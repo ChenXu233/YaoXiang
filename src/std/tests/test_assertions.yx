@@ -76,3 +76,5 @@ main = {
     a4 = test.assert_approx_eq(1.0, 2.0, -1.0)
     assert.assert(result.is_err(a4), "approx_eq negative eps rejected at declaration")
 }
+
+main()

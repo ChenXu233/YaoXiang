@@ -57,3 +57,5 @@ main = {
     assert.assert(identity("s") == "s", "identity String")
     assert.assert(identity(true), "identity Bool")
 }
+
+main()

@@ -12,3 +12,5 @@ main = {
     first = items[0]
     assert.assert(first == 1, "first element should be 1")
 }
+
+main()

@@ -19,3 +19,5 @@ main = {
 
     assert.assert(threshold == 5, "捕获后原值仍可用")
 }
+
+main()

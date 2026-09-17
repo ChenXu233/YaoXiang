@@ -31,3 +31,5 @@ main = {
     n2 = list.len(xs)
     assert.assert(n1 == 3  and  n2 == 3, "std read fn reuses xs")
 }
+
+main()

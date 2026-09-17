@@ -36,3 +36,5 @@ main = {
     assert.assert(d.age() == 3, "Animal.age dispatch returns 3")
     assert.assert(d.name == "Rex", "own field still accessible")
 }
+
+main()

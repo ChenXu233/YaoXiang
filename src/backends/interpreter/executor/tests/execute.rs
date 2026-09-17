@@ -316,6 +316,7 @@ fn spawn_concurrent_standard_mode() {
         vtables: vec![],
         globals: vec![],
         entry_point: Some(2), // main 函数
+        init_function: None,
         debug_sources: None,
     };
 

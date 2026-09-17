@@ -39,3 +39,5 @@ main = {
     }
     assert.assert(r3 == 900, "spawn 嵌套表达式 (a+b)*c == 900")
 }
+
+main()

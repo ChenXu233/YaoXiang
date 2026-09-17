@@ -217,6 +217,21 @@ pub enum BytecodeInstr {
     },
 
     // =====================
+    // Global Slots (顶层绑定)
+    // =====================
+    /// 从全局槽位读取：d. 索引为 u16（全局槽位可远超 256）。
+    LoadGlobal {
+        dst: Reg,
+        global_idx: u16,
+    },
+
+    /// 写入全局槽位
+    StoreGlobal {
+        global_idx: u16,
+        src: Reg,
+    },
+
+    // =====================
     // Binary Operations
     // =====================
     BinaryOp {
@@ -557,6 +572,8 @@ impl BytecodeInstr {
             BytecodeInstr::LoadLocal { .. } => opcode::LOAD_LOCAL,
             BytecodeInstr::StoreLocal { .. } => opcode::STORE_LOCAL,
             BytecodeInstr::LoadArg { .. } => opcode::LOAD_ARG,
+            BytecodeInstr::LoadGlobal { .. } => opcode::LOAD_GLOBAL,
+            BytecodeInstr::StoreGlobal { .. } => opcode::STORE_GLOBAL,
             BytecodeInstr::BinaryOp { op, .. } => match op {
                 BinaryOp::Add => opcode::I64_ADD,
                 BinaryOp::Sub => opcode::I64_SUB,
@@ -689,6 +706,10 @@ impl BytecodeInstr {
             BytecodeInstr::LoadLocal { .. } => 3,
             BytecodeInstr::StoreLocal { .. } => 3,
             BytecodeInstr::LoadArg { .. } => 3,
+            // dst(1) + global_idx(2, 小端)
+            BytecodeInstr::LoadGlobal { .. } => 4,
+            // global_idx(2, 小端) + src(1)
+            BytecodeInstr::StoreGlobal { .. } => 4,
             BytecodeInstr::BinaryOp { .. } => 6,
             BytecodeInstr::UnaryOp { .. } => 4,
             BytecodeInstr::Compare { .. } => 6,
@@ -833,6 +854,9 @@ pub struct BytecodeModule {
     pub globals: Vec<GlobalInfo>,
     /// Entry point function index
     pub entry_point: Option<usize>,
+    /// 模块初始化函数索引（T2）：执行入口前先调用它——顶层绑定的求值
+    /// （全局槽位写入）在其中完成。无顶层绑定时为 None。
+    pub init_function: Option<usize>,
     /// Debug sources（#327）：带 DebugSection 的 .42 直跑时用于渲染栈帧源码上下文；
     /// 无 DebugSection（构建未带 --debug-info）时为 None，渲染降级为无片段
     pub debug_sources: Option<crate::util::span::SourceMap>,
@@ -862,6 +886,7 @@ impl BytecodeModule {
             vtables: Vec::new(),
             globals: Vec::new(),
             entry_point: None,
+            init_function: None,
             debug_sources: None,
         }
     }
@@ -1587,6 +1612,32 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
+                    opcode::LOAD_GLOBAL => {
+                        // LoadGlobal: dst(1) + global_idx(2, 小端)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let global_idx = op_u16(&instr.operands, 1).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::LoadGlobal {
+                                dst: Reg(dst),
+                                global_idx,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STORE_GLOBAL => {
+                        // StoreGlobal: global_idx(2, 小端) + src(1)
+                        if instr.operands.len() >= 3 {
+                            let global_idx = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let src = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::StoreGlobal {
+                                global_idx,
+                                src: Reg(src),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
                     opcode::RETURN_VALUE => {
                         // ReturnValue: value(1) [legacy], or value(2)
                         if instr.operands.len() >= 2 {
@@ -1944,15 +1995,19 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             functions.push(byte_func);
         }
 
-        // Determine entry point
+        // T4：入口点用 `idx + 1` 编码，0 = 无入口（Script 模式或纯库模块）。
+        // 此前这里写「entry_point == 0 且有函数就用 0 号」——那是第二个静默
+        // 兜底：无 main 的文件会随机执行第一个函数（#271 同类）。
         let entry_point = if file.header.entry_point > 0 {
-            Some(file.header.entry_point as usize)
-        } else if file.header.entry_point == 0 && !functions.is_empty() {
-            // If entry_point is 0 but we have functions, use 0 as valid entry
-            Some(0)
+            Some(file.header.entry_point as usize - 1)
         } else {
             None
         };
+
+        // T2：按保留名定位模块初始化函数（codegen 追加到函数表末尾）。
+        let init_function = functions.iter().position(|f| {
+            f.name == crate::middle::passes::codegen::translator::MODULE_INIT_FUNCTION
+        });
 
         BytecodeModule {
             name,
@@ -1962,6 +2017,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             vtables: file.vtables,
             globals: Vec::new(), // Not stored in BytecodeFile yet
             entry_point,
+            init_function,
             // #327：贯通 DebugSection.sources——.42 直跑也能渲染栈帧源码上下文
             debug_sources,
         }

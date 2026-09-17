@@ -15,3 +15,5 @@ main = {
     arr = Capped(Int, 3)
     assert.assert(true, "Capped(Int, 3) with N < 100 and N <= 100 compiled and ran")
 }
+
+main()

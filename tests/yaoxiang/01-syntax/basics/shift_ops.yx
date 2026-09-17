@@ -20,3 +20,5 @@ main = {
     assert.assert((a >> 2) == 256, "移位与比较")
     io.println("SHIFT_OPS_OK")
 }
+
+main()

@@ -34,3 +34,5 @@ main = {
     r = copy_use(&w)
     assert.assert(r == 6, "参数令牌复制后两份都活跃")
 }
+
+main()

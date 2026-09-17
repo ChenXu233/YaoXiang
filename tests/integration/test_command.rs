@@ -27,6 +27,9 @@ fn write_file(
     name: &str,
     content: &str,
 ) {
+    // T4 入口语义：Script 模式下 `main` 不再隐式执行，夹具需写 `main()`。
+    // 经 with_main_invoked_in 适配（目录有 manifest 时不追加：那属 Bin 角色）。
+    let content = crate::fixture::with_main_invoked_in(dir, content);
     let path = dir.join(name);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).unwrap_or_else(|e| panic!("mkdir {name}: {e}"));

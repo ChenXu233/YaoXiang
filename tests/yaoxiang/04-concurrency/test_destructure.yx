@@ -20,3 +20,5 @@ main = {
     assert.assert(y == 20)
     assert.assert(z == 30);
 }
+
+main()

@@ -9,3 +9,5 @@ main = {
     mut d = {"key": 42}
     assert.assert(true, "dict created successfully")
 }
+
+main()

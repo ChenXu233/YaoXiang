@@ -18,3 +18,5 @@ main = {
     ok = 5 in [5] and 3 in [3]
     assert.assert(ok, "in composes with &&")
 }
+
+main()

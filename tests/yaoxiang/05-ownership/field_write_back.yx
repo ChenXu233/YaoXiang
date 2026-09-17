@@ -39,3 +39,5 @@ main = {
     t.y = 99
     assert.assert(t.y == 99, "普通字段写生效")
 }
+
+main()

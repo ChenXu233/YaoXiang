@@ -32,3 +32,5 @@ main = {
     assert.assert(p.first == 7, "Pair(7, 9).first should be 7")
     assert.assert(p.second == 9, "Pair(7, 9).second should be 9")
 }
+
+main()

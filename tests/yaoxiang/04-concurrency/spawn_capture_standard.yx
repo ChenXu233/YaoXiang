@@ -40,3 +40,5 @@ main = {
     assert.assert(spawned == 12, "Standard spawn 内写 q.x+q.y == 12")
     assert.assert(q.x == 5 and q.y == 7, "Standard spawn 写回共享 Struct 可见")
 }
+
+main()

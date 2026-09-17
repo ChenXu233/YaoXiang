@@ -18,3 +18,5 @@ main = {
     r = p.get_x()
     assert.assert(r == 3.0, "get_x should be 3.0")
 }
+
+main()

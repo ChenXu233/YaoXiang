@@ -30,3 +30,5 @@ main = {
 
     io.println("fn value first class ok")
 }
+
+main()

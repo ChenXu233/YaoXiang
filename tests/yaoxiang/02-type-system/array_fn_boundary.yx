@@ -13,3 +13,5 @@ main = {
     b: Array(Int, 3) = [10, 20, 30]
     assert.assert(head_of(b) == 10, "Array(Int,3) passed to Array(Int,3) param")
 }
+
+main()

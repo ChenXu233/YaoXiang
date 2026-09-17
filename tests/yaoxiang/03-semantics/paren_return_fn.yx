@@ -36,3 +36,5 @@ main = {
 
     io.println("paren return fn ok")
 }
+
+main()

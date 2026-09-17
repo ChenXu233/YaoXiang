@@ -29,3 +29,5 @@ main = {
     assert.assert(!os.is_file("src/std/tests"), "is_file false on dir")
     assert.assert(!os.is_dir("src/std/tests/os_ops.yx"), "is_dir false on file")
 }
+
+main()

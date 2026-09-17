@@ -12,3 +12,5 @@ main = {
     }
     assert.assert(result == 42)
 }
+
+main()

@@ -15,3 +15,5 @@ main = {
     // ms 精度不低于 s 精度
     assert.assert(time.timestamp_ms() >= time.timestamp(), "ms >= s")
 }
+
+main()

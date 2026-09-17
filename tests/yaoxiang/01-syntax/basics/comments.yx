@@ -16,3 +16,5 @@ main = {
     // 单行注释在函数体内
     assert.assert("comments_work" == "comments_work", "string literal") // 行尾注释
 }
+
+main()

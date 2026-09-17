@@ -21,3 +21,5 @@ main = {
 
     println("weak roundtrip ok")
 }
+
+main()

@@ -25,3 +25,5 @@ main = {
     dec = net.url_decode("a%20b")
     assert.assert(dec == "a b", "url_decode: %20 to space")
 }
+
+main()

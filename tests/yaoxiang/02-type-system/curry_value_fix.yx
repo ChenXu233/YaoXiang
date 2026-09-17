@@ -18,3 +18,5 @@ main = {
     evens = list.filter([1, 6, 3, 8], gt(5))
     assert.assert(list.len(evens) == 2, "gt(5) 谓词 filter 保留 6,8")
 }
+
+main()

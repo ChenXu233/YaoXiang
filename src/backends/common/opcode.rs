@@ -26,6 +26,10 @@ pub const STORE_LOCAL: u8 = 0x13;
 pub const LOAD_ARG: u8 = 0x14;
 pub const BORROW: u8 = 0x15;
 pub const RELEASE: u8 = 0x16;
+// 全局槽位（RFC-029f / 顶层绑定）：新 plan（top-level-binding）启用。
+// 全局索引 u16（小端两字节），本地槽位为 u8，容量差异由 u16 承担。
+pub const LOAD_GLOBAL: u8 = 0x17;
+pub const STORE_GLOBAL: u8 = 0x18;
 
 // Integer Operations (0x20-0x2F)
 pub const I64_ADD: u8 = 0x20;
@@ -134,6 +138,8 @@ pub fn opcode_name(code: u8) -> &'static str {
         LOAD_ARG => "LoadArg",
         BORROW => "Borrow",
         RELEASE => "Release",
+        LOAD_GLOBAL => "LoadGlobal",
+        STORE_GLOBAL => "StoreGlobal",
         I64_ADD => "I64Add",
         I64_SUB => "I64Sub",
         I64_MUL => "I64Mul",

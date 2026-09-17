@@ -34,3 +34,5 @@ main = {
     true or io.write_file(p, "side effect")
     assert.assert(!os.exists(p), "or short-circuit skipped rhs")
 }
+
+main()

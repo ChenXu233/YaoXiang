@@ -18,8 +18,11 @@ mod eval;
 mod execution;
 #[path = "integration/feature_flags.rs"]
 mod feature_flags;
+#[path = "integration/fixture.rs"]
+mod fixture;
 #[path = "integration/fstring.rs"]
 mod fstring;
+
 #[path = "integration/interpreter.rs"]
 mod interpreter;
 #[path = "integration/test_command.rs"]

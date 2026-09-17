@@ -37,3 +37,5 @@ main = {
     }
     assert.assert(found == 60, "while 体 if 分支内带注解绑定（20 + 40）")
 }
+
+main()

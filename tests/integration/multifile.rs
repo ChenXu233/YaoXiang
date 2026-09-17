@@ -448,3 +448,44 @@ helper: (x: Int) -> Int = (x) => {
         "错误应说明模块键歧义，实际: {err}"
     );
 }
+
+// T5：跨文件顶层绑定（全局槽位）
+
+/// 跨文件块值绑定：`x: Int = { 5 }` 在 lib 中定义，入口文件读取。
+///
+/// 覆盖 T2（块值运行时初始化）+ T5（跨文件槽位布局）。裁决 C 下
+/// 非 Fn 注解的块值是**值绑定**，故它占全局槽位而非函数表。
+#[test]
+fn test_multifile_use_block_value_binding() {
+    let lib = "x: Int = { 5 }\n";
+    let main = r#"
+use std.assert
+use lib.{x}
+
+main = {
+    assert.assert(x == 5, "跨文件块值绑定应为 5")
+}
+"#;
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+/// 跨文件前向引用：lib 的绑定依赖另一个后声明的绑定。
+///
+/// 覆盖 T3 拓扑排序在跨文件场景的行为——每个文件的初始化序列各自有序，
+/// 文件间按发现顺序（被依赖者先）。
+#[test]
+fn test_multifile_forward_reference_in_lib() {
+    let lib = r#"
+derived: Int = base * 3
+base: Int = 7
+"#;
+    let main = r#"
+use std.assert
+use lib.{derived}
+
+main = {
+    assert.assert(derived == 21, "跨文件前向引用应为 21")
+}
+"#;
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}

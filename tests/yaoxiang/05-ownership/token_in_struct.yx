@@ -17,3 +17,5 @@ main = {
     w = Window(p, ref_p)  // view 令牌从 p 派生
     assert.assert(true, "token_in_struct — tokens can be stored as fields")
 }
+
+main()

@@ -22,7 +22,8 @@ fn test_run_with_default_features() {
     "#;
 
     // Act
-    let result = run(source);
+    let adapted = crate::fixture::with_main_invoked(source);
+    let result = run(&adapted);
 
     // Assert
     assert!(
@@ -49,7 +50,8 @@ fn test_run_complex_program_with_default_features() {
     "#;
 
     // Act
-    let result = run(source);
+    let adapted = crate::fixture::with_main_invoked(source);
+    let result = run(&adapted);
 
     // Assert
     assert!(
@@ -72,7 +74,8 @@ fn test_core_functionality_available() {
     "#;
 
     // Act
-    let result = run(source);
+    let adapted = crate::fixture::with_main_invoked(source);
+    let result = run(&adapted);
 
     // Assert
     assert!(
@@ -96,7 +99,8 @@ fn test_basic_arithmetic_available() {
     "#;
 
     // Act
-    let result = run(source);
+    let adapted = crate::fixture::with_main_invoked(source);
+    let result = run(&adapted);
 
     // Assert
     assert!(
@@ -121,7 +125,8 @@ fn test_control_flow_available() {
     "#;
 
     // Act
-    let result = run(source);
+    let adapted = crate::fixture::with_main_invoked(source);
+    let result = run(&adapted);
 
     // Assert
     assert!(
@@ -142,7 +147,8 @@ fn test_match_expression_available() {
     "#;
 
     // Act
-    let result = run(source);
+    let adapted = crate::fixture::with_main_invoked(source);
+    let result = run(&adapted);
 
     // Assert
     assert!(
@@ -165,7 +171,8 @@ fn test_z3_available_in_all_feature_combinations() {
     "#;
 
     // Act
-    let result = run(source);
+    let adapted = crate::fixture::with_main_invoked(source);
+    let result = run(&adapted);
 
     // Assert
     // Z3 可能未安装，但基本代码应该能运行
@@ -189,7 +196,8 @@ fn test_cli_features_unavailable_without_cli() {
     "#;
 
     // Act
-    let result = run(source);
+    let adapted = crate::fixture::with_main_invoked(source);
+    let result = run(&adapted);
 
     // Assert
     assert!(
@@ -221,7 +229,8 @@ fn test_list_operations_available() {
     "#;
 
     // Act
-    let result = run(source);
+    let adapted = crate::fixture::with_main_invoked(source);
+    let result = run(&adapted);
 
     // Assert
     assert!(

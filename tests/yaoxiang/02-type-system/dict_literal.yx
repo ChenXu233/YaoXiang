@@ -4,3 +4,5 @@ main = {
     d = {"a": 1, "b": 2}
     assert.assert(true, "dict literal created successfully")
 }
+
+main()

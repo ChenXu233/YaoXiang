@@ -37,3 +37,5 @@ main = {
     assert.assert(result[1] == 40, "chain[1]")
     assert.assert(result[2] == 50, "chain[2]")
 }
+
+main()

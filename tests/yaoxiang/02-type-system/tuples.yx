@@ -9,3 +9,5 @@ main = {
     mut t = (1, "one", true)
     assert.assert(true, "tuple created successfully")
 }
+
+main()

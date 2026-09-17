@@ -9,8 +9,14 @@
 use yaoxiang::run;
 
 /// Helper: assert that source code compiles and executes successfully.
+///
+/// **夹具约定（T4 入口语义）**：Script 模式下 `main` 不再是隐式入口——顶层
+/// 语句才是程序主体，想跑 `main` 得写 `main()`。本 helper 在源码定义了 `main`
+/// 但未调用时自动补上调用（见 `fixture::with_main_invoked`），使既有夹具
+/// 仍然真正执行而非空跑。
 fn assert_run_ok(source: &str) {
-    let result = run(source);
+    let source = crate::fixture::with_main_invoked(source);
+    let result = run(&source);
     match result {
         Ok(_) => {}
         Err(e) => {

@@ -47,3 +47,5 @@ main = {
 
     io.println("binding fn vs block ok")
 }
+
+main()

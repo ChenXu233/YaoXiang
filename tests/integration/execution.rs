@@ -8,7 +8,8 @@
 use yaoxiang::run;
 
 fn run_ok(source: &str) {
-    run(source).unwrap_or_else(|e| panic!("Execution failed:\n{:?}", e));
+    let source = crate::fixture::with_main_invoked(source);
+    run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{:?}\n\nSource:\n{source}", e));
 }
 
 // 完整程序测试

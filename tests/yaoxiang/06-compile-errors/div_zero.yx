@@ -13,3 +13,5 @@ main = {
     c = a / b
     io.println(c)
 }
+
+main()

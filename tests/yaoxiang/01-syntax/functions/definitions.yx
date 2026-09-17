@@ -30,3 +30,5 @@ main = {
     msg = greet()
     assert.assert(msg == "Hello", "greet() == Hello")
 }
+
+main()

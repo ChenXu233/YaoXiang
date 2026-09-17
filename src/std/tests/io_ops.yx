@@ -33,3 +33,5 @@ main = {
     assert.assert(string.len(cwd) > 0, "getcwd non-empty")
     assert.assert(os.is_dir("."), "cwd is_dir")
 }
+
+main()

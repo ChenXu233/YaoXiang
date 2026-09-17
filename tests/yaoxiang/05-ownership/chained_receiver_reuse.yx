@@ -15,3 +15,5 @@ main = {
     p.shift()
     assert.assert(p.x == 2, "sequential chained &mut receiver reuse")
 }
+
+main()

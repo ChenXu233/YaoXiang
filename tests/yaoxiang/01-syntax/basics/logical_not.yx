@@ -18,3 +18,5 @@ main = {
     assert.assert(!(true == false), "!(true == false) ≡ true")
     assert.assert(!(1 == 2), "!(1 == 2) ≡ true（显式括号取反比较结果）")
 }
+
+main()

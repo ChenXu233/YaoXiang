@@ -17,3 +17,5 @@ main = {
     io.println(x)
     assert.assert(x == 7, "原语传参不 move 源")
 }
+
+main()

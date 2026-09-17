@@ -9,3 +9,5 @@ main = {
     }
     assert.assert(result == 30)
 }
+
+main()

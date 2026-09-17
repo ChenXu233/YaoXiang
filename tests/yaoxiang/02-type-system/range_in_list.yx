@@ -29,3 +29,5 @@ main = {
         assert.assert(p[0] > 0, "tuple element index via loop var")
     }
 }
+
+main()

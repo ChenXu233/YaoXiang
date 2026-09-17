@@ -45,3 +45,5 @@ main = {
     }
     assert.assert(grade == "B", "score 85 对应 B 等级")
 }
+
+main()

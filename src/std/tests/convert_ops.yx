@@ -19,3 +19,5 @@ main = {
     s_dict = convert.to_string({})
     assert.assert(string.len(s_dict) > 0, "dict to_string non-empty")
 }
+
+main()

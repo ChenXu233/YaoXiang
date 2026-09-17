@@ -29,3 +29,5 @@ main = {
     assert.assert(reads == 3, "loop ran 3 times")
     assert.assert(p.x == 2, "guarded write fired exactly once")
 }
+
+main()

@@ -41,3 +41,5 @@ main = {
         .x
     assert.assert(v == 6, "leading-dot chained field access")
 }
+
+main()

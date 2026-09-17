@@ -26,3 +26,5 @@ main = {
     assert.assert(o.inner.view.y == 6, "三层嵌套令牌访问")
     assert.assert(t.x == 5, "派生令牌后源仍可读")
 }
+
+main()

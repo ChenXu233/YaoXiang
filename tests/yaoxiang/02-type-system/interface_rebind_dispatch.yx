@@ -25,3 +25,5 @@ main = {
     s = zoo[0].speak()
     assert.assert(s == "Tweet", "rebound method dispatches through variant match")
 }
+
+main()

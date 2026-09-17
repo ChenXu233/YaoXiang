@@ -16,3 +16,5 @@ main = {
     p.shift(3, 4)
     assert.assert(true, "shift completed — &mut T mutation works")
 }
+
+main()

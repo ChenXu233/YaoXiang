@@ -101,6 +101,9 @@ pub struct Interpreter {
     pub(super) type_table: Vec<crate::middle::core::ir::Type>,
     /// Current execution state
     pub(super) state: ExecutionState,
+    /// 全局槽位（顶层绑定的运行时存储）。生命周期 = 一次 run：
+    /// `execute_module` 按模块 globals 段大小初始化，模块初始化序列写入。
+    pub(super) global_slots: Vec<RuntimeValue>,
     /// Configuration
     pub(super) config: ExecutorConfig,
     /// Breakpoints
@@ -159,6 +162,16 @@ impl Interpreter {
         Self::with_config(ExecutorConfig::default())
     }
 
+    /// 读取全局槽位（顶层绑定的运行时值）。
+    ///
+    /// 供测试与 REPL 观察模块初始化结果（T1 基础设施的观察口）。
+    pub fn global_slot(
+        &self,
+        idx: usize,
+    ) -> Option<&RuntimeValue> {
+        self.global_slots.get(idx)
+    }
+
     /// Create an interpreter with custom configuration
     pub fn with_config(config: ExecutorConfig) -> Self {
         let runtime_config = RuntimeConfig::default();
@@ -176,6 +189,7 @@ impl Interpreter {
             vtable_cache: HashMap::new(),
             type_table: Vec::new(),
             state: ExecutionState::default(),
+            global_slots: Vec::new(),
             config,
             breakpoints: HashMap::new(),
             ffi: FfiRegistry::with_std(),
@@ -230,6 +244,7 @@ impl Interpreter {
             vtable_cache,
             type_table,
             state: ExecutionState::default(),
+            global_slots: Vec::new(),
             config: ExecutorConfig::default(),
             breakpoints: HashMap::new(),
             ffi,
