@@ -365,6 +365,18 @@ fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::
             "{}",
             t_cur(MSG::BytecodeFuncLocalCount, Some(&[&func.local_count]))
         );
+        // 局部变量名：只列具名者，按槽位下标排序保证输出稳定
+        if !func.local_names.is_empty() {
+            let mut named: Vec<(usize, &String)> =
+                func.local_names.iter().map(|(k, v)| (*k, v)).collect();
+            named.sort_by_key(|(idx, _)| *idx);
+            let list = named
+                .iter()
+                .map(|(idx, name)| format!("{name}@{idx}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            tracing::info!("{}", t_cur(MSG::BytecodeFuncLocalNames, Some(&[&list])));
+        }
         tracing::info!(
             "{}",
             t_cur(

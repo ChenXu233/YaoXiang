@@ -46,6 +46,7 @@
   "bytecode_func_params": "  パラメータ：{0}",
   "bytecode_func_return_type": "  戻り値の型：{0}",
   "bytecode_func_local_count": "  ローカル変数数：{0}",
+  "bytecode_func_local_names": "  ローカル変数：{0}",
   "bytecode_func_instr_count": "  命令数：{0}",
   "bytecode_func_code": "  コード：",
   "bytecode_instr_index": "    [{0}] {1} {2}",

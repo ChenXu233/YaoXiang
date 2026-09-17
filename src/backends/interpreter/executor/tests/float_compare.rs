@@ -25,6 +25,7 @@ fn make_compare_function(op: CompareOp) -> BytecodeFunction {
         params: vec![],
         return_type: Type::Bool,
         local_count: 3,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             // r0 = const[lhs]

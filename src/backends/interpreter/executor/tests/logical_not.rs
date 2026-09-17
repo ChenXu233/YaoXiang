@@ -23,6 +23,7 @@ fn make_not_function() -> BytecodeFunction {
         params: vec![],
         return_type: Type::Bool,
         local_count: 2,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             // r0 = const[val]

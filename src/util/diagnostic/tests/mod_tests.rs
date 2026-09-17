@@ -124,6 +124,7 @@ fn test_render_runtime_function_not_found_with_span() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 0,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![BytecodeInstr::Nop],
         labels: HashMap::new(),

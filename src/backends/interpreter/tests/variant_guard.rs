@@ -95,6 +95,7 @@ fn test_variant_tag_guard_rejects_unwrapped_value() {
             params: vec![],
             return_type: Type::Void,
             local_count: 4,
+            local_names: HashMap::new(),
             upvalue_count: 0,
             instructions: vec![
                 // local0 = Int(42)（未包装的具体值）
