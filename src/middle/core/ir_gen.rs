@@ -4040,7 +4040,7 @@ impl AstToIrGenerator {
                         .unwrap_or_else(|| b.function.clone());
                     instructions.push(Instruction::Call {
                         dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(func_name)),
+                        func: Operand::Const(ConstValue::String(func_name.to_string())),
                         args: final_args,
                         span,
                         def: None,
@@ -4287,7 +4287,7 @@ impl AstToIrGenerator {
 
     fn generate_match_expr_ir(
         &mut self,
-        match_expr: &Box<Expr>,
+        match_expr: &Expr,
         arms: &Vec<ast::MatchArm>,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -4438,8 +4438,8 @@ impl AstToIrGenerator {
 
     fn generate_index_expr_ir(
         &mut self,
-        expr: &Box<Expr>,
-        index: &Box<Expr>,
+        expr: &Expr,
+        index: &Expr,
         span: &Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -4462,7 +4462,7 @@ impl AstToIrGenerator {
 
     fn generate_unsafe_expr_ir(
         &mut self,
-        body: &Box<ast::Block>,
+        body: &ast::Block,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -4483,12 +4483,13 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn generate_spawn_for_expr_ir(
         &mut self,
-        var: &String,
+        var: &str,
         var_mut: &bool,
-        iterable: &Box<Expr>,
-        body: &Box<ast::Block>,
+        iterable: &Expr,
+        body: &ast::Block,
         span: &Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -4507,12 +4508,13 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn generate_for_expr_ir(
         &mut self,
-        var: &String,
+        var: &str,
         var_mut: &bool,
-        iterable: &Box<Expr>,
-        body: &Box<ast::Block>,
+        iterable: &Expr,
+        body: &ast::Block,
         for_span: &Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -4534,7 +4536,7 @@ impl AstToIrGenerator {
     fn generate_un_op_expr_ir(
         &mut self,
         op: &ast::UnOp,
-        expr: &Box<Expr>,
+        expr: &Expr,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -4584,7 +4586,7 @@ impl AstToIrGenerator {
 
     fn generate_ref_expr_ir(
         &mut self,
-        expr: &Box<Expr>,
+        expr: &Expr,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -4594,7 +4596,7 @@ impl AstToIrGenerator {
         self.generate_expr_ir(expr, src_reg, instructions, constants)?;
 
         // 逃逸分析：跨 spawn 使用 → Arc，否则 → Rc
-        let var_name = match expr.as_ref() {
+        let var_name = match expr {
             ast::Expr::Var(name, _) => Some(name.clone()),
             _ => None,
         };
@@ -4622,7 +4624,7 @@ impl AstToIrGenerator {
 
     fn generate_borrow_expr_ir(
         &mut self,
-        expr: &Box<Expr>,
+        expr: &Expr,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -4672,7 +4674,7 @@ impl AstToIrGenerator {
 
     fn generate_list_expr_ir(
         &mut self,
-        elements: &Vec<Expr>,
+        elements: &[Expr],
         span: &Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -4709,7 +4711,7 @@ impl AstToIrGenerator {
 
     fn generate_try_expr_ir(
         &mut self,
-        expr: &Box<Expr>,
+        expr: &Expr,
         span: &Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -4861,7 +4863,7 @@ impl AstToIrGenerator {
 
     fn generate_var_expr_ir(
         &mut self,
-        var_name: &String,
+        var_name: &str,
         var_span: &Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -4882,7 +4884,7 @@ impl AstToIrGenerator {
             });
         } else if self.lookup_global(var_name).is_some() {
             // 全局变量：生成函数调用获取值
-            let func_name = var_name.clone();
+            let func_name = var_name.to_string();
             instructions.push(Instruction::Call {
                 dst: Some(Operand::Local(result_reg)),
                 func: Operand::Const(ConstValue::String(func_name)),
@@ -4902,7 +4904,7 @@ impl AstToIrGenerator {
                 def: None,
             });
         } else if matches!(
-            var_name.as_str(),
+            var_name,
             "Int" | "Float" | "Bool" | "String" | "Char" | "Bytes" | "Type" | "Void" | "Never"
         ) {
             // 内置类型名作为类型实参（如 SafeArray(Int, 3)）：类型宇宙的值，
@@ -4921,7 +4923,7 @@ impl AstToIrGenerator {
             // 作一等值使用：`io.println(f)` / `g(f)` / `x = f` 全部失败。
             instructions.push(Instruction::MakeClosure {
                 dst: Operand::Local(result_reg),
-                func: var_name.clone(),
+                func: var_name.to_string(),
                 env: vec![],
                 def: None,
                 span: self.cur_span,
@@ -4938,8 +4940,8 @@ impl AstToIrGenerator {
 
     fn generate_field_access_expr_ir(
         &mut self,
-        expr: &Box<Expr>,
-        field: &String,
+        expr: &Expr,
+        field: &str,
         span: &Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -4947,7 +4949,7 @@ impl AstToIrGenerator {
     ) -> Result<(), Diagnostic> {
         // 首先检查是否是模块变量的字段访问（如 io.println）
         // io 是通过 use std.{io} 导入的模块变量
-        if let Expr::Var(module_name, _) = expr.as_ref() {
+        if let Expr::Var(module_name, _) = expr {
             if let Some(full_path) = {
                 let reg = &self.registry;
                 if reg.is_std_submodule(module_name) {
@@ -5030,8 +5032,8 @@ impl AstToIrGenerator {
 
     fn generate_lambda_expr_ir(
         &mut self,
-        params: &Vec<ast::Param>,
-        body: &Box<ast::Block>,
+        params: &[ast::Param],
+        body: &ast::Block,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -5083,7 +5085,7 @@ impl AstToIrGenerator {
         // 5. 生成闭包函数体 IR
         // 类似于 generate_function_ir 的逻辑，但针对 Lambda
         let closure_body =
-            self.generate_lambda_body_ir(params, body.as_ref(), constants, env_names.len())?;
+            self.generate_lambda_body_ir(params, body, constants, env_names.len())?;
         // #254：闭包体生成完毕，清除捕获表
         self.closure_captures.clear();
 
@@ -5128,7 +5130,7 @@ impl AstToIrGenerator {
 
     fn generate_spawn_expr_ir(
         &mut self,
-        body: &Box<ast::Block>,
+        body: &ast::Block,
         span: &Span,
         _expr: &Expr,
         result_reg: usize,
@@ -5246,11 +5248,12 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn generate_list_comp_expr_ir(
         &mut self,
-        element: &Box<Expr>,
-        var: &String,
-        iterable: &Box<Expr>,
+        element: &Expr,
+        var: &str,
+        iterable: &Expr,
         condition: &Option<Box<Expr>>,
         span: &Span,
         result_reg: usize,
@@ -5396,11 +5399,12 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn generate_bin_op_expr_ir(
         &mut self,
         op: &ast::BinOp,
-        left: &Box<Expr>,
-        right: &Box<Expr>,
+        left: &Expr,
+        right: &Expr,
         span: &Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
@@ -5410,7 +5414,7 @@ impl AstToIrGenerator {
         // 二元运算
         let instr = match op {
             ast::BinOp::Assign => {
-                if let Expr::Var(var_name, _) = left.as_ref() {
+                if let Expr::Var(var_name, _) = left {
                     let local_idx = if let Some(idx) = self.lookup_local(var_name) {
                         idx
                     } else {
@@ -5638,11 +5642,12 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn generate_call_expr_ir(
         &mut self,
-        func: &Box<Expr>,
-        args: &Vec<Expr>,
-        named_args: &Vec<(String, Expr)>,
+        func: &Expr,
+        args: &[Expr],
+        named_args: &[(String, Expr)],
         span: &Span,
         _expr: &Expr,
         result_reg: usize,
@@ -5650,7 +5655,7 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
         // 检查是否是方法调用：func 是 FieldAccess
-        if let Expr::FieldAccess { expr, field, .. } = func.as_ref() {
+        if let Expr::FieldAccess { expr, field, .. } = func {
             // 方法调用 - 转换为普通函数调用
             // 命名空间机制：p.method() -> method(p)
 
@@ -5866,7 +5871,7 @@ impl AstToIrGenerator {
 
             // RFC-010: 处理命名参数构造 `Point(x=1, y=2)`
             if !named_args.is_empty() {
-                if let Expr::Var(name, _) = func.as_ref() {
+                if let Expr::Var(name, _) = func {
                     if let Some(fields) = self.struct_definitions.get(name).cloned() {
                         // 生成命名参数的 IR
                         let mut named_regs: Vec<(String, Operand)> = Vec::new();
@@ -5923,7 +5928,7 @@ impl AstToIrGenerator {
             // 检查是否是结构体构造器调用，需要填充默认值
             // 两层调用 X(类型参数)(构造参数)：func 是 Call{func: Var(name)}，
             // 内层类型实参运行期擦除，外层实参按字段位置填充。
-            let struct_ctor_name: Option<String> = match func.as_ref() {
+            let struct_ctor_name: Option<String> = match func {
                 Expr::Var(name, _) => Some(name.clone()),
                 Expr::Call { func: inner, .. } => match inner.as_ref() {
                     Expr::Var(name, _) => Some(name.clone()),
@@ -5975,7 +5980,7 @@ impl AstToIrGenerator {
             } else {
                 // ========== print/println 零开销分发处理 ==========
                 // 检查是否是 print 或 println 调用
-                let is_print_call = if let Expr::Var(name, _) = func.as_ref() {
+                let is_print_call = if let Expr::Var(name, _) = func {
                     matches!(
                         name.as_str(),
                         "print" | "println" | "std.io.print" | "std.io.println"
@@ -6016,7 +6021,7 @@ impl AstToIrGenerator {
 
                             // 然后调用 std.io.print 输出字符串
                             // 使用 resolved name
-                            let print_func_name = if let Expr::Var(name, _) = func.as_ref() {
+                            let print_func_name = if let Expr::Var(name, _) = func {
                                 if name == "print" || name == "println" {
                                     if let Some(qualified) =
                                         self.registry.short_to_qualified_map().get(name)
@@ -6069,7 +6074,7 @@ impl AstToIrGenerator {
                             });
 
                             // 然后调用 std.io.print 输出
-                            let print_func_name = if let Expr::Var(name, _) = func.as_ref() {
+                            let print_func_name = if let Expr::Var(name, _) = func {
                                 if name == "print" || name == "println" {
                                     if let Some(qualified) =
                                         self.registry.short_to_qualified_map().get(name)
