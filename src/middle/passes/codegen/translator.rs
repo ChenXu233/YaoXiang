@@ -200,15 +200,20 @@ impl Translator {
 
                 if self.generate_debug_info {
                     // 语句级侧表先垫底，逐指令 span 随后覆盖（同名 ip 后者优先）
+                    // 嵌套语句取最窄匹配（start 最大者）：外层 if 的范围包住内层
+                    // return 的范围，若取先命中者会把内层指令归给外层行。
                     // ponytail: 每条指令线性扫一遍侧表；侧表长度与语句数同阶（百级），
                     // 编译期可忽略。真要优化时按 start 二分即可。
-                    let mut stmt_span = None;
+                    let mut stmt_span: Option<(usize, Span)> = None;
                     for &(start, end, sp) in &block.stmt_spans {
-                        if global_ir_index >= start && global_ir_index < end {
-                            stmt_span = Some(sp);
+                        if global_ir_index >= start
+                            && global_ir_index < end
+                            && stmt_span.is_none_or(|(best, _)| start > best)
+                        {
+                            stmt_span = Some((start, sp));
                         }
                     }
-                    if let Some(sp) = stmt_span {
+                    if let Some((_, sp)) = stmt_span {
                         if !sp.is_dummy() {
                             debug_map.insert(
                                 current_bytecode_idx,
