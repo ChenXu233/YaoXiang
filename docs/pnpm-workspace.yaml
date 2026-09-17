@@ -2,4 +2,10 @@ allowBuilds:
   esbuild: true
 overrides:
   js-yaml@<4.1.1: ^4.1.1
-  image-size@<2.0.2: ^2.0.2
+  # advisories 的 "patched: None" 是元数据滞后：2.0.3/2.0.4 已修
+  # （GHSA-5p2g-fcmc-qvqq / GHSA-w3rx-r6r6-pgpr）
+  image-size@<=2.0.2: ^2.0.4
+  # vite <6.4.3 的四项告警命中 vitepress 的 ^5.4.14 解析结果（5.4.21）；
+  # 限定 5.x 内升级，避免跨大版本动 vitepress 的构建链
+  vite@>=5.4.0 <6.4.3: ^6.4.3
+  esbuild@<=0.24.2: ^0.25.0

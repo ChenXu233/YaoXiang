@@ -42,6 +42,7 @@ fn store_then_load_module() -> ModuleIR {
                     Instruction::Load {
                         dst: Operand::Local(0),
                         src: Operand::Const(ConstValue::Int(42)),
+                        span: Span::default(),
                     },
                     Instruction::Store {
                         dst: Operand::Global(0),
@@ -51,8 +52,12 @@ fn store_then_load_module() -> ModuleIR {
                     Instruction::Load {
                         dst: Operand::Local(1),
                         src: Operand::Global(0),
+                        span: Span::default(),
                     },
-                    Instruction::Ret(Some(Operand::Local(1))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(1)),
+                        span: Span::default(),
+                    },
                 ],
                 successors: Vec::new(),
             }],

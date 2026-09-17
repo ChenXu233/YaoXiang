@@ -152,7 +152,7 @@ impl Translator {
             self.source_file_id =
                 module.function_files.get(&func.name).copied().unwrap_or(0) as FileId;
             match &func.body {
-                FunctionBody::TypeDecl { definition } => {
+                FunctionBody::TypeDecl { definition, .. } => {
                     // 类型定义：从定义机械合成构造函数
                     let ctor = self.synthesize_constructor(func, definition)?;
                     code_section.functions.push(ctor);
@@ -240,13 +240,13 @@ impl Translator {
                 let current_bytecode_idx = instructions.len();
 
                 if self.generate_debug_info {
-                    if let Some(span) = Self::extract_span(instr) {
-                        if !span.is_dummy() {
-                            debug_map.insert(
-                                current_bytecode_idx,
-                                DebugSpan::new(self.source_file_id, span),
-                            );
-                        }
+                    // 位置直接来自指令自身：生成期就地捕获，无跨调用配对状态
+                    let span = instr.span();
+                    if !span.is_dummy() {
+                        debug_map.insert(
+                            current_bytecode_idx,
+                            DebugSpan::new(self.source_file_id, span),
+                        );
                     }
                 }
 
@@ -310,6 +310,8 @@ impl Translator {
             ir_instructions.push(Instruction::Load {
                 dst: Operand::Local(local_reg),
                 src: Operand::Arg(i),
+                // 合成构造函数：无源码对应语句，位置诚实留空
+                span: Span::dummy(),
             });
             field_operands.push(Operand::Local(local_reg));
         }
@@ -319,8 +321,12 @@ impl Translator {
             dst: Operand::Local(result_reg),
             type_name: struct_name.clone(),
             fields: field_operands,
+            span: Span::dummy(),
         });
-        ir_instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+        ir_instructions.push(Instruction::Ret {
+            value: Some(Operand::Local(result_reg)),
+            span: Span::dummy(),
+        });
 
         // 创建临时 FunctionIR 用于 translate_instruction
         let param_types: Vec<MonoType> = fields.iter().map(|f| f.ty.clone().into()).collect();
@@ -353,33 +359,12 @@ impl Translator {
         Ok(func_code)
     }
 
-    fn extract_span(instr: &Instruction) -> Option<Span> {
-        match instr {
-            Instruction::Call { span, .. } => Some(*span),
-            Instruction::CallVirt { span, .. } => Some(*span),
-            Instruction::CallDyn { span, .. } => Some(*span),
-            Instruction::Store { span, .. } => Some(*span),
-            Instruction::StoreField { span, .. } => Some(*span),
-            Instruction::StoreIndex { span, .. } => Some(*span),
-            Instruction::Contains { span, .. } => Some(*span),
-            Instruction::Div { span, .. } => Some(*span),
-            Instruction::Mod { span, .. } => Some(*span),
-            Instruction::LoadField { span, .. } => Some(*span),
-            Instruction::LoadIndex { span, .. } => Some(*span),
-            Instruction::AllocFixedArray { span, .. } => Some(*span),
-            Instruction::CreateVariant { span, .. } => Some(*span),
-            Instruction::VariantTag { span, .. } => Some(*span),
-            Instruction::VariantPayload { span, .. } => Some(*span),
-            _ => None,
-        }
-    }
-
     /// 从指令中提取跳转目标（如果是跳转指令）
     fn get_jump_target(instr: &Instruction) -> Option<(usize, u8)> {
         match instr {
-            Instruction::Jmp(target) => Some((*target, opcode::JMP)),
-            Instruction::JmpIf(_, target) => Some((*target, opcode::JMP_IF)),
-            Instruction::JmpIfNot(_, target) => Some((*target, opcode::JMP_IF_NOT)),
+            Instruction::Jmp { target, .. } => Some((*target, opcode::JMP)),
+            Instruction::JmpIf { target, .. } => Some((*target, opcode::JMP_IF)),
+            Instruction::JmpIfNot { target, .. } => Some((*target, opcode::JMP_IF_NOT)),
             _ => None,
         }
     }
@@ -426,40 +411,40 @@ impl Translator {
         use Instruction::*;
 
         match instr {
-            Move { dst, src } => self.translate_move(dst, src),
-            Load { dst, src } => self.translate_load(dst, src),
+            Move { dst, src, .. } => self.translate_move(dst, src),
+            Load { dst, src, .. } => self.translate_load(dst, src),
             Store { dst, src, .. } => self.translate_store(dst, src),
 
-            Add { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_ADD, dst, lhs, rhs),
-            Sub { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_SUB, dst, lhs, rhs),
-            Mul { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_MUL, dst, lhs, rhs),
+            Add { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_ADD, dst, lhs, rhs),
+            Sub { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_SUB, dst, lhs, rhs),
+            Mul { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_MUL, dst, lhs, rhs),
             Div { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_DIV, dst, lhs, rhs),
             Mod { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_REM, dst, lhs, rhs),
 
-            And { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_AND, dst, lhs, rhs),
-            Or { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_OR, dst, lhs, rhs),
-            Xor { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_XOR, dst, lhs, rhs),
-            Shl { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_SHL, dst, lhs, rhs),
-            Shr { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_SHR, dst, lhs, rhs),
-            Sar { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_SAR, dst, lhs, rhs),
-            Neg { dst, src } => self.translate_unary_op(opcode::I64_NEG, dst, src),
-            Not { dst, src } => self.translate_unary_op(opcode::I64_NEG, dst, src),
+            And { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_AND, dst, lhs, rhs),
+            Or { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_OR, dst, lhs, rhs),
+            Xor { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_XOR, dst, lhs, rhs),
+            Shl { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_SHL, dst, lhs, rhs),
+            Shr { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_SHR, dst, lhs, rhs),
+            Sar { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_SAR, dst, lhs, rhs),
+            Neg { dst, src, .. } => self.translate_unary_op(opcode::I64_NEG, dst, src),
+            Not { dst, src, .. } => self.translate_unary_op(opcode::I64_NEG, dst, src),
 
-            Eq { dst, lhs, rhs } => {
+            Eq { dst, lhs, rhs, .. } => {
                 self.translate_compare(opcode::I64_EQ, opcode::I64_NE, dst, lhs, rhs)
             }
-            Ne { dst, lhs, rhs } => {
+            Ne { dst, lhs, rhs, .. } => {
                 self.translate_compare(opcode::I64_NE, opcode::I64_EQ, dst, lhs, rhs)
             }
-            Lt { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_LT, dst, lhs, rhs),
-            Le { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_LE, dst, lhs, rhs),
-            Gt { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_GT, dst, lhs, rhs),
-            Ge { dst, lhs, rhs } => self.translate_binary_op(opcode::I64_GE, dst, lhs, rhs),
+            Lt { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_LT, dst, lhs, rhs),
+            Le { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_LE, dst, lhs, rhs),
+            Gt { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_GT, dst, lhs, rhs),
+            Ge { dst, lhs, rhs, .. } => self.translate_binary_op(opcode::I64_GE, dst, lhs, rhs),
 
-            Jmp(target) => self.translate_jmp(*target),
-            JmpIf(cond, target) => self.translate_jmp_if(cond, *target),
-            JmpIfNot(cond, target) => self.translate_jmp_if_not(cond, *target),
-            Ret(value) => self.translate_ret(value),
+            Jmp { target, .. } => self.translate_jmp(*target),
+            JmpIf { cond, target, .. } => self.translate_jmp_if(cond, *target),
+            JmpIfNot { cond, target, .. } => self.translate_jmp_if_not(cond, *target),
+            Ret { value, .. } => self.translate_ret(value),
 
             Call {
                 dst,
@@ -481,7 +466,7 @@ impl Translator {
             TailCall { func, args, .. } => self.translate_tail_call(func, args),
 
             Alloc { dst, .. } => self.translate_alloc(dst),
-            Free(_) => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
+            Free { .. } => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
             AllocArray { dst, .. } => self.translate_alloc_array(dst),
             AllocFixedArray { dst, count, .. } => {
                 // #299 §2：定长数组构造——NEW_ARRAY(dst, count)
@@ -527,24 +512,29 @@ impl Translator {
             }
 
             Cast { dst, src, .. } => self.translate_cast(dst, src),
-            TypeTest(_, _) => Ok(BytecodeInstruction::new(opcode::TYPE_CHECK, vec![0, 0, 0])),
+            TypeTest { .. } => Ok(BytecodeInstruction::new(opcode::TYPE_CHECK, vec![0, 0, 0])),
 
             Spawn {
+                span: _,
                 closures,
                 plan,
                 result,
             } => self.translate_spawn_multi(closures, plan, result),
-            Yield => Ok(BytecodeInstruction::new(opcode::YIELD, vec![])),
+            Yield { .. } => Ok(BytecodeInstruction::new(opcode::YIELD, vec![])),
 
             HeapAlloc { dst, .. } => self.translate_heap_alloc(dst),
             CreateStruct {
+                span: _,
                 dst,
                 type_name,
                 fields,
             } => self.translate_create_struct(dst, type_name, fields),
-            NewDict { dst, keys, values } => self.translate_new_dict(dst, keys, values),
-            NewTuple { dst, items } => self.translate_new_tuple(dst, items),
+            NewDict {
+                dst, keys, values, ..
+            } => self.translate_new_dict(dst, keys, values),
+            NewTuple { dst, items, .. } => self.translate_new_tuple(dst, items),
             NewRange {
+                span: _,
                 dst,
                 start,
                 end,
@@ -564,42 +554,52 @@ impl Translator {
                 dst, obj, group, ..
             } => self.translate_variant_access(opcode::VARIANT_PAYLOAD, dst, obj, group),
             MakeClosure {
+                span: _,
                 dst,
                 func,
                 def,
                 env,
             } => self.translate_make_closure(dst, func, *def, env),
-            Drop(operand) => self.translate_drop(operand),
+            Drop { src: operand, .. } => self.translate_drop(operand),
 
-            Push(operand) => self.translate_push(operand),
-            Pop(operand) => self.translate_pop(operand),
-            Dup => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
-            Swap => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
+            Push { src: operand, .. } => self.translate_push(operand),
+            Pop { dst: operand, .. } => self.translate_pop(operand),
+            Dup { .. } => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
+            Swap { .. } => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
 
-            ArcNew { dst, src } => self.translate_arc_new(dst, src),
-            RcNew { dst, src } => self.translate_rc_new(dst, src),
-            ArcClone { dst, src } => self.translate_arc_clone(dst, src),
-            ArcDrop(operand) => self.translate_arc_drop(operand),
+            ArcNew { dst, src, .. } => self.translate_arc_new(dst, src),
+            RcNew { dst, src, .. } => self.translate_rc_new(dst, src),
+            ArcClone { dst, src, .. } => self.translate_arc_clone(dst, src),
+            ArcDrop { src: operand, .. } => self.translate_arc_drop(operand),
 
-            StringLength { dst, src } => self.translate_string_length(dst, src),
-            StringConcat { dst, lhs, rhs } => self.translate_string_concat(dst, lhs, rhs),
-            StringGetChar { dst, src, index } => self.translate_string_get_char(dst, src, index),
-            StringFromInt { dst, src } => self.translate_string_from_int(dst, src),
-            StringFromFloat { dst, src } => self.translate_string_from_float(dst, src),
+            StringLength { dst, src, .. } => self.translate_string_length(dst, src),
+            StringConcat { dst, lhs, rhs, .. } => self.translate_string_concat(dst, lhs, rhs),
+            StringGetChar {
+                dst, src, index, ..
+            } => self.translate_string_get_char(dst, src, index),
+            StringFromInt { dst, src, .. } => self.translate_string_from_int(dst, src),
+            StringFromFloat { dst, src, .. } => self.translate_string_from_float(dst, src),
 
-            LoadUpvalue { dst, upvalue_idx } => self.translate_load_upvalue(dst, *upvalue_idx),
-            StoreUpvalue { src, upvalue_idx } => self.translate_store_upvalue(src, *upvalue_idx),
+            LoadUpvalue {
+                dst, upvalue_idx, ..
+            } => self.translate_load_upvalue(dst, *upvalue_idx),
+            StoreUpvalue {
+                src, upvalue_idx, ..
+            } => self.translate_store_upvalue(src, *upvalue_idx),
 
             // unsafe 块和指针操作（暂不支持，跳过）
-            UnsafeBlockStart | UnsafeBlockEnd => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
+            UnsafeBlockStart { .. } | UnsafeBlockEnd { .. } => {
+                Ok(BytecodeInstruction::new(opcode::NOP, vec![]))
+            }
             PtrFromRef { .. } | PtrDeref { .. } | PtrStore { .. } | PtrLoad { .. } => {
                 Ok(BytecodeInstruction::new(opcode::NOP, vec![]))
             }
 
-            CloseUpvalue(operand) => self.translate_close_upvalue(operand),
+            CloseUpvalue { src: operand, .. } => self.translate_close_upvalue(operand),
 
             // spawn for: 从 List 寄存器动态读取闭包并 spawn
             Instruction::SpawnFromList {
+                span: _,
                 closures_list,
                 plan,
                 result,

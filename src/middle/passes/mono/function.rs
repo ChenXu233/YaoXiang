@@ -69,7 +69,6 @@ pub trait FunctionMonomorphizer {
         type_map: &HashMap<usize, MonoType>,
     ) -> Instruction;
 
-    /// 替换AST类型
     fn substitute_type_ast(
         &self,
         ty: &AstType,
@@ -291,18 +290,25 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 dst,
                 src,
                 target_type,
+                span,
             } => {
                 let new_target = self.substitute_type_ast(target_type, type_map);
                 Instruction::Cast {
                     dst: dst.clone(),
                     src: src.clone(),
                     target_type: new_target,
+                    span: *span,
                 }
             }
-            Instruction::TypeTest(operand, test_type) => {
-                let new_test_type = self.substitute_type_ast(test_type, type_map);
-                Instruction::TypeTest(operand.clone(), new_test_type)
-            }
+            Instruction::TypeTest {
+                src: operand,
+                ty: test_type,
+                span,
+            } => Instruction::TypeTest {
+                src: operand.clone(),
+                ty: self.substitute_type_ast(test_type, type_map),
+                span: *span,
+            },
             _ => instr.clone(),
         }
     }

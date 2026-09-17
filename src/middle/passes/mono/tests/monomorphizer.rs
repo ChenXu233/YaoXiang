@@ -44,8 +44,12 @@ fn make_identity_ir() -> FunctionIR {
                     Instruction::Load {
                         dst: Operand::Local(0),
                         src: Operand::Arg(0),
+                        span: Span::dummy(),
                     },
-                    Instruction::Ret(Some(Operand::Local(0))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(0)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
@@ -72,12 +76,17 @@ fn make_swap_ir() -> FunctionIR {
                     Instruction::Load {
                         dst: Operand::Local(0),
                         src: Operand::Arg(0),
+                        span: Span::dummy(),
                     },
                     Instruction::Load {
                         dst: Operand::Local(1),
                         src: Operand::Arg(1),
+                        span: Span::dummy(),
                     },
-                    Instruction::Ret(Some(Operand::Local(0))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(0)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
@@ -303,7 +312,10 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
         body: FunctionBody::Code {
             blocks: vec![BasicBlock {
                 label: 0,
-                instructions: vec![Instruction::Ret(None)],
+                instructions: vec![Instruction::Ret {
+                    value: None,
+                    span: Span::dummy(),
+                }],
                 successors: Vec::new(),
             }],
             entry: 0,
@@ -409,7 +421,10 @@ fn test_replace_call_sites_replaces_generic_call_in_main() {
                         span: Span::default(),
                         def: None,
                     },
-                    Instruction::Ret(Some(Operand::Local(0))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(0)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
@@ -467,7 +482,10 @@ fn test_replace_call_sites_skips_generic_functions() {
                         span: Span::default(),
                         def: None,
                     },
-                    Instruction::Ret(Some(Operand::Local(0))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(0)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
@@ -582,7 +600,10 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
                         span: Span::default(),
                         def: None,
                     },
-                    Instruction::Ret(Some(Operand::Local(0))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(0)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
@@ -929,7 +950,10 @@ fn test_replace_call_sites_multi_instantiation_dispatches_per_site() {
                         span: span_str,
                         def: None,
                     },
-                    Instruction::Ret(None),
+                    Instruction::Ret {
+                        value: None,
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
@@ -1020,7 +1044,10 @@ fn test_replace_call_sites_rewrites_nested_calls_in_specialized_body() {
                         span: inner_span,
                         def: None,
                     },
-                    Instruction::Ret(Some(Operand::Local(1))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(1)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
@@ -1085,7 +1112,10 @@ fn test_scale_over_hundred_instantiations_compiles() {
                         span: Span::default(),
                         def: None,
                     },
-                    Instruction::Ret(None),
+                    Instruction::Ret {
+                        value: None,
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
@@ -1151,7 +1181,10 @@ fn test_type_growing_recursion_still_blocked_by_depth() {
                             span: Span::default(),
                             def: None,
                         },
-                        Instruction::Ret(Some(Operand::Local(1))),
+                        Instruction::Ret {
+                            value: Some(Operand::Local(1)),
+                            span: Span::dummy(),
+                        },
                     ],
                     successors: Vec::new(),
                 }],

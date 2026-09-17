@@ -203,6 +203,12 @@ pub struct AstToIrGenerator {
     /// 嵌套函数体生成前保存并清空：闭包体不继承外层循环上下文（typecheck E1102 已拦截，
     /// 此处为层间失联防御）。
     loop_stack: Vec<LoopTargets>,
+    /// 当前语句的源码 span：语句生成循环在语句边界设置，指令构造处直接读取。
+    ///
+    /// 这是指令级 span 的唯一来源——每个 `Instruction::X { .., span: self.cur_span }`
+    /// 就地捕获当时的语句位置，不存在"先记录后配对"的时序契约。
+    /// 嵌套函数体生成前保存、之后恢复（与 next_temp 同款处理）。
+    cur_span: Span,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -311,6 +317,7 @@ impl AstToIrGenerator {
                 map
             },
             loop_stack: Vec::new(),
+            cur_span: Span::dummy(),
         }
     }
 
@@ -1433,18 +1440,28 @@ impl AstToIrGenerator {
         let last_idx = body.len().checked_sub(1);
         let mut tail_handled = false;
         for (i, stmt) in body.iter().enumerate() {
+            // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
+            self.set_cur_span(stmt.span);
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
-                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
+                    self.set_cur_span(stmt.span);
                     tail_handled = true;
                     break;
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            self.set_cur_span(stmt.span);
         }
         if !tail_handled {
-            instructions.push(Instruction::Ret(None));
+            instructions.push(Instruction::Ret {
+                value: None,
+                span: self.cur_span,
+            });
         }
 
         // 退出作用域
@@ -1521,6 +1538,7 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Load {
                 dst: Operand::Local(i),
                 src: Operand::Arg(i),
+                span: self.cur_span,
             });
 
             self.register_local(&param.name, i);
@@ -1559,10 +1577,16 @@ impl AstToIrGenerator {
         let last_idx = body.len().checked_sub(1);
         let mut tail_handled = false;
         for (i, stmt) in body.iter().enumerate() {
+            // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
+            self.set_cur_span(stmt.span);
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
-                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
+                    self.set_cur_span(stmt.span);
                     tail_handled = true;
                     break;
                 }
@@ -1577,7 +1601,10 @@ impl AstToIrGenerator {
             if let Some(vars) = self.release_plan.get(&stmt.span) {
                 for var in vars {
                     if let Some(local_idx) = self.lookup_local(var) {
-                        instructions.push(Instruction::Drop(Operand::Local(local_idx)));
+                        instructions.push(Instruction::Drop {
+                            src: Operand::Local(local_idx),
+                            span: self.cur_span,
+                        });
                     }
                 }
             }
@@ -1586,9 +1613,13 @@ impl AstToIrGenerator {
                 MSG::IrGenAfterProcessStmt,
                 &self.symbols.len().to_string()
             );
+            self.set_cur_span(stmt.span);
         }
         if !tail_handled {
-            instructions.push(Instruction::Ret(None));
+            instructions.push(Instruction::Ret {
+                value: None,
+                span: self.cur_span,
+            });
         }
 
         // 退出函数体作用域
@@ -1677,10 +1708,14 @@ impl AstToIrGenerator {
             func: next_func_name.to_string(),
             env: full_env,
             def: None,
+            span: self.cur_span,
         });
 
         // Ret(closure)
-        instructions.push(Instruction::Ret(Some(Operand::Local(closure_dst))));
+        instructions.push(Instruction::Ret {
+            value: Some(Operand::Local(closure_dst)),
+            span: self.cur_span,
+        });
 
         // 5. 构建 FunctionIR
         let param_types: Vec<MonoType> = layer
@@ -1753,18 +1788,28 @@ impl AstToIrGenerator {
         let last_idx = body.len().checked_sub(1);
         let mut tail_handled = false;
         for (i, stmt) in body.iter().enumerate() {
+            // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
+            self.set_cur_span(stmt.span);
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
-                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
+                    self.set_cur_span(stmt.span);
                     tail_handled = true;
                     break;
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            self.set_cur_span(stmt.span);
         }
         if !tail_handled {
-            instructions.push(Instruction::Ret(None));
+            instructions.push(Instruction::Ret {
+                value: None,
+                span: self.cur_span,
+            });
         }
 
         let param_types: Vec<MonoType> = layer
@@ -1822,6 +1867,8 @@ impl AstToIrGenerator {
 
         // 保存外层状态，避免污染
         let saved_next_temp = self.next_temp;
+        // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
+        let saved_cur_span = self.cur_span;
 
         for (i, layer) in layers.iter().enumerate() {
             let is_innermost = i == layers.len() - 1;
@@ -1875,6 +1922,7 @@ impl AstToIrGenerator {
 
         // 恢复外层状态
         self.next_temp = saved_next_temp;
+        self.cur_span = saved_cur_span;
 
         // 内层函数加入 nested_functions，最外层返回给调用者
         // 第 0 个是最外层，其余是内层
@@ -2249,6 +2297,7 @@ impl AstToIrGenerator {
                 init_instrs.push(Instruction::Load {
                     dst: Operand::Local(result_reg),
                     src: Operand::Const(const_val),
+                    span: Self::get_expr_span(init),
                 });
             } else {
                 self.generate_expr_ir(init, result_reg, &mut init_instrs, constants)?;
@@ -2257,6 +2306,7 @@ impl AstToIrGenerator {
             init_instrs.push(Instruction::Load {
                 dst: Operand::Local(result_reg),
                 src: Operand::Const(ConstValue::Int(0)),
+                span: Span::default(),
             });
         }
         init_instrs.push(Instruction::Store {
@@ -2338,6 +2388,8 @@ impl AstToIrGenerator {
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 保存父函数状态
         let saved_next_temp = self.next_temp;
+        // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
+        let saved_cur_span = self.cur_span;
 
         // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
@@ -2353,6 +2405,7 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Load {
                 dst: Operand::Local(i),
                 src: Operand::Arg(i),
+                span: self.cur_span,
             });
 
             self.register_local(&param.name, i);
@@ -2365,7 +2418,10 @@ impl AstToIrGenerator {
         // 生成表达式体的 IR，并返回结果
         let result_reg = self.next_temp_reg();
         self.generate_expr_ir(body, result_reg, &mut instructions, constants)?;
-        instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+        instructions.push(Instruction::Ret {
+            value: Some(Operand::Local(result_reg)),
+            span: self.cur_span,
+        });
 
         // 退出作用域
         self.exit_scope();
@@ -2376,6 +2432,7 @@ impl AstToIrGenerator {
 
         // 恢复父函数状态
         self.next_temp = saved_next_temp;
+        self.cur_span = saved_cur_span;
 
         // 解析返回类型
         let ret_type: MonoType = return_type.clone().into();
@@ -2471,8 +2528,16 @@ impl AstToIrGenerator {
         }
     }
 
-    /// 生成局部语句 IR
-    #[allow(clippy::only_used_in_recursion)]
+    /// 在语句边界设定当前 span：之后所有指令构造就地捕获它。
+    fn set_cur_span(
+        &mut self,
+        span: Span,
+    ) {
+        if !span.is_dummy() {
+            self.cur_span = span;
+        }
+    }
+
     fn generate_local_stmt_ir(
         &mut self,
         stmt: &ast::Stmt,
@@ -2666,6 +2731,7 @@ impl AstToIrGenerator {
                                 instructions.push(Instruction::Load {
                                     dst: Operand::Local(idx_reg),
                                     src: Operand::Const(ConstValue::Int(i as i128)),
+                                    span: self.cur_span,
                                 });
                                 instructions.push(Instruction::StoreIndex {
                                     dst: Operand::Local(var_idx),
@@ -2683,6 +2749,7 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(var_idx),
                         src: Operand::Const(ConstValue::Int(0)),
+                        span: self.cur_span,
                     });
                 }
             }
@@ -2746,6 +2813,7 @@ impl AstToIrGenerator {
                         instructions.push(Instruction::Load {
                             dst: Operand::Local(index_reg),
                             src: Operand::Const(ConstValue::Int(i as i128)),
+                            span: self.cur_span,
                         });
 
                         instructions.push(Instruction::LoadIndex {
@@ -2761,10 +2829,16 @@ impl AstToIrGenerator {
                 Some(e) => {
                     let result_reg = self.next_temp_reg();
                     self.generate_expr_ir(e, result_reg, instructions, constants)?;
-                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
                 }
                 None => {
-                    instructions.push(Instruction::Ret(None));
+                    instructions.push(Instruction::Ret {
+                        value: None,
+                        span: self.cur_span,
+                    });
                 }
             },
             // 合法不产生代码的语句：
@@ -2803,7 +2877,11 @@ impl AstToIrGenerator {
 
         // 2. 跳转到下一个分支的占位符 (JmpIfNot to next_branch)
         let jump_to_next_branch_idx = instructions.len();
-        instructions.push(Instruction::JmpIfNot(Operand::Local(condition_reg), 0)); // 占位符
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(condition_reg),
+            target: 0,
+            span: self.cur_span,
+        }); // 占位符
 
         // 3. 生成 then 分支
         self.generate_block_ir(then_branch, None, instructions, constants)?;
@@ -2813,13 +2891,21 @@ impl AstToIrGenerator {
         // 只有当有 else/else if 时才需要跳过它们，否则这里已经是 end
         if !else_if_branches.is_empty() || else_branch.is_some() {
             let idx = instructions.len();
-            instructions.push(Instruction::Jmp(0)); // 占位符
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            }); // 占位符
             jump_to_end_indices.push(idx);
         }
 
         // 5. 修复条件跳转 (JmpIfNot)，使其指向 else if 或 else (即当前位置)
         let len = instructions.len();
-        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_to_next_branch_idx] {
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_to_next_branch_idx]
+        {
             *target = len;
         }
 
@@ -2836,22 +2922,30 @@ impl AstToIrGenerator {
 
             // 跳转到下一个分支 (JmpIfNot)
             let jump_to_next_else_if_idx = instructions.len();
-            instructions.push(Instruction::JmpIfNot(
-                Operand::Local(else_if_condition_reg),
-                0,
-            ));
+            instructions.push(Instruction::JmpIfNot {
+                cond: Operand::Local(else_if_condition_reg),
+                target: 0,
+                span: self.cur_span,
+            });
 
             // 生成 else if 分支
             self.generate_block_ir(else_if_body, None, instructions, constants)?;
 
             // else if 分支结束后跳转到结束
             let idx = instructions.len();
-            instructions.push(Instruction::Jmp(0)); // 占位符
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            }); // 占位符
             jump_to_end_indices.push(idx);
 
             // 修复条件跳转
             let len = instructions.len();
-            if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_to_next_else_if_idx]
+            if let Instruction::JmpIfNot {
+                cond: _,
+                ref mut target,
+                span: _,
+            } = instructions[jump_to_next_else_if_idx]
             {
                 *target = len;
             }
@@ -2865,7 +2959,11 @@ impl AstToIrGenerator {
         // 8. 修复所有跳转到结束的指令
         let end_pos = instructions.len();
         for idx in jump_to_end_indices {
-            if let Instruction::Jmp(ref mut target) = instructions[idx] {
+            if let Instruction::Jmp {
+                ref mut target,
+                span: _,
+            } = instructions[idx]
+            {
                 *target = end_pos;
             }
         }
@@ -2906,7 +3004,11 @@ impl AstToIrGenerator {
 
         // 2. 跳转到下一个分支的占位符 (JmpIfNot to next)
         let jump_to_next_idx = instructions.len();
-        instructions.push(Instruction::JmpIfNot(Operand::Local(condition_reg), 0)); // 占位符
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(condition_reg),
+            target: 0,
+            span: self.cur_span,
+        }); // 占位符
 
         // 3. then 分支
         let then_result_reg = self.next_temp_reg();
@@ -2914,17 +3016,26 @@ impl AstToIrGenerator {
         instructions.push(Instruction::Move {
             dst: Operand::Local(value_reg),
             src: Operand::Local(then_result_reg),
+            span: self.cur_span,
         });
 
         // 4. 跳转到结束 (Jmp to end)
         let mut jumps_to_end = Vec::new();
         let jmp_idx = instructions.len();
-        instructions.push(Instruction::Jmp(0)); // 占位符
+        instructions.push(Instruction::Jmp {
+            target: 0,
+            span: self.cur_span,
+        }); // 占位符
         jumps_to_end.push(jmp_idx);
 
         // 5. 修复条件跳转
         let len = instructions.len();
-        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_to_next_idx] {
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_to_next_idx]
+        {
             *target = len;
         }
 
@@ -2934,20 +3045,33 @@ impl AstToIrGenerator {
             self.generate_expr_ir(else_if_condition, else_if_cond_reg, instructions, constants)?;
 
             let jump_idx = instructions.len();
-            instructions.push(Instruction::JmpIfNot(Operand::Local(else_if_cond_reg), 0));
+            instructions.push(Instruction::JmpIfNot {
+                cond: Operand::Local(else_if_cond_reg),
+                target: 0,
+                span: self.cur_span,
+            });
 
             let else_if_res = self.next_temp_reg();
             self.generate_block_ir(else_if_body, Some(else_if_res), instructions, constants)?;
             instructions.push(Instruction::Move {
                 dst: Operand::Local(value_reg),
                 src: Operand::Local(else_if_res),
+                span: self.cur_span,
             });
 
             let jmp_end_idx = instructions.len();
-            instructions.push(Instruction::Jmp(0));
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            });
             jumps_to_end.push(jmp_end_idx);
             let len = instructions.len();
-            if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_idx] {
+            if let Instruction::JmpIfNot {
+                cond: _,
+                ref mut target,
+                span: _,
+            } = instructions[jump_idx]
+            {
                 *target = len;
             }
         }
@@ -2959,13 +3083,18 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Move {
                 dst: Operand::Local(value_reg),
                 src: Operand::Local(else_res),
+                span: self.cur_span,
             });
         }
 
         // 8. 修复所有跳转到结束的指令
         let end_len = instructions.len();
         for idx in jumps_to_end {
-            if let Instruction::Jmp(ref mut target) = instructions[idx] {
+            if let Instruction::Jmp {
+                ref mut target,
+                span: _,
+            } = instructions[idx]
+            {
                 *target = end_len;
             }
         }
@@ -2975,6 +3104,7 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Load {
                 dst: Operand::Local(result_reg),
                 src: Operand::Const(ConstValue::Void),
+                span: self.cur_span,
             });
         }
 
@@ -3046,14 +3176,18 @@ impl AstToIrGenerator {
         let last_idx = block.stmts.len().checked_sub(1);
         for (i, stmt) in block.stmts.iter().enumerate() {
             let is_last = Some(i) == last_idx;
+            // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
+            self.set_cur_span(stmt.span);
             // 块作为表达式 + 最后一条语句贡献块值 → 值写入 result_reg
             if let (Some(reg), true) = (result_reg, is_last) {
                 if self.generate_tail_stmt_ir(stmt, reg, instructions, constants)? {
+                    self.set_cur_span(stmt.span);
                     continue;
                 }
             }
             // 其他情况正常生成语句
             self.generate_local_stmt_ir(stmt, instructions, constants)?;
+            self.set_cur_span(stmt.span);
         }
 
         // 退出作用域
@@ -3081,7 +3215,11 @@ impl AstToIrGenerator {
     ) {
         if let Some(targets) = self.loop_stack.pop() {
             for fixup in targets.break_fixups {
-                if let Instruction::Jmp(ref mut target) = instructions[fixup] {
+                if let Instruction::Jmp {
+                    ref mut target,
+                    span: _,
+                } = instructions[fixup]
+                {
                     *target = end_idx;
                 }
             }
@@ -3108,17 +3246,29 @@ impl AstToIrGenerator {
 
         // Jump to end if false
         let jump_end_idx = instructions.len();
-        instructions.push(Instruction::JmpIfNot(Operand::Local(cond_reg), 0)); // Placeholder
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(cond_reg),
+            target: 0,
+            span: self.cur_span,
+        }); // Placeholder
 
         // Body
         self.generate_block_ir(body, None, instructions, constants)?;
 
         // Jump back to start
-        instructions.push(Instruction::Jmp(loop_start_idx));
+        instructions.push(Instruction::Jmp {
+            target: loop_start_idx,
+            span: self.cur_span,
+        });
 
         // Fix JmpIfNot target
         let end_idx = instructions.len();
-        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_end_idx]
+        {
             *target = end_idx;
         }
         // #311：回填循环体内 break 的占位跳转到出口
@@ -3128,6 +3278,7 @@ impl AstToIrGenerator {
         instructions.push(Instruction::Load {
             dst: Operand::Local(result_reg),
             src: Operand::Const(ConstValue::Void),
+            span: self.cur_span,
         });
 
         Ok(())
@@ -3218,6 +3369,7 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Load {
                 dst: Operand::Local(step_reg),
                 src: Operand::Const(ConstValue::Int(1)),
+                span: self.cur_span,
             });
         }
 
@@ -3231,6 +3383,7 @@ impl AstToIrGenerator {
             start: Operand::Local(start_reg),
             end: Operand::Local(end_reg),
             step: Operand::Local(step_reg),
+            span: self.cur_span,
         });
         Ok(())
     }
@@ -3324,16 +3477,22 @@ impl AstToIrGenerator {
         instructions.push(Instruction::Load {
             dst: Operand::Local(ok_const),
             src: Operand::Const(ConstValue::Int(0)),
+            span: self.cur_span,
         });
         let eq_reg = self.next_temp_reg();
         instructions.push(Instruction::Eq {
             dst: Operand::Local(eq_reg),
             lhs: Operand::Local(tag_reg),
             rhs: Operand::Local(ok_const),
+            span: self.cur_span,
         });
         // variant != 0（Err）→ 跳到显式失败
         let is_err_idx = instructions.len();
-        instructions.push(Instruction::JmpIfNot(Operand::Local(eq_reg), 0));
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(eq_reg),
+            target: 0,
+            span: self.cur_span,
+        });
         // Ok 路径：payload 原地解包为消费值
         instructions.push(Instruction::VariantPayload {
             dst: Operand::Local(dst_reg),
@@ -3342,10 +3501,17 @@ impl AstToIrGenerator {
             span,
         });
         let end_idx = instructions.len();
-        instructions.push(Instruction::Jmp(0));
+        instructions.push(Instruction::Jmp {
+            target: 0,
+            span: self.cur_span,
+        });
         // Err 路径：abort native 必返 ExecutorError，后续指令不可达
         let err_target = instructions.len();
-        instructions[is_err_idx] = Instruction::JmpIfNot(Operand::Local(eq_reg), err_target);
+        instructions[is_err_idx] = Instruction::JmpIfNot {
+            cond: Operand::Local(eq_reg),
+            target: err_target,
+            span: self.cur_span,
+        };
         instructions.push(Instruction::Call {
             dst: None,
             func: Operand::Const(ConstValue::String(abort_fn.to_string())),
@@ -3354,7 +3520,10 @@ impl AstToIrGenerator {
             def: None,
         });
         let end_target = instructions.len();
-        instructions[end_idx] = Instruction::Jmp(end_target);
+        instructions[end_idx] = Instruction::Jmp {
+            target: end_target,
+            span: self.cur_span,
+        };
     }
 
     /// 生成基于迭代器协议的 For 循环 IR
@@ -3430,7 +3599,11 @@ impl AstToIrGenerator {
 
         // 6. 如果没有更多元素，跳转到结束
         let jump_end_idx = instructions.len();
-        instructions.push(Instruction::JmpIfNot(Operand::Local(has_more_reg), 0));
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(has_more_reg),
+            target: 0,
+            span: self.cur_span,
+        });
 
         // 7. 获取下一个元素: var = next(iterator)
         let element_reg = self.next_temp_reg();
@@ -3451,11 +3624,19 @@ impl AstToIrGenerator {
         self.generate_block_ir(body, None, instructions, constants)?;
 
         // 9. 跳转回循环开始
-        instructions.push(Instruction::Jmp(loop_start_idx));
+        instructions.push(Instruction::Jmp {
+            target: loop_start_idx,
+            span: self.cur_span,
+        });
 
         // 10. 修复跳转
         let end_idx = instructions.len();
-        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_end_idx]
+        {
             *target = end_idx;
         }
         // #311：回填循环体内 break 的占位跳转到出口
@@ -3468,6 +3649,7 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Load {
                 dst: Operand::Local(reg),
                 src: Operand::Const(ConstValue::Void),
+                span: self.cur_span,
             });
         }
 
@@ -3527,6 +3709,7 @@ impl AstToIrGenerator {
             dst: Operand::Local(closures_list_reg),
             size: Operand::Const(ConstValue::Int(0)),
             elem_size: Operand::Const(ConstValue::Int(1)),
+            span: self.cur_span,
         });
 
         // 4. 计算可迭代对象
@@ -3562,7 +3745,11 @@ impl AstToIrGenerator {
 
         // 9. 如果没有更多元素，跳转到结束
         let jump_end_idx = instructions.len();
-        instructions.push(Instruction::JmpIfNot(Operand::Local(has_more_reg), 0));
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(has_more_reg),
+            target: 0,
+            span: self.cur_span,
+        });
 
         // 10. 获取下一个元素: var = next(iterator)
         let element_reg = self.next_temp_reg();
@@ -3609,11 +3796,19 @@ impl AstToIrGenerator {
         });
 
         // 13. 跳转回循环开始
-        instructions.push(Instruction::Jmp(loop_start_idx));
+        instructions.push(Instruction::Jmp {
+            target: loop_start_idx,
+            span: self.cur_span,
+        });
 
         // 14. 修复跳出循环的跳转目标
         let end_idx = instructions.len();
-        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_end_idx]
+        {
             *target = end_idx;
         }
 
@@ -3635,6 +3830,7 @@ impl AstToIrGenerator {
             closures_list: Operand::Local(closures_list_reg),
             plan,
             result: Operand::Local(result_reg),
+            span: self.cur_span,
         });
 
         // 17. 退出 spawn 作用域
@@ -3847,6 +4043,8 @@ impl AstToIrGenerator {
     ) -> Result<LambdaBodyIR, Diagnostic> {
         // 保存父函数的临时寄存器计数
         let saved_next_temp = self.next_temp;
+        // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
+        let saved_cur_span = self.cur_span;
 
         // #311：闭包体是独立指令流，循环栈属父函数——保存并清空
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
@@ -3876,24 +4074,34 @@ impl AstToIrGenerator {
         let last_idx = body.stmts.len().checked_sub(1);
         let mut tail_handled = false;
         for (i, stmt) in body.stmts.iter().enumerate() {
+            // 语句边界设定当前 span，供本条语句的所有指令构造就地捕获
+            self.set_cur_span(stmt.span);
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
-                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
+                    self.set_cur_span(stmt.span);
                     tail_handled = true;
                     break;
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            self.set_cur_span(stmt.span);
         }
 
         // 尾位置无值（末位为语句 / 空体）时补 Ret(None)
         if !tail_handled {
             let has_ret = instructions
                 .iter()
-                .any(|inst| matches!(inst, Instruction::Ret(_)));
+                .any(|inst| matches!(inst, Instruction::Ret { value: _, span: _ }));
             if !has_ret {
-                instructions.push(Instruction::Ret(None));
+                instructions.push(Instruction::Ret {
+                    value: None,
+                    span: self.cur_span,
+                });
             }
         }
 
@@ -3906,6 +4114,7 @@ impl AstToIrGenerator {
 
         // 恢复父函数的临时寄存器计数
         self.next_temp = saved_next_temp;
+        self.cur_span = saved_cur_span;
 
         // #311：恢复父函数的循环上下文
         self.loop_stack = saved_loop_stack;
@@ -4052,15 +4261,21 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Load {
                 dst: Operand::Local(const_reg),
                 src: Operand::Const(ConstValue::Int(i as i128)),
+                span: self.cur_span,
             });
             let eq_reg = self.next_temp_reg();
             instructions.push(Instruction::Eq {
                 dst: Operand::Local(eq_reg),
                 lhs: Operand::Local(tag_reg),
                 rhs: Operand::Local(const_reg),
+                span: self.cur_span,
             });
             let next_idx = instructions.len();
-            instructions.push(Instruction::JmpIfNot(Operand::Local(eq_reg), 0));
+            instructions.push(Instruction::JmpIfNot {
+                cond: Operand::Local(eq_reg),
+                target: 0,
+                span: self.cur_span,
+            });
 
             // 解包负载
             let payload_reg = self.next_temp_reg();
@@ -4124,12 +4339,20 @@ impl AstToIrGenerator {
             }
 
             let end_idx = instructions.len();
-            instructions.push(Instruction::Jmp(0));
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            });
             end_jumps.push(end_idx);
 
             // 回填：tag != i → 下一变体臂
             let next_target = instructions.len();
-            if let Instruction::JmpIfNot(_, ref mut target) = instructions[next_idx] {
+            if let Instruction::JmpIfNot {
+                cond: _,
+                ref mut target,
+                span: _,
+            } = instructions[next_idx]
+            {
                 *target = next_target;
             }
         }
@@ -4137,7 +4360,11 @@ impl AstToIrGenerator {
         // 汇合点（VariantTag 守卫保证 tag 恒在集合内）
         let end = instructions.len();
         for idx in end_jumps {
-            if let Instruction::Jmp(ref mut target) = instructions[idx] {
+            if let Instruction::Jmp {
+                ref mut target,
+                span: _,
+            } = instructions[idx]
+            {
                 *target = end;
             }
         }
@@ -4254,6 +4481,7 @@ impl AstToIrGenerator {
                 instructions.push(Instruction::Load {
                     dst: Operand::Local(result_reg),
                     src: Operand::Const(const_val),
+                    span: self.cur_span,
                 });
             }
             Expr::Var(var_name, var_span) => {
@@ -4262,18 +4490,21 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::LoadUpvalue {
                         dst: Operand::Local(result_reg),
                         upvalue_idx: env_idx,
+                        span: self.cur_span,
                     });
                 } else if let Some(local_idx) = self.lookup_local(var_name) {
                     // 局部变量：直接加载
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(result_reg),
                         src: Operand::Local(local_idx),
+                        span: self.cur_span,
                     });
                 } else if let Some(global_idx) = self.lookup_global(var_name) {
                     // 全局变量（T2）：直接从全局槽位加载，不再调用访问器函数
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(result_reg),
                         src: Operand::Global(global_idx),
+                        span: *var_span,
                     });
                 } else if let Some(alias) = self.use_aliases.get(var_name) {
                     // T5：`use lib.{value}` 的别名先看是否落在全局布局里
@@ -4283,6 +4514,7 @@ impl AstToIrGenerator {
                         instructions.push(Instruction::Load {
                             dst: Operand::Local(result_reg),
                             src: Operand::Global(slot),
+                            span: *var_span,
                         });
                     } else {
                         instructions.push(Instruction::Call {
@@ -4310,6 +4542,7 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(result_reg),
                         src: Operand::Const(ConstValue::Void),
+                        span: self.cur_span,
                     });
                 } else if self.binding_is_function(var_name) {
                     // #348：名字的类型是 Fn ⇒ 它就是函数值。运行时函数值的唯一表示是
@@ -4323,6 +4556,7 @@ impl AstToIrGenerator {
                         func: var_name.clone(),
                         env: vec![],
                         def: None,
+                        span: self.cur_span,
                     });
                 } else {
                     // #271 #3：未解析变量 → 硬错误（#254 spawn 捕获已落地，不再需要静默 Load 0 兜底）。
@@ -4369,6 +4603,7 @@ impl AstToIrGenerator {
                             instructions.push(Instruction::Load {
                                 dst: Operand::Local(result_reg),
                                 src: Operand::Local(local_idx),
+                                span: self.cur_span,
                             });
                         }
                         return Ok(());
@@ -4394,19 +4629,40 @@ impl AstToIrGenerator {
                         let is_and = matches!(op, ast::BinOp::And);
                         let short_idx = instructions.len();
                         if is_and {
-                            instructions.push(Instruction::JmpIfNot(Operand::Local(lhs_reg), 0));
+                            instructions.push(Instruction::JmpIfNot {
+                                cond: Operand::Local(lhs_reg),
+                                target: 0,
+                                span: self.cur_span,
+                            });
                         } else {
-                            instructions.push(Instruction::JmpIf(Operand::Local(lhs_reg), 0));
+                            instructions.push(Instruction::JmpIf {
+                                cond: Operand::Local(lhs_reg),
+                                target: 0,
+                                span: self.cur_span,
+                            });
                         }
                         self.generate_expr_ir(right, result_reg, instructions, constants)?;
                         let end_idx = instructions.len();
-                        instructions.push(Instruction::Jmp(0));
+                        instructions.push(Instruction::Jmp {
+                            target: 0,
+                            span: self.cur_span,
+                        });
                         // 短路值：and → false，or → true
                         let sc_target = instructions.len();
-                        if let Instruction::JmpIf(_, ref mut t) = instructions[short_idx] {
+                        if let Instruction::JmpIf {
+                            cond: _,
+                            target: ref mut t,
+                            span: _,
+                        } = instructions[short_idx]
+                        {
                             *t = sc_target;
                         }
-                        if let Instruction::JmpIfNot(_, ref mut t) = instructions[short_idx] {
+                        if let Instruction::JmpIfNot {
+                            cond: _,
+                            target: ref mut t,
+                            span: _,
+                        } = instructions[short_idx]
+                        {
                             *t = sc_target;
                         }
                         instructions.push(Instruction::Load {
@@ -4416,9 +4672,14 @@ impl AstToIrGenerator {
                             } else {
                                 ConstValue::Bool(true)
                             }),
+                            span: self.cur_span,
                         });
                         let end_target = instructions.len();
-                        if let Instruction::Jmp(ref mut t) = instructions[end_idx] {
+                        if let Instruction::Jmp {
+                            target: ref mut t,
+                            span: _,
+                        } = instructions[end_idx]
+                        {
                             *t = end_target;
                         }
                         return Ok(());
@@ -4434,16 +4695,19 @@ impl AstToIrGenerator {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Sub => Instruction::Sub {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Mul => Instruction::Mul {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Div => Instruction::Div {
                                 dst: Operand::Local(result_reg),
@@ -4462,56 +4726,67 @@ impl AstToIrGenerator {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::BitOr => Instruction::Or {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::BitXor => Instruction::Xor {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Shl => Instruction::Shl {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Shr => Instruction::Shr {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Eq => Instruction::Eq {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Neq => Instruction::Ne {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Lt => Instruction::Lt {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Le => Instruction::Le {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Gt => Instruction::Gt {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             ast::BinOp::Ge => Instruction::Ge {
                                 dst: Operand::Local(result_reg),
                                 lhs: Operand::Local(left_reg),
                                 rhs: Operand::Local(right_reg),
+                                span: self.cur_span,
                             },
                             // Assign 在上方分支处理；And/Or 走短路求值；Range 仅限 for/切片上下文。
                             // 剩余运算符到达此处即内部错误——禁止静默兜底（教训：&&/|| 曾静默编译为常量 0，#251）
@@ -4802,6 +5077,7 @@ impl AstToIrGenerator {
                                             instructions.push(Instruction::Load {
                                                 dst: Operand::Local(default_reg),
                                                 src: Operand::Const(ConstValue::Int(0)),
+                                                span: self.cur_span,
                                             });
                                         }
                                         *slot = Some(Operand::Local(default_reg));
@@ -4844,6 +5120,7 @@ impl AstToIrGenerator {
                                         instructions.push(Instruction::Load {
                                             dst: Operand::Local(default_reg),
                                             src: Operand::Const(ConstValue::Int(0)),
+                                            span: self.cur_span,
                                         });
                                     }
                                     arg_regs.push(Operand::Local(default_reg));
@@ -4960,6 +5237,7 @@ impl AstToIrGenerator {
                                     instructions.push(Instruction::Load {
                                         dst: Operand::Local(type_name_reg),
                                         src: Operand::Const(ConstValue::String(type_name.clone())),
+                                        span: self.cur_span,
                                     });
                                     let fallback_reg = self.next_temp_reg();
                                     instructions.push(Instruction::Call {
@@ -5132,6 +5410,7 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     size: Operand::Const(ConstValue::Int(0)),
                     elem_size: Operand::Const(ConstValue::Int(1)),
+                    span: self.cur_span,
                 });
 
                 // 2. 计算可迭代对象
@@ -5166,10 +5445,11 @@ impl AstToIrGenerator {
                 });
 
                 let jump_end_idx = instructions.len();
-                instructions.push(Instruction::JmpIfNot(
-                    Operand::Local(has_next_reg),
-                    0, // 占位符
-                ));
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(has_next_reg),
+                    target: 0, // 占位符
+                    span: self.cur_span,
+                });
 
                 // 7. next element
                 let element_reg = self.next_temp_reg();
@@ -5194,10 +5474,11 @@ impl AstToIrGenerator {
                     self.generate_expr_ir(cond_expr, cond_reg, instructions, constants)?;
 
                     let skip_push_idx = instructions.len();
-                    instructions.push(Instruction::JmpIfNot(
-                        Operand::Local(cond_reg),
-                        0, // 占位符
-                    ));
+                    instructions.push(Instruction::JmpIfNot {
+                        cond: Operand::Local(cond_reg),
+                        target: 0, // 占位符
+                        span: self.cur_span,
+                    });
 
                     // 10. 计算元素表达式
                     let comp_reg = self.next_temp_reg();
@@ -5214,7 +5495,12 @@ impl AstToIrGenerator {
 
                     // 修复条件跳转
                     let after_push = instructions.len();
-                    if let Instruction::JmpIfNot(_, ref mut target) = instructions[skip_push_idx] {
+                    if let Instruction::JmpIfNot {
+                        cond: _,
+                        ref mut target,
+                        span: _,
+                    } = instructions[skip_push_idx]
+                    {
                         *target = after_push;
                     }
                 } else {
@@ -5233,11 +5519,19 @@ impl AstToIrGenerator {
                 }
 
                 // 12. 跳回循环开始
-                instructions.push(Instruction::Jmp(loop_start_idx));
+                instructions.push(Instruction::Jmp {
+                    target: loop_start_idx,
+                    span: self.cur_span,
+                });
 
                 // 13. 修复跳出循环的跳转目标
                 let end_pos = instructions.len();
-                if let Instruction::JmpIfNot(_, ref mut target) = instructions[jump_end_idx] {
+                if let Instruction::JmpIfNot {
+                    cond: _,
+                    ref mut target,
+                    span: _,
+                } = instructions[jump_end_idx]
+                {
                     *target = end_pos;
                 }
             }
@@ -5247,6 +5541,7 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     size: Operand::Const(ConstValue::Int(elements.len() as i128)),
                     elem_size: Operand::Const(ConstValue::Int(1)),
+                    span: self.cur_span,
                 });
 
                 for (idx, element) in elements.iter().enumerate() {
@@ -5257,6 +5552,7 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(index_reg),
                         src: Operand::Const(ConstValue::Int(idx as i128)),
+                        span: self.cur_span,
                     });
 
                     instructions.push(Instruction::StoreIndex {
@@ -5283,6 +5579,7 @@ impl AstToIrGenerator {
                     dst: Operand::Local(result_reg),
                     keys,
                     values,
+                    span: self.cur_span,
                 });
             }
             Expr::Index { expr, index, span } => {
@@ -5313,9 +5610,15 @@ impl AstToIrGenerator {
                 // 生成返回指令
                 if let Some(e) = expr {
                     self.generate_expr_ir(e, result_reg, instructions, constants)?;
-                    instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                    instructions.push(Instruction::Ret {
+                        value: Some(Operand::Local(result_reg)),
+                        span: self.cur_span,
+                    });
                 } else {
-                    instructions.push(Instruction::Ret(None));
+                    instructions.push(Instruction::Ret {
+                        value: None,
+                        span: self.cur_span,
+                    });
                 }
             }
             Expr::Break(span) => {
@@ -5325,7 +5628,10 @@ impl AstToIrGenerator {
                 match self.loop_stack.last_mut() {
                     Some(top) => {
                         let fixup = instructions.len();
-                        instructions.push(Instruction::Jmp(0));
+                        instructions.push(Instruction::Jmp {
+                            target: 0,
+                            span: self.cur_span,
+                        });
                         top.break_fixups.push(fixup);
                     }
                     None => {
@@ -5343,7 +5649,10 @@ impl AstToIrGenerator {
                 match self.loop_stack.last() {
                     Some(top) => {
                         let target = top.continue_target;
-                        instructions.push(Instruction::Jmp(target));
+                        instructions.push(Instruction::Jmp {
+                            target,
+                            span: self.cur_span,
+                        });
                     }
                     None => {
                         return Err(ErrorCodeDefinition::ir_internal_error(
@@ -5375,16 +5684,22 @@ impl AstToIrGenerator {
                 instructions.push(Instruction::Load {
                     dst: Operand::Local(ok_const),
                     src: Operand::Const(ConstValue::Int(0)),
+                    span: self.cur_span,
                 });
                 let eq_reg = self.next_temp_reg();
                 instructions.push(Instruction::Eq {
                     dst: Operand::Local(eq_reg),
                     lhs: Operand::Local(tag_reg),
                     rhs: Operand::Local(ok_const),
+                    span: self.cur_span,
                 });
                 // variant != 0（Err）→ 跳到提前返回
                 let is_err_idx = instructions.len();
-                instructions.push(Instruction::JmpIfNot(Operand::Local(eq_reg), 0));
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(eq_reg),
+                    target: 0,
+                    span: self.cur_span,
+                });
                 // Ok 路径：解包 payload 作为表达式值
                 instructions.push(Instruction::VariantPayload {
                     dst: Operand::Local(result_reg),
@@ -5393,14 +5708,26 @@ impl AstToIrGenerator {
                     span,
                 });
                 let end_idx = instructions.len();
-                instructions.push(Instruction::Jmp(0));
+                instructions.push(Instruction::Jmp {
+                    target: 0,
+                    span: self.cur_span,
+                });
                 // Err 路径：以整个 Result 值提前返回（Err(e) 沿调用栈传播）
                 let err_target = instructions.len();
-                instructions[is_err_idx] =
-                    Instruction::JmpIfNot(Operand::Local(eq_reg), err_target);
-                instructions.push(Instruction::Ret(Some(Operand::Local(result_reg))));
+                instructions[is_err_idx] = Instruction::JmpIfNot {
+                    cond: Operand::Local(eq_reg),
+                    target: err_target,
+                    span: self.cur_span,
+                };
+                instructions.push(Instruction::Ret {
+                    value: Some(Operand::Local(result_reg)),
+                    span: self.cur_span,
+                });
                 let end_target = instructions.len();
-                instructions[end_idx] = Instruction::Jmp(end_target);
+                instructions[end_idx] = Instruction::Jmp {
+                    target: end_target,
+                    span: self.cur_span,
+                };
             }
             Expr::If {
                 condition,
@@ -5465,24 +5792,30 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::ArcNew {
                         dst: Operand::Local(result_reg),
                         src: Operand::Local(src_reg),
+                        span: self.cur_span,
                     });
                 } else {
                     instructions.push(Instruction::RcNew {
                         dst: Operand::Local(result_reg),
                         src: Operand::Local(src_reg),
+                        span: self.cur_span,
                     });
                 }
             }
             Expr::Unsafe { body, span: _ } => {
                 // unsafe 块：生成 UnsafeBlockStart/End 标记
-                instructions.push(Instruction::UnsafeBlockStart);
+                instructions.push(Instruction::UnsafeBlockStart {
+                    span: self.cur_span,
+                });
 
                 // RFC-010a 规则①：`unsafe {}` 是**有值块**，值出口为尾表达式。
                 // 此前 result_reg 传 None 并硬写 Void，导致 `v = unsafe { 42 }`
                 // 得 void（#347）。现按普通块处理，尾表达式写入 result_reg。
                 self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
 
-                instructions.push(Instruction::UnsafeBlockEnd);
+                instructions.push(Instruction::UnsafeBlockEnd {
+                    span: self.cur_span,
+                });
             }
             // spawn for 数据并行循环（RFC-024 §2.4）
             Expr::SpawnFor {
@@ -5586,6 +5919,7 @@ impl AstToIrGenerator {
                     closures: closure_regs,
                     plan: analysis.plan,
                     result: Operand::Local(result_reg),
+                    span: self.cur_span,
                 });
 
                 // 6. 块的结果值：从 return 语句获取（RFC-010 语义）
@@ -5599,6 +5933,7 @@ impl AstToIrGenerator {
                             instructions.push(Instruction::Move {
                                 dst: Operand::Local(result_reg),
                                 src: Operand::Local(ret_reg),
+                                span: self.cur_span,
                             });
                             has_return = true;
                             break;
@@ -5625,6 +5960,7 @@ impl AstToIrGenerator {
                         instructions.push(Instruction::PtrDeref {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(src_reg),
+                            span: self.cur_span,
                         });
                     }
                     ast::UnOp::Neg => {
@@ -5634,6 +5970,7 @@ impl AstToIrGenerator {
                         instructions.push(Instruction::Neg {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(src_reg),
+                            span: self.cur_span,
                         });
                     }
                     ast::UnOp::Pos => {
@@ -5647,6 +5984,7 @@ impl AstToIrGenerator {
                         instructions.push(Instruction::Not {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(src_reg),
+                            span: self.cur_span,
                         });
                     }
                 }
@@ -5745,6 +6083,7 @@ impl AstToIrGenerator {
                     func: closure_name,
                     env: env_vars,
                     def: None,
+                    span: self.cur_span,
                 });
             }
             Expr::Borrow {
@@ -5763,6 +6102,7 @@ impl AstToIrGenerator {
                 instructions.push(Instruction::Move {
                     dst: Operand::Local(result_reg),
                     src: Operand::Local(inner_reg),
+                    span: self.cur_span,
                 });
             }
             Expr::Match {
@@ -5812,6 +6152,7 @@ impl AstToIrGenerator {
                                 instructions.push(Instruction::Load {
                                     dst: Operand::Local(cmp_reg),
                                     src: Operand::Const(const_val),
+                                    span: self.cur_span,
                                 });
                             }
                             other => {
@@ -5832,14 +6173,16 @@ impl AstToIrGenerator {
                             dst: Operand::Local(eq_reg),
                             lhs: Operand::Local(scrutinee_reg),
                             rhs: Operand::Local(cmp_reg),
+                            span: self.cur_span,
                         });
 
                         // 如果不相等，跳到下一个 arm
                         let jmp_idx = instructions.len();
-                        instructions.push(Instruction::JmpIfNot(
-                            Operand::Local(eq_reg),
-                            0, // 占位符
-                        ));
+                        instructions.push(Instruction::JmpIfNot {
+                            cond: Operand::Local(eq_reg),
+                            target: 0, // 占位符
+                            span: self.cur_span,
+                        });
                         Some(jmp_idx)
                     };
 
@@ -5854,17 +6197,26 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Move {
                         dst: Operand::Local(result_reg),
                         src: Operand::Local(arm_result_reg),
+                        span: self.cur_span,
                     });
 
                     // 跳转到 match 结束
                     let jmp_end_idx = instructions.len();
-                    instructions.push(Instruction::Jmp(0)); // 占位符
+                    instructions.push(Instruction::Jmp {
+                        target: 0,
+                        span: self.cur_span,
+                    }); // 占位符
                     jumps_to_end.push(jmp_end_idx);
 
                     // 修复条件跳转目标（指向当前 arm 之后的代码）
                     if let Some(jmp_idx) = jump_to_next_idx {
                         let current_pos = instructions.len();
-                        if let Instruction::JmpIfNot(_, ref mut target) = instructions[jmp_idx] {
+                        if let Instruction::JmpIfNot {
+                            cond: _,
+                            ref mut target,
+                            span: _,
+                        } = instructions[jmp_idx]
+                        {
                             *target = current_pos;
                         }
                     }
@@ -5873,7 +6225,11 @@ impl AstToIrGenerator {
                 // 修复所有跳转到结束的指令
                 let end_pos = instructions.len();
                 for idx in jumps_to_end {
-                    if let Instruction::Jmp(ref mut target) = instructions[idx] {
+                    if let Instruction::Jmp {
+                        ref mut target,
+                        span: _,
+                    } = instructions[idx]
+                    {
                         *target = end_pos;
                     }
                 }
@@ -5886,6 +6242,7 @@ impl AstToIrGenerator {
                     instructions.push(Instruction::Load {
                         dst: Operand::Local(result_reg),
                         src: Operand::Const(const_val),
+                        span: self.cur_span,
                     });
                     return Ok(());
                 }
@@ -5929,6 +6286,7 @@ impl AstToIrGenerator {
                 instructions.push(Instruction::Load {
                     dst: Operand::Local(fmt_reg),
                     src: Operand::Const(fmt_const),
+                    span: self.cur_span,
                 });
 
                 // Build args: [format_str, arg0, arg1, ...]
@@ -5955,6 +6313,7 @@ impl AstToIrGenerator {
                 instructions.push(Instruction::NewTuple {
                     dst: Operand::Local(result_reg),
                     items: item_regs,
+                    span: self.cur_span,
                 });
             }
             Expr::Block(block) => {

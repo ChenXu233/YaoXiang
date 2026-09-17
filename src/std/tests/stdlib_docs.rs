@@ -164,18 +164,28 @@ fn yaoxiang_examples(doc: &str) -> Vec<String> {
     out
 }
 
-/// 被测解释器路径——与 `target/` 同目录族，测试与 example 共用一次构建产物
+/// 被测解释器路径
+///
+/// 必须用 `CARGO_BIN_EXE_*`：引擎二进制从 `yaoxiang` 改名为 `yaoxiang-rs` 后，
+/// 按名字猜路径会拿到 target/ 里残留的旧构建产物（旧 exe 永不重建），
+/// 于是本门禁一直在拿几个月前的编译器验收文档示例。
+///
+/// lib 单测里 cargo 不提供 `env!` 形式的该变量，只能运行时取；
+/// 取不到（如直接跑 lib test 目标）则回退到 target/<profile>/ 下的产物路径。
 fn yaoxiang_binary() -> PathBuf {
-    // 集成测试的运行目录是 target/<profile>/deps/，主二进制在上一层
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_yaoxiang-rs") {
+        return PathBuf::from(path);
+    }
+    // 回退：测试可执行文件位于 target/<profile>/deps/，主二进制在上一层
     let mut exe = std::env::current_exe().expect("无法定位当前测试可执行文件");
     exe.pop();
     if exe.ends_with("deps") {
         exe.pop();
     }
     exe.join(if cfg!(windows) {
-        "yaoxiang.exe"
+        "yaoxiang-rs.exe"
     } else {
-        "yaoxiang"
+        "yaoxiang-rs"
     })
 }
 
@@ -185,8 +195,15 @@ fn test_yaoxiang_binary_is_discoverable() {
     let bin = yaoxiang_binary();
     assert!(
         bin.exists(),
-        "未找到解释器 {}；文档示例门禁依赖 target/<profile>/yaoxiang",
+        "未找到解释器 {}；文档示例门禁依赖 target/<profile>/yaoxiang-rs",
         bin.display()
+    );
+    // 防回归：引擎改名前旧名产物会永远留在 target/ 里不重建。
+    // 路径必须指向当前 bin 名，否则门禁会拿陈旧编译器验收文档示例。
+    let name = bin.file_name().unwrap_or_default().to_string_lossy();
+    assert!(
+        name.starts_with("yaoxiang-rs"),
+        "被测二进制名为 {name}，疑似指向改名前的陈旧产物；"
     );
 }
 
