@@ -48,10 +48,12 @@ pub enum Instruction {
     Move {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     Load {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     Store {
         dst: Operand,
@@ -59,24 +61,37 @@ pub enum Instruction {
         /// Source span for error reporting
         span: Span,
     },
-    Push(Operand),
-    Pop(Operand),
-    Dup,
-    Swap,
+    Push {
+        src: Operand,
+        span: Span,
+    },
+    Pop {
+        dst: Operand,
+        span: Span,
+    },
+    Dup {
+        span: Span,
+    },
+    Swap {
+        span: Span,
+    },
     Add {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Sub {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Mul {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Div {
         dst: Operand,
@@ -99,73 +114,98 @@ pub enum Instruction {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Or {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Xor {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Shl {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Shr {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Sar {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Neg {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     Not {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     Eq {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Ne {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Lt {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Le {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Gt {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Ge {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
-    Jmp(usize),
-    JmpIf(Operand, usize),
-    JmpIfNot(Operand, usize),
+    Jmp {
+        target: usize,
+        span: Span,
+    },
+    JmpIf {
+        cond: Operand,
+        target: usize,
+        span: Span,
+    },
+    JmpIfNot {
+        cond: Operand,
+        target: usize,
+        span: Span,
+    },
     Call {
         dst: Option<Operand>,
         func: Operand,
@@ -205,17 +245,26 @@ pub enum Instruction {
         args: Vec<Operand>,
         /// 静态调用目标的绑定身份（同 `Call::def`）
         def: Option<DefId>,
+        span: Span,
     },
-    Ret(Option<Operand>),
+    Ret {
+        value: Option<Operand>,
+        span: Span,
+    },
     Alloc {
         dst: Operand,
         size: Operand,
+        span: Span,
     },
-    Free(Operand),
+    Free {
+        src: Operand,
+        span: Span,
+    },
     AllocArray {
         dst: Operand,
         size: Operand,
         elem_size: Operand,
+        span: Span,
     },
     /// 定长数组构造（#299 §2）：分配 N 个 Void 占位元素，
     /// 由字面量上下文落点生成——仅当 Array(T,N) 注解直接作用于 List 字面量
@@ -270,8 +319,13 @@ pub enum Instruction {
         dst: Operand,
         src: Operand,
         target_type: Type,
+        span: Span,
     },
-    TypeTest(Operand, Type),
+    TypeTest {
+        src: Operand,
+        ty: Type,
+        span: Span,
+    },
     /// Spawn a new task (for cycle detection: track args and result)
     Spawn {
         /// 每个直接子表达式对应一个闭包
@@ -280,6 +334,7 @@ pub enum Instruction {
         plan: ExecutionPlan,
         /// spawn 块返回值寄存器
         result: Operand,
+        span: Span,
     },
     /// 从 List 寄存器动态读取闭包并 spawn（RFC-024 §2.4 spawn for）
     SpawnFromList {
@@ -289,12 +344,16 @@ pub enum Instruction {
         plan: ExecutionPlan,
         /// spawn 块返回值寄存器
         result: Operand,
+        span: Span,
     },
-    Yield,
+    Yield {
+        span: Span,
+    },
     // Phase 5 additions
     HeapAlloc {
         dst: Operand,
         type_id: usize,
+        span: Span,
     },
     /// 创建结构体实例
     /// type_name: 结构体类型名
@@ -303,6 +362,7 @@ pub enum Instruction {
         dst: Operand,
         type_name: String,
         fields: Vec<Operand>,
+        span: Span,
     },
     /// 创建字典实例
     /// keys: 键的操作数列表
@@ -311,12 +371,14 @@ pub enum Instruction {
         dst: Operand,
         keys: Vec<Operand>,
         values: Vec<Operand>,
+        span: Span,
     },
     /// 创建元组实例（SPEC §3.6）
     /// items: 各元素的操作数列表（按元素顺序）
     NewTuple {
         dst: Operand,
         items: Vec<Operand>,
+        span: Span,
     },
     /// 创建 Range 值（#302）：三标量不可变记录，正式运行时身份
     NewRange {
@@ -324,6 +386,7 @@ pub enum Instruction {
         start: Operand,
         end: Operand,
         step: Operand,
+        span: Span,
     },
     /// RFC-011a §6: 包装具体值为存在类型变体（Animal$Group.Dog(payload)）。
     /// group: 合成变体类型名（接口名 + "$Group"）；variant: 编译期类型收集定序的变体号
@@ -355,52 +418,70 @@ pub enum Instruction {
         /// 闭包目标函数的绑定身份（生成期 intern，必有值；测试手工构造可为 None）
         def: Option<DefId>,
         env: Vec<Operand>,
+        span: Span,
     },
     /// Drop a value (ownership-based cleanup)
-    Drop(Operand),
+    Drop {
+        src: Operand,
+        span: Span,
+    },
     /// Create Arc (atomic reference count = 1)
     ArcNew {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Create Rc (non-atomic reference count = 1)
     RcNew {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Clone Arc (atomic reference count + 1)
     ArcClone {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Drop Arc (atomic reference count - 1, free if zero)
-    ArcDrop(Operand),
+    ArcDrop {
+        src: Operand,
+        span: Span,
+    },
     // =====================
     // unsafe 块和裸指针指令
     // =====================
     /// Mark the start of an unsafe block
-    UnsafeBlockStart,
+    UnsafeBlockStart {
+        span: Span,
+    },
     /// Mark the end of an unsafe block
-    UnsafeBlockEnd,
+    UnsafeBlockEnd {
+        span: Span,
+    },
     /// Create raw pointer from value: ptr = &value
     PtrFromRef {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Dereference pointer: value = *ptr
     PtrDeref {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Store through pointer: *ptr = value
     PtrStore {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Load from pointer: value = *ptr (combined deref and load)
     PtrLoad {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     // =====================
     // 字符串指令
@@ -408,24 +489,29 @@ pub enum Instruction {
     StringLength {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     StringConcat {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     StringGetChar {
         dst: Operand,
         src: Operand,
         index: Operand,
+        span: Span,
     },
     StringFromInt {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     StringFromFloat {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     // =====================
     // 闭包 Upvalue 指令
@@ -433,28 +519,112 @@ pub enum Instruction {
     LoadUpvalue {
         dst: Operand,
         upvalue_idx: usize,
+        span: Span,
     },
     StoreUpvalue {
         src: Operand,
         upvalue_idx: usize,
+        span: Span,
     },
-    CloseUpvalue(Operand),
+    CloseUpvalue {
+        src: Operand,
+        span: Span,
+    },
+}
+
+impl Instruction {
+    /// 指令的源码位置。
+    ///
+    /// 刻意**不设通配臂**：新增变体若忘了带 span，此处编译失败，
+    /// 而不是静默退化到"无位置"。这是位置信息可信的唯一强制手段。
+    pub fn span(&self) -> Span {
+        match self {
+            Instruction::Move { span, .. } => *span,
+            Instruction::Load { span, .. } => *span,
+            Instruction::Store { span, .. } => *span,
+            Instruction::Push { span, .. } => *span,
+            Instruction::Pop { span, .. } => *span,
+            Instruction::Dup { span, .. } => *span,
+            Instruction::Swap { span, .. } => *span,
+            Instruction::Add { span, .. } => *span,
+            Instruction::Sub { span, .. } => *span,
+            Instruction::Mul { span, .. } => *span,
+            Instruction::Div { span, .. } => *span,
+            Instruction::Mod { span, .. } => *span,
+            Instruction::And { span, .. } => *span,
+            Instruction::Or { span, .. } => *span,
+            Instruction::Xor { span, .. } => *span,
+            Instruction::Shl { span, .. } => *span,
+            Instruction::Shr { span, .. } => *span,
+            Instruction::Sar { span, .. } => *span,
+            Instruction::Neg { span, .. } => *span,
+            Instruction::Not { span, .. } => *span,
+            Instruction::Eq { span, .. } => *span,
+            Instruction::Ne { span, .. } => *span,
+            Instruction::Lt { span, .. } => *span,
+            Instruction::Le { span, .. } => *span,
+            Instruction::Gt { span, .. } => *span,
+            Instruction::Ge { span, .. } => *span,
+            Instruction::Jmp { span, .. } => *span,
+            Instruction::JmpIf { span, .. } => *span,
+            Instruction::JmpIfNot { span, .. } => *span,
+            Instruction::Call { span, .. } => *span,
+            Instruction::CallVirt { span, .. } => *span,
+            Instruction::CallDyn { span, .. } => *span,
+            Instruction::TailCall { span, .. } => *span,
+            Instruction::Ret { span, .. } => *span,
+            Instruction::Alloc { span, .. } => *span,
+            Instruction::Free { span, .. } => *span,
+            Instruction::AllocArray { span, .. } => *span,
+            Instruction::AllocFixedArray { span, .. } => *span,
+            Instruction::LoadField { span, .. } => *span,
+            Instruction::StoreField { span, .. } => *span,
+            Instruction::LoadIndex { span, .. } => *span,
+            Instruction::StoreIndex { span, .. } => *span,
+            Instruction::Contains { span, .. } => *span,
+            Instruction::Cast { span, .. } => *span,
+            Instruction::TypeTest { span, .. } => *span,
+            Instruction::Spawn { span, .. } => *span,
+            Instruction::SpawnFromList { span, .. } => *span,
+            Instruction::Yield { span, .. } => *span,
+            Instruction::HeapAlloc { span, .. } => *span,
+            Instruction::CreateStruct { span, .. } => *span,
+            Instruction::NewDict { span, .. } => *span,
+            Instruction::NewTuple { span, .. } => *span,
+            Instruction::NewRange { span, .. } => *span,
+            Instruction::CreateVariant { span, .. } => *span,
+            Instruction::VariantTag { span, .. } => *span,
+            Instruction::VariantPayload { span, .. } => *span,
+            Instruction::MakeClosure { span, .. } => *span,
+            Instruction::Drop { span, .. } => *span,
+            Instruction::ArcNew { span, .. } => *span,
+            Instruction::RcNew { span, .. } => *span,
+            Instruction::ArcClone { span, .. } => *span,
+            Instruction::ArcDrop { span, .. } => *span,
+            Instruction::UnsafeBlockStart { span, .. } => *span,
+            Instruction::UnsafeBlockEnd { span, .. } => *span,
+            Instruction::PtrFromRef { span, .. } => *span,
+            Instruction::PtrDeref { span, .. } => *span,
+            Instruction::PtrStore { span, .. } => *span,
+            Instruction::PtrLoad { span, .. } => *span,
+            Instruction::StringLength { span, .. } => *span,
+            Instruction::StringConcat { span, .. } => *span,
+            Instruction::StringGetChar { span, .. } => *span,
+            Instruction::StringFromInt { span, .. } => *span,
+            Instruction::StringFromFloat { span, .. } => *span,
+            Instruction::LoadUpvalue { span, .. } => *span,
+            Instruction::StoreUpvalue { span, .. } => *span,
+            Instruction::CloseUpvalue { span, .. } => *span,
+        }
+    }
 }
 
 /// Basic block
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct BasicBlock {
     pub label: usize,
     pub instructions: Vec<Instruction>,
     pub successors: Vec<usize>,
-    /// 语句级位置侧表：(起始 IR 指令下标, 结束下标, span)。
-    ///
-    /// 与 `instructions` 平行；translator 将 IR 下标区间逐一映射到字节码 ip。
-    /// 为什么不做逐指令 span：`Instruction` 76 个变体只有 15 个带 span 字段，
-    /// 给其余 61 个补字段要改 150+ 处 push 点（且指令经 `&mut Vec` 流转，
-    /// 被调函数无法回写调用方）。语句粒度由生成循环在语句边界统一记录。
-    /// 需要逐指令精度时（如 DAP 单步）再给具体变体补 `span` 字段。
-    pub stmt_spans: Vec<(usize, usize, Span)>,
 }
 
 /// 函数体形态
