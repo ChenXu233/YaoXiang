@@ -259,7 +259,11 @@ impl Monomorphizer {
             .cloned()
             .collect();
 
-        for func in self.specialized_functions.values() {
+        // HashMap 迭代顺序随进程随机化，直接发射会让同一份源码产出不同的
+        // 函数序号（进而 .42 字节不同、dump 不可复现）。按名排序固定顺序。
+        let mut specialized: Vec<&FunctionIR> = self.specialized_functions.values().collect();
+        specialized.sort_by(|a, b| a.name.cmp(&b.name));
+        for func in specialized {
             functions.push(func.clone());
         }
 
