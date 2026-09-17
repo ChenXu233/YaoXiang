@@ -71,6 +71,14 @@ impl Executor for Interpreter {
         });
         self.shared = Box::into_raw(shared);
 
+        // T2：先执行模块初始化（顶层绑定求值 → 全局槽位写入），
+        // 再执行入口。初始化函数由 codegen 合成（`__yx_module_init`）。
+        if let Some(init_idx) = module.init_function {
+            if let Some(init_func) = module.functions.get(init_idx) {
+                self.execute_function(init_func, &[])?;
+            }
+        }
+
         // Execute entry point
         if let Some(entry_idx) = module.entry_point {
             if entry_idx < module.functions.len() {

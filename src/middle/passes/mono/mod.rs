@@ -266,6 +266,7 @@ impl Monomorphizer {
         ModuleIR {
             globals: module.globals.clone(),
             functions,
+            init: module.init.clone(),
             ffi_libs: module.ffi_libs.clone(),
             ffi_bindings: module.ffi_bindings.clone(),
             entry_function: module.entry_function.clone(),

@@ -649,11 +649,31 @@ pub enum FfiBinding {
     },
 }
 
+/// 模块级全局槽位（顶层绑定）。
+///
+/// 顶层绑定编译为「一个槽位 + 一条初始化指令」：初始化指令在模块初始化
+/// 序列中运行时求值并写入槽位，读取处走 `Operand::Global(idx)`。
+#[derive(Debug, Clone)]
+pub struct GlobalSlot {
+    /// 绑定名（多文件模式下为限定名 `{module}.{name}`）
+    pub name: String,
+    /// 绑定类型
+    pub ty: MonoType,
+    /// 绝对槽位号（`Operand::Global(index)` 的值）。
+    /// 多文件模式下由编排器预先分配，各文件共享同一布局，故跨文件引用
+    /// 与定义方用同一个索引；单文件模式下即本文件内的声明顺序。
+    pub index: usize,
+}
+
 /// Module IR
 #[derive(Debug, Clone, Default)]
 pub struct ModuleIR {
-    pub globals: Vec<(String, Type, Option<ConstValue>)>,
+    /// 模块级全局槽位（顶层绑定）。索引即 `Operand::Global(idx)` 的槽位号。
+    pub globals: Vec<GlobalSlot>,
     pub functions: Vec<FunctionIR>,
+    /// 模块初始化序列：按依赖顺序求值并写入全局槽位的指令。
+    /// 入口执行前先跑它（Script 模式下它本身就是程序）。
+    pub init: Vec<Instruction>,
     /// FFI 库绑定 — 编译期链接的外部库
     pub ffi_libs: Vec<FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数

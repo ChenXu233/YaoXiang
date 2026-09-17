@@ -1,0 +1,11 @@
+// 06-compile-errors/global_init_cycle_err.yx
+// 顶层绑定初始化形成循环依赖 → E3019（T3）
+// expect: compile-error E3019
+// 验证: 前向引用可用（T3 拓扑排序）之后，真环必须被检测出来而非静默取到未初始化值
+// 状态: 待测试
+
+a: Int = b + 1
+b: Int = a + 1
+
+main = {
+}

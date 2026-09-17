@@ -42,6 +42,7 @@ fn test_debug_section_round_trip() {
         type_table: Vec::new(),
         const_pool: Vec::new(),
         code_section,
+        vtables: Vec::new(),
         debug_section: Some(debug_section),
     };
 

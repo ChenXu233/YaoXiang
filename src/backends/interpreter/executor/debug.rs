@@ -286,6 +286,29 @@ impl Interpreter {
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }
+            BytecodeInstr::LoadGlobal { dst, global_idx } => {
+                let val = self
+                    .global_slots
+                    .get(*global_idx as usize)
+                    .cloned()
+                    .unwrap_or(RuntimeValue::Void);
+                frame.set_slot(dst.0 as usize, val);
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
+            BytecodeInstr::StoreGlobal { global_idx, src } => {
+                let val = frame
+                    .get_slot(src.0 as usize)
+                    .cloned()
+                    .unwrap_or(RuntimeValue::Void);
+                let idx = *global_idx as usize;
+                if idx >= self.global_slots.len() {
+                    self.global_slots.resize(idx + 1, RuntimeValue::Void);
+                }
+                self.global_slots[idx] = val;
+                frame.advance();
+                Ok(StepOutcome::Continue)
+            }
             BytecodeInstr::LoadUpvalue { dst, upvalue_idx } => {
                 let val = frame
                     .get_upvalue(*upvalue_idx as usize)

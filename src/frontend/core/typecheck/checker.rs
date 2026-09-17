@@ -65,6 +65,12 @@ pub struct TypeChecker {
     /// #321 W1003: pass2 解析路径标记的已使用名（类型/方法外部绑定等
     /// 不经 body_checker Var 推断臂的引用点），发射时与 body 侧并集。
     import_used: HashSet<String>,
+    /// T3：pass2 收集的顶层值绑定占位类型（名字 → 类型）。
+    ///
+    /// 仅用于**函数体内的前向引用解析**——注入 body_checker 使后置绑定名可见。
+    /// 不写入 `env.vars`：那里会被当作最终 `bindings` 输出，而占位类型
+    /// （TypeVar）会遮蔽 pass3 推断出的真实类型。
+    early_value_bindings: HashMap<String, PolyType>,
 }
 
 /// RFC-011a: 类型体应用项 `Animal(Dog)` 的待决接口实例化。
@@ -103,6 +109,7 @@ impl TypeChecker {
             imported_names: Vec::new(),
             import_watch: HashMap::new(),
             import_used: HashSet::new(),
+            early_value_bindings: HashMap::new(),
         }
     }
 
@@ -316,6 +323,14 @@ impl TypeChecker {
             self.collect_function_signature(stmt);
         }
 
+        // 第二遍（补）：收集顶层值绑定的类型（T3 前向引用）。
+        // 必须在函数签名之后（避免把函数当值绑定），且在函数体检查之前
+        // （使函数体内的引用能解析到后置绑定）。
+        for stmt in &module.items {
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            self.collect_value_binding_signature(stmt);
+        }
+
         // RFC-004: 函数签名就位后登记类型体绑定
         self.flush_pending_body_bindings();
 
@@ -381,6 +396,14 @@ impl TypeChecker {
 
         // 将环境中的变量同步到 body_checker
         for (name, poly) in self.env.vars.clone() {
+            self.body_checker_mut()
+                .add_var(name, poly, false, crate::util::span::Span::default());
+        }
+
+        // T3：把 pass2 收集的顶层值绑定占位也注入 body_checker，
+        // 使函数体内对后置绑定的引用（前向引用）能解析到名字。
+        // pass3 执行到该语句时会重新推断并覆盖占位类型。
+        for (name, poly) in self.early_value_bindings.clone() {
             self.body_checker_mut()
                 .add_var(name, poly, false, crate::util::span::Span::default());
         }
@@ -1279,6 +1302,66 @@ impl TypeChecker {
             }
             _ => {}
         }
+    }
+
+    /// T3：pass2 收集**顶层值绑定**的类型（含非函数的 `name = expr`）。
+    ///
+    /// 此前 pass2 只收函数签名，值绑定只在 pass3 执行到语句时才入 scope——
+    /// 导致前向引用（`main` 中引用后置绑定、`b = a + 1` 且 `a` 在后）报 E1001。
+    /// 现在值绑定也在 pass2 登记，使其在整个模块内可见。
+    ///
+    /// 类型来源优先级：显式标注 > 初始化表达式的字面量类型 > 类型变量（待 pass3 统一）。
+    fn collect_value_binding_signature(
+        &mut self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+    ) {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+        let StmtKind::Assign {
+            target,
+            type_annotation,
+            value,
+            ..
+        } = &stmt.kind
+        else {
+            return;
+        };
+        // 只处理裸名绑定（`Type.method` 归方法路径）
+        let Expr::Var(name, _) = target.as_ref() else {
+            return;
+        };
+        // 函数绑定已在 collect_function_signature 登记，不重复
+        let is_fn = value.as_ref().is_some_and(|v| {
+            matches!(v.as_ref(), Expr::Lambda { .. })
+                || Expr::block_binding_is_function(type_annotation.as_ref(), Some(v.as_ref()))
+        });
+        if is_fn {
+            return;
+        }
+        // 已有该名字（函数签名或前面登记的值）则不覆盖
+        if self.env.vars.contains_key(name) || self.early_value_bindings.contains_key(name) {
+            return;
+        }
+        // 类型：显式标注优先；否则从字面量初始化推断一个保守类型
+        let ty = match type_annotation {
+            Some(t) => MonoType::from(t.clone()),
+            None => match value.as_deref() {
+                Some(Expr::Lit(lit, _)) => match lit {
+                    crate::frontend::core::lexer::tokens::Literal::Int(_) => MonoType::Int(64),
+                    crate::frontend::core::lexer::tokens::Literal::Float(_) => MonoType::Float(64),
+                    crate::frontend::core::lexer::tokens::Literal::String(_) => {
+                        MonoType::make_string()
+                    }
+                    crate::frontend::core::lexer::tokens::Literal::Char(_) => MonoType::Char,
+                    crate::frontend::core::lexer::tokens::Literal::Bool(_) => MonoType::Bool,
+                    _ => self.env.solver().new_var(),
+                },
+                // 其余形态（块值、调用、引用、运算）：类型变量。
+                // pass3 执行到该语句时统一出具体类型；这里只求「名字可见」。
+                _ => self.env.solver().new_var(),
+            },
+        };
+        self.early_value_bindings
+            .insert(name.clone(), PolyType::mono(ty));
     }
 
     /// RFC-004: 归一化绑定位置（负索引从末尾计数，[-1] = 最后一个参数）并校验有效性。

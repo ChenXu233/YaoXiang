@@ -25,7 +25,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::parser::ast::{Expr, StmtKind};
-use crate::util::diagnostic::Diagnostic;
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::tokenize;
 use crate::frontend::core::typecheck::checker::TypeChecker;
@@ -127,23 +127,25 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
         type_results.push(result);
     }
 
-    // 收集跨文件上下文：所有文件的类型（结构体布局/方法绑定）与全局变量名。
+    // 收集跨文件上下文：所有文件的类型（结构体布局/方法绑定）与全局变量布局。
+    //
+    // 全局槽位布局（T5）：逐文件分配不相交的槽位区间，并把限定名（`lib.value`）
+    // 映射到绝对槽位号。各文件共享这份布局，故引用方与定义方用同一索引。
+    // 分配结果同时决定各文件的 `global_slot_base`。
     let all_ast_refs: Vec<&Module> = asts.iter().map(|(_, _, ast)| ast).collect();
-    let mut all_globals: Vec<(String, MonoType)> = Vec::new();
-    for (_, _, ast) in &asts {
-        all_globals.extend(extract_global_defs(ast));
-    }
+    let (global_layout, slot_bases) = allocate_global_slots(&asts);
 
     // Phase 2: 逐文件 IR 生成（预注册跨文件上下文）→ 限定名重写 → IR 层链接。
     // 每个文件是独立编译单元——不合并 AST。函数名带模块限定名（module=record 语义），
     // 跨文件同名顶层函数因此天然共存，不再冲突。
     let mut module_irs: Vec<(String, ModuleIR)> = Vec::new();
-    for ((key, path, ast), result) in asts.iter().zip(type_results.iter()) {
+    for (file_idx, ((key, path, ast), result)) in asts.iter().zip(type_results.iter()).enumerate() {
         let ir = crate::middle::generate_ir_with_context(
             ast,
             result,
             &all_ast_refs,
-            &all_globals,
+            &global_layout,
+            slot_bases[file_idx],
             &registry,
             key,
         )
@@ -163,7 +165,65 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
     }
 
     let entry_key = entry_module_key(entry);
-    link_module_irs(module_irs, &entry_key)
+    let merged = link_module_irs(module_irs, &entry_key)?;
+
+    // T4：入口语义（RFC-029f 角色驱动）。
+    //
+    // - Script（无 yaoxiang.toml，单文件直跑）：无入口概念，顶层代码本身就是
+    //   程序（顶层语句与绑定编入模块初始化序列）；`main` 不特殊（想跑就写 `main()`）。
+    // - Bin（有 manifest）：要求 `main` 且必须是函数。无 main 时**全部函数
+    //   不可达**，属编译错误——而非静默执行函数表第一个函数。
+    if is_bin_role(entry) {
+        // 入口名是 `{entry_key}.main`（限定名）；只查名字不查签名，
+        // 因为 `main: Int = 5` 会落入全局槽位、不进函数表。
+        let has_main_fn = merged
+            .functions
+            .iter()
+            .any(|f| f.name == format!("{entry_key}.main"));
+        if !has_main_fn {
+            // 区分「没有 main」与「main 存在但不是函数」——后者更常见且更好修。
+            // 值绑定的名字已限定（`{entry_key}.main`），两种形态都要查。
+            let qualified_main = format!("{entry_key}.main");
+            let main_as_value = merged
+                .globals
+                .iter()
+                .any(|g| g.name == "main" || g.name == qualified_main);
+            let diag = if main_as_value {
+                ErrorCodeDefinition::bin_main_not_function("main").at(entry_span(entry))
+            } else {
+                ErrorCodeDefinition::bin_missing_main(&entry.display().to_string())
+                    .at(entry_span(entry))
+            };
+            return Err(OrchestratorError::TypeCheck {
+                path: entry.display().to_string(),
+                message: diag.build().to_string(),
+                diagnostics: vec![diag.build()],
+            });
+        }
+    }
+
+    Ok(merged)
+}
+
+/// T4：入口文件是否必须定义 `main`（Bin 要求）。
+///
+/// 判据：项目里有 manifest（`yaoxiang.toml`）。
+///
+/// 为何不用 `roles::classify`：那个模型回答「这个文件被谁消费」（服务于死代码
+/// 分析），而这里要回答的是「这个文件能不能当程序跑」——两回事。有 manifest
+/// 却没 `main` 的文件在 classify 里是 Internal（合理：它不被别的文件 use），
+/// 但用户刚把它当入口跑了，此时必须有入口，否则静默什么都不做。
+///
+/// 对无 manifest 的单文件直跑（Script 角色）：顶层语句即程序主体，
+/// 无需 main——这是「默认情况零门槛」。
+fn is_bin_role(entry: &Path) -> bool {
+    find_project_root(entry).is_some()
+}
+
+/// T4：入口文件的 span（用于无源码位置的诊断）。
+/// 用文件首行首列作占位——诊断需要位置才能渲染，而“缺 main”是文件级问题。
+fn entry_span(_entry: &Path) -> crate::util::span::Span {
+    crate::util::span::Span::default()
 }
 
 /// 检查一个项目：发现源文件 → 构建 Registry → 逐文件 typecheck。
@@ -423,10 +483,13 @@ fn extract_global_defs(ast: &Module) -> Vec<(String, MonoType)> {
         } = &stmt.kind
         {
             if let Expr::Var(name, _) = target.as_ref() {
-                let is_fn = matches!(
-                    value.as_deref(),
-                    Some(Expr::Lambda { .. }) | Some(Expr::Block(_))
-                );
+                // 裁决 C（RFC-010a 附录D）：注解是 Fn → 函数；非 Fn 注解 → 块值；
+                // 无注解 → 函数。此前这里写「Block 就是函数」，把 `x: Int = { 5 }`
+                // 误判为函数——与 ir_gen 的注册口径不一致，导致跨文件引用
+                // `use lib.{x}` 找不到槽位（T5）。
+                let is_fn =
+                    Expr::block_binding_is_function(type_annotation.as_ref(), value.as_deref())
+                        || matches!(value.as_deref(), Some(Expr::Lambda { .. }));
                 if !is_fn {
                     let ty = type_annotation
                         .as_ref()
@@ -438,6 +501,27 @@ fn extract_global_defs(ast: &Module) -> Vec<(String, MonoType)> {
         }
     }
     out
+}
+
+/// 为所有文件分配不相交的全局槽位区间（T5）。
+///
+/// 返回 `(限定名 → 绝对槽位号, 各文件的槽位基址)`。
+/// 槽位号按发现顺序连续分配；限定名用 `{module_key}.{name}`（与
+/// `SymbolTable::qualify` 同源），使 `use lib.{value}` 解析到 `lib.value`。
+///
+/// 只登记**真正的值绑定**（非函数）——函数进函数表，不占全局槽位。
+fn allocate_global_slots(asts: &[(String, PathBuf, Module)]) -> (Vec<(String, usize)>, Vec<usize>) {
+    let mut layout: Vec<(String, usize)> = Vec::new();
+    let mut bases: Vec<usize> = Vec::with_capacity(asts.len());
+    let mut next_slot = 0usize;
+    for (key, _, ast) in asts {
+        bases.push(next_slot);
+        for (name, _ty) in extract_global_defs(ast) {
+            layout.push((SymbolTable::qualify(key, &name), next_slot));
+            next_slot += 1;
+        }
+    }
+    (layout, bases)
 }
 
 /// 链接多个文件的 `ModuleIR`：拼接函数/全局/FFI，合并 per-function 映射。
@@ -466,6 +550,7 @@ fn link_module_irs(
     let mut merged = ModuleIR {
         globals: Vec::new(),
         functions: Vec::new(),
+        init: Vec::new(),
         ffi_libs: Vec::new(),
         ffi_bindings: Vec::new(),
         entry_function: Some(format!("{}.main", entry_key)),
@@ -480,9 +565,14 @@ fn link_module_irs(
     for (_, ir) in irs {
         merged.globals.extend(ir.globals);
         merged.functions.extend(ir.functions);
+        // T5：各文件的初始化序列按发现顺序拼接（被依赖模块先于入口文件）。
+        merged.init.extend(ir.init);
         merged.ffi_libs.extend(ir.ffi_libs);
         merged.ffi_bindings.extend(ir.ffi_bindings);
     }
+    // 槽位号已由 allocate_global_slots 全局唯一，此处仅按索引稳定排序，
+    // 便于调试与运行时按索引直取。
+    merged.globals.sort_by_key(|g| g.index);
     Ok(merged)
 }
 
@@ -843,7 +933,7 @@ pub fn compile_embedded_module(
             diagnostics: result.diagnostics,
         });
     }
-    crate::middle::generate_ir_with_context(&ast, &result, &[], &[], registry, key).map_err(
+    crate::middle::generate_ir_with_context(&ast, &result, &[], &[], 0, registry, key).map_err(
         |diags| OrchestratorError::Compile {
             path: format!("<{key}> (embedded std)"),
             message: diags

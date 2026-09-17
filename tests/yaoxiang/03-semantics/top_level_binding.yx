@@ -1,0 +1,32 @@
+// 03-semantics/top_level_binding.yx
+// 覆盖: T2 顶层绑定 = 全局槽位 + 运行时初始化
+//   - 顶层块值（旧 E3007 拒绝的形态）
+//   - 顶层调用初始化（旧 E3007 拒绝的形态）
+//   - 块内中间语句的局部作用域
+// 状态: ✅ 可运行
+
+use std.{assert, io}
+
+// 顶层块值：初始化在运行时求值，不再是编译期常量门槛
+answer: Int = { 42 }
+
+// 块内带语句：块的值 = 尾表达式
+nested: Int = {
+    inner = 5
+    inner * 2
+}
+
+// 顶层调用初始化：运行时求值，不再要求常量折叠
+inc: (Int) -> Int = (x) => x + 1
+computed: Int = inc(41)
+
+// 常量形式（回归：折叠路径仍在）
+plain: Int = 1 + 2
+
+main = {
+    assert.assert(answer == 42, "顶层块值应为 42")
+    assert.assert(nested == 10, "块内中间语句作用域应正确")
+    assert.assert(computed == 42, "顶层调用初始化应运行时求值")
+    assert.assert(plain == 3, "常量折叠路径不应回归")
+    io.println("top_level_binding ok")
+}

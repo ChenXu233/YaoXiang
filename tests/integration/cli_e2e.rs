@@ -694,3 +694,85 @@ fn test_e2e_dump_bytecode_file_carries_source_path() {
         "dump .42 should resolve real source path; stdout: {stdout:?}"
     );
 }
+
+// T4：入口点语义（RFC-029f 角色驱动）
+
+/// Bin 角色（有 manifest）缺 main → E3020 编译错误。
+///
+/// 此前 `find_entry_point` 找不到 main 就静默返回 0——执行函数表里任意
+/// 第一个函数（用户以为在跑 main，实际跑了 helper）。属 #271 静默错误族。
+#[test]
+fn test_e2e_bin_missing_main_reports_e3020() {
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let src = write_yx(tmp.path(), "main.yx", "helper: () -> Void = { }\n");
+
+    let (code, _stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    assert_ne!(code, 0, "Bin 缺 main 应编译失败");
+    assert!(
+        stderr.contains("E3020"),
+        "应报 E3020（缺入口），实际 stderr: {stderr:?}"
+    );
+}
+
+/// Bin 角色 main 是值绑定而非函数 → E3021 编译错误。
+///
+/// 此前 `main: Int = 5` 被当作入口编译成零参访问器函数，静默“成功”且无输出。
+#[test]
+fn test_e2e_bin_main_not_function_reports_e3021() {
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let src = write_yx(tmp.path(), "main.yx", "main: Int = 5\n");
+
+    let (code, _stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    assert_ne!(code, 0, "main 非函数应编译失败");
+    assert!(
+        stderr.contains("E3021"),
+        "应报 E3021（入口非函数），实际 stderr: {stderr:?}"
+    );
+}
+
+/// Script 角色（无 manifest）：顶层语句即程序主体，无入口概念。
+///
+/// 这条覆盖「默认情况零门槛」——单文件直跑不需要 main。
+#[test]
+fn test_e2e_script_top_level_statement_runs() {
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "script.yx",
+        "use std.io\n\nio.println(\"script ran\")\n",
+    );
+
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    assert_eq!(code, 0, "Script 顶层语句应正常执行; stderr: {stderr:?}");
+    assert!(
+        stdout.contains("script ran"),
+        "顶层语句应被执行，实际 stdout: {stdout:?}"
+    );
+}
+
+/// Script 角色无 main 时**不得**执行函数表里第一个函数。
+///
+/// 这是 T4 的核心修复：旧实现 `find_entry_point` 兜底返回 0，
+/// 于是「只有 helper 没有 main」的文件会打印 helper 的输出。
+#[test]
+fn test_e2e_script_no_main_does_not_run_arbitrary_function() {
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "nomain.yx",
+        "use std.io\n\nhelper: () -> Void = { io.println(\"helper ran\") }\n",
+    );
+
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    assert_eq!(code, 0, "无 main 的 Script 不应失败; stderr: {stderr:?}");
+    assert!(
+        !stdout.contains("helper ran"),
+        "无 main 时不得执行任意函数（旧兜底行为），实际 stdout: {stdout:?}"
+    );
+}

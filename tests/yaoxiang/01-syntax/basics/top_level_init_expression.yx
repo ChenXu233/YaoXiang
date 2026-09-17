@@ -2,10 +2,8 @@
 // 覆盖: 规范 §5.2 顶层绑定初始化；RFC-010 统一类型语法；RFC-029 模块 = record of bindings
 // 验证: 顶层 `name = expr` 的四种 init 形态（字面量/算术/字符串拼接/类型标注）求值后绑定，不丢值
 // 修复: #261 (顶层 binding 初始化表达式被编译成返回 0 的函数)
+//       顶层绑定重构 T2（块值/调用/跨绑定引用不再要求编译期常量，改为运行时初始化）
 // 状态: ✅ 可运行
-// 限制：跨顶层 binding 引用（如 `other = sum + 100`）与调用 init（`sum = f()`）
-// 现在会报 E3007（#271 清单 #2：折叠不到 → 硬错误，不再静默输出 0），
-// 用例见 06-compile-errors/top_level_call_init.yx / top_level_cross_binding.yx。
 
 use std.assert
 
@@ -15,10 +13,24 @@ arithmetic = 1 + 2 + 3                      // (2) 算术（#261 主修复：原
 concat = "hello, " + "world"                // (3) 字符串拼接（同 #261 常量折叠路径）
 pi_anno: Float = 3.14                       // (4) 字面量 + 显式类型注解
 
+// (5) 跨顶层 binding 引用（T2 后运行时初始化，不再报 E3007）
+doubled = arithmetic * 2
+
+// (6) 顶层调用初始化（T2 后运行时求值）
+inc: (Int) -> Int = (x) => x + 1
+incremented = inc(literal)
+
+// (7) 前向引用（T3）：引用后声明的绑定——拓扑排序保证 fwd_base 先初始化
+fwd_derived: Int = fwd_base * 3
+fwd_base: Int = 7
+
 // Act + Assert — 每个 binding 恰好访问一次，期望值来自 §5.2 语义（name: type = value 求值后绑定）。
 main = {
     assert.assert(literal == 42, "顶层字面量绑定 == 42")
     assert.assert(arithmetic == 6, "顶层算术绑定 == 6（#261）")
     assert.assert(concat == "hello, world", "顶层字符串拼接 == hello, world")
     assert.assert(pi_anno == 3.14, "顶层类型标注绑定 == 3.14")
+    assert.assert(doubled == 12, "跨顶层 binding 引用（T2 运行时初始化）")
+    assert.assert(incremented == 43, "顶层调用初始化（T2 运行时求值）")
+    assert.assert(fwd_derived == 21, "前向引用（T3 拓扑排序：fwd_base 先初始化）")
 }

@@ -15,6 +15,12 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::{DebugSpan, FileId, Span};
 use std::collections::HashMap;
 
+/// 模块初始化函数的保留名（T2）。
+///
+/// 顶层绑定编译为全局槽位 + 初始化指令；这串指令装在一个合成函数里，
+/// 由运行时在执行 `main` 前先调用。`__yx_` 前缀是保留段，不会与用户标识符碰撞。
+pub const MODULE_INIT_FUNCTION: &str = "__yx_module_init";
+
 /// FFI 函数元数据 — 机制/库/符号
 #[derive(Debug, Clone)]
 struct FfiFuncMeta {
@@ -159,11 +165,46 @@ impl Translator {
             }
         }
 
+        // T2：模块初始化序列编译为一个合成函数 `__yx_module_init`，
+        // 追加到函数表末尾并作为入口前置（运行时先跑它再跑 main）。
+        // 顶层绑定的求值对顶层代码可见，写成函数是让它可被 call/ret 包裹的
+        // 最小手段；不污染用户函数表（名字带 `__yx_` 前缀保留段）。
+        //
+        // 必须在 take_constant_pool() 之前翻译：init 里的字面量要进常量池，
+        // 否则 LoadConst 会指向其他函数的常量（错位）。
+        if !module.init.is_empty() {
+            let init_func = self.translate_init_sequence(&module.init)?;
+            code_section.functions.push(init_func);
+        }
+
         let const_pool = self.emitter.take_constant_pool();
 
         Ok(TranslatorOutput {
             code_section,
             const_pool,
+        })
+    }
+
+    /// T2：把模块初始化指令序列编译成一个零参函数。
+    fn translate_init_sequence(
+        &mut self,
+        init: &[Instruction],
+    ) -> Result<super::FunctionCode, Diagnostic> {
+        let mut instructions = Vec::new();
+        for instr in init {
+            let bc = self.translate_instruction(instr)?;
+            instructions.push(bc);
+        }
+        // 末尾补 Return（初始化无返回值）
+        instructions.push(super::BytecodeInstruction::new(opcode::RETURN, vec![]));
+
+        Ok(super::FunctionCode {
+            name: MODULE_INIT_FUNCTION.to_string(),
+            params: Vec::new(),
+            return_type: MonoType::Void,
+            instructions,
+            local_count: 0,
+            debug_map: HashMap::new(),
         })
     }
 
@@ -612,6 +653,14 @@ impl Translator {
                 opcode::LOAD_ARG,
                 vec![dst_reg, *arg_idx as u8],
             )),
+            Operand::Global(idx) => {
+                // LoadGlobal: dst(1) + global_idx(2, 小端)
+                let idx = *idx as u16;
+                Ok(BytecodeInstruction::new(
+                    opcode::LOAD_GLOBAL,
+                    vec![dst_reg, idx as u8, (idx >> 8) as u8],
+                ))
+            }
             _ => {
                 let src_reg = self.operand_resolver.to_reg(src)?;
                 Ok(BytecodeInstruction::new(
@@ -632,6 +681,14 @@ impl Translator {
             Ok(BytecodeInstruction::new(
                 opcode::STORE_LOCAL,
                 vec![*local_idx as u8, src_reg],
+            ))
+        } else if let Operand::Global(idx) = dst {
+            // StoreGlobal: global_idx(2, 小端) + src(1)
+            let idx = *idx as u16;
+            let src_reg = self.operand_resolver.to_reg(src)?;
+            Ok(BytecodeInstruction::new(
+                opcode::STORE_GLOBAL,
+                vec![idx as u8, (idx >> 8) as u8, src_reg],
             ))
         } else {
             Err(ErrorCodeDefinition::codegen_invalid_operand("invalid operand").build())

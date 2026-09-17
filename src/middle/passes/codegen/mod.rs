@@ -19,6 +19,9 @@ pub mod flow;
 pub mod operand;
 pub mod translator;
 
+#[cfg(test)]
+mod tests;
+
 use crate::frontend::core::parser::ast::Type;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{ConstValue, ModuleIR, Operand};
@@ -235,11 +238,18 @@ impl CodegenContext {
 
     /// 生成文件头
     fn generate_header(&self) -> BytecodeHeader {
+        // T4：入口点用 `idx + 1` 编码，0 = 无入口。
+        // 不能直接用 idx——0 号函数与“无入口”无法区分，而单函数文件里
+        // main 常常就是 0 号。
+        let entry_point = self
+            .find_entry_point()
+            .map(|idx| idx as u32 + 1)
+            .unwrap_or(0);
         BytecodeHeader {
             magic: YAOXIANG_MAGIC,
             version: BYTECODE_VERSION,
             flags: self.compute_flags(),
-            entry_point: self.find_entry_point() as u32,
+            entry_point,
             section_count: 4,
             file_size: 0,
             checksum: 0,
@@ -255,27 +265,31 @@ impl CodegenContext {
         flags
     }
 
-    /// 查找入口点
+    /// 查找入口点。
     ///
-    /// RFC-029：多文件模式下函数名带模块限定名（如 `main.main`），由编排器
-    /// 在 `entry_function` 里给出精确名字；单文件为 None，回退到查找裸名 `main`。
-    fn find_entry_point(&self) -> usize {
+    /// - 多文件（Bin 角色，有 yaoxiang.toml）：编排器在 `entry_function` 给出
+    ///   限定名（如 `main.main`）。
+    /// - 单文件（Script 角色）：找裸名 `main` 函数；没有则无入口。
+    ///
+    /// T4：**删除了“找不到 main 就用第 0 个函数”的静默兜底**。那个兜底会执行
+    /// 函数表里任意第一个函数（用户以为在跑 main，实际跑了 helper），
+    /// 属 #271 静默错误族。现在返回 `Option`：None = 本模块无入口，
+    /// 由调用方按角色处理（Script 允许；Bin 报错）。
+    ///
+    /// 注：`main: Int = 5` 这类值绑定不在函数表里（它进全局槽位），
+    /// 故不会成为入口——由 Bin 角色检查报 E3021，而非静默挑别的函数。
+    fn find_entry_point(&self) -> Option<usize> {
         if let Some(ref entry_name) = self.module.entry_function {
-            if let Some(idx) = self
+            return self
                 .module
                 .functions
                 .iter()
-                .position(|func| &func.name == entry_name)
-            {
-                return idx;
-            }
+                .position(|func| &func.name == entry_name);
         }
-        for (idx, func) in self.module.functions.iter().enumerate() {
-            if func.name == "main" {
-                return idx;
-            }
-        }
-        0
+        self.module
+            .functions
+            .iter()
+            .position(|func| func.name == "main")
     }
 
     /// 从 AST 类型转换

@@ -6,5 +6,6 @@ pub mod buffer;
 pub mod bytecode;
 pub mod emitter;
 pub mod flow;
+pub mod global_slot;
 pub mod mod_;
 pub mod operand;

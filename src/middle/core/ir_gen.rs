@@ -147,8 +147,23 @@ pub struct AstToIrGenerator {
     nested_functions: Vec<FunctionIR>,
     /// 闭包计数器（用于生成唯一的闭包名称）
     closure_counter: usize,
-    /// 全局变量表 (name, type, initial_value)
+    /// 全局变量表 (name, type, initial_value)。
+    /// 索引即全局槽位号（`Operand::Global(idx)`）。`initial_value` 恒为 None——
+    /// 初始化改由运行时 `module_init` 序列承载（T2）；字段保留供跨文件登记占位。
     global_vars: Vec<(String, MonoType, Option<ConstValue>)>,
+    /// 跨文件全局布局（T5）：限定名 → 绝对槽位号。
+    /// 多文件模式下由编排器预先分配（各文件共享），使引用方与定义方
+    /// 用同一索引；单文件模式下为空，索引即 `global_vars` 下标。
+    global_slot_layout: HashMap<String, usize>,
+    /// 本文件顶层绑定的槽位起始号（多文件模式由编排器分配；单文件恒为 0）。
+    global_slot_base: usize,
+    /// 模块初始化序列（T2）：顶层绑定的求值 + 写入全局槽位的指令。
+    /// 按源码顺序生成（T3 改为依赖拓扑序），由运行时入口先执行。
+    module_init: Vec<Instruction>,
+    /// T3：顶层值绑定的待定初始化（拓扑排序前）。
+    /// 按源码顺序收集，在 `generate_module_ir` 尾部按依赖关系重排后
+    /// 写入 `module_init`——前向引用（`b = a + 1` 且 `a` 在后）需要 `a` 先初始化。
+    pending_inits: Vec<PendingInit>,
     /// 约束变量的具体类型映射（接口直接赋值优化）
     /// 当 `d: Drawable = Circle(1)` 时，记录 d -> "Circle"（具体类型名）
     /// 用于方法调用时选择直接调用而非 vtable 查找
@@ -207,6 +222,22 @@ struct LambdaBodyIR {
     locals: Vec<MonoType>,
 }
 
+/// T3：一条待排序的顶层绑定初始化。
+///
+/// 收集后按依赖关系重排：`init_instructions` 里对其它绑定的全局写入
+/// 决定依赖边（“我依赖谁”）。
+#[derive(Debug)]
+struct PendingInit {
+    /// 本绑定名（与槽位名同形，多文件下为限定名）
+    name: String,
+    /// 初始化指令（已是“求值 + StoreGlobal”）
+    instructions: Vec<Instruction>,
+    /// 本初始化引用的其它顶层绑定名
+    deps: Vec<String>,
+    /// 声明位置（循环依赖诊断用）
+    span: Span,
+}
+
 /// 循环上下文（#311）：一次 while/for 生成期内的跳转目标记录
 #[derive(Debug)]
 struct LoopTargets {
@@ -247,6 +278,10 @@ impl AstToIrGenerator {
             nested_functions: Vec::new(),
             closure_counter: 0,
             global_vars: Vec::new(),
+            global_slot_layout: HashMap::new(),
+            global_slot_base: 0,
+            module_init: Vec::new(),
+            pending_inits: Vec::new(),
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             release_plan: type_result.release_plan.drops.clone(),
@@ -452,14 +487,20 @@ impl AstToIrGenerator {
         None
     }
 
-    /// 查找全局变量
+    /// 查找全局变量，返回**绝对槽位号**（`Operand::Global(idx)` 的值）。
+    ///
+    /// 先查跨文件布局（限定名 → 绝对槽位）；未命中则按本文件声明顺序，
+    /// 基址由编排器分配（单文件为 0）。
     fn lookup_global(
         &self,
         name: &str,
     ) -> Option<usize> {
-        for (idx, (var_name, _, _)) in self.global_vars.iter().enumerate() {
+        if let Some(&idx) = self.global_slot_layout.get(name) {
+            return Some(idx);
+        }
+        for (i, (var_name, _, _)) in self.global_vars.iter().enumerate() {
             if var_name == name {
-                return Some(idx);
+                return Some(self.global_slot_base + i);
             }
         }
         None
@@ -628,6 +669,53 @@ impl AstToIrGenerator {
         reg
     }
 
+    /// T3：预扫描模块，为所有顶层值绑定分配槽位。
+    ///
+    /// 必须在生成任何初始化指令**之前**跑：前向引用（`b = a + 1` 中 `a` 在后）
+    /// 要求 `a` 的槽位号在生成 `b` 的初始化时就已知。
+    /// 按源码顺序分配，故槽位号 = 声明序（与旧行为一致）。
+    fn register_global_slots(
+        &mut self,
+        module: &ast::Module,
+    ) {
+        for stmt in &module.items {
+            let ast::StmtKind::Assign {
+                target,
+                type_annotation,
+                value,
+                ..
+            } = &stmt.kind
+            else {
+                continue;
+            };
+            let ast::Expr::Var(name, _) = target.as_ref() else {
+                continue;
+            };
+            // 函数绑定进函数表，不占槽位；类型定义绑定无运行时代码
+            if ast::Expr::block_binding_is_function(type_annotation.as_ref(), value.as_deref())
+                || Self::is_type_def_binding(value.as_deref())
+            {
+                continue;
+            }
+            // 已登记（如跨文件布局已有同名的本文件绑定）则跳过
+            if self.global_slot_layout.contains_key(name) {
+                continue;
+            }
+            let ty = type_annotation
+                .as_ref()
+                .map(|t| MonoType::from(t.clone()))
+                .unwrap_or(MonoType::Int(64));
+            // 名字已限定（多文件）时布局键用限定名，否则用裸名
+            let key = match &self.module_key {
+                Some(k) => SymbolTable::qualify(k, name),
+                None => name.clone(),
+            };
+            let slot = self.global_slot_base + self.global_vars.len();
+            self.global_slot_layout.insert(key, slot);
+            self.global_vars.push((name.clone(), ty, None));
+        }
+    }
+
     /// 从 AST 模块生成 IR 模块
     pub fn generate_module_ir(
         &mut self,
@@ -640,6 +728,9 @@ impl AstToIrGenerator {
         }
         // use 导入别名表（含 #245 条目别名）：生成期解析调用名用。
         self.use_aliases = self.build_import_aliases(module);
+
+        // T3：先分配所有顶层值绑定的槽位，使前向引用在生成期可解析。
+        self.register_global_slots(module);
 
         let mut functions = Vec::new();
         let mut errors = Vec::new();
@@ -657,6 +748,21 @@ impl AstToIrGenerator {
             return Err(errors);
         }
 
+        // T3：顶层绑定的初始化按**依赖拓扑序**拼接（被依赖者先初始化）。
+        // 前向引用（`b = a + 1` 且 `a` 在后）靠它把 `a` 的初始化提到前面。
+        // 循环依赖在此报错（带环上的名字），而非运行时取到未初始化值。
+        let ordered = match self.topo_sort_pending_inits() {
+            Ok(v) => v,
+            Err(e) => return Err(vec![e]),
+        };
+        let ordered_inits: Vec<Vec<Instruction>> = ordered
+            .into_iter()
+            .map(|i| i.instructions.clone())
+            .collect();
+        for instrs in ordered_inits {
+            self.module_init.extend(instrs);
+        }
+
         // 添加嵌套函数到模块函数列表
         functions.extend(std::mem::take(&mut self.nested_functions));
 
@@ -664,8 +770,18 @@ impl AstToIrGenerator {
         functions.extend(std::mem::take(&mut self.anon_function_irs));
 
         let mut ir = ModuleIR {
-            globals: Vec::new(),
+            globals: self
+                .global_vars
+                .iter()
+                .enumerate()
+                .map(|(i, (name, ty, _))| crate::middle::core::ir::GlobalSlot {
+                    name: name.clone(),
+                    ty: ty.clone(),
+                    index: self.global_slot_base + i,
+                })
+                .collect(),
             functions,
+            init: std::mem::take(&mut self.module_init),
             ffi_libs: std::mem::take(&mut self.ffi_libs),
             ffi_bindings: std::mem::take(&mut self.ffi_bindings),
             entry_function: None,
@@ -831,6 +947,12 @@ impl AstToIrGenerator {
             }
         }
 
+        // 重写全局槽位名（T5）：与 `allocate_global_slots` 的限定规则同源，
+        // 使槽位名与跨文件布局键（`lib.value`）一致，同名全局得以共存。
+        for slot in &mut ir.globals {
+            slot.name = SymbolTable::qualify(module_key, &slot.name);
+        }
+
         // 重写调用/闭包引用：本文件函数（rename）+ 导入函数（aliases）。
         for func in &mut ir.functions {
             if func.is_type_decl() {
@@ -941,18 +1063,28 @@ impl AstToIrGenerator {
         }
     }
 
-    /// RFC-029 多文件编排：登记其他文件定义的全局变量名，使本文件中对跨文件全局的
-    /// 裸名引用解析为 `Call(访问器函数)`，而非误判为未定义（`Load 0`）。
+    /// RFC-029 多文件编排：登记跨文件全局布局（限定名 → 绝对槽位号）。
     ///
-    /// 不生成访问器函数 IR——那由定义该全局的文件各自的 `generate_module_ir` 生成。
-    /// `lookup_global` 只按名字匹配，故 `init_value` 留 `None`。
+    /// 使本文件对跨文件全局（`use lib.{value}` → `lib.value`）的引用
+    /// 能用定义方的槽位号生成 `Load(Global(idx))`，而非误判为未定义。
     pub fn seed_cross_file_globals(
         &mut self,
-        globals: &[(String, MonoType)],
+        layout: &[(String, usize)],
     ) {
-        for (name, ty) in globals {
-            self.global_vars.push((name.clone(), ty.clone(), None));
+        for (name, idx) in layout {
+            self.global_slot_layout.insert(name.clone(), *idx);
         }
+    }
+
+    /// 本文件顶层绑定的槽位分配起点。
+    ///
+    /// 多文件模式下各文件必须用不相交的槽位区间（否则跨文件索引冲突），
+    /// 由编排器按发现顺序预先分配；单文件模式恒为 0（索引 = 声明序）。
+    pub fn set_global_slot_base(
+        &mut self,
+        base: usize,
+    ) {
+        self.global_slot_base = base;
     }
 
     /// 生成语句的 IR
@@ -1182,37 +1314,41 @@ impl AstToIrGenerator {
                             generic_param_names,
                         )
                     }
-                } else if name == "main" {
-                    // 空 main（`main = {}`）：入口点绑定，生成空函数而非全局变量。
-                    // #271 #2：空块不是"折叠不到的初始化"，硬错误会误伤合法空入口。
-                    self.generate_function_ir(
-                        &name,
-                        type_annotation.as_ref(),
-                        &params,
-                        &body,
-                        constants,
-                        None,
-                    )
                 } else if Self::is_type_def_binding(value.as_deref()) {
                     // RFC-010：`Db = unsafe { Db: Type = {...}; Db }` 是**类型定义绑定**，
                     // 不是运行时全局变量。类型已在 typecheck 阶段注册（并提升到本作用域），
                     // 此处不生成运行时代码。
-                    // 此前落入 `generate_global_var_ir`，因 `unsafe` 无法常量折叠而报
-                    // E3007（顶层绑定初始化必须是编译期常量）。
+                    // 此前（T2 前）落入 `generate_global_var_ir`，因 `unsafe` 无法常量折叠而报
+                    // E3007（当时要求顶层初始化必须是编译期常量；T2 后该门槛已取消）。
                     Ok(None)
                 } else {
-                    // 全局变量
+                    // 全局变量（T2：槽位 + 初始化指令）
                     self.generate_global_var_ir(
                         &name,
                         type_annotation.as_ref(),
                         value.as_ref().map(|v| v.as_ref()),
+                        constants,
                     )
                 }
             }
             // 导入语句：解析在独立 pass 完成（build_import_aliases），不生成运行时代码
             ast::StmtKind::Use { .. } => Ok(None),
+            // T4：Script 模式（无 yaoxiang.toml）下顶层就是程序主体——
+            // 任意可执行语句按书写顺序编进模块初始化序列。
+            //
+            // Bin 模式（有 manifest）仍拒绝：那里程序入口是 `main`，
+            // 顶层散语句会让「先建什么后建什么」含糊。
+            // 注：初始化序列本身也是代码——所以顶层可执行语句不报错，
+            // 而是像 Python 一样按序执行。这是「默认情况零门槛」的代价与红利。
+            _ if self.module_key.is_none() => {
+                let mut instrs = Vec::new();
+                self.generate_local_stmt_ir(stmt, &mut instrs, constants)?;
+                self.module_init.extend(instrs);
+                Ok(None)
+            }
             _ => {
-                // 顶层只允许定义（绑定/类型/导入）；可执行语句必须在函数体内。
+                // 多文件/有 manifest：顶层只允许定义（绑定/类型/导入）；
+                // 可执行语句必须在函数体内。
                 // 禁止静默丢弃（#251 同类：表达式级兑底曾静默归零）
                 Err(ErrorCodeDefinition::ir_internal_error(&format!(
                     "unhandled top-level statement in IR generation: {:?}",
@@ -1468,16 +1604,18 @@ impl AstToIrGenerator {
             &self.symbols.len().to_string()
         );
 
-        // 计算局部变量总数（用于 VM 分配帧空间）
-        // 局部变量包括参数和函数体中声明的变量
-        // 参数数量 + 临时寄存器使用数量
+        // E3014 寄存器溢出：寄存器索引是 u8（上限 255），故局部+临时寄存器
+        // 总数必须 ≤ 255。此前这里写 MAX_LOCALS = 65_535（与 u8 不符），
+        // 几百个局部变量会落进 OperandResolver 的溢出分支——该分支构造
+        // E3014（requires_span 码）时无 span 可挂，debug 构建直接 panic。
+        // 现在在 IR 层就拦住并带上函数 span（#271 静默/崩溃同类：宁可报错不崩）。
         let total_locals = self.next_temp;
-        const MAX_LOCALS: usize = 65_535;
-        if total_locals > MAX_LOCALS {
-            return Err(ErrorCodeDefinition::ir_internal_error(&format!(
-                "too many locals allocated in function '{}': {}",
-                name, total_locals
-            ))
+        const MAX_REGISTERS: usize = 255;
+        if total_locals > MAX_REGISTERS {
+            return Err(ErrorCodeDefinition::register_overflow(
+                &total_locals.to_string(),
+                &MAX_REGISTERS.to_string(),
+            )
             .build());
         }
         let locals_types: Vec<MonoType> = (0..total_locals)
@@ -1958,7 +2096,9 @@ impl AstToIrGenerator {
     ///
     /// 形态：`Db = unsafe { Db: Type = {...}; Db }` —— 块内定义类型并把类型名
     /// 作为尾表达式交回。这是编译期构造（类型已在 typecheck 注册并提升），
-    /// 不应生成运行时全局变量，否则 `unsafe` 无法常量折叠 → E3007。
+    /// 不应生成运行时全局变量，否则（T2 前）`unsafe` 无法常量折叠 → E3007。
+    /// T2 后 E3007 已不再产生，但本判定仍然必要：类型定义本就不该有运行时代码，
+    /// 生成多余初始化会把类型名当成值去求值。
     fn is_type_def_binding(value: Option<&ast::Expr>) -> bool {
         let Some(ast::Expr::Unsafe { body, .. }) = value else {
             return false;
@@ -1980,70 +2120,208 @@ impl AstToIrGenerator {
         )
     }
 
-    /// 生成全局变量 IR
+    /// T3：把待定初始化按依赖顺序重排（DFS + 三色标记）。
+    ///
+    /// 返回按可执行顺序排列的初始化列表（被依赖者在前）。
+    /// 检测到环时返回诊断，消息列出环上的名字——而非报一个无名的“循环依赖”。
+    fn topo_sort_pending_inits(&self) -> Result<Vec<&PendingInit>, Diagnostic> {
+        #[derive(Clone, Copy, PartialEq)]
+        enum Mark {
+            White,
+            Gray,
+            Black,
+        }
+        use std::collections::HashMap;
+        let mut marks: HashMap<&str, Mark> = self
+            .pending_inits
+            .iter()
+            .map(|p| (p.name.as_str(), Mark::White))
+            .collect();
+        let by_name: HashMap<&str, &PendingInit> = self
+            .pending_inits
+            .iter()
+            .map(|p| (p.name.as_str(), p))
+            .collect();
+        let mut order: Vec<&PendingInit> = Vec::with_capacity(self.pending_inits.len());
+        // 显式栈的 DFS：避免深依赖链（上千绑定）退化为递归崩溃
+        let mut stack: Vec<(&str, usize)> = Vec::new();
+        let mut path: Vec<&str> = Vec::new();
+
+        for root in &self.pending_inits {
+            if marks[root.name.as_str()] != Mark::White {
+                continue;
+            }
+            stack.push((root.name.as_str(), 0));
+            path.push(root.name.as_str());
+            marks.insert(root.name.as_str(), Mark::Gray);
+            while let Some((name, dep_i)) = stack.pop() {
+                let init = by_name[name];
+                if dep_i < init.deps.len() {
+                    let dep = init.deps[dep_i].as_str();
+                    stack.push((name, dep_i + 1));
+                    // 依赖不在本文件（跨文件布局、已由别的文件初始化或 std 常量）：跳过
+                    if !by_name.contains_key(dep) {
+                        continue;
+                    }
+                    match marks[dep] {
+                        Mark::White => {
+                            marks.insert(dep, Mark::Gray);
+                            path.push(dep);
+                            stack.push((dep, 0));
+                        }
+                        Mark::Gray => {
+                            // 回边：环。从 path 里截出环上名字
+                            let start = path.iter().position(|p| *p == dep).unwrap_or(0);
+                            let cycle = path[start..].join(" → ");
+                            return Err(ErrorCodeDefinition::global_init_cycle(&format!(
+                                "{cycle} → {dep}"
+                            ))
+                            .at(init.span)
+                            .build());
+                        }
+                        Mark::Black => {}
+                    }
+                } else {
+                    marks.insert(name, Mark::Black);
+                    path.pop();
+                    order.push(init);
+                }
+            }
+        }
+        Ok(order)
+    }
+
+    /// T3：本文件内某个绑定名的槽位号（不含跨文件布局）。
+    fn lookup_global_in_own_file(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        let key = match &self.module_key {
+            Some(k) => SymbolTable::qualify(k, name),
+            None => name.to_string(),
+        };
+        self.global_slot_layout.get(&key).copied()
+    }
+
+    /// 生成全局变量 IR（T2：槽位 + 初始化）。
+    ///
+    /// 顶层绑定不再编译成零参访问器函数，而是：
+    /// 1. 在 `self.global_vars` 登记槽位（名字 + 类型）；
+    /// 2. 生成初始化指令（求值 init 表达式 → `Store(Global(idx))`），
+    ///    追加到 `self.module_init`（模块初始化序列）。
+    ///
+    /// 读取处（`Expr::Var`）走 `Load(Operand::Global(idx))`。
+    /// 初始化表达式可以是任意表达式（含块值）——运行时求值，不再要求常量折叠。
     fn generate_global_var_ir(
         &mut self,
         name: &str,
         type_annotation: Option<&ast::Type>,
         initializer: Option<&ast::Expr>,
+        constants: &mut Vec<ConstValue>,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         let var_type = type_annotation
             .map(|t| (*t).clone().into())
             .unwrap_or(MonoType::Int(64));
 
-        // 尝试从 initializer 提取常量值
-        // 这里返回 None 是正常的——表示初始值不是编译期常量表达式
-        // （如 main = {} 这样的块表达式），需要运行时求值
-        let init_value = initializer.and_then(|expr| self.eval_const_expr(expr));
-
-        // #271 #2：有 init 表达式但常量折叠不到 → 硬错误（不再静默填 0）。
-        // 无 init 的绑定保留零初始化语义（C 风格默认值，非静默兜底）。
-        if let Some(init) = initializer {
-            if init_value.is_none() {
-                return Err(ErrorCodeDefinition::top_level_init_not_const(name)
-                    .at(Self::get_expr_span(init))
-                    .build());
+        // T3：槽位已在 register_global_slots 预分配（前向引用需要），此处取回。
+        // 未预分配的情形（非顶层语句路径）在此补登记，保持单一来源。
+        let slot_idx = match self.lookup_global_in_own_file(name) {
+            Some(idx) => idx,
+            None => {
+                let idx = self.global_slot_base + self.global_vars.len();
+                self.global_vars
+                    .push((name.to_string(), var_type.clone(), None));
+                idx
             }
-        }
-
-        // 注册到全局变量表（init_value 由 init 表达式的常量折叠得；折叠不到的留 None）
-        // ponytail: 该字段由 #261+B PR 删除，本 PR 不动数据结构
-        self.global_vars
-            .push((name.to_string(), var_type.clone(), init_value.clone()));
-
-        // 零参访问器函数：函数体返回 init_value。
-        // 注：原实现曾硬编码 `LoadConst(Int(0)) + Ret`，对常量可折叠的表达式（`1+2+3`）静默丢值（#261）
-        // #271 #2：折叠不到的 init 已在上面报 E3007；此处 init_value 非 None，
-        // 无 init 的绑定走零初始化（C 语义默认值，非静默兜底）。
-        let result_reg = 0;
-        let src_operand = Operand::Const(init_value.unwrap_or(ConstValue::Int(0)));
-        let instructions = vec![
-            Instruction::Load {
-                dst: Operand::Local(result_reg),
-                src: src_operand,
-            },
-            Instruction::Ret(Some(Operand::Local(result_reg))),
-        ];
-
-        // 为全局变量创建函数
-        let func_ir = FunctionIR {
-            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
-            name: name.to_string(),
-            params: Vec::new(),
-            return_type: var_type,
-            generic_params: None,
-            body: FunctionBody::Code {
-                blocks: vec![BasicBlock {
-                    label: 0,
-                    instructions,
-                    successors: Vec::new(),
-                }],
-                entry: 0,
-                locals: vec![MonoType::Int(64)], // 分配一个局部变量用于存储结果
-            },
         };
 
-        Ok(Some(func_ir))
+        // 生成初始化指令：求值 init 表达式，写入槽位。
+        // 无 init 的绑定保留零初始化语义（C 风格默认值）。
+        // 旧实现（E3007）要求 init 必须是编译期常量；T2 后改为运行时求值，
+        // 「折叠不到」不再是错误，折叠仅作优化（能折就内联为常量）。
+        let result_reg = self.next_temp_reg();
+        // 先生成到局部缓冲（generate_expr_ir 需 &mut self，不能直接借 self.module_init）
+        let mut init_instrs: Vec<Instruction> = Vec::new();
+        if let Some(init) = initializer {
+            // 常量折叠优化：能折就直接写常量，省掉运行时求值。
+            // 折不出就走完整表达式生成（块值、调用、变量引用等）。
+            if let Some(const_val) = self.eval_const_expr(init) {
+                init_instrs.push(Instruction::Load {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Const(const_val),
+                });
+            } else {
+                self.generate_expr_ir(init, result_reg, &mut init_instrs, constants)?;
+            }
+        } else {
+            init_instrs.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::Int(0)),
+            });
+        }
+        init_instrs.push(Instruction::Store {
+            dst: Operand::Global(slot_idx),
+            src: Operand::Local(result_reg),
+            span: initializer.map(Self::get_expr_span).unwrap_or_default(),
+        });
+        // T3：入待定队列（不直接追加到 module_init）——尾部按依赖拓扑排序后写入。
+        let key = match &self.module_key {
+            Some(k) => SymbolTable::qualify(k, name),
+            None => name.to_string(),
+        };
+        let deps = initializer
+            .map(|init| self.collect_global_deps(init))
+            .unwrap_or_default();
+        self.pending_inits.push(PendingInit {
+            name: key,
+            instructions: init_instrs,
+            deps,
+            span: initializer.map(Self::get_expr_span).unwrap_or_default(),
+        });
+
+        // 顶层绑定不再需要独立 FunctionIR
+        Ok(None)
+    }
+
+    /// T3：收集一个初始化表达式引用的其它顶层绑定名（依赖边）。
+    ///
+    /// 只统计“解析为本文件或跨文件全局槽位”的引用；局部变量、函数名不算。
+    /// 保守起见走完整 AST 遍历——多收一条依赖只会把顺序摆得更保守，
+    /// 漏收才会导致初始化顺序错误。
+    fn collect_global_deps(
+        &self,
+        expr: &ast::Expr,
+    ) -> Vec<String> {
+        let mut found = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        Self::walk_expr_vars(expr, &mut |name: &str| {
+            let key = match &self.module_key {
+                Some(k) => SymbolTable::qualify(k, name),
+                None => name.to_string(),
+            };
+            // 自引用不算依赖（由循环检测单独报）
+            if self.global_slot_layout.contains_key(&key) && found.insert(key.clone()) {
+                out.push(key);
+            }
+        });
+        out
+    }
+
+    /// 遍历表达式中的所有 `Var` 名字（含嵌套块、二元、调用等）。
+    ///
+    /// 复用既有的 `collect_free_vars_expr`（AST 全形态遍历，已覆盖闭包捕获
+    /// 场景并经受测试）——`bound` 传空集即「所有 Var 都是自由变量」。
+    fn walk_expr_vars(
+        expr: &ast::Expr,
+        visit: &mut impl FnMut(&str),
+    ) {
+        let bound: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut names: Vec<String> = Vec::new();
+        collect_free_vars_expr(expr, &bound, &mut seen, &mut names);
+        for n in &names {
+            visit(n.as_str());
+        }
     }
 
     /// RFC-004: 为匿名函数绑定生成独立的 FunctionIR
@@ -3991,27 +4269,30 @@ impl AstToIrGenerator {
                         dst: Operand::Local(result_reg),
                         src: Operand::Local(local_idx),
                     });
-                } else if self.lookup_global(var_name).is_some() {
-                    // 全局变量：生成函数调用获取值
-                    let func_name = var_name.clone();
-                    instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(func_name)),
-                        args: vec![],
-                        span: *var_span,
-                        def: None,
+                } else if let Some(global_idx) = self.lookup_global(var_name) {
+                    // 全局变量（T2）：直接从全局槽位加载，不再调用访问器函数
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Global(global_idx),
                     });
-                } else if let Some(qualified) = self.use_aliases.get(var_name) {
-                    // 选择性导入的绑定（常量/函数）：按限定名调用 native handler 取值。
-                    // 例：use std.math.{PI} → PI 展开为 std.math.PI，调用 native_pi 返回真实常量。
-                    // 修复：此前常量引用掉进“静默 Load Int(0)”兜底，PI 运行时恒为 0（#251）。
-                    instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(qualified.clone())),
-                        args: vec![],
-                        span: *var_span,
-                        def: None,
-                    });
+                } else if let Some(alias) = self.use_aliases.get(var_name) {
+                    // T5：`use lib.{value}` 的别名先看是否落在全局布局里
+                    // （跨文件顶层绑定）——是则走 LoadGlobal。
+                    // 否则是 std 原生常量（如 PI），按限定名调用 native handler。
+                    if let Some(&slot) = self.global_slot_layout.get(alias) {
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Global(slot),
+                        });
+                    } else {
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(alias.clone())),
+                            args: vec![],
+                            span: *var_span,
+                            def: None,
+                        });
+                    }
                 } else if matches!(
                     var_name.as_str(),
                     "Int"
@@ -5716,7 +5997,9 @@ pub fn generate_ir_with_context(
     ast: &crate::frontend::core::parser::ast::Module,
     result: &crate::frontend::core::typecheck::TypeCheckResult,
     cross_file_types: &[&crate::frontend::core::parser::ast::Module],
-    cross_file_globals: &[(String, MonoType)],
+    global_layout: &[(String, usize)],
+    // 本文件顶层绑定的槽位起始号（编排器分配，保证各文件区间不相交）
+    global_slot_base: usize,
     registry: &ModuleRegistry,
     module_key: &str,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
@@ -5726,7 +6009,8 @@ pub fn generate_ir_with_context(
         Some(module_key.to_string()),
     );
     generator.seed_cross_file_types(cross_file_types);
-    generator.seed_cross_file_globals(cross_file_globals);
+    generator.seed_cross_file_globals(global_layout);
+    generator.set_global_slot_base(global_slot_base);
     generator.generate_module_ir(ast)
 }
 
