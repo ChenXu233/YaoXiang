@@ -6,6 +6,7 @@
 pub mod executor;
 pub mod ffi;
 pub mod frames;
+pub mod image;
 pub mod registers;
 
 #[cfg(test)]

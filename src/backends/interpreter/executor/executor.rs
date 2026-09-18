@@ -6,12 +6,13 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState, ExecutorConfig};
+use crate::backends::{ExecutorConfig, ExecutorError, ExecutorResult, ExecutionState};
 use crate::backends::common::{RuntimeValue, Heap, HeapValue};
 use crate::backends::common::value::{
     AsyncState, AsyncValue, FunctionId, FunctionValue, TaskId, ValueType,
 };
-use crate::middle::bytecode::{BytecodeFunction, Reg, Label, BinaryOp, CompareOp, ConstValue};
+use crate::middle::bytecode::{BytecodeFunction, Reg, BinaryOp, CompareOp, ConstValue};
+use crate::backends::interpreter::image::Image;
 use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::runtime::{Runtime, RuntimeConfig};
@@ -86,19 +87,12 @@ pub enum InterpreterTask {
 /// - A call stack for function calls
 /// - A constant pool for literals
 pub struct Interpreter {
+    /// 只读镜像：常量池、函数表、类型表、vtable（加载期建好，执行期不变）
+    pub(super) image: Image,
     /// Heap for dynamic allocation
     pub(super) heap: Heap,
     /// Call stack
     pub(super) call_stack: Vec<Frame>,
-    /// Constant pool (shared across modules)
-    pub(super) constants: Vec<ConstValue>,
-    /// 函数表（按索引分发：CallStatic / MakeClosure / CallDyn 全部走这里）
-    pub(super) functions_by_id: Vec<BytecodeFunction>,
-    /// 类型 vtable 缓存（type_name → 方法表）。每类型的 vtable 只构建一次，
-    /// 消除「每次 CreateStruct 都 O(n) 扫函数表 + 向 functions_by_id 重复追加」的浪费与泄漏。
-    pub(super) vtable_cache: HashMap<String, Vec<(String, FunctionValue)>>,
-    /// Type table
-    pub(super) type_table: Vec<crate::middle::core::ir::Type>,
     /// Current execution state
     pub(super) state: ExecutionState,
     /// 全局槽位（顶层绑定的运行时存储）。生命周期 = 一次 run：
@@ -120,7 +114,7 @@ pub struct Interpreter {
     /// Cached stack-trace info for the frame currently being executed.
     /// Populated in `step_one` before popping the frame, so `capture_stack()`
     /// can include it even though the frame is temporarily off `call_stack`.
-    pub(super) current_frame_info: Option<(String, usize)>,
+    pub(super) current_frame_info: Option<(u32, usize)>,
     /// Whether `step_one` executed a function call (used by `step_over`).
     pub(super) called_func: bool,
     /// Return value from the last Return/ReturnValue instruction.
@@ -133,11 +127,9 @@ impl fmt::Debug for Interpreter {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         f.debug_struct("Interpreter")
+            .field("image", &self.image)
             .field("heap", &self.heap)
             .field("call_stack", &self.call_stack)
-            .field("constants", &self.constants)
-            .field("functions_by_id", &self.functions_by_id)
-            .field("type_table", &self.type_table)
             .field("state", &self.state)
             .field("config", &self.config)
             .field("breakpoints", &self.breakpoints)
@@ -182,12 +174,9 @@ impl Interpreter {
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
 
         Self {
+            image: Image::new(),
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
-            constants: Vec::new(),
-            functions_by_id: Vec::new(),
-            vtable_cache: HashMap::new(),
-            type_table: Vec::new(),
             state: ExecutionState::default(),
             global_slots: Vec::new(),
             config,
@@ -206,6 +195,30 @@ impl Interpreter {
         &self.runtime_config
     }
 
+    /// 按函数表索引执行，不经克隆。
+    ///
+    /// `local_count` 由调用方从 `Image` 查出传入（`Frame` 不持有函数体）。
+    pub(super) fn execute_by_id(
+        &mut self,
+        func_id: u32,
+        local_count: usize,
+        args: &[RuntimeValue],
+    ) -> ExecutorResult<RuntimeValue> {
+        let frame = crate::backends::interpreter::Frame::with_args(func_id, local_count, args);
+        self.push_frame(frame)?;
+        loop {
+            match self.step_one()? {
+                super::debug::StepOutcome::Continue => {}
+                super::debug::StepOutcome::Returned => {
+                    return Ok(std::mem::replace(
+                        &mut self.last_return_value,
+                        RuntimeValue::Void,
+                    ))
+                }
+            }
+        }
+    }
+
     /// Create an interpreter that shares read-only state via a raw pointer.
     ///
     /// The caller must ensure that the `SharedState` outlives this interpreter.
@@ -217,32 +230,25 @@ impl Interpreter {
         // 主解释器通过 drive_until 阻塞直到所有任务完成，保证数据在任务期间有效。
         // 数据在创建后只读，无数据竞争。
         // 如果 shared 为空（例如 execute_module 未调用），使用空数据。
-        let (constants, functions_by_id, type_table, vtable_cache, ffi) = if shared.is_null() {
-            (
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                HashMap::new(),
-                FfiRegistry::new(),
-            )
+        let (image, ffi) = if shared.is_null() {
+            (Image::new(), FfiRegistry::new())
         } else {
             let shared_ref = unsafe { &*shared };
             (
-                shared_ref.constants.clone(),
-                shared_ref.functions_by_id.clone(),
-                shared_ref.type_table.clone(),
-                shared_ref.vtable_cache.clone(),
+                Image {
+                    constants: shared_ref.constants.clone(),
+                    functions_by_id: shared_ref.functions_by_id.clone(),
+                    type_table: shared_ref.type_table.clone(),
+                    vtable_cache: shared_ref.vtable_cache.clone(),
+                },
                 shared_ref.ffi.clone(),
             )
         };
 
         Self {
+            image,
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
-            constants,
-            functions_by_id,
-            vtable_cache,
-            type_table,
             state: ExecutionState::default(),
             global_slots: Vec::new(),
             config: ExecutorConfig::default(),
@@ -291,7 +297,8 @@ impl Interpreter {
         &self,
         type_name: &str,
     ) -> Vec<(String, FunctionValue)> {
-        self.vtable_cache
+        self.image
+            .vtable_cache
             .get(type_name)
             .cloned()
             .unwrap_or_default()
@@ -305,20 +312,20 @@ impl Interpreter {
         args: &[RuntimeValue],
     ) -> Result<RuntimeValue, ExecutorError> {
         let idx = func_id.0 as usize;
-        if idx >= self.functions_by_id.len() {
+        if idx >= self.image.functions_by_id.len() {
             let stack = self.capture_stack();
             return Err(ExecutorError::function_not_found(
                 format!(
                     "Function with id {} not found (total functions: {})",
                     idx,
-                    self.functions_by_id.len()
+                    self.image.functions_by_id.len()
                 ),
                 stack,
             ));
         }
-        // Clone the function to avoid borrow issues
-        let func = self.functions_by_id[idx].clone();
-        self.execute_function(&func, args)
+        // 不再克隆函数体：Frame 只持 func_id，指令经 &Image 读取
+        let local_count = self.image.functions_by_id[idx].local_count;
+        self.execute_by_id(func_id.0, local_count, args)
     }
 
     /// Call a closure function with env as upvalues.
@@ -332,20 +339,20 @@ impl Interpreter {
         upvalues: &[RuntimeValue],
     ) -> Result<RuntimeValue, ExecutorError> {
         let idx = func_id.0 as usize;
-        if idx >= self.functions_by_id.len() {
+        if idx >= self.image.functions_by_id.len() {
             let stack = self.capture_stack();
             return Err(ExecutorError::function_not_found(
                 format!(
                     "Function with id {} not found (total functions: {})",
                     idx,
-                    self.functions_by_id.len()
+                    self.image.functions_by_id.len()
                 ),
                 stack,
             ));
         }
-        let func = self.functions_by_id[idx].clone();
-        let mut frame = crate::backends::interpreter::Frame::with_args(func.clone(), args);
-        frame.set_entry_ip(0);
+        let local_count = self.image.functions_by_id[idx].local_count;
+        let mut frame =
+            crate::backends::interpreter::Frame::with_args(func_id.0, local_count, args);
         // Set upvalues from closure env (for LoadUpvalue instructions)
         *frame.upvalues_mut() = upvalues.to_vec();
         self.push_frame(frame)?;
@@ -388,7 +395,9 @@ impl Interpreter {
 
     /// Get the current function
     pub fn current_function(&self) -> Option<&BytecodeFunction> {
-        self.call_stack.last().map(|f| &f.function)
+        self.call_stack
+            .last()
+            .and_then(|f| self.image.function(f.func_id as usize))
     }
 
     /// Capture the current call stack as a vector of StackFrame
@@ -398,14 +407,23 @@ impl Interpreter {
             .iter()
             .rev()
             .map(|frame| crate::backends::StackFrame {
-                function_name: frame.function.name.clone(),
+                function_name: self
+                    .image
+                    .function_name(frame.func_id as usize)
+                    .unwrap_or("<unknown>")
+                    .to_string(),
                 ip: frame.ip,
             })
             .collect();
         // Include the frame currently being executed (popped during step_one)
-        if let Some((ref name, ip)) = self.current_frame_info {
+        if let Some((func_id, ip)) = self.current_frame_info {
+            let name = self
+                .image
+                .function_name(func_id as usize)
+                .unwrap_or("<unknown>")
+                .to_string();
             stack.push(crate::backends::StackFrame {
-                function_name: name.clone(),
+                function_name: name,
                 ip,
             });
         }
@@ -434,21 +452,13 @@ impl Interpreter {
         }
     }
 
-    /// Resolve a label to an instruction offset
-    pub fn resolve_label(
-        &mut self,
-        label: Label,
-    ) -> Option<usize> {
-        self.current_frame()
-            .and_then(|f| f.function.labels.get(&label).copied())
-    }
-
     /// Load a constant by index
     pub(super) fn load_constant(
         &self,
         idx: u16,
     ) -> RuntimeValue {
-        self.constants
+        self.image
+            .constants
             .get(idx as usize)
             .map(|c| match c {
                 ConstValue::Void => RuntimeValue::Void,

@@ -59,7 +59,8 @@ impl Interpreter {
         &self,
         idx: u16,
     ) -> String {
-        self.constants
+        self.image
+            .constants
             .get(idx as usize)
             .and_then(|c| {
                 if let ConstValue::String(s) = c {
@@ -85,6 +86,9 @@ impl Interpreter {
     ///
     /// Pops the top frame, executes one instruction, and pushes it back
     /// (unless the instruction was a Return).
+    ///
+    /// 指令数据统一经 `image` 读取——`Frame` 只持 `func_id`，不再按值携带
+    /// 函数体，因此这里不再逐指令克隆整个 `BytecodeFunction`。
     pub(super) fn step_one(&mut self) -> ExecutorResult<StepOutcome> {
         if self.call_stack.is_empty() {
             return Ok(StepOutcome::Returned);
@@ -92,20 +96,30 @@ impl Interpreter {
 
         // Cache stack-trace info before popping
         if let Some(frame) = self.call_stack.last() {
-            self.current_frame_info = Some((frame.function.name.clone(), frame.ip));
+            self.current_frame_info = Some((frame.func_id, frame.ip));
         }
 
         // Pop frame — self is fully available
         let mut frame = self.pop_frame().unwrap();
 
-        if frame.ip >= frame.function.instructions.len() {
+        let fid = frame.func_id as usize;
+        if fid >= self.image.functions_by_id.len() {
+            self.current_frame_info = None;
+            let stack = self.capture_stack();
+            return Err(ExecutorError::function_not_found(
+                format!("Frame holds invalid func_id {fid}"),
+                stack,
+            ));
+        }
+
+        if frame.ip >= self.image.functions_by_id[fid].instructions.len() {
             self.current_frame_info = None;
             self.push_frame(frame)?;
             return Ok(StepOutcome::Returned);
         }
 
         let depth_before = self.call_stack.len();
-        let instr = frame.function.instructions[frame.ip].clone();
+        let instr = self.image.functions_by_id[fid].instructions[frame.ip].clone();
         let outcome = self.execute_instr(&mut frame, &instr)?;
 
         // Detect if a function call was executed (depth increased then restored)
@@ -385,6 +399,7 @@ impl Interpreter {
             } => {
                 let func_id = FunctionId(*func_idx);
                 let func_label = self
+                    .image
                     .functions_by_id
                     .get(*func_idx as usize)
                     .map(|f| f.name.clone())
@@ -503,6 +518,7 @@ impl Interpreter {
                 let obj_val = self.force_slot(frame, *obj)?;
 
                 let method_name = self
+                    .image
                     .constants
                     .get(*method_idx as usize)
                     .and_then(|c| {
@@ -1366,13 +1382,13 @@ impl Interpreter {
                 func: func_idx,
                 env,
             } => {
-                let func_id = if (*func_idx as usize) < self.functions_by_id.len() {
+                let func_id = if (*func_idx as usize) < self.image.functions_by_id.len() {
                     FunctionId(*func_idx)
                 } else {
                     eprintln!(
                         "[warn] Closure: function index {} out of range ({}), fallback to id 0",
                         func_idx,
-                        self.functions_by_id.len()
+                        self.image.functions_by_id.len()
                     );
                     FunctionId(0)
                 };
@@ -1555,7 +1571,9 @@ impl DebuggableExecutor for Interpreter {
     }
 
     fn current_function(&self) -> Option<&str> {
-        self.call_stack.last().map(|f| f.function.name.as_str())
+        self.call_stack
+            .last()
+            .and_then(|f| self.image.function_name(f.func_id as usize))
     }
 
     fn breakpoints(&self) -> Vec<usize> {

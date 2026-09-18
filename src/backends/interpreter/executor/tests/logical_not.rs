@@ -50,7 +50,7 @@ fn run_logical_not(val: bool) -> bool {
     // Arrange
     let func = make_not_function();
     let mut interp = Interpreter::new();
-    interp.constants.push(ConstValue::Bool(val));
+    interp.image.constants.push(ConstValue::Bool(val));
 
     // Act
     let result = interp

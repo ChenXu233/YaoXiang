@@ -6,7 +6,6 @@ use crate::backends::{Executor, ExecutorResult, ExecutorError, ExecutionState};
 use crate::backends::common::RuntimeValue;
 use crate::backends::common::value::{FunctionId, FunctionValue};
 use crate::middle::bytecode::{BytecodeModule, BytecodeFunction};
-use crate::backends::interpreter::Frame;
 use crate::backends::interpreter::frames::MAX_LOCALS;
 use crate::backends::runtime::Runtime;
 use crate::backends::runtime::facade::RuntimeConfig;
@@ -20,20 +19,25 @@ impl Executor for Interpreter {
         module: &BytecodeModule,
     ) -> ExecutorResult<()> {
         // Add constants
-        self.constants.extend(module.constants.clone());
+        self.image.constants.extend(module.constants.clone());
 
         // Add functions
         for func in &module.functions {
             tlog!(debug, MSG::DebugLoadingFunction, &func.name);
-            self.functions_by_id.push(func.clone());
+            self.image.functions_by_id.push(func.clone());
         }
-        tlog!(debug, MSG::DebugTotalFunctions, &self.functions_by_id.len());
+        tlog!(
+            debug,
+            MSG::DebugTotalFunctions,
+            &self.image.functions_by_id.len()
+        );
         tlog!(
             debug,
             MSG::DebugAvailableFunctions,
             &format!(
                 "{:?}",
-                self.functions_by_id
+                self.image
+                    .functions_by_id
                     .iter()
                     .map(|f| &f.name)
                     .collect::<Vec<_>>()
@@ -55,18 +59,18 @@ impl Executor for Interpreter {
                     )
                 })
                 .collect();
-            self.vtable_cache.insert(type_name.clone(), vt);
+            self.image.vtable_cache.insert(type_name.clone(), vt);
         }
 
         // Add types
-        self.type_table.extend(module.type_table.clone());
+        self.image.type_table.extend(module.type_table.clone());
 
         // Create shared state for parallel task execution
         let shared = Box::new(SharedState {
-            functions_by_id: self.functions_by_id.clone(),
-            constants: self.constants.clone(),
-            type_table: self.type_table.clone(),
-            vtable_cache: self.vtable_cache.clone(),
+            functions_by_id: self.image.functions_by_id.clone(),
+            constants: self.image.constants.clone(),
+            type_table: self.image.type_table.clone(),
+            vtable_cache: self.image.vtable_cache.clone(),
             ffi: self.ffi.clone(),
         });
         self.shared = Box::into_raw(shared);
@@ -109,20 +113,23 @@ impl Executor for Interpreter {
                 stack,
             ));
         }
-        let mut frame = Frame::with_args(func.clone(), args);
-        frame.set_entry_ip(0);
-        self.push_frame(frame)?;
-        loop {
-            match self.step_one()? {
-                super::debug::StepOutcome::Continue => {}
-                super::debug::StepOutcome::Returned => {
-                    return Ok(std::mem::replace(
-                        &mut self.last_return_value,
-                        RuntimeValue::Void,
-                    ))
-                }
+        // 公开 API 接受任意函数（含不在函数表内的临时构造函数，如测试用例）。
+        // 若已在表中（按名字命中）则直接复用，否则 append 到表尾取得 func_id。
+        // 热路径（call_function_by_id / call_closure）不经此函数，直接走
+        // execute_by_id，无查找、无克隆。
+        let fid = match self
+            .image
+            .functions_by_id
+            .iter()
+            .position(|f| f.name == func.name)
+        {
+            Some(i) => i as u32,
+            None => {
+                self.image.functions_by_id.push(func.clone());
+                (self.image.functions_by_id.len() - 1) as u32
             }
-        }
+        };
+        self.execute_by_id(fid, func.local_count, args)
     }
 
     fn reset(&mut self) {

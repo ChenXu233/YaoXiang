@@ -62,8 +62,8 @@ fn run_float_compare(
     // Arrange
     let func = make_compare_function(op);
     let mut interp = Interpreter::new();
-    interp.constants.push(ConstValue::Float(lhs));
-    interp.constants.push(ConstValue::Float(rhs));
+    interp.image.constants.push(ConstValue::Float(lhs));
+    interp.image.constants.push(ConstValue::Float(rhs));
 
     // Act
     let result = interp

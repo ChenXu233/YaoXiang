@@ -68,6 +68,7 @@ fn interp_with_nested_call_error() -> Interpreter {
 
     // 常量 0 为 String——非 Bool 且不可转换，保证触发类型错误
     interp
+        .image
         .constants
         .push(ConstValue::String("not-a-bool".into()));
 
@@ -98,8 +99,8 @@ fn interp_with_nested_call_error() -> Interpreter {
         ],
     );
 
-    interp.functions_by_id.push(outer);
-    interp.functions_by_id.push(inner);
+    interp.image.functions_by_id.push(outer);
+    interp.image.functions_by_id.push(inner);
 
     interp
 }
@@ -107,9 +108,8 @@ fn interp_with_nested_call_error() -> Interpreter {
 /// 单层调用报错时恰好 1 帧——防止「当前帧被重复计入」。
 #[test]
 fn test_capture_stack_single_frame_not_duplicated() {
-    // Arrange — 直接执行 inner（不经 outer）
     let mut interp = interp_with_nested_call_error();
-    let inner = interp.functions_by_id[1].clone();
+    let inner = interp.image.functions_by_id[1].clone();
 
     // Act
     let err = interp
@@ -140,7 +140,7 @@ fn test_capture_stack_single_frame_not_duplicated() {
 fn test_capture_stack_nested_call_reports_full_chain() {
     // Arrange
     let mut interp = interp_with_nested_call_error();
-    let outer = interp.functions_by_id[0].clone();
+    let outer = interp.image.functions_by_id[0].clone();
 
     // Act — outer 调用 inner，inner 在 JmpIf 处报类型错误
     let err = interp
@@ -167,7 +167,7 @@ fn test_capture_stack_nested_call_reports_full_chain() {
 fn test_capture_stack_empty_after_normal_return() {
     // Arrange
     let mut interp = Interpreter::new();
-    interp.constants.push(ConstValue::Int(7));
+    interp.image.constants.push(ConstValue::Int(7));
     let normal = make_named_function(
         "normal",
         vec![
