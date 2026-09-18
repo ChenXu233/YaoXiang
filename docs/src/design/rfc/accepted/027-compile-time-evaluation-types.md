@@ -631,7 +631,7 @@ factorial: (n: Int) -> Int = {
 }
 
 # 编译期使用——编译器保证 factorial 在编译期终止
-vec: Vec(factorial(5)) = Vec(120)()  # 5! = 120，编译期完成
+arr: Array(Int, factorial(5)) = Array(Int, 120)()  # 5! = 120，编译期完成
 ```
 
 | 场景                               | 行为           |

@@ -66,9 +66,54 @@ YaoXiang 的泛型系统建立在**类型宇宙思想**之上，这一心智模�
 List: (T: Type) -> Type
 
 # 值依赖类型：值参数
-Vec: (n: Int) -> Type  # 向量类型依赖于长度值 n
+Array: (T: Type, N: Int) -> Type  # 数组类型依赖于长度值 N
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type  # 矩阵类型依赖于行数和列数
 ```
+
+### 容器类型命名分层
+
+语言层有三个容器概念，长度信息的归属是它们的根本区别：
+
+| 类型           | 长度 | 语义                       | 底层                                |
+| -------------- | ---- | -------------------------- | ----------------------------------- |
+| `Array(T, N)`  | 类型 | **定长**数组，N 在类型中   | 核心原语（栈/内联优先）             |
+| `Vec(T)`       | 运行时值 | **运行时长度的原始缓冲**，可增长 | 核心原语（堆上连续缓冲）       |
+| `List(T)`      | 运行时值 | 标准库类型                 | 库：`{ data: Vec(T), length: Int }` |
+
+三者的分工原则：
+
+- **`Array(T, N)` 是唯一把长度放进类型的形式**——长度是编译期常量，故可做边界失败的编译期拒绝（`a[5]` 当 `a: Array(Int, 3)` 直接编译期报错，见下文「编译期维度验证」）。
+- **`Vec(T)` 是运行时长度的最小地基**——只提供「能分配、能取长、能读写、能扩容」四件事，容量策略、增长因子、是否收缩一律不做。它是构建其他容器的原料。
+- **`List(T)` 是库类型，不是原语**——用 YaoXiang 自身在 `std.list` 中定义（`{ data: Vec(T), length: Int }`），与用户自定义泛型记录同一待遇。可增长语义的全部策略（何时扩容、扩多少、能否共享）都在库里，编译器不参与。
+
+`Vec(T)` 的构造形式（两层：先类型参数，再构造参数）：
+
+```yaoxiang
+# 空构造——长度 0，元素事后追加
+v = Vec(Int)()
+
+# 元素构造——长度由元素个数确定
+w = Vec(Int)(1, 2, 3)          # 长度 3
+
+# 槽位分配——分配 n 个零值槽位
+buf = Vec(Int)(len=64)         # 长度 64，元素全为零值
+```
+
+> 槽位分配用**字段名式**（`len=`）而非位置式：位置式单整数会与「单元素向量」歧义
+> （`Vec(Int)(64)` 无法区分「长度 64」与「含一个元素 64」）。
+> 这与泛型构造的统一规则一致：字段名式实参按名绑定，不受位置推断影响。
+>
+> 这是 `List` 扩容所需的唯一原语——`List` 在需要时分配新槽位并搬移元素：
+>
+> ```yaoxiang
+> new_data = Vec(T)(len=self.data.length * 2)
+> ```
+>
+> 何时扩容、扩多少、是否收缩全部由 `List` 决定。`Vec` 不做容量策略。
+
+由底向上，性能递减、灵活性递增：`Array` > `Vec` > `List`。
+
+> 命名依据：`Vec`/`vector` 在主流语言（Rust/C++）中均指运行时长度的可增长序列；`Array` 指定长。
 
 ### 值依赖类型的核心优势
 
@@ -90,14 +135,14 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type  # 矩阵类型依赖于行数�
 | --------- | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
 | Type-1    | 值                             | `42`, `factorial(5)`, 函数本身                                                                       |
 | Type0     | 元类型关键字                   | `Type`                                                                                               |
-| Type1     | 具体类型                       | `Int`, `String`, `Vec(3)`                                                                            |
-| **Type2** | **函数/类型构造器/值依赖类型** | `add: (Int, Int) -> Int`, `Vec: (n: Int) -> Type`, `Matrix: (T: Type, Rows: Int, Cols: Int) -> Type` |
+| Type1     | 具体类型                       | `Int`, `String`, `Array(Int, 3)`                                                                     |
+| **Type2** | **函数/类型构造器/值依赖类型** | `add: (Int, Int) -> Int`, `Array: (T: Type, N: Int) -> Type`, `Matrix: (T: Type, Rows: Int, Cols: Int) -> Type` |
 
 **关键设计**：Type2 层的函数、类型构造器和值依赖类型**统一语法**，都是 `(params) -> result` 的形式：
 
 - 普通函数：`(Int, Int) -> Int` → 返回值是值
 - 类型构造器：`(T: Type) -> Type` → 返回值是类型
-- 值依赖类型：`(n: Int) -> Type` → 返回值是类型，但依赖于值参数
+- 值依赖类型：`(T: Type, N: Int) -> Type` → 返回值是类型，且依赖于值参数 N
 
 > **Curry-Howard 同构**：这种统一不是巧合。Curry-Howard 同构指出"类型即命题，程序即证明"——函数类型
 > `A → B` 对应逻辑蕴含"若 A 则 B"，泛型 `(T: Type) -> Type` 对应全称量化"对所有类型 T"，值依赖类型
@@ -123,8 +168,8 @@ identity: (T: Add + Zero + One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = {
     # ...
 }
 
-# 编译期计算：factorial(3) = 6，向量大小在编译期确定
-vec: Vec(factorial(3)) = Vec(6)()
+# 编译期计算：factorial(3) = 6，数组大小在编译期确定
+arr: Array(Int, factorial(3)) = Array(Int, 6)()
 ```
 
 编译器会自动：
@@ -255,7 +300,7 @@ factorial: (n: Int) -> Int = {
 }
 
 # 使用：在类型位置调用，编译器先验证终止再求值
-vec: Vec(factorial(5)) = Vec(120)()  # 编译期求值 factorial(5) = 120
+arr: Array(Int, factorial(5)) = Array(Int, 120)()  # 编译期求值 factorial(5) = 120
 ```
 
 | 场景                               | 行为           |
@@ -290,7 +335,7 @@ sum: (arr: Array(Int, n)) -> Int = {
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  类型检查阶段                                                │
-│  遇到类型位置上的函数调用（如 Vec(factorial(5))）            │
+│  遇到类型位置上的函数调用（如 factorial(5)）                │
 └─────────────────────────┬───────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -309,7 +354,7 @@ sum: (arr: Array(Int, n)) -> Int = {
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  3. 结果嵌入类型                                            │
-│     - Vec(factorial(5)) → Vec(120)                          │
+│     - Array(Int, factorial(5)) → Array(Int, 120)             │
 │     - Matrix(Float, 3, 3) → 具体类型                        │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -347,7 +392,7 @@ YaoXiang 的**值依赖类型**是相对于传统泛型的核心优势：
 
 | 优势           | 说明                                             |
 | -------------- | ------------------------------------------------ |
-| **类型依赖值** | `Vec: (n: Int) -> Type` 让类型依赖于具体的值     |
+| **类型依赖值** | `Array: (T: Type, N: Int) -> Type` 让类型依赖于具体的值 |
 | **编译期求值** | 类型位置的函数调用在编译期求值，结果直接嵌入类型 |
 | **维度验证**   | `Matrix(Float, 3, 3)` 在编译期验证矩阵维度       |
 | **类型级计算** | `If`, `Match` 等条件类型支持类型级计算           |
@@ -371,8 +416,8 @@ identity: Matrix(Float, 3, 3) = ...
 # 不同容器类型的map操作
 
 # 传统方案：每个类型单独实现
-map_int_array: (array: Array(Int), f: Fn(Int) -> Int) -> Array(Int) = ...
-map_string_array: (array: Array(String), f: Fn(String) -> String) -> Array(String) = ...
+map_int_array: (array: Vec(Int), f: Fn(Int) -> Int) -> Vec(Int) = ...
+map_string_array: (array: Vec(String), f: Fn(String) -> String) -> Vec(String) = ...
 map_int_list: (list: List(Int), f: Fn(Int) -> Int) -> List(Int) = ...
 map_string_list: (list: List(String), f: Fn(String) -> String) -> List(String) = ...
 
@@ -432,7 +477,7 @@ Result: (T: Type, E: Type) -> Type = {
 }
 
 List: (T: Type) -> Type = {
-    data: Array(T),
+    data: Vec(T),
     length: Int,
     push: (self: List(T), item: T) -> Void,   # self 只是约定名，不是关键字
     get: (self: List(T), index: Int) -> Option(T),
@@ -574,8 +619,8 @@ sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T) = {
 }
 
 # 函数类型约束
-map: (T: Type, R: FnMut(T))(array: Array(T), f: R) -> Array(R) = {
-    result: Array(R) = Array()
+map: (T: Type, R: FnMut(T))(array: Vec(T), f: R) -> Vec(R) = {
+    result: Vec(R) = Vec()
     for item in array {
         result.push(f(item))
     }
@@ -583,7 +628,7 @@ map: (T: Type, R: FnMut(T))(array: Array(T), f: R) -> Array(R) = {
 }
 
 # 使用
-doubled: Array(Int) = map(Array(1, 2, 3), (x: Int) => x * 2)  # 编译器推断
+doubled: Vec(Int) = map(Vec(1, 2, 3), (x: Int) => x * 2)  # 编译器推断
 ```
 
 #### 2.3 函数类型约束
@@ -694,14 +739,20 @@ collect_all: (T: Type, I: Iterator(T))(iter: I) -> List(T) = {
     return result
 }
 
-# Array的Iterator实现
-# 使用方法语法糖：Array.Item, Array.next, Array.has_next
-Array.has_next: (T: Type)(self: Array(T)) -> Bool = {
-    return self.index < self.length
+# Vec的Iterator实现
+# 使用方法语法糖：Vec.Item, Vec.next, Vec.has_next
+# 迭代位置由包装记录携带（Vec 本身是原始缓冲，无 index 字段）
+VecIter: (T: Type) -> Type = {
+    data: &Vec(T),
+    index: Int,
 }
 
-Array.next: (T: Type)(self: Array(T)) -> Option(T) = {
-    if has_next(self) {
+VecIter.has_next: (T: Type)(self: &VecIter(T)) -> Bool = {
+    return self.index < self.data.length
+}
+
+VecIter.next: (T: Type)(self: &mut VecIter(T)) -> Option(T) = {
+    if self.index < self.data.length {
         item = self.data[self.index]
         self.index = self.index + 1
         return Option.some(item)
@@ -710,8 +761,8 @@ Array.next: (T: Type)(self: Array(T)) -> Option(T) = {
     }
 }
 
-Array.Item: (T: Type)(arr: Array(T)) -> T = {
-    return arr.data[0]
+VecIter.Item: (T: Type)(arr: &VecIter(T)) -> T = {
+    return arr.data[arr.index]
 }
 ```
 
@@ -770,15 +821,15 @@ process_container: (T: Type, C: Container(T))(container: C) -> List(T) = {
 
 ```yaoxiang
 # ════════════════════════════════════════════════════════
-# 编译期值参数：N 在类型位置（Array 长度槽）被引用
+# 编译期值参数：N 在类型位置（Measure 长度槽）被引用
 # ════════════════════════════════════════════════════════
-StaticArray: (T: Type, N: Int) -> Type = {
+Measure: (T: Type, N: Int) -> Type = {
     data: Array(T, N),  # N 出现在类型构造实参位 → 编译期值参数
     length: N,
 }
 
 # 使用方式：factorial(5) 在类型位置求值（编译期），结果 120 嵌入类型
-arr: StaticArray(Int, factorial(5))  # StaticArray(Int, 120)
+m: Measure(Int, factorial(5))  # Measure(Int, 120)
 
 # ════════════════════════════════════════════════════════
 # 值依赖：N 作为内层参数 k 的类型
@@ -874,14 +925,14 @@ Assert: (cond: Bool) -> Type = IsTrue(cond)
 #                  Runtime     → 插入 check，注入 Γ 假设
 
 # 使用方式1：在类型定义中作为约束
-Array: (T: Type, N: Int) -> Type = {
+Bounded: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
     # 编译期检查：N 必须大于 0（Assert 在类型位置）
     length: Assert(N > 0),
 }
 
 # 使用方式2：在表达式中使用
-IntArray: (N: Int) -> Type = StaticArray(Int, N)
+IntArray: (N: Int) -> Type = Array(Int, N)
 # 验证：IntArray(10) 的大小等于 sizeof(Int) * 10
 Assert(size_of(IntArray(10)) == sizeof(Int) * 10)
 ```
@@ -985,18 +1036,18 @@ Five: Type = Add[Two, Three]  # Succ(Succ(Succ(Succ(Succ(Zero)))))
 
 ```yaoxiang
 # 基本特化：使用函数重载（编译器自动选择）
-sum: (arr: Array(Int)) -> Int = {
+sum: (arr: Vec(Int)) -> Int = {
     # 编译为更高效的代码
     return native_sum_int(arr.data, arr.length)
 }
 
-sum: (arr: Array(Float)) -> Float = {
+sum: (arr: Vec(Float)) -> Float = {
     # 使用SIMD指令
     return simd_sum_float(arr.data, arr.length)
 }
 
 # 通用实现
-sum: (T: Type) -> ((arr: Array(T)) -> T) = {
+sum: (T: Type) -> ((arr: Vec(T)) -> T) = {
     result = Zero::zero()
     for item in arr {
         result = result + item
@@ -1011,16 +1062,16 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
 # 完全符合RFC-010语法的特化方式：函数重载
 
 # 具体类型特化
-sum: (arr: Array(Int)) -> Int = {
+sum: (arr: Vec(Int)) -> Int = {
     return native_sum_int(arr.data, arr.length)
 }
 
-sum: (arr: Array(Float)) -> Float = {
+sum: (arr: Vec(Float)) -> Float = {
     return simd_sum_float(arr.data, arr.length)
 }
 
 # 泛型实现（编译器自动选择最优）
-sum: (T: Type) -> ((arr: Array(T)) -> T) = {
+sum: (T: Type) -> ((arr: Vec(T)) -> T) = {
     result = Zero::zero()
     for item in arr {
         result = result + item
@@ -1029,12 +1080,12 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
 }
 
 # 使用时完全透明
-int_arr = Array(Int)(1, 2, 3)
-float_arr = Array(Float)(1.0, 2.0, 3.0)
+int_arr = Vec(Int)(1, 2, 3)
+float_arr = Vec(Float)(1.0, 2.0, 3.0)
 
 # 编译器自动选择最优特化
-sum(int_arr)     # 选择 sum: (Array(Int)) -> Int
-sum(float_arr)    # 选择 sum: (Array(Float)) -> Float
+sum(int_arr)     # 选择 sum: (Vec(Int)) -> Int
+sum(float_arr)    # 选择 sum: (Vec(Float)) -> Float
 ```
 
 #### 6.3 函数重载与内联的完美结合
@@ -1043,15 +1094,15 @@ sum(float_arr)    # 选择 sum: (Array(Float)) -> Float
 
 ```yaoxiang
 # ======== 源代码 ========
-sum: (arr: Array(Int)) -> Int = {
+sum: (arr: Vec(Int)) -> Int = {
     return native_sum_int(arr.data, arr.length)
 }
 
-sum: (arr: Array(Float)) -> Float = {
+sum: (arr: Vec(Float)) -> Float = {
     return simd_sum_float(arr.data, arr.length)
 }
 
-sum: (T: Type) -> ((arr: Array(T)) -> T) = {
+sum: (T: Type) -> ((arr: Vec(T)) -> T) = {
     result = Zero::zero()
     for item in arr {
         result = result + item
@@ -1060,7 +1111,7 @@ sum: (T: Type) -> ((arr: Array(T)) -> T) = {
 }
 
 # 使用
-int_arr = Array(Int)(1, 2, 3, 4, 5)
+int_arr = Vec(Int)(1, 2, 3, 4, 5)
 result = sum(int_arr)
 
 # ======== 编译后（等价代码）=======
@@ -1075,9 +1126,9 @@ result = native_sum_int(int_arr.data, int_arr.length)
 1. **编译器智能选择**
 
    ```yaoxiang
-   sum(int_arr)      # 自动选择 sum: (Array(Int)) -> Int
-   sum(float_arr)    # 自动选择 sum: (Array(Float)) -> Float
-   sum(custom_arr)  # 自动选择 sum: (T: Type) -> ((arr: Array(T)) -> T)
+   sum(int_arr)      # 自动选择 sum: (Vec(Int)) -> Int
+   sum(float_arr)    # 自动选择 sum: (Vec(Float)) -> Float
+   sum(custom_arr)  # 自动选择 sum: (T: Type) -> ((arr: Vec(T)) -> T)
    ```
 
 2. **内联优化**
@@ -1396,7 +1447,7 @@ Option: (T: Type) -> Type = {
 }
 
 List: (T: Type) -> Type = {
-    data: Array(T),
+    data: Vec(T),
     length: Int,
 
     # 泛型方法（T 由外层 List(T) 自动带入作用域）
@@ -1415,7 +1466,7 @@ List: (T: Type) -> Type = {
 List.push: (T: Type) -> ((self: List(T), item: T) -> Void) = {
     if self.length >= self.data.length {
         # 扩容
-        new_data = Array(T)(self.data.length * 2)
+        new_data = Vec(T)(len=self.data.length * 2)
         for i in 0..self.length {
             new_data[i] = self.data[i]
         }
@@ -1500,14 +1551,14 @@ Comparator: (T: Type) -> Type = {
 }
 
 # 泛型quicksort
-quicksort: (T: Clone) -> ((array: Array(T), cmp: Comparator(T)) -> Array(T)) = {
+quicksort: (T: Clone) -> ((array: Vec(T), cmp: Comparator(T)) -> Vec(T)) = {
     if array.length <= 1 {
         return array.clone()
     }
 
     pivot = array[array.length / 2]
-    left = Array(T)()
-    right = Array(T)()
+    left = Vec(T)()
+    right = Vec(T)()
 
     for i in 0..array.length {
         if i == array.length / 2 {
@@ -1545,11 +1596,11 @@ compare: (a: Int, b: Int) -> Int = {
 
 # ======== 3. 使用示例 ========
 # 排序Int数组
-numbers = Array(Int)(3, 1, 4, 1, 5, 9, 2, 6)
+numbers = Vec(Int)(3, 1, 4, 1, 5, 9, 2, 6)
 sorted = quicksort(numbers, Comparator(Int)())
 
 # 排序String数组（需要StringComparator）
-strings = Array(String)("hello", "world", "foo", "bar")
+strings = Vec(String)("hello", "world", "foo", "bar")
 sorted_strings = quicksort(strings, Comparator(String)())
 ```
 
