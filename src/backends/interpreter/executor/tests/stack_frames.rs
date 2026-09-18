@@ -67,8 +67,8 @@ fn interp_with_nested_call_error() -> Interpreter {
     let mut interp = Interpreter::new();
 
     // 常量 0 为 String——非 Bool 且不可转换，保证触发类型错误
-    interp
-        .image
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
         .constants
         .push(ConstValue::String("not-a-bool".into()));
 
@@ -99,8 +99,14 @@ fn interp_with_nested_call_error() -> Interpreter {
         ],
     );
 
-    interp.image.functions_by_id.push(outer);
-    interp.image.functions_by_id.push(inner);
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .functions_by_id
+        .push(outer);
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .functions_by_id
+        .push(inner);
 
     interp
 }
@@ -166,7 +172,10 @@ fn test_capture_stack_nested_call_reports_full_chain() {
 fn test_capture_stack_empty_after_normal_return() {
     // Arrange
     let mut interp = Interpreter::new();
-    interp.image.constants.push(ConstValue::Int(7));
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .constants
+        .push(ConstValue::Int(7));
     let normal = make_named_function(
         "normal",
         vec![

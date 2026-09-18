@@ -29,7 +29,10 @@ fn make_function(instrs: Vec<BytecodeInstr>) -> BytecodeFunction {
 /// 辅助函数：创建预装一个常量的解释器
 fn make_interp_with_const(val: ConstValue) -> Interpreter {
     let mut interp = Interpreter::new();
-    interp.image.constants.push(val);
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .constants
+        .push(val);
     interp
 }
 

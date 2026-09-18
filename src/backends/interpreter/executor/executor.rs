@@ -26,43 +26,6 @@ use crate::std::NativeContext;
 /// Maximum call stack depth
 const DEFAULT_MAX_STACK_DEPTH: usize = 1024;
 
-/// Read-only shared state, shared across threads via raw pointer.
-///
-/// Safety: `drive_until` blocks until all tasks complete, so the data outlives all tasks.
-/// Data is read-only after creation, so no data races.
-pub(super) struct SharedState {
-    pub functions_by_id: Vec<BytecodeFunction>,
-    pub constants: Vec<ConstValue>,
-    pub type_table: Vec<crate::middle::core::ir::Type>,
-    pub vtable_cache: HashMap<String, Vec<(String, FunctionValue)>>,
-    pub ffi: FfiRegistry,
-}
-
-/// Wrapper around a raw pointer to make it `Send`.
-///
-/// # Safety
-///
-/// The pointer must remain valid for the entire duration of the task execution.
-/// `drive_until` blocks until all tasks complete, guaranteeing the data outlives all tasks.
-/// Data behind the pointer is read-only after creation, so no data races occur.
-#[derive(Clone, Copy)]
-struct SendPtr(*const SharedState);
-
-impl SendPtr {
-    /// Get the raw pointer.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure the pointer is used safely (read-only, valid lifetime).
-    unsafe fn get(self) -> *const SharedState {
-        self.0
-    }
-}
-
-// SAFETY: See Safety comment above.
-unsafe impl Send for SendPtr {}
-unsafe impl Sync for SendPtr {}
-
 #[derive(Debug)]
 pub enum InterpreterTask {
     Static {
@@ -87,8 +50,11 @@ pub enum InterpreterTask {
 /// - A call stack for function calls
 /// - A constant pool for literals
 pub struct Interpreter {
-    /// 只读镜像：常量池、函数表、类型表、vtable（加载期建好，执行期不变）
-    pub(super) image: Image,
+    /// 只读镜像：常量池、函数表、类型表、vtable（加载期建好，执行期不变）。
+    ///
+    /// 用 `Arc` 包裹：跨线程任务可直接共享同一份只读数据，
+    /// 无需原先 `SendPtr` 裸指针 + `unsafe impl Send` 的绕道。
+    pub(super) image: Arc<Image>,
     /// Heap for dynamic allocation
     pub(super) heap: Heap,
     /// Call stack
@@ -108,9 +74,6 @@ pub struct Interpreter {
     pub(super) runtime_config: RuntimeConfig,
     /// Runtime facade used for task scheduling (Embedded / Standard / Full).
     pub(super) rt: Runtime,
-    /// Read-only shared state, shared across threads via raw pointer.
-    /// Set in `execute_module`; null when not yet initialized.
-    pub(super) shared: *const SharedState,
     /// Whether `step_one` executed a function call (used by `step_over`).
     pub(super) called_func: bool,
     /// Return value from the last Return/ReturnValue instruction.
@@ -130,7 +93,6 @@ impl fmt::Debug for Interpreter {
             .field("config", &self.config)
             .field("breakpoints", &self.breakpoints)
             .field("ffi", &self.ffi)
-            .field("shared", &self.shared)
             .field("called_func", &self.called_func)
             .field("last_return_value", &self.last_return_value)
             .finish()
@@ -169,7 +131,7 @@ impl Interpreter {
         .unwrap_or_else(|_| Runtime::new(RuntimeConfig::default()).unwrap());
 
         Self {
-            image: Image::new(),
+            image: Arc::new(Image::new()),
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             state: ExecutionState::default(),
@@ -179,7 +141,6 @@ impl Interpreter {
             ffi: FfiRegistry::with_std(),
             runtime_config,
             rt,
-            shared: std::ptr::null(),
             called_func: false,
             last_return_value: RuntimeValue::Void,
         }
@@ -219,31 +180,16 @@ impl Interpreter {
         }
     }
 
-    /// Create an interpreter that shares read-only state via a raw pointer.
+    /// 为并发任务创建解释器，共享主解释器的只读镜像。
     ///
-    /// The caller must ensure that the `SharedState` outlives this interpreter.
-    /// Typically used when spawning per-task interpreters inside `execute_module`.
-    pub(super) fn from_shared(shared: *const SharedState) -> Self {
+    /// `image` 是 `Arc<Image>`——只读数据经引用计数共享，任务闭包持有它即可，
+    /// 生命周期由 `Arc` 保证（`drive_until` 阻塞到所有任务完成）。
+    /// 相比旧实现（裸指针 + 每次任务深拷贝整份函数表），这里零拷贝、零 `unsafe`。
+    ///
+    /// FFI 注册表按任务新建（它是可变状态，且 `FfiRegistry::with_std` 只注册标准库
+    /// 原生函数——任务内调用原生函数沿此路径解析）。
+    pub(super) fn for_task(image: Arc<Image>) -> Self {
         let rt = Runtime::new(RuntimeConfig::default()).unwrap();
-
-        // SAFETY: 共享状态由主解释器管理生命周期（通过 execute_module 中的 Box::into_raw）。
-        // 主解释器通过 drive_until 阻塞直到所有任务完成，保证数据在任务期间有效。
-        // 数据在创建后只读，无数据竞争。
-        // 如果 shared 为空（例如 execute_module 未调用），使用空数据。
-        let (image, ffi) = if shared.is_null() {
-            (Image::new(), FfiRegistry::new())
-        } else {
-            let shared_ref = unsafe { &*shared };
-            (
-                Image {
-                    constants: shared_ref.constants.clone(),
-                    functions_by_id: shared_ref.functions_by_id.clone(),
-                    type_table: shared_ref.type_table.clone(),
-                    vtable_cache: shared_ref.vtable_cache.clone(),
-                },
-                shared_ref.ffi.clone(),
-            )
-        };
 
         Self {
             image,
@@ -253,12 +199,9 @@ impl Interpreter {
             global_slots: Vec::new(),
             config: ExecutorConfig::default(),
             breakpoints: HashMap::new(),
-            ffi,
+            ffi: FfiRegistry::with_std(),
             runtime_config: RuntimeConfig::default(),
             rt,
-            // 不设置 shared 字段，避免 Drop 时双重释放。
-            // 共享数据已拷贝到上方的字段中。
-            shared: std::ptr::null(),
             called_func: false,
             last_return_value: RuntimeValue::Void,
         }
@@ -385,11 +328,6 @@ impl Interpreter {
         Ok(())
     }
 
-    /// Pop a frame from the call stack
-    pub(super) fn pop_frame(&mut self) -> Option<Frame> {
-        self.call_stack.pop()
-    }
-
     /// Get the current frame
     pub fn current_frame(&mut self) -> Option<&mut Frame> {
         self.call_stack.last_mut()
@@ -499,9 +437,11 @@ impl Interpreter {
         task: InterpreterTask,
         meta: TaskMeta,
     ) -> ExecutorResult<TaskId> {
-        let sp = SendPtr(self.shared);
+        // 只读镜像经 Arc 共享给任务闭包：零拷贝、零 unsafe。
+        // （旧实现用 SendPtr 裸指针 + 任务内深拷贝整份函数表。）
+        let image = Arc::clone(&self.image);
         let task_fn: crate::backends::runtime::TaskFn = Box::new(move |_spawn_handle| {
-            let mut task_interp = Interpreter::from_shared(unsafe { sp.get() });
+            let mut task_interp = Interpreter::for_task(image);
             task_interp.execute_scheduled_task_from_data(task)
         });
 
@@ -1130,16 +1070,6 @@ impl Interpreter {
                 items_eq(x, y).unwrap_or_else(|| a == b)
             }
             _ => a == b,
-        }
-    }
-}
-
-impl Drop for Interpreter {
-    fn drop(&mut self) {
-        if !self.shared.is_null() {
-            unsafe {
-                drop(Box::from_raw(self.shared as *mut SharedState));
-            }
         }
     }
 }

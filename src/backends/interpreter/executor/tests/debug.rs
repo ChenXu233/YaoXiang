@@ -55,15 +55,24 @@ fn load_module_for_stepping(module: &BytecodeModule) -> Interpreter {
     let mut interp = embedded_interpreter();
 
     // 加载常量
-    interp.image.constants.extend(module.constants.clone());
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .constants
+        .extend(module.constants.clone());
 
     // 加载函数
     for func in &module.functions {
-        interp.image.functions_by_id.push(func.clone());
+        std::sync::Arc::get_mut(&mut interp.image)
+            .unwrap()
+            .functions_by_id
+            .push(func.clone());
     }
 
     // 加载类型
-    interp.image.type_table.extend(module.type_table.clone());
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .type_table
+        .extend(module.type_table.clone());
 
     // 创建 frame 并压入栈（但不执行）
     if let Some(entry_idx) = module.entry_point {
@@ -262,11 +271,20 @@ fn test_step_out_returns_to_caller() {
 
     // 手动加载模块并创建 frame，模拟停在 callee 中途的状态
     let mut interp = embedded_interpreter();
-    interp.image.constants.extend(module.constants.clone());
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .constants
+        .extend(module.constants.clone());
     for func in &module.functions {
-        interp.image.functions_by_id.push(func.clone());
+        std::sync::Arc::get_mut(&mut interp.image)
+            .unwrap()
+            .functions_by_id
+            .push(func.clone());
     }
-    interp.image.type_table.extend(module.type_table.clone());
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .type_table
+        .extend(module.type_table.clone());
 
     // 手动执行 CallStatic 但不执行 callee 的 body
     // 这里我们直接测试 step_out 的语义：从当前帧跳出
