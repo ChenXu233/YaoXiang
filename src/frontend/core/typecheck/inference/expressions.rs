@@ -1814,6 +1814,19 @@ impl<'a> ExpressionInferrer<'a> {
                                             .unwrap_or_else(|| MonoType::TypeRef(p.clone()))
                                     })
                                     .collect();
+                                // 类型实参含未绑定类型参数（`L(T)`，T 是所在泛型的参数）时
+                                // 不展开为 Struct：注解侧对同一形态也保持 `Generic`（见
+                                // try_instantiate_generic_type），两侧表示须一致才能 unify。
+                                // 全部实参具体时仍展开——与顶层 `L(Int)(...)` 路径一致。
+                                if type_args
+                                    .iter()
+                                    .any(super::statements::contains_unresolved_param)
+                                {
+                                    return Ok(MonoType::Generic {
+                                        name: fn_name.clone(),
+                                        args: type_args,
+                                    });
+                                }
                                 return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
                                     &generic_def,
                                     &type_args,

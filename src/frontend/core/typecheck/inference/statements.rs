@@ -2159,7 +2159,7 @@ fn innermost_return_type(
 /// #286: 检查 MonoType 是否含未解析的泛型参数（TypeRef/TypeVar）。
 /// 用于区分「构造器推断的悬空泛型实例」（字段还是 TypeRef 占位，合法豁免）
 /// 与「实参已确定具体类型但 unify 失败」（真不匹配，必须报错）。
-fn contains_unresolved_param(t: &MonoType) -> bool {
+pub(super) fn contains_unresolved_param(t: &MonoType) -> bool {
     match t {
         MonoType::TypeRef(_) | MonoType::TypeVar(_) => true,
         MonoType::Struct(s) => s.fields.iter().any(|(_, f)| contains_unresolved_param(f)),
