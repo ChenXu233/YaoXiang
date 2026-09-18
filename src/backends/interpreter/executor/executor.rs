@@ -111,10 +111,6 @@ pub struct Interpreter {
     /// Read-only shared state, shared across threads via raw pointer.
     /// Set in `execute_module`; null when not yet initialized.
     pub(super) shared: *const SharedState,
-    /// Cached stack-trace info for the frame currently being executed.
-    /// Populated in `step_one` before popping the frame, so `capture_stack()`
-    /// can include it even though the frame is temporarily off `call_stack`.
-    pub(super) current_frame_info: Option<(u32, usize)>,
     /// Whether `step_one` executed a function call (used by `step_over`).
     pub(super) called_func: bool,
     /// Return value from the last Return/ReturnValue instruction.
@@ -135,7 +131,6 @@ impl fmt::Debug for Interpreter {
             .field("breakpoints", &self.breakpoints)
             .field("ffi", &self.ffi)
             .field("shared", &self.shared)
-            .field("current_frame_info", &self.current_frame_info)
             .field("called_func", &self.called_func)
             .field("last_return_value", &self.last_return_value)
             .finish()
@@ -185,7 +180,6 @@ impl Interpreter {
             runtime_config,
             rt,
             shared: std::ptr::null(),
-            current_frame_info: None,
             called_func: false,
             last_return_value: RuntimeValue::Void,
         }
@@ -198,6 +192,9 @@ impl Interpreter {
     /// 按函数表索引执行，不经克隆。
     ///
     /// `local_count` 由调用方从 `Image` 查出传入（`Frame` 不持有函数体）。
+    ///
+    /// 以“帧深度回到入栈前”作为结束条件：帧原地驻留后 `call_stack` 可能
+    /// 在返回时仍含外层帧（嵌套调用场景），不能以栈空为结束条件。
     pub(super) fn execute_by_id(
         &mut self,
         func_id: u32,
@@ -205,15 +202,18 @@ impl Interpreter {
         args: &[RuntimeValue],
     ) -> ExecutorResult<RuntimeValue> {
         let frame = crate::backends::interpreter::Frame::with_args(func_id, local_count, args);
+        let entry_depth = self.call_stack.len();
         self.push_frame(frame)?;
         loop {
             match self.step_one()? {
                 super::debug::StepOutcome::Continue => {}
                 super::debug::StepOutcome::Returned => {
-                    return Ok(std::mem::replace(
-                        &mut self.last_return_value,
-                        RuntimeValue::Void,
-                    ))
+                    if self.call_stack.len() <= entry_depth {
+                        return Ok(std::mem::replace(
+                            &mut self.last_return_value,
+                            RuntimeValue::Void,
+                        ));
+                    }
                 }
             }
         }
@@ -259,7 +259,6 @@ impl Interpreter {
             // 不设置 shared 字段，避免 Drop 时双重释放。
             // 共享数据已拷贝到上方的字段中。
             shared: std::ptr::null(),
-            current_frame_info: None,
             called_func: false,
             last_return_value: RuntimeValue::Void,
         }
@@ -355,16 +354,19 @@ impl Interpreter {
             crate::backends::interpreter::Frame::with_args(func_id.0, local_count, args);
         // Set upvalues from closure env (for LoadUpvalue instructions)
         *frame.upvalues_mut() = upvalues.to_vec();
+        let entry_depth = self.call_stack.len();
         self.push_frame(frame)?;
 
         loop {
             match self.step_one()? {
                 super::debug::StepOutcome::Continue => {}
                 super::debug::StepOutcome::Returned => {
-                    return Ok(std::mem::replace(
-                        &mut self.last_return_value,
-                        RuntimeValue::Void,
-                    ))
+                    if self.call_stack.len() <= entry_depth {
+                        return Ok(std::mem::replace(
+                            &mut self.last_return_value,
+                            RuntimeValue::Void,
+                        ));
+                    }
                 }
             }
         }
@@ -401,9 +403,12 @@ impl Interpreter {
     }
 
     /// Capture the current call stack as a vector of StackFrame
+    ///
+    /// 帧原地驻留后，当前执行的帧就在 `call_stack` 末尾，无需额外补入
+    /// （旧实现把帧从栈上弹出，故需 `current_frame_info` 补回——那个补丁
+    /// 在新语义下会导致当前帧被重复计入，已删除）。
     pub fn capture_stack(&self) -> Vec<crate::backends::StackFrame> {
-        let mut stack: Vec<crate::backends::StackFrame> = self
-            .call_stack
+        self.call_stack
             .iter()
             .rev()
             .map(|frame| crate::backends::StackFrame {
@@ -414,26 +419,16 @@ impl Interpreter {
                     .to_string(),
                 ip: frame.ip,
             })
-            .collect();
-        // Include the frame currently being executed (popped during step_one)
-        if let Some((func_id, ip)) = self.current_frame_info {
-            let name = self
-                .image
-                .function_name(func_id as usize)
-                .unwrap_or("<unknown>")
-                .to_string();
-            stack.push(crate::backends::StackFrame {
-                function_name: name,
-                ip,
-            });
-        }
-        stack
+            .collect()
     }
 
     /// #281：checked 整数运算——溢出报 E6007（不再静默 wrap / panic），正常路径写 dst 槽
+    ///
+    /// 收帧索引而非 `&mut Frame`：帧留在 `call_stack` 上，每次访问是
+    /// 瞬时借用，与 `&mut self`（堆/运行时）顺序执行不冲突。
     fn int_op(
         &mut self,
-        frame: &mut Frame,
+        fi: usize,
         dst: Reg,
         op_name: &str,
         l: i64,
@@ -442,7 +437,7 @@ impl Interpreter {
     ) -> ExecutorResult<()> {
         match f(l, r) {
             Some(v) => {
-                frame.set_slot(dst.0 as usize, RuntimeValue::Int(v));
+                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Int(v));
                 Ok(())
             }
             None => Err(ExecutorError::runtime(
@@ -729,15 +724,16 @@ impl Interpreter {
 
     pub(super) fn force_slot(
         &mut self,
-        frame: &mut Frame,
+        fi: usize,
         reg: Reg,
     ) -> ExecutorResult<RuntimeValue> {
-        if let Some(v) = frame.get_slot_mut(reg.0 as usize) {
-            self.force_value_in_place(v)?;
-            Ok(v.clone())
-        } else {
-            Ok(RuntimeValue::Void)
-        }
+        // 先取值再 force：若先借出槽位再调 &mut self 会与 call_stack 借用冲突
+        let mut v = self.call_stack[fi]
+            .get_slot(reg.0 as usize)
+            .cloned()
+            .unwrap_or(RuntimeValue::Void);
+        self.force_value_in_place(&mut v)?;
+        Ok(v)
     }
 
     pub(super) fn force_value_clone(
@@ -849,17 +845,17 @@ impl Interpreter {
         lhs: Reg,
         rhs: Reg,
         op: BinaryOp,
-        frame: &mut Frame,
+        fi: usize,
     ) -> ExecutorResult<()> {
         tlog!(
             debug,
             MSG::DebugRegisters,
-            &frame.local_count(),
+            &self.call_stack[fi].local_count(),
             &(lhs.0 as usize),
             &(rhs.0 as usize)
         );
-        let a = self.force_slot(frame, lhs)?;
-        let b = self.force_slot(frame, rhs)?;
+        let a = self.force_slot(fi, lhs)?;
+        let b = self.force_slot(fi, rhs)?;
 
         tlog!(
             debug,
@@ -879,13 +875,13 @@ impl Interpreter {
                 tlog!(debug, MSG::DebugAddingNumbers, &l, &r);
                 tlog!(debug, MSG::VmI64Add, &l, &r);
                 // #281：溢出报 E6007，不再静默 wrap（debug 曾直接 panic）
-                return self.int_op(frame, dst, "+", l, r, i64::checked_add);
+                return self.int_op(fi, dst, "+", l, r, i64::checked_add);
             }
             (BinaryOp::Sub, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                return self.int_op(frame, dst, "-", l, r, i64::checked_sub)
+                return self.int_op(fi, dst, "-", l, r, i64::checked_sub)
             }
             (BinaryOp::Mul, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                return self.int_op(frame, dst, "*", l, r, i64::checked_mul)
+                return self.int_op(fi, dst, "*", l, r, i64::checked_mul)
             }
             (BinaryOp::Div, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 if r == 0 {
@@ -894,7 +890,7 @@ impl Interpreter {
                     return Err(ExecutorError::division_by_zero(format!("{l} / {r}"), stack));
                 }
                 // #281：i64::MIN / -1 溢出（原 release 下 panic）
-                return self.int_op(frame, dst, "/", l, r, i64::checked_div);
+                return self.int_op(fi, dst, "/", l, r, i64::checked_div);
             }
             (BinaryOp::Rem, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 if r == 0 {
@@ -902,20 +898,20 @@ impl Interpreter {
                     // #282：携带触发表达式文本
                     return Err(ExecutorError::division_by_zero(format!("{l} % {r}"), stack));
                 }
-                return self.int_op(frame, dst, "%", l, r, i64::checked_rem);
+                return self.int_op(fi, dst, "%", l, r, i64::checked_rem);
             }
             (BinaryOp::And, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l & r),
             (BinaryOp::Or, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l | r),
             (BinaryOp::Xor, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l ^ r),
             (BinaryOp::Shl, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
                 // #281：移位量 >= 64 原为 panic（Rust 语义），改报错
-                return self.int_op(frame, dst, "<<", l, r, |a, b| a.checked_shl(b as u32));
+                return self.int_op(fi, dst, "<<", l, r, |a, b| a.checked_shl(b as u32));
             }
             (BinaryOp::Sar, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                return self.int_op(frame, dst, ">>", l, r, |a, b| a.checked_shr(b as u32));
+                return self.int_op(fi, dst, ">>", l, r, |a, b| a.checked_shr(b as u32));
             }
             (BinaryOp::Shr, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                return self.int_op(frame, dst, ">>", l, r, |a, b| a.checked_shr(b as u32));
+                return self.int_op(fi, dst, ">>", l, r, |a, b| a.checked_shr(b as u32));
             }
             (BinaryOp::Add, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                 RuntimeValue::Float(l + r)
@@ -959,7 +955,7 @@ impl Interpreter {
             }
         };
 
-        frame.set_slot(dst.0 as usize, result);
+        self.call_stack[fi].set_slot(dst.0 as usize, result);
         Ok(())
     }
 
@@ -970,10 +966,10 @@ impl Interpreter {
         lhs: Reg,
         rhs: Reg,
         cmp: CompareOp,
-        frame: &mut Frame,
+        fi: usize,
     ) -> ExecutorResult<()> {
-        let a = self.force_slot(frame, lhs)?;
-        let b = self.force_slot(frame, rhs)?;
+        let a = self.force_slot(fi, lhs)?;
+        let b = self.force_slot(fi, rhs)?;
 
         let result = match (cmp, &a, &b) {
             // Integer comparison
@@ -1083,7 +1079,7 @@ impl Interpreter {
             }
         };
 
-        frame.set_slot(dst.0 as usize, result);
+        self.call_stack[fi].set_slot(dst.0 as usize, result);
         Ok(())
     }
 

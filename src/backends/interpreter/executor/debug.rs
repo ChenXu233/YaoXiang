@@ -9,7 +9,6 @@ use crate::middle::bytecode::{BytecodeInstr, ConstValue, Label, Reg};
 use crate::backends::common::value::FunctionId;
 use crate::backends::common::value::TypeId;
 use super::executor::Interpreter;
-use crate::backends::interpreter::Frame;
 
 /// Outcome of a single instruction execution.
 pub(super) enum StepOutcome {
@@ -84,27 +83,25 @@ impl Interpreter {
 
     /// Execute a single instruction. The core of the stepping engine.
     ///
-    /// Pops the top frame, executes one instruction, and pushes it back
-    /// (unless the instruction was a Return).
+    /// ## 帧原地驻留（不再 pop/push）
     ///
-    /// 指令数据统一经 `image` 读取——`Frame` 只持 `func_id`，不再按值携带
-    /// 函数体，因此这里不再逐指令克隆整个 `BytecodeFunction`。
+    /// 此前实现把顶部帧从 `call_stack` 弹出、执行、再压回：在帧上执行需要
+    /// `&mut self`（改堆/运行时），而帧存于 `self.call_stack`，二者借用冲突，
+    /// 故只能先弹出。代价是每条指令搬一次 `Frame`（含 3 个 `Vec` 与槽位数组）。
+    ///
+    /// 现改为按索引就地访问：所有对帧的读写都是 `self.call_stack[fi]` 形式的
+    /// 瞬时借用，与 `&mut self.heap` 等顺序执行、互不重叠，因此无需弹出。
+    /// 附带修正：调用者帧全程留在栈上，栈帧捕获可拿到完整调用链。
+    ///
+    /// 指令数据统一经 `image` 读取——`Frame` 只持 `func_id`，不按值携带函数体。
     pub(super) fn step_one(&mut self) -> ExecutorResult<StepOutcome> {
         if self.call_stack.is_empty() {
             return Ok(StepOutcome::Returned);
         }
+        let fi = self.call_stack.len() - 1;
 
-        // Cache stack-trace info before popping
-        if let Some(frame) = self.call_stack.last() {
-            self.current_frame_info = Some((frame.func_id, frame.ip));
-        }
-
-        // Pop frame — self is fully available
-        let mut frame = self.pop_frame().unwrap();
-
-        let fid = frame.func_id as usize;
+        let fid = self.call_stack[fi].func_id as usize;
         if fid >= self.image.functions_by_id.len() {
-            self.current_frame_info = None;
             let stack = self.capture_stack();
             return Err(ExecutorError::function_not_found(
                 format!("Frame holds invalid func_id {fid}"),
@@ -112,26 +109,14 @@ impl Interpreter {
             ));
         }
 
-        if frame.ip >= self.image.functions_by_id[fid].instructions.len() {
-            self.current_frame_info = None;
-            self.push_frame(frame)?;
+        if self.call_stack[fi].ip >= self.image.functions_by_id[fid].instructions.len() {
+            self.call_stack.pop();
             return Ok(StepOutcome::Returned);
         }
 
-        let depth_before = self.call_stack.len();
-        let instr = self.image.functions_by_id[fid].instructions[frame.ip].clone();
-        let outcome = self.execute_instr(&mut frame, &instr)?;
-
-        // Detect if a function call was executed (depth increased then restored)
-        self.called_func = self.call_stack.len() > depth_before;
-
-        // Don't push back on Return — frame is already consumed
-        if !matches!(outcome, StepOutcome::Returned) {
-            self.push_frame(frame)?;
-        }
-
-        self.current_frame_info = None;
-        Ok(outcome)
+        let ip = self.call_stack[fi].ip;
+        let instr = self.image.functions_by_id[fid].instructions[ip].clone();
+        self.execute_instr(fi, &instr)
     }
 
     /// Execute until a stop condition (breakpoint, return, or completion).
@@ -152,14 +137,16 @@ impl Interpreter {
         }
     }
 
-    /// Execute a single instruction on the given frame.
+    /// Execute a single instruction on the frame at `call_stack[fi]`.
     ///
     /// This is the instruction dispatcher — all instruction logic lives here.
-    /// `frame` is a local variable (not on `self.call_stack`), so `self` is
-    /// fully available for helper method calls.
+    ///
+    /// 帧不再作为 `&mut Frame` 传入，而是用索引定位：所有对帧的访问都是
+    /// `self.call_stack[fi]` 的瞬时借用，因此 `&mut self`（堆、运行时、
+    /// 甚至嵌套调用时向同一 `call_stack` 压帧）始终可用。
     fn execute_instr(
         &mut self,
-        frame: &mut Frame,
+        fi: usize,
         instr: &BytecodeInstr,
     ) -> ExecutorResult<StepOutcome> {
         match instr {
@@ -173,65 +160,68 @@ impl Interpreter {
             | BytecodeInstr::TryEnd
             | BytecodeInstr::ArcDrop { .. }
             | BytecodeInstr::CloseUpvalue { .. } => {
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
 
             // ── Return ──────────────────────────────────────────
             BytecodeInstr::Return => {
-                for task_id in frame.take_all_spawned_tasks() {
+                for task_id in self.call_stack[fi].take_all_spawned_tasks() {
                     let mut v = self.make_async_pending(task_id);
                     self.force_value_in_place(&mut v)?;
                 }
                 self.last_return_value = RuntimeValue::Void;
-                // Frame is NOT pushed back — caller handles this
+                // 帧原地驻留后，返回由指令自身弹出（旧实现由 step_one 省略 push 完成）
+                self.call_stack.pop();
                 Ok(StepOutcome::Returned)
             }
             BytecodeInstr::ReturnValue { value } => {
-                let result = frame
+                let result = self.call_stack[fi]
                     .get_slot(value.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
-                for task_id in frame.take_all_spawned_tasks() {
+                for task_id in self.call_stack[fi].take_all_spawned_tasks() {
                     let mut v = self.make_async_pending(task_id);
                     self.force_value_in_place(&mut v)?;
                 }
                 self.last_return_value = result;
+                // 帧原地驻留后，返回由指令自身弹出
+                self.call_stack.pop();
                 Ok(StepOutcome::Returned)
             }
 
             // ── Jumps ───────────────────────────────────────────
             BytecodeInstr::Jmp { target } => {
                 let offset = Self::decode_label_offset(*target);
-                frame.ip = ((frame.ip as i32) + offset) as usize;
+                self.call_stack[fi].ip = ((self.call_stack[fi].ip as i32) + offset) as usize;
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::JmpIf { cond, target } => {
-                let c = self.force_slot(frame, *cond)?.to_bool().ok_or_else(|| {
+                let c = self.force_slot(fi, *cond)?.to_bool().ok_or_else(|| {
                     ExecutorError::type_error("JmpIf 条件值不是布尔类型", self.capture_stack())
                 })?;
                 if c {
                     let offset = Self::decode_label_offset(*target);
-                    frame.ip = ((frame.ip as i32) + offset) as usize;
+                    self.call_stack[fi].ip = ((self.call_stack[fi].ip as i32) + offset) as usize;
                 } else {
-                    frame.advance();
+                    self.call_stack[fi].advance();
                 }
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::JmpIfNot { cond, target } => {
-                let c = self.force_slot(frame, *cond)?.to_bool().ok_or_else(|| {
+                let c = self.force_slot(fi, *cond)?.to_bool().ok_or_else(|| {
                     ExecutorError::type_error("JmpIfNot 条件值不是布尔类型", self.capture_stack())
                 })?;
                 if !c {
                     let offset = Self::decode_label_offset(*target);
-                    frame.ip = ((frame.ip as i32) + offset) as usize;
+                    self.call_stack[fi].ip = ((self.call_stack[fi].ip as i32) + offset) as usize;
                 } else {
-                    frame.advance();
+                    self.call_stack[fi].advance();
                 }
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::Switch { value, targets } => {
-                let val = self.force_slot(frame, *value)?;
+                let val = self.force_slot(fi, *value)?;
                 let mut jumped = false;
                 for (case_val, target) in targets {
                     if let Some(case_label) = case_val {
@@ -246,7 +236,8 @@ impl Interpreter {
                         };
                         if matches {
                             let offset = Self::decode_label_offset(*target);
-                            frame.ip = ((frame.ip as i32) + offset) as usize;
+                            self.call_stack[fi].ip =
+                                ((self.call_stack[fi].ip as i32) + offset) as usize;
                             jumped = true;
                             break;
                         }
@@ -255,9 +246,10 @@ impl Interpreter {
                 if !jumped {
                     if let Some((None, default_target)) = targets.last() {
                         let offset = Self::decode_label_offset(*default_target);
-                        frame.ip = ((frame.ip as i32) + offset) as usize;
+                        self.call_stack[fi].ip =
+                            ((self.call_stack[fi].ip as i32) + offset) as usize;
                     } else {
-                        frame.advance();
+                        self.call_stack[fi].advance();
                     }
                 }
                 Ok(StepOutcome::Continue)
@@ -265,46 +257,46 @@ impl Interpreter {
 
             // ── Register operations ─────────────────────────────
             BytecodeInstr::Mov { dst, src } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
-                frame.set_slot(dst.0 as usize, val);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, val);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::LoadConst { dst, const_idx } => {
                 let val = self.load_constant(*const_idx);
-                frame.set_slot(dst.0 as usize, val);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, val);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::LoadLocal { dst, local_idx } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(*local_idx as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
-                frame.set_slot(dst.0 as usize, val);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, val);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StoreLocal { local_idx, src } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
-                frame.set_slot(*local_idx as usize, val);
-                frame.advance();
+                self.call_stack[fi].set_slot(*local_idx as usize, val);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::LoadArg { dst, arg_idx } => {
                 // Args are stored in locals by Frame::with_args
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(*arg_idx as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
-                frame.set_slot(dst.0 as usize, val);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, val);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::LoadGlobal { dst, global_idx } => {
@@ -313,12 +305,12 @@ impl Interpreter {
                     .get(*global_idx as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
-                frame.set_slot(dst.0 as usize, val);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, val);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StoreGlobal { global_idx, src } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
@@ -327,41 +319,41 @@ impl Interpreter {
                     self.global_slots.resize(idx + 1, RuntimeValue::Void);
                 }
                 self.global_slots[idx] = val;
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::LoadUpvalue { dst, upvalue_idx } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_upvalue(*upvalue_idx as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
-                frame.set_slot(dst.0 as usize, val);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, val);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StoreUpvalue { src, upvalue_idx } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(src.0 as usize)
                     .cloned()
                     .expect("register index out of bounds");
-                frame.set_upvalue(*upvalue_idx as usize, val);
-                frame.advance();
+                self.call_stack[fi].set_upvalue(*upvalue_idx as usize, val);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
 
             // ── Arithmetic / comparison ─────────────────────────
             BytecodeInstr::BinaryOp { dst, lhs, rhs, op } => {
-                self.exec_binary_op(*dst, *lhs, *rhs, *op, frame)?;
-                frame.advance();
+                self.exec_binary_op(*dst, *lhs, *rhs, *op, fi)?;
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::Compare { dst, lhs, rhs, cmp } => {
-                self.exec_compare(*dst, *lhs, *rhs, *cmp, frame)?;
-                frame.advance();
+                self.exec_compare(*dst, *lhs, *rhs, *cmp, fi)?;
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::UnaryOp { dst, src, op } => {
-                let val = self.force_slot(frame, *src)?;
+                let val = self.force_slot(fi, *src)?;
                 let result = match (op, val) {
                     (crate::middle::bytecode::UnaryOp::Neg, RuntimeValue::Int(n)) => {
                         RuntimeValue::Int(-n)
@@ -386,8 +378,8 @@ impl Interpreter {
                         ));
                     }
                 };
-                frame.set_slot(dst.0 as usize, result);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, result);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
 
@@ -408,7 +400,7 @@ impl Interpreter {
                 let call_args: Vec<RuntimeValue> = arg_regs
                     .iter()
                     .map(|r| {
-                        frame
+                        self.call_stack[fi]
                             .get_slot(r.0 as usize)
                             .cloned()
                             .unwrap_or(RuntimeValue::Void)
@@ -420,9 +412,9 @@ impl Interpreter {
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     let result = self.call_static_by_id(func_id, &call_args)?;
                     if let Some(dst_reg) = dst {
-                        frame.set_slot(dst_reg.index() as usize, result);
+                        self.call_stack[fi].set_slot(dst_reg.index() as usize, result);
                     }
-                    frame.advance();
+                    self.call_stack[fi].advance();
                     return Ok(StepOutcome::Continue);
                 }
 
@@ -447,10 +439,10 @@ impl Interpreter {
                 let mut v = self.make_async_pending(task_id);
                 self.force_value_in_place(&mut v)?;
                 if let Some(dst_reg) = dst {
-                    frame.set_slot(dst_reg.index() as usize, v);
+                    self.call_stack[fi].set_slot(dst_reg.index() as usize, v);
                 }
 
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::CallNative {
@@ -464,7 +456,7 @@ impl Interpreter {
                 let call_args: Vec<RuntimeValue> = arg_regs
                     .iter()
                     .map(|r| {
-                        frame
+                        self.call_stack[fi]
                             .get_slot(r.0 as usize)
                             .cloned()
                             .unwrap_or(RuntimeValue::Void)
@@ -477,9 +469,9 @@ impl Interpreter {
                     let result = self
                         .call_native_with_ffi_meta(func_name, mechanism, lib, symbol, &call_args)?;
                     if let Some(dst_reg) = dst {
-                        frame.set_slot(dst_reg.index() as usize, result);
+                        self.call_stack[fi].set_slot(dst_reg.index() as usize, result);
                     }
-                    frame.advance();
+                    self.call_stack[fi].advance();
                     return Ok(StepOutcome::Continue);
                 }
 
@@ -503,10 +495,10 @@ impl Interpreter {
                 let mut v = self.make_async_pending(task_id);
                 self.force_value_in_place(&mut v)?;
                 if let Some(dst_reg) = dst {
-                    frame.set_slot(dst_reg.index() as usize, v);
+                    self.call_stack[fi].set_slot(dst_reg.index() as usize, v);
                 }
 
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::CallVirt {
@@ -515,7 +507,7 @@ impl Interpreter {
                 method_idx,
                 args,
             } => {
-                let obj_val = self.force_slot(frame, *obj)?;
+                let obj_val = self.force_slot(fi, *obj)?;
 
                 let method_name = self
                     .image
@@ -533,11 +525,11 @@ impl Interpreter {
                 if let Some(func_value) = obj_val.get_method(&method_name).cloned() {
                     let mut call_args = Vec::with_capacity(args.len());
                     for r in args {
-                        call_args.push(self.force_slot(frame, *r)?);
+                        call_args.push(self.force_slot(fi, *r)?);
                     }
                     let result = self.call_function_by_id(func_value.func_id, &call_args)?;
                     if let Some(dst_reg) = dst {
-                        frame.set_slot(dst_reg.index() as usize, result);
+                        self.call_stack[fi].set_slot(dst_reg.index() as usize, result);
                     }
                 } else {
                     // RFC-011a 阶段3 加固：vtable 缺方法不再静默写 Void——
@@ -549,7 +541,7 @@ impl Interpreter {
                         method_name, obj_desc
                     )));
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::CallDyn {
@@ -558,13 +550,13 @@ impl Interpreter {
                 name_idx: _,
                 args,
             } => {
-                let closure_val = self.force_slot(frame, *obj)?;
+                let closure_val = self.force_slot(fi, *obj)?;
 
                 if let RuntimeValue::Function(func_value) = closure_val {
                     let env_args: Vec<RuntimeValue> = func_value.env.clone();
                     let mut call_args = Vec::with_capacity(args.len());
                     for r in args {
-                        call_args.push(self.force_slot(frame, *r)?);
+                        call_args.push(self.force_slot(fi, *r)?);
                     }
                     let mut final_args = env_args.clone();
                     final_args.extend(call_args);
@@ -573,14 +565,14 @@ impl Interpreter {
                     // 导致闭包体 `LoadUpvalue` 恒读 Void（实测 `adder(10)(5)` 得 10 而非 15）。
                     let result = self.call_closure(func_value.func_id, &final_args, &env_args)?;
                     if let Some(dst_reg) = dst {
-                        frame.set_slot(dst_reg.index() as usize, result);
+                        self.call_stack[fi].set_slot(dst_reg.index() as usize, result);
                     }
                 } else {
                     if let Some(dst_reg) = dst {
-                        frame.set_slot(dst_reg.index() as usize, RuntimeValue::Void);
+                        self.call_stack[fi].set_slot(dst_reg.index() as usize, RuntimeValue::Void);
                     }
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
 
@@ -597,7 +589,7 @@ impl Interpreter {
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
                     for func_reg in closures.iter() {
-                        let closure_val = self.force_slot(frame, *func_reg)?;
+                        let closure_val = self.force_slot(fi, *func_reg)?;
                         let RuntimeValue::Function(func_value) = closure_val else {
                             let stack = self.capture_stack();
                             return Err(ExecutorError::type_error(
@@ -613,7 +605,7 @@ impl Interpreter {
                             &func_value.env,
                             &func_value.env,
                         )?;
-                        frame.set_slot(func_reg.0 as usize, _result);
+                        self.call_stack[fi].set_slot(func_reg.0 as usize, _result);
                     }
                 } else {
                     use crate::backends::runtime::engine::{ResourceKey, TaskMeta};
@@ -623,7 +615,7 @@ impl Interpreter {
                         Vec::new();
 
                     for (i, func_reg) in closures.iter().enumerate() {
-                        let closure_val = self.force_slot(frame, *func_reg)?;
+                        let closure_val = self.force_slot(fi, *func_reg)?;
                         let RuntimeValue::Function(func_value) = closure_val else {
                             let stack = self.capture_stack();
                             return Err(ExecutorError::type_error(
@@ -660,18 +652,18 @@ impl Interpreter {
                             },
                         )?;
 
-                        frame.record_spawned_task(task_id);
+                        self.call_stack[fi].record_spawned_task(task_id);
                         task_ids.push((*func_reg, task_id));
                     }
 
                     for (func_reg, task_id) in &task_ids {
                         let mut v = self.make_async_pending(*task_id);
                         self.force_value_in_place(&mut v)?;
-                        frame.set_slot(func_reg.0 as usize, v);
+                        self.call_stack[fi].set_slot(func_reg.0 as usize, v);
                     }
                 }
 
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::SpawnFromList {
@@ -684,7 +676,7 @@ impl Interpreter {
                 let task_deps = task_deps.clone();
                 let task_resources = task_resources.clone();
 
-                let list_val = self.force_slot(frame, closures_list)?;
+                let list_val = self.force_slot(fi, closures_list)?;
                 let closures: Vec<RuntimeValue> = match list_val {
                     RuntimeValue::List(handle) => match &*handle.lock() {
                         crate::backends::common::HeapValue::List(items) => items.clone(),
@@ -762,7 +754,7 @@ impl Interpreter {
                             },
                         )?;
 
-                        frame.record_spawned_task(task_id);
+                        self.call_stack[fi].record_spawned_task(task_id);
                         spawned_tasks.push(task_id);
                     }
 
@@ -772,7 +764,7 @@ impl Interpreter {
                     }
                 }
 
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
 
@@ -781,16 +773,16 @@ impl Interpreter {
                 let handle = self
                     .heap
                     .allocate(crate::backends::common::HeapValue::Tuple(Vec::new()));
-                frame.set_slot(dst.0 as usize, RuntimeValue::Tuple(handle));
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Tuple(handle));
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::NewListWithCap { dst, capacity } => {
                 let handle = self.heap.allocate(crate::backends::common::HeapValue::List(
                     Vec::with_capacity(*capacity as usize),
                 ));
-                frame.set_slot(dst.0 as usize, RuntimeValue::List(handle));
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::List(handle));
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::NewArray { dst, count } => {
@@ -799,18 +791,18 @@ impl Interpreter {
                 let handle = self
                     .heap
                     .allocate(crate::backends::common::HeapValue::Array(items));
-                frame.set_slot(dst.0 as usize, RuntimeValue::Array(handle));
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Array(handle));
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::NewDict { dst, keys, values } => {
                 let mut map = std::collections::HashMap::new();
                 for (key_reg, val_reg) in keys.iter().zip(values.iter()) {
-                    let key = frame
+                    let key = self.call_stack[fi]
                         .get_slot(key_reg.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Void);
-                    let val = frame
+                    let val = self.call_stack[fi]
                         .get_slot(val_reg.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Void);
@@ -819,14 +811,14 @@ impl Interpreter {
                 let handle = self
                     .heap
                     .allocate(crate::backends::common::HeapValue::Dict(map));
-                frame.set_slot(dst.0 as usize, RuntimeValue::Dict(handle));
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Dict(handle));
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::NewTuple { dst, items } => {
                 let mut tuple_items = Vec::with_capacity(items.len());
                 for item_reg in items {
-                    let item = frame
+                    let item = self.call_stack[fi]
                         .get_slot(item_reg.0 as usize)
                         .cloned()
                         .unwrap_or(RuntimeValue::Void);
@@ -835,8 +827,8 @@ impl Interpreter {
                 let handle = self
                     .heap
                     .allocate(crate::backends::common::HeapValue::Tuple(tuple_items));
-                frame.set_slot(dst.0 as usize, RuntimeValue::Tuple(handle));
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Tuple(handle));
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::NewRange {
@@ -847,13 +839,13 @@ impl Interpreter {
             } => {
                 // #302：三标量内联记录，构造点已拦 step=0（字面量）；动态零走 std.range.contains 显式错误
                 let read = |r: &Reg| -> i64 {
-                    match frame.get_slot(r.0 as usize) {
+                    match self.call_stack[fi].get_slot(r.0 as usize) {
                         Some(RuntimeValue::Int(n)) => *n,
                         _ => 0,
                     }
                 };
                 let (s, e, p) = (read(start), read(end), read(step));
-                frame.set_slot(
+                self.call_stack[fi].set_slot(
                     dst.0 as usize,
                     RuntimeValue::Range {
                         start: s,
@@ -861,7 +853,7 @@ impl Interpreter {
                         step: p,
                     },
                 );
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             // RFC-011a §6: 包装具体值为存在类型变体（Animal$Group.Dog(payload)）
@@ -871,10 +863,10 @@ impl Interpreter {
                 variant,
                 payload,
             } => {
-                let payload_val = self.force_slot(frame, *payload)?;
+                let payload_val = self.force_slot(fi, *payload)?;
                 let group = self.const_string(*group_idx);
                 let _ = group;
-                frame.set_slot(
+                self.call_stack[fi].set_slot(
                     dst.0 as usize,
                     RuntimeValue::Enum {
                         type_id: TypeId::ENUM,
@@ -882,7 +874,7 @@ impl Interpreter {
                         payload: Box::new(payload_val),
                     },
                 );
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             // RFC-011a §6: 变体号提取。守卫：obj 必须是变体值——漏包装在此显式
@@ -892,7 +884,7 @@ impl Interpreter {
                 obj,
                 group_idx,
             } => {
-                let obj_val = self.force_slot(frame, *obj)?;
+                let obj_val = self.force_slot(fi, *obj)?;
                 let group = self.const_string(*group_idx);
                 let tag = match &obj_val {
                     RuntimeValue::Enum { variant_id, .. } => *variant_id as i64,
@@ -904,8 +896,8 @@ impl Interpreter {
                         )));
                     }
                 };
-                frame.set_slot(dst.0 as usize, RuntimeValue::Int(tag));
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Int(tag));
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             // RFC-011a §6: 变体负载提取（守卫同 VariantTag）
@@ -914,7 +906,7 @@ impl Interpreter {
                 obj,
                 group_idx,
             } => {
-                let obj_val = self.force_slot(frame, *obj)?;
+                let obj_val = self.force_slot(fi, *obj)?;
                 let group = self.const_string(*group_idx);
                 let payload = match obj_val {
                     RuntimeValue::Enum { payload, .. } => *payload,
@@ -926,8 +918,8 @@ impl Interpreter {
                         )));
                     }
                 };
-                frame.set_slot(dst.0 as usize, payload);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, payload);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             // #299 §3: membership 谓词——命中 true / 未命中 false，不报错（问 vs 断言）
@@ -936,8 +928,8 @@ impl Interpreter {
                 elem,
                 container,
             } => {
-                let e = self.force_slot(frame, *elem)?;
-                let cval = self.force_slot(frame, *container)?;
+                let e = self.force_slot(fi, *elem)?;
+                let cval = self.force_slot(fi, *container)?;
                 let found = match &cval {
                     RuntimeValue::List(h) => matches!(
                         &*h.lock(),
@@ -985,13 +977,13 @@ impl Interpreter {
                         )))
                     }
                 };
-                frame.set_slot(dst.0 as usize, RuntimeValue::Bool(found));
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Bool(found));
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::LoadElement { dst, array, index } => {
-                let arr = self.force_slot(frame, *array)?;
-                let idx_value = self.force_slot(frame, *index)?;
+                let arr = self.force_slot(fi, *array)?;
+                let idx_value = self.force_slot(fi, *index)?;
 
                 match arr {
                     RuntimeValue::List(handle) => {
@@ -999,7 +991,7 @@ impl Interpreter {
                         let idx = index_arg_at(&idx_value, "list", len, Some(index.0 as usize))?;
                         if let crate::backends::common::HeapValue::List(items) = &*handle.lock() {
                             if idx < items.len() {
-                                frame.set_slot(dst.0 as usize, items[idx].clone());
+                                self.call_stack[fi].set_slot(dst.0 as usize, items[idx].clone());
                             } else {
                                 // #279：越界读不再静默返回 void；#280：报专用码 E6003
                                 // 带上索引寄存器号，供诊断层回溯源码变量名
@@ -1017,7 +1009,7 @@ impl Interpreter {
                         let idx = index_arg_at(&idx_value, "tuple", len, Some(index.0 as usize))?;
                         if let crate::backends::common::HeapValue::Tuple(items) = &*handle.lock() {
                             if idx < items.len() {
-                                frame.set_slot(dst.0 as usize, items[idx].clone());
+                                self.call_stack[fi].set_slot(dst.0 as usize, items[idx].clone());
                             } else {
                                 // #279：越界读不再静默返回 void；#280：报专用码 E6003
                                 // 带上索引寄存器号，供诊断层回溯源码变量名
@@ -1035,7 +1027,7 @@ impl Interpreter {
                         let idx = index_arg_at(&idx_value, "array", len, Some(index.0 as usize))?;
                         if let crate::backends::common::HeapValue::Array(items) = &*handle.lock() {
                             if idx < items.len() {
-                                frame.set_slot(dst.0 as usize, items[idx].clone());
+                                self.call_stack[fi].set_slot(dst.0 as usize, items[idx].clone());
                             } else {
                                 // #279：越界读不再静默返回 void；#280：报专用码 E6003
                                 // 带上索引寄存器号，供诊断层回溯源码变量名
@@ -1051,7 +1043,9 @@ impl Interpreter {
                     RuntimeValue::Dict(handle) => {
                         if let crate::backends::common::HeapValue::Dict(map) = &*handle.lock() {
                             match map.get(&idx_value) {
-                                Some(value) => frame.set_slot(dst.0 as usize, value.clone()),
+                                Some(value) => {
+                                    self.call_stack[fi].set_slot(dst.0 as usize, value.clone())
+                                }
                                 // #299：缺键不再静默返回 void（同 #279 方向）
                                 None => {
                                     return Err(ExecutorError::KeyNotFound {
@@ -1069,7 +1063,7 @@ impl Interpreter {
                         ))
                     }
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StoreElement {
@@ -1077,9 +1071,9 @@ impl Interpreter {
                 index,
                 value,
             } => {
-                let arr = self.force_slot(frame, *array)?;
-                let idx_value = self.force_slot(frame, *index)?;
-                let val = self.force_slot(frame, *value)?;
+                let arr = self.force_slot(fi, *array)?;
+                let idx_value = self.force_slot(fi, *index)?;
+                let val = self.force_slot(fi, *value)?;
 
                 match arr {
                     RuntimeValue::List(handle) => {
@@ -1126,7 +1120,7 @@ impl Interpreter {
                     }
                     _ => {}
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::GetField {
@@ -1134,11 +1128,12 @@ impl Interpreter {
                 src,
                 field_idx,
             } => {
-                let obj = self.force_slot(frame, *src)?;
+                let obj = self.force_slot(fi, *src)?;
                 if let RuntimeValue::Struct { fields, .. } = obj {
                     if let crate::backends::common::HeapValue::Tuple(items) = &*fields.lock() {
                         if (*field_idx as usize) < items.len() {
-                            frame.set_slot(dst.0 as usize, items[*field_idx as usize].clone());
+                            self.call_stack[fi]
+                                .set_slot(dst.0 as usize, items[*field_idx as usize].clone());
                         }
                     }
                 } else if let RuntimeValue::Range { start, end, step } = obj {
@@ -1148,9 +1143,9 @@ impl Interpreter {
                         1 => end,
                         _ => step,
                     };
-                    frame.set_slot(dst.0 as usize, RuntimeValue::Int(v));
+                    self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Int(v));
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::SetField {
@@ -1158,8 +1153,8 @@ impl Interpreter {
                 field_idx,
                 value,
             } => {
-                let obj = self.force_slot(frame, *src)?;
-                let val = self.force_slot(frame, *value)?;
+                let obj = self.force_slot(fi, *src)?;
+                let val = self.force_slot(fi, *value)?;
                 if let RuntimeValue::Struct { fields, .. } = obj {
                     if let crate::backends::common::HeapValue::Tuple(items) = &mut *fields.lock() {
                         if (*field_idx as usize) < items.len() {
@@ -1167,7 +1162,7 @@ impl Interpreter {
                         }
                     }
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::CreateStruct {
@@ -1178,7 +1173,7 @@ impl Interpreter {
                 let field_values: Vec<RuntimeValue> = fields
                     .iter()
                     .map(|reg| {
-                        frame
+                        self.call_stack[fi]
                             .get_slot(reg.0 as usize)
                             .cloned()
                             .unwrap_or(RuntimeValue::Void)
@@ -1193,13 +1188,13 @@ impl Interpreter {
                     fields: handle,
                     vtable,
                 };
-                frame.set_slot(dst.0 as usize, struct_val);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, struct_val);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::BoundsCheck { array, index } => {
-                let arr = self.force_slot(frame, *array)?;
-                let idx = self.force_slot(frame, *index)?.to_int().unwrap_or(-1);
+                let arr = self.force_slot(fi, *array)?;
+                let idx = self.force_slot(fi, *index)?.to_int().unwrap_or(-1);
                 let len = match &arr {
                     RuntimeValue::List(h) | RuntimeValue::Tuple(h) | RuntimeValue::Array(h) => {
                         match &*h.lock() {
@@ -1219,54 +1214,54 @@ impl Interpreter {
                         Some(stack),
                     ));
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
 
             // ── String operations ────────────────────────────────
             BytecodeInstr::StringConcat { dst, str1, str2 } => {
-                let s1: String = match self.force_slot(frame, *str1)? {
+                let s1: String = match self.force_slot(fi, *str1)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                let s2: String = match self.force_slot(frame, *str2)? {
+                let s2: String = match self.force_slot(fi, *str2)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                frame.set_slot(
+                self.call_stack[fi].set_slot(
                     dst.0 as usize,
                     RuntimeValue::String(format!("{}{}", s1, s2).into()),
                 );
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringLength { dst, src } => {
-                let s: String = match self.force_slot(frame, *src)? {
+                let s: String = match self.force_slot(fi, *src)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                frame.set_slot(dst.0 as usize, RuntimeValue::Int(s.len() as i64));
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Int(s.len() as i64));
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringEqual { dst, str1, str2 } => {
-                let s1: String = match self.force_slot(frame, *str1)? {
+                let s1: String = match self.force_slot(fi, *str1)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                let s2: String = match self.force_slot(frame, *str2)? {
+                let s2: String = match self.force_slot(fi, *str2)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                frame.set_slot(
+                self.call_stack[fi].set_slot(
                     dst.0 as usize,
                     RuntimeValue::Int(if s1 == s2 { 1 } else { 0 }),
                 );
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringGetChar { dst, src, index } => {
-                let s: String = match self.force_slot(frame, *src)? {
+                let s: String = match self.force_slot(fi, *src)? {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
@@ -1275,104 +1270,106 @@ impl Interpreter {
                     .nth(index.0 as usize)
                     .map(|c| RuntimeValue::Char(c as u32))
                     .unwrap_or(RuntimeValue::Void);
-                frame.set_slot(dst.0 as usize, result);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, result);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringFromInt { dst, src } => {
-                let val = self.force_slot(frame, *src)?.to_int().ok_or_else(|| {
+                let val = self.force_slot(fi, *src)?.to_int().ok_or_else(|| {
                     ExecutorError::type_error(
                         "StringFromInt 操作数不是 Int 类型",
                         self.capture_stack(),
                     )
                 })?;
-                frame.set_slot(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
-                frame.advance();
+                self.call_stack[fi]
+                    .set_slot(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringFromFloat { dst, src } => {
-                let val = self.force_slot(frame, *src)?.to_float().ok_or_else(|| {
+                let val = self.force_slot(fi, *src)?.to_float().ok_or_else(|| {
                     ExecutorError::type_error(
                         "StringFromFloat 操作数不是 Float 类型",
                         self.capture_stack(),
                     )
                 })?;
-                frame.set_slot(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
-                frame.advance();
+                self.call_stack[fi]
+                    .set_slot(dst.0 as usize, RuntimeValue::String(val.to_string().into()));
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             // ── Reference counting ──────────────────────────────
             BytecodeInstr::ArcNew { dst, src } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
-                frame.set_slot(dst.0 as usize, val.into_arc());
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, val.into_arc());
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::RcNew { dst, src } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
-                frame.set_slot(dst.0 as usize, val.into_arc());
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, val.into_arc());
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::ArcClone { dst, src } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
                 if let RuntimeValue::Arc(inner) = val {
-                    frame.set_slot(dst.0 as usize, RuntimeValue::Arc(inner));
+                    self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Arc(inner));
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::WeakNew { dst, src } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
                 if let RuntimeValue::Arc(arc) = val {
-                    frame.set_slot(
+                    self.call_stack[fi].set_slot(
                         dst.0 as usize,
                         RuntimeValue::Weak(std::sync::Arc::downgrade(&arc)),
                     );
                 } else {
-                    frame.set_slot(dst.0 as usize, RuntimeValue::Void);
+                    self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Void);
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::WeakUpgrade { dst, src } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
                 if let RuntimeValue::Weak(weak) = val {
                     if let Some(arc) = weak.upgrade() {
-                        frame.set_slot(dst.0 as usize, RuntimeValue::Arc(arc));
+                        self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Arc(arc));
                     } else {
-                        frame.set_slot(dst.0 as usize, RuntimeValue::Void);
+                        self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Void);
                     }
                 } else {
-                    frame.set_slot(dst.0 as usize, RuntimeValue::Void);
+                    self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Void);
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
 
             // ── Borrow (ZST, runtime equivalent to Mov) ─────────
             BytecodeInstr::Borrow { dst, src, .. } => {
-                let val = frame
+                let val = self.call_stack[fi]
                     .get_slot(src.0 as usize)
                     .cloned()
                     .unwrap_or(RuntimeValue::Void);
-                frame.set_slot(dst.0 as usize, val);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, val);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
 
@@ -1395,7 +1392,7 @@ impl Interpreter {
                 let captured_env: Vec<RuntimeValue> = env
                     .iter()
                     .map(|r| {
-                        frame
+                        self.call_stack[fi]
                             .get_slot(r.0 as usize)
                             .cloned()
                             .unwrap_or(RuntimeValue::Void)
@@ -1406,14 +1403,14 @@ impl Interpreter {
                         func_id,
                         env: captured_env,
                     });
-                frame.set_slot(dst.0 as usize, closure);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, closure);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
 
             // ── Type operations ──────────────────────────────────
             BytecodeInstr::TypeOf { dst, src } => {
-                let val = self.force_slot(frame, *src)?;
+                let val = self.force_slot(fi, *src)?;
                 let type_name: &str = match &val {
                     RuntimeValue::Void => "Void",
                     RuntimeValue::Bool(_) => "Bool",
@@ -1436,11 +1433,11 @@ impl Interpreter {
                     RuntimeValue::Ptr { .. } => "Ptr",
                     RuntimeValue::OpaqueHandle { .. } => "OpaqueHandle",
                 };
-                frame.set_slot(
+                self.call_stack[fi].set_slot(
                     dst.0 as usize,
                     RuntimeValue::String(std::sync::Arc::from(type_name)),
                 );
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::Cast {
@@ -1448,7 +1445,7 @@ impl Interpreter {
                 src,
                 target_type_id,
             } => {
-                let val = self.force_slot(frame, *src)?;
+                let val = self.force_slot(fi, *src)?;
                 let result = match (val, *target_type_id) {
                     (RuntimeValue::Int(n), 1) => RuntimeValue::Float(n as f64),
                     (RuntimeValue::Float(f), 0) => RuntimeValue::Int(f as i64),
@@ -1456,12 +1453,12 @@ impl Interpreter {
                     (RuntimeValue::Bool(b), 0) => RuntimeValue::Int(if b { 1 } else { 0 }),
                     (v, _) => v,
                 };
-                frame.set_slot(dst.0 as usize, result);
-                frame.advance();
+                self.call_stack[fi].set_slot(dst.0 as usize, result);
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::TypeCheck { value, type_id } => {
-                let val = self.force_slot(frame, *value)?;
+                let val = self.force_slot(fi, *value)?;
                 let actual_id: u16 = match val {
                     RuntimeValue::Int(_) => 0,
                     RuntimeValue::Float(_) => 1,
@@ -1481,7 +1478,7 @@ impl Interpreter {
                         stack,
                     ));
                 }
-                frame.advance();
+                self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }
 

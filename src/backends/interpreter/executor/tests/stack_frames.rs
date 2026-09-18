@@ -136,7 +136,6 @@ fn test_capture_stack_single_frame_not_duplicated() {
 /// 而内层函数在同一个 `execute_instr` 里跑到报错）。
 /// T1 把 frame 改为原地驻留后，调用者帧全程保留，此测试即可启用。
 #[test]
-#[ignore = "T1 待修复：step_one 的 pop-then-push 使调用链丢失（见文件头背景一）"]
 fn test_capture_stack_nested_call_reports_full_chain() {
     // Arrange
     let mut interp = interp_with_nested_call_error();

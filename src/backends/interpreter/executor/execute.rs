@@ -137,7 +137,6 @@ impl Executor for Interpreter {
         self.call_stack.clear();
         self.state = ExecutionState::default();
         self.breakpoints.clear();
-        self.current_frame_info = None;
         self.called_func = false;
         self.rt = Runtime::new(RuntimeConfig {
             mode: self.runtime_config.mode,
