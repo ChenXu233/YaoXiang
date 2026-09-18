@@ -1265,6 +1265,23 @@ impl<'a> ExpressionInferrer<'a> {
                 let resolved = self.solver.resolve_type(&resolved);
 
                 let namespace_path = extract_namespace_path(obj);
+
+                // 泛型类型实例展开：`Box(T)` 是 `Generic{name:"Box", args:[T]}`，
+                // 字段定义存在 generic_type_defs 里而非 struct 表。若目标名命中
+                // 泛型类型定义，先实例化成 Struct 再做字段/方法查找——
+                // 非泛型结构体（Point）走原有 Struct 路径不受影响。
+                let resolved = match &resolved {
+                    MonoType::Generic { name, args } if self.generic_type_defs.contains_key(name) => {
+                        match crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
+                            &self.generic_type_defs[name],
+                            args,
+                        ) {
+                            Ok(inst) => self.solver.resolve_type(&inst),
+                            Err(_) => resolved,
+                        }
+                    }
+                    _ => resolved,
+                };
                 if let Some(ns_path) = namespace_path {
                     let full_path = format!("{}.{}", ns_path, field);
                     if let Some(sig) = self.native_signatures.get(&full_path).cloned() {
@@ -1560,6 +1577,41 @@ impl<'a> ExpressionInferrer<'a> {
                                     let Some(arg_ty) = arg_types.get(i) else {
                                         break;
                                     };
+                                    // RFC-011 容器命名分层：`Vec(T)` 字段接受 List 字面量。
+                                    // 与变量声明的落点规则一致（statements.rs 同款豁免）——
+                                    // Vec 是运行时长度的可增长缓冲，语义与字面量一致；
+                                    // 逐元素 unify(T) 仍然执行，不做整段豁免。
+                                    let vec_seed_ok = matches!(field_ty, MonoType::Generic { name, .. } if name == "Vec")
+                                        && matches!(
+                                            args.get(i),
+                                            Some(crate::frontend::core::parser::ast::Expr::List(
+                                                _,
+                                                _
+                                            ))
+                                        );
+                                    if vec_seed_ok {
+                                        if let (
+                                            Some(MonoType::Generic { args: fa, .. }),
+                                            Some(MonoType::Generic { args: aa, .. }),
+                                        ) = (
+                                            Some(field_ty),
+                                            Some(&self.solver.resolve_type(arg_ty)),
+                                        ) {
+                                            if let (Some(fe), Some(ae)) = (fa.first(), aa.first()) {
+                                                if self.solver.unify(fe, ae).is_err() {
+                                                    return Err(
+                                                        ErrorCodeDefinition::type_mismatch(
+                                                            &format!("{}", fe),
+                                                            &format!("{}", ae),
+                                                        )
+                                                        .at(*span)
+                                                        .build(),
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        continue;
+                                    }
                                     if self.solver.unify(field_ty, arg_ty).is_err() {
                                         return Err(ErrorCodeDefinition::type_mismatch(
                                             &format!("{}", field_ty),
