@@ -690,6 +690,10 @@ impl AstToIrGenerator {
         match mono_type {
             MonoType::TypeRef(name) => Some(name.clone()),
             MonoType::Struct(st) => Some(st.name.clone()),
+            // RFC-011 §4.2：泛型类型实例（`ValList(Int)`）— 方法绑定注册在类型名上
+            // （`ValList.push`），故用 Generic 的名字取绑定；不给名字则方法调用
+            // 落到 native 查找（`m.push` → “Native function not found”）。
+            MonoType::Generic { name, .. } => Some(name.clone()),
             // #266: &mut 令牌穿透——Ref 递归取 inner（m = &mut q 的类型是
             // Ref { mutable, inner: Point }，方法派发应基于 Point）
             MonoType::Ref { inner, .. } => Self::mono_type_to_struct_name(inner),

@@ -1068,6 +1068,35 @@ impl OwnershipChecker {
         }
     }
 
+    /// 实参是否为**类型实参**（而非值）。
+    ///
+    /// 泛型类型构造的参数位（`T: Type`）在语法上接受 `Var` 形态的实参
+    /// （`M(Int, Int)` 的 `Int`），但语义上它们是**类型**，不参与变量的
+    /// Move/借用分析。若当值处理，同一类型名出现两次即被线性类型账本判为
+    /// 「'Int' has been moved」（E2014）。
+    ///
+    /// 判定：以 `Expr::Var` 形态出现，且名字命中内建类型名、已注册的泛型类型
+    /// 定义、或已注册的类型定义（两者都只在类型位置立名，不会同时是值变量）。
+    /// 类型参数名（`T`/`R` 等）同样命中：它们由泛型声明引入，不在值作用域。
+    fn is_type_argument(
+        &self,
+        expr: &Expr,
+    ) -> bool {
+        let Expr::Var(name, _) = expr else {
+            return false;
+        };
+        // 内建类型名（Int/Float/Bool/String/...）
+        if crate::frontend::core::types::MonoType::from_builtin_name(name).is_some() {
+            return true;
+        }
+        // 已注册的类型定义 / 泛型类型定义（含泛型类型参数名经类型位置引入的情形）
+        let Some(env_ptr) = self.env else {
+            return false;
+        };
+        let env = unsafe { &*env_ptr };
+        env.types.contains_key(name) || env.generic_type_defs.contains_key(name)
+    }
+
     /// 从 TypeEnvironment 查询函数参数的所有权语义
     fn lookup_param_types(
         &self,
@@ -1981,6 +2010,13 @@ impl OwnershipChecker {
                 };
                 // 处理显式参数
                 for (i, arg) in args.iter().enumerate() {
+                    // 类型实参不是值：`M(Int, Int)` 里的 `Int` 是类型名而非变量引用，
+                    // 不参与 Move/借用分析。若当值走，同一类型名出现两次即报
+                    // E2014「'Int' has been moved」（#361）——泛型构造实参位
+                    // （`T: Type`）接受的实参在语法上是 Var 形态，但语义上是类型。
+                    if self.is_type_argument(arg) {
+                        continue;
+                    }
                     let ownership = param_types.get(i).unwrap_or(&ParamOwnership::Move);
                     let is_write_borrow = matches!(ownership, ParamOwnership::WriteBorrow);
                     // #312：WriteBorrow 实参遍历期间压制消费者注册——Var 臂的
