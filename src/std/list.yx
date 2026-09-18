@@ -147,8 +147,11 @@ pop: (A: Type) -> (list: List(A)) -> List(A) = {
 
 /// 移除下标 `index` 处元素，后移其余，返回新列表。O(n)。
 remove_at: (A: Type) -> (list: List(A), index: Int) -> List(A) = {
+    // 上界先提到局部变量：终止证明的秩函数合成只处理 `i < 简单名` 形态，
+    // 复合上界（`i + 1 < list.length`）目前推不出递减度量。
+    limit = list.length - 1
     i = index
-    while i + 1 < list.length {
+    while i < limit {
         list.data[i] = list.data[i + 1]
         i = i + 1
     }
@@ -219,7 +222,7 @@ map: (T: Type, R: Type) -> (list: &List(T), f: (item: T) -> R) -> List(R) = {
 }
 
 /// 保留满足谓词的元素，返回新列表。
-filter: (T: Type) -> (list: &List(T), keep: (item: T) -> Bool) -> List(T) = {
+filter: (T: Type) -> (list: &List(T), keep: (item: &T) -> Bool) -> List(T) = {
     seed: Vec(T) = []
     out: List(T) = List(seed, 0)
     i = 0
@@ -235,7 +238,11 @@ filter: (T: Type) -> (list: &List(T), keep: (item: T) -> Bool) -> List(T) = {
 }
 
 /// 左折叠：`acc = f(acc, item)`，返回终值。
-reduce: (T: Type, Acc: Type) -> (list: &List(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc = {
+///
+/// `f` 的累加器按**只读借用**接收（`&Acc`）：`Acc` 是任意类型，值语义下
+/// `f(acc, ..)` 会把 `acc` 消费掉，循环下一轮与最终 return 都无法再用它。
+/// 借用形式让调用方不必为 `Acc` 实现 `Dup`/`Clone`。
+reduce: (T: Type, Acc: Type) -> (list: &List(T), f: (acc: &Acc, item: T) -> Acc, init: Acc) -> Acc = {
     acc = init
     i = 0
     while i < list.length {

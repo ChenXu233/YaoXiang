@@ -743,6 +743,61 @@ impl<'a> ExpressionInferrer<'a> {
         Substituter::new().substitute(ty, &sub)
     }
 
+    /// 用实际类型 `actual` 解出 `shape` 里未绑定的 `TypeRef` 类型参数，返回替换后的类型。
+    ///
+    /// 只在**结构对齐**处绑定（泛型名相同、实参个数相同、以及 Ref/Fn 逐位），
+    /// 因此 `List(TypeRef "A")` vs `List(Int)` → `List(Int)`。
+    /// 无绑定则原样返回，交由常规 unify 决定。
+    fn bind_type_params_from(
+        shape: &MonoType,
+        actual: &MonoType,
+    ) -> MonoType {
+        match (shape, actual) {
+            (MonoType::TypeRef(_), act) => {
+                if matches!(act, MonoType::TypeRef(_)) {
+                    shape.clone()
+                } else {
+                    act.clone()
+                }
+            }
+            (
+                MonoType::Generic { name: n1, args: a1 },
+                MonoType::Generic { name: n2, args: a2 },
+            ) if n1 == n2 && a1.len() == a2.len() => MonoType::Generic {
+                name: n1.clone(),
+                args: a1
+                    .iter()
+                    .zip(a2.iter())
+                    .map(|(s, a)| Self::bind_type_params_from(s, a))
+                    .collect(),
+            },
+            (MonoType::Ref { mutable, inner: i1 }, MonoType::Ref { inner: i2, .. }) => {
+                MonoType::Ref {
+                    mutable: *mutable,
+                    inner: Box::new(Self::bind_type_params_from(i1, i2)),
+                }
+            }
+            (
+                MonoType::Fn {
+                    params: p1,
+                    return_type: r1,
+                },
+                MonoType::Fn {
+                    params: p2,
+                    return_type: r2,
+                },
+            ) if p1.len() == p2.len() => MonoType::Fn {
+                params: p1
+                    .iter()
+                    .zip(p2.iter())
+                    .map(|(s, a)| Self::bind_type_params_from(s, a))
+                    .collect(),
+                return_type: Box::new(Self::bind_type_params_from(r1, r2)),
+            },
+            _ => shape.clone(),
+        }
+    }
+
     /// 按名替换类型中的 `TypeRef`（声明的类型参数名 → fresh TypeVar）。
     /// 只替换 `subst` 里登记的名字，其余 TypeRef（std 的 `Error` 等）原样保留。
     fn substitute_type_refs(
@@ -2000,6 +2055,10 @@ impl<'a> ExpressionInferrer<'a> {
                                         args: type_args,
                                     });
                                 }
+                                eprintln!(
+                                    "PROBE26 ctor fn={:?} type_args={:?}",
+                                    fn_name, type_args
+                                );
                                 return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
                                     &generic_def,
                                     &type_args,
@@ -2278,14 +2337,30 @@ impl<'a> ExpressionInferrer<'a> {
                     // expression type matches it via unification.
                     let expected = self.expected_return_type.clone();
                     if let Some(ref expected) = expected {
-                        self.solver.unify(&ret_ty, expected).map_err(|_| {
-                            ErrorCodeDefinition::type_mismatch(
-                                &format!("{}", expected),
-                                &format!("{}", ret_ty),
-                            )
-                            .at(*span)
-                            .build()
-                        })?;
+                        // 返回位若含**未绑定的类型参数**（`List(TypeRef "A")`，A 是所在
+                        // 泛型的参数），先按名把该参数绑定到实际返回类型，再做常规 unify。
+                        // 否则 `unify(List(Int), List(TypeRef "A"))` 因「TypeRef 与具体类型
+                        // 无统一规则」而报 E1002——而这里 A := Int 是合法的。
+                        let bound_expected = Self::bind_type_params_from(expected, &ret_ty);
+                        if bound_expected != *expected {
+                            self.solver.unify(&ret_ty, &bound_expected).map_err(|_| {
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("{}", bound_expected),
+                                    &format!("{}", ret_ty),
+                                )
+                                .at(*span)
+                                .build()
+                            })?;
+                        } else {
+                            self.solver.unify(&ret_ty, expected).map_err(|_| {
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("{}", expected),
+                                    &format!("{}", ret_ty),
+                                )
+                                .at(*span)
+                                .build()
+                            })?;
+                        }
                         // RFC-011a §6: 具体值返回进存在类型返回位 → 检查实现并记录包装点
                         self.collect_existential_coercions(e, expected)?;
                     }
