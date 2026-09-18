@@ -1171,7 +1171,7 @@ impl<'a> ExpressionInferrer<'a> {
                 // 待真实需求出现时照 Dict 模式补全
                 let member_ty: Option<MonoType> = match &container_ty {
                     MonoType::Generic { name, args, .. } => match name.as_str() {
-                        "List" | "Array" | "Dict" => args.first().cloned(),
+                        "List" | "Vec" | "Array" | "Dict" => args.first().cloned(),
                         // ponytail: Tuple 异构成员，精确检查需逐成员回退试探，
                         // 真实误报面极小，需要时再加
                         "Tuple" => return Ok(MonoType::Bool),
@@ -1212,6 +1212,7 @@ impl<'a> ExpressionInferrer<'a> {
                 let container_ty = self.infer_expr(container)?;
                 match container_ty {
                     MonoType::Generic { name, args } if name == "List" => Ok(args[0].clone()),
+                    MonoType::Generic { name, args } if name == "Vec" => Ok(args[0].clone()),
                     MonoType::Generic { name, args } if name == "Array" => Ok(args[0].clone()),
                     MonoType::Generic { name, args } if name == "Dict" => Ok(args[1].clone()),
                     MonoType::Generic { name, args } if name == "Tuple" => {
@@ -1283,6 +1284,16 @@ impl<'a> ExpressionInferrer<'a> {
                 }
 
                 match resolved {
+                    // RFC-011 容器命名分层：`Vec(T)` / `Array(T, N)` 的长度。
+                    // 两者以 `length: Int` 暴露长度（与 Range 具名字字段同款处理）：
+                    // - `Array(T, N)`：N 编译期已知，但统一走同一读取路径，避免两套语义。
+                    // - `Vec(T)`：运行时长度，底层缓冲的长度。
+                    // - `List(T)`：库类型自己维护的 length 字段，不经此处。
+                    MonoType::Generic { ref name, .. }
+                        if (name == "Vec" || name == "Array") && field == "length" =>
+                    {
+                        Ok(MonoType::Int(64))
+                    }
                     // #302：Range 具名字段（start/end/step）
                     MonoType::Generic { ref name, .. } if name == "Range" => {
                         if matches!(field.as_str(), "start" | "end" | "step") {
@@ -2309,7 +2320,9 @@ impl<'a> ExpressionInferrer<'a> {
                 // 循环变量类型从可迭代对象取（此前硬编码 Char，靠
                 // 算术 fresh-var 兜底蒙混；硬化后按 check_for_stmt 同款分发）
                 let loop_var_ty = match &iter_ty {
-                    m if m.is_list() || m.is_array() => m.generic_args().unwrap()[0].clone(),
+                    m if m.is_list() || m.is_vec() || m.is_array() => {
+                        m.generic_args().unwrap()[0].clone()
+                    }
                     m if m.is_string() => MonoType::Char,
                     m if m.is_dict() => {
                         let args = m.generic_args().unwrap();

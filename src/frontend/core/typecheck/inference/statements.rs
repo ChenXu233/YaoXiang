@@ -1566,11 +1566,11 @@ impl StatementChecker {
                     (MonoType::Float(_), MonoType::Int(_))
                 );
                 if !is_int_to_float {
-                    // #300：Array 字面量落点校验——替代 #299 的整段 unify 豁免。
-                    // 豁免曾同时跳过元素类型与个数校验（维度1/2/3 裸奔）；
-                    // 此处显式校验：逐元素 unify(T)，N 为具体字面量时比对个数，
-                    // N 为符号常量（TypeRef，RFC-011 const 参数形态）时推迟个数校验。
-                    let array_seed_elems = if resolved_ann.is_array() {
+                    // RFC-011 容器命名分层：接受 List 字面量作初始值的容器类型。
+                    // - `Vec(T)`：运行时长度的可增长缓冲，语义与 List 字面量一致。
+                    // - `Array(T, N)`：定长，额外校验 N 与元素个数（#300）。
+                    // 两者都逐元素 unify(T)，并豁免随后的 List↔容器 unify。
+                    let seed_container = if resolved_ann.is_vec() || resolved_ann.is_array() {
                         match initializer {
                             Some(crate::frontend::core::parser::ast::Expr::List(elems, _)) => {
                                 Some(elems)
@@ -1580,9 +1580,11 @@ impl StatementChecker {
                     } else {
                         None
                     };
+                    let mut seed_matched = false;
                     if let (Some(elems), MonoType::Generic { args, .. }) =
-                        (array_seed_elems, &resolved_ann)
+                        (seed_container, &resolved_ann)
                     {
+                        seed_matched = true;
                         let elem_ann = &args[0];
                         for elem in elems.iter() {
                             let elem_ty = self.check_expr(elem)?;
@@ -1597,23 +1599,28 @@ impl StatementChecker {
                                 ));
                             }
                         }
-                        if let Some(MonoType::Literal {
-                            value: crate::frontend::core::types::const_data::ConstValue::Int(n),
-                            ..
-                        }) = args.get(1)
-                        {
-                            if *n != elems.len() as i128 {
-                                return Err(Box::new(
-                                    ErrorCodeDefinition::type_mismatch(
-                                        &format!("{}", ann_ty),
-                                        &format!("Array({}, {})", elem_ann, elems.len()),
-                                    )
-                                    .at(stmt_span)
-                                    .build(),
-                                ));
+                        // Array 专属：N 为具体字面量时比对元素个数
+                        // （N 为符号常量（TypeRef，RFC-011 const 参数形态）时推迟）。
+                        if resolved_ann.is_array() {
+                            if let Some(MonoType::Literal {
+                                value: crate::frontend::core::types::const_data::ConstValue::Int(n),
+                                ..
+                            }) = args.get(1)
+                            {
+                                if *n != elems.len() as i128 {
+                                    return Err(Box::new(
+                                        ErrorCodeDefinition::type_mismatch(
+                                            &format!("{}", ann_ty),
+                                            &format!("Array({}, {})", elem_ann, elems.len()),
+                                        )
+                                        .at(stmt_span)
+                                        .build(),
+                                    ));
+                                }
                             }
                         }
-                    } else {
+                    }
+                    if !seed_matched {
                         let unify_result = self.solver.unify(&resolved_init, &resolved_ann);
                         if unify_result.is_err() {
                             // Unify failed — check structural subtyping (interface assignment)

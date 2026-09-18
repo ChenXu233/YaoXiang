@@ -2667,6 +2667,35 @@ impl AstToIrGenerator {
                     });
                     return Ok(());
                 }
+                // 索引赋值：a[i] = v。
+                // 容器运行时值是堆句柄，StoreIndex 原地写共享对象——
+                // 与字段赋值同理（#266/#360）：Array/Vec/List 均按原地写处理，
+                // 语义与值语义的 list.set 区分开（后者在 std 层返回新列表）。
+                if let Expr::Index {
+                    expr: base_expr,
+                    index: index_expr,
+                    ..
+                } = target.as_ref()
+                {
+                    let value_expr = value.as_ref().ok_or_else(|| {
+                        ErrorCodeDefinition::ir_internal_error("索引赋值缺少右侧值")
+                            .at(*span)
+                            .build()
+                    })?;
+                    let base_reg = self.next_temp_reg();
+                    self.generate_expr_ir(base_expr, base_reg, instructions, constants)?;
+                    let index_reg = self.next_temp_reg();
+                    self.generate_expr_ir(index_expr, index_reg, instructions, constants)?;
+                    let val_reg = self.next_temp_reg();
+                    self.generate_expr_ir(value_expr, val_reg, instructions, constants)?;
+                    instructions.push(Instruction::StoreIndex {
+                        dst: Operand::Local(base_reg),
+                        index: Operand::Local(index_reg),
+                        src: Operand::Local(val_reg),
+                        span: *span,
+                    });
+                    return Ok(());
+                }
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
                     // 不认识的赋值目标：显式报错，不静默吞掉（#266）
@@ -4086,7 +4115,8 @@ impl AstToIrGenerator {
                 let base_ty = self.get_expr_mono_type(base);
                 match base_ty {
                     Some(MonoType::Generic { name, args })
-                        if (name == "List" || name == "Array") && args.len() == 1 =>
+                        if (name == "List" || name == "Vec" || name == "Array")
+                            && args.len() == 1 =>
                     {
                         Some(args[0].clone())
                     }
@@ -4222,7 +4252,8 @@ impl AstToIrGenerator {
                 let base_ty = self.receiver_base_mono_type(base)?;
                 match base_ty {
                     MonoType::Generic { name, args }
-                        if (name == "List" || name == "Array") && args.len() == 1 =>
+                        if (name == "List" || name == "Vec" || name == "Array")
+                            && args.len() == 1 =>
                     {
                         self.existential_interface_of(&args[0])
                     }
@@ -5328,6 +5359,22 @@ impl AstToIrGenerator {
                     args: vec![],
                     span: *span,
                     def: None,
+                });
+            } else if field == "length"
+                && matches!(
+                    self.get_expr_mono_type(expr),
+                    Some(ref t) if t.is_vec() || t.is_array()
+                )
+            {
+                // RFC-011 容器命名分层：`Vec(T)` / `Array(T, N)` 的 `.length`。
+                // 复用 StringLength 指令（已泛化为通用长度读取），
+                // 与 Range 具名字字段同模式：类型层认字段、IR 层脱糖成原语。
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                instructions.push(Instruction::StringLength {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    span: *span,
                 });
             } else {
                 // 普通字段访问

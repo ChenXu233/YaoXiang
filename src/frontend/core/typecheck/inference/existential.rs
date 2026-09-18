@@ -117,7 +117,7 @@ fn walk(
     let expected = solver.resolve_type(expected);
     match &expected {
         MonoType::Generic { name, args }
-            if (name == "List" || name == "Array") && args.len() == 1 =>
+            if (name == "List" || name == "Vec" || name == "Array") && args.len() == 1 =>
         {
             if let Expr::List(elems, _) = expr {
                 for e in elems {

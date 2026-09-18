@@ -1573,6 +1573,91 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
+                    opcode::STRING_LENGTH => {
+                        // StringLength: dst(1) + src(1)。
+                        // 长度读取（String / List / Array / Tuple / Dict 共用）。
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringLength {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STRING_CONCAT => {
+                        // StringConcat: dst(1) + str1(1) + str2(1)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let str1 = instr.operands[1] as u16;
+                            let str2 = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringConcat {
+                                dst: Reg(dst),
+                                str1: Reg(str1),
+                                str2: Reg(str2),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STRING_EQUAL => {
+                        // StringEqual: dst(1) + str1(1) + str2(1)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let str1 = instr.operands[1] as u16;
+                            let str2 = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringEqual {
+                                dst: Reg(dst),
+                                str1: Reg(str1),
+                                str2: Reg(str2),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STRING_GET_CHAR => {
+                        // StringGetChar: dst(1) + src(1) + index(1)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            let index = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringGetChar {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                                index: Reg(index),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STRING_FROM_INT => {
+                        // StringFromInt: dst(1) + src(1)
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringFromInt {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STRING_FROM_FLOAT => {
+                        // StringFromFloat: dst(1) + src(1)
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringFromFloat {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
                     opcode::LOAD_LOCAL => {
                         // LoadLocal: dst(1) + local_idx(1)
                         if instr.operands.len() >= 2 {
