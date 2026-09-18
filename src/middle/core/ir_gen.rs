@@ -1294,10 +1294,12 @@ impl AstToIrGenerator {
                         constants,
                     )
                 } else if !params.is_empty() || !body.is_empty() || is_fn_binding {
-                    // Fn: 普通函数（含**空块体** `f = { }`——裁决 C 下无注解即函数，
-                    // 块体可为空；不能因 `body.is_empty()` 就落到值绑定分支，
-                    // 否则 `f()` 解析不到函数（#356 修复过程中发现）。
-                    // Fn: 普通函数
+                    // Fn: 普通函数（含**空块体**的注解形态 `f: () -> Void = { }`——
+                    // 裁决 C 下注解为 Fn 即函数；不能因 `body.is_empty()` 就落到
+                    // 值绑定分支，否则 `f()` 解析不到函数。
+                    //
+                    // 注：无注解的空块 `f = { }` 到不了这里——它在 parser 层就被
+                    // 认作**空 Dict 字面量**（`{}` 二义，见 #359），属值绑定。
                     let generic_param_names = if generic_params.is_empty() {
                         None
                     } else {
