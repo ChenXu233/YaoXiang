@@ -354,3 +354,285 @@ fn test_ref_type_mutable_maps_to_void_ir_type() {
         "Mutable Ref<String> should map to IrType::Void (ZST has no runtime repr)"
     );
 }
+
+// ── 编解码漂移护栏 ────────────────────────────────────────────
+
+/// 断言「编码器能产出的每个 opcode，解码器都有对应分支」。
+///
+/// 背景：解码器曾只覆盖 57/83 个 opcode，其余落到静默兜底变 `Nop`——
+/// `RC_NEW`(0x89) 即因此让弱引用功能静默失效。该兜底现已改为 panic，
+/// 本测试把「漂移」提前到编译/测试期暴露，而非运行到某个用例才炸。
+///
+/// 做法：遍历 `BytecodeInstr::opcode()` 的映射（编码方向），对每个 opcode
+/// 构造一条最小指令再解码，断言解出的**指令种类与编码前一致**（不是 Nop）。
+#[test]
+fn test_every_opcode_roundtrips_not_silently_nop() {
+    use crate::backends::common::opcode;
+    use crate::middle::bytecode::{BinaryOp, BytecodeInstr, CompareOp, Label, Reg};
+
+    // (指令, 期望的 opcode) —— 覆盖解码器现支持的全部指令种类
+    let cases: Vec<(BytecodeInstr, u8)> = vec![
+        (BytecodeInstr::Nop, opcode::NOP),
+        (
+            BytecodeInstr::Mov {
+                dst: Reg(1),
+                src: Reg(2),
+            },
+            opcode::MOV,
+        ),
+        (
+            BytecodeInstr::LoadConst {
+                dst: Reg(1),
+                const_idx: 0,
+            },
+            opcode::LOAD_CONST,
+        ),
+        (
+            BytecodeInstr::LoadLocal {
+                dst: Reg(1),
+                local_idx: 0,
+            },
+            opcode::LOAD_LOCAL,
+        ),
+        (
+            BytecodeInstr::StoreLocal {
+                local_idx: 0,
+                src: Reg(1),
+            },
+            opcode::STORE_LOCAL,
+        ),
+        (
+            BytecodeInstr::LoadArg {
+                dst: Reg(1),
+                arg_idx: 0,
+            },
+            opcode::LOAD_ARG,
+        ),
+        (
+            BytecodeInstr::LoadGlobal {
+                dst: Reg(1),
+                global_idx: 0,
+            },
+            opcode::LOAD_GLOBAL,
+        ),
+        (
+            BytecodeInstr::StoreGlobal {
+                global_idx: 0,
+                src: Reg(1),
+            },
+            opcode::STORE_GLOBAL,
+        ),
+        (
+            BytecodeInstr::BinaryOp {
+                dst: Reg(1),
+                lhs: Reg(2),
+                rhs: Reg(3),
+                op: BinaryOp::Add,
+            },
+            opcode::I64_ADD,
+        ),
+        (
+            BytecodeInstr::Compare {
+                dst: Reg(1),
+                lhs: Reg(2),
+                rhs: Reg(3),
+                cmp: CompareOp::Eq,
+            },
+            opcode::I64_EQ,
+        ),
+        (BytecodeInstr::Return, opcode::RETURN),
+        (
+            BytecodeInstr::ReturnValue { value: Reg(0) },
+            opcode::RETURN_VALUE,
+        ),
+        (BytecodeInstr::Jmp { target: Label(0) }, opcode::JMP),
+        (
+            BytecodeInstr::JmpIf {
+                cond: Reg(0),
+                target: Label(0),
+            },
+            opcode::JMP_IF,
+        ),
+        (
+            BytecodeInstr::JmpIfNot {
+                cond: Reg(0),
+                target: Label(0),
+            },
+            opcode::JMP_IF_NOT,
+        ),
+        // 引用计数族（本次修复的重点）
+        (
+            BytecodeInstr::ArcNew {
+                dst: Reg(1),
+                src: Reg(2),
+            },
+            opcode::ARC_NEW,
+        ),
+        (
+            BytecodeInstr::RcNew {
+                dst: Reg(1),
+                src: Reg(2),
+            },
+            opcode::RC_NEW,
+        ),
+        (
+            BytecodeInstr::ArcClone {
+                dst: Reg(1),
+                src: Reg(2),
+            },
+            opcode::ARC_CLONE,
+        ),
+        (BytecodeInstr::ArcDrop { src: Reg(1) }, opcode::ARC_DROP),
+        (
+            BytecodeInstr::WeakNew {
+                dst: Reg(1),
+                src: Reg(2),
+            },
+            opcode::WEAK_NEW,
+        ),
+        (
+            BytecodeInstr::WeakUpgrade {
+                dst: Reg(1),
+                src: Reg(2),
+            },
+            opcode::WEAK_UPGRADE,
+        ),
+        (
+            BytecodeInstr::Borrow {
+                dst: Reg(1),
+                src: Reg(2),
+                mutable: false,
+            },
+            opcode::BORROW,
+        ),
+        (BytecodeInstr::Release { src: Reg(1) }, opcode::RELEASE),
+        // 内存与类型
+        (BytecodeInstr::Drop { value: Reg(0) }, opcode::DROP),
+        (
+            BytecodeInstr::StackAlloc {
+                dst: Reg(0),
+                size: 1,
+            },
+            opcode::STACK_ALLOC,
+        ),
+        (
+            BytecodeInstr::HeapAlloc {
+                dst: Reg(0),
+                type_id: 0,
+            },
+            opcode::HEAP_ALLOC,
+        ),
+        (
+            BytecodeInstr::CloseUpvalue { src: Reg(0) },
+            opcode::CLOSE_UPVALUE,
+        ),
+        (
+            BytecodeInstr::Cast {
+                dst: Reg(0),
+                src: Reg(1),
+                target_type_id: 0,
+            },
+            opcode::CAST,
+        ),
+        (
+            BytecodeInstr::TypeCheck {
+                value: Reg(0),
+                type_id: 0,
+            },
+            opcode::TYPE_CHECK,
+        ),
+        (
+            BytecodeInstr::TypeOf {
+                dst: Reg(0),
+                src: Reg(1),
+            },
+            opcode::TYPE_OF,
+        ),
+        (
+            BytecodeInstr::BoundsCheck {
+                array: Reg(0),
+                index: Reg(1),
+            },
+            opcode::BOUNDS_CHECK,
+        ),
+        // 字符串
+        (
+            BytecodeInstr::StringLength {
+                dst: Reg(0),
+                src: Reg(1),
+            },
+            opcode::STRING_LENGTH,
+        ),
+        (
+            BytecodeInstr::StringConcat {
+                dst: Reg(0),
+                str1: Reg(1),
+                str2: Reg(2),
+            },
+            opcode::STRING_CONCAT,
+        ),
+        (
+            BytecodeInstr::StringEqual {
+                dst: Reg(0),
+                str1: Reg(1),
+                str2: Reg(2),
+            },
+            opcode::STRING_EQUAL,
+        ),
+        (
+            BytecodeInstr::StringGetChar {
+                dst: Reg(0),
+                src: Reg(1),
+                index: Reg(2),
+            },
+            opcode::STRING_GET_CHAR,
+        ),
+        (
+            BytecodeInstr::StringFromInt {
+                dst: Reg(0),
+                src: Reg(1),
+            },
+            opcode::STRING_FROM_INT,
+        ),
+        (
+            BytecodeInstr::StringFromFloat {
+                dst: Reg(0),
+                src: Reg(1),
+            },
+            opcode::STRING_FROM_FLOAT,
+        ),
+        // 异常
+        (BytecodeInstr::TryEnd, opcode::TRY_END),
+        (BytecodeInstr::Throw { error: Reg(0) }, opcode::THROW),
+    ];
+
+    for (instr, expected_opcode) in cases {
+        // Arrange: 按 operand_len 表填充合法长度的操作数
+        let opcode_val = instr.opcode();
+        assert_eq!(
+            opcode_val, expected_opcode,
+            "编码方向 opcode 不符：{instr:?}"
+        );
+        let operand_len = instr.size();
+        let encoded = BytecodeInstruction::new(opcode_val, vec![0u8; operand_len]);
+
+        // Act
+        let module = build_and_decode(vec![encoded]);
+        let decoded = &module.functions[0].instructions;
+
+        // Assert: 解出的指令种类与编码前一致（不得是静默 Nop 兜底）
+        assert_eq!(
+            decoded.len(),
+            1,
+            "{instr:?} 解码后指令数应为 1，实际 {}",
+            decoded.len()
+        );
+        assert_eq!(
+            std::mem::discriminant(&decoded[0]),
+            std::mem::discriminant(&instr),
+            "opcode 0x{opcode_val:02X} 解码后指令种类变了——编码器与解码器漂移。\
+             编码前 {instr:?}，解码后 {:?}",
+            decoded[0]
+        );
+    }
+}
