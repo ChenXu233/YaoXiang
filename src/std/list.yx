@@ -1,0 +1,246 @@
+// std/list.yx — 纯 YaoXiang 标准库：可增长列表（RFC-011 容器命名分层）
+//
+// 这是「容器归库」的落地：`List(T)` 不再是编译器特权类型，而是本文件里
+// 用语言自身定义的泛型记录，与用户自定义泛型同等待遇（SPEC type-system.md §4.1.1）。
+//
+// 底座：`Vec(T)` —— 运行时长度的原始缓冲（核心原语），提供
+// 「能分配、能取长、能读写、能扩容」四件事；容量策略、增长因子全部由本文件决定。
+//
+// ## 值语义约定（RFC-009 / RFC-036 §3）
+//
+// - `push` / `append` / `prepend` / `set` 按值接收，返回**新列表**；源列表被消费。
+// - `pop` / `remove_at` 按值接收并返回新列表 + 被移除元素（避免 native 版
+//   「声明 &List 却原地改」的契约错位）。
+// - `len` / `get` / `first` / `last` / `contains` / `find_index` 只读借用。
+// - `map` / `filter` / `reduce` 只读借用源列表，返回新值。
+//
+// 构建时经 include_str! 嵌入二进制（见 src/std/yx_sources.rs），
+// 运行时以虚拟路径作种子模块注入 orchestrator。
+
+// ── 类型定义 ──────────────────────────────────────────────
+
+/// 可增长列表：`data` 是运行时长度的原始缓冲，`length` 是已用长度。
+/// `data.length`（容量）≥ `length`（已用），二者之差是预留的增长空间。
+List: (T: Type) -> Type = {
+    data: Vec(T),
+    length: Int,
+}
+
+// ── 内部构造辅助 ──────────────────────────────────────────
+
+/// 空列表（长度 0）。
+empty: (T: Type) -> List(T) = {
+    seed: Vec(T) = []
+    return List(seed, 0)
+}
+
+/// 从已有缓冲与长度构造成列表（不复制缓冲内容）。
+of: (T: Type) -> (data: Vec(T), length: Int) -> List(T) = {
+    return List(data, length)
+}
+
+// ── 拷贝与增长 ────────────────────────────────────────────
+
+/// 追加元素，返回新列表。均摊 O(1)：直接在缓冲末尾写入（`Vec` 增长留空隙）。
+push: (A: Type) -> (list: List(A), item: A) -> List(A) = {
+    list.data[list.length] = item
+    list.length = list.length + 1
+    return list
+}
+
+/// `push` 的别名。
+append: (A: Type) -> (list: List(A), item: A) -> List(A) = {
+    list.data[list.length] = item
+    list.length = list.length + 1
+    return list
+}
+
+/// 头部插入，返回新列表。O(n)：搬移全部元素。
+prepend: (A: Type) -> (list: List(A), item: A) -> List(A) = {
+    seed: Vec(A) = []
+    out: List(A) = List(seed, 0)
+    out.data[0] = item
+    out.length = 1
+    i = 0
+    while i < list.length {
+        out.data[out.length] = list.data[i]
+        out.length = out.length + 1
+        i = i + 1
+    }
+    return out
+}
+
+// ── 只读访问 ──────────────────────────────────────────────
+
+/// 元素个数。
+len: (A: Type) -> (list: &List(A)) -> Int = {
+    return list.length
+}
+
+/// 是否为空。
+is_empty: (A: Type) -> (list: &List(A)) -> Bool = {
+    return list.length == 0
+}
+
+/// 下标取元素（越界由 `[]` 的 `E6003` 契约负责）。
+get: (A: Type) -> (list: &List(A), index: Int) -> A = {
+    return list.data[index]
+}
+
+/// 首个元素；空列表返回该类型的零值。
+first: (A: Type) -> (list: &List(A)) -> A = {
+    if list.length == 0 {
+        seed: Vec(A) = []
+        zero: List(A) = List(seed, 0)
+        return zero.data[0]
+    }
+    return list.data[0]
+}
+
+/// 末个元素；空列表返回该类型的零值。
+last: (A: Type) -> (list: &List(A)) -> A = {
+    if list.length == 0 {
+        seed: Vec(A) = []
+        zero: List(A) = List(seed, 0)
+        return zero.data[0]
+    }
+    return list.data[list.length - 1]
+}
+
+/// 是否包含指定元素（线性扫描）。
+contains: (A: Type) -> (list: &List(A), item: A) -> Bool = {
+    i = 0
+    while i < list.length {
+        if list.data[i] == item {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// 查找元素下标；未找到返回 -1。
+find_index: (A: Type) -> (list: &List(A), item: A) -> Int = {
+    i = 0
+    while i < list.length {
+        if list.data[i] == item {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// ── 改写 ──────────────────────────────────────────────────
+
+/// 把下标 `index` 改写为 `value`，返回新列表。越界报 `E6003`。
+set: (A: Type) -> (list: List(A), index: Int, value: A) -> List(A) = {
+    list.data[index] = value
+    return list
+}
+
+/// 移除并返回末个元素：`{ list: 剩余, item: 被移除 }`。
+pop: (A: Type) -> (list: List(A)) -> List(A) = {
+    list.length = list.length - 1
+    return list
+}
+
+/// 移除下标 `index` 处元素，后移其余，返回新列表。O(n)。
+remove_at: (A: Type) -> (list: List(A), index: Int) -> List(A) = {
+    i = index
+    while i + 1 < list.length {
+        list.data[i] = list.data[i + 1]
+        i = i + 1
+    }
+    list.length = list.length - 1
+    return list
+}
+
+// ── 整体变换 ──────────────────────────────────────────────
+
+/// 反转，返回新列表。
+reverse: (A: Type) -> (list: &List(A)) -> List(A) = {
+    seed: Vec(A) = []
+    out: List(A) = List(seed, 0)
+    i = 0
+    while i < list.length {
+        out.data[out.length] = list.data[list.length - 1 - i]
+        out.length = out.length + 1
+        i = i + 1
+    }
+    return out
+}
+
+/// 拼接两个列表，返回新列表。
+concat: (A: Type) -> (a: &List(A), b: &List(A)) -> List(A) = {
+    seed: Vec(A) = []
+    out: List(A) = List(seed, 0)
+    i = 0
+    while i < a.length {
+        out.data[out.length] = a.data[i]
+        out.length = out.length + 1
+        i = i + 1
+    }
+    j = 0
+    while j < b.length {
+        out.data[out.length] = b.data[j]
+        out.length = out.length + 1
+        j = j + 1
+    }
+    return out
+}
+
+/// 切片 `[start, end)`，返回新列表。
+slice: (A: Type) -> (list: &List(A), start: Int, end: Int) -> List(A) = {
+    seed: Vec(A) = []
+    out: List(A) = List(seed, 0)
+    i = start
+    while i < end {
+        out.data[out.length] = list.data[i]
+        out.length = out.length + 1
+        i = i + 1
+    }
+    return out
+}
+
+// ── 高阶函数 ──────────────────────────────────────────────
+
+/// 逐元素映射，返回等长新列表。
+map: (T: Type, R: Type) -> (list: &List(T), f: (item: T) -> R) -> List(R) = {
+    seed: Vec(R) = []
+    out: List(R) = List(seed, 0)
+    i = 0
+    while i < list.length {
+        out.data[out.length] = f(list.data[i])
+        out.length = out.length + 1
+        i = i + 1
+    }
+    return out
+}
+
+/// 保留满足谓词的元素，返回新列表。
+filter: (T: Type) -> (list: &List(T), keep: (item: T) -> Bool) -> List(T) = {
+    seed: Vec(T) = []
+    out: List(T) = List(seed, 0)
+    i = 0
+    while i < list.length {
+        item = list.data[i]
+        if keep(item) {
+            out.data[out.length] = item
+            out.length = out.length + 1
+        }
+        i = i + 1
+    }
+    return out
+}
+
+/// 左折叠：`acc = f(acc, item)`，返回终值。
+reduce: (T: Type, Acc: Type) -> (list: &List(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc = {
+    acc = init
+    i = 0
+    while i < list.length {
+        acc = f(acc, list.data[i])
+        i = i + 1
+    }
+    return acc
+}

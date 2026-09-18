@@ -65,6 +65,13 @@ pub struct StatementChecker {
     >,
     /// 方法绑定表: "Type.method" -> MonoType
     method_bindings: HashMap<String, MonoType>,
+    /// 泛型函数的**声明序类型参数名**：函数名 -> ["T", "Acc", ...]。
+    ///
+    /// 为什么需要单独一张表：`MonoType` 里类型参数只是普通 `TypeRef("T")`，
+    /// 无法与「恰好没在本地注册的普通类型名」（std 的 `Error`/`Iterator` 等）
+    /// 区分。调用点要做正确的类型参数替换就必须知道**声明**了哪些名字。
+    /// `PolyType.type_binders` 存的是 `TypeVar`（编号），拿不回名字，故单列。
+    generic_fn_type_params: HashMap<String, Vec<String>>,
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析
     type_defs: HashMap<String, MonoType>,
@@ -119,6 +126,7 @@ impl StatementChecker {
             expected_return_type: None,
             generic_type_defs: std::collections::HashMap::new(),
             method_bindings: HashMap::new(),
+            generic_fn_type_params: HashMap::new(),
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
             call_ownership: super::call_ownership::CallOwnershipTable::new(),
@@ -1190,6 +1198,24 @@ impl StatementChecker {
             }
         }
 
+        // 记录本函数的声明序类型参数名（调用点做类型参数替换时要用）。
+        // 只登记非空的情况，避免污染普通函数。
+        {
+            let names: Vec<String> = generic_params
+                .iter()
+                .filter(|p| {
+                    matches!(
+                        p.kind,
+                        crate::frontend::core::parser::ast::GenericParamKind::Type
+                    )
+                })
+                .map(|p| p.name.clone())
+                .collect();
+            if !names.is_empty() {
+                self.generic_fn_type_params.insert(name.to_string(), names);
+            }
+        }
+
         // 提取 Type 级别的泛型参数
         let type_generic_params: Vec<_> = generic_params
             .iter()
@@ -1687,6 +1713,29 @@ impl StatementChecker {
                     && matches!(resolved_init, MonoType::Struct(_))
                 {
                     resolved_init
+                } else if let crate::frontend::core::parser::ast::Type::Generic {
+                    name, args, ..
+                } = type_ann
+                {
+                    // 泛型注解（`L(Int)`）：存回 **Generic 形态**而非展开后的 Struct。
+                    //
+                    // 展开后的 Struct 只能携带字段布局，**丢掉类型实参**（`L(Int)` → 只余
+                    // 名字 `L`）——后续把该变量传给泛型函数或取 `&` 时，实参类型变成裸
+                    // `L`，与形参 `L(T)` 不匹配（E1002）。
+                    // 实例化后的 Struct 仍用于上方字段/元素校验，但入 scope 的须是带参形式。
+                    //
+                    // 例外：实参含未绑定类型参数（泛型方法体内引用自身参数）时，
+                    // try_instantiate 已返回 None，ann_ty 本就是 Generic，取之即可。
+                    if matches!(ann_ty, MonoType::Generic { .. }) {
+                        ann_ty
+                    } else {
+                        let arg_types: Vec<MonoType> =
+                            args.iter().map(|a| MonoType::from(a.clone())).collect();
+                        MonoType::Generic {
+                            name: name.clone(),
+                            args: arg_types,
+                        }
+                    }
                 } else {
                     ann_ty
                 }
@@ -2029,7 +2078,9 @@ impl StatementChecker {
                             );
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_type_defs(&self.type_defs);
+                        inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
+                        inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                         inferrer.set_loop_depth(self.loop_depth);
@@ -2103,6 +2154,7 @@ impl StatementChecker {
                 );
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
+                inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                 inferrer.set_loop_depth(self.loop_depth);
