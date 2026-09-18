@@ -1933,6 +1933,217 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
+                    // ── 其余曾缺解码分支的指令 ─────────────────────────
+                    // 格式依据本文档 `BytecodeInstr::operand_len` 的长度表与各变体
+                    // 的字段定义。此前这些 opcode 落到静默兜底变 Nop——会让
+                    // 「编码器产出、解码器不认」的功能静默失效（如 ref 创建 Arc）。
+                    opcode::DROP => {
+                        // Drop: value(2)
+                        decoded_instructions.push(BytecodeInstr::Drop {
+                            value: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                        });
+                    }
+                    opcode::CLOSE_UPVALUE => {
+                        // CloseUpvalue: src(2)
+                        decoded_instructions.push(BytecodeInstr::CloseUpvalue {
+                            src: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                        });
+                    }
+                    opcode::STACK_ALLOC => {
+                        // StackAlloc: dst(2) + size(2)
+                        decoded_instructions.push(BytecodeInstr::StackAlloc {
+                            dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            size: op_u16(&instr.operands, 2).unwrap_or(0),
+                        });
+                    }
+                    opcode::HEAP_ALLOC => {
+                        // HeapAlloc: dst(2) + type_id(2)
+                        decoded_instructions.push(BytecodeInstr::HeapAlloc {
+                            dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            type_id: op_u16(&instr.operands, 2).unwrap_or(0),
+                        });
+                    }
+                    opcode::CAST => {
+                        // Cast: dst(2) + src(2) + target_type_id(2)
+                        decoded_instructions.push(BytecodeInstr::Cast {
+                            dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                            target_type_id: op_u16(&instr.operands, 4).unwrap_or(0),
+                        });
+                    }
+                    opcode::TYPE_CHECK => {
+                        // TypeCheck: value(2) + type_id(2)
+                        decoded_instructions.push(BytecodeInstr::TypeCheck {
+                            value: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            type_id: op_u16(&instr.operands, 2).unwrap_or(0),
+                        });
+                    }
+                    opcode::TYPE_OF => {
+                        // TypeOf: dst(2) + src(2)
+                        decoded_instructions.push(BytecodeInstr::TypeOf {
+                            dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                        });
+                    }
+                    opcode::STRING_LENGTH => {
+                        // StringLength: dst(2) + src(2)
+                        decoded_instructions.push(BytecodeInstr::StringLength {
+                            dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                        });
+                    }
+                    opcode::STRING_CONCAT => {
+                        // StringConcat: dst(2) + str1(2) + str2(2)
+                        decoded_instructions.push(BytecodeInstr::StringConcat {
+                            dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            str1: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                            str2: Reg(op_u16(&instr.operands, 4).unwrap_or(0)),
+                        });
+                    }
+                    opcode::STRING_EQUAL => {
+                        // StringEqual: dst(2) + str1(2) + str2(2)
+                        decoded_instructions.push(BytecodeInstr::StringEqual {
+                            dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            str1: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                            str2: Reg(op_u16(&instr.operands, 4).unwrap_or(0)),
+                        });
+                    }
+                    opcode::STRING_GET_CHAR => {
+                        // StringGetChar: dst(2) + src(2) + index(2)
+                        decoded_instructions.push(BytecodeInstr::StringGetChar {
+                            dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                            index: Reg(op_u16(&instr.operands, 4).unwrap_or(0)),
+                        });
+                    }
+                    opcode::STRING_FROM_INT => {
+                        // StringFromInt: dst(2) + src(2)
+                        decoded_instructions.push(BytecodeInstr::StringFromInt {
+                            dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                        });
+                    }
+                    opcode::STRING_FROM_FLOAT => {
+                        // StringFromFloat: dst(2) + src(2)
+                        decoded_instructions.push(BytecodeInstr::StringFromFloat {
+                            dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                        });
+                    }
+                    opcode::TRY_BEGIN => {
+                        // TryBegin: catch_target(4)
+                        decoded_instructions.push(BytecodeInstr::TryBegin {
+                            catch_target: Label(op_u32(&instr.operands, 0).unwrap_or(0)),
+                        });
+                    }
+                    opcode::TRY_END => {
+                        decoded_instructions.push(BytecodeInstr::TryEnd);
+                    }
+                    opcode::THROW => {
+                        // Throw: error(2)
+                        decoded_instructions.push(BytecodeInstr::Throw {
+                            error: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                        });
+                    }
+                    opcode::BOUNDS_CHECK => {
+                        // BoundsCheck: array(2) + index(2)
+                        decoded_instructions.push(BytecodeInstr::BoundsCheck {
+                            array: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            index: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                        });
+                    }
+                    opcode::TAIL_CALL => {
+                        // TailCall: func_id(4) + base_arg_reg(1) + argc(1)
+                        // 注：IR `TailCall` 目前无生成点（死路径），此处补齐
+                        // 格式以免未来接通时静默失效。
+                        let func_id = op_u32(&instr.operands, 0).unwrap_or(0);
+                        let base_arg_reg = instr.operands.get(4).copied().unwrap_or(0);
+                        let argc = instr.operands.get(5).copied().unwrap_or(0);
+                        let mut args = Vec::with_capacity(argc as usize);
+                        for k in 0..argc as usize {
+                            args.push(Reg(base_arg_reg as u16 + k as u16));
+                        }
+                        decoded_instructions.push(BytecodeInstr::CallStatic {
+                            dst: None,
+                            func: func_id,
+                            args,
+                        });
+                    }
+                    // Nop 是合法的填充指令（编译器用于对齐/占位），显式识别。
+                    // 此前无分支 → 落到静默兜底「未知 opcode 用 Nop」而侥幸正确；
+                    // 该兜底改为 panic 后必须显式处理，否则合法字节码也会失败。
+                    opcode::NOP => {
+                        decoded_instructions.push(BytecodeInstr::Nop);
+                    }
+                    // ── 引用计数族 ─────────────────────────────────────
+                    // 编码格式见本文档 `BytecodeInstr::operand_len`（dst(2)+src(2)=4）。
+                    // 此前这 6 个 opcode 无解码分支，落到 `_ =>` 静默变 Nop——
+                    // `ref 42`（弱引用创建）即触发，功能静默失效。
+                    opcode::ARC_NEW => {
+                        // ArcNew: dst(2) + src(2)
+                        if instr.operands.len() >= 4 {
+                            decoded_instructions.push(BytecodeInstr::ArcNew {
+                                dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                                src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::RC_NEW => {
+                        // RcNew: dst(2) + src(2)
+                        if instr.operands.len() >= 4 {
+                            decoded_instructions.push(BytecodeInstr::RcNew {
+                                dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                                src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::ARC_CLONE => {
+                        // ArcClone: dst(2) + src(2)
+                        if instr.operands.len() >= 4 {
+                            decoded_instructions.push(BytecodeInstr::ArcClone {
+                                dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                                src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::ARC_DROP => {
+                        // ArcDrop: src(2)
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::ArcDrop {
+                                src: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::WEAK_NEW => {
+                        // WeakNew: dst(2) + src(2)
+                        if instr.operands.len() >= 4 {
+                            decoded_instructions.push(BytecodeInstr::WeakNew {
+                                dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                                src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::WEAK_UPGRADE => {
+                        // WeakUpgrade: dst(2) + src(2)
+                        if instr.operands.len() >= 4 {
+                            decoded_instructions.push(BytecodeInstr::WeakUpgrade {
+                                dst: Reg(op_u16(&instr.operands, 0).unwrap_or(0)),
+                                src: Reg(op_u16(&instr.operands, 2).unwrap_or(0)),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
                     opcode::RELEASE => {
                         // Release: src(2)
                         if instr.operands.len() >= 2 {
@@ -1972,9 +2183,18 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
-                    _ => {
-                        // Unknown opcode, use Nop
-                        decoded_instructions.push(BytecodeInstr::Nop);
+                    unknown => {
+                        // 未知 opcode 不再静默变 Nop（#271 静默兜底族）：
+                        // 静默吞掉会让「编码器与解码器漂移」表现为功能莫名失效，
+                        // 且丢失全部定位信息。此处显式 panic 并给出 opcode 值。
+                        //
+                        // 注：`From` trait 无法返回 `Result`，故用 panic 而非错误返回。
+                        // 后续应把该转换改为 `TryFrom`（调用点 13 处），使未知 opcode
+                        // 可被上层诊断渲染而非终止进程。
+                        panic!(
+                            "字节码解码遇到未知 opcode 0x{unknown:02X}（函数 '{}'，指令 #{ip}）——                             编码器与解码器可能已漂移，请核对 opcode.rs 与 bytecode.rs 的分支表",
+                            func.name
+                        );
                     }
                 }
                 ip += 1;
