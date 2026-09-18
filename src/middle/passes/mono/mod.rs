@@ -16,7 +16,7 @@ use function::FunctionMonomorphizer;
 use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 
 /// 是否含符号化类型实参（TypeRef(泛型参数名)）——#335 路径 A 的 deferred 分流依据
@@ -259,7 +259,11 @@ impl Monomorphizer {
             .cloned()
             .collect();
 
-        for func in self.specialized_functions.values() {
+        // HashMap 迭代顺序随进程随机化，直接发射会让同一份源码产出不同的
+        // 函数序号（进而 .42 字节不同、dump 不可复现）。按名排序固定顺序。
+        let mut specialized: Vec<&FunctionIR> = self.specialized_functions.values().collect();
+        specialized.sort_by(|a, b| a.name.cmp(&b.name));
+        for func in specialized {
             functions.push(func.clone());
         }
 
@@ -306,10 +310,14 @@ impl Monomorphizer {
         let new_return_type = self.substitute_single_type(&generic.return_type, &type_map);
 
         // 替换局部变量类型
-        let new_locals: Vec<MonoType> = match &generic.body {
+        let new_locals: Vec<LocalSlot> = match &generic.body {
             FunctionBody::Code { locals, .. } => locals
                 .iter()
-                .map(|ty| self.substitute_single_type(ty, &type_map))
+                .map(|slot| LocalSlot {
+                    name: slot.name.clone(),
+                    ty: self.substitute_single_type(&slot.ty, &type_map),
+                    scope_depth: slot.scope_depth,
+                })
                 .collect(),
             _ => Vec::new(),
         };
@@ -454,8 +462,8 @@ impl Monomorphizer {
 
         // 扫描 locals 和指令中的类型
         if let FunctionBody::Code { locals, blocks, .. } = &func.body {
-            for ty in locals {
-                self.collect_generic_type_refs(ty, depth);
+            for slot in locals {
+                self.collect_generic_type_refs(&slot.ty, depth);
             }
             for block in blocks {
                 for instr in &block.instructions {

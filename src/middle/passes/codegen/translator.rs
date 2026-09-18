@@ -4,7 +4,7 @@
 
 use crate::backends::common::opcode;
 use crate::middle::core::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::Reg;
@@ -204,6 +204,7 @@ impl Translator {
             return_type: MonoType::Void,
             instructions,
             local_count: 0,
+            local_names: HashMap::new(),
             debug_map: HashMap::new(),
         })
     }
@@ -221,9 +222,15 @@ impl Translator {
         let mut pending_jumps: Vec<(usize, usize, u8)> = Vec::new(); // (bytecode_idx, target_ir_idx, opcode)
         let mut global_ir_index = 0;
 
-        let (blocks_ref, locals_len) = match &func.body {
+        let (blocks_ref, locals_len, local_names) = match &func.body {
             FunctionBody::Code { blocks, locals, .. } => {
-                (blocks.iter().collect::<Vec<_>>(), locals.len())
+                // 只保留具名槽位；临时寄存器不进调试信息
+                let names: HashMap<usize, String> = locals
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, slot)| slot.name.as_ref().map(|n| (i, n.clone())))
+                    .collect();
+                (blocks.iter().collect::<Vec<_>>(), locals.len(), names)
             }
             FunctionBody::TypeDecl { .. } => {
                 // #322 M3：E_INTERNAL 伪码收敛为注册码 E8001
@@ -273,6 +280,7 @@ impl Translator {
             return_type: func.return_type.clone(),
             instructions,
             local_count: locals_len,
+            local_names,
             debug_map,
         })
     }
@@ -297,6 +305,7 @@ impl Translator {
                 return_type: type_func.return_type.clone(),
                 instructions: Vec::new(),
                 local_count: 0,
+                local_names: HashMap::new(),
                 debug_map: HashMap::new(),
             });
         }
@@ -330,8 +339,8 @@ impl Translator {
 
         // 创建临时 FunctionIR 用于 translate_instruction
         let param_types: Vec<MonoType> = fields.iter().map(|f| f.ty.clone().into()).collect();
-        let mut locals: Vec<MonoType> = param_types.clone();
-        locals.push(MonoType::TypeRef(struct_name.clone()));
+        let mut locals: Vec<LocalSlot> = param_types.iter().cloned().map(LocalSlot::temp).collect();
+        locals.push(LocalSlot::temp(MonoType::TypeRef(struct_name.clone())));
 
         let temp_func = FunctionIR {
             name: struct_name.clone(),

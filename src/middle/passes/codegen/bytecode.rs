@@ -18,7 +18,10 @@ pub const VERSION: u32 = 4;
 const FLAG_DEBUG_INFO: u32 = 0x02;
 
 const DEBUG_SECTION_MAGIC: u32 = 0x59584442; // 'Y' 'X' 'D' 'B'
-const DEBUG_SECTION_VERSION: u32 = 1;
+/// 调试段格式版本。
+/// v1: 源文件表 + 每函数 ip→span 映射
+/// v2: 追加每函数局部变量名表（与 v1 布局向后兼容读取，见 decode）
+const DEBUG_SECTION_VERSION: u32 = 2;
 
 /// 字节码文件结构
 #[derive(Debug, Clone)]
@@ -77,6 +80,8 @@ pub struct CodeSection {
 pub struct DebugSection {
     pub sources: SourceMap,
     pub function_debug_maps: Vec<HashMap<usize, DebugSpan>>,
+    /// 每函数的局部变量名表，与 `function_debug_maps` 平行（同一函数序号）
+    pub function_local_names: Vec<HashMap<usize, String>>,
 }
 
 impl DebugSection {
@@ -85,9 +90,11 @@ impl DebugSection {
         functions: &[FunctionCode],
     ) -> Self {
         let function_debug_maps = functions.iter().map(|f| f.debug_map.clone()).collect();
+        let function_local_names = functions.iter().map(|f| f.local_names.clone()).collect();
         Self {
             sources,
             function_debug_maps,
+            function_local_names,
         }
     }
 
@@ -116,6 +123,18 @@ impl DebugSection {
             }
         }
 
+        // v2：每函数局部变量名表（按槽位下标排序保证字节确定）
+        out.write_all(&(self.function_local_names.len() as u32).to_le_bytes())?;
+        for names in &self.function_local_names {
+            let mut entries: Vec<(usize, &String)> = names.iter().map(|(k, v)| (*k, v)).collect();
+            entries.sort_by_key(|(idx, _)| *idx);
+            out.write_all(&(entries.len() as u32).to_le_bytes())?;
+            for (idx, name) in entries {
+                out.write_all(&(idx as u32).to_le_bytes())?;
+                write_string(&mut out, name)?;
+            }
+        }
+
         Ok(out)
     }
 
@@ -123,7 +142,8 @@ impl DebugSection {
         let mut cursor = io::Cursor::new(bytes);
 
         let version = read_u32(&mut cursor)?;
-        if version != DEBUG_SECTION_VERSION {
+        // 接受 v1 与 v2：v1 无局部名表，读完后补空表，读取路径不得 panic。
+        if version != 1 && version != DEBUG_SECTION_VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unsupported debug section version: {version}"),
@@ -153,9 +173,29 @@ impl DebugSection {
             function_debug_maps.push(map);
         }
 
+        // v2 起才有局部名表；v1 产物在此补空表（长度与函数数一致）
+        let function_local_names = if version >= 2 {
+            let name_count = read_u32(&mut cursor)? as usize;
+            let mut all = Vec::with_capacity(name_count);
+            for _ in 0..name_count {
+                let entry_count = read_u32(&mut cursor)? as usize;
+                let mut map = HashMap::with_capacity(entry_count);
+                for _ in 0..entry_count {
+                    let idx = read_u32(&mut cursor)? as usize;
+                    let name = read_string(&mut cursor)?;
+                    map.insert(idx, name);
+                }
+                all.push(map);
+            }
+            all
+        } else {
+            vec![HashMap::new(); func_count]
+        };
+
         Ok(Self {
             sources,
             function_debug_maps,
+            function_local_names,
         })
     }
 
@@ -197,6 +237,9 @@ pub struct FunctionCode {
     pub return_type: MonoType,
     pub instructions: Vec<BytecodeInstruction>,
     pub local_count: usize,
+    /// 局部变量名（槽位下标 → 源码名）。
+    /// 只含具名变量；编译器临时寄存器不出现在此表。
+    pub local_names: HashMap<usize, String>,
     /// Debug info: mapping from IP to source Span
     pub debug_map: HashMap<usize, DebugSpan>,
 }
@@ -505,6 +548,8 @@ impl BytecodeFile {
                 return_type,
                 instructions,
                 local_count,
+                // 名字来自调试段（v2）；由上层在读取调试段后回填
+                local_names: HashMap::new(),
                 debug_map: HashMap::new(),
             });
         }
@@ -530,6 +575,16 @@ impl BytecodeFile {
 
         // 可选的调试段（从文件尾向后读取）
         let debug_section = DebugSection::read_from_end(reader)?;
+
+        // 代码段本身不序列化 local_names（名字只在调试段里）；
+        // 读回后按函数序号平行回填，否则 dump/调试器看不到变量名。
+        if let Some(d) = &debug_section {
+            for (idx, func) in functions.iter_mut().enumerate() {
+                if let Some(names) = d.function_local_names.get(idx) {
+                    func.local_names = names.clone();
+                }
+            }
+        }
 
         Ok(Self {
             header,

@@ -21,6 +21,7 @@ fn make_function_with_locals(local_count: usize) -> BytecodeFunction {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![],
         labels: HashMap::new(),

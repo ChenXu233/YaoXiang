@@ -17,7 +17,7 @@ use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::ExportKind;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -215,6 +215,14 @@ pub struct AstToIrGenerator {
     /// 就地捕获当时的语句位置，不存在"先记录后配对"的时序契约。
     /// 嵌套函数体生成前保存、之后恢复（与 next_temp 同款处理）。
     cur_span: Span,
+    /// 当前正在生成的函数的局部槽位（含源码变量名）。
+    ///
+    /// 槽位下标即寄存器号；`name` 为 None 表示编译器临时寄存器。
+    /// `register_local` 就地把名字写进来，函数体生成结束后交给
+    /// `FunctionBody::Code::locals`。
+    /// 嵌套函数体生成前保存、之后恢复——**必须与 next_temp 的
+    /// 保存/恢复点物理相邻**，否则内层函数的名字会串到外层。
+    cur_locals: Vec<LocalSlot>,
 }
 
 /// 绑定信息（用于 IR 生成阶段的方法调用转发）
@@ -231,7 +239,7 @@ struct BindingInfo {
 /// Lambda 函数体 IR 结果
 struct LambdaBodyIR {
     instructions: Vec<Instruction>,
-    locals: Vec<MonoType>,
+    locals: Vec<LocalSlot>,
 }
 
 /// T3：一条待排序的顶层绑定初始化。
@@ -325,6 +333,7 @@ impl AstToIrGenerator {
             },
             loop_stack: Vec::new(),
             cur_span: Span::dummy(),
+            cur_locals: Vec::new(),
         }
     }
 
@@ -479,6 +488,31 @@ impl AstToIrGenerator {
         if let Some(scope) = self.symbols.last_mut() {
             scope.insert(name.to_string(), SymbolEntry { local_idx });
         }
+        // 把源码名写进当前函数的槽位表：槽位可能尚未扩展到 local_idx
+        // （临时寄存器先于具名变量分配），先补齐空槽。
+        while self.cur_locals.len() <= local_idx {
+            self.cur_locals.push(LocalSlot::temp(MonoType::Int(64)));
+        }
+        self.cur_locals[local_idx].name = Some(name.to_string());
+        self.cur_locals[local_idx].scope_depth = self.symbols.len().saturating_sub(1);
+    }
+
+    /// 取出当前函数的局部槽位，补齐到 `total_locals` 长度后交给函数体。
+    ///
+    /// `register_local` 在生成期把源码名写进 `self.cur_locals`；
+    /// 临时寄存器分配的槽位没有名字，这里补空槽保证长度覆盖全部槽位。
+    /// 嵌套函数体在进入前已 `std::mem::take` 掉父函数的表，
+    /// 因此这里拿到的一定是本函数自己的名字。
+    fn take_cur_locals(
+        &mut self,
+        total_locals: usize,
+    ) -> Vec<LocalSlot> {
+        let mut slots = std::mem::take(&mut self.cur_locals);
+        // 必须**恰好** total_locals 个：该长度即 local_count，
+        // 多一个少一个都会改变字节码。register_local 会为槽位号较大的
+        // 具名变量临时补空槽，而最终寄存器数以 total_locals 为准。
+        slots.resize(total_locals, LocalSlot::temp(MonoType::Int(64)));
+        slots
     }
 
     /// 查找局部变量
@@ -1448,6 +1482,10 @@ impl AstToIrGenerator {
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
 
+        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
+        // 嵌套路径（curry/lambda/anon）走 save/restore，不在此列。
+        self.cur_locals.clear();
+
         // 生成指令序列
         let mut instructions = Vec::new();
 
@@ -1485,8 +1523,7 @@ impl AstToIrGenerator {
         // 退出作用域
         self.exit_scope();
 
-        // 分配局部变量类型（简化：与参数相同）
-        let locals_types = param_types.clone();
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(param_types.len());
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -1544,6 +1581,14 @@ impl AstToIrGenerator {
         // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        // 顶层函数体入口：接手槽位表，避免沿用上一个函数的局部名。
+        //
+        // 这里用 take 而非 save/restore——与 next_temp 不同，next_temp 由
+        // 本函数重置为参数个数（见下），而槽位表没有等价的“重置”动作，
+        // 因此只能先把当前表接走再在出口放回。
+        // 嵌套路径（curry/lambda/anon）则与 next_temp 成对 save/restore。
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
 
         // 生成函数体指令
         let mut instructions = Vec::new();
@@ -1667,9 +1712,7 @@ impl AstToIrGenerator {
             )
             .build());
         }
-        let locals_types: Vec<MonoType> = (0..total_locals)
-            .map(|_| MonoType::Int(64)) // 简化：所有局部变量默认为 Int64
-            .collect();
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -1695,6 +1738,9 @@ impl AstToIrGenerator {
 
         // #311：恢复父函数的循环上下文
         self.loop_stack = saved_loop_stack;
+        // 恢复父函数的槽位表：本函数可能是在父函数体内生成的嵌套函数，
+        // 清空/取用后必须把父函数的名字放回去，否则父函数已记录的局部名会丢失。
+        self.cur_locals = saved_cur_locals;
 
         Ok(Some(func_ir))
     }
@@ -1744,7 +1790,7 @@ impl AstToIrGenerator {
             .collect();
         let return_type: MonoType = layer.return_type.clone().into();
         let total_locals = self.next_temp;
-        let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         Ok(FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
@@ -1781,6 +1827,8 @@ impl AstToIrGenerator {
         // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
 
         let mut instructions = Vec::new();
         let env_count = env_param_names.len();
@@ -1837,7 +1885,7 @@ impl AstToIrGenerator {
             .map(MonoType::from)
             .collect();
         let total_locals = self.next_temp;
-        let locals_types: Vec<MonoType> = vec![MonoType::Int(64); total_locals];
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // #311：恢复父函数的循环上下文
         self.loop_stack = saved_loop_stack;
@@ -1885,6 +1933,7 @@ impl AstToIrGenerator {
 
         // 保存外层状态，避免污染
         let saved_next_temp = self.next_temp;
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
 
@@ -1940,6 +1989,7 @@ impl AstToIrGenerator {
 
         // 恢复外层状态
         self.next_temp = saved_next_temp;
+        self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
         // 内层函数加入 nested_functions，最外层返回给调用者
@@ -2406,12 +2456,15 @@ impl AstToIrGenerator {
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 保存父函数状态
         let saved_next_temp = self.next_temp;
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
 
         // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
+
+        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
 
         let mut instructions = Vec::new();
 
@@ -2446,10 +2499,11 @@ impl AstToIrGenerator {
 
         // 计算局部变量总数
         let total_locals = self.next_temp;
-        let locals_types: Vec<MonoType> = (0..total_locals).map(|_| MonoType::Int(64)).collect();
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // 恢复父函数状态
         self.next_temp = saved_next_temp;
+        self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
         // 解析返回类型
@@ -4061,6 +4115,7 @@ impl AstToIrGenerator {
     ) -> Result<LambdaBodyIR, Diagnostic> {
         // 保存父函数的临时寄存器计数
         let saved_next_temp = self.next_temp;
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
 
@@ -4128,10 +4183,11 @@ impl AstToIrGenerator {
 
         // 计算局部变量总数
         let total_locals = self.next_temp;
-        let locals_types: Vec<MonoType> = (0..total_locals).map(|_| MonoType::Int(64)).collect();
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // 恢复父函数的临时寄存器计数
         self.next_temp = saved_next_temp;
+        self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
         // #311：恢复父函数的循环上下文
@@ -4334,7 +4390,7 @@ impl AstToIrGenerator {
                         .unwrap_or_else(|| b.function.clone());
                     instructions.push(Instruction::Call {
                         dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String(func_name)),
+                        func: Operand::Const(ConstValue::String(func_name.to_string())),
                         args: final_args,
                         span,
                         def: None,
@@ -4476,6 +4532,1957 @@ impl AstToIrGenerator {
     }
 
     #[allow(clippy::only_used_in_recursion)]
+    fn generate_lit_expr_ir(
+        &mut self,
+        literal: &Literal,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 常量加载
+        let const_val = match literal {
+            Literal::Int(n) => ConstValue::Int(*n),
+            Literal::Float(f) => ConstValue::Float(*f),
+            Literal::Bool(b) => ConstValue::Bool(*b),
+            Literal::String(s) => ConstValue::String(s.clone()),
+            Literal::Char(c) => ConstValue::Char(*c),
+            Literal::Void => ConstValue::Void,
+        };
+        // 添加到常量池
+        constants.push(const_val.clone());
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Const(const_val),
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_return_expr_ir(
+        &mut self,
+        expr: &Option<Box<Expr>>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 生成返回指令
+        if let Some(e) = expr {
+            self.generate_expr_ir(e, result_reg, instructions, constants)?;
+            instructions.push(Instruction::Ret {
+                value: Some(Operand::Local(result_reg)),
+                span: self.cur_span,
+            });
+        } else {
+            instructions.push(Instruction::Ret {
+                value: None,
+                span: self.cur_span,
+            });
+        }
+        Ok(())
+    }
+
+    fn generate_break_expr_ir(
+        &mut self,
+        span: &Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> Result<(), Diagnostic> {
+        // #311: break → 跳出最近一层循环；出口生成期未知，占位后由
+        // exit_loop_targets 回填。#314：标签语法已移除（Python 风格定案），
+        // break 恒指最近一层循环。
+        match self.loop_stack.last_mut() {
+            Some(top) => {
+                let fixup = instructions.len();
+                instructions.push(Instruction::Jmp {
+                    target: 0,
+                    span: self.cur_span,
+                });
+                top.break_fixups.push(fixup);
+            }
+            None => {
+                // 不变式：typecheck 已用 E1102 拦截循环外 break，走到这里说明层间失联
+                return Err(ErrorCodeDefinition::ir_internal_error(
+                    "break reached IR generation without enclosing loop",
+                )
+                .at(*span)
+                .build());
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_continue_expr_ir(
+        &mut self,
+        span: &Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> Result<(), Diagnostic> {
+        // #311: continue → 跳回最近一层循环的条件重判点（生成时即知）
+        match self.loop_stack.last() {
+            Some(top) => {
+                let target = top.continue_target;
+                instructions.push(Instruction::Jmp {
+                    target,
+                    span: self.cur_span,
+                });
+            }
+            None => {
+                return Err(ErrorCodeDefinition::ir_internal_error(
+                    "continue reached IR generation without enclosing loop",
+                )
+                .at(*span)
+                .build());
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_match_expr_ir(
+        &mut self,
+        match_expr: &Expr,
+        arms: &Vec<ast::MatchArm>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // Match 表达式 IR 生成
+        // 模式: match scrutinee { pat1 => body1, pat2 => body2, _ => bodyN }
+        //
+        // IR 结构:
+        //   1. 评估 scrutinee
+        //   2. 对每个 arm:
+        //      a. 如果模式是 Literal: 比较 scrutinee == literal, JmpIfNot 到下一个 arm
+        //      b. 如果模式是 Wildcard: 始终匹配
+        //      c. 生成 arm body, Move 结果到 result_reg, Jmp 到 end
+        //   3. 修复所有跳转目标
+
+        // 1. 评估 scrutinee
+        let scrutinee_reg = self.next_temp_reg();
+        self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
+
+        let mut jumps_to_end: Vec<usize> = Vec::new();
+
+        for arm in arms {
+            // 检查模式是否匹配
+            let needs_condition = matches!(arm.pattern, ast::Pattern::Wildcard);
+
+            let jump_to_next_idx = if needs_condition {
+                // Wildcard: 始终匹配，不需条件跳转
+                None
+            } else {
+                // 生成条件: 比较 scrutinee 和模式值
+                let cmp_reg = self.next_temp_reg();
+
+                match &arm.pattern {
+                    ast::Pattern::Literal(lit) => {
+                        let const_val = match lit {
+                            ast::Literal::Int(n) => ConstValue::Int(*n),
+                            ast::Literal::Float(f) => ConstValue::Float(*f),
+                            ast::Literal::Bool(b) => ConstValue::Bool(*b),
+                            ast::Literal::String(s) => ConstValue::String(s.clone()),
+                            ast::Literal::Char(c) => ConstValue::Char(*c),
+                            ast::Literal::Void => ConstValue::Void,
+                        };
+                        constants.push(const_val.clone());
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(cmp_reg),
+                            src: Operand::Const(const_val),
+                            span: self.cur_span,
+                        });
+                    }
+                    other => {
+                        // #330 安全网：非字面量/通配符模式尚无 IR 编码，
+                        // 原 stub 加载 0 永不匹配、scrutinee 为 0 时误匹配——
+                        // 宁可编译期拒绝，不可静默错译（完备支持见 RFC-039）
+                        return Err(ErrorCodeDefinition::ir_unsupported_pattern(&pattern_label(
+                            other,
+                        ))
+                        .at(arm.span)
+                        .build());
+                    }
+                }
+
+                // 比较: scrutinee == pattern_value
+                let eq_reg = self.next_temp_reg();
+                instructions.push(Instruction::Eq {
+                    dst: Operand::Local(eq_reg),
+                    lhs: Operand::Local(scrutinee_reg),
+                    rhs: Operand::Local(cmp_reg),
+                    span: self.cur_span,
+                });
+
+                // 如果不相等，跳到下一个 arm
+                let jmp_idx = instructions.len();
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(eq_reg),
+                    target: 0, // 占位符
+                    span: self.cur_span,
+                });
+                Some(jmp_idx)
+            };
+
+            // 生成 arm body，结果放入 result_reg
+            let arm_result_reg = self.next_temp_reg();
+            self.generate_block_ir(&arm.body, Some(arm_result_reg), instructions, constants)?;
+            instructions.push(Instruction::Move {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(arm_result_reg),
+                span: self.cur_span,
+            });
+
+            // 跳转到 match 结束
+            let jmp_end_idx = instructions.len();
+            instructions.push(Instruction::Jmp {
+                target: 0,
+                span: self.cur_span,
+            }); // 占位符
+            jumps_to_end.push(jmp_end_idx);
+
+            // 修复条件跳转目标（指向当前 arm 之后的代码）
+            if let Some(jmp_idx) = jump_to_next_idx {
+                let current_pos = instructions.len();
+                if let Instruction::JmpIfNot {
+                    cond: _,
+                    ref mut target,
+                    span: _,
+                } = instructions[jmp_idx]
+                {
+                    *target = current_pos;
+                }
+            }
+        }
+
+        // 修复所有跳转到结束的指令
+        let end_pos = instructions.len();
+        for idx in jumps_to_end {
+            if let Instruction::Jmp {
+                ref mut target,
+                span: _,
+            } = instructions[idx]
+            {
+                *target = end_pos;
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_tuple_expr_ir(
+        &mut self,
+        items: &Vec<Expr>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // SPEC §3.6 元组字面量：逐个求值元素，用 NewTuple 一次性构造
+        let mut item_regs = Vec::with_capacity(items.len());
+        for item_expr in items {
+            let item_reg = self.next_temp_reg();
+            self.generate_expr_ir(item_expr, item_reg, instructions, constants)?;
+            item_regs.push(Operand::Local(item_reg));
+        }
+        instructions.push(Instruction::NewTuple {
+            dst: Operand::Local(result_reg),
+            items: item_regs,
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_index_expr_ir(
+        &mut self,
+        expr: &Expr,
+        index: &Expr,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let src_reg = self.next_temp_reg();
+        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+        let index_reg = self.next_temp_reg();
+        self.generate_expr_ir(index, index_reg, instructions, constants)?;
+
+        instructions.push(Instruction::LoadIndex {
+            dst: Operand::Local(result_reg),
+            src: Operand::Local(src_reg),
+            index: Operand::Local(index_reg),
+            span: *span,
+        });
+        Ok(())
+    }
+
+    fn generate_unsafe_expr_ir(
+        &mut self,
+        body: &ast::Block,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // unsafe 块：生成 UnsafeBlockStart/End 标记
+        instructions.push(Instruction::UnsafeBlockStart {
+            span: self.cur_span,
+        });
+
+        // RFC-010a 规则①：`unsafe {}` 是**有值块**，值出口为尾表达式。
+        // 此前 result_reg 传 None 并硬写 Void，导致 `v = unsafe { 42 }`
+        // 得 void（#347）。现按普通块处理，尾表达式写入 result_reg。
+        self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
+
+        instructions.push(Instruction::UnsafeBlockEnd {
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_spawn_for_expr_ir(
+        &mut self,
+        var: &str,
+        var_mut: &bool,
+        iterable: &Expr,
+        body: &ast::Block,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        self.generate_spawn_for_ir(
+            var,
+            *var_mut,
+            iterable,
+            body,
+            result_reg,
+            *span,
+            instructions,
+            constants,
+        )?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_for_expr_ir(
+        &mut self,
+        var: &str,
+        var_mut: &bool,
+        iterable: &Expr,
+        body: &ast::Block,
+        for_span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        self.generate_for_loop_ir(
+            var,
+            *var_mut,
+            iterable,
+            body,
+            Some(result_reg),
+            *for_span,
+            instructions,
+            constants,
+        )?;
+        Ok(())
+    }
+
+    fn generate_un_op_expr_ir(
+        &mut self,
+        op: &ast::UnOp,
+        expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 一元运算符
+        match op {
+            ast::UnOp::Deref => {
+                // 解引用：*ptr
+                // 生成指针表达式的 IR
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+                // 生成 PtrDeref 指令
+                instructions.push(Instruction::PtrDeref {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                    span: self.cur_span,
+                });
+            }
+            ast::UnOp::Neg => {
+                // 负号：-x
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                instructions.push(Instruction::Neg {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                    span: self.cur_span,
+                });
+            }
+            ast::UnOp::Pos => {
+                // 正号：+x（无操作）
+                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+            }
+            ast::UnOp::Not => {
+                // 逻辑非：!x
+                let src_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+                instructions.push(Instruction::Not {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(src_reg),
+                    span: self.cur_span,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_ref_expr_ir(
+        &mut self,
+        expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 生成内部表达式的 IR
+        let src_reg = self.next_temp_reg();
+        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
+
+        // 逃逸分析：跨 spawn 使用 → Arc，否则 → Rc
+        let var_name = match expr {
+            ast::Expr::Var(name, _) => Some(name.clone()),
+            _ => None,
+        };
+        let use_arc = var_name.as_ref().is_some_and(|n| {
+            self.type_result
+                .as_ref()
+                .is_some_and(|tr| tr.escaped_refs.contains(n))
+        });
+
+        if use_arc {
+            instructions.push(Instruction::ArcNew {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(src_reg),
+                span: self.cur_span,
+            });
+        } else {
+            instructions.push(Instruction::RcNew {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(src_reg),
+                span: self.cur_span,
+            });
+        }
+        Ok(())
+    }
+
+    fn generate_borrow_expr_ir(
+        &mut self,
+        expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 1. 生成内部表达式的 IR
+        let inner_reg = self.next_temp_reg();
+        self.generate_expr_ir(expr, inner_reg, instructions, constants)?;
+
+        // 借用令牌（& / &mut）是编译期品牌，运行时零大小：
+        // Struct 值是堆句柄，传参/赋值复制的是句柄，共享同一对象——
+        // 因此字段写（StoreField）经令牌自然写回底层，无需额外指令（#266）。
+        // 所有权与借用合法性已在 typecheck 层验证（RFC-009a）。
+        instructions.push(Instruction::Move {
+            dst: Operand::Local(result_reg),
+            src: Operand::Local(inner_reg),
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_dict_expr_ir(
+        &mut self,
+        pairs: &Vec<(Expr, Expr)>,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 字典字面量：使用 NewDict 指令一次性创建
+        let mut keys = Vec::new();
+        let mut values = Vec::new();
+        for (key_expr, val_expr) in pairs {
+            let key_reg = self.next_temp_reg();
+            self.generate_expr_ir(key_expr, key_reg, instructions, constants)?;
+            keys.push(Operand::Local(key_reg));
+            let val_reg = self.next_temp_reg();
+            self.generate_expr_ir(val_expr, val_reg, instructions, constants)?;
+            values.push(Operand::Local(val_reg));
+        }
+        instructions.push(Instruction::NewDict {
+            dst: Operand::Local(result_reg),
+            keys,
+            values,
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_list_expr_ir(
+        &mut self,
+        elements: &[Expr],
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 列表字面量：先创建空列表，再按索引写入元素
+        instructions.push(Instruction::AllocArray {
+            dst: Operand::Local(result_reg),
+            size: Operand::Const(ConstValue::Int(elements.len() as i128)),
+            elem_size: Operand::Const(ConstValue::Int(1)),
+            span: self.cur_span,
+        });
+
+        for (idx, element) in elements.iter().enumerate() {
+            let element_reg = self.next_temp_reg();
+            self.generate_expr_ir(element, element_reg, instructions, constants)?;
+
+            let index_reg = self.next_temp_reg();
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(index_reg),
+                src: Operand::Const(ConstValue::Int(idx as i128)),
+                span: self.cur_span,
+            });
+
+            instructions.push(Instruction::StoreIndex {
+                dst: Operand::Local(result_reg),
+                index: Operand::Local(index_reg),
+                src: Operand::Local(element_reg),
+                span: *span,
+            });
+        }
+        Ok(())
+    }
+
+    fn generate_try_expr_ir(
+        &mut self,
+        expr: &Expr,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // #301：`?` 真实语义——Result 解包 + Err 提前返回（错误
+        // 传播通道，type-system.md §4.2 Result(T, E)）。
+        // 求值 expr（Result(T, E)，运行时 Enum{variant 0=ok/1=err}）：
+        //   variant 0 → 表达式值为解包后的 T（payload）
+        //   variant 1 → 以整个 Enum 值提前 Ret 当前函数（沿调用栈传播）
+        // typecheck 侧已拦截：非 Result 表达式（E1082）、函数返回类型
+        // 非 Result（E1081）、错误类型不匹配（E1083）。
+        self.generate_expr_ir(expr, result_reg, instructions, constants)?;
+        let span = *span;
+        let tag_reg = self.next_temp_reg();
+        instructions.push(Instruction::VariantTag {
+            dst: Operand::Local(tag_reg),
+            obj: Operand::Local(result_reg),
+            group: "Result".to_string(),
+            span,
+        });
+        let ok_const = self.next_temp_reg();
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(ok_const),
+            src: Operand::Const(ConstValue::Int(0)),
+            span: self.cur_span,
+        });
+        let eq_reg = self.next_temp_reg();
+        instructions.push(Instruction::Eq {
+            dst: Operand::Local(eq_reg),
+            lhs: Operand::Local(tag_reg),
+            rhs: Operand::Local(ok_const),
+            span: self.cur_span,
+        });
+        // variant != 0（Err）→ 跳到提前返回
+        let is_err_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(eq_reg),
+            target: 0,
+            span: self.cur_span,
+        });
+        // Ok 路径：解包 payload 作为表达式值
+        instructions.push(Instruction::VariantPayload {
+            dst: Operand::Local(result_reg),
+            obj: Operand::Local(result_reg),
+            group: "Result".to_string(),
+            span,
+        });
+        let end_idx = instructions.len();
+        instructions.push(Instruction::Jmp {
+            target: 0,
+            span: self.cur_span,
+        });
+        // Err 路径：以整个 Result 值提前返回（Err(e) 沿调用栈传播）
+        let err_target = instructions.len();
+        instructions[is_err_idx] = Instruction::JmpIfNot {
+            cond: Operand::Local(eq_reg),
+            target: err_target,
+            span: self.cur_span,
+        };
+        instructions.push(Instruction::Ret {
+            value: Some(Operand::Local(result_reg)),
+            span: self.cur_span,
+        });
+        let end_target = instructions.len();
+        instructions[end_idx] = Instruction::Jmp {
+            target: end_target,
+            span: self.cur_span,
+        };
+        Ok(())
+    }
+
+    fn generate_f_string_expr_ir(
+        &mut self,
+        segments: &Vec<ast::FStringSegment>,
+        span: &Span,
+        expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 1. 尝试常量求值
+        if let Some(const_val) = self.eval_const_expr(expr) {
+            constants.push(const_val.clone());
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(const_val),
+                span: self.cur_span,
+            });
+            return Ok(());
+        }
+
+        // 2. 转换为 format() 调用
+        // 构建 format_str: "Hello {} is {} years old"
+        // 构建 args: [name, age]
+        let mut format_str = String::new();
+        let mut arg_regs = Vec::new();
+        let mut arg_index = 0usize;
+
+        for segment in segments {
+            match segment {
+                ast::FStringSegment::Text(text) => {
+                    format_str.push_str(text);
+                }
+                ast::FStringSegment::Interpolation {
+                    expr: interp_expr,
+                    format_spec,
+                } => {
+                    // Build format placeholder: {0}, {1}, or {0:.2f}
+                    if let Some(spec) = format_spec {
+                        format_str.push_str(&format!("{{{0}:{1}}}", arg_index, spec));
+                    } else {
+                        format_str.push_str(&format!("{{{}}}", arg_index));
+                    }
+                    arg_index += 1;
+
+                    // Generate IR for the interpolation expression
+                    let arg_reg = self.next_temp_reg();
+                    self.generate_expr_ir(interp_expr, arg_reg, instructions, constants)?;
+                    arg_regs.push(Operand::Local(arg_reg));
+                }
+            }
+        }
+
+        // Load format string constant
+        let fmt_reg = self.next_temp_reg();
+        let fmt_const = ConstValue::String(format_str);
+        constants.push(fmt_const.clone());
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(fmt_reg),
+            src: Operand::Const(fmt_const),
+            span: self.cur_span,
+        });
+
+        // Build args: [format_str, arg0, arg1, ...]
+        let mut call_args = vec![Operand::Local(fmt_reg)];
+        call_args.extend(arg_regs);
+
+        // Generate Call to std.string.format
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(result_reg)),
+            func: Operand::Const(ConstValue::String("std.string.format".to_string())),
+            args: call_args,
+            span: *span,
+            def: None,
+        });
+        Ok(())
+    }
+
+    fn generate_var_expr_ir(
+        &mut self,
+        var_name: &str,
+        var_span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+    ) -> Result<(), Diagnostic> {
+        // #254：闭包体内——先查捕获表（外层变量经 env 捕获，LoadUpvalue 读）
+        if let Some(&env_idx) = self.closure_captures.get(var_name) {
+            instructions.push(Instruction::LoadUpvalue {
+                dst: Operand::Local(result_reg),
+                upvalue_idx: env_idx,
+                span: self.cur_span,
+            });
+        } else if let Some(local_idx) = self.lookup_local(var_name) {
+            // 局部变量：直接加载
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(local_idx),
+                span: self.cur_span,
+            });
+        } else if let Some(global_idx) = self.lookup_global(var_name) {
+            // 全局变量（T2）：直接从全局槽位加载，不再调用访问器函数
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Global(global_idx),
+                span: *var_span,
+            });
+        } else if let Some(alias) = self.use_aliases.get(var_name) {
+            // T5：`use lib.{value}` 的别名先看是否落在全局布局里
+            // （跨文件顶层绑定）——是则走 LoadGlobal。
+            // 否则是 std 原生常量（如 PI），按限定名调用 native handler。
+            if let Some(&slot) = self.global_slot_layout.get(alias) {
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Global(slot),
+                    span: *var_span,
+                });
+            } else {
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(alias.clone())),
+                    args: vec![],
+                    span: *var_span,
+                    def: None,
+                });
+            }
+        } else if matches!(
+            var_name,
+            "Int" | "Float" | "Bool" | "String" | "Char" | "Bytes" | "Type" | "Void" | "Never"
+        ) {
+            // 内置类型名作为类型实参（如 SafeArray(Int, 3)）：类型宇宙的值，
+            // 运行时无表示，加载 Void 占位（类型参数在编译期已被消费）
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Const(ConstValue::Void),
+                span: self.cur_span,
+            });
+        } else if self.binding_is_function(var_name) {
+            // #348：名字的类型是 Fn ⇒ 它就是函数值。运行时函数值的唯一表示是
+            // 闭包，故物化为 MakeClosure（env 为空：本处只处理顶层/自由函数名，
+            // 捕获变量已由上方 closure_captures 处理）。
+            //
+            // 此前落到下方兜底 → E3006（"变量无法解析"），使函数名不能
+            // 作一等值使用：`io.println(f)` / `g(f)` / `x = f` 全部失败。
+            instructions.push(Instruction::MakeClosure {
+                dst: Operand::Local(result_reg),
+                func: var_name.to_string(),
+                env: vec![],
+                def: None,
+                span: self.cur_span,
+            });
+        } else {
+            // #271 #3：未解析变量 → 硬错误（#254 spawn 捕获已落地，不再需要静默 Load 0 兜底）。
+            // 走到这里说明 typecheck 漏网，属编译器内部一致性问题。
+            return Err(ErrorCodeDefinition::unresolved_variable(var_name)
+                .at(*var_span)
+                .build());
+        }
+        Ok(())
+    }
+
+    fn generate_field_access_expr_ir(
+        &mut self,
+        expr: &Expr,
+        field: &str,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 首先检查是否是模块变量的字段访问（如 io.println）
+        // io 是通过 use std.{io} 导入的模块变量
+        if let Expr::Var(module_name, _) = expr {
+            if let Some(full_path) = {
+                let reg = &self.registry;
+                if reg.is_std_submodule(module_name) {
+                    let path = format!("std.{}", field);
+                    if reg.is_native_name(&path) {
+                        Some(path)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } {
+                // 模块变量方法调用：生成函数调用
+                // 例如：io.println -> Call("std.io.println", [args])
+                // 这里我们处理的是非调用场景的字段访问（如 io.println 作为值）
+                // 生成零参数调用
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(full_path)),
+                    args: vec![],
+                    span: *span,
+                    def: None,
+                });
+            } else {
+                // 普通字段访问
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                let field_index = self.resolve_field_index(expr, field).ok_or_else(|| {
+                    ErrorCodeDefinition::ir_internal_error(&format!(
+                        "无法解析字段索引: '{}'",
+                        field
+                    ))
+                    .at(Self::get_expr_span(expr))
+                    .build()
+                })?;
+                instructions.push(Instruction::LoadField {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    field: field_index,
+                    span: *span,
+                });
+            }
+        } else {
+            // 提取完整的命名空间路径（如 std.math.PI）
+            let full_path = self.resolve_field_path(expr, field);
+
+            // 检查是否是命名空间常量访问
+            if self.registry.is_native_name(&full_path) {
+                // 命名空间常量访问：生成零参数函数调用
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(full_path)),
+                    args: vec![],
+                    span: *span,
+                    def: None,
+                });
+            } else {
+                // 普通字段访问
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                let field_index = self.resolve_field_index(expr, field).ok_or_else(|| {
+                    ErrorCodeDefinition::ir_internal_error(&format!(
+                        "无法解析字段索引: '{}'",
+                        field
+                    ))
+                    .at(Self::get_expr_span(expr))
+                    .build()
+                })?;
+                instructions.push(Instruction::LoadField {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    field: field_index,
+                    span: *span,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_lambda_expr_ir(
+        &mut self,
+        params: &[ast::Param],
+        body: &ast::Block,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // Lambda 表达式 IR 生成
+        // 例如: (x, y) => x + y
+
+        // 1. 生成唯一的闭包函数名
+        let closure_name = format!("closure_{}", self.closure_counter);
+        self.closure_counter += 1;
+
+        // 2. 获取闭包的返回类型（简化处理：使用 Void）
+        // TODO: 可以通过类型检查结果获取更精确的返回类型
+        let return_type = MonoType::Void;
+
+        // 3. 为闭包参数分配寄存器索引
+        let _param_regs: Vec<usize> = (0..params.len()).collect();
+
+        // RFC-009a / #254：闭包需捕获自由变量。
+        // `pending_env_vars` 只由 spawn/for 路径填充；普通 lambda（如
+        // `adder: (n: Int) -> ((x: Int) -> Int) = (x) => x + n` 里的内层）
+        // 从未填充，导致 `MakeClosure` 的 env 为空，`n` 在闭包体内取不到
+        // （实测 `adder(10)(5)` 得 10 而非 15）。
+        // 此处按“body 中引用但非自身参数”收集自由变量，用外层寄存器作为 env。
+        let mut env_vars = std::mem::take(&mut self.pending_env_vars);
+        let mut env_names = std::mem::take(&mut self.pending_env_names);
+        if env_names.is_empty() {
+            let bound: std::collections::HashSet<&str> =
+                params.iter().map(|p| p.name.as_str()).collect();
+            let mut free = Vec::new();
+            let mut seen = std::collections::HashSet::new();
+            for stmt in &body.stmts {
+                super::ir_gen::collect_free_vars_stmt(stmt, &bound, &mut seen, &mut free);
+            }
+            for name in free {
+                if let Some(idx) = self.lookup_local(&name) {
+                    env_vars.push(Operand::Local(idx));
+                    env_names.push(name);
+                }
+            }
+        }
+        // #254：捕获表（变量名 → env 槽位），供闭包体内 Var 解析 → LoadUpvalue
+        self.closure_captures = env_names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.clone(), i))
+            .collect();
+
+        // 5. 生成闭包函数体 IR
+        // 类似于 generate_function_ir 的逻辑，但针对 Lambda
+        let closure_body =
+            self.generate_lambda_body_ir(params, body, constants, env_names.len())?;
+        // #254：闭包体生成完毕，清除捕获表
+        self.closure_captures.clear();
+
+        // 6. 创建闭包函数 IR
+        let param_types: Vec<MonoType> = params
+            .iter()
+            .filter_map(|p| p.ty.clone())
+            .map(|t| t.into())
+            .collect();
+
+        let closure_func = FunctionIR {
+            def: None, // 由 generate_module_ir 尾部 assign_defs 填充
+            name: closure_name.clone(),
+            params: param_types,
+            return_type,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions: closure_body.instructions,
+                    successors: Vec::new(),
+                }],
+                entry: 0,
+                locals: closure_body.locals.clone(),
+            },
+        };
+
+        // 7. 将闭包函数添加到嵌套函数列表
+        self.nested_functions.push(closure_func);
+
+        // 9. 创建 MakeClosure 指令
+        // env 包含被捕获的外部变量的 Operand
+        instructions.push(Instruction::MakeClosure {
+            dst: Operand::Local(result_reg),
+            func: closure_name,
+            env: env_vars,
+            def: None,
+            span: self.cur_span,
+        });
+        Ok(())
+    }
+
+    fn generate_spawn_expr_ir(
+        &mut self,
+        body: &ast::Block,
+        span: &Span,
+        _expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // Spawn block: spawn { ... }
+        // RFC-024: DAG 分析识别直接子表达式，为每个生成独立闭包
+
+        // 1. DAG 分析：识别直接子表达式，生成执行计划
+        let (trait_table, local_var_types) = if let Some(ref type_result) = self.type_result {
+            (&type_result.trait_table, &type_result.local_var_types)
+        } else {
+            // 无类型信息时使用空表（向后兼容）
+            static EMPTY_TRAIT_TABLE: std::sync::LazyLock<
+                crate::frontend::core::types::TraitTable,
+            > = std::sync::LazyLock::new(crate::frontend::core::types::TraitTable::default);
+            static EMPTY_VAR_TYPES: std::sync::LazyLock<
+                std::collections::HashMap<String, crate::frontend::core::types::MonoType>,
+            > = std::sync::LazyLock::new(std::collections::HashMap::new);
+            (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
+        };
+        let analysis = crate::frontend::core::spawn::analysis::analyze_spawn_body(
+            body,
+            trait_table,
+            local_var_types,
+        );
+
+        // 2. 进入 spawn 作用域
+        self.enter_scope();
+
+        // 3. 为每个直接子表达式生成闭包
+        let mut closure_regs = Vec::new();
+        for task in &analysis.tasks {
+            // 如果是赋值，注册目标变量到 spawn 作用域
+            if let Some(target) = &task.target {
+                if self.lookup_local(target).is_none() {
+                    let reg = self.next_temp_reg();
+                    self.register_local(target, reg);
+                }
+            }
+
+            // 将 RHS 包装为无参闭包：() => { rhs }
+            // #254：捕获 task 读取的外层变量（RFC-024 §2.3 Move 值捕获）
+            // 过滤：仅捕获能在当前作用域链解析的变量（spawn 内声明的由
+            // 任务间依赖传递，不在此捕获）；task.reads 由 spawn analysis 提供。
+            let mut env_ops = Vec::new();
+            let mut env_names = Vec::new();
+            for var in &task.reads {
+                if let Some(local_idx) = self.lookup_local(var) {
+                    env_ops.push(Operand::Local(local_idx));
+                    env_names.push(var.clone());
+                }
+            }
+            self.pending_env_vars = env_ops;
+            self.pending_env_names = env_names;
+            let closure_reg = self.next_temp_reg();
+            let lambda = ast::Expr::Lambda {
+                params: Vec::new(),
+                body: Box::new(ast::Block {
+                    stmts: vec![ast::Stmt {
+                        kind: ast::StmtKind::Expr(Box::new(task.expr.clone())),
+                        span: *span,
+                    }],
+                    span: *span,
+                }),
+                span: *span,
+            };
+            self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
+            self.pending_env_vars.clear();
+            self.pending_env_names.clear();
+            closure_regs.push(Operand::Local(closure_reg));
+        }
+
+        // 4. 生成 spawn 块剩余语句（非直接子表达式，如 var 声明等）
+        for stmt in &body.stmts {
+            if !crate::frontend::core::spawn::analysis::is_direct_child(stmt) {
+                self.generate_local_stmt_ir(stmt, instructions, constants)?;
+            }
+        }
+
+        // 5. 生成 Spawn 指令（多闭包 + 执行计划）
+        // Spawn 指令会等待所有闭包完成，之后 t1/t2 等变量才可用
+        instructions.push(Instruction::Spawn {
+            closures: closure_regs,
+            plan: analysis.plan,
+            result: Operand::Local(result_reg),
+            span: self.cur_span,
+        });
+
+        // 6. 块的结果值：从 return 语句获取（RFC-010 语义）
+        // 必须在 Spawn 之后生成，因为 return 表达式可能引用闭包的结果变量
+        let mut has_return = false;
+        for stmt in &body.stmts {
+            if let ast::StmtKind::Expr(ref expr_stmt) = stmt.kind {
+                if let ast::Expr::Return(Some(ret_expr), _) = expr_stmt.as_ref() {
+                    let ret_reg = self.next_temp_reg();
+                    self.generate_expr_ir(ret_expr, ret_reg, instructions, constants)?;
+                    instructions.push(Instruction::Move {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(ret_reg),
+                        span: self.cur_span,
+                    });
+                    has_return = true;
+                    break;
+                }
+            }
+        }
+        if !has_return {
+            // 无 return 语句，块值为 Void（result_reg 保持默认 0）
+        }
+
+        // 7. 退出 spawn 作用域
+        self.exit_scope();
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_list_comp_expr_ir(
+        &mut self,
+        element: &Expr,
+        var: &str,
+        iterable: &Expr,
+        condition: &Option<Box<Expr>>,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 列表推导式 IR 生成
+        // [x * x for x in items] 等价于:
+        //   1. 创建空结果列表
+        //   2. 通过迭代器遍历 iterable
+        //   3. 对每个元素: 绑定到 var, 检查 condition(可选), 计算 element, push 到结果列表
+        //   4. 返回结果列表
+
+        // 1. 创建空结果列表
+        instructions.push(Instruction::AllocArray {
+            dst: Operand::Local(result_reg),
+            size: Operand::Const(ConstValue::Int(0)),
+            elem_size: Operand::Const(ConstValue::Int(1)),
+            span: self.cur_span,
+        });
+
+        // 2. 计算可迭代对象
+        let iterable_reg = self.next_temp_reg();
+        self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+
+        // 3. 创建迭代器
+        let iterator_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(iterator_reg)),
+            func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
+            args: vec![Operand::Local(iterable_reg)],
+            span: *span,
+            def: None,
+        });
+
+        // 4. 注册循环变量
+        let var_reg = self.next_temp_reg();
+        self.register_local(var, var_reg);
+
+        // 5. 循环开始
+        let loop_start_idx = instructions.len();
+
+        // 6. has_next?
+        let has_next_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(has_next_reg)),
+            func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span: *span,
+            def: None,
+        });
+
+        let jump_end_idx = instructions.len();
+        instructions.push(Instruction::JmpIfNot {
+            cond: Operand::Local(has_next_reg),
+            target: 0, // 占位符
+            span: self.cur_span,
+        });
+
+        // 7. next element
+        let element_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(Operand::Local(element_reg)),
+            func: Operand::Const(ConstValue::String("std.list.next".to_string())),
+            args: vec![Operand::Local(iterator_reg)],
+            span: *span,
+            def: None,
+        });
+
+        // 8. 存储到循环变量
+        instructions.push(Instruction::Store {
+            dst: Operand::Local(var_reg),
+            src: Operand::Local(element_reg),
+            span: *span,
+        });
+
+        // 9. 如果有条件，检查条件
+        if let Some(cond_expr) = condition {
+            let cond_reg = self.next_temp_reg();
+            self.generate_expr_ir(cond_expr, cond_reg, instructions, constants)?;
+
+            let skip_push_idx = instructions.len();
+            instructions.push(Instruction::JmpIfNot {
+                cond: Operand::Local(cond_reg),
+                target: 0, // 占位符
+                span: self.cur_span,
+            });
+
+            // 10. 计算元素表达式
+            let comp_reg = self.next_temp_reg();
+            self.generate_expr_ir(element, comp_reg, instructions, constants)?;
+
+            // 11. push 到结果列表
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String("std.list.push".to_string())),
+                args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
+                span: *span,
+                def: None,
+            });
+
+            // 修复条件跳转
+            let after_push = instructions.len();
+            if let Instruction::JmpIfNot {
+                cond: _,
+                ref mut target,
+                span: _,
+            } = instructions[skip_push_idx]
+            {
+                *target = after_push;
+            }
+        } else {
+            // 10. 计算元素表达式
+            let comp_reg = self.next_temp_reg();
+            self.generate_expr_ir(element, comp_reg, instructions, constants)?;
+
+            // 11. push 到结果列表
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String("std.list.push".to_string())),
+                args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
+                span: *span,
+                def: None,
+            });
+        }
+
+        // 12. 跳回循环开始
+        instructions.push(Instruction::Jmp {
+            target: loop_start_idx,
+            span: self.cur_span,
+        });
+
+        // 13. 修复跳出循环的跳转目标
+        let end_pos = instructions.len();
+        if let Instruction::JmpIfNot {
+            cond: _,
+            ref mut target,
+            span: _,
+        } = instructions[jump_end_idx]
+        {
+            *target = end_pos;
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_bin_op_expr_ir(
+        &mut self,
+        op: &ast::BinOp,
+        left: &Expr,
+        right: &Expr,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        tlog!(debug, MSG::DebugGeneratingIRBinOp, &format!("{:?}", op));
+        // 二元运算
+        let instr = match op {
+            ast::BinOp::Assign => {
+                if let Expr::Var(var_name, _) = left {
+                    let local_idx = if let Some(idx) = self.lookup_local(var_name) {
+                        idx
+                    } else {
+                        let idx = self.next_temp_reg();
+                        self.register_local(var_name, idx);
+                        idx
+                    };
+                    let val_reg = self.next_temp_reg();
+                    self.generate_expr_ir(right, val_reg, instructions, constants)?;
+
+                    // 更新变量的类型信息
+                    // 优先使用 typecheck 结果推导类型名，AST 推断仅作为兜底
+                    let inferred = self.get_expr_type_name(right);
+                    if inferred != "<unknown>" {
+                        self.local_var_types.insert(var_name.clone(), inferred);
+                    }
+
+                    // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
+                    instructions.push(Instruction::Store {
+                        dst: Operand::Local(local_idx),
+                        src: Operand::Local(val_reg),
+                        span: *span,
+                    });
+                    instructions.push(Instruction::Load {
+                        dst: Operand::Local(result_reg),
+                        src: Operand::Local(local_idx),
+                        span: self.cur_span,
+                    });
+                }
+                return Ok(());
+            }
+            // #300 I 项：Range 是一等值——三槽 [start, end, step]，复用 Tuple 载体
+            // （静态类型驱动一切消费，载体不透明；#302 落地 std.Range 后换正式身份）
+            ast::BinOp::Range => {
+                self.generate_range_construction_ir(
+                    left,
+                    right,
+                    result_reg,
+                    *span,
+                    instructions,
+                    constants,
+                )?;
+                return Ok(());
+            }
+            ast::BinOp::And | ast::BinOp::Or => {
+                // SPEC §2.2 / RFC-010 权威语义：and/or 短路求值
+                // a and b ≡ if a { b } else { false }；a or b ≡ if a { true } else { b }
+                let lhs_reg = self.next_temp_reg();
+                self.generate_expr_ir(left, lhs_reg, instructions, constants)?;
+                let is_and = matches!(op, ast::BinOp::And);
+                let short_idx = instructions.len();
+                if is_and {
+                    instructions.push(Instruction::JmpIfNot {
+                        cond: Operand::Local(lhs_reg),
+                        target: 0,
+                        span: self.cur_span,
+                    });
+                } else {
+                    instructions.push(Instruction::JmpIf {
+                        cond: Operand::Local(lhs_reg),
+                        target: 0,
+                        span: self.cur_span,
+                    });
+                }
+                self.generate_expr_ir(right, result_reg, instructions, constants)?;
+                let end_idx = instructions.len();
+                instructions.push(Instruction::Jmp {
+                    target: 0,
+                    span: self.cur_span,
+                });
+                // 短路值：and → false，or → true
+                let sc_target = instructions.len();
+                if let Instruction::JmpIf {
+                    cond: _,
+                    target: ref mut t,
+                    span: _,
+                } = instructions[short_idx]
+                {
+                    *t = sc_target;
+                }
+                if let Instruction::JmpIfNot {
+                    cond: _,
+                    target: ref mut t,
+                    span: _,
+                } = instructions[short_idx]
+                {
+                    *t = sc_target;
+                }
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Const(if is_and {
+                        ConstValue::Bool(false)
+                    } else {
+                        ConstValue::Bool(true)
+                    }),
+                    span: self.cur_span,
+                });
+                let end_target = instructions.len();
+                if let Instruction::Jmp {
+                    target: ref mut t,
+                    span: _,
+                } = instructions[end_idx]
+                {
+                    *t = end_target;
+                }
+                return Ok(());
+            }
+            _ => {
+                let left_reg = self.next_temp_reg();
+                let right_reg = self.next_temp_reg();
+                self.generate_expr_ir(left, left_reg, instructions, constants)?;
+                self.generate_expr_ir(right, right_reg, instructions, constants)?;
+
+                match op {
+                    ast::BinOp::Add => Instruction::Add {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Sub => Instruction::Sub {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Mul => Instruction::Mul {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Div => Instruction::Div {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: *span,
+                    },
+                    ast::BinOp::Mod => Instruction::Mod {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: *span,
+                    },
+                    // #285: 位运算/移位（SPEC §2.2 级 7/8）
+                    ast::BinOp::BitAnd => Instruction::And {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::BitOr => Instruction::Or {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::BitXor => Instruction::Xor {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Shl => Instruction::Shl {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Shr => Instruction::Shr {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Eq => Instruction::Eq {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Neq => Instruction::Ne {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Lt => Instruction::Lt {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Le => Instruction::Le {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Gt => Instruction::Gt {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    ast::BinOp::Ge => Instruction::Ge {
+                        dst: Operand::Local(result_reg),
+                        lhs: Operand::Local(left_reg),
+                        rhs: Operand::Local(right_reg),
+                        span: self.cur_span,
+                    },
+                    // Assign 在上方分支处理；And/Or 走短路求值；Range 仅限 for/切片上下文。
+                    // 剩余运算符到达此处即内部错误——禁止静默兜底（教训：&&/|| 曾静默编译为常量 0，#251）
+                    _ => {
+                        return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                            "unhandled binary operator: {:?}",
+                            op
+                        ))
+                        .build());
+                    }
+                }
+            }
+        };
+        instructions.push(instr);
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_call_expr_ir(
+        &mut self,
+        func: &Expr,
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+        span: &Span,
+        _expr: &Expr,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // 检查是否是方法调用：func 是 FieldAccess
+        if let Expr::FieldAccess { expr, field, .. } = func {
+            // 方法调用 - 转换为普通函数调用
+            // 命名空间机制：p.method() -> method(p)
+
+            // 只有非命名空间调用才需要添加 self 参数
+            // 命名空间调用（如 std.io.println）不需要隐式参数
+            if self.is_namespace_receiver(expr) {
+                // 命名空间调用：不需要隐式参数
+                let mut arg_regs = Vec::new();
+                for arg in args.iter() {
+                    let arg_reg = self.next_temp_reg();
+                    self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                    arg_regs.push(Operand::Local(arg_reg));
+                }
+                let method_function_name = self.resolve_field_path(expr, field);
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(method_function_name.to_string())),
+                    args: arg_regs,
+                    span: *span,
+                    def: None,
+                });
+            } else {
+                // 非命名空间调用：检查是否有绑定信息（RFC-004）
+                let binding_info = self.get_expr_struct_type_name(expr).and_then(|type_name| {
+                    self.type_bindings
+                        .get(&type_name)
+                        .and_then(|bindings| bindings.get(field).cloned())
+                });
+
+                if let Some(binding) = binding_info {
+                    // 绑定方法调用：按 RFC-004 进行参数重排
+                    // obj.method(arg1, arg2) + binding positions [0]
+                    // → original_function(obj, arg1, arg2)
+                    //
+                    // obj.method(arg1) + binding positions [1]
+                    // → original_function(arg1, obj)
+
+                    // 首先生成对象表达式 IR
+                    let obj_reg = self.next_temp_reg();
+                    self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+
+                    // 生成所有方法参数 IR
+                    let mut method_arg_regs = Vec::new();
+                    for arg in args.iter() {
+                        let arg_reg = self.next_temp_reg();
+                        self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                        method_arg_regs.push(Operand::Local(arg_reg));
+                    }
+
+                    // 按绑定位置重排参数。
+                    // total_params = 绑定位数 + 方法实参数 = 被绑函数元数（调用方
+                    // 恰好提供剩余参数），负索引据此归一化（[-1] = 最后一个参数）。
+                    let total_params = binding.positions.len() + method_arg_regs.len();
+                    let positions: Vec<i64> = binding
+                        .positions
+                        .iter()
+                        .map(|&p| if p < 0 { p + total_params as i64 } else { p })
+                        .collect();
+                    let mut final_args: Vec<Operand> = Vec::with_capacity(total_params);
+                    let mut method_arg_iter = method_arg_regs.into_iter();
+
+                    for pos in 0..total_params {
+                        if positions.contains(&(pos as i64)) {
+                            final_args.push(Operand::Local(obj_reg));
+                        } else if let Some(arg_reg) = method_arg_iter.next() {
+                            final_args.push(arg_reg);
+                        }
+                    }
+
+                    // 解析函数名
+                    let func_name = if let Some(qualified) = self
+                        .registry
+                        .short_to_qualified_map()
+                        .get(&binding.function)
+                    {
+                        qualified.clone()
+                    } else {
+                        binding.function.clone()
+                    };
+
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(func_name)),
+                        args: final_args,
+                        span: *span,
+                        def: None,
+                    });
+                } else {
+                    // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
+                    // 接口直接赋值优化：检查对象是否是约束变量
+                    let mut arg_regs = Vec::new();
+
+                    // 生成对象表达式 IR（作为第一个参数）
+                    let obj_reg = self.next_temp_reg();
+                    self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                    arg_regs.push(Operand::Local(obj_reg));
+
+                    // 生成方法参数 IR
+                    for arg in args.iter() {
+                        let arg_reg = self.next_temp_reg();
+                        self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                        arg_regs.push(Operand::Local(arg_reg));
+                    }
+
+                    // RFC-011a §6.4: 存在类型接收者 → 编译期变体分发。
+                    // 门控：接口须有本单元实现证明（隔离遗留 trait 约束路径）
+                    if let Some(iface) = self.existential_receiver_interface(expr) {
+                        if self.interface_variants.contains_key(&iface) {
+                            let method_args: Vec<Operand> = arg_regs[1..].to_vec();
+                            self.emit_variant_dispatch(
+                                &iface,
+                                field,
+                                obj_reg,
+                                &method_args,
+                                result_reg,
+                                *span,
+                                instructions,
+                                constants,
+                            )?;
+                            return Ok(());
+                        }
+                    }
+
+                    // 检查对象是否是约束变量（接口直接赋值优化）
+                    let var_name = if let Expr::Var(name, _) = expr.as_ref() {
+                        Some(name.clone())
+                    } else {
+                        None
+                    };
+
+                    let concrete_type = var_name
+                        .as_ref()
+                        .and_then(|name| self.get_constraint_var_concrete_type(name).cloned());
+
+                    if let Some(concrete_type_name) = concrete_type {
+                        // 编译期可确定具体类型 → 直接调用（零开销）
+                        // d.draw(screen) → ConcreteType.draw(d, screen)
+                        let qualified_name = format!("{}.{}", concrete_type_name, field);
+
+                        let final_args: Vec<Operand> = arg_regs.clone();
+
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(qualified_name)),
+                            args: final_args,
+                            span: *span,
+                            def: None,
+                        });
+                    } else if var_name.as_ref().is_some_and(|name| {
+                        // 检查变量的类型标注是否是约束类型（但具体类型未知）
+                        self.local_var_types
+                            .get(name)
+                            .and_then(|type_name| {
+                                // 如果变量类型是约束类型且不在 constraint_var_concrete_types 中
+                                // 说明具体类型无法在编译期确定，需要 vtable 调用
+                                if !self.struct_definitions.contains_key(type_name)
+                                    && !self.constraint_var_concrete_types.contains_key(name)
+                                {
+                                    // 简单启发式：如果变量类型不是已知结构体，可能是约束类型
+                                    Some(true)
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or(false)
+                    }) {
+                        // 编译期无法确定具体类型 → CallVirt（vtable 调用）
+                        instructions.push(Instruction::CallVirt {
+                            dst: Some(Operand::Local(result_reg)),
+                            obj: Operand::Local(obj_reg),
+                            method_name: field.to_string(),
+                            args: arg_regs,
+                            span: *span,
+                        });
+                    } else {
+                        // 普通方法调用
+                        // 优先使用类型名（而非变量名）构建函数名
+                        // 例如：a.is_greater(b) 中 a 的类型是 Node
+                        // → 函数名应为 "Node.is_greater" 而非 "a.is_greater"
+                        let func_name = if let Expr::Var(name, _) = expr.as_ref() {
+                            if let Some(type_name) = self.local_var_types.get(name) {
+                                // #266: &mut 令牌穿透——变量类型可能是
+                                // "&mut Point"，方法名应基于底层结构体 "Point"
+                                let base = Self::strip_ref_prefix(type_name);
+                                format!("{}.{}", base, field)
+                            } else {
+                                self.resolve_field_path(expr, field)
+                            }
+                        } else {
+                            self.resolve_field_path(expr, field)
+                        };
+
+                        let final_args: Vec<Operand> = arg_regs.clone();
+
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(func_name)),
+                            args: final_args,
+                            span: *span,
+                            def: None,
+                        });
+                    }
+                }
+            }
+        } else {
+            // 普通函数调用
+            let mut arg_regs = Vec::new();
+            for arg in args.iter() {
+                let arg_reg = self.next_temp_reg();
+                self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                arg_regs.push(Operand::Local(arg_reg));
+            }
+
+            // RFC-010: 处理命名参数构造 `Point(x=1, y=2)`
+            if !named_args.is_empty() {
+                if let Expr::Var(name, _) = func {
+                    if let Some(fields) = self.struct_definitions.get(name).cloned() {
+                        // 生成命名参数的 IR
+                        let mut named_regs: Vec<(String, Operand)> = Vec::new();
+                        for (arg_name, arg_expr) in named_args.iter() {
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                            named_regs.push((arg_name.clone(), Operand::Local(arg_reg)));
+                        }
+
+                        // 按字段顺序重排参数
+                        let mut final_args: Vec<Option<Operand>> = vec![None; fields.len()];
+
+                        // 先放置位置参数
+                        for (i, reg) in arg_regs.iter().enumerate() {
+                            if i < fields.len() {
+                                final_args[i] = Some(reg.clone());
+                            }
+                        }
+
+                        // 再放置命名参数（按字段名匹配）
+                        for (name, reg) in &named_regs {
+                            if let Some(idx) = fields.iter().position(|f| &f.name == name) {
+                                final_args[idx] = Some(reg.clone());
+                            }
+                        }
+
+                        // 填充默认值
+                        for (i, slot) in final_args.iter_mut().enumerate() {
+                            if slot.is_none() {
+                                let default_reg = self.next_temp_reg();
+                                if let Some(default_expr) = &fields[i].default {
+                                    self.generate_expr_ir(
+                                        default_expr,
+                                        default_reg,
+                                        instructions,
+                                        constants,
+                                    )?;
+                                } else {
+                                    instructions.push(Instruction::Load {
+                                        dst: Operand::Local(default_reg),
+                                        src: Operand::Const(ConstValue::Int(0)),
+                                        span: self.cur_span,
+                                    });
+                                }
+                                *slot = Some(Operand::Local(default_reg));
+                            }
+                        }
+
+                        arg_regs = final_args.into_iter().map(|s| s.unwrap()).collect();
+                    }
+                }
+            }
+
+            // 检查是否是结构体构造器调用，需要填充默认值
+            // 两层调用 X(类型参数)(构造参数)：func 是 Call{func: Var(name)}，
+            // 内层类型实参运行期擦除，外层实参按字段位置填充。
+            let struct_ctor_name: Option<String> = match func {
+                Expr::Var(name, _) => Some(name.clone()),
+                Expr::Call { func: inner, .. } => match inner.as_ref() {
+                    Expr::Var(name, _) => Some(name.clone()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(name) = struct_ctor_name {
+                if let Some(fields) = self.struct_definitions.get(&name).cloned() {
+                    // 这是一个结构体构造器调用
+                    // 如果提供的参数数少于字段数，用默认值填充
+                    if arg_regs.len() < fields.len() {
+                        for field in fields.iter().skip(arg_regs.len()) {
+                            let default_reg = self.next_temp_reg();
+                            if let Some(default_expr) = &field.default {
+                                // 有默认值：生成默认值表达式 IR
+                                self.generate_expr_ir(
+                                    default_expr,
+                                    default_reg,
+                                    instructions,
+                                    constants,
+                                )?;
+                            } else {
+                                // 无默认值：用零值填充（语义检查阶段应已报错）
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(default_reg),
+                                    src: Operand::Const(ConstValue::Int(0)),
+                                    span: self.cur_span,
+                                });
+                            }
+                            arg_regs.push(Operand::Local(default_reg));
+                        }
+                    }
+                }
+            }
+
+            // 检查是否是动态函数调用（非静态函数名的 Var）
+            if !self.is_static_fn_name(func) {
+                // 闭包调用：先加载函数值，然后使用 CallDyn
+                let func_reg = self.next_temp_reg();
+                self.generate_expr_ir(func, func_reg, instructions, constants)?;
+
+                instructions.push(Instruction::CallDyn {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Local(func_reg),
+                    args: arg_regs,
+                    span: *span,
+                });
+            } else {
+                // ========== print/println 零开销分发处理 ==========
+                // 检查是否是 print 或 println 调用
+                let is_print_call = if let Expr::Var(name, _) = func {
+                    matches!(
+                        name.as_str(),
+                        "print" | "println" | "std.io.print" | "std.io.println"
+                    )
+                } else {
+                    false
+                };
+
+                // 如果是 print/println 且有参数，尝试零开销分发
+                if is_print_call && !args.is_empty() {
+                    let arg_expr = &args[0];
+                    // 获取参数的类型信息
+                    let arg_type = self.get_expr_mono_type(arg_expr);
+
+                    if let Some(mono_type) = arg_type {
+                        // 检查类型是否实现了 Stringable（to_string 方法）
+                        if type_implements_stringable(&mono_type) {
+                            // 零开销路径：直接调用 to_string 方法
+                            // 生成: arg.to_string()
+                            let func_name =
+                                format!("{}.to_string", get_type_fallback_string(&mono_type));
+                            let mut arg_regs_for_method = Vec::new();
+
+                            // 先计算参数值
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                            arg_regs_for_method.push(Operand::Local(arg_reg));
+
+                            // 调用 to_string 方法
+                            let to_string_reg = self.next_temp_reg();
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(to_string_reg)),
+                                func: Operand::Const(ConstValue::String(func_name)),
+                                args: arg_regs_for_method,
+                                span: *span,
+                                def: None,
+                            });
+
+                            // 然后调用 std.io.print 输出字符串
+                            // 使用 resolved name
+                            let print_func_name = if let Expr::Var(name, _) = func {
+                                if name == "print" || name == "println" {
+                                    if let Some(qualified) =
+                                        self.registry.short_to_qualified_map().get(name)
+                                    {
+                                        qualified.clone()
+                                    } else {
+                                        format!("std.io.{}", name)
+                                    }
+                                } else {
+                                    name.clone()
+                                }
+                            } else {
+                                "std.io.print".to_string()
+                            };
+
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(result_reg)),
+                                func: Operand::Const(ConstValue::String(print_func_name)),
+                                args: vec![Operand::Local(to_string_reg)],
+                                span: *span,
+                                def: None,
+                            });
+                        } else {
+                            // 兜底路径：类型未实现 Stringable，调用 std.io.print 输出类型信息
+                            // 生成: std.io.format_fallback(arg, type_name)
+                            let type_name = get_type_fallback_string(&mono_type);
+
+                            // 先计算参数值
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+
+                            // 调用 format_fallback 获取类型信息字符串
+                            // 类型名常量先 Load 进寄存器——Call 参数必须寄存器态
+                            // （Const 直传会被 codegen to_reg 拒收，老 bug，tuple 同款）
+                            let type_name_reg = self.next_temp_reg();
+                            instructions.push(Instruction::Load {
+                                dst: Operand::Local(type_name_reg),
+                                src: Operand::Const(ConstValue::String(type_name.clone())),
+                                span: self.cur_span,
+                            });
+                            let fallback_reg = self.next_temp_reg();
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(fallback_reg)),
+                                func: Operand::Const(ConstValue::String(
+                                    "std.io.format_fallback".to_string(),
+                                )),
+                                args: vec![Operand::Local(arg_reg), Operand::Local(type_name_reg)],
+                                span: *span,
+                                def: None,
+                            });
+
+                            // 然后调用 std.io.print 输出
+                            let print_func_name = if let Expr::Var(name, _) = func {
+                                if name == "print" || name == "println" {
+                                    if let Some(qualified) =
+                                        self.registry.short_to_qualified_map().get(name)
+                                    {
+                                        qualified.clone()
+                                    } else {
+                                        format!("std.io.{}", name)
+                                    }
+                                } else {
+                                    name.clone()
+                                }
+                            } else {
+                                "std.io.print".to_string()
+                            };
+
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(result_reg)),
+                                func: Operand::Const(ConstValue::String(print_func_name)),
+                                args: vec![Operand::Local(fallback_reg)],
+                                span: *span,
+                                def: None,
+                            });
+                        }
+                    } else {
+                        // 无法获取类型，使用默认处理
+                        let func_operand = self.resolve_function_name(func)?;
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: func_operand,
+                            args: arg_regs,
+                            span: *span,
+                            def: None,
+                        });
+                    }
+                } else {
+                    // 非 print 调用或无参数，使用默认处理
+                    // ========== 默认函数调用处理 ==========
+                    let final_args: Vec<Operand> = arg_regs.clone();
+
+                    let func_operand = self.resolve_function_name(func)?;
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: func_operand,
+                        args: final_args,
+                        span: *span,
+                        def: None,
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn generate_expr_ir_inner(
         &mut self,
         expr: &ast::Expr,
@@ -4485,929 +6492,57 @@ impl AstToIrGenerator {
     ) -> Result<(), Diagnostic> {
         match expr {
             Expr::Lit(literal, _) => {
-                // 常量加载
-                let const_val = match literal {
-                    Literal::Int(n) => ConstValue::Int(*n),
-                    Literal::Float(f) => ConstValue::Float(*f),
-                    Literal::Bool(b) => ConstValue::Bool(*b),
-                    Literal::String(s) => ConstValue::String(s.clone()),
-                    Literal::Char(c) => ConstValue::Char(*c),
-                    Literal::Void => ConstValue::Void,
-                };
-                // 添加到常量池
-                constants.push(const_val.clone());
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Const(const_val),
-                    span: self.cur_span,
-                });
+                self.generate_lit_expr_ir(literal, result_reg, instructions, constants)?;
             }
             Expr::Var(var_name, var_span) => {
-                // #254：闭包体内——先查捕获表（外层变量经 env 捕获，LoadUpvalue 读）
-                if let Some(&env_idx) = self.closure_captures.get(var_name) {
-                    instructions.push(Instruction::LoadUpvalue {
-                        dst: Operand::Local(result_reg),
-                        upvalue_idx: env_idx,
-                        span: self.cur_span,
-                    });
-                } else if let Some(local_idx) = self.lookup_local(var_name) {
-                    // 局部变量：直接加载
-                    instructions.push(Instruction::Load {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(local_idx),
-                        span: self.cur_span,
-                    });
-                } else if let Some(global_idx) = self.lookup_global(var_name) {
-                    // 全局变量（T2）：直接从全局槽位加载，不再调用访问器函数
-                    instructions.push(Instruction::Load {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Global(global_idx),
-                        span: *var_span,
-                    });
-                } else if let Some(alias) = self.use_aliases.get(var_name) {
-                    // T5：`use lib.{value}` 的别名先看是否落在全局布局里
-                    // （跨文件顶层绑定）——是则走 LoadGlobal。
-                    // 否则是 std 原生常量（如 PI），按限定名调用 native handler。
-                    if let Some(&slot) = self.global_slot_layout.get(alias) {
-                        instructions.push(Instruction::Load {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Global(slot),
-                            span: *var_span,
-                        });
-                    } else {
-                        instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Const(ConstValue::String(alias.clone())),
-                            args: vec![],
-                            span: *var_span,
-                            def: None,
-                        });
-                    }
-                } else if matches!(
-                    var_name.as_str(),
-                    "Int"
-                        | "Float"
-                        | "Bool"
-                        | "String"
-                        | "Char"
-                        | "Bytes"
-                        | "Type"
-                        | "Void"
-                        | "Never"
-                ) {
-                    // 内置类型名作为类型实参（如 SafeArray(Int, 3)）：类型宇宙的值，
-                    // 运行时无表示，加载 Void 占位（类型参数在编译期已被消费）
-                    instructions.push(Instruction::Load {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Const(ConstValue::Void),
-                        span: self.cur_span,
-                    });
-                } else if self.binding_is_function(var_name) {
-                    // #348：名字的类型是 Fn ⇒ 它就是函数值。运行时函数值的唯一表示是
-                    // 闭包，故物化为 MakeClosure（env 为空：本处只处理顶层/自由函数名，
-                    // 捕获变量已由上方 closure_captures 处理）。
-                    //
-                    // 此前落到下方兜底 → E3006（"变量无法解析"），使函数名不能
-                    // 作一等值使用：`io.println(f)` / `g(f)` / `x = f` 全部失败。
-                    instructions.push(Instruction::MakeClosure {
-                        dst: Operand::Local(result_reg),
-                        func: var_name.clone(),
-                        env: vec![],
-                        def: None,
-                        span: self.cur_span,
-                    });
-                } else {
-                    // #271 #3：未解析变量 → 硬错误（#254 spawn 捕获已落地，不再需要静默 Load 0 兜底）。
-                    // 走到这里说明 typecheck 漏网，属编译器内部一致性问题。
-                    return Err(ErrorCodeDefinition::unresolved_variable(var_name)
-                        .at(*var_span)
-                        .build());
-                }
+                self.generate_var_expr_ir(var_name, var_span, result_reg, instructions)?;
             }
             Expr::BinOp {
                 op,
                 left,
                 right,
                 span,
+                ..
             } => {
-                tlog!(debug, MSG::DebugGeneratingIRBinOp, &format!("{:?}", op));
-                // 二元运算
-                let instr = match op {
-                    ast::BinOp::Assign => {
-                        if let Expr::Var(var_name, _) = left.as_ref() {
-                            let local_idx = if let Some(idx) = self.lookup_local(var_name) {
-                                idx
-                            } else {
-                                let idx = self.next_temp_reg();
-                                self.register_local(var_name, idx);
-                                idx
-                            };
-                            let val_reg = self.next_temp_reg();
-                            self.generate_expr_ir(right, val_reg, instructions, constants)?;
-
-                            // 更新变量的类型信息
-                            // 优先使用 typecheck 结果推导类型名，AST 推断仅作为兜底
-                            let inferred = self.get_expr_type_name(right);
-                            if inferred != "<unknown>" {
-                                self.local_var_types.insert(var_name.clone(), inferred);
-                            }
-
-                            // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
-                            instructions.push(Instruction::Store {
-                                dst: Operand::Local(local_idx),
-                                src: Operand::Local(val_reg),
-                                span: *span,
-                            });
-                            instructions.push(Instruction::Load {
-                                dst: Operand::Local(result_reg),
-                                src: Operand::Local(local_idx),
-                                span: self.cur_span,
-                            });
-                        }
-                        return Ok(());
-                    }
-                    // #300 I 项：Range 是一等值——三槽 [start, end, step]，复用 Tuple 载体
-                    // （静态类型驱动一切消费，载体不透明；#302 落地 std.Range 后换正式身份）
-                    ast::BinOp::Range => {
-                        self.generate_range_construction_ir(
-                            left,
-                            right,
-                            result_reg,
-                            *span,
-                            instructions,
-                            constants,
-                        )?;
-                        return Ok(());
-                    }
-                    ast::BinOp::And | ast::BinOp::Or => {
-                        // SPEC §2.2 / RFC-010 权威语义：and/or 短路求值
-                        // a and b ≡ if a { b } else { false }；a or b ≡ if a { true } else { b }
-                        let lhs_reg = self.next_temp_reg();
-                        self.generate_expr_ir(left, lhs_reg, instructions, constants)?;
-                        let is_and = matches!(op, ast::BinOp::And);
-                        let short_idx = instructions.len();
-                        if is_and {
-                            instructions.push(Instruction::JmpIfNot {
-                                cond: Operand::Local(lhs_reg),
-                                target: 0,
-                                span: self.cur_span,
-                            });
-                        } else {
-                            instructions.push(Instruction::JmpIf {
-                                cond: Operand::Local(lhs_reg),
-                                target: 0,
-                                span: self.cur_span,
-                            });
-                        }
-                        self.generate_expr_ir(right, result_reg, instructions, constants)?;
-                        let end_idx = instructions.len();
-                        instructions.push(Instruction::Jmp {
-                            target: 0,
-                            span: self.cur_span,
-                        });
-                        // 短路值：and → false，or → true
-                        let sc_target = instructions.len();
-                        if let Instruction::JmpIf {
-                            cond: _,
-                            target: ref mut t,
-                            span: _,
-                        } = instructions[short_idx]
-                        {
-                            *t = sc_target;
-                        }
-                        if let Instruction::JmpIfNot {
-                            cond: _,
-                            target: ref mut t,
-                            span: _,
-                        } = instructions[short_idx]
-                        {
-                            *t = sc_target;
-                        }
-                        instructions.push(Instruction::Load {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Const(if is_and {
-                                ConstValue::Bool(false)
-                            } else {
-                                ConstValue::Bool(true)
-                            }),
-                            span: self.cur_span,
-                        });
-                        let end_target = instructions.len();
-                        if let Instruction::Jmp {
-                            target: ref mut t,
-                            span: _,
-                        } = instructions[end_idx]
-                        {
-                            *t = end_target;
-                        }
-                        return Ok(());
-                    }
-                    _ => {
-                        let left_reg = self.next_temp_reg();
-                        let right_reg = self.next_temp_reg();
-                        self.generate_expr_ir(left, left_reg, instructions, constants)?;
-                        self.generate_expr_ir(right, right_reg, instructions, constants)?;
-
-                        match op {
-                            ast::BinOp::Add => Instruction::Add {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Sub => Instruction::Sub {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Mul => Instruction::Mul {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Div => Instruction::Div {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: *span,
-                            },
-                            ast::BinOp::Mod => Instruction::Mod {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: *span,
-                            },
-                            // #285: 位运算/移位（SPEC §2.2 级 7/8）
-                            ast::BinOp::BitAnd => Instruction::And {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::BitOr => Instruction::Or {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::BitXor => Instruction::Xor {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Shl => Instruction::Shl {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Shr => Instruction::Shr {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Eq => Instruction::Eq {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Neq => Instruction::Ne {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Lt => Instruction::Lt {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Le => Instruction::Le {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Gt => Instruction::Gt {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            ast::BinOp::Ge => Instruction::Ge {
-                                dst: Operand::Local(result_reg),
-                                lhs: Operand::Local(left_reg),
-                                rhs: Operand::Local(right_reg),
-                                span: self.cur_span,
-                            },
-                            // Assign 在上方分支处理；And/Or 走短路求值；Range 仅限 for/切片上下文。
-                            // 剩余运算符到达此处即内部错误——禁止静默兜底（教训：&&/|| 曾静默编译为常量 0，#251）
-                            _ => {
-                                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
-                                    "unhandled binary operator: {:?}",
-                                    op
-                                ))
-                                .build());
-                            }
-                        }
-                    }
-                };
-                instructions.push(instr);
+                self.generate_bin_op_expr_ir(
+                    op,
+                    left,
+                    right,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
             Expr::Call {
                 func,
                 args,
                 named_args,
                 span,
+                ..
             } => {
-                // 检查是否是方法调用：func 是 FieldAccess
-                if let Expr::FieldAccess { expr, field, .. } = func.as_ref() {
-                    // 方法调用 - 转换为普通函数调用
-                    // 命名空间机制：p.method() -> method(p)
-
-                    // 只有非命名空间调用才需要添加 self 参数
-                    // 命名空间调用（如 std.io.println）不需要隐式参数
-                    if self.is_namespace_receiver(expr) {
-                        // 命名空间调用：不需要隐式参数
-                        let mut arg_regs = Vec::new();
-                        for arg in args.iter() {
-                            let arg_reg = self.next_temp_reg();
-                            self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                            arg_regs.push(Operand::Local(arg_reg));
-                        }
-                        let method_function_name = self.resolve_field_path(expr, field);
-                        instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Const(ConstValue::String(
-                                method_function_name.to_string(),
-                            )),
-                            args: arg_regs,
-                            span: *span,
-                            def: None,
-                        });
-                    } else {
-                        // 非命名空间调用：检查是否有绑定信息（RFC-004）
-                        let binding_info =
-                            self.get_expr_struct_type_name(expr).and_then(|type_name| {
-                                self.type_bindings
-                                    .get(&type_name)
-                                    .and_then(|bindings| bindings.get(field).cloned())
-                            });
-
-                        if let Some(binding) = binding_info {
-                            // 绑定方法调用：按 RFC-004 进行参数重排
-                            // obj.method(arg1, arg2) + binding positions [0]
-                            // → original_function(obj, arg1, arg2)
-                            //
-                            // obj.method(arg1) + binding positions [1]
-                            // → original_function(arg1, obj)
-
-                            // 首先生成对象表达式 IR
-                            let obj_reg = self.next_temp_reg();
-                            self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-
-                            // 生成所有方法参数 IR
-                            let mut method_arg_regs = Vec::new();
-                            for arg in args.iter() {
-                                let arg_reg = self.next_temp_reg();
-                                self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                                method_arg_regs.push(Operand::Local(arg_reg));
-                            }
-
-                            // 按绑定位置重排参数。
-                            // total_params = 绑定位数 + 方法实参数 = 被绑函数元数（调用方
-                            // 恰好提供剩余参数），负索引据此归一化（[-1] = 最后一个参数）。
-                            let total_params = binding.positions.len() + method_arg_regs.len();
-                            let positions: Vec<i64> = binding
-                                .positions
-                                .iter()
-                                .map(|&p| if p < 0 { p + total_params as i64 } else { p })
-                                .collect();
-                            let mut final_args: Vec<Operand> = Vec::with_capacity(total_params);
-                            let mut method_arg_iter = method_arg_regs.into_iter();
-
-                            for pos in 0..total_params {
-                                if positions.contains(&(pos as i64)) {
-                                    final_args.push(Operand::Local(obj_reg));
-                                } else if let Some(arg_reg) = method_arg_iter.next() {
-                                    final_args.push(arg_reg);
-                                }
-                            }
-
-                            // 解析函数名
-                            let func_name = if let Some(qualified) = self
-                                .registry
-                                .short_to_qualified_map()
-                                .get(&binding.function)
-                            {
-                                qualified.clone()
-                            } else {
-                                binding.function.clone()
-                            };
-
-                            instructions.push(Instruction::Call {
-                                dst: Some(Operand::Local(result_reg)),
-                                func: Operand::Const(ConstValue::String(func_name)),
-                                args: final_args,
-                                span: *span,
-                                def: None,
-                            });
-                        } else {
-                            // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
-                            // 接口直接赋值优化：检查对象是否是约束变量
-                            let mut arg_regs = Vec::new();
-
-                            // 生成对象表达式 IR（作为第一个参数）
-                            let obj_reg = self.next_temp_reg();
-                            self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                            arg_regs.push(Operand::Local(obj_reg));
-
-                            // 生成方法参数 IR
-                            for arg in args.iter() {
-                                let arg_reg = self.next_temp_reg();
-                                self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                                arg_regs.push(Operand::Local(arg_reg));
-                            }
-
-                            // RFC-011a §6.4: 存在类型接收者 → 编译期变体分发。
-                            // 门控：接口须有本单元实现证明（隔离遗留 trait 约束路径）
-                            if let Some(iface) = self.existential_receiver_interface(expr) {
-                                if self.interface_variants.contains_key(&iface) {
-                                    let method_args: Vec<Operand> = arg_regs[1..].to_vec();
-                                    self.emit_variant_dispatch(
-                                        &iface,
-                                        field,
-                                        obj_reg,
-                                        &method_args,
-                                        result_reg,
-                                        *span,
-                                        instructions,
-                                        constants,
-                                    )?;
-                                    return Ok(());
-                                }
-                            }
-
-                            // 检查对象是否是约束变量（接口直接赋值优化）
-                            let var_name = if let Expr::Var(name, _) = expr.as_ref() {
-                                Some(name.clone())
-                            } else {
-                                None
-                            };
-
-                            let concrete_type = var_name.as_ref().and_then(|name| {
-                                self.get_constraint_var_concrete_type(name).cloned()
-                            });
-
-                            if let Some(concrete_type_name) = concrete_type {
-                                // 编译期可确定具体类型 → 直接调用（零开销）
-                                // d.draw(screen) → ConcreteType.draw(d, screen)
-                                let qualified_name = format!("{}.{}", concrete_type_name, field);
-
-                                let final_args: Vec<Operand> = arg_regs.clone();
-
-                                instructions.push(Instruction::Call {
-                                    dst: Some(Operand::Local(result_reg)),
-                                    func: Operand::Const(ConstValue::String(qualified_name)),
-                                    args: final_args,
-                                    span: *span,
-                                    def: None,
-                                });
-                            } else if var_name.as_ref().is_some_and(|name| {
-                                // 检查变量的类型标注是否是约束类型（但具体类型未知）
-                                self.local_var_types
-                                    .get(name)
-                                    .and_then(|type_name| {
-                                        // 如果变量类型是约束类型且不在 constraint_var_concrete_types 中
-                                        // 说明具体类型无法在编译期确定，需要 vtable 调用
-                                        if !self.struct_definitions.contains_key(type_name)
-                                            && !self
-                                                .constraint_var_concrete_types
-                                                .contains_key(name)
-                                        {
-                                            // 简单启发式：如果变量类型不是已知结构体，可能是约束类型
-                                            Some(true)
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .unwrap_or(false)
-                            }) {
-                                // 编译期无法确定具体类型 → CallVirt（vtable 调用）
-                                instructions.push(Instruction::CallVirt {
-                                    dst: Some(Operand::Local(result_reg)),
-                                    obj: Operand::Local(obj_reg),
-                                    method_name: field.to_string(),
-                                    args: arg_regs,
-                                    span: *span,
-                                });
-                            } else {
-                                // 普通方法调用
-                                // 优先使用类型名（而非变量名）构建函数名
-                                // 例如：a.is_greater(b) 中 a 的类型是 Node
-                                // → 函数名应为 "Node.is_greater" 而非 "a.is_greater"
-                                let func_name = if let Expr::Var(name, _) = expr.as_ref() {
-                                    if let Some(type_name) = self.local_var_types.get(name) {
-                                        // #266: &mut 令牌穿透——变量类型可能是
-                                        // "&mut Point"，方法名应基于底层结构体 "Point"
-                                        let base = Self::strip_ref_prefix(type_name);
-                                        format!("{}.{}", base, field)
-                                    } else {
-                                        self.resolve_field_path(expr, field)
-                                    }
-                                } else {
-                                    self.resolve_field_path(expr, field)
-                                };
-
-                                let final_args: Vec<Operand> = arg_regs.clone();
-
-                                instructions.push(Instruction::Call {
-                                    dst: Some(Operand::Local(result_reg)),
-                                    func: Operand::Const(ConstValue::String(func_name)),
-                                    args: final_args,
-                                    span: *span,
-                                    def: None,
-                                });
-                            }
-                        }
-                    }
-                } else {
-                    // 普通函数调用
-                    let mut arg_regs = Vec::new();
-                    for arg in args.iter() {
-                        let arg_reg = self.next_temp_reg();
-                        self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                        arg_regs.push(Operand::Local(arg_reg));
-                    }
-
-                    // RFC-010: 处理命名参数构造 `Point(x=1, y=2)`
-                    if !named_args.is_empty() {
-                        if let Expr::Var(name, _) = func.as_ref() {
-                            if let Some(fields) = self.struct_definitions.get(name).cloned() {
-                                // 生成命名参数的 IR
-                                let mut named_regs: Vec<(String, Operand)> = Vec::new();
-                                for (arg_name, arg_expr) in named_args.iter() {
-                                    let arg_reg = self.next_temp_reg();
-                                    self.generate_expr_ir(
-                                        arg_expr,
-                                        arg_reg,
-                                        instructions,
-                                        constants,
-                                    )?;
-                                    named_regs.push((arg_name.clone(), Operand::Local(arg_reg)));
-                                }
-
-                                // 按字段顺序重排参数
-                                let mut final_args: Vec<Option<Operand>> = vec![None; fields.len()];
-
-                                // 先放置位置参数
-                                for (i, reg) in arg_regs.iter().enumerate() {
-                                    if i < fields.len() {
-                                        final_args[i] = Some(reg.clone());
-                                    }
-                                }
-
-                                // 再放置命名参数（按字段名匹配）
-                                for (name, reg) in &named_regs {
-                                    if let Some(idx) = fields.iter().position(|f| &f.name == name) {
-                                        final_args[idx] = Some(reg.clone());
-                                    }
-                                }
-
-                                // 填充默认值
-                                for (i, slot) in final_args.iter_mut().enumerate() {
-                                    if slot.is_none() {
-                                        let default_reg = self.next_temp_reg();
-                                        if let Some(default_expr) = &fields[i].default {
-                                            self.generate_expr_ir(
-                                                default_expr,
-                                                default_reg,
-                                                instructions,
-                                                constants,
-                                            )?;
-                                        } else {
-                                            instructions.push(Instruction::Load {
-                                                dst: Operand::Local(default_reg),
-                                                src: Operand::Const(ConstValue::Int(0)),
-                                                span: self.cur_span,
-                                            });
-                                        }
-                                        *slot = Some(Operand::Local(default_reg));
-                                    }
-                                }
-
-                                arg_regs = final_args.into_iter().map(|s| s.unwrap()).collect();
-                            }
-                        }
-                    }
-
-                    // 检查是否是结构体构造器调用，需要填充默认值
-                    // 两层调用 X(类型参数)(构造参数)：func 是 Call{func: Var(name)}，
-                    // 内层类型实参运行期擦除，外层实参按字段位置填充。
-                    let struct_ctor_name: Option<String> = match func.as_ref() {
-                        Expr::Var(name, _) => Some(name.clone()),
-                        Expr::Call { func: inner, .. } => match inner.as_ref() {
-                            Expr::Var(name, _) => Some(name.clone()),
-                            _ => None,
-                        },
-                        _ => None,
-                    };
-                    if let Some(name) = struct_ctor_name {
-                        if let Some(fields) = self.struct_definitions.get(&name).cloned() {
-                            // 这是一个结构体构造器调用
-                            // 如果提供的参数数少于字段数，用默认值填充
-                            if arg_regs.len() < fields.len() {
-                                for field in fields.iter().skip(arg_regs.len()) {
-                                    let default_reg = self.next_temp_reg();
-                                    if let Some(default_expr) = &field.default {
-                                        // 有默认值：生成默认值表达式 IR
-                                        self.generate_expr_ir(
-                                            default_expr,
-                                            default_reg,
-                                            instructions,
-                                            constants,
-                                        )?;
-                                    } else {
-                                        // 无默认值：用零值填充（语义检查阶段应已报错）
-                                        instructions.push(Instruction::Load {
-                                            dst: Operand::Local(default_reg),
-                                            src: Operand::Const(ConstValue::Int(0)),
-                                            span: self.cur_span,
-                                        });
-                                    }
-                                    arg_regs.push(Operand::Local(default_reg));
-                                }
-                            }
-                        }
-                    }
-
-                    // 检查是否是动态函数调用（非静态函数名的 Var）
-                    if !self.is_static_fn_name(func) {
-                        // 闭包调用：先加载函数值，然后使用 CallDyn
-                        let func_reg = self.next_temp_reg();
-                        self.generate_expr_ir(func, func_reg, instructions, constants)?;
-
-                        instructions.push(Instruction::CallDyn {
-                            dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Local(func_reg),
-                            args: arg_regs,
-                            span: *span,
-                        });
-                    } else {
-                        // ========== print/println 零开销分发处理 ==========
-                        // 检查是否是 print 或 println 调用
-                        let is_print_call = if let Expr::Var(name, _) = func.as_ref() {
-                            matches!(
-                                name.as_str(),
-                                "print" | "println" | "std.io.print" | "std.io.println"
-                            )
-                        } else {
-                            false
-                        };
-
-                        // 如果是 print/println 且有参数，尝试零开销分发
-                        if is_print_call && !args.is_empty() {
-                            let arg_expr = &args[0];
-                            // 获取参数的类型信息
-                            let arg_type = self.get_expr_mono_type(arg_expr);
-
-                            if let Some(mono_type) = arg_type {
-                                // 检查类型是否实现了 Stringable（to_string 方法）
-                                if type_implements_stringable(&mono_type) {
-                                    // 零开销路径：直接调用 to_string 方法
-                                    // 生成: arg.to_string()
-                                    let func_name = format!(
-                                        "{}.to_string",
-                                        get_type_fallback_string(&mono_type)
-                                    );
-                                    let mut arg_regs_for_method = Vec::new();
-
-                                    // 先计算参数值
-                                    let arg_reg = self.next_temp_reg();
-                                    self.generate_expr_ir(
-                                        arg_expr,
-                                        arg_reg,
-                                        instructions,
-                                        constants,
-                                    )?;
-                                    arg_regs_for_method.push(Operand::Local(arg_reg));
-
-                                    // 调用 to_string 方法
-                                    let to_string_reg = self.next_temp_reg();
-                                    instructions.push(Instruction::Call {
-                                        dst: Some(Operand::Local(to_string_reg)),
-                                        func: Operand::Const(ConstValue::String(func_name)),
-                                        args: arg_regs_for_method,
-                                        span: *span,
-                                        def: None,
-                                    });
-
-                                    // 然后调用 std.io.print 输出字符串
-                                    // 使用 resolved name
-                                    let print_func_name = if let Expr::Var(name, _) = func.as_ref()
-                                    {
-                                        if name == "print" || name == "println" {
-                                            if let Some(qualified) =
-                                                self.registry.short_to_qualified_map().get(name)
-                                            {
-                                                qualified.clone()
-                                            } else {
-                                                format!("std.io.{}", name)
-                                            }
-                                        } else {
-                                            name.clone()
-                                        }
-                                    } else {
-                                        "std.io.print".to_string()
-                                    };
-
-                                    instructions.push(Instruction::Call {
-                                        dst: Some(Operand::Local(result_reg)),
-                                        func: Operand::Const(ConstValue::String(print_func_name)),
-                                        args: vec![Operand::Local(to_string_reg)],
-                                        span: *span,
-                                        def: None,
-                                    });
-                                } else {
-                                    // 兜底路径：类型未实现 Stringable，调用 std.io.print 输出类型信息
-                                    // 生成: std.io.format_fallback(arg, type_name)
-                                    let type_name = get_type_fallback_string(&mono_type);
-
-                                    // 先计算参数值
-                                    let arg_reg = self.next_temp_reg();
-                                    self.generate_expr_ir(
-                                        arg_expr,
-                                        arg_reg,
-                                        instructions,
-                                        constants,
-                                    )?;
-
-                                    // 调用 format_fallback 获取类型信息字符串
-                                    // 类型名常量先 Load 进寄存器——Call 参数必须寄存器态
-                                    // （Const 直传会被 codegen to_reg 拒收，老 bug，tuple 同款）
-                                    let type_name_reg = self.next_temp_reg();
-                                    instructions.push(Instruction::Load {
-                                        dst: Operand::Local(type_name_reg),
-                                        src: Operand::Const(ConstValue::String(type_name.clone())),
-                                        span: self.cur_span,
-                                    });
-                                    let fallback_reg = self.next_temp_reg();
-                                    instructions.push(Instruction::Call {
-                                        dst: Some(Operand::Local(fallback_reg)),
-                                        func: Operand::Const(ConstValue::String(
-                                            "std.io.format_fallback".to_string(),
-                                        )),
-                                        args: vec![
-                                            Operand::Local(arg_reg),
-                                            Operand::Local(type_name_reg),
-                                        ],
-                                        span: *span,
-                                        def: None,
-                                    });
-
-                                    // 然后调用 std.io.print 输出
-                                    let print_func_name = if let Expr::Var(name, _) = func.as_ref()
-                                    {
-                                        if name == "print" || name == "println" {
-                                            if let Some(qualified) =
-                                                self.registry.short_to_qualified_map().get(name)
-                                            {
-                                                qualified.clone()
-                                            } else {
-                                                format!("std.io.{}", name)
-                                            }
-                                        } else {
-                                            name.clone()
-                                        }
-                                    } else {
-                                        "std.io.print".to_string()
-                                    };
-
-                                    instructions.push(Instruction::Call {
-                                        dst: Some(Operand::Local(result_reg)),
-                                        func: Operand::Const(ConstValue::String(print_func_name)),
-                                        args: vec![Operand::Local(fallback_reg)],
-                                        span: *span,
-                                        def: None,
-                                    });
-                                }
-                            } else {
-                                // 无法获取类型，使用默认处理
-                                let func_operand = self.resolve_function_name(func)?;
-                                instructions.push(Instruction::Call {
-                                    dst: Some(Operand::Local(result_reg)),
-                                    func: func_operand,
-                                    args: arg_regs,
-                                    span: *span,
-                                    def: None,
-                                });
-                            }
-                        } else {
-                            // 非 print 调用或无参数，使用默认处理
-                            // ========== 默认函数调用处理 ==========
-                            let final_args: Vec<Operand> = arg_regs.clone();
-
-                            let func_operand = self.resolve_function_name(func)?;
-                            instructions.push(Instruction::Call {
-                                dst: Some(Operand::Local(result_reg)),
-                                func: func_operand,
-                                args: final_args,
-                                span: *span,
-                                def: None,
-                            });
-                        }
-                    }
-                }
+                self.generate_call_expr_ir(
+                    func,
+                    args,
+                    named_args,
+                    span,
+                    expr,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
-            Expr::FieldAccess { expr, field, span } => {
-                // 首先检查是否是模块变量的字段访问（如 io.println）
-                // io 是通过 use std.{io} 导入的模块变量
-                if let Expr::Var(module_name, _) = expr.as_ref() {
-                    if let Some(full_path) = {
-                        let reg = &self.registry;
-                        if reg.is_std_submodule(module_name) {
-                            let path = format!("std.{}", field);
-                            if reg.is_native_name(&path) {
-                                Some(path)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    } {
-                        // 模块变量方法调用：生成函数调用
-                        // 例如：io.println -> Call("std.io.println", [args])
-                        // 这里我们处理的是非调用场景的字段访问（如 io.println 作为值）
-                        // 生成零参数调用
-                        instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Const(ConstValue::String(full_path)),
-                            args: vec![],
-                            span: *span,
-                            def: None,
-                        });
-                    } else {
-                        // 普通字段访问
-                        let obj_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                        let field_index =
-                            self.resolve_field_index(expr, field).ok_or_else(|| {
-                                ErrorCodeDefinition::ir_internal_error(&format!(
-                                    "无法解析字段索引: '{}'",
-                                    field
-                                ))
-                                .at(Self::get_expr_span(expr))
-                                .build()
-                            })?;
-                        instructions.push(Instruction::LoadField {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(obj_reg),
-                            field: field_index,
-                            span: *span,
-                        });
-                    }
-                } else {
-                    // 提取完整的命名空间路径（如 std.math.PI）
-                    let full_path = self.resolve_field_path(expr, field);
-
-                    // 检查是否是命名空间常量访问
-                    if self.registry.is_native_name(&full_path) {
-                        // 命名空间常量访问：生成零参数函数调用
-                        instructions.push(Instruction::Call {
-                            dst: Some(Operand::Local(result_reg)),
-                            func: Operand::Const(ConstValue::String(full_path)),
-                            args: vec![],
-                            span: *span,
-                            def: None,
-                        });
-                    } else {
-                        // 普通字段访问
-                        let obj_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                        let field_index =
-                            self.resolve_field_index(expr, field).ok_or_else(|| {
-                                ErrorCodeDefinition::ir_internal_error(&format!(
-                                    "无法解析字段索引: '{}'",
-                                    field
-                                ))
-                                .at(Self::get_expr_span(expr))
-                                .build()
-                            })?;
-                        instructions.push(Instruction::LoadField {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(obj_reg),
-                            field: field_index,
-                            span: *span,
-                        });
-                    }
-                }
+            Expr::FieldAccess {
+                expr, field, span, ..
+            } => {
+                self.generate_field_access_expr_ir(
+                    expr,
+                    field,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
             Expr::ListComp {
                 element,
@@ -5415,204 +6550,36 @@ impl AstToIrGenerator {
                 iterable,
                 condition,
                 span,
+                ..
             } => {
-                // 列表推导式 IR 生成
-                // [x * x for x in items] 等价于:
-                //   1. 创建空结果列表
-                //   2. 通过迭代器遍历 iterable
-                //   3. 对每个元素: 绑定到 var, 检查 condition(可选), 计算 element, push 到结果列表
-                //   4. 返回结果列表
-
-                // 1. 创建空结果列表
-                instructions.push(Instruction::AllocArray {
-                    dst: Operand::Local(result_reg),
-                    size: Operand::Const(ConstValue::Int(0)),
-                    elem_size: Operand::Const(ConstValue::Int(1)),
-                    span: self.cur_span,
-                });
-
-                // 2. 计算可迭代对象
-                let iterable_reg = self.next_temp_reg();
-                self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
-
-                // 3. 创建迭代器
-                let iterator_reg = self.next_temp_reg();
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(iterator_reg)),
-                    func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
-                    args: vec![Operand::Local(iterable_reg)],
-                    span: *span,
-                    def: None,
-                });
-
-                // 4. 注册循环变量
-                let var_reg = self.next_temp_reg();
-                self.register_local(var, var_reg);
-
-                // 5. 循环开始
-                let loop_start_idx = instructions.len();
-
-                // 6. has_next?
-                let has_next_reg = self.next_temp_reg();
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(has_next_reg)),
-                    func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
-                    args: vec![Operand::Local(iterator_reg)],
-                    span: *span,
-                    def: None,
-                });
-
-                let jump_end_idx = instructions.len();
-                instructions.push(Instruction::JmpIfNot {
-                    cond: Operand::Local(has_next_reg),
-                    target: 0, // 占位符
-                    span: self.cur_span,
-                });
-
-                // 7. next element
-                let element_reg = self.next_temp_reg();
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(element_reg)),
-                    func: Operand::Const(ConstValue::String("std.list.next".to_string())),
-                    args: vec![Operand::Local(iterator_reg)],
-                    span: *span,
-                    def: None,
-                });
-
-                // 8. 存储到循环变量
-                instructions.push(Instruction::Store {
-                    dst: Operand::Local(var_reg),
-                    src: Operand::Local(element_reg),
-                    span: *span,
-                });
-
-                // 9. 如果有条件，检查条件
-                if let Some(cond_expr) = condition {
-                    let cond_reg = self.next_temp_reg();
-                    self.generate_expr_ir(cond_expr, cond_reg, instructions, constants)?;
-
-                    let skip_push_idx = instructions.len();
-                    instructions.push(Instruction::JmpIfNot {
-                        cond: Operand::Local(cond_reg),
-                        target: 0, // 占位符
-                        span: self.cur_span,
-                    });
-
-                    // 10. 计算元素表达式
-                    let comp_reg = self.next_temp_reg();
-                    self.generate_expr_ir(element, comp_reg, instructions, constants)?;
-
-                    // 11. push 到结果列表
-                    instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String("std.list.push".to_string())),
-                        args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
-                        span: *span,
-                        def: None,
-                    });
-
-                    // 修复条件跳转
-                    let after_push = instructions.len();
-                    if let Instruction::JmpIfNot {
-                        cond: _,
-                        ref mut target,
-                        span: _,
-                    } = instructions[skip_push_idx]
-                    {
-                        *target = after_push;
-                    }
-                } else {
-                    // 10. 计算元素表达式
-                    let comp_reg = self.next_temp_reg();
-                    self.generate_expr_ir(element, comp_reg, instructions, constants)?;
-
-                    // 11. push 到结果列表
-                    instructions.push(Instruction::Call {
-                        dst: Some(Operand::Local(result_reg)),
-                        func: Operand::Const(ConstValue::String("std.list.push".to_string())),
-                        args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
-                        span: *span,
-                        def: None,
-                    });
-                }
-
-                // 12. 跳回循环开始
-                instructions.push(Instruction::Jmp {
-                    target: loop_start_idx,
-                    span: self.cur_span,
-                });
-
-                // 13. 修复跳出循环的跳转目标
-                let end_pos = instructions.len();
-                if let Instruction::JmpIfNot {
-                    cond: _,
-                    ref mut target,
-                    span: _,
-                } = instructions[jump_end_idx]
-                {
-                    *target = end_pos;
-                }
+                self.generate_list_comp_expr_ir(
+                    element,
+                    var,
+                    iterable,
+                    condition,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
             Expr::List(elements, span) => {
-                // 列表字面量：先创建空列表，再按索引写入元素
-                instructions.push(Instruction::AllocArray {
-                    dst: Operand::Local(result_reg),
-                    size: Operand::Const(ConstValue::Int(elements.len() as i128)),
-                    elem_size: Operand::Const(ConstValue::Int(1)),
-                    span: self.cur_span,
-                });
-
-                for (idx, element) in elements.iter().enumerate() {
-                    let element_reg = self.next_temp_reg();
-                    self.generate_expr_ir(element, element_reg, instructions, constants)?;
-
-                    let index_reg = self.next_temp_reg();
-                    instructions.push(Instruction::Load {
-                        dst: Operand::Local(index_reg),
-                        src: Operand::Const(ConstValue::Int(idx as i128)),
-                        span: self.cur_span,
-                    });
-
-                    instructions.push(Instruction::StoreIndex {
-                        dst: Operand::Local(result_reg),
-                        index: Operand::Local(index_reg),
-                        src: Operand::Local(element_reg),
-                        span: *span,
-                    });
-                }
+                self.generate_list_expr_ir(elements, span, result_reg, instructions, constants)?;
             }
-            Expr::Dict(pairs, _span) => {
-                // 字典字面量：使用 NewDict 指令一次性创建
-                let mut keys = Vec::new();
-                let mut values = Vec::new();
-                for (key_expr, val_expr) in pairs {
-                    let key_reg = self.next_temp_reg();
-                    self.generate_expr_ir(key_expr, key_reg, instructions, constants)?;
-                    keys.push(Operand::Local(key_reg));
-                    let val_reg = self.next_temp_reg();
-                    self.generate_expr_ir(val_expr, val_reg, instructions, constants)?;
-                    values.push(Operand::Local(val_reg));
-                }
-                instructions.push(Instruction::NewDict {
-                    dst: Operand::Local(result_reg),
-                    keys,
-                    values,
-                    span: self.cur_span,
-                });
+            Expr::Dict(pairs, _) => {
+                self.generate_dict_expr_ir(pairs, result_reg, instructions, constants)?;
             }
-            Expr::Index { expr, index, span } => {
-                let src_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-
-                let index_reg = self.next_temp_reg();
-                self.generate_expr_ir(index, index_reg, instructions, constants)?;
-
-                instructions.push(Instruction::LoadIndex {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(src_reg),
-                    index: Operand::Local(index_reg),
-                    span: *span,
-                });
+            Expr::Index {
+                expr, index, span, ..
+            } => {
+                self.generate_index_expr_ir(
+                    expr,
+                    index,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
             // #299 §3: membership 谓词 `elem in container`
             // Range 字面量脱糖成比较链（left >= start && left < end），无需 Range 运行时值；
@@ -5625,127 +6592,16 @@ impl AstToIrGenerator {
                 self.generate_in_ir(elem, container, result_reg, *span, instructions, constants)?;
             }
             Expr::Return(expr, _) => {
-                // 生成返回指令
-                if let Some(e) = expr {
-                    self.generate_expr_ir(e, result_reg, instructions, constants)?;
-                    instructions.push(Instruction::Ret {
-                        value: Some(Operand::Local(result_reg)),
-                        span: self.cur_span,
-                    });
-                } else {
-                    instructions.push(Instruction::Ret {
-                        value: None,
-                        span: self.cur_span,
-                    });
-                }
+                self.generate_return_expr_ir(expr, result_reg, instructions, constants)?;
             }
             Expr::Break(span) => {
-                // #311: break → 跳出最近一层循环；出口生成期未知，占位后由
-                // exit_loop_targets 回填。#314：标签语法已移除（Python 风格定案），
-                // break 恒指最近一层循环。
-                match self.loop_stack.last_mut() {
-                    Some(top) => {
-                        let fixup = instructions.len();
-                        instructions.push(Instruction::Jmp {
-                            target: 0,
-                            span: self.cur_span,
-                        });
-                        top.break_fixups.push(fixup);
-                    }
-                    None => {
-                        // 不变式：typecheck 已用 E1102 拦截循环外 break，走到这里说明层间失联
-                        return Err(ErrorCodeDefinition::ir_internal_error(
-                            "break reached IR generation without enclosing loop",
-                        )
-                        .at(*span)
-                        .build());
-                    }
-                }
+                self.generate_break_expr_ir(span, instructions)?;
             }
             Expr::Continue(span) => {
-                // #311: continue → 跳回最近一层循环的条件重判点（生成时即知）
-                match self.loop_stack.last() {
-                    Some(top) => {
-                        let target = top.continue_target;
-                        instructions.push(Instruction::Jmp {
-                            target,
-                            span: self.cur_span,
-                        });
-                    }
-                    None => {
-                        return Err(ErrorCodeDefinition::ir_internal_error(
-                            "continue reached IR generation without enclosing loop",
-                        )
-                        .at(*span)
-                        .build());
-                    }
-                }
+                self.generate_continue_expr_ir(span, instructions)?;
             }
-            Expr::Try { expr, span } => {
-                // #301：`?` 真实语义——Result 解包 + Err 提前返回（错误
-                // 传播通道，type-system.md §4.2 Result(T, E)）。
-                // 求值 expr（Result(T, E)，运行时 Enum{variant 0=ok/1=err}）：
-                //   variant 0 → 表达式值为解包后的 T（payload）
-                //   variant 1 → 以整个 Enum 值提前 Ret 当前函数（沿调用栈传播）
-                // typecheck 侧已拦截：非 Result 表达式（E1082）、函数返回类型
-                // 非 Result（E1081）、错误类型不匹配（E1083）。
-                self.generate_expr_ir(expr, result_reg, instructions, constants)?;
-                let span = *span;
-                let tag_reg = self.next_temp_reg();
-                instructions.push(Instruction::VariantTag {
-                    dst: Operand::Local(tag_reg),
-                    obj: Operand::Local(result_reg),
-                    group: "Result".to_string(),
-                    span,
-                });
-                let ok_const = self.next_temp_reg();
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(ok_const),
-                    src: Operand::Const(ConstValue::Int(0)),
-                    span: self.cur_span,
-                });
-                let eq_reg = self.next_temp_reg();
-                instructions.push(Instruction::Eq {
-                    dst: Operand::Local(eq_reg),
-                    lhs: Operand::Local(tag_reg),
-                    rhs: Operand::Local(ok_const),
-                    span: self.cur_span,
-                });
-                // variant != 0（Err）→ 跳到提前返回
-                let is_err_idx = instructions.len();
-                instructions.push(Instruction::JmpIfNot {
-                    cond: Operand::Local(eq_reg),
-                    target: 0,
-                    span: self.cur_span,
-                });
-                // Ok 路径：解包 payload 作为表达式值
-                instructions.push(Instruction::VariantPayload {
-                    dst: Operand::Local(result_reg),
-                    obj: Operand::Local(result_reg),
-                    group: "Result".to_string(),
-                    span,
-                });
-                let end_idx = instructions.len();
-                instructions.push(Instruction::Jmp {
-                    target: 0,
-                    span: self.cur_span,
-                });
-                // Err 路径：以整个 Result 值提前返回（Err(e) 沿调用栈传播）
-                let err_target = instructions.len();
-                instructions[is_err_idx] = Instruction::JmpIfNot {
-                    cond: Operand::Local(eq_reg),
-                    target: err_target,
-                    span: self.cur_span,
-                };
-                instructions.push(Instruction::Ret {
-                    value: Some(Operand::Local(result_reg)),
-                    span: self.cur_span,
-                });
-                let end_target = instructions.len();
-                instructions[end_idx] = Instruction::Jmp {
-                    target: end_target,
-                    span: self.cur_span,
-                };
+            Expr::Try { expr, span, .. } => {
+                self.generate_try_expr_ir(expr, span, result_reg, instructions, constants)?;
             }
             Expr::If {
                 condition,
@@ -5778,62 +6634,24 @@ impl AstToIrGenerator {
                 iterable,
                 body,
                 span: for_span,
+                ..
             } => {
-                self.generate_for_loop_ir(
+                self.generate_for_expr_ir(
                     var,
-                    *var_mut,
+                    var_mut,
                     iterable,
                     body,
-                    Some(result_reg),
-                    *for_span,
+                    for_span,
+                    result_reg,
                     instructions,
                     constants,
                 )?;
             }
-            Expr::Ref { expr, span: _ } => {
-                // 生成内部表达式的 IR
-                let src_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-
-                // 逃逸分析：跨 spawn 使用 → Arc，否则 → Rc
-                let var_name = match expr.as_ref() {
-                    ast::Expr::Var(name, _) => Some(name.clone()),
-                    _ => None,
-                };
-                let use_arc = var_name.as_ref().is_some_and(|n| {
-                    self.type_result
-                        .as_ref()
-                        .is_some_and(|tr| tr.escaped_refs.contains(n))
-                });
-
-                if use_arc {
-                    instructions.push(Instruction::ArcNew {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(src_reg),
-                        span: self.cur_span,
-                    });
-                } else {
-                    instructions.push(Instruction::RcNew {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(src_reg),
-                        span: self.cur_span,
-                    });
-                }
+            Expr::Ref { expr, .. } => {
+                self.generate_ref_expr_ir(expr, result_reg, instructions, constants)?;
             }
-            Expr::Unsafe { body, span: _ } => {
-                // unsafe 块：生成 UnsafeBlockStart/End 标记
-                instructions.push(Instruction::UnsafeBlockStart {
-                    span: self.cur_span,
-                });
-
-                // RFC-010a 规则①：`unsafe {}` 是**有值块**，值出口为尾表达式。
-                // 此前 result_reg 传 None 并硬写 Void，导致 `v = unsafe { 42 }`
-                // 得 void（#347）。现按普通块处理，尾表达式写入 result_reg。
-                self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
-
-                instructions.push(Instruction::UnsafeBlockEnd {
-                    span: self.cur_span,
-                });
+            Expr::Unsafe { body, .. } => {
+                self.generate_unsafe_expr_ir(body, result_reg, instructions, constants)?;
             }
             // spawn for 数据并行循环（RFC-024 §2.4）
             Expr::SpawnFor {
@@ -5842,497 +6660,51 @@ impl AstToIrGenerator {
                 iterable,
                 body,
                 span,
+                ..
             } => {
-                self.generate_spawn_for_ir(
+                self.generate_spawn_for_expr_ir(
                     var,
-                    *var_mut,
+                    var_mut,
                     iterable,
                     body,
+                    span,
                     result_reg,
-                    *span,
                     instructions,
                     constants,
                 )?;
             }
-            Expr::Spawn { body, span } => {
-                // Spawn block: spawn { ... }
-                // RFC-024: DAG 分析识别直接子表达式，为每个生成独立闭包
-
-                // 1. DAG 分析：识别直接子表达式，生成执行计划
-                let (trait_table, local_var_types) = if let Some(ref type_result) = self.type_result
-                {
-                    (&type_result.trait_table, &type_result.local_var_types)
-                } else {
-                    // 无类型信息时使用空表（向后兼容）
-                    static EMPTY_TRAIT_TABLE: std::sync::LazyLock<
-                        crate::frontend::core::types::TraitTable,
-                    > = std::sync::LazyLock::new(crate::frontend::core::types::TraitTable::default);
-                    static EMPTY_VAR_TYPES: std::sync::LazyLock<
-                        std::collections::HashMap<String, crate::frontend::core::types::MonoType>,
-                    > = std::sync::LazyLock::new(std::collections::HashMap::new);
-                    (&*EMPTY_TRAIT_TABLE, &*EMPTY_VAR_TYPES)
-                };
-                let analysis = crate::frontend::core::spawn::analysis::analyze_spawn_body(
-                    body,
-                    trait_table,
-                    local_var_types,
-                );
-
-                // 2. 进入 spawn 作用域
-                self.enter_scope();
-
-                // 3. 为每个直接子表达式生成闭包
-                let mut closure_regs = Vec::new();
-                for task in &analysis.tasks {
-                    // 如果是赋值，注册目标变量到 spawn 作用域
-                    if let Some(target) = &task.target {
-                        if self.lookup_local(target).is_none() {
-                            let reg = self.next_temp_reg();
-                            self.register_local(target, reg);
-                        }
-                    }
-
-                    // 将 RHS 包装为无参闭包：() => { rhs }
-                    // #254：捕获 task 读取的外层变量（RFC-024 §2.3 Move 值捕获）
-                    // 过滤：仅捕获能在当前作用域链解析的变量（spawn 内声明的由
-                    // 任务间依赖传递，不在此捕获）；task.reads 由 spawn analysis 提供。
-                    let mut env_ops = Vec::new();
-                    let mut env_names = Vec::new();
-                    for var in &task.reads {
-                        if let Some(local_idx) = self.lookup_local(var) {
-                            env_ops.push(Operand::Local(local_idx));
-                            env_names.push(var.clone());
-                        }
-                    }
-                    self.pending_env_vars = env_ops;
-                    self.pending_env_names = env_names;
-                    let closure_reg = self.next_temp_reg();
-                    let lambda = ast::Expr::Lambda {
-                        params: Vec::new(),
-                        body: Box::new(ast::Block {
-                            stmts: vec![ast::Stmt {
-                                kind: ast::StmtKind::Expr(Box::new(task.expr.clone())),
-                                span: *span,
-                            }],
-                            span: *span,
-                        }),
-                        span: *span,
-                    };
-                    self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
-                    self.pending_env_vars.clear();
-                    self.pending_env_names.clear();
-                    closure_regs.push(Operand::Local(closure_reg));
-                }
-
-                // 4. 生成 spawn 块剩余语句（非直接子表达式，如 var 声明等）
-                for stmt in &body.stmts {
-                    if !crate::frontend::core::spawn::analysis::is_direct_child(stmt) {
-                        self.generate_local_stmt_ir(stmt, instructions, constants)?;
-                    }
-                }
-
-                // 5. 生成 Spawn 指令（多闭包 + 执行计划）
-                // Spawn 指令会等待所有闭包完成，之后 t1/t2 等变量才可用
-                instructions.push(Instruction::Spawn {
-                    closures: closure_regs,
-                    plan: analysis.plan,
-                    result: Operand::Local(result_reg),
-                    span: self.cur_span,
-                });
-
-                // 6. 块的结果值：从 return 语句获取（RFC-010 语义）
-                // 必须在 Spawn 之后生成，因为 return 表达式可能引用闭包的结果变量
-                let mut has_return = false;
-                for stmt in &body.stmts {
-                    if let ast::StmtKind::Expr(ref expr_stmt) = stmt.kind {
-                        if let ast::Expr::Return(Some(ret_expr), _) = expr_stmt.as_ref() {
-                            let ret_reg = self.next_temp_reg();
-                            self.generate_expr_ir(ret_expr, ret_reg, instructions, constants)?;
-                            instructions.push(Instruction::Move {
-                                dst: Operand::Local(result_reg),
-                                src: Operand::Local(ret_reg),
-                                span: self.cur_span,
-                            });
-                            has_return = true;
-                            break;
-                        }
-                    }
-                }
-                if !has_return {
-                    // 无 return 语句，块值为 Void（result_reg 保持默认 0）
-                }
-
-                // 7. 退出 spawn 作用域
-                self.exit_scope();
+            Expr::Spawn { body, span, .. } => {
+                self.generate_spawn_expr_ir(body, span, expr, result_reg, instructions, constants)?;
             }
-            Expr::UnOp { op, expr, span: _ } => {
-                // 一元运算符
-                match op {
-                    ast::UnOp::Deref => {
-                        // 解引用：*ptr
-                        // 生成指针表达式的 IR
-                        let src_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-
-                        // 生成 PtrDeref 指令
-                        instructions.push(Instruction::PtrDeref {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(src_reg),
-                            span: self.cur_span,
-                        });
-                    }
-                    ast::UnOp::Neg => {
-                        // 负号：-x
-                        let src_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-                        instructions.push(Instruction::Neg {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(src_reg),
-                            span: self.cur_span,
-                        });
-                    }
-                    ast::UnOp::Pos => {
-                        // 正号：+x（无操作）
-                        self.generate_expr_ir(expr, result_reg, instructions, constants)?;
-                    }
-                    ast::UnOp::Not => {
-                        // 逻辑非：!x
-                        let src_reg = self.next_temp_reg();
-                        self.generate_expr_ir(expr, src_reg, instructions, constants)?;
-                        instructions.push(Instruction::Not {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(src_reg),
-                            span: self.cur_span,
-                        });
-                    }
-                }
+            Expr::UnOp { op, expr, .. } => {
+                self.generate_un_op_expr_ir(op, expr, result_reg, instructions, constants)?;
             }
-            Expr::Lambda {
-                params,
-                body,
-                span: _,
-            } => {
-                // Lambda 表达式 IR 生成
-                // 例如: (x, y) => x + y
-
-                // 1. 生成唯一的闭包函数名
-                let closure_name = format!("closure_{}", self.closure_counter);
-                self.closure_counter += 1;
-
-                // 2. 获取闭包的返回类型（简化处理：使用 Void）
-                // TODO: 可以通过类型检查结果获取更精确的返回类型
-                let return_type = MonoType::Void;
-
-                // 3. 为闭包参数分配寄存器索引
-                let _param_regs: Vec<usize> = (0..params.len()).collect();
-
-                // RFC-009a / #254：闭包需捕获自由变量。
-                // `pending_env_vars` 只由 spawn/for 路径填充；普通 lambda（如
-                // `adder: (n: Int) -> ((x: Int) -> Int) = (x) => x + n` 里的内层）
-                // 从未填充，导致 `MakeClosure` 的 env 为空，`n` 在闭包体内取不到
-                // （实测 `adder(10)(5)` 得 10 而非 15）。
-                // 此处按“body 中引用但非自身参数”收集自由变量，用外层寄存器作为 env。
-                let mut env_vars = std::mem::take(&mut self.pending_env_vars);
-                let mut env_names = std::mem::take(&mut self.pending_env_names);
-                if env_names.is_empty() {
-                    let bound: std::collections::HashSet<&str> =
-                        params.iter().map(|p| p.name.as_str()).collect();
-                    let mut free = Vec::new();
-                    let mut seen = std::collections::HashSet::new();
-                    for stmt in &body.stmts {
-                        super::ir_gen::collect_free_vars_stmt(stmt, &bound, &mut seen, &mut free);
-                    }
-                    for name in free {
-                        if let Some(idx) = self.lookup_local(&name) {
-                            env_vars.push(Operand::Local(idx));
-                            env_names.push(name);
-                        }
-                    }
-                }
-                // #254：捕获表（变量名 → env 槽位），供闭包体内 Var 解析 → LoadUpvalue
-                self.closure_captures = env_names
-                    .iter()
-                    .enumerate()
-                    .map(|(i, n)| (n.clone(), i))
-                    .collect();
-
-                // 5. 生成闭包函数体 IR
-                // 类似于 generate_function_ir 的逻辑，但针对 Lambda
-                let closure_body = self.generate_lambda_body_ir(
-                    params,
-                    body.as_ref(),
-                    constants,
-                    env_names.len(),
-                )?;
-                // #254：闭包体生成完毕，清除捕获表
-                self.closure_captures.clear();
-
-                // 6. 创建闭包函数 IR
-                let param_types: Vec<MonoType> = params
-                    .iter()
-                    .filter_map(|p| p.ty.clone())
-                    .map(|t| t.into())
-                    .collect();
-
-                let closure_func = FunctionIR {
-                    def: None, // 由 generate_module_ir 尾部 assign_defs 填充
-                    name: closure_name.clone(),
-                    params: param_types,
-                    return_type,
-                    generic_params: None,
-                    body: FunctionBody::Code {
-                        blocks: vec![BasicBlock {
-                            label: 0,
-                            instructions: closure_body.instructions,
-                            successors: Vec::new(),
-                        }],
-                        entry: 0,
-                        locals: closure_body.locals.clone(),
-                    },
-                };
-
-                // 7. 将闭包函数添加到嵌套函数列表
-                self.nested_functions.push(closure_func);
-
-                // 9. 创建 MakeClosure 指令
-                // env 包含被捕获的外部变量的 Operand
-                instructions.push(Instruction::MakeClosure {
-                    dst: Operand::Local(result_reg),
-                    func: closure_name,
-                    env: env_vars,
-                    def: None,
-                    span: self.cur_span,
-                });
+            Expr::Lambda { params, body, .. } => {
+                self.generate_lambda_expr_ir(params, body, result_reg, instructions, constants)?;
             }
-            Expr::Borrow {
-                mutable: _,
-                expr,
-                span: _,
-            } => {
-                // 1. 生成内部表达式的 IR
-                let inner_reg = self.next_temp_reg();
-                self.generate_expr_ir(expr, inner_reg, instructions, constants)?;
-
-                // 借用令牌（& / &mut）是编译期品牌，运行时零大小：
-                // Struct 值是堆句柄，传参/赋值复制的是句柄，共享同一对象——
-                // 因此字段写（StoreField）经令牌自然写回底层，无需额外指令（#266）。
-                // 所有权与借用合法性已在 typecheck 层验证（RFC-009a）。
-                instructions.push(Instruction::Move {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Local(inner_reg),
-                    span: self.cur_span,
-                });
+            Expr::Borrow { expr, .. } => {
+                self.generate_borrow_expr_ir(expr, result_reg, instructions, constants)?;
             }
             Expr::Match {
                 expr: match_expr,
                 arms,
-                span: _,
+                ..
             } => {
-                // Match 表达式 IR 生成
-                // 模式: match scrutinee { pat1 => body1, pat2 => body2, _ => bodyN }
-                //
-                // IR 结构:
-                //   1. 评估 scrutinee
-                //   2. 对每个 arm:
-                //      a. 如果模式是 Literal: 比较 scrutinee == literal, JmpIfNot 到下一个 arm
-                //      b. 如果模式是 Wildcard: 始终匹配
-                //      c. 生成 arm body, Move 结果到 result_reg, Jmp 到 end
-                //   3. 修复所有跳转目标
-
-                // 1. 评估 scrutinee
-                let scrutinee_reg = self.next_temp_reg();
-                self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
-
-                let mut jumps_to_end: Vec<usize> = Vec::new();
-
-                for arm in arms {
-                    // 检查模式是否匹配
-                    let needs_condition = matches!(arm.pattern, ast::Pattern::Wildcard);
-
-                    let jump_to_next_idx = if needs_condition {
-                        // Wildcard: 始终匹配，不需条件跳转
-                        None
-                    } else {
-                        // 生成条件: 比较 scrutinee 和模式值
-                        let cmp_reg = self.next_temp_reg();
-
-                        match &arm.pattern {
-                            ast::Pattern::Literal(lit) => {
-                                let const_val = match lit {
-                                    ast::Literal::Int(n) => ConstValue::Int(*n),
-                                    ast::Literal::Float(f) => ConstValue::Float(*f),
-                                    ast::Literal::Bool(b) => ConstValue::Bool(*b),
-                                    ast::Literal::String(s) => ConstValue::String(s.clone()),
-                                    ast::Literal::Char(c) => ConstValue::Char(*c),
-                                    ast::Literal::Void => ConstValue::Void,
-                                };
-                                constants.push(const_val.clone());
-                                instructions.push(Instruction::Load {
-                                    dst: Operand::Local(cmp_reg),
-                                    src: Operand::Const(const_val),
-                                    span: self.cur_span,
-                                });
-                            }
-                            other => {
-                                // #330 安全网：非字面量/通配符模式尚无 IR 编码，
-                                // 原 stub 加载 0 永不匹配、scrutinee 为 0 时误匹配——
-                                // 宁可编译期拒绝，不可静默错译（完备支持见 RFC-039）
-                                return Err(ErrorCodeDefinition::ir_unsupported_pattern(
-                                    &pattern_label(other),
-                                )
-                                .at(arm.span)
-                                .build());
-                            }
-                        }
-
-                        // 比较: scrutinee == pattern_value
-                        let eq_reg = self.next_temp_reg();
-                        instructions.push(Instruction::Eq {
-                            dst: Operand::Local(eq_reg),
-                            lhs: Operand::Local(scrutinee_reg),
-                            rhs: Operand::Local(cmp_reg),
-                            span: self.cur_span,
-                        });
-
-                        // 如果不相等，跳到下一个 arm
-                        let jmp_idx = instructions.len();
-                        instructions.push(Instruction::JmpIfNot {
-                            cond: Operand::Local(eq_reg),
-                            target: 0, // 占位符
-                            span: self.cur_span,
-                        });
-                        Some(jmp_idx)
-                    };
-
-                    // 生成 arm body，结果放入 result_reg
-                    let arm_result_reg = self.next_temp_reg();
-                    self.generate_block_ir(
-                        &arm.body,
-                        Some(arm_result_reg),
-                        instructions,
-                        constants,
-                    )?;
-                    instructions.push(Instruction::Move {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Local(arm_result_reg),
-                        span: self.cur_span,
-                    });
-
-                    // 跳转到 match 结束
-                    let jmp_end_idx = instructions.len();
-                    instructions.push(Instruction::Jmp {
-                        target: 0,
-                        span: self.cur_span,
-                    }); // 占位符
-                    jumps_to_end.push(jmp_end_idx);
-
-                    // 修复条件跳转目标（指向当前 arm 之后的代码）
-                    if let Some(jmp_idx) = jump_to_next_idx {
-                        let current_pos = instructions.len();
-                        if let Instruction::JmpIfNot {
-                            cond: _,
-                            ref mut target,
-                            span: _,
-                        } = instructions[jmp_idx]
-                        {
-                            *target = current_pos;
-                        }
-                    }
-                }
-
-                // 修复所有跳转到结束的指令
-                let end_pos = instructions.len();
-                for idx in jumps_to_end {
-                    if let Instruction::Jmp {
-                        ref mut target,
-                        span: _,
-                    } = instructions[idx]
-                    {
-                        *target = end_pos;
-                    }
-                }
+                self.generate_match_expr_ir(match_expr, arms, result_reg, instructions, constants)?;
             }
             // RFC-012: F-string 代码生成
-            Expr::FString { segments, span } => {
-                // 1. 尝试常量求值
-                if let Some(const_val) = self.eval_const_expr(expr) {
-                    constants.push(const_val.clone());
-                    instructions.push(Instruction::Load {
-                        dst: Operand::Local(result_reg),
-                        src: Operand::Const(const_val),
-                        span: self.cur_span,
-                    });
-                    return Ok(());
-                }
-
-                // 2. 转换为 format() 调用
-                // 构建 format_str: "Hello {} is {} years old"
-                // 构建 args: [name, age]
-                let mut format_str = String::new();
-                let mut arg_regs = Vec::new();
-                let mut arg_index = 0usize;
-
-                for segment in segments {
-                    match segment {
-                        ast::FStringSegment::Text(text) => {
-                            format_str.push_str(text);
-                        }
-                        ast::FStringSegment::Interpolation {
-                            expr: interp_expr,
-                            format_spec,
-                        } => {
-                            // Build format placeholder: {0}, {1}, or {0:.2f}
-                            if let Some(spec) = format_spec {
-                                format_str.push_str(&format!("{{{0}:{1}}}", arg_index, spec));
-                            } else {
-                                format_str.push_str(&format!("{{{}}}", arg_index));
-                            }
-                            arg_index += 1;
-
-                            // Generate IR for the interpolation expression
-                            let arg_reg = self.next_temp_reg();
-                            self.generate_expr_ir(interp_expr, arg_reg, instructions, constants)?;
-                            arg_regs.push(Operand::Local(arg_reg));
-                        }
-                    }
-                }
-
-                // Load format string constant
-                let fmt_reg = self.next_temp_reg();
-                let fmt_const = ConstValue::String(format_str);
-                constants.push(fmt_const.clone());
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(fmt_reg),
-                    src: Operand::Const(fmt_const),
-                    span: self.cur_span,
-                });
-
-                // Build args: [format_str, arg0, arg1, ...]
-                let mut call_args = vec![Operand::Local(fmt_reg)];
-                call_args.extend(arg_regs);
-
-                // Generate Call to std.string.format
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Const(ConstValue::String("std.string.format".to_string())),
-                    args: call_args,
-                    span: *span,
-                    def: None,
-                });
+            Expr::FString { segments, span, .. } => {
+                self.generate_f_string_expr_ir(
+                    segments,
+                    span,
+                    expr,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
-            Expr::Tuple(items, _span) => {
-                // SPEC §3.6 元组字面量：逐个求值元素，用 NewTuple 一次性构造
-                let mut item_regs = Vec::with_capacity(items.len());
-                for item_expr in items {
-                    let item_reg = self.next_temp_reg();
-                    self.generate_expr_ir(item_expr, item_reg, instructions, constants)?;
-                    item_regs.push(Operand::Local(item_reg));
-                }
-                instructions.push(Instruction::NewTuple {
-                    dst: Operand::Local(result_reg),
-                    items: item_regs,
-                    span: self.cur_span,
-                });
+            Expr::Tuple(items, _) => {
+                self.generate_tuple_expr_ir(items, result_reg, instructions, constants)?;
             }
             Expr::Block(block) => {
                 // 语句位置块表达式（SPEC §12.5 good_seq）：逐语句生成，

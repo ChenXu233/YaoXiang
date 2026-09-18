@@ -809,6 +809,8 @@ pub struct BytecodeFunction {
     pub return_type: crate::middle::core::ir::Type,
     /// Number of local variables
     pub local_count: usize,
+    /// 局部变量名（槽位下标 → 源码名）；仅具名变量，临时寄存器不入表
+    pub local_names: HashMap<usize, String>,
     /// Number of upvalues
     pub upvalue_count: usize,
     /// Instructions
@@ -949,6 +951,12 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                 .and_then(|d| d.function_debug_maps.get(func_idx))
                 .cloned()
                 .unwrap_or(func.debug_map);
+            // v2 调试段：局部变量名与 debug_map 同一函数序号平行回填
+            let local_names = debug_section
+                .as_ref()
+                .and_then(|d| d.function_local_names.get(func_idx))
+                .cloned()
+                .unwrap_or_default();
             let mut ip = 0;
             while ip < func.instructions.len() {
                 let instr = &func.instructions[ip];
@@ -1977,6 +1985,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                 params: func.params.into_iter().map(|t| t.into()).collect(),
                 return_type: func.return_type.into(),
                 local_count: func.local_count,
+                local_names,
                 upvalue_count: 0, // Not stored in BytecodeFile
                 instructions: decoded_instructions,
                 labels,                         // Populated from opcode::LABEL

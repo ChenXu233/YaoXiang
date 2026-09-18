@@ -8,6 +8,7 @@
 //! - MonoType::Ref -> IrType::Void conversion
 
 use crate::middle::core::bytecode::{BytecodeInstr, BytecodeModule, Label, Reg};
+use std::collections::HashMap;
 use crate::middle::core::ir::Type as IrType;
 use crate::backends::common::opcode;
 use crate::frontend::core::typecheck::MonoType;
@@ -170,6 +171,7 @@ fn build_and_decode(instrs: Vec<BytecodeInstruction>) -> BytecodeModule {
         return_type: crate::frontend::core::typecheck::MonoType::Void,
         instructions: instrs,
         local_count: 0,
+        local_names: HashMap::new(),
         debug_map: std::collections::HashMap::new(),
     };
     let file = bcfile::BytecodeFile {

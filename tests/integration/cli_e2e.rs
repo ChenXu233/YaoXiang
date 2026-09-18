@@ -808,3 +808,125 @@ fn test_e2e_dump_covers_statement_level_instructions() {
         "语句级位置应覆盖调用语句；stdout: {stdout:?}"
     );
 }
+
+#[test]
+fn test_e2e_dump_lists_local_variable_names() {
+    // Arrange: 变量名在生成期由 register_local 就地对写入 IR 槽位。
+    // dump 应列出具名槽位（名字@槽位号），临时寄存器不入表。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "names.yx",
+        "main = {\n    alpha = 1\n    beta = alpha + 2\n}\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["dump", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "dump should exit 0; stderr: {stderr:?}");
+    // 不锚定标签文案：locales/*.json 由 i18n 自动翻译机器人维护，
+    // 断言 "locals:" 会被它改名（实测已改成 "Local Variables:"）而误报。
+    // 断言值本身：名字@槽位 才是本功能的契约。
+    assert!(
+        stdout.contains("alpha@0"),
+        "应列出 alpha 及其槽位号；stdout: {stdout:?}"
+    );
+    // 槽位号不需断言具体值：临时寄存器会占位（此例 beta 落在 2），
+    // 断言"名字带上某个槽位号"即可，避免把寄存器分配细节写进测试。
+    assert!(
+        stdout.contains("beta@"),
+        "应列出 beta 及其槽位号；stdout: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_e2e_dump_local_names_survive_bytecode_roundtrip() {
+    // Arrange: 名字只存在于 .42 调试段（代码段不序列化）。
+    // build --debug-info 写出的文件，dump 读回后名字必须还在。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "roundtrip.yx",
+        "main = {\n    gamma = 7\n    gamma\n}\n",
+    );
+    let out = tmp.path().join("roundtrip.42");
+
+    // Act: 先编译落盘，再对 .42 做 dump（走的是读取路径而非重新编译）
+    let (build_code, _, build_err) = run_yx(
+        &[
+            "build",
+            "--debug-info",
+            src.to_str().unwrap(),
+            "-o",
+            out.to_str().unwrap(),
+        ],
+        tmp.path(),
+    );
+    assert_eq!(build_code, 0, "build should exit 0; stderr: {build_err:?}");
+
+    let (dump_code, stdout, dump_err) = run_yx(&["dump", out.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(dump_code, 0, "dump .42 should exit 0; stderr: {dump_err:?}");
+    assert!(
+        stdout.contains("gamma@0"),
+        "名字应经 .42 往返保持；stdout: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_e2e_runtime_bounds_error_names_the_variable() {
+    // Arrange: 索引来自具名局部变量时，E6003 应指出是哪个变量越界，
+    // 而不只是给数值——`(idx)` 比 `10` 好定位得多。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "oob.yx",
+        "use std.io\n\nmain = {\n    a = [1, 2, 3]\n    idx = 10\n    io.println(a[idx])\n}\n\nmain()\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_ne!(
+        code, 0,
+        "越界应是非零退出；stdout: {stdout:?} stderr: {stderr:?}"
+    );
+    assert!(
+        combined.contains("E6003"),
+        "应报 E6003 索引越界；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("(idx)"),
+        "错误信息应指出越界变量名；combined: {combined:?}"
+    );
+}
+
+#[test]
+fn test_e2e_runtime_bounds_error_omits_clause_for_literals() {
+    // Arrange: 字面量索引没有变量名——不能留下空的 "( )" 子句。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "lit.yx",
+        "use std.io\n\nmain = {\n    a = [1, 2, 3]\n    io.println(a[10])\n}\n\nmain()\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_ne!(code, 0, "越界应是非零退出");
+    assert!(
+        combined.contains("E6003"),
+        "应报 E6003；combined: {combined:?}"
+    );
+    assert!(
+        !combined.contains("()"),
+        "无变量名时不应留空子句；combined: {combined:?}"
+    );
+}

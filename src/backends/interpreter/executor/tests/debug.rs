@@ -28,6 +28,7 @@ fn make_module(
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions,
         labels: HashMap::new(),
@@ -146,6 +147,7 @@ fn test_step_over_advances_past_call() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             BytecodeInstr::Nop,
@@ -163,6 +165,7 @@ fn test_step_over_advances_past_call() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             BytecodeInstr::CallStatic {
@@ -222,6 +225,7 @@ fn test_step_out_returns_to_caller() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             BytecodeInstr::Nop,
@@ -240,6 +244,7 @@ fn test_step_out_returns_to_caller() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             BytecodeInstr::CallStatic {

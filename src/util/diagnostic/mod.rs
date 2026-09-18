@@ -95,14 +95,13 @@ pub fn render_runtime_error(
 ) -> String {
     let emitter = TextEmitter::new();
 
-    let primary_span = error
-        .stack_trace()
-        .and_then(|stack| stack.first())
+    let primary_frame = error.stack_trace().and_then(|stack| stack.first());
+    let primary_span = primary_frame
         .and_then(|frame| resolve_runtime_span(module, frame))
         .filter(|span| !span.is_dummy());
 
     let primary_source = primary_span.and_then(|ds| sources.and_then(|sm| sm.get(ds.file_id)));
-    let diagnostic = build_runtime_diagnostic(error, primary_span, primary_source);
+    let diagnostic = build_runtime_diagnostic(error, module, primary_frame, primary_span);
 
     let mut output = emitter.render_with_source(&diagnostic, primary_source);
     let stack_text = format_runtime_stack_trace(error, module, sources);
@@ -112,6 +111,47 @@ pub fn render_runtime_error(
     }
 
     output
+}
+
+/// 反查某帧里某个槽位的源码变量名。
+///
+/// 名字来自 .42 调试段的 `function_local_names`（v2 起）；
+/// v1 产物没有名字表，返回 None，渲染层退化为只给数值。
+/// 把「索引所在的寄存器号」回溯成源码变量名。
+///
+/// 为什么需要回溯：`a[idx]` 生成的是
+/// `LoadLocal tmp, idx` → `LoadElement dst, a, tmp`，
+/// 抛错点看到的寄存器是临时槽 `tmp`，而名字挂在 `idx` 上。
+/// 这里沿指令流向前找最后一次写该寄存器的 `LoadLocal`，取它的源槽位；
+/// 若该源槽位本身也没有名字（链式临时），就退化为 None。
+///
+/// 只做一步回溯是有意为之：再多就是在诊断层重写寄存器分配分析，
+/// 而一步足以覆盖用户手写变量的常见形态。
+fn resolve_index_var_name(
+    module: &crate::middle::bytecode::BytecodeModule,
+    frame: &crate::backends::StackFrame,
+    index_reg: usize,
+) -> Option<String> {
+    let func = module
+        .functions
+        .iter()
+        .find(|f| f.name == frame.function_name)?;
+
+    // 先看该寄存器自身是否就是具名局部（有些形态直接原地使用）
+    if let Some(name) = func.local_names.get(&index_reg) {
+        return Some(name.clone());
+    }
+
+    // 否则向前找最后一次写它的 LoadLocal，取其源槽位名
+    let upto = frame.ip.min(func.instructions.len());
+    for instr in func.instructions[..upto].iter().rev() {
+        if let crate::middle::bytecode::BytecodeInstr::LoadLocal { dst, local_idx } = instr {
+            if dst.0 as usize == index_reg {
+                return func.local_names.get(&(*local_idx as usize)).cloned();
+            }
+        }
+    }
+    None
 }
 
 fn resolve_runtime_span(
@@ -127,12 +167,13 @@ fn resolve_runtime_span(
 
 fn build_runtime_diagnostic(
     error: &crate::backends::ExecutorError,
+    module: &crate::middle::bytecode::BytecodeModule,
+    primary_frame: Option<&crate::backends::StackFrame>,
     primary_span: Option<DebugSpan>,
-    _source_file: Option<&SourceFile>,
 ) -> Diagnostic {
     use crate::backends::ExecutorError;
 
-    let mut builder = match error {
+    let builder = match error {
         ExecutorError::FunctionNotFound(name, _) => {
             ErrorCodeDefinition::runtime_function_not_found(name.as_str())
         }
@@ -149,8 +190,26 @@ fn build_runtime_diagnostic(
         ExecutorError::Type(message, _) => ErrorCodeDefinition::runtime_error(message.as_str()),
         ExecutorError::StackOverflow(_) => ErrorCodeDefinition::stack_overflow(0),
         // #280：专用变体映射专用码，不再落通用 E6007
-        ExecutorError::IndexOutOfBounds { max, index, .. } => {
-            ErrorCodeDefinition::runtime_index_out_of_bounds(*max, *index)
+        ExecutorError::IndexOutOfBounds {
+            max,
+            index,
+            index_slot,
+            ..
+        } => {
+            let def = ErrorCodeDefinition::runtime_index_out_of_bounds(*max, *index);
+            // 索引来自具名变量时补上变量名：`idx` 越界比 `10` 越界更好定位。
+            // 临时寄存器（无源码名）与 v1 产物（无名字表）都自然落空 → 不加该子句。
+            // 用追加而非模板参数：模板参数在无名字时会留下空的 "（变量 ）"。
+            let name = index_slot
+                .and_then(|reg| primary_frame.map(|f| (reg, f)))
+                .and_then(|(reg, frame)| resolve_index_var_name(module, frame, reg))
+                .unwrap_or_default();
+            if name.is_empty() {
+                return finish(def, primary_span);
+            }
+            let mut d = finish(def, primary_span);
+            d.message = format!("{} ({name})", d.message);
+            return d;
         }
         // #299 §4: 键缺失映射专用码 E6008
         ExecutorError::KeyNotFound { key, .. } => ErrorCodeDefinition::key_not_found(key.as_str()),
@@ -160,10 +219,17 @@ fn build_runtime_diagnostic(
         other => ErrorCodeDefinition::runtime_error(&other.to_string()),
     };
 
+    finish(builder, primary_span)
+}
+
+/// 给 builder 挂上位置并构建。
+fn finish(
+    mut builder: DiagnosticBuilder,
+    primary_span: Option<DebugSpan>,
+) -> Diagnostic {
     if let Some(span) = primary_span {
         builder = builder.at(span.span);
     }
-
     builder.build()
 }
 
@@ -292,8 +358,11 @@ pub fn run_file_with_diagnostics(
             // Generate bytecode
             // #327：debug_map 默认生成——运行时错误默认携带栈帧与源码上下文，
             // 不再有"无位置"的运行时错误形态
+            // keep_debug_info 必须一并开启：ip→span 与局部变量名都在调试段里，
+            // 只生成不保留等于白做（E6003 只能报数值、报不出是哪个变量越界）。
             let mut ctx = CodegenContext::new(module);
             ctx.set_generate_debug_info(true);
+            ctx.set_keep_debug_info(true);
             let bytecode_file = ctx
                 .generate()
                 .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;

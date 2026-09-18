@@ -46,6 +46,7 @@
   "bytecode_func_params": "  参数：{0}",
   "bytecode_func_return_type": "  返回类型：{0}",
   "bytecode_func_local_count": "  局部变量数：{0}",
+  "bytecode_func_local_names": "  局部变量：{0}",
   "bytecode_func_instr_count": "  指令数：{0}",
   "bytecode_func_code": "  代码：",
   "bytecode_instr_index": "    [{0}] {1} {2}",

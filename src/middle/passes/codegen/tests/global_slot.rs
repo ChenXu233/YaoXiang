@@ -10,6 +10,7 @@ use crate::backends::Executor;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, GlobalSlot, Instruction, ModuleIR, Operand,
+    LocalSlot,
 };
 use crate::middle::passes::codegen::CodegenContext;
 use crate::util::span::Span;
@@ -64,7 +65,10 @@ fn store_then_load_module() -> ModuleIR {
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![MonoType::Int(64), MonoType::Int(64)],
+            locals: vec![
+                LocalSlot::temp(MonoType::Int(64)),
+                LocalSlot::temp(MonoType::Int(64)),
+            ],
         },
     });
     module

@@ -28,10 +28,16 @@ pub(super) enum StopReason {
 
 /// #279：索引值 → usize；非 Int 报类型错误，负数报运行时错误（不再静默当 0）
 /// #300 D 项：len 为真实容器长度，负索引诊断携带原始 i64（不再是 max=0 哨兵）
-fn index_arg(
+/// 索引值 → usize；非 Int 报类型错误，负数报运行时错误（不再静默当 0）。
+///
+/// `index_slot` 记录索引所在的寄存器号，供诊断层反查局部变量名——
+/// `a[k]` 越界时告诉用户“k 这个变量越界了”比只给数值有用。
+/// 传 None 表示索引来自编译器临时寄存器（无源码名）。
+fn index_arg_at(
     idx: &RuntimeValue,
     what: &str,
     len: usize,
+    index_slot: Option<usize>,
 ) -> ExecutorResult<usize> {
     let i = idx
         .to_int()
@@ -41,6 +47,7 @@ fn index_arg(
         ExecutorError::IndexOutOfBounds {
             max: len,
             index: i,
+            index_slot,
             stack: None,
         }
     })
@@ -973,49 +980,55 @@ impl Interpreter {
                 match arr {
                     RuntimeValue::List(handle) => {
                         let len = handle.lock().len();
-                        let idx = index_arg(&idx_value, "list", len)?;
+                        let idx = index_arg_at(&idx_value, "list", len, Some(index.0 as usize))?;
                         if let crate::backends::common::HeapValue::List(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
                             } else {
                                 // #279：越界读不再静默返回 void；#280：报专用码 E6003
-                                return Err(ExecutorError::index_out_of_bounds(
-                                    items.len(),
-                                    idx as i64,
-                                    Some(self.capture_stack()),
-                                ));
+                                // 带上索引寄存器号，供诊断层回溯源码变量名
+                                return Err(ExecutorError::IndexOutOfBounds {
+                                    max: items.len(),
+                                    index: idx as i64,
+                                    index_slot: Some(index.0 as usize),
+                                    stack: Some(self.capture_stack()),
+                                });
                             }
                         }
                     }
                     RuntimeValue::Tuple(handle) => {
                         let len = handle.lock().len();
-                        let idx = index_arg(&idx_value, "tuple", len)?;
+                        let idx = index_arg_at(&idx_value, "tuple", len, Some(index.0 as usize))?;
                         if let crate::backends::common::HeapValue::Tuple(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
                             } else {
                                 // #279：越界读不再静默返回 void；#280：报专用码 E6003
-                                return Err(ExecutorError::index_out_of_bounds(
-                                    items.len(),
-                                    idx as i64,
-                                    Some(self.capture_stack()),
-                                ));
+                                // 带上索引寄存器号，供诊断层回溯源码变量名
+                                return Err(ExecutorError::IndexOutOfBounds {
+                                    max: items.len(),
+                                    index: idx as i64,
+                                    index_slot: Some(index.0 as usize),
+                                    stack: Some(self.capture_stack()),
+                                });
                             }
                         }
                     }
                     RuntimeValue::Array(handle) => {
                         let len = handle.lock().len();
-                        let idx = index_arg(&idx_value, "array", len)?;
+                        let idx = index_arg_at(&idx_value, "array", len, Some(index.0 as usize))?;
                         if let crate::backends::common::HeapValue::Array(items) = &*handle.lock() {
                             if idx < items.len() {
                                 frame.set_slot(dst.0 as usize, items[idx].clone());
                             } else {
                                 // #279：越界读不再静默返回 void；#280：报专用码 E6003
-                                return Err(ExecutorError::index_out_of_bounds(
-                                    items.len(),
-                                    idx as i64,
-                                    Some(self.capture_stack()),
-                                ));
+                                // 带上索引寄存器号，供诊断层回溯源码变量名
+                                return Err(ExecutorError::IndexOutOfBounds {
+                                    max: items.len(),
+                                    index: idx as i64,
+                                    index_slot: Some(index.0 as usize),
+                                    stack: Some(self.capture_stack()),
+                                });
                             }
                         }
                     }
@@ -1055,7 +1068,7 @@ impl Interpreter {
                 match arr {
                     RuntimeValue::List(handle) => {
                         let len = handle.lock().len();
-                        let idx = index_arg(&idx_value, "list", len)?;
+                        let idx = index_arg_at(&idx_value, "list", len, Some(index.0 as usize))?;
                         if let crate::backends::common::HeapValue::List(items) = &mut *handle.lock()
                         {
                             if idx < items.len() {
@@ -1074,7 +1087,7 @@ impl Interpreter {
                     }
                     RuntimeValue::Array(handle) => {
                         let len = handle.lock().len();
-                        let idx = index_arg(&idx_value, "array", len)?;
+                        let idx = index_arg_at(&idx_value, "array", len, Some(index.0 as usize))?;
                         if let crate::backends::common::HeapValue::Array(items) =
                             &mut *handle.lock()
                         {

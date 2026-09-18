@@ -46,6 +46,7 @@
   "bytecode_func_params": "  喵参：{0}",
   "bytecode_func_return_type": "  喵返型：{0}",
   "bytecode_func_local_count": "  喵局变数：{0}",
+  "bytecode_func_local_names": "  局部变量喵：{0}",
   "bytecode_func_instr_count": "  喵令数：{0}",
   "bytecode_func_code": "  喵码：",
   "bytecode_instr_index": "    [{0}] {1} {2}",

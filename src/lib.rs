@@ -111,6 +111,10 @@ fn run_with_source_name(
     let module = compiler.compile_with_source(source_name, source)?;
     // Generate BytecodeModule using the new backend architecture
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+    // run 是面向用户的执行路径，需要调试元数据：运行时错误靠 debug_map 定位，
+    // 变量名靠 local_names 指认（E6003 之类会说清是哪个变量越界）。
+    ctx.set_generate_debug_info(true);
+    ctx.set_keep_debug_info(true);
     let bytecode_file = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
@@ -151,6 +155,8 @@ pub fn run_project(entry: &Path) -> Result<()> {
     let module = frontend::module::orchestrator::compile_project(entry)
         .map_err(|e| anyhow::anyhow!("Project compilation failed: {}", e))?;
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+    ctx.set_generate_debug_info(true);
+    ctx.set_keep_debug_info(true);
     let bytecode_file = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
@@ -365,6 +371,18 @@ fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::
             "{}",
             t_cur(MSG::BytecodeFuncLocalCount, Some(&[&func.local_count]))
         );
+        // 局部变量名：只列具名者，按槽位下标排序保证输出稳定
+        if !func.local_names.is_empty() {
+            let mut named: Vec<(usize, &String)> =
+                func.local_names.iter().map(|(k, v)| (*k, v)).collect();
+            named.sort_by_key(|(idx, _)| *idx);
+            let list = named
+                .iter()
+                .map(|(idx, name)| format!("{name}@{idx}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            tracing::info!("{}", t_cur(MSG::BytecodeFuncLocalNames, Some(&[&list])));
+        }
         tracing::info!(
             "{}",
             t_cur(

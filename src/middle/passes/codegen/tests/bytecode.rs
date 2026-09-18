@@ -28,6 +28,7 @@ fn test_debug_section_round_trip() {
         return_type: MonoType::Void,
         instructions: vec![BytecodeInstruction::new(opcode::NOP, vec![])],
         local_count: 0,
+        local_names: HashMap::new(),
         debug_map: HashMap::from([(0usize, debug_span)]),
     };
 

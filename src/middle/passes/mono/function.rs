@@ -4,7 +4,7 @@
 
 use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{BasicBlock, FunctionBody, FunctionIR, Instruction, ModuleIR};
+use crate::middle::core::ir::{BasicBlock, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR};
 use crate::middle::passes::mono::instance::{FunctionId, InstantiationRequest};
 use std::collections::HashMap;
 
@@ -197,10 +197,14 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             .collect();
         let new_return_type =
             self.substitute_single_type(&generic_func.return_type, &type_param_map);
-        let new_locals: Vec<MonoType> = match &generic_func.body {
+        let new_locals: Vec<LocalSlot> = match &generic_func.body {
             FunctionBody::Code { locals, .. } => locals
                 .iter()
-                .map(|ty| self.substitute_single_type(ty, &type_param_map))
+                .map(|slot| LocalSlot {
+                    name: slot.name.clone(),
+                    ty: self.substitute_single_type(&slot.ty, &type_param_map),
+                    scope_depth: slot.scope_depth,
+                })
                 .collect(),
             _ => Vec::new(),
         };
