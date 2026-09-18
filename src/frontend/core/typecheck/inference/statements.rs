@@ -257,6 +257,11 @@ impl StatementChecker {
     ///
     /// 当 type_annotation 为 `List(Int)` 时，查找 `List` 的泛型模板，
     /// 将类型参数 `T` 替换为 `Int`，返回展开后的结构体类型。
+    ///
+    /// **仅当全部类型实参都已具体化时才展开**。若实参含未绑定的类型参数
+    /// （`L(T)`，T 是所在泛型的参数），展开得到的 Struct 与签名侧给出的
+    /// `Generic{name:“L”}` 表示不一致，unify 会报 E1002——而它们语义相同。
+    /// 此时返回 None 让调用方回退到 `Generic` 形态，两侧表示一致。
     fn try_instantiate_generic_type(
         &self,
         type_ann: &crate::frontend::core::parser::ast::Type,
@@ -267,6 +272,10 @@ impl StatementChecker {
                 let def = self.generic_type_defs.get(name)?;
                 let arg_types: Vec<MonoType> =
                     args.iter().map(|a| MonoType::from(a.clone())).collect();
+                // 含未绑定类型参数（TypeRef）时不做结构体展开，保持 Generic 形态。
+                if arg_types.iter().any(contains_unresolved_param) {
+                    return None;
+                }
                 TypeEnvironment::instantiate_generic_type(def, &arg_types).ok()
             }
             _ => None,
