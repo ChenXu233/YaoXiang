@@ -1036,6 +1036,20 @@ impl<'a> ExpressionInferrer<'a> {
                     let _ = self.solver.unify(&a, &p);
                 }
             }
+            // TypeVar 形态下，返回类型里的类型参数可能被分配了**另一个** TypeVar
+            // （声明处逐位置替换，参数位与返回位各拿一个）。unify 只绑定了参数位
+            // 的那个，返回位仍是自由变量——调用方拿到的返回值类型解不出具体类型。
+            // 按位置把返回位的变量与已解出的实参统一，使返回类型收敛。
+            if !pending_slots.is_empty() && pending_slots.len() == declared_names.len() {
+                let mut ret_slots: Vec<(usize, MonoType)> = Vec::new();
+                Self::collect_type_vars_positional(&new_return, &mut ret_slots);
+                ret_slots.sort_by_key(|(i, _)| *i);
+                ret_slots.dedup_by_key(|(i, _)| *i);
+                for (slot, (_, ty)) in pending_slots.iter().zip(ret_slots.iter()) {
+                    let _ = self.solver.unify(ty, slot);
+                }
+                new_return = self.solver.resolve_type(&new_return);
+            }
             // 统一后解出具体类型（unify 之前它们还是 fresh TypeVar）
             self.last_type_args = pending_slots
                 .iter()
