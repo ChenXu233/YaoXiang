@@ -29,13 +29,10 @@ impl Interpreter {
                 args: arg_regs,
             } => {
                 let func_id = FunctionId(*func_idx);
-                let func_label = self
-                    .image
-                    .functions_by_id
-                    .get(*func_idx as usize)
-                    .map(|f| f.name.clone())
-                    .unwrap_or_else(|| format!("fn_{}", func_idx));
-
+                // 注：函数名标签只在下方 Standard 模式的任务调度里用到
+                // （TaskMeta.label）。此前在此无条件克隆函数名，而默认的
+                // Embedded 模式（直接调 call_static_by_id）根本不用它——
+                // 每次 CallStatic 都白做一次 String 分配。故移到使用处。
                 let call_args: Vec<RuntimeValue> = arg_regs
                     .iter()
                     .map(|r| {
@@ -62,6 +59,12 @@ impl Interpreter {
 
                 let deps = self.deps_from_args(&call_args);
 
+                let label: Arc<str> = Arc::from(
+                    self.image
+                        .function_name(*func_idx as usize)
+                        .unwrap_or("fn_?"),
+                );
+
                 let task_id = self.schedule_task(
                     InterpreterTask::Static {
                         func_id,
@@ -70,7 +73,7 @@ impl Interpreter {
                     TaskMeta {
                         deps,
                         resources: Vec::<ResourceKey>::new(),
-                        label: Some(Arc::<str>::from(func_label.as_str())),
+                        label: Some(label),
                     },
                 )?;
 
