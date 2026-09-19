@@ -448,7 +448,7 @@ impl TypeChecker {
                     let Some((name, type_name)) = target.receiver_parts() else {
                     continue
                     };
-                    // 裁决 C（RFC-010a 附录D）：非 Fn 注解的块绑定是**块值**而非函数
+                    // RFC-010a 附录D：非 Fn 注解的块绑定是**块值**而非函数
                     let is_fn_binding =
                         crate::frontend::core::parser::ast::Expr::block_binding_is_function(
                             type_annotation.as_ref(),

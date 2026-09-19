@@ -1001,7 +1001,7 @@ impl StatementChecker {
                     // 也是元绑定：编译期构造类型，不引入运行时变量。
                     || Expr::is_type_def_binding(value.as_deref());
                 // 从 value 提取 Lambda params/body。
-                // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值（交给 check_var_stmt 按普通变量审）。
                 let (params, body_stmts) = match value {
                     Some(v) => {

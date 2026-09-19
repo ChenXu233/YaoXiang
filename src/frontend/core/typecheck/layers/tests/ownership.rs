@@ -2754,7 +2754,7 @@ fn test_e2e_branch_local_var_dropped_at_merge() {
 }
 
 // ── #312: smt_cut 真实路径条件查询 ─────────────────────
-// RFC-009a §慢速通道 + 勘误（2026-08-17）：SMT 是精度层非 soundness 依赖。
+// RFC-009a §证明策略：SMT 是精度层非 soundness 依赖。
 // 查询 `写节点路径条件 ⇒ !loop_cond`：Unsat = 蕴含成立 = 切断；否则穿越（保守拒绝）。
 // 此前用 NamedVar 占位符 + 假设其为真 → 恒 Unsat → 恒切断 → 循环内借用写静默放行。
 

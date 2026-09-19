@@ -510,7 +510,7 @@ fn extract_global_defs(ast: &Module) -> Vec<(String, MonoType)> {
         } = &stmt.kind
         {
             if let Expr::Var(name, _) = target.as_ref() {
-                // 裁决 C（RFC-010a 附录D）：注解是 Fn → 函数；非 Fn 注解 → 块值；
+                // RFC-010a 附录D：注解是 Fn → 函数；非 Fn 注解 → 块值；
                 // 无注解 → 函数。此前这里写「Block 就是函数」，把 `x: Int = { 5 }`
                 // 误判为函数——与 ir_gen 的注册口径不一致，导致跨文件引用
                 // `use lib.{x}` 找不到槽位（T5）。

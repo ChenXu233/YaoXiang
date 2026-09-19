@@ -155,20 +155,6 @@ impl<'a> NativeContext<'a> {
     }
 }
 
-/// 解构第一个参数为 List 句柄（类型不符返回 type_only 错误）
-pub(crate) fn expect_list(
-    args: &[RuntimeValue],
-    what: &str,
-) -> Result<Handle, ExecutorError> {
-    match args.first() {
-        Some(RuntimeValue::List(h)) => Ok(h.clone()),
-        _ => Err(ExecutorError::type_only(format!(
-            "{} expects a List as first argument",
-            what
-        ))),
-    }
-}
-
 /// 解构第一个参数为 Dict 句柄（类型不符返回 type_only 错误）
 pub(crate) fn expect_dict(
     args: &[RuntimeValue],

@@ -2209,7 +2209,7 @@ impl TypeChecker {
 
             // #297/F：落空 const 候选（标注具体类型但未在类型体任何类型位置引用）
             // 不能静默丢弃——否则实例化 arity 对不上，调用侧报风马牛不相及的 E1010。
-            // 按 RFC-011 §4.1 勘误推荐：声明侧直接报错。
+            // 按 RFC-011 §4.1 编译期值参数判定：声明侧直接报错。
             for p in &resolved_const.fallen {
                 self.add_error(
                     ErrorCodeDefinition::unused_const_param(&p.name, name)

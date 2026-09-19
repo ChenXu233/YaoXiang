@@ -3171,7 +3171,7 @@ impl<'a> ExpressionInferrer<'a> {
                         let _ = self.infer_expr(v)?;
                         return Ok(MonoType::Void);
                     }
-                    // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                    // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                     // 非 Fn 注解→块值（立即求值，变量绑定块值类型）。
                     // 此前不论注解一律注册为 0 参函数，与 ir_gen 分流脱节（#343）。
                     if let Expr::Block(..) = v.as_ref() {
