@@ -7,9 +7,7 @@
 // 本文件是 `{}` 语义的哨兵：若 parser 把 `{}` 退回空 Dict，
 // 「空块是 Void」的断言立刻失败（而非静默通过）。
 
-use std.assert
-use std.dict
-use std.io
+use std.{assert, dict, io}
 
 // ── 形态一：`{}` = 空块，值 Void ────────────────────────────────
 
