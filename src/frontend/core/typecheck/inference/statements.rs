@@ -892,6 +892,45 @@ impl StatementChecker {
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
+                // 字段赋值（`s.n = v` / `s.data[i] = v`）不是变量声明/赋值：
+                // 它不引入也不重赋值任何变量，spec §4.3「赋值优先」不适用。
+                //
+                // 此前把字段名当作变量名继续走下面的绑定判定：
+                //   - 首次 `s.n = 1` 会把 `n` 注册成一个**幻影变量**；
+                //   - 再次 `s.n = 2` 就命中「不可变变量重赋值」→ 误报 E2010。
+                // 复现：函数内先 `s.n = 1`，再在 while 体内 `s.n = s.n + 1`。
+                // 字段自身的可写性由所有权/借用层校验，此处直接返回。
+                // 字段赋值（`s.n = v`）：接收者是**变量**时，不引入也不重赋值任何变量，
+                // 直接返回（字段可写性由所有权层负责）。
+                //
+                // 但接收者是**已注册类型名**时（`Dog.fetch = ...`）是方法绑定/元绑定，
+                // 必须继续走下面的注册路径——否则方法不会被登记，方法体里的
+                // `self` 参数类型丢失，字段访问报 E1053。
+                if let Expr::FieldAccess { expr: recv, .. } = target.as_ref() {
+                    let recv_is_type = matches!(
+                        recv.as_ref(),
+                        Expr::Var(tn, _) if self.type_defs.contains_key(tn.as_str())
+                    );
+                    if !recv_is_type {
+                        if let Some(v) = value.as_deref() {
+                            self.check_expr(v)?;
+                        }
+                        return Ok(());
+                    }
+                }
+                // 索引赋值（`a[i] = v`）同理：不引入变量。
+                if let Expr::Index {
+                    expr: base, index, ..
+                } = target.as_ref()
+                {
+                    // 容器与索引表达式都要检查（类型正确性 + 借用）
+                    let _ = self.check_expr(base);
+                    let _ = self.check_expr(index);
+                    if let Some(v) = value.as_deref() {
+                        self.check_expr(v)?;
+                    }
+                    return Ok(());
+                }
                 let (name, type_name) = match target.as_ref() {
                     Expr::Var(n, _) => (n.clone(), None),
                     Expr::FieldAccess { expr, field, .. } => {
@@ -903,9 +942,10 @@ impl StatementChecker {
                     }
                     _ => return Ok(()),
                 };
+                // RFC-010 类型定义绑定（`Db = unsafe { Db: Type = {...}; Db }`）
+                // 是元绑定：编译期构造类型，不引入运行时变量。
                 // `Type.method = ...` 是**方法绑定**（左值是类型限定名），
-                // 不是变量声明/赋值——spec §4.3 不适用。此前 type_name 被丢弃，
-                // 导致 `Point.get_x = get_x[0]` 被当成对变量 `get_x` 的重赋值 → 误报 E2010。
+                // 不是变量声明/赋值——spec §4.3 不适用。
                 let is_method_binding = type_name
                     .as_ref()
                     .is_some_and(|tn| self.type_defs.contains_key(tn.as_str()))
@@ -2281,62 +2321,6 @@ fn innermost_return_type(
         ty
     }
 }
-/// 把 `Struct` 与 `Generic` 两种表示对齐，使 unify 能做**带实参**的结构比较。
-///
-/// 泛型类型实例有两种形态并存：
-/// - `Generic{name, args}` —— 类型注解形态（保留实参）
-/// - `Struct{name, fields}` —— 实例化后的字段布局形态
-///
-/// 同名时把 Struct 侧折算回 `Generic{name, args}`：实参由**字段类型反推**。
-/// 不能只比名字——那会放过 `Container(Int) = Container("str")` 这类实参不匹配
-/// （#286 的类型一致性检查会失效）。
-fn align_struct_and_generic(
-    a: &MonoType,
-    b: &MonoType,
-    _solver: &crate::frontend::core::types::solver::TypeConstraintSolver,
-) -> (MonoType, MonoType) {
-    fn struct_to_generic(st: &crate::frontend::core::types::mono::StructType) -> MonoType {
-        MonoType::Generic {
-            name: st.name.clone(),
-            // 实参位无法从字段布局完整还原（字段可能多对一），故留空表示
-            // 「布局已固定」；实参一致性由调用点的构造器推断另行保证。
-            args: Vec::new(),
-        }
-    }
-    match (a, b) {
-        (MonoType::Struct(sa), MonoType::Generic { name, .. }) if sa.name == *name => {
-            (struct_to_generic(sa), b.clone())
-        }
-        (MonoType::Generic { name, .. }, MonoType::Struct(sb)) if sb.name == *name => {
-            (a.clone(), struct_to_generic(sb))
-        }
-        _ => (a.clone(), b.clone()),
-    }
-}
-
-/// 泛型注解的类型层形态：若 `type_ann` 是 `Generic{name, args}`，返回
-/// `Generic{name, args}`（保留实参）；否则原样返回 `ann_ty`。
-///
-/// 为什么不直接用实例化结果：实例化把 `List(Int)` 展开成 `Struct{List, fields..}`，
-/// 字段布局有了，但**类型实参名丢了**（再取名字只剩 `List`）。类型层需要的是
-/// 带实参的 `Generic`——unify、跨函数传递、取借用都依赖它。
-fn generic_annotation_form(
-    type_ann: &crate::frontend::core::parser::ast::Type,
-    ann_ty: &MonoType,
-) -> MonoType {
-    if let crate::frontend::core::parser::ast::Type::Generic { name, args, .. } = type_ann {
-        // 实参含未绑定类型参数时，注解本身就是 Generic 形态，直接用
-        if matches!(ann_ty, MonoType::Generic { .. }) {
-            return ann_ty.clone();
-        }
-        return MonoType::Generic {
-            name: name.clone(),
-            args: args.iter().map(|a| MonoType::from(a.clone())).collect(),
-        };
-    }
-    ann_ty.clone()
-}
-
 /// #286: 检查 MonoType 是否含未解析的泛型参数（TypeRef/TypeVar）。
 /// 用于区分「构造器推断的悬空泛型实例」（字段还是 TypeRef 占位，合法豁免）
 /// 与「实参已确定具体类型但 unify 失败」（真不匹配，必须报错）。

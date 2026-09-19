@@ -676,6 +676,39 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 递归收集类型中的所有 TypeVar 索引
+    /// 按出现顺序收集 `TypeVar`（与集合语义的 `collect_type_var_indices` 相对）。
+    /// 用于把「声明序类型参数名」与签名里的变量位逐一对齐。
+    fn collect_type_vars_positional(
+        ty: &MonoType,
+        out: &mut Vec<(usize, MonoType)>,
+    ) {
+        match ty {
+            MonoType::TypeVar(tv) => out.push((tv.index(), ty.clone())),
+            MonoType::Ref { inner, .. } => Self::collect_type_vars_positional(inner, out),
+            MonoType::Generic { args, .. } => {
+                for a in args {
+                    Self::collect_type_vars_positional(a, out);
+                }
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => {
+                for p in params {
+                    Self::collect_type_vars_positional(p, out);
+                }
+                Self::collect_type_vars_positional(return_type, out);
+            }
+            MonoType::Union(items) | MonoType::Intersection(items) => {
+                for t in items {
+                    Self::collect_type_vars_positional(t, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn collect_type_var_indices(
         ty: &MonoType,
         out: &mut HashSet<usize>,
@@ -741,6 +774,16 @@ impl<'a> ExpressionInferrer<'a> {
             sub.insert(*idx, replacement.clone());
         }
         Substituter::new().substitute(ty, &sub)
+    }
+
+    /// 剥离顶层 `Ref`（递归），返回内层类型。用于类型参数推断时穿透借用包装：
+    /// `unify(&List(Int), &List(T))` 走 Ref 分支后递归到内层即可解出 T，
+    /// 但实参未带 Ref 时（或可变性不匹配）到不了内层，故显式剥一层再补 unify。
+    fn strip_ref(ty: &MonoType) -> MonoType {
+        match ty {
+            MonoType::Ref { inner, .. } => Self::strip_ref(inner),
+            other => other.clone(),
+        }
     }
 
     /// 用实际类型 `actual` 解出 `shape` 里未绑定的 `TypeRef` 类型参数，返回替换后的类型。
@@ -877,15 +920,30 @@ impl<'a> ExpressionInferrer<'a> {
         // 两次不同类型调用（`identity(42)` 与 `identity("hi")`）会冲突。
         let mut new_params: Vec<MonoType> = params.clone();
         let mut new_return: MonoType = (**return_type).clone();
-        let mut solved: Vec<MonoType> = Vec::new();
+        let mut pending_slots: Vec<MonoType> = Vec::new();
         let mut changed = false;
 
         // 第 1 趟：TypeVar → fresh
+        //
+        // 类型参数的两种表示：`TypeRef("A")`（名字）与 `TypeVar(n)`（编号）。
+        // 声明处（`checker.rs`）为每个声明类型参数创建 TypeVar 并替换进签名，
+        // 所以**普通注解形态**（`(l: L(A))`）拿到的是 TypeVar；
+        // 只有嵌在 `Ref` 内层等少数形态会保留 TypeRef 名字。
+        //
+        // 声明序已知：`declared[i]` 对应签名里「按出现顺序」的第 i 个 TypeVar。
+        // 第 1 趟按索引升序换 fresh，因此可据此把名字与 fresh 槽位对应起来，
+        // 让纯 TypeVar 形态也能收集到实例化请求（否则该泛型函数不会被特化，
+        // 在 mono 的 build_output 里被当未特化泛型删掉 → 运行时报函数不存在）。
+        let declared_names: Vec<String> = fn_name
+            .and_then(|f| self.generic_fn_type_params.get(f).cloned())
+            .unwrap_or_default();
         let mut var_indices = HashSet::new();
         Self::collect_type_var_indices(&func_ty, &mut var_indices);
         if !var_indices.is_empty() {
             let mut subst = HashMap::new();
-            for idx in var_indices {
+            let mut sorted: Vec<usize> = var_indices.iter().copied().collect();
+            sorted.sort_unstable();
+            for idx in sorted {
                 subst.insert(idx, self.solver.new_var());
             }
             new_params = new_params
@@ -922,14 +980,35 @@ impl<'a> ExpressionInferrer<'a> {
                     changed = true;
                 }
                 // 解出的实参按声明序留存（供实例化请求使用）
-                if changed && !declared.is_empty() {
-                    for pname in &declared {
-                        if let Some(v) = subst.get(pname) {
-                            solved.push(self.solver.resolve_type(v));
-                        }
-                    }
-                    self.last_type_args = solved;
-                }
+                // 记住待解的槽位（unify 之前它们还是 fresh TypeVar，解不出具体类型）
+                pending_slots = declared
+                    .iter()
+                    .filter_map(|pname| subst.get(pname).cloned())
+                    .collect();
+            }
+        }
+        // TypeVar 形态（普通注解 `(l: L(A))`）：签名里的类型参数是 TypeVar 而非
+        // TypeRef 名字，第 2 趟按名字收集不到。改为从**替换后的签名**里按出现顺序
+        // 取回这些 TypeVar——必须与签名实际使用的是同一个变量；另建 fresh 会让
+        // unify 绑到签名变量上、而收集的槽位永远解不出具体类型。
+        // 第 2 趟按名字填的槽位可能仍是**未解变量**（签名里该名字根本没出现，
+        // 只是照着 declared 列表建了 fresh）——这正是 TypeVar 形态的特征。
+        let ref_slots_unresolved = !pending_slots.is_empty()
+            && pending_slots
+                .iter()
+                .all(|t| matches!(self.solver.resolve_type(t), MonoType::TypeVar(_)));
+        if (pending_slots.is_empty() || ref_slots_unresolved)
+            && !declared_names.is_empty()
+            && changed
+        {
+            let mut ordered: Vec<(usize, MonoType)> = Vec::new();
+            for p in new_params.iter().chain(std::iter::once(&new_return)) {
+                Self::collect_type_vars_positional(p, &mut ordered);
+            }
+            ordered.sort_by_key(|(i, _)| *i);
+            ordered.dedup_by_key(|(i, _)| *i);
+            if ordered.len() == declared_names.len() {
+                pending_slots = ordered.into_iter().map(|(_, t)| t).collect();
             }
         }
 
@@ -944,20 +1023,38 @@ impl<'a> ExpressionInferrer<'a> {
                 return func_ty;
             }
         } else {
-            // Unify 新参数与实参以推断具体类型
+            // Unify 新参数与实参以推断具体类型。
+            //
+            // 形参带借用（`&List(T)`）而实参是 `&List(Int)` 时，`TypeRef`/`TypeVar`
+            // 嵌在 `Ref` 内层——solver 的 Ref 分支会递归，但实参若未带 Ref
+            // （或两侧可变性不同）就到不了内层，类型参数解不出来。
+            // 因此逐条 unify 后，再用「剥离 Ref 的形态」补一次，保证内层类型参数能绑定。
             if arg_types.len() == new_params.len() {
                 for (arg_ty, param_ty) in arg_types.iter().zip(new_params.iter()) {
                     let _ = self.solver.unify(arg_ty, param_ty);
+                    let (a, p) = (Self::strip_ref(arg_ty), Self::strip_ref(param_ty));
+                    let _ = self.solver.unify(&a, &p);
                 }
             }
-            // 统一后重取解（此时 fresh 已解成具体类型）
-            if !self.last_type_args.is_empty() {
-                self.last_type_args = self
-                    .last_type_args
-                    .iter()
-                    .map(|t| self.solver.resolve_type(t))
-                    .collect();
+            // TypeVar 形态下，返回类型里的类型参数可能被分配了**另一个** TypeVar
+            // （声明处逐位置替换，参数位与返回位各拿一个）。unify 只绑定了参数位
+            // 的那个，返回位仍是自由变量——调用方拿到的返回值类型解不出具体类型。
+            // 按位置把返回位的变量与已解出的实参统一，使返回类型收敛。
+            if !pending_slots.is_empty() && pending_slots.len() == declared_names.len() {
+                let mut ret_slots: Vec<(usize, MonoType)> = Vec::new();
+                Self::collect_type_vars_positional(&new_return, &mut ret_slots);
+                ret_slots.sort_by_key(|(i, _)| *i);
+                ret_slots.dedup_by_key(|(i, _)| *i);
+                for (slot, (_, ty)) in pending_slots.iter().zip(ret_slots.iter()) {
+                    let _ = self.solver.unify(ty, slot);
+                }
+                new_return = self.solver.resolve_type(&new_return);
             }
+            // 统一后解出具体类型（unify 之前它们还是 fresh TypeVar）
+            self.last_type_args = pending_slots
+                .iter()
+                .map(|t| self.solver.resolve_type(t))
+                .collect();
             let resolved_return = self.solver.resolve_type(&new_return);
             return MonoType::Fn {
                 params: new_params,
@@ -1525,6 +1622,18 @@ impl<'a> ExpressionInferrer<'a> {
                 }
 
                 match resolved {
+                    // 元组下标：`t.0` / `t.1`。解析期已把数字下标转成十进制字段名，
+                    // 这里按下标取元素类型。此前只支持 `t[0]` 形态（见索引表达式臂）。
+                    MonoType::Generic { ref name, ref args } if name == "Tuple" => {
+                        match field.parse::<usize>() {
+                            Ok(i) if i < args.len() => Ok(args[i].clone()),
+                            _ => Err(ErrorCodeDefinition::index_out_of_bounds(
+                                args.len(),
+                                field.parse::<i64>().unwrap_or(-1),
+                            )
+                            .build()),
+                        }
+                    }
                     // RFC-011 容器命名分层：`Vec(T)` / `Array(T, N)` 的长度。
                     // 两者以 `length: Int` 暴露长度（与 Range 具名字字段同款处理）：
                     // - `Array(T, N)`：N 编译期已知，但统一走同一读取路径，避免两套语义。
@@ -2055,10 +2164,6 @@ impl<'a> ExpressionInferrer<'a> {
                                         args: type_args,
                                     });
                                 }
-                                eprintln!(
-                                    "PROBE26 ctor fn={:?} type_args={:?}",
-                                    fn_name, type_args
-                                );
                                 return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
                                     &generic_def,
                                     &type_args,
@@ -2525,6 +2630,18 @@ impl<'a> ExpressionInferrer<'a> {
                 let saved_loop_depth = self.loop_depth;
                 self.loop_depth = 0;
                 let body_ty = self.infer_block(body, true, None);
+                // 箭头 lambda（`(x) => expr`）的体被解析成只含 `return expr` 的块，
+                // 块值按规则恒为 `Never`（`return : Never`）。此处**在退出 lambda 作用域前**
+                // 取出载荷类型——退出后形参已不在 scope，重推会失败。
+                let arrow_payload_ty = match &body_ty {
+                    Ok(MonoType::Never) if body.stmts.len() == 1 => match &body.stmts[0].kind {
+                        crate::frontend::core::parser::ast::StmtKind::Return(Some(e)) => {
+                            self.infer_expr(e).ok()
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                };
                 self.loop_depth = saved_loop_depth;
                 self.expected_return_type = saved_expected_ret;
                 self.result_err = saved_result_err;
@@ -2532,12 +2649,22 @@ impl<'a> ExpressionInferrer<'a> {
                 self.scope.exit_fn();
                 let body_ty = body_ty?;
 
-                let param_types: Vec<MonoType> =
-                    params.iter().map(|_| self.solver.new_var()).collect();
+                // 参数类型：有显式标注用标注（`(x: Int) => ..`），否则 fresh var。
+                // 此前一律 `new_var()`，把标注丢掉了——于是 `(x: Int) => x * 2` 的
+                // 参数类型是未绑定变量，与形参 `(item: T) -> R` unify 时无法推出 R。
+                let param_types: Vec<MonoType> = params
+                    .iter()
+                    .map(|p| match &p.ty {
+                        Some(t) => MonoType::from(t.clone()),
+                        None => self.solver.new_var(),
+                    })
+                    .collect();
+
+                let return_type = arrow_payload_ty.unwrap_or_else(|| body_ty.clone());
 
                 Ok(MonoType::Fn {
                     params: param_types,
-                    return_type: Box::new(body_ty),
+                    return_type: Box::new(return_type),
                 })
             }
 

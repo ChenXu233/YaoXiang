@@ -58,10 +58,10 @@ append: (A: Type) -> (list: List(A), item: A) -> List(A) = {
 /// 头部插入，返回新列表。O(n)：搬移全部元素。
 prepend: (A: Type) -> (list: List(A), item: A) -> List(A) = {
     seed: Vec(A) = []
-    out: List(A) = List(seed, 0)
+    mut out: List(A) = List(seed, 0)
     out.data[0] = item
     out.length = 1
-    i = 0
+    mut i = 0
     while i < list.length {
         out.data[out.length] = list.data[i]
         out.length = out.length + 1
@@ -109,7 +109,7 @@ last: (A: Type) -> (list: &List(A)) -> A = {
 
 /// 是否包含指定元素（线性扫描）。
 contains: (A: Type) -> (list: &List(A), item: A) -> Bool = {
-    i = 0
+    mut i = 0
     while i < list.length {
         if list.data[i] == item {
             return true
@@ -121,7 +121,7 @@ contains: (A: Type) -> (list: &List(A), item: A) -> Bool = {
 
 /// 查找元素下标；未找到返回 -1。
 find_index: (A: Type) -> (list: &List(A), item: A) -> Int = {
-    i = 0
+    mut i = 0
     while i < list.length {
         if list.data[i] == item {
             return i
@@ -150,7 +150,7 @@ remove_at: (A: Type) -> (list: List(A), index: Int) -> List(A) = {
     // 上界先提到局部变量：终止证明的秩函数合成只处理 `i < 简单名` 形态，
     // 复合上界（`i + 1 < list.length`）目前推不出递减度量。
     limit = list.length - 1
-    i = index
+    mut i = index
     while i < limit {
         list.data[i] = list.data[i + 1]
         i = i + 1
@@ -164,8 +164,8 @@ remove_at: (A: Type) -> (list: List(A), index: Int) -> List(A) = {
 /// 反转，返回新列表。
 reverse: (A: Type) -> (list: &List(A)) -> List(A) = {
     seed: Vec(A) = []
-    out: List(A) = List(seed, 0)
-    i = 0
+    mut out: List(A) = List(seed, 0)
+    mut i = 0
     while i < list.length {
         out.data[out.length] = list.data[list.length - 1 - i]
         out.length = out.length + 1
@@ -177,14 +177,14 @@ reverse: (A: Type) -> (list: &List(A)) -> List(A) = {
 /// 拼接两个列表，返回新列表。
 concat: (A: Type) -> (a: &List(A), b: &List(A)) -> List(A) = {
     seed: Vec(A) = []
-    out: List(A) = List(seed, 0)
-    i = 0
+    mut out: List(A) = List(seed, 0)
+    mut i = 0
     while i < a.length {
         out.data[out.length] = a.data[i]
         out.length = out.length + 1
         i = i + 1
     }
-    j = 0
+    mut j = 0
     while j < b.length {
         out.data[out.length] = b.data[j]
         out.length = out.length + 1
@@ -196,8 +196,8 @@ concat: (A: Type) -> (a: &List(A), b: &List(A)) -> List(A) = {
 /// 切片 `[start, end)`，返回新列表。
 slice: (A: Type) -> (list: &List(A), start: Int, end: Int) -> List(A) = {
     seed: Vec(A) = []
-    out: List(A) = List(seed, 0)
-    i = start
+    mut out: List(A) = List(seed, 0)
+    mut i = start
     while i < end {
         out.data[out.length] = list.data[i]
         out.length = out.length + 1
@@ -211,8 +211,8 @@ slice: (A: Type) -> (list: &List(A), start: Int, end: Int) -> List(A) = {
 /// 逐元素映射，返回等长新列表。
 map: (T: Type, R: Type) -> (list: &List(T), f: (item: T) -> R) -> List(R) = {
     seed: Vec(R) = []
-    out: List(R) = List(seed, 0)
-    i = 0
+    mut out: List(R) = List(seed, 0)
+    mut i = 0
     while i < list.length {
         out.data[out.length] = f(list.data[i])
         out.length = out.length + 1
@@ -224,8 +224,8 @@ map: (T: Type, R: Type) -> (list: &List(T), f: (item: T) -> R) -> List(R) = {
 /// 保留满足谓词的元素，返回新列表。
 filter: (T: Type) -> (list: &List(T), keep: (item: &T) -> Bool) -> List(T) = {
     seed: Vec(T) = []
-    out: List(T) = List(seed, 0)
-    i = 0
+    mut out: List(T) = List(seed, 0)
+    mut i = 0
     while i < list.length {
         item = list.data[i]
         if keep(item) {
@@ -243,11 +243,32 @@ filter: (T: Type) -> (list: &List(T), keep: (item: &T) -> Bool) -> List(T) = {
 /// `f(acc, ..)` 会把 `acc` 消费掉，循环下一轮与最终 return 都无法再用它。
 /// 借用形式让调用方不必为 `Acc` 实现 `Dup`/`Clone`。
 reduce: (T: Type, Acc: Type) -> (list: &List(T), f: (acc: &Acc, item: T) -> Acc, init: Acc) -> Acc = {
-    acc = init
-    i = 0
+    mut acc = init
+    mut i = 0
     while i < list.length {
         acc = f(acc, list.data[i])
         i = i + 1
     }
     return acc
+}
+
+/// 构造迭代器：`(列表, 当前下标)` 的二元组。
+///
+/// 与 native 版保持同一形态（Tuple），`for x in list` 的脱糖路径依赖它。
+iter: (T: Type) -> (list: &List(T)) -> (List(T), Int) = {
+    copy: List(T) = List(list.data, list.length)
+    return (copy, 0)
+}
+
+/// 迭代器是否还有下一个元素。
+has_next: (T: Type) -> (it: &(List(T), Int)) -> Bool = {
+    return it.1 < it.0.length
+}
+
+/// 取下一个元素并推进：返回 `(当前元素, 新迭代器)`。
+///
+/// 前置条件：`has_next(it)` 为真（调用方先判空再取，与 native `next` 同约定）。
+/// 越界读取由 `Vec` 的边界检查兜住并报 E6003，不做静默返回 0（#279 同类）。
+next: (T: Type) -> (it: &(List(T), Int)) -> (T, (List(T), Int)) = {
+    return (it.0.data[it.1], (it.0, it.1 + 1))
 }

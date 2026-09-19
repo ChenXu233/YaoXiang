@@ -611,6 +611,26 @@ impl AstToIrGenerator {
         expr: &ast::Expr,
         field_name: &str,
     ) -> Option<usize> {
+        // 0. 元组下标（`t.0` / `t.1`）：解析期已把数字下标转成十进制字段名。
+        // 元组的“字段索引”就是位置下标本身，直接解析返回。
+        if let Some(t) = self.get_expr_mono_type(expr) {
+            // 剥掉 Ref 层：`it: &(A, B)` 取 `it.1` 时类型是 `Ref{Tuple}`。
+            let mut resolved = t.clone();
+            while let crate::frontend::core::types::mono::MonoType::Ref { inner, .. } = resolved {
+                resolved = *inner;
+            }
+            let is_tuple = matches!(
+                &resolved,
+                crate::frontend::core::types::mono::MonoType::Generic { name, .. }
+                    if name == "Tuple"
+            );
+            if is_tuple {
+                if let Ok(i) = field_name.parse::<usize>() {
+                    return Some(i);
+                }
+            }
+        }
+
         // 0. #302：Range 具名字段（start=0, end=1, step=2）
         if matches!(field_name, "start" | "end" | "step")
             && self
