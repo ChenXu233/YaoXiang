@@ -1320,6 +1320,13 @@ impl OwnershipChecker {
             }
             // #302：Range 是不可变三标量记录（运行时内联值），值语义
             m if m.is_range() => CopySemantics::ValueCopy,
+            // #352：函数是不可变**代码**，不是运行时资源——物化成闭包值后
+            // 使用它只是在拷贝一个代码指针，不消耗任何所有权。
+            //
+            // 此前落 `_ => Move`，于是 `h = double` 消耗了 `double`，
+            // 之后 `double(6)` 报 E2014——把函数当成 Linear（一次性）类型，
+            // 与「函数可任意次调用」的直觉和高阶编程直接冲突。
+            MonoType::Fn { .. } => CopySemantics::Dup,
             _ => CopySemantics::Move,
         }
     }
