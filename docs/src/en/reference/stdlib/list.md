@@ -1,14 +1,14 @@
 ---
 title: 'std.list'
-description: 'List add/remove, slicing, higher-order functions, and iterator protocol'
+description: 'List add/remove, slicing, higher-order functions and iterator protocol'
 ---
 
 # std.list
 
-List manipulation module. **Pay special attention to move semantics**: there are two categories of
-functions—those that only read-borrow the source list, and those that consume (move) the source
-list. For the automatic borrowing rules of `&` parameters, see RFC-009 §2.8: when an argument is
-still used after the call, the compiler automatically creates a read-only token.
+List operations module. **Pay special attention to move semantics**: there are two kinds of
+functions—those that only borrow the source list, and those that consume (move) it. The auto-borrow
+rule for `&` parameters is described in RFC-009 §2.8: when the argument is used after the call, the
+compiler automatically creates a read-only token.
 
 ```yaoxiang
 use std.list
@@ -16,15 +16,15 @@ use std.list
 
 ## Semantic Categories
 
-Parameters with `&` in the signature are read-only borrows; the source value remains usable after
+Parameters with `&` in their signature are read-only borrows—the source value remains usable after
 the call. Parameters without `&` are passed by value, and the source value is **moved** after the
 call; using it again will raise `E2014`.
 
-| Category                 | Functions                                                                                                        | Behavior                                         |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| **Consumes source list** | `push` `append` `prepend` `set` `pop` `remove_at`                                                                | Source list is moved, cannot be reused afterward |
-| Read-only borrow         | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | Source list can be used repeatedly               |
-| Iterator protocol        | `iter` (consumes source list, returns iterator) `has_next` `next` (borrows / mutably borrows iterator)           | See explanation below                            |
+| Category                | Functions                                                                                                        | Behavior                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| **Consume source list** | `push` `append` `prepend` `set` `pop` `remove_at`                                                                | Source list is moved, unusable afterwards |
+| Read-only borrow        | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | Source list can be used repeatedly        |
+| Iterator protocol       | `iter` (consumes source list, returns iterator) `has_next` `next` (borrows / mutably borrows iterator)           | See explanation below                     |
 
 ```yaoxiang
 use std.assert
@@ -38,7 +38,7 @@ main: () -> Void = {
     assert(list.len(nums) == 3)
     assert(list.contains(nums, 2))
 
-    // Consumes: base cannot be used after this point
+    // Consume: base cannot be used after this point
     base = [1, 2]
     extended = list.push(base, 3)
     assert(list.len(extended) == 3)
@@ -49,47 +49,47 @@ main: () -> Void = {
 
 <!-- stdlib:table:list start -->
 
-| Function     | Signature                                                                     |
-| ------------ | ----------------------------------------------------------------------------- |
-| `push`       | `(A: Type)(list: List(A), item: A) -> List(A)`                                |
-| `pop`        | `(A: Type)(list: &List(A)) -> Any`                                            |
-| `append`     | `(A: Type)(list: List(A), item: A) -> List(A)`                                |
-| `prepend`    | `(A: Type)(list: List(A), item: A) -> List(A)`                                |
-| `remove_at`  | `(A: Type)(list: &List(A), index: Int) -> Any`                                |
-| `reverse`    | `(A: Type)(list: &List(A)) -> List(A)`                                        |
-| `concat`     | `(A: Type)(a: &List(A), b: &List(A)) -> List(A)`                              |
-| `map`        | `(T: Type)(list: &List(T), fn: (item: T) -> T) -> List(T)`                    |
-| `filter`     | `(T: Type)(list: &List(T), fn: (item: T) -> Bool) -> List(T)`                 |
-| `reduce`     | `(T: Type)(list: &List(T), fn: (acc: Any, item: T) -> Any, init: Any) -> Any` |
-| `len`        | `(A: Type)(list: &List(A)) -> Int`                                            |
-| `is_empty`   | `(A: Type)(list: &List(A)) -> Bool`                                           |
-| `get`        | `(A: Type)(list: &List(A), index: Int) -> Any`                                |
-| `set`        | `(A: Type)(list: List(A), index: Int, value: A) -> List(A)`                   |
-| `first`      | `(A: Type)(list: &List(A)) -> Any`                                            |
-| `last`       | `(A: Type)(list: &List(A)) -> Any`                                            |
-| `slice`      | `(A: Type)(list: &List(A), start: Int, end: Int) -> List(A)`                  |
-| `contains`   | `(A: Type)(list: &List(A), item: Any) -> Bool`                                |
-| `find_index` | `(A: Type)(list: &List(A), item: Any) -> Int`                                 |
-| `iter`       | `(A: Type)(list: &List(A)) -> Tuple`                                          |
-| `next`       | `(iterator: Tuple) -> Any`                                                    |
-| `has_next`   | `(iterator: Tuple) -> Bool`                                                   |
+| Function     | Signature                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| `push`       | `(A: Type) -> (list: Vec(A), item: A) -> Vec(A)`                                           |
+| `pop`        | `(A: Type) -> (list: Vec(A)) -> Vec(A)`                                                    |
+| `append`     | `(A: Type) -> (list: Vec(A), item: A) -> Vec(A)`                                           |
+| `prepend`    | `(A: Type) -> (list: Vec(A), item: A) -> Vec(A)`                                           |
+| `remove_at`  | `(A: Type) -> (list: Vec(A), index: Int) -> Vec(A)`                                        |
+| `reverse`    | `(A: Type) -> (list: &Vec(A)) -> Vec(A)`                                                   |
+| `concat`     | `(A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A)`                                          |
+| `map`        | `(T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R)`                       |
+| `filter`     | `(T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T)`                          |
+| `reduce`     | `(T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc` |
+| `len`        | `(A: Type) -> (list: &Vec(A)) -> Int`                                                      |
+| `is_empty`   | `(A: Type) -> (list: &Vec(A)) -> Bool`                                                     |
+| `get`        | `(A: Type) -> (list: &Vec(A), index: Int) -> A`                                            |
+| `set`        | `(A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A)`                              |
+| `first`      | `(A: Type) -> (list: &Vec(A)) -> A`                                                        |
+| `last`       | `(A: Type) -> (list: &Vec(A)) -> A`                                                        |
+| `slice`      | `(A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A)`                             |
+| `contains`   | `(A: Type) -> (list: &Vec(A), item: A) -> Bool`                                            |
+| `find_index` | `(A: Type) -> (list: &Vec(A), item: A) -> Int`                                             |
+| `iter`       | `(T: Type) -> (list: Vec(T)) -> Iter(T)`                                                   |
+| `next`       | `(T: Type) -> (it: &mut Iter(T)) -> T`                                                     |
+| `has_next`   | `(T: Type) -> (it: &Iter(T)) -> Bool`                                                      |
+| `empty`      | `(T: Type) -> Vec(T)`                                                                      |
+| `of`         | `(T: Type) -> (data: Vec(T)) -> Vec(T)`                                                    |
 
-<!-- stdlib:table:list end -->
-
-## Functions
+<!-- stdlib:table:list end -->## Functions
 
 ### push
 
 <!-- stdlib:sig:list.push start -->
 
 ```yaoxiang
-push: (A: Type)(list: List(A), item: A) -> List(A)
+push: (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.push end -->
 
-Returns a **new list** with `item` appended at the end of `list`. `list` is passed by value and is
-**moved** after the call, and cannot be used again.
+Returns a **new list** with `item` appended to the end of `list`. `list` is passed by value and is
+**moved** after the call—it cannot be used again.
 
 ```yaoxiang
 use std.assert
@@ -107,12 +107,12 @@ main: () -> Void = {
 <!-- stdlib:sig:list.append start -->
 
 ```yaoxiang
-append: (A: Type)(list: List(A), item: A) -> List(A)
+append: (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.append end -->
 
-Alias of `push` with identical behavior.
+An alias for `push`, with identical behavior.
 
 ```yaoxiang
 use std.assert
@@ -129,7 +129,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.prepend start -->
 
 ```yaoxiang
-prepend: (A: Type)(list: List(A), item: A) -> List(A)
+prepend: (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.prepend end -->
@@ -152,29 +152,34 @@ main: () -> Void = {
 <!-- stdlib:sig:list.pop start -->
 
 ```yaoxiang
-pop: (A: Type)(list: &List(A)) -> Any
+pop: (A: Type) -> (list: Vec(A)) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.pop end -->
 
-Removes and returns the last element. **Modifies `list` in place**—this is an exception where the
-signature carries `&` yet the source value is changed.
+Removes the last element and returns the **shortened list** (value semantics). The source list is
+consumed; this is not the native "signature has `&` yet mutates the source in place" exception.
 
-Returns: the removed element; returns `Void` when the list is empty, and the list remains empty.
+Returns: a new list with the last element removed; returns the original unchanged when the list is
+empty. To read the removed element, use `last` to retrieve it before calling.
 
 ```yaoxiang
 use std.assert
 use std.list
 
 main: () -> Void = {
-    mut l = [1, 2, 3]
-    gone = list.pop(l)
-    assert(list.len(l) == 2)         // shortened in place
-    assert(gone == 3)
+    l = [1, 2, 3]
+    rest = list.pop(l)               // l is consumed, rest is the new shortened list
+    assert(list.len(rest) == 2)
+    assert(list.last(rest) == 2)     // the last element 3 has been removed
 
-    mut empty = []
-    v = list.pop(empty)
-    assert(list.is_empty(empty))
+    // To read the removed element, use last before pop
+    l2 = [1, 2, 3]
+    removed = list.last(l2)
+    assert(removed == 3)
+
+    empty = list.empty(Int)
+    assert(list.is_empty(list.pop(empty)))
 }
 ```
 
@@ -183,27 +188,29 @@ main: () -> Void = {
 <!-- stdlib:sig:list.remove_at start -->
 
 ```yaoxiang
-remove_at: (A: Type)(list: &List(A), index: Int) -> Any
+remove_at: (A: Type) -> (list: Vec(A), index: Int) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.remove_at end -->
 
-Removes and returns the element at index `index`. **Modifies `list` in place**.
+Removes the element at index `index` and returns the **shortened new list** (value semantics). The
+source list is consumed.
 
-- `index` — character/element index; default `0`
+- `index` —— element index
 
-Returns: the removed element. Error: throws `E6003` (index out of bounds) when index is negative or
-≥ length; the list remains unchanged.
+Returns: a new list with that element removed. Errors: raises `E6003` (index out of bounds) when the
+index is negative or ≥ the length.
 
 ```yaoxiang
 use std.assert
 use std.list
 
 main: () -> Void = {
-    mut l = [10, 20, 30]
-    x = list.remove_at(l, 1)
-    assert(x == 20)
-    assert(list.len(l) == 2)
+    l = [10, 20, 30]
+    got = list.remove_at(l, 1)
+    assert(list.len(got) == 2)
+    assert(list.get(got, 0) == 10)
+    assert(list.get(got, 1) == 30)
 }
 ```
 
@@ -212,7 +219,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.set start -->
 
 ```yaoxiang
-set: (A: Type)(list: List(A), index: Int, value: A) -> List(A)
+set: (A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.set end -->
@@ -220,11 +227,11 @@ set: (A: Type)(list: List(A), index: Int, value: A) -> List(A)
 Returns a new list with the element at index `index` overwritten by `value`. `list` is passed by
 value and is **moved** after the call.
 
-- `index` — index; default `0`
-- `value` — new value; default `Void`
+- `index` —— index; defaults to `0`
+- `value` —— new value; defaults to `Void`
 
-Error: throws `E6003` (out-of-bounds writes are no longer silently discarded) when index is negative
-or ≥ length.
+Errors: raises `E6003` when the index is negative or ≥ the length (out-of-bounds writes are no
+longer silently discarded).
 
 ```yaoxiang
 use std.assert
@@ -241,17 +248,17 @@ main: () -> Void = {
 <!-- stdlib:sig:list.get start -->
 
 ```yaoxiang
-get: (A: Type)(list: &List(A), index: Int) -> Any
+get: (A: Type) -> (list: &Vec(A), index: Int) -> A
 ```
 
 <!-- stdlib:sig:list.get end -->
 
-Reads the element at index `index` (read-only borrow, `list` is reusable).
+Reads the element at index `index` (read-only borrow, `list` can be reused).
 
-- `index` — index; default `0`
+- `index` —— index; defaults to `0`
 
-Returns: the element value; **returns `Void` for out-of-bounds** (does not throw). Error: throws
-`E6007` when index is negative.
+Returns: the element value; **out-of-bounds returns `Void`** (does not throw). Errors: raises
+`E6007` when the index is negative.
 
 ```yaoxiang
 use std.assert
@@ -268,7 +275,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.first start -->
 
 ```yaoxiang
-first: (A: Type)(list: &List(A)) -> Any
+first: (A: Type) -> (list: &Vec(A)) -> A
 ```
 
 <!-- stdlib:sig:list.first end -->
@@ -289,7 +296,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.last start -->
 
 ```yaoxiang
-last: (A: Type)(list: &List(A)) -> Any
+last: (A: Type) -> (list: &Vec(A)) -> A
 ```
 
 <!-- stdlib:sig:list.last end -->
@@ -310,18 +317,18 @@ main: () -> Void = {
 <!-- stdlib:sig:list.slice start -->
 
 ```yaoxiang
-slice: (A: Type)(list: &List(A), start: Int, end: Int) -> List(A)
+slice: (A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.slice end -->
 
-Returns a sublist of the range `[start, end)`.
+Takes the sublist of the interval `[start, end)`.
 
-- `start` — start index; default `0`
-- `end` — end index (exclusive); default to the end of the list
+- `start` —— starting index; defaults to `0`
+- `end` —— ending index (exclusive); defaults to the end of the list
 
-Returns: a new list. Bounds are **clamped** to valid ranges without raising an error. Error: throws
-`E6007` when `start` or `end` is negative.
+Returns: a new list. Boundaries are **clamped** to the valid range without raising an error. Errors:
+raises `E6007` when `start` or `end` is negative.
 
 ```yaoxiang
 use std.assert
@@ -339,12 +346,12 @@ main: () -> Void = {
 <!-- stdlib:sig:list.reverse start -->
 
 ```yaoxiang
-reverse: (A: Type)(list: &List(A)) -> List(A)
+reverse: (A: Type) -> (list: &Vec(A)) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.reverse end -->
 
-Returns a new list with elements in reverse order; the source list is unchanged.
+Returns a new list with the element order reversed; the source list is unchanged.
 
 ```yaoxiang
 use std.assert
@@ -361,14 +368,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.concat start -->
 
 ```yaoxiang
-concat: (A: Type)(a: &List(A), b: &List(A)) -> List(A)
+concat: (A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.concat end -->
 
-Concatenates two lists and returns a new list. Both source lists remain unchanged.
+Concatenates two lists and returns a new list. Neither source list is changed.
 
-Error: throws `E6007` when the second argument is not a list.
+Errors: raises `E6007` when the second argument is not a list.
 
 ```yaoxiang
 use std.assert
@@ -385,14 +392,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.len start -->
 
 ```yaoxiang
-len: (A: Type)(list: &List(A)) -> Int
+len: (A: Type) -> (list: &Vec(A)) -> Int
 ```
 
 <!-- stdlib:sig:list.len end -->
 
-Number of elements. Read-only borrow, `list` can be used repeatedly.
+Number of elements. Read-only borrow; `list` can be used repeatedly.
 
-Error: throws `E6007` when the argument is not a list.
+Errors: raises `E6007` when the argument is not a list.
 
 ```yaoxiang
 use std.assert
@@ -410,14 +417,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.is_empty start -->
 
 ```yaoxiang
-is_empty: (A: Type)(list: &List(A)) -> Bool
+is_empty: (A: Type) -> (list: &Vec(A)) -> Bool
 ```
 
 <!-- stdlib:sig:list.is_empty end -->
 
 Whether the list is empty.
 
-Error: throws `E6007` when the argument is not a list.
+Errors: raises `E6007` when the argument is not a list.
 
 ```yaoxiang
 use std.assert
@@ -434,14 +441,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.contains start -->
 
 ```yaoxiang
-contains: (A: Type)(list: &List(A), item: Any) -> Bool
+contains: (A: Type) -> (list: &Vec(A), item: A) -> Bool
 ```
 
 <!-- stdlib:sig:list.contains end -->
 
 Whether `item` is in the list (compared by value equality).
 
-Returns: `true` if present; `false` if the argument is not a list.
+Returns: `true` if present; returns `false` when the argument is not a list.
 
 ```yaoxiang
 use std.assert
@@ -459,7 +466,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.find_index start -->
 
 ```yaoxiang
-find_index: (A: Type)(list: &List(A), item: Any) -> Int
+find_index: (A: Type) -> (list: &Vec(A), item: A) -> Int
 ```
 
 <!-- stdlib:sig:list.find_index end -->
@@ -483,15 +490,15 @@ main: () -> Void = {
 <!-- stdlib:sig:list.map start -->
 
 ```yaoxiang
-map: (T: Type)(list: &List(T), fn: (item: T) -> T) -> List(T)
+map: (T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R)
 ```
 
 <!-- stdlib:sig:list.map end -->
 
 Calls `fn` on each element and returns a new list composed of the results. The function value is
-passed in a **curried** form: `list.map(nums, x => x * 2)`. The source list is unchanged.
+passed in **curried** form: `list.map(nums, x => x * 2)`. The source list is unchanged.
 
-Error: throws `E6007` when the second argument is not a function.
+Errors: raises `E6007` when the second argument is not a function.
 
 ```yaoxiang
 use std.assert
@@ -508,14 +515,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.filter start -->
 
 ```yaoxiang
-filter: (T: Type)(list: &List(T), fn: (item: T) -> Bool) -> List(T)
+filter: (T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T)
 ```
 
 <!-- stdlib:sig:list.filter end -->
 
-Keeps elements for which `fn` returns true. The source list is unchanged.
+Keeps the elements for which `fn` returns true. The source list is unchanged.
 
-Error: throws `E6007` when the second argument is not a function.
+Errors: raises `E6007` when the second argument is not a function.
 
 ```yaoxiang
 use std.assert
@@ -532,20 +539,19 @@ main: () -> Void = {
 <!-- stdlib:sig:list.reduce start -->
 
 ```yaoxiang
-reduce: (T: Type)(list: &List(T), fn: (acc: Any, item: T) -> Any, init: Any) -> Any
+reduce: (T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc
 ```
 
 <!-- stdlib:sig:list.reduce end -->
 
-Folds from left to right: starting with `init` as the initial value, `fn(acc, item)` is called in
-sequence.
+Folds from left to right: starting with `init`, calls `fn(acc, item)` in order.
 
-- `fn` — reduction function `(accumulator, item) -> new accumulator`
-- `init` — initial accumulator
+- `fn` —— reduction function `(accumulator, element) -> new accumulator`
+- `init` —— initial accumulator
 
-Returns: the final accumulator value. Returns `init` when the list is empty.
+Returns: the final accumulator. Returns `init` for an empty list.
 
-Error: throws `E6007` when the second argument is not a function.
+Errors: raises `E6007` when the second argument is not a function.
 
 ```yaoxiang
 use std.assert
@@ -562,13 +568,13 @@ main: () -> Void = {
 <!-- stdlib:sig:list.iter start -->
 
 ```yaoxiang
-iter: (A: Type)(list: &List(A)) -> Tuple
+iter: (T: Type) -> (list: Vec(T)) -> Iter(T)
 ```
 
 <!-- stdlib:sig:list.iter end -->
 
-Creates an iterator. An iterator is a `(list, index)` tuple state carrier; after creation it is
-**sequentially consumed** in `next`. The source list is a read-only borrow and remains usable during
+Creates an iterator. The iterator is a `(list, index)` tuple state carrier; once created, it is
+**consumed in order** within `next`. The source list is read-only borrowed and remains usable during
 iteration.
 
 Returns: an iterator tuple, to be used with `next` / `has_next`.
@@ -588,18 +594,18 @@ main: () -> Void = {
 <!-- stdlib:sig:list.next start -->
 
 ```yaoxiang
-next: (iterator: Tuple) -> Any
+next: (T: Type) -> (it: &mut Iter(T)) -> T
 ```
 
 <!-- stdlib:sig:list.next end -->
 
-Takes the current element and advances the internal index by one.
+Takes out the current element and advances the internal index by one.
 
 Returns: the current element; returns `Void` when iteration ends.
 
-> Both `next` and `has_next` **move** the iterator (the signature has no `&`), so each access
-> requires creating a new iterator, or just use `for ... in` to traverse. This differs from the
-> borrow form of [`std.range.next`](./range#next).
+> Both `next` and `has_next` **move** the iterator (no `&` in the signature), so each access
+> requires recreating the iterator, or you may use a `for ... in` loop directly. This differs from
+> the borrow form of [`std.range.next`](./range#next).
 
 ```yaoxiang
 use std.assert
@@ -616,7 +622,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.has_next start -->
 
 ```yaoxiang
-has_next: (iterator: Tuple) -> Bool
+has_next: (T: Type) -> (it: &Iter(T)) -> Bool
 ```
 
 <!-- stdlib:sig:list.has_next end -->
@@ -635,7 +641,7 @@ main: () -> Void = {
 
 ### for ... in Traversal
 
-A list can be iterated directly with `for ... in` without manually calling `next`:
+Lists can be traversed directly with `for ... in`, without manually calling `next`:
 
 ```yaoxiang
 use std.assert
@@ -651,5 +657,5 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.range`](./range) — range iteration and lazy adapters
-- [`std.assert`](./assert) — assertion utility used in examples
+- [`std.range`](./range) —— range iteration and lazy adapters
+- [`std.assert`](./assert) —— assertion utility used in the examples

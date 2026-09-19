@@ -1,30 +1,29 @@
 ---
 title: 'std.list'
-description: 'リスト追加・削除、スライス、高階関数とイテレータプロトコル'
+description: 'リストの追加・削除、スライス、高階関数とイテレータプロトコル'
 ---
 
 # std.list
 
-リスト操作モジュール。**ムーブセマンティクスには特に注意が必要**です：ソースリストを読み取り専用で借用するだけの関数と、ソースリストを消費（ムーブ）する関数の2種類があります。
+リスト操作モジュール。**ムーブセマンティクスには特に注意が必要**：2 種類の関数がある ― ソースリストを読み取り専用で借用するものと、ソースリストを消費（ムーブ）するもの。
 `&` 仮引数の自動借用ルールについては RFC-009
-§2.8 を参照してください：実引数が呼び出し後も引き続き使用される場合、コンパイラが自動的に読み取り専用トークンを作成します。
+§2.8 を参照：実引数が呼び出し後にも使用される場合、コンパイラが自動的に読み取り専用トークンを作成する。
 
 ```yaoxiang
 use std.list
 ```
 
-## 意味論の分類
+## 意味の分類
 
-シグネチャに `&`
-が含まれる引数は読み取り専用借用であり、呼び出し後もソース値は引き続き使用可能です。`&`
-のない引数は値渡しされ、呼び出し後ソース値は**ムーブ済み**となり、再度使用すると `E2014`
-が発生します。
+シグネチャに `&` が付くパラメータは読み取り専用借用で、呼び出し後もソース値は使用可能；`&`
+の付かないパラメータは値渡しで渡され、呼び出し後はソース値が**ムーブ済み**となり、再度使用すると
+`E2014` を送出する。
 
-| カテゴリ               | 関数                                                                                                             | 動作                                       |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| **ソースリストを消費** | `push` `append` `prepend` `set` `pop` `remove_at`                                                                | ソースリストがムーブされ、その後は使用不可 |
-| 読み取り専用借用       | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | ソースリストを繰り返し使用可能             |
-| イテレータプロトコル   | `iter`（ソースリストを消費しイテレータを返す）`has_next` `next`（イテレータを借用 / 可変借用）                   | 下記参照                                   |
+| カテゴリ               | 関数                                                                                                             | 動作                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| **ソースリストを消費** | `push` `append` `prepend` `set` `pop` `remove_at`                                                                | ソースリストがムーブされ、以後は使用不可 |
+| 読み取り専用借用       | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | ソースリストは繰り返し使用可能           |
+| イテレータプロトコル   | `iter`（ソースリストを消費し、イテレータを返す）`has_next` `next`（イテレータの借用 / 可変借用）                 | 下記参照                                 |
 
 ```yaoxiang
 use std.assert
@@ -38,7 +37,7 @@ main: () -> Void = {
     assert(list.len(nums) == 3)
     assert(list.contains(nums, 2))
 
-    // 消費：base はこの後は使用不可
+    // 消費：base はここでは以後使用不可
     base = [1, 2]
     extended = list.push(base, 3)
     assert(list.len(extended) == 3)
@@ -49,30 +48,32 @@ main: () -> Void = {
 
 <!-- stdlib:table:list start -->
 
-| 関数         | シグネチャ                                                                    |
-| ------------ | ----------------------------------------------------------------------------- |
-| `push`       | `(A: Type)(list: List(A), item: A) -> List(A)`                                |
-| `pop`        | `(A: Type)(list: &List(A)) -> Any`                                            |
-| `append`     | `(A: Type)(list: List(A), item: A) -> List(A)`                                |
-| `prepend`    | `(A: Type)(list: List(A), item: A) -> List(A)`                                |
-| `remove_at`  | `(A: Type)(list: &List(A), index: Int) -> Any`                                |
-| `reverse`    | `(A: Type)(list: &List(A)) -> List(A)`                                        |
-| `concat`     | `(A: Type)(a: &List(A), b: &List(A)) -> List(A)`                              |
-| `map`        | `(T: Type)(list: &List(T), fn: (item: T) -> T) -> List(T)`                    |
-| `filter`     | `(T: Type)(list: &List(T), fn: (item: T) -> Bool) -> List(T)`                 |
-| `reduce`     | `(T: Type)(list: &List(T), fn: (acc: Any, item: T) -> Any, init: Any) -> Any` |
-| `len`        | `(A: Type)(list: &List(A)) -> Int`                                            |
-| `is_empty`   | `(A: Type)(list: &List(A)) -> Bool`                                           |
-| `get`        | `(A: Type)(list: &List(A), index: Int) -> Any`                                |
-| `set`        | `(A: Type)(list: List(A), index: Int, value: A) -> List(A)`                   |
-| `first`      | `(A: Type)(list: &List(A)) -> Any`                                            |
-| `last`       | `(A: Type)(list: &List(A)) -> Any`                                            |
-| `slice`      | `(A: Type)(list: &List(A), start: Int, end: Int) -> List(A)`                  |
-| `contains`   | `(A: Type)(list: &List(A), item: Any) -> Bool`                                |
-| `find_index` | `(A: Type)(list: &List(A), item: Any) -> Int`                                 |
-| `iter`       | `(A: Type)(list: &List(A)) -> Tuple`                                          |
-| `next`       | `(iterator: Tuple) -> Any`                                                    |
-| `has_next`   | `(iterator: Tuple) -> Bool`                                                   |
+| 関数         | シグネチャ                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| `push`       | `(A: Type) -> (list: Vec(A), item: A) -> Vec(A)`                                           |
+| `pop`        | `(A: Type) -> (list: Vec(A)) -> Vec(A)`                                                    |
+| `append`     | `(A: Type) -> (list: Vec(A), item: A) -> Vec(A)`                                           |
+| `prepend`    | `(A: Type) -> (list: Vec(A), item: A) -> Vec(A)`                                           |
+| `remove_at`  | `(A: Type) -> (list: Vec(A), index: Int) -> Vec(A)`                                        |
+| `reverse`    | `(A: Type) -> (list: &Vec(A)) -> Vec(A)`                                                   |
+| `concat`     | `(A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A)`                                          |
+| `map`        | `(T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R)`                       |
+| `filter`     | `(T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T)`                          |
+| `reduce`     | `(T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc` |
+| `len`        | `(A: Type) -> (list: &Vec(A)) -> Int`                                                      |
+| `is_empty`   | `(A: Type) -> (list: &Vec(A)) -> Bool`                                                     |
+| `get`        | `(A: Type) -> (list: &Vec(A), index: Int) -> A`                                            |
+| `set`        | `(A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A)`                              |
+| `first`      | `(A: Type) -> (list: &Vec(A)) -> A`                                                        |
+| `last`       | `(A: Type) -> (list: &Vec(A)) -> A`                                                        |
+| `slice`      | `(A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A)`                             |
+| `contains`   | `(A: Type) -> (list: &Vec(A), item: A) -> Bool`                                            |
+| `find_index` | `(A: Type) -> (list: &Vec(A), item: A) -> Int`                                             |
+| `iter`       | `(T: Type) -> (list: Vec(T)) -> Iter(T)`                                                   |
+| `next`       | `(T: Type) -> (it: &mut Iter(T)) -> T`                                                     |
+| `has_next`   | `(T: Type) -> (it: &Iter(T)) -> Bool`                                                      |
+| `empty`      | `(T: Type) -> Vec(T)`                                                                      |
+| `of`         | `(T: Type) -> (data: Vec(T)) -> Vec(T)`                                                    |
 
 <!-- stdlib:table:list end -->## 関数
 
@@ -81,13 +82,13 @@ main: () -> Void = {
 <!-- stdlib:sig:list.push start -->
 
 ```yaoxiang
-push: (A: Type)(list: List(A), item: A) -> List(A)
+push: (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.push end -->
 
-`list` の末尾に `item` を追加した**新しいリスト**を返します。`list`
-は値渡しされ、呼び出し後は**ムーブ**されるため、再利用できません。
+`list` の末尾に `item` を追加した**新しいリスト**を返す。`list`
+は値渡しで渡され、呼び出し後は**ムーブ**されて使用できなくなる。
 
 ```yaoxiang
 use std.assert
@@ -105,12 +106,12 @@ main: () -> Void = {
 <!-- stdlib:sig:list.append start -->
 
 ```yaoxiang
-append: (A: Type)(list: List(A), item: A) -> List(A)
+append: (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.append end -->
 
-`push` のエイリアスで、動作は完全に同一です。
+`push` の別名。動作は完全に同一。
 
 ```yaoxiang
 use std.assert
@@ -127,13 +128,13 @@ main: () -> Void = {
 <!-- stdlib:sig:list.prepend start -->
 
 ```yaoxiang
-prepend: (A: Type)(list: List(A), item: A) -> List(A)
+prepend: (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.prepend end -->
 
-`list` の先頭に `item` を挿入した新しいリストを返します。`list`
-は値渡しされ、呼び出し後は**ムーブ**されます。
+`list` の先頭に `item` を挿入した新しいリストを返す。`list`
+は値渡しで渡され、呼び出し後は**ムーブ**される。
 
 ```yaoxiang
 use std.assert
@@ -150,29 +151,34 @@ main: () -> Void = {
 <!-- stdlib:sig:list.pop start -->
 
 ```yaoxiang
-pop: (A: Type)(list: &List(A)) -> Any
+pop: (A: Type) -> (list: Vec(A)) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.pop end -->
 
-末尾の要素を削除して返します。`list` を**インプレースで変更**します——これはシグネチャに `&`
-が付いているにもかかわらずソース値を変更する例外です。
+末尾の要素を削除し、**短縮されたリスト**を返す（値セマンティクス）。ソースリストは消費され、ネイティブ版に見られる「シグネチャに
+`&` が付いていながらソース値をインプレースに変更する」という例外的な形式は採らない。
 
-戻り値：削除された要素。リストが空の場合は `Void` を返し、リストは空のままとなります。
+戻り値：末尾の要素を除いた新しいリスト。リストが空の場合はそのまま返す。削除された要素を読み取るには、呼び出し前に
+`last` で値を取得する。
 
 ```yaoxiang
 use std.assert
 use std.list
 
 main: () -> Void = {
-    mut l = [1, 2, 3]
-    gone = list.pop(l)
-    assert(list.len(l) == 2)         // インプレースで短縮
-    assert(gone == 3)
+    l = [1, 2, 3]
+    rest = list.pop(l)               // l は消費され、rest は短縮された新しいリスト
+    assert(list.len(rest) == 2)
+    assert(list.last(rest) == 2)     // 末尾の 3 は削除済み
 
-    mut empty = []
-    v = list.pop(empty)
-    assert(list.is_empty(empty))
+    // 削除された要素を読み取るには、先に last で値を取得してから pop する
+    l2 = [1, 2, 3]
+    removed = list.last(l2)
+    assert(removed == 3)
+
+    empty = list.empty(Int)
+    assert(list.is_empty(list.pop(empty)))
 }
 ```
 
@@ -181,27 +187,28 @@ main: () -> Void = {
 <!-- stdlib:sig:list.remove_at start -->
 
 ```yaoxiang
-remove_at: (A: Type)(list: &List(A), index: Int) -> Any
+remove_at: (A: Type) -> (list: Vec(A), index: Int) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.remove_at end -->
 
-インデックス `index` の位置にある要素を削除して返します。`list` を**インプレースで変更**します。
+インデックス `index`
+の位置の要素を削除し、**短縮された新しいリスト**を返す（値セマンティクス）。ソースリストは消費される。
 
-- `index` —— 文字/要素のインデックス。デフォルトは `0`
+- `index` ―― 要素のインデックス
 
-戻り値：削除された要素。エラー：インデックスが負または長さ以上の場合は
-`E6003`（インデックス範囲外）がスローされ、リストは変更されません。
+戻り値：その要素を除いた新しいリスト。エラー：インデックスが負または長さ以上のとき、`E6003`（インデックス範囲外）を送出する。
 
 ```yaoxiang
 use std.assert
 use std.list
 
 main: () -> Void = {
-    mut l = [10, 20, 30]
-    x = list.remove_at(l, 1)
-    assert(x == 20)
-    assert(list.len(l) == 2)
+    l = [10, 20, 30]
+    got = list.remove_at(l, 1)
+    assert(list.len(got) == 2)
+    assert(list.get(got, 0) == 10)
+    assert(list.get(got, 1) == 30)
 }
 ```
 
@@ -210,19 +217,19 @@ main: () -> Void = {
 <!-- stdlib:sig:list.set start -->
 
 ```yaoxiang
-set: (A: Type)(list: List(A), index: Int, value: A) -> List(A)
+set: (A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.set end -->
 
-インデックス `index` の値を `value` に書き換えた新しいリストを返します。`list`
-は値渡しされ、呼び出し後は**ムーブ**されます。
+インデックス `index` を `value` に書き換えた新しいリストを返す。`list`
+は値渡しで渡され、呼び出し後は**ムーブ**される。
 
-- `index` —— インデックス。デフォルトは `0`
-- `value` —— 新しい値。デフォルトは `Void`
+- `index` ―― インデックス；デフォルト `0`
+- `value` ―― 新しい値；デフォルト `Void`
 
-エラー：インデックスが負または長さ以上の場合は `E6003`
-がスローされます（範囲外への書き込みはもはや静かに破棄されません）。
+エラー：インデックスが負または長さ以上のとき、`E6003`
+を送出する（範囲外への書き込みはもはや静かに破棄されない）。
 
 ```yaoxiang
 use std.assert
@@ -239,18 +246,17 @@ main: () -> Void = {
 <!-- stdlib:sig:list.get start -->
 
 ```yaoxiang
-get: (A: Type)(list: &List(A), index: Int) -> Any
+get: (A: Type) -> (list: &Vec(A), index: Int) -> A
 ```
 
 <!-- stdlib:sig:list.get end -->
 
-インデックス `index` の位置にある要素を読み取ります（読み取り専用借用。`list` は再利用可能）。
+インデックス `index` の位置の要素を読み取る（読み取り専用借用で、`list` は再利用可能）。
 
-- `index` —— インデックス。デフォルトは `0`
+- `index` ―― インデックス；デフォルト `0`
 
 戻り値：要素の値。**範囲外の場合は `Void`
-を返します**（エラーはスローされません）。エラー：インデックスが負の場合は `E6007`
-がスローされます。
+を返す**（エラーは送出しない）。エラー：インデックスが負のとき、`E6007` を送出する。
 
 ```yaoxiang
 use std.assert
@@ -267,12 +273,12 @@ main: () -> Void = {
 <!-- stdlib:sig:list.first start -->
 
 ```yaoxiang
-first: (A: Type)(list: &List(A)) -> Any
+first: (A: Type) -> (list: &Vec(A)) -> A
 ```
 
 <!-- stdlib:sig:list.first end -->
 
-先頭要素を返します。空のリストの場合は `Void` を返します。
+先頭の要素を返す。空のリストの場合は `Void` を返す。
 
 ```yaoxiang
 use std.assert
@@ -288,12 +294,12 @@ main: () -> Void = {
 <!-- stdlib:sig:list.last start -->
 
 ```yaoxiang
-last: (A: Type)(list: &List(A)) -> Any
+last: (A: Type) -> (list: &Vec(A)) -> A
 ```
 
 <!-- stdlib:sig:list.last end -->
 
-末尾要素を返します。空のリストの場合は `Void` を返します。
+末尾の要素を返す。空のリストの場合は `Void` を返す。
 
 ```yaoxiang
 use std.assert
@@ -309,18 +315,18 @@ main: () -> Void = {
 <!-- stdlib:sig:list.slice start -->
 
 ```yaoxiang
-slice: (A: Type)(list: &List(A), start: Int, end: Int) -> List(A)
+slice: (A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.slice end -->
 
-`[start, end)` の範囲の部分リストを取得します。
+`[start, end)` 区間の部分リストを取得する。
 
-- `start` —— 開始インデックス。デフォルトは `0`
-- `end` —— 終了インデックス（含まない）。デフォルトはリストの末尾
+- `start` ―― 開始インデックス；デフォルト `0`
+- `end` ―― 終了インデックス（含まない）；デフォルトはリストの末尾
 
-戻り値：新しいリスト。境界は有効な範囲に**クランプ**され、エラーはスローされません。エラー：`start`
-または `end` が負の場合は `E6007` がスローされます。
+戻り値：新しいリスト。境界は**クランプ**されて有効範囲となるため、エラーは送出しない。エラー：`start`
+または `end` が負のとき、`E6007` を送出する。
 
 ```yaoxiang
 use std.assert
@@ -338,12 +344,12 @@ main: () -> Void = {
 <!-- stdlib:sig:list.reverse start -->
 
 ```yaoxiang
-reverse: (A: Type)(list: &List(A)) -> List(A)
+reverse: (A: Type) -> (list: &Vec(A)) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.reverse end -->
 
-要素の順序を逆にした新しいリストを返します。ソースリストは変更されません。
+要素の順序を反転した新しいリストを返す。ソースリストは変更されない。
 
 ```yaoxiang
 use std.assert
@@ -360,14 +366,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.concat start -->
 
 ```yaoxiang
-concat: (A: Type)(a: &List(A), b: &List(A)) -> List(A)
+concat: (A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.concat end -->
 
-2つのリストを連結して新しいリストを返します。両方のソースリストは変更されません。
+2 つのリストを連結し、新しいリストを返す。両方のソースリストは変更されない。
 
-エラー：第2引数がリストでない場合は `E6007` がスローされます。
+エラー：第 2 引数がリストでない場合、`E6007` を送出する。
 
 ```yaoxiang
 use std.assert
@@ -384,14 +390,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.len start -->
 
 ```yaoxiang
-len: (A: Type)(list: &List(A)) -> Int
+len: (A: Type) -> (list: &Vec(A)) -> Int
 ```
 
 <!-- stdlib:sig:list.len end -->
 
-要素数を返します。読み取り専用借用で、`list` は繰り返し使用できます。
+要素数。読み取り専用借用で、`list` は繰り返し使用可能。
 
-エラー：引数がリストでない場合は `E6007` がスローされます。
+エラー：引数がリストでない場合、`E6007` を送出する。
 
 ```yaoxiang
 use std.assert
@@ -409,14 +415,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.is_empty start -->
 
 ```yaoxiang
-is_empty: (A: Type)(list: &List(A)) -> Bool
+is_empty: (A: Type) -> (list: &Vec(A)) -> Bool
 ```
 
 <!-- stdlib:sig:list.is_empty end -->
 
-空のリストかどうかを判定します。
+リストが空かどうかを返す。
 
-エラー：引数がリストでない場合は `E6007` がスローされます。
+エラー：引数がリストでない場合、`E6007` を送出する。
 
 ```yaoxiang
 use std.assert
@@ -433,14 +439,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.contains start -->
 
 ```yaoxiang
-contains: (A: Type)(list: &List(A), item: Any) -> Bool
+contains: (A: Type) -> (list: &Vec(A), item: A) -> Bool
 ```
 
 <!-- stdlib:sig:list.contains end -->
 
-`item` がリスト内に存在するかどうかを判定します（値による等価比較）。
+`item` がリスト内に存在するかを判定する（値による等価比較）。
 
-戻り値：存在する場合は `true`。引数がリストでない場合は `false` を返します。
+戻り値：存在する場合は `true`。引数がリストでない場合は `false` を返す。
 
 ```yaoxiang
 use std.assert
@@ -458,14 +464,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.find_index start -->
 
 ```yaoxiang
-find_index: (A: Type)(list: &List(A), item: Any) -> Int
+find_index: (A: Type) -> (list: &Vec(A), item: A) -> Int
 ```
 
 <!-- stdlib:sig:list.find_index end -->
 
-`item` が最初に現れるインデックスを返します。
+`item` が初出するインデックスを返す。
 
-戻り値：見つかった場合はそのインデックス。見つからない場合は `-1` を返します。
+戻り値：見つかった場合はインデックスを返し、見つからない場合は `-1` を返す。
 
 ```yaoxiang
 use std.assert
@@ -482,15 +488,15 @@ main: () -> Void = {
 <!-- stdlib:sig:list.map start -->
 
 ```yaoxiang
-map: (T: Type)(list: &List(T), fn: (item: T) -> T) -> List(T)
+map: (T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R)
 ```
 
 <!-- stdlib:sig:list.map end -->
 
 各要素に対して `fn`
-を呼び出し、結果をまとめた新しいリストを返します。関数値を渡すのは**カリー化**形式です：`list.map(nums, x => x * 2)`。ソースリストは変更されません。
+を呼び出し、結果を組み合わせた新しいリストを返す。関数値を渡すのは**カリー化**形式：`list.map(nums, x => x * 2)`。ソースリストは変更されない。
 
-エラー：第2引数が関数でない場合は `E6007` がスローされます。
+エラー：第 2 引数が関数でない場合、`E6007` を送出する。
 
 ```yaoxiang
 use std.assert
@@ -507,14 +513,14 @@ main: () -> Void = {
 <!-- stdlib:sig:list.filter start -->
 
 ```yaoxiang
-filter: (T: Type)(list: &List(T), fn: (item: T) -> Bool) -> List(T)
+filter: (T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T)
 ```
 
 <!-- stdlib:sig:list.filter end -->
 
-`fn` が真を返す要素のみを保持します。ソースリストは変更されません。
+`fn` が真となる要素を保持する。ソースリストは変更されない。
 
-エラー：第2引数が関数でない場合は `E6007` がスローされます。
+エラー：第 2 引数が関数でない場合、`E6007` を送出する。
 
 ```yaoxiang
 use std.assert
@@ -531,19 +537,19 @@ main: () -> Void = {
 <!-- stdlib:sig:list.reduce start -->
 
 ```yaoxiang
-reduce: (T: Type)(list: &List(T), fn: (acc: Any, item: T) -> Any, init: Any) -> Any
+reduce: (T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc
 ```
 
 <!-- stdlib:sig:list.reduce end -->
 
-左から右へ畳み込みます：`init` を初期値として、順に `fn(acc, item)` を呼び出します。
+左から右へ畳み込みを行う。`init` を初期値として、`fn(acc, item)` を順に呼び出す。
 
-- `fn` —— リダクション関数 `(累積値, 要素) -> 新しい累積値`
-- `init` —— 初期累積値
+- `fn` ―― 畳み込み関数 `(累積値, 要素) -> 新しい累積値`
+- `init` ―― 初期累積値
 
-戻り値：最終的な累積値。リストが空の場合は `init` を返します。
+戻り値：最終累積値。リストが空の場合は `init` を返す。
 
-エラー：第2引数が関数でない場合は `E6007` がスローされます。
+エラー：第 2 引数が関数でない場合、`E6007` を送出する。
 
 ```yaoxiang
 use std.assert
@@ -560,16 +566,15 @@ main: () -> Void = {
 <!-- stdlib:sig:list.iter start -->
 
 ```yaoxiang
-iter: (A: Type)(list: &List(A)) -> Tuple
+iter: (T: Type) -> (list: Vec(T)) -> Iter(T)
 ```
 
 <!-- stdlib:sig:list.iter end -->
 
-イテレータを作成します。イテレータは `(リスト, インデックス)` のタプル状態オブジェクトで、作成後は
-`next`
-で**順次消費**されます。ソースリストは読み取り専用借用であり、イテレーション中も使用可能です。
+イテレータを作成する。イテレータは `(リスト, インデックス)` のタプル状態キャリアで、作成後 `next`
+内で**順番に消費**される。ソースリストは読み取り専用で借用され、反復中も使用可能。
 
-戻り値：`next` / `has_next` で使用するイテレータのタプル。
+戻り値：イテレータタプル。`next` / `has_next` に渡して使用する。
 
 ```yaoxiang
 use std.assert
@@ -586,18 +591,18 @@ main: () -> Void = {
 <!-- stdlib:sig:list.next start -->
 
 ```yaoxiang
-next: (iterator: Tuple) -> Any
+next: (T: Type) -> (it: &mut Iter(T)) -> T
 ```
 
 <!-- stdlib:sig:list.next end -->
 
-現在の要素を取り出し、内部インデックスを1つ進めます。
+現在の要素を取り出し、内部インデックスを 1 つ進める。
 
-戻り値：現在の要素。イテレーション終了時は `Void` を返します。
+戻り値：現在の要素。反復終了時は `Void` を返す。
 
-> `next` と `has_next` はどちらもイテレータを**ムーブ**します（シグネチャに `&`
-> がない）。そのため、取得のたびにイテレータを再作成するか、`for ... in`
-> で直接走査する必要があります。これは [`std.range.next`](./range#next) の借用形式とは異なります。
+> `next` と `has_next` はどちらもイテレータを**ムーブ**する（シグネチャに `&`
+> が無い）ため、取得するたびにイテレータを再作成する必要がある。あるいは `for ... in`
+> で直接反復する。これは [`std.range.next`](./range#next) の借用形式とは異なる。
 
 ```yaoxiang
 use std.assert
@@ -614,12 +619,12 @@ main: () -> Void = {
 <!-- stdlib:sig:list.has_next start -->
 
 ```yaoxiang
-has_next: (iterator: Tuple) -> Bool
+has_next: (T: Type) -> (it: &Iter(T)) -> Bool
 ```
 
 <!-- stdlib:sig:list.has_next end -->
 
-まだ消費されていない要素があるかどうかを判定します。
+未消費の要素があるかどうかを返す。
 
 ```yaoxiang
 use std.assert
@@ -631,9 +636,9 @@ main: () -> Void = {
 }
 ```
 
-### for ... in による走査
+### for ... in による反復
 
-リストは `for ... in` で直接走査でき、手動で `next` を呼び出す必要はありません：
+リストは `for ... in` で直接反復でき、`next` を手動で呼び出す必要はない：
 
 ```yaoxiang
 use std.assert
@@ -649,5 +654,5 @@ main: () -> Void = {
 
 ## 関連
 
-- [`std.range`](./range) —— 区間イテレーションと遅延アダプタ
-- [`std.assert`](./assert) —— 例で使用しているアサーション
+- [`std.range`](./range) ―― 区間反復と遅延アダプタ
+- [`std.assert`](./assert) ―― 例で使用されているアサートツール
