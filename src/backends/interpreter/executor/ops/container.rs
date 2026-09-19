@@ -113,13 +113,16 @@ impl Interpreter {
             // RFC-011a §6: 包装具体值为存在类型变体（Animal$Group.Dog(payload)）
             BytecodeInstr::CreateVariant {
                 dst,
-                group_idx,
+                // 见下方说明：构造点不需要组名
+                group_idx: _,
                 variant,
                 payload,
             } => {
                 let payload_val = self.force_slot(fi, *payload)?;
-                let group = self.const_string(*group_idx);
-                let _ = group;
+                // group_idx 在此**不使用**：Enum 用 `TypeId::ENUM` 承载类型身份，
+                // 组名只在 VariantTag/VariantPayload 的守卫错误消息里出现。
+                // 此前无条件 `const_string(...)` 再丢弃，是每次构造变体都做的
+                // 常量池解析 + String 分配的无用功（构造点在热循环内）。
                 self.call_stack[fi].set_slot(
                     dst.0 as usize,
                     RuntimeValue::Enum {
