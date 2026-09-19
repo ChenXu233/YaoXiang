@@ -74,8 +74,6 @@ pub struct Interpreter {
     pub(super) runtime_config: RuntimeConfig,
     /// Runtime facade used for task scheduling (Embedded / Standard / Full).
     pub(super) rt: Runtime,
-    /// Whether `step_one` executed a function call (used by `step_over`).
-    pub(super) called_func: bool,
     /// Return value from the last Return/ReturnValue instruction.
     pub(super) last_return_value: RuntimeValue,
 }
@@ -93,7 +91,6 @@ impl fmt::Debug for Interpreter {
             .field("config", &self.config)
             .field("breakpoints", &self.breakpoints)
             .field("ffi", &self.ffi)
-            .field("called_func", &self.called_func)
             .field("last_return_value", &self.last_return_value)
             .finish()
     }
@@ -141,7 +138,6 @@ impl Interpreter {
             ffi: FfiRegistry::with_std(),
             runtime_config,
             rt,
-            called_func: false,
             last_return_value: RuntimeValue::Void,
         }
     }
@@ -202,7 +198,6 @@ impl Interpreter {
             ffi: FfiRegistry::with_std(),
             runtime_config: RuntimeConfig::default(),
             rt,
-            called_func: false,
             last_return_value: RuntimeValue::Void,
         }
     }
