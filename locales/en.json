@@ -204,7 +204,7 @@
     "title": "Return Type Mismatch",
     "message": "Function return type is incorrect",
     "template": "Return type mismatch: expected '{expected}', found '{found}'",
-    "help": "Ensure the return value matches the declared return type",
+    "help": "The body's value does not match the declared return type. Either fix the body, or correct the annotation — note `h: () -> Int = f` means h returns Int, not that h IS f; write `h = f` to alias the function.",
     "example": "fn foo() -> Int { \"hello\" }",
     "error_output": "error[E1012]: return type mismatch\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ expected 'Int', found 'String'"
   },
@@ -738,6 +738,11 @@
     "title": "Unsafe dereference",
     "template": "Cannot dereference a raw pointer outside an unsafe block",
     "help": "Wrap the dereference operation in an `unsafe` block."
+  },
+  "E3022": {
+    "title": "Entry point main has wrong signature",
+    "template": "Entry point '{name}' has the wrong signature: it is called with no arguments at startup, but it requires '{expected}' (actual: '{found}')",
+    "help": "The program entry point is always invoked with no arguments. Write it as `main: () -> Void = { ... }`; use std.os argv/environment for external input."
   },
   "E3004": {
     "title": "Unsupported iterator",

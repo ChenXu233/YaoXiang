@@ -1,0 +1,20 @@
+// 06-compile-errors/if_tail_branch_mismatch_err.yx
+// `if` 作尾表达式时分支类型不一致应报 E1002
+// expect: compile-error E1002
+// 覆盖: #354——组合表达式作尾表达式时类型检查被跳过
+// 码为 E1002：if 的**分支之间**不符（在 check_if_stmt 内判），先于尾表达式校验
+// 验证: 声明返回 Int，两个分支分别给 Int 与 String
+// 状态: ✅
+//
+// 此前 `peek_expr_type` 只识字面量与变量，`if` / `match` / 调用等一律返回
+// None → 静默跳过校验，声明 `-> Int` 却能返回 String。
+
+use std.io
+
+f: () -> Int = {
+    if 1 == 1 { 1 } else { "s" }    // ❌ 分支类型不符，且与返回类型不符
+}
+
+main: () -> Void = {
+    io.println(f())
+}

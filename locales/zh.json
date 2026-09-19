@@ -204,7 +204,7 @@
     "title": "返回类型不匹配",
     "message": "函数返回类型不正确",
     "template": "返回类型不匹配：期望 '{expected}'，实际 '{found}'",
-    "help": "确保返回值与声明的返回类型匹配",
+    "help": "函数体的值与声明的返回类型不符。要么修改函数体，要么修正注解——注意 `h: () -> Int = f` 的含义是「h 返回 Int」，而不是「h 就是 f」；若想给函数起别名请写 `h = f`。",
     "example": "fn foo() -> Int { \"hello\" }",
     "error_output": "error[E1012]: 返回类型不匹配\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 期望 'Int'，找到 'String'"
   },
@@ -979,6 +979,11 @@
     "message": "spawn 块内检测到引用形成循环",
     "template": "spawn 内引用循环: {cycle}",
     "help": "spawn 捕获的引用不能形成循环依赖，请检查捕获列表"
+  },
+  "E3022": {
+    "title": "入口 main 签名不符",
+    "template": "入口 '{name}' 的签名不符：运行期以零参调用，但它需要 '{expected}'，实际是 '{found}'",
+    "help": "程序入口总是以无参数方式被调用。请把 main 写成无参形式 `main: () -> Void = { ... }`；需要外部输入请用 std.os 的 argv/环境变量。"
   },
   "E2030": {
     "title": "精化类型约束违反",

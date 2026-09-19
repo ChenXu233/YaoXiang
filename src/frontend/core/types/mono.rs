@@ -720,7 +720,16 @@ impl From<ast::Type> for MonoType {
                 variants,
             }),
             ast::Type::Tuple(types) => {
-                MonoType::make_tuple(types.into_iter().map(MonoType::from).collect())
+                // 零元素元组就是**单位类型**，与 `Void` 同义。
+                //
+                // `-> ()` 与 `-> Void` 是同一件事；此前分别落成
+                // `Generic{"Tuple",[]}` 与 `Void`，导致函数体尾表达式
+                // （值 `Void`）与返回注解（`()`）判为不等 → 误报 E1002。
+                if types.is_empty() {
+                    MonoType::Void
+                } else {
+                    MonoType::make_tuple(types.into_iter().map(MonoType::from).collect())
+                }
             }
             ast::Type::Fn {
                 params,

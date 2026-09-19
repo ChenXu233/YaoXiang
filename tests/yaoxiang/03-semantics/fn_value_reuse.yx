@@ -1,0 +1,35 @@
+// 03-semantics/fn_value_reuse.yx
+// 覆盖: #352——函数值物化后不被消耗（函数是不可变代码，隐式 Dup）
+// 规范: RFC-009 所有权模型，Dup / Linear 类型属性
+// 状态: ✅ 可运行
+//
+// 函数是**不可变代码**，不是运行时资源。物化成闭包值后使用它只是在拷贝
+// 代码指针，不消耗所有权——故可任意次复用。
+// 此前 `classify_mono` 对 `Fn` 落 `_ => Move`，把函数当作 Linear（一次性）类型。
+
+use std.{assert, io}
+
+double: (a: Int) -> Int = a * 2
+
+// 高阶函数：接收函数作参数
+apply: (h: (a: Int) -> Int, x: Int) -> Int = h(x)
+
+main: () -> Void = {
+    // 物化为值别名后，原函数仍可直接调用
+    h = double
+    assert.assert(h(5) == 10, "alias call")
+    assert.assert(double(6) == 12, "direct call after alias")
+
+    // 作实参传给高阶函数后，仍可直接调用
+    assert.assert(apply(double, 3) == 6, "passed as argument")
+    assert.assert(double(7) == 14, "direct call after passing")
+
+    // 多次物化同一函数
+    f1 = double
+    f2 = double
+    assert.assert(f1(1) + f2(2) == 6, "two aliases reuse same function")
+
+    io.println("fn value reuse ok")
+}
+
+main()

@@ -100,6 +100,16 @@ pub struct StatementChecker {
     imported_used: HashSet<String>,
     /// #321 W1003：函数体级 use 登记的导入（本地名, use 语句 span）
     body_imports: Vec<(String, crate::util::span::Span)>,
+    /// 最近一条表达式语句的类型（由 `check_expr_stmt` 写入）。
+    ///
+    /// 用途：尾表达式返回类型校验。`check_stmt` 走体时**已经算过**每个表达式的
+    /// 类型，但 `check_body_tail_type` 需要事后取回——只要在 walk 时顺手记下。
+    ///
+    /// 此前用 `peek_expr_type` 事后重建类型，而它只识字面量与变量，
+    /// `if` / `match` / 调用等其他形态一律返回 `None` → **静默跳过校验**（#354）。
+    last_expr_stmt_ty: Option<MonoType>,
+    /// 当前函数**返回类型注解**的位置（#353：尾表达式不符时指向注解而非表达式）。
+    tail_annotation_span: Option<crate::util::span::Span>,
 }
 
 impl StatementChecker {
@@ -139,6 +149,8 @@ impl StatementChecker {
             import_watch: HashMap::new(),
             imported_used: HashSet::new(),
             body_imports: Vec::new(),
+            last_expr_stmt_ty: None,
+            tail_annotation_span: None,
         }
     }
 
@@ -737,6 +749,7 @@ impl StatementChecker {
         if self.collect_all_errors {
             // 收集模式：收集所有错误，不短路
             let mut first_err = None;
+            self.clear_tail_ty();
             for stmt in &body.stmts {
                 if let Err(e) = self.check_stmt(stmt) {
                     if first_err.is_none() {
@@ -770,6 +783,7 @@ impl StatementChecker {
         } else {
             // 短路模式：遇到第一个错误立即返回
             let mut err = None;
+            self.clear_tail_ty();
             for stmt in &body.stmts {
                 if let Err(e) = self.check_stmt(stmt) {
                     err = Some(e);
@@ -819,6 +833,11 @@ impl StatementChecker {
         if *expected == MonoType::Void {
             return Ok(());
         }
+        // 证明函数（`(x: Int) -> Type = x > 0`）：返回位是**元类型** Type，
+        // 体是一个布尔谓词而不是 Type 值——尾表达式与返回位不同域，不适用尾校验。
+        if matches!(expected, MonoType::MetaType { .. }) {
+            return Ok(());
+        }
         let Some(last) = body.stmts.last() else {
             return Ok(());
         };
@@ -826,49 +845,44 @@ impl StatementChecker {
         let crate::frontend::core::parser::ast::StmtKind::Expr(expr) = &last.kind else {
             return Ok(());
         };
-        // 不重走 check_expr——那会重复声明体内局部变量（E2002）。
-        // 只对自身能定型的尾表达式做校验（字面量 / 已绑定变量）。
-        let Some(tail_ty) = self.peek_expr_type(expr) else {
+        // 尾表达式类型 = walk 时 `check_stmt` 顺手记下的那一个。
+        //
+        // 不重走 `check_expr`——那会重复声明体内局部变量（E2002）。
+        //
+        // 也不事后重建（旧 `peek_expr_type`：只识字面量/变量，其余返回 None 便
+        // 静默跳过，#354——`if` / `match` / 调用等全部逃逸）。
+        let Some(tail_ty) = self.last_expr_stmt_ty.clone() else {
+            // 尾表达式未经 walk（如空体/被短路跳过）：无可校验的类型
             return Ok(());
         };
         // `return` 作尾表达式：类型 Never，爆炸原理放行
         if tail_ty == MonoType::Never {
             return Ok(());
         }
-        if self.solver.unify(&tail_ty, expected).is_err() {
+        // 先推进推断再比较：`if` 等组合表达式的类型可能还是未解的约束变量
+        let tail_ty = self.solver.resolve_type(&tail_ty);
+        let expected = self.solver.resolve_type(expected);
+        if self.solver.unify(&tail_ty, &expected).is_err() {
+            // #353：用 E1012（尾表达式与声明返回类型不符）而非 E1002，
+            // 并把位置**指向注解**——真正该改的是注解，不是体的最后一行。
+            //
+            // 旧诊断用 E1002 指向表达式，作者看到「这个值有问题」；
+            // 而值往往是完全正确的（如 `h: () -> Int = f` 中的 `f`）。
             return Err(Box::new(
-                ErrorCodeDefinition::type_mismatch(
-                    &format!("{}", expected),
-                    &format!("{}", tail_ty),
+                ErrorCodeDefinition::return_type_mismatch(
+                    &format!("{expected}"),
+                    &format!("{tail_ty}"),
                 )
-                .at(expr.span())
+                .at(self.tail_annotation_span.unwrap_or_else(|| expr.span()))
                 .build(),
             ));
         }
         Ok(())
     }
 
-    /// 非侵入式查询表达式类型：只处理能直接定型的形态，不产生副作用。
-    ///
-    /// 用于已 check 过的尾表达式的返回类型校验——不得重走 `check_expr`，
-    /// 否则函数体内的局部绑定会被重复声明。
-    fn peek_expr_type(
-        &mut self,
-        expr: &Expr,
-    ) -> Option<MonoType> {
-        use crate::frontend::core::lexer::tokens::Literal;
-        match expr {
-            Expr::Lit(lit, _) => Some(match lit {
-                Literal::Int(_) => MonoType::Int(64),
-                Literal::Float(_) => MonoType::Float(64),
-                Literal::Bool(_) => MonoType::Bool,
-                Literal::Char(_) => MonoType::Char,
-                Literal::String(_) => MonoType::make_string(),
-                Literal::Void => MonoType::Void,
-            }),
-            Expr::Var(name, _) => self.scope.get_var(name).map(|p| p.body.clone()),
-            _ => None,
-        }
+    /// 清空尾表达式类型记录（进入新函数体前调用）。
+    fn clear_tail_ty(&mut self) {
+        self.last_expr_stmt_ty = None;
     }
 
     /// 检查语句
@@ -881,7 +895,13 @@ impl StatementChecker {
         // 账本键：当前语句的 span（嵌套语句递归时逐层覆盖，#256）
         self.scope.set_current_stmt(stmt.span);
         match &stmt.kind {
-            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.check_expr_stmt(expr),
+            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
+                // 记录本条表达式语句的类型——尾表达式校验要用（#354）。
+                // 每次进体前由调用方清空，故末位语句写下的就是尾表达式的类型。
+                let ty = self.check_expr(expr)?;
+                self.last_expr_stmt_ty = Some(ty);
+                Ok(())
+            }
             crate::frontend::core::parser::ast::StmtKind::Assign {
                 target,
                 type_annotation,
@@ -1040,6 +1060,7 @@ impl StatementChecker {
                     else_branch.as_deref(),
                     *span,
                 )
+                // check_if_stmt 已把 `if` 表达式的类型写入 last_expr_stmt_ty
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
                 path,
@@ -1260,6 +1281,9 @@ impl StatementChecker {
         body: Block,
         _span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
+        // #353：记录绑定语句的位置，供尾表达式不符时指向它（而非体的末行）。
+        // 真正该改的是注解所在的声明，不是体里那个（可能完全正确的）值。
+        self.tail_annotation_span = Some(_span);
         let generic_params =
             classify_generic_params(signature_params, &|name| self.trait_table.has_trait(name));
         // 检查是否与结构体重名
@@ -2006,19 +2030,27 @@ impl StatementChecker {
         let cond_ty = self.check_expr(condition)?;
         if cond_ty != MonoType::Bool {
             return Err(Box::new(
-                ErrorCodeDefinition::type_mismatch("bool", &format!("{}", cond_ty))
+                ErrorCodeDefinition::type_mismatch("bool", &format!("{cond_ty}"))
                     .at(_stmt_span)
                     .build(),
             ));
         }
 
+        // `if` 作为**尾表达式**时其自有类型 = 各分支块值类型的 join（#354）。
+        //
+        // 本函数在 walk 体内会覆写 `last_expr_stmt_ty`，故先取回每个分支的值类型，
+        // 开完后再写回“if 整个表达式的类型”。无 else 分支时 if 的值恒为 Void。
+        let saved_tail = self.last_expr_stmt_ty.take();
+
         self.check_block(then_branch)?;
+        let mut branch_tys: Vec<MonoType> =
+            vec![self.last_expr_stmt_ty.take().unwrap_or(MonoType::Void)];
 
         for (else_if_cond, _) in else_if_branches {
             let else_if_cond_ty = self.check_expr(else_if_cond)?;
             if else_if_cond_ty != MonoType::Bool {
                 return Err(Box::new(
-                    ErrorCodeDefinition::type_mismatch("bool", &format!("{}", else_if_cond_ty))
+                    ErrorCodeDefinition::type_mismatch("bool", &format!("{else_if_cond_ty}"))
                         .at(_stmt_span)
                         .build(),
                 ));
@@ -2027,12 +2059,37 @@ impl StatementChecker {
 
         for (_, else_if_block) in else_if_branches {
             self.check_block(else_if_block)?;
+            branch_tys.push(self.last_expr_stmt_ty.take().unwrap_or(MonoType::Void));
         }
 
-        if let Some(else_block) = else_branch {
+        let if_ty = if let Some(else_block) = else_branch {
             self.check_block(else_block)?;
-        }
+            branch_tys.push(self.last_expr_stmt_ty.take().unwrap_or(MonoType::Void));
+            // 各分支类型必须互相兼容（取首个非 Never 分支为基准）
+            let base = branch_tys.iter().find(|t| **t != MonoType::Never).cloned();
+            if let Some(base) = &base {
+                for other in branch_tys.iter().filter(|t| **t != MonoType::Never) {
+                    let a = self.solver.resolve_type(base);
+                    let b = self.solver.resolve_type(other);
+                    if self.solver.unify(&a, &b).is_err() {
+                        return Err(Box::new(
+                            ErrorCodeDefinition::type_mismatch(&format!("{a}"), &format!("{b}"))
+                                .at(_stmt_span)
+                                .build(),
+                        ));
+                    }
+                }
+            }
+            base.unwrap_or(MonoType::Void)
+        } else {
+            // 无 else：条件不成立时无值 → Void（真分支的值被丢弃）
+            MonoType::Void
+        };
 
+        self.last_expr_stmt_ty = Some(if_ty);
+        // 保留外层已记录的尾类型？不必——调用方（check_stmt）会以本语句的新类型覆盖，
+        // 而 `saved_tail` 只在“if 不是末位语句”时才会被外层覆盖回去。
+        let _ = saved_tail;
         Ok(())
     }
 
@@ -2044,6 +2101,8 @@ impl StatementChecker {
         block: &Block,
     ) -> Result<(), Box<Diagnostic>> {
         self.scope.enter_block();
+        // 块内会覆写尾类型记录——先清空，让块尾表达式重新写入（#354）
+        self.last_expr_stmt_ty = None;
 
         if self.collect_all_errors {
             let mut first_err = None;

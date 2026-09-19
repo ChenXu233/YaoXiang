@@ -71,6 +71,66 @@ pub struct TypeChecker {
     /// 不写入 `env.vars`：那里会被当作最终 `bindings` 输出，而占位类型
     /// （TypeVar）会遮蔽 pass3 推断出的真实类型。
     early_value_bindings: HashMap<String, PolyType>,
+    /// #358：已声明的顶层函数名 → 签名（用于区分重复定义与合法重载）。
+    declared_top_fns: HashMap<String, String>,
+}
+
+/// 取顶层语句的函数**名与签名**（值/HOF 绑定也算函数）。
+///
+/// 签名用字符串形态：只用于等值比较，不需要结构化。
+impl TypeChecker {
+    fn top_level_fn_signature(
+        &self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+    ) -> Option<(String, String)> {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+        let StmtKind::Assign {
+            target,
+            type_annotation,
+            signature_params,
+            value,
+            ..
+        } = &stmt.kind
+        else {
+            return None;
+        };
+        let Expr::Var(name, _) = target.as_ref() else {
+            return None;
+        };
+        let is_fn = value.as_ref().is_some_and(|v| {
+            matches!(v.as_ref(), Expr::Lambda { .. })
+                || Expr::block_binding_is_function(type_annotation.as_ref(), Some(v.as_ref()))
+        });
+        if !is_fn {
+            return None;
+        }
+        // 签名 = 参数类型（含返回位）。
+        //
+        // 优先取 `signature_params`（RFC-010 新语法把参数类型放在这里），
+        // 它区分 `Array(Int)` 与 `Array(Float)`；无参数时退到类型注解自身。
+        // 注意：不能用 `{:?}` 格式化 `Type`——它含 `Span`，同一签名在不同
+        // 位置会得到不同字符串。用 `MonoType::type_name()` 取纯类型名。
+        let type_name_of = |t: &crate::frontend::core::parser::ast::Type| {
+            crate::frontend::core::types::MonoType::from(t.clone()).type_name()
+        };
+        let sig = if !signature_params.is_empty() {
+            signature_params
+                .iter()
+                .map(|p| {
+                    p.ty.as_ref()
+                        .map(&type_name_of)
+                        .unwrap_or_else(|| "_".to_string())
+                })
+                .collect::<Vec<_>>()
+                .join(",")
+        } else {
+            type_annotation
+                .as_ref()
+                .map(&type_name_of)
+                .unwrap_or_default()
+        };
+        Some((name.clone(), sig))
+    }
 }
 
 /// RFC-011a: 类型体应用项 `Animal(Dog)` 的待决接口实例化。
@@ -110,6 +170,7 @@ impl TypeChecker {
             import_watch: HashMap::new(),
             import_used: HashSet::new(),
             early_value_bindings: HashMap::new(),
+            declared_top_fns: HashMap::new(),
         }
     }
 
@@ -734,6 +795,29 @@ impl TypeChecker {
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
     ) {
+        // #358：顶层函数**重复定义**检测（同名**同签名**才是重复）。
+        //
+        // 此前只有「与结构体重名」会报 E2002——同一文件写两次 `main`（或任何
+        // 顶层函数）两个定义都留在函数表里，静默取第一个。下游按名解析
+        //（`CallStatic` / vtable / `find_entry_point`）可能取到非预期的那个，
+        // 而用户看不到任何提示。
+        //
+        // 重载（RFC-011 §3.15）是合法特性：`sum: (Array(Int)) -> Int` 与
+        // `sum: (Array(Float)) -> Float` 共存不报——故只在**签名完全相同**时判重。
+        if let Some((dup_name, sig)) = self.top_level_fn_signature(stmt) {
+            match self.declared_top_fns.get(&dup_name) {
+                Some(prev) if *prev == sig => {
+                    let diag = ErrorCodeDefinition::duplicate_definition(&dup_name)
+                        .at(stmt.span)
+                        .build();
+                    self.env.errors.add_error(diag);
+                }
+                Some(_) => {} // 不同签名 → 重载，放行
+                None => {
+                    self.declared_top_fns.insert(dup_name, sig);
+                }
+            }
+        }
         match &stmt.kind {
             crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
                 // 处理函数定义表达式
