@@ -16,7 +16,7 @@ Pair: (T: Type) -> Type = {
     second: T,
 }
 
-main = {
+main: () -> Void = {
     p: Pair(Int) = Pair(1, 2)
     assert.assert(p.first == 1, "Pair(1, 2) first == 1")
     assert.assert(p.second == 2, "Pair(1, 2) second == 2")

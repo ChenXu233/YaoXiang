@@ -10,6 +10,6 @@ tail_mismatch2: () -> Int = {
     q
 }
 
-main = {
+main: () -> Void = {
     x = tail_mismatch2()
 }

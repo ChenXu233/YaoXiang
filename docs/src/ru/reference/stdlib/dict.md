@@ -5,27 +5,27 @@ description: 'Чтение и запись словаря, представле�
 
 # std.dict
 
-Модуль операций над словарями (`Dict(K, V)`).
+Модуль операций со словарём (`Dict(K, V)`).
 
 ```yaoxiang
 use std.dict
 ```
 
-## Семантические категории
+## Семантическая классификация
 
-| Категория                      | Функции                                                        | Поведение                                                          |
-| ------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Только чтение (заимствование)  | `get` `has` `values` `keys` `entries` `len` `is_empty` `merge` | Исходный словарь можно использовать повторно                       |
-| **Поглощает исходный словарь** | `set` `delete`                                                 | Исходный словарь перемещается, после этого использовать его нельзя |
+| Категория                      | Функции                                                        | Поведение                                                        |
+| ------------------------------ | -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Только чтение (заимствование)  | `get` `has` `values` `keys` `entries` `len` `is_empty` `merge` | Исходный словарь можно использовать повторно                     |
+| **Поглощает исходный словарь** | `set` `delete`                                                 | Исходный словарь перемещается и больше не может быть использован |
 
 ```yaoxiang
 use std.assert
 use std.dict
 
-main = {
-    d = dict.set({}, "a", 1)
+main: () -> Void = {
+    d = dict.set(dict.new(), "a", 1)
 
-    // Только чтение (заимствование): d можно использовать повторно
+    // Только чтение: d можно использовать повторно
     assert(dict.get(d, "a") == 1)
     assert(dict.len(d) == 1)
     assert(dict.has(d, "a"))
@@ -48,10 +48,9 @@ main = {
 | `len`      | `(K: Type, V: Type)(dict: &Dict(K, V)) -> Int`                             |
 | `is_empty` | `(K: Type, V: Type)(dict: &Dict(K, V)) -> Bool`                            |
 | `merge`    | `(A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B)`         |
+| `new`      | `(K: Type, V: Type)() -> Dict(K, V)`                                       |
 
-<!-- stdlib:table:dict end -->
-
-## Функции
+<!-- stdlib:table:dict end -->## Функции
 
 ### set
 
@@ -63,15 +62,15 @@ set: (K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V)
 
 <!-- stdlib:sig:dict.set end -->
 
-Возвращает **новый словарь** с записью `key` → `value`. `dict` передаётся по значению, после вызова
-он **перемещается**.
+Возвращает **новый словарь** с записью `key` → `value`. `dict` передаётся по значению и
+**перемещается** после вызова.
 
 ```yaoxiang
 use std.assert
 use std.dict
 
-main = {
-    d1 = dict.set({}, "a", 1)
+main: () -> Void = {
+    d1 = dict.set(dict.new(), "a", 1)
     d2 = dict.set(d1, "b", 2)
     assert(dict.len(d2) == 2)
 }
@@ -89,28 +88,27 @@ get: (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any
 
 Получение значения по ключу (только чтение, `dict` можно использовать повторно).
 
-Возвращает: значение, соответствующее ключу. Ошибка: **если ключ отсутствует, выбрасывается
-`E6008`** (ключ отсутствует). Перед получением значения можно проверить его наличие с помощью
-[`has`](#has).
+Возвращает: значение, соответствующее ключу. Ошибка: при отсутствии ключа выбрасывается `E6008`
+(ключ отсутствует). Перед получением значения можно проверить наличие с помощью [`has`](#has).
 
 ```yaoxiang
 use std.assert
 use std.dict
 
-main = {
-    d = dict.set({}, "a", 1)
+main: () -> Void = {
+    d = dict.set(dict.new(), "a", 1)
     assert(dict.get(d, "a") == 1)
 }
 ```
 
-Проверка существования перед получением:
+Получение после проверки наличия:
 
 ```yaoxiang
 use std.assert
 use std.dict
 
-main = {
-    d = dict.set({}, "a", 1)
+main: () -> Void = {
+    d = dict.set(dict.new(), "a", 1)
     assert(!dict.has(d, "nope"))
     if dict.has(d, "a") {
         assert(dict.get(d, "a") == 1)
@@ -128,16 +126,16 @@ has: (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool
 
 <!-- stdlib:sig:dict.has end -->
 
-Содержится ли `key` в словаре.
+Существует ли `key` в словаре.
 
-Ошибка: если первый аргумент не является словарём, выбрасывается `E6007`.
+Ошибка: `E6007`, если первый аргумент не является словарём.
 
 ```yaoxiang
 use std.assert
 use std.dict
 
-main = {
-    d = dict.set({}, "a", 1)
+main: () -> Void = {
+    d = dict.set(dict.new(), "a", 1)
     assert(dict.has(d, "a"))
     assert(!dict.has(d, "zzz"))
 }
@@ -153,18 +151,18 @@ delete: (K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V)
 
 <!-- stdlib:sig:dict.delete end -->
 
-Возвращает **новый словарь** с удалённым `key`. `dict` передаётся по значению, после вызова он
-**перемещается**.
+Возвращает **новый словарь** с удалённым `key`. `dict` передаётся по значению и **перемещается**
+после вызова.
 
-Возвращает: новый словарь. Удаление несуществующего ключа не вызывает ошибки, словарь остаётся без
+Возвращает: новый словарь. Удаление несуществующего ключа не вызывает ошибку, словарь остаётся без
 изменений.
 
 ```yaoxiang
 use std.assert
 use std.dict
 
-main = {
-    d = dict.set({}, "a", 1)
+main: () -> Void = {
+    d = dict.set(dict.new(), "a", 1)
     deleted = dict.delete(d, "a")
     assert(!dict.has(deleted, "a"))
 }
@@ -180,18 +178,18 @@ keys: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
 
 <!-- stdlib:sig:dict.keys end -->
 
-Возвращает список всех ключей (только чтение, заимствование).
+Возвращает список всех ключей (только чтение).
 
 > Порядок возврата зависит от реализации хеширования и **не гарантируется стабильным**. Если
-> требуется упорядоченный вывод, выполните сортировку самостоятельно.
+> требуется упорядоченный вывод, отсортируйте самостоятельно.
 
 ```yaoxiang
 use std.assert
 use std.dict
 use std.list
 
-main = {
-    d = dict.set({}, "a", 1)
+main: () -> Void = {
+    d = dict.set(dict.new(), "a", 1)
     ks = dict.keys(d)
     assert(list.len(ks) == 1)
 }
@@ -207,15 +205,15 @@ values: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
 
 <!-- stdlib:sig:dict.values end -->
 
-Возвращает список всех значений (только чтение, заимствование). Порядок не гарантируется стабильным.
+Возвращает список всех значений (только чтение). Порядок не гарантируется стабильным.
 
 ```yaoxiang
 use std.assert
 use std.dict
 use std.list
 
-main = {
-    d = dict.set({}, "a", 1)
+main: () -> Void = {
+    d = dict.set(dict.new(), "a", 1)
     vs = dict.values(d)
     assert(list.len(vs) == 1)
 }
@@ -231,7 +229,7 @@ entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
 
 <!-- stdlib:sig:dict.entries end -->
 
-Возвращает список пар ключ-значение, где каждый элемент является кортежем `(key, value)`. Порядок не
+Возвращает список пар ключ-значение, каждый элемент — кортеж `(key, value)`. Порядок не
 гарантируется стабильным.
 
 ```yaoxiang
@@ -239,8 +237,8 @@ use std.assert
 use std.dict
 use std.list
 
-main = {
-    d = dict.set({}, "a", 1)
+main: () -> Void = {
+    d = dict.set(dict.new(), "a", 1)
     es = dict.entries(d)
     assert(list.len(es) == 1)
 }
@@ -258,14 +256,14 @@ len: (K: Type, V: Type)(dict: &Dict(K, V)) -> Int
 
 Количество элементов. Только чтение, `dict` можно использовать повторно.
 
-Ошибка: если аргумент не является словарём, выбрасывается `E6007`.
+Ошибка: `E6007`, если аргумент не является словарём.
 
 ```yaoxiang
 use std.assert
 use std.dict
 
-main = {
-    d = dict.set({}, "a", 1)
+main: () -> Void = {
+    d = dict.set(dict.new(), "a", 1)
     assert(dict.len(d) == 1)
     assert(dict.len(d) == 1)      // можно использовать повторно
 }
@@ -283,15 +281,15 @@ is_empty: (K: Type, V: Type)(dict: &Dict(K, V)) -> Bool
 
 Является ли словарь пустым.
 
-Ошибка: если аргумент не является словарём, выбрасывается `E6007`.
+Ошибка: `E6007`, если аргумент не является словарём.
 
 ```yaoxiang
 use std.assert
 use std.dict
 
-main = {
-    assert(dict.is_empty({}))
-    d = dict.set({}, "a", 1)
+main: () -> Void = {
+    assert(dict.is_empty(dict.new()))
+    d = dict.set(dict.new(), "a", 1)
     assert(!dict.is_empty(d))
 }
 ```
@@ -306,19 +304,19 @@ merge: (A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B)
 
 <!-- stdlib:sig:dict.merge end -->
 
-Слияние двух словарей, возвращает новый словарь. Оба исходных словаря передаются только для чтения и
-не изменяются.
+Объединяет два словаря и возвращает новый словарь. Оба исходных словаря передаются только для чтения
+и не изменяются.
 
 При конфликте ключей **значение из `b` перезаписывает значение из `a`**.
 
-Ошибка: если любой из аргументов не является словарём, выбрасывается `E6007`.
+Ошибка: `E6007`, если любой из аргументов не является словарём.
 
 ```yaoxiang
 use std.assert
 use std.dict
 
-main = {
-    m = dict.merge(dict.set({}, "x", 10), dict.set({}, "y", 20))
+main: () -> Void = {
+    m = dict.merge(dict.set(dict.new(), "x", 10), dict.set(dict.new(), "y", 20))
     assert(dict.get(m, "x") == 10)
     assert(dict.get(m, "y") == 20)
 }

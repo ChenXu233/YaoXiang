@@ -5,7 +5,7 @@
 
 use std.{assert, list}
 
-main = {
+main: () -> Void = {
     mut items = [1, 2, 3, 4, 5]
 
     // map

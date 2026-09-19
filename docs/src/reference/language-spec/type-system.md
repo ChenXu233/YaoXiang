@@ -44,7 +44,7 @@ Curry-Howard 同构在 YaoXiang 中的具体体现：
 2. **类型族**（RFC-011）：自然数 `Nat(Zero/Succ)`
    的类型级 case 分析 + 递归调用对应 Peano 公理——前提是编译器做终止性检查
 3. **条件类型**（RFC-011）：`If: (C: Bool, T: Type, E: Type) -> Type` 对应逻辑中的 case 析取
-4. **值依赖类型**（RFC-011）：`Vec: (n: Int) -> Type` 对应"对每个整数 n 存在一个类型"的有穷量化
+4. **值依赖类型**（RFC-011）：`Array: (T: Type, N: Int) -> Type` 对应"对每个整数 N 存在一个类型"的有穷量化
 
 ---
 
@@ -313,14 +313,20 @@ Map: (K: Type, V: Type) -> Type = { ... }
 
 ### 4.1.1 容器类型
 
-容器类型是泛型类型构造器，不是内置原语——与用户自定义泛型同一待遇，经由统一的泛型实例化路径处理：
+容器类型是泛型类型构造器，不是内置原语——与用户自定义泛型同一待遇，经由统一的泛型实例化路径处理。
+长度信息的归属是三个容器概念的根本区别：
 
-| 类型          | 语义                     | 底座               |
-| ------------- | ------------------------ | ------------------ |
-| `List(T)`     | 可增长列表               | `HeapValue::List`  |
-| `Array(T, N)` | 定长数组（const 泛型 N） | `HeapValue::Array` |
-| `Dict(K, V)`  | 键值映射                 | `HeapValue::Dict`  |
+| 类型          | 长度 | 语义                     | 底座                    |
+| ------------- | ---- | ------------------------ | ----------------------- |
+| `Array(T, N)` | 类型 | 定长数组（const 泛型 N） | 核心原语（栈/内联优先） |
+| `Vec(T)`      | 运行时值 | 运行时长度的原始缓冲，可增长 | 核心原语（堆上连续缓冲） |
+| `List(T)`     | 运行时值 | 标准库类型（可增长列表） | 库：`{ data: Vec(T), length: Int }` |
+| `Dict(K, V)`  | 运行时值 | 键值映射                 | `HeapValue::Dict`       |
 
+> `List(T)` 是**标准库类型，不是编译器原语**：由 YaoXiang 自身在 `std.list` 中定义，
+> 与用户自定义泛型记录同一待遇。可增长语义的全部策略（何时扩容、扩多少、能否共享）都在库里，编译器不参与。
+> `Vec(T)` 是它依赖的最小地基原语。
+>
 > Set(T) 已除名：无字面量、无运行时表示、无 std.set。需求出现时照 Dict 模式补全。
 
 关键规则：
@@ -329,6 +335,7 @@ Map: (K: Type, V: Type) -> Type = { ... }
   注解直接作用于字面量时落定长数组。落点校验：元素个数 ==
   N、元素类型兼容 T，不符编译期 E1002；N 为符号常量（const 参数）时个数校验推迟到精化类型阶段。
 - **禁止隐式 List→Array 转换**：定长性由类型层保证——push 只接受 `List(A)` receiver。
+- **性能层次**：由底向上性能递减、灵活性递增：`Array` > `Vec` > `List`。
 - **索引失败契约**（运行时报错为过渡态，目标态编译期精化覆盖，走值依赖类型）：
   - 索引越界（含负索引）→ `E6003`
   - Dict 缺键 → `E6008`
@@ -540,13 +547,13 @@ LiteralType   ::= Identifier ':' Int          // 编译期常量（候选）
 
 ```yaoxiang
 // 编译期值参数：N 在类型位置（Array 长度槽）被引用
-StaticArray: (T: Type, N: Int) -> Type = {
+Measure: (T: Type, N: Int) -> Type = {
     data: Array(T, N),      // N 出现在类型构造实参位 → 编译期值参数
     length: N
 }
 
 // 使用方式：factorial(5) 在类型位置求值（编译期），结果 120 嵌入类型
-arr: StaticArray(Int, factorial(5))  // 编译器在编译期计算 factorial(5) = 120
+arr: Measure(Int, factorial(5))  // 编译器在编译期计算 factorial(5) = 120
 
 // 值依赖：N 作为内层参数 k 的类型
 // N 是编译期值参数（出现在 (k: N) 的类型位）；
@@ -1030,7 +1037,7 @@ Iterator: (T: Type) -> Type = { Item: T, next: () -> Option(T) }
 
 // 编译期泛型：N 在类型位置 (k: N) 被引用 → 编译期值参数
 factorial: (N: Int)(k: N) -> Int = { ... }
-StaticArray: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
+Measure: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 
 // 条件类型
 If: (C: Bool, T: Type, E: Type) -> Type = match C { True => T, False => E }

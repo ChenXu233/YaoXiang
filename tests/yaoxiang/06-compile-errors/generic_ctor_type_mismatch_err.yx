@@ -9,7 +9,7 @@ use std.io
 
 Container: (T: Type) -> Type = { value: T }
 
-main = {
+main: () -> Void = {
     a: Container(Int) = Container("str")
     io.println(a.value)
 }

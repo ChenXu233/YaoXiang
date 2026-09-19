@@ -2,7 +2,7 @@
 // 验证: match 表达式
 // 状态: 待测试
 
-main = {
+main: () -> Void = {
     // 匹配第一个 arm
     r1 = match 1 {
         1 => "one",

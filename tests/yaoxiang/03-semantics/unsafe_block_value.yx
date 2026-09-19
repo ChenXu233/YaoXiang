@@ -4,7 +4,7 @@
 
 use std.{assert, io}
 
-main = {
+main: () -> Void = {
     // unsafe 块作为表达式取值
     v = unsafe { 42 }
     assert.assert(v == 42, "unsafe { 42 } should yield 42")

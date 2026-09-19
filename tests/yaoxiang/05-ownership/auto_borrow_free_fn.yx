@@ -13,7 +13,7 @@ manhattan: (p: &Point) -> Int = {
     return p.x + p.y
 }
 
-main = {
+main: () -> Void = {
     p = Point(3, 4)
 
     // 两次调用，p 不被 move（自动创建 &Point 令牌）

@@ -15,18 +15,18 @@ use std.result
 
 | 値                  | 表現                                   |
 | ------------------- | -------------------------------------- |
-| `Result.ok(value)`  | バリアント、`value` を保持             |
-| `Result.err(error)` | バリアント、`error` を保持             |
+| `Result.ok(value)`  | 列挙型バリアント、`value` を保持       |
+| `Result.err(error)` | 列挙型バリアント、`error` を保持       |
 | `Error`             | 構造体、フィールドは `(code, message)` |
 
 `Error.code` は RFC-013 の `E6xxx` / `E7xxx`
-セグメント登録コード（バージョン横断の安定契約）、`Error.message` は人間が読める説明。
+セグメント登録コード（バージョン間安定契約）、`Error.message` は人間が読める説明です。
 
 ## 関数一覧
 
 <!-- stdlib:table:result start -->
 
-| 関数         | 署名                                                       |
+| 関数         | シグネチャ                                                 |
 | ------------ | ---------------------------------------------------------- |
 | `is_ok`      | `(T: Type, E: Type)(self: &Result(T, E)) -> Bool`          |
 | `is_err`     | `(T: Type, E: Type)(self: &Result(T, E)) -> Bool`          |
@@ -52,16 +52,16 @@ ok: (T: Type, E: Type)(value: T) -> Result(T, E)
 
 <!-- stdlib:sig:result.ok end -->
 
-成功値をラップする。
+成功値を包みます。
 
-`?` で分解された `Ok` 値を `Result` 戻り型に沿って伝播させるには再ラップが必要であり、`ok`
-がそのラッパーとなる。
+`?` で分解された `Ok` 値は `Result` の戻り型に沿って伝播を続けるために再包装が必要であり、`ok`
+がそのラッパーです。
 
 ```yaoxiang
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.ok(42)
     assert(result.is_ok(r))
 }
@@ -77,13 +77,13 @@ err: (T: Type, E: Type)(error: E) -> Result(T, E)
 
 <!-- stdlib:sig:result.err end -->
 
-エラー値をラップする。
+エラー値を包みます。
 
 ```yaoxiang
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.err("boom")
     assert(result.is_err(r))
 }
@@ -101,13 +101,13 @@ is_ok: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_ok end -->
 
-成功バリアントかどうか。読み取り専用の借用で、`self` は反復して使用可能。
+成功バリアントかどうかを判定します。読み取り専用借用で、`self` は繰り返し使用可能です。
 
 ```yaoxiang
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.ok(1)
     assert(result.is_ok(r))
     assert(result.is_ok(r))      // 再利用可能
@@ -124,13 +124,13 @@ is_err: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_err end -->
 
-エラーバリアントかどうか。読み取り専用の借用。
+エラーバリアントかどうかを判定します。読み取り専用借用。
 
 ```yaoxiang
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.err("e")
     assert(result.is_err(r))
 }
@@ -148,18 +148,19 @@ unwrap: (T: Type, E: Type)(self: &Result(T, E)) -> T
 
 <!-- stdlib:sig:result.unwrap end -->
 
-成功値を取り出す。
+成功値を取り出します。
 
-戻り値：`Ok` バリアントが保持する値。エラー：`Err` 値に対して呼び出すと `E6007`
-が送出され、メッセージには**元エラーコードと説明が付記**され、`unwrap called on Err value (E6010: parse_int: ...)`
-のような形式となるため、事前に `unwrap_err` を呼ぶことなく失敗原因を確認できる。
+戻り値：`Ok` バリアントが保持する値。エラー：`Err` 値に対して呼び出した場合 `E6007`
+を送出し、メッセージには**元々のエラーコードと説明が付属**し、例えば
+`unwrap called on Err value (E6010: parse_int: ...)` のようになります。そのため `unwrap_err`
+を先に呼ばなくても失敗原因を確認できます。
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("42")
     assert(result.unwrap(r) == 42)
 }
@@ -175,16 +176,16 @@ unwrap_or: (T: Type, E: Type)(self: &Result(T, E), default: T) -> T
 
 <!-- stdlib:sig:result.unwrap_or end -->
 
-成功値を取り出すか、`Err` の場合は `default` を返す。
+成功値を取り出すか、`Err` の場合は `default` を返します。
 
-- `default` —— `Err` 時のフォールバック値
+- `default` —— `Err` 時の既定値
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     good = string.parse_int("42")
     assert(result.unwrap_or(good, 0) == 42)
 
@@ -203,16 +204,16 @@ unwrap_err: (T: Type, E: Type)(self: &Result(T, E)) -> E
 
 <!-- stdlib:sig:result.unwrap_err end -->
 
-エラー値を取り出す。
+エラー値を取り出します。
 
-戻り値：`Err` バリアントが保持する値。エラー：`Ok` 値に対して呼び出すと `E6007` が送出される。
+戻り値：`Err` バリアントが保持する値。エラー：`Ok` 値に対して呼び出した場合 `E6007` を送出します。
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("abc")
     e = result.unwrap_err(r)
     assert(result.is_err(r))
@@ -231,17 +232,17 @@ code: (self: &Error) -> String
 
 <!-- stdlib:sig:result.code end -->
 
-エラーコード文字列（例：`"E6010"`）を読み取る。
+エラーコード文字列を `"E6010"` のような形式で読み取ります。
 
-> 署名の型は `Error` だが、ランタイムのエラーキャリアは `(code, message)`
-> をフィールドとする構造体である。`Error` 値に対して直接呼び出す。
+> シグネチャの型は `Error` ですが、ランタイムエラーキャリアは `(code, message)`
+> をフィールドとする構造体です。`Error` 値に対して直接呼び出します。
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("abc")
     e = result.unwrap_err(r)
     assert(result.code(e) == "E6010")
@@ -258,14 +259,14 @@ message: (self: &Error) -> String
 
 <!-- stdlib:sig:result.message end -->
 
-エラー説明テキストを読み取る。
+エラー説明テキストを読み取ります。
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("abc")
     e = result.unwrap_err(r)
     assert(string.len(result.message(e)) > 0)

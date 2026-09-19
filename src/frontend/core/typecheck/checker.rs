@@ -394,18 +394,31 @@ impl TypeChecker {
         }
         *self.body_checker_mut() = body_checker;
 
-        // 将环境中的变量同步到 body_checker
+        // 将环境中的变量同步到 body_checker。
+        //
+        // 标注为「导入」：`env.vars` 里既有本文件的声明，也有
+        // `add_native_function_types` 注入的 std native 短名（如 `ok`/`err`）。
+        // 后者不是本文件的绑定——若不区分，用户写 `ok = ...` 会被 spec §4.3
+        // 判定看成「重赋值不可变变量」→ 误报 E2010。
         for (name, poly) in self.env.vars.clone() {
-            self.body_checker_mut()
-                .add_var(name, poly, false, crate::util::span::Span::default());
+            let is_native = self.env.native_signatures.contains_key(&name);
+            if is_native {
+                self.body_checker_mut().add_imported_var(name, poly);
+            } else {
+                self.body_checker_mut().add_var(
+                    name,
+                    poly,
+                    false,
+                    crate::util::span::Span::default(),
+                );
+            }
         }
 
         // T3：把 pass2 收集的顶层值绑定占位也注入 body_checker，
         // 使函数体内对后置绑定的引用（前向引用）能解析到名字。
         // pass3 执行到该语句时会重新推断并覆盖占位类型。
         for (name, poly) in self.early_value_bindings.clone() {
-            self.body_checker_mut()
-                .add_var(name, poly, false, crate::util::span::Span::default());
+            self.body_checker_mut().add_forward_declared_var(name, poly);
         }
 
         // #321 W1003：模块级导入名监视集注入（函数体级 use 由 process_use_stmt 自行登记）
@@ -2702,6 +2715,33 @@ impl TypeChecker {
         self.env.errors.extend_errors(refined_diags);
     }
 
+    /// 遍历绑定值的**函数体语句**（精化收集的两阶段共用）。
+    ///
+    /// 判定与 `block_binding_is_function` 同源：`Lambda`（`=>`）恒为函数体；
+    /// `Block` 仅在是函数定义时才下钻（值块不是函数体，其语句由表达式求值处理）。
+    ///
+    /// 存在的理由：两阶段此前各写一份 `if Lambda … else if Block …`，且
+    /// `build_dep_graph_and_check_init` 的注解臂根本没有下钻——见 #363。
+    fn walk_fn_body_for_refined<F>(
+        &self,
+        value: &crate::frontend::core::parser::ast::Expr,
+        f: &mut F,
+    ) where
+        F: FnMut(&crate::frontend::core::parser::ast::Stmt),
+    {
+        use crate::frontend::core::parser::ast::Expr;
+        let body = match value {
+            Expr::Lambda { body, .. } => Some(body.as_ref()),
+            Expr::Block(block) => Some(block),
+            _ => None,
+        };
+        if let Some(body) = body {
+            for s in &body.stmts {
+                f(s);
+            }
+        }
+    }
+
     /// 阶段 1：递归遍历语句树——构建依赖图 + 检查初始化绑定
     fn build_dep_graph_and_check_init(
         &self,
@@ -2717,6 +2757,7 @@ impl TypeChecker {
             StmtKind::Assign {
                 target,
                 type_annotation: Some(type_ann),
+                value,
                 ..
             } => {
                 let name = match target.as_ref() {
@@ -2762,6 +2803,25 @@ impl TypeChecker {
                             dep_graph.add_dep(&name, fv);
                         }
                     }
+                }
+
+                // 注解绑定的**函数体也要下钻**。
+                //
+                // 此前本臂到此为止，而下一个臂（无 type_annotation）才递归
+                // Lambda/Block 体——于是 `f: () -> Void = { y: IsSmall(1,2) = 5 }`
+                // 体内的精化实参**全不校验**（E1092/E1093 静默失守），
+                // 而 `f = () => { ... }` 正常报出。注解是推荐的函数写法，
+                // 却成了校验最弱的一条路径。（#363）
+                if let Some(expr) = value.as_deref() {
+                    self.walk_fn_body_for_refined(expr, &mut |s| {
+                        self.build_dep_graph_and_check_init(
+                            s,
+                            dep_graph,
+                            shared_ctx,
+                            proof_calls,
+                            diags,
+                        );
+                    });
                 }
             }
             StmtKind::Assign {
@@ -2968,28 +3028,10 @@ impl TypeChecker {
                         );
                     }
                 }
-                // 递归处理 Lambda/Block 函数体
-                if let Expr::Lambda { body, .. } = v.as_ref() {
-                    for s in &body.stmts {
-                        self.check_assignments_with_deps(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
-                    }
-                } else if let Expr::Block(block) = v.as_ref() {
-                    for s in &block.stmts {
-                        self.check_assignments_with_deps(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
-                    }
-                }
+                // 递归处理 Lambda/Block 函数体（含注解绑定：`f: T = { ... }`）
+                self.walk_fn_body_for_refined(v, &mut |s| {
+                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls, diags);
+                });
             }
             StmtKind::If {
                 then_branch,

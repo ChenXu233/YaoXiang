@@ -7,7 +7,7 @@
 
 use std.list
 
-main = {
+main: () -> Void = {
     xs = [1, 2]
     v = &xs
     list.push(xs, 3)

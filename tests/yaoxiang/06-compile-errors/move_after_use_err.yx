@@ -6,7 +6,7 @@ use std.io
 
 Point: Type = { x: Float, y: Float }
 
-main = {
+main: () -> Void = {
     p = Point(1.0, 2.0)
     p2 = p
     io.println(p)

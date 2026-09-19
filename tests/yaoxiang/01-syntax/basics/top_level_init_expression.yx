@@ -25,7 +25,7 @@ fwd_derived: Int = fwd_base * 3
 fwd_base: Int = 7
 
 // Act + Assert — 每个 binding 恰好访问一次，期望值来自 §5.2 语义（name: type = value 求值后绑定）。
-main = {
+main: () -> Void = {
     assert.assert(literal == 42, "顶层字面量绑定 == 42")
     assert.assert(arithmetic == 6, "顶层算术绑定 == 6（#261）")
     assert.assert(concat == "hello, world", "顶层字符串拼接 == hello, world")

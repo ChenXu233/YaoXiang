@@ -19,7 +19,7 @@ File.close: (self: &mut File) -> Void = {
     io.println("closing file")
 }
 
-main = {
+main: () -> Void = {
     f = File("test.txt", true)
     f.open()
     assert.assert(true, "file opened")

@@ -649,8 +649,12 @@ fn test_every_opcode_roundtrips_not_silently_nop() {
 /// 按 `src, dst` 解码，种类仍是 `RcNew` 但值已互换。本测试用互不相同的
 /// 操作数值逐字段断言。
 ///
-/// 为何不用「重编码比对」：编码方向只存在于 `translator`（IR → 字节码），
-/// `BytecodeInstr` **没有**回编码方法，故无法从解出的指令再编码回来对照。
+/// **字节布局以编码器为准**（`translator.rs` 的 `translate_*`）：
+/// 编码器经 `to_reg` 产出寄存器号，上限 255（`operand.rs` 的
+/// register_overflow 检查），故**寄存器恒为 1 字节**；类型号/长度等
+/// 非寄存器字段才是 2 字节小端。
+/// 注：`BytecodeInstr::size()` 的注释（如 "dst(2)"）与实际编码不符，
+/// **不可**作为字节布局依据——曾据此实现导致全部字段错位。
 #[test]
 fn test_decode_places_fields_in_correct_positions() {
     use crate::backends::common::opcode;
@@ -665,36 +669,51 @@ fn test_decode_places_fields_in_correct_positions() {
         module.functions[0].instructions[0].clone()
     }
 
-    // dst=0x11AA, src=0x22BB——两值不同，dst/src 写反即被抓
-    match decode_one(opcode::RC_NEW, vec![0xAA, 0x11, 0xBB, 0x22]) {
+    // RcNew: dst(1) + src(1)——两值不同，dst/src 写反即被抓
+    match decode_one(opcode::RC_NEW, vec![0x11, 0x22]) {
         BytecodeInstr::RcNew { dst, src } => {
-            assert_eq!(dst, Reg(0x11AA), "RcNew.dst 位置错误（可能 dst/src 写反）");
-            assert_eq!(src, Reg(0x22BB), "RcNew.src 位置错误");
+            assert_eq!(dst, Reg(0x11), "RcNew.dst 位置错误（可能 dst/src 写反）");
+            assert_eq!(src, Reg(0x22), "RcNew.src 位置错误");
         }
         other => panic!("应为 RcNew，实际 {other:?}"),
     }
 
-    // ArcDrop: 单字段 src
-    match decode_one(opcode::ARC_DROP, vec![0xCD, 0xAB]) {
-        BytecodeInstr::ArcDrop { src } => assert_eq!(src, Reg(0xABCD), "ArcDrop.src 位置错误"),
+    // ArcDrop: 单字段 src（1 字节）
+    match decode_one(opcode::ARC_DROP, vec![0xCD]) {
+        BytecodeInstr::ArcDrop { src } => {
+            assert_eq!(src, Reg(0xCD), "ArcDrop.src 位置错误")
+        }
         other => panic!("应为 ArcDrop，实际 {other:?}"),
     }
 
-    // StringConcat: dst + str1 + str2（三字段，顺序易错）
-    match decode_one(
-        opcode::STRING_CONCAT,
-        vec![0x01, 0x00, 0x02, 0x00, 0x03, 0x00],
-    ) {
-        BytecodeInstr::StringConcat { dst, str1, str2 } => {
-            assert_eq!(dst, Reg(1), "StringConcat.dst 位置错误");
-            assert_eq!(str1, Reg(2), "StringConcat.str1 位置错误");
-            assert_eq!(str2, Reg(3), "StringConcat.str2 位置错误");
+    // ArcNew: dst(1) + src(1)
+    match decode_one(opcode::ARC_NEW, vec![0x05, 0x06]) {
+        BytecodeInstr::ArcNew { dst, src } => {
+            assert_eq!(dst, Reg(5), "ArcNew.dst 位置错误");
+            assert_eq!(src, Reg(6), "ArcNew.src 位置错误");
         }
-        other => panic!("应为 StringConcat，实际 {other:?}"),
+        other => panic!("应为 ArcNew，实际 {other:?}"),
     }
 
-    // Cast: dst + src + target_type_id（u16 类型号）
-    match decode_one(opcode::CAST, vec![0x01, 0x00, 0x02, 0x00, 0x34, 0x12]) {
+    // WeakUpgrade: dst(1) + src(1)
+    match decode_one(opcode::WEAK_UPGRADE, vec![0x07, 0x08]) {
+        BytecodeInstr::WeakUpgrade { dst, src } => {
+            assert_eq!(dst, Reg(7), "WeakUpgrade.dst 位置错误");
+            assert_eq!(src, Reg(8), "WeakUpgrade.src 位置错误");
+        }
+        other => panic!("应为 WeakUpgrade，实际 {other:?}"),
+    }
+
+    // Drop: value(1)
+    match decode_one(opcode::DROP, vec![0x0A]) {
+        BytecodeInstr::Drop { value } => {
+            assert_eq!(value, Reg(10), "Drop.value 位置错误")
+        }
+        other => panic!("应为 Drop，实际 {other:?}"),
+    }
+
+    // Cast: dst(1) + src(1) + target_type_id(2, 小端)
+    match decode_one(opcode::CAST, vec![0x01, 0x02, 0x34, 0x12]) {
         BytecodeInstr::Cast {
             dst,
             src,
@@ -707,8 +726,17 @@ fn test_decode_places_fields_in_correct_positions() {
         other => panic!("应为 Cast，实际 {other:?}"),
     }
 
-    // BoundsCheck: array + index
-    match decode_one(opcode::BOUNDS_CHECK, vec![0x07, 0x00, 0x09, 0x00]) {
+    // HeapAlloc: dst(1) + type_id(2, 小端)
+    match decode_one(opcode::HEAP_ALLOC, vec![0x03, 0x78, 0x56]) {
+        BytecodeInstr::HeapAlloc { dst, type_id } => {
+            assert_eq!(dst, Reg(3), "HeapAlloc.dst 位置错误");
+            assert_eq!(type_id, 0x5678, "HeapAlloc.type_id 位置错误");
+        }
+        other => panic!("应为 HeapAlloc，实际 {other:?}"),
+    }
+
+    // BoundsCheck: array(1) + index(1)
+    match decode_one(opcode::BOUNDS_CHECK, vec![0x07, 0x09]) {
         BytecodeInstr::BoundsCheck { array, index } => {
             assert_eq!(array, Reg(7), "BoundsCheck.array 位置错误");
             assert_eq!(index, Reg(9), "BoundsCheck.index 位置错误");
@@ -716,12 +744,13 @@ fn test_decode_places_fields_in_correct_positions() {
         other => panic!("应为 BoundsCheck，实际 {other:?}"),
     }
 
-    // WeakUpgrade: dst + src
-    match decode_one(opcode::WEAK_UPGRADE, vec![0x05, 0x00, 0x06, 0x00]) {
-        BytecodeInstr::WeakUpgrade { dst, src } => {
-            assert_eq!(dst, Reg(5), "WeakUpgrade.dst 位置错误");
-            assert_eq!(src, Reg(6), "WeakUpgrade.src 位置错误");
+    // StringConcat: dst(1) + str1(1) + str2(1)
+    match decode_one(opcode::STRING_CONCAT, vec![0x01, 0x02, 0x03]) {
+        BytecodeInstr::StringConcat { dst, str1, str2 } => {
+            assert_eq!(dst, Reg(1), "StringConcat.dst 位置错误");
+            assert_eq!(str1, Reg(2), "StringConcat.str1 位置错误");
+            assert_eq!(str2, Reg(3), "StringConcat.str2 位置错误");
         }
-        other => panic!("应为 WeakUpgrade，实际 {other:?}"),
+        other => panic!("应为 StringConcat，实际 {other:?}"),
     }
 }

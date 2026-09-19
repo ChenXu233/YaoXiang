@@ -9,7 +9,7 @@ use std.assert
 
 g: (N: Int) -> Int = 42
 
-main = {
+main: () -> Void = {
     a = g(99)
     assert.assert(a == 42, "g(99) should return 42")
 }

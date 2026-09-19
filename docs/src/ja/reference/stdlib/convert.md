@@ -5,7 +5,7 @@ description: '任意値から String への変換'
 
 # std.convert
 
-型変換モジュール。現在、値から `String` への変換を提供します。
+型変換モジュールで、現在値から `String` への変換を提供します。
 
 ```yaoxiang
 use std.convert
@@ -13,25 +13,24 @@ use std.convert
 
 ## 変換ルール
 
-`to_string` は値のランタイム形式に従ってフォーマットします：
+`to_string` は値のランタイム形式に基づいてフォーマットします：
 
-| 型       | 出力形式                   | 例                             |
-| -------- | -------------------------- | ------------------------------ |
-| `Void`   | `void`                     | `void`                         |
-| `Bool`   | `true` / `false`           | `true`                         |
-| `Int`    | 十進                       | `42`                           |
-| `Float`  | 下記参照                   | `3.14` / `2.0`                 |
-| `Char`   | 文字そのもの               | `a`                            |
-| `String` | 元の内容（**引用符なし**） | `hello`                        |
-| `List`   | `[要素, ...]`              | `[1, 2, 3]`                    |
-| `Dict`   | `{k: v, ...}`              | `{a: 1}`                       |
-| `Tuple`  | `(要素, ...)`              | `(1, hello)`                   |
-| `Array`  | `[要素, ...]`              | `[1, 2]`                       |
-| `Range`  | `開始..終了`               | `1..5`（step が 1 の場合省略） |
-| `Bytes`  | `bytes[長さ]`              | `bytes[3]`                     |
+| 型       | 出力形式                   | 例                               |
+| -------- | -------------------------- | -------------------------------- |
+| `Void`   | `void`                     | `void`                           |
+| `Bool`   | `true` / `false`           | `true`                           |
+| `Int`    | 十進数                     | `42`                             |
+| `Float`  | 下記参照                   | `3.14` / `2.0`                   |
+| `Char`   | 文字そのもの               | `a`                              |
+| `String` | 元の内容（**引用符なし**） | `hello`                          |
+| `List`   | `[要素, ...]`              | `[1, 2, 3]`                      |
+| `Dict`   | `{k: v, ...}`              | `{a: 1}`                         |
+| `Tuple`  | `(要素, ...)`              | `(1, hello)`                     |
+| `Array`  | `[要素, ...]`              | `[1, 2]`                         |
+| `Range`  | `開始..終了`               | `1..5`（step が 1 の場合は省略） |
+| `Bytes`  | `bytes[長さ]`              | `bytes[3]`                       |
 
-`Float` の整数値には小数点が 1 桁付加されます（`2` ではなく `2.0`）。これは `Int` と `Float`
-を区別するためです。
+`Float` の整数値は小数点を補完し（`2` ではなく `2.0`）、`Int` と `Float` の区別を容易にします。
 
 ## 関数一覧
 
@@ -51,9 +50,7 @@ use std.convert
 | `set.to_string`    | `(self) -> String`  |
 | `range.to_string`  | `(self) -> String`  |
 
-<!-- stdlib:table:convert end -->
-
-## 関数
+<!-- stdlib:table:convert end -->## 関数
 
 ### to_string
 
@@ -69,38 +66,38 @@ to_string: (value) -> String
 
 - `value` —— 任意の型の値
 
-戻り値：フォーマット後の文字列。引数が欠落している場合、`"()"` を返します。
+戻り値：フォーマットされた文字列。引数が欠落している場合は `"()"` を返します。
 
 ```yaoxiang
 use std.assert
 use std.convert
 
-main = {
+main: () -> Void = {
     assert(convert.to_string(42) == "42")
     assert(convert.to_string(true) == "true")
     assert(convert.to_string(false) == "false")
 }
 ```
 
-文字列自体には引用符が付きません：
+文字列自体は引用符で囲まれません：
 
 ```yaoxiang
 use std.assert
 use std.convert
 
-main = {
+main: () -> Void = {
     assert(convert.to_string("hi") == "hi")
 }
 ```
 
-複合型は再帰的に展開されます（フォーマットは脆弱性回避のため表明しません）：
+複合型は再帰的に展開されます（形式は脆弱さを避けるためにアサートしません）：
 
 ```yaoxiang
 use std.assert
 use std.convert
 use std.string
 
-main = {
+main: () -> Void = {
     s_list = convert.to_string([1, 2, 3])
     assert(string.len(s_list) > 0)
 
@@ -111,8 +108,8 @@ main = {
 
 ### 型メソッド形式
 
-汎用の `convert.to_string`
-に加え、モジュールは型ごとに束縛された以下の同名関数をエクスポートしており、動作はそれと完全に一致します：
+汎用 `convert.to_string`
+외에도、モジュールは次の型バインドの同名の関数をエクスポートし、動作は完全に同じです：
 
 | エクスポート名     | シグネチャ         |
 | ------------------ | ------------------ |
@@ -127,11 +124,11 @@ main = {
 | `set.to_string`    | `(self) -> String` |
 | `range.to_string`  | `(self) -> String` |
 
-これらの束縛はランタイムの `Stringable` ディスパッチで使用されます。通常のコードでは
+これらのバインディングはランタイムの `Stringable` ディスパッチに使用され、日常のコードでは
 [`convert.to_string`](#to_string) を直接使用すれば十分です。
 
-> `Set` 型は言語層から既に削除されており、`set.to_string`
-> は互換用プレースホルダとして残されています。
+> `Set` 型は言語層からすでに削除されており、`set.to_string`
+> は互換性のためのプレースホルダとして残されています。
 
 ## 関連
 

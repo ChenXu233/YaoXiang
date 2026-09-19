@@ -169,7 +169,7 @@ Array: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 Point: Type = { x: Float, y: Float }
 
 # ✅ 函数：没有 : Type，HM 推断为 () -> Void
-main = { println("Hello") }
+main: () -> Void = { println("Hello") }
 
 # ❌ 错误：没有 : Type，编译器无法将 { ... } 解析为类型
 Point = { x: Float, y: Float }  // HM 推断为函数，不是类型！

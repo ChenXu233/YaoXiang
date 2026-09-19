@@ -8,7 +8,7 @@
 use std.io
 use std.weak
 
-main = {
+main: () -> Void = {
     p = ref 42
     w = weak.new(p)
     u = weak.upgrade(w)

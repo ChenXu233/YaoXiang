@@ -6,7 +6,7 @@
 // 验证: while 体内嵌套 if 分支中的类型注解冲突与顶层同等被拒绝
 // 状态: ✅
 
-main = {
+main: () -> Void = {
     mut i = 0
     while i < 2 {
         i = i + 1

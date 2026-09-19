@@ -9,7 +9,7 @@ Point: Type = { x: Int, y: Int }
 take_mut: (p: &mut Point) -> Void = {
     p.x = 9
 }
-main = {
+main: () -> Void = {
     p = Point(1, 2)
     f = take_mut
     v = &p.x

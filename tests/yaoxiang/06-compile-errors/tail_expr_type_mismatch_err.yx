@@ -9,6 +9,6 @@ tail_mismatch: () -> Int = {
     "not an int"
 }
 
-main = {
+main: () -> Void = {
     x = tail_mismatch()
 }

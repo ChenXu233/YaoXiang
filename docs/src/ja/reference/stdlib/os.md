@@ -11,17 +11,17 @@ description: 'ファイルハンドル、ディレクトリ、環境変数、作
 use std.os
 ```
 
-> 本モジュールのすべての関数はオペレーティングシステムの機能に依存しており、`wasm32`
+> 本モジュールのすべての関数はオペレーティングシステムの能力に依存しており、`wasm32`
 > ターゲットでは**エクスポートされません**。
 
 ## ファイルハンドルモデル
 
-> **重要な制限（#337）**：`open` が返すハンドルは**一回限り**のものです。`&` を持たないため、最初に
+> **重要な制限（#337）**：`open` が返すハンドルは**一回限りの**ものです。`&` を持たないため、最初に
 > `read` / `write` / `seek` / `tell` / `flush` / `close`
-> に渡した時点で**ムーブ**され、再利用できません。そのため `open` → `write` → `close`
+> に渡した時点で**ムーブ**され、それ以降は再利用できません。したがって `open` → `write` → `close`
 > のような一般的な書き方は現在の実装では**コンパイルできません**（`E2014` が報告されます）。
 >
-> 実行可能な2つの書き方：
+> 可能な二つの書き方：
 >
 > 1. **`open` を単一の呼び出しにインライン化する**——ハンドルは生成後すぐに消費されます：
 >
@@ -30,11 +30,11 @@ use std.os
 >    ```
 >
 > 2. **ハンドルを開かない便利関数を使う**——[`std.io.read_file`](./io#read_file) /
->    [`write_file`](./io#write_file) / [`append_file`](./io#append_file)、または本モジュールの
+>    [`write_file`](./io#write_file) / [`append_file`](./io#append_file)、あるいは本モジュールの
 >    [`append_file`](#append_file)。
 >
-> ハンドルはハンドルテーブルエントリとして存在し、プロセス終了時にプロセスと共に回収されます。一度使用すると再参照できないため、多くのシナリオでは明示的な
-> `close` を記述できません（ただし、下記の単一呼び出し形式を参照してください）。
+> ハンドルはハンドルテーブルのエントリとして存在し、プロセス終了時にプロセスとともに回収されます。一度使用すると再参照できないため、ほとんどのシナリオでは明示的な
+> `close` を書くことができません（ただし、下記の単一呼び出し形式を参照）。
 
 `open` が返すのは **`Int`
 型のファイルディスクリプタ**です（エンジンが内部でハンドルテーブルを保持します）。したがってシグネチャ中の
@@ -47,7 +47,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_open.txt"
     n = os.write(os.open(p, "w"), "hello")
     assert(n == 5)
@@ -58,14 +58,14 @@ main = {
 
 `open` がサポートするモード：
 
-| モード | 意味                           |
-| ------ | ------------------------------ |
-| `r`    | 読み取り専用、ファイル必須     |
-| `w`    | 書き込み専用、作成または初期化 |
-| `a`    | 追記、作成または末尾に追記     |
-| `r+`   | 読み書き、ファイル必須         |
-| `w+`   | 読み書き、作成または初期化     |
-| `a+`   | 読み書き、作成または追記       |
+| モード | 意味                         |
+| ------ | ---------------------------- |
+| `r`    | 読み取り専用、ファイル必須   |
+| `w`    | 書き込み専用、作成または消去 |
+| `a`    | 追加、作成または末尾に追加   |
+| `r+`   | 読み書き、ファイル必須       |
+| `w+`   | 読み書き、作成または消去     |
+| `a+`   | 読み書き、作成または追加     |
 
 ## 関数一覧
 
@@ -110,22 +110,22 @@ open: (path: &String, mode: &String) -> File
 
 ファイルを開き、ファイルディスクリプタを返します。
 
-- `path` —— ファイルパス（読み取り専用借用）
-- `mode` —— オープンモード、上の表を参照
+- `path` —— ファイルパス（読み取り専用の借用）
+- `mode` —— オープンモード、上記の表を参照
 
 戻り値：内部ハンドルテーブルが割り当てる `Int`
-ディスクリプタ。**このハンドルは一度しか使用できません**——任意の下流呼び出しがこれをムーブします（[ファイルハンドルモデル](#ファイルハンドルモデル)
-を参照）。そのため通常は `open` を単一の呼び出しにインライン化します。
+ディスクリプタ。**このハンドルは一度しか使用できません**——後続の呼び出しはいずれもそれをムーブします（[ファイルハンドルモデル](#ファイルハンドルモデル)を参照）。したがって通常は
+`open` を単一の呼び出しにインライン化します。
 
-エラー：モードが無効、ファイルが存在しない、または権限がない場合、`E6007` をスローします。
+エラー：モードが無効、ファイルが存在しない、または権限がない場合に `E6007` をスローします。
 
-> ハンドルは一度しか使用できないため（#337）、この戻り値は通常、直接下流の呼び出しにインライン化されます。
+> ハンドルは一度しか使用できない（#337）ため、この戻り値は通常、下流の呼び出しに直接インライン化されます。
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_open_only.txt"
     f = os.open(p, "w")
     assert(os.exists(p))
@@ -146,15 +146,15 @@ close: (file: File) -> Void
 ファイルハンドルを閉じ、テーブルエントリを解放します。
 
 ハンドルは一度しか使用できないため、`close`
-は「開いた後、他に使用しない」シナリオでのみ意味があります。書き込まれた内容は [`write`](#write)
-が返る時点で既にディスクに反映されているため、通常は明示的なクローズは不要です。
+は「開いた後、他に何もしない」シナリオでのみ意味を持ちます。書き込まれた内容は [`write`](#write)
+の戻り時にすでにディスクに反映されているため、通常は明示的に閉じる必要はありません。
 
-エラー：ディスクリプタが無効な場合（未オープンまたは既にクローズ済み）、`E6007` をスローします。
+エラー：ディスクリプタが無効な場合（未オープンまたはクローズ済み）に `E6007` をスローします。
 
 ```yaoxiang
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_close.txt"
     f = os.open(p, "w")
     os.close(f)
@@ -175,18 +175,18 @@ read: (file: File, n: Int) -> String
 現在の読み書き位置から**最大** `n` バイトを読み取ります。
 
 - `file` —— ファイルディスクリプタ
-- `n` —— 読み取り希望のバイト数
+- `n` —— 読み取りを希望するバイト数
 
 戻り値：実際に読み取られた内容（`n`
-より短い可能性があり、ファイル末尾に到達した場合は空文字列）。不正な UTF-8 バイトは置換文字として返され、エラーにはなりません。エラー：ディスクリプタが無効または読み取りに失敗した場合、`E6007`
-をスローします。
+より短い場合があり、ファイル末尾に達したときは空文字列）。不正な UTF-8 バイトは置換文字として返され、エラーにはなりません。エラー：ディスクリプタが無効または読み取り失敗時に
+`E6007` をスローします。
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_read.txt"
     io.write_file(p, "abcdef")
 
@@ -208,16 +208,16 @@ write: (file: File, content: String) -> Int
 
 現在の読み書き位置に `content` のすべてを書き込みます。
 
-- `content` —— 値で渡される
+- `content` —— 値渡し
 
-戻り値：書き込まれた**バイト数**。エラー：ディスクリプタが無効または書き込みに失敗した場合、`E6007`
+戻り値：書き込まれた**バイト数**。エラー：ディスクリプタが無効または書き込み失敗時に `E6007`
 をスローします。
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_write.txt"
     n = os.write(os.open(p, "w"), "hello")
     assert(n == 5)
@@ -237,17 +237,17 @@ seek: (file: File, offset: Int) -> Bool
 
 読み書き位置を**絶対**オフセット `offset`（ファイル先頭からの相対位置）に移動します。
 
-- `offset` —— 目標バイトオフセット、非負であること
+- `offset` —— 目標バイトオフセット、非負である必要があります
 
-戻り値：成功時は `true`
-を返します。エラー：ディスクリプタが無効またはオフセットが不正な場合、`E6007` をスローします。
+戻り値：成功時は `true` を返します。エラー：ディスクリプタが無効またはオフセットが不正な場合に
+`E6007` をスローします。
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_seek.txt"
     io.write_file(p, "abcdef")
 
@@ -269,13 +269,13 @@ tell: (file: File) -> Int
 
 現在の読み書き位置のバイトオフセットを返します。
 
-エラー：ディスクリプタが無効な場合、`E6007` をスローします。
+エラー：ディスクリプタが無効な場合に `E6007` をスローします。
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_tell.txt"
     pos = os.tell(os.open(p, "w"))
     assert(pos == 0)
@@ -293,15 +293,15 @@ flush: (file: File) -> Void
 
 <!-- stdlib:sig:os.flush end -->
 
-バッファ内容をディスクにフラッシュします。
+バッファされた内容をディスクにフラッシュします。
 
-エラー：ディスクリプタが無効またはフラッシュに失敗した場合、`E6007` をスローします。
+エラー：ディスクリプタが無効またはフラッシュ失敗時に `E6007` をスローします。
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_flush.txt"
     os.flush(os.open(p, "w"))
     assert(os.exists(p))
@@ -321,17 +321,17 @@ mkdir: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.mkdir end -->
 
-**単一階層**のディレクトリを作成します（親ディレクトリは再帰的に作成しません）。
+**単一層**のディレクトリを作成します（親ディレクトリを再帰的に作成しません）。
 
 戻り値：成功時は `true`
-を返します。エラー：親ディレクトリが存在しない、またはディレクトリが既に存在する場合、`E6007`
+を返します。エラー：親ディレクトリが存在しない、またはディレクトリがすでに存在する場合に `E6007`
 をスローします。
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     d = "__yx_doc_mkdir"
     assert(os.mkdir(d))
     assert(os.is_dir(d))
@@ -351,14 +351,14 @@ rmdir: (path: &String) -> Bool
 
 **空の**ディレクトリを削除します。
 
-戻り値：成功時は `true` を返します。エラー：ディレクトリが存在しない、または空でない場合、`E6007`
+戻り値：成功時は `true` を返します。エラー：ディレクトリが存在しない、または空でない場合に `E6007`
 をスローします。
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     d = "__yx_doc_rmdir"
     os.mkdir(d)
     assert(os.rmdir(d))
@@ -378,19 +378,19 @@ read_dir: (path: &String) -> String
 
 ディレクトリ内のエントリ名を列挙します。
 
-戻り値：エントリ名が **`\n` で連結された**単一の文字列（`List`
-ではありません）。エラー：ディレクトリが存在しない、または権限がない場合、`E6007` をスローします。
+戻り値：エントリ名を **`\n` で連結**した単一の文字列（`List`
+ではありません）。エラー：ディレクトリが存在しない、または権限がない場合に `E6007` をスローします。
 
 ```yaoxiang
 use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     d = "__yx_doc_read_dir"
     os.mkdir(d)
     names = os.read_dir(d)
-    // 空ディレクトリは空文字列を返す
+    // 空のディレクトリは空文字列を返す
     assert(string.is_empty(names))
     os.rmdir(d)
 }
@@ -409,18 +409,18 @@ remove: (path: &String) -> Bool
 <!-- stdlib:sig:os.remove end -->
 
 ファイルを削除します。セマンティクスは `remove_file`
-と同等です（**ディレクトリは削除できません**。ディレクトリの削除は [`rmdir`](#rmdir)
+と同等です（**ディレクトリは削除できません**。ディレクトリの削除には [`rmdir`](#rmdir)
 を使用してください）。
 
-戻り値：成功時は `true`
-を返します。エラー：ファイルが存在しない、またはパスがディレクトリの場合、`E6007` をスローします。
+戻り値：成功時は `true` を返します。エラー：ファイルが存在しない、またはパスがディレクトリの場合に
+`E6007` をスローします。
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_remove.txt"
     io.write_file(p, "x")
     assert(os.remove(p))
@@ -438,14 +438,14 @@ exists: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.exists end -->
 
-パスが存在するかどうか（ファイルまたはディレクトリ）。**エラーは発生せず**、存在しない場合は `false`
-を返します。
+パスが存在するかどうか（ファイルでもディレクトリでも可）。**エラーは発生せず**、存在しない場合は
+`false` を返します。
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     assert(os.exists("."))
     assert(!os.exists("__yx_definitely_missing_path__"))
 }
@@ -461,14 +461,14 @@ is_file: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.is_file end -->
 
-パスが**通常のファイル**であるかどうか。ディレクトリは `false` を返し、存在しない場合も `false`
+パスが**通常のファイル**かどうか。ディレクトリは `false` を返し、存在しない場合も `false`
 を返します。
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     assert(!os.is_file("."))
 }
 ```
@@ -483,14 +483,13 @@ is_dir: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.is_dir end -->
 
-パスが**ディレクトリ**であるかどうか。ファイルは `false` を返し、存在しない場合も `false`
-を返します。
+パスが**ディレクトリ**かどうか。ファイルは `false` を返し、存在しない場合も `false` を返します。
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     assert(os.is_dir("."))
 }
 ```
@@ -505,17 +504,17 @@ copy: (src: &String, dst: &String) -> Bool
 
 <!-- stdlib:sig:os.copy end -->
 
-ファイルをコピーします。ターゲットが既に存在する場合は**上書き**します。
+ファイルをコピーします。ターゲットがすでに存在する場合は**上書き**します。
 
-戻り値：成功時は `true`
-を返します。エラー：ソースファイルが存在しない、または権限がない場合、`E6007` をスローします。
+戻り値：成功時は `true` を返します。エラー：ソースファイルが存在しない、または権限がない場合に
+`E6007` をスローします。
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     a = "__yx_doc_copy_a.txt"
     b = "__yx_doc_copy_b.txt"
     io.write_file(a, "data")
@@ -536,10 +535,10 @@ rename: (old: &String, new: &String) -> Bool
 
 <!-- stdlib:sig:os.rename end -->
 
-ファイル名を変更またはファイルを移動します。
+ファイルの名前変更または移動を行います。
 
 戻り値：成功時は `true`
-を返します。エラー：ソースファイルが存在しない、またはターゲットが既に存在する場合、`E6007`
+を返します。エラー：ソースファイルが存在しない、またはターゲットがすでに存在する場合に `E6007`
 をスローします。
 
 ```yaoxiang
@@ -547,7 +546,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     a = "__yx_doc_rename_a.txt"
     b = "__yx_doc_rename_b.txt"
     io.write_file(a, "data")
@@ -567,19 +566,19 @@ append_file: (path: &String, content: &String) -> Bool
 
 <!-- stdlib:sig:os.append_file end -->
 
-追記書き込み（ハンドルを開かない便利関数）。ファイルが存在しない場合は作成します。
+追加書き込み（ハンドルを開かない便利関数）。ファイルが存在しない場合は作成します。
 
-戻り値：成功時は `true` を返します。エラー：権限がない場合、`E6007` をスローします。
+戻り値：成功時は `true` を返します。エラー：権限がない場合に `E6007` をスローします。
 
 > これは [`std.io.append_file`](./io#append_file)
-> の同名同種インターフェースで、両方のモジュールで提供されており、動作は同一です。
+> の同名同種インターフェースで、両方のモジュールで提供されており、動作も同一です。
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_os_append.txt"
     io.write_file(p, "a")
     os.append_file(p, "b")
@@ -602,14 +601,14 @@ get_env: (name: &String) -> String
 
 環境変数を読み取ります。
 
-戻り値：変数の値。**変数が存在しない場合は空文字列を返します**（エラーは発生しません）。したがって「未設定」と「空文字列に設定」の区別はできません。
+戻り値：変数の値；**変数が存在しない場合は空文字列を返します**（エラーにはなりません）。そのため「未設定」と「空文字列に設定」を区別することはできません。
 
 ```yaoxiang
 use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     // PATH は主要プラットフォームで必ず存在する
     path = os.get_env("PATH")
     assert(string.len(path) > 0)
@@ -635,7 +634,7 @@ set_env: (name: &String, value: &String) -> Void
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     os.set_env("__YX_DOC_ENV", "hello")
     assert(os.get_env("__YX_DOC_ENV") == "hello")
 }
@@ -655,7 +654,7 @@ args: () -> String
 
 コマンドライン引数を返します。
 
-戻り値：すべての argv が **`\n` で連結された**単一の文字列（`List`
+戻り値：すべての argv を **`\n` で連結**した単一の文字列（`List`
 ではありません）。最初の項目はプログラム自身のパスです。
 
 ```yaoxiang
@@ -663,7 +662,7 @@ use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     argv = os.args()
     assert(string.len(argv) > 0)
 }
@@ -681,13 +680,13 @@ chdir: (path: &String) -> Bool
 
 現在の作業ディレクトリを切り替えます。
 
-戻り値：成功時は `true` を返します。エラー：ディレクトリが存在しない場合、`E6007` をスローします。
+戻り値：成功時は `true` を返します。エラー：ディレクトリが存在しない場合に `E6007` をスローします。
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     before = os.getcwd()
     assert(os.chdir(".."))
     assert(os.chdir(before))     // 戻る
@@ -707,14 +706,14 @@ getcwd: () -> String
 
 現在の作業ディレクトリの絶対パスを返します。
 
-エラー：取得できない場合、`E6007` をスローします。
+エラー：取得できない場合に `E6007` をスローします。
 
 ```yaoxiang
 use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     cwd = os.getcwd()
     assert(string.len(cwd) > 0)
 }

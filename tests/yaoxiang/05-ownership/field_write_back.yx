@@ -14,7 +14,7 @@ Point.shift: (self: &mut Point, dx: Int, dy: Int) -> Void = {
     self.y = self.y + dy
 }
 
-main = {
+main: () -> Void = {
     // #266 缺陷 1：自动借用 &mut 方法调用写回
     q = Point(3, 4)
     q.shift(1, 1)

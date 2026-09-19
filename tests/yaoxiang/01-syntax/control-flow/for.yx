@@ -5,7 +5,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     mut items = [10, 20, 30]
 
     // for 累加

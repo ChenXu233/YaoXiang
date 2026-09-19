@@ -1,11 +1,11 @@
 ---
 title: 'std.assert'
-description: 'アサーション'
+description: 'アサート'
 ---
 
 # std.assert
 
-アサーションモジュール。テストと例で最もよく使われるツールです。
+アサートモジュール。テストと例で最もよく使われるツール。
 
 ```yaoxiang
 use std.assert
@@ -15,7 +15,7 @@ use std.assert
 
 <!-- stdlib:table:assert start -->
 
-| 関数     | シグネチャ                           |
+| 関数     | 署名                                 |
 | -------- | ------------------------------------ |
 | `assert` | `(cond: Bool, ?msg: String) -> Void` |
 
@@ -33,38 +33,37 @@ assert: (cond: Bool, ?msg: String) -> Void
 
 <!-- stdlib:sig:assert.assert end -->
 
-`cond` が真であることをアサートします。
+`cond` が真であることをアサートする。
 
-- `cond` —— 判定対象のブール式
-- `msg` —— オプションのメッセージ。`?`
-  は省略可能を意味します。条件が成立しない場合、診断情報と一緒に出力されます
+- `cond` —— 判定対象の真偽式
+- `msg` —— オプションのメッセージ。`?` は省略可を示す。条件が成立しない場合、診断とともに表示される
 
-戻り値: 条件が成立した場合は `Void`
-を返し、実行は中断されません。エラー: 条件が偽の場合、`E6005`（アサーション失敗）をスローし、プログラムは非ゼロの終了コードで終了します。
+戻り値：条件が成立する場合は `Void` を返し、実行を中断しない。エラー：条件が偽の場合に
+`E6005`（アサート失敗）をスローし、プログラムは非ゼロコードで終了する。
 
 ```yaoxiang
 use std.assert
 
-main = {
+main: () -> Void = {
     assert(1 > 0)
     assert(1 > 0, "このリテラルアサーションは必ず成立する")
 }
 ```
 
-アサーションは**テストコーパスの主要な判定手段**です。`src/std/tests/*.yx` と `tests/yaoxiang/**`
-はどちらも `assert` の失敗によってプロセスがエラーを報告するという仕組みで動作します：
+アサートは **テストケースの主要な判定手段** である —— `src/std/tests/*.yx` と `tests/yaoxiang/**`
+はすべて、`assert` の失敗によってプロセスがエラーを報告する方式で動作する。
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     list.len([1, 2, 3]) == 3
     assert(list.len([1, 2, 3]) == 3, "len == 3")
 }
 ```
 
-## 関連項目
+## 関連
 
-- [テスト仕様](../dev/test-specification.md) —— コーパスの構成と判定の規約
-- [エラーコードリファレンス](../error-code/) —— `E6005` アサーション失敗
+- [テスト仕様](../dev/test-specification.md) —— テストケースの構成と判定の規約
+- [エラーコードリファレンス](../error-code/) —— `E6005` アサート失敗

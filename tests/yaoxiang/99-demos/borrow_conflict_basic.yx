@@ -15,7 +15,7 @@ Point.shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
     self.y = self.y + dy
 }
 
-main = {
+main: () -> Void = {
     p = Point(1.0, 2.0)
     p.read()          // 创建 &Point 令牌
     p.shift(1.0, 1.0) // 上一个 &Point 已释放，创建 &mut Point

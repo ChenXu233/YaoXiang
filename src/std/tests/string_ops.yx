@@ -8,7 +8,7 @@ use std.string
 use std.list
 use std.result
 
-main = {
+main: () -> Void = {
     s = "  Hello World  "
 
     // 只读操作可复用（&String 自动借用）

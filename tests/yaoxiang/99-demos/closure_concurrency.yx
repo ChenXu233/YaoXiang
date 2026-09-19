@@ -4,7 +4,7 @@
 
 use std.{assert, io}
 
-main = {
+main: () -> Void = {
     data = 100
 
     result = spawn {

@@ -22,7 +22,7 @@ Point.shift: (self: &mut Point, dx: Int, dy: Int) -> Void = {
     self.y = self.y + dy
 }
 
-main = {
+main: () -> Void = {
     // 1. &mut self 写回可见
     p = Point(1, 2)
     p.shift(10, 20)

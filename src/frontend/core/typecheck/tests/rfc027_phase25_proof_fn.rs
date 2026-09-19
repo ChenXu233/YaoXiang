@@ -458,7 +458,7 @@ fn test_e2e_proof_fn_compilation_succeeds() {
     // Arrange: IsPositive(5) 在编译期返回 true
     let source = r#"
         IsPositive: (x: Int) -> Type = { x > 0 }
-        main = {
+        main = () => {
             val: IsPositive(5) = 5
         }
     "#;
@@ -479,7 +479,7 @@ fn test_e2e_proof_fn_compilation_fails_on_false() {
     // Arrange: IsPositive(-1) 在编译期应返回 false
     let source = r#"
         IsPositive: (x: Int) -> Type = { x > 0 }
-        main = {
+        main = () => {
             val: IsPositive(-1) = -1
         }
     "#;
@@ -502,7 +502,7 @@ fn test_e2e_proof_fn_expression_form_succeeds() {
     // Arrange: 表达式形式 = x > 0（RFC-007 表达式简写）
     let source = r#"
         IsPositive: (x: Int) -> Type = x > 0
-        main = {
+        main = () => {
             val: IsPositive(5) = 5
         }
     "#;
@@ -523,7 +523,7 @@ fn test_e2e_proof_fn_expression_form_fails_on_false() {
     // Arrange: 表达式形式，IsPositive(-1) 应失败
     let source = r#"
         IsPositive: (x: Int) -> Type = x > 0
-        main = {
+        main = () => {
             val: IsPositive(-1) = -1
         }
     "#;

@@ -6,7 +6,7 @@ use std.assert
 
 f: (m: Int) -> (n: m) -> Int = (n) => n
 
-main = {
+main: () -> Void = {
     result = f(42)(5)
     assert.assert(result == 5, "f(42)(5) with lowercase m should return 5")
 }

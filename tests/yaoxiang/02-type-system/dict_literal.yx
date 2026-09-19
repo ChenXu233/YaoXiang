@@ -1,6 +1,6 @@
 // dict_literal: Dict 字面量 IR 支持
 use std.assert
-main = {
+main: () -> Void = {
     d = {"a": 1, "b": 2}
     assert.assert(true, "dict literal created successfully")
 }

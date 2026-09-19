@@ -79,6 +79,12 @@ impl StdModule for DictModule {
                 "(A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B)",
                 native_merge
             ),
+            export!(
+                "new",
+                "std.dict.new",
+                "(K: Type, V: Type)() -> Dict(K, V)",
+                native_new
+            ),
         ]
     }
 }
@@ -87,6 +93,20 @@ impl StdModule for DictModule {
 pub const DICT_MODULE: DictModule = DictModule;
 
 // Native function implementations
+
+/// Native implementation: new - create an empty dict
+///
+/// `{}` 现在是**空块**（值 `Void`），不再是空字典——空字典请用本函数：
+/// `dict.new()`. 键值类型由上下文推断（如 `d: Dict(String, Int) = dict.new()`）。
+fn native_new(
+    _args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let handle = ctx
+        .heap
+        .allocate(HeapValue::Dict(std::collections::HashMap::new()));
+    Ok(RuntimeValue::Dict(handle))
+}
 
 /// Native implementation: get - get value by key
 fn native_get(

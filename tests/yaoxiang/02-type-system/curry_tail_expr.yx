@@ -13,7 +13,7 @@ f: (a: Int) -> (b: Int) -> Int = {
 // 裸表达式值（解析器包成 Block[Expr]）
 g: (N: Int) -> (n: N) -> Int = n * 2
 
-main = {
+main: () -> Void = {
     r1 = f(10)(5)
     assert.assert(r1 == 15, "f(10)(5) should be 15")
 

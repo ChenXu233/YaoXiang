@@ -78,7 +78,7 @@ add = (a: Int, b: Int) => a + b                      # 省略签名
 # === 空参函数 ===
 main: () -> Void = () => { println("Hello") }          # 完整形式
 main: () -> Void = { println("Hello") }                # 省略 Lambda 头
-main = { println("Hello") }                            # 最简形式（推断为 () -> Void）
+main: () -> Void = { println("Hello") }                            # 最简形式（推断为 () -> Void）
 
 # === 泛型函数（使用 RFC-010 统一语法）===
 identity: (T: Type) -> ((x: T) -> T) = (x) => x         # 完整形式
@@ -219,7 +219,7 @@ compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) 
 
 # 标准函数：HM算法推断返回类型（参数类型需显式）
 add = (a: Int, b: Int) => a + b            # 推断为 (a: Int, b: Int) -> Int
-main = { println("Hello") }                # 推断为 () -> Void
+main: () -> Void = { println("Hello") }                # 推断为 () -> Void
 
 # 部分显式参数：HM算法推断剩余部分
 print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # 推断为 (Int, Int) -> Void
@@ -438,10 +438,10 @@ main: () -> Void = { println("Hello") }
 
 # === 简写：HM 推断 ===
 add = (a: Int, b: Int) => a + b              # 推断为 (a: Int, b: Int) -> Int
-main = { println("Hello") }                  # 推断为 () -> Void
+main: () -> Void = { println("Hello") }                  # 推断为 () -> Void
 
 # === 最简形式 ===
-main = {                                      # 等价于 main: () -> Void = { ... }
+main: () -> Void = {                                      # 等价于 main: () -> Void = { ... }
     println("Hello")
 }
 ```
@@ -462,7 +462,7 @@ main = {                                      # 等价于 main: () -> Void = { .
 
 > 以下问题已在设计中解决，记录在附录A。
 
-- ~~Q1: 是否应该保留 `main() = body` 这种极简写法？~~ → 已解决：保留为 `main = { ... }`
+- ~~Q1: 是否应该保留 `main() = body` 这种极简写法？~~ → 已解决：保留为 `main: () -> Void = { ... }`
 - ~~Q2: 函数名后的 `:` 是否保留？~~ → 已解决：可选保留；但有参函数仍需在签名或 lambda 头标注参数类型
 - ~~Q3: HM算法是否支持参数类型推断？~~ → 已解决：返回值/局部可推断；有参函数的参数类型需显式标注
 - ~~Q4: 是否引入 `fn` 关键字？~~ → 已解决：不引入，函数就是 lambda

@@ -28,7 +28,7 @@ fn two_layer_curry_returns_inner_value() {
         r#"
         f: (N: Int) -> (n: N) -> Int = (n) => n
 
-        main = {
+        main = () => {
             result = f(42)(5)
         }
         "#,
@@ -43,7 +43,7 @@ fn three_layer_curry_sums_all_args() {
         r#"
         add3: (a: Int) -> (b: Int) -> (c: Int) -> Int = (a, b, c) => a + b + c
 
-        main = {
+        main = () => {
             result = add3(1)(2)(3)
         }
         "#,
@@ -58,7 +58,7 @@ fn curry_with_capture_uses_outer_param() {
         r#"
         f: (N: Int) -> (n: N) -> Int = (n) => n + N
 
-        main = {
+        main = () => {
             result = f(10)(5)
         }
         "#,

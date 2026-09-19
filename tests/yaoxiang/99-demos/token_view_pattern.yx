@@ -12,7 +12,7 @@ BufferView: Type = {
     view: &Buffer
 }
 
-main = {
+main: () -> Void = {
     buf = Buffer(42)
     ref_buf = &buf              // 显式借用 buf，不转移所有权
     v = BufferView(buf, ref_buf)  // view 令牌从 buf 派生

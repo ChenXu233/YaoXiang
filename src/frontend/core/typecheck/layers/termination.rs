@@ -349,8 +349,13 @@ impl TerminationChecker {
         if is_never {
             return;
         }
-        // 1. 从条件中提取边界信息
-        let bounds = self.extract_bounds_from_condition(condition);
+        // 1. 从条件中提取边界信息（仅保留循环不变量——上界在循环体内被赋值时
+        //    度量合成不成立：`while i < n { n = n - 1; i = i + 1 }` 度量恒为 0）
+        let bounds: Vec<(String, (BoundOp, BoundExpr))> = self
+            .extract_bounds_from_condition(condition)
+            .into_iter()
+            .filter(|(_, (_, b))| Self::bound_is_loop_invariant(b, condition, body))
+            .collect();
 
         // 2. 从循环体中收集赋值操作
         let assignments = self.collect_assignments(body);
@@ -407,6 +412,7 @@ impl TerminationChecker {
     /// - `i > 0` → (i, Gt, 0)
     /// - `i >= 0` → (i, Gte, 0)
     /// - `i != 0` → (i, Neq, 0) — 不提供严格递减保证
+    /// - `i < s.n` → (i, Lt, Var("s.n")) — 字段访问作符号上界（见 expr_to_bound）
     fn extract_bounds_from_condition(
         &self,
         condition: &Expr,
@@ -449,6 +455,10 @@ impl TerminationChecker {
     }
 
     /// 将表达式转换为边界表示
+    ///
+    /// `FieldAccess`（如 `s.n`）归为**符号变量**（`BoundExpr::Var`）：度量合成只需
+    /// 上界在迭代间保持同一，而 SMT 侧同一符号名保证这一点。健全性由
+    /// `bound_is_loop_invariant` 把守——若该字段在循环体内被赋值，上界不作数。
     fn expr_to_bound(
         &self,
         expr: &Expr,
@@ -460,7 +470,114 @@ impl TerminationChecker {
                 _ => None,
             },
             Expr::Var(name, _) => Some(BoundExpr::Var(name.clone())),
+            // `s.n` / `a.b.c`：拼成稳定符号名，供 SMT 作同一变量使用
+            Expr::FieldAccess { .. } => Self::render_field_path(expr).map(BoundExpr::Var),
             _ => None,
+        }
+    }
+
+    /// 把字段访问链渲染成稳定符号名（`s.n` / `a.b.c`）。
+    /// 非纯字段链（含索引/调用等）返回 None。
+    fn render_field_path(expr: &Expr) -> Option<String> {
+        match expr {
+            Expr::Var(name, _) => Some(name.clone()),
+            Expr::FieldAccess {
+                expr: inner, field, ..
+            } => Self::render_field_path(inner).map(|p| format!("{p}.{field}")),
+            _ => None,
+        }
+    }
+
+    /// 上界是否为循环不变量：该边界引用的名字（或其前缀根）不得在循环体内被赋值。
+    ///
+    /// 没有这一步，`while i < n { n = n - 1; i = i + 1 }` 会被误判为终止
+    /// （上界 n 自身在递减，度量 `n - i` 恒为 0，循环不终止）。
+    fn bound_is_loop_invariant(
+        bound: &BoundExpr,
+        condition: &Expr,
+        body: &ast::Block,
+    ) -> bool {
+        let names: Vec<&str> = match bound {
+            // 常量天然不变
+            BoundExpr::Const(_) => return true,
+            BoundExpr::Var(n) => vec![n.as_str()],
+        };
+        // 边界名本身与循环变量同名时（`i < i`）不作数，交由后续度量合成失败处理
+        let _ = condition;
+        let mut assigned: Vec<String> = Vec::new();
+        Self::collect_assigned_names(body, &mut assigned);
+        !names.iter().any(|n| {
+            // 精确匹配（`s.n`）或前缀根匹配（赋值 `s` 就污染 `s.n`）
+            let root = n.split('.').next().unwrap_or(n);
+            assigned
+                .iter()
+                .any(|a| a == n || a == root || n.starts_with(&format!("{a}.")))
+        })
+    }
+
+    /// 收集循环体内被赋值的所有目标名（变量名或字段路径）。
+    fn collect_assigned_names(
+        block: &ast::Block,
+        out: &mut Vec<String>,
+    ) {
+        for stmt in &block.stmts {
+            Self::collect_assigned_names_from_stmt(stmt, out);
+        }
+    }
+
+    fn collect_assigned_names_from_stmt(
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+        out: &mut Vec<String>,
+    ) {
+        use crate::frontend::core::parser::ast::StmtKind;
+        match &stmt.kind {
+            StmtKind::Assign { target, .. } => {
+                if let Some(path) = Self::render_field_path(target) {
+                    out.push(path);
+                }
+            }
+            StmtKind::Expr(e) => Self::collect_assigned_names_from_expr(e, out),
+            StmtKind::If { then_branch, .. } => {
+                Self::collect_assigned_names(then_branch, out);
+            }
+            StmtKind::For { body, .. } => {
+                Self::collect_assigned_names(body, out);
+            }
+            _ => {}
+        }
+    }
+
+    /// 表达式内的赋值路径收集（`i = i + 1` / `if` / `while` / `for` 体内的）。
+    /// 循环语句在 AST 里是 `Expr` 而非 `StmtKind`。
+    fn collect_assigned_names_from_expr(
+        expr: &Expr,
+        out: &mut Vec<String>,
+    ) {
+        match expr {
+            Expr::BinOp {
+                op: ast::BinOp::Assign,
+                left,
+                ..
+            } => {
+                if let Some(path) = Self::render_field_path(left) {
+                    out.push(path);
+                }
+            }
+            Expr::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                Self::collect_assigned_names(then_branch, out);
+                if let Some(e) = else_branch {
+                    Self::collect_assigned_names(e, out);
+                }
+            }
+            Expr::While { body, .. } | Expr::For { body, .. } => {
+                Self::collect_assigned_names(body, out);
+            }
+            Expr::Block(b) => Self::collect_assigned_names(b, out),
+            _ => {}
         }
     }
 

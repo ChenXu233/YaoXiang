@@ -65,7 +65,7 @@ fn run_yx(
 fn test_e2e_run_valid_program_exits_zero() {
     // Arrange
     let tmp = TempDir::new().unwrap();
-    let src = write_yx(tmp.path(), "ok.yx", "main = { print(42) }");
+    let src = write_yx(tmp.path(), "ok.yx", "main = () => { print(42) }");
 
     // Act
     let (code, stdout, _stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
@@ -114,7 +114,7 @@ fn test_e2e_run_nonexistent_file_exits_nonzero() {
 fn test_e2e_run_42_file() {
     // Arrange
     let tmp = TempDir::new().unwrap();
-    let src = write_yx(tmp.path(), "prog.yx", "main = { print(42) }");
+    let src = write_yx(tmp.path(), "prog.yx", "main = () => { print(42) }");
     let out = tmp.path().join("prog.42");
 
     // 先 build
@@ -139,7 +139,7 @@ fn test_e2e_run_42_file() {
 fn test_e2e_run_bytecode_by_content_not_extension() {
     // Arrange
     let tmp = TempDir::new().unwrap();
-    let src = write_yx(tmp.path(), "prog.yx", "main = { print(1) }");
+    let src = write_yx(tmp.path(), "prog.yx", "main = () => { print(1) }");
     let out_42 = tmp.path().join("prog.42");
     let out_bin = tmp.path().join("prog.bin");
 
@@ -198,7 +198,7 @@ fn test_e2e_run_non_42_binary_file_exits_nonzero() {
 fn test_e2e_build_valid_source_produces_bytecode_file() {
     // Arrange
     let tmp = TempDir::new().unwrap();
-    let src = write_yx(tmp.path(), "prog.yx", "main = { print(1) }");
+    let src = write_yx(tmp.path(), "prog.yx", "main = () => { print(1) }");
     let out = tmp.path().join("prog.42");
 
     // Act
@@ -244,7 +244,7 @@ fn test_e2e_build_compile_error_exits_nonzero() {
 fn test_e2e_check_valid_file_exits_zero() {
     // Arrange
     let tmp = TempDir::new().unwrap();
-    let src = write_yx(tmp.path(), "ok.yx", "main = { x = 1 }");
+    let src = write_yx(tmp.path(), "ok.yx", "main = () => { x = 1 }");
 
     // Act
     let (code, _stdout, _stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
@@ -293,7 +293,7 @@ fn test_e2e_check_unused_private_fn_warns_but_exits_zero() {
     let src = write_yx(
         tmp.path(),
         "dead_fn.yx",
-        "dead_fn = (x: Int) => x\nmain = { x = 1 }",
+        "dead_fn = (x: Int) => x\nmain = () => { x = 1 }",
     );
 
     // Act
@@ -311,7 +311,11 @@ fn test_e2e_check_unused_private_fn_warns_but_exits_zero() {
 fn test_e2e_check_unused_import_warns_but_exits_zero() {
     // Arrange: 整模块导入且未被引用 → W1003
     let tmp = TempDir::new().unwrap();
-    let src = write_yx(tmp.path(), "dead_import.yx", "use std.io\nmain = { x = 1 }");
+    let src = write_yx(
+        tmp.path(),
+        "dead_import.yx",
+        "use std.io\nmain = () => { x = 1 }",
+    );
 
     // Act
     let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
@@ -331,7 +335,7 @@ fn test_e2e_check_deny_warnings_exits_one() {
     let src = write_yx(
         tmp.path(),
         "dead_fn.yx",
-        "dead_fn = (x: Int) => x\nmain = { x = 1 }",
+        "dead_fn = (x: Int) => x\nmain = () => { x = 1 }",
     );
 
     // Act
@@ -348,7 +352,7 @@ fn test_e2e_check_deny_warnings_exits_one() {
 fn test_e2e_check_deny_warnings_clean_file_exits_zero() {
     // Arrange: 无警告文件在 --deny-warnings 下仍应通过
     let tmp = TempDir::new().unwrap();
-    let src = write_yx(tmp.path(), "clean.yx", "main = { x = 1 }");
+    let src = write_yx(tmp.path(), "clean.yx", "main = () => { x = 1 }");
 
     // Act
     let (code, _stdout, _stderr) = run_yx(
@@ -457,7 +461,7 @@ fn test_e2e_check_bin_role_reports_unused_pub_fn() {
     let src = write_yx(
         tmp.path(),
         "main.yx",
-        "pub dead_api = (x: Int) => x\nmain = { x = 1 }",
+        "pub dead_api = (x: Int) => x\nmain = () => { x = 1 }",
     );
 
     // Act
@@ -476,7 +480,11 @@ fn test_e2e_check_lib_file_unused_pub_exempt() {
     // Arrange: [lib] 声明的库文件是对外接口——未使用 pub 豁免（定案 B 语义）
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "[lib]\npath = \"lib.yx\"\n");
-    let _main = write_yx(tmp.path(), "main.yx", "use lib\nmain = { lib.lib_fn(1) }");
+    let _main = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use lib\nmain = () => { lib.lib_fn(1) }",
+    );
     let lib = write_yx(
         tmp.path(),
         "lib.yx",
@@ -499,11 +507,15 @@ fn test_e2e_check_tests_dir_exempt_from_dead_code() {
     // Arrange: tests/ 目录文件是 Test 角色——不参与死代码判定
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "");
-    let _main = write_yx(tmp.path(), "main.yx", "main = { x = 1 }");
+    let _main = write_yx(tmp.path(), "main.yx", "main = () => { x = 1 }");
     let test_file = tmp.path().join("tests");
     std::fs::create_dir(&test_file).unwrap();
     let test_src = test_file.join("util_test.yx");
-    std::fs::write(&test_src, "pub helper = (x: Int) => x\nmain = { x = 1 }").unwrap();
+    std::fs::write(
+        &test_src,
+        "pub helper = (x: Int) => x\nmain = () => { x = 1 }",
+    )
+    .unwrap();
 
     // Act: check 目录——tests/ 下的文件作为入口被检查
     let (code, _stdout, stderr) = run_yx(&["check", tmp.path().to_str().unwrap()], tmp.path());
@@ -527,7 +539,11 @@ fn test_e2e_check_vendor_import_surface_allows_exported() {
     write_manifest(&dep, "dep", "[exports]\n\".\" = \"src/dep.yx\"\n");
     std::fs::write(dep.join("src/dep.yx"), "pub api = (x: Int) => x").unwrap();
     std::fs::write(dep.join("src/hidden.yx"), "pub secret = (x: Int) => x").unwrap();
-    let src = write_yx(tmp.path(), "main.yx", "use dep\nmain = { dep.api(1) }");
+    let src = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use dep\nmain = () => { dep.api(1) }",
+    );
 
     // Act
     let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
@@ -546,7 +562,11 @@ fn test_e2e_check_vendor_import_surface_blocks_hidden() {
     write_manifest(&dep, "dep", "[exports]\n\".\" = \"src/dep.yx\"\n");
     std::fs::write(dep.join("src/dep.yx"), "pub api = (x: Int) => x").unwrap();
     std::fs::write(dep.join("src/hidden.yx"), "pub secret = (x: Int) => x").unwrap();
-    let src = write_yx(tmp.path(), "main.yx", "use dep.hidden\nmain = { x = 1 }");
+    let src = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use dep.hidden\nmain = () => { x = 1 }",
+    );
 
     // Act
     let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
@@ -567,7 +587,7 @@ fn test_e2e_check_internal_unused_pub_reports() {
     // （Phase 2 收紧：包内 use 图不可达即报）
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "");
-    let _main = write_yx(tmp.path(), "main.yx", "main = { x = 1 }");
+    let _main = write_yx(tmp.path(), "main.yx", "main = () => { x = 1 }");
     let internal = write_yx(
         tmp.path(),
         "internal.yx",
@@ -594,7 +614,7 @@ fn test_e2e_check_internal_pub_used_elsewhere_alive() {
     let _main = write_yx(
         tmp.path(),
         "main.yx",
-        "use internal.{util}\nmain = { util(1) }",
+        "use internal.{util}\nmain = () => { util(1) }",
     );
     let internal = write_yx(tmp.path(), "internal.yx", "pub util = (x: Int) => x");
 
@@ -619,11 +639,11 @@ fn test_e2e_check_custom_test_patterns() {
         "app",
         "[tool.test]\npatterns = [\"checks/**/*.yx\"]\n",
     );
-    let _main = write_yx(tmp.path(), "main.yx", "main = { x = 1 }");
+    let _main = write_yx(tmp.path(), "main.yx", "main = () => { x = 1 }");
     let checks = tmp.path().join("checks");
     std::fs::create_dir(&checks).unwrap();
     let guard = checks.join("guard.yx");
-    std::fs::write(&guard, "pub ensure = (x: Int) => x\nmain = { x = 1 }").unwrap();
+    std::fs::write(&guard, "pub ensure = (x: Int) => x\nmain = () => { x = 1 }").unwrap();
 
     // Act
     let (code, _stdout, stderr) = run_yx(&["check", guard.to_str().unwrap()], tmp.path());
@@ -646,7 +666,7 @@ fn test_e2e_dump_annotates_instructions_with_source_line() {
     let src = write_yx(
         tmp.path(),
         "loc.yx",
-        "use std.io\n\nmain = {\n    io.println(1)\n}\n",
+        "use std.io\n\nmain = () => {\n    io.println(1)\n}\n",
     );
 
     // Act
@@ -671,7 +691,7 @@ fn test_e2e_dump_bytecode_file_carries_source_path() {
     let src = write_yx(
         tmp.path(),
         "loc.yx",
-        "use std.io\n\nmain = {\n    io.println(1)\n}\n",
+        "use std.io\n\nmain = () => {\n    io.println(1)\n}\n",
     );
     let out = tmp.path().join("loc.42");
 
@@ -791,7 +811,7 @@ fn test_e2e_dump_covers_statement_level_instructions() {
     let src = write_yx(
         tmp.path(),
         "stmt.yx",
-        "use std.io\n\nmain = {\n    a = 1\n    b = a + 2\n    io.println(b)\n}\n",
+        "use std.io\n\nmain = () => {\n    a = 1\n    b = a + 2\n    io.println(b)\n}\n",
     );
 
     // Act
@@ -817,7 +837,7 @@ fn test_e2e_dump_lists_local_variable_names() {
     let src = write_yx(
         tmp.path(),
         "names.yx",
-        "main = {\n    alpha = 1\n    beta = alpha + 2\n}\n",
+        "main = () => {\n    alpha = 1\n    beta = alpha + 2\n}\n",
     );
 
     // Act
@@ -848,7 +868,7 @@ fn test_e2e_dump_local_names_survive_bytecode_roundtrip() {
     let src = write_yx(
         tmp.path(),
         "roundtrip.yx",
-        "main = {\n    gamma = 7\n    gamma\n}\n",
+        "main = () => {\n    gamma = 7\n    gamma\n}\n",
     );
     let out = tmp.path().join("roundtrip.42");
 
@@ -883,7 +903,7 @@ fn test_e2e_runtime_bounds_error_names_the_variable() {
     let src = write_yx(
         tmp.path(),
         "oob.yx",
-        "use std.io\n\nmain = {\n    a = [1, 2, 3]\n    idx = 10\n    io.println(a[idx])\n}\n\nmain()\n",
+        "use std.io\n\nmain = () => {\n    a = [1, 2, 3]\n    idx = 10\n    io.println(a[idx])\n}\n\nmain()\n",
     );
 
     // Act
@@ -912,7 +932,7 @@ fn test_e2e_runtime_bounds_error_omits_clause_for_literals() {
     let src = write_yx(
         tmp.path(),
         "lit.yx",
-        "use std.io\n\nmain = {\n    a = [1, 2, 3]\n    io.println(a[10])\n}\n\nmain()\n",
+        "use std.io\n\nmain = () => {\n    a = [1, 2, 3]\n    io.println(a[10])\n}\n\nmain()\n",
     );
 
     // Act

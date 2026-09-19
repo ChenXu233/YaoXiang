@@ -1,44 +1,44 @@
 ---
 title: 'std.list'
-description: 'List add/remove, slicing, higher-order functions, and iterator protocol'
+description: 'List addition/deletion, slicing, higher-order functions and iterator protocol'
 ---
 
 # std.list
 
-List operations module. **Pay special attention to move semantics**: some functions only read-borrow
-the source list, others consume (move) it, and two more, although marked as borrow, will modify the
-list in place.
+List operation module. **Pay special attention to move semantics**: some functions only read-borrow
+the source list, others consume (move) the source list, and there are two that are marked as borrow
+but modify the list in place.
 
 ```yaoxiang
 use std.list
 ```
 
-## Semantic Classification
+## Semantic Categories
 
-Parameters with `&` in the signature are read-only borrows; after the call the source value is still
-usable. Parameters without `&` are passed by value; after the call the source value has been
-**moved**, and using it again raises `E2014`.
+Parameters with `&` in the signature are read-only borrows; the source value remains usable after
+the call. Parameters without `&` are passed by value, and the source value has been **moved** after
+the call — reusing it will report `E2014`.
 
-| Category                         | Function                                                                                                                | Behavior                                          |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **Consumes source list**         | `push` `append` `prepend` `set`                                                                                         | Source list is moved and cannot be used afterward |
-| Read-only borrow                 | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` `iter` | Source list can be reused repeatedly              |
-| Borrow but **modifies in place** | `pop` `remove_at`                                                                                                       | Source list contents are changed                  |
-| Consumes iterator                | `next` `has_next`                                                                                                       | Iterator tuple is moved                           |
+| Category                       | Functions                                                                                                               | Behavior                                       |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **Consume source list**        | `push` `append` `prepend` `set`                                                                                         | Source list is moved, cannot be used afterward |
+| Read-only borrow               | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` `iter` | Source list can be used repeatedly             |
+| Borrow but **modify in place** | `pop` `remove_at`                                                                                                       | Source list contents are changed               |
+| Consume iterator               | `next` `has_next`                                                                                                       | Iterator tuple is moved                        |
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3]
 
-    // Read-only borrow: nums can be reused
+    // Read-only borrow: nums can be used repeatedly
     assert(list.len(nums) == 3)
     assert(list.len(nums) == 3)
     assert(list.contains(nums, 2))
 
-    // Consumption: base cannot be used after this
+    // Consume: base cannot be used after this
     base = [1, 2]
     extended = list.push(base, 3)
     assert(list.len(extended) == 3)
@@ -86,14 +86,14 @@ push: (A: Type)(list: List(A), item: A) -> List(A)
 
 <!-- stdlib:sig:list.push end -->
 
-Returns a **new list** with `item` appended to the end of `list`. `list` is passed by value, so it
-is **moved** after the call and cannot be used again.
+Returns a **new list** with `item` appended to the end of `list`. `list` is passed by value and is
+**moved** after the call — it cannot be used again.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     base = [1, 2]
     extended = list.push(base, 3)
     assert(list.len(extended) == 3)
@@ -110,13 +110,13 @@ append: (A: Type)(list: List(A), item: A) -> List(A)
 
 <!-- stdlib:sig:list.append end -->
 
-Alias for `push`; behavior is identical.
+Alias of `push`; behaves identically.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     extended = list.append([1, 2], 3)
     assert(list.len(extended) == 3)
 }
@@ -132,14 +132,14 @@ prepend: (A: Type)(list: List(A), item: A) -> List(A)
 
 <!-- stdlib:sig:list.prepend end -->
 
-Returns a new list with `item` inserted at the head of `list`. `list` is passed by value, so it is
+Returns a new list with `item` inserted at the head of `list`. `list` is passed by value and is
 **moved** after the call.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     l = list.prepend([2, 3], 1)
     assert(list.first(l) == 1)
 }
@@ -156,7 +156,7 @@ pop: (A: Type)(list: &List(A)) -> Any
 <!-- stdlib:sig:list.pop end -->
 
 Removes and returns the last element. **Modifies `list` in place** — this is an exception where the
-signature carries `&` but the source value is still changed.
+signature has `&` but modifies the source value.
 
 Returns: the removed element; returns `Void` when the list is empty, and the list remains empty.
 
@@ -164,7 +164,7 @@ Returns: the removed element; returns `Void` when the list is empty, and the lis
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     mut l = [1, 2, 3]
     gone = list.pop(l)
     assert(list.len(l) == 2)         // shortened in place
@@ -188,16 +188,16 @@ remove_at: (A: Type)(list: &List(A), index: Int) -> Any
 
 Removes and returns the element at index `index`. **Modifies `list` in place**.
 
-- `index` — character/element index; defaults to `0`
+- `index` — character/element index; default `0`
 
-Returns: the removed element. Error: raises `E6003` (index out of bounds) when the index is negative
-or ≥ length, and the list is left unchanged.
+Returns: the removed element. Errors: when index is negative or ≥ length, throws `E6003` (index out
+of bounds), list unchanged.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     mut l = [10, 20, 30]
     x = list.remove_at(l, 1)
     assert(x == 20)
@@ -215,20 +215,20 @@ set: (A: Type)(list: List(A), index: Int, value: A) -> List(A)
 
 <!-- stdlib:sig:list.set end -->
 
-Returns a new list with index `index` rewritten to `value`. `list` is passed by value, so it is
-**moved** after the call.
+Returns a new list with the value at index `index` overwritten to `value`. `list` is passed by value
+and is **moved** after the call.
 
-- `index` — index; defaults to `0`
-- `value` — new value; defaults to `Void`
+- `index` — index; default `0`
+- `value` — new value; default `Void`
 
-Error: raises `E6003` when the index is negative or ≥ length (out-of-bounds writes are no longer
+Errors: when index is negative or ≥ length, throws `E6003` (out-of-bounds write is no longer
 silently discarded).
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     l = list.set([1, 2, 3], 1, 99)
     assert(list.get(l, 1) == 99)
 }
@@ -244,18 +244,18 @@ get: (A: Type)(list: &List(A), index: Int) -> Any
 
 <!-- stdlib:sig:list.get end -->
 
-Reads the element at index `index` (read-only borrow; `list` can be reused).
+Reads the element at index `index` (read-only borrow; `list` is reusable).
 
-- `index` — index; defaults to `0`
+- `index` — index; default `0`
 
-Returns: the element value; **returns `Void` on out-of-bounds** (no error raised). Error: raises
-`E6007` when the index is negative.
+Returns: the element value; **out-of-bounds returns `Void`** (no error thrown). Errors: when index
+is negative, throws `E6007`.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3, 4]
     assert(list.get(nums, 1) == 2)
 }
@@ -277,7 +277,7 @@ Returns the first element; returns `Void` for an empty list.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.first([1, 2, 3]) == 1)
 }
 ```
@@ -298,7 +298,7 @@ Returns the last element; returns `Void` for an empty list.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.last([1, 2, 3]) == 3)
 }
 ```
@@ -313,19 +313,19 @@ slice: (A: Type)(list: &List(A), start: Int, end: Int) -> List(A)
 
 <!-- stdlib:sig:list.slice end -->
 
-Takes the sub-list in the `[start, end)` range.
+Gets the sublist of the range `[start, end)`.
 
-- `start` — starting index; defaults to `0`
-- `end` — ending index (exclusive); defaults to the end of the list
+- `start` — starting index; default `0`
+- `end` — ending index (exclusive); default is the end of the list
 
-Returns: a new list. Boundaries are **clamped** to the valid range; no error is raised. Error:
-raises `E6007` when `start` or `end` is negative.
+Returns: a new list. Boundaries are **clamped** to the valid range, no error is reported. Errors:
+when `start` or `end` is negative, throws `E6007`.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     sub = list.slice([1, 2, 3, 4], 1, 3)
     assert(list.len(sub) == 2)
     assert(list.first(sub) == 2)
@@ -342,13 +342,13 @@ reverse: (A: Type)(list: &List(A)) -> List(A)
 
 <!-- stdlib:sig:list.reverse end -->
 
-Returns a new list with the element order reversed; the source list is unchanged.
+Returns a new list with reversed element order; the source list is unchanged.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     rev = list.reverse([1, 2, 3])
     assert(list.first(rev) == 3)
 }
@@ -366,13 +366,13 @@ concat: (A: Type)(a: &List(A), b: &List(A)) -> List(A)
 
 Concatenates two lists and returns a new list. Both source lists remain unchanged.
 
-Error: raises `E6007` when the second argument is not a list.
+Errors: when the second argument is not a list, throws `E6007`.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     joined = list.concat([1, 2], [3, 4])
     assert(list.len(joined) == 4)
 }
@@ -388,15 +388,15 @@ len: (A: Type)(list: &List(A)) -> Int
 
 <!-- stdlib:sig:list.len end -->
 
-Number of elements. Read-only borrow; `list` can be reused repeatedly.
+Number of elements. Read-only borrow; `list` can be used repeatedly.
 
-Error: raises `E6007` when the argument is not a list.
+Errors: when the argument is not a list, throws `E6007`.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3]
     assert(list.len(nums) == 3)
     assert(list.len(nums) == 3)      // reusable
@@ -415,13 +415,13 @@ is_empty: (A: Type)(list: &List(A)) -> Bool
 
 Whether the list is empty.
 
-Error: raises `E6007` when the argument is not a list.
+Errors: when the argument is not a list, throws `E6007`.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.is_empty([]))
     assert(!list.is_empty([1]))
 }
@@ -439,13 +439,13 @@ contains: (A: Type)(list: &List(A), item: Any) -> Bool
 
 Whether `item` is in the list (compared by value equality).
 
-Returns: `true` if present; `false` if the argument is not a list.
+Returns: `true` if present; returns `false` when the argument is not a list.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3, 4]
     assert(list.contains(nums, 3))
     assert(!list.contains(nums, 99))
@@ -462,15 +462,15 @@ find_index: (A: Type)(list: &List(A), item: Any) -> Int
 
 <!-- stdlib:sig:list.find_index end -->
 
-The index of the first occurrence of `item`.
+Index of the first occurrence of `item`.
 
-Returns: the index if found; `-1` if not found.
+Returns: the index if found; returns `-1` if not found.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.find_index([1, 2, 3, 4], 3) == 2)
     assert(list.find_index([1, 2], 99) == -1)
 }
@@ -486,16 +486,16 @@ map: (T: Type)(list: &List(T), fn: (item: T) -> T) -> List(T)
 
 <!-- stdlib:sig:list.map end -->
 
-Calls `fn` on each element and returns a new list of the results. Passing the function value uses a
+Calls `fn` on each element, returns a new list of the results. The function value is passed in a
 **curried** form: `list.map(nums, x => x * 2)`. The source list is unchanged.
 
-Error: raises `E6007` when the second argument is not a function.
+Errors: when the second argument is not a function, throws `E6007`.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     doubled = list.map([1, 2, 3], x => x * 2)
     assert(list.get(doubled, 0) == 2)
 }
@@ -513,13 +513,13 @@ filter: (T: Type)(list: &List(T), fn: (item: T) -> Bool) -> List(T)
 
 Keeps the elements for which `fn` is true. The source list is unchanged.
 
-Error: raises `E6007` when the second argument is not a function.
+Errors: when the second argument is not a function, throws `E6007`.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     evens = list.filter([1, 2, 3, 4], x => x % 2 == 0)
     assert(list.len(evens) == 2)
 }
@@ -535,20 +535,21 @@ reduce: (T: Type)(list: &List(T), fn: (acc: Any, item: T) -> Any, init: Any) -> 
 
 <!-- stdlib:sig:list.reduce end -->
 
-Folds from left to right: starting with `init` as the initial value, calls `fn(acc, item)` in turn.
+Folds from left to right: starts with `init` as the initial value, and calls `fn(acc, item)` in
+order.
 
-- `fn` — reduction function `(accumulator, item) -> new accumulator`
+- `fn` — reduce function `(accumulator, element) -> new accumulator`
 - `init` — initial accumulator value
 
-Returns: the final accumulator. Returns `init` when the list is empty.
+Returns: the final accumulator value. Returns `init` when the list is empty.
 
-Error: raises `E6007` when the second argument is not a function.
+Errors: when the second argument is not a function, throws `E6007`.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     total = list.reduce([1, 2, 3, 4], (acc, x) => acc + x, 0)
     assert(total == 10)
 }
@@ -564,17 +565,17 @@ iter: (A: Type)(list: &List(A)) -> Tuple
 
 <!-- stdlib:sig:list.iter end -->
 
-Creates an iterator. An iterator is a `(list, index)` tuple state carrier; once created, it is
-**consumed sequentially** in `next`. The source list is a read-only borrow, and remains usable
-during iteration.
+Creates an iterator. The iterator is a `(list, index)` tuple state carrier; after creation it is
+**consumed sequentially** in `next`. The source list is a read-only borrow and remains usable during
+iteration.
 
-Returns: an iterator tuple, to be passed to `next` / `has_next`.
+Returns: an iterator tuple, to be used with `next` / `has_next`.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([1, 2, 3])
     assert(list.has_next(it))
 }
@@ -590,19 +591,19 @@ next: (iterator: Tuple) -> Any
 
 <!-- stdlib:sig:list.next end -->
 
-Takes the current element and advances the internal index by one.
+Takes out the current element and advances the internal index by one.
 
-Returns: the current element; returns `Void` when the iteration ends.
+Returns: the current element; returns `Void` when iteration ends.
 
 > Both `next` and `has_next` **move** the iterator (the signature has no `&`), so each access
-> requires creating a new iterator, or just iterating directly with `for ... in`. This differs from
-> the borrow form of [`std.range.next`](./range#next).
+> requires recreating the iterator, or use `for ... in` directly to traverse. This differs from the
+> borrow form of [`std.range.next`](./range#next).
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([7, 8])
     assert(list.next(it) == 7)
 }
@@ -618,26 +619,26 @@ has_next: (iterator: Tuple) -> Bool
 
 <!-- stdlib:sig:list.has_next end -->
 
-Whether there are still unconsumed elements.
+Whether there are unconsumed elements remaining.
 
 ```yaoxiang
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([1])
     assert(list.has_next(it))
 }
 ```
 
-### for ... in Traversal
+### `for ... in` Traversal
 
 Lists can be traversed directly with `for ... in`, without manually calling `next`:
 
 ```yaoxiang
 use std.assert
 
-main = {
+main: () -> Void = {
     mut sum = 0
     for x in [1, 2, 3] {
         sum = sum + x
@@ -648,5 +649,5 @@ main = {
 
 ## Related
 
-- [`std.range`](./range) — range iteration and lazy adapters
-- [`std.assert`](./assert) — assertion utility used in the examples
+- [`std.range`](./range) — Range iteration and lazy adapters
+- [`std.assert`](./assert) — Assertion utility used in examples

@@ -41,3 +41,7 @@ merge: (A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B) = {
     ...
 }
 
+new: (K: Type, V: Type)() -> Dict(K, V) = {
+    ...
+}
+

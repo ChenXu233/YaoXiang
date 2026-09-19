@@ -66,7 +66,7 @@ use std.assert
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     assert(list.len(string.split("a,b,c", ",")) == 3)
     assert(list.get(string.split("a,b,c", ","), 0) == "a")
 
@@ -94,7 +94,7 @@ trim: (s: &String) -> String
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.trim("  hi  ") == "hi")
 }
 ```
@@ -115,7 +115,7 @@ upper: (s: &String) -> String
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.upper("abc") == "ABC")
 }
 ```
@@ -136,7 +136,7 @@ lower: (s: &String) -> String
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.lower("ABC") == "abc")
 }
 ```
@@ -159,7 +159,7 @@ replace: (s: &String, old: &String, new: &String) -> String
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.replace("a-b-c", "-", "+") == "a+b+c")
     assert(string.replace("abc", "", "x") == "abc")
 }
@@ -181,7 +181,7 @@ contains: (s: &String, sub: &String) -> Bool
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.contains("hello", "ell"))
     assert(!string.contains("hello", "xyz"))
 }
@@ -203,7 +203,7 @@ starts_with: (s: &String, prefix: &String) -> Bool
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.starts_with("hello", "he"))
 }
 ```
@@ -224,7 +224,7 @@ ends_with: (s: &String, suffix: &String) -> Bool
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.ends_with("hello", "lo"))
 }
 ```
@@ -249,7 +249,7 @@ index_of: (s: &String, sub: &String) -> Int
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.index_of("hello", "ll") == 2)
     assert(string.index_of("hello", "xyz") == -1)
 }
@@ -276,7 +276,7 @@ substring: (s: &String, start: Int, end: Int) -> String
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.substring("hello", 1, 4) == "ell")
     assert(string.substring("hello", 1, 99) == "ello")   // 上界钳制
 }
@@ -298,7 +298,7 @@ is_empty: (s: &String) -> Bool
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.is_empty(""))
     assert(!string.is_empty("x"))
 }
@@ -320,7 +320,7 @@ len: (s: &String) -> Int
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.len("hello") == 5)
     assert(string.len("中") == 3)   // 字节长度
 }
@@ -343,7 +343,7 @@ use std.assert
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     cs = string.chars("ab")
     assert(list.len(cs) == 2)
     assert(list.get(cs, 0) == "a")
@@ -366,7 +366,7 @@ concat: (s1: &String, s2: &String) -> String
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.concat("a", "b") == "ab")
 }
 ```
@@ -389,7 +389,7 @@ repeat: (s: &String, n: Int) -> String
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.repeat("ab", 3) == "ababab")
     assert(string.repeat("ab", 0) == "")
 }
@@ -411,7 +411,7 @@ reverse: (s: &String) -> String
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.reverse("abc") == "cba")
 }
 ```
@@ -447,7 +447,7 @@ format: (format: &String, ...args) -> String
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.format("{0}-{1}", "a", "b") == "a-b")
     assert(string.format("[{0:>5}]", "ab") == "[   ab]")
     assert(string.format("[{0:<5}]", "ab") == "[ab   ]")
@@ -473,7 +473,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_int("42")))
     assert(result.is_err(string.parse_int("abc")))
 }
@@ -498,7 +498,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_float("3.14")))
     assert(result.is_err(string.parse_float("xxx")))
 }

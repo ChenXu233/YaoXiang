@@ -8,7 +8,7 @@ use std.io
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     p = "__yx_io_ops_tmp.txt"
 
     // 写入 → 读回

@@ -23,7 +23,7 @@ Dog.speak: (self: &Dog) -> String = {
     return "Bark"
 }
 
-main = {
+main: () -> Void = {
     d = Dog("Rex")
     assert.assert(d.speak() == "Woof", "duplicate impl must not compile")
 }

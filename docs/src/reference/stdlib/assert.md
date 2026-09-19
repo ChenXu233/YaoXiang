@@ -44,7 +44,7 @@ assert: (cond: Bool, ?msg: String) -> Void
 ```yaoxiang
 use std.assert
 
-main = {
+main: () -> Void = {
     assert(1 > 0)
     assert(1 > 0, "这个字面断言必然成立")
 }
@@ -57,7 +57,7 @@ main = {
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     list.len([1, 2, 3]) == 3
     assert(list.len([1, 2, 3]) == 3, "len == 3")
 }

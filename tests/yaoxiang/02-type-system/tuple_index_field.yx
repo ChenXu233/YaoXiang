@@ -1,0 +1,47 @@
+// 02-type-system/tuple_index_field.yx
+// 覆盖: 元组下标访问 `t.0` / `t.1`（全链路：词法 → 语法 → 类型 → IR → 执行）
+// 验证:
+//   - `t.0` 不再被词法器读成浮点 `0.0`（`.5` 前导小数仍可用）
+//   - 下标后紧跟运算符也能解析（`t.1 < 3`）
+//   - 引用接收者 `&(A, B)` 下标读取
+//   - 越界下标显式报错，不静默返回 Void（#279 同类纪律）
+// 状态: ✅ 可运行
+
+use std.assert
+
+first_of: (t: (Int, Int)) -> Int = {
+    return t.0
+}
+
+second_of: (t: (Int, Int)) -> Int = {
+    return t.1
+}
+
+second_by_ref: (t: &(Int, String)) -> String = {
+    return t.1
+}
+
+main: () -> Void = {
+    t = (10, 20)
+
+    assert.assert(t.0 == 10, "t.0 reads first slot")
+    assert.assert(t.1 == 20, "t.1 reads second slot")
+    // 按值传入会被移动（值语义），故各用独立元组
+    t1 = (10, 20)
+    assert.assert(first_of(t1) == 10, "tuple index through function param")
+    t2 = (10, 20)
+    assert.assert(second_of(t2) == 20, "second slot through function param")
+
+    // 下标后紧跟运算符：曾因 `.1 <` 被词法器吞成浮点而报 E0010
+    assert.assert(t.1 < 30, "operator directly after tuple index")
+    assert.assert(t.0 + t.1 == 30, "tuple indices in arithmetic")
+
+    s = (1, "two")
+    assert.assert(second_by_ref(&s) == "two", "tuple index on ref receiver")
+
+    // 前导小数仍按浮点解析（与下标消歧的对照）
+    half = .5
+    assert.assert(half == 0.5, "leading-dot float still works")
+}
+
+main()

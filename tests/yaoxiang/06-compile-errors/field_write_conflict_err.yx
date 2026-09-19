@@ -13,7 +13,7 @@ bad_alias: (p: &mut Point) -> Void = {
     p.y = v + 1
     print(p.y)
 }
-main = {
+main: () -> Void = {
     p = Point(1, 2)
     bad_alias(p)
     print("unreachable")

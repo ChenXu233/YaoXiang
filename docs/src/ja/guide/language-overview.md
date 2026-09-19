@@ -4,7 +4,7 @@ title: '構文早見表'
 
 # 構文早見表
 
-5 分でわかる YaoXiang の核となる構文。深く学ぶには [チュートリアル](/tutorial/) をご覧ください。
+5分でわかるYaoXiangの中核構文。詳しく学ぶには[チュートリアル](/tutorial/)を参照。
 
 ## 変数
 
@@ -20,7 +20,7 @@ pub version = "1.0"       // 公开导出
 
 ## 関数
 
-すべては `name: type = value`。関数も値である。
+すべてが `name: type = value`。関数も値。
 
 ```yaoxiang
 // 表达式形式（直接返回值）
@@ -52,7 +52,7 @@ greet: (name: String) -> Void = {
 
 ## 型
 
-`type`、`struct`、`trait`、`impl` キーワードは存在しない。統一された宣言で全てを完結する。
+`type`、`struct`、`trait`、`impl` キーワードなし。統一された宣言で完結。
 
 ```yaoxiang
 // 记录类型
@@ -225,7 +225,7 @@ backup = data.clone()
 
 ## 並行処理
 
-spawn は唯一の並列プリミティブ。async/await もなく、Send/Sync もない。
+spawn は唯一の並列プリミティブ。async/await なし、Send/Sync なし。
 
 ```yaoxiang
 // spawn 块：子表达式自动并行
@@ -241,7 +241,7 @@ results = spawn for item in items {
 }
 
 // spawn + ref：跨任务共享
-main = {
+main: () -> Void = {
     shared = ref data
     result = spawn {
         a = shared
@@ -250,7 +250,7 @@ main = {
 }
 ```
 
-## F-string
+## F文字列
 
 ```yaoxiang
 name = "YaoXiang"

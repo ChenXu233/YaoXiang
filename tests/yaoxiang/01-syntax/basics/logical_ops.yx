@@ -6,7 +6,7 @@
 use std.assert
 use std.{io, os}
 
-main = {
+main: () -> Void = {
     // and 真值表
     assert.assert(true and true, "and tt")
     assert.assert(!(true and false), "and tf")

@@ -7,7 +7,7 @@
 
 use std.io
 
-main = {
+main: () -> Void = {
     a = 1
     b = 0
     c = a / b

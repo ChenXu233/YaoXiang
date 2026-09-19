@@ -11,7 +11,7 @@ use std.list
 gt: (t: Int) -> (x: Int) -> Bool = (x) => x > t
 make_adder: (n: Int) -> (x: Int) -> Int = (x) => x + n
 
-main = {
+main: () -> Void = {
     add5 = make_adder(5)
     assert.assert(add5(3) == 8, "make_adder(5)(3) == 8")
 

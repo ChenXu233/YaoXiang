@@ -5,7 +5,7 @@ description: 'Arc / Weak weak reference'
 
 # std.weak
 
-The weak reference module, used together with `Arc` to break reference cycles.
+Weak reference module, used together with `Arc` to break reference cycles.
 
 ```yaoxiang
 use std.weak
@@ -36,18 +36,18 @@ new: (T: Type)(arc: Arc(T)) -> Weak(T)
 
 <!-- stdlib:sig:weak.new end -->
 
-Create the corresponding weak reference from an `Arc`.
+Create a weak reference from an `Arc`.
 
-- `arc` — the strong reference value; passed by value and **moved** after the call.
+- `arc` — strong reference value; passed by value and **moved** after the call.
 
-Returns: a `Weak` handle pointing to the same allocation block, **without** incrementing the strong
+Returns: a `Weak` handle pointing to the same allocation, which does **not** increase the strong
 reference count.
 
 ```yaoxiang
 use std.assert
 use std.weak
 
-main = {
+main: () -> Void = {
     // ref creates Arc[Int]
     p = ref 42
 
@@ -67,40 +67,39 @@ upgrade: (T: Type)(weak: Weak(T)) -> Option(Arc(T))
 
 <!-- stdlib:sig:weak.upgrade end -->
 
-Attempt to upgrade a weak reference to a strong reference.
+Attempt to promote a weak reference to a strong reference.
 
-- `weak` — the weak reference handle
+- `weak` — weak reference handle.
 
-Returns: `Option.some(Arc)` when the allocation block is still alive, `Option.none()` when it has
-already been released. **No error is reported** — `Option` is used to express whether the target
-still exists.
+Returns: `Option.some(Arc)` if the allocation is still alive, `Option.none()` if it has been
+released. **No error**—`Option` is used to express "whether the target still exists".
 
 ```yaoxiang
 use std.assert
 use std.weak
 
-main = {
+main: () -> Void = {
     p = ref 42
     w = weak.new(p)
 
-    // target alive: get some variant
+    // target is alive: get the some variant
     u = weak.upgrade(w)
     assert(true)
 }
 ```
 
-> **Syntax Limitation**: the variant destructuring syntax for `Option` (e.g. `match some(v)`) has
-> not yet landed, so for now only the call success can be verified, and `some` / `none` cannot be
-> branched on in source code. See the notes in `src/std/tests/weak_ops.yx`.
+> **Syntax limitation**: The variant destructuring syntax for `Option` (e.g. `match some(v)`) is not
+> yet implemented, so currently only the successful call can be verified, and `some` / `none` cannot
+> be branched in source code. See the notes in `src/std/tests/weak_ops.yx`.
 
-## Semantic Notes
+## Semantics
 
-Weak references **do not hold** ownership: the existence of a `Weak` does not prevent the target
-from being released. The typical use case is breaking circular references — the parent node holds an
-`Arc` pointing to the child node, while the child only holds a `Weak` pointing back to the parent;
-this breaks the cycle.
+A weak reference **does not hold** ownership: the existence of a `Weak` does not prevent the target
+from being released. A typical use is to break cyclic references—a parent node holds an `Arc`
+pointing to a child node, while the child node only holds a `Weak` pointing back to the parent, thus
+breaking the cycle.
 
 ## Related
 
-- [Language Spec: type system](../language-spec/type-system.md) — ownership semantics of `Arc` /
-  `Weak`
+- [Language Specification: Type System](../language-spec/type-system.md) — ownership semantics of
+  `Arc` / `Weak`

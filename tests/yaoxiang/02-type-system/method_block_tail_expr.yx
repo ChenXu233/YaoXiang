@@ -11,7 +11,7 @@ Point.get_x: (self: &Point) -> Float = {
     self.x
 }
 
-main = {
+main: () -> Void = {
     // Arrange
     p = Point(3.0, 4.0)
     // Act / Assert

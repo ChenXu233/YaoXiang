@@ -5,7 +5,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // §2.7 单 if-else 表达式值绑定
     a = if true { 42 } else { 0 }
     assert.assert(a == 42, "if true 分支应返回 42")

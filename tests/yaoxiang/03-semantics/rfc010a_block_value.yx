@@ -52,7 +52,7 @@ early_return: (n: Int) -> Int = {
     n
 }
 
-main = {
+main: () -> Void = {
     // 尾表达式
     assert.assert(tail_expr(4) == 5, "tail_expr(4) should be 5")
     assert.assert(tail_after_stmts(3) == 7, "tail_after_stmts(3) should be 7")

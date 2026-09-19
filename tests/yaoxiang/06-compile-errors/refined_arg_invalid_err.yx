@@ -3,12 +3,14 @@
 // 错误检测: 证明函数精化标注使用不可转换实参（RFC-027 §语法 — 谓词应用实参必须是编译期常量形态）
 // expect: compile-error E1092
 // （#263 已修复：实参不可转换时报错，精化约束绝不静默丢弃）
+//
+// 注解块形式（#363 已修复：注解绑定的函数体同样下钻精化校验）
 
 use std.io
 
 IsSmall: (x: Int) -> Type = { x < 100 }
 
-main = {
+main: () -> Void = {
     y: IsSmall(List(Int)) = 9999    // ❌ List(Int) 无法转换为编译期常量表达式
     io.println(y)
 }

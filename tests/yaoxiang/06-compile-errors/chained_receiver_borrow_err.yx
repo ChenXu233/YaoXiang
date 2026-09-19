@@ -11,7 +11,7 @@ Point.shift: (self: &mut Point) -> Void = {
     self.x = 5
 }
 Outer: Type = { inner: Point }
-main = {
+main: () -> Void = {
     o = Outer(Point(1, 2))
     v = &o.inner.x
     o.inner.shift()

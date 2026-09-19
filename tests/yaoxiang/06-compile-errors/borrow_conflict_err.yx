@@ -9,7 +9,7 @@ Point: Type = { x: Int, y: Int }
 
 alias_both: (a: &mut Point, b: &Point) -> Void = {}
 
-main = {
+main: () -> Void = {
     p = Point(1, 2)
     alias_both(p, p)    // ❌ p 同时派生 &mut 和 & 令牌
     io.println("ALL TESTS PASSED")

@@ -51,6 +51,8 @@ define_codes!(E1XXX, {
     ("E1062", TypeCheck, false, const_constraint_failed(constraint: &str) => .param("constraint", constraint)),
     // E1064 绑定位置索引无效（RFC-004）
     ("E1064", TypeCheck, false, invalid_binding_position(positions: &str, total: usize) => .param("positions", positions) .param("total", total.to_string())),
+    // E1065 对非函数值调用
+    ("E1065", TypeCheck, false, not_callable(type_: &str) => .param("type", type_)),
     // E1071 类型定义只能在模块级
     ("E1071", TypeCheck, false, type_def_only_at_module_level(name: &str) => .param("name", name)),
     // E1081 `?` 仅允许在返回 Result 的函数内使用

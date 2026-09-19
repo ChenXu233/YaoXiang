@@ -352,6 +352,11 @@
     "example": "BadArray(Int, n)  // n 不是编译期常量",
     "error_output": "warning[W1063]: const 泛型约束无法求值\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 无法在编译期求值约束 `N > 0`"
   },
+  "E1065": {
+    "title": "对非函数值调用",
+    "template": "类型 `{type}` 不可调用——它不是函数",
+    "help": "只有函数值才能被调用。请检查该位置表达式的类型；若要定义函数，需写 Fn 注解 `f: () -> T = { ... }`。"
+  },
   "E1071": {
     "title": "类型定义只能在模块级",
     "message": "类型定义只能出现在模块顶层",

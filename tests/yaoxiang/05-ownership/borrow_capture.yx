@@ -12,7 +12,7 @@ use std.list
 
 threshold = 5
 
-main = {
+main: () -> Void = {
     nums = [1, 6, 3, 8]
     big = list.filter(nums, x => x > threshold)
     assert.assert(list.len(big) == 2, "闭包捕获外部值 filter")

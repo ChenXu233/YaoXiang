@@ -1,0 +1,45 @@
+// 02-type-system/generic_slot_alignment.yx
+// 覆盖: 泛型调用点的类型参数按【声明序】对齐（D3/D7 回归）
+// 验证:
+//   - 泛型函数返回泛型实例后，调用方取引用再传给另一个泛型函数（曾报「函数不存在」）
+//   - 返回值类型收敛（返回位的类型参数与实参统一）
+//   - lambda 返回类型可被推断（`(x: Int) => x * 2` 曾报 E3018「期望 2 个类型实参，得到 1 个」）
+//   - 声明含多个类型参数时槽位不串位
+// 状态: ✅ 可运行
+
+use std.assert
+
+Box: (T: Type) -> Type = { v: Vec(T), n: Int }
+
+// 返回泛型实例：返回值类型必须收敛
+mk: (A: Type, item: A) -> Box(A) = {
+    z: Vec(A) = []
+    b: Box(A) = Box(z, 0)
+    b.v[0] = item
+    b.n = 1
+    return b
+}
+
+// 取引用读取：调用方必须先拿到具体的 Box(Int)
+count: (A: Type) -> (b: &Box(A)) -> Int = {
+    return b.n
+}
+
+// 高阶函数：lambda 返回位参与类型参数推断
+apply_to: (T: Type, R: Type) -> (v: &Vec(T), f: (item: T) -> R) -> Vec(R) = {
+    seed: Vec(R) = []
+    return seed
+}
+
+main: () -> Void = {
+    // 泛型返回值 → 取引用 → 传另一个泛型函数
+    z = mk(Int, 5)
+    assert.assert(count(&z) == 1, "generic return keeps concrete type")
+
+    // lambda 返回类型可推断
+    xs: Vec(Int) = [1, 2, 3]
+    out = apply_to(&xs, (x: Int) => x * 2)
+    assert.assert(out.length == 0, "lambda return type inferred")
+}
+
+main()

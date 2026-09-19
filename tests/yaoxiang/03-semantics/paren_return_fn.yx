@@ -19,7 +19,7 @@ curried: (a: Int) -> (b: Int) -> Int = { a + b }
 // 高阶函数作参数（括号在参数位置，不产生 Paren）
 apply: (h: (() -> Int)) -> Int = { h() }
 
-main = {
+main: () -> Void = {
     // 括号：调用一次得到函数，再调用得到值
     assert.assert(mk()(5) == 6, "mk()(5) should be 6")
     assert.assert(mk_block()() == 7, "mk_block()() should be 7")

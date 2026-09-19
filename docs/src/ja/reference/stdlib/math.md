@@ -1,11 +1,11 @@
 ---
 title: 'std.math'
-description: '整数・浮動小数点・三角関数。PI/E/TAU の定数を含む'
+description: '整数、浮動小数点、三角関数。PI/E/TAU 定数を含む'
 ---
 
 # std.math
 
-数学モジュール。すべて**純粋な値関数**：引数は値渡し（Copy セマンティクス）で受け取られ、借用・ムーブ・副作用は伴いません。
+数学モジュール。すべて**純粋な値関数**：引数は値渡し（Copy セマンティクス）で渡され、借用・ムーブ・副作用はありません。
 
 ```yaoxiang
 use std.math
@@ -13,7 +13,7 @@ use std.math
 
 ## 定数
 
-名前でインポートして使用します：
+名前でインポートすれば使用できます。
 
 ```yaoxiang
 use std.math.{PI, E, TAU}
@@ -29,7 +29,7 @@ use std.math.{PI, E, TAU}
 use std.assert
 use std.math.{E, PI, TAU}
 
-main = {
+main: () -> Void = {
     assert(PI > 3.14 and PI < 3.15)
     assert(E > 2.71 and E < 2.72)
     assert(TAU > 6.28 and TAU < 6.29)
@@ -61,10 +61,10 @@ main = {
 | `E`     | `Float`                                   |
 | `TAU`   | `Float`                                   |
 
-<!-- stdlib:table:math end -->整型族は `Int` を、浮動小数点族は `Float` を取ります。型が一致しない引数を渡すと `0` として扱われます
+<!-- stdlib:table:math end -->> 整数族は `Int`、浮動小数点族は `Float` を取ります。一致しない型を渡すと `0` として扱われます
 
-> （`to_int` / `to_float` の変換に失敗した場合は `0`
-> にフォールバックする）ので、エラーは発生しません。型チェッカーに頼ってコンパイル時に検出させることを推奨します。
+> （`to_int` / `to_float` 変換に失敗した場合は `0`
+> にフォールバック）。エラーは発生しません。型チェッカーを使用してコンパイル時に検出することをお勧めします。
 
 ## 整数関数
 
@@ -84,7 +84,7 @@ abs: (n: Int) -> Int
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.abs(-5) == 5)
     assert(math.abs(5) == 5)
 }
@@ -106,7 +106,7 @@ max: (a: Int, b: Int) -> Int
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.max(3, 7) == 7)
 }
 ```
@@ -127,7 +127,7 @@ min: (a: Int, b: Int) -> Int
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.min(3, 7) == 3)
 }
 ```
@@ -142,22 +142,22 @@ clamp: (value: Int, min: Int, max: Int) -> Int
 
 <!-- stdlib:sig:math.clamp end -->
 
-`value` を `[min, max]` の区間にクランプします。
+`value` を `[min, max]` 区間にクランプします。
 
 - `value` —— クランプ対象の値
 - `min` —— 下限（含）
 - `max` —— 上限（含）
 
-戻り値：区間内の値。下限未満なら `min`、上限超過なら `max` を返します。
+戻り値：区間内の値。下限未満は `min`、上限超過は `max` を返します。
 
-> **`min > max` の場合、インタプリタが panic します（#339）**（内部で `i64::clamp`
-> の事前条件による）。エラー値は返されません。`min <= max` を満たすことを保証してください。
+> **`min > max` の場合、インタプリタが panic します（#339）**（下層の `i64::clamp`
+> の前提条件）。エラー値は返されません。`min <= max` となるようにしてください。
 
 ```yaoxiang
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.clamp(15, 1, 10) == 10)
     assert(math.clamp(-5, 1, 10) == 1)
     assert(math.clamp(5, 1, 10) == 5)
@@ -182,7 +182,7 @@ fabs: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.fabs(-2.5) == 2.5)
 }
 ```
@@ -203,7 +203,7 @@ fmax: (a: Float, b: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.fmax(1.5, 2.5) == 2.5)
 }
 ```
@@ -224,7 +224,7 @@ fmin: (a: Float, b: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.fmin(1.5, 2.5) == 1.5)
 }
 ```
@@ -245,7 +245,7 @@ pow: (base: Float, exp: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.pow(2.0, 10.0) == 1024.0)
 }
 ```
@@ -266,7 +266,7 @@ sqrt: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.sqrt(4.0) == 2.0)
     assert(math.sqrt(2.0) > 1.41 and math.sqrt(2.0) < 1.42)
 }
@@ -288,7 +288,7 @@ floor: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.floor(3.7) == 3.0)
 }
 ```
@@ -309,7 +309,7 @@ ceil: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.ceil(3.2) == 4.0)
 }
 ```
@@ -324,13 +324,13 @@ round: (n: Float) -> Float
 
 <!-- stdlib:sig:math.round end -->
 
-四捨五入（ゼロから遠い方向へ丸める）。戻り値は `Float` のままです。
+四捨五入（ゼロから遠い方向で丸める）。戻り値は `Float` のままです。
 
 ```yaoxiang
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.round(3.5) == 4.0)
     assert(math.round(3.4) == 3.0)
 }
@@ -352,7 +352,7 @@ sin: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.sin(0.0) == 0.0)
 }
 ```
@@ -373,7 +373,7 @@ cos: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.cos(0.0) == 1.0)
 }
 ```
@@ -394,11 +394,11 @@ tan: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.tan(0.0) == 0.0)
 }
 ```
 
 ## 関連
 
-- [`std.string.parse_float`](./string#parse_float) —— 文字列を `Float` へ解析
+- [`std.string.parse_float`](./string#parse_float) —— 文字列を `Float` にパースする

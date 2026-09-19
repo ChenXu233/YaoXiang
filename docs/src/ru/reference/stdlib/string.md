@@ -1,23 +1,24 @@
 ---
 title: 'std.string'
-description: 'Поиск, разделение, форматирование и разбор строк'
+description: 'поиск, разбиение, форматирование и разбор строк'
 ---
 
 # std.string
 
-Модуль строковых операций. За исключением `format`, все функции работают с аргументами только для
-чтения (`&String`), поэтому исходная строка остаётся доступной после вызова.
+Модуль строковых операций. За исключением `format`, все функции принимают аргументы по заимствованию
+только для чтения (`&String`); исходная строка остаётся доступной для дальнейшего использования
+после вызова.
 
-Все функции при несоответствии типов аргументов вырождаются в **семантику пустой строки** (а не в
-ошибку): такие функции, как `split`/`trim`/`upper`, обрабатывают аргументы, не являющиеся `String`,
-как `""`. Это означает, что при неверном типе аргумента выполнение не прерывается, но и ожидаемого
-результата не будет — рекомендуется полагаться на проверку типов во время компиляции.
+Если типы аргументов не совпадают, все функции вырождаются в **семантику пустой строки** (а не
+выдают ошибку): `split`/`trim`/`upper` и т.д. обрабатывают аргументы не типа `String` как `""`. Это
+означает, что вызов с ошибочным типом аргумента не прерывается, но и не даёт ожидаемого результата —
+рекомендуется полагаться на проверку типов во время компиляции.
 
 ```yaoxiang
 use std.string
 ```
 
-## Список функций
+## Обзор функций
 
 <!-- stdlib:table:string start -->
 
@@ -43,7 +44,9 @@ use std.string
 | `parse_int`   | `(s: &String) -> Result(Int, Error)`                 |
 | `parse_float` | `(s: &String) -> Result(Float, Error)`               |
 
-<!-- stdlib:table:string end -->## Функции
+<!-- stdlib:table:string end -->
+
+## Функции
 
 ### split
 
@@ -55,23 +58,23 @@ split: (s: &String, sep: &String) -> List(String)
 
 <!-- stdlib:sig:string.split end -->
 
-Разделяет `s` по `sep` и возвращает список подстрок.
+Разбивает `s` по `sep`, возвращает список подстрок.
 
-- `s` — разделяемая строка
-- `sep` — разделитель; **если это пустая строка, разделение выполняется посимвольно**
+- `s` — разбиваемая строка
+- `sep` — разделитель; **если пустая строка — разбивает посимвольно**
 
-Возвращает: `List(String)`. Если разделитель не найден, возвращается список из одного элемента.
+Возвращает: `List(String)`. Если разделитель не найден, возвращается одноэлементный список.
 
 ```yaoxiang
 use std.assert
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     assert(list.len(string.split("a,b,c", ",")) == 3)
     assert(list.get(string.split("a,b,c", ","), 0) == "a")
 
-    // пустой разделитель → посимвольно
+    // 空分隔符 → 逐字符
     cs = string.split("abc", "")
     assert(list.len(cs) == 3)
 }
@@ -89,13 +92,13 @@ trim: (s: &String) -> String
 
 Удаляет начальные и конечные пробельные символы Unicode.
 
-Возвращает: новую строку с удалёнными начальными и конечными пробелами (без изменения `s`).
+Возвращает: новую строку с удалёнными начальными и конечными пробелами (не изменяет `s`).
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.trim("  hi  ") == "hi")
 }
 ```
@@ -110,13 +113,13 @@ upper: (s: &String) -> String
 
 <!-- stdlib:sig:string.upper end -->
 
-Преобразует в верхний регистр (с поддержкой Unicode).
+Преобразует в верхний регистр (с учётом Unicode).
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.upper("abc") == "ABC")
 }
 ```
@@ -131,13 +134,13 @@ lower: (s: &String) -> String
 
 <!-- stdlib:sig:string.lower end -->
 
-Преобразует в нижний регистр (с поддержкой Unicode).
+Преобразует в нижний регистр (с учётом Unicode).
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.lower("ABC") == "abc")
 }
 ```
@@ -154,13 +157,13 @@ replace: (s: &String, old: &String, new: &String) -> String
 
 Заменяет **все** вхождения `old` в `s` на `new`.
 
-- `old` — если это пустая строка, **возвращает `s` без изменений** (без вставок)
+- `old` — если пустая строка, **возвращает `s` без изменений** (без вставки)
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.replace("a-b-c", "-", "+") == "a+b+c")
     assert(string.replace("abc", "", "x") == "abc")
 }
@@ -176,13 +179,13 @@ contains: (s: &String, sub: &String) -> Bool
 
 <!-- stdlib:sig:string.contains end -->
 
-Содержится ли `sub` в `s`. Для пустой подстроки всегда `true`.
+Проверяет, содержится ли `sub` в `s`. Для пустой подстроки всегда возвращает `true`.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.contains("hello", "ell"))
     assert(!string.contains("hello", "xyz"))
 }
@@ -198,13 +201,13 @@ starts_with: (s: &String, prefix: &String) -> Bool
 
 <!-- stdlib:sig:string.starts_with end -->
 
-Начинается ли `s` с `prefix`. Для пустого `prefix` всегда `true`.
+Проверяет, начинается ли `s` с `prefix`. Для пустого `prefix` всегда возвращает `true`.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.starts_with("hello", "he"))
 }
 ```
@@ -219,13 +222,13 @@ ends_with: (s: &String, suffix: &String) -> Bool
 
 <!-- stdlib:sig:string.ends_with end -->
 
-Заканчивается ли `s` суффиксом `suffix`. Для пустого `suffix` всегда `true`.
+Проверяет, заканчивается ли `s` на `suffix`. Для пустого `suffix` всегда возвращает `true`.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.ends_with("hello", "lo"))
 }
 ```
@@ -240,18 +243,18 @@ index_of: (s: &String, sub: &String) -> Int
 
 <!-- stdlib:sig:string.index_of end -->
 
-**Байтовый** индекс первого вхождения `sub`.
+Индекс первого вхождения `sub` в **байтах**.
 
-Возвращает: индекс при нахождении; `-1`, если не найдено.
+Возвращает: индекс при обнаружении; `-1`, если не найдено.
 
-> Возвращается байтовое смещение. При наличии многобайтовых символов можно сначала воспользоваться
-> `chars`, а затем определить индекс символа.
+> Возвращается смещение в байтах. При наличии многобайтовых символов можно использовать `chars` для
+> преобразования и последующего определения индекса символа.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.index_of("hello", "ll") == 2)
     assert(string.index_of("hello", "xyz") == -1)
 }
@@ -267,21 +270,21 @@ substring: (s: &String, start: Int, end: Int) -> String
 
 <!-- stdlib:sig:string.substring end -->
 
-Извлекает интервал `[start, end)` по **символьным** индексам.
+Извлекает диапазон `[start, end)` по **символьным** индексам.
 
-- `start` — начальный символьный индекс, по умолчанию `0`
-- `end` — конечный символьный индекс (не включается), по умолчанию — конец строки
+- `start` — начальный индекс символа, по умолчанию `0`
+- `end` — конечный индекс символа (не включается), по умолчанию — конец строки
 
-Возвращает: результат извлечения. Выходящие за границы индексы **фиксируются** в допустимом
-диапазоне без ошибки; при `start > end` результат фиксируется в пустую строку.
+Возвращает: результат извлечения. Выходящие за границы значения **зажимаются** в допустимый
+диапазон, ошибка не выдаётся; при `start > end` результат зажимается до пустой строки.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.substring("hello", 1, 4) == "ell")
-    assert(string.substring("hello", 1, 99) == "ello")   // фиксация верхней границы
+    assert(string.substring("hello", 1, 99) == "ello")   // 上界钳制
 }
 ```
 
@@ -295,13 +298,13 @@ is_empty: (s: &String) -> Bool
 
 <!-- stdlib:sig:string.is_empty end -->
 
-Является ли `s` пустой строкой.
+Проверяет, является ли `s` пустой строкой.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.is_empty(""))
     assert(!string.is_empty("x"))
 }
@@ -317,15 +320,15 @@ len: (s: &String) -> Int
 
 <!-- stdlib:sig:string.len end -->
 
-Возвращает **длину строки в байтах в UTF-8**, а не количество символов.
+Возвращает **длину в байтах UTF-8**, а не количество символов.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.len("hello") == 5)
-    assert(string.len("中") == 3)   // длина в байтах
+    assert(string.len("中") == 3)   // 字节长度
 }
 ```
 
@@ -346,7 +349,7 @@ use std.assert
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     cs = string.chars("ab")
     assert(list.len(cs) == 2)
     assert(list.get(cs, 0) == "a")
@@ -363,13 +366,13 @@ concat: (s1: &String, s2: &String) -> String
 
 <!-- stdlib:sig:string.concat end -->
 
-Сцепляет две строки. Также можно использовать оператор `+` напрямую.
+Сцепляет две строки. Также можно использовать оператор `+`.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.concat("a", "b") == "ab")
 }
 ```
@@ -386,13 +389,13 @@ repeat: (s: &String, n: Int) -> String
 
 Повторяет `s` `n` раз.
 
-- `n` — количество повторений; при `n <= 0` возвращается пустая строка
+- `n` — количество повторений; при `n <= 0` возвращает пустую строку
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.repeat("ab", 3) == "ababab")
     assert(string.repeat("ab", 0) == "")
 }
@@ -408,13 +411,13 @@ reverse: (s: &String) -> String
 
 <!-- stdlib:sig:string.reverse end -->
 
-Переворачивает строку посимвольно.
+Переворачивает по символам.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.reverse("abc") == "cba")
 }
 ```
@@ -429,30 +432,31 @@ format: (format: &String, ...args) -> String
 
 <!-- stdlib:sig:string.format end -->
 
-Форматирует с заполнителями `{index}`, с необязательными спецификаторами ширины/выравнивания.
+Форматирует с использованием плейсхолдеров `{index}`, с необязательными спецификаторами
+ширины/выравнивания.
 
-Синтаксис заполнителей:
+Синтаксис плейсхолдера:
 
 | Форма    | Значение                                               |
 | -------- | ------------------------------------------------------ |
 | `{0}`    | 0-й аргумент (аргументы после `format` нумеруются с 0) |
 | `{0:03}` | ширина 3                                               |
-| `{0:>3}` | ширина 3, по правому краю (по умолчанию)               |
-| `{0:<3}` | ширина 3, по левому краю                               |
-| `{0:^3}` | ширина 3, по центру                                    |
+| `{0:>3}` | ширина 3, выравнивание по правому краю (по умолчанию)  |
+| `{0:<3}` | ширина 3, выравнивание по левому краю                  |
+| `{0:^3}` | ширина 3, выравнивание по центру                       |
 
 Литеральные фигурные скобки обозначаются удвоением: две открывающие фигурные скобки дают одну
-литеральную открывающую, аналогично для закрывающих.
+литеральную открывающую скобку, две закрывающие — аналогично.
 
-Возвращает: отформатированную строку. Аргументы сначала преобразуются в строки (аналогично
-`convert.to_string`); при выходе за границы индекса подставляется пустая строка, недопустимая ширина
-обрабатывается как `0`.
+Возвращаемое значение: отформатированная строка. Аргументы сначала преобразуются в строки
+(аналогично `convert.to_string`); при выходе индекса за границы берётся пустая строка, недопустимая
+ширина обрабатывается как `0`.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.format("{0}-{1}", "a", "b") == "a-b")
     assert(string.format("[{0:>5}]", "ab") == "[   ab]")
     assert(string.format("[{0:<5}]", "ab") == "[ab   ]")
@@ -469,17 +473,17 @@ parse_int: (s: &String) -> Result(Int, Error)
 
 <!-- stdlib:sig:string.parse_int end -->
 
-Разбирает десятичное целое число (с автоматическим удалением начальных и конечных пробелов).
+Разбирает десятичное целое число (автоматически удаляет начальные и конечные пробелы).
 
-Возвращает: при успехе — `Result.ok(Int)`; при неудаче — `Result.err(Error)` с полем `code`, равным
-`E6010`. **Исключение не выбрасывается**.
+Возвращает: при успехе `Result.ok(Int)`; при неудаче `Result.err(Error)` с `code` `E6010`.
+**Исключение не выбрасывается**.
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_int("42")))
     assert(result.is_err(string.parse_int("abc")))
 }
@@ -495,23 +499,22 @@ parse_float: (s: &String) -> Result(Float, Error)
 
 <!-- stdlib:sig:string.parse_float end -->
 
-Разбирает число с плавающей точкой (с автоматическим удалением начальных и конечных пробелов).
+Разбирает число с плавающей точкой (автоматически удаляет начальные и конечные пробелы).
 
-Возвращает: при успехе — `Result.ok(Float)`; при неудаче — `Result.err(Error)` с полем `code`,
-равным `E6011`.
+Возвращает: при успехе `Result.ok(Float)`; при неудаче `Result.err(Error)` с `code` `E6011`.
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_float("3.14")))
     assert(result.is_err(string.parse_float("xxx")))
 }
 ```
 
-## См. также
+## Связанные разделы
 
 - [`std.convert`](./convert) — преобразование чисел в строки
 - [`std.result`](./result) — распаковка результатов `parse_*`

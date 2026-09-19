@@ -20,7 +20,7 @@ Bird: Type = {
 // 被绑函数（类型体内绑定允许前向引用）
 animal_speak: (self: &Bird) -> String = { return "Tweet" }
 
-main = {
+main: () -> Void = {
     zoo: List(Animal) = [Bird("Kiwi")]
     s = zoo[0].speak()
     assert.assert(s == "Tweet", "rebound method dispatches through variant match")

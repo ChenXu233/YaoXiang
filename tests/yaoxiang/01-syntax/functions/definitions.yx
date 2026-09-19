@@ -20,7 +20,7 @@ greet: () -> String = () => {
     return "Hello"
 }
 
-main = {
+main: () -> Void = {
     r1 = add(3, 4)
     assert.assert(r1 == 7, "add(3, 4) == 7")
 

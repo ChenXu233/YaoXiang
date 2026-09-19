@@ -35,7 +35,7 @@ Cat: Type = {
 }
 Cat.speak: (self: Cat) -> String = { return "Meow" }
 
-main = {
+main = () => {
     animals: List(Animal) = [Dog("Rex"), Cat(9)]
     print(animals[0].speak())
     print(animals[1].speak())

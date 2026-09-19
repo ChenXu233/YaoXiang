@@ -30,7 +30,7 @@ dead-code = "warn"
 ```yaoxiang
 pub dead_function: () -> Void = { }  // W1001: 未使用的导出函数
 
-main = {
+main: () -> Void = {
     // dead_function 从未被调用
 }
 ```
@@ -51,7 +51,7 @@ main = {
 ```yaoxiang
 DeadType: Type = Int  // W1002: 未使用的导出类型
 
-main = {
+main: () -> Void = {
     x = 42
 }
 ```
@@ -69,7 +69,7 @@ main = {
 ```yaoxiang
 use std.json  // W1003: 未使用的导入
 
-main = {
+main: () -> Void = {
     // json 模块从未被使用
 }
 ```
@@ -90,7 +90,7 @@ main = {
 ```yaoxiang
 pub dead_var = 42  // W1004: 未使用的导出变量
 
-main = {
+main: () -> Void = {
     // dead_var 从未被读取
 }
 ```
@@ -113,7 +113,7 @@ Foo: Type = { value: Int }
 
 pub Foo.dead_method: (self: Foo) -> Void = { }  // W1005: 未使用的导出方法
 
-main = {
+main: () -> Void = {
     foo = Foo(1)
     // dead_method 从未被调用
 }

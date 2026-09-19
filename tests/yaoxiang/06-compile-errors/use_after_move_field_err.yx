@@ -10,7 +10,7 @@ use std.io
 
 Point: Type = { x: Int, y: Int }
 
-main = {
+main: () -> Void = {
     p = Point(1, 2)
     q = p
     io.println(p.x)    // ❌ move 后字段访问

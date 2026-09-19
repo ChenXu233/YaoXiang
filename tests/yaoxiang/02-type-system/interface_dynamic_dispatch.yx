@@ -34,7 +34,7 @@ describe: (a: Animal) -> String = {
     return a.speak()
 }
 
-main = {
+main: () -> Void = {
     // 异构字面量:具体值进入存在类型位置自动包装
     animals: List(Animal) = [Dog("Rex", 3), Cat(9)]
 

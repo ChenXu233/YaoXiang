@@ -14,7 +14,7 @@ pass_arc: (a: Arc(Int)) -> Arc(Int) = {
     return a
 }
 
-main = {
+main: () -> Void = {
     p = ref 42
     q = pass_arc(p)             // Arc Dup 复制，共享持有
     w = weak.new(q)             // 复制件登记 weak

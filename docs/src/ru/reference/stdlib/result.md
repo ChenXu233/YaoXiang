@@ -1,11 +1,11 @@
 ---
 title: 'std.result'
-description: 'Конструирование и распаковка Result и Error'
+description: 'Создание и распаковка Result и Error'
 ---
 
 # std.result
 
-Конструирование и распаковка `Result(T, E)`, а также доступ к полям носителя `Error`.
+Создание и распаковка `Result(T, E)`, а также доступ к полям носителя `Error`.
 
 ```yaoxiang
 use std.result
@@ -13,14 +13,14 @@ use std.result
 
 ## Представление во время выполнения
 
-| Значение            | Представление                         |
-| ------------------- | ------------------------------------- |
-| `Result.ok(value)`  | вариант перечисления, несущий `value` |
-| `Result.err(error)` | вариант перечисления, несущий `error` |
-| `Error`             | структура с полями `(code, message)`  |
+| Значение            | Представление                                  |
+| ------------------- | ---------------------------------------------- |
+| `Result.ok(value)`  | значение-вариант перечисления, несущий `value` |
+| `Result.err(error)` | значение-вариант перечисления, несущий `error` |
+| `Error`             | структура с полями `(code, message)`           |
 
-`Error.code` — это регистрационный код из сегментов `E6xxx` / `E7xxx` согласно RFC-013 (стабильный
-контракт между версиями), а `Error.message` — человекочитаемое описание.
+`Error.code` — это регистрационный код сегмента `E6xxx` / `E7xxx` из RFC-013 (стабильный контракт
+между версиями), `Error.message` — удобочитаемое описание для человека.
 
 ## Обзор функций
 
@@ -40,7 +40,7 @@ use std.result
 
 <!-- stdlib:table:result end -->
 
-## Конструирование
+## Создание
 
 ### ok
 
@@ -54,14 +54,14 @@ ok: (T: Type, E: Type)(value: T) -> Result(T, E)
 
 Оборачивает успешное значение.
 
-Значение `Ok`, извлечённое через `?`, необходимо повторно обернуть, чтобы продолжить распространение
-по типу возврата `Result`; `ok` как раз и является этим обёртывателем.
+Значение `Ok`, распакованное через `?`, необходимо обернуть заново, чтобы продолжить распространение
+по типу возврата `Result`; `ok` — именно этот обёртчик.
 
 ```yaoxiang
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.ok(42)
     assert(result.is_ok(r))
 }
@@ -83,7 +83,7 @@ err: (T: Type, E: Type)(error: E) -> Result(T, E)
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.err("boom")
     assert(result.is_err(r))
 }
@@ -101,13 +101,13 @@ is_ok: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_ok end -->
 
-Является ли вариантом успеха. Неизменяемое заимствование, `self` можно использовать повторно.
+Является ли вариантом успеха. Только чтение по ссылке, `self` можно использовать многократно.
 
 ```yaoxiang
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.ok(1)
     assert(result.is_ok(r))
     assert(result.is_ok(r))      // можно использовать повторно
@@ -124,19 +124,19 @@ is_err: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_err end -->
 
-Является ли вариантом ошибки. Неизменяемое заимствование.
+Является ли вариантом ошибки. Только чтение по ссылке.
 
 ```yaoxiang
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.err("e")
     assert(result.is_err(r))
 }
 ```
 
-## Извлечение значений
+## Извлечение значения
 
 ### unwrap
 
@@ -150,8 +150,8 @@ unwrap: (T: Type, E: Type)(self: &Result(T, E)) -> T
 
 Извлекает успешное значение.
 
-Возврат: значение, которое несёт вариант `Ok`. Ошибка: при вызове на значении `Err` выбрасывает
-`E6007`, при этом сообщение **содержит исходный код ошибки и описание**, в форме наподобие
+Возврат: значение, которое несёт вариант `Ok`. Ошибка: при вызове на значении `Err` выбрасывается
+`E6007`, а сообщение **содержит исходный код ошибки и описание**, например
 `unwrap called on Err value (E6010: parse_int: ...)`, поэтому нет необходимости сначала вызывать
 `unwrap_err`, чтобы увидеть причину сбоя.
 
@@ -160,7 +160,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("42")
     assert(result.unwrap(r) == 42)
 }
@@ -178,14 +178,14 @@ unwrap_or: (T: Type, E: Type)(self: &Result(T, E), default: T) -> T
 
 Извлекает успешное значение или возвращает `default` в случае `Err`.
 
-- `default` — резервное значение на случай `Err`
+- `default` — резервное значение в случае `Err`
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     good = string.parse_int("42")
     assert(result.unwrap_or(good, 0) == 42)
 
@@ -206,7 +206,7 @@ unwrap_err: (T: Type, E: Type)(self: &Result(T, E)) -> E
 
 Извлекает значение ошибки.
 
-Возврат: значение, которое несёт вариант `Err`. Ошибка: при вызове на значении `Ok` выбрасывает
+Возврат: значение, которое несёт вариант `Err`. Ошибка: при вызове на значении `Ok` выбрасывается
 `E6007`.
 
 ```yaoxiang
@@ -214,7 +214,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("abc")
     e = result.unwrap_err(r)
     assert(result.is_err(r))
@@ -233,9 +233,9 @@ code: (self: &Error) -> String
 
 <!-- stdlib:sig:result.code end -->
 
-Читает строку кода ошибки, например `"E6010"`.
+Считывает строку кода ошибки, например `"E6010"`.
 
-> Тип в сигнатуре — `Error`, но носитель ошибки во время выполнения — это структура с полями
+> Сигнатура типизирована как `Error`, но носитель ошибки во время выполнения — структура с полями
 > `(code, message)`. Вызывается непосредственно на значении `Error`.
 
 ```yaoxiang
@@ -243,7 +243,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("abc")
     e = result.unwrap_err(r)
     assert(result.code(e) == "E6010")
@@ -260,22 +260,22 @@ message: (self: &Error) -> String
 
 <!-- stdlib:sig:result.message end -->
 
-Читает текст описания ошибки.
+Считывает текст описания ошибки.
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("abc")
     e = result.unwrap_err(r)
     assert(string.len(result.message(e)) > 0)
 }
 ```
 
-## См. также
+## Связанные ссылки
 
-- [`std.string`](./string#parse_int) — функции разбора, возвращающие `Result`
-- [Справочник по кодам ошибок](../error-code/) — коды ошибок времени выполнения, такие как `E6010` /
-  `E6011`
+- [`std.string`](./string#parse_int) — функция разбора, возвращающая `Result`
+- [Справочник по кодам ошибок](../error-code/) — коды значений ошибок времени выполнения, такие как
+  `E6010` / `E6011`

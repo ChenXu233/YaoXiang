@@ -18,7 +18,7 @@ Pair: (T: Type) -> Type = {
     second: T,
 }
 
-main = {
+main: () -> Void = {
     // Happy: 单字段泛型 + 基础类型
     c: Container(Int) = Container(42)
     assert.assert(c.value == 42, "Container(42).value should be 42")

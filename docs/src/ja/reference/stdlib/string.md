@@ -1,16 +1,16 @@
 ---
 title: 'std.string'
-description: '文字列の検索、分割、フォーマット、解析'
+description: '文字列の検索、分割、フォーマットと解析'
 ---
 
 # std.string
 
 文字列操作モジュール。`format`
-を除き、すべての関数は引数に対して読み取り専用の借用（`&String`）を行い、呼び出し後も元の文字列は引き続き使用可能。
+を除き、すべての関数は引数に対して読み取り専用の借用（`&String`）を行い、呼び出し後も元の文字列は引き続き使用できます。
 
-引数の型が一致しない場合、すべての関数は**空文字列の意味論**に縮退する（エラーを返さない）：`split`/`trim`/`upper`
-などは `String` 以外の入力を `""`
-として扱う。これは誤った引数型でも中断されないことを意味するが、期待した結果も得られないことになる——コンパイラによる型チェックでのコンパイル時検出を推奨する。
+すべての関数は引数の型が一致しない場合、エラーを発生させるのではなく**空文字列のセマンティクス**に退化します。`split`/`trim`/`upper`
+などは `String` 以外の引数を `""`
+として扱います。これは誤った引数の型で中断されることはないが、期待される結果も得られないことを意味します。型チェッカーによってコンパイル時に捕捉されることを推奨します。
 
 ```yaoxiang
 use std.string
@@ -42,7 +42,9 @@ use std.string
 | `parse_int`   | `(s: &String) -> Result(Int, Error)`                 |
 | `parse_float` | `(s: &String) -> Result(Float, Error)`               |
 
-<!-- stdlib:table:string end -->## 関数
+<!-- stdlib:table:string end -->
+
+## 関数
 
 ### split
 
@@ -54,19 +56,19 @@ split: (s: &String, sep: &String) -> List(String)
 
 <!-- stdlib:sig:string.split end -->
 
-`sep` で `s` を分割し、部分文字列のリストを返す。
+`sep` で `s` を分割し、部分文字列のリストを返します。
 
 - `s` —— 分割対象の文字列
 - `sep` —— 区切り文字。**空文字列の場合は文字ごとに分割**
 
-戻り値：`List(String)`。区切り文字が見つからない場合は単一要素のリストを返す。
+戻り値：`List(String)`。区切り文字が見つからない場合は単一要素のリストを返します。
 
 ```yaoxiang
 use std.assert
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     assert(list.len(string.split("a,b,c", ",")) == 3)
     assert(list.get(string.split("a,b,c", ","), 0) == "a")
 
@@ -86,15 +88,15 @@ trim: (s: &String) -> String
 
 <!-- stdlib:sig:string.trim end -->
 
-先頭と末尾の Unicode 空白文字を除去する。
+先頭と末尾の Unicode 空白文字を除去します。
 
-戻り値：先頭と末尾の空白を除去した新しい文字列（`s` は変更しない）。
+戻り値：先頭と末尾の空白を除去した新しい文字列（`s` は変更されません）。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.trim("  hi  ") == "hi")
 }
 ```
@@ -109,13 +111,13 @@ upper: (s: &String) -> String
 
 <!-- stdlib:sig:string.upper end -->
 
-大文字に変換する（Unicode 対応）。
+大文字に変換します（Unicode 対応）。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.upper("abc") == "ABC")
 }
 ```
@@ -130,13 +132,13 @@ lower: (s: &String) -> String
 
 <!-- stdlib:sig:string.lower end -->
 
-小文字に変換する（Unicode 対応）。
+小文字に変換します（Unicode 対応）。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.lower("ABC") == "abc")
 }
 ```
@@ -151,15 +153,15 @@ replace: (s: &String, old: &String, new: &String) -> String
 
 <!-- stdlib:sig:string.replace end -->
 
-`s` 内の**すべて**の `old` を `new` に置き換える。
+`s` 中の**すべて**の `old` を `new` に置換します。
 
-- `old` —— 空文字列の場合は `s` を**そのまま返す**（挿入しない）
+- `old` —— 空文字列の場合は `s` を**そのまま返します**（挿入しない）
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.replace("a-b-c", "-", "+") == "a+b+c")
     assert(string.replace("abc", "", "x") == "abc")
 }
@@ -175,13 +177,13 @@ contains: (s: &String, sub: &String) -> Bool
 
 <!-- stdlib:sig:string.contains end -->
 
-`sub` が `s` 内に現れるかどうか。空文字列は常に `true`。
+`sub` が `s` 中に現れるかどうか。空文字列は常に `true`。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.contains("hello", "ell"))
     assert(!string.contains("hello", "xyz"))
 }
@@ -203,7 +205,7 @@ starts_with: (s: &String, prefix: &String) -> Bool
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.starts_with("hello", "he"))
 }
 ```
@@ -224,7 +226,7 @@ ends_with: (s: &String, suffix: &String) -> Bool
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.ends_with("hello", "lo"))
 }
 ```
@@ -239,18 +241,18 @@ index_of: (s: &String, sub: &String) -> Int
 
 <!-- stdlib:sig:string.index_of end -->
 
-`sub` が最初に出現する**バイト**位置。
+`sub` が最初に現れる**バイト**位置。
 
-戻り値：見つかった場合はその位置。見つからない場合は `-1`。
+戻り値：見つかった場合は位置、見つからない場合は `-1`。
 
-> 返り値はバイトオフセット。マルチバイト文字を含む場合は、`chars`
-> で変換してから文字位置を特定できる。
+> 戻り値はバイトオフセットです。マルチバイト文字を含む場合は、`chars`
+> で変換してから文字位置を特定できます。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.index_of("hello", "ll") == 2)
     assert(string.index_of("hello", "xyz") == -1)
 }
@@ -266,21 +268,21 @@ substring: (s: &String, start: Int, end: Int) -> String
 
 <!-- stdlib:sig:string.substring end -->
 
-**文字**位置で `[start, end)` の範囲を取り出す。
+**文字**位置で `[start, end)` の範囲を取得します。
 
-- `start` —— 開始文字位置、デフォルト `0`
+- `start` —— 開始文字位置、デフォルトは `0`
 - `end` —— 終了文字位置（含まない）、デフォルトは文字列の末尾
 
-戻り値：切り出した結果。範囲外の境界は有効な範囲に**クランプ**され、エラーは返さない。`start > end`
-の場合は空文字列にクランプされる。
+戻り値：切り出し結果。範囲外の境界は有効な範囲に**クランプ**され、エラーにはなりません。`start > end`
+の場合は空文字列にクランプされます。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.substring("hello", 1, 4) == "ell")
-    assert(string.substring("hello", 1, 99) == "ello")   // 上限をクランプ
+    assert(string.substring("hello", 1, 99) == "ello")   // 上限のクランプ
 }
 ```
 
@@ -300,7 +302,7 @@ is_empty: (s: &String) -> Bool
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.is_empty(""))
     assert(!string.is_empty("x"))
 }
@@ -316,13 +318,13 @@ len: (s: &String) -> Int
 
 <!-- stdlib:sig:string.len end -->
 
-**UTF-8 のバイト長**を返す。文字数ではない。
+**UTF-8 バイト長**を返します。文字数ではありません。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.len("hello") == 5)
     assert(string.len("中") == 3)   // バイト長
 }
@@ -338,14 +340,14 @@ chars: (s: &String) -> List(String)
 
 <!-- stdlib:sig:string.chars end -->
 
-単一文字の文字列リストに分解する（Unicode スカラー値ごと）。
+単一文字の文字列リストに分割します（Unicode スカラー値ごと）。
 
 ```yaoxiang
 use std.assert
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     cs = string.chars("ab")
     assert(list.len(cs) == 2)
     assert(list.get(cs, 0) == "a")
@@ -362,13 +364,13 @@ concat: (s1: &String, s2: &String) -> String
 
 <!-- stdlib:sig:string.concat end -->
 
-2 つの文字列を連結する。`+` 演算子を使ってもよい。
+2つの文字列を連結します。`+` 演算子も直接使用できます。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.concat("a", "b") == "ab")
 }
 ```
@@ -383,15 +385,15 @@ repeat: (s: &String, n: Int) -> String
 
 <!-- stdlib:sig:string.repeat end -->
 
-`s` を `n` 回繰り返す。
+`s` を `n` 回繰り返します。
 
-- `n` —— 繰り返し回数。`n <= 0` の場合は空文字列を返す
+- `n` —— 繰り返し回数。`n <= 0` の場合は空文字列を返します。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.repeat("ab", 3) == "ababab")
     assert(string.repeat("ab", 0) == "")
 }
@@ -407,13 +409,13 @@ reverse: (s: &String) -> String
 
 <!-- stdlib:sig:string.reverse end -->
 
-文字ごとに反転する。
+文字ごとに反転します。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.reverse("abc") == "cba")
 }
 ```
@@ -428,28 +430,28 @@ format: (format: &String, ...args) -> String
 
 <!-- stdlib:sig:string.format end -->
 
-`{index}` プレースホルダでフォーマットし、任意の幅/位置揃え指定子を使用できる。
+`{index}` プレースホルダーでフォーマットし、オプションで幅/配置指定子を使用します。
 
-プレースホルダの構文：
+プレースホルダー構文：
 
-| 形式     | 意味                                             |
-| -------- | ------------------------------------------------ |
-| `{0}`    | 0 番目の引数（`format` の後から 0 始まりで採番） |
-| `{0:03}` | 幅 3                                             |
-| `{0:>3}` | 幅 3、右揃え（デフォルト）                       |
-| `{0:<3}` | 幅 3、左揃え                                     |
-| `{0:^3}` | 幅 3、中央揃え                                   |
+| 形態     | 意味                                                |
+| -------- | --------------------------------------------------- |
+| `{0}`    | 0番目の引数（`format` の後の引数は 0 から番号付け） |
+| `{0:03}` | 幅 3                                                |
+| `{0:>3}` | 幅 3、右揃え（デフォルト）                          |
+| `{0:<3}` | 幅 3、左揃え                                        |
+| `{0:^3}` | 幅 3、中央揃え                                      |
 
-リテラルの波括弧は二重に書く：左波括弧 2 つで 1 つのリテラル左波括弧、右波括弧も同様。
+リテラルの中括弧は二重書きで表現します：2つの左中括弧でリテラルの左中括弧1つ、2つの右中括弧も同様です。
 
-戻り値：フォーマット後の文字列。引数はまず文字列に変換される（`convert.to_string`
-と同じ）。インデックスが範囲外の場合は空文字列、不正な幅は `0` として扱われる。
+戻り値：フォーマット後の文字列。引数はまず文字列に変換されます（`convert.to_string`
+と同様）。インデックスが範囲外の場合は空文字列、不正な幅は `0` として扱われます。
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.format("{0}-{1}", "a", "b") == "a-b")
     assert(string.format("[{0:>5}]", "ab") == "[   ab]")
     assert(string.format("[{0:<5}]", "ab") == "[ab   ]")
@@ -466,17 +468,17 @@ parse_int: (s: &String) -> Result(Int, Error)
 
 <!-- stdlib:sig:string.parse_int end -->
 
-10 進数の整数を解析する（先頭と末尾の空白を自動的に除去）。
+10 進整数を解析します（先頭と末尾の空白を自動的に除去）。
 
-戻り値：成功時は `Result.ok(Int)`。失敗時は `Result.err(Error)` で、その `code` は
-`E6010`。**例外は送出しない**。
+戻り値：成功時は `Result.ok(Int)`、失敗時は `Result.err(Error)`（`code` は
+`E6010`）。**エラーはスローされません**。
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_int("42")))
     assert(result.is_err(string.parse_int("abc")))
 }
@@ -492,16 +494,16 @@ parse_float: (s: &String) -> Result(Float, Error)
 
 <!-- stdlib:sig:string.parse_float end -->
 
-浮動小数点数を解析する（先頭と末尾の空白を自動的に除去）。
+浮動小数点数を解析します（先頭と末尾の空白を自動的に除去）。
 
-戻り値：成功時は `Result.ok(Float)`。失敗時は `Result.err(Error)` で、その `code` は `E6011`。
+戻り値：成功時は `Result.ok(Float)`、失敗時は `Result.err(Error)`（`code` は `E6011`）。
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_float("3.14")))
     assert(result.is_err(string.parse_float("xxx")))
 }
@@ -510,4 +512,4 @@ main = {
 ## 関連
 
 - [`std.convert`](./convert) —— 数値から文字列への変換
-- [`std.result`](./result) —— `parse_*` の結果のアンラップ
+- [`std.result`](./result) —— `parse_*` の結果をアンパック

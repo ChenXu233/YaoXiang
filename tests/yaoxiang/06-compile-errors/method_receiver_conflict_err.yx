@@ -12,7 +12,7 @@ Point: Type = { x: Int, y: Int }
 Point.shift: (self: &mut Point) -> Void = {
     self.x = 5
 }
-main = {
+main: () -> Void = {
     p = Point(1, 2)
     v = &p.y
     p.shift()

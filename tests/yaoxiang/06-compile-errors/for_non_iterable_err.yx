@@ -5,7 +5,7 @@
 // 验证: 0.8.0 盘点硬化；List/Array/Range/String/Dict/Tuple 合法
 // 状态: ❌ 应编译失败
 
-main = {
+main: () -> Void = {
     for x in 5 {
         y = x
     }

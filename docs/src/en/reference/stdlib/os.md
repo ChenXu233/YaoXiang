@@ -12,43 +12,43 @@ variables, and working directory.
 use std.os
 ```
 
-> All functions in this module depend on operating system capabilities, and are **not exported** on
+> All functions in this module depend on operating system capabilities and are **not exported** for
 > the `wasm32` target.
 
 ## File Handle Model
 
 > **Important limitation (#337)**: The handle returned by `open` is **single-use**. It has no `&`,
-> so when it's first passed to `read` / `write` / `seek` / `tell` / `flush` / `close`, it's
-> **moved**, and cannot be used again afterwards. Therefore the common pattern `open` → `write` →
-> `close` **cannot compile** under the current implementation (it will report `E2014`).
+> so the first time it is passed to `read` / `write` / `seek` / `tell` / `flush` / `close`, it is
+> **moved** and can no longer be used. Therefore, the common pattern `open` → `write` → `close`
+> **cannot be compiled** under the current implementation (it will report `E2014`).
 >
 > Two viable approaches:
 >
-> 1. **Inline `open` into a single call** — the handle is consumed immediately after creation:
+> 1. **Inline `open` into a single call** — the handle is consumed immediately after being created:
 >
 >    ```yaoxiang
 >    n = os.write(os.open(p, "w"), "hello")
 >    ```
 >
-> 2. **Use the convenience functions that don't open handles** —
->    [`std.io.read_file`](./io#read_file) / [`write_file`](./io#write_file) /
->    [`append_file`](./io#append_file), or this module's [`append_file`](#append_file).
+> 2. **Use convenience functions that do not open handles** — [`std.io.read_file`](./io#read_file) /
+>    [`write_file`](./io#write_file) / [`append_file`](./io#append_file), or this module's
+>    [`append_file`](#append_file).
 >
-> Handles exist as entries in a handle table and are reclaimed with the process when it exits. Since
-> a handle cannot be referenced again after a single use, explicit `close` cannot be written in most
-> scenarios (but see the inline single-call form below).
+> Handles exist as entries in the handle table and are reclaimed with the process at exit; because
+> they cannot be referenced again after one use, an explicit `close` cannot be written in most
+> scenarios (but see the single-call form below).
 
-`open` returns an **`Int`-typed file descriptor** (the engine internally maintains a handle table),
-so `File` in the signature is actually `Int`.
+`open` returns a **`Int` file descriptor** (the engine internally maintains a handle table), so the
+`File` in the signature is effectively `Int`.
 
-Content is flushed to disk immediately after writing, with no need for explicit `close`:
+Content is written to disk immediately after writing; no explicit `close` is required:
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_open.txt"
     n = os.write(os.open(p, "w"), "hello")
     assert(n == 5)
@@ -59,16 +59,16 @@ main = {
 
 Modes supported by `open`:
 
-| Mode | Meaning                         |
-| ---- | ------------------------------- |
-| `r`  | Read-only, file must exist      |
-| `w`  | Write-only, create or truncate  |
-| `a`  | Append, create or append to end |
-| `r+` | Read-write, file must exist     |
-| `w+` | Read-write, create or truncate  |
-| `a+` | Read-write, create or append    |
+| Mode | Meaning                             |
+| ---- | ----------------------------------- |
+| `r`  | Read only; file must exist          |
+| `w`  | Write only; create or truncate      |
+| `a`  | Append; create or append to the end |
+| `r+` | Read and write; file must exist     |
+| `w+` | Read and write; create or truncate  |
+| `a+` | Read and write; create or append    |
 
-## Function Overview
+## Function List
 
 <!-- stdlib:table:os start -->
 
@@ -111,25 +111,25 @@ open: (path: &String, mode: &String) -> File
 
 <!-- stdlib:sig:os.open end -->
 
-Opens a file and returns a file descriptor.
+Open a file and return a file descriptor.
 
-- `path` — File path (read-only borrow)
-- `mode` — Open mode, see table above
+- `path` — file path (read-only borrow)
+- `mode` — open mode, see the table above
 
-Returns: an `Int` descriptor allocated from the internal handle table. **This handle can only be
-used once** — any downstream call will move it (see [File Handle Model](#file-handle-model)), so
-`open` is usually inlined into a single call.
+Returns: an `Int` descriptor allocated from the internal handle table. **The handle can only be used
+once** — any downstream call will move it (see [File Handle Model](#file-handle-model)), so `open`
+is usually inlined into a single call.
 
-Errors: throws `E6007` for invalid mode, non-existent file, or lack of permission.
+Errors: throws `E6007` for an invalid mode, missing file, or insufficient permissions.
 
-> Since the handle can only be used once (#337), the return value is usually inlined directly into a
+> The handle can only be used once (#337), so the return value is usually inlined directly into a
 > downstream call.
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_open_only.txt"
     f = os.open(p, "w")
     assert(os.exists(p))
@@ -147,18 +147,18 @@ close: (file: File) -> Void
 
 <!-- stdlib:sig:os.close end -->
 
-Closes the file handle and frees the table entry.
+Close a file handle and release the table entry.
 
-Since the handle can only be used once, `close` only makes sense in scenarios where the file is
-opened and not used further. Written content is already flushed to disk when [`write`](#write)
-returns, so explicit close is usually unnecessary.
+Because the handle can only be used once, `close` is only meaningful in scenarios where the file is
+opened but not used afterwards; content written via [`write`](#write) is already flushed to disk by
+the time it returns, so an explicit close is usually unnecessary.
 
-Errors: throws `E6007` when the descriptor is invalid (not opened or already closed).
+Errors: throws `E6007` for an invalid descriptor (not opened or already closed).
 
 ```yaoxiang
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_close.txt"
     f = os.open(p, "w")
     os.close(f)
@@ -176,21 +176,22 @@ read: (file: File, n: Int) -> String
 
 <!-- stdlib:sig:os.read end -->
 
-Reads at most `n` bytes from the current read/write position.
+Read **up to** `n` bytes from the current read/write position.
 
-- `file` — File descriptor
-- `n` — Number of bytes expected to be read
+- `file` — file descriptor
+- `n` — number of bytes to read
 
-Returns: the actually read content (may be shorter than `n`, returns an empty string when reaching
-the end of file). Invalid UTF-8 bytes are returned as replacement characters, no error reported.
-Errors: throws `E6007` when the descriptor is invalid or reading fails.
+Returns: the content actually read (may be shorter than `n`; returns an empty string at end of
+file). Invalid UTF-8 bytes are returned as replacement characters, no error is raised.
+
+Errors: throws `E6007` for an invalid descriptor or read failure.
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_read.txt"
     io.write_file(p, "abcdef")
 
@@ -210,18 +211,18 @@ write: (file: File, content: String) -> Int
 
 <!-- stdlib:sig:os.write end -->
 
-Writes all of `content` at the current read/write position.
+Write all of `content` at the current read/write position.
 
 - `content` — passed by value
 
-Returns: the **number of bytes written**. Errors: throws `E6007` when the descriptor is invalid or
-writing fails.
+Returns: the **number of bytes** written. Errors: throws `E6007` for an invalid descriptor or write
+failure.
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_write.txt"
     n = os.write(os.open(p, "w"), "hello")
     assert(n == 5)
@@ -239,20 +240,18 @@ seek: (file: File, offset: Int) -> Bool
 
 <!-- stdlib:sig:os.seek end -->
 
-Moves the read/write position to the **absolute** offset `offset` (relative to the beginning of the
-file).
+Move the read/write position to **absolute** offset `offset` (relative to the start of the file).
 
-- `offset` — Target byte offset, must be non-negative
+- `offset` — target byte offset, must be non-negative
 
-Returns: `true` on success. Errors: throws `E6007` when the descriptor is invalid or offset is
-invalid.
+Returns: `true` on success. Errors: throws `E6007` for an invalid descriptor or invalid offset.
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_seek.txt"
     io.write_file(p, "abcdef")
 
@@ -272,15 +271,15 @@ tell: (file: File) -> Int
 
 <!-- stdlib:sig:os.tell end -->
 
-Returns the byte offset of the current read/write position.
+Return the byte offset of the current read/write position.
 
-Errors: throws `E6007` when the descriptor is invalid.
+Errors: throws `E6007` for an invalid descriptor.
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_tell.txt"
     pos = os.tell(os.open(p, "w"))
     assert(pos == 0)
@@ -298,15 +297,15 @@ flush: (file: File) -> Void
 
 <!-- stdlib:sig:os.flush end -->
 
-Flushes buffered content to disk.
+Flush buffered content to disk.
 
-Errors: throws `E6007` when the descriptor is invalid or flush fails.
+Errors: throws `E6007` for an invalid descriptor or flush failure.
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_flush.txt"
     os.flush(os.open(p, "w"))
     assert(os.exists(p))
@@ -326,16 +325,16 @@ mkdir: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.mkdir end -->
 
-Creates a **single-level** directory (does not recursively create parent directories).
+Create a **single-level** directory (does not create parent directories recursively).
 
-Returns: `true` on success. Errors: throws `E6007` when parent directory does not exist or directory
-already exists.
+Returns: `true` on success. Errors: throws `E6007` if the parent directory does not exist or the
+directory already exists.
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     d = "__yx_doc_mkdir"
     assert(os.mkdir(d))
     assert(os.is_dir(d))
@@ -353,15 +352,15 @@ rmdir: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.rmdir end -->
 
-Removes an **empty** directory.
+Delete an **empty** directory.
 
-Returns: `true` on success. Errors: throws `E6007` when directory does not exist or is not empty.
+Returns: `true` on success. Errors: throws `E6007` if the directory does not exist or is not empty.
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     d = "__yx_doc_rmdir"
     os.mkdir(d)
     assert(os.rmdir(d))
@@ -379,17 +378,17 @@ read_dir: (path: &String) -> String
 
 <!-- stdlib:sig:os.read_dir end -->
 
-Lists the entry names under a directory.
+List the entry names within a directory.
 
-Returns: entry names joined by **`\n`** as a single string (not a `List`). Errors: throws `E6007`
-when directory does not exist or lack of permission.
+Returns: a single string with entry names joined by **`\n`** (not a `List`). Errors: throws `E6007`
+if the directory does not exist or permission is denied.
 
 ```yaoxiang
 use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     d = "__yx_doc_read_dir"
     os.mkdir(d)
     names = os.read_dir(d)
@@ -411,17 +410,18 @@ remove: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.remove end -->
 
-Removes a file, semantically equivalent to `remove_file` (**cannot remove directories**; use
-[`rmdir`](#rmdir) to remove directories).
+Delete a file, semantically equivalent to `remove_file` (**cannot delete directories**; use
+[`rmdir`](#rmdir) for directories).
 
-Returns: `true` on success. Errors: throws `E6007` when file does not exist or path is a directory.
+Returns: `true` on success. Errors: throws `E6007` if the file does not exist or the path is a
+directory.
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_remove.txt"
     io.write_file(p, "x")
     assert(os.remove(p))
@@ -439,14 +439,14 @@ exists: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.exists end -->
 
-Whether the path exists (file or directory). **No error** is reported; returns `false` if it does
+Whether a path exists (file or directory). **Does not raise an error**; returns `false` if it does
 not exist.
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     assert(os.exists("."))
     assert(!os.exists("__yx_definitely_missing_path__"))
 }
@@ -462,14 +462,14 @@ is_file: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.is_file end -->
 
-Whether the path is a **regular file**. Returns `false` for directories, `false` for non-existent
-paths.
+Whether the path is a **regular file**. Returns `false` for directories, and `false` for
+non-existent paths.
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     assert(!os.is_file("."))
 }
 ```
@@ -484,13 +484,13 @@ is_dir: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.is_dir end -->
 
-Whether the path is a **directory**. Returns `false` for files, `false` for non-existent paths.
+Whether the path is a **directory**. Returns `false` for files, and `false` for non-existent paths.
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     assert(os.is_dir("."))
 }
 ```
@@ -505,17 +505,17 @@ copy: (src: &String, dst: &String) -> Bool
 
 <!-- stdlib:sig:os.copy end -->
 
-Copies a file. **Overwrites** if the destination already exists.
+Copy a file. **Overwrites** the destination if it already exists.
 
-Returns: `true` on success. Errors: throws `E6007` when source file does not exist or lack of
-permission.
+Returns: `true` on success. Errors: throws `E6007` if the source file does not exist or permission
+is denied.
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     a = "__yx_doc_copy_a.txt"
     b = "__yx_doc_copy_b.txt"
     io.write_file(a, "data")
@@ -536,17 +536,17 @@ rename: (old: &String, new: &String) -> Bool
 
 <!-- stdlib:sig:os.rename end -->
 
-Renames or moves a file.
+Rename or move a file.
 
-Returns: `true` on success. Errors: throws `E6007` when source file does not exist or destination
-already exists.
+Returns: `true` on success. Errors: throws `E6007` if the source file does not exist or the
+destination already exists.
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     a = "__yx_doc_rename_a.txt"
     b = "__yx_doc_rename_b.txt"
     io.write_file(a, "data")
@@ -566,20 +566,20 @@ append_file: (path: &String, content: &String) -> Bool
 
 <!-- stdlib:sig:os.append_file end -->
 
-Appends content (convenience function that doesn't open a handle). Creates the file if it does not
+Append write (convenience function that does not open a handle). Creates the file if it does not
 exist.
 
-Returns: `true` on success. Errors: throws `E6007` on permission denied.
+Returns: `true` on success. Errors: throws `E6007` for insufficient permissions.
 
-> This is a same-name counterpart to [`std.io.append_file`](./io#append_file); both modules provide
-> it with identical behavior.
+> This is a same-name, same-behavior interface as [`std.io.append_file`](./io#append_file); both
+> modules provide it with identical behavior.
 
 ```yaoxiang
 use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_os_append.txt"
     io.write_file(p, "a")
     os.append_file(p, "b")
@@ -600,22 +600,22 @@ get_env: (name: &String) -> String
 
 <!-- stdlib:sig:os.get_env end -->
 
-Reads an environment variable.
+Read an environment variable.
 
-Returns: the variable value; **returns an empty string if the variable does not exist** (no error).
-Therefore you cannot distinguish between "unset" and "set to empty string".
+Returns: the variable's value; **returns an empty string if the variable is not set** (no error).
+Therefore, it is not possible to distinguish between "not set" and "set to empty string".
 
 ```yaoxiang
 use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     // PATH is guaranteed to exist on mainstream platforms
     path = os.get_env("PATH")
     assert(string.len(path) > 0)
 
-    // Non-existent variables return an empty string
+    // A non-existent variable returns an empty string
     assert(string.is_empty(os.get_env("__YX_DEFINITELY_MISSING__")))
 }
 ```
@@ -630,13 +630,13 @@ set_env: (name: &String, value: &String) -> Void
 
 <!-- stdlib:sig:os.set_env end -->
 
-Sets an environment variable (affects the current process).
+Set an environment variable (affects the current process).
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     os.set_env("__YX_DOC_ENV", "hello")
     assert(os.get_env("__YX_DOC_ENV") == "hello")
 }
@@ -654,17 +654,17 @@ args: () -> String
 
 <!-- stdlib:sig:os.args end -->
 
-Returns command-line arguments.
+Return command-line arguments.
 
-Returns: all argv as a single string joined by **`\n`** (not a `List`). The first item is the
-program's own path.
+Returns: a single string with all argv joined by **`\n`** (not a `List`). The first item is the
+program path itself.
 
 ```yaoxiang
 use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     argv = os.args()
     assert(string.len(argv) > 0)
 }
@@ -680,18 +680,18 @@ chdir: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.chdir end -->
 
-Changes the current working directory.
+Change the current working directory.
 
-Returns: `true` on success. Errors: throws `E6007` when directory does not exist.
+Returns: `true` on success. Errors: throws `E6007` if the directory does not exist.
 
 ```yaoxiang
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     before = os.getcwd()
     assert(os.chdir(".."))
-    assert(os.chdir(before))     // switch back
+    assert(os.chdir(before))     // Switch back
     assert(os.getcwd() == before)
 }
 ```
@@ -706,16 +706,16 @@ getcwd: () -> String
 
 <!-- stdlib:sig:os.getcwd end -->
 
-Returns the absolute path of the current working directory.
+Return the absolute path of the current working directory.
 
-Errors: throws `E6007` when it cannot be retrieved.
+Errors: throws `E6007` if it cannot be obtained.
 
 ```yaoxiang
 use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     cwd = os.getcwd()
     assert(string.len(cwd) > 0)
 }
@@ -724,4 +724,4 @@ main = {
 ## Related
 
 - [`std.io`](./io) — Whole-file read/write convenience functions
-- [Error code reference](../error-code/) — `E6007` general runtime error
+- [Error Code Reference](../error-code/) — `E6007` general runtime error

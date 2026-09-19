@@ -1,6 +1,6 @@
 ---
 title: 'std.net'
-description: 'HTTP Requests and URL Percent-Encoding'
+description: 'HTTP requests and URL percent-encoding/decoding'
 ---
 
 # std.net
@@ -14,12 +14,12 @@ use std.net
 > This module depends on the operating system's networking capabilities and is **not exported** on
 > the `wasm32` target.
 
-> **Implementation Status Warning (#56)**: Of the 4 functions in this module, only `url_encode` /
-> `url_decode` are real implementations. `http_get` / `http_post` **are placeholder
-> implementations—they do not send any network request** and only concatenate parameters into a
-> string and return it. See the entries below for details.
+> **Implementation status warning (#56)**: Of the 4 functions in this module, only `url_encode` /
+> `url_decode` are real implementations. `http_get` / `http_post` are **placeholder
+> implementations—they do not send any network requests**; they only concatenate the arguments into
+> a string and return it. See each section below for details.
 
-## Function Overview
+## Function overview
 
 <!-- stdlib:table:net start -->
 
@@ -44,22 +44,22 @@ http_get: (url: &String) -> String
 
 <!-- stdlib:sig:net.http_get end -->
 
-> **Placeholder implementation, not wired to an HTTP client (#56).** The current behavior
-> concatenates the input into a string like `"GET: {url}"` and returns it, **does not initiate any
-> network request**, and does not return a response body. Relying on it for real HTTP calls will
-> fail silently—you will get a descriptive string, not the response content.
+> **Placeholder implementation, not wired to an HTTP client (#56).** The current behavior is to
+> concatenate the argument into the string `"GET: {url}"` and return it, **without initiating any
+> network request** or returning a response body. Relying on it for real HTTP calls will silently
+> fail—you will get a descriptive string rather than the response content.
 
-- `url` —— The request URL (read-only borrow)
+- `url` — Request URL (read-only borrow)
 
-Returns: a string like `"GET: http://example.com"`. Errors: throws `E6007` when an argument is
-missing; throws a type error when an argument is not a `String`.
+Returns: a string of the form `"GET: http://example.com"`. Errors: throws `E6007` when the argument
+is missing; throws a type error when the argument is not a `String`.
 
 ```yaoxiang
 use std.assert
 use std.net
 
-main = {
-    // Current implementation returns a descriptive string, not the response body
+main: () -> Void = {
+    // The current implementation returns a descriptive string, not the response body
     r = net.http_get("http://example.com")
     assert(r == "GET: http://example.com")
 }
@@ -75,21 +75,21 @@ http_post: (url: &String, body: &String) -> String
 
 <!-- stdlib:sig:net.http_post end -->
 
-> **Placeholder implementation, not wired to an HTTP client (#56).** The current behavior
-> concatenates into a string like `"POST {url}: {body}"` and returns it, **does not initiate any
-> network request**.
+> **Placeholder implementation, not wired to an HTTP client (#56).** The current behavior is to
+> concatenate the string `"POST {url}: {body}"` and return it, **without initiating any network
+> request**.
 
-- `url` —— The request URL (read-only borrow)
-- `body` —— The request body (read-only borrow)
+- `url` — Request URL (read-only borrow)
+- `body` — Request body (read-only borrow)
 
-Returns: a string like `"POST http://example.com: hello"`. Errors: throws `E6007` when arguments are
-insufficient; throws a type error when argument types do not match.
+Returns: a string of the form `"POST http://example.com: hello"`. Errors: throws `E6007` when
+arguments are insufficient; throws a type error when argument types do not match.
 
 ```yaoxiang
 use std.assert
 use std.net
 
-main = {
+main: () -> Void = {
     r = net.http_post("http://example.com", "hello")
     assert(r == "POST http://example.com: hello")
 }
@@ -107,19 +107,19 @@ url_encode: (s: &String) -> String
 
 Percent-encoding.
 
-- `s` —— The string to encode (read-only borrow)
+- `s` — The string to be encoded (read-only borrow)
 
 Returns: the encoded string. Spaces are encoded as `%20` (not `+`); reserved characters are escaped
-according to RFC 3986; unreserved characters are preserved as-is.
+per RFC 3986; unreserved characters are passed through unchanged.
 
-Errors: throws `E6007` when an argument is missing; throws a type error when an argument is not a
+Errors: throws `E6007` when the argument is missing; throws a type error when the argument is not a
 `String`.
 
 ```yaoxiang
 use std.assert
 use std.net
 
-main = {
+main: () -> Void = {
     assert(net.url_encode("a b") == "a%20b")
     assert(net.url_encode("a&b=c?d") == "a%26b%3Dc%3Fd")
 }
@@ -135,23 +135,23 @@ url_decode: (s: &String) -> String
 
 <!-- stdlib:sig:net.url_decode end -->
 
-Percent-decoding, inverse of `url_encode`.
+Percent-decoding; the inverse of `url_encode`.
 
-- `s` —— The encoded string (read-only borrow)
+- `s` — The encoded string (read-only borrow)
 
 Returns: the decoded string. Illegal escape sequences are preserved as-is.
 
-Errors: throws `E6007` when an argument is missing; throws a type error when an argument is not a
+Errors: throws `E6007` when the argument is missing; throws a type error when the argument is not a
 `String`.
 
 ```yaoxiang
 use std.assert
 use std.net
 
-main = {
+main: () -> Void = {
     assert(net.url_decode("a%20b") == "a b")
 
-    // Round-trip is consistent
+    // Round-trip consistency
     orig = "hello world & friends"
     assert(net.url_decode(net.url_encode(orig)) == orig)
 }
@@ -159,4 +159,4 @@ main = {
 
 ## Related
 
-- [Error Code Reference](../error-code/) —— `E6007` generic runtime error
+- [Error code reference](../error-code/) — `E6007` generic runtime error

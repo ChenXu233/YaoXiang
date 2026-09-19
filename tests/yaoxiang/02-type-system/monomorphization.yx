@@ -12,7 +12,7 @@ add_pair: (T: Type) -> (a: T, b: T) -> T = (a, b) => a
 // 嵌套泛型调用
 double_identity: (T: Type) -> (x: T) -> T = (x) => identity(x)
 
-main = {
+main: () -> Void = {
     // 测试 1: identity 用不同类型调用（验证单态化生成多个版本）
     x = identity(42)
     s = identity("hello")

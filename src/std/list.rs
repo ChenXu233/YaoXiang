@@ -453,7 +453,12 @@ fn native_set(
         .map(|i| i.len())
         .unwrap_or(0);
     let index = usize::try_from(index).map_err(|_| {
-        // #300 D 项：负索引归并 E6003，诊断保真（原始 i64）
+        // #300 D 项：负索引归并 E6003，诊断保真（原始 i64）。
+        //
+        // `index_slot: None` 是**正确**的：native 调用拿不到调用方的实参表达式，
+        // 无法反查「这个下标来自哪个变量」。语法层的 `a[i] = v` 走
+        // STORE_ELEMENT 指令，那条路径能带 `index_slot`（见 executor/debug.rs），
+        // 因此会显示 `found 5 (i)`；`list.set(a, i, v)` 形态则只能给出数值。
         ExecutorError::IndexOutOfBounds {
             max: list_len,
             index,
@@ -468,7 +473,8 @@ fn native_set(
     if index < items.len() {
         items[index] = value;
     } else {
-        // #279/#280：越界写不再静默丢弃，报专用码 E6003
+        // #279/#280：越界写不再静默丢弃，报专用码 E6003。
+        // `index_slot: None` 同上层理由（native 形态无实参表达式可反查）。
         return Err(ExecutorError::index_out_of_bounds(
             items.len(),
             index as i64,

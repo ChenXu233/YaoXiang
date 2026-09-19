@@ -21,7 +21,7 @@ parse_chain: (s: &String) -> Result(Int, Error) = {
     return result.ok(d + 1)
 }
 
-main = {
+main: () -> Void = {
     // 成功路径：21 → parse_int? 解包 21 → ok(42) → parse_double? 解包 42 → ok(43)
     ok = parse_chain("21")
     assert.assert(result.is_ok(ok), "chain ok: is_ok")

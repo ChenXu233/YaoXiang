@@ -5,7 +5,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     name = "world"
     msg = f"hello {name}"
     assert.assert(msg == "hello world", "f-string name == world")

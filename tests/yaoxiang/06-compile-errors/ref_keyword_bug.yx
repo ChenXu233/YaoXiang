@@ -9,7 +9,7 @@
 
 use std.io
 
-main = {
+main: () -> Void = {
     x = 1
     ref = 2      // 这行被静默跳过！x 应该输出 2 但输出 1
     io.println(x)

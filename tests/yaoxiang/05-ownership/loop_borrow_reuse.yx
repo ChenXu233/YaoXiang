@@ -8,7 +8,7 @@ Point: Type = { x: Int, y: Int }
 good_seq: (p: &mut Point) -> Void = {
     p.x = 10
 }
-main = {
+main: () -> Void = {
     p = Point(1, 2)
     mut i = 0
     while i < 5 {

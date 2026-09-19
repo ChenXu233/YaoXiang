@@ -1027,6 +1027,55 @@ impl Expr {
     ///
     /// 关键：块值语义**不靠新语法**。想要 `{ ... }` 当场求值就把目标类型写上：
     /// `x: Int = { y = 5; y }`。
+    /// `name = <expr>` 中，`mut` 绑定是否为类型/方法的**元绑定**——
+    /// 这类左值不引入变量，不适用 spec §4.3 的声明/赋值判定。
+    ///
+    /// 两种形态：
+    /// - **类型定义绑定**（RFC-010）：`Db = unsafe { Db: Type = {...}; Db }`
+    ///   块内定义类型、尾表达式交回类型名——编译期构造，无运行时绑定。
+    /// - 调用方自有的其他形态（如 `Type.method = f` 方法绑定）由调用方判定。
+    pub fn is_type_def_binding(value: Option<&Expr>) -> bool {
+        let Some(Expr::Unsafe { body, .. }) = value else {
+            return false;
+        };
+        // 块内**直接**包含类型定义，且尾表达式引用该类型名
+        let mut def_names: Vec<&str> = Vec::new();
+        for st in &body.stmts {
+            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition { name, .. } =
+                &st.kind
+            {
+                def_names.push(name.as_str());
+            }
+        }
+        if def_names.is_empty() {
+            return false;
+        }
+        matches!(
+            body.stmts.last().map(|s| &s.kind),
+            Some(crate::frontend::core::parser::ast::StmtKind::Expr(e))
+                if matches!(e.as_ref(), Expr::Var(n, _) if def_names.contains(&n.as_str()))
+        )
+    }
+
+    /// `name = <value>` 是**函数定义**还是**值绑定**？（B 方案）
+    ///
+    /// # 判据：注解
+    ///
+    /// | 情形 | 结果 | 依据 |
+    /// | ---- | ---- | ---- |
+    /// | `value` 是 `Lambda`（`=>`） | 函数 | `=>` 是显式函数构造子 |
+    /// | 注解是 `Fn` | 函数 | 声明了函数类型 |
+    /// | 注解是非 `Fn` 类型 | 值 | 注解即类型 |
+    /// | **无注解** | **值** | **内容决定类型** |
+    ///
+    /// # 与旧裁决 C 的差别（无注解行）
+    ///
+    /// 旧规则「无注解 → 默认函数」（RFC-007「空参最简」）已被取消：
+    /// 它使 `f = { 5 }` 是函数而非 `5`，与「内容决定类型」相悖——
+    /// 块的值应由内容给出，不由注解存在与否决定。
+    ///
+    /// 现在要定义函数就写注解：`f: () -> Int = { 5 }`。
+    /// 这条规则与 `d = {"a": 1}` 同源：类型由内容（此处为注解）决定。
     pub fn block_binding_is_function(
         type_annotation: Option<&Type>,
         value: Option<&Expr>,
@@ -1034,13 +1083,8 @@ impl Expr {
         match value {
             // `=>` 是显式函数构造子，注释无关
             Some(Expr::Lambda { .. }) => true,
-            Some(Expr::Block(_)) => match type_annotation {
-                Some(Type::Fn { .. }) => true,
-                // 非 Fn 注解：注解声明了目标类型，块求值成该类型的值
-                Some(_) => false,
-                // 无注解：默认函数（RFC-007「空参最简」）
-                None => true,
-            },
+            // 块：只有 Fn 注解才是函数；无注解按值处理（内容决定类型）
+            Some(Expr::Block(_)) => matches!(type_annotation, Some(Type::Fn { .. })),
             // 非块值的绑定不参与此判定
             _ => false,
         }

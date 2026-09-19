@@ -38,6 +38,10 @@ pub struct Lexer<'a> {
     pub error: Option<crate::frontend::core::lexer::LexError>,
 
     state: LexerState,
+
+    /// 上一个产出 token 的 kind（用于消解 `.` 的歧义：`t.0` 成员访问 vs `.5` 前导小数）。
+    /// `None` 表示行首/文件开头。
+    last_token_kind: Option<TokenKind>,
 }
 
 impl<'a> Lexer<'a> {
@@ -61,6 +65,8 @@ impl<'a> Lexer<'a> {
             error: None,
 
             state: LexerState::new(),
+
+            last_token_kind: None,
         }
     }
 
@@ -200,6 +206,16 @@ impl<'a> Lexer<'a> {
 
     /// Generate next token
     pub fn next_token(&mut self) -> Option<Token> {
+        let token = self.next_token_inner();
+        if let Some(t) = &token {
+            if !matches!(t.kind, TokenKind::Eof) {
+                self.last_token_kind = Some(t.kind.clone());
+            }
+        }
+        token
+    }
+
+    fn next_token_inner(&mut self) -> Option<Token> {
         self.skip_whitespace_and_comments();
 
         // Check if at end of file
@@ -419,7 +435,9 @@ impl<'a> Lexer<'a> {
                     } else {
                         Some(self.make_token(TokenKind::DotDot))
                     }
-                } else if self.peek().map(|c| is_digit(*c)).unwrap_or(false) {
+                } else if self.peek().map(|c| is_digit(*c)).unwrap_or(false)
+                    && self.digit_after_dot_is_float()
+                {
                     // Leading decimal point: .5
 
                     scan_leading_dot(self)
@@ -444,6 +462,27 @@ impl<'a> Lexer<'a> {
     }
 
     /// Scan identifier token
+    /// `.` 后紧跟数字时，判断这是「前导小数」（`.5`）还是「成员/元组下标访问」（`t.0`）。
+    ///
+    /// 二者词法形态相同，只能看**上一个 token**：
+    ///   标识符 / `)` / `]` / `}` 之后 → 成员或元组下标（`t.0`、`f(x).0`），
+    ///   其余（运算符、逗号、行首等）→ 前导小数（`.5`）。
+    /// 此前一律当前导小数，`t.0` 被读成 `t` + `0.0`，元组下标完全不可用。
+    fn digit_after_dot_is_float(&self) -> bool {
+        !matches!(
+            self.last_token_kind.as_ref(),
+            Some(
+                TokenKind::Identifier(_)
+                    | TokenKind::RParen
+                    | TokenKind::RBracket
+                    | TokenKind::RBrace
+                    | TokenKind::IntLiteral(_)
+                    | TokenKind::FloatLiteral(_)
+                    | TokenKind::StringLiteral(_)
+            )
+        )
+    }
+
     fn scan_identifier(
         &mut self,
 

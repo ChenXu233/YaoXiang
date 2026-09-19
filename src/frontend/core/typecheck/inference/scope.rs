@@ -15,14 +15,136 @@ use std::collections::HashMap;
 use crate::frontend::core::types::PolyType;
 use crate::util::span::Span;
 
+/// `x = value` 的绑定动作（spec §4.3「赋值优先」）。
+///
+/// 规范算法（`x = value` 沿作用域链向外查找）：
+///
+/// ```text
+/// 找到 mut x           → 赋值 OK
+/// 找到 x（不可变，存活）→ E2010 不可重新赋值
+/// 找不到               → 在当前作用域新声明
+/// ```
+///
+/// `mut x = value` 是**显式新声明**，同作用域撞名 → E2002；
+/// 外层存在同名 → E2013（禁止遮蔽）。
+///
+/// # 「已 moved」分支已删除（2026-09-19）
+///
+/// spec 旧文有一行「找到 x（已 moved）→ 视为未找到有效绑定，重新声明」。
+/// 该分支**不可达且不该存在**：
+///
+/// - **不可达**：判定依赖 `VarInfo::moved`，而其唯一写入点 `mark_moved` 零调用点，
+///   故 `moved` 恒为 `false`。
+/// - **不该存在**：move 是**路径相关**的数据流属性（`if c { move p }` 后 `p` 在
+///   一条路径上已 move、另一条尚未），一个布尔字段结构上无法表达——它没有
+///   分支概念。真正的 move 分析在 `layers/ownership.rs`：构建函数体 CFG，
+///   以 `Alive < Moved < Dropped` 格做数据流，分支汇合取 max（保守），
+///   读检查点报 E2014/E2018。
+///
+/// 所以「moved 后可重声明」由**重声明本身**承担：写 `mut x = v` 即新声明；
+/// 想复用旧名而不写 `mut`，本来就需要一个能表达「这是新绑定」的记号。
+///
+/// 本函数是这条规则的**唯一实现**：`StatementChecker` 与 `ExpressionInferrer`
+/// 都调它。此前两处各写一份，导致规则不一致（一处有 E2010、一处没有）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingAction {
+    /// 同作用域（或跨作用域 mut）重赋值：写回既有绑定
+    Reassign,
+    /// 新声明：在当前作用域插入
+    Declare,
+    /// 不可变绑定被重赋值 → E2010
+    ImmutableReassign,
+    /// 显式 `mut` 重新声明同名（同作用域）→ E2002
+    DuplicateDefinition,
+    /// 显式 `mut` 声明撞外层同名 → E2013 禁止遮蔽
+    Shadowing,
+}
+
+impl ScopeManager {
+    /// 判定 `name = value` 应走哪个动作（spec §4.3）。
+    ///
+    /// `is_mut` 是**语句级**的 `mut` 标记（是显式新声明还是赋值）。
+    /// `is_declaration_only`：纯注解声明（`x: Int` / `f: () -> Void`，无初值）。
+    /// 这类语句是**声明**而非赋值，不参与 §4.3 的「沿作用域链查找」。
+    /// （pass2 会预注册它们以供前向引用，若按真实绑定处理会误报 E2010。）
+    ///
+    /// 返回的动作由调用方执行（写回 / 插入 / 报错）——因为两个检查器的
+    /// 写回方式不同（一个走 `assign_var` 带 unify 开关，一个直接 `update_var`）。
+    pub fn classify_binding(
+        &self,
+        name: &str,
+        is_mut: bool,
+        is_declaration_only: bool,
+    ) -> BindingAction {
+        // 前向引用占位（pass2 预注册、声明语句未执行）与导入名
+        // （`use` 来的 std 导出 / 跨模块符号）都**不算本文件的现有绑定**：
+        // 否则顶层 `mut i = 0` 误报 E2013；`ok = ...`（撞 `std.result.ok`）误报 E2010。
+        let info = self
+            .get_var_info(name)
+            .filter(|v| !v.forward_declared && !v.imported);
+        let in_current = info.is_some() && self.var_in_current_scope(name);
+        let anywhere = info.is_some();
+        let existing_mut = info.map(|v| v.is_mut).unwrap_or(false);
+
+        // 纯注解声明：总是声明（同作用域真撞名才报 E2002）
+        if is_declaration_only {
+            if in_current {
+                return BindingAction::DuplicateDefinition;
+            }
+            return BindingAction::Declare;
+        }
+
+        if is_mut {
+            // `mut x = value`：显式新声明
+            if in_current {
+                return BindingAction::DuplicateDefinition;
+            }
+            if anywhere {
+                return BindingAction::Shadowing;
+            }
+            return BindingAction::Declare;
+        }
+
+        // `x = value`：赋值优先
+        if in_current {
+            if existing_mut {
+                BindingAction::Reassign
+            } else {
+                BindingAction::ImmutableReassign
+            }
+        } else if anywhere {
+            if existing_mut {
+                BindingAction::Reassign // 外层 mut：赋值同一绑定
+            } else {
+                BindingAction::ImmutableReassign
+            }
+        } else {
+            BindingAction::Declare
+        }
+    }
+}
+
 /// 作用域中存储的变量信息
 #[derive(Debug, Clone)]
 pub struct VarInfo {
     pub poly: PolyType,
     pub is_mut: bool,
-    pub moved: bool,
     /// 变量定义位置的 span（用于 LSP 跳转定义）
     pub definition_span: Span,
+    /// 是否只是「前向引用占位」——pass2 预注册的顶层绑定，
+    /// 其声明语句还未被 pass3 执行。
+    ///
+    /// 区别为何必要（spec §4.3）：前向引用要求「使用前名字已可见」，
+    /// 但声明判定要求「`mut x = v` 时 x 还未声明」。两者共存靠这个标记：
+    /// 占位项在 `classify_binding` 里**不算现有绑定**，
+    /// 只有 pass3 执行到声明语句才转成真实绑定。
+    pub forward_declared: bool,
+    /// 是否来自 `use` 导入（std 导出或跨模块符号）。
+    ///
+    /// 导入名不是本文件的绑定——spec §4.3 的「沿作用域链查找」只查
+    /// 程序自身声明。否则用户写 `ok = ...`（撞 `std.result.ok` 构造器）
+    /// 会被误判为重赋值不可变变量 → 误报 E2010。
+    pub imported: bool,
 }
 
 /// 作用域管理器（#295 三链模型）
@@ -140,8 +262,57 @@ impl ScopeManager {
         let info = VarInfo {
             poly,
             is_mut,
-            moved: false,
             definition_span,
+            forward_declared: false,
+            imported: false,
+        };
+        if self.local_scopes.is_empty() {
+            self.globals.insert(name, info);
+        } else {
+            self.local_scopes.last_mut().unwrap().insert(name, info);
+        }
+    }
+
+    /// 注入「前向引用占位」：名字可见（供函数体引用后置绑定），
+    /// 但 `classify_binding` 不把它当现有绑定。
+    ///
+    /// 用途：pass2 预注册顶层绑定时调用——前向引用（`main` 中引用后置绑定）
+    /// 要求「使用前名字已可见」，而 spec §4.3 的声明判定要求
+    /// 「`mut x = v` 时 x 还未声明」。两者靠这个标记共存。
+    pub fn add_forward_declared_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        definition_span: Span,
+    ) {
+        let info = VarInfo {
+            poly,
+            is_mut: false,
+            definition_span,
+            forward_declared: true,
+            imported: false,
+        };
+        if self.local_scopes.is_empty() {
+            self.globals.insert(name, info);
+        } else {
+            self.local_scopes.last_mut().unwrap().insert(name, info);
+        }
+    }
+
+    /// 注入「导入名」：来自 `use` 的符号（std 导出 / 跨模块）。
+    /// 可见可调用，但**不是本文件的绑定**——不参与 spec §4.3 的赋值判定。
+    pub fn add_imported_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        definition_span: Span,
+    ) {
+        let info = VarInfo {
+            poly,
+            is_mut: false,
+            definition_span,
+            forward_declared: false,
+            imported: true,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -163,8 +334,9 @@ impl ScopeManager {
         let info = VarInfo {
             poly,
             is_mut,
-            moved: false,
             definition_span,
+            forward_declared: false,
+            imported: false,
         };
         if let Some(scope) = self.param_scopes.last_mut() {
             scope.insert(name, info);
@@ -219,36 +391,6 @@ impl ScopeManager {
             || self.param_scopes.iter().any(|s| s.contains_key(name))
     }
 
-    /// 标记变量为已移动（局部 → 参数 → 全局）
-    pub fn mark_moved(
-        &mut self,
-        name: &str,
-    ) {
-        for scope in self.local_scopes.iter_mut().rev() {
-            if let Some(info) = scope.get_mut(name) {
-                info.moved = true;
-                return;
-            }
-        }
-        for scope in self.param_scopes.iter_mut().rev() {
-            if let Some(info) = scope.get_mut(name) {
-                info.moved = true;
-                return;
-            }
-        }
-        if let Some(info) = self.globals.get_mut(name) {
-            info.moved = true;
-        }
-    }
-
-    /// 检查变量是否已移动（局部 → 参数 → 全局）
-    pub fn var_is_moved(
-        &self,
-        name: &str,
-    ) -> Option<bool> {
-        self.get_var_info(name).map(|info| info.moved)
-    }
-
     /// 从当前局部层移除变量
     pub fn remove_var(
         &mut self,
@@ -293,6 +435,15 @@ impl ScopeManager {
         &self,
         name: &str,
     ) -> bool {
+        // 模块级（三链全空）：当前作用域就是 `globals`。
+        //
+        // 此前只看 `local_scopes`，于是顶层的 `mut d = 1; mut d = 2` 被当成
+        // 「外层存在同名」→ 误报 E2013（禁止遮蔽），而正确诊断是 E2002
+        //（同作用域重复定义）。函数体内同写法报 E2002，顶层报 E2013——
+        // 同一语法两个诊断，因为顶层绑定住在 `globals`。
+        if self.at_module_level() {
+            return self.globals.contains_key(name);
+        }
         self.local_scopes
             .last()
             .is_some_and(|s| s.contains_key(name))

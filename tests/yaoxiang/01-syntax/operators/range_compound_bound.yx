@@ -6,7 +6,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     n = 3
     mut count = 0
     for i in 0..n+2 {

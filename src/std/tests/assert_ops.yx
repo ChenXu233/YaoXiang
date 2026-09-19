@@ -7,7 +7,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // 基本断言：真条件通过
     assert.assert(1 + 1 == 2, "basic equality")
 

@@ -8,7 +8,7 @@
 //! 集成测试里大量夹具形如：
 //!
 //! ```ignore
-//! run_ok("main = { x = 42; print(x) }");
+//! run_ok("main = () => { x = 42; print(x) }");
 //! ```
 //!
 //! 按新语义这类夹具会**空跑**（编译通过、`main` 不执行、断言无意义）。
@@ -24,7 +24,7 @@
 /// 三类不追加：
 /// - **`main` 是值绑定**（如 `main: Int = 5`）：那是 E3021 的夹具，加调用会
 ///   掩盖被测诊断。只在无注解或注解为 Fn 时追加。
-/// - **空块 `main = {}`**：parser 把它解析为**空 Dict 字面量**（`{}` 二义，
+/// - **空块 `main = () => {}`**：parser 把它解析为**空 Dict 字面量**（`{}` 二义，
 ///   与语法规范 §2.9 冲突，见 **#359**），不是函数体——追加 `main()`
 ///   会变成“调用一个 Dict”，报 E6006。
 /// - **项目模式（有 yaoxiang.toml）**：那种文件是 Bin 角色，`main` 本就是
@@ -60,12 +60,14 @@ fn with_main_invoked_opts(
             calls_main = true;
             continue;
         }
-        // 无注解：`main = ...`（裁决 C 下无注解块即函数）
+        // 无注解：`main = ...`
         if let Some(rhs) = t.strip_prefix("main =") {
             let rhs = rhs.trim_start();
-            // 排除空块（Dict 字面量）与显式非函数值
+            // 排除空块（Dict 字面量）与显式非函数值；`() =>` 是显式 lambda
             let callable =
-                rhs.starts_with('{') && !rhs.starts_with("{}") && !rhs.starts_with("{ }");
+                (rhs.starts_with('{') && !rhs.starts_with("{}") && !rhs.starts_with("{ }"))
+                    || rhs.starts_with("() =>")
+                    || rhs.starts_with('(');
             main_is_callable |= callable;
         }
         // Fn 注解：`main: () -> T = ...`

@@ -3,7 +3,7 @@
 // 验证: `a, b = (1, 2)` 和 `(a, b) = (1, 2)` 两种形式
 
 use std.assert
-main = {
+main: () -> Void = {
     // Non-paren form: a, b = (1, 2)
     a, b = (1, 2)
     assert.assert(a == 1)

@@ -6,7 +6,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // 经典 fib 迭代 — 规范 §3.8 WhileStmt ::= 'while' Expr Block
     // 每次 while 体内对 a/b/temp 的赋值必须写回外层 mut 绑定
     mut a = 0

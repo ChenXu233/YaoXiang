@@ -13,38 +13,38 @@ issue: '#341'
 > **References**:
 >
 > - [RFC-011: Generic Type System Design](./011-generic-type-system.md) — type constraint
->   `T: Add + Multiply`, associated type
+>   `T: Add + Multiply`, associated types
 > - [RFC-011a: Interface Implementation and Dynamic Dispatch](./011a-interface-implementation.md) —
 >   interface declaration/instantiation mechanism
-> - [RFC-009: Ownership Model Design](./009-ownership-model.md) — `Dup` / `Linear` type attributes
-> - [RFC-004: Multi-Position Union Binding for Curried Methods](./004-curry-multi-position-binding.md)
->   — `f[0]` position-binding syntax
-> - [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md) — sum type = record where all
+> - [RFC-009: Ownership Model Design](./009-ownership-model.md) — `Dup` / `Linear` type properties
+> - [RFC-004: Multi-Position Joint Binding for Curried Methods](./004-curry-multi-position-binding.md)
+>   — `f[0]` positional binding syntax
+> - [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md) — sum type = record type where all
 >   fields return the type itself
 > - [RFC-039: Pattern Matching Completeness](../draft/039-pattern-matching-completeness.md) —
 >   variant deconstruction (dependency)
 
 ## Summary
 
-This RFC completes the **operator overloading** capability for YaoXiang, enabling `a + b` / `a == b`
-/ `a[i]` / `e?` to be implemented by user-defined types, and turns the `T: Add + Multiply + Zero`
-constraint already written in RFC-011 from a **paper capability** into a deliverable mechanism.
+This RFC adds **operator overloading** capability to YaoXiang, so that `a + b` / `a == b` / `a[i]` /
+`e?` can be implemented by user-defined types, and the `T: Add + Multiply + Zero` constraint already
+written in RFC-011 transitions from a **paper capability** to a working mechanism.
 
-The design adopts a **three-layer separation of responsibilities**: a fixed operator→method mapping
-table (Layer 0), a name-based dispatch foundation (Layer 1, reusing the existing `method_bindings`),
-and an interface contract layer (Layer 2, used for generics constraint). The **precedence and
-associativity of operators remain language-fixed**; users only overload semantics.
+The design adopts a **three-layer separation of concerns**: a fixed operator-to-method mapping table
+(Layer 0), a name-based dispatch base (Layer 1, reusing the existing `method_bindings`), and an
+interface contract layer (Layer 2, for generic constraints). The **precedence and associativity of
+operators remain language-fixed**; users only overload semantics.
 
 First batch scope: eight interfaces — `Add` `Subtract` `Multiply` `Divide` `Modulo` `Equal` `Index`
-`Try`. No new keywords are introduced, and no new syntactic structures are added.
+`Try`. No new keywords are introduced, and no new syntactic constructs are added.
 
 ## Motivation
 
-### Why This Feature Is Needed
+### Why this feature is needed
 
-#### 1. RFC-011's Core Examples Depend on It, but Are Currently Paper-Only
+#### 1. RFC-011's core example depends on it, but is currently a paper capability
 
-RFC-011 (already accepted) uses operator names as type constraints in eight places:
+RFC-011 (already accepted) uses operator names as type constraints in 8 places:
 
 ```yaoxiang
 multiply: (T: Add + Multiply + Zero, Rows: Int, Cols: Int, M: Int) -> (
@@ -52,11 +52,11 @@ multiply: (T: Add + Multiply + Zero, Rows: Int, Cols: Int, M: Int) -> (
 )
 ```
 
-This is RFC-011's showcase example of "value-dependent types + compile-time dimension verification."
-But **across the entire set of RFCs, not a single document defines where `Add` / `Multiply` come
-from or how `+` binds to them**. `T: Add` is currently an unfulfillable assertion.
+This is RFC-011's showcase example for "value-dependent types + compile-time dimension
+verification." But **none of the entire RFC set defines where `Add` / `Multiply` come from, or how
+`+` binds to them**. `T: Add` is currently an unenforceable assertion.
 
-#### 2. User-Defined Types Cannot Participate in Basic Operations (Verified)
+#### 2. User-defined types cannot participate in basic operations (verified)
 
 ```
 Point: Type = { x: Int, y: Int }
@@ -70,15 +70,15 @@ error [E6007] Runtime error: type mismatch in comparison Eq:
     Struct { type_id: TypeId(0), ... } vs Struct { type_id: TypeId(0), ... }
 ```
 
-A cascading consequence: `list.contains(list_of_structs, p)` is **completely unusable** — it
-internally depends on `==`.
+Collateral damage: `list.contains(list_of_structs, p)` is **completely unusable** — it internally
+depends on `==`.
 
-#### 3. `?` Hardcodes Type Names into the Compiler, Blocking `Result`'s Move to std
+#### 3. `?` hardcodes the type name into the compiler, blocking `Result` from moving to std
 
-The implementation of `?` hardcodes both the type name and the variant number:
+The implementation of `?` simultaneously hardcodes the type name and the variant number:
 
 ```rust
-// typecheck: hardcoded construction of the Result type
+// typecheck: hardcoded construction of Result type
 let expected_result = MonoType::make_result(ok_ty, expected_err);
 
 // ir_gen: hardcoded group name and variant number
@@ -86,11 +86,11 @@ Instruction::VariantTag { group: "Result".to_string(), .. }
 variant 0 = ok, variant 1 = err
 ```
 
-This forces `Result` to remain in core. If `?` were made **interface-driven**, any type that
-implements that interface (including user-defined ones) could be used by `?`, allowing `Result` to
-be moved to std.
+This forces `Result` to remain in core. If `?` were made **interface-driven**, any type implementing
+that interface (including user-defined types) could be used with `?`, and `Result` could be moved to
+std.
 
-#### 4. User-Defined Containers Cannot Be Indexed
+#### 4. User-defined containers cannot be indexed
 
 The type check for `Index` is a hardcoded whitelist:
 
@@ -99,85 +99,83 @@ The type check for `Index` is a hardcoded whitelist:
 MonoType::Generic { name, args } if name == "List"  => Ok(args[0].clone()),
 MonoType::Generic { name, args } if name == "Array" => Ok(args[0].clone()),
 MonoType::Generic { name, args } if name == "Dict"  => Ok(args[1].clone()),
-// otherwise → "refuse to silently accept unrecognized container types"
+// Otherwise → "Better to reject unknown containers than be silent"
 ```
 
-Any container type defined by the user will trigger an error on `c[0]`.
+For any user-defined container type, `c[0]` always reports an error.
 
-### Existing Semi-Finished Foundations
+### Existing semi-finished foundations
 
-Investigation shows that **most of the mechanism is already in place**; what's missing is the
-wiring:
+Investigation found that **most of the mechanism already exists**; what's missing is the wiring:
 
-| Mechanism                                                           | Location                                     | Status                                          |
-| ------------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------- |
-| Interface declaration `(Self: Type) -> Type`                        | RFC-011a Phase 1                             | ✅ Runnable                                     |
-| Interface instantiation `Animal(Dog)` + external method declaration | RFC-011a Phase 2–3                           | ✅ Runnable                                     |
-| Method dispatch `method_bindings["Type.method"]`                    | `expressions.rs:1299`                        | ✅ Runnable                                     |
-| Associated type (= interface type parameter)                        | RFC-011 §3.1; RFC-011a adopted this approach | ✅ Mechanism defined                            |
-| Type family evaluation `AssociatedTypeDef`                          | `dependent_types.rs`                         | ✅ Production use case: `std.assert`'s `IsTrue` |
-| `Equal` / `Dup` / `Clone` / `Debug` trait                           | Registered in `trait_data.rs`                | ⚠️ `Equal` has **zero consumer sites**          |
-| Operator → method-name mapping                                      | —                                            | ❌ Nonexistent                                  |
+| Mechanism                                                           | Location                                     | Status                                         |
+| ------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------- |
+| Interface declaration `(Self: Type) -> Type`                        | RFC-011a Phase 1                             | ✅ Runnable                                    |
+| Interface instantiation `Animal(Dog)` + external method declaration | RFC-011a Phase 2–3                           | ✅ Runnable                                    |
+| Method dispatch `method_bindings["Type.method"]`                    | `expressions.rs:1299`                        | ✅ Runnable                                    |
+| Associated types (= interface type parameters)                      | RFC-011 §3.1; RFC-011a adopted this approach | ✅ Mechanism fixed                             |
+| Type family evaluation `AssociatedTypeDef`                          | `dependent_types.rs`                         | ✅ Production use case `std.assert`'s `IsTrue` |
+| `Equal` / `Dup` / `Clone` / `Debug` trait                           | registered in `trait_data.rs`                | ⚠️ `Equal` has **zero consumers**              |
+| Operator → method name mapping                                      | —                                            | ❌ Does not exist                              |
 
-**Conclusion**: This is not building a feature from scratch, but wiring together existing parts and
+**Conclusion**: This is not building a feature from scratch, but wiring up existing components and
 documenting them.
 
 ## Proposal
 
-### Core Design: Three-Layer Separation of Responsibilities
+### Core design: three-layer separation of concerns
 
 ```
-Layer 0  Fixed mapping table (language-level constant, not user-modifiable)
+Layer 0  Fixed mapping table (language-level constant, user-immutable)
          + → add    == → equal    [] → index    ? → residual
-         │  Compile-time built-in, does not participate in type inference, not exposed to users
+         │  Built in at compile time, not involved in type inference, not exposed to users
          ▼
-Layer 1  Dispatch foundation (lookup method by name and invoke)  ← Reuses existing mechanism
+Layer 1  Dispatch base (look up method by name and invoke)  ← reuses existing mechanism
          method_bindings["Point.add"]
          ▼
-Layer 2  Interface contract (used for generics constraint)
+Layer 2  Interface contract (for generic constraints)
          Add / Equal / Index / Try …
-         Makes T: Add constraints valid, and serves as the gate for operators
+         Makes the T: Add constraint valid, and serves as the gate for operators
 ```
 
-**Rationale for the layering**:
+**Rationale for layering**:
 
-- **Layers 0 and 1 make operators "usable"**, while Layer 2 makes operators "constrainable." Merging
-  them would cause any method named `add` to be invoked by `+`, decoupling RFC-011's `T: Add` from
+- **Layer 0 and 1 make operators "usable"**; Layer 2 makes operators "constrainable." Merging them
+  would cause any method named `add` to be called by `+`, decoupling RFC-011's `T: Add` from
   operators.
-- **Layer 1 introduces nothing new**: `method_bindings` already looks up entries by the
-  `Type.method` key (the fallback path after field lookup fails); operators can simply take the same
-  path.
-- **Layer 2 is the gate**: Before allowing an operator, the compiler **must** verify that the type
-  implements the corresponding interface (see §"Why Implementing an Interface Is Mandatory").
+- **Layer 1 is not new**: `method_bindings` already looks up by `Type.method` key (fallback path
+  after field lookup fails); operators can use the same path.
+- **Layer 2 is the gate**: before an operator is allowed, the type **must** be confirmed to have
+  implemented the corresponding interface (see §"Why interfaces must be implemented").
 
-### Layer 0: Fixed Mapping Table
+### Layer 0: Fixed mapping table
 
-| Operator            | Interface                                                 | Method     | First batch |
-| ------------------- | --------------------------------------------------------- | ---------- | ----------- |
-| `+`                 | `Add`                                                     | `add`      | ✅          |
-| `-`                 | `Subtract`                                                | `subtract` | ✅          |
-| `*`                 | `Multiply`                                                | `multiply` | ✅          |
-| `/`                 | `Divide`                                                  | `divide`   | ✅          |
-| `%`                 | `Modulo`                                                  | `modulo`   | ✅          |
-| `==` `!=`           | `Equal`                                                   | `equal`    | ✅          |
-| `[]`                | `Index`                                                   | `index`    | ✅          |
-| `?`                 | `Try`                                                     | `residual` | ✅          |
-| `<` `<=` `>` `>=`   | — (reserved as native instructions)                       | —          | ❌          |
-| `and` `or`          | — (short-circuit is language semantics, not overloadable) | —          | ❌          |
-| 5 bitwise operators | —                                                         | —          | ❌          |
-| Unary `-` `!`       | —                                                         | —          | ❌          |
+| Operator          | Interface                                                 | Method     | First batch |
+| ----------------- | --------------------------------------------------------- | ---------- | ----------- |
+| `+`               | `Add`                                                     | `add`      | ✅          |
+| `-`               | `Subtract`                                                | `subtract` | ✅          |
+| `*`               | `Multiply`                                                | `multiply` | ✅          |
+| `/`               | `Divide`                                                  | `divide`   | ✅          |
+| `%`               | `Modulo`                                                  | `modulo`   | ✅          |
+| `==` `!=`         | `Equal`                                                   | `equal`    | ✅          |
+| `[]`              | `Index`                                                   | `index`    | ✅          |
+| `?`               | `Try`                                                     | `residual` | ✅          |
+| `<` `<=` `>` `>=` | — (reserved native instruction)                           | —          | ❌          |
+| `and` `or`        | — (short-circuit is language semantics, not overloadable) | —          | ❌          |
+| 5 bitwise ops     | —                                                         | —          | ❌          |
+| Unary `-` `!`     | —                                                         | —          | ❌          |
 
-**Interface names use full words rather than abbreviations** (`Multiply` rather than `Mul`):
-consistent with the `T: Add + Multiply + Zero` in the main text of RFC-011, **without modifying
-already-accepted RFCs**.
+**Interface names use full words rather than abbreviations** (`Multiply` rather than `Mul`): this is
+consistent with RFC-011's text `T: Add + Multiply + Zero`, and **does not modify already-accepted
+RFCs**.
 
-**`%` adopts `Modulo` semantics** (mathematical modulus, result sign follows divisor) rather than
-the current remainder behavior (`-7 % 3` currently returns `-1`). This is a **deliberate semantic
-correction** — the name pins the semantics to mathematical modulus.
+**`%` adopts `Modulo` semantics** (mathematical modulo, result sign follows the divisor), rather
+than the current implementation's remainder behavior (`-7 % 3` currently returns `-1`). This is an
+**intentional semantic correction** — the name pins the semantics to mathematical modulo.
 
-### Layer 2: Interface Definitions
+### Layer 2: Interface definitions
 
-#### Arithmetic Interfaces
+#### Arithmetic interfaces
 
 ```yaoxiang
 Add: (Self: Type, R: Type) -> Type = {
@@ -201,11 +199,11 @@ Modulo: (Self: Type, R: Type) -> Type = {
 }
 ```
 
-`R` is the right-operand type, allowing left/right heterogeneous types (e.g., `Int + Float`). The
-return value is fixed as `Self` (`&Self` borrows the receiver; see RFC-009 borrow tokens and
-RFC-011a receiver convention).
+`R` is the right operand type, allowing heterogeneous left/right operands (e.g. `Int + Float`). The
+return value is fixed as `Self` (`&Self` borrows the receiver, see RFC-009 borrow tokens and
+RFC-011a receiver conventions).
 
-#### Equality Interface
+#### Equality interface
 
 ```yaoxiang
 Equal: (Self: Type, R: Type) -> Type = {
@@ -213,16 +211,16 @@ Equal: (Self: Type, R: Type) -> Type = {
 }
 ```
 
-**`Equal` implicitly requires `Dup`**: the semantics of `==` is "comparing two values," which
-requires both sides to be readable. A linear (non-`Dup`) value can only be read once, so it cannot
-participate in comparison. RFC-009 already provides the causal chain:
+**`Equal` implicitly requires `Dup`**: the semantics of `==` is "compare two values," which requires
+both to be readable. Values of linear (non-`Dup`) types can only be read once and cannot participate
+in comparison. RFC-009 already provides the causal chain:
 
-> **The causal relationship cannot be reversed: freezing is the cause, Dup is the result.**
+> **Causality cannot be reversed: freeze is the cause, Dup is the result.**
 
-Therefore, the prerequisite for instantiating `Equal` is that `Self` has the `Dup` attribute;
-otherwise, the compiler rejects the `Equal` instantiation.
+Therefore the implementation prerequisite of `Equal` is that `Self` has the `Dup` property; the
+compiler rejects `Equal` instantiation when this is not satisfied.
 
-#### Index Interface
+#### Index interface
 
 ```yaoxiang
 Index: (Self: Type, Key: Type, Value: Type) -> Type = {
@@ -230,26 +228,25 @@ Index: (Self: Type, Key: Type, Value: Type) -> Type = {
 }
 ```
 
-**`Value` as a type parameter rather than an associated type member**: the open question in RFC-011a
-was settled by adopting "associated types implemented through generics interface parameters"
-(`Iterator: (Item: Type) -> Type` is an isomorphic precedent), and no `type` member syntax needs to
-be introduced.
+**`Value` is a type parameter rather than an associated type member**: RFC-011a's open issue has
+settled on "associated types via generic interface parameters" (`Iterator: (Item: Type) -> Type` is
+an isomorphic precedent), and there's no need to introduce `type` member syntax.
 
-**Multi-position indexing is handled via tuple packing + overloading**, without introducing variadic
+**Multi-position indexing relies on tuple packing + overloading**, without introducing variadic
 interfaces:
 
 ```yaoxiang
-// One-dimensional container
-List(T) instantiates Index(List(T), Int, T)                 → arr[0]
+// 1D container
+List(T) instantiates Index(List(T), Int, T)                   → arr[0]
 
 // Multi-dimensional container
-Grid    instantiates Index(Grid, Tuple(Int, Int), Float)     → g[0, 1]
+Grid    instantiates Index(Grid, Tuple(Int, Int), Float)       → g[0, 1]
 //                    └─ Key is a tuple
 
-// Two instantiation signatures differ → coexist per RFC-011a overloading rules
+// Two instantiation signatures differ → coexist via RFC-011a overloading rules
 ```
 
-#### Propagation Interface
+#### Propagation interface
 
 ```yaoxiang
 Try: (Self: Type, T: Type, E: Type) -> Type = {
@@ -259,11 +256,11 @@ Try: (Self: Type, T: Type, E: Type) -> Type = {
 
 `T` (success type) and `E` (error type) are both interface type parameters.
 
-**Typing rules for `?`**:
+**Type rules for `?`**:
 
 ```yaoxiang
 // f: () -> Result(T, E)
-// The rest of the function body expects Result(U, E) (error type must be consistent)
+// The rest of the function body requires Result(U, E) (error types must be consistent)
 x = f()?        // x: T, equivalent to:
                 //   match f() {
                 //       ok(v)  => v
@@ -271,14 +268,14 @@ x = f()?        // x: T, equivalent to:
                 //   }
 ```
 
-A compile error is reported when error types are inconsistent (corresponding to the existing
-`E1083`); `E1081` is reported when the outer function's return type is not a propagatable type; the
-wording of `E1082` is updated (no longer referring to the specific name "Result") when an expression
-does not implement `Try`.
+When the error types are inconsistent, a compile error is reported (corresponding to the existing
+`E1083`); when the outer function's return type is not a propagatable type, `E1081` is reported;
+when the expression does not implement `Try`, the text of `E1082` is replaced (no longer mentioning
+the specific name "Result").
 
 ### Examples
 
-#### User-Defined Type Arithmetic and Equality
+#### Arithmetic and equality for user-defined types
 
 ```yaoxiang
 Point: Type = {
@@ -294,7 +291,7 @@ Point.add: (self: &Point, other: &Point) -> Point =
 Point.equal: (self: &Point, other: &Point) -> Bool =
     self.x == other.x and self.y == other.y
 
-main = {
+main: () -> Void = {
     a = Point(1.0, 2.0)
     b = Point(3.0, 4.0)
     c = a + b                   // Point(4.0, 6.0)
@@ -303,7 +300,7 @@ main = {
 }
 ```
 
-#### User-Defined Container Indexing
+#### Custom container indexing
 
 ```yaoxiang
 Box: (T: Type) -> Type = {
@@ -314,18 +311,18 @@ Box: (T: Type) -> Type = {
 Box.index: (T: Type)(self: &Box(T), key: &Int) -> T =
     list.get(self.data, key)
 
-main = {
+main: () -> Void = {
     b = Box([10, 20, 30])
     println(b[1])               // 20
 }
 ```
 
-#### Moving `Result` to std (Design Goal)
+#### Moving `Result` to std (design goal)
 
 After `Result` implements `Try`, `?` no longer depends on hardcoded type names:
 
 ```yaoxiang
-// In std.result (no longer needs core special-casing)
+// inside std.result (no longer needs core special-casing)
 Result: (T: Type, E: Type) -> Type = {
     ok: (T) -> Result(T, E),
     err: (E) -> Result(T, E),
@@ -340,235 +337,232 @@ Result.residual: (T: Type, E: Type)(self: &Result(T, E)) -> E =
 }
 ```
 
-#### Generics Constraints Finally Deliverable
+#### Generic constraints are finally enforceable
 
 ```yaoxiang
-// The example from RFC-011 becomes implementable
+// RFC-011's example now becomes usable
 combine: (T: Add + Multiply)(a: T, b: T, c: T) -> T =
     a * b + c
 ```
 
-### Syntax Changes
+### Syntax changes
 
-**No new syntax, no new keywords**. All capabilities are composed from existing mechanisms:
+**No new syntax, no new keywords**. All capabilities are composed of existing mechanisms:
 
-| Capability              | Reused Existing Mechanism                                   |
+| Capability              | Reused existing mechanism                                   |
 | ----------------------- | ----------------------------------------------------------- |
 | Interface declaration   | RFC-011a Phase 1                                            |
 | Interface instantiation | RFC-011a Phase 2 (`Dog: { Animal(Dog) }`)                   |
 | Method implementation   | RFC-011a Phase 3 (external declaration `Point.add`)         |
-| Associated type         | RFC-011 §3.1 (interface type parameters)                    |
-| Multi-position indexing | Existing tuple-packing parsing + RFC-011a overloading rules |
-| Operator precedence     | **Language-fixed**, not user-customizable                   |
+| Associated types        | RFC-011 §3.1 (interface type parameters)                    |
+| Multi-position indexing | Existing tuple packing parsing + RFC-011a overloading rules |
+| Operator precedence     | **Language-fixed**, no user customization                   |
 
-## Detailed Design
+## Detailed design
 
-### Impact on the Type System
+### Type system impact
 
 **New interfaces** (Layer 2): `Add` `Subtract` `Multiply` `Divide` `Modulo` `Equal` `Index` `Try`.
 
 **Reuse already-registered trait**: `Equal` is already registered in `trait_data.rs` but has **zero
-consumer sites** (`==` currently only performs `unify` and then hardcodes a return of `Bool`). This
-RFC connects it as the actual contract for `==`.
+consumers** (`==` currently only does `unify` then hardcodes returning `Bool`). This RFC wires it up
+as the actual contract for `==`.
 
-**`Dup` prerequisite constraint**: when instantiating `Equal`, check whether `Self` is `Dup`. `Dup`
-/ `Linear` attributes are inferred per RFC-009 (`&T` freeze ⇒ Dup; `&mut T` exclusive ⇒ Linear).
+**`Dup` prerequisite constraint**: when instantiating `Equal`, check whether `Self` is `Dup`. The
+`Dup` / `Linear` properties are inferred by RFC-009 (`&T` freeze ⇒ Dup; `&mut T` exclusive ⇒
+Linear).
 
-**Constraint solving**: solving `T: Add` = checking whether `T` has instantiated the `Add`
-interface. The mechanism reuses RFC-011a's compile-time type collection, with no new solver
-required.
+**Constraint solving**: solving `T: Add` = checking whether `T` instantiates the `Add` interface.
+The mechanism reuses RFC-011a's compile-time type collection, with no new solver added.
 
-### Runtime Behavior
+### Runtime behavior
 
-**Zero runtime overhead**: the call target for an operator is determined at compile time (static
-dispatch). For primitive types (`Int` / `Float` / `String` / `List`), the **native instruction fast
-path** is preserved and does not go through interface dispatch.
+**Zero runtime overhead**: operators determine the call target at compile time (static dispatch).
+For primitive types (`Int`/`Float`/`String`/`List`), the **native instruction fast path is
+retained**, without going through interface dispatch.
 
-The runtime behavior of `?` remains unchanged (unpack + early return); only the judgment criterion
-changes from "type name == 'Result'" to "type implements `Try`."
+The runtime behavior of `?` is unchanged (unwrapping + early return); only the basis for judgment
+changes from "type name == 'Result'" to "type implements `Try`".
 
-### Compiler Changes
+### Compiler changes
 
-| Component                            | Change                                                                                                                                          |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `typecheck/inference/expressions.rs` | The whitelist in `infer_binary` is replaced with a dual path of "native fast path + interface query"; add interface queries for `Index` / `Try` |
-| Same as above (`Try` arm)            | Remove the hardcoded `MonoType::make_result`; replace with `Try` instantiation query                                                            |
-| `middle/core/ir_gen.rs`              | `Expr::Try`: remove the hardcoded `group: "Result"`; `Expr::Index`: add interface dispatch branch                                               |
-| `typecheck/types/trait_data.rs`      | Register default instantiations for the 8 interfaces (for `Int` / `Float` / `String` / `List`, etc.)                                            |
-| New                                  | Layer 0 mapping table constant + operator-to-interface query function                                                                           |
-| Diagnostics                          | `E1082` wording changes from "requires Result" to "requires Try" (`E1081` / `E1083` are kept)                                                   |
+| Component                            | Changes                                                                                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `typecheck/inference/expressions.rs` | `infer_binary`'s whitelist is changed to "native fast path + interface query" dual path; add `Index` / `Try` interface queries |
+| Same as above (`Try` branch)         | Remove `MonoType::make_result` hardcoding, change to query `Try` instantiation                                                 |
+| `middle/core/ir_gen.rs`              | `Expr::Try` removes `group: "Result"` hardcoding; `Expr::Index` adds interface dispatch branch                                 |
+| `typecheck/types/trait_data.rs`      | Register default instantiations for the 8 interfaces (`Int` / `Float` / `String` / `List` etc.)                                |
+| New                                  | Layer 0 mapping table constants + operator→interface query function                                                            |
+| Diagnostics                          | `E1082` text changes from "requires Result" to "requires Try" (`E1081`/`E1083` retained)                                       |
 
-### Backward Compatibility
+### Backward compatibility
 
 **Primitive type operations are unchanged**: `1 + 2`, `"a" + "b"`, `[1] + [2]`, `1 < 2` all retain
-their native paths, with the same behavior and performance.
+native paths, with behavior and performance unchanged.
 
-**`%` semantic change**: `-7 % 3` changes from `-1` (remainder) to `2` (modulo). This is a
-**deliberate correction** and should be noted in the migration guide; existing test corpora have no
-dependencies on negative-number `%` (verified).
+**`%` semantic change**: `-7 % 3` changes from `-1` (remainder) to `2` (modulo). This is an
+**intentional correction** and must be noted in the migration guide; existing test corpora have no
+cases that depend on negative `%` (verified).
 
-**`f[0]` position binding is unchanged**: `distance[0]` is a compiler built-in capability from
-RFC-004 and **does not go through the `Index` interface**, so it is unaffected.
+**`f[0]` positional binding is unchanged**: `distance[0]` is a compiler-built-in capability from
+RFC-004, **does not go through the `Index` interface**, and is unaffected.
 
-**`?` is transparent to existing code**: after `Result` adds the `Try` instantiation, the behavior
-of existing `?` usages is completely identical.
+**`?` is transparent to existing code**: after `Result` gets its `Try` instantiation, existing `?`
+usages behave identically.
 
-## Tradeoffs
+## Trade-offs
 
 ### Advantages
 
-- **Delivers on RFC-011**: `T: Add + Multiply + Zero` transitions from paper to deliverable, without
-  modifying the main text of the already-accepted RFC
-- **Removes the core binding for `Result`**: after `?` is interface-based, `Result` can move to std,
-  supporting the layering goal
-- **Fixes a verified defect**: `Point == Point` becomes usable, and also fixes `list.contains` being
+- **Delivers on RFC-011**: `T: Add + Multiply + Zero` goes from paper to working, without modifying
+  the already-accepted RFC text
+- **Removes the core binding of `Result`**: after `?` is interface-ified, `Result` can move to std,
+  fulfilling the layering goal
+- **Fixes verified defects**: `Point == Point` works, which also fixes `list.contains` being
   unusable on structs
-- **Zero new syntax**: all mechanisms from RFC-011a are reused, without touching parser grammar
-  rules (complying with the zero-grammar-change principle of RFC-036)
+- **Zero new syntax**: fully reuses RFC-011a's existing mechanisms, without touching parser grammar
+  rules (adheres to RFC-036's zero-syntax-change principle)
 - **Zero runtime overhead**: static dispatch + native fast path for primitive types
-- **User-defined containers are usable**: `Box(T)[0]` transitions from "always errors" to "usable"
+- **User-defined containers are usable**: `Box(T)[0]` changes from "always errors" to usable
 
 ### Disadvantages
 
-- **`%` semantic change is a breaking change**: despite the real semantic rationale, a migration
-  note is still required
-- **`Equal` implicitly requiring `Dup` rejects some types**: linear-type values cannot be `==`,
-  which is the cost of semantic correctness, but may surprise users, so clear diagnostics are
-  required
+- **`%` semantic change is a breaking change**: despite genuine semantic reasons, a migration note
+  is still required
+- **`Equal` implicitly requiring `Dup` will reject some types**: values of linear types cannot be
+  `==`. This is the cost of semantic correctness, but users may find it surprising; clear diagnostic
+  messages are needed
 - **Interface instantiation is an explicit cost**: each operator requires writing one interface
   instantiation line + one method. RFC-011a's syntax makes implicit derivation impossible (the
-  trade-off is no magic with the `Self` type parameter)
+  trade-off is that the `Self` type parameter has no magic)
 
 ## Alternatives
 
-### Option A: Only Do Layer 1 (dispatch by method name), Without the Interface Layer
+### Option A: Only do Layer 1 (dispatch by method name), no interface layer
 
-`+` only checks whether a method named `add` exists, without requiring the `Add` interface to be
+`+` only checks whether there is a method named `add`, without requiring the `Add` interface to be
 implemented.
 
-**Reason for rejection**: RFC-011's `T: Add` constraint would become decoupled from operators — the
-constraint checks the interface, while the operator checks the method name, and the two could yield
-inconsistent answers. It would also be impossible to provide accurate compile-time diagnostics for
-"`+` used on non-addable types."
+**Rejection reason**: RFC-011's `T: Add` constraint would be decoupled from operators — the
+constraint queries the interface while the operator queries the method name, which can give
+inconsistent answers. Furthermore, it would be impossible to provide accurate diagnostics at compile
+time for "`+` used on a non-addable type".
 
-### Option B: Introduce Constructor Syntax `Ok(x)` / `Some(x)` to Solve the `?` Problem
+### Option B: Introduce constructor syntax `Ok(x)` / `Some(x)` to solve the `?` problem
 
-Don't make `?` interface-based; instead, add constructor syntax for sum types.
+Instead of interface-ifying `?`, add constructor syntax for sum types.
 
-**Reason for rejection**: Conflicts with RFC-010 (already accepted). RFC-010 explicitly states that
-"sum types are uniformly expressed using record types, **no two syntaxes are needed**" and
-explicitly deprecates the `|` syntax. Introducing constructors would introduce a second expression.
-Moreover, it only solves `?`, not `Point == Point` or user-defined container indexing.
+**Rejection reason**: Conflicts with RFC-010 (already accepted). RFC-010 explicitly stipulates that
+"record types uniformly express sum types, **no two syntax sets are needed**" and explicitly
+deprecates the `|` syntax. Introducing constructors is introducing a second set of expressions.
+Moreover, it only solves `?`, not `Point == Point` and custom container indexing.
 
-### Option C: Also Make Comparison Operators Part of the First Batch (Introducing `Ordering`)
+### Option C: Make comparison operators also part of the first batch (introduce `Ordering`)
 
-`<` `<=` `>` `>=` go through a `Compare` interface, returning the three-valued `Ordering`.
+`<` `<=` `>` `>=` go through the `Compare` interface, returning the three-valued `Ordering`.
 
-**Reason for rejection**: `<` is already a **first-class IR instruction** in YaoXiang
-(`Instruction::Lt/Le/Gt/Ge`); interface-ization would force primitive types to take a detour.
-Moreover, introducing `Ordering` brings along a whole set of issues including `Ordering`'s own
-comparison/sorting and the `PartialOrd` vs `Ord` distinction for float `NaN`, which warrants an
-independent RFC. The needs exposed by current verification (`Point == Point`, `list.contains`)
-**only require `Equal`**.
+**Rejection reason**: `<` is already a **first-class IR instruction** in YaoXiang
+(`Instruction::Lt/Le/Gt/Ge`); interface-ifying it would force primitive types to take a detour.
+Moreover, introducing `Ordering` would bring up a whole set of issues such as `Ordering`'s own
+comparison/sorting and `PartialOrd` vs `Ord` for float `NaN`, which is the scope of an independent
+RFC. The current verified need (`Point == Point`, `list.contains`) only requires `Equal`.
 
-### Option D: Use Abbreviated Names for Operators (the `Add` interface has method `add`, but the interface is called `Mul`)
+### Option D: Use abbreviated names for operators (`Add` interface's method is `add`, but interface is `Mul`)
 
-**Reason for rejection**: The main text of RFC-011 already reads `T: Add + Multiply + Zero`; using
-abbreviations would require modifying the already-accepted RFC.
+**Rejection reason**: RFC-011 text already writes `T: Add + Multiply + Zero`; using abbreviations
+would require modifying already-accepted RFCs.
 
-## Implementation Strategy
+## Implementation strategy
 
 ### Dependencies
 
-| Dependency                             | Status        | Effect on This RFC                                                                                           |
-| -------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------ |
-| RFC-011a interface mechanism Phase 1–3 | ✅ Landed     | Foundation of Layer 2 (verified runnable)                                                                    |
-| RFC-010 record-style construction path | ❌ Not landed | **Construction side of `?`** (without being able to construct `Result` values, `Try` cannot be fully tested) |
-| RFC-039 variant deconstruction         | ❌ Paper      | `match` syntax in `Result.residual`                                                                          |
-| RFC-009 `Dup` / `Linear` inference     | Partial       | Prerequisite constraint check for `Equal`                                                                    |
+| Dependency                             | Status             | Impact on this RFC                                                                                       |
+| -------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------- |
+| RFC-011a interface mechanism Phase 1–3 | ✅ Implemented     | Layer 2 foundation (verified runnable)                                                                   |
+| RFC-010 record-based construction path | ❌ Not implemented | **`?` construction side** (cannot test `Try` completely without being able to construct `Result` values) |
+| RFC-039 variant deconstruction         | ❌ Paper           | `Result.residual`'s `match` syntax                                                                       |
+| RFC-009 `Dup`/`Linear` inference       | Partial            | `Equal`'s prerequisite constraint check                                                                  |
 
 ### Phasing
 
-Grouped by **interface dependencies** (a design constraint, not a schedule):
+By **interface dependency** (design constraint, not scheduling), divided into two groups:
 
-**Phase 1 — Does not depend on RFC-010 / 039**:
+**Phase 1 — Does not depend on RFC-010/039**:
 
 - Layer 0 mapping table + Layer 1 dispatch wiring
 - Seven interfaces: `Add` `Subtract` `Multiply` `Divide` `Modulo` `Equal` `Index`
 - `Equal` ⇒ `Dup` prerequisite constraint
-- Primitive type native fast path preserved
+- Native fast paths for primitive types are retained
 - **Benefit**: `Point + Point`, `Point == Point`, `Box(T)[0]` all become usable
 
 **Phase 2 — Depends on RFC-010 / RFC-039**:
 
-- `Try` interface + interface-based `?`
-- Move `Result` from core to std
-- **Blocker reason**: requires being able to construct `Result` values (RFC-010) and deconstruct
-  them (RFC-039)
+- `Try` interface + `?` interface-ification
+- `Result` migrates from core to std
+- **Blocking reason**: needs to be able to construct `Result` values (RFC-010) and deconstruct them
+  (RFC-039)
 
 ### Risks
 
-| Risk                                                                      | Mitigation                                                                                                     |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| The `%` semantic change breaks existing user code                         | Migration note + verified that the test corpus has no negative `%` dependencies                                |
-| The explicit cost of interface instantiation annoys users                 | Diagnostics indicate "must implement interface X" and provide an instantiation example                         |
-| Inconsistency between dual paths (native + interface) for primitive types | Gate: although `Int` et al. implement the interface, their method semantics must match the native instructions |
-| Layer 2 gate causes existing code to fail to compile                      | `Equal` currently has zero consumer sites, so wiring it up only affects usages that were already erroring      |
+| Risk                                                            | Mitigation                                                                                                 |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `%` semantic change breaks existing user code                   | Migration note + verified that test corpora have no negative `%` dependence                                |
+| Explicit cost of interface instantiation annoys users           | Diagnostic message suggests "Need to implement interface X" with instantiation example                     |
+| Inconsistency between primitive dual paths (native + interface) | Gate: `Int` etc. implement interfaces but method semantics must match native instructions                  |
+| Layer 2 gate causes existing code to fail compilation           | `Equal` currently has zero consumers; after wiring up, only usages that were already erroring are affected |
 
-## Coordination With Other RFCs
+## Coordination with other RFCs
 
-This RFC is positioned as a **consumer-side requirements originator**, and the following RFCs must
-be updated synchronously to maintain coordinated consistency (revisions authorized):
+This RFC is positioned as a **consumer-side requirements proposer**, and the following RFCs need to
+be updated in sync to ensure coordinated consistency (authorized for revision):
 
-| RFC                    | Content to be updated                                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| **RFC-011** (accepted) | In the §Constraints section, note that `Add` / `Multiply` etc. are defined and implemented by RFC-011b              |
-| **RFC-010** (accepted) | Clarify the landing requirement of "record fields act as constructors" — it is the prerequisite for Phase 2 of `?`  |
-| **RFC-039** (draft)    | Construction and deconstruction must come in pairs; handling of exhaustiveness checks against the `std` variant set |
-| **RFC-009** (accepted) | Cross-reference `Equal` ⇒ `Dup` prerequisite in §Type Attributes                                                    |
+| RFC                    | Content to be updated                                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **RFC-011** (accepted) | In §Constraints, note that `Add` / `Multiply` etc. are defined and implemented by RFC-011b                       |
+| **RFC-010** (accepted) | Clarify the implementation requirement for "record fields as constructors" — it's a prerequisite for `?` Phase 2 |
+| **RFC-039** (draft)    | Construction and deconstruction must be paired; exhaustiveness check for `std` variant set handling              |
+| **RFC-009** (accepted) | Cross-reference `Equal` ⇒ `Dup` prerequisite in §Type Properties                                                 |
 
-## Open Questions
+## Open issues
 
-- [ ] Does the semantic correction of `Modulo` need a compatibility period? (@Chenxu: leaning toward
-      a direct change, since the current behavior is a bug, not a feature)
-- [ ] Should `Index` distinguish mutable indexing (similar to Rust's `IndexMut`)? (@Chenxu:
-      read-only for the first batch; mutable indexing involves RFC-009's `WriteToken` and is left
-      for later)
-- [ ] Should multi-position indexing keys be packed as tuples (current approach) or changed to
-      multiple parameters (Swift-style)? (@Chenxu: stick with the current tuple approach to avoid
-      modifying the parser)
-- [ ] Can users **add operator implementations to existing types**? (e.g., adding a custom `Add` to
-      `List`) — involves the orphan rule
+- [ ] Does `Modulo`'s semantic correction need a compatibility period? (@Chenxu: leaning toward
+      changing it directly, because the current behavior is a bug, not a feature)
+- [ ] Should `Index` distinguish mutable indexing (like Rust's `IndexMut`)? (@Chenxu: read-only in
+      the first batch; mutable indexing involves RFC-009's `WriteToken`, deferred)
+- [ ] Multi-position indexing: pack keys in a tuple (current) or use multiple parameters (Swift
+      style)? (@Chenxu: keep the current tuple approach, avoid changing the parser)
+- [ ] Can users add operator implementations to **already-existing types**? (e.g., add custom `Add`
+      to `List`) — involves orphan rules
 
 ---
 
-## Appendix A: Investigation Evidence
+## Appendix A: Investigation evidence
 
-All the following verifications were reproduced on **0.8.0** (`target/debug/yaoxiang-rs.exe`).
+All of the following tests were reproduced on **0.8.0** (`target/debug/yaoxiang-rs.exe`).
 
-### A.1 Interface Mechanism Usability (Foundation of This RFC)
+### A.1 Interface mechanism availability (foundation for this RFC)
 
-| Capability                                                                     | Verification                                               |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| Interface declaration `Animal: (Self: Type) -> Type = {...}`                   | ✅ Definable                                               |
-| Interface instantiation + external method `Dog: { Animal(Dog) }` + `Dog.speak` | ✅ Runnable, correct output                                |
-| Interface instantiation + **internal** method declaration                      | ❌ `E1097` (collision between field and method namespaces) |
-| Method dispatch `d.speak()`                                                    | ✅ Runnable                                                |
+| Capability                                                                     | Test Result                                                        |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Interface declaration `Animal: (Self: Type) -> Type = {...}`                   | ✅ Can be defined                                                  |
+| Interface instantiation + external method `Dog: { Animal(Dog) }` + `Dog.speak` | ✅ Runnable, output correct                                        |
+| Interface instantiation + **internal** method declaration                      | ❌ `E1097` (conflict between fields and methods sharing namespace) |
+| Method dispatch `d.speak()`                                                    | ✅ Runnable                                                        |
 
-**Note**: `E1097` means that operator methods must use the **external declaration** form
-(`Point.add: (self: &Point, ...)`), consistent with the examples in RFC-011a.
+**Note**: `E1097` means operator methods must use the **external declaration** form
+(`Point.add: (self: &Point, ...)`), consistent with RFC-011a's examples.
 
-### A.2 Current State of Operators
+### A.2 Current operator status
 
-| Expression                          | Current State                                                                |
-| ----------------------------------- | ---------------------------------------------------------------------------- |
-| `1 + 2` / `"a" + "b"` / `[1] + [2]` | ✅ Hardcoded whitelist (Int/Float/String/List)                               |
-| `Point(1,2) == Point(1,2)`          | ❌ `E6007` (Eq does not hold on Struct)                                      |
-| `f[0]` (function position binding)  | ⚠️ Only legal within binding declarations; as an expression, reports `E3006` |
-| `arr[0, 1]` (multi-position)        | ✅ Tuple packing, `list([1, 2])`                                             |
-| `-7 % 3`                            | `-1` (remainder, not modulo)                                                 |
+| Expression                           | Current Status                                                      |
+| ------------------------------------ | ------------------------------------------------------------------- |
+| `1 + 2` / `"a" + "b"` / `[1] + [2]`  | ✅ Hardcoded whitelist (Int/Float/String/List)                      |
+| `Point(1,2) == Point(1,2)`           | ❌ `E6007` (Eq does not hold on Struct)                             |
+| `f[0]` (function positional binding) | ⚠️ Only legal in binding declaration; as expression reports `E3006` |
+| `arr[0, 1]` (multi-position)         | ✅ Tuple packing, `list([1, 2])`                                    |
+| `-7 % 3`                             | `-1` (remainder, not modulo)                                        |
 
-### A.3 Hardcoded Locations of `?`
+### A.3 `?` hardcoding locations
 
 ```rust
 // src/frontend/core/typecheck/inference/expressions.rs
@@ -581,41 +575,41 @@ Instruction::VariantTag { group: "Result".to_string(), .. }
 
 Both locations need to be changed to interface queries.
 
-## Appendix B: Design Decision Record
+## Appendix B: Design decision record
 
-| Decision                                   | Choice                                                                        | Rationale                                                                                                                          | Date       |
-| ------------------------------------------ | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| Architecture                               | Three-layer separation (mapping / dispatch / interface contract)              | Merging them would decouple RFC-011's constraints from operators                                                                   | 2026-09-15 |
-| Operator allowance condition               | Must implement the interface (Layer 2 is the gate)                            | Ensures strict correspondence between `T: Add` and `+`                                                                             | 2026-09-15 |
-| `Equal` and `Dup`                          | Hardcode the `Dup` prerequisite inside the `Equal` definition                 | RFC-009 causal chain: freezing is the cause, Dup is the result                                                                     | 2026-09-15 |
-| Interface naming                           | Full words (`Multiply` rather than `Mul`)                                     | Do not modify the already-accepted main text of RFC-011                                                                            | 2026-09-15 |
-| `%` interface name                         | `Modulo` (mathematical modulus)                                               | The name pins the semantics; the current remainder behavior is a defect                                                            | 2026-09-15 |
-| Comparison operators                       | **Not** interface-based in the first batch; native IR instructions retained   | Already first-class instructions; `Ordering` brings along a set of independent issues                                              | 2026-09-15 |
-| `Ordering`                                 | Not introduced in the first batch                                             | No real demand; warrants an independent RFC                                                                                        | 2026-09-15 |
-| `?` interface name                         | `Try`, with method `residual`                                                 | Do not pre-assume unification with a future ternary sugar, to avoid over-design                                                    | 2026-09-15 |
-| Associated type                            | Use interface type parameters, no `type` member syntax introduced             | RFC-011a settled this approach (`Iterator: (Item: Type)`)                                                                          | 2026-09-15 |
-| Unification of method binding and indexing | Conceptually unified; the interface only governs container indexing (Layer A) | Position-binding keys are compile-time constants; the result type requires type family evaluation, which is not user-implementable | 2026-09-15 |
-| Multi-position indexing                    | Tuple packing + overloading by Key type; no variadic interface                | Do not modify the parser; coexistence via RFC-011a overloading rules                                                               | 2026-09-15 |
-| Bitwise / unary operators                  | Not in the first batch                                                        | Rare for user-defined types; YAGNI                                                                                                 | 2026-09-15 |
+| Decision                                   | Determination                                                             | Reason                                                                                                                   | Date       |
+| ------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| Architecture                               | Three-layer separation (mapping / dispatch / contract)                    | Merging would decouple RFC-011 constraints from operators                                                                | 2026-09-15 |
+| Operator gating condition                  | Must implement interface (Layer 2 is the gate)                            | Ensures `T: Add` strictly corresponds to `+`                                                                             | 2026-09-15 |
+| `Equal` and `Dup`                          | `Equal`'s definition hardcodes the `Dup` prerequisite                     | RFC-009 causal chain: freeze is the cause, Dup is the result                                                             | 2026-09-15 |
+| Interface naming                           | Full words (`Multiply` rather than `Mul`)                                 | Don't change RFC-011's already-accepted text                                                                             | 2026-09-15 |
+| `%` interface name                         | `Modulo` (mathematical modulo)                                            | The name pins the semantics; current remainder behavior is a defect                                                      | 2026-09-15 |
+| Comparison operators                       | **Not** interface-ified in first batch, retain native IR instructions     | Already first-class instructions; `Ordering` brings up an entire separate set of issues                                  | 2026-09-15 |
+| `Ordering`                                 | Not introduced in the first batch                                         | No real need driving it; belongs to an independent RFC's scope                                                           | 2026-09-15 |
+| `?` interface name                         | `Try`, method `residual`                                                  | Don't pre-empt unification with future ternary syntactic sugar, avoid over-design                                        | 2026-09-15 |
+| Associated types                           | Use interface type parameters, don't introduce `type` member syntax       | RFC-011a already settled on this approach (`Iterator: (Item: Type)`)                                                     | 2026-09-15 |
+| Unification of method binding and indexing | Conceptually unified, interfaces only handle container indexing (Layer A) | Positional binding keys are compile-time constants, result types need type family evaluation, cannot be user-implemented | 2026-09-15 |
+| Multi-position indexing                    | Tuple packing + overloading by Key type, no variadic interface            | Don't change the parser; rely on RFC-011a overloading rules to coexist                                                   | 2026-09-15 |
+| Bitwise / unary operators                  | Not done in the first batch                                               | Rare for user-defined types, YAGNI                                                                                       | 2026-09-15 |
 
 ## Appendix C: Glossary
 
-| Term             | Definition                                                                                                              |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Layer 0          | Fixed mapping table from operator to method name; a language-level constant, not user-modifiable                        |
-| Layer 1          | Dispatch foundation that looks up and invokes by the `Type.method` key                                                  |
-| Layer 2          | Interface contract layer that provides the basis for generics constraints, and also serves as the operator gate         |
-| Native fast path | The hardcoded operation path retained for primitive types (Int/Float/String/List), which does not go through interfaces |
-| Position binding | The `f[0]` syntax from RFC-004 that binds a function parameter position as a method; a compile-time behavior            |
+| Term               | Definition                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Layer 0            | Fixed mapping table from operators to method names; language-level constant, user-immutable                   |
+| Layer 1            | Dispatch base that looks up by `Type.method` key and invokes                                                  |
+| Layer 2            | Interface contract layer; provides basis for generic constraints, and is also the operator gating gate        |
+| Native fast path   | Hardcoded operation path retained for primitive types (Int/Float/String/List), does not go through interfaces |
+| Positional binding | RFC-004's `f[0]` syntax, which binds a function's parameter position as a method; compile-time behavior       |
 
 ## References
 
 - [RFC-011: Generic Type System Design](./011-generic-type-system.md) — `T: Add + Multiply + Zero`
-  constraints, associated type
+  constraint, associated types
 - [RFC-011a: Interface Implementation and Dynamic Dispatch](./011a-interface-implementation.md) —
   interface declaration/instantiation/overloading rules
 - [RFC-009: Ownership Model Design](./009-ownership-model.md) — `Dup` / `Linear`
-- [RFC-004: Multi-Position Union Binding for Curried Methods](./004-curry-multi-position-binding.md)
+- [RFC-004: Multi-Position Joint Binding for Curried Methods](./004-curry-multi-position-binding.md)
   — `f[0]` syntax
 - [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md) — sum type expression
 - [RFC-039: Pattern Matching Completeness](../draft/039-pattern-matching-completeness.md)

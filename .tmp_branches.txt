@@ -1,0 +1,187 @@
+                    opcode::ARC_NEW => {
+                        // ArcNew: dst(1) + src(1)
+                        // 编码器: [dst, src]
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::ArcNew {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::RC_NEW => {
+                        // RcNew: dst(1) + src(1)
+                        // 编码器: [dst, src]
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::RcNew {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::ARC_CLONE => {
+                        // ArcClone: dst(1) + src(1)
+                        // 编码器: [dst, src]
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::ArcClone {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::ARC_DROP => {
+                        // ArcDrop: src(1)
+                        // 编码器: [reg]
+                        if instr.operands.len() >= 1 {
+                            decoded_instructions.push(BytecodeInstr::ArcDrop {
+                                src: Reg(instr.operands[0] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::DROP => {
+                        // Drop: value(1)
+                        // 编码器: [reg]
+                        if instr.operands.len() >= 1 {
+                            decoded_instructions.push(BytecodeInstr::Drop {
+                                value: Reg(instr.operands[0] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CLOSE_UPVALUE => {
+                        // CloseUpvalue: src(1)
+                        // 编码器: [reg]
+                        if instr.operands.len() >= 1 {
+                            decoded_instructions.push(BytecodeInstr::CloseUpvalue {
+                                src: Reg(instr.operands[0] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STACK_ALLOC => {
+                        // StackAlloc: dst(1)
+                        // 编码器: [dst]（size 未编码）
+                        if instr.operands.len() >= 1 {
+                            decoded_instructions.push(BytecodeInstr::StackAlloc {
+                                dst: Reg(instr.operands[0] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::HEAP_ALLOC => {
+                        // HeapAlloc: dst(1) + type_id(2, 小端)
+                        // 编码器: [dst, 0, 0]
+                        if instr.operands.len() >= 3 {
+                            decoded_instructions.push(BytecodeInstr::HeapAlloc {
+                                dst: Reg(instr.operands[0] as u16),
+                                type_id: op_u16(&instr.operands, 1).unwrap_or(0),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CAST => {
+                        // Cast: dst(1) + src(1) + target_type_id(2, 小端)
+                        // 编码器: [dst, src, 0, 0]
+                        if instr.operands.len() >= 4 {
+                            decoded_instructions.push(BytecodeInstr::Cast {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                                target_type_id: op_u16(&instr.operands, 2).unwrap_or(0),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::WEAK_NEW => {
+                        // WeakNew: dst(1) + src(1)
+                        // 无编码器（死路径），按变体定义
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::WeakNew {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::WEAK_UPGRADE => {
+                        // WeakUpgrade: dst(1) + src(1)
+                        // 无编码器（死路径），按变体定义
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::WeakUpgrade {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::TYPE_CHECK => {
+                        // TypeCheck: value(1) + type_id(2, 小端)
+                        // 无编码器（死路径）
+                        if instr.operands.len() >= 3 {
+                            decoded_instructions.push(BytecodeInstr::TypeCheck {
+                                value: Reg(instr.operands[0] as u16),
+                                type_id: op_u16(&instr.operands, 1).unwrap_or(0),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::TYPE_OF => {
+                        // TypeOf: dst(1) + src(1)
+                        // 无编码器（死路径）
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::TypeOf {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::TRY_BEGIN => {
+                        // TryBegin: catch_target(4, 小端)
+                        // 无编码器（死路径）
+                        if instr.operands.len() >= 4 {
+                            decoded_instructions.push(BytecodeInstr::TryBegin {
+                                catch_target: op_u32(&instr.operands, 0).unwrap_or(0),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::THROW => {
+                        // Throw: error(1)
+                        // 无编码器（死路径）
+                        if instr.operands.len() >= 1 {
+                            decoded_instructions.push(BytecodeInstr::Throw {
+                                error: Reg(instr.operands[0] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::BOUNDS_CHECK => {
+                        // BoundsCheck: array(1) + index(1)
+                        // 无编码器（死路径）
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::BoundsCheck {
+                                array: Reg(instr.operands[0] as u16),
+                                index: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }

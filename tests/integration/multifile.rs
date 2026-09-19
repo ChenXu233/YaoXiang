@@ -44,7 +44,7 @@ distance: (a: Point, b: Point) -> Float = (a, b) => {
 use std.assert
 use lib.{Point, distance}
 
-main = {
+main = () => {
     p = Point(1.0, 2.0)
     q = Point(4.0, 6.0)
     d = distance(p, q)
@@ -63,7 +63,7 @@ Point: Type = { x: Float, y: Float }
 use std.assert
 use lib.{Point}
 
-main = {
+main = () => {
     p = Point(3.0, 4.0)
     assert.assert(p.x == 3.0, "p.x should be 3")
     assert.assert(p.y == 4.0, "p.y should be 4")
@@ -81,7 +81,7 @@ value: Int = 7
 use std.assert
 use lib.{value}
 
-main = {
+main = () => {
     assert.assert(value == 7, "value should be 7")
 }
 "#;
@@ -107,7 +107,7 @@ Point.norm_sq: (self: &Point) -> Float = {
 use std.assert
 use lib.{Point}
 
-main = {
+main = () => {
     p = Point(3.0, 4.0)
     x = p.get_x()
     n = p.norm_sq()
@@ -124,7 +124,7 @@ fn test_single_file_via_project_path() {
     let main = r#"
 use std.assert
 
-main = {
+main = () => {
     assert.assert(42 == 42, "trivial")
 }
 "#;
@@ -160,7 +160,7 @@ use std.assert
 use a.{use_a}
 use b.{use_b}
 
-main = {
+main = () => {
     assert.assert(use_a() == 1, "a.helper should return 1")
     assert.assert(use_b() == 2, "b.helper should return 2")
 }
@@ -186,7 +186,7 @@ add: (a: Int, b: Int) -> Int = (a, b) => {
 use std.assert
 use lib
 
-main = {
+main = () => {
     assert.assert(lib.helper() == 42, "lib.helper should return 42")
     assert.assert(lib.add(3, 4) == 7, "lib.add(3,4) should be 7")
 }
@@ -222,7 +222,7 @@ use std.assert
 use a.{make_a}
 use b.{make_b}
 
-main = {
+main = () => {
     assert.assert(make_a() == 3.0, "a.Point(1,2) x+y should be 3.0")
     assert.assert(make_b() == 7.0, "b.Point(3,4) x+z should be 7.0")
 }
@@ -242,7 +242,7 @@ helper: (x: Int) -> Int = (x) => {
 use std.assert
 use lib.{helper as double}
 
-main = {
+main = () => {
     assert.assert(double(21) == 42, "double(21) should be 42")
 }
 "#;
@@ -263,7 +263,7 @@ helper: (x: Int) -> Int = (x) => {
 use std.assert
 use lib.{helper as double, Point}
 
-main = {
+main = () => {
     p = Point(3.0)
     assert.assert(p.x == 3.0, "p.x should be 3")
     assert.assert(double(21) == 42, "double(21) should be 42")
@@ -282,7 +282,7 @@ Point: Type = { x: Float }
 use std.assert
 use lib.{Point as P}
 
-main = {
+main = () => {
     p = P(3.0)
     assert.assert(p.x == 3.0, "p.x should be 3")
 }
@@ -303,7 +303,7 @@ helper: (x: Int) -> Int = (x) => {
 use std.assert
 use lib.{helper}
 
-main = {
+main = () => {
     assert.assert(helper(21) == 42, "helper(21) should be 42")
 }
 "#;
@@ -337,7 +337,7 @@ helper: (x: Int) -> Int = (x) => {
 use std.assert
 use lib.{helper}
 
-main = {
+main = () => {
     assert.assert(helper(21) == 63, "importer-dir lib should win: helper(21) == 63")
 }
 "#;
@@ -360,7 +360,7 @@ fn test_multifile_unrelated_broken_file_does_not_block_run() {
     let main = r#"
 use std.assert
 
-main = {
+main = () => {
     assert.assert(1 + 1 == 2, "math still works")
 }
 "#;
@@ -389,7 +389,7 @@ fa: () -> Int = () => {
 use std.assert
 use a.{fa}
 
-main = {
+main = () => {
     assert.assert(fa() == 42, "transitive fa() should be 42")
 }
 "#;
@@ -407,7 +407,7 @@ fn test_multifile_same_module_key_from_two_roots_is_ambiguity_error() {
 use lib.{helper}
 use sub.consumer
 
-main = {
+main = () => {
     println(helper(1))
 }
 "#;
@@ -462,7 +462,7 @@ fn test_multifile_use_block_value_binding() {
 use std.assert
 use lib.{x}
 
-main = {
+main = () => {
     assert.assert(x == 5, "跨文件块值绑定应为 5")
 }
 "#;
@@ -483,7 +483,7 @@ base: Int = 7
 use std.assert
 use lib.{derived}
 
-main = {
+main = () => {
     assert.assert(derived == 21, "跨文件前向引用应为 21")
 }
 "#;

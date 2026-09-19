@@ -15,7 +15,7 @@ copy_use: (p: &Point) -> Int = (p) => {
     return q.x + p.x
 }
 
-main = {
+main: () -> Void = {
     // 令牌复制：两份都活跃（SPEC §11.2 示例）
     p = Point(1, 2)
     view = &p

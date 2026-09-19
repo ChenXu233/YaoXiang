@@ -7,6 +7,6 @@
 
 Container: (T: Type) -> Type = { value: T, extra: T }
 
-main = {
+main: () -> Void = {
     b = Container(42, 43, 44)
 }

@@ -20,7 +20,7 @@ fn_return_skips_rest: () -> Int = {
     return 42
 }
 
-main = {
+main: () -> Void = {
     fn_no_return(99)
 
     r = fn_early_return(-1)

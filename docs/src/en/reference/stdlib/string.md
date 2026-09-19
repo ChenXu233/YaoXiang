@@ -1,17 +1,17 @@
 ---
 title: 'std.string'
-description: 'String searching, splitting, formatting, and parsing'
+description: 'String search, splitting, formatting and parsing'
 ---
 
 # std.string
 
-String operations module. Except for `format`, all functions borrow their input read-only
-(`&String`); the source string remains usable after the call.
+String operation module. Except for `format`, all functions perform read-only borrowing (`&String`)
+on the input parameters, and the source string remains usable after the call.
 
-When the argument type does not match, all functions degrade to **empty-string semantics** (rather
-than reporting an error): `split`/`trim`/`upper` etc. treat non-`String` arguments as `""`. This
-means an incorrect argument type will not be interrupted, but you also won't get the expected result
-— it is recommended to rely on the type checker to intercept such cases at compile-time.
+All functions degrade to **empty string semantics** (rather than reporting an error) when the
+argument types do not match: `split`/`trim`/`upper` etc. treat non-`String` inputs as `""`. This
+means that incorrect argument types will not be interrupted, but the expected results will not be
+obtained either — it is recommended to rely on the type checker to intercept at compile-time.
 
 ```yaoxiang
 use std.string
@@ -57,23 +57,23 @@ split: (s: &String, sep: &String) -> List(String)
 
 <!-- stdlib:sig:string.split end -->
 
-Split `s` by `sep` and return a list of substrings.
+Splits `s` by `sep` and returns a list of substrings.
 
-- `s` —— string to split
-- `sep` —— separator; **when empty, splits character by character**
+- `s` —— the string to be split
+- `sep` —— the separator; **when empty string, splits by each character**
 
-Returns: `List(String)`. When the separator is not found, returns a single-element list.
+Returns: `List(String)`. Returns a single-element list when the separator is not found.
 
 ```yaoxiang
 use std.assert
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     assert(list.len(string.split("a,b,c", ",")) == 3)
     assert(list.get(string.split("a,b,c", ","), 0) == "a")
 
-    // Empty separator → split character by character
+    // Empty separator → split by character
     cs = string.split("abc", "")
     assert(list.len(cs) == 3)
 }
@@ -89,7 +89,7 @@ trim: (s: &String) -> String
 
 <!-- stdlib:sig:string.trim end -->
 
-Remove leading and trailing Unicode whitespace characters.
+Removes leading and trailing Unicode whitespace characters.
 
 Returns: a new string with leading and trailing whitespace removed (does not modify `s`).
 
@@ -97,7 +97,7 @@ Returns: a new string with leading and trailing whitespace removed (does not mod
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.trim("  hi  ") == "hi")
 }
 ```
@@ -112,13 +112,13 @@ upper: (s: &String) -> String
 
 <!-- stdlib:sig:string.upper end -->
 
-Convert to uppercase (Unicode-aware).
+Converts to uppercase (Unicode-aware).
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.upper("abc") == "ABC")
 }
 ```
@@ -133,13 +133,13 @@ lower: (s: &String) -> String
 
 <!-- stdlib:sig:string.lower end -->
 
-Convert to lowercase (Unicode-aware).
+Converts to lowercase (Unicode-aware).
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.lower("ABC") == "abc")
 }
 ```
@@ -154,15 +154,15 @@ replace: (s: &String, old: &String, new: &String) -> String
 
 <!-- stdlib:sig:string.replace end -->
 
-Replace **every** occurrence of `old` in `s` with `new`.
+Replaces **all** `old` in `s` with `new`.
 
-- `old` —— when empty, returns `s` **as-is** (no insertion occurs)
+- When `old` is an empty string, returns `s` **as-is** (no insertion).
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.replace("a-b-c", "-", "+") == "a+b+c")
     assert(string.replace("abc", "", "x") == "abc")
 }
@@ -178,13 +178,13 @@ contains: (s: &String, sub: &String) -> Bool
 
 <!-- stdlib:sig:string.contains end -->
 
-Whether `sub` appears in `s`. Always `true` for an empty string.
+Whether `sub` appears in `s`. Empty string is always `true`.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.contains("hello", "ell"))
     assert(!string.contains("hello", "xyz"))
 }
@@ -200,13 +200,13 @@ starts_with: (s: &String, prefix: &String) -> Bool
 
 <!-- stdlib:sig:string.starts_with end -->
 
-Whether `s` starts with `prefix`. Always `true` for an empty `prefix`.
+Whether `s` starts with `prefix`. Empty `prefix` is always `true`.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.starts_with("hello", "he"))
 }
 ```
@@ -221,13 +221,13 @@ ends_with: (s: &String, suffix: &String) -> Bool
 
 <!-- stdlib:sig:string.ends_with end -->
 
-Whether `s` ends with `suffix`. Always `true` for an empty `suffix`.
+Whether `s` ends with `suffix`. Empty `suffix` is always `true`.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.ends_with("hello", "lo"))
 }
 ```
@@ -242,18 +242,18 @@ index_of: (s: &String, sub: &String) -> Int
 
 <!-- stdlib:sig:string.index_of end -->
 
-Byte index of the first occurrence of `sub`.
+The **byte** index of the first occurrence of `sub`.
 
-Returns: the index when found; `-1` when not found.
+Returns: returns the index when found; returns `-1` when not found.
 
-> The return value is a byte offset. When the string contains multi-byte characters, you can convert
-> with `chars` first to locate a character index.
+> The return value is the byte offset. When the string contains multi-byte characters, you can use
+> `chars` to convert and then locate the character index.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.index_of("hello", "ll") == 2)
     assert(string.index_of("hello", "xyz") == -1)
 }
@@ -269,21 +269,21 @@ substring: (s: &String, start: Int, end: Int) -> String
 
 <!-- stdlib:sig:string.substring end -->
 
-Extract the `[start, end)` range by **character** index.
+Takes the `[start, end)` interval by **character** index.
 
-- `start` —— starting character index; defaults to `0`
-- `end` —— ending character index (exclusive); defaults to the end of the string
+- `start` —— start character index, defaults to `0`
+- `end` —— end character index (exclusive), defaults to the end of the string
 
-Returns: the sliced result. Out-of-range bounds are **clamped** to the valid range, without error;
-when `start > end`, it is clamped to an empty string.
+Returns: the sliced result. Out-of-range boundaries are **clamped** to the valid range without
+error; clamps to an empty string when `start > end`.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.substring("hello", 1, 4) == "ell")
-    assert(string.substring("hello", 1, 99) == "ello")   // upper bound clamped
+    assert(string.substring("hello", 1, 99) == "ello")   // Upper bound clamped
 }
 ```
 
@@ -303,7 +303,7 @@ Whether `s` is an empty string.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.is_empty(""))
     assert(!string.is_empty("x"))
 }
@@ -325,9 +325,9 @@ Returns the **UTF-8 byte length**, not the number of characters.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.len("hello") == 5)
-    assert(string.len("中") == 3)   // byte length
+    assert(string.len("中") == 3)   // Byte length
 }
 ```
 
@@ -341,14 +341,14 @@ chars: (s: &String) -> List(String)
 
 <!-- stdlib:sig:string.chars end -->
 
-Split into a list of single-character strings (by Unicode scalar value).
+Splits into a list of single-character strings (by Unicode scalar value).
 
 ```yaoxiang
 use std.assert
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     cs = string.chars("ab")
     assert(list.len(cs) == 2)
     assert(list.get(cs, 0) == "a")
@@ -365,13 +365,13 @@ concat: (s1: &String, s2: &String) -> String
 
 <!-- stdlib:sig:string.concat end -->
 
-Concatenate two strings. You can also use the `+` operator directly.
+Concatenates two strings. You can also use the `+` operator directly.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.concat("a", "b") == "ab")
 }
 ```
@@ -386,15 +386,15 @@ repeat: (s: &String, n: Int) -> String
 
 <!-- stdlib:sig:string.repeat end -->
 
-Repeat `s` `n` times.
+Repeats `s` `n` times.
 
-- `n` —— number of repetitions; when `n <= 0`, returns an empty string
+- `n` —— the number of repetitions; returns an empty string when `n <= 0`
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.repeat("ab", 3) == "ababab")
     assert(string.repeat("ab", 0) == "")
 }
@@ -410,13 +410,13 @@ reverse: (s: &String) -> String
 
 <!-- stdlib:sig:string.reverse end -->
 
-Reverse the string by character.
+Reverses by character.
 
 ```yaoxiang
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.reverse("abc") == "cba")
 }
 ```
@@ -431,7 +431,7 @@ format: (format: &String, ...args) -> String
 
 <!-- stdlib:sig:string.format end -->
 
-Format using `{index}` placeholders, with optional width/alignment specifiers.
+Formats using `{index}` placeholders, with optional width/alignment specifiers.
 
 Placeholder syntax:
 
@@ -443,10 +443,10 @@ Placeholder syntax:
 | `{0:<3}` | Width 3, left-aligned                                           |
 | `{0:^3}` | Width 3, centered                                               |
 
-Literal curly braces are written by doubling: two left braces produce one literal left brace, and
-the same applies to right braces.
+Literal curly braces are represented by doubling: two left curly braces produce one literal left
+curly brace, and the same applies to two right curly braces.
 
-Return value: the formatted string. Arguments are first converted to strings (the same as
+Return value: the formatted string. Arguments are first converted to strings (same as
 `convert.to_string`); an out-of-range index yields an empty string, and an invalid width is treated
 as `0`.
 
@@ -454,7 +454,7 @@ as `0`.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.format("{0}-{1}", "a", "b") == "a-b")
     assert(string.format("[{0:>5}]", "ab") == "[   ab]")
     assert(string.format("[{0:<5}]", "ab") == "[ab   ]")
@@ -471,9 +471,9 @@ parse_int: (s: &String) -> Result(Int, Error)
 
 <!-- stdlib:sig:string.parse_int end -->
 
-Parse a decimal integer (leading and trailing whitespace is removed automatically).
+Parses a decimal integer (automatically trims leading/trailing whitespace).
 
-Returns: on success, `Result.ok(Int)`; on failure, `Result.err(Error)`, whose `code` is `E6010`.
+Returns: on success, `Result.ok(Int)`; on failure, `Result.err(Error)` with `code` being `E6010`.
 **Does not throw.**
 
 ```yaoxiang
@@ -481,7 +481,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_int("42")))
     assert(result.is_err(string.parse_int("abc")))
 }
@@ -497,16 +497,16 @@ parse_float: (s: &String) -> Result(Float, Error)
 
 <!-- stdlib:sig:string.parse_float end -->
 
-Parse a floating-point number (leading and trailing whitespace is removed automatically).
+Parses a floating-point number (automatically trims leading/trailing whitespace).
 
-Returns: on success, `Result.ok(Float)`; on failure, `Result.err(Error)`, whose `code` is `E6011`.
+Returns: on success, `Result.ok(Float)`; on failure, `Result.err(Error)` with `code` being `E6011`.
 
 ```yaoxiang
 use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_float("3.14")))
     assert(result.is_err(string.parse_float("xxx")))
 }
@@ -514,5 +514,5 @@ main = {
 
 ## Related
 
-- [`std.convert`](./convert) —— number to string
-- [`std.result`](./result) —— unpack the result of `parse_*`
+- [`std.convert`](./convert) —— Convert numbers to strings
+- [`std.result`](./result) —— Unwrap the results of `parse_*`

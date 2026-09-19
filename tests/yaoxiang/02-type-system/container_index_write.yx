@@ -1,0 +1,46 @@
+// 02-type-system/container_index_write.yx
+// 覆盖: RFC-011 容器命名分层（Array/Vec/List）+ #360 索引赋值
+// 验证:
+//   - 索引赋值 `a[i] = v` 生成 StoreIndex，原地写堆句柄（Array/Vec/List 同款）
+//   - 越界写报 E6003（不静默丢弃）
+//   - `v[v.length] = x` 在末尾追加（运行时长度可增长，O(1)）
+//   - `.length` 读取容器当前长度
+// 状态: ✅ 可运行
+
+use std.assert
+
+main: () -> Void = {
+    // Array：定长，索引原地写
+    a: Array(Int, 3) = [1, 2, 3]
+    a[1] = 99
+    assert.assert(a[0] == 1, "Array write leaves other slots intact")
+    assert.assert(a[1] == 99, "Array index write")
+    assert.assert(a[2] == 3, "Array write preserves tail")
+    assert.assert(a.length == 3, "Array length")
+
+    // Vec：运行时长度的原始缓冲，索引读写 + 末尾追加
+    v: Vec(Int) = [10, 20, 30]
+    assert.assert(v.length == 3, "Vec length from literal")
+    v[0] = 11
+    assert.assert(v[0] == 11, "Vec index write")
+
+    v[v.length] = 40
+    assert.assert(v.length == 4, "Vec append grows length")
+    assert.assert(v[3] == 40, "Vec appended value readable")
+
+    v[v.length] = 50
+    assert.assert(v.length == 5, "Vec second append")
+    assert.assert(v[4] == 50, "Vec second appended value")
+
+    // List：可增长列表，同一索引写通路
+    l = [100, 200]
+    l[1] = 201
+    assert.assert(l[1] == 201, "List index write")
+
+    // 变量索引（非字面量）
+    i = 2
+    l[i] = 202
+    assert.assert(l[2] == 202, "List variable index write appends")
+}
+
+main()
