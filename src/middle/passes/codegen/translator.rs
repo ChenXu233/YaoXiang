@@ -186,17 +186,32 @@ impl Translator {
     }
 
     /// T2：把模块初始化指令序列编译成一个零参函数。
+    ///
+    /// 与 `translate_function` 的差别只在尾部：初始化无返回值，故补 `Return`。
+    /// **跳转回填与函数体同路** —— `for`/`while` 在顶层（Script 模式）
+    /// 会生成回跳，漏回填会让 target 停在占位 0（实测：顶层 for 只跑一次）。
     fn translate_init_sequence(
         &mut self,
         init: &[Instruction],
     ) -> Result<super::FunctionCode, Diagnostic> {
         let mut instructions = Vec::new();
-        for instr in init {
+        let mut pending_jumps: Vec<(usize, usize, u8)> = Vec::new();
+
+        for (ir_idx, instr) in init.iter().enumerate() {
+            if let Some((target, opcode)) = Self::get_jump_target(instr) {
+                pending_jumps.push((instructions.len(), target, opcode));
+            }
             let bc = self.translate_instruction(instr)?;
             instructions.push(bc);
+            let _ = ir_idx;
         }
         // 末尾补 Return（初始化无返回值）
         instructions.push(super::BytecodeInstruction::new(opcode::RETURN, vec![]));
+
+        // IR 下标 → 字节码下标（此处一条 IR 指令→一条字节码指令，恒等映射；
+        // 用 map 而非直等是为了与 translate_function 同形，未来指令展开时不错位）
+        let ir_to_bytecode_map: HashMap<usize, usize> = (0..init.len()).map(|i| (i, i)).collect();
+        Self::backfill_jumps_impl(&mut instructions, &ir_to_bytecode_map, &pending_jumps);
 
         Ok(super::FunctionCode {
             name: MODULE_INIT_FUNCTION.to_string(),

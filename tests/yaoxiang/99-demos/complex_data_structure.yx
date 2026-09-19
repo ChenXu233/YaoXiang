@@ -17,7 +17,7 @@ main = {
     n3 = Node(30, 0)
 
     // 三个 &Node 令牌同时活跃 — 自然（Dup）
-    total = sum_nodes(n1, n2)
+    mut total = sum_nodes(n1, n2)
     total = total + n3.value
     assert.assert(total == 60, "total should be 60")
     io.println(total)

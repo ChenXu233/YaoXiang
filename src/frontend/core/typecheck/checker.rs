@@ -394,18 +394,31 @@ impl TypeChecker {
         }
         *self.body_checker_mut() = body_checker;
 
-        // 将环境中的变量同步到 body_checker
+        // 将环境中的变量同步到 body_checker。
+        //
+        // 标注为「导入」：`env.vars` 里既有本文件的声明，也有
+        // `add_native_function_types` 注入的 std native 短名（如 `ok`/`err`）。
+        // 后者不是本文件的绑定——若不区分，用户写 `ok = ...` 会被 spec §4.3
+        // 判定看成「重赋值不可变变量」→ 误报 E2010。
         for (name, poly) in self.env.vars.clone() {
-            self.body_checker_mut()
-                .add_var(name, poly, false, crate::util::span::Span::default());
+            let is_native = self.env.native_signatures.contains_key(&name);
+            if is_native {
+                self.body_checker_mut().add_imported_var(name, poly);
+            } else {
+                self.body_checker_mut().add_var(
+                    name,
+                    poly,
+                    false,
+                    crate::util::span::Span::default(),
+                );
+            }
         }
 
         // T3：把 pass2 收集的顶层值绑定占位也注入 body_checker，
         // 使函数体内对后置绑定的引用（前向引用）能解析到名字。
         // pass3 执行到该语句时会重新推断并覆盖占位类型。
         for (name, poly) in self.early_value_bindings.clone() {
-            self.body_checker_mut()
-                .add_var(name, poly, false, crate::util::span::Span::default());
+            self.body_checker_mut().add_forward_declared_var(name, poly);
         }
 
         // #321 W1003：模块级导入名监视集注入（函数体级 use 由 process_use_stmt 自行登记）

@@ -387,10 +387,11 @@ impl StatementChecker {
         export: &Export,
     ) {
         let ty = self.export_type(export);
-        self.scope.add_var(
+        // 标记为导入：导入名不是本文件的绑定，不参与 spec §4.3 的
+        // 「沿作用域链查找」（否则 `ok = ...` 撞 `std.result.ok` 会误报 E2010）。
+        self.scope.add_imported_var(
             binding_name.to_string(),
             PolyType::mono(ty),
-            false,
             crate::util::span::Span::default(),
         );
     }
@@ -493,6 +494,28 @@ impl StatementChecker {
         definition_span: crate::util::span::Span,
     ) {
         self.scope.add_var(name, poly, is_mut, definition_span);
+    }
+
+    /// 注入「前向引用占位」：名字可见（供函数体引用后置绑定），
+    /// 但 §4.3 的声明判定不把它当现有绑定（否则 `mut x = v` 误报遮蔽）。
+    pub fn add_forward_declared_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
+        self.scope
+            .add_forward_declared_var(name, poly, crate::util::span::Span::default());
+    }
+
+    /// 注入「导入名」：来自 `use` 的符号（std 导出 / 跨模块）或 std native 短名。
+    /// 可见可调用，但**不是本文件的绑定**——不参与 spec §4.3 的赋值判定。
+    pub fn add_imported_var(
+        &mut self,
+        name: String,
+        poly: PolyType,
+    ) {
+        self.scope
+            .add_imported_var(name, poly, crate::util::span::Span::default());
     }
 
     /// 添加参数（函数签名参数，lambda 体可继承）
@@ -852,7 +875,7 @@ impl StatementChecker {
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
-                let (name, _type_name) = match target.as_ref() {
+                let (name, type_name) = match target.as_ref() {
                     Expr::Var(n, _) => (n.clone(), None),
                     Expr::FieldAccess { expr, field, .. } => {
                         if let Expr::Var(tn, _) = expr.as_ref() {
@@ -863,6 +886,15 @@ impl StatementChecker {
                     }
                     _ => return Ok(()),
                 };
+                // `Type.method = ...` 是**方法绑定**（左值是类型限定名），
+                // 不是变量声明/赋值——spec §4.3 不适用。此前 type_name 被丢弃，
+                // 导致 `Point.get_x = get_x[0]` 被当成对变量 `get_x` 的重赋值 → 误报 E2010。
+                let is_method_binding = type_name
+                    .as_ref()
+                    .is_some_and(|tn| self.type_defs.contains_key(tn.as_str()))
+                    // RFC-010 类型定义绑定（`Db = unsafe { Db: Type = {...}; Db }`）
+                    // 也是元绑定：编译期构造类型，不引入运行时变量。
+                    || Expr::is_type_def_binding(value.as_deref());
                 // 从 value 提取 Lambda params/body。
                 // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
                 // 非 Fn 注解→块值（交给 check_var_stmt 按普通变量审）。
@@ -884,6 +916,7 @@ impl StatementChecker {
                                     Some(v.as_ref()),
                                     *is_mut,
                                     *stmt_span,
+                                    is_method_binding,
                                 );
                             }
                         } else {
@@ -894,6 +927,7 @@ impl StatementChecker {
                                 Some(v.as_ref()),
                                 *is_mut,
                                 *stmt_span,
+                                is_method_binding,
                             );
                         }
                     }
@@ -905,6 +939,7 @@ impl StatementChecker {
                             None,
                             *is_mut,
                             *stmt_span,
+                            is_method_binding,
                         );
                     }
                 };
@@ -1470,6 +1505,11 @@ impl StatementChecker {
     /// 检查变量语句
     ///
     /// 处理 Binding 类型的变量声明。
+    ///
+    /// `is_method_binding`：左值是 `Type.method` 形式（方法绑定），
+    /// 不是变量声明/赋值——不适用 spec §4.3（否则 `Point.get_x = f[0]`
+    /// 会被当成对变量 `get_x` 的重赋值）。
+    #[allow(clippy::too_many_arguments)]
     fn check_var_stmt(
         &mut self,
         name: &str,
@@ -1478,6 +1518,7 @@ impl StatementChecker {
         initializer: Option<&Expr>,
         is_mut: bool,
         stmt_span: crate::util::span::Span,
+        is_method_binding: bool,
     ) -> Result<(), Box<Diagnostic>> {
         // 处理 prelude 语句（编译期求值部分）
         for stmt in prelude_stmts {
@@ -1682,34 +1723,63 @@ impl StatementChecker {
             (None, None) => self.solver.new_var(),
         };
 
-        if self.scope.var_in_current_scope(name) {
-            // mut 变量被重新赋值 → kill Γ 中依赖该变量的假设
-            if let Some(gamma) = &mut self.gamma {
-                if is_mut {
-                    gamma.kill(name);
-                }
-            }
-            // 统一变量类型并写回 scope，确保后续类型推断正确。
-            // 无初值注解绑定走占位覆写（enforce=false），见 assign_var 文档。
-            self.assign_var(name, ty, stmt_span, initializer.is_some())?;
+        // spec §4.3「赋值优先」：声明还是赋值？由 `ScopeManager::classify_binding`
+        // 统一判定（与 `ExpressionInferrer` 同一实现，不再各写一份）。
+        //
+        // 方法绑定（`Type.method = ...`）不走此判定：左值是类型限定名，
+        // 不引入也不重赋值任何变量。
+        if is_method_binding {
+            self.scope.add_var(
+                name.to_string(),
+                PolyType::mono(ty),
+                is_mut,
+                crate::util::span::Span::default(),
+            );
             return Ok(());
         }
-
-        if self.scope.var_in_any_scope(name) {
-            // mut 变量被重新赋值 → kill Γ 中依赖该变量的假设
-            if let Some(gamma) = &mut self.gamma {
-                if is_mut {
+        use crate::frontend::core::typecheck::inference::scope::BindingAction;
+        match self
+            .scope
+            .classify_binding(name, is_mut, initializer.is_none())
+        {
+            BindingAction::ImmutableReassign => {
+                return Err(Box::new(
+                    ErrorCodeDefinition::immutable_assignment(name)
+                        .at(stmt_span)
+                        .build(),
+                ));
+            }
+            BindingAction::DuplicateDefinition => {
+                return Err(Box::new(
+                    ErrorCodeDefinition::duplicate_definition(name)
+                        .at(stmt_span)
+                        .build(),
+                ));
+            }
+            BindingAction::Shadowing => {
+                return Err(Box::new(
+                    ErrorCodeDefinition::variable_shadowing(name)
+                        .at(stmt_span)
+                        .build(),
+                ));
+            }
+            BindingAction::Reassign => {
+                // mut 变量被重新赋值 → kill Γ 中依赖该变量的假设
+                if let Some(gamma) = &mut self.gamma {
                     gamma.kill(name);
                 }
+                // 仅全局（std/模块导出）撞名时不强制统一（保持旧覆写），见 assign_var 文档
+                self.assign_var(
+                    name,
+                    ty,
+                    stmt_span,
+                    initializer.is_some() && self.scope.var_in_local_scopes(name),
+                )?;
+                return Ok(());
             }
-            // 仅全局（std/模块导出）撞名时不强制统一（保持旧覆写），见 assign_var 文档
-            self.assign_var(
-                name,
-                ty,
-                stmt_span,
-                initializer.is_some() && self.scope.var_in_local_scopes(name),
-            )?;
-            return Ok(());
+            BindingAction::Declare => {
+                // 走下方新声明
+            }
         }
 
         self.scope.add_var(

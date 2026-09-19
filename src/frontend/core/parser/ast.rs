@@ -1027,6 +1027,36 @@ impl Expr {
     ///
     /// 关键：块值语义**不靠新语法**。想要 `{ ... }` 当场求值就把目标类型写上：
     /// `x: Int = { y = 5; y }`。
+    /// `name = <expr>` 中，`mut` 绑定是否为类型/方法的**元绑定**——
+    /// 这类左值不引入变量，不适用 spec §4.3 的声明/赋值判定。
+    ///
+    /// 两种形态：
+    /// - **类型定义绑定**（RFC-010）：`Db = unsafe { Db: Type = {...}; Db }`
+    ///   块内定义类型、尾表达式交回类型名——编译期构造，无运行时绑定。
+    /// - 调用方自有的其他形态（如 `Type.method = f` 方法绑定）由调用方判定。
+    pub fn is_type_def_binding(value: Option<&Expr>) -> bool {
+        let Some(Expr::Unsafe { body, .. }) = value else {
+            return false;
+        };
+        // 块内**直接**包含类型定义，且尾表达式引用该类型名
+        let mut def_names: Vec<&str> = Vec::new();
+        for st in &body.stmts {
+            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition { name, .. } =
+                &st.kind
+            {
+                def_names.push(name.as_str());
+            }
+        }
+        if def_names.is_empty() {
+            return false;
+        }
+        matches!(
+            body.stmts.last().map(|s| &s.kind),
+            Some(crate::frontend::core::parser::ast::StmtKind::Expr(e))
+                if matches!(e.as_ref(), Expr::Var(n, _) if def_names.contains(&n.as_str()))
+        )
+    }
+
     pub fn block_binding_is_function(
         type_annotation: Option<&Type>,
         value: Option<&Expr>,

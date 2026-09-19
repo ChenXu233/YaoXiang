@@ -2437,22 +2437,33 @@ impl<'a> ExpressionInferrer<'a> {
         _allow_unit: bool,
         _expected_type: Option<&MonoType>,
     ) -> Result<MonoType> {
-        // RFC-010a 规则①：块的值 = 尾表达式（唯一出口）。
-        // 空块 `{}` → Void；末位为语句（如赋值）→ Void；否则为尾表达式类型。
+        // spec §2.15：每个 `{}` 块创建一个作用域——
+        // 内层可读外层，**外层不可读内层**。
         //
-        // 与 `return` 的关系（规则②）：`return : Never`。带 `return` 的分支经
-        // `join` 被忽略（`Never` 不参与合并），故不再需要单独收集 `return` 类型。
-        let mut block_ty: MonoType = MonoType::Void;
+        // 此前本函数不开作用域，导致内层块变量泄漏到外层可见
+        //（`{ inner = 1 }; print(inner)` 不报未定义），进而使 spec §4.3 的
+        // 跨作用域规则（E2010 / E2013）无从判定。
+        self.scope.enter_block();
+        let result = (|| {
+            // RFC-010a 规则①：块的值 = 尾表达式（唯一出口）。
+            // 空块 `{}` → Void；末位为语句（如赋值）→ Void；否则为尾表达式类型。
+            //
+            // 与 `return` 的关系（规则②）：`return : Never`。带 `return` 的分支经
+            // `join` 被忽略（`Never` 不参与合并），故不再需要单独收集 `return` 类型。
+            let mut block_ty: MonoType = MonoType::Void;
 
-        let last_idx = block.stmts.len().checked_sub(1);
-        for (i, stmt) in block.stmts.iter().enumerate() {
-            let ty = self.infer_stmt(stmt)?;
-            if Some(i) == last_idx {
-                block_ty = ty;
+            let last_idx = block.stmts.len().checked_sub(1);
+            for (i, stmt) in block.stmts.iter().enumerate() {
+                let ty = self.infer_stmt(stmt)?;
+                if Some(i) == last_idx {
+                    block_ty = ty;
+                }
             }
-        }
 
-        Ok(block_ty)
+            Ok(block_ty)
+        })();
+        self.scope.exit_block();
+        result
     }
 
     /// #313：for 循环推断——`Expr::For`（表达式位置）与 `StmtKind::For`
@@ -2647,26 +2658,34 @@ impl<'a> ExpressionInferrer<'a> {
                         .build()
                     })?;
                 }
-                if self.scope.var_in_any_scope(&name) {
-                    if self.scope.var_in_current_scope(&name) {
+                // spec §4.3「赋值优先」：与 `StatementChecker` 同一判定
+                // （`ScopeManager::classify_binding`）——此前两处各写一份，
+                // 导致规则不一致（E2010/E2013 在这里有、在那里没有）。
+                use crate::frontend::core::typecheck::inference::scope::BindingAction;
+                match self.scope.classify_binding(&name, *is_mut, value.is_none()) {
+                    BindingAction::ImmutableReassign => {
+                        return Err(ErrorCodeDefinition::immutable_assignment(&name)
+                            .at(*stmt_span)
+                            .build());
+                    }
+                    BindingAction::DuplicateDefinition => {
+                        return Err(ErrorCodeDefinition::duplicate_definition(&name)
+                            .at(*stmt_span)
+                            .build());
+                    }
+                    BindingAction::Shadowing => {
+                        return Err(ErrorCodeDefinition::variable_shadowing(&name)
+                            .at(*stmt_span)
+                            .build());
+                    }
+                    BindingAction::Reassign => {
+                        self.assign_var(&name, init_ty, *stmt_span, true)?;
+                        return Ok(MonoType::Void);
+                    }
+                    BindingAction::Declare => {
+                        // moved 后重新声明：先清掉旧槽位（旧绑定已消耗）
                         if self.scope.var_is_moved(&name).unwrap_or(false) {
                             self.scope.remove_var(&name);
-                        } else {
-                            return Err(ErrorCodeDefinition::duplicate_definition(&name)
-                                .at(*stmt_span)
-                                .build());
-                        }
-                    } else {
-                        if self.scope.var_is_moved(&name).unwrap_or(false) {
-                            // 外层变量已 moved：在当前作用域重新声明
-                        } else if !*is_mut {
-                            if !self.scope.var_is_mutable(&name).unwrap_or(false) {
-                                return Err(ErrorCodeDefinition::immutable_assignment(&name)
-                                    .at(*stmt_span)
-                                    .build());
-                            }
-                            self.assign_var(&name, init_ty, *stmt_span, true)?;
-                            return Ok(MonoType::Void);
                         }
                     }
                 }

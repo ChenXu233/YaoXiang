@@ -1,0 +1,17 @@
+// 06-compile-errors/shadowing_err.yx
+// 内层显式 `mut` 声明撞外层同名 → E2013（spec §4.3）
+// expect: compile-error E2013
+// 验证: `mut x = value` 是**显式新声明**——内层新声明不得与外层同名。
+//       与 shadow_err.yx 的区别：那边是不写 mut 的赋值（→ E2010），
+//       这边是写了 mut 的新声明（→ E2013）。
+// 状态: 待测试
+
+use std.io
+
+main = {
+    x = 1
+    {
+        mut x = 2
+    }
+    io.println(x)
+}

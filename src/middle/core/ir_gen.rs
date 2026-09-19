@@ -170,6 +170,12 @@ pub struct AstToIrGenerator {
     /// 语句是**程序主体**（后执行，源码序）。若不分开，语句会立即入队
     /// 而绑定被推迟到末尾排序，导致 `io.println(v)` 先于 `v` 的初始化执行。
     module_stmts: Vec<Instruction>,
+    /// 顶层已声明的绑定名（首次出现在 `name = ...` 的）。
+    ///
+    /// 用于区分**声明**与**重赋值**：Script 模式下顶层语句是程序主体，
+    /// `i = i + 1` 是赋值而非重声明。旧实现把两者混为一谈，
+    /// 导致重赋值被当成第二份初始化 → 自引用 → 误报 E3019。
+    declared_globals: std::collections::HashSet<String>,
     /// 约束变量的具体类型映射（接口直接赋值优化）
     /// 当 `d: Drawable = Circle(1)` 时，记录 d -> "Circle"（具体类型名）
     /// 用于方法调用时选择直接调用而非 vtable 查找
@@ -303,6 +309,7 @@ impl AstToIrGenerator {
             module_init: Vec::new(),
             pending_inits: Vec::new(),
             module_stmts: Vec::new(),
+            declared_globals: std::collections::HashSet::new(),
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             release_plan: type_result.release_plan.drops.clone(),
@@ -808,11 +815,19 @@ impl AstToIrGenerator {
             .map(|i| i.instructions.clone())
             .collect();
         for instrs in ordered_inits {
+            let base = self.module_init.len();
+            let mut instrs = instrs;
+            Self::rebase_jump_targets(&mut instrs, base);
             self.module_init.extend(instrs);
         }
         // T4/T3：绑定初始化（声明，已拓扑排序）之后才跑顶层语句（程序主体，源码序）。
         // 两段不可交换：语句可能读绑定（如 `io.println(v)`），必须先初始化。
-        let stmts = std::mem::take(&mut self.module_stmts);
+        //
+        // 跳转重定位：module_stmts 里的 target 是**段内**下标，
+        // 前面接上绑定初始化后必须整体平移——否则顶层 while 的回跳会指向函数头。
+        let base = self.module_init.len();
+        let mut stmts = std::mem::take(&mut self.module_stmts);
+        Self::rebase_jump_targets(&mut stmts, base);
         self.module_init.extend(stmts);
 
         // 添加嵌套函数到模块函数列表
@@ -1139,6 +1154,31 @@ impl AstToIrGenerator {
         self.global_slot_base = base;
     }
 
+    /// 把一段指令序列里的跳转目标整体平移 `base`。
+    ///
+    /// `Instruction::Jmp` / `JmpIf` / `JmpIfNot` 的 target 是**函数内展平后的绝对下标**
+    /// （translator 按 `global_ir_index` 建表）。当一段指令在**空 Vec** 上生成、
+    /// 再拼进更大的序列时，原下标基准失效，必须平移。
+    ///
+    /// 顶层语句与顶层重赋值都在空 Vec 上生成（循环体的回跳会指向 0），
+    /// 拼进 `module_stmts` / `module_init` 前必须重定位。
+    fn rebase_jump_targets(
+        instrs: &mut [Instruction],
+        base: usize,
+    ) {
+        if base == 0 {
+            return;
+        }
+        for instr in instrs.iter_mut() {
+            match instr {
+                Instruction::Jmp { target, .. }
+                | Instruction::JmpIf { target, .. }
+                | Instruction::JmpIfNot { target, .. } => *target += base,
+                _ => {}
+            }
+        }
+    }
+
     /// 生成语句的 IR
     fn generate_stmt_ir(
         &mut self,
@@ -1379,13 +1419,41 @@ impl AstToIrGenerator {
                     // E3007（当时要求顶层初始化必须是编译期常量；T2 后该门槛已取消）。
                     Ok(None)
                 } else {
-                    // 全局变量（T2：槽位 + 初始化指令）
-                    self.generate_global_var_ir(
-                        &name,
-                        type_annotation.as_ref(),
-                        value.as_ref().map(|v| v.as_ref()),
-                        constants,
-                    )
+                    // spec §4.3：首次出现是**声明**（槽位 + 初始化），
+                    // 后续同名是**重赋值**（StoreGlobal，进模块语句段）。
+                    //
+                    // 此前无差别当声明，导致 `mut i = 0; i = i + 1` 被当成
+                    // 两份初始化 → 自引用 → 误报 E3019。
+                    let key = match &self.module_key {
+                        Some(k) => SymbolTable::qualify(k, &name),
+                        None => name.clone(),
+                    };
+                    if self.declared_globals.contains(&key) {
+                        // 重赋值：求值后写回已有槽位，进程序主体（顶层语句段）
+                        if let Some(slot) = self.lookup_global(&name) {
+                            let mut instrs = Vec::new();
+                            if let Some(v) = value.as_ref() {
+                                let reg = self.next_temp_reg();
+                                self.generate_expr_ir(v, reg, &mut instrs, constants)?;
+                                instrs.push(Instruction::Store {
+                                    dst: Operand::Global(slot),
+                                    src: Operand::Local(reg),
+                                    span: Self::get_expr_span(v),
+                                });
+                            }
+                            self.module_stmts.extend(instrs);
+                        }
+                        Ok(None)
+                    } else {
+                        self.declared_globals.insert(key);
+                        // 全局变量（T2：槽位 + 初始化指令）
+                        self.generate_global_var_ir(
+                            &name,
+                            type_annotation.as_ref(),
+                            value.as_ref().map(|v| v.as_ref()),
+                            constants,
+                        )
+                    }
                 }
             }
             // 导入语句：解析在独立 pass 完成（build_import_aliases），不生成运行时代码
@@ -1400,8 +1468,13 @@ impl AstToIrGenerator {
             _ if self.module_key.is_none() => {
                 // T4：顶层可执行语句（Script 模式）——先收进 module_stmts，
                 // 待所有绑定初始化（拓扑序）就绪后再拼到后面。
+                //
+                // 跳转重定位：语句在空 Vec 上生成，内部回跳（如 while）
+                // 的 target 从 0 起算；拼进 module_stmts 后必须加基线偏移。
+                let base = self.module_stmts.len();
                 let mut instrs = Vec::new();
                 self.generate_local_stmt_ir(stmt, &mut instrs, constants)?;
+                Self::rebase_jump_targets(&mut instrs, base);
                 self.module_stmts.extend(instrs);
                 Ok(None)
             }
@@ -2216,24 +2289,7 @@ impl AstToIrGenerator {
     /// T2 后 E3007 已不再产生，但本判定仍然必要：类型定义本就不该有运行时代码，
     /// 生成多余初始化会把类型名当成值去求值。
     fn is_type_def_binding(value: Option<&ast::Expr>) -> bool {
-        let Some(ast::Expr::Unsafe { body, .. }) = value else {
-            return false;
-        };
-        // 块内**直接**包含类型定义，且尾表达式引用该类型名
-        let mut def_names: Vec<&str> = Vec::new();
-        for st in &body.stmts {
-            if let ast::StmtKind::TypeDefinition { name, .. } = &st.kind {
-                def_names.push(name.as_str());
-            }
-        }
-        if def_names.is_empty() {
-            return false;
-        }
-        matches!(
-            body.stmts.last().map(|s| &s.kind),
-            Some(ast::StmtKind::Expr(e))
-                if matches!(e.as_ref(), ast::Expr::Var(n, _) if def_names.contains(&n.as_str()))
-        )
+        ast::Expr::is_type_def_binding(value)
     }
 
     /// T3：把待定初始化按依赖顺序重排（DFS + 三色标记）。
@@ -2772,6 +2828,24 @@ impl AstToIrGenerator {
                     let inferred = self.get_expr_type_name(init_expr);
                     if inferred != "<unknown>" {
                         self.local_var_types.insert(name.clone(), inferred);
+                    }
+                }
+                // 顶层绑定（Script 模式下 `mut i = 0` 在模块初始化序列里）：
+                // 重赋值写回全局槽位，不能新建局部（否则值被丢弃、循环永不推进）。
+                // 此路径在循环体内尤其关键——`while` 体里的 `i = i + 1`
+                // 走的就是 `generate_local_stmt_ir`。
+                if self.lookup_local(&name).is_none() {
+                    if let Some(slot) = self.lookup_global(&name) {
+                        if let Some(expr) = initializer {
+                            let reg = self.next_temp_reg();
+                            self.generate_expr_ir(expr, reg, instructions, constants)?;
+                            instructions.push(Instruction::Store {
+                                dst: Operand::Global(slot),
+                                src: Operand::Local(reg),
+                                span: Self::get_expr_span(expr),
+                            });
+                        }
+                        return Ok(());
                     }
                 }
                 let var_idx = if let Some(existing_idx) = self.lookup_local(&name) {
