@@ -1143,10 +1143,70 @@ impl Interpreter {
                         field_idx
                     )));
                 }
-                if let RuntimeValue::Struct { fields, .. } = obj {
-                    if let crate::backends::common::HeapValue::Tuple(items) = &*fields.lock() {
+                // 以下三条路径此前都是**静默失败**：不匹配就不写 dst，留下 Void，
+                // 调用方拿到 void 却不报错（#279 同类：不得静默）。
+                // 典型触发：内置 `List(T)` 的值传给名为 `List` 的库结构体的 `&List(A)`
+                // 形参——类型检查按名放行（同名），运行时形状不同，取 `.length` 得 void。
+                // 内置集合值（`RuntimeValue::List/Array`）：`GetField` 的 field_idx 就是
+                // 元素下标。命中此处说明静态类型被当成了记录型（例如库里的 `List`
+                // 与内置 `List` 同名），按下标读元素而不是静默留 Void。
+                if let RuntimeValue::List(h) | RuntimeValue::Array(h) = &obj {
+                    let guard = h.lock();
+                    if let crate::backends::common::HeapValue::List(items)
+                    | crate::backends::common::HeapValue::Array(items) = &*guard
+                    {
                         if (*field_idx as usize) < items.len() {
-                            frame.set_slot(dst.0 as usize, items[*field_idx as usize].clone());
+                            let v = items[*field_idx as usize].clone();
+                            drop(guard);
+                            frame.set_slot(dst.0 as usize, v);
+                            frame.advance();
+                            return Ok(StepOutcome::Continue);
+                        }
+                    }
+                    drop(guard);
+                    return Err(ExecutorError::type_only(format!(
+                        "field index {} out of range on list/array value",
+                        field_idx
+                    )));
+                }
+                if let RuntimeValue::Struct { fields, .. } = obj {
+                    let guard = fields.lock();
+                    match &*guard {
+                        crate::backends::common::HeapValue::Tuple(items) => {
+                            if (*field_idx as usize) < items.len() {
+                                let v = items[*field_idx as usize].clone();
+                                drop(guard);
+                                frame.set_slot(dst.0 as usize, v);
+                            } else {
+                                let len = items.len();
+                                drop(guard);
+                                return Err(ExecutorError::type_only(format!(
+                                    "tuple index {} out of range (len {})",
+                                    field_idx, len
+                                )));
+                            }
+                        }
+                        crate::backends::common::HeapValue::List(items)
+                        | crate::backends::common::HeapValue::Array(items) => {
+                            if (*field_idx as usize) < items.len() {
+                                let v = items[*field_idx as usize].clone();
+                                drop(guard);
+                                frame.set_slot(dst.0 as usize, v);
+                            } else {
+                                let len = items.len();
+                                drop(guard);
+                                return Err(ExecutorError::type_only(format!(
+                                    "field index {} out of range (len {})",
+                                    field_idx, len
+                                )));
+                            }
+                        }
+                        _ => {
+                            drop(guard);
+                            return Err(ExecutorError::type_only(format!(
+                                "GetField index {} on non-record heap value",
+                                field_idx
+                            )));
                         }
                     }
                 } else if let RuntimeValue::Range { start, end, step } = obj {
