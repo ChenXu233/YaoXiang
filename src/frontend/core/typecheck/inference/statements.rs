@@ -892,6 +892,45 @@ impl StatementChecker {
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
+                // 字段赋值（`s.n = v` / `s.data[i] = v`）不是变量声明/赋值：
+                // 它不引入也不重赋值任何变量，spec §4.3「赋值优先」不适用。
+                //
+                // 此前把字段名当作变量名继续走下面的绑定判定：
+                //   - 首次 `s.n = 1` 会把 `n` 注册成一个**幻影变量**；
+                //   - 再次 `s.n = 2` 就命中「不可变变量重赋值」→ 误报 E2010。
+                // 复现：函数内先 `s.n = 1`，再在 while 体内 `s.n = s.n + 1`。
+                // 字段自身的可写性由所有权/借用层校验，此处直接返回。
+                // 字段赋值（`s.n = v`）：接收者是**变量**时，不引入也不重赋值任何变量，
+                // 直接返回（字段可写性由所有权层负责）。
+                //
+                // 但接收者是**已注册类型名**时（`Dog.fetch = ...`）是方法绑定/元绑定，
+                // 必须继续走下面的注册路径——否则方法不会被登记，方法体里的
+                // `self` 参数类型丢失，字段访问报 E1053。
+                if let Expr::FieldAccess { expr: recv, .. } = target.as_ref() {
+                    let recv_is_type = matches!(
+                        recv.as_ref(),
+                        Expr::Var(tn, _) if self.type_defs.contains_key(tn.as_str())
+                    );
+                    if !recv_is_type {
+                        if let Some(v) = value.as_deref() {
+                            self.check_expr(v)?;
+                        }
+                        return Ok(());
+                    }
+                }
+                // 索引赋值（`a[i] = v`）同理：不引入变量。
+                if let Expr::Index {
+                    expr: base, index, ..
+                } = target.as_ref()
+                {
+                    // 容器与索引表达式都要检查（类型正确性 + 借用）
+                    let _ = self.check_expr(base);
+                    let _ = self.check_expr(index);
+                    if let Some(v) = value.as_deref() {
+                        self.check_expr(v)?;
+                    }
+                    return Ok(());
+                }
                 let (name, type_name) = match target.as_ref() {
                     Expr::Var(n, _) => (n.clone(), None),
                     Expr::FieldAccess { expr, field, .. } => {
@@ -903,9 +942,10 @@ impl StatementChecker {
                     }
                     _ => return Ok(()),
                 };
+                // RFC-010 类型定义绑定（`Db = unsafe { Db: Type = {...}; Db }`）
+                // 是元绑定：编译期构造类型，不引入运行时变量。
                 // `Type.method = ...` 是**方法绑定**（左值是类型限定名），
-                // 不是变量声明/赋值——spec §4.3 不适用。此前 type_name 被丢弃，
-                // 导致 `Point.get_x = get_x[0]` 被当成对变量 `get_x` 的重赋值 → 误报 E2010。
+                // 不是变量声明/赋值——spec §4.3 不适用。
                 let is_method_binding = type_name
                     .as_ref()
                     .is_some_and(|tn| self.type_defs.contains_key(tn.as_str()))
