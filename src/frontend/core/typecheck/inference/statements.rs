@@ -2281,62 +2281,6 @@ fn innermost_return_type(
         ty
     }
 }
-/// 把 `Struct` 与 `Generic` 两种表示对齐，使 unify 能做**带实参**的结构比较。
-///
-/// 泛型类型实例有两种形态并存：
-/// - `Generic{name, args}` —— 类型注解形态（保留实参）
-/// - `Struct{name, fields}` —— 实例化后的字段布局形态
-///
-/// 同名时把 Struct 侧折算回 `Generic{name, args}`：实参由**字段类型反推**。
-/// 不能只比名字——那会放过 `Container(Int) = Container("str")` 这类实参不匹配
-/// （#286 的类型一致性检查会失效）。
-fn align_struct_and_generic(
-    a: &MonoType,
-    b: &MonoType,
-    _solver: &crate::frontend::core::types::solver::TypeConstraintSolver,
-) -> (MonoType, MonoType) {
-    fn struct_to_generic(st: &crate::frontend::core::types::mono::StructType) -> MonoType {
-        MonoType::Generic {
-            name: st.name.clone(),
-            // 实参位无法从字段布局完整还原（字段可能多对一），故留空表示
-            // 「布局已固定」；实参一致性由调用点的构造器推断另行保证。
-            args: Vec::new(),
-        }
-    }
-    match (a, b) {
-        (MonoType::Struct(sa), MonoType::Generic { name, .. }) if sa.name == *name => {
-            (struct_to_generic(sa), b.clone())
-        }
-        (MonoType::Generic { name, .. }, MonoType::Struct(sb)) if sb.name == *name => {
-            (a.clone(), struct_to_generic(sb))
-        }
-        _ => (a.clone(), b.clone()),
-    }
-}
-
-/// 泛型注解的类型层形态：若 `type_ann` 是 `Generic{name, args}`，返回
-/// `Generic{name, args}`（保留实参）；否则原样返回 `ann_ty`。
-///
-/// 为什么不直接用实例化结果：实例化把 `List(Int)` 展开成 `Struct{List, fields..}`，
-/// 字段布局有了，但**类型实参名丢了**（再取名字只剩 `List`）。类型层需要的是
-/// 带实参的 `Generic`——unify、跨函数传递、取借用都依赖它。
-fn generic_annotation_form(
-    type_ann: &crate::frontend::core::parser::ast::Type,
-    ann_ty: &MonoType,
-) -> MonoType {
-    if let crate::frontend::core::parser::ast::Type::Generic { name, args, .. } = type_ann {
-        // 实参含未绑定类型参数时，注解本身就是 Generic 形态，直接用
-        if matches!(ann_ty, MonoType::Generic { .. }) {
-            return ann_ty.clone();
-        }
-        return MonoType::Generic {
-            name: name.clone(),
-            args: args.iter().map(|a| MonoType::from(a.clone())).collect(),
-        };
-    }
-    ann_ty.clone()
-}
-
 /// #286: 检查 MonoType 是否含未解析的泛型参数（TypeRef/TypeVar）。
 /// 用于区分「构造器推断的悬空泛型实例」（字段还是 TypeRef 占位，合法豁免）
 /// 与「实参已确定具体类型但 unify 失败」（真不匹配，必须报错）。
