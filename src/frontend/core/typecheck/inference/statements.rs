@@ -816,9 +816,17 @@ impl StatementChecker {
 
     /// 检查函数体的**尾表达式**类型是否与声明的返回类型一致（RFC-010a 规则①）。
     ///
-    /// - 空块：`Void`（返回类型非 `Void` 时不算错——空块函数体是合法占位）
-    /// - 末位为语句（如赋值）：值 `Void`，同样不报（RFC-010a：想要 `Void` 就显式写）
-    /// - 末位为表达式：其类型必须能与声明返回类型统一
+    /// 块的值 = 尾表达式的类型，**逐语句形态判定，不得早退**：
+    ///
+    /// - 空块 `{}`：值 `Void`
+    /// - 末位为表达式 / `if`：walk 时记下的类型
+    /// - 末位为其余语句（赋值、`for`、`use`、类型定义…）：值 `Void`
+    /// - `return`：`Never`（爆炸原理放行）
+    ///
+    /// 早退曾让三条路径逃逸校验——RFC-010a「开放问题」第 5 条（#342）：`f: () -> Int = {}`（空块）、
+    /// `f: () -> Int = { x = 5 }`（末位赋值）、`f: () -> Int = { for .. }`（末位 `for`）
+    /// 均静默通过。RFC-010a 附录B「机制与保护分工」要求类型检查拦截此类不匹配，
+    /// 故 `Void` 必须参与统一而非被跳过。
     ///
     /// `Never`（`return` 作尾表达式）按爆炸原理 `Never <: T` 一律放行。
     fn check_body_tail_type(
@@ -838,22 +846,30 @@ impl StatementChecker {
         if matches!(expected, MonoType::MetaType { .. }) {
             return Ok(());
         }
-        let Some(last) = body.stmts.last() else {
-            return Ok(());
-        };
-        // 仅表达式语句贡献块值（RFC-010a 规则①：末位赋值语句值为 Void）
-        let crate::frontend::core::parser::ast::StmtKind::Expr(expr) = &last.kind else {
-            return Ok(());
-        };
-        // 尾表达式类型 = walk 时 `check_stmt` 顺手记下的那一个。
+        use crate::frontend::core::parser::ast::StmtKind;
+        // 尾语句贡献的块值类型。
         //
-        // 不重走 `check_expr`——那会重复声明体内局部变量（E2002）。
-        //
-        // 也不事后重建（旧 `peek_expr_type`：只识字面量/变量，其余返回 None 便
+        // 表达式语句与 `if` 的类型由 walk 时 `check_stmt` 顺手记下——
+        // 不重走 `check_expr`（那会重复声明体内局部变量，E2002），
+        // 也不事后重建（旧 `peek_expr_type` 只识字面量/变量，其余返回 None 便
         // 静默跳过，#354——`if` / `match` / 调用等全部逃逸）。
-        let Some(tail_ty) = self.last_expr_stmt_ty.clone() else {
-            // 尾表达式未经 walk（如空体/被短路跳过）：无可校验的类型
-            return Ok(());
+        let tail_ty: MonoType = match body.stmts.last() {
+            // 空块 `{}` → Void
+            None => MonoType::Void,
+            Some(last) => match &last.kind {
+                StmtKind::Expr(_) | StmtKind::If { .. } => match self.last_expr_stmt_ty.clone() {
+                    Some(t) => t,
+                    // 未经 walk（被短路跳过）：无可校验的类型
+                    None => return Ok(()),
+                },
+                // `return` 作尾表达式：类型 Never，爆炸原理放行
+                StmtKind::Return(_) => MonoType::Never,
+                // 解析错误占位符：语法错误已单独报出，不叠加尾类型诊断
+                StmtKind::Error(_) => return Ok(()),
+                // RFC-010a 规则①：赋值语句的值为 Void；`for` / `use` / 类型定义
+                // 等语句同样不产生值。两者都与任何非 Void 返回类型不符。
+                _ => MonoType::Void,
+            },
         };
         // `return` 作尾表达式：类型 Never，爆炸原理放行
         if tail_ty == MonoType::Never {
@@ -868,12 +884,17 @@ impl StatementChecker {
             //
             // 旧诊断用 E1002 指向表达式，作者看到「这个值有问题」；
             // 而值往往是完全正确的（如 `h: () -> Int = f` 中的 `f`）。
+            //
+            // 无尾表达式（空块 / 末位语句）时无表达式 span 可指，退到函数名。
+            let at = self
+                .tail_annotation_span
+                .unwrap_or_else(|| body.stmts.last().map_or(body.span, |s| s.span));
             return Err(Box::new(
                 ErrorCodeDefinition::return_type_mismatch(
                     &format!("{expected}"),
                     &format!("{tail_ty}"),
                 )
-                .at(self.tail_annotation_span.unwrap_or_else(|| expr.span()))
+                .at(at)
                 .build(),
             ));
         }

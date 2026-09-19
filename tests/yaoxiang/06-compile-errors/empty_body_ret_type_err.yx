@@ -1,0 +1,13 @@
+// 06-compile-errors/empty_body_ret_type_err.yx
+// RFC-010a 规则①：空块 `{}` 的值是 Void，与声明的返回类型必须统一
+// expect: compile-error E1012
+// （声明 -> Int，空块值为 Void）
+// 验证: 空块作函数体不再是「合法占位」——附录B「机制与保护分工」要求类型检查拦截
+//       （此前 check_body_tail_type 对空体早退，静默通过）
+// 状态: ❌ 应编译失败
+
+empty_body: () -> Int = {}
+
+main: () -> Void = {
+    x = empty_body()
+}
