@@ -1892,6 +1892,12 @@ impl<'a> ExpressionInferrer<'a> {
                 // 单态化：处理编译期泛型参数
                 let fn_name_for_mono = match func.as_ref() {
                     crate::frontend::core::parser::ast::Expr::Var(n, _) => Some(n.as_str()),
+                    // 限定名调用（`list.len(v)`）：取函数名才能查声明期类型参数名表
+                    // 并按声明序绑定签名里的 `TypeRef("A")`；否则实参无法与
+                    // `&Vec(A)` unify 报 E1002。
+                    crate::frontend::core::parser::ast::Expr::FieldAccess { field, .. } => {
+                        Some(field.as_str())
+                    }
                     _ => None,
                 };
                 let mono_func_ty = self.monomorphize(func_ty.clone(), &arg_types, fn_name_for_mono);

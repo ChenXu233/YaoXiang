@@ -67,8 +67,9 @@ use std.list
 use std.string
 
 main: () -> Void = {
-    assert(list.len(string.split("a,b,c", ",")) == 3)
-    assert(list.get(string.split("a,b,c", ","), 0) == "a")
+    parts = string.split("a,b,c", ",")
+    assert(list.len(parts) == 3)
+    assert(list.get(parts, 0) == "a")
 
     // 空分隔符 → 逐字符
     cs = string.split("abc", "")

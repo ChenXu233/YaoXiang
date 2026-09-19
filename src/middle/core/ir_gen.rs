@@ -5512,7 +5512,20 @@ impl AstToIrGenerator {
             } else if field == "length"
                 && matches!(
                     self.get_expr_mono_type(expr),
-                    Some(ref t) if t.is_vec() || t.is_array()
+                    // 剥掉 Ref 层：`&Vec(A)` 的 `.length` 也是长度读取
+                    // （RFC-009 §2.8 读透明）。此前未剥离，泛型函数的
+                    // `&Vec(A)` 形参上读长度会落到「普通字段访问」分支，
+                    // 生成 `GetField(0)` 去写元素槽位 0，静默读出错误值。
+                    Some(ref t) if {
+                        let mut r = t.clone();
+                        while let crate::frontend::core::types::mono::MonoType::Ref {
+                            inner, ..
+                        } = r
+                        {
+                            r = *inner;
+                        }
+                        r.is_vec() || r.is_array()
+                    }
                 )
             {
                 // RFC-011 容器命名分层：`Vec(T)` / `Array(T, N)` 的 `.length`。

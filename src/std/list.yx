@@ -9,12 +9,12 @@
 // ## 值语义约定（RFC-009 / RFC-036 §3）
 //
 // - `push` / `append` / `prepend` / `set` 按值接收，返回**新列表**；源列表被消费。
-// - `pop` / `remove_at` 按值接收并返回新列表 + 被移除元素（避免 native 版
-//   「声明 &List 却原地改」的契约错位）。
+// - `pop` / `remove_at` 按值接收并返回**缩短后的新列表**（值语义，D9-A）。
+//   native 版声明 `&List` 却原地改写调用方的列表（RFC-009 §2.5 空洞，见 D9），
+//   值语义消除该别名副作用；被移除的元素不再另行返回（要读它先取下标）。
 // - `len` / `get` / `first` / `last` / `contains` / `find_index` / `reverse` /
-//   `slice` / `concat` / `map` / `filter` / `reduce` 也**按值接收**源列表。
-//
-// 为什么全部按值（而不是只读函数用 `&Vec(A)`）：见下方「借用签名」说明。
+//   `slice` / `concat` / `map` / `filter` / `reduce` 只读借用（RFC-009 §2.8
+//   自动借用：实参后续仍有使用 → 调用端自动创建 `&T` 令牌），源列表可反复使用。
 //
 // 构建时经 include_str! 嵌入二进制（见 src/std/yx_sources.rs），
 // 运行时以虚拟路径作种子模块注入 orchestrator。
@@ -63,22 +63,22 @@ pub prepend: (A: Type) -> (list: Vec(A), item: A) -> Vec(A) = {
 // ── 只读访问 ──────────────────────────────────────────────
 
 /// 元素个数。
-pub len: (A: Type) -> (list: Vec(A)) -> Int = {
+pub len: (A: Type) -> (list: &Vec(A)) -> Int = {
     return list.length
 }
 
 /// 是否为空。
-pub is_empty: (A: Type) -> (list: Vec(A)) -> Bool = {
+pub is_empty: (A: Type) -> (list: &Vec(A)) -> Bool = {
     return list.length == 0
 }
 
 /// 下标取元素（越界由 `[]` 的 `E6003` 契约负责）。
-pub get: (A: Type) -> (list: Vec(A), index: Int) -> A = {
+pub get: (A: Type) -> (list: &Vec(A), index: Int) -> A = {
     return list[index]
 }
 
 /// 首个元素；空列表返回该类型的零值。
-pub first: (A: Type) -> (list: Vec(A)) -> A = {
+pub first: (A: Type) -> (list: &Vec(A)) -> A = {
     if list.length == 0 {
         seed: Vec(A) = []
         zero: Vec(A) = seed
@@ -88,7 +88,7 @@ pub first: (A: Type) -> (list: Vec(A)) -> A = {
 }
 
 /// 末个元素；空列表返回该类型的零值。
-pub last: (A: Type) -> (list: Vec(A)) -> A = {
+pub last: (A: Type) -> (list: &Vec(A)) -> A = {
     if list.length == 0 {
         seed: Vec(A) = []
         zero: Vec(A) = seed
@@ -98,7 +98,7 @@ pub last: (A: Type) -> (list: Vec(A)) -> A = {
 }
 
 /// 是否包含指定元素（线性扫描）。
-pub contains: (A: Type) -> (list: Vec(A), item: A) -> Bool = {
+pub contains: (A: Type) -> (list: &Vec(A), item: A) -> Bool = {
     mut i = 0
     while i < list.length {
         if list[i] == item {
@@ -110,7 +110,7 @@ pub contains: (A: Type) -> (list: Vec(A), item: A) -> Bool = {
 }
 
 /// 查找元素下标；未找到返回 -1。
-pub find_index: (A: Type) -> (list: Vec(A), item: A) -> Int = {
+pub find_index: (A: Type) -> (list: &Vec(A), item: A) -> Int = {
     mut i = 0
     while i < list.length {
         if list[i] == item {
@@ -156,7 +156,7 @@ pub remove_at: (A: Type) -> (list: Vec(A), index: Int) -> Vec(A) = {
 // ── 整体变换 ──────────────────────────────────────────────
 
 /// 反转，返回新列表。
-pub reverse: (A: Type) -> (list: Vec(A)) -> Vec(A) = {
+pub reverse: (A: Type) -> (list: &Vec(A)) -> Vec(A) = {
     seed: Vec(A) = []
     mut out: Vec(A) = seed
     mut i = 0
@@ -168,7 +168,7 @@ pub reverse: (A: Type) -> (list: Vec(A)) -> Vec(A) = {
 }
 
 /// 拼接两个列表，返回新列表。
-pub concat: (A: Type) -> (a: Vec(A), b: Vec(A)) -> Vec(A) = {
+pub concat: (A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A) = {
     seed: Vec(A) = []
     mut out: Vec(A) = seed
     mut i = 0
@@ -185,7 +185,7 @@ pub concat: (A: Type) -> (a: Vec(A), b: Vec(A)) -> Vec(A) = {
 }
 
 /// 切片 `[start, end)`，返回新列表。
-pub slice: (A: Type) -> (list: Vec(A), start: Int, end: Int) -> Vec(A) = {
+pub slice: (A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A) = {
     seed: Vec(A) = []
     mut out: Vec(A) = seed
     mut i = start
@@ -199,7 +199,7 @@ pub slice: (A: Type) -> (list: Vec(A), start: Int, end: Int) -> Vec(A) = {
 // ── 高阶函数 ──────────────────────────────────────────────
 
 /// 逐元素映射，返回等长新列表。
-pub map: (T: Type, R: Type) -> (list: Vec(T), f: (item: T) -> R) -> Vec(R) = {
+pub map: (T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R) = {
     seed: Vec(R) = []
     mut out: Vec(R) = seed
     mut i = 0
@@ -211,7 +211,7 @@ pub map: (T: Type, R: Type) -> (list: Vec(T), f: (item: T) -> R) -> Vec(R) = {
 }
 
 /// 保留满足谓词的元素，返回新列表。
-pub filter: (T: Type) -> (list: Vec(T), keep: (item: T) -> Bool) -> Vec(T) = {
+pub filter: (T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T) = {
     seed: Vec(T) = []
     mut out: Vec(T) = seed
     mut i = 0
@@ -230,7 +230,7 @@ pub filter: (T: Type) -> (list: Vec(T), keep: (item: T) -> Bool) -> Vec(T) = {
 ///
 /// `f` 按值接收累加器与元素，返回新的累加器（值语义，D9-A）：
 /// 每轮把当前累加器交给 `f`，用返回值作为下一轮的累加器。
-pub reduce: (T: Type, Acc: Type) -> (list: Vec(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc = {
+pub reduce: (T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc = {
     mut acc = init
     mut i = 0
     while i < list.length {

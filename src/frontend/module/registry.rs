@@ -272,6 +272,7 @@ impl ModuleRegistry {
                 kind: ExportKind::SubModule,
                 signature: "Module".to_string(),
                 mono_type: None,
+                type_params: None,
             });
 
             // 注册模块信息
@@ -305,6 +306,7 @@ impl ModuleRegistry {
                         kind: ExportKind::SubModule,
                         signature: "Module".to_string(),
                         mono_type: None,
+                        type_params: None,
                     });
                     self.register(info);
                 }
@@ -333,6 +335,7 @@ mod tests {
             kind,
             signature: String::new(),
             mono_type: Some(MonoType::Int(64)),
+            type_params: None,
         }
     }
 
