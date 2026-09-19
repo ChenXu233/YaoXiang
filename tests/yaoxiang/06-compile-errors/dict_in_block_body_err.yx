@@ -1,0 +1,19 @@
+// 06-compile-errors/dict_in_block_body_err.yx
+// 块体位置的字典字面量是语法错误
+// expect: compile-error E0016
+// 覆盖: `parse_block_expr` 的静默回退（非 Block 即空 Block）改为显式诊断
+// 验证: `unsafe {"a": 1}` 不再静默丢弃字典
+// 状态: ✅
+//
+// 背景：字典是**值**，不是代码体。块体位置（函数体 / unsafe / spawn / if 分支）
+// 期待的是语句序列，出现 `{"a": 1}` 说明作者写错了——旧实现把它静默换成一个
+// **空块**，字典凭空消失且无任何提示（数据丢失）。
+//
+// 注：`{}`（真正的空块）在块体位置仍合法，见 03-semantics/empty_block_semantics.yx。
+
+use std.io
+
+main: () -> Void = {
+    x = unsafe {"a": 1}     // ❌ 块体位置出现字典字面量
+    io.println("never reached")
+}
