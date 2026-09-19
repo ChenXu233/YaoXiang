@@ -676,6 +676,39 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 递归收集类型中的所有 TypeVar 索引
+    /// 按出现顺序收集 `TypeVar`（与集合语义的 `collect_type_var_indices` 相对）。
+    /// 用于把「声明序类型参数名」与签名里的变量位逐一对齐。
+    fn collect_type_vars_positional(
+        ty: &MonoType,
+        out: &mut Vec<(usize, MonoType)>,
+    ) {
+        match ty {
+            MonoType::TypeVar(tv) => out.push((tv.index(), ty.clone())),
+            MonoType::Ref { inner, .. } => Self::collect_type_vars_positional(inner, out),
+            MonoType::Generic { args, .. } => {
+                for a in args {
+                    Self::collect_type_vars_positional(a, out);
+                }
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => {
+                for p in params {
+                    Self::collect_type_vars_positional(p, out);
+                }
+                Self::collect_type_vars_positional(return_type, out);
+            }
+            MonoType::Union(items) | MonoType::Intersection(items) => {
+                for t in items {
+                    Self::collect_type_vars_positional(t, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn collect_type_var_indices(
         ty: &MonoType,
         out: &mut HashSet<usize>,
@@ -891,11 +924,26 @@ impl<'a> ExpressionInferrer<'a> {
         let mut changed = false;
 
         // 第 1 趟：TypeVar → fresh
+        //
+        // 类型参数的两种表示：`TypeRef("A")`（名字）与 `TypeVar(n)`（编号）。
+        // 声明处（`checker.rs`）为每个声明类型参数创建 TypeVar 并替换进签名，
+        // 所以**普通注解形态**（`(l: L(A))`）拿到的是 TypeVar；
+        // 只有嵌在 `Ref` 内层等少数形态会保留 TypeRef 名字。
+        //
+        // 声明序已知：`declared[i]` 对应签名里「按出现顺序」的第 i 个 TypeVar。
+        // 第 1 趟按索引升序换 fresh，因此可据此把名字与 fresh 槽位对应起来，
+        // 让纯 TypeVar 形态也能收集到实例化请求（否则该泛型函数不会被特化，
+        // 在 mono 的 build_output 里被当未特化泛型删掉 → 运行时报函数不存在）。
+        let declared_names: Vec<String> = fn_name
+            .and_then(|f| self.generic_fn_type_params.get(f).cloned())
+            .unwrap_or_default();
         let mut var_indices = HashSet::new();
         Self::collect_type_var_indices(&func_ty, &mut var_indices);
         if !var_indices.is_empty() {
             let mut subst = HashMap::new();
-            for idx in var_indices {
+            let mut sorted: Vec<usize> = var_indices.iter().copied().collect();
+            sorted.sort_unstable();
+            for idx in sorted {
                 subst.insert(idx, self.solver.new_var());
             }
             new_params = new_params
@@ -937,6 +985,30 @@ impl<'a> ExpressionInferrer<'a> {
                     .iter()
                     .filter_map(|pname| subst.get(pname).cloned())
                     .collect();
+            }
+        }
+        // TypeVar 形态（普通注解 `(l: L(A))`）：签名里的类型参数是 TypeVar 而非
+        // TypeRef 名字，第 2 趟按名字收集不到。改为从**替换后的签名**里按出现顺序
+        // 取回这些 TypeVar——必须与签名实际使用的是同一个变量；另建 fresh 会让
+        // unify 绑到签名变量上、而收集的槽位永远解不出具体类型。
+        // 第 2 趟按名字填的槽位可能仍是**未解变量**（签名里该名字根本没出现，
+        // 只是照着 declared 列表建了 fresh）——这正是 TypeVar 形态的特征。
+        let ref_slots_unresolved = !pending_slots.is_empty()
+            && pending_slots
+                .iter()
+                .all(|t| matches!(self.solver.resolve_type(t), MonoType::TypeVar(_)));
+        if (pending_slots.is_empty() || ref_slots_unresolved)
+            && !declared_names.is_empty()
+            && changed
+        {
+            let mut ordered: Vec<(usize, MonoType)> = Vec::new();
+            for p in new_params.iter().chain(std::iter::once(&new_return)) {
+                Self::collect_type_vars_positional(p, &mut ordered);
+            }
+            ordered.sort_by_key(|(i, _)| *i);
+            ordered.dedup_by_key(|(i, _)| *i);
+            if ordered.len() == declared_names.len() {
+                pending_slots = ordered.into_iter().map(|(_, t)| t).collect();
             }
         }
 
