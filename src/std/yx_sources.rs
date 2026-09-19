@@ -9,7 +9,10 @@
 
 /// (文件路径, 源码文本)。路径形如 `std/test.yx`（use 路径点转斜杠 + .yx）。
 /// native 模块（std.assert 等）不在此表；同名不得同时存在两种实现。
-pub const STD_YX_FILES: &[(&str, &str)] = &[("std/test.yx", include_str!("test.yx"))];
+pub const STD_YX_FILES: &[(&str, &str)] = &[
+    ("std/list.yx", include_str!("list.yx")),
+    ("std/test.yx", include_str!("test.yx")),
+];
 
 /// use 路径（`std.test`）查嵌入源；未命中（native 模块或用户模块）返回 None。
 pub fn embedded_std_source(use_path: &str) -> Option<&'static str> {

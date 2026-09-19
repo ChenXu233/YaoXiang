@@ -1,6 +1,6 @@
 ---
 title: 'std.range'
-description: 'Итерация по диапазонам, предикаты и ленивые адаптеры'
+description: 'Итерация диапазонов, предикаты и ленивые адаптеры'
 ---
 
 # std.range
@@ -13,18 +13,18 @@ use std.range
 
 ## Литералы диапазонов
 
-| Запись    | Значение               |
-| --------- | ---------------------- |
-| `a..b`    | От `a` до `b`, шаг `1` |
-| `a..b..s` | От `a` до `b`, шаг `s` |
+| Запись    | Значение                  |
+| --------- | ------------------------- |
+| `a..b`    | от `a` до `b` с шагом `1` |
+| `a..b..s` | от `a` до `b` с шагом `s` |
 
-Диапазон **не включает конечное значение** (полуоткрытый интервал). Шаг может быть отрицательным,
-что означает убывание.
+Диапазон **не включает конечное значение** (полуоткрытый — левая граница включается, правая — нет).
+Шаг может быть отрицательным, что означает убывание.
 
 ## Протокол итератора
 
-[`iter`](#iter) возвращает `Result` — при шаге `0` это путь ошибки (`E6009`), поэтому нужно сначала
-`unwrap` или явно обработать:
+[`iter`](#iter) возвращает `Result` — при шаге `0` это ошибочный путь (`E6009`), поэтому сначала
+нужно вызвать `unwrap` или явно обработать результат:
 
 ```yaoxiang
 use std.assert
@@ -38,9 +38,10 @@ main: () -> Void = {
 }
 ```
 
-> **Семантика перемещения**: сигнатуры `has_next` и `next` не содержат `&`, поэтому они
-> **перемещают** итератор. Следовательно, при каждом использовании нужно пересоздавать итератор или
-> же обходить его напрямую через `for ... in`. Это согласуется с итератором [`std.list`](./list).
+> **Семантика перемещения**: сигнатуры `has_next` и `next` не принимают `&`, поэтому они
+> **перемещают** итератор. Следовательно, при каждом использовании нужно создавать итератор заново,
+> либо сразу обходить его через `for ... in`. Это соответствует поведению итератора в
+> [`std.list`](./list).
 
 ```yaoxiang
 use std.assert
@@ -57,7 +58,7 @@ main: () -> Void = {
 }
 ```
 
-Для повседневного обхода просто используйте `for ... in`:
+Для повседневного обхода используйте `for ... in`:
 
 ```yaoxiang
 use std.assert
@@ -86,7 +87,7 @@ main: () -> Void = {
 | `abort_invalid_step` | `(r: Range(Int)) -> Any`                                      |
 | `map`                | `(it: Iterator(Any), f: (Any) -> Any) -> Iterator(Any)`       |
 | `filter`             | `(it: Iterator(Any), p: (Any) -> Bool) -> Iterator(Any)`      |
-| `collect`            | `(it: Iterator(Any)) -> List(Any)`                            |
+| `collect`            | `(it: Iterator(Any)) -> Vec(Any)`                             |
 | `reduce`             | `(it: Iterator(Any), init: Any, f: (Any, Any) -> Any) -> Any` |
 | `for_each`           | `(it: Iterator(Any), f: (Any) -> Void) -> Void`               |
 
@@ -106,7 +107,8 @@ iter: (r: Range(Int)) -> Result(Iterator(Any), Error)
 
 - `r` — диапазон, например `1..6` или `3..0..-1`
 
-Возвращает: при успехе — `Result.ok(итератор)`; при шаге `0` — `Result.err` с `code` равным `E6009`.
+Возвращает: в случае успеха — `Result.ok(итератор)`; при шаге `0` — `Result.err` с `code` равным
+`E6009`.
 
 ```yaoxiang
 use std.assert
@@ -129,7 +131,7 @@ has_next: (it: Iterator(Any)) -> Bool
 
 <!-- stdlib:sig:range.has_next end -->
 
-Есть ли ещё не потреблённые элементы.
+Есть ли ещё необработанные элементы.
 
 > **Перемещает** итератор.
 
@@ -199,8 +201,8 @@ contains: (r: Range(Int), x: Int) -> Result(Bool, Error)
 - `r` — диапазон
 - `x` — проверяемое значение
 
-Возвращает: `Result.ok(Bool)`. Конечное значение представляет собой **открытый интервал** (не
-включается); при заданном шаге совпадают только значения, выровненные по шагу.
+Возвращает: `Result.ok(Bool)`. Конечное значение не включается (открытый интервал); при заданном
+шаге сопоставляются только элементы, выровненные по шагу.
 
 ```yaoxiang
 use std.assert
@@ -209,7 +211,7 @@ use std.result
 
 main: () -> Void = {
     assert(result.unwrap(range.contains(1..10, 5)))
-    assert(!result.unwrap(range.contains(1..10, 10)))     // Конечное значение не включено
+    assert(!result.unwrap(range.contains(1..10, 10)))     // Конечное значение не включается
 
     assert(result.unwrap(range.contains(0..10..2, 4)))    // Выровнено по шагу
     assert(!result.unwrap(range.contains(0..10..2, 3)))   // Не выровнено
@@ -226,26 +228,26 @@ abort_invalid_step: (r: Range(Int)) -> Any
 
 <!-- stdlib:sig:range.abort_invalid_step end -->
 
-Хук прерывания при недопустимом шаге, вызываемый из `for ... in`, когда тот потребляет диапазон с
+Обработчик прерывания при недопустимом шаге, вызываемый при потреблении `for ... in` диапазона с
 шагом `0`.
 
-**Всегда** выбрасывает `E6007` с сообщением `Range step must be non-zero (for/in consumption)`.
-Обычному коду не нужно вызывать его напрямую.
+**Всегда** выбрасывает `E6007` с сообщением `Range step must be non-zero (for/in consumption)`. В
+обычном коде прямой вызов не требуется.
 
 ```yaoxiang
 use std.range
 
 main: () -> Void = {
-    // Прямое использование iter даст Err, этот хук не нужен
+    // Прямое использование iter вернёт Err, обращаться к этому хуку не нужно
     r = range.iter(1..3)
 }
 ```
 
 ## Адаптеры
 
-`map` и `filter` возвращают **ленивые** адаптеры — они не вычисляют результат немедленно, а только
-после потребления через [`collect`](#collect) / [`reduce`](#reduce) / [`for_each`](#for_each) /
-`for ... in`.
+`map` и `filter` возвращают **ленивые** адаптеры — они не вычисляются немедленно, а формируют
+результат только после потребления через [`collect`](#collect) / [`reduce`](#reduce) /
+[`for_each`](#for_each) / `for ... in`.
 
 ### map
 
@@ -257,7 +259,7 @@ map: (it: Iterator(Any), f: (Any) -> Any) -> Iterator(Any)
 
 <!-- stdlib:sig:range.map end -->
 
-Применяет `f` к каждому элементу, возвращая новый ленивый итератор.
+Применяет `f` к каждому элементу и возвращает новый ленивый итератор.
 
 ```yaoxiang
 use std.assert
@@ -267,8 +269,8 @@ use std.result
 
 main: () -> Void = {
     doubled = range.collect(range.map(result.unwrap(range.iter(1..4)), x => x * 2))
-    assert(list.len(doubled) == 3)
-    assert(list.get(doubled, 0) == 2)
+    assert(doubled.length == 3)
+    assert(doubled[0] == 2)
 }
 ```
 
@@ -282,7 +284,7 @@ filter: (it: Iterator(Any), p: (Any) -> Bool) -> Iterator(Any)
 
 <!-- stdlib:sig:range.filter end -->
 
-Сохраняет элементы, для которых `p` возвращает истину, возвращая новый ленивый итератор.
+Оставляет элементы, для которых `p` истинно, и возвращает новый ленивый итератор.
 
 ```yaoxiang
 use std.assert
@@ -292,12 +294,12 @@ use std.result
 
 main: () -> Void = {
     big = range.collect(range.filter(result.unwrap(range.iter(1..6)), x => x > 3))
-    assert(list.len(big) == 2)
-    assert(list.get(big, 0) == 4)
+    assert(big.length == 2)
+    assert(big[0] == 4)
 }
 ```
 
-Адаптеры можно комбинировать в цепочку:
+Адаптеры можно компоновать в цепочку:
 
 ```yaoxiang
 use std.assert
@@ -308,8 +310,11 @@ use std.result
 main: () -> Void = {
     r = 1..6
     chained = range.collect(range.map(range.filter(result.unwrap(range.iter(r)), x => x % 2 == 0), x => x * 10))
-    assert(list.get(chained, 0) == 20)
-    assert(list.get(chained, 1) == 40)
+    // Семантика значений: `chained` потребляется при чтении по индексу, элементы последовательно связываются с локальными переменными
+    first = chained[0]
+    second = chained[1]
+    assert(first == 20)
+    assert(second == 40)
 }
 ```
 
@@ -318,7 +323,7 @@ main: () -> Void = {
 <!-- stdlib:sig:range.collect start -->
 
 ```yaoxiang
-collect: (it: Iterator(Any)) -> List(Any)
+collect: (it: Iterator(Any)) -> Vec(Any)
 ```
 
 <!-- stdlib:sig:range.collect end -->
@@ -354,7 +359,7 @@ reduce: (it: Iterator(Any), init: Any, f: (Any, Any) -> Any) -> Any
 - `f` — функция свёртки `(аккумулятор, элемент) -> новый аккумулятор`
 
 > Обратите внимание, что порядок аргументов отличается от [`std.list.reduce`](./list#reduce): в
-> данном модуле это `(итератор, начальное_значение, функция)`, тогда как в `std.list` это
+> данном модуле это `(итератор, начальное_значение, функция)`, тогда как в `std.list` —
 > `(список, функция, начальное_значение)`.
 
 ```yaoxiang
@@ -378,7 +383,7 @@ for_each: (it: Iterator(Any), f: (Any) -> Void) -> Void
 
 <!-- stdlib:sig:range.for_each end -->
 
-Выполняет `f` для каждого элемента, используется для побочных эффектов.
+Выполняет `f` для каждого элемента. Используется для побочных эффектов.
 
 ```yaoxiang
 use std.assert
@@ -386,18 +391,18 @@ use std.range
 use std.result
 
 main: () -> Void = {
-    // Выводит 1, 2, 3
+    // Выведет 1, 2, 3
     range.for_each(result.unwrap(range.iter(1..4)), x => println(x))
     assert(true)
 }
 ```
 
-> В настоящее время замыкания **не могут захватывать и изменять** внешнюю переменную `mut`, поэтому
+> В настоящее время замыкания **не могут захватывать и изменять** внешние переменные `mut`, поэтому
 > использовать `for_each` для накопления не получится (будет выдана ошибка `E1001`) — для накопления
 > используйте [`reduce`](#reduce).
 
-## Связанные разделы
+## Связанные модули
 
-- [`std.list`](./list) — список и его итератор
+- [`std.list`](./list) — списки и их итераторы
 - [`std.result`](./result) — распаковка возвращаемых значений `iter` / `contains`
 - [Справочник по кодам ошибок](../error-code/) — `E6009` недопустимый шаг

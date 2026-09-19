@@ -380,13 +380,20 @@ impl StatementChecker {
                 }
                 self.default_callable_type()
             }
-            _ => self
-                .native_signatures
-                .get(&export.full_path)
-                .cloned()
-                .or_else(|| self.native_signatures.get(&export.name).cloned())
-                .or_else(|| export.mono_type.clone())
-                .unwrap_or_else(|| self.default_callable_type()),
+            _ => {
+                // 优先级：**限定名精确签名** → **导出自身携带的类型** → 短名兜底。
+                //
+                // 短名兜底必须排最后：它按裸名查 native 表，`list.len` 的导出名是
+                // `len`，会命中 `std.string.len`（`&String -> Int`）——签名完全错位
+                // （D5 切换时实测）。导出自带 `mono_type`（来自模块源码的类型检查）
+                // 才是权威来源，短名兜底只服务既有无 mono_type 的旧路径。
+                self.native_signatures
+                    .get(&export.full_path)
+                    .cloned()
+                    .or_else(|| export.mono_type.clone())
+                    .or_else(|| self.native_signatures.get(&export.name).cloned())
+                    .unwrap_or_else(|| self.default_callable_type())
+            }
         }
     }
 
@@ -1674,6 +1681,23 @@ impl StatementChecker {
                         for elem in elems.iter() {
                             let elem_ty = self.check_expr(elem)?;
                             if self.solver.unify(&elem_ty, elem_ann).is_err() {
+                                // 元素位是**接口构造器**（存在类型位）且元素是具体结构体时，
+                                // 报精确的 E1101「未实现接口」，而非笼统的类型不匹配。
+                                // 与 `existential::walk` 的叶子判定同源（RFC-011a §6.3）。
+                                let elem_ann_resolved = self.solver.resolve_type(elem_ann);
+                                if let (MonoType::Struct(s), MonoType::TypeRef(iface)) =
+                                    (self.solver.resolve_type(&elem_ty), &elem_ann_resolved)
+                                {
+                                    if self.generic_type_defs.contains_key(iface.as_str()) {
+                                        return Err(Box::new(
+                                            ErrorCodeDefinition::type_does_not_implement_interface(
+                                                &s.name, iface,
+                                            )
+                                            .at(stmt_span)
+                                            .build(),
+                                        ));
+                                    }
+                                }
                                 return Err(Box::new(
                                     ErrorCodeDefinition::type_mismatch(
                                         &format!("{}", elem_ann),

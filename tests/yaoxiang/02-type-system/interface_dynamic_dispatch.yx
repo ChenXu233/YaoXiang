@@ -1,5 +1,5 @@
 // 02-type-system/interface_dynamic_dispatch.yx
-// 覆盖: RFC-011a §6 动态分发——List(Animal) 存在类型异构容器
+// 覆盖: RFC-011a §6 动态分发——Vec(Animal) 存在类型异构容器
 // 验证: 接口未实例化用作存在类型;异构字面量包装;元素方法按实际类型分发;
 //       二段式取元素;接口形参多态;带实参方法分发;std.list.append 成员检查
 // 状态: ✅
@@ -36,7 +36,7 @@ describe: (a: Animal) -> String = {
 
 main: () -> Void = {
     // 异构字面量:具体值进入存在类型位置自动包装
-    animals: List(Animal) = [Dog("Rex", 3), Cat(9)]
+    animals: Vec(Animal) = [Dog("Rex", 3), Cat(9)]
 
     // 元素方法按实际类型分发
     s0 = animals[0].speak()

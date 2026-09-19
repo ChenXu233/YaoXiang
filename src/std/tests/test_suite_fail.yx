@@ -16,10 +16,11 @@ always_fails: () -> Result(Void, String) = () => {
     test.assert_eq(1, 2)
 }
 
+// 值语义（D9-A）：pop 返回缩短后的新列表；此用例验证失败用例之后的用例仍照常执行。
 pop_still_runs: () -> Result(Void, String) = () => {
-    mut xs = [1, 2]
-    last = list.pop(xs)
-    test.assert_eq(last, 2)
+    xs = [1, 2]
+    shorter = list.pop(xs)
+    test.assert_eq(shorter.length, 1)
 }
 
 main: () -> Void = {

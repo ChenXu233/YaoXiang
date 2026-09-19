@@ -20,27 +20,27 @@ use std.string
 
 <!-- stdlib:table:string start -->
 
-| 函数          | 签名                                                 |
-| ------------- | ---------------------------------------------------- |
-| `split`       | `(s: &String, sep: &String) -> List(String)`         |
-| `trim`        | `(s: &String) -> String`                             |
-| `upper`       | `(s: &String) -> String`                             |
-| `lower`       | `(s: &String) -> String`                             |
-| `replace`     | `(s: &String, old: &String, new: &String) -> String` |
-| `contains`    | `(s: &String, sub: &String) -> Bool`                 |
-| `starts_with` | `(s: &String, prefix: &String) -> Bool`              |
-| `ends_with`   | `(s: &String, suffix: &String) -> Bool`              |
-| `index_of`    | `(s: &String, sub: &String) -> Int`                  |
-| `substring`   | `(s: &String, start: Int, end: Int) -> String`       |
-| `is_empty`    | `(s: &String) -> Bool`                               |
-| `len`         | `(s: &String) -> Int`                                |
-| `chars`       | `(s: &String) -> List(String)`                       |
-| `concat`      | `(s1: &String, s2: &String) -> String`               |
-| `repeat`      | `(s: &String, n: Int) -> String`                     |
-| `reverse`     | `(s: &String) -> String`                             |
-| `format`      | `(format: &String, ...args) -> String`               |
-| `parse_int`   | `(s: &String) -> Result(Int, Error)`                 |
-| `parse_float` | `(s: &String) -> Result(Float, Error)`               |
+| 函数 | 签名 |
+| ---- | ---- |
+| `split` | `(s: &String, sep: &String) -> Vec(String)` |
+| `trim` | `(s: &String) -> String` |
+| `upper` | `(s: &String) -> String` |
+| `lower` | `(s: &String) -> String` |
+| `replace` | `(s: &String, old: &String, new: &String) -> String` |
+| `contains` | `(s: &String, sub: &String) -> Bool` |
+| `starts_with` | `(s: &String, prefix: &String) -> Bool` |
+| `ends_with` | `(s: &String, suffix: &String) -> Bool` |
+| `index_of` | `(s: &String, sub: &String) -> Int` |
+| `substring` | `(s: &String, start: Int, end: Int) -> String` |
+| `is_empty` | `(s: &String) -> Bool` |
+| `len` | `(s: &String) -> Int` |
+| `chars` | `(s: &String) -> Vec(String)` |
+| `concat` | `(s1: &String, s2: &String) -> String` |
+| `repeat` | `(s: &String, n: Int) -> String` |
+| `reverse` | `(s: &String) -> String` |
+| `format` | `(format: &String, ...args) -> String` |
+| `parse_int` | `(s: &String) -> Result(Int, Error)` |
+| `parse_float` | `(s: &String) -> Result(Float, Error)` |
 
 <!-- stdlib:table:string end -->## 函数
 
@@ -49,7 +49,7 @@ use std.string
 <!-- stdlib:sig:string.split start -->
 
 ```yaoxiang
-split: (s: &String, sep: &String) -> List(String)
+split: (s: &String, sep: &String) -> Vec(String)
 ```
 
 <!-- stdlib:sig:string.split end -->
@@ -331,7 +331,7 @@ main: () -> Void = {
 <!-- stdlib:sig:string.chars start -->
 
 ```yaoxiang
-chars: (s: &String) -> List(String)
+chars: (s: &String) -> Vec(String)
 ```
 
 <!-- stdlib:sig:string.chars end -->
@@ -345,8 +345,8 @@ use std.string
 
 main: () -> Void = {
     cs = string.chars("ab")
-    assert(list.len(cs) == 2)
-    assert(list.get(cs, 0) == "a")
+    assert(cs.length == 2)
+    assert(cs[0] == "a")
 }
 ```
 

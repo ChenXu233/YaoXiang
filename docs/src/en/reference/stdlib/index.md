@@ -1,13 +1,13 @@
 ---
 title: 'Standard Library Overview'
-description: 'YaoXiang standard library module overview and usage conventions'
+description: 'YaoXiang standard library modules overview and usage conventions'
 ---
 
 # Standard Library Reference
 
-The YaoXiang standard library (`std`) is organized as modules. Each module is imported via `use` and
-then called as `module.function_name(...)`. This directory contains the API reference documentation
-split by module.
+The YaoXiang standard library (`std`) is organized by modules; each module is imported with `use`
+and then invoked as `Module.function(...)`. This directory contains per-module API reference
+documentation.
 
 ## Module Index
 
@@ -15,26 +15,25 @@ split by module.
 
 | Module                           | Exports | Description                                                               |
 | -------------------------------- | ------- | ------------------------------------------------------------------------- |
-| [`std.convert`](./convert)       | 11      | Conversion from any value to String                                       |
-| [`std.dict`](./dict)             | 11      | Dictionary read/write, key-value views, and merging                       |
+| [`std.convert`](./convert)       | 11      | Conversion of any value to String                                         |
+| [`std.dict`](./dict)             | 11      | Dictionary read/write, key/value views, and merging                       |
 | [`std.io`](./io)                 | 7       | Standard output, standard input, and whole-file read/write                |
-| [`std.list`](./list)             | 22      | List add/remove, slicing, higher-order functions, and iterator protocol   |
 | [`std.math`](./math)             | 18      | Integer, float, and trigonometric functions, including PI/E/TAU constants |
-| [`std.string`](./string)         | 19      | String search, splitting, formatting, and parsing                         |
+| [`std.string`](./string)         | 19      | String search, split, formatting, and parsing                             |
 | [`std.time`](./time)             | 14      | Timestamps, formatting, and DateTime field access                         |
 | [`std.result`](./result)         | 9       | Construction and unwrapping of Result and Error                           |
 | [`std.range`](./range)           | 10      | Range iteration, predicates, and lazy adapters                            |
 | [`std.assert`](./assert)         | 1       | Assertions                                                                |
-| [`std.net`](./net)               | 4       | HTTP requests and URL percent encoding/decoding                           |
-| [`std.concurrent`](./concurrent) | 3       | Sleep, yield scheduling, and thread identifiers                           |
+| [`std.net`](./net)               | 4       | HTTP requests and URL percent-encoding/decoding                           |
+| [`std.concurrent`](./concurrent) | 3       | Sleep, yield scheduling, and thread identity                              |
 | [`std.os`](./os)                 | 22      | File handles, directories, environment variables, and working directory   |
-| [`std.weak`](./weak)             | 2       | Arc / Weak references                                                     |
+| [`std.weak`](./weak)             | 2       | Arc / Weak weak references                                                |
 
 <!-- stdlib:index:modules end -->
 
 ## Import Conventions
 
-Whole-module import:
+Importing a whole module:
 
 ```yaoxiang
 use std.list
@@ -57,11 +56,11 @@ main: () -> Void = {
 }
 ```
 
-## Parameter Borrowing Conventions
+## Parameter Borrowing Convention
 
-A `&` in a signature indicates **read-only automatic borrowing** (RFC-009 §2.8): the variable passed
-in by the caller is not moved and can still be used after the call. This is the default form for
-most read-only functions in the standard library.
+A `&` in a signature indicates **read-only auto-borrow** (RFC-009 §2.8): the variable passed by the
+caller is not moved and can still be used after the call. This is the default shape for most
+read-only functions in the standard library.
 
 ```yaoxiang
 use std.assert
@@ -70,16 +69,16 @@ use std.list
 main: () -> Void = {
     nums = [1, 2, 3]
 
-    // All three calls borrow nums read-only; nums remains usable afterward
+    // All three calls only read-borrow nums; it remains usable afterward
     assert(list.len(nums) == 3)
     assert(list.len(nums) == 3)
     assert(list.contains(nums, 2))
 }
 ```
 
-Parameters without `&` indicate **pass-by-value**. Most "modifying" functions therefore take a
-**functional form that consumes the source value and returns a new value**, rather than mutating in
-place:
+A parameter without `&` means **passed by value**. Because of this, most "modifying" functions take
+the form of **consuming the source value and returning a new one**—the functional style—rather than
+in-place mutation:
 
 ```yaoxiang
 use std.assert
@@ -92,38 +91,38 @@ main: () -> Void = {
 }
 ```
 
-The "Semantic Categories" section of each module page lists which functions borrow, which consume,
-and which mutate in place. One detail worth noting:
+Each module page's "Semantic Categories" section lists which functions borrow, which consume, and
+which mutate in place. One point deserves special attention:
 
-- [`list.pop`](./list#pop) / [`list.remove_at`](./list#remove_at) are signed as `&List(A)`, but
-  **mutate the list in place**
+- [`list.pop`](./list#pop) / [`list.remove_at`](./list#remove_at) are marked as `&List(A)` in the
+  signature, but **mutate the list in place**
 
 ## Error Model
 
-The standard library has two kinds of failure forms. Each function entry labels them as "Error" and
-"Returns ..." respectively:
+The standard library has two shapes of failure, each labeled in individual function entries as
+either "Error" or "Returns …":
 
-| Form                     | Behavior                                          | Typical Scenario                                                                      |
-| ------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Throws a runtime error   | Terminates current execution with an `E6xxx` code | Missing dict key `E6008`, index out of bounds `E6003`, assertion failure              |
-| Returns a sentinel value | Does not interrupt; returns `Void` / `-1` / `""`  | List out-of-bounds read, first element of an empty list, missing environment variable |
+| Shape                  | Behavior                                              | Typical scenarios                                                        |
+| ---------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------ |
+| Throws runtime error   | Terminates the current execution with an `E6xxx` code | Missing dict key `E6008`, index out of bounds `E6003`, assertion failure |
+| Returns sentinel value | Does not interrupt; returns `Void` / `-1` / `""`      | List out-of-bounds read, head of empty list, missing env var             |
 
 Common runtime error codes:
 
-| Error Code | Meaning                              | Triggering Example                           |
-| ---------- | ------------------------------------ | -------------------------------------------- |
-| `E6003`    | Index out of bounds                  | `list.set(l, 99, v)`                         |
-| `E6005`    | Assertion failure                    | `assert(false)`                              |
-| `E6007`    | Generic runtime error                | File does not exist, `result.unwrap` failure |
-| `E6008`    | Missing key                          | `dict.get(d, "nope")`                        |
-| `E6010`    | Integer parse failure (as Err value) | `string.parse_int("abc")`                    |
-| `E6011`    | Float parse failure (as Err value)   | `string.parse_float("abc")`                  |
+| Code    | Meaning                              | Trigger example                              |
+| ------- | ------------------------------------ | -------------------------------------------- |
+| `E6003` | Index out of bounds                  | `list.set(l, 99, v)`                         |
+| `E6005` | Assertion failed                     | `assert(false)`                              |
+| `E6007` | Generic runtime error                | File does not exist, `result.unwrap` failure |
+| `E6008` | Missing key                          | `dict.get(d, "nope")`                        |
+| `E6010` | Integer parse failure (as Err value) | `string.parse_int("abc")`                    |
+| `E6011` | Float parse failure (as Err value)   | `string.parse_float("abc")`                  |
 
-For the full error code table, see the [Error Code Reference](../error-code/).
+See the [Error Code Reference](../error-code/) for the full table.
 
-`string.parse_int` / `string.parse_float` belong to a third form: **no error is thrown**; failures
-are wrapped into the `Err` value of a `Result` and returned, which can be unwrapped with
-[`std.result`](./result) or propagated with `?`.
+`string.parse_int` / `string.parse_float` fall into a third shape: **they do not throw**, but wrap
+the failure as the `Err` value of a `Result`, which can be unwrapped with [`std.result`](./result)
+or propagated with `?`.
 
 ```yaoxiang
 use std.assert
@@ -136,13 +135,13 @@ main: () -> Void = {
 }
 ```
 
-## Iterator Protocol
+## Iteration Protocol
 
-`std.list` and `std.range` provide the same iterator protocol. An iterator itself is a `Tuple` state
-carrier.
+`std.list` and `std.range` provide the same iterator protocol. The iterator itself is a `Tuple`
+carrying the state.
 
-> **Move semantics**: `next` and `has_next` both **move** the iterator (the signature has no `&`),
-> so every access requires recreating the iterator, or you can use `for ... in` directly.
+> **Move semantics**: both `next` and `has_next` **move** the iterator (no `&` in the signature), so
+> each access requires recreating it, or simply use `for ... in`.
 
 ```yaoxiang
 use std.assert
@@ -152,13 +151,13 @@ main: () -> Void = {
     it = list.iter([1, 2, 3])
     assert(list.has_next(it))
 
-    // has_next moved it; recreate it before taking the element
+    // has_next has moved it; recreate it before taking the element
     it2 = list.iter([1, 2, 3])
     assert(list.next(it2) == 1)
 }
 ```
 
-For everyday iteration, use `for ... in` directly:
+For everyday traversal, just use `for ... in`:
 
 ```yaoxiang
 use std.assert
@@ -172,8 +171,8 @@ main: () -> Void = {
 }
 ```
 
-[`range.map`](./range#map) / [`range.filter`](./range#filter) return **lazy** adapters, which only
-produce results after being consumed by `collect` / `reduce` / `for_each` / `for ... in`:
+[`range.map`](./range#map) / [`range.filter`](./range#filter) return **lazy** adapters; they only
+produce results once consumed by `collect` / `reduce` / `for_each` / `for ... in`:
 
 ```yaoxiang
 use std.assert
@@ -190,61 +189,60 @@ main: () -> Void = {
 
 ## Platform Availability
 
-The following depend on operating system capabilities and are **not exported** on the `wasm32`
-target:
+The following content depends on operating system capabilities and is **not exported** for the
+`wasm32` target:
 
-| Range                                                           | Requires       |
-| --------------------------------------------------------------- | -------------- |
-| All of `std.os`, all of `std.net`, all of `std.weak`            | File / Network |
-| All of `std.concurrent`                                         | Threads        |
-| `std.io.read_line` / `read_file` / `write_file` / `append_file` | Standard I/O   |
-| `std.time.sleep`                                                | Thread sleep   |
+| Scope                                                           | Requires        |
+| --------------------------------------------------------------- | --------------- |
+| All of `std.os`, all of `std.net`, all of `std.weak`            | Files / network |
+| All of `std.concurrent`                                         | Threads         |
+| `std.io.read_line` / `read_file` / `write_file` / `append_file` | Standard I/O    |
+| `std.time.sleep`                                                | Thread sleep    |
 
 `std.string` / `std.list` / `std.dict` / `std.math` / `std.convert` / `std.result` / `std.range` /
-`std.assert`, as well as `std.io.print` / `println` / `format_fallback`, are available on all
-targets.
+`std.assert`, and `std.io.print` / `println` / `format_fallback` are available on all targets.
 
-## Implemented Gaps
+## Known Gaps
 
-The following issues were confirmed by actually running sample programs while writing the
-documentation, and all have open issues for tracking.
+The following issues were each confirmed by actually running the examples when the documentation was
+written, and are all tracked with issues.
 
-**Fixed (2026-09-19)**: #337 / #338 / #339 / #340 have all been fixed. The corresponding page
-contents have been rewritten to reflect normal usage:
+**Fixed (2026-09-19)**: #337 / #338 / #339 / #340 are all fixed, and the corresponding pages have
+been rewritten as normal usage:
 
-| Location                                          | Original Problem                                                          | Fix                                           |
-| ------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------- |
-| [`os.open`](./os#open)                            | Handle was single-use; `open`→`write`→`close` could not compile           | Handle changed to pass-by-reference ✅        |
-| [`time.datetime_*`](./time#datetime-field-access) | 8 accessors were not callable from source (exported names contained `::`) | Changed to flat names like `datetime_year` ✅ |
-| [`time.parse_time`](./time#parse_time)            | `fmt` parameter was ignored; return value was unusable                    | Step-by-step parsing by fmt ✅                |
-| [`math.clamp`](./math#clamp)                      | `min > max` would panic the interpreter instead of returning an error     | Returns `E6007` ✅                            |
+| Location                                          | Original issue                                                           | Fix                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------ |
+| [`os.open`](./os#open)                            | Handle is one-shot; `open`→`write`→`close` would not compile             | Handle now passed by reference ✅          |
+| [`time.datetime_*`](./time#datetime-field-access) | 8 accessors could not be called from source (export name contained `::`) | Flattened to names like `datetime_year` ✅ |
+| [`time.parse_time`](./time#parse_time)            | `fmt` parameter was ignored; return value could not be used further      | Step-by-step parsing according to fmt ✅   |
+| [`math.clamp`](./math#clamp)                      | `min > max` would panic the interpreter instead of returning an error    | Returns `E6007` ✅                         |
 
-**Still Open**:
+**Still open**:
 
-| Location                                       | Issue                                                                            | Tracking |
-| ---------------------------------------------- | -------------------------------------------------------------------------------- | -------- |
-| [`net.http_get`](./net#http_get) / `http_post` | Placeholder implementation; does not send requests, returns a description string | #56      |
+| Location                                       | Issue                                                                             | Tracking |
+| ---------------------------------------------- | --------------------------------------------------------------------------------- | -------- |
+| [`net.http_get`](./net#http_get) / `http_post` | Placeholder implementation; does not send a request, returns a description string | #56      |
 
 ## Documentation Maintenance
 
-This directory uses a **generated + hand-written** hybrid structure:
+This directory follows a **generated + handwritten** hybrid structure:
 
-- **Generated regions** (between `<!-- stdlib:KEY start/end -->` markers): function summary tables
-  and signature blocks, derived from `StdModule::exports()`. Signatures come byte-for-byte from
-  `NativeExport::signature`, so they cannot drift from the implementation.
-- **Hand-written regions** (outside the markers): module overview, borrow/move semantics, error
+- **Generated region** (between the `<!-- stdlib:KEY start/end -->` markers): function overview
+  tables and signature blocks, derived from `StdModule::exports()`. Signatures come byte-for-byte
+  from `NativeExport::signature` and cannot drift from the implementation.
+- **Handwritten region** (outside the markers): module overviews, borrow/move semantics, the error
   model, known gaps, and examples.
 
 Gates (run in CI alongside `cargo test --lib`):
 
-| Gate              | Test                                          | Purpose                                             |
-| ----------------- | --------------------------------------------- | --------------------------------------------------- |
-| Drift detection   | `test_stdlib_docs_match_generation`           | Generated regions must match `exports()`            |
-| Orphan detection  | `test_stdlib_docs_has_no_orphan_module_pages` | Module pages must not exceed generator output       |
-| Coverage          | `test_stdlib_docs_covers_interface_modules`   | Documented module set must cover the interface view |
-| Examples must run | `test_stdlib_docs_examples_run`               | Every ```yaoxiang` example must actually run        |
+| Gate                | Test                                          | Purpose                                             |
+| ------------------- | --------------------------------------------- | --------------------------------------------------- |
+| Drift detection     | `test_stdlib_docs_match_generation`           | Generated region must match `exports()`             |
+| Orphan detection    | `test_stdlib_docs_has_no_orphan_module_pages` | Module pages must not exceed generator output       |
+| Coverage            | `test_stdlib_docs_covers_interface_modules`   | Documented module set must cover the interface view |
+| Example runnability | `test_stdlib_docs_examples_run`               | Every ```yaoxiang example must actually run         |
 
-After `exports()` changes, rewrite the generated regions with the healing tool:
+After `exports()` changes, use the healing tool to rewrite the generated region:
 
 ```bash
 cargo run --example gen-stdlib-docs
@@ -255,7 +253,7 @@ It is isomorphic to `gen-std-interfaces` (RFC-037 interface view) and `tools/cod
 
 ## Related Documentation
 
-- [Standard Library Specification](../language-spec/stdlib.md) — Language-level standard library
-  design conventions
+- [Standard Library Specification](../language-spec/stdlib.md) — Language-level design conventions
+  for the standard library
 - [FFI Specification](../language-spec/ffi.md) — User-side `native` extensions and C ABI bindings
 - [Error Code Reference](../error-code/) — Full table of `E6xxx` runtime error codes

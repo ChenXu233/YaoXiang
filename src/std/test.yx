@@ -96,7 +96,7 @@ assert_approx_eq: (a: Float, b: Float, eps: Float) -> Result(Void, String) = (a,
 //   作为值引用暂不支持——IR 层限制）
 // - 全 Ok 静默，文件退出码 0；任一 Err：汇总失败明细（名字 + 诊断）并 abort，
 //   文件退出码非 0——abort 是测试二进制的运行时守卫，非断言路径
-suite: (tests: List((String, () -> Result(Void, String)))) -> Void = (tests) => {
+suite: (tests: Vec((String, () -> Result(Void, String)))) -> Void = (tests) => {
     mut failed = 0
     mut total = 0
     mut report = ""

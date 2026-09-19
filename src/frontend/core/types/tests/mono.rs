@@ -570,9 +570,10 @@ fn test_mono_type_type_var_none() {
 #[test]
 fn test_mono_type_list_variant() {
     let list = MonoType::make_list(MonoType::Int(32));
+    // D8-B 名字分层：内置层是 `Vec(T)`（`List` 是标准库类型，见 std/list.yx）。
     assert!(
-        list.type_name().contains("List"),
-        "List type_name should contain 'List'"
+        list.type_name().contains("Vec"),
+        "builtin buffer type_name should contain 'Vec'"
     );
     assert!(
         list.type_name().contains("int32"),

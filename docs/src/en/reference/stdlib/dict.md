@@ -1,11 +1,11 @@
 ---
 title: 'std.dict'
-description: 'Dictionary read/write, key-value views, and merging'
+description: 'Dictionary read/write, key-value views, and merge'
 ---
 
 # std.dict
 
-The dictionary (`Dict(K, V)`) operations module.
+The dictionary (`Dict(K, V)`) operation module.
 
 ```yaoxiang
 use std.dict
@@ -13,10 +13,10 @@ use std.dict
 
 ## Semantic Categories
 
-| Category            | Functions                                                      | Behavior                                            |
-| ------------------- | -------------------------------------------------------------- | --------------------------------------------------- |
-| Read-only borrow    | `get` `has` `values` `keys` `entries` `len` `is_empty` `merge` | Source dictionary can be reused                     |
-| **Consumes source** | `set` `delete`                                                 | Source dictionary is moved and cannot be used again |
+| Category            | Functions                                                      | Behavior                                 |
+| ------------------- | -------------------------------------------------------------- | ---------------------------------------- |
+| Read-only borrow    | `get` `has` `values` `keys` `entries` `len` `is_empty` `merge` | Source dict is reusable                  |
+| **Consumes source** | `set` `delete`                                                 | Source dict is moved, unusable afterward |
 
 ```yaoxiang
 use std.assert
@@ -25,7 +25,7 @@ use std.dict
 main: () -> Void = {
     d = dict.set(dict.new(), "a", 1)
 
-    // Read-only borrow: d can be reused
+    // Read-only borrow: d is reusable
     assert(dict.get(d, "a") == 1)
     assert(dict.len(d) == 1)
     assert(dict.has(d, "a"))
@@ -41,9 +41,9 @@ main: () -> Void = {
 | `get`      | `(K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any`                   |
 | `set`      | `(K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V)` |
 | `has`      | `(K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool`                  |
-| `values`   | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)`                |
-| `keys`     | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)`                |
-| `entries`  | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)`                |
+| `values`   | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)`                 |
+| `keys`     | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)`                 |
+| `entries`  | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)`                 |
 | `delete`   | `(K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V)`             |
 | `len`      | `(K: Type, V: Type)(dict: &Dict(K, V)) -> Int`                             |
 | `is_empty` | `(K: Type, V: Type)(dict: &Dict(K, V)) -> Bool`                            |
@@ -64,7 +64,7 @@ set: (K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V)
 
 <!-- stdlib:sig:dict.set end -->
 
-Returns a **new dictionary** with `key` → `value` written. `dict` is passed by value and is
+Returns a **new dictionary** with `key` → `value` written into it. `dict` is passed by value and is
 **moved** after the call.
 
 ```yaoxiang
@@ -88,10 +88,10 @@ get: (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any
 
 <!-- stdlib:sig:dict.get end -->
 
-Get value by key (read-only borrow, `dict` is reusable).
+Fetches the value by key (read-only borrow, `dict` is reusable).
 
-Returns: the value corresponding to the key. Error: throws `E6008` when the key does not exist
-(missing key). You may use [`has`](#has) to check before reading.
+Returns: the value corresponding to the key. Error: **throws `E6008` when the key is missing**. You
+can use [`has`](#has) to check before fetching.
 
 ```yaoxiang
 use std.assert
@@ -103,7 +103,7 @@ main: () -> Void = {
 }
 ```
 
-Check existence before reading:
+Check existence before fetching:
 
 ```yaoxiang
 use std.assert
@@ -156,7 +156,7 @@ delete: (K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V)
 Returns a **new dictionary** with `key` removed. `dict` is passed by value and is **moved** after
 the call.
 
-Returns: a new dictionary. Deleting a non-existent key does not raise an error; the dictionary
+Returns: the new dictionary. Deleting a non-existent key does not raise an error; the dictionary
 remains unchanged.
 
 ```yaoxiang
@@ -175,15 +175,15 @@ main: () -> Void = {
 <!-- stdlib:sig:dict.keys start -->
 
 ```yaoxiang
-keys: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
+keys: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
 ```
 
 <!-- stdlib:sig:dict.keys end -->
 
 Returns a list of all keys (read-only borrow).
 
-> The return order depends on the hash implementation and is **not guaranteed to be stable**. Sort
-> it yourself if you need an ordered output.
+> The return order depends on the hash implementation and is **not guaranteed to be stable**. If you
+> need ordered output, sort it yourself.
 
 ```yaoxiang
 use std.assert
@@ -202,12 +202,12 @@ main: () -> Void = {
 <!-- stdlib:sig:dict.values start -->
 
 ```yaoxiang
-values: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
+values: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
 ```
 
 <!-- stdlib:sig:dict.values end -->
 
-Returns a list of all values (read-only borrow). Order is not guaranteed to be stable.
+Returns a list of all values (read-only borrow). The order is not guaranteed to be stable.
 
 ```yaoxiang
 use std.assert
@@ -226,12 +226,12 @@ main: () -> Void = {
 <!-- stdlib:sig:dict.entries start -->
 
 ```yaoxiang
-entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
+entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
 ```
 
 <!-- stdlib:sig:dict.entries end -->
 
-Returns a list of key-value pairs, where each item is a `(key, value)` tuple. Order is not
+Returns a list of key-value pairs, where each item is a `(key, value)` tuple. The order is not
 guaranteed to be stable.
 
 ```yaoxiang
@@ -256,7 +256,7 @@ len: (K: Type, V: Type)(dict: &Dict(K, V)) -> Int
 
 <!-- stdlib:sig:dict.len end -->
 
-Number of entries. Read-only borrow, `dict` can be reused.
+The number of entries. Read-only borrow, `dict` is reusable.
 
 Error: throws `E6007` when the argument is not a dictionary.
 
@@ -267,7 +267,7 @@ use std.dict
 main: () -> Void = {
     d = dict.set(dict.new(), "a", 1)
     assert(dict.len(d) == 1)
-    assert(dict.len(d) == 1)      // reusable
+    assert(dict.len(d) == 1)      // Reusable
 }
 ```
 
@@ -306,10 +306,10 @@ merge: (A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B)
 
 <!-- stdlib:sig:dict.merge end -->
 
-Merges two dictionaries and returns a new one. Both source dictionaries are read-only borrows and
-remain unchanged.
+Merges two dictionaries and returns a new dictionary. Both source dictionaries are read-only borrows
+and remain unchanged.
 
-On key conflicts, **`b`'s value overrides `a`**.
+On key conflict, **the value from `b` overrides `a`**.
 
 Error: throws `E6007` when either argument is not a dictionary.
 
@@ -326,5 +326,5 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.list`](./list) — handles return values from `keys` / `values` / `entries`
-- [Error Code Reference](../error-code/) — `E6008` missing key
+- [`std.list`](./list) — handles the return values of `keys` / `values` / `entries`
+- [Error Code Reference](../error-code/) — `E6008` for missing key
