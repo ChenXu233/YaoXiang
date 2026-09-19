@@ -144,13 +144,132 @@ jobs:
       - name: Run benchmarks
         run: cargo bench --all-features 2>&1 | tee benchmark-output.txt
 
+      # Criterion 的 estimates.json 是结构化结果，跨 nightly 可直接比较；
+      # bench-report.sh 汇总成 Markdown 进 Step Summary，并产出 JSON 供追踪。
+      - name: Summarize benchmarks
+        if: always()
+        run: |
+          bash scripts/ci/bench-report.sh \
+            --out-json target/bench-results.json | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Upload benchmark results
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: |
             target/criterion/
+            target/bench-results.json
             benchmark-output.txt
+          retention-days: 30
+
+  # 多语言横比（shootout）：测的是同一问题在不同语言下的耗时，
+  # 与上面 Criterion（Yaoxiang 自身微基准）互补——前者看相对位置，
+  # 后者看自身回归。结果写进 nightly release notes（见 publish job）。
+  shootout:
+    name: Shootout (multi-language)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+
+      # shootout 需要各语言工具链来编译对照实现。缺哪个就跳哪个，
+      # runner 自身对编译失败是「跳过该语言」而非中断，故此处也逐个装、
+      # 不因某个包不可用而中断整个 job。
+      - name: Install comparison toolchains
+        run: |
+          sudo apt-get update -qq
+          for pkg in g++ golang-go python3; do
+            sudo apt-get install -y --no-install-recommends "$pkg" \
+              || echo "::warning::[$pkg] 安装失败，对应语言将被跳过"
+          done
+          # 记录实际可用的工具链（便于从日志判断某个语言为何缺席）
+          for t in g++ go python3 rustc; do
+            if command -v "$t" >/dev/null 2>&1; then
+              printf '%-8s %s\n' "$t" "$("$t" --version 2>&1 | head -1)"
+            else
+              echo "::warning::[$t] 不在 PATH，对应语言将被跳过"
+            fi
+          done
+
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: shootout-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            shootout-${{ runner.os }}-cargo-
+
+      # 先构建 release 二进制：runner 默认用它（--yaoxiang-bin），
+      # 且 bench.yaml 的 compile 步骤也走 %y → 同一个二进制。
+      - name: Build yaoxiang (release)
+        run: cargo build --release --bin yaoxiang-rs
+
+      - name: Run shootout
+        run: |
+          set -o pipefail
+          cargo run -p shootout --release 2>&1 | tee shootout-output.txt
+
+      - name: Summarize
+        if: always()
+        run: |
+          bash scripts/ci/bench-report.sh \
+            --shootout shootout-output.txt \
+            --out-json target/shootout-results.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: shootout-results
+          path: |
+            shootout-output.txt
+            target/shootout-results.json
+          retention-days: 30
+
+  # 把上述两类基准结果汇总为一段 Markdown，供 publish job 注入
+  # nightly release 的 body。
+  bench-notes:
+    name: Benchmark notes
+    needs: [benchmark, shootout]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download benchmark artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '*results*'
+          path: bench-artifacts
+
+      - name: Compose notes
+        run: |
+          # 传 artifact 根目录即可：脚本会自动向下查找 criterion 目录
+          # 与 shootout-output.txt（artifact 内部层次不稳定，不写死）。
+          bash scripts/ci/bench-report.sh \
+            --criterion-dir bench-artifacts/benchmark-results \
+            --shootout bench-artifacts/shootout-results/shootout-output.txt \
+            > bench-notes.md
+          cat bench-notes.md
+
+      - name: Upload notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-notes
+          path: bench-notes.md
           retention-days: 30
 
   coverage:
@@ -193,7 +312,7 @@ jobs:
 
   publish:
     name: Publish Nightly Pre-release
-    needs: [build, build-wasm]
+    needs: [build, build-wasm, bench-notes]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -233,15 +352,31 @@ jobs:
         with:
           path: release-artifacts
 
+      # 拼装 release body：先写头部，再附基准结果（若 bench-notes job 产出）。
+      # bench-notes 用 `if: always()` 但不保证有数据，故此处按「存在则追加」处理。
+      - name: Compose release body
+        run: |
+          {
+            echo "> ⚠️ **这是自动构建的 nightly 版本，仅供测试使用，可能不稳定。**"
+            echo
+            echo "Automated nightly build from commit ${{ steps.sha.outputs.short }}"
+          } > release-body.md
+
+          NOTES="release-artifacts/bench-notes/bench-notes.md"
+          if [[ -f "$NOTES" ]]; then
+            printf '\n---\n\n' >> release-body.md
+            cat "$NOTES" >> release-body.md
+          else
+            printf '\n---\n\n> 基准结果未生成（benchmark / shootout job 可能失败或被跳过）。\n' \
+              >> release-body.md
+          fi
+
       - name: Create GitHub Pre-release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
           name: "Nightly Pre-release"
-          body: |
-            > ⚠️ **这是自动构建的 nightly 版本，仅供测试使用，可能不稳定。**
-
-            Automated nightly build from commit ${{ steps.sha.outputs.short }}
+          body_path: release-body.md
           prerelease: true
           files: |
             release-artifacts/**/yaoxiang-*
