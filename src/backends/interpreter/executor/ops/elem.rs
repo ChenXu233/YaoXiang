@@ -27,11 +27,90 @@ impl Interpreter {
                 field_idx,
             } => {
                 let obj = self.force_slot(fi, *src)?;
-                if let RuntimeValue::Struct { fields, .. } = obj {
-                    if let crate::backends::common::HeapValue::Tuple(items) = &*fields.lock() {
+                // 元组值：`NewTuple` 产出 `RuntimeValue::Tuple(handle)`，索引即位置。
+                // 此前只处理 `Struct{fields: HeapValue::Tuple}`（另一条构造路径），
+                // 导致 `t.0` 静默写成 Void（#279 同类：不得静默）。
+                if let RuntimeValue::Tuple(handle) = &obj {
+                    let guard = handle.lock();
+                    if let crate::backends::common::HeapValue::Tuple(items) = &*guard {
                         if (*field_idx as usize) < items.len() {
-                            self.call_stack[fi]
-                                .set_slot(dst.0 as usize, items[*field_idx as usize].clone());
+                            let v = items[*field_idx as usize].clone();
+                            drop(guard);
+                            self.call_stack[fi].set_slot(dst.0 as usize, v);
+                            self.call_stack[fi].advance();
+                            return Ok(StepOutcome::Continue);
+                        }
+                    }
+                    drop(guard);
+                    return Err(ExecutorError::type_only(format!(
+                        "tuple index {} out of range",
+                        field_idx
+                    )));
+                }
+                // 以下三条路径此前都是**静默失败**：不匹配就不写 dst，留下 Void，
+                // 调用方拿到 void 却不报错（#279 同类：不得静默）。
+                // 典型触发：内置 `List(T)` 的值传给名为 `List` 的库结构体的 `&List(A)`
+                // 形参——类型检查按名放行（同名），运行时形状不同，取 `.length` 得 void。
+                // 内置集合值（`RuntimeValue::List/Array`）：`GetField` 的 field_idx 就是
+                // 元素下标。命中此处说明静态类型被当成了记录型（例如库里的 `List`
+                // 与内置 `List` 同名），按下标读元素而不是静默留 Void。
+                if let RuntimeValue::List(h) | RuntimeValue::Array(h) = &obj {
+                    let guard = h.lock();
+                    if let crate::backends::common::HeapValue::List(items)
+                    | crate::backends::common::HeapValue::Array(items) = &*guard
+                    {
+                        if (*field_idx as usize) < items.len() {
+                            let v = items[*field_idx as usize].clone();
+                            drop(guard);
+                            self.call_stack[fi].set_slot(dst.0 as usize, v);
+                            self.call_stack[fi].advance();
+                            return Ok(StepOutcome::Continue);
+                        }
+                    }
+                    drop(guard);
+                    return Err(ExecutorError::type_only(format!(
+                        "field index {} out of range on list/array value",
+                        field_idx
+                    )));
+                }
+                if let RuntimeValue::Struct { fields, .. } = obj {
+                    let guard = fields.lock();
+                    match &*guard {
+                        crate::backends::common::HeapValue::Tuple(items) => {
+                            if (*field_idx as usize) < items.len() {
+                                let v = items[*field_idx as usize].clone();
+                                drop(guard);
+                                self.call_stack[fi].set_slot(dst.0 as usize, v);
+                            } else {
+                                let len = items.len();
+                                drop(guard);
+                                return Err(ExecutorError::type_only(format!(
+                                    "tuple index {} out of range (len {})",
+                                    field_idx, len
+                                )));
+                            }
+                        }
+                        crate::backends::common::HeapValue::List(items)
+                        | crate::backends::common::HeapValue::Array(items) => {
+                            if (*field_idx as usize) < items.len() {
+                                let v = items[*field_idx as usize].clone();
+                                drop(guard);
+                                self.call_stack[fi].set_slot(dst.0 as usize, v);
+                            } else {
+                                let len = items.len();
+                                drop(guard);
+                                return Err(ExecutorError::type_only(format!(
+                                    "field index {} out of range (len {})",
+                                    field_idx, len
+                                )));
+                            }
+                        }
+                        _ => {
+                            drop(guard);
+                            return Err(ExecutorError::type_only(format!(
+                                "GetField index {} on non-record heap value",
+                                field_idx
+                            )));
                         }
                     }
                 } else if let RuntimeValue::Range { start, end, step } = obj {
@@ -134,11 +213,24 @@ impl Interpreter {
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringLength { dst, src } => {
-                let s: String = match self.force_slot(fi, *src)? {
-                    RuntimeValue::String(s) => s.as_ref().to_string(),
-                    _ => String::new(),
+                // 长度读取：String 与容器（List/Array/Tuple/Dict）共用本指令。
+                // 容器长度是缓冲的当前长度（`HeapValue::len()`）；String 按字节长。
+                // 注：`Vec(T)` 运行时以 `RuntimeValue::List` 表示（同为可增长缓冲的唯一存储），
+                // 二者仅类型层区分，待分配/扩容原语落地后另立堆变体。
+                let len = match self.force_slot(fi, *src)? {
+                    RuntimeValue::String(s) => s.len() as i64,
+                    RuntimeValue::List(h)
+                    | RuntimeValue::Array(h)
+                    | RuntimeValue::Tuple(h)
+                    | RuntimeValue::Dict(h) => h.lock().len() as i64,
+                    // 非长度载体：显式报错，不静默返回 0（#279/#281 同款）
+                    _ => {
+                        return Err(ExecutorError::type_only(
+                            "length is not defined for this value type".to_string(),
+                        ))
+                    }
                 };
-                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Int(s.len() as i64));
+                self.call_stack[fi].set_slot(dst.0 as usize, RuntimeValue::Int(len));
                 self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }

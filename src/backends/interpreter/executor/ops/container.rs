@@ -341,11 +341,13 @@ impl Interpreter {
                                 items.push(val);
                             } else {
                                 // #279：越界写不再静默丢弃；#280：报专用码 E6003
-                                return Err(ExecutorError::index_out_of_bounds(
-                                    items.len(),
-                                    idx as i64,
-                                    Some(self.capture_stack()),
-                                ));
+                                // 带上索引寄存器号，供诊断层回溯源码变量名（#360）
+                                return Err(ExecutorError::IndexOutOfBounds {
+                                    max: items.len(),
+                                    index: idx as i64,
+                                    index_slot: Some(index.0 as usize),
+                                    stack: Some(self.capture_stack()),
+                                });
                             }
                         }
                     }
@@ -359,11 +361,13 @@ impl Interpreter {
                                 items[idx] = val;
                             } else {
                                 // #279：越界写不再静默丢弃；#280：报专用码 E6003
-                                return Err(ExecutorError::index_out_of_bounds(
-                                    items.len(),
-                                    idx as i64,
-                                    Some(self.capture_stack()),
-                                ));
+                                // 带上索引寄存器号，供诊断层回溯源码变量名（#360）
+                                return Err(ExecutorError::IndexOutOfBounds {
+                                    max: items.len(),
+                                    index: idx as i64,
+                                    index_slot: Some(index.0 as usize),
+                                    stack: Some(self.capture_stack()),
+                                });
                             }
                         }
                     }
