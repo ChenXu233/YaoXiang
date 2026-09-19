@@ -713,9 +713,9 @@ impl BytecodeInstr {
             BytecodeInstr::BinaryOp { .. } => 6,
             BytecodeInstr::UnaryOp { .. } => 4,
             BytecodeInstr::Compare { .. } => 6,
-            BytecodeInstr::StackAlloc { .. } => 4,
-            BytecodeInstr::HeapAlloc { .. } => 4,
-            BytecodeInstr::Drop { .. } => 2,
+            BytecodeInstr::StackAlloc { .. } => 1, // dst(1)（编码器未编码 size）
+            BytecodeInstr::HeapAlloc { .. } => 3,  // dst(1) + type_id(2)
+            BytecodeInstr::Drop { .. } => 1,       // value(1)
             BytecodeInstr::GetField { .. } => 4,
             BytecodeInstr::SetField { .. } => 4,
             BytecodeInstr::LoadElement { .. } => 4,
@@ -753,10 +753,15 @@ impl BytecodeInstr {
                 // dst(1) + elem(1) + container(1) = 3
                 3
             }
-            BytecodeInstr::ArcNew { .. } => 4,
-            BytecodeInstr::RcNew { .. } => 4,
-            BytecodeInstr::ArcClone { .. } => 4,
-            BytecodeInstr::ArcDrop { .. } => 2,
+            // 注：以下引用计数与内存类的寄存器为 **1 字节**——
+            // 编码器经 `to_reg` 产出（上限 255，见 operand.rs 的
+            // register_overflow）。而容器/聚合类（NewTuple/NewDict 等）用
+            // `(reg as u16).to_le_bytes()`，那类才是 2 字节。
+            // **判据只能是 translator.rs 对应的 translate_*，不能只看表内注释**。
+            BytecodeInstr::ArcNew { .. } => 2,   // dst(1) + src(1)
+            BytecodeInstr::RcNew { .. } => 2,    // dst(1) + src(1)
+            BytecodeInstr::ArcClone { .. } => 2, // dst(1) + src(1)
+            BytecodeInstr::ArcDrop { .. } => 1,  // src(1)
             BytecodeInstr::WeakNew { .. } => 4,
             BytecodeInstr::WeakUpgrade { .. } => 4,
             BytecodeInstr::Borrow { .. } => 5, // dst(2) + src(2) + mutable(1)
