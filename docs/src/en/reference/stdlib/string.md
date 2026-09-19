@@ -1,17 +1,17 @@
 ---
 title: 'std.string'
-description: 'String search, split, format, and parsing'
+description: 'String search, splitting, formatting and parsing'
 ---
 
 # std.string
 
-String operations module. Except for `format`, all functions borrow input arguments read-only
-(`&String`), so the source string remains usable after the call.
+String operations module. Except for `format`, all functions take a read-only borrow (`&String`) on
+the input; the source string remains usable after the call.
 
-All functions degrade to **empty-string semantics** (rather than erroring) when the argument type
-doesn't match: `split`/`trim`/`upper` etc. treat non-`String` inputs as `""`. This means wrong
-argument types won't be interrupted, but they also won't produce the expected result—it is
-recommended to rely on the type checker to catch them at compile time.
+When the argument type does not match, all functions degrade to **empty-string semantics** (rather
+than reporting an error): `split`/`trim`/`upper` and the like treat a non-`String` argument as `""`.
+This means a wrong argument type will not be interrupted, but the result will not be what you expect
+— relying on the type checker to catch it at compile-time is recommended.
 
 ```yaoxiang
 use std.string
@@ -43,9 +43,7 @@ use std.string
 | `parse_int`   | `(s: &String) -> Result(Int, Error)`                 |
 | `parse_float` | `(s: &String) -> Result(Float, Error)`               |
 
-<!-- stdlib:table:string end -->
-
-## Functions
+<!-- stdlib:table:string end -->## Functions
 
 ### split
 
@@ -59,10 +57,10 @@ split: (s: &String, sep: &String) -> Vec(String)
 
 Splits `s` by `sep` and returns a list of substrings.
 
-- `s` —— the string to split
-- `sep` —— the separator; **when empty, splits character by character**
+- `s` —— string to split
+- `sep` —— separator; **when empty, splits character by character**
 
-Returns: `List(String)`. Returns a single-element list when the separator is not found.
+Returns: `List(String)`. When the separator is not found, returns a single-element list.
 
 ```yaoxiang
 use std.assert
@@ -70,10 +68,11 @@ use std.list
 use std.string
 
 main: () -> Void = {
-    assert(list.len(string.split("a,b,c", ",")) == 3)
-    assert(list.get(string.split("a,b,c", ","), 0) == "a")
+    parts = string.split("a,b,c", ",")
+    assert(list.len(parts) == 3)
+    assert(list.get(parts, 0) == "a")
 
-    // Empty separator → split character by character
+    // Empty separator → character by character
     cs = string.split("abc", "")
     assert(list.len(cs) == 3)
 }
@@ -89,9 +88,9 @@ trim: (s: &String) -> String
 
 <!-- stdlib:sig:string.trim end -->
 
-Removes leading and trailing Unicode whitespace.
+Trims leading and trailing Unicode whitespace.
 
-Returns: a new string with leading and trailing whitespace removed (`s` is not modified).
+Returns: a new string with leading and trailing whitespace removed (does not modify `s`).
 
 ```yaoxiang
 use std.assert
@@ -154,9 +153,9 @@ replace: (s: &String, old: &String, new: &String) -> String
 
 <!-- stdlib:sig:string.replace end -->
 
-Replaces **all** occurrences of `old` in `s` with `new`.
+Replaces **every** occurrence of `old` in `s` with `new`.
 
-- `old` —— when empty, **returns `s` as-is** (no insertion)
+- `old` —— when empty, returns `s` **as-is** (no insertion)
 
 ```yaoxiang
 use std.assert
@@ -178,7 +177,7 @@ contains: (s: &String, sub: &String) -> Bool
 
 <!-- stdlib:sig:string.contains end -->
 
-Whether `sub` appears in `s`. Always `true` for an empty string.
+Whether `sub` appears in `s`. An empty string is always `true`.
 
 ```yaoxiang
 use std.assert
@@ -200,7 +199,7 @@ starts_with: (s: &String, prefix: &String) -> Bool
 
 <!-- stdlib:sig:string.starts_with end -->
 
-Whether `s` starts with `prefix`. Always `true` for an empty `prefix`.
+Whether `s` starts with `prefix`. An empty `prefix` is always `true`.
 
 ```yaoxiang
 use std.assert
@@ -221,7 +220,7 @@ ends_with: (s: &String, suffix: &String) -> Bool
 
 <!-- stdlib:sig:string.ends_with end -->
 
-Whether `s` ends with `suffix`. Always `true` for an empty `suffix`.
+Whether `s` ends with `suffix`. An empty `suffix` is always `true`.
 
 ```yaoxiang
 use std.assert
@@ -274,8 +273,8 @@ Takes the `[start, end)` range by **character** index.
 - `start` —— starting character index, defaults to `0`
 - `end` —— ending character index (exclusive), defaults to the end of the string
 
-Returns: the sliced result. Out-of-bounds boundaries are **clamped** to the valid range, no error is
-reported; when `start > end`, it is clamped to an empty string.
+Returns: the sliced result. Out-of-bounds bounds are **clamped** to the valid range, no error is
+reported; when `start > end` it is clamped to an empty string.
 
 ```yaoxiang
 use std.assert
@@ -341,7 +340,7 @@ chars: (s: &String) -> Vec(String)
 
 <!-- stdlib:sig:string.chars end -->
 
-Splits into a list of single-character strings (by Unicode scalar values).
+Splits into a list of single-character strings (by Unicode scalar value).
 
 ```yaoxiang
 use std.assert
@@ -388,7 +387,7 @@ repeat: (s: &String, n: Int) -> String
 
 Repeats `s` `n` times.
 
-- `n` —— the number of repetitions; returns an empty string when `n <= 0`
+- `n` —— number of repetitions; `n <= 0` returns an empty string
 
 ```yaoxiang
 use std.assert
@@ -431,24 +430,24 @@ format: (format: &String, ...args) -> String
 
 <!-- stdlib:sig:string.format end -->
 
-Formats using `{index}` placeholders, with optional width/alignment specifiers.
+Formats with `{index}` placeholders, with optional width/alignment specifiers.
 
 Placeholder syntax:
 
-| Form     | Meaning                                                        |
-| -------- | -------------------------------------------------------------- |
-| `{0}`    | The 0th argument (arguments after `format` are indexed from 0) |
-| `{0:03}` | Width 3                                                        |
-| `{0:>3}` | Width 3, right-aligned (default)                               |
-| `{0:<3}` | Width 3, left-aligned                                          |
-| `{0:^3}` | Width 3, centered                                              |
+| Form     | Meaning                                                         |
+| -------- | --------------------------------------------------------------- |
+| `{0}`    | the 0th argument (arguments after `format` are numbered from 0) |
+| `{0:03}` | width 3                                                         |
+| `{0:>3}` | width 3, right-aligned (default)                                |
+| `{0:<3}` | width 3, left-aligned                                           |
+| `{0:^3}` | width 3, centered                                               |
 
-Literal curly braces are written by doubling: two left curly braces produce a literal left curly
-brace, and similarly for the right curly brace.
+Literal curly braces are written by doubling: two left braces produce one literal left brace, and
+the same applies to right braces.
 
 Return value: the formatted string. Arguments are first converted to strings (same as
-`convert.to_string`); out-of-range indices yield an empty string, and invalid widths are treated as
-`0`.
+`convert.to_string`); out-of-bounds indices yield an empty string, and an invalid width is treated
+as `0`.
 
 ```yaoxiang
 use std.assert
@@ -471,10 +470,10 @@ parse_int: (s: &String) -> Result(Int, Error)
 
 <!-- stdlib:sig:string.parse_int end -->
 
-Parses a decimal integer (automatically trims leading and trailing whitespace).
+Parses a decimal integer (leading and trailing whitespace is automatically trimmed).
 
-Returns: on success, `Result.ok(Int)`; on failure, `Result.err(Error)` with `code` `E6010`. **Does
-not throw.**
+Returns: `Result.ok(Int)` on success; `Result.err(Error)` on failure, with `code` set to `E6010`.
+**Does not throw.**
 
 ```yaoxiang
 use std.assert
@@ -497,9 +496,9 @@ parse_float: (s: &String) -> Result(Float, Error)
 
 <!-- stdlib:sig:string.parse_float end -->
 
-Parses a floating-point number (automatically trims leading and trailing whitespace).
+Parses a floating-point number (leading and trailing whitespace is automatically trimmed).
 
-Returns: on success, `Result.ok(Float)`; on failure, `Result.err(Error)` with `code` `E6011`.
+Returns: `Result.ok(Float)` on success; `Result.err(Error)` on failure, with `code` set to `E6011`.
 
 ```yaoxiang
 use std.assert
@@ -515,4 +514,4 @@ main: () -> Void = {
 ## Related
 
 - [`std.convert`](./convert) —— convert numbers to strings
-- [`std.result`](./result) —— unwrap `parse_*` results
+- [`std.result`](./result) —— unpack the result of `parse_*`
