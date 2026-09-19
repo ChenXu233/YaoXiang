@@ -43,6 +43,26 @@ fn test_stdlib_docs_match_generation() {
     );
 }
 
+/// 本仓库**应当**有文档页的模块名（不含 `.md`）。
+///
+/// 两部分：native `StdModule`（生成器产出）+ 纯 yx 模块（手写页，RFC-036 §4）。
+/// 两个门禁共用同一份清单——否则 yx 模块的页会从其中一个门禁的视野里消失。
+fn documented_module_names() -> Vec<String> {
+    let yx_backed: Vec<String> = crate::std::yx_sources::STD_YX_FILES
+        .iter()
+        .filter_map(|(file, _)| {
+            file.strip_prefix("std/")
+                .and_then(|f| f.strip_suffix(".yx"))
+                .map(|n| format!("{}.md", n.replace('/', "-")))
+        })
+        .collect();
+    modules_for_docs()
+        .iter()
+        .map(|m| format!("{}.md", m.module_path().trim_start_matches("std.")))
+        .chain(yx_backed)
+        .collect()
+}
+
 /// 门禁一（反向）：文档目录不得比生成器多出模块页
 ///
 /// 生成器删掉某模块后，其 md 会变成无人维护的孤儿——同
@@ -52,19 +72,7 @@ fn test_stdlib_docs_has_no_orphan_module_pages() {
     // 纯 yx 模块（RFC-036 §4，`src/std/yx_sources.rs` 的 STD_YX_FILES）不是 native
     // `StdModule`，不进 `modules_for_docs()`，但它们**确实**有文档页。
     // 这些页是手写的模块说明（不再由生成器产出），故显式列为合法页。
-    let yx_backed: Vec<String> = crate::std::yx_sources::STD_YX_FILES
-        .iter()
-        .filter_map(|(file, _)| {
-            file.strip_prefix("std/")
-                .and_then(|f| f.strip_suffix(".yx"))
-                .map(|n| format!("{}.md", n.replace('/', "-")))
-        })
-        .collect();
-    let valid: Vec<String> = modules_for_docs()
-        .iter()
-        .map(|m| format!("{}.md", m.module_path().trim_start_matches("std.")))
-        .chain(yx_backed)
-        .collect();
+    let valid: Vec<String> = documented_module_names();
 
     let entries = std::fs::read_dir(docs_dir())
         .unwrap_or_else(|e| panic!("读取 {} 失败: {e}", docs_dir().display()));
@@ -112,9 +120,11 @@ fn test_stdlib_docs_examples_run() {
     let mut checked = 0usize;
     let mut failures: Vec<String> = Vec::new();
 
-    for module in modules_for_docs() {
-        let name = module.module_path().trim_start_matches("std.");
-        let path = docs_dir().join(format!("{name}.md"));
+    // 遍历**所有**有文档页的模块，含纯 yx 模块（`list` 等）——它们不进
+    // `modules_for_docs()`，但页里同样有可运行示例，漏掉等于无人守。
+    for page in documented_module_names() {
+        let name = page.trim_end_matches(".md");
+        let path = docs_dir().join(&page);
         let Ok(doc) = std::fs::read_to_string(&path) else {
             continue;
         };
@@ -130,8 +140,19 @@ fn test_stdlib_docs_examples_run() {
             }
             checked += 1;
 
+            // 块里只定义 `main`，没有调用——`run` 不会自动调它，于是断言
+            // 即使全错也退出码 0。必须补一行 `main()` 才真的执行。
+            let mut src = code.trim_end().to_string();
+            if !src.ends_with("main()") {
+                src.push_str(
+                    "
+main()
+",
+                );
+            }
+
             let file = std::env::temp_dir().join(format!("yx_doc_{name}_{i}.yx"));
-            if let Err(e) = std::fs::write(&file, &code) {
+            if let Err(e) = std::fs::write(&file, &src) {
                 failures.push(format!("{name}.md#{i}: 写临时文件失败: {e}"));
                 continue;
             }

@@ -135,8 +135,13 @@ pub set: (A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A) = {
 /// 与 native 版的区别：native 声明 `&List(A)` 却**原地**缩短调用方的列表
 /// （RFC-009 §2.5 空洞，见 D9）。值语义返回新列表，源被消费，无别名副作用。
 pub pop: (A: Type) -> (list: Vec(A)) -> Vec(A) = {
-    list.length = list.length - 1
-    return list
+    // 空列表原样返回：`length = -1` 会被 SetField 的范围校验拒绝（E6007）。
+    if list.length == 0 {
+        return list
+    } else {
+        list.length = list.length - 1
+        return list
+    }
 }
 
 /// 移除下标 `index` 处元素，后移其余，返回新列表。O(n)。
