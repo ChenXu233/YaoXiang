@@ -767,6 +767,7 @@ fn test_e2e_bin_main_not_function_reports_e3021() {
 /// `main: (x: Int) -> Void = (x) => { io.println(x) }` 打出 "void" 且退出码 0。
 #[test]
 fn test_e2e_bin_main_with_params_reports_e3022() {
+    // Arrange: Bin 角色（有 manifest）+ 带参 main
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "");
     let src = write_yx(
@@ -775,8 +776,10 @@ fn test_e2e_bin_main_with_params_reports_e3022() {
         "use std.io\nmain: (x: Int) -> Void = (x) => { io.println(x) }\n",
     );
 
+    // Act
     let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
 
+    // Assert: 必须编译失败，且不得静默运行
     assert_ne!(code, 0, "带参 main 应编译失败");
     assert!(
         stderr.contains("E3022"),
@@ -793,6 +796,7 @@ fn test_e2e_bin_main_with_params_reports_e3022() {
 /// 此前两个同名 main 都进函数表，静默取第一个作入口。
 #[test]
 fn test_e2e_bin_duplicate_main_reports_e2002() {
+    // Arrange: Bin 角色 + 两个同名同签名的 main
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "");
     let src = write_yx(
@@ -801,8 +805,10 @@ fn test_e2e_bin_duplicate_main_reports_e2002() {
         "use std.io\nmain: () -> Void = { io.println(\"first\") }\nmain: () -> Void = { io.println(\"second\") }\n",
     );
 
+    // Act
     let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
 
+    // Assert: 必须编译失败，且不得静默执行第一个定义
     assert_ne!(code, 0, "重复 main 应编译失败");
     assert!(
         stderr.contains("E2002"),

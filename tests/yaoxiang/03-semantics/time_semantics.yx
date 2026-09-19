@@ -7,9 +7,7 @@
 // #340：`parse_time(fmt, s)` 的 fmt 此前被忽略，只硬认 ISO 8601；现按 fmt
 //       提取字段，与 format_time 互为逆运算。
 
-use std.assert
-use std.io
-use std.time
+use std.{assert, io, time}
 
 main: () -> Void = {
     // now() 的返回值可直接用于格式化与访问器（#338 连带问题）
