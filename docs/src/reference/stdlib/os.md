@@ -15,24 +15,30 @@ use std.os
 
 ## 文件句柄模型
 
-> **重要限制（#337）**：`open` 返回的句柄是**一次性的**。它没有 `&`，所以第一次传给 `read` / `write`
-> / `seek` / `tell` / `flush` / `close` 时就被**移动**，之后不可再用。因此 `open` → `write` →
-> `close` 这种常见写法在目前实现下 **无法编译**（会报 `E2014`）。
+> **句柄按引用传递（#337 已修复）**：`read` / `write` / `seek` / `tell` / `flush` /
+> `close` 的签名均为 `(file: &File, ...)`，故句柄可反复使用：
 >
-> 可行的两种写法：
+> ```yaoxiang
+> f = os.open(p, "w")
+> os.write(f, "hello world")
+> os.close(f)
+> ```
 >
-> 1. **把 `open` 内联进单次调用**——句柄产生后立即被消费：
+> 定位后读写（`seek` 存在的理由）也已可用：
 >
->    ```yaoxiang
->    n = os.write(os.open(p, "w"), "hello")
->    ```
+> ```yaoxiang
+> r = os.open(p, "r")
+> os.seek(r, 6)
+> tail = os.read(r, 5)     // "world"
+> os.close(r)
+> ```
 >
-> 2. **用不开句柄的便捷函数**——[`std.io.read_file`](./io#read_file) /
->    [`write_file`](./io#write_file) / [`append_file`](./io#append_file)，或本模块的
->    [`append_file`](#append_file)。
+> 修复前签名无 `&`，句柄按值传入 → 线性所有权 → 用一次即失效，
+> `open → write → close` 会报 `E2014`。
 >
-> 句柄以句柄表条目形式存在，进程退出时随进程回收；因为一次使用后即不可再引用，显式 `close`
-> 在多数场景无法写上（但见下文单次调用形态）。
+> 若想避免手工管理句柄，仍可用不开句柄的便捷函数：
+> [`std.io.read_file`](./io#read_file) / [`write_file`](./io#write_file) /
+> [`append_file`](./io#append_file)，或本模块的 [`append_file`](#append_file)。
 
 `open` 返回的是一个 **`Int` 类型的文件描述符**（引擎内部维护句柄表），因此签名中的 `File` 实为
 `Int`。
@@ -68,29 +74,29 @@ main: () -> Void = {
 
 <!-- stdlib:table:os start -->
 
-| 函数          | 签名                                        |
-| ------------- | ------------------------------------------- |
-| `open`        | `(path: &String, mode: &String) -> File`    |
-| `close`       | `(file: File) -> Void`                      |
-| `read`        | `(file: File, n: Int) -> String`            |
-| `write`       | `(file: File, content: String) -> Int`      |
-| `seek`        | `(file: File, offset: Int) -> Bool`         |
-| `tell`        | `(file: File) -> Int`                       |
-| `flush`       | `(file: File) -> Void`                      |
-| `mkdir`       | `(path: &String) -> Bool`                   |
-| `rmdir`       | `(path: &String) -> Bool`                   |
-| `read_dir`    | `(path: &String) -> String`                 |
-| `remove`      | `(path: &String) -> Bool`                   |
-| `exists`      | `(path: &String) -> Bool`                   |
-| `is_file`     | `(path: &String) -> Bool`                   |
-| `is_dir`      | `(path: &String) -> Bool`                   |
-| `copy`        | `(src: &String, dst: &String) -> Bool`      |
-| `rename`      | `(old: &String, new: &String) -> Bool`      |
-| `get_env`     | `(name: &String) -> String`                 |
-| `set_env`     | `(name: &String, value: &String) -> Void`   |
-| `args`        | `() -> String`                              |
-| `chdir`       | `(path: &String) -> Bool`                   |
-| `getcwd`      | `() -> String`                              |
+| 函数 | 签名 |
+| ---- | ---- |
+| `open` | `(path: &String, mode: &String) -> File` |
+| `close` | `(file: &File) -> Void` |
+| `read` | `(file: &File, n: Int) -> String` |
+| `write` | `(file: &File, content: String) -> Int` |
+| `seek` | `(file: &File, offset: Int) -> Bool` |
+| `tell` | `(file: &File) -> Int` |
+| `flush` | `(file: &File) -> Void` |
+| `mkdir` | `(path: &String) -> Bool` |
+| `rmdir` | `(path: &String) -> Bool` |
+| `read_dir` | `(path: &String) -> String` |
+| `remove` | `(path: &String) -> Bool` |
+| `exists` | `(path: &String) -> Bool` |
+| `is_file` | `(path: &String) -> Bool` |
+| `is_dir` | `(path: &String) -> Bool` |
+| `copy` | `(src: &String, dst: &String) -> Bool` |
+| `rename` | `(old: &String, new: &String) -> Bool` |
+| `get_env` | `(name: &String) -> String` |
+| `set_env` | `(name: &String, value: &String) -> Void` |
+| `args` | `() -> String` |
+| `chdir` | `(path: &String) -> Bool` |
+| `getcwd` | `() -> String` |
 | `append_file` | `(path: &String, content: &String) -> Bool` |
 
 <!-- stdlib:table:os end -->## 文件操作
@@ -135,7 +141,7 @@ main: () -> Void = {
 <!-- stdlib:sig:os.close start -->
 
 ```yaoxiang
-close: (file: File) -> Void
+close: (file: &File) -> Void
 ```
 
 <!-- stdlib:sig:os.close end -->
@@ -163,7 +169,7 @@ main: () -> Void = {
 <!-- stdlib:sig:os.read start -->
 
 ```yaoxiang
-read: (file: File, n: Int) -> String
+read: (file: &File, n: Int) -> String
 ```
 
 <!-- stdlib:sig:os.read end -->
@@ -197,7 +203,7 @@ main: () -> Void = {
 <!-- stdlib:sig:os.write start -->
 
 ```yaoxiang
-write: (file: File, content: String) -> Int
+write: (file: &File, content: String) -> Int
 ```
 
 <!-- stdlib:sig:os.write end -->
@@ -225,7 +231,7 @@ main: () -> Void = {
 <!-- stdlib:sig:os.seek start -->
 
 ```yaoxiang
-seek: (file: File, offset: Int) -> Bool
+seek: (file: &File, offset: Int) -> Bool
 ```
 
 <!-- stdlib:sig:os.seek end -->
@@ -256,7 +262,7 @@ main: () -> Void = {
 <!-- stdlib:sig:os.tell start -->
 
 ```yaoxiang
-tell: (file: File) -> Int
+tell: (file: &File) -> Int
 ```
 
 <!-- stdlib:sig:os.tell end -->
@@ -282,7 +288,7 @@ main: () -> Void = {
 <!-- stdlib:sig:os.flush start -->
 
 ```yaoxiang
-flush: (file: File) -> Void
+flush: (file: &File) -> Void
 ```
 
 <!-- stdlib:sig:os.flush end -->
