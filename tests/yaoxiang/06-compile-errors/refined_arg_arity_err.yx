@@ -1,0 +1,15 @@
+// 06-compile-errors/refined_arg_arity_err.yx
+// 精化标注实参**个数**不匹配应报 E1093
+// expect: compile-error E1093
+// 覆盖: #363——注解绑定的函数体此前不下钻精化校验
+// 验证: `main: () -> Void = { y: IsSmall(1, 2) = 5 }` 报 E1093
+// 状态: ✅
+//
+// 本用例是 #363 的哨兵：注解是推荐的函数写法，此前却是校验最弱的路径——
+// 函数体根本不下钻（精化实参静默通过），而 `f = () => { ... }` 能正常报出。
+
+IsSmall: (x: Int) -> Type = { x < 100 }
+
+main: () -> Void = {
+    y: IsSmall(1, 2) = 5    // ❌ IsSmall 只接受 1 个实参
+}

@@ -4,13 +4,13 @@
 // expect: compile-error E1092
 // （#263 已修复：实参不可转换时报错，精化约束绝不静默丢弃）
 //
-// 注：函数体用**显式 lambda** `() => { ... }` 而非 Fn 注解块。
-// 注解块（`main: () -> Void = { ... }`）存在既有缺口：体不经精化实参校验
-// （见 decisions 文档 D4），写成本形式会让本用例静默通过而失去哨兵作用。
+// 注解块形式（#363 已修复：注解绑定的函数体同样下钻精化校验）
+
+use std.io
 
 IsSmall: (x: Int) -> Type = { x < 100 }
 
-main = () => {
+main: () -> Void = {
     y: IsSmall(List(Int)) = 9999    // ❌ List(Int) 无法转换为编译期常量表达式
-    y
+    io.println(y)
 }

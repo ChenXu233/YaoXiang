@@ -476,7 +476,7 @@ fn test_type_checker_with_generic_type_binding() {
                 },
                 span: Span::dummy(),
             },
-            // let w: Wrapper<Int> = ...  (使用泛型类型)
+            // let w: Wrapper<Int> = Wrapper(1)  (使用泛型类型)
             Stmt {
                 kind: crate::frontend::core::parser::ast::StmtKind::Assign {
                     target: Box::new(crate::frontend::core::parser::ast::Expr::Var(
@@ -492,7 +492,19 @@ fn test_type_checker_with_generic_type_binding() {
                         }],
                     }),
                     signature_params: Vec::new(),
-                    value: None,
+                    // 声明必须带初值（spec §3.2 文法要求 `= Expr`）
+                    value: Some(Box::new(crate::frontend::core::parser::ast::Expr::Call {
+                        func: Box::new(crate::frontend::core::parser::ast::Expr::Var(
+                            "Wrapper".to_string(),
+                            Span::dummy(),
+                        )),
+                        args: vec![crate::frontend::core::parser::ast::Expr::Lit(
+                            crate::frontend::core::parser::ast::Literal::Int(1),
+                            Span::dummy(),
+                        )],
+                        named_args: vec![],
+                        span: Span::dummy(),
+                    })),
                     is_pub: false,
                     is_mut: false,
                     span: Span::dummy(),

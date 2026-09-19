@@ -352,6 +352,11 @@
     "example": "BadArray(Int, n)  // n is not a compile-time constant",
     "error_output": "warning[W1063]: const generic constraint cannot be evaluated\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ constraint `N > 0` cannot be evaluated at compile-time"
   },
+  "E1065": {
+    "title": "Call on non-callable type",
+    "template": "Type `{type}` is not callable — it is not a function",
+    "help": "Only function values can be called. Check the expression's type at this position; to define a function, write a Fn annotation `f: () -> T = { ... }`."
+  },
   "E1071": {
     "title": "type definition only allowed at module level",
     "message": "type definition can only appear at the module top-level",

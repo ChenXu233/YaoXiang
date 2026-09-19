@@ -21,13 +21,28 @@ use crate::util::span::Span;
 ///
 /// ```text
 /// 找到 mut x           → 赋值 OK
-/// 找到 x（已 moved）    → 视为未找到有效绑定，在当前作用域重新声明
 /// 找到 x（不可变，存活）→ E2010 不可重新赋值
 /// 找不到               → 在当前作用域新声明
 /// ```
 ///
 /// `mut x = value` 是**显式新声明**，同作用域撞名 → E2002；
 /// 外层存在同名 → E2013（禁止遮蔽）。
+///
+/// # 「已 moved」分支已删除（2026-09-19）
+///
+/// spec 旧文有一行「找到 x（已 moved）→ 视为未找到有效绑定，重新声明」。
+/// 该分支**不可达且不该存在**：
+///
+/// - **不可达**：判定依赖 `VarInfo::moved`，而其唯一写入点 `mark_moved` 零调用点，
+///   故 `moved` 恒为 `false`。
+/// - **不该存在**：move 是**路径相关**的数据流属性（`if c { move p }` 后 `p` 在
+///   一条路径上已 move、另一条尚未），一个布尔字段结构上无法表达——它没有
+///   分支概念。真正的 move 分析在 `layers/ownership.rs`：构建函数体 CFG，
+///   以 `Alive < Moved < Dropped` 格做数据流，分支汇合取 max（保守），
+///   读检查点报 E2014/E2018。
+///
+/// 所以「moved 后可重声明」由**重声明本身**承担：写 `mut x = v` 即新声明；
+/// 想复用旧名而不写 `mut`，本来就需要一个能表达「这是新绑定」的记号。
 ///
 /// 本函数是这条规则的**唯一实现**：`StatementChecker` 与 `ExpressionInferrer`
 /// 都调它。此前两处各写一份，导致规则不一致（一处有 E2010、一处没有）。
@@ -69,12 +84,11 @@ impl ScopeManager {
             .filter(|v| !v.forward_declared && !v.imported);
         let in_current = info.is_some() && self.var_in_current_scope(name);
         let anywhere = info.is_some();
-        let moved = info.map(|v| v.moved).unwrap_or(false);
         let existing_mut = info.map(|v| v.is_mut).unwrap_or(false);
 
         // 纯注解声明：总是声明（同作用域真撞名才报 E2002）
         if is_declaration_only {
-            if in_current && !moved {
+            if in_current {
                 return BindingAction::DuplicateDefinition;
             }
             return BindingAction::Declare;
@@ -83,13 +97,9 @@ impl ScopeManager {
         if is_mut {
             // `mut x = value`：显式新声明
             if in_current {
-                // moved 后重新声明是合法的（旧绑定已消耗）
-                if moved {
-                    return BindingAction::Declare;
-                }
                 return BindingAction::DuplicateDefinition;
             }
-            if anywhere && !moved {
+            if anywhere {
                 return BindingAction::Shadowing;
             }
             return BindingAction::Declare;
@@ -97,17 +107,13 @@ impl ScopeManager {
 
         // `x = value`：赋值优先
         if in_current {
-            if moved {
-                BindingAction::Declare // moved 后重新绑定
-            } else if existing_mut {
+            if existing_mut {
                 BindingAction::Reassign
             } else {
                 BindingAction::ImmutableReassign
             }
         } else if anywhere {
-            if moved {
-                BindingAction::Declare // 外层已 moved：当前作用域重新声明
-            } else if existing_mut {
+            if existing_mut {
                 BindingAction::Reassign // 外层 mut：赋值同一绑定
             } else {
                 BindingAction::ImmutableReassign
@@ -123,7 +129,6 @@ impl ScopeManager {
 pub struct VarInfo {
     pub poly: PolyType,
     pub is_mut: bool,
-    pub moved: bool,
     /// 变量定义位置的 span（用于 LSP 跳转定义）
     pub definition_span: Span,
     /// 是否只是「前向引用占位」——pass2 预注册的顶层绑定，
@@ -257,7 +262,6 @@ impl ScopeManager {
         let info = VarInfo {
             poly,
             is_mut,
-            moved: false,
             definition_span,
             forward_declared: false,
             imported: false,
@@ -284,7 +288,6 @@ impl ScopeManager {
         let info = VarInfo {
             poly,
             is_mut: false,
-            moved: false,
             definition_span,
             forward_declared: true,
             imported: false,
@@ -307,7 +310,6 @@ impl ScopeManager {
         let info = VarInfo {
             poly,
             is_mut: false,
-            moved: false,
             definition_span,
             forward_declared: false,
             imported: true,
@@ -332,7 +334,6 @@ impl ScopeManager {
         let info = VarInfo {
             poly,
             is_mut,
-            moved: false,
             definition_span,
             forward_declared: false,
             imported: false,
@@ -390,36 +391,6 @@ impl ScopeManager {
             || self.param_scopes.iter().any(|s| s.contains_key(name))
     }
 
-    /// 标记变量为已移动（局部 → 参数 → 全局）
-    pub fn mark_moved(
-        &mut self,
-        name: &str,
-    ) {
-        for scope in self.local_scopes.iter_mut().rev() {
-            if let Some(info) = scope.get_mut(name) {
-                info.moved = true;
-                return;
-            }
-        }
-        for scope in self.param_scopes.iter_mut().rev() {
-            if let Some(info) = scope.get_mut(name) {
-                info.moved = true;
-                return;
-            }
-        }
-        if let Some(info) = self.globals.get_mut(name) {
-            info.moved = true;
-        }
-    }
-
-    /// 检查变量是否已移动（局部 → 参数 → 全局）
-    pub fn var_is_moved(
-        &self,
-        name: &str,
-    ) -> Option<bool> {
-        self.get_var_info(name).map(|info| info.moved)
-    }
-
     /// 从当前局部层移除变量
     pub fn remove_var(
         &mut self,
@@ -464,6 +435,15 @@ impl ScopeManager {
         &self,
         name: &str,
     ) -> bool {
+        // 模块级（三链全空）：当前作用域就是 `globals`。
+        //
+        // 此前只看 `local_scopes`，于是顶层的 `mut d = 1; mut d = 2` 被当成
+        // 「外层存在同名」→ 误报 E2013（禁止遮蔽），而正确诊断是 E2002
+        //（同作用域重复定义）。函数体内同写法报 E2002，顶层报 E2013——
+        // 同一语法两个诊断，因为顶层绑定住在 `globals`。
+        if self.at_module_level() {
+            return self.globals.contains_key(name);
+        }
         self.local_scopes
             .last()
             .is_some_and(|s| s.contains_key(name))

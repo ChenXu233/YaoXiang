@@ -1,0 +1,18 @@
+// 06-compile-errors/not_callable_err.yx
+// 对非函数值调用应报 E1065
+// expect: compile-error E1065
+// 覆盖: #364——调用处缺可调用性校验
+// 验证: `x = 5; x()` 编译期拦截，不再落到运行时 E6006
+// 状态: ✅
+//
+// 此前完全不检：编译期静默通过，运行时才报
+// 「Function not found: 'Native function not found: x'」——真实原因是
+// 「x 是 Int，没有调用运算符」，提示却说「函数没定义，检查拼写」。
+
+use std.io
+
+main: () -> Void = {
+    x = 5
+    x()                 // ❌ Int 不可调用
+    io.println("never reached")
+}

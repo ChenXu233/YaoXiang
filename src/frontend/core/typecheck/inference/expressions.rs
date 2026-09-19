@@ -1788,6 +1788,32 @@ impl<'a> ExpressionInferrer<'a> {
             } => {
                 let func_ty = self.infer_expr(func)?;
 
+                // 可调用性校验：被调对象必须是函数（或 LibraryRef）。
+                //
+                // 此前完全不检——`x = 5; x()` 编译期静默通过，到运行时才报
+                // E6006「函数找不到」，与真实原因（值不可调用）风马牛不相及。
+                // （#364）
+                {
+                    let ft = self.solver.resolve_type(&func_ty);
+                    // 可调用 = 函数 / lib 引用 / 未定形（类型变量、泛型、结构体构造器）。
+                    //
+                    // 只拦**确定不可调用**者：数值、布尔、字符串、容器等纯数据。
+                    // 结构体名既可作构造器（`Point(1,2)`）也可作值，不在此处判。
+                    let definitely_not_callable = matches!(
+                        ft,
+                        MonoType::Int(_)
+                            | MonoType::Float(_)
+                            | MonoType::Bool
+                            | MonoType::Char
+                            | MonoType::Void
+                    ) || ft.is_string();
+                    if definitely_not_callable {
+                        return Err(ErrorCodeDefinition::not_callable(&format!("{ft}"))
+                            .at(*span)
+                            .build());
+                    }
+                }
+
                 // LibraryRef callable rule: when calling a LibraryRef with a string literal
                 // e.g. sqlite3("sqlite3_open") where sqlite3: LibraryRef
                 // Returns ExternRef at compile time
@@ -3212,12 +3238,7 @@ impl<'a> ExpressionInferrer<'a> {
                         self.assign_var(&name, init_ty, *stmt_span, true)?;
                         return Ok(MonoType::Void);
                     }
-                    BindingAction::Declare => {
-                        // moved 后重新声明：先清掉旧槽位（旧绑定已消耗）
-                        if self.scope.var_is_moved(&name).unwrap_or(false) {
-                            self.scope.remove_var(&name);
-                        }
-                    }
+                    BindingAction::Declare => {}
                 }
                 self.try_add_var(name.clone(), PolyType::mono(init_ty), *stmt_span, *is_mut)?;
                 Ok(MonoType::Void)

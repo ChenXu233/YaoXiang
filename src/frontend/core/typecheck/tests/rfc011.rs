@@ -421,7 +421,7 @@ fn test_rfc011_compile_time_evaluation() {
             data: Array(T, N),
             length: N
         }
-        arr: StaticArray(Int, factorial(5))  // 编译期计算 factorial(5)=120
+        arr: Array(Int, factorial(5)) = []  // 编译期计算 factorial(5)=120
     "#;
 
     // Act

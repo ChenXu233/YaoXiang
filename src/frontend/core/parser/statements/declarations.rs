@@ -552,21 +552,19 @@ fn parse_assign_after_target(
         });
     }
 
-    // 无初始化: `x: Int` 或 `x` (纯声明)
-    state.skip(&TokenKind::Semicolon);
-
-    Some(Stmt {
-        kind: StmtKind::Assign {
-            target: Box::new(target),
-            type_annotation,
-            signature_params: Vec::new(),
-            value: None,
-            is_pub,
-            is_mut,
-            span,
-        },
-        span,
-    })
+    // 语法错误：`x: Int` 无初值
+    //
+    // spec §3.2 `LetStmt ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr`
+    // 要求 `= Expr`——纯注解声明不合文法。旧实现把它当「纯声明」放行，
+    // 但它没有值也没有可用的类型（仅用于延迟初始化，而本语言无此语义）。
+    state.error(
+        ErrorCodeDefinition::invalid_syntax(
+            "declaration requires an initializer — write `x: Int = value`",
+        )
+        .at(span)
+        .build(),
+    );
+    None
 }
 
 /// Parse generic parameters with constraints: `[T: Clone]` or `[N: Int]`
