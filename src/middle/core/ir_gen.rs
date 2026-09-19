@@ -614,7 +614,11 @@ impl AstToIrGenerator {
         // 0. 元组下标（`t.0` / `t.1`）：解析期已把数字下标转成十进制字段名。
         // 元组的“字段索引”就是位置下标本身，直接解析返回。
         if let Some(t) = self.get_expr_mono_type(expr) {
-            let resolved = t.clone();
+            // 剥掉 Ref 层：`it: &(A, B)` 取 `it.1` 时类型是 `Ref{Tuple}`。
+            let mut resolved = t.clone();
+            while let crate::frontend::core::types::mono::MonoType::Ref { inner, .. } = resolved {
+                resolved = *inner;
+            }
             let is_tuple = matches!(
                 &resolved,
                 crate::frontend::core::types::mono::MonoType::Generic { name, .. }

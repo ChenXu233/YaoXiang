@@ -265,13 +265,10 @@ has_next: (T: Type) -> (it: &(List(T), Int)) -> Bool = {
     return it.1 < it.0.length
 }
 
-/// 取下一个元素，返回 `(元素, 新迭代器)`；无元素时返回 `(none, it)`。
+/// 取下一个元素并推进：返回 `(当前元素, 新迭代器)`。
 ///
-/// 用 `Option` 表达耗尽：调用方按 `Result/Option` 约定判空，
-/// 避免 native 版「越界返回 0」的静默语义（#279 同类）。
-next: (T: Type) -> (it: &(List(T), Int)) -> (Option(T), (List(T), Int)) = {
-    if it.1 < it.0.length {
-        return (Option(it.0.data[it.1]), (it.0, it.1 + 1))
-    }
-    return (none, (it.0, it.1))
+/// 前置条件：`has_next(it)` 为真（调用方先判空再取，与 native `next` 同约定）。
+/// 越界读取由 `Vec` 的边界检查兜住并报 E6003，不做静默返回 0（#279 同类）。
+next: (T: Type) -> (it: &(List(T), Int)) -> (T, (List(T), Int)) = {
+    return (it.0.data[it.1], (it.0, it.1 + 1))
 }
