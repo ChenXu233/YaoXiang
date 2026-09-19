@@ -10,7 +10,7 @@ use std.io
 
 IsSmall: (x: Int) -> Type = { x < 100 }
 
-main: () -> Void = {
-    y: IsSmall(List(Int)) = 9999    // ❌ List(Int) 无法转换为编译期常量表达式
-    io.println(y)
+main = () => {
+    y: IsSmall(Vec(Int)) = 9999    // ❌ Vec(Int) 无法转换为编译期常量表达式
+    y
 }

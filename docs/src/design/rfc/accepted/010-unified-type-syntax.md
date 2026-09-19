@@ -388,7 +388,7 @@ result = spawn {
     a = fetch_data("url1")    # 任务 1
     b = fetch_data("url2")    # 任务 2（与 a 无依赖，并行执行）
     c = process(a, b)         # 依赖 a, b → 等待两者完成后执行
-    c                         # 尾表达式 → spawn 的值
+    return c                  # 块的值（尾表达式出口尚未实现，见 #365）
 }
 // 调用方在此阻塞，直到 spawn 块内所有任务完成
 ```

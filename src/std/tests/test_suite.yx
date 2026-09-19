@@ -17,11 +17,12 @@ push_grows_len: () -> Result(Void, String) = () => {
     test.assert_eq(list.len(extended), 2)
 }
 
-pop_returns_last: () -> Result(Void, String) = () => {
-    mut xs = [1, 2]
-    last = list.pop(xs)
-    test.assert_eq(last, 2)
-    test.assert_eq(list.len(xs), 1)
+// 值语义（D9-A）：pop 返回**缩短后的新列表**，源被消费。
+pop_shrinks_len: () -> Result(Void, String) = () => {
+    xs = [1, 2]
+    shorter = list.pop(xs)
+    test.assert_eq(shorter.length, 1)
+    test.assert_eq(shorter[0], 1)
 }
 
 parse_ok: () -> Result(Void, String) = () => {
@@ -33,7 +34,7 @@ parse_ok: () -> Result(Void, String) = () => {
 main: () -> Void = {
     test.suite([
         ("push_grows_len", () => push_grows_len()),
-        ("pop_returns_last", () => pop_returns_last()),
+        ("pop_shrinks_len", () => pop_shrinks_len()),
         ("parse_ok", () => parse_ok()),
     ])
 }

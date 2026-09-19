@@ -1599,6 +1599,14 @@ impl<'a> ExpressionInferrer<'a> {
                 ..
             } => {
                 let container_ty = self.infer_expr(container)?;
+                // 剥掉 Ref 层：`&Vec(T)` 上下标读取合法（RFC-009 §2.8 读透明，
+                // 与 `r.n` 字段读同款）。此前未剥离，带借用的形参里
+                // `list[i]` 报「不可索引」。
+                let mut container_ty = container_ty;
+                while let MonoType::Ref { inner, .. } = container_ty {
+                    container_ty = *inner;
+                }
+                let container_ty = self.solver.resolve_type(&container_ty);
                 match container_ty {
                     MonoType::Generic { name, args } if name == "List" => Ok(args[0].clone()),
                     MonoType::Generic { name, args } if name == "Vec" => Ok(args[0].clone()),

@@ -75,18 +75,18 @@ main: () -> Void = {
 
 <!-- stdlib:table:range start -->
 
-| 函数                 | 签名                                                          |
-| -------------------- | ------------------------------------------------------------- |
-| `iter`               | `(r: Range(Int)) -> Result(Iterator(Any), Error)`             |
-| `has_next`           | `(it: Iterator(Any)) -> Bool`                                 |
-| `next`               | `(it: &Iterator(Any)) -> Any`                                 |
-| `contains`           | `(r: Range(Int), x: Int) -> Result(Bool, Error)`              |
-| `abort_invalid_step` | `(r: Range(Int)) -> Any`                                      |
-| `map`                | `(it: Iterator(Any), f: (Any) -> Any) -> Iterator(Any)`       |
-| `filter`             | `(it: Iterator(Any), p: (Any) -> Bool) -> Iterator(Any)`      |
-| `collect`            | `(it: Iterator(Any)) -> List(Any)`                            |
-| `reduce`             | `(it: Iterator(Any), init: Any, f: (Any, Any) -> Any) -> Any` |
-| `for_each`           | `(it: Iterator(Any), f: (Any) -> Void) -> Void`               |
+| 函数 | 签名 |
+| ---- | ---- |
+| `iter` | `(r: Range(Int)) -> Result(Iterator(Any), Error)` |
+| `has_next` | `(it: Iterator(Any)) -> Bool` |
+| `next` | `(it: &Iterator(Any)) -> Any` |
+| `contains` | `(r: Range(Int), x: Int) -> Result(Bool, Error)` |
+| `abort_invalid_step` | `(r: Range(Int)) -> Any` |
+| `map` | `(it: Iterator(Any), f: (Any) -> Any) -> Iterator(Any)` |
+| `filter` | `(it: Iterator(Any), p: (Any) -> Bool) -> Iterator(Any)` |
+| `collect` | `(it: Iterator(Any)) -> Vec(Any)` |
+| `reduce` | `(it: Iterator(Any), init: Any, f: (Any, Any) -> Any) -> Any` |
+| `for_each` | `(it: Iterator(Any), f: (Any) -> Void) -> Void` |
 
 <!-- stdlib:table:range end -->## 迭代器协议
 
@@ -263,7 +263,7 @@ use std.result
 main: () -> Void = {
     doubled = range.collect(range.map(result.unwrap(range.iter(1..4)), x => x * 2))
     assert(list.len(doubled) == 3)
-    assert(list.get(doubled, 0) == 2)
+    assert(doubled[0] == 2)
 }
 ```
 
@@ -288,7 +288,7 @@ use std.result
 main: () -> Void = {
     big = range.collect(range.filter(result.unwrap(range.iter(1..6)), x => x > 3))
     assert(list.len(big) == 2)
-    assert(list.get(big, 0) == 4)
+    assert(big[0] == 4)
 }
 ```
 
@@ -303,8 +303,11 @@ use std.result
 main: () -> Void = {
     r = 1..6
     chained = range.collect(range.map(range.filter(result.unwrap(range.iter(r)), x => x % 2 == 0), x => x * 10))
-    assert(list.get(chained, 0) == 20)
-    assert(list.get(chained, 1) == 40)
+    // 值语义：`chained` 会被下标读取消费，逐个绑定局部量
+    first = chained[0]
+    second = chained[1]
+    assert(first == 20)
+    assert(second == 40)
 }
 ```
 
@@ -313,7 +316,7 @@ main: () -> Void = {
 <!-- stdlib:sig:range.collect start -->
 
 ```yaoxiang
-collect: (it: Iterator(Any)) -> List(Any)
+collect: (it: Iterator(Any)) -> Vec(Any)
 ```
 
 <!-- stdlib:sig:range.collect end -->

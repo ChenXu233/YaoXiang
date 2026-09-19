@@ -21,7 +21,11 @@ fn test_generate_all_interfaces() {
     // 检查包含关键模块
     let names: Vec<&str> = interfaces.iter().map(|(n, _)| n.as_str()).collect();
     assert!(names.contains(&"io"), "应包含 io 模块");
-    assert!(names.contains(&"list"), "应包含 list 模块");
+    // D5 硬切换：std.list 已迁到纯 yx（src/std/list.yx），不再由 native 生成接口。
+    assert!(
+        !names.contains(&"list"),
+        "std.list 已迁到纯 yx，不应再生成接口"
+    );
     assert!(names.contains(&"math"), "应包含 math 模块");
     assert!(names.contains(&"dict"), "应包含 dict 模块");
     assert!(names.contains(&"string"), "应包含 string 模块");
@@ -52,14 +56,14 @@ fn test_math_interface_has_constants() {
 
 #[test]
 fn test_list_interface_content() {
+    // D5 硬切换：std.list 已由纯 yx 实现接管（src/std/list.yx），
+    // 不再是 native `ListModule`，因此 `generate_all_interfaces()` 不再产出
+    // `list` 条目——接口面由 .yx 源码自身承载（`use std.list` 直接读导出签名）。
     let interfaces = generate_all_interfaces();
-    let list = interfaces.iter().find(|(n, _)| n == "list").unwrap();
-    let content = &list.1;
-
-    assert!(content.contains("push:"), "list 接口应包含 push");
-    assert!(content.contains("pop:"), "list 接口应包含 pop");
-    assert!(content.contains("map:"), "list 接口应包含 map");
-    assert!(content.contains("filter:"), "list 接口应包含 filter");
+    assert!(
+        !interfaces.iter().any(|(n, _)| n == "list"),
+        "std.list 已迁到纯 yx，不应再出现在 native 生成的接口列表里"
+    );
 }
 
 #[test]
@@ -73,9 +77,10 @@ fn test_write_interfaces_to_temp_dir() {
     // Assert: 每个 std 模块都有对应接口文件落盘
     assert!(
         count >= 3,
-        "至少应写出 3 个接口文件（io/list/math 等），实际 {count}"
+        "至少应写出 3 个接口文件（io/math/dict 等），实际 {count}"
     );
-    for name in ["io", "list", "math"] {
+    // std.list 已迁到纯 yx，其接口由源码承载，不再落盘为生成物。
+    for name in ["io", "math", "dict"] {
         let file = temp.path().join(format!("{}.yx", name));
         assert!(file.exists(), "接口文件 {} 应存在", file.display());
     }

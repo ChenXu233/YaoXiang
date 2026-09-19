@@ -640,6 +640,27 @@ impl AstToIrGenerator {
             }
         }
 
+        // 0. `Vec(T)` 的 `length`（RFC-011 容器命名分层）：内建缓冲的长度。
+        // 运行时以 `RuntimeValue::List/Array` 表示，长度即底层条目数；
+        // 写 `v.length = n` 语义为「把缓冲调整到 n 个元素」（截断或补 Void）。
+        // 用字段索引 0 作占位——执行器按**运行时值类型**与结构体字段区分。
+        if field_name == "length" {
+            if let Some(t) = self.get_expr_mono_type(expr) {
+                let mut resolved = t.clone();
+                while let crate::frontend::core::types::mono::MonoType::Ref { inner, .. } = resolved
+                {
+                    resolved = *inner;
+                }
+                if matches!(
+                    &resolved,
+                    crate::frontend::core::types::mono::MonoType::Generic { name, .. }
+                        if name == "Vec" || name == "Array"
+                ) {
+                    return Some(0);
+                }
+            }
+        }
+
         // 0. #302：Range 具名字段（start=0, end=1, step=2）
         if matches!(field_name, "start" | "end" | "step")
             && self
@@ -3759,17 +3780,28 @@ impl AstToIrGenerator {
             .get_expr_mono_type(iterable)
             .map(|t| t.is_range())
             .unwrap_or(false);
+        // 迭代协议函数名：range 仍是 native（限定名直用）；
+        // list 已迁到纯 yx（src/std/list.yx），其函数以裸名注册，
+        // 交给 `resolve_namespace` 决定最终名（命中限定名用限定名，否则退裸名）。
         let (iter_fn, has_next_fn, next_fn) = if is_range {
-            ("std.range.iter", "std.range.has_next", "std.range.next")
+            (
+                "std.range.iter".to_string(),
+                "std.range.has_next".to_string(),
+                "std.range.next".to_string(),
+            )
         } else {
-            ("std.list.iter", "std.list.has_next", "std.list.next")
+            (
+                self.resolver().resolve_namespace("list", &["iter"]),
+                self.resolver().resolve_namespace("list", &["has_next"]),
+                self.resolver().resolve_namespace("list", &["next"]),
+            )
         };
 
         // 2. 创建迭代器: iterator = iter(iterable)
         let iterator_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(iterator_reg)),
-            func: Operand::Const(ConstValue::String(iter_fn.to_string())),
+            func: Operand::Const(ConstValue::String(iter_fn.clone())),
             args: vec![Operand::Local(iterable_reg)],
             span: for_span,
             def: None,
@@ -3929,7 +3961,9 @@ impl AstToIrGenerator {
         let iterator_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(iterator_reg)),
-            func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
+            func: Operand::Const(ConstValue::String(
+                self.resolver().resolve_namespace("list", &["iter"]),
+            )),
             args: vec![Operand::Local(iterable_reg)],
             span,
             def: None,
@@ -5800,7 +5834,9 @@ impl AstToIrGenerator {
         let iterator_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(iterator_reg)),
-            func: Operand::Const(ConstValue::String("std.list.iter".to_string())),
+            func: Operand::Const(ConstValue::String(
+                self.resolver().resolve_namespace("list", &["iter"]),
+            )),
             args: vec![Operand::Local(iterable_reg)],
             span: *span,
             def: None,

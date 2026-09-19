@@ -1,49 +1,55 @@
 // src/std/tests/list_ops.yx
-// 覆盖: std.list 模块（#117）— RFC-009 §2.8 只读自动借用 + 泛型 map/filter/reduce
-// 验证: 正常路径（len/get/first/last/contains/reverse/concat/map/filter/reduce/push）+ 错误路径（越界 get / 空 pop 返回 Void）
+// 覆盖: std.list 模块（#117 / D5 硬切换）— 纯 yx 实现（src/std/list.yx）
+// 验证: 正常路径（len/get/first/last/contains/reverse/concat/map/filter/reduce/push）
+//       + 错误路径（越界 get / 空 pop）
 // 状态: ✅
+//
+// 语义契约（D9-A 值语义）：所有函数**按值接收**源列表，调用后源值已被移动；
+// `len`/`get`/`first`/`last`/`contains`/`find_index`/`is_empty`/`reverse`/`slice`
+// 不修改源但同样消费它。需要重复使用同一列表时，重新构造（`mk()`）或先 clone。
+// 这与 native 版「只读参数用 `&List` 自动借用」的旧契约不同——旧契约的问题是
+// `pop` 声明 `&List` 却原地改写（RFC-009 §2.5 空洞，见 D9）。
 
 use std.assert
 use std.list
 
+/// 每个用例用一份新列表：值语义下源值会被消费。
+mk: () -> Vec(Int) = {
+    v: Vec(Int) = [1, 2, 3, 4]
+    return v
+}
+
 main: () -> Void = {
-    nums = [1, 2, 3, 4]
+    // 只读操作（各用一份新值，因为都会被消费）
+    assert.assert(list.len(mk()) == 4, "len == 4")
+    assert.assert(list.get(mk(), 1) == 2, "get(1) == 2")
+    assert.assert(list.first(mk()) == 1, "first == 1")
+    assert.assert(list.last(mk()) == 4, "last == 4")
+    assert.assert(list.contains(mk(), 3), "contains 3")
+    assert.assert(!list.contains(mk(), 99), "not contains 99")
+    assert.assert(list.find_index(mk(), 3) == 2, "find_index 3 == 2")
+    assert.assert(!list.is_empty(mk()), "not empty")
 
-    // 只读操作可复用（&List 自动借用，不 move）
-    assert.assert(list.len(nums) == 4, "len == 4")
-    assert.assert(list.len(nums) == 4, "len reusable (not moved)")
-    assert.assert(list.get(nums, 1) == 2, "get(1) == 2")
-    assert.assert(list.first(nums) == 1, "first == 1")
-    assert.assert(list.last(nums) == 4, "last == 4")
-    assert.assert(list.contains(nums, 3), "contains 3")
-    assert.assert(!list.contains(nums, 99), "not contains 99")
-    assert.assert(list.find_index(nums, 3) == 2, "find_index 3 == 2")
-    assert.assert(!list.is_empty(nums), "not empty")
+    // reverse / concat（返回新列表）
+    assert.assert(list.first(list.reverse(mk())) == 4, "reverse first == 4")
+    assert.assert(list.len(list.concat(mk(), mk())) == 8, "concat len == 8")
 
-    // reverse / concat（只读原列表，返回新列表）
-    rev = list.reverse(nums)
-    assert.assert(list.first(rev) == 4, "reverse first == 4")
-    joined = list.concat([1, 2], [3, 4])
-    assert.assert(list.len(joined) == 4, "concat len == 4")
+    // 泛型高阶函数（curry + 泛型 + 类型参数推断）
+    assert.assert(list.get(list.map(mk(), (x: Int) => x * 2), 0) == 2, "map [0] == 2")
+    assert.assert(list.len(list.filter(mk(), (x: Int) => x % 2 == 0)) == 2, "filter evens len == 2")
+    assert.assert(list.reduce(mk(), (acc: Int, x: Int) => acc + x, 0) == 10, "reduce sum == 10")
 
-    // 泛型高阶函数（curry + 泛型 + &T 借用）
-    doubled = list.map(nums, x => x * 2)
-    assert.assert(list.get(doubled, 0) == 2, "map [0] == 2")
-    evens = list.filter(nums, x => x % 2 == 0)
-    assert.assert(list.len(evens) == 2, "filter evens len == 2")
-    total = list.reduce(nums, (acc, x) => acc + x, 0)
-    assert.assert(total == 10, "reduce sum == 10")
+    // 修改操作：函数式返回新列表（源被消费）
+    assert.assert(list.len(list.push(mk(), 3)) == 5, "push returns new len 5")
+    assert.assert(list.len(list.prepend(mk(), 0)) == 5, "prepend returns new len 5")
+    assert.assert(list.len(list.remove_at(mk(), 0)) == 3, "remove_at drops one")
+    assert.assert(list.len(list.set(mk(), 0, 9)) == 4, "set keeps len")
+    assert.assert(list.first(list.set(mk(), 0, 9)) == 9, "set writes slot")
 
-    // 修改操作：函数式返回新列表
-    mut base = [1, 2]
-    extended = list.push(base, 3)
-    assert.assert(list.len(extended) == 3, "push returns new len 3")
-
-    // 错误路径：越界 / 空 pop 返回 Void（优雅处理，不 panic）
-    oob = list.get(nums, 99)
-    mut empty = []
-    gone = list.pop(empty)
-    assert.assert(list.is_empty(empty), "empty stays empty after pop")
+    // 错误路径
+    assert.assert(list.is_empty(list.empty(Int)), "empty is empty")
+    assert.assert(list.len(list.slice(mk(), 0, 2)) == 2, "slice len == 2")
+    assert.assert(list.len(list.pop(mk())) == 3, "pop drops last")
 }
 
 main()

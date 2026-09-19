@@ -629,11 +629,13 @@ impl TypeUnifier {
                 UnificationResult::Success(result)
             }
 
-            // 列表统一
+            // 列表统一。名字分层（RFC-011，D8-B）：内置层是 `Vec(T)`；
+            // `List(T)` 是标准库类型（`std/list.yx`），其 `Generic` 形态由
+            // 泛型类型定义展开处理，不走这条内建规则。
             (
                 MonoType::Generic { name: n1, args: a1 },
                 MonoType::Generic { name: n2, args: a2 },
-            ) if n1 == "List" && n2 == "List" && a1.len() == 1 && a2.len() == 1 => {
+            ) if n1 == "Vec" && n2 == "Vec" && a1.len() == 1 && a2.len() == 1 => {
                 self.unify_internal(&a1[0], &a2[0])
             }
 

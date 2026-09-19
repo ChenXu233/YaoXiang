@@ -1,6 +1,6 @@
 ---
 title: 'std.dict'
-description: '辞書の読み書き、キー値ビュー、マージ'
+description: '辞書の読み書き、キーと値のビュー、マージ'
 ---
 
 # std.dict
@@ -15,8 +15,8 @@ use std.dict
 
 | カテゴリ             | 関数                                                           | 動作                                   |
 | -------------------- | -------------------------------------------------------------- | -------------------------------------- |
-| 読み取り専用借用     | `get` `has` `values` `keys` `entries` `len` `is_empty` `merge` | ソース辞書は繰り返し使用可能           |
-| **ソース辞書を消費** | `set` `delete`                                                 | ソース辞書は移動され、その後再利用不可 |
+| 読み取り専用借用     | `get` `has` `values` `keys` `entries` `len` `is_empty` `merge` | ソース辞書は再利用可能                 |
+| **ソース辞書を消費** | `set` `delete`                                                 | ソース辞書がムーブされ、使用不可となる |
 
 ```yaoxiang
 use std.assert
@@ -25,7 +25,7 @@ use std.dict
 main: () -> Void = {
     d = dict.set(dict.new(), "a", 1)
 
-    // 読み取り専用借用：d は繰り返し使用可能
+    // 読み取り専用借用：d は再利用可能
     assert(dict.get(d, "a") == 1)
     assert(dict.len(d) == 1)
     assert(dict.has(d, "a"))
@@ -41,9 +41,9 @@ main: () -> Void = {
 | `get`      | `(K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any`                   |
 | `set`      | `(K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V)` |
 | `has`      | `(K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool`                  |
-| `values`   | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)`                |
-| `keys`     | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)`                |
-| `entries`  | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)`                |
+| `values`   | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)`                 |
+| `keys`     | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)`                 |
+| `entries`  | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)`                 |
 | `delete`   | `(K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V)`             |
 | `len`      | `(K: Type, V: Type)(dict: &Dict(K, V)) -> Int`                             |
 | `is_empty` | `(K: Type, V: Type)(dict: &Dict(K, V)) -> Bool`                            |
@@ -62,8 +62,8 @@ set: (K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V)
 
 <!-- stdlib:sig:dict.set end -->
 
-`key` → `value` を書き込んだ**新しい辞書**を返します。`dict`
-は値渡しされ、呼び出し後に**移動**されます。
+`key` → `value` を書き込んだ**新しい辞書**を返す。`dict`
+は値渡しされ、呼び出し後に**ムーブ**される。
 
 ```yaoxiang
 use std.assert
@@ -86,10 +86,10 @@ get: (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any
 
 <!-- stdlib:sig:dict.get end -->
 
-キーで値を取得します（読み取り専用借用、`dict` は再利用可能）。
+キーで値を取得（読み取り専用借用、`dict` は再利用可能）。
 
-戻り値：キーに対応する値。エラー：**キーが存在しない場合 `E6008` をスロー**（キー欠落）。取得前に
-[`has`](#has) で先に判定できます。
+戻り値：キーに対応する値。エラー：**キーが存在しない場合、`E6008`をスロー**（キー欠落）。値を取得する前に
+[`has`](#has) で先に確認できる。
 
 ```yaoxiang
 use std.assert
@@ -101,7 +101,7 @@ main: () -> Void = {
 }
 ```
 
-存在確認後に取得：
+存在を確認してから取得する場合：
 
 ```yaoxiang
 use std.assert
@@ -126,9 +126,9 @@ has: (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool
 
 <!-- stdlib:sig:dict.has end -->
 
-`key` が辞書に存在するかどうか。
+辞書内に `key` が存在するかどうか。
 
-エラー：最初の引数が辞書でない場合 `E6007` をスロー。
+エラー：第1引数が辞書でない場合、`E6007`をスロー。
 
 ```yaoxiang
 use std.assert
@@ -151,9 +151,9 @@ delete: (K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V)
 
 <!-- stdlib:sig:dict.delete end -->
 
-`key` を削除した**新しい辞書**を返します。`dict` は値渡しされ、呼び出し後に**移動**されます。
+`key` を削除した**新しい辞書**を返す。`dict` は値渡しされ、呼び出し後に**ムーブ**される。
 
-戻り値：新しい辞書。存在しないキーを削除してもエラーにならず、辞書は変更されません。
+戻り値：新しい辞書。存在しないキーを削除してもエラーは発生せず、辞書は変更されない。
 
 ```yaoxiang
 use std.assert
@@ -171,14 +171,14 @@ main: () -> Void = {
 <!-- stdlib:sig:dict.keys start -->
 
 ```yaoxiang
-keys: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
+keys: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
 ```
 
 <!-- stdlib:sig:dict.keys end -->
 
-全キーのリストを返します（読み取り専用借用）。
+すべてのキーで構成されるリストを返す（読み取り専用借用）。
 
-> 戻り値の順序はハッシュ実装に依存し、**安定性は保証されません**。順序付き出力が必要な場合はご自身でソートしてください。
+> 戻り値の順序はハッシュ実装に依存し、**安定性は保証されない**。順序が必要な場合は各自でソートすること。
 
 ```yaoxiang
 use std.assert
@@ -197,12 +197,12 @@ main: () -> Void = {
 <!-- stdlib:sig:dict.values start -->
 
 ```yaoxiang
-values: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
+values: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
 ```
 
 <!-- stdlib:sig:dict.values end -->
 
-全値のリストを返します（読み取り専用借用）。順序の安定性は保証されません。
+すべての値で構成されるリストを返す（読み取り専用借用）。順序の安定性は保証されない。
 
 ```yaoxiang
 use std.assert
@@ -221,12 +221,12 @@ main: () -> Void = {
 <!-- stdlib:sig:dict.entries start -->
 
 ```yaoxiang
-entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
+entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
 ```
 
 <!-- stdlib:sig:dict.entries end -->
 
-キーと値のペアのリストを返し、各項目は `(key, value)` のタプルです。順序の安定性は保証されません。
+キーと値のペアのリストを返し、各要素は `(key, value)` のタプル。順序の安定性は保証されない。
 
 ```yaoxiang
 use std.assert
@@ -250,9 +250,9 @@ len: (K: Type, V: Type)(dict: &Dict(K, V)) -> Int
 
 <!-- stdlib:sig:dict.len end -->
 
-エントリ数。読み取り専用借用で、`dict` は繰り返し使用可能です。
+エントリ数。読み取り専用借用で、`dict` は再利用可能。
 
-エラー：引数が辞書でない場合 `E6007` をスロー。
+エラー：引数が辞書でない場合、`E6007`をスロー。
 
 ```yaoxiang
 use std.assert
@@ -277,7 +277,7 @@ is_empty: (K: Type, V: Type)(dict: &Dict(K, V)) -> Bool
 
 辞書が空かどうか。
 
-エラー：引数が辞書でない場合 `E6007` をスロー。
+エラー：引数が辞書でない場合、`E6007`をスロー。
 
 ```yaoxiang
 use std.assert
@@ -300,11 +300,11 @@ merge: (A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B)
 
 <!-- stdlib:sig:dict.merge end -->
 
-2つの辞書をマージし、新しい辞書を返します。両方のソース辞書は読み取り専用借用で、いずれも変更されません。
+2つの辞書をマージし、新しい辞書を返す。両方のソース辞書は読み取り専用借用で、変更されない。
 
-キーが衝突した場合、**`b` の値で `a` を上書き**します。
+キーが衝突した場合、**`b` の値で `a` を上書き**する。
 
-エラー：いずれかの引数が辞書でない場合 `E6007` をスロー。
+エラー：いずれかの引数が辞書でない場合、`E6007`をスロー。
 
 ```yaoxiang
 use std.assert
@@ -319,5 +319,5 @@ main: () -> Void = {
 
 ## 関連
 
-- [`std.list`](./list) —— `keys` / `values` / `entries` の戻り値の処理
+- [`std.list`](./list) —— `keys` / `values` / `entries` の戻り値を処理
 - [エラーコードリファレンス](../error-code/) —— `E6008` キー欠落

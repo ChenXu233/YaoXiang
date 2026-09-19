@@ -921,8 +921,38 @@ pub(crate) fn scan_use_paths(source: &str) -> Vec<String> {
                 _ => break,
             }
         }
-        if !segments.is_empty() {
-            paths.push(segments.join("."));
+        if segments.is_empty() {
+            continue;
+        }
+        let prefix = segments.join(".");
+        // `use std.{io, list}`：花括号里的每个名字都是**同一前缀下的子模块**，
+        // 需展开成 `std.io` / `std.list`。此前只收集到前缀 `std`，
+        // 于是纯 yx 子模块（std.list）永远不被纳入编译单元——`use std.list`
+        // 形式正常而 inline 形式报「Native function not found」
+        // （`std.test` 同样受影响）。
+        let mut expanded = false;
+        // 只对 `std.{...}` 展开：`std` 的成员是子模块（`std.list`）；
+        // 其他前缀（`use lib.{add_one}`）的成员是**具体导出名**，不是模块路径，
+        // 展开会让模块发现阶段去找不存在的 `lib.add_one` 文件（LSP 跨文件导入用例）。
+        if prefix == "std"
+            && matches!(tokens.get(i).map(|t| &t.kind), Some(TokenKind::Dot))
+            && matches!(tokens.get(i + 1).map(|t| &t.kind), Some(TokenKind::LBrace))
+        {
+            i += 2; // 跳过 `.{`
+            while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
+                paths.push(format!("{prefix}.{name}"));
+                expanded = true;
+                i += 1;
+                match tokens.get(i).map(|t| &t.kind) {
+                    Some(TokenKind::Comma) => {
+                        i += 1;
+                    }
+                    _ => break,
+                }
+            }
+        }
+        if !expanded {
+            paths.push(prefix);
         }
     }
     paths

@@ -73,7 +73,7 @@ impl StdModule for RangeModule {
             export!(
                 "collect",
                 "std.range.collect",
-                "(it: Iterator(Any)) -> List(Any)",
+                "(it: Iterator(Any)) -> Vec(Any)",
                 native_collect
             ),
             export!(
