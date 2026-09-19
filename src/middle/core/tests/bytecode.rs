@@ -813,6 +813,250 @@ fn test_all_opcodes_have_decode_branch() {
     );
 }
 
+/// 未被往返测试覆盖的**解码布局**——补测（2026-09-19）。
+///
+/// 方法：把 82 个 opcode 按「解码器读取的操作数偏移 + 读取方式」分组，
+/// 得 18 组布局；其中 **7 组没有任何成员被往返测试覆盖**：
+///
+/// | 布局（偏移） | 读取 | 代表指令 |
+/// |---|---|---|
+/// | `[0, 2]` | u16, u32 | `NEW_DICT` / `NEW_TUPLE` / `SPAWN` |
+/// | `[0, 1, 5]` | u32 | `CREATE_STRUCT` / `MAKE_CLOSURE` |
+/// | `[0, 1, 5, 6]` | u32 | `CALL_STATIC` |
+/// | `[0, 1, 5, 6, 9, 13, 17, 18]` | u32 | `CALL_NATIVE` |
+/// | `[0, 2, 4, 6]` | u16 | `NEW_RANGE` |
+/// | `[0, 2, 4, 8]` | u16, u32 | `CREATE_VARIANT` |
+/// | `[0, 1, 3]` | u16 | `SET_FIELD` |
+///
+/// 这些恰是**带多字节索引的复杂指令**，也是历史上「编码器产出、解码器
+/// 字段错位」的高发区（曾致 24 个 opcode 静默变 Nop、`StringConcat.str1`
+/// 读出 0）。故逐个补往返测试。
+///
+/// 判据：编码字节序列**手工按 translator 的 `to_le_bytes()` 顺序写出**
+/// （不调用编码器），再断言解码结果的**每个字段值**——这样既能捕获
+/// 「解码器与编码器约定不一致」，也能捕获字段位置错乱。
+#[test]
+fn test_untested_decode_layouts_roundtrip() {
+    use crate::backends::common::opcode;
+    use crate::middle::bytecode::BytecodeInstr;
+
+    // 辅助：以小端序拼出操作数
+    fn u16le(v: u16) -> [u8; 2] {
+        v.to_le_bytes()
+    }
+    fn u32le(v: u32) -> [u8; 4] {
+        v.to_le_bytes()
+    }
+
+    // ── NewDict: dst(2) + pair_count(4) + keys(2*count) + values(2*count) ──
+    // dst=3, 1 对: key=5, val=7
+    let mut ops = Vec::new();
+    ops.extend_from_slice(&u16le(3));
+    ops.extend_from_slice(&u32le(1));
+    ops.extend_from_slice(&u16le(5));
+    ops.extend_from_slice(&u16le(7));
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::NEW_DICT, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::NewDict { dst, keys, values } => {
+            assert_eq!(dst.0, 3, "NewDict.dst 位置错误");
+            assert_eq!(keys.len(), 1, "NewDict.keys 数量错误");
+            assert_eq!(values.len(), 1, "NewDict.values 数量错误");
+            assert_eq!(keys[0].0, 5, "NewDict.keys[0] 位置错误");
+            assert_eq!(values[0].0, 7, "NewDict.values[0] 位置错误");
+        }
+        other => panic!("NewDict 解码为 {other:?}（疑静默 Nop 或字段错位）"),
+    }
+
+    // ── NewTuple: dst(2) + item_count(4) + items(2*count) ──
+    let mut ops = Vec::new();
+    ops.extend_from_slice(&u16le(4));
+    ops.extend_from_slice(&u32le(2));
+    ops.extend_from_slice(&u16le(9));
+    ops.extend_from_slice(&u16le(11));
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::NEW_TUPLE, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::NewTuple { dst, items } => {
+            assert_eq!(dst.0, 4, "NewTuple.dst 位置错误");
+            assert_eq!(items.len(), 2, "NewTuple.items 数量错误");
+            assert_eq!(items[0].0, 9, "NewTuple.items[0] 位置错误");
+            assert_eq!(items[1].0, 11, "NewTuple.items[1] 位置错误");
+        }
+        other => panic!("NewTuple 解码为 {other:?}"),
+    }
+
+    // ── NewRange: dst(2) + start(2) + end(2) + step(2) ──
+    let mut ops = Vec::new();
+    for r in [6u16, 8, 10, 12] {
+        ops.extend_from_slice(&u16le(r));
+    }
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::NEW_RANGE, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::NewRange {
+            dst,
+            start,
+            end,
+            step,
+        } => {
+            assert_eq!(dst.0, 6, "NewRange.dst 位置错误");
+            assert_eq!(start.0, 8, "NewRange.start 位置错误");
+            assert_eq!(end.0, 10, "NewRange.end 位置错误");
+            assert_eq!(step.0, 12, "NewRange.step 位置错误");
+        }
+        other => panic!("NewRange 解码为 {other:?}"),
+    }
+
+    // ── CreateVariant: dst(2) + group_idx(2) + variant(4) + payload(2) ──
+    // 注意 group_idx 是 **2 字节**（编码器 `as u16`），variant 才是 4 字节
+    let mut ops = Vec::new();
+    ops.extend_from_slice(&u16le(13));
+    ops.extend_from_slice(&u16le(2));
+    ops.extend_from_slice(&u32le(1));
+    ops.extend_from_slice(&u16le(14));
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::CREATE_VARIANT, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::CreateVariant {
+            dst,
+            group_idx,
+            variant,
+            payload,
+        } => {
+            assert_eq!(dst.0, 13, "CreateVariant.dst 位置错误");
+            assert_eq!(*group_idx, 2, "CreateVariant.group_idx 位置错误");
+            assert_eq!(*variant, 1, "CreateVariant.variant 位置错误");
+            assert_eq!(payload.0, 14, "CreateVariant.payload 位置错误");
+        }
+        other => panic!("CreateVariant 解码为 {other:?}"),
+    }
+}
+
+/// 其余 3 种未被覆盖的解码布局补测（2026-09-19）。
+///
+/// 覆盖 `[0,1,5]`（`CREATE_STRUCT` / `MAKE_CLOSURE`）与 `[0,1,3]`（`SET_FIELD`）。
+#[test]
+fn test_remaining_untested_layouts_roundtrip() {
+    use crate::backends::common::opcode;
+    use crate::middle::bytecode::BytecodeInstr;
+
+    // ── CreateStruct: dst(1) + type_name_idx(4) + field_count(1) + fields(2*count) ──
+    // 注意 dst 是 **1 字节**，type_name_idx 是 4 字节，field_count 是 1 字节
+    let mut ops = vec![4u8];
+    ops.extend_from_slice(&0u32.to_le_bytes()); // type_name_idx（常量池 0，空池→回退名）
+    ops.push(2u8); // field_count
+    ops.extend_from_slice(&21u16.to_le_bytes());
+    ops.extend_from_slice(&22u16.to_le_bytes());
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::CREATE_STRUCT, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::CreateStruct { dst, fields, .. } => {
+            assert_eq!(dst.0, 4, "CreateStruct.dst 位置错误");
+            assert_eq!(fields.len(), 2, "CreateStruct.fields 数量错误");
+            assert_eq!(fields[0].0, 21, "CreateStruct.fields[0] 位置错误");
+            assert_eq!(fields[1].0, 22, "CreateStruct.fields[1] 位置错误");
+        }
+        other => panic!("CreateStruct 解码为 {other:?}"),
+    }
+
+    // ── MakeClosure: dst(1) + func_id(4) + env_count(1) + env(2*count) ──
+    let mut ops = vec![5u8];
+    ops.extend_from_slice(&9u32.to_le_bytes()); // func_id
+    ops.push(1u8); // env_count
+    ops.extend_from_slice(&31u16.to_le_bytes());
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::MAKE_CLOSURE, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::MakeClosure { dst, func, env } => {
+            assert_eq!(dst.0, 5, "MakeClosure.dst 位置错误");
+            assert_eq!(*func, 9, "MakeClosure.func 位置错误");
+            assert_eq!(env.len(), 1, "MakeClosure.env 数量错误");
+            assert_eq!(env[0].0, 31, "MakeClosure.env[0] 位置错误");
+        }
+        other => panic!("MakeClosure 解码为 {other:?}"),
+    }
+
+    // ── SetField: src(1) + field_idx(2 LE) + value(1) ──
+    // 与 GET_FIELD 同构（dst(1) + src(1) + field(2 LE)）；**不是**全 u16。
+    // 编码器 translate_store_field 的写法即此（低字节在前）。
+    let ops = vec![41u8, 7u8, 0u8, 42u8]; // src=41, field_idx=7 (LE), value=42
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::SET_FIELD, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::SetField {
+            src,
+            field_idx,
+            value,
+        } => {
+            assert_eq!(src.0, 41, "SetField.src 位置错误");
+            assert_eq!(*field_idx, 7, "SetField.field_idx 位置错误");
+            assert_eq!(value.0, 42, "SetField.value 位置错误");
+        }
+        other => panic!("SetField 解码为 {other:?}"),
+    }
+}
+
+/// `CallStatic` 往返（布局 `[0,1,5,6]` 的唯一成员，故单独测）。
+///
+/// 格式：dst(1) + func_id(4 LE) + base_arg_reg(1) + arg_count(1) + args(2*count)
+/// 注意 `dst` 是 **1 字节**（与容器类的 2 字节不同）——这正是 D4 记录的陷阱。
+#[test]
+fn test_call_static_layout_roundtrip() {
+    use crate::backends::common::opcode;
+    use crate::middle::bytecode::BytecodeInstr;
+
+    // Arrange: dst=2, func_id=7, base=0, 2 个参数（reg 3、reg 4）
+    let mut ops = vec![2u8];
+    ops.extend_from_slice(&7u32.to_le_bytes());
+    ops.push(0u8);
+    ops.push(2u8);
+    ops.extend_from_slice(&3u16.to_le_bytes());
+    ops.extend_from_slice(&4u16.to_le_bytes());
+
+    // Act
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::CALL_STATIC, ops)]);
+
+    // Assert
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::CallStatic { dst, func, args } => {
+            assert_eq!(dst.map(|r| r.0), Some(2), "CallStatic.dst 位置错误");
+            assert_eq!(*func, 7, "CallStatic.func 位置错误");
+            assert_eq!(args.len(), 2, "CallStatic.args 数量错误");
+            assert_eq!(args[0].0, 3, "CallStatic.args[0] 位置错误");
+            assert_eq!(args[1].0, 4, "CallStatic.args[1] 位置错误");
+        }
+        other => panic!("CallStatic 解码为 {other:?}"),
+    }
+}
+
+/// `CallNative` 往返（布局 `[0,1,5,6,9,13,17,18]` 的唯一成员）。
+///
+/// 两种格式：无 FFI 元数据（短）与有 FFI 元数据（长，多 12 字节的
+/// mechanism/lib/symbol 常量索引）。**长格式的字段位置最易错**，
+/// 故此处测长格式。
+#[test]
+fn test_call_native_ffi_layout_roundtrip() {
+    use crate::backends::common::opcode;
+    use crate::middle::bytecode::BytecodeInstr;
+
+    // Arrange: dst=1, name_idx=3, mech=4, lib=5, sym=6, base=0, count=1, arg=reg 8
+    let mut ops = vec![1u8];
+    ops.extend_from_slice(&3u32.to_le_bytes()); // func_name_idx
+    ops.extend_from_slice(&4u32.to_le_bytes()); // mechanism
+    ops.extend_from_slice(&5u32.to_le_bytes()); // lib
+    ops.extend_from_slice(&6u32.to_le_bytes()); // symbol
+    ops.push(0u8); // base_arg_reg
+    ops.push(1u8); // arg_count
+    ops.extend_from_slice(&8u16.to_le_bytes()); // arg reg
+
+    // Act
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::CALL_NATIVE, ops)]);
+
+    // Assert
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::CallNative { dst, args, .. } => {
+            assert_eq!(dst.map(|r| r.0), Some(1), "CallNative.dst 位置错误");
+            assert_eq!(args.len(), 1, "CallNative.args 数量错误");
+            assert_eq!(args[0].0, 8, "CallNative.args[0] 位置错误");
+        }
+        other => panic!("CallNative 解码为 {other:?}"),
+    }
+}
+
 /// 编码器覆盖面哨兵：记录**无 translator 编码器**的 opcode 全集。
 ///
 /// 与解码覆盖面哨兵互补——那个查「定义 vs 解码」，本测试查「定义 vs 编码」。
