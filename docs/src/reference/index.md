@@ -215,6 +215,9 @@ yaoxiang --help
 ## 完整示例
 
 ```yaoxiang
+use std.convert
+use std.io
+
 // 计算斐波那契数列
 fib: (n: Int) -> Int = if n <= 1 {
     n
@@ -224,7 +227,7 @@ fib: (n: Int) -> Int = if n <= 1 {
 
 // 主函数
 main: () -> Void = {
-    print("Fibonacci(10) = " + fib(10).to_string())
+    io.println("Fibonacci(10) = " + convert.to_string(fib(10)))
 }
 ```
 
