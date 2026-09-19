@@ -11,13 +11,13 @@ Time module.
 use std.time
 ```
 
-> **Implementation gap fixed (#338 / #340, 2026-09-19)**.
+> **Implementation gaps fixed (#338 / #340, 2026-09-19)**.
 >
-> `DateTime` is now an **alias for the timestamp** (i.e. `Int`) — at runtime it has always been
-> `RuntimeValue::Int`; previously it was just a name with no backing, which prevented the return
-> value of `now()` from being passed into `format_time` and the accessors. The accessor export name
-> has also been changed from `DateTime::year` to **`datetime_year`** (`::` is a lexically reserved
-> token and cannot appear in field access positions).
+> `DateTime` is now an **alias for the timestamp** (i.e., `Int`) — at runtime it was always
+> `RuntimeValue::Int`; previously it was just a name with no substance, which prevented the return
+> value of `now()` from being passed into `format_time` and the accessors. The accessor export names
+> also changed from `DateTime::year` to **`datetime_year`** (`::` is a lexically reserved token and
+> cannot appear in field access position).
 >
 > Now the return values of `now()` / `parse_time()` can be used directly in arithmetic, formatting,
 > and all accessors.
@@ -45,7 +45,7 @@ use std.time
 
 <!-- stdlib:table:time end -->
 
-## Time Retrieval
+## Time Acquisition
 
 ### now
 
@@ -59,9 +59,9 @@ now: () -> DateTime
 
 Returns the current time.
 
-Returns: a `DateTime` value, which prints in the form `DateTime(1789471990)`. **It is not `Int`**,
-so it cannot directly participate in arithmetic or comparison, nor be passed as an `Int` argument to
-other functions (see [`format_time`](#format_time)).
+Returns: a `DateTime` value, printed in the form `DateTime(1789471990)`. **It is not `Int`**, so it
+cannot directly participate in arithmetic or comparison, nor can it be passed as an `Int` parameter
+to other functions (see [`format_time`](#format_time)).
 
 ```yaoxiang
 use std.time
@@ -72,7 +72,7 @@ main: () -> Void = {
 }
 ```
 
-> When you need to participate in calculations, use [`timestamp`](#timestamp) or
+> When you need to participate in computations, use [`timestamp`](#timestamp) or
 > [`timestamp_ms`](#timestamp_ms), which return `Int` directly.
 
 ### timestamp
@@ -114,7 +114,7 @@ use std.assert
 use std.time
 
 main: () -> Void = {
-    // Millisecond precision is not lower than second precision
+    // millisecond precision is at least as fine as second precision
     assert(time.timestamp_ms() >= time.timestamp())
 }
 ```
@@ -129,13 +129,12 @@ sleep: (seconds: Float) -> Void
 
 <!-- stdlib:sig:time.sleep end -->
 
-Sleeps for the specified **number of seconds** (decimals allowed). The same-named
-[`std.concurrent.sleep`](./concurrent#sleep) uses **milliseconds** as its unit, so be careful to
-distinguish between them.
+Sleeps for the specified number of **seconds** (may have a fractional part). The similarly-named
+[`std.concurrent.sleep`](./concurrent#sleep) uses **milliseconds** — note the distinction.
 
-- `seconds` — Number of seconds to sleep; accepts `Int` (interpreted as seconds) or `Float`
+- `seconds` — number of seconds to sleep; accepts `Int` (interpreted as seconds) or `Float`
 
-Errors: Throws `E6007` when the argument is neither `Int` nor `Float`.
+Error: throws `E6007` if the argument is neither `Int` nor `Float`.
 
 ```yaoxiang
 use std.time
@@ -159,15 +158,15 @@ format_time: (dt: Int, fmt: String) -> String
 
 <!-- stdlib:sig:time.format_time end -->
 
-Formats a timestamp according to `fmt`, supporting `strftime`-style placeholders.
+Formats a timestamp according to `fmt`. Supports `strftime`-style placeholders.
 
 - `dt` — Unix timestamp (**seconds**), must be `Int`
-- `fmt` — Format string
+- `fmt` — format string
 
 > **Type note**: `dt` must be `Int`. Passing the return value of [`now`](#now) or
-> [`parse_time`](#parse_time) will report `E1002` (`expected type 'int64', found type 'DateTime'`),
-> because they are both `DateTime`. There is currently no `DateTime` → `Int` conversion, so **in
-> practice you can only pass `Int` literals or the result of [`timestamp`](#timestamp)**.
+> [`parse_time`](#parse_time) will produce `E1002` (`expected type 'int64', found type 'DateTime'`),
+> because they both return `DateTime`. Currently there is no way to convert `DateTime` to `Int`, so
+> **in practice you can only pass an `Int` literal or the result of [`timestamp`](#timestamp)**.
 
 Supported placeholders:
 
@@ -183,9 +182,9 @@ Supported placeholders:
 | `%F`        | Equivalent to `%Y-%m-%d`       | `2024-01-15` |
 | `%T`        | Equivalent to `%H:%M:%S`       | `10:30:00`   |
 
-Decomposed according to **local time**. Unrecognized placeholders are preserved as-is.
+Broken down in **local time**. Unrecognized placeholders are preserved verbatim.
 
-Errors: Throws `E6007` when `dt` is not `Int`, `fmt` is not `String`, or arguments are insufficient.
+Error: throws `E6007` if `dt` is not `Int`, `fmt` is not `String`, or arguments are missing.
 
 ```yaoxiang
 use std.assert
@@ -197,7 +196,7 @@ main: () -> Void = {
     assert(time.format_time(0, "%Y") == "1970")
     assert(time.format_time(0, "%m") == "01")
 
-    // The current timestamp (Int) can also be used directly
+    // the current timestamp (Int) can also be used directly
     s = time.format_time(time.timestamp(), "%Y")
     assert(string.len(s) == 4)
 }
@@ -215,77 +214,67 @@ parse_time: (fmt: String, s: String) -> DateTime
 
 Parses a time string into a time.
 
-- `fmt` — **Currently ignored** (see below)
-- `s` — String to be parsed
+- `fmt` — **currently ignored** (see below)
+- `s` — the string to parse
 
 Returns: a `DateTime` value.
 
 > **Two implementation limitations (#340)**:
 >
-> 1. The `fmt` parameter **does not participate in parsing**. The function only recognizes the ISO
->    8601 form `YYYY-MM-DDTHH:MM:SS` or `YYYY-MM-DD HH:MM:SS` (date and time separated by `T` or a
->    space). Passing any other form will fail, regardless of what `fmt` is.
-> 2. The returned `DateTime` **cannot currently be used further** — it is neither `Int` (so it
+> 1. The `fmt` parameter is **not used during parsing**. The function only recognizes ISO 8601 forms
+>    `YYYY-MM-DDTHH:MM:SS` or `YYYY-MM-DD HH:MM:SS` (date and time separated by `T` or a space). Any
+>    other form will fail regardless of what `fmt` says.
+> 2. The returned `DateTime` **currently cannot be used further** — it is neither `Int` (so it
 >    cannot be passed to `format_time` / `DateTime::*`), nor does it have any callable accessors
 >    (see the next section).
 
-Errors: Throws `E6007` when the format does not match.
+Error: throws `E6007` if the format does not match.
 
 ```yaoxiang
 use std.time
 
 main: () -> Void = {
-    // The parse itself can succeed
+    // the parsing itself can succeed
     ts = time.parse_time("", "2024-01-15 10:30:00")
     println(ts)
 }
 ```
 
-## DateTime Field Access (Unavailable)
+## DateTime Field Access
 
-> Tracking: #338
+`std.time` exports 8 date-component accessors (fixed in `#338`, with flat export names):
 
-`std.time` exports 8 accessors named with the `DateTime::` prefix:
+| Export name          | Signature             | Description            |
+| -------------------- | --------------------- | ---------------------- |
+| `datetime_year`      | `(dt: Int) -> Int`    | Four-digit year        |
+| `datetime_month`     | `(dt: Int) -> Int`    | Month (1–12)           |
+| `datetime_day`       | `(dt: Int) -> Int`    | Day (1–31)             |
+| `datetime_hour`      | `(dt: Int) -> Int`    | Hour (0–23)            |
+| `datetime_minute`    | `(dt: Int) -> Int`    | Minute (0–59)          |
+| `datetime_second`    | `(dt: Int) -> Int`    | Second (0–59)          |
+| `datetime_weekday`   | `(dt: Int) -> Int`    | Weekday (0 = Sunday)   |
+| `datetime_to_string` | `(dt: Int) -> String` | ISO 8601 format string |
 
-| Export name           | Signature             | Description          |
-| --------------------- | --------------------- | -------------------- |
-| `DateTime::year`      | `(dt: Int) -> Int`    | Four-digit year      |
-| `DateTime::month`     | `(dt: Int) -> Int`    | Month (1–12)         |
-| `DateTime::day`       | `(dt: Int) -> Int`    | Day (1–31)           |
-| `DateTime::hour`      | `(dt: Int) -> Int`    | Hour (0–23)          |
-| `DateTime::minute`    | `(dt: Int) -> Int`    | Minute (0–59)        |
-| `DateTime::second`    | `(dt: Int) -> Int`    | Second (0–59)        |
-| `DateTime::weekday`   | `(dt: Int) -> Int`    | Weekday (0 = Sunday) |
-| `DateTime::to_string` | `(dt: Int) -> String` | ISO 8601 form string |
-
-**But these names cannot currently be called from YaoXiang source code (#338).** The export names
-contain `::`, and `::` is a reserved token in the syntax that cannot appear in field access
-positions. The following attempts have all been confirmed to fail:
-
-| Attempted syntax           | Result                                              |
-| -------------------------- | --------------------------------------------------- |
-| `time.DateTime::year(0)`   | `E0010 expected RParen, found ColonColon`           |
-| `time.DateTime.year(0)`    | `E1042 Field 'DateTime' not found in struct 'time'` |
-| `time.year(0)`             | `E1042 Field 'year' not found in struct 'time'`     |
-| `time.DateTime_year(0)`    | `E1042 Field 'DateTime_year' not found`             |
-| `time."DateTime::year"(0)` | `E0011 Unexpected token: StringLiteral`             |
-
-**Workaround**: When you need date components, use [`format_time`](#format_time) to format on demand
-— it has already performed the timestamp → year/month/day decomposition internally:
+`DateTime` is an **alias for the timestamp** (i.e., `Int`) — the return values of `now()` /
+`parse_time()` can be passed directly to these accessors, and can also be used directly in
+[`format_time`](#format_time):
 
 ```yaoxiang
 use std.assert
 use std.time
 
 main: () -> Void = {
-    // Use format_time to extract each component
-    assert(time.format_time(0, "%Y") == "1970")
-    assert(time.format_time(0, "%m") == "01")
-    assert(time.format_time(0, "%d") == "01")
+    ts = time.parse_time("%Y-%m-%d", "2024-01-15")
+    assert(time.datetime_year(ts) == 2024)
+    assert(time.datetime_month(ts) == 1)
+    assert(time.datetime_day(ts) == 15)
+
+    // equivalent to format_time
+    assert(time.format_time(ts, "%Y-%m-%d") == "2024-01-15")
 }
 ```
 
-## See Also
+## Related
 
-- [`std.concurrent`](./concurrent) — Millisecond-level sleep
+- [`std.concurrent`](./concurrent) — millisecond-level sleep
 - [Error code reference](../error-code/) — `E6007` generic runtime error
