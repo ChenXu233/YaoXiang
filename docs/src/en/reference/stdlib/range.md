@@ -18,13 +18,13 @@ use std.range
 | `a..b`    | From `a` to `b`, step `1` |
 | `a..b..s` | From `a` to `b`, step `s` |
 
-Ranges **exclude the end value** (half-open: closed on the left, open on the right). The step can be
-negative, indicating a descending range.
+A range is **exclusive of the end value** (half-open, left-closed right-open). The step can be
+negative to indicate a decreasing range.
 
 ## Iterator protocol
 
-[`iter`](#iter) returns a `Result` — when the step is `0` it takes the error path (`E6009`), so you
-should `unwrap` or handle it explicitly:
+[`iter`](#iter) returns a `Result`—when the step is `0` it is the error path (`E6009`), so you must
+`unwrap` or handle it explicitly:
 
 ```yaoxiang
 use std.assert
@@ -38,9 +38,9 @@ main: () -> Void = {
 }
 ```
 
-> **Move semantics**: the signatures of `has_next` and `next` do not take `&`, which **moves** the
-> iterator. Therefore, you must create a new iterator every time you consume it, or simply use
-> `for ... in` to traverse. This is consistent with the iterator in [`std.list`](./list).
+> **Move semantics**: The signatures of `has_next` and `next` do not take `&`, so they **move** the
+> iterator. Therefore, you must create a new iterator on every access, or just iterate with
+> `for ... in`. This matches the iterator in [`std.list`](./list).
 
 ```yaoxiang
 use std.assert
@@ -48,7 +48,7 @@ use std.range
 use std.result
 
 main: () -> Void = {
-    // Create a new iterator each time
+    // create a new iterator each time
     a = result.unwrap(range.iter(1..3))
     assert(range.has_next(a))
 
@@ -57,7 +57,7 @@ main: () -> Void = {
 }
 ```
 
-For everyday iteration, just use `for ... in`:
+For everyday iteration, just use `for ... in` directly:
 
 ```yaoxiang
 use std.assert
@@ -108,8 +108,7 @@ Creates an iterator from a range.
 
 - `r` — the range, e.g. `1..6` or `3..0..-1`
 
-Returns: `Result.ok(iterator)` on success; `Result.err` when the step is `0`, with `code` set to
-`E6009`.
+Returns: `Result.ok(iterator)` on success; `Result.err` with `code` `E6009` when the step is `0`.
 
 ```yaoxiang
 use std.assert
@@ -132,9 +131,9 @@ has_next: (it: Iterator(Any)) -> Bool
 
 <!-- stdlib:sig:range.has_next end -->
 
-Whether there are unconsumed elements remaining.
+Whether there are still unconsumed elements.
 
-> This **moves** the iterator.
+> **Moves** the iterator.
 
 ```yaoxiang
 use std.assert
@@ -157,11 +156,11 @@ next: (it: &Iterator(Any)) -> Any
 
 <!-- stdlib:sig:range.next end -->
 
-Takes the current element and advances the internal cursor by one.
+Takes the current element and advances the internal cursor by one position.
 
-Returns: the current element; returns `Void` when the iteration ends.
+Returns: the current element; `Void` when iteration ends.
 
-> This **moves** the iterator.
+> **Moves** the iterator.
 
 ```yaoxiang
 use std.assert
@@ -174,7 +173,7 @@ main: () -> Void = {
 }
 ```
 
-Descending ranges are also supported:
+Decreasing ranges are supported as well:
 
 ```yaoxiang
 use std.assert
@@ -197,13 +196,13 @@ contains: (r: Range(Int), x: Int) -> Result(Bool, Error)
 
 <!-- stdlib:sig:range.contains end -->
 
-Determines whether `x` falls within the range.
+Checks whether `x` falls within the range.
 
 - `r` — the range
 - `x` — the value to test
 
-Returns: `Result.ok(Bool)`. The end value is an **open bound** (excluded); when a step is provided,
-only values aligned with the step are matched.
+Returns: `Result.ok(Bool)`. The end value is **excluded** (open); when a step is given, only
+elements aligned with the step are matched.
 
 ```yaoxiang
 use std.assert
@@ -212,10 +211,10 @@ use std.result
 
 main: () -> Void = {
     assert(result.unwrap(range.contains(1..10, 5)))
-    assert(!result.unwrap(range.contains(1..10, 10)))     // End value excluded
+    assert(!result.unwrap(range.contains(1..10, 10)))     // end value excluded
 
-    assert(result.unwrap(range.contains(0..10..2, 4)))    // Aligned with step
-    assert(!result.unwrap(range.contains(0..10..2, 3)))   // Not aligned
+    assert(result.unwrap(range.contains(0..10..2, 4)))    // aligned with step
+    assert(!result.unwrap(range.contains(0..10..2, 3)))   // not aligned
 }
 ```
 
@@ -229,8 +228,7 @@ abort_invalid_step: (r: Range(Int)) -> Any
 
 <!-- stdlib:sig:range.abort_invalid_step end -->
 
-The abort hook for an invalid step, invoked by `for ... in` when consuming a range whose step is
-`0`.
+The abort hook for an invalid step, invoked when `for ... in` consumes a range whose step is `0`.
 
 **Always** raises `E6007` with the message `Range step must be non-zero (for/in consumption)`.
 Normal code does not need to call this directly.
@@ -239,15 +237,15 @@ Normal code does not need to call this directly.
 use std.range
 
 main: () -> Void = {
-    // Using iter directly yields Err; you do not need to go through this hook
+    // using iter directly gives you an Err, so you do not need this hook
     r = range.iter(1..3)
 }
 ```
 
 ## Adapters
 
-`map` and `filter` return **lazy** adapters — they do not compute immediately, and only produce a
-result when consumed by [`collect`](#collect) / [`reduce`](#reduce) / [`for_each`](#for_each) /
+`map` and `filter` return **lazy** adapters—they do not compute immediately, and only produce
+results once consumed by [`collect`](#collect) / [`reduce`](#reduce) / [`for_each`](#for_each) /
 `for ... in`.
 
 ### map
@@ -260,7 +258,7 @@ map: (it: Iterator(Any), f: (Any) -> Any) -> Iterator(Any)
 
 <!-- stdlib:sig:range.map end -->
 
-Maps `f` over each element and returns a new lazy iterator.
+Maps `f` over every element and returns a new lazy iterator.
 
 ```yaoxiang
 use std.assert
@@ -270,7 +268,7 @@ use std.result
 
 main: () -> Void = {
     doubled = range.collect(range.map(result.unwrap(range.iter(1..4)), x => x * 2))
-    assert(doubled.length == 3)
+    assert(list.len(doubled) == 3)
     assert(doubled[0] == 2)
 }
 ```
@@ -285,7 +283,7 @@ filter: (it: Iterator(Any), p: (Any) -> Bool) -> Iterator(Any)
 
 <!-- stdlib:sig:range.filter end -->
 
-Keeps elements for which `p` is true, and returns a new lazy iterator.
+Keeps the elements for which `p` is true, and returns a new lazy iterator.
 
 ```yaoxiang
 use std.assert
@@ -295,7 +293,7 @@ use std.result
 
 main: () -> Void = {
     big = range.collect(range.filter(result.unwrap(range.iter(1..6)), x => x > 3))
-    assert(big.length == 2)
+    assert(list.len(big) == 2)
     assert(big[0] == 4)
 }
 ```
@@ -311,7 +309,7 @@ use std.result
 main: () -> Void = {
     r = 1..6
     chained = range.collect(range.map(range.filter(result.unwrap(range.iter(r)), x => x % 2 == 0), x => x * 10))
-    // Value semantics: `chained` is consumed by indexed access, binding one local at a time
+    // value semantics: `chained` is consumed by indexed reads, so bind each value to a local
     first = chained[0]
     second = chained[1]
     assert(first == 20)
@@ -359,8 +357,8 @@ Consumes the iterator and folds it.
 - `init` — the initial accumulator value
 - `f` — the reduction function `(accumulator, element) -> new accumulator`
 
-> Note that the parameter order differs from [`std.list.reduce`](./list#reduce): this module uses
-> `(iterator, init, function)`, while `std.list` uses `(list, function, init)`.
+> Note that the argument order differs from [`std.list.reduce`](./list#reduce): in this module it is
+> `(iterator, init, function)`, while `std.list` is `(list, function, init)`.
 
 ```yaoxiang
 use std.assert
@@ -383,7 +381,7 @@ for_each: (it: Iterator(Any), f: (Any) -> Void) -> Void
 
 <!-- stdlib:sig:range.for_each end -->
 
-Executes `f` for each element; intended for side effects.
+Runs `f` on every element, intended for side effects.
 
 ```yaoxiang
 use std.assert
@@ -391,17 +389,17 @@ use std.range
 use std.result
 
 main: () -> Void = {
-    // Outputs 1, 2, 3
+    // prints 1, 2, 3
     range.for_each(result.unwrap(range.iter(1..4)), x => println(x))
     assert(true)
 }
 ```
 
-> Closures currently **cannot capture and modify** an outer `mut` variable, so accumulating with
-> `for_each` will not work (it raises `E1001`) — please use [`reduce`](#reduce) for accumulation.
+> Closures currently **cannot capture and mutate** an outer `mut` variable, so accumulating with
+> `for_each` is not possible (it raises `E1001`)—use [`reduce`](#reduce) for accumulation.
 
 ## Related
 
 - [`std.list`](./list) — lists and their iterators
-- [`std.result`](./result) — unwrap the return values of `iter` / `contains`
+- [`std.result`](./result) — unwrapping the return value of `iter` / `contains`
 - [Error code reference](../error-code/) — `E6009` invalid step
