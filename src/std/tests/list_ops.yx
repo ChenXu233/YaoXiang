@@ -5,11 +5,13 @@
 //       + 边界路径（空列表即空、slice 长度、pop 缩短）
 // 状态: ✅
 //
-// 语义契约（D9-A 值语义）：所有函数**按值接收**源列表，调用后源值已被移动；
-// `len`/`get`/`first`/`last`/`contains`/`find_index`/`is_empty`/`reverse`/`slice`
-// 不修改源但同样消费它。需要重复使用同一列表时，重新构造（`mk()`）或先 clone。
-// 这与 native 版「只读参数用 `&List` 自动借用」的旧契约不同——旧契约的问题是
-// `pop` 声明 `&List` 却原地改写（RFC-009 §2.5 空洞，见 D9）。
+// 语义契约（RFC-009 §2.8 自动借用 + D9-A 值语义）：
+// - 只读函数（`len`/`get`/`first`/`last`/`contains`/`find_index`/`is_empty`/
+//   `reverse`/`slice`/`concat`/`map`/`filter`/`reduce`）声明 `&Vec(A)`，实参
+//   后续仍被使用时编译器自动创建只读令牌，源列表可反复使用。
+// - 消耗函数（`push`/`append`/`prepend`/`set`/`pop`/`remove_at`）按值接收，
+//   源列表被移动。`pop`/`remove_at` 返回值语义（缩短后的新列表）而非 native 版
+//   「声明 `&List` 却原地改写」（RFC-009 §2.5 空洞，见 D9）。
 
 use std.assert
 use std.list
@@ -51,6 +53,8 @@ main: () -> Void = {
     assert.assert(list.is_empty(list.empty(Int)), "empty is empty")
     assert.assert(list.len(list.slice(mk(), 0, 2)) == 2, "slice len == 2")
     assert.assert(list.len(list.pop(mk())) == 3, "pop drops last")
+    // 空列表 pop 必须原样返回：`length = -1` 会被长度写入的范围校验拒绝（E6007）
+    assert.assert(list.is_empty(list.pop(list.empty(Int))), "pop empty stays empty")
 }
 
 main()

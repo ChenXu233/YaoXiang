@@ -46,30 +46,32 @@ main: () -> Void = {
 
 <!-- stdlib:table:list start -->
 
-| 函数         | 签名                                                                          |
-| ------------ | ----------------------------------------------------------------------------- |
-| `push`       | `(A: Type)(list: List(A), item: A) -> List(A)`                                |
-| `pop`        | `(A: Type)(list: &List(A)) -> Any`                                            |
-| `append`     | `(A: Type)(list: List(A), item: A) -> List(A)`                                |
-| `prepend`    | `(A: Type)(list: List(A), item: A) -> List(A)`                                |
-| `remove_at`  | `(A: Type)(list: &List(A), index: Int) -> Any`                                |
-| `reverse`    | `(A: Type)(list: &List(A)) -> List(A)`                                        |
-| `concat`     | `(A: Type)(a: &List(A), b: &List(A)) -> List(A)`                              |
-| `map`        | `(T: Type)(list: &List(T), fn: (item: T) -> T) -> List(T)`                    |
-| `filter`     | `(T: Type)(list: &List(T), fn: (item: T) -> Bool) -> List(T)`                 |
-| `reduce`     | `(T: Type)(list: &List(T), fn: (acc: Any, item: T) -> Any, init: Any) -> Any` |
-| `len`        | `(A: Type)(list: &List(A)) -> Int`                                            |
-| `is_empty`   | `(A: Type)(list: &List(A)) -> Bool`                                           |
-| `get`        | `(A: Type)(list: &List(A), index: Int) -> Any`                                |
-| `set`        | `(A: Type)(list: List(A), index: Int, value: A) -> List(A)`                   |
-| `first`      | `(A: Type)(list: &List(A)) -> Any`                                            |
-| `last`       | `(A: Type)(list: &List(A)) -> Any`                                            |
-| `slice`      | `(A: Type)(list: &List(A), start: Int, end: Int) -> List(A)`                  |
-| `contains`   | `(A: Type)(list: &List(A), item: Any) -> Bool`                                |
-| `find_index` | `(A: Type)(list: &List(A), item: Any) -> Int`                                 |
-| `iter`       | `(A: Type)(list: &List(A)) -> Tuple`                                          |
-| `next`       | `(iterator: Tuple) -> Any`                                                    |
-| `has_next`   | `(iterator: Tuple) -> Bool`                                                   |
+| 函数         | 签名                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| `push`       | `(A: Type) -> (list: Vec(A), item: A) -> Vec(A)`                                           |
+| `pop`        | `(A: Type) -> (list: Vec(A)) -> Vec(A)`                                                    |
+| `append`     | `(A: Type) -> (list: Vec(A), item: A) -> Vec(A)`                                           |
+| `prepend`    | `(A: Type) -> (list: Vec(A), item: A) -> Vec(A)`                                           |
+| `remove_at`  | `(A: Type) -> (list: Vec(A), index: Int) -> Vec(A)`                                        |
+| `reverse`    | `(A: Type) -> (list: &Vec(A)) -> Vec(A)`                                                   |
+| `concat`     | `(A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A)`                                          |
+| `map`        | `(T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R)`                       |
+| `filter`     | `(T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T)`                          |
+| `reduce`     | `(T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc` |
+| `len`        | `(A: Type) -> (list: &Vec(A)) -> Int`                                                      |
+| `is_empty`   | `(A: Type) -> (list: &Vec(A)) -> Bool`                                                     |
+| `get`        | `(A: Type) -> (list: &Vec(A), index: Int) -> A`                                            |
+| `set`        | `(A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A)`                              |
+| `first`      | `(A: Type) -> (list: &Vec(A)) -> A`                                                        |
+| `last`       | `(A: Type) -> (list: &Vec(A)) -> A`                                                        |
+| `slice`      | `(A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A)`                             |
+| `contains`   | `(A: Type) -> (list: &Vec(A), item: A) -> Bool`                                            |
+| `find_index` | `(A: Type) -> (list: &Vec(A), item: A) -> Int`                                             |
+| `iter`       | `(T: Type) -> (list: Vec(T)) -> Iter(T)`                                                   |
+| `next`       | `(T: Type) -> (it: &mut Iter(T)) -> T`                                                     |
+| `has_next`   | `(T: Type) -> (it: &Iter(T)) -> Bool`                                                      |
+| `empty`      | `(T: Type) -> Vec(T)`                                                                      |
+| `of`         | `(T: Type) -> (data: Vec(T)) -> Vec(T)`                                                    |
 
 <!-- stdlib:table:list end -->## 函数
 
@@ -78,7 +80,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.push start -->
 
 ```yaoxiang
-push: (A: Type)(list: List(A), item: A) -> List(A)
+push: (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.push end -->
@@ -101,7 +103,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.append start -->
 
 ```yaoxiang
-append: (A: Type)(list: List(A), item: A) -> List(A)
+append: (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.append end -->
@@ -123,7 +125,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.prepend start -->
 
 ```yaoxiang
-prepend: (A: Type)(list: List(A), item: A) -> List(A)
+prepend: (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.prepend end -->
@@ -145,28 +147,34 @@ main: () -> Void = {
 <!-- stdlib:sig:list.pop start -->
 
 ```yaoxiang
-pop: (A: Type)(list: &List(A)) -> Any
+pop: (A: Type) -> (list: Vec(A)) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.pop end -->
 
-移除并返回末元素。**原地修改** `list`——这是签名带 `&` 却会改动源值的例外。
+移除末元素并返回**缩短后的列表**（值语义）。源列表被消费，不再是 native 版
+「签名带 `&` 却原地改动源值」的例外形态。
 
-返回：被移除的元素；列表为空时返回 `Void`，列表保持为空。
+返回：去掉末元素的新列表；列表为空时原样返回。要读取被移除的元素，在调用前
+先用 `last` 取值。
 
 ```yaoxiang
 use std.assert
 use std.list
 
 main: () -> Void = {
-    mut l = [1, 2, 3]
-    gone = list.pop(l)
-    assert(list.len(l) == 2)         // 原地缩短
-    assert(gone == 3)
+    l = [1, 2, 3]
+    rest = list.pop(l)               // l 被消费，rest 是缩短后的新列表
+    assert(list.len(rest) == 2)
+    assert(list.last(rest) == 2)     // 末元素 3 已被移除
 
-    mut empty = []
-    v = list.pop(empty)
-    assert(list.is_empty(empty))
+    // 要读取被移除的元素，先用 last 取值再 pop
+    l2 = [1, 2, 3]
+    removed = list.last(l2)
+    assert(removed == 3)
+
+    empty = list.empty(Int)
+    assert(list.is_empty(list.pop(empty)))
 }
 ```
 
@@ -175,26 +183,27 @@ main: () -> Void = {
 <!-- stdlib:sig:list.remove_at start -->
 
 ```yaoxiang
-remove_at: (A: Type)(list: &List(A), index: Int) -> Any
+remove_at: (A: Type) -> (list: Vec(A), index: Int) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.remove_at end -->
 
-移除并返回下标 `index` 处的元素。**原地修改** `list`。
+移除下标 `index` 处的元素并返回**缩短后的新列表**（值语义）。源列表被消费。
 
-- `index` —— 字符/元素下标；缺省 `0`
+- `index` —— 元素下标
 
-返回：被移除的元素。错误：下标为负或 ≥ 长度时抛出 `E6003`（索引越界），列表不变。
+返回：去掉该元素的新列表。错误：下标为负或 ≥ 长度时抛出 `E6003`（索引越界）。
 
 ```yaoxiang
 use std.assert
 use std.list
 
 main: () -> Void = {
-    mut l = [10, 20, 30]
-    x = list.remove_at(l, 1)
-    assert(x == 20)
-    assert(list.len(l) == 2)
+    l = [10, 20, 30]
+    got = list.remove_at(l, 1)
+    assert(list.len(got) == 2)
+    assert(list.get(got, 0) == 10)
+    assert(list.get(got, 1) == 30)
 }
 ```
 
@@ -203,7 +212,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.set start -->
 
 ```yaoxiang
-set: (A: Type)(list: List(A), index: Int, value: A) -> List(A)
+set: (A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.set end -->
@@ -230,7 +239,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.get start -->
 
 ```yaoxiang
-get: (A: Type)(list: &List(A), index: Int) -> Any
+get: (A: Type) -> (list: &Vec(A), index: Int) -> A
 ```
 
 <!-- stdlib:sig:list.get end -->
@@ -256,7 +265,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.first start -->
 
 ```yaoxiang
-first: (A: Type)(list: &List(A)) -> Any
+first: (A: Type) -> (list: &Vec(A)) -> A
 ```
 
 <!-- stdlib:sig:list.first end -->
@@ -277,7 +286,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.last start -->
 
 ```yaoxiang
-last: (A: Type)(list: &List(A)) -> Any
+last: (A: Type) -> (list: &Vec(A)) -> A
 ```
 
 <!-- stdlib:sig:list.last end -->
@@ -298,7 +307,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.slice start -->
 
 ```yaoxiang
-slice: (A: Type)(list: &List(A), start: Int, end: Int) -> List(A)
+slice: (A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.slice end -->
@@ -326,7 +335,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.reverse start -->
 
 ```yaoxiang
-reverse: (A: Type)(list: &List(A)) -> List(A)
+reverse: (A: Type) -> (list: &Vec(A)) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.reverse end -->
@@ -348,7 +357,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.concat start -->
 
 ```yaoxiang
-concat: (A: Type)(a: &List(A), b: &List(A)) -> List(A)
+concat: (A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A)
 ```
 
 <!-- stdlib:sig:list.concat end -->
@@ -372,7 +381,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.len start -->
 
 ```yaoxiang
-len: (A: Type)(list: &List(A)) -> Int
+len: (A: Type) -> (list: &Vec(A)) -> Int
 ```
 
 <!-- stdlib:sig:list.len end -->
@@ -397,7 +406,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.is_empty start -->
 
 ```yaoxiang
-is_empty: (A: Type)(list: &List(A)) -> Bool
+is_empty: (A: Type) -> (list: &Vec(A)) -> Bool
 ```
 
 <!-- stdlib:sig:list.is_empty end -->
@@ -421,7 +430,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.contains start -->
 
 ```yaoxiang
-contains: (A: Type)(list: &List(A), item: Any) -> Bool
+contains: (A: Type) -> (list: &Vec(A), item: A) -> Bool
 ```
 
 <!-- stdlib:sig:list.contains end -->
@@ -446,7 +455,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.find_index start -->
 
 ```yaoxiang
-find_index: (A: Type)(list: &List(A), item: Any) -> Int
+find_index: (A: Type) -> (list: &Vec(A), item: A) -> Int
 ```
 
 <!-- stdlib:sig:list.find_index end -->
@@ -470,7 +479,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.map start -->
 
 ```yaoxiang
-map: (T: Type)(list: &List(T), fn: (item: T) -> T) -> List(T)
+map: (T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R)
 ```
 
 <!-- stdlib:sig:list.map end -->
@@ -495,7 +504,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.filter start -->
 
 ```yaoxiang
-filter: (T: Type)(list: &List(T), fn: (item: T) -> Bool) -> List(T)
+filter: (T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T)
 ```
 
 <!-- stdlib:sig:list.filter end -->
@@ -519,7 +528,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.reduce start -->
 
 ```yaoxiang
-reduce: (T: Type)(list: &List(T), fn: (acc: Any, item: T) -> Any, init: Any) -> Any
+reduce: (T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc
 ```
 
 <!-- stdlib:sig:list.reduce end -->
@@ -548,7 +557,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.iter start -->
 
 ```yaoxiang
-iter: (A: Type)(list: &List(A)) -> Tuple
+iter: (T: Type) -> (list: Vec(T)) -> Iter(T)
 ```
 
 <!-- stdlib:sig:list.iter end -->
@@ -573,7 +582,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.next start -->
 
 ```yaoxiang
-next: (iterator: Tuple) -> Any
+next: (T: Type) -> (it: &mut Iter(T)) -> T
 ```
 
 <!-- stdlib:sig:list.next end -->
@@ -600,7 +609,7 @@ main: () -> Void = {
 <!-- stdlib:sig:list.has_next start -->
 
 ```yaoxiang
-has_next: (iterator: Tuple) -> Bool
+has_next: (T: Type) -> (it: &Iter(T)) -> Bool
 ```
 
 <!-- stdlib:sig:list.has_next end -->
