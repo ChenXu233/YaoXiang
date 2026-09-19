@@ -140,6 +140,13 @@ pub struct AstToIrGenerator {
     /// 结构体定义映射（类型名 -> 字段列表）
     /// 用于构造器调用时填充默认值
     struct_definitions: HashMap<String, Vec<crate::frontend::core::parser::ast::StructField>>,
+    /// 本模块声明的**全部**类型名（含泛型类型定义）。
+    ///
+    /// `struct_definitions` 只收非泛型结构体；泛型类型（`E: (T: Type) -> Type = ..`）
+    /// 走 TypeDecl 函数路径不落在这里。但名字解析需要知道「这是用户自己的类型」，
+    /// 否则 `use std.math` 后用户写 `PI: Type = ..; PI(7)` 会被解析成
+    /// `std.math.PI`（常量）——调用常量得到 void，静默错值（D10）。
+    declared_type_names: std::collections::HashSet<String>,
     /// 类型绑定映射（类型名 -> (方法名 -> BindingInfo)）
     /// 用于方法调用时的参数重排和函数转发（RFC-004）
     type_bindings: HashMap<String, HashMap<String, BindingInfo>>,
@@ -300,6 +307,8 @@ impl AstToIrGenerator {
             ffi_bindings: Vec::new(),
             next_lib_id: 0,
             struct_definitions: HashMap::new(),
+
+            declared_type_names: std::collections::HashSet::new(),
             type_bindings: HashMap::new(),
             nested_functions: Vec::new(),
             closure_counter: 0,
@@ -1216,6 +1225,7 @@ impl AstToIrGenerator {
                 definition,
                 is_pub: _,
             } => {
+                self.declared_type_names.insert(name.clone());
                 use crate::frontend::core::parser::ast::extract_generic_param_names;
                 use crate::frontend::core::types::mono::UniverseLevel;
 
@@ -4124,7 +4134,14 @@ impl AstToIrGenerator {
         func: &ast::Expr,
     ) -> Result<Operand, Diagnostic> {
         if let Expr::Var(name, _) = func {
-            let resolved_name = if let Some(qualified) = self.use_aliases.get(name) {
+            // 用户**本模块**定义的类型/结构体优先于 `use` 导入的 std 名字。
+            // 否则 `use std.math` 后用户写 `PI: Type = { .. }; PI(7)` 会被解析成
+            // `std.math.PI`（圆周率常量）——调用常量得到 void，静默错值（D10）。
+            // 要访问被遮蔽的 std 名，写限定名 `math.PI` 即可。
+            let locally_defined = self.declared_type_names.contains(name);
+            let resolved_name = if locally_defined {
+                name.clone()
+            } else if let Some(qualified) = self.use_aliases.get(name) {
                 qualified.clone()
             } else if self.registry.is_native_name(name) {
                 name.clone()
