@@ -77,8 +77,17 @@ struct Cli {
     #[arg(long, default_value = "benches/shootout")]
     bench_root: PathBuf,
 
-    /// yaoxiang 可执行文件路径（不依赖 PATH，避免用到旧版本）
-    #[arg(long, default_value = if cfg!(target_os = "windows") { "target/release/yaoxiang.exe" } else { "target/release/yaoxiang" })]
+    /// yaoxiang 可执行文件路径（不依赖 PATH，避免用到旧版本）。
+    ///
+    /// 默认指向 `yaoxiang-rs`——RFC-037 引入 `yx`（前门）/`yaoxiang-rs`（引擎）
+    /// 双二进制后，Cargo.toml 的 `[[bin]]` 名为 `yaoxiang-rs`，旧的
+    /// `yaoxiang.exe` 已不再产出（此前默认值未同步，导致基准套件报
+    /// 「不是内部或外部命令」）。
+    #[arg(long, default_value = if cfg!(target_os = "windows") {
+        "target/release/yaoxiang-rs.exe"
+    } else {
+        "target/release/yaoxiang-rs"
+    })]
     yaoxiang_bin: PathBuf,
 }
 
@@ -232,7 +241,15 @@ impl RunCtx {
                 }
 
                 let src_path = self.bench_root.join(&lang_def.src);
-                let out_path = out_dir.join(format!("{}_{}", bench_name, lang_name));
+                // Windows 上编译产物带 `.exe` 后缀（rustc/g++ 均如此），
+                // 而 runner 此前拼的是无后缀路径，导致运行阶段报
+                // 「不是内部或外部命令」。仅在**有编译步骤**时补后缀：
+                // 解释型语言（python）直接跑源码，其 %o 不参与执行。
+                let mut out_name = format!("{}_{}", bench_name, lang_name);
+                if cfg!(target_os = "windows") && lang_def.compile.is_some() {
+                    out_name.push_str(".exe");
+                }
+                let out_path = out_dir.join(out_name);
 
                 // 编译阶段
                 let compile_time = if let Some(compile) = &lang_def.compile {
