@@ -11,35 +11,35 @@ description: '时间戳、格式化与 DateTime 字段访问'
 use std.time
 ```
 
-> **本模块存在若干实现缺口（#338 /
-> #340）**，写作文档时已实测确认。可用面与不可用面在下文分别标注，避免照签名写出无法编译的示例。
+> **实现缺口已修复（#338 / #340，2026-09-19）**。
 >
-> 可正常使用：[`now`](#now) / [`timestamp`](#timestamp) / [`timestamp_ms`](#timestamp_ms) /
-> [`sleep`](#sleep) / [`format_time`](#format_time)（接受 `Int` 时间戳字面量）。
+> `DateTime` 现为**时间戳的别名**（即 `Int`）——运行时本就是
+> `RuntimeValue::Int`，此前只是一个没实体的名字，使 `now()` 的返回值传不进
+> `format_time` 与访问器。访问器导出名也从 `DateTime::year` 改为
+> **`datetime_year`**（`::` 是词法保留记号，不能出现在字段访问位置）。
 >
-> 目前不可用：[`parse_time`](#parse_time) 的返回值，以及全部
-> [`DateTime::*`](#datetime-字段访问不可用) 访问器。
+> 现在 `now()` / `parse_time()` 的返回值可直接用于算术、格式化与全部访问器。
 
 ## 函数一览
 
 <!-- stdlib:table:time start -->
 
-| 函数                  | 签名                                   |
-| --------------------- | -------------------------------------- |
-| `now`                 | `() -> DateTime`                       |
-| `timestamp`           | `() -> Int`                            |
-| `timestamp_ms`        | `() -> Int`                            |
-| `sleep`               | `(seconds: Float) -> Void`             |
-| `format_time`         | `(dt: Int, fmt: String) -> String`     |
-| `parse_time`          | `(fmt: String, s: String) -> DateTime` |
-| `DateTime::year`      | `(dt: Int) -> Int`                     |
-| `DateTime::month`     | `(dt: Int) -> Int`                     |
-| `DateTime::day`       | `(dt: Int) -> Int`                     |
-| `DateTime::hour`      | `(dt: Int) -> Int`                     |
-| `DateTime::minute`    | `(dt: Int) -> Int`                     |
-| `DateTime::second`    | `(dt: Int) -> Int`                     |
-| `DateTime::weekday`   | `(dt: Int) -> Int`                     |
-| `DateTime::to_string` | `(dt: Int) -> String`                  |
+| 函数 | 签名 |
+| ---- | ---- |
+| `now` | `() -> DateTime` |
+| `timestamp` | `() -> Int` |
+| `timestamp_ms` | `() -> Int` |
+| `sleep` | `(seconds: Float) -> Void` |
+| `format_time` | `(dt: Int, fmt: String) -> String` |
+| `parse_time` | `(fmt: String, s: String) -> DateTime` |
+| `datetime_year` | `(dt: Int) -> Int` |
+| `datetime_month` | `(dt: Int) -> Int` |
+| `datetime_day` | `(dt: Int) -> Int` |
+| `datetime_hour` | `(dt: Int) -> Int` |
+| `datetime_minute` | `(dt: Int) -> Int` |
+| `datetime_second` | `(dt: Int) -> Int` |
+| `datetime_weekday` | `(dt: Int) -> Int` |
+| `datetime_to_string` | `(dt: Int) -> String` |
 
 <!-- stdlib:table:time end -->## 时间获取
 

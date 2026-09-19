@@ -606,6 +606,13 @@ impl MonoType {
     pub fn from_builtin_name(name: &str) -> Option<MonoType> {
         match name {
             "Int" | "int" | "Int64" | "int64" | "i64" => Some(MonoType::Int(64)),
+            // DateTime 是**时间戳的别名**，不是独立类型。
+            //
+            // 运行时本就是 `RuntimeValue::Int`（`native_now` 直接返回 Int），
+            // 所有访问器也已声明 `(dt: Int)`；此前只在 `now` / `parse_time` 的
+            // 签名串里叫 `DateTime`，使 `now()` 的返回值传不进 `format_time`
+            // 与任何访问器（#338 连带问题）。归一到 Int 即可全线打通。
+            "DateTime" | "datetime" => Some(MonoType::Int(64)),
             "Int32" | "int32" | "i32" => Some(MonoType::Int(32)),
             "Int16" | "int16" | "i16" => Some(MonoType::Int(16)),
             "Int8" | "int8" | "i8" => Some(MonoType::Int(8)),
