@@ -754,3 +754,61 @@ fn test_decode_places_fields_in_correct_positions() {
         other => panic!("应为 StringConcat，实际 {other:?}"),
     }
 }
+
+/// 解码覆盖面哨兵：`opcode.rs` 定义的每个 opcode 都应有解码分支。
+///
+/// 背景：解码器曾只覆盖 57/83 个 opcode，其余落到静默兜底变 `Nop`——
+/// `RC_NEW`(0x89) 即因此让弱引用功能静默失效（见 #D2）。兜底改为 panic 后，
+/// 遗漏会表现为运行到该指令才崩，本测试把它提前到测试期。
+///
+/// **已知例外**：`SWITCH` 无编码器（`translator.rs` 不产出）、`ir_gen` 也不构造
+/// 对应的 `Instruction::Switch`——`match` 语句编译为 `I64Eq` + `JmpIfNot` 链
+/// （实测 dump 确认）。故它既无编码格式也无解码需求，列入白名单。
+/// 白名单外的任何遗漏都会让本测试失败。
+#[test]
+fn test_all_opcodes_have_decode_branch() {
+    // 从源码读取 opcode.rs 的定义与 bytecode.rs 的解码分支，
+    // 断言前者是后者的子集（白名单除外）。
+    let opcode_src = include_str!("../../../backends/common/opcode.rs");
+    let decoder_src = include_str!("../bytecode.rs");
+
+    let defined: std::collections::BTreeSet<String> = opcode_src
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("pub const "))
+        .filter_map(|rest| rest.split_once(':'))
+        .map(|(name, _)| name.trim().to_string())
+        .collect();
+
+    let decoded: std::collections::BTreeSet<String> = decoder_src
+        .match_indices("opcode::")
+        .filter_map(|(i, _)| {
+            let rest = &decoder_src[i + "opcode::".len()..];
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect();
+            // 只认「匹配臂」：后随 ` =>`
+            if rest[name.len()..].trim_start().starts_with("=>") {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // 已知死路径：无编码器亦无 IR 产出
+    const WHITELIST: &[&str] = &["SWITCH"];
+
+    let missing: Vec<&String> = defined
+        .iter()
+        .filter(|op| !decoded.contains(*op) && !WHITELIST.contains(&op.as_str()))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "以下 opcode 已定义但无解码分支（会落到 panic 兜底，应在 bytecode.rs 补分支或加入白名单）：{missing:?}\n\
+         已定义 {} 个，有解码分支 {} 个",
+        defined.len(),
+        decoded.len()
+    );
+}
