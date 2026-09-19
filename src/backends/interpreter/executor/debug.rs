@@ -76,6 +76,40 @@ impl Interpreter {
             .unwrap_or_default()
     }
 
+    /// 相对跳转：把 `label` 解出的偏移应用到 `call_stack[fi].ip`。
+    ///
+    /// 校验两处此前会静默出错的情形：
+    /// 1. **偏移为 0**——原地跳转即死循环。正常编译器产出的跳转偏移来自
+    ///    `target - current`，仅在「回填未命中」时保持初值 0（编码器
+    ///    `backfill_jumps_impl` 对未命中目标静默跳过）。语言不允许无界循环
+    ///    （终止检查器报 E8001），故 offset 0 必为编码缺陷。
+    /// 2. **跳转目标为负**——`(ip as i32) + offset < 0` 时原实现直接
+    ///    `as usize` 回绕成巨大索引，导致越界读取而非报错。
+    pub(in crate::backends::interpreter::executor) fn apply_jump(
+        &mut self,
+        fi: usize,
+        label: Label,
+    ) -> ExecutorResult<()> {
+        let offset = Self::decode_label_offset(label);
+        let ip = self.call_stack[fi].ip;
+        let target = (ip as i64) + (offset as i64);
+        if offset == 0 || target < 0 {
+            let fid = self.call_stack[fi].func_id;
+            let fname = self
+                .image
+                .function_name(fid as usize)
+                .unwrap_or("<unknown>");
+            return Err(ExecutorError::runtime(
+                format!(
+                    "跳转偏移非法（offset={offset}，ip={ip}，目标={target}）于函数 '{fname}'                     ——偏移 0 会造成原地死循环，负目标会越界。                     通常意味着跳转回填缺失（codegen 的 ir→bytecode 映射未命中）"
+                ),
+                self.capture_stack(),
+            ));
+        }
+        self.call_stack[fi].ip = target as usize;
+        Ok(())
+    }
+
     /// Decode a Label into a signed offset for relative jumps.
     pub(in crate::backends::interpreter::executor) fn decode_label_offset(label: Label) -> i32 {
         i32::from_le_bytes([

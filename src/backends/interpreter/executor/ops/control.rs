@@ -62,8 +62,7 @@ impl Interpreter {
 
             // ── Jumps ───────────────────────────────────────────
             BytecodeInstr::Jmp { target } => {
-                let offset = Self::decode_label_offset(*target);
-                self.call_stack[fi].ip = ((self.call_stack[fi].ip as i32) + offset) as usize;
+                self.apply_jump(fi, *target)?;
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::JmpIf { cond, target } => {
@@ -71,8 +70,7 @@ impl Interpreter {
                     ExecutorError::type_error("JmpIf 条件值不是布尔类型", self.capture_stack())
                 })?;
                 if c {
-                    let offset = Self::decode_label_offset(*target);
-                    self.call_stack[fi].ip = ((self.call_stack[fi].ip as i32) + offset) as usize;
+                    self.apply_jump(fi, *target)?;
                 } else {
                     self.call_stack[fi].advance();
                 }
@@ -83,8 +81,7 @@ impl Interpreter {
                     ExecutorError::type_error("JmpIfNot 条件值不是布尔类型", self.capture_stack())
                 })?;
                 if !c {
-                    let offset = Self::decode_label_offset(*target);
-                    self.call_stack[fi].ip = ((self.call_stack[fi].ip as i32) + offset) as usize;
+                    self.apply_jump(fi, *target)?;
                 } else {
                     self.call_stack[fi].advance();
                 }
@@ -95,6 +92,8 @@ impl Interpreter {
                 let mut jumped = false;
                 for (case_val, target) in targets {
                     if let Some(case_label) = case_val {
+                        // 注意：这里的 case_label 承载的是**比较值**而非跳转偏移
+                        // （编码期复用 Label 字段存 case 常量），故不能走 apply_jump。
                         let case_offset = Self::decode_label_offset(*case_label);
                         let matches = match &val {
                             RuntimeValue::Int(n) => *n == case_offset as i64,
@@ -105,9 +104,7 @@ impl Interpreter {
                             _ => false,
                         };
                         if matches {
-                            let offset = Self::decode_label_offset(*target);
-                            self.call_stack[fi].ip =
-                                ((self.call_stack[fi].ip as i32) + offset) as usize;
+                            self.apply_jump(fi, *target)?;
                             jumped = true;
                             break;
                         }
@@ -115,9 +112,7 @@ impl Interpreter {
                 }
                 if !jumped {
                     if let Some((None, default_target)) = targets.last() {
-                        let offset = Self::decode_label_offset(*default_target);
-                        self.call_stack[fi].ip =
-                            ((self.call_stack[fi].ip as i32) + offset) as usize;
+                        self.apply_jump(fi, *default_target)?;
                     } else {
                         self.call_stack[fi].advance();
                     }
