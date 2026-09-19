@@ -983,5 +983,17 @@
   "E3018.help": "The monomorphizer could not generate a specialized version for the given type arguments (a common cause: the number of type arguments does not match the number of generic parameters). Previously this error was silently skipped, only surfacing as a \"missing function table\" at runtime.",
   "E2030.title": "Refinement type constraint violation",
   "E2030.template": "After assigning to '{assigned}', '{var}' no longer satisfies the refinement type constraint: {constraint} (counterexample: {counterexample})",
-  "E2030.help": "A refinement type annotation requires that the dependent variable still satisfies the predicate constraint after the relevant assignment. Adjust the assignment so the constraint holds, or relax the type annotation."
+  "E2030.help": "A refinement type annotation requires that the dependent variable still satisfies the predicate constraint after the relevant assignment. Adjust the assignment so the constraint holds, or relax the type annotation.",
+  "E1014.title": "Unknown named argument",
+  "E1014.message": "The argument name used in the call is not in the function's parameter list",
+  "E1014.template": "function '{func}' has no parameter named '{name}' (available: {params})",
+  "E1014.help": "Use a name from the parameter list, or pass arguments by position instead",
+  "E1014.example": "add(b = 1, c = 2);",
+  "E1014.error_output": "error[E1014]: unknown named argument\n --> example.yx:1:1\n  |\n1 | add(b = 1, c = 2);\n  |     ^ function 'add' has no parameter named 'c' (available: a, b)",
+  "E1015.title": "Argument specified multiple times",
+  "E1015.message": "The same parameter is specified by both a positional argument and a named argument",
+  "E1015.template": "parameter '{name}' of function '{func}' is specified multiple times",
+  "E1015.help": "Each argument can be passed only once: remove the extra named or positional argument",
+  "E1015.example": "add(1, a = 2);",
+  "E1015.error_output": "error[E1015]: argument specified multiple times\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ parameter 'a' of function 'add' is specified multiple times"
 }

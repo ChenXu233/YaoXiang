@@ -988,5 +988,17 @@
   "E1065.help": "唯函数值可调用。请检此处表达式之式；欲定义函数，须书 Fn 注解 `f: () -> T = { ... }`。",
   "E3022.title": "入口 main 签名相违",
   "E3022.template": "入口 '{name}' 之签名相违：运行期以无参调用之，而其需 '{expected}'，实乃 '{found}'",
-  "E3022.help": "程序入口恒以无参之式被调用。请书 main 为无参之形 `main: () -> Void = { ... }`；需外入者，请用 std.os 之 argv、环境变量。"
+  "E3022.help": "程序入口恒以无参之式被调用。请书 main 为无参之形 `main: () -> Void = { ... }`；需外入者，请用 std.os 之 argv、环境变量。",
+  "E1014.title": "命名參數名未識",
+  "E1014.message": "調用時所用之參數名不在函數形參表內",
+  "E1014.template": "函數 '{func}' 無名為 '{name}' 之參數（可用：{params}）",
+  "E1014.help": "改用形參表所列之名，或按位傳參",
+  "E1014.example": "add(b = 1, c = 2);",
+  "E1014.error_output": "error[E1014]: 命名參數名未識\n --> example.yx:1:1\n  |\n1 | add(b = 1, c = 2);\n  |     ^ 函數 'add' 無名為 'c' 之參數（可用：a, b）",
+  "E1015.title": "參數重複指定",
+  "E1015.message": "同一形參被位置實參與命名實參同時指定",
+  "E1015.template": "函數 '{func}' 之參數 '{name}' 被重複指定",
+  "E1015.help": "每參數僅可傳一次：去多餘之命名實參或位置實參",
+  "E1015.example": "add(1, a = 2);",
+  "E1015.error_output": "error[E1015]: 參數重複指定\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ 函數 'add' 之參數 'a' 被重複指定"
 }
