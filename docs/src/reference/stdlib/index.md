@@ -17,7 +17,6 @@ YaoXiang 标准库（`std`）以模块为组织单位，每个模块通过 `use`
 | [`std.convert`](./convert) | 11 | 任意值到 String 的转换 |
 | [`std.dict`](./dict) | 11 | 字典读写、键值视图与合并 |
 | [`std.io`](./io) | 7 | 标准输出、标准输入与文件整体读写 |
-| [`std.list`](./list) | 22 | 列表增删、切片、高阶函数与迭代器协议 |
 | [`std.math`](./math) | 18 | 整数、浮点与三角函数，含 PI/E/TAU 常量 |
 | [`std.string`](./string) | 19 | 字符串查找、切分、格式化与解析 |
 | [`std.time`](./time) | 14 | 时间戳、格式化与 DateTime 字段访问 |

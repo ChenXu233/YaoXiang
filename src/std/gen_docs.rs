@@ -45,7 +45,8 @@ pub fn modules_for_docs() -> Vec<Box<dyn StdModule>> {
         Box::new(crate::std::convert::ConvertModule),
         Box::new(crate::std::dict::DictModule),
         Box::new(crate::std::io::IoModule),
-        Box::new(crate::std::list::ListModule),
+        // D5 硬切换：std.list 已由纯 yx 实现接管（src/std/list.yx），
+        // 不再有 native `ListModule`；其接口面由 .yx 源码自身提供。
         Box::new(crate::std::math::MathModule),
         Box::new(crate::std::string::StringModule),
         Box::new(crate::std::time::TimeModule),

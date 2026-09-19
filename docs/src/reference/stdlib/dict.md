@@ -41,9 +41,9 @@ main: () -> Void = {
 | `get` | `(K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any` |
 | `set` | `(K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V)` |
 | `has` | `(K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool` |
-| `values` | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)` |
-| `keys` | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)` |
-| `entries` | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)` |
+| `values` | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)` |
+| `keys` | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)` |
+| `entries` | `(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)` |
 | `delete` | `(K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V)` |
 | `len` | `(K: Type, V: Type)(dict: &Dict(K, V)) -> Int` |
 | `is_empty` | `(K: Type, V: Type)(dict: &Dict(K, V)) -> Bool` |
@@ -169,7 +169,7 @@ main: () -> Void = {
 <!-- stdlib:sig:dict.keys start -->
 
 ```yaoxiang
-keys: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
+keys: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
 ```
 
 <!-- stdlib:sig:dict.keys end -->
@@ -195,7 +195,7 @@ main: () -> Void = {
 <!-- stdlib:sig:dict.values start -->
 
 ```yaoxiang
-values: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
+values: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
 ```
 
 <!-- stdlib:sig:dict.values end -->
@@ -219,7 +219,7 @@ main: () -> Void = {
 <!-- stdlib:sig:dict.entries start -->
 
 ```yaoxiang
-entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)
+entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
 ```
 
 <!-- stdlib:sig:dict.entries end -->

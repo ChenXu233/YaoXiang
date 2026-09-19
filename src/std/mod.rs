@@ -20,7 +20,7 @@ pub mod dict;
 pub mod gen_docs;
 pub mod gen_interfaces;
 pub mod io;
-pub mod list;
+// pub mod list; // D5 硬切换：std.list 已由纯 yx 实现接管（src/std/list.yx）
 pub mod math;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod net;
@@ -411,7 +411,6 @@ pub fn register_all(
     convert::ConvertModule.register_ffi(registry);
     dict::DictModule.register_ffi(registry);
     io::IoModule.register_ffi(registry);
-    list::ListModule.register_ffi(registry);
     math::MathModule.register_ffi(registry);
     #[cfg(not(target_arch = "wasm32"))]
     net::NetModule.register_ffi(registry);
@@ -456,7 +455,6 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
         convert::ConvertModule.to_module_info(),
         dict::DictModule.to_module_info(),
         io::IoModule.to_module_info(),
-        list::ListModule.to_module_info(),
         math::MathModule.to_module_info(),
         #[cfg(not(target_arch = "wasm32"))]
         net::NetModule.to_module_info(),

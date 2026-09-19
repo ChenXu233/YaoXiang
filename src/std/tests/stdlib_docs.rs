@@ -49,9 +49,21 @@ fn test_stdlib_docs_match_generation() {
 /// `test_committed_interface_dir_has_no_orphan_files` 的反向检查。
 #[test]
 fn test_stdlib_docs_has_no_orphan_module_pages() {
+    // 纯 yx 模块（RFC-036 §4，`src/std/yx_sources.rs` 的 STD_YX_FILES）不是 native
+    // `StdModule`，不进 `modules_for_docs()`，但它们**确实**有文档页。
+    // 这些页是手写的模块说明（不再由生成器产出），故显式列为合法页。
+    let yx_backed: Vec<String> = crate::std::yx_sources::STD_YX_FILES
+        .iter()
+        .filter_map(|(file, _)| {
+            file.strip_prefix("std/")
+                .and_then(|f| f.strip_suffix(".yx"))
+                .map(|n| format!("{}.md", n.replace('/', "-")))
+        })
+        .collect();
     let valid: Vec<String> = modules_for_docs()
         .iter()
         .map(|m| format!("{}.md", m.module_path().trim_start_matches("std.")))
+        .chain(yx_backed)
         .collect();
 
     let entries = std::fs::read_dir(docs_dir())

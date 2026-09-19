@@ -402,7 +402,14 @@ fn merge_embedded_std_ir(
     ir: &mut crate::middle::ModuleIR,
     registry: &crate::frontend::module::registry::ModuleRegistry,
 ) -> Result<(), Diagnostic> {
-    let use_paths = crate::frontend::module::orchestrator::scan_use_paths(source);
+    let mut use_paths = crate::frontend::module::orchestrator::scan_use_paths(source);
+    // `for x in xs` 的脱糖会调用迭代协议 `std.list.iter/has_next/next`，
+    // 该协议现由纯 yx 模块提供（`src/std/list.yx`，D5 硬切换）。
+    // 源码未写 `use std.list` 时也必须纳入编译单元，否则 for 循环运行时
+    // 报「Native function not found: std.list.iter」。
+    if !use_paths.iter().any(|p| p == "std.list") {
+        use_paths.push("std.list".to_string());
+    }
     for use_path in use_paths {
         if use_path == "std"
             || !use_path.starts_with("std.")

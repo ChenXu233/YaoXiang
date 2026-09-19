@@ -1,7 +1,7 @@
 //! RFC-011a §6 存在类型变体指令——运行时守卫与序列化往返测试
 //!
 //! 覆盖:
-//! - List(Animal) 变体分发经字节码序列化往返后仍正确执行（CREATE_VARIANT /
+//! - Vec(Animal) 变体分发经字节码序列化往返后仍正确执行（CREATE_VARIANT /
 //!   VARIANT_TAG / VARIANT_PAYLOAD 编解码链路）
 //! - VariantTag 收到未包装值时显式报错（四层防御第③层：包装点遗漏在运行时
 //!   响亮暴露，绝不静默产出错误数据）
@@ -12,7 +12,7 @@ use crate::middle::bytecode::{BytecodeFunction, BytecodeInstr, BytecodeModule, C
 use crate::middle::core::ir::Type;
 use std::collections::HashMap;
 
-/// List(Animal) 异构容器 + 变体分发，经字节码落盘/加载往返后执行正确。
+/// Vec(Animal) 异构容器 + 变体分发，经字节码落盘/加载往返后执行正确。
 #[test]
 fn test_variant_dispatch_roundtrip() {
     let dir = tempfile::TempDir::new().expect("create temp dir");
@@ -36,7 +36,7 @@ Cat: Type = {
 Cat.speak: (self: Cat) -> String = { return "Meow" }
 
 main = () => {
-    animals: List(Animal) = [Dog("Rex"), Cat(9)]
+    animals: Vec(Animal) = [Dog("Rex"), Cat(9)]
     print(animals[0].speak())
     print(animals[1].speak())
 }

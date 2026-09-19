@@ -1228,10 +1228,44 @@ impl Interpreter {
             } => {
                 let obj = self.force_slot(frame, *src)?;
                 let val = self.force_slot(frame, *value)?;
+                // `Vec(T).length = n`：把缓冲调整到 n 个元素（截断或补 Void）。
+                // 运行时用 `RuntimeValue::List/Array` 表示；按**运行时值类型**与
+                // 结构体字段写区分，故与 `Struct` 分支不冲突（见 resolve_field_index）。
+                if let RuntimeValue::List(h) | RuntimeValue::Array(h) = &obj {
+                    let n = match &val {
+                        RuntimeValue::Int(i) if *i >= 0 => *i as usize,
+                        _ => {
+                            return Err(ExecutorError::type_only(
+                                "length assignment expects a non-negative Int",
+                            ));
+                        }
+                    };
+                    let mut guard = h.lock();
+                    match &mut *guard {
+                        crate::backends::common::HeapValue::List(items)
+                        | crate::backends::common::HeapValue::Array(items) => {
+                            items.resize(n, RuntimeValue::Void);
+                        }
+                        _ => {
+                            drop(guard);
+                            return Err(ExecutorError::type_only(
+                                "length assignment on a non-buffer handle",
+                            ));
+                        }
+                    }
+                    drop(guard);
+                    frame.advance();
+                    return Ok(StepOutcome::Continue);
+                }
                 if let RuntimeValue::Struct { fields, .. } = obj {
                     if let crate::backends::common::HeapValue::Tuple(items) = &mut *fields.lock() {
                         if (*field_idx as usize) < items.len() {
                             items[*field_idx as usize] = val;
+                        } else {
+                            return Err(ExecutorError::type_only(format!(
+                                "struct field index {} out of range",
+                                field_idx
+                            )));
                         }
                     }
                 }

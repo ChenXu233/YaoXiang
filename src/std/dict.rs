@@ -40,19 +40,19 @@ impl StdModule for DictModule {
             export!(
                 "values",
                 "std.dict.values",
-                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)",
+                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)",
                 native_values
             ),
             export!(
                 "keys",
                 "std.dict.keys",
-                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)",
+                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)",
                 native_keys
             ),
             export!(
                 "entries",
                 "std.dict.entries",
-                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C)",
+                "(A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)",
                 native_entries
             ),
             export!(

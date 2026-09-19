@@ -287,8 +287,14 @@ impl MonoType {
     ) -> bool {
         matches!(self, MonoType::Generic { name: n, .. } if n == name)
     }
+    /// 内建**运行时长度缓冲**：`Vec(T)`。D8-B 之前这个角色叫 `List`。
+    ///
+    /// 名字分层（RFC-011）：内置层只有 `Vec(T)`（运行时长度的原始缓冲）
+    /// 与 `Array(T, N)`（定长）；`List(T)` 是**标准库类型**
+    /// （`std/list.yx` 里的 `{ data: Vec(T), length: Int }`），不在内置层。
+    /// 因此 `[1,2,3]` 字面量的类型是 `Vec(Int)`，可直接传给库函数。
     pub fn is_list(&self) -> bool {
-        self.is_generic_named("List")
+        self.is_generic_named("Vec")
     }
     pub fn is_dict(&self) -> bool {
         self.is_generic_named("Dict")
@@ -337,10 +343,13 @@ impl MonoType {
         }
     }
 
-    /// 构造 List(T)
+    /// 构造内建缓冲类型 `Vec(T)`（见 `is_list` 的名字分层说明）。
+    ///
+    /// 保留 `make_list` 这个名字作为**调用方语义**的锚点：语义是
+    /// 「一串同型元素」，落在内置层就是 `Vec(T)`。
     pub fn make_list(elem: MonoType) -> Self {
         MonoType::Generic {
-            name: "List".into(),
+            name: "Vec".into(),
             args: vec![elem],
         }
     }
@@ -402,7 +411,10 @@ impl MonoType {
         }
     }
 
-    /// 检查是否是可索引类型
+    /// 检查是否是可索引类型。
+    ///
+    /// `is_list()` 现已指向内建缓冲 `Vec(T)`（D8-B 名字分层），
+    /// 故 `Vec` 自动包含在内——字面量 `[1,2,3]` 可直接下标。
     pub fn is_indexable(&self) -> bool {
         self.is_list()
             || self.is_dict()

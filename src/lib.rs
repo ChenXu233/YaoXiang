@@ -514,6 +514,7 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                     .join(", ")
             ),
             "List" => format!("List({})", dump_type_detail(&args[0])),
+            "Vec" => format!("Vec({})", dump_type_detail(&args[0])),
             "Dict" => format!(
                 "Dict({}, {})",
                 dump_type_detail(&args[0]),

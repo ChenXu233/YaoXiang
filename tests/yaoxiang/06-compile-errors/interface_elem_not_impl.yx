@@ -24,6 +24,6 @@ Stone: Type = {
 }
 
 main: () -> Void = {
-    animals: List(Animal) = [Dog("Rex")]
+    animals: Vec(Animal) = [Dog("Rex")]
     animals2 = list.append(animals, Stone(2))
 }
