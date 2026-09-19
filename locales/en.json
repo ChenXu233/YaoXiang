@@ -204,7 +204,7 @@
     "title": "Return Type Mismatch",
     "message": "Function return type is incorrect",
     "template": "Return type mismatch: expected '{expected}', found '{found}'",
-    "help": "The body's value does not match the declared return type. Either fix the body, or correct the annotation — note `h: () -> Int = f` means h returns Int, not that h IS f; write `h = f` to alias the function.",
+    "help": "The value of the function body does not match the declared return type. Either modify the function body or fix the annotation—note that `h: () -> Int = f` means \"h returns Int\", not \"h is f\"; if you want to give a function an alias, write `h = f`.",
     "example": "fn foo() -> Int { \"hello\" }",
     "error_output": "error[E1012]: return type mismatch\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ expected 'Int', found 'String'"
   },
@@ -353,9 +353,9 @@
     "error_output": "warning[W1063]: const generic constraint cannot be evaluated\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ constraint `N > 0` cannot be evaluated at compile-time"
   },
   "E1065": {
-    "title": "Call on non-callable type",
-    "template": "Type `{type}` is not callable — it is not a function",
-    "help": "Only function values can be called. Check the expression's type at this position; to define a function, write a Fn annotation `f: () -> T = { ... }`."
+    "title": "Calling a non-function value",
+    "template": "Type `{type}` is not callable—it is not a function",
+    "help": "Only function values can be called. Check the type of the expression at this position; to define a function, write the Fn annotation `f: () -> T = { ... }`."
   },
   "E1071": {
     "title": "type definition only allowed at module level",
@@ -740,9 +740,9 @@
     "help": "Wrap the dereference operation in an `unsafe` block."
   },
   "E3022": {
-    "title": "Entry point main has wrong signature",
-    "template": "Entry point '{name}' has the wrong signature: it is called with no arguments at startup, but it requires '{expected}' (actual: '{found}')",
-    "help": "The program entry point is always invoked with no arguments. Write it as `main: () -> Void = { ... }`; use std.os argv/environment for external input."
+    "title": "Entry main signature mismatch",
+    "template": "The signature of entry '{name}' does not match: the runtime calls it with zero arguments, but it requires '{expected}', found '{found}'",
+    "help": "The program entry is always called with no arguments. Write main as a no-argument form `main: () -> Void = { ... }`; for external input, use argv/environment variables from std.os."
   },
   "E3004": {
     "title": "Unsupported iterator",
