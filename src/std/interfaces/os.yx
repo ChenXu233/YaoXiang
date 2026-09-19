@@ -5,27 +5,27 @@ open: (path: &String, mode: &String) -> File = {
     ...
 }
 
-close: (file: File) -> Void = {
+close: (file: &File) -> Void = {
     ...
 }
 
-read: (file: File, n: Int) -> String = {
+read: (file: &File, n: Int) -> String = {
     ...
 }
 
-write: (file: File, content: String) -> Int = {
+write: (file: &File, content: String) -> Int = {
     ...
 }
 
-seek: (file: File, offset: Int) -> Bool = {
+seek: (file: &File, offset: Int) -> Bool = {
     ...
 }
 
-tell: (file: File) -> Int = {
+tell: (file: &File) -> Int = {
     ...
 }
 
-flush: (file: File) -> Void = {
+flush: (file: &File) -> Void = {
     ...
 }
 

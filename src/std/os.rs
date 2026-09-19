@@ -35,32 +35,32 @@ impl StdModule for OsModule {
             export!(
                 "close",
                 "std.os.close",
-                "(file: File) -> Void",
+                "(file: &File) -> Void",
                 native_close
             ),
             export!(
                 "read",
                 "std.os.read",
-                "(file: File, n: Int) -> String",
+                "(file: &File, n: Int) -> String",
                 native_read
             ),
             export!(
                 "write",
                 "std.os.write",
-                "(file: File, content: String) -> Int",
+                "(file: &File, content: String) -> Int",
                 native_write
             ),
             export!(
                 "seek",
                 "std.os.seek",
-                "(file: File, offset: Int) -> Bool",
+                "(file: &File, offset: Int) -> Bool",
                 native_seek
             ),
-            export!("tell", "std.os.tell", "(file: File) -> Int", native_tell),
+            export!("tell", "std.os.tell", "(file: &File) -> Int", native_tell),
             export!(
                 "flush",
                 "std.os.flush",
-                "(file: File) -> Void",
+                "(file: &File) -> Void",
                 native_flush
             ),
             // Directory operations
