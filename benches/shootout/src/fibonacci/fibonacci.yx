@@ -9,7 +9,7 @@
 
 use std.{io, os, string, result}
 
-main = {
+main: () -> Void = {
     n_str = os.get_env("BENCH_INPUT")
     n = if n_str == "" {
         90

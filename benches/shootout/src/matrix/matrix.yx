@@ -32,7 +32,7 @@ multiply: (a: List(List(Int)), b: List(List(Int)), size: Int) -> List(List(Int))
     return m_result
 }
 
-main = {
+main: () -> Void = {
     n_str = os.get_env("BENCH_INPUT")
     s = if n_str == "" {
         20
