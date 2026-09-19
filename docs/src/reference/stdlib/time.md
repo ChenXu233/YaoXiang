@@ -234,46 +234,36 @@ main: () -> Void = {
 }
 ```
 
-## DateTime 字段访问（不可用）
+## DateTime 字段访问
 
-> 追踪：#338
+`std.time` 导出 8 个日期分量访问器（`#338` 已修复，导出名为扁平形式）：
 
-`std.time` 导出了 8 个以 `DateTime::` 为名的访问器：
+| 导出名                  | 签名                  | 说明                |
+| ----------------------- | --------------------- | ------------------- |
+| `datetime_year`         | `(dt: Int) -> Int`    | 四位年份            |
+| `datetime_month`        | `(dt: Int) -> Int`    | 月份（1–12）        |
+| `datetime_day`          | `(dt: Int) -> Int`    | 日期（1–31）        |
+| `datetime_hour`         | `(dt: Int) -> Int`    | 小时（0–23）        |
+| `datetime_minute`       | `(dt: Int) -> Int`    | 分钟（0–59）        |
+| `datetime_second`       | `(dt: Int) -> Int`    | 秒（0–59）          |
+| `datetime_weekday`      | `(dt: Int) -> Int`    | 星期（0 = 周日）    |
+| `datetime_to_string`    | `(dt: Int) -> String` | ISO 8601 形态字符串 |
 
-| 导出名                | 签名                  | 说明                |
-| --------------------- | --------------------- | ------------------- |
-| `DateTime::year`      | `(dt: Int) -> Int`    | 四位年份            |
-| `DateTime::month`     | `(dt: Int) -> Int`    | 月份（1–12）        |
-| `DateTime::day`       | `(dt: Int) -> Int`    | 日期（1–31）        |
-| `DateTime::hour`      | `(dt: Int) -> Int`    | 小时（0–23）        |
-| `DateTime::minute`    | `(dt: Int) -> Int`    | 分钟（0–59）        |
-| `DateTime::second`    | `(dt: Int) -> Int`    | 秒（0–59）          |
-| `DateTime::weekday`   | `(dt: Int) -> Int`    | 星期（0 = 周日）    |
-| `DateTime::to_string` | `(dt: Int) -> String` | ISO 8601 形态字符串 |
-
-**但这些名字目前无法从 YaoXiang 源码调用（#338）。** 导出名含 `::`，而 `::`
-是语法中的保留记号，不能出现在字段访问位置。已实测确认以下写法全部失败：
-
-| 尝试的写法                 | 结果                                                |
-| -------------------------- | --------------------------------------------------- |
-| `time.DateTime::year(0)`   | `E0010 expected RParen, found ColonColon`           |
-| `time.DateTime.year(0)`    | `E1042 Field 'DateTime' not found in struct 'time'` |
-| `time.year(0)`             | `E1042 Field 'year' not found in struct 'time'`     |
-| `time.DateTime_year(0)`    | `E1042 Field 'DateTime_year' not found`             |
-| `time."DateTime::year"(0)` | `E0011 Unexpected token: StringLiteral`             |
-
-**替代方案**：需要日期分量时，用 [`format_time`](#format_time)
-按需格式化，它内部已完成时间戳 → 年月日的拆解：
+`DateTime` 是**时间戳的别名**（即 `Int`）——`now()` / `parse_time()` 的返回值
+可直接传入这些访问器，也可直接用于 [`format_time`](#format_time)：
 
 ```yaoxiang
 use std.assert
 use std.time
 
 main: () -> Void = {
-    // 用 format_time 取各分量
-    assert(time.format_time(0, "%Y") == "1970")
-    assert(time.format_time(0, "%m") == "01")
-    assert(time.format_time(0, "%d") == "01")
+    ts = time.parse_time("%Y-%m-%d", "2024-01-15")
+    assert(time.datetime_year(ts) == 2024)
+    assert(time.datetime_month(ts) == 1)
+    assert(time.datetime_day(ts) == 15)
+
+    // 与 format_time 等价
+    assert(time.format_time(ts, "%Y-%m-%d") == "2024-01-15")
 }
 ```
 
