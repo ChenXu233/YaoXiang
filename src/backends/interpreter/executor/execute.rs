@@ -133,7 +133,9 @@ impl Executor for Interpreter {
     }
 
     fn reset(&mut self) {
-        self.heap.clear();
+        // 注：原此处 `self.heap.clear()` 清的是已移除的分配注册表（Heap 现无状态）。
+        // 堆数据的释放由各 `Handle` 的存放位置决定：`call_stack.clear()` 丢掉
+        // 帧后，帧内所有 Handle 随之释放（Arc 归零即回收）。
         self.call_stack.clear();
         self.state = ExecutionState::default();
         self.breakpoints.clear();
