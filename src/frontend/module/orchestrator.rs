@@ -1099,6 +1099,7 @@ fn make_export(
         signature: String::new(),
         mono_type: Some(ty),
         type_params: None,
+        param_names: None,
     }
 }
 

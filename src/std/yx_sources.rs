@@ -72,12 +72,21 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                         signature: String::new(),
                         mono_type: Some(ty),
                         type_params: None,
+                        param_names: None,
                     });
                 }
             }
-            parser::ast::StmtKind::Assign { target, .. } => {
+            parser::ast::StmtKind::Assign { target, value, .. } => {
                 if let parser::ast::Expr::Var(name, _) = target.as_ref() {
                     if let Some(ty) = vars.get(name).map(|p| p.body.clone()) {
+                        // 声明期形参名：命名参数调用（`list.push(item = 9, list = v)`）
+                        // 需按名字重排实参。名字只存在于 AST 的 Lambda 形参里
+                        // （`MonoType::Fn` 只存类型），所以这里从 AST 取。
+                        let param_names = value
+                            .as_deref()
+                            .map(|v| v.callable_parts().0)
+                            .filter(|ps| !ps.is_empty())
+                            .map(|ps| ps.iter().map(|p| p.name.clone()).collect());
                         info.add_export(Export {
                             name: name.clone(),
                             full_path: SymbolTable::qualify(use_path, name),
@@ -89,6 +98,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             signature: String::new(),
                             mono_type: Some(ty),
                             type_params: fn_type_params.get(name).cloned(),
+                            param_names,
                         });
                     }
                 }

@@ -1,0 +1,47 @@
+// 01-syntax/functions/named_arguments.yx
+// 覆盖: 教程 §命名参数 + formatter §7.2（命名参数 `name = value`）
+// 验证: 按名传参（顺序任意）/ 位置+命名混用 / 多参数重排 / 限定名调用
+// 状态: ✅ 可运行
+
+use std.{assert, io, list}
+
+add: (a: Int, b: Int) -> Int = a + b
+
+// 三参数：用于验证命名实参真的按名入槽（错位会算出别的数）
+digits: (x: Int, y: Int, z: Int) -> Int = x * 100 + y * 10 + z
+
+// 演示「少量参数时命名参数提升可读性」（教程原文场景）
+send: (to: String, title: String, body: String) -> String = to + "|" + title + "|" + body
+
+main: () -> Void = {
+    // 声明序
+    assert.assert(add(a = 3, b = 5) == 8, "named: declaration order")
+
+    // 顺序任意——这是命名参数存在的意义
+    assert.assert(add(b = 5, a = 3) == 8, "named: reversed order")
+
+    // 位置参数在前 + 命名参数混用（教程 §命名参数 "位置参数必须在前面"）
+    assert.assert(add(3, b = 5) == 8, "named: mixed positional first")
+
+    // 三参数全颠倒：只有真按名入槽才能得到 123
+    assert.assert(digits(z = 3, y = 2, x = 1) == 123, "named: three args reversed")
+
+    // 混合：首个位置 + 其余命名
+    assert.assert(digits(1, z = 3, y = 2) == 123, "named: one positional + two named")
+
+    // 跨模块限定名调用：`list.push` 的形参名来自 std.list 的声明
+    v: Vec(Int) = [1, 2]
+    pushed = list.push(item = 9, list = v)
+    assert.assert(list.len(pushed) == 3, "named: qualified list.push len")
+    assert.assert(list.get(pushed, 2) == 9, "named: qualified list.push value")
+
+    // 命名参数 + 可读性场景（教程原文）
+    msg = send(
+        body = "明天下午 3 点开会",
+        to = "alice@example.com",
+        title = "会议通知"
+    )
+    assert.assert(msg == "alice@example.com|会议通知|明天下午 3 点开会", "named: readable call")
+}
+
+main()

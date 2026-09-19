@@ -325,6 +325,7 @@ pub trait StdModule {
                 signature: export.signature.to_string(),
                 mono_type: None,
                 type_params: None,
+                param_names: None,
             });
         }
 
@@ -337,6 +338,7 @@ pub trait StdModule {
                 signature: format!("({}) -> Type", export.params.join(", ")),
                 mono_type: None,
                 type_params: None,
+                param_names: None,
             });
         }
 

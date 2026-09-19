@@ -183,6 +183,16 @@ pub struct AstToIrGenerator {
     /// `i = i + 1` 是赋值而非重声明。旧实现把两者混为一谈，
     /// 导致重赋值被当成第二份初始化 → 自引用 → 误报 E3019。
     declared_globals: std::collections::HashSet<String>,
+    /// 本模块**函数**的声明期形参名（函数名 → 按声明序的参数名）。
+    ///
+    /// `FunctionIR.params` 只有类型没有名字，而命名参数调用（`add(b = 5, a = 3)`）
+    /// 必须按**名字**把实参重排到声明序。struct 构造器有 `struct_definitions`
+    /// 提供字段名，普通函数原先没有对应表——于是 `named_args` 被静默丢弃，
+    /// 实参一个不进，运行期报 e6007 类型不符。此表补上那个缺口。
+    ///
+    /// curry 形态（`f: (A: Type) -> (x: A) -> R`）登记的是**最后一层**的形参名
+    /// ——调用点传的就是最后那层。
+    fn_param_names: HashMap<String, Vec<String>>,
     /// 约束变量的具体类型映射（接口直接赋值优化）
     /// 当 `d: Drawable = Circle(1)` 时，记录 d -> "Circle"（具体类型名）
     /// 用于方法调用时选择直接调用而非 vtable 查找
@@ -319,6 +329,7 @@ impl AstToIrGenerator {
             pending_inits: Vec::new(),
             module_stmts: Vec::new(),
             declared_globals: std::collections::HashSet::new(),
+            fn_param_names: HashMap::new(),
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             release_plan: type_result.release_plan.drops.clone(),
@@ -393,6 +404,27 @@ impl AstToIrGenerator {
             }
             None => field.to_string(),
         }
+    }
+
+    /// 查一个函数的**声明期形参名**（按声明序），供命名参数重排。
+    ///
+    /// 两个来源，按就近优先：
+    /// 1. 本模块的 `fn_param_names`（定义与调用同文件）
+    /// 2. 模块注册表里该导出携带的 `param_names`——跨模块调用
+    ///    （`list.push(item = 9, list = v)`）时定义方的 IR 生成器实例拿不到，
+    ///    名字必须随导出传过来（同 `Export.type_params` 的跨模块情形）。
+    ///
+    /// `full_path` 是解析后的限定名（如 `std.list.push`）；`leaf` 是短名。
+    fn lookup_param_names(
+        &self,
+        full_path: &str,
+        leaf: &str,
+    ) -> Option<Vec<String>> {
+        if let Some(names) = self.fn_param_names.get(leaf) {
+            return Some(names.clone());
+        }
+        let export = self.registry.resolve_export(full_path).ok()?;
+        export.param_names.clone()
     }
 
     /// 拆分 curry 签名为多层
@@ -1387,6 +1419,13 @@ impl AstToIrGenerator {
                     crate::frontend::core::parser::ast::extract_generic_param_names(
                         signature_params,
                     );
+                // 登记形参名，供命名参数调用（`add(b = 5, a = 3)`）重排实参。
+                // 名字取自 Lambda 形参（`params`）——签名里的 `Type::Fn` 只存类型、
+                // 不存名字，是值参数名唯一的来源。
+                if is_fn_binding && !params.is_empty() {
+                    let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+                    self.fn_param_names.insert(name.clone(), names);
+                }
                 if let Some(type_name) = type_name {
                     // RFC-004 外部重绑定：`Type.method = fn` / `Type.method = fn[pos]`
                     // 只登记 type_bindings（方法调用时参数重排），不生成新函数 IR。
@@ -6249,6 +6288,10 @@ impl AstToIrGenerator {
             // 命名空间调用（如 std.io.println）不需要隐式参数
             if self.is_namespace_receiver(expr) {
                 // 命名空间调用：不需要隐式参数
+                //
+                // 命名参数（`list.push(list = v, item = 9)`）在命名空间路径上
+                // 同样要按形参名重排，否则实参一个不进——与普通函数调用同类
+                // 缺口（那边在 6.5k 行修，这里是它的镜像）。
                 let mut arg_regs = Vec::new();
                 for arg in args.iter() {
                     let arg_reg = self.next_temp_reg();
@@ -6256,6 +6299,44 @@ impl AstToIrGenerator {
                     arg_regs.push(Operand::Local(arg_reg));
                 }
                 let method_function_name = self.resolve_field_path(expr, field);
+                if !named_args.is_empty() {
+                    let leaf = method_function_name
+                        .rsplit('.')
+                        .next()
+                        .unwrap_or(&method_function_name);
+                    // 本模块表 → 跨模块导出携带的 `param_names`
+                    if let Some(names) = self.lookup_param_names(&method_function_name, leaf) {
+                        if arg_regs.len() <= names.len() {
+                            let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
+                            for (i, reg) in arg_regs.iter().enumerate() {
+                                slots[i] = Some(reg.clone());
+                            }
+                            for (arg_name, arg_expr) in named_args.iter() {
+                                let Some(idx) = names.iter().position(|n| n == arg_name) else {
+                                    return Err(ErrorCodeDefinition::unknown_argument(
+                                        &method_function_name,
+                                        arg_name,
+                                        &names.join(", "),
+                                    )
+                                    .at(*span)
+                                    .build());
+                                };
+                                if slots[idx].is_some() {
+                                    return Err(ErrorCodeDefinition::duplicate_argument(
+                                        &method_function_name,
+                                        arg_name,
+                                    )
+                                    .at(*span)
+                                    .build());
+                                }
+                                let arg_reg = self.next_temp_reg();
+                                self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                                slots[idx] = Some(Operand::Local(arg_reg));
+                            }
+                            arg_regs = slots.into_iter().flatten().collect();
+                        }
+                    }
+                }
                 instructions.push(Instruction::Call {
                     dst: Some(Operand::Local(result_reg)),
                     func: Operand::Const(ConstValue::String(method_function_name.to_string())),
@@ -6547,6 +6628,90 @@ impl AstToIrGenerator {
                             }
                             arg_regs.push(Operand::Local(default_reg));
                         }
+                    }
+                }
+            }
+
+            // 命名参数调用普通**函数**：`add(b = 5, a = 3)`。
+            //
+            // 上面的 struct 分支按字段名重排；普通函数原先无人处理 `named_args`，
+            // 于是它们被静默丢弃——实参一个不进调用，运行期报 e6007「类型不符」，
+            // 与真正的病因（参数没传进去）完全搭不上。这里按**声明序形参名**重排：
+            // 位置实参填前导槽位，命名实参按名入槽，重名/未知名报错。
+            if !named_args.is_empty() {
+                let callee = match func {
+                    Expr::Var(n, _) => Some(n.clone()),
+                    // 限定名调用 `list.push(...)`：取叶子名（表中键就是声明处的短名）
+                    Expr::FieldAccess { field, .. } => Some(field.clone()),
+                    // 两层调用 `f(T)(...)`：外层才是传值那层
+                    Expr::Call { func: inner, .. } => match inner.as_ref() {
+                        Expr::Var(n, _) => Some(n.clone()),
+                        Expr::FieldAccess { field, .. } => Some(field.clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let is_ctor = callee
+                    .as_ref()
+                    .is_some_and(|n| self.struct_definitions.contains_key(n));
+                // 本模块表 → 跨模块导出携带的 `param_names`。
+                // 限定名（`list.push`）保留完整路径去查导出。
+                let qualified = match func {
+                    Expr::FieldAccess { expr, field, .. } => {
+                        Some(self.resolve_field_path(expr, field))
+                    }
+                    _ => None,
+                };
+                if let Some(names) = callee
+                    .as_ref()
+                    .filter(|_| !is_ctor)
+                    .and_then(|n| self.lookup_param_names(qualified.as_deref().unwrap_or(n), n))
+                {
+                    // 位置实参必须在命名实参之前（同教程“位置参数必须在前面”）。
+                    // 它们按序占前导槽位。
+                    if arg_regs.len() <= names.len() {
+                        let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
+                        for (i, reg) in arg_regs.iter().enumerate() {
+                            slots[i] = Some(reg.clone());
+                        }
+                        for (arg_name, arg_expr) in named_args.iter() {
+                            let Some(idx) = names.iter().position(|n| n == arg_name) else {
+                                return Err(ErrorCodeDefinition::unknown_argument(
+                                    callee.as_deref().unwrap_or("<fn>"),
+                                    arg_name,
+                                    &names.join(", "),
+                                )
+                                .at(*span)
+                                .build());
+                            };
+                            if slots[idx].is_some() {
+                                return Err(ErrorCodeDefinition::duplicate_argument(
+                                    callee.as_deref().unwrap_or("<fn>"),
+                                    arg_name,
+                                )
+                                .at(*span)
+                                .build());
+                            }
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                            slots[idx] = Some(Operand::Local(arg_reg));
+                        }
+                        // 未覆盖的槽位：保持缺席，由类型检查阶段报 E1010。
+                        // 运行期为安全起见补 0（正常路径不会到这里）。
+                        arg_regs = slots
+                            .into_iter()
+                            .map(|s| {
+                                s.unwrap_or_else(|| {
+                                    let r = self.next_temp_reg();
+                                    instructions.push(Instruction::Load {
+                                        dst: Operand::Local(r),
+                                        src: Operand::Const(ConstValue::Int(0)),
+                                        span: self.cur_span,
+                                    });
+                                    Operand::Local(r)
+                                })
+                            })
+                            .collect();
                     }
                 }
             }

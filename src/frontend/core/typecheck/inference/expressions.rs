@@ -2361,14 +2361,18 @@ impl<'a> ExpressionInferrer<'a> {
                                 // 仅当 params 非空时检查：lambda/块函数绑定（mk: (Int,Int)->Int
                                 // = (x,y)=>x+y）在 scope 里参数类型丢失（params 为空），
                                 // 计数不可靠，跳过避免误伤（#271 记 lambda 绑定参数丢失）。
-                                if named_args.is_empty()
-                                    && !params.is_empty()
-                                    && provided != params.len()
+                                //
+                                // 命名参数也计入总数：`add(a = 1, b = 2)` 传了 2 个。
+                                // 此前 `named_args.is_empty()` 门槛把命名实参整体豁免，
+                                // `add(a = 1)`（少传一个）就没人拦——IR 层补 0 凑数，
+                                // 静默算出 1 而不报错。现在按实际传参总数校验。
+                                if !params.is_empty()
+                                    && provided + named_args.len() != params.len()
                                 => {
                                     return Err(ErrorCodeDefinition::argument_count_mismatch(
                                         fn_name,
                                         params.len(),
-                                        provided,
+                                        provided + named_args.len(),
                                     )
                                     .at(*span)
                                     .build());
