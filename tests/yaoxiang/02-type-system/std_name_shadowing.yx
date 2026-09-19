@@ -1,0 +1,42 @@
+// 02-type-system/std_name_shadowing.yx
+// 覆盖: 用户类型名与 std native 同名时的解析优先级（D10 回归）
+// 验证:
+//   - `use std.math` 后用户定义 `PI: Type = {...}` 时，`PI(7)` 构造的是**用户的** PI
+//   - 泛型类型名与 std 常量同名（`E` vs `std.math.E`）时同样优先用户定义
+//   - （限定名访问被遮蔽的 std 名是独立缺口，见决策文档 D10）
+// 状态: ✅ 可运行
+
+use std.assert
+use std.math
+
+// 与 std.math.PI（圆周率常量）同名
+PI: Type = { n: Int }
+
+// 与 std.math.E（自然常数）同名，且是泛型类型定义
+E: (T: Type) -> Type = { data: Vec(T), n: Int }
+
+mk_e: (A: Type, x: A) -> E(A) = {
+    z: Vec(A) = []
+    o: E(A) = E(z, 0)
+    o.n = 1
+    return o
+}
+
+e_n: (A: Type) -> (e: &E(A)) -> Int = {
+    return e.n
+}
+
+main: () -> Void = {
+    // 用户 PI 优先于 std.math.PI
+    p: PI = PI(7)
+    assert.assert(p.n == 7, "user type wins over std constant of same name")
+
+    // 泛型类型名同名时同样优先
+    e = mk_e(Int, 5)
+    assert.assert(e_n(&e) == 1, "user generic type wins over std constant")
+
+    // 注：被遮蔽的 std 名用限定名 `math.PI` 访问当前报 E3006（另记缺口），
+    // 故此处不覆盖。本用例只保证用户定义优先、不再静默返回 void。
+}
+
+main()
