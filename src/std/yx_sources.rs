@@ -53,6 +53,11 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
     checker.collect_signatures(&parsed.module);
     let vars = checker.env().vars.clone();
     let types = checker.env().types.clone();
+    // 声明期类型参数名（按声明序）：跨模块调用的单态化需要它们绑定签名里的
+    // `TypeRef("A")`。随导出一并携带，调用方不必从签名形态反推
+    // （反推区分不了类型参数与普通类型名，会误伤 `Dict(K,V)` / `File` 等）。
+    let fn_type_params = checker.generic_fn_type_params_snapshot();
+
     let mut info = ModuleInfo::new(use_path.to_string(), ModuleSource::Std);
     info.method_bindings = checker.env().method_bindings.clone();
 
@@ -66,6 +71,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                         kind: ExportKind::Type,
                         signature: String::new(),
                         mono_type: Some(ty),
+                        type_params: None,
                     });
                 }
             }
@@ -82,6 +88,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             },
                             signature: String::new(),
                             mono_type: Some(ty),
+                            type_params: fn_type_params.get(name).cloned(),
                         });
                     }
                 }

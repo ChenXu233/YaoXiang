@@ -1,7 +1,8 @@
 // src/std/tests/list_ops.yx
 // 覆盖: std.list 模块（#117 / D5 硬切换）— 纯 yx 实现（src/std/list.yx）
-// 验证: 正常路径（len/get/first/last/contains/reverse/concat/map/filter/reduce/push）
-//       + 错误路径（越界 get / 空 pop）
+// 验证: 正常路径（len/get/first/last/contains/find_index/is_empty/reverse/concat/
+//       slice/map/filter/reduce/push/prepend/remove_at/set/empty）
+//       + 边界路径（空列表即空、slice 长度、pop 缩短）
 // 状态: ✅
 //
 // 语义契约（D9-A 值语义）：所有函数**按值接收**源列表，调用后源值已被移动；

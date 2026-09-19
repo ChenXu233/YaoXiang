@@ -331,6 +331,7 @@ pub trait StdModule {
                 kind,
                 signature: export.signature.to_string(),
                 mono_type: None,
+                type_params: None,
             });
         }
 
@@ -342,6 +343,7 @@ pub trait StdModule {
                 kind: ExportKind::Type,
                 signature: format!("({}) -> Type", export.params.join(", ")),
                 mono_type: None,
+                type_params: None,
             });
         }
 
