@@ -7,6 +7,8 @@ macro_rules! export {
     ($name:literal, $native:literal, $sig:literal, $handler:ident) => {
         NativeExport::new($name, $native, $sig, $handler as $crate::std::NativeHandler)
     };
+    // 常量导出形式（3 参数）保留：当前无调用者，但属公开宏接口的一部分，
+    // 供后续以「求值函数」方式实现常量时使用。详见 plan 文档 D5。
     ($name:literal, $native:literal, $sig:literal) => {
         NativeExport::constant($name, $native, $sig)
     };
@@ -291,6 +293,11 @@ pub trait StdModule {
         registry: &mut FfiRegistry,
     ) {
         for export in self.exports() {
+            // 无 handler 的导出（常量形式）在此跳过：FFI 注册表只登记可调用函数。
+            // 注意：常量导出**当前无任何调用者**，且**尚无**独立的常量注册路径
+            // （原先的 `if let` 与「漏注册」在语义上不可区分，见 plan 文档 D5）。
+            // 若将来启用常量导出，需在此之外补注册逻辑，否则调用会运行时报
+            // 「函数未找到」而声明处无提示。
             if let Some(handler) = export.handler {
                 registry.register(export.native_name, handler);
             }
