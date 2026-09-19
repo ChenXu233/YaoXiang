@@ -595,6 +595,26 @@ impl TypeChecker {
                 // 收集局部变量的 MonoType（用于 IR 生成器错误消息）
                 local_var_types.insert(name, poly.body);
             }
+            // 补入**已退出作用域**的块内声明（#D1）。
+            //
+            // `vars()` 遍历的是当前存活的 `local_scopes`，而 `exit_block`
+            // 会 pop 掉块层——`while`/`if` 等体内声明的变量因此不在 `vars()` 中。
+            // 但 IR 生成发生在类型检查**之后**，`for` 的迭代器派发需要这些变量的
+            // 静态类型（`generate_for_loop_ir` 取不到类型即报 E3004 `<unknown>`）。
+            //
+            // `type_ledger` 正是为此存在的机制：注释标明「作用域 pop 后条目保留，
+            // 供下游按位置查询」（scope.rs）。此处据它补齐类型表，
+            // 使块内声明对 IR 生成可见。
+            //
+            // 按语句位置排序后覆盖写入：同名变量取**最后**一条（即最内层/最强制的
+            // 那次声明），与词法遮蔽的直觉一致。
+            let mut ledger_entries: Vec<_> = bc.var_type_ledger().iter().collect();
+            ledger_entries.sort_by_key(|((stmt_key, _), _)| *stmt_key);
+            for ((_stmt_key, name), poly) in ledger_entries {
+                local_var_types
+                    .entry(name.clone())
+                    .or_insert_with(|| poly.body.clone());
+            }
             for (name, info) in bc.scope_globals() {
                 if !bindings.contains_key(name) {
                     bindings.insert(name.clone(), info.poly.clone());
