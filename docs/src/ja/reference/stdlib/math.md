@@ -1,11 +1,11 @@
 ---
 title: 'std.math'
-description: '整数・浮動小数点・三角関数。PI/E/TAU の定数を含む'
+description: '整数、浮動小数点、三角関数。PI/E/TAU 定数を含む'
 ---
 
 # std.math
 
-数学モジュール。すべて**純粋な値関数**：引数は値渡し（Copy セマンティクス）で受け取られ、借用・ムーブ・副作用は伴いません。
+数学モジュール。すべて**純粋な値関数**：引数は値渡し（Copy セマンティクス）で渡され、借用・ムーブ・副作用はありません。
 
 ```yaoxiang
 use std.math
@@ -13,7 +13,7 @@ use std.math
 
 ## 定数
 
-名前でインポートして使用します：
+名前でインポートすれば使用できます。
 
 ```yaoxiang
 use std.math.{PI, E, TAU}
@@ -61,10 +61,10 @@ main: () -> Void = {
 | `E`     | `Float`                                   |
 | `TAU`   | `Float`                                   |
 
-<!-- stdlib:table:math end -->整型族は `Int` を、浮動小数点族は `Float` を取ります。型が一致しない引数を渡すと `0` として扱われます
+<!-- stdlib:table:math end -->> 整数族は `Int`、浮動小数点族は `Float` を取ります。一致しない型を渡すと `0` として扱われます
 
-> （`to_int` / `to_float` の変換に失敗した場合は `0`
-> にフォールバックする）ので、エラーは発生しません。型チェッカーに頼ってコンパイル時に検出させることを推奨します。
+> （`to_int` / `to_float` 変換に失敗した場合は `0`
+> にフォールバック）。エラーは発生しません。型チェッカーを使用してコンパイル時に検出することをお勧めします。
 
 ## 整数関数
 
@@ -142,16 +142,16 @@ clamp: (value: Int, min: Int, max: Int) -> Int
 
 <!-- stdlib:sig:math.clamp end -->
 
-`value` を `[min, max]` の区間にクランプします。
+`value` を `[min, max]` 区間にクランプします。
 
 - `value` —— クランプ対象の値
 - `min` —— 下限（含）
 - `max` —— 上限（含）
 
-戻り値：区間内の値。下限未満なら `min`、上限超過なら `max` を返します。
+戻り値：区間内の値。下限未満は `min`、上限超過は `max` を返します。
 
-> **`min > max` の場合、インタプリタが panic します（#339）**（内部で `i64::clamp`
-> の事前条件による）。エラー値は返されません。`min <= max` を満たすことを保証してください。
+> **`min > max` の場合、インタプリタが panic します（#339）**（下層の `i64::clamp`
+> の前提条件）。エラー値は返されません。`min <= max` となるようにしてください。
 
 ```yaoxiang
 use std.assert
@@ -324,7 +324,7 @@ round: (n: Float) -> Float
 
 <!-- stdlib:sig:math.round end -->
 
-四捨五入（ゼロから遠い方向へ丸める）。戻り値は `Float` のままです。
+四捨五入（ゼロから遠い方向で丸める）。戻り値は `Float` のままです。
 
 ```yaoxiang
 use std.assert
@@ -401,4 +401,4 @@ main: () -> Void = {
 
 ## 関連
 
-- [`std.string.parse_float`](./string#parse_float) —— 文字列を `Float` へ解析
+- [`std.string.parse_float`](./string#parse_float) —— 文字列を `Float` にパースする

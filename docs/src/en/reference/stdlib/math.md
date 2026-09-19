@@ -5,7 +5,7 @@ description: 'Integer, floating-point and trigonometric functions, including PI/
 
 # std.math
 
-Math module. All are **pure value functions**: parameters are passed by value (Copy semantics), with
+Math module. All are **pure value functions**: arguments are passed by value (Copy semantics), with
 no borrowing, no moving, and no side effects.
 
 ```yaoxiang
@@ -14,7 +14,7 @@ use std.math
 
 ## Constants
 
-Can be used by importing by name:
+Import by name to use:
 
 ```yaoxiang
 use std.math.{PI, E, TAU}
@@ -64,9 +64,9 @@ main: () -> Void = {
 
 <!-- stdlib:table:math end -->
 
-> The integer family takes `Int`, the floating-point family takes `Float`. Passing mismatched types
-> will be treated as `0` (falls back to `0` when `to_int` / `to_float` conversion fails), and no
-> error is reported — it is recommended to rely on the type checker to intercept at compile-time.
+> The integer family takes `Int`, the float family takes `Float`. Arguments of mismatched types are
+> treated as `0` (falling back to `0` when `to_int` / `to_float` conversion fails), and no error is
+> raised — it is recommended to rely on the type checker to catch this at compile-time.
 
 ## Integer Functions
 
@@ -102,7 +102,7 @@ max: (a: Int, b: Int) -> Int
 
 <!-- stdlib:sig:math.max end -->
 
-The larger of the two.
+The larger of the two values.
 
 ```yaoxiang
 use std.assert
@@ -123,7 +123,7 @@ min: (a: Int, b: Int) -> Int
 
 <!-- stdlib:sig:math.min end -->
 
-The smaller of the two.
+The smaller of the two values.
 
 ```yaoxiang
 use std.assert
@@ -144,17 +144,17 @@ clamp: (value: Int, min: Int, max: Int) -> Int
 
 <!-- stdlib:sig:math.clamp end -->
 
-Clamp `value` to the `[min, max]` range.
+Clamps `value` to the `[min, max]` range.
 
 - `value` — the value to be clamped
 - `min` — the lower bound (inclusive)
 - `max` — the upper bound (inclusive)
 
-Returns: A value within the range. Returns `min` if below the lower bound, returns `max` if above
-the upper bound.
+Returns: the value within the range. Values below the lower bound return `min`; values above the
+upper bound return `max`.
 
-> **`min > max` will cause the interpreter to panic (#339)** (the precondition of the underlying
-> `i64::clamp`); it does not return an error value. Please ensure `min <= max`.
+> **`min > max` will cause the interpreter to panic (#339)** (a precondition of the underlying
+> `i64::clamp`); it will not return an error value. Please ensure that `min <= max`.
 
 ```yaoxiang
 use std.assert
@@ -167,7 +167,7 @@ main: () -> Void = {
 }
 ```
 
-## Floating-Point Functions
+## Float Functions
 
 ### fabs
 
@@ -179,7 +179,7 @@ fabs: (n: Float) -> Float
 
 <!-- stdlib:sig:math.fabs end -->
 
-Floating-point absolute value.
+Float absolute value.
 
 ```yaoxiang
 use std.assert
@@ -200,7 +200,7 @@ fmax: (a: Float, b: Float) -> Float
 
 <!-- stdlib:sig:math.fmax end -->
 
-Floating-point larger value.
+Float maximum.
 
 ```yaoxiang
 use std.assert
@@ -221,7 +221,7 @@ fmin: (a: Float, b: Float) -> Float
 
 <!-- stdlib:sig:math.fmin end -->
 
-Floating-point smaller value.
+Float minimum.
 
 ```yaoxiang
 use std.assert
@@ -263,7 +263,7 @@ sqrt: (n: Float) -> Float
 
 <!-- stdlib:sig:math.sqrt end -->
 
-Square root. Returns `NaN` for negative numbers (no error).
+Square root. Negative numbers return `NaN` (no error is raised).
 
 ```yaoxiang
 use std.assert
@@ -327,7 +327,7 @@ round: (n: Float) -> Float
 
 <!-- stdlib:sig:math.round end -->
 
-Round (round half away from zero); the return value is still `Float`.
+Round half away from zero; the return value is still `Float`.
 
 ```yaoxiang
 use std.assert
@@ -349,7 +349,7 @@ sin: (n: Float) -> Float
 
 <!-- stdlib:sig:math.sin end -->
 
-Sine; the parameter is in **radians**.
+Sine; the argument is in **radians**.
 
 ```yaoxiang
 use std.assert
@@ -370,7 +370,7 @@ cos: (n: Float) -> Float
 
 <!-- stdlib:sig:math.cos end -->
 
-Cosine; the parameter is in **radians**.
+Cosine; the argument is in **radians**.
 
 ```yaoxiang
 use std.assert
@@ -391,7 +391,7 @@ tan: (n: Float) -> Float
 
 <!-- stdlib:sig:math.tan end -->
 
-Tangent; the parameter is in **radians**.
+Tangent; the argument is in **radians**.
 
 ```yaoxiang
 use std.assert
@@ -404,4 +404,4 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.string.parse_float`](./string#parse_float) — Parse string as `Float`
+- [`std.string.parse_float`](./string#parse_float) — parse a string into `Float`

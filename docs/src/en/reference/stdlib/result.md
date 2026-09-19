@@ -5,7 +5,7 @@ description: 'Construction and unpacking of Result and Error'
 
 # std.result
 
-Construction and unpacking of `Result(T, E)`, as well as field access on the `Error` carrier.
+Construction and unpacking of `Result(T, E)`, and field access for the `Error` carrier.
 
 ```yaoxiang
 use std.result
@@ -19,10 +19,10 @@ use std.result
 | `Result.err(error)` | enum variant, carrying `error`        |
 | `Error`             | struct, with fields `(code, message)` |
 
-`Error.code` is a registration code from the `E6xxx` / `E7xxx` segment of RFC-013 (a version-stable
-contract across releases), and `Error.message` is the human-readable description.
+`Error.code` is a registered code from the `E6xxx` / `E7xxx` range per RFC-013 (a stable contract
+across versions), and `Error.message` is a human-readable description.
 
-## Function Overview
+## Function Summary
 
 <!-- stdlib:table:result start -->
 
@@ -54,8 +54,8 @@ ok: (T: Type, E: Type)(value: T) -> Result(T, E)
 
 Wraps a success value.
 
-The `Ok` value produced by `?` needs to be re-wrapped before it can propagate through a `Result`
-return type, and `ok` is precisely that wrapper.
+The `Ok` value unpacked by `?` must be re-wrapped before it can continue to propagate along a
+`Result` return type; `ok` is that wrapper.
 
 ```yaoxiang
 use std.assert
@@ -101,7 +101,7 @@ is_ok: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_ok end -->
 
-Whether this is the success variant. Takes a read-only borrow, so `self` can be used repeatedly.
+Whether this is the success variant. Read-only borrow; `self` can be used repeatedly.
 
 ```yaoxiang
 use std.assert
@@ -124,7 +124,7 @@ is_err: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_err end -->
 
-Whether this is the error variant. Takes a read-only borrow.
+Whether this is the error variant. Read-only borrow.
 
 ```yaoxiang
 use std.assert
@@ -136,7 +136,7 @@ main: () -> Void = {
 }
 ```
 
-## Extraction
+## Extracting Values
 
 ### unwrap
 
@@ -150,8 +150,8 @@ unwrap: (T: Type, E: Type)(self: &Result(T, E)) -> T
 
 Extracts the success value.
 
-Return: the value carried by the `Ok` variant. Error: calling on an `Err` value throws `E6007`, and
-the message **includes the original error code and description**, in the form
+Returns: the value carried by the `Ok` variant. Error: calling on an `Err` value throws `E6007`,
+with the message **including the original error code and description**, in a form like
 `unwrap called on Err value (E6010: parse_int: ...)`, so the failure reason is visible without first
 calling `unwrap_err`.
 
@@ -176,9 +176,9 @@ unwrap_or: (T: Type, E: Type)(self: &Result(T, E), default: T) -> T
 
 <!-- stdlib:sig:result.unwrap_or end -->
 
-Extracts the success value, or returns `default` when given an `Err`.
+Extracts the success value, or returns `default` on `Err`.
 
-- `default` —— the fallback value when encountering `Err`
+- `default` —— fallback value when `Err`
 
 ```yaoxiang
 use std.assert
@@ -206,7 +206,7 @@ unwrap_err: (T: Type, E: Type)(self: &Result(T, E)) -> E
 
 Extracts the error value.
 
-Return: the value carried by the `Err` variant. Error: calling on an `Ok` value throws `E6007`.
+Returns: the value carried by the `Err` variant. Error: calling on an `Ok` value throws `E6007`.
 
 ```yaoxiang
 use std.assert
@@ -234,8 +234,8 @@ code: (self: &Error) -> String
 
 Reads the error code string, such as `"E6010"`.
 
-> The signature's type is `Error`, but the runtime error carrier is a struct with fields
-> `(code, message)`. Call it directly on an `Error` value.
+> The signature type is `Error`, but the runtime error carrier is a struct with fields
+> `(code, message)`. Call directly on an `Error` value.
 
 ```yaoxiang
 use std.assert
@@ -275,5 +275,5 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.string`](./string#parse_int) —— parsing functions that produce `Result`
-- [Error Code Reference](../error-code/) —— runtime error value codes such as `E6010` / `E6011`
+- [`std.string`](./string#parse_int) —— parsing function that produces a `Result`
+- [Error code reference](../error-code/) —— runtime error value codes such as `E6010` / `E6011`

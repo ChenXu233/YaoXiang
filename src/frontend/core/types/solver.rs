@@ -418,6 +418,17 @@ impl TypeConstraintSolver {
             (MonoType::Never, MonoType::Never) => Ok(()),
             (MonoType::Never, _) | (_, MonoType::Never) => Ok(()),
 
+            // 顶层类型 `Any`：任意 `T <: Any`，`unify(Any, T)` 恒成立（与 `Never`
+            // 上下对称）。native 签名里大量使用 `fn(Any) -> Any` 形态的多态槽位
+            // （std.range.map / std.list.map 等），若 `Any` 只能与 `Any` 统一，
+            // 传具体类型的 lambda（`x => x * 2` 推断为 `fn(Int) -> Int`）会被拒，
+            // 而这些槽位在运行期本就不关心元素类型。
+            //
+            // 不绑定类型变量（同 `Never` 的理由）：把 `T` 绑成 `Any` 会丢信息。
+            // 必须在 TypeVar 分支之前，否则 `(_, TypeVar(v))` 会先绑走。
+            (MonoType::TypeRef(n), _) if n == "Any" => Ok(()),
+            (_, MonoType::TypeRef(n)) if n == "Any" => Ok(()),
+
             // 类型变量 unify
             (MonoType::TypeVar(v1), MonoType::TypeVar(v2)) => {
                 let v1 = self.find(*v1);

@@ -5,7 +5,7 @@ description: 'Assertion'
 
 # std.assert
 
-The assertion module. The most commonly used tool in tests and examples.
+Assertion module. The most commonly used tool in tests and examples.
 
 ```yaoxiang
 use std.assert
@@ -35,24 +35,24 @@ assert: (cond: Bool, ?msg: String) -> Void
 
 Asserts that `cond` is true.
 
-- `cond` — The boolean expression to check
-- `msg` — Optional message; `?` means it can be omitted; emitted alongside the diagnostic when the
-  condition is not satisfied
+- `cond` — The boolean expression to evaluate
+- `msg` — Optional message, `?` indicates it can be omitted; output along with diagnostics when the
+  condition is not met
 
-Returns: Returns `Void` when the condition holds, without interrupting execution. Errors: Throws
-`E6005` (assertion failed) when the condition is false; the program exits with a non-zero code.
+Returns: returns `Void` when the condition holds, without interrupting execution. Error: throws
+`E6005` (Assertion Failed) when the condition is false, and the program exits with a non-zero code.
 
 ```yaoxiang
 use std.assert
 
 main: () -> Void = {
     assert(1 > 0)
-    assert(1 > 0, "This literal assertion must hold")
+    assert(1 > 0, "this literal assertion must hold")
 }
 ```
 
-Assertions are **the primary means of judgment in test corpora** — both `src/std/tests/*.yx` and
-`tests/yaoxiang/**` work in a way that an `assert` failure causes a process error:
+Assertions are the **primary means of evaluation in test corpora** — `src/std/tests/*.yx` and
+`tests/yaoxiang/**` all work in a way where an `assert` failure causes the process to error:
 
 ```yaoxiang
 use std.assert
@@ -66,5 +66,6 @@ main: () -> Void = {
 
 ## Related
 
-- [Test Specification](../dev/test-specification.md) — Corpus organization and judgment conventions
+- [Test Specification](../dev/test-specification.md) — Corpus organization and evaluation
+  conventions
 - [Error Code Reference](../error-code/) — `E6005` Assertion Failed

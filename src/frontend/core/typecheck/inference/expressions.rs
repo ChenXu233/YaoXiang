@@ -569,10 +569,27 @@ impl<'a> ExpressionInferrer<'a> {
                     let elem_ty = self.solver.resolve_type(left_elem);
                     Ok(MonoType::make_list(elem_ty))
                 } else {
-                    // 未绑定类型变量（无标注 lambda 参数等）延后判定：过早
-                    // unify 会把多态参数收敛成具体类型，破坏 fn(Any)->Any 槽位
-                    if matches!(left, MonoType::TypeVar(_)) || matches!(right, MonoType::TypeVar(_))
-                    {
+                    // 未绑定类型变量（无标注 lambda 参数等）：把变量与**另一侧的
+                    // 具体类型**统一，结果取该具体类型。这样 `x * 2` 里
+                    // `x: TypeVar` 会被绑成 `Int`，`fn(x: Int) -> Int` 的返回类型
+                    // 得以定型（调用方 `map(.., f: (item: T) -> R)` 的 `R` 才能解出）。
+                    //
+                    // 仅当**两侧都是**未绑定变量时才真的无法判定，返回 fresh 推迟
+                    // ——此时无具体类型可依，强行 unify 会把两个独立参数错误地
+                    // 绑在一起（破坏 `fn(Any, Any)` 的独立性）。
+                    let (lv, rv) = (
+                        matches!(left, MonoType::TypeVar(_)),
+                        matches!(right, MonoType::TypeVar(_)),
+                    );
+                    if lv && !rv {
+                        let _ = self.solver.unify(left, right);
+                        return Ok(self.solver.resolve_type(right));
+                    }
+                    if rv && !lv {
+                        let _ = self.solver.unify(left, right);
+                        return Ok(self.solver.resolve_type(left));
+                    }
+                    if lv && rv {
                         return Ok(self.solver.new_var());
                     }
                     // 类型层不认的组合宁拒不静默：fresh var 兜底会让
@@ -1036,17 +1053,68 @@ impl<'a> ExpressionInferrer<'a> {
                     let _ = self.solver.unify(&a, &p);
                 }
             }
-            // TypeVar 形态下，返回类型里的类型参数可能被分配了**另一个** TypeVar
-            // （声明处逐位置替换，参数位与返回位各拿一个）。unify 只绑定了参数位
-            // 的那个，返回位仍是自由变量——调用方拿到的返回值类型解不出具体类型。
-            // 按位置把返回位的变量与已解出的实参统一，使返回类型收敛。
+            // 声明名 ↔ 变量的对应可能**断裂**：同一声明类型参数在签名里能以两种
+            // 形态出现（`TypeRef("T")` 名字式、`TypeVar(n)` 编号式），声明处的替换
+            // 只覆盖了其中一部分。于是按名字建的槽位可能指向一个**签名里根本没用到**
+            // 的变量，永远解不出具体类型（`map(.., f: (item:T)->R)` 的 `R` 即如此：
+            // 名字槽指向 t77，而签名实际用的是 t75）。
+            //
+            // 补救：按位置遍历签名取回**实际使用**的变量（unify 已把它们绑好），
+            // 用它替换掉仍未解出的名字槽。已在 unify 中收敛的槽位保持不动
+            // （它才是对应声明名的正主）。
             if !pending_slots.is_empty() && pending_slots.len() == declared_names.len() {
-                let mut ret_slots: Vec<(usize, MonoType)> = Vec::new();
-                Self::collect_type_vars_positional(&new_return, &mut ret_slots);
-                ret_slots.sort_by_key(|(i, _)| *i);
-                ret_slots.dedup_by_key(|(i, _)| *i);
-                for (slot, (_, ty)) in pending_slots.iter().zip(ret_slots.iter()) {
-                    let _ = self.solver.unify(ty, slot);
+                let is_free = |s: &Self, t: &MonoType| {
+                    matches!(s.solver.resolve_type(t), MonoType::TypeVar(_))
+                };
+                if pending_slots.iter().any(|t| is_free(self, t)) {
+                    let mut positional: Vec<(usize, MonoType)> = Vec::new();
+                    for p in new_params.iter().chain(std::iter::once(&new_return)) {
+                        Self::collect_type_vars_positional(p, &mut positional);
+                    }
+                    positional.sort_by_key(|(i, _)| *i);
+                    positional.dedup_by_key(|(i, _)| *i);
+                    let mut used: Vec<MonoType> = pending_slots
+                        .iter()
+                        .filter(|t| !is_free(self, t))
+                        .cloned()
+                        .collect();
+                    for slot in pending_slots.iter_mut() {
+                        if !is_free(self, slot) {
+                            continue;
+                        }
+                        // 取一个尚未被占用的、已收敛的位置变量
+                        if let Some((_, cand)) = positional
+                            .iter()
+                            .find(|(_, t)| !is_free(self, t) && !used.iter().any(|u| u == t))
+                        {
+                            used.push(cand.clone());
+                            *slot = cand.clone();
+                        }
+                    }
+                }
+                // 返回位与参数位可能是**两个不同的** TypeVar（声明处逐位置替换，
+                // 同一类型参数在参数位、返回位各拿一个）。unify 只绑定了参数位那个，
+                // 返回位仍是自由变量——调用方拿到的返回值类型解不出具体类型
+                // （`r = rev(&a)` 后 `len(&r)` 的 A 解不出的根因）。
+                // 按**出现位置**把返回位的自由变量与已解出的槽位统一。
+                let free_ret: Vec<MonoType> = {
+                    let mut v: Vec<(usize, MonoType)> = Vec::new();
+                    Self::collect_type_vars_positional(&new_return, &mut v);
+                    v.sort_by_key(|(i, _)| *i);
+                    v.dedup_by_key(|(i, _)| *i);
+                    v.into_iter()
+                        .map(|(_, t)| t)
+                        .filter(|t| matches!(self.solver.resolve_type(t), MonoType::TypeVar(_)))
+                        .collect()
+                };
+                let resolved_slots: Vec<MonoType> = pending_slots
+                    .iter()
+                    .map(|t| self.solver.resolve_type(t))
+                    .collect();
+                if free_ret.len() == resolved_slots.len() {
+                    for (slot, ty) in resolved_slots.iter().zip(free_ret.iter()) {
+                        let _ = self.solver.unify(slot, ty);
+                    }
                 }
                 new_return = self.solver.resolve_type(&new_return);
             }

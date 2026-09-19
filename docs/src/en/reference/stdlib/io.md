@@ -5,20 +5,20 @@ description: 'Standard output, standard input, and whole-file read/write'
 
 # std.io
 
-Input/output module. Provides standard output, standard input reading, and convenience functions for
-one-shot whole-file read/write. For incremental file I/O via handles, use [`std.os`](./os).
+I/O module. Provides standard output, standard input reading, and convenience functions for
+reading/writing an entire file at once. For incremental file I/O by handle, use [`std.os`](./os).
 
 ```yaoxiang
 use std.io
 ```
 
-## Platform availability
+## Platform Availability
 
-The following functions starting from `read_line` depend on operating system I/O and are **not
-exported** on the `wasm32` target: `read_line`, `read_file`, `write_file`, `append_file`. `print` /
-`println` / `format_fallback` are available on all targets.
+Functions from `read_line` onward depend on OS I/O and are **not exported** on the `wasm32` target:
+`read_line`, `read_file`, `write_file`, `append_file`. `print` / `println` / `format_fallback` are
+available on all targets.
 
-## Function summary
+## Function Overview
 
 <!-- stdlib:table:io start -->
 
@@ -46,7 +46,7 @@ print: (...args) -> Void
 
 <!-- stdlib:sig:io.print end -->
 
-Outputs all arguments in order, **without appending a newline**. Multiple arguments are separated by
+Outputs all arguments in order, **without a trailing newline**. Multiple arguments are separated by
 a single space.
 
 Arguments are formatted: `String` outputs its content directly; `List` / `Dict` / `Tuple` are
@@ -75,7 +75,7 @@ println: (...args) -> ()
 
 Same as [`print`](#print), but appends a newline at the end of the output.
 
-`println()` called without arguments outputs an empty line:
+`println()` without arguments outputs an empty line:
 
 ```yaoxiang
 main: () -> Void = {
@@ -93,12 +93,13 @@ read_line: () -> String
 
 <!-- stdlib:sig:io.read_line end -->
 
-Reads a line from standard input.
+Reads one line from standard input.
 
-Returns: the entire line read, **with the trailing newline removed** (`\n` or `\r\n`). Error: throws
-`E6007` when the read fails.
+**Returns:** the entire line content read, with the trailing newline removed (`\n` or `\r\n`).
+**Errors:** throws `E6007` on read failure.
 
-> Interactive examples cannot be auto-run in the docs; the following is for reference only.
+> Interactive examples cannot be run automatically in the documentation; the following is for
+> reference only.
 
 ```yaoxiang
 use std.io
@@ -120,12 +121,12 @@ read_file: (path: &String) -> String
 
 <!-- stdlib:sig:io.read_file end -->
 
-Reads the entire file content as a string in one go.
+Reads the entire file content as a string at once.
 
-- `path` — file path (read-only borrow)
+- `path` —— file path (immutable borrow)
 
-Returns: the entire file content. Error: throws `E6007` when the file does not exist or lacks
-permission. **Does not return an empty string.**
+**Returns:** the entire file content. **Errors:** throws `E6007` when the file does not exist or
+permission is denied. **Does not return an empty string.**
 
 ```yaoxiang
 use std.assert
@@ -154,14 +155,14 @@ write_file: (path: &String, content: &String) -> Bool
 
 <!-- stdlib:sig:io.write_file end -->
 
-Writes `content` to `path`, **overwriting** any existing content; creates the file if it does not
+Writes `content` to `path`, **overwriting** the original content; creates the file if it does not
 exist.
 
-- `path` — file path (read-only borrow)
-- `content` — content to write (read-only borrow)
+- `path` —— file path (immutable borrow)
+- `content` —— content to write (immutable borrow)
 
-Returns: `true` on successful write. Error: throws `E6007` when the directory does not exist or
-lacks permission (does not return `false`).
+**Returns:** `true` on successful write. **Errors:** throws `E6007` when the directory does not
+exist or permission is denied (does not return `false`).
 
 ```yaoxiang
 use std.assert
@@ -189,7 +190,7 @@ append_file: (path: &String, content: &String) -> Bool
 
 **Appends** `content` to the end of `path`; creates the file if it does not exist.
 
-Returns: `true` on successful write. Error: throws `E6007` when lacking permission.
+**Returns:** `true` on successful write. **Errors:** throws `E6007` on permission error.
 
 ```yaoxiang
 use std.assert
@@ -215,15 +216,15 @@ format_fallback: (value, type_name: &String) -> String
 
 <!-- stdlib:sig:io.format_fallback end -->
 
-Formats a value by its type name, producing a prefixed representation such as `int(42)` / `list@3`.
+Formats a value by type name, producing a prefixed representation such as `int(42)` / `list@3`.
 
-This is an internal helper function used by the runtime's generic formatting path as a callback;
-everyday code should use [`std.convert.to_string`](./convert#to_string) directly.
+This is an internal helper function used by the runtime's generic formatting fallback path; everyday
+code should use [`std.convert.to_string`](./convert#to_string) directly.
 
-- `value` — any value
-- `type_name` — type-name string
+- `value` —— any value
+- `type_name` —— type name string
 
-Returns: a string representation with a type prefix.
+**Returns:** a string representation with a type prefix.
 
 ```yaoxiang
 use std.assert
@@ -236,7 +237,7 @@ main: () -> Void = {
 }
 ```
 
-## See also
+## Related
 
-- [`std.os`](./os) — file handles, directories, and environment variables
-- [`std.convert`](./convert) — value to string
+- [`std.os`](./os) —— file handles, directories, and environment variables
+- [`std.convert`](./convert) —— value to string conversion
