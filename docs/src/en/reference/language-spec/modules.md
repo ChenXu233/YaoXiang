@@ -1,18 +1,18 @@
 # Module System Specification
 
-This document defines the module system specification for the YaoXiang programming language,
-including module definitions, imports/exports, and scope.
+This file defines the module system specification for the YaoXiang programming language, including
+module definitions, imports/exports, and scoping.
 
 ---
 
-## Chapter 1: Module Definition
+## Chapter 1: Module Definitions
 
 ### 1.1 Module Basics
 
 Modules use files as boundaries. Each `.yx` file is a module.
 
 ```
-// File name is the module name
+// The file name is the module name
 // Math.yx
 pub pi: Float = 3.14159
 pub sqrt: (x: Float) -> Float = (x) => { ... }
@@ -21,12 +21,12 @@ pub sqrt: (x: Float) -> Float = (x) => { ... }
 ### 1.2 Module Naming Rules
 
 - The module name is determined by the file name
-- The file extension `.yx` does not participate in the module name
+- The `.yx` file extension does not participate in the module name
 - Module names use PascalCase naming
 
 ---
 
-## Chapter 2: Module Import
+## Chapter 2: Module Imports
 
 ### 2.1 Import Syntax
 
@@ -43,9 +43,9 @@ AliasList    ::= Identifier (',' Identifier)*
 | Syntax                       | Description                         | Example                                         |
 | ---------------------------- | ----------------------------------- | ----------------------------------------------- |
 | `use path;`                  | Import module, access via last part | `use std.io;` -> `io.print`                     |
-| `use path.{a, b};`           | Import specified items              | `use std.io.{print};` -> `print`                |
+| `use path.{a, b};`           | Import specific items               | `use std.io.{print};` -> `print`                |
 | `use path as alias;`         | Import and rename                   | `use std.io as io;` -> `io.print`               |
-| `use path.{i1, i2} as a, b;` | Import specified items and rename   | `use std.io.{print, read} as p, r;` -> `p`, `r` |
+| `use path.{i1, i2} as a, b;` | Import specific items and rename    | `use std.io.{print, read} as p, r;` -> `p`, `r` |
 
 ### 2.3 Import Examples
 
@@ -54,7 +54,7 @@ AliasList    ::= Identifier (',' Identifier)*
 use std.io
 io.print("Hello")
 
-// Import specified items
+// Import specific items
 use std.io.{print, read}
 print("Hello")
 
@@ -62,14 +62,14 @@ print("Hello")
 use std.io as io_module
 io_module.print("Hello")
 
-// Import specified items and rename
+// Import specific items and rename
 use std.io.{print, read} as p, r
 p("Hello")
 ```
 
 ---
 
-## Chapter 3: Module Export
+## Chapter 3: Module Exports
 
 ### 3.1 The `pub` Keyword
 
@@ -80,7 +80,7 @@ Use the `pub` keyword to declare exported items:
 pub pi: Float = 3.14159
 pub sqrt: (x: Float) -> Float = (x) => { ... }
 
-// Private items (not exported)
+// Private item (not exported)
 internal_value: Int = 42
 ```
 
@@ -96,32 +96,32 @@ For functions declared with `pub`, the compiler automatically binds them to type
 same file:
 
 ```yaoxiang
-// Declared with pub, compiler automatically binds
+// Declared with pub, compiler auto-binds
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
 }
 
-// Compiler automatically infers:
+// Compiler auto-infers:
 // 1. Point is defined in the current file
 // 2. Function parameters contain Point
-// 3. Execute Point.distance = distance[0]
+// 3. Perform Point.distance = distance[0]
 
 // Invocation
-d = distance(p1, p2)           // Functional
+d = distance(p1, p2)           // Functional style
 d2 = p1.distance(p2)           // OOP syntactic sugar
 ```
 
 ---
 
-## Chapter 4: Scope
+## Chapter 4: Scoping
 
 ### 4.1 Module Scope
 
-Each module has its own scope, and items within a module are not visible to the outside by default.
+Each module has its own scope; items within a module are not visible externally by default.
 
-### 4.2 Nested Scope
+### 4.2 Nested Scopes
 
 ```yaoxiang
 // Block scope
@@ -143,31 +143,29 @@ add: (a: Int, b: Int) -> Int = {
 
 YaoXiang has no `let` keyword. Is `x = value` a declaration or an assignment? Follow one principle:
 
-**Assignment first.** Declaration happens only once, but assignment happens hundreds of times. Let
-high-frequency operations take the shortest path.
+**Assignment takes precedence.** Declarations happen only once, but assignments happen hundreds of
+times. Let the high-frequency operation take the shortest path.
 
 ```
 x = value:
   Search outward along the scope chain for x
-    → Found mut x          : Assignment, OK (via &mut token)
-    → Found x (moved)      : Treated as "no valid binding found", re-declare in current scope
+    → Found mut x           : assignment, OK (via &mut token)
     → Found x (immutable, alive) : E2010 cannot reassign
-    → Not found            : New declaration in current scope (the only declaration path)
+    → Not found              : new declaration in current scope (the only declaration path)
 
 mut x = value:
     → x already exists in current scope : E2002 duplicate definition
-    → x exists in outer scope           : E2013 shadowing prohibited (explicit new declaration cannot share name with outer)
-    → No conflict            : New mutable declaration
+    → x exists in outer scope           : E2013 shadowing forbidden (explicit new declaration cannot share name with outer)
+    → No conflict              : new mutable declaration
 ```
 
 - **Same scope**: Any name can only be declared once (E2002)
-- **Inner scope without `mut`**: Search the outer scope first, assign or error
-- **Inner scope with `mut`**: Explicit new declaration, prohibited from sharing name with outer
-  (E2013)
+- **Inner without `mut`**: Search outer first, assign or error
+- **Inner with `mut`**: Explicit new declaration, forbidden from sharing name with outer (E2013)
 
-> **Blocks are real scopes**: The prerequisite for "searching along the scope chain" is that each
-> `{}` block truly establishes a layer—names newly declared in an inner scope **do not leak to the
-> outer scope** (see §2.15).
+> **Blocks are real scopes**: The premise of "searching along the scope chain" is that each `{}`
+> block does establish a layer—names newly declared in inner scopes **do not leak into outer
+> scopes** (see §2.15).
 
 #### Same Scope
 
@@ -176,68 +174,74 @@ x = 10
 x = 20              // E2010: 'x' is immutable, cannot reassign
 
 mut y = 10
-y = 20              // OK: same binding, reassignment
-mut y = 30          // E2002: 'y' is already defined in this scope (explicit new declaration conflicts)
+y = 20              // OK: same binding, reassign
+mut y = 30          // E2002: 'y' is already defined in this scope (explicit new declaration collides)
 
 z = 10
-mut z = 20          // E2002: 'z' is already defined in this scope (mut cannot cover existing declaration)
+mut z = 20          // E2002: 'z' is already defined in this scope (mut cannot override existing declaration)
 ```
 
 Note that `x = 20` reports **E2010** (cannot reassign) rather than E2002 (duplicate definition):
-`x = value` without `mut` is semantically an **assignment** (search along the scope chain), not
-"re-declare an x". Only `mut x = value` is an explicit new declaration, and conflicts report E2002.
+`x = value` without `mut` is semantically an **assignment** (search along scope chain), not
+"declaring another x". Only `mut x = value` is an explicit new declaration, and name collision then
+reports E2002.
 
 #### Rebinding After Move
 
-If an immutable variable owns a value, after its value is moved (consumed), the original binding
+If an immutable variable owns ownership, when its value is moved (consumed), the original binding
 enters the **moved** state—the name still occupies the scope slot, but the value is no longer
-accessible. At this point, `x = value` is not modifying the old binding, but re-declaring `x` within
-the same scope.
+accessible.
 
-```
-"moved" branch of assignment-first search:
-  x exists in current scope, but is in moved state
-    → Compiler treats it as "no valid binding found"
-    → Re-declare x in current scope (overwrite the old moved slot)
-```
-
-**Core mechanism:** After the old value is consumed, the binding becomes invalid, and the name
-returns to a "declarable" state. This is not shadowing—the old binding no longer exists.
+**Moved is not an input to "declaration judgment".** The way to reclaim that name is through
+**explicit redeclaration**:
 
 ```yaoxiang
-// Pipeline-style data flow: each step consumes the old value and produces a new one
-data = fetch()           // Immutable, holds ownership
-data = transform(data)   // move data → old data invalidated, new data rebound
-data = filter(data)      // Same as above
-process(data)
+// Pipeline-style data flow: each step consumes old value, produces new value
+mut data = fetch()           // explicit mutable declaration
+mut data = transform(data)   // E2002: data already exists in same scope
+```
 
-// Equivalent explicit writing (comparison):
-data1 = fetch()
+> **Why not "already moved → can redeclare"** (revised 2026-09-19):
+>
+> Move is a **path-sensitive** data-flow property—after `if c { move p }`, `p` is moved on one path
+> but not on the other; it is "possibly moved" rather than a boolean truth. A binding-level flag
+> structurally cannot express branch confluence, and treating it as a switch for "name can be
+> redeclared" produces wrong diagnostics (single-branch move treated as fully moved).
+>
+> The real move analysis is in `layers/ownership.rs`: build a function body CFG, perform data flow
+> over the `Alive < Moved < Dropped` lattice, **take the max at branch confluence (conservative)**,
+> and report E2014/E2018 at read checkpoints. It answers "can I read here", while "can this name be
+> redeclared" is independently answered by §4.3's assignment-first rule.
+>
+> The two responsibilities differ and should not be coupled. This is also why the old text's "moved
+> branch" was never reachable: it depends on a flag that is never written.
+
+**Rebinding relies on explicit `mut` declaration:**
+
+```yaoxiang
+// Equivalent explicit form
+mut data1 = fetch()
 data2 = transform(data1)  // data1 is moved, cannot be used again
-data3 = filter(data2)     // data2 is moved, cannot be used again
-process(data3)
+mut data3 = filter(data2)
 ```
 
 **Semantic separation:**
 
-| Operation                 | Meaning                                   | Mechanism         | Syntax         |
-| ------------------------- | ----------------------------------------- | ----------------- | -------------- |
-| **Rebinding**             | Old value disappears, new value is born   | move + re-declare | `x = f(x)`     |
-| **In-place modification** | Value at the same memory location changes | mut assignment    | `mut x; x = v` |
-
-**Why this differs from shadowing:**
-
-- Shadowing (Rust's `let x = ...`): The old binding still exists, just hidden by the new binding
-- Rebinding after Move: The old binding has been consumed, the name returns to an uninitialized
-  state, re-declaration is the only way out
+| Operation                 | Meaning                                   | Mechanism              | Syntax                             |
+| ------------------------- | ----------------------------------------- | ---------------------- | ---------------------------------- |
+| **Rebinding**             | Old value disappears, new one born        | move + new declaration | `mut x = f(x)` (new name or `mut`) |
+| **In-place modification** | Value at the same memory location changes | mut assignment         | `mut x = v; x = w`                 |
 
 **Constraints:**
 
-- Only values that own can be moved. References (`&T`, `&mut T`) are copied rather than moved
-- Move checking is completed at compile-time; reading a moved-state variable in any expression
-  reports E2014
-- The IDE can show a gray hint on moved variables, indicating that the name is in an uninitialized
-  state
+- Only values that own ownership can be moved. References (`&T`, `&mut T`) are copied, not moved
+- Move checking is done at compile-time (CFG + data flow); reading a moved variable in any
+  expression reports E2014
+- The IDE can display grayed-out hints on moved variables, indicating the name is in an
+  uninitialized state
+- **Declarations must include an initial value**:
+  `LetStmt ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr` (§3.2)—pure annotation declarations
+  like `x: Int` are not grammatical and report E0012
 
 ```yaoxiang
 // Read after move → error
@@ -247,14 +251,14 @@ print(data)              // E2014: 'data' has been moved and cannot be used
 
 // References do not trigger move
 ref_data = &value
-copy1 = ref_data         // Copy the reference, ref_data is still usable
+copy1 = ref_data         // copy reference, ref_data still usable
 copy2 = ref_data         // OK
 
-// Cross-scope: moved state propagates
+// Cross-scope: moved state penetrates
 data = fetch()
 {
-    data = transform(data)  // move outer data → rebind (new inner declaration)
-    print(data)             // OK: uses inner data
+    data = transform(data)  // move outer data → rebind (new declaration in inner scope)
+    print(data)             // OK: use inner data
 }
 print(data)                 // E2014: outer data has been moved
 ```
@@ -268,7 +272,7 @@ x = 10
     x = 20          // E2010: 'x' is immutable, cannot reassign
 }
 {
-    mut x = 20      // E2013: cannot shadow existing variable 'x' (explicit declaration of new binding)
+    mut x = 20      // E2013: cannot shadow existing variable 'x' (explicit new declaration)
 }
 
 // Outer mut, inner assignment → modify the same binding
@@ -278,7 +282,7 @@ mut y = 10
 }
 print(y)            // 20
 
-// Outer mut, inner cannot declare the same name
+// Outer mut, inner cannot declare same name
 mut z = 10
 {
     z = 30          // OK: same binding
@@ -305,10 +309,10 @@ b = 0
 }
 ```
 
-#### for Loop
+#### `for` Loops
 
 ```yaoxiang
-// Loop variable is a new binding each iteration, not modification
+// Loop variable is a new binding each iteration, not a modification
 for i in 1..5 {
     print(i)        // OK: new value bound each iteration
     i = 10          // E2010: immutable loop variable, cannot reassign
@@ -323,7 +327,7 @@ i = 0
 for i in 1..5 {     // E2013: cannot shadow existing variable 'i'
 }
 
-// mut outer accumulator can be modified within loop body
+// Mutable outer accumulator can be modified within loop body
 mut sum = 0
 for i in 1..5 {
     sum = sum + i   // OK: same binding, modified via &mut token
@@ -339,12 +343,12 @@ for i in 1..5 {
 
 #### Related Error Codes
 
-| Error Code | Message                                        | Trigger Scenario                                                                       |
-| ---------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
-| E2002      | `'{name}' is already defined in this scope`    | Duplicate declaration in same scope (regardless of mut)                                |
-| E2010      | `Cannot assign to immutable variable '{name}'` | When assigning without `mut` in inner scope, outer variable is immutable and not moved |
-| E2013      | `Cannot shadow existing variable '{name}'`     | Inner explicit declaration (`mut x` or `x: Type`) shares name with outer               |
-| E2014      | `'{name}' has been moved and cannot be used`   | Reading a moved variable                                                               |
+| Error Code | Message                                        | Trigger Scenario                                                               |
+| ---------- | ---------------------------------------------- | ------------------------------------------------------------------------------ |
+| E2002      | `'{name}' is already defined in this scope`    | Duplicate declaration in same scope (regardless of mut)                        |
+| E2010      | `Cannot assign to immutable variable '{name}'` | When inner assignment without `mut`, outer variable is immutable and not moved |
+| E2013      | `Cannot shadow existing variable '{name}'`     | Inner explicit declaration (`mut x` or `x: Type`) shares name with outer       |
+| E2014      | `'{name}' has been moved and cannot be used`   | Read from an already-moved variable                                            |
 
 ---
 
@@ -354,14 +358,14 @@ for i in 1..5 {
 
 ```
 src/
-├── main.yx          // Main module
+├── main.yx          // main module
 ├── math/
-│   ├── index.yx     // Math module entry
-│   ├── vector.yx    // Vector module
-│   └── matrix.yx    // Matrix module
+│   ├── index.yx     // math module entry
+│   ├── vector.yx    // vector module
+│   └── matrix.yx    // matrix module
 └── utils/
-    ├── index.yx     // Utils module entry
-    └── string.yx    // String utilities
+    ├── index.yx     // utils module entry
+    └── string.yx    // string utilities
 ```
 
 ### 5.2 Module Entry
@@ -377,26 +381,26 @@ pub Vector = vector.Vector
 pub Matrix = matrix.Matrix
 ```
 
-### 5.3 Relative Import
+### 5.3 Relative Imports
 
 ```yaoxiang
 // In math/vector.yx
-use math.matrix  // Absolute import
-use .matrix      // Relative import (same directory)
+use math.matrix  // absolute import
+use .matrix      // relative import (same directory)
 ```
 
 ---
 
 ## Appendix: Module Syntax Quick Reference
 
-### A.1 Module as File
+### A.1 Modules Are Files
 
 ```
-// File name .yx is the module name
+// filename.yx is the module name
 Import ::= 'use' ModuleRef
 ```
 
-### A.2 Import/Export
+### A.2 Imports and Exports
 
 ```yaoxiang
 // Import

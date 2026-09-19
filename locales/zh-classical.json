@@ -167,7 +167,7 @@
     "title": "归返之型弗合",
     "message": "函数归返之型非正",
     "template": "归返之型弗合：应 '{expected}'，实 '{found}'",
-    "help": "必使归返之值合于所宣之型",
+    "help": "函数体之值与所宣返式相乖。宜更函数体，或正其注解——慎诸 `h: () -> Int = f` 之义，乃「h 返 Int」也，非「h 即 f」也；若欲为函数立别名，请书 `h = f`。",
     "example": "fn foo() -> Int { \"hello\" }",
     "error_output": "error[E1012]: 归返之型弗合\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 应 'Int'，实得 'String'"
   },
@@ -982,5 +982,11 @@
   "E3020.help": "定义入口：main = { ... }。Bin 角色下若无 main，则诸函数皆不可及。",
   "E3021.title": "入口非函数",
   "E3021.template": "程序入口 '{name}' 须为函数，今乃值绑定",
-  "E3021.help": "入口须可调用：当书 main = { ... } 或 main: () -> Void = { ... }；值绑定（如 main: Int = 5）不致执行。"
+  "E3021.help": "入口须可调用：当书 main = { ... } 或 main: () -> Void = { ... }；值绑定（如 main: Int = 5）不致执行。",
+  "E1065.title": "调用非函数之值",
+  "E1065.template": "式 `{type}` 不可调用——非函数也",
+  "E1065.help": "唯函数值可调用。请检此处表达式之式；欲定义函数，须书 Fn 注解 `f: () -> T = { ... }`。",
+  "E3022.title": "入口 main 签名相违",
+  "E3022.template": "入口 '{name}' 之签名相违：运行期以无参调用之，而其需 '{expected}'，实乃 '{found}'",
+  "E3022.help": "程序入口恒以无参之式被调用。请书 main 为无参之形 `main: () -> Void = { ... }`；需外入者，请用 std.os 之 argv、环境变量。"
 }
