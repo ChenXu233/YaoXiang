@@ -251,3 +251,27 @@ reduce: (T: Type, Acc: Type) -> (list: &List(T), f: (acc: &Acc, item: T) -> Acc,
     }
     return acc
 }
+
+/// 构造迭代器：`(列表, 当前下标)` 的二元组。
+///
+/// 与 native 版保持同一形态（Tuple），`for x in list` 的脱糖路径依赖它。
+iter: (T: Type) -> (list: &List(T)) -> (List(T), Int) = {
+    copy: List(T) = List(list.data, list.length)
+    return (copy, 0)
+}
+
+/// 迭代器是否还有下一个元素。
+has_next: (T: Type) -> (it: &(List(T), Int)) -> Bool = {
+    return it.1 < it.0.length
+}
+
+/// 取下一个元素，返回 `(元素, 新迭代器)`；无元素时返回 `(none, it)`。
+///
+/// 用 `Option` 表达耗尽：调用方按 `Result/Option` 约定判空，
+/// 避免 native 版「越界返回 0」的静默语义（#279 同类）。
+next: (T: Type) -> (it: &(List(T), Int)) -> (Option(T), (List(T), Int)) = {
+    if it.1 < it.0.length {
+        return (Option(it.0.data[it.1]), (it.0, it.1 + 1))
+    }
+    return (none, (it.0, it.1))
+}

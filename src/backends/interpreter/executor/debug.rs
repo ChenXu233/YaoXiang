@@ -1123,6 +1123,26 @@ impl Interpreter {
                 field_idx,
             } => {
                 let obj = self.force_slot(frame, *src)?;
+                // 元组值：`NewTuple` 产出 `RuntimeValue::Tuple(handle)`，索引即位置。
+                // 此前只处理 `Struct{fields: HeapValue::Tuple}`（另一条构造路径），
+                // 导致 `t.0` 静默写成 Void（#279 同类：不得静默）。
+                if let RuntimeValue::Tuple(handle) = &obj {
+                    let guard = handle.lock();
+                    if let crate::backends::common::HeapValue::Tuple(items) = &*guard {
+                        if (*field_idx as usize) < items.len() {
+                            let v = items[*field_idx as usize].clone();
+                            drop(guard);
+                            frame.set_slot(dst.0 as usize, v);
+                            frame.advance();
+                            return Ok(StepOutcome::Continue);
+                        }
+                    }
+                    drop(guard);
+                    return Err(ExecutorError::type_only(format!(
+                        "tuple index {} out of range",
+                        field_idx
+                    )));
+                }
                 if let RuntimeValue::Struct { fields, .. } = obj {
                     if let crate::backends::common::HeapValue::Tuple(items) = &*fields.lock() {
                         if (*field_idx as usize) < items.len() {

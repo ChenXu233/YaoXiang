@@ -1622,6 +1622,18 @@ impl<'a> ExpressionInferrer<'a> {
                 }
 
                 match resolved {
+                    // 元组下标：`t.0` / `t.1`。解析期已把数字下标转成十进制字段名，
+                    // 这里按下标取元素类型。此前只支持 `t[0]` 形态（见索引表达式臂）。
+                    MonoType::Generic { ref name, ref args } if name == "Tuple" => {
+                        match field.parse::<usize>() {
+                            Ok(i) if i < args.len() => Ok(args[i].clone()),
+                            _ => Err(ErrorCodeDefinition::index_out_of_bounds(
+                                args.len(),
+                                field.parse::<i64>().unwrap_or(-1),
+                            )
+                            .build()),
+                        }
+                    }
                     // RFC-011 容器命名分层：`Vec(T)` / `Array(T, N)` 的长度。
                     // 两者以 `length: Int` 暴露长度（与 Range 具名字字段同款处理）：
                     // - `Array(T, N)`：N 编译期已知，但统一走同一读取路径，避免两套语义。
