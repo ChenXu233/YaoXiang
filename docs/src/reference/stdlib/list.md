@@ -5,7 +5,8 @@ description: '列表增删、切片、高阶函数与迭代器协议'
 
 # std.list
 
-列表操作模块。**移动语义需要特别留意**：有几类函数只读借用源列表，另几类会消耗（移动）源列表，还有两个虽标为借用却会原地改动列表。
+列表操作模块。**移动语义需要特别留意**：有两类函数——只读借用源列表的，与消耗（移动）源列表的。
+`&` 形参的自动借用规则见 RFC-009 §2.8：实参在调用后仍被使用时，编译器自动创建只读令牌。
 
 ```yaoxiang
 use std.list
@@ -18,10 +19,9 @@ use std.list
 
 | 类别               | 函数                                                                                                                    | 行为                       |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| **消耗源列表**     | `push` `append` `prepend` `set`                                                                                         | 源列表被移动，之后不可再用 |
-| 只读借用           | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` `iter` | 源列表可反复使用           |
-| 借用但**原地改动** | `pop` `remove_at`                                                                                                       | 源列表内容被改变           |
-| 消耗迭代器         | `next` `has_next`                                                                                                       | 迭代器元组被移动           |
+| **消耗源列表** | `push` `append` `prepend` `set` `pop` `remove_at` | 源列表被移动，之后不可再用 |
+| 只读借用       | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | 源列表可反复使用 |
+| 迭代协议       | `iter`（消耗源列表，返回迭代器）`has_next` `next`（借用 / 可变借用迭代器） | 见下方说明 |
 
 ```yaoxiang
 use std.assert

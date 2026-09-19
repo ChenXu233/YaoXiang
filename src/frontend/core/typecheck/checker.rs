@@ -31,6 +31,10 @@ use crate::util::diagnostic::ErrorCodeDefinition;
 pub struct TypeChecker {
     /// 当前环境
     env: TypeEnvironment,
+    /// 本模块函数的声明期类型参数名（名字 → 按声明序的参数名）。
+    /// 在签名收集阶段填充（`collect_signatures`），供 `embedded_std_module_info`
+    /// 随导出暴露——跨模块单态化需要被调函数的声明名。
+    declared_fn_type_params: HashMap<String, Vec<String>>,
     /// 语句检查器
     body_checker: Option<inference::StatementChecker>,
     /// 语义信息收集（typecheck 阶段同时产出）
@@ -158,6 +162,7 @@ impl TypeChecker {
 
         Self {
             env,
+            declared_fn_type_params: HashMap::new(),
             body_checker: None,
             semantic_db: semantic_db::SemanticDB::new(),
             dependent_type_env,
@@ -246,6 +251,20 @@ impl TypeChecker {
     }
 
     /// 获取环境引用
+    /// 本模块声明的**函数类型参数名表**快照（名字 → 按声明序的参数名）。
+    ///
+    /// 跨模块调用的单态化需要被调函数的声明名（否则签名里的 `TypeRef("A")`
+    /// 无人绑定）；`embedded_std_module_info` 借此把名字随导出一并暴露。
+    pub fn generic_fn_type_params_snapshot(&self) -> HashMap<String, Vec<String>> {
+        // 签名收集阶段（`collect_signatures`）填的是 `declared_fn_type_params`；
+        // 函数体检查后 `body_checker` 里也有一份更全的。两处合并，后者优先。
+        let mut out = self.declared_fn_type_params.clone();
+        if let Some(c) = self.body_checker.as_ref() {
+            out.extend(c.generic_fn_type_params_snapshot());
+        }
+        out
+    }
+
     pub fn env(&mut self) -> &mut TypeEnvironment {
         &mut self.env
     }
@@ -346,6 +365,46 @@ impl TypeChecker {
             let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             self.collect_function_signature(stmt);
         }
+        // 记录本模块每个函数的**声明期类型参数名**（按声明序）。
+        //
+        // 放在签名收集阶段：`embedded_std_module_info` 只跑这一步（不跑函数体），
+        // 却需要把名字随导出一并暴露——跨模块调用（`list.len(v)`）的单态化
+        // 依赖它们绑定签名里的 `TypeRef("A")`。
+        {
+            use crate::frontend::core::parser::ast::StmtKind;
+            for stmt in &module.items {
+                if let StmtKind::Assign {
+                    target,
+                    signature_params,
+                    ..
+                } = &stmt.kind
+                {
+                    if let crate::frontend::core::parser::ast::Expr::Var(name, _) = target.as_ref()
+                    {
+                        // 参数位是 `(A: Type)` 形态即类型参数（同
+                        // `StatementChecker` 的 classify_generic_params 判据）。
+                        let names: Vec<String> = signature_params
+                            .iter()
+                            // 类型参数的语法形态是 `A: Type`，解析为 `Type::MetaType`
+                            // （与 `StatementChecker::classify_generic_params` 判据一致）。
+                            .filter(|p| {
+                                matches!(
+                                    p.ty.as_ref(),
+                                    Some(crate::frontend::core::parser::ast::Type::MetaType { .. })
+                                )
+                            })
+                            .map(|p| p.name.clone())
+                            .collect();
+                        if !names.is_empty() {
+                            self.declared_fn_type_params
+                                .entry(name.clone())
+                                .or_insert(names);
+                        }
+                    }
+                }
+            }
+        }
+
         // RFC-004: 函数签名就位后登记类型体绑定
         self.flush_pending_body_bindings();
     }
@@ -2229,7 +2288,7 @@ impl TypeChecker {
 
             // #297/F：落空 const 候选（标注具体类型但未在类型体任何类型位置引用）
             // 不能静默丢弃——否则实例化 arity 对不上，调用侧报风马牛不相及的 E1010。
-            // 按 RFC-011 §4.1 勘误推荐：声明侧直接报错。
+            // 按 RFC-011 §4.1 编译期值参数判定：声明侧直接报错。
             for p in &resolved_const.fallen {
                 self.add_error(
                     ErrorCodeDefinition::unused_const_param(&p.name, name)

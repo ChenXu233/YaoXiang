@@ -113,6 +113,12 @@ pub struct StatementChecker {
 }
 
 impl StatementChecker {
+    /// 本模块声明的函数类型参数名表快照（名字 → 按声明序的参数名）。
+    /// 供 `embedded_std_module_info` 随导出暴露给调用方（跨模块单态化用）。
+    pub fn generic_fn_type_params_snapshot(&self) -> HashMap<String, Vec<String>> {
+        self.generic_fn_type_params.clone()
+    }
+
     /// 创建新的语句检查器
     pub fn new(
         solver: &mut TypeConstraintSolver,
@@ -381,6 +387,19 @@ impl StatementChecker {
                 self.default_callable_type()
             }
             _ => {
+                // 跨模块单态化：把被调模块声明的类型参数名登记进本检查器的表，
+                // 调用点（`list.len(v)`）才能按声明序绑定签名里的 `TypeRef("A")`。
+                // 同时登记短名与限定名两种键，两种调用形态都命中。
+                if let Some(tp) = &export.type_params {
+                    if !tp.is_empty() {
+                        self.generic_fn_type_params
+                            .entry(export.name.clone())
+                            .or_insert_with(|| tp.clone());
+                        self.generic_fn_type_params
+                            .entry(export.full_path.clone())
+                            .or_insert_with(|| tp.clone());
+                    }
+                }
                 // 优先级：**限定名精确签名** → **导出自身携带的类型** → 短名兜底。
                 //
                 // 短名兜底必须排最后：它按裸名查 native 表，`list.len` 的导出名是
@@ -1001,7 +1020,7 @@ impl StatementChecker {
                     // 也是元绑定：编译期构造类型，不引入运行时变量。
                     || Expr::is_type_def_binding(value.as_deref());
                 // 从 value 提取 Lambda params/body。
-                // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值（交给 check_var_stmt 按普通变量审）。
                 let (params, body_stmts) = match value {
                     Some(v) => {

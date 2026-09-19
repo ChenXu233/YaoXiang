@@ -552,8 +552,8 @@ pub fn fast_path_check(
                     .any(|(succ, kind)| *succ == cur && *kind == EdgeKind::BackEdge);
 
                 if is_back_edge {
-                    // #312：路径条件取写节点自身条件（RFC-009a 勘误 2026-08-17：
-                    // 判定目标为写节点），与循环头条件做蕴含判定。
+                    // #312：路径条件取**写节点自身**条件（RFC-009a §反向 BFS：
+                    // 判定目标是写节点的路径条件），与循环头条件做蕴含判定。
                     // 任一缺失（无守卫的循环体 / for 循环 / loop）或 SMT 无法证明
                     // 蕴含 → 回边穿越 → 保守拒绝（SMT 是精度层，不是 soundness 依赖）
                     let write_cond = cfg.nodes[write_node].path_condition.as_ref();
@@ -590,7 +590,7 @@ pub fn fast_path_check(
 /// SMT 逻辑切断：判定 `write_path_cond ⇒ !loop_cond`
 ///
 /// 仅在回边 + 双侧路径条件（写节点自身条件 + 循环头条件）齐备时调用。
-/// RFC-009a 勘误（2026-08-17）：SMT 是精度层而非 soundness 依赖——
+/// RFC-009a §证明策略：SMT 是精度层而非 soundness 依赖——
 /// 蕴含无法证明（Sat/Unknown/Z3 不可用）一律返回 false = 回边穿越 = 保守拒绝。
 ///
 /// 构造：目标 `!(path ∧ loop)`，Unsat = 蕴含成立 → 切断。

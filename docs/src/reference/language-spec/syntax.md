@@ -313,7 +313,7 @@ Block       ::= '{' Stmt* Expr? '}'
 > **为何函数需要注解**：`f = { stmt }` 是**值**（尾表达式类型），不是函数。
 > 要定义函数就写明 Fn 注解：`f: () -> Int = { 5 }`。
 > 这与字典同一原则：**类型由内容决定**，不由注解存在与否决定。
-> （此规则取代了 RFC-010a 附录 D 裁决 C 的「无注解 → 默认函数」，见其勘误。）
+> （此规则见 [RFC-010a](./design/rfc/accepted/010a-tail-expression-and-return.md) 附录 D。）
 
 **统一语义**：所有 `{}` 块的值均由**尾表达式**给出，`return` 是 `Never` 型的非局部退出。
 
@@ -346,11 +346,11 @@ SqliteDb = unsafe {
     SqliteDb         // 块的值
 }
 
-// spawn {} 块：尾表达式给出结果（⚠️ 尚未实现，见 #365；当前需写 return）
+// spawn {} 块：尾表达式给出结果
 (a, b) = spawn {
     result1 = fetch("url1"),
     result2 = fetch("url2")
-    return (result1, result2)   // 块的值
+    (result1, result2)   // 块的值
 }
 
 // return：穿透块，退出函数

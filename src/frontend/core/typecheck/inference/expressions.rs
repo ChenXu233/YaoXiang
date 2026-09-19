@@ -1892,6 +1892,12 @@ impl<'a> ExpressionInferrer<'a> {
                 // 单态化：处理编译期泛型参数
                 let fn_name_for_mono = match func.as_ref() {
                     crate::frontend::core::parser::ast::Expr::Var(n, _) => Some(n.as_str()),
+                    // 限定名调用（`list.len(v)`）：取函数名才能查声明期类型参数名表
+                    // 并按声明序绑定签名里的 `TypeRef("A")`；否则实参无法与
+                    // `&Vec(A)` unify 报 E1002。
+                    crate::frontend::core::parser::ast::Expr::FieldAccess { field, .. } => {
+                        Some(field.as_str())
+                    }
                     _ => None,
                 };
                 let mono_func_ty = self.monomorphize(func_ty.clone(), &arg_types, fn_name_for_mono);
@@ -3171,7 +3177,7 @@ impl<'a> ExpressionInferrer<'a> {
                         let _ = self.infer_expr(v)?;
                         return Ok(MonoType::Void);
                     }
-                    // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                    // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                     // 非 Fn 注解→块值（立即求值，变量绑定块值类型）。
                     // 此前不论注解一律注册为 0 参函数，与 ir_gen 分流脱节（#343）。
                     if let Expr::Block(..) = v.as_ref() {
