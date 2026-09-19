@@ -2209,12 +2209,32 @@ impl StatementChecker {
                             }
                             // 与 infer_binary 同款纪律：类型层不认的组合宁拒不
                             // 静默，fresh var 兜底会把错译推迟到运行时 E6007
+                            //
+                            // D6.1：借用参与算术时默认 help（“加类型转换”）指不出
+                            // 真正出路。`t = &v; t + 1` 报 “Vec(int64) 与 int64”
+                            // ——读者看到的是借用后的读视图类型，但很可能以为是
+                            // “Vec 和 Int 不能相加”，而实际该做的是取元素或解引用。
+                            // 这里针对“一侧是借用”的情形给出具体提示。
+                            let borrowed = matches!(left_ty, MonoType::Ref { .. })
+                                || matches!(right_ty, MonoType::Ref { .. });
+                            let help = if borrowed {
+                                format!(
+                                    "左侧读作 '{l}'、右侧读作 '{r}'；借用（&T）参与算术时按内部类型判定，\
+                                     若想对容器运算请先取元素（如 v[0]）或解引用（*t）"
+                                )
+                            } else {
+                                format!(
+                                    "左右类型分别为 '{l}' 和 '{r}'，二者不支持该运算符；\
+                                         检查是否少了转换或写错了操作数"
+                                )
+                            };
                             Err(Box::new(
                                 ErrorCodeDefinition::type_mismatch(
                                     "Int/Float/String/List（两侧同型）",
                                     &format!("{l} 与 {r}"),
                                 )
                                 .at(*span)
+                                .with_help(help)
                                 .build(),
                             ))
                         }
