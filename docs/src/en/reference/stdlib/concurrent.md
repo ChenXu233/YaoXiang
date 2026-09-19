@@ -5,7 +5,7 @@ description: 'Sleep, yield scheduling, and thread identifier'
 
 # std.concurrent
 
-Concurrency utility module.
+Concurrency helper module.
 
 ```yaoxiang
 use std.concurrent
@@ -13,7 +13,7 @@ use std.concurrent
 
 > This module depends on operating system threads and is **not exported** on the `wasm32` target.
 
-## Functions
+## Function List
 
 <!-- stdlib:table:concurrent start -->
 
@@ -41,9 +41,9 @@ Blocks the current thread for the specified number of **milliseconds**.
 
 - `millis` —— number of milliseconds to sleep; if not an `Int` or missing, treated as `0` (no error)
 
-> **Unit note**: [`std.time.sleep`](./time#sleep) uses **seconds** and accepts decimals, while this
-> function uses **milliseconds**. `concurrent.sleep(1)` sleeps for 1 millisecond, `time.sleep(1)`
-> sleeps for 1 second.
+> **Unit note**: [`std.time.sleep`](./time#sleep) takes **seconds** and accepts decimals, while this
+> function takes **milliseconds**. `concurrent.sleep(1)` sleeps for 1 millisecond, and
+> `time.sleep(1)` sleeps for 1 second.
 
 ```yaoxiang
 use std.concurrent
@@ -66,9 +66,8 @@ thread_id: () -> String
 
 Returns the identifier string of the current thread.
 
-Returns: a string of the form `ThreadId(1)`. The specific value varies by platform and scheduling;
-it should **only be used for existence checks**, and should not rely on its specific content or
-format.
+Returns: a string like `ThreadId(1)`. The specific value varies by platform and scheduling; you
+should **only check for its existence**, not rely on its specific content or format.
 
 ```yaoxiang
 use std.assert
@@ -91,8 +90,7 @@ yield_now: () -> Void
 
 <!-- stdlib:sig:concurrent.yield_now end -->
 
-Voluntarily yields the current thread's scheduling time slice, giving other threads an opportunity
-to run.
+Actively yields the current thread's scheduling time slice, giving other threads a chance to run.
 
 ```yaoxiang
 use std.concurrent
@@ -105,5 +103,4 @@ main: () -> Void = {
 ## Related
 
 - [`std.time.sleep`](./time#sleep) —— second-level sleep
-- [Language Specification: Concurrency Model](../language-spec/concurrency.md) —— `spawn` and spawn
-  semantics
+- [Language Spec: Concurrency Model](../language-spec/concurrency.md) —— `spawn` and spawn semantics
