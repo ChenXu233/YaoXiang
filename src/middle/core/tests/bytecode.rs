@@ -614,7 +614,13 @@ fn test_every_opcode_roundtrips_not_silently_nop() {
             "编码方向 opcode 不符：{instr:?}"
         );
         let operand_len = instr.size();
-        let encoded = BytecodeInstruction::new(opcode_val, vec![0u8; operand_len]);
+        // 用非零且可区分的字节填充：全填 0 无法发现「字段顺序写反」这类
+        // 错位——各字段都解出 0 时看似正确。此处按位置递增，
+        // 使每个字段解出的值互不相同，错位即被下方断言捕获。
+        let operands: Vec<u8> = (0..operand_len)
+            .map(|i| (i as u8).wrapping_mul(3).wrapping_add(1))
+            .collect();
+        let encoded = BytecodeInstruction::new(opcode_val, operands);
 
         // Act
         let module = build_and_decode(vec![encoded]);
@@ -634,5 +640,88 @@ fn test_every_opcode_roundtrips_not_silently_nop() {
              编码前 {instr:?}，解码后 {:?}",
             decoded[0]
         );
+    }
+}
+
+/// 字段级校验：解码器把各字段放在正确位置。
+///
+/// 上方的种类比对无法发现「字段顺序写反」——例如 `RcNew { dst, src }` 若
+/// 按 `src, dst` 解码，种类仍是 `RcNew` 但值已互换。本测试用互不相同的
+/// 操作数值逐字段断言。
+///
+/// 为何不用「重编码比对」：编码方向只存在于 `translator`（IR → 字节码），
+/// `BytecodeInstr` **没有**回编码方法，故无法从解出的指令再编码回来对照。
+#[test]
+fn test_decode_places_fields_in_correct_positions() {
+    use crate::backends::common::opcode;
+    use crate::middle::bytecode::{BytecodeInstr, Reg};
+
+    // 辅助：按字节向量解码出单条指令
+    fn decode_one(
+        op: u8,
+        operands: Vec<u8>,
+    ) -> BytecodeInstr {
+        let module = build_and_decode(vec![BytecodeInstruction::new(op, operands)]);
+        module.functions[0].instructions[0].clone()
+    }
+
+    // dst=0x11AA, src=0x22BB——两值不同，dst/src 写反即被抓
+    match decode_one(opcode::RC_NEW, vec![0xAA, 0x11, 0xBB, 0x22]) {
+        BytecodeInstr::RcNew { dst, src } => {
+            assert_eq!(dst, Reg(0x11AA), "RcNew.dst 位置错误（可能 dst/src 写反）");
+            assert_eq!(src, Reg(0x22BB), "RcNew.src 位置错误");
+        }
+        other => panic!("应为 RcNew，实际 {other:?}"),
+    }
+
+    // ArcDrop: 单字段 src
+    match decode_one(opcode::ARC_DROP, vec![0xCD, 0xAB]) {
+        BytecodeInstr::ArcDrop { src } => assert_eq!(src, Reg(0xABCD), "ArcDrop.src 位置错误"),
+        other => panic!("应为 ArcDrop，实际 {other:?}"),
+    }
+
+    // StringConcat: dst + str1 + str2（三字段，顺序易错）
+    match decode_one(
+        opcode::STRING_CONCAT,
+        vec![0x01, 0x00, 0x02, 0x00, 0x03, 0x00],
+    ) {
+        BytecodeInstr::StringConcat { dst, str1, str2 } => {
+            assert_eq!(dst, Reg(1), "StringConcat.dst 位置错误");
+            assert_eq!(str1, Reg(2), "StringConcat.str1 位置错误");
+            assert_eq!(str2, Reg(3), "StringConcat.str2 位置错误");
+        }
+        other => panic!("应为 StringConcat，实际 {other:?}"),
+    }
+
+    // Cast: dst + src + target_type_id（u16 类型号）
+    match decode_one(opcode::CAST, vec![0x01, 0x00, 0x02, 0x00, 0x34, 0x12]) {
+        BytecodeInstr::Cast {
+            dst,
+            src,
+            target_type_id,
+        } => {
+            assert_eq!(dst, Reg(1), "Cast.dst 位置错误");
+            assert_eq!(src, Reg(2), "Cast.src 位置错误");
+            assert_eq!(target_type_id, 0x1234, "Cast.target_type_id 位置错误");
+        }
+        other => panic!("应为 Cast，实际 {other:?}"),
+    }
+
+    // BoundsCheck: array + index
+    match decode_one(opcode::BOUNDS_CHECK, vec![0x07, 0x00, 0x09, 0x00]) {
+        BytecodeInstr::BoundsCheck { array, index } => {
+            assert_eq!(array, Reg(7), "BoundsCheck.array 位置错误");
+            assert_eq!(index, Reg(9), "BoundsCheck.index 位置错误");
+        }
+        other => panic!("应为 BoundsCheck，实际 {other:?}"),
+    }
+
+    // WeakUpgrade: dst + src
+    match decode_one(opcode::WEAK_UPGRADE, vec![0x05, 0x00, 0x06, 0x00]) {
+        BytecodeInstr::WeakUpgrade { dst, src } => {
+            assert_eq!(dst, Reg(5), "WeakUpgrade.dst 位置错误");
+            assert_eq!(src, Reg(6), "WeakUpgrade.src 位置错误");
+        }
+        other => panic!("应为 WeakUpgrade，实际 {other:?}"),
     }
 }
