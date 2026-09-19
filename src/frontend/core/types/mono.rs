@@ -314,6 +314,11 @@ impl MonoType {
     pub fn is_array(&self) -> bool {
         self.is_generic_named("Array")
     }
+    /// RFC-011 容器命名分层：`Vec(T)` 是运行时长度的原始缓冲原语，
+    /// 与 `List(T)`（标准库类型）、`Array(T, N)`（定长）区分。
+    pub fn is_vec(&self) -> bool {
+        self.is_generic_named("Vec")
+    }
     pub fn is_arc(&self) -> bool {
         self.is_generic_named("Arc")
     }
@@ -336,6 +341,13 @@ impl MonoType {
     pub fn make_list(elem: MonoType) -> Self {
         MonoType::Generic {
             name: "List".into(),
+            args: vec![elem],
+        }
+    }
+    /// 构造 Vec(T)
+    pub fn make_vec(elem: MonoType) -> Self {
+        MonoType::Generic {
+            name: "Vec".into(),
             args: vec![elem],
         }
     }

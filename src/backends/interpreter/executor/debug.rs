@@ -1077,11 +1077,13 @@ impl Interpreter {
                                 items.push(val);
                             } else {
                                 // #279：越界写不再静默丢弃；#280：报专用码 E6003
-                                return Err(ExecutorError::index_out_of_bounds(
-                                    items.len(),
-                                    idx as i64,
-                                    Some(self.capture_stack()),
-                                ));
+                                // 带上索引寄存器号，供诊断层回溯源码变量名（#360）
+                                return Err(ExecutorError::IndexOutOfBounds {
+                                    max: items.len(),
+                                    index: idx as i64,
+                                    index_slot: Some(index.0 as usize),
+                                    stack: Some(self.capture_stack()),
+                                });
                             }
                         }
                     }
@@ -1095,11 +1097,13 @@ impl Interpreter {
                                 items[idx] = val;
                             } else {
                                 // #279：越界写不再静默丢弃；#280：报专用码 E6003
-                                return Err(ExecutorError::index_out_of_bounds(
-                                    items.len(),
-                                    idx as i64,
-                                    Some(self.capture_stack()),
-                                ));
+                                // 带上索引寄存器号，供诊断层回溯源码变量名（#360）
+                                return Err(ExecutorError::IndexOutOfBounds {
+                                    max: items.len(),
+                                    index: idx as i64,
+                                    index_slot: Some(index.0 as usize),
+                                    stack: Some(self.capture_stack()),
+                                });
                             }
                         }
                     }
@@ -1225,11 +1229,24 @@ impl Interpreter {
                 Ok(StepOutcome::Continue)
             }
             BytecodeInstr::StringLength { dst, src } => {
-                let s: String = match self.force_slot(frame, *src)? {
-                    RuntimeValue::String(s) => s.as_ref().to_string(),
-                    _ => String::new(),
+                // 长度读取：String 与容器（List/Array/Tuple/Dict）共用本指令。
+                // 容器长度是缓冲的当前长度（`HeapValue::len()`）；String 按字节长。
+                // 注：`Vec(T)` 运行时以 `RuntimeValue::List` 表示（同为可增长缓冲的唯一存储），
+                // 二者仅类型层区分，待分配/扩容原语落地后另立堆变体。
+                let len = match self.force_slot(frame, *src)? {
+                    RuntimeValue::String(s) => s.len() as i64,
+                    RuntimeValue::List(h)
+                    | RuntimeValue::Array(h)
+                    | RuntimeValue::Tuple(h)
+                    | RuntimeValue::Dict(h) => h.lock().len() as i64,
+                    // 非长度载体：显式报错，不静默返回 0（#279/#281 同款）
+                    _ => {
+                        return Err(ExecutorError::type_only(
+                            "length is not defined for this value type".to_string(),
+                        ))
+                    }
                 };
-                frame.set_slot(dst.0 as usize, RuntimeValue::Int(s.len() as i64));
+                frame.set_slot(dst.0 as usize, RuntimeValue::Int(len));
                 frame.advance();
                 Ok(StepOutcome::Continue)
             }

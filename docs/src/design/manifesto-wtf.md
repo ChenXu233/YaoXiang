@@ -186,7 +186,7 @@ factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
 }
-vec: Vec(factorial(5)) = Vec(120)()  # Vec(120) 类型，编译期计算
+arr: Array(Int, factorial(5)) = Array(Int, 120)()  # Array(Int, 120) 类型，编译期计算
 
 # === 并作模型：spawn + @block + @eager = 三位一体的混乱 ===
 fetch_data: (url: String) -> JSON spawn = {

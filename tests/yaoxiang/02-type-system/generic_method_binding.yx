@@ -1,0 +1,54 @@
+// 02-type-system/generic_method_binding.yx
+// 覆盖: RFC-011 §4.2 泛型类型的方法绑定（List 下沉的前置能力）
+// 验证:
+//   - 泛型类型定义的方法体可访问自身字段（Generic 实例展开为 Struct 后查找）
+//   - 方法接收者 &Self / &mut Self 的自动借用
+//   - 一个库类型（MyList）完全用 YaoXiang 自身写出：Vec 底座 + length + 方法
+// 状态: ✅ 可运行
+
+use std.assert
+
+// 泛型方法读字段
+Box: (T: Type) -> Type = { v: T }
+
+Box.get: (T: Type) -> (self: &Box(T)) -> T = {
+    return self.v
+}
+
+// 用语言自身实现的 List：data 是运行时长度的 Vec，length 是已用长度
+MyList: (T: Type) -> Type = {
+    data: Vec(T),
+    length: Int,
+}
+
+MyList.push: (T: Type) -> (self: &mut MyList(T), item: T) -> Void = {
+    self.data[self.length] = item
+    self.length = self.length + 1
+}
+
+MyList.get: (T: Type) -> (self: &MyList(T), i: Int) -> T = {
+    return self.data[i]
+}
+
+read_box: () -> Int = {
+    b: Box(Int) = Box(Int)(7)
+    return b.get()
+}
+
+build_list: () -> Int = {
+    l: MyList(Int) = MyList(Int)([0], 0)
+    l.push(42)
+    assert.assert(l.length == 1, "push grows length")
+    assert.assert(l.get(0) == 42, "pushed value at slot 0")
+    l.push(43)
+    assert.assert(l.length == 2, "second push")
+    assert.assert(l.get(1) == 43, "second pushed value")
+    return l.length
+}
+
+main = {
+    assert.assert(read_box() == 7, "generic method reads own field")
+    assert.assert(build_list() == 2, "library-style List built in YaoXiang")
+}
+
+main()

@@ -65,6 +65,13 @@ pub struct StatementChecker {
     >,
     /// 方法绑定表: "Type.method" -> MonoType
     method_bindings: HashMap<String, MonoType>,
+    /// 泛型函数的**声明序类型参数名**：函数名 -> ["T", "Acc", ...]。
+    ///
+    /// 为什么需要单独一张表：`MonoType` 里类型参数只是普通 `TypeRef("T")`，
+    /// 无法与「恰好没在本地注册的普通类型名」（std 的 `Error`/`Iterator` 等）
+    /// 区分。调用点要做正确的类型参数替换就必须知道**声明**了哪些名字。
+    /// `PolyType.type_binders` 存的是 `TypeVar`（编号），拿不回名字，故单列。
+    generic_fn_type_params: HashMap<String, Vec<String>>,
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析
     type_defs: HashMap<String, MonoType>,
@@ -119,6 +126,7 @@ impl StatementChecker {
             expected_return_type: None,
             generic_type_defs: std::collections::HashMap::new(),
             method_bindings: HashMap::new(),
+            generic_fn_type_params: HashMap::new(),
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
             call_ownership: super::call_ownership::CallOwnershipTable::new(),
@@ -257,6 +265,11 @@ impl StatementChecker {
     ///
     /// 当 type_annotation 为 `List(Int)` 时，查找 `List` 的泛型模板，
     /// 将类型参数 `T` 替换为 `Int`，返回展开后的结构体类型。
+    ///
+    /// **仅当全部类型实参都已具体化时才展开**。若实参含未绑定的类型参数
+    /// （`L(T)`，T 是所在泛型的参数），展开得到的 Struct 与签名侧给出的
+    /// `Generic{name:“L”}` 表示不一致，unify 会报 E1002——而它们语义相同。
+    /// 此时返回 None 让调用方回退到 `Generic` 形态，两侧表示一致。
     fn try_instantiate_generic_type(
         &self,
         type_ann: &crate::frontend::core::parser::ast::Type,
@@ -267,6 +280,10 @@ impl StatementChecker {
                 let def = self.generic_type_defs.get(name)?;
                 let arg_types: Vec<MonoType> =
                     args.iter().map(|a| MonoType::from(a.clone())).collect();
+                // 含未绑定类型参数（TypeRef）时不做结构体展开，保持 Generic 形态。
+                if arg_types.iter().any(contains_unresolved_param) {
+                    return None;
+                }
                 TypeEnvironment::instantiate_generic_type(def, &arg_types).ok()
             }
             _ => None,
@@ -1216,6 +1233,24 @@ impl StatementChecker {
             }
         }
 
+        // 记录本函数的声明序类型参数名（调用点做类型参数替换时要用）。
+        // 只登记非空的情况，避免污染普通函数。
+        {
+            let names: Vec<String> = generic_params
+                .iter()
+                .filter(|p| {
+                    matches!(
+                        p.kind,
+                        crate::frontend::core::parser::ast::GenericParamKind::Type
+                    )
+                })
+                .map(|p| p.name.clone())
+                .collect();
+            if !names.is_empty() {
+                self.generic_fn_type_params.insert(name.to_string(), names);
+            }
+        }
+
         // 提取 Type 级别的泛型参数
         let type_generic_params: Vec<_> = generic_params
             .iter()
@@ -1596,6 +1631,9 @@ impl StatementChecker {
                 // The annotation type is NOT resolved when it's a struct/interface TypeRef,
                 // so the solver can detect the Struct vs TypeRef pattern.
                 let resolved_init = self.resolve_type_ref_type(&init_ty);
+                // 泛型注解（`List(Int)`）统一取 **Generic 形态**：实例化后的 Struct 会丢
+                // 类型实参（`List(Int)` → 只剩名字 `List`），后续传给泛型函数或取 `&` 时
+                // 形参与实参表示不一致（E1002）。字段校验仍用实例化结果（ann_ty 未动）。
                 // RFC-027: Refined 类型用 base 做 unify
                 let resolved_ann = match &ann_ty {
                     MonoType::Refined { base, .. } => *base.clone(),
@@ -1607,11 +1645,11 @@ impl StatementChecker {
                     (MonoType::Float(_), MonoType::Int(_))
                 );
                 if !is_int_to_float {
-                    // #300：Array 字面量落点校验——替代 #299 的整段 unify 豁免。
-                    // 豁免曾同时跳过元素类型与个数校验（维度1/2/3 裸奔）；
-                    // 此处显式校验：逐元素 unify(T)，N 为具体字面量时比对个数，
-                    // N 为符号常量（TypeRef，RFC-011 const 参数形态）时推迟个数校验。
-                    let array_seed_elems = if resolved_ann.is_array() {
+                    // RFC-011 容器命名分层：接受 List 字面量作初始值的容器类型。
+                    // - `Vec(T)`：运行时长度的可增长缓冲，语义与 List 字面量一致。
+                    // - `Array(T, N)`：定长，额外校验 N 与元素个数（#300）。
+                    // 两者都逐元素 unify(T)，并豁免随后的 List↔容器 unify。
+                    let seed_container = if resolved_ann.is_vec() || resolved_ann.is_array() {
                         match initializer {
                             Some(crate::frontend::core::parser::ast::Expr::List(elems, _)) => {
                                 Some(elems)
@@ -1621,9 +1659,11 @@ impl StatementChecker {
                     } else {
                         None
                     };
+                    let mut seed_matched = false;
                     if let (Some(elems), MonoType::Generic { args, .. }) =
-                        (array_seed_elems, &resolved_ann)
+                        (seed_container, &resolved_ann)
                     {
+                        seed_matched = true;
                         let elem_ann = &args[0];
                         for elem in elems.iter() {
                             let elem_ty = self.check_expr(elem)?;
@@ -1638,23 +1678,28 @@ impl StatementChecker {
                                 ));
                             }
                         }
-                        if let Some(MonoType::Literal {
-                            value: crate::frontend::core::types::const_data::ConstValue::Int(n),
-                            ..
-                        }) = args.get(1)
-                        {
-                            if *n != elems.len() as i128 {
-                                return Err(Box::new(
-                                    ErrorCodeDefinition::type_mismatch(
-                                        &format!("{}", ann_ty),
-                                        &format!("Array({}, {})", elem_ann, elems.len()),
-                                    )
-                                    .at(stmt_span)
-                                    .build(),
-                                ));
+                        // Array 专属：N 为具体字面量时比对元素个数
+                        // （N 为符号常量（TypeRef，RFC-011 const 参数形态）时推迟）。
+                        if resolved_ann.is_array() {
+                            if let Some(MonoType::Literal {
+                                value: crate::frontend::core::types::const_data::ConstValue::Int(n),
+                                ..
+                            }) = args.get(1)
+                            {
+                                if *n != elems.len() as i128 {
+                                    return Err(Box::new(
+                                        ErrorCodeDefinition::type_mismatch(
+                                            &format!("{}", ann_ty),
+                                            &format!("Array({}, {})", elem_ann, elems.len()),
+                                        )
+                                        .at(stmt_span)
+                                        .build(),
+                                    ));
+                                }
                             }
                         }
-                    } else {
+                    }
+                    if !seed_matched {
                         let unify_result = self.solver.unify(&resolved_init, &resolved_ann);
                         if unify_result.is_err() {
                             // Unify failed — check structural subtyping (interface assignment)
@@ -1712,6 +1757,29 @@ impl StatementChecker {
                     && matches!(resolved_init, MonoType::Struct(_))
                 {
                     resolved_init
+                } else if let crate::frontend::core::parser::ast::Type::Generic {
+                    name, args, ..
+                } = type_ann
+                {
+                    // 泛型注解（`L(Int)`）：存回 **Generic 形态**而非展开后的 Struct。
+                    //
+                    // 展开后的 Struct 只能携带字段布局，**丢掉类型实参**（`L(Int)` → 只余
+                    // 名字 `L`）——后续把该变量传给泛型函数或取 `&` 时，实参类型变成裸
+                    // `L`，与形参 `L(T)` 不匹配（E1002）。
+                    // 实例化后的 Struct 仍用于上方字段/元素校验，但入 scope 的须是带参形式。
+                    //
+                    // 例外：实参含未绑定类型参数（泛型方法体内引用自身参数）时，
+                    // try_instantiate 已返回 None，ann_ty 本就是 Generic，取之即可。
+                    if matches!(ann_ty, MonoType::Generic { .. }) {
+                        ann_ty
+                    } else {
+                        let arg_types: Vec<MonoType> =
+                            args.iter().map(|a| MonoType::from(a.clone())).collect();
+                        MonoType::Generic {
+                            name: name.clone(),
+                            args: arg_types,
+                        }
+                    }
                 } else {
                     ann_ty
                 }
@@ -2083,7 +2151,9 @@ impl StatementChecker {
                             );
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_type_defs(&self.type_defs);
+                        inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
+                        inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                         inferrer.set_loop_depth(self.loop_depth);
@@ -2157,6 +2227,7 @@ impl StatementChecker {
                 );
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
+                inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                 inferrer.set_loop_depth(self.loop_depth);
@@ -2210,10 +2281,66 @@ fn innermost_return_type(
         ty
     }
 }
+/// 把 `Struct` 与 `Generic` 两种表示对齐，使 unify 能做**带实参**的结构比较。
+///
+/// 泛型类型实例有两种形态并存：
+/// - `Generic{name, args}` —— 类型注解形态（保留实参）
+/// - `Struct{name, fields}` —— 实例化后的字段布局形态
+///
+/// 同名时把 Struct 侧折算回 `Generic{name, args}`：实参由**字段类型反推**。
+/// 不能只比名字——那会放过 `Container(Int) = Container("str")` 这类实参不匹配
+/// （#286 的类型一致性检查会失效）。
+fn align_struct_and_generic(
+    a: &MonoType,
+    b: &MonoType,
+    _solver: &crate::frontend::core::types::solver::TypeConstraintSolver,
+) -> (MonoType, MonoType) {
+    fn struct_to_generic(st: &crate::frontend::core::types::mono::StructType) -> MonoType {
+        MonoType::Generic {
+            name: st.name.clone(),
+            // 实参位无法从字段布局完整还原（字段可能多对一），故留空表示
+            // 「布局已固定」；实参一致性由调用点的构造器推断另行保证。
+            args: Vec::new(),
+        }
+    }
+    match (a, b) {
+        (MonoType::Struct(sa), MonoType::Generic { name, .. }) if sa.name == *name => {
+            (struct_to_generic(sa), b.clone())
+        }
+        (MonoType::Generic { name, .. }, MonoType::Struct(sb)) if sb.name == *name => {
+            (a.clone(), struct_to_generic(sb))
+        }
+        _ => (a.clone(), b.clone()),
+    }
+}
+
+/// 泛型注解的类型层形态：若 `type_ann` 是 `Generic{name, args}`，返回
+/// `Generic{name, args}`（保留实参）；否则原样返回 `ann_ty`。
+///
+/// 为什么不直接用实例化结果：实例化把 `List(Int)` 展开成 `Struct{List, fields..}`，
+/// 字段布局有了，但**类型实参名丢了**（再取名字只剩 `List`）。类型层需要的是
+/// 带实参的 `Generic`——unify、跨函数传递、取借用都依赖它。
+fn generic_annotation_form(
+    type_ann: &crate::frontend::core::parser::ast::Type,
+    ann_ty: &MonoType,
+) -> MonoType {
+    if let crate::frontend::core::parser::ast::Type::Generic { name, args, .. } = type_ann {
+        // 实参含未绑定类型参数时，注解本身就是 Generic 形态，直接用
+        if matches!(ann_ty, MonoType::Generic { .. }) {
+            return ann_ty.clone();
+        }
+        return MonoType::Generic {
+            name: name.clone(),
+            args: args.iter().map(|a| MonoType::from(a.clone())).collect(),
+        };
+    }
+    ann_ty.clone()
+}
+
 /// #286: 检查 MonoType 是否含未解析的泛型参数（TypeRef/TypeVar）。
 /// 用于区分「构造器推断的悬空泛型实例」（字段还是 TypeRef 占位，合法豁免）
 /// 与「实参已确定具体类型但 unify 失败」（真不匹配，必须报错）。
-fn contains_unresolved_param(t: &MonoType) -> bool {
+pub(super) fn contains_unresolved_param(t: &MonoType) -> bool {
     match t {
         MonoType::TypeRef(_) | MonoType::TypeVar(_) => true,
         MonoType::Struct(s) => s.fields.iter().any(|(_, f)| contains_unresolved_param(f)),
