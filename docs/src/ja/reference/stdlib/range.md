@@ -1,29 +1,29 @@
 ---
 title: 'std.range'
-description: '範囲の反復、述語と遅延アダプタ'
+description: '区間反復、述語と遅延アダプタ'
 ---
 
 # std.range
 
-範囲（`Range`）の反復とアダプタ。
+区間（`Range`）の反復とアダプタ。
 
 ```yaoxiang
 use std.range
 ```
 
-## 範囲リテラル
+## 区間リテラル
 
-| 書き方    | 意味                            |
-| --------- | ------------------------------- |
-| `a..b`    | `a` から `b` まで、ステップ `1` |
-| `a..b..s` | `a` から `b` まで、ステップ `s` |
+| 書き方    | 意味                          |
+| --------- | ----------------------------- |
+| `a..b`    | `a` から `b` まで、刻み幅 `1` |
+| `a..b..s` | `a` から `b` まで、刻み幅 `s` |
 
-範囲は**終了値を含まない**（左閉右開）。ステップは負の値も可能で、減少を表す。
+区間は**終了値を含まない**（左閉右開）。刻み幅は負の値も可能で、減少を表します。
 
 ## イテレータプロトコル
 
-[`iter`](#iter) は `Result` を返す——ステップが `0` の場合はエラーパス（`E6009`）となるため、`unwrap`
-するか明示的に処理する必要がある：
+[`iter`](#iter) は `Result` を返します。刻み幅が `0` の場合はエラー経路（`E6009`）となるため、事前に
+`unwrap` するか明示的に処理してください。
 
 ```yaoxiang
 use std.assert
@@ -38,8 +38,9 @@ main: () -> Void = {
 ```
 
 > **ムーブセマンティクス**：`has_next` と `next` のシグネチャには `&`
-> が付かないため、イテレータを**ムーブ**してしまう。したがって、毎回イテレータを作り直すか、`for ... in`
-> で直接走査する必要がある。これは [`std.list`](./list) のイテレータと同じ動作である。
+> が付かず、イテレータを**ムーブ**
+> してしまいます。そのため、参照のたびにイテレータを作り直すか、`for ... in`
+> で直接走査してください。これは [`std.list`](./list) のイテレータと一貫しています。
 
 ```yaoxiang
 use std.assert
@@ -47,7 +48,7 @@ use std.range
 use std.result
 
 main: () -> Void = {
-    // イテレータを毎回新しく作成
+    // 毎回新しいイテレータを作成
     a = result.unwrap(range.iter(1..3))
     assert(range.has_next(a))
 
@@ -56,7 +57,7 @@ main: () -> Void = {
 }
 ```
 
-日常的な走査は直接 `for ... in` を使う：
+日常の走査は `for ... in` を直接使います。
 
 ```yaoxiang
 use std.assert
@@ -101,12 +102,12 @@ iter: (r: Range(Int)) -> Result(Iterator(Any), Error)
 
 <!-- stdlib:sig:range.iter end -->
 
-範囲からイテレータを作成する。
+区間からイテレータを作成します。
 
-- `r` —— 範囲（例：`1..6` や `3..0..-1`）
+- `r` —— 区間。例：`1..6` または `3..0..-1`
 
-戻り値：成功時は `Result.ok(イテレータ)`、ステップが `0` の場合は `Result.err` となり、`code` は
-`E6009`。
+戻り値：成功時は `Result.ok(イテレータ)`。刻み幅が `0` の場合は `Result.err` となり、`code` は
+`E6009` です。
 
 ```yaoxiang
 use std.assert
@@ -129,9 +130,9 @@ has_next: (it: Iterator(Any)) -> Bool
 
 <!-- stdlib:sig:range.has_next end -->
 
-まだ消費されていない要素があるかどうか。
+未消費の要素があるかどうかを判定します。
 
-> イテレータを**ムーブ**する。
+> イテレータを**ムーブ**します。
 
 ```yaoxiang
 use std.assert
@@ -154,11 +155,11 @@ next: (it: &Iterator(Any)) -> Any
 
 <!-- stdlib:sig:range.next end -->
 
-現在の要素を取り出し、内部カーソルを1つ進める。
+現在の要素を取り出し、内部カーソルを 1 つ進めます。
 
-戻り値：現在の要素。反復終了時は `Void` を返す。
+戻り値：現在の要素。反復終了時は `Void` を返します。
 
-> イテレータを**ムーブ**する。
+> イテレータを**ムーブ**します。
 
 ```yaoxiang
 use std.assert
@@ -171,7 +172,7 @@ main: () -> Void = {
 }
 ```
 
-減少範囲も同様にサポート：
+減少区間も同様にサポートされます。
 
 ```yaoxiang
 use std.assert
@@ -194,12 +195,12 @@ contains: (r: Range(Int), x: Int) -> Result(Bool, Error)
 
 <!-- stdlib:sig:range.contains end -->
 
-`x` が範囲内に含まれるかどうかを判定する。
+`x` が区間内に含まれるかどうかを判定します。
 
-- `r` —— 範囲
+- `r` —— 区間
 - `x` —— 判定対象の値
 
-戻り値：`Result.ok(Bool)`。終了値は**開区間**（含まない）。ステップが指定されている場合は、ステップに整列している要素のみが一致する。
+戻り値：`Result.ok(Bool)`。終了値は**開区間**（含まない）です。刻み幅付きの場合は、刻み幅に揃った要素のみが一致します。
 
 ```yaoxiang
 use std.assert
@@ -210,8 +211,8 @@ main: () -> Void = {
     assert(result.unwrap(range.contains(1..10, 5)))
     assert(!result.unwrap(range.contains(1..10, 10)))     // 終了値は含まない
 
-    assert(result.unwrap(range.contains(0..10..2, 4)))    // ステップに整列
-    assert(!result.unwrap(range.contains(0..10..2, 3)))   // 整列していない
+    assert(result.unwrap(range.contains(0..10..2, 4)))    // 刻み幅に揃っている
+    assert(!result.unwrap(range.contains(0..10..2, 3)))   // 揃っていない
 }
 ```
 
@@ -225,24 +226,26 @@ abort_invalid_step: (r: Range(Int)) -> Any
 
 <!-- stdlib:sig:range.abort_invalid_step end -->
 
-ステップが不正な場合の中断フック。`for ... in` がステップ `0` の範囲を消費する際に呼び出される。
+刻み幅が不正な場合に呼ばれる中止フック。`for ... in` が刻み幅 `0`
+の区間を消費する際に呼び出されます。
 
-**常に** `E6007` をスローし、メッセージは
-`Range step must be non-zero (for/in consumption)`。通常のコードでは直接呼び出す必要はない。
+**常に** `E6007` を送出し、メッセージは `Range step must be non-zero (for/in consumption)`
+です。通常のコードから直接呼び出す必要はありません。
 
 ```yaoxiang
 use std.range
 
 main: () -> Void = {
-    // 直接 iter を使うと Err になるため、このフックを通す必要はない
+    // 単純に iter を使うと Err が返ってくるため、このフックを踏む必要はない
     r = range.iter(1..3)
 }
 ```
 
 ## アダプタ
 
-`map` と `filter` は**遅延**アダプタを返す——これらは即座には計算されず、[`collect`](#collect) /
-[`reduce`](#reduce) / [`for_each`](#for_each) / `for ... in` で消費された後に結果が生成される。
+`map` と `filter` は**遅延**アダプタを返します。直ちには計算せず、[`collect`](#collect) /
+[`reduce`](#reduce) / [`for_each`](#for_each) / `for ... in`
+によって消費された時点で結果が生成されます。
 
 ### map
 
@@ -254,7 +257,7 @@ map: (it: Iterator(Any), f: (Any) -> Any) -> Iterator(Any)
 
 <!-- stdlib:sig:range.map end -->
 
-`f` を各要素にマップし、新しい遅延イテレータを返す。
+各要素に `f` を適用した新しい遅延イテレータを返します。
 
 ```yaoxiang
 use std.assert
@@ -264,7 +267,7 @@ use std.result
 
 main: () -> Void = {
     doubled = range.collect(range.map(result.unwrap(range.iter(1..4)), x => x * 2))
-    assert(doubled.length == 3)
+    assert(list.len(doubled) == 3)
     assert(doubled[0] == 2)
 }
 ```
@@ -279,7 +282,7 @@ filter: (it: Iterator(Any), p: (Any) -> Bool) -> Iterator(Any)
 
 <!-- stdlib:sig:range.filter end -->
 
-`p` が真となる要素を保持し、新しい遅延イテレータを返す。
+`p` が真となる要素だけを保持する新しい遅延イテレータを返します。
 
 ```yaoxiang
 use std.assert
@@ -289,12 +292,12 @@ use std.result
 
 main: () -> Void = {
     big = range.collect(range.filter(result.unwrap(range.iter(1..6)), x => x > 3))
-    assert(big.length == 2)
+    assert(list.len(big) == 2)
     assert(big[0] == 4)
 }
 ```
 
-アダプタはチェーン状に組み合わせ可能：
+アダプタはチェーンして組み合わせられます。
 
 ```yaoxiang
 use std.assert
@@ -305,7 +308,7 @@ use std.result
 main: () -> Void = {
     r = 1..6
     chained = range.collect(range.map(range.filter(result.unwrap(range.iter(r)), x => x % 2 == 0), x => x * 10))
-    // 値セマンティクス：`chained` はインデックス読み取りで消費され、1つずつローカル変数にバインドされる
+    // 値セマンティクス：`chained` はインデックス読み出しで消費されるため、要素ごとに局所変数に束縛する
     first = chained[0]
     second = chained[1]
     assert(first == 20)
@@ -323,7 +326,7 @@ collect: (it: Iterator(Any)) -> Vec(Any)
 
 <!-- stdlib:sig:range.collect end -->
 
-イテレータを消費し、すべての要素を `List` に収集する。
+イテレータを消費し、全要素を `List` に集めます。
 
 ```yaoxiang
 use std.assert
@@ -347,14 +350,14 @@ reduce: (it: Iterator(Any), init: Any, f: (Any, Any) -> Any) -> Any
 
 <!-- stdlib:sig:range.reduce end -->
 
-イテレータを消費して畳み込む。
+イテレータを消費して畳み込みます。
 
 - `it` —— イテレータ
 - `init` —— 初期累積値
 - `f` —— 畳み込み関数 `(累積値, 要素) -> 新しい累積値`
 
-> 引数の順序が [`std.list.reduce`](./list#reduce) と異なることに注意：本モジュールは
-> `(イテレータ, 初期値, 関数)` であり、`std.list` は `(リスト, 関数, 初期値)` である。
+> 引数の順序は [`std.list.reduce`](./list#reduce) と異なる点に注意してください。本モジュールは
+> `(イテレータ, 初期値, 関数)` ですが、`std.list` は `(リスト, 関数, 初期値)` です。
 
 ```yaoxiang
 use std.assert
@@ -377,7 +380,7 @@ for_each: (it: Iterator(Any), f: (Any) -> Void) -> Void
 
 <!-- stdlib:sig:range.for_each end -->
 
-各要素に対して `f` を実行し、副作用のために使用する。
+各要素に対して `f` を実行します。副作用目的で利用します。
 
 ```yaoxiang
 use std.assert
@@ -391,11 +394,13 @@ main: () -> Void = {
 }
 ```
 
-> クロージャは現時点で外側の `mut` 変数を**キャプチャして書き換える**ことはできないため、`for_each`
-> での累積は不可能（`E1001` が発生する）——累積には [`reduce`](#reduce) を使用してください。
+> クロージャは現在のところ外側の `mut`
+> 変数を**捕捉して書き換える**ことはできません。そのため、`for_each`
+> で累積を行う方法は使えません（`E1001` が発生します）。累積には [`reduce`](#reduce)
+> を使用してください。
 
 ## 関連
 
 - [`std.list`](./list) —— リストとそのイテレータ
-- [`std.result`](./result) —— `iter` / `contains` の戻り値をアンラップする
-- [エラーコードリファレンス](../error-code/) —— `E6009` ステップが不正
+- [`std.result`](./result) —— `iter` / `contains` の戻り値をアンラップ
+- [エラーコードリファレンス](../error-code/) —— `E6009` 刻み幅不正

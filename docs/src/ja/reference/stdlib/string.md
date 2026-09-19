@@ -1,16 +1,16 @@
 ---
 title: 'std.string'
-description: '文字列の検索、分割、フォーマットと解析'
+description: '文字列の検索・分割・フォーマットと解析'
 ---
 
 # std.string
 
 文字列操作モジュール。`format`
-を除き、すべての関数は引数に対して読み取り専用の借用（`&String`）を行い、呼び出し後も元の文字列は引き続き使用可能。
+を除き、すべての関数は引数を読み取り専用借用（`&String`）し、呼び出し後も元文字列は引き続き使用できる。
 
-すべての関数は引数の型が一致しない場合、**空文字列のセマンティクス**にフォールバックする（エラーを出さない）：`split`
-/ `trim` / `upper` などは `String` 以外の入力を `""`
-として扱う。これは誤った引数の型で中断しないことを意味するが、期待する結果も得られない——コンパイル時に型チェッカーで捕捉することを推奨する。
+すべての関数は引数の型が一致しない場合、**空文字列のセマンティクス**に縮退する（エラーではない）：`split`/`trim`/`upper`
+などは `String` 以外の入力を `""`
+として扱う。つまり、引数の型が誤っていても中断はされないが、期待した結果も得られない——コンパイラに依存して型チェックでコンパイル時に遮断することを推奨する。
 
 ```yaoxiang
 use std.string
@@ -57,7 +57,7 @@ split: (s: &String, sep: &String) -> Vec(String)
 `sep` で `s` を分割し、部分文字列のリストを返す。
 
 - `s` —— 分割対象の文字列
-- `sep` —— 区切り文字；**空文字列の場合は文字ごとに分割**
+- `sep` —— 区切り文字；**空文字列の場合は文字ごとに分割する**
 
 戻り値：`List(String)`。区切り文字が見つからない場合は単一要素のリストを返す。
 
@@ -71,7 +71,7 @@ main: () -> Void = {
     assert(list.len(parts) == 3)
     assert(list.get(parts, 0) == "a")
 
-    // 空の区切り文字 → 一文字ずつ
+    // 空の区切り文字 → 1文字ずつ
     cs = string.split("abc", "")
     assert(list.len(cs) == 3)
 }
@@ -154,7 +154,7 @@ replace: (s: &String, old: &String, new: &String) -> String
 
 `s` 中の**すべての** `old` を `new` に置換する。
 
-- `old` —— 空文字列の場合、`s` を**そのまま返す**（挿入は行わない）
+- `old` —— 空文字列の場合は `s` を**そのまま返す**（挿入しない）
 
 ```yaoxiang
 use std.assert
@@ -240,12 +240,12 @@ index_of: (s: &String, sub: &String) -> Int
 
 <!-- stdlib:sig:string.index_of end -->
 
-`sub` が最初に出現する**バイト**位置。
+`sub` が最初に現れる**バイト**位置。
 
-戻り値：見つかった場合はその位置、見つからなかった場合は `-1`。
+戻り値：見つかった場合はその位置を返す；見つからない場合は `-1` を返す。
 
-> 戻り値はバイトオフセットである。マルチバイト文字を含む場合は、`chars`
-> で変換してから文字位置を調べること。
+> 返り値はバイトオフセットである。マルチバイト文字を含む場合は、`chars`
+> で変換してから文字位置を特定できる。
 
 ```yaoxiang
 use std.assert
@@ -272,7 +272,7 @@ substring: (s: &String, start: Int, end: Int) -> String
 - `start` —— 開始文字位置、デフォルトは `0`
 - `end` —— 終了文字位置（含まない）、デフォルトは文字列の末尾
 
-戻り値：切り出した結果。範囲外の境界は有効な範囲に**クランプ**され、エラーにはならない；`start > end`
+戻り値：切り出した結果。範囲外の境界は**クランプ**されてエラーにはならない；`start > end`
 の場合は空文字列にクランプされる。
 
 ```yaoxiang
@@ -281,7 +281,7 @@ use std.string
 
 main: () -> Void = {
     assert(string.substring("hello", 1, 4) == "ell")
-    assert(string.substring("hello", 1, 99) == "ello")   // 上限のクランプ
+    assert(string.substring("hello", 1, 99) == "ello")   // 上限をクランプ
 }
 ```
 
@@ -317,7 +317,7 @@ len: (s: &String) -> Int
 
 <!-- stdlib:sig:string.len end -->
 
-**UTF-8 のバイト長**を返す。文字数ではない。
+**UTF-8 バイト長**を返す。文字数ではない。
 
 ```yaoxiang
 use std.assert
@@ -339,7 +339,7 @@ chars: (s: &String) -> Vec(String)
 
 <!-- stdlib:sig:string.chars end -->
 
-一文字ずつの文字列リストに分解する（Unicode スカラー値単位）。
+単一文字の文字列リストに分解する（Unicode スカラー値ごと）。
 
 ```yaoxiang
 use std.assert
@@ -348,7 +348,7 @@ use std.string
 
 main: () -> Void = {
     cs = string.chars("ab")
-    assert(cs.length == 2)
+    assert(list.len(cs) == 2)
     assert(cs[0] == "a")
 }
 ```
@@ -363,7 +363,7 @@ concat: (s1: &String, s2: &String) -> String
 
 <!-- stdlib:sig:string.concat end -->
 
-二つの文字列を連結する。`+` 演算子を直接使うこともできる。
+2つの文字列を連結する。`+` 演算子を直接使用してもよい。
 
 ```yaoxiang
 use std.assert
@@ -429,19 +429,19 @@ format: (format: &String, ...args) -> String
 
 <!-- stdlib:sig:string.format end -->
 
-`{index}` プレースホルダに従ってフォーマットし、オプションで幅/位置揃え指定子を使える。
+`{index}` プレースホルダでフォーマットし、オプションで幅/配置指定子が使える。
 
 プレースホルダの構文：
 
 | 形式     | 意味                                                 |
 | -------- | ---------------------------------------------------- |
-| `{0}`    | 0 番目の引数（`format` の後の引数は 0 から番号付け） |
+| `{0}`    | 0 番目の引数（`format` 以降の引数は 0 から番号付け） |
 | `{0:03}` | 幅 3                                                 |
-| `{0:>3}` | 幅 3、右寄せ（デフォルト）                           |
-| `{0:<3}` | 幅 3、左寄せ                                         |
-| `{0:^3}` | 幅 3、中央寄せ                                       |
+| `{0:>3}` | 幅 3、右揃え（デフォルト）                           |
+| `{0:<3}` | 幅 3、左揃え                                         |
+| `{0:^3}` | 幅 3、中央揃え                                       |
 
-リテラルの波括弧は二重に書く：左波括弧を二つ書くとリテラル左波括弧、右波括弧も同様。
+リテラルの波括弧は二重書きで表現する：左波括弧 2 つでリテラル左波括弧 1 つ、右波括弧も同様。
 
 戻り値：フォーマット後の文字列。引数はまず文字列に変換される（`convert.to_string`
 と同様）；インデックスが範囲外の場合は空文字列、不正な幅は `0` として扱われる。
@@ -467,10 +467,10 @@ parse_int: (s: &String) -> Result(Int, Error)
 
 <!-- stdlib:sig:string.parse_int end -->
 
-十進整数を解析する（先頭と末尾の空白は自動的に除去される）。
+10 進整数を解析する（先頭と末尾の空白を自動的に除去する）。
 
 戻り値：成功時は `Result.ok(Int)`；失敗時は `Result.err(Error)` で、その `code` は
-`E6010`。**例外は送出しない**。
+`E6010`。**例外を投げない**。
 
 ```yaoxiang
 use std.assert
@@ -493,7 +493,7 @@ parse_float: (s: &String) -> Result(Float, Error)
 
 <!-- stdlib:sig:string.parse_float end -->
 
-浮動小数点数を解析する（先頭と末尾の空白は自動的に除去される）。
+浮動小数点数を解析する（先頭と末尾の空白を自動的に除去する）。
 
 戻り値：成功時は `Result.ok(Float)`；失敗時は `Result.err(Error)` で、その `code` は `E6011`。
 
@@ -511,4 +511,4 @@ main: () -> Void = {
 ## 関連
 
 - [`std.convert`](./convert) —— 数値から文字列への変換
-- [`std.result`](./result) —— `parse_*` の結果を展開する
+- [`std.result`](./result) —— `parse_*` の結果のアンラップ

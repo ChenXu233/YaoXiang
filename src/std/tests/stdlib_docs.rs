@@ -111,10 +111,12 @@ fn test_stdlib_docs_covers_interface_modules() {
     }
 }
 
-/// 门禁二：文档中的每个 ```yaoxiang 示例都必须真的能跑
+/// 门禁二：文档中的每个可运行示例都必须真的能跑
 ///
-/// 只检查含 `main = {` 的完整示例（片段与签名块不在此列）。诊断走 stderr；
-/// 退出码非 0 或 stderr 非空都算失败。
+/// 判定「可运行」的形式是块内出现 `main: () -> Void = {`（无注解块是值、非函数，
+/// 与本门禁无关）。检查前会补一行 `main()`——块里只定义不调用，`run` 不会自动调它，
+/// 断言即使全错也退出码 0（这曾让本门禁空转，2026-09 修）。
+/// 诊断走 stderr；退出码非 0 或 stderr 非空都算失败。
 #[test]
 fn test_stdlib_docs_examples_run() {
     let mut checked = 0usize;
