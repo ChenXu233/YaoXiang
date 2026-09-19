@@ -1,0 +1,75 @@
+// 03-semantics/empty_block_semantics.yx
+// 验证: `{}` 是空块（值 Void），不是空字典；`{` 的三形态由内容判定
+// 规范: spec §2.9.1「{ 的三种形态」+ §1.6.4（字典字面量要求至少一个键值对）
+// 关联: 决策——「类型由内容决定」（取代 RFC-010a 附录D 裁决 C 的无注解行）
+// 状态: ✅ 可运行
+//
+// 本文件是 `{}` 语义的哨兵：若 parser 把 `{}` 退回空 Dict，
+// 「空块是 Void」的断言立刻失败（而非静默通过）。
+
+use std.assert
+use std.dict
+use std.io
+
+// ── 形态一：`{}` = 空块，值 Void ────────────────────────────────
+
+// 空块的值是 Void：能赋给 Void 注解的绑定
+empty: Void = {}
+
+// ── 形态二：有键值对 → 字典字面量 ──────────────────────────────
+
+// 非空形态由内容自描述
+d = { "a": 1, "b": 2 }
+
+// ── 形态三：其余 → 块，值 = 尾表达式 ────────────────────────────
+
+// 块求值：值即尾表达式（不是函数）
+five = { 5 }
+assert.assert(five == 5, "块的值 = 尾表达式")
+
+nested = {
+    inner = {
+        x = 3
+        x
+    }
+    inner * 2
+}
+assert.assert(nested == 6, "嵌套块的值")
+
+// ── 空字典：必须用构造子 ────────────────────────────────────────
+
+// `{}` 不再是空字典，所以空字典用 dict.new()
+empty_dict = dict.new()
+assert.assert(dict.is_empty(empty_dict), "dict.new() 是空字典")
+assert.assert(dict.len(empty_dict) == 0, "空字典长度为 0")
+
+// ── 函数必须写 Fn 注解（注解声明类型） ──────────────────────────
+
+// 空函数体：注解声明 Fn 才是函数
+noop: () -> Void = {}
+noop()
+
+// 有体函数
+get_five: () -> Int = { 5 }
+assert.assert(get_five() == 5, "Fn 注解 → 函数")
+
+// 显式 lambda 也是函数
+via_lambda = () => 7
+assert.assert(via_lambda() == 7, "lambda → 函数")
+
+// Fn 注解允许空块作空函数体（无副作用）
+run_noop: () -> Void = {
+    noop()
+}
+run_noop()
+
+// 末位为赋值语句 → 块值 Void
+assign_last: Void = {
+    x = 1
+}
+
+main: () -> Void = {
+    io.println("empty_block_semantics: ok")
+}
+
+main()
