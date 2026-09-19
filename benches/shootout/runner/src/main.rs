@@ -241,12 +241,19 @@ impl RunCtx {
                 }
 
                 let src_path = self.bench_root.join(&lang_def.src);
-                // Windows 上编译产物带 `.exe` 后缀（rustc/g++ 均如此），
+                // Windows 上**原生编译产物**带 `.exe` 后缀（rustc/g++/go 均如此），
                 // 而 runner 此前拼的是无后缀路径，导致运行阶段报
-                // 「不是内部或外部命令」。仅在**有编译步骤**时补后缀：
-                // 解释型语言（python）直接跑源码，其 %o 不参与执行。
+                // 「不是内部或外部命令」。
+                //
+                // 不能只判 `compile.is_some()`：YaoXiang 的编译步骤产出的是
+                // `YXBC` 魔数的 .42 字节码（非可执行文件），加 .exe 会得到
+                // 误导性的 `*_yaoxiang.exe`（内容仍是字节码）。
                 let mut out_name = format!("{}_{}", bench_name, lang_name);
-                if cfg!(target_os = "windows") && lang_def.compile.is_some() {
+                let is_native_compile = lang_def
+                    .compile
+                    .as_ref()
+                    .is_some_and(|c| !c.cmd.contains("%y"));
+                if cfg!(target_os = "windows") && is_native_compile {
                     out_name.push_str(".exe");
                 }
                 let out_path = out_dir.join(out_name);
