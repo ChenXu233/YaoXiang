@@ -204,7 +204,7 @@
     "title": "返回类型不匹配",
     "message": "函数返回类型不正确",
     "template": "返回类型不匹配：期望 '{expected}'，实际 '{found}'",
-    "help": "确保返回值与声明的返回类型匹配",
+    "help": "函数体的值与声明的返回类型不符。要么修改函数体，要么修正注解——注意 `h: () -> Int = f` 的含义是「h 返回 Int」，而不是「h 就是 f」；若想给函数起别名请写 `h = f`。",
     "example": "fn foo() -> Int { \"hello\" }",
     "error_output": "error[E1012]: 返回类型不匹配\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 期望 'Int'，找到 'String'"
   },

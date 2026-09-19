@@ -204,7 +204,7 @@
     "title": "Return Type Mismatch",
     "message": "Function return type is incorrect",
     "template": "Return type mismatch: expected '{expected}', found '{found}'",
-    "help": "Ensure the return value matches the declared return type",
+    "help": "The body's value does not match the declared return type. Either fix the body, or correct the annotation — note `h: () -> Int = f` means h returns Int, not that h IS f; write `h = f` to alias the function.",
     "example": "fn foo() -> Int { \"hello\" }",
     "error_output": "error[E1012]: return type mismatch\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ expected 'Int', found 'String'"
   },

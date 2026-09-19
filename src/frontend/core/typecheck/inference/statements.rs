@@ -108,6 +108,8 @@ pub struct StatementChecker {
     /// 此前用 `peek_expr_type` 事后重建类型，而它只识字面量与变量，
     /// `if` / `match` / 调用等其他形态一律返回 `None` → **静默跳过校验**（#354）。
     last_expr_stmt_ty: Option<MonoType>,
+    /// 当前函数**返回类型注解**的位置（#353：尾表达式不符时指向注解而非表达式）。
+    tail_annotation_span: Option<crate::util::span::Span>,
 }
 
 impl StatementChecker {
@@ -148,6 +150,7 @@ impl StatementChecker {
             imported_used: HashSet::new(),
             body_imports: Vec::new(),
             last_expr_stmt_ty: None,
+            tail_annotation_span: None,
         }
     }
 
@@ -860,10 +863,18 @@ impl StatementChecker {
         let tail_ty = self.solver.resolve_type(&tail_ty);
         let expected = self.solver.resolve_type(expected);
         if self.solver.unify(&tail_ty, &expected).is_err() {
+            // #353：用 E1012（尾表达式与声明返回类型不符）而非 E1002，
+            // 并把位置**指向注解**——真正该改的是注解，不是体的最后一行。
+            //
+            // 旧诊断用 E1002 指向表达式，作者看到「这个值有问题」；
+            // 而值往往是完全正确的（如 `h: () -> Int = f` 中的 `f`）。
             return Err(Box::new(
-                ErrorCodeDefinition::type_mismatch(&format!("{expected}"), &format!("{tail_ty}"))
-                    .at(expr.span())
-                    .build(),
+                ErrorCodeDefinition::return_type_mismatch(
+                    &format!("{expected}"),
+                    &format!("{tail_ty}"),
+                )
+                .at(self.tail_annotation_span.unwrap_or_else(|| expr.span()))
+                .build(),
             ));
         }
         Ok(())
@@ -1270,6 +1281,9 @@ impl StatementChecker {
         body: Block,
         _span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
+        // #353：记录绑定语句的位置，供尾表达式不符时指向它（而非体的末行）。
+        // 真正该改的是注解所在的声明，不是体里那个（可能完全正确的）值。
+        self.tail_annotation_span = Some(_span);
         let generic_params =
             classify_generic_params(signature_params, &|name| self.trait_table.has_trait(name));
         // 检查是否与结构体重名
