@@ -1369,7 +1369,7 @@ impl AstToIrGenerator {
                     }
                     _ => return Ok(None),
                 };
-                // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值。后者不得当函数体处理，否则变量拿不到值。
                 let is_fn_binding = ast::Expr::block_binding_is_function(
                     type_annotation.as_ref(),
@@ -1424,7 +1424,7 @@ impl AstToIrGenerator {
                     )
                 } else if !params.is_empty() || !body.is_empty() || is_fn_binding {
                     // Fn: 普通函数（含**空块体**的注解形态 `f: () -> Void = { }`——
-                    // 裁决 C 下注解为 Fn 即函数；不能因 `body.is_empty()` 就落到
+                    // 注解为 Fn 即函数；不能因 `body.is_empty()` 就落到
                     // 值绑定分支，否则 `f()` 解析不到函数。
                     //
                     // 注：无注解的空块 `f = { }` 到不了这里——它在 parser 层就被
@@ -2819,7 +2819,7 @@ impl AstToIrGenerator {
                         .build())
                     }
                 };
-                // 裁决 C（RFC-010a 附录D）：`name = { ... }` 无注解→函数；
+                // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值。
                 let is_fn_binding = ast::Expr::block_binding_is_function(
                     type_annotation.as_ref(),
@@ -5757,8 +5757,11 @@ impl AstToIrGenerator {
         }
 
         // 4. 生成 spawn 块剩余语句（非直接子表达式，如 var 声明等）
-        for stmt in &body.stmts {
-            if !crate::frontend::core::spawn::analysis::is_direct_child(stmt) {
+        // 尾表达式跳过：它在第 6 步作为块值写出（#365）
+        for (i, stmt) in body.stmts.iter().enumerate() {
+            if !crate::frontend::core::spawn::analysis::is_direct_child(stmt)
+                || crate::frontend::core::spawn::analysis::is_spawn_tail_expr(body, i)
+            {
                 self.generate_local_stmt_ir(stmt, instructions, constants)?;
             }
         }
@@ -5772,9 +5775,13 @@ impl AstToIrGenerator {
             span: self.cur_span,
         });
 
-        // 6. 块的结果值：从 return 语句获取（RFC-010 语义）
-        // 必须在 Spawn 之后生成，因为 return 表达式可能引用闭包的结果变量
-        let mut has_return = false;
+        // 6. 块的结果值（RFC-010a 规则①：块的值 = 尾表达式）
+        // 必须在 Spawn 之后生成，因为 return / 尾表达式可能引用闭包的结果变量。
+        //
+        // 优先级：return 优先（显式退出函数体语义），否则取尾表达式。
+        // #365：此前只扫 return，尾表达式被当并行任务包装进闭包而丢值，
+        // 引用块内变量时还会报 E3006（变量由别的任务声明）。
+        let mut has_value = false;
         for stmt in &body.stmts {
             if let ast::StmtKind::Expr(ref expr_stmt) = stmt.kind {
                 if let ast::Expr::Return(Some(ret_expr), _) = expr_stmt.as_ref() {
@@ -5785,13 +5792,26 @@ impl AstToIrGenerator {
                         src: Operand::Local(ret_reg),
                         span: self.cur_span,
                     });
-                    has_return = true;
+                    has_value = true;
                     break;
                 }
             }
         }
-        if !has_return {
-            // 无 return 语句，块值为 Void（result_reg 保持默认 0）
+        if !has_value {
+            // 尾表达式：值出口（空块 / 末位为赋值语句时为 Void，无需写出）
+            if let Some(last_idx) = body.stmts.len().checked_sub(1) {
+                if crate::frontend::core::spawn::analysis::is_spawn_tail_expr(body, last_idx) {
+                    if let ast::StmtKind::Expr(ref expr) = body.stmts[last_idx].kind {
+                        let tail_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, tail_reg, instructions, constants)?;
+                        instructions.push(Instruction::Move {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Local(tail_reg),
+                            span: self.cur_span,
+                        });
+                    }
+                }
+            }
         }
 
         // 7. 退出 spawn 作用域

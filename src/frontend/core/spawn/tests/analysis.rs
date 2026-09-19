@@ -11,7 +11,7 @@ use crate::frontend::core::parser::ast::{
 };
 use crate::frontend::core::spawn::analysis::{
     analyze_reads_writes, analyze_spawn_body, analyze_spawn_for, build_execution_plan,
-    is_direct_child,
+    is_direct_child, is_spawn_tail_expr,
 };
 use crate::frontend::core::types::{MonoType, TraitTable};
 use crate::util::span::Span;
@@ -809,4 +809,113 @@ fn test_spawn_for_end_to_end_independent_iterations() {
         "spawn 分析应识别 item 读取"
     );
     assert!(analysis.writes.is_empty(), "无写操作时应允许并行");
+}
+
+// is_spawn_tail_expr（#365）
+
+/// 构造裸表达式语句
+fn expr_stmt(expr: Expr) -> Stmt {
+    Stmt {
+        kind: StmtKind::Expr(Box::new(expr)),
+        span: dummy_span(),
+    }
+}
+
+#[test]
+fn test_spawn_tail_expr_single_expression() {
+    // #365: 唯一语句且为表达式 → 尾表达式（块值出口，不是并行任务）
+    // Arrange
+    let body = spawn_body(vec![expr_stmt(var_expr("x"))]);
+
+    // Act
+    let result = is_spawn_tail_expr(&body, 0);
+
+    // Assert
+    assert!(result, "末位表达式应为尾表达式");
+}
+
+#[test]
+fn test_spawn_tail_expr_after_assignments() {
+    // #365: 末位表达式在赋值之后 → 仍是尾表达式
+    // Arrange
+    let body = spawn_body(vec![
+        assign_stmt("a", call_expr("fetch", vec![])),
+        expr_stmt(var_expr("a")),
+    ]);
+
+    // Act
+    let result = is_spawn_tail_expr(&body, 1);
+
+    // Assert
+    assert!(result, "赋值之后的末位表达式应为尾表达式");
+}
+
+#[test]
+fn test_spawn_tail_expr_is_false_for_non_last() {
+    // #365: 非末位表达式是并行任务，不是值出口
+    // Arrange
+    let body = spawn_body(vec![
+        expr_stmt(call_expr("f", vec![])),
+        assign_stmt("a", call_expr("g", vec![])),
+    ]);
+
+    // Act
+    let result = is_spawn_tail_expr(&body, 0);
+
+    // Assert
+    assert!(!result, "非末位表达式不应被视为尾表达式");
+}
+
+#[test]
+fn test_spawn_tail_expr_is_false_for_return() {
+    // RFC-010: return 是显式值出口，由 ir_gen 单独处理，不算尾表达式
+    // Arrange
+    let body = spawn_body(vec![expr_stmt(Expr::Return(
+        Some(Box::new(call_expr("f", vec![]))),
+        dummy_span(),
+    ))]);
+
+    // Act
+    let result = is_spawn_tail_expr(&body, 0);
+
+    // Assert
+    assert!(!result, "return 不应被视为尾表达式");
+}
+
+#[test]
+fn test_spawn_tail_expr_is_false_for_trailing_assign() {
+    // RFC-010a 规则①: 末位赋值语句的块值是 Void，不是值出口
+    // Arrange
+    let body = spawn_body(vec![assign_stmt("a", call_expr("f", vec![]))]);
+
+    // Act
+    let result = is_spawn_tail_expr(&body, 0);
+
+    // Assert
+    assert!(!result, "末位赋值语句不应被视为尾表达式");
+}
+
+#[test]
+fn test_spawn_body_excludes_tail_expr_from_tasks() {
+    // #365 回归: 尾表达式不得成为并行任务
+    // Arrange
+    let body = spawn_body(vec![
+        assign_stmt("a", call_expr("fetch", vec![])),
+        expr_stmt(var_expr("a")),
+    ]);
+
+    // Act
+    let analysis = analyze_spawn_body(&body, &empty_trait_table(), &empty_var_types());
+
+    // Assert
+    assert_eq!(
+        analysis.tasks.len(),
+        1,
+        "只有赋值是任务，尾表达式不是；修复前会误产出 2 个任务"
+    );
+    assert_eq!(
+        analysis.tasks[0].target.as_deref(),
+        Some("a"),
+        "唯一任务目标是赋值目标 a"
+    );
 }

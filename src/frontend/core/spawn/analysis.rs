@@ -67,6 +67,35 @@ pub fn is_direct_child(stmt: &Stmt) -> bool {
     matches!(stmt.kind, StmtKind::Expr(_))
 }
 
+/// 判断 `index` 处的语句是否为 spawn 块的**尾表达式**
+///
+/// 尾表达式是块的值出口（RFC-010a 规则①），不是并行任务：它的值在 Spawn 指令
+/// 完成后写回 `result_reg`（见 `ir_gen::generate_spawn_expr_ir` 第 6 步）。
+/// 若包装成闭包，值会随闭包丢弃；引用块内变量的形态还会因变量由别的任务声明
+/// 而在 IR 生成期解析失败（E3006）——见 #365。
+///
+/// 赋值语句的值是 `Void`（不是值出口）、`return` 另由第 6 步单独处理，
+/// 二者均不视为尾表达式。
+pub fn is_spawn_tail_expr(
+    body: &Block,
+    index: usize,
+) -> bool {
+    if index + 1 != body.stmts.len() {
+        return false;
+    }
+    match &body.stmts[index].kind {
+        StmtKind::Expr(expr) => !matches!(
+            expr.as_ref(),
+            Expr::Return(..)
+                | Expr::BinOp {
+                    op: BinOp::Assign,
+                    ..
+                }
+        ),
+        _ => false,
+    }
+}
+
 /// 分析 spawn 块，生成执行计划
 pub fn analyze_spawn_body(
     body: &Block,
@@ -76,7 +105,8 @@ pub fn analyze_spawn_body(
     let mut tasks = Vec::new();
 
     for (i, stmt) in body.stmts.iter().enumerate() {
-        if !is_direct_child(stmt) {
+        // 尾表达式是块的值出口，不是并行任务（#365）
+        if !is_direct_child(stmt) || is_spawn_tail_expr(body, i) {
             continue;
         }
         if let StmtKind::Expr(expr) = &stmt.kind {
