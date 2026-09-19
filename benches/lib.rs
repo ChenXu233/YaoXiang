@@ -36,9 +36,12 @@ fn bench_add(c: &mut Criterion) {
 fn bench_mul(c: &mut Criterion) {
     c.bench_function("mul", |b| {
         b.iter(|| {
+            // 用 wrapping_mul：100! 远超 i64，普通 `*=` 在 debug 下直接 panic
+            // （`cargo test --bench` 会触发），且溢出行为并非本基准测量目标。
+            // 本基准测的是乘法指令的 CPU 成本，结果值无意义。
             let mut r = 1i64;
-            for i in 1..100 {
-                r *= i;
+            for i in 1..100i64 {
+                r = r.wrapping_mul(i);
             }
             r
         })
@@ -230,7 +233,7 @@ fib: (n: Int) -> Int = {
 
 result: Int = fib(27)
 
-main = {
+main: () -> Void = {
   result
 }
 main()
@@ -252,7 +255,7 @@ accumulate: () -> Int = {
 
 result: Int = accumulate()
 
-main = {
+main: () -> Void = {
   result
 }
 main()

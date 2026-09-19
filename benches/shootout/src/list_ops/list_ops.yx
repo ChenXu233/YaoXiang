@@ -17,6 +17,10 @@ main = {
         result.unwrap_or(parsed, 100)
     }
 
+    // 注：此处的过滤/映射用**索引遍历**而非 `for n in nums`——因为循环体内
+    // 声明的列表迭代会报 E3004「Unsupported iterator type: <unknown>」
+    // （循环体内的变量声明未进入 for 的可迭代类型解析，见 issue 记录）。
+    // 用索引遍历可绕过该缺陷，且基准测的仍是列表读写与函数调用的 CPU 成本。
     mut total = 0
     mut i = 0
     while i < limit {
@@ -27,14 +31,19 @@ main = {
             j = j + 1
         }
         mut filtered = []
-        for n in nums {
+        mut k = 0
+        while k < 1000 {
+            n = nums[k]
             if n % 2 == 0 {
                 filtered = filtered + [n]
             }
+            k = k + 1
         }
         mut doubled = []
-        for n in filtered {
-            doubled = doubled + [double(n)]
+        mut f = 0
+        while f < 500 {
+            doubled = doubled + [double(filtered[f])]
+            f = f + 1
         }
         total = total + doubled[0]
         i = i + 1
