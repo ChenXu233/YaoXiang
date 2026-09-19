@@ -760,6 +760,60 @@ fn test_e2e_bin_main_not_function_reports_e3021() {
     );
 }
 
+/// Bin 角色入口 main 带参数 → E3022（#357）。
+///
+/// 入口总是以**零参**调用（`execute_module` 传 `&[]`）。带参 main 此前
+/// 静默运行：参数位是未初始化值（读成 Void），
+/// `main: (x: Int) -> Void = (x) => { io.println(x) }` 打出 "void" 且退出码 0。
+#[test]
+fn test_e2e_bin_main_with_params_reports_e3022() {
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let src = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use std.io\nmain: (x: Int) -> Void = (x) => { io.println(x) }\n",
+    );
+
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    assert_ne!(code, 0, "带参 main 应编译失败");
+    assert!(
+        stderr.contains("E3022"),
+        "应报 E3022（入口签名不符），实际 stderr: {stderr:?}"
+    );
+    assert!(
+        !stdout.contains("void"),
+        "不得静默把未初始化参数当 Void 打印；stdout: {stdout:?}"
+    );
+}
+
+/// Bin 角色重复定义 main → E2002（#358）。
+///
+/// 此前两个同名 main 都进函数表，静默取第一个作入口。
+#[test]
+fn test_e2e_bin_duplicate_main_reports_e2002() {
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let src = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use std.io\nmain: () -> Void = { io.println(\"first\") }\nmain: () -> Void = { io.println(\"second\") }\n",
+    );
+
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    assert_ne!(code, 0, "重复 main 应编译失败");
+    assert!(
+        stderr.contains("E2002"),
+        "应报 E2002（重复定义），实际 stderr: {stderr:?}"
+    );
+    assert!(
+        !stdout.contains("first"),
+        "不得静默执行第一个定义；stdout: {stdout:?}"
+    );
+}
+
 /// Script 角色（无 manifest）：顶层语句即程序主体，无入口概念。
 ///
 /// 这条覆盖「默认情况零门槛」——单文件直跑不需要 main。

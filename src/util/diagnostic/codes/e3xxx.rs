@@ -35,4 +35,6 @@ define_codes!(E3XXX, {
     // 属编译错误；此前静默执行函数表第一个函数（#271 静默错误族）。
     ("E3020", Codegen, false, bin_missing_main(path: &str) => .param("path", path)),
     ("E3021", Codegen, false, bin_main_not_function(name: &str) => .param("name", name)),
+    // E3022 入口 main 签名不符（运行期以零参调用）
+    ("E3022", Codegen, false, bin_main_signature(name: &str, expected: &str, found: &str) => .param("name", name).param("expected", expected).param("found", found)),
 });

@@ -980,6 +980,11 @@
     "template": "spawn 内引用循环: {cycle}",
     "help": "spawn 捕获的引用不能形成循环依赖，请检查捕获列表"
   },
+  "E3022": {
+    "title": "入口 main 签名不符",
+    "template": "入口 '{name}' 的签名不符：运行期以零参调用，但它需要 '{expected}'，实际是 '{found}'",
+    "help": "程序入口总是以无参数方式被调用。请把 main 写成无参形式 `main: () -> Void = { ... }`；需要外部输入请用 std.os 的 argv/环境变量。"
+  },
   "E2030": {
     "title": "精化类型约束违反",
     "template": "对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）",

@@ -200,6 +200,33 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
                 diagnostics: vec![diag.build()],
             });
         }
+
+        // #357：入口总是以**零参**调用（`execute_module` 传 `&[]`）。
+        //
+        // 带参的 main 此前静默运行：参数位是未初始化值（读成 Void），
+        // `main: (x: Int) -> Void = (x) => { io.println(x) }` 打出 "void" 且退出码 0。
+        // 无诊断的错误行为比报错更贵——必须在编译期拒绝。
+        if let Some(main_fn) = merged
+            .functions
+            .iter()
+            .find(|f| f.name == format!("{entry_key}.main"))
+        {
+            if !main_fn.params.is_empty() {
+                let found = main_fn
+                    .params
+                    .iter()
+                    .map(|p| format!("{p}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let diag = ErrorCodeDefinition::bin_main_signature("main", "()", &found)
+                    .at(entry_span(entry));
+                return Err(OrchestratorError::TypeCheck {
+                    path: entry.display().to_string(),
+                    message: diag.build().to_string(),
+                    diagnostics: vec![diag.build()],
+                });
+            }
+        }
     }
 
     Ok(merged)
