@@ -5,7 +5,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     mut d = {"key": 42}
     assert.assert(true, "dict created successfully")
 }

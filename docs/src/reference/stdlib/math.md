@@ -29,7 +29,7 @@ use std.math.{PI, E, TAU}
 use std.assert
 use std.math.{E, PI, TAU}
 
-main = {
+main: () -> Void = {
     assert(PI > 3.14 and PI < 3.15)
     assert(E > 2.71 and E < 2.72)
     assert(TAU > 6.28 and TAU < 6.29)
@@ -83,7 +83,7 @@ abs: (n: Int) -> Int
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.abs(-5) == 5)
     assert(math.abs(5) == 5)
 }
@@ -105,7 +105,7 @@ max: (a: Int, b: Int) -> Int
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.max(3, 7) == 7)
 }
 ```
@@ -126,7 +126,7 @@ min: (a: Int, b: Int) -> Int
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.min(3, 7) == 3)
 }
 ```
@@ -156,7 +156,7 @@ clamp: (value: Int, min: Int, max: Int) -> Int
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.clamp(15, 1, 10) == 10)
     assert(math.clamp(-5, 1, 10) == 1)
     assert(math.clamp(5, 1, 10) == 5)
@@ -181,7 +181,7 @@ fabs: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.fabs(-2.5) == 2.5)
 }
 ```
@@ -202,7 +202,7 @@ fmax: (a: Float, b: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.fmax(1.5, 2.5) == 2.5)
 }
 ```
@@ -223,7 +223,7 @@ fmin: (a: Float, b: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.fmin(1.5, 2.5) == 1.5)
 }
 ```
@@ -244,7 +244,7 @@ pow: (base: Float, exp: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.pow(2.0, 10.0) == 1024.0)
 }
 ```
@@ -265,7 +265,7 @@ sqrt: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.sqrt(4.0) == 2.0)
     assert(math.sqrt(2.0) > 1.41 and math.sqrt(2.0) < 1.42)
 }
@@ -287,7 +287,7 @@ floor: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.floor(3.7) == 3.0)
 }
 ```
@@ -308,7 +308,7 @@ ceil: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.ceil(3.2) == 4.0)
 }
 ```
@@ -329,7 +329,7 @@ round: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.round(3.5) == 4.0)
     assert(math.round(3.4) == 3.0)
 }
@@ -351,7 +351,7 @@ sin: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.sin(0.0) == 0.0)
 }
 ```
@@ -372,7 +372,7 @@ cos: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.cos(0.0) == 1.0)
 }
 ```
@@ -393,7 +393,7 @@ tan: (n: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.tan(0.0) == 0.0)
 }
 ```

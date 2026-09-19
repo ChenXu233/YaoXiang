@@ -5,6 +5,6 @@
 // 验证: `x = break` 作为表达式使用时在解析层被拒绝
 // 状态: ✅
 
-main = {
+main: () -> Void = {
     x = break
 }

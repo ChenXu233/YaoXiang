@@ -3,7 +3,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     items = [1, 2, 3, 4, 5]
     spawn for item in items {
         item

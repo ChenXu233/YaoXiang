@@ -7,7 +7,7 @@
 //       「Unknown variable: 'Point'」（E1001）
 // 状态: ❌ 应编译失败
 
-main = {
+main: () -> Void = {
     Point: Type = { x: Int, y: Int }   // ❌ 类型定义只能出现在模块顶层
     p = Point(1, 2)
     print(p.x)

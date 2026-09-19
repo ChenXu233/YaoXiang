@@ -31,7 +31,7 @@ dead-code = "warn"
 ```yaoxiang
 pub dead_function: () -> Void = { }  // W1001: неиспользуемая экспортируемая функция
 
-main = {
+main: () -> Void = {
     // dead_function никогда не вызывается
 }
 ```
@@ -53,7 +53,7 @@ main = {
 ```yaoxiang
 DeadType: Type = Int  // W1002: неиспользуемый экспортируемый тип
 
-main = {
+main: () -> Void = {
     x = 42
 }
 ```
@@ -71,7 +71,7 @@ main = {
 ```yaoxiang
 use std.json  // W1003: неиспользуемый импорт
 
-main = {
+main: () -> Void = {
     // модуль json никогда не используется
 }
 ```
@@ -93,7 +93,7 @@ main = {
 ```yaoxiang
 pub dead_var = 42  // W1004: неиспользуемая экспортируемая переменная
 
-main = {
+main: () -> Void = {
     // dead_var никогда не читается
 }
 ```
@@ -117,7 +117,7 @@ Foo: Type = { value: Int }
 
 pub Foo.dead_method: (self: Foo) -> Void = { }  // W1005: неиспользуемый экспортируемый метод
 
-main = {
+main: () -> Void = {
     foo = Foo(1)
     // dead_method никогда не вызывается
 }

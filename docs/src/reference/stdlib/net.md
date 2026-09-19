@@ -54,7 +54,7 @@ http_get: (url: &String) -> String
 use std.assert
 use std.net
 
-main = {
+main: () -> Void = {
     // 当前实现返回描述字符串，而非响应体
     r = net.http_get("http://example.com")
     assert(r == "GET: http://example.com")
@@ -84,7 +84,7 @@ http_post: (url: &String, body: &String) -> String
 use std.assert
 use std.net
 
-main = {
+main: () -> Void = {
     r = net.http_post("http://example.com", "hello")
     assert(r == "POST http://example.com: hello")
 }
@@ -112,7 +112,7 @@ url_encode: (s: &String) -> String
 use std.assert
 use std.net
 
-main = {
+main: () -> Void = {
     assert(net.url_encode("a b") == "a%20b")
     assert(net.url_encode("a&b=c?d") == "a%26b%3Dc%3Fd")
 }
@@ -140,7 +140,7 @@ url_decode: (s: &String) -> String
 use std.assert
 use std.net
 
-main = {
+main: () -> Void = {
     assert(net.url_decode("a%20b") == "a b")
 
     // 往返一致

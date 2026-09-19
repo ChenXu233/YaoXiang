@@ -72,7 +72,7 @@ if val != 42 {
 ```yaoxiang
 use std.assert.assert
 
-main = {
+main: () -> Void = {
     assert(1 + 1 == 2, "math is broken")
     assert(get_name() == "YaoXiang", "name mismatch")
 }

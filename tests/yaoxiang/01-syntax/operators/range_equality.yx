@@ -6,7 +6,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // Range 相等（修复前 E6007 type mismatch in comparison Eq）
     r = 1..10
     r2 = 1..10

@@ -873,7 +873,7 @@ io.println(x)                // 42
 
 ```yaoxiang
 use std.io
-main = { io.println("only runs if called") }
+main: () -> Void = { io.println("only runs if called") }
 
 main()                       // ← Необходимо написать эту строку
 ```
@@ -892,7 +892,7 @@ main()                       // ← Необходимо написать эту
 - На верхнем уровне не допускаются исполняемые операторы — телом программы является `main`
 
 ```yaoxiang
-main = {
+main: () -> Void = {
     print("hello")
 }
 ```

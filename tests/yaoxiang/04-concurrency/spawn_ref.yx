@@ -4,7 +4,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     data = 42
     shared = ref data       // 编译器自动选 Rc 或 Arc
     result = spawn {

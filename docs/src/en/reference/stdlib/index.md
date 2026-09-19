@@ -40,7 +40,7 @@ Import an entire module:
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     parts = string.split("a,b,c", ",")
     println(list.len(parts))
 }
@@ -52,7 +52,7 @@ You can also import by name from a module, including constants:
 use std.assert
 use std.math.{E, PI, TAU}
 
-main = {
+main: () -> Void = {
     assert(PI > 3.14)
 }
 ```
@@ -67,7 +67,7 @@ read-only functions in the standard library.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3]
 
     // All three calls borrow nums read-only; it remains usable afterward
@@ -84,7 +84,7 @@ the source value, return a new value** — a functional shape rather than in-pla
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     base = [1, 2]
     extended = list.push(base, 3)   // Returns a new list; base has been moved
     assert(list.len(extended) == 3)
@@ -131,7 +131,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_int("42")))
     assert(result.is_err(string.parse_int("abc")))
 }
@@ -149,7 +149,7 @@ state carrier.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([1, 2, 3])
     assert(list.has_next(it))
 
@@ -164,7 +164,7 @@ For everyday traversal, just use `for ... in`:
 ```yaoxiang
 use std.assert
 
-main = {
+main: () -> Void = {
     mut sum = 0
     for x in [1, 2, 3] {
         sum = sum + x
@@ -182,7 +182,7 @@ use std.list
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     doubled = range.collect(range.map(result.unwrap(range.iter(1..4)), x => x * 2))
     assert(list.get(doubled, 0) == 2)
     assert(list.len(doubled) == 3)

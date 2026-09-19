@@ -23,7 +23,7 @@ computed: Int = inc(41)
 // 常量形式（回归：折叠路径仍在）
 plain: Int = 1 + 2
 
-main = {
+main: () -> Void = {
     assert.assert(answer == 42, "顶层块值应为 42")
     assert.assert(nested == 10, "块内中间语句作用域应正确")
     assert.assert(computed == 42, "顶层调用初始化应运行时求值")

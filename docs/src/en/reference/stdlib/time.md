@@ -63,7 +63,7 @@ an `Int` parameter (see [`format_time`](#format_time)).
 ```yaoxiang
 use std.time
 
-main = {
+main: () -> Void = {
     t = time.now()
     println(t)          // DateTime(1789471990)
 }
@@ -89,7 +89,7 @@ comparison.
 use std.assert
 use std.time
 
-main = {
+main: () -> Void = {
     assert(time.timestamp() > 0)
 }
 ```
@@ -110,7 +110,7 @@ Returns the current Unix timestamp (**milliseconds**).
 use std.assert
 use std.time
 
-main = {
+main: () -> Void = {
     // millisecond precision is no worse than second precision
     assert(time.timestamp_ms() >= time.timestamp())
 }
@@ -137,7 +137,7 @@ Error: throws `E6007` when the parameter is neither `Int` nor `Float`.
 ```yaoxiang
 use std.time
 
-main = {
+main: () -> Void = {
     time.sleep(0.0)
 }
 ```
@@ -189,7 +189,7 @@ use std.assert
 use std.string
 use std.time
 
-main = {
+main: () -> Void = {
     // 0 = Unix epoch
     assert(time.format_time(0, "%Y") == "1970")
     assert(time.format_time(0, "%m") == "01")
@@ -231,7 +231,7 @@ Error: throws `E6007` when the format does not match.
 ```yaoxiang
 use std.time
 
-main = {
+main: () -> Void = {
     // Parsing itself can succeed
     ts = time.parse_time("", "2024-01-15 10:30:00")
     println(ts)
@@ -274,7 +274,7 @@ position. The following attempts have been confirmed by actual testing to all fa
 use std.assert
 use std.time
 
-main = {
+main: () -> Void = {
     // Use format_time to get each component
     assert(time.format_time(0, "%Y") == "1970")
     assert(time.format_time(0, "%m") == "01")

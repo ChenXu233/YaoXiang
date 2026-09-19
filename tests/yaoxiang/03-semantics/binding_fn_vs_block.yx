@@ -24,7 +24,7 @@ fn_with_return = { return 13 }
 
 direct_expr: (n: Int) -> Int = n + 1
 
-main = {
+main: () -> Void = {
     assert.assert(ann_fn() == 5, "ann_fn() should be 5")
     assert.assert(no_ann_fn() == 7, "no_ann_fn() should be 7 (no annotation => function)")
     assert.assert(lambda_fn() == 9, "lambda_fn() should be 9")

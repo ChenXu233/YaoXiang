@@ -48,7 +48,7 @@ new: (T: Type)(arc: Arc(T)) -> Weak(T)
 use std.assert
 use std.weak
 
-main = {
+main: () -> Void = {
     // ref создаёт Arc[Int]
     p = ref 42
 
@@ -79,7 +79,7 @@ upgrade: (T: Type)(weak: Weak(T)) -> Option(Arc(T))
 use std.assert
 use std.weak
 
-main = {
+main: () -> Void = {
     p = ref 42
     w = weak.new(p)
 

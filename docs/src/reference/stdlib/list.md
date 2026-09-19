@@ -27,7 +27,7 @@ use std.list
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3]
 
     // 只读借用：nums 可反复使用
@@ -89,7 +89,7 @@ push: (A: Type)(list: List(A), item: A) -> List(A)
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     base = [1, 2]
     extended = list.push(base, 3)
     assert(list.len(extended) == 3)
@@ -112,7 +112,7 @@ append: (A: Type)(list: List(A), item: A) -> List(A)
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     extended = list.append([1, 2], 3)
     assert(list.len(extended) == 3)
 }
@@ -134,7 +134,7 @@ prepend: (A: Type)(list: List(A), item: A) -> List(A)
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     l = list.prepend([2, 3], 1)
     assert(list.first(l) == 1)
 }
@@ -158,7 +158,7 @@ pop: (A: Type)(list: &List(A)) -> Any
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     mut l = [1, 2, 3]
     gone = list.pop(l)
     assert(list.len(l) == 2)         // 原地缩短
@@ -190,7 +190,7 @@ remove_at: (A: Type)(list: &List(A), index: Int) -> Any
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     mut l = [10, 20, 30]
     x = list.remove_at(l, 1)
     assert(x == 20)
@@ -219,7 +219,7 @@ set: (A: Type)(list: List(A), index: Int, value: A) -> List(A)
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     l = list.set([1, 2, 3], 1, 99)
     assert(list.get(l, 1) == 99)
 }
@@ -245,7 +245,7 @@ get: (A: Type)(list: &List(A), index: Int) -> Any
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3, 4]
     assert(list.get(nums, 1) == 2)
 }
@@ -267,7 +267,7 @@ first: (A: Type)(list: &List(A)) -> Any
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.first([1, 2, 3]) == 1)
 }
 ```
@@ -288,7 +288,7 @@ last: (A: Type)(list: &List(A)) -> Any
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.last([1, 2, 3]) == 3)
 }
 ```
@@ -314,7 +314,7 @@ slice: (A: Type)(list: &List(A), start: Int, end: Int) -> List(A)
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     sub = list.slice([1, 2, 3, 4], 1, 3)
     assert(list.len(sub) == 2)
     assert(list.first(sub) == 2)
@@ -337,7 +337,7 @@ reverse: (A: Type)(list: &List(A)) -> List(A)
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     rev = list.reverse([1, 2, 3])
     assert(list.first(rev) == 3)
 }
@@ -361,7 +361,7 @@ concat: (A: Type)(a: &List(A), b: &List(A)) -> List(A)
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     joined = list.concat([1, 2], [3, 4])
     assert(list.len(joined) == 4)
 }
@@ -385,7 +385,7 @@ len: (A: Type)(list: &List(A)) -> Int
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3]
     assert(list.len(nums) == 3)
     assert(list.len(nums) == 3)      // 可复用
@@ -410,7 +410,7 @@ is_empty: (A: Type)(list: &List(A)) -> Bool
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.is_empty([]))
     assert(!list.is_empty([1]))
 }
@@ -434,7 +434,7 @@ contains: (A: Type)(list: &List(A), item: Any) -> Bool
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3, 4]
     assert(list.contains(nums, 3))
     assert(!list.contains(nums, 99))
@@ -459,7 +459,7 @@ find_index: (A: Type)(list: &List(A), item: Any) -> Int
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.find_index([1, 2, 3, 4], 3) == 2)
     assert(list.find_index([1, 2], 99) == -1)
 }
@@ -484,7 +484,7 @@ map: (T: Type)(list: &List(T), fn: (item: T) -> T) -> List(T)
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     doubled = list.map([1, 2, 3], x => x * 2)
     assert(list.get(doubled, 0) == 2)
 }
@@ -508,7 +508,7 @@ filter: (T: Type)(list: &List(T), fn: (item: T) -> Bool) -> List(T)
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     evens = list.filter([1, 2, 3, 4], x => x % 2 == 0)
     assert(list.len(evens) == 2)
 }
@@ -537,7 +537,7 @@ reduce: (T: Type)(list: &List(T), fn: (acc: Any, item: T) -> Any, init: Any) -> 
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     total = list.reduce([1, 2, 3, 4], (acc, x) => acc + x, 0)
     assert(total == 10)
 }
@@ -562,7 +562,7 @@ iter: (A: Type)(list: &List(A)) -> Tuple
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([1, 2, 3])
     assert(list.has_next(it))
 }
@@ -589,7 +589,7 @@ next: (iterator: Tuple) -> Any
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([7, 8])
     assert(list.next(it) == 7)
 }
@@ -611,7 +611,7 @@ has_next: (iterator: Tuple) -> Bool
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([1])
     assert(list.has_next(it))
 }
@@ -624,7 +624,7 @@ main = {
 ```yaoxiang
 use std.assert
 
-main = {
+main: () -> Void = {
     mut sum = 0
     for x in [1, 2, 3] {
         sum = sum + x

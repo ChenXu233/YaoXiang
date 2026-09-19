@@ -257,7 +257,7 @@ main: () -> Void = {
 }
 
 // Самая краткая форма (рекомендуется)
-main = {
+main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 ```
@@ -345,7 +345,7 @@ factorial: (n: Int) -> Int = {
 }
 
 // Функция без параметров (самая краткая)
-main = { print("Hello!") }
+main: () -> Void = { print("Hello!") }
 
 // С параметрами — сигнатура опущена
 double = (x: Int) => x * 2

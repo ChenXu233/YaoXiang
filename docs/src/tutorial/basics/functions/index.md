@@ -244,7 +244,7 @@ main: () -> Void = {
 }
 
 // 最简形式（推荐）
-main = {
+main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 ```
@@ -328,7 +328,7 @@ factorial: (n: Int) -> Int = {
 }
 
 // 无参函数（最简）
-main = { print("Hello!") }
+main: () -> Void = { print("Hello!") }
 
 // 有参—省略签名
 double = (x: Int) => x * 2

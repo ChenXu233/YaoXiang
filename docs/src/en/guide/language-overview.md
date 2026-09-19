@@ -241,7 +241,7 @@ results = spawn for item in items {
 }
 
 // spawn + ref: share across tasks
-main = {
+main: () -> Void = {
     shared = ref data
     result = spawn {
         a = shared

@@ -6,7 +6,7 @@
 use std.io
 use std.assert
 
-main = {
+main: () -> Void = {
     a = 6
     assert.assert((a & 2) == 2, "位与")
     assert.assert((a | 2) == 6, "位或")

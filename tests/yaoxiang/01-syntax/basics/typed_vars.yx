@@ -11,7 +11,7 @@ name: String = "YaoXiang"
 flag: Bool = true
 pi: Float = 3.14
 
-main = {
+main: () -> Void = {
     assert.assert(x == 42, "x == 42")
     assert.assert(name == "YaoXiang", "name == YaoXiang")
     assert.assert(flag, "flag is true")

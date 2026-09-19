@@ -6,7 +6,7 @@
 use std.assert
 use std.time
 
-main = {
+main: () -> Void = {
     // 时间戳为正（Unix epoch 之后）
     assert.assert(time.now() > 0, "now > 0")
     assert.assert(time.timestamp() > 0, "timestamp > 0")

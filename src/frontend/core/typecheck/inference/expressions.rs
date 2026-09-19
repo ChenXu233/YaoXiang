@@ -2618,7 +2618,16 @@ impl<'a> ExpressionInferrer<'a> {
 
             // spawn 块：spawn { ... }
             crate::frontend::core::parser::ast::Expr::Spawn { body, .. } => {
-                self.infer_block(body, true, None)
+                // `spawn {}` 引入**新的函数边界**：块内 `return` 退出的是 spawn 体
+                // 而非外层函数（运行时已验证：`r = spawn { return 3 + 4 }` 得 r == 7）。
+                //
+                // 此前 `expected_return_type` 未隔离，保持外层函数声明的类型，
+                // 导致 `f: () -> Void = { r = spawn { return 1 + 2 } }` 误报
+                // E1002（把 spawn 体的 return 当外层 void 函数的 return）。
+                let saved = self.expected_return_type.take();
+                let result = self.infer_block(body, true, None);
+                self.expected_return_type = saved;
+                result
             }
 
             // ListComp 表达式

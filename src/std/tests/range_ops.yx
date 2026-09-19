@@ -8,7 +8,7 @@ use std.result
 use std.range
 use std.list
 
-main = {
+main: () -> Void = {
     r = 1..6
 
     // ── 迭代器协议（for 消费；载体 Move 语义与 List 迭代器一致）──

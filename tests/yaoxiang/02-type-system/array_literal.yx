@@ -6,7 +6,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     a = [10, 20, 30]
     assert.assert(a[0] == 10, "bare literal stays List")
     assert.assert(a[2] == 30, "bare literal List index")

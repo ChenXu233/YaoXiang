@@ -30,7 +30,7 @@ dead-code = "warn"
 ```yaoxiang
 pub dead_function: () -> Void = { }  // W1001: 未使用のエクスポート関数
 
-main = {
+main: () -> Void = {
     // dead_function は一度も呼び出されない
 }
 ```
@@ -51,7 +51,7 @@ main = {
 ```yaoxiang
 DeadType: Type = Int  // W1002: 未使用のエクスポート型
 
-main = {
+main: () -> Void = {
     x = 42
 }
 ```
@@ -69,7 +69,7 @@ main = {
 ```yaoxiang
 use std.json  // W1003: 未使用のインポート
 
-main = {
+main: () -> Void = {
     // json モジュールは一度も使用されない
 }
 ```
@@ -91,7 +91,7 @@ main = {
 ```yaoxiang
 pub dead_var = 42  // W1004: 未使用のエクスポート変数
 
-main = {
+main: () -> Void = {
     // dead_var は一度も読み取られない
 }
 ```
@@ -114,7 +114,7 @@ Foo: Type = { value: Int }
 
 pub Foo.dead_method: (self: Foo) -> Void = { }  // W1005: 未使用のエクスポートメソッド
 
-main = {
+main: () -> Void = {
     foo = Foo(1)
     // dead_method は一度も呼び出されない
 }

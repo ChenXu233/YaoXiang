@@ -6,7 +6,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // Range 值绑定
     r = 1..10
     assert.assert(5 in r, "5 in r")

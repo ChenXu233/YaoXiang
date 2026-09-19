@@ -15,7 +15,7 @@ Point.get_x: (self: &Point) -> Float = {
     return self.x
 }
 
-main = {
+main: () -> Void = {
     p = Point(1.0, 2.0)
     p.draw("screen")
     s = p.serialize()

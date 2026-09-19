@@ -5,7 +5,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // 整数字面量
     assert.assert(42 == 42, "int 42")
     assert.assert(-7 == -7, "int -7")

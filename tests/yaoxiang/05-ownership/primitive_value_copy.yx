@@ -5,7 +5,7 @@
 
 use std.{assert, io}
 
-main = {
+main: () -> Void = {
     // 赋值复制：两者独立可用
     a = 42
     b = a

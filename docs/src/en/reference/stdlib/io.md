@@ -55,7 +55,7 @@ expanded recursively; other values are output as literals.
 ```yaoxiang
 use std.io
 
-main = {
+main: () -> Void = {
     print("hello")
     print(" ")
     print("world")
@@ -78,7 +78,7 @@ Same as [`print`](#print), but appends a newline at the end of the output.
 `println()` called without arguments outputs an empty line:
 
 ```yaoxiang
-main = {
+main: () -> Void = {
     println("Hello, YaoXiang!")
 }
 ```
@@ -103,7 +103,7 @@ Returns: the entire line read, **with the trailing newline removed** (`\n` or `\
 ```yaoxiang
 use std.io
 
-main = {
+main: () -> Void = {
     println("Please enter your name: ")
     name = io.read_line()
     println("Hello, " + name)
@@ -133,7 +133,7 @@ use std.io
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_read_file.txt"
     io.write_file(p, "hello")
 
@@ -168,7 +168,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_write_file.txt"
     ok = io.write_file(p, "hello")
     assert(ok)
@@ -196,7 +196,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_append_file.txt"
     io.write_file(p, "hello")
     io.append_file(p, " world")
@@ -230,7 +230,7 @@ use std.assert
 use std.io
 use std.string
 
-main = {
+main: () -> Void = {
     s = io.format_fallback(42, "int")
     assert(string.contains(s, "42"))
 }

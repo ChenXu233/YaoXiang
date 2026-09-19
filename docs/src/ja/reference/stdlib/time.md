@@ -64,7 +64,7 @@ now: () -> DateTime
 ```yaoxiang
 use std.time
 
-main = {
+main: () -> Void = {
     t = time.now()
     println(t)          // DateTime(1789471990)
 }
@@ -89,7 +89,7 @@ timestamp: () -> Int
 use std.assert
 use std.time
 
-main = {
+main: () -> Void = {
     assert(time.timestamp() > 0)
 }
 ```
@@ -110,7 +110,7 @@ timestamp_ms: () -> Int
 use std.assert
 use std.time
 
-main = {
+main: () -> Void = {
     // ミリ秒精度は秒精度を下回らない
     assert(time.timestamp_ms() >= time.timestamp())
 }
@@ -136,7 +136,7 @@ sleep: (seconds: Float) -> Void
 ```yaoxiang
 use std.time
 
-main = {
+main: () -> Void = {
     time.sleep(0.0)
 }
 ```
@@ -191,7 +191,7 @@ use std.assert
 use std.string
 use std.time
 
-main = {
+main: () -> Void = {
     // 0 = Unix epoch
     assert(time.format_time(0, "%Y") == "1970")
     assert(time.format_time(0, "%m") == "01")
@@ -232,7 +232,7 @@ parse_time: (fmt: String, s: String) -> DateTime
 ```yaoxiang
 use std.time
 
-main = {
+main: () -> Void = {
     // 解析自体は成功する
     ts = time.parse_time("", "2024-01-15 10:30:00")
     println(ts)
@@ -275,7 +275,7 @@ main = {
 use std.assert
 use std.time
 
-main = {
+main: () -> Void = {
     // format_time で各構成要素を取得
     assert(time.format_time(0, "%Y") == "1970")
     assert(time.format_time(0, "%m") == "01")

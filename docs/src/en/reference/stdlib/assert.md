@@ -45,7 +45,7 @@ Returns: Returns `Void` when the condition holds, without interrupting execution
 ```yaoxiang
 use std.assert
 
-main = {
+main: () -> Void = {
     assert(1 > 0)
     assert(1 > 0, "This literal assertion must hold")
 }
@@ -58,7 +58,7 @@ Assertions are **the primary means of judgment in test corpora** — both `src/s
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     list.len([1, 2, 3]) == 3
     assert(list.len([1, 2, 3]) == 3, "len == 3")
 }

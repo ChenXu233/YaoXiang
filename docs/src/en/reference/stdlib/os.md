@@ -48,7 +48,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_open.txt"
     n = os.write(os.open(p, "w"), "hello")
     assert(n == 5)
@@ -129,7 +129,7 @@ Errors: throws `E6007` for invalid mode, non-existent file, or lack of permissio
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_open_only.txt"
     f = os.open(p, "w")
     assert(os.exists(p))
@@ -158,7 +158,7 @@ Errors: throws `E6007` when the descriptor is invalid (not opened or already clo
 ```yaoxiang
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_close.txt"
     f = os.open(p, "w")
     os.close(f)
@@ -190,7 +190,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_read.txt"
     io.write_file(p, "abcdef")
 
@@ -221,7 +221,7 @@ writing fails.
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_write.txt"
     n = os.write(os.open(p, "w"), "hello")
     assert(n == 5)
@@ -252,7 +252,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_seek.txt"
     io.write_file(p, "abcdef")
 
@@ -280,7 +280,7 @@ Errors: throws `E6007` when the descriptor is invalid.
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_tell.txt"
     pos = os.tell(os.open(p, "w"))
     assert(pos == 0)
@@ -306,7 +306,7 @@ Errors: throws `E6007` when the descriptor is invalid or flush fails.
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_flush.txt"
     os.flush(os.open(p, "w"))
     assert(os.exists(p))
@@ -335,7 +335,7 @@ already exists.
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     d = "__yx_doc_mkdir"
     assert(os.mkdir(d))
     assert(os.is_dir(d))
@@ -361,7 +361,7 @@ Returns: `true` on success. Errors: throws `E6007` when directory does not exist
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     d = "__yx_doc_rmdir"
     os.mkdir(d)
     assert(os.rmdir(d))
@@ -389,7 +389,7 @@ use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     d = "__yx_doc_read_dir"
     os.mkdir(d)
     names = os.read_dir(d)
@@ -421,7 +421,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_remove.txt"
     io.write_file(p, "x")
     assert(os.remove(p))
@@ -446,7 +446,7 @@ not exist.
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     assert(os.exists("."))
     assert(!os.exists("__yx_definitely_missing_path__"))
 }
@@ -469,7 +469,7 @@ paths.
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     assert(!os.is_file("."))
 }
 ```
@@ -490,7 +490,7 @@ Whether the path is a **directory**. Returns `false` for files, `false` for non-
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     assert(os.is_dir("."))
 }
 ```
@@ -515,7 +515,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     a = "__yx_doc_copy_a.txt"
     b = "__yx_doc_copy_b.txt"
     io.write_file(a, "data")
@@ -546,7 +546,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     a = "__yx_doc_rename_a.txt"
     b = "__yx_doc_rename_b.txt"
     io.write_file(a, "data")
@@ -579,7 +579,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_os_append.txt"
     io.write_file(p, "a")
     os.append_file(p, "b")
@@ -610,7 +610,7 @@ use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     // PATH is guaranteed to exist on mainstream platforms
     path = os.get_env("PATH")
     assert(string.len(path) > 0)
@@ -636,7 +636,7 @@ Sets an environment variable (affects the current process).
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     os.set_env("__YX_DOC_ENV", "hello")
     assert(os.get_env("__YX_DOC_ENV") == "hello")
 }
@@ -664,7 +664,7 @@ use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     argv = os.args()
     assert(string.len(argv) > 0)
 }
@@ -688,7 +688,7 @@ Returns: `true` on success. Errors: throws `E6007` when directory does not exist
 use std.assert
 use std.os
 
-main = {
+main: () -> Void = {
     before = os.getcwd()
     assert(os.chdir(".."))
     assert(os.chdir(before))     // switch back
@@ -715,7 +715,7 @@ use std.assert
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     cwd = os.getcwd()
     assert(string.len(cwd) > 0)
 }

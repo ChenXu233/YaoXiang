@@ -25,7 +25,7 @@ mut outer: Int = 5
 // 注解声明 + 初值（spec §3.2 文法要求 `= Expr`）
 declared_only: Int = 7
 
-main = {
+main: () -> Void = {
     assert.assert(fresh == 1, "新声明")
     assert.assert(counter == 11, "mut 重赋值累计")
     assert.assert(outer == 10, "跨作用域 mut 赋值")

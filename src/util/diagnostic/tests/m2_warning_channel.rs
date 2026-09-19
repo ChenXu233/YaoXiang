@@ -92,7 +92,7 @@ fn test_unused_named_import_reports_w1003_via_warnings_channel() {
     // Arrange: 具名导入（use std.io.{print}）且 print 未被引用 → W1003
     let source = r#"
 use std.io.{print}
-main = {
+main = () => {
     x = 1
     x
 }
@@ -132,7 +132,7 @@ fn test_unused_module_import_reports_w1003() {
     // 移交 typecheck use elaboration 后恢复检测。
     let source = r#"
 use std.io
-main = {
+main = () => {
     x = 1
     x
 }
@@ -154,7 +154,7 @@ fn test_used_import_no_warning() {
     // Arrange: 具名导入被调用 → 不报 W1003
     let source = r#"
 use std.io.{print}
-main = {
+main = () => {
     print(42)
 }
 "#;
@@ -175,7 +175,7 @@ fn test_module_alias_member_call_marks_import_used() {
     // Arrange: 整模块导入后经别名限定调用（io.print）→ 导入已使用
     let source = r#"
 use std.io
-main = {
+main = () => {
     io.print(42)
 }
 "#;
@@ -199,7 +199,7 @@ fn test_import_used_via_method_binding_no_warning() {
 use std.io.{println}
 Widget: Type = { x: Int }
 Widget.show = println
-main = {
+main = () => {
     x = 1
     x
 }
@@ -220,7 +220,7 @@ main = {
 fn test_body_level_unused_import_reports_w1003() {
     // Arrange: 函数体内 use 且导入名未被引用 → W1003（use 语句位置）
     let source = r#"
-main = {
+main = () => {
     use std.io
     x = 1
     x
@@ -242,7 +242,7 @@ main = {
 fn test_body_level_used_import_no_warning() {
     // Arrange: 函数体内 use 且导入被引用 → 不报
     let source = r#"
-main = {
+main = () => {
     use std.io.{print}
     print(42)
 }

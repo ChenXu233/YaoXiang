@@ -30,7 +30,7 @@ parse_ok: () -> Result(Void, String) = () => {
     test.assert_eq(v, 42)
 }
 
-main = {
+main: () -> Void = {
     test.suite([
         ("push_grows_len", () => push_grows_len()),
         ("pop_returns_last", () => pop_returns_last()),

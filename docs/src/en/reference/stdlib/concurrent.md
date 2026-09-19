@@ -48,7 +48,7 @@ Blocks the current thread for the specified number of **milliseconds**.
 ```yaoxiang
 use std.concurrent
 
-main = {
+main: () -> Void = {
     concurrent.sleep(0)
     concurrent.sleep(1)
 }
@@ -75,7 +75,7 @@ use std.assert
 use std.concurrent
 use std.string
 
-main = {
+main: () -> Void = {
     tid = concurrent.thread_id()
     assert(string.len(tid) > 0)
 }
@@ -97,7 +97,7 @@ to run.
 ```yaoxiang
 use std.concurrent
 
-main = {
+main: () -> Void = {
     concurrent.yield_now()
 }
 ```

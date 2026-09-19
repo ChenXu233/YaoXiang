@@ -113,7 +113,7 @@ path = "src/cli.yx"
 ```yaoxiang
 # src/cli.yx (Bin role)
 pub unused_fn = (x: Int) => x    # ← W1001 may be reported: bin has no external consumer
-main = { ... }
+main: () -> Void = { ... }
 
 # src/lib.yx (Lib role, on the export surface)
 pub api_fn = ...                 # ← never reported: external consumers are invisible

@@ -171,7 +171,7 @@ Array: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 Point: Type = { x: Float, y: Float }
 
 # ✅ 関数：: Type なし、HM が () -> Void と推論
-main = { println("Hello") }
+main: () -> Void = { println("Hello") }
 
 # ❌ エラー：: Type なし、コンパイラは { ... } を型として解析できない
 Point = { x: Float, y: Float }  // HM は関数と推論し、型ではない！

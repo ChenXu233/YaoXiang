@@ -242,7 +242,7 @@ results = spawn for item in items {
 }
 
 // spawn + ref：跨任务共享
-main = {
+main: () -> Void = {
     shared = ref data
     result = spawn {
         a = shared

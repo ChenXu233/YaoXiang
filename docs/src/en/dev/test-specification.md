@@ -705,7 +705,7 @@ lines should external fixture files be used (placed in `tests/fixtures/`).
 fn test_fibonacci() {
     run_ok(
         r#"
-        main = {
+        main: () -> Void = {
             mut a = 0
             mut b = 1
             while a < 100 {

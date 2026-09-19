@@ -6,7 +6,7 @@
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3, 4]
 
     // 只读操作可复用（&List 自动借用，不 move）

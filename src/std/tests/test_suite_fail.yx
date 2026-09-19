@@ -22,7 +22,7 @@ pop_still_runs: () -> Result(Void, String) = () => {
     test.assert_eq(last, 2)
 }
 
-main = {
+main: () -> Void = {
     test.suite([
         ("always_fails", () => always_fails()),
         ("pop_still_runs", () => pop_still_runs()),

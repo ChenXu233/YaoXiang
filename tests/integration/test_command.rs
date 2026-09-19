@@ -57,14 +57,14 @@ fn run_test_cmd(
 
 const PASS_TEST: &str = r#"
 use std.assert
-main = {
+main = () => {
     assert.assert(1 + 1 == 2, "math works")
 }
 "#;
 
 const FAIL_TEST: &str = r#"
 use std.assert
-main = {
+main = () => {
     assert.assert(1 == 2, "one is not two")
 }
 "#;
@@ -73,7 +73,7 @@ main = {
 const NOISY_PASS_TEST: &str = r#"
 use std.io
 use std.assert
-main = {
+main = () => {
     io.println("noisy stdout marker")
     assert.assert(1 + 1 == 2, "math works")
 }
@@ -193,7 +193,7 @@ fn test_test_command_project_test_imports_project_module() {
         r#"
 use std.assert
 use lib.{helper}
-main = {
+main = () => {
     assert.assert(helper(21) == 42, "helper(21) should be 42")
 }
 "#,
@@ -478,14 +478,14 @@ fn test_test_command_json_empty_discovery_outputs_empty_report() {
 
 /// 编译错误正文（镜像语料 06-compile-errors/array_empty_n_err.yx 的 E1002 形态）
 const COMPILE_ERR_BODY: &str = r#"
-main = {
+main = () => {
     b: Array(Int, 3) = []
 }
 "#;
 
 /// 运行期错误正文（除零，镜像语料 06-compile-errors/div_zero.yx 的 E6001 形态）
 const RUNTIME_ERR_BODY: &str = r#"
-main = {
+main = () => {
     x = 1 / 0
     print(x)
 }
@@ -866,7 +866,7 @@ fn test_test_command_parallel_fail_fast_stops_scheduling() {
         r#"
 use std.assert
 use std.concurrent
-main = {
+main = () => {
     concurrent.sleep(1500)
     assert.assert(1 + 1 == 2, "math works")
 }
@@ -930,7 +930,7 @@ ok_two: () -> Result(Void, String) = () => {
     test.assert_true(1 < 2)
 }
 
-main = {
+main = () => {
     test.suite([
         ("ok_one", () => ok_one()),
         ("ok_two", () => ok_two()),
@@ -968,7 +968,7 @@ still_runs: () -> Result(Void, String) = () => {
     test.assert_true(1 < 2)
 }
 
-main = {
+main = () => {
     test.suite([
         ("always_fails", () => always_fails()),
         ("still_runs", () => still_runs()),

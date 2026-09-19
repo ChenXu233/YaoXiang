@@ -836,7 +836,7 @@ io.println(x)                // 42
 
 ```yaoxiang
 use std.io
-main = { io.println("only runs if called") }
+main: () -> Void = { io.println("only runs if called") }
 
 main()                       // ← この行を書かなければならない
 ```
@@ -855,7 +855,7 @@ main()                       // ← この行を書かなければならない
 - トップレベルには実行可能文は許可されない——プログラムの本体は `main` そのものである
 
 ```yaoxiang
-main = {
+main: () -> Void = {
     print("hello")
 }
 ```

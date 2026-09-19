@@ -9,7 +9,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // Array：定长，索引原地写
     a: Array(Int, 3) = [1, 2, 3]
     a[1] = 99

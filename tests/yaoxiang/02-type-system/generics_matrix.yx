@@ -28,7 +28,7 @@ twice: (T: Type) -> (f: (T) -> T, x: T) -> T = (f, x) => f(f(x))
 // 泛型恒等：容器经泛型 move
 identity: (T: Type) -> (x: T) -> T = (x) => x
 
-main = {
+main: () -> Void = {
     // 1. 双参数泛型，不同实参
     e: Entry(Int, String) = Entry(1, "one")
     assert.assert(e.key == 1, "Entry(Int, String).key == 1")

@@ -21,7 +21,7 @@ fn locals_of<'a>(
 #[test]
 fn named_locals_carry_source_name() {
     let src = r#"
-main = {
+main = () => {
     alpha = 1
     beta = alpha + 2
 }
@@ -50,7 +50,7 @@ fn parameters_carry_source_name() {
     let src = r#"
 double: (n: Int) -> Int = (n) => { n * 2 }
 
-main = {
+main = () => {
     r = double(21)
 }
 "#;
@@ -78,7 +78,7 @@ main = {
 #[test]
 fn temporaries_stay_anonymous() {
     let src = r#"
-main = {
+main = () => {
     a = 1
     b = 2
     c = a + b
@@ -103,9 +103,9 @@ fn nested_function_locals_do_not_leak_to_parent() {
     // 内层函数体的具名局部不得出现在外层函数的槽位表里。
     // 这正是 span 迁移中踩过的坑：跨调用状态未隔离导致张冠李戴。
     let src = r#"
-outer = {
+outer = () => {
     outer_only = 1
-    inner = {
+    inner = () => {
         inner_only = 2
         inner_only
     }
@@ -137,7 +137,7 @@ fn locals_length_matches_declared_count() {
     // 槽位数量必须恰好等于函数体声明数：多一个少一个都会改变 local_count
     // 进而改变 .42 字节码。
     let src = r#"
-main = {
+main = () => {
     x = 1
     y = 2
     x + y

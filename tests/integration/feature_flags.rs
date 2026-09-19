@@ -16,7 +16,7 @@ use yaoxiang::run;
 fn test_run_with_default_features() {
     // Arrange
     let source = r#"
-        main = {
+        main = () => {
             print("Hello, World!")
         }
     "#;
@@ -38,7 +38,7 @@ fn test_run_with_default_features() {
 fn test_run_complex_program_with_default_features() {
     // Arrange
     let source = r#"
-        main = {
+        main = () => {
             mut sum = 0
             mut i = 1
             while i <= 10 {
@@ -68,7 +68,7 @@ fn test_run_complex_program_with_default_features() {
 fn test_core_functionality_available() {
     // Arrange
     let source = r#"
-        main = {
+        main = () => {
             print("Core functionality works")
         }
     "#;
@@ -90,7 +90,7 @@ fn test_core_functionality_available() {
 fn test_basic_arithmetic_available() {
     // Arrange
     let source = r#"
-        main = {
+        main = () => {
             x = 42
             y = x * 2
             z = y + 10
@@ -115,7 +115,7 @@ fn test_basic_arithmetic_available() {
 fn test_control_flow_available() {
     // Arrange
     let source = r#"
-        main = {
+        main = () => {
             mut x = 0
             while x < 5 {
                 x = x + 1
@@ -141,7 +141,7 @@ fn test_control_flow_available() {
 fn test_match_expression_available() {
     // Arrange
     let source = r#"
-        main = {
+        main = () => {
             r1 = match 1 { 1 => 100, _ => 0 }
         }
     "#;
@@ -165,7 +165,7 @@ fn test_match_expression_available() {
 fn test_z3_available_in_all_feature_combinations() {
     // Arrange
     let source = r#"
-        main = {
+        main = () => {
             print("Z3 works!")
         }
     "#;
@@ -190,7 +190,7 @@ fn test_cli_features_unavailable_without_cli() {
 
     // Arrange
     let source = r#"
-        main = {
+        main = () => {
             print("Core functionality works")
         }
     "#;
@@ -215,7 +215,7 @@ fn test_list_operations_available() {
     // Arrange
     let source = r#"
         use std.{io, list}
-        main = {
+        main = () => {
             xs = [1, 2, 3, 4, 5]
             ys = list.map(xs, x => x * 10)
             xs2 = [1, 2, 3, 4, 5]

@@ -11,7 +11,7 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
 }
 
-main = {
+main: () -> Void = {
     assert.assert(true, "compiled with Assert(Rows > 0) and Assert(Cols > 0)")
 }
 

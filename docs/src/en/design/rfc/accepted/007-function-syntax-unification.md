@@ -91,7 +91,7 @@ add = (a: Int, b: Int) => a + b                      # Omit the signature
 # === No-argument functions ===
 main: () -> Void = () => { println("Hello") }          # Full form
 main: () -> Void = { println("Hello") }                # Omit the lambda head
-main = { println("Hello") }                            # Simplest form (inferred as () -> Void)
+main: () -> Void = { println("Hello") }                            # Simplest form (inferred as () -> Void)
 
 # === Generic functions (using RFC-010 unified syntax) ===
 identity: (T: Type) -> ((x: T) -> T) = (x) => x         # Full form
@@ -244,7 +244,7 @@ compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) 
 
 # Standard function: HM algorithm infers the return type (parameter types must be explicit)
 add = (a: Int, b: Int) => a + b            # Inferred as (a: Int, b: Int) -> Int
-main = { println("Hello") }                # Inferred as () -> Void
+main: () -> Void = { println("Hello") }                # Inferred as () -> Void
 
 # Partially explicit parameters: HM algorithm infers the rest
 print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # Inferred as (Int, Int) -> Void
@@ -465,10 +465,10 @@ main: () -> Void = { println("Hello") }
 
 # === Abbreviation: HM inference ===
 add = (a: Int, b: Int) => a + b              # Inferred as (a: Int, b: Int) -> Int
-main = { println("Hello") }                  # Inferred as () -> Void
+main: () -> Void = { println("Hello") }                  # Inferred as () -> Void
 
 # === Simplest form ===
-main = {                                      # Equivalent to main: () -> Void = { ... }
+main: () -> Void = {                                      # Equivalent to main: () -> Void = { ... }
     println("Hello")
 }
 ```
@@ -490,7 +490,7 @@ main = {                                      # Equivalent to main: () -> Void =
 > The questions below have been resolved in the design and are recorded in Appendix A.
 
 - ~~Q1: Should the very compact form `main() = body` be retained?~~ → Resolved: retained as
-  `main = { ... }`.
+  `main: () -> Void = { ... }`.
 - ~~Q2: Should the `:` after the function name be retained?~~ → Resolved: optionally retained;
   however, functions with parameters still need parameter types annotated in the signature or the
   lambda head.

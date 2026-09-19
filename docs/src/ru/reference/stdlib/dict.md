@@ -22,7 +22,7 @@ use std.dict
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
 
     // Только чтение (заимствование): d можно использовать повторно
@@ -70,7 +70,7 @@ set: (K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V)
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d1 = dict.set({}, "a", 1)
     d2 = dict.set(d1, "b", 2)
     assert(dict.len(d2) == 2)
@@ -97,7 +97,7 @@ get: (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     assert(dict.get(d, "a") == 1)
 }
@@ -109,7 +109,7 @@ main = {
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     assert(!dict.has(d, "nope"))
     if dict.has(d, "a") {
@@ -136,7 +136,7 @@ has: (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     assert(dict.has(d, "a"))
     assert(!dict.has(d, "zzz"))
@@ -163,7 +163,7 @@ delete: (K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V)
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     deleted = dict.delete(d, "a")
     assert(!dict.has(deleted, "a"))
@@ -190,7 +190,7 @@ use std.assert
 use std.dict
 use std.list
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     ks = dict.keys(d)
     assert(list.len(ks) == 1)
@@ -214,7 +214,7 @@ use std.assert
 use std.dict
 use std.list
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     vs = dict.values(d)
     assert(list.len(vs) == 1)
@@ -239,7 +239,7 @@ use std.assert
 use std.dict
 use std.list
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     es = dict.entries(d)
     assert(list.len(es) == 1)
@@ -264,7 +264,7 @@ len: (K: Type, V: Type)(dict: &Dict(K, V)) -> Int
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     assert(dict.len(d) == 1)
     assert(dict.len(d) == 1)      // можно использовать повторно
@@ -289,7 +289,7 @@ is_empty: (K: Type, V: Type)(dict: &Dict(K, V)) -> Bool
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     assert(dict.is_empty({}))
     d = dict.set({}, "a", 1)
     assert(!dict.is_empty(d))
@@ -317,7 +317,7 @@ merge: (A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B)
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     m = dict.merge(dict.set({}, "x", 10), dict.set({}, "y", 20))
     assert(dict.get(m, "x") == 10)
     assert(dict.get(m, "y") == 20)

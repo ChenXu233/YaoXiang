@@ -84,7 +84,7 @@ add = (a: Int, b: Int) => a + b                      # 省略签名
 # === 空参函数 ===
 main: () -> Void = () => { println("Hello") }          # 完整形式
 main: () -> Void = { println("Hello") }                # 省略 Lambda 头
-main = { println("Hello") }                            # 最简形式（推断为 () -> Void）
+main: () -> Void = { println("Hello") }                            # 最简形式（推断为 () -> Void）
 
 # === 泛型函数（使用 RFC-010 统一语法）===
 identity: (T: Type) -> ((x: T) -> T) = (x) => x         # 完整形式
@@ -228,7 +228,7 @@ compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) 
 
 # 标准函数：HM算法推断返回类型（参数类型需显式）
 add = (a: Int, b: Int) => a + b            # 推断为 (a: Int, b: Int) -> Int
-main = { println("Hello") }                # 推断为 () -> Void
+main: () -> Void = { println("Hello") }                # 推断为 () -> Void
 
 # 部分显式参数：HM算法推断剩余部分
 print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # 推断为 (Int, Int) -> Void
@@ -447,10 +447,10 @@ main: () -> Void = { println("Hello") }
 
 # === 简写：HM 推断 ===
 add = (a: Int, b: Int) => a + b              # 推断为 (a: Int, b: Int) -> Int
-main = { println("Hello") }                  # 推断为 () -> Void
+main: () -> Void = { println("Hello") }                  # 推断为 () -> Void
 
 # === 最简形式 ===
-main = {                                      # 等价于 main: () -> Void = { ... }
+main: () -> Void = {                                      # 等价于 main: () -> Void = { ... }
     println("Hello")
 }
 ```
@@ -471,7 +471,7 @@ main = {                                      # 等价于 main: () -> Void = { .
 
 > 以下の問題は設計中に解決済みであり、付録A に記録されている。
 
-- ~~Q1: `main() = body` のような極簡記法を保持すべきか？~~ → 解決済み：`main = { ... }` として保持
+- ~~Q1: `main() = body` のような極簡記法を保持すべきか？~~ → 解決済み：`main: () -> Void = { ... }` として保持
 - ~~Q2: 関数名の後の `:` を保持するか？~~
   → 解決済み：保持は任意；但し有引数関数は引き続き署名または lambda 頭で引数型を注釈する必要がある
 - ~~Q3: HM アルゴリズムは引数型の推論をサポートするか？~~

@@ -47,7 +47,7 @@ reference count.
 use std.assert
 use std.weak
 
-main = {
+main: () -> Void = {
     // ref creates Arc[Int]
     p = ref 42
 
@@ -79,7 +79,7 @@ still exists.
 use std.assert
 use std.weak
 
-main = {
+main: () -> Void = {
     p = ref 42
     w = weak.new(p)
 

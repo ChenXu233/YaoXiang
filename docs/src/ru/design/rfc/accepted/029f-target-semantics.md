@@ -112,7 +112,7 @@ path = "src/cli.yx"
 ```yaoxiang
 # src/cli.yx (роль Bin)
 pub unused_fn = (x: Int) => x    # ← W1001 может сообщаться: bin не имеет внешних потребителей
-main = { ... }
+main: () -> Void = { ... }
 
 # src/lib.yx (роль Lib, на поверхности экспорта)
 pub api_fn = ...                 # ← никогда не сообщается: внешние потребители не видны

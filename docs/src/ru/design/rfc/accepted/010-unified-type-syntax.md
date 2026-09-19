@@ -179,7 +179,7 @@ Array: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 Point: Type = { x: Float, y: Float }
 
 # ✅ Функция: нет : Type, HM выводит () -> Void
-main = { println("Hello") }
+main: () -> Void = { println("Hello") }
 
 # ❌ Ошибка: нет : Type, компилятор не может интерпретировать { ... } как тип
 Point = { x: Float, y: Float }  // HM выводит как функцию, а не как тип!

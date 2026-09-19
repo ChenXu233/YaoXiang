@@ -11,6 +11,6 @@ f: () -> Int = {
     n = string.parse_int("1")?
     return n
 }
-main = {
+main: () -> Void = {
     print(f())
 }

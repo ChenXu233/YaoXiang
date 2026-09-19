@@ -11,6 +11,6 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
 }
 
-main = {
+main: () -> Void = {
     m = Matrix(42)
 }

@@ -40,7 +40,7 @@ YaoXiang 標準庫（`std`）はモジュール単位で組織され、各モジ
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     parts = string.split("a,b,c", ",")
     println(list.len(parts))
 }
@@ -52,7 +52,7 @@ main = {
 use std.assert
 use std.math.{E, PI, TAU}
 
-main = {
+main: () -> Void = {
     assert(PI > 3.14)
 }
 ```
@@ -66,7 +66,7 @@ main = {
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3]
 
     // 3 か所すべて nums を読み取り専用借用し、呼び出し後も引き続き使用可能
@@ -83,7 +83,7 @@ main = {
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     base = [1, 2]
     extended = list.push(base, 3)   // 新しいリストを返す；base はムーブ済み
     assert(list.len(extended) == 3)
@@ -128,7 +128,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_int("42")))
     assert(result.is_err(string.parse_int("abc")))
 }
@@ -148,7 +148,7 @@ main = {
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([1, 2, 3])
     assert(list.has_next(it))
 
@@ -163,7 +163,7 @@ main = {
 ```yaoxiang
 use std.assert
 
-main = {
+main: () -> Void = {
     mut sum = 0
     for x in [1, 2, 3] {
         sum = sum + x
@@ -181,7 +181,7 @@ use std.list
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     doubled = range.collect(range.map(result.unwrap(range.iter(1..4)), x => x * 2))
     assert(list.get(doubled, 0) == 2)
     assert(list.len(doubled) == 3)

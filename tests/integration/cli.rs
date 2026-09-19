@@ -117,7 +117,7 @@ fn test_init_on_existing_directory_returns_project_exists_error() {
 fn test_run_program_with_variable_declaration_and_print() {
     // Act
     let result = run(r#"
-        main = {
+        main = () => {
             x = 1 + 2
             print(x)
         }
@@ -133,7 +133,7 @@ fn test_run_program_with_variable_declaration_and_print() {
 #[test]
 fn test_run_syntax_error_returns_error() {
     // Act
-    let result = run("main = { print('unclosed }");
+    let result = run("main = () => { print('unclosed }");
     // Assert
     assert!(result.is_err(), "syntax error should return compile error");
 }
@@ -150,7 +150,7 @@ fn test_run_nonexistent_file_returns_error() {
 fn test_run_void_literal_in_variable_declaration() {
     // Act
     let result = run(r#"
-        main = {
+        main = () => {
             x: Void = void
             print("ok")
         }
@@ -184,7 +184,7 @@ fn test_run_file_compile_error_returns_error() {
 fn test_build_bytecode_produces_nonempty_output_file() {
     // Arrange
     let tmp = temp_dir();
-    let src = write_yx_file(tmp.path(), "test.yx", "main = { print(42) }");
+    let src = write_yx_file(tmp.path(), "test.yx", "main = () => { print(42) }");
     let output = tmp.path().join("test.42");
     // Act
     build_bytecode(&src, &output).unwrap_or_else(|e| panic!("Failed to build bytecode: {:?}", e));
@@ -200,7 +200,7 @@ fn test_build_bytecode_produces_nonempty_output_file() {
 fn test_build_bytecode_with_debug_info_succeeds() {
     // Arrange
     let tmp = temp_dir();
-    let src = write_yx_file(tmp.path(), "debug.yx", "main = { print(1) }");
+    let src = write_yx_file(tmp.path(), "debug.yx", "main = () => { print(1) }");
     let output = tmp.path().join("debug.42");
     // Act
     let result = build_bytecode_with_options(&src, &output, true);
@@ -242,7 +242,7 @@ fn test_eval_code_single_expression() {
 #[test]
 fn test_eval_code_with_explicit_main_block() {
     // Act
-    let result = eval_code("main = { print(\"with explicit main\") }");
+    let result = eval_code("main = () => { print(\"with explicit main\") }");
     // Assert
     assert!(
         result.is_ok(),

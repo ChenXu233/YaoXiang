@@ -30,7 +30,7 @@ use std.list
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     it = result.unwrap(range.iter(1..4))
     assert(range.has_next(it))
 }
@@ -45,7 +45,7 @@ use std.assert
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     // 逐个新建迭代器
     a = result.unwrap(range.iter(1..3))
     assert(range.has_next(a))
@@ -61,7 +61,7 @@ main = {
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3]
     mut sum = 0
     for x in nums {
@@ -111,7 +111,7 @@ use std.assert
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     it = result.unwrap(range.iter(1..4))
     assert(range.has_next(it))
 }
@@ -136,7 +136,7 @@ use std.assert
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     it = result.unwrap(range.iter(1..4))
     assert(range.has_next(it))
 }
@@ -163,7 +163,7 @@ use std.assert
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     it = result.unwrap(range.iter(1..4))
     assert(range.next(it) == 1)
 }
@@ -176,7 +176,7 @@ use std.assert
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     desc = result.unwrap(range.iter(3..0..-1))
     assert(range.next(desc) == 3)
 }
@@ -204,7 +204,7 @@ use std.assert
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     assert(result.unwrap(range.contains(1..10, 5)))
     assert(!result.unwrap(range.contains(1..10, 10)))     // 结束值不含
 
@@ -231,7 +231,7 @@ abort_invalid_step: (r: Range(Int)) -> Any
 ```yaoxiang
 use std.range
 
-main = {
+main: () -> Void = {
     // 直接用 iter 会得到 Err，不需要走这个钩子
     r = range.iter(1..3)
 }
@@ -260,7 +260,7 @@ use std.list
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     doubled = range.collect(range.map(result.unwrap(range.iter(1..4)), x => x * 2))
     assert(list.len(doubled) == 3)
     assert(list.get(doubled, 0) == 2)
@@ -285,7 +285,7 @@ use std.list
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     big = range.collect(range.filter(result.unwrap(range.iter(1..6)), x => x > 3))
     assert(list.len(big) == 2)
     assert(list.get(big, 0) == 4)
@@ -300,7 +300,7 @@ use std.list
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     r = 1..6
     chained = range.collect(range.map(range.filter(result.unwrap(range.iter(r)), x => x % 2 == 0), x => x * 10))
     assert(list.get(chained, 0) == 20)
@@ -326,7 +326,7 @@ use std.list
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     xs = range.collect(result.unwrap(range.iter(1..4)))
     assert(list.len(xs) == 3)
 }
@@ -356,7 +356,7 @@ use std.assert
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     total = range.reduce(result.unwrap(range.iter(1..6)), 0, (acc, x) => acc + x)
     assert(total == 15)
 }
@@ -379,7 +379,7 @@ use std.assert
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     // 输出 1、2、3
     range.for_each(result.unwrap(range.iter(1..4)), x => println(x))
     assert(true)

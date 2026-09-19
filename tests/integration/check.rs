@@ -45,7 +45,7 @@ fn check_file(path: &PathBuf) -> Result<usize, anyhow::Error> {
 #[test]
 fn test_check_valid_file() {
     let dir = temp_dir();
-    let file = create_yx_file(&dir, "valid.yx", r#"main = { x = 42; print(x) }"#);
+    let file = create_yx_file(&dir, "valid.yx", r#"main = () => { x = 42; print(x) }"#);
     let result = check_file(&file);
     assert!(result.is_ok(), "Valid file should pass check");
     assert_eq!(result.unwrap(), 0, "Valid file should report 0 errors");
@@ -57,7 +57,7 @@ fn test_check_module_import() {
     let file = create_yx_file(
         &dir,
         "import.yx",
-        r#"use std.io; main = { io.println("ok") }"#,
+        r#"use std.io; main = () => { io.println("ok") }"#,
     );
     let result = check_file(&file);
     assert!(result.is_ok(), "File with module import should pass check");
@@ -73,7 +73,7 @@ fn test_check_complex_program() {
         r#"
 use std.list
 
-main = {
+main = () => {
     mut xs = [1, 2, 3]
     ys = list.map(xs, (x) => x * 2)
     print(ys)
@@ -89,7 +89,7 @@ main = {
 #[test]
 fn test_check_syntax_error() {
     let dir = temp_dir();
-    let file = create_yx_file(&dir, "syntax_error.yx", r#"main = { x =  }"#);
+    let file = create_yx_file(&dir, "syntax_error.yx", r#"main = () => { x =  }"#);
     let result = check_file(&file);
     assert!(
         result.is_err(),
@@ -108,7 +108,11 @@ fn test_check_syntax_error() {
 #[test]
 fn test_check_type_mismatch() {
     let dir = temp_dir();
-    let file = create_yx_file(&dir, "type_error.yx", r#"main = { x: Int = "hello" }"#);
+    let file = create_yx_file(
+        &dir,
+        "type_error.yx",
+        r#"main = () => { x: Int = "hello" }"#,
+    );
     let result = check_file(&file);
     assert!(result.is_ok(), "check should not panic on type errors");
     let error_count = result.unwrap();
@@ -121,7 +125,11 @@ fn test_check_type_mismatch() {
 #[test]
 fn test_check_undeclared_variable() {
     let dir = temp_dir();
-    let file = create_yx_file(&dir, "undeclared.yx", r#"main = { x = undefined_var }"#);
+    let file = create_yx_file(
+        &dir,
+        "undeclared.yx",
+        r#"main = () => { x = undefined_var }"#,
+    );
     let result = check_file(&file);
     assert!(result.is_ok(), "check should not panic on undeclared var");
     let error_count = result.unwrap();
@@ -142,7 +150,7 @@ fn test_check_nonexistent_file() {
 #[test]
 fn test_check_file_no_yx_extension() {
     let dir = temp_dir();
-    let file = create_yx_file(&dir, "hello.txt", "main = { print(42) }");
+    let file = create_yx_file(&dir, "hello.txt", "main = () => { print(42) }");
     let result = check_file(&file);
     // 非 .yx 文件路径会被 collect_yx_files_from_paths 过滤掉，返回 "No .yx files found"
     assert!(
@@ -160,7 +168,7 @@ fn test_check_std_call_wrong_arg_type_rejected() {
     let file = create_yx_file(
         &dir,
         "std_wrong_args.yx",
-        "use std.io.{write_file}\nmain = {\n    write_file(123, 456)\n}\n",
+        "use std.io.{write_file}\nmain = () => {\n    write_file(123, 456)\n}\n",
     );
 
     // Act
@@ -181,7 +189,7 @@ fn test_check_std_whole_module_qualified_call_rejected() {
     let file = create_yx_file(
         &dir,
         "std_qualified_wrong.yx",
-        "use std.io\nmain = {\n    io.write_file(123, 456)\n}\n",
+        "use std.io\nmain = () => {\n    io.write_file(123, 456)\n}\n",
     );
 
     // Act
@@ -202,7 +210,7 @@ fn test_check_std_call_correct_args_accepted() {
     let file = create_yx_file(
         &dir,
         "std_correct.yx",
-        "use std.io.{write_file}\nmain = {\n    write_file(\"a.txt\", \"hello\")\n}\n",
+        "use std.io.{write_file}\nmain = () => {\n    write_file(\"a.txt\", \"hello\")\n}\n",
     );
 
     // Act
@@ -224,7 +232,7 @@ fn test_check_std_generic_higher_order_accepted() {
     let file = create_yx_file(
         &dir,
         "std_map.yx",
-        "use std.list\nmain = {\n    mut xs = [1, 2, 3]\n    ys = list.map(xs, (x) => x * 2)\n    print(ys)\n}\n",
+        "use std.list\nmain = () => {\n    mut xs = [1, 2, 3]\n    ys = list.map(xs, (x) => x * 2)\n    print(ys)\n}\n",
     );
 
     // Act
@@ -246,7 +254,7 @@ fn test_check_std_optional_param_both_arities_accepted() {
     let file = create_yx_file(
         &dir,
         "std_assert.yx",
-        "use std.assert.{assert}\nmain = {\n    assert(1 > 0)\n    assert(1 > 0, \"must hold\")\n}\n",
+        "use std.assert.{assert}\nmain = () => {\n    assert(1 > 0)\n    assert(1 > 0, \"must hold\")\n}\n",
     );
 
     // Act
@@ -268,7 +276,7 @@ fn test_check_std_result_return_accepted() {
     let file = create_yx_file(
         &dir,
         "std_result.yx",
-        "use std.string.{parse_int}\nuse std.io\nmain = {\n    r = parse_int(\"42\")\n    io.println(r)\n}\n",
+        "use std.string.{parse_int}\nuse std.io\nmain = () => {\n    r = parse_int(\"42\")\n    io.println(r)\n}\n",
     );
 
     // Act
@@ -330,7 +338,7 @@ fn test_check_multifile_project_matches_run() {
         ("lib.yx", "add_one: (x: Int) -> Int = (x) => x + 1\n"),
         (
             "main.yx",
-            "use std.assert\nuse lib.{add_one}\n\nmain = {\n    assert.assert(add_one(41) == 42, \"ok\")\n}\n",
+            "use std.assert\nuse lib.{add_one}\n\nmain = () => {\n    assert.assert(add_one(41) == 42, \"ok\")\n}\n",
         ),
     ]);
     let main = dir.path().join("main.yx");
@@ -354,7 +362,7 @@ fn test_check_multifile_project_matches_run() {
 #[test]
 fn test_check_missing_module_reports_e5001() {
     // Arrange - 导入不存在的模块
-    let dir = create_project(&[("main.yx", "use nosuch.{thing}\n\nmain = {\n}\n")]);
+    let dir = create_project(&[("main.yx", "use nosuch.{thing}\n\nmain = () => {\n}\n")]);
     let main = dir.path().join("main.yx");
 
     // Act
@@ -371,7 +379,7 @@ fn test_check_missing_module_reports_e5001() {
 #[test]
 fn test_check_missing_export_reports_e5003() {
     // Arrange - 模块存在但导出项不存在
-    let dir = create_project(&[("main.yx", "use std.math.{nosuch_fn}\n\nmain = {\n}\n")]);
+    let dir = create_project(&[("main.yx", "use std.math.{nosuch_fn}\n\nmain = () => {\n}\n")]);
     let main = dir.path().join("main.yx");
 
     // Act
@@ -395,7 +403,7 @@ fn test_check_vendor_dependency_importable() {
         ),
         (
             "main.yx",
-            "use std.assert\nuse foo.{add_one}\n\nmain = {\n    assert.assert(add_one(41) == 42, \"vendor\")\n}\n",
+            "use std.assert\nuse foo.{add_one}\n\nmain = () => {\n    assert.assert(add_one(41) == 42, \"vendor\")\n}\n",
         ),
     ]);
     let main = dir.path().join("main.yx");
@@ -415,7 +423,7 @@ fn test_check_vendor_dependency_importable() {
 #[test]
 fn test_check_vendor_missing_dependency_reports_e5001() {
     // Arrange - 依赖未安装（vendor 目录为空）
-    let dir = create_project(&[("main.yx", "use foo.{add_one}\n\nmain = {\n}\n")]);
+    let dir = create_project(&[("main.yx", "use foo.{add_one}\n\nmain = () => {\n}\n")]);
     let main = dir.path().join("main.yx");
 
     // Act
@@ -435,8 +443,8 @@ fn test_check_two_entries_sharing_module_reports_it_once() {
     // 收集全项目文件，正是此多入口场景）
     let dir = create_project(&[
         ("lib.yx", "broken: Int = nosuch_value\n"),
-        ("a.yx", "use lib\n\nmain = {\n}\n"),
-        ("b.yx", "use lib\n\nmain = {\n}\n"),
+        ("a.yx", "use lib\n\nmain = () => {\n}\n"),
+        ("b.yx", "use lib\n\nmain = () => {\n}\n"),
     ]);
     let entries = vec![dir.path().join("a.yx"), dir.path().join("b.yx")];
 

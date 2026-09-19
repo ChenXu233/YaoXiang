@@ -69,7 +69,7 @@ use std.assert
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     assert(list.len(string.split("a,b,c", ",")) == 3)
     assert(list.get(string.split("a,b,c", ","), 0) == "a")
 
@@ -97,7 +97,7 @@ Returns: a new string with leading and trailing whitespace removed (does not mod
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.trim("  hi  ") == "hi")
 }
 ```
@@ -118,7 +118,7 @@ Convert to uppercase (Unicode-aware).
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.upper("abc") == "ABC")
 }
 ```
@@ -139,7 +139,7 @@ Convert to lowercase (Unicode-aware).
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.lower("ABC") == "abc")
 }
 ```
@@ -162,7 +162,7 @@ Replace **every** occurrence of `old` in `s` with `new`.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.replace("a-b-c", "-", "+") == "a+b+c")
     assert(string.replace("abc", "", "x") == "abc")
 }
@@ -184,7 +184,7 @@ Whether `sub` appears in `s`. Always `true` for an empty string.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.contains("hello", "ell"))
     assert(!string.contains("hello", "xyz"))
 }
@@ -206,7 +206,7 @@ Whether `s` starts with `prefix`. Always `true` for an empty `prefix`.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.starts_with("hello", "he"))
 }
 ```
@@ -227,7 +227,7 @@ Whether `s` ends with `suffix`. Always `true` for an empty `suffix`.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.ends_with("hello", "lo"))
 }
 ```
@@ -253,7 +253,7 @@ Returns: the index when found; `-1` when not found.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.index_of("hello", "ll") == 2)
     assert(string.index_of("hello", "xyz") == -1)
 }
@@ -281,7 +281,7 @@ when `start > end`, it is clamped to an empty string.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.substring("hello", 1, 4) == "ell")
     assert(string.substring("hello", 1, 99) == "ello")   // upper bound clamped
 }
@@ -303,7 +303,7 @@ Whether `s` is an empty string.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.is_empty(""))
     assert(!string.is_empty("x"))
 }
@@ -325,7 +325,7 @@ Returns the **UTF-8 byte length**, not the number of characters.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.len("hello") == 5)
     assert(string.len("中") == 3)   // byte length
 }
@@ -348,7 +348,7 @@ use std.assert
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     cs = string.chars("ab")
     assert(list.len(cs) == 2)
     assert(list.get(cs, 0) == "a")
@@ -371,7 +371,7 @@ Concatenate two strings. You can also use the `+` operator directly.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.concat("a", "b") == "ab")
 }
 ```
@@ -394,7 +394,7 @@ Repeat `s` `n` times.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.repeat("ab", 3) == "ababab")
     assert(string.repeat("ab", 0) == "")
 }
@@ -416,7 +416,7 @@ Reverse the string by character.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.reverse("abc") == "cba")
 }
 ```
@@ -454,7 +454,7 @@ as `0`.
 use std.assert
 use std.string
 
-main = {
+main: () -> Void = {
     assert(string.format("{0}-{1}", "a", "b") == "a-b")
     assert(string.format("[{0:>5}]", "ab") == "[   ab]")
     assert(string.format("[{0:<5}]", "ab") == "[ab   ]")
@@ -481,7 +481,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_int("42")))
     assert(result.is_err(string.parse_int("abc")))
 }
@@ -506,7 +506,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_float("3.14")))
     assert(result.is_err(string.parse_float("xxx")))
 }

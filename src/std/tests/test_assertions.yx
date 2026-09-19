@@ -13,7 +13,7 @@ use std.result
 use std.string
 use std.test
 
-main = {
+main: () -> Void = {
     // 值语义正向：成功返回 Ok(void)，不中断进程
     r1 = test.assert_eq(1 + 1, 2)
     assert.assert(result.is_ok(r1), "assert_eq equal is Ok")

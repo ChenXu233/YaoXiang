@@ -14,7 +14,7 @@ apply_twice: (h: (a: Int) -> Int, x: Int) -> Int = {
     h(h(x))
 }
 
-main = {
+main: () -> Void = {
     // 直接调用
     assert.assert(double(5) == 10, "double(5) should be 10")
 

@@ -75,7 +75,7 @@ Returns: the formatted string. Returns `"()"` when the argument is missing.
 use std.assert
 use std.convert
 
-main = {
+main: () -> Void = {
     assert(convert.to_string(42) == "42")
     assert(convert.to_string(true) == "true")
     assert(convert.to_string(false) == "false")
@@ -88,7 +88,7 @@ Strings themselves are not quoted:
 use std.assert
 use std.convert
 
-main = {
+main: () -> Void = {
     assert(convert.to_string("hi") == "hi")
 }
 ```
@@ -100,7 +100,7 @@ use std.assert
 use std.convert
 use std.string
 
-main = {
+main: () -> Void = {
     s_list = convert.to_string([1, 2, 3])
     assert(string.len(s_list) > 0)
 

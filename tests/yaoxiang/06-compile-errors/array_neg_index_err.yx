@@ -6,7 +6,7 @@
 // 验证: IndexOutOfBounds.index 为 i64，负索引诊断不失真
 // 状态: ❌ 应运行失败
 
-main = {
+main: () -> Void = {
     l = [1, 2, 3]
     x = l[-1]
 }

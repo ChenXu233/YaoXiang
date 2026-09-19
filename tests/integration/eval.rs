@@ -16,7 +16,7 @@ fn test_eval_single_line() {
 #[test]
 fn test_eval_main_defined() {
     assert!(
-        eval_code("main = { print(\"with main\") }").is_ok(),
+        eval_code("main = () => { print(\"with main\") }").is_ok(),
         "eval 有 main 时不应包装，直接执行"
     );
 }
@@ -32,7 +32,7 @@ fn test_eval_use_no_main() {
 #[test]
 fn test_eval_use_and_main_defined() {
     assert!(
-        eval_code("use std; main = { print(\"hi\") }").is_ok(),
+        eval_code("use std; main = () => { print(\"hi\") }").is_ok(),
         "eval 应支持 use 导入 + main 同时存在"
     );
 }
@@ -47,7 +47,7 @@ fn test_eval_syntax_error() {
 fn test_eval_use_item_inline_alias() {
     // #245：单文件 std 条目别名——`use std.io.{println as say}` 后别名可调用。
     assert!(
-        eval_code("use std.io.{println as say}\nmain = { say(\"hi\") }").is_ok(),
+        eval_code("use std.io.{println as say}\nmain = () => { say(\"hi\") }").is_ok(),
         "std 条目内联别名应可编译执行"
     );
 }

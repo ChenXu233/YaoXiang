@@ -11,7 +11,7 @@ sum_nodes: (a: &Node, b: &Node) -> Int = {
     return a.value + b.value
 }
 
-main = {
+main: () -> Void = {
     n1 = Node(10, 0)
     n2 = Node(20, 0)
     n3 = Node(30, 0)

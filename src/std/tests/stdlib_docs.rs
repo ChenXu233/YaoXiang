@@ -108,7 +108,8 @@ fn test_stdlib_docs_examples_run() {
         };
 
         for (i, code) in yaoxiang_examples(&doc).into_iter().enumerate() {
-            if !code.contains("main = {") {
+            // 可运行示例 = 带 Fn 注解的入口（B 方案：无注解块是值，不是函数）
+            if !code.contains("main: () -> Void = {") {
                 continue;
             }
             // 生成区里的签名块不是可运行程序

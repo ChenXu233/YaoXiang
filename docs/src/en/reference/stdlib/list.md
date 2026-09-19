@@ -30,7 +30,7 @@ usable. Parameters without `&` are passed by value; after the call the source va
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3]
 
     // Read-only borrow: nums can be reused
@@ -93,7 +93,7 @@ is **moved** after the call and cannot be used again.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     base = [1, 2]
     extended = list.push(base, 3)
     assert(list.len(extended) == 3)
@@ -116,7 +116,7 @@ Alias for `push`; behavior is identical.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     extended = list.append([1, 2], 3)
     assert(list.len(extended) == 3)
 }
@@ -139,7 +139,7 @@ Returns a new list with `item` inserted at the head of `list`. `list` is passed 
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     l = list.prepend([2, 3], 1)
     assert(list.first(l) == 1)
 }
@@ -164,7 +164,7 @@ Returns: the removed element; returns `Void` when the list is empty, and the lis
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     mut l = [1, 2, 3]
     gone = list.pop(l)
     assert(list.len(l) == 2)         // shortened in place
@@ -197,7 +197,7 @@ or ≥ length, and the list is left unchanged.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     mut l = [10, 20, 30]
     x = list.remove_at(l, 1)
     assert(x == 20)
@@ -228,7 +228,7 @@ silently discarded).
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     l = list.set([1, 2, 3], 1, 99)
     assert(list.get(l, 1) == 99)
 }
@@ -255,7 +255,7 @@ Returns: the element value; **returns `Void` on out-of-bounds** (no error raised
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3, 4]
     assert(list.get(nums, 1) == 2)
 }
@@ -277,7 +277,7 @@ Returns the first element; returns `Void` for an empty list.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.first([1, 2, 3]) == 1)
 }
 ```
@@ -298,7 +298,7 @@ Returns the last element; returns `Void` for an empty list.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.last([1, 2, 3]) == 3)
 }
 ```
@@ -325,7 +325,7 @@ raises `E6007` when `start` or `end` is negative.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     sub = list.slice([1, 2, 3, 4], 1, 3)
     assert(list.len(sub) == 2)
     assert(list.first(sub) == 2)
@@ -348,7 +348,7 @@ Returns a new list with the element order reversed; the source list is unchanged
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     rev = list.reverse([1, 2, 3])
     assert(list.first(rev) == 3)
 }
@@ -372,7 +372,7 @@ Error: raises `E6007` when the second argument is not a list.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     joined = list.concat([1, 2], [3, 4])
     assert(list.len(joined) == 4)
 }
@@ -396,7 +396,7 @@ Error: raises `E6007` when the argument is not a list.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3]
     assert(list.len(nums) == 3)
     assert(list.len(nums) == 3)      // reusable
@@ -421,7 +421,7 @@ Error: raises `E6007` when the argument is not a list.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.is_empty([]))
     assert(!list.is_empty([1]))
 }
@@ -445,7 +445,7 @@ Returns: `true` if present; `false` if the argument is not a list.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3, 4]
     assert(list.contains(nums, 3))
     assert(!list.contains(nums, 99))
@@ -470,7 +470,7 @@ Returns: the index if found; `-1` if not found.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     assert(list.find_index([1, 2, 3, 4], 3) == 2)
     assert(list.find_index([1, 2], 99) == -1)
 }
@@ -495,7 +495,7 @@ Error: raises `E6007` when the second argument is not a function.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     doubled = list.map([1, 2, 3], x => x * 2)
     assert(list.get(doubled, 0) == 2)
 }
@@ -519,7 +519,7 @@ Error: raises `E6007` when the second argument is not a function.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     evens = list.filter([1, 2, 3, 4], x => x % 2 == 0)
     assert(list.len(evens) == 2)
 }
@@ -548,7 +548,7 @@ Error: raises `E6007` when the second argument is not a function.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     total = list.reduce([1, 2, 3, 4], (acc, x) => acc + x, 0)
     assert(total == 10)
 }
@@ -574,7 +574,7 @@ Returns: an iterator tuple, to be passed to `next` / `has_next`.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([1, 2, 3])
     assert(list.has_next(it))
 }
@@ -602,7 +602,7 @@ Returns: the current element; returns `Void` when the iteration ends.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([7, 8])
     assert(list.next(it) == 7)
 }
@@ -624,7 +624,7 @@ Whether there are still unconsumed elements.
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([1])
     assert(list.has_next(it))
 }
@@ -637,7 +637,7 @@ Lists can be traversed directly with `for ... in`, without manually calling `nex
 ```yaoxiang
 use std.assert
 
-main = {
+main: () -> Void = {
     mut sum = 0
     for x in [1, 2, 3] {
         sum = sum + x

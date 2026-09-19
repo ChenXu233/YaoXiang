@@ -22,7 +22,7 @@ use std.dict
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
 
     // Read-only borrow: d can be reused
@@ -70,7 +70,7 @@ Returns a **new dictionary** with `key` → `value` written into it. `dict` is p
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d1 = dict.set({}, "a", 1)
     d2 = dict.set(d1, "b", 2)
     assert(dict.len(d2) == 2)
@@ -96,7 +96,7 @@ not exist**. You can use [`has`](#has) to check first before retrieving.
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     assert(dict.get(d, "a") == 1)
 }
@@ -108,7 +108,7 @@ Existence check before retrieval:
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     assert(!dict.has(d, "nope"))
     if dict.has(d, "a") {
@@ -135,7 +135,7 @@ Error: throws `E6007` when the first argument is not a dictionary.
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     assert(dict.has(d, "a"))
     assert(!dict.has(d, "zzz"))
@@ -162,7 +162,7 @@ remains unchanged.
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     deleted = dict.delete(d, "a")
     assert(!dict.has(deleted, "a"))
@@ -189,7 +189,7 @@ use std.assert
 use std.dict
 use std.list
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     ks = dict.keys(d)
     assert(list.len(ks) == 1)
@@ -213,7 +213,7 @@ use std.assert
 use std.dict
 use std.list
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     vs = dict.values(d)
     assert(list.len(vs) == 1)
@@ -238,7 +238,7 @@ use std.assert
 use std.dict
 use std.list
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     es = dict.entries(d)
     assert(list.len(es) == 1)
@@ -263,7 +263,7 @@ Error: throws `E6007` when the argument is not a dictionary.
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     d = dict.set({}, "a", 1)
     assert(dict.len(d) == 1)
     assert(dict.len(d) == 1)      // reusable
@@ -288,7 +288,7 @@ Error: throws `E6007` when the argument is not a dictionary.
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     assert(dict.is_empty({}))
     d = dict.set({}, "a", 1)
     assert(!dict.is_empty(d))
@@ -316,7 +316,7 @@ Error: throws `E6007` when either argument is not a dictionary.
 use std.assert
 use std.dict
 
-main = {
+main: () -> Void = {
     m = dict.merge(dict.set({}, "x", 10), dict.set({}, "y", 20))
     assert(dict.get(m, "x") == 10)
     assert(dict.get(m, "y") == 20)

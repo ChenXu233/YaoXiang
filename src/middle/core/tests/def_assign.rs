@@ -11,7 +11,7 @@ fn assign_defs_gives_every_function_def_and_resolves_static_calls() {
     let src = r#"
 helper: (x: Int) -> Int = (x) => { return x }
 
-main = {
+main = () => {
     y = helper(1)
 }
 "#;

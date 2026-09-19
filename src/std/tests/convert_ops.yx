@@ -7,7 +7,7 @@ use std.assert
 use std.convert
 use std.string
 
-main = {
+main: () -> Void = {
     // 基本类型转换（精确值）
     assert.assert(convert.to_string(42) == "42", "int to_string")
     assert.assert(convert.to_string(true) == "true", "bool to_string")

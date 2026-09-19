@@ -6,7 +6,7 @@
 use std.io
 use std.assert
 
-main = {
+main: () -> Void = {
     a = 1024
     // 字面量与变量操作数
     assert.assert((a << 2) == 4096, "左移字面量")

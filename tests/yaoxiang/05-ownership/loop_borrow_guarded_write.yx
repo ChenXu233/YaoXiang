@@ -12,7 +12,7 @@ bump: (pt: &mut Point) -> Void = {
     pt.x = pt.x + 1
 }
 
-main = {
+main: () -> Void = {
     p = Point(1, 2)
     view = &p
     mut i = 0

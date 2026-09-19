@@ -8,7 +8,7 @@
 
 use std.io
 
-main = {
+main: () -> Void = {
     mut arr = [1, 2, 3]
     a = &mut arr[0]
     b = &mut arr[0]    // ❌ 与 a 冲突：同一底层存储的两个写入令牌

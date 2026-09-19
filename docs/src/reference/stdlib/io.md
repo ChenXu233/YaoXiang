@@ -51,7 +51,7 @@ print: (...args) -> Void
 ```yaoxiang
 use std.io
 
-main = {
+main: () -> Void = {
     print("hello")
     print(" ")
     print("world")
@@ -74,7 +74,7 @@ println: (...args) -> ()
 `println()` 不带参数时输出一个空行：
 
 ```yaoxiang
-main = {
+main: () -> Void = {
     println("Hello, YaoXiang!")
 }
 ```
@@ -98,7 +98,7 @@ read_line: () -> String
 ```yaoxiang
 use std.io
 
-main = {
+main: () -> Void = {
     println("请输入你的名字：")
     name = io.read_line()
     println("你好，" + name)
@@ -127,7 +127,7 @@ use std.io
 use std.os
 use std.string
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_read_file.txt"
     io.write_file(p, "hello")
 
@@ -160,7 +160,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_write_file.txt"
     ok = io.write_file(p, "hello")
     assert(ok)
@@ -188,7 +188,7 @@ use std.assert
 use std.io
 use std.os
 
-main = {
+main: () -> Void = {
     p = "__yx_doc_append_file.txt"
     io.write_file(p, "hello")
     io.append_file(p, " world")
@@ -222,7 +222,7 @@ use std.assert
 use std.io
 use std.string
 
-main = {
+main: () -> Void = {
     s = io.format_fallback(42, "int")
     assert(string.contains(s, "42"))
 }

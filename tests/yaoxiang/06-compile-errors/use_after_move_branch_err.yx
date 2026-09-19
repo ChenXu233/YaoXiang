@@ -13,7 +13,7 @@ use std.io
 
 Point: Type = { x: Int, y: Int }
 
-main = {
+main: () -> Void = {
     mut p = Point(1, 2)
     mut q = Point(3, 4)
     mut r = Point(5, 6)

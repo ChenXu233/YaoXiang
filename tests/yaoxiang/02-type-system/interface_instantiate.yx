@@ -30,7 +30,7 @@ Dog.age: (self: &Dog) -> Int = {
     return 3
 }
 
-main = {
+main: () -> Void = {
     d = Dog("Rex")
     assert.assert(d.speak() == "Woof", "Animal.speak dispatch returns Woof")
     assert.assert(d.age() == 3, "Animal.age dispatch returns 3")

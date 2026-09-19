@@ -8,7 +8,7 @@
 
 use std.io
 
-main = {
+main: () -> Void = {
     x = 1
     {
         x = 2

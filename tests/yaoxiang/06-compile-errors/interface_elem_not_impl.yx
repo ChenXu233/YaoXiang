@@ -23,7 +23,7 @@ Stone: Type = {
     weight: Int,
 }
 
-main = {
+main: () -> Void = {
     animals: List(Animal) = [Dog("Rex")]
     animals2 = list.append(animals, Stone(2))
 }

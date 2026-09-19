@@ -5,7 +5,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // 算术运算
     a = 10 + 20
     assert.assert(a == 30, "10 + 20 == 30")

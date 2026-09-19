@@ -257,7 +257,7 @@ main: () -> Void = {
 }
 
 // Most concise form (recommended)
-main = {
+main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 ```
@@ -345,7 +345,7 @@ factorial: (n: Int) -> Int = {
 }
 
 // Parameterless function (most concise)
-main = { print("Hello!") }
+main: () -> Void = { print("Hello!") }
 
 // With parameters—omitting signature
 double = (x: Int) => x * 2

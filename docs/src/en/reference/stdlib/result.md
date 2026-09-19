@@ -61,7 +61,7 @@ return type, and `ok` is precisely that wrapper.
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.ok(42)
     assert(result.is_ok(r))
 }
@@ -83,7 +83,7 @@ Wraps an error value.
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.err("boom")
     assert(result.is_err(r))
 }
@@ -107,7 +107,7 @@ Whether this is the success variant. Takes a read-only borrow, so `self` can be 
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.ok(1)
     assert(result.is_ok(r))
     assert(result.is_ok(r))      // reusable
@@ -130,7 +130,7 @@ Whether this is the error variant. Takes a read-only borrow.
 use std.assert
 use std.result
 
-main = {
+main: () -> Void = {
     r = result.err("e")
     assert(result.is_err(r))
 }
@@ -160,7 +160,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("42")
     assert(result.unwrap(r) == 42)
 }
@@ -185,7 +185,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     good = string.parse_int("42")
     assert(result.unwrap_or(good, 0) == 42)
 
@@ -213,7 +213,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("abc")
     e = result.unwrap_err(r)
     assert(result.is_err(r))
@@ -242,7 +242,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("abc")
     e = result.unwrap_err(r)
     assert(result.code(e) == "E6010")
@@ -266,7 +266,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     r = string.parse_int("abc")
     e = result.unwrap_err(r)
     assert(string.len(result.message(e)) > 0)

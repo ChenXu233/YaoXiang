@@ -289,7 +289,7 @@ Point.add: (self: &Point, other: &Point) -> Point =
 Point.equal: (self: &Point, other: &Point) -> Bool =
     self.x == other.x and self.y == other.y
 
-main = {
+main: () -> Void = {
     a = Point(1.0, 2.0)
     b = Point(3.0, 4.0)
     c = a + b                   // Point(4.0, 6.0)
@@ -309,7 +309,7 @@ Box: (T: Type) -> Type = {
 Box.index: (T: Type)(self: &Box(T), key: &Int) -> T =
     list.get(self.data, key)
 
-main = {
+main: () -> Void = {
     b = Box([10, 20, 30])
     println(b[1])               // 20
 }

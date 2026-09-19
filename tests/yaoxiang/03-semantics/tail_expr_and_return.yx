@@ -39,7 +39,7 @@ no_return_has_side_effect: () -> () = {
     io.println("side effect ok")
 }
 
-main = {
+main: () -> Void = {
     // 尾表达式
     assert.assert(tail_expr_value(21) == 42, "tail_expr_value(21) should be 42")
 

@@ -7,7 +7,7 @@ use std.assert
 
 Point: Type = { x: Int, y: Int }
 
-main = {
+main: () -> Void = {
     // 1. 多变量捕获（#254 复现：此前 t2 未捕获 → E6007）
     t1 = 1 + 1
     t2 = 2 + 2

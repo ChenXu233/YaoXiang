@@ -8,7 +8,7 @@
 
 use std.list
 
-main = {
+main: () -> Void = {
     n = 5
     evens = list.filter([1, 6, 3, 8], x => x > n)   // ❌ n 是外层局部变量，闭包不捕获
 }

@@ -6,7 +6,7 @@
 // 验证: spawn 体内嵌套 if 分支中的类型注解冲突被拒绝
 // 状态: ✅
 
-main = {
+main: () -> Void = {
     spawn {
         if true {
             t: Int = "bad"

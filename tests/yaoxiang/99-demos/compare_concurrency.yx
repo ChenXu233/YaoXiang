@@ -5,7 +5,7 @@
 
 use std.{assert, io}
 
-main = {
+main: () -> Void = {
     data = 100
 
     // ref: 编译器自动选 Rc（单线程）或 Arc（跨线程）

@@ -102,7 +102,7 @@ path = "src/cli.yx"
 ```yaoxiang
 # src/cli.yx（Bin 角色）
 pub unused_fn = (x: Int) => x    # ← W1001 可报：bin 无包外消费者
-main = { ... }
+main: () -> Void = { ... }
 
 # src/lib.yx（Lib 角色，在导出面上）
 pub api_fn = ...                 # ← 永不报：包外消费者不可见

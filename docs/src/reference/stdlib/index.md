@@ -12,22 +12,22 @@ YaoXiang 标准库（`std`）以模块为组织单位，每个模块通过 `use`
 
 <!-- stdlib:index:modules start -->
 
-| 模块                             | 导出数 | 说明                                   |
-| -------------------------------- | ------ | -------------------------------------- |
-| [`std.convert`](./convert)       | 11     | 任意值到 String 的转换                 |
-| [`std.dict`](./dict)             | 10     | 字典读写、键值视图与合并               |
-| [`std.io`](./io)                 | 7      | 标准输出、标准输入与文件整体读写       |
-| [`std.list`](./list)             | 22     | 列表增删、切片、高阶函数与迭代器协议   |
-| [`std.math`](./math)             | 18     | 整数、浮点与三角函数，含 PI/E/TAU 常量 |
-| [`std.string`](./string)         | 19     | 字符串查找、切分、格式化与解析         |
-| [`std.time`](./time)             | 14     | 时间戳、格式化与 DateTime 字段访问     |
-| [`std.result`](./result)         | 9      | Result 与 Error 的构造和拆包           |
-| [`std.range`](./range)           | 10     | 区间迭代、谓词与惰性适配器             |
-| [`std.assert`](./assert)         | 1      | 断言                                   |
-| [`std.net`](./net)               | 4      | HTTP 请求与 URL 百分号编解码           |
-| [`std.concurrent`](./concurrent) | 3      | 休眠、让出调度与线程标识               |
-| [`std.os`](./os)                 | 22     | 文件句柄、目录、环境变量与工作目录     |
-| [`std.weak`](./weak)             | 2      | Arc / Weak 弱引用                      |
+| 模块 | 导出数 | 说明 |
+| ---- | ------ | ---- |
+| [`std.convert`](./convert) | 11 | 任意值到 String 的转换 |
+| [`std.dict`](./dict) | 11 | 字典读写、键值视图与合并 |
+| [`std.io`](./io) | 7 | 标准输出、标准输入与文件整体读写 |
+| [`std.list`](./list) | 22 | 列表增删、切片、高阶函数与迭代器协议 |
+| [`std.math`](./math) | 18 | 整数、浮点与三角函数，含 PI/E/TAU 常量 |
+| [`std.string`](./string) | 19 | 字符串查找、切分、格式化与解析 |
+| [`std.time`](./time) | 14 | 时间戳、格式化与 DateTime 字段访问 |
+| [`std.result`](./result) | 9 | Result 与 Error 的构造和拆包 |
+| [`std.range`](./range) | 10 | 区间迭代、谓词与惰性适配器 |
+| [`std.assert`](./assert) | 1 | 断言 |
+| [`std.net`](./net) | 4 | HTTP 请求与 URL 百分号编解码 |
+| [`std.concurrent`](./concurrent) | 3 | 休眠、让出调度与线程标识 |
+| [`std.os`](./os) | 22 | 文件句柄、目录、环境变量与工作目录 |
+| [`std.weak`](./weak) | 2 | Arc / Weak 弱引用 |
 
 <!-- stdlib:index:modules end -->
 
@@ -39,7 +39,7 @@ YaoXiang 标准库（`std`）以模块为组织单位，每个模块通过 `use`
 use std.list
 use std.string
 
-main = {
+main: () -> Void = {
     parts = string.split("a,b,c", ",")
     println(list.len(parts))
 }
@@ -51,7 +51,7 @@ main = {
 use std.assert
 use std.math.{E, PI, TAU}
 
-main = {
+main: () -> Void = {
     assert(PI > 3.14)
 }
 ```
@@ -65,7 +65,7 @@ main = {
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     nums = [1, 2, 3]
 
     // 三处调用都只读借用 nums，之后仍可用
@@ -82,7 +82,7 @@ main = {
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     base = [1, 2]
     extended = list.push(base, 3)   // 返回新列表；base 已被移动
     assert(list.len(extended) == 3)
@@ -125,7 +125,7 @@ use std.assert
 use std.result
 use std.string
 
-main = {
+main: () -> Void = {
     assert(result.is_ok(string.parse_int("42")))
     assert(result.is_err(string.parse_int("abc")))
 }
@@ -142,7 +142,7 @@ main = {
 use std.assert
 use std.list
 
-main = {
+main: () -> Void = {
     it = list.iter([1, 2, 3])
     assert(list.has_next(it))
 
@@ -157,7 +157,7 @@ main = {
 ```yaoxiang
 use std.assert
 
-main = {
+main: () -> Void = {
     mut sum = 0
     for x in [1, 2, 3] {
         sum = sum + x
@@ -175,7 +175,7 @@ use std.list
 use std.range
 use std.result
 
-main = {
+main: () -> Void = {
     doubled = range.collect(range.map(result.unwrap(range.iter(1..4)), x => x * 2))
     assert(list.get(doubled, 0) == 2)
     assert(list.len(doubled) == 3)

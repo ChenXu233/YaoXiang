@@ -6,7 +6,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // Range 元素嵌套迭代（#303 复现用例）
     ranges = [0..3, 10..13]
     mut total = 0

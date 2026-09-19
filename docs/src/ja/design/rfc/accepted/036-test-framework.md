@@ -333,7 +333,7 @@ pop_returns_last: () -> Result(Void, String) = () => {
     test.assert_eq(last, 2)
 }
 
-main = {
+main: () -> Void = {
     test.suite([
         ("push_grows_len", () => push_grows_len()),
         ("pop_returns_last", () => pop_returns_last()),

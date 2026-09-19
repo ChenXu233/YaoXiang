@@ -46,7 +46,7 @@ build_list: () -> Int = {
     return l.length
 }
 
-main = {
+main: () -> Void = {
     assert.assert(read_box() == 7, "generic method reads own field")
     assert.assert(build_list() == 2, "library-style List built in YaoXiang")
 }

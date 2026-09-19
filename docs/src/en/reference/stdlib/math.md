@@ -30,7 +30,7 @@ use std.math.{PI, E, TAU}
 use std.assert
 use std.math.{E, PI, TAU}
 
-main = {
+main: () -> Void = {
     assert(PI > 3.14 and PI < 3.15)
     assert(E > 2.71 and E < 2.72)
     assert(TAU > 6.28 and TAU < 6.29)
@@ -86,7 +86,7 @@ Absolute value.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.abs(-5) == 5)
     assert(math.abs(5) == 5)
 }
@@ -108,7 +108,7 @@ The larger of the two.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.max(3, 7) == 7)
 }
 ```
@@ -129,7 +129,7 @@ The smaller of the two.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.min(3, 7) == 3)
 }
 ```
@@ -160,7 +160,7 @@ the upper bound.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.clamp(15, 1, 10) == 10)
     assert(math.clamp(-5, 1, 10) == 1)
     assert(math.clamp(5, 1, 10) == 5)
@@ -185,7 +185,7 @@ Floating-point absolute value.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.fabs(-2.5) == 2.5)
 }
 ```
@@ -206,7 +206,7 @@ Floating-point larger value.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.fmax(1.5, 2.5) == 2.5)
 }
 ```
@@ -227,7 +227,7 @@ Floating-point smaller value.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.fmin(1.5, 2.5) == 1.5)
 }
 ```
@@ -248,7 +248,7 @@ pow: (base: Float, exp: Float) -> Float
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.pow(2.0, 10.0) == 1024.0)
 }
 ```
@@ -269,7 +269,7 @@ Square root. Returns `NaN` for negative numbers (no error).
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.sqrt(4.0) == 2.0)
     assert(math.sqrt(2.0) > 1.41 and math.sqrt(2.0) < 1.42)
 }
@@ -291,7 +291,7 @@ Round down; the return value is still `Float`.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.floor(3.7) == 3.0)
 }
 ```
@@ -312,7 +312,7 @@ Round up; the return value is still `Float`.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.ceil(3.2) == 4.0)
 }
 ```
@@ -333,7 +333,7 @@ Round (round half away from zero); the return value is still `Float`.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.round(3.5) == 4.0)
     assert(math.round(3.4) == 3.0)
 }
@@ -355,7 +355,7 @@ Sine; the parameter is in **radians**.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.sin(0.0) == 0.0)
 }
 ```
@@ -376,7 +376,7 @@ Cosine; the parameter is in **radians**.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.cos(0.0) == 1.0)
 }
 ```
@@ -397,7 +397,7 @@ Tangent; the parameter is in **radians**.
 use std.assert
 use std.math
 
-main = {
+main: () -> Void = {
     assert(math.tan(0.0) == 0.0)
 }
 ```

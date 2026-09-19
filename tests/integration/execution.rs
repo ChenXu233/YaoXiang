@@ -18,7 +18,7 @@ fn run_ok(source: &str) {
 fn test_simple_program() {
     run_ok(
         r#"
-        main = {
+        main = () => {
             x = 42
             y = x * 2
             print(x)
@@ -32,7 +32,7 @@ fn test_simple_program() {
 fn test_fibonacci_iterative() {
     run_ok(
         r#"
-        main = {
+        main = () => {
             mut a = 0
             mut b = 1
             mut i = 0
@@ -52,7 +52,7 @@ fn test_fibonacci_iterative() {
 fn test_factorial_iterative() {
     run_ok(
         r#"
-        main = {
+        main = () => {
             mut result = 1
             mut i = 1
             while i <= 5 {
@@ -69,7 +69,7 @@ fn test_factorial_iterative() {
 fn test_counter_loop() {
     run_ok(
         r#"
-        main = {
+        main = () => {
             mut sum = 0
             mut i = 1
             while i <= 10 {
@@ -86,7 +86,7 @@ fn test_counter_loop() {
 fn test_match_simple() {
     run_ok(
         r#"
-        main = {
+        main = () => {
             r1 = match 1 { 1 => 100, _ => 0 }
         }
         "#,
@@ -98,7 +98,7 @@ fn test_list_operations() {
     run_ok(
         r#"
         use std.{io, list}
-        main = {
+        main = () => {
             xs = [1, 2, 3, 4, 5]
             ys = list.map(xs, x => x * 10)
             xs2 = [1, 2, 3, 4, 5]
@@ -123,7 +123,7 @@ fn test_curried_fn_assign_and_call() {
         r#"
         add: (x: Int) -> (y: Int) -> Int = (x) => (y) => x + y
 
-        main = {
+        main = () => {
             f = add(1)
             y = f(2)
             print(y)

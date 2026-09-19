@@ -7,7 +7,7 @@
 
 use std.list
 
-main = {
+main: () -> Void = {
     b: Array(Int, 3) = [40, 50, 60]
     b2 = list.push(b, 70)
 }

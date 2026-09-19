@@ -858,7 +858,7 @@ explicitly call it:
 
 ```yaoxiang
 use std.io
-main = { io.println("only runs if called") }
+main: () -> Void = { io.println("only runs if called") }
 
 main()                       // ← This line must be written
 ```
@@ -875,7 +875,7 @@ When a manifest exists, the file is an "executable target", in which case:
 - Top-level does not allow executable statements——the program body is `main`
 
 ```yaoxiang
-main = {
+main: () -> Void = {
     print("hello")
 }
 ```

@@ -10,6 +10,6 @@ use std.result
 f: () -> Result(Int, Error) = {
     return result.ok((1 + 1)?)
 }
-main = {
+main: () -> Void = {
     print("never")
 }

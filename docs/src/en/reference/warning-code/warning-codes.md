@@ -31,7 +31,7 @@ dead-code = "warn"
 ```yaoxiang
 pub dead_function: () -> Void = { }  // W1001: Unused exported function
 
-main = {
+main: () -> Void = {
     // dead_function is never called
 }
 ```
@@ -53,7 +53,7 @@ main = {
 ```yaoxiang
 DeadType: Type = Int  // W1002: Unused exported type
 
-main = {
+main: () -> Void = {
     x = 42
 }
 ```
@@ -71,7 +71,7 @@ main = {
 ```yaoxiang
 use std.json  // W1003: Unused import
 
-main = {
+main: () -> Void = {
     // json module is never used
 }
 ```
@@ -93,7 +93,7 @@ main = {
 ```yaoxiang
 pub dead_var = 42  // W1004: Unused exported variable
 
-main = {
+main: () -> Void = {
     // dead_var is never read
 }
 ```
@@ -116,7 +116,7 @@ Foo: Type = { value: Int }
 
 pub Foo.dead_method: (self: Foo) -> Void = { }  // W1005: Unused exported method
 
-main = {
+main: () -> Void = {
     foo = Foo(1)
     // dead_method is never called
 }
