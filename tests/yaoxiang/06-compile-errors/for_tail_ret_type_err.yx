@@ -1,0 +1,17 @@
+// 06-compile-errors/for_tail_ret_type_err.yx
+// RFC-010a 规则①：末位为 `for` 语句时块值为 Void，与声明的返回类型必须统一
+// expect: compile-error E1012
+// （声明 -> Int，末位 for 语句不产生值）
+// 验证: `for` 走 StmtKind::For（非 Expr），与 `while`（走 StmtKind::Expr）不得两套待遇——
+//       此前 for 逃逸校验而 while 报出，同一语义两种结果
+// 状态: ❌ 应编译失败
+
+for_tail: () -> Int = {
+    for i in [1, 2] {
+        i
+    }
+}
+
+main: () -> Void = {
+    x = for_tail()
+}

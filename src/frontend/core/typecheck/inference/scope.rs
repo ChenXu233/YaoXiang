@@ -105,16 +105,15 @@ impl ScopeManager {
             return BindingAction::Declare;
         }
 
-        // `x = value`：赋值优先
-        if in_current {
+        // `x = value`：赋值优先（spec §4.3）。
+        //
+        // 「沿作用域链向外查找 x」的两种命中（当前作用域 / 外层作用域）给出相同的
+        // 动作——是赋值同一绑定，与在哪一层无关；`mut` 与否只影响 existing_mut 分支。
+        // 此前写成 in_current / anywhere 两层嵌套，而两臂内容完全一致（clippy 报
+        // identical blocks），是作用域层级的冗余，不是两种语义。
+        if anywhere {
             if existing_mut {
                 BindingAction::Reassign
-            } else {
-                BindingAction::ImmutableReassign
-            }
-        } else if anywhere {
-            if existing_mut {
-                BindingAction::Reassign // 外层 mut：赋值同一绑定
             } else {
                 BindingAction::ImmutableReassign
             }
