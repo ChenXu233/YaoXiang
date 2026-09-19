@@ -812,3 +812,76 @@ fn test_all_opcodes_have_decode_branch() {
         decoded.len()
     );
 }
+
+/// 编码器覆盖面哨兵：记录**无 translator 编码器**的 opcode 全集。
+///
+/// 与解码覆盖面哨兵互补——那个查「定义 vs 解码」，本测试查「定义 vs 编码」。
+///
+/// 这些 opcode 的解码器与执行器大多已实现，但 `translator.rs` 不产出它们
+/// （`ir_gen` 前端不构造对应 IR），故属**预留路径**而非缺陷。本测试的作用：
+/// 1. 把「未启用路径」的全集固化为断言——新增此类 opcode 时会被发现
+/// 2. 若将来接通某个前端，该 opcode 应从此表**移除**（表示已启用），
+///    使这张表始终是「当前未启用」的准确快照
+///
+/// 判定方式：扫描 `translator.rs` 是否出现 `opcode::NAME`。这是近似判据，
+/// 只会在「误报为已编码」时使断言更严（要求移除表项），不会漏报。
+#[test]
+fn test_opcodes_without_encoder_are_documented() {
+    // Arrange: 读取 opcode 定义与编码器源码
+    let opcode_src = include_str!("../../../backends/common/opcode.rs");
+    let translator_src = include_str!("../../passes/codegen/translator.rs");
+
+    let defined: std::collections::BTreeSet<String> = opcode_src
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("pub const "))
+        .filter_map(|rest| rest.split_once(':'))
+        .map(|(name, _)| name.trim().to_string())
+        .collect();
+
+    // Act: 找出 translator.rs 中未出现的 opcode
+    let unencoded: std::collections::BTreeSet<String> = defined
+        .iter()
+        .filter(|name| !translator_src.contains(&format!("opcode::{name}")))
+        .cloned()
+        .collect();
+
+    // Assert: 与下方快照完全一致。
+    // 每个条目都经核查确认「解码/执行已实现、前端未接通」，详见 plan 文档 D8。
+    const EXPECTED_UNENCODED: &[&str] = &[
+        // 借用令牌（RFC-009 v9）：解码器 + 执行器 + 往返测试齐备
+        "BORROW",
+        "RELEASE",
+        // 越界检查：有解码 + 执行，ir_gen 不产出
+        "BOUNDS_CHECK",
+        // 异常族（throw/try）：有解码 + 执行，ir_gen 不产出
+        "THROW",
+        "TRY_BEGIN",
+        "TRY_END",
+        // 弱引用：有解码 + 执行
+        "WEAK_NEW",
+        "WEAK_UPGRADE",
+        // 字符串相等：有解码 + 执行，当前走别处
+        "STRING_EQUAL",
+        // 运行时类型查询：有解码 + 执行
+        "TYPE_OF",
+        // 多路分支：**无解码器**（唯一一个），已在解码哨兵白名单
+        "SWITCH",
+        // 占位 opcode：仅在显示名表出现，非真实指令
+        "LABEL",
+    ];
+
+    let expected: std::collections::BTreeSet<String> =
+        EXPECTED_UNENCODED.iter().map(|s| s.to_string()).collect();
+
+    let newly_unencoded: Vec<&String> = unencoded.difference(&expected).collect();
+    let newly_encoded: Vec<&String> = expected.difference(&unencoded).collect();
+
+    assert!(
+        newly_unencoded.is_empty(),
+        "以下 opcode 无 translator 编码器但未登记——若是新预留路径请加入          EXPECTED_UNENCODED 并核查解码/执行是否齐备；若是缺陷请补编码器：{newly_unencoded:?}"
+    );
+    assert!(
+        newly_encoded.is_empty(),
+        "以下 opcode 已出现在 translator.rs 中（疑似已接通前端），请从          EXPECTED_UNENCODED 移除，使本表保持为「当前未启用」的准确快照：{newly_encoded:?}"
+    );
+}
