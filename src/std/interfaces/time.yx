@@ -25,35 +25,35 @@ parse_time: (fmt: String, s: String) -> DateTime = {
     ...
 }
 
-DateTime::year: (dt: Int) -> Int = {
+datetime_year: (dt: Int) -> Int = {
     ...
 }
 
-DateTime::month: (dt: Int) -> Int = {
+datetime_month: (dt: Int) -> Int = {
     ...
 }
 
-DateTime::day: (dt: Int) -> Int = {
+datetime_day: (dt: Int) -> Int = {
     ...
 }
 
-DateTime::hour: (dt: Int) -> Int = {
+datetime_hour: (dt: Int) -> Int = {
     ...
 }
 
-DateTime::minute: (dt: Int) -> Int = {
+datetime_minute: (dt: Int) -> Int = {
     ...
 }
 
-DateTime::second: (dt: Int) -> Int = {
+datetime_second: (dt: Int) -> Int = {
     ...
 }
 
-DateTime::weekday: (dt: Int) -> Int = {
+datetime_weekday: (dt: Int) -> Int = {
     ...
 }
 
-DateTime::to_string: (dt: Int) -> String = {
+datetime_to_string: (dt: Int) -> String = {
     ...
 }
 
