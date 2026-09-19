@@ -346,11 +346,11 @@ SqliteDb = unsafe {
     SqliteDb         // 块的值
 }
 
-// spawn {} 块：尾表达式给出结果
+// spawn {} 块：尾表达式给出结果（⚠️ 尚未实现，见 #365；当前需写 return）
 (a, b) = spawn {
     result1 = fetch("url1"),
     result2 = fetch("url2")
-    (result1, result2)   // 块的值
+    return (result1, result2)   // 块的值
 }
 
 // return：穿透块，退出函数
