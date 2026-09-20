@@ -2,6 +2,8 @@
 //!
 //! §3.4: i18n 修复（I3/I4: E1090/E1091 翻译）
 //! §4.6: error! 宏简化
+//! RFC-013 §错误码注册表：`DiagnosticBuilder::with_help` 的按站点 help 覆盖
+//! （同码在不同位置需不同出路提示时的机制）
 
 use crate::util::diagnostic::codes::{ErrorCodeDefinition, I18nRegistry};
 use crate::util::span::Span;
@@ -116,4 +118,32 @@ fn test_i18n_consistency() {
             def.code
         );
     }
+}
+
+#[test]
+fn test_with_help_overrides_code_default_help() {
+    // Arrange
+    // E1002 的 i18n 默认 help 是通用的「使用正确的类型或添加类型转换」，
+    // 但同一码在不同站点可能需要不同的出路提示。
+    let span = Span::default();
+    let custom_help = "左侧是 Vec、右侧是 Int；请先取元素或解引用";
+
+    // Act
+    let with_override = ErrorCodeDefinition::type_mismatch("Int", "String")
+        .at(span)
+        .with_help(custom_help)
+        .build();
+    let without_override = ErrorCodeDefinition::type_mismatch("Int", "String")
+        .at(span)
+        .build();
+
+    // Assert
+    assert_eq!(
+        with_override.help, custom_help,
+        "with_help 应覆盖该码的默认 help"
+    );
+    assert_ne!(
+        without_override.help, custom_help,
+        "未调用 with_help 时不应出现调用方自定义的提示"
+    );
 }
