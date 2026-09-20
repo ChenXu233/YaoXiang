@@ -935,6 +935,8 @@ impl AstToIrGenerator {
                 .collect(),
             functions,
             init: std::mem::take(&mut self.module_init),
+            // 单文件：恒 file_id 0，空表（translator 回退 0）
+            init_file_ids: Vec::new(),
             // #368：模块级槽位表随 init 一起交给 codegen。
             // 顶层语句里的具名结构（如 `for i in ..` 的循环变量）在此登记，
             // 取值时已覆盖到最大已注册槽位（register_local 会补空格）。

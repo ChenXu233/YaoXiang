@@ -330,6 +330,7 @@ impl Monomorphizer {
             globals: module.globals.clone(),
             functions,
             init: module.init.clone(),
+            init_file_ids: module.init_file_ids.clone(),
             init_locals: module.init_locals.clone(),
             ffi_libs: module.ffi_libs.clone(),
             ffi_bindings: module.ffi_bindings.clone(),

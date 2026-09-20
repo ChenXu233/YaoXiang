@@ -662,6 +662,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             globals: original_module.globals.clone(),
             functions: output_funcs,
             init: original_module.init.clone(),
+            init_file_ids: original_module.init_file_ids.clone(),
             init_locals: original_module.init_locals.clone(),
             ffi_libs: original_module.ffi_libs.clone(),
             ffi_bindings: original_module.ffi_bindings.clone(),

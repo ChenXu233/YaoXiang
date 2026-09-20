@@ -877,6 +877,13 @@ pub struct ModuleIR {
     /// 模块初始化序列：按依赖顺序求值并写入全局槽位的指令。
     /// 入口执行前先跑它（Script 模式下它本身就是程序）。
     pub init: Vec<Instruction>,
+    /// `init` 每段所属的源文件序号（`source_files` 下标）。
+    ///
+    /// 多文件下 `init` 是各文件初始化序列的拼接，而 `Instruction` 只带
+    /// Span（行/列）不带文件——没有本表就只能给所有段挂同一个 file_id，
+    /// 报错指向错误的文件。#368 遗留项。
+    /// 段数与 `init` 等长（每条指令一个条目）；单文件模式为空（恒 file_id 0）。
+    pub init_file_ids: Vec<usize>,
     /// 模块初始化序列的局部槽位表（含源码名）。
     ///
     /// 顶层语句是 Script 模式下的程序主体，`for` 循环变量等会占用真实局部槽位；

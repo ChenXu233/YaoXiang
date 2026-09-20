@@ -173,14 +173,13 @@ impl Translator {
         // 必须在 take_constant_pool() 之前翻译：init 里的字面量要进常量池，
         // 否则 LoadConst 会指向其他函数的常量（错位）。
         if !module.init.is_empty() {
-            // #368：只有单文件模式才给 init 挂源码位置。
-            // 多文件下 `merged.init` 是各文件初始化序列的拼接，而 `Instruction`
-            // 只带 Span（行/列）不带文件——给不出正确的 file_id，挂错文件比
-            // 不挂更误导，故维持原状。
-            // ponytail: 升级路径是让 ModuleIR 按段记录 file_id。
-            let single_file = module.source_files.len() <= 1;
-            let init_func =
-                self.translate_init_sequence(&module.init, &module.init_locals, single_file)?;
+            // #368：单文件恒 file_id 0；多文件按 `init_file_ids` 逐条定文件，
+            // 两路都挂源码位置。
+            let init_func = self.translate_init_sequence(
+                &module.init,
+                &module.init_locals,
+                &module.init_file_ids,
+            )?;
             code_section.functions.push(init_func);
         }
 
@@ -201,12 +200,12 @@ impl Translator {
     /// #368：调试元数据（ip→span、局部名）与函数体同路生成。此前这里
     /// 硬编码空表，导致顶层语句的运行期错误既无源码位置也无变量名。
     ///
-    /// `single_file` 为假时不挂源码位置（多文件下 file_id 不可信，见调用处）。
+    /// `file_ids` 逐条给出该指令的源文件序号（单文件为空 → 恒 file_id 0）。
     fn translate_init_sequence(
         &mut self,
         init: &[Instruction],
         locals: &[LocalSlot],
-        single_file: bool,
+        file_ids: &[usize],
     ) -> Result<super::FunctionCode, Diagnostic> {
         let mut instructions = Vec::new();
         let mut debug_map = HashMap::new();
@@ -219,13 +218,14 @@ impl Translator {
             .filter_map(|(i, slot)| slot.name.as_ref().map(|n| (i, n.clone())))
             .collect();
 
-        for instr in init.iter() {
+        for (init_idx, instr) in init.iter().enumerate() {
             let bytecode_idx = instructions.len();
-            if single_file && self.generate_debug_info {
+            if self.generate_debug_info {
                 // 位置直接来自指令自身：生成期就地捕获，无跨调用配对状态
                 let span = instr.span();
                 if !span.is_dummy() {
-                    debug_map.insert(bytecode_idx, DebugSpan::new(self.source_file_id, span));
+                    let file_id = file_ids.get(init_idx).copied().unwrap_or(0) as FileId;
+                    debug_map.insert(bytecode_idx, DebugSpan::new(file_id, span));
                 }
             }
             if let Some((target, opcode)) = Self::get_jump_target(instr) {

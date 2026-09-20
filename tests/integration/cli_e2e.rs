@@ -1116,3 +1116,43 @@ fn test_e2e_bin_mode_top_level_statement_is_user_error() {
         "用户写法错误不应叫用户提单；combined: {combined:?}"
     );
 }
+
+#[test]
+fn test_e2e_multifile_init_failure_points_at_owning_file() {
+    // Arrange: #368 遗留项——多文件下各文件的初始化序列被拼成一条 `init`，
+    // 而 `Instruction` 只带 Span（行/列）不带文件。没有逐条 file_id 表时，
+    // 所有段的错误都指向同一个（错的）文件：用户按报出的位置去看，
+    // 那里根本没有那行代码。
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "mfsrc", "");
+    std::fs::write(tmp.path().join("liba.yx"), "a_val: Int = 1\n").unwrap();
+    // 出错的绑定在第二个库里——报错须指向 libb.yx，而非 main.yx 或 liba.yx。
+    std::fs::write(tmp.path().join("libb.yx"), "b_val: Int = 2 / 0\n").unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use std.assert\nuse liba.{a_val}\nuse libb.{b_val}\n\nmain: () -> Void = {\n    assert.assert(a_val == 1, \"a\")\n}\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_ne!(
+        code, 0,
+        "libb 的 2 / 0 应让运行失败；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("E6001"),
+        "应报除零错误 E6001；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("libb.yx"),
+        "报错应指向拥有该绑定的 libb.yx；combined: {combined:?}"
+    );
+    assert!(
+        !combined.contains("liba.yx:"),
+        "不应把错误归到 liba.yx；combined: {combined:?}"
+    );
+}
