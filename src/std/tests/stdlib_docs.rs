@@ -162,6 +162,9 @@ main()
             let out = std::process::Command::new(yaoxiang_binary())
                 .arg("run")
                 .arg(&file)
+                // 隔离 cwd：示例里的相对路径读写全部落在临时目录；
+                // 进程级 cwd 被其他测试污染（如残留进已删除的 TempDir）也免疫。
+                .current_dir(std::env::temp_dir())
                 .output();
 
             match out {

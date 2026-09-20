@@ -273,6 +273,7 @@ impl ModuleRegistry {
                 signature: "Module".to_string(),
                 mono_type: None,
                 type_params: None,
+                param_names: None,
             });
 
             // 注册模块信息
@@ -307,6 +308,7 @@ impl ModuleRegistry {
                         signature: "Module".to_string(),
                         mono_type: None,
                         type_params: None,
+                        param_names: None,
                     });
                     self.register(info);
                 }
@@ -336,6 +338,7 @@ mod tests {
             signature: String::new(),
             mono_type: Some(MonoType::Int(64)),
             type_params: None,
+            param_names: None,
         }
     }
 

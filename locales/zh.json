@@ -216,6 +216,22 @@
     "example": "unknown_fn();",
     "error_output": "error[E1013]: 函数未找到\n --> example.yx:1:1\n  |\n1 | unknown_fn();\n  | ^ 未定义的函数 'unknown_fn'"
   },
+  "E1014": {
+    "title": "命名参数名未知",
+    "message": "调用时使用的参数名不在函数的形参表里",
+    "template": "函数 '{func}' 没有名为 '{name}' 的参数（可用：{params}）",
+    "help": "改用形参表里列出的名字，或改为按位置传参",
+    "example": "add(b = 1, c = 2);",
+    "error_output": "error[E1014]: 命名参数名未知\n --> example.yx:1:1\n  |\n1 | add(b = 1, c = 2);\n  |     ^ 函数 'add' 没有名为 'c' 的参数（可用：a, b）"
+  },
+  "E1015": {
+    "title": "参数重复指定",
+    "message": "同一形参被位置实参与命名实参同时指定",
+    "template": "函数 '{func}' 的参数 '{name}' 被重复指定",
+    "help": "每个参数只能传一次：去掉多余的命名实参或位置实参",
+    "example": "add(1, a = 2);",
+    "error_output": "error[E1015]: 参数重复指定\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ 函数 'add' 的参数 'a' 被重复指定"
+  },
   "E1020": {
     "title": "无法推断类型",
     "message": "上下文无法推断类型",

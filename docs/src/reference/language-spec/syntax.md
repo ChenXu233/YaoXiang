@@ -240,8 +240,23 @@ Expr        ::= Literal
 ```
 FnCall      ::= Expr '(' ArgList? ')'
 ArgList     ::= Expr (',' Expr)* (',' NamedArg)* | NamedArg (',' NamedArg)*
-NamedArg    ::= Identifier ':' Expr
+NamedArg    ::= Identifier '=' Expr
 ```
+
+命名实参用 `name = value`（RFC-010 §函数定义、RFC-011 §构造形式）。位置实参
+必须在命名实参之前；顺序指定的参数在命名实参中可任意排列：
+
+```yaoxiang
+add: (a: Int, b: Int) -> Int = a + b
+
+add(3, 5)          // 位置式
+add(a = 3, b = 5)  // 命名式
+add(b = 5, a = 3)  // 顺序任意
+add(3, b = 5)      // 混用，位置在前
+```
+
+命名实参写错名字报 **E1014**，同一形参被位置与命名同时指定报 **E1015**，
+个数不符报 **E1010**（RFC-013）。
 
 ### 2.4 成员访问
 

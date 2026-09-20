@@ -183,6 +183,16 @@ pub struct AstToIrGenerator {
     /// `i = i + 1` 是赋值而非重声明。旧实现把两者混为一谈，
     /// 导致重赋值被当成第二份初始化 → 自引用 → 误报 E3019。
     declared_globals: std::collections::HashSet<String>,
+    /// 本模块**函数**的声明期形参名（函数名 → 按声明序的参数名）。
+    ///
+    /// `FunctionIR.params` 只有类型没有名字，而命名参数调用（`add(b = 5, a = 3)`）
+    /// 必须按**名字**把实参重排到声明序。struct 构造器有 `struct_definitions`
+    /// 提供字段名，普通函数原先没有对应表——于是 `named_args` 被静默丢弃，
+    /// 实参一个不进，运行期报 e6007 类型不符。此表补上那个缺口。
+    ///
+    /// curry 形态（`f: (A: Type) -> (x: A) -> R`）登记的是**最后一层**的形参名
+    /// ——调用点传的就是最后那层。
+    fn_param_names: HashMap<String, Vec<String>>,
     /// 约束变量的具体类型映射（接口直接赋值优化）
     /// 当 `d: Drawable = Circle(1)` 时，记录 d -> "Circle"（具体类型名）
     /// 用于方法调用时选择直接调用而非 vtable 查找
@@ -319,6 +329,7 @@ impl AstToIrGenerator {
             pending_inits: Vec::new(),
             module_stmts: Vec::new(),
             declared_globals: std::collections::HashSet::new(),
+            fn_param_names: HashMap::new(),
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             release_plan: type_result.release_plan.drops.clone(),
@@ -393,6 +404,27 @@ impl AstToIrGenerator {
             }
             None => field.to_string(),
         }
+    }
+
+    /// 查一个函数的**声明期形参名**（按声明序），供命名参数重排。
+    ///
+    /// 两个来源，按就近优先：
+    /// 1. 本模块的 `fn_param_names`（定义与调用同文件）
+    /// 2. 模块注册表里该导出携带的 `param_names`——跨模块调用
+    ///    （`list.push(item = 9, list = v)`）时定义方的 IR 生成器实例拿不到，
+    ///    名字必须随导出传过来（同 `Export.type_params` 的跨模块情形）。
+    ///
+    /// `full_path` 是解析后的限定名（如 `std.list.push`）；`leaf` 是短名。
+    fn lookup_param_names(
+        &self,
+        full_path: &str,
+        leaf: &str,
+    ) -> Option<Vec<String>> {
+        if let Some(names) = self.fn_param_names.get(leaf) {
+            return Some(names.clone());
+        }
+        let export = self.registry.resolve_export(full_path).ok()?;
+        export.param_names.clone()
     }
 
     /// 拆分 curry 签名为多层
@@ -1391,6 +1423,13 @@ impl AstToIrGenerator {
                     crate::frontend::core::parser::ast::extract_generic_param_names(
                         signature_params,
                     );
+                // 登记形参名，供命名参数调用（`add(b = 5, a = 3)`）重排实参。
+                // 名字取自 Lambda 形参（`params`）——签名里的 `Type::Fn` 只存类型、
+                // 不存名字，是值参数名唯一的来源。
+                if is_fn_binding && !params.is_empty() {
+                    let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+                    self.fn_param_names.insert(name.clone(), names);
+                }
                 if let Some(type_name) = type_name {
                     // RFC-004 外部重绑定：`Type.method = fn` / `Type.method = fn[pos]`
                     // 只登记 type_bindings（方法调用时参数重排），不生成新函数 IR。
@@ -4195,12 +4234,44 @@ impl AstToIrGenerator {
                 name.clone()
             };
             Ok(Operand::Const(ConstValue::String(resolved_name)))
-        } else if let Expr::Call { func: inner, .. } = func {
-            // 两层调用 Container(Int)(42, 43)：内层类型实参运行期擦除，
-            // 按结构体构造器名生成（字段填充由调用点实参决定）。
+        } else if let Expr::Call {
+            func: inner,
+            args: inner_args,
+            ..
+        } = func
+        {
+            // 两层调用 `X(T)(...)`：内层类型实参运行期擦除。
+            //
+            // - 结构体构造器（`Container(Int)(42, 43)`）：按类型名生成，
+            //   字段填充由调用点实参决定。
+            // - **泛型函数**（`mk(Int)(5)`）：内层是类型应用，运行期完全无表示。
+            //   单态化器把 `mk` 特化成 `mk(int64)` 并**剥掉未特化的 `mk`**，
+            //   所以这里必须发**特化名**，否则运行期找不到 `mk`（E6006，D6.3）。
             if let Expr::Var(name, _) = inner.as_ref() {
                 if self.struct_definitions.contains_key(name) {
                     return Ok(Operand::Const(ConstValue::String(name.clone())));
+                }
+                if self.lookup_local(name).is_none() {
+                    let base = self.resolve_function_name(inner)?;
+                    let base_name = match &base {
+                        Operand::Const(ConstValue::String(s)) => s.clone(),
+                        _ => name.clone(),
+                    };
+                    // 仅在实参确为类型值时叠特化后缀（值实参=部分应用，不在此列）
+                    if !inner_args.is_empty()
+                        && inner_args.iter().all(|a| self.expr_is_type_value(a))
+                    {
+                        let args_str = inner_args
+                            .iter()
+                            .map(Self::type_value_ir_name)
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        return Ok(Operand::Const(ConstValue::String(format!(
+                            "{}({})",
+                            base_name, args_str
+                        ))));
+                    }
+                    return Ok(base);
                 }
             }
             Err(ErrorCodeDefinition::ir_internal_error(&format!(
@@ -4223,6 +4294,70 @@ impl AstToIrGenerator {
     ///
     /// 只有全局函数声明（通过 let/fn 定义的具名函数）才是静态的。
     /// 局部变量、闭包表达式、函数调用返回值等全部走动态分发。
+    /// 该表达式是否是**类型值**（类型宇宙的值）：`Int`、`Vec(Int)` 等。
+    ///
+    /// 用于区分「类型实参层」（擦除）与「部分应用」（真实调用）：
+    /// `mk(Int)(5)` 的 `Int` 是类型值，内层不生成运行时代码；
+    /// `f(10)(5)` 的 `10` 是普通值，内层必须真的调用并返回闭包。
+    fn expr_is_type_value(
+        &self,
+        expr: &ast::Expr,
+    ) -> bool {
+        let ast::Expr::Var(name, _) = expr else {
+            return false;
+        };
+        // 本模块声明的局部变量/参数优先——变量叫 `Int` 也是值
+        if self.lookup_local(name).is_some() {
+            return false;
+        }
+        crate::frontend::core::types::mono::MonoType::from_builtin_name(name).is_some()
+            || matches!(
+                name.as_str(),
+                "Vec" | "Array" | "Dict" | "Tuple" | "Option" | "Result" | "Range" | "Iter"
+            )
+            || self.declared_type_names.contains(name)
+    }
+
+    /// 类型值表达式 → `MonoType`（`Int` → `Int(64)`，`Vec(Int)` → `Generic`）。
+    ///
+    /// 与 `typecheck` 侧的 `type_arg_of_expr` 同口径（两边都必须把类型名解成
+    /// 真实类型，而非笼统的 `MetaType`）。
+    fn type_arg_of_expr_ir(expr: &ast::Expr) -> MonoType {
+        match expr {
+            ast::Expr::Var(name, _) => {
+                crate::frontend::core::types::mono::MonoType::from_builtin_name(name)
+                    .unwrap_or_else(|| {
+                        crate::frontend::core::types::mono::MonoType::TypeRef(name.clone())
+                    })
+            }
+            ast::Expr::Call { func, args, .. } => {
+                if let ast::Expr::Var(cname, _) = func.as_ref() {
+                    MonoType::Generic {
+                        name: cname.clone(),
+                        args: args.iter().map(Self::type_arg_of_expr_ir).collect(),
+                    }
+                } else {
+                    MonoType::TypeRef("_".to_string())
+                }
+            }
+            _ => MonoType::TypeRef("_".to_string()),
+        }
+    }
+
+    /// 把类型值表达式转成单态化器的类型名（`Int` → `int64`，`String` → `string`）。
+    ///
+    /// 必须与 `middle::passes::mono` 生成特化名的口径**完全一致**
+    /// （那边用 `MonoType::type_name()`）：`mk(Int)(5)` 要调的函数叫
+    /// `mk(int64)`，名字对不上就 E6006。
+    fn type_value_ir_name(expr: &ast::Expr) -> String {
+        let ast::Expr::Var(name, _) = expr else {
+            return "_".to_string();
+        };
+        crate::frontend::core::types::mono::MonoType::from_builtin_name(name)
+            .unwrap_or_else(|| crate::frontend::core::types::mono::MonoType::TypeRef(name.clone()))
+            .type_name()
+    }
+
     fn is_static_fn_name(
         &self,
         func: &ast::Expr,
@@ -4234,8 +4369,28 @@ impl AstToIrGenerator {
                 }
                 self.lookup_var_type(name).is_some()
             }
-            ast::Expr::Call { func: inner, .. } => match inner.as_ref() {
-                ast::Expr::Var(name, _) => self.struct_definitions.contains_key(name),
+            // 两层调用 `X(T)(...)`：
+            // - 内层是 struct 构造器（`Container(Int)(42, 43)`）——类型实参擦除
+            // - 内层是**普通函数**且实参均为**类型**（`mk(Int)(5)`）——擦除类型实参层，
+            //   外层才是真实调用。
+            //
+            // 关键判据：内层实参必须是类型（`MetaType`）而非值。否则会误伤
+            // 部分应用（`f(10)(5)` 里 `f(10)` 是**真的返回闭包**，不是类型实参层
+            // ——那会让 `f(10)(5)` 变成单次调用 `f(10, 5)` 而错值）。
+            ast::Expr::Call {
+                func: inner,
+                args: inner_args,
+                ..
+            } => match inner.as_ref() {
+                ast::Expr::Var(name, _) => {
+                    if self.struct_definitions.contains_key(name) {
+                        return true;
+                    }
+                    !inner_args.is_empty()
+                        && inner_args.iter().all(|a| self.expr_is_type_value(a))
+                        && self.lookup_local(name).is_none()
+                        && self.lookup_var_type(name).is_some()
+                }
                 _ => false,
             },
             _ => false,
@@ -4243,6 +4398,25 @@ impl AstToIrGenerator {
     }
 
     /// 获取表达式的推断类型（用于 IR 生成阶段的分支）
+    /// 该字段访问是否为容器的 `.length`（`Vec(T)` / `Array(T, N)`）。
+    ///
+    /// 剥掉 `Ref` 层：`&Vec(A)` 的 `.length` 也是长度读取（RFC-009 §2.8 读透明）。
+    fn is_container_length_field(
+        &self,
+        expr: &Expr,
+        field: &str,
+    ) -> bool {
+        field == "length"
+            && matches!(self.get_expr_mono_type(expr), Some(ref t) if {
+                let mut r = t.clone();
+                while let crate::frontend::core::types::mono::MonoType::Ref { inner, .. } = r {
+                    r = *inner;
+                }
+                r.is_vec() || r.is_array()
+            })
+    }
+
+    /// 生成一个表达式的静态类型（IR 期视图）
     fn get_expr_mono_type(
         &self,
         expr: &ast::Expr,
@@ -4283,6 +4457,32 @@ impl AstToIrGenerator {
                 }
             }
             ast::Expr::List(_, _) => Some(MonoType::make_list(MonoType::Void)),
+            // `Vec(Int)(...)` / `Array(Int, 3)(...)` 的静态类型。
+            //
+            // 链式取字段（`Vec(Int)().length`）走 `get_expr_mono_type` 判类型，
+            // 没有本臂就落到「普通字段访问」分支 → 报
+            // E3005「无法解析字段索引: 'length'」。类型实参在 AST 里就是
+            // `Call{func: Var(容器名), args: [类型表达式...]}`，直接解出来。
+            ast::Expr::Call { func, .. } => {
+                if let ast::Expr::Call {
+                    func: inner,
+                    args: type_args,
+                    ..
+                } = func.as_ref()
+                {
+                    if let ast::Expr::Var(cname, _) = inner.as_ref() {
+                        if matches!(cname.as_str(), "Vec" | "Array")
+                            && !self.declared_type_names.contains(cname)
+                        {
+                            return Some(MonoType::Generic {
+                                name: cname.clone(),
+                                args: type_args.iter().map(Self::type_arg_of_expr_ir).collect(),
+                            });
+                        }
+                    }
+                }
+                None
+            }
             ast::Expr::Tuple(items, _) => {
                 let elems = vec![MonoType::Void; items.len()];
                 Some(MonoType::make_tuple(elems))
@@ -5249,6 +5449,75 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    /// 内置容器的类型构造器名：`Vec(Int)(...)` 的内层 `Vec`。
+    ///
+    /// 只认 RFC-011 明确规格化的 `Vec(T)` / `Array(T, N)`。用户自有同名类型
+    /// 优先（D10 同款纪律）。
+    fn builtin_container_ctor_name(
+        &self,
+        inner: &Expr,
+    ) -> Option<String> {
+        let Expr::Var(name, _) = inner else {
+            return None;
+        };
+        if self.declared_type_names.contains(name) {
+            return None;
+        }
+        matches!(name.as_str(), "Vec" | "Array").then(|| name.clone())
+    }
+
+    /// 生成内置容器构造（RFC-011 §「Vec(T) 的构造形式」）。
+    ///
+    /// 三条形态：
+    /// - `Vec(Int)()` → 空容器（长度 0，元素事后追加）
+    /// - `Vec(Int)(1, 2, 3)` → 元素构造（长度 = 元素个数）
+    /// - `Vec(Int)(len = 64)` → 槽位分配（64 个零值槽位）
+    ///
+    /// 前两者与容器字面量同形，直接复用 `generate_list_expr_ir`；
+    /// 第三者用 `AllocFixedArray` 分配 n 个 Void 占位（与 Array 字面量落点同款）。
+    fn generate_builtin_container_ir(
+        &mut self,
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // `len = n`：分配 n 个零值槽位。
+        // 长度是**运行期**值（RFC-011：Vec 是运行时长度的地基），
+        // 故用 AllocArray 而非编译期定长的 AllocFixedArray。
+        if let Some((_, len_expr)) = named_args.iter().find(|(n, _)| n == "len") {
+            // 空缓冲 + 长度写入。
+            //
+            // 不走 `AllocArray.size`：字节码 `NewListWithCap` 的容量是**字面量**
+            // （`capacity: u16`），而 RFC-011 说 `Vec(T)` 的长度是运行期值
+            // （`len=self.data.length * 2`）——无法用现有字段表达动态长度。
+            // 改用已测试的「长度写入」路径（`v.length = n` 同一条
+            // SetField → resize(n, Void)），语义一致且无需扯动字节码格式。
+            let len_reg = self.next_temp_reg();
+            self.generate_expr_ir(len_expr, len_reg, instructions, constants)?;
+            instructions.push(Instruction::AllocArray {
+                dst: Operand::Local(result_reg),
+                size: Operand::Const(ConstValue::Int(0)),
+                elem_size: Operand::Const(ConstValue::Int(1)),
+                span: *span,
+            });
+            instructions.push(Instruction::StoreField {
+                dst: Operand::Local(result_reg),
+                field: 0,
+                src: Operand::Local(len_reg),
+                type_name: None,
+                field_name: Some("length".to_string()),
+                span: *span,
+            });
+            return Ok(());
+        }
+
+        // 元素构造 / 空构造：与 `[a, b, c]` / `[]` 同形
+        self.generate_list_expr_ir(args, span, result_reg, instructions, constants)
+    }
+
     fn generate_try_expr_ir(
         &mut self,
         expr: &Expr,
@@ -5570,6 +5839,23 @@ impl AstToIrGenerator {
         } else {
             // 提取完整的命名空间路径（如 std.math.PI）
             let full_path = self.resolve_field_path(expr, field);
+
+            // 容器的 `.length` 读取（接收者非简单变量时）。
+            //
+            // 上面的 `.length` 分支嵌在 `if let Expr::Var(module_name, _) = expr`
+            // 内部，只对变量接收者生效；`Vec(Int)().length`（接收者是两层构造调用）
+            // 落到下面的普通字段分支，生成 `LoadField(0)`——那是**取元素 0**，
+            // 空容器上直接报「field index 0 out of range」。
+            if self.is_container_length_field(expr, field) {
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                instructions.push(Instruction::StringLength {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    span: *span,
+                });
+                return Ok(());
+            }
 
             // 检查是否是命名空间常量访问
             if self.registry.is_native_name(&full_path) {
@@ -6250,6 +6536,28 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
+        // RFC-011 §「Vec(T) 的构造形式」：内置容器的两层构造
+        // `Vec(Int)()` / `Vec(Int)(1, 2, 3)` / `Vec(Int)(len = 64)`。
+        //
+        // 内层 `Vec(Int)` 是**类型实参**，运行期擦除（与 struct 的
+        // `Container(Int)(42, 43)` 同一规则）；真正要生成的是外层构造：
+        //   - 无构造实参 → 空容器
+        //   - 位置实参   → 元素构造（长度 = 元素个数）
+        //   - `len = n`  → 槽位分配（n 个零值）
+        // 此前这条路径根本不存在：`Vec(Int)()` 在类型检查阶段就报
+        // E1001 unknown variable 'Vec'（类型名不在值位置的白名单里）。
+        if let Expr::Call { func: inner, .. } = func {
+            if let Some(_ctor) = self.builtin_container_ctor_name(inner) {
+                return self.generate_builtin_container_ir(
+                    args,
+                    named_args,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                );
+            }
+        }
         // 检查是否是方法调用：func 是 FieldAccess
         if let Expr::FieldAccess { expr, field, .. } = func {
             // 方法调用 - 转换为普通函数调用
@@ -6259,6 +6567,10 @@ impl AstToIrGenerator {
             // 命名空间调用（如 std.io.println）不需要隐式参数
             if self.is_namespace_receiver(expr) {
                 // 命名空间调用：不需要隐式参数
+                //
+                // 命名参数（`list.push(list = v, item = 9)`）在命名空间路径上
+                // 同样要按形参名重排，否则实参一个不进——与普通函数调用同类
+                // 缺口（那边在 6.5k 行修，这里是它的镜像）。
                 let mut arg_regs = Vec::new();
                 for arg in args.iter() {
                     let arg_reg = self.next_temp_reg();
@@ -6266,6 +6578,44 @@ impl AstToIrGenerator {
                     arg_regs.push(Operand::Local(arg_reg));
                 }
                 let method_function_name = self.resolve_field_path(expr, field);
+                if !named_args.is_empty() {
+                    let leaf = method_function_name
+                        .rsplit('.')
+                        .next()
+                        .unwrap_or(&method_function_name);
+                    // 本模块表 → 跨模块导出携带的 `param_names`
+                    if let Some(names) = self.lookup_param_names(&method_function_name, leaf) {
+                        if arg_regs.len() <= names.len() {
+                            let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
+                            for (i, reg) in arg_regs.iter().enumerate() {
+                                slots[i] = Some(reg.clone());
+                            }
+                            for (arg_name, arg_expr) in named_args.iter() {
+                                let Some(idx) = names.iter().position(|n| n == arg_name) else {
+                                    return Err(ErrorCodeDefinition::unknown_argument(
+                                        &method_function_name,
+                                        arg_name,
+                                        &names.join(", "),
+                                    )
+                                    .at(*span)
+                                    .build());
+                                };
+                                if slots[idx].is_some() {
+                                    return Err(ErrorCodeDefinition::duplicate_argument(
+                                        &method_function_name,
+                                        arg_name,
+                                    )
+                                    .at(*span)
+                                    .build());
+                                }
+                                let arg_reg = self.next_temp_reg();
+                                self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                                slots[idx] = Some(Operand::Local(arg_reg));
+                            }
+                            arg_regs = slots.into_iter().flatten().collect();
+                        }
+                    }
+                }
                 instructions.push(Instruction::Call {
                     dst: Some(Operand::Local(result_reg)),
                     func: Operand::Const(ConstValue::String(method_function_name.to_string())),
@@ -6557,6 +6907,90 @@ impl AstToIrGenerator {
                             }
                             arg_regs.push(Operand::Local(default_reg));
                         }
+                    }
+                }
+            }
+
+            // 命名参数调用普通**函数**：`add(b = 5, a = 3)`。
+            //
+            // 上面的 struct 分支按字段名重排；普通函数原先无人处理 `named_args`，
+            // 于是它们被静默丢弃——实参一个不进调用，运行期报 e6007「类型不符」，
+            // 与真正的病因（参数没传进去）完全搭不上。这里按**声明序形参名**重排：
+            // 位置实参填前导槽位，命名实参按名入槽，重名/未知名报错。
+            if !named_args.is_empty() {
+                let callee = match func {
+                    Expr::Var(n, _) => Some(n.clone()),
+                    // 限定名调用 `list.push(...)`：取叶子名（表中键就是声明处的短名）
+                    Expr::FieldAccess { field, .. } => Some(field.clone()),
+                    // 两层调用 `f(T)(...)`：外层才是传值那层
+                    Expr::Call { func: inner, .. } => match inner.as_ref() {
+                        Expr::Var(n, _) => Some(n.clone()),
+                        Expr::FieldAccess { field, .. } => Some(field.clone()),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                let is_ctor = callee
+                    .as_ref()
+                    .is_some_and(|n| self.struct_definitions.contains_key(n));
+                // 本模块表 → 跨模块导出携带的 `param_names`。
+                // 限定名（`list.push`）保留完整路径去查导出。
+                let qualified = match func {
+                    Expr::FieldAccess { expr, field, .. } => {
+                        Some(self.resolve_field_path(expr, field))
+                    }
+                    _ => None,
+                };
+                if let Some(names) = callee
+                    .as_ref()
+                    .filter(|_| !is_ctor)
+                    .and_then(|n| self.lookup_param_names(qualified.as_deref().unwrap_or(n), n))
+                {
+                    // 位置实参必须在命名实参之前（同教程“位置参数必须在前面”）。
+                    // 它们按序占前导槽位。
+                    if arg_regs.len() <= names.len() {
+                        let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
+                        for (i, reg) in arg_regs.iter().enumerate() {
+                            slots[i] = Some(reg.clone());
+                        }
+                        for (arg_name, arg_expr) in named_args.iter() {
+                            let Some(idx) = names.iter().position(|n| n == arg_name) else {
+                                return Err(ErrorCodeDefinition::unknown_argument(
+                                    callee.as_deref().unwrap_or("<fn>"),
+                                    arg_name,
+                                    &names.join(", "),
+                                )
+                                .at(*span)
+                                .build());
+                            };
+                            if slots[idx].is_some() {
+                                return Err(ErrorCodeDefinition::duplicate_argument(
+                                    callee.as_deref().unwrap_or("<fn>"),
+                                    arg_name,
+                                )
+                                .at(*span)
+                                .build());
+                            }
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                            slots[idx] = Some(Operand::Local(arg_reg));
+                        }
+                        // 未覆盖的槽位：保持缺席，由类型检查阶段报 E1010。
+                        // 运行期为安全起见补 0（正常路径不会到这里）。
+                        arg_regs = slots
+                            .into_iter()
+                            .map(|s| {
+                                s.unwrap_or_else(|| {
+                                    let r = self.next_temp_reg();
+                                    instructions.push(Instruction::Load {
+                                        dst: Operand::Local(r),
+                                        src: Operand::Const(ConstValue::Int(0)),
+                                        span: self.cur_span,
+                                    });
+                                    Operand::Local(r)
+                                })
+                            })
+                            .collect();
                     }
                 }
             }

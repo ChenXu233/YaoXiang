@@ -1,0 +1,43 @@
+// 02-type-system/builtin_container_ctor.yx
+// 覆盖: RFC-011 §「Vec(T) 的构造形式」——内置容器的两层构造
+// 验证: Vec(Int)() 空构造 / Vec(Int)(元素...) 元素构造 / Vec(Int)(len=n) 槽位分配
+// 状态: ✅ 可运行
+//
+// 此前 `Vec(Int)()` 在类型检查阶段直接报 E1001 unknown variable 'Vec'
+// （D6.2）：内置泛型容器名不在值位置的白名单里，也不在 generic_type_defs 里。
+// len= 那一条另暴露了 AllocArray 的 size 操作数被 codegen 丢弃的既有缺陷。
+
+use std.assert
+
+main: () -> Void = {
+    // 空构造——长度 0，元素事后追加
+    empty = Vec(Int)()
+    assert.assert(empty.length == 0, "Vec(Int)() len == 0")
+
+    // 元素构造——长度由元素个数确定
+    elems = Vec(Int)(1, 2, 3)
+    assert.assert(elems.length == 3, "Vec(Int)(1,2,3) len == 3")
+    assert.assert(elems[0] == 1, "elems[0] == 1")
+    assert.assert(elems[2] == 3, "elems[2] == 3")
+
+    // 槽位分配——n 个零值槽位
+    buf = Vec(Int)(len = 8)
+    assert.assert(buf.length == 8, "Vec(Int)(len=8) len == 8")
+
+    // 槽位分配的长度可以是**运行期**表达式（RFC-011：Vec 是运行时长度的地基）
+    n = 3
+    dynamic = Vec(Int)(len = n * 2)
+    assert.assert(dynamic.length == 6, "Vec(Int)(len=n*2) len == 6")
+
+    // 与带注解的字面量等价（同一种运行时表示）
+    annotated: Vec(Int) = [1, 2]
+    assert.assert(annotated.length == 2, "Vec(Int) = [1,2] len == 2")
+
+    // 元素构造后可继续追加（可增长缓冲语义）
+    mut grown = Vec(Int)(1, 2)
+    grown[grown.length] = 9
+    assert.assert(grown.length == 3, "grown len == 3")
+    assert.assert(grown[2] == 9, "grown[2] == 9")
+}
+
+main()

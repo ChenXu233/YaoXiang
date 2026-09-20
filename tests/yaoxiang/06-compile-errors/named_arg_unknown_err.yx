@@ -1,0 +1,15 @@
+// 06-compile-errors/named_arg_unknown_err.yx
+// 命名参数名不在函数形参表里应报 E1014
+// expect: compile-error E1014
+// 覆盖: 命名参数（教程 §命名参数）——写错参数名时静默丢弃实参是不可接受的
+// 验证: `add(b = 5, c = 1)` 报 E1014（c 不是 add 的形参）
+// 状态: ✅
+//
+// 此前 named_args 对普通函数调用完全无人处理：实参被静默丢弃，
+// 运行期才报 E6007「类型不符」，且提示与真正病因（参数没传进去）毫无关系。
+
+add: (a: Int, b: Int) -> Int = a + b
+
+main: () -> Void = {
+    x = add(b = 5, c = 1)   // ❌ add 没有名为 c 的形参
+}

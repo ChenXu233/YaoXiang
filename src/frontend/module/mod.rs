@@ -64,6 +64,12 @@ pub struct Export {
     /// 随导出一并携带可让调用方直接使用**真实名字**，无需从签名形态反推
     /// （反推无法区分类型参数与普通类型名，会误伤 `Dict(K,V)` / `File` 等）。
     pub type_params: Option<Vec<String>>,
+    /// 该导出函数的**声明期形参名**（按声明序），无参或未知为 None。
+    ///
+    /// 命名参数调用（`list.push(item = 9, list = v)`）必须按**名字**把实参
+    /// 重排到声明序。定义方的 `fn_param_names` 只在本模块的 IR 生成器实例里，
+    /// 调用方拿不到（`FunctionIR.params` 只有类型没有名字）——所以随导出携带。
+    pub param_names: Option<Vec<String>>,
 }
 
 /// 模块源类型

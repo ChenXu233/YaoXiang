@@ -30,6 +30,26 @@ fn lock_cwd() -> std::sync::MutexGuard<'static, ()> {
     CWD_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// 真正会在 drop 时还原 cwd 的守卫。
+///
+/// `set_current_dir` 的返回值是 `Result`，绑成 `let _guard = ...` drop 时**不会**
+/// 还原目录：进程级 cwd 残留进 TempDir，TempDir 析构后整个测试进程的 cwd
+/// 指向已删除目录，之后任何 spawn 的子进程（如 stdlib 文档门禁的解释器）
+/// 全部相对路径 IO 报 ENOENT。libtest 多线程共享进程 cwd，这是跨模块污染。
+struct CwdGuard(std::path::PathBuf);
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        let _ = std::env::set_current_dir(&self.0);
+    }
+}
+
+fn chdir_guard(dir: &std::path::Path) -> CwdGuard {
+    let original = std::env::current_dir().expect("无法读取当前目录");
+    std::env::set_current_dir(dir).expect("无法切换目录");
+    CwdGuard(original)
+}
+
 fn default_opts() -> InitOptions {
     InitOptions { lib: false }
 }
@@ -192,7 +212,7 @@ fn test_init_here_creates_project_in_current_directory() {
     fs::create_dir(&project_dir).unwrap();
 
     // Act
-    let _guard = std::env::set_current_dir(&project_dir);
+    let _guard = chdir_guard(&project_dir);
     exec_here(&default_opts()).unwrap();
 
     // Assert
@@ -219,7 +239,7 @@ fn test_init_here_fails_when_project_already_exists() {
     let project_dir = tmp.path().join("my-here");
     fs::create_dir(&project_dir).unwrap();
 
-    let _guard = std::env::set_current_dir(&project_dir);
+    let _guard = chdir_guard(&project_dir);
     exec_here(&default_opts()).unwrap();
 
     // Act
@@ -249,7 +269,7 @@ fn test_init_here_preserves_preexisting_files() {
     fs::write(&main_path, preexisting_content).unwrap();
 
     // Act
-    let _guard = std::env::set_current_dir(&project_dir);
+    let _guard = chdir_guard(&project_dir);
     exec_here(&default_opts()).unwrap();
 
     // Assert
