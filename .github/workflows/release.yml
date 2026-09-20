@@ -124,7 +124,12 @@ jobs:
         run: cargo clippy --all --all-features -- -D warnings
 
       - name: Run tests
-        run: cargo test --all-features --lib --bins
+        run: |
+          # 先产出普通可执行文件：`cargo test --lib --bins` 只构建测试壳，
+          # 不落 target/debug/yaoxiang-rs，stdlib 文档门禁会找不到解释器。
+          # （同 ci.yml MSRV job，V0.8.1 发版时已踩过一次）
+          cargo build --all-features --bins
+          cargo test --all-features --lib --bins
 
       - name: Doc tests
         run: cargo test --doc --all-features
