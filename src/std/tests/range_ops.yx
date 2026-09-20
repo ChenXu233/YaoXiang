@@ -8,7 +8,7 @@ use std.result
 use std.range
 use std.list
 
-main = {
+main: () -> Void = {
     r = 1..6
 
     // ── 迭代器协议（for 消费；载体 Move 语义与 List 迭代器一致）──
@@ -45,20 +45,22 @@ main = {
 
     // ── 适配器：map/filter 惰性 + collect ──
     doubled = range.collect(range.map(result.unwrap(range.iter(r)), x => x * 2))
-    assert.assert(list.len(doubled) == 5, "map+collect length")
-    assert.assert(list.get(doubled, 0) == 2, "map first = 2")
-    assert.assert(list.get(doubled, 4) == 10, "map last = 10")
+    assert.assert(doubled.length == 5, "map+collect length")
+    assert.assert(doubled[0] == 2, "map first = 2")
+    assert.assert(doubled[4] == 10, "map last = 10")
 
     big = range.collect(range.filter(result.unwrap(range.iter(r)), x => x > 3))
-    assert.assert(list.len(big) == 2, "filter keeps 4,5")
-    assert.assert(list.get(big, 0) == 4, "filter first = 4")
+    assert.assert(big.length == 2, "filter keeps 4,5")
+    assert.assert(big[0] == 4, "filter first = 4")
 
     // ── 链式适配器 ──
     chained = range.collect(range.map(range.filter(result.unwrap(range.iter(r)), x => x % 2 == 0), x => x * 10))
-    assert.assert(list.get(chained, 0) == 20, "chain even*10 first")
-    assert.assert(list.get(chained, 1) == 40, "chain even*10 second")
+    assert.assert(chained[0] == 20, "chain even*10 first")
+    assert.assert(chained[1] == 40, "chain even*10 second")
 
     // ── reduce ──
     total = range.reduce(result.unwrap(range.iter(r)), 0, (acc, x) => acc + x)
     assert.assert(total == 15, "reduce sum 1..5 = 15")
 }
+
+main()

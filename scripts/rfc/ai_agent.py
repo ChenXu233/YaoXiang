@@ -199,6 +199,21 @@ def call_llm(prompt, api_key):
         return data["choices"][0]["message"]["content"]
 
 
+def call_llm_or_binding_fallback(prompt, api_key):
+    """call_llm 包装：LLM 不可达时降级为 RFC/issue 绑定检查。
+
+    API 返回非 2xx、网络错误或 key 未配置时，不再让 CI 红灯，
+    而是回退到 check_tracking 的非 LLM 绑定检查（frontmatter 完整性），
+    以其退出码作为本任务退出码。
+    """
+    try:
+        return call_llm(prompt, api_key)
+    except (httpx.HTTPStatusError, httpx.RequestError) as e:
+        print(f"[WARN] LLM API 不可达（{e}）— 降级为 RFC/issue 绑定检查")
+        import check_tracking
+        sys.exit(check_tracking.main())
+
+
 # ── Response Parsing ─────────────────────────────────────────────────────────
 
 def parse_llm_response(response_text, task_type):
@@ -282,8 +297,9 @@ def main():
         sys.exit(1)
 
     if not api_key:
-        print("Error: AI_API_KEY environment variable not set.")
-        sys.exit(1)
+        print("[WARN] AI_API_KEY 未配置 — 降级为 RFC/issue 绑定检查")
+        import check_tracking
+        sys.exit(check_tracking.main())
 
     task_type = determine_task_type(event_path)
     if task_type is None:
@@ -304,7 +320,7 @@ def main():
         # Build a simple RFC index by scanning the RFC directories
         rfc_index = _build_rfc_index()
         prompt = build_issue_prompt(issue_body, rfc_index)
-        raw = call_llm(prompt, api_key)
+        raw = call_llm_or_binding_fallback(prompt, api_key)
         parsed = parse_llm_response(raw, task_type)
         result_body = (
             f"## 🤖 RFC AI Agent — Issue Analysis\n\n"
@@ -322,7 +338,7 @@ def main():
         pr_body = pr_info.get('body', '') or ''
         rfc_id = parse_rfc_id(pr_body)
         prompt = build_pr_prompt(pr_title, pr_body, rfc_id)
-        raw = call_llm(prompt, api_key)
+        raw = call_llm_or_binding_fallback(prompt, api_key)
         parsed = parse_llm_response(raw, task_type)
         issues = parsed.get('issues_found', [])
         result_body = (
@@ -342,7 +358,7 @@ def main():
         # Output to GITHUB_STEP_SUMMARY instead of posting a comment
         rfc_index = _build_rfc_index()
         prompt = build_issue_prompt("Generate a progress report for the RFC workflow.", rfc_index)
-        raw = call_llm(prompt, api_key)
+        raw = call_llm_or_binding_fallback(prompt, api_key)
         parsed = parse_llm_response(raw, task_type)
         summary = json.dumps(parsed, indent=2, ensure_ascii=False)
 

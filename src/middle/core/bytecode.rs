@@ -217,6 +217,21 @@ pub enum BytecodeInstr {
     },
 
     // =====================
+    // Global Slots (顶层绑定)
+    // =====================
+    /// 从全局槽位读取：d. 索引为 u16（全局槽位可远超 256）。
+    LoadGlobal {
+        dst: Reg,
+        global_idx: u16,
+    },
+
+    /// 写入全局槽位
+    StoreGlobal {
+        global_idx: u16,
+        src: Reg,
+    },
+
+    // =====================
     // Binary Operations
     // =====================
     BinaryOp {
@@ -557,6 +572,8 @@ impl BytecodeInstr {
             BytecodeInstr::LoadLocal { .. } => opcode::LOAD_LOCAL,
             BytecodeInstr::StoreLocal { .. } => opcode::STORE_LOCAL,
             BytecodeInstr::LoadArg { .. } => opcode::LOAD_ARG,
+            BytecodeInstr::LoadGlobal { .. } => opcode::LOAD_GLOBAL,
+            BytecodeInstr::StoreGlobal { .. } => opcode::STORE_GLOBAL,
             BytecodeInstr::BinaryOp { op, .. } => match op {
                 BinaryOp::Add => opcode::I64_ADD,
                 BinaryOp::Sub => opcode::I64_SUB,
@@ -689,12 +706,16 @@ impl BytecodeInstr {
             BytecodeInstr::LoadLocal { .. } => 3,
             BytecodeInstr::StoreLocal { .. } => 3,
             BytecodeInstr::LoadArg { .. } => 3,
+            // dst(1) + global_idx(2, 小端)
+            BytecodeInstr::LoadGlobal { .. } => 4,
+            // global_idx(2, 小端) + src(1)
+            BytecodeInstr::StoreGlobal { .. } => 4,
             BytecodeInstr::BinaryOp { .. } => 6,
             BytecodeInstr::UnaryOp { .. } => 4,
             BytecodeInstr::Compare { .. } => 6,
-            BytecodeInstr::StackAlloc { .. } => 4,
-            BytecodeInstr::HeapAlloc { .. } => 4,
-            BytecodeInstr::Drop { .. } => 2,
+            BytecodeInstr::StackAlloc { .. } => 1, // dst(1)（编码器未编码 size）
+            BytecodeInstr::HeapAlloc { .. } => 3,  // dst(1) + type_id(2)
+            BytecodeInstr::Drop { .. } => 1,       // value(1)
             BytecodeInstr::GetField { .. } => 4,
             BytecodeInstr::SetField { .. } => 4,
             BytecodeInstr::LoadElement { .. } => 4,
@@ -732,10 +753,15 @@ impl BytecodeInstr {
                 // dst(1) + elem(1) + container(1) = 3
                 3
             }
-            BytecodeInstr::ArcNew { .. } => 4,
-            BytecodeInstr::RcNew { .. } => 4,
-            BytecodeInstr::ArcClone { .. } => 4,
-            BytecodeInstr::ArcDrop { .. } => 2,
+            // 注：以下引用计数与内存类的寄存器为 **1 字节**——
+            // 编码器经 `to_reg` 产出（上限 255，见 operand.rs 的
+            // register_overflow）。而容器/聚合类（NewTuple/NewDict 等）用
+            // `(reg as u16).to_le_bytes()`，那类才是 2 字节。
+            // **判据只能是 translator.rs 对应的 translate_*，不能只看表内注释**。
+            BytecodeInstr::ArcNew { .. } => 2,   // dst(1) + src(1)
+            BytecodeInstr::RcNew { .. } => 2,    // dst(1) + src(1)
+            BytecodeInstr::ArcClone { .. } => 2, // dst(1) + src(1)
+            BytecodeInstr::ArcDrop { .. } => 1,  // src(1)
             BytecodeInstr::WeakNew { .. } => 4,
             BytecodeInstr::WeakUpgrade { .. } => 4,
             BytecodeInstr::Borrow { .. } => 5, // dst(2) + src(2) + mutable(1)
@@ -788,6 +814,8 @@ pub struct BytecodeFunction {
     pub return_type: crate::middle::core::ir::Type,
     /// Number of local variables
     pub local_count: usize,
+    /// 局部变量名（槽位下标 → 源码名）；仅具名变量，临时寄存器不入表
+    pub local_names: HashMap<usize, String>,
     /// Number of upvalues
     pub upvalue_count: usize,
     /// Instructions
@@ -831,6 +859,9 @@ pub struct BytecodeModule {
     pub globals: Vec<GlobalInfo>,
     /// Entry point function index
     pub entry_point: Option<usize>,
+    /// 模块初始化函数索引（T2）：执行入口前先调用它——顶层绑定的求值
+    /// （全局槽位写入）在其中完成。无顶层绑定时为 None。
+    pub init_function: Option<usize>,
     /// Debug sources（#327）：带 DebugSection 的 .42 直跑时用于渲染栈帧源码上下文；
     /// 无 DebugSection（构建未带 --debug-info）时为 None，渲染降级为无片段
     pub debug_sources: Option<crate::util::span::SourceMap>,
@@ -860,6 +891,7 @@ impl BytecodeModule {
             vtables: Vec::new(),
             globals: Vec::new(),
             entry_point: None,
+            init_function: None,
             debug_sources: None,
         }
     }
@@ -924,6 +956,12 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                 .and_then(|d| d.function_debug_maps.get(func_idx))
                 .cloned()
                 .unwrap_or(func.debug_map);
+            // v2 调试段：局部变量名与 debug_map 同一函数序号平行回填
+            let local_names = debug_section
+                .as_ref()
+                .and_then(|d| d.function_local_names.get(func_idx))
+                .cloned()
+                .unwrap_or_default();
             let mut ip = 0;
             while ip < func.instructions.len() {
                 let instr = &func.instructions[ip];
@@ -1540,6 +1578,91 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
+                    opcode::STRING_LENGTH => {
+                        // StringLength: dst(1) + src(1)。
+                        // 长度读取（String / List / Array / Tuple / Dict 共用）。
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringLength {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STRING_CONCAT => {
+                        // StringConcat: dst(1) + str1(1) + str2(1)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let str1 = instr.operands[1] as u16;
+                            let str2 = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringConcat {
+                                dst: Reg(dst),
+                                str1: Reg(str1),
+                                str2: Reg(str2),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STRING_EQUAL => {
+                        // StringEqual: dst(1) + str1(1) + str2(1)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let str1 = instr.operands[1] as u16;
+                            let str2 = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringEqual {
+                                dst: Reg(dst),
+                                str1: Reg(str1),
+                                str2: Reg(str2),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STRING_GET_CHAR => {
+                        // StringGetChar: dst(1) + src(1) + index(1)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            let index = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringGetChar {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                                index: Reg(index),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STRING_FROM_INT => {
+                        // StringFromInt: dst(1) + src(1)
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringFromInt {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STRING_FROM_FLOAT => {
+                        // StringFromFloat: dst(1) + src(1)
+                        if instr.operands.len() >= 2 {
+                            let dst = instr.operands[0] as u16;
+                            let src = instr.operands[1] as u16;
+                            decoded_instructions.push(BytecodeInstr::StringFromFloat {
+                                dst: Reg(dst),
+                                src: Reg(src),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
                     opcode::LOAD_LOCAL => {
                         // LoadLocal: dst(1) + local_idx(1)
                         if instr.operands.len() >= 2 {
@@ -1574,6 +1697,32 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::LoadArg {
                                 dst: Reg(dst),
                                 arg_idx,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::LOAD_GLOBAL => {
+                        // LoadGlobal: dst(1) + global_idx(2, 小端)
+                        if instr.operands.len() >= 3 {
+                            let dst = instr.operands[0] as u16;
+                            let global_idx = op_u16(&instr.operands, 1).unwrap_or(0);
+                            decoded_instructions.push(BytecodeInstr::LoadGlobal {
+                                dst: Reg(dst),
+                                global_idx,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STORE_GLOBAL => {
+                        // StoreGlobal: global_idx(2, 小端) + src(1)
+                        if instr.operands.len() >= 3 {
+                            let global_idx = op_u16(&instr.operands, 0).unwrap_or(0);
+                            let src = instr.operands[2] as u16;
+                            decoded_instructions.push(BytecodeInstr::StoreGlobal {
+                                global_idx,
+                                src: Reg(src),
                             });
                         } else {
                             decoded_instructions.push(BytecodeInstr::Nop);
@@ -1874,6 +2023,221 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
+                    // ── 其余曾缺解码分支的指令 ─────────────────────────
+                    // 格式依据本文档 `BytecodeInstr::operand_len` 的长度表与各变体
+                    // 的字段定义。此前这些 opcode 落到静默兜底变 Nop——会让
+                    // 「编码器产出、解码器不认」的功能静默失效（如 ref 创建 Arc）。
+                    opcode::DROP => {
+                        // Drop: value(1)（依据编码器）
+                        if !instr.operands.is_empty() {
+                            decoded_instructions.push(BytecodeInstr::Drop {
+                                value: Reg(instr.operands[0] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CLOSE_UPVALUE => {
+                        // CloseUpvalue: src(1)（依据编码器）
+                        if !instr.operands.is_empty() {
+                            decoded_instructions.push(BytecodeInstr::CloseUpvalue {
+                                src: Reg(instr.operands[0] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::STACK_ALLOC => {
+                        // StackAlloc: dst(1)（依据编码器）
+                        if !instr.operands.is_empty() {
+                            decoded_instructions.push(BytecodeInstr::StackAlloc {
+                                dst: Reg(instr.operands[0] as u16),
+                                // **编码器未编码 size**（`translate_alloc` 只产出
+                                // `vec![dst_reg]`）——size 在编解码往返中丢失。
+                                // 此处补 0 以保证可解码；若 StackAlloc 将来需要 size，
+                                // 应同时修编码器（否则往返不对称）。
+                                size: 0,
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::HEAP_ALLOC => {
+                        // HeapAlloc: dst(1) + type_id(2)（依据编码器）
+                        if instr.operands.len() >= 3 {
+                            decoded_instructions.push(BytecodeInstr::HeapAlloc {
+                                dst: Reg(instr.operands[0] as u16),
+                                type_id: op_u16(&instr.operands, 1).unwrap_or(0),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::CAST => {
+                        // Cast: dst(1) + src(1) + target_type_id(2)（依据编码器）
+                        if instr.operands.len() >= 4 {
+                            decoded_instructions.push(BytecodeInstr::Cast {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                                target_type_id: op_u16(&instr.operands, 2).unwrap_or(0),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::TYPE_CHECK => {
+                        // TypeCheck: value(1) + type_id(2)（依据编码器）
+                        if instr.operands.len() >= 3 {
+                            decoded_instructions.push(BytecodeInstr::TypeCheck {
+                                value: Reg(instr.operands[0] as u16),
+                                type_id: op_u16(&instr.operands, 1).unwrap_or(0),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::TYPE_OF => {
+                        // TypeOf: dst(1) + src(1)（依据编码器）
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::TypeOf {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::TRY_BEGIN => {
+                        // TryBegin: catch_target(4)（依据编码器）
+                        if instr.operands.len() >= 4 {
+                            decoded_instructions.push(BytecodeInstr::TryBegin {
+                                catch_target: Label(op_u32(&instr.operands, 0).unwrap_or(0)),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::TRY_END => {
+                        // TryEnd: 无操作数
+                        decoded_instructions.push(BytecodeInstr::TryEnd);
+                    }
+                    opcode::THROW => {
+                        // Throw: error(1)（依据编码器）
+                        if !instr.operands.is_empty() {
+                            decoded_instructions.push(BytecodeInstr::Throw {
+                                error: Reg(instr.operands[0] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::BOUNDS_CHECK => {
+                        // BoundsCheck: array(1) + index(1)（依据编码器）
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::BoundsCheck {
+                                array: Reg(instr.operands[0] as u16),
+                                index: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::TAIL_CALL => {
+                        // TailCall: func_id(4) + base_arg_reg(1) + argc(1)
+                        // 注：IR `TailCall` 目前无生成点（死路径），此处补齐
+                        // 格式以免未来接通时静默失效。
+                        let func_id = op_u32(&instr.operands, 0).unwrap_or(0);
+                        let base_arg_reg = instr.operands.get(4).copied().unwrap_or(0);
+                        let argc = instr.operands.get(5).copied().unwrap_or(0);
+                        let mut args = Vec::with_capacity(argc as usize);
+                        for k in 0..argc as usize {
+                            args.push(Reg(base_arg_reg as u16 + k as u16));
+                        }
+                        decoded_instructions.push(BytecodeInstr::CallStatic {
+                            dst: None,
+                            func: func_id,
+                            args,
+                        });
+                    }
+                    // Nop 是合法的填充指令（编译器用于对齐/占位），显式识别。
+                    // 此前无分支 → 落到静默兜底「未知 opcode 用 Nop」而侥幸正确；
+                    // 该兜底改为 panic 后必须显式处理，否则合法字节码也会失败。
+                    opcode::NOP => {
+                        decoded_instructions.push(BytecodeInstr::Nop);
+                    }
+                    // ── 引用计数族 ─────────────────────────────────────
+                    // **字节布局依据编码器**（`translator.rs` 的 `translate_*`）：
+                    // 编码器经 `to_reg` 产出寄存器号，上限 255（`operand.rs`
+                    // 的 register_overflow 检查），故寄存器**恒为 1 字节**。
+                    // 注：本文件 `size()` 表的注释（如 "dst(2)"）与实际编码不符，
+                    // **不可**作为解码依据——曾据此实现导致字段错位。
+                    // 此前这 6 个 opcode 无解码分支，落到 `_ =>` 静默变 Nop——
+                    // `ref 42`（弱引用创建）即触发，功能静默失效。
+                    opcode::ARC_NEW => {
+                        // ArcNew: dst(1) + src(1)。编码器: vec![dst_reg, src_reg]
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::ArcNew {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::RC_NEW => {
+                        // RcNew: dst(1) + src(1)。编码器: vec![dst_reg, src_reg]
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::RcNew {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::ARC_CLONE => {
+                        // ArcClone: dst(1) + src(1)。编码器: vec![dst_reg, src_reg]
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::ArcClone {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::ARC_DROP => {
+                        // ArcDrop: src(1)。编码器: vec![reg]
+                        if !instr.operands.is_empty() {
+                            decoded_instructions.push(BytecodeInstr::ArcDrop {
+                                src: Reg(instr.operands[0] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::WEAK_NEW => {
+                        // WeakNew: dst(1) + src(1)。无编码器（死路径），按变体定义
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::WeakNew {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
+                    opcode::WEAK_UPGRADE => {
+                        // WeakUpgrade: dst(1) + src(1)。无编码器（死路径）
+                        if instr.operands.len() >= 2 {
+                            decoded_instructions.push(BytecodeInstr::WeakUpgrade {
+                                dst: Reg(instr.operands[0] as u16),
+                                src: Reg(instr.operands[1] as u16),
+                            });
+                        } else {
+                            decoded_instructions.push(BytecodeInstr::Nop);
+                        }
+                    }
                     opcode::RELEASE => {
                         // Release: src(2)
                         if instr.operands.len() >= 2 {
@@ -1913,9 +2277,18 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
-                    _ => {
-                        // Unknown opcode, use Nop
-                        decoded_instructions.push(BytecodeInstr::Nop);
+                    unknown => {
+                        // 未知 opcode 不再静默变 Nop（#271 静默兜底族）：
+                        // 静默吞掉会让「编码器与解码器漂移」表现为功能莫名失效，
+                        // 且丢失全部定位信息。此处显式 panic 并给出 opcode 值。
+                        //
+                        // 注：`From` trait 无法返回 `Result`，故用 panic 而非错误返回。
+                        // 后续应把该转换改为 `TryFrom`（调用点 13 处），使未知 opcode
+                        // 可被上层诊断渲染而非终止进程。
+                        panic!(
+                            "字节码解码遇到未知 opcode 0x{unknown:02X}（函数 '{}'，指令 #{ip}）——                             编码器与解码器可能已漂移，请核对 opcode.rs 与 bytecode.rs 的分支表",
+                            func.name
+                        );
                     }
                 }
                 ip += 1;
@@ -1926,6 +2299,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
                 params: func.params.into_iter().map(|t| t.into()).collect(),
                 return_type: func.return_type.into(),
                 local_count: func.local_count,
+                local_names,
                 upvalue_count: 0, // Not stored in BytecodeFile
                 instructions: decoded_instructions,
                 labels,                         // Populated from opcode::LABEL
@@ -1935,15 +2309,19 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             functions.push(byte_func);
         }
 
-        // Determine entry point
+        // T4：入口点用 `idx + 1` 编码，0 = 无入口（Script 模式或纯库模块）。
+        // 此前这里写「entry_point == 0 且有函数就用 0 号」——那是第二个静默
+        // 兜底：无 main 的文件会随机执行第一个函数（#271 同类）。
         let entry_point = if file.header.entry_point > 0 {
-            Some(file.header.entry_point as usize)
-        } else if file.header.entry_point == 0 && !functions.is_empty() {
-            // If entry_point is 0 but we have functions, use 0 as valid entry
-            Some(0)
+            Some(file.header.entry_point as usize - 1)
         } else {
             None
         };
+
+        // T2：按保留名定位模块初始化函数（codegen 追加到函数表末尾）。
+        let init_function = functions.iter().position(|f| {
+            f.name == crate::middle::passes::codegen::translator::MODULE_INIT_FUNCTION
+        });
 
         BytecodeModule {
             name,
@@ -1953,6 +2331,7 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             vtables: file.vtables,
             globals: Vec::new(), // Not stored in BytecodeFile yet
             entry_point,
+            init_function,
             // #327：贯通 DebugSection.sources——.42 直跑也能渲染栈帧源码上下文
             debug_sources,
         }

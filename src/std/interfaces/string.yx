@@ -1,7 +1,7 @@
 // string.yx - 标准库 std.string 模块接口
 // 仅供 LSP 跳转和类型查看，不参与实际执行
 
-split: (s: &String, sep: &String) -> List(String) = {
+split: (s: &String, sep: &String) -> Vec(String) = {
     ...
 }
 
@@ -49,7 +49,7 @@ len: (s: &String) -> Int = {
     ...
 }
 
-chars: (s: &String) -> List(String) = {
+chars: (s: &String) -> Vec(String) = {
     ...
 }
 

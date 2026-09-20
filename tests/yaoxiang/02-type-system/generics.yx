@@ -10,7 +10,7 @@ use std.assert
 identity: (T: Type) -> (x: T) -> T = (x) => x
 
 // 泛型函数调用
-main = {
+main: () -> Void = {
     // 类型推断：T = Int
     x = identity(42)
     assert.assert(x == 42, "identity(42) should be 42")
@@ -19,3 +19,5 @@ main = {
     s = identity("hello")
     assert.assert(s == "hello", "identity(\"hello\") should be \"hello\"")
 }
+
+main()

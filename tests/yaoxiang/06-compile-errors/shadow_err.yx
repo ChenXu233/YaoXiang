@@ -1,12 +1,14 @@
 // 06-compile-errors/shadow_err.yx
-// 内部作用域重新绑定外层变量应报 E2002
-// expect: compile-error E2002
-// 验证: 禁止遮蔽 — 内部作用域不能重新绑定外层变量
+// 不可变变量被内层赋值 → E2010（spec §4.3「赋值优先」）
+// expect: compile-error E2010
+// 验证: `x = value` 是**赋值**（沿作用域链查找），不是「再声明一个 x」。
+//       找到的绑定不可变 → E2010 不可重赋值。
+//       显式 `mut x = value` 撞外层才是 E2013 禁止遮蔽（见 shadowing_err.yx）。
 // 状态: 待测试
 
 use std.io
 
-main = {
+main: () -> Void = {
     x = 1
     {
         x = 2

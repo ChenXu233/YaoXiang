@@ -23,6 +23,7 @@ fn make_not_function() -> BytecodeFunction {
         params: vec![],
         return_type: Type::Bool,
         local_count: 2,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             // r0 = const[val]
@@ -49,7 +50,10 @@ fn run_logical_not(val: bool) -> bool {
     // Arrange
     let func = make_not_function();
     let mut interp = Interpreter::new();
-    interp.constants.push(ConstValue::Bool(val));
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .constants
+        .push(ConstValue::Bool(val));
 
     // Act
     let result = interp

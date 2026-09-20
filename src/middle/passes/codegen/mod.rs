@@ -19,6 +19,9 @@ pub mod flow;
 pub mod operand;
 pub mod translator;
 
+#[cfg(test)]
+mod tests;
+
 use crate::frontend::core::parser::ast::Type;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{ConstValue, ModuleIR, Operand};
@@ -56,6 +59,10 @@ pub struct CodegenContext {
 #[derive(Debug, Clone, Default)]
 struct CodegenConfig {
     generate_debug_info: bool,
+    /// 保留调试段（源码 + ip→span 映射）到 BytecodeFile。
+    /// generate_debug_info 只让 translator 建 debug_map；本项决定它是否随产物留存。
+    /// 默认 false——.42 体积敏感，调试段只在显式要求时携带。
+    keep_debug_info: bool,
 }
 
 impl CodegenContext {
@@ -87,6 +94,15 @@ impl CodegenContext {
     ) {
         self.config.generate_debug_info = enable;
         self.translator.set_generate_debug_info(enable);
+    }
+
+    /// 让产物携带调试段（源码 + ip→span 映射）。
+    /// 需同时开启 generate_debug_info，否则映射为空段。
+    pub fn set_keep_debug_info(
+        &mut self,
+        enable: bool,
+    ) {
+        self.config.keep_debug_info = enable;
     }
 
     /// 生成下一个标签（委托给 FlowManager）
@@ -192,6 +208,23 @@ impl CodegenContext {
         // 4. 生成文件头
         let header = self.generate_header();
 
+        // 4.5 保留调试段：dump 与离线 .42 定位消费同一份 ip→span 映射
+        let debug_section = self.config.keep_debug_info.then(|| {
+            let mut sources = crate::util::span::SourceMap::new();
+            for path in &self.module.source_files {
+                // #327：std 虚拟路径读盘必失败，回退嵌入源文本
+                let content = crate::std::yx_sources::embedded_source_by_virtual_path(path)
+                    .map(str::to_string)
+                    .or_else(|| std::fs::read_to_string(path).ok())
+                    .unwrap_or_default();
+                sources.add_file(path.clone(), content);
+            }
+            super::codegen::bytecode::DebugSection::from_sources_and_functions(
+                sources,
+                &output.code_section.functions,
+            )
+        });
+
         debug!("{}", t_simple(MSG::CodegenComplete, lang));
         Ok(BytecodeFile {
             header,
@@ -199,17 +232,24 @@ impl CodegenContext {
             const_pool,
             code_section: output.code_section,
             vtables,
-            debug_section: None,
+            debug_section,
         })
     }
 
     /// 生成文件头
     fn generate_header(&self) -> BytecodeHeader {
+        // T4：入口点用 `idx + 1` 编码，0 = 无入口。
+        // 不能直接用 idx——0 号函数与“无入口”无法区分，而单函数文件里
+        // main 常常就是 0 号。
+        let entry_point = self
+            .find_entry_point()
+            .map(|idx| idx as u32 + 1)
+            .unwrap_or(0);
         BytecodeHeader {
             magic: YAOXIANG_MAGIC,
             version: BYTECODE_VERSION,
             flags: self.compute_flags(),
-            entry_point: self.find_entry_point() as u32,
+            entry_point,
             section_count: 4,
             file_size: 0,
             checksum: 0,
@@ -225,27 +265,25 @@ impl CodegenContext {
         flags
     }
 
-    /// 查找入口点
+    /// 查找入口点。
     ///
-    /// RFC-029：多文件模式下函数名带模块限定名（如 `main.main`），由编排器
-    /// 在 `entry_function` 里给出精确名字；单文件为 None，回退到查找裸名 `main`。
-    fn find_entry_point(&self) -> usize {
-        if let Some(ref entry_name) = self.module.entry_function {
-            if let Some(idx) = self
-                .module
-                .functions
-                .iter()
-                .position(|func| &func.name == entry_name)
-            {
-                return idx;
-            }
-        }
-        for (idx, func) in self.module.functions.iter().enumerate() {
-            if func.name == "main" {
-                return idx;
-            }
-        }
-        0
+    /// 入口**只由编排器指定**（`entry_function`）——Bin 角色（有 yaoxiang.toml）
+    /// 由它给出 `{entry_key}.main`。
+    ///
+    /// T4：Script 角色（无 manifest）**没有入口概念**：顶层语句与绑定就是程序
+    /// 主体（编入模块初始化序列），`main` 只是个普通绑定——想跑就写 `main()`。
+    ///
+    /// 这也消除了双跑：若既扫 main 又把顶层语句当程序，显式 `main()` 会跑两次
+    /// （#356）。单一入口语义后不可能重叠。
+    ///
+    /// 不再有“找不到就用第 0 个函数”的静默兜底（它会执行函数表里任意第一个
+    /// 函数——用户以为在跑 main，实际跑了 helper，属 #271 静默错误族）。
+    fn find_entry_point(&self) -> Option<usize> {
+        let entry_name = self.module.entry_function.as_ref()?;
+        self.module
+            .functions
+            .iter()
+            .position(|func| &func.name == entry_name)
     }
 
     /// 从 AST 类型转换

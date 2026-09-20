@@ -6,7 +6,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // spawn 块捕获外层变量（规范 §3.10 SpawnBlock）
     data = 42
     result = spawn {
@@ -29,3 +29,5 @@ main = {
     }
     assert.assert(sum == 100, "for list sum 10+20+30+40 == 100")
 }
+
+main()

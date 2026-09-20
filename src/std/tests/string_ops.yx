@@ -8,7 +8,7 @@ use std.string
 use std.list
 use std.result
 
-main = {
+main: () -> Void = {
     s = "  Hello World  "
 
     // 只读操作可复用（&String 自动借用）
@@ -28,14 +28,15 @@ main = {
     assert.assert(string.repeat("ab", 3) == "ababab", "repeat")
     assert.assert(string.reverse("abc") == "cba", "reverse")
 
-    // split 返回 List（只读 s 复用）
+    // split 返回 Vec（值语义：下标读取会消费，故一次取一个）
     parts = string.split("x,y,z", ",")
-    assert.assert(list.len(parts) == 3, "split len 3")
-    assert.assert(list.get(parts, 0) == "x", "split[0] == x")
+    assert.assert(parts.length == 3, "split len 3")
+    parts2 = string.split("x,y,z", ",")
+    assert.assert(parts2[0] == "x", "split[0] == x")
 
     // chars 返回 List
     cs = string.chars("ab")
-    assert.assert(list.len(cs) == 2, "chars len 2")
+    assert.assert(cs.length == 2, "chars len 2")
 
     // 错误路径：parse 失败返回 Result err（优雅，不 panic）
     ok_r = string.parse_int("42")
@@ -45,3 +46,5 @@ main = {
     err_f = string.parse_float("xxx")
     assert.assert(result.is_err(err_f), "parse_float err on invalid")
 }
+
+main()

@@ -48,10 +48,16 @@ repos:
 
       - id: markdownlint
         name: markdownlint docs
-        entry: markdownlint "docs/**/*.md" --fix --config docs/.markdownlint.jsonc --ignore-path docs/.markdownlintignore
+        # 只检查本次暂存的文件：原先写死 "docs/**/*.md" + pass_filenames: false 会 lint 全量文档，
+        # 并发会话正在编辑 docs/ 时，钩子的 --fix 会改动对方未暂存的写入，
+        # 与 pre-commit 的 stash 回滚冲突导致提交随机失败。
+        # 注：显式传文件名时 markdownlint 会忽略 --ignore-path，故忽略目录改由 exclude 表达。
+        # 手动全量检查用 pre-commit run markdownlint --all-files。
+        entry: markdownlint --fix --config docs/.markdownlint.jsonc
         language: system
-        types: [text]
-        pass_filenames: false
+        files: '^docs/.*\.md$'
+        types: [markdown]
+        exclude: '^docs/(node_modules|public|dist|superpowers)/|^docs/src/\.vitepress/|^docs/src/(en|ja|ru|archive)/|^docs/src/design/rfc/(deprecated|rejected)/'
 
       - id: check-commit-msg
         name: check commit message format

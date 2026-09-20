@@ -244,8 +244,11 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
 
             // Not a function type, just a tuple
             if param_types.len() == 1 {
-                // Single element in parentheses, not a tuple
-                Some(param_types.pop().unwrap())
+                // 单元素括号 = 完整类型（RFC-004 柯里化语义）：
+                // 保留为 `Paren`，让 split_curry 知道此处链条终止。
+                // 此前直接剥掉，导致 `() -> ((a:Int)->Int)` 与
+                // `() -> (a:Int)->Int` 解析成同一个 AST（括号无意义）。
+                Some(Type::Paren(Box::new(param_types.pop().unwrap())))
             } else {
                 Some(Type::Tuple(param_types))
             }
@@ -517,6 +520,32 @@ pub fn parse_fn_type_with_names(
         }
         state.restore_position(saved);
     }
+    // RFC-004 括号语义：`-> ((a: Int) -> Int)` —— 外层括号声明“返回值是函数”，
+    // 链条到此终止（`split_curry` 遇 `Paren` 停下）。但 body lambda 仍需要
+    // 内层参数**名**对齐类型，而 `Type::Fn` 只存类型不存名（见上方说明），
+    // 故此处回扫一次收集带名参数，返回类型保持 `Paren`。
+    let saved_paren = state.save_position();
+    if state.skip(&TokenKind::LParen) && state.at(&TokenKind::LParen) {
+        if let Some((inner_first, inner_all, inner_ret)) = parse_fn_type_with_names(state) {
+            // 仅在全部内层参数都带类型时采用——否则 `((Int) -> Int)` 的 `Int`
+            // 会被 parse_fn_type_with_names 误当作参数名（无名参数 ty=None）。
+            if inner_first.iter().all(|p| p.ty.is_some()) && state.skip(&TokenKind::RParen) {
+                let mut all_params = params.clone();
+                all_params.extend(inner_all);
+                let inner_fn = Type::Fn {
+                    params: inner_first.iter().filter_map(|p| p.ty.clone()).collect(),
+                    return_type: inner_ret,
+                };
+                return Some((
+                    params,
+                    all_params,
+                    Box::new(Type::Paren(Box::new(inner_fn))),
+                ));
+            }
+        }
+    }
+    state.restore_position(saved_paren);
+
     // `->` 后返回类型必需：严格版，非法 token 报错而非静默吞掉整个签名（审计发现）
     let return_type = Box::new(parse_type_annotation_required(state)?);
     let all_params = params.clone();

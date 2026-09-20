@@ -32,8 +32,8 @@ const ANIMAL_DOG_CAT: &str = r#"
 fn test_rfc011a_dispatch_coercions_collected() {
     let source = format!(
         "{}\n
-    main = {{
-        animals: List(Animal) = [Dog(\"Rex\"), Cat(9)]
+    main = () => {{
+        animals: Vec(Animal) = [Dog(\"Rex\"), Cat(9)]
         x: Animal = Dog(\"Bella\")
     }}",
         ANIMAL_DOG_CAT
@@ -69,8 +69,8 @@ fn test_rfc011a_dispatch_coercions_collected() {
 fn test_rfc011a_dispatch_literal_elem_violation_e1101() {
     let source = format!(
         "{}\n
-    main = {{
-        animals: List(Animal) = [Dog(\"Rex\"), Stone(2)]
+    main = () => {{
+        animals: Vec(Animal) = [Dog(\"Rex\"), Stone(2)]
     }}",
         ANIMAL_DOG_CAT
     );
@@ -94,8 +94,8 @@ fn test_rfc011a_dispatch_append_arg_violation_e1101() {
         "{}\n
     use std.list
 
-    main = {{
-        animals: List(Animal) = [Dog(\"Rex\")]
+    main = () => {{
+        animals: Vec(Animal) = [Dog(\"Rex\")]
         animals2 = list.append(animals, Stone(2))
     }}",
         ANIMAL_DOG_CAT
@@ -119,7 +119,7 @@ fn test_rfc011a_dispatch_fn_param_coercion() {
     describe: (a: Animal) -> String = {{
         return a.speak()
     }}
-    main = {{
+    main = () => {{
         r1 = describe(Dog(\"Rex\"))
         r2 = describe(Cat(9))
     }}",

@@ -171,7 +171,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: yaoxiang-windows-installer
-          path: dist/YaoXiang-Setup-*.exe
+          # OutputDir=..\dist 同样相对 .iss 所在目录解析 → scripts/dist/
+          path: scripts/dist/YaoXiang-Setup-*.exe
+          if-no-files-found: error
           retention-days: 30
 
   # ── 发布：merge-commit changelog body + 追加上传（发布保持现状）──

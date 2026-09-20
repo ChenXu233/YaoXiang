@@ -4,13 +4,18 @@ issue: '#131'
 status: '已接受'
 author: '沫郁酱'
 created: '2025-01-05'
-updated: '2026-07-05（同步到 GH Issue #131）'
+updated: '2026-09-15'
 ---
 
 # RFC-007: 函数定义语法统一方案
 
-> **相关补充**：函数体（`{ ... }` 代码块）内的语句终止与换行规则（`;` 显式分隔、换行终止、续行例外）
-> 由 [RFC-038（草案）](../draft/038-statement-termination.md) 定义，本 RFC 不涉及。
+> **相关**：在「空参最简」`name = { ... }` 与 RFC-010 的「有值块」语法位置重叠处，
+> 裁决为**内容决定类型**——`=>` 恒为函数，`Fn` 注解为函数，非 `Fn` 注解为块值，
+> 无注解时按内容推断。见 [RFC-010a](./010a-tail-expression-and-return.md) 附录D。
+>
+> **相关补充**：函数体（`{ ... }` 代码块）内的语句终止与换行规则（`;`
+> 显式分隔、换行终止、续行例外）由 [RFC-038（草案）](../draft/038-statement-termination.md)
+> 定义，本 RFC 不涉及。
 
 ## 摘要
 
@@ -19,8 +24,8 @@ updated: '2026-07-05（同步到 GH Issue #131）'
 
 为避免歧义：当函数存在输入参数时，参数类型必须在「签名」或「lambda 头」至少一处显式标注；两边都省略将被拒绝。
 
-代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式 `= expr`
-直接返回值。
+代码块 `{ ... }` 的值由**尾表达式**给出；`return` 是 `Never` 型的非局部退出（见
+[RFC-010a](./010a-tail-expression-and-return.md)）。表达式形式 `= expr` 直接给出值。
 
 ## 动机
 
@@ -69,7 +74,7 @@ add = (a: Int, b: Int) => a + b                      # 省略签名
 # === 空参函数 ===
 main: () -> Void = () => { println("Hello") }          # 完整形式
 main: () -> Void = { println("Hello") }                # 省略 Lambda 头
-main = { println("Hello") }                            # 最简形式（推断为 () -> Void）
+main: () -> Void = { println("Hello") }                            # 最简形式（推断为 () -> Void）
 
 # === 泛型函数（使用 RFC-010 统一语法）===
 identity: (T: Type) -> ((x: T) -> T) = (x) => x         # 完整形式
@@ -93,8 +98,9 @@ factorial: (n: Int) -> Int = (n) => {
 | **空参简写**       | `name: () -> Void = { return ... }`                    | 省略 Lambda 头        |
 | **空参最简**       | `name = { return ... }`                                | 无参无返最简          |
 
-**注意**：代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式
-`= expr` 直接返回值。
+**注意**：代码块 `{ ... }` 的值由**尾表达式**给出（唯一出口）；`return` 是 `Never`
+型的非局部退出，退出最近的函数边界。表达式形式 `= expr` 直接给出值。详见
+[RFC-010a](./010a-tail-expression-and-return.md)。
 
 **注意**：`->` 是函数类型的标志，不能省略（否则会被解析为元组）。
 
@@ -147,20 +153,22 @@ compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) 
 
 ### Lambda 表达式语法规则
 
-**重要规则**：代码块 `{ ... }` 内必须使用 `return` 返回值；无 `return` 时默认返回 `Void`。表达式形式
-`= expr` 直接返回值。
+**重要规则**：代码块 `{ ... }` 的值由**尾表达式**给出（唯一出口）；`return` 是 `Never`
+型的非局部退出，退出最近的函数边界。表达式形式 `= expr` 直接给出值。详见
+[RFC-010a](./010a-tail-expression-and-return.md)。
 
-| 语法形式       | 语法             | 返回方式                                            |
-| -------------- | ---------------- | --------------------------------------------------- |
-| **代码块形式** | `{ statements }` | 必须使用 `return` 返回值；无 `return` 时默认 `Void` |
-| **表达式形式** | `expression`     | 直接返回表达式值                                    |
+| 语法形式       | 语法             | 值出口                          |
+| -------------- | ---------------- | ------------------------------- |
+| **代码块形式** | `{ statements }` | 尾表达式（空块 `{}` 为 `Void`） |
+| **表达式形式** | `expression`     | 表达式值                        |
+| **`return`**   | `return e`       | 非局部退出函数，类型 `Never`    |
 
 **示例**：
 
 ```yaoxiang
-main: () -> Void = { println("Hello") }         # 返回 Void（无 return）
-add: (a: Int, b: Int) -> Int = { return a + b }  # 返回 Int（显式 return）
-empty: () -> Void = {}                          # 空块默认返回 Void
+main: () -> Void = { println("Hello") }         # 尾表达式为 Void
+add: (a: Int, b: Int) -> Int = { a + b }        # 尾表达式给出值
+empty: () -> Void = {}                          # 空块 → Void
 
 # 提前返回：使用 return
 factorial: (n: Int) -> Int = {
@@ -168,7 +176,7 @@ factorial: (n: Int) -> Int = {
     return n * factorial(n - 1)
 }
 
-# 表达式形式：直接返回值（无需 return）
+# 表达式形式：直接给出值
 add: (a: Int, b: Int) -> Int = a + b            # 正确：表达式形式
 main: () -> Void = println("Hello")               # 正确：表达式形式
 ```
@@ -207,7 +215,7 @@ compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) 
 
 # 标准函数：HM算法推断返回类型（参数类型需显式）
 add = (a: Int, b: Int) => a + b            # 推断为 (a: Int, b: Int) -> Int
-main = { println("Hello") }                # 推断为 () -> Void
+main: () -> Void = { println("Hello") }                # 推断为 () -> Void
 
 # 部分显式参数：HM算法推断剩余部分
 print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # 推断为 (Int, Int) -> Void
@@ -426,10 +434,10 @@ main: () -> Void = { println("Hello") }
 
 # === 简写：HM 推断 ===
 add = (a: Int, b: Int) => a + b              # 推断为 (a: Int, b: Int) -> Int
-main = { println("Hello") }                  # 推断为 () -> Void
+main: () -> Void = { println("Hello") }                  # 推断为 () -> Void
 
 # === 最简形式 ===
-main = {                                      # 等价于 main: () -> Void = { ... }
+main: () -> Void = {                                      # 等价于 main: () -> Void = { ... }
     println("Hello")
 }
 ```
@@ -450,7 +458,7 @@ main = {                                      # 等价于 main: () -> Void = { .
 
 > 以下问题已在设计中解决，记录在附录A。
 
-- ~~Q1: 是否应该保留 `main() = body` 这种极简写法？~~ → 已解决：保留为 `main = { ... }`
+- ~~Q1: 是否应该保留 `main() = body` 这种极简写法？~~ → 已解决：保留为 `main: () -> Void = { ... }`
 - ~~Q2: 函数名后的 `:` 是否保留？~~ → 已解决：可选保留；但有参函数仍需在签名或 lambda 头标注参数类型
 - ~~Q3: HM算法是否支持参数类型推断？~~ → 已解决：返回值/局部可推断；有参函数的参数类型需显式标注
 - ~~Q4: 是否引入 `fn` 关键字？~~ → 已解决：不引入，函数就是 lambda

@@ -4,7 +4,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     result = spawn {
         t1 = 1 + 1
         t2 = 2 + 2
@@ -12,3 +12,5 @@ main = {
     }
     assert.assert(result == 6)
 }
+
+main()

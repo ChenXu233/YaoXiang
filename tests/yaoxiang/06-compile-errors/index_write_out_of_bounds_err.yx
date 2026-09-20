@@ -1,0 +1,15 @@
+// 06-compile-errors/index_write_out_of_bounds_err.yx
+// #360 索引赋值的越界写
+// expect: runtime-error E6003
+// 消息含真实长度（0..3）与越界下标（found 5），并回溯源码变量名 (i)
+// 验证: 越界写不静默丢弃；诊断携带索引变量名（诊断层回溯一个 LoadLocal 步）
+// 状态: ❌ 应运行失败
+
+main: () -> Void = {
+    a = [1, 2, 3]
+    i = 5
+    a[i] = 99
+    print(a[0])
+}
+
+main()

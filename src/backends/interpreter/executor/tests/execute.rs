@@ -17,6 +17,7 @@ fn make_function(instrs: Vec<BytecodeInstr>) -> BytecodeFunction {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 4,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: instrs,
         labels: HashMap::new(),
@@ -28,7 +29,10 @@ fn make_function(instrs: Vec<BytecodeInstr>) -> BytecodeFunction {
 /// 辅助函数：创建预装一个常量的解释器
 fn make_interp_with_const(val: ConstValue) -> Interpreter {
     let mut interp = Interpreter::new();
-    interp.constants.push(val);
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .constants
+        .push(val);
     interp
 }
 
@@ -229,6 +233,7 @@ fn spawn_concurrent_standard_mode() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             BytecodeInstr::LoadConst {
@@ -248,6 +253,7 @@ fn spawn_concurrent_standard_mode() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             BytecodeInstr::LoadConst {
@@ -268,6 +274,7 @@ fn spawn_concurrent_standard_mode() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 4,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             // r0 = closure task_a
@@ -312,6 +319,7 @@ fn spawn_concurrent_standard_mode() {
         vtables: vec![],
         globals: vec![],
         entry_point: Some(2), // main 函数
+        init_function: None,
         debug_sources: None,
     };
 
@@ -418,6 +426,7 @@ fn test_new_array_bytecode_roundtrip_decode() {
                 return_type: crate::frontend::core::types::MonoType::Void,
                 instructions: vec![raw_new_array, raw_return],
                 local_count: 1,
+                local_names: HashMap::new(),
                 debug_map: std::collections::HashMap::new(),
             }],
         },

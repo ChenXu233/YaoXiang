@@ -24,7 +24,7 @@ impl StdModule for StringModule {
             export!(
                 "split",
                 "std.string.split",
-                "(s: &String, sep: &String) -> List(String)",
+                "(s: &String, sep: &String) -> Vec(String)",
                 native_split
             ),
             export!(
@@ -91,7 +91,7 @@ impl StdModule for StringModule {
             export!(
                 "chars",
                 "std.string.chars",
-                "(s: &String) -> List(String)",
+                "(s: &String) -> Vec(String)",
                 native_chars
             ),
             export!(

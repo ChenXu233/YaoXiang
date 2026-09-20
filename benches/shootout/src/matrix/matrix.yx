@@ -32,7 +32,7 @@ multiply: (a: List(List(Int)), b: List(List(Int)), size: Int) -> List(List(Int))
     return m_result
 }
 
-main = {
+main: () -> Void = {
     n_str = os.get_env("BENCH_INPUT")
     s = if n_str == "" {
         20
@@ -40,12 +40,18 @@ main = {
         parsed = string.parse_int(n_str)
         result.unwrap_or(parsed, 20)
     }
-    // 每调用一次 create_matrix 消耗一次 s，重新读取
-    _ = s
-    mut a = create_matrix(20)
-    mut b = create_matrix(20)
-    mut c = multiply(a, b, 20)
+    // 此前硬编码 20，导致三档输入的耗时完全相同（不随 BENCH_INPUT 变化），
+    // 基准失去意义。改用读入的规模 s。
+    mut a = create_matrix(s)
+    mut b = create_matrix(s)
+    mut c = multiply(a, b, s)
+    // 与 Python/Rust 版对齐：打印 c[0][0]（因 `a[0][k] = 0*k` 恒为 0，
+    // 它是跨语言一致性校验点，而非数值校验点）。
     row0 = c[0]
     val = row0[0]
     io.println(val)
 }
+
+// 在入口语义下，顶层 main 绑定本身不构成入口——须显式调用。
+// 缺少此调用会让基准静默空跑（实测读数约 61ms 恒定，与输入规模无关）。
+main()

@@ -328,11 +328,19 @@ impl RuntimeValue {
         self.value_type(None)
     }
 
-    /// Convert to bool
+    /// 转为 `bool`；仅接受 `Bool` 值。
+    ///
+    /// 此前 `Int` 会被当作真值（`i != 0`）。该宽松行为无处依赖：
+    /// - 条件位置（`if` / `while` / `JmpIf`）的条件由类型检查器强制为
+    ///   `Bool`——写 `if x`（x 为 Int）报 E1002，编译期即拦截
+    /// - `list.filter` / `range.filter` 的签名是 `(T) -> Bool`
+    ///   （`stdlib.md §filter`），谓词必为 Bool
+    ///
+    /// 故保留 Int 分支属静默接受（#271 族）：它会让「非 Bool 值意外进入
+    /// 条件位置」这类编译缺陷在运行时表现为「非零即真」，掩盖问题。
     pub fn to_bool(&self) -> Option<bool> {
         match self {
             RuntimeValue::Bool(b) => Some(*b),
-            RuntimeValue::Int(i) => Some(*i != 0),
             _ => None,
         }
     }

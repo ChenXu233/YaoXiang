@@ -5,6 +5,6 @@
 // 验证: 元素类型约束对 Array 字面量落点路径生效，Int 不能塞进 String 数组
 // 状态: ❌ 应编译失败
 
-main = {
+main: () -> Void = {
     b: Array(String, 2) = [1, 2]
 }

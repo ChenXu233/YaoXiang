@@ -6,7 +6,7 @@
 use std.io
 use std.assert
 
-main = {
+main: () -> Void = {
     a = 6
     assert.assert((a & 2) == 2, "位与")
     assert.assert((a | 2) == 6, "位或")
@@ -16,3 +16,5 @@ main = {
     assert.assert((16 >> 1 & 3) == 0, "移位高于位与")
     io.println("BITWISE_OPS_OK")
 }
+
+main()

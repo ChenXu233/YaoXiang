@@ -1,0 +1,35 @@
+// 03-semantics/assignment_semantics.yx
+// 覆盖: 规范 §4.3「赋值优先」——`x = value` 沿作用域链查找
+//   找到 mut x           → 赋值
+//   找到 x（已 moved）    → 重新声明
+//   找到 x（不可变，存活）→ E2010（见 06-compile-errors/shadow_err.yx）
+//   找不到               → 新声明
+// 状态: ✅ 可运行
+
+use std.{assert, io}
+
+// 新声明：找不到 → 在当前作用域声明
+fresh: Int = 1
+
+// mut 重赋值：找到 mut → 赋值同一绑定
+mut counter: Int = 0
+counter = counter + 1
+counter = counter + 10
+
+// 跨作用域赋值外层 mut（spec §4.3 跨作用域例）
+mut outer: Int = 5
+{
+    outer = outer * 2
+}
+
+// 注解声明 + 初值（spec §3.2 文法要求 `= Expr`）
+declared_only: Int = 7
+
+main: () -> Void = {
+    assert.assert(fresh == 1, "新声明")
+    assert.assert(counter == 11, "mut 重赋值累计")
+    assert.assert(outer == 10, "跨作用域 mut 赋值")
+    assert.assert(declared_only == 7, "纯注解声明后赋值")
+    io.println("assignment_semantics ok")
+}
+main()

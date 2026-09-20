@@ -73,7 +73,7 @@ Point.draw: (self: Point, surface: Surface) -> Void = {
 }
 
 Point.serialize: (self: Point) -> String = {
-    return "Point(${self.x}, ${self.y})"
+    "Point(${self.x}, ${self.y})"
 }
 
 // 泛型类型（(T: Type) -> Type = 接受类型参数的泛型类型）
@@ -169,7 +169,7 @@ Array: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 Point: Type = { x: Float, y: Float }
 
 # ✅ 函数：没有 : Type，HM 推断为 () -> Void
-main = { println("Hello") }
+main: () -> Void = { println("Hello") }
 
 # ❌ 错误：没有 : Type，编译器无法将 { ... } 解析为类型
 Point = { x: Float, y: Float }  // HM 推断为函数，不是类型！
@@ -280,62 +280,70 @@ y = 100  // 推断为 Int
 
 #### 2. 函数定义
 
+**块的值 = 尾表达式，`return` 退出函数（类型 `Never`）**——详见
+[RFC-010a](010a-tail-expression-and-return.md)。
+
 ```yaoxiang
-// 单表达式形式（直接返回值，无需 return）
+// 单表达式形式
 add: (a: Int, b: Int) -> Int = a + b
 greet: (name: String) -> String = "Hello, ${name}!"
 
-// 代码块形式（必须用 return 返回值）
+// 代码块形式：值是尾表达式
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
-    return b
+    b                    // 尾表达式 → 块的值
 }
 
 // 多行代码块
 calc: (x: Float, y: Float, op: String) -> Float = {
-    return match op {
+    match op {
         "+" -> x + y,
         "-" -> x - y,
         _ -> 0.0
-    }
+    }                    // match 作尾表达式
 }
 
-// Void 函数（代码块内不需要 return）
+// Void 函数：尾表达式为 Void
 print: (msg: String) -> Void = {
-    console.write(msg)
+    console.write(msg)   // console.write : Void
 }
 ```
 
 #### 返回规则
 
-返回值取决于 `=` 右侧的形式：
+**块的值 = 尾表达式（唯一出口）**：
 
-| 写法                    | 返回值                           |
-| ----------------------- | -------------------------------- |
-| `= expr`（无花括号）    | 直接返回 `expr`                  |
-| `= { ... }`（有花括号） | 必须用 `return`，否则返回 `Void` |
+| 写法                              | 值                          |
+| --------------------------------- | --------------------------- |
+| `= expr`（无花括号）              | `expr`                      |
+| `= { ...; e }`（有花括号）        | 尾表达式 `e`                |
+| `= { ...; s }`（末位为语句/赋值） | `Void`（赋值的值是 `Void`） |
+| `= {}`（空块）                    | `Void`                      |
+
+**`return` 的语义**：非局部退出，**退出最近的函数边界**（不「返回给块」），类型为
+`Never`。`Never <: T` 对任意类型成立（爆炸原理），故 `return` 可出现在任何返回类型的位置。
 
 ```yaoxiang
-# 单表达式：直接返回值，不需要 return
+# 单表达式：直接返回值
 add: (a: Int, b: Int) -> Int = a + b
 
-# 代码块：必须用 return 返回值
+# 代码块：值是尾表达式
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
-    return b
+    b
 }
 
-# Void 函数：不需要 return
-print: (msg: String) -> Void = {
-    console.write(msg)
+# 提前返回：return 穿透块，退出函数（类型 Never）
+factorial: (n: Int) -> Int = {
+    if n <= 1 { return 1 }
+    n * factorial(n - 1)     # 尾表达式
 }
 ```
 
-> **设计理由**：`{ ... }`
-> 是依赖驱动计算单元（见下文），其返回语义与单表达式不同。花括号引入了多语句上下文，因此需要显式
-> `return` 来消除"最后一个表达式是否是返回值"的歧义。
+**设计理由**：`{ ... }` 是依赖驱动计算单元（见下文），其求值语义与单表达式不同——
+花括号引入多语句上下文，**其值由尾表达式给出**，不存在「最后一个表达式是否是返回值」的歧义。
 
 #### `{}` 语义：依赖驱动计算单元
 
@@ -346,19 +354,18 @@ print: (msg: String) -> Void = {
 
 - `{}` 内的赋值语句按依赖关系自动排序，而非书写顺序
 - 依赖齐备则立即执行，缺失则阻塞等待
-- 使用 `return` 显式返回值（见返回规则）
+- **块的值 = 尾表达式**（见返回规则）；`return` 是 `Never` 型的非局部退出，退出函数
 
 ```yaoxiang
 # 依赖驱动：b 依赖 a，编译器自动排序
 result: Int = {
     b = a + 1      # 依赖 a → 自动排在 a 之后
     a = 10         # 无依赖 → 可以先执行
-    return b       # 返回 11
+    b              # 尾表达式 → 块的值 11
 }
 ```
 
-> **与单表达式的区别**：`= expr`（无花括号）是直接返回值的简单绑定；`= { ... }`（有花括号）引入依赖驱动计算上下文，允许多语句和显式
-> `return`。
+> **与单表达式的区别**：`= expr`（无花括号）是直接返回值的简单绑定；`= { ... }`（有花括号）引入依赖驱动计算上下文，允许多语句，其值由尾表达式给出。
 
 #### `spawn` 块
 
@@ -373,7 +380,7 @@ result = spawn {
     a = fetch_data("url1")    # 任务 1
     b = fetch_data("url2")    # 任务 2（与 a 无依赖，并行执行）
     c = process(a, b)         # 依赖 a, b → 等待两者完成后执行
-    return c
+    c                         # 尾表达式 → spawn 的值
 }
 // 调用方在此阻塞，直到 spawn 块内所有任务完成
 ```
@@ -383,12 +390,12 @@ result = spawn {
 #### `unsafe` 块
 
 `unsafe { ... }` 用于定义不透明类型和操作裸指针。它利用 `{}`
-的 return 语义将类型定义返回给上一作用域：
+的求值语义将类型定义交给上一作用域（值出口为尾表达式）：
 
 **核心规则**：
 
 - `unsafe {}` 中可以定义类型和操作裸指针
-- 使用 `return` 将类型定义返回给上一作用域
+- **尾表达式**给出 `unsafe {}` 的值（类型定义交给上一作用域）
 - 返回的类型在 `unsafe {}` 外可用
 - 类型的字段访问需要 unsafe 权限
 
@@ -398,7 +405,7 @@ SqliteDb = unsafe {
     SqliteDb: Type = {
         handle: *Void  # 裸指针
     }
-    return SqliteDb
+    SqliteDb           # 尾表达式 → unsafe 块的值
 }
 
 # SqliteDb 在 unsafe 块外可用
@@ -510,7 +517,7 @@ Point: Type = {
     distance: ((a: Point, b: Point) -> Float)[0] = ((a, b) => {
         dx = a.x - b.x
         dy = a.y - b.y
-        return (dx * dx + dy * dy).sqrt()
+        (dx * dx + dy * dy).sqrt()      # 尾表达式
     })
 }
 // 语法：((params) => body)[position]
@@ -569,7 +576,7 @@ Point.draw: (p: &Point, surface: Surface) -> Void = {
 }
 
 Point.serialize: (p: &Point) -> String = {
-    return "Point(${p.x}, ${p.y})"
+    "Point(${p.x}, ${p.y})"
 }
 
 // 调用：就是普通函数调用
@@ -628,7 +635,7 @@ DrawableSerializable: Type = Drawable & Serializable
 // 使用交集类型
 process: (T: Drawable & Serializable) -> ((item: T, screen: Surface) -> String) = {
     item.draw(screen)
-    return item.serialize()
+    item.serialize()
 }
 ```
 
@@ -652,7 +659,7 @@ IntList.push = {
 }
 
 List.push = (type: Type) -> {
-    return (self: List(type), item: type) -> {
+    (self: List(type), item: type) -> {
         self.data.append(item)
         self.length = self.length + 1
     }
@@ -668,9 +675,9 @@ List.push: (self: List(T), item: T) -> Void = {
 
 List.get: (self: List(T), index: Int) -> Maybe(T) = {
     if index >= 0 and index < self.length {
-        return Maybe.Just(self.data[index])
+        Maybe.Just(self.data[index])
     } else {
-        return Maybe.Nothing
+        Maybe.Nothing
     }
 }
 ```
@@ -778,25 +785,25 @@ draw: (p: &Point, surface: Surface) -> Void = {
 }
 
 bounding_box: (p: &Point) -> Rect = {
-    return Rect(p.x - 1, p.y - 1, 2, 2)
+    Rect(p.x - 1, p.y - 1, 2, 2)
 }
 
 serialize: (p: &Point) -> String = {
-    return "Point(${p.x}, ${p.y})"
+    "Point(${p.x}, ${p.y})"
 }
 
 translate: (p: &Point, dx: Float, dy: Float) -> Point = {
-    return Point(p.x + dx, p.y + dy)
+    Point(p.x + dx, p.y + dy)
 }
 
 scale: (p: &Point, factor: Float) -> Point = {
-    return Point(p.x * factor, p.y * factor)
+    Point(p.x * factor, p.y * factor)
 }
 
 distance: (p1: &Point, p2: &Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    return (dx * dx + dy * dy).sqrt()
+    (dx * dx + dy * dy).sqrt()
 }
 
 // 显式绑定 — 绑定后才有点调用语法
@@ -817,17 +824,17 @@ bounding_box: (r: &Rect) -> Rect = r
 Rect.bounding_box = bounding_box[0]
 
 serialize: (r: &Rect) -> String = {
-    return "Rect(${r.x}, ${r.y}, ${r.width}, ${r.height})"
+    "Rect(${r.x}, ${r.y}, ${r.width}, ${r.height})"
 }
 Rect.serialize = serialize[0]
 
 translate: (r: &Rect, dx: Float, dy: Float) -> Rect = {
-    return Rect(r.x + dx, r.y + dy, r.width, r.height)
+    Rect(r.x + dx, r.y + dy, r.width, r.height)
 }
 Rect.translate = translate[0]
 
 scale: (r: &Rect, factor: Float) -> Rect = {
-    return Rect(r.x * factor, r.y * factor, r.width * factor, r.height * factor)
+    Rect(r.x * factor, r.y * factor, r.width * factor, r.height * factor)
 }
 Rect.scale = scale[0]
 
@@ -1007,17 +1014,18 @@ Option: (T: Type) -> Type = {
 
 ### 逻辑运算符：`and` / `or` / `!`（权威定义，Zig 式）
 
-> **定义声明（2026-08-03）**：逻辑运算符的权威形式是关键字 `and` / `or` + 符号一元 `!`
-> （与 SPEC `syntax.md` §2.2 优先级表一致）。本设计对齐 Zig：**短路控制流用关键字，纯一元运算用符号**。
-> 早期实现向 C 漂移的 `&&` / `||` 以及中间态的关键字 `not` 均已移除。
+> **定义声明（2026-08-03）**：逻辑运算符的权威形式是关键字 `and` / `or` + 符号一元 `!` （与 SPEC
+> `syntax.md`
+> §2.2 优先级表一致）。本设计对齐 Zig：**短路控制流用关键字，纯一元运算用符号**。早期实现向 C 漂移的
+> `&&` / `||` 以及中间态的关键字 `not` 均已移除。
 
 **语义**：
 
-| 运算符 | 优先级（SPEC §2.2） | 结合性 | 语义           |
-| ------ | ----------------- | ------ | -------------- |
+| 运算符 | 优先级（SPEC §2.2）   | 结合性 | 语义                       |
+| ------ | --------------------- | ------ | -------------------------- |
 | `!`    | 3（一元前缀，紧绑定） | 右到左 | 逻辑非（纯函数，无控制流） |
-| `and`  | 10                | 左到右 | 短路逻辑与     |
-| `or`   | 10                | 左到右 | 短路逻辑或     |
+| `and`  | 10                    | 左到右 | 短路逻辑与                 |
+| `or`   | 10                    | 左到右 | 短路逻辑或                 |
 
 ```yaoxiang
 # 短路求值：and 左侧为 false / or 左侧为 true 时，右侧不执行
@@ -1040,19 +1048,20 @@ not x      # ❌ 已移除，用 !x（not 恢复为普通标识符；!= 不受�
 
 **设计理由**（对齐 Zig，ziglang/zig#272 / #6625）：
 
-1. **短路是控制流 → 关键字；纯函数是运算 → 符号**。`and` / `or` 改变求值顺序（右侧按需跳过），与 `if` 同性质，
-   用关键字；`!` 对已求值的操作数做纯取反，与 `-` `+` 同性质，用符号。YaoXiang 错误传播用 `?`（§2.11），`!` 无冲突。
-2. **紧绑定消除歧义**：`!` 视觉上“紧贴”操作数，高优先级一目了然；关键字 `not` 被迫与操作数留空格，
-   绑到哪边（`not a == b`）易引发脑内歧义。
-3. **消歧**：`&` 身兼两职——借用令牌（`&p` / `&mut p`，RFC-009）与位与（SPEC §2.2 优先级 8）。
-   再引入 `&&` 会让一个符号承载三种含义。`and` / `or` / `!` 使借用、位运算、逻辑三个概念在视觉上彻底分离。
-4. **先例**：Zig（同生态位现代系统语言）正是 `and` / `or` 关键字 + `!` 符号的组合；Python / Lua / Ada / SQL 用
-   全关键字（含 `not`），C 家族用全符号——YaoXiang 取 Zig 的混搭，两者皆得。
-5. **Curry-Howard 一致性**：类型即命题（见上文同构节），精化类型中的逻辑连接写作 `and` / `or`
-   （如 `{ 0 <= idx and idx < arr.len }`）是命题的自然表述；`!` 作为一元否定符号对应 ¬。
+1. **短路是控制流 → 关键字；纯函数是运算 → 符号**。`and` / `or` 改变求值顺序（右侧按需跳过），与
+   `if` 同性质，用关键字；`!` 对已求值的操作数做纯取反，与 `-` `+`
+   同性质，用符号。YaoXiang 错误传播用 `?`（§2.11），`!` 无冲突。
+2. **紧绑定消除歧义**：`!` 视觉上“紧贴”操作数，高优先级一目了然；关键字 `not`
+   被迫与操作数留空格，绑到哪边（`not a == b`）易引发脑内歧义。
+3. **消歧**：`&` 身兼两职——借用令牌（`&p` / `&mut p`，RFC-009）与位与（SPEC §2.2 优先级 8）。再引入
+   `&&` 会让一个符号承载三种含义。`and` / `or` / `!` 使借用、位运算、逻辑三个概念在视觉上彻底分离。
+4. **先例**：Zig（同生态位现代系统语言）正是 `and` / `or` 关键字 + `!` 符号的组合；Python / Lua /
+   Ada / SQL 用全关键字（含 `not`），C 家族用全符号——YaoXiang 取 Zig 的混搭，两者皆得。
+5. **Curry-Howard 一致性**：类型即命题（见上文同构节），精化类型中的逻辑连接写作 `and` / `or` （如
+   `{ 0 <= idx and idx < arr.len }`）是命题的自然表述；`!` 作为一元否定符号对应 ¬。
 
-> **实现**：`and` / `or` 在 IR 层展开为短路跳转序列（`a and b ≡ if a { b } else { false }`），
-> `!` 按一元紧绑定解析（操作数按 `BP_UNARY + 1`）。回归测试：
+> **实现**：`and` / `or` 在 IR 层展开为短路跳转序列（`a and b ≡ if a { b } else { false }`）， `!`
+> 按一元紧绑定解析（操作数按 `BP_UNARY + 1`）。回归测试：
 > `tests/yaoxiang/01-syntax/basics/logical_ops.yx`、`logical_not.yx`。
 
 ## 语法设计说明：具名函数本质是 Lambda 的语法糖

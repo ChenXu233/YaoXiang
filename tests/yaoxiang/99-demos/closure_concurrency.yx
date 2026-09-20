@@ -4,7 +4,7 @@
 
 use std.{assert, io}
 
-main = {
+main: () -> Void = {
     data = 100
 
     result = spawn {
@@ -18,3 +18,5 @@ main = {
     io.println(result)
     assert.assert(true, "all passed")
 }
+
+main()

@@ -1,0 +1,10 @@
+// 06-compile-errors/block_value_type_mismatch_err.yx
+// RFC-010a 附录D：非函数注解的块绑定是块值，其值类型必须与注解决一致
+// expect: compile-error E1002
+// （注解声明 Int，块值为 String）
+// 验证: 块值绑定同样受注解类型约束
+// 状态: ❌ 应编译失败
+
+main: () -> Void = {
+    x: Int = { "not an int" }
+}

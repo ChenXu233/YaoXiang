@@ -3,7 +3,7 @@ title: 'RFC-014c: 工作空间支持'
 status: '审核中'
 author: '晨煦'
 created: '2026-06-11'
-updated: '2026-07-05'
+updated: '2026-09-15'
 group: 'rfc-014'
 issue: '#113'
 ---
@@ -11,6 +11,15 @@ issue: '#113'
 # RFC-014c: 工作空间支持
 
 > 本 RFC 是 [RFC-014: 包管理系统设计](../accepted/014-package-manager.md) 的子 RFC。
+
+## 2026-09-15 审核决议
+
+以下决议由所有者于 2026-09-15 拍板：
+
+1. **实施顺序提前**：工作空间不依赖网络与构建系统（`{ workspace = "key" }` 路径解析 + 共享 lockfile 纯本地），排期提前至 RFC-014b **之前**（总纲执行顺序调整为 `3 → 3.5 → 6 → 4 → 5`）。编译器仓库自身（编译器 + vscode 扩展 + wasm + docs）即是第一个用户。
+2. **workspace 级 `[build]`**：不支持。坚持「根只协调、成员自包含」原则，构建声明只写在成员 toml。
+3. **成员自有 lockfile**：不允许，根 `yaoxiang.lock` 唯一。
+4. **嵌套 workspace**：初期不支持。
 
 ## 摘要
 
@@ -290,9 +299,9 @@ struct WorkspaceMember {
 ## 开放问题
 
 - [x] 是否允许成员之间的循环依赖？→ **不允许。** 成员是独立包，包间循环是编译错误。（RFC-029 决策，2026-07-30）
-- [ ] 是否支持 workspace 级别的 `[build]` 配置？
-- [ ] 成员是否可以有自己的 lockfile（覆盖根 lockfile）？
-- [ ] 是否支持嵌套 workspace？
+- [x] 是否支持 workspace 级别的 `[build]` 配置？→ 不支持，成员自包含（2026-09-15 决议 2）
+- [x] 成员是否可以有自己的 lockfile（覆盖根 lockfile）？→ 不允许，根 lockfile 唯一（2026-09-15 决议 3）
+- [x] 是否支持嵌套 workspace？→ 初期不支持（2026-09-15 决议 4）
 
 ---
 

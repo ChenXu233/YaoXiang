@@ -6,7 +6,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     mut items = [1, 2, 3, 4, 5]
 
     // 基本列表推导式
@@ -31,3 +31,5 @@ main = {
     assert.assert(tens[3] == 10, "tens[3] == 10")
     assert.assert(tens[4] == 10, "tens[4] == 10")
 }
+
+main()

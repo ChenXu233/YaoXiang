@@ -11,10 +11,12 @@ use std.list
 gt: (t: Int) -> (x: Int) -> Bool = (x) => x > t
 make_adder: (n: Int) -> (x: Int) -> Int = (x) => x + n
 
-main = {
+main: () -> Void = {
     add5 = make_adder(5)
     assert.assert(add5(3) == 8, "make_adder(5)(3) == 8")
 
     evens = list.filter([1, 6, 3, 8], gt(5))
     assert.assert(list.len(evens) == 2, "gt(5) 谓词 filter 保留 6,8")
 }
+
+main()

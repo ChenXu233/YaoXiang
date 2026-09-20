@@ -5,7 +5,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // 基本 Lambda
     double = (x) => x * 2
     assert.assert(double(21) == 42, "double(21) == 42")
@@ -25,3 +25,5 @@ main = {
     assert.assert(max(10, 20) == 20, "max(10, 20) == 20")
     assert.assert(max(30, 5) == 30, "max(30, 5) == 30")
 }
+
+main()

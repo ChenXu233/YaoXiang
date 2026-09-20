@@ -13,7 +13,7 @@ Point: Type = { x: Int, y: Int }
 Inner: Type = { view: &Point }
 Outer: Type = { inner: Inner }
 
-main = {
+main: () -> Void = {
     // 1. 嵌套块 good_seq：块内读释放后 &mut 写继续（§12.5）
     p = Point(1, 2)
     { io.println(p.x) }        // 块表达式语句：内部作用域读
@@ -26,3 +26,5 @@ main = {
     assert.assert(o.inner.view.y == 6, "三层嵌套令牌访问")
     assert.assert(t.x == 5, "派生令牌后源仍可读")
 }
+
+main()

@@ -9,7 +9,9 @@ head_of: (a: Array(Int, 3)) -> Int = {
     return a[0]
 }
 
-main = {
+main: () -> Void = {
     b: Array(Int, 3) = [10, 20, 30]
     assert.assert(head_of(b) == 10, "Array(Int,3) passed to Array(Int,3) param")
 }
+
+main()

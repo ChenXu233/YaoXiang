@@ -19,7 +19,7 @@ Dog.name: (self: &Dog) -> String = {
     return self.name
 }
 
-main = {
+main: () -> Void = {
     d = Dog("Rex")
     assert.assert(d.name == "Rex", "member/field conflict must not compile")
 }

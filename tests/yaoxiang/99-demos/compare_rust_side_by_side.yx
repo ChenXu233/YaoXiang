@@ -20,7 +20,7 @@ get_x: (view: &PointView) -> Float = {
     return view.inner.x
 }
 
-main = {
+main: () -> Void = {
     p = Point(3.0, 4.0)
     v = PointView(p)
     x = get_x(v)
@@ -28,3 +28,5 @@ main = {
     io.println(x)
     assert.assert(true, "all passed")
 }
+
+main()

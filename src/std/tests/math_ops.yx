@@ -7,7 +7,7 @@ use std.assert
 use std.math
 use std.math.{PI, E, TAU}
 
-main = {
+main: () -> Void = {
     // 整数函数
     assert.assert(math.abs(-5) == 5, "abs(-5) == 5")
     assert.assert(math.max(3, 7) == 7, "max(3,7) == 7")
@@ -36,3 +36,5 @@ main = {
     assert.assert(E > 2.71  and  E < 2.72, "E in range")
     assert.assert(TAU > 6.28  and  TAU < 6.29, "TAU in range")
 }
+
+main()

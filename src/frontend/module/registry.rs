@@ -272,6 +272,8 @@ impl ModuleRegistry {
                 kind: ExportKind::SubModule,
                 signature: "Module".to_string(),
                 mono_type: None,
+                type_params: None,
+                param_names: None,
             });
 
             // 注册模块信息
@@ -293,7 +295,21 @@ impl ModuleRegistry {
                         .strip_prefix("std.")
                         .unwrap_or(&info.path)
                         .to_string();
-                    std_root.add_submodule(submodule_name);
+                    std_root.add_submodule(submodule_name.clone());
+                    // 与 native 子模块同款：`std` 根也要**导出**子模块名，
+                    // 否则 `use std.{io, list}` 的内联导入形式查 `std` 的 exports
+                    // 时报 E5003「Export 'list' not found in module 'std'」。
+                    // 此前只 add_submodule 未 add_export，故 `use std.list` 可用
+                    // 而 `use std.{list}` 不可用。
+                    std_root.add_export(Export {
+                        name: submodule_name,
+                        full_path: info.path.clone(),
+                        kind: ExportKind::SubModule,
+                        signature: "Module".to_string(),
+                        mono_type: None,
+                        type_params: None,
+                        param_names: None,
+                    });
                     self.register(info);
                 }
             }
@@ -321,6 +337,8 @@ mod tests {
             kind,
             signature: String::new(),
             mono_type: Some(MonoType::Int(64)),
+            type_params: None,
+            param_names: None,
         }
     }
 

@@ -1,7 +1,7 @@
 // 测试: spawn 块 return 语义（无闭包）
 use std.assert
 
-main = {
+main: () -> Void = {
     result = spawn {
         x = 10
         y = 20
@@ -9,3 +9,5 @@ main = {
     }
     assert.assert(result == 30)
 }
+
+main()

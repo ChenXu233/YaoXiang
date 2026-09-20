@@ -3,13 +3,25 @@ title: 'RFC-014a: Registry 协议规范'
 status: '审核中'
 author: '晨煦'
 created: '2026-06-11'
-updated: '2026-07-05'
+updated: '2026-09-15'
 group: 'rfc-014'
 ---
 
 # RFC-014a: Registry 协议规范
 
 > 本 RFC 是 [RFC-014: 包管理系统设计](../accepted/014-package-manager.md) 的子 RFC。
+
+## 2026-09-15 审核决议
+
+以下决议由所有者于 2026-09-15 拍板，正文相应章节作为「官方 Registry 上线后」的完整规范保留：
+
+1. **范围缩减（本文档最重要的一条）**：官方 Registry 服务器、认证（login/logout）、yank **无限期后置**。Phase 4 实际交付物 = GitHub Release/Git 适配层 + Registry trait 定型 + `.yxpkg` 打包 + `publish --github`。理由：生态冷启动只需 git/GitHub 渠道（Go 早期同型）；Registry 服务器的运维、账号体系与滥用治理成本在无第三方包阶段是纯负债。
+2. **裸包名 add 不可用**：官方 Registry 上线前 `yaoxiang add <裸包名>` 报错，添加依赖须显式来源（`--git` / `--path`）。下方「源优先级」默认查找链自 Registry 上线起生效。
+3. **包格式归一**：`.yxpkg` 只含源码（`yaoxiang.toml`/`src/`/`build.yx`/`SHA256SUMS`），删除 `build/native/` 预编译产物目录；二进制分发一律走 RFC-014b 的 `[binaries]` 外链（Release/CDN），避免包体积与全局缓存膨胀。
+4. **Source 分发实现**：内置四源（Local/Git/Registry/GitHub）是封闭集合，实现层用 enum 分发（避免 dyn-async 的 Send 约束与 `async-trait` 依赖）；`Source` trait 定义保留在语义层，未来若开放第三方 Source 再经 trait 对象接入。
+5. **API 版本化**：URL 路径 `/api/v1/` + 响应头携带协议版本；破坏性变更升 v2 并存，不做原地变更。
+6. **速率限制**：GitHub 适配层指数退避 + ETag 条件请求缓存；Registry 端速率策略随官方 Registry 一并后置。
+7. **包大小上限**：源码包 20 MiB（初值，可调）；GitHub 渠道由平台自管。
 
 ## 摘要
 
@@ -168,14 +180,12 @@ private = { git = "https://github.com/my-org/private-lib" }
 
 ### 包格式（.yxpkg）
 
+> 2026-09-15 决议：仅含源码，`build/` 预编译产物移除——二进制一律经 RFC-014b `[binaries]` 外链分发。
+
 ```
 foo-1.2.3.yxpkg (tar.gz)
 ├── yaoxiang.toml          # 包元数据
 ├── src/                   # 源代码
-├── build/                 # 构建产物（如果有）
-│   └── native/
-│       └── linux-x86_64/
-│           └── libfoo.so
 ├── build.yx               # 构建脚本（如果有）
 └── SHA256SUMS             # 校验和
 ```
@@ -381,10 +391,10 @@ pub enum RegistryError {
 
 ## 开放问题
 
-- [ ] Registry API 是否需要版本化（`/api/v1/` vs `/api/v2/`）？
-- [ ] 包名是否支持 namespace（如 `@org/pkg`）？
-- [ ] 速率限制策略？
-- [ ] 包大小上限？
+- [x] Registry API 是否需要版本化（`/api/v1/` vs `/api/v2/`）？→ URL `/api/v1/` + 版本响应头，破坏性变更升 v2 并存（2026-09-15）
+- [x] 包名是否支持 namespace（如 `@org/pkg`）？→ 初期不支持，扁平包名（2026-09-15，见总纲）
+- [x] 速率限制策略？→ GitHub 适配层退避 + 缓存；Registry 端随官方 Registry 后置（2026-09-15）
+- [x] 包大小上限？→ 源码包 20 MiB 初值（2026-09-15，可调）
 
 ---
 

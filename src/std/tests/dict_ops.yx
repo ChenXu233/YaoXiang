@@ -6,8 +6,8 @@
 use std.assert
 use std.dict
 
-main = {
-    d = {}
+main: () -> Void = {
+    d = dict.new()
 
     // set 返回新 dict（函数式），原 dict 复用
     d1 = dict.set(d, "a", 1)
@@ -28,7 +28,7 @@ main = {
     assert.assert(dict.len(d2) == 2, "dict reusable after keys/values")
 
     // merge（两个只读源，返回新 dict）
-    m = dict.merge(dict.set({}, "x", 10), dict.set({}, "y", 20))
+    m = dict.merge(dict.set(dict.new(), "x", 10), dict.set(dict.new(), "y", 20))
     assert.assert(dict.get(m, "x") == 10, "merge x == 10")
     assert.assert(dict.get(m, "y") == 20, "merge y == 20")
 
@@ -43,3 +43,5 @@ main = {
     deleted = dict.delete(d2, "a")
     assert.assert(!dict.has(deleted, "a"), "deleted has no a")
 }
+
+main()

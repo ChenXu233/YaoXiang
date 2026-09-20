@@ -1,16 +1,21 @@
 // fibonacci — 迭代斐波那契数列
 // 测试: 整数运算和循环性能
-// 从 BENCH_INPUT 环境变量读取输入规模，默认 1000
+// 从 BENCH_INPUT 环境变量读取输入规模，默认 90
+//
+// 注：默认值由 1000 下调至 90 —— fib(93) 起超出 i64 范围，而运行时的整数
+// 溢出检查（#281）会将其报为 E6007 而非静默 wrap。基准测的是循环与算术的
+// CPU 成本，不需要超出类型范围的值；90 是 i64 内不溢出的最大项。
+// 基准输入由 bench.yaml 的 inputs 指定时，也应在该范围内取值。
 
 use std.{io, os, string, result}
 
-main = {
+main: () -> Void = {
     n_str = os.get_env("BENCH_INPUT")
     n = if n_str == "" {
-        1000
+        90
     } else {
         parsed = string.parse_int(n_str)
-        result.unwrap_or(parsed, 1000)
+        result.unwrap_or(parsed, 90)
     }
 
     mut total = 0
@@ -28,3 +33,7 @@ main = {
     }
     io.println(total)
 }
+
+// 在入口语义下，顶层 main 绑定本身不构成入口——须显式调用。
+// 缺少此调用会让基准静默空跑（实测读数约 61ms 恒定，与输入规模无关）。
+main()

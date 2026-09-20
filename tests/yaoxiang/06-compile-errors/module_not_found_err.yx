@@ -7,6 +7,6 @@
 
 use nosuch.{thing}
 
-main = {
+main: () -> Void = {
     print(1)
 }

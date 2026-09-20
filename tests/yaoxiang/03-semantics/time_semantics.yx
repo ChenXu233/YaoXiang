@@ -1,0 +1,41 @@
+// 03-semantics/time_semantics.yx
+// 覆盖: #338 / #340——DateTime 别名 + parse_time 的 fmt 驱动解析
+// 状态: ✅ 可运行
+//
+// #338：`DateTime` 是**时间戳的别名**（即 Int），运行时本就是 RuntimeValue::Int。
+//       访问器导出名从 `DateTime::year` 改为 `datetime_year`（`::` 是词法保留记号）。
+// #340：`parse_time(fmt, s)` 的 fmt 此前被忽略，只硬认 ISO 8601；现按 fmt
+//       提取字段，与 format_time 互为逆运算。
+
+use std.{assert, io, time}
+
+main: () -> Void = {
+    // now() 的返回值可直接用于格式化与访问器（#338 连带问题）
+    t = time.now()
+    assert.assert(time.datetime_year(t) >= 2020, "now() flows into accessors")
+    assert.assert(time.format_time(t, "%Y-%m") != "", "now() flows into format_time")
+
+    // fmt 驱动的解析（#340）：非 ISO 形态现在按 fmt 解析
+    ts = time.parse_time("%d/%m/%Y", "15/01/2024")
+    assert.assert(ts == 1705276800, "parse_time honors fmt")
+
+    // 与 format_time 互逆
+    assert.assert(time.format_time(ts, "%Y-%m-%d") == "2024-01-15", "roundtrip")
+
+    // ISO 形态同样按 fmt 解析
+    ts2 = time.parse_time("%Y-%m-%dT%H:%M:%S", "2024-01-15T10:30:00")
+    assert.assert(time.format_time(ts2, "%H:%M:%S") == "10:30:00", "ISO with fmt")
+
+    // epoch 与闰日边界（timestamp_to_datetime 的年份计算）
+    assert.assert(time.format_time(0, "%Y-%m-%d") == "1970-01-01", "epoch")
+    assert.assert(time.format_time(951782400, "%Y-%m-%d") == "2000-02-29", "leap day")
+
+    // 程序性日期（可多跑几处，防年份近似回归）
+    assert.assert(time.format_time(1705276800, "%Y-%m-%d") == "2024-01-15", "2024")
+    assert.assert(time.format_time(1735689600, "%Y-%m-%d") == "2025-01-01", "2025")
+    assert.assert(time.format_time(1583020800, "%Y-%m-%d") == "2020-03-01", "2020")
+
+    io.println("time semantics ok")
+}
+
+main()

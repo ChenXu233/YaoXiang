@@ -1,9 +1,11 @@
 // 测试: spawn 块 return 语义（纯计算，无子任务）
 use std.assert
 
-main = {
+main: () -> Void = {
     result = spawn {
         return 10 + 20
     }
     assert.assert(result == 30)
 }
+
+main()

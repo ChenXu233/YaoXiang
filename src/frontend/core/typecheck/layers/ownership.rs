@@ -552,8 +552,8 @@ pub fn fast_path_check(
                     .any(|(succ, kind)| *succ == cur && *kind == EdgeKind::BackEdge);
 
                 if is_back_edge {
-                    // #312：路径条件取写节点自身条件（RFC-009a 勘误 2026-08-17：
-                    // 判定目标为写节点），与循环头条件做蕴含判定。
+                    // #312：路径条件取**写节点自身**条件（RFC-009a §反向 BFS：
+                    // 判定目标是写节点的路径条件），与循环头条件做蕴含判定。
                     // 任一缺失（无守卫的循环体 / for 循环 / loop）或 SMT 无法证明
                     // 蕴含 → 回边穿越 → 保守拒绝（SMT 是精度层，不是 soundness 依赖）
                     let write_cond = cfg.nodes[write_node].path_condition.as_ref();
@@ -590,7 +590,7 @@ pub fn fast_path_check(
 /// SMT 逻辑切断：判定 `write_path_cond ⇒ !loop_cond`
 ///
 /// 仅在回边 + 双侧路径条件（写节点自身条件 + 循环头条件）齐备时调用。
-/// RFC-009a 勘误（2026-08-17）：SMT 是精度层而非 soundness 依赖——
+/// RFC-009a §证明策略：SMT 是精度层而非 soundness 依赖——
 /// 蕴含无法证明（Sat/Unknown/Z3 不可用）一律返回 false = 回边穿越 = 保守拒绝。
 ///
 /// 构造：目标 `!(path ∧ loop)`，Unsat = 蕴含成立 → 切断。
@@ -1068,6 +1068,35 @@ impl OwnershipChecker {
         }
     }
 
+    /// 实参是否为**类型实参**（而非值）。
+    ///
+    /// 泛型类型构造的参数位（`T: Type`）在语法上接受 `Var` 形态的实参
+    /// （`M(Int, Int)` 的 `Int`），但语义上它们是**类型**，不参与变量的
+    /// Move/借用分析。若当值处理，同一类型名出现两次即被线性类型账本判为
+    /// 「'Int' has been moved」（E2014）。
+    ///
+    /// 判定：以 `Expr::Var` 形态出现，且名字命中内建类型名、已注册的泛型类型
+    /// 定义、或已注册的类型定义（两者都只在类型位置立名，不会同时是值变量）。
+    /// 类型参数名（`T`/`R` 等）同样命中：它们由泛型声明引入，不在值作用域。
+    fn is_type_argument(
+        &self,
+        expr: &Expr,
+    ) -> bool {
+        let Expr::Var(name, _) = expr else {
+            return false;
+        };
+        // 内建类型名（Int/Float/Bool/String/...）
+        if crate::frontend::core::types::MonoType::from_builtin_name(name).is_some() {
+            return true;
+        }
+        // 已注册的类型定义 / 泛型类型定义（含泛型类型参数名经类型位置引入的情形）
+        let Some(env_ptr) = self.env else {
+            return false;
+        };
+        let env = unsafe { &*env_ptr };
+        env.types.contains_key(name) || env.generic_type_defs.contains_key(name)
+    }
+
     /// 从 TypeEnvironment 查询函数参数的所有权语义
     fn lookup_param_types(
         &self,
@@ -1291,6 +1320,13 @@ impl OwnershipChecker {
             }
             // #302：Range 是不可变三标量记录（运行时内联值），值语义
             m if m.is_range() => CopySemantics::ValueCopy,
+            // #352：函数是不可变**代码**，不是运行时资源——物化成闭包值后
+            // 使用它只是在拷贝一个代码指针，不消耗任何所有权。
+            //
+            // 此前落 `_ => Move`，于是 `h = double` 消耗了 `double`，
+            // 之后 `double(6)` 报 E2014——把函数当成 Linear（一次性）类型，
+            // 与「函数可任意次调用」的直觉和高阶编程直接冲突。
+            MonoType::Fn { .. } => CopySemantics::Dup,
             _ => CopySemantics::Move,
         }
     }
@@ -1981,6 +2017,13 @@ impl OwnershipChecker {
                 };
                 // 处理显式参数
                 for (i, arg) in args.iter().enumerate() {
+                    // 类型实参不是值：`M(Int, Int)` 里的 `Int` 是类型名而非变量引用，
+                    // 不参与 Move/借用分析。若当值走，同一类型名出现两次即报
+                    // E2014「'Int' has been moved」（#361）——泛型构造实参位
+                    // （`T: Type`）接受的实参在语法上是 Var 形态，但语义上是类型。
+                    if self.is_type_argument(arg) {
+                        continue;
+                    }
                     let ownership = param_types.get(i).unwrap_or(&ParamOwnership::Move);
                     let is_write_borrow = matches!(ownership, ParamOwnership::WriteBorrow);
                     // #312：WriteBorrow 实参遍历期间压制消费者注册——Var 臂的

@@ -1,0 +1,282 @@
+// std/list.yx — 纯 YaoXiang 标准库：可增长列表（RFC-011 容器命名分层）
+//
+// 这是「容器归库」的落地：`List(T)` 不再是编译器特权类型，而是本文件里
+// 用语言自身定义的泛型记录，与用户自定义泛型同等待遇（SPEC type-system.md §4.1.1）。
+//
+// 底座：`Vec(T)` —— 运行时长度的原始缓冲（核心原语），提供
+// 「能分配、能取长、能读写、能扩容」四件事；容量策略、增长因子全部由本文件决定。
+//
+// ## 值语义约定（RFC-009 / RFC-036 §3）
+//
+// - `push` / `append` / `prepend` / `set` 按值接收，返回**新列表**；源列表被消费。
+// - `pop` / `remove_at` 按值接收并返回**缩短后的新列表**（值语义，D9-A）。
+//   native 版声明 `&List` 却原地改写调用方的列表（RFC-009 §2.5 空洞，见 D9），
+//   值语义消除该别名副作用；被移除的元素不再另行返回（要读它先取下标）。
+// - `len` / `get` / `first` / `last` / `contains` / `find_index` / `reverse` /
+//   `slice` / `concat` / `map` / `filter` / `reduce` 只读借用（RFC-009 §2.8
+//   自动借用：实参后续仍有使用 → 调用端自动创建 `&T` 令牌），源列表可反复使用。
+//
+// 构建时经 include_str! 嵌入二进制（见 src/std/yx_sources.rs），
+// 运行时以虚拟路径作种子模块注入 orchestrator。
+
+// ── 内部构造辅助 ──────────────────────────────────────────
+
+/// 空列表（长度 0）。等价于字面量 `[]`，保留为具名入口便于泛型上下文使用。
+pub empty: (T: Type) -> Vec(T) = {
+    seed: Vec(T) = []
+    return seed
+}
+
+/// 恒等转换：`Vec(T)` 即列表，保留此名以兼容「先构造再填充」的写法。
+pub of: (T: Type) -> (data: Vec(T)) -> Vec(T) = {
+    return data
+}
+
+// ── 拷贝与增长 ────────────────────────────────────────────
+
+/// 追加元素，返回新列表。均摊 O(1)：直接在缓冲末尾写入（`Vec` 增长留空隙）。
+pub push: (A: Type) -> (list: Vec(A), item: A) -> Vec(A) = {
+    list[list.length] = item
+    return list
+}
+
+/// `push` 的别名。
+pub append: (A: Type) -> (list: Vec(A), item: A) -> Vec(A) = {
+    list[list.length] = item
+    return list
+}
+
+/// 头部插入，返回新列表。O(n)：搬移全部元素。
+pub prepend: (A: Type) -> (list: Vec(A), item: A) -> Vec(A) = {
+    seed: Vec(A) = []
+    mut out: Vec(A) = seed
+    out[0] = item
+    out.length = 1
+    mut i = 0
+    while i < list.length {
+        out[out.length] = list[i]
+        i = i + 1
+    }
+    return out
+}
+
+// ── 只读访问 ──────────────────────────────────────────────
+
+/// 元素个数。
+pub len: (A: Type) -> (list: &Vec(A)) -> Int = {
+    return list.length
+}
+
+/// 是否为空。
+pub is_empty: (A: Type) -> (list: &Vec(A)) -> Bool = {
+    return list.length == 0
+}
+
+/// 下标取元素（越界由 `[]` 的 `E6003` 契约负责）。
+pub get: (A: Type) -> (list: &Vec(A), index: Int) -> A = {
+    return list[index]
+}
+
+/// 首个元素；空列表返回该类型的零值。
+pub first: (A: Type) -> (list: &Vec(A)) -> A = {
+    if list.length == 0 {
+        seed: Vec(A) = []
+        zero: Vec(A) = seed
+        return zero[0]
+    }
+    return list[0]
+}
+
+/// 末个元素；空列表返回该类型的零值。
+pub last: (A: Type) -> (list: &Vec(A)) -> A = {
+    if list.length == 0 {
+        seed: Vec(A) = []
+        zero: Vec(A) = seed
+        return zero[0]
+    }
+    return list[list.length - 1]
+}
+
+/// 是否包含指定元素（线性扫描）。
+pub contains: (A: Type) -> (list: &Vec(A), item: A) -> Bool = {
+    mut i = 0
+    while i < list.length {
+        if list[i] == item {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// 查找元素下标；未找到返回 -1。
+pub find_index: (A: Type) -> (list: &Vec(A), item: A) -> Int = {
+    mut i = 0
+    while i < list.length {
+        if list[i] == item {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// ── 改写 ──────────────────────────────────────────────────
+
+/// 把下标 `index` 改写为 `value`，返回新列表。越界报 `E6003`。
+pub set: (A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A) = {
+    list[index] = value
+    return list
+}
+
+/// 移除并返回末个元素：`{ list: 剩余, item: 被移除 }`。
+/// 移除并返回末个元素，返回新列表（值语义，D9-A）。
+///
+/// 与 native 版的区别：native 声明 `&List(A)` 却**原地**缩短调用方的列表
+/// （RFC-009 §2.5 空洞，见 D9）。值语义返回新列表，源被消费，无别名副作用。
+pub pop: (A: Type) -> (list: Vec(A)) -> Vec(A) = {
+    // 空列表原样返回：`length = -1` 会被 SetField 的范围校验拒绝（E6007）。
+    if list.length == 0 {
+        return list
+    } else {
+        list.length = list.length - 1
+        return list
+    }
+}
+
+/// 移除下标 `index` 处元素，后移其余，返回新列表。O(n)。
+pub remove_at: (A: Type) -> (list: Vec(A), index: Int) -> Vec(A) = {
+    // 上界先提到局部变量：终止证明的秩函数合成只处理 `i < 简单名` 形态，
+    // 复合上界（`i + 1 < list.length`）目前推不出递减度量。
+    limit = list.length - 1
+    mut i = index
+    while i < limit {
+        list[i] = list[i + 1]
+        i = i + 1
+    }
+    list.length = list.length - 1
+    return list
+}
+
+// ── 整体变换 ──────────────────────────────────────────────
+
+/// 反转，返回新列表。
+pub reverse: (A: Type) -> (list: &Vec(A)) -> Vec(A) = {
+    seed: Vec(A) = []
+    mut out: Vec(A) = seed
+    mut i = 0
+    while i < list.length {
+        out[out.length] = list[list.length - 1 - i]
+        i = i + 1
+    }
+    return out
+}
+
+/// 拼接两个列表，返回新列表。
+pub concat: (A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A) = {
+    seed: Vec(A) = []
+    mut out: Vec(A) = seed
+    mut i = 0
+    while i < a.length {
+        out[out.length] = a[i]
+        i = i + 1
+    }
+    mut j = 0
+    while j < b.length {
+        out[out.length] = b[j]
+        j = j + 1
+    }
+    return out
+}
+
+/// 切片 `[start, end)`，返回新列表。
+pub slice: (A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A) = {
+    seed: Vec(A) = []
+    mut out: Vec(A) = seed
+    mut i = start
+    while i < end {
+        out[out.length] = list[i]
+        i = i + 1
+    }
+    return out
+}
+
+// ── 高阶函数 ──────────────────────────────────────────────
+
+/// 逐元素映射，返回等长新列表。
+pub map: (T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R) = {
+    seed: Vec(R) = []
+    mut out: Vec(R) = seed
+    mut i = 0
+    while i < list.length {
+        out[out.length] = f(list[i])
+        i = i + 1
+    }
+    return out
+}
+
+/// 保留满足谓词的元素，返回新列表。
+pub filter: (T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T) = {
+    seed: Vec(T) = []
+    mut out: Vec(T) = seed
+    mut i = 0
+    while i < list.length {
+        // 谓词按值消费一份、结果里放另一份：从源列表读两次，
+        // 避免同一个值既被谓词消费又要写入结果（值语义下会 E2014）。
+        if keep(list[i]) {
+            out[out.length] = list[i]
+        }
+        i = i + 1
+    }
+    return out
+}
+
+/// 左折叠：`acc = f(acc, item)`，返回终值。
+///
+/// `f` 按值接收累加器与元素，返回新的累加器（值语义，D9-A）：
+/// 每轮把当前累加器交给 `f`，用返回值作为下一轮的累加器。
+pub reduce: (T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc = {
+    mut acc = init
+    mut i = 0
+    while i < list.length {
+        // `f` 按值消费当前累加器并产出新的——把「消费」与「重绑定」分开写，
+        // 避免 `acc = f(acc, ..)` 里同一变量既作实参又作赋值目标（E2014）。
+        next = f(acc, list[i])
+        acc = next
+        i = i + 1
+    }
+    return acc
+}
+
+/// 迭代器状态：缓冲 + 当前下标。
+///
+/// 用具名字段（而非 `(Vec(T), Int)` 元组）是**必需**的：`for x in list` 的脱糖
+/// 只把 `next(it)` 的**返回值**当元素用，迭代器本身靠**原地推进**——
+/// 元组不可变，`next` 无法把下标写回，会导致 `has_next` 恒真而死循环。
+pub Iter: (T: Type) -> Type = {
+    buf: Vec(T),
+    pos: Int,
+}
+
+/// 构造迭代器。
+pub iter: (T: Type) -> (list: Vec(T)) -> Iter(T) = {
+    return Iter(list, 0)
+}
+
+/// 迭代器是否还有下一个元素。
+pub has_next: (T: Type) -> (it: &Iter(T)) -> Bool = {
+    // 先取出字段到局部量：IR 期对「深层字段访问」的字段索引解析只认
+    // 直接可见类型的表达式（`it.buf.length` 解析不出 `length` 的索引）。
+    buf: Vec(T) = it.buf
+    return it.pos < buf.length
+}
+
+/// 取下一个元素并**原地推进**迭代器。
+///
+/// 前置条件：`has_next(it)` 为真（调用方先判空再取，与 native `next` 同约定）。
+/// 越界读取由 `Vec` 的边界检查兜住并报 E6003，不做静默返回 0（#279 同类）。
+pub next: (T: Type) -> (it: &mut Iter(T)) -> T = {
+    item = it.buf[it.pos]
+    it.pos = it.pos + 1
+    return item
+}

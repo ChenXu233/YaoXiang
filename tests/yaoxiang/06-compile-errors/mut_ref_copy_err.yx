@@ -8,7 +8,7 @@ use std.io
 
 Point: Type = { x: Int, y: Int }
 
-main = {
+main: () -> Void = {
     mut p = Point(1, 2)
     m = &mut p
     m2 = m              // ❌ &mut 不是 Dup，不能复制

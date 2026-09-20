@@ -270,6 +270,18 @@ macro_rules! tlog {
 /// Get current language for src/util/i18n messages
 /// Priority: YAOXIANG_LANG env > local-lang > lang > fallback
 pub fn current_lang() -> &'static str {
+    // 语言解析含 env::var 与多次哈希查询，而调用点遍布日志/诊断等路径。
+    // 缓存首次解析结果；set_lang_from_string 负责失效。
+    if let Some(lang) = cached_lang() {
+        return lang;
+    }
+    let lang = resolve_current_lang();
+    store_cached_lang(lang);
+    lang
+}
+
+/// `current_lang` 的未缓存实现
+fn resolve_current_lang() -> &'static str {
     // 1. Check YAOXIANG_LANG environment variable (highest priority)
     if let Ok(env_lang) = std::env::var("YAOXIANG_LANG") {
         if TRANSLATIONS.contains_key(&env_lang) {
@@ -347,6 +359,31 @@ pub fn error_lang() -> &'static str {
 /// Set current language via environment variable
 pub fn set_lang_from_string(lang: String) {
     std::env::set_var("YAOXIANG_LANG", lang);
+    invalidate_lang_cache();
+}
+
+/// `current_lang` 的解析结果缓存。
+///
+/// 用 `Mutex` 而非 `AtomicPtr`：缓存值是 `&'static str`（胖指针，
+/// `AtomicPtr` 不支持 unsized 类型）。本函数位于诊断/日志路径而非
+/// 执行热路径，无竞争时一次锁约 20ns，远低于重新解析（env::var + 哈希查询）。
+static LANG_CACHE: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
+
+/// 读取缓存的当前语言；未缓存返回 `None`
+fn cached_lang() -> Option<&'static str> {
+    *LANG_CACHE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// 写入缓存
+fn store_cached_lang(lang: &'static str) {
+    let mut guard = LANG_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    *guard = Some(lang);
+}
+
+/// 失效缓存（语言切换后调用）
+fn invalidate_lang_cache() {
+    let mut guard = LANG_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    *guard = None;
 }
 
 /// Message IDs for compiler logs and errors
@@ -425,9 +462,11 @@ pub enum MSG {
     BytecodeFuncParams,
     BytecodeFuncReturnType,
     BytecodeFuncLocalCount,
+    BytecodeFuncLocalNames,
     BytecodeFuncInstrCount,
     BytecodeFuncCode,
     BytecodeInstrIndex,
+    BytecodeInstrSpan,
     BytecodeUnknownOpcode,
 
     // Debug messages
@@ -515,9 +554,11 @@ impl MSG {
             MSG::BytecodeFuncParams => "bytecode_func_params",
             MSG::BytecodeFuncReturnType => "bytecode_func_return_type",
             MSG::BytecodeFuncLocalCount => "bytecode_func_local_count",
+            MSG::BytecodeFuncLocalNames => "bytecode_func_local_names",
             MSG::BytecodeFuncInstrCount => "bytecode_func_instr_count",
             MSG::BytecodeFuncCode => "bytecode_func_code",
             MSG::BytecodeInstrIndex => "bytecode_instr_index",
+            MSG::BytecodeInstrSpan => "bytecode_instr_span",
             MSG::BytecodeUnknownOpcode => "bytecode_unknown_opcode",
 
             // REPL and Shell messages

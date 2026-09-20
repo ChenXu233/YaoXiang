@@ -5,9 +5,9 @@ author: 'Chenxu'
 created: '2026-06-15'
 updated: '2026-07-14'
 decision:
-  'assert and Assert are two sides of the same coin, automatically dispatched by dispatch. All 6
-  Phases implemented (#157-#162 closed). Unified registration in std.assert module (#169 closed),
-  assert native function + Assert/IsTrue type family on the same path.'
+  'assert and Assert are two sides of the same coin; dispatch routes automatically. All 6 Phases
+  implemented (#157–#162 closed). The std.assert module is registered uniformly (#169 closed); the
+  assert native function and the Assert/IsTrue type family share the same path.'
 issue: '#97'
 issues_impl:
   - '#155'
@@ -24,11 +24,11 @@ issues_impl:
 
 ## Summary
 
-Introduce the `assert` mechanism for YaoXiang, used for testing, precondition checks, and runtime
-panic. `assert` and the compile-time refined type `Assert(C)` (see RFC-011 §4.3) are **two sides of
-the same refinement primitive**—automatically dispatched by dispatch to either compile-time proof or
-runtime check based on "whether the predicate's free variables are available at compile time."
-`assert(false, "msg")` is equivalent to `raise`, and no separate `throw`/`raise` keyword is needed.
+This RFC introduces the `assert` mechanism for YaoXiang, used for testing, precondition checks, and
+runtime panics. `assert` and the compile-time refinement type `Assert(C)` (see RFC-011 §4.3) are
+**two sides of the same refinement primitive**—dispatch automatically routes to compile-time proof
+or runtime check based on whether the predicate's free variables are reachable at compile time.
+`assert(false, "msg")` is equivalent to `raise`; no separate `throw`/`raise` keyword is required.
 
 ## Motivation
 
@@ -44,97 +44,96 @@ if val != 42 {
 }
 ```
 
-This approach has three problems:
+This style has three problems:
 
-1. **Boilerplate-heavy**: Each assertion requires 4 lines, bloating test files
-2. **Weak error messages**: Manual string concatenation, missing source location
-3. **Not composable**: Cannot register assertions in bulk, cannot pass as arguments to test
-   frameworks
+1. **Excessive boilerplate**: every assertion requires 4 lines, bloating test files
+2. **Weak error messages**: manual string concatenation, lacking source location
+3. **Not composable**: cannot batch-register assertions, cannot be passed as arguments to a test
+   framework
 
-### Current problems
+### Current Problems
 
 - No unified assertion mechanism
-- Test code is flooded with `if` + print + `return` patterns
-- The `Throw` instruction already exists at the bytecode level but is not exposed at the language
-  level
-- RFC-011 defines the compile-time `Assert(C)` conditional type, but runtime `assert()` is not yet
-  implemented
+- Test code is cluttered with the `if` + print + `return` pattern
+- The bytecode layer already has a `Throw` instruction, but it is not exposed at the language level
+- RFC-011 defines the compile-time `Assert(C)` conditional type, but runtime `assert()` has not yet
+  been implemented
 
-### Design principles
+### Design Principles
 
-`assert` is YaoXiang's only user-facing panic mechanism. `assert(false, "msg")` is equivalent to
-`raise`, and no separate `throw`/`raise` keyword is needed. The `assert` function itself is the best
+`assert` is the only user-space panic mechanism in YaoXiang. `assert(false, "msg")` is equivalent to
+`raise`; no separate `throw`/`raise` keyword is required. The `assert` function itself is the best
 encapsulation of `if raise`.
 
 **No new keywords, no new syntax. Everything is a function call.**
 
-## Approach A: native function
+## Option A: Native Function
 
-Implement `assert` as a native function, introducing no new keywords.
+Implement `assert` as a native function, with no new keywords introduced.
 
 ```yaoxiang
 use std.assert.assert
 
-main = {
+main: () -> Void = {
     assert(1 + 1 == 2, "math is broken")
     assert(get_name() == "YaoXiang", "name mismatch")
 }
 ```
 
-### Overload signatures
+### Overload Signatures
 
 `assert` has two overloads:
 
 ```
-// Core signature: assert is the value-universe introducer of Assert
+// 核心签名：assert 是 Assert 的值宇宙引入子
 assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
 //                                       ^^^^^^^^^^^^^^^^^^^^^^^^
-//                                       Returns a refined type, not ()
+//                                       返回精化类型，不是 ()
 //
-// IsTrue: Bool -> Type is the bridge from truth value to type:
-//   IsTrue(true)  = Void   (⊤, program continues)
-//   IsTrue(false) = Never  (⊥, divergent/compile error)
+// IsTrue: Bool -> Type 是真值到类型的桥：
+//   IsTrue(true)  = Void   (⊤，程序继续)
+//   IsTrue(false) = Never  (⊥，发散/编译错误)
 ```
 
-The actual behavior of `assert` is determined by dispatch:
+The actual behavior of `assert` is determined by dispatch routing:
 
-- All free variables known at compile time → **CompileTime**: compiler evaluates cond, true → erased
-  to Void, false → compile error (Never uninhabitable)
-- Runtime free variables exist → **Runtime**: insert check, inject refined facts into the
+- All free variables compile-time known → **CompileTime**: the compiler evaluates `cond`; `true` →
+  erased to `Void`, `false` → compile error (Never cannot be inhabited)
+- Runtime free variables present → **Runtime**: insert a check, inject refinement facts into the
   flow-sensitive assumption set Γ
 
-The optional message `?msg` and the Result overload (see below) are preserved as runtime raise
+The optional message `?msg` and Result overloads (see below) are preserved as runtime raise
 payloads.
 
-#### Overload 1: Conditional assertion `(Bool, ?String | Error)`
+#### Overload 1: Conditional Assertion `(Bool, ?String | Error)`
 
 `Bool` + optional message. The message can be a `String` or an `Error` value:
 
 ```yaoxiang
-assert(1 + 1 == 2)                    // No message, default panic info
-assert(1 + 1 == 2, "math is broken")   // String message
-assert(x > 0, my_error)                // Throw an Error value directly
+assert(1 + 1 == 2)                    // 无消息，默认 panic 信息
+assert(1 + 1 == 2, "math is broken")   // 字符串消息
+assert(x > 0, my_error)                // 直接抛 Error 值
 ```
 
-`assert(false, "msg")` is YaoXiang's `raise`/`throw` equivalent—no separate keyword needed.
+`assert(false, "msg")` is YaoXiang's `raise`/`throw` equivalent—no separate keyword is needed.
 
-#### Overload 2: Result assertion `(Result)`
+#### Overload 2: Result Assertion `(Result)`
 
-A single `Result` parameter, automatically checking for `Err`:
+A single `Result` parameter, automatically checking if it is `Err`:
 
 ### Advantages
 
-- **Zero syntax change**: Pure function, no new keywords needed
-- **Zero new concepts**: Reuses existing native function registration mechanism
-- **High extensibility**: Function overloading naturally supports multiple signatures
-- **Self-documenting**: The `std.assert` namespace is documentation in itself
+- **Zero syntax changes**: pure function, no new keywords needed
+- **Zero new concepts**: reuses the existing native function registration mechanism
+- **High extensibility**: function overloading naturally supports multiple signatures
+- **Self-documenting**: the `std.assert` namespace itself is documentation
 
 ### Disadvantages
 
-- None. When assert's type signature is correct, the compiler can infer dead code through function
-  reachability analysis. No additional pass needed.
+- None. When assert's type signature is correct, the compiler can infer dead code via function
+  reachability analysis. No additional pass is needed.
 
-### Runtime behavior
+### Runtime Behavior
 
 1. Evaluate the first argument `condition: Bool`
 2. If `true`, return `Unit`
@@ -143,205 +142,205 @@ A single `Result` parameter, automatically checking for `Err`:
    - Output the call stack (in debug mode)
    - Terminate the current execution
 
-#### Failure behavior for each overload
+#### Failure Behavior of Each Overload
 
-| Signature                  | Behavior on failure              |
+| Signature                  | Failure Behavior                 |
 | -------------------------- | -------------------------------- |
 | `assert(false)`            | Default panic message            |
 | `assert(false, "msg")`     | Output string message then panic |
-| `assert(false, error_val)` | Throw the Error value            |
-| `assert(Err(x))`           | Extract Err contents and panic   |
+| `assert(false, error_val)` | Throw Error value                |
+| `assert(Err(x))`           | Extract Err content and panic    |
 
-### Relationship with compile-time Assert
+### Relationship with Compile-Time Assert
 
 `assert` and `Assert` are **two sides of the same refinement primitive**—automatically selected by
-the dispatch pipeline based on "whether the predicate's free variables are available at compile
-time":
+the dispatch routing pipeline based on whether the predicate's free variables are reachable at
+compile time:
 
-| Condition                                | Dispatch                     | Behavior                                                               |
-| ---------------------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
-| All free variables known at compile time | CompileTime → proof pipeline | Proved → erased, Disproved → compile error, Unknown → proof required   |
-| Runtime free variables exist             | Runtime → insert check       | Bool check + inject refined facts into flow-sensitive assumption set Γ |
+| Condition                             | Routing                      | Behavior                                                                      |
+| ------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------- |
+| All free variables compile-time known | CompileTime → proof pipeline | Proved → erased; Disproved → compile error; Unknown → requires proof          |
+| Runtime free variables exist          | Runtime → insert check       | Bool check + inject refinement facts into the flow-sensitive assumption set Γ |
 
 ```yaoxiang
 use std.assert
 
-# Known at compile time (generic parameter) — goes to CompileTime, zero runtime overhead
+# 编译期已知（泛型参数）—— 走 CompileTime，零运行时开销
 Array: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
-    length: assert.Assert(N > 0),   # N is a generic parameter, evaluated at compile time
+    length: assert.Assert(N > 0),   # N 是泛型参数，编译期求值
 }
 
-# Runtime value — goes to Runtime, inserts Bool check
+# 运行时值 —— 走 Runtime，插入 Bool 检查
 x = read_int()
-assert.assert(x > 0, "expected positive")  # Runtime check
+assert.assert(x > 0, "expected positive")  # 运行时 check
 ```
 
-> **2026-07-12 Unified plan**: The previous "completely independent" conclusion has been superseded.
-> `assert()` is the value introducer of `Assert`, automatically dispatched by dispatch.
+> **2026-07-12 Unified Approach**: The earlier "fully independent" conclusion is now superseded.
+> `assert()` is the value-level introducer of `Assert`; dispatch routes automatically.
 
-### Compiler changes
+### Compiler Changes
 
-**No changes to parser, AST, typecheck, or IR gen are needed.**
+**No changes needed to parser, AST, typecheck, or IR gen.**
 
 Only native function registration needs to be added under `src/std/`:
 
 1. Add `src/std/assert.rs`
-2. Register `std.assert.assert` and `std.assert.Assert` (the latter is the compile-time conditional
+2. Register `std.assert.assert` and `std.assert.Assert` (the latter is a compile-time conditional
    type)
 3. Internally call the existing `BytecodeInstr::Throw` instruction
 
 ### Advantages
 
-- **Zero syntax change**: Pure function, no new keywords needed
-- **Zero new concepts**: Reuses existing native function registration mechanism
-- **High extensibility**: Function signatures can be extended to variants like `assert_eq` (future)
-- **Self-documenting**: The `std.assert` namespace is documentation in itself
+- **Zero syntax changes**: pure function, no new keywords needed
+- **Zero new concepts**: reuses the existing native function registration mechanism
+- **High extensibility**: function signatures can be extended to variants like `assert_eq` (future)
+- **Self-documenting**: the `std.assert` namespace itself is documentation
 
 ### Disadvantages
 
-- ~~Not known at compile time: unlike Approach B (keyword), cannot perform dead code elimination at
-  compile time~~ → **No longer holds under the unified plan**. CompileTime-mode assert goes through
-  the proof pipeline; compile-time-known cond → erased or compile error (`assert(false)` → Never →
-  dead code).
-- Call stack is only available in debug mode
+- ~~Compile-time opaque: unlike Option B (keyword), cannot perform compile-time dead code
+  elimination~~ → **No longer holds under the unified approach**. CompileTime-mode `assert` goes
+  through the proof pipeline; compile-time-known `cond` → erased or compile error (`assert(false)` →
+  Never → dead code).
+- The call stack is only available in debug mode
 
-## Approach B: Built-in keyword (superseded by the unified plan)
+## Option B: Built-in Keyword (Superseded by Unified Approach)
 
-> Deprecated. The opposition between Approaches A and B is dissolved by the dispatch pipeline—assert
-> is the value introducer of Assert; compile-time-known predicates go through the proof pipeline
-> (zero runtime overhead), runtime predicates go through check. There is no need to choose between
-> "function" and "keyword." The following is historical record.
+> Deprecated. The opposition between Options A and B is dissolved by the dispatch routing
+> pipeline—`assert` is the value-level introducer of `Assert`; compile-time known goes through the
+> proof pipeline (zero runtime overhead), runtime goes through check. No need to choose between
+> "function" and "keyword". The following is for historical reference.
 
 ```yaoxiang
 assert(1 + 1 == 2, "math is broken")
 ```
 
-### Type signature
+### Type Signature
 
 No independent type signature—the keyword is handled by the parser.
 
-### Runtime behavior
+### Runtime Behavior
 
-Same as Approach A.
+Same as Option A.
 
-### Compiler changes
+### Compiler Changes
 
-Parser, AST, typecheck, and IR gen need to be modified:
+Need to modify parser, AST, typecheck, and IR gen:
 
-1. Parser: add new `Expr::Assert` variant
-2. AST: add new `Expr::Assert` node
-3. Typecheck: validate argument types
-4. IR gen: generate `BytecodeInstr::Throw`
+1. parser: add `Expr::Assert` variant
+2. AST: add `Expr::Assert` node
+3. typecheck: validate argument types
+4. IR gen: emit `BytecodeInstr::Throw`
 
 ### Advantages
 
-- Source location is known at compile time (no dependency on debug info)
+- Source location is known at compile time (does not depend on debug info)
 - Compile-time constant folding is possible: `assert(true)` → no-op, `assert(false)` → compile error
 
 ### Disadvantages
 
-| Disadvantage                          | Impact                                                 |
-| ------------------------------------- | ------------------------------------------------------ |
-| Requires parser changes               | Introduces new syntax node, increases maintenance cost |
-| Keywords are not extensible           | Variants like `assert_eq` still need functions         |
-| Compile-time advantage is impractical | See analysis below                                     |
+| Disadvantage                            | Impact                                                   |
+| --------------------------------------- | -------------------------------------------------------- |
+| Requires parser changes                 | Introduces new syntax nodes, increasing maintenance cost |
+| Keyword is not extensible               | Variants like `assert_eq` still require functions        |
+| Compile-time advantages are theoretical | See analysis below                                       |
 
 ### Comparison
 
-| Dimension           | Approach A (function) | Approach B (keyword)              |
-| ------------------- | --------------------- | --------------------------------- |
-| Implementation cost | ~20 lines             | parser + AST + typecheck + IR gen |
-| Syntax change       | None                  | New keyword                       |
-| Extensibility       | Function overloading  | Requires companion macros         |
-| Source location     | debug info            | Compile-time available            |
-| Constant folding    | Requires pass support | Compile-time available            |
-| Runtime overhead    | Function call         | Minimal                           |
+| Dimension           | Option A (Function)  | Option B (Keyword)                |
+| ------------------- | -------------------- | --------------------------------- |
+| Implementation cost | ~20 lines            | parser + AST + typecheck + IR gen |
+| Syntax change       | None                 | New keyword                       |
+| Extensibility       | Function overloading | Requires companion macros         |
+| Source location     | debug info           | Compile-time known                |
+| Constant folding    | Requires a pass      | Compile-time known                |
+| Runtime overhead    | Function call        | Minimal                           |
 
-### Realistic constraints of compile-time analysis
+### Practical Constraints of Compile-Time Analysis
 
-The core advantage of Approach B—compile-time analysis—requires a **constant folding pass** to take
-effect. That is, the compiler needs to evaluate `false` in `assert(false)` at compile time to know
-it's dead code.
+Option B's core advantage—compile-time analysis—requires a **constant folding pass** to take effect.
+That is, the compiler must evaluate `false` in `assert(false)` at compile time in order to recognize
+it as dead code.
 
-YaoXiang currently has no constant folding pass. Even with Approach B, common patterns like
+YaoXiang currently has no constant folding pass. Even with Option B, common patterns like
 `assert(x > 0)` still cannot be analyzed at compile time. Only literals like `assert(true)` /
 `assert(false)` can be analyzed.
 
-Therefore, the compile-time advantage of Approach B is **theoretical at the current stage, not
+Therefore, Option B's compile-time advantages **are theoretical at the current stage, not
 practical**.
 
 ---
 
-## Open questions
+## Open Questions
 
-- [x] ~~Choose Approach A or Approach B?~~ → **Unified plan: assert is the value introducer of
-      Assert**. The opposition between A and B is dissolved by the dispatch
-      pipeline—compile-time-known predicates go through the proof pipeline, runtime predicates go
-      through check. No need to "pick one."
-- [x] ~~Does `assert` need to support a simplified form `assert(cond)` without `message`?~~ → **Yes.
-      `assert(cond, ?msg)`, message is optional.**
-- [x] ~~Are variants like `assert_eq`, `assert_ne` needed?~~ → **No. YAGNI. Wait until the test
-      framework takes shape.**
-- [x] ~~Does panic output include source location?~~ → Approach A depends on debug info (call
-      stack).
-- [x] ~~assert / Assert unification issue~~ → **Determined**. Unified plan:
-      `assert: (Bool) -> Assert(IsTrue(cond))`, two sides of the same coin, automatically dispatched
-      by dispatch. The `Never` type (⊥) is built in as the return type of `assert(false)`.
+- [x] ~~Choose Option A or Option B?~~ → **Unified approach: `assert` is the value-level introducer
+      of `Assert`**. The opposition between Options A and B is dissolved by the dispatch routing
+      pipeline—compile-time known goes through the proof pipeline, runtime goes through check. No
+      "either/or" is needed.
+- [x] ~~Does `assert` need to support the simplified form `assert(cond)` without `message`?~~ →
+      **Supported. `assert(cond, ?msg)`, message is optional.**
+- [x] ~~Are variants like `assert_eq`, `assert_ne` needed?~~ → **Not needed. YAGNI. Wait until the
+      test framework matures.**
+- [x] ~~Does panic output include source location?~~ → Option A depends on debug info (call stack).
+- [x] ~~assert / Assert unification~~ → **Determined**. Unified approach:
+      `assert: (Bool) -> Assert(IsTrue(cond))`, two sides of the same coin, dispatch routes
+      automatically. The `Never` type (⊥) is built in as the return type of `assert(false)`.
 
-### 2026-07-05: Choose Approach A (superseded by the unified plan)
+### 2026-07-05: Option A Selected (Superseded by Unified Approach)
 
-The 20-line implementation of Approach A wins in value and cost. After the unified plan was
-determined on 2026-07-12, the opposition between A and B is dissolved by the dispatch
-pipeline—assert is the value introducer of Assert, no longer a choice between "function" and
-"keyword."
+Option A's 20-line implementation wins on the value-vs-cost tradeoff. After the unified approach was
+determined on 2026-07-12, the opposition between Options A and B is dissolved by the dispatch
+routing pipeline—`assert` is the value-level introducer of `Assert`; no longer an "either/or"
+between "function" and "keyword".
 
-### 2026-07-12: Unified plan determined (supersedes the 2026-07-11 "completely independent" conclusion)
+### 2026-07-12: Unified Approach Determined (Supersedes the 2026-07-11 "Fully Independent" Conclusion)
 
 **Conclusion**: `assert` and `Assert` are not two independent mechanisms.
-`assert: (Bool) -> Assert(IsTrue(cond))`—automatically dispatched by dispatch:
+`assert: (Bool) -> Assert(IsTrue(cond))`—dispatch routes automatically:
 
-- Compile-time known → enters proof pipeline (Proved erased / Disproved error / Unknown needs proof)
-- Runtime input → inserts check + injects Γ assumption
+- Compile-time known → enters the proof pipeline (Proved erased / Disproved error / Unknown requires
+  proof)
+- Runtime input → insert check + inject Γ assumption
 
 **Module structure**: `std.assert` uniformly hosts runtime assertions (`assert`) and compile-time
-refined types (`Assert`, `IsTrue`). No longer "implemented separately," but two sides of the same
+refinement types (`Assert`, `IsTrue`). No longer "implemented separately", but two sides of the same
 primitive.
 
-### 2026-07-11: assert overload design
+### 2026-07-11: assert Overload Design
 
-**Question**: Why does `assert` need two overloads, instead of a unified `(Bool, ?String)`?
+**Question**: Why does `assert` need two overloads instead of a unified `(Bool, ?String)`?
 
 **Answer**:
 
-Runtime `assert()` is YaoXiang's only user-facing panic mechanism. `assert(false, "msg")` is
-equivalent to `raise`/`throw` in other languages. So it needs to cover three scenarios:
+Runtime `assert()` is the only user-space panic mechanism in YaoXiang. `assert(false, "msg")` is
+equivalent to `raise`/`throw` in other languages. Therefore, it needs to cover three scenarios:
 
 1. Condition + simple message: `assert(cond, "msg")`
 2. Condition + custom Error: `assert(cond, my_error)`
 3. Result check: `assert(result)` — the most concise `if is_err { panic }`
 
-The justification for the Result overload is: this is the shortest path for error
-propagation—"Result should be Ok, or else die." No need to call `.is_ok()` first and then handle the
-error separately.
+The rationale for the Result overload is: this is the shortest path for error propagation—"Result
+should be Ok, otherwise die". There is no need to first call `.is_ok()` and then handle the error
+separately.
 
-## Appendix B: Design decision record
+## Appendix B: Design Decision Record
 
-| Decision                                         | Determination                                                                                                  | Date       | Recorder |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
-| Choose Approach A or Approach B                  | **Unified plan**: dispatch pipeline dissolves A/B opposition, assert is the value introducer of Assert         | 2026-07-12 | Chenxu   |
-| Whether message is optional                      | **Yes**: `assert(cond, ?msg)`, String or Error                                                                 | 2026-07-11 | Chenxu   |
-| Whether variants like assert_eq are needed       | **No**. YAGNI, wait for the test framework                                                                     | 2026-07-11 | Chenxu   |
-| Whether a separate raise/throw keyword is needed | **No**. `assert(false, msg)` is equivalent to raise                                                            | 2026-07-11 | Chenxu   |
-| Relationship between assert and Assert           | **Two sides of the same coin**. `assert: (Bool) -> Assert(IsTrue(cond))`, automatically dispatched by dispatch | 2026-07-12 | Chenxu   |
+| Decision                                             | Decision                                                                                                                     | Date       | Recorder |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- |
+| Choose Option A or Option B                          | **Unified approach**: dispatch routing pipeline dissolves A/B opposition; `assert` is the value-level introducer of `Assert` | 2026-07-12 | Chenxu   |
+| Whether message is optional                          | **Yes**: `assert(cond, ?msg)`, String or Error                                                                               | 2026-07-11 | Chenxu   |
+| Whether variants like `assert_eq` are needed         | **Not needed**. YAGNI; wait until the test framework matures                                                                 | 2026-07-11 | Chenxu   |
+| Whether a separate `raise`/`throw` keyword is needed | **Not needed**. `assert(false, msg)` is equivalent to `raise`                                                                | 2026-07-11 | Chenxu   |
+| Relationship between `assert` and `Assert`           | **Two sides of the same coin**. `assert: (Bool) -> Assert(IsTrue(cond))`, dispatch routes automatically                      | 2026-07-12 | Chenxu   |
 
 ## References
 
-- [RFC-007: Unified Function Definition Syntax](007-function-syntax-unification.md) —
+- [RFC-007: Unified Function Definition Syntax](007-function-syntax-unification.md) — the
   `name: type = value` model
-- [RFC-010: Unified Type Syntax](010-unified-type-syntax.md) — type system foundation
+- [RFC-010: Unified Type Syntax](010-unified-type-syntax.md) — foundations of the type system
 - [RFC-011: Generic Type System Design §4.3](../accepted/011-generic-type-system.md) — compile-time
-  verification and `Assert(C)` conditional type
+  verification and the `Assert(C)` conditional type
 - [RFC-026: FFI Core Mechanism](026-ffi-core-mechanism.md) — native function registration mechanism
-- [RFC-027: Compile-time Predicates and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)
-  — compile-time evaluation system
+- [RFC-027: Compile-Time Predicates and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)
+  — the compile-time evaluation system

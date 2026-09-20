@@ -17,6 +17,10 @@ define_codes!(E1XXX, {
     ("E1012", TypeCheck, false, return_type_mismatch(expected: &str, found: &str) => .param("expected", expected) .param("found", found)),
     // E1013 函数未找到
     ("E1013", TypeCheck, false, function_not_found(func: &str) => .param("func", func)),
+    // E1014 命名参数名未知（与调用者写的名字不在形参表里）
+    ("E1014", TypeCheck, false, unknown_argument(func: &str, name: &str, params: &str) => .param("func", func) .param("name", name) .param("params", params)),
+    // E1015 同一形参被位置实参与命名实参同时指定（或命名两次）
+    ("E1015", TypeCheck, false, duplicate_argument(func: &str, name: &str) => .param("func", func) .param("name", name)),
     // E1020 无法推断类型
     ("E1020", TypeCheck, false, cannot_infer_type(expr: &str) => .param("expr", expr)),
     // E1021 类型推断冲突
@@ -51,6 +55,8 @@ define_codes!(E1XXX, {
     ("E1062", TypeCheck, false, const_constraint_failed(constraint: &str) => .param("constraint", constraint)),
     // E1064 绑定位置索引无效（RFC-004）
     ("E1064", TypeCheck, false, invalid_binding_position(positions: &str, total: usize) => .param("positions", positions) .param("total", total.to_string())),
+    // E1065 对非函数值调用
+    ("E1065", TypeCheck, false, not_callable(type_: &str) => .param("type", type_)),
     // E1071 类型定义只能在模块级
     ("E1071", TypeCheck, false, type_def_only_at_module_level(name: &str) => .param("name", name)),
     // E1081 `?` 仅允许在返回 Result 的函数内使用

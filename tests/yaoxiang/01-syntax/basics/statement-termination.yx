@@ -13,7 +13,7 @@ Point: Type = { x: Int, y: Int }
 // 括号内换行续行（RFC-038 例外 1）：参数跨行
 mk: (Int, Int) -> Int = (x, y) => x + y
 
-main = {
+main: () -> Void = {
     // 行尾运算符续行（RFC-038 例外 2）
     sum = 1 +
         2 + 3
@@ -41,3 +41,5 @@ main = {
         .x
     assert.assert(v == 6, "leading-dot chained field access")
 }
+
+main()

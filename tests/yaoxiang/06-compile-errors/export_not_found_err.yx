@@ -7,6 +7,6 @@
 
 use std.math.{nosuch_fn}
 
-main = {
+main: () -> Void = {
     print(1)
 }

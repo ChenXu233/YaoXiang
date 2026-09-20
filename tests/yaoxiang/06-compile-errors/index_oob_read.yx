@@ -7,7 +7,9 @@
 
 use std.io
 
-main = {
+main: () -> Void = {
     items = [1, 2, 3]
     io.println(items[5])
 }
+
+main()

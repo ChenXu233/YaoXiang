@@ -1,0 +1,54 @@
+// 04-concurrency/spawn_tail_expr.yx
+// 覆盖: RFC-010a 规则①在 spawn 块的落地 —— 尾表达式是块的值出口（#365）
+// 验证:
+//   - 单表达式尾表达式给出 block 值
+//   - 多语句块：尾表达式引用块内任务结果变量
+//   - 嵌套 spawn 尾表达式
+//   - return 形态与尾表达式共存时 return 优先
+// 状态: ✅ 可运行
+//
+// 本文件是 spawn 值出口的哨兵：修复前 `spawn { 42 }` 返回 Void、
+// `spawn { x = 10; x + 1 }` 报 E3006（尾表达式被当并行任务包装进闭包，
+// 值随之丢弃 / 变量由别的任务声明而解析不到）——见 #365。
+
+use std.{assert, io}
+
+fetch_data: (u: String) -> Int = { 7 }
+process: (a: Int, b: Int) -> Int = { a + b }
+
+// 单表达式尾表达式
+single_tail = spawn { 42 }
+
+// 多语句块：尾表达式引用任务结果变量
+deps_tail = spawn {
+    a = fetch_data("url1")
+    b = fetch_data("url2")
+    c = process(a, b)
+    c
+}
+
+// 嵌套 spawn 尾表达式
+nested_tail = spawn {
+    inner = spawn { 5 }
+    inner + 1
+}
+
+// 尾表达式为字面量、无任务依赖
+literal_only = spawn {
+    x = 1
+    x + 41
+}
+
+main: () -> Void = {
+    assert.assert(single_tail == 42, "single tail expr should yield 42")
+    assert.assert(deps_tail == 14, "tail expr referencing task results should yield 14")
+    assert.assert(nested_tail == 6, "nested spawn tail expr should yield 6")
+    assert.assert(literal_only == 42, "tail expr after stmts should yield 42")
+
+    // 空 spawn 块 → Void（无尾表达式）
+    spawn { }
+
+    io.println("spawn tail expr ok")
+}
+
+main()

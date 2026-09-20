@@ -1,15 +1,15 @@
 // src/std/tests/os_ops.yx
-// 覆盖: std.os 模块（#117）— 只读无副作用子集
+// 覆盖: std.os 模块（#117）— 进程信息 / 路径判定 / 文件句柄生命周期
 // 验证: getcwd/args/get_env 进程信息 + exists/is_file/is_dir 路径判定
 // 状态: ✅
-// 注: 文件写操作（open/write/mkdir/remove 等）有真实文件系统副作用，
-// 集成测试规范 规则 9.2 禁止，不在此覆盖（走 Rust 集成测试或临时目录）
+// 注: 文件写操作使用 `__yx_` 前缀的当前目录临时文件，用完显式 remove（与
+// io_ops.yx 同惯例）。无 mkdtemp 等临时目录设施，故不以目录隔离。
 
 use std.assert
 use std.string
 use std.os
 
-main = {
+main: () -> Void = {
     // 工作目录：非空
     cwd = os.getcwd()
     assert.assert(string.len(cwd) > 0, "getcwd should be non-empty")
@@ -28,4 +28,26 @@ main = {
     assert.assert(os.is_file("src/std/tests/os_ops.yx"), "is_file: self")
     assert.assert(!os.is_file("src/std/tests"), "is_file false on dir")
     assert.assert(!os.is_dir("src/std/tests/os_ops.yx"), "is_dir false on file")
+
+    // 文件句柄生命周期（#337）：句柄按**引用**传递给 read/write/seek/tell/flush，
+    // 不得因一次使用就失效。此前签名是 `(file: File)`（按值）→ 线性所有权
+    // → `open → write → close` 直接报 E2014。
+    hp = "__yx_os_handle_tmp.txt"
+    w = os.open(hp, "w")
+    n = os.write(w, "hello world")
+    assert.assert(n == 11, "write returns byte count")
+    os.close(w)              // close 也在引用语义下调用
+
+    // 定位后读取（seek 存在的唯一理由）
+    r = os.open(hp, "r")
+    os.seek(r, 6)
+    tail = os.read(r, 5)
+    assert.assert(tail == "world", "seek then read: got " + tail)
+    os.close(r)
+
+    // 清理（与 io_ops.yx 同惯例）
+    assert.assert(os.remove(hp), "os.remove handle tmp ok")
+    assert.assert(!os.exists(hp), "handle tmp gone after remove")
 }
+
+main()

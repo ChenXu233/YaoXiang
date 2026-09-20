@@ -9,7 +9,10 @@
 
 /// (文件路径, 源码文本)。路径形如 `std/test.yx`（use 路径点转斜杠 + .yx）。
 /// native 模块（std.assert 等）不在此表；同名不得同时存在两种实现。
-pub const STD_YX_FILES: &[(&str, &str)] = &[("std/test.yx", include_str!("test.yx"))];
+pub const STD_YX_FILES: &[(&str, &str)] = &[
+    ("std/list.yx", include_str!("list.yx")),
+    ("std/test.yx", include_str!("test.yx")),
+];
 
 /// use 路径（`std.test`）查嵌入源；未命中（native 模块或用户模块）返回 None。
 pub fn embedded_std_source(use_path: &str) -> Option<&'static str> {
@@ -50,6 +53,11 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
     checker.collect_signatures(&parsed.module);
     let vars = checker.env().vars.clone();
     let types = checker.env().types.clone();
+    // 声明期类型参数名（按声明序）：跨模块调用的单态化需要它们绑定签名里的
+    // `TypeRef("A")`。随导出一并携带，调用方不必从签名形态反推
+    // （反推区分不了类型参数与普通类型名，会误伤 `Dict(K,V)` / `File` 等）。
+    let fn_type_params = checker.generic_fn_type_params_snapshot();
+
     let mut info = ModuleInfo::new(use_path.to_string(), ModuleSource::Std);
     info.method_bindings = checker.env().method_bindings.clone();
 
@@ -63,12 +71,22 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                         kind: ExportKind::Type,
                         signature: String::new(),
                         mono_type: Some(ty),
+                        type_params: None,
+                        param_names: None,
                     });
                 }
             }
-            parser::ast::StmtKind::Assign { target, .. } => {
+            parser::ast::StmtKind::Assign { target, value, .. } => {
                 if let parser::ast::Expr::Var(name, _) = target.as_ref() {
                     if let Some(ty) = vars.get(name).map(|p| p.body.clone()) {
+                        // 声明期形参名：命名参数调用（`list.push(item = 9, list = v)`）
+                        // 需按名字重排实参。名字只存在于 AST 的 Lambda 形参里
+                        // （`MonoType::Fn` 只存类型），所以这里从 AST 取。
+                        let param_names = value
+                            .as_deref()
+                            .map(|v| v.callable_parts().0)
+                            .filter(|ps| !ps.is_empty())
+                            .map(|ps| ps.iter().map(|p| p.name.clone()).collect());
                         info.add_export(Export {
                             name: name.clone(),
                             full_path: SymbolTable::qualify(use_path, name),
@@ -79,6 +97,8 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             },
                             signature: String::new(),
                             mono_type: Some(ty),
+                            type_params: fn_type_params.get(name).cloned(),
+                            param_names,
                         });
                     }
                 }

@@ -1,0 +1,16 @@
+// 06-compile-errors/named_arg_missing_err.yx
+// 命名参数少传必需实参应报 E1010（而非静默补零）
+// expect: compile-error E1010
+// 覆盖: 命名参数（教程 §命名参数）——少传参数必须拦在编译期
+// 验证: `add(a = 1)` 只传 1 个，add 需要 2 个 → E1010
+// 状态: ✅
+//
+// 类型检查原先有 `named_args.is_empty()` 门槛：只要用了命名参数就整体豁免
+// 个数校验。IR 层再对空槽补 0 凑数，于是 add(a = 1) 静默算出 1 而非报错——
+// 这是最危险的一类缺陷：错值冒充正确结果。
+
+add: (a: Int, b: Int) -> Int = a + b
+
+main: () -> Void = {
+    x = add(a = 1)   // ❌ 缺少 b
+}

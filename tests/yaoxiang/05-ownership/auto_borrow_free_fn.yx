@@ -1,6 +1,7 @@
 // 05-ownership/auto_borrow_free_fn.yx
 // 覆盖: RFC-009 §2.8 — 自由函数调用自动借用（native std 与用户模块统一，#251 P0-6）
-// 验证: 用户定义自由函数取 &T 参数，调用后原值可复用（不被 move）；std 只读函数同理
+// 验证: 用户定义自由函数取 &T 参数，调用后原值可复用（不被 move）;
+//       std.list 只读函数同理（RFC-009 §2.8 自动借用，见 stdlib/list.md 语义分类表）
 // 状态: ✅
 
 use std.assert
@@ -13,7 +14,7 @@ manhattan: (p: &Point) -> Int = {
     return p.x + p.y
 }
 
-main = {
+main: () -> Void = {
     p = Point(3, 4)
 
     // 两次调用，p 不被 move（自动创建 &Point 令牌）
@@ -25,9 +26,11 @@ main = {
     // 调用后 p 字段仍可访问
     assert.assert(p.x == 3, "p.x intact after borrows")
 
-    // std 只读函数同理（&List 自动借用）
+    // std 只读函数同理（RFC-009 §2.8：实参后续仍有使用 → 自动创建 &T 令牌）
     xs = [1, 2, 3]
     n1 = list.len(xs)
     n2 = list.len(xs)
     assert.assert(n1 == 3  and  n2 == 3, "std read fn reuses xs")
 }
+
+main()

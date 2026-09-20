@@ -4,7 +4,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // 基本取反
     assert.assert(!true == false, "!true == false")
     assert.assert(!false == true, "!false == true")
@@ -18,3 +18,5 @@ main = {
     assert.assert(!(true == false), "!(true == false) ≡ true")
     assert.assert(!(1 == 2), "!(1 == 2) ≡ true（显式括号取反比较结果）")
 }
+
+main()

@@ -278,7 +278,7 @@ use std.dict
 // These two go with containers
 use std.io
 
-main = {
+main = () => {
     io.println(\"test\")
 }
 ";
@@ -324,7 +324,7 @@ fn test_format_sort_imports_header_only_no_duplication() {
 // Comment 2
 use std.io
 
-main = {
+main = () => {
     io.println(\"test\")
 }
 ";
@@ -350,7 +350,7 @@ use std.io
 // list helpers
 use std.list
 
-main = {}
+main = () => {}
 ";
     // Act
     let result = format_source(source, &default_options()).unwrap();
@@ -433,11 +433,10 @@ fn test_format_binop_spaces() {
 
 #[test]
 fn test_format_empty_block() {
-    // RFC-010: foo: () -> Void = {} 语法
-    // 解析器将 {} 解析为空字典，而不是空代码块
-    // 所以 formatter 输出 { {} }
+    // `{}` 是**空块**（值 Void），不是空字典——空字典请写 dict.new()
+    // （旧测试曾断言 `{ {} }`，那正是把 {} 当空字典的 bug 的固化）
     let result = format_source("foo: () -> Void = {}", &default_options()).unwrap();
-    assert_eq!(result, "foo: () -> Void = { {} }\n");
+    assert_eq!(result, "foo: () -> Void = {}\n");
 }
 
 // === 配置选项测试 ===
@@ -536,7 +535,7 @@ use std.dict
 // These two go with containers
 use std.io
 
-main = {
+main = () => {
     io.println(\"test\")
 }
 ";
@@ -559,7 +558,7 @@ fn test_format_idempotent_function_body_comments() {
 // global header
 use std.io
 
-main = {
+main = () => {
     // main logic
     io.println(\"hello\")
 }
@@ -650,16 +649,18 @@ fn test_format_field_default_value_unchanged() {
 
 #[test]
 fn test_format_generic_function_roundtrip() {
-    // Arrange — RFC-010: 泛型函数定义签名带名保留（#174）
-    // #175 修复后：curried 泛型函数 return 块形式类型检查通过
+    // Arrange — RFC-010 / RFC-004：返回位置的 `Paren` 声明“返回值是函数”
+    // 括号**有语义**，formatter 必须保留（丢括号会把“返回函数”改成“柯里化”）
     let input = "map: (T: Type) -> ((x: Int) -> Int) = (x) => x";
 
-    // Act — formatter 输出：(T: Type) -> (Int) -> Int = (x) => x（不补全内层参数名）
     let result = format_source(input, &default_options())
         .unwrap_or_else(|e| panic!("Failed to format: {}", e));
 
-    // Assert — 签名按嵌套 Fn 切分，body 保持表达式形式
-    assert_eq!(result, "map: (T: Type) -> (Int) -> Int = (x) => x\n");
+    // Assert — 括号保留，内层参数名 `x` 不回丢；body 规范化为块形式
+    assert_eq!(
+        result,
+        "map: (T: Type) -> ((x: Int) -> Int) = { (x: Int) => x }\n"
+    );
 }
 
 #[test]

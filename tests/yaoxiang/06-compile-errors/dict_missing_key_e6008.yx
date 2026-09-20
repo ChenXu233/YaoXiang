@@ -9,7 +9,9 @@
 // 验证: 缺键访问不得静默 void、不得渲染 internal error，必须是带文案的 E6008
 // 状态: ❌ 应运行时失败
 
-main = {
+main: () -> Void = {
     d = {"a": 1}
     v = d["nope"]
 }
+
+main()

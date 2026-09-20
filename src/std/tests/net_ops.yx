@@ -7,7 +7,7 @@
 use std.assert
 use std.net
 
-main = {
+main: () -> Void = {
     // 空格 → %20（标准 percent-encoding）
     enc1 = net.url_encode("a b")
     assert.assert(enc1 == "a%20b", "url_encode: space to %20")
@@ -25,3 +25,5 @@ main = {
     dec = net.url_decode("a%20b")
     assert.assert(dec == "a b", "url_decode: %20 to space")
 }
+
+main()

@@ -357,7 +357,7 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
 }
 
 # 编译期计算：factorial(3) = 6
-vec: Vec(factorial(3)) = Vec(6)()
+arr: Array(Int, factorial(3)) = Array(Int, 6)()
 
 # 编译期维度验证
 identity_3x3: Matrix(Float, 3, 3) = identity(Float, 3)(3)

@@ -54,50 +54,50 @@ impl StdModule for TimeModule {
                 native_parse_time
             ),
             export!(
-                "DateTime::year",
-                "std.time.DateTime.year",
+                "datetime_year",
+                "std.time.datetime_year",
                 "(dt: Int) -> Int",
                 native_datetime_year
             ),
             export!(
-                "DateTime::month",
-                "std.time.DateTime.month",
+                "datetime_month",
+                "std.time.datetime_month",
                 "(dt: Int) -> Int",
                 native_datetime_month
             ),
             export!(
-                "DateTime::day",
-                "std.time.DateTime.day",
+                "datetime_day",
+                "std.time.datetime_day",
                 "(dt: Int) -> Int",
                 native_datetime_day
             ),
             export!(
-                "DateTime::hour",
-                "std.time.DateTime.hour",
+                "datetime_hour",
+                "std.time.datetime_hour",
                 "(dt: Int) -> Int",
                 native_datetime_hour
             ),
             export!(
-                "DateTime::minute",
-                "std.time.DateTime.minute",
+                "datetime_minute",
+                "std.time.datetime_minute",
                 "(dt: Int) -> Int",
                 native_datetime_minute
             ),
             export!(
-                "DateTime::second",
-                "std.time.DateTime.second",
+                "datetime_second",
+                "std.time.datetime_second",
                 "(dt: Int) -> Int",
                 native_datetime_second
             ),
             export!(
-                "DateTime::weekday",
-                "std.time.DateTime.weekday",
+                "datetime_weekday",
+                "std.time.datetime_weekday",
                 "(dt: Int) -> Int",
                 native_datetime_weekday
             ),
             export!(
-                "DateTime::to_string",
-                "std.time.DateTime.to_string",
+                "datetime_to_string",
+                "std.time.datetime_to_string",
                 "(dt: Int) -> String",
                 native_datetime_to_string
             ),
@@ -136,13 +136,14 @@ fn timestamp_to_datetime(timestamp: u64) -> (i64, i64, i64, i64, i64, i64, i64, 
     // Calculate year, month, day from days since epoch
     let days_since_epoch = days;
 
-    // Approximate year
-    let mut year = 1970 + days_since_epoch / 365;
-
-    // Calculate day of year
+    // 求年份与年内偏移（“1970-01-01 起第 N 天” → year + day-of-year）。
+    //
+    // 旧实现先取近似年 `1970 + days/365`，却把 `remaining_days` 仍初始化为
+    // **全部** days_since_epoch（而非减去近似年之前的那些天），于是循环在近似年
+    // 之上又加了一遍年份——1705276800（2024-01-15）被算成 2078-01-14。
+    // 注意 `timestamp_to_datetime` 假设输入非负，故 days 也非负。
+    let mut year = 1970i64;
     let mut remaining_days = days_since_epoch;
-
-    // Adjust year until we find the right one
     loop {
         let days_in_year = if is_leap_year(year) { 366 } else { 365 };
         if remaining_days < days_in_year {
@@ -353,7 +354,7 @@ fn native_parse_time(
         ));
     }
 
-    let _fmt = match &args[0] {
+    let fmt = match &args[0] {
         RuntimeValue::String(s) => s.to_string(),
         other => {
             return Err(ExecutorError::type_only(format!(
@@ -373,36 +374,97 @@ fn native_parse_time(
         }
     };
 
-    // Simple ISO 8601 format parsing: "2024-01-15T10:30:00"
-    let parts: Vec<&str> = s.split(['T', ' ']).collect();
-
-    if parts.len() < 2 {
-        return Err(ExecutorError::runtime_only(format!(
-            "Invalid time format: {}",
-            s
-        )));
-    }
-
-    let date_parts: Vec<&str> = parts[0].split('-').collect();
-    let time_parts: Vec<&str> = parts[1].split(':').collect();
-
-    if date_parts.len() < 3 || time_parts.len() < 3 {
-        return Err(ExecutorError::runtime_only(format!(
-            "Invalid time format: {}",
-            s
-        )));
-    }
-
-    let year: i64 = date_parts[0].parse().unwrap_or(0);
-    let month: i64 = date_parts[1].parse().unwrap_or(0);
-    let day: i64 = date_parts[2].parse().unwrap_or(0);
-    let hour: i64 = time_parts[0].parse().unwrap_or(0);
-    let minute: i64 = time_parts[1].parse().unwrap_or(0);
-    let second: i64 = time_parts[2].parse().unwrap_or(0);
+    // 按 fmt 的指示符切分输入——与 `format_time` 支持同一组指示符（互为逆运算）。
+    //
+    // 此前 `fmt` 绑定为 `_fmt` 后**从未使用**：只硬识别 ISO 8601。
+    // 于是 `parse_time("%d/%m/%Y", "15/01/2024")` 失败，而
+    // `parse_time("totally-bogus", "2024-01-15T10:30:00")` 反而成功（#340）。
+    let (year, month, day, hour, minute, second) = parse_by_format(&fmt, &s)?;
 
     let timestamp = calculate_timestamp(year, month, day, hour, minute, second);
 
     Ok(RuntimeValue::Int(timestamp))
+}
+
+/// 按 `fmt` 的指示符从 `s` 中提取时间字段。
+///
+/// 与 `format_time` 支持的指示符一一对应：
+/// `%Y` `%m` `%d` `%H` `%M` `%S`，以及组合形 `%F`（`%Y-%m-%d`）
+/// 与 `%T`（`%H:%M:%S`）。未出现的字段默认 1 月 1 日 0 时 0 分 0 秒。
+fn parse_by_format(
+    fmt: &str,
+    s: &str,
+) -> Result<(i64, i64, i64, i64, i64, i64), ExecutorError> {
+    // 先把组合指示符展开成基本指示符，使后续只剩一种形态要处理
+    let expanded = fmt.replace("%F", "%Y-%m-%d").replace("%T", "%H:%M:%S");
+    let expanded_s = s.to_string();
+
+    let mut year = 1970i64;
+    let mut month = 1i64;
+    let mut day = 1i64;
+    let mut hour = 0i64;
+    let mut minute = 0i64;
+    let mut second = 0i64;
+
+    // 步进扫描：fmt 的字面量字符必须与输入逐一匹配，指示符处提取数字
+    let fmt_chars: Vec<char> = expanded.chars().collect();
+    let s_chars: Vec<char> = expanded_s.chars().collect();
+    let mut fi = 0usize;
+    let mut si = 0usize;
+
+    while fi < fmt_chars.len() {
+        if fmt_chars[fi] == '%' && fi + 1 < fmt_chars.len() {
+            let spec = fmt_chars[fi + 1];
+            fi += 2;
+            // 该指示符要抽取的位数；%Y 允许 4 位或更多
+            let width = match spec {
+                'Y' => 4,
+                'm' | 'd' | 'H' | 'M' | 'S' => 2,
+                _ => {
+                    return Err(ExecutorError::runtime_only(format!(
+                        "parse_time: unsupported format specifier '%{spec}'"
+                    )))
+                }
+            };
+            let mut digits = String::new();
+            while si < s_chars.len() && digits.len() < width && s_chars[si].is_ascii_digit() {
+                digits.push(s_chars[si]);
+                si += 1;
+            }
+            if digits.is_empty() {
+                return Err(ExecutorError::runtime_only(format!(
+                    "Invalid time format: '{s}' does not match '{fmt}' (expected %{spec} at position {si})"
+                )));
+            }
+            let value: i64 = digits.parse().unwrap_or(0);
+            match spec {
+                'Y' => year = value,
+                'm' => month = value,
+                'd' => day = value,
+                'H' => hour = value,
+                'M' => minute = value,
+                'S' => second = value,
+                _ => unreachable!(),
+            }
+        } else {
+            // 字面量字符：必须匹配（跳过输入中的空白差异）
+            if si >= s_chars.len() || s_chars[si] != fmt_chars[fi] {
+                return Err(ExecutorError::runtime_only(format!(
+                    "Invalid time format: '{s}' does not match '{fmt}'"
+                )));
+            }
+            fi += 1;
+            si += 1;
+        }
+    }
+
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return Err(ExecutorError::runtime_only(format!(
+            "Invalid time format: month/day out of range in '{s}' (got {month}/{day})"
+        )));
+    }
+
+    Ok((year, month, day, hour, minute, second))
 }
 
 // DateTime Accessor Functions

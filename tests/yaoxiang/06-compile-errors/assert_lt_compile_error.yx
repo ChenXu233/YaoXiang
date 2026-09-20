@@ -12,7 +12,7 @@ Capped: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
 }
 
-main = {
+main: () -> Void = {
     bad = Capped(Int, 150)
     io.println("SHOULD NOT REACH HERE")
 }

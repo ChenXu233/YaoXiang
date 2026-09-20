@@ -6,7 +6,7 @@
 // 验证: 函数顶层 if 分支内的 break 被拒绝
 // 状态: ✅
 
-main = {
+main: () -> Void = {
     if true {
         break
     }

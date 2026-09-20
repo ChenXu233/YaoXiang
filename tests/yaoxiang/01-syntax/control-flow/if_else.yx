@@ -5,7 +5,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // if-else
     mut r1 = ""
     if true {
@@ -47,3 +47,5 @@ main = {
     }
     assert.assert(size == "small", "nested if small")
 }
+
+main()

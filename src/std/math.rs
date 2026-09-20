@@ -110,6 +110,10 @@ fn native_min(
 }
 
 /// Native implementation: clamp (integer)
+///
+/// `min > max` 是调用方的错误实参，不是可选行为：
+/// `i64::clamp` 在此情况会 **panic 掉整个解释器进程**（#339），
+/// 对一门语言而言不可接受——返回诊断，让调用链正常传播错误。
 fn native_clamp(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -117,6 +121,11 @@ fn native_clamp(
     let value = args.first().and_then(|v| v.to_int()).unwrap_or(0);
     let min = args.get(1).and_then(|v| v.to_int()).unwrap_or(0);
     let max = args.get(2).and_then(|v| v.to_int()).unwrap_or(0);
+    if min > max {
+        return Err(ExecutorError::runtime_only(format!(
+            "math.clamp: min must be <= max, got min = {min}, max = {max}"
+        )));
+    }
     Ok(RuntimeValue::Int(value.clamp(min, max)))
 }
 

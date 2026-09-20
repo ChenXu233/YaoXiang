@@ -7,6 +7,8 @@ macro_rules! export {
     ($name:literal, $native:literal, $sig:literal, $handler:ident) => {
         NativeExport::new($name, $native, $sig, $handler as $crate::std::NativeHandler)
     };
+    // 常量导出形式（3 参数）保留：当前无调用者，但属公开宏接口的一部分，
+    // 供后续以「求值函数」方式实现常量时使用。详见 plan 文档 D5。
     ($name:literal, $native:literal, $sig:literal) => {
         NativeExport::constant($name, $native, $sig)
     };
@@ -17,9 +19,10 @@ pub mod assert;
 pub mod concurrent;
 pub mod convert;
 pub mod dict;
+pub mod gen_docs;
 pub mod gen_interfaces;
 pub mod io;
-pub mod list;
+// pub mod list; // D5 硬切换：std.list 已由纯 yx 实现接管（src/std/list.yx）
 pub mod math;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod net;
@@ -154,20 +157,6 @@ impl<'a> NativeContext<'a> {
     }
 }
 
-/// 解构第一个参数为 List 句柄（类型不符返回 type_only 错误）
-pub(crate) fn expect_list(
-    args: &[RuntimeValue],
-    what: &str,
-) -> Result<Handle, ExecutorError> {
-    match args.first() {
-        Some(RuntimeValue::List(h)) => Ok(h.clone()),
-        _ => Err(ExecutorError::type_only(format!(
-            "{} expects a List as first argument",
-            what
-        ))),
-    }
-}
-
 /// 解构第一个参数为 Dict 句柄（类型不符返回 type_only 错误）
 pub(crate) fn expect_dict(
     args: &[RuntimeValue],
@@ -290,6 +279,11 @@ pub trait StdModule {
         registry: &mut FfiRegistry,
     ) {
         for export in self.exports() {
+            // 无 handler 的导出（常量形式）在此跳过：FFI 注册表只登记可调用函数。
+            // 注意：常量导出**当前无任何调用者**，且**尚无**独立的常量注册路径
+            // （原先的 `if let` 与「漏注册」在语义上不可区分，见 plan 文档 D5）。
+            // 若将来启用常量导出，需在此之外补注册逻辑，否则调用会运行时报
+            // 「函数未找到」而声明处无提示。
             if let Some(handler) = export.handler {
                 registry.register(export.native_name, handler);
             }
@@ -330,6 +324,8 @@ pub trait StdModule {
                 kind,
                 signature: export.signature.to_string(),
                 mono_type: None,
+                type_params: None,
+                param_names: None,
             });
         }
 
@@ -341,6 +337,8 @@ pub trait StdModule {
                 kind: ExportKind::Type,
                 signature: format!("({}) -> Type", export.params.join(", ")),
                 mono_type: None,
+                type_params: None,
+                param_names: None,
             });
         }
 
@@ -410,7 +408,6 @@ pub fn register_all(
     convert::ConvertModule.register_ffi(registry);
     dict::DictModule.register_ffi(registry);
     io::IoModule.register_ffi(registry);
-    list::ListModule.register_ffi(registry);
     math::MathModule.register_ffi(registry);
     #[cfg(not(target_arch = "wasm32"))]
     net::NetModule.register_ffi(registry);
@@ -455,7 +452,6 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
         convert::ConvertModule.to_module_info(),
         dict::DictModule.to_module_info(),
         io::IoModule.to_module_info(),
-        list::ListModule.to_module_info(),
         math::MathModule.to_module_info(),
         #[cfg(not(target_arch = "wasm32"))]
         net::NetModule.to_module_info(),

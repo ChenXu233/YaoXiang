@@ -46,6 +46,7 @@ pub struct DiagnosticBuilder {
     span: Option<Span>,
     related: Vec<Diagnostic>,
     severity: Option<Severity>,
+    help_override: Option<String>,
 }
 
 impl DiagnosticBuilder {
@@ -57,7 +58,21 @@ impl DiagnosticBuilder {
             span: None,
             related: Vec::new(),
             severity: None,
+            help_override: None,
         }
+    }
+
+    /// 覆盖本错误码的默认 help（i18n 里的通用句子）。
+    ///
+    /// 同一个错误码在不同位置可能需不同的出路提示：如 E1002 的默认 help
+    /// 是「使用正确的类型或添加类型转换」，但两个集合/容器类型相加时
+    /// 该提示帮不上忙——知道具体是哪两个类型冲突、该怎么写才有用。
+    pub fn with_help(
+        mut self,
+        help: impl Into<String>,
+    ) -> Self {
+        self.help_override = Some(help.into());
+        self
     }
 
     /// 添加模板参数
@@ -142,7 +157,10 @@ impl DiagnosticBuilder {
         } else {
             i18n.render(template, &self.params)
         };
-        let help = i18n.render_help(self.code, &self.params);
+        let help = match &self.help_override {
+            Some(h) => h.clone(),
+            None => i18n.render_help(self.code, &self.params),
+        };
 
         // #324：span 强制——显式 .at() > walk 上下文自动填 > 都没有则按模式处理
         // （debug panic 拒绝构造；release 降级 E8001，与上方参数校验同策略）

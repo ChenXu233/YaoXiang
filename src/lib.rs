@@ -111,6 +111,10 @@ fn run_with_source_name(
     let module = compiler.compile_with_source(source_name, source)?;
     // Generate BytecodeModule using the new backend architecture
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+    // run 是面向用户的执行路径，需要调试元数据：运行时错误靠 debug_map 定位，
+    // 变量名靠 local_names 指认（E6003 之类会说清是哪个变量越界）。
+    ctx.set_generate_debug_info(true);
+    ctx.set_keep_debug_info(true);
     let bytecode_file = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
@@ -151,6 +155,8 @@ pub fn run_project(entry: &Path) -> Result<()> {
     let module = frontend::module::orchestrator::compile_project(entry)
         .map_err(|e| anyhow::anyhow!("Project compilation failed: {}", e))?;
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+    ctx.set_generate_debug_info(true);
+    ctx.set_keep_debug_info(true);
     let bytecode_file = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
@@ -247,6 +253,9 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 
     // Generate bytecode
     let mut ctx = CodegenContext::new(module);
+    // dump 的卖点就是"字节码 ↔ 源码行"对照，必须建映射并留存调试段
+    ctx.set_generate_debug_info(true);
+    ctx.set_keep_debug_info(true);
     let bytecode_file: BytecodeFile = ctx
         .generate()
         .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
@@ -362,6 +371,18 @@ fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::
             "{}",
             t_cur(MSG::BytecodeFuncLocalCount, Some(&[&func.local_count]))
         );
+        // 局部变量名：只列具名者，按槽位下标排序保证输出稳定
+        if !func.local_names.is_empty() {
+            let mut named: Vec<(usize, &String)> =
+                func.local_names.iter().map(|(k, v)| (*k, v)).collect();
+            named.sort_by_key(|(idx, _)| *idx);
+            let list = named
+                .iter()
+                .map(|(idx, name)| format!("{name}@{idx}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            tracing::info!("{}", t_cur(MSG::BytecodeFuncLocalNames, Some(&[&list])));
+        }
         tracing::info!(
             "{}",
             t_cur(
@@ -373,7 +394,16 @@ fn dump_bytecode_file(bytecode_file: &crate::middle::passes::codegen::bytecode::
         // Dump instructions in a more readable format
         if !func.instructions.is_empty() {
             tracing::info!("{}", t_cur_simple(MSG::BytecodeFuncCode));
-            dump_instructions(&func.instructions);
+            // ip→span 映射与函数表平行索引；.42 从 debug_section 回填，源码路径现场生成
+            let debug_map = bytecode_file
+                .debug_section
+                .as_ref()
+                .and_then(|d| d.function_debug_maps.get(func_idx));
+            dump_instructions(
+                &func.instructions,
+                debug_map,
+                bytecode_file.debug_section.as_ref(),
+            );
         }
     }
 }
@@ -484,6 +514,7 @@ fn dump_type_detail(ty: &crate::frontend::core::typecheck::MonoType) -> String {
                     .join(", ")
             ),
             "List" => format!("List({})", dump_type_detail(&args[0])),
+            "Vec" => format!("Vec({})", dump_type_detail(&args[0])),
             "Dict" => format!(
                 "Dict({}, {})",
                 dump_type_detail(&args[0]),
@@ -568,12 +599,15 @@ fn format_operands(operands: &[u8]) -> String {
 
 /// Dump instructions in a readable format with opcode names
 fn dump_instructions(
-    instructions: &[crate::middle::passes::codegen::bytecode::BytecodeInstruction]
+    instructions: &[crate::middle::passes::codegen::bytecode::BytecodeInstruction],
+    debug_map: Option<&::std::collections::HashMap<usize, crate::util::span::DebugSpan>>,
+    debug_section: Option<&crate::middle::passes::codegen::bytecode::DebugSection>,
 ) {
     for (instr_idx, instr) in instructions.iter().enumerate() {
         // Try to decode the opcode
         let ops_str = format_operands(&instr.operands);
         let name = crate::backends::common::opcode_name(instr.opcode);
+        let loc = dump_instr_location(instr_idx, debug_map, debug_section);
         if name != "Unknown" {
             tracing::info!(
                 "{}",
@@ -584,7 +618,7 @@ fn dump_instructions(
                         &format!("{:<14}", name),
                         &ops_str
                     ])
-                )
+                ) + &loc
             );
         } else {
             tracing::info!(
@@ -596,10 +630,33 @@ fn dump_instructions(
                         &format!("{:02x}", instr.opcode),
                         &ops_str
                     ])
-                )
+                ) + &loc
             );
         }
     }
+}
+
+/// 取指令对应源码位置（ip → DebugSpan → `file:line:col`）。
+///
+/// #327 起运行时错误默认携带位置，dump 沿用同一份映射，避免两套查找逻辑。
+/// 无映射（未开调试信息 / 合成指令）时返回空串，保持原有输出形态。
+fn dump_instr_location(
+    instr_idx: usize,
+    debug_map: Option<&::std::collections::HashMap<usize, crate::util::span::DebugSpan>>,
+    debug_section: Option<&crate::middle::passes::codegen::bytecode::DebugSection>,
+) -> String {
+    let Some(ds) = debug_map.and_then(|m| m.get(&instr_idx)) else {
+        return String::new();
+    };
+    // 单文件模式 module.source_files 为空，translator 固定 file_id 0，名称退化为 <src>
+    let file = debug_section
+        .and_then(|d| d.sources.get(ds.file_id))
+        .map(|f| f.name.clone())
+        .unwrap_or_else(|| "<src>".to_string());
+    t_cur(
+        MSG::BytecodeInstrSpan,
+        Some(&[&file, &ds.span.start.line, &ds.span.start.column]),
+    )
 }
 
 // FFI End-to-End Tests

@@ -25,7 +25,7 @@ step0: (n: Int) -> Result(Any, Error) = {
     return result.ok(range.next(it))
 }
 
-main = {
+main: () -> Void = {
     // 1. 动态 step=0 → E6009（Range 步长非法）
     r = mk_range(0)
     assert.assert(result.is_err(r), "step=0 → Err")
@@ -53,3 +53,5 @@ main = {
     ep = result.unwrap_err(p)
     assert.assert(result.code(ep) == "E6009", "? 传播携带 E6009")
 }
+
+main()

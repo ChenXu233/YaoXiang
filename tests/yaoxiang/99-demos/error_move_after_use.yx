@@ -4,7 +4,7 @@
 
 use std.{assert, io}
 
-main = {
+main: () -> Void = {
     x = 42
     y = x       // Move: x -> y
     assert.assert(true, "value moved from x to y")
@@ -13,3 +13,5 @@ main = {
     // io.println(x)  // 取消注释查看错误
     assert.assert(true, "all passed")
 }
+
+main()

@@ -18,7 +18,7 @@ Pair: (T: Type) -> Type = {
     second: T,
 }
 
-main = {
+main: () -> Void = {
     // Happy: 单字段泛型 + 基础类型
     c: Container(Int) = Container(42)
     assert.assert(c.value == 42, "Container(42).value should be 42")
@@ -32,3 +32,5 @@ main = {
     assert.assert(p.first == 7, "Pair(7, 9).first should be 7")
     assert.assert(p.second == 9, "Pair(7, 9).second should be 9")
 }
+
+main()

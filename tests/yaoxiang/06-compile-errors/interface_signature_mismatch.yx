@@ -19,7 +19,7 @@ Dog.speak: (self: &Dog) -> Int = {
     return 42
 }
 
-main = {
+main: () -> Void = {
     d = Dog("Rex")
     assert.assert(d.speak() == 42, "mismatched impl must not compile")
 }

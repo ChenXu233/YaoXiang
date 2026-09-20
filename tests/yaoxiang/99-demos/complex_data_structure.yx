@@ -11,15 +11,17 @@ sum_nodes: (a: &Node, b: &Node) -> Int = {
     return a.value + b.value
 }
 
-main = {
+main: () -> Void = {
     n1 = Node(10, 0)
     n2 = Node(20, 0)
     n3 = Node(30, 0)
 
     // 三个 &Node 令牌同时活跃 — 自然（Dup）
-    total = sum_nodes(n1, n2)
+    mut total = sum_nodes(n1, n2)
     total = total + n3.value
     assert.assert(total == 60, "total should be 60")
     io.println(total)
     assert.assert(true, "all passed")
 }
+
+main()

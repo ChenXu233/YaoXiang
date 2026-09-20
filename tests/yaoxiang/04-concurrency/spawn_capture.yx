@@ -7,7 +7,7 @@ use std.assert
 
 Point: Type = { x: Int, y: Int }
 
-main = {
+main: () -> Void = {
     // 1. 多变量捕获（#254 复现：此前 t2 未捕获 → E6007）
     t1 = 1 + 1
     t2 = 2 + 2
@@ -39,3 +39,5 @@ main = {
     }
     assert.assert(r3 == 900, "spawn 嵌套表达式 (a+b)*c == 900")
 }
+
+main()

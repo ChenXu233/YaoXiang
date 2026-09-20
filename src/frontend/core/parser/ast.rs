@@ -494,6 +494,18 @@ pub enum Type {
     },
     /// 编译期表达式（泛型参数位置的值表达式，如 Assert(N > 0) 中的 N > 0）
     ConstExpr(Box<Expr>),
+    /// 括号类型：`(T)` —— **完整类型，链条终止**（RFC-004 柯里化语义）。
+    ///
+    /// 仅在「括号未构成函数参数组」时产生，即括号后不跟 `->`。因此：
+    ///
+    /// - `(a: Int) -> Int` 参数组：内层 `(...)` 后跟 `->` → **不**产生 `Paren`
+    /// - `() -> ((a: Int) -> Int)` 返回位置裸括号 → **产生** `Paren`
+    ///
+    /// `split_curry` 遇 `Paren` 即停止拆层：括号声明“这是一个完整类型”，
+    /// 它是函数的**值**，不是下一个参数组。
+    ///
+    /// 其余环节（类型检查 / 单态化 / 解释器）视 `Paren` 为透明，递归内层即可。
+    Paren(Box<Type>),
 }
 
 impl Type {
@@ -796,6 +808,35 @@ pub const CONST_PARAM_TYPES: &[&str] = &[
     "Char", "String",
 ];
 
+/// 参数名是否在给定类型中被当作类型引用（`(N: Int) -> (n: N)` 的 `N`）。
+///
+/// 与 `declarations.rs` 的 `name_used_as_type` 同义，此处独立实现以避免
+/// parser 内部跨模块依赖。
+fn name_used_as_type_in(
+    name: &str,
+    ty: &Type,
+) -> bool {
+    match ty {
+        Type::Name { name: n, .. } => n == name,
+        Type::Literal { name: n, .. } => n == name,
+        Type::Generic { args, .. } => args.iter().any(|a| name_used_as_type_in(name, a)),
+        Type::Fn {
+            params,
+            return_type,
+        } => {
+            params.iter().any(|p| name_used_as_type_in(name, p))
+                || name_used_as_type_in(name, return_type)
+        }
+        Type::Option(inner) | Type::Ptr(inner) => name_used_as_type_in(name, inner),
+        Type::Ref { inner, .. } => name_used_as_type_in(name, inner),
+        Type::Result(a, b) => name_used_as_type_in(name, a) || name_used_as_type_in(name, b),
+        Type::Tuple(types) | Type::Sum(types) => {
+            types.iter().any(|t| name_used_as_type_in(name, t))
+        }
+        _ => false,
+    }
+}
+
 /// Extract just the names and constraints of generic parameters from signature params.
 /// Only returns structurally determined generic params (Type/MetaType + CONST_PARAM_TYPES).
 /// Trait-constrained params (T: Clone) are not recognized — typechecker's classify_generic_params
@@ -815,11 +856,25 @@ pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
                     name: p.name.clone(),
                     constraints: Vec::new(),
                 }),
+                // `(N: Int)` 是 const 泛型，但 `(a: Int)` 是普通值参数——
+                // 两者类型标注都是 `Int`，仅凭类型无法区分。
+                // 判据：参数名是否在**同一签名**的其它位置被当作类型引用
+                //（如 `f: (N: Int) -> (n: N) -> Int` 的 `N`）。
+                // 不做此判别会把 `plain: (a: Int) -> Int` 误标为泛型函数，
+                // 单态化据此将其删除且永不重建（实测 E6006，#351）。
                 Type::Name { name, .. } if CONST_PARAM_TYPES.contains(&name.as_str()) => {
-                    Some(GenericParamName {
-                        name: p.name.clone(),
-                        constraints: Vec::new(),
-                    })
+                    let used_as_type = params.iter().any(|q| {
+                        q.ty.as_ref()
+                            .is_some_and(|qt| name_used_as_type_in(&p.name, qt))
+                    });
+                    if used_as_type {
+                        Some(GenericParamName {
+                            name: p.name.clone(),
+                            constraints: Vec::new(),
+                        })
+                    } else {
+                        None
+                    }
                 }
                 Type::Name { .. } => {
                     // 无法确认是否为 trait → 保守不下泛型参数
@@ -956,6 +1011,66 @@ impl Expr {
             Expr::Lambda { params, body, .. } => (params.clone(), body.stmts.clone()),
             Expr::Block(block) => (Vec::new(), block.stmts.clone()),
             _ => (Vec::new(), Vec::new()),
+        }
+    }
+
+    /// `name = <expr>` 中，`mut` 绑定是否为类型/方法的**元绑定**——
+    /// 这类左值不引入变量，不适用 spec §4.3 的声明/赋值判定。
+    ///
+    /// 两种形态：
+    /// - **类型定义绑定**（RFC-010）：`Db = unsafe { Db: Type = {...}; Db }`
+    ///   块内定义类型、尾表达式交回类型名——编译期构造，无运行时绑定。
+    /// - 调用方自有的其他形态（如 `Type.method = f` 方法绑定）由调用方判定。
+    pub fn is_type_def_binding(value: Option<&Expr>) -> bool {
+        let Some(Expr::Unsafe { body, .. }) = value else {
+            return false;
+        };
+        // 块内**直接**包含类型定义，且尾表达式引用该类型名
+        let mut def_names: Vec<&str> = Vec::new();
+        for st in &body.stmts {
+            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition { name, .. } =
+                &st.kind
+            {
+                def_names.push(name.as_str());
+            }
+        }
+        if def_names.is_empty() {
+            return false;
+        }
+        matches!(
+            body.stmts.last().map(|s| &s.kind),
+            Some(crate::frontend::core::parser::ast::StmtKind::Expr(e))
+                if matches!(e.as_ref(), Expr::Var(n, _) if def_names.contains(&n.as_str()))
+        )
+    }
+
+    /// `name = <value>` 是**函数定义**还是**值绑定**？（B 方案）
+    ///
+    /// # 判据：注解
+    ///
+    /// | 情形 | 结果 | 依据 |
+    /// | ---- | ---- | ---- |
+    /// | `value` 是 `Lambda`（`=>`） | 函数 | `=>` 是显式函数构造子 |
+    /// | 注解是 `Fn` | 函数 | 声明了函数类型 |
+    /// | 注解是非 `Fn` 类型 | 值 | 注解即类型 |
+    /// | **无注解** | **值** | **内容决定类型** |
+    ///
+    /// # 无注解时按内容推断
+    ///
+    /// 无注解的 `f = { 5 }` 是**值** `5`，不是函数——块的值由内容给出，
+    /// 不由注解存在与否决定。要定义函数就写注解：`f: () -> Int = { 5 }`。
+    /// 这条规则与 `d = {"a": 1}` 同源：类型由内容决定。
+    pub fn block_binding_is_function(
+        type_annotation: Option<&Type>,
+        value: Option<&Expr>,
+    ) -> bool {
+        match value {
+            // `=>` 是显式函数构造子，注释无关
+            Some(Expr::Lambda { .. }) => true,
+            // 块：只有 Fn 注解才是函数；无注解按值处理（内容决定类型）
+            Some(Expr::Block(_)) => matches!(type_annotation, Some(Type::Fn { .. })),
+            // 非块值的绑定不参与此判定
+            _ => false,
         }
     }
 

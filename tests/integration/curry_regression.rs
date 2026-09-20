@@ -9,7 +9,8 @@
 use yaoxiang::run;
 
 fn run_ok(source: &str) {
-    run(source).unwrap_or_else(|e| {
+    let source = crate::fixture::with_main_invoked(source);
+    run(&source).unwrap_or_else(|e| {
         panic!(
             "Regression test failed.\nSource:\n{}\nError:\n{:?}",
             source, e
@@ -23,7 +24,7 @@ fn non_curry_multi_param_function_unchanged() {
     run_ok(
         r#"
         add: (a: Int, b: Int) -> Int = (a, b) => a + b
-        main = { r = add(3, 4) }
+        main = () => { r = add(3, 4) }
         "#,
     );
 }
@@ -34,7 +35,7 @@ fn non_curry_single_param_function_unchanged() {
     run_ok(
         r#"
         inc: (x: Int) -> Int = (x) => x + 1
-        main = { r = inc(5) }
+        main = () => { r = inc(5) }
         "#,
     );
 }
@@ -45,7 +46,7 @@ fn existing_lambda_call_still_works() {
     run_ok(
         r#"
         f: (x: Int) -> Int = (x) => x * 2
-        main = { r = f(21) }
+        main = () => { r = f(21) }
         "#,
     );
 }

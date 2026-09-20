@@ -4,7 +4,7 @@
 
 use crate::frontend::core::parser::ast::Type as AstType;
 use crate::frontend::core::typecheck::MonoType;
-use crate::middle::core::ir::{BasicBlock, FunctionBody, FunctionIR, Instruction, ModuleIR};
+use crate::middle::core::ir::{BasicBlock, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR};
 use crate::middle::passes::mono::instance::{FunctionId, InstantiationRequest};
 use std::collections::HashMap;
 
@@ -69,7 +69,6 @@ pub trait FunctionMonomorphizer {
         type_map: &HashMap<usize, MonoType>,
     ) -> Instruction;
 
-    /// 替换AST类型
     fn substitute_type_ast(
         &self,
         ty: &AstType,
@@ -198,10 +197,14 @@ impl FunctionMonomorphizer for super::Monomorphizer {
             .collect();
         let new_return_type =
             self.substitute_single_type(&generic_func.return_type, &type_param_map);
-        let new_locals: Vec<MonoType> = match &generic_func.body {
+        let new_locals: Vec<LocalSlot> = match &generic_func.body {
             FunctionBody::Code { locals, .. } => locals
                 .iter()
-                .map(|ty| self.substitute_single_type(ty, &type_param_map))
+                .map(|slot| LocalSlot {
+                    name: slot.name.clone(),
+                    ty: self.substitute_single_type(&slot.ty, &type_param_map),
+                    scope_depth: slot.scope_depth,
+                })
                 .collect(),
             _ => Vec::new(),
         };
@@ -291,18 +294,25 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 dst,
                 src,
                 target_type,
+                span,
             } => {
                 let new_target = self.substitute_type_ast(target_type, type_map);
                 Instruction::Cast {
                     dst: dst.clone(),
                     src: src.clone(),
                     target_type: new_target,
+                    span: *span,
                 }
             }
-            Instruction::TypeTest(operand, test_type) => {
-                let new_test_type = self.substitute_type_ast(test_type, type_map);
-                Instruction::TypeTest(operand.clone(), new_test_type)
-            }
+            Instruction::TypeTest {
+                src: operand,
+                ty: test_type,
+                span,
+            } => Instruction::TypeTest {
+                src: operand.clone(),
+                ty: self.substitute_type_ast(test_type, type_map),
+                span: *span,
+            },
             _ => instr.clone(),
         }
     }
@@ -395,6 +405,11 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                     .collect(),
                 return_type: Box::new(self.substitute_type_ast(return_type, type_map)),
             },
+
+            // RFC-004：括号有语义，替换内层后保留括号（供 split_curry 判定链条终点）
+            AstType::Paren(inner) => {
+                AstType::Paren(Box::new(self.substitute_type_ast(inner, type_map)))
+            }
 
             // Option：替换内部类型
             AstType::Option(inner) => {
@@ -646,6 +661,7 @@ impl FunctionMonomorphizer for super::Monomorphizer {
         ModuleIR {
             globals: original_module.globals.clone(),
             functions: output_funcs,
+            init: original_module.init.clone(),
             ffi_libs: original_module.ffi_libs.clone(),
             ffi_bindings: original_module.ffi_bindings.clone(),
             entry_function: original_module.entry_function.clone(),

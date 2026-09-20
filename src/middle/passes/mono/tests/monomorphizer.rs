@@ -19,7 +19,7 @@ use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::core::types::mono::UniverseLevel;
 use crate::frontend::core::types::var::TypeVar;
 use crate::middle::core::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::middle::passes::mono::Monomorphizer;
@@ -44,13 +44,17 @@ fn make_identity_ir() -> FunctionIR {
                     Instruction::Load {
                         dst: Operand::Local(0),
                         src: Operand::Arg(0),
+                        span: Span::dummy(),
                     },
-                    Instruction::Ret(Some(Operand::Local(0))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(0)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![param_type.clone()],
+            locals: vec![LocalSlot::temp(param_type.clone())],
         },
     }
 }
@@ -72,17 +76,22 @@ fn make_swap_ir() -> FunctionIR {
                     Instruction::Load {
                         dst: Operand::Local(0),
                         src: Operand::Arg(0),
+                        span: Span::dummy(),
                     },
                     Instruction::Load {
                         dst: Operand::Local(1),
                         src: Operand::Arg(1),
+                        span: Span::dummy(),
                     },
-                    Instruction::Ret(Some(Operand::Local(0))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(0)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![t.clone(), t.clone()],
+            locals: vec![LocalSlot::temp(t.clone()), LocalSlot::temp(t.clone())],
         },
     }
 }
@@ -149,7 +158,7 @@ fn test_specialize_identity_with_int() {
     assert_eq!(func.params[0], MonoType::Int(64), "参数类型应为 Int(64)");
     assert_eq!(func.return_type, MonoType::Int(64), "返回类型应为 Int(64)");
     assert_eq!(
-        func.locals()[0],
+        func.locals()[0].ty,
         MonoType::Int(64),
         "局部变量类型应为 Int(64)"
     );
@@ -303,11 +312,16 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
         body: FunctionBody::Code {
             blocks: vec![BasicBlock {
                 label: 0,
-                instructions: vec![Instruction::Ret(None)],
+                instructions: vec![Instruction::Ret {
+                    value: None,
+                    span: Span::dummy(),
+                }],
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![MonoType::make_list(MonoType::TypeVar(TypeVar::new(0)))],
+            locals: vec![LocalSlot::temp(MonoType::make_list(MonoType::TypeVar(
+                TypeVar::new(0),
+            )))],
         },
     };
 
@@ -329,7 +343,7 @@ fn test_specialize_with_generic_type_args_replaces_inner_types() {
     assert_eq!(func.params[0], MonoType::make_list(MonoType::make_string()));
     assert_eq!(func.return_type, MonoType::make_string());
     assert_eq!(
-        func.locals()[0],
+        func.locals()[0].ty,
         MonoType::make_list(MonoType::make_string())
     );
 }
@@ -409,12 +423,15 @@ fn test_replace_call_sites_replaces_generic_call_in_main() {
                         span: Span::default(),
                         def: None,
                     },
-                    Instruction::Ret(Some(Operand::Local(0))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(0)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![MonoType::Int(64)],
+            locals: vec![LocalSlot::temp(MonoType::Int(64))],
         },
     };
 
@@ -467,12 +484,15 @@ fn test_replace_call_sites_skips_generic_functions() {
                         span: Span::default(),
                         def: None,
                     },
-                    Instruction::Ret(Some(Operand::Local(0))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(0)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![MonoType::TypeVar(TypeVar::new(0))],
+            locals: vec![LocalSlot::temp(MonoType::TypeVar(TypeVar::new(0)))],
         },
     };
 
@@ -582,12 +602,15 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
                         span: Span::default(),
                         def: None,
                     },
-                    Instruction::Ret(Some(Operand::Local(0))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(0)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![MonoType::Int(64)],
+            locals: vec![LocalSlot::temp(MonoType::Int(64))],
         },
     };
 
@@ -929,12 +952,18 @@ fn test_replace_call_sites_multi_instantiation_dispatches_per_site() {
                         span: span_str,
                         def: None,
                     },
-                    Instruction::Ret(None),
+                    Instruction::Ret {
+                        value: None,
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![MonoType::Int(64), MonoType::make_string()],
+            locals: vec![
+                LocalSlot::temp(MonoType::Int(64)),
+                LocalSlot::temp(MonoType::make_string()),
+            ],
         },
     };
 
@@ -1020,12 +1049,15 @@ fn test_replace_call_sites_rewrites_nested_calls_in_specialized_body() {
                         span: inner_span,
                         def: None,
                     },
-                    Instruction::Ret(Some(Operand::Local(1))),
+                    Instruction::Ret {
+                        value: Some(Operand::Local(1)),
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![MonoType::Int(64)],
+            locals: vec![LocalSlot::temp(MonoType::Int(64))],
         },
     };
 
@@ -1085,12 +1117,15 @@ fn test_scale_over_hundred_instantiations_compiles() {
                         span: Span::default(),
                         def: None,
                     },
-                    Instruction::Ret(None),
+                    Instruction::Ret {
+                        value: None,
+                        span: Span::dummy(),
+                    },
                 ],
                 successors: Vec::new(),
             }],
             entry: 0,
-            locals: vec![MonoType::Int(64)],
+            locals: vec![LocalSlot::temp(MonoType::Int(64))],
         },
     };
     let module = ModuleIR {
@@ -1151,15 +1186,18 @@ fn test_type_growing_recursion_still_blocked_by_depth() {
                             span: Span::default(),
                             def: None,
                         },
-                        Instruction::Ret(Some(Operand::Local(1))),
+                        Instruction::Ret {
+                            value: Some(Operand::Local(1)),
+                            span: Span::dummy(),
+                        },
                     ],
                     successors: Vec::new(),
                 }],
                 entry: 0,
-                locals: vec![MonoType::Generic {
+                locals: vec![LocalSlot::temp(MonoType::Generic {
                     name: "List".to_string(),
                     args: vec![t.clone()],
-                }],
+                })],
             },
         },
     );

@@ -10,7 +10,7 @@ use std.assert
 use std.string
 use std.result
 
-main = {
+main: () -> Void = {
     // 成功路径：T=Int 从实参反推
     ok_r = string.parse_int("42")
     assert.assert(result.is_ok(ok_r), "ok: is_ok")
@@ -28,3 +28,5 @@ main = {
     r2 = string.parse_int("7")
     assert.assert(result.unwrap(r2) == 7, "second instance unwrap == 7")
 }
+
+main()

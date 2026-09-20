@@ -3,7 +3,7 @@ title: 'RFC-014b: 构建系统与二进制分发'
 status: '审核中'
 author: '晨煦'
 created: '2026-06-11'
-updated: '2026-07-05'
+updated: '2026-09-15'
 group: 'rfc-014'
 issue: '#91'
 impl: '0%'
@@ -13,6 +13,21 @@ impl_status: 'not-started'
 # RFC-014b: 构建系统与二进制分发
 
 > 本 RFC 是 [RFC-014: 包管理系统设计](../accepted/014-package-manager.md) 的子 RFC。
+
+## 2026-09-15 审核决议
+
+以下决议由所有者于 2026-09-15 拍板：
+
+1. **build.yx 信任门（对「沙箱」开放问题的落地）**：`custom` 策略执行任意代码是包管理器最大的供应链攻击面——`yaoxiang add` 一个恶意包即等于交出 `std.os` 全权限。最低强制线：
+   - 首次执行某包的 `build.yx` 前必须交互确认；
+   - `yaoxiang add --trust <pkg>` / `install --trust` 把信任记录持久化到 `~/.yaoxiang/config.toml`（`[trust] build-scripts = ["name@version"]`）；
+   - 非交互环境（CI）默认拒绝 `custom` 构建，除非显式 `--trust`；
+   - 完整沙箱机制继续作为开放问题研究，但信任门是不可省略的下限。
+2. **阶段重排**：`5a → 5b → 5c（cargo）→ 5d（[binaries]）→ 5f（bindgen，依赖 RFC-026b）→ 5e（custom 最后，带信任门）`。声明式路径（cargo）先行，任意代码执行最后。
+3. **二进制分发归一**：`[binaries]` 是唯一二进制分发机制（对应 RFC-014a 决议 3——`.yxpkg` 只含源码）。
+4. **交叉编译**：初期不支持，多平台产物由 CI 多主机产出（与 RFC-037 cargo-dist 思路对齐）。
+5. **构建产物大小**：不设上限，由分发渠道自管。
+6. **Cargo 版本不兼容**：走 `[build.requirements]` 预检报错 + 安装指引（正文已定义，无额外机制）。
 
 ## 摘要
 
@@ -155,6 +170,7 @@ URL 或 Registry 根 URL）。
 **执行模型（最小规范）：**
 
 - 脚本是普通 `.yx` 代码，拥有完整 `std` 访问权限
+- **信任门（2026-09-15 决议，强制）**：首次执行前须交互确认，非交互环境默认拒绝（见上方决议 1）
 - 工作目录：包根目录（`vendor/<pkg>-<ver>/`）
 - 成功：退出码 0
 - 失败：非 0 退出码，安装中止
@@ -320,8 +336,10 @@ build/
 | Phase 5b | 系统依赖检查                                |
 | Phase 5c | Cargo 构建集成（读 `[build.cargo]` 拼命令） |
 | Phase 5d | 预编译二进制下载 + 校验                     |
-| Phase 5e | build.yx 脚本执行                           |
-| Phase 5f | yx-bindgen 集成（`headers` 字段）           |
+| Phase 5f | yx-bindgen 集成（`headers` 字段，依赖 RFC-026b） |
+| Phase 5e | build.yx 脚本执行（**最后实施**，带信任门） |
+
+执行顺序（2026-09-15 决议 2）：`5a → 5b → 5c → 5d → 5f → 5e`。声明式构建先行，任意代码执行殿后。
 
 ### 依赖关系
 
@@ -330,10 +348,10 @@ build/
 
 ## 开放问题
 
-- [ ] build.yx 脚本是否需要沙箱隔离？
-- [ ] 构建产物的最大大小限制？
-- [ ] 是否支持交叉编译（在 Linux 上构建 Windows 产物）？
-- [ ] Cargo 版本不兼容时如何处理？
+- [x] build.yx 脚本是否需要沙箱隔离？→ 信任门为强制下限（2026-09-15 决议 1）；完整沙箱继续研究
+- [x] 构建产物的最大大小限制？→ 不设上限，渠道自管（2026-09-15 决议 5）
+- [x] 是否支持交叉编译（在 Linux 上构建 Windows 产物）？→ 初期不支持，CI 多主机产出（2026-09-15 决议 4）
+- [x] Cargo 版本不兼容时如何处理？→ `[build.requirements]` 预检报错 + 安装指引（2026-09-15 决议 6）
 
 ---
 

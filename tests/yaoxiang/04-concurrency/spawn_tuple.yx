@@ -3,7 +3,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     result = spawn {
         v1 = 1 + 1
         v2 = 2 + 2
@@ -11,3 +11,5 @@ main = {
     }
     assert.assert(result == 8)
 }
+
+main()

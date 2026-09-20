@@ -19,7 +19,7 @@ Point.shift: (self: &mut Point, dx: Float, dy: Float) -> Void = {
     self.y = self.y + dy
 }
 
-main = {
+main: () -> Void = {
     p = Point(1.0, 2.0)
     (px_ref, p) = p.get_x()      // 令牌返回给调用者
     assert.assert(px_ref == 1.0, "子令牌活跃")
@@ -29,3 +29,5 @@ main = {
     p.shift(0.5, 0.5)
     assert.assert(p.x == 1.5, "&mut 复用写回")
 }
+
+main()

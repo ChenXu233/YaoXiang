@@ -56,6 +56,20 @@ pub struct Export {
     ///
     /// ponytail: std 精度提升是独立后续任务（见后续 issue），native FFI 边界本就丢精度。
     pub mono_type: Option<MonoType>,
+    /// 该导出函数的**声明期类型参数名**（按声明序），非泛型为 None。
+    ///
+    /// 跨模块调用（`list.len(v)`）的单态化需要这些名字：调用方的
+    /// `generic_fn_type_params` 只登记本模块的函数，拿不到被调模块的声明名，
+    /// 于是签名里的 `TypeRef("A")` 无人绑定、实参无法与 `&Vec(A)` unify（E1002）。
+    /// 随导出一并携带可让调用方直接使用**真实名字**，无需从签名形态反推
+    /// （反推无法区分类型参数与普通类型名，会误伤 `Dict(K,V)` / `File` 等）。
+    pub type_params: Option<Vec<String>>,
+    /// 该导出函数的**声明期形参名**（按声明序），无参或未知为 None。
+    ///
+    /// 命名参数调用（`list.push(item = 9, list = v)`）必须按**名字**把实参
+    /// 重排到声明序。定义方的 `fn_param_names` 只在本模块的 IR 生成器实例里，
+    /// 调用方拿不到（`FunctionIR.params` 只有类型没有名字）——所以随导出携带。
+    pub param_names: Option<Vec<String>>,
 }
 
 /// 模块源类型

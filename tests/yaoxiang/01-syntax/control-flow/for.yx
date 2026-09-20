@@ -5,7 +5,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     mut items = [10, 20, 30]
 
     // for 累加
@@ -15,3 +15,5 @@ main = {
     }
     assert.assert(sum == 60, "for sum 10+20+30 == 60")
 }
+
+main()

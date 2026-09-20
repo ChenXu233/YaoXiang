@@ -5,10 +5,12 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     mut items = [1, 2, 3]
 
     // 索引访问
     first = items[0]
     assert.assert(first == 1, "first element should be 1")
 }
+
+main()

@@ -6,9 +6,11 @@ use std.assert
 
 Point: Type = { x: Int, y: Int }
 
-main = {
+main: () -> Void = {
     p = Point(1, 2)
     ref1 = &p
     ref2 = &p
     assert.assert(true, "&T is Copy — two immutable refs can coexist")
 }
+
+main()

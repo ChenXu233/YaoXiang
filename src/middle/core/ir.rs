@@ -48,10 +48,12 @@ pub enum Instruction {
     Move {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     Load {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     Store {
         dst: Operand,
@@ -59,24 +61,37 @@ pub enum Instruction {
         /// Source span for error reporting
         span: Span,
     },
-    Push(Operand),
-    Pop(Operand),
-    Dup,
-    Swap,
+    Push {
+        src: Operand,
+        span: Span,
+    },
+    Pop {
+        dst: Operand,
+        span: Span,
+    },
+    Dup {
+        span: Span,
+    },
+    Swap {
+        span: Span,
+    },
     Add {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Sub {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Mul {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Div {
         dst: Operand,
@@ -99,73 +114,98 @@ pub enum Instruction {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Or {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Xor {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Shl {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Shr {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Sar {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Neg {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     Not {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     Eq {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Ne {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Lt {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Le {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Gt {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     Ge {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
-    Jmp(usize),
-    JmpIf(Operand, usize),
-    JmpIfNot(Operand, usize),
+    Jmp {
+        target: usize,
+        span: Span,
+    },
+    JmpIf {
+        cond: Operand,
+        target: usize,
+        span: Span,
+    },
+    JmpIfNot {
+        cond: Operand,
+        target: usize,
+        span: Span,
+    },
     Call {
         dst: Option<Operand>,
         func: Operand,
@@ -205,17 +245,26 @@ pub enum Instruction {
         args: Vec<Operand>,
         /// 静态调用目标的绑定身份（同 `Call::def`）
         def: Option<DefId>,
+        span: Span,
     },
-    Ret(Option<Operand>),
+    Ret {
+        value: Option<Operand>,
+        span: Span,
+    },
     Alloc {
         dst: Operand,
         size: Operand,
+        span: Span,
     },
-    Free(Operand),
+    Free {
+        src: Operand,
+        span: Span,
+    },
     AllocArray {
         dst: Operand,
         size: Operand,
         elem_size: Operand,
+        span: Span,
     },
     /// 定长数组构造（#299 §2）：分配 N 个 Void 占位元素，
     /// 由字面量上下文落点生成——仅当 Array(T,N) 注解直接作用于 List 字面量
@@ -270,8 +319,13 @@ pub enum Instruction {
         dst: Operand,
         src: Operand,
         target_type: Type,
+        span: Span,
     },
-    TypeTest(Operand, Type),
+    TypeTest {
+        src: Operand,
+        ty: Type,
+        span: Span,
+    },
     /// Spawn a new task (for cycle detection: track args and result)
     Spawn {
         /// 每个直接子表达式对应一个闭包
@@ -280,6 +334,7 @@ pub enum Instruction {
         plan: ExecutionPlan,
         /// spawn 块返回值寄存器
         result: Operand,
+        span: Span,
     },
     /// 从 List 寄存器动态读取闭包并 spawn（RFC-024 §2.4 spawn for）
     SpawnFromList {
@@ -289,12 +344,16 @@ pub enum Instruction {
         plan: ExecutionPlan,
         /// spawn 块返回值寄存器
         result: Operand,
+        span: Span,
     },
-    Yield,
+    Yield {
+        span: Span,
+    },
     // Phase 5 additions
     HeapAlloc {
         dst: Operand,
         type_id: usize,
+        span: Span,
     },
     /// 创建结构体实例
     /// type_name: 结构体类型名
@@ -303,6 +362,7 @@ pub enum Instruction {
         dst: Operand,
         type_name: String,
         fields: Vec<Operand>,
+        span: Span,
     },
     /// 创建字典实例
     /// keys: 键的操作数列表
@@ -311,12 +371,14 @@ pub enum Instruction {
         dst: Operand,
         keys: Vec<Operand>,
         values: Vec<Operand>,
+        span: Span,
     },
     /// 创建元组实例（SPEC §3.6）
     /// items: 各元素的操作数列表（按元素顺序）
     NewTuple {
         dst: Operand,
         items: Vec<Operand>,
+        span: Span,
     },
     /// 创建 Range 值（#302）：三标量不可变记录，正式运行时身份
     NewRange {
@@ -324,6 +386,7 @@ pub enum Instruction {
         start: Operand,
         end: Operand,
         step: Operand,
+        span: Span,
     },
     /// RFC-011a §6: 包装具体值为存在类型变体（Animal$Group.Dog(payload)）。
     /// group: 合成变体类型名（接口名 + "$Group"）；variant: 编译期类型收集定序的变体号
@@ -355,52 +418,70 @@ pub enum Instruction {
         /// 闭包目标函数的绑定身份（生成期 intern，必有值；测试手工构造可为 None）
         def: Option<DefId>,
         env: Vec<Operand>,
+        span: Span,
     },
     /// Drop a value (ownership-based cleanup)
-    Drop(Operand),
+    Drop {
+        src: Operand,
+        span: Span,
+    },
     /// Create Arc (atomic reference count = 1)
     ArcNew {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Create Rc (non-atomic reference count = 1)
     RcNew {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Clone Arc (atomic reference count + 1)
     ArcClone {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Drop Arc (atomic reference count - 1, free if zero)
-    ArcDrop(Operand),
+    ArcDrop {
+        src: Operand,
+        span: Span,
+    },
     // =====================
     // unsafe 块和裸指针指令
     // =====================
     /// Mark the start of an unsafe block
-    UnsafeBlockStart,
+    UnsafeBlockStart {
+        span: Span,
+    },
     /// Mark the end of an unsafe block
-    UnsafeBlockEnd,
+    UnsafeBlockEnd {
+        span: Span,
+    },
     /// Create raw pointer from value: ptr = &value
     PtrFromRef {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Dereference pointer: value = *ptr
     PtrDeref {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Store through pointer: *ptr = value
     PtrStore {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     /// Load from pointer: value = *ptr (combined deref and load)
     PtrLoad {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     // =====================
     // 字符串指令
@@ -408,24 +489,29 @@ pub enum Instruction {
     StringLength {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     StringConcat {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
+        span: Span,
     },
     StringGetChar {
         dst: Operand,
         src: Operand,
         index: Operand,
+        span: Span,
     },
     StringFromInt {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     StringFromFloat {
         dst: Operand,
         src: Operand,
+        span: Span,
     },
     // =====================
     // 闭包 Upvalue 指令
@@ -433,12 +519,104 @@ pub enum Instruction {
     LoadUpvalue {
         dst: Operand,
         upvalue_idx: usize,
+        span: Span,
     },
     StoreUpvalue {
         src: Operand,
         upvalue_idx: usize,
+        span: Span,
     },
-    CloseUpvalue(Operand),
+    CloseUpvalue {
+        src: Operand,
+        span: Span,
+    },
+}
+
+impl Instruction {
+    /// 指令的源码位置。
+    ///
+    /// 刻意**不设通配臂**：新增变体若忘了带 span，此处编译失败，
+    /// 而不是静默退化到"无位置"。这是位置信息可信的唯一强制手段。
+    pub fn span(&self) -> Span {
+        match self {
+            Instruction::Move { span, .. } => *span,
+            Instruction::Load { span, .. } => *span,
+            Instruction::Store { span, .. } => *span,
+            Instruction::Push { span, .. } => *span,
+            Instruction::Pop { span, .. } => *span,
+            Instruction::Dup { span, .. } => *span,
+            Instruction::Swap { span, .. } => *span,
+            Instruction::Add { span, .. } => *span,
+            Instruction::Sub { span, .. } => *span,
+            Instruction::Mul { span, .. } => *span,
+            Instruction::Div { span, .. } => *span,
+            Instruction::Mod { span, .. } => *span,
+            Instruction::And { span, .. } => *span,
+            Instruction::Or { span, .. } => *span,
+            Instruction::Xor { span, .. } => *span,
+            Instruction::Shl { span, .. } => *span,
+            Instruction::Shr { span, .. } => *span,
+            Instruction::Sar { span, .. } => *span,
+            Instruction::Neg { span, .. } => *span,
+            Instruction::Not { span, .. } => *span,
+            Instruction::Eq { span, .. } => *span,
+            Instruction::Ne { span, .. } => *span,
+            Instruction::Lt { span, .. } => *span,
+            Instruction::Le { span, .. } => *span,
+            Instruction::Gt { span, .. } => *span,
+            Instruction::Ge { span, .. } => *span,
+            Instruction::Jmp { span, .. } => *span,
+            Instruction::JmpIf { span, .. } => *span,
+            Instruction::JmpIfNot { span, .. } => *span,
+            Instruction::Call { span, .. } => *span,
+            Instruction::CallVirt { span, .. } => *span,
+            Instruction::CallDyn { span, .. } => *span,
+            Instruction::TailCall { span, .. } => *span,
+            Instruction::Ret { span, .. } => *span,
+            Instruction::Alloc { span, .. } => *span,
+            Instruction::Free { span, .. } => *span,
+            Instruction::AllocArray { span, .. } => *span,
+            Instruction::AllocFixedArray { span, .. } => *span,
+            Instruction::LoadField { span, .. } => *span,
+            Instruction::StoreField { span, .. } => *span,
+            Instruction::LoadIndex { span, .. } => *span,
+            Instruction::StoreIndex { span, .. } => *span,
+            Instruction::Contains { span, .. } => *span,
+            Instruction::Cast { span, .. } => *span,
+            Instruction::TypeTest { span, .. } => *span,
+            Instruction::Spawn { span, .. } => *span,
+            Instruction::SpawnFromList { span, .. } => *span,
+            Instruction::Yield { span, .. } => *span,
+            Instruction::HeapAlloc { span, .. } => *span,
+            Instruction::CreateStruct { span, .. } => *span,
+            Instruction::NewDict { span, .. } => *span,
+            Instruction::NewTuple { span, .. } => *span,
+            Instruction::NewRange { span, .. } => *span,
+            Instruction::CreateVariant { span, .. } => *span,
+            Instruction::VariantTag { span, .. } => *span,
+            Instruction::VariantPayload { span, .. } => *span,
+            Instruction::MakeClosure { span, .. } => *span,
+            Instruction::Drop { span, .. } => *span,
+            Instruction::ArcNew { span, .. } => *span,
+            Instruction::RcNew { span, .. } => *span,
+            Instruction::ArcClone { span, .. } => *span,
+            Instruction::ArcDrop { span, .. } => *span,
+            Instruction::UnsafeBlockStart { span, .. } => *span,
+            Instruction::UnsafeBlockEnd { span, .. } => *span,
+            Instruction::PtrFromRef { span, .. } => *span,
+            Instruction::PtrDeref { span, .. } => *span,
+            Instruction::PtrStore { span, .. } => *span,
+            Instruction::PtrLoad { span, .. } => *span,
+            Instruction::StringLength { span, .. } => *span,
+            Instruction::StringConcat { span, .. } => *span,
+            Instruction::StringGetChar { span, .. } => *span,
+            Instruction::StringFromInt { span, .. } => *span,
+            Instruction::StringFromFloat { span, .. } => *span,
+            Instruction::LoadUpvalue { span, .. } => *span,
+            Instruction::StoreUpvalue { span, .. } => *span,
+            Instruction::CloseUpvalue { span, .. } => *span,
+        }
+    }
 }
 
 /// Basic block
@@ -460,10 +638,35 @@ pub enum FunctionBody {
     Code {
         blocks: Vec<BasicBlock>,
         entry: usize,
-        locals: Vec<MonoType>,
+        locals: Vec<LocalSlot>,
     },
     /// 返回值是类型 → {} 是类型字面量
     TypeDecl { definition: Type },
+}
+
+/// 局部变量槽位：类型 + 源码名 + 作用域深度。
+///
+/// `name` 为 `None` 表示编译器内部临时寄存器（无对应源码变量）。
+/// 用 `Option` 而非空串：调用方必须显式处理“无名字”，
+/// 避免 `""` 被当成合法名字传播到诊断里。
+#[derive(Debug, Clone)]
+pub struct LocalSlot {
+    /// 源码变量名；临时寄存器为 None
+    pub name: Option<String>,
+    pub ty: MonoType,
+    /// 作用域深度（0 = 函数参数层），供嵌套作用域重名消歧
+    pub scope_depth: usize,
+}
+
+impl LocalSlot {
+    /// 无名槽位（编译器临时寄存器）
+    pub fn temp(ty: MonoType) -> Self {
+        Self {
+            name: None,
+            ty,
+            scope_depth: 0,
+        }
+    }
 }
 
 /// Function IR
@@ -508,8 +711,8 @@ impl FunctionIR {
         }
     }
 
-    /// 获取局部变量类型列表（仅 Code 体有效）
-    pub fn locals(&self) -> &[MonoType] {
+    /// 获取局部变量槽位（仅 Code 体有效）
+    pub fn locals(&self) -> &[LocalSlot] {
         match &self.body {
             FunctionBody::Code { locals, .. } => locals,
             FunctionBody::TypeDecl { .. } => &[],
@@ -649,11 +852,31 @@ pub enum FfiBinding {
     },
 }
 
+/// 模块级全局槽位（顶层绑定）。
+///
+/// 顶层绑定编译为「一个槽位 + 一条初始化指令」：初始化指令在模块初始化
+/// 序列中运行时求值并写入槽位，读取处走 `Operand::Global(idx)`。
+#[derive(Debug, Clone)]
+pub struct GlobalSlot {
+    /// 绑定名（多文件模式下为限定名 `{module}.{name}`）
+    pub name: String,
+    /// 绑定类型
+    pub ty: MonoType,
+    /// 绝对槽位号（`Operand::Global(index)` 的值）。
+    /// 多文件模式下由编排器预先分配，各文件共享同一布局，故跨文件引用
+    /// 与定义方用同一个索引；单文件模式下即本文件内的声明顺序。
+    pub index: usize,
+}
+
 /// Module IR
 #[derive(Debug, Clone, Default)]
 pub struct ModuleIR {
-    pub globals: Vec<(String, Type, Option<ConstValue>)>,
+    /// 模块级全局槽位（顶层绑定）。索引即 `Operand::Global(idx)` 的槽位号。
+    pub globals: Vec<GlobalSlot>,
     pub functions: Vec<FunctionIR>,
+    /// 模块初始化序列：按依赖顺序求值并写入全局槽位的指令。
+    /// 入口执行前先跑它（Script 模式下它本身就是程序）。
+    pub init: Vec<Instruction>,
     /// FFI 库绑定 — 编译期链接的外部库
     pub ffi_libs: Vec<FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数

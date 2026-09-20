@@ -4,7 +4,7 @@
 
 use std.{assert, io}
 
-main = {
+main: () -> Void = {
     (name, age, city) = spawn {
         t1 = "Alice"
         t2 = 30
@@ -19,3 +19,5 @@ main = {
     io.println(city)
     assert.assert(true, "all passed")
 }
+
+main()

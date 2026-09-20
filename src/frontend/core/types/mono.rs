@@ -287,8 +287,14 @@ impl MonoType {
     ) -> bool {
         matches!(self, MonoType::Generic { name: n, .. } if n == name)
     }
+    /// 内建**运行时长度缓冲**：`Vec(T)`。D8-B 之前这个角色叫 `List`。
+    ///
+    /// 名字分层（RFC-011）：内置层只有 `Vec(T)`（运行时长度的原始缓冲）
+    /// 与 `Array(T, N)`（定长）；`List(T)` 是**标准库类型**
+    /// （`std/list.yx` 里的 `{ data: Vec(T), length: Int }`），不在内置层。
+    /// 因此 `[1,2,3]` 字面量的类型是 `Vec(Int)`，可直接传给库函数。
     pub fn is_list(&self) -> bool {
-        self.is_generic_named("List")
+        self.is_generic_named("Vec")
     }
     pub fn is_dict(&self) -> bool {
         self.is_generic_named("Dict")
@@ -314,6 +320,11 @@ impl MonoType {
     pub fn is_array(&self) -> bool {
         self.is_generic_named("Array")
     }
+    /// RFC-011 容器命名分层：`Vec(T)` 是运行时长度的原始缓冲原语，
+    /// 与 `List(T)`（标准库类型）、`Array(T, N)`（定长）区分。
+    pub fn is_vec(&self) -> bool {
+        self.is_generic_named("Vec")
+    }
     pub fn is_arc(&self) -> bool {
         self.is_generic_named("Arc")
     }
@@ -332,10 +343,20 @@ impl MonoType {
         }
     }
 
-    /// 构造 List(T)
+    /// 构造内建缓冲类型 `Vec(T)`（见 `is_list` 的名字分层说明）。
+    ///
+    /// 保留 `make_list` 这个名字作为**调用方语义**的锚点：语义是
+    /// 「一串同型元素」，落在内置层就是 `Vec(T)`。
     pub fn make_list(elem: MonoType) -> Self {
         MonoType::Generic {
-            name: "List".into(),
+            name: "Vec".into(),
+            args: vec![elem],
+        }
+    }
+    /// 构造 Vec(T)
+    pub fn make_vec(elem: MonoType) -> Self {
+        MonoType::Generic {
+            name: "Vec".into(),
             args: vec![elem],
         }
     }
@@ -390,7 +411,10 @@ impl MonoType {
         }
     }
 
-    /// 检查是否是可索引类型
+    /// 检查是否是可索引类型。
+    ///
+    /// `is_list()` 现已指向内建缓冲 `Vec(T)`（D8-B 名字分层），
+    /// 故 `Vec` 自动包含在内——字面量 `[1,2,3]` 可直接下标。
     pub fn is_indexable(&self) -> bool {
         self.is_list()
             || self.is_dict()
@@ -594,6 +618,13 @@ impl MonoType {
     pub fn from_builtin_name(name: &str) -> Option<MonoType> {
         match name {
             "Int" | "int" | "Int64" | "int64" | "i64" => Some(MonoType::Int(64)),
+            // DateTime 是**时间戳的别名**，不是独立类型。
+            //
+            // 运行时本就是 `RuntimeValue::Int`（`native_now` 直接返回 Int），
+            // 所有访问器也已声明 `(dt: Int)`；此前只在 `now` / `parse_time` 的
+            // 签名串里叫 `DateTime`，使 `now()` 的返回值传不进 `format_time`
+            // 与任何访问器（#338 连带问题）。归一到 Int 即可全线打通。
+            "DateTime" | "datetime" => Some(MonoType::Int(64)),
             "Int32" | "int32" | "i32" => Some(MonoType::Int(32)),
             "Int16" | "int16" | "i16" => Some(MonoType::Int(16)),
             "Int8" | "int8" | "i8" => Some(MonoType::Int(8)),
@@ -649,6 +680,9 @@ impl fmt::Display for MonoType {
 impl From<ast::Type> for MonoType {
     fn from(ast_type: ast::Type) -> Self {
         match ast_type {
+            // RFC-004 括号语义：`Paren` 在类型检查/单态化/解释器层视为**透明**，
+            // 只递归内层（唯一“看见”它的是 split_curry 与 formatter）。
+            ast::Type::Paren(inner) => MonoType::from(*inner),
             ast::Type::Name { name, .. } => {
                 Self::from_builtin_name(&name).unwrap_or(MonoType::TypeRef(name))
             }
@@ -705,7 +739,16 @@ impl From<ast::Type> for MonoType {
                 variants,
             }),
             ast::Type::Tuple(types) => {
-                MonoType::make_tuple(types.into_iter().map(MonoType::from).collect())
+                // 零元素元组就是**单位类型**，与 `Void` 同义。
+                //
+                // `-> ()` 与 `-> Void` 是同一件事；此前分别落成
+                // `Generic{"Tuple",[]}` 与 `Void`，导致函数体尾表达式
+                // （值 `Void`）与返回注解（`()`）判为不等 → 误报 E1002。
+                if types.is_empty() {
+                    MonoType::Void
+                } else {
+                    MonoType::make_tuple(types.into_iter().map(MonoType::from).collect())
+                }
             }
             ast::Type::Fn {
                 params,

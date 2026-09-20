@@ -270,6 +270,62 @@
           {
             "text": "標準ライブラリ概要",
             "link": "/ja/reference/stdlib/"
+          },
+          {
+            "text": "std.string",
+            "link": "/ja/reference/stdlib/string"
+          },
+          {
+            "text": "std.list",
+            "link": "/ja/reference/stdlib/list"
+          },
+          {
+            "text": "std.dict",
+            "link": "/ja/reference/stdlib/dict"
+          },
+          {
+            "text": "std.math",
+            "link": "/ja/reference/stdlib/math"
+          },
+          {
+            "text": "std.io",
+            "link": "/ja/reference/stdlib/io"
+          },
+          {
+            "text": "std.os",
+            "link": "/ja/reference/stdlib/os"
+          },
+          {
+            "text": "std.time",
+            "link": "/ja/reference/stdlib/time"
+          },
+          {
+            "text": "std.net",
+            "link": "/ja/reference/stdlib/net"
+          },
+          {
+            "text": "std.concurrent",
+            "link": "/ja/reference/stdlib/concurrent"
+          },
+          {
+            "text": "std.convert",
+            "link": "/ja/reference/stdlib/convert"
+          },
+          {
+            "text": "std.result",
+            "link": "/ja/reference/stdlib/result"
+          },
+          {
+            "text": "std.range",
+            "link": "/ja/reference/stdlib/range"
+          },
+          {
+            "text": "std.assert",
+            "link": "/ja/reference/stdlib/assert"
+          },
+          {
+            "text": "std.weak",
+            "link": "/ja/reference/stdlib/weak"
           }
         ]
       },

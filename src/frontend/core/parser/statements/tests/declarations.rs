@@ -325,8 +325,10 @@ fn test_value_params_no_merged_misalignment() {
 
 #[test]
 fn test_generic_curried_fn_params_from_lambda() {
-    // 覆盖: RFC-010 泛型函数 — 全泛型第一组时值参数在内层签名
-    // 验证: map: (T: Type) -> ((x: Int) -> Int) = (x) => x 的 params == [x: 无标注]
+    // 覆盖: RFC-004 括号语义 —— `(T: Type) -> ((x: Int) -> Int)` 中
+    // 返回位置的 `Paren` 声明“返回值是函数”，链条在此终止。
+    // 验证: 外层函数只拥有类型参数 `T`（编译期擦除，不占运行时位），
+    // 因而值参数为空；`x` 属于**被返回的内层 lambda**，不再合并进外层。
     let kind = parse_stmt("map: (T: Type) -> ((x: Int) -> Int) = (x) => x");
     let StmtKind::Assign { value, .. } = &kind else {
         panic!("Expected StmtKind::Binding, got {:?}", kind);
@@ -341,11 +343,10 @@ fn test_generic_curried_fn_params_from_lambda() {
         Vec::new()
     };
 
-    assert_eq!(params.len(), 1, "params 应含 lambda 参数 x");
-    assert_eq!(params[0].name, "x", "参数名应来自 lambda");
     assert!(
-        params[0].ty.is_none(),
-        "curried 泛型函数值参数标注 None（HM 推断），不应有 MetaType 错位标注"
+        params.is_empty(),
+        "括号返回位置：外层函数不拥有值参数（`x` 属于被返回的内层 lambda），实际 {:?}",
+        params.iter().map(|p| &p.name).collect::<Vec<_>>()
     );
 }
 

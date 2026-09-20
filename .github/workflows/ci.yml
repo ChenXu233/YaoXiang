@@ -181,4 +181,8 @@ jobs:
           cargo clippy --all --all-features -- -D warnings
 
       - name: Test with MSRV
-        run: cargo test --all-features --lib --bins
+        run: |
+          # 先产出普通可执行文件：`cargo test --lib --bins` 只构建测试壳，
+          # 不落 target/debug/yaoxiang-rs，stdlib 文档门禁会找不到解释器。
+          cargo build --all-features --bins
+          cargo test --all-features --lib --bins

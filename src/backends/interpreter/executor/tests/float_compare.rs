@@ -25,6 +25,7 @@ fn make_compare_function(op: CompareOp) -> BytecodeFunction {
         params: vec![],
         return_type: Type::Bool,
         local_count: 3,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             // r0 = const[lhs]
@@ -61,8 +62,14 @@ fn run_float_compare(
     // Arrange
     let func = make_compare_function(op);
     let mut interp = Interpreter::new();
-    interp.constants.push(ConstValue::Float(lhs));
-    interp.constants.push(ConstValue::Float(rhs));
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .constants
+        .push(ConstValue::Float(lhs));
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .constants
+        .push(ConstValue::Float(rhs));
 
     // Act
     let result = interp

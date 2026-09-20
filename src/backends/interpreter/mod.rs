@@ -6,11 +6,10 @@
 pub mod executor;
 pub mod ffi;
 pub mod frames;
-pub mod registers;
+pub mod image;
 
 #[cfg(test)]
 mod tests;
 
 pub use executor::Interpreter;
-pub use registers::RegisterFile;
 pub use frames::Frame;

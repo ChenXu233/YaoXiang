@@ -10,7 +10,9 @@ SafeArray: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
 }
 
-main = {
+main: () -> Void = {
     arr = SafeArray(Int, 3)
     assert.assert(true, "SafeArray(Int, 3) instantiation compiled and ran")
 }
+
+main()

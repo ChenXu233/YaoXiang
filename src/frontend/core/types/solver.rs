@@ -407,6 +407,28 @@ impl TypeConstraintSolver {
         // eprintln!("DEBUG unify: after expand, t1={:?}, t2={:?}", t1, t2);
 
         match (&t1, &t2) {
+            // 爆炸原理：`Never <: T` 对任意 `T` 成立（类型系统 §2.2 / RFC-010a 规则②）。
+            // 与 `is_subtype` 保持一致——此前 `is_subtype(Never, T)` 为真而
+            // `unify(Never, T)` 报错，两者矛盾。
+            //
+            // 不绑定类型变量：`Never` 可归约到任意 `T`，把 `T` 绑成 `Never`
+            // 会丢失调用点已定型的类型（如 `list.map(xs, x => x * 2)` 中
+            // 由 `xs: List(Int)` 定出的 `T = Int` 被误绑为 `Never`）。
+            // 必须排在 TypeVar 分支之前，否则 `(_, TypeVar(v))` 会先绑走。
+            (MonoType::Never, MonoType::Never) => Ok(()),
+            (MonoType::Never, _) | (_, MonoType::Never) => Ok(()),
+
+            // 顶层类型 `Any`：任意 `T <: Any`，`unify(Any, T)` 恒成立（与 `Never`
+            // 上下对称）。native 签名里大量使用 `fn(Any) -> Any` 形态的多态槽位
+            // （std.range.map / std.list.map 等），若 `Any` 只能与 `Any` 统一，
+            // 传具体类型的 lambda（`x => x * 2` 推断为 `fn(Int) -> Int`）会被拒，
+            // 而这些槽位在运行期本就不关心元素类型。
+            //
+            // 不绑定类型变量（同 `Never` 的理由）：把 `T` 绑成 `Any` 会丢信息。
+            // 必须在 TypeVar 分支之前，否则 `(_, TypeVar(v))` 会先绑走。
+            (MonoType::TypeRef(n), _) if n == "Any" => Ok(()),
+            (_, MonoType::TypeRef(n)) if n == "Any" => Ok(()),
+
             // 类型变量 unify
             (MonoType::TypeVar(v1), MonoType::TypeVar(v2)) => {
                 let v1 = self.find(*v1);
@@ -423,7 +445,6 @@ impl TypeConstraintSolver {
 
             // 具体类型 unify
             (MonoType::Void, MonoType::Void) => Ok(()),
-            (MonoType::Never, MonoType::Never) => Ok(()),
 
             // MetaType unify：层级必须相等
             (

@@ -3,6 +3,14 @@
 #
 # 每个 benchmark 通过 BENCH_INPUT 环境变量注入输入规模
 # 所有语言实现均从 BENCH_INPUT 读取，无需 %i 模板替换
+#
+# ⚠ 读数可比性（2026-09-20 已对齐）：
+#   所有语言统一跑**编译产物**——rust/cpp/go 跑原生可执行文件，YaoXiang 跑
+#   `compile` 产出的 .42 字节码（`%y run %o`，实测可正常执行且输出一致）。
+#   故各语言的「运行」一列现在是纯执行时间，可横向比较。
+#
+#   历史：此前 YaoXiang 写 `%y run %s` 跑源码，读数混入约 65ms 编译开销，
+#   与其他语言不可比。已改成与它们一致的「跑产物」形式。
 
 benchmarks:
   fibonacci:
@@ -14,7 +22,9 @@ benchmarks:
       yaoxiang:
         src: src/fibonacci/fibonacci.yx
         compile: { cmd: "%y build %s -o %o" }
-        run: { cmd: "%y run %s" }
+        # 跑 `compile` 产出的 .42 字节码，与 rust/cpp/go 跑编译产物对齐；
+        # 若写 `%y run %s` 则每次运行都重编译源码，读数混入编译开销。
+        run: { cmd: "%y run %o" }
       rust:
         src: src/fibonacci/fibonacci.rs
         compile: { cmd: "rustc -O %s -o %o" }
@@ -41,7 +51,8 @@ benchmarks:
       yaoxiang:
         src: src/matrix/matrix.yx
         compile: { cmd: "%y build %s -o %o" }
-        run: { cmd: "%y run %s" }
+        # 跑编译产物 .42，与 fib 处一致（详见文件头「读数可比性」）
+        run: { cmd: "%y run %o" }
       python:
         src: src/matrix/matrix.py
         run: { cmd: "python %s" }
@@ -55,7 +66,8 @@ benchmarks:
       yaoxiang:
         src: src/list_ops/list_ops.yx
         compile: { cmd: "%y build %s -o %o" }
-        run: { cmd: "%y run %s" }
+        # 跑编译产物 .42，与 fib 处一致（详见文件头「读数可比性」）
+        run: { cmd: "%y run %o" }
 
   string_concat:
     description: "字符串拼接 — 字符串操作性能"
@@ -66,4 +78,5 @@ benchmarks:
       yaoxiang:
         src: src/string_concat/string_concat.yx
         compile: { cmd: "%y build %s -o %o" }
-        run: { cmd: "%y run %s" }
+        # 跑编译产物 .42，与 fib 处一致（详见文件头「读数可比性」）
+        run: { cmd: "%y run %o" }

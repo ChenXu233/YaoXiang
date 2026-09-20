@@ -291,7 +291,7 @@ def test_main_issue_rfc_link(monkeypatch):
     path = _write_event_file(event)
 
     monkeypatch.setenv('GITHUB_EVENT_PATH', path)
-    monkeypatch.setenv('OPENAI_API_KEY', 'sk-test-key')
+    monkeypatch.setenv('AI_API_KEY', 'sk-test-key')
 
     class FakeResponse:
         status_code = 200
@@ -349,7 +349,7 @@ def test_main_unmatched_event(monkeypatch):
     path = _write_event_file(event)
 
     monkeypatch.setenv('GITHUB_EVENT_PATH', path)
-    monkeypatch.setenv('OPENAI_API_KEY', 'sk-test-key')
+    monkeypatch.setenv('AI_API_KEY', 'sk-test-key')
 
     # Should not crash
     agent.main()

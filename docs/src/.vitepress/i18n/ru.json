@@ -267,6 +267,62 @@
           {
             "text": "Обзор стандартной библиотеки",
             "link": "/ru/reference/stdlib/"
+          },
+          {
+            "text": "std.string",
+            "link": "/ru/reference/stdlib/string"
+          },
+          {
+            "text": "std.list",
+            "link": "/ru/reference/stdlib/list"
+          },
+          {
+            "text": "std.dict",
+            "link": "/ru/reference/stdlib/dict"
+          },
+          {
+            "text": "std.math",
+            "link": "/ru/reference/stdlib/math"
+          },
+          {
+            "text": "std.io",
+            "link": "/ru/reference/stdlib/io"
+          },
+          {
+            "text": "std.os",
+            "link": "/ru/reference/stdlib/os"
+          },
+          {
+            "text": "std.time",
+            "link": "/ru/reference/stdlib/time"
+          },
+          {
+            "text": "std.net",
+            "link": "/ru/reference/stdlib/net"
+          },
+          {
+            "text": "std.concurrent",
+            "link": "/ru/reference/stdlib/concurrent"
+          },
+          {
+            "text": "std.convert",
+            "link": "/ru/reference/stdlib/convert"
+          },
+          {
+            "text": "std.result",
+            "link": "/ru/reference/stdlib/result"
+          },
+          {
+            "text": "std.range",
+            "link": "/ru/reference/stdlib/range"
+          },
+          {
+            "text": "std.assert",
+            "link": "/ru/reference/stdlib/assert"
+          },
+          {
+            "text": "std.weak",
+            "link": "/ru/reference/stdlib/weak"
           }
         ]
       },

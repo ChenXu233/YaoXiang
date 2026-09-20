@@ -1,0 +1,29 @@
+// 03-semantics/top_level_control_flow.yx
+// 覆盖: Script 模式（无 manifest）下顶层语句即程序主体——
+//       控制流（if / while / for）在顶层可用，且回跳与分支跳转正确。
+// 回归: 顶层语句在空指令缓冲上生成，拼进模块初始化序列时跳转目标须整体平移；
+//       漏平移会让 while 的回跳指向函数头（死循环）或 for 只跑一轮。
+// 状态: ✅ 可运行
+
+use std.{assert, io}
+
+mut i: Int = 0
+while i < 3 {
+    i = i + 1
+}
+assert.assert(i == 3, "顶层 while 回跳正确")
+
+mut sum: Int = 0
+for n in [1, 2, 3, 4] {
+    sum = sum + n
+}
+assert.assert(sum == 10, "顶层 for 遍历完整")
+
+flag: Bool = true
+if flag {
+    io.println("顶层 if 分支")
+} else {
+    assert.assert(false, "不应走 else")
+}
+
+io.println("top_level_control_flow ok")

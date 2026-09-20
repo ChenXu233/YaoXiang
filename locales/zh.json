@@ -46,9 +46,11 @@
   "bytecode_func_params": "  参数：{0}",
   "bytecode_func_return_type": "  返回类型：{0}",
   "bytecode_func_local_count": "  局部变量数：{0}",
+  "bytecode_func_local_names": "  局部变量：{0}",
   "bytecode_func_instr_count": "  指令数：{0}",
   "bytecode_func_code": "  代码：",
   "bytecode_instr_index": "    [{0}] {1} {2}",
+  "bytecode_instr_span": " ; {0}:{1}:{2}",
   "bytecode_unknown_opcode": "    [{0}] 未知操作码：0x{1}  ({2})",
   "shell_loaded": "已加载：{0}",
   "debug_binary_op": "调试：左值={0}, 右值={1}",
@@ -202,7 +204,7 @@
     "title": "返回类型不匹配",
     "message": "函数返回类型不正确",
     "template": "返回类型不匹配：期望 '{expected}'，实际 '{found}'",
-    "help": "确保返回值与声明的返回类型匹配",
+    "help": "函数体的值与声明的返回类型不符。要么修改函数体，要么修正注解——注意 `h: () -> Int = f` 的含义是「h 返回 Int」，而不是「h 就是 f」；若想给函数起别名请写 `h = f`。",
     "example": "fn foo() -> Int { \"hello\" }",
     "error_output": "error[E1012]: 返回类型不匹配\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 期望 'Int'，找到 'String'"
   },
@@ -213,6 +215,22 @@
     "help": "检查函数名是否拼写正确",
     "example": "unknown_fn();",
     "error_output": "error[E1013]: 函数未找到\n --> example.yx:1:1\n  |\n1 | unknown_fn();\n  | ^ 未定义的函数 'unknown_fn'"
+  },
+  "E1014": {
+    "title": "命名参数名未知",
+    "message": "调用时使用的参数名不在函数的形参表里",
+    "template": "函数 '{func}' 没有名为 '{name}' 的参数（可用：{params}）",
+    "help": "改用形参表里列出的名字，或改为按位置传参",
+    "example": "add(b = 1, c = 2);",
+    "error_output": "error[E1014]: 命名参数名未知\n --> example.yx:1:1\n  |\n1 | add(b = 1, c = 2);\n  |     ^ 函数 'add' 没有名为 'c' 的参数（可用：a, b）"
+  },
+  "E1015": {
+    "title": "参数重复指定",
+    "message": "同一形参被位置实参与命名实参同时指定",
+    "template": "函数 '{func}' 的参数 '{name}' 被重复指定",
+    "help": "每个参数只能传一次：去掉多余的命名实参或位置实参",
+    "example": "add(1, a = 2);",
+    "error_output": "error[E1015]: 参数重复指定\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ 函数 'add' 的参数 'a' 被重复指定"
   },
   "E1020": {
     "title": "无法推断类型",
@@ -349,6 +367,11 @@
     "help": "确保 const 参数是编译期常量",
     "example": "BadArray(Int, n)  // n 不是编译期常量",
     "error_output": "warning[W1063]: const 泛型约束无法求值\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 无法在编译期求值约束 `N > 0`"
+  },
+  "E1065": {
+    "title": "对非函数值调用",
+    "template": "类型 `{type}` 不可调用——它不是函数",
+    "help": "只有函数值才能被调用。请检查该位置表达式的类型；若要定义函数，需写 Fn 注解 `f: () -> T = { ... }`。"
   },
   "E1071": {
     "title": "类型定义只能在模块级",
@@ -772,6 +795,21 @@
     "template": "代码生成：无效操作数：{reason}",
     "help": "检查操作数类型和用法。"
   },
+  "E3019": {
+    "title": "顶层绑定循环依赖",
+    "template": "顶层绑定的初始化形成循环依赖：{cycle}",
+    "help": "打破坏环：把其中一个绑定的初始化改成不引用环内其他绑定，或用函数推迟求值。"
+  },
+  "E3020": {
+    "title": "缺少程序入口",
+    "template": "可执行文件缺少 main 函数（{path}）",
+    "help": "定义入口：main = { ... }。Bin 角色下没有 main 时全部函数都不可达。"
+  },
+  "E3021": {
+    "title": "入口不是函数",
+    "template": "程序入口 '{name}' 必须是函数，但它是值绑定",
+    "help": "入口要可调用：写成 main = { ... } 或 main: () -> Void = { ... }；值绑定（如 main: Int = 5）不会被执行。"
+  },
   "E4010": {
     "title": "常量除零",
     "template": "常量表达式除以零",
@@ -957,6 +995,11 @@
     "message": "spawn 块内检测到引用形成循环",
     "template": "spawn 内引用循环: {cycle}",
     "help": "spawn 捕获的引用不能形成循环依赖，请检查捕获列表"
+  },
+  "E3022": {
+    "title": "入口 main 签名不符",
+    "template": "入口 '{name}' 的签名不符：运行期以零参调用，但它需要 '{expected}'，实际是 '{found}'",
+    "help": "程序入口总是以无参数方式被调用。请把 main 写成无参形式 `main: () -> Void = { ... }`；需要外部输入请用 std.os 的 argv/环境变量。"
   },
   "E2030": {
     "title": "精化类型约束违反",

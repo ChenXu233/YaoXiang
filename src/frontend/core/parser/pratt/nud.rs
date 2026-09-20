@@ -686,16 +686,35 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse block expression: `{ stmt; ... expr? }`
+    /// Parse block expression: `{ stmt; ... expr? }`
+    ///
+    /// # `{` 的唯一判定点
+    ///
+    /// 三种形态在此**一次**分开，下游不再各自判断：
+    ///
+    /// | 形态 | 结果 | 值 |
+    /// | ---- | ---- | -- |
+    /// | `{}` | 空块 | `Void` |
+    /// | `{ "key": ... }` | 字典字面量 | `Dict(K, V)` |
+    /// | 其它 | 块 | 尾表达式 |
+    ///
+    /// **`{}` 是空块而非空字典**：判据是内容——`Dict` 文法要求至少一个键，
+    /// `{}` 无内容可依据，故取块结构的零形态（与 `unsafe {}` / `spawn {}` 一致）。
+    /// 空块的值是 `Void`。
+    ///
+    /// 非空形态由**内容**决定：`{ "a": 1 }` 是字典（键值对可自描述），
+    /// `{ println("f") }` 是块。
     pub fn parse_block(&mut self) -> Option<Expr> {
         let span = self.span();
         self.bump(); // consume '{'
 
-        // Check for dict literal: {"key": value, ...}
-        // A dict literal starts with a string literal followed by ':'
+        // 形态一：空块 `{}`——无内容，取块结构的零形态（值 Void）
         if self.at(&TokenKind::RBrace) {
-            // Empty dict: {}
             self.bump();
-            return Some(Expr::Dict(Vec::new(), span));
+            return Some(Expr::Block(Block {
+                stmts: Vec::new(),
+                span,
+            }));
         }
 
         // Check if this looks like a dict literal
@@ -733,9 +752,9 @@ impl<'a> ParserState<'a> {
 
         self.expect(&TokenKind::RBrace);
 
-        // 不再自动剥离末尾表达式
-        // 代码块形式必须显式使用 return 返回值
-        // 否则默认返回 Void
+        // RFC-010a 规则①：块的值 = 尾表达式（唯一出口）。
+        // 此处不过早剥离末尾表达式——块整体交给下游求值，
+        // 由 typecheck / ir_gen 按尾表达式规则取值。
         Some(Expr::Block(Block { stmts, span }))
     }
 
@@ -913,15 +932,31 @@ impl<'a> ParserState<'a> {
     }
 
     /// Helper to parse a block expression
+    /// 解析块体并保证返回 Block。
+    ///
+    /// `parse_block` 只在字典字面量形态下返回非 Block（`{ "k": v }`）；
+    /// 块体位置（函数体 / `unsafe` / `spawn` / `if` 分支）出现字典字面量是
+    /// 语法错误——字典是**值**，不是代码体。
+    ///
+    /// 旧实现遇到非 Block 就静默回退成**空 Block**，把字典默默丢掉：
+    /// `x = unsafe {"a": 1}` 会变空块且不报错。现改为显式诊断。
     fn parse_block_expr(&mut self) -> Option<Block> {
-        if let Expr::Block(block) = self.parse_block()? {
-            Some(block)
-        } else {
-            // If we didn't get a block, create an empty one with the expression as the body
-            Some(Block {
-                stmts: Vec::new(),
-                span: self.span(),
-            })
+        match self.parse_block()? {
+            Expr::Block(block) => Some(block),
+            other => {
+                let span = match &other {
+                    Expr::Dict(_, s) => *s,
+                    _ => self.span(),
+                };
+                self.error(
+                    ErrorCodeDefinition::expected_expression(
+                        "block body — a dict literal is a value, not a code block",
+                    )
+                    .at(span)
+                    .build(),
+                );
+                None
+            }
         }
     }
 

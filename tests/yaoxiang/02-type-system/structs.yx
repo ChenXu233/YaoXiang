@@ -7,7 +7,9 @@ use std.assert
 
 Point: Type = { x: Float, y: Float }
 
-main = {
+main: () -> Void = {
     p = Point(1.0, 2.0)
     assert.assert(true, "Point struct created successfully")
 }
+
+main()

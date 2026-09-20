@@ -281,7 +281,15 @@ impl<'a> ParserState<'a> {
         self.bump(); // consume '.'
 
         let token = self.current().cloned()?;
-        if let TokenKind::Identifier(name) = token.kind {
+        // 元组下标：`t.0` / `t.1`。字段名在 AST 里统一按字符串存（`resolve_field_index`
+        // 已有 Range 的 start/end/step 先例），故数字下标转成十进制字符串即可，
+        // 不必新增 AST 节点。此前只接受 Identifier，`t.0` 在解析期直接报 E0011。
+        let field_name = match token.kind.clone() {
+            TokenKind::Identifier(name) => Some(name),
+            TokenKind::IntLiteral(n) if n >= 0 => Some(n.to_string()),
+            _ => None,
+        };
+        if let Some(name) = field_name {
             let span = token.span;
             self.bump();
             Some(Expr::FieldAccess {

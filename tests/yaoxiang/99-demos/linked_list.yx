@@ -11,7 +11,7 @@ sum_values: (a: &Node, b: &Node) -> Int = {
     return a.value + b.value
 }
 
-main = {
+main: () -> Void = {
     n1 = Node(10, 0)
     n2 = Node(20, 0)
 
@@ -22,3 +22,5 @@ main = {
 
     assert.assert(true, "all passed")
 }
+
+main()

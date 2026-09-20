@@ -28,6 +28,7 @@ fn make_module(
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions,
         labels: HashMap::new(),
@@ -54,23 +55,31 @@ fn load_module_for_stepping(module: &BytecodeModule) -> Interpreter {
     let mut interp = embedded_interpreter();
 
     // 加载常量
-    interp.constants.extend(module.constants.clone());
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .constants
+        .extend(module.constants.clone());
 
     // 加载函数
     for func in &module.functions {
-        interp.functions_by_id.push(func.clone());
+        std::sync::Arc::get_mut(&mut interp.image)
+            .unwrap()
+            .functions_by_id
+            .push(func.clone());
     }
 
     // 加载类型
-    interp.type_table.extend(module.type_table.clone());
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .type_table
+        .extend(module.type_table.clone());
 
     // 创建 frame 并压入栈（但不执行）
     if let Some(entry_idx) = module.entry_point {
         if entry_idx < module.functions.len() {
             let entry_func = &module.functions[entry_idx];
             use crate::backends::interpreter::Frame;
-            let mut frame = Frame::with_args(entry_func.clone(), &[]);
-            frame.set_entry_ip(0);
+            let frame = Frame::with_args(entry_idx as u32, entry_func.local_count, &[]);
             interp.push_frame(frame).unwrap();
         }
     }
@@ -146,6 +155,7 @@ fn test_step_over_advances_past_call() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             BytecodeInstr::Nop,
@@ -163,6 +173,7 @@ fn test_step_over_advances_past_call() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             BytecodeInstr::CallStatic {
@@ -222,6 +233,7 @@ fn test_step_out_returns_to_caller() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             BytecodeInstr::Nop,
@@ -240,6 +252,7 @@ fn test_step_out_returns_to_caller() {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count: 1,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![
             BytecodeInstr::CallStatic {
@@ -258,11 +271,20 @@ fn test_step_out_returns_to_caller() {
 
     // 手动加载模块并创建 frame，模拟停在 callee 中途的状态
     let mut interp = embedded_interpreter();
-    interp.constants.extend(module.constants.clone());
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .constants
+        .extend(module.constants.clone());
     for func in &module.functions {
-        interp.functions_by_id.push(func.clone());
+        std::sync::Arc::get_mut(&mut interp.image)
+            .unwrap()
+            .functions_by_id
+            .push(func.clone());
     }
-    interp.type_table.extend(module.type_table.clone());
+    std::sync::Arc::get_mut(&mut interp.image)
+        .unwrap()
+        .type_table
+        .extend(module.type_table.clone());
 
     // 手动执行 CallStatic 但不执行 callee 的 body
     // 这里我们直接测试 step_out 的语义：从当前帧跳出
@@ -438,9 +460,11 @@ fn test_capture_stack_during_execution() {
     assert_eq!(stack[0].function_name, "main", "栈顶应为 main 函数");
 }
 
+/// 帧原地驻留后，执行中的帧就在 `call_stack` 末尾，`capture_stack` 天然包含它。
+/// （旧实现把帧从栈上弹出，靠 `current_frame_info` 补回；该字段已随重构删除。）
 #[test]
 fn test_capture_stack_includes_current_frame_during_step() {
-    // Arrange: 在 step_one 执行期间，current_frame_info 应使 capture_stack 完整
+    // Arrange: 单步执行时当前帧应可被 capture_stack 观察到
     let module = make_module(
         vec![
             BytecodeInstr::Nop,

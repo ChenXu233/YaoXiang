@@ -12,7 +12,7 @@ Point.shift: (self: &mut Point, dx: Int, dy: Int) -> Void = {
     self.x = self.x + dx
     self.y = self.y + dy
 }
-main = {
+main: () -> Void = {
     p = Point(0, 0)
     p.shift(1)
 }

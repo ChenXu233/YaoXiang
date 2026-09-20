@@ -36,6 +36,10 @@ static EMPTY_GENERIC_TYPE_DEFS: std::sync::LazyLock<
 ///
 /// 使用统一的 ScopeManager 管理变量作用域，
 /// 不再维护独立的作用域栈。
+/// 空表：未注入声明序类型参数名时使用（测试/独立构造）。
+static EMPTY_FN_TYPE_PARAMS: std::sync::LazyLock<HashMap<String, Vec<String>>> =
+    std::sync::LazyLock::new(HashMap::new);
+
 pub struct ExpressionInferrer<'a> {
     /// 共享的作用域管理器
     scope: &'a mut ScopeManager,
@@ -53,6 +57,8 @@ pub struct ExpressionInferrer<'a> {
     result_err: Option<MonoType>,
     /// 当前函数的预期返回类型（用于 return 语句的类型检查）
     expected_return_type: Option<MonoType>,
+    /// 当前嵌套的 `unsafe {}` 深度（RFC-010：unsafe 块内允许类型定义）
+    unsafe_depth: usize,
     /// 方法绑定表: "Type.method" -> MonoType(Fn)
     /// 用于方法调用语法糖解析: p.draw(screen) → Point.draw(p, screen)
     method_bindings: &'a HashMap<String, MonoType>,
@@ -65,6 +71,12 @@ pub struct ExpressionInferrer<'a> {
         &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// 泛型函数的声明序类型参数名：函数名 -> ["T", "Acc", ...]（由 StatementChecker 注入）。
+    /// 调用点据此区分「真类型参数」与「恰好未在本地注册的普通类型名」（std 的 `Error` 等）。
+    generic_fn_type_params: &'a HashMap<String, Vec<String>>,
+    /// 最近一次 `monomorphize` 解出的类型实参（按声明顺序），供紧随其后的
+    /// `collect_instantiation_request` 取用。
+    last_type_args: Vec<MonoType>,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// 依赖类型环境（效应查询）—— 由 StatementChecker 注入
@@ -94,10 +106,13 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures: &EMPTY_SIGNATURES,
             result_err: None,
             expected_return_type: None,
+            unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
+            last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -122,10 +137,13 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures,
             result_err: None,
             expected_return_type: None,
+            unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
+            last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -151,10 +169,13 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures,
             result_err,
             expected_return_type: None,
+            unsafe_depth: 0,
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
+            last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -182,10 +203,13 @@ impl<'a> ExpressionInferrer<'a> {
             native_signatures,
             result_err,
             expected_return_type,
+            unsafe_depth: 0,
             method_bindings,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             instantiation_requests: Vec::new(),
+            generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
+            last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -269,6 +293,14 @@ impl<'a> ExpressionInferrer<'a> {
         defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     ) {
         self.generic_type_defs = defs;
+    }
+
+    /// 注入泛型函数的声明序类型参数名表（调用点做类型参数替换的依据）。
+    pub fn set_generic_fn_type_params(
+        &mut self,
+        params: &'a HashMap<String, Vec<String>>,
+    ) {
+        self.generic_fn_type_params = params;
     }
 
     /// 设置依赖类型环境（效应查询）
@@ -537,10 +569,27 @@ impl<'a> ExpressionInferrer<'a> {
                     let elem_ty = self.solver.resolve_type(left_elem);
                     Ok(MonoType::make_list(elem_ty))
                 } else {
-                    // 未绑定类型变量（无标注 lambda 参数等）延后判定：过早
-                    // unify 会把多态参数收敛成具体类型，破坏 fn(Any)->Any 槽位
-                    if matches!(left, MonoType::TypeVar(_)) || matches!(right, MonoType::TypeVar(_))
-                    {
+                    // 未绑定类型变量（无标注 lambda 参数等）：把变量与**另一侧的
+                    // 具体类型**统一，结果取该具体类型。这样 `x * 2` 里
+                    // `x: TypeVar` 会被绑成 `Int`，`fn(x: Int) -> Int` 的返回类型
+                    // 得以定型（调用方 `map(.., f: (item: T) -> R)` 的 `R` 才能解出）。
+                    //
+                    // 仅当**两侧都是**未绑定变量时才真的无法判定，返回 fresh 推迟
+                    // ——此时无具体类型可依，强行 unify 会把两个独立参数错误地
+                    // 绑在一起（破坏 `fn(Any, Any)` 的独立性）。
+                    let (lv, rv) = (
+                        matches!(left, MonoType::TypeVar(_)),
+                        matches!(right, MonoType::TypeVar(_)),
+                    );
+                    if lv && !rv {
+                        let _ = self.solver.unify(left, right);
+                        return Ok(self.solver.resolve_type(right));
+                    }
+                    if rv && !lv {
+                        let _ = self.solver.unify(left, right);
+                        return Ok(self.solver.resolve_type(left));
+                    }
+                    if lv && rv {
                         return Ok(self.solver.new_var());
                     }
                     // 类型层不认的组合宁拒不静默：fresh var 兜底会让
@@ -644,6 +693,39 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 递归收集类型中的所有 TypeVar 索引
+    /// 按出现顺序收集 `TypeVar`（与集合语义的 `collect_type_var_indices` 相对）。
+    /// 用于把「声明序类型参数名」与签名里的变量位逐一对齐。
+    fn collect_type_vars_positional(
+        ty: &MonoType,
+        out: &mut Vec<(usize, MonoType)>,
+    ) {
+        match ty {
+            MonoType::TypeVar(tv) => out.push((tv.index(), ty.clone())),
+            MonoType::Ref { inner, .. } => Self::collect_type_vars_positional(inner, out),
+            MonoType::Generic { args, .. } => {
+                for a in args {
+                    Self::collect_type_vars_positional(a, out);
+                }
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+                ..
+            } => {
+                for p in params {
+                    Self::collect_type_vars_positional(p, out);
+                }
+                Self::collect_type_vars_positional(return_type, out);
+            }
+            MonoType::Union(items) | MonoType::Intersection(items) => {
+                for t in items {
+                    Self::collect_type_vars_positional(t, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn collect_type_var_indices(
         ty: &MonoType,
         out: &mut HashSet<usize>,
@@ -699,6 +781,32 @@ impl<'a> ExpressionInferrer<'a> {
     ///
     /// 递归遍历类型，将遇到的 TypeVar 在 `subst` 映射中查找，
     /// 若找到替换项则替换，否则保留原 TypeVar。
+    /// 把「类型实参表达式」解成具体类型：`Int` → `Int(64)`、`Vec(Int)` → `Generic{"Vec",[Int]}`。
+    ///
+    /// 类型名在实参位置推断得到的只是笼统的 `MetaType`（类型宇宙的值），
+    /// 而显式类型实参要的是它**指的类型**——`mk(Int)` 必须把 `A` 绑到 `Int`，
+    /// 而不是绑到「某个类型值」。这里从 AST 形态直接取类型。
+    fn type_arg_of_expr(expr: &crate::frontend::core::parser::ast::Expr) -> MonoType {
+        use crate::frontend::core::parser::ast::Expr;
+        match expr {
+            Expr::Var(name, _) => {
+                MonoType::from_builtin_name(name).unwrap_or_else(|| MonoType::TypeRef(name.clone()))
+            }
+            // `Vec(Int)` / `Array(Int, 3)` 形态：类型构造器应用
+            Expr::Call { func, args, .. } => {
+                if let Expr::Var(cname, _) = func.as_ref() {
+                    MonoType::Generic {
+                        name: cname.clone(),
+                        args: args.iter().map(Self::type_arg_of_expr).collect(),
+                    }
+                } else {
+                    MonoType::TypeRef("_".to_string())
+                }
+            }
+            _ => MonoType::TypeRef("_".to_string()),
+        }
+    }
+
     fn substitute_type_vars(
         ty: &MonoType,
         subst: &HashMap<usize, MonoType>,
@@ -711,6 +819,113 @@ impl<'a> ExpressionInferrer<'a> {
         Substituter::new().substitute(ty, &sub)
     }
 
+    /// 剥离顶层 `Ref`（递归），返回内层类型。用于类型参数推断时穿透借用包装：
+    /// `unify(&List(Int), &List(T))` 走 Ref 分支后递归到内层即可解出 T，
+    /// 但实参未带 Ref 时（或可变性不匹配）到不了内层，故显式剥一层再补 unify。
+    fn strip_ref(ty: &MonoType) -> MonoType {
+        match ty {
+            MonoType::Ref { inner, .. } => Self::strip_ref(inner),
+            other => other.clone(),
+        }
+    }
+
+    /// 用实际类型 `actual` 解出 `shape` 里未绑定的 `TypeRef` 类型参数，返回替换后的类型。
+    ///
+    /// 只在**结构对齐**处绑定（泛型名相同、实参个数相同、以及 Ref/Fn 逐位），
+    /// 因此 `List(TypeRef "A")` vs `List(Int)` → `List(Int)`。
+    /// 无绑定则原样返回，交由常规 unify 决定。
+    fn bind_type_params_from(
+        shape: &MonoType,
+        actual: &MonoType,
+    ) -> MonoType {
+        match (shape, actual) {
+            (MonoType::TypeRef(_), act) => {
+                if matches!(act, MonoType::TypeRef(_)) {
+                    shape.clone()
+                } else {
+                    act.clone()
+                }
+            }
+            (
+                MonoType::Generic { name: n1, args: a1 },
+                MonoType::Generic { name: n2, args: a2 },
+            ) if n1 == n2 && a1.len() == a2.len() => MonoType::Generic {
+                name: n1.clone(),
+                args: a1
+                    .iter()
+                    .zip(a2.iter())
+                    .map(|(s, a)| Self::bind_type_params_from(s, a))
+                    .collect(),
+            },
+            (MonoType::Ref { mutable, inner: i1 }, MonoType::Ref { inner: i2, .. }) => {
+                MonoType::Ref {
+                    mutable: *mutable,
+                    inner: Box::new(Self::bind_type_params_from(i1, i2)),
+                }
+            }
+            (
+                MonoType::Fn {
+                    params: p1,
+                    return_type: r1,
+                },
+                MonoType::Fn {
+                    params: p2,
+                    return_type: r2,
+                },
+            ) if p1.len() == p2.len() => MonoType::Fn {
+                params: p1
+                    .iter()
+                    .zip(p2.iter())
+                    .map(|(s, a)| Self::bind_type_params_from(s, a))
+                    .collect(),
+                return_type: Box::new(Self::bind_type_params_from(r1, r2)),
+            },
+            _ => shape.clone(),
+        }
+    }
+
+    /// 按名替换类型中的 `TypeRef`（声明的类型参数名 → fresh TypeVar）。
+    /// 只替换 `subst` 里登记的名字，其余 TypeRef（std 的 `Error` 等）原样保留。
+    fn substitute_type_refs(
+        ty: &MonoType,
+        subst: &HashMap<String, MonoType>,
+    ) -> MonoType {
+        match ty {
+            MonoType::TypeRef(name) => subst.get(name).cloned().unwrap_or_else(|| ty.clone()),
+            MonoType::Ref { mutable, inner } => MonoType::Ref {
+                mutable: *mutable,
+                inner: Box::new(Self::substitute_type_refs(inner, subst)),
+            },
+            MonoType::Generic { name, args } => MonoType::Generic {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|a| Self::substitute_type_refs(a, subst))
+                    .collect(),
+            },
+            MonoType::Fn {
+                params,
+                return_type,
+            } => MonoType::Fn {
+                params: params
+                    .iter()
+                    .map(|p| Self::substitute_type_refs(p, subst))
+                    .collect(),
+                return_type: Box::new(Self::substitute_type_refs(return_type, subst)),
+            },
+            MonoType::Struct(st) => {
+                let mut st = st.clone();
+                st.fields = st
+                    .fields
+                    .into_iter()
+                    .map(|(n, f)| (n, Self::substitute_type_refs(&f, subst)))
+                    .collect();
+                MonoType::Struct(st)
+            }
+            _ => ty.clone(),
+        }
+    }
+
     /// 单态化泛型函数类型：将泛型函数类型中的类型变量统一替换为具体类型。
     ///
     /// 当调用泛型函数（如 `fn identity[T](x: T) -> T`）时，根据实参类型
@@ -721,7 +936,31 @@ impl<'a> ExpressionInferrer<'a> {
         &mut self,
         func_ty: MonoType,
         arg_types: &[MonoType],
+        fn_name: Option<&str>,
     ) -> MonoType {
+        // 内置容器构器：`Vec(Int)` / `Array(Int, 3)`。
+        //
+        // 被调对象本身是 `MetaType`（类型宇宙的值，由值位置的类型名推断而来），
+        // 而不是 `Fn`——下面的 `let MonoType::Fn` 会直接原样返回它，
+        // `Vec(Int)()` 的 `func_ty` 就悬空成 `tN`，`.length` 报
+        // E1053「非结构体不能取字段」（D6.2）。这里先把「MetaType 应用类型实参」
+        // 收成 `Generic{name, args}`——这正是 `Vec(Int)` 应有的类型。
+        if matches!(func_ty, MonoType::MetaType { .. }) {
+            if let Some(name) = fn_name {
+                if matches!(name, "Vec" | "Array") {
+                    let args: Vec<MonoType> = arg_types.to_vec();
+                    if !args.is_empty() {
+                        self.last_type_args = args.clone();
+                        return MonoType::Generic {
+                            name: name.to_string(),
+                            args,
+                        };
+                    }
+                }
+            }
+        }
+        // 入口清空：非泛型调用不得读到上次的残留。
+        self.last_type_args.clear();
         let MonoType::Fn {
             params,
             return_type,
@@ -730,31 +969,207 @@ impl<'a> ExpressionInferrer<'a> {
             return func_ty;
         };
 
-        // 收集原始类型变量索引
+        // ── 单态化：每调用一次换一套 fresh 实例 ──────────────────────
+        //
+        // 泛型函数签名里的类型参数有两种表示：
+        //   1. `TypeVar`  —— 值级泛型（`identity: (T: Type) -> (x: T) -> T`
+        //                     在 scope 里已实例化为 TypeVar）
+        //   2. `TypeRef`  —— 类型级泛型（`(T: Type) -> (l: &L(T)) -> Int`
+        //                     声明侧把裸名转成 TypeRef；与 std 的 `Error` 等
+        //                     普通类型名同形，故必须查**声明表**才能区分）
+        //
+        // 两趟都要跑，且都不能提前返回——同一签名里可能两种并存
+        // （`&L(T)` 的 T 是 TypeRef，同签名的 lambda 形参是 TypeVar）。
+        // 关键是**每次调用都要换新实例**：否则跨调用共享同一 TypeVar，
+        // 两次不同类型调用（`identity(42)` 与 `identity("hi")`）会冲突。
+        let mut new_params: Vec<MonoType> = params.clone();
+        let mut new_return: MonoType = (**return_type).clone();
+        let mut pending_slots: Vec<MonoType> = Vec::new();
+        let mut changed = false;
+
+        // 第 1 趟：TypeVar → fresh
+        //
+        // 类型参数的两种表示：`TypeRef("A")`（名字）与 `TypeVar(n)`（编号）。
+        // 声明处（`checker.rs`）为每个声明类型参数创建 TypeVar 并替换进签名，
+        // 所以**普通注解形态**（`(l: L(A))`）拿到的是 TypeVar；
+        // 只有嵌在 `Ref` 内层等少数形态会保留 TypeRef 名字。
+        //
+        // 声明序已知：`declared[i]` 对应签名里「按出现顺序」的第 i 个 TypeVar。
+        // 第 1 趟按索引升序换 fresh，因此可据此把名字与 fresh 槽位对应起来，
+        // 让纯 TypeVar 形态也能收集到实例化请求（否则该泛型函数不会被特化，
+        // 在 mono 的 build_output 里被当未特化泛型删掉 → 运行时报函数不存在）。
+        let declared_names: Vec<String> = fn_name
+            .and_then(|f| self.generic_fn_type_params.get(f).cloned())
+            .unwrap_or_default();
         let mut var_indices = HashSet::new();
         Self::collect_type_var_indices(&func_ty, &mut var_indices);
-
         if !var_indices.is_empty() {
-            // 泛型值级函数：创建新的 TypeVar 实例（每次调用独立）
             let mut subst = HashMap::new();
-            for idx in var_indices {
-                let fresh = self.solver.new_var();
-                subst.insert(idx, fresh);
+            let mut sorted: Vec<usize> = var_indices.iter().copied().collect();
+            sorted.sort_unstable();
+            for idx in sorted {
+                subst.insert(idx, self.solver.new_var());
             }
-
-            let new_params: Vec<MonoType> = params
+            new_params = new_params
                 .iter()
                 .map(|p| Self::substitute_type_vars(p, &subst))
                 .collect();
-            let new_return = Self::substitute_type_vars(return_type, &subst);
+            new_return = Self::substitute_type_vars(&new_return, &subst);
+            changed = true;
+        }
 
-            // Unify 新参数与实参以推断具体类型
+        // 第 2 趟：声明序的类型参数名（TypeRef）→ fresh，并记录解出的实参
+        if let Some(fname) = fn_name {
+            if let Some(declared) = self.generic_fn_type_params.get(fname).cloned() {
+                let mut subst: HashMap<String, MonoType> = HashMap::new();
+                for pname in &declared {
+                    subst.insert(pname.clone(), self.solver.new_var());
+                }
+                // 只有签名里确实出现该名字时才替换（避免无谓复制）
+                let mut any = false;
+                let old_params = std::mem::take(&mut new_params);
+                for p in old_params {
+                    let r = Self::substitute_type_refs(&p, &subst);
+                    if r != p {
+                        any = true;
+                    }
+                    new_params.push(r);
+                }
+                let r = Self::substitute_type_refs(&new_return, &subst);
+                if r != new_return {
+                    any = true;
+                }
+                new_return = r;
+                if any {
+                    changed = true;
+                }
+                // 解出的实参按声明序留存（供实例化请求使用）
+                // 记住待解的槽位（unify 之前它们还是 fresh TypeVar，解不出具体类型）
+                pending_slots = declared
+                    .iter()
+                    .filter_map(|pname| subst.get(pname).cloned())
+                    .collect();
+            }
+        }
+        // TypeVar 形态（普通注解 `(l: L(A))`）：签名里的类型参数是 TypeVar 而非
+        // TypeRef 名字，第 2 趟按名字收集不到。改为从**替换后的签名**里按出现顺序
+        // 取回这些 TypeVar——必须与签名实际使用的是同一个变量；另建 fresh 会让
+        // unify 绑到签名变量上、而收集的槽位永远解不出具体类型。
+        // 第 2 趟按名字填的槽位可能仍是**未解变量**（签名里该名字根本没出现，
+        // 只是照着 declared 列表建了 fresh）——这正是 TypeVar 形态的特征。
+        let ref_slots_unresolved = !pending_slots.is_empty()
+            && pending_slots
+                .iter()
+                .all(|t| matches!(self.solver.resolve_type(t), MonoType::TypeVar(_)));
+        if (pending_slots.is_empty() || ref_slots_unresolved)
+            && !declared_names.is_empty()
+            && changed
+        {
+            let mut ordered: Vec<(usize, MonoType)> = Vec::new();
+            for p in new_params.iter().chain(std::iter::once(&new_return)) {
+                Self::collect_type_vars_positional(p, &mut ordered);
+            }
+            ordered.sort_by_key(|(i, _)| *i);
+            ordered.dedup_by_key(|(i, _)| *i);
+            if ordered.len() == declared_names.len() {
+                pending_slots = ordered.into_iter().map(|(_, t)| t).collect();
+            }
+        }
+
+        if !changed {
+            // 无 TypeVar、无声明类型参数 → 原样返回，交给后续 MetaType 路径
+            let has_meta = params
+                .iter()
+                .any(|p| matches!(p, MonoType::MetaType { .. }));
+            if has_meta {
+                // 落到下方 MetaType 处理（保持原逻辑）
+            } else {
+                return func_ty;
+            }
+        } else {
+            // Unify 新参数与实参以推断具体类型。
+            //
+            // 形参带借用（`&List(T)`）而实参是 `&List(Int)` 时，`TypeRef`/`TypeVar`
+            // 嵌在 `Ref` 内层——solver 的 Ref 分支会递归，但实参若未带 Ref
+            // （或两侧可变性不同）就到不了内层，类型参数解不出来。
+            // 因此逐条 unify 后，再用「剥离 Ref 的形态」补一次，保证内层类型参数能绑定。
             if arg_types.len() == new_params.len() {
                 for (arg_ty, param_ty) in arg_types.iter().zip(new_params.iter()) {
                     let _ = self.solver.unify(arg_ty, param_ty);
+                    let (a, p) = (Self::strip_ref(arg_ty), Self::strip_ref(param_ty));
+                    let _ = self.solver.unify(&a, &p);
                 }
             }
-
+            // 声明名 ↔ 变量的对应可能**断裂**：同一声明类型参数在签名里能以两种
+            // 形态出现（`TypeRef("T")` 名字式、`TypeVar(n)` 编号式），声明处的替换
+            // 只覆盖了其中一部分。于是按名字建的槽位可能指向一个**签名里根本没用到**
+            // 的变量，永远解不出具体类型（`map(.., f: (item:T)->R)` 的 `R` 即如此：
+            // 名字槽指向 t77，而签名实际用的是 t75）。
+            //
+            // 补救：按位置遍历签名取回**实际使用**的变量（unify 已把它们绑好），
+            // 用它替换掉仍未解出的名字槽。已在 unify 中收敛的槽位保持不动
+            // （它才是对应声明名的正主）。
+            if !pending_slots.is_empty() && pending_slots.len() == declared_names.len() {
+                let is_free = |s: &Self, t: &MonoType| {
+                    matches!(s.solver.resolve_type(t), MonoType::TypeVar(_))
+                };
+                if pending_slots.iter().any(|t| is_free(self, t)) {
+                    let mut positional: Vec<(usize, MonoType)> = Vec::new();
+                    for p in new_params.iter().chain(std::iter::once(&new_return)) {
+                        Self::collect_type_vars_positional(p, &mut positional);
+                    }
+                    positional.sort_by_key(|(i, _)| *i);
+                    positional.dedup_by_key(|(i, _)| *i);
+                    let mut used: Vec<MonoType> = pending_slots
+                        .iter()
+                        .filter(|t| !is_free(self, t))
+                        .cloned()
+                        .collect();
+                    for slot in pending_slots.iter_mut() {
+                        if !is_free(self, slot) {
+                            continue;
+                        }
+                        // 取一个尚未被占用的、已收敛的位置变量
+                        if let Some((_, cand)) = positional
+                            .iter()
+                            .find(|(_, t)| !is_free(self, t) && !used.iter().any(|u| u == t))
+                        {
+                            used.push(cand.clone());
+                            *slot = cand.clone();
+                        }
+                    }
+                }
+                // 返回位与参数位可能是**两个不同的** TypeVar（声明处逐位置替换，
+                // 同一类型参数在参数位、返回位各拿一个）。unify 只绑定了参数位那个，
+                // 返回位仍是自由变量——调用方拿到的返回值类型解不出具体类型
+                // （`r = rev(&a)` 后 `len(&r)` 的 A 解不出的根因）。
+                // 按**出现位置**把返回位的自由变量与已解出的槽位统一。
+                let free_ret: Vec<MonoType> = {
+                    let mut v: Vec<(usize, MonoType)> = Vec::new();
+                    Self::collect_type_vars_positional(&new_return, &mut v);
+                    v.sort_by_key(|(i, _)| *i);
+                    v.dedup_by_key(|(i, _)| *i);
+                    v.into_iter()
+                        .map(|(_, t)| t)
+                        .filter(|t| matches!(self.solver.resolve_type(t), MonoType::TypeVar(_)))
+                        .collect()
+                };
+                let resolved_slots: Vec<MonoType> = pending_slots
+                    .iter()
+                    .map(|t| self.solver.resolve_type(t))
+                    .collect();
+                if free_ret.len() == resolved_slots.len() {
+                    for (slot, ty) in resolved_slots.iter().zip(free_ret.iter()) {
+                        let _ = self.solver.unify(slot, ty);
+                    }
+                }
+                new_return = self.solver.resolve_type(&new_return);
+            }
+            // 统一后解出具体类型（unify 之前它们还是 fresh TypeVar）
+            self.last_type_args = pending_slots
+                .iter()
+                .map(|t| self.solver.resolve_type(t))
+                .collect();
             let resolved_return = self.solver.resolve_type(&new_return);
             return MonoType::Fn {
                 params: new_params,
@@ -800,10 +1215,32 @@ impl<'a> ExpressionInferrer<'a> {
 
             // 如果返回类型是 MetaType，尝试从 generic_type_defs 中获取具体的类型
             if matches!(resolved_return, MonoType::MetaType { .. }) {
-                // 尝试从函数名中获取泛型类型定义
-                // 这里我们需要从 func_ty 中获取函数名，但 func_ty 是 MonoType::Fn，
-                // 没有函数名信息。因此我们需要在调用时传入函数名。
-                // 暂时返回一个 TypeVar，让调用者处理
+                // 把 MetaType 位置上的实参组装成 `Generic{name, args}`。
+                //
+                // 这条路径原本直接返回 fresh TypeVar（注释写“让调用者处理”），
+                // 但调用者无从知晓函数名：`Vec(Int)` 于是永远悬空，
+                // `Vec(Int)()` 的 `func_ty` 变成 `tN`，`.length` 报
+                // E1053「非结构体不能取字段」（D6.2 的另一半）。
+                //
+                // 判据：被调形参里有 MetaType 且实参已解成具体类型——
+                // 实参类型就是类型实参（类型宇宙的值），直接收进 args。
+                if let Some(name) = fn_name {
+                    // 只对内置容器构器展开（`Vec` / `Array`）：
+                    // 其余泛型类型走各自的 instantiate_generic_type 路径。
+                    if matches!(name, "Vec" | "Array") {
+                        let args: Vec<MonoType> = arg_types.to_vec();
+                        if !args.is_empty() {
+                            return MonoType::Fn {
+                                params: new_params,
+                                return_type: Box::new(MonoType::Generic {
+                                    name: name.to_string(),
+                                    args,
+                                }),
+                            };
+                        }
+                    }
+                }
+                // 仍未知：返回 TypeVar，由调用点继续判定（原行为）
                 return MonoType::Fn {
                     params: new_params,
                     return_type: Box::new(self.solver.new_var()),
@@ -837,6 +1274,33 @@ impl<'a> ExpressionInferrer<'a> {
         else {
             return;
         };
+
+        // 优先：单态化阶段已按声明序解出的类型实参。
+        // 它覆盖按名声明的类型参数（`(T: Type, Acc: Type)`）——这类参数在
+        // MonoType 侧是 TypeRef 或嵌在 `Ref(Generic)` 里，下面的 TypeVar 位置
+        // 启发式猜不全（#361）。
+        let monomorphized_args = std::mem::take(&mut self.last_type_args);
+        // 只接受**已解成具体类型**的实参；仍是 TypeVar 的说明单态化未收敛，
+        // 落回下方「参数位是 TypeVar」的既有路径（那里的 resolved_params 已统一过）。
+        let monomorphized_args: Vec<MonoType> = monomorphized_args
+            .into_iter()
+            .filter(|t| !matches!(t, MonoType::TypeVar(_)))
+            .collect();
+        if !monomorphized_args.is_empty() {
+            if let crate::frontend::core::parser::ast::Expr::Var(ref name, _) = func_expr {
+                let type_params: Vec<String> = self.lookup_type_params(name);
+                let arity_ok =
+                    type_params.is_empty() || type_params.len() == monomorphized_args.len();
+                if arity_ok {
+                    let generic_id = GenericFunctionId::new(name.clone(), type_params);
+                    let mut request =
+                        InstantiationRequest::new(generic_id, monomorphized_args, call_span);
+                    request.containing_fn = self.scope.fn_context().map(str::to_owned);
+                    self.instantiation_requests.push(request);
+                    return;
+                }
+            }
+        }
 
         // 收集「参数位直接是 TypeVar」的位置（如 identity 的 x: T、twice 的 x: T）。
         // 不能收集嵌套 TypeVar 的参数位：twice(f: (T) -> T, x: T) 的 f 位是 fn(T)->T，
@@ -934,6 +1398,19 @@ impl<'a> ExpressionInferrer<'a> {
                     .enumerate()
                     .map(|(i, _)| format!("T{}", i))
                     .collect();
+            }
+        }
+
+        // 3. 声明的类型参数名表（`check_fn_stmt` 登记）。
+        //
+        // 这是**最可靠**的来源：`poly.type_binders` 在签名收集阶段已被剥掉，
+        // 所以上面第 2 步对 `mk: (A: Type) -> (x: A) -> A` 拿不到名字，
+        // 返回空表——而空表会被下游当成「无 arity 约束」放行，
+        // 实例化请求的 `GenericFunctionId` 就带不上声明名，单态化器匹配不到
+        // `mk` 的特化，运行时报 E6006。
+        if let Some(names) = self.generic_fn_type_params.get(fn_name) {
+            if !names.is_empty() {
+                return names.clone();
             }
         }
 
@@ -1165,7 +1642,7 @@ impl<'a> ExpressionInferrer<'a> {
                 // 待真实需求出现时照 Dict 模式补全
                 let member_ty: Option<MonoType> = match &container_ty {
                     MonoType::Generic { name, args, .. } => match name.as_str() {
-                        "List" | "Array" | "Dict" => args.first().cloned(),
+                        "List" | "Vec" | "Array" | "Dict" => args.first().cloned(),
                         // ponytail: Tuple 异构成员，精确检查需逐成员回退试探，
                         // 真实误报面极小，需要时再加
                         "Tuple" => return Ok(MonoType::Bool),
@@ -1204,8 +1681,17 @@ impl<'a> ExpressionInferrer<'a> {
                 ..
             } => {
                 let container_ty = self.infer_expr(container)?;
+                // 剥掉 Ref 层：`&Vec(T)` 上下标读取合法（RFC-009 §2.8 读透明，
+                // 与 `r.n` 字段读同款）。此前未剥离，带借用的形参里
+                // `list[i]` 报「不可索引」。
+                let mut container_ty = container_ty;
+                while let MonoType::Ref { inner, .. } = container_ty {
+                    container_ty = *inner;
+                }
+                let container_ty = self.solver.resolve_type(&container_ty);
                 match container_ty {
                     MonoType::Generic { name, args } if name == "List" => Ok(args[0].clone()),
+                    MonoType::Generic { name, args } if name == "Vec" => Ok(args[0].clone()),
                     MonoType::Generic { name, args } if name == "Array" => Ok(args[0].clone()),
                     MonoType::Generic { name, args } if name == "Dict" => Ok(args[1].clone()),
                     MonoType::Generic { name, args } if name == "Tuple" => {
@@ -1258,6 +1744,23 @@ impl<'a> ExpressionInferrer<'a> {
                 let resolved = self.solver.resolve_type(&resolved);
 
                 let namespace_path = extract_namespace_path(obj);
+
+                // 泛型类型实例展开：`Box(T)` 是 `Generic{name:"Box", args:[T]}`，
+                // 字段定义存在 generic_type_defs 里而非 struct 表。若目标名命中
+                // 泛型类型定义，先实例化成 Struct 再做字段/方法查找——
+                // 非泛型结构体（Point）走原有 Struct 路径不受影响。
+                let resolved = match &resolved {
+                    MonoType::Generic { name, args } if self.generic_type_defs.contains_key(name) => {
+                        match crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
+                            &self.generic_type_defs[name],
+                            args,
+                        ) {
+                            Ok(inst) => self.solver.resolve_type(&inst),
+                            Err(_) => resolved,
+                        }
+                    }
+                    _ => resolved,
+                };
                 if let Some(ns_path) = namespace_path {
                     let full_path = format!("{}.{}", ns_path, field);
                     if let Some(sig) = self.native_signatures.get(&full_path).cloned() {
@@ -1277,6 +1780,28 @@ impl<'a> ExpressionInferrer<'a> {
                 }
 
                 match resolved {
+                    // 元组下标：`t.0` / `t.1`。解析期已把数字下标转成十进制字段名，
+                    // 这里按下标取元素类型。此前只支持 `t[0]` 形态（见索引表达式臂）。
+                    MonoType::Generic { ref name, ref args } if name == "Tuple" => {
+                        match field.parse::<usize>() {
+                            Ok(i) if i < args.len() => Ok(args[i].clone()),
+                            _ => Err(ErrorCodeDefinition::index_out_of_bounds(
+                                args.len(),
+                                field.parse::<i64>().unwrap_or(-1),
+                            )
+                            .build()),
+                        }
+                    }
+                    // RFC-011 容器命名分层：`Vec(T)` / `Array(T, N)` 的长度。
+                    // 两者以 `length: Int` 暴露长度（与 Range 具名字字段同款处理）：
+                    // - `Array(T, N)`：N 编译期已知，但统一走同一读取路径，避免两套语义。
+                    // - `Vec(T)`：运行时长度，底层缓冲的长度。
+                    // - `List(T)`：库类型自己维护的 length 字段，不经此处。
+                    MonoType::Generic { ref name, .. }
+                        if (name == "Vec" || name == "Array") && field == "length" =>
+                    {
+                        Ok(MonoType::Int(64))
+                    }
                     // #302：Range 具名字段（start/end/step）
                     MonoType::Generic { ref name, .. } if name == "Range" => {
                         if matches!(field.as_str(), "start" | "end" | "step") {
@@ -1353,6 +1878,32 @@ impl<'a> ExpressionInferrer<'a> {
             } => {
                 let func_ty = self.infer_expr(func)?;
 
+                // 可调用性校验：被调对象必须是函数（或 LibraryRef）。
+                //
+                // 此前完全不检——`x = 5; x()` 编译期静默通过，到运行时才报
+                // E6006「函数找不到」，与真实原因（值不可调用）风马牛不相及。
+                // （#364）
+                {
+                    let ft = self.solver.resolve_type(&func_ty);
+                    // 可调用 = 函数 / lib 引用 / 未定形（类型变量、泛型、结构体构造器）。
+                    //
+                    // 只拦**确定不可调用**者：数值、布尔、字符串、容器等纯数据。
+                    // 结构体名既可作构造器（`Point(1,2)`）也可作值，不在此处判。
+                    let definitely_not_callable = matches!(
+                        ft,
+                        MonoType::Int(_)
+                            | MonoType::Float(_)
+                            | MonoType::Bool
+                            | MonoType::Char
+                            | MonoType::Void
+                    ) || ft.is_string();
+                    if definitely_not_callable {
+                        return Err(ErrorCodeDefinition::not_callable(&format!("{ft}"))
+                            .at(*span)
+                            .build());
+                    }
+                }
+
                 // LibraryRef callable rule: when calling a LibraryRef with a string literal
                 // e.g. sqlite3("sqlite3_open") where sqlite3: LibraryRef
                 // Returns ExternRef at compile time
@@ -1391,6 +1942,41 @@ impl<'a> ExpressionInferrer<'a> {
                     .map(|arg| self.infer_expr(arg))
                     .collect::<Result<Vec<_>, _>>()?;
 
+                // D6.3：显式类型实参（`mk(Int)(5)` 的内层 `mk(Int)`）。
+                //
+                // 语法上 `Int` 在实参位置是个 `MetaType`（类型宇宙的值）。
+                // 若函数签名已声明类型参数（作用域里的 `Fn` 参数/返回含类型变量）
+                // 且前导实参全是 `MetaType`，则它们是**类型实参**而非值实参——
+                // 不能当值传给 `Fn{params:[t]}`，否则 `A` 绑到 `MetaType`，
+                // `mk(Int)(5)` 静默出 void（D6.3）。
+                //
+                // 判据用「形参里有未绑定类型变量」而非 `lookup_type_params`：
+                // 后者依赖 `generic_fn_type_params` 登记（仅在 check_fn_stmt 时填），
+                // 单文件里 lambda 形态的绑定未必命中。
+                let mut explicit_type_args: Vec<MonoType> = Vec::new();
+                let mut value_arg_types: Vec<MonoType> = arg_types.clone();
+                {
+                    let leading = arg_types
+                        .iter()
+                        .take_while(|t| matches!(t, MonoType::MetaType { .. }))
+                        .count();
+                    let fn_has_type_slot = matches!(
+                        &func_ty,
+                        MonoType::Fn { params, return_type }
+                            if params.iter().any(|p| matches!(p, MonoType::TypeVar(_)))
+                                || matches!(**return_type, MonoType::TypeVar(_))
+                    );
+
+                    if leading > 0 && fn_has_type_slot && leading <= args.len() {
+                        // 把类型名实参换成**具体类型**（`Int` → `Int(64)`），
+                        // 而不是笼统的 `MetaType`：上层 `mk(Int)(5)` 需要的
+                        // 是已专用化的 `Fn{[Int], Int}`，用 MetaType 绑不出它。
+                        explicit_type_args =
+                            args[..leading].iter().map(Self::type_arg_of_expr).collect();
+                        value_arg_types = arg_types[leading..].to_vec();
+                    }
+                }
+
                 // 重载解析
                 if let crate::frontend::core::parser::ast::Expr::Var(ref name, _) = **func {
                     if overload::has_overloads(self.overload_candidates, name) {
@@ -1421,7 +2007,78 @@ impl<'a> ExpressionInferrer<'a> {
                 }
 
                 // 单态化：处理编译期泛型参数
-                let mono_func_ty = self.monomorphize(func_ty.clone(), &arg_types);
+                let fn_name_for_mono = match func.as_ref() {
+                    crate::frontend::core::parser::ast::Expr::Var(n, _) => Some(n.as_str()),
+                    // 限定名调用（`list.len(v)`）：取函数名才能查声明期类型参数名表
+                    // 并按声明序绑定签名里的 `TypeRef("A")`；否则实参无法与
+                    // `&Vec(A)` unify 报 E1002。
+                    crate::frontend::core::parser::ast::Expr::FieldAccess { field, .. } => {
+                        Some(field.as_str())
+                    }
+                    _ => None,
+                };
+                let mono_func_ty =
+                    self.monomorphize(func_ty.clone(), &value_arg_types, fn_name_for_mono);
+                // D6.3：显式类型实参应用（`mk(Int)` 的内层）。
+                //
+                // 语义：`mk: (A: Type) -> (x: A) -> A` 里 `A` 是**类型参数**；
+                // `mk(Int)` 把 `A` 绑为 `Int`，**返回专用化后的函数**
+                // `(x: Int) -> Int`（而非某个值）。因此：
+                //   1. 把类型实参绑到形参/返回里的类型变量（顺序对应声明序）；
+                //   2. 从实参列表里**移除**它（它不是值实参），否则后面的
+                //      逐参 unify 会拿 `MetaType` 去对 `Int` 报 E1002；
+                //   3. 返回收敛后的 `Fn`。
+                //
+                // 单文件里 `A` 在作用域中是 fresh TypeVar（签名收集阶段已剥掉类型层）。
+                if !explicit_type_args.is_empty() {
+                    if let MonoType::Fn {
+                        params,
+                        return_type,
+                    } = &mono_func_ty
+                    {
+                        let mut slots: Vec<(usize, MonoType)> = Vec::new();
+                        for p in params.iter().chain(std::iter::once(&**return_type)) {
+                            Self::collect_type_vars_positional(p, &mut slots);
+                        }
+                        slots.sort_by_key(|(i, _)| *i);
+                        slots.dedup_by_key(|(i, _)| *i);
+                        for (idx, ta) in explicit_type_args.iter().enumerate() {
+                            if let Some((_, slot)) = slots.get(idx) {
+                                let _ = self.solver.unify(slot, ta);
+                            }
+                        }
+                        // 类型实参不是值实参：从后续逐参校验中移除
+                        let bound_params: Vec<MonoType> =
+                            params.iter().map(|p| self.solver.resolve_type(p)).collect();
+                        let bound_ret = self.solver.resolve_type(return_type);
+                        // 返回专用化后的函数：curry 尾层已是具体形参
+                        if bound_params
+                            .iter()
+                            .all(|p| !matches!(p, MonoType::TypeVar(_)))
+                            && !matches!(bound_ret, MonoType::TypeVar(_))
+                        {
+                            self.last_type_args = explicit_type_args.clone();
+                            let specialized = MonoType::Fn {
+                                params: bound_params,
+                                return_type: Box::new(bound_ret),
+                            };
+                            // 登记实例化请求：单态化阶段靠它特化并保留 `mk` 的
+                            // 具体版本。不登记的话 mono 会把未特化的 `mk` 删掉，
+                            // 运行时找不到 `mk`（E6006）。
+                            self.collect_instantiation_request(
+                                &func_ty,
+                                func.as_ref(),
+                                &explicit_type_args,
+                                &specialized,
+                                *span,
+                            );
+                            return Ok(specialized);
+                        }
+                    }
+                }
+                explicit_type_args.clear();
+                // 清除探针
+                let _ = &explicit_type_args;
 
                 // 收集实例化请求：检测泛型函数调用并记录
                 self.collect_instantiation_request(
@@ -1543,6 +2200,41 @@ impl<'a> ExpressionInferrer<'a> {
                                     let Some(arg_ty) = arg_types.get(i) else {
                                         break;
                                     };
+                                    // RFC-011 容器命名分层：`Vec(T)` 字段接受 List 字面量。
+                                    // 与变量声明的落点规则一致（statements.rs 同款豁免）——
+                                    // Vec 是运行时长度的可增长缓冲，语义与字面量一致；
+                                    // 逐元素 unify(T) 仍然执行，不做整段豁免。
+                                    let vec_seed_ok = matches!(field_ty, MonoType::Generic { name, .. } if name == "Vec")
+                                        && matches!(
+                                            args.get(i),
+                                            Some(crate::frontend::core::parser::ast::Expr::List(
+                                                _,
+                                                _
+                                            ))
+                                        );
+                                    if vec_seed_ok {
+                                        if let (
+                                            Some(MonoType::Generic { args: fa, .. }),
+                                            Some(MonoType::Generic { args: aa, .. }),
+                                        ) = (
+                                            Some(field_ty),
+                                            Some(&self.solver.resolve_type(arg_ty)),
+                                        ) {
+                                            if let (Some(fe), Some(ae)) = (fa.first(), aa.first()) {
+                                                if self.solver.unify(fe, ae).is_err() {
+                                                    return Err(
+                                                        ErrorCodeDefinition::type_mismatch(
+                                                            &format!("{}", fe),
+                                                            &format!("{}", ae),
+                                                        )
+                                                        .at(*span)
+                                                        .build(),
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        continue;
+                                    }
                                     if self.solver.unify(field_ty, arg_ty).is_err() {
                                         return Err(ErrorCodeDefinition::type_mismatch(
                                             &format!("{}", field_ty),
@@ -1745,6 +2437,19 @@ impl<'a> ExpressionInferrer<'a> {
                                             .unwrap_or_else(|| MonoType::TypeRef(p.clone()))
                                     })
                                     .collect();
+                                // 类型实参含未绑定类型参数（`L(T)`，T 是所在泛型的参数）时
+                                // 不展开为 Struct：注解侧对同一形态也保持 `Generic`（见
+                                // try_instantiate_generic_type），两侧表示须一致才能 unify。
+                                // 全部实参具体时仍展开——与顶层 `L(Int)(...)` 路径一致。
+                                if type_args
+                                    .iter()
+                                    .any(super::statements::contains_unresolved_param)
+                                {
+                                    return Ok(MonoType::Generic {
+                                        name: fn_name.clone(),
+                                        args: type_args,
+                                    });
+                                }
                                 return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
                                     &generic_def,
                                     &type_args,
@@ -1834,14 +2539,18 @@ impl<'a> ExpressionInferrer<'a> {
                                 // 仅当 params 非空时检查：lambda/块函数绑定（mk: (Int,Int)->Int
                                 // = (x,y)=>x+y）在 scope 里参数类型丢失（params 为空），
                                 // 计数不可靠，跳过避免误伤（#271 记 lambda 绑定参数丢失）。
-                                if named_args.is_empty()
-                                    && !params.is_empty()
-                                    && provided != params.len()
+                                //
+                                // 命名参数也计入总数：`add(a = 1, b = 2)` 传了 2 个。
+                                // 此前 `named_args.is_empty()` 门槛把命名实参整体豁免，
+                                // `add(a = 1)`（少传一个）就没人拦——IR 层补 0 凑数，
+                                // 静默算出 1 而不报错。现在按实际传参总数校验。
+                                if !params.is_empty()
+                                    && provided + named_args.len() != params.len()
                                 => {
                                     return Err(ErrorCodeDefinition::argument_count_mismatch(
                                         fn_name,
                                         params.len(),
-                                        provided,
+                                        provided + named_args.len(),
                                     )
                                     .at(*span)
                                     .build());
@@ -1953,12 +2662,19 @@ impl<'a> ExpressionInferrer<'a> {
                                 }
                             }
                         }
-                        let resolved_ret = self.solver.expand_type_shallow(&return_type);
+                        // 用 `resolve_type` 而非 `expand_type_shallow`：
+                        // 后者只做结构展开，**不跟随 TypeVar 绑定**。
+                        // 显式类型实参（`mk(Int)`）的绑定就在 solver 里，
+                        // 不 resolve 的话返回类型仍是 `t49`，外层 `mk(Int)(5)`
+                        // 拿不到 Int，静默当 void（D6.3）。
+                        let resolved_ret = self.solver.resolve_type(&return_type);
                         return Ok(resolved_ret);
                     }
-                    MonoType::Struct(_) | MonoType::TypeRef(_) => {
-                        // 类型构造器：Point(1.0, 2.0) 或 List(Int) 单态化后的结果。
-                        // 参数个数检查已在 #271#1 前置块完成（泛型构造器豁免）。
+                    MonoType::Struct(_) | MonoType::TypeRef(_) | MonoType::Generic { .. } => {
+                        // 类型构造器：Point(1.0, 2.0) 或 `Vec(Int)` / `Array(Int, 3)`
+                        // 等内置容器类构造器（内层类型实参应用的结果就是
+                        // `Generic{name, args}`，必须原样交给调用点作为 `func_ty`，
+                        // 否则退化成 fresh TypeVar，`Vec(Int)()` 的 `.length` 无法解析）
                         return Ok(mono_func_ty);
                     }
                     _ => {}
@@ -2023,14 +2739,30 @@ impl<'a> ExpressionInferrer<'a> {
                     // expression type matches it via unification.
                     let expected = self.expected_return_type.clone();
                     if let Some(ref expected) = expected {
-                        self.solver.unify(&ret_ty, expected).map_err(|_| {
-                            ErrorCodeDefinition::type_mismatch(
-                                &format!("{}", expected),
-                                &format!("{}", ret_ty),
-                            )
-                            .at(*span)
-                            .build()
-                        })?;
+                        // 返回位若含**未绑定的类型参数**（`List(TypeRef "A")`，A 是所在
+                        // 泛型的参数），先按名把该参数绑定到实际返回类型，再做常规 unify。
+                        // 否则 `unify(List(Int), List(TypeRef "A"))` 因「TypeRef 与具体类型
+                        // 无统一规则」而报 E1002——而这里 A := Int 是合法的。
+                        let bound_expected = Self::bind_type_params_from(expected, &ret_ty);
+                        if bound_expected != *expected {
+                            self.solver.unify(&ret_ty, &bound_expected).map_err(|_| {
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("{}", bound_expected),
+                                    &format!("{}", ret_ty),
+                                )
+                                .at(*span)
+                                .build()
+                            })?;
+                        } else {
+                            self.solver.unify(&ret_ty, expected).map_err(|_| {
+                                ErrorCodeDefinition::type_mismatch(
+                                    &format!("{}", expected),
+                                    &format!("{}", ret_ty),
+                                )
+                                .at(*span)
+                                .build()
+                            })?;
+                        }
                         // RFC-011a §6: 具体值返回进存在类型返回位 → 检查实现并记录包装点
                         self.collect_existential_coercions(e, expected)?;
                     }
@@ -2129,8 +2861,21 @@ impl<'a> ExpressionInferrer<'a> {
 
                     let body_ty = body_ty_res?;
 
-                    if return_type.is_some() {
-                        let _ = self.solver.unify(&body_ty, &expected_body_ty);
+                    // RFC-010a 规则①：块值必须与声明的返回类型一致。
+                    // 此前 unify 结果被 `let _` 吞掉，类型不符静默通过、推迟到运行时
+                    // （如 `f: () -> Int = { "s" }` 编得过）。此处上报。
+                    // `Never` 是特例：`return` 在尾位置时块类型为 `Never`，
+                    // `Never <: T` 属实（爆炸原理），不算错。
+                    if return_type.is_some()
+                        && body_ty != MonoType::Never
+                        && self.solver.unify(&body_ty, &expected_body_ty).is_err()
+                    {
+                        return Err(ErrorCodeDefinition::type_mismatch(
+                            &format!("{}", expected_body_ty),
+                            &format!("{}", body_ty),
+                        )
+                        .at(body.span)
+                        .build());
                     }
 
                     Ok(())
@@ -2182,6 +2927,18 @@ impl<'a> ExpressionInferrer<'a> {
                 let saved_loop_depth = self.loop_depth;
                 self.loop_depth = 0;
                 let body_ty = self.infer_block(body, true, None);
+                // 箭头 lambda（`(x) => expr`）的体被解析成只含 `return expr` 的块，
+                // 块值按规则恒为 `Never`（`return : Never`）。此处**在退出 lambda 作用域前**
+                // 取出载荷类型——退出后形参已不在 scope，重推会失败。
+                let arrow_payload_ty = match &body_ty {
+                    Ok(MonoType::Never) if body.stmts.len() == 1 => match &body.stmts[0].kind {
+                        crate::frontend::core::parser::ast::StmtKind::Return(Some(e)) => {
+                            self.infer_expr(e).ok()
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                };
                 self.loop_depth = saved_loop_depth;
                 self.expected_return_type = saved_expected_ret;
                 self.result_err = saved_result_err;
@@ -2189,12 +2946,22 @@ impl<'a> ExpressionInferrer<'a> {
                 self.scope.exit_fn();
                 let body_ty = body_ty?;
 
-                let param_types: Vec<MonoType> =
-                    params.iter().map(|_| self.solver.new_var()).collect();
+                // 参数类型：有显式标注用标注（`(x: Int) => ..`），否则 fresh var。
+                // 此前一律 `new_var()`，把标注丢掉了——于是 `(x: Int) => x * 2` 的
+                // 参数类型是未绑定变量，与形参 `(item: T) -> R` unify 时无法推出 R。
+                let param_types: Vec<MonoType> = params
+                    .iter()
+                    .map(|p| match &p.ty {
+                        Some(t) => MonoType::from(t.clone()),
+                        None => self.solver.new_var(),
+                    })
+                    .collect();
+
+                let return_type = arrow_payload_ty.unwrap_or_else(|| body_ty.clone());
 
                 Ok(MonoType::Fn {
                     params: param_types,
-                    return_type: Box::new(body_ty),
+                    return_type: Box::new(return_type),
                 })
             }
 
@@ -2248,12 +3015,43 @@ impl<'a> ExpressionInferrer<'a> {
 
             // Unsafe 块
             crate::frontend::core::parser::ast::Expr::Unsafe { body, .. } => {
-                self.infer_block(body, false, None)
+                // RFC-010：块内定义的类型名提升到当前作用域（供尾表达式引用），
+                // 须在检查块体**之前**注册，否则 `T` 报 E1001。
+                for st in &body.stmts {
+                    if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+                        name,
+                        ..
+                    } = &st.kind
+                    {
+                        if self.scope.get_var(name).is_none() {
+                            // 类型值的运行时表示是 Void（编译期构造）
+                            self.scope.add_var(
+                                name.clone(),
+                                PolyType::mono(MonoType::Void),
+                                false,
+                                crate::util::span::Span::default(),
+                            );
+                        }
+                    }
+                }
+                self.unsafe_depth += 1;
+                let r = self.infer_block(body, true, None);
+                self.unsafe_depth -= 1;
+                r
             }
 
             // spawn 块：spawn { ... }
             crate::frontend::core::parser::ast::Expr::Spawn { body, .. } => {
-                self.infer_block(body, true, None)
+                // `spawn {}` 引入**新的函数边界**：块内 `return` 退出的是 spawn 体
+                // 而非外层函数（运行时已验证：`r = spawn { return 3 + 4 }` 得 r == 7）。
+                //
+                // 此前 `expected_return_type` 未隔离，保持外层函数声明的类型，
+                // 导致 `f: () -> Void = { r = spawn { return 1 + 2 } }` 误报
+                // E1002（把 spawn 体的 return 当外层 void 函数的 return）。
+                let saved = self.expected_return_type.take();
+                let result = self.infer_block(body, true, None);
+                self.expected_return_type = saved;
+                result
             }
 
             // ListComp 表达式
@@ -2268,7 +3066,9 @@ impl<'a> ExpressionInferrer<'a> {
                 // 循环变量类型从可迭代对象取（此前硬编码 Char，靠
                 // 算术 fresh-var 兜底蒙混；硬化后按 check_for_stmt 同款分发）
                 let loop_var_ty = match &iter_ty {
-                    m if m.is_list() || m.is_array() => m.generic_args().unwrap()[0].clone(),
+                    m if m.is_list() || m.is_vec() || m.is_array() => {
+                        m.generic_args().unwrap()[0].clone()
+                    }
                     m if m.is_string() => MonoType::Char,
                     m if m.is_dict() => {
                         let args = m.generic_args().unwrap();
@@ -2396,44 +3196,33 @@ impl<'a> ExpressionInferrer<'a> {
         _allow_unit: bool,
         _expected_type: Option<&MonoType>,
     ) -> Result<MonoType> {
-        let mut return_type: Option<MonoType> = None;
+        // spec §2.15：每个 `{}` 块创建一个作用域——
+        // 内层可读外层，**外层不可读内层**。
+        //
+        // 此前本函数不开作用域，导致内层块变量泄漏到外层可见
+        //（`{ inner = 1 }; print(inner)` 不报未定义），进而使 spec §4.3 的
+        // 跨作用域规则（E2010 / E2013）无从判定。
+        self.scope.enter_block();
+        let result = (|| {
+            // RFC-010a 规则①：块的值 = 尾表达式（唯一出口）。
+            // 空块 `{}` → Void；末位为语句（如赋值）→ Void；否则为尾表达式类型。
+            //
+            // 与 `return` 的关系（规则②）：`return : Never`。带 `return` 的分支经
+            // `join` 被忽略（`Never` 不参与合并），故不再需要单独收集 `return` 类型。
+            let mut block_ty: MonoType = MonoType::Void;
 
-        for stmt in &block.stmts {
-            // 检查语句是否包含 return 表达式
-            match &stmt.kind {
-                crate::frontend::core::parser::ast::StmtKind::Expr(ref expr_stmt) => {
-                    if let Some(ty) = self.collect_return_type(expr_stmt)? {
-                        return_type = Some(ty);
-                    }
+            let last_idx = block.stmts.len().checked_sub(1);
+            for (i, stmt) in block.stmts.iter().enumerate() {
+                let ty = self.infer_stmt(stmt)?;
+                if Some(i) == last_idx {
+                    block_ty = ty;
                 }
-                crate::frontend::core::parser::ast::StmtKind::Return(Some(ref ret_expr)) => {
-                    let ty = self.infer_expr(ret_expr)?;
-                    return_type = Some(ty);
-                }
-                _ => {}
             }
-            self.infer_stmt(stmt)?;
-        }
 
-        // 块的类型 = return 的类型，没有 return 则 Void
-        Ok(return_type.unwrap_or(MonoType::Void))
-    }
-
-    /// 递归收集表达式中的 return 类型
-    /// 如果表达式是 `return expr`，返回 expr 的类型
-    /// 如果表达式包含子块（if/for/spawn 等），递归收集子块中的 return 类型
-    fn collect_return_type(
-        &mut self,
-        expr: &crate::frontend::core::parser::ast::Expr,
-    ) -> Result<Option<MonoType>> {
-        match expr {
-            crate::frontend::core::parser::ast::Expr::Return(Some(ret_expr), _) => {
-                let ty = self.infer_expr(ret_expr)?;
-                Ok(Some(ty))
-            }
-            crate::frontend::core::parser::ast::Expr::Return(None, _) => Ok(Some(MonoType::Void)),
-            _ => Ok(None),
-        }
+            Ok(block_ty)
+        })();
+        self.scope.exit_block();
+        result
     }
 
     /// #313：for 循环推断——`Expr::For`（表达式位置）与 `StmtKind::For`
@@ -2526,17 +3315,20 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 推断语句的类型
+    ///
+    /// RFC-010a 规则①：返回该语句作为块尾表达式时贡献的值类型——
+    /// 表达式语句取表达式类型；赋值语句为 `Void`；`return` 为 `Never`（规则②）；
+    /// 控制流语句取其块值。
     pub fn infer_stmt(
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
-    ) -> Result<()> {
+    ) -> Result<MonoType> {
         // #324：挂当前节点 span，walk 内诊断构造自动获得位置
         let _current_span = crate::util::diagnostic::push_current_span(stmt.span);
         match &stmt.kind {
-            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => {
-                self.infer_expr(expr)?;
-                Ok(())
-            }
+            // RFC-010a 规则①：语句的值——表达式语句取其表达式类型；赋值语句为
+            // Void；`return` 为 Never（规则②）；控制流语句取其块值/运算值。
+            crate::frontend::core::parser::ast::StmtKind::Expr(expr) => self.infer_expr(expr),
             crate::frontend::core::parser::ast::StmtKind::Assign {
                 target,
                 type_annotation,
@@ -2548,7 +3340,7 @@ impl<'a> ExpressionInferrer<'a> {
                 use crate::frontend::core::parser::ast::Expr;
                 let name = match target.as_ref() {
                     Expr::Var(n, _) => n.clone(),
-                    _ => return Ok(()),
+                    _ => return Ok(MonoType::Void),
                 };
                 // 如果 value 是 Lambda，走函数推断
                 if let Some(v) = value {
@@ -2572,26 +3364,35 @@ impl<'a> ExpressionInferrer<'a> {
                         // 函数边界语义）——此前直接 return，spawn 体/循环体内嵌套
                         // lambda 的体从未被类型检查。注册类型来自注解，保持不变。
                         let _ = self.infer_expr(v)?;
-                        return Ok(());
+                        return Ok(MonoType::Void);
                     }
+                    // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
+                    // 非 Fn 注解→块值（立即求值，变量绑定块值类型）。
+                    // 此前不论注解一律注册为 0 参函数，与 ir_gen 分流脱节（#343）。
                     if let Expr::Block(..) = v.as_ref() {
-                        let fn_type = MonoType::Fn {
-                            params: vec![],
-                            return_type: Box::new(
-                                type_annotation
-                                    .as_ref()
-                                    .map_or(MonoType::Void, |t| t.clone().into()),
-                            ),
-                        };
-                        self.try_add_var(
-                            name.clone(),
-                            PolyType::mono(fn_type),
-                            *stmt_span,
-                            *is_mut,
-                        )?;
-                        // #313：同上——匿名绑定体此前未检查
-                        let _ = self.infer_expr(v)?;
-                        return Ok(());
+                        if crate::frontend::core::parser::ast::Expr::block_binding_is_function(
+                            type_annotation.as_ref(),
+                            Some(v.as_ref()),
+                        ) {
+                            let fn_type = MonoType::Fn {
+                                params: vec![],
+                                return_type: Box::new(
+                                    type_annotation
+                                        .as_ref()
+                                        .map_or(MonoType::Void, |t| t.clone().into()),
+                                ),
+                            };
+                            self.try_add_var(
+                                name.clone(),
+                                PolyType::mono(fn_type),
+                                *stmt_span,
+                                *is_mut,
+                            )?;
+                            // #313：匿名绑定体仍须检查
+                            let _ = self.infer_expr(v)?;
+                            return Ok(MonoType::Void);
+                        }
+                        // 块值：走普通变量路径（下方按 value 推断 init_ty）
                     }
                 }
                 // 普通变量
@@ -2616,31 +3417,34 @@ impl<'a> ExpressionInferrer<'a> {
                         .build()
                     })?;
                 }
-                if self.scope.var_in_any_scope(&name) {
-                    if self.scope.var_in_current_scope(&name) {
-                        if self.scope.var_is_moved(&name).unwrap_or(false) {
-                            self.scope.remove_var(&name);
-                        } else {
-                            return Err(ErrorCodeDefinition::duplicate_definition(&name)
-                                .at(*stmt_span)
-                                .build());
-                        }
-                    } else {
-                        if self.scope.var_is_moved(&name).unwrap_or(false) {
-                            // 外层变量已 moved：在当前作用域重新声明
-                        } else if !*is_mut {
-                            if !self.scope.var_is_mutable(&name).unwrap_or(false) {
-                                return Err(ErrorCodeDefinition::immutable_assignment(&name)
-                                    .at(*stmt_span)
-                                    .build());
-                            }
-                            self.assign_var(&name, init_ty, *stmt_span, true)?;
-                            return Ok(());
-                        }
+                // spec §4.3「赋值优先」：与 `StatementChecker` 同一判定
+                // （`ScopeManager::classify_binding`）——此前两处各写一份，
+                // 导致规则不一致（E2010/E2013 在这里有、在那里没有）。
+                use crate::frontend::core::typecheck::inference::scope::BindingAction;
+                match self.scope.classify_binding(&name, *is_mut, value.is_none()) {
+                    BindingAction::ImmutableReassign => {
+                        return Err(ErrorCodeDefinition::immutable_assignment(&name)
+                            .at(*stmt_span)
+                            .build());
                     }
+                    BindingAction::DuplicateDefinition => {
+                        return Err(ErrorCodeDefinition::duplicate_definition(&name)
+                            .at(*stmt_span)
+                            .build());
+                    }
+                    BindingAction::Shadowing => {
+                        return Err(ErrorCodeDefinition::variable_shadowing(&name)
+                            .at(*stmt_span)
+                            .build());
+                    }
+                    BindingAction::Reassign => {
+                        self.assign_var(&name, init_ty, *stmt_span, true)?;
+                        return Ok(MonoType::Void);
+                    }
+                    BindingAction::Declare => {}
                 }
                 self.try_add_var(name.clone(), PolyType::mono(init_ty), *stmt_span, *is_mut)?;
-                Ok(())
+                Ok(MonoType::Void)
             }
             // #313：以下语句种类此前落 `_ => Ok(())` 静默跳过——spawn 体/循环体经
             // infer_block 走到这里，If/For 中的语句从未被类型检查（类型错误编译通过，
@@ -2654,7 +3458,7 @@ impl<'a> ExpressionInferrer<'a> {
                 ..
             } => {
                 self.infer_for_loop(var, *var_mut, iterable, body, stmt.span)?;
-                Ok(())
+                Ok(MonoType::Void)
             }
             crate::frontend::core::parser::ast::StmtKind::If {
                 condition,
@@ -2662,15 +3466,12 @@ impl<'a> ExpressionInferrer<'a> {
                 else_if_branches,
                 else_branch,
                 ..
-            } => {
-                self.infer_if_expr(
-                    condition,
-                    then_branch,
-                    else_if_branches,
-                    else_branch.as_deref(),
-                )?;
-                Ok(())
-            }
+            } => self.infer_if_expr(
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch.as_deref(),
+            ),
             // 元组解构赋值（镜像 StatementChecker::check_stmt 的 DestructureAssign 臂）
             crate::frontend::core::parser::ast::StmtKind::DestructureAssign {
                 names,
@@ -2697,33 +3498,41 @@ impl<'a> ExpressionInferrer<'a> {
                                 false,
                             )?;
                         }
-                        Ok(())
+                        Ok(MonoType::Void)
                     }
                     _ => {
                         for name in names {
                             let ty = self.solver.new_var();
                             self.try_add_var(name.name.clone(), PolyType::mono(ty), *span, false)?;
                         }
-                        Ok(())
+                        Ok(MonoType::Void)
                     }
                 }
             }
+            // RFC-010a 规则②：return : (T) -> Never（非局部退出，退出最近的函数边界）。
+            // 值本身仍被推断（与 expected_return_type 统一），但语句类型是 Never，
+            // 使其在 join 中被忽略。
             crate::frontend::core::parser::ast::StmtKind::Return(Some(expr)) => {
                 self.infer_expr(expr)?;
-                Ok(())
+                Ok(MonoType::Never)
             }
-            crate::frontend::core::parser::ast::StmtKind::Return(None) => Ok(()),
+            crate::frontend::core::parser::ast::StmtKind::Return(None) => Ok(MonoType::Never),
             // 类型定义仅模块级合法（E1071，#295）；infer_stmt 只会在 spawn 体/
             // 循环体内遇到它——必为函数上下文，一律报错。
+            // 例外（RFC-010）：`unsafe {}` 内允许类型定义（不透明类型封装）。
             crate::frontend::core::parser::ast::StmtKind::TypeDefinition { name, .. } => {
-                Err(ErrorCodeDefinition::type_def_only_at_module_level(name)
-                    .at(stmt.span)
-                    .build())
+                if self.unsafe_depth > 0 {
+                    Ok(MonoType::Void)
+                } else {
+                    Err(ErrorCodeDefinition::type_def_only_at_module_level(name)
+                        .at(stmt.span)
+                        .build())
+                }
             }
             // use 语句的模块注册依赖 StatementChecker 的环境（process_use_stmt），
             // inferrer 无模块上下文。真实代码中 use 已由 checker 处理；表达式位置的
             // 循环体内出现时显式接受，import 未注册时下游报 E1001（响亮失败）。
-            crate::frontend::core::parser::ast::StmtKind::Use { .. } => Ok(()),
+            crate::frontend::core::parser::ast::StmtKind::Use { .. } => Ok(MonoType::Void),
             // 错误恢复占位符：报告错误但不 panic（镜像 StatementChecker::check_stmt）
             crate::frontend::core::parser::ast::StmtKind::Error(span) => {
                 Err(ErrorCodeDefinition::invalid_syntax("缺失语句")
@@ -2783,25 +3592,29 @@ fn extract_const_value_from_expr(
     }
 }
 /// 检查名称是否为内置类型名（Type 宇宙的值）
+///
+/// 单源：标量走 `MonoType::from_builtin_name`（与类型位置同一份表，
+/// 不再手抄第二份名单）；容器/泛型构器（`Vec` / `Array` / `Dict` /
+/// `Tuple` / `Option` / `Result` / `Range` / `Iter` / `Bytes`）
+/// 在类型位置由 `Type::Generic` 分支无条件接受，此处补上对应的值位置识别。
+///
+/// 这两类名字在**值位置**都是 Type 宇宙的值：`Vec(Int)()` 是类型构造
+/// 调用（D6.2 修的就是它报 E1001 unknown variable 'Vec'）。
 fn is_builtin_type_name(name: &str) -> bool {
-    matches!(
-        name,
-        "Int"
-            | "int"
-            | "Float"
-            | "float"
-            | "Bool"
-            | "bool"
-            | "String"
-            | "string"
-            | "Void"
-            | "void"
-            | "Never"
-            | "never"
-            | "Char"
-            | "char"
-            | "Type"
-    )
+    MonoType::from_builtin_name(name).is_some()
+        || is_builtin_generic_type_name(name)
+        || name == "Type"
+}
+
+/// 内置泛型容器的类型名（值位置可作类型构造器用）。
+///
+/// **仅含 RFC-011 规格化了两层构造的 `Vec(T)` / `Array(T, N)`**。
+/// 其余容器名（`Dict`/`Tuple`/`Option`/`Result`/`Range`/`Iter`/`Bytes`）
+/// 在**值位置**没有类型构造器语义（无 `Dict(Int,Int)()` 这样的写法），
+/// 列入它们会让类型检查放行、IR 层却无对应生成器，
+/// 结果从清楚的 `E1001 unknown variable` 退化成 `E3006` 编译器内部一致性错。
+fn is_builtin_generic_type_name(name: &str) -> bool {
+    matches!(name, "Vec" | "Array")
 }
 
 /// #287: 将泛型构造器字段类型中的 TypeRef(类型参数名) 替换为对应 TypeVar，

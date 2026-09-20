@@ -85,6 +85,7 @@ fn test_bytecode_module_add_function() {
         params: vec![Type::Int(0), Type::Int(0)],
         return_type: Type::Int(0),
         local_count: 0,
+        local_names: std::collections::HashMap::new(),
         upvalue_count: 0,
         instructions: vec![],
         labels: std::collections::HashMap::new(),

@@ -9,7 +9,7 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     // 等于 / 不等于
     assert.assert(1.0 == 1.0, "1.0 == 1.0 should be true")
     assert.assert(1.0 != 2.0, "1.0 != 2.0 should be true")
@@ -29,3 +29,5 @@ main = {
     assert.assert(3.14 > 3.0, "3.14 > 3.0 should be true")
     assert.assert(3.0 < 3.14, "3.0 < 3.14 should be true")
 }
+
+main()

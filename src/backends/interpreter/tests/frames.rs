@@ -21,6 +21,7 @@ fn make_function_with_locals(local_count: usize) -> BytecodeFunction {
         params: vec![],
         return_type: crate::middle::core::ir::Type::Void,
         local_count,
+        local_names: HashMap::new(),
         upvalue_count: 0,
         instructions: vec![],
         labels: HashMap::new(),
@@ -35,7 +36,7 @@ fn test_frame_new_initializes_slots_to_local_count() {
     let func = make_function_with_locals(2);
 
     // Act
-    let frame = Frame::new(func);
+    let frame = Frame::new(0, func.local_count);
 
     // Assert
     assert_eq!(
@@ -50,7 +51,7 @@ fn test_frame_new_initializes_slots_to_local_count() {
 fn test_frame_slot_set_and_get_roundtrip() {
     // Arrange
     let func = make_function_with_locals(2);
-    let mut frame = Frame::new(func);
+    let mut frame = Frame::new(0, func.local_count);
 
     // Act
     frame.set_slot(0, RuntimeValue::Int(42));
@@ -70,7 +71,7 @@ fn test_slots_unified_read_write_after_merge() {
     // 合并前 registers 和 locals 是两个独立数组，Mov 写 registers、LoadLocal 读 locals，
     // 导致赋值不写回。合并后同一 idx 索引同一数组，此 bug 物理上不可能发生。
     let func = make_function_with_locals(4);
-    let mut frame = Frame::new(func);
+    let mut frame = Frame::new(0, func.local_count);
 
     // Act — 通过统一 API 写入两个不同槽位
     frame.set_slot(0, RuntimeValue::Int(42));

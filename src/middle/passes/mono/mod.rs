@@ -16,7 +16,7 @@ use function::FunctionMonomorphizer;
 use instance::{GenericFunctionId, InstantiationRequest, SpecializationKey};
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::core::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 
 /// 是否含符号化类型实参（TypeRef(泛型参数名)）——#335 路径 A 的 deferred 分流依据
@@ -245,27 +245,91 @@ impl Monomorphizer {
         Ok(())
     }
 
+    /// 收集一个函数体内所有「按名调用的目标名」（`Call`/`CallStatic` 的字符串操作数）。
+    ///
+    /// 用于判断一个未特化的泛型函数是否仍被调用——被调用就必须保留。
+    fn call_target_names(func: &FunctionIR) -> Vec<String> {
+        let FunctionBody::Code { blocks, .. } = &func.body else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for block in blocks {
+            for instr in &block.instructions {
+                if let Instruction::Call {
+                    func: Operand::Const(ConstValue::String(name)),
+                    ..
+                } = instr
+                {
+                    out.push(name.clone());
+                }
+            }
+        }
+        out
+    }
+
     fn build_output(
         &self,
         module: &ModuleIR,
     ) -> ModuleIR {
+        // 保留哪些函数？
+        //
+        // 1. 非泛型函数——当然保留。
+        // 2. 泛型 TypeDecl 构造器——typecheck 对构造器调用不生成 request，
+        //    mono 启用时若删除则函数表缺 Entry → 运行时 E6006（#255）。
+        // 3. 泛型函数但**未产生任何特化**且**仍被某处按名调用**——
+        //    `std.list` 系列（`list.yx` 里声明为 `(A: Type) -> ...`）就是这类：
+        //    它们随嵌入 std 合并进来，调用点写的是 `std.list.push`（原名叫，
+        //    不是特化名）。若一并删掉，一旦别的泛型（如 `mk(Int)`）触发 mono，
+        //    `std.list.push` 就凭空消失，运行时报「Native function not found」
+        //    （实测：不调 `mk` 就正常，一调就崩）。
+        // 本次请求涉及的泛型名（这些会被特化版替换，原泛型应删）。
+        // 用 `self.site_requests` 而非全部请求：`build_output` 在队列处理完后调用，
+        // 此时 `site_requests` 就是最终确定要特化的集合。
+        let requested_generic_names: std::collections::HashSet<String> = self
+            .site_requests
+            .iter()
+            .map(|r| r.generic_id().name().to_string())
+            .collect();
+        let names_called_by_name: std::collections::HashSet<String> = module
+            .functions
+            .iter()
+            .flat_map(Self::call_target_names)
+            .collect();
+
         let mut functions: Vec<FunctionIR> = module
             .functions
             .iter()
-            // 删未特化的泛型代码函数；泛型 TypeDecl 构造器函数必须保留
-            // （typecheck 对构造器调用不生成 request，无 mono 时原样保留可用；
-            //  mono 启用时若删除则函数表缺 Entry → 运行时 E6006（#255））
-            .filter(|f| f.generic_params.is_none() || f.is_type_decl())
+            .filter(|f| {
+                if f.generic_params.is_none() || f.is_type_decl() {
+                    return true;
+                }
+                // 已被特化的泛型：删原泛型，保留特化版（特化版由下方追加）。
+                // 判据用「实例化请求里的泛型名」而非特化名前缀——
+                // 特化名形如 `identity(int64)`，前缀匹配无法区分
+                // `identity` 与 `identity2` 这类同名前缀。
+                if requested_generic_names.contains(f.name.as_str()) {
+                    return false;
+                }
+                // 未产生实例化请求，但仍有调用点按名引用（如嵌入 std 的
+                // `std.list.push`）：必须保留，否则一旦别的泛型触发 mono，
+                // 这些函数的定义就从函数表里消失，运行时「function not found」。
+                f.name.starts_with("std.") || names_called_by_name.contains(&f.name)
+            })
             .cloned()
             .collect();
 
-        for func in self.specialized_functions.values() {
+        // HashMap 迭代顺序随进程随机化，直接发射会让同一份源码产出不同的
+        // 函数序号（进而 .42 字节不同、dump 不可复现）。按名排序固定顺序。
+        let mut specialized: Vec<&FunctionIR> = self.specialized_functions.values().collect();
+        specialized.sort_by(|a, b| a.name.cmp(&b.name));
+        for func in specialized {
             functions.push(func.clone());
         }
 
         ModuleIR {
             globals: module.globals.clone(),
             functions,
+            init: module.init.clone(),
             ffi_libs: module.ffi_libs.clone(),
             ffi_bindings: module.ffi_bindings.clone(),
             entry_function: module.entry_function.clone(),
@@ -305,10 +369,14 @@ impl Monomorphizer {
         let new_return_type = self.substitute_single_type(&generic.return_type, &type_map);
 
         // 替换局部变量类型
-        let new_locals: Vec<MonoType> = match &generic.body {
+        let new_locals: Vec<LocalSlot> = match &generic.body {
             FunctionBody::Code { locals, .. } => locals
                 .iter()
-                .map(|ty| self.substitute_single_type(ty, &type_map))
+                .map(|slot| LocalSlot {
+                    name: slot.name.clone(),
+                    ty: self.substitute_single_type(&slot.ty, &type_map),
+                    scope_depth: slot.scope_depth,
+                })
                 .collect(),
             _ => Vec::new(),
         };
@@ -453,8 +521,8 @@ impl Monomorphizer {
 
         // 扫描 locals 和指令中的类型
         if let FunctionBody::Code { locals, blocks, .. } = &func.body {
-            for ty in locals {
-                self.collect_generic_type_refs(ty, depth);
+            for slot in locals {
+                self.collect_generic_type_refs(&slot.ty, depth);
             }
             for block in blocks {
                 for instr in &block.instructions {

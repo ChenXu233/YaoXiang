@@ -12,7 +12,7 @@ Window: Type = {
     view: &Point   // ← 在 Rust 中需要 Window<'a> 和 'a 标注
 }
 
-main = {
+main: () -> Void = {
     p = Point(1.0, 2.0)
     ref_p = &p                // 显式借用
     w = Window(p, ref_p)      // view 令牌从 p 派生
@@ -20,3 +20,5 @@ main = {
     io.println(w.view.x)
     assert.assert(true, "all passed")
 }
+
+main()

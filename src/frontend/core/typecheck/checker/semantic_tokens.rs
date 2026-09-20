@@ -113,6 +113,10 @@ impl TypeChecker {
         use crate::frontend::core::parser::ast::Type;
 
         match ty {
+            // RFC-004：括号在语义上透明，仅 formatter/split_curry 可见
+            Type::Paren(inner) => {
+                self.collect_type_tokens(file_path, inner);
+            }
             Type::Name { name, span } => {
                 self.semantic_db.add_token(
                     file_path,
@@ -444,10 +448,21 @@ impl TypeChecker {
                     let Some((name, type_name)) = target.receiver_parts() else {
                     continue
                     };
-                    let (params, body): (Vec<_>, Vec<_>) = match value {
-                        Some(v) => v.callable_parts(),
-                        None => (Vec::new(), Vec::new()),
-                    };                    let generic_params = crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
+                    // RFC-010a 附录D：非 Fn 注解的块绑定是**块值**而非函数
+                    let is_fn_binding =
+                        crate::frontend::core::parser::ast::Expr::block_binding_is_function(
+                            type_annotation.as_ref(),
+                            value.as_deref(),
+                        );
+                    let (params, body): (Vec<_>, Vec<_>) = if is_fn_binding {
+                        match value {
+                            Some(v) => v.callable_parts(),
+                            None => (Vec::new(), Vec::new()),
+                        }
+                    } else {
+                        (Vec::new(), Vec::new())
+                    };
+                    let generic_params = crate::frontend::core::parser::ast::extract_generic_param_names(signature_params);
                     let is_method = type_name.is_some();
                     if is_method {
                         self.semantic_db.add_token(

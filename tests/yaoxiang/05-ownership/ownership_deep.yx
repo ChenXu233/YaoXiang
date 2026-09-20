@@ -25,7 +25,7 @@ Window: Type = {
     view: &Point,
 }
 
-main = {
+main: () -> Void = {
     // 1. Dup 令牌复制：两份都活跃（§11.2 view/view2）
     p = Point(1, 2)
     view = &p
@@ -60,3 +60,5 @@ main = {
     assert.assert(w.view.x == 5, "经令牌字段访问")
     assert.assert(t.y == 6, "派生令牌后源仍可读")
 }
+
+main()

@@ -186,30 +186,39 @@ Expr '(' ArgList? ')'
 除了按位置传参，YaoXiang 还支持**命名参数**——用参数名指定值，顺序不限：
 
 ```yaoxiang
-// 命名参数——参数名后面跟冒号，然后是值
-result = add(a: 3, b: 5)     // result = 8
-result = add(b: 5, a: 3)     // 顺序任意，结果相同
+// 命名参数——参数名后面跟等号，然后是值
+result = add(a = 3, b = 5)     // result = 8
+result = add(b = 5, a = 3)     // 顺序任意，结果相同
 
 // 可以和位置参数混用，但位置参数必须在前面
-result = add(3, b: 5)        // OK
+result = add(3, b = 5)        // OK
 ```
 
 命名参数让调用更可读，在参数较多时特别有用：
 
 ```yaoxiang
 // 函数签名
-send: (to: String, title: String, body: String) -> Void = {
-    print("发送给: " + to)
-    print("标题: " + title)
-    print("正文: " + body)
-}
+send: (to: String, title: String, body: String) -> String = to + "|" + title + "|" + body
 
 // 命名参数让调用意图一目了然
-send(
-    to: "alice@example.com",
-    title: "会议通知",
-    body: "明天下午 3 点开会"
+msg = send(
+    to = "alice@example.com",
+    title = "会议通知",
+    body = "明天下午 3 点开会"
 )
+```
+
+参数名写错或重复指定会在编译期报错，不会静默按位置取用：
+
+```yaoxiang
+// ❌ add 没有名为 c 的形参 → E1014
+result = add(b = 5, c = 1)
+
+// ❌ a 既由位置传入又由命名传入 → E1015
+result = add(1, a = 2)
+
+// ❌ 少传一个参数 → E1010
+result = add(a = 1)
 ```
 
 ---
@@ -244,7 +253,7 @@ main: () -> Void = {
 }
 
 // 最简形式（推荐）
-main = {
+main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 ```
@@ -328,7 +337,7 @@ factorial: (n: Int) -> Int = {
 }
 
 // 无参函数（最简）
-main = { print("Hello!") }
+main: () -> Void = { print("Hello!") }
 
 // 有参—省略签名
 double = (x: Int) => x * 2
@@ -342,8 +351,8 @@ pub add: (a: Int, b: Int) -> Int = a + b
 // ── 调用语法 ──
 
 result = add(1, 2)          // 位置参数
-result = add(a: 1, b: 2)    // 命名参数
-result = add(1, b: 2)       // 混用（位置在前）
+result = add(a = 1, b = 2)   // 命名参数
+result = add(1, b = 2)      // 混用（位置在前）
 ```
 
 ---

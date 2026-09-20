@@ -4,10 +4,12 @@
 
 use std.assert
 
-main = {
+main: () -> Void = {
     result = spawn {
         x = 42
         return x
     }
     assert.assert(result == 42, "result should be 42")
 }
+
+main()

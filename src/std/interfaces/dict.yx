@@ -13,15 +13,15 @@ has: (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool = {
     ...
 }
 
-values: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C) = {
+values: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C) = {
     ...
 }
 
-keys: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C) = {
+keys: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C) = {
     ...
 }
 
-entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> List(C) = {
+entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C) = {
     ...
 }
 
@@ -38,6 +38,10 @@ is_empty: (K: Type, V: Type)(dict: &Dict(K, V)) -> Bool = {
 }
 
 merge: (A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B) = {
+    ...
+}
+
+new: (K: Type, V: Type)() -> Dict(K, V) = {
     ...
 }
 

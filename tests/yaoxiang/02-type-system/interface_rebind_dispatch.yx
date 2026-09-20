@@ -1,6 +1,6 @@
 // 02-type-system/interface_rebind_dispatch.yx
 // 覆盖: RFC-011a §6 动态分发 × RFC-004 [n] 绑定——重绑定形式的方法进变体分发
-// 验证: 类型体内 speak = animal_speak[0] 重绑定；List(Animal) 异构容器元素
+// 验证: 类型体内 speak = animal_speak[0] 重绑定；Vec(Animal) 异构容器元素
 //       调用重绑定方法时按绑定位置重排参数后转发到原函数
 // 状态: ✅
 
@@ -20,8 +20,10 @@ Bird: Type = {
 // 被绑函数（类型体内绑定允许前向引用）
 animal_speak: (self: &Bird) -> String = { return "Tweet" }
 
-main = {
-    zoo: List(Animal) = [Bird("Kiwi")]
+main: () -> Void = {
+    zoo: Vec(Animal) = [Bird("Kiwi")]
     s = zoo[0].speak()
     assert.assert(s == "Tweet", "rebound method dispatches through variant match")
 }
+
+main()

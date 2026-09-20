@@ -14,7 +14,7 @@ distance: (a: &Point, b: &Point) -> Float = {
     return dx * dx + dy * dy
 }
 
-main = {
+main: () -> Void = {
     p1 = Point(0.0, 0.0)
     p2 = Point(3.0, 4.0)
 
@@ -26,3 +26,5 @@ main = {
 
     assert.assert(true, "all passed")
 }
+
+main()

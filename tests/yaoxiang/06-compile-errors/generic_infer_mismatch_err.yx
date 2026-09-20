@@ -9,7 +9,7 @@ use std.io
 
 identity: (T: Type) -> (x: T) -> T = (x) => x
 
-main = {
+main: () -> Void = {
     s: String = identity(42)
     io.println(s)
 }

@@ -7,8 +7,10 @@
 
 use std.io
 
-main = {
+main: () -> Void = {
     a = 9223372036854775807
     b = a + 1
     io.println(b)
 }
+
+main()

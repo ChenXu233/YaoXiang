@@ -77,8 +77,17 @@ struct Cli {
     #[arg(long, default_value = "benches/shootout")]
     bench_root: PathBuf,
 
-    /// yaoxiang 可执行文件路径（不依赖 PATH，避免用到旧版本）
-    #[arg(long, default_value = if cfg!(target_os = "windows") { "target/release/yaoxiang.exe" } else { "target/release/yaoxiang" })]
+    /// yaoxiang 可执行文件路径（不依赖 PATH，避免用到旧版本）。
+    ///
+    /// 默认指向 `yaoxiang-rs`——RFC-037 引入 `yx`（前门）/`yaoxiang-rs`（引擎）
+    /// 双二进制后，Cargo.toml 的 `[[bin]]` 名为 `yaoxiang-rs`，旧的
+    /// `yaoxiang.exe` 已不再产出（此前默认值未同步，导致基准套件报
+    /// 「不是内部或外部命令」）。
+    #[arg(long, default_value = if cfg!(target_os = "windows") {
+        "target/release/yaoxiang-rs.exe"
+    } else {
+        "target/release/yaoxiang-rs"
+    })]
     yaoxiang_bin: PathBuf,
 }
 
@@ -232,7 +241,22 @@ impl RunCtx {
                 }
 
                 let src_path = self.bench_root.join(&lang_def.src);
-                let out_path = out_dir.join(format!("{}_{}", bench_name, lang_name));
+                // Windows 上**原生编译产物**带 `.exe` 后缀（rustc/g++/go 均如此），
+                // 而 runner 此前拼的是无后缀路径，导致运行阶段报
+                // 「不是内部或外部命令」。
+                //
+                // 不能只判 `compile.is_some()`：YaoXiang 的编译步骤产出的是
+                // `YXBC` 魔数的 .42 字节码（非可执行文件），加 .exe 会得到
+                // 误导性的 `*_yaoxiang.exe`（内容仍是字节码）。
+                let mut out_name = format!("{}_{}", bench_name, lang_name);
+                let is_native_compile = lang_def
+                    .compile
+                    .as_ref()
+                    .is_some_and(|c| !c.cmd.contains("%y"));
+                if cfg!(target_os = "windows") && is_native_compile {
+                    out_name.push_str(".exe");
+                }
+                let out_path = out_dir.join(out_name);
 
                 // 编译阶段
                 let compile_time = if let Some(compile) = &lang_def.compile {
