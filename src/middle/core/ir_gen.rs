@@ -5278,6 +5278,75 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    /// 内置容器的类型构造器名：`Vec(Int)(...)` 的内层 `Vec`。
+    ///
+    /// 只认 RFC-011 明确规格化的 `Vec(T)` / `Array(T, N)`。用户自有同名类型
+    /// 优先（D10 同款纪律）。
+    fn builtin_container_ctor_name(
+        &self,
+        inner: &Expr,
+    ) -> Option<String> {
+        let Expr::Var(name, _) = inner else {
+            return None;
+        };
+        if self.declared_type_names.contains(name) {
+            return None;
+        }
+        matches!(name.as_str(), "Vec" | "Array").then(|| name.clone())
+    }
+
+    /// 生成内置容器构造（RFC-011 §「Vec(T) 的构造形式」）。
+    ///
+    /// 三条形态：
+    /// - `Vec(Int)()` → 空容器（长度 0，元素事后追加）
+    /// - `Vec(Int)(1, 2, 3)` → 元素构造（长度 = 元素个数）
+    /// - `Vec(Int)(len = 64)` → 槽位分配（64 个零值槽位）
+    ///
+    /// 前两者与容器字面量同形，直接复用 `generate_list_expr_ir`；
+    /// 第三者用 `AllocFixedArray` 分配 n 个 Void 占位（与 Array 字面量落点同款）。
+    fn generate_builtin_container_ir(
+        &mut self,
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        // `len = n`：分配 n 个零值槽位。
+        // 长度是**运行期**值（RFC-011：Vec 是运行时长度的地基），
+        // 故用 AllocArray 而非编译期定长的 AllocFixedArray。
+        if let Some((_, len_expr)) = named_args.iter().find(|(n, _)| n == "len") {
+            // 空缓冲 + 长度写入。
+            //
+            // 不走 `AllocArray.size`：字节码 `NewListWithCap` 的容量是**字面量**
+            // （`capacity: u16`），而 RFC-011 说 `Vec(T)` 的长度是运行期值
+            // （`len=self.data.length * 2`）——无法用现有字段表达动态长度。
+            // 改用已测试的「长度写入」路径（`v.length = n` 同一条
+            // SetField → resize(n, Void)），语义一致且无需扯动字节码格式。
+            let len_reg = self.next_temp_reg();
+            self.generate_expr_ir(len_expr, len_reg, instructions, constants)?;
+            instructions.push(Instruction::AllocArray {
+                dst: Operand::Local(result_reg),
+                size: Operand::Const(ConstValue::Int(0)),
+                elem_size: Operand::Const(ConstValue::Int(1)),
+                span: *span,
+            });
+            instructions.push(Instruction::StoreField {
+                dst: Operand::Local(result_reg),
+                field: 0,
+                src: Operand::Local(len_reg),
+                type_name: None,
+                field_name: Some("length".to_string()),
+                span: *span,
+            });
+            return Ok(());
+        }
+
+        // 元素构造 / 空构造：与 `[a, b, c]` / `[]` 同形
+        self.generate_list_expr_ir(args, span, result_reg, instructions, constants)
+    }
+
     fn generate_try_expr_ir(
         &mut self,
         expr: &Expr,
@@ -6279,6 +6348,28 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
+        // RFC-011 §「Vec(T) 的构造形式」：内置容器的两层构造
+        // `Vec(Int)()` / `Vec(Int)(1, 2, 3)` / `Vec(Int)(len = 64)`。
+        //
+        // 内层 `Vec(Int)` 是**类型实参**，运行期擦除（与 struct 的
+        // `Container(Int)(42, 43)` 同一规则）；真正要生成的是外层构造：
+        //   - 无构造实参 → 空容器
+        //   - 位置实参   → 元素构造（长度 = 元素个数）
+        //   - `len = n`  → 槽位分配（n 个零值）
+        // 此前这条路径根本不存在：`Vec(Int)()` 在类型检查阶段就报
+        // E1001 unknown variable 'Vec'（类型名不在值位置的白名单里）。
+        if let Expr::Call { func: inner, .. } = func {
+            if let Some(_ctor) = self.builtin_container_ctor_name(inner) {
+                return self.generate_builtin_container_ir(
+                    args,
+                    named_args,
+                    span,
+                    result_reg,
+                    instructions,
+                    constants,
+                );
+            }
+        }
         // 检查是否是方法调用：func 是 FieldAccess
         if let Expr::FieldAccess { expr, field, .. } = func {
             // 方法调用 - 转换为普通函数调用

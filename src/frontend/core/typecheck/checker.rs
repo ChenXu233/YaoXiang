@@ -152,6 +152,7 @@ impl TypeChecker {
         add_builtin_types(&mut env);
         add_std_traits(&mut env);
         add_native_function_types(&mut env);
+        Self::register_builtin_container_defs(&mut env);
 
         // 注册预定义的 const 函数
         Self::register_predefined_const_functions(&mut env);
@@ -187,6 +188,43 @@ impl TypeChecker {
 
     /// 注册预定义的 const 函数
     /// 这些函数用于值依赖类型的编译期求值
+    /// 注册内置泛型容器的类型构造器定义（RFC-011）。
+    ///
+    /// `Vec(T)` / `Array(T, N)` 是**内建**类型（与 `Int`/`String` 同类），
+    /// 但它们带类型参数，且值位置可当构造器用（`Vec(Int)()`、`Vec(Int)(1,2,3)`）。
+    /// 此前它们既不在 `env.types`（标量表）也不在 `generic_type_defs`
+    ///（只由用户 `Type` 定义填充）——于是值位置的 `Vec(Int)()` 报
+    /// E1001 unknown variable 'Vec'（D6.2），类型推断也拿不到构造器形参
+    /// （`Vec(Int)(1,2,3)` 不写注解时 `func_ty` 悬空成 `t49`）。
+    ///
+    /// 构造器体的字段表只承担一个作用：让实例化能展开成 `Generic{name,args}`。
+    fn register_builtin_container_defs(env: &mut TypeEnvironment) {
+        use crate::frontend::core::typecheck::environment::GenericTypeDef;
+        use crate::frontend::core::types::mono::PolyType;
+        // `Vec(T)`：运行时长度的最小地基。无具名字段（长度是内建属性）。
+        for (name, params) in [("Vec", vec!["T"]), ("Array", vec!["T", "N"])] {
+            let type_binders: Vec<crate::frontend::core::types::TypeVar> = (0..params.len())
+                .map(crate::frontend::core::types::TypeVar::new)
+                .collect();
+            let body = MonoType::Generic {
+                name: name.to_string(),
+                args: params
+                    .iter()
+                    .map(|p| MonoType::TypeRef(p.to_string()))
+                    .collect(),
+            };
+            let def = GenericTypeDef {
+                poly: PolyType {
+                    type_binders,
+                    const_binders: Vec::new(),
+                    body,
+                },
+                type_param_names: params.iter().map(|p| p.to_string()).collect(),
+            };
+            env.add_generic_type_def(name.to_string(), def);
+        }
+    }
+
     fn register_predefined_const_functions(env: &mut TypeEnvironment) {
         // 注册 factorial 函数
         let factorial = ConstFunction::new(

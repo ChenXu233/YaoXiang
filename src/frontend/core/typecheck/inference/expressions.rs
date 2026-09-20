@@ -912,6 +912,27 @@ impl<'a> ExpressionInferrer<'a> {
         arg_types: &[MonoType],
         fn_name: Option<&str>,
     ) -> MonoType {
+        // 内置容器构器：`Vec(Int)` / `Array(Int, 3)`。
+        //
+        // 被调对象本身是 `MetaType`（类型宇宙的值，由值位置的类型名推断而来），
+        // 而不是 `Fn`——下面的 `let MonoType::Fn` 会直接原样返回它，
+        // `Vec(Int)()` 的 `func_ty` 就悬空成 `tN`，`.length` 报
+        // E1053「非结构体不能取字段」（D6.2）。这里先把「MetaType 应用类型实参」
+        // 收成 `Generic{name, args}`——这正是 `Vec(Int)` 应有的类型。
+        if matches!(func_ty, MonoType::MetaType { .. }) {
+            if let Some(name) = fn_name {
+                if matches!(name, "Vec" | "Array") {
+                    let args: Vec<MonoType> = arg_types.to_vec();
+                    if !args.is_empty() {
+                        self.last_type_args = args.clone();
+                        return MonoType::Generic {
+                            name: name.to_string(),
+                            args,
+                        };
+                    }
+                }
+            }
+        }
         // 入口清空：非泛型调用不得读到上次的残留。
         self.last_type_args.clear();
         let MonoType::Fn {
@@ -1168,10 +1189,32 @@ impl<'a> ExpressionInferrer<'a> {
 
             // 如果返回类型是 MetaType，尝试从 generic_type_defs 中获取具体的类型
             if matches!(resolved_return, MonoType::MetaType { .. }) {
-                // 尝试从函数名中获取泛型类型定义
-                // 这里我们需要从 func_ty 中获取函数名，但 func_ty 是 MonoType::Fn，
-                // 没有函数名信息。因此我们需要在调用时传入函数名。
-                // 暂时返回一个 TypeVar，让调用者处理
+                // 把 MetaType 位置上的实参组装成 `Generic{name, args}`。
+                //
+                // 这条路径原本直接返回 fresh TypeVar（注释写“让调用者处理”），
+                // 但调用者无从知晓函数名：`Vec(Int)` 于是永远悬空，
+                // `Vec(Int)()` 的 `func_ty` 变成 `tN`，`.length` 报
+                // E1053「非结构体不能取字段」（D6.2 的另一半）。
+                //
+                // 判据：被调形参里有 MetaType 且实参已解成具体类型——
+                // 实参类型就是类型实参（类型宇宙的值），直接收进 args。
+                if let Some(name) = fn_name {
+                    // 只对内置容器构器展开（`Vec` / `Array`）：
+                    // 其余泛型类型走各自的 instantiate_generic_type 路径。
+                    if matches!(name, "Vec" | "Array") {
+                        let args: Vec<MonoType> = arg_types.to_vec();
+                        if !args.is_empty() {
+                            return MonoType::Fn {
+                                params: new_params,
+                                return_type: Box::new(MonoType::Generic {
+                                    name: name.to_string(),
+                                    args,
+                                }),
+                            };
+                        }
+                    }
+                }
+                // 仍未知：返回 TypeVar，由调用点继续判定（原行为）
                 return MonoType::Fn {
                     params: new_params,
                     return_type: Box::new(self.solver.new_var()),
@@ -2487,9 +2530,11 @@ impl<'a> ExpressionInferrer<'a> {
                         let resolved_ret = self.solver.expand_type_shallow(&return_type);
                         return Ok(resolved_ret);
                     }
-                    MonoType::Struct(_) | MonoType::TypeRef(_) => {
-                        // 类型构造器：Point(1.0, 2.0) 或 List(Int) 单态化后的结果。
-                        // 参数个数检查已在 #271#1 前置块完成（泛型构造器豁免）。
+                    MonoType::Struct(_) | MonoType::TypeRef(_) | MonoType::Generic { .. } => {
+                        // 类型构造器：Point(1.0, 2.0) 或 `Vec(Int)` / `Array(Int, 3)`
+                        // 等内置容器类构造器（内层类型实参应用的结果就是
+                        // `Generic{name, args}`，必须原样交给调用点作为 `func_ty`，
+                        // 否则退化成 fresh TypeVar，`Vec(Int)()` 的 `.length` 无法解析）
                         return Ok(mono_func_ty);
                     }
                     _ => {}
@@ -3407,24 +3452,25 @@ fn extract_const_value_from_expr(
     }
 }
 /// 检查名称是否为内置类型名（Type 宇宙的值）
+///
+/// 单源：标量走 `MonoType::from_builtin_name`（与类型位置同一份表，
+/// 不再手抄第二份名单）；容器/泛型构器（`Vec` / `Array` / `Dict` /
+/// `Tuple` / `Option` / `Result` / `Range` / `Iter` / `Bytes`）
+/// 在类型位置由 `Type::Generic` 分支无条件接受，此处补上对应的值位置识别。
+///
+/// 这两类名字在**值位置**都是 Type 宇宙的值：`Vec(Int)()` 是类型构造
+/// 调用（D6.2 修的就是它报 E1001 unknown variable 'Vec'）。
 fn is_builtin_type_name(name: &str) -> bool {
+    MonoType::from_builtin_name(name).is_some()
+        || is_builtin_generic_type_name(name)
+        || name == "Type"
+}
+
+/// 内置泛型容器的类型名（值位置可作类型构造器用）。
+fn is_builtin_generic_type_name(name: &str) -> bool {
     matches!(
         name,
-        "Int"
-            | "int"
-            | "Float"
-            | "float"
-            | "Bool"
-            | "bool"
-            | "String"
-            | "string"
-            | "Void"
-            | "void"
-            | "Never"
-            | "never"
-            | "Char"
-            | "char"
-            | "Type"
+        "Vec" | "Array" | "Dict" | "Tuple" | "Option" | "Result" | "Range" | "Iter" | "Bytes"
     )
 }
 
