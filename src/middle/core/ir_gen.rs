@@ -4224,12 +4224,44 @@ impl AstToIrGenerator {
                 name.clone()
             };
             Ok(Operand::Const(ConstValue::String(resolved_name)))
-        } else if let Expr::Call { func: inner, .. } = func {
-            // 两层调用 Container(Int)(42, 43)：内层类型实参运行期擦除，
-            // 按结构体构造器名生成（字段填充由调用点实参决定）。
+        } else if let Expr::Call {
+            func: inner,
+            args: inner_args,
+            ..
+        } = func
+        {
+            // 两层调用 `X(T)(...)`：内层类型实参运行期擦除。
+            //
+            // - 结构体构造器（`Container(Int)(42, 43)`）：按类型名生成，
+            //   字段填充由调用点实参决定。
+            // - **泛型函数**（`mk(Int)(5)`）：内层是类型应用，运行期完全无表示。
+            //   单态化器把 `mk` 特化成 `mk(int64)` 并**剥掉未特化的 `mk`**，
+            //   所以这里必须发**特化名**，否则运行期找不到 `mk`（E6006，D6.3）。
             if let Expr::Var(name, _) = inner.as_ref() {
                 if self.struct_definitions.contains_key(name) {
                     return Ok(Operand::Const(ConstValue::String(name.clone())));
+                }
+                if self.lookup_local(name).is_none() {
+                    let base = self.resolve_function_name(inner)?;
+                    let base_name = match &base {
+                        Operand::Const(ConstValue::String(s)) => s.clone(),
+                        _ => name.clone(),
+                    };
+                    // 仅在实参确为类型值时叠特化后缀（值实参=部分应用，不在此列）
+                    if !inner_args.is_empty()
+                        && inner_args.iter().all(|a| self.expr_is_type_value(a))
+                    {
+                        let args_str = inner_args
+                            .iter()
+                            .map(Self::type_value_ir_name)
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        return Ok(Operand::Const(ConstValue::String(format!(
+                            "{}({})",
+                            base_name, args_str
+                        ))));
+                    }
+                    return Ok(base);
                 }
             }
             Err(ErrorCodeDefinition::ir_internal_error(&format!(
@@ -4252,6 +4284,44 @@ impl AstToIrGenerator {
     ///
     /// 只有全局函数声明（通过 let/fn 定义的具名函数）才是静态的。
     /// 局部变量、闭包表达式、函数调用返回值等全部走动态分发。
+    /// 该表达式是否是**类型值**（类型宇宙的值）：`Int`、`Vec(Int)` 等。
+    ///
+    /// 用于区分「类型实参层」（擦除）与「部分应用」（真实调用）：
+    /// `mk(Int)(5)` 的 `Int` 是类型值，内层不生成运行时代码；
+    /// `f(10)(5)` 的 `10` 是普通值，内层必须真的调用并返回闭包。
+    fn expr_is_type_value(
+        &self,
+        expr: &ast::Expr,
+    ) -> bool {
+        let ast::Expr::Var(name, _) = expr else {
+            return false;
+        };
+        // 本模块声明的局部变量/参数优先——变量叫 `Int` 也是值
+        if self.lookup_local(name).is_some() {
+            return false;
+        }
+        crate::frontend::core::types::mono::MonoType::from_builtin_name(name).is_some()
+            || matches!(
+                name.as_str(),
+                "Vec" | "Array" | "Dict" | "Tuple" | "Option" | "Result" | "Range" | "Iter"
+            )
+            || self.declared_type_names.contains(name)
+    }
+
+    /// 把类型值表达式转成单态化器的类型名（`Int` → `int64`，`String` → `string`）。
+    ///
+    /// 必须与 `middle::passes::mono` 生成特化名的口径**完全一致**
+    /// （那边用 `MonoType::type_name()`）：`mk(Int)(5)` 要调的函数叫
+    /// `mk(int64)`，名字对不上就 E6006。
+    fn type_value_ir_name(expr: &ast::Expr) -> String {
+        let ast::Expr::Var(name, _) = expr else {
+            return "_".to_string();
+        };
+        crate::frontend::core::types::mono::MonoType::from_builtin_name(name)
+            .unwrap_or_else(|| crate::frontend::core::types::mono::MonoType::TypeRef(name.clone()))
+            .type_name()
+    }
+
     fn is_static_fn_name(
         &self,
         func: &ast::Expr,
@@ -4263,8 +4333,28 @@ impl AstToIrGenerator {
                 }
                 self.lookup_var_type(name).is_some()
             }
-            ast::Expr::Call { func: inner, .. } => match inner.as_ref() {
-                ast::Expr::Var(name, _) => self.struct_definitions.contains_key(name),
+            // 两层调用 `X(T)(...)`：
+            // - 内层是 struct 构造器（`Container(Int)(42, 43)`）——类型实参擦除
+            // - 内层是**普通函数**且实参均为**类型**（`mk(Int)(5)`）——擦除类型实参层，
+            //   外层才是真实调用。
+            //
+            // 关键判据：内层实参必须是类型（`MetaType`）而非值。否则会误伤
+            // 部分应用（`f(10)(5)` 里 `f(10)` 是**真的返回闭包**，不是类型实参层
+            // ——那会让 `f(10)(5)` 变成单次调用 `f(10, 5)` 而错值）。
+            ast::Expr::Call {
+                func: inner,
+                args: inner_args,
+                ..
+            } => match inner.as_ref() {
+                ast::Expr::Var(name, _) => {
+                    if self.struct_definitions.contains_key(name) {
+                        return true;
+                    }
+                    !inner_args.is_empty()
+                        && inner_args.iter().all(|a| self.expr_is_type_value(a))
+                        && self.lookup_local(name).is_none()
+                        && self.lookup_var_type(name).is_some()
+                }
                 _ => false,
             },
             _ => false,

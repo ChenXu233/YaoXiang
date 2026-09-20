@@ -781,6 +781,32 @@ impl<'a> ExpressionInferrer<'a> {
     ///
     /// 递归遍历类型，将遇到的 TypeVar 在 `subst` 映射中查找，
     /// 若找到替换项则替换，否则保留原 TypeVar。
+    /// 把「类型实参表达式」解成具体类型：`Int` → `Int(64)`、`Vec(Int)` → `Generic{"Vec",[Int]}`。
+    ///
+    /// 类型名在实参位置推断得到的只是笼统的 `MetaType`（类型宇宙的值），
+    /// 而显式类型实参要的是它**指的类型**——`mk(Int)` 必须把 `A` 绑到 `Int`，
+    /// 而不是绑到「某个类型值」。这里从 AST 形态直接取类型。
+    fn type_arg_of_expr(expr: &crate::frontend::core::parser::ast::Expr) -> MonoType {
+        use crate::frontend::core::parser::ast::Expr;
+        match expr {
+            Expr::Var(name, _) => {
+                MonoType::from_builtin_name(name).unwrap_or_else(|| MonoType::TypeRef(name.clone()))
+            }
+            // `Vec(Int)` / `Array(Int, 3)` 形态：类型构造器应用
+            Expr::Call { func, args, .. } => {
+                if let Expr::Var(cname, _) = func.as_ref() {
+                    MonoType::Generic {
+                        name: cname.clone(),
+                        args: args.iter().map(Self::type_arg_of_expr).collect(),
+                    }
+                } else {
+                    MonoType::TypeRef("_".to_string())
+                }
+            }
+            _ => MonoType::TypeRef("_".to_string()),
+        }
+    }
+
     fn substitute_type_vars(
         ty: &MonoType,
         subst: &HashMap<usize, MonoType>,
@@ -1375,6 +1401,19 @@ impl<'a> ExpressionInferrer<'a> {
             }
         }
 
+        // 3. 声明的类型参数名表（`check_fn_stmt` 登记）。
+        //
+        // 这是**最可靠**的来源：`poly.type_binders` 在签名收集阶段已被剥掉，
+        // 所以上面第 2 步对 `mk: (A: Type) -> (x: A) -> A` 拿不到名字，
+        // 返回空表——而空表会被下游当成「无 arity 约束」放行，
+        // 实例化请求的 `GenericFunctionId` 就带不上声明名，单态化器匹配不到
+        // `mk` 的特化，运行时报 E6006。
+        if let Some(names) = self.generic_fn_type_params.get(fn_name) {
+            if !names.is_empty() {
+                return names.clone();
+            }
+        }
+
         vec![]
     }
 
@@ -1903,6 +1942,41 @@ impl<'a> ExpressionInferrer<'a> {
                     .map(|arg| self.infer_expr(arg))
                     .collect::<Result<Vec<_>, _>>()?;
 
+                // D6.3：显式类型实参（`mk(Int)(5)` 的内层 `mk(Int)`）。
+                //
+                // 语法上 `Int` 在实参位置是个 `MetaType`（类型宇宙的值）。
+                // 若函数签名已声明类型参数（作用域里的 `Fn` 参数/返回含类型变量）
+                // 且前导实参全是 `MetaType`，则它们是**类型实参**而非值实参——
+                // 不能当值传给 `Fn{params:[t]}`，否则 `A` 绑到 `MetaType`，
+                // `mk(Int)(5)` 静默出 void（D6.3）。
+                //
+                // 判据用「形参里有未绑定类型变量」而非 `lookup_type_params`：
+                // 后者依赖 `generic_fn_type_params` 登记（仅在 check_fn_stmt 时填），
+                // 单文件里 lambda 形态的绑定未必命中。
+                let mut explicit_type_args: Vec<MonoType> = Vec::new();
+                let mut value_arg_types: Vec<MonoType> = arg_types.clone();
+                {
+                    let leading = arg_types
+                        .iter()
+                        .take_while(|t| matches!(t, MonoType::MetaType { .. }))
+                        .count();
+                    let fn_has_type_slot = matches!(
+                        &func_ty,
+                        MonoType::Fn { params, return_type }
+                            if params.iter().any(|p| matches!(p, MonoType::TypeVar(_)))
+                                || matches!(**return_type, MonoType::TypeVar(_))
+                    );
+
+                    if leading > 0 && fn_has_type_slot && leading <= args.len() {
+                        // 把类型名实参换成**具体类型**（`Int` → `Int(64)`），
+                        // 而不是笼统的 `MetaType`：上层 `mk(Int)(5)` 需要的
+                        // 是已专用化的 `Fn{[Int], Int}`，用 MetaType 绑不出它。
+                        explicit_type_args =
+                            args[..leading].iter().map(Self::type_arg_of_expr).collect();
+                        value_arg_types = arg_types[leading..].to_vec();
+                    }
+                }
+
                 // 重载解析
                 if let crate::frontend::core::parser::ast::Expr::Var(ref name, _) = **func {
                     if overload::has_overloads(self.overload_candidates, name) {
@@ -1943,7 +2017,69 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                     _ => None,
                 };
-                let mono_func_ty = self.monomorphize(func_ty.clone(), &arg_types, fn_name_for_mono);
+                let mono_func_ty =
+                    self.monomorphize(func_ty.clone(), &value_arg_types, fn_name_for_mono);
+                let mut explicit_type_args = explicit_type_args;
+                // D6.3：显式类型实参应用（`mk(Int)` 的内层）。
+                //
+                // 语义：`mk: (A: Type) -> (x: A) -> A` 里 `A` 是**类型参数**；
+                // `mk(Int)` 把 `A` 绑为 `Int`，**返回专用化后的函数**
+                // `(x: Int) -> Int`（而非某个值）。因此：
+                //   1. 把类型实参绑到形参/返回里的类型变量（顺序对应声明序）；
+                //   2. 从实参列表里**移除**它（它不是值实参），否则后面的
+                //      逐参 unify 会拿 `MetaType` 去对 `Int` 报 E1002；
+                //   3. 返回收敛后的 `Fn`。
+                //
+                // 单文件里 `A` 在作用域中是 fresh TypeVar（签名收集阶段已剥掉类型层）。
+                if !explicit_type_args.is_empty() {
+                    if let MonoType::Fn {
+                        params,
+                        return_type,
+                    } = &mono_func_ty
+                    {
+                        let mut slots: Vec<(usize, MonoType)> = Vec::new();
+                        for p in params.iter().chain(std::iter::once(&**return_type)) {
+                            Self::collect_type_vars_positional(p, &mut slots);
+                        }
+                        slots.sort_by_key(|(i, _)| *i);
+                        slots.dedup_by_key(|(i, _)| *i);
+                        for (idx, ta) in explicit_type_args.iter().enumerate() {
+                            if let Some((_, slot)) = slots.get(idx) {
+                                let _ = self.solver.unify(slot, ta);
+                            }
+                        }
+                        // 类型实参不是值实参：从后续逐参校验中移除
+                        let bound_params: Vec<MonoType> =
+                            params.iter().map(|p| self.solver.resolve_type(p)).collect();
+                        let bound_ret = self.solver.resolve_type(return_type);
+                        // 返回专用化后的函数：curry 尾层已是具体形参
+                        if bound_params
+                            .iter()
+                            .all(|p| !matches!(p, MonoType::TypeVar(_)))
+                            && !matches!(bound_ret, MonoType::TypeVar(_))
+                        {
+                            self.last_type_args = explicit_type_args.clone();
+                            let specialized = MonoType::Fn {
+                                params: bound_params,
+                                return_type: Box::new(bound_ret),
+                            };
+                            // 登记实例化请求：单态化阶段靠它特化并保留 `mk` 的
+                            // 具体版本。不登记的话 mono 会把未特化的 `mk` 删掉，
+                            // 运行时找不到 `mk`（E6006）。
+                            self.collect_instantiation_request(
+                                &func_ty,
+                                func.as_ref(),
+                                &explicit_type_args,
+                                &specialized,
+                                *span,
+                            );
+                            return Ok(specialized);
+                        }
+                    }
+                }
+                explicit_type_args.clear();
+                // 清除探针
+                let _ = &explicit_type_args;
 
                 // 收集实例化请求：检测泛型函数调用并记录
                 self.collect_instantiation_request(
@@ -2527,7 +2663,12 @@ impl<'a> ExpressionInferrer<'a> {
                                 }
                             }
                         }
-                        let resolved_ret = self.solver.expand_type_shallow(&return_type);
+                        // 用 `resolve_type` 而非 `expand_type_shallow`：
+                        // 后者只做结构展开，**不跟随 TypeVar 绑定**。
+                        // 显式类型实参（`mk(Int)`）的绑定就在 solver 里，
+                        // 不 resolve 的话返回类型仍是 `t49`，外层 `mk(Int)(5)`
+                        // 拿不到 Int，静默当 void（D6.3）。
+                        let resolved_ret = self.solver.resolve_type(&return_type);
                         return Ok(resolved_ret);
                     }
                     MonoType::Struct(_) | MonoType::TypeRef(_) | MonoType::Generic { .. } => {
