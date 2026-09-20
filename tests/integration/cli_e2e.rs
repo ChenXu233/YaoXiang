@@ -1010,3 +1010,67 @@ fn test_e2e_runtime_bounds_error_omits_clause_for_literals() {
         "无变量名时不应留空子句；combined: {combined:?}"
     );
 }
+
+#[test]
+fn test_e2e_script_mode_top_level_diagnostic_has_span_and_var_name() {
+    // Arrange: #368——顶层语句编入合成函数 `__yx_module_init`。
+    // 此前该函数的调试元数据整段为空：运行期错误既没有 `-->` 源码行，
+    // 也报不出索引变量名（只有数值）。不是函数体内专属问题。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "top_oob.yx",
+        "use std.io\n\na = [1, 2, 3]\ni = 5\nio.println(a[i])\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_ne!(
+        code, 0,
+        "顶层越界应是非零退出；stdout: {stdout:?} stderr: {stderr:?}"
+    );
+    assert!(
+        combined.contains("E6003"),
+        "应报 E6003 索引越界；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("--> "),
+        "顶层语句的错误应带 `-->` 源码位置（此前完全缺失）；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("(i)"),
+        "顶层绑定的索引变量名应可见（走全局槽位名表）；combined: {combined:?}"
+    );
+}
+
+#[test]
+fn test_e2e_script_mode_top_level_for_loop_completes() {
+    // Arrange: #368 附带修复——顶层 `for` 的循环出口跳转目标落在
+    // 初始化序列段尾，`translate_init_sequence` 缺段尾哨兵时该目标查不到，
+    // 偏移停在占位 0 → 运行时 E6007「跳转偏移非法」。
+    // 函数体内的同名循环一直正常，差别只在合成函数的回填表。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "top_for.yx",
+        "use std.io\n\nfor i in 0..3 {\n    io.println(i)\n}\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_eq!(code, 0, "顶层 for 应正常跑完；combined: {combined:?}");
+    assert!(
+        !combined.contains("E6007"),
+        "不应出现跳转回填错误 E6007；combined: {combined:?}"
+    );
+    assert!(
+        stdout.contains('0') && stdout.contains('1') && stdout.contains('2'),
+        "循环体应执行三次（0/1/2）；stdout: {stdout:?}"
+    );
+}

@@ -903,6 +903,10 @@ impl AstToIrGenerator {
                 .collect(),
             functions,
             init: std::mem::take(&mut self.module_init),
+            // #368：模块级槽位表随 init 一起交给 codegen。
+            // 顶层语句里的具名结构（如 `for i in ..` 的循环变量）在此登记，
+            // 取值时已覆盖到最大已注册槽位（register_local 会补空格）。
+            init_locals: std::mem::take(&mut self.cur_locals),
             ffi_libs: std::mem::take(&mut self.ffi_libs),
             ffi_bindings: std::mem::take(&mut self.ffi_bindings),
             entry_function: None,
@@ -1610,9 +1614,12 @@ impl AstToIrGenerator {
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
         let saved_loop_stack = std::mem::take(&mut self.loop_stack);
 
-        // 顶层函数体入口：清空槽位表，避免沿用上一个函数的局部名。
-        // 嵌套路径（curry/lambda/anon）走 save/restore，不在此列。
-        self.cur_locals.clear();
+        // 顶层函数体入口：接手槽位表，避免沿用上一个函数的局部名。
+        //
+        // 与 generate_function_ir 同款 take/restore：方法体可以嵌在模块级
+        // 生成流程里（顶层类型定义），直接 clear 会把已积累的模块级槽位表
+        // 抹掉——顶层 `for` 的循环变量名会因此丢失（#368）。
+        let saved_cur_locals = std::mem::take(&mut self.cur_locals);
 
         // 生成指令序列
         let mut instructions = Vec::new();
@@ -1673,6 +1680,9 @@ impl AstToIrGenerator {
 
         // #311：恢复父函数的循环上下文
         self.loop_stack = saved_loop_stack;
+        // 恢复父函数的槽位表：本方法体可能嵌在模块级生成流程里，
+        // take 走后必须放回，否则模块级已登记的具名槽位会丢（#368）。
+        self.cur_locals = saved_cur_locals;
 
         Ok(Some(func_ir))
     }

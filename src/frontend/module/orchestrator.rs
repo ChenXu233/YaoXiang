@@ -578,6 +578,7 @@ fn link_module_irs(
         globals: Vec::new(),
         functions: Vec::new(),
         init: Vec::new(),
+        init_locals: Vec::new(),
         ffi_libs: Vec::new(),
         ffi_bindings: Vec::new(),
         entry_function: Some(format!("{}.main", entry_key)),
@@ -594,6 +595,9 @@ fn link_module_irs(
         merged.functions.extend(ir.functions);
         // T5：各文件的初始化序列按发现顺序拼接（被依赖模块先于入口文件）。
         merged.init.extend(ir.init);
+        // #368：init 拼接后槽位号会跨文件错位（各文件从 0 起算），
+        // 故此处不合并 init_locals——多文件下 codegen 也不挂源码位置。
+        // ponytail: 要覆盖需让 ModuleIR 按段记录 file_id 与槽位基址。
         merged.ffi_libs.extend(ir.ffi_libs);
         merged.ffi_bindings.extend(ir.ffi_bindings);
     }

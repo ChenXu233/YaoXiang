@@ -64,3 +64,37 @@ fn test_debug_section_round_trip() {
         Some(debug_span)
     );
 }
+
+#[test]
+fn test_debug_section_round_trip_global_names() {
+    // #368：全局槽位名表（v3）——顶层绑定的名字不在任何函数局部名表里，
+    // 顶层 `a[i]` 的越界诊断要靠它才能报出 `i`。往返必须保真。
+    let mut sources = SourceMap::new();
+    sources.add_file("script.yx".to_string(), "a = [1]\ni = 5".to_string());
+
+    let code_section = CodeSection { functions: vec![] };
+    let debug_section = DebugSection::with_global_names(
+        sources,
+        &code_section.functions,
+        HashMap::from([(0usize, "a".to_string()), (1usize, "i".to_string())]),
+    );
+    let file = BytecodeFile {
+        header: FileHeader::default(),
+        type_table: Vec::new(),
+        const_pool: Vec::new(),
+        code_section,
+        vtables: Vec::new(),
+        debug_section: Some(debug_section),
+    };
+
+    let mut bytes = Vec::new();
+    file.write_to(&mut bytes).expect("write bytecode");
+
+    let mut cursor = io::Cursor::new(bytes);
+    let decoded = DebugSection::read_from_end(&mut cursor)
+        .expect("read debug section")
+        .expect("debug section should exist");
+
+    assert_eq!(decoded.global_names.get(&0).map(String::as_str), Some("a"));
+    assert_eq!(decoded.global_names.get(&1).map(String::as_str), Some("i"));
+}

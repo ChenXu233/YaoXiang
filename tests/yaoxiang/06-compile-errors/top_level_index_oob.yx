@@ -1,0 +1,12 @@
+// 06-compile-errors/top_level_index_oob.yx
+// expect: runtime-error E6003
+// 覆盖: #368 Script 模式顶层语句的诊断可达性
+// 验证: 顶层语句（编入合成函数 __yx_module_init）的越界索引报 E6003，
+//       且带源码位置与索引变量名——此前既无位置也无名字
+// 状态: ❌ 应运行失败
+
+use std.io
+
+a = [1, 2, 3]
+i = 5
+io.println(a[i])

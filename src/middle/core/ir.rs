@@ -877,6 +877,12 @@ pub struct ModuleIR {
     /// 模块初始化序列：按依赖顺序求值并写入全局槽位的指令。
     /// 入口执行前先跑它（Script 模式下它本身就是程序）。
     pub init: Vec<Instruction>,
+    /// 模块初始化序列的局部槽位表（含源码名）。
+    ///
+    /// 顶层语句是 Script 模式下的程序主体，`for` 循环变量等会占用真实局部槽位；
+    /// 槽位号即 `init` 指令里的寄存器号，与 `FunctionIR.body.locals` 同构。
+    /// 供 codegen 给合成函数 `__yx_module_init` 生成调试信息（#368）。
+    pub init_locals: Vec<LocalSlot>,
     /// FFI 库绑定 — 编译期链接的外部库
     pub ffi_libs: Vec<FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数

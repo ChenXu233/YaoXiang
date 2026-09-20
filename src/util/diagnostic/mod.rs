@@ -115,14 +115,16 @@ pub fn render_runtime_error(
 
 /// 反查某帧里某个槽位的源码变量名。
 ///
-/// 名字来自 .42 调试段的 `function_local_names`（v2 起）；
-/// v1 产物没有名字表，返回 None，渲染层退化为只给数值。
+/// 名字来自 .42 调试段的 `function_local_names`（v2 起）与
+/// `global_names`（v3 起）；更早产物没有对应名字表，返回 None，
+/// 渲染层退化为只给数值。
 /// 把「索引所在的寄存器号」回溯成源码变量名。
 ///
 /// 为什么需要回溯：`a[idx]` 生成的是
 /// `LoadLocal tmp, idx` → `LoadElement dst, a, tmp`，
 /// 抛错点看到的寄存器是临时槽 `tmp`，而名字挂在 `idx` 上。
-/// 这里沿指令流向前找最后一次写该寄存器的 `LoadLocal`，取它的源槽位；
+/// 这里沿指令流向前找最后一次写该寄存器的 `LoadLocal`（局部）或
+/// `LoadGlobal`（顶层绑定，走全局槽位名表），取它的源槽位；
 /// 若该源槽位本身也没有名字（链式临时），就退化为 None。
 ///
 /// 只做一步回溯是有意为之：再多就是在诊断层重写寄存器分配分析，
@@ -142,13 +144,24 @@ fn resolve_index_var_name(
         return Some(name.clone());
     }
 
-    // 否则向前找最后一次写它的 LoadLocal，取其源槽位名
+    // 否则向前找最后一次写它的载入指令，取其源槽位名。
+    // 局部与全局共用一段回溯：顶层语句里的索引变量是全局槽位
+    // （Script 模式 `i = 5` 编进 `__yx_module_init` 的 StoreGlobal），
+    // 只认 LoadLocal 会让顶层形态永远追不到名字（#368）。
     let upto = frame.ip.min(func.instructions.len());
     for instr in func.instructions[..upto].iter().rev() {
-        if let crate::middle::bytecode::BytecodeInstr::LoadLocal { dst, local_idx } = instr {
-            if dst.0 as usize == index_reg {
+        match instr {
+            crate::middle::bytecode::BytecodeInstr::LoadLocal { dst, local_idx }
+                if dst.0 as usize == index_reg =>
+            {
                 return func.local_names.get(&(*local_idx as usize)).cloned();
             }
+            crate::middle::bytecode::BytecodeInstr::LoadGlobal { dst, global_idx }
+                if dst.0 as usize == index_reg =>
+            {
+                return module.global_names.get(&(*global_idx as usize)).cloned();
+            }
+            _ => {}
         }
     }
     None
