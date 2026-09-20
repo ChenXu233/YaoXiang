@@ -10,6 +10,7 @@
 // 不能因为「两层调用」就被当成类型实参层擦掉（否则 `f(10)(5)` 变成 `f(10, 5)`）。
 
 use std.assert
+use std.list
 
 // 类型参数在形参与返回位都出现
 mk: (A: Type) -> (x: A) -> A = x
@@ -50,6 +51,17 @@ main: () -> Void = {
     add10 = add2(10)
     assert.assert(add10(1) == 11, "add10(1) == 11")
     assert.assert(add10(7) == 17, "add10(7) == 17")
+
+    // 关键回归：显式类型实参触发单态化时，嵌入 std 的泛型函数必须存活。
+    // 单态化会删掉「未特化的泛型」，而 `std.list` 系列本身就是泛型
+    // （`list.yx` 里写为 `(A: Type) -> ...`），调用点又按原名（`std.list.push`）
+    // 调用——一旦因 `mk(Int)` 触发 mono，它们会整批从函数表消失，
+    // 运行时报「Native function not found: std.list.push」。
+    v: Vec(Int) = [1, 2]
+    pushed = list.push(item = 9, list = v)
+    assert.assert(list.len(pushed) == 3, "std.list.* survives monomorphization")
+    s2 = mk(String)("x")
+    assert.assert(s2 == "x", "explicit type arg still works alongside std.list")
 }
 
 main()

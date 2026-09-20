@@ -4308,6 +4308,32 @@ impl AstToIrGenerator {
             || self.declared_type_names.contains(name)
     }
 
+    /// 类型值表达式 → `MonoType`（`Int` → `Int(64)`，`Vec(Int)` → `Generic`）。
+    ///
+    /// 与 `typecheck` 侧的 `type_arg_of_expr` 同口径（两边都必须把类型名解成
+    /// 真实类型，而非笼统的 `MetaType`）。
+    fn type_arg_of_expr_ir(expr: &ast::Expr) -> MonoType {
+        match expr {
+            ast::Expr::Var(name, _) => {
+                crate::frontend::core::types::mono::MonoType::from_builtin_name(name)
+                    .unwrap_or_else(|| {
+                        crate::frontend::core::types::mono::MonoType::TypeRef(name.clone())
+                    })
+            }
+            ast::Expr::Call { func, args, .. } => {
+                if let ast::Expr::Var(cname, _) = func.as_ref() {
+                    MonoType::Generic {
+                        name: cname.clone(),
+                        args: args.iter().map(Self::type_arg_of_expr_ir).collect(),
+                    }
+                } else {
+                    MonoType::TypeRef("_".to_string())
+                }
+            }
+            _ => MonoType::TypeRef("_".to_string()),
+        }
+    }
+
     /// 把类型值表达式转成单态化器的类型名（`Int` → `int64`，`String` → `string`）。
     ///
     /// 必须与 `middle::passes::mono` 生成特化名的口径**完全一致**
@@ -4362,6 +4388,25 @@ impl AstToIrGenerator {
     }
 
     /// 获取表达式的推断类型（用于 IR 生成阶段的分支）
+    /// 该字段访问是否为容器的 `.length`（`Vec(T)` / `Array(T, N)`）。
+    ///
+    /// 剥掉 `Ref` 层：`&Vec(A)` 的 `.length` 也是长度读取（RFC-009 §2.8 读透明）。
+    fn is_container_length_field(
+        &self,
+        expr: &Expr,
+        field: &str,
+    ) -> bool {
+        field == "length"
+            && matches!(self.get_expr_mono_type(expr), Some(ref t) if {
+                let mut r = t.clone();
+                while let crate::frontend::core::types::mono::MonoType::Ref { inner, .. } = r {
+                    r = *inner;
+                }
+                r.is_vec() || r.is_array()
+            })
+    }
+
+    /// 生成一个表达式的静态类型（IR 期视图）
     fn get_expr_mono_type(
         &self,
         expr: &ast::Expr,
@@ -4402,6 +4447,32 @@ impl AstToIrGenerator {
                 }
             }
             ast::Expr::List(_, _) => Some(MonoType::make_list(MonoType::Void)),
+            // `Vec(Int)(...)` / `Array(Int, 3)(...)` 的静态类型。
+            //
+            // 链式取字段（`Vec(Int)().length`）走 `get_expr_mono_type` 判类型，
+            // 没有本臂就落到「普通字段访问」分支 → 报
+            // E3005「无法解析字段索引: 'length'」。类型实参在 AST 里就是
+            // `Call{func: Var(容器名), args: [类型表达式...]}`，直接解出来。
+            ast::Expr::Call { func, .. } => {
+                if let ast::Expr::Call {
+                    func: inner,
+                    args: type_args,
+                    ..
+                } = func.as_ref()
+                {
+                    if let ast::Expr::Var(cname, _) = inner.as_ref() {
+                        if matches!(cname.as_str(), "Vec" | "Array")
+                            && !self.declared_type_names.contains(cname)
+                        {
+                            return Some(MonoType::Generic {
+                                name: cname.clone(),
+                                args: type_args.iter().map(Self::type_arg_of_expr_ir).collect(),
+                            });
+                        }
+                    }
+                }
+                None
+            }
             ast::Expr::Tuple(items, _) => {
                 let elems = vec![MonoType::Void; items.len()];
                 Some(MonoType::make_tuple(elems))
@@ -5758,6 +5829,23 @@ impl AstToIrGenerator {
         } else {
             // 提取完整的命名空间路径（如 std.math.PI）
             let full_path = self.resolve_field_path(expr, field);
+
+            // 容器的 `.length` 读取（接收者非简单变量时）。
+            //
+            // 上面的 `.length` 分支嵌在 `if let Expr::Var(module_name, _) = expr`
+            // 内部，只对变量接收者生效；`Vec(Int)().length`（接收者是两层构造调用）
+            // 落到下面的普通字段分支，生成 `LoadField(0)`——那是**取元素 0**，
+            // 空容器上直接报「field index 0 out of range」。
+            if self.is_container_length_field(expr, field) {
+                let obj_reg = self.next_temp_reg();
+                self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                instructions.push(Instruction::StringLength {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Local(obj_reg),
+                    span: *span,
+                });
+                return Ok(());
+            }
 
             // 检查是否是命名空间常量访问
             if self.registry.is_native_name(&full_path) {
