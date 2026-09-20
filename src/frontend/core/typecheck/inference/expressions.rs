@@ -3608,11 +3608,14 @@ fn is_builtin_type_name(name: &str) -> bool {
 }
 
 /// 内置泛型容器的类型名（值位置可作类型构造器用）。
+///
+/// **仅含 RFC-011 规格化了两层构造的 `Vec(T)` / `Array(T, N)`**。
+/// 其余容器名（`Dict`/`Tuple`/`Option`/`Result`/`Range`/`Iter`/`Bytes`）
+/// 在**值位置**没有类型构造器语义（无 `Dict(Int,Int)()` 这样的写法），
+/// 列入它们会让类型检查放行、IR 层却无对应生成器，
+/// 结果从清楚的 `E1001 unknown variable` 退化成 `E3006` 编译器内部一致性错。
 fn is_builtin_generic_type_name(name: &str) -> bool {
-    matches!(
-        name,
-        "Vec" | "Array" | "Dict" | "Tuple" | "Option" | "Result" | "Range" | "Iter" | "Bytes"
-    )
+    matches!(name, "Vec" | "Array")
 }
 
 /// #287: 将泛型构造器字段类型中的 TypeRef(类型参数名) 替换为对应 TypeVar，
