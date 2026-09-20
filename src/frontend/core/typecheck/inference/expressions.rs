@@ -2019,7 +2019,6 @@ impl<'a> ExpressionInferrer<'a> {
                 };
                 let mono_func_ty =
                     self.monomorphize(func_ty.clone(), &value_arg_types, fn_name_for_mono);
-                let mut explicit_type_args = explicit_type_args;
                 // D6.3：显式类型实参应用（`mk(Int)` 的内层）。
                 //
                 // 语义：`mk: (A: Type) -> (x: A) -> A` 里 `A` 是**类型参数**；

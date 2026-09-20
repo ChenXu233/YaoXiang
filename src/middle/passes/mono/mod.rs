@@ -255,10 +255,12 @@ impl Monomorphizer {
         let mut out = Vec::new();
         for block in blocks {
             for instr in &block.instructions {
-                if let Instruction::Call { func, .. } = instr {
-                    if let Operand::Const(ConstValue::String(name)) = func {
-                        out.push(name.clone());
-                    }
+                if let Instruction::Call {
+                    func: Operand::Const(ConstValue::String(name)),
+                    ..
+                } = instr
+                {
+                    out.push(name.clone());
                 }
             }
         }
