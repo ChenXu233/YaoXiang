@@ -37,4 +37,8 @@ define_codes!(E3XXX, {
     ("E3021", Codegen, false, bin_main_not_function(name: &str) => .param("name", name)),
     // E3022 入口 main 签名不符（运行期以零参调用）
     ("E3022", Codegen, false, bin_main_signature(name: &str, expected: &str, found: &str) => .param("name", name).param("expected", expected).param("found", found)),
+    // E3023 Bin 角色顶层不允许可执行语句（规范 §3.11）。
+    // 此前这类**用户写法错误**落入 E3005「IR 内部错误，请报告此问题」，
+    // 并把 `Discriminant(0)` 泄给用户。同族：#360（索引赋值）/#311（break）。
+    ("E3023", Codegen, true, bin_top_level_statement() => ),
 });

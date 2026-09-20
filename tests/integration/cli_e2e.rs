@@ -1074,3 +1074,45 @@ fn test_e2e_script_mode_top_level_for_loop_completes() {
         "循环体应执行三次（0/1/2）；stdout: {stdout:?}"
     );
 }
+
+#[test]
+fn test_e2e_bin_mode_top_level_statement_is_user_error() {
+    // Arrange: 规范 §3.11——Bin 角色（有 yaoxiang.toml）顶层不允许可执行语句。
+    // 这是**文档化的用户写法错误**，必须报可行动的编译错误；
+    // 此前它挨 E3005「IR 内部错误，请报告此问题」并把 `Discriminant(N)` 泄给用户，
+    // 既指错方向又误导提单（同族：#360 索引赋值、#311 break）。
+    let tmp = TempDir::new().unwrap();
+    std::fs::write(
+        tmp.path().join("yaoxiang.toml"),
+        "[package]\nname = \"bintl\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use std.io\n\nio.println(\"top level\")\n\nmain: () -> Void = {\n    io.println(\"main\")\n}\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_ne!(code, 0, "编译应失败；combined: {combined:?}");
+    assert!(
+        combined.contains("E3023"),
+        "应报专门的 E3023 顶层语句错误码；combined: {combined:?}"
+    );
+    assert!(
+        !combined.contains("E3005"),
+        "不应再落入 IR 内部错误码 E3005；combined: {combined:?}"
+    );
+    assert!(
+        !combined.contains("Discriminant"),
+        "不应把内部判别式泄给用户；combined: {combined:?}"
+    );
+    assert!(
+        !combined.contains("please report this issue"),
+        "用户写法错误不应叫用户提单；combined: {combined:?}"
+    );
+}

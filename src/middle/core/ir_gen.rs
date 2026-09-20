@@ -1578,14 +1578,14 @@ impl AstToIrGenerator {
             }
             _ => {
                 // 多文件/有 manifest：顶层只允许定义（绑定/类型/导入）；
-                // 可执行语句必须在函数体内。
-                // 禁止静默丢弃（#251 同类：表达式级兑底曾静默归零）
-                Err(ErrorCodeDefinition::ir_internal_error(&format!(
-                    "unhandled top-level statement in IR generation: {:?}",
-                    std::mem::discriminant(&stmt.kind)
-                ))
-                .at(stmt.span)
-                .build())
+                // 可执行语句必须在 main 体内（规范 §3.11）。
+                //
+                // 这是**用户写法错误**，不是编译器缺陷——此前挨 E3005「IR 内部
+                // 错误，请报告此问题」并把 `Discriminant(N)` 泄给用户，既指错方向
+                // 又误导提单（同族：#360 索引赋值、#311 break）。
+                Err(ErrorCodeDefinition::bin_top_level_statement()
+                    .at(stmt.span)
+                    .build())
             }
         }
     }

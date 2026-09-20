@@ -744,6 +744,12 @@
     "template": "The signature of entry '{name}' does not match: the runtime calls it with zero arguments, but it requires '{expected}', found '{found}'",
     "help": "The program entry is always called with no arguments. Write main as a no-argument form `main: () -> Void = { ... }`; for external input, use argv/environment variables from std.os."
   },
+  "E3023": {
+    "title": "Top-level statement not allowed",
+    "message": "In the Bin role the program body is main, so the top level may only declare",
+    "template": "the Bin role (a yaoxiang.toml exists) does not allow executable statements at the top level — the program body is main",
+    "help": "Move this statement inside the main function body; if you really want top-level statements as the program body, remove yaoxiang.toml to use Script mode (without a manifest, top-level statements run in written order)."
+  },
   "E3004": {
     "title": "Unsupported iterator",
     "template": "Unsupported iterator type: {iter_type}",

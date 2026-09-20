@@ -382,6 +382,7 @@ E1001::unknown_variable(&var_name)
 | E3020 | 缺少程序入口        |
 | E3021 | 入口不是函数        |
 | E3022 | 入口 main 签名不符  |
+| E3023 | 顶层不允许可执行语句    |
 <!-- code-table:E3xxx end -->
 
 #### E4xxx：泛型与特质
