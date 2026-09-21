@@ -751,10 +751,10 @@
     "help": "Move this statement into the main function body; if you really want top-level statements to act as the program body, remove yaoxiang.toml and switch to Script mode (when no manifest is present, top-level statements are executed in written order)."
   },
   "E1103": {
-    "title": "Brackets are not type syntax",
-    "message": "Type arguments use parentheses; brackets are value-level indexing",
-    "template": "'{name}[...]' is not type syntax — type arguments use parentheses",
-    "help": "Write `{name}(...)`. Brackets are **value-level** indexing (`list[0]`); in type position only parentheses are allowed: `List(Int)`, not `List[Int]`."
+    "title": "Brackets are not allowed in type position",
+    "message": "Type arguments use parentheses; brackets are for value-level indexing",
+    "template": "'{name}[...]' is not type syntax — type arguments require parentheses",
+    "help": "Write it as `{name}(...)`. Brackets are **value-level** indexing (`list[0]`); type position only takes parentheses: `List(Int)` not `List[Int]`."
   },
   "E3004": {
     "title": "Unsupported iterator",

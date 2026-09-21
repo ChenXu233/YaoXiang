@@ -1004,5 +1004,9 @@
   "E3023.title": "顶层不许可执行之语句",
   "E3023.message": "Bin 角色之程序主体乃 main，顶层唯许声明",
   "E3023.template": "Bin 角色之下（存 yaoxiang.toml），顶层不许可执行之语句——程序之主体即 main",
-  "E3023.help": "移此语句入 main 函数之体；若果欲以顶层语句为程序之主体，则去 yaoxiang.toml，改用 Script 之式（无 manifest 时，顶层语句依书写之序而行）。"
+  "E3023.help": "移此语句入 main 函数之体；若果欲以顶层语句为程序之主体，则去 yaoxiang.toml，改用 Script 之式（无 manifest 时，顶层语句依书写之序而行）。",
+  "E1103.title": "类型位不可用方括号",
+  "E1103.message": "类型实参用圆括号，方括号乃值级下标",
+  "E1103.template": "'{name}[...]' 非类型语法——类型实参宜用圆括号",
+  "E1103.help": "可改作 `{name}(...)`。方括号者，**值级**下标也（如 `list[0]`），类型位唯可书圆括号：`List(Int)`，非 `List[Int]`。"
 }
