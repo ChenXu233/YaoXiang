@@ -1,6 +1,10 @@
 //! 字节码序列化单元测试
 //!
 //! 测试 DebugSection 的序列化和反序列化（round-trip）功能。
+//!
+//! 规范来源：
+//! - RFC-034 §「IR 调试元数据」（调试段格式）：v1 仅 ip→span；v2 增每函数
+//!   局部变量名表；v3 增全局槽位名表。读取端接受 v1/v2/v3，旧产物补空表不 panic。
 
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::passes::codegen::bytecode::{

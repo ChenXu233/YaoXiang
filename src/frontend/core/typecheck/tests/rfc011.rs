@@ -343,7 +343,7 @@ fn test_rfc011_associated_type() {
     assert!(result.diagnostics.is_empty(), "associated type should pass");
 }
 
-/// 规范：泛型关联类型（GAT）
+/// 规范：RFC-011 §3.2 泛型关联类型（GAT）
 ///
 /// `Container: (Item: Type) -> Type = { IteratorType: Iterator(Item), iter: (Self) -> IteratorType }`
 ///
@@ -382,7 +382,7 @@ fn test_rfc011_generic_associated_type() {
     );
 }
 
-/// 规范：成员名的作用域限于本类型体
+/// 规范：RFC-011 §3.1 关联类型定义（体级名字作用域）
 ///
 /// 体级名字**不得**溢出——否则成员名会变成全局合法类型，
 /// 静默掩盖真实的拼写错误（即 #372 要堵的那类缺口）。

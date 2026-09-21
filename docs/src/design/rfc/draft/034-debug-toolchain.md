@@ -381,7 +381,8 @@ spawn {          // Step Over → 跑完整个 spawn 块
 | 交付项 | 状态 | 落地形式 |
 | --- | --- | --- |
 | 源码位置 | 已完成 | 全部 76 个 `Instruction` 变体携带 `span` 字段；`span()` 方法刻意不设通配臂，新增变体漏带 span 即编译失败。位置覆盖 40/41 指令 |
-| 变量名 | 已完成 | `LocalSlot { name, ty, scope_depth }` 挂 `FunctionBody::Code::locals`；`register_local` 生成期就地对写入。`.42` 调试段 v2 携带名字，v1 产物向后兼容读取 |
+| 变量名 | 已完成 | `LocalSlot { name, ty, scope_depth }` 挂 `FunctionBody::Code::locals`；`register_local` 生成期就地对写入。`.42` 调试段 v2 携带名字，v1 产物向后兼容读取。 |
+| 全局槽位名 | 已完成 | `.42` 调试段 v3 携带「槽位号 → 顶层绑定名」表。顶层绑定走 `Operand::Global`，不在任何函数的局部名表里，没这张表就只能报数值、报不出变量名。v1/v2 产物补空表读取 |
 | 类型信息 | 部分 | 槽位已含 `ty`；`TypeAnnotation` 独立元数据未做 |
 | dump 可见性 | 已完成 | `dump` 逐指令输出 `; <file>:<line>:<col>`，并列出 `locals: 名字@槽位` |
 
