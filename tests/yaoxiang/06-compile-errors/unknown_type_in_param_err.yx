@@ -1,0 +1,17 @@
+// 06-compile-errors/unknown_type_in_param_err.yx
+// expect: compile-error E1003
+// 覆盖: #372 —— 形参注解里的未知类型名
+// 验证: `BogusType` 从未声明，必须在**注解自己的 span** 上报 E1003。
+//       此前它被静默当成一个合法类型，该形参上的类型检查随之全部失效
+//       （任意实参都能传进去）。
+// 状态: ❌ 应被编译期拒绝
+
+use std.io
+
+f: (s: BogusType) -> Int = (s) => 1
+
+main: () -> Void = {
+    io.println(f(1))
+}
+
+main()

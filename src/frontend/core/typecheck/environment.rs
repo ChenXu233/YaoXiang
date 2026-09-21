@@ -535,6 +535,103 @@ impl TypeEnvironment {
         self.trait_table.has_trait(name)
     }
 
+    /// 类型名在本环境里是否可解析（#371/#372）。
+    ///
+    /// **这是「合法类型名」的唯一真相源。** 此前不存在这样一个查询，各消费点
+    /// 各自判断（有查 `types`、有查 `generic_type_defs`、有查 `trait_table`），
+    /// 而 `MonoType::from(ast::Type)` 对 `Type::Name` 干脆不查——直接包成
+    /// `TypeRef(name)`。后果是形参/字段里的错拼类型名静默变成一个「合法类型」，
+    /// 该参数上的类型检查随之全部失效（任意实参都能传）。
+    ///
+    /// 允许集（按来源）：
+    /// - **内置名**：`Int`/`String`/... —— `from_builtin_name`
+    /// - **编译器级顶类型**：`Any` —— 与 `Void`/`Never` 同族，solver 特判，不需声明
+    /// - **已登记类型**：`types`（本地类型定义 + `use` 导入的类型）
+    /// - **泛型构造器**：`generic_type_defs`（`Vec`/`Array` + 用户泛型类型）
+    /// - **接口/特质**：`trait_table`（存在类型位置，RFC-011a）
+    /// - **std 导出类型**：`module_registry` 里标记为 `Type` 的导出
+    ///   （`Error`/`File`/`Iterator`... —— 它们由 Rust 侧 `export!` 宏登记，
+    ///   不进 `types`；此前完全无人可查，却能隐式通过）
+    ///
+    /// 注意：**不含**泛型参数名（`T`/`Self`）与编译期值参数名——那些是声明处
+    /// 绑定的局部名字，由调用方（`TypeNameScope`）先行剔除后再查询。
+    pub fn resolves_type_name(
+        &self,
+        name: &str,
+    ) -> bool {
+        if MonoType::from_builtin_name(name).is_some() {
+            return true;
+        }
+        // `Any` 是编译器级顶类型：`from_builtin_name` 不含它，solver 直接特判
+        // （`solver.rs` 的 `(TypeRef(n), _) if n == "Any" => Ok(())`）。
+        // `Self` 是语言关键字：在类型体/接口方法签名里指当前类型，
+        // 由接口实例化阶段替换（RFC-011a），同样没有也不可能有声明。
+        if name == "Any" || name == "Self" {
+            return true;
+        }
+        // 编译器级容器/引用类型：这些名字在类型位置由编译器直接识别
+        // （`mono.rs` 的 `is_vec`/`is_arc`/`is_weak`/`is_range` 等谓词、
+        // `type_name()` 的专门臂），不需要也不存在源码声明。
+        // 注意：它们只在**类型位置**成立；值位置的构造器另有限制
+        // （见 `is_builtin_generic_type_name`，那里只放 `Vec`/`Array`）。
+        if Self::is_compiler_container_type(name) {
+            return true;
+        }
+        if self.types.contains_key(name) || self.generic_type_defs.contains_key(name) {
+            return true;
+        }
+        if self.has_trait(name) {
+            return true;
+        }
+        // std 导出类型：`Error`/`File`/`Native`/`Weak`/`Arc` 等由 Rust 侧登记，
+        // 只活在模块注册表里。逐个 std 子模块查同名 Type 导出。
+        self.std_export_type_name(name)
+    }
+
+    /// 编译器直接识别的容器/引用类型名（类型位置合法，无源码声明）。
+    ///
+    /// 与 `mono.rs` 的 `is_vec`/`is_arc`/`is_weak`/`is_range` 等谓词同源——
+    /// 那些谓词按名字判定，本表列出同一批名字，供名字解析查询。
+    /// 新增此类内置容器时**两处都要改**（谓词 + 本表）。
+    fn is_compiler_container_type(name: &str) -> bool {
+        matches!(
+            name,
+            "Vec"
+                | "Array"
+                | "List"
+                | "Dict"
+                | "Tuple"
+                | "Option"
+                | "Result"
+                | "Range"
+                | "Bytes"
+                | "Set"
+                | "Arc"
+                | "Weak"
+        )
+    }
+
+    /// 名字是否是某个 std 子模块导出的**类型**（`ExportKind::Type`）。
+    ///
+    /// 兜底顺序上放在最后：它要遍历子模块，比前几项的表查询贵，
+    /// 而绝大多数名字在前面就命中了。
+    fn std_export_type_name(
+        &self,
+        name: &str,
+    ) -> bool {
+        use crate::frontend::module::ExportKind;
+        self.module_registry
+            .std_submodule_names()
+            .iter()
+            .any(|sub| {
+                let path = format!("std.{sub}");
+                self.module_registry
+                    .get(&path)
+                    .and_then(|m| m.get_export(name))
+                    .is_some_and(|e| matches!(e.kind, ExportKind::Type))
+            })
+    }
+
     /// 添加 Trait 实现
     ///
     /// 返回 `true` 表示新插入，`false` 表示已存在（冲突）

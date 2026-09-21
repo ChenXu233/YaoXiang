@@ -349,18 +349,24 @@ fn test_rfc011_associated_type() {
 ///
 /// 预期行为：
 /// - 关联类型可以是泛型的
+///
+/// ⚠️ **关联类型（GAT）尚未实现**——RFC-011a 待办清单明确列为 `- [ ]`
+/// （「关联类型通过泛型接口参数实现，GAT 需要进一步设计」）。
+///
+/// 本用例此前断言 `diagnostics.is_empty()` 能过，纯粹是因为类型注解里的
+/// 未知名**没人校验**（#372）——`IteratorType` 从未被声明，却被静默当成
+/// 一个合法类型。缺口补上后，它现在会报 E1003。
+///
+/// 故改为：前半（两个泛型接口定义）必须通过；后半（用关联类型的
+/// `Container`）定住未实现事实，待 RFC-011a 落地后启用。
 #[test]
 fn test_rfc011_generic_associated_type() {
-    // Arrange
+    // Arrange：只用泛型接口参数，不涉关联类型——这部分今天就该工作。
     let source = r#"
         Option: (T: Type) -> Type = { some: (T) -> Self, none: () -> Self }
         Iterator: (Item: Type) -> Type = {
             next: (Self) -> Option(Item),
             has_next: (Self) -> Bool
-        }
-        Container: (Item: Type) -> Type = {
-            IteratorType: Iterator(Item),
-            iter: (Self) -> IteratorType
         }
     "#;
 
@@ -368,7 +374,24 @@ fn test_rfc011_generic_associated_type() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.diagnostics.is_empty(), "GAT should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "泛型接口定义应通过；diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    // TODO(#372)：关联类型（GAT）落地后启用。RFC-011a 待办项。
+    // 正写法应是泛型接口参数（`Container: (Self: Type, T: Type) -> Type`），
+    // 而非类型体里的 `IteratorType: Iterator(Item)` 字段——后者与运行时
+    // 数据字段在 AST 里同形（都是 `TypeBodyItem::Field`），无法区分。
+    //
+    // let gat = r#"
+    //     Container: (Item: Type) -> Type = {
+    //         IteratorType: Iterator(Item),
+    //         iter: (Self) -> IteratorType
+    //     }
+    // "#;
+    // assert!(check_source(gat).diagnostics.is_empty(), "GAT 应通过");
 }
 
 // RFC-011 §4: 编译期泛型

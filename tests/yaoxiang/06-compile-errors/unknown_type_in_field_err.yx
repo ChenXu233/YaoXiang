@@ -1,0 +1,19 @@
+// 06-compile-errors/unknown_type_in_field_err.yx
+// expect: compile-error E1003
+// 覆盖: #372 —— 结构体字段注解里的未知类型名
+// 验证: `BogusField` 从未声明，必须在字段注解处报 E1003。
+//       与形参位同源：类型名此前完全不校验。
+// 状态: ❌ 应被编译期拒绝
+
+use std.io
+
+Point: Type = {
+    x: Int,
+    y: BogusField,
+}
+
+main: () -> Void = {
+    io.println(1)
+}
+
+main()

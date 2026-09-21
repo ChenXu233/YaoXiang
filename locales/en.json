@@ -750,6 +750,12 @@
     "template": "the Bin role (a yaoxiang.toml exists) does not allow executable statements at the top level — the program body is main",
     "help": "Move this statement inside the main function body; if you really want top-level statements as the program body, remove yaoxiang.toml to use Script mode (without a manifest, top-level statements run in written order)."
   },
+  "E1103": {
+    "title": "Brackets are not type syntax",
+    "message": "Type arguments use parentheses; brackets are value-level indexing",
+    "template": "'{name}[...]' is not type syntax — type arguments use parentheses",
+    "help": "Write `{name}(...)`. Brackets are **value-level** indexing (`list[0]`); in type position only parentheses are allowed: `List(Int)`, not `List[Int]`."
+  },
   "E3004": {
     "title": "Unsupported iterator",
     "template": "Unsupported iterator type: {iter_type}",

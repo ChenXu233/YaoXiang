@@ -320,6 +320,224 @@ impl TypeChecker {
         self.env.errors.add_error(error);
     }
 
+    /// 从一条语句里抽出所有类型注解并校验（#371/#372）。
+    ///
+    /// 覆盖位置：绑定/函数的类型注解（含返回位）、各层形参、类型定义体。
+    /// 泛型参数名（`(A: Type)` 形态）先剔出来置顶跳过。
+    fn check_annotation_type_names(
+        &mut self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+    ) {
+        use crate::frontend::core::parser::ast::{StmtKind, Type as T};
+
+        let (type_annotation, signature_params, definition) = match &stmt.kind {
+            StmtKind::Assign {
+                type_annotation,
+                signature_params,
+                ..
+            } => (type_annotation.as_ref(), signature_params.as_slice(), None),
+            StmtKind::TypeDefinition {
+                signature_params,
+                definition,
+                ..
+            } => (None, signature_params.as_slice(), Some(definition)),
+            _ => return,
+        };
+
+        // 签名参数名：类型参数（`A: Type`）与编译期值参数（`N: Int`）都是**声明处
+        // 绑定的局部名字**，在类型位置出现时不算未知名，先行剔除。
+        // （不区分两者：只看「有注解即视为该签名的绑定名」——即使误剔，
+        //   真未知名会在别处报出，不会洩漏。）
+        let generic_names: Vec<String> = signature_params
+            .iter()
+            .filter(|p| p.ty.is_some())
+            .map(|p| p.name.clone())
+            .collect();
+
+        // 各层形参注解（`A: Type` 形态的类型参数位自身不引用类型，跳过）
+        for p in signature_params {
+            if let Some(ty) = p.ty.as_ref() {
+                if !matches!(ty, T::MetaType { .. }) {
+                    self.check_type_names_in(ty, &generic_names);
+                }
+            }
+        }
+        // 顶层注解（含函数返回位）
+        if let Some(ty) = type_annotation {
+            self.check_type_names_in(ty, &generic_names);
+        }
+        // 类型定义体（字段类型就是 #372 的另一半）
+        if let Some(def) = definition {
+            self.check_type_names_in(def, &generic_names);
+        }
+    }
+
+    /// 若表达式是索引形态（`Name[...]`），返回被索引的名字与源码位置（#371）。
+    ///
+    /// 用于把 `List[Int]` 这类**错写法**变成一条指向注解本身的诊断：
+    /// 它在类型位置无合法解释（编译期值参数不用下标），而默认路径会把它
+    /// 静默变成一个名叫 `<const-expr>` 的占位类型，直到使用处才报出
+    /// 完全无关的错误。
+    fn index_expr_head(
+        expr: &crate::frontend::core::parser::ast::Expr
+    ) -> Option<(String, crate::util::span::Span)> {
+        use crate::frontend::core::parser::ast::Expr as E;
+        match expr {
+            E::Index { expr, .. } => match expr.as_ref() {
+                E::Var(name, span) => Some((name.clone(), *span)),
+                // 链式索引 `A[0][1]`：递归到最内层
+                other => Self::index_expr_head(other),
+            },
+            _ => None,
+        }
+    }
+
+    /// 校验注解引用的类型名是否都可解析（#371/#372）。
+    ///
+    /// 为何需要：`MonoType::from(ast::Type)` 对 `Type::Name` 不查表（直接包成
+    /// `TypeRef(name)`）。于是形参/字段里错拼的类型名会静默成为一个「合法类型」，
+    /// 而 solver 对两个不同的 `TypeRef` 判不等的分支根本走不到——**该参数上的
+    /// 类型检查随之全部失效**（任意实参都能传）。
+    ///
+    /// 必须放在**所有注册完成之后**跑（见调用处）：`use` 导入的类型、接口、
+    /// 泛型构造器、std 导出都陆续进 env，提前跑会把它们误判为未知。
+    ///
+    /// `generic_names` 是本签名的类型参数名（如 `(A: Type)` 里的 `A`）——
+    /// 它们是声明处绑定的局部名字，不是可解析类型。
+    fn check_type_names_in(
+        &mut self,
+        ty: &crate::frontend::core::parser::ast::Type,
+        generic_names: &[String],
+    ) {
+        let mut unknown: Vec<(String, crate::util::span::Span, bool)> = Vec::new();
+        Self::collect_unknown_type_names(ty, generic_names, &self.env, &mut unknown);
+        for (name, span, was_bracket) in unknown {
+            // 值空间兼容：泛型实参位的名字可能是**编译期值**而非类型
+            // （`Array(Int, factorial(5))` 的 `factorial`、`StaticArray(Int, n)` 的 `n`）。
+            // parser 在类型位置一律产 `Type::Name`/`Type::Generic`，区分不了；
+            // 此处按「该名字是否解析为已声明的值/函数」容错。
+            if self.env.vars.contains_key(&name) || self.env.get_var(&name).is_some() {
+                continue;
+            }
+            // 方括号写法（`List[Int]`）→ 专用码，直接给出 `List(...)` 的写法；
+            // 其余未知名 → E1003。两者都不再让错误拖到使用处（#371）。
+            let code = if was_bracket {
+                ErrorCodeDefinition::bracket_in_type_position(&name)
+            } else {
+                ErrorCodeDefinition::unknown_type(&name)
+            };
+            self.add_error(code.at(span).build());
+        }
+    }
+
+    /// 递归收集注解中无法解析的类型名（#372）。
+    fn collect_unknown_type_names(
+        ty: &crate::frontend::core::parser::ast::Type,
+        generic_names: &[String],
+        env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+        out: &mut Vec<(String, crate::util::span::Span, bool)>,
+    ) {
+        use crate::frontend::core::parser::ast::Type as T;
+        match ty {
+            T::Name { name, span } => {
+                if !generic_names.iter().any(|g| g == name) && !env.resolves_type_name(name) {
+                    out.push((name.clone(), *span, false));
+                }
+            }
+            T::Generic {
+                name,
+                name_span,
+                args,
+            } => {
+                if !generic_names.iter().any(|g| g == name) && !env.resolves_type_name(name) {
+                    out.push((name.clone(), *name_span, false));
+                }
+                for a in args {
+                    Self::collect_unknown_type_names(a, generic_names, env, out);
+                }
+            }
+            T::Fn {
+                params,
+                return_type,
+            } => {
+                for p in params {
+                    Self::collect_unknown_type_names(p, generic_names, env, out);
+                }
+                Self::collect_unknown_type_names(return_type, generic_names, env, out);
+            }
+            T::Tuple(items) | T::Sum(items) => {
+                for i in items {
+                    Self::collect_unknown_type_names(i, generic_names, env, out);
+                }
+            }
+            T::Option(inner) | T::Ptr(inner) => {
+                Self::collect_unknown_type_names(inner, generic_names, env, out);
+            }
+            T::Result(ok, err) => {
+                Self::collect_unknown_type_names(ok, generic_names, env, out);
+                Self::collect_unknown_type_names(err, generic_names, env, out);
+            }
+            T::Ref { inner, .. } => {
+                Self::collect_unknown_type_names(inner, generic_names, env, out);
+            }
+            T::MetaType { args, .. } => {
+                for a in args {
+                    Self::collect_unknown_type_names(a, generic_names, env, out);
+                }
+            }
+            T::Literal { base_type, .. } => {
+                Self::collect_unknown_type_names(base_type, generic_names, env, out);
+            }
+            T::Struct { body } => {
+                for item in body {
+                    if let crate::frontend::core::parser::ast::TypeBodyItem::Field(f) = item {
+                        Self::collect_unknown_type_names(&f.ty, generic_names, env, out);
+                    }
+                }
+            }
+            T::NamedStruct { fields, .. } => {
+                for f in fields {
+                    Self::collect_unknown_type_names(&f.ty, generic_names, env, out);
+                }
+            }
+            T::AssocType {
+                host_type,
+                assoc_args,
+                ..
+            } => {
+                Self::collect_unknown_type_names(host_type, generic_names, env, out);
+                for a in assoc_args {
+                    Self::collect_unknown_type_names(a, generic_names, env, out);
+                }
+            }
+            T::Union(members) => {
+                for (_, m) in members {
+                    if let Some(m) = m {
+                        Self::collect_unknown_type_names(m, generic_names, env, out);
+                    }
+                }
+            }
+            // ConstExpr（RFC-027 编译期值参数）：合法形态是**值表达式**
+            // （`Assert(N > 0)`、`Array(Int, factorial(5))`）。
+            //
+            // 但 `List[Int]` 这类**误解**也会落到这里：类型位置的标识符后跟 `[`
+            // 会被当索引表达式，于是注解变成一个「名字叫 `<const-expr>` 的类型」。
+            // 那是个凭空造出的占位类型，谁也认不出（#371）。
+            //
+            // 索引形态的表达式在**类型位置**没有任何合法解释（编译期值参数
+            // 不用下标），所以一律报未知名——指向被索引的名字，并给出正确写法。
+            T::ConstExpr(expr) => {
+                if let Some((name, span)) = Self::index_expr_head(expr) {
+                    // 下标形态在**类型位置**无任何合法解释（编译期值参数不用下标），
+                    // 一律报专用码，指向注解并给出正确写法。
+                    out.push((name, span, true));
+                }
+            }
+            // 括号类型、Range、字面量类型、通配等：不引用具名类型。
+            _ => {}
+        }
+    }
+
     /// 检查是否有错误
     pub fn has_errors(&self) -> bool {
         self.env.errors.has_errors()
@@ -497,6 +715,16 @@ impl TypeChecker {
 
         // 收集所有导出项
         self.collect_exports(module);
+
+        // #371/#372：注解里的类型名校验。
+        //
+        // 放在此处（而非签名收集时）是因为 `use` 导入的类型、接口、泛型构造器、
+        // std 导出都在前面各步才陆续进 env——提前校验会把 `Vec`/`Iterator`/
+        // `Error` 这类合法名误判为未知（实测踩过）。
+        for stmt in &module.items {
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            self.check_annotation_type_names(stmt);
+        }
 
         // RFC-024: spawn 位置检查
         for err in spawn::placement::check_spawn_placement(module) {

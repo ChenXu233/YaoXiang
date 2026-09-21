@@ -92,4 +92,9 @@ define_codes!(E1XXX, {
     ("E1101", TypeCheck, false, type_does_not_implement_interface(type_: &str, interface: &str) => .param("type", type_) .param("interface", interface)),
     // E1102 break/continue 出现在循环外（#311：仅 while/for 体内允许循环控制流）
     ("E1102", TypeCheck, false, break_outside_loop(keyword: &str) => .param("keyword", keyword)),
+    // E1103 类型位置的方括号写法（#371）。
+    // `List[Int]` 会被解析成索引表达式 → 占位类型 `<const-expr>`，
+    // 注解处无诊断，错误拖到使用处才爆（且报的是「不可索引」这种无关信息）。
+    // 本码专给这个误解，直接给出正确写法。
+    ("E1103", TypeCheck, true, bracket_in_type_position(name: &str) => .param("name", name)),
 });

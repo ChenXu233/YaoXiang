@@ -1,0 +1,17 @@
+// 06-compile-errors/bracket_type_syntax_err.yx
+// expect: compile-error E1103
+// 覆盖: #371 —— 类型位置的方括号写法
+// 验证: `List[Int]` 必须在**注解处**报 E1103 并指出应写 `List(Int)`。
+//       此前它被解析成索引表达式 → 占位类型 `<const-expr>`，注解处零诊断，
+//       错误拖到使用处才爆（报的是「不可索引」这种无关信息）。
+// 状态: ❌ 应被编译期拒绝
+
+use std.io
+
+pick: (xs: List[Int]) -> Int = (xs) => xs[0]
+
+main: () -> Void = {
+    io.println(pick([1, 2, 3]))
+}
+
+main()

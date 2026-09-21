@@ -1011,5 +1011,11 @@
     "message": "Bin 角色的程序主体是 main，顶层只能声明",
     "template": "Bin 角色（存在 yaoxiang.toml）下顶层不允许可执行语句——程序主体就是 main",
     "help": "把这条语句移进 main 函数体；若确实想让顶层语句作为程序主体，去掉 yaoxiang.toml 改用 Script 模式（无 manifest 时顶层语句按书写顺序执行）。"
+  },
+  "E1103": {
+    "title": "类型位置不能使用方括号",
+    "message": "类型实参用圆括号，方括号是值级下标",
+    "template": "'{name}[...]' 不是类型语法——类型实参要用圆括号",
+    "help": "写成 `{name}(...)`。方括号是**值级**下标（`list[0]`），类型位置只能写圆括号：`List(Int)` 而非 `List[Int]`。"
   }
 }

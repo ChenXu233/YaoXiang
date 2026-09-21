@@ -16,7 +16,9 @@
 use crate::backends::common::value::TypeId;
 use crate::backends::common::{HeapValue, RuntimeValue};
 use crate::backends::ExecutorError;
-use crate::std::{NativeContext, NativeExport, StdModule};
+use crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef;
+use crate::frontend::core::types::MonoType;
+use crate::std::{NativeContext, NativeExport, StdModule, TypeFamilyExport};
 
 /// 运行时错误值码注册表（码 → 默认语义）。
 ///
@@ -33,6 +35,35 @@ pub struct ResultModule;
 impl StdModule for ResultModule {
     fn module_path(&self) -> &str {
         "std.result"
+    }
+
+    /// `Error`：`Result(T, E)` 的 Err 载体。
+    ///
+    /// 运行时是 `Struct { fields: [code, message] }`（#323 M4）——code 是 RFC-013
+    /// E6xxx/E7xxx 段注册码，message 是人类可读描述。
+    ///
+    /// 此前它**从未被声明**：签名里用了 26 处（`(self: &Error) -> String` 等）
+    /// 却没有任何导出/定义，靠 `MonoType::from` 的 `_ => TypeRef(name)`
+    /// 静默兜底活着。后果见 #371/#372——形参/字段注解里的类型名没人校验，
+    /// 因为「已知类型」根本无从判定。此处起它有了正式身份。
+    fn type_families(&self) -> Vec<TypeFamilyExport> {
+        vec![TypeFamilyExport::new(
+            "Error",
+            vec![],
+            AssociatedTypeDef::Direct(MonoType::Struct(
+                crate::frontend::core::types::mono::StructType {
+                    name: "Error".to_string(),
+                    fields: vec![
+                        ("code".to_string(), MonoType::make_string()),
+                        ("message".to_string(), MonoType::make_string()),
+                    ],
+                    methods: std::collections::HashMap::new(),
+                    field_mutability: Vec::new(),
+                    field_has_default: Vec::new(),
+                    interfaces: vec![],
+                },
+            )),
+        )]
     }
 
     fn exports(&self) -> Vec<NativeExport> {
