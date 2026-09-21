@@ -1,0 +1,30 @@
+// 02-type-system/associated_type_in_body.yx
+// 覆盖: RFC-011 §3.1 关联类型 —— 类型体内声明的成员名可在本体内作类型名引用
+// 验证:
+//   - `IteratorType: Iterator(Item)` 在 Container 体内声明
+//   - `iter: (Self) -> IteratorType` 能解析到同体声明的 IteratorType
+//   - 成员名不溢出：别的类型体/函数签名引用它应被拒绝（由 rfc011 单元用例钉住）
+// 状态: ✅ 可运行
+//
+// 注：这是**体级名字作用域**，不是完整 GAT 语义。关联类型目前不能被当作
+// 独立类型在外部引用（`Container(Int).IteratorType` 解析不了），完整 GAT
+// 仍属 RFC-011a 待办项。
+
+use std.assert
+
+Option: (T: Type) -> Type = { some: (T) -> Self, none: () -> Self }
+Iterator: (Item: Type) -> Type = {
+    next: (Self) -> Option(Item),
+    has_next: (Self) -> Bool
+}
+Container: (Item: Type) -> Type = {
+    IteratorType: Iterator(Item),
+    iter: (Self) -> IteratorType
+}
+
+main: () -> Void = {
+    // 两个泛型接口与带关联类型成员的 Container 均能通过类型检查。
+    assert.assert(true, "associated type member resolves within its own body")
+}
+
+main()

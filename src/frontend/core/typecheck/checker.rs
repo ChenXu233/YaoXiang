@@ -366,9 +366,52 @@ impl TypeChecker {
         if let Some(ty) = type_annotation {
             self.check_type_names_in(ty, &generic_names);
         }
-        // 类型定义体（字段类型就是 #372 的另一半）
+        // 类型定义体（字段类型就是 #372 的另一半）。
+        //
+        // 体内声明的**成员名**（RFC-011 §3.1 关联类型，如 `IteratorType: Iterator(Item)`）
+        // 在本体内是合法的类型名：`iter: (Self) -> IteratorType` 要能引用它。
+        // 这是体级作用域——不得溢出到其他类型体或形参（见 `collect_body_member_names`）。
         if let Some(def) = definition {
-            self.check_type_names_in(def, &generic_names);
+            let mut in_body = generic_names.clone();
+            Self::collect_member_names(def, &mut in_body);
+            self.check_type_names_in(def, &in_body);
+        }
+    }
+
+    /// 收集类型体内声明的成员名（RFC-011 §3.1 关联类型）。
+    ///
+    /// 背景：类型体里的 `Name: Type` 在 AST 里**只有一种形态**
+    /// （`TypeBodyItem::Field`），关联类型成员与运行时数据字段**同形**，无从区分。
+    /// 因此这里把全部字段名都当作潜在的体内类型名——这是 AST 表达力所限，
+    /// 不是偷懒（见下方「残留宽松」）。
+    ///
+    /// **作用域**：仅用于定义体自身的校验。调用方只把结果传给
+    /// `check_type_names_in(def, ..)`，不会写入 `env`，所以不会溢出到
+    /// 别的类型体、形参或返回值。
+    ///
+    /// 残留宽松：`S: Type = { a: Int, b: a }` 里的 `a` 会被当作合法类型名。
+    /// 这拦不了——`a` 确实被引用，而「引用」正是 RFC-011 判定成员的依据；
+    /// 要根治需给关联类型一个**区别于数据字段的语法形态**（如 `type Name: T`），
+    /// 属语言设计变更，不在本修复范围。
+    fn collect_member_names(
+        ty: &crate::frontend::core::parser::ast::Type,
+        out: &mut Vec<String>,
+    ) {
+        use crate::frontend::core::parser::ast::{Type as T, TypeBodyItem};
+        match ty {
+            T::Struct { body } => {
+                for item in body {
+                    if let TypeBodyItem::Field(f) = item {
+                        out.push(f.name.clone());
+                    }
+                }
+            }
+            T::NamedStruct { fields, .. } => {
+                for f in fields {
+                    out.push(f.name.clone());
+                }
+            }
+            _ => {}
         }
     }
 
