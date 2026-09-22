@@ -66,7 +66,7 @@ title: "RFC 索引"
 | ↳ RFC-010a | [RFC-010a: 尾表达式求值与 return 语义](./accepted/010a-tail-expression-and-return.md) | 晨煦 | 2026-09-15 | 已接受 |
 | RFC-011 | [RFC-011: 泛型系统设计 - 零成本抽象与宏替代](./accepted/011-generic-type-system.md) | 晨煦 |  | 已接受 |
 | ↳ RFC-011a | [RFC-011a: 接口实现与动态分发](./accepted/011a-interface-implementation.md) | 晨煦 | 2026-06-14 | 已接受 |
-| ↳ RFC-011b | [RFC-011b: 运算符重载与接口驱动运算符](./draft/011b-operator-overloading.md) | 晨煦 | 2026-09-15 | 草案RFC |
+| ↳ RFC-011b | [RFC-011b: 运算符重载与接口驱动运算符](./accepted/011b-operator-overloading.md) | 晨煦 | 2026-09-22 | 已接受 |
 | RFC-012 | [RFC 012: F-String 模板字符串](./accepted/012-f-string-template-strings.md) | Chen Xu | 2025-01-27 | 已接受 |
 | RFC-013 | [RFC 013: 错误代码规范](./accepted/013-error-code-specification.md) | 晨煦 | 2026-02-02 | 已接受 |
 | RFC-014 | [RFC-014: 包管理系统设计](./accepted/014-package-manager.md) | 晨煦 | 2026-02-12 | 已接受 |

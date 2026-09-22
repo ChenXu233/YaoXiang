@@ -338,7 +338,7 @@ E1001::unknown_variable(&var_name)
 | E1103 | 类型位置不能使用方括号              |
 <!-- code-table:E1xxx end -->
 
-> **RFC-011b 关联（2026-09-22 注，草案）**：[RFC-011b: 运算符重载](../draft/011b-operator-overloading.md)
+> **RFC-011b 关联（2026-09-22 注）**：[RFC-011b: 运算符重载](./011b-operator-overloading.md)
 > 落地时将涉及本段三处——① `E1081` / `E1082` 文案去 "Result" 字样（`?` 改为按 `Try` 接口判定，
 > 不再绑定具体类型名），随阶段 2 按本文档「三方一致性」流程同步（codes/*.rs ↔ locales ↔ 码表）；
 > ② `Equal` 前置约束（线性令牌）不满足的拒绝诊断复用 `E1101`（类型未实现接口）族；

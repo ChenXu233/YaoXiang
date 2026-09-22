@@ -1,6 +1,6 @@
 ---
 title: 'RFC-011b: 运算符重载与接口驱动运算符'
-status: '草案'
+status: '已接受'
 author: '晨煦'
 created: '2026-09-15'
 updated: '2026-09-22'
@@ -12,18 +12,18 @@ issue: '#341'
 
 > **参考**:
 >
-> - [RFC-011: 泛型系统设计](../accepted/011-generic-type-system.md) — 类型约束
+> - [RFC-011: 泛型系统设计](./011-generic-type-system.md) — 类型约束
 >   `T: Add + Multiply`、关联类型
-> - [RFC-011a: 接口实现与动态分发](../accepted/011a-interface-implementation.md)
+> - [RFC-011a: 接口实现与动态分发](./011a-interface-implementation.md)
 >   — 接口声明/实例化机制
-> - [RFC-009: 所有权模型设计](../accepted/009-ownership-model.md) — `&mut T` 线性令牌
-> - [RFC-004: 柯里化方法的多位置联合绑定](../accepted/004-curry-multi-position-binding.md) — `f[0]`
+> - [RFC-009: 所有权模型设计](./009-ownership-model.md) — `&mut T` 线性令牌
+> - [RFC-004: 柯里化方法的多位置联合绑定](./004-curry-multi-position-binding.md) — `f[0]`
 >   位置绑定语法
-> - [RFC-010: 统一类型语法](../accepted/010-unified-type-syntax.md)
+> - [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
 >   — 和类型 = 字段全返回自身类型的记录
-> - [RFC-013: 错误码规范](../accepted/013-error-code-specification.md) — `Result`
+> - [RFC-013: 错误码规范](./013-error-code-specification.md) — `Result`
 >   归 std 的既有定位、E108x
-> - [RFC-039: 模式匹配完备化](./039-pattern-matching-completeness.md) — 变体解构（依赖）
+> - [RFC-039: 模式匹配完备化](../draft/039-pattern-matching-completeness.md) — 变体解构（依赖）
 
 ## 摘要
 
@@ -720,17 +720,17 @@ Instruction::VariantTag { group: "Result".to_string(), .. }
 
 ## 参考文献
 
-- [RFC-011: 泛型系统设计](../accepted/011-generic-type-system.md) — `T: Add + Multiply + Zero`
+- [RFC-011: 泛型系统设计](./011-generic-type-system.md) — `T: Add + Multiply + Zero`
   约束、关联类型
-- [RFC-011a: 接口实现与动态分发](../accepted/011a-interface-implementation.md)
+- [RFC-011a: 接口实现与动态分发](./011a-interface-implementation.md)
   — 接口声明/实例化/重载规则
-- [RFC-009: 所有权模型设计](../accepted/009-ownership-model.md) — `&mut T` 线性令牌
-- [RFC-004: 柯里化方法的多位置联合绑定](../accepted/004-curry-multi-position-binding.md) — `f[0]`
+- [RFC-009: 所有权模型设计](./009-ownership-model.md) — `&mut T` 线性令牌
+- [RFC-004: 柯里化方法的多位置联合绑定](./004-curry-multi-position-binding.md) — `f[0]`
   语法
-- [RFC-010: 统一类型语法](../accepted/010-unified-type-syntax.md) — 和类型表达
-- [RFC-013: 错误码规范](../accepted/013-error-code-specification.md) — `Result`
+- [RFC-010: 统一类型语法](./010-unified-type-syntax.md) — 和类型表达
+- [RFC-013: 错误码规范](./013-error-code-specification.md) — `Result`
   归 std 定位、错误码流程
-- [RFC-039: 模式匹配完备化](./039-pattern-matching-completeness.md)
+- [RFC-039: 模式匹配完备化](../draft/039-pattern-matching-completeness.md)
 - [Rust `std::ops::Index`](https://doc.rust-lang.org/std/ops/trait.Index.html) — 关联类型 `Output`
   设计
 - [Swift Subscripts](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/subscripts/)

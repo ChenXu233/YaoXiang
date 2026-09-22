@@ -12,6 +12,7 @@
 | 010a-tail-expression-and-return.md | RFC-010a: 尾表达式求值与 return 语义 | 已接受 | accepted\010a-tail-expression-and-return.md | #342 | -- | -- | -- |
 | 011-generic-type-system.md | RFC-011: 泛型系统设计 - 零成本抽象与宏替代 | 已接受 | accepted\011-generic-type-system.md | #128 | #45, #46, #73, #90, #96, #40, #151 | #122 | -- |
 | 011a-interface-implementation.md | RFC-011a: 接口实现与动态分发 | 已接受 | accepted\011a-interface-implementation.md | -- | -- | -- | -- |
+| 011b-operator-overloading.md | RFC-011b: 运算符重载与接口驱动运算符 | 已接受 | accepted\011b-operator-overloading.md | #341 | -- | -- | -- |
 | 012-f-string-template-strings.md | RFC 012: F-String 模板字符串 | 已接受 | accepted\012-f-string-template-strings.md | #124 | -- | -- | -- |
 | 013-error-code-specification.md | RFC 013: 错误代码规范 | 已接受 | accepted\013-error-code-specification.md | #125 | #125 | #7, #9, #29, #66 | -- |
 | 014-package-manager.md | RFC-014: 包管理系统设计 | 已接受 | accepted\014-package-manager.md | #88 | -- | -- | -- |
@@ -33,7 +34,6 @@
 | 022-hoare-logic-static-verification.md | RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型） | 已废弃 | deprecated\022-hoare-logic-static-verification.md | -- | -- | -- | -- |
 | 023-closure-capture-model.md | RFC-023: 闭包捕获模型 | 已废弃 | deprecated\023-closure-capture-model.md | -- | -- | -- | -- |
 | 002-cross-platform-io-libuv.md | RFC-002：基于 libuv 的资源类型 IO 实现层 | 草案 | draft\002-cross-platform-io-libuv.md | #102 | -- | -- | -- |
-| 011b-operator-overloading.md | RFC-011b: 运算符重载与接口驱动运算符 | 草案 | draft\011b-operator-overloading.md | #341 | -- | -- | -- |
 | 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 草案 | draft\019-typed-homoiconicity.md | -- | -- | -- | -- |
 | 026b-yx-bindgen.md | RFC-026b: yx-bindgen 工具链 | 草案 | draft\026b-yx-bindgen.md | -- | -- | -- | -- |
 | 027a-termination-proof-fallback.md | RFC-027a: 终止检查的证明函数兜底 | 草案 | draft\027a-termination-proof-fallback.md | #318 | -- | -- | -- |
