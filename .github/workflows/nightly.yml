@@ -3,6 +3,9 @@ name: Nightly
 on:
   schedule:
     - cron: '17 22 * * *'
+  # 支持手动触发：本 workflow 曾连续 8 天失败而无人重跑（只能等次日 cron），
+  # 修完也无从验证。加此入口后改动可当场跑一遍确认。
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -80,15 +83,21 @@ jobs:
       - name: Package restructured release archive
         shell: bash
         run: |
+          # Debian 的 Version 必须以数字开头（policy §5.6.12），而 nightly 传
+          # 的旧字面量 "nightly" 不是；dpkg-deb 直接拒绝、整个 Package 步骤失败
+          # → 两个 Linux job 全挂、Upload 被跳过 → Linux 产物一个不剩。
+          # 用 crate 版本 + 标识段：仍是合法 semver，且按 dpkg 排序
+          # 0.8.1-nightly > 0.8.1，手动装了 nightly .deb 的人会被下个正式版正常升级。
+          VERSION="$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')"
           bash scripts/release/package-dist.sh \
-            "nightly" \
+            "$VERSION-nightly" \
             "${{ join(matrix.targets, '-') }}"
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: yaoxiang-nightly-${{ join(matrix.targets, '_') }}
           path: |
-            target/distrib/yaoxiang-nightly-*
+            target/distrib/yaoxiang-*-nightly-*
             ${{ env.BUILD_MANIFEST_NAME }}
           retention-days: 14
 
@@ -313,7 +322,11 @@ jobs:
   publish:
     name: Publish Nightly Pre-release
     needs: [build, build-wasm, bench-notes]
-    if: always() && !cancelled()
+    # 构建失败必须让 publish 失败并不能执行：旧 nightly release 会先被删掉，
+    # `if: always()` 下再发一个缺平台的残缺版——正是「零资产静默发布」的同构
+    # 缺陷（dist-release.yml 已修过同类）。本轮 Linux 全挂却发布绿色就是此因。
+    # benchmark / bench-notes 失败不阻断（它们只影响 body，已按「存在则追加」处理）。
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.build-wasm.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -351,6 +364,15 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: release-artifacts
+
+      # 传了 files 却一个没匹配上，说明构件根本没下来（构建失败或命名漂移）。
+      # 此处不发空 release，直接失败——残缺/空版比不发更坑人。
+      - name: Verify artifacts downloaded
+        run: |
+          count=$(find release-artifacts -type f -name 'yaoxiang-*' | wc -l)
+          echo "found $count release artifacts"
+          find release-artifacts -type f -name 'yaoxiang-*' | head -20
+          [ "$count" -gt 0 ] || { echo "::error::no release artifacts downloaded"; exit 1; }
 
       # 拼装 release body：先写头部，再附基准结果（若 bench-notes job 产出）。
       # bench-notes 用 `if: always()` 但不保证有数据，故此处按「存在则追加」处理。
