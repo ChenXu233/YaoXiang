@@ -631,6 +631,12 @@ map: (T: Type, R: FnMut(T))(array: Vec(T), f: R) -> Vec(R) = {
 doubled: Vec(Int) = map(Vec(1, 2, 3), (x: Int) => x * 2)  # 编译器推断
 ```
 
+> **约束名来源（2026-09-22 注）**：`Add` / `Subtract` / `Multiply` / `Divide` / `Modulo` 等运算符约束由
+> [RFC-011b: 运算符重载与接口驱动运算符](../draft/011b-operator-overloading.md) 定义并落地——
+> `T: Add` ≜ 已登记 `Add(T, T, T)` 接口实例化（三类型参数，结果类型 `O` 显式）。
+> `Zero` / `One` / `PartialOrd` / `Fn` / `FnMut` 目前**尚无定义来源**，属悬空约束名，
+> 待后续 RFC 分别落地；在此之前，涉及这些名字的示例为纸面示意。
+
 #### 2.3 函数类型约束
 
 ```yaoxiang
@@ -1424,6 +1430,12 @@ AssertAddable: (A: Type, B: Type) -> Type = If(Add(A, B) != TypeError, (A, B), c
 # 使用
 result_type = Add[Int, Float]  # 推导为 Float
 ```
+
+> **与 RFC-011b 的关系（2026-09-22 注）**：本节的提升类型族 `Add(A, B)` 即
+> [RFC-011b](../draft/011b-operator-overloading.md) 运算符接口登记表在类型层面的视角——
+> 核心登记 `Add(Int, Float, Float)` 与本表 `(Int, Float) => Float` 是同一条规则，
+> 用户的每次接口实例化都是向此表添加一行。§5.2 的 Peano 类型级 `Add` 则是纯类型层面的
+> 计算（同名不同物），与值层面的运算符接口互不干扰——运算符查询实现登记表，不走名字解析。
 
 ### 9. 示例
 

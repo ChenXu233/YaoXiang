@@ -35,7 +35,7 @@ issue: '#330'
 | Union 变体模式             | `VariantName` / `VariantName(binding)` 匹配 + 载荷绑定进 arm 作用域   |
 | Struct / Tuple 模式        | 字段模式、元组模式落地（AST 已有，IR 补全）                           |
 | Or 模式与 Guard            | `p1 \| p2` 与 `p if cond` 的求值顺序与绑定规则                        |
-| 穷尽性检查                 | E1030 漏分支、E1031 不可达，作用域覆盖变体集（含内建 Result/Option）  |
+| 穷尽性检查                 | E1030 漏分支、E1031 不可达，作用域覆盖变体集（Result/Option 现属 core；判定不依赖归属，见 RFC-011b 阶段 2 迁 std）  |
 | Identifier 模式语义确认    | 现语法中裸标识符是绑定还是变体比较，需定案（与通配 `_` 的关系）        |
 
 ### 开放问题
