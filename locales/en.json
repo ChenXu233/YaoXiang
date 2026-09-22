@@ -987,25 +987,35 @@
     "template": "Reference cycle within spawn: {cycle}",
     "help": "References captured by spawn must not form cyclic dependencies, please check the capture list"
   },
-  "E3008.title": "Unsupported match pattern",
-  "E3008.template": "Match pattern '{pattern}' is not yet implemented: currently only literal and wildcard (_) patterns are supported",
-  "E3008.help": "Variant destructuring (ok(v)/err(e)/some(x)), structs, tuples, or patterns with guards are not yet implemented (planned in RFC-039). Previous implementations would silently mistranslate these; they are now rejected at compile-time. To handle Result, use the `?` operator instead.",
-  "E3018.title": "Monomorphization instantiation failed",
-  "E3018.template": "Generic '{func}' instantiation failed: {reason}",
-  "E3018.help": "The monomorphizer was unable to generate a specialized version for the given type arguments (common cause: the number of type arguments does not match the generic parameters). Previously this error was silently skipped, resulting only in a runtime \"function table missing\" error.",
-  "E2030.title": "Refinement type constraint violation",
-  "E2030.template": "After assigning '{assigned}', '{var}' no longer satisfies the refinement type constraint: {constraint} (counterexample: {counterexample})",
-  "E2030.help": "Refinement type annotations require dependent variables to still satisfy the predicate constraint after the relevant assignment. Please adjust the assignment so the constraint holds, or relax the type annotation.",
-  "E1014.title": "Unknown named argument name",
-  "E1014.message": "The argument name used in the call is not in the function's parameter list",
-  "E1014.template": "Function '{func}' has no parameter named '{name}' (available: {params})",
-  "E1014.help": "Use a name from the parameter list, or pass arguments by position",
-  "E1014.example": "add(b = 1, c = 2);",
-  "E1014.error_output": "error[E1014]: unknown named argument name\n --> example.yx:1:1\n  |\n1 | add(b = 1, c = 2);\n  |     ^ function 'add' has no parameter named 'c' (available: a, b)",
-  "E1015.title": "Argument specified more than once",
-  "E1015.message": "The same parameter is specified by both a positional and a named argument",
-  "E1015.template": "Parameter '{name}' of function '{func}' is specified more than once",
-  "E1015.help": "Each argument can only be passed once: remove the extra named or positional argument",
-  "E1015.example": "add(1, a = 2);",
-  "E1015.error_output": "error[E1015]: argument specified more than once\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ parameter 'a' of function 'add' is specified more than once"
+  "E3008": {
+    "title": "Unsupported match pattern",
+    "template": "Match pattern '{pattern}' is not yet implemented: currently only literal and wildcard (_) patterns are supported",
+    "help": "Variant destructuring (ok(v)/err(e)/some(x)), structs, tuples, or patterns with guards are not yet implemented (planned in RFC-039). Previous implementations would silently mistranslate these; they are now rejected at compile-time. To handle Result, use the `?` operator instead."
+  },
+  "E3018": {
+    "title": "Monomorphization instantiation failed",
+    "template": "Generic '{func}' instantiation failed: {reason}",
+    "help": "The monomorphizer was unable to generate a specialized version for the given type arguments (common cause: the number of type arguments does not match the generic parameters). Previously this error was silently skipped, resulting only in a runtime \"function table missing\" error."
+  },
+  "E2030": {
+    "title": "Refinement type constraint violation",
+    "template": "After assigning '{assigned}', '{var}' no longer satisfies the refinement type constraint: {constraint} (counterexample: {counterexample})",
+    "help": "Refinement type annotations require dependent variables to still satisfy the predicate constraint after the relevant assignment. Please adjust the assignment so the constraint holds, or relax the type annotation."
+  },
+  "E1014": {
+    "title": "Unknown named argument name",
+    "message": "The argument name used in the call is not in the function's parameter list",
+    "template": "Function '{func}' has no parameter named '{name}' (available: {params})",
+    "help": "Use a name from the parameter list, or pass arguments by position",
+    "example": "add(b = 1, c = 2);",
+    "error_output": "error[E1014]: unknown named argument name\n --> example.yx:1:1\n  |\n1 | add(b = 1, c = 2);\n  |     ^ function 'add' has no parameter named 'c' (available: a, b)"
+  },
+  "E1015": {
+    "title": "Argument specified more than once",
+    "message": "The same parameter is specified by both a positional and a named argument",
+    "template": "Parameter '{name}' of function '{func}' is specified more than once",
+    "help": "Each argument can only be passed once: remove the extra named or positional argument",
+    "example": "add(1, a = 2);",
+    "error_output": "error[E1015]: argument specified more than once\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ parameter 'a' of function 'add' is specified more than once"
+  }
 }

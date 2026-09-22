@@ -44,12 +44,25 @@ fn run_yx(
     args: &[&str],
     cwd: &std::path::Path,
 ) -> (i32, String, String) {
-    let output = Command::new(yx_bin())
-        .args(args)
+    run_yx_env(args, cwd, &[])
+}
+
+/// 同上，但可注入环境变量（用于验证 `YAOXIANG_LANG` 语言选择）
+fn run_yx_env(
+    args: &[&str],
+    cwd: &std::path::Path,
+    envs: &[(&str, &str)],
+) -> (i32, String, String) {
+    let mut cmd = Command::new(yx_bin());
+    cmd.args(args)
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .output()
         .unwrap_or_else(|e| panic!("failed to spawn yaoxiang: {e}"));
     let code = output.status.code().unwrap_or(-1);
@@ -1155,4 +1168,56 @@ fn test_e2e_multifile_init_failure_points_at_owning_file() {
         !combined.contains("liba.yx:"),
         "不应把错误归到 liba.yx；combined: {combined:?}"
     );
+}
+
+/// `YAOXIANG_LANG` 必须能选中所有随包发布的语言。
+///
+/// 回归：`src/main.rs` 曾硬编码白名单 `["en","zh","zh-x-miao","zh-miao"]`，
+/// `ja`/`ru`/`zh-classical` 被静默丢弃后回落 `en`——译文就在 locales/*.json 里，
+/// 用户却永远看到英文。`zh-miao` 更是个**从未存在**的语言（locales 里只有
+/// `zh-x-miao`）。白名单现已改为从 `i18n::available_langs()` 派生。
+#[test]
+fn test_e2e_yaoxiang_lang_env_selects_every_shipped_language() {
+    // Arrange: 取一个必然报错的源，借错误文案判定实际生效的语言
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "lang_probe.yx",
+        "pick: (xs: List[Int]) -> Int = (xs) => xs[0]\nmain: () -> Void = { }\n",
+    );
+
+    // 每个语言：locales/<lang>.json 里 E1103 template 的特征片段。
+    // 任一语言若被白名单拦掉，就会回落 en——由下面的英文标记断言揭穿。
+    let expectations: &[(&str, &str)] = &[
+        ("zh", "不是类型语法"),
+        ("ja", "は型構文ではありません"),
+        ("ru", "не является синтаксисом типа"),
+        ("zh-classical", "非类型语法"),
+        ("zh-x-miao", "圆括号喵"),
+    ];
+    // en 的 template 特征——它是回落目标，出现即说明语言选择失效
+    let english_marker = "is not type syntax";
+
+    // Act & Assert
+    for (lang, expected_fragment) in expectations {
+        let (_, stdout, stderr) = run_yx_env(
+            &["check", src.to_str().unwrap()],
+            tmp.path(),
+            &[("YAOXIANG_LANG", lang)],
+        );
+        let combined = format!("{stdout}{stderr}");
+
+        assert!(
+            combined.contains("E1103"),
+            "应报 E1103；lang={lang} combined: {combined:?}"
+        );
+        assert!(
+            combined.contains(expected_fragment),
+            "YAOXIANG_LANG={lang} 应显示该语言译文（期望片段 {expected_fragment:?}）；combined: {combined:?}"
+        );
+        assert!(
+            !combined.contains(english_marker),
+            "YAOXIANG_LANG={lang} 不应回落英文；combined: {combined:?}"
+        );
+    }
 }

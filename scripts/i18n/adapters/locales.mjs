@@ -1,4 +1,10 @@
 /**
+ * 错误码键形状（`E0001` / `W1004`）。判定用形状而非「含点即嵌套」：
+ * 万一将来引入普通带点键，不会被误当成错误码拍进对象。
+ */
+const CODE_KEY = /^[EW]\d{4}$/;
+
+/**
  * 从 locale JSON 中提取 key-value 对（扁平字符串 + 嵌套错误码对象，如 E0001.title）
  * @param {object} json - 源 JSON（可能包含 _meta）
  * @returns {Object<string, string>} key → value 映射
@@ -30,13 +36,15 @@ export function applyTranslations(targetJson, translations) {
   const result = { ...targetJson };
   for (const [key, value] of Object.entries(translations)) {
     const dot = key.indexOf('.');
-    if (dot > 0 && typeof result[key] === 'undefined' && result[key.slice(0, dot)] !== undefined) {
+    if (dot > 0 && CODE_KEY.test(key.slice(0, dot))) {
       // E0001.title → result.E0001.title（错误码对象字段）
-      const parent = result[key.slice(0, dot)];
-      if (typeof parent === 'object' && parent !== null) {
-        result[key.slice(0, dot)] = { ...parent, [key.slice(dot + 1)]: value };
-        continue;
-      }
+      const head = key.slice(0, dot);
+      const parent = result[head];
+      result[head] = {
+        ...(typeof parent === 'object' && parent !== null ? parent : {}),
+        [key.slice(dot + 1)]: value
+      };
+      continue;
     }
     result[key] = value;
   }
