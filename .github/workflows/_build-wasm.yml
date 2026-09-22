@@ -20,6 +20,12 @@ jobs:
     name: Build Wasm
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # 跨 run 下载 Z3 wasm（dawidd6/action-download-artifact）需 actions: read。
+    # 显式声明而非依赖仓库默认：下载失败有 continue-on-error + 降级分支，
+    # 权限不够时会静默变成「Z3 features disabled」而不报错。
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v7
 
@@ -33,7 +39,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Download Z3 wasm (cross-run)
-        uses: dawidd6/action-download-artifact@v21
+        uses: dawidd6/action-download-artifact@v24
         with:
           workflow: _build-z3-wasm.yml
           name: z3-wasm-4.16.0

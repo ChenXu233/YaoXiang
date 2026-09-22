@@ -5,6 +5,21 @@
 
 version: 2
 updates:
+  # workflow 里的 uses: 此前无人看管：checkout/cache 等靠人顺手升，
+  # 而 setup-node、action-gh-release 等一路停在两三年前的 major。
+  # 纳入 dependabot 后由它统一按周提 PR。
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "dev"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: ":arrow_up: chore"
+      include: "scope"
+    groups:
+      actions:
+        patterns:
+          - "*"
   - package-ecosystem: "cargo" # See documentation for possible values
     directory: "/" # Location of package manifests
     target-branch: "dev"
