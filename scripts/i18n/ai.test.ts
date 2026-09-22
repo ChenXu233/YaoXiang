@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { translateBatch } from './ai.mjs';
+import { translateBatch } from './ai.ts';
 
 describe('translateBatch', () => {
   it('should call API and parse response', async () => {

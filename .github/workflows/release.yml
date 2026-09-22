@@ -147,6 +147,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # generate-commit-list.ts 走 Node 原生类型剥离，需 22.18+；
+      # 不依赖 runner 默认版本
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Create and push tag
         run: |
           TAG="v${{ needs.check-version.outputs.version }}"
@@ -174,7 +180,7 @@ jobs:
 
       - name: Generate commit list with @mentions
         run: |
-          node scripts/release/generate-commit-list.mjs \
+          node scripts/release/generate-commit-list.ts \
             --from-tag ${{ steps.prev-tag.outputs.value }} \
             --to-tag v${{ needs.check-version.outputs.version }} \
             --changelog CHANGELOG.md \

@@ -4,8 +4,8 @@
  * 将 canonical source（vscode-extension/language-pack/syntaxes/）中的
  * yaoxiang.tmLanguage.json 同步到 VitePress 文档目录。
  *
- * 用法: node scripts/sync-syntax.mjs
- *       node scripts/sync-syntax.mjs --watch    # 启动文件监听
+ * 用法: node scripts/sync-syntax.ts
+ *       node scripts/sync-syntax.ts --watch    # 启动文件监听
  *
  * Canonical source: vscode-extension/language-pack/syntaxes/yaoxiang.tmLanguage.json
  * Build artifact:   docs/src/.vitepress/syntaxes/yaoxiang.tmLanguage.json
@@ -25,10 +25,10 @@ const BUILD_ARTIFACT_COMMENT =
   '═══════════════════════════════════════════════════════════════ ' +
   '  BUILD ARTIFACT — 请勿直接编辑此文件' +
   '  ' +
-  '  此文件由 scripts/sync-syntax.mjs 从 canonical source' +
+  '  此文件由 scripts/sync-syntax.ts 从 canonical source' +
   '  (vscode-extension/language-pack/syntaxes/) 自动同步生成。' +
   '  如需修改语法规则，请在 canonical source 中编辑后运行:' +
-  '    node scripts/sync-syntax.mjs' +
+  '    node scripts/sync-syntax.ts' +
   '═══════════════════════════════════════════════════════════════'
 
 function sync() {

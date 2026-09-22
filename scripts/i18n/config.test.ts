@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadConfig, loadGlossary } from './config.mjs';
+import { loadConfig, loadGlossary } from './config.ts';
 import { fileURLToPath } from 'url';
 import path from 'path';
 

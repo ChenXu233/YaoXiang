@@ -1,10 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { loadCache, saveCache, getKeysToTranslate, updateCache, computeHash } from './cache.mjs';
-import * as localesAdapter from './adapters/locales.mjs';
-import * as localesAdapter from './adapters/locales.mjs';
+import { loadCache, saveCache, getKeysToTranslate, updateCache } from './cache.ts';
+import * as localesAdapter from './adapters/locales.ts';
 
 describe('E2E: Translation workflow', () => {
   const tmpDir = path.join(os.tmpdir(), 'i18n-e2e-test');
@@ -37,7 +36,7 @@ describe('E2E: Translation workflow', () => {
     };
 
     // 更新目标文件
-    let target = { _meta: { lang: 'en' } };
+    let target: localesAdapter.LocaleJson = { _meta: { lang: 'en' } };
     target = localesAdapter.applyTranslations(target, translations);
 
     // 更新 cache
@@ -88,10 +87,12 @@ describe('E2E: Translation workflow', () => {
       'E0001.template': "Invalid character: '{char}'"
     };
 
-    let target = { E0001: {} };
+    let target: localesAdapter.LocaleJson = {};
     target = localesAdapter.applyTranslations(target, translations);
-    expect(target.E0001.title).toBe('Invalid character');
-    expect(target.E0001.template).toBe("Invalid character: '{char}'");
+    expect(localesAdapter.codeFields(target, 'E0001')).toEqual({
+      title: 'Invalid character',
+      template: "Invalid character: '{char}'"
+    });
 
     // 更新 cache
     cache = updateCache(cache, sourceKeys, 'en', keysToTranslate);

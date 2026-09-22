@@ -4,7 +4,7 @@
 # * tag 驱动（v* 格式，与既有 release.yml 的 tag 命名一致）
 # * 构建交给 `cargo dist build`（plan job 计算各 target 的 runner 矩阵与交叉编译依赖）
 # * 逐 target 跑 scripts/release/package-dist.sh 重组为 bin/ + lib/ 结构并重算 checksum
-# * 发布保持现状：generate-commit-list.mjs 生成 merge-commit changelog body，
+# * 发布保持现状：generate-commit-list.ts 生成 merge-commit changelog body，
 #   追加上传到 GitHub Release（双跑期与旧 release.yml 共存同一 Release，阶段三后接管）
 #
 # 与生成版的差异：去掉 pull_request 触发 / host / announce / global artifacts
@@ -189,6 +189,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # generate-commit-list.ts 走 Node 原生类型剥离，需 22.18+；
+      # ubuntu-22.04 自带 node 18，必须显式装
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       # 下载失败必须让 job 失败：容忍会产出"零资产静默发布"的绿色 Release
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -203,7 +208,7 @@ jobs:
           echo "Previous tag: $PREV"
       - name: Generate commit list with @mentions
         run: |
-          node scripts/release/generate-commit-list.mjs \
+          node scripts/release/generate-commit-list.ts \
             --from-tag "${{ steps.prev-tag.outputs.value }}" \
             --to-tag "${{ needs.plan.outputs.tag }}" \
             --changelog CHANGELOG.md \

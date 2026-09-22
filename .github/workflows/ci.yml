@@ -48,6 +48,33 @@ jobs:
       - name: Build check
         run: cargo check --all-features
 
+  scripts:
+    name: Scripts (typecheck + tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # scripts/**/*.ts 走 Node 原生类型剥离，需 22.18+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # scripts/ 无依赖清单之外的东西；i18n 测试另需 vitest
+      - name: Install script deps
+        run: npm ci --prefix scripts --ignore-scripts
+
+      - name: Install i18n test deps
+        run: npm ci --prefix scripts/i18n --ignore-scripts
+
+      - name: Typecheck
+        run: npm run typecheck --prefix scripts
+
+      # 这些用例此前只在本地跑（CI 无 Node 步骤），
+      # 扁平键那类「结构性错误」正是它们在守
+      - name: Run i18n tests
+        run: npm test --prefix scripts/i18n
+
   test:
     name: Test
     runs-on: ubuntu-latest

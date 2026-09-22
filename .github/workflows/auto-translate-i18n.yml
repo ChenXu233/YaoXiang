@@ -41,7 +41,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
         run: npm install
@@ -58,7 +58,7 @@ jobs:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
 
       - name: Translate i18n files
-        run: node scripts/i18n/translate.mjs ${{ inputs.full_translate == true && '--full' || '' }}
+        run: node scripts/i18n/translate.ts ${{ inputs.full_translate == true && '--full' || '' }}
         env:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_MODEL: ${{ secrets.AI_MODEL || 'MiniMax-M2.7-highspeed' }}

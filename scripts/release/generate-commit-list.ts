@@ -3,7 +3,7 @@
  * Generate commit list with @author mentions for release body.
  *
  * Usage:
- *   node scripts/release/generate-commit-list.mjs \
+ *   node scripts/release/generate-commit-list.ts \
  *     --from-tag v0.7.9 --to-tag v0.7.10 \
  *     --changelog CHANGELOG.md
  *
@@ -20,9 +20,15 @@ import { execSync } from "node:child_process";
 
 const GITHUB_NOREPLY_RE = /^\d+\+(.+)@users\.noreply\.github\.com$/;
 
-function parseArgs() {
+interface CliOptions {
+  fromTag: string;
+  toTag: string;
+  changelog: string;
+}
+
+function parseArgs(): CliOptions {
   const args = process.argv.slice(2);
-  const opts = {};
+  const opts: Partial<CliOptions> = {};
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case "--from-tag":
@@ -36,7 +42,7 @@ function parseArgs() {
         break;
       case "--help":
       case "-h":
-        console.log(`Usage: node scripts/release/generate-commit-list.mjs \\
+        console.log(`Usage: node scripts/release/generate-commit-list.ts \\
   --from-tag <tag> --to-tag <tag> \\
   --changelog <path>`);
         process.exit(0);
@@ -46,7 +52,7 @@ function parseArgs() {
     console.error("Error: --from-tag, --to-tag, and --changelog are required");
     process.exit(1);
   }
-  return opts;
+  return opts as CliOptions;
 }
 
 /**
@@ -55,9 +61,9 @@ function parseArgs() {
  *   49699333+dependabot[bot]@users.noreply.github.com → dependabot[bot]
  * Returns null if not a noreply email.
  */
-function parseNoreplyUsername(email) {
+function parseNoreplyUsername(email: string): string | null {
   const match = email.match(GITHUB_NOREPLY_RE);
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 }
 
 /**
@@ -65,12 +71,14 @@ function parseNoreplyUsername(email) {
  * Uses in-memory cache to avoid duplicate lookups.
  */
 class UsernameResolver {
+  private cache: Map<string, string | null>;
+
   constructor() {
     this.cache = new Map(); // email → username | null
   }
 
-  async resolve(email) {
-    if (this.cache.has(email)) return this.cache.get(email);
+  async resolve(email: string): Promise<string | null> {
+    if (this.cache.has(email)) return this.cache.get(email) ?? null;
 
     // 1. Try noreply parsing first
     const fromNoreply = parseNoreplyUsername(email);
@@ -95,7 +103,15 @@ class UsernameResolver {
   }
 }
 
-function getCommits(fromTag, toTag) {
+/** git log 解析出的一条提交 */
+interface Commit {
+  hash: string;
+  author: string;
+  email: string;
+  subject: string;
+}
+
+function getCommits(fromTag: string, toTag: string): Commit[] {
   const output = execSync(
     `git log "${fromTag}..${toTag}" --no-merges --format="%H|||%an|||%ae|||%s"`,
     { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 }
@@ -105,13 +121,13 @@ function getCommits(fromTag, toTag) {
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const parts = line.split("|||", 4);
-      return { hash: parts[0], author: parts[1], email: parts[2], subject: parts[3] };
+      const [hash = "", author = "", email = "", subject = ""] = line.split("|||", 4);
+      return { hash, author, email, subject };
     });
 }
 
-async function generateCommitTable(commits, resolver) {
-  const warned = new Set();
+async function generateCommitTable(commits: Commit[], resolver: UsernameResolver): Promise<string> {
+  const warned = new Set<string>();
   const lines = [
     "### 📝 提交记录",
     "",
@@ -141,7 +157,7 @@ async function generateCommitTable(commits, resolver) {
   return lines.join("\n") + "\n";
 }
 
-function stripOldCommitSection(content) {
+function stripOldCommitSection(content: string): string {
   const marker = "### 📝 提交记录";
   const idx = content.indexOf(marker);
   if (idx !== -1) {

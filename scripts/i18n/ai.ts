@@ -1,7 +1,40 @@
+import type { FlatKeys } from './adapters/locales.ts';
+import type { Glossary } from './config.ts';
+
+/** OpenAI 兼容的 chat/completions 响应（只取用到的字段） */
+interface ChatCompletionResponse {
+  choices: Array<{ message: { content: string } }>;
+}
+
+/** `buildPrompt` 的入参 */
+interface BuildPromptOptions {
+  keys: FlatKeys;
+  sourceLang: string;
+  targetLang: string;
+  languagePrompt: string;
+  glossary: Glossary;
+}
+
+/** `translateBatch` 的入参 */
+export interface TranslateBatchOptions extends BuildPromptOptions {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  /** 可注入以便测试；默认全局 fetch */
+  fetchFn?: typeof fetch;
+  maxRetries?: number;
+}
+
 /**
  * 构建翻译 prompt
  */
-function buildPrompt({ keys, sourceLang, targetLang, languagePrompt, glossary }) {
+function buildPrompt({
+  keys,
+  sourceLang,
+  targetLang,
+  languagePrompt,
+  glossary,
+}: BuildPromptOptions): string {
   const glossaryText = Object.entries(glossary)
     .map(([k, v]) => `${k} → ${v}`)
     .join('\n');
@@ -27,6 +60,8 @@ ${JSON.stringify(keys, null, 2)}
 
 /**
  * 批量翻译 key-value 对
+ *
+ * 失败重试 `maxRetries` 次（指数退避：1s/2s/4s…），全败则抛出最后一次错误。
  */
 export async function translateBatch({
   keys,
@@ -38,11 +73,11 @@ export async function translateBatch({
   baseUrl,
   model,
   fetchFn = fetch,
-  maxRetries = 3
-}) {
+  maxRetries = 3,
+}: TranslateBatchOptions): Promise<FlatKeys> {
   const prompt = buildPrompt({ keys, sourceLang, targetLang, languagePrompt, glossary });
 
-  let lastError;
+  let lastError: unknown;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const response = await fetchFn(`${baseUrl}/chat/completions`, {
@@ -62,8 +97,11 @@ export async function translateBatch({
         throw new Error(`API error: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
-      const content = data.choices[0].message.content;
+      const data = (await response.json()) as ChatCompletionResponse;
+      const content = data.choices[0]?.message.content;
+      if (content === undefined) {
+        throw new Error('Malformed API response: no choices[0].message.content');
+      }
 
       // 尝试从响应中提取 JSON
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -71,7 +109,7 @@ export async function translateBatch({
         throw new Error('No JSON found in response');
       }
 
-      return JSON.parse(jsonMatch[0]);
+      return JSON.parse(jsonMatch[0]) as FlatKeys;
     } catch (error) {
       lastError = error;
       if (attempt < maxRetries - 1) {

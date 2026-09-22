@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import * as locales from './locales.mjs';
+import * as locales from './locales.ts';
+import type { LocaleJson } from './locales.ts';
 
 describe('locales adapter', () => {
   const sampleJson = {
@@ -72,11 +73,13 @@ describe('locales adapter with nested error codes', () => {
 
   describe('applyTranslations', () => {
     it('should apply translations to nested structure', () => {
-      const target = { E0001: { title: 'old' } };
+      const target: LocaleJson = { E0001: { title: 'old' } };
       const translations = { 'E0001.title': 'Invalid character', 'E0001.help': 'Remove it' };
       const result = locales.applyTranslations(target, translations);
-      expect(result.E0001.title).toBe('Invalid character');
-      expect(result.E0001.help).toBe('Remove it');
+      expect(locales.codeFields(result, 'E0001')).toEqual({
+        title: 'Invalid character',
+        help: 'Remove it'
+      });
     });
 
     // 回归：新增错误码在目标语言里**还没有父对象**。旧守卫额外要求父对象
@@ -84,7 +87,7 @@ describe('locales adapter with nested error codes', () => {
     // `"E9999.title"`；而运行时 src/util/i18n/mod.rs 只从对象值取条目，
     // 扁平键被静默丢弃——翻译存在于文件里，用户却看到英文兜底。
     it('should nest fields for a code the target has never translated', () => {
-      const target = { _meta: { lang: 'ja' }, cmd_received: '既存' };
+      const target: LocaleJson = { _meta: { lang: 'ja' }, cmd_received: '既存' };
       const result = locales.applyTranslations(target, { 'E9999.title': '新コード' });
       expect(result.E9999).toEqual({ title: '新コード' });
       // 注意用 Object.hasOwn 而非 toHaveProperty：后者按点分路径取值，
@@ -94,7 +97,7 @@ describe('locales adapter with nested error codes', () => {
 
     // 目标已有该码的父对象时，两个字段都要并入同一对象（不能互相覆盖）
     it('should merge sibling fields into one object', () => {
-      const target = { E9999: { title: '旧' } };
+      const target: LocaleJson = { E9999: { title: '旧' } };
       const result = locales.applyTranslations(target, {
         'E9999.title': '新',
         'E9999.help': '助'

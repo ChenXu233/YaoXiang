@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tmlanguage.json",
-  "$comment": "═══════════════════════════════════════════════════════════════\n  CANONICAL SOURCE — 在此文件中编辑\n  \n  此文件是 TextMate grammar 的唯一真实来源。\n  docs 中的副本 (docs/src/.vitepress/syntaxes/) 由构建脚本\n  (scripts/sync-syntax.mjs) 自动同步，请勿直接编辑 docs 中的副本。\n═══════════════════════════════════════════════════════════════",
+  "$comment": "═══════════════════════════════════════════════════════════════\n  CANONICAL SOURCE — 在此文件中编辑\n  \n  此文件是 TextMate grammar 的唯一真实来源。\n  docs 中的副本 (docs/src/.vitepress/syntaxes/) 由构建脚本\n  (scripts/sync-syntax.ts) 自动同步，请勿直接编辑 docs 中的副本。\n═══════════════════════════════════════════════════════════════",
   "name": "YaoXiang",
   "patterns": [
     {

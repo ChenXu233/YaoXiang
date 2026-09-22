@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { loadCache, saveCache, getKeysToTranslate, computeHash } from './cache.mjs';
+import { loadCache, saveCache, getKeysToTranslate, computeHash } from './cache.ts';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

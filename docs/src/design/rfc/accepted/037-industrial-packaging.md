@@ -293,7 +293,7 @@ cargo-dist 管的是"把编译器发给用户"，wasm 是"在线 playground 嵌�
 
 ### 与现有发版流程的整合
 
-现状 `release.yml`：push main → check-version（`v{version}` tag 不存在才放行）→ build / build-wasm / security / test 四路 → release job（打 tag 推送 + `generate-commit-list.mjs` 生成含 @mentions 的 body + 上传制品）。
+现状 `release.yml`：push main → check-version（`v{version}` tag 不存在才放行）→ build / build-wasm / security / test 四路 → release job（打 tag 推送 + `generate-commit-list.ts` 生成含 @mentions 的 body + 上传制品）。
 
 cargo-dist 生成的流水线是 tag 驱动、自带 announce/publish，且不含 fmt/clippy/test/audit 门禁，release notes 格式也无法承载 merge commit changelog。**直接整体替换会打碎现有发版仪式**（PR → CI 全绿 → bump → merge commit 即 changelog）。
 
@@ -302,7 +302,7 @@ cargo-dist 生成的流水线是 tag 驱动、自带 announce/publish，且不�
 1. check-version / security / test 三个 job 保持现状（push main 触发、打 tag 前置门禁）
 2. 全部通过后由 release job 创建并推送 `v{version}` tag（现状不变）
 3. tag push 触发新的 `dist-release.yml`：plan job 由 dist 计算 runner/系统依赖矩阵 → `cargo dist build`（5 target）→ `package-dist.sh` 逐 target 重组 → Inno Setup job（吃 Windows 重组包构建向导，`/DMyAppVersion=` 注入版本，不再二次编译）→ `_build-wasm.yml`（并行 job）
-4. publish job：`generate-commit-list.mjs` 生成 body（现状脚本复用）→ 追加上传重组包 + `.sha256` + `.deb` + wasm + Setup exe；独立 `publish-apt` job 发布 GitHub Pages apt 仓库元数据（`secrets.APT_GPG_KEY` 未配置时自动跳过，不影响其余渠道）
+4. publish job：`generate-commit-list.ts` 生成 body（现状脚本复用）→ 追加上传重组包 + `.sha256` + `.deb` + wasm + Setup exe；独立 `publish-apt` job 发布 GitHub Pages apt 仓库元数据（`secrets.APT_GPG_KEY` 未配置时自动跳过，不影响其余渠道）
 
 ### Nightly 发布
 
@@ -384,7 +384,7 @@ allow-dirty = ["ci"]
 - 便携解压后 `yx` 回退相邻 `yaoxiang-rs`，行为与托管安装一致
 - Inno Setup 安装后目录结构完整、PATH 生效、可卸载
 - Release 资产齐全：5 平台重组包 + `.sha256` 与实际内容一致
-- Release body 为 `generate-commit-list.mjs` 输出（merge commit changelog 完整）
+- Release body 为 `generate-commit-list.ts` 输出（merge commit changelog 完整）
 - nightly 产物为 Pre-release，不影响最新正式 tag
 
 ## 权衡
