@@ -83,21 +83,27 @@ jobs:
       - name: Package restructured release archive
         shell: bash
         run: |
-          # Debian 的 Version 必须以数字开头（policy §5.6.12），而 nightly 传
-          # 的旧字面量 "nightly" 不是；dpkg-deb 直接拒绝、整个 Package 步骤失败
-          # → 两个 Linux job 全挂、Upload 被跳过 → Linux 产物一个不剩。
-          # 用 crate 版本 + 标识段：仍是合法 semver，且按 dpkg 排序
-          # 0.8.1-nightly > 0.8.1，手动装了 nightly .deb 的人会被下个正式版正常升级。
+          # Debian 的 Version 必须以数字开头（policy §5.6.12），旧字面量
+          # "nightly" 会让 dpkg-deb 直接拒绝、整个 Package 步骤失败。
+          #
+          # 但只补成固定的 "0.8.1-nightly" 也不够：nightly 每夜都是不同提交，
+          # 版本串相同则 dpkg 判 SAME → apt 认为「已是最新」，用户永远拿不到
+          # 次日的构建。故后缀必须随构建变化。
+          #
+          # 用 run number + attempt 作排序键：二者单调递增（重跑时 attempt +1），
+          # 新构建一定排在旧构建之上，不会被误判成降级；末尾附短 sha 便于对照提交。
+          # 不能只放 sha：sha 无时序，相邻构建约半数会判成降序（dpkg 报
+          # downgrading）。dpkg 对数字段按数值比（9 < 10），无需补零。
           VERSION="$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')"
           bash scripts/release/package-dist.sh \
-            "$VERSION-nightly" \
+            "$VERSION-nightly.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}.${GITHUB_SHA:0:7}" \
             "${{ join(matrix.targets, '-') }}"
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: yaoxiang-nightly-${{ join(matrix.targets, '_') }}
           path: |
-            target/distrib/yaoxiang-*-nightly-*
+            target/distrib/yaoxiang-*-nightly.*
             ${{ env.BUILD_MANIFEST_NAME }}
           retention-days: 14
 
