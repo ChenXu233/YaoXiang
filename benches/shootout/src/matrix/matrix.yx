@@ -4,7 +4,7 @@
 
 use std.{io, os, string, result}
 
-create_matrix: (size: Int) -> List(List(Int)) = (size) => {
+create_matrix: (size: Int) -> Vec(Vec(Int)) = (size) => {
     mut matrix = []
     for i in 0..size {
         mut row = []
@@ -16,7 +16,7 @@ create_matrix: (size: Int) -> List(List(Int)) = (size) => {
     return matrix
 }
 
-multiply: (a: List(List(Int)), b: List(List(Int)), size: Int) -> List(List(Int)) = (a, b, size) => {
+multiply: (a: Vec(Vec(Int)), b: Vec(Vec(Int)), size: Int) -> Vec(Vec(Int)) = (a, b, size) => {
     mut m_result = []
     for i in 0..size {
         mut row = []

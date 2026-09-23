@@ -232,14 +232,19 @@ jobs:
       - name: Run shootout
         run: |
           set -o pipefail
-          cargo run -p shootout --release 2>&1 | tee shootout-output.txt
+          # 不要 `2>&1`：cargo 的彩色/进度信息（CARGO_TERM_COLOR=always）会
+          # 经此一并写进 benchmark-output.txt，最终颜色转义码被搬进 release notes。
+          # 结构化的结果走 --out-json，人读输出留在日志里即可。
+          cargo run -p shootout --release -- \
+            --out-json target/shootout-results.json | tee shootout-output.txt
 
       - name: Summarize
         if: always()
         run: |
           bash scripts/ci/bench-report.sh \
+            --shootout-json target/shootout-results.json \
             --shootout shootout-output.txt \
-            --out-json target/shootout-results.json \
+            --out-json target/shootout-report.json \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload results
@@ -250,6 +255,7 @@ jobs:
           path: |
             shootout-output.txt
             target/shootout-results.json
+            target/shootout-report.json
           retention-days: 30
 
   # 把上述两类基准结果汇总为一段 Markdown，供 publish job 注入
@@ -273,9 +279,10 @@ jobs:
       - name: Compose notes
         run: |
           # 传 artifact 根目录即可：脚本会自动向下查找 criterion 目录
-          # 与 shootout-output.txt（artifact 内部层次不稳定，不写死）。
+          # 与 shootout 输出（artifact 内部层次不稳定，不写死）。
           bash scripts/ci/bench-report.sh \
             --criterion-dir bench-artifacts/benchmark-results \
+            --shootout-json bench-artifacts/shootout-results/target/shootout-results.json \
             --shootout bench-artifacts/shootout-results/shootout-output.txt \
             > bench-notes.md
           cat bench-notes.md
