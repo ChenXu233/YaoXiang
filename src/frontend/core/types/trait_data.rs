@@ -239,7 +239,11 @@ impl TraitTable {
     // ---- 自动派生 ----
 
     /// 内置可派生 trait 列表
-    pub const BUILTIN_DERIVES: &[&str] = &["Clone", "Equal", "Debug"];
+    ///
+    /// RFC-011b: `Equal` 移出——其判定改由接口实现登记表 + 结构推导承担
+    /// （旧签名桩自动登记只有类型无实现，且全仓零消费点）。
+    /// Clone / Debug 维持现状，将来统一另议。
+    pub const BUILTIN_DERIVES: &[&str] = &["Clone", "Debug"];
 
     /// 检查 Record 的所有字段是否都满足某 trait（AST 层面）
     pub fn can_auto_derive(

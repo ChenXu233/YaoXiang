@@ -81,6 +81,12 @@ pub struct StatementChecker {
     pub call_ownership: super::call_ownership::CallOwnershipTable,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
+    /// RFC-011b: 接口实现登记表（运算符查询唯一判据，不经名字解析）
+    interface_impl_registry:
+        HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
+    /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
+    pub operator_dispatches:
+        Vec<crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
     gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
     /// 依赖类型环境（类型族注册与查找）
@@ -147,6 +153,8 @@ impl StatementChecker {
             instantiation_requests: Vec::new(),
             call_ownership: super::call_ownership::CallOwnershipTable::new(),
             existential_coercions: Vec::new(),
+            interface_impl_registry: HashMap::new(),
+            operator_dispatches: Vec::new(),
             gamma,
             dep_env,
             trait_table,
@@ -269,6 +277,17 @@ impl StatementChecker {
         bindings: HashMap<String, MonoType>,
     ) {
         self.method_bindings = bindings;
+    }
+
+    /// RFC-011b: 注入接口实现登记表
+    pub fn set_interface_impl_registry(
+        &mut self,
+        registry: HashMap<
+            String,
+            Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>,
+        >,
+    ) {
+        self.interface_impl_registry = registry;
     }
 
     /// 设置证明函数基类型表（RFC-027 Phase 2.5）
@@ -2284,6 +2303,7 @@ impl StatementChecker {
                                 current_result_err,
                             );
                         inferrer.set_method_bindings(&self.method_bindings);
+                        inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                         inferrer.set_type_defs(&self.type_defs);
                         inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
@@ -2303,6 +2323,8 @@ impl StatementChecker {
                         self.call_ownership.extend(inferrer.call_ownership);
                         self.existential_coercions
                             .extend(inferrer.existential_coercions);
+                        self.operator_dispatches
+                            .extend(inferrer.operator_dispatches);
                         result
                     }
                 }
@@ -2360,6 +2382,7 @@ impl StatementChecker {
                     &self.method_bindings,
                 );
                 inferrer.set_type_defs(&self.type_defs);
+                inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
                 inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                 inferrer.set_dep_env(&self.dep_env);
@@ -2377,6 +2400,8 @@ impl StatementChecker {
                 self.call_ownership.extend(inferrer.call_ownership);
                 self.existential_coercions
                     .extend(inferrer.existential_coercions);
+                self.operator_dispatches
+                    .extend(inferrer.operator_dispatches);
                 result
             }
         }

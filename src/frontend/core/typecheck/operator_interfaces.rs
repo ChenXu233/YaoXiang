@@ -206,6 +206,23 @@ pub fn register_native_entries(env: &mut TypeEnvironment) {
     }
 }
 
+/// RFC-011b: 运算符派发点（span 键控）。
+///
+/// typecheck 在 `==`/`!=`（显式 Equal 实例化命中）等位置产出，ir_gen 按
+/// span 查表把原生指令替换为 `Call "{type}.{method}"`——与 RFC-011a
+/// existential_coercions 同一「span 键表 → IR 注入」模式。
+#[derive(Debug, Clone)]
+pub struct OperatorDispatch {
+    /// 运算符表达式在 AST 中的 span（ir_gen 查表键）
+    pub span: crate::util::span::Span,
+    /// 接收者类型名（如 "Vec3"）
+    pub type_name: String,
+    /// 派发方法名（如 "equal"）
+    pub method: String,
+    /// 结果取反（`!=` 派发到 equal 后需 Not）
+    pub negate: bool,
+}
+
 /// 名义头提取：Struct/TypeRef/Generic 取名字；内建标量无名字返回 None。
 fn type_head_name(ty: &MonoType) -> Option<&str> {
     match ty {

@@ -224,6 +224,10 @@ pub struct AstToIrGenerator {
     /// RFC-011a §6: 存在类型包装点（span → 接口名），来自 typecheck 强制点收集。
     /// generate_expr_ir 入口查表命中 → 值生成后包 CreateVariant。
     existential_wraps: HashMap<Span, String>,
+
+    /// RFC-011b: 运算符派发点（span → 接收者类型名, 方法名, 取反）。
+    /// `==`/`!=` 命中显式 Equal 实例化时，原生比较指令替换为方法调用。
+    operator_dispatches: HashMap<Span, (String, String, bool)>,
     /// RFC-011a §6.2: 编译期类型收集——接口 → 实现类型列表（ImplementationProof
     /// 按类型名定序），变体分发与包装定序共用。
     interface_variants: HashMap<String, Vec<String>>,
@@ -344,6 +348,11 @@ impl AstToIrGenerator {
                 .existential_coercions
                 .iter()
                 .map(|c| (c.span, c.interface.clone()))
+                .collect(),
+            operator_dispatches: type_result
+                .operator_dispatches
+                .iter()
+                .map(|d| (d.span, (d.type_name.clone(), d.method.clone(), d.negate)))
                 .collect(),
             interface_variants: {
                 let mut map: HashMap<String, Vec<String>> = HashMap::new();
@@ -6413,6 +6422,36 @@ impl AstToIrGenerator {
                 let right_reg = self.next_temp_reg();
                 self.generate_expr_ir(left, left_reg, instructions, constants)?;
                 self.generate_expr_ir(right, right_reg, instructions, constants)?;
+
+                // RFC-011b: 显式接口派发——`==`/`!=` 命中 Equal 实例化时
+                // 生成方法调用（接收者居首），`!=` 对结果取反
+                if let Some((type_name, method, negate)) =
+                    self.operator_dispatches.get(span).cloned()
+                {
+                    let short_name = format!("{}.{}", type_name, method);
+                    let func_name = if let Some(qualified) =
+                        self.registry.short_to_qualified_map().get(&short_name)
+                    {
+                        qualified.clone()
+                    } else {
+                        short_name
+                    };
+                    instructions.push(Instruction::Call {
+                        dst: Some(Operand::Local(result_reg)),
+                        func: Operand::Const(ConstValue::String(func_name)),
+                        args: vec![Operand::Local(left_reg), Operand::Local(right_reg)],
+                        span: self.cur_span,
+                        def: None,
+                    });
+                    if negate {
+                        instructions.push(Instruction::Not {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Local(result_reg),
+                            span: self.cur_span,
+                        });
+                    }
+                    return Ok(());
+                }
 
                 match op {
                     ast::BinOp::Add => Instruction::Add {

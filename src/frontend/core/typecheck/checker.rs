@@ -801,6 +801,8 @@ impl TypeChecker {
         body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
         // 设置方法绑定表
         body_checker.set_method_bindings(self.env.method_bindings.clone());
+        // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
+        body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
         // 设置类型定义表（用于 TypeRef → Struct 解析）
         let type_defs: HashMap<String, MonoType> = self
             .env
@@ -1024,6 +1026,11 @@ impl TypeChecker {
         };
 
         // RFC-011a §6: 从 body_checker 收集存在类型强制点（ir_gen 包装注入用）
+        let operator_dispatches = if let Some(ref bc) = self.body_checker {
+            bc.operator_dispatches.clone()
+        } else {
+            Vec::new()
+        };
         let existential_coercions = if let Some(ref bc) = self.body_checker {
             bc.existential_coercions.clone()
         } else {
@@ -1045,6 +1052,7 @@ impl TypeChecker {
             escaped_refs,
             instantiation_requests,
             existential_coercions,
+            operator_dispatches,
             implementation_proofs: self.env.implementation_proofs.clone(),
             interface_impl_registry: self.env.interface_impl_registry.clone(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),

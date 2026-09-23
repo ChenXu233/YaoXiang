@@ -32,6 +32,11 @@ static EMPTY_GENERIC_TYPE_DEFS: std::sync::LazyLock<
     HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
 > = std::sync::LazyLock::new(HashMap::new);
 
+/// RFC-011b: 空接口实现登记表（未注入时使用——测试/独立构造）
+static EMPTY_INTERFACE_IMPL_REGISTRY: std::sync::LazyLock<
+    HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
+> = std::sync::LazyLock::new(HashMap::new);
+
 /// 表达式类型推断器
 ///
 /// 使用统一的 ScopeManager 管理变量作用域，
@@ -62,6 +67,9 @@ pub struct ExpressionInferrer<'a> {
     /// 方法绑定表: "Type.method" -> MonoType(Fn)
     /// 用于方法调用语法糖解析: p.draw(screen) → Point.draw(p, screen)
     method_bindings: &'a HashMap<String, MonoType>,
+    /// RFC-011b: 接口实现登记表（运算符查询唯一判据，不经名字解析）
+    interface_impl_registry:
+        &'a HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析（字段访问等）
     type_defs: &'a HashMap<String, MonoType>,
@@ -79,6 +87,9 @@ pub struct ExpressionInferrer<'a> {
     last_type_args: Vec<MonoType>,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
+    /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
+    pub operator_dispatches:
+        Vec<crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch>,
     /// 依赖类型环境（效应查询）—— 由 StatementChecker 注入
     dep_env: Option<&'a crate::frontend::core::types::eval::dependent_types::DependentTypeEnv>,
     /// 流敏感假设集 Γ（效应注入）—— 由 StatementChecker 注入
@@ -114,6 +125,8 @@ impl<'a> ExpressionInferrer<'a> {
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
+            interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
+            operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
@@ -145,6 +158,8 @@ impl<'a> ExpressionInferrer<'a> {
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
+            interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
+            operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
@@ -177,6 +192,8 @@ impl<'a> ExpressionInferrer<'a> {
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
+            interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
+            operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
@@ -211,6 +228,8 @@ impl<'a> ExpressionInferrer<'a> {
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
+            interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
+            operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
             gamma: None,
@@ -277,6 +296,17 @@ impl<'a> ExpressionInferrer<'a> {
         bindings: &'a HashMap<String, MonoType>,
     ) {
         self.method_bindings = bindings;
+    }
+
+    /// RFC-011b: 注入接口实现登记表（运算符查询的唯一判据）
+    pub fn set_interface_impl_registry(
+        &mut self,
+        registry: &'a HashMap<
+            String,
+            Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>,
+        >,
+    ) {
+        self.interface_impl_registry = registry;
     }
 
     /// 设置类型定义表
@@ -659,6 +689,169 @@ impl<'a> ExpressionInferrer<'a> {
                 }
             }
             BinOp::Assign => Ok(MonoType::Void),
+        }
+    }
+
+    /// RFC-011b: `==` / `!=` 的类型判定与派发记录。
+    ///
+    /// 无用户记录类型参与时保持既有行为（unify 后 Bool，运行时定——Any、
+    /// 容器、异构比较全部不受影响）；至少一侧为记录类型时进接口判定：
+    /// 显式 `Equal(T, T)` 实例化优先（记 OperatorDispatch 供 ir_gen 派发
+    /// 方法调用），否则结构推导——全字段可比且不含 `&mut` 线性令牌则
+    /// 原生逐字段比较，失败报 E1101（指明拖后腿的字段）。
+    pub fn infer_equality(
+        &mut self,
+        op: &BinOp,
+        left_ty: &MonoType,
+        right_ty: &MonoType,
+        span: crate::util::span::Span,
+    ) -> Result<MonoType> {
+        use crate::frontend::core::typecheck::operator_interfaces as ops;
+        let negate = matches!(op, BinOp::Neq);
+        let l = read_view(left_ty);
+        let r = read_view(right_ty);
+
+        // 未定型类型变量一侧：延后判定（保持既有行为，泛型体内合法）
+        if matches!(left_ty, MonoType::TypeVar(_)) || matches!(right_ty, MonoType::TypeVar(_)) {
+            let _ = self.solver.unify(left_ty, right_ty);
+            return Ok(MonoType::Bool);
+        }
+
+        let l_record = self.as_user_record(&l);
+        let r_record = self.as_user_record(&r);
+        if l_record.is_none() && r_record.is_none() {
+            let _ = self.solver.unify(left_ty, right_ty);
+            return Ok(MonoType::Bool);
+        }
+
+        // 显式 Equal 实例化优先（登记表查询，名义结构匹配；
+        // native 条目只含基础类型，Struct 查询命中的必为用户条目）
+        if let Some(entry) = ops::query_exact(
+            self.interface_impl_registry,
+            ops::EQUAL_INTERFACE,
+            &[l.clone(), r.clone()],
+        ) {
+            let type_name = entry.impl_type.clone();
+            let method = entry
+                .methods
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "equal".to_string());
+            self.operator_dispatches.push(ops::OperatorDispatch {
+                span,
+                type_name,
+                method,
+                negate,
+            });
+            return Ok(MonoType::Bool);
+        }
+
+        // 同名记录 → 结构推导（递归字段，&mut 拒绝）
+        if let (Some(ls), Some(rs)) = (&l_record, &r_record) {
+            if ls.name == rs.name {
+                match self.struct_comparable(&MonoType::Struct(ls.clone()), 0) {
+                    Ok(()) => return Ok(MonoType::Bool),
+                    Err(field_desc) => {
+                        return Err(ErrorCodeDefinition::type_does_not_implement_interface(
+                            &format!("{}（字段 {} 不可比较）", ls.name, field_desc),
+                            ops::EQUAL_INTERFACE,
+                        )
+                        .at(span)
+                        .build());
+                    }
+                }
+            }
+        }
+
+        // 异型 / 单侧记录 / 字段不可比
+        let name = l_record
+            .as_ref()
+            .or(r_record.as_ref())
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| "Struct".to_string());
+        Err(ErrorCodeDefinition::type_does_not_implement_interface(
+            &format!("{}（{} 与 {}）", name, l, r),
+            ops::EQUAL_INTERFACE,
+        )
+        .at(span)
+        .build())
+    }
+
+    /// RFC-011b: 解析为用户记录类型（Struct 或 type_defs 可解析的 TypeRef）
+    fn as_user_record(
+        &self,
+        ty: &MonoType,
+    ) -> Option<crate::frontend::core::types::StructType> {
+        match ty {
+            MonoType::Struct(s) => Some(s.clone()),
+            MonoType::TypeRef(name) => match self.type_defs.get(name) {
+                Some(MonoType::Struct(s)) => Some(s.clone()),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// RFC-011b Equal 结构推导：类型是否可比（基础类型、String、可比记录/
+    /// 元组/列表；`&mut` 线性令牌读一次即消耗，不可比）。返回 Err(首个不可比
+    /// 字段的描述)。
+    fn struct_comparable(
+        &self,
+        ty: &MonoType,
+        depth: usize,
+    ) -> Result<(), String> {
+        if depth > 16 {
+            return Err("类型嵌套过深（疑似循环引用）".to_string());
+        }
+        // &mut 线性令牌：读一次即消耗，无法同时取出两个值来比——
+        // 必须在 read_view 穿透之前判定（穿透会把 &mut T 剥成 T）
+        if let MonoType::Ref {
+            mutable: true,
+            inner,
+        } = ty
+        {
+            return Err(format!("&mut {}", inner));
+        }
+        let ty = read_view(ty);
+        match &ty {
+            MonoType::Int(_)
+            | MonoType::Float(_)
+            | MonoType::Bool
+            | MonoType::Char
+            | MonoType::Void
+            | MonoType::Never => Ok(()),
+            MonoType::Struct(s) => {
+                for (name, field_ty) in &s.fields {
+                    self.struct_comparable(field_ty, depth + 1)
+                        .map_err(|d| format!("{}: {}", name, d))?;
+                }
+                Ok(())
+            }
+            MonoType::Generic { name, args } if name == "String" || name == "Bytes" => {
+                let _ = args;
+                Ok(())
+            }
+            MonoType::Generic { name, args } if name == "Range" => args
+                .iter()
+                .try_for_each(|a| self.struct_comparable(a, depth + 1)),
+            MonoType::Generic { name, args }
+                if name == "List" || name == "Array" || name == "Vec" || name == "Tuple" =>
+            {
+                args.iter()
+                    .try_for_each(|a| self.struct_comparable(a, depth + 1))
+                    .map_err(|d| format!("{}<{}>", name, d))
+            }
+            MonoType::TypeRef(name) => {
+                // 内建名（字段经 from_builtin_name 已物化；此处兜底别名形态）
+                if crate::frontend::core::types::MonoType::from_builtin_name(name).is_some() {
+                    return Ok(());
+                }
+                match self.type_defs.get(name) {
+                    Some(resolved) => self.struct_comparable(resolved, depth + 1),
+                    _ => Err(name.clone()),
+                }
+            }
+            other => Err(other.to_string()),
         }
     }
 
@@ -1566,6 +1759,11 @@ impl<'a> ExpressionInferrer<'a> {
                 }
 
                 let left_ty = self.infer_expr(left)?;
+                // RFC-011b: `==`/`!=` 走相等判定（记录类型参与时查 Equal 接口
+                // 或结构推导，并记录显式派发点）；其余比较保持既有行为
+                if matches!(op, BinOp::Eq | BinOp::Neq) {
+                    return self.infer_equality(op, &left_ty, &right_ty, *span);
+                }
                 self.infer_binary(op, &left_ty, &right_ty)
             }
 

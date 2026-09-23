@@ -999,6 +999,14 @@ impl Interpreter {
                 RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
                 RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
             ) => RuntimeValue::Bool(!Self::runtime_value_deep_eq(&a, &b)),
+            // RFC-011b：Struct Eq/Ne 逐字段结构相等——Equal 自动派生的运行时
+            // 路径（显式 equal 实例化在 IR 层派发为方法调用，不到这里）
+            (CompareOp::Eq, RuntimeValue::Struct { .. }, RuntimeValue::Struct { .. }) => {
+                RuntimeValue::Bool(Self::runtime_value_deep_eq(&a, &b))
+            }
+            (CompareOp::Ne, RuntimeValue::Struct { .. }, RuntimeValue::Struct { .. }) => {
+                RuntimeValue::Bool(!Self::runtime_value_deep_eq(&a, &b))
+            }
             // #302：Range 结构相等（三标量按值比较，PartialEq 已实现）
             (CompareOp::Eq, RuntimeValue::Range { .. }, RuntimeValue::Range { .. }) => {
                 RuntimeValue::Bool(a == b)
@@ -1066,6 +1074,24 @@ impl Interpreter {
             | (RuntimeValue::List(x), RuntimeValue::List(y))
             | (RuntimeValue::Array(x), RuntimeValue::Array(y)) => {
                 items_eq(x, y).unwrap_or_else(|| a == b)
+            }
+            // RFC-011b：Struct 逐字段递归（fields 是堆上 Tuple 载体）
+            (
+                RuntimeValue::Struct {
+                    fields: fx,
+                    type_id: tx,
+                    ..
+                },
+                RuntimeValue::Struct {
+                    fields: fy,
+                    type_id: ty_,
+                    ..
+                },
+            ) => {
+                if tx != ty_ {
+                    return false;
+                }
+                items_eq(fx, fy).unwrap_or(false)
             }
             _ => a == b,
         }

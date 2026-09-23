@@ -218,3 +218,132 @@ fn test_rfc011b_parse_smoke() {
     let result = parse(&tokens);
     assert!(!result.has_errors, "parse failed: {:?}", result.errors);
 }
+
+// ===== M2: Equal 接线 =====
+
+/// 规范（RFC-011b §Equal 规则1）：全字段可比的记录自动派生 `==`——
+/// 无任何接口实例化，类型检查放行且不产生 OperatorDispatch（原生路径）
+#[test]
+fn test_rfc011b_equal_auto_derived_without_instantiation() {
+    let source = r#"
+        Point: Type = {
+            x: Float,
+            y: Float,
+        }
+        main: () -> Void = {
+            a = Point(1.0, 2.0)
+            b = Point(1.0, 2.0)
+            c = a == b
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "auto-derived equality should pass: {:?}",
+        result.diagnostics
+    );
+    assert!(
+        result.operator_dispatches.is_empty(),
+        "auto-derivation is native — no dispatch entry expected"
+    );
+}
+
+/// 规范（规则2）：显式 `Equal(T, T)` + `T.equal` 方法覆盖自动派生——
+/// 产生 OperatorDispatch（ir_gen 派发方法调用），`!=` 记 negate
+#[test]
+fn test_rfc011b_equal_explicit_overrides_with_dispatch() {
+    let source = r#"
+        Vec3: Type = {
+            x: Float,
+            y: Float,
+            z: Float,
+            Equal(Vec3, Vec3),
+        }
+        Vec3.equal: (self: &Vec3, other: &Vec3) -> Bool = {
+            return self.x == other.x
+        }
+        main: () -> Void = {
+            v1 = Vec3(1.0, 2.0, 3.0)
+            v2 = Vec3(1.0, 9.9, 3.0)
+            eq = v1 == v2
+            ne = v1 != v2
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "explicit Equal implementation should pass: {:?}",
+        result.diagnostics
+    );
+    let eq_dispatch = result
+        .operator_dispatches
+        .iter()
+        .find(|d| d.method == "equal" && !d.negate)
+        .expect("== dispatch entry expected");
+    assert_eq!(eq_dispatch.type_name, "Vec3");
+    assert!(
+        result
+            .operator_dispatches
+            .iter()
+            .any(|d| d.method == "equal" && d.negate),
+        "!= should dispatch with negate"
+    );
+}
+
+/// 规范（规则3/4）：含 `&mut` 线性令牌字段的类型不可比较 → E1101（指明字段）
+#[test]
+fn test_rfc011b_linear_token_field_rejects_equality() {
+    let source = r#"
+        Token: Type = {
+            name: String,
+            lock: &mut Int,
+        }
+        main: () -> Void = {
+            a = Token("x", 1)
+            b = Token("y", 2)
+            c = a == b
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    let diag = result
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "E1101")
+        .expect("linear token field should reject equality with E1101");
+    assert!(
+        diag.message.contains("lock"),
+        "diagnostic should name the offending field: {}",
+        diag.message
+    );
+}
+
+/// 规范（规则3）：字段不可比的记录可手写 `Equal` 自定义比较（覆盖）
+#[test]
+fn test_rfc011b_custom_equal_rescues_incomparable_fields() {
+    let source = r#"
+        Callback: Type = {
+            id: Int,
+            fn_ref: (Int) -> Int,
+            Equal(Callback, Callback),
+        }
+        Callback.equal: (self: &Callback, other: &Callback) -> Bool = {
+            return self.id == other.id
+        }
+        main: () -> Void = {
+            a = Callback(1, (x) => x)
+            b = Callback(1, (x) => x)
+            c = a == b
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    // 字段 fn_ref 不可比，但显式 Equal 覆盖在结构推导之前命中 → 放行
+    assert!(
+        result.diagnostics.is_empty(),
+        "explicit Equal should rescue incomparable fields: {:?}",
+        result.diagnostics
+    );
+}
