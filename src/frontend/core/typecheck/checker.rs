@@ -1635,6 +1635,11 @@ impl TypeChecker {
                     self.declared_methods.insert(key, fn_ty.clone());
                     self.env
                         .add_fn_binding(&name, type_name.as_deref(), fn_ty.clone());
+                    // RFC-011b: 重载候选表（接口完整性检查按候选集匹配）
+                    if let Some(tn) = type_name.as_deref() {
+                        let okey = format!("{}.{}", tn, name);
+                        self.env.add_method_overload(&okey, fn_ty.clone());
+                    }
                 } else {
                     // 如果函数有 const 泛型参数，存进 PolyType.const_binders
                     let poly = if const_binders.is_empty() {
@@ -2197,10 +2202,18 @@ impl TypeChecker {
             }
         }
 
-        // 完整性检查：每个接口成员须有同名实现且 Self 替换后签名一致
+        // 完整性检查：每个接口成员须有同名实现且 Self 替换后签名一致。
+        // RFC-011b: 按重载候选集匹配——同名方法存在多个签名（实例化级重载）
+        // 时任一匹配即可；method_bindings 单值表会互相覆盖，不可用。
         let mut methods: Vec<String> = Vec::new();
         for (member, expected) in &members {
-            let Some(found) = self.env.get_method_binding(impl_type, member).cloned() else {
+            let overload_key = format!("{}.{}", impl_type, member);
+            let candidates = self
+                .env
+                .get_method_overloads(&overload_key)
+                .cloned()
+                .unwrap_or_default();
+            if candidates.is_empty() {
                 self.add_error(
                     ErrorCodeDefinition::interface_method_missing(
                         impl_type,
@@ -2211,12 +2224,22 @@ impl TypeChecker {
                     .build(),
                 );
                 return Err(());
-            };
-            // impl 签名中的 Self 是 impl 类型的别名（RFC-011a §3：impl 签名与接口
-            // 成员经 Self↦impl 类型替换后完全一致）——两侧用同一实参替换后再比较，
-            // impl 写 &Self 或 &Dog 均与接口 &Self 匹配
-            let found = TypeEnvironment::replace_type_params(&found, &["Self".to_string()], args);
-            if &found != expected {
+            }
+            // impl 签名中的 Self 是 impl 类型的别名（RFC-011a §3）——
+            // 两侧用同一实参替换后再比较，impl 写 &Self 或 &Dog 均匹配
+            let mut matched = false;
+            let mut last_found = None;
+            for candidate in &candidates {
+                let found =
+                    TypeEnvironment::replace_type_params(candidate, &["Self".to_string()], args);
+                if &found == expected {
+                    matched = true;
+                    break;
+                }
+                last_found = Some(found);
+            }
+            if !matched {
+                let found = last_found.unwrap_or_else(|| candidates[0].clone());
                 self.add_error(
                     ErrorCodeDefinition::interface_method_mismatch(
                         impl_type,
@@ -2303,7 +2326,10 @@ impl TypeChecker {
         if let Some(positions) = self.normalize_binding_positions(positions, total, span) {
             let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
             self.env
-                .add_method_binding(type_name, method_name, method_ty);
+                .add_method_binding(type_name, method_name, method_ty.clone());
+            // RFC-011b: 绑定形态同样进重载候选表（接口完整性检查按候选集匹配）
+            let okey = format!("{}.{}", type_name, method_name);
+            self.env.add_method_overload(&okey, method_ty);
         }
     }
 

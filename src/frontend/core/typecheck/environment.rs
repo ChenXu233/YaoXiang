@@ -99,6 +99,11 @@ pub struct TypeEnvironment {
     /// 方法绑定关系: "Type.method" -> FunctionType
     /// 用于存储显式绑定和 pub 自动绑定
     pub method_bindings: HashMap<String, MonoType>,
+    /// RFC-011b: 同名方法的重载候选表（"Type.method" -> 全部签名）。
+    /// `method_bindings` 是单值表，同键互相覆盖；接口实例化的完整性检查
+    /// 需要「任一候选签名匹配」语义（同一类型的同名接口多实例化共存，
+    /// 如 Grid 同时实现 Index(Grid, Int, V) 与 Index(Grid, Tuple(Int,Int), V)）。
+    pub method_overloads: HashMap<String, Vec<MonoType>>,
     /// RFC-011a: 已通过的接口实现证明（编译期，运行时擦除）
     pub implementation_proofs: Vec<ImplementationProof>,
     /// RFC-011b: 接口实现登记表（接口名 → 实例化条目，带类型实参维度）。
@@ -142,6 +147,26 @@ impl TypeEnvironment {
             module_registry: crate::frontend::module::registry::ModuleRegistry::with_std(),
             ..Self::default()
         }
+    }
+
+    /// RFC-011b: 登记方法重载候选（同签名去重）
+    pub fn add_method_overload(
+        &mut self,
+        key: &str,
+        ty: MonoType,
+    ) {
+        let list = self.method_overloads.entry(key.to_string()).or_default();
+        if !list.contains(&ty) {
+            list.push(ty);
+        }
+    }
+
+    /// RFC-011b: 查方法重载候选
+    pub fn get_method_overloads(
+        &self,
+        key: &str,
+    ) -> Option<&Vec<MonoType>> {
+        self.method_overloads.get(key)
     }
 
     /// RFC-011b: 登记接口实现（完全同参的重复条目去重）

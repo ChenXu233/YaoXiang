@@ -43,3 +43,5 @@ main: () -> Void = {
     e = a + b + a
     assert.assert(e.x == 5.0 and e.y == 8.0, "chained Point + Point")
 }
+
+main()

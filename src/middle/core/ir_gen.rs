@@ -305,6 +305,20 @@ struct CurryLayer {
     return_type: ast::Type,
 }
 
+/// RFC-011b：floor 取模（结果符号跟随除数，Python % 语义）。
+/// rem_euclid 是恒非负的欧几里得取模，不符合语言参考「乘除取模」的语义。
+fn floor_mod_float(
+    a: f64,
+    b: f64,
+) -> f64 {
+    let r = a % b;
+    if r != 0.0 && (r < 0.0) != (b < 0.0) {
+        r + b
+    } else {
+        r
+    }
+}
+
 impl AstToIrGenerator {
     /// 创建新的 IR 生成器（带类型信息）
     pub fn new_with_type_result(
@@ -2216,8 +2230,16 @@ impl AstToIrGenerator {
                         B::Add => Some(ConstValue::Int(a.wrapping_add(b))),
                         B::Sub => Some(ConstValue::Int(a.wrapping_sub(b))),
                         B::Mul => Some(ConstValue::Int(a.wrapping_mul(b))),
-                        // RFC-011b：`%` 数学取模（符号随除数）
-                        B::Mod => (b != 0).then(|| ConstValue::Int(a.rem_euclid(b))),
+                        // RFC-011b：`%` floor 取模（符号随除数；rem_euclid 是
+                        // 恒非负的欧几里得取模，不符语义，故手写调整式）
+                        B::Mod => (b != 0).then(|| {
+                            let r = a % b;
+                            if r != 0 && (r < 0) != (b < 0) {
+                                ConstValue::Int(r + b)
+                            } else {
+                                ConstValue::Int(r)
+                            }
+                        }),
                         B::Eq => Some(ConstValue::Bool(a == b)),
                         B::Neq => Some(ConstValue::Bool(a != b)),
                         B::Lt => Some(ConstValue::Bool(a < b)),
@@ -2242,8 +2264,8 @@ impl AstToIrGenerator {
                         B::Add => Some(ConstValue::Float(a + b)),
                         B::Sub => Some(ConstValue::Float(a - b)),
                         B::Mul => Some(ConstValue::Float(a * b)),
-                        // RFC-011b：`%` 数学取模（符号随除数）
-                        B::Mod => Some(ConstValue::Float(a.rem_euclid(b))),
+                        // RFC-011b：`%` floor 取模（符号随除数）
+                        B::Mod => Some(ConstValue::Float(floor_mod_float(a, b))),
                         B::Eq => Some(ConstValue::Bool(a == b)),
                         B::Neq => Some(ConstValue::Bool(a != b)),
                         B::Lt => Some(ConstValue::Bool(a < b)),
@@ -2261,7 +2283,7 @@ impl AstToIrGenerator {
                         B::Add => Some(ConstValue::Float(a as f64 + b)),
                         B::Sub => Some(ConstValue::Float(a as f64 - b)),
                         B::Mul => Some(ConstValue::Float(a as f64 * b)),
-                        B::Mod => Some(ConstValue::Float((a as f64).rem_euclid(b))),
+                        B::Mod => Some(ConstValue::Float(floor_mod_float(a as f64, b))),
                         B::Eq => Some(ConstValue::Bool(a as f64 == b)),
                         B::Neq => Some(ConstValue::Bool(a as f64 != b)),
                         B::Lt => Some(ConstValue::Bool((a as f64) < b)),
@@ -2274,7 +2296,7 @@ impl AstToIrGenerator {
                         B::Add => Some(ConstValue::Float(a + b as f64)),
                         B::Sub => Some(ConstValue::Float(a - b as f64)),
                         B::Mul => Some(ConstValue::Float(a * b as f64)),
-                        B::Mod => Some(ConstValue::Float(a.rem_euclid(b as f64))),
+                        B::Mod => Some(ConstValue::Float(floor_mod_float(a, b as f64))),
                         B::Eq => Some(ConstValue::Bool(a == b as f64)),
                         B::Neq => Some(ConstValue::Bool(a != b as f64)),
                         B::Lt => Some(ConstValue::Bool(a < b as f64)),
@@ -5231,6 +5253,26 @@ impl AstToIrGenerator {
 
         let index_reg = self.next_temp_reg();
         self.generate_expr_ir(index, index_reg, instructions, constants)?;
+
+        // RFC-011b：实现 Index 接口的用户容器——原生 LoadIndex 替换为
+        // `Call "Type.index"`（接收者居首，与 method_bindings 形态一致）
+        if let Some((type_name, method, _negate)) = self.operator_dispatches.get(span).cloned() {
+            let short_name = format!("{}.{}", type_name, method);
+            let func_name =
+                if let Some(qualified) = self.registry.short_to_qualified_map().get(&short_name) {
+                    qualified.clone()
+                } else {
+                    short_name
+                };
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String(func_name)),
+                args: vec![Operand::Local(src_reg), Operand::Local(index_reg)],
+                span: *span,
+                def: None,
+            });
+            return Ok(());
+        }
 
         instructions.push(Instruction::LoadIndex {
             dst: Operand::Local(result_reg),

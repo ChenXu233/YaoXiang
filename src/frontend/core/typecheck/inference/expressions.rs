@@ -1931,7 +1931,7 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::Index {
                 expr: container,
                 index,
-                ..
+                span: idx_span,
             } => {
                 let container_ty = self.infer_expr(container)?;
                 // 剥掉 Ref 层：`&Vec(T)` 上下标读取合法（RFC-009 §2.8 读透明，
@@ -1970,14 +1970,50 @@ impl<'a> ExpressionInferrer<'a> {
                         // 方法绑定机制消费，此处类型不收敛（既有宽松语义，非兜底洞）
                         Ok(self.solver.new_var())
                     }
-                    // 类型层不认的容器宁拒不静默：fresh var 兜底会让
-                    // `5[0]` 纸面通过（Array 此前也落此臂、元素类型从未检查）
-                    other => Err(ErrorCodeDefinition::type_mismatch(
-                        "List/Array/Dict/Tuple（可索引）",
-                        &format!("{other}"),
-                    )
-                    .at(container.span())
-                    .build()),
+                    // RFC-011b：登记表查询——实现 Index 接口的用户容器。
+                    // 命中用户实例化时记录 OperatorDispatch（ir_gen 派发
+                    // `Call "Type.index"`），native 容器不受影响（走上面快路径）。
+                    other => {
+                        use crate::frontend::core::typecheck::operator_interfaces as ops;
+                        let key_ty = self.infer_expr(index)?;
+                        let key_ty = self.solver.resolve_type(&key_ty);
+                        let (entry, remaining) = match ops::query_prefix(
+                            self.interface_impl_registry,
+                            ops::INDEX_INTERFACE,
+                            &[other.clone(), key_ty],
+                        ) {
+                            Some(hit) => hit,
+                            None => {
+                                return Err(ErrorCodeDefinition::type_mismatch(
+                                    "List/Array/Dict/Tuple（可索引）或实现 Index 接口",
+                                    &format!("{other}"),
+                                )
+                                .at(container.span())
+                                .build())
+                            }
+                        };
+                        let Some(value_ty) = remaining.first() else {
+                            return Err(ErrorCodeDefinition::type_mismatch(
+                                "Index 接口需要三实参 (Self, Key, Value)",
+                                &format!("{}", other),
+                            )
+                            .at(container.span())
+                            .build());
+                        };
+                        if !entry.native {
+                            self.operator_dispatches.push(ops::OperatorDispatch {
+                                span: *idx_span,
+                                type_name: entry.impl_type.clone(),
+                                method: entry
+                                    .methods
+                                    .first()
+                                    .cloned()
+                                    .unwrap_or_else(|| "index".to_string()),
+                                negate: false,
+                            });
+                        }
+                        Ok(value_ty.clone())
+                    }
                 }
             }
 

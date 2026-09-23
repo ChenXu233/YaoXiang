@@ -351,8 +351,14 @@ impl ConstGenericEval {
                 if *b == 0 {
                     Err(ErrorCodeDefinition::const_division_by_zero().build())
                 } else {
-                    // RFC-011b：`%` 数学取模（符号随除数）
-                    Ok(ConstValue::Int(a.rem_euclid(*b)))
+                    // RFC-011b：`%` floor 取模（符号随除数）
+                    let r = a % b;
+                    let adjusted = if r != 0 && (r < 0) != (*b < 0) {
+                        r + b
+                    } else {
+                        r
+                    };
+                    Ok(ConstValue::Int(adjusted))
                 }
             }
 

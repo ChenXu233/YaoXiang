@@ -833,9 +833,18 @@ impl Interpreter {
                     // #282：携带触发表达式文本
                     return Err(ExecutorError::division_by_zero(format!("{l} % {r}"), stack));
                 }
-                // RFC-011b：`%` 为数学取模（符号随除数），非截断余数——
-                // 语言参考优先级表早已写「乘除取模」，截断余数是违反文档的实现缺陷
-                return self.int_op(fi, dst, "%", l, r, i64::checked_rem_euclid);
+                // RFC-011b：`%` 为 floor 取模（结果符号跟随除数，Python 语义）——
+                // 语言参考优先级表早已写「乘除取模」，截断余数是违反文档的实现缺陷。
+                // 注意 rem_euclid 是恒非负的欧几里得取模（7 % -3 = 1），不符合本文档语义
+                return self.int_op(fi, dst, "%", l, r, |a, b| {
+                    let r = a.checked_rem(b)?;
+                    let adjusted = if r != 0 && (r < 0) != (b < 0) {
+                        r.checked_add(b)?
+                    } else {
+                        r
+                    };
+                    Some(adjusted)
+                });
             }
             (BinaryOp::And, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l & r),
             (BinaryOp::Or, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l | r),
@@ -863,8 +872,14 @@ impl Interpreter {
                 RuntimeValue::Float(l / r)
             }
             (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
-                // RFC-011b：数学取模，与整数臂语义一致
-                RuntimeValue::Float(l.rem_euclid(r))
+                // RFC-011b：floor 取模（符号随除数），与整数臂语义一致
+                let r0 = l % r;
+                let adjusted = if r0 != 0.0 && (r0 < 0.0) != (r < 0.0) {
+                    r0 + r
+                } else {
+                    r0
+                };
+                RuntimeValue::Float(adjusted)
             }
             // RFC-011b：Int~Float 混合算术（typecheck 层 widening 的运行时对应）
             // ——Int 侧提升为 f64 后运算，与 std.time sleep 的既有先例一致
@@ -893,10 +908,10 @@ impl Interpreter {
                 RuntimeValue::Float(l / r as f64)
             }
             (BinaryOp::Rem, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
-                RuntimeValue::Float((l as f64).rem_euclid(r))
+                RuntimeValue::Float(Self::floor_mod_float(l as f64, r))
             }
             (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Float(l.rem_euclid(r as f64))
+                RuntimeValue::Float(Self::floor_mod_float(l, r as f64))
             }
             (BinaryOp::Add, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 let mut result = (*l).to_string();
@@ -1059,6 +1074,20 @@ impl Interpreter {
 
         self.call_stack[fi].set_slot(dst.0 as usize, result);
         Ok(())
+    }
+
+    /// RFC-011b：floor 取模（结果符号跟随除数，Python % 语义）。
+    /// 注意 rem_euclid 是恒非负的欧几里得取模，不符合文档「取模」语义。
+    pub(super) fn floor_mod_float(
+        a: f64,
+        b: f64,
+    ) -> f64 {
+        let r = a % b;
+        if r != 0.0 && (r < 0.0) != (b < 0.0) {
+            r + b
+        } else {
+            r
+        }
     }
 
     /// #304：递归结构相等——vec 类容器（Tuple/List/Array）按内容逐元素比较，

@@ -1,0 +1,29 @@
+// 02-type-system/operator_index.yx
+// 覆盖: RFC-011b Index 接口——用户自定义容器下标访问
+// 验证: Int 键派发 index 方法、元组键实例化级重载、未实现类型编译期拒绝由
+//       operator_index_err 语料承担
+// 状态: ✅ 可运行
+
+use std.assert
+
+Grid: Type = {
+    cells: List(Float),
+    Index(Grid, Int, Float),
+}
+
+// 注: 实例化级重载（同类型多个 Index，如元组键）的 typecheck 共存
+// 已由单测覆盖；但同名方法在运行时层无签名分发（按名 Call，后定义
+// 覆盖前定义，RFC-011a 历史债）——多实例化的端到端待该缺口立案后开放
+Grid.index: (self: &Grid, key: &Int) -> Float = {
+    return self.cells[key]
+}
+
+main: () -> Void = {
+    g = Grid([7.0, 8.0, 9.0])
+
+    // Int 键：派发第一个 index 方法
+    assert.assert(g[1] == 8.0, "g[1] == 8.0")
+
+}
+
+main()

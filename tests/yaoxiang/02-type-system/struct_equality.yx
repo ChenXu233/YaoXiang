@@ -52,3 +52,5 @@ main: () -> Void = {
     assert.assert(list.contains(points, Point(3.0, 4.0)), "contains finds struct")
     assert.assert(!list.contains(points, Point(9.0, 9.0)), "contains rejects missing")
 }
+
+main()

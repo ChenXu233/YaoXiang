@@ -454,3 +454,95 @@ fn test_rfc011b_unregistered_add_reports_e1002() {
         diag.message
     );
 }
+
+// ===== M4: Index 接线 =====
+
+/// 规范（RFC-011b §索引接口）：实现 Index 的用户容器可下标访问，
+/// 结果类型来自登记条目的 Value 位
+#[test]
+fn test_rfc011b_user_index_typecheck() {
+    let source = r#"
+        Grid: Type = {
+            cells: List(Float),
+            Index(Grid, Int, Float),
+        }
+        Grid.index: (self: &Grid, key: &Int) -> Float = {
+            return self.cells[key]
+        }
+        main: () -> Void = {
+            g = Grid([7.0, 8.0, 9.0])
+            v = g[1]
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "user container index should pass: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(
+        result.local_var_types.get("v"),
+        Some(&crate::frontend::core::types::MonoType::Float(64)),
+        "g[1] should infer Float from Index entry's Value position"
+    );
+    let d = result
+        .operator_dispatches
+        .iter()
+        .find(|d| d.method == "index")
+        .expect("index dispatch entry expected");
+    assert_eq!(d.type_name, "Grid");
+}
+
+/// 规范（RFC-011b §实例化级重载）：同一类型的同名接口多实例化按
+/// 方法签名共存（Int 键 + 元组键）
+#[test]
+fn test_rfc011b_index_overload_coexists() {
+    let source = r#"
+        Grid: Type = {
+            cells: List(Float),
+            Index(Grid, Int, Float),
+            Index(Grid, Tuple(Int, Int), Float),
+        }
+        Grid.index: (self: &Grid, key: &Int) -> Float = {
+            return self.cells[key]
+        }
+        Grid.index: (self: &Grid, key: &Tuple(Int, Int)) -> Float = {
+            return self.cells[key.0]
+        }
+        main: () -> Void = {
+            g = Grid([7.0, 8.0, 9.0])
+            a = g[1]
+            b = g[0, 2]
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "two Index instantiations should coexist: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范：未实现 Index 的类型下标访问 → E1002（提示实现 Index 接口）
+#[test]
+fn test_rfc011b_unregistered_index_reports_e1002() {
+    let source = r#"
+        Point: Type = {
+            x: Float,
+            y: Float,
+        }
+        main: () -> Void = {
+            p = Point(1.0, 2.0)
+            v = p[0]
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1002"),
+        "unregistered index should report E1002: {:?}",
+        result.diagnostics
+    );
+}
