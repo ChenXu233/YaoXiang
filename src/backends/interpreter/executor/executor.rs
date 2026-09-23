@@ -833,7 +833,9 @@ impl Interpreter {
                     // #282：携带触发表达式文本
                     return Err(ExecutorError::division_by_zero(format!("{l} % {r}"), stack));
                 }
-                return self.int_op(fi, dst, "%", l, r, i64::checked_rem);
+                // RFC-011b：`%` 为数学取模（符号随除数），非截断余数——
+                // 语言参考优先级表早已写「乘除取模」，截断余数是违反文档的实现缺陷
+                return self.int_op(fi, dst, "%", l, r, i64::checked_rem_euclid);
             }
             (BinaryOp::And, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l & r),
             (BinaryOp::Or, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l | r),
@@ -861,7 +863,8 @@ impl Interpreter {
                 RuntimeValue::Float(l / r)
             }
             (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
-                RuntimeValue::Float(l % r)
+                // RFC-011b：数学取模，与整数臂语义一致
+                RuntimeValue::Float(l.rem_euclid(r))
             }
             (BinaryOp::Add, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 let mut result = (*l).to_string();

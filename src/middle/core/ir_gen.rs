@@ -2207,7 +2207,8 @@ impl AstToIrGenerator {
                         B::Add => Some(ConstValue::Int(a.wrapping_add(b))),
                         B::Sub => Some(ConstValue::Int(a.wrapping_sub(b))),
                         B::Mul => Some(ConstValue::Int(a.wrapping_mul(b))),
-                        B::Mod => (b != 0).then(|| ConstValue::Int(a % b)),
+                        // RFC-011b：`%` 数学取模（符号随除数）
+                        B::Mod => (b != 0).then(|| ConstValue::Int(a.rem_euclid(b))),
                         B::Eq => Some(ConstValue::Bool(a == b)),
                         B::Neq => Some(ConstValue::Bool(a != b)),
                         B::Lt => Some(ConstValue::Bool(a < b)),
@@ -2232,7 +2233,8 @@ impl AstToIrGenerator {
                         B::Add => Some(ConstValue::Float(a + b)),
                         B::Sub => Some(ConstValue::Float(a - b)),
                         B::Mul => Some(ConstValue::Float(a * b)),
-                        B::Mod => Some(ConstValue::Float(a % b)),
+                        // RFC-011b：`%` 数学取模（符号随除数）
+                        B::Mod => Some(ConstValue::Float(a.rem_euclid(b))),
                         B::Eq => Some(ConstValue::Bool(a == b)),
                         B::Neq => Some(ConstValue::Bool(a != b)),
                         B::Lt => Some(ConstValue::Bool(a < b)),

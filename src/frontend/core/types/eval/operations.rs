@@ -74,7 +74,8 @@ impl ArithOp {
             }
             (ArithOp::Mod, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
                 if *b != 0 {
-                    Some(TypeLevelValue::Int(a % b))
+                    // RFC-011b：`%` 数学取模（符号随除数）
+                    Some(TypeLevelValue::Int(a.rem_euclid(*b)))
                 } else {
                     None
                 }
