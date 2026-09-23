@@ -575,11 +575,17 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 推断二元操作符表达式类型
+    ///
+    /// RFC-011b: 算术运算双路——白名单快路径（含 Int~Float 混合 widening）
+    /// 先行，miss 后查接口实现登记表：native 条目取登记结果类型（如
+    /// `Add(Int, Float, Float)`），用户条目额外记录 OperatorDispatch 供
+    /// ir_gen 派发方法调用。都 miss 报 E1002 并提示需实现对应接口。
     pub fn infer_binary(
         &mut self,
         op: &BinOp,
         left: &MonoType,
         right: &MonoType,
+        span: crate::util::span::Span,
     ) -> Result<MonoType> {
         match op {
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
@@ -590,6 +596,12 @@ impl<'a> ExpressionInferrer<'a> {
                     Ok(l)
                 } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
                     Ok(l)
+                } else if let (MonoType::Int(_), MonoType::Float(_))
+                | (MonoType::Float(_), MonoType::Int(_)) = (&l, &r)
+                {
+                    // RFC-011b：Int~Float 混合 widening（native 登记
+                    // Add(Int, Float, Float) 的快路径），结果恒 Float
+                    Ok(MonoType::Float(64))
                 } else if l.is_string() && r.is_string() {
                     Ok(MonoType::make_string())
                 } else if l.is_list() && r.is_list() {
@@ -622,10 +634,14 @@ impl<'a> ExpressionInferrer<'a> {
                     if lv && rv {
                         return Ok(self.solver.new_var());
                     }
+                    // RFC-011b：登记表查询（用户实例化的运算符重载）
+                    if let Some(result) = self.query_operator_dispatch(op, &l, &r, span) {
+                        return Ok(result);
+                    }
                     // 类型层不认的组合宁拒不静默：fresh var 兜底会让
                     // `1 + "a"` 纸面通过、运行期错译（#271 同款纪律）
                     Err(ErrorCodeDefinition::type_mismatch(
-                        "Int/Float/String/List（两侧同型）",
+                        "Int/Float/String/List（两侧同型）或实现对应算术接口",
                         &format!("{l} 与 {r}"),
                     )
                     .build())
@@ -638,14 +654,23 @@ impl<'a> ExpressionInferrer<'a> {
                     Ok(l)
                 } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
                     Ok(l)
+                } else if let (MonoType::Int(_), MonoType::Float(_))
+                | (MonoType::Float(_), MonoType::Int(_)) = (&l, &r)
+                {
+                    // RFC-011b：混合 widening，结果恒 Float
+                    Ok(MonoType::Float(64))
                 } else if matches!(left, MonoType::TypeVar(_))
                     || matches!(right, MonoType::TypeVar(_))
                 {
                     // 未绑定类型变量延后判定（同 Add/Sub/Mul/Div 臂注释）
                     Ok(self.solver.new_var())
                 } else {
+                    // RFC-011b：登记表查询（用户实例化的 % 重载）
+                    if let Some(result) = self.query_operator_dispatch(op, &l, &r, span) {
+                        return Ok(result);
+                    }
                     Err(ErrorCodeDefinition::type_mismatch(
-                        "Int/Float（两侧同型）",
+                        "Int/Float（两侧同型）或实现 Modulo 接口",
                         &format!("{l} 与 {r}"),
                     )
                     .build())
@@ -690,6 +715,36 @@ impl<'a> ExpressionInferrer<'a> {
             }
             BinOp::Assign => Ok(MonoType::Void),
         }
+    }
+
+    /// RFC-011b: 算术运算的登记表查询。命中用户实例化时记录 OperatorDispatch
+    /// （ir_gen 据此生成 `Call "Type.method"`），native 命中直接取登记结果类型
+    /// （运算符保持原生指令，不走方法调用）。
+    fn query_operator_dispatch(
+        &mut self,
+        op: &BinOp,
+        l: &MonoType,
+        r: &MonoType,
+        span: crate::util::span::Span,
+    ) -> Option<MonoType> {
+        use crate::frontend::core::typecheck::operator_interfaces as ops;
+        let iface = ops::arithmetic_interface(op)?;
+        let (entry, remaining) =
+            ops::query_prefix(self.interface_impl_registry, iface, &[l.clone(), r.clone()])?;
+        let result_ty = remaining.first()?.clone();
+        if !entry.native {
+            self.operator_dispatches.push(ops::OperatorDispatch {
+                span,
+                type_name: entry.impl_type.clone(),
+                method: entry
+                    .methods
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "add".to_string()),
+                negate: false,
+            });
+        }
+        Some(result_ty)
     }
 
     /// RFC-011b: `==` / `!=` 的类型判定与派发记录。
@@ -1764,7 +1819,7 @@ impl<'a> ExpressionInferrer<'a> {
                 if matches!(op, BinOp::Eq | BinOp::Neq) {
                     return self.infer_equality(op, &left_ty, &right_ty, *span);
                 }
-                self.infer_binary(op, &left_ty, &right_ty)
+                self.infer_binary(op, &left_ty, &right_ty, *span)
             }
 
             // 一元运算

@@ -1,0 +1,12 @@
+// 06-compile-errors/operator_orphan_err.yx
+// RFC-011b 孤儿规则：运算符接口的 Self 位必须是声明类型本身——
+// 用户无法借自己类型体的实例化给内建类型当 Self 补运算符
+// expect: compile-error E1104
+// 验证: 实现跟随类型的定义模块，内建类型无特权也无豁免
+// 状态: ❌ 应编译失败
+
+Point: Type = {
+    x: Float,
+    y: Float,
+    Add(Int, Point, Point),
+}

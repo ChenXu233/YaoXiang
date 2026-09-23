@@ -336,6 +336,7 @@ E1001::unknown_variable(&var_name)
 | E1101 | 类型未实现接口                  |
 | E1102 | 循环控制语句出现在循环外             |
 | E1103 | 类型位置不能使用方括号              |
+| E1104 | 接口实现不在类型的定义模块            |
 <!-- code-table:E1xxx end -->
 
 > **RFC-011b 关联（2026-09-22 注）**：[RFC-011b: 运算符重载](./011b-operator-overloading.md)

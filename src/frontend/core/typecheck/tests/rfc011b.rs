@@ -347,3 +347,110 @@ fn test_rfc011b_custom_equal_rescues_incomparable_fields() {
         result.diagnostics
     );
 }
+
+// ===== M3: 算术接口接线 =====
+
+/// 规范（RFC-011b §运行时行为/向后兼容）：`1 + 2.5` 混合算术 widening——
+/// native 登记 `Add(Int, Float, Float)` 的快路径，结果 Float
+#[test]
+fn test_rfc011b_mixed_arithmetic_widens_to_float() {
+    let source = r#"
+        main: () -> Void = {
+            a = 1 + 2.5
+            b = 2.5 + 1
+            c = 7 - 2.5
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "mixed arithmetic should pass: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(
+        result.local_var_types.get("a"),
+        Some(&crate::frontend::core::types::MonoType::Float(64)),
+        "1 + 2.5 should infer Float"
+    );
+}
+
+/// 规范（RFC-011b §示例）：`Point + Point` 用户重载——派发方法调用，
+/// 结果类型来自登记条目的 O 位
+#[test]
+fn test_rfc011b_user_add_dispatch_recorded() {
+    let source = r#"
+        Point: Type = {
+            x: Float,
+            y: Float,
+            Add(Point, Point, Point),
+        }
+        Point.add: (self: &Point, other: &Point) -> Point = {
+            return Point(self.x + other.x, self.y + other.y)
+        }
+        main: () -> Void = {
+            a = Point(1.0, 2.0)
+            b = Point(3.0, 4.0)
+            c = a + b
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "user add should pass: {:?}",
+        result.diagnostics
+    );
+    let d = result
+        .operator_dispatches
+        .iter()
+        .find(|d| d.method == "add" && !d.negate)
+        .expect("add dispatch entry expected");
+    assert_eq!(d.type_name, "Point");
+}
+
+/// 规范（RFC-011b §孤儿规则）：Self 位不是声明类型本身 → E1104
+#[test]
+fn test_rfc011b_orphan_rule_rejects_e1104() {
+    let source = r#"
+        Point: Type = {
+            x: Float,
+            y: Float,
+            Add(Int, Point, Point),
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1104"),
+        "Self position must be the declaring type: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范：未登记的组合（Point 无 Add 实例化）→ E1002 且提示接口
+#[test]
+fn test_rfc011b_unregistered_add_reports_e1002() {
+    let source = r#"
+        Point: Type = {
+            x: Float,
+            y: Float,
+        }
+        main: () -> Void = {
+            a = Point(1.0, 2.0)
+            b = Point(3.0, 4.0)
+            c = a + b
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    let diag = result
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "E1002")
+        .expect("unregistered add should report E1002");
+    assert!(
+        diag.message.contains("Point"),
+        "diagnostic should mention operand types: {}",
+        diag.message
+    );
+}

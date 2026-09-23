@@ -1,0 +1,45 @@
+// 02-type-system/operator_interfaces.yx
+// 覆盖: RFC-011b 算术运算符重载与混合算术
+// 验证: 1 + 2.5 widening、Point + Point、Point * Float 缩放、泛型 T: Add 约束
+// 状态: ✅ 可运行
+
+use std.assert
+
+Point: Type = {
+    x: Float,
+    y: Float,
+    Add(Point, Point, Point),
+    Multiply(Point, Float, Point),
+}
+
+Point.add: (self: &Point, other: &Point) -> Point = {
+    return Point(self.x + other.x, self.y + other.y)
+}
+
+Point.multiply: (self: &Point, other: &Float) -> Point = {
+    return Point(self.x * other, self.y * other)
+}
+
+combine: (T: Add + Multiply) -> ((a: T, b: T, c: T) -> T) = (a, b, c) => a
+
+main: () -> Void = {
+    // 混合算术 widening：Int 提升为 Float，结果 Float
+    assert.assert(1 + 2.5 == 3.5, "1 + 2.5 == 3.5")
+    assert.assert(2.5 + 1 == 3.5, "2.5 + 1 == 3.5")
+    assert.assert(7 - 2.5 == 4.5, "7 - 2.5 == 4.5")
+    assert.assert(3 * 1.5 == 4.5, "3 * 1.5 == 4.5")
+
+    // 用户重载：Point + Point
+    a = Point(1.0, 2.0)
+    b = Point(3.0, 4.0)
+    c = a + b
+    assert.assert(c.x == 4.0 and c.y == 6.0, "Point + Point")
+
+    // 用户重载：Point * Float 缩放
+    d = a * 3.0
+    assert.assert(d.x == 3.0 and d.y == 6.0, "Point * Float scaling")
+
+    // 加法结合进表达式
+    e = a + b + a
+    assert.assert(e.x == 5.0 and e.y == 8.0, "chained Point + Point")
+}

@@ -2240,6 +2240,11 @@ impl StatementChecker {
                             Ok(l)
                         } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
                             Ok(l)
+                        } else if let (MonoType::Int(_), MonoType::Float(_))
+                        | (MonoType::Float(_), MonoType::Int(_)) = (&l, &r)
+                        {
+                            // RFC-011b：Int~Float 混合 widening，结果恒 Float
+                            Ok(MonoType::Float(64))
                         } else if l.is_string() && r.is_string() {
                             Ok(MonoType::make_string())
                         } else if l.is_list() && r.is_list() {
@@ -2255,6 +2260,33 @@ impl StatementChecker {
                                 || matches!(right_ty, MonoType::TypeVar(_))
                             {
                                 return Ok(self.solver.new_var());
+                            }
+                            // RFC-011b：登记表查询（用户实例化的运算符重载）
+                            {
+                                use crate::frontend::core::typecheck::operator_interfaces as ops;
+                                if let Some(iface) = ops::arithmetic_interface(op) {
+                                    if let Some((entry, remaining)) = ops::query_prefix(
+                                        &self.interface_impl_registry,
+                                        iface,
+                                        &[l.clone(), r.clone()],
+                                    ) {
+                                        if !entry.native {
+                                            self.operator_dispatches.push(ops::OperatorDispatch {
+                                                span: *span,
+                                                type_name: entry.impl_type.clone(),
+                                                method: entry
+                                                    .methods
+                                                    .first()
+                                                    .cloned()
+                                                    .unwrap_or_else(|| "add".to_string()),
+                                                negate: false,
+                                            });
+                                        }
+                                        if let Some(result_ty) = remaining.first() {
+                                            return Ok(result_ty.clone());
+                                        }
+                                    }
+                                }
                             }
                             // 与 infer_binary 同款纪律：类型层不认的组合宁拒不
                             // 静默，fresh var 兜底会把错译推迟到运行时 E6007

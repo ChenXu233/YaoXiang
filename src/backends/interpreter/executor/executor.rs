@@ -866,6 +866,38 @@ impl Interpreter {
                 // RFC-011b：数学取模，与整数臂语义一致
                 RuntimeValue::Float(l.rem_euclid(r))
             }
+            // RFC-011b：Int~Float 混合算术（typecheck 层 widening 的运行时对应）
+            // ——Int 侧提升为 f64 后运算，与 std.time sleep 的既有先例一致
+            (BinaryOp::Add, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l as f64 + r)
+            }
+            (BinaryOp::Add, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Float(l + r as f64)
+            }
+            (BinaryOp::Sub, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l as f64 - r)
+            }
+            (BinaryOp::Sub, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Float(l - r as f64)
+            }
+            (BinaryOp::Mul, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l as f64 * r)
+            }
+            (BinaryOp::Mul, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Float(l * r as f64)
+            }
+            (BinaryOp::Div, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l as f64 / r)
+            }
+            (BinaryOp::Div, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Float(l / r as f64)
+            }
+            (BinaryOp::Rem, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float((l as f64).rem_euclid(r))
+            }
+            (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Float(l.rem_euclid(r as f64))
+            }
             (BinaryOp::Add, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 let mut result = (*l).to_string();
                 result.push_str(&r);

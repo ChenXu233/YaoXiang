@@ -97,4 +97,8 @@ define_codes!(E1XXX, {
     // 注解处无诊断，错误拖到使用处才爆（且报的是「不可索引」这种无关信息）。
     // 本码专给这个误解，直接给出正确写法。
     ("E1103", TypeCheck, true, bracket_in_type_position(name: &str) => .param("name", name)),
+    // E1104 接口实现写在了非定义模块（RFC-011b 孤儿规则：实现跟随类型的
+    // 定义模块——`Int` 的定义在核心，只有核心能给 `Int` 登记运算符接口；
+    // 用户只能为本模块定义的类型登记）
+    ("E1104", TypeCheck, false, interface_impl_outside_defining_module(type_: &str, interface: &str) => .param("type", type_) .param("interface", interface)),
 });

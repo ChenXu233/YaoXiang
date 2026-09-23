@@ -2144,6 +2144,37 @@ impl TypeChecker {
         args: &[MonoType],
         span: crate::util::span::Span,
     ) -> Result<(), ()> {
+        // RFC-011b 孤儿规则：实现跟随类型的定义模块。类型体内实例化的
+        // impl_type 恒为外层类型，执法落点因此在 Self 位——运算符接口
+        // `Add(X, R, O)` 的 X 必须与声明类型名义相同，用户无法借自己
+        // 类型体的实例化给内建类型（Int/List 等）当 Self 补运算符。
+        // （native 登记走 register_native_entries，不经此检查。）
+        if super::operator_interfaces::spec(interface_name).is_some() {
+            let self_head = args.first().and_then(|a| match a {
+                MonoType::Struct(s) => Some(s.name.clone()),
+                MonoType::TypeRef(n) => Some(n.clone()),
+                MonoType::Generic { name, .. } => Some(name.clone()),
+                // 内建标量经 from_builtin_name 物化（Add(Int,..) 的 Int → Int(64)）
+                MonoType::Int(_) => Some("Int".to_string()),
+                MonoType::Float(_) => Some("Float".to_string()),
+                MonoType::Bool => Some("Bool".to_string()),
+                MonoType::Char => Some("Char".to_string()),
+                MonoType::Void => Some("Void".to_string()),
+                _ => None,
+            });
+            if self_head.as_deref() != Some(impl_type) {
+                let shown = self_head.unwrap_or_else(|| "?".to_string());
+                self.add_error(
+                    ErrorCodeDefinition::interface_impl_outside_defining_module(
+                        &shown,
+                        interface_name,
+                    )
+                    .at(span)
+                    .build(),
+                );
+                return Err(());
+            }
+        }
         let mut visiting = Vec::new();
         let members = self.expand_interface_members(interface_name, args, &mut visiting, span)?;
 
