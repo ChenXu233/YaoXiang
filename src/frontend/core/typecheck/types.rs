@@ -37,6 +37,9 @@ pub struct TypeCheckResult {
     pub existential_coercions: Vec<super::inference::existential::ExistentialCoercion>,
     /// RFC-011a §5.3 实现证明（编译期擦除；阶段3 ir_gen 由此得每接口的变体集合）
     pub implementation_proofs: Vec<super::environment::ImplementationProof>,
+    /// RFC-011b 接口实现登记表（接口名 → 带类型实参的实例化条目）。
+    /// 运算符查询与约束求解的唯一判据；镜像供 middle 端/LSP 消费。
+    pub interface_impl_registry: HashMap<String, Vec<super::environment::InterfaceImplEntry>>,
     /// 用户模块命名空间别名表（别名 → 模块限定键）。
     /// 模块解析归 typecheck 所有：由整体导入（`use lib` / `use lib as l`）登记，IR 生成直接消费。
     pub module_namespaces: HashMap<String, String>,

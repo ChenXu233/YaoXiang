@@ -41,6 +41,24 @@ pub struct ImplementationProof {
     pub methods: Vec<String>,
 }
 
+/// RFC-011b: 接口实现登记表条目。
+///
+/// `ImplementationProof` 不带类型实参，无法区分同一接口的不同实例化
+/// （`Add(Int, Float, Float)` 与 `Add(Point, Point, Point)`）；运算符查询
+/// 与约束求解需要实参维度，故另立此表，与 proof 在实例化检查通过时
+/// 同步写入（check_interface_instantiation）。
+#[derive(Debug, Clone)]
+pub struct InterfaceImplEntry {
+    /// 实现类型头名（用户条目如 "Point"；native 条目为 "Int" 等基本类型名）
+    pub impl_type: String,
+    /// 接口类型实参，与接口形参表一一对应（如 [Point, Point, Point]）
+    pub args: Vec<MonoType>,
+    /// 已验证的方法名
+    pub methods: Vec<String>,
+    /// 核心默认登记：原生指令路径，无用户方法绑定（运算符代码生成不走方法调用）
+    pub native: bool,
+}
+
 /// 类型环境
 ///
 /// 存储类型检查过程中的所有状态信息：
@@ -83,6 +101,9 @@ pub struct TypeEnvironment {
     pub method_bindings: HashMap<String, MonoType>,
     /// RFC-011a: 已通过的接口实现证明（编译期，运行时擦除）
     pub implementation_proofs: Vec<ImplementationProof>,
+    /// RFC-011b: 接口实现登记表（接口名 → 实例化条目，带类型实参维度）。
+    /// 运算符查询与约束求解的唯一判据；不经普通名字解析（§名字与登记）。
+    pub interface_impl_registry: HashMap<String, Vec<InterfaceImplEntry>>,
     /// 模块名称
     pub module_name: String,
     /// 重载候选存储: 函数名 -> 多个重载版本
@@ -120,6 +141,24 @@ impl TypeEnvironment {
             trait_table: crate::frontend::core::types::TraitTable::default(),
             module_registry: crate::frontend::module::registry::ModuleRegistry::with_std(),
             ..Self::default()
+        }
+    }
+
+    /// RFC-011b: 登记接口实现（完全同参的重复条目去重）
+    pub fn add_interface_impl(
+        &mut self,
+        interface_name: &str,
+        entry: InterfaceImplEntry,
+    ) {
+        let list = self
+            .interface_impl_registry
+            .entry(interface_name.to_string())
+            .or_default();
+        if !list
+            .iter()
+            .any(|e| e.impl_type == entry.impl_type && e.args == entry.args)
+        {
+            list.push(entry);
         }
     }
 

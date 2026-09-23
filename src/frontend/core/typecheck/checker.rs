@@ -151,6 +151,9 @@ impl TypeChecker {
         let mut env = TypeEnvironment::new_with_module(module_name.to_string());
         add_builtin_types(&mut env);
         add_std_traits(&mut env);
+        // RFC-011b: 运算符接口声明（接口构造器形态）+ 核心默认登记
+        super::operator_interfaces::register_interface_defs(&mut env);
+        super::operator_interfaces::register_native_entries(&mut env);
         add_native_function_types(&mut env);
         Self::register_builtin_container_defs(&mut env);
 
@@ -184,6 +187,14 @@ impl TypeChecker {
     /// LSP/阶段 3 动态分发的类型收集据此枚举某接口的全部实现类型。
     pub fn implementation_proofs(&self) -> &[ImplementationProof] {
         &self.env.implementation_proofs
+    }
+
+    /// RFC-011b: 接口实现登记表（带类型实参维度）。
+    /// 运算符查询与约束求解的唯一判据。
+    pub fn interface_impl_registry(
+        &self
+    ) -> &HashMap<String, Vec<super::environment::InterfaceImplEntry>> {
+        &self.env.interface_impl_registry
     }
 
     /// 注册预定义的 const 函数
@@ -1035,6 +1046,7 @@ impl TypeChecker {
             instantiation_requests,
             existential_coercions,
             implementation_proofs: self.env.implementation_proofs.clone(),
+            interface_impl_registry: self.env.interface_impl_registry.clone(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
             warnings: import_warnings,
         }
@@ -1371,8 +1383,14 @@ impl TypeChecker {
                     None => (Vec::new(), Vec::new()),
                 };
                 let method_type = type_annotation.as_ref();
-                let generic_params =
-                    classify_generic_params(signature_params, &|name| self.env.has_trait(name));
+                let generic_params = classify_generic_params(
+                    signature_params,
+                    // RFC-011b: 运算符接口名也是合法约束名（T: Add）——
+                    // 约束求解在实例化点查接口实现登记表
+                    &|name| {
+                        self.env.has_trait(name) || super::operator_interfaces::spec(name).is_some()
+                    },
+                );
                 // 处理统一函数语法
                 // 方法绑定使用 method_type，普通函数使用 type_annotation
                 let (param_types, return_type) = if let Some(meth_ty) = method_type {
@@ -2011,6 +2029,28 @@ impl TypeChecker {
         }
         visiting.push(interface_name.to_string());
 
+        // RFC-011b: 七个运算符接口走编译器侧规格（成员签名模板），
+        // 不依赖用户源码声明体；其余接口照旧从 generic_type_defs + 声明体展开
+        if let Some(spec) = super::operator_interfaces::spec(interface_name) {
+            let param_names: Vec<String> = spec.params.iter().map(|s| s.to_string()).collect();
+            if param_names.len() != args.len() {
+                self.add_error(
+                    ErrorCodeDefinition::interface_arity_mismatch(
+                        interface_name,
+                        param_names.len(),
+                        args.len(),
+                    )
+                    .at(span)
+                    .build(),
+                );
+                return Err(());
+            }
+            let sig = super::operator_interfaces::member_signature(spec);
+            let substituted = TypeEnvironment::replace_type_params(&sig, &param_names, args);
+            visiting.pop();
+            return Ok(vec![(spec.method.to_string(), substituted)]);
+        }
+
         let Some(param_names) = self
             .env
             .generic_type_defs
@@ -2157,8 +2197,20 @@ impl TypeChecker {
         self.env.implementation_proofs.push(ImplementationProof {
             type_name: impl_type.to_string(),
             interface_name: interface_name.to_string(),
-            methods,
+            methods: methods.clone(),
         });
+
+        // RFC-011b: 写入接口实现登记表（带类型实参维度）——
+        // 运算符查询与约束求解的唯一判据，与 proof 同步落表
+        self.env.add_interface_impl(
+            interface_name,
+            super::environment::InterfaceImplEntry {
+                impl_type: impl_type.to_string(),
+                args: args.to_vec(),
+                methods,
+                native: false,
+            },
+        );
 
         // 接口名追加进实现类型的 interfaces 面（LSP/阶段3 类型收集消费）。
         // types 与 vars 必须同步：构造器调用（Dog("Rex")）返回的是 vars 里的
@@ -2399,8 +2451,12 @@ impl TypeChecker {
         signature_params: &[Param],
         span: crate::util::span::Span,
     ) {
-        let generic_params =
-            classify_generic_params(signature_params, &|name| self.env.has_trait(name));
+        let generic_params = classify_generic_params(
+            signature_params,
+            // RFC-011b: 运算符接口名也是合法约束名（T: Add）——
+            // 约束求解在实例化点查接口实现登记表
+            &|name| self.env.has_trait(name) || super::operator_interfaces::spec(name).is_some(),
+        );
         let param_names: Vec<String> = generic_params.iter().map(|p| p.name.clone()).collect();
         // RFC-010 Easter Egg: Type: Type = Type
         // 当用户尝试定义 Type 自身时，触发彩蛋

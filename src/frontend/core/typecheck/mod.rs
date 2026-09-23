@@ -25,6 +25,9 @@ pub mod semantic_db;
 // 类型环境
 pub mod environment;
 
+// RFC-011b: 运算符接口与实现登记表
+pub mod operator_interfaces;
+
 // 类型检查器
 pub mod checker;
 
