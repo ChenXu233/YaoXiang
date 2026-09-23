@@ -447,6 +447,11 @@ clone: (T: Clone)(value: T) -> T = value.clone()
 
 ### 5.2 多重约束
 
+> **约束的求解来源（RFC-011b）**：运算符约束名（`Add` / `Subtract` / `Multiply` /
+> `Divide` / `Modulo` / `Equal` / `Index`）的求解 = 查接口实现登记表——
+> `T: Add` ≜ 已登记 `Add(T, T, T)` 实例化；`Equal` 另有结构推导（全字段可比的
+> 记录自动可比）。`Zero` / `One` / `PartialOrd` 等名字尚未有定义来源，属悬空约束名。
+
 ```yaoxiang
 // 多重约束语法
 combine: (T: Clone + Add)(a: T, b: T) -> T = {

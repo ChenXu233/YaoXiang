@@ -270,6 +270,13 @@ MemberAccess::= Expr '.' Identifier
 IndexAccess ::= Expr '[' Expr ']'
 ```
 
+> **三层语义（RFC-011b）**：`a[i]` 按 `a` 的类型分流——① 内建容器
+> （List/Vec/Array/Dict/Tuple）走原生索引指令（快路径）；② 实现了
+> `Index` 接口的用户类型派发到其 `index` 方法（类型体内 `Index(Grid, Int, Float)`
+> 实例化 + `Grid.index` 方法）；③ RFC-004 的 `f[0]` 位置绑定仅存在于绑定
+> 声明，不走本文法。多维索引 `a[0, 1]` 的键按元组打包。未实现 `Index` 的
+> 其他类型在类型层拒绝。
+
 ### 2.6 类型转换
 
 ```

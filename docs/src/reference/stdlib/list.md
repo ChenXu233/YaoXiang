@@ -435,7 +435,7 @@ contains: (A: Type) -> (list: &Vec(A), item: A) -> Bool
 
 <!-- stdlib:sig:list.contains end -->
 
-`item` 是否在列表中（按值相等比较）。
+`item` 是否在列表中（按值相等比较；元素类型须支持 `==`——基础类型原生支持，记录类型由 RFC-011b 的 `Equal` 自动派生或显式实例化提供）。
 
 返回：存在为 `true`；参数不是列表时返回 `false`。
 
