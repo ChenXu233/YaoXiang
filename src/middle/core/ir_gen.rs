@@ -5129,16 +5129,122 @@ impl AstToIrGenerator {
 
         for arm in arms {
             // 检查模式是否匹配
-            let needs_condition = matches!(arm.pattern, ast::Pattern::Wildcard);
+            let needs_condition = matches!(
+                arm.pattern,
+                ast::Pattern::Wildcard | ast::Pattern::Identifier(_)
+            );
+
+            // RFC-010b: Identifier 兜底臂——无条件匹配并绑定 scrutinee
+            if let ast::Pattern::Identifier(bn) = &arm.pattern {
+                self.register_local(bn, scrutinee_reg);
+            }
 
             let jump_to_next_idx = if needs_condition {
-                // Wildcard: 始终匹配，不需条件跳转
+                // Wildcard / Identifier: 始终匹配，不需条件跳转
                 None
             } else {
                 // 生成条件: 比较 scrutinee 和模式值
                 let cmp_reg = self.next_temp_reg();
 
                 match &arm.pattern {
+                    ast::Pattern::Union {
+                        variant, pattern, ..
+                    } => {
+                        // RFC-010b: 变体解构——VariantTag 取声明序 tag 比较，
+                        // 命中后 VariantPayload 取载荷绑定进臂作用域
+                        let Some(sum_name) = self.match_scrutinee_sum_type(match_expr) else {
+                            return Err(ErrorCodeDefinition::ir_unsupported_pattern(
+                                &pattern_label(&arm.pattern),
+                            )
+                            .at(arm.span)
+                            .build());
+                        };
+                        let Some(variants) = self.sum_type_variants.get(&sum_name) else {
+                            return Err(ErrorCodeDefinition::ir_unsupported_pattern(
+                                &pattern_label(&arm.pattern),
+                            )
+                            .at(arm.span)
+                            .build());
+                        };
+                        let Some(variant_index) = variants.iter().position(|v| v == variant) else {
+                            return Err(ErrorCodeDefinition::ir_unsupported_pattern(variant)
+                                .at(arm.span)
+                                .build());
+                        };
+                        let tag_reg = self.next_temp_reg();
+                        instructions.push(Instruction::VariantTag {
+                            dst: Operand::Local(tag_reg),
+                            obj: Operand::Local(scrutinee_reg),
+                            group: sum_name.clone(),
+                            span: self.cur_span,
+                        });
+                        let idx_reg = self.next_temp_reg();
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(idx_reg),
+                            src: Operand::Const(ConstValue::Int(variant_index as i128)),
+                            span: self.cur_span,
+                        });
+                        // 比较: tag == variant_index
+                        let eq_reg = self.next_temp_reg();
+                        instructions.push(Instruction::Eq {
+                            dst: Operand::Local(eq_reg),
+                            lhs: Operand::Local(tag_reg),
+                            rhs: Operand::Local(idx_reg),
+                            span: self.cur_span,
+                        });
+                        // 如果不相等，跳到下一个 arm
+                        let jmp_idx = instructions.len();
+                        instructions.push(Instruction::JmpIfNot {
+                            cond: Operand::Local(eq_reg),
+                            target: 0, // 占位符
+                            span: self.cur_span,
+                        });
+
+                        // 载荷绑定：Identifier 载荷 → 局部名
+                        if let ast::Pattern::Identifier(bn) =
+                            pattern.as_deref().unwrap_or(&ast::Pattern::Wildcard)
+                        {
+                            let payload_reg = self.next_temp_reg();
+                            instructions.push(Instruction::VariantPayload {
+                                dst: Operand::Local(payload_reg),
+                                obj: Operand::Local(scrutinee_reg),
+                                group: sum_name.clone(),
+                                span: self.cur_span,
+                            });
+                            self.register_local(bn, payload_reg);
+                        }
+
+                        // 交由下方通用的 body 生成与跳转修复处理：
+                        // 借 Union 臂不做 Literal 比较，直接把 jump 标记传下去
+                        let arm_result_reg = self.next_temp_reg();
+                        self.generate_block_ir(
+                            &arm.body,
+                            Some(arm_result_reg),
+                            instructions,
+                            constants,
+                        )?;
+                        instructions.push(Instruction::Move {
+                            dst: Operand::Local(result_reg),
+                            src: Operand::Local(arm_result_reg),
+                            span: self.cur_span,
+                        });
+                        let jmp_end_idx = instructions.len();
+                        instructions.push(Instruction::Jmp {
+                            target: 0,
+                            span: self.cur_span,
+                        });
+                        jumps_to_end.push(jmp_end_idx);
+                        let current_pos = instructions.len();
+                        if let Instruction::JmpIfNot {
+                            cond: _,
+                            ref mut target,
+                            span: _,
+                        } = instructions[jmp_idx]
+                        {
+                            *target = current_pos;
+                        }
+                        continue;
+                    }
                     ast::Pattern::Literal(lit) => {
                         let const_val = match lit {
                             ast::Literal::Int(n) => ConstValue::Int(*n),
@@ -6652,6 +6758,22 @@ impl AstToIrGenerator {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// RFC-010b: scrutinee 是否为已登记和类型（返回类型名）
+    fn match_scrutinee_sum_type(
+        &self,
+        scrutinee: &Expr,
+    ) -> Option<String> {
+        let ty = self.get_expr_mono_type(scrutinee)?;
+        match ty {
+            crate::frontend::core::types::MonoType::Generic { name, .. }
+                if self.sum_type_variants.contains_key(&name) =>
+            {
+                Some(name)
+            }
+            _ => None,
+        }
+    }
+
     /// RFC-010: 变体构造形态检测——`Result(Int, String).ok(5)` / `Color.red()`。
     /// 与 typecheck 的变体构造识别同一 AST 形态；span 键跨系统不可靠（两端
     /// 对 Call 节点 span 的语义不同），故就地检测并从 sum_type_variants 取变体序。

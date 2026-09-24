@@ -854,7 +854,25 @@ impl<'a> ParserState<'a> {
         while !self.at(&TokenKind::RBrace) && !self.at_end() {
             // Parse pattern - use BP_LAMBDA + 1 to prevent => from being parsed as lambda
             // Lambda binding power is 11, so we use 12 to stop before =>
-            let pattern = self.parse_expression(12)?;
+            //
+            // RFC-010b: 变体模式 `ok(v)` 的调用结合力（BP_CALL=9）低于 12，
+            // parse_expression(12) 会把 `ok` 停成裸 Var、`(` 成意外 token——
+            // 特判 Var 后跟 LParen 的形态，手动走 parse_call 重组调用
+            //（expr_to_pattern 随后把它转成 Union 变体模式）。
+            let pattern_expr = {
+                let mut pattern_expr_opt: Option<Expr> = None;
+                let probe = self.parse_expression(12)?;
+                if self.at(&TokenKind::LParen) && matches!(&probe, Expr::Var(_, _)) {
+                    if let Some(called) = self.parse_call(probe.clone(), 0) {
+                        pattern_expr_opt = Some(called);
+                    }
+                }
+                match pattern_expr_opt {
+                    Some(e) => e,
+                    None => probe,
+                }
+            };
+            let pattern = self.expr_to_pattern(&pattern_expr);
 
             self.expect(&TokenKind::FatArrow);
 
@@ -874,7 +892,7 @@ impl<'a> ParserState<'a> {
             };
 
             arms.push(MatchArm {
-                pattern: self.expr_to_pattern(&pattern),
+                pattern,
                 body,
                 span: self.span(),
             });
