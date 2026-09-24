@@ -4,7 +4,7 @@ This document defines the type system specification for the YaoXiang programming
 
 ---
 
-## Chapter 0: Theoretical Foundation
+## Chapter 0: Theoretical Foundations
 
 ### 0.1 Curry-Howard Isomorphism
 
@@ -45,7 +45,7 @@ The concrete manifestations of the Curry-Howard isomorphism in YaoXiang:
 
 ## Chapter 1: Type Classification
 
-### 1.1 Type Expressions
+### 1.1 Type Expression
 
 ```
 TypeExpr    ::= PrimitiveType
@@ -100,7 +100,7 @@ Width-specified integers: `Int8`, `Int16`, `Int32`, `Int64`, `Int128` Width-spec
 
 ## Chapter 3: Composite Types
 
-### 3.1 Record Types
+### 3.1 Record Type
 
 **Unified syntax**: `Name: Type = { field1: Type1, field2: Type2, ... }`
 
@@ -112,16 +112,16 @@ Field       ::= Identifier ':' TypeExpr
 ```
 
 ```yaoxiang
-// Simple record type
+// 简单记录类型
 Point: Type = { x: Float, y: Float }
 
-// Empty record type
+// 空记录类型
 Empty: Type = {}
 
-// Generic record type
+// 带泛型的记录类型
 Pair: (T: Type) -> Type = { first: T, second: T }
 
-// Record type implementing interfaces
+// 实现接口的记录类型
 Point: Type = {
     x: Float,
     y: Float,
@@ -149,7 +149,7 @@ Point: Type = {
     y: Float = 0
 }
 
-// Usage
+// 使用
 Point()           // -> Point(x=0, y=0)
 Point(x=1)       // -> Point(x=1, y=0)
 Point(x=1, y=2) // -> Point(x=1, y=2)
@@ -170,7 +170,7 @@ Point2()          // Error
 - `field: Type = expression` -> has default value, optional during construction
 - `field: Type` -> no default value, required during construction
 
-#### 3.1.2 Builtin Bindings
+#### 3.1.2 Built-in Bindings
 
 Methods can be bound directly within a type definition body:
 
@@ -182,9 +182,9 @@ Point: Type = {
     y: Float = 0,
     distance = distance[0]    // Bind to position 0
 }
-// Call: p1.distance(p2) -> distance(p1, p2)
+// 调用：p1.distance(p2) -> distance(p1, p2)
 
-// Method 2: Anonymous function + position binding
+// 方式2：匿名函数 + 位置绑定
 Point: Type = {
     x: Float = 0,
     y: Float = 0,
@@ -194,11 +194,11 @@ Point: Type = {
         return (dx * dx + dy * dy).sqrt()
     })
 }
-// Syntax: ((params) => body)[position]
-// Call: p1.distance(p2) -> distance(p1, p2)
+// 语法：((params) => body)[position]
+// 调用：p1.distance(p2) -> distance(p1, p2)
 ```
 
-### 3.2 Interface Types
+### 3.2 Interface Type
 
 ```
 InterfaceType ::= '{' FnField (',' FnField)* ','?
@@ -209,7 +209,7 @@ FnType        ::= '(' ParamTypes? ')' '->' TypeExpr
 **Syntax**: Interfaces are record types with all fields being function types
 
 ```yaoxiang
-// Interface definition
+// 接口定义
 Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
@@ -219,7 +219,7 @@ Serializable: Type = {
     serialize: () -> String
 }
 
-// Empty interface
+// 空接口
 EmptyInterface: Type = {}
 ```
 
@@ -240,13 +240,13 @@ Point: Type = {
 ```yaoxiang
 // Direct assignment (concrete type determined at compile time -> zero-overhead call)
 d: Drawable = Circle(1)
-d.draw(screen)        // After compilation: direct call to circle_draw, no vtable
+d.draw(screen)        // 编译后：直接调用 circle_draw，无 vtable
 
 // Function return value (concrete type unknown at compile time -> vtable call)
 d: Drawable = get_shape()
 d.draw(screen)        // Method lookup through vtable
 
-// Interface as function parameter
+// 接口作为函数参数
 process: (d: Drawable) -> Void = d.draw(screen)
 ```
 
@@ -260,14 +260,14 @@ process: (d: Drawable) -> Void = d.draw(screen)
 
 **Coherence and Orphan Rules (Not applicable, closing note)**: YaoXiang's interfaces are structural types (interface = record with all fields being function types), not nominal traits—there is no "who can implement what for whom" issue across crates/modules, and Rust-style orphan rules and coherence checks have no subjects to apply to (resolution recorded in RFC-011 §2.1). The corresponding guarantee in the structural world is **duplicate implementation rejection**: redefining the same method signature on a type results in a compilation error (RFC-011a §3, overriding prohibited; overloading allowed).
 
-### 3.4 Tuple Types
+### 3.4 Tuple Type
 
 ```
 TupleType   ::= '(' TypeList? ')'
 TypeList    ::= TypeExpr (',' TypeExpr)* ','?
 ```
 
-### 3.5 Function Types
+### 3.5 Function Type
 
 ```
 FnType      ::= '(' ParamList? ')' '->' TypeExpr
@@ -330,7 +330,7 @@ map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R)) = ...
 ### 4.2 Generic Type Definitions
 
 ```yaoxiang
-// Basic generic type
+// 基础泛型类型
 Option: (T: Type) -> Type = {
     some: (T) -> Option(T),
     none: () -> Option(T)
@@ -354,7 +354,7 @@ List: (T: Type) -> Type = {
 The field list of a generic type definition **automatically generates constructors**: each field corresponds to a construction parameter, field name is the parameter name; fields with default values can be omitted during construction, fields without defaults are required. Function type fields (methods) do not generate construction parameters.
 
 ```yaoxiang
-// Type definition
+// 类型定义
 Container: (T: Type) -> Type = {
     value: T,        // No default -> construction parameter required
     extra: T,
@@ -374,7 +374,7 @@ c5 = Container(Int)()             // Empty construction: fields take default/zer
 
 // Field default value -> construction parameter can be omitted
 Point: (T: Type) -> Type = { x: T = 0, y: T = 0 }
-p  = Point(1.5, 2.5)              // T = Float, x←1.5, y←2.5
+p  = Point(1.5, 2.5)              // T = Float，x←1.5, y←2.5
 p2 = Point(Int)()                 // x=0, y=0
 ```
 
@@ -390,9 +390,9 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows),
 }
 
-m: Matrix(Int, 3, 4)              // Type position: one layer of type construction
-m2 = Matrix(Int, 3, 4)(data=[[1,2,3,4],[5,6,7,8],[9,10,11,12]])  // Two layers: type + construction parameters
-m3 = Matrix(Int, 3, 4)()          // Empty construction (RFC-011 §9.3 pattern, data assigned later)
+m: Matrix(Int, 3, 4)              // 类型位置：一层类型构造
+m2 = Matrix(Int, 3, 4)(data=[[1,2,3,4],[5,6,7,8],[9,10,11,12]])  // 两层：类型 + 构造参数
+m3 = Matrix(Int, 3, 4)()          // 空构造（RFC-011 §9.3 模式，数据事后赋值）
 
 Matrix(42)    // ❌ Position 0: T←42 doesn't match (42 is not a type); Position 1: Rows←42 matches;
               //    Position 2: Cols missing -> Report first error: T expects Type, found 42
@@ -413,7 +413,7 @@ ConstrainedType ::= '(' Identifier ':' TypeBound ')' TypeExpr
 ```
 
 ```yaoxiang
-// Interface type definition (as constraint)
+// 接口类型定义（作为约束）
 Clone: Type = {
     clone: () -> Clone
 }
@@ -444,7 +444,7 @@ sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T) = {
 ### 5.3 Function Type Constraints
 
 ```yaoxiang
-// Higher-order function constraints
+// 高阶函数约束
 call_twice: (T: Type, F: () -> T)(f: F) -> (T, T) = (f(), f())
 
 compose: (A: Type, B: Type, C: Type, F: (A) -> B, G: (B) -> C)(a: A, f: F, g: G) -> C = g(f(a))
@@ -461,7 +461,7 @@ AssociatedType ::= Identifier ':' TypeExpr
 ```
 
 ```yaoxiang
-// Iterator trait (using record type syntax)
+// Iterator trait（使用记录类型语法）
 Iterator: (T: Type) -> Type = {
     Item: T,                    // Associated type
     next: () -> Option(T),
@@ -480,7 +480,7 @@ collect: (T: Type, I: Iterator(T))(iter: I) -> List(T) = {
 }
 ```
 
-### 6.2 Generic Associated Types (GAT)
+### 6.2 Generic Associated Type (GAT)
 
 ```yaoxiang
 // More complex associated types
@@ -543,7 +543,7 @@ factorial: (N: Int) -> (k: N) -> Int = {
 ### 7.2 Compile-Time Constant Arrays
 
 ```yaoxiang
-// Matrix type usage
+// 矩阵类型使用
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     data: Array(Array(T, Cols), Rows)
 }
@@ -565,7 +565,7 @@ IfType        ::= 'If' '(' BoolExpr ',' TypeExpr ',' TypeExpr ')'
 ```
 
 ```yaoxiang
-// Type-level If
+// 类型级 If
 If: (C: Bool, T: Type, E: Type) -> Type = match C {
     True => T,
     False => E
@@ -575,16 +575,16 @@ If: (C: Bool, T: Type, E: Type) -> Type = match C {
 NonEmpty: (T: Type) -> Type = If(T != Void, T, Never)
 // IsTrue bridging with Assert refinement types (details in §8.3)
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      // ⊤, program continues
-    false => Never,    // ⊥, divergence/compile error
+    true => Void,      // ⊤，程序继续
+    false => Never,    // ⊥，发散/编译错误
 }
 Assert: (cond: Bool) -> Type = IsTrue(cond)
 ```
 
-### 8.2 Type Families
+### 8.2 Type Family
 
 ```yaoxiang
-// Compile-time type conversion
+// 编译期类型转换
 AsString: (T: Type) -> Type = match T {
     Int => String,
     Float => String,
@@ -608,12 +608,12 @@ AsString: (T: Type) -> Type = match T {
 
 **Flow-sensitive assumption set Γ**:
 
-The compiler maintains a set of known propositions at each control flow point:
+The compiler maintains a set of known propositions for each control flow point:
 
 ```yaoxiang
 assert(x > 0)       // Γ = {x > 0}
-y = x + 1           // Γ = {x > 0, y > 1}  ← SP propagation
-mut x = x - 5       // Γ = {}  ← mut kill set: old assumptions invalidated
+y = x + 1           // Γ = {x > 0, y > 1}  ← SP 传播
+mut x = x - 5       // Γ = {}  ← mut kill set：旧假设失效
 ```
 
 After `mut` variable assignment, all assumptions involving that variable are removed (kill set). When branches merge, Γ takes the intersection of each branch.
@@ -710,7 +710,7 @@ sum: (arr: Array(Float)) -> Float = {
     return simd_sum_float(arr.data, arr.length)
 }
 
-// Generic implementation
+// 通用实现
 sum: (T: Add)(arr: Array(T)) -> T = {
     result = Zero::zero()
     for item in arr {
@@ -771,9 +771,9 @@ view2 = view     // Dup: copy handle, both valid
 print(view.x)    // usable
 print(view2.x)   // usable
 
-// &mut T: Linear, non-copyable
+// &mut T: Linear，不可复制
 mut_ref: &mut Point = &mut p
-// r2 = mut_ref  // ❌ &mut T is not Dup, cannot be copied
+// r2 = mut_ref  // ❌ &mut T 不是 Dup，不能复制
 ```
 
 ### 11.3 Clone (Explicit Deep Copy) and Its Relationship with Dup
@@ -781,12 +781,12 @@ mut_ref: &mut Point = &mut p
 **Clone** is an explicit deep copy interface. All types can implement Clone, providing a `.clone()` method.
 
 ```yaoxiang
-// Clone interface definition (standard library)
+// Clone 接口定义（标准库）
 Clone: Type = {
     clone: () -> Clone
 }
 
-// Usage
+// 使用
 p: Point = Point(1.0, 2.0)
 backup = p.clone()    // Deep copy, p still usable
 p2 = p.clone()        // Can clone multiple times
@@ -831,7 +831,7 @@ r = p               // Move: ownership transfer, because Point is neither Dup no
 
 ## Chapter 12: Borrow Handle Types
 
-### 12.1 Core Concept
+### 12.1 Core Concepts
 
 `&T` and `&mut T` are **zero-size compile-time handle types**. They are not "references" but "type-level proofs of access permission".
 
@@ -948,8 +948,8 @@ bad_alias: (p: &mut Point) -> Void = {
 // ✅ Handle scope ends, automatically released
 good_seq: (p: &mut Point) -> Void = {
     {
-        // inner scope
-        print(p.x)               // uses &mut Point
+        // 内部作用域
+        print(p.x)               // 使用 &mut Point
     }
     // inner scope ends
     p.x = 10.0                   // ✅ WriteHandle still usable
@@ -1007,17 +1007,17 @@ Brands completely disappear after monomorphization and inlining; generated machi
 ### A.1 Type Definitions
 
 ```
-// === Record types (curly braces) ===
+// === 记录类型（花括号） ===
 
-// Record type
+// 记录类型
 Point: Type = { x: Float, y: Float }
 
-// Record type with variants (using function fields)
+// 带变体的记录类型（使用函数字段）
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// === Interface types (curly braces, all fields are functions) ===
+// === 接口类型（花括号，字段全为函数） ===
 
-// Interface definition
+// 接口定义
 Serializable: Type = { serialize: () -> String }
 
 // Type implementing interfaces
@@ -1027,7 +1027,7 @@ Point: Type = {
     Serializable    // Implements Serializable interface
 }
 
-// === Function types ===
+// === 函数类型 ===
 
 Adder: Type = (Int, Int) -> Int
 
@@ -1051,11 +1051,11 @@ gcd: Terminates((a: Int, b: Int) -> Int, gcd_measure) = {
 ### A.2 Generic Syntax
 
 ```
-// Generic type
+// 泛型类型
 List: (T: Type) -> Type = { data: Array(T), length: Int }
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// Generic function
+// 泛型函数
 map: (T: Type, R: Type)(list: List(T), f: (T) -> R) -> List(R) = { ... }
 
 // Type constraints
@@ -1072,7 +1072,7 @@ Measure: (T: Type, N: Int) -> Type = { data: Array(T, N), length: N }
 // Conditional types
 If: (C: Bool, T: Type, E: Type) -> Type = match C { True => T, False => E }
 
-// Function specialization
+// 函数特化
 sum: (arr: Array(Int)) -> Int = { ... }
 sum: (arr: Array(Float)) -> Float = { ... }
 ```

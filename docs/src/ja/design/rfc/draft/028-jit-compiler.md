@@ -15,7 +15,7 @@ issue: '#101'
 > - [RFC-024：spawn ブロックに基づく並行モデル](../accepted/024-concurrency-model.md)
 > - [RFC-008：Runtime 並行モデルとスケジューラの分離設計](../accepted/008-runtime-concurrency-model.md)
 
-## 摘要
+## 概要
 
 本文書は YaoXiang の VM バックエンドに Cranelift JIT コンパイラを導入し、VM を純粋なインタープリタから**マルチレベル実行エンジン**にアップグレードするを提案する：冷的コードはインタープリタ実行、熱い関数は Cranelift でネイティブコードにコンパイル。JIT パスは RFC-018 の LLVM AOT パスと IR 正規化 pass を共有し、Cranelift は JIT の高速コンパイルを担当し、LLVM は AOT の深い最適化を担当し、各々の長所を生かす。
 
@@ -23,7 +23,7 @@ issue: '#101'
 
 ## 動機
 
-### なぜ JIT が必要か？
+### なぜJITが必要なのか?
 
 現在の VM バックエンドは純粋なインタープリタであり、実行速度はネイティブコードの 10-100 倍遅い。開発時には頻繁にテスト、スクリプト、ローカルデバッグを実行する——これらのシナリオでは AOT の極端な最適化は不要だが、インタープリタより明らかに速い実行速度が必要。
 
@@ -31,7 +31,7 @@ issue: '#101'
 
 LLVM AOT コンパイルは時間がかる（秒レベル）ため、開発イテレーションに適さない。開発には「変更したらすぐに実行」の体験が必要：一行のコードを変更 → 再実行 → ほぼ即座に結果を確認。Cranelift JIT は単一関数のコンパイルに 1-5ms しかかからないため、ユーザーはコンパイル遅延を感知しない。
 
-### なぜ Cranelift で LLVM ORC JIT ではないのか？
+### なぜCraneliftでLLVM ORC JITではないのか?
 
 | 観点       | Cranelift JIT      | LLVM ORC JIT         |
 | ---------- | ------------------ | -------------------- |
@@ -44,11 +44,11 @@ Cranelift はコンパイルが速く、コード品質は十分。LLVM はオ�
 
 ## 提案
 
-### コアアーキテクチャ
+### 中核アーキテクチャ
 
 ```
-VM 実行エンジン
-├── インタープリタ層
+VM実行エンジン
+├── インタプリタ層
 │   ├── バイトコード命令を実行
 │   ├── 热度データを収集（呼び出し回数 + ループバックエッジ回数）
 │   └── 閾値到達 → コンパイルタスクを提出
@@ -56,7 +56,7 @@ VM 実行エンジン
 ├── JIT コンパイル層（Cranelift バックエンド）
 │   ├── コンパイルキュー（バックグラウンドスレッド、インタープリタをブロックしない）
 │   ├── IR → 正規化 → Cranelift IR → ネイティブコード
-│   └── RFC-018 §4.0 の IR 正規化 pass を再利用（スタック→SSA）
+│   └── RFC-018 §4.0のIR正規化パスを再利用(スタック→SSA)
 │
 ├── コードキャッシュ
 │   ├── 関数テーブル：関数 ID → {インタープリタ入口, JIT入口(任意)}
@@ -69,7 +69,7 @@ VM 実行エンジン
     └── 三段階の热度：Cold → Warm → Hot → Compiled
 ```
 
-### 既存アーキテクチャとの接続
+### 既存アーキテクチャとの統合
 
 ```
 ソースコード → フロントエンド（共用）→ IR → ┬→ バイトコード codegen → VM インタープリタ → [熱関数] → Cranelift JIT
@@ -96,7 +96,7 @@ JIT と AOT は **IR 正規化 pass**（`middle/passes/ir_normalize.rs`）を共
 ```
 src/
 ├── backends/
-│   ├── interpreter/              # 既存 — VM インタープリタ
+│   ├── interpreter/              # 既存 — VMインタプリタ
 │   │   └── executor/
 │   │       ├── engine.rs         # 変更 — 呼び出し入口を直接解釈から FunctionEntry ディスパッチに変更
 │   │       └── ...
@@ -110,7 +110,7 @@ src/
 │   │   ├── types.rs              # YaoXiang 型 → Cranelift 型マッピング
 │   │   └── abi.rs                # 関数呼び出し規約（System V / Microsoft x64）
 │   │
-│   ├── llvm/                     # 計画中 — LLVM AOT（RFC-018）
+│   ├── llvm/                     # 計画中 — LLVM AOT(RFC-018)
 │   ├── common/                   # 既存
 │   └── runtime/                  # 既存
 │
@@ -120,7 +120,7 @@ src/
                                   #   JIT と LLVM AOT が共用
 ```
 
-**重要な制約**：
+**重要な制約**:
 
 - `backends/jit/` は `middle/`（IR 定義、正規化 pass）、標準ライブラリ、Cranelift crate にのみ依存
 - `backends/jit/` は `backends/llvm/` に依存しない、両者は対等のバックエンド
@@ -180,7 +180,7 @@ fn decay(entry: &FunctionEntry) {
 
 コンパイル中は関数はインタープリタ経由で実行。コンパイル完了後、次回呼び出しで JIT コードに原子切り替え。
 
-### 3. IR → Cranelift コンパイルパイプライン
+### 3. IR → Craneliftコンパイルパイプライン
 
 #### 3.1 パイプライン
 
@@ -192,7 +192,7 @@ YaoXiang IR（スタック形式）
   → コードキャッシュに書き込み
 ```
 
-#### 3.2 YaoXiang 型 → Cranelift 型
+#### 3.2 YaoXiang型 → Cranelift型
 
 | YaoXiang 型 | Cranelift 型             | 説明                       |
 | ----------- | ------------------------ | -------------------------- |
@@ -244,7 +244,7 @@ VM インタープリタはスタックセマンティクス（`Push`/`Pop`/`Dup
 
 ```rust
 struct FunctionEntry {
-    /// 原子的に置換可能な実行ターゲット
+    /// アトミックに交換可能な実行ターゲット
     code_ptr: AtomicPtr<u8>,
     /// 不変メタデータ
     bytecode: &'static [u8],        // インタープリタ fallback
@@ -267,7 +267,7 @@ struct FunctionEntry {
 
 一回だけのポインタ逆参照。现代的な CPU ブランチプレディクタの間接ジャンプ処理：初回の予測ミスの後、その後はすべて正解。オーバーヘッドは約 1 cycle。
 
-#### 4.3 原子切り替え
+#### 4.3 アトミック切り替え
 
 コンパイル完了後、一回の CAS：
 
@@ -296,11 +296,11 @@ CodeCache:
         "compute"    → FunctionEntry (state: Compiled)
         "process"    → FunctionEntry (state: Cold)
         "init"       → FunctionEntry (state: Compiled)
-      native_pages:   [ mmap'd 実行可能メモリページ ]
+      native_pages:   [ mmap済み実行可能メモリページ ]
     "lib.yao":
       functions:
         "helper"     → FunctionEntry (state: Compiled)
-      native_pages:   [ mmap'd 実行可能メモリページ ]
+      native_pages:   [ mmap済み実行可能メモリページ ]
 ```
 
 #### 5.2 実行可能メモリ管理
@@ -331,10 +331,10 @@ trait CodeCacheExt {
     /// モジュール全体の JIT コードを失效し、インタープリタにロールバック
     fn invalidate_module(&self, module_path: &str);
 
-    /// ソースコード位置範囲に基づいて特定の関数を失效
+    /// ソースコードの位置範囲に基づいて特定の関数を無効化
     fn invalidate_range(&self, file: &str, start: u32, end: u32);
 
-    /// モジュール全体の関数テーブルを原子置換
+    /// モジュール全体の関数表をアトミックに置換
     fn swap_module(&self, module_path: &str, new_functions: HashMap<String, FunctionEntry>);
 }
 
@@ -366,7 +366,7 @@ JIT 自体は関数のみを必要とする。モジュール単位での組織�
 3. **コールドスタートの热度遅延**：プログラム起動後の最初の数秒間は JIT 高速化がなく、热度が蓄積されるまで待つ必要がある
 4. **プラットフォーム ABI**：異なるプラットフォーム（Linux/macOS/Windows）の mmap と呼び出し規約はそれぞれ適応が必要
 
-### 関連 RFC との整合性
+### 関連RFCとの一貫性
 
 | RFC                  | 整合性                                            |
 | -------------------- | ------------------------------------------------- |
@@ -402,7 +402,7 @@ JIT 自体は関数のみを必要とする。モジュール単位での組織�
 
 ---
 
-## ライフサイクルと行き先
+## ライフサイクルと帰属
 
 | 状態       | 位置                            | 説明                   |
 | ---------- | ------------------------------- | ---------------------- |

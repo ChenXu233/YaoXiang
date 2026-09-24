@@ -76,10 +76,10 @@ Single binary with dual mode:
 │           │                         │                   │
 │           ▼                         ▼                   │
 │  ┌──────────────────────────────────────────────────┐  │
-│  │  Shared lib crate (`yaoxiang`)                   │  │
-│  │  src/lsp/{server,session,world}.rs               │  │
-│  │  src/frontend/{lexer,parser,core}/...            │  │
-│  │  src/middle/...                                  │  │
+│  │  Shared lib crate (`yaoxiang`)                    │  │
+│  │  src/lsp/{server,session,world}.rs                │  │
+│  │  src/frontend/{lexer,parser,core}/...             │  │
+│  │  src/middle/...                                   │  │
 │  └──────────────────────────────────────────────────┘  │
 │                                                          │
 │  ┌──────────────────────────────────────────────────┐  │
@@ -122,7 +122,7 @@ stateless first, workspace tools share LSP World, AST rewrite tools added indepe
 | `list_imports`      | `file_path: String`, `project_root?: String`                                                   | `{imports: [{module, items, source_file}]}`                  | Reuse `middle::passes::module::ModuleGraph::validate_imports`  | **v0.9.x**  |
 | `rename_symbol`    | `source: String`, `old_name: String`, `new_name: String`, `scope?: "module" \| "function:name"` | `{source: String, edits: Edit[], diagnostics: Diagnostic[]}` | **New** `src/middle/rename.rs` (AST rewrite)                  | **v0.10.x** |
 
-**Boundary of 8 tools**:
+**Boundaries of the 8 tools**:
 
 - `parse_source` / `format_source` —— **Pure source stateless**, no World involvement
 - `lookup_symbol` / `find_references` —— Accept `workspace_root` (if not passed, use
@@ -284,7 +284,7 @@ impl ProjectRoot {
 }
 ```
 
-`ProjectRoot` singleton + `src/mcp/schema.rs` tool schema auto-generation:
+`ProjectRoot` singleton + automatic tool schema generation in `src/mcp/schema.rs`:
 
 ```rust
 pub struct ProjectRoot {

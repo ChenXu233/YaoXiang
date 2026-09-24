@@ -84,6 +84,10 @@ pub struct StatementChecker {
     /// RFC-011b: 接口实现登记表（运算符查询唯一判据，不经名字解析）
     interface_impl_registry:
         HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
+    /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
+    sum_types: HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
+    /// RFC-010: 变体构造调用点（span 键控）
+    pub variant_ctor_calls: Vec<crate::frontend::core::typecheck::environment::VariantCtorCall>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
     pub operator_dispatches:
         Vec<crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch>,
@@ -154,6 +158,8 @@ impl StatementChecker {
             call_ownership: super::call_ownership::CallOwnershipTable::new(),
             existential_coercions: Vec::new(),
             interface_impl_registry: HashMap::new(),
+            sum_types: HashMap::new(),
+            variant_ctor_calls: Vec::new(),
             operator_dispatches: Vec::new(),
             gamma,
             dep_env,
@@ -288,6 +294,17 @@ impl StatementChecker {
         >,
     ) {
         self.interface_impl_registry = registry;
+    }
+
+    /// RFC-010: 注入和类型登记表
+    pub fn set_sum_types(
+        &mut self,
+        sum_types: HashMap<
+            String,
+            Vec<crate::frontend::core::typecheck::environment::SumVariantDef>,
+        >,
+    ) {
+        self.sum_types = sum_types;
     }
 
     /// 设置证明函数基类型表（RFC-027 Phase 2.5）
@@ -2336,6 +2353,7 @@ impl StatementChecker {
                             );
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_interface_impl_registry(&self.interface_impl_registry);
+                        inferrer.set_sum_types(&self.sum_types);
                         inferrer.set_type_defs(&self.type_defs);
                         inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
@@ -2357,6 +2375,7 @@ impl StatementChecker {
                             .extend(inferrer.existential_coercions);
                         self.operator_dispatches
                             .extend(inferrer.operator_dispatches);
+                        self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
                         result
                     }
                 }
@@ -2415,6 +2434,7 @@ impl StatementChecker {
                 );
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_interface_impl_registry(&self.interface_impl_registry);
+                inferrer.set_sum_types(&self.sum_types);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
                 inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                 inferrer.set_dep_env(&self.dep_env);
@@ -2434,6 +2454,7 @@ impl StatementChecker {
                     .extend(inferrer.existential_coercions);
                 self.operator_dispatches
                     .extend(inferrer.operator_dispatches);
+                self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
                 result
             }
         }

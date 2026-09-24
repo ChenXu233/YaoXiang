@@ -1,7 +1,7 @@
 ---
 title: 'RFC-024: Spawn-based Concurrency Runtime Semantics'
 status: 'Accepted (Revised)'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-06-05'
 updated: '2026-07-05 (RFC Sync Check: Implementation progress ~85%, core runtime and frontend analysis completed)'
 
@@ -41,7 +41,7 @@ Synchronous blocking wait for results            ← Sole behavior
 **Complexity Eliminated**:
 
 - ❌ No `@block`/`@eager`/`@auto` annotations
-- ❌ No `Send`/`Sync` trait
+- ❌ No `Send`/`Sync` traits
 - ❌ No `Mutex`/`RwLock`/`Atomic`
 - ❌ No `future`/non-blocking handles
 - ❌ No whole-program DAG analysis
@@ -50,7 +50,7 @@ Synchronous blocking wait for results            ← Sole behavior
 > **User Mental Model**: The ordinary code you write executes sequentially. When you want multiple things to happen
 > together, put them inside `spawn <expr>`. No callbacks, no `await`, no strange annotations.
 
-## Design Sources
+## Design Origins
 
 | Document                                                                   | Relationship                      |
 | --------------------------------------------------------------------------- | --------------------------------- |
@@ -73,7 +73,7 @@ Current mainstream language concurrency models have obvious flaws:
 | Python      | asyncio                    | GIL restrictions, function coloring        |
 | JavaScript  | Promise/async              | Callback hell, function coloring           |
 
-### Problems with the Old Design (RFC-001)
+### Problems with the old design (RFC-001)
 
 The three-layer concurrency architecture (L1/L2/L3) proposed in RFC-001 had the following problems:
 
@@ -114,12 +114,12 @@ In YaoXiang, `{}` is a **dependency-driven computation unit**.
 x = compute_x()        // x is ready
 y = compute_y()        // y is ready
 result = {
-    // Depends on x and y, executes immediately after both are ready
+    // Depends on x and y, executes immediately when both are ready
     return x + y
 }
 ```
 
-### 2. Spawn Expression Semantics
+### 2. spawn Expression Semantics
 
 `spawn <expr>` is the **sole parallel primitive** in YaoXiang. Can modify any expression, and the expression shape
 determines task decomposition granularity.
@@ -159,7 +159,7 @@ results = spawn for item in items {
 
 // spawn while: each iteration parallel
 spawn while has_next() {
-    step()               // Each iteration → independent task
+    step()               // Each round → independent task
 }
 
 // spawn if: selected branch as a whole as task
@@ -177,7 +177,7 @@ Spawn expressions create independent scopes; internal variables don't affect ext
 ```yaoxiang
 x = 10
 result = spawn {
-    x = 20              // This is local x inside the spawn expression
+    x = 20              // This is a local x inside the spawn expression
     compute(x)
 }
 // x is still 10
@@ -219,7 +219,7 @@ result = spawn {
 
 #### 2.4 Error Propagation Rules
 
-##### `spawn { a, b, c }` (block)
+##### `spawn { a, b, c }` (Block)
 
 1. Wait for all tasks to complete (even if some have failed)
 2. Propagate the first error encountered
@@ -247,7 +247,7 @@ results = spawn for item in items {
 
 ##### `spawn while cond { body? }`
 
-Inherits the error semantics of while itself:
+Inherits the error semantics of `while` itself:
 
 - step uses `?` to propagate error → entire spawn while fails, no more iterations
 - step doesn't propagate error (error swallowed) → proceed to next iteration
@@ -275,7 +275,7 @@ result = spawn if cond()? {  // cond evaluated sequentially, failure → overall
 
 #### 2.5 Resource Type Rules
 
-The compiler tracks resource type usage to ensure concurrency safety:
+The compiler tracks the usage of resource types to ensure concurrency safety:
 
 | Resource Type   | Description         | Compiler Behavior                |
 | --------------- | ------------------- | -------------------------------- |
@@ -284,7 +284,7 @@ The compiler tracks resource type usage to ensure concurrency safety:
 | `DBUrl`         | Database connection | Operations on same connection auto-serialized |
 | `Console`       | Standard output    | All Console operations auto-serialized |
 
-##### Inside `spawn { ... }` block
+##### Inside `spawn { ... }` Block
 
 ```yaoxiang
 // Operations on the same file auto-serialized
@@ -294,7 +294,7 @@ The compiler tracks resource type usage to ensure concurrency safety:
 }
 ```
 
-##### `spawn for ... { ... }` cross-iteration same resource
+##### `spawn for ... { ... }` Same Resource Across Iterations
 
 When all iterations operate on the same resource type, the compiler **automatically downgrades to serial**
 (spawn degrades to sequential for, no error reported):
@@ -310,7 +310,7 @@ results = spawn for item in items {
 > **Design Rationale**: The spawn keyword still expresses parallel intent; when resource conflicts occur,
 > the compiler auto-downgrades, which aligns better with the principle of least surprise than outright rejection.
 
-##### `spawn while ... { ... }` capturing `&mut`
+##### `spawn while ... { ... }` Capturing `&mut`
 
 **Compile-time error**: `spawn while` does not allow capturing external variables of `&mut` type:
 
@@ -324,7 +324,7 @@ spawn while iter.has_next() {       // Compile-time error
 > **Not reintroducing `Sync` trait**: Consistent with RFC-024's "no Send/Sync" promise. Users should use `ref`
 > or non-spawn写法.
 
-##### `spawn if c { ... } else { ... }` both branches same resource
+##### `spawn if c { ... } else { ... }` Same Resource in Both Branches
 
 **Legal with no warnings**: if conditions are mutually exclusive, at most one branch executes, no concurrency conflict:
 
@@ -336,7 +336,7 @@ result = spawn if use_cache {
 }
 ```
 
-#### 2.6 Nested Spawn
+#### 2.6 Nested spawn
 
 Spawn expressions can be nested, inner layers create **independent concurrency domains**:
 
@@ -389,16 +389,16 @@ YaoXiang's return rules are unified and explicit:
 | `= { ... }` (with braces)  | Must use `return`, otherwise `Void`    | Block needs explicit return |
 
 ```yaoxiang
-// No braces: direct return
+// No curly braces: direct return
 add: (a: Int, b: Int) -> Int = a + b
 
-// With braces: must use return
+// With curly braces: must use return
 process: (data: Data) -> Result = {
     validated = validate(data)?
     return ok(transform(validated))
 }
 
-// With braces but no return: returns Void
+// With curly braces but no return: returns Void
 log: (message: String) -> Void = {
     print(message)  // No return, returns Void
 }
@@ -406,19 +406,19 @@ log: (message: String) -> Void = {
 
 ### 5. User Mental Model
 
-> **The ordinary code you write executes sequentially.**
+> **The normal code you write executes sequentially.**
 >
-> **When you want multiple things to happen together, put them inside `spawn <expr>`.**
+> **When you want to do multiple things simultaneously, put them inside `spawn <expr>`.**
 >
 > The shape of the expression determines how tasks are decomposed: each direct sub-expression in a block runs
 > in parallel; each iteration of for runs in parallel; the selected branch of if runs as one task.
 >
 > **The entire spawn expression blocks synchronously, waiting for all tasks to complete.**
 >
-> **No callbacks, no `await`, no strange annotations.**
+> **No callbacks, no `await`, no weird annotations.**
 
 ```yaoxiang
-// Ordinary code: sequential execution
+// Normal code: sequential execution
 a = compute_a()         // Executes first
 b = compute_b(a)        // Depends on a, executes after a completes
 c = compute_c(b)        // Depends on b, executes after b completes
@@ -429,7 +429,7 @@ c = compute_c(b)        // Depends on b, executes after b completes
     fetch("url2"),      // Parallel
     fetch("url3")       // Parallel
 }
-// Continue after all complete
+// Wait for all to complete before continuing
 process(x, y, z)
 
 // Data parallelism: spawn for
@@ -461,7 +461,7 @@ results = spawn for item in items {
 
 ---
 
-## Alternative Approaches
+## Alternatives
 
 | Approach                      | Why Not Chosen                                   |
 | ----------------------------- | ------------------------------------------------ |
@@ -483,7 +483,7 @@ results = spawn for item in items {
 3. **Topological sort**: Determine execution order within the spawn expression
 4. **Parallelism identification**: Identify dependency-free subtrees within the spawn expression
 5. **Escape analysis**: `ref` → Rc or Arc
-6. **Resource conflict detection**: Detect potential conflicts for resource types
+6. **Resource conflict detection**: Detect potential conflicts on resource types
 
 ### Module Organization
 

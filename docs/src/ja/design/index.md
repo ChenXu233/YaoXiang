@@ -1,10 +1,10 @@
 # YaoXiang 設計ドキュメント
 
-> 道生一，一生二，二生三，三生万物。
+> 道は一を生じ、一は二を生じ、二は三を生じ、三は万物を生じる。
 
 本ディレクトリには YaoXiang プログラミング言語の設計判断、提案、議論が含まれています。
 
-## コア設計理念
+## 核心設計理念
 
 | 理念           | 説明                                           |
 | -------------- | ---------------------------------------------- |
@@ -108,7 +108,7 @@ design/
 - [RFC_TEMPLATE.md](./rfc/RFC_TEMPLATE.md)
 - [完全な例](./rfc/EXAMPLE_full_feature_proposal.md)
 
-## 設計議論への参加
+## 設計議論に参加する
 
 ### RFC ライフサイクル
 
@@ -190,7 +190,7 @@ compute: (Int) -> Int = (n) => {
     a + b + c
 }
 
-// spawn ブロックでデータフロー並列を導入
+// spawnブロックがデータフロー並列を導入
 process: () -> Void = () => {
     spawn {
         users = fetch_users()   // 並列
@@ -207,7 +207,7 @@ process: () -> Void = () => {
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 process: () -> Result(Data, Error) = {
-    data = fetch_data()?      // ? 演算子は透過的に伝播
+    data = fetch_data()?      // ? 演算子は透過的に伝播する
     transformed = transform(data)?
     save(transformed)?
 }
@@ -221,7 +221,7 @@ process: () -> Result(Data, Error) = {
 - [GitHub Discussions](https://github.com/ChenXu233/YaoXiang/discussions)
 - [貢献ガイド](../dev/contributing.md)
 
-## 歴史アーカイブ
+## 履歴アーカイブ
 
 設計過程の歴史ドキュメントは `docs/src/archive/` ディレクトリに移動されました（このディレクトリはサイト構築に参加しません）：
 

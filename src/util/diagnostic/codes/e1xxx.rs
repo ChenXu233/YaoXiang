@@ -101,4 +101,7 @@ define_codes!(E1XXX, {
     // 定义模块——`Int` 的定义在核心，只有核心能给 `Int` 登记运算符接口；
     // 用户只能为本模块定义的类型登记）
     ("E1104", TypeCheck, false, interface_impl_outside_defining_module(type_: &str, interface: &str) => .param("type", type_) .param("interface", interface)),
+    // E1105 变体构造器被当作字段访问（RFC-010 记录式和类型：变体名升格，
+    // 构造只以 `类型.变体(...)` 调用形态存在，值上无变体数据字段）
+    ("E1105", TypeCheck, false, variant_used_as_field(type_: &str, variant: &str) => .param("type", type_) .param("variant", variant)),
 });

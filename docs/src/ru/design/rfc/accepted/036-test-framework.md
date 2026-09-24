@@ -66,7 +66,7 @@ issue: '#94, #95, #221, #319'
 ### 1. Дизайн CLI
 
 ```
-yaoxiang test [OPTIONS] [PATHS]
+yaoxiang test [ОПЦИИ] [ПУТИ]
 
 Arguments:
   [PATHS]...      указать тестовые файлы или директории (по умолчанию: из yaoxiang.toml, иначе tests/)

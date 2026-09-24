@@ -16,7 +16,7 @@ issue: '#102'
 > - [RFC-009: Ownership Model Design](../accepted/009-ownership-model.md)
 > - [Concurrency Model Specification](../../../../reference/language-spec/concurrency.md)
 
-## Abstract
+## Summary
 
 This document defines the IO implementation layer for YaoXiang: providing cross-platform IO capabilities based on libuv, serving as the underlying implementation for the RFC-024 resource type system.
 
@@ -82,10 +82,10 @@ These resource types need underlying IO implementation. libuv provides:
 └─────────────────────────────────────────────────────────┘
                           ↓ Underlying
 ┌─────────────────────────────────────────────────────────┐
-│  libuv: Cross-platform IO Engine                        │
-│  - Event loop                                           │
-│  - Thread pool                                          │
-│  - Cross-platform unified API                           │
+│  libuv: Cross-platform IO Engine                         │
+│  - Event loop                                            │
+│  - Thread pool                                           │
+│  - Cross-platform unified API                            │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -236,7 +236,7 @@ fn native_query(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<Runtim
 fn native_print(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<RuntimeValue, ExecutorError> {
     let output = format_args(args);
 
-    // Console operations serialized
+    // Console operation serialized
     // libuv tty write
     ctx.uv_loop.tty_write(output)
 }
@@ -294,7 +294,7 @@ Runtime executes spawn blocks:
 
 **Embedded Runtime**: No libuv, immediate execution, no async capability.
 
-**Standard Runtime**: Shared libuv event loop, all IO operations handled asynchronously.
+**Standard Runtime**: Shared libuv event loop, all IO operations processed asynchronously.
 
 **Full Runtime**: Shared libuv event loop, multi-threaded parallelism + IO async.
 
@@ -412,7 +412,7 @@ impl IoScheduler for UvLoop {
 
 ## Implementation Strategy
 
-### Phases
+### Phase Breakdown
 
 1. **Phase 1 (v0.3)**: libuv bindings, basic file IO
 2. **Phase 2 (v0.5)**: network IO, HTTP support

@@ -32,7 +32,7 @@ This document aims to perfect the language specification, ensuring YaoXiang's co
 
 ## Motivation
 
-### Limitations of Existing Design
+### Limitations of the Current Design
 
 RFC-001/008/018 built an elegant transparent concurrency model, but still have blind spots when facing real-world requirements:
 
@@ -53,7 +53,7 @@ RFC-001/008/018 built an elegant transparent concurrency model, but still have b
 
 ### 1. Dynamic Module Metadata Contract
 
-#### 1.1 Contract Contents
+#### 1.1 Contract Content
 
 Each dynamic library (`.yxo` / platform-specific dynamic library) compiled with YaoXiang must be accompanied by a **metadata description file** (`.yxmeta`), containing:
 
@@ -66,7 +66,7 @@ Each dynamic library (`.yxo` / platform-specific dynamic library) compiled with 
 
 Metadata format uses binary or structured text (such as MessagePack) to ensure parsing efficiency.
 
-#### 1.2 Compile-Time Processing
+#### 1.2 Compile-time Processing
 
 When the main program is compiled and encounters calls to dynamic module functions:
 
@@ -76,7 +76,7 @@ When the main program is compiled and encounters calls to dynamic module functio
 
 #### 1.3 Runtime Binding
 
-When dynamic modules are loaded:
+When the dynamic module is loaded:
 
 - Runtime verifies that actual function signatures match metadata (preventing version mismatch).
 - Bind placeholder nodes to actual function pointers.
@@ -88,7 +88,7 @@ When dynamic modules are loaded:
 - If a dynamic module violates the contract (such as claiming `@pure` but modifying global state), the consequences are borne by the developer (similar to FFI's unsafe boundary). But since it's the same language, runtime checks (such as memory isolation) can enhance safety but add overhead.
 - Cross-module circular dependencies: If module A calls B, and B calls A, and the call relationship is declared in metadata, the compiler can detect and report an error; if not declared, deadlock may occur at runtime, detected and panicked by the scheduler.
 
-### 2. FFI Scheduling Semantics in DAG
+### 2. FFI Scheduling Semantics in the DAG
 
 The complete FFI toolchain support (dynamic library loading, binding generation, type conversion, memory ownership) is defined by [RFC-021](./021-library-driven-ffi-extension.md). This section only describes the behavior of FFI calls in DAG scheduling.
 
@@ -96,9 +96,9 @@ The complete FFI toolchain support (dynamic library loading, binding generation,
 
 External functions (declared via `native("symbol")`) are treated as **`@block` nodes** in the DAG by default:
 
-- Do not participate in DAG parallel scheduling; execute synchronously on the current thread.
-- The scheduler does not intervene in their internal concurrency during execution.
-- Return values are available, but the call itself does not generate dependency edges.
+- Do not participate in DAG parallel scheduling, execute synchronously on the current thread.
+- The scheduler does not intervene in its internal concurrency during execution.
+- The return value is available, but the call itself does not generate dependency edges.
 
 #### 2.2 Optional Concurrency Annotations
 
@@ -107,7 +107,7 @@ Developers can use annotations to integrate FFI calls into DAG scheduling (see [
 - `@pure`: Treated as an ordinary DAG node, can run in parallel with other nodes without dependencies.
 - `@io`: Participates in resource dependency analysis; multiple calls to the same resource are automatically serialized.
 
-#### 2.3 Impact on Scheduler
+#### 2.3 Impact on the Scheduler
 
 FFI nodes use the same `TaskNode` structure as ordinary nodes in the scheduler, differing only in that the `effect` marker is set to `Block`. When the scheduler encounters a `Block` node, it skips parallel scheduling and executes synchronously.
 
@@ -146,11 +146,11 @@ The compiler should generate an optimization report (can be enabled via `--emit-
 - **Reasons for Keeping as Independent Node**: E.g., "has multiple consumers", "contains side effects", "cross-module call", etc.
 - **Decision Statistics**: Total inlines, retained node count, helping developers evaluate optimization effects.
 
-Report output format can be text or JSON for easy tool parsing.
+The report output format can be text or JSON, for easy tool parsing.
 
 ### 4. Control Flow and DAG Merge
 
-#### 4.1 Conditional Branch (if) Handling
+#### 4.1 Handling Conditional Branches (`if`)
 
 Introduce **Phi nodes** (borrowed from SSA form) to represent branch convergence points:
 
@@ -172,11 +172,11 @@ Example DAG:
       subsequent nodes
 ```
 
-#### 4.2 Loop (loop/while) Handling
+#### 4.2 Handling Loops (`loop`/`while`)
 
 Loops are treated as sub-DAGs with feedback edges, **dynamically unrolled at runtime as needed**:
 
-- At compile time, identify the loop body and construct a **loop template** containing:
+- At compile time, identify the loop body and construct a **loop template**, containing:
   - Condition node.
   - Loop body sub-DAG.
   - State variables passed between iterations.
@@ -214,7 +214,7 @@ A single infinite loop executes synchronously as the main DAG (no scheduling ove
 - After a node completes execution and passes results to all downstream nodes, the reference count reaches zero and the node's memory can be released.
 - Result values themselves also use reference counting (`Arc<T>`), but can be optimized: if a result is only used by one consumer, ownership is moved directly, avoiding counting overhead.
 
-#### 5.2 Arena Memory Allocation
+#### 5.2 Region Memory Allocation (Arena)
 
 For dynamically generated short-lifecycle nodes (such as loop iterations), use an **arena allocator**:
 
@@ -222,7 +222,7 @@ For dynamically generated short-lifecycle nodes (such as loop iterations), use a
 - Nodes within the arena are allocated contiguously and released as a whole, reducing fragmentation and deallocation overhead.
 - When the arena ends, all node memory is reclaimed at once.
 
-#### 5.3 Lock-Free Data Structures
+#### 5.3 Lock-free Data Structures
 
 - Dependency counter: Use `AtomicUsize` with `fetch_sub` atomic decrement.
 - Ready queue: Adopt Chase-Lev deque (per-thread local queue + work stealing), reducing lock contention.
@@ -252,10 +252,10 @@ struct FuncMeta {
     name: String,
     signature: TypeSignature,
     effects: EffectTag,      // Pure | IO | Block
-    resource_params: Vec<usize>, // Parameter index list indicating which parameters are resource types
+    resource_params: Vec<usize>, // List of parameter indices indicating which parameters are resource types
     calls: Vec<String>,       // Names of other exported functions called (optional)
     ownership: OwnershipInfo,
-    send_sync: SendSync,      // Whether it satisfies Send/Sync
+    send_sync: SendSync,      // Whether Send/Sync is satisfied
 }
 ```
 
@@ -275,15 +275,15 @@ struct TaskNode {
 }
 
 struct Scheduler {
-    ready_queues: PerThreadQueue<TaskId>, // Per-thread local queues
+    ready_queues: PerThreadQueue<TaskId>, // Per-thread local queue
     global_work_stealer: WorkStealer,
-    arenas: ArenaAllocator,               // Arena allocator
+    arenas: ArenaAllocator,               // Region allocator
 }
 ```
 
-### 6.3 Context-Based Optimization Analysis
+### 6.3 Context-based Optimization Analysis
 
-The compiler performs the following steps at the MIR level:
+The compiler performs the following steps at the MIR layer:
 
 1. Build global call graph and data dependency graph.
 2. For each function call node, calculate its out-degree (number of consumers).
@@ -302,7 +302,8 @@ enum NodeKind {
 }
 ```
 
-During dynamic unrolling at runtime, `LoopTemplate` generates a series of `Normal` node instances.
+When the runtime dynamically unrolls, `LoopTemplate` will generate a series of `Normal` node
+instances.
 
 ## Tradeoffs
 
@@ -323,7 +324,7 @@ During dynamic unrolling at runtime, `LoopTemplate` generates a series of `Norma
 
 ## Implementation Strategy
 
-### Phase Division (with Priority Recommendations)
+### Phased Plan (Including Priority Suggestions)
 
 > **Implementation Priority Recommendation**: Perfection is not required initially; simpler solutions can be used to get the system running, then optimized progressively. For example:
 >
@@ -357,7 +358,7 @@ During dynamic unrolling at runtime, `LoopTemplate` generates a series of `Norma
 
 #### Phase 5: Performance Optimization (v1.0)
 
-- [ ] Implement arena allocator.
+- [ ] Implement region allocator.
 - [ ] Optimize lock-free queues and work stealing.
 - [ ] Benchmark testing and tuning.
 

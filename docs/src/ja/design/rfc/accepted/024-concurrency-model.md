@@ -23,7 +23,7 @@ issue: '#89'
 > - [RFC-010: 統一型構文](./010-unified-type-syntax.md)
 > - [RFC-032: spawn 統一式修飾子 — AST/IR リファクタリング](../review/032-spawn-unified-expression.md)
 
-## 概要
+## 要約
 
 このドキュメントは YaoXiang プログラミング言語の `spawn` に関する**ランタイム動作意味論**を定義します：`spawn <expr>`
 は唯一の並列プリミティブであり、任意の式を修飾でき、呼び出し元は同期的にブロックします。式の形状がタスク分解の粒度を決定し、ランタイムは GMP
@@ -37,7 +37,7 @@ spawn <expr>               ← 唯一の並列プリミティブ
 同期的にブロックして結果を待つ ← 唯一の動作
 ```
 
-**排除した複雑さ**：
+**除去された複雑性**：
 
 - ❌ `@block`/`@eager`/`@auto` アノテーションなし
 - ❌ `Send`/`Sync` trait なし
@@ -122,7 +122,7 @@ result = {
 
 `spawn <expr>` は YaoXiang における**唯一の並列プリミティブ**です。任意の式を修飾でき、式の形状がタスク分解の粒度を決定します。
 
-#### 2.1 タスク作成ルール
+#### 2.1 タスク生成ルール
 
 | 式形状                       | タスク分解                                 | 同期意味論         |
 | ---------------------------- | ------------------------------------------ | ------------------ |
@@ -144,11 +144,11 @@ result = {
 > §2.6 のルールを継承します。
 
 ```yaoxiang
-// spawn ブロック：直接部分式が並行
+// spawn ブロック：直接の子式を並列化
 (a, b) = spawn {
-    t1 = fetch("url1")   // 直接部分式 → 並行タスク 1
-    t2 = fetch("url2")   // 直接部分式 → 並行タスク 2
-    return (t1, t2)      // 明示的にタプルを返す
+    t1 = fetch("url1")   // 直接の子式 → 並列タスク1
+    t2 = fetch("url2")   // 直接の子式 → 並列タスク2
+    return (t1, t2)      // タプルを明示的に返す
 }
 
 // spawn for：毎回の反復が並行
@@ -169,14 +169,14 @@ result = spawn if cond {
 }
 ```
 
-#### 2.2 スコープ隔離
+#### 2.2 スコープ分離
 
 spawn 式は独立したスコープを作成し、内部変数は外部に影響しません：
 
 ```yaoxiang
 x = 10
 result = spawn {
-    x = 20              // これは spawn 式内の局所的な x
+    x = 20              // これはspawn式内のローカルx
     compute(x)
 }
 // x は引き続き 10
@@ -185,7 +185,7 @@ result = spawn for item in items {
     item = item + 1     // 反復局所的な item、毎回の反復で独立コピー
     process(item)
 }
-// 外側の item は影響されない
+// 外側の item は影響を受けない
 ```
 
 **反復変数**（for の `x`）は毎回復興独立コピー、反復終了時に自動的に破棄されます。
@@ -199,10 +199,10 @@ data = load_data()
 result = spawn {
     process(data)       // data の所有権が spawn 式に移動する
 }
-// data はここでは使用不可（move 済み）
+// data はここでは使用不可（move済み）
 ```
 
-複数のタスク間で共有する必要がある場合は、`ref` を使用します：
+複数のタスク間で共有する必要がある場合は `ref` を使用する：
 
 ```yaoxiang
 data = load_data()
@@ -226,8 +226,8 @@ result = spawn {
 
 ```yaoxiang
 (a, b) = spawn {
-    fetch("url1")?,     // 失敗可能性あり
-    fetch("url2")?      // 失敗可能性あり
+    fetch("url1")?,     // 失敗の可能性あり
+    fetch("url2")?      // 失敗の可能性あり
 }
 // いずれかのタスクが失敗すると、整个 spawn 式が最初のエラーを伝播
 ```
@@ -307,7 +307,7 @@ results = spawn for item in items {
 
 > **設計理由**：spawn キーワードは並行意図を仍然表明しています；リソース競合時にコンパイラが自動降格するのは、直接拒否するよりも最小驚異原則に従っています。
 
-##### `spawn while ... { ... }` `&mut` のキャプチャ
+##### `spawn while ... { ... }` における `&mut` キャプチャ
 
 **コンパイル時エラー**：`spawn while` は `&mut` 型の外部変数のキャプチャを許可しません：
 
@@ -332,9 +332,9 @@ result = spawn if use_cache {
 }
 ```
 
-#### 2.6 ネスト spawn
+#### 2.6 spawn のネスト
 
-spawn 式はネスト可能で、内側の spawn は**独立した並行ドメイン**を作成します：
+spawn 式はネスト可能で、内層は**独立した並列ドメイン**を作成する：
 
 ```yaoxiang
 (a, b) = spawn {
@@ -375,7 +375,7 @@ results = spawn for x in items {
 | 関数の色分け（async/await）        | 関数の色分けなし                           |
 | `spawn` は `{}` ブロックのみ修飾可能         | `spawn` が任意の式を修飾可能（RFC-032 参照） |
 
-### 4. 戻りルール
+### 4. return ルール
 
 YaoXiang の戻りルールは統一されており明確です：
 
@@ -400,11 +400,11 @@ log: (message: String) -> Void = {
 }
 ```
 
-### 5. ユーザーメンタルモデル
+### 5. ユーザーのメンタルモデル
 
-> **書いた普通のコードは順番に実行されます。**
+> **通常のコードは順次実行される。**
 >
-> **複数のことを同時に行いたい時は、`spawn <expr>` の中に入れます。**
+> **複数のことを同時に行いたい場合、それらを `spawn <expr>` の中に入れる。**
 >
 > 式の形状がタスク分解の方法を決定します：ブロック内の各直接部分式は並行；for の各反復は並行；if の選択された分岐は1つのタスクとして。
 >
@@ -413,16 +413,16 @@ log: (message: String) -> Void = {
 > **コールバックはなく、`await`はなく、おかしなアノテーションもありません。**
 
 ```yaoxiang
-// 普通のコード：順序実行
+// 通常コード：順次実行
 a = compute_a()         // 先に実行
 b = compute_b(a)        // a に依存、a 完了後に実行
 c = compute_c(b)        // b に依存、b 完了後に実行
 
-// 並行が必要な時：spawn を使用
+// 並列が必要な場合：spawn を使用
 (x, y, z) = spawn {
-    fetch("url1"),      // 並行
-    fetch("url2"),      // 並行
-    fetch("url3")       // 並行
+    fetch("url1"),      // 並列
+    fetch("url2"),      // 並列
+    fetch("url3")       // 並列
 }
 // すべて完了後に続行
 process(x, y, z)
@@ -437,7 +437,7 @@ results = spawn for item in items {
 
 ## トレードオフ
 
-### メリット
+### 利点
 
 1. **シンプル**：`spawn` という1つの並列プリミティブのみ、任意の式を修飾可能
 2. **明示的**：ユーザーがどこが並行でどこが順序的かを明確に把握、暗黙の並行処理なし
@@ -448,7 +448,7 @@ results = spawn for item in items {
 7. **コンパイル効率が高い**：DAG 分析は spawn 式内に限定され、コンパイル時間が制御可能
 8. **直交性**：spawn と任意の制御フロー構造が自然に組み合わせ可能（RFC-032 参照）
 
-### デメリット
+### 欠点
 
 1. **明示的な spawn が必要**：自動並列化がなく、ユーザーが手動で並列点をマークする必要がある
 2. **spawn 式内の DAG 分析**：コンパイラが spawn 式内で依存関係分析を行う必要がある
@@ -471,7 +471,7 @@ results = spawn for item in items {
 
 ## 実装戦略
 
-### コンパイル時分析
+### コンパイル時解析
 
 1. **式形状認識**：spawn 後の式の形状に応じてタスク分解を決定（RFC-032 §DAG 分析参照）
 2. **DAG 構築**：spawn 式内の依存関係を分析
@@ -497,7 +497,7 @@ frontend/core/spawn/
 
 ### ランタイム実行
 
-[RFC-008](./008-runtime-concurrency-model.md) の Runtime アーキテクチャを参照：
+[RFC-008](./008-runtime-concurrency-model.md) のRuntimeアーキテクチャを参照：
 
 - **Embedded Runtime**：spawn サポートなし、即時実行
 - **Standard Runtime**：spawn 式をサポート
@@ -513,7 +513,7 @@ frontend/core/spawn/
 
 ---
 
-## 設計意思決定記録
+## 設計決定記録
 
 | 意思決定                       | 決定                        | 理由                              | 日付       |
 | ------------------------- | --------------------------- | --------------------------------- | ---------- |
@@ -552,7 +552,7 @@ frontend/core/spawn/
 - [RFC-011 ジェネリクスシステム](./011-generic-type-system.md)
 - [RFC-032 spawn 統一式修飾子 — AST/IR リファクタリング](../review/032-spawn-unified-expression.md)
 
-### 外部参照
+### 外部参考
 
 - [Rust async book](https://rust-lang.github.io/async-book/)
 - [Go concurrency patterns](https://go.dev/blog/pipelines)
@@ -561,7 +561,7 @@ frontend/core/spawn/
 
 ---
 
-## ライフサイクルと行き先
+## ライフサイクルと帰属
 
 | 状態                 | 位置                        | 説明                                    |
 | -------------------- | --------------------------- | --------------------------------------- |

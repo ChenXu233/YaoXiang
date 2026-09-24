@@ -18,7 +18,7 @@ yaoxiang format --dry-run file.yx
 # Форматирование и запись в файл
 yaoxiang format -w file.yx
 
-# Форматирование всех файлов .yx в каталоге
+# Форматирование всех файлов .yx в директории
 yaoxiang format -w src/
 ```
 
@@ -38,7 +38,7 @@ yaoxiang format -w src/
 
 ---
 
-## C. Ссылки
+## C. Справочные материалы
 
 - [Issue #13: Реализация инструмента форматирования кода yaoxiang format](https://github.com/ChenXu233/YaoXiang/issues/13)
 - [Руководство по стилю Rustfmt](https://rust-lang.github.io/rustfmt/)

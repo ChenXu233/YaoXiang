@@ -91,7 +91,7 @@ mut x = 20   // Compile error! x has already been declared
 
 These rules ensure that each variable name is unique within the current scope, so you'll never encounter confusion about which variable a name refers to.
 
-## Type Inference vs Explicit Type Annotations
+## Type Inference vs. Explicit Type Annotations
 
 YaoXiang uses the Hindley-Milner (HM) type inference algorithm. The compiler can automatically infer types from the values you write, so in most cases you don't need to write types manually.
 
@@ -112,7 +112,7 @@ ratio: Float = 0.618
 
 Both styles are completely equivalent. You can start writing code without types and add type annotations when needed. This makes prototyping very fast while still maintaining type safety in the final code.
 
-## Basic Types Overview
+## Overview of Basic Types
 
 YaoXiang has several built-in primitive types that cover the vast majority of everyday programming scenarios.
 
@@ -188,9 +188,9 @@ outer = "I'm outside"
 ```yaoxiang
 greet: (name: String) -> Void = {
     print("Hello, " + name)
-    // name is visible inside this function body
+    // 'name' is visible inside this function body
 }
-// name is not visible outside the function
+// 'name' is not visible outside the function
 ```
 
 ### Block Expressions
@@ -203,8 +203,8 @@ result = {
     y = 20
     return x + y   // Returns 30 to the outer scope
 }
-// result's value is 30
-// x and y are not visible outside the block
+// The value of 'result' is 30
+// 'x' and 'y' are not visible outside the block
 ```
 
 For detailed explanation of block return values, please refer to the functions chapter later. For now, just remember: **curly braces create scope, inner can see outer, outer cannot see inner**.

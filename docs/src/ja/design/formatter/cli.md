@@ -3,11 +3,11 @@ title: "yaoxiang format コマンドライン用法"
 description: フォーマットツールのコマンドラインパラメータと使用方法
 ---
 
-# コマンドライン用法
+# コマンドライン使用方法
 
 ---
 
-## A. コマンドライン用法
+## A. コマンドライン使用方法
 
 ```bash
 # ファイルをフォーマット（stdout に出力）
@@ -16,7 +16,7 @@ yaoxiang format file.yx
 # ファイルがフォーマット済みかチェック
 yaoxiang format --dry-run file.yx
 
-# フォーマットしてファイルに書き込み
+# ファイルをフォーマットして書き込む
 yaoxiang format -w file.yx
 
 # ディレクトリ内のすべての .yx ファイルをフォーマット

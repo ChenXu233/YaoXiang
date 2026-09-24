@@ -163,7 +163,7 @@ exit of type `Never`, exiting the nearest function boundary. The expression form
 | **Expression form**| `expression`       | Expression value                   |
 | **`return`**       | `return e`         | Non-local function exit, type `Never` |
 
-**Examples**:
+**Example**:
 
 ```yaoxiang
 main: () -> Void = { println("Hello") }         # tail expression is Void
@@ -193,7 +193,7 @@ main: () -> Void = println("Hello")               # correct: expression form
 **Type Inference Examples**:
 
 ```yaoxiang
-# Generic functions: explicit type parameters (using RFC-010 unified syntax)
+# Generic function: explicit type parameters (using the RFC-010 unified syntax)
 identity: (T: Type) -> ((x: T) -> T) = x
 map: (T: Type, R: Type) -> ((f: (T) -> R, list: List(T)) -> List(R)) = {
     result = List(R)()
@@ -221,7 +221,7 @@ main: () -> Void = { println("Hello") }                # infers to () -> Void
 print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # infers to (Int, Int) -> Void
 greet: (name: String) -> Void = { println("Hello " + name) }  # infers to (String) -> Void
 
-# Generic functions: explicitly constrain polymorphic type parameters (using RFC-010 unified syntax)
+# Generic function: explicitly constrain polymorphic type parameters (using the RFC-010 unified syntax)
 identity: (T: Type) -> ((x: T) -> T) = x
 map: (T: Type, R: Type) -> ((f: (T) -> R, list: List(T)) -> List(R)) = {
     # implement map function

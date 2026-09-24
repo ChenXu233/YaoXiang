@@ -4,7 +4,7 @@
 
 This directory contains design decisions, proposals, and discussions for the YaoXiang programming language.
 
-## Core Design Principles
+## Core Design Philosophy
 
 | Principle           | Description                                               |
 | ------------------- | --------------------------------------------------------- |
@@ -106,13 +106,13 @@ design/
 Before submitting a new proposal, please refer to:
 
 - [RFC_TEMPLATE.md](./rfc/RFC_TEMPLATE.md)
-- [Full Example](./rfc/EXAMPLE_full_feature_proposal.md)
+- [Complete Example](./rfc/EXAMPLE_full_feature_proposal.md)
 
 ## Participating in Design Discussions
 
 ### RFC Lifecycle
 
-RFC proposals have 5 statuses:
+RFC proposals have 5 states:
 
 | Status       | Meaning                                   |
 | ------------ | ----------------------------------------- |
@@ -133,7 +133,7 @@ Draft → Under Review → Accepted → Deprecated (replaced)
 ### Proposal Process
 
 ```
-1. Draft proposal (use RFC template)
+1. Draft proposal (using RFC template)
    → Place in rfc/draft/
 
 2. Submit for review
@@ -190,7 +190,7 @@ compute: (Int) -> Int = (n) => {
     a + b + c
 }
 
-// Spawn block introduces dataflow parallelism
+// spawn block introduces dataflow parallelism
 process: () -> Void = () => {
     spawn {
         users = fetch_users()   // Parallel
@@ -221,7 +221,7 @@ process: () -> Result(Data, Error) = {
 - [GitHub Discussions](https://github.com/ChenXu233/YaoXiang/discussions)
 - [Contributing Guide](../dev/contributing.md)
 
-## Historical Archive
+## Historical Archives
 
 Historical documents from the design process have been moved to the `docs/src/archive/` directory (this directory is not included in site building), including:
 

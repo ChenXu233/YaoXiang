@@ -292,7 +292,7 @@ main: () -> Void = {
 
 Negative testing splits by failure layer, each layer in its proper place:
 
-#### 8.1 Value-Level Reverse (General, User-Facing)
+#### 8.1 Value-Level Reverse (Generic, User-Facing)
 
 Operations under test return `Result`, tests express expected failure with ordinary assertions:
 

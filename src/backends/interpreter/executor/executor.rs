@@ -1054,6 +1054,13 @@ impl Interpreter {
             (CompareOp::Ne, RuntimeValue::Struct { .. }, RuntimeValue::Struct { .. }) => {
                 RuntimeValue::Bool(!Self::runtime_value_deep_eq(&a, &b))
             }
+            // RFC-010：和类型值 Eq/Ne——类型身份 + 变体序 + 载荷递归
+            (CompareOp::Eq, RuntimeValue::Enum { .. }, RuntimeValue::Enum { .. }) => {
+                RuntimeValue::Bool(Self::runtime_value_deep_eq(&a, &b))
+            }
+            (CompareOp::Ne, RuntimeValue::Enum { .. }, RuntimeValue::Enum { .. }) => {
+                RuntimeValue::Bool(!Self::runtime_value_deep_eq(&a, &b))
+            }
             // #302：Range 结构相等（三标量按值比较，PartialEq 已实现）
             (CompareOp::Eq, RuntimeValue::Range { .. }, RuntimeValue::Range { .. }) => {
                 RuntimeValue::Bool(a == b)
@@ -1136,6 +1143,19 @@ impl Interpreter {
             | (RuntimeValue::Array(x), RuntimeValue::Array(y)) => {
                 items_eq(x, y).unwrap_or_else(|| a == b)
             }
+            // RFC-010：和类型递归（类型身份 + 变体序 + 载荷）
+            (
+                RuntimeValue::Enum {
+                    type_id: tx,
+                    variant_id: vx,
+                    payload: px,
+                },
+                RuntimeValue::Enum {
+                    type_id: ty,
+                    variant_id: vy,
+                    payload: py,
+                },
+            ) => tx == ty && vx == vy && Self::runtime_value_deep_eq(px, py),
             // RFC-011b：Struct 逐字段递归（fields 是堆上 Tuple 载体）
             (
                 RuntimeValue::Struct {

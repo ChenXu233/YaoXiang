@@ -157,7 +157,7 @@ Matrix: (T: Type, Rows: Int, Cols: Int) -> Type = {
     _assert: Assert(Cols > 0),
 }
 
-# Создание единичной матрицы 3x3 — выполняется на этапе компиляции
+# Создание единичной матрицы 3x3 — завершается на этапе компиляции
 identity: (T: Add + Zero + One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = {
     matrix = Matrix(T, N, N)()
     # ...
@@ -236,7 +236,7 @@ AsString: (T: Type) -> Type = match T {
 }
 ```
 
-#### Обобщённые функции
+#### Дженерик-функции
 
 ```yaoxiang
 # map: обобщённая функция, типы параметров T, R определяются на этапе компиляции
@@ -471,7 +471,7 @@ map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) 
 > | `List = {...}`                       | ❌ HM выводит как функцию, не тип |
 
 ```yaoxiang
-# Определение обобщённого типа (обязательно : Type)
+# Определение дженерик-типа (должно иметь : Type)
 Option: (T: Type) -> Type = {
     some: (T) -> Self,
     none: () -> Self
@@ -489,7 +489,7 @@ List: (T: Type) -> Type = {
     get: (self: List(T), index: Int) -> Option(T),
 }
 
-# Обобщённая функция (без : Type, HM выводит как функцию)
+# Дженерик-функция (без : Type, HM выводит как функцию)
 map: (T: Type, R: Type) -> ((opt: Option(T), f: Fn(T) -> R) -> Option(R)) = {
     return match opt {
         some => Option.some(f(some)),
@@ -504,12 +504,12 @@ clone: (T: Clone)(value: T) -> T = value.clone()
 combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 ```
 
-### Синтаксис вызова обобщённых функций
+### Синтаксис вызова дженерик-функций
 
 #### 1.1 Унифицированный синтаксис сигнатур
 
 ```yaoxiang
-# Обобщённые функции используют унифицированный синтаксис сигнатур (T: Type, R: Type)
+# Дженерик-функции используют унифицированный синтаксис сигнатур (T: Type, R: Type)
 map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = ...
 
 # Несколько параметров типов
@@ -547,10 +547,10 @@ map: (T: Type, R: Type) -> ((list: List(T), f: (x: T) -> R) -> List(R)) = {
 
 # Точки использования
 int_list: List(Int) = List(Int)()
-doubled: List(Int) = map(int_list, (x: Int) => x * 2)  # Инстанциация map[Int, Int]
+doubled: List(Int) = map(int_list, (x: Int) => x * 2)  # Инстанцирование map[Int, Int]
 
 string_list: List(String) = List(String)()
-uppercased: List(String) = map(string_list, (s: String) => s.to_uppercase())  # Инстанциация map[String, String]
+uppercased: List(String) = map(string_list, (s: String) => s.to_uppercase())  # Инстанцирование map[String, String]
 
 # После компиляции (эквивалентный код)
 map_Int_Int: (list: List(Int), f: (Int) -> Int) -> List(Int) = {
@@ -616,7 +616,7 @@ combine: (T: Clone + Add)(a: T, b: T) -> T = {
     a.clone() + b
 }
 
-# Сортировка обобщённого контейнера
+# Сортировка дженерик-контейнера
 sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T) = {
     # Реализация алгоритма сортировки
     result: List(T) = list.clone()
@@ -785,7 +785,7 @@ Producer: (Item: Type) -> Type = {
 # Ассоциированные типы могут быть обобщёнными
 Container: (Item: Type) -> Type = {
     Item: T,
-    IteratorType: Iterator(Item),  # Ассоциированный тип тоже обобщённый
+    IteratorType: Iterator(Item),  # Ассоциированный тип тоже дженерик
     iter: (Self) -> IteratorType,
 }
 
@@ -933,7 +933,7 @@ Assert(size_of(IntArray(10)) == sizeof(Int) * 10)
 ```yaoxiang
 # Оптимизация малых массивов: реализация специализации compile-time обобщений через перегрузку функций
 
-# Универсальная реализация
+# Общая реализация
 sum: (T: Type, N: Int) -> ((arr: Array(T, N)) -> T) = {
     result = Zero::zero()
     for item in arr.data {
@@ -991,7 +991,7 @@ AsString: (T: Type) -> Type = match T {
     Int => String,
     Float => String,
     Bool => String,
-    _ => String,  # По умолчанию
+    _ => String,  # по умолчанию
 }
 
 # Вычисления на уровне типов
@@ -1030,7 +1030,7 @@ sum: (arr: Vec(Float)) -> Float = {
     return simd_sum_float(arr.data, arr.length)
 }
 
-# Универсальная реализация
+# Общая реализация
 sum: (T: Type) -> ((arr: Vec(T)) -> T) = {
     result = Zero::zero()
     for item in arr {
@@ -1128,7 +1128,7 @@ result = native_sum_int(int_arr.data, int_arr.length)
 4. **Идеально соответствует RFC-010**
 
    ```yaoxiang
-   # Полностью используется унифицированный синтаксис
+   # Полностью использует унифицированный синтаксис
    name: type = value
    # Без новых ключевых слов вроде impl, where
    ```
@@ -1143,7 +1143,7 @@ fibonacci: (n: Int) -> Int = {
 }
 
 fibonacci: (n: Float) -> Float = {
-    # Использование формулы Бине
+    # Использует формулу Бине
     phi = (1.0 + 5.0.sqrt()) / 2.0
     return (phi.pow(n) - (-phi).pow(-n)) / 5.0.sqrt()
 }
@@ -1165,7 +1165,7 @@ fibonacci(10.5)    # Выбирается версия Float, используе
 
 ### 7. Механизм устранения мёртвого кода
 
-#### 7.1 Анализ графа инстанциации
+#### 7.1 Анализ графа инстанцирования
 
 ```rust
 // Внутренняя структура компилятора: построение графа зависимостей инстанциации обобщений
@@ -1208,14 +1208,14 @@ fn eliminate_dead_instantiations(graph: &InstantiationGraph) {
 # Анализ исходного кода
 map: (T: Type, R: Type)(list: List(T), f: Fn(T) -> R) -> List(R) = ...
 
-# Точка использования 1: инстанциация map(Int, Int)
+# Точка использования 1: инстанцирование map(Int, Int)
 int_list = List(Int)()
 int_list.push(1)
 int_list.push(2)
 int_list.push(3)
 doubled = map(int_list, (x) => x * 2)  # Требуется map[Int, Int]
 
-# Точка использования 2: инстанциация map(String, String)
+# Точка использования 2: инстанцирование map(String, String)
 string_list = List(String)()
 string_list.push("a")
 string_list.push("b")
@@ -1264,7 +1264,7 @@ int_list = List(Int)()
 int_list.push(1)
 int_list.push(2)
 int_list.push(3)
-doubled = map(int_list, (x) => x * 2)  # Инстанциация map(Int, Int)
+doubled = map(int_list, (x) => x * 2)  # Инстанцирование map(Int, Int)
 
 # Модуль C
 # C.yx
@@ -1273,7 +1273,7 @@ string_list = List(String)()
 string_list.push("a")
 string_list.push("b")
 string_list.push("c")
-uppercased = map(string_list, (s) => s.to_uppercase())  # Инстанциация map(String, String)
+uppercased = map(string_list, (s) => s.to_uppercase())  # Инстанцирование map(String, String)
 
 # Compile-time анализ:
 # - Модуль B использует map[Int, Int]
@@ -1311,7 +1311,7 @@ fn optimize_ir(ir: &mut IR) {
 
 ### 8. Стратегия замены макросов
 
-#### 8.1 Замена генерации кода
+#### 8.1 Замена кодогенерации
 
 ```yaoxiang
 # ❌ Подход с макросами: генерация кода
@@ -1414,10 +1414,10 @@ result_type = Add[Int, Float]  # Выводится как Float
 
 ### 9. Примеры
 
-#### 9.1 Полный пример обобщённого контейнера
+#### 9.1 Полный пример дженерик-контейнера
 
 ```yaoxiang
-# ======== 1. Определение обобщённого контейнера ========
+# ======== 1. Определение дженерик-контейнера ========
 # Использование синтаксиса (T: Type) -> Type
 Result: (T: Type, E: Type) -> Type = {
     ok: (T) -> Self,
@@ -1505,13 +1505,13 @@ List.clone: (T: Clone) -> ((self: List(T)) -> List(T)) = {
 }
 
 # ======== 4. Примеры использования ========
-# Создание обобщённого List
+# Создание дженерик-List
 numbers = List(Int)()
 numbers.push(1)
 numbers.push(2)
 numbers.push(3)
 
-# Использование обобщённых методов
+# Использование дженерик-методов
 doubled = numbers.map((x) => x * 2)
 evens = numbers.filter((x) => x % 2 == 0)
 
@@ -1528,7 +1528,7 @@ sum_of_evens = numbers
 #### 9.2 Пример обобщённого алгоритма
 
 ```yaoxiang
-# ======== 1. Обобщённый алгоритм сортировки ========
+# ======== 1. Дженерик-алгоритм сортировки ========
 Comparator: (T: Type) -> Type = {
     compare: (T, T) -> Int,  # -1 если a < b, 0 если a == b, 1 если a > b
 }
@@ -1800,7 +1800,7 @@ generic_type ::= identifier ':' type '=' type_expression
        ├──────────────────┐
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
-│  Принято    │    │  Отклонено  │
+│  Принят     │    │  Отклонён   │
 └──────┬──────┘    └──────┬──────┘
        │                  │
        ▼                  ▼

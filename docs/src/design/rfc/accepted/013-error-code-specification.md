@@ -337,6 +337,7 @@ E1001::unknown_variable(&var_name)
 | E1102 | 循环控制语句出现在循环外             |
 | E1103 | 类型位置不能使用方括号              |
 | E1104 | 接口实现不在类型的定义模块            |
+| E1105 | 变体构造器不可作为字段访问            |
 <!-- code-table:E1xxx end -->
 
 > **RFC-011b 关联（2026-09-22 注）**：[RFC-011b: 运算符重载](./011b-operator-overloading.md)
@@ -546,7 +547,7 @@ Error { code: String, message: String }
 
 #### 演进路径（线 C，未实施）
 
-模式匹配完备化（RFC-039）落地后，`Error` 可升级为 `{ kind: ErrorKind, message: String }`，`code` 转为由 kind 派生的属性（变体定义处即码注册表）。演进期本节 code 稳定契约保持不变；该升级为独立决策，不构成本节承诺。
+模式匹配完备化（RFC-010b）落地后，`Error` 可升级为 `{ kind: ErrorKind, message: String }`，`code` 转为由 kind 派生的属性（变体定义处即码注册表）。演进期本节 code 稳定契约保持不变；该升级为独立决策，不构成本节承诺。
 
 ---
 

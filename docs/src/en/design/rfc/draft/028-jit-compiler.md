@@ -84,7 +84,7 @@ JIT and AOT share the **IR normalization pass** (`middle/passes/ir_normalize.rs`
 ```
 Function call
   → fn_entry.code_ptr.load()
-  → ┬─ Interpreter stub (cold state): interpret bytecode instruction by instruction
+  → ┬─ Interpreter stub (cold state): interpret bytecode one by one
     └─ JIT native code (hot state): execute machine code directly
   → Return
 ```
@@ -106,7 +106,7 @@ src/
 │   │   ├── profiler.rs           # Profiling counts + decay + threshold decisions
 │   │   ├── entry.rs              # FunctionEntry + AtomicPtr management
 │   │   ├── cache.rs              # Code cache (mmap executable page management)
-│   │   ├── compiler.rs           # IR → Cranelift IR → Native code
+│   │   ├── compiler.rs           # IR → Cranelift IR → native code
 │   │   ├── types.rs              # YaoXiang type → Cranelift type mapping
 │   │   └── abi.rs                # Function calling convention (System V / Microsoft x64)
 │   │
@@ -120,7 +120,7 @@ src/
                                    #   Shared by JIT and LLVM AOT
 ```
 
-**Key Constraints**:
+**Key constraints**:
 
 - `backends/jit/` depends only on `middle/` (IR definitions, normalization passes), standard library, and Cranelift crate
 - `backends/jit/` does not depend on `backends/llvm/`, they are peer backends
@@ -128,7 +128,7 @@ src/
 
 ### 2. Profiling Analysis and Tiered Triggering
 
-#### 2.1 Heat State Machine
+#### 2.1 Hotness State Machine
 
 ```
 Cold ──(invocation > 50 or backedge > 500)──→ Warm
@@ -162,7 +162,7 @@ fn decay(entry: &FunctionEntry) {
 
 Using bit operations, zero division overhead.
 
-#### 2.4 Compilation Queue
+#### 2.4 Compile Queue
 
 ```
 Interpreter thread                          Background JIT thread
@@ -186,7 +186,7 @@ During compilation, the function still executes via the interpreter. After compi
 
 ```
 YaoXiang IR (stack form)
-  → IR normalization pass (stack → register/SSA)    ← Reuse RFC-018 §4.0
+  → IR normalization pass (stack → register/SSA)    ← Reuses RFC-018 §4.0
   → Cranelift IR construction
   → Cranelift optimization + machine code generation
   → Write to code cache
@@ -267,14 +267,14 @@ Caller
 
 One pointer dereference. Modern CPU branch predictors handle indirect jumps: first prediction is wrong, then all correct. Cost ~1 cycle.
 
-#### 4.3 Atomic Switching
+#### 4.3 Atomic Switch
 
-One CAS after compilation completes:
+After compilation completes, a single CAS:
 
 ```rust
 fn install_jit_code(entry: &FunctionEntry, jit_code: *mut u8) -> bool {
     entry.code_ptr.compare_exchange(
-        INTERPRETER_STUB,      // Expected: still pointing to interpreter
+        INTERPRETER_STUB,      // Expected: still points to interpreter
         jit_code,              // Replace with: JIT code
         Ordering::AcqRel,
         Ordering::Acquire,
@@ -338,7 +338,7 @@ trait CodeCacheExt {
     fn swap_module(&self, module_path: &str, new_functions: HashMap<String, FunctionEntry>);
 }
 
-/// Compilation queue extension interface (reserved, not implemented)
+/// Compile queue extension interface (reserved, not implemented)
 trait CompileQueueExt {
     /// Priority insertion (hot reload compilation takes precedence over normal JIT compilation)
     fn submit_priority(&self, task: CompileTask);
@@ -388,7 +388,7 @@ JIT itself only needs functions. Organizing by module is entirely for hot reload
 
 - RFC-018 (LLVM AOT) → Shares IR normalization pass
 - RFC-024 (spawn block concurrency) → JIT compilation of spawn blocks
-- RFC-008 (runtime architecture) → Three-tier runtime JIT support
+- RFC-008 (runtime architecture) → three-tier runtime JIT support
 - Cranelift crate → JIT backend
 
 ## References

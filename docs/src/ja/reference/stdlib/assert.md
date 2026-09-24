@@ -15,7 +15,7 @@ use std.assert
 
 <!-- stdlib:table:assert start -->
 
-| 関数     | 署名                                 |
+| 関数     | シグネチャ                           |
 | -------- | ------------------------------------ |
 | `assert` | `(cond: Bool, ?msg: String) -> Void` |
 

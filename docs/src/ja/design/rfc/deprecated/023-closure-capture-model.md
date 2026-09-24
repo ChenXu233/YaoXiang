@@ -92,7 +92,7 @@ spawn_worker: (data: Data) -> Void = {
 # 4. 混合キャプチャ
 complex: (items: List(Point), config: &Config, buf: Buffer) -> List(Point) = {
     # config: &Config → Dup → トークンをコピー
-    # buf: Buffer → 非 Dup、非エスケープ → &mut Buffer 借用
+    # buf: Buffer → 非 Dup、非エスケープ → &mut Buffer を借用
     items.filter(|p| {
         let threshold = config.get_threshold()
         buf.update(p)
@@ -162,10 +162,10 @@ for captured in captures {
             // Move dst, src を生成（Dup 型のシャローコピー）
         }
         Borrow => {
-            // Borrow dst, src を生成（ReadToken を作成）
+            // Borrow dst, src を生成（ReadToken 作成）
         }
         BorrowMut => {
-            // Borrow dst, src を生成（WriteToken を作成）
+            // Borrow dst, src を生成（WriteToken 作成）
         }
         Move => {
             // Move dst, src を生成（所有権移転）

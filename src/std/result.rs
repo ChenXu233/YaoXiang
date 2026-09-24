@@ -137,7 +137,7 @@ pub const RESULT_MODULE: ResultModule = ResultModule;
 /// 构造 Result.ok(value)，variant_id=0
 pub fn result_ok(value: RuntimeValue) -> RuntimeValue {
     RuntimeValue::Enum {
-        type_id: TypeId::ENUM,
+        type_id: crate::backends::common::value::TypeId::from_sum_type_name("Result"),
         variant_id: 0,
         payload: Box::new(value),
     }
@@ -146,7 +146,7 @@ pub fn result_ok(value: RuntimeValue) -> RuntimeValue {
 /// 构造 Result.err(error)，variant_id=1
 pub fn result_err(error: RuntimeValue) -> RuntimeValue {
     RuntimeValue::Enum {
-        type_id: TypeId::ENUM,
+        type_id: crate::backends::common::value::TypeId::from_sum_type_name("Result"),
         variant_id: 1,
         payload: Box::new(error),
     }

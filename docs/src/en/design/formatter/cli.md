@@ -25,7 +25,7 @@ yaoxiang format -w src/
 
 ---
 
-## B. CLI Arguments
+## B. CLI Parameters
 
 | Argument          | Description                     | Default |
 | ------------------|---------------------------------|---------|

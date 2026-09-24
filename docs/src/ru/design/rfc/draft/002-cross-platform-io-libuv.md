@@ -134,7 +134,7 @@ RFC-024 определяет систему ресурсных типов:
 
 ### 2. Маппинг IO ресурсных типов
 
-#### 2.1 FilePath → файловый IO libuv
+#### 2.1 FilePath → файловый IO через libuv
 
 ```rust
 // модуль std.io (на основе libuv)
@@ -170,7 +170,7 @@ fn native_read_file(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<Ru
 }
 ```
 
-#### 2.2 HttpUrl → сетевой IO libuv
+#### 2.2 HttpUrl → сетевой IO через libuv
 
 ```rust
 // модуль std.net (на основе libuv)
@@ -241,7 +241,7 @@ fn native_print(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<Runtim
 }
 ```
 
-### 3. Интеграция с блоками spawn
+### 3. Интеграция со spawn-блоками
 
 #### 3.1 С точки зрения пользователя
 

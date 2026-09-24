@@ -1,12 +1,12 @@
 ---
-title: 'RFC 016: Quantum-Native Support and Multi-Backend Integration'
+title: 'RFC 016: Quantum Native Support and Multi-Backend Integration'
 status: 'Rejected'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-02-13'
 updated: '2026-06-05'
 ---
 
-# RFC 016: Quantum-Native Support and Multi-Backend Integration
+# RFC 016: Quantum Native Support and Multi-Backend Integration
 
 > **Rejection Reason**: Insufficient prerequisites. The Primitive::Extension mechanism has not been implemented, the language compiler is incomplete, and there is no actual user demand. Quantum support should be re-evaluated after the language matures as a consumer of the Extension mechanism.
 
@@ -24,7 +24,7 @@ This document defines **quantum-native support** and **multi-backend integration
 
 ## Motivation
 
-### Why Quantum-Native Support?
+### Why is quantum native support needed?
 
 The current quantum programming ecosystem has severe fragmentation:
 
@@ -116,7 +116,7 @@ BellPair: Type0 = primitive_bell_pair
 # Builtin functions - can only operate as a whole
 CNOT: (Qubit, Qubit) -> BellPair
 measure_bell: (BellPair) -> { Int, Int }
-split_bell: (BellPair) -> { Qubit, Qubit }  # Split entangled pair (use with caution)
+split_bell: (BellPair) -> { Qubit, Qubit }  # split the entangled pair (use with caution)
 apply_cnot_to_bell: (BellPair, Qubit) -> BellPair
 ```
 
@@ -227,10 +227,10 @@ grover_search: (target: Int) -> Int = () => {
         qubits.append(H(qubit(0)))
     }
     # Classical loop mixed with quantum operations
-    oracle(qubits, target)   # oracle is a quantum gate sequence
+    oracle(qubits, target)   # oracle is a sequence of quantum gates
     qubits = diffusion(qubits)
     results = measure_all(qubits)
-    return decode_result(results)   # Classical post-processing
+    return decode_result(results)   # classical post-processing
 }
 ```
 
@@ -279,7 +279,7 @@ bell_measure: () -> {Int, Int} = () => {
 
 ```yaoxiang
 teleport: (msg: Qubit, bell: BellPair) -> Qubit = (msg, bell) => {
-    # Split entangled pair to get two independent qubits
+    # Split the entangled pair to obtain two independent qubits
     (alice_qubit, bob_qubit) = split_bell(bell)
 
     # Alice's operations
@@ -447,7 +447,7 @@ QIR backend leverages LLVM's `-O2` for further optimization, and outputs QIR All
 
 ```
 ┌─────────────┐
-│   Draft     │  ← Author creates
+│   Draft     │  ← Created by author
 └──────┬──────┘
        │
        ▼

@@ -29,7 +29,7 @@ issue: '#90'
 > **Supersedes**: [RFC-022: Hoare Logic Static Verification Support (Specification Comments and Specification Types)](../deprecated/022-hoare-logic-static-verification.md)
 > — Deprecated
 
-## Summary
+## Abstract
 
 This document proposes introducing **compile-time predicates** as first-class citizens in YaoXiang, unifying all compile-time static verification into a single **proof pipeline**. Compile-time predicates are not external specification comments — they are functions. A function that returns Type, usable in type positions, called by the compiler at compile-time, with its return value checked. Types are propositions, compile-time evaluation is proof.
 
@@ -37,7 +37,7 @@ This document proposes introducing **compile-time predicates** as first-class ci
 
 ## Motivation
 
-### Why Deprecate RFC-022?
+### Why deprecate RFC-022?
 
 RFC-022 designed specifications as `//!` comment forms:
 
@@ -114,8 +114,8 @@ sum: (arr: Array(Int)) -> Int = {
     mut s: SumUpTo(arr, i) = 0   # Annotate references i — tells compiler s's type depends on i
     mut i: UpTo(arr.len) = 0     # At initialization i=0, verify: 0 == sum(arr[0..0]) → True
     while i < arr.len {
-        s += arr[i]  # Compiler verifies: s_new == sum(arr[0..i+1])
-        i += 1       # i changes → triggers s dependency re-verification: s satisfies SumUpTo(arr, i_new)
+        s += arr[i]  # compiler verifies: s_new == sum(arr[0..i+1])
+        i += 1       # i changes → triggers s's dependent re-verification: s satisfies SumUpTo(arr, i_new)
     }
     return s  # s: SumUpTo(arr, arr.len) = sum(arr[0..arr.len])
 }
@@ -270,7 +270,7 @@ The pipeline returns `Disproved` (not implied) → Compile error:
 
 YaoXiang does not accept runtime values directly entering refined type parameters without providing static evidence. This is not a limitation — it's the core of hard safety philosophy. Any code the compiler cannot statically prove must not pass compilation.
 
-#### 3.5 Relationship with the Unified Pipeline
+#### 3.5 Relationship to the Unified Pipeline
 
 Path condition propagation is not an additional mechanism. It's the direct extension of the compile-time proof pipeline to control flow analysis:
 
@@ -297,10 +297,10 @@ When compiler encounters Bool expression needing evaluation (i.e., needs to cons
         │   → Flow-sensitive liveness analysis (Dup/Linear attribute tracking)
         │
         ├── Dependent type reduction (n + m simplification)
-        │   → Compile-time term rewriting system (βδι-reduction)
+        │   → compile-time term rewriting system (βδι-reduction)
         │
-        ├── Compile-time predicates (x > 0, forall...)
-        │   → Compiler itself + SMT acceleration module
+        ├── Compile-time predicate (x > 0, forall...)
+        │   → compiler itself + SMT accelerator module
         │
         └── Hoare logic implications (P ⇒ Q)
             → Compiler + SMT acceleration module
@@ -339,7 +339,7 @@ The compiler saying "I cannot prove it" is not equivalent to the proposition bei
 
 Hard budget limits are the engineering solution to the halting problem. No knobs — giving knobs means asking users "do you think your program will halt," users don't know, compiler doesn't know either.
 
-#### 4.2 After Unproven: Programmer Writes Proof
+#### 4.2 After Unproven: The Programmer Writes the Proof
 
 When the compiler returns Unproven, the programmer can write a **proof function** — a YaoXiang function whose return type equals the proposition to be proved. The type checker verifies this function — the same mechanism as it verifies `add(a, b): Int`.
 
@@ -384,7 +384,8 @@ Evaluation order (same pipeline, layered scheduling)
     └── Compiler itself → SMT acceleration → arrive at Proved / Disproved / Unproven
 ```
 
-Each layer still returns `Proved/Disproved/Unproven`, sharing the same interface and budget system.
+Each layer still returns `Proved/Disproved/Unproven`, sharing the same interface and the same budget
+system.
 
 ### 5. Three-Layer Function Unification
 
@@ -429,7 +430,7 @@ sum: (arr: Array(Int)) -> Int = {
         s += arr[i]
         i += 1
     }
-    return s  # At this point s: SumUpTo(arr, arr.len), i.e., s == sum(arr[0..arr.len])
+    return s  # at this point s: SumUpTo(arr, arr.len), i.e. s == sum(arr[0..arr.len])
 }
 ```
 
@@ -465,8 +466,8 @@ i += 1        # i changes → re-verify s satisfies SumUpTo(arr, i_new) → True
 # Wrong order — compiler rejects
 i += 1        # i changes → re-verify s satisfies SumUpTo(arr, i_new)
               # s not yet updated, s_old == sum(arr[0..i_old]) ≠ sum(arr[0..i_new])
-              # → Compile error: variable s does not satisfy type SumUpTo(arr, i_new)
-s += arr[i]   # Unreachable
+              # → compile error: variable s does not satisfy type SumUpTo(arr, i_new)
+s += arr[i]   # unreachable
 ```
 
 **Combined dependencies**: A variable can depend on multiple variables. Type annotation `{ v: Int; v == x + y }` depends on both `x` and `y` — either change triggers re-verification.
@@ -521,7 +522,7 @@ Coverage: Any loop where variables are assigned linear expressions (`v = a·v + 
 
 ```yaoxiang
 # Binary search: low = mid + 1 or high = mid
-# Measure high - low strictly decreases on both paths
+# Metric high - low strictly decreases on both paths
 binary_search: (arr: Sorted(Int, arr), key: Int) -> Option(Int) = {
     mut low: UpTo(arr.len) = 0
     mut high: UpTo(arr.len) = arr.len
@@ -592,7 +593,7 @@ sort: (arr: Array(Int)) -> (result: Sorted(result)) = {
 
 `v += const` (normal constant), variable has upper bound type annotation → measure `upper_bound - v` decreases by `const` each time, lower bound 0. This is a degenerate case of Strategy 1, handled quickly at the front.
 
-#### 6.5 Strategy 4: Multiplicative Scaling Measure Template
+#### 6.5 Strategy 4: Multiplicative Scaling Metric Template
 
 `v *= const` (const > 1), variable has upper and lower bound type annotations. Compiler has built-in logarithmic measure template
 `ceil(log_const(upper/v))`, each multiply by const decreases measure by 1.
@@ -810,7 +811,7 @@ automatically decides whether to go through compile-time proof or runtime check 
 
 The compiler maintains a flow-sensitive hypothesis set Γ, tracking propositions known to hold at each control flow point.
 
-**SP (Strongest Postcondition) propagation**:
+**SP (strongest postcondition) propagation**:
 
 ```yaoxiang
 assert(x > 0)       // Γ = {x > 0}
@@ -968,7 +969,7 @@ comes from runtime input, a runtime Bool check **is** inserted.
 - RFC-011: Generic Type System — compile-time predicates can have generic parameters
 - RFC-009: Ownership Model — expressions in compile-time predicates follow ownership rules
 
-## Open Questions
+## Open Issues
 
 - [x] **SMT solver choice**: Default Z3 (MIT license, most extensively verified). CVC5 as SMT-LIB-compatible alternative, switchable via compiler flag. Compiler internally translates to SMT-LIB
       2.6 standard format — SMT-LIB is the abstraction layer, no custom general solver interface.
@@ -986,7 +987,7 @@ comes from runtime input, a runtime Bool check **is** inserted.
 ## References
 
 - [RFC-010: Unified Type Syntax](../accepted/010-unified-type-syntax.md)
-- [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md)
+- [RFC-011: Generics System Design](../accepted/011-generic-type-system.md)
 - [RFC-009: Ownership Model](../accepted/009-ownership-model.md)
 - Howard, W. A. (1969). The Formulae-as-Types Notion of Construction.
 - Swamy, N. et al. (2016). Dependent Types and Multi-Monadic Effects in F\*. _POPL 2016_.
@@ -1001,7 +1002,7 @@ comes from runtime input, a runtime Bool check **is** inserted.
 
 ```
 ┌─────────────┐
-│   Draft     │  ← Author created
+│   Draft     │  ← author creates
 └──────┬──────┘
        │
        ▼

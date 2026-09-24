@@ -41,6 +41,26 @@ pub struct ImplementationProof {
     pub methods: Vec<String>,
 }
 
+/// RFC-010 记录式和类型：变体定义（声明序即 variant_id）。
+/// params 保留声明形态（形参名为 TypeRef），实例化时按类型实参替换。
+#[derive(Debug, Clone)]
+pub struct SumVariantDef {
+    pub name: String,
+    pub params: Vec<MonoType>,
+}
+
+/// RFC-010: 变体构造调用点（span 键控，ir_gen 据此生成 CreateVariant）。
+#[derive(Debug, Clone)]
+pub struct VariantCtorCall {
+    pub span: crate::util::span::Span,
+    /// 和类型名（CreateVariant 的 group，也是类型身份来源）
+    pub type_name: String,
+    /// 变体序号（类型体声明序）
+    pub variant_index: usize,
+    /// 载荷数（0 = 零载荷；>1 运行时打包 Tuple）
+    pub payload_count: usize,
+}
+
 /// RFC-011b: 接口实现登记表条目。
 ///
 /// `ImplementationProof` 不带类型实参，无法区分同一接口的不同实例化
@@ -109,6 +129,10 @@ pub struct TypeEnvironment {
     /// RFC-011b: 接口实现登记表（接口名 → 实例化条目，带类型实参维度）。
     /// 运算符查询与约束求解的唯一判据；不经普通名字解析（§名字与登记）。
     pub interface_impl_registry: HashMap<String, Vec<InterfaceImplEntry>>,
+    /// RFC-010: 记录式和类型登记表（类型名 → 变体定义表，声明序）。
+    /// 判定规则见 RFC-010「记录式和类型的变体构造（权威定义）」：
+    /// 字段全为函数且返回自身 → 判定，全部函数字段升格为变体构造器。
+    pub sum_types: HashMap<String, Vec<SumVariantDef>>,
     /// 模块名称
     pub module_name: String,
     /// 重载候选存储: 函数名 -> 多个重载版本
@@ -167,6 +191,14 @@ impl TypeEnvironment {
         key: &str,
     ) -> Option<&Vec<MonoType>> {
         self.method_overloads.get(key)
+    }
+
+    /// RFC-010: 类型名是否为已判定的和类型
+    pub fn is_sum_type(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.sum_types.contains_key(name)
     }
 
     /// RFC-011b: 登记接口实现（完全同参的重复条目去重）

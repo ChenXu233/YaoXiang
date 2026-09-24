@@ -10,7 +10,7 @@
 
 ---
 
-## I. Why Create YaoXiang?
+## 1. Why Create YaoXiang?
 
 ### 1.1 The Language Gap
 
@@ -56,7 +56,7 @@ This philosophical thinking is reflected in every detail of the language design:
 
 ---
 
-## II. Core Philosophy and Principles
+## 2. Core Philosophy and Principles
 
 The following design tenets are the cornerstone of YaoXiang, **non-negotiable and unbreakable**. Every feature proposal must pass scrutiny by these principles.
 
@@ -127,7 +127,7 @@ Type information should not exist only at compile-time but should be fully avail
 
 ---
 
-## III. Key Innovations and Features
+## 3. Key Innovations and Features
 
 YaoXiang, while absorbing the excellent features of existing languages, proposes the following innovative designs.
 
@@ -263,7 +263,7 @@ d3 = dist_from_p1(p2)       # 2.828
 
 **Innovation Value**: Pure functional design, no hidden `self` parameter, functions are values that can be freely passed and composed.
 
-### 3.4 Innovation Four: Spawn Model
+### 3.4 Innovation Four: The Spawn Model
 
 > 「All things arise together, I observe their return.」—— *I Ching, Hexagram Fu*
 >
@@ -277,7 +277,7 @@ d3 = dist_from_p1(p2)       # 2.828
 | **Concurrent Essence** | Runtime automatically extracts parallelism          |
 | **Unified Coordination** | Results automatically converge when needed, ensuring logical correctness |
 
-**Terminology System**:
+**Terminology**:
 
 | Official Term   | Corresponding Syntax            | Explanation                                                                       |
 | --------------- | ------------------------------- | --------------------------------------------------------------------------------- |
@@ -359,7 +359,7 @@ arr: Array(Int, factorial(3)) = Array(Int, 6)()
 
 # Compile-time dimension verification
 identity_3x3: Matrix(Float, 3, 3) = identity(Float, 3)(3)
-# multiply(matrix_2x3, matrix_4x2)  # Compile error: dimension mismatch
+# multiply(matrix_2x3, matrix_4x2)  # Compile error: dimensions mismatch
 ```
 
 **Innovation Value**: Capture more errors at compile-time, achieving more precise type guarantees.
@@ -387,7 +387,7 @@ break  continue as     in     unsafe
 
 ---
 
-## IV. Preliminary Syntax Preview
+## 4. Initial Syntax Preview
 
 The following code examples showcase YaoXiang's language style, helping you quickly feel its design aesthetics.
 
@@ -522,7 +522,7 @@ fetch_api: (url: String) -> JSON spawn = {
     return JSON.parse(response.body)
 }
 
-# Concurrent construction block: explicit parallelism
+# Concurrent construct block: explicit parallelism
 process_all: () -> (JSON, JSON, JSON) spawn = {
     (a, b, c) = spawn {
         fetch_api("https://api1.com/data"),
@@ -535,7 +535,7 @@ process_all: () -> (JSON, JSON, JSON) spawn = {
 
 ---
 
-## V. Roadmap and Pending Items
+## 5. Roadmap and Pending Items
 
 ### 5.1 Decided Design Decisions
 
@@ -571,11 +571,11 @@ The following decisions have been fully discussed and reviewed, **no longer acce
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## VI. How to Contribute
+## 6. How to Participate in Contributing
 
 YaoXiang is a language born from the community, growing in the community, and serving the community. We sincerely invite every developer passionate about programming language design to join this exploration journey.
 
-### 6.1 Design Discussion
+### 6.1 Design Discussions
 
 **Target Audience**: Programming language theory researchers, type system enthusiasts, language design fanatics
 
@@ -591,7 +591,7 @@ YaoXiang is a language born from the community, growing in the community, and se
 | | - Error handling syntax optimization |
 | | - Standard library API design |
 
-**Submitting Design Proposals**:
+**Submitting a Design Proposal**:
 
 1. Create a new file in the `rfcs/` directory
 2. Fill out the RFC template (motivation, detailed design, pros/cons analysis, alternatives)
@@ -662,7 +662,7 @@ yaoxiang/
 │   └── vim/                      # Vim/Neovim
 ```
 
-### 6.4 Standard Library Construction
+### 6.4 Standard Library Development
 
 **Target Audience**: Library developers, API designers, domain experts
 
@@ -727,7 +727,7 @@ yaoxiang/
 - Twitter/X: Project updates
 - Blog: In-depth articles
 
-### 6.7 Contribution Guidelines
+### 6.7 Contribution Guide
 
 **How to Start Contributing**:
 
@@ -738,7 +738,7 @@ yaoxiang/
 5. **Submit PR**: Follow commit conventions, write tests
 6. **Participate in review**: Review others' code, participate in discussions
 
-**Commit Conventions**:
+**Commit Convention**:
 
 ```bash
 # Commit message format
@@ -769,7 +769,7 @@ docs(readme): update installation instructions
 
 ---
 
-## Appendix A: Language Quick Reference
+## Appendix A: Language Cheat Sheet
 
 ### A.1 Keywords
 
@@ -861,7 +861,7 @@ A:
 
 A: v1.0 goal: production-ready. Release timing depends on implementation progress; see [Version Planning RFC](./rfc/rejected/003-version-planning.md).
 
-**Q: How to contact the core team?**
+**Q: How do I contact the core team?**
 
 A: Through GitHub Discussions or Discord community channels. Core team members respond regularly.
 

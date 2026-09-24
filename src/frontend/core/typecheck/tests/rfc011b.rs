@@ -546,3 +546,209 @@ fn test_rfc011b_unregistered_index_reports_e1002() {
         result.diagnostics
     );
 }
+
+// ===== RFC-010 变体构造（阶段 2 第一块）=====
+
+/// 规范（RFC-010 判定规则）：字段全为函数且返回自身 → 判定为和类型；
+/// `Result(Int, String)` 值位置实例化为 Generic 形态（类型自足）
+#[test]
+fn test_rfc010_sum_type_detection_and_instantiation() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        main: () -> Void = {
+            x = Result(Int, String)
+            return
+        }
+    "#;
+    let (result, mut checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "sum type declaration + instantiation should pass: {:?}",
+        result.diagnostics
+    );
+    let variants = checker
+        .env()
+        .sum_types
+        .get("Result")
+        .expect("Result should be detected as sum type");
+    assert_eq!(variants.len(), 2);
+    assert_eq!(variants[0].name, "ok");
+    assert_eq!(variants[1].name, "err");
+}
+
+/// 规范（判定规则·反例）：字段返回非自身 → 不判定为和类型（普通记录）
+#[test]
+fn test_rfc010_not_sum_type_when_return_differs() {
+    let source = r#"
+        Wrapper: Type = {
+            make: () -> Int,
+        }
+        main: () -> Void = {
+            return
+        }
+    "#;
+    let (_result, mut checker) = check_source_with_checker(source);
+    assert!(
+        !checker.env().sum_types.contains_key("Wrapper"),
+        "returning Int is not sum type"
+    );
+}
+
+/// 规范（判定规则·反例）：存在方法绑定 → 不判定（全有或全无）
+#[test]
+fn test_rfc010_not_sum_type_with_binding() {
+    let source = r#"
+        helper: () -> Int = 1
+        Weird: Type = {
+            make: () -> Weird,
+            make = helper[0],
+        }
+        main: () -> Void = {
+            return
+        }
+    "#;
+    let (_result, mut checker) = check_source_with_checker(source);
+    assert!(
+        !checker.env().sum_types.contains_key("Weird"),
+        "binding item disqualifies sum type"
+    );
+}
+
+// ===== RFC-010 变体构造（W2/W3）=====
+
+/// 规范（RFC-010 调用形态/推断）：类型限定调用类型自足——
+/// `Result(Int, String).ok(5)` 推断为 Generic{Result,[Int,String]}，
+/// 并记录 VariantCtorCall（span 键控，ir_gen 生成 CreateVariant）
+#[test]
+fn test_rfc010_variant_ctor_type_inferred() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        main: () -> Void = {
+            r = Result(Int, String).ok(5)
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "variant construction should pass: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(
+        result.local_var_types.get("r"),
+        Some(&crate::frontend::core::types::MonoType::Generic {
+            name: "Result".to_string(),
+            args: vec![
+                crate::frontend::core::types::MonoType::Int(64),
+                crate::frontend::core::types::MonoType::make_string(),
+            ],
+        }),
+    );
+    let d = result
+        .variant_ctor_calls
+        .iter()
+        .find(|c| c.type_name == "Result")
+        .expect("variant ctor call expected");
+    assert_eq!(d.variant_index, 0, "ok is declaration-order 0");
+    assert_eq!(d.payload_count, 1);
+}
+
+/// 规范（零载荷变体）：`Color.red()` 函数调用形态，构造点 payload_count = 0
+#[test]
+fn test_rfc010_zero_payload_variant() {
+    let source = r#"
+        Color: Type = {
+            red: () -> Color,
+            green: () -> Color,
+            blue: () -> Color,
+        }
+        main: () -> Void = {
+            c = Color.green()
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "zero-payload variant should pass: {:?}",
+        result.diagnostics
+    );
+    let d = result
+        .variant_ctor_calls
+        .iter()
+        .find(|c| c.type_name == "Color")
+        .expect("Color ctor call expected");
+    assert_eq!(d.variant_index, 1, "green is declaration-order 1");
+    assert_eq!(d.payload_count, 0);
+}
+
+/// 规范（字段升格）：和类型值的变体名字段访问 → E1105
+#[test]
+fn test_rfc010_variant_field_access_rejected_e1105() {
+    let source = r#"
+        Color: Type = {
+            red: () -> Color,
+        }
+        main: () -> Void = {
+            c = Color.red()
+            x = c.red
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1105"),
+        "variant-as-field should report E1105: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范（无一等构造器值）：`Result(Int, String).ok` 不跟调用 → E1105
+#[test]
+fn test_rfc010_ctor_without_call_rejected_e1105() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        main: () -> Void = {
+            f = Result(Int, String).ok
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1105"),
+        "ctor without call should report E1105: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范（相等放行）：和类型值参与 == 编译期放行（运行时按身份+变体+载荷）
+#[test]
+fn test_rfc010_sum_type_equality_allowed() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        main: () -> Void = {
+            a = Result(Int, String).ok(5)
+            b = Result(Int, String).ok(5)
+            e = a == b
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "sum type equality should pass typecheck: {:?}",
+        result.diagnostics
+    );
+}

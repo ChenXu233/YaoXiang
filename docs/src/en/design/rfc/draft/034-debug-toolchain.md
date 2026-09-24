@@ -99,7 +99,7 @@ yaoxiang run --debug file.yx
     │   └── Lowering to IR (with debug metadata attached)
     │
     ├── Phase 2: Use interpreter engine
-    │   └── In --debug mode, interpreter is used regardless of --release
+    │   └── In --debug mode, use the interpreter regardless of --release
     │
     ├── Phase 3: Start DAP server
     │   ├── Initialize stdio transport channel
@@ -130,7 +130,7 @@ Breakpoint types:
 └── Data breakpoint           → Triggers when variable is modified (Phase 2)
 ```
 
-**Core logic for source line breakpoints**:
+**Source line breakpoint core logic**:
 
 ```
 VS Code sends: "Set breakpoint at file.yx:42"
@@ -192,7 +192,7 @@ Step Out:
 ### 3. Variable Inspection and Scopes
 
 ```
-VS Code requests: "Variable list for current frame"
+VS Code request: "Variable list for current frame"
     │
 DAP server:
     ├── Query IR node at current pause point
@@ -201,7 +201,7 @@ DAP server:
     └── Assemble VariablesResponse → VS Code
 ```
 
-**Scope hierarchy**:
+**Scope layering**:
 
 ```
 ┌─ Globals ───────────────────────────┐
@@ -237,16 +237,16 @@ result: T       →  Display concrete runtime type
 ```
 DAP request: StackTrace
     │
-Returns:
+Return:
 ┌──────────────────────────────────┐
 │ #0  process_item()  file.yx:42  │  ← Current pause point
 │     locals: item = "hello"       │
 │     spawn task ID: task-3        │
 ├──────────────────────────────────┤
-│ #1  main()          file.yx:67  │  ← Caller
+│ #1  main()          file.yx:67  │  ← caller
 │     locals: data = ["hello", ...]│
 ├──────────────────────────────────┤
-│ #2  <entry>         file.yx:1   │  ← Root
+│ #2  <entry>         file.yx:1   │  ← root
 └──────────────────────────────────┘
 ```
 
@@ -291,7 +291,7 @@ User inputs expression
 | JIT    | Temporarily compile expression → Link to current frame → Execute → Discard temporary code |
 | LLVM   | Not supported—LLVM mode does not do interactive debugging      |
 
-### 6. Concurrent Debugging
+### 6. Concurrency Debugging
 
 **Task model visibility**:
 
@@ -299,14 +299,14 @@ DAP's `threads` concept maps to YaoXiang's `spawn` tasks. Each task has its own 
 
 ```
 ┌─ Threads ───────────────────────────┐
-│  ● task-1  main()     file.yx:10   │ ← Current focus
+│  ● task-1  main()     file.yx:10   │ ← Currently focused
 │  ▶ task-2  fetch()    file.yx:34   │ ← Running
 │  ⏸ task-3  process()  file.yx:56   │ ← Breakpoint paused
 │  ◼ task-4  write()    finished      │
 └─────────────────────────────────────┘
 ```
 
-**Breakpoints in concurrent context**:
+**Breakpoints in concurrency context**:
 
 | Pause mode              | Behavior                              | Use case                  |
 | ----------------------- | ------------------------------------- | ------------------------- |
@@ -394,7 +394,7 @@ Data shape landed above directly interfaces with Phase 1: DAP's breakpoint resol
 
 ### Phase 2: Advanced Debugging Capabilities
 
-**Goal**: Expression evaluation, function breakpoints, concurrent debugging, exception breakpoints.
+**Goal**: Expression evaluation, function breakpoints, concurrency debugging, exception breakpoints.
 
 | Component           | Changes                                                                    |
 | ------------------- | -------------------------------------------------------------------------- |
@@ -412,7 +412,7 @@ Data shape landed above directly interfaces with Phase 1: DAP's breakpoint resol
 | JIT  | Implement `DebugEngine` trait, generate variable→register mapping at compile time, runtime frame linked list, expression temporary compilation |
 | LLVM | IR debug metadata → LLVM `DILocation` / `DISubprogram` → DWARF (no DAP interaction) |
 
-### Dependencies
+### Dependency Relationships
 
 ```
 Phase 0 (IR metadata)

@@ -55,7 +55,7 @@ Glance/Modify in Place    Take        Shared Ownership    Clone a Copy       Sys
 | Rust           | Ownership + Borrow Checker    | Lifetime `'a` steep learning curve            |
 | **YaoXiang**   | **Move + Token + ref**        | **Simple, deterministic, no GC**              |
 
-### Design Goals
+### Design goals
 
 ```yaoxiang
 # 1. Default Move (zero-copy)
@@ -97,7 +97,7 @@ unsafe {
 
 ## Proposal
 
-### 1. Move (Default Ownership Transfer)
+### 1. Move (default ownership transfer)
 
 ```yaoxiang
 # Rule: Assignment / parameter passing / return = Move, zero-copy
@@ -108,7 +108,7 @@ p2 = p                           # Move, p cannot be read again
 # Variables can be reassigned (Python-style, no shadowing)
 p = Point(3.0, 4.0)              # p re-bound, type must be consistent
 
-# Function parameters: Move
+# Function parameter: Move
 process: (p: Point) -> Point = {
     p.transform()
     p                            # Move return
@@ -147,7 +147,7 @@ are zero-size compile-time token types. They are not "references", but "type-lev
 **The causal relationship cannot be reversed: freezing is the cause, Dup is the result.** It's not because `&T`
 implements Dup that they can coexist—it's because data is frozen (no mutation possible), multiple read-only views are safe, so Dup can be implemented. If you treat Dup as the definition and conflict checking as "extra patching", the design is wrong.
 
-#### 2.2 Basic Usage
+#### 2.2 Basic usage
 
 ```yaoxiang
 # Method side: declare parameter type, determines required permission
@@ -268,7 +268,7 @@ Token lifetime is determined by **ordinary scope rules**, no lifetime parameters
 
 Compiler doesn't need `'a` annotations because tokens are **values**, and value lifetime is uniformly managed by the ownership system (Move/RAII). **Reduces borrowing problem to ownership problem.**
 
-#### 2.5 Token Conflict Detection
+#### 2.5 Token conflict detection
 
 Token conflict detection is **a Hoare logic proposition**, not independent flow-sensitive analysis.
 
@@ -280,7 +280,7 @@ Shares RFC-027's proof pipeline with type checking and user predicate verificati
 / Disproved / Unproven.
 
 ```yaoxiang
-# ❌ &mut token is linear, cannot be copied
+# ❌ &mut tokens are linear, cannot be duplicated
 bad_dup: (p: &mut Point) -> Void = {
     p2: &mut Point = p              # Move, p cannot be read again
     p.x = 10.0                      # ❌ Compile error: WriteToken already moved
@@ -318,7 +318,7 @@ Brand uses:
 
 Brands completely disappear after monomorphization and inlining, not present in generated machine code. **Zero runtime overhead.**
 
-#### 2.8 Automatic Borrow Selection Rules
+#### 2.8 Automatic borrow selection rules
 
 Compiler at call site auto-selects by this priority:
 
@@ -356,7 +356,7 @@ p2 = p           # Move, p no longer used
 
 `ref` is the only way to share across scopes. Whether it's Rc or Arc underneath, users don't need to care.
 
-#### 3.1 Basic Usage
+#### 3.1 Basic usage
 
 ```yaoxiang
 p: Point = Point(1.0, 2.0)
@@ -380,7 +380,7 @@ main: () -> Void = {
 
 **User mental model**: `ref` = shared ownership. That's enough.
 
-#### 3.2 Compiler Escape Analysis: Rc vs Arc
+#### 3.2 Compiler escape analysis: Rc vs Arc
 
 ```
 ref data flow analysis:
@@ -389,7 +389,7 @@ Does not escape to other tasks → Rc (non-atomic reference count, low overhead)
 Escapes to other tasks         → Arc (atomic reference count, thread-safe)
 ```
 
-#### 3.3 Cycle Detection Strategy
+#### 3.3 Cycle detection strategy
 
 ```
 Intra-task cycles → silently allowed.
@@ -504,7 +504,7 @@ unsafe {
 
 ---
 
-### 6. Ownership Gradient Overview
+### 6. Ownership gradient overview
 
 ```
   Borrow tokens (zero overhead)   Move (zero overhead)    Sharing (pay-as-needed)   Copy
@@ -522,7 +522,7 @@ unsafe {
 
 ---
 
-## Comprehensive Example
+## Comprehensive example
 
 ```yaoxiang
 Point: Type = {
@@ -583,7 +583,7 @@ unsafe {
 
 ---
 
-## Type System Constraints
+## Type system constraints
 
 ### Dup Type Attribute
 
@@ -604,7 +604,7 @@ unsafe {
 
 ---
 
-## Performance Analysis
+## Performance analysis
 
 | Operation            | Cost    | Description                                 |
 | -------------------- | ------- | ------------------------------------------- |
@@ -680,7 +680,7 @@ unsafe {
 | **Inverse function / partial consume / three-layer mutability** | Deleted | Over-engineered                                                   | 2026-05-11   |
 | **Lambda no implicit capture**            | Lambda only uses explicit parameters, no implicit capture of outer variables; context solidified via currying at creation point (SPEC §12.3) | Closure definition scope may be dead; solidified value at creation point (call site scope alive) is safe | 2026-06-16   |
 
-### Version History
+### Version history
 
 | Version | Major Changes                                                                                              | Date          |
 | ------- | ---------------------------------------------------------------------------------------------------------- | ------------- |
@@ -688,7 +688,7 @@ unsafe {
 | **v8**  | **Deleted over-engineering (inverse function/partial consume/three-layer mutability/consume analysis/ownership return/empty state reuse), added bare-bones borrowing &T/&mut T** | **2026-05-11** |
 | **v9**  | **Borrow token system replaces bare-bones borrowing, unified type system; token conflict detection corrected to Hoare propositions, see RFC-009a** | **2026-06-13** |
 
-### Open Issues
+### Open issues
 
 | Issue             | Description                          | Status                       |
 | ----------------- | ------------------------------------ | ---------------------------- |
@@ -696,7 +696,7 @@ unsafe {
 | Escape analysis algorithm | ref cross-task detection implementation | Under discussion             |
 | Token conflict detection | Hoare logic propositions, see below | ✅ Resolved (details in RFC-009a) |
 
-### Token Conflict Detection: Hoare Logic Propositions
+### Token conflict detection: Hoare logic proposition
 
 Complete solution for token conflict detection is in
 [RFC-009a: Token Lifetime Analysis—Based on Hoare Proof Pipeline](../accepted/009a-borrow-proof-pipeline.md). Key points:
@@ -728,7 +728,7 @@ Complete solution for token conflict detection is in
 - [RFC-010 Unified Type Syntax](./010-unified-type-syntax.md)
 - [Tutorial](../../../tutorial/index.md)
 
-### External References
+### External references
 
 - [Rust Ownership Model](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html)
 - [C++ RAII](https://en.wikipedia.org/wiki/Resource_acquisition_is_initialization)

@@ -22,7 +22,7 @@ pr_impl:
 
 This document defines the **generic type system design** for YaoXiang language, achieving zero-cost abstraction through powerful generic capabilities, leveraging compile-time optimization to reduce reliance on macros, and providing dead code elimination mechanisms.
 
-**Core Design**:
+**Core design**:
 
 - **Unified Signature Syntax**: `(T: Type, R: Type) -> ...` - generic parameters and regular parameters are unified
 - **Type Self-Description Mechanism**: `Type` is a language-level special entity; `Type` positions in signatures can be automatically inferred and filled
@@ -65,7 +65,7 @@ YaoXiang's generic system is built on the **Type Universe Theory**, a mental mod
 # Traditional generics: type parameters
 List: (T: Type) -> Type
 
-# Value-dependent types: value parameters
+# Value-dependent type: value parameters
 Array: (T: Type, N: Int) -> Type  # Array type depends on length value N
 Matrix: (T: Type, Rows: Int, Cols: Int) -> Type  # Matrix type depends on row and column counts
 ```
@@ -167,7 +167,7 @@ identity: (T: Add + Zero + One, N: Int) -> ((size: N) -> Matrix(T, N, N)) = {
 arr: Array(Int, factorial(3)) = Array(Int, 6)()
 ```
 
-The compiler will automatically:
+The compiler automatically:
 
 1. Detect function calls at type positions
 2. Perform compile-time termination checking on functions (see termination checking mechanism below)
@@ -236,7 +236,7 @@ AsString: (T: Type) -> Type = match T {
 }
 ```
 
-#### Generic Functions
+#### Generics Functions
 
 ```yaoxiang
 # map: generic function, type parameters T, R determined at compile time
@@ -363,7 +363,7 @@ loop: (n: Int) -> Int = {
 
 ## Motivation
 
-### Why Do We Need a Strong Generic System?
+### Why Do We Need a Strong Generics System?
 
 Current mainstream language generics have limitations:
 
@@ -405,7 +405,7 @@ identity: Matrix(Float, 3, 3) = ...
 # multiply(matrix_2x3, identity_3x3)  # Compile error: 2 != 3
 ```
 
-### Value of the Generic System
+### Value of the Generics System
 
 ```yaoxiang
 # Example: Unified API Design
@@ -417,7 +417,7 @@ map_string_array: (array: Vec(String), f: Fn(String) -> String) -> Vec(String) =
 map_int_list: (list: List(Int), f: Fn(Int) -> Int) -> List(Int) = ...
 map_string_list: (list: List(String), f: Fn(String) -> String) -> List(String) = ...
 
-# Generic approach: one generic function covers all types
+# Generics approach: one generics function covers all types
 map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) = {
     for item in container {
         result.push(f(item))
@@ -451,7 +451,7 @@ map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) 
 
 ### 1. Basic Generics
 
-#### 1.1 Generic Type Parameters
+#### 1.1 Generics Type Parameters
 
 > **Key Rule**: Generic type definitions **must explicitly annotate `: Type`**, otherwise HM will infer them as functions.
 >
@@ -461,7 +461,7 @@ map: (T: Type, R: Type)(container: Container(T), f: Fn(T) -> R) -> Container(R) 
 > | `List = {...}`                        | ❌ HM infers as function, not type |
 
 ```yaoxiang
-# Generic type definition (must have : Type)
+# Generics type definition (must have : Type)
 Option: (T: Type) -> Type = {
     some: (T) -> Self,
     none: () -> Self
@@ -479,7 +479,7 @@ List: (T: Type) -> Type = {
     get: (self: List(T), index: Int) -> Option(T),
 }
 
-# Generic function (no : Type, HM infers as function)
+# Generics function (no : Type, HM infers as function)
 map: (T: Type, R: Type) -> ((opt: Option(T), f: Fn(T) -> R) -> Option(R)) = {
     return match opt {
         some => Option.some(f(some)),
@@ -487,14 +487,14 @@ map: (T: Type, R: Type) -> ((opt: Option(T), f: Fn(T) -> R) -> Option(R)) = {
     }
 }
 
-# Generic constraint (direct expression, return can be omitted for single-line)
+# Generics constraint (direct expression, return can be omitted on one line)
 clone: (T: Clone)(value: T) -> T = value.clone()
 
 # Multiple type parameters
 combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 ```
 
-### Generic Function Call Syntax
+### Generics Function Call Syntax
 
 #### 1.1 Unified Signature Syntax
 
@@ -511,7 +511,7 @@ combine: (T: Type, U: Type) -> ((a: T, b: U) -> (T, U)) = (a, b)
 `Type` is a language-level special entity; the compiler naturally recognizes `Type` positions in signatures and automatically infers and fills them from actual argument types.
 
 ```yaoxiang
-# Compiler automatically infers generic parameters
+# Compiler automatically infers generics parameters
 numbers: List(Int) = List(Int)()
 #         ^^^^^^^^   ^^^^^^^^
 #         type declaration   construction call: Int fills T, () is value construction
@@ -706,7 +706,7 @@ print(view.x)   # ✅
 # Clone: explicit deep copy, create independent copy
 backup = big_struct.clone()  # explicit call
 
-# Generic constraints
+# Generics constraints
 dup_use: (T: Dup) -> T = x         # T: Dup → can shallow copy
 clone_use: (T: Clone) -> T = x.clone()  # T: Clone → can deep copy
 ```
@@ -772,10 +772,10 @@ Producer: (Item: Type) -> Type = {
     produce: (Self) -> Option(Item),
 }
 
-# Associated types can be generic
+# Associated type can be generics
 Container: (Item: Type) -> Type = {
     Item: T,
-    IteratorType: Iterator(Item),  # Associated type is also generic
+    IteratorType: Iterator(Item),  # Associated type is also generics
     iter: (Self) -> IteratorType,
 }
 
@@ -918,7 +918,7 @@ IntArray: (N: Int) -> Type = Array(Int, N)
 Assert(size_of(IntArray(10)) == sizeof(Int) * 10)
 ```
 
-#### 4.4 Compile-Time Generic Specialization
+#### 4.4 Compile-Time Generics Specialization
 
 ```yaoxiang
 # Small array optimization: using function overloading to implement compile-time generic specialization
@@ -981,7 +981,7 @@ AsString: (T: Type) -> Type = match T {
     Int => String,
     Float => String,
     Bool => String,
-    _ => String,  # default
+    _ => String,  # Default
 }
 
 # Type-level computation
@@ -1095,9 +1095,9 @@ result = native_sum_int(int_arr.data, int_arr.length)
 # Completely equivalent to hand-written optimized code, no function call overhead!
 ```
 
-**Core Advantages**:
+**Core advantages**:
 
-1. **Compiler Intelligent Selection**
+1. **Compiler intelligent selection**
 
    ```yaoxiang
    sum(int_arr)      # automatically selects sum: (Vec(Int)) -> Int
@@ -1110,7 +1110,7 @@ result = native_sum_int(int_arr.data, int_arr.length)
    - Zero function call overhead
    - Completely equivalent to hand-written optimized code
 
-3. **Type Safety**
+3. **Type safety**
    - Compile-time type checking
    - Zero runtime overhead
    - No virtual function tables
@@ -1143,7 +1143,7 @@ fibonacci(10)      # selects Int version, fully inlined
 fibonacci(10.5)    # selects Float version, uses Binet's formula
 ```
 
-**What Does This Mean?**
+**What does this mean?**
 
 - ✅ **Generic specialization** → naturally solved by function overloading
 - ✅ **Performance optimization** → inlining automatically done
@@ -1156,7 +1156,7 @@ fibonacci(10.5)    # selects Float version, uses Binet's formula
 #### 7.1 Instantiation Graph Analysis
 
 ```rust
-// Compiler internal: build generic instantiation dependency graph
+// Compiler internals: build generics instantiation dependency graph
 struct InstantiationGraph {
     // Nodes: generic instantiations
     nodes: HashMap<InstanceKey, InstanceNode>,
@@ -1218,10 +1218,10 @@ map_Int_Int: (list: List(Int), f: Fn(Int) -> Int) -> List(Int) = ...
 map_String_String: (list: List(String), f: Fn(String) -> String) -> List(String) = ...
 ```
 
-#### 7.3 Compile-Time Generic DCE
+#### 7.3 Compile-Time Generics DCE
 
 ```yaoxiang
-# Compile-time analysis: compile-time generic usage
+# Compile-time analysis: compile-time generics usage
 Array: (T: Type, N: Int) -> Type = {
     data: Array(T, N),
 }
@@ -1263,7 +1263,7 @@ string_list.push("b")
 string_list.push("c")
 uppercased = map(string_list, (s) => s.to_uppercase())  # instantiate map(String, String)
 
-# Compilation analysis:
+# Compile analysis:
 # - Module B uses map[Int, Int]
 # - Module C uses map[String, String]
 # - Binary after compilation only contains these two instances
@@ -1339,7 +1339,7 @@ html! {
     </div>
 }
 
-# ✅ Generic approach: type-safe builder
+# ✅ Generics approach: type-safe builder
 Element: Type = {
     tag: String,
     attrs: HashMap(String, String),
@@ -1402,7 +1402,7 @@ result_type = Add[Int, Float]  # inferred as Float
 
 ### 9. Examples
 
-#### 9.1 Complete Generic Container Example
+#### 9.1 Complete Generics Container Example
 
 ```yaoxiang
 # ======== 1. Define Generic Container ========
@@ -1499,21 +1499,21 @@ numbers.push(1)
 numbers.push(2)
 numbers.push(3)
 
-# Use generic methods
+# Use generics methods
 doubled = numbers.map((x) => x * 2)
 evens = numbers.filter((x) => x % 2 == 0)
 
 # Use fold for computation
 sum = numbers.fold(0, (acc, x) => acc + x)  # sum = 6
 
-# Generic composition
+# Generics composition
 sum_of_evens = numbers
     .filter((x) => x % 2 == 0)
     .map((x) => x * 2)
     .fold(0, (acc, x) => acc + x)  # sum_of_evens = 8
 ```
 
-#### 9.2 Generic Algorithm Example
+#### 9.2 Generics Algorithm Example
 
 ```yaoxiang
 # ======== 1. Generic Sorting Algorithm ========
@@ -1521,7 +1521,7 @@ Comparator: (T: Type) -> Type = {
     compare: (T, T) -> Int,  # -1 if a < b, 0 if a == b, 1 if a > b
 }
 
-# Generic quicksort
+# Generics quicksort
 quicksort: (T: Clone) -> ((array: Vec(T), cmp: Comparator(T)) -> Vec(T)) = {
     if array.length <= 1 {
         return array.clone()
@@ -1575,7 +1575,7 @@ strings = Vec(String)("hello", "world", "foo", "bar")
 sorted_strings = quicksort(strings, Comparator(String)())
 ```
 
-#### 9.3 Compile-Time Generic Example
+#### 9.3 Compile-Time Generics Example
 
 ```yaoxiang
 # ======== 1. Compile-Time Matrix Type ========
@@ -1658,7 +1658,7 @@ identity_3x3 = identity(Float, 3)()
 
 2. **Dead code elimination**
    - Compile-time analysis, only instantiate used generics
-   - Code bloat is controllable
+   - Code bloat controllable
 
 3. **Macro replacement**
    - Type-safe code generation
@@ -1687,7 +1687,7 @@ identity_3x3 = identity(Float, 3)()
    - Generic errors may be complex
    - Need clear error hints
 
-### Mitigation Measures
+### Mitigations
 
 1. **Caching strategy**
    - Cache instantiation results
@@ -1699,7 +1699,7 @@ identity_3x3 = identity(Float, 3)()
 
 3. **Error hints**
    - Clear error messages
-   - Generic parameter inference hints
+   - Generics parameter inference hints
 
 4. **Parallel compilation**
    - Parallel instantiation of generics
@@ -1802,7 +1802,7 @@ generic_type ::= identifier ':' type '=' type_expression
 
 ## References
 
-### YaoXiang Official Documentation
+### YaoXiang Official Documents
 
 - [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md)
 - [RFC-009: Ownership Model](./009-ownership-model.md)

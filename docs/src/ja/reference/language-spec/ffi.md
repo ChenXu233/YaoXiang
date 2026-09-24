@@ -7,12 +7,12 @@
 
 ---
 
-## 第1章：概要
+## 第一章：概要
 
 ### 1.1 FFI の基本原則
 
 ```
-すべての {} 内の return は内容を上位スコープに戻す
+すべての {} 内の return は内容を一つ上のスコープに返す
 デフォルトで return がない場合は Void を返す
 ```
 
@@ -26,7 +26,7 @@
 
 ---
 
-## 第2章：FFI 型定義
+## 第二章：FFI 型定義
 
 ### 2.1 不透明型
 
@@ -62,37 +62,37 @@ Point: Type = {
     y: Int32
 }
 
-// ユーザーは直接作成可能
+// ユーザーが直接作成可能
 p: Point = Point { x: 1, y: 2 }
 ```
 
 ### 2.3 不透明型の判定
 
-コンパイラは不透明型と真空型を自動的に判定します：
+コンパイラは不透明型と真空型を自動的に判定する：
 
 ```yaoxiang
-// 不透明型（native 関数で参照されている）
+// 不透明型（native 関数に参照される）
 SqliteDb: Type = {}
 sqlite3_open: (filename: String) -> SqliteDb = native("sqlite3_open")
-// → SqliteDb は native 関数で参照されている → 不透明型
+// → SqliteDb は native 関数に参照される → 不透明型
 
-// 真空型（native 関数で参照されていない）
+// 真空型（native 関数に参照されない）
 MyType: Type = {}
-// → MyType は native 関数で参照されていない → 真空型
+// → MyType は native 関数に参照されない → 真空型
 ```
 
 **判定ルール**：
 
-- 型が `native` 関数で参照されている場合 → 不透明型
-- それ以外 → 真空型
+- 型が `native` 関数に参照される場合 → 不透明型
+- それ以外の場合 → 真空型
 
 ---
 
-## 第3章：FFI 関数宣言
+## 第三章：FFI 関数宣言
 
 ### 3.1 native 構文
 
-`native("symbol")` 構文を使用して外部関数を宣言します：
+外部関数の宣言には `native("symbol")` 構文を使用する：
 
 ```yaoxiang
 // FFI 関数宣言
@@ -119,7 +119,7 @@ FFI 関数の引数型は直接 YaoXiang 型を使用し、コンパイラが C 
 | `struct T*`          | `T`（透明型）   |
 | `typedef struct T T` | `T`（不透明型） |
 
-### 3.3 戻り値の型
+### 3.3 戻り型
 
 FFI 関数の戻り値の型は直接 YaoXiang 型を使用します：
 
@@ -136,11 +136,11 @@ get_value: () -> Int32 = native("get_value")
 
 ---
 
-## 第4章：メソッドバインディング
+## 第四章：メソッドバインディング
 
-### 4.1 [0] 構文
+### 4.1 `[0]` 構文
 
-`[0]` 構文を使用して、self 引数が関数引数タプル内の位置を指定します：
+`[0]` 構文を使用して、関数の引数タプル内の self 引数の位置を指定する：
 
 ```yaoxiang
 // FFI 関数
@@ -162,22 +162,22 @@ db.close()  // sqlite3_close(db) と同等
 db.exec("SELECT * FROM users")  // sqlite3_exec(db, "SELECT * FROM users") と同等
 ```
 
-### 4.2 コンストラクターバインディング
+### 4.2 コンストラクタのバインディング
 
-コンストラクターには `[0]` を付けず、普通関数としてバインディングします：
+コンストラクタには `[0]` を付けず、通常の関数としてバインドする：
 
 ```yaoxiang
 // FFI 関数
 sqlite3_open: (filename: String) -> SqliteDb = native("sqlite3_open")
 
-// コンストラクターバインディング（普通関数）
+// コンストラクタのバインディング（通常関数）
 SqliteDb.open = sqlite3_open
 ```
 
 **呼び出し方法**：
 
 ```yaoxiang
-// コンストラクターで作成
+// コンストラクタを通じて作成
 db = SqliteDb.open("test.db")
 ```
 
@@ -186,10 +186,10 @@ db = SqliteDb.open("test.db")
 メソッドバインディングは任意の位置で 가능합니다（型はデータコンテナであるため）：
 
 ```yaoxiang
-// 型定義後にバインディング
+// 型定義後にバインド
 SqliteDb.close = sqlite3_close[0]
 
-// 他のファイルでバインディング
+// 他のファイルでバインド
 SqliteDb.exec = sqlite3_exec[0]
 
 // コンパイラが最終的にはすべてチェック
@@ -197,7 +197,7 @@ SqliteDb.exec = sqlite3_exec[0]
 
 ---
 
-## 第5章：spawn ブロック内の FFI 動作
+## 第五章：spawn ブロックにおける FFI の挙動
 
 ### 5.1 リソース型は自動的に直列化
 
@@ -216,29 +216,29 @@ FFI 型がリソース型の場合、spawn ブロック内で自動的に直列�
 }
 ```
 
-### 5.2 非リソース型は並列可能
+### 5.2 非リソース型は並列実行可能
 
-FFI 型がリソース型でない場合、spawn ブロック内で並列実行できます：
+FFI 型がリソース型でない場合、spawn ブロック内で並列実行可能：
 
 ```yaoxiang
 // Float はリソース型ではない
 (a, b) = spawn {
-    result1 = sin(1.0),  // 並列可能
-    result2 = cos(1.0)   // 並列可能
+    result1 = sin(1.0),  // 並列実行可能
+    result2 = cos(1.0)   // 並列実行可能
 }
 ```
 
 ---
 
-## 第6章：yx-bindgen ツールチェーン
+## 第六章：yx-bindgen ツールチェーン
 
 ### 6.1 生成内容
 
-yx-bindgen は以下の内容を生成します：
+yx-bindgen は以下の内容を生成する：
 
 - FFI 型定義（unsafe ブロック + return）
 - FFI 関数宣言（native 構文）
-- メソッドバインディング（[0] 構文）
+- メソッドバインディング（`[0]` 構文）
 
 ### 6.2 生成例
 
@@ -250,7 +250,7 @@ yx-bindgen --header /usr/include/sqlite3.h --output sqlite3_bindings.yx
 
 ```yaoxiang
 // sqlite3_bindings.yx
-// 自動生成、手動編集禁止
+// 自動生成、手動編集不可
 
 // ============================================================================
 // 型定義
@@ -285,7 +285,7 @@ sqlite3_finalize: (stmt: SqliteStmt) -> Int32 = native("sqlite3_finalize")
 // メソッドバインディング
 // ============================================================================
 
-// コンストラクター（普通関数）
+// コンストラクタ（通常関数）
 SqliteDb.open = sqlite3_open
 
 // メソッド（self は位置 0）
@@ -331,7 +331,7 @@ sqlite3_close: (db: SqliteDb) -> Int32 = native("sqlite3_close")
 ### A.3 メソッドバインディング
 
 ```yaoxiang
-// コンストラクター（普通関数）
+// コンストラクタ（通常関数）
 SqliteDb.open = sqlite3_open
 
 // メソッド（self は位置 0）
@@ -341,7 +341,7 @@ SqliteDb.close = sqlite3_close[0]
 ### A.4 呼び出し方法
 
 ```yaoxiang
-// コンストラクターで作成
+// コンストラクタを通じて作成
 db = SqliteDb.open("test.db")
 
 // メソッド呼び出し

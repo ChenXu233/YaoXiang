@@ -62,9 +62,9 @@ YaoXiang の既存設計はこれらの問題を解決するのに十分な基�
 
 ## 提案
 
-### コア設計
+### 中核設計
 
-#### 1. 量子型システムマッピング
+#### 1. 量子型システムのマッピング
 
 **基本型**：
 
@@ -105,7 +105,7 @@ measure_all: (List(Qubit)) -> List(Int) = builtin_measure_all
 qubit: (Int) -> Qubit = builtin_qubit   # 0 または 1 で初期状態
 ```
 
-#### 2. エンタングルメントと不透明型カプセル化
+#### 2. エンタングルメントと不透明型によるカプセル化
 
 エンタングルメントペアを不透明型にカプセル化し、合成操作のみを提供し、分解を禁止します：
 
@@ -148,7 +148,7 @@ Topology: Type0 = primitive_topology
 # 組み込みトポロジー定数
 Linear8: Topology = topology(8)          # 線形8ビット: 0-1-2-3-4-5-6-7
 Grid3x3: Topology = topology(3, 3)        # 3x3 グリッド
-Ring16: Topology = topology(16, ring)    # リング16ビット
+Ring16: Topology = topology(16, ring)    # リング型 16 ビット
 ```
 
 **Qubit のトポロジー、バインド、位置**：
@@ -226,8 +226,8 @@ grover_search: (target: Int) -> Int = () => {
     for i in 0..n {
         qubits.append(H(qubit(0)))
     }
-    # 古典ループと量子操作の混合
-    oracle(qubits, target)   # oracle は量子ゲート列
+    # 古典ループと量子操作のハイブリッド
+    oracle(qubits, target)   # oracle は量子ゲートシーケンス
     qubits = diffusion(qubits)
     results = measure_all(qubits)
     return decode_result(results)   # 古典後処理
@@ -270,7 +270,7 @@ bell_measure: () -> {Int, Int} = () => {
     q1 = H(qubit(0))
     q2 = H(qubit(0))
     bell = CNOT(q1, q2)  # BellPair 不透明型を返す
-    result = measure_bell(bell)  # 2ビットを一度に測定
+    result = measure_bell(bell)  # 2 ビットを一度に測定
     return result
 }
 ```
@@ -298,7 +298,7 @@ teleport: (msg: Qubit, bell: BellPair) -> Qubit = (msg, bell) => {
 
 ## 詳細設計
 
-### 組み込み型と関数定義
+### 組み込み型と関数の定義
 
 `compiler/builtins` モジュールに追加：
 
@@ -336,7 +336,7 @@ builtins.insert("qubit", Ty::Function(vec![Ty::Primitive(Primitive::Int)], Ty::Q
 - スケジューラが「量子命令列」を出力する際、データ依存を保持し、並行ゲートをグループ化します（複数量子プロセッサに適用可能）。
 - `--target-num-qubits` と `--target-topology` 設定をサポートし、将来のレイアウトとルーティングに使用（将来拡張）。
 
-### QIR バックエンドの詳細マッピング
+### QIR バックエンド詳細マッピング
 
 | YaoXiang 操作  | QIR 命令                                                          |
 | -------------- | ----------------------------------------------------------------- |
@@ -347,7 +347,7 @@ builtins.insert("qubit", Ty::Function(vec![Ty::Primitive(Primitive::Int)], Ty::Q
 
 QIR バックエンドは LLVM の `-O2` をさらに活用し、QIR Alliance と互換性のある bitcode を出力します。
 
-### QCIS バックエンドの詳細マッピング
+### QCIS バックエンド詳細マッピング
 
 | YaoXiang 操作                        | QCIS 命令                            |
 | ------------------------------------ | ------------------------------------ |
@@ -443,11 +443,11 @@ QIR バックエンドは LLVM の `-O2` をさらに活用し、QIR Alliance �
 
 ---
 
-## ライフサイクルと行き先
+## ライフサイクルと帰結
 
 ```
 ┌─────────────┐
-│   草案      │  ← 著者作成
+│   草稿      │  ← 著者作成
 └──────┬──────┘
        │
        ▼
@@ -464,11 +464,11 @@ QIR バックエンドは LLVM の `-O2` をさらに活用し、QIR Alliance �
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
 │   accepted/ │    │    rfc/     │
-│ (正式設計)  │    │ (元の位置を保持) │
+│ (正式設計)  │    │ (原位置保持) │
 └─────────────┘    └─────────────┘
 ```
 
-### ステータス説明
+### 状態説明
 
 | ステータス | 場所                        | 説明                              |
 | --------- | -------------------------- | -------------------------------- |

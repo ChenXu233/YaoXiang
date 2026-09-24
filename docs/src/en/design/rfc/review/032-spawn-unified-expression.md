@@ -269,7 +269,7 @@ This mechanism is not limited to spawn — any future effect (pure computation, 
 
 ## Implementation Strategy
 
-### Phase Division
+### Phasing
 
 1. **AST + Parser**: `Spawn { body: Box<Expr> }`, delete `SpawnFor`
 2. **DAG Analysis unification**: Merge entry points, unify `TaskSource` enum. Single-task spawn (`spawn call(x)`, `spawn 42`) produces compile warnings
@@ -294,7 +294,7 @@ This mechanism is not limited to spawn — any future effect (pure computation, 
 - RFC-024 (spawn block concurrency model) — this RFC is its orthogonal extension
 - RFC-010 (unified type syntax) — foundation for syntax unification
 
-## Design Decision Record
+## Design Decision Log
 
 | Decision                  | Decision                                                          | Reason                                                    | Date        |
 | ------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------- | ----------- |

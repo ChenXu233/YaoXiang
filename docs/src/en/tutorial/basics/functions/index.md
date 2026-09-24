@@ -197,7 +197,7 @@ Named arguments make calls more readable, especially useful when there are many 
 // Function signature
 send: (to: String, title: String, body: String) -> String = to + "|" + title + "|" + body
 
-// Named arguments make the call's intent clear at a glance
+// Named arguments make the call's intent immediately clear
 msg = send(
     to = "alice@example.com",
     title = "Meeting Notice",
@@ -214,7 +214,7 @@ result = add(b = 5, c = 1)
 // ❌ a is both passed positionally and by name → E1015
 result = add(1, a = 2)
 
-// ❌ Missing one parameter → E1010
+// ❌ One argument missing → E1010
 result = add(a = 1)
 ```
 
@@ -222,7 +222,7 @@ result = add(a = 1)
 
 ## Functions with No Parameters
 
-Functions that don't need parameters can omit the parameter list:
+Functions that take no parameters can omit the parameter list:
 
 ```yaoxiang
 // Full form: explicitly declare empty parameters

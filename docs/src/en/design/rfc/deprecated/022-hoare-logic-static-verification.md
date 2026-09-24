@@ -1,7 +1,7 @@
 ---
 title: 'RFC 022: Hoare Logic Static Verification Support (Specification Comments and Specification Types)'
 status: 'Deprecated (superseded by RFC-027)'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-03-16'
 updated: '2026-06-07 (deprecated: superseded by compile-time evaluation type system)'
 ---
@@ -24,7 +24,7 @@ updated: '2026-06-07 (deprecated: superseded by compile-time evaluation type sys
 > **References**:
 >
 > - [RFC-010: Unified Type Syntax](../accepted/010-unified-type-syntax.md)
-> - [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md)
+> - [RFC-011: Generics System Design](../accepted/011-generic-type-system.md)
 > - [RFC-009: Ownership Model](../accepted/009-ownership-model.md)
 
 ## Summary
@@ -110,7 +110,7 @@ GreaterOrEqual: (T: Type) -> Type = { result: T, arr: Array(T); result >= arr[0]
 Bounds: (T: Type) -> Type = { i: T, n: T; 0 <= i && i <= n }
 SumInvariant: (T: Type) -> Type = { s: T, arr: Array(T); s == sum(arr[0..i]) }
 
-// Quantifier constructs (language built-in, not functions)
+// Quantifier constructs (language built-ins, not functions)
 forall: (start: Int, end: Int, pred: (Int) -> Bool) -> Bool
 exists: (start: Int, end: Int, pred: (Int) -> Bool) -> Bool
 ```
@@ -120,16 +120,16 @@ exists: (start: Int, end: Int, pred: (Int) -> Bool) -> Bool
 Completely consistent with ordinary type definitions, users can define their own specification types:
 
 ```yaoxiang
-// Define positive integer specification
+// Define a positive integer specification
 Positive: Type = { x: Int; x > 0 }
 
-// Define sorted array specification
+// Define a sorted array specification
 Sorted: (T: Ord) -> Type = {
     arr: Array(T);
     forall i in 0..arr.len-1: arr[i] <= arr[i+1]
 }
 
-// Define maximum value specification
+// Define a maximum value specification
 ExistsMax: (T: Ord) -> Type = {
     result: T, arr: Array(T);
     exists i in 0..arr.len: result == arr[i]
@@ -153,7 +153,7 @@ binary_search: (T: Ord) -> ((arr: Sorted(Array(T)), key: T) -> Option(Index)) = 
 
 Specification types, like other types, support generic parameters, type constraints, and participate in type inference.
 
-### 3. Build Modes
+### 3. Compilation Modes
 
 | Mode                | Behavior                                                                                             | Option                                        |
 | ------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------- |
@@ -219,19 +219,19 @@ If proof fails, the solver may provide a model (counterexample). The compiler sh
 
 ### 7.5 Runtime Checks
 
-In `--enable-runtime-checks` mode, the compiler converts specifications to `assert` statements:
+In `--enable-runtime-checks` mode, the compiler converts specifications into `assert` statements:
 
 - `requires`: Insert `assert(cond)` at function entry
 - `ensures`: Insert `assert(cond)` before all return points of the function, with `result` substituted by the actual return value
 - `invariant`: Insert `assert(cond)` at the beginning of the loop body
 
-### 7.6 Integration with Existing Design
+### 7.6 Integration with Existing Designs
 
 - **Ownership model**: Expressions in specifications follow ownership rules, can only read not write (pure functions), avoiding side effects
 - **Generic system**: Specification types support generic parameters (such as `Requires(P)`), can combine with generic functions/types
 - **Dependent types**: Value-dependent types (such as array length `n`) in specifications are naturally usable
 
-### Type System Impact
+### Impact on the Type System
 
 - Specification types are ordinary types in YaoXiang, consistent with the unified syntax model
 - The compiler includes commonly used specification types built-in (`Positive`, `NonEmpty`, `GreaterOrEqual`, etc.)
@@ -246,16 +246,16 @@ In `--enable-runtime-checks` mode, the compiler converts specifications to `asse
 
 ### Compiler Changes
 
-- Parser: Recognize specification comment syntax
-- Semantic analysis: Collect specifications, convert to specification types
-- Verification backend: Generate verification conditions, call SMT solver
-- Code generation: Support runtime check mode
+- Parser: recognize specification comment syntax
+- Semantic analysis: collect specifications, convert to specification types
+- Verification backend: generate verification conditions, call the SMT solver
+- Code generation: support runtime check mode
 
 ### Backward Compatibility
 
 - ✅ Fully backward compatible
-- Specification comments are ignored in normal compilation, not affecting existing code
-- Specifications are ignored in Release Build, no extra overhead
+- Specification comments are ignored under normal compilation, not affecting existing code
+- Specifications are ignored in Release Build, with no additional overhead
 
 ## Trade-offs
 
@@ -273,7 +273,7 @@ In `--enable-runtime-checks` mode, the compiler converts specifications to `asse
 - **Learning curve**: Need to learn how to write effective specifications and quantifiers
 - **SMT solver limitations**: Some complex properties may not be provable automatically
 
-## Alternative Approaches
+## Alternatives
 
 | Approach                        | Advantages           | Disadvantages                   |
 | ------------------------------- | -------------------- | ------------------------------- |
@@ -327,7 +327,7 @@ In `--enable-runtime-checks` mode, the compiler converts specifications to `asse
 
 ---
 
-## Lifecycle and Disposition
+## Lifecycle and Destination
 
 ```
 ┌─────────────┐

@@ -29,7 +29,7 @@ updated: '2026-09-15'
 
 ## 動機
 
-### なぜこの機能が必要か？
+### なぜこの特性が必要か？
 
 1. **構文の一貫性**：旧構文の歴史的包袱を排除し、スタイルを統一する
 2. **簡潔性**：HM アルゴリズムが型を自動推論し、ボイラープレートを削減する
@@ -81,7 +81,7 @@ identity: (T: Type) -> ((x: T) -> T) = (x) => x         # 完全形
 identity: (T: Type) -> ((x: T) -> T) = x                # Lambda ヘッダを省略
 identity = (x: T) => x                                  # シグネチャを省略（lambda ヘッダが型を标注）
 
-# === 再帰関数 ===
+# === 递归函数 ===
 factorial: (n: Int) -> Int = (n) => {
     if n <= 1 { return 1 } else { return n * factorial(n - 1) }
 }
@@ -133,12 +133,12 @@ if n <= 1 { return 1 } else { return n * factorial(n - 1) }
 call_twice: (T: Type) -> ((f: (T) -> T, x: T) -> T) = {
     return f(f(x))
 }
-# 使用：call_twice((x) => x + 1, 5)  # T=Int と推論
+# 使用：call_twice((x) => x + 1, 5)  # 推断 T=Int
 
 compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) = {
     return f(g(x))
 }
-# 使用：compose((x) => x * 2, (x) => x + 1, 5)  # A=Int, B=Int, C=Int と推論
+# 使用：compose((x) => x * 2, (x) => x + 1, 5)  # 推断 A=Int, B=Int, C=Int
 
 # ❌ サポート外：ジェネリック制約がない高階関数
 # bad_hof: (f, x) => f(f(x))  # HM が推論できず、ジェネリックパラメータが不足
@@ -166,11 +166,11 @@ compose: (A: Type, B: Type, C: Type) -> ((f: (B) -> C, g: (A) -> B, x: A) -> C) 
 **サンプル**：
 
 ```yaoxiang
-main: () -> Void = { println("Hello") }         # 末尾式は Void
-add: (a: Int, b: Int) -> Int = { a + b }        # 末尾式が値を与える
-empty: () -> Void = {}                          # 空ブロック → Void
+main: () -> Void = { println("Hello") }         # 尾表达式为 Void
+add: (a: Int, b: Int) -> Int = { a + b }        # 尾表达式给出值
+empty: () -> Void = {}                          # 空块 → Void
 
-# 早期リターン：return を使用
+# 提前返回：使用 return
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
@@ -203,7 +203,7 @@ map: (T: Type, R: Type) -> ((f: (T) -> R, list: List(T)) -> List(R)) = {
 
 # 多态関数：明示的なジェネリック制約を通じて定義（RFC-010/011）
 add: (T: Add) -> ((a: T, b: T) -> T) = a + b
-print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # (Int, Int) -> Void と推論
+print_sum: (a: Int, b: Int) -> Void = { println(a + b) }  # 推断为 (Int, Int) -> Void
 
 # 高階多态：ジェネリック型注釈を通じて HM がより高階多态をサポート
 call_twice: (T: Type) -> ((f: (T) -> T, x: T) -> T) = { return f(f(x)) }
@@ -224,7 +224,7 @@ greet: (name: String) -> Void = { println("Hello " + name) }  # (String) -> Void
 # ジェネリック関数：多态型パラメータを明示的に制約（RFC-010 統一構文を使用）
 identity: (T: Type) -> ((x: T) -> T) = x
 map: (T: Type, R: Type) -> ((f: (T) -> R, list: List(T)) -> List(R)) = {
-    # map 関数の実装
+    # 实现 map 函数
     return List(R)()
 }
 
@@ -235,7 +235,7 @@ factorial: (n: Int) -> Int = {
 
 # === 変数代入：HM アルゴリズム型推論 ===
 
-# 明示的な型
+# 显式类型
 x: Int = 42
 
 # HM アルゴリズムが自動的に Int と推論
@@ -280,7 +280,7 @@ pi = 3.14159                         # Float と推論
 // 完全形
 add: (a: Int, b: Int) -> Int = (a, b) => a + b
 
-// 展開後 IR
+// 展开后 IR
 let add: (Int, Int) -> Int = |a: Int, b: Int| -> Int {
     return a + b
 };
@@ -296,7 +296,7 @@ let add: (Int, Int) -> Int = |a: Int, b: Int| -> Int {
 // シグネチャを省略（lambda ヘッダがパラメータ型を标注）
 add = (a: Int, b: Int) => a + b
 
-// 展開後 IR
+// 展开后 IR
 let add: (Int, Int) -> Int = |a: Int, b: Int| -> Int {
     a + b
 };
@@ -350,8 +350,8 @@ add: (a: Int, b: Int) -> Int = { println(a + b) }
 
 # エラー2：未宣言の型パラメータを使用
 identity: (x: T) -> T = x
-// エラー：T が未宣言；明示的なジェネリックパラメータが必要（RFC-010）
-// 正しい：identity: (T: Type) -> ((x: T) -> T) = x
+// 错误：T 未声明；需要显式泛型参数（RFC-010）
+// 正确：identity: (T: Type) -> ((x: T) -> T) = x
 
 # 正しい：HM アルゴリズムが返り値型を推論
 double = (x: Int) => x + x
@@ -399,17 +399,17 @@ double = (x: Int) => x + x                            # 返り値型を省略（
    - `yaoxiang-migrate --old-to-new` ツールを開発
    - 旧構文コードを自動的に変換
 
-3. **Phase 3: 検証とドキュメント**（v0.3）
+3. **フェーズ3：検証とドキュメント**（v0.3）
    - 旧コード移行完了の検証
    - ドキュメント更新
 
 ### 移行ツール
 
 ```bash
-# 単一ファイルの移行
+# 迁移单个文件
 yaoxiang-migrate --old-to-new src/main.yaoxiang
 
-# プロジェクト全体の移行
+# 迁移整个项目
 yaoxiang-migrate --old-to-new --recursive src/
 
 # 移行プレビュー（ファイルは変更しない）
@@ -419,7 +419,7 @@ yaoxiang-migrate --old-to-new --dry-run src/main.yaoxiang
 移行規則：
 
 ```yaoxiang
-# 旧構文
+# 旧语法
 add(Int, Int) -> Int = (a, b) => { a + b }
 main() -> Int = { println("Hello"); 0 }
 main() = { println("Hello") }

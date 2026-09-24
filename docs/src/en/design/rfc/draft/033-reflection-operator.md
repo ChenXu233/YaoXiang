@@ -1,7 +1,7 @@
 ---
 title: 'RFC-033: `^^` Reflection Operator'
 status: 'Under Review'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-06-16'
 updated: '2026-07-05'
 issue: '#136'
@@ -11,7 +11,7 @@ issue: '#136'
 
 > **References**:
 >
-> - [RFC-010: Unified Type Syntax - name: type = value Model](../accepted/010-unified-type-syntax.md)
+> - [RFC-010: Unified Type Syntax - name: type = value model](../accepted/010-unified-type-syntax.md)
 > - [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md)
 > - [RFC-027: Compile-Time Predicates and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)
 > - [RFC-011a: Interface Implementation and Dynamic Dispatch](../accepted/011a-interface-implementation.md)
@@ -29,7 +29,7 @@ This document proposes introducing the `^^` operator as a reflection entry point
 3. **Runtime debugging/tools**: Need to print type information at runtime to assist debugging
 4. **Runtime type checking**: Need to determine type relationships at runtime, such as "what type is obj?"
 
-### Current problems
+### Current Problems
 
 Currently, YaoXiang has no reflection mechanism and cannot access type metadata at compile-time or runtime. If `.name` or `.fields` were used directly to access type metadata, they would conflict with user-defined fields:
 
@@ -44,11 +44,11 @@ A syntax that does **not intrude into the normal field namespace** is needed to 
 
 ## Proposal
 
-### Core design
+### Core Design
 
 Introduce the `^^` operator as a reflection entry point, clearly distinguishing between normal code and metadata queries.
 
-**Two usage patterns**:
+**Two usages**:
 
 1. **Static reflection (applies to types)**: `^^T` returns the static metadata object of type `T`
 2. **Dynamic reflection (applies to values)**: `^^obj` returns the dynamic type metadata of value `obj`
@@ -81,7 +81,7 @@ FieldMeta: Type = {
 
 ### Examples
 
-#### Basic usage
+#### Basic Usage
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
@@ -91,15 +91,15 @@ meta = ^^Point
 print(meta.name)           # "Point"
 print(meta.fields.len)     # 2
 print(meta.fields[0].name) # "x"
-print(meta.fields[0].type) # Float
+print(fields[0].type)      # Float
 
-# Dynamic reflection (requires enabling runtime reflection)
+# Dynamic reflection (requires runtime reflection to be enabled)
 obj = Point(1.0, 2.0)
 meta = ^^obj
 print(meta.name)           # "Point"
 ```
 
-#### Generic types
+#### Generic Types
 
 ```yaoxiang
 List: (T: Type) -> Type = { data: Array(T), length: Int }
@@ -126,7 +126,7 @@ print(meta.params)         # [{ name: "a", type: Int }, { name: "b", type: Int }
 print(meta.return_type)    # Int
 ```
 
-#### Refinement types
+#### Refinement Types
 
 ```yaoxiang
 Positive: (x: Int) -> Type = { x > 0 }
@@ -139,7 +139,7 @@ print(meta.refinement)     # Some(AST(x > 0))
 # Runtime: refinement is None (erased)
 ```
 
-#### Usage in compile-time predicates
+#### Usage in Compile-time Predicates
 
 ```yaoxiang
 # Check if a type has fields
@@ -155,10 +155,10 @@ obj: HasFields(Point) = Point(1.0, 2.0)  # ✅ Validation passed
 # obj: HasFields(Int) = 42  # ❌ Validation failed
 ```
 
-#### Serialization example
+#### Serialization Example
 
 ```yaoxiang
-# Compile-time pure function: generates JSON string
+# Compile-time pure function: generate JSON string
 to_json: (T: Type) -> ((obj: T) -> String) = {
     meta = ^^T
     parts: Array(String) = []
@@ -174,24 +174,24 @@ point_to_json = to_json(Point)
 print(point_to_json(Point(1.0, 2.0)))  # '{"x": 1.0, "y": 2.0}'
 ```
 
-### Syntax changes
+### Syntax Changes
 
 | Before          | After                               |
 | --------------- | ----------------------------------- |
 | No reflection   | `^^T` obtains type metadata          |
 | No reflection   | `^^obj` obtains value's dynamic type metadata |
 
-## Detailed design
+## Detailed Design
 
-### Type system impact
+### Type System Impact
 
 - **New types**: `TypeMeta`, `ParamMeta`, `FieldMeta`
-- **Universe level**: The type returned by `^^T` is one level higher than `T`
+- **Universe levels**: The type returned by `^^T` is one level higher than `T`
 - **Generic interaction**: Both `^^List` and `^^List(Int)` are supported
 - **Function interaction**: `^^add` returns function metadata (including parameters and return type)
 - **Refinement type interaction**: `^^Positive` returns refinement type metadata (including refinement expression)
 
-### Runtime behavior
+### Runtime Behavior
 
 **Compile-time reflection**:
 
@@ -201,7 +201,7 @@ print(point_to_json(Point(1.0, 2.0)))  # '{"x": 1.0, "y": 2.0}'
 **Runtime reflection**:
 
 - Disabled by default, zero overhead
-- Enabled via `--enable-runtime-reflection` compilation option
+- Enabled via the `--enable-runtime-reflection` compilation option
 - When enabled, `^^obj` returns dynamic type metadata
 - Refinement expressions are erased to `None` at runtime
 
@@ -210,16 +210,16 @@ print(point_to_json(Point(1.0, 2.0)))  # '{"x": 1.0, "y": 2.0}'
 - Metadata is generated only for types that actually use `^^`
 - Types not referenced do not generate metadata (treeshake)
 
-### Compiler changes
+### Compiler Changes
 
 1. **Lexer**: Recognize `^^` as a single token
 2. **Parser**: Add `^^` prefix expression rule
 3. **Type system**: Add `TypeMeta`, `ParamMeta`, `FieldMeta` type definitions
-4. **Type checker**: Generate metadata instances for each type
+4. **Type checker**: Generate a metadata instance for each type
 5. **Compile-time evaluator**: Support compile-time evaluation of `^^T`
 6. **Runtime (optional)**: Generate RTTI for reflected types
 
-### Backward compatibility
+### Backward Compatibility
 
 - ✅ No impact on existing syntax: `^^` is a new operator and does not conflict with existing syntax
 - ✅ No impact on existing types: All types automatically support `^^`
@@ -243,7 +243,7 @@ print(point_to_json(Point(1.0, 2.0)))  # '{"x": 1.0, "y": 2.0}'
 - **Runtime overhead**: Enabling runtime reflection increases memory overhead (one pointer per instance)
 - **Implementation complexity**: Requires modifying multiple compiler components
 
-## Alternative approaches
+## Alternatives
 
 | Approach              | Why not chosen                                          |
 | --------------------- | ------------------------------------------------------- |
@@ -252,7 +252,7 @@ print(point_to_json(Point(1.0, 2.0)))  # '{"x": 1.0, "y": 2.0}'
 | Single `^` operator   | May conflict with bitwise operations; C++26 chose `^^` precisely because of such conflicts |
 | `@@`, `##` and other symbols | No precedent; `^^` is easier to interpret     |
 
-## Implementation phases
+## Implementation Phases
 
 | Phase  | Content                       | Dependency   |
 | ------ | ----------------------------- | ------------ |
@@ -269,7 +269,7 @@ Phase 1 (Parsing)
     ↓
 Phase 2 (Data structure)
     ↓
-Phase 3 (Compile-time metadata)
+Phase 3 (Compile-time Metadata)
     ↓
     ├────────────┐
     ↓            ↓
@@ -284,7 +284,7 @@ reflection)   predicates)
 - **Performance impact**: Compile-time metadata generation may increase compilation time (treeshake optimization can mitigate)
 - **Runtime overhead**: Enabling runtime reflection increases memory overhead (on-demand generation alleviates this)
 
-## Open questions
+## Open Questions
 
 - [x] Scope of `^^`: Only applies to types and values, not expressions
 - [x] Chained access: Supported, the metadata object returned by `^^T` can access properties normally
@@ -296,7 +296,7 @@ reflection)   predicates)
 
 ## Appendices
 
-### Appendix A: Design decision records
+### Appendix A: Design Decision Record
 
 | Decision             | Decision                                              | Date       | Recorder |
 | -------------------- | ----------------------------------------------------- | ---------- | -------- |

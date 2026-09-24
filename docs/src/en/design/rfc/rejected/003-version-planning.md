@@ -1,7 +1,7 @@
 ---
 title: 'RFC-003: Version Planning'
 status: 'Rejected'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2025-01-05'
 updated: '2025-01-06'
 ---
@@ -10,11 +10,11 @@ updated: '2025-01-06'
 
 > **Rejection Date**: 2026-06-01
 
-## ⚠️ Rejection Reason
+## ⚠️ Reason for Rejection
 
-**This RFC does not comply with RFC standards and has been rejected.**
+**This RFC does not conform to RFC specifications and has been rejected.**
 
-### Problem Analysis
+### Issue Analysis
 
 | Problem             | Description                                                                                             |
 | ------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -36,10 +36,10 @@ This document should be managed as a **Roadmap**, not an RFC. Roadmaps record fa
 
 Version release plan for YaoXiang, a roadmap from v0.1 to v1.0.
 
-**Core Objectives**:
+**Core Goals**:
 
 1. **Bytecode Compilation**: Support REPL and incremental compilation
-2. **Bootstrap**: Write the YaoXiang compiler in YaoXiang
+2. **Bootstrap**: Use YaoXiang to write the YaoXiang compiler
 3. **AOT Compilation**: Compile bytecode to native machine code
 
 ## 1. Motivation
@@ -91,11 +91,11 @@ Version release plan for YaoXiang, a roadmap from v0.1 to v1.0.
 
 **Completed**:
 
-- ✅ Complete lexer, parser, type checking
+- ✅ Lexing, parsing, and type checking complete
 - ✅ Bytecode generation available
 - ✅ VM can interpret and execute basic programs
 - ✅ Basic print function
-- ✅ TUI REPL completed
+- ✅ TUI REPL complete
 - ✅ Basic task system (Task/Scheduler)
 
 ```
@@ -105,7 +105,7 @@ Hello, YaoXiang!
 
 **Technical Highlights**:
 
-- Three-layer runtime architecture design completed
+- Three-tier runtime architecture design complete
 - Task system fully implemented
 - Modern TUI REPL interface
 - Unified type syntax + generics system design
@@ -114,12 +114,12 @@ Hello, YaoXiang!
 
 ### v0.2: FlowScheduler 🚧
 
-**Goal**: Implement complete dependency-aware scheduler
+**Goal**: Implement a complete dependency-aware scheduler
 
-- ✅ Design document completed
+- ✅ Design document complete
 - 🔶 Implementation in progress
-- [ ] DAG nodes and graph implementation
-- [ ] Work-stealing algorithm
+- [ ] DAG node and graph implementation
+- [ ] Work stealing algorithm
 - [ ] libuv IO scheduling engine
 - [ ] Lazy evaluation strategy
 - [ ] spawn syntax support
@@ -140,7 +140,7 @@ Hello, YaoXiang!
 
 ### v0.4: Generics System 📋
 
-**Goal**: Complete generics capability
+**Goal**: Complete generics capabilities
 
 - [ ] RFC-011 Phase 1: Basic generics
 - [ ] RFC-011 Phase 2: Type constraints
@@ -156,9 +156,9 @@ Hello, YaoXiang!
 
 ### v0.5: Standard Library Enhancement 📋
 
-**Goal**: Usability improvement
+**Goal**: Usability improvements
 
-- IO, dictionary, networking modules
+- IO, dictionary, network modules
 - Toolchain (fmt, basic LSP)
 - Performance optimization
 
@@ -194,7 +194,7 @@ Hello, YaoXiang!
 - AOT compilation (LLVM backend)
 - Production ready
 
-## 4. Three-Layer Compilation Strategy
+## 4. Three-Layer Compilation Strategy Design
 
 | Layer        | Version | Input         | Output          | Description           |
 | ------------ | ------- | ------------- | --------------- | --------------------- |
@@ -210,16 +210,16 @@ Hello, YaoXiang!
 
 ## 5. Dependency Strategy
 
-**Short-term**: Call Rust libraries, reuse crates.io (Cargo parasitic)
+**Short-term**: Call Rust libraries to reuse crates.io (Cargo parasitism)
 
 **Current Dependencies**:
 
 - Concurrency: parking_lot, crossbeam, rayon
 - Data structures: indexmap, hashbrown, smallvec
-- Networking: tokio
+- Network: tokio
 - Serialization: serde, ron
 
-**Long-term**: Build our own standard library and package manager
+**Long-term**: Self-built standard library and package manager
 
 ## 6. Toolchain
 
@@ -260,9 +260,9 @@ Hello, YaoXiang!
 - [ ] JIT vs AOT timing selection
 - [ ] Package manager design
 - [ ] Bootstrap module replacement order
-- [ ] AOT backend selection (LLVM vs custom)
+- [ ] AOT backend selection (LLVM vs self-developed)
 
-## 9. Version Release Criteria
+## 9. Version Release Standards
 
 **v0.x Series**:
 

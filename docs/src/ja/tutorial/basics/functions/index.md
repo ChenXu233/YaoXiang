@@ -35,7 +35,7 @@ square: (x: Int) -> Int = x * x
 greet: (name: String) -> String = "你好, " + name
 ```
 
-呼び出し：
+呼び出し:
 
 ```yaoxiang
 sum = add(3, 5)          // sum = 8
@@ -75,9 +75,9 @@ f5 = factorial(5)        // f5 = 120
 規則は簡単です：**式形式は直接値を返す；コードブロック形式は明示的な `return` が必要**。コードブロックで `return` を忘れた場合、関数はデフォルトで `Void` を返します。
 
 ```yaoxiang
-// 注意：这个函数有 bug
+// 注意：この関数にはバグがある
 // bad_add: (a: Int, b: Int) -> Int = {
-//     a + b   // 没有 return！块默认返回 Void，但签名要求 Int → 类型错误
+//     a + b   // return がない！ブロックはデフォルトで Void を返すが、シグネチャは Int を要求 → 型エラー
 // }
 
 // 正しい書き方
@@ -238,7 +238,7 @@ hello = {
 hello()
 ```
 
-`main` 関数が最も一般的な引数なし関数です：
+`main` 関数が最も一般的な引数なし関数です。
 
 ```yaoxiang
 // main 関数のいくつかの書き方
@@ -353,7 +353,7 @@ result = add(1, b = 2)      // 混在（位置が前）
 
 ## まとめ
 
-YaoXiang 関数の核心知識を習得しました：
+YaoXiang の関数に関する核となる知識を習得しました。
 
 - **統一構文**：`name: (params) -> Return = body`、変数宣言の `name: type = value` と同じ起源
 - **式形式**：`= expr`、式の値が直接戻り値として機能、`return` は不要

@@ -253,7 +253,7 @@ IndexAccess ::= Expr '[' Expr ']'
 
 > **Three-layer semantics (RFC-011b)**: `a[i]` dispatches based on `a`'s type—① Built-in containers (List/Vec/Array/Dict/Tuple) use native index instructions (fast path); ② User types implementing `Index` dispatch to their `index` method (type body `Index(Grid, Int, Float)` instantiation + `Grid.index` method); ③ RFC-004 positional binding for `f[0]` only exists in binding declarations, not in this grammar. Multi-dimensional index `a[0, 1]` keys are packed as tuples. Other types not implementing `Index` are rejected at type level.
 
-### 2.6 Type Cast
+### 2.6 Type Conversion
 
 ```
 TypeCast    ::= Expr 'as' TypeExpr
@@ -287,7 +287,7 @@ Block       ::= '{' Stmt* Expr? '}'
 
 > **Statement termination rules**: Separator and newline behavior between Stmts (`;` explicit separator, newline terminates, line continuation exception, line-start `(`/`[` never merges) are defined by [RFC-038](../../design/rfc/accepted/038-statement-termination.md).
 
-#### 2.9.1 Three Forms of `{`
+#### 2.9.1 The Three Forms of `{`
 
 `{` in expression position has exactly three interpretations, determined once by **content**:
 
@@ -349,7 +349,7 @@ f: (n: Int) -> Int = {
     if n < 0 {
         return 0     // pierces through if and function body, exits function
     }
-    n * 2            // tail expression
+    n * 2            // Tail expression
 }
 ```
 
@@ -735,7 +735,7 @@ This rule applies to all code blocks, see [4.3 Shadowing Rules](./modules.md#43-
 | Python     | Modifies the same variable (no mut needed)  |
 | C/C++      | Modifies the same variable (requires pointer or reference) |
 
-**Design rationale**: YaoXiang adopts binding semantics because:
+**Design rationale**: YaoXiang uses binding semantics because:
 
 1. **More natural semantics** In natural language, "for each element x in a set" means each x is an independent entity. YaoXiang's `for i in 1..5` reads as "for each i in 1 to 5", and each iteration's i is a completely new binding—this aligns with human intuitive understanding.
 
@@ -760,7 +760,7 @@ SpawnStmt   ::= SpawnBlock | SpawnFor
 }
 ```
 
-**spawn loop**: Data-parallel loop.
+**spawn loop**: A data-parallel loop.
 
 ```yaoxiang
 results = spawn for item in items {

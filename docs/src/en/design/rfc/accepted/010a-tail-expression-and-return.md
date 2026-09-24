@@ -32,7 +32,7 @@ No new syntax, no new keywords.
 
 ## Implementation Status
 
-This RFC has been accepted. The implementation status of the three rules:
+This RFC is accepted. Implementation status of the three rules:
 
 | Rule                       | Sub-item                               | Status                                |
 | -------------------------- | -------------------------------------- | ------------------------------------- |
@@ -113,7 +113,7 @@ claimed "tail expressions no longer implicitly return" but didn't cover that cas
 
 ## Proposal
 
-### Three Rules
+### The Three Rules
 
 ```
 ① Block value = tail expression (single exit point)
@@ -172,7 +172,7 @@ This replaces RFC-010's "`= { ... }` must use `return`, otherwise returns `Void`
 ### Rule ③: `if` without `else`
 
 ```yaoxiang
-x = if c { 19 }        // No else
+x = if c { 19 }        // no else
 ```
 
 When the condition is false, no branch can be evaluated, so `Void` is taken. Hence this `if`'s value type is `Void` (or cannot be used in non-`Void` positions).
@@ -205,13 +205,13 @@ fib: (n: Int) -> Int = {
 
 ## Detailed Design
 
-### Formalization of Blocks and Tail Expressions
+### Formalization of Block and Tail Expression
 
 ```
-Block        ::= '{' Stmt* '}'                     // Empty block → Void
-               | '{' Stmt* Expr '}'                // Value = Expr
+Block        ::= '{' Stmt* '}'                     // empty block → Void
+               | '{' Stmt* Expr '}'                // value = Expr
 Expr         ::= ...
-               | Return                            // Type Never
+               | Return                            // type Never
 Stmt         ::= Assignment | ExprStmt | ...
 
 value(Block):
@@ -248,7 +248,7 @@ RFC-007's examples **fully comply with this RFC**, no revisions needed:
 ```yaoxiang
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }          // Never branch, ignored by join
-    return n * factorial(n - 1)     // Function exit
+    return n * factorial(n - 1)     // function exit
 }
 ```
 
@@ -294,7 +294,7 @@ c = spawn { fetch("a") }
 - **Consistent with mature languages**: Rust similarly coexists with "tail expression + `return : !`"
 - **Zero new syntax**: No keywords added, parser syntax rules unchanged
 
-### Disadvantages
+### Drawbacks
 
 - **"Accidental return" risk with last expression as value**: Forgetting to delete the last line silently changes the return value
   - Mitigation: Type checking catches type mismatches; language doesn't promise to prevent intent errors (see design criterion)
@@ -355,7 +355,7 @@ All reproduced on 0.8.0.
 | `while { if i==2 { return 42 } }`                  | `42` (exits loop)              |
 | Nested `{ { return 5 } return 1 }`                 | `5` (exits bare block)         |
 
-## Appendix B: Design Decision Log
+## Appendix B: Design Decision Record
 
 | Decision                      | Decision                                             | Rationale                              | Date        |
 | ----------------------------- | ---------------------------------------------------- | -------------------------------------- | ----------- |
@@ -378,7 +378,7 @@ All reproduced on 0.8.0.
 | Value-bearing block | `= {}` / `spawn {}` / `unsafe {}` — value exit is tail expression                                       |
 | join              | Multi-branch merge rule; `Never` branches don't participate in merging                                  |
 
-## Appendix D: Function / Block Value Ambiguity Resolution
+## Appendix D: Function / Block Value Ambiguity Adjudication
 
 ### Problem
 
@@ -386,7 +386,7 @@ All reproduced on 0.8.0.
 ("simplest no-argument form" `name = { return ... }`), while RFC-010 / 010a treated it as a block value (`= {}` is a value-bearing block,
 value is tail expression). Same syntactic position, two sets of semantics; implementation had `callable_parts()` registering blocks as 0-arg functions while `generate_block_ir` evaluated them as block values — two layers of understanding inconsistent.
 
-### Resolution: Content Determines Type
+### Ruling: Content Determines the Type
 
 The same principle should apply consistently to dict literals and blocks:
 

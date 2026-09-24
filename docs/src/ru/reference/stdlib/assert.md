@@ -11,7 +11,7 @@ description: 'Утверждения'
 use std.assert
 ```
 
-## Обзор функций
+## Список функций
 
 <!-- stdlib:table:assert start -->
 

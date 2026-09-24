@@ -25,7 +25,7 @@ This RFC defines the **closure capture model** for the YaoXiang language. The co
 
 ## Motivation
 
-### Why is this needed?
+### Why is it needed?
 
 Currently, closure capture is **not implemented** — the `env` field of the `MakeClosure` instruction is always empty, and lambdas cannot reference any external variables. The borrow token system requires closures to capture `&T` tokens (zero-cost copy), which is a core use case.
 
@@ -34,7 +34,7 @@ Currently, closure capture is **not implemented** — the `env` field of the `Ma
 ```yaoxiang
 # This code currently cannot compile — lambda cannot reference threshold
 filter_by: (items: List(Point), threshold: &Float) -> List(Point) = {
-    items.filter(|p| p.x > threshold)  # ❌ threshold cannot be captured
+    items.filter(|p| p.x > threshold)  # ❌ threshold 无法捕获
 }
 ```
 
@@ -69,8 +69,8 @@ Conservative principle: when in doubt, treat as escaping.
 ```yaoxiang
 # 1. Dup token — direct copy (zero-cost)
 filter_by: (items: List(Point), threshold: &Float) -> List(Point) = {
-    # threshold: &Float → Dup → compiler copies token into closure
-    # Zero-size token, zero runtime overhead
+    # threshold: &Float → Dup → 编译器复制令牌进闭包
+    # 零大小令牌，零运行时开销
     items.filter(|p| p.x > threshold)
 }
 
@@ -78,7 +78,7 @@ filter_by: (items: List(Point), threshold: &Float) -> List(Point) = {
 process: (buf: Buffer) -> Void = {
     # buf is non-Dup, filter is non-escaping → auto-create &Buffer token
     transform(|b| b.read())
-    # Token released after closure returns, buf becomes usable again
+    # 闭包返回后令牌释放，buf 恢复可用
 }
 
 # 3. Closure escapes — Move
@@ -87,7 +87,7 @@ spawn_worker: (data: Data) -> Void = {
     spawn { use(data) }
 }
 
-# 4. Mixed capture
+# 4. 混合捕获
 complex: (items: List(Point), config: &Config, buf: Buffer) -> List(Point) = {
     # config: &Config → Dup → copy token
     # buf: Buffer → non-Dup, non-escaping → &mut Buffer borrow
@@ -98,7 +98,7 @@ complex: (items: List(Point), config: &Config, buf: Buffer) -> List(Point) = {
     })
 }
 
-# 5. Borrow conflict detection
+# 5. 借用冲突检测
 bad: (buf: Buffer) -> Void = {
     closure = |b| b.write()
     buf.read()  # ❌ buf has already been borrowed by closure, conflict here
@@ -135,21 +135,21 @@ Lambda type signatures remain unchanged: `(params) -> Return`. Captured variable
 6. Determine escape: how the closure is used
 7. Select capture mode:
    Dup → Copy
-   Non-Dup + non-escaping + Read → Borrow (&T)
-   Non-Dup + non-escaping + Write → BorrowMut (&mut T)
+   Non-Dup + not escaping + Read → Borrow (&T)
+   Non-Dup + not escaping + Write → BorrowMut (&mut T)
    Non-Dup + escaping → Move
 ```
 
 **IR Generation**:
 
 ```rust
-// Current (empty)
+// 当前（空）
 Instruction::MakeClosure { dst, func, env: Vec::new() }
 
-// Changed to
+// 改为
 Instruction::MakeClosure { dst, func, env: captured_env }
 
-// captured_env generation logic:
+// captured_env 的生成逻辑：
 for captured in captures {
     match captured.mode {
         Copy if is_zst(captured.ty) => {
@@ -160,13 +160,13 @@ for captured in captures {
             // Generate Move dst, src (shallow copy of Dup type)
         }
         Borrow => {
-            // Generate Borrow dst, src (create ReadToken)
+            // 生成 Borrow dst, src（创建 ReadToken）
         }
         BorrowMut => {
-            // Generate Borrow dst, src (create WriteToken)
+            // 生成 Borrow dst, src（创建 WriteToken）
         }
         Move => {
-            // Generate Move dst, src (ownership transfer)
+            // 生成 Move dst, src（所有权转移）
         }
     }
 }
@@ -225,8 +225,8 @@ Fully compatible. Currently all lambdas cannot capture outer variables; this RFC
 
 ### Risks
 
-- Escape analysis may be too conservative, causing unnecessary Moves; can be optimized later
-- Capture analysis for generic closures may require additional handling
+- Escape analysis may be overly conservative, leading to unnecessary Moves; can be optimized later
+- Capture analysis of generic closures may require additional handling
 
 ## Design Decision Record
 

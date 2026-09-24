@@ -164,7 +164,7 @@ title: 'Индекс RFC'
 
 ---
 
-## Подача RFC
+## Отправка RFC
 
 1. Прочитайте [RFC_TEMPLATE.md](RFC_TEMPLATE.md) для понимания требований к формату
 2. Изучите [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) для изучения стиля написания

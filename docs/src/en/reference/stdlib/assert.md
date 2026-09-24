@@ -5,7 +5,7 @@ description: 'Assertions'
 
 # std.assert
 
-Assertion module. The most commonly used tool in tests and examples.
+The assertion module. The most commonly used tool in tests and examples.
 
 ```yaoxiang
 use std.assert

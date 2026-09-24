@@ -9,7 +9,7 @@ issue: '#154'
 
 # RFC-035: MCP サーバーサポート（AI Agent 統合）
 
-## 概要
+## 要約
 
 YaoXiang に MCP（Model Context Protocol）サーバーを追加し、AI agent（Claude
 Code、Continue、Cody、Zed など）が YaoXiang ソースコードの
@@ -36,13 +36,13 @@ AI agent が実際に使用できる LSP クライアント（vscode-langservers
 
 これらの L1 LSP 翻訳能力では**做不到**、LSP の設計上サポートしていないため。
 
-### 現在の問題
+### 現在の問題点
 
 1. AI agent が LSP を使用するのは体験が悪い：モックドキュメントが必要、JSON が巨大、強URI依存
 2. YaoXiang プロジェクトに「AI-First」インターフェース層がない：人間は IDE で LSP を使うが、AI agent は LSP を使えない
 3. Claude Code / Continue など主要な AI agent はデフォルトで MCP をサポートしており、YaoXiang にとっては未開拓のエコシステム
 
-### MCP とは？
+### MCP とは何か？
 
 MCP（Model Context Protocol）は 2024-2025 年に Anthropic が主導して公開・オープンソース化した AI
 agent ツール呼び出しプロトコルで、既に事実上の標準になっている（OpenAI、Google、Microsoft、Zed、Continue、Cody などが対応）。特徴：
