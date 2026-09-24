@@ -2,44 +2,45 @@
 title:
   'RFC 022: Hoare Logic Static Verification Support (Specification Comments and Specification Types)'
 status: 'Deprecated (superseded by RFC-027)'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-03-16'
-updated: '2026-06-07 (Deprecated: superseded by compile-time evaluation type system)'
+updated: '2026-06-07 (Deprecated: superseded by the compile-time evaluation type system)'
 ---
 
 > **⚠️ DEPRECATED**
 >
 > This RFC has been superseded by
-> **[RFC-027: Compile-time Evaluation Types and Unified Static Verification](../review/027-compile-time-evaluation-types.md)**.
+> **[RFC-027: Compile-Time Evaluation Types and Unified Static Verification](../accepted/027-compile-time-evaluation-types.md)**.
 >
-> **Deprecation reason**: RFC 022 designed specifications as external syntax in `//!` comments,
-> which contradicts the fundamental principle of Curry-Howard isomorphism—"no `//!` comments. No
-> separate specification language. Everything is in the type system." The new design makes
-> compile-time evaluation types first-class citizens, replacing comment-style specifications with a
-> unified compile-time Bool evaluation pipeline. The Debug/Release split verification model is also
-> replaced by a unified True/False/Unknown three-level return value model.
+> **Reason for deprecation**: RFC 022 designed specifications as an external `//!` comment-based
+> syntax, which contradicts the fundamental principle of the Curry-Howard correspondence—"No `//!`
+> comments. No standalone specification language. Everything lives within the type system." The new
+> design treats compile-time evaluation types as first-class citizens, replacing comment-style
+> specifications with a unified compile-time Boolean evaluation pipeline. The Debug/Release
+> split-verification pattern has also been replaced by a unified True/False/Unknown three-level
+> return value model.
 >
-> This document is retained for historical reference only.
+> This document is preserved for historical reference only.
 
 ---
 
-# RFC 022: Hoare Logic Static Verification Support (Specification Comments and Specification Types) [DEPRECATED]
+# RFC 022: Hoare Logic Static Verification Support (Specification Comments and Specification Types) [Deprecated]
 
 > **References**:
 >
 > - [RFC-010: Unified Type Syntax](../accepted/010-unified-type-syntax.md)
-> - [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md)
+> - [RFC-011: Generics System Design](../accepted/011-generic-type-system.md)
 > - [RFC-009: Ownership Model](../accepted/009-ownership-model.md)
 
 ## Summary
 
 This document proposes introducing a **Hoare logic static verification mechanism** for the YaoXiang
-language, allowing developers to write preconditions, postconditions, and loop invariants in
-comments using `//!` or `/*! ... !*/` syntax. During Debug Build, static verification is enforced
-and must pass before a Release Build can proceed; during Release Build, specification comments are
-ignored (zero overhead) and verification cache is cleared. Specifications themselves are treated as
-part of the type system, forming "specification types" (such as `Requires(P)`, `Ensures(P)`), and
-can be extended by users. This design aims to maintain language simplicity while providing high
+language, allowing developers to write preconditions, postconditions, and loop invariants in the
+form of `//!` or `/*! ... !*/` comments. In Debug Build mode, static verification is enforced and
+must pass before proceeding to Release Build; in Release Build mode, specification comments are
+ignored (zero overhead) and the verification cache is cleared. Specifications themselves are treated
+as part of the type system, forming "specification types" (such as `Requires(P)`, `Ensures(P)`),
+which can be extended by users. This design aims to keep the language simple while providing high
 reliability guarantees for critical code, and integrates perfectly with YaoXiang's unified type
 model.
 
@@ -48,17 +49,17 @@ model.
 ### Why is this feature/change needed?
 
 YaoXiang already guarantees memory safety and thread safety through the ownership model (RFC-009)
-and concurrency model (RFC-001), but logical correctness still relies on testing. For systems
+and the concurrency model (RFC-001), but logical correctness still depends on testing. For systems
 programming and safety-critical domains (such as aerospace, finance, operating system kernels),
 logical errors can lead to catastrophic consequences. Existing solutions (such as Rust's borrow
-checker) cannot catch these kinds of errors. Hoare logic provides a mathematical proof method, but
+checker) cannot capture such errors. Hoare logic provides a mathematical proof mechanism, but
 traditional formal verification tools often require a separate specification language and have a
 steep learning curve.
 
 ### Current Problems
 
-- Logical correctness can only be verified through testing, cannot be guaranteed at compile-time
-- Critical system code lacks formal verification methods
+- Logical correctness can only be verified through testing, and cannot be guaranteed at compile-time
+- Critical system code lacks formal verification means
 - Existing formal verification tools have steep learning curves and are disconnected from mainstream
   programming languages
 
@@ -66,21 +67,22 @@ steep learning curve.
 
 ### Core Design
 
-Our goal is to design a **lightweight, language-integrated** static verification solution:
+Our goal is to design a **lightweight, language-integrated** static verification scheme:
 
-- **Debug Build verification required**: Developers write specifications in modules requiring high
-  reliability; Debug Build enforces verification passing before Release Build can proceed
-- **Elegant syntax**: Uses `//!` comments, does not introduce new keywords, and can be highlighted
-  by editors
-- **Integrated with type system**: Specifications become part of types, can participate in type
-  checking, supports user-defined specification types
-- **Provable and testable**: Can be statically proven or degraded to runtime assertions,
-  facilitating gradual adoption
+- **Debug Build requires verification**: Developers write specifications in modules that require
+  high reliability. In Debug Build mode, verification is enforced and must pass before proceeding to
+  Release Build
+- **Elegant syntax**: Uses `//!` comments, introduces no new keywords, and can be highlighted by
+  editors
+- **Integrated with the type system**: Specifications become part of types, can participate in type
+  checking, and support user-defined specification types
+- **Provable and testable**: Can be statically proven or downgraded to runtime assertions,
+  facilitating incremental adoption
 
 ### 1. Specification Comment Syntax
 
-Use `//!` (single line) or `/*! ... !*/` (multi-line) at the beginning of a function body or loop
-body to write specifications.
+At the beginning of a function body or loop body, use `//!` (single-line) or `/*! ... !*/`
+(multi-line) to write specifications.
 
 #### 1.1 Unified Specification Syntax
 
@@ -96,10 +98,10 @@ max: (T: Ord) -> ((arr: Array(T, n)) -> T) = {
 }
 ```
 
-- A specification is essentially a **type declaration**, with the right side being a boolean
-  expression
-- The left side is a specification type instance (can carry type parameters)
-- Special variable `result` can be used to denote the return value
+- A specification is essentially a **type declaration** with a Boolean expression on the right-hand
+  side
+- The left-hand side is a specification type instance (with optional type parameters)
+- The special variable `result` can be used to represent the return value
 
 #### 1.2 Loop Specifications
 
@@ -114,7 +116,8 @@ while i < n {
 
 #### 1.3 Specification Expressions
 
-Boolean expressions on the right side of specifications use YaoXiang expression syntax, supporting:
+The Boolean expressions on the right-hand side of specifications use YaoXiang expression syntax,
+supporting:
 
 - Arithmetic, comparison, and logical operations
 - Quantifiers: `forall i in 0..n: P(i)`, `exists i in 0..n: P(i)` — language-built-in logical
@@ -128,8 +131,8 @@ syntax model.
 
 #### 2.1 Built-in Specification Types
 
-The compiler provides the following commonly used specification types (can be used directly in
-specifications):
+The compiler provides the following commonly used specification types built-in (can be used directly
+in specifications):
 
 ```yaoxiang
 // Built-in specification type definitions
@@ -139,26 +142,26 @@ GreaterOrEqual: (T: Type) -> Type = { result: T, arr: Array(T); result >= arr[0]
 Bounds: (T: Type) -> Type = { i: T, n: T; 0 <= i && i <= n }
 SumInvariant: (T: Type) -> Type = { s: T, arr: Array(T); s == sum(arr[0..i]) }
 
-// Quantifier constructs (language built-in, not functions)
+// Quantifier constructs (language built-ins, not functions)
 forall: (start: Int, end: Int, pred: (Int) -> Bool) -> Bool
 exists: (start: Int, end: Int, pred: (Int) -> Bool) -> Bool
 ```
 
-#### 2.2 User-defined Specification Types
+#### 2.2 User-Defined Specification Types
 
-Fully consistent with ordinary type definitions, users can define their own specification types:
+Consistent with ordinary type definitions, users can define their own specification types:
 
 ```yaoxiang
-// Define positive integer specification
+// Define a positive integer specification
 Positive: Type = { x: Int; x > 0 }
 
-// Define sorted array specification
+// Define a sorted array specification
 Sorted: (T: Ord) -> Type = {
     arr: Array(T);
     forall i in 0..arr.len-1: arr[i] <= arr[i+1]
 }
 
-// Define maximum value specification
+// Define a maximum value specification
 ExistsMax: (T: Ord) -> Type = {
     result: T, arr: Array(T);
     exists i in 0..arr.len: result == arr[i]
@@ -183,44 +186,44 @@ binary_search: (T: Ord) -> ((arr: Sorted(Array(T)), key: T) -> Option(Index)) = 
 Specification types, like other types, support generic parameters and type constraints, and can
 participate in type inference.
 
-### 3. Build Modes
+### 3. Compilation Modes
 
-| Mode               | Behavior                                                                                                           | Option                                        |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
-| **Debug Build**    | Parse specifications, generate verification conditions, call SMT solver for proofs; must pass before Release Build | `yaoxiangc --debug source.yx`                 |
-| **Release Build**  | Ignore all `//!` comments, generate no code; clear all verification cache; enable aggressive optimizations         | `yaoxiangc --release source.yx`               |
-| **Runtime Checks** | Convert specifications to runtime assertions, panic on violations                                                  | `yaoxiangc --enable-runtime-checks source.yx` |
+| Mode               | Behavior                                                                                                                                          | Option                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| **Debug Build**    | Parses specifications, generates verification conditions, calls the SMT solver to prove; Release Build can only proceed after verification passes | `yaoxiangc --debug source.yx`                 |
+| **Release Build**  | Ignores all `//!` comments, generates no code; clears all verification caches; enables aggressive optimization                                    | `yaoxiangc --release source.yx`               |
+| **Runtime Checks** | Converts specifications to runtime assertions, panics on violation                                                                                | `yaoxiangc --enable-runtime-checks source.yx` |
 
-In verification mode, if proof fails, the compiler reports an error and provides possible
+In verification mode, if the proof fails, the compiler reports an error and provides possible
 counterexamples (such as input values).
 
 ### 4. Verification Mechanism
 
-The compiler converts specifications to Verification Conditions (VCs) and sends them to an
+The compiler converts specifications into verification conditions (VCs) and sends them to an
 integrated SMT solver (such as Z3). The verification process is roughly as follows:
 
-1. Collect `requires` and `ensures` for functions, `invariant` for loops
-2. Generate loop invariant proof obligations for each loop: must hold before entering the loop,
-   maintained after each iteration, and implies postconditions after loop exit
-3. Transform function bodies into logical formulas, combine with specifications, form verification
-   conditions
-4. Call SMT solver to check satisfiability
+1. Collect `requires` and `ensures` for functions, and `invariant` for loops
+2. For each loop, generate loop invariant proof obligations: holds before entering the loop,
+   maintained after each iteration, and implies the postcondition after loop exit
+3. Transform the function body into logical formulas, combine with specifications to form
+   verification conditions
+4. Call the SMT solver to check satisfiability
 
 If the solver returns `unsat` (unsatisfiable), the specification holds; otherwise, report a
 counterexample.
 
 ### 5. Integration with Testing
 
-Runtime check mode can convert specifications to assertions for testing. Combined with specification
-coverage tools, one can evaluate the degree to which tests cover specifications. In the future,
-specification mining tools can be considered to automatically infer candidate specifications from
-tests.
+Runtime check mode can convert specifications into assertions for testing. Combined with
+specification coverage tools, the extent to which tests cover specifications can be evaluated. In
+the future, specification mining tools may be considered to automatically infer candidate
+specifications from tests.
 
 ### 6. Editor Support
 
-`//!` and `/*! ... !*/` can be recognized by editors as special comments, given different colors
-(such as purple), distinguishing them from ordinary comments. Language servers can provide hover
-tooltips, completions, and verification error reporting for specifications.
+`//!` and `/*! ... !*/` can be recognized by editors as special comments and given a different color
+(such as purple) to distinguish them from ordinary comments. The language server can provide hover
+hints, completion, and verification error reports for specifications.
 
 ## Detailed Design
 
@@ -232,8 +235,8 @@ tooltips, completions, and verification error reporting for specifications.
 
 ### 7.1 Syntax Extension
 
-On top of the existing syntax (RFC-010), zero or more `//!` or `/*! ... !*/` comments are allowed at
-the beginning of function bodies and loop bodies. Specification syntax is consistent with the
+On top of the existing syntax (RFC-010), allow zero or more `//!` or `/*! ... !*/` comments at the
+beginning of function bodies and loop bodies. The specification syntax is consistent with the
 unified type syntax:
 
 ```
@@ -243,155 +246,159 @@ spec_name        ::= 'requires' | 'ensures' | 'invariant'
 spec_block       ::= (spec_name ':' type_expr '=' expr ';')*
 ```
 
-- A specification is essentially a type declaration: `spec_name: spec_type = boolean_expression`
-- `type_expr` is a specification type expression, can carry type parameters
-- `expr` uses YaoXiang expression syntax, supports quantifiers
+- A specification is essentially a type declaration: `spec_name: spec_type = Boolean expression`
+- `type_expr` is a specification type expression, with optional type parameters
+- `expr` uses YaoXiang expression syntax, supporting quantifiers
 
 ### 7.2 Type Checking
 
-In verification mode, the compiler converts specification comments to corresponding specification
-type instances and records them in the metadata of functions or loops.
+In verification mode, the compiler converts specification comments into corresponding specification
+type instances and records them in the metadata of the function or loop.
 
 ### 7.3 Verification Condition Generation
 
 Using weakest precondition or strongest postcondition calculus, combined with loop invariants,
-generate first-order logic formulas. Generated VCs use SMT-LIB format and call external solvers.
+first-order logic formulas are generated. The generated VCs use the SMT-LIB format and call external
+solvers.
 
 ### 7.4 Error Reporting
 
-If proof fails, the solver may provide a model (counterexample). The compiler should convert these
-counterexamples into readable forms, such as concrete input values, to help users debug.
+If the proof fails, the solver may provide a model (counterexample). The compiler should convert
+these counterexamples into a readable form, such as concrete input values, to help users debug.
 
 ### 7.5 Runtime Checks
 
-In `--enable-runtime-checks` mode, the compiler converts specifications to `assert` statements:
+In `--enable-runtime-checks` mode, the compiler converts specifications into `assert` statements:
 
-- `requires`: Insert `assert(cond)` at function entry
-- `ensures`: Insert `assert(cond)` before all return points in the function, where `result` is
+- `requires`: insert `assert(cond)` at the function entry
+- `ensures`: insert `assert(cond)` before all return points of the function, where `result` is
   replaced with the actual return value
-- `invariant`: Insert `assert(cond)` at the beginning of the loop body
+- `invariant`: insert `assert(cond)` at the beginning of the loop body
 
-### 7.6 Integration with Existing Design
+### 7.6 Integration with Existing Designs
 
-- **Ownership model**: Expressions in specifications obey ownership rules, can only read not write
-  (pure functions), avoiding side effects
-- **Generic system**: Specification types support generic parameters (such as `Requires(P)`), can be
-  combined with generic functions/types
+- **Ownership model**: Expressions in specifications follow ownership rules, can only read but not
+  write (pure functions), avoiding side effects
+- **Generics system**: Specification types support generic parameters (such as `Requires(P)`), and
+  can be combined with generic functions/types
 - **Dependent types**: Value-dependent types in specifications (such as array length `n`) are
   naturally available
 
-### Type System Impact
+### Impact on the Type System
 
 - Specification types are ordinary YaoXiang types, consistent with the unified syntax model
-- The compiler provides commonly used built-in specification types (`Positive`, `NonEmpty`,
+- The compiler has commonly used specification types built-in (`Positive`, `NonEmpty`,
   `GreaterOrEqual`, etc.)
 - Users can define custom specification types through ordinary type definitions
 - Specification types can carry generic parameters and support type constraints
 
 ### Runtime Behavior
 
-- **Debug Build**: Calls SMT solver for static verification, increased compilation time; cache
-  verification results after successful verification
-- **Release Build**: Specification comments are ignored, zero runtime overhead; clear all
-  verification cache; enable aggressive optimizations such as span cache clearing
-- **Runtime check mode**: Generate assert statements, runtime detection of violations
+- **Debug Build**: Calls the SMT solver for static verification, increasing compile time; caches
+  verification results upon success
+- **Release Build**: Specification comments are ignored, zero runtime overhead; clears all
+  verification caches; enables aggressive optimizations such as Span cache clearing
+- **Runtime check mode**: Generates assert statements that detect violations at runtime
 
 ### Compiler Changes
 
-- Parser: Recognize specification comment syntax
-- Semantic analysis: Collect specifications, convert to specification types
-- Verification backend: Generate verification conditions, call SMT solver
-- Code generation: Support runtime check mode
+- Parser: recognize specification comment syntax
+- Semantic analysis: collect specifications, convert to specification types
+- Verification backend: generate verification conditions, call the SMT solver
+- Code generation: support runtime check mode
 
 ### Backward Compatibility
 
 - ✅ Fully backward compatible
-- Specification comments are ignored in normal compilation, not affecting existing code
-- Specifications are ignored in Release Build, no extra overhead
+- Specification comments are ignored under normal compilation, not affecting existing code
+- Specifications are ignored in Release Build, with no additional overhead
 
 ## Trade-offs
 
 ### Advantages
 
-- **Debug Build verification**: Debug Build enforces verification, ensuring logical correctness
+- **Debug Build verification**: Forced verification in Debug Build mode ensures logical correctness
 - **Elegant syntax**: Pure comments, no new keywords, editor-friendly
-- **Integrated with type system**: Specifications are types, extensible
-- **Gradual adoption**: Can transition from runtime checks to static verification incrementally
-- **Increased reliability**: Can catch logical errors that are difficult to find through testing
+- **Integrated with the type system**: Specifications are types, extensible
+- **Incremental adoption**: Can gradually transition from runtime checks to static verification
+- **Improved reliability**: Can catch logical errors that are difficult to find through testing
 
 ### Disadvantages
 
-- **Compilation time**: Verification mode may significantly increase compilation time
-- **Learning curve**: Need to learn how to write effective specifications and quantifiers
-- **SMT solver limitations**: Some complex properties may not be automatically provable
+- **Compile time**: Verification mode may significantly increase compile time
+- **Learning curve**: Requires learning how to write effective specifications and quantifiers
+- **SMT solver limitations**: Some complex properties may not be provable automatically
 
-## Alternative Approaches
+## Alternatives
 
-| Approach                                  | Advantages                            | Disadvantages                             |
-| ----------------------------------------- | ------------------------------------- | ----------------------------------------- |
-| New keywords (such as `requires`)         | Intuitive syntax                      | Introduce new keywords, break simplicity  |
-| Separate specification files (like CVL)   | Separate specs from code              | Increase file count, hard to keep in sync |
-| Runtime assertions only                   | Simple implementation                 | Cannot guarantee statically               |
-| **This approach (comments + spec types)** | Balanced simplicity and functionality | Requires editor support                   |
+| Scheme                                           | Advantages                            | Disadvantages                              |
+| ------------------------------------------------ | ------------------------------------- | ------------------------------------------ |
+| New keywords (such as `requires`)                | Intuitive syntax                      | Introduces new keywords, breaks simplicity |
+| Separate specification files (such as CVL)       | Separates specifications from code    | Increases file count, hard to keep in sync |
+| Runtime assertions only                          | Simple to implement                   | Cannot guarantee statically                |
+| **This scheme (comments + specification types)** | Balances simplicity and functionality | Requires editor support                    |
 
 ## Implementation Strategy
 
-### Phases
+### Phased Plan
 
-| Phase                                   | Content                                                                                                                                                                                                                   |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Phase 1: Basic support**              | Extend parser to recognize `//!` and `/*! ... !*/` comments, attach to AST nodes; in verification mode collect specifications, generate simple verification conditions (arithmetic comparisons only); integrate Z3 solver |
-| **Phase 2: Quantifier support**         | Support quantifier expressions, translate to SMT-LIB `forall`/`exists`; provide IDE highlighting and hover tooltips for specifications                                                                                    |
-| **Phase 3: Optimization and toolchain** | Incremental verification, cache verified modules; specification coverage reports; specification mining tools (generate candidate specifications from tests)                                                               |
+| Phase                                 | Content                                                                                                                                                                                                            |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Phase 1: Basic Support**            | Extend the parser to recognize `//!` and `/*! ... !*/` comments, attach them to AST nodes; collect specifications in verification mode, generate simple VCs (arithmetic comparisons only); integrate the Z3 solver |
+| **Phase 2: Quantifier Support**       | Support quantifier expressions, translate to SMT-LIB's `forall`/`exists`; provide IDE highlighting and hover hints for specifications                                                                              |
+| **Phase 3: Optimization and Tooling** | Incremental verification, caching of verified modules; specification coverage reports; specification mining tools (generate candidate specifications from tests)                                                   |
 
 ### Dependencies
 
-- RFC-009: Ownership model - Specification expressions require pure function semantics
-- RFC-010: Unified type syntax - Specification type system is based on the type system
-- RFC-011: Generic type system design - Specification types support generic parameters
+- RFC-009: Ownership Model - specification expressions require pure function semantics
+- RFC-010: Unified Type Syntax - the specification type system is based on the type system
+- RFC-011: Generics System Design - specification types support generic parameters
 
 ### Risks
 
-1. **SMT solver integration complexity**: Integration of solvers like Z3 may encounter technical
+1. **SMT solver integration complexity**: Integrating solvers like Z3 may encounter technical
    challenges
-   - Mitigation: Use mature Rust Z3 bindings, gradually expand supported expression types
+   - Mitigation: Use mature Rust Z3 bindings, gradually expand the supported expression types
 
-2. **Difficult debugging of verification failures**: When the SMT solver cannot prove a
-   specification, users may have difficulty understanding why
+2. **Difficulty debugging verification failures**: When the SMT solver cannot prove a specification,
+   users may find it hard to understand the reason
    - Mitigation: Provide clear error messages and counterexample explanations
 
-3. **Performance overhead**: Verification mode may significantly increase compilation time
+3. **Performance overhead**: Verification mode may significantly increase compile time
    - Mitigation: Implement incremental verification and caching mechanisms
 
 ## Open Questions
 
-- [ ] **Quantifier support scope**: Support nested quantifiers? Support higher-order quantifiers?
-- [ ] **Loop invariant inference**: Provide automatic inference of simple invariants?
-- [ ] **Counterexample format for proof failures**: How to present counterexamples most effectively?
-- [ ] **Integration with other verification tools**: Consider integration with proof assistants like
-      Coq, Lean?
+- [ ] **Quantifier support scope**: Are nested quantifiers supported? Are higher-order quantifiers
+      supported?
+- [ ] **Loop invariant inference**: Is automatic inference of simple invariants provided?
+- [ ] **Format of counterexamples for failed proofs**: How to present counterexamples most
+      effectively?
+- [ ] **Integration with other verification tools**: Should integration with proof assistants like
+      Coq and Lean be considered?
 
 ## References
 
-- [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md)
-- [RFC-011: Generic Type System Design](./011-generic-type-system.md)
-- [RFC-009: Ownership Model](./009-ownership-model.md)
+- [RFC-010: Unified Type Syntax](../accepted/010-unified-type-syntax.md)
+- [RFC-011: Generics System Design](../accepted/011-generic-type-system.md)
+- [RFC-009: Ownership Model](../accepted/009-ownership-model.md)
 - [JML Reference Manual](https://www.openjml.org/)
 - [The SPARK Toolset](https://www.adacore.com/about-spark)
 - [Z3 SMT Solver](https://github.com/Z3Prover/z3)
 
 ---
 
-## Lifecycle and Disposition
+## Lifecycle and Destination
 
 ```
 ┌─────────────┐
-│   Draft     │  ← Author created
+│   Draft     │  ← Author creates
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│  Review     │  ← Community discussion
+│  Under      │  ← Community discussion
+│  Review     │
 └──────┬──────┘
        │
        ├──────────────────┐
@@ -403,28 +410,29 @@ In `--enable-runtime-checks` mode, the compiler converts specifications to `asse
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
 │ accepted/  │    │    rfc/     │
-│ (official) │    │ (kept in place) │
+│ (formal    │    │ (kept in    │
+│  design)   │    │   place)    │
 └─────────────┘    └─────────────┘
 ```
 
-### Status Descriptions
+### Status Description
 
-| Status       | Location                | Description                                                   |
-| ------------ | ----------------------- | ------------------------------------------------------------- |
-| **Draft**    | `docs/design/rfc/`      | Author draft, awaiting submission for review                  |
-| **Review**   | `docs/design/rfc/`      | Open for community discussion and feedback                    |
-| **Accepted** | `docs/design/accepted/` | Becomes official design document, enters implementation phase |
-| **Rejected** | `docs/design/rfc/`      | Kept in RFC directory, status updated                         |
+| Status           | Location                | Description                                             |
+| ---------------- | ----------------------- | ------------------------------------------------------- |
+| **Draft**        | `docs/design/rfc/`      | Author's draft, awaiting submission for review          |
+| **Under Review** | `docs/design/rfc/`      | Open to community discussion and feedback               |
+| **Accepted**     | `docs/design/accepted/` | Becomes a formal design document, enters implementation |
+| **Rejected**     | `docs/design/rfc/`      | Kept in the RFC directory, status updated               |
 
-### Post-acceptance Actions
+### Actions After Acceptance
 
-1. Move RFC to `docs/design/accepted/` directory
-2. Update filename to descriptive name (such as `hoare-logic-static-verification.md`)
-3. Update status to "Official"
-4. Update status to "Accepted", add acceptance date
+1. Move the RFC to the `docs/design/accepted/` directory
+2. Update the file name to a descriptive one (e.g. `hoare-logic-static-verification.md`)
+3. Update status to "Formal"
+4. Update status to "Accepted", add the acceptance date
 
-### Post-rejection Actions
+### Actions After Rejection
 
-1. Keep in `docs/design/rfc/` directory
-2. Add rejection reason and date at the top of the file
+1. Keep in the `docs/design/rfc/` directory
+2. Add the reason for rejection and date at the top of the file
 3. Update status to "Rejected"

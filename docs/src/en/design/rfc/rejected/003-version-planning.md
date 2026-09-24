@@ -1,7 +1,7 @@
 ---
 title: 'RFC-003: Version Planning'
 status: 'Rejected'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2025-01-05'
 updated: '2025-01-06'
 ---
@@ -10,79 +10,79 @@ updated: '2025-01-06'
 
 > **Rejection Date**: 2026-06-01
 
-## ⚠️ Rejection Reason
+## ⚠️ Reason for Rejection
 
-**This RFC does not comply with RFC standards and has been rejected.**
+**This RFC does not conform to RFC specifications and has been rejected.**
 
-### Problem Analysis
+### Issue Analysis
 
-| Issue                        | Description                                                                                                                                 |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Wrong Doc Type**           | RFCs are decision documents about "why this design", this document is a project management document about "where we are, where we're going" |
-| **Lack of Design Decisions** | No trade-off analysis for technical choices, no alternative comparison, no design rationale                                                 |
-| **Over-planning**            | Planned 9 versions (v0.1-v1.0), but only 1.5 are complete; v0.3 and beyond are all speculation                                              |
-| **High Maintenance Cost**    | Success metrics table has 50 states, difficult to maintain                                                                                  |
-| **Version Number Chaos**     | Skipped v0.8, no explanation provided                                                                                                       |
+| Issue                        | Description                                                                                                                                                 |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Wrong Document Type**      | An RFC is a decision document about "why we design this way"; this document is a project management document about "where we are now and where we're going" |
+| **Lack of Design Decisions** | No trade-off analysis for technology choices, no comparison of alternatives, no design rationale                                                            |
+| **Over-Planning**            | Planned 9 versions (v0.1-v1.0), but only completed 1.5; everything after v0.3 is speculative                                                                |
+| **High Maintenance Cost**    | The success metrics table has 50 statuses, hard to maintain                                                                                                 |
+| **Version Number Chaos**     | Skipped v0.8 without explanation                                                                                                                            |
 
 ### Correct Document Type
 
-This document should be managed as a **Project Roadmap**, not an RFC. Roadmaps record facts and
-short-term plans, RFCs record design decisions.
+This document should be managed as a **Project Roadmap**, not an RFC. A Roadmap records facts and
+short-term plans; an RFC records design decisions.
 
 ---
 
-> **The following is the original content, preserved for reference.**
+> **The following is the original content, retained for reference.**
 
-## Abstract
+## Summary
 
-YaoXiang's version release plan, a roadmap from v0.1 to v1.0.
+YaoXiang's release plan, the roadmap from v0.1 to v1.0.
 
-**Core Objectives**:
+**Core Goals**:
 
 1. **Bytecode Compilation**: Support REPL and incremental compilation
-2. **Bootstrap**: Write the YaoXiang compiler in YaoXiang
+2. **Bootstrap**: Use YaoXiang to write the YaoXiang compiler
 3. **AOT Compilation**: Compile bytecode to native machine code
 
 ## 1. Motivation
 
-### Why Do We Need Version Planning?
+### Why Version Planning?
 
-1. **Project Management**: Decompose goals into executable milestones
-2. **User Expectations**: Let users understand the language's development stages
-3. **Resource Allocation**: Clarify focus areas for each phase
-4. **Risk Control**: Detect problems early and adjust direction
+1. **Project Management**: Break down goals into executable milestones
+2. **User Expectations**: Let users understand the language's development stage
+3. **Resource Allocation**: Clarify priorities for each stage
+4. **Risk Control**: Identify issues promptly and adjust direction
 
 ### Core Design Decisions
 
-- **Bytecode First**: Implement interpreter execution first, then consider AOT
+- **Bytecode First**: Implement interpreted execution first, then consider AOT
 - **Incremental Delivery**: Each version has usable features
-- **Backward Compatibility**: APIs may change before v1.0, but will be announced in advance
-- **Bootstrap Verification**: Prove the language's expressiveness through self-hosting
-- **Performance Tiers**: Get it working first, then optimize
+- **Backward Compatibility**: API may change before v1.0, but announcements will be made in advance
+- **Bootstrap Verification**: Prove the language's expressive power through bootstrapping
+- **Layered Performance**: Get it running first, then optimize
 
 ## 2. Component Status (Phase)
 
-| Phase | Module             | Status         | Location                                        | Last Updated |
-| ----- | ------------------ | -------------- | ----------------------------------------------- | ------------ |
-| P1    | Lexer              | ✅ Complete    | `src/frontend/lexer/`                           | 2025-01-23   |
-| P2    | Type Checker       | ✅ Complete    | `src/frontend/typecheck/`                       | 2025-01-23   |
-| P3    | Bytecode Generator | ✅ Complete    | `src/middle/codegen/`                           | 2025-01-25   |
-| P4    | Virtual Machine    | ✅ Complete    | `src/middle/`                                   | 2025-01-25   |
-| P4.1  | Task System        | ✅ Complete    | `src/backends/runtime/task.rs`                  | 2025-01-23   |
-| P4.2  | DAG Scheduler      | 🔶 Design Done | `.claude/plan/flow-scheduler-implementation.md` | 2026-01-04   |
-| P5    | Standard Library   | ⚠️ Partial     | `src/std/`                                      | 2025-01-23   |
-| P6    | TUI REPL           | ✅ Complete    | `src/backends/dev/repl/`                        | 2025-01-24   |
-| P7    | Generics System    | ✅ Complete    | `docs/design/rfc/011-generic-type-system.md`    | 2025-01-25   |
+| Phase | Module             | Status             | Location                                        | Last Updated |
+| ----- | ------------------ | ------------------ | ----------------------------------------------- | ------------ |
+| P1    | Lexer              | ✅ Complete        | `src/frontend/lexer/`                           | 2025-01-23   |
+| P2    | Type Checker       | ✅ Complete        | `src/frontend/typecheck/`                       | 2025-01-23   |
+| P3    | Bytecode Generator | ✅ Complete        | `src/middle/codegen/`                           | 2025-01-25   |
+| P4    | Virtual Machine    | ✅ Complete        | `src/middle/`                                   | 2025-01-25   |
+| P4.1  | Task System        | ✅ Complete        | `src/backends/runtime/task.rs`                  | 2025-01-23   |
+| P4.2  | DAG Scheduler      | 🔶 Design Complete | `.claude/plan/flow-scheduler-implementation.md` | 2026-01-04   |
+| P5    | Standard Library   | ⚠️ Partial         | `src/std/`                                      | 2025-01-23   |
+| P6    | TUI REPL           | ✅ Complete        | `src/backends/dev/repl/`                        | 2025-01-24   |
+| P7    | Generics System    | ✅ Complete        | `docs/design/rfc/011-generic-type-system.md`    | 2025-01-25   |
 
 **Core Achievements**:
 
 - ✅ Compiler frontend fully implemented (P1-P2)
-- ✅ Bytecode generation and virtual machine completed (P3-P4)
-- ✅ Basic task system completed (P4.1)
-- ✅ TUI REPL development completed (P6)
-- ✅ Generics system design completed (P7)
+- ✅ Bytecode generation and virtual machine complete (P3-P4)
+- ✅ Basic task system complete (P4.1)
+- ✅ TUI REPL development complete (P6)
+- ✅ Generics system design complete (P7)
 
-**Next Priority**: Implement FlowScheduler → Improve standard library (P5) → v0.1 release
+**Next Priority**: Implement the FlowScheduler → Improve the standard library (P5) → Release v0.1
 
 ## 3. Version Roadmap
 
@@ -92,11 +92,11 @@ YaoXiang's version release plan, a roadmap from v0.1 to v1.0.
 
 **Completed**:
 
-- ✅ Complete lexer, parser, type checking
+- ✅ Lexing, parsing, and type checking complete
 - ✅ Bytecode generation available
-- ✅ Virtual machine can interpret and execute basic programs
+- ✅ Virtual machine can interpret basic programs
 - ✅ Basic print function
-- ✅ TUI REPL completed
+- ✅ TUI REPL complete
 - ✅ Basic task system (Task/Scheduler)
 
 ```
@@ -106,21 +106,21 @@ Hello, YaoXiang!
 
 **Technical Highlights**:
 
-- Three-layer runtime architecture design completed
+- Three-tier runtime architecture design complete
 - Task system fully implemented
 - TUI REPL modern interface
 - Unified type syntax + generics system design
 
-**Not Included**: Full DAG scheduling (basic scheduler already implemented)
+**Not Included**: Complete DAG scheduling (basic scheduler implemented)
 
 ### v0.2: FlowScheduler 🚧
 
-**Goal**: Implement complete dependency-aware scheduler
+**Goal**: Implement a complete dependency-aware scheduler
 
-- ✅ Design document completed
+- ✅ Design document complete
 - 🔶 Implementation in progress
-- [ ] DAG nodes and graph implementation
-- [ ] Work-stealing algorithm
+- [ ] DAG node and graph implementation
+- [ ] Work stealing algorithm
 - [ ] libuv IO scheduling engine
 - [ ] Lazy evaluation strategy
 - [ ] spawn syntax support
@@ -141,7 +141,7 @@ Hello, YaoXiang!
 
 ### v0.4: Generics System 📋
 
-**Goal**: Complete generics capability
+**Goal**: Complete generics capabilities
 
 - [ ] RFC-011 Phase 1: Basic generics
 - [ ] RFC-011 Phase 2: Type constraints
@@ -153,13 +153,13 @@ Hello, YaoXiang!
 
 - Dead code elimination
 - Zero-cost abstractions
-- Function overloading + inlining optimization
+- Function overloading + inline optimization
 
 ### v0.5: Standard Library Improvement 📋
 
-**Goal**: Usability improvement
+**Goal**: Usability improvements
 
-- IO, dictionary, networking modules
+- IO, dictionary, network modules
 - Toolchain (fmt, basic LSP)
 - Performance optimization
 
@@ -174,18 +174,18 @@ Hello, YaoXiang!
 
 ### v0.7: Stable Version 📋
 
-**Goal**: API趋于稳定
+**Goal**: API approaching stability
 
 - Complete documentation
-- Toolchain improvement
+- Toolchain refinement
 - Edge case fixes
 
 ### v0.9: Bootstrap Start 📋
 
-**Goal**: Core modules rewritten in YaoXiang
+**Goal**: Rewrite core modules in YaoXiang
 
-- Lexer → Parser → TypeChecker → Codegen progressively replaced
-- Cross-validation: results from both compilers match
+- Lexer → Parser → TypeChecker → Codegen gradual replacement
+- Cross-validation: two compilers produce identical results
 
 ### v1.0: Production Ready 📋
 
@@ -195,32 +195,33 @@ Hello, YaoXiang!
 - AOT compilation (LLVM backend)
 - Production ready
 
-## 4. Three-Layer Compilation Strategy
+## 4. Three-Layer Compilation Strategy Design
 
 | Layer         | Version | Input           | Output          | Description              |
 | ------------- | ------- | --------------- | --------------- | ------------------------ |
 | L1: Bytecode  | v0.1+   | Source (.yx)    | Bytecode (.yxb) | VM interpreted execution |
-| L2: Bootstrap | v0.9+   | YaoXiang src    | Bytecode        | Self-compilation         |
-| L3: AOT       | v1.0+   | Source/Bytecode | Native code     | Native performance       |
+| L2: Bootstrap | v0.9+   | YaoXiang source | Bytecode        | Self-compile-self        |
+| L3: AOT       | v1.0+   | Source/Bytecode | Machine code    | Native performance       |
 
 **Reasons for Bytecode First**:
 
-1. **REPL Support**: Compile input code immediately, interactive development
+1. **REPL Support**: Instantly compile input code, interactive development
 2. **Incremental Compilation**: Modifying a single function only requires recompiling that part
-3. **Platform Independence**: .yxb files run cross-platform, only need the corresponding platform VM
+3. **Platform Independent**: .yxb files run cross-platform; only need the VM for the corresponding
+   platform
 
 ## 5. Dependency Strategy
 
-**Short-term**: Call Rust libraries, reuse crates.io (Cargo parasitic)
+**Short-term**: Call Rust libraries to reuse crates.io (Cargo parasitism)
 
 **Current Dependencies**:
 
 - Concurrency: parking_lot, crossbeam, rayon
 - Data structures: indexmap, hashbrown, smallvec
-- Networking: tokio
+- Network: tokio
 - Serialization: serde, ron
 
-**Long-term**: Build our own standard library and package manager
+**Long-term**: Self-built standard library and package manager
 
 ## 6. Toolchain
 
@@ -228,7 +229,7 @@ Hello, YaoXiang!
 | ------- | -------------------- | ------------ |
 | v0.1    | yaoxiang-cli         | ✅ Complete  |
 | v0.1    | TUI REPL             | ✅ Complete  |
-| v0.2    | yaoxiang-debug       | 🚧 Designing |
+| v0.2    | yaoxiang-debug       | 🚧 In Design |
 | v0.3    | yaoxiang-fmt         | 📋 Planned   |
 | v0.3    | yaoxiang-lsp (basic) | 📋 Planned   |
 | v0.5    | yaoxiang-clippy      | 📋 Planned   |
@@ -236,38 +237,38 @@ Hello, YaoXiang!
 
 ## 7. Success Metrics
 
-| Metric            | v0.1  | v0.2  | v0.3     | v0.5     | v1.0 |
-| ----------------- | ----- | ----- | -------- | -------- | ---- |
-| End-to-end run    | ✅    | ✅    | ✅       | ✅       | ✅   |
-| Basic task system | ✅    | ✅    | ✅       | ✅       | ✅   |
-| FlowScheduler     | ❌    | 🚧    | ✅       | ✅       | ✅   |
-| Concurrency       | ⚠️    | 🚧    | ✅ Basic | ✅ Full  | ✅   |
-| Standard library  | Basic | Basic | Basic    | Improved | Full |
-| Generics system   | ⚠️    | ⚠️    | 🚧       | ✅       | ✅   |
-| TUI REPL          | ✅    | ✅    | ✅       | ✅       | ✅   |
-| Bootstrap         | ❌    | ❌    | ❌       | ❌       | ✅   |
-| AOT               | ❌    | ❌    | ❌       | ❌       | ✅   |
-| Code coverage     | 60%   | 70%   | 80%      | 90%      | 95%  |
+| Metric              | v0.1  | v0.2  | v0.3     | v0.5     | v1.0     |
+| ------------------- | ----- | ----- | -------- | -------- | -------- |
+| End-to-end run      | ✅    | ✅    | ✅       | ✅       | ✅       |
+| Basic task system   | ✅    | ✅    | ✅       | ✅       | ✅       |
+| FlowScheduler       | ❌    | 🚧    | ✅       | ✅       | ✅       |
+| Concurrency support | ⚠️    | 🚧    | ✅ Basic | ✅ Full  | ✅       |
+| Standard library    | Basic | Basic | Basic    | Improved | Complete |
+| Generics system     | ⚠️    | ⚠️    | 🚧       | ✅       | ✅       |
+| TUI REPL            | ✅    | ✅    | ✅       | ✅       | ✅       |
+| Bootstrap           | ❌    | ❌    | ❌       | ❌       | ✅       |
+| AOT                 | ❌    | ❌    | ❌       | ❌       | ✅       |
+| Code coverage       | 60%   | 70%   | 80%      | 90%      | 95%      |
 
 **Legend**:
 
-- ✅ Completed
-- 🚧 In Progress
-- ⚠️ Partial
+- ✅ Complete
+- 🚧 In progress
+- ⚠️ Partially complete
 - 📋 Planned
 
 ## 8. Open Questions
 
-- [ ] JIT vs AOT timing choice
+- [ ] Timing choice between JIT vs AOT
 - [ ] Package manager design
 - [ ] Bootstrap module replacement order
-- [ ] AOT backend selection (LLVM vs custom)
+- [ ] AOT backend selection (LLVM vs self-developed)
 
-## 9. Version Release Criteria
+## 9. Version Release Standards
 
 **v0.x Series**:
 
-- Feature complete but may have edge case issues
+- Features complete but may have edge case issues
 - API may change
 - For learning and experimentation only
 
@@ -280,7 +281,7 @@ Hello, YaoXiang!
 
 ## References
 
-- [Semantic Versioning 2.0.0](https://semver.org/lang/zh-CN/)
-- [Rust Release Process](https://forge.rust-lang.org/release.html)
-- [RFC-001: Concurrency Model and Error Handling](./001-concurrent-model-error-handling.md)
-- [RFC-008: Runtime Concurrency Model](./008-runtime-concurrency-model.md)
+- [Semantic Versioning 2.0.0](https://semver.org/)
+- [Rust Release Model](https://forge.rust-lang.org/release.html)
+- [RFC-001: Concurrency Model and Error Handling](../deprecated/001-concurrent-model-error-handling.md)
+- [RFC-008: Runtime Concurrency Model](../accepted/008-runtime-concurrency-model.md)

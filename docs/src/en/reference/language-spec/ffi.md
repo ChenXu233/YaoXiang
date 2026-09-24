@@ -1,11 +1,11 @@
 # FFI Specification
 
-This document defines the FFI (Foreign Function Interface) specification for the YaoXiang
-programming language, including type definitions, function declarations, method bindings, and opaque
-type handling.
+This document defines the FFI (Foreign Function Interface) specification of the YaoXiang programming
+language, including type definitions, function declarations, method bindings, and the handling of
+opaque types.
 
-> **Detailed Design**: The complete design, motivation, and trade-offs of FFI are documented in
-> [RFC-026: FFI Core Mechanism](../design/rfc/accepted/026-ffi-core-mechanism.md).
+> **Detailed Design**: For the complete design, motivation, and trade-offs of FFI, see
+> [RFC-026: FFI Core Mechanism](../../design/rfc/accepted/026-ffi-core-mechanism.md).
 
 ---
 
@@ -14,8 +14,8 @@ type handling.
 ### 1.1 Core Principles of FFI
 
 ```
-All returns inside {} return content to the upper scope
-By default, no return means returning Void
+All `return` statements inside `{}` return their content to the enclosing scope
+By default, the absence of `return` returns Void
 ```
 
 ### 1.2 Components of FFI
@@ -28,14 +28,15 @@ By default, no return means returning Void
 
 ---
 
-## Chapter 2: FFI Type Definitions
+## Chapter 2: FFI Type Definition
 
 ### 2.1 Opaque Types
 
-Opaque types are defined inside `unsafe {}` blocks and returned to the upper scope via `return`:
+Opaque types are defined inside an `unsafe {}` block and returned to the enclosing scope via
+`return`:
 
 ```yaoxiang
-// Define opaque type in unsafe block
+// In an unsafe block, define an opaque type
 SqliteDb = unsafe {
     SqliteDb: Type = {
         handle: *Void  // raw pointer
@@ -46,16 +47,16 @@ SqliteDb = unsafe {
 // SqliteDb is available outside the unsafe block
 db = sqlite3_open("test.db")
 
-// ❌ Compile error: handle field requires unsafe permission
+// ❌ Compile error: the `handle` field requires unsafe permission
 handle = db.handle
 
-// ✅ Through method calls
+// ✅ Through a method call
 db.close()
 ```
 
 ### 2.2 Transparent Types
 
-Transparent types are defined directly without `unsafe {}` blocks:
+Transparent types are defined directly, without an `unsafe {}` block:
 
 ```yaoxiang
 // Transparent type
@@ -64,37 +65,37 @@ Point: Type = {
     y: Int32
 }
 
-// Users can create directly
+// Users can create them directly
 p: Point = Point { x: 1, y: 2 }
 ```
 
-### 2.3 Opaque Type Determination
+### 2.3 Distinguishing Opaque Types
 
-The compiler automatically determines opaque and transparent types:
+The compiler automatically distinguishes opaque types from void types:
 
 ```yaoxiang
-// Opaque type (referenced by native functions)
+// Opaque type (referenced by a native function)
 SqliteDb: Type = {}
 sqlite3_open: (filename: String) -> SqliteDb = native("sqlite3_open")
-// → SqliteDb is referenced by native function → opaque type
+// → SqliteDb is referenced by a native function → opaque type
 
-// Transparent type (not referenced by native functions)
+// Void type (not referenced by any native function)
 MyType: Type = {}
-// → MyType is not referenced by native function → transparent type
+// → MyType is not referenced by any native function → void type
 ```
 
-**Determination Rules**:
+**Rules of Distinction**:
 
-- If a type is referenced by `native` functions → opaque type
-- Otherwise → transparent type
+- If a type is referenced by a `native` function → opaque type
+- Otherwise → void type
 
 ---
 
-## Chapter 3: FFI Function Declarations
+## Chapter 3: FFI Function Declaration
 
-### 3.1 native Syntax
+### 3.1 `native` Syntax
 
-Use `native("symbol")` syntax to declare external functions:
+Use the `native("symbol")` syntax to declare external functions:
 
 ```yaoxiang
 // FFI function declarations
@@ -105,8 +106,8 @@ sqlite3_exec: (db: SqliteDb, sql: String) -> Int32 = native("sqlite3_exec")
 
 ### 3.2 Parameter Type Mapping
 
-FFI function parameter types use YaoXiang types directly, and the compiler handles C type mapping
-automatically:
+FFI function parameter types use YaoXiang types directly; the compiler automatically handles the
+mapping to C types:
 
 | C Type               | YaoXiang Type          |
 | -------------------- | ---------------------- |
@@ -127,90 +128,91 @@ automatically:
 FFI function return types use YaoXiang types directly:
 
 ```yaoxiang
-// Return opaque type
+// Returns an opaque type
 sqlite3_open: (filename: String) -> SqliteDb = native("sqlite3_open")
 
-// Return transparent type
+// Returns a transparent type
 get_point: () -> Point = native("get_point")
 
-// Return primitive type
+// Returns a primitive type
 get_value: () -> Int32 = native("get_value")
 ```
 
 ---
 
-## Chapter 4: Method Bindings
+## Chapter 4: Method Binding
 
-### 4.1 [0] Syntax
+### 4.1 The `[0]` Syntax
 
-Use `[0]` syntax to specify the position of the self parameter in the function parameter tuple:
+Use the `[0]` syntax to specify the position of the `self` parameter within the function's parameter
+tuple:
 
 ```yaoxiang
 // FFI functions
 sqlite3_close: (db: SqliteDb) -> Int32 = native("sqlite3_close")
 sqlite3_exec: (db: SqliteDb, sql: String) -> Int32 = native("sqlite3_exec")
 
-// Method bindings (self at position 0)
+// Method binding (self is at position 0)
 SqliteDb.close = sqlite3_close[0]
 SqliteDb.exec = sqlite3_exec[0]
 ```
 
-**Calling Methods**:
+**Invocation**:
 
 ```yaoxiang
 db = sqlite3_open("test.db")
 
-// Method calls
+// Method call
 db.close()  // equivalent to sqlite3_close(db)
 db.exec("SELECT * FROM users")  // equivalent to sqlite3_exec(db, "SELECT * FROM users")
 ```
 
-### 4.2 Constructor Bindings
+### 4.2 Constructor Binding
 
-Constructors do not use `[0]` and are bound as regular functions:
+Constructors do not use `[0]`; they are bound as ordinary functions:
 
 ```yaoxiang
 // FFI function
 sqlite3_open: (filename: String) -> SqliteDb = native("sqlite3_open")
 
-// Constructor binding (regular function)
+// Constructor binding (ordinary function)
 SqliteDb.open = sqlite3_open
 ```
 
-**Calling Constructors**:
+**Invocation**:
 
 ```yaoxiang
-// Create through constructor
+// Create via the constructor
 db = SqliteDb.open("test.db")
 ```
 
-### 4.3 Binding Locations
+### 4.3 Binding Location
 
-Method bindings can be at any location because types are data containers:
+Method bindings can appear anywhere, because types are data containers:
 
 ```yaoxiang
-// Bind after type definition
+// Bound after the type definition
 SqliteDb.close = sqlite3_close[0]
 
-// Bind in other files
+// Bound in another file
 SqliteDb.exec = sqlite3_exec[0]
 
-// The compiler will check them all in the end
+// The compiler will ultimately check all bindings
 ```
 
 ---
 
-## Chapter 5: FFI Behavior in spawn Blocks
+## Chapter 5: FFI Behavior in `spawn` Blocks
 
-### 5.1 Resource Types Automatically Serialized
+### 5.1 Automatic Serialization of Resource Types
 
-If an FFI type is a resource type, it is automatically serialized in spawn blocks:
+If an FFI type is a resource type, it is automatically serialized within a `spawn` block:
 
 ```yaoxiang
 // SqliteDb is a resource type
 (a, b) = spawn {
     db1 = SqliteDb.open("db1.sqlite"),  // SqliteDb resource
-    db2 = SqliteDb.open("db2.sqlite")   // different instances, can be parallel
+    db2 = SqliteDb.open("db2.sqlite")   // different instances, may run in parallel
 }
 
 (a, b) = spawn {
@@ -219,29 +221,29 @@ If an FFI type is a resource type, it is automatically serialized in spawn block
 }
 ```
 
-### 5.2 Non-Resource Types Can Be Parallel
+### 5.2 Non-Resource Types Can Run in Parallel
 
-If an FFI type is not a resource type, it can be parallel in spawn blocks:
+If an FFI type is not a resource type, it can be executed in parallel within a `spawn` block:
 
 ```yaoxiang
 // Float is not a resource type
 (a, b) = spawn {
-    result1 = sin(1.0),  // can be parallel
-    result2 = cos(1.0)   // can be parallel
+    result1 = sin(1.0),  // can run in parallel
+    result2 = cos(1.0)   // can run in parallel
 }
 ```
 
 ---
 
-## Chapter 6: yx-bindgen Toolchain
+## Chapter 6: The `yx-bindgen` Toolchain
 
 ### 6.1 Generated Content
 
-yx-bindgen generates the following:
+`yx-bindgen` generates the following:
 
-- FFI type definitions (unsafe blocks + return)
-- FFI function declarations (native syntax)
-- Method bindings ([0] syntax)
+- FFI type definitions (`unsafe` block + `return`)
+- FFI function declarations (`native` syntax)
+- Method bindings (`[0]` syntax)
 
 ### 6.2 Generation Example
 
@@ -249,7 +251,7 @@ yx-bindgen generates the following:
 yx-bindgen --header /usr/include/sqlite3.h --output sqlite3_bindings.yx
 ```
 
-Generated output:
+Generated result:
 
 ```yaoxiang
 // sqlite3_bindings.yx
@@ -288,22 +290,22 @@ sqlite3_finalize: (stmt: SqliteStmt) -> Int32 = native("sqlite3_finalize")
 // Method Bindings
 // ============================================================================
 
-// Constructors (regular functions)
+// Constructor (ordinary function)
 SqliteDb.open = sqlite3_open
 
-// Methods (self at position 0)
+// Method (self at position 0)
 SqliteDb.close = sqlite3_close[0]
 SqliteDb.exec = sqlite3_exec[0]
 SqliteDb.prepare = sqlite3_prepare_v2[0]
 
-// SqliteStmt methods
+// Methods on SqliteStmt
 SqliteStmt.step = sqlite3_step[0]
 SqliteStmt.finalize = sqlite3_finalize[0]
 ```
 
 ---
 
-## Appendix: FFI Syntax Quick Reference
+## Appendix: FFI Syntax Cheat Sheet
 
 ### A.1 Type Definitions
 
@@ -334,20 +336,20 @@ sqlite3_close: (db: SqliteDb) -> Int32 = native("sqlite3_close")
 ### A.3 Method Bindings
 
 ```yaoxiang
-// Constructor (regular function)
+// Constructor (ordinary function)
 SqliteDb.open = sqlite3_open
 
 // Method (self at position 0)
 SqliteDb.close = sqlite3_close[0]
 ```
 
-### A.4 Calling Methods
+### A.4 Invocation
 
 ```yaoxiang
-// Create through constructor
+// Create via the constructor
 db = SqliteDb.open("test.db")
 
-// Call through methods
+// Call via methods
 db.close()
 db.exec("SELECT * FROM users")
 ```

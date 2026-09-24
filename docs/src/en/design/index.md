@@ -1,19 +1,20 @@
 # YaoXiang Design Document
 
-> One gives rise to two, two gives rise to three, three gives rise to all things.
+> The Dao gives birth to One, One gives birth to Two, Two gives birth to Three, Three gives birth to
+> the myriad things.
 
 This directory contains design decisions, proposals, and discussions for the YaoXiang programming
 language.
 
-## Core Design Principles
+## Core Design Philosophy
 
-| Principle              | Description                                                                  |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| **Everything is Type** | Values, functions, and modules are all types; types are first-class citizens |
-| **Natural Syntax**     | Python-like readability, close to natural language                           |
-| **Ownership Model**    | Zero-cost abstraction, no GC, high performance                               |
-| **Spawn Model**        | Synchronous syntax, asynchronous nature, automatic parallelism               |
-| **AI-Friendly**        | Strictly structured, clear AST                                               |
+| Philosophy               | Description                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| **Everything is a Type** | Values, functions, and modules are all types; types are first-class citizens |
+| **Natural Syntax**       | Python-like readability, close to natural language                           |
+| **Ownership Model**      | Zero-cost abstraction, no GC, high performance                               |
+| **Spawn Model**          | Synchronous syntax, asynchronous nature, automatic parallelism               |
+| **AI-Friendly**          | Strictly structured, clear AST                                               |
 
 ## Design Document Structure
 
@@ -26,10 +27,10 @@ design/
 │   └── *.md
 ├── rfc/
 │   ├── draft/            # Draft (work in progress)
-│   ├── review/           # Under review (open for discussion)
-│   ├── accepted/         # Accepted (design passed)
+│   ├── review/           # Review (open for discussion)
+│   ├── accepted/         # Accepted (design approved)
 │   ├── deprecated/       # Deprecated (replaced)
-│   └── rejected/         # Rejected (did not pass)
+│   └── rejected/         # Rejected (not approved)
 └── discussion/           # Design discussion area (open for discussion)
     └── *.md
 ```
@@ -40,11 +41,11 @@ design/
 | -------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------- |
 | [RFC-010 Unified Type Syntax](./rfc/accepted/010-unified-type-syntax.md)               | ✅ Accepted | Unified type definition syntax                  |
 | [RFC-011 Generic Type System](./rfc/accepted/011-generic-type-system.md)               | ✅ Accepted | Generic type system design                      |
-| [RFC-009 Ownership Model](./rfc/accepted/009-ownership-model.md)                       | ✅ Accepted | Ownership and borrowing design                  |
-| [RFC-024 Concurrency Model](./rfc/accepted/024-concurrency-model.md)                   | ✅ Accepted | Spawn concurrency primitive semantics           |
-| [RFC-027 Compile-time Assertions](./rfc/accepted/027-compile-time-evaluation-types.md) | ✅ Accepted | Compile-time predicates and static verification |
+| [RFC-009 Ownership Model](./rfc/accepted/009-ownership-model.md)                       | ✅ Accepted | Ownership and borrowing system                  |
+| [RFC-024 Concurrency Model](./rfc/accepted/024-concurrency-model.md)                   | ✅ Accepted | spawn concurrency primitive semantics           |
+| [RFC-027 Compile-Time Assertions](./rfc/accepted/027-compile-time-evaluation-types.md) | ✅ Accepted | Compile-time predicates and static verification |
 
-> See the [`rfc/accepted/`](./rfc/accepted/) directory for the complete list (16 total), and
+> See the [`rfc/accepted/`](./rfc/accepted/) directory for the full list (16 total), and
 > [`rfc/index.md`](./rfc/index.md) for the latest status.
 
 ## RFC Proposals
@@ -59,30 +60,30 @@ design/
 | RFC-028  | JIT Compiler                                  | Draft  |
 | RFC-029  | Module Semantic System                        | Draft  |
 | RFC-031  | Optimization Levels                           | Draft  |
-| RFC-033  | Reflection Operators                          | Draft  |
+| RFC-033  | ^^ Reflection Operator                        | Draft  |
 | RFC-034  | Debug Toolchain                               | Draft  |
 | RFC-035  | MCP Server                                    | Draft  |
-| RFC-002  | Cross-platform IO (libuv)                     | Draft  |
+| RFC-002  | Cross-Platform IO (libuv)                     | Draft  |
 | RFC-026b | yx-bindgen                                    | Draft  |
 | RFC-011a | Interface Implementation and Dynamic Dispatch | Review |
 | RFC-014a | Registry Protocol                             | Review |
 | RFC-014b | Build System                                  | Review |
 | RFC-014c | Workspace                                     | Review |
 | RFC-026a | Extensible FFI                                | Review |
-| RFC-032  | Unified Spawn Expression                      | Review |
+| RFC-032  | Unified spawn Expression                      | Review |
 
 ### Accepted Proposals
 
 | Number   | Title                           | Status   |
 | -------- | ------------------------------- | -------- |
-| RFC-004  | Curried Multi-position Bindings | Accepted |
+| RFC-004  | Curried Multi-Position Binding  | Accepted |
 | RFC-006  | Documentation Site Optimization | Accepted |
 | RFC-007  | Unified Function Syntax         | Accepted |
 | RFC-008  | Runtime Concurrency Model       | Accepted |
 | RFC-009  | Ownership Model                 | Accepted |
 | RFC-009a | Token Lifetime Analysis         | Accepted |
 | RFC-010  | Unified Type Syntax             | Accepted |
-| RFC-011  | Generic System                  | Accepted |
+| RFC-011  | Generics System                 | Accepted |
 | RFC-012  | f-string                        | Accepted |
 | RFC-013  | Error Code Specification        | Accepted |
 | RFC-014  | Package Manager                 | Accepted |
@@ -91,8 +92,8 @@ design/
 | RFC-018  | LLVM AOT Compiler               | Accepted |
 | RFC-024  | Concurrency Model               | Accepted |
 | RFC-026  | FFI Core Mechanism              | Accepted |
-| RFC-027  | Compile-time Assertions         | Accepted |
-| RFC-030  | assert Mechanism                | Accepted |
+| RFC-027  | Compile-Time Assertions         | Accepted |
+| RFC-030  | assert Assertion Mechanism      | Accepted |
 
 ### Rejected Proposals
 
@@ -100,42 +101,42 @@ design/
 | ------- | ------------------------ | -------- |
 | RFC-003 | Version Planning         | Rejected |
 | RFC-005 | CVE Scanning             | Rejected |
-| RFC-016 | Quantum Native Support   | Rejected |
+| RFC-016 | Quantum-Native Support   | Rejected |
 | RFC-025 | Primitive Type Extension | Rejected |
 
-### RFC Templates
+### RFC Template
 
 Before submitting a new proposal, please refer to:
 
 - [RFC_TEMPLATE.md](./rfc/RFC_TEMPLATE.md)
-- [Full Example](./rfc/EXAMPLE_full_feature_proposal.md)
+- [Complete Example](./rfc/EXAMPLE_full_feature_proposal.md)
 
-## Participating in Design Discussion
+## Participate in Design Discussions
 
 ### RFC Lifecycle
 
-RFC proposals have 5 statuses:
+RFC proposals have 5 states:
 
-| Status     | Meaning                              |
-| ---------- | ------------------------------------ |
-| Draft      | Work in progress                     |
-| Review     | Open for discussion                  |
-| Accepted   | Design passed                        |
-| Deprecated | Was accepted, replaced by new design |
-| Rejected   | Did not pass                         |
+| State      | Meaning                                     |
+| ---------- | ------------------------------------------- |
+| Draft      | Work in progress                            |
+| Review     | Open for discussion                         |
+| Accepted   | Design approved                             |
+| Deprecated | Previously accepted, replaced by new design |
+| Rejected   | Not approved                                |
 
-Complete lifecycle:
+Full lifecycle:
 
 ```
 Draft → Review → Accepted → Deprecated (replaced)
                     ↓
-                 Rejected (did not pass)
+                Rejected (not approved)
 ```
 
 ### Proposal Process
 
 ```
-1. Draft proposal (use RFC template)
+1. Draft proposal (using RFC template)
    → Place in rfc/draft/
 
 2. Submit for review
@@ -145,15 +146,15 @@ Draft → Review → Accepted → Deprecated (replaced)
    → Accept → Move to rfc/accepted/
    → Reject → Move to rfc/rejected/
 
-4. Ongoing maintenance
+4. Subsequent maintenance
    → Replaced → Move to rfc/deprecated/
 ```
 
 ### Design Principles
 
 - **Clear Boundaries**: Each design decision should have a clear scope of application
-- **Practicality First**: Solve real problems, not imagined threats
-- **User-Visible Behavior Invariant**: Never break userspace
+- **Practicality First**: Solve real problems, not imaginary threats
+- **User-Visible Behavior Unchanged**: Never break userspace
 
 ## Code Examples
 
@@ -175,30 +176,30 @@ main: () -> Void = {
 
 ### 1. Type System
 
-- **Unified Type Syntax**: Abolish `enum`, `struct`, `union`, unify with `Name: Type = {...}`
-- **Constructors are Types**: Bridge the gap between "type" and "value"
+- **Unified Type Syntax**: Abolish `enum`, `struct`, `union`; unify with `Name: Type = {...}`
+- **Constructors as Types**: Eliminate the gap between "type" and "value"
 - **Generic Support**: Compile-time monomorphization, zero runtime overhead
 
 ### 2. Spawn Model
 
 ```yaoxiang
-// Spawn model: sequential by default, spawn introduces dataflow parallelism
+// Spawn model: sequential execution by default, spawn introduces dataflow parallelism
 
-// Sequential by default
+// Default sequential execution
 compute: (Int) -> Int = (n) => {
     a = heavy_calc(1)
-    b = heavy_calc(2)  // Sequential, wait for a
-    c = heavy_calc(3)  // Sequential, wait for b
+    b = heavy_calc(2)  // Sequential execution, waits for a
+    c = heavy_calc(3)  // Sequential execution, waits for b
     a + b + c
 }
 
-// Spawn block introduces dataflow parallelism
+// spawn block introduces dataflow parallelism
 process: () -> Void = () => {
     spawn {
         users = fetch_users()   // Parallel
         posts = fetch_posts()   // Parallel
     }
-    // Caller blocks synchronously waiting for results
+    // Caller synchronously blocks waiting for results
     render(users, posts)
 }
 ```
@@ -209,7 +210,7 @@ process: () -> Void = () => {
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 process: () -> Result(Data, Error) = {
-    data = fetch_data()?      // ? operator propagates transparently
+    data = fetch_data()?      // ? operator transparently propagates
     transformed = transform(data)?
     save(transformed)?
 }
@@ -221,9 +222,9 @@ process: () -> Result(Data, Error) = {
 - [Reference Documentation](../reference/) - API and standard library
 - [Language Specification](../reference/language-spec/index.md) - Complete language specification
 - [GitHub Discussions](https://github.com/ChenXu233/YaoXiang/discussions)
-- [Contributing Guide](../tutorial/contributing.md)
+- [Contributing Guide](../dev/contributing.md)
 
-## Historical Archive
+## Historical Archives
 
 Historical documents from the design process have been moved to the [`docs/old/`](../../old/)
 directory, including:
