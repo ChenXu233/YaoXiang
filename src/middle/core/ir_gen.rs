@@ -228,6 +228,10 @@ pub struct AstToIrGenerator {
     /// RFC-011b: 运算符派发点（span → 接收者类型名, 方法名, 取反）。
     /// `==`/`!=` 命中显式 Equal 实例化时，原生比较指令替换为方法调用。
     operator_dispatches: HashMap<Span, (String, String, bool)>,
+
+    /// RFC-010: 变体构造调用点（span → 和类型名, 变体序号, 载荷数）。
+    /// 调用整体替换为 CreateVariant（tagged union 构造）。
+    variant_ctor_calls: HashMap<Span, (String, usize, usize)>,
     /// RFC-011a §6.2: 编译期类型收集——接口 → 实现类型列表（ImplementationProof
     /// 按类型名定序），变体分发与包装定序共用。
     interface_variants: HashMap<String, Vec<String>>,
@@ -367,6 +371,11 @@ impl AstToIrGenerator {
                 .operator_dispatches
                 .iter()
                 .map(|d| (d.span, (d.type_name.clone(), d.method.clone(), d.negate)))
+                .collect(),
+            variant_ctor_calls: type_result
+                .variant_ctor_calls
+                .iter()
+                .map(|c| (c.span, (c.type_name.clone(), c.variant_index, c.payload_count)))
                 .collect(),
             interface_variants: {
                 let mut map: HashMap<String, Vec<String>> = HashMap::new();
@@ -5144,7 +5153,7 @@ impl AstToIrGenerator {
                     other => {
                         // #330 安全网：非字面量/通配符模式尚无 IR 编码，
                         // 原 stub 加载 0 永不匹配、scrutinee 为 0 时误匹配——
-                        // 宁可编译期拒绝，不可静默错译（完备支持见 RFC-039）
+                        // 宁可编译期拒绝，不可静默错译（完备支持见 RFC-010b）
                         return Err(ErrorCodeDefinition::ir_unsupported_pattern(&pattern_label(
                             other,
                         ))
@@ -6649,6 +6658,46 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
+        // RFC-010: 变体构造——`Result(Int, String).ok(5)` / `Color.red()`。
+        // 整个调用替换为 CreateVariant：载荷求值进寄存器（多载荷先打包
+        // Tuple、零载荷用 Void 哨兵），group 携带和类型名（解释器 intern
+        // 为类型身份），variant 为声明序号。
+        if let Some((type_name, variant_index, payload_count)) =
+            self.variant_ctor_calls.get(span).cloned()
+        {
+            let payload_reg = self.next_temp_reg();
+            if payload_count == 0 {
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(payload_reg),
+                    src: Operand::Const(ConstValue::Void),
+                    span: *span,
+                });
+            } else if payload_count == 1 {
+                self.generate_expr_ir(&args[0], payload_reg, instructions, constants)?;
+            } else {
+                // 多载荷打包 Tuple（与 match 变体模式的多参解包对称）
+                let mut elem_regs = Vec::with_capacity(payload_count);
+                for a in args {
+                    let r = self.next_temp_reg();
+                    self.generate_expr_ir(a, r, instructions, constants)?;
+                    elem_regs.push(Operand::Local(r));
+                }
+                instructions.push(Instruction::NewTuple {
+                    dst: Operand::Local(payload_reg),
+                    items: elem_regs,
+                    span: *span,
+                });
+            }
+            instructions.push(Instruction::CreateVariant {
+                dst: Operand::Local(result_reg),
+                group: type_name,
+                variant: variant_index as u32,
+                payload: Operand::Local(payload_reg),
+                span: *span,
+            });
+            return Ok(());
+        }
+
         // RFC-011 §「Vec(T) 的构造形式」：内置容器的两层构造
         // `Vec(Int)()` / `Vec(Int)(1, 2, 3)` / `Vec(Int)(len = 64)`。
         //

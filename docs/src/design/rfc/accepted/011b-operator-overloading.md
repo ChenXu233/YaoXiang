@@ -23,7 +23,7 @@ issue: '#341'
 >   — 和类型 = 字段全返回自身类型的记录
 > - [RFC-013: 错误码规范](./013-error-code-specification.md) — `Result`
 >   归 std 的既有定位、E108x
-> - [RFC-039: 模式匹配完备化](../draft/039-pattern-matching-completeness.md) — 变体解构（依赖）
+> - [RFC-010b: 模式匹配完备化（变体解构与穷尽性）](../draft/010b-pattern-matching-completeness.md) — 变体解构（依赖）
 
 ## 摘要
 
@@ -41,7 +41,7 @@ issue: '#341'
 **默认自动派生**（全字段可比的记录自动获得逐字段 `==`），显式实例化可覆盖。
 
 `Try`（`?`
-的接口化）整体移至阶段 2：它依赖 RFC-010（构造）与 RFC-039（解构）落地，且接口形状尚未定案（见开放问题）。
+的接口化）整体移至阶段 2：它依赖 RFC-010（构造）与 RFC-010b（解构）落地，且接口形状尚未定案（见开放问题）。
 
 **无新语法、无新关键字**，全部复用 RFC-011a 既有机制（接口声明 / 实例化 / 外部方法声明 / 重载）。
 
@@ -339,7 +339,7 @@ Grid    实例化 Index(Grid, Tuple(Int, Int), Float)       → g[0, 1]
 1. `?` 实际做三件事：判定成败（现靠硬编码 variant
    0）、取出成功载荷、失败路径把整个值原样从当前函数返回。仅有 `residual: (self: &Self) -> E`
    一个方法只覆盖第三件事的一角，现在写死将来大概率返工；
-2. 阶段 2 本就依赖 RFC-010（构造 `Result` 值）与 RFC-039（变体解构）落地；
+2. 阶段 2 本就依赖 RFC-010（构造 `Result` 值）与 RFC-010b（变体解构）落地；
 3. 伴生的**构造子焊死问题**（`ok` / `err` / `some` 由解析器识别，语言规范 §1.4.2）与 `?`
    的类型名焊死是同一件事的两半，「Result 归 std」必须两半一起解，均归阶段 2 范围。
 
@@ -565,14 +565,14 @@ combine: (T: Add + Multiply)(a: T, b: T, c: T) -> T =
 | --------------------------- | --------- | ----------------------------------------------------- |
 | RFC-011a 接口机制 Phase 1–3 | ✅ 已落地 | Layer 2 的地基（已实测可运行）                        |
 | RFC-010 记录式构造路径      | ❌ 未落地 | **阶段 2**：`?` 的构造侧 + 构造子 parser 特判退役     |
-| RFC-039 变体解构            | ❌ 纸面   | **阶段 2**：`Result.residual` 的 `match` 写法、穷尽性 |
+| RFC-010b 变体解构          | ❌ 纸面   | **阶段 2**：`Result.residual` 的 `match` 写法、穷尽性 |
 | RFC-009 线性令牌推导        | 部分      | `Equal` 的前置约束检查                                |
 
 ### 分阶段
 
 按**接口依赖**（设计约束，非排期）分为两组：
 
-**阶段 1 — 不依赖 RFC-010/039**：
+**阶段 1 — 不依赖 RFC-010/010b**：
 
 - Layer 0 映射表 + 接口实现登记表 + Layer 1 派发接线
 - `Add` `Subtract` `Multiply` `Divide` `Modulo` `Equal` `Index` 七个接口（三类型参数形态）
@@ -582,7 +582,7 @@ combine: (T: Add + Multiply)(a: T, b: T, c: T) -> T =
 - **收益**：`Point + Point`、`Point == Point`（免仪式）、`Box(T)[0]`、`1 + 2.5`、`T: Add`
   约束全部可用
 
-**阶段 2 — 依赖 RFC-010 / RFC-039，开工前须定案 `Try` 形状**：
+**阶段 2 — 依赖 RFC-010 / RFC-010b，开工前须定案 `Try` 形状**：
 
 - `Try` 接口形状定案（见开放问题）
 - `?` 接口化 + 构造子（`ok`/`err`/`some`）parser 特判退役，改走 RFC-010 记录构造路径
@@ -606,7 +606,7 @@ combine: (T: Add + Multiply)(a: T, b: T, c: T) -> T =
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **RFC-011**（已接受） | §约束处注明 `Add` / `Multiply` 由 011b 定义并落地（`T: Add` ≜ `Add(T, T, T)`）；标注 `Zero` / `One` / `PartialOrd` / `Fn` / `FnMut` 为悬空约束名（待后续 RFC）；§8.3 提升类型族注明与接口登记表合一 |
 | **RFC-010**（已接受） | 明确「记录字段即构造函数」的落地要求——它是阶段 2 构造子 parser 特判退役的前置                                                                                                                       |
-| **RFC-039**（草案）   | 构造与解构必须成对；穷尽性判定不依赖 `Result` 的 core/std 归属（011b 阶段 2 将迁移）                                                                                                                |
+| **RFC-010b**（草案，原 RFC-039） | 构造与解构必须成对；穷尽性判定不依赖 `Result` 的 core/std 归属（011b 阶段 2 将迁移）                                                                                                                |
 | **RFC-009**（已接受） | §类型属性处交叉引用：`Equal` 前置为「不含 `&mut` 线性令牌」（非 Dup）                                                                                                                               |
 | **RFC-013**（已接受） | 阶段 2 落地时：`E1081` / `E1082` 文案去 "Result" 字样；`Equal` 前置诊断复用 `E1101` 族——按 RFC-013 流程三方同步（codes/*.rs ↔ locales ↔ 码表）                                                      |
 | **RFC-018**（已接受） | `%` 改数学取模后，`Mod → srem/urem` 映射表失效，需改为 `srem` + 符号修正（或 `sdiv`+`mul`+`sub` 合成），并更正「取模/余数」术语混用                                                                 |
@@ -730,7 +730,7 @@ Instruction::VariantTag { group: "Result".to_string(), .. }
 - [RFC-010: 统一类型语法](./010-unified-type-syntax.md) — 和类型表达
 - [RFC-013: 错误码规范](./013-error-code-specification.md) — `Result`
   归 std 定位、错误码流程
-- [RFC-039: 模式匹配完备化](../draft/039-pattern-matching-completeness.md)
+- [RFC-010b: 模式匹配完备化（变体解构与穷尽性）](../draft/010b-pattern-matching-completeness.md)
 - [Rust `std::ops::Index`](https://doc.rust-lang.org/std/ops/trait.Index.html) — 关联类型 `Output`
   设计
 - [Swift Subscripts](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/subscripts/)
