@@ -755,43 +755,38 @@ impl<'a> ExpressionInferrer<'a> {
     #[allow(clippy::too_many_arguments)]
     fn infer_variant_ctor_call(
         &mut self,
-        _type_name: &str,
+        type_name: &str,
         variant_name: &str,
-        base_call: &crate::frontend::core::parser::ast::Expr,
+        concrete: Vec<MonoType>,
         value_args: &[crate::frontend::core::parser::ast::Expr],
         named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
         span: crate::util::span::Span,
     ) -> Result<MonoType> {
-        let base_ty = self.infer_expr(base_call)?;
-        let base_ty = self.solver.resolve_type(&base_ty);
-        let MonoType::Generic {
-            name: sum_name,
-            args: concrete,
-        } = &base_ty
-        else {
-            return Err(ErrorCodeDefinition::type_mismatch(
-                "和类型实例化结果",
-                &format!("{}", base_ty),
-            )
-            .at(span)
-            .build());
-        };
-        let Some(variants) = self.sum_types.get(sum_name) else {
-            return Err(ErrorCodeDefinition::field_not_found(variant_name, sum_name)
-                .at(span)
-                .build());
+        let Some(variants) = self.sum_types.get(type_name) else {
+            return Err(
+                ErrorCodeDefinition::field_not_found(variant_name, type_name)
+                    .at(span)
+                    .build(),
+            );
         };
         let Some((variant_index, vdef)) = variants
             .iter()
             .enumerate()
             .find(|(_, v)| v.name == variant_name)
         else {
-            return Err(ErrorCodeDefinition::field_not_found(variant_name, sum_name)
-                .at(span)
-                .build());
+            return Err(
+                ErrorCodeDefinition::field_not_found(variant_name, type_name)
+                    .at(span)
+                    .build(),
+            );
         };
         // 载荷签名 = 变体参数经类型实参替换
-        let param_names = self.generic_type_defs[sum_name].type_param_names.clone();
+        // 非泛型和类型（Color）不在 generic_type_defs，形参表为空
+        let param_names = self
+            .generic_type_defs
+            .get(type_name)
+            .map(|d| d.type_param_names.clone())
+            .unwrap_or_default();
         let subst_params: Vec<MonoType> = vdef
             .params
             .iter()
@@ -799,7 +794,7 @@ impl<'a> ExpressionInferrer<'a> {
                 crate::frontend::core::typecheck::TypeEnvironment::replace_type_params(
                     pty,
                     &param_names,
-                    concrete,
+                    &concrete,
                 )
             })
             .collect();
@@ -837,12 +832,15 @@ impl<'a> ExpressionInferrer<'a> {
         self.variant_ctor_calls.push(
             crate::frontend::core::typecheck::environment::VariantCtorCall {
                 span,
-                type_name: sum_name.clone(),
+                type_name: type_name.to_string(),
                 variant_index,
                 payload_count: subst_params.len(),
             },
         );
-        Ok(base_ty)
+        Ok(MonoType::Generic {
+            name: type_name.to_string(),
+            args: concrete,
+        })
     }
 
     /// RFC-011b: 算术运算的登记表查询。命中用户实例化时记录 OperatorDispatch
@@ -2319,28 +2317,48 @@ impl<'a> ExpressionInferrer<'a> {
                 // 构造器只以调用形态存在（无一等构造器值），在 infer(func) 之前
                 // 拦截，避免 FieldAccess 臂的变体字段拒绝。
                 if let crate::frontend::core::parser::ast::Expr::FieldAccess {
-                    expr: base_call,
+                    expr: base_expr,
                     field: variant_name,
                     ..
                 } = func.as_ref()
                 {
-                    if let crate::frontend::core::parser::ast::Expr::Call {
-                        func: inner_func, ..
-                    } = base_call.as_ref()
+                    // 两种 base 形态：泛型 `Call(Var(名), 类型实参)` / 非泛型 `Var(名)`
+                    let inner = if let crate::frontend::core::parser::ast::Expr::Call {
+                        func: inner_func,
+                        ..
+                    } = base_expr.as_ref()
                     {
-                        if let crate::frontend::core::parser::ast::Expr::Var(type_name, _) =
-                            &**inner_func
-                        {
-                            if self.sum_types.contains_key(type_name) {
-                                return self.infer_variant_ctor_call(
-                                    type_name,
-                                    variant_name,
-                                    base_call,
-                                    args,
-                                    named_args,
-                                    *span,
-                                );
-                            }
+                        inner_func.as_ref()
+                    } else {
+                        base_expr.as_ref()
+                    };
+                    if let crate::frontend::core::parser::ast::Expr::Var(type_name, _) = inner {
+                        if self.sum_types.contains_key(type_name) {
+                            let concrete = match base_expr.as_ref() {
+                                crate::frontend::core::parser::ast::Expr::Var(_, _) => Vec::new(),
+                                _ => {
+                                    let base_ty = self.infer_expr(base_expr)?;
+                                    match self.solver.resolve_type(&base_ty) {
+                                        MonoType::Generic { args, .. } => args,
+                                        other => {
+                                            return Err(ErrorCodeDefinition::type_mismatch(
+                                                "和类型实例化结果",
+                                                &format!("{}", other),
+                                            )
+                                            .at(*span)
+                                            .build())
+                                        }
+                                    }
+                                }
+                            };
+                            return self.infer_variant_ctor_call(
+                                type_name,
+                                variant_name,
+                                concrete,
+                                args,
+                                named_args,
+                                *span,
+                            );
                         }
                     }
                 }
