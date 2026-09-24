@@ -6,25 +6,25 @@ description: 'List add/remove, slicing, higher-order functions and iterator prot
 # std.list
 
 List operations module. **Pay special attention to move semantics**: there are two kinds of
-functions—those that only borrow the source list, and those that consume (move) it. The auto-borrow
-rule for `&` parameters is described in RFC-009 §2.8: when the argument is used after the call, the
-compiler automatically creates a read-only token.
+functions — those that only read-borrow the source list, and those that consume (move) the source
+list. The automatic borrow rules for `&` parameters are described in RFC-009 §2.8: when the argument
+is still used after the call, the compiler automatically creates a read-only token.
 
 ```yaoxiang
 use std.list
 ```
 
-## Semantic Categories
+## Semantic classification
 
-Parameters with `&` in their signature are read-only borrows—the source value remains usable after
-the call. Parameters without `&` are passed by value, and the source value is **moved** after the
-call; using it again will raise `E2014`.
+Parameters with `&` in the signature are read-only borrows, and the source value remains usable
+after the call; parameters without `&` are passed by value, and after the call the source value
+**has been moved**; using it again will report `E2014`.
 
-| Category                | Functions                                                                                                        | Behavior                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| **Consume source list** | `push` `append` `prepend` `set` `pop` `remove_at`                                                                | Source list is moved, unusable afterwards |
-| Read-only borrow        | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | Source list can be used repeatedly        |
-| Iterator protocol       | `iter` (consumes source list, returns iterator) `has_next` `next` (borrows / mutably borrows iterator)           | See explanation below                     |
+| Category                | Functions                                                                                                        | Behavior                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| **Consume source list** | `push` `append` `prepend` `set` `pop` `remove_at`                                                                | Source list is moved, cannot be used afterwards |
+| Read-only borrow        | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | Source list can be reused                       |
+| Iterator protocol       | `iter` (consume source list, return iterator) `has_next` `next` (borrow / mutable borrow the iterator)           | See below                                       |
 
 ```yaoxiang
 use std.assert
@@ -33,19 +33,19 @@ use std.list
 main: () -> Void = {
     nums = [1, 2, 3]
 
-    // Read-only borrow: nums can be used repeatedly
+    // Read-only borrow: nums can be reused
     assert(list.len(nums) == 3)
     assert(list.len(nums) == 3)
     assert(list.contains(nums, 2))
 
-    // Consume: base cannot be used after this point
+    // Consume: base cannot be used after this
     base = [1, 2]
     extended = list.push(base, 3)
     assert(list.len(extended) == 3)
 }
 ```
 
-## Function Overview
+## Function overview
 
 <!-- stdlib:table:list start -->
 
@@ -88,8 +88,8 @@ push: (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
 
 <!-- stdlib:sig:list.push end -->
 
-Returns a **new list** with `item` appended to the end of `list`. `list` is passed by value and is
-**moved** after the call—it cannot be used again.
+Returns a **new list** with `item` appended to the end of `list`. `list` is passed by value, and is
+**moved** after the call; it cannot be used again.
 
 ```yaoxiang
 use std.assert
@@ -158,10 +158,11 @@ pop: (A: Type) -> (list: Vec(A)) -> Vec(A)
 <!-- stdlib:sig:list.pop end -->
 
 Removes the last element and returns the **shortened list** (value semantics). The source list is
-consumed; this is not the native "signature has `&` yet mutates the source in place" exception.
+consumed, and is no longer the native form's exceptional case of "signature with `&` that mutates
+the source in place".
 
-Returns: a new list with the last element removed; returns the original unchanged when the list is
-empty. To read the removed element, use `last` to retrieve it before calling.
+Returns: a new list with the last element removed; if the list is empty, returns it as is. To read
+the removed element, use `last` to get the value before calling.
 
 ```yaoxiang
 use std.assert
@@ -169,11 +170,11 @@ use std.list
 
 main: () -> Void = {
     l = [1, 2, 3]
-    rest = list.pop(l)               // l is consumed, rest is the new shortened list
+    rest = list.pop(l)               // l is consumed; rest is the new shortened list
     assert(list.len(rest) == 2)
     assert(list.last(rest) == 2)     // the last element 3 has been removed
 
-    // To read the removed element, use last before pop
+    // To read the removed element, get the value with last before popping
     l2 = [1, 2, 3]
     removed = list.last(l2)
     assert(removed == 3)
@@ -193,13 +194,13 @@ remove_at: (A: Type) -> (list: Vec(A), index: Int) -> Vec(A)
 
 <!-- stdlib:sig:list.remove_at end -->
 
-Removes the element at index `index` and returns the **shortened new list** (value semantics). The
+Removes the element at index `index` and returns a **new shortened list** (value semantics). The
 source list is consumed.
 
-- `index` —— element index
+- `index` — element index
 
-Returns: a new list with that element removed. Errors: raises `E6003` (index out of bounds) when the
-index is negative or ≥ the length.
+Returns: a new list with that element removed. Errors: throws `E6003` (index out of bounds) when the
+index is negative or ≥ length.
 
 ```yaoxiang
 use std.assert
@@ -224,14 +225,14 @@ set: (A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A)
 
 <!-- stdlib:sig:list.set end -->
 
-Returns a new list with the element at index `index` overwritten by `value`. `list` is passed by
-value and is **moved** after the call.
+Returns a new list with index `index` overwritten with `value`. `list` is passed by value and is
+**moved** after the call.
 
-- `index` —— index; defaults to `0`
-- `value` —— new value; defaults to `Void`
+- `index` — index; defaults to `0`
+- `value` — new value; defaults to `Void`
 
-Errors: raises `E6003` when the index is negative or ≥ the length (out-of-bounds writes are no
-longer silently discarded).
+Errors: throws `E6003` when the index is negative or ≥ length (out-of-bounds writes are no longer
+silently dropped).
 
 ```yaoxiang
 use std.assert
@@ -253,11 +254,11 @@ get: (A: Type) -> (list: &Vec(A), index: Int) -> A
 
 <!-- stdlib:sig:list.get end -->
 
-Reads the element at index `index` (read-only borrow, `list` can be reused).
+Reads the element at index `index` (read-only borrow; `list` can be reused).
 
-- `index` —— index; defaults to `0`
+- `index` — index; defaults to `0`
 
-Returns: the element value; **out-of-bounds returns `Void`** (does not throw). Errors: raises
+Returns: the element value; **returns `Void` on out-of-bounds** (no error thrown). Errors: throws
 `E6007` when the index is negative.
 
 ```yaoxiang
@@ -322,13 +323,13 @@ slice: (A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A)
 
 <!-- stdlib:sig:list.slice end -->
 
-Takes the sublist of the interval `[start, end)`.
+Takes a sublist over the interval `[start, end)`.
 
-- `start` —— starting index; defaults to `0`
-- `end` —— ending index (exclusive); defaults to the end of the list
+- `start` — start index; defaults to `0`
+- `end` — end index (exclusive); defaults to the end of the list
 
-Returns: a new list. Boundaries are **clamped** to the valid range without raising an error. Errors:
-raises `E6007` when `start` or `end` is negative.
+Returns: a new list. Boundaries are **clamped** to the valid range, no error is thrown. Errors:
+throws `E6007` when `start` or `end` is negative.
 
 ```yaoxiang
 use std.assert
@@ -351,7 +352,7 @@ reverse: (A: Type) -> (list: &Vec(A)) -> Vec(A)
 
 <!-- stdlib:sig:list.reverse end -->
 
-Returns a new list with the element order reversed; the source list is unchanged.
+Returns a new list with elements in reverse order; the source list is unchanged.
 
 ```yaoxiang
 use std.assert
@@ -375,7 +376,7 @@ concat: (A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A)
 
 Concatenates two lists and returns a new list. Neither source list is changed.
 
-Errors: raises `E6007` when the second argument is not a list.
+Errors: throws `E6007` when the second argument is not a list.
 
 ```yaoxiang
 use std.assert
@@ -397,9 +398,9 @@ len: (A: Type) -> (list: &Vec(A)) -> Int
 
 <!-- stdlib:sig:list.len end -->
 
-Number of elements. Read-only borrow; `list` can be used repeatedly.
+Number of elements. Read-only borrow; `list` can be reused.
 
-Errors: raises `E6007` when the argument is not a list.
+Errors: throws `E6007` when the argument is not a list.
 
 ```yaoxiang
 use std.assert
@@ -408,7 +409,7 @@ use std.list
 main: () -> Void = {
     nums = [1, 2, 3]
     assert(list.len(nums) == 3)
-    assert(list.len(nums) == 3)      // reusable
+    assert(list.len(nums) == 3)      // can be reused
 }
 ```
 
@@ -424,7 +425,7 @@ is_empty: (A: Type) -> (list: &Vec(A)) -> Bool
 
 Whether the list is empty.
 
-Errors: raises `E6007` when the argument is not a list.
+Errors: throws `E6007` when the argument is not a list.
 
 ```yaoxiang
 use std.assert
@@ -446,9 +447,11 @@ contains: (A: Type) -> (list: &Vec(A), item: A) -> Bool
 
 <!-- stdlib:sig:list.contains end -->
 
-Whether `item` is in the list (compared by value equality).
+Whether `item` is in the list (compared by value equality; the element type must support `==` —
+primitive types support it natively; for record types, it is provided by automatic derivation or
+explicit instantiation of `Equal` per RFC-011b).
 
-Returns: `true` if present; returns `false` when the argument is not a list.
+Returns: `true` if present; `false` if the argument is not a list.
 
 ```yaoxiang
 use std.assert
@@ -495,10 +498,10 @@ map: (T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R)
 
 <!-- stdlib:sig:list.map end -->
 
-Calls `fn` on each element and returns a new list composed of the results. The function value is
-passed in **curried** form: `list.map(nums, x => x * 2)`. The source list is unchanged.
+Calls `fn` on each element and returns a new list of the results. Passing a function value uses the
+**curried** form: `list.map(nums, x => x * 2)`. The source list is unchanged.
 
-Errors: raises `E6007` when the second argument is not a function.
+Errors: throws `E6007` when the second argument is not a function.
 
 ```yaoxiang
 use std.assert
@@ -522,7 +525,7 @@ filter: (T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T)
 
 Keeps the elements for which `fn` returns true. The source list is unchanged.
 
-Errors: raises `E6007` when the second argument is not a function.
+Errors: throws `E6007` when the second argument is not a function.
 
 ```yaoxiang
 use std.assert
@@ -544,14 +547,14 @@ reduce: (T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, i
 
 <!-- stdlib:sig:list.reduce end -->
 
-Folds from left to right: starting with `init`, calls `fn(acc, item)` in order.
+Folds from left to right: starting with `init`, `fn(acc, item)` is called in turn.
 
-- `fn` —— reduction function `(accumulator, element) -> new accumulator`
-- `init` —— initial accumulator
+- `fn` — the reduce function `(accumulator, element) -> new accumulator`
+- `init` — the initial accumulator
 
-Returns: the final accumulator. Returns `init` for an empty list.
+Returns: the final accumulator. Returns `init` when the list is empty.
 
-Errors: raises `E6007` when the second argument is not a function.
+Errors: throws `E6007` when the second argument is not a function.
 
 ```yaoxiang
 use std.assert
@@ -573,9 +576,9 @@ iter: (T: Type) -> (list: Vec(T)) -> Iter(T)
 
 <!-- stdlib:sig:list.iter end -->
 
-Creates an iterator. The iterator is a `(list, index)` tuple state carrier; once created, it is
-**consumed in order** within `next`. The source list is read-only borrowed and remains usable during
-iteration.
+Creates an iterator. The iterator is a `(list, index)` tuple carrying state, and after creation it
+is **consumed sequentially** in `next`. The source list is held by read-only borrow and remains
+usable during iteration.
 
 Returns: an iterator tuple, to be used with `next` / `has_next`.
 
@@ -599,13 +602,13 @@ next: (T: Type) -> (it: &mut Iter(T)) -> T
 
 <!-- stdlib:sig:list.next end -->
 
-Takes out the current element and advances the internal index by one.
+Takes the current element and advances the internal index by one.
 
 Returns: the current element; returns `Void` when iteration ends.
 
-> Both `next` and `has_next` **move** the iterator (no `&` in the signature), so each access
-> requires recreating the iterator, or you may use a `for ... in` loop directly. This differs from
-> the borrow form of [`std.range.next`](./range#next).
+> Both `next` and `has_next` **move** the iterator (the signature has no `&`), so every access
+> requires recreating the iterator, or simply using `for ... in` to traverse. This differs from the
+> borrow form of [`std.range.next`](./range#next).
 
 ```yaoxiang
 use std.assert
@@ -639,9 +642,9 @@ main: () -> Void = {
 }
 ```
 
-### for ... in Traversal
+### Iterating with `for ... in`
 
-Lists can be traversed directly with `for ... in`, without manually calling `next`:
+Lists can be iterated directly with `for ... in`, without manually calling `next`:
 
 ```yaoxiang
 use std.assert
@@ -657,5 +660,5 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.range`](./range) —— range iteration and lazy adapters
-- [`std.assert`](./assert) —— assertion utility used in the examples
+- [`std.range`](./range) — range iteration and lazy adapters
+- [`std.assert`](./assert) — assertion utility used in the examples

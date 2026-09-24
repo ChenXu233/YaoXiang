@@ -4,8 +4,11 @@ title: 'Lists and Dictionaries'
 
 # Lists and Dictionaries
 
-Data structures are the skeleton of a program. YaoXiang provides two built-in collection types:
-lists and dictionaries.
+Data structures are the skeleton of programs. YaoXiang's collection types are layered: `Vec(T)` is
+the runtime-length raw buffer, `List(T)` is a standard library type
+(`{ data: Vec(T), length: Int }`), and dictionaries are built on the same layering. Users can also
+define their own container types—after implementing the `Index` interface (RFC-011b), subscript
+access with `[]` is also supported.
 
 ## Lists
 
@@ -13,15 +16,15 @@ A list is an **ordered** sequence of values, where all elements share the same t
 `[]`:
 
 ```yaoxiang
-// Creating lists
+// 创建列表
 numbers = [1, 2, 3, 4, 5]
 names = ["Alice", "Bob", "Charlie"]
-empty: List(Int) = []       // Empty lists require a type annotation
+empty: List(Int) = []       // 空列表需要类型注解
 ```
 
-### Indexing
+### Index Access
 
-Use `[]` to access elements by position, with indices starting from 0:
+Use `[]` to access elements by position, with 0-based indexing:
 
 ```yaoxiang
 scores = [95, 87, 73, 91]
@@ -36,30 +39,30 @@ last = scores[3]     // 91
 ```yaoxiang
 mut items = [1, 2, 3]
 
-// Append an element
+// 添加元素
 items.append(4)       // [1, 2, 3, 4]
 
-// Length
+// 长度
 count = items.len()   // 4
 
-// Slice
+// 切片
 slice = items[0..2]   // [1, 2]
 ```
 
 ### List Comprehensions
 
-List comprehensions are a powerful tool for creating lists—generating new lists from existing ones:
+List comprehensions are a powerful tool for creating lists—generate a new list from an existing one:
 
 ```yaoxiang
-// Basic comprehension
+// 基本推导式
 squares = [x * x for x in [1, 2, 3, 4, 5]]
 print(squares)  // [1, 4, 9, 16, 25]
 
-// Comprehension with a filter
+// 带过滤条件的推导式
 evens = [x for x in [1, 2, 3, 4, 5, 6] if x % 2 == 0]
 print(evens)  // [2, 4, 6]
 
-// Transforming types
+// 转换类型
 names = ["Alice", "Bob", "Charlie"]
 lengths = [n.len() for n in names]
 print(lengths)  // [5, 3, 7]
@@ -69,13 +72,13 @@ Syntax: `[expression for variable in list if condition]`—the `if condition` pa
 
 ## Dictionaries
 
-A dictionary is a collection of **key-value pairs**, where keys are strings and values can be of any
+A dictionary is a collection of **key-value pairs**, where keys are strings and values may be of any
 type. Create one with `{}`:
 
 ```yaoxiang
-// Creating dictionaries
+// 创建字典
 scores = {"Alice": 90, "Bob": 85, "Charlie": 92}
-empty: Dict(Int) = {}          // Empty dictionaries require a type annotation
+empty: Dict(Int) = {}          // 空字典需要类型注解
 ```
 
 ### Key Access
@@ -94,7 +97,7 @@ bob = scores["Bob"]       // 85
 ```yaoxiang
 mut data = {"name": "Alice"}
 
-// Add/update a key-value pair
+// 添加/更新键值
 data["age"] = 25
 data["name"] = "Bob"
 
@@ -114,9 +117,9 @@ has_user = "user" in config    // false
 
 ## Summary
 
-| Type | Syntax      | Ordered? | Duplicates? | Key Type      |
-| ---- | ----------- | -------- | ----------- | ------------- |
-| List | `[1, 2, 3]` | ✅       | ✅          | Integer index |
-| Dict | `{"a": 1}`  | ✅       | Keys unique | String        |
+| Type | Syntax      | Ordered? | Duplicates?       | Key Type      |
+| ---- | ----------- | -------- | ----------------- | ------------- |
+| List | `[1, 2, 3]` | ✅       | ✅                | Integer Index |
+| Dict | `{"a": 1}`  | ✅       | No duplicate keys | String        |
 
-Lists are your primary container, while dictionaries are suited for key-value lookups.
+Lists are your workhorse container; dictionaries are best for key-value lookups.
