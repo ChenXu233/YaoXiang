@@ -13,26 +13,26 @@ issue: '#342'
 > **References**:
 >
 > - [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md) — `name: type = value` model, `{}`
->   as a dependency-driven computation unit
-> - [RFC-007: Function Definition Syntax Unification](./007-function-syntax-unification.md) — code
+>   as dependency-driven computation units
+> - [RFC-007: Function Definition Syntax Unification](./007-function-syntax-unification.md) — Code
 >   block return rules, early return
-> - [RFC-038: Statement Termination and Line-Break Rules](038-statement-termination.md) — line-break
+> - [RFC-038: Statement Termination and Line Break Rules](038-statement-termination.md) — Line break
 >   behavior of statements and expressions
-> - [Language Specification §Type System](/reference/language-spec/type-system.md) — the `Never`
->   explosion principle
+> - [Language Specification §Type System](/reference/language-spec/type-system.md) — `Never`
+>   bottoms-out principle
 
 ## Summary
 
-Unify the semantics of `return` and block evaluation, eliminating the wording conflict between
+Unify the semantics of `return` and block evaluation, eliminating the conflicting statements between
 RFC-007 and RFC-010.
 
 This RFC proposes **three self-consistent rules**: a block's value equals its tail expression (the
-sole exit); `return` is a **non-local exit** of type `Never` (exits the function, not "returned to
-the block"); and an `if` without `else` takes `Void`.
+sole exit point); `return` is a **non-local exit** of type `Never` (it exits the function, not
+"returning to the block"); and an `if` without `else` takes `Void`.
 
-`return` and block evaluation **are not bifurcated at the language level**—`{ return n }` as a block
-has value `n` (of type `Never`), while at the same time the effect of `return` is to exit the
-function. The two coexist via the **explosion principle** (`Never <: T`). RFC-007's "early return"
+`return` and block evaluation **are not split into two by the language**—`{ return n }` as a block
+has value `n` (type `Never`), while at the same time `return`'s effect is to exit the function.
+These two things coexist via the **bottoms-out principle** (`Never <: T`). RFC-007's "early return"
 and RFC-010's "blocks have values" are corollaries of these three rules, not contradictory special
 cases.
 
@@ -42,106 +42,106 @@ No new syntax, no new keywords.
 
 This RFC is accepted. Implementation status of the three rules:
 
-| Rule                               | Subitem                                                      | Status                                                     |
-| ---------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------- |
-| ① Block's value = tail expression  | Function body tail expression                                | ✅ Implemented                                             |
-| ① Block's value = tail expression  | Tail-position `if` / `match`                                 | ✅ Implemented (#344)                                      |
-| ① Block's value = tail expression  | Trailing assignment statement → `Void`                       | ✅ Implemented                                             |
-| ① Block's value = tail expression  | Empty block `{}` → `Void`                                    | ✅ Implemented                                             |
-| ① Safeguard via type checking      | Tail expression agrees with declared return type             | ✅ Implemented (#345)                                      |
-| ② `return` is non-local exit       | Pierces `if` / `while` / `for` / bare blocks / nested blocks | ✅ Implemented                                             |
-| ② `Never <: T` explosion principle | Consistent across `unify` and `is_subtype`                   | ✅ Implemented (this RFC fixes the internal contradiction) |
-| ③ `if` without `else` → `Void`     | Branch value does not leak into expression position          | ✅ Implemented (#346)                                      |
-| ① Block's value = tail expression  | Bare-block value binding `x = { ... }`                       | ✅ Implemented (#343)                                      |
-| ① Block's value = tail expression  | `unsafe {}` value exit                                       | ✅ Implemented (#347)                                      |
-| ① Safeguard via type checking      | Empty block / trailing-statement escape validation           | ✅ Implemented (#342 Open Question 5)                      |
-| ① Block's value = tail expression  | `spawn {}` value exit (tail expression)                      | ✅ Implemented (#365)                                      |
+| Rule                                   | Sub-item                                                   | Status                                           |
+| -------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------ |
+| ① Block value = tail expr              | Function body tail expression                              | ✅ Implemented                                   |
+| ① Block value = tail expr              | Tail-position `if` / `match`                               | ✅ Implemented (#344)                            |
+| ① Block value = tail expr              | Trailing assignment statement → `Void`                     | ✅ Implemented                                   |
+| ① Block value = tail expr              | Empty block `{}` → `Void`                                  | ✅ Implemented                                   |
+| ① Protection provided by type checking | Tail expression unified with declared return type          | ✅ Implemented (#345)                            |
+| ② `return` non-local exit              | Pierces through `if`/`while`/`for`/bare block/nested block | ✅ Implemented                                   |
+| ② `Never <: T` bottoms-out             | `unify` consistent with `is_subtype`                       | ✅ Implemented (resolves internal contradiction) |
+| ③ `if` without `else` → `Void`         | Branch value does not leak at expression position          | ✅ Implemented (#346)                            |
+| ① Block value = tail expr              | Bare block value binding `x = { ... }`                     | ✅ Implemented (#343)                            |
+| ① Block value = tail expr              | `unsafe {}` value exit                                     | ✅ Implemented (#347)                            |
+| ① Protection provided by type checking | Empty block / trailing statement escape check              | ✅ Implemented (#342 open issue 5)               |
+| ① Block value = tail expr              | `spawn {}` value exit (tail expression)                    | ✅ Implemented (#365)                            |
 
-Corpus coverage: `tests/yaoxiang/03-semantics/rfc010a_block_value.yx` (positive) +
+Test coverage: `tests/yaoxiang/03-semantics/rfc010a_block_value.yx` (positive) +
 `tests/yaoxiang/06-compile-errors/tail_expr_type_mismatch{,_with_stmts}_err.yx` (negative).
 
 ## Motivation
 
-### Wording Conflict
+### Conflicting Statements
 
-The Fibonacci example in the playground exposed a semantic divergence:
+A Fibonacci example in the playground exposed a semantic divergence:
 
 ```yaoxiang
 fib: (n: Int) -> Int = {
   if n <= 1 {
-    return n          // Is this `return` for the `if` or for the function?
+    return n          // Is this return "the if's" or "the function's"?
   }
   return fib(n - 1) + fib(n - 2)
 }
 ```
 
-Two accepted RFCs derive **opposite** conclusions:
+Two already-accepted RFCs give **opposite** derivations:
 
-| RFC                    | Statement                                                                                                                              | Derived Semantics                                                               |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **RFC-007** (Accepted) | Uses `factorial` as the example, with the heading **"Early return: using `return`"**: `if n <= 1 { return 1 }`                         | `return` pierces both `if` and the function body, **returning to the function** |
-| **RFC-010** (Accepted) | "`{}` is a dependency-driven computation unit…use `return` to return a value explicitly"; `spawn { return c }` returns the task result | `return` gives the value to **this `{}`**                                       |
+| RFC                    | Statement                                                                                                                               | Derived semantics                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **RFC-007** (Accepted) | Using `factorial` as example, the title reads **"Early return: using return"**: `if n <= 1 { return 1 }`                                | `return` pierces through `if` and the function body, **back to the function** |
+| **RFC-010** (Accepted) | "`{}` is a dependency-driven computation unit…uses `return` to explicitly return a value"; `spawn { return c }` returns the task result | `return` gives **that `{}`** a value                                          |
 
-Per RFC-010, the braces of `if n <= 1 { return 1 }` form a computation unit; `return 1` gives the
-block the value 1, so the value of the `if` statement is discarded and the next line must
-execute—**infinite recursion in fib**. Per RFC-007, the result is correct.
+According to RFC-010, in `if n <= 1 { return 1 }` the braces form a computation unit, `return 1`
+gives it value 1, so the `if` statement's value is discarded and the next line will inevitably
+execute—**fib recurses infinitely**. According to RFC-007, it is correct.
 
-### Root Cause: The Double Duty of `return`
+### Root Cause: `return` Carries Two Jobs
 
-- **RFC-007 uses it to express "exit the function"**—a control-flow concept
+- **RFC-007 uses it to express "exiting the function"**—a control-flow concept
 - **RFC-010 uses it to express "this block's value is it"**—an evaluation concept
 
-Using a control-flow keyword to express evaluation is a **category error**. A single word bearing
-two responsibilities: however you adjust, one side gets sacrificed.
+Using a control-flow keyword to express evaluation is a **category error**. When one word bears two
+jobs, no matter how you adjust it, one side gets sacrificed.
 
-### Erroneous Extended Interpretation in Downstream Documents
+### Downstream Documentation's Mis-Expanded Interpretation
 
-`docs/src/reference/language-spec/syntax.md` has extended RFC-010's "`{}` block" to **all braces**:
+`docs/src/reference/language-spec/syntax.md` expanded RFC-010's "`{}` blocks" to **all braces**:
 
-- §2.9: "`return` in `{}` **always returns its content to the enclosing scope**" (also calling it
+- §2.9: "`return` inside `{}` **always returns the content to the enclosing scope**" (and calls it
   "unified semantics: all `{}` blocks")
 - §3.3: "`return` is used to **return a value from a code block**"
 
-But RFC-010's original text defines only **three value-bearing block forms** (`= {}` / `spawn {}` /
-`unsafe {}`), and **nowhere in it discusses the braces of `if` / `while` / `for` / `match`**.
+But RFC-010 originally defined only **three value-bearing blocks** (`= {}` / `spawn {}` /
+`unsafe {}`), and **never mentioned the braces of `if` / `while` / `for` / `match`**.
 
-### Current Implementation Status
+### Current Implementation State
 
-| Behavior                                        | Current State                                  |
-| ----------------------------------------------- | ---------------------------------------------- |
-| `if n == 0 { return 7 } … return 8`             | Function exit (`h(0) = 7`)                     |
-| `f = { n + 1 }`                                 | Tail expression works (returns `5`)            |
-| `x = { y = 5; y }` (bare block tail expression) | `E3006` variable unresolved (see #343)         |
-| `f: () -> Int = { if c {5} else {6} }`          | Returns `void`, tail expression dropped (#344) |
-| `f: () -> Int = { "s" }`                        | Silently passes compilation (see #345)         |
-| `x = if c { 19 }` (without `else`)              | `19` (should be `Void`, see #346)              |
-| `v = unsafe { 42 }`                             | `void` (see #347)                              |
-| `y = if c { 111 } else { 222 }`                 | Works (`if` as expression)                     |
+| Behavior                                        | Current state                                    |
+| ----------------------------------------------- | ------------------------------------------------ |
+| `if n == 0 { return 7 } … return 8`             | Function exits (`h(0) = 7`)                      |
+| `f = { n + 1 }`                                 | Tail expression usable (returns `5`)             |
+| `x = { y = 5; y }` (bare block tail expression) | `E3006` variable unresolved (see #343)           |
+| `f: () -> Int = { if c {5} else {6} }`          | Returns `void`, tail expression discarded (#344) |
+| `f: () -> Int = { "s" }`                        | Silently passes compilation (see #345)           |
+| `x = if c { 19 }` (no `else`)                   | `19` (should be `Void`, see #346)                |
+| `v = unsafe { 42 }`                             | `void` (see #347)                                |
+| `y = if c { 111 } else { 222 }`                 | Usable (`if` as expression)                      |
 
 `tests/yaoxiang/03-semantics/no_tail_expr_return.yx` once claimed "tail expressions no longer
-implicitly return," but didn't cover this case, so the test didn't fail. That file has been replaced
-by `tests/yaoxiang/03-semantics/tail_expr_and_return.yx`.
+implicitly return," but it didn't cover that case, so the test didn't fail. That file has been
+replaced by `tests/yaoxiang/03-semantics/tail_expr_and_return.yx`.
 
 ## Proposal
 
-### The Three Rules
+### Three Rules
 
 ```
-① The block's value = the tail expression (sole exit)
-   Assignment statements have value Void; the empty block {} has value Void
+① Block value = tail expression (sole exit point)
+   Assignment statement's value is Void; empty block {}'s value is Void
 ② return : (T) -> Never
    Non-local exit: exits the nearest function boundary
 ③ if without else → Void
 ```
 
-**These three suffice to derive "early return" without needing any additional rule that singles out
-`return` for functions.**
+**These three suffice to derive "early return"—no extra rule making `return` specifically belong to
+a function is needed.**
 
-### Rule ①: The Block's Value
+### Rule ①: Block's Value
 
-The **last statement/expression** of a block is the block's value (the tail expression). This is
-**not** "no tail expression ⇒ Void"—a non-empty block always has a tail expression (the last
-statement _is_ one); the empty block `{}` has value `Void`.
+The **last statement/expression of a block** is the block's value (the tail expression). This is
+**not** "no tail expression means Void"—a non-empty block always has a tail expression (the very
+last statement is one), and an empty block `{}` has value `Void`.
 
 ```yaoxiang
 // The tail expression determines the block's value
@@ -150,7 +150,7 @@ a = {
     x * 2                // Tail expression → block's value
 }
 
-// An assignment as tail expression → block's value is Void
+// Assignment as tail expression → block's value is Void
 b = {
     x = compute()
     log(x)               // Assignment statement → Void
@@ -163,31 +163,32 @@ c = {
 }
 ```
 
-**Design criterion (separating mechanism from safeguard)**:
+**Design rationale (separation of mechanism and protection)**:
 
 - **The language rule only provides the mechanism**: the last statement is the block's value—single
-  rule, unambiguous
-- **Safeguard is provided by type checking**: a function declared `-> Int` with a tail expression of
-  an incompatible type → compile error
+  rule, no ambiguity
+- **Protection is provided by type checking**: function declared `-> Int` but tail expression's type
+  mismatches → compile error
 - **The language does not guard against "wrong intent"**: if the tail expression's type happens to
-  match the return type but its semantics isn't what was intended, that's the author's oversight—the
-  language has no way to tell. **We do not rely on language rules to prevent intent errors.**
+  match the return type but the semantics is unintended, that's the author's carelessness—the
+  language cannot tell. **The language does not rely on rules to prevent intent errors.**
 - **If you don't want to return, write `Void` explicitly**
 
-This replaces RFC-010's "`= { ... }` must use `return`, otherwise returns `Void`," as well as its
-design rationale "an explicit `return` is needed to eliminate the ambiguity of 'whether the last
-expression is the return value'."
+This replaces RFC-010's "= { ... } must use `return`, otherwise returns `Void`," and also replaces
+its design rationale that "explicit `return` is needed to disambiguate whether the last expression
+is the return value."
 
 ### Rule ②: `return` Is a Non-Local Exit
 
-`return` has type `Never` (zero constructors, no inhabitable value). Its semantics:
+`return` has type `Never` (zero constructors, no value can inhabit it). Its semantics:
 
-- **Exits the nearest function boundary**, handing the value to the caller
-- **Pierces all blocks**—(any) `if` / `while` / `for` / `match` / bare block / `spawn` / `unsafe`
+- **Exits the nearest function boundary**, delivering the value to the caller
+- **Pierces through all blocks**—(if any) `if` / `while` / `for` / `match` / bare block / `spawn` /
+  `unsafe`
 
-`return` does not "return to the block." `{ return n }` as a block has value `n` (by the tail
-expression rule), of type `Never`; and at the same time the effect of `return` is to exit the
-function. **Both hold simultaneously.**
+`return` does not "return to a block." As a block, `{ return n }` has value `n` (tail expression
+rule), **of type `Never`**; at the same time, `return`'s effect is to exit the function. **Both hold
+simultaneously.**
 
 ### Rule ③: `if` Without `else`
 
@@ -195,8 +196,8 @@ function. **Both hold simultaneously.**
 x = if c { 19 }        // no else
 ```
 
-When the condition is false there is no branch to evaluate, so the value is `Void`. Hence this `if`
-has value type `Void` (and cannot be used in non-`Void` positions).
+When the condition is false there is no branch to evaluate, so take `Void`. Hence this `if`'s value
+type is `Void` (or it cannot be used at a non-`Void` position).
 
 When a value is needed, supply both branches explicitly:
 
@@ -204,109 +205,108 @@ When a value is needed, supply both branches explicitly:
 x = if c { 19 } else { 20 }
 ```
 
-### `Never` Is the Technical Foundation for Coexistence
+### `Never` Is the Technical Foundation of Coexistence
 
-`Never <: T` holds for any type `T` (the explosion principle; see Language Specification §Type
+`Never <: T` holds for any type `T` (the bottoms-out principle; see Language Specification §Type
 System). Therefore:
 
 ```yaoxiang
 fib: (n: Int) -> Int = {
   if n <= 1 {
-    return n              // tail expression : Never
-  }                       // → the if's value : Never
-  fib(n - 1) + fib(n - 2) // → the block's value : Int
+    return n              // Tail expression : Never
+  }                       // → this if's value : Never
+  fib(n - 1) + fib(n - 2) // → block's value : Int
 }
 ```
 
-- The branch body `{ return n }` has value `Never`
-- The `if`'s only branch is `Never` ⇒ the `if`'s value is `Never`
-- A statement of type `Never` means **the sequence ends here**—the following statement is not "the
-  next to execute sequentially"
-- And since `Never` can be coerced to any type (the explosion principle), the whole block satisfies
+- The branch body `{ return n }`'s value is `Never`
+- This `if`'s only branch is `Never` ⇒ `if`'s value is `Never`
+- A statement of type `Never` means **the sequence terminates here**—the following statement is not
+  "the next one to execute in order"
+- And `Never` can be coerced to any type (bottoms-out principle), so the entire block satisfies
   `-> Int`
 
-**"Early return" follows naturally from this**: `Never` ends the sequence + the explosion principle
-enables coercion.
+**"Early return" naturally follows from this**: `Never` terminates the sequence + the bottoms-out
+principle allows coercion.
 
 ## Detailed Design
 
-### Formalization of Block and Tail Expression
+### Formalizing Blocks and Tail Expressions
 
 ```
-Block        ::= '{' Stmt* '}'                     // empty block → Void
-               | '{' Stmt* Expr '}'                // value = Expr
+Block        ::= '{' Stmt* '}'                     // Empty block → Void
+               | '{' Stmt* Expr '}'                // Value = Expr
 Expr         ::= ...
-               | Return                            // type Never
+               | Return                            // Type Never
 Stmt         ::= Assignment | ExprStmt | ...
 
 Value(Block):
-  empty block             → Void
-  { ...; e }              → type(e)
-  { ...; s } (s a stmt)   → Void          // assignment's value is Void
+  Empty block                → Void
+  { ...; e }                 → type(e)
+  { ...; s } (s is a stmt)   → Void          // Assignment's value is Void
 ```
 
-### Typing Rule for `return`
+### Type Rule for `return`
 
 ```
 return e : Never        where e : T
 
-// Because Never <: T' holds for any T', return can appear in any return-type position
+// Because Never <: T' for any T', return can appear at any return-type position
 ```
 
-**No additional rule is needed to constrain the legality of `return`**—the explosion principle
-already covers it. This makes questions like "can `return` appear in a function that returns `X`"
-simply disappear.
+**No extra rule is needed to constrain `return`'s legality**—the bottoms-out principle already
+covers it. This makes questions like "can `return` appear in a function returning `X`" disappear.
 
-### Multi-Branch Join
+### Joining Multiple Branches
 
 ```
 join(A, B):
-  if A : Never  → B
-  if B : Never  → A
-  otherwise     → require A and B to be compatible (same type or with a common upper bound)
+  If A : Never  → B
+  If B : Never  → A
+  Otherwise     → require A, B to be compatible (same type or reach a common upper bound)
 ```
 
-The multiple branches of `if` / `match` are joined via `join`. Branches containing `return` have
-type `Never` and do not participate in the join.
+`if` / `match`'s multiple branches are joined by `join`. Branches with `return` don't participate in
+joining because their type is `Never`.
 
 ### Consistency with RFC-007
 
-RFC-007's example fits this RFC exactly, with no revision needed:
+RFC-007's example **fully conforms to this RFC**—no revision needed:
 
 ```yaoxiang
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }          // Never branch, ignored by join
-    return n * factorial(n - 1)     // function exit
+    return n * factorial(n - 1)     // Function exit
 }
 ```
 
-"Early return" is not a special case; it is a **corollary** of rules ① ② and the explosion
+"Early return" is not a special case; it's a **corollary** of rules ①, ②, and the bottoms-out
 principle.
 
 ### Differences from RFC-010 and Revision Requirements
 
-RFC-010's definitions have been revised per this RFC. The differences:
+RFC-010's definitions have been revised per this RFC; the differences are as follows:
 
-| RFC-010 Original Clause                                                           | Current Definition                                                                        |
-| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| "`= { ... }` must use `return`, otherwise returns `Void`"                         | The block's value = tail expression; empty block → `Void`                                 |
-| Design rationale: "explicit `return` needed to resolve tail-expression ambiguity" | Does not hold—the tail expression is unambiguous, and `return` does not interfere with it |
-| The three `return c` / `return SqliteDb` examples                                 | Tail-expression form (unified value exit for `spawn` / `unsafe`)                          |
+| RFC-010 original clause                                                     | Current definition                                                                      |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| "= { ... } must use `return`, otherwise returns `Void`"                     | Block's value = tail expression; empty block → `Void`                                   |
+| Design rationale "explicit `return` needed to disambiguate tail expression" | No longer holds—tail expression causes no ambiguity, `return` doesn't interfere with it |
+| Three examples with `return c` / `return SqliteDb`                          | Tail expression form (value exits of `spawn` / `unsafe` unified)                        |
 
-**RFC-010's core design (`{}` as a dependency-driven computation unit) is unchanged**; only the
-value exit changes from `return` to the tail expression.
+**RFC-010's core design (`{}` as a dependency-driven computation unit) is unchanged**—only the value
+exit changed from `return` to tail expression.
 
-### Unified Perspective (Design Principle)
+### Unifying Perspectives (Design Principle)
 
-The braces of `if` / `while` are **both an imperative control body and a declarative evaluation
-unit**—this is a **difference in perspective, not two language constructs**. Therefore:
+The braces of `if` / `while` are **both imperative control bodies and declarative evaluation
+units**—this is a **difference in perspective, not two different language constructs**. Therefore:
 
-- **Do not bifurcate at the language level** between "control-flow body" and "evaluation unit"
-- All blocks share the same evaluation rules (Rule ①)
-- `return` is the sole exception mechanism, and its exceptional nature comes from the type-theoretic
-  property of `Never`, not from a syntactic special case
+- **Do not split at the language level** between "control-flow bodies" and "evaluation units"
+- All blocks share the same set of evaluation rules (rule ①)
+- `return` is the only exceptional mechanism, and its exceptional nature comes from `Never`'s
+  type-theoretic property, not a syntactic special case
 
-This lets declarative and Python-style writing naturally coexist:
+This allows declarative and Python-style writing to coexist naturally:
 
 ```yaoxiang
 a = if input > 10 { 19 } else { 20 }
@@ -318,147 +318,146 @@ c = spawn { fetch("a") }
 
 ### Advantages
 
-- **Eliminates the RFC conflict**: RFC-007 and RFC-010 go from contradictory to corollary-relation,
-  with neither side sacrificed
-- **Minimum number of rules**: three rules + one type-theoretic property (the explosion principle),
-  no special cases
-- **Single meaning of `return`**: exits the function. No more need to judge between "block value /
-  function value"
-- **Unified perspective**: imperative and declarative coexist, not bifurcated at the language level
-- **Consistent with mature languages**: Rust also lets the two mechanisms ("tail expression" +
-  `return : !`) coexist
+- **Eliminates RFC conflicts**: RFC-007 and RFC-010 shift from contradiction to a corollary
+  relationship, without sacrificing either
+- **Fewest rules**: three rules + one type-theoretic property (bottoms-out principle), no special
+  cases
+- **Single meaning for `return`**: exits the function. No more judging whether it belongs to "block
+  value" or "function value"
+- **Unified perspective**: imperative and declarative coexist, no language-level split
+- **Consistent with mature languages**: Rust likewise coexists via "tail expression + `return : !`"
 - **Zero new syntax**: no new keywords, no parser grammar changes
 
-### Drawbacks
+### Disadvantages
 
-- **Last-expression-as-value carries a risk of "accidental return"**: forgetting to delete the last
-  line silently changes the return value
+- **"Accidental return" risk from last-expression-is-value**: when the last line is left by
+  accident, the return value silently changes
   - Mitigation: type checking intercepts type mismatches; the language does not promise to prevent
-    intent errors (see Design Criterion)
-- **Downstream documents need synchronized revision**: examples in already-accepted documents must
-  be rewritten
-- **Interaction with statement termination needs to be clarified**: is a newline-terminated last
-  expression still the block's value (see Open Questions)
+    intent errors (see design rationale)
+- **Downstream documentation needs synchronized revision**: examples in accepted documents must be
+  rewritten
+- **Interaction with statement termination must be clarified**: does a newline-terminated last
+  expression still count as the block's value (see open issues)
 
 ## Alternatives
 
-### Alternative A: `return` Retains Double Duty, Dispatched by Containing Block Type
+### Option A: `return` Retains Dual Jobs, Dispatched by Containing Block Type
 
-In a function body `= {}`, `return` belongs to the function; in `spawn {}` / `unsafe {}`, to the
-block; in `if {}` / bare blocks, to what?
+In function body `= {}`, `return` belongs to the function; in `spawn {}` / `unsafe {}`, it belongs
+to the block; in `if {}` / bare blocks, it belongs to…?
 
-**Reason for rejection**: The belonging of `if` cannot be adjudicated—this is precisely the original
-conflict. And the user would have to remember "which blocks belong to whom," with no principled
-basis (why should `if` belong to the function while a bare block belongs to itself?).
+**Reason for rejection**: `if`'s assignment is unresolvable—this is the original conflict. And users
+must remember "which blocks belong to whom," with no principled basis (why should `if` belong to the
+function but a bare block to itself?).
 
-### Alternative B: Strict Block Return (`return` Always Belongs to the Current Block)
+### Option B: Strict Block Return (`return` Always Belongs to the Current Block)
 
-**Reason for rejection**: **Missing functionality**. `return` can never exit a function early from a
-nested block; guard clauses (`if err { return }`) become impossible to write, and the function can
-only be written as a stack of nested expressions.
+**Reason for rejection**: **Missing functionality**. `return` can never early-exit from a nested
+block, so guard clauses (`if err { return }`) are completely unwritable, and functions can only be
+written as deeply nested expressions.
 
-### Alternative C: Block Value via a New Keyword (`give x` / `yield x`)
+### Option C: New Keyword for Block's Value (`give x` / `yield x`)
 
-**Reason for rejection**: Violates the **zero syntax change** principle of RFC-036 (would require a
-new keyword), and users have to learn two concepts (`return` for exit + `give` for evaluation). The
-tail-expression approach has zero new concepts.
+**Reason for rejection**: Violates RFC-036's **zero-syntax-change** principle (must add new
+keywords), and users must learn two concepts (`return` to exit + `give` to evaluate). The tail
+expression approach needs zero new concepts.
 
-### Alternative D: Keep RFC-010 As-Is (Explicit `return` Required)
+### Option D: Keep RFC-010 as Originally Written (Explicit `return` Required)
 
-**Reason for rejection**: Irreconcilable conflict with RFC-007 (see Motivation). And the actual
-implementation has already taken the tail-expression path.
+**Reason for rejection**: Irreconcilably conflicts with RFC-007 (see Motivation). And the actual
+implementation has already gone down the tail expression path.
 
-## Revisions to Downstream Documents
+## Revisions to Downstream Documentation
 
-This RFC's definitions have become the authoritative semantics for downstream documents; the related
-documents have all been synchronized (no deprecated wording is retained).
+This RFC's definition has become the authoritative semantics for downstream documentation; the
+relevant documents have all been synchronized (no deprecated wording is retained).
 
-## Open Questions
+## Open Issues
 
-- [x] Interaction between tail expressions and RFC-038 statement-termination rules: does a
-      newline-terminated last expression remain the block's value? (@chenxu: needs to be confirmed
-      together with RFC-038's "leading `(` / `[` on a new line never merge" rule). Empirically
-      verified: newline-terminated last expressions (including leading `(` / `[` / list literals)
-      all serve as block values.
+- [x] Interaction between tail expression and RFC-038's statement termination rules: does a
+      newline-terminated last expression still count as the block's value? (@Chenxu: needs to be
+      confirmed together with RFC-038's "line-start `(`/`[` never merges" rules) — Verified by test:
+      newline-terminated last expressions (including line-start `(` / `[` / list literals) all count
+      as block values
 - [x] When is `name = { ... }` a function vs. a block value binding—see Appendix D (content
-      determines the type).
-- [x] Specific forms of `unsafe {}` / `spawn {}` after revision—both have empirically verified
-      working tail expressions.
-- [x] Interaction of `match` branch `join` with exhaustiveness checking (depends on RFC-039).
-      Empirically verified: `Never` branches do not participate in the join; the join behavior of
-      multi-branch `if` / `match` is correct.
-- [x] Diagnostic message for empty block `{}` as a function body when the return type is not
-      `Void`—reuses the existing `E1012`, with the location pointing at the annotation.
+      determines the type)
+- [x] Specific forms after rewriting `unsafe {}` / `spawn {}`—both verified usable with tail
+      expressions
+- [x] Interaction between `match` branch `join` and exhaustiveness checking (depends on RFC-010b) —
+      Verified: `Never` branches don't participate in joining; multi-branch `if` / `match` join
+      behavior is correct
+- [x] Diagnostic message for empty block `{}` as function body with non-`Void` return type—reuse
+      existing `E1012`, position points to the annotation
 
 ---
 
 ## Appendix A: Empirical Evidence
 
-All reproduced below on 0.8.0.
+The following were all reproduced on 0.8.0.
 
-| Code                                              | Empirically Verified              |
+| Code                                              | Empirical result                  |
 | ------------------------------------------------- | --------------------------------- |
 | `h: (n)->Int = { if n==0 { return 7 } return 8 }` | `h(0)=7`, `h(1)=8`                |
-| `f: (n)->Int = { n + 1 }`                         | `5` (tail expression works)       |
+| `f: (n)->Int = { n + 1 }`                         | `5` (tail expression usable)      |
 | `f: ()->Int = { if c {5} else {6} }`              | `void` (should be `5`, see #344)  |
 | `f: ()->Int = if c {5} else {6}`                  | `5`                               |
 | `f: ()->Int = { match ... }`                      | Correct                           |
 | `f: ()->Int = { while ...; i }`                   | Correct                           |
-| `{ y = 5; y }` as a binding expression            | `E3006` (see #343)                |
+| `{ y = 5; y }` as binding expression              | `E3006` (see #343)                |
 | `f: ()->Int = { "s" }`                            | Silently passes (see #345)        |
 | `x = if c { 19 }` (no `else`)                     | `19` (should be `Void`, see #346) |
 | `v = unsafe { 42 }`                               | `void` (see #347)                 |
 | `y = if c { 111 } else { 222 }`                   | `111`                             |
-| `while { if i==2 { return 42 } }`                 | `42` (pierces the loop)           |
-| Nested `{ { return 5 } return 1 }`                | `5` (pierces the bare block)      |
+| `while { if i==2 { return 42 } }`                 | `42` (pierces through loop)       |
+| Nested `{ { return 5 } return 1 }`                | `5` (pierces through bare block)  |
 
-## Appendix B: Design Decision Record
+## Appendix B: Design Decision Log
 
-| Decision                            | Decision                                                                                   | Reason                                                               | Date       |
-| ----------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- | ---------- |
-| `return` semantics                  | Function exit, type `Never`; does not return to the block                                  | Eliminate the category error of double duty                          | 2026-09-15 |
-| Block value exit                    | Tail expression (sole exit)                                                                | Minimum number of rules; consistent with Rust                        | 2026-09-15 |
-| No tail expression                  | Does not occur (a non-empty block always has a tail expression; empty block `{}` → `Void`) | If you want `Void`, write `Void` explicitly                          | 2026-09-15 |
-| Assignment's value                  | `Void`                                                                                     | Assignment is a statement, not value production                      | 2026-09-15 |
-| `if` without `else`                 | `Void`                                                                                     | When the condition is false, no branch can be evaluated              | 2026-09-15 |
-| Division of mechanism and safeguard | Language provides the mechanism, type checking provides the safeguard                      | The language does not promise to prevent "intent errors"             | 2026-09-15 |
-| Control-flow body / evaluation unit | Not bifurcated at the language level; treated as a difference in perspective               | Imperative and declarative coexist; avoid unprincipled special cases | 2026-09-15 |
-| Handling of error examples          | Delete directly; do not keep erroneous code                                                | Keeping seemingly usable erroneous code is misleading                | 2026-09-15 |
+| Decision                             | Determination                                                                     | Reason                                                            | Date       |
+| ------------------------------------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------- |
+| `return` semantics                   | Function exit, type `Never`; does not return to a block                           | Eliminates the category error of one word bearing two jobs        | 2026-09-15 |
+| Block's value exit                   | Tail expression (sole exit)                                                       | Fewest rules; consistent with Rust                                | 2026-09-15 |
+| No tail expression                   | Doesn't exist (non-empty block always has a tail expression; empty `{}` → `Void`) | If you want `Void`, write `Void` explicitly                       | 2026-09-15 |
+| Assignment's value                   | `Void`                                                                            | Assignment is a statement, not a value producer                   | 2026-09-15 |
+| `if` without `else`                  | `Void`                                                                            | No branch to evaluate when the condition is false                 | 2026-09-15 |
+| Division of mechanism and protection | Language provides mechanism, type checking provides protection                    | Language does not promise to prevent "wrong intent"               | 2026-09-15 |
+| Control body / evaluation unit       | Not split at the language level; treat as difference in perspective               | Imperative and declarative coexist; avoid unprincipled exceptions | 2026-09-15 |
+| Handling of erroneous examples       | Delete directly; do not retain erroneous code                                     | Retaining seemingly usable erroneous code will mislead            | 2026-09-15 |
 
 ## Appendix C: Glossary
 
-| Term                | Definition                                                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Tail expression     | The last expression in a block that produces a value; the block's value is it.                                     |
-| Non-local exit      | A control-flow transfer that crosses outer evaluation units and acts directly on the function boundary (`return`). |
-| Explosion principle | `Never <: T` holds for any `T`, enabling `Never` to be coerced to any type.                                        |
-| Value-bearing block | `= {}` / `spawn {}` / `unsafe {}`—the value exit is the tail expression.                                           |
-| join                | The multi-branch merge rule; `Never` branches do not participate in the join.                                      |
+| Term                  | Definition                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Tail expression       | The last value-producing expression in a block; the block's value equals it                                         |
+| Non-local exit        | A control-flow transfer that traverses outer evaluation units and acts directly on the function boundary (`return`) |
+| Bottoms-out principle | `Never <: T` holds for any `T`, so `Never` can be coerced to any type                                               |
+| Value-bearing block   | `= {}` / `spawn {}` / `unsafe {}`—the value exit is the tail expression                                             |
+| join                  | Multi-branch merge rule; `Never` branches don't participate in joining                                              |
 
-## Appendix D: Function / Block Value Ambiguity Adjudication
+## Appendix D: Function / Block Value Disambiguation
 
-### Problem
+### The Problem
 
-`name = { ... }` had been defined as two different things by two accepted RFCs: RFC-007 (function
-syntax) treated it as a function (the "simplest no-arg" form, `name = { return ... }`); RFC-010 /
-010a treats it as a block value (`= {}` is a value-bearing block, whose value is the tail
-expression). The same syntactic position with two semantics caused, implementationally,
-`callable_parts()` to register the block as a 0-arg function while `generate_block_ir` took it as a
-block value—the two layers of understanding are inconsistent.
+`name = { ... }` was once defined differently by two accepted RFCs: RFC-007 (function syntax)
+treated it as a function ("zero-arg minimal" `name = { return ... }`), while RFC-010 / 010a treated
+it as a block value (`= {}` is a value-bearing block, whose value is the tail expression). The same
+syntactic position, two sets of semantics, led in the implementation to `callable_parts()`
+registering the block as a 0-arg function while `generate_block_ir` takes it as a block value—the
+two levels of understanding are inconsistent.
 
-### Ruling: Content Determines the Type
+### Resolution: Content Determines the Type
 
-The same principle should span dicts and blocks:
+The same principle should pervade dictionaries and blocks:
 
-| Case                          | Result                    | Basis                                        |
-| ----------------------------- | ------------------------- | -------------------------------------------- |
-| `value` is a `Lambda` (`=>`)  | Function                  | `=>` is an explicit function constructor     |
-| Annotation is `Fn`            | Function                  | A function type has been declared            |
-| Annotation is a non-`Fn` type | Block value               | The annotation is the type (`x: Int = {..}`) |
-| **No annotation**             | **Inferred from content** | **The type is determined by the content**    |
+| Case                          | Result                    | Basis                                    |
+| ----------------------------- | ------------------------- | ---------------------------------------- |
+| `value` is a `Lambda` (`=>`)  | Function                  | `=>` is an explicit function constructor |
+| Annotation is `Fn`            | Function                  | Declared a function type                 |
+| Annotation is a non-`Fn` type | Block value               | Annotation is the type (`x: Int = {..}`) |
+| **No annotation**             | **Inferred from content** | **Type determined by content**           |
 
 ```yaoxiang
-x: Int = { y = 5; y }      // Block value: x = 5 (annotation is not Fn)
+x: Int = { y = 5; y }      // Block value: x = 5 (annotation is non-Fn)
 f: () -> Int = { 5 }       // Function: f() = 5 (annotation is Fn)
 f = { 5 }                  // Value: f = 5 (no annotation → content inference)
 f = {}                     // Value: f = Void (empty block)
@@ -466,42 +465,42 @@ b = () => 5                // Function: explicit lambda
 d = { "a": 1 }             // Value: Dict (content self-describing)
 ```
 
-**Why not "no annotation defaults to function"**: that would make `f = { 5 }` a function while
-`d = { "a": 1 }` is a dict—the same `{` at the same no-annotation position would give categorically
-different things. All three previously considered reasons fail:
+**Why not "no annotation defaults to function"**: that would make `f = { 5 }` a function, while
+`d = { "a": 1 }` is a dictionary—the same `{` in the same no-annotation position yielding different
+categories of things. The three reasons once considered all fail:
 
 1. Zero changes to existing code—migration cost is payable (211 files, 704 sites), not a semantic
    basis
 2. Function definition is high-frequency, block value is low-frequency—frequency is not a type rule
-3. RFC-007 has been accepted; modifying it is more expensive than modifying this RFC—wrong things
-   don't become right because they're "expensive" to change
+3. RFC-007 is already accepted; changing it costs more than changing this RFC—changing a wrong thing
+   doesn't make it right because it's "expensive"
 
-**The type is determined by the content**, regardless of whether an annotation is present. The
-annotation still declares the type (`f: () -> Int`), but its absence does not impose a default
-value.
+**Type is determined by content**, not by the presence or absence of an annotation. The annotation
+still declares the type (`f: () -> Int`), but does not impose a default value just because the
+annotation is absent.
 
-### Placement of `{}`
+### Where `{}` Falls
 
-The `Dict` grammar requires at least one key; `{}` has no content to rely on, so it takes the zero
-form of block structure → empty block, value `Void`. Use `dict.new()` for an empty dict. See spec
-[§2.9.1](../../../reference/language-spec/syntax.md) for details.
+`Dict`'s grammar requires at least one key; `{}` has no content to base on, so it takes the zero
+form of block structure → empty block, value `Void`. Use `dict.new()` for an empty dictionary. See
+spec [§2.9.1](../../../reference/language-spec/syntax.md).
 
 ### Accompanying Implementation Fixes
 
-1. **The annotation must not determine value-taking**: `generate_function_ir` and two other places
-   used `return_type != Void` as a threshold for taking the tail expression's value, causing the
-   tail expression of an unannotated `f = { 5 }` to be silently discarded and the function to return
-   `Void`. The annotation only determines whether to _check_, not whether to _evaluate_.
-2. **`callable_parts()` no longer unconditionally swallows blocks**: the dispatch is now uniformly
+1. **Annotation must not determine value-taking**: three places in `generate_function_ir` once used
+   `return_type != Void` as the threshold for taking the tail expression's value, causing the
+   no-annotation `f = { 5 }` to silently discard the tail expression and return `Void`. The
+   annotation only decides whether to _check_, not whether to _evaluate_.
+2. **`callable_parts()` no longer unconditionally swallows blocks**: dispatch is now uniformly
    determined by `Expr::block_binding_is_function(annotation, value)`.
 
 ## References
 
 - [RFC-007: Function Definition Syntax Unification](./007-function-syntax-unification.md)
 - [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md)
-- [RFC-038: Statement Termination and Line-Break Rules](038-statement-termination.md)
-- [RFC-030: assert Mechanism](./030-assert-mechanism.md) — refined-type application of `Never`
-- [Language Specification §Type System](/reference/language-spec/type-system.md) — `Never` / `Void`
-  as ⊥ / ⊤
+- [RFC-038: Statement Termination and Line Break Rules](038-statement-termination.md)
+- [RFC-030: assert Mechanism](./030-assert-mechanism.md) — Refined type application of `Never`
+- [Language Specification §Type System](/reference/language-spec/type-system.md) — ⊥ / ⊤ positioning
+  of `Never` / `Void`
 - [Rust Reference: `!` never type](https://doc.rust-lang.org/reference/types/never.html) —
-  homologous application of the explosion principle
+  Isomorphic application of the bottoms-out principle
