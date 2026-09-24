@@ -44,8 +44,10 @@ export default defineConfig({
   // 最后更新时间
   lastUpdated: true,
 
-  // 忽略死链接
-  ignoreDeadLinks: true,
+  // 死链检查：不忽略任何链接。相对链接按文件位置解析，站点内与跨根链接
+  // 均在构建时校验。原为 `true`（全局关闭，2026-05-29 引入），
+  // 导致 287 个站内链接失效仍一直构绿。
+  ignoreDeadLinks: false,
 
   // 代码高亮配置
   markdown: {
