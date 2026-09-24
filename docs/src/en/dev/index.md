@@ -1,10 +1,9 @@
 # Development Documentation
 
-YaoXiang language development-related documentation, for contributors and maintainers.
+Documentation related to YaoXiang language development, for contributors and maintainers.
 
-## Contents
+## Table of Contents
 
-- [Commit Convention](./commit-convention.md) - Git commit message convention
-- [Contributing Guide](./contributing.md) - How to participate in YaoXiang language development
-- [Branch Maintenance Guide](./branch-maintenance-guide.md) - Branch management strategy
-- [Development Plan](./plan/) - Project development plan and task tracking
+- [Commit Convention](./commit-convention.md) - Git commit message conventions
+- [Contributing Guide](./contributing.md) - How to contribute to YaoXiang language development
+- [Branch Maintenance Guide](./branch-maintenance-guide.md) - Branch management strategies

@@ -320,9 +320,7 @@ git checkout -b feature/new-feature
 ## 📚 相关文档
 
 - [提交规范](./commit-convention.md)
-- [代码审查指南](./code-review.md)
-- [发布流程](./release-guide.md)
-- [CI/CD 配置](../../.github/workflows/)
+- [测试规范](./test-specification.md)
 
 ---
 

@@ -1,12 +1,12 @@
-# Git ブランチメンテナンス手册
+# Git ブランチメンテナンスガイド
 
-> 本手册は YaoXiang プロジェクトの Git ブランチ管理戦略を定義し、コードベースの秩序ある開発と効率的なコラボレーションを確保することを目的としています。
+> 本ガイドは YaoXiang プロジェクトの Git ブランチ管理戦略を定義し、コードベースの秩序ある開発と効率的なコラボレーションを確保することを目的としています。
 
 ---
 
 ## 📋 目次
 
-- [ブランチタイプ規範](#ブランチタイプ規範)
+- [ブランチタイプ仕様](#ブランチタイプ仕様)
 - [命名規則](#命名規則)
 - [ブランチライフサイクル](#ブランチライフサイクル)
 - [ワークフロー](#ワークフロー)
@@ -16,33 +16,33 @@
 
 ---
 
-## 🏷️ ブランチタイプ規範
+## 🏷️ ブランチタイプ仕様
 
 ### コアブランチ（Core Branches）
 
-| ブランチ名 | 用途                   | ライフサイクル | 保護レベル |
-| ---------- | ---------------------- | -------------- | ---------- |
-| `main`     | 本番環境コード         | 永続           | 厳格保護   |
-| `dev`      | メイン開発ブランチ     | 永続           | 中程度保護 |
-| `master`   | メインブランチ（互換） | 永続           | 厳格保護   |
+| ブランチ名 | 用途             | ライフサイクル | 保護レベル |
+| ---------- | ---------------- | -------------- | ---------- |
+| `main`     | 本番環境コード   | 永続           | 厳格保護   |
+| `dev`      | メイン開発ブランチ | 永続         | 中程度保護 |
+| `master`   | メーンブランチ（互換性） | 永続   | 厳格保護   |
 
 ### 機能ブランチ（Feature Branches）
 
-| 接頭辞     | 用途                 | 命名例                                                | マージ先       |
-| ---------- | -------------------- | ----------------------------------------------------- | -------------- |
-| `feature/` | 新機能開発           | `feature/type-inference`<br>`feature/ownership-model` | `dev`          |
-| `bugfix/`  | 既知の欠陥を修正     | `bugfix/memory-leak`<br>`bugfix/parser-error`         | `dev`          |
-| `hotfix/`  | 緊急の本番問題修正   | `hotfix/security-patch`<br>`hotfix/crash-bug`         | `main` + `dev` |
-| `release/` | リリース準備ブランチ | `release/v0.8.0`<br>`release/v1.0.0`                  | `main`         |
+| プレフィックス | 用途             | 命名例                                              | マージ先       |
+| ------------- | ---------------- | --------------------------------------------------- | -------------- |
+| `feature/`    | 新機能開発       | `feature/type-inference`<br>`feature/ownership-model` | `dev`          |
+| `bugfix/`      | 既知の欠陥修正   | `bugfix/memory-leak`<br>`bugfix/parser-error`         | `dev`          |
+| `hotfix/`      | 緊急本番問題修正 | `hotfix/security-patch`<br>`hotfix/crash-bug`         | `main` + `dev` |
+| `release/`     | リリース準備ブランチ | `release/v0.8.0`<br>`release/v1.0.0`              | `main`         |
 
 ### 補助ブランチ（Auxiliary Branches）
 
-| 接頭辞      | 用途                   | 命名例                                                     | マージ先 |
-| ----------- | ---------------------- | ---------------------------------------------------------- | -------- |
-| `docs/`     | ドキュメント更新       | `docs/api-reference`<br>`docs/tutorial-update`             | `dev`    |
-| `ci/`       | CI/CD 設定変更         | `ci/add-deploy-script`<br>`ci/optimize-build`              | `dev`    |
-| `refactor/` | コードリファクタリング | `refactor/lexer-optimization`<br>`refactor/memory-manager` | `dev`    |
-| `test/`     | テスト関連変更         | `test/add-integration`<br>`test/performance-bench`         | `dev`    |
+| プレフィックス   | 用途           | 命名例                                                     | マージ先 |
+| --------------- | -------------- | ---------------------------------------------------------- | -------- |
+| `docs/`         | ドキュメント更新 | `docs/api-reference`<br>`docs/tutorial-update`             | `dev`    |
+| `ci/`           | CI/CD設定変更   | `ci/add-deploy-script`<br>`ci/optimize-build`              | `dev`    |
+| `refactor/`     | コードリファクタリング | `refactor/lexer-optimization`<br>`refactor/memory-manager` | `dev`    |
+| `test/`         | テスト関連変更 | `test/add-integration`<br>`test/performance-bench`          | `dev`    |
 
 ---
 
@@ -63,9 +63,9 @@ hotfix/security-vulnerability
 ### 命名規範
 
 1. **小文字を使用**：すべてのブランチ名は小文字を使用
-2. **ハイフンで区切る**：単語の区切りには `-` を使用し、アンダースコアは使用しない
+2. **ハイフンで区切る**：単語の区切りに `-` を使用し、アンダースコアは使用しない
 3. **説明的な命名**：ブランチ名はその目的を明確に表現すること
-4. **特殊文字を避ける**：スペース、ピリオド、その他の特殊文字を使用しない
+4. **特殊文字を避ける**：スペース、ドット、その他の特殊文字を使用しない
 5. **長さ制限**：ブランチ名は50文字を超えないこと
 
 ### 詳細な例
@@ -82,7 +82,7 @@ test/add-e2e-test-cases
 # ❌ 悪い命名
 Feature/NewFeature  # 大文字を使用
 bug_fix            # アンダースコアを使用
-hotfix/fix        # 説明が不明確
+hotfix/fix        # 説明が不鮮明
 feature/ADD_NEW_FEATURE_WITH_LOTS_OF_DETAILS_THAT_IS_TOO_LONG  # 長すぎる
 ```
 
@@ -90,22 +90,22 @@ feature/ADD_NEW_FEATURE_WITH_LOTS_OF_DETAILS_THAT_IS_TOO_LONG  # 長すぎる
 
 ## 🔄 ブランチライフサイクル
 
-### ブランチの作成
+### ブランチ作成
 
 ```bash
-# 1. 最新の dev ブランチから作成
+# 1. 最新devブランチから作成
 git checkout dev
 git pull origin dev
 git checkout -b feature/your-feature-name
 
-# 2. リモートブランチをプッシュ
+# 2. リモートブランチにプッシュ
 git push -u origin feature/your-feature-name
 ```
 
 ### ブランチ開発
 
 ```bash
-# 定期的に最新コードを同期
+# 最新コードを定期的に同期
 git checkout dev
 git pull origin dev
 git checkout feature/your-feature-name
@@ -117,11 +117,11 @@ git commit -m ":sparkles: feat(frontend): タイプ推論機能を追加"
 git push origin feature/your-feature-name
 ```
 
-### ブランチのマージ
+### ブランチマージ
 
 ```bash
-# 1. Pull Request を作成
-# 2. コードレビューが通った後
+# 1. Pull Requestを作成
+# 2. コードレビュー通過後
 git checkout dev
 git pull origin dev
 git merge --no-ff feature/your-feature-name
@@ -132,7 +132,7 @@ git branch -d feature/your-feature-name  # ローカル削除
 git push origin --delete feature/your-feature-name  # リモート削除
 ```
 
-### ブランチの削除
+### ブランチ削除
 
 ```bash
 # マージ済みの機能ブランチを削除
@@ -147,7 +147,7 @@ git branch --merged dev | grep feature | xargs -n 1 git branch -d
 
 ## 🚀 ワークフロー
 
-### 機能開発フロー
+### 機能開発ワークフロー
 
 ```mermaid
 graph TD
@@ -162,7 +162,7 @@ graph TD
     G --> I[CI/CD がトリガー]
 ```
 
-### 緊急修正フロー
+### 緊急修正ワークフロー
 
 ```mermaid
 graph TD
@@ -171,12 +171,12 @@ graph TD
     C --> D[コードをコミット]
     D --> E[PR を main + dev に作成]
     E --> F[クイックレビュー]
-    F --> G[main と dev に同時にマージ]
+    F --> G[main と dev に同時マージ]
     G --> H[hotfix をリリース]
     I[hotfix ブランチを削除]
 ```
 
-### リリースフロー
+### リリースワークフロー
 
 ```mermaid
 graph TD
@@ -186,7 +186,7 @@ graph TD
     D --> E[PR を main に作成]
     E --> F[最終レビュー]
     F --> G[main にマージ]
-    G --> H[バージョンチームを作成]
+    G --> H[バージョンブロック]
     H --> I[dev にマージバック]
     J[release ブランチをクリーンアップ]
 ```
@@ -195,31 +195,31 @@ graph TD
 
 ## 🛡️ ブランチ保護策略
 
-### 主要ブランチの保護
+### メインブランチ保護
 
 **main ブランチ**
 
 - 直接プッシュを禁止
-- PR によるマージが必須
-- 強制プッシュを禁止
+- PR 経由でのみマージ可能
+- フォースプッシュを禁止
 - コードレビューを要求
-- ステータスチェックが通過必須
+- ステータスチェックの通過を必須
 
 **dev ブランチ**
 
 - 直接プッシュを禁止（開発メンバー）
 - PR マージを要求
-- ステータスチェックが通過必須
+- ステータスチェックの通過を必須
 - 管理者の直接プッシュを許可
 
 ### ブランチ権限設定
 
-| ブランチタイプ | 開発者    | メンテナー | 管理者         |
-| -------------- | --------- | ---------- | -------------- |
-| `main`         | PR のみ   | PR のみ    | PR を承認      |
-| `dev`          | PR マージ | PR マージ  | 直接プッシュ可 |
-| `feature/*`    | 全権限    | 全権限     | 全権限         |
-| `hotfix/*`     | 全権限    | 全権限     | 全権限         |
+| ブランチタイプ | 開発者   | メンテナー | 管理者   |
+| ------------ | -------- | ---------- | -------- |
+| `main`       | PR のみ  | PR のみ    | PR 承認  |
+| `dev`        | PR マージ | PR マージ  | 直接プッシュ |
+| `feature/*`  | 完全権限 | 完全権限   | 完全権限 |
+| `hotfix/*`   | 完全権限 | 完全権限   | 完全権限 |
 
 ---
 
@@ -227,10 +227,10 @@ graph TD
 
 ### 1. ブランチ管理
 
-- **頻繁に同期**：定期的に `dev` ブランチから最新コードを取得
-- **アトミックコミット**：各コミットは関連する変更のみを含める
+- **頻繁な同期**：`dev` ブランチから最新コードを定期的に取得
+- **アトミックコミット**：各コミットは関連する変更のみを含む
 - **タイムリーなクリーンアップ**：マージ後は速やかに完了した機能ブランチを削除
-- **明確な説明**：ブランチ名とコミットメッセージは意図を明確に表現
+- **明確な説明**：ブランチ名とコミットメッセージは意図を明確に表現すること
 
 ### 2. コミット規範
 
@@ -238,25 +238,25 @@ graph TD
 
 ```bash
 # フォーマット
-:絵文字: type(scope): テーマ（日本語）
+:emoji: type(scope): テーマ（日本語）
 
 # 例
 :sparkles: feat(frontend): タイプ推論機能を追加
-:bug: fix(parser): パーサークラッシュの問題を修正
-:recycle: refactor(vm): 仮想マシンのメモリ管理をリファクタリング
+:bug: fix(parser): パーサークラッシュ問題を修正
+:recycle: refactor(vm): 仮想マシン内存管理をリファクタリング
 ```
 
 ### 3. Pull Request
 
 - **明確な説明**：変更内容と理由を詳細に説明
-- **이슈 の関連付け**：`Closes #123` を使用して関連する Issue を関連付け
-- **タイムリーな対応**：レビューの意見には速やかに返信
-- **十分なテスト**：すべてのテストが通ることを確認
+- ** 이슈との関連付け**：`Closes #123` を使用して関連する Issue との関連付け
+- **タイムリーな対応**：レビューのコメントには速やかに返信
+- **十分なテスト**：すべてのテストが通過していることを確認
 
 ### 4. コードレビュー
 
 - **機能の正しさ**：コードの機能が正しいか確認
-- **コード品質**：コードが規範是否符合するかチェック
+- **コード品質**：コードが規範に適合しているか確認
 - **テストカバレッジ**：適切なテストがあるか確認
 - **ドキュメント更新**：ドキュメントの更新が必要か確認
 
@@ -264,20 +264,20 @@ graph TD
 
 ## ❓ よくある質問
 
-### Q1: ブランチタイプはどのように選択すればよいですか？
+### Q1: ブランチタイプはどう選択すればよいですか？
 
 **回答：**
 
 - 新機能 → `feature/`
 - 既知の欠陥修正 → `bugfix/`
-- 緊急の本番修正 → `hotfix/`
+- 緊急本番修正 → `hotfix/`
 - ドキュメント更新 → `docs/`
 - コードリファクタリング → `refactor/`
 - テスト関連 → `test/`
 
 ### Q2: feature ブランチはどのブランチから作成すべきですか？
 
-**回答：** 常に `dev` ブランチから作成し、 最新の開発コードに基づいて機能を確保します：
+**回答：** 常により新しい開発コードに基づいて機能を作成するため、`dev` ブランチから作成してください：
 
 ```bash
 git checkout dev
@@ -285,45 +285,42 @@ git pull origin dev
 git checkout -b feature/new-feature
 ```
 
-### Q3: release ブランチはいつ作成しますか？
+### Q3: release ブランチはいつ作成すべきですか？
 
 **回答：**
 
-- 新しいバージョンのリリースを準備する時
-- 新機能の追加を凍結する必要がある時
-- 安定バージョンを专门的にテストする必要がある時
+- 新バージョンのリリース準備時
+- 新機能の追加をフリーズする必要がある時
+- 安定バージョンの专门テストが必要な時
 
-### Q4: ブランチの競合はどのように処理しますか？
+### Q4: ブランチの競合（コンフリクト）はどう処理すればよいですか？
 
 **回答：**
 
-1. 対象ブランチを更新：`git checkout dev && git pull origin dev`
+1. ターゲットブランチを更新：`git checkout dev && git pull origin dev`
 2. 機能ブランチに切り替え：`git checkout feature/your-branch`
 3. マージして競合を解決：`git rebase dev` または `git merge dev`
-4. 競合解決後に開発を続ける
+4. 競合解決後は開発を継続
 
-### Q5: hotfix ブランチはどのように処理しますか？
+### Q5: hotfix ブランチはどう処理すればよいですか？
 
 **回答：**
 
 1. `main` ブランチから作成：`git checkout main && git checkout -b hotfix/urgent-fix`
 2. 問題を修正してテスト
 3. `main` と `dev` に同時に PR を作成
-4. マージ後に即座にデプロイ
+4. マージ後は即座にデプロイ
 
-### Q6: ブランチの命名長さに制限はありますか？
+### Q6: ブランチ名の長さに制限はありますか？
 
-**回答：**
-50文字を超えないことを推奨し、簡潔で明了に保ちます。Git 自体はより長い名前をサポートしていますが、 長すぎる名前は可読性に影響します。
+**回答：** 50文字を超えないことを推奨し、簡潔で明了であるよう 保ってください。Git自体はより長い名前をサポートしていますが、長すぎる名前は可読性に影響します。
 
 ---
 
 ## 📚 関連ドキュメント
 
 - [コミット規範](./commit-convention.md)
-- [コードレビュガイドライン](./code-review.md)
-- [リリース流程](./release-guide.md)
-- [CI/CD 設定](../../.github/workflows/)
+- [テスト仕様](./test-specification.md)
 
 ---
 
@@ -332,12 +329,12 @@ git checkout -b feature/new-feature
 ### マージ済みブランチの一括クリーンアップ
 
 ```bash
-# dev にマージ済みのローカルブランチを削除
+# dev にマージされたローカルブランチを削除
 git checkout dev
 git pull origin dev
 git branch --merged dev | grep -E "^(feature|bugfix|docs|refactor|test)/" | xargs -n 1 git branch -d
 
-# マージ済みのリモートブランチを削除
+# マージされたリモートブランチを削除
 git remote prune origin
 ```
 
@@ -366,7 +363,6 @@ echo "ブランチを作成してプッシュしました: $BRANCH_TYPE/$BRANCH_
 
 ---
 
-> 💡
-> **ヒント**：ブランチの原子性と集中性を保ち、 各ブランチは1つのことだけを行い、 これによりコード管理をより明確で効率的にできます！
+> 💡 **ヒント**：ブランチの原子性と集中性を保ち、各ブランチは1つのことだけを担当するよう にすると、コード管理がより明確で効率的になります！
 
-> 📞 **サポート**：質問がある場合は、 GitHub Discussions で議論してください。
+> 📞 **サポート**：質問がある場合は、GitHub Discussions で議論してください。

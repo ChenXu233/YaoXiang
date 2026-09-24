@@ -54,7 +54,7 @@ grade = match score {
 print(grade)  // "B"
 ```
 
-> **注意**：范围模式 `90..100` 等属于进阶内容，将在 [模式匹配进阶](../pattern-matching.md)
+> **注意**：范围模式 `90..100` 等属于进阶内容，将在 [模式匹配进阶](../pattern-matching/index.md)
 > 中深入讲解。本章先聚焦于基础模式。
 
 ## 基础模式
@@ -177,4 +177,4 @@ print(result)  // "其他"
 | 顺序执行   | 从上到下，第一个匹配的分支生效         |
 
 > **下一步**：本文覆盖了 `match` 的基础用法。更高级的模式（嵌套模式、卫表达式、结构体解构等）请参阅
-> [模式匹配进阶](../pattern-matching.md)。
+> [模式匹配进阶](../pattern-matching/index.md)。

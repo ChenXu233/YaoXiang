@@ -8,82 +8,57 @@ updated: '2026-06-05'
 
 # RFC 016: Quantum-Native Support and Multi-Backend Integration
 
-> **Rejection Reason**: Insufficient prerequisites. The Primitive::Extension mechanism has not been
-> implemented, the language compiler is incomplete, and there is no actual user demand. Quantum
-> support should be reconsidered after the language matures, as a consumer of the Extension
-> mechanism.
+> **Rejection Reason**: Insufficient prerequisites. The Primitive::Extension mechanism has not been implemented, the language compiler is incomplete, and there is no actual user demand. Quantum support should be re-evaluated after the language matures as a consumer of the Extension mechanism.
 
 > **Dependencies**:
 >
-> - [RFC-001: Concurrent Model and Error Handling System](./001-concurrent-model-error-handling.md)
-> - [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](./008-runtime-concurrency-model.md)
-> - [RFC-009: Ownership Model Design](./009-ownership-model.md)
-> - [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md)
-> - [RFC-011: Generic Type System Design](./011-generic-type-system.md)
+> - [RFC-001: Concurrent Model and Error Handling System](../deprecated/001-concurrent-model-error-handling.md)
+> - [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](../accepted/008-runtime-concurrency-model.md)
+> - [RFC-009: Ownership Model Design](../accepted/009-ownership-model.md)
+> - [RFC-010: Unified Type Syntax](../accepted/010-unified-type-syntax.md)
+> - [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md)
 
-## Abstract
+## Summary
 
-This document defines the **quantum-native support** and **multi-backend integration** scheme for
-the YaoXiang language. Core idea: **YaoXiang's existing design (default Move, ownership flow-back,
-opaque types, DAG scheduler, generic constant parameters) naturally constitutes a complete
-foundation for quantum programming language, without introducing any new quantum-specific syntax**.
-We implement quantum-native semantics, maximize quantum utilization through automatic parallelism,
-hybrid classical programming, and multi-backend support by adding a few built-in types (`Qubit`,
-`Complex`, `Topology`) and built-in functions (quantum gates, measurements, topology constraints),
-utilizing existing language mechanisms.
+This document defines **quantum-native support** and **multi-backend integration** for YaoXiang. Core idea: **YaoXiang's existing design (default spawn, ownership reflux, opaque types, DAG scheduler, generic literal parameters) naturally forms a complete foundation for quantum programming language, without introducing any new quantum-specific syntax**. We add a small number of builtin types (`Qubit`, `Complex`, `Topology`) and builtin functions (quantum gates, measurement, topology constraints), and utilize existing language mechanisms to achieve quantum-native semantics, automatic parallelism to maximize quantum utilization, hybrid classical programming, and multi-backend support.
 
 ## Motivation
 
 ### Why Quantum-Native Support?
 
-The current quantum programming ecosystem suffers from severe fragmentation:
+The current quantum programming ecosystem has severe fragmentation:
 
-- **Low-level languages (QCIS, OpenQASM)**: Directly manipulate physical quantum gates, but lack
-  type systems and abstraction mechanisms, making it difficult to write complex algorithms.
-- **High-level frameworks (Qiskit, Cirq, Q#)**: Extend based on classical languages (Python, C#),
-  with quantum semantics implemented through libraries, leading to:
-  - No-cloning theorem for quantum states requires manual compliance by users (or reliance on linear
-    type systems retrofitted).
-  - Quantum gate operations are syntactically disjoint from classical code, creating a high learning
-    curve.
-- **Hybrid computing**: Quantum and classical parts require explicit separation, lacking a unified
-  dataflow model.
+- **Low-level languages (QCIS, OpenQASM)**: Directly manipulate physical quantum gates, but lack type systems and abstraction mechanisms, making it difficult to write complex algorithms.
+- **High-level frameworks (Qiskit, Cirq, Q#)**: Built on top of classical languages (Python, C#) extensions, quantum semantics implemented through libraries, leading to:
+  - Quantum no-cloning theorem must be manually enforced by users (or rely on linear type systems retrofitted later).
+  - Quantum gate operations are syntactically separated from classical code, high learning curve.
+- **Hybrid computing**: Quantum and classical parts need explicit separation, lacking a unified dataflow model.
 
-### Current Issues
+### Current Problems
 
-YaoXiang's existing design provides exactly the complete foundation to address these issues:
+YaoXiang's existing design provides exactly the complete foundation for solving these problems:
 
-| Quantum Computing Requirement            | YaoXiang Existing Design        | Description                                                                                                                    |
-| ---------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| No-cloning of quantum states             | **Default Move semantics**      | Assignment moves ownership; no implicit copying, naturally compliant with no-cloning theorem                                   |
-| Quantum gates as unitary transformations | **Ownership flow-back**         | `q = H(q)` consumes the original qubit, returns a new qubit, precisely matching gate semantics                                 |
-| Entangled states                         | **Opaque types**                | `BellPair` can only be operated as a whole; compiler tracks lifetime, preventing improper decomposition                        |
-| Physical topology constraints            | **Generic constant parameters** | `Qubit(Topology, N)` performs compile-time adjacency checking                                                                  |
-| Measurement collapse                     | **Empty state reuse**           | After measurement, qubit becomes empty and can be re-initialized, simulating quantum state collapse                            |
-| Automatic quantum circuit parallelism    | **DAG scheduler**               | Statements within a function are automatically parallelized based on data dependencies; independent gates execute concurrently |
-| Hybrid classical-quantum control flow    | **Unified syntax**              | Quantum and classical operations use the same `name: type = value` form                                                        |
+| Quantum Computing Requirement | YaoXiang Existing Design | Description |
+| ------------------- | ------------------ | ------------------------------------------------------- |
+| No-cloning of quantum states | **Default spawn Semantics** | Assignment moves ownership, no implicit copying, naturally complies with no-cloning theorem |
+| Quantum gates as unitary transformations | **Ownership Reflux** | `q = H(q)` consumes original qubit, returns new qubit, precisely corresponding to gate semantics |
+| Entangled states | **Opaque Types** | `BellPair` can only be operated as a whole, compiler tracks lifetime, prevents erroneous decomposition |
+| Physical topology constraints | **Generic Literal Parameters** | `Qubit(Topology, N)` compile-time checks adjacency for two-qubit gates |
+| Measurement collapse | **Void State Reuse** | After measurement, qubit becomes void, can be reinitialized, simulating quantum state collapse |
+| Automatic quantum circuit parallelism | **DAG Scheduler** | Statements within functions auto-parallelize based on data dependencies, independent gates naturally concurrent |
+| Hybrid classical-quantum control flow | **Unified Syntax** | Quantum and classical operations use the same `name: type = value` form |
 
-**YaoXiang is not "adding quantum support", but discovering that its design is already
-quantum-native.**
+**YaoXiang is not "adding quantum support", but discovering its design is already quantum-native.**
 
-> **Semantic Note**: This document uses YaoXiang's **ownership semantics** to express quantum
-> operations. The compiler guarantees no-cloning (ownership safety) at the compiler level. At the
-> language level, "consume-create" is a **syntactic expression of ownership transfer**—consume =
-> acquire ownership, return = transfer ownership. The underlying implementation can be true
-> reversible quantum gates (in-place quantum state modification), rather than truly "creating new
-> quantum states".
+> **Semantic Note**: This document uses YaoXiang's **ownership semantics** to express quantum operations. The compiler guarantees no-cloning (ownership safety) at the compiler level. At the language level, "consume-create" is a **syntax expression of ownership transfer**—consume = acquire ownership, return = transfer ownership. The underlying implementation can be true reversible quantum gates (in-place quantum state modification), not truly "creating new quantum states".
 
 ### Design Goals
 
-1. **Zero new syntax**: No introduction of keywords like `quantum` or `circuit`; all quantum
-   features are expressed through existing language mechanisms.
-2. **Type safety**: The compiler guarantees quantum states are not copied or used illegally.
-3. **Topology constraint compile-time checking**: Through generic constant parameters `Qubit(T, N)`,
-   verify whether two-qubit gate operations comply with physical topology at compile time.
-4. **Transparent multi-backend support**: The same quantum code can be compiled to QIR (general
-   ecosystem) or QCIS (domestic quantum instruction set), switched via command-line arguments.
-5. **Seamless hybrid classical**: Quantum computing can freely call classical functions; classical
-   code can also manipulate quantum data (via `ref` sharing, but constrained by ownership).
+1. **Zero new syntax**: No introduction of keywords like `quantum`, `circuit`; all quantum features expressed through existing language mechanisms.
+2. **Type safety**: Compiler guarantees quantum states are not copied or illegally used.
+3. **Compile-time topology constraint checking**: Using generic literal parameters `Qubit(T, N)` to verify at compile-time whether two-qubit gate operations comply with physical topology.
+4. **Transparent multi-backend**: The same quantum code can be compiled to QIR (universal ecosystem) or QCIS (domestic quantum instruction set), switched via command line arguments.
+5. **Seamless hybrid classical**: Quantum computing can freely call classical functions; classical code can also operate on quantum data (via `ref` sharing, but subject to ownership constraints).
 
 ## Proposal
 
@@ -91,17 +66,17 @@ quantum-native.**
 
 #### 1. Quantum Type System Mapping
 
-**Base types**:
+**Base Types**:
 
 ```yaoxiang
 Qubit: Type0 = primitive_qubit
 Complex: Type0 = { re: Float, im: Float }
 ```
 
-- `Qubit` is a first-class type, following ownership rules (Move, RAII).
-- `Complex` is used to represent amplitudes; the compiler can perform inline optimization.
+- `Qubit` is a first-class type, following ownership rules (spawn, RAII).
+- `Complex` is used for representing amplitudes, compiler can inline optimize.
 
-**Quantum gates as functions**:
+**Quantum Gates as Functions**:
 
 ```yaoxiang
 # Builtin function signatures
@@ -112,88 +87,81 @@ Z: (Qubit) -> Qubit = builtin_pauli_z
 CNOT: (control: Qubit, target: Qubit) -> { Qubit, Qubit } = builtin_cnot
 ```
 
-- All gates consume input qubits, returning new qubits (or entangled pairs). The ownership flow-back
-  syntax `q = H(q)` directly corresponds to mathematical semantics.
-- Multi-qubit gates return structs, with results obtained through pattern matching or field access.
+- All gates consume input qubits, return new qubits (or entangled pairs). Ownership reflux syntax `q = H(q)` directly corresponds to mathematical semantics.
+- Multi-qubit gates return structs, accessed via pattern matching or field access.
 
 **Measurement**:
 
 ```yaoxiang
-measure: (Qubit) -> Int = builtin_measure   # Consumes qubit, returns classical bit
+measure: (Qubit) -> Int = builtin_measure   # Consume qubit, return classical bit
 measure_all: (List(Qubit)) -> List(Int) = builtin_measure_all
 ```
 
-- After measurement, the qubit is consumed (becomes empty); users can re-initialize through empty
-  state reuse.
+- After measurement, qubit is consumed (becomes void), user can reinitialize via void state reuse.
 
 **Initialization**:
 
 ```yaoxiang
-qubit: (Int) -> Qubit = builtin_qubit   # 0 or 1 initializes basis state
+qubit: (Int) -> Qubit = builtin_qubit   # 0 or 1 initialize basis state
 ```
 
 #### 2. Entanglement and Opaque Type Encapsulation
 
-Encapsulate entangled pairs as opaque types, providing only composite operations and prohibiting
-decomposition:
+Entangled pairs are encapsulated as opaque types, providing only combined operations, prohibiting decomposition:
 
 ```yaoxiang
 # Builtin opaque type
 BellPair: Type0 = primitive_bell_pair
 
-# Builtin functions - can only operate on the whole
+# Builtin functions - can only operate as a whole
 CNOT: (Qubit, Qubit) -> BellPair
 measure_bell: (BellPair) -> { Int, Int }
 split_bell: (BellPair) -> { Qubit, Qubit }  # Split entangled pair (use with caution)
 apply_cnot_to_bell: (BellPair, Qubit) -> BellPair
 ```
 
-**Key design**:
+**Key Design Points**:
 
-- No field accessors are provided; operations are only allowed on the whole through builtin
-  functions.
-- `measure_bell(bp)` consumes the entire entangled pair at once, returning classical bits.
-- The compiler can track the complete lifecycle of entangled pairs.
+- No field accessors provided, only allow whole operation via builtin functions
+- `measure_bell(bp)` consumes the entire entangled pair at once, returns classical bits
+- Compiler can track the complete lifetime of entangled pairs
 
 **Comparison with Python/Qiskit**:
 
 ```
-Python (Qiskit): Runtime circuit construction; errors may only be discovered after submission
-YaoXiang:       Compile-time capture of most logical errors
+Python (Qiskit): Circuit built at runtime, errors may only be discovered after submission
+YaoXiang:        Most logic errors caught at compile-time
 ```
 
-**Remaining 10%** (such as physical decoherence, gate errors) are hardware issues, not resolvable by
-the language.
+**Remaining 10%** (such as physical decoherence, gate errors) are hardware issues, not solvable by the language.
 
 #### 3. Physical Topology Constraints
 
-A quantum chip is a constrained topology graph, **not any two qubits can perform two-qubit
-gates**—they must be adjacent. YaoXiang uses **generic constant parameters** to guarantee topology
-constraints at compile time.
+Quantum chips are constrained topology graphs, **not any two qubits can perform two-qubit gates**, they must be adjacent. YaoXiang uses **generic literal parameters** to guarantee topology constraints at compile-time.
 
-**Topology type definition**:
+**Topology Type Definition**:
 
 ```yaoxiang
-# Topology as a type, containing adjacency matrix
+# Topology as type, containing adjacency matrix
 Topology: Type0 = primitive_topology
 
 # Builtin topology constants
-Linear8: Topology = topology(8)          # Linear 8-qubit: 0-1-2-3-4-5-6-7
+Linear8: Topology = topology(8)          # Linear 8-bit: 0-1-2-3-4-5-6-7
 Grid3x3: Topology = topology(3, 3)        # 3x3 grid
-Ring16: Topology = topology(16, ring)    # Ring 16-qubit
+Ring16: Topology = topology(16, ring)    # Ring 16-bit
 ```
 
-**Qubit binds topology and position**:
+**Qubit Binding to Topology and Position**:
 
 ```yaoxiang
-# Qubit(T, N) - T is the topology type, N is a constant position parameter
+# Qubit(T, N) - T is topology type, N is literal position parameter
 q0: Qubit(Grid3x3, 0)   # Grid3x3 topology, position (0,0)
 q1: Qubit(Grid3x3, 1)   # Grid3x3 topology, position (0,1)
 q2: Qubit(Grid3x3, 2)   # Grid3x3 topology, position (0,2)
 q3: Qubit(Grid3x3, 3)   # Grid3x3 topology, position (1,0)
 ```
 
-**Gate operations auto-constrained**:
+**Gate Operations with Automatic Constraints**:
 
 ```yaoxiang
 # CNOT type signature with topology constraint
@@ -201,34 +169,34 @@ CNOT: (T: Topology, I: Int, J: Int) -> (
     (Qubit(T, I), Qubit(T, J)) -> { Qubit(T, I), Qubit(T, J) }
 ) when adjacent(T, I, J)
 
-# Compile-time checking
-CNOT(q0, q1)  # ✅ (0,0) is adjacent to (0,1) in Grid3x3
-CNOT(q0, q2)  # ❌ Compile error: (0,0) is not adjacent to (0,2)
+# Compile-time check
+CNOT(q0, q1)  # ✅ In Grid3x3, (0,0) and (0,1) are adjacent
+CNOT(q0, q2)  # ❌ Compile error: (0,0) and (0,2) are not adjacent
 ```
 
-**`adjacent` compile-time constraint**:
+**`adjacent` Compile-Time Constraint**:
 
-- `adjacent` is a compile-time function, using the topology's adjacency matrix for static checking.
-- With constant indices, 100% compile-time verification.
-- With dynamic indices, generates runtime checking code.
+- `adjacent` is a compile-time function, using topology's adjacency matrix for static checking
+- For literal indices, 100% compile-time verification
+- For dynamic indices, generates runtime check code
 
-**Virtual-to-physical mapping**:
+**Virtual-to-Physical Mapping**:
 
 ```yaoxiang
-# Don't know specific physical position at compile time? Use type inference
-q = qubit(Grid3x3)  # Auto-assign position 0, subsequent derivation
+# Don't know specific physical position at compile-time? Use type inference
+q = qubit(Grid3x3)  # Auto-allocate position 0, subsequent derivation
 ```
 
-#### 4. Ownership and Linear Flow of Quantum States
+#### 4. Ownership and Quantum State Linearity
 
-All quantum operations follow Move semantics, ensuring qubits are not copied:
+All quantum operations follow spawn semantics, ensuring qubits are not copied:
 
 ```yaoxiang
 q = qubit(0)
-q2 = q          # ❌ Compile error: q has been moved, cannot be used again
+q2 = q          # ❌ Compile error: q has already been spawned, cannot use again
 q = H(q)        # ✅ Consume q, return new q
-measure(q)      # ✅ Consume q, after which q becomes empty
-q = qubit(0)    # ✅ Empty state reuse
+measure(q)      # ✅ Consume q, after which q becomes void
+q = qubit(0)    # ✅ Void state reuse
 ```
 
 #### 4. Automatic Parallelism and DAG Scheduling
@@ -239,18 +207,17 @@ Under Standard or Full Runtime, the DAG scheduler automatically analyzes quantum
 apply_two_qubit_gates: () -> {Qubit, Qubit} = () => {
     q1 = H(qubit(0))
     q2 = H(qubit(0))
-    # The two lines above have no data dependency; DAG automatically parallelizes execution
-    CNOT(q1, q2)   # Depends on q1 and q2, automatically waits
+    # The above two lines have no data dependency, DAG auto-parallelizes execution
+    CNOT(q1, q2)   # Depends on q1 and q2, auto-waits
 }
 ```
 
-- The scheduler uses `num_workers` configuration (number of physical quantum processors) to achieve
-  true parallelism.
-- Users don't need to manually arrange gate order; they just describe the dataflow.
+- Scheduler utilizes `num_workers` configuration (number of physical quantum processors) to achieve true parallelism.
+- Users don't need to manually arrange gate order, just describe dataflow.
 
 #### 5. Hybrid Classical Computing
 
-Classical and quantum code are fully integrated:
+Classical and quantum code fully integrate:
 
 ```yaoxiang
 grover_search: (target: Int) -> Int = () => {
@@ -267,41 +234,32 @@ grover_search: (target: Int) -> Int = () => {
 }
 ```
 
-- Quantum gates and classical control flow can be freely mixed within the same function.
-- The ownership system ensures quantum variables are not incorrectly copied in classical branches.
+- Quantum gates and classical control flow can be arbitrarily mixed within the same function.
+- Ownership system ensures quantum variables are not incorrectly copied in classical branches.
 
 #### 6. Multi-Backend Support Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   YaoXiang      │     │   Type Check    │     │   DAG IR        │
-│   Source        │     │   + Ownership   │     │   (Dataflow     │
-│   (Unified      │────▶│   Analysis      │────▶│   Graph)        │
-│   Syntax)       │     │                 │     │                 │
+│   YaoXiang Source │     │   Type Checking │     │   DAG Intermediate│
+│   (Unified Syntax)│────▶│   + Ownership Analysis │────▶│   (Dataflow Graph) │
 └─────────────────┘     └─────────────────┘     └────────┬────────┘
                                                           │
                                                           ▼
                           ┌─────────────────────────────────────────────┐
-                          │           Code Generation Backends         │
-                          │              (Pluggable)                  │
+                          │           Code Generation Backend (Pluggable) │
                           ├─────────────────┬───────────────────────────┤
-                          │  QIR Backend   │  QCIS Backend             │
-                          │  (General      │  (Domestic Quantum        │
-                          │   Ecosystem)   │   Instruction Set)        │
+                          │  QIR Backend    │  QCIS Backend              │
+                          │  (Universal Ecosystem) │ (Domestic Quantum ISA) │
                           ├─────────────────┼───────────────────────────┤
-                          │  - Output .ll  │  - Output .qcis text      │
-                          │  - Adapt to    │  - Adapt to CAS/          │
-                          │    multiple    │    Qudyn hardware         │
-                          │    QPUs        │                           │
+                          │  - Output .ll file │  - Output .qcis text     │
+                          │  - Adapt multiple QPUs │ - Adapt CAS/QuantumCTek hardware │
                           └─────────────────┴───────────────────────────┘
 ```
 
-- **Compilation flow**: Unified frontend → DAG construction → Backend selection → Target code
-  generation.
-- **QIR Backend**: Maps DAG nodes to QIR's quantum gate intrinsics, generates LLVM bitcode, enabling
-  further LLVM optimization.
-- **QCIS Backend**: Serializes DAG to QCIS instructions (e.g., `H q0`), supporting direct submission
-  to quantum chip consoles.
+- **Compilation Flow**: Unified frontend → DAG construction → Backend selection → Target code generation.
+- **QIR Backend**: Maps DAG nodes to QIR quantum gate intrinsics, generates LLVM bitcode, can further leverage LLVM optimizations.
+- **QCIS Backend**: Serializes DAG to QCIS instructions (such as `H q0`), supports direct submission to quantum chip console.
 
 ### Examples
 
@@ -312,7 +270,7 @@ bell_measure: () -> {Int, Int} = () => {
     q1 = H(qubit(0))
     q2 = H(qubit(0))
     bell = CNOT(q1, q2)  # Returns BellPair opaque type
-    result = measure_bell(bell)  # Measure two bits at once
+    result = measure_bell(bell)  # Measure both bits at once
     return result
 }
 ```
@@ -330,7 +288,7 @@ teleport: (msg: Qubit, bell: BellPair) -> Qubit = (msg, bell) => {
     a1 = measure(msg)
     a2 = measure(alice_qubit)
 
-    # Classical information transmission (automatically handled by scheduler for dependencies)
+    # Classical message passing (handled automatically by scheduler)
     # Bob's operations
     if a2 == 1 { bob_qubit = X(bob_qubit) }
     if a1 == 1 { bob_qubit = Z(bob_qubit) }
@@ -342,7 +300,7 @@ teleport: (msg: Qubit, bell: BellPair) -> Qubit = (msg, bell) => {
 
 ### Builtin Types and Function Definitions
 
-Add in the `compiler/builtins` module:
+In the `compiler/builtins` module, add:
 
 ```rust
 builtins.insert("Qubit", Ty::Primitive(Primitive::Qubit));
@@ -366,155 +324,126 @@ builtins.insert("measure", Ty::Function(vec![Ty::Qubit], Ty::Primitive(Primitive
 builtins.insert("qubit", Ty::Function(vec![Ty::Primitive(Primitive::Int)], Ty::Qubit));
 ```
 
-### Special Handling of Qubit by the Ownership Checker
+### Ownership Checker Special Handling for Qubit
 
-- `Qubit` is marked as `!Copy` (default Move), prohibiting implicit copying.
-- The measurement function `measure` takes `Qubit` as a parameter (pass-by-value), consuming
-  ownership.
-- Fields in the record type returned by multi-qubit gates are all `Qubit`, still subject to
-  ownership rules.
+- `Qubit` is marked `!Copy` (default spawn), preventing implicit copying.
+- Measurement function `measure` takes `Qubit` parameter (by value), consuming ownership.
+- Multi-qubit gate returned record types have all fields as `Qubit`, still subject to ownership rules.
 
-### DAG Scheduler Optimization for Quantum Gates
+### DAG Scheduler Quantum Gate Optimization
 
-- Quantum gate nodes are treated as pure functions (no side effects), allowing the scheduler to
-  arbitrarily reorder independent gates.
-- When the scheduler outputs "quantum instruction sequence", it preserves data dependencies and
-  groups parallel gates (applicable to multi-qubit processors).
-- Supports configuring `--target-num-qubits` and `--target-topology` for subsequent layout and
-  routing (future extension).
+- Quantum gate nodes are treated as pure functions (no side effects), scheduler can arbitrarily reorder independent gates.
+- When scheduler outputs "quantum instruction sequence", it preserves data dependencies and groups parallel gates (applicable to multi-qubit processors).
+- Supports configuring `--target-num-qubits` and `--target-topology` for future layout and routing (future expansion).
 
 ### QIR Backend Detailed Mapping
 
-| YaoXiang Operation | QIR Instruction                                                   |
-| ------------------ | ----------------------------------------------------------------- |
-| `H(q)`             | `call void @__quantum__qis__h__body(%Qubit* %q)`                  |
-| `CNOT(q1, q2)`     | `call void @__quantum__qis__cnot__body(%Qubit* %q1, %Qubit* %q2)` |
-| `measure(q)`       | `%result = call i1 @__quantum__qis__mz__body(%Qubit* %q)`         |
-| `qubit(0)`         | `%q = call %Qubit* @__quantum__rt__qubit_allocate()`              |
+| YaoXiang Operation | QIR Instruction |
+| -------------- | ----------------------------------------------------------------- |
+| `H(q)` | `call void @__quantum__qis__h__body(%Qubit* %q)` |
+| `CNOT(q1, q2)` | `call void @__quantum__qis__cnot__body(%Qubit* %q1, %Qubit* %q2)` |
+| `measure(q)` | `%result = call i1 @__quantum__qis__mz__body(%Qubit* %q)` |
+| `qubit(0)` | `%q = call %Qubit* @__quantum__rt__qubit_allocate()` |
 
-The QIR backend uses LLVM's `-O2` for further optimization and outputs bitcode compatible with the
-QIR Alliance.
+QIR backend leverages LLVM's `-O2` for further optimization, and outputs QIR Alliance compatible bitcode.
 
 ### QCIS Backend Detailed Mapping
 
-| YaoXiang Operation                       | QCIS Instruction                                                 |
-| ---------------------------------------- | ---------------------------------------------------------------- |
-| `H(q)` (q corresponds to physical bit 2) | `H 2`                                                            |
-| `CNOT(q1,q2)` (q1→bit 0, q2→bit 1)       | `CNOT 0 1`                                                       |
-| `measure(q)` (bit 0)                     | `M 0`                                                            |
-| `qubit(0)` initialization                | Implicit in first usage instruction, no extra instruction needed |
+| YaoXiang Operation | QCIS Instruction |
+| ------------------------------------ | ------------------------------------ |
+| `H(q)` (q corresponds to physical qubit 2) | `H 2` |
+| `CNOT(q1,q2)` (q1→qubit 0, q2→qubit 1) | `CNOT 0 1` |
+| `measure(q)` (qubit 0) | `M 0` |
+| `qubit(0)` initialization | Implicit in first usage instruction, no extra instruction needed |
 
-- A mapping table from virtual qubits (YaoXiang variables) to physical bits must be maintained.
-- Topology constraint checking supported (future implementation).
+- Must maintain mapping from virtual qubits (YaoXiang variables) to physical qubits.
+- Supports topology constraint checking (future implementation).
 
 ### Hybrid Classical Code Generation
 
-- Classical parts (such as loops, conditions, integer operations) generate native code (x86/ARM) as
-  usual, interacting with the quantum backend through FFI or embedded calls.
-- In the QIR backend, classical parts can be lowered to LLVM IR, compiled together with QIR.
+- Classical parts (loops, conditions, integer operations) normally generate native code (x86/ARM), interacting with quantum backend via FFI or embedded calls.
+- In QIR backend, classical parts can be lowered to LLVM IR, compiled together with QIR.
 
 ### Type System Impact
 
-- New `Qubit` and `Complex` primitive types added.
-- `Qubit` automatically has Move semantics, prohibiting copying.
-- Quantum gate function signatures need to be registered in the type system.
+- New primitive types `Qubit` and `Complex` added.
+- `Qubit` automatically has spawn semantics, copying prohibited.
+- Quantum gate function signatures need registration in type system.
 
 ### Backward Compatibility
 
 - ✅ Fully backward compatible
-- New builtin types and functions do not affect existing code
-- Quantum features are optional, introducing no extra overhead when not enabled
+- New builtin types and functions don't affect existing code
+- Quantum features are optional, no extra overhead when not enabled
 
 ## Trade-offs
 
 ### Advantages
 
-- **No new syntax**: Developers only need to learn a few builtin functions to write quantum
-  programs.
-- **Type safety**: The ownership system automatically prevents qubit copying, avoiding common
-  quantum programming errors.
-- **Automatic parallelism**: The DAG scheduler provides gate-level parallelism for free, without
-  additional compiler optimization.
-- **Ecosystem compatibility**: The QIR backend enables YaoXiang to run on multiple quantum cloud
-  platforms; the QCIS backend ensures autonomy and controllability.
-- **Hybrid capability**: Classical-quantum fusion is natural, suitable for writing complex quantum
-  algorithms (such as classical control in Shor and Grover).
+- **No new syntax**: Developers only need to learn a few builtin functions to write quantum programs.
+- **Type safety**: Ownership system automatically prevents qubit copying, avoiding common quantum programming errors.
+- **Automatic parallelism**: DAG scheduler provides gate-level parallelism for free, no additional compiler optimization needed.
+- **Ecosystem compatibility**: QIR backend allows YaoXiang to run on multiple quantum cloud platforms; QCIS backend ensures autonomy and control.
+- **Hybrid capability**: Classical-quantum integration is natural, suitable for writing complex quantum algorithms (like classical control in Shor, Grover).
 
 ### Disadvantages
 
-- **Static qubit count**: The current design assumes qubit count is known at compile time; dynamic
-  allocation requires `List(Qubit)`, but `List`'s heap allocation may introduce extra overhead (can
-  be mitigated through optimization).
-- **Post-measurement reuse**: Empty state reuse allows re-initialization of qubits, but physical
-  qubits may have relaxation times, requiring runtime system handling (currently user
-  responsibility).
-- **Dynamic topology mapping**: When physical topology is only known at runtime, compile-time
-  checking cannot take effect, requiring runtime checking code generation (current version only
-  supports static checking).
+- **Static qubit count**: Current design assumes qubit count is known at compile-time; dynamic allocation via `List(Qubit)`, but `List`'s heap allocation may introduce extra overhead (can be mitigated via optimization).
+- **Post-measurement reuse**: Void state reuse allows re-initializing qubits, but physical qubits may have relaxation time, requiring runtime system handling (currently user responsibility).
+- **Dynamic topology mapping**: When physical topology is only known at runtime, compile-time checking cannot take effect, requiring runtime check code generation (current version only supports static checking).
 
-## Alternative Approaches
+## Alternative Solutions
 
-| Approach                                           | Why Not Chosen                                                                                                  |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Introduce `quantum` keyword and `circuit` type     | Adds new syntax, high learning cost, violates YaoXiang's concise design principle                               |
-| Implement quantum support only as a library        | Cannot leverage compiler guarantees for quantum state safety; cannot deeply integrate with DAG scheduler        |
-| Wait for quantum hardware to mature before support | Miss the critical window period for quantum programming language design                                         |
-| Reuse existing quantum frameworks (like Qiskit)    | Quantum semantics implemented through libraries; cannot gain type system and ownership system safety guarantees |
-| Design a separate quantum sublanguage              | Increases language complexity; high maintenance cost                                                            |
+| Approach | Why Not Chosen |
+| -------------------------------------- | ---------------------------------------------------------- |
+| Introduce `quantum` keyword and `circuit` type | Adds new syntax, high learning cost, violates YaoXiang's simplicity design principle |
+| Implement quantum support only as a library | Cannot use compiler to guarantee quantum state safety, cannot deeply integrate with DAG scheduler |
+| Wait for quantum hardware to mature before supporting | Misses critical window for quantum programming language design |
+| Reuse existing quantum frameworks (like Qiskit) | Quantum semantics implemented through library, cannot get type system and ownership system safety guarantees |
+| Design separate quantum sublanguage | Increases language complexity, high maintenance cost |
 
 ## Implementation Strategy
 
-### Phase Breakdown
+### Phase Division
 
-| Phase   | Duration | Content                                                                                                                                                             |
-| ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 1 | 1 month  | Basic quantum types and builtin functions: Add `Qubit`, `Complex` types to compiler; implement type checking for builtin functions; extend ownership checker        |
-| Phase 2 | 1 month  | DAG scheduler recognizes quantum gates: Modify DAG construction logic; mark quantum gates as pure functions; implement parallel gate grouping output                |
-| Phase 3 | 2 months | QIR backend prototype: Implement DAG to QIR code generator; integrate LLVM; connect QIR simulator for verification                                                  |
-| Phase 4 | 2 months | QCIS backend prototype: Implement DAG to QCIS instruction translator; design virtual-physical bit mapping; connect domestic quantum platform for verification       |
-| Phase 5 | 2 months | Hybrid classical enhancement: Ensure correct code generation when classical control flow intersects with quantum gates; support `List(Qubit)`; add example programs |
-| Phase 6 | 2 months | Optimization and documentation: Implement basic layout and routing; write user guide and quantum programming tutorial; release preview version                      |
+| Phase | Duration | Content |
+| ------- | ----- | -------------------------------------------------------------------------------------------------------- |
+| Phase 1 | 1 month | Basic quantum types and builtin functions: add `Qubit`, `Complex` types to compiler, implement type checking for builtin functions, extend ownership checker |
+| Phase 2 | 1 month | DAG scheduler recognizes quantum gates: modify DAG construction logic, mark quantum gates as pure functions, implement parallel gate grouping output |
+| Phase 3 | 2 months | QIR backend prototype: implement DAG to QIR code generator, integrate LLVM, connect QIR simulator for verification |
+| Phase 4 | 2 months | QCIS backend prototype: implement DAG to QCIS instruction translator, design virtual-physical qubit mapping, connect domestic quantum platform for verification |
+| Phase 5 | 2 months | Hybrid classical enhancement: ensure correct code generation for classical control flow interleaved with quantum gates, support `List(Qubit)`, add example programs |
+| Phase 6 | 2 months | Optimization and documentation: implement basic layout and routing, write user guide and quantum programming tutorial, release preview version |
 
 ### Risks
 
-1. **Quantum hardware availability**: Depends on the availability of external quantum simulators and
-   real QPUs.
-   - **Mitigation**: Prioritize connecting to open-source simulators (QIR runner, Qiskit Aer); real
-     QPUs as a long-term goal.
+1. **Quantum hardware availability**: Depends on external quantum simulator and real QPU availability.
+   - **Mitigation**: Prioritize connecting to open-source simulators (QIR runner, Qiskit Aer), real QPU as long-term goal.
 
 2. **Backend implementation complexity**: QIR and QCIS specifications may change.
-   - **Mitigation**: Abstract code generation interface; isolate backend differences; facilitate
-     subsequent adaptation.
+   - **Mitigation**: Abstract code generation interface, isolate backend differences, facilitate subsequent adaptation.
 
-3. **Performance uncertainty**: Quantum programs have different performance characteristics than
-   classical programs.
-   - **Mitigation**: Provide performance profiling tools, allowing users to understand gate-level
-     parallelism effects.
+3. **Performance uncertainty**: Quantum program performance characteristics differ from classical programs.
+   - **Mitigation**: Provide performance profiling tools, let users understand gate-level parallelism effects.
 
 ## Open Questions
 
-- [x] **Topology constraints**: Implemented through `Qubit(Topology, N)` generic constant parameters
-      for compile-time checking.
-- [ ] **Dynamic quantum registers**: How should `List(Qubit)` be mapped in the QCIS backend?
-      Physical bits of corresponding quantity can be generated, but requires runtime allocation
-      mechanism.
-- [ ] **Error mitigation**: Should builtin error mitigation constructs (such as dynamic decoupling)
-      be provided? Can be implemented as a library first.
-- [ ] **Interoperability with existing quantum SDKs**: Can QASM or QIR modules be imported? FFI can
-      be considered in the future.
-- [ ] **Automatic layout and routing**: When virtual qubit count exceeds physical qubit count, how
-      to auto-map?
+- [x] **Topology constraints**: Already implemented via `Qubit(Topology, N)` generic literal parameter compile-time checking.
+- [ ] **Dynamic quantum registers**: How does `List(Qubit)` map in QCIS backend? Can generate corresponding number of physical qubits, but needs runtime allocation mechanism.
+- [ ] **Error mitigation**: Whether to provide builtin error mitigation (like dynamical decoupling) constructs? Can first implement as library.
+- [ ] **Interoperability with existing quantum SDKs**: Can import QASM or QIR modules? Can consider FFI in the future.
+- [ ] **Automatic layout and routing**: When virtual qubit count exceeds physical qubit count, how to auto-map?
 
 ## References
 
 - [QIR Specification](https://github.com/qir-alliance/qir-spec)
-- [QCIS: A Quantum Control Instruction Set](https://arxiv.org/abs/2005.12534) (USTC/Qudyn)
+- [QCIS: A Quantum Control Instruction Set](https://arxiv.org/abs/2005.12534) (USTC/QuantumCTek)
 - [Rust Quantum Computing Examples](https://github.com/Rust-GPU/rust-gpu)
 - [Qunity: A Unified Language for Quantum and Classical Computing](https://qunity-lang.org) (2025)
 
 ---
 
-## Lifecycle and Disposition
+## Lifecycle and Fate
 
 ```
 ┌─────────────┐
@@ -523,8 +452,7 @@ QIR Alliance.
        │
        ▼
 ┌─────────────┐
-│  Under      │  ← Community discussion
-│  Review     │
+│  Under Review │  ← Community discussion
 └──────┬──────┘
        │
        ├──────────────────┐
@@ -536,16 +464,15 @@ QIR Alliance.
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
 │   accepted/ │    │    rfc/     │
-│  (Official  │    │ (Preserved  │
-│   Design)   │    │   In Place) │
+│ (formal design) │    │ (preserved in place) │
 └─────────────┘    └─────────────┘
 ```
 
 ### Status Description
 
-| Status           | Location                 | Description                                                   |
-| ---------------- | ------------------------ | ------------------------------------------------------------- |
-| **Draft**        | `docs/design/rfc/draft/` | Author draft; awaiting submission for review                  |
-| **Under Review** | `docs/design/rfc/`       | Open for community discussion and feedback                    |
-| **Accepted**     | `docs/design/accepted/`  | Becomes official design document; enters implementation phase |
-| **Rejected**     | `docs/design/rfc/`       | Preserved in RFC directory; status updated                    |
+| Status | Location | Description |
+| ---------- | ------------------------ | ------------------------------ |
+| **Draft** | `docs/design/rfc/draft/` | Author draft, awaiting review submission |
+| **Under Review** | `docs/design/rfc/` | Open for community discussion and feedback |
+| **Accepted** | `docs/design/accepted/` | Becomes formal design document, enters implementation phase |
+| **Rejected** | `docs/design/rfc/` | Preserved in RFC directory, status updated |

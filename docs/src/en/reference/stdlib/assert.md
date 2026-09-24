@@ -1,6 +1,6 @@
 ---
 title: 'std.assert'
-description: 'Assertion'
+description: 'Assertions'
 ---
 
 # std.assert
@@ -15,7 +15,7 @@ use std.assert
 
 <!-- stdlib:table:assert start -->
 
-| Function | Signature                            |
+| Function | Signature                           |
 | -------- | ------------------------------------ |
 | `assert` | `(cond: Bool, ?msg: String) -> Void` |
 
@@ -36,23 +36,20 @@ assert: (cond: Bool, ?msg: String) -> Void
 Asserts that `cond` is true.
 
 - `cond` — The boolean expression to evaluate
-- `msg` — Optional message, `?` indicates it can be omitted; output along with diagnostics when the
-  condition is not met
+- `msg` — Optional message, `?` indicates it can be omitted; output together with diagnostics when the condition doesn't hold
 
-Returns: returns `Void` when the condition holds, without interrupting execution. Error: throws
-`E6005` (Assertion Failed) when the condition is false, and the program exits with a non-zero code.
+Returns: Returns `Void` when the condition holds, without interrupting execution. Error: Throws `E6005` (assertion failed) when the condition is false, and the program exits with a non-zero code.
 
 ```yaoxiang
 use std.assert
 
 main: () -> Void = {
     assert(1 > 0)
-    assert(1 > 0, "this literal assertion must hold")
+    assert(1 > 0, "This literal assertion is always true")
 }
 ```
 
-Assertions are the **primary means of evaluation in test corpora** — `src/std/tests/*.yx` and
-`tests/yaoxiang/**` all work in a way where an `assert` failure causes the process to error:
+Assertions are the **primary judgment mechanism in test suites** — both `src/std/tests/*.yx` and `tests/yaoxiang/**` operate on the principle that an `assert` failure causes the process to report an error:
 
 ```yaoxiang
 use std.assert
@@ -64,8 +61,7 @@ main: () -> Void = {
 }
 ```
 
-## Related
+## See Also
 
-- [Test Specification](../dev/test-specification.md) — Corpus organization and evaluation
-  conventions
-- [Error Code Reference](../error-code/) — `E6005` Assertion Failed
+- [Test Specification](../../dev/test-specification.md) — Test organization and judgment conventions
+- [Error Code Reference](../error-code/) — `E6005` assertion failed

@@ -50,7 +50,7 @@ pr_impl:
 | [RFC-009: 所有权模型](./009-ownership-model.md)                    | **类型系统**   | Move语义与泛型的自然结合                           |
 | [RFC-024: 基于 spawn 的并发运行时语义](./024-concurrency-model.md)          | **执行模型**   | DAG分析与泛型类型检查                              |
 | [RFC-008: 运行时模型](./008-runtime-concurrency-model.md)          | **编译器架构** | 泛型单态化与编译期优化策略                         |
-| [类型宇宙思想](../reference/plan/ongoing/类型宇宙思想.md)                   | **理论核心**   | 类型宇宙层级模型与值依赖类型设计                   |
+| 类型宇宙思想（见下文同名章节）                                             | **理论核心**   | 类型宇宙层级模型与值依赖类型设计                   |
 | [RFC-027: 编译期谓词与统一静态验证](./027-compile-time-evaluation-types.md) | **终止检查**   | 自动度量合成与编译期求值安全保障                   |
 
 ## 类型宇宙思想与值依赖类型
@@ -1855,7 +1855,7 @@ generic_type ::= identifier ':' type '=' type_expression
 - [RFC-009: 所有权模型](./009-ownership-model.md)
 - [RFC-001: 并作模型](../deprecated/001-concurrent-model-error-handling.md)
 - [RFC-008: 运行时模型](./008-runtime-concurrency-model.md)
-- [tutorial/ 教程](../../../../../tutorial/)
+- [tutorial/ 教程](../../../tutorial/index.md)
 
 ### 外部参考
 

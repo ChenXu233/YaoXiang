@@ -959,8 +959,8 @@ tests/
 
 ### D. 参考资料
 
-- [YaoXiang 语言规范](../../design/language-spec.md) —— **测试的权威来源**
-- [已接受的 RFC](../../design/rfc/accepted/) —— **设计决策的权威来源**
+- [YaoXiang 语言规范](../reference/language-spec/index.md) —— **测试的权威来源**
+- [已接受的 RFC](../design/rfc/index.md) —— **设计决策的权威来源**
 - [Rust 测试文档](https://doc.rust-lang.org/book/ch11-00-testing.html)
 - [Criterion.rs 用户指南](https://bheisler.github.io/criterion.rs/book/)
 - [proptest 文档](https://docs.rs/proptest/latest/proptest/)

@@ -1,149 +1,149 @@
-# YaoXiang: Быстрый старт
+# YaoXiang — быстрый старт
 
-> 本指南帮助您快速上手 YaoXiang 编程语言。
+> Это руководство поможет вам быстро освоить язык программирования YaoXiang.
 >
-> **注意**：本文档中的代码示例基于 YaoXiang 语言规范编写。如在实际运行中遇到语法差异，请参考
-> [语言规范](../reference/language-spec/index.md)。
+> **Примечание**: Примеры кода в этом документе написаны в соответствии со спецификацией языка YaoXiang. Если вы столкнётесь с синтаксическими различиями при фактическом запуске, обратитесь к
+> [спецификации языка](../reference/language-spec/index.md).
 
-## 安装
+## Установка
 
-### 从源码编译（推荐）
+### Компиляция из исходного кода (рекомендуется)
 
 ```bash
-# 克隆仓库
+# Клонировать репозиторий
 git clone https://github.com/ChenXu233/YaoXiang.git
 cd yaoxiang
 
-# 编译（调试版本，用于开发测试）
+# Компиляция (отладочная версия, для разработки и тестирования)
 cargo build
 
-# 编译（发布版本，推荐用于生产）
+# Компиляция (релизная версия, рекомендуется для продакшена)
 cargo build --release
 
-# 运行测试
+# Запустить тесты
 cargo test
 
-# 查看版本
+# Проверить версию
 ./target/debug/yaoxiang --version
-# 或
+# или
 ./target/release/yaoxiang --version
 ```
 
-**验证安装成功**：
+**Проверка успешной установки**:
 
 ```bash
 ./target/debug/yaoxiang --version
-# 应输出类似: yaoxiang x.y.z
+# Должно вывести что-то вроде: yaoxiang x.y.z
 ```
 
-## 第一个程序
+## Первая программа
 
-创建文件 `hello.yx`：
+Создайте файл `hello.yx`:
 
 ```yaoxiang
 // hello.yx
 use std.io
 
-// 函数定义: name: (param: Type, ...) -> return_type = { return ... }  # 代码块必须显式 return
-// 表达式形式: name: (param: Type, ...) -> return_type = expr           # 表达式直接返回值
+// Определение функции: name: (param: Type, ...) -> return_type = { return ... }  # Блок кода должен явно возвращать значение
+// Выражение: name: (param: Type, ...) -> return_type = expr                      # Выражение возвращает значение напрямую
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 ```
 
-运行：
+Запуск:
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# 或使用 release 版本
+# или с релизной версией
 ./target/release/yaoxiang hello.yx
 ```
 
-输出：
+Вывод:
 
 ```
 Hello, YaoXiang!
 ```
 
-## 基本概念
+## Основные концепции
 
-### 变量与类型
+### Переменные и типы
 
 ```yaoxiang
-// 自动类型推断
-x = 42  // 推断为 Int
-name = "YaoXiang"  // 推断为 String
-pi = 3.14159  // 推断为 Float
-is_valid = true  // 推断为 Bool
+// Автоматический вывод типов
+x = 42  // Выводится как Int
+name = "YaoXiang"  // Выводится как String
+pi = 3.14159  // Выводится как Float
+is_valid = true  // Выводится как Bool
 
-// 显式类型注解（推荐使用类型集中约定）
+// Явные аннотации типов (рекомендуется использовать договорённость о централизации типов)
 count: Int = 100
 
-// 默认不可变（安全特性）
+// По умолчанию неизменяемые (функция безопасности)
 x = 10
-x = 20  // ❌ 编译错误！不可变
+x = 20  // ❌ Ошибка компиляции! Неизменяемость
 
-// 可变变量（需要显式声明）
+// Изменяемые переменные (нужно явное объявление)
 mut counter = 0
 counter = counter + 1  // ✅ OK
 ```
 
-### 函数
+### Функции
 
 ```yaoxiang
-// 函数定义语法
-// 表达式形式：直接返回值，不需要 return
+// Синтаксис определения функции
+// Выражение: возвращает значение напрямую, без return
 add: (a: Int, b: Int) -> Int = a + b
 
-// 代码块形式：必须使用 return 返回值
+// Блок кода: необходимо использовать return для возврата значения
 // add: (a: Int, b: Int) -> Int = { return a + b }
 
-// 调用
+// Вызов
 result = add(1, 2)  // result = 3
 
-// 单参数函数（表达式形式）
+// Функция с одним параметром (выражение)
 inc: (x: Int) -> Int = x + 1
 ```
 
-### 类型定义
+### Определение типов
 
-YaoXiang 使用统一的 `name: type = value` 语法模型：
+YaoXiang использует унифицированную модель синтаксиса `name: type = value`:
 
 ```yaoxiang
-// 变量声明
+// Объявление переменной
 x: Int = 42
 name: String = "YaoXiang"
 
-// 函数定义
+// Определение функции
 add: (a: Int, b: Int) -> Int = a + b
 
-// 类型定义（使用花括号）
+// Определение типа (использование фигурных скобок)
 Point: Type = { x: Float, y: Float }
 
-// 使用类型
+// Использование типа
 p: Point = Point(x=1.0, y=2.0)
 p.x  // 1.0
 p.y  // 2.0
 ```
 
-#### 记录类型
+#### Типы записей
 
 ```yaoxiang
-// 结构体类型
+// Структурные типы
 Point: Type = { x: Float, y: Float }
 Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
-// 使用
+// Использование
 p = Point(x=3.0, y=4.0)
 r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 ```
 
-#### 接口定义
+#### Определение интерфейсов
 
-接口是字段全为函数类型的记录类型：
+Интерфейсы — это типы записей, все поля которых являются функциями:
 
 ```yaoxiang
-// 定义接口
+// Определение интерфейса
 Drawable: Type = {
     draw: (Surface) -> Void,
     bounding_box: () -> Rect
@@ -153,19 +153,19 @@ Serializable: Type = {
     serialize: () -> String
 }
 
-// 空接口
+// Пустой интерфейс
 EmptyInterface: Type = {}
 ```
 
-#### 类型方法
+#### Методы типов
 
-使用 `Type.method: (Type, ...) -> Return = ...` 语法定义类型方法：
+Используйте синтаксис `Type.method: (Type, ...) -> Return = ...` для определения методов типа:
 
 ```yaoxiang
-// 类型定义
+// Определение типа
 Point: Type = { x: Float, y: Float }
 
-// 类型方法定义
+// Определение метода типа
 Point.draw: (self: Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -174,70 +174,70 @@ Point.serialize: (self: Point) -> String = {
     "Point({self.x}, {self.y})"
 }
 
-// 使用方法（语法糖）
+// Использование методов (синтаксический сахар)
 p = Point(x=1.0, y=2.0)
 p.draw(screen)  // → Point.draw(p, screen)
 str = p.serialize()  // → Point.serialize(p)
 ```
 
-#### 自动绑定
+#### Автоматическое связывание
 
-使用 `pub` 关键字声明的函数会自动绑定到同文件定义的类型：
+Функции, объявленные с ключевым словом `pub`, автоматически связываются с типами, определёнными в том же файле:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-// pub 声明自动绑定到 Point
+// Публичная функция автоматически связывается с Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
     (dx * dx + dy * dy).sqrt()
 }
 
-// 使用
+// Использование
 p1 = Point(x=3.0, y=4.0)
 p2 = Point(x=1.0, y=2.0)
 
-// 函数式调用
+// Функциональный вызов
 d = distance(p1, p2)  // 3.606...
 
-// OOP 语法糖（自动绑定到 Point.distance）
+// Синтаксис ООП (автосвязывание с Point.distance)
 d2 = p1.distance(p2)  // → distance(p1, p2)
 ```
 
-#### 枚举类型
+#### Перечисления
 
 ```yaoxiang
-// 简单枚举
+// Простое перечисление
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-// 带数据的枚举
+// Перечисление с данными
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// 使用泛型
+// Использование с generics
 success: Result(Int, String) = ok(42)
 failure: Result(Int, String) = err("not found")
 ```
 
-#### 泛型类型
+#### Обобщённые типы
 
 ```yaoxiang
-// 泛型类型定义
+// Определение обобщённого типа
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
     push: (List(T), T) -> Void
 }
 
-// 具体实例化
+// Конкретные экземпляры
 IntList: Type = List(Int)
 StringList: Type = List(String)
 ```
 
-### 控制流
+### Управление потоком выполнения
 
 ```yaoxiang
-// 条件表达式
+// Условное выражение
 if x > 0 {
     "positive"
 } else if x == 0 {
@@ -246,12 +246,12 @@ if x > 0 {
     "negative"
 }
 
-// 循环
+// Цикл
 for i in 0..5 {
     print(i)
 }
 
-// while 循环
+// Цикл while
 mut n = 0
 while n < 5 {
     print(n)
@@ -259,26 +259,26 @@ while n < 5 {
 }
 ```
 
-### 列表和字典
+### Списки и словари
 
 ```yaoxiang
-// 列表
+// Списки
 numbers = [1, 2, 3, 4, 5]
 first = numbers[0]  // 1
 
-// 字典
+// Словари
 scores = {"Alice": 90, "Bob": 85}
 alice_score = scores["Alice"]  // 90
 
-// 添加元素
+// Добавление элементов
 mut list = [1, 2, 3]
 list.append(4)
 ```
 
-### 模式匹配
+### Сопоставление с образцом
 
 ```yaoxiang
-// match 表达式
+// Выражение match
 result: Result(Int, String) = ok(42)
 
 message = match result {
@@ -287,64 +287,63 @@ message = match result {
 }
 ```
 
-## 并作编程（并发）
+## Параллельное программирование (конкурентность)
 
-YaoXiang 的并发模型围绕 `spawn <expr>` 原语构建——它是唯一的并行入口。
+Модель конкурентности YaoXiang строится вокруг примитива `spawn <expr>` — это единственная точка входа для параллелизма.
 
 ```yaoxiang
-// spawn 修饰任意表达式，自动并行执行
+// spawn модифицирует любое выражение, автоматически выполняя параллельно
 main: () -> Void = {
-    user = spawn fetch_user(1)   // 后台执行
-    posts = spawn fetch_posts()  // 并行的另一步
+    user = spawn fetch_user(1)   // Выполняется в фоне
+    posts = spawn fetch_posts()  // Параллельный следующий шаг
 
-    // 需要结果时自动阻塞等待
+    // При необходимости получить результат — автоматическая блокировка
     print(user.name)
     print(posts.length)
 }
 ```
 
-**核心规则**：`spawn`
-修饰的表达式在后台执行，外层同步阻塞等待结果。无依赖的任务自动并行，由运行时 GMP 模型调度。
+**Основное правило**: выражения, модифицированные `spawn`, выполняются в фоновом режиме, а внешний код синхронно блокируется в ожидании результата. Независимые задачи выполняются автоматически параллельно, с планированием по модели GMP среды выполнения.
 
-## 模块系统
+## Система модулей
 
 ```yaoxiang
-// 导入标准库
+// Импорт стандартной библиотеки
 use std.io
 use std.math
 
-// 使用导入的函数
+// Использование импортированных функций
 result = math.sqrt(16)  // 4.0
 print("Hello!")
 ```
 
-## 常见问题
+## Часто задаваемые вопросы
 
-### Q: 变量默认不可变，如何修改变量？
+### В: Переменные по умолчанию неизменяемы, как тогда изменять переменные?
 
 ```yaoxiang
-// 使用 mut 关键字声明可变变量
+// Используйте ключевое слово mut для объявления изменяемой переменной
 mut x = 10
 x = 20  // ✅ OK
 ```
 
-### Q: 如何定义函数？
+### В: Как определять функции?
 
 ```yaoxiang
-// 完整形式（推荐）
+// Полная форма (рекомендуется)
 add: (a: Int, b: Int) -> Int = a + b
 
-// 简短形式（类型推断）
+// Краткая форма (вывод типов)
 add = (a, b) => a + b
 ```
 
-### Q: 如何处理错误？
+### В: Как обрабатывать ошибки?
 
 ```yaoxiang
-// 使用 Result 类型
+// Используйте тип Result
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-// 模式匹配处理
+// Обработка через сопоставление с образцом
 result = risky_operation()
 match result {
     ok(value) => print("Success: " + value)
@@ -352,14 +351,14 @@ match result {
 }
 ```
 
-## 下一步
+## Что дальше
 
-- 📚 查看 [语言规范](../YaoXiang-language-specification.md) 了解完整语法
-- 🏗️ 浏览 [架构文档](../architecture/) 了解实现细节
-- 💡 查看 [设计宣言](../YaoXiang-design-manifesto.md) 了解核心理念
+- 📚 Изучите [спецификацию языка](../reference/language-spec/index.md) для понимания полного синтаксиса
+- 🏗️ Просмотрите [документацию по дизайну](../design/) для понимания деталей реализации
+- 💡 Прочитайте [манифест дизайна](../design/manifesto.md) для ознакомления с основными идеями
 
-## 相关资源
+## Связанные ресурсы
 
-- [GitHub 仓库](https://github.com/yourusername/yaoxiang)
-- [Issue 反馈](https://github.com/yourusername/yaoxiang/issues)
-- [贡献指南](../guides/dev/)
+- [GitHub репозиторий](https://github.com/yourusername/yaoxiang)
+- [Сообщить о проблеме](https://github.com/yourusername/yaoxiang/issues)
+- [Руководство по внесению вклада](../dev/contributing.md)

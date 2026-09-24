@@ -40,7 +40,7 @@ Rustコミュニティはそこで止まりませんでした。ライフタイ�
 
 ## 別の見方：借用はポインタではなくトークンである
 
-YaoXiangのコア設計は[RFC-009（所有権モデル）](/design/rfc/accepted/009-ownership-model)に記録されています。デフォルトのセマンティクス（すべてMove）は変えず、**借用の本質**を変えています。
+YaoXiangのコア設計は[RFC-009（所有権モデル）](../../design/rfc/accepted/009-ownership-model.md)に記録されています。デフォルトのセマンティクス（すべてMove）は変えず、**借用の本質**を変えています。
 
 YaoXiangでは、`&T`と`&mut T`は**ポインタではありません**。これらは**ゼロサイズのコンパイル時トークン**——型レベルのアクセス権限の証明です。値を借用するとは、それへのポインタを作るのではなく、「それへのアクセスが許可されている」という証明を作ることです：
 
@@ -147,7 +147,7 @@ Rustの`'a`にはよく言及される価値があります：ドキュメント
 
 ## トークン衝突検出：同じ証明パイプライン
 
-Rustには独立した「借用チェッカー」があります。YaoXiangの**設計方向**は、借用衝突を型検査の証明パイプラインに統合することです（[RFC-027（コンパイル時述語と統一静的検証）](/design/rfc/accepted/027-compile-time-evaluation-types)）。
+Rustには独立した「借用チェッカー」があります。YaoXiangの**設計方向**は、借用衝突を型検査の証明パイプラインに統合することです（[RFC-027（コンパイル時述語と統一静的検証）](../../design/rfc/accepted/027-compile-time-evaluation-types.md)）。
 
 トークン衝突はホール命題です：
 
@@ -274,4 +274,4 @@ v8からv9への跳躍が真のブレークスルーです：3つの禁止から
 
 ---
 
-_YaoXiangは開発中のプログラミング言語です。所有権モデルについては[RFC-009](/design/rfc/accepted/009-ownership-model)、クロージャキャプチャについては[RFC-023](/design/rfc/accepted/023-closure-capture-model)、並行性モデルについては[RFC-024](/design/rfc/accepted/024-concurrency-model)を参照してください。_
+_YaoXiangは開発中のプログラミング言語です。所有権モデルについては[RFC-009](../../design/rfc/accepted/009-ownership-model.md)、クロージャキャプチャについては[RFC-023](../../design/rfc/deprecated/023-closure-capture-model.md)、並行性モデルについては[RFC-024](../../design/rfc/accepted/024-concurrency-model.md)を参照してください。_

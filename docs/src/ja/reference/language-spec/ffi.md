@@ -1,10 +1,9 @@
 # FFI 仕様
 
-このドキュメントでは、YaoXiang プログラミング言語の FFI（外部関数インターフェース）の仕様を定義します。これには、型定義、関数宣言、メソッドバインディング、不透明型の処理が含まれます。
+このドキュメントでは、YaoXiang プログラミング言語のFFI（外部関数インターフェース）の仕様を定義します。これには、型定義、関数宣言、メソッドバインディング、不透明型の処理が含まれます。
 
-> **詳細設計**：FFI の完全な設計、動機、トレードオフについては、
-> [RFC-026: FFI コアメカニズム](../design/rfc/accepted/026-ffi-core-mechanism.md)
-> を参照してください。
+> **詳細設計**: FFI の完全な設計、動機、トレードオフについては、
+> [RFC-026: FFI コア機構](../../design/rfc/accepted/026-ffi-core-mechanism.md) を参照してください。
 
 ---
 
@@ -19,11 +18,11 @@
 
 ### 1.2 FFI の構成要素
 
-| コンポーネント         | 説明                             | 構文                   |
-| ---------------------- | -------------------------------- | ---------------------- |
-| 型定義                 | FFI 型の定義（不透明または透明） | `unsafe {}` + `return` |
-| 関数宣言               | 外部関数の宣言                   | `native("symbol")`     |
-| メソッドバインディング | 型へのメソッドのバインディング   | `[0]` 構文             |
+| コンポーネント | 説明                          | 構文                   |
+| -------- | ----------------------------- | ---------------------- |
+| 型定義     | FFI 型の定義（不透明または透明） | `unsafe {}` + `return` |
+| 関数宣言    | 外部関数の宣言                  | `native("symbol")`     |
+| メソッドバインディング | メソッドを型にバインディング          | `[0]` 構文             |
 
 ---
 
@@ -31,30 +30,30 @@
 
 ### 2.1 不透明型
 
-不透明型は `unsafe {}` ブロック内で定義され、`return` で上位スコープに戻されます：
+不透明型は `unsafe {}` ブロックで定義され、`return` で上位スコープに戻されます：
 
 ```yaoxiang
 // unsafe ブロック内で不透明型を定義
 SqliteDb = unsafe {
     SqliteDb: Type = {
-        handle: *Void  // 裸ポインタ
+        handle: *Void  // 生ポインタ
     }
     return SqliteDb
 }
 
-// SqliteDb は unsafe ブロック外で使用可能
+// SqliteDb は unsafe ブロック外で可用
 db = sqlite3_open("test.db")
 
 // ❌ コンパイルエラー：handle フィールドには unsafe 権限が必要
 handle = db.handle
 
-// ✅ メソッド呼び出しでアクセス
+// ✅ メソッド呼び出し経由
 db.close()
 ```
 
 ### 2.2 透明型
 
-透明型は直接定義でき、`unsafe {}` ブロックは不要です：
+透明型は直接定義され、`unsafe {}` ブロックは不要です：
 
 ```yaoxiang
 // 透明型
@@ -104,25 +103,25 @@ sqlite3_exec: (db: SqliteDb, sql: String) -> Int32 = native("sqlite3_exec")
 
 ### 3.2 引数型のマッピング
 
-FFI 関数の引数型は YaoXiang 型を直接使用し、コンパイラが C 型のマッピングを自動的に処理します：
+FFI 関数の引数型は直接 YaoXiang 型を使用し、コンパイラが C 型のマッピングを自動的に処理します：
 
-| C 型                 | YaoXiang 型     |
-| -------------------- | --------------- |
-| `int`                | `Int32`         |
-| `long`               | `Int64`         |
-| `float`              | `Float32`       |
-| `double`             | `Float64`       |
-| `char`               | `Char`          |
-| `char*`              | `String`        |
-| `bool`               | `Bool`          |
-| `size_t`             | `Uint`          |
-| `void*`              | `*Void`         |
+| C 型                | YaoXiang 型     |
+| -------------------- | ----------------- |
+| `int`                | `Int32`           |
+| `long`               | `Int64`           |
+| `float`              | `Float32`         |
+| `double`             | `Float64`         |
+| `char`               | `Char`            |
+| `char*`              | `String`          |
+| `bool`               | `Bool`            |
+| `size_t`             | `Uint`            |
+| `void*`              | `*Void`           |
 | `struct T*`          | `T`（透明型）   |
 | `typedef struct T T` | `T`（不透明型） |
 
 ### 3.3 戻り値の型
 
-FFI 関数の戻り値の型は YaoXiang 型を直接使用します：
+FFI 関数の戻り値の型は直接 YaoXiang 型を使用します：
 
 ```yaoxiang
 // 不透明型を返す
@@ -184,7 +183,7 @@ db = SqliteDb.open("test.db")
 
 ### 4.3 バインディングの位置
 
-メソッドバインディングはどこでも行えます。型はデータコンテナであるためです：
+メソッドバインディングは任意の位置で 가능합니다（型はデータコンテナであるため）：
 
 ```yaoxiang
 // 型定義後にバインディング
@@ -193,27 +192,27 @@ SqliteDb.close = sqlite3_close[0]
 // 他のファイルでバインディング
 SqliteDb.exec = sqlite3_exec[0]
 
-// コンパイラは最終的にすべてチェックする
+// コンパイラが最終的にはすべてチェック
 ```
 
 ---
 
 ## 第5章：spawn ブロック内の FFI 動作
 
-### 5.1 リソース型は自動的にシリアル化
+### 5.1 リソース型は自動的に直列化
 
-FFI 型がリソース型の場合、spawn ブロック内で自動的にシリアル化されます：
+FFI 型がリソース型の場合、spawn ブロック内で自動的に直列化されます：
 
 ```yaoxiang
 // SqliteDb はリソース型
 (a, b) = spawn {
     db1 = SqliteDb.open("db1.sqlite"),  // SqliteDb リソース
-    db2 = SqliteDb.open("db2.sqlite")   // 異なるインスタンスのため並列可能
+    db2 = SqliteDb.open("db2.sqlite")   // 異なるインスタンス、並列可能
 }
 
 (a, b) = spawn {
-    result1 = db.exec("SELECT ..."),  // 同じ SqliteDb
-    result2 = db.exec("INSERT ...")   // 自動的にシリアル化
+    result1 = db.exec("SELECT ..."),  // 同一の SqliteDb
+    result2 = db.exec("INSERT ...")   // 自動的に直列化
 }
 ```
 
@@ -233,7 +232,7 @@ FFI 型がリソース型でない場合、spawn ブロック内で並列実行�
 
 ## 第6章：yx-bindgen ツールチェーン
 
-### 6.1 生成される内容
+### 6.1 生成内容
 
 yx-bindgen は以下の内容を生成します：
 

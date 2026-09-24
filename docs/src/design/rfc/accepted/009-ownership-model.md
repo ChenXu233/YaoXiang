@@ -732,11 +732,11 @@ Char）的赋值行为是编译器内置的值复制——两个值完全独立�
 
 ### YaoXiang 官方文档
 
-- [语言规范](../language-spec.md)
+- [语言规范](../../../reference/language-spec/index.md)
 - [设计宣言](../../manifesto.md)
 - [RFC-001 并作模型](../deprecated/001-concurrent-model-error-handling.md)
 - [RFC-010 统一类型语法](./010-unified-type-syntax.md)
-- [tutorial/ 教程](../../../../../tutorial/)
+- [tutorial/ 教程](../../../tutorial/index.md)
 
 ### 外部参考
 

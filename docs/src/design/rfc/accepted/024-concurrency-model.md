@@ -17,7 +17,7 @@ issue: '#89'
 
 > **参考**:
 >
-> - [并发模型规范](/reference/language-spec/concurrency.md)
+> - [并发模型规范](../../../reference/language-spec/concurrency.md)
 > - [RFC-008: Runtime 并发模型与调度器脱耦设计](./008-runtime-concurrency-model.md)
 > - [RFC-009: 所有权模型设计](./009-ownership-model.md)
 > - [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
@@ -52,7 +52,7 @@ spawn <expr>               ← 唯一并行原语
 
 | 文档                                                                     | 关系                              |
 | ------------------------------------------------------------------------ | --------------------------------- |
-| [RFC-001](/design/rfc/deprecated/001-concurrent-model-error-handling.md) | 被本文取代                        |
+| [RFC-001](../deprecated/001-concurrent-model-error-handling.md) | 被本文取代                        |
 | [RFC-008](./008-runtime-concurrency-model.md)                            | 运行时架构，与本文正交            |
 | [RFC-009](./009-ownership-model.md)                                      | 所有权模型，不变                  |
 | [RFC-010](./010-unified-type-syntax.md)                                  | 统一类型语法                      |
@@ -544,8 +544,8 @@ frontend/core/spawn/
 
 ### YaoXiang 官方文档
 
-- [并发模型规范](/reference/language-spec/concurrency.md)
-- [RFC-001 并作模型（已废弃）](/design/rfc/deprecated/001-concurrent-model-error-handling.md)
+- [并发模型规范](../../../reference/language-spec/concurrency.md)
+- [RFC-001 并作模型（已废弃）](../deprecated/001-concurrent-model-error-handling.md)
 - [RFC-008 Runtime 并发模型](./008-runtime-concurrency-model.md)
 - [RFC-009 所有权模型](./009-ownership-model.md)
 - [RFC-010 统一类型语法](./010-unified-type-syntax.md)

@@ -325,7 +325,6 @@ spawn if use_cache {
 - [RFC-010: 统一类型语法](../accepted/010-unified-type-syntax.md)
 - [ECMTT: Contextual Modal Types for Algebraic Effects and Handlers (ICFP 2021)](https://arxiv.org/abs/2103.02976) — 计算结构类型的理论基础
 - [并发模型规范](../../../reference/language-spec/concurrency.md)
-- [spawn for 正交性悬置（讨论稿）](../../dev/plan/ongoing/spawn-for-orthogonality.md)
 
 ---
 

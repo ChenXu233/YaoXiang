@@ -9,7 +9,7 @@ updated: '2026-05-11（обрезано: удалены @auto, эвристик�
 > **⚠️ Устаревший (DEPRECATED)**
 >
 > Данный RFC заменён
-> **[RFC-024：Новая модель конкурентности](/design/rfc/accepted/024-new-concurrency-model)**.
+> **[RFC-024：Новая модель конкурентности](../../../../design/rfc/accepted/024-concurrency-model.md)**.
 >
 > Трёхуровневая архитектура конкурентности (L1/L2/L3), аннотации @block/@eager, автоматический
 > DAG-анализ и другие концепции RFC-001 были удалены. Новая модель использует блоки `spawn {}` как
@@ -30,8 +30,8 @@ title: "RFC-001：Модель спавна и система обработки
 
 | Документ                                          | Связь                                |
 | ------------------------------------------------- | ------------------------------------ |
-| [async-whitepaper](/src/archive/async-whitepaper) | Источник дизайна, теоретическая база |
-| [language-spec](/src/design/language-spec)        | Целевая спецификация                 |
+| async-whitepaper | Источник дизайна, теоретическая база |
+| [language-spec](../../../../reference/language-spec/index.md)        | Целевая спецификация                 |
 
 ## Аннотация
 
@@ -377,5 +377,5 @@ Arc(T) реализует Send + Sync (потокобезопасный счёт
 - [Rust async book](https://rust-lang.github.io/async-book/)
 - [Go concurrency patterns](https://golang.org/doc/effective_go#concurrency)
 - [Work-stealing scheduling](https://en.wikipedia.org/wiki/Work_stealing)
-- [Whitepaper модели спавна](/src/archive/async-whitepaper)
-- [Спецификация языка YaoXiang](/src/design/language-spec)
+- Whitepaper модели спавна
+- [Спецификация языка YaoXiang](../../../../reference/language-spec/index.md)

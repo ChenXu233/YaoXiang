@@ -876,7 +876,7 @@ A: 通过 GitHub Discussions 或 Discord 社区频道。核心团队成员会定
 >
 > **文档版本**：v2.0.0
 >
-> **许可证**：[MIT](LICENSE)
+> **许可证**：MIT
 
 ---
 

@@ -1,9 +1,9 @@
 # YaoXiang クイックスタート
 
-> 本ガイドは、YaoXiang プログラミング言語への快速な入門を目的としています。
+> 本ガイドは、YaoXiang プログラミング言語へのクイックスタートを支援します。
 >
-> **注意**：本ドキュメントのコード示例は YaoXiang 言語仕様書に準拠して記述されています。実際の実行時に構文の差異が発生した場合は、
-> [言語仕様書](../reference/language-spec/index.md)を参照してください。
+> **注意**：本ドキュメントのコード例は YaoXiang 言語仕様に基づいて書かれています。実際の実行で構文の差異が発生した場合は、
+> [言語仕様](../reference/language-spec/index.md)を参照してください。
 
 ## インストール
 
@@ -14,10 +14,10 @@
 git clone https://github.com/ChenXu233/YaoXiang.git
 cd yaoxiang
 
-# ビルド（デバッグバージョン、開発・テスト用）
+# ビルド（デバッグ版、開発テスト用）
 cargo build
 
-# ビルド（リリースバージョン、本番環境推奨）
+# ビルド（リリース版、本番環境推奨）
 cargo build --release
 
 # テストの実行
@@ -33,12 +33,12 @@ cargo test
 
 ```bash
 ./target/debug/yaoxiang --version
-# 次のような出力がされるはず: yaoxiang x.y.z
+# 次のように出力されるはず: yaoxiang x.y.z
 ```
 
 ## 最初のプログラム
 
-ファイル `hello.yx` を作成します：
+`hello.yx` ファイルを作成：
 
 ```yaoxiang
 // hello.yx
@@ -55,7 +55,7 @@ main: () -> Void = {
 
 ```bash
 ./target/debug/yaoxiang hello.yx
-# または release バージョンを使用
+# または release 版を使用
 ./target/release/yaoxiang hello.yx
 ```
 
@@ -70,16 +70,16 @@ Hello, YaoXiang!
 ### 変数と型
 
 ```yaoxiang
-// 自動的な型推論
-x = 42  // Int に推論される
-name = "YaoXiang"  // String に推論される
-pi = 3.14159  // Float に推論される
-is_valid = true  // Bool に推論される
+// 自動型推論
+x = 42  // Int に推論
+name = "YaoXiang"  // String に推論
+pi = 3.14159  // Float に推論
+is_valid = true  // Bool に推論
 
-// 明示的な型注釈（型集約の規則に従って使用することを推奨）
+// 明示的な型注釈（タイプ集中の約束事の使用を推奨）
 count: Int = 100
 
-// デフォルトで不変（安全性のための機能）
+// デフォルトで不変（安全機能）
 x = 10
 x = 20  // ❌ コンパイルエラー！不変
 
@@ -92,10 +92,10 @@ counter = counter + 1  // ✅ OK
 
 ```yaoxiang
 // 関数定義の構文
-// 式形式：直接値を返す、return は不要
+// 式形式：直接値を返す、return 不要
 add: (a: Int, b: Int) -> Int = a + b
 
-// コードブロック形式：return を使用して値を返す必要がある
+// コードブロック形式：return で値を返す必要がある
 // add: (a: Int, b: Int) -> Int = { return a + b }
 
 // 呼び出し
@@ -107,7 +107,7 @@ inc: (x: Int) -> Int = x + 1
 
 ### 型定義
 
-YaoXiang は統一された `name: type = value` 構文モデルを使用します：
+YaoXiang は統合された `name: type = value` 構文モデルを使用します：
 
 ```yaoxiang
 // 変数宣言
@@ -117,7 +117,7 @@ name: String = "YaoXiang"
 // 関数定義
 add: (a: Int, b: Int) -> Int = a + b
 
-// 型定義（中括弧を使用）
+// 型定義（波括弧を使用）
 Point: Type = { x: Float, y: Float }
 
 // 型の使用
@@ -126,7 +126,7 @@ p.x  // 1.0
 p.y  // 2.0
 ```
 
-#### 記録型
+#### レコード型
 
 ```yaoxiang
 // 構造体型
@@ -140,7 +140,7 @@ r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 
 #### インターフェース定義
 
-インターフェースは、フィールドがすべて関数型である記録型です：
+インターフェースはフィールドが全て関数型であるレコード型です：
 
 ```yaoxiang
 // インターフェース定義
@@ -159,7 +159,7 @@ EmptyInterface: Type = {}
 
 #### 型メソッド
 
-`Type.method: (Type, ...) -> Return = ...` 構文を使用して型メソッドを定義します：
+`Type.method: (Type, ...) -> Return = ...` 構文で型メソッドを定義します：
 
 ```yaoxiang
 // 型定義
@@ -182,12 +182,12 @@ str = p.serialize()  // → Point.serialize(p)
 
 #### 自動バインディング
 
-`pub` キーワードで宣言された関数は、同じファイルで定義された型に自動的にバインドされます：
+`pub` キーワードで宣言された関数は、同じファイルで定義された型に自動バインディングされます：
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-// pub 宣言は Point に自動的にバインド
+// pub 宣言は Point に自動バインディング
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -201,28 +201,28 @@ p2 = Point(x=1.0, y=2.0)
 // 関数呼び出し
 d = distance(p1, p2)  // 3.606...
 
-// OOP 糖衣構文（Point.distance に自動バインド）
+// OOP 糖衣構文（Point.distance に自動バインディング）
 d2 = p1.distance(p2)  // → distance(p1, p2)
 ```
 
 #### 列挙型
 
 ```yaoxiang
-// 単純な列挙型
+// 単純列挙
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-// データ付き列挙型
+// データ付き列挙
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// 泛型 の使用
+// ジェネリクスの使用
 success: Result(Int, String) = ok(42)
 failure: Result(Int, String) = err("not found")
 ```
 
-#### 泛型型
+#### ジェネリック型
 
 ```yaoxiang
-// 泛型型定義
+// ジェネリック型定義
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -275,7 +275,7 @@ mut list = [1, 2, 3]
 list.append(4)
 ```
 
-### パターン照合
+### パターンマッチング
 
 ```yaoxiang
 // match 式
@@ -287,24 +287,24 @@ message = match result {
 }
 ```
 
-## 並作プログラミング（並行性）
+## 並列プログラミング（並行性）
 
-YaoXiang の並行モデルは `spawn <expr>` 基本要素を中心に構築されています—これが唯一の並列入口です。
+YaoXiang の並行モデルは `spawn <expr>` プリミティブを中心に構築されており、唯一の並列エントリポイントです。
 
 ```yaoxiang
-// spawn は任意の式を修飾し、自動的に並行実行する
+// spawn で任意の式を修飾、自动並列実行
 main: () -> Void = {
-    user = spawn fetch_user(1)   // バックグラウンドで実行
-    posts = spawn fetch_posts()  // 並行する別の処理
+    user = spawn fetch_user(1)   // バックグラウンド実行
+    posts = spawn fetch_posts()  // 並列の別の処理
 
-    // 結果が必要なときに自動的にブロックして待機
+    // 結果が必要な時に自動ブロック待機
     print(user.name)
     print(posts.length)
 }
 ```
 
-**核心の規則**：`spawn`
-で修飾された式はバックグラウンドで実行され、外層の同期コードは結果の待機時にブロックします。依存関係のないタスクは自動的に並列実行され、実行時の GMP モデルによってスケジュールされます。
+**コアルール**：`spawn`
+で修飾された式はバックグラウンドで実行され、外層は同期的にブロックして結果を待ちます。依存関係のないタスクは自動並列化され、ランタイムの GMP モデルでスケジュールされます。
 
 ## モジュールシステム
 
@@ -320,15 +320,15 @@ print("Hello!")
 
 ## よくある質問
 
-### Q: 変数はデフォルトで不変ですが、変数を変更するには？
+### Q: 変数はデフォルトで不変ですが、変数を変更する方法は？
 
 ```yaoxiang
-// mut キーワードを使用して可変変数を宣言する
+// mut キーワードで可変変数を宣言
 mut x = 10
 x = 20  // ✅ OK
 ```
 
-### Q: 関数はどのように定義しますか？
+### Q: 関数の定義方法は？
 
 ```yaoxiang
 // 完全形式（推奨）
@@ -338,13 +338,13 @@ add: (a: Int, b: Int) -> Int = a + b
 add = (a, b) => a + b
 ```
 
-### Q: エラーはどのように処理しますか？
+### Q: エラーの処理方法は？
 
 ```yaoxiang
-// Result 型を使用する
+// Result 型を使用
 Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
 
-// パターン照合で処理
+// パターンマッチングで処理
 result = risky_operation()
 match result {
     ok(value) => print("Success: " + value)
@@ -354,12 +354,12 @@ match result {
 
 ## 次のステップ
 
-- 📚 完全な構文については [言語仕様書](../YaoXiang-language-specification.md) を参照
-- 🏗️ 実装の詳細については [アーキテクチャドキュメント](../architecture/) を参照
-- 💡 核心の理念については [設計宣言](../YaoXiang-design-manifesto.md) を参照
+- 📚 完全な構文については[言語仕様](../reference/language-spec/index.md)を参照
+- 🏗️ 実装の詳細については[デザインドキュメント](../design/)を参照
+- 💡 核心理念については[デザイン宣言](../design/manifesto.md)を参照
 
 ## 関連リソース
 
 - [GitHub リポジトリ](https://github.com/yourusername/yaoxiang)
 - [Issue フィードバック](https://github.com/yourusername/yaoxiang/issues)
-- [貢献ガイド](../guides/dev/)
+- [貢献ガイド](../dev/contributing.md)

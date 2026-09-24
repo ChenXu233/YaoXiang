@@ -4,7 +4,7 @@ title: '语法速查'
 
 # 语法速查
 
-5 分钟看懂 YaoXiang 核心语法。深入学习请访问 [教程](/tutorial/)。
+5 分钟看懂 YaoXiang 核心语法。深入学习请访问 [教程](../tutorial/index.md)。
 
 ## 变量
 

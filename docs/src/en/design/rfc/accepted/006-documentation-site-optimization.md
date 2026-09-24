@@ -10,20 +10,17 @@ issue: '#130'
 
 # RFC-006: Documentation Site Construction
 
-> **Reference**: See [RFC Template](RFC_TEMPLATE.md) for RFC specifications.
+> **Reference**: See [RFC Template](../RFC_TEMPLATE.md) for RFC conventions.
 
 ## Summary
 
-Establish a YaoXiang documentation site, consolidate scattered documentation, and provide search,
-navigation, multi-language, and version switching support.
+Establish a YaoXiang documentation site, integrate scattered documentation, and provide search, navigation, multilingual, and version switching support.
 
 ## Motivation
 
 ### Why is this feature needed?
 
-Currently, documentation is scattered across multiple directories and only displayed via GitHub
-Readme, making it difficult for new users to find the information they need, with no search
-capability and unsynchronized Chinese and English documentation.
+Currently, documentation is scattered across multiple directories and only displayed via GitHub README. New users find it difficult to locate the information they need, there is no search capability, and Chinese and English documentation are out of sync.
 
 ### Current Problems
 
@@ -43,10 +40,10 @@ docs/
 
 Problems:
 
-1. No unified entry point, only relying on GitHub Readme
+1. No unified entry point, only relying on GitHub README
 2. No search capability
 3. No version switching, users may read outdated documentation
-4. .obsidian mixed into version control
+4. .obsidian files mixed into version control
 
 ## Proposal
 
@@ -54,10 +51,9 @@ Problems:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Documentation Site Frontend          │
+│                    Documentation Site Frontend           │
 │  ┌───────────┐ ┌───────────┐ ┌─────────────────────┐   │
-│  │  Navbar   │ │  Sidebar  │ │  Version Switch     │   │
-│  │           │ │           │ │  Dropdown Menu      │   │
+│  │  Navbar   │ │  Sidebar  │ │  Version Switcher   │   │
 │  └───────────┘ └───────────┘ └─────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
                           │
@@ -102,39 +98,39 @@ docs/
     └── getting-started.md
 ```
 
-### URL Path Specification (Core Design)
+### URL Path Convention (Core Design)
 
-| Scenario         | URL Format                  | Description                 |
-| ---------------- | --------------------------- | --------------------------- |
-| Latest (Chinese) | `/zh/getting-started/`      | Redirects to latest version |
-| Latest (English) | `/en/getting-started/`      | Redirects to latest version |
-| Specific version | `/v0.5/zh/getting-started/` | Version number prefix       |
-| Homepage         | `/zh/` or `/en/`            | Language homepage           |
+| Scenario            | URL Format                    | Description           |
+| ---------- | --------------------------- | -------------- |
+| Latest (Chinese) | `/zh/getting-started/`      | Redirect to latest version |
+| Latest (English) | `/en/getting-started/`      | Redirect to latest version |
+| Specific version   | `/v0.5/zh/getting-started/` | Version number prefix     |
+| Homepage       | `/zh/` or `/en/`            | Language homepage       |
 
 **Version Switching Design**:
 
 ```
-Version dropdown menu:
+Version switcher dropdown:
 ├── v0.6 (latest)
 ├── v0.5
 ├── v0.4
 └── v0.3
 ```
 
-**Version Path Specification** (Key decision, difficult to change later):
+**Version Path Convention** (Key decision, difficult to change later):
 
 - Latest version: `/zh/xxx/` → Redirect to latest version
 - Specific version: `/v0.5/zh/xxx/` → Fixed version
-- Navbar version switching: Switch between combinations of `/v0.5/` and `/zh/`
+- Navbar version switching: Toggle combinations of `/v0.5/` and `/zh/`
 
-### Sidebar Specification
+### Sidebar Convention
 
 ```typescript
 // docs/.vitepress/sidebar/zh.ts
 export default {
   '/zh/tutorial/': [
     {
-      text: 'Tutorials',
+      text: 'Tutorial',
       items: [
         { text: 'Quick Start', link: '/zh/getting-started' },
         { text: 'Basics', link: '/zh/tutorial/basics' },
@@ -144,7 +140,7 @@ export default {
   '/zh/reference/': [
     {
       text: 'Reference',
-      items: [{ text: 'Built-in Functions', link: '/zh/reference/builtins' }],
+      items: [{ text: 'Builtins', link: '/zh/reference/builtins' }],
     },
   ],
 };
@@ -184,7 +180,7 @@ jobs:
 ```typescript
 // docs/.vitepress/navbar.ts
 export default [
-  { text: 'Getting Started', link: '/zh/getting-started' },
+  { text: 'Get Started', link: '/zh/getting-started' },
   { text: 'Tutorial', link: '/zh/tutorial/' },
   { text: 'Reference', link: '/zh/reference/' },
   { text: 'Design', link: '/zh/design/' },
@@ -201,7 +197,7 @@ import starlight from '@astrojs/starlight';
 
 export default defineConfig({
   title: 'YaoXiang',
-  description: 'A future-oriented programming language',
+  description: 'A programming language for the future',
 
   locales: {
     root: { label: '中文', lang: 'zh-CN', link: '/zh/' },
@@ -227,38 +223,38 @@ export default defineConfig({
 
 ### Advantages
 
-- Professional documentation site improves project image
+- Professional documentation site enhances project image
 - Users can quickly find needed information
 - Local search is free and sufficient
-- Multi-language support serves the international community
+- Multilingual support serves international community
 - Version switching prevents reading outdated documentation
 
 ### Disadvantages
 
-- Maintenance cost: need to maintain site configuration
+- Maintenance cost: Need to maintain site configuration
 - Technology stack introduction: Node.js
 
-## Alternative Solutions
+## Alternatives
 
-| Solution    | Why Not Chosen                 |
-| ----------- | ------------------------------ |
+| Alternative      | Why Not Chosen           |
+| ----------- | ---------------- |
 | GitHub Wiki | Poor search, low customization |
-| README only | No search, no navigation       |
-| Docusaurus  | Too heavy, slow startup        |
+| README Only | No search, no navigation   |
+| Docusaurus  | Heavy, slow startup     |
 
 ## Implementation Strategy
 
 ### Phase Breakdown
 
-| Phase | Content                                        | Status |
-| ----- | ---------------------------------------------- | ------ |
-| P0    | Initialize VitePress + Starlight config        | TODO   |
-| P0    | Configure directory structure, navbar, sidebar | TODO   |
-| P0    | Migrate README + Quick Start                   | TODO   |
-| P0    | CI/CD auto-deploy to GitHub Pages              | TODO   |
-| P1    | Migrate tutorials, reference docs              | TODO   |
-| P1    | Configure version switching menu               | TODO   |
-| P2    | Supplement English documentation               | TODO   |
+| Phase | Content                                | Status |
+| ---- | --------------------------------- | ---- |
+| P0   | Initialize VitePress + Starlight configuration | Todo |
+| P0   | Configure directory structure, navbar, sidebar      | Todo |
+| P0   | Migrate README + Quick Start            | Todo |
+| P0   | CI/CD auto-deploy to GitHub Pages     | Todo |
+| P1   | Migrate tutorials, reference docs                | Todo |
+| P1   | Configure version switcher menu                  | Todo |
+| P2   | Supplement English documentation                      | Todo |
 
 ### Dependencies
 
@@ -266,9 +262,9 @@ No external RFC dependencies
 
 ### Risks
 
-| Risk         | Impact | Mitigation                   |
-| ------------ | ------ | ---------------------------- |
-| Content loss | High   | Full backup before migration |
+| Risk       | Impact           | Mitigation     |
+| -------- | -------------- | ------------ |
+| Content loss | Major | Complete backup before migration |
 
 ## Open Questions
 
@@ -276,17 +272,17 @@ No external RFC dependencies
 
 ---
 
-## Appendix
+## Appendices
 
 ### Appendix A: Design Decision Records
 
-| Decision                 | Decision                   | Date       | Recorder |
-| ------------------------ | -------------------------- | ---------- | -------- |
-| SSG Selection            | VitePress + Starlight      | 2025-02-07 | Chen Xu  |
-| Hosting Platform         | GitHub Pages               | 2025-02-07 | Chen Xu  |
-| Search Solution          | Local search               | 2025-02-07 | Chen Xu  |
-| Multi-language Structure | `/zh/` and `/en/` prefixes | 2025-02-07 | Chen Xu  |
-| Version Path             | `/v0.5/zh/` format         | 2025-02-07 | Chen Xu  |
+| Decision       | Decision                  | Date       | Recorded By |
+| ---------- | --------------------- | ---------- | ------ |
+| SSG Selection   | VitePress + Starlight | 2025-02-07 | Chen Xu   |
+| Hosting Platform   | GitHub Pages          | 2025-02-07 | Chen Xu   |
+| Search Solution   | Local search              | 2025-02-07 | Chen Xu   |
+| Multilingual Structure | `/zh/` and `/en/` prefixes | 2025-02-07 | Chen Xu   |
+| Version Path   | `/v0.5/zh/` format      | 2025-02-07 | Chen Xu   |
 
 ---
 

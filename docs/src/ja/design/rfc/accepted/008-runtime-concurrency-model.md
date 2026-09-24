@@ -14,14 +14,14 @@ pr_impl:
 
 # RFC-008：Runtime 並列処理モデルとスケジューラ分離設計
 
-> **⚠️ 整合に関する注意**：本文書は[RFC-024 新並列処理モデル](/reference/language-spec/concurrency.md)
+> **⚠️ 整合に関する注意**：本文書は[RFC-024 新並列処理モデル](../../../../reference/language-spec/concurrency.md)
 > と整合しています。旧式の全プログラムDAG分析、`@block`/`@eager`アノテーション、L1/L2/L3レイヤーモデルは
 > `spawn {}`ブロック並列プリミティブに置き換えられました。DAG分析は現在は`spawn {}`ブロック内部でのみ機能します。
 
 > **参考**:
 >
 > - [RFC-011: ジェネリクスシステム設計](./011-generic-type-system.md)
-> - [並列処理モデル仕様（RFC-024）](/reference/language-spec/concurrency.md)
+> - [並列処理モデル仕様（RFC-024）](../../../../reference/language-spec/concurrency.md)
 
 ## 概要
 
@@ -426,7 +426,7 @@ src/
 
 ## 参考文献
 
-- [並列処理モデル仕様（RFC-024）](/reference/language-spec/concurrency.md)
+- [並列処理モデル仕様（RFC-024）](../../../../reference/language-spec/concurrency.md)
 - [RFC-011: ジェネリクスシステム設計](./011-generic-type-system.md)
 - [Rust async ランタイム設計](https://tokio.rs/)
 - [Go スケジューラ設計](https://golang.org/src/runtime/proc.go)

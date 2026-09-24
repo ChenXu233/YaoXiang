@@ -1,53 +1,39 @@
 ---
-title: 'RFC-032: Unified spawn Expression Modifier — Eliminating the spawn for Special Case'
+title: 'RFC-032: Unified Expression Modifier for spawn — Eliminating Special Cases for spawn for'
 status: 'Under Review'
-author: '晨煦 (Chenxu)'
+author: 'Chen Xu'
 created: '2026-06-16'
 updated: '2026-08-19'
 issue: '#98'
 ---
 
-# RFC-032: Unified spawn Expression Modifier
+# RFC-032: Unified Expression Modifier for spawn
 
-> **This document defines the syntax and AST/IR refactor of `spawn`**. Runtime behavioral semantics
-> (task decomposition granularity, ownership, scope, error propagation, resource types, nesting) are
-> covered in [RFC-024: Concurrency Runtime Semantics Based on spawn](./024-concurrency-model.md).
+> **This document defines `spawn` syntax and AST/IR restructuring.** For runtime behavior semantics (task decomposition granularity, ownership, scope, error propagation, resource types, nesting), see [RFC-024: Concurrency Runtime Semantics Based on Spawn](../accepted/024-concurrency-model.md).
 >
-> These two RFCs jointly define `spawn` — RFC-024 answers "what to do", and RFC-032 answers "how to
-> represent it".
+> The two RFCs collaboratively define `spawn` — 024 answers "what to do", 032 answers "how to represent".
 
-> **Core Insight**: `spawn` should not only modify `{}` blocks. It can modify **any expression**.
-> `spawn for` is not special syntax — it is simply the natural combination of `spawn` + a `for`
-> expression.
+> **Core Insight**: `spawn` should not only modify `{}` blocks. It can modify **any expression**. `spawn for` is not a special syntax — it is the natural combination of `spawn` + `for` expression.
 
 ## Summary
 
-Extend `spawn` from `spawn { }` (only modifying blocks) to `spawn <expr>` (modifying any
-expression). `Expr::SpawnFor` is removed from the AST, naturally replaced by
-`Expr::Spawn { body: Expr::For { .. } }`. This RFC only performs AST/IR/Parser cleanup and does not
-involve type system changes.
+Extend `spawn` from `spawn { }` (modifying only blocks) to `spawn <expr>` (modifying any expression). `Expr::SpawnFor` is removed from the AST, naturally replaced by `Expr::Spawn { body: Expr::For { .. } }`. This RFC only does AST/IR/Parser cleanup, with no type system changes.
 
-> **Computation Structure Types (`MonoType` extensions) are deferred to a separate RFC.** After this
-> RFC removes the `SpawnFor` special case, the proof pipeline integration of `spawn` requires the
-> type system to be aware of the computation structure — this is a general mechanism not limited to
-> spawn, and deserves an independent design.
+> **Computational structure types (`MonoType` extension) is deferred to a separate RFC.** After this RFC removes `SpawnFor`, integrating `spawn` into the proof pipeline requires the type system to be aware of computational structures — this is a general mechanism, not limited to spawn, and deserves independent design.
 
 ## Motivation
 
 ### Why is this change needed?
 
-Currently, `spawn for x in items { body }` is an independent keyword combination, with a dedicated
-`Expr::SpawnFor` in the AST to represent it. This breaks the orthogonality of the language:
+Currently `spawn for x in items { body }` is an independent keyword combination, and `Expr::SpawnFor` exists in the AST specifically to represent it. This breaks language orthogonality:
 
-1. **Inconsistent syntax**: `spawn` can only modify `{}` blocks, while `spawn for` is a hardcoded
-   exception
-2. **Lack of orthogonality**: Combinations like `spawn while`, `spawn if` cannot be naturally
-   expressed
+1. **Inconsistent syntax**: `spawn` can only modify `{}` blocks, `spawn for` is a hardcoded exception
+2. **Missing orthogonality**: Combinations like `spawn while`, `spawn if` cannot be expressed naturally
 
-### Current Problem
+### Current problems
 
 ```rust
-// Two spawn variants in the AST
+// Two spawn variants in AST
 Spawn { body: Box<Block>, span: Span },         // spawn { ... }
 SpawnFor { var, var_mut, iterable, body, span },  // spawn for x in items { ... }
 ```
@@ -56,47 +42,42 @@ SpawnFor { var, var_mut, iterable, body, span },  // spawn for x in items { ... 
 
 ### Core Design
 
-`spawn <expr>`: `spawn` modifies any expression. The shape of the expression determines how the DAG
-decomposes tasks.
+`spawn <expr>`: `spawn` modifies any expression. The shape of the expression determines how the DAG decomposes tasks.
 
 ### User Mental Model
 
-`spawn` = "run this expression concurrently". The shape of the expression determines how it is
-decomposed:
+`spawn` = "take this expression and do it concurrently". The expression's shape determines decomposition:
 
-| Expression Shape                | Concurrent Behavior                           |
-| ------------------------------- | --------------------------------------------- |
-| `spawn { a, b, c }`             | `a`, `b`, `c` run independently in parallel   |
-| `spawn for x in items { f(x) }` | N iterations run independently in parallel    |
-| `spawn while cond { step() }`   | Each iteration is an independent task         |
-| `spawn if c { a } else { b }`   | The selected branch is the whole spawn domain |
-| `spawn call(x)`                 | The call itself is a single task              |
-| `spawn 42`                      | A single task                                 |
+| Expression Shape              | Concurrency Behavior                     |
+| ----------------------------- | ---------------------------------------- |
+| `spawn { a, b, c }`           | `a`, `b`, `c` run independently in parallel |
+| `spawn for x in items { f(x) }` | N iterations run independently in parallel |
+| `spawn while cond { step() }` | Each iteration is an independent task    |
+| `spawn if c { a } else { b }` | Selected branch as a whole is the spawn domain |
+| `spawn call(x)`               | The call itself is one task              |
+| `spawn 42`                    | A single task                            |
 
-The compiler is responsible for DAG analysis to determine dependencies, and the runtime schedules
-according to the GMP model — tasks without dependencies are thrown into the work queue, and workers
-race to run them. The whole thing blocks synchronously, waiting for all tasks to complete.
+The compiler is responsible for DAG analysis to determine dependencies, and the runtime schedules according to the GMP model — tasks with no dependencies are thrown into the work queue, workers compete to run them. Overall synchronization blocks, waiting for all tasks to complete.
 
-**Difference from Go**: Go's `go` is "fire and forget", while YaoXiang's `spawn` is "decompose for
-parallel execution, and continue only after everything is done".
+**Difference from Go**: Go's `go` is "throw it out and don't care", YaoXiang's `spawn` is "decompose for parallel execution, wait for all to finish before continuing".
 
 ### Control Flow Orthogonality
 
-| Combination                     | Semantics                                               | Difference                                                 |
-| ------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
-| `spawn for x in items { body }` | Data parallel: each iteration = independent task        | DAG analyzes dependencies across iterations                |
-| `for x in items spawn { body }` | Each iteration creates a spawn domain                   | Does not analyze across iterations                         |
-| `spawn while cond { body }`     | Conditional parallel: each iteration = independent task | Inter-iteration dependencies guaranteed by condition       |
-| `while cond spawn { body }`     | Each iteration creates a spawn domain                   | Different semantics from above, no special handling needed |
-| `spawn if c { a } else { b }`   | The entire if-else is one spawn domain                  | Selects branch at runtime                                  |
-| `if c spawn { a } else { b }`   | Only a single branch is spawned                         | if expression internally wraps spawn                       |
+| Combination                        | Semantics                               | Differences                            |
+| ---------------------------------- | --------------------------------------- | -------------------------------------- |
+| `spawn for x in items { body }`    | Data parallelism: each iteration = independent task | DAG analyzes dependencies across iterations |
+| `for x in items spawn { body }`   | Each iteration creates a spawn domain   | No cross-iteration analysis            |
+| `spawn while cond { body }`        | Conditional parallelism: each iteration = independent task | Inter-iteration dependencies guaranteed by condition |
+| `while cond spawn { body }`        | Each iteration creates a spawn domain   | Different semantics from above but no special handling needed |
+| `spawn if c { a } else { b }`      | The entire if-else is one spawn domain   | Executes according to condition at runtime |
+| `if c spawn { a } else { b }`      | Only the single branch is spawned       | spawn wraps inside the if expression   |
 
 ### Eliminated Complexity
 
-- ❌ `Expr::SpawnFor` removed from the AST
+- ❌ `Expr::SpawnFor` removed from AST
 - ❌ `SpawnForAnalysis` removed from DAG analysis
-- ❌ `spawn for` is no longer specially handled as a combined keyword in the Parser
-- ❌ `Ir::SpawnFor` removed from the IR
+- ❌ `spawn for` no longer specially handled as a combined keyword in Parser
+- ❌ `Ir::SpawnFor` removed from IR
 
 ## Detailed Design
 
@@ -115,7 +96,7 @@ SpawnFor { var, var_mut, iterable, body, span },  // spawn for x in items { ... 
 Spawn { body: Box<Expr>, span: Span },           // spawn <any expression>
 ```
 
-`Expr::SpawnFor` is removed. The AST representation of `spawn for x in items { body }`:
+`Expr::SpawnFor` deleted. AST representation of `spawn for x in items { body }`:
 
 ```rust
 Expr::Spawn {
@@ -128,41 +109,38 @@ Expr::Spawn {
 }
 ```
 
-**IF Special Cases**:
+**IF edge cases:**
 
-| Syntax                           | AST Structure                                       |
-| -------------------------------- | --------------------------------------------------- |
-| `spawn if cond { a } else { b }` | `Spawn { body: Expr::If { ... } }`                  |
-| `if cond spawn { a } else { b }` | `Expr::If { then: Spawn { body: {a} }, else: {b} }` |
+| Syntax                               | AST Structure                                     |
+| ------------------------------------ | ------------------------------------------------- |
+| `spawn if cond { a } else { b }`    | `Spawn { body: Expr::If { ... } }`                |
+| `if cond spawn { a } else { b }`    | `Expr::If { then: Spawn { body: {a} }, else: {b} }` |
 
-The two have different semantics but both are natural combinations, requiring no special rules.
+Both have different semantics but are natural combinations, requiring no special rules.
 
 ### 2. Parser Layer
 
-`spawn` has the lowest binding precedence (same as `return`), consuming the entire subsequent
-expression:
+`spawn` binds with the lowest precedence (same as `return`), consuming the entire following expression:
 
 ```
 spawn a + b        →  spawn (a + b)         ≠  (spawn a) + b
 spawn f(x).y       →  spawn (f(x).y)
 ```
 
-Parser changes: in `pratt/nud.rs`, `spawn` no longer requires `{`, but instead calls general
-expression parsing:
+Parser changes: In `pratt/nud.rs`, `spawn` no longer requires `{`, but calls generic expression parsing:
 
 ```
 token spawn → parse_expr(min_precedence) → Expr::Spawn { body: expr }
 ```
 
-`spawn for` is no longer handled as a combined keyword — `for` is handled by the general expression
-parser to produce `Expr::For`, and `spawn` is only responsible for wrapping.
+`spawn for` is no longer treated as a combined keyword — `for` is processed by the generic expression parser to produce `Expr::For`, and `spawn` only handles wrapping.
 
 ### 3. DAG Analysis Layer
 
-The two current entry points are merged into one:
+Two entry points merged into one:
 
 ```rust
-/// Unified entry: dispatches based on the body expression kind
+/// Unified entry: dispatches based on body expression kind
 fn analyze_spawn_expr(body: &Expr, ...) -> SpawnAnalysis {
     match body {
         Expr::Block(block)       => analyze_block_tasks(block, ...),
@@ -174,7 +152,7 @@ fn analyze_spawn_expr(body: &Expr, ...) -> SpawnAnalysis {
 }
 ```
 
-**Unified Result Structure**:
+**Unified result structure:**
 
 ```rust
 struct SpawnAnalysis {
@@ -183,14 +161,14 @@ struct SpawnAnalysis {
 }
 
 enum TaskSource {
-    /// spawn { a, b, c } — N direct sub-expressions known at compile time
+    /// spawn { a, b, c } — N direct child expressions known at compile time
     Explicit(Vec<TaskInfo>),
-    /// spawn for/while — N tasks produced by runtime iteration
+    /// spawn for/while — N tasks generated by runtime iteration
     Iterate {
         kind: IterKind,
         iter_var: String,
-        iterable: Option<Expr>,      // present for for, absent for while
-        condition: Option<Expr>,     // present for while, absent for for
+        iterable: Option<Expr>,      // for has it, while doesn't
+        condition: Option<Expr>,     // while has it, for doesn't
         body: Block,
         reads: HashSet<String>,
         writes: HashSet<String>,
@@ -201,32 +179,30 @@ enum TaskSource {
 enum IterKind { For, While }
 ```
 
-The `SpawnForAnalysis` struct is removed.
+`SpawnForAnalysis` struct deleted.
 
-| body Kind             | How to Decompose into Tasks               |
-| --------------------- | ----------------------------------------- |
-| `Expr::Block`         | Direct sub-expressions → task list        |
-| `Expr::For`           | Each iteration → one task (data parallel) |
-| `Expr::While`         | Each iteration → one task                 |
-| `Expr::If`            | Selected branch as a whole → one task     |
-| `Expr::Call` / others | Expression itself → one task              |
+| body kind            | How decomposed into tasks                |
+| -------------------- | ---------------------------------------- |
+| `Expr::Block`        | Direct child expressions → task list     |
+| `Expr::For`          | Each iteration → one task (data parallelism) |
+| `Expr::While`        | Each iteration → one task                |
+| `Expr::If`           | Selected branch → one task               |
+| `Expr::Call` / other | The expression itself → one task         |
 
-After DAG analysis is complete, the runtime schedules according to the GMP model — tasks without
-dependencies are thrown into the work queue, and workers race to run them.
+After DAG analysis completes, the runtime schedules according to the GMP model — tasks with no dependencies are thrown into the work queue, workers compete to run them.
 
 ### 4. IR / Codegen Layer
 
-`Ir::SpawnFor` is removed. Unified into `Ir::Spawn`, carrying `TaskSource` information.
+`Ir::SpawnFor` deleted. Unified to `Ir::Spawn`, carrying `TaskSource` information.
 
 HIR → IR translation generates runtime calls based on `SpawnAnalysis.source`:
 
-- `TaskSource::Explicit(tasks)` → task list known at compile time
-- `TaskSource::Iterate { .. }` → runtime expansion (compiler-driven, similar to par_iter but
-  zero-cost)
+- `TaskSource::Explicit(tasks)` → tasks known at compile time
+- `TaskSource::Iterate { .. }` → runtime expansion (compiler-driven, similar to par_iter but zero-cost)
 
 ### 5. Placement Layer
 
-The two current branches are merged into one:
+Two branches merged into one:
 
 ```rust
 // Before
@@ -237,16 +213,14 @@ Expr::SpawnFor { body, iterable, .. } => {
 }
 
 // After
-Expr::Spawn { body, .. } => self.check_expr(body),   // body is Expr, just recurse
+Expr::Spawn { body, .. } => self.check_expr(body),   // body is Expr, recurse
 ```
 
 ### 6. Backward Compatibility
 
-The semantics of existing `spawn for` code remain unchanged. The Parser automatically parses
-`spawn for x in items { body }` as `Expr::Spawn { body: Expr::For }`. The internal representation
-changes, while the user-visible behavior remains the same.
+Existing `spawn for` code has unchanged semantics. Parser automatically parses `spawn for x in items { body }` as `Expr::Spawn { body: Expr::For }`. Internal representation changes, user-visible behavior unchanged.
 
-New syntax is naturally obtained:
+New syntax naturally gained:
 
 ```yx
 spawn while has_next() {
@@ -261,111 +235,90 @@ spawn if use_cache {
 }
 ```
 
-**Single-Task spawn Warning**: When modifying a single expression like `spawn call(x)` and
-`spawn 42`, DAG analysis produces a compile warning: "spawn modifying a single expression has no
-concurrency effect". The syntax is legal, but it reminds the user to check their intent.
+**Single-task spawn warning**: When `spawn` modifies a single expression like `spawn call(x)` and `spawn 42`, DAG analysis produces a compile warning: "spawn modifying a single expression has no concurrency effect". Syntax is legal, but reminds user to check intent.
 
 ## Trade-offs
 
 ### Advantages
 
-1. **Syntactic orthogonality**: `spawn` + any control flow = natural concurrent combination
-2. **Elimination of special cases**: Remove `Expr::SpawnFor` and related special handling code
-3. **Extensibility**: Future new control flow structures automatically combine with `spawn` without
-   modifying spawn logic
+1. **Syntax orthogonality**: `spawn` + any control flow = natural concurrency combination
+2. **Eliminate special cases**: Remove `Expr::SpawnFor` and related special handling code
+3. **Extensible**: Future control flow structures automatically combine with `spawn`, no spawn logic modification needed
 
 ### Disadvantages
 
-1. **Breaking change**: Internal AST/IR representation changes, requiring all code consuming
-   `Expr::SpawnFor` to be updated
-2. **Proof pipeline adaptation required**: After removing `SpawnFor`, the proof pipeline dispatches
-   via AST (`match body { Expr::For => ..., Expr::While => ... }`) — this adaptation is accomplished
-   within the scope of this RFC through the unified DAG entry point
+1. **Breaking change**: Internal AST/IR representation changes, all code consuming `Expr::SpawnFor` must be updated
+2. **Proof pipeline adaptation needed**: After removing `SpawnFor`, the proof pipeline dispatches through AST (`match body { Expr::For => ..., Expr::While => ... }`) — this adaptation is completed within this RFC scope through the DAG unified entry point
 
-## Alternatives
+## Alternative Approaches
 
-| Approach                                                                     | Why Not Choose                                                                                                         |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Keep `spawn for` as independent syntax                                       | Breaks orthogonality, becomes the only keyword combination special case in the language                                |
-| `spawn` only modifies `{}`, data parallelism via standard library `par_iter` | Language primitive capability sinks to the library, losing compiler-level DAG analysis and resource conflict detection |
+| Approach                                        | Why not chosen                                                 |
+| ----------------------------------------------- | -------------------------------------------------------------- |
+| Keep `spawn for` as independent syntax           | Breaks orthogonality, becomes the only keyword combination special case in the language |
+| `spawn` only modifies `{}`, data parallelism via standard library `par_iter` | Language's primitive capability moved to library, loses compiler-level DAG analysis and resource conflict detection |
 
-## Computation Structure Types (Deferred to a Separate RFC)
+## Computational Structure Types (Deferred to Separate RFC)
 
-After this RFC removes `SpawnFor`, the proof pipeline integration of `spawn` faces an architectural
-issue: the proof pipeline operates at the type level and needs to know the computation structure
-inside spawn (For/While/Block/If/Call) in order to select the correct proof strategy. The current
-proof pipeline dispatches via AST, but the long-term direction is to encode the computation
-structure as `MonoType` variants (`Block`/`ForExpr`/`WhileExpr`/`IfExpr`/`Call`/`Spawn`), so that
-the pipeline works entirely at the type level.
+After this RFC removes `SpawnFor`, integrating `spawn` into the proof pipeline faces an architectural issue: the proof pipeline works at the type level and needs to know the computational structure inside spawn (For/While/Block/If/Call) to select the correct proof strategy. Currently the proof pipeline dispatches through AST, but the long-term direction is to encode computational structures as `MonoType` variants (`Block`/`ForExpr`/`WhileExpr`/`IfExpr`/`Call`/`Spawn`), making the pipeline work entirely at the type level.
 
-This is a weakened practical version of
-[RFC-019: Type-Level Homoiconicity](./019-typed-homoiconicity.md) — the compiler's built-in
-computation structures enter the type system, but without opening up user-defined syntax. The
-theoretical basis is ECMTT (Contextual Modal Types for Algebraic Effects and Handlers, ICFP 2021):
-`Spawn<T>` corresponds to the modal operator `□`, and the proof pipeline corresponds to the handler.
+This is a weakened practical version of [RFC-019: Typed Homoiconicity](../draft/019-typed-homoiconicity.md) — compiler-built-in computational structures enter the type system, but without exposing user-defined syntax. The theoretical foundation is ECMTT (Contextual Modal Types for Algebraic Effects and Handlers, ICFP 2021): `Spawn<T>` corresponds to modal operator `□`, and the proof pipeline corresponds to handlers.
 
-This mechanism is not limited to spawn — any future effect (pure computation, IO, fallible) can
-enter the type system through the same pattern. spawn is the first consumer, not the only consumer.
+This mechanism is not limited to spawn — any future effect (pure computation, IO, fallible) can enter the type system through the same pattern. spawn is the first consumer, not the only consumer.
 
-> **The separate RFC will define**: Complete semantics of the 6 MonoType variants, type checker
-> adaptation strategy, unified interface for proof pipeline dispatch by type, and the integration
-> plan with RFC-027.
+> **The independent RFC will define**: Complete semantics for 6 MonoType variants, type checker adaptation strategy, unified interface for proof pipeline dispatch by type, and integration plan with RFC-027.
 
 ## Implementation Strategy
 
 ### Phase Division
 
-1. **AST + Parser**: `Spawn { body: Box<Expr> }`, remove `SpawnFor`
-2. **DAG Analysis Unification**: Merge entry points, unify `TaskSource` enum. Single-task spawn
-   (`spawn call(x)`, `spawn 42`) produces compile warnings
-3. **IR / Codegen Adaptation**: Remove `Ir::SpawnFor`, unify handling paths
-4. **Placement Simplification**: Remove `SpawnFor` branch
-5. **Test Verification**: All existing `spawn for` tests pass
+1. **AST + Parser**: `Spawn { body: Box<Expr> }`, delete `SpawnFor`
+2. **DAG Analysis unification**: Merge entry points, unify `TaskSource` enum. Single-task spawn (`spawn call(x)`, `spawn 42`) produces compile warnings
+3. **IR / Codegen adaptation**: Delete `Ir::SpawnFor`, unify processing path
+4. **Placement simplification**: Delete `SpawnFor` branch
+5. **Testing validation**: All existing `spawn for` tests pass
 
-### Scope of Impact
+### Impact Scope
 
-| File/Directory                               | Changes                                                  |
-| -------------------------------------------- | -------------------------------------------------------- |
-| `frontend/core/parser/ast.rs`                | `Spawn` body changed to `Box<Expr>`, remove `SpawnFor`   |
-| `frontend/core/parser/pratt/nud.rs`          | `spawn` handler simplified to general expression parsing |
-| `frontend/core/spawn/analysis.rs`            | Unified entry, `TaskSource` merges Explicit + Iterate    |
-| `frontend/core/spawn/placement.rs`           | Remove `SpawnFor` branch                                 |
-| `middle/core/ir.rs`                          | Remove `Ir::SpawnFor`                                    |
-| `middle/` (IR gen, codegen)                  | Unify spawn paths                                        |
-| `tests/yaoxiang/04-concurrency/spawn_for.yx` | Semantics unchanged, verify pass                         |
+| File/Directory                                | Changes                                                         |
+| --------------------------------------------- | --------------------------------------------------------------- |
+| `frontend/core/parser/ast.rs`                 | `Spawn` body changed to `Box<Expr>`, delete `SpawnFor`          |
+| `frontend/core/parser/pratt/nud.rs`           | `spawn` handler simplified to generic expression parsing        |
+| `frontend/core/spawn/analysis.rs`             | Unified entry, `TaskSource` merges Explicit + Iterate          |
+| `frontend/core/spawn/placement.rs`            | Delete `SpawnFor` branch                                        |
+| `middle/core/ir.rs`                           | Delete `Ir::SpawnFor`                                          |
+| `middle/` (IR gen, codegen)                   | Unified spawn path                                             |
+| `tests/yaoxiang/04-concurrency/spawn_for.yx` | Semantics unchanged, validation passes                         |
 
 ### Dependencies
 
-- RFC-024 (spawn block concurrency model) — This RFC is its orthogonality extension
-- RFC-010 (unified type syntax) — Foundation of syntactic unification
+- RFC-024 (spawn block concurrency model) — this RFC is its orthogonal extension
+- RFC-010 (unified type syntax) — foundation for syntax unification
 
 ## Design Decision Record
 
-| Decision                    | Decision                                              | Reason                                                                                                           | Date       |
-| --------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------- |
-| spawn modifier scope        | Any expression                                        | Eliminate `spawn for` special case                                                                               | 2026-06-16 |
-| `spawn while` support       | Supported                                             | Syntactic orthogonality, low implementation cost. Proof pipeline may reject cross-iteration dependency use cases | 2026-06-16 |
-| `spawn if` semantics        | Modifies the entire if-else                           | Distinguish from `if spawn { }`                                                                                  | 2026-06-16 |
-| spawn binding precedence    | Lowest (same as return)                               | Consumes the entire subsequent expression                                                                        | 2026-06-16 |
-| DAG on for internals        | Do not expand sub-expressions inside for              | Direct sub-expression rule unchanged, for as a whole is one task source                                          | 2026-06-16 |
-| Single-task spawn warning   | `spawn call(x)` / `spawn 42` produces compile warning | No concurrency effect, remind user to check intent                                                               | 2026-08-19 |
-| Computation structure types | Deferred to a separate RFC                            | General mechanism, not limited to spawn. ECMTT theoretical basis                                                 | 2026-08-19 |
+| Decision                  | Decision                                                          | Reason                                                    | Date        |
+| ------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------- | ----------- |
+| spawn modifier scope      | Any expression                                                    | Eliminate `spawn for` special case                        | 2026-06-16  |
+| `spawn while` support     | Supported                                                         | Syntax orthogonal, low implementation cost. Proof pipeline may reject cross-iteration dependency use cases | 2026-06-16  |
+| `spawn if` semantics      | Modifies entire if-else                                           | Distinguish from `if spawn { }`                          | 2026-06-16  |
+| spawn binding precedence  | Lowest (same as return)                                           | Consumes the entire expression following it              | 2026-06-16  |
+| DAG for for body          | Does not expand inside for                                        | Direct child expression rules unchanged, for as a whole is one task source | 2026-06-16  |
+| Single-task spawn warning | `spawn call(x)` / `spawn 42` produce compile warnings             | No concurrency effect, remind user to check intent       | 2026-08-19  |
+| Computational structure types | Deferred to separate RFC                                         | General mechanism, not limited to spawn. ECMTT theoretical foundation | 2026-08-19  |
 
 ---
 
 ## References
 
-- [RFC-024: Concurrency Model Based on spawn Blocks](./024-concurrency-model.md)
-- [RFC-010: Unified Type Syntax](./010-unified-type-syntax.md)
-- [ECMTT: Contextual Modal Types for Algebraic Effects and Handlers (ICFP 2021)](https://arxiv.org/abs/2103.02976)
-  — Theoretical basis of computation structure types
-- [Concurrency Model Specification](../../reference/language-spec/concurrency.md)
-- [spawn for Orthogonality Suspension (Discussion Draft)](../../dev/plan/ongoing/spawn-for-orthogonality.md)
+- [RFC-024: Concurrency Model Based on Spawn Blocks](../accepted/024-concurrency-model.md)
+- [RFC-010: Unified Type Syntax](../accepted/010-unified-type-syntax.md)
+- [ECMTT: Contextual Modal Types for Algebraic Effects and Handlers (ICFP 2021)](https://arxiv.org/abs/2103.02976) — theoretical foundation for computational structure types
+- [Concurrency Model Specification](../../../reference/language-spec/concurrency.md)
 
 ---
 
-## Lifecycle and Destination
+## Lifecycle and Disposition
 
-| Status           | Location                  | Description               |
-| ---------------- | ------------------------- | ------------------------- |
-| **Under Review** | `docs/design/rfc/review/` | Open community discussion |
+| Status            | Location                        | Description             |
+| ----------------- | ------------------------------- | ----------------------- |
+| **Under Review** | `docs/design/rfc/review/`       | Open for community discussion |

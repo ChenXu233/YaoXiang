@@ -8,7 +8,7 @@ updated: '2026-05-11（修剪：移除 @auto、L1 回退启发式，精简讨论
 
 > **⚠️ 已废弃 (DEPRECATED)**
 >
-> 本 RFC 已被 **[RFC-024：新并发模型](/design/rfc/accepted/024-new-concurrency-model)** 取代。
+> 本 RFC 已被 **[RFC-024：新并发模型](../accepted/024-concurrency-model.md)** 取代。
 >
 > RFC-001 的三层并发架构（L1/L2/L3）、@block/@eager 注解、DAG 自动分析等设计已被移除。新设计使用
 > `spawn {}` 块作为唯一并行原语，无需注解。
@@ -28,8 +28,8 @@ title: "RFC-001：并作模型与错误处理系统"
 
 | 文档                                              | 关系               |
 | ------------------------------------------------- | ------------------ |
-| [async-whitepaper](/src/archive/async-whitepaper) | 设计源头，理论基础 |
-| [language-spec](/src/design/language-spec)        | 规范目标           |
+| async-whitepaper | 设计源头，理论基础 |
+| [language-spec](../../../reference/language-spec/index.md)        | 规范目标           |
 
 ## 摘要
 
@@ -366,5 +366,5 @@ Arc(T) 实现 Send + Sync（线程安全引用计数）
 - [Rust async book](https://rust-lang.github.io/async-book/)
 - [Go 并发模式](https://golang.org/doc/effective_go#concurrency)
 - [工作窃取调度](https://en.wikipedia.org/wiki/Work_stealing)
-- [并作模型白皮书](/src/archive/async-whitepaper)
-- [YaoXiang 语言规范](/src/design/language-spec)
+- 并作模型白皮书
+- [YaoXiang 语言规范](../../../reference/language-spec/index.md)

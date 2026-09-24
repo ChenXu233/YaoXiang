@@ -15,14 +15,14 @@ pr_impl:
 # RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design
 
 > **⚠️ Alignment Note**: This document has been aligned with
-> [RFC-024 New Concurrency Model](/reference/language-spec/concurrency.md). The old whole-program
+> [RFC-024 New Concurrency Model](../../../../reference/language-spec/concurrency.md). The old whole-program
 > DAG analysis, `@block`/`@eager` annotations, and L1/L2/L3 hierarchy models have been replaced by
 > the `spawn {}` block parallel primitive. DAG analysis now operates only within `spawn {}` blocks.
 
 > **References**:
 >
 > - [RFC-011: Generic Type System Design](./011-generic-type-system.md)
-> - [Concurrency Model Specification (RFC-024)](/reference/language-spec/concurrency.md)
+> - [Concurrency Model Specification (RFC-024)](../../../../reference/language-spec/concurrency.md)
 
 ## Abstract
 
@@ -452,7 +452,7 @@ src/
 
 ## References
 
-- [Concurrency Model Specification (RFC-024)](/reference/language-spec/concurrency.md)
+- [Concurrency Model Specification (RFC-024)](../../../../reference/language-spec/concurrency.md)
 - [RFC-011: Generic Type System Design](./011-generic-type-system.md)
 - [Rust async runtime design](https://tokio.rs/)
 - [Go scheduler design](https://golang.org/src/runtime/proc.go)

@@ -5,7 +5,7 @@ title: 'Syntax Cheatsheet'
 # Syntax Cheatsheet
 
 Understand YaoXiang core syntax in 5 minutes. For in-depth learning, visit the
-[Tutorial](/tutorial/).
+[Tutorial](../../tutorial/index.md).
 
 ## Variables
 

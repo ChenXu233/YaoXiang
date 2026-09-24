@@ -14,7 +14,7 @@ issue: '#102'
 > - [RFC-024: 基于 spawn 块的并发模型](../accepted/024-concurrency-model.md)
 > - [RFC-008: Runtime 并发模型与调度器脱耦设计](../accepted/008-runtime-concurrency-model.md)
 > - [RFC-009: 所有权模型设计](../accepted/009-ownership-model.md)
-> - [并发模型规范](/reference/language-spec/concurrency.md)
+> - [并发模型规范](../../../reference/language-spec/concurrency.md)
 
 ## 摘要
 
@@ -457,7 +457,7 @@ impl IoScheduler for UvLoop {
 - [RFC-024 并发模型](../accepted/024-concurrency-model.md)
 - [RFC-008 Runtime 架构](../accepted/008-runtime-concurrency-model.md)
 - [RFC-009 所有权模型](../accepted/009-ownership-model.md)
-- [并发模型规范](/reference/language-spec/concurrency.md)
+- [并发模型规范](../../../reference/language-spec/concurrency.md)
 
 ### 外部参考
 

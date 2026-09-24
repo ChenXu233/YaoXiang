@@ -15,14 +15,14 @@ pr_impl:
 # RFC-008: Архитектура Runtime с разделением модели конкурентности и планировщика
 
 > **⚠️ Указание о согласовании**: Данный документ согласован с
-> [RFC-024 Новая модель конкурентности](/reference/language-spec/concurrency.md). Старый анализ DAG
+> [RFC-024 Новая модель конкурентности](../../../../reference/language-spec/concurrency.md). Старый анализ DAG
 > всей программы, аннотации `@block`/`@eager`, модель уровней L1/L2/L3 заменены примитивом
 > параллельных блоков `spawn {}`. Анализ DAG теперь применяется только внутри блоков `spawn {}`.
 
 > **Справочные материалы**:
 >
 > - [RFC-011: Проектирование системы обобщённых типов](./011-generic-type-system.md)
-> - [Спецификация модели конкурентности (RFC-024)](/reference/language-spec/concurrency.md)
+> - [Спецификация модели конкурентности (RFC-024)](../../../../reference/language-spec/concurrency.md)
 
 ## Аннотация
 
@@ -501,7 +501,7 @@ src/
 
 ## Список литературы
 
-- [Спецификация модели конкурентности (RFC-024)](/reference/language-spec/concurrency.md)
+- [Спецификация модели конкурентности (RFC-024)](../../../../reference/language-spec/concurrency.md)
 - [RFC-011: Проектирование системы обобщённых типов](./011-generic-type-system.md)
 - [Дизайн async runtime в Rust](https://tokio.rs/)
 - [Дизайн планировщика Go](https://golang.org/src/runtime/proc.go)

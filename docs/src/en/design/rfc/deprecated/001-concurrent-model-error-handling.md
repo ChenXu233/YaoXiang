@@ -9,7 +9,7 @@ updated: '2026-05-11 (pruned: removed @auto, L1 fallback heuristics, streamlined
 > **⚠️ Deprecated**
 >
 > This RFC has been superseded by
-> **[RFC-024: New Concurrency Model](/design/rfc/accepted/024-new-concurrency-model)**.
+> **[RFC-024: New Concurrency Model](../../../../design/rfc/accepted/024-concurrency-model.md)**.
 >
 > RFC-001's three-layer concurrency architecture (L1/L2/L3), @block/@eager annotations, and DAG
 > automatic analysis have been removed. The new design uses `spawn {}` blocks as the sole
@@ -30,8 +30,8 @@ title: "RFC-001: Concurrent Spawn Model and Error Handling System"
 
 | Document                                          | Relationship                     |
 | ------------------------------------------------- | -------------------------------- |
-| [async-whitepaper](/src/archive/async-whitepaper) | Design origin, theoretical basis |
-| [language-spec](/src/design/language-spec)        | Specification target             |
+| async-whitepaper | Design origin, theoretical basis |
+| [language-spec](../../../../reference/language-spec/index.md)        | Specification target             |
 
 ## Abstract
 
@@ -375,5 +375,5 @@ Arc(T) implements Send + Sync (thread-safe reference counting)
 - [Rust async book](https://rust-lang.github.io/async-book/)
 - [Go Concurrency Patterns](https://golang.org/doc/effective_go#concurrency)
 - [Work Stealing Scheduling](https://en.wikipedia.org/wiki/Work_stealing)
-- [Concurrent Spawn Model Whitepaper](/src/archive/async-whitepaper)
-- [YaoXiang Language Specification](/src/design/language-spec)
+- Concurrent Spawn Model Whitepaper
+- [YaoXiang Language Specification](../../../../reference/language-spec/index.md)

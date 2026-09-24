@@ -53,7 +53,7 @@ impl<'a> Parser<'a> {
 ## Другой угол: заимствование — это не указатель, а токен
 
 Основной дизайн YaoXiang зафиксирован в
-[RFC-009 (Модель ownership)](/design/rfc/accepted/009-ownership-model). Он не меняет семантику по
+[RFC-009 (Модель ownership)](../../design/rfc/accepted/009-ownership-model.md). Он не меняет семантику по
 умолчанию (это Move), но меняет **онтологию заимствования**.
 
 В YaoXiang `&T` и `&mut T` — **не указатели**. Они — **нуль-размерные токены compile-time** —
@@ -196,7 +196,7 @@ YaoXiang вам нужно понимать цепочки производны�
 
 В Rust есть отдельный «проверщик заимствований». **Направление дизайна** YaoXiang — унифицировать
 конфликты заимствований в конвейер доказательств проверки типов
-([RFC-027 (Предикаты compile-time и унифицированная статическая верификация)](/design/rfc/accepted/027-compile-time-evaluation-types)).
+([RFC-027 (Предикаты compile-time и унифицированная статическая верификация)](../../design/rfc/accepted/027-compile-time-evaluation-types.md)).
 
 Конфликт токенов — это утверждение Хоара:
 
@@ -356,6 +356,6 @@ process: (data: &mut Data) -> Void = {
 ---
 
 _YaoXiang — это разрабатываемый язык программирования. Модель ownership см. в
-[RFC-009](/design/rfc/accepted/009-ownership-model), захват замыканиями — в
-[RFC-023](/design/rfc/accepted/023-closure-capture-model), модель concurrency — в
-[RFC-024](/design/rfc/accepted/024-concurrency-model)._
+[RFC-009](../../design/rfc/accepted/009-ownership-model.md), захват замыканиями — в
+[RFC-023](../../design/rfc/deprecated/023-closure-capture-model.md), модель concurrency — в
+[RFC-024](../../design/rfc/accepted/024-concurrency-model.md)._

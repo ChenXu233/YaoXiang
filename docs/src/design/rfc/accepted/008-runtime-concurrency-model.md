@@ -14,14 +14,14 @@ pr_impl:
 
 # RFC-008：Runtime 并发模型与调度器脱耦设计
 
-> **⚠️ 对齐说明**：本文档已与 [RFC-024 新并发模型](/reference/language-spec/concurrency.md)
+> **⚠️ 对齐说明**：本文档已与 [RFC-024 新并发模型](../../../reference/language-spec/concurrency.md)
 > 对齐。旧的全程序 DAG 分析、`@block`/`@eager` 注解、L1/L2/L3 层级模型已被 `spawn {}`
 > 块并行原语取代。DAG 分析现在仅作用于 `spawn {}` 块内部。
 
 > **参考**:
 >
 > - [RFC-011: 泛型系统设计](./011-generic-type-system.md)
-> - [并发模型规范（RFC-024）](/reference/language-spec/concurrency.md)
+> - [并发模型规范（RFC-024）](../../../reference/language-spec/concurrency.md)
 
 ## 摘要
 
@@ -423,7 +423,7 @@ src/
 
 ## 参考文献
 
-- [并发模型规范（RFC-024）](/reference/language-spec/concurrency.md)
+- [并发模型规范（RFC-024）](../../../reference/language-spec/concurrency.md)
 - [RFC-011: 泛型系统设计](./011-generic-type-system.md)
 - [Rust async 运行时设计](https://tokio.rs/)
 - [Go 调度器设计](https://golang.org/src/runtime/proc.go)

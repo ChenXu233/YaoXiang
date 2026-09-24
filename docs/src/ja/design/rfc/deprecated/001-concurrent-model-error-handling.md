@@ -8,7 +8,7 @@ updated: '2026-05-11（整備：@auto、L1 フォールバック启发式の削�
 
 > **⚠️ 廃止 (DEPRECATED)**
 >
-> 本 RFC は **[RFC-024：新並行モデル](/design/rfc/accepted/024-new-concurrency-model)**
+> 本 RFC は **[RFC-024：新並行モデル](../../../../design/rfc/accepted/024-concurrency-model.md)**
 > に置き換えられました。
 >
 > RFC-001 の3層並行アーキテクチャ（L1/L2/L3）、@block/@eager アノテーション、DAG 自動解析などの設計は削除されました。新設計では
@@ -29,8 +29,8 @@ title: "RFC-001：並作モデルとエラー処理システム"
 
 | ドキュメント                                      | 関係                   |
 | ------------------------------------------------- | ---------------------- |
-| [async-whitepaper](/src/archive/async-whitepaper) | 設計ソース、理論的基盤 |
-| [language-spec](/src/design/language-spec)        | 規範目標               |
+| async-whitepaper | 設計ソース、理論的基盤 |
+| [language-spec](../../../../reference/language-spec/index.md)        | 規範目標               |
 
 ## 概要
 
@@ -367,5 +367,5 @@ Arc(T) は Send + Sync を実装（スレッドセーフ参照カウント）
 - [Rust async book](https://rust-lang.github.io/async-book/)
 - [Go 並行パターン](https://golang.org/doc/effective_go#concurrency)
 - [ワークスティールングスケジューリング](https://en.wikipedia.org/wiki/Work_stealing)
-- [並作モデル白皮书](/src/archive/async-whitepaper)
-- [YaoXiang 言語規範](/src/design/language-spec)
+- 並作モデル白皮书
+- [YaoXiang 言語規範](../../../../reference/language-spec/index.md)

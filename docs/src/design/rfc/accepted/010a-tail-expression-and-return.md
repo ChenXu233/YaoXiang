@@ -16,7 +16,7 @@ issue: '#342'
 >   依赖驱动计算单元
 > - [RFC-007: 函数定义语法统一方案](./007-function-syntax-unification.md) — 代码块返回规则、提前返回
 > - [RFC-038: 语句终止与换行规则](038-statement-termination.md) — 语句与表达式的换行行为
-> - [语言规范 §类型系统](/reference/language-spec/type-system.md) — `Never` 爆炸原理
+> - [语言规范 §类型系统](../../../reference/language-spec/type-system.md) — `Never` 爆炸原理
 
 ## 摘要
 
@@ -445,6 +445,6 @@ d = { "a": 1 }             // 值：Dict（内容自描述）
 - [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
 - [RFC-038: 语句终止与换行规则](038-statement-termination.md)
 - [RFC-030: assert 断言机制](./030-assert-mechanism.md) — `Never` 的精化类型应用
-- [语言规范 §类型系统](/reference/language-spec/type-system.md) — `Never` / `Void` 的 ⊥ / ⊤ 定位
+- [语言规范 §类型系统](../../../reference/language-spec/type-system.md) — `Never` / `Void` 的 ⊥ / ⊤ 定位
 - [Rust Reference: `!` never type](https://doc.rust-lang.org/reference/types/never.html)
   — 同构的爆炸原理应用

@@ -177,4 +177,4 @@ title: 'RFC 索引'
 
 ## 贡献指南
 
-请参阅 [CONTRIBUTING.md](../../../../CONTRIBUTING.md) 了解贡献指南。
+请参阅 CONTRIBUTING.md 了解贡献指南。

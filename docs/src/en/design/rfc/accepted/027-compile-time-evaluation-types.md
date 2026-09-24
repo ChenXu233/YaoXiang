@@ -1,15 +1,15 @@
 ---
-title: 'RFC-027: Compile-time Predicates and Unified Static Verification'
+title: 'RFC-027: Compile-Time Predicates and Unified Static Verification'
 status: 'Accepted'
-author: 'ChenXu'
+author: 'Chen Xu'
 created: '2026-06-07'
 updated: '2026-09-14'
 impl_status: 'in_progress'
 impl_detail:
-  'Phase 1-2 completed, Phase 3 partially completed, Phase 4 partially completed. All 6 phases of
-  the unified assert/Assert scheme implemented (#157-#162 closed): Never type, IsTrue bridging,
-  flow-sensitive Γ + kill set, type-level recursion, universe stratification weak check, dispatch
-  pipeline.'
+  'Phase 1-2 complete, Phase 3 partially complete, Phase 4 partially complete.
+  Assert/Assert unified solution all 6 phases implemented (#157-#162 closed):
+  Never type, IsTrue bridging, flow-sensitive Γ + kill set, type-level recursion,
+  universe stratified weak checking, dispatch pipeline.'
 impl_percent: 85
 issue_number: 90
 issue_url: 'https://github.com/ChenXu233/YaoXiang/issues/90'
@@ -17,66 +17,50 @@ issue_url: 'https://github.com/ChenXu233/YaoXiang/issues/90'
 issue: '#90'
 ---
 
-# RFC-027: Compile-time Predicates and Unified Static Verification
+# RFC-027: Compile-Time Predicates and Unified Static Verification
 
 > **References**:
 >
 > - [RFC-009: Ownership Model](../accepted/009-ownership-model.md)
 > - [RFC-010: Unified Type Syntax - name: type = value Model](../accepted/010-unified-type-syntax.md)
 > - [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md)
-> - [RFC-024: Concurrency Model Based on spawn Blocks](../accepted/024-concurrency-model.md)
+> - [RFC-024: Concurrency Model Based on Spawn Blocks](../accepted/024-concurrency-model.md)
 >
-> **Supersedes**:
-> [RFC-022: Hoare Logic Static Verification Support (Specification Comments and Specification Types)](../deprecated/022-hoare-logic-static-verification.md)
+> **Supersedes**: [RFC-022: Hoare Logic Static Verification Support (Specification Comments and Specification Types)](../deprecated/022-hoare-logic-static-verification.md)
 > — Deprecated
 
 ## Summary
 
-This RFC proposes introducing **compile-time predicates** as first-class citizens in YaoXiang,
-unifying all compile-time static verification into a single **proof pipeline**. Compile-time
-predicates are not external specification annotations—they are functions. A function that returns
-Type, usable in type positions, called and checked by the compiler at compile time. Types are
-propositions, compile-time evaluation is proof.
+This document proposes introducing **compile-time predicates** as first-class citizens in YaoXiang, unifying all compile-time static verification into a single **proof pipeline**. Compile-time predicates are not external specification comments — they are functions. A function that returns Type, usable in type positions, called by the compiler at compile-time, with its return value checked. Types are propositions, compile-time evaluation is proof.
 
-**Core argument**: The sole job of type checking at compile time is to construct and verify proof
-terms. Type equality, token conflicts, dependent type reduction, compile-time predicate evaluation,
-Hoare logic entailment—all are different type checks within the compile-time proof pipeline, sharing
-the same pipeline. The SMT solver is an acceleration module of the type checker, not an independent
-trust boundary. When the compiler returns Unproven, the programmer writes a YaoXiang function as the
-proof—the type checker validates it exactly the same way it validates any function's return type.
-Everything is YaoXiang code, everything is verified by the type checker.
+**Core Argument**: The only work of type checking at compile-time is constructing and verifying proof terms. Type equality, token conflicts, dependent type reduction, compile-time predicate evaluation, Hoare logic implications — all are different kinds of type checking in the compile-time proof pipeline, sharing the same pipeline. The SMT solver is an acceleration module for the type checker, not an independent trust boundary. When the compiler returns Unproven, the programmer writes a YaoXiang function as a proof — the type checker verifies it in exactly the same way it verifies any function's return type. Everything is YaoXiang code, everything is verified by the type checker.
 
 ## Motivation
 
 ### Why Deprecate RFC-022?
 
-RFC-022 designed specifications as `//!` comments:
+RFC-022 designed specifications as `//!` comment forms:
 
 ```yaoxiang
 max: (T: Ord) -> ((arr: Array(T, n)) -> T) = {
-    //! requires: NonEmpty(n) = n > 0          ← This is an annotation independent of types
-    //! ensures: ExistsMax(result, arr[0..n])   ← This is an annotation independent of types
+    //! requires: NonEmpty(n) = n > 0          ← This is a comment independent of types
+    //! ensures: ExistsMax(result, arr[0..n])   ← This is a comment independent of types
 }
 ```
 
-This commits the fundamental error of the Curry-Howard isomorphism: **splitting specifications and
-types into two layers**. Annotations are not types. Annotations do not participate in type checking.
-The "external tool" mental model.
+This commits the fundamental error of Curry-Howard isomorphism: **splitting specifications and types into two layers**. Comments are not types. Comments do not participate in type checking. Comments are the mental model of an "external tool".
 
-The white paper makes it clear:
+The white paper is clear:
 
-> "No `//!` annotations. No independent specification language. Everything is within the type
-> system."
+> "No `//!` comments. No separate specification language. Everything is within the type system."
 
 ### Current Problems
 
-- RFC-022's `//!` annotations are external syntax independent of the type system
-- Specification types and ordinary types are two systems, causing conceptual redundancy
-- The Debug Build verification / Release Build ignore split pattern breaks unity
-- SMT solvers are traditionally positioned as external tools—YaoXiang builds them in as acceleration
-  modules of the type checker
-- Type checking, borrow verification, compile-time predicate checking, and macro expansion each take
-  different paths
+- RFC-022's `//!` comments are external syntax independent of the type system
+- Specification types and regular types are two separate systems, causing conceptual redundancy
+- The split pattern of Debug Build verification / Release Build ignoring breaks unity
+- SMT solvers are positioned as external tools in traditional understanding — YaoXiang makes them internal acceleration modules for the type checker
+- Type checking, borrow verification, compile-time predicate checking, and macro expansion each follow different paths
 
 ### The Correct Mental Model
 
@@ -86,28 +70,23 @@ Type checking can be abstracted as a function:
 verify : Program → Proved | Disproved(Model) | Unproven
 ```
 
-All compile-time checks—simple type matching, borrow conflict detection, compile-time predicate
-verification—are subtasks of this function. They share the same proof pipeline, differing only in
-proof term complexity and construction strategy.
+All compile-time checks — simple type matching, borrow conflict detection, compile-time predicate verification — are sub-tasks of this function. They share the same proof pipeline, differing only in proof term complexity and construction strategies.
 
-When the compiler returns Unproven, the programmer provides a proof function—whose return type
-equals the proposition to be proved. The type checker validates it. This is the same operation as
-ordinary type checking.
+When the compiler returns Unproven, the programmer provides a proof function — the function's return type equals the proposition to be proved. The type checker verifies it. This is the same operation as ordinary type checking.
 
 ## Proposal
 
-### 1. `{}` Is the Proof Space: Types Are Assertions, Verification Is Type Checking
+### 1. `{}` is the Proof Space: Types are Assertions, Verification is Type Checking
 
-YaoXiang's `{}` is the compile-time proof space. Everything inside it is an assertion, and the
-compiler guarantees each item is True—either automatically proved or provided by the programmer as a
-proof function.
+YaoXiang's `{}`
+is the compile-time proof space. Everything inside is an assertion, guaranteed by the compiler to be True — either automatically proved or provided by the programmer as a proof function.
 
 ```
 Point: Type = { x: Float, y: Float }
-#               ^^^^^^^^^^^^^^^^^^^^^  Compiler guarantees x is Float, y is Float
+#               ^^^^^^^^^^^^^^^^^^^^^  The compiler guarantees x is Float, y is Float
 
 List: (T: Type) -> Type = { data: Array(T) }
-#                           ^^^^^^^^^^^^^^^  Compiler guarantees data is Array(T)
+#                           ^^^^^^^^^^^^^^^  The compiler guarantees data is Array(T)
 ```
 
 **Generics are a special case of compile-time predicates.**
@@ -115,27 +94,25 @@ List: (T: Type) -> Type = { data: Array(T) }
 ```yaoxiang
 Positive: (x: Int) -> Type = { x > 0 }
 #          ^^^^^^              ^^^^^^
-#          Parameter in signature  Only assertions in {}
-#          Compiler validates x > 0 at compile-time call
+#          Parameters at signature  The {} contains only assertions
+#          Compiler verifies x > 0 when called at compile-time
 
 List: (T: Type) -> Type = { data: Array(T) }
 #      ^^^^^^^^              ^^^^^^^^^^^^^^^
-#      Parameter in signature  Compiler validates type_of(T) == Type, type_of(data) == Array(T)
+#      Parameters at signature  Compiler verifies type_of(T) == Type, type_of(data) == Array(T)
 ```
 
-The same pattern: `name: (params) -> Type = { assertions }`. The compiler does not distinguish "type
-assertions" from "value assertions"—both are evaluation targets in the proof pipeline.
+The same pattern: `name: (params) -> Type = { assertions }`. The compiler does not distinguish "type assertions" from "value assertions" — both are evaluation targets in the proof pipeline.
 
-**Loop invariants need not be written separately. Type annotations on variables are Floyd-Hoare
-invariants.**
+**Loop invariants don't need separate writing. Type annotations on variables are Floyd-Hoare invariants.**
 
 ```yaoxiang
 SumUpTo: (arr: Array(Int), i: Int) -> Type = { s: Int; s == sum(arr[0..i]) }
 UpTo: (n: Int) -> Type = { i: Int; 0 <= i <= n }
 
 sum: (arr: Array(Int)) -> Int = {
-    mut s: SumUpTo(arr, i) = 0   # Annotation references i—tells the compiler s's type depends on i
-    mut i: UpTo(arr.len) = 0     # At init i=0, verify: 0 == sum(arr[0..0]) → True
+    mut s: SumUpTo(arr, i) = 0   # Annotate references i — tells compiler s's type depends on i
+    mut i: UpTo(arr.len) = 0     # At initialization i=0, verify: 0 == sum(arr[0..0]) → True
     while i < arr.len {
         s += arr[i]  # Compiler verifies: s_new == sum(arr[0..i+1])
         i += 1       # i changes → triggers s dependency re-verification: s satisfies SumUpTo(arr, i_new)
@@ -144,32 +121,26 @@ sum: (arr: Array(Int)) -> Int = {
 }
 ```
 
-The compiler generates a verification condition once for the loop body—inductive hypothesis (type
-annotation) → assignment operation → whether the new value satisfies the type annotation. After the
-proof pipeline verifies the inductive step holds, all iterations are automatically covered. No
-`: decreases`, no `: Invariant`, no inductive proof needed—the compiler breaks induction into local
-VCs for each assignment.
+The compiler generates verification conditions once for the loop body — inductive hypothesis (type annotation) → assignment operation → whether new value satisfies type annotation. Once the proof pipeline verifies the inductive step, all iterations are automatically covered. No
+`: decreases`, no `: Invariant`, no inductive proof — the compiler decomposes induction into local VCs for each assignment.
 
-### 2. Pre/Postconditions: Compile-time Predicates on Parameter and Return Types
+### 2. Pre/Postconditions: Compile-Time Predicates on Parameter and Return Types
 
-Abandon RFC-022's `//! requires`/`//! ensures`. Compile-time predicates serve as annotations on
-parameter or return types.
+Abandon RFC-022's `//! requires`/`//! ensures`. Compile-time predicates serve as parameter or return type annotations.
 
-**The parameter side is a function call.** A compile-time predicate is a function that returns Type,
-and its use on the parameter side is calling it—just like `factorial(5)`. The return side introduces
-a new concept: the return value parameter.
+**The parameter side is a function call.** Compile-time predicates are functions returning Type, and using them on the parameter side means calling them — just like `factorial(5)`. The return side introduces a new concept: return value parameter.
 
 ```yaoxiang
-# Precondition: explicitly call compile-time predicate in parameter type
+# Precondition: Explicitly call compile-time predicate in parameter type
 Positive: (x: Int) -> Type = { x > 0 }
 
 divide: (a: Int, b: Positive(b)) -> Int = a / b
 #                       ^^^^^^^^^^  b is the current parameter name, passed to Positive as argument
-#                       Compiler extracts argument value at call site, substitutes b, validates Positive(arg)
-#                       Ex: divide(10, 2) → validate Positive(2) = { 2 > 0 } → True
-#                       Ex: divide(10, 0) → validate Positive(0) = { 0 > 0 } → False → Compile error
+#                       Compiler extracts actual argument at call site, substitutes b, verifies Positive(actual)
+#                       Example: divide(10, 2) → verify Positive(2) = { 2 > 0 } → True
+#                       Example: divide(10, 0) → verify Positive(0) = { 0 > 0 } → False → Compile error
 
-# Postcondition: return value parameter + compile-time predicate
+# Postcondition: Return value parameter + compile-time predicate
 IsMax: (T: Ord, arr: Array(T), result: T) -> Type = {
     forall j in 0..arr.len: result >= arr[j]
 }
@@ -179,7 +150,7 @@ NonEmpty: (arr: Array(T)) -> Type = { arr.len > 0 }
 max: (T: Ord) -> ((arr: NonEmpty(arr))) -> (result: IsMax(T, arr, result)) = {
 #                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #                                            result is the return value parameter, value provided by return
-#                                            Compiler substitutes the return value at return point, validates postcondition
+#                                            Compiler substitutes return value at return point, verifies postcondition
     candidate = arr[0]
     for i in 1..arr.len {
         if arr[i] > candidate { candidate = arr[i] }
@@ -188,53 +159,38 @@ max: (T: Ord) -> ((arr: NonEmpty(arr))) -> (result: IsMax(T, arr, result)) = {
 }
 ```
 
-**Key rules**:
+**Key Rules**:
 
-- **Parameter side**: `b: Positive(b)` — `b` is the current parameter name, passed to `Positive` as
-  argument. Function call syntax, zero implicit.
-- **Return side**: `-> (result: IsMax(T, arr, result))` — `result` is the return value parameter,
-  value provided by the `return` statement. `result` only exists in the type signature, only
-  referenced by predicates, does not enter the function body scope, does not appear at the caller.
-- **Return value parameter is optional**: when no postcondition is needed, signature is identical to
-  an ordinary function (`-> Int`).
-- **Unity**: parameter and return value parameters are the same
-  concept—`param_name: predicate_call(param_name)`, differing only in whether the value is provided
-  by the caller or by `return`.
+- **Parameter side**: `b: Positive(b)` — `b` is the current parameter name, passed to `Positive`. Function call syntax, zero implicit.
+- **Return side**: `-> (result: IsMax(T, arr, result))` — `result` is the return value parameter, value provided by `return` statement. `result` only exists in the type signature, only referenced by predicates, does not enter function body scope, does not appear at call sites.
+- **Return value parameter optional**: When no postcondition, omit it, signature is identical to regular function (`-> Int`).
+- **Unity**: Parameter and return value parameters are the same concept — `paramName: predicateCall(paramName)`, differing only in whether value is provided by caller or `return`.
 
-### 3. Path Condition Propagation: Compile-time Verification of Runtime Values
+### 3. Path Condition Propagation: Compile-Time Verification of Runtime Values
 
-When a compile-time predicate is used at a binding position, arguments are explicitly passed by the
-programmer. When a runtime value enters a refinement type parameter, the compiler completes
-verification through path condition collection and SMT entailment judgment—no explicit proof passing
-required.
+When compile-time predicates are used at binding positions, parameters are explicitly provided by the programmer. When runtime values enter refined type parameters, the compiler completes verification through path condition collection and SMT implication checking — no explicit proof passing by the programmer required.
 
-#### 3.1 Explicit Function Call
+#### 3.1 Explicit Function Calls
 
-When a compile-time predicate is used at a binding position, arguments are explicitly passed by the
-programmer—it is a function call, zero implicit.
+When compile-time predicates are used at binding positions, parameters are explicitly provided by the programmer — it's just a function call, zero implicit.
 
-`Positive: (x: Int) -> Type = { x > 0 }` is a compile-time predicate constructor. When it appears in
-a binding position (parameter declaration, variable declaration, return type), the programmer
-explicitly passes an already-bound variable name:
+`Positive: (x: Int) -> Type = { x > 0 }`
+is a compile-time predicate constructor. When it appears at a binding position (parameter declaration, variable declaration, return type), the programmer explicitly passes the already-bound variable name:
 
 ```yaoxiang
 b: Positive(b)
-// b is already declared as the current parameter, Positive(b) is a function call
+// b has been declared as current parameter, Positive(b) is a function call
 // After normalization: b: { b > 0 }
 ```
 
-No need for the compiler to implicitly fill in arguments—`b: Positive(b)` is just like `f(5)`, a
-function call. `b` is bound as a parameter name, and its type annotation `Positive(b)` references
-`b` itself—this is the standard pattern of dependent types, not an implicit expansion rule.
+No compiler implicit argument filling needed — `b: Positive(b)` is just like `f(5)`, it's a function call. `b`
+as the parameter name is bound, its type annotation `Positive(b)` references `b` itself — this is the standard pattern of dependent types, not an implicit expansion rule.
 
-**Unity with RFC-010 `self`**: RFC-010 establishes that `self` is not a keyword, just a conventional
-parameter name ("writing `p`, `this`, `x` is exactly the same effect"). `b: Positive(b)` shares the
-same mechanism—parameter names can be referenced in type annotations. `self` appears in the position
-of `self: Point`, `b` appears in the position of `b: Positive(b)`, both type annotations reference
-the parameter itself. The difference is only in the complexity of the type annotation, the mechanism
-is exactly the same—after a name is bound, the type can depend on that name.
+**Unification with RFC-010 `self`**: RFC-010 establishes that `self` is not a keyword, just a conventional parameter name ("writing `p`, `this`, `x` has exactly the same effect"). `b: Positive(b)`
+shares the same mechanism — parameter name can be referenced in type annotation. `self` appears in `self: Point`, `b` appears in
+`b: Positive(b)`. Both type annotations reference the parameter itself. The only difference is the complexity of the type annotation — the mechanism is exactly the same: after name binding, type can depend on that name.
 
-The return type also uses explicit function calls:
+Return types also use explicit function calls:
 
 ```yaoxiang
 Sorted: (arr: Array(T)) -> Type = { forall i in 0..arr.len-1: arr[i] <= arr[i+1] }
@@ -242,66 +198,58 @@ Sorted: (arr: Array(T)) -> Type = { forall i in 0..arr.len-1: arr[i] <= arr[i+1]
 sort: (arr: Array(T)) -> (result: Sorted(result)) = { ... }
 //                        ^^^^^^^^^^^^^^^^^^^^^^^
 //                        result is the return value parameter, Sorted(result) is a function call
-//                        Compiler substitutes the return value into result at return point, validates Sorted(return value)
+//                        Compiler substitutes return value into result at return point, verifies Sorted(return value)
 ```
 
-The same applies to local variable declarations:
+Equally applicable to local variable declarations:
 
 ```yaoxiang
 let x: Positive(x) = 5
-// x is bound to 5, Positive(5) → { 5 > 0 } → True → Pass
+// x bound to 5, Positive(5) → { 5 > 0 } → True → Pass
 
 // let y: Positive(y) = 0
-// y is bound to 0, Positive(0) → { 0 > 0 } → False → Compile error
+// y bound to 0, Positive(0) → { 0 > 0 } → False → Compile error
 ```
 
 #### 3.2 Path Condition Collection
 
-When a runtime value appears in a conditional branch, the compiler automatically collects path
-conditions, forming the **assumption set** for the current scope. These assumptions participate in
-verification as background knowledge for compile-time Bool evaluation.
+When runtime values appear in conditional branches, the compiler automatically collects path conditions, forming a **hypothesis set** for the current scope. These hypotheses participate in verification as background knowledge for compile-time Bool evaluation.
 
 ```yaoxiang
 if y > 0 {
-    // Compiler automatically obtains the assumption in this branch: { y > 0 }
+    // Compiler automatically gains hypothesis in this branch: { y > 0 }
     let result = divide(x, y)
-    // Validation condition: (y > 0) ⇒ (y > 0)
-    // Proof pipeline judges entailment holds → Proved
+    // Verification condition: (y > 0) ⇒ (y > 0)
+    // Proof pipeline decides implication holds → Proved
 } else {
-// This branch assumes: { !(y > 0) }
-// If divide(x, y) is called, validation condition is !(y > 0) ⇒ y > 0
-    // Proof pipeline judges not entailed → Disproved
+// This branch hypothesis: { !(y > 0) }
+// If calling divide(x, y), verification condition is !(y > 0) ⇒ y > 0
+    // Proof pipeline decides not implied → Disproved
 }
 ```
 
-This is not a hard-coded special pattern in the compiler—this is the natural behavior of the
-compile-time proof pipeline. Each type check call site sends to the pipeline:
+This is not the compiler hardcoding special patterns — it's the natural behavior of the compile-time proof pipeline. Each type checking call site sends to the pipeline:
 
 ```
-{background assumptions} ⇒ {validation target}
+{background hypotheses} ⇒ {verification goal}
 ```
 
-The proof pipeline judges entailment. Proved → pass, Disproved → compile error + counterexample,
-Unproven → compile error + unsolved proposition. Background assumptions come from the path condition
-at the current program point.
+The proof pipeline determines implicativity. Proved → Pass, Disproved → Compile error + counterexample, Unproven
+→ Compile error + unproven proposition. Background hypotheses come from path conditions at the current program point.
 
-#### 3.3 Assumption Stack
+#### 3.3 Hypothesis Stack
 
-When the compiler analyzes control flow, it maintains an assumption set for each basic block:
+When analyzing control flow, the compiler maintains a hypothesis set for each basic block:
 
-- **if-guard**: `if y > 0` → true branch pushes `y > 0`, false branch pushes `!(y > 0)` (if else is
-  used)
-- **match pattern**: `if let Some(v) = opt` → push `opt == Some(v)` inside the branch
-- **Logical conjunction**: `if x > 0 and y < 10` → push `x > 0` and `y < 10` inside the branch
-- **Function preconditions**: when calling `divide(a, b)`, evidence that `b` satisfies `Positive`
-  must come either from current assumptions or from the argument's own refinement type annotation
-  (`b` is annotated as `Positive` then its type carries `b > 0`)
-- **Assignment**: `let z = y`, refinement conditions already on `y` are transferred to `z`
+- **if-guard**: `if y > 0` → true branch pushes `y > 0`, false branch pushes `!(y > 0)` (if else is used)
+- **match pattern**: `if let Some(v) = opt` → pushes `opt == Some(v)` in branch
+- **logical conjunction**: `if x > 0 and y < 10` → pushes `x > 0` and `y < 10` in branch
+- **function preconditions**: When calling `divide(a, b)`, evidence that `b` satisfies `Positive` must either come from current hypotheses or from the actual argument's refined type annotation (`b` already annotated as `Positive` means its type carries `b > 0`)
+- **assignment**: When `let z = y`, refined conditions on `y` transfer to `z`
 
-All assumptions enter the compile-time proof pipeline. When entering the SMT acceleration path, they
-are translated into SMT-LIB background assertions.
+All hypotheses enter the compile-time proof pipeline. When entering the SMT acceleration path, they're translated to SMT-LIB background assertions.
 
-#### 3.4 No Static Evidence Then Compile Error
+#### 3.4 No Static Evidence Means Compile Error
 
 If the programmer directly writes:
 
@@ -309,52 +257,44 @@ If the programmer directly writes:
 divide_user_input: (x: Int, y: Int) -> Int = divide(x, y)
 ```
 
-The current program point has no assumption of `y > 0`, and the argument `y` itself has no
-`Positive` type annotation. The validation condition is:
+There's no hypothesis of `y > 0` at the current program point, and the actual argument `y` itself has no `Positive` type annotation. The verification condition is:
 
 ```
 {} ⇒ { y > 0 }
 ```
 
-The pipeline returns `Disproved` (not entailed) → compile error:
+The pipeline returns `Disproved` (not implied) → Compile error:
 
-> Cannot prove that parameter `b` satisfies `Positive` in the `divide` call. `y` comes from function
-> input, with no proven bound. Consider guarding the call with an if branch:
-> `if y > 0 { divide(x, y) }`.
+> Cannot prove that parameter `b` satisfies `Positive` in `divide` call. `y`
+> comes from function input with no proven bounds. Consider calling with if-branch guard: `if y > 0 { divide(x, y) }`.
 
-YaoXiang does not accept runtime values directly entering refinement type parameters without
-providing static evidence. This is not a restriction—this is the core of hard safety philosophy.
-Whatever the compiler cannot statically prove shall not pass compilation.
+YaoXiang does not accept runtime values directly entering refined type parameters without providing static evidence. This is not a limitation — it's the core of hard safety philosophy. Any code the compiler cannot statically prove must not pass compilation.
 
 #### 3.5 Relationship with the Unified Pipeline
 
-Path condition propagation is not an additional mechanism. It is the direct extension of the
-compile-time proof pipeline over control flow analysis:
+Path condition propagation is not an additional mechanism. It's the direct extension of the compile-time proof pipeline to control flow analysis:
 
-| Stage                           | Responsibility                                                                                                                                           |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Path condition collection       | Compiler control flow analysis stage, annotates assumption set for each basic block                                                                      |
-| Validation condition generation | When encountering type constraints to validate, merge path conditions + argument type information                                                        |
-| Proof pipeline evaluation       | Compiler kernel → SMT acceleration → Proved / Disproved / Unproven                                                                                       |
-| Result                          | `Proved` → pass; `Disproved` → compile error + counterexample; `Unproven` → compile error + unsolved proposition (programmer can provide proof function) |
+| Stage | Responsibility |
+| ----------- | -------------------------------------------------------------------------------------------------------- |
+| Path condition collection | Compiler control flow analysis stage, annotating each basic block with hypothesis set |
+| Verification condition generation | When encountering type constraints to verify, merge path conditions + actual argument type info |
+| Proof pipeline evaluation | Compiler kernel → SMT acceleration → arrive at Proved / Disproved / Unproven |
+| Result | `Proved` → Pass; `Disproved` → Compile error + counterexample; `Unproven` → Compile error + unproven proposition (programmer can provide proof function) |
 
-No new components. No special rules. Path conditions are background knowledge of the proof
-pipeline—sharing the same pipeline and budget system as type equality and borrow constraints.
+No new components. No special rules. Path conditions are background knowledge for the proof pipeline — sharing the same pipeline and budget system with type equations and borrow constraints.
 
-### 4. Compile-time Proof Pipeline
+### 4. Compile-Time Proof Pipeline
 
-All compile-time checks share the same pipeline. The core operation of the pipeline is **type
-checking**—checking whether the type of a proof term equals the proposition to be proved. Everything
-is type checking.
+All compile-time checks share the same pipeline. The pipeline's core operation is **type checking** — checking whether a proof term's type equals the proposition to be proved. Everything is type checking.
 
 ```
-Compile-time encounters Bool expression to evaluate (i.e.: needs to construct a proof term)
+When compiler encounters Bool expression needing evaluation (i.e., needs to construct a proof term)
         │
         ├── Type equality (T1 == T2)
-        │   → Compiler judges directly (structural equivalence)
+        │   → Compiler decides directly (structural equivalence)
         │
         ├── Token conflict conditions (!conflicting(tokens))
-        │   → Flow-sensitive liveness analysis (Dup/Linear property tracking)
+        │   → Flow-sensitive liveness analysis (Dup/Linear attribute tracking)
         │
         ├── Dependent type reduction (n + m simplification)
         │   → Compile-time term rewriting system (βδι-reduction)
@@ -362,148 +302,129 @@ Compile-time encounters Bool expression to evaluate (i.e.: needs to construct a 
         ├── Compile-time predicates (x > 0, forall...)
         │   → Compiler itself + SMT acceleration module
         │
-        └── Hoare logic entailment (P ⇒ Q)
+        └── Hoare logic implications (P ⇒ Q)
             → Compiler + SMT acceleration module
                     │
                     ▼
              ┌──────────┐
              │ Proved   │  → Compilation passes
              │ Disproved│  → Compile error + counterexample
-             │ Unproven │  → Compile error + unsolved proposition
+             │ Unproven │  → Compile error + unproven proposition
              └────┬─────┘
                   │
                   ▼
          Programmer writes proof function (YaoXiang code)
                   │
                   ▼
-         Type checker validates ──→ Proved ──→ Compilation passes
+         Type checker verifies ──→ Proved ──→ Compilation passes
                   │
                   ▼
-            Validation failed → Compile error: "Proof does not hold"
+            Verification failed → Compile error: "Proof does not hold"
 ```
 
-#### 4.1 Proof Results: A Three-valued Algebra
+#### 4.1 Proof Results: Three-Value Algebra
 
-Compile-time evaluation returns three results—this is the inevitable conclusion of the halting
-problem, and the natural partition of proof theory:
+Compile-time evaluation returns three results — this is an inevitable conclusion of the halting problem, and the natural partition of proof theory:
 
 ```
 eval_compile_time : BoolExpr → Proved | Disproved(Model) | Unproven
 ```
 
-- **Proved** → Halts, proof term constructed, type check passes. Compilation continues.
-- **Disproved(M)** → Halts, counterexample M exists. Compile error + counterexample + source
-  location.
-- **Unproven** → Within given resource upper bound, no proof was constructed. Compile error +
-  unsolved proposition + budget consumption report.
+- **Proved** → Halts, proof term constructed, type checking passes. Compilation continues.
+- **Disproved(M)** → Halts, counterexample M exists. Compile error + counterexample + source location.
+- **Unproven** → No proof constructed within given resource limit. Compile error + unproven proposition + budget consumption report.
 
-**Unproven ≠ False.** The compiler saying "I cannot prove it" is not equivalent to the proposition
-being false—just beyond current automatic proof capability. This is honesty, not a defect.
+**Unproven ≠ False.**
+The compiler saying "I cannot prove it" is not equivalent to the proposition being false — it simply exceeds current automatic proof capabilities. This is honesty, not a defect.
 
-The hard budget limit is the engineering solution to the halting problem. No knob—giving one would
-be asking the user "do you think your program will halt," and the user doesn't know, and neither
-does the compiler.
+Hard budget limits are the engineering solution to the halting problem. No knobs — giving knobs means asking users "do you think your program will halt," users don't know, compiler doesn't know either.
 
 #### 4.2 After Unproven: Programmer Writes Proof
 
-When the compiler returns Unproven, the programmer can write a **proof function**—which is a
-YaoXiang function whose return type equals the proposition to be proved. The type checker validates
-this function—the same mechanism as validating `add(a, b): Int`.
+When the compiler returns Unproven, the programmer can write a **proof function** — a YaoXiang function whose return type equals the proposition to be proved. The type checker verifies this function — the same mechanism as it verifies `add(a, b): Int`.
 
 ```
-Proposition  = Type
-Proof        = Program (a value of that type)
-Validation   = Type checking (the only trust root)
+Proposition = Type
+Proof      = Program (a value of that type)
+Verification = Type checking (the only trust root)
 ```
 
-The SMT solver is not an independent trust boundary—it is an **acceleration module of the type
-checker**. SMT helps find proofs, but validating the proof is always the type checker. When SMT
-returns `unsat`, the compiler reconstructs its result as a proof term verifiable by the type
-checker. If reconstruction fails (SMT's reasoning steps exceed the compiler kernel's inference
-rules), fall back to Unproven—the programmer can manually write a proof function.
+The SMT solver is not an independent trust boundary — it's an **acceleration module for the type checker**. SMT helps find proofs, but the type checker is always the one verifying proofs. When SMT returns
+`sat`
+with model → Disproved (counterexample exists), when SMT returns `unsat` → Proved. If SMT returns `unknown`, the compiler reconstructs SMT's result into a proof term verifiable by the type checker. If reconstruction fails (SMT's reasoning steps exceed compiler kernel's inference rules), fall back to Unproven — programmer can manually write a proof function.
 
 ```yaoxiang
-# Proposition: refinement property the compiler cannot automatically prove
+# Proposition: Refined property the compiler cannot automatically prove
 FirstIsMin: (T: Ord, arr: Sorted(T)) -> Type = {
     forall i in 0..arr.len: arr[0] <= arr[i]
 }
 
-# Proof: programmer writes a function, return type is the above proposition
-# Type checker validates this function—exactly the same as validating add(a,b): Int
+# Proof: Programmer writes a function whose return type is the proposition above
+# Type checker verifies this function — exactly the same as verifying add(a,b): Int
 first_is_min: (T: Ord, arr: Sorted(T)) -> FirstIsMin(T, arr) = {
-    # Compiler validates here: type of function body = FirstIsMin(T, arr)
+    # Compiler here verifies: function body's type = FirstIsMin(T, arr)
     ...
 }
 ```
 
-No AI, no export to Coq, no new concepts. **Compile-time cannot automatically prove property →
-programmer writes proof in YaoXiang code → type checker validates.** The entire process is a smooth
-gradient—the compiler does simple proofs for you, leaving the brain for the hard ones.
+No AI, no export to Coq, no new concepts. **Properties the compiler cannot automatically prove at compile-time → programmer writes proof in YaoXiang code → type checker verifies.**
+The whole process is a smooth gradient — the compiler does the easy proofs for you, leaving your mind for the hard ones.
 
-#### 4.3 Layered Dependencies within the Pipeline
+#### 4.3 Layered Dependencies Within the Pipeline
 
-The above evaluators share the same interface but have an evaluation order. Type equality is the
-prerequisite for all subsequent analyses; ownership/token checks depend on type information;
-refinement predicate validation depends on the first two layers' results. The compiler evaluates
-layer by layer; expressions failing in lower layers do not enter upper layers—avoiding wasting
-solver budget on type-error programs.
+The above evaluators share the same interface but have evaluation order. Type equality is the prerequisite for all subsequent analysis; ownership/token checking depends on type information; refined predicate verification depends on results from the first two layers. The compiler evaluates layer by layer — expressions failing at lower layers don't enter upper layers — avoiding wasted solver budget on programs with type errors.
 
 ```
 Evaluation order (same pipeline, layered scheduling)
 ├── Layer 0: Type equality (T1 == T2)
-│   └── Structural unification → failure means subsequent is meaningless, directly return Disproved
+│   └── Structural unification → If fails, subsequent analysis is meaningless, return Disproved directly
 ├── Layer 1: Ownership/token conflicts
-│   └── Flow-sensitive liveness analysis → failure means memory safety doesn't hold, directly return Disproved
-└── Layer 2: Refinement predicates / Hoare entailment
-    └── Compiler itself → SMT acceleration → Proved / Disproved / Unproven
+│   └── Flow-sensitive liveness analysis → If fails, memory safety doesn't hold, return Disproved directly
+└── Layer 2: Refined predicates/Hoare implications
+    └── Compiler itself → SMT acceleration → arrive at Proved / Disproved / Unproven
 ```
 
 Each layer still returns `Proved/Disproved/Unproven`, sharing the same interface and budget system.
 
-### 5. Three-layer Function Unity
+### 5. Three-Layer Function Unification
 
-| Layer                  | Timing       | Input        | Output | Example                                        |
-| ---------------------- | ------------ | ------------ | ------ | ---------------------------------------------- |
-| Value-level function   | Runtime      | Values       | Value  | `add: (a: Int, b: Int) -> Int = a + b`         |
-| Type constructor       | Compile time | Types/Values | Type   | `List: (T: Type) -> Type = { data: Array(T) }` |
-| Compile-time predicate | Compile time | Values       | Type   | `Positive: (x: Int) -> Type = { x > 0 }`       |
+| Layer | Execution Time | Input | Output | Example |
+| ---------- | -------- | ------- | ---- | ---------------------------------------------- |
+| Value-level function | Runtime | Value | Value | `add: (a: Int, b: Int) -> Int = a + b` |
+| Type constructor | Compile-time | Type/Value | Type | `List: (T: Type) -> Type = { data: Array(T) }` |
+| Compile-time predicate | Compile-time | Value | Type | `Positive: (x: Int) -> Type = { x > 0 }` |
 
-All use the same `name: type = value` syntax. Compile-time predicates and type constructors go
-through the same compile-time proof pipeline—`{}` is the proof space.
+All use the same `name: type = value` syntax. Compile-time predicates and type constructors go through the same compile-time proof pipeline — `{}`
+is the proof space.
 
 ### 6. Loops: Floyd-Hoare Verification Condition Generation
 
-Loops do not need separate `: Invariant(...)` or `: decreases(...)` annotations. Compile-time
-predicate type annotations on variables define Floyd-Hoare style assertions—the compiler generates
-verification conditions from type annotations, and the proof pipeline checks whether each assignment
-preserves the type.
+Loops don't need separate `: Invariant(...)` or `: decreases(...)`
+annotations. Type annotations with compile-time predicate types on variables define Floyd-Hoare-style assertions — the compiler generates verification conditions from type annotations, and the proof pipeline checks whether each assignment maintains the type.
 
-Core mechanism: each assignment operation corresponds to a Hoare triple `{P} x := e {Q}`, the
-validation condition is `P ⇒ Q[e/x]`. The compiler generates a verification condition once for the
-loop body—after the proof pipeline validates the inductive step holds, all iterations are
-automatically covered.
+Core mechanism: Each assignment operation corresponds to a Hoare triple `{P} x := e {Q}`, verification condition is `P ⇒ Q[e/x]`. The compiler generates verification conditions once for the loop body — once the proof pipeline verifies the inductive step, all iterations are automatically covered.
 
 ```yaoxiang
 SumUpTo: (arr: Array(Int), i: Int) -> Type = { s: Int; s == sum(arr[0..i]) }
 UpTo: (n: Int) -> Type = { i: Int; 0 <= i <= n }
 
 sum: (arr: Array(Int)) -> Int = {
-    mut s: SumUpTo(arr, i) = 0   # Annotation references i; at init i=0, validate: 0 == sum(arr[0..0]) → True
-    mut i: UpTo(arr.len) = 0     # Validate: 0 <= 0 <= arr.len → True
+    mut s: SumUpTo(arr, i) = 0   # Annotation references i; at initialization i=0, verify: 0 == sum(arr[0..0]) → True
+    mut i: UpTo(arr.len) = 0     # Verify: 0 <= 0 <= arr.len → True
     while i < arr.len {
-        # Compiler generates one VC for the loop body. Precondition: s satisfies SumUpTo(arr, i), i satisfies UpTo(arr.len).
+        # Compiler generates VC for loop body once. Premise: s satisfies SumUpTo(arr, i), i satisfies UpTo(arr.len).
         #
         # s += arr[i]:
-        #   Validation obligation: s_new satisfies SumUpTo(arr, i) (current i unchanged)
+        #   Verification obligation: s_new satisfies SumUpTo(arr, i) (current i unchanged)
         #   Substitute s_new = s_old + arr[i]:
         #     Need s_old + arr[i] == sum(arr[0..i+1])
         #     From inductive hypothesis s_old == sum(arr[0..i]), add arr[i] to both sides:
         #     sum(arr[0..i]) + arr[i] == sum(arr[0..i+1])
-        #   Compiler + SMT: linear arithmetic, millisecond-level → Proved
+        #   Compiler + SMT: Linear arithmetic, millisecond-level → Proved
         #
         # i += 1:
-        #   i changes → dependency graph shows s's type annotation references i → trigger re-validation
-        #   New validation target: s satisfies SumUpTo(arr, i_new)
+        #   i changes → s's type annotation in dependency graph references i → triggers re-verification
+        #   New verification goal: s satisfies SumUpTo(arr, i_new)
         #   i.e., s == sum(arr[0..i_new]), guaranteed by previous step → Proved
         s += arr[i]
         i += 1
@@ -512,112 +433,91 @@ sum: (arr: Array(Int)) -> Int = {
 }
 ```
 
-Loop invariants are type annotations on variables—programmer writes types, compiler checks inductive
-steps. The compiler doesn't need to "discover" invariants, nor "auto-induct"—it breaks inductive
-proofs into local verification conditions for each assignment, divide-and-conquer handed to the
-proof pipeline.
+Loop invariants are type annotations on variables — programmer writes types, compiler checks inductive step. The compiler doesn't need to "discover" invariants or "automatically do induction" — it decomposes the inductive proof into local verification conditions for each assignment operation, delegating to the proof pipeline for divide-and-conquer.
 
 #### 6.1 Dependency Tracking: Dependent Types on Mutable Variables
 
-The premise of the above mechanism is: the compiler knows that the type annotation `SumUpTo(arr, i)`
-of `s` references `i`—when `i` changes, `s`'s type constraint changes accordingly. This requires the
-compiler to maintain a **type dependency graph between variables**.
+The prerequisite for the above mechanism is: the compiler knows that `s`'s type annotation `SumUpTo(arr, i)` references `i` — when `i` changes, `s`'s type constraint also changes accordingly. This requires the compiler to maintain a **type dependency graph between variables**.
 
 **Data structure**:
 
 ```
 TypeDepGraph: Map<VarName, Set<VarName>>
-# Key is the depended-on variable, value is the set of variables that reference it in type annotations
-# Ex: { i: {s}, j: {s, t}, ... }
+# Key is the depended-upon variable, value is the set of variables whose type annotations reference the key
+# Example: { i: {s}, j: {s, t}, ... }
 ```
 
-**Construction**: when the type checker processes `mut v: Pred(... x ...) = init`, it parses free
-variable references in the `Pred(...)` arguments. If the arguments reference another mutable
-variable `x` in the current scope, it records `x → v` in the dependency graph.
+**Construction**: When the type checker processes `mut v: Pred(... x ...) = init`, it parses free variable references in `Pred(...)` parameters. If parameters reference other mutable variables `x` in current scope, record `x → v` in the dependency graph.
 
-**Trigger**: when a depended-on variable `x` is assigned, the compiler:
+**Trigger**: When a depended-upon variable `x` is assigned, the compiler:
 
-1. Looks up all variables `{v₁, v₂, ...}` in the dependency graph that depend on `x`
-2. For each `v`, generates a validation condition:
-   `does v's current value satisfy the updated type Pred(... x_new ...)`
-3. Sends the VC to the proof pipeline
+1. Looks up all variables depending on `x` in the dependency graph: `{v₁, v₂, ...}`
+2. For each `v`, generates verification condition: `does v's current value satisfy the updated type Pred(... x_new ...)`
+3. Sends VCs to the proof pipeline
 
-**Assignment order sensitivity**: dependency tracking naturally enforces the correct assignment
-order. Take `SumUpTo(arr, i)` as an example:
+**Assignment order sensitive**: Dependency tracking naturally enforces correct assignment order. Using `SumUpTo(arr, i)` as example:
 
 ```yaoxiang
 # Correct order
 s += arr[i]   # s_new satisfies SumUpTo(arr, i+1)
-i += 1        # i changes → re-validate s satisfies SumUpTo(arr, i_new) → True
+i += 1        # i changes → re-verify s satisfies SumUpTo(arr, i_new) → True
 
-# Wrong order—compiler rejects
-i += 1        # i changes → re-validate s satisfies SumUpTo(arr, i_new)
+# Wrong order — compiler rejects
+i += 1        # i changes → re-verify s satisfies SumUpTo(arr, i_new)
               # s not yet updated, s_old == sum(arr[0..i_old]) ≠ sum(arr[0..i_new])
               # → Compile error: variable s does not satisfy type SumUpTo(arr, i_new)
 s += arr[i]   # Unreachable
 ```
 
-**Combined dependencies**: a variable can depend on multiple variables. The type annotation
-`{ v: Int; v == x + y }` depends on both `x` and `y`—either change triggers re-validation.
+**Combined dependencies**: A variable can depend on multiple variables. Type annotation `{ v: Int; v == x + y }` depends on both `x` and `y` — either change triggers re-verification.
 
-**Relationship with proof pipeline**: dependency tracking is the trigger for VC generation, not an
-independent validation mechanism. It answers "when is VC generation needed"—the proof pipeline
-answers "does the VC hold".
+**Relationship with the proof pipeline**: Dependency tracking is the trigger for VC generation, not an independent verification mechanism. It answers "when do we need to generate VCs" — the proof pipeline answers "do the VCs hold".
 
 ### 7. Termination Checking
 
-**Scope of application: compile-time evaluation.** Termination checking only targets loops and
-recursion involved in compile-time evaluation (triggered by dependency tracking)—the code the
-compiler itself must execute must be provably total; runtime code does not require termination
-proofs (§6.7 scope table). Within scope, compile-time full automation is preferred: loops the
-compiler can prove pass through, those automatic strategies cannot prove directly report compile
-errors—the programmer must make the compiler able to automatically analyze loop termination. No
-**annotation syntax** escape hatch (not introducing `decreases`-like annotations, what is
-unsupported is always a syntax position, not a function).
+**Scope: Refined types.**
+Termination is not a separate switch but part of the **verification mode**: once a type is refined (`Refined { base, constraint }`), the computation it annotates enters verification mode, which requires termination within the mode; ordinary types not refined do not enter verification mode and generate no termination obligations.
 
-> **Revision (RFC-027a, 2026-09-14)**: ① Scope explicitly limited to compile-time evaluation—the
-> original text didn't qualify "loops" by position, creating ambiguity with the §6.7 scope table;
-> the implementation layer's unconditional full check is narrowed by this. ② For termination
-> obligations that automatic strategies cannot prove, programmers can provide measure functions and
-> termination proof functions (`Terminates`) as fallback—all ordinary YaoXiang functions, zero new
-> syntax, type checker validates. Full-automation preference unchanged, fallback only after
-> Unproven. See
-> [RFC-027a: Termination Proof Function Fallback](../draft/027a-termination-proof-fallback.md).
+From this we derive two corollaries:
+
+- **Loops**: Bare `while` does not enter verification mode; when a measure variable has refined annotation (e.g., `i: UpTo(n)`), it enters verification mode and must prove termination.
+- **Recursion**: When a function signature is refined (parameter refinement or return type containing refinement), it enters verification mode and must prove strict decrease at each recursive call site.
+
+Full automation priority within mode: compiler first automatically explores measures; what it can prove passes; if exploration fails and no measure is explicitly given, compile error. **No annotation syntax escape hatch** — measures and termination propositions are written in type positions, no new syntax like `decreases` introduced. Measure and explicit fallback forms are described in §6.9.
 
 #### 6.1 Design Principles
 
-The compiler automatically extracts the information needed for termination proofs from two places:
+The compiler automatically extracts information needed for termination proofs from two sources:
 
-1. **Variable type annotations**: boundary constraints in refinement types (e.g., `UpTo(n)` gives
-   upper bound `n` and lower bound `0`)
-2. **Loop body operations**: operations applied to variables on each iteration
+1. **Variable type annotations**: Boundary constraints in refined types (e.g., `UpTo(n)` gives upper bound `n` and lower bound `0`)
+2. **Loop body operations**: Operations applied to variables in each iteration
 
-The compiler tries four measure synthesis strategies in order of priority, stopping when one is
-found.
+The compiler tries four measure synthesis strategies in priority order, stops when it finds one. The four strategies are **restricted template sequences for measure exploration**, input is refined constraints (strategies 1–4 all start from "variables with bounded types"), not "code for compile-time evaluation"; they are the automatic and manual sides of the same thing as §6.9's explicit measures.
 
-#### 6.2 Strategy 1: Linear Rank Function Automatic Synthesis
+> **Measure exploration is exploration, not inference.**
+> Exploration only enumerates templates (linear rank, violation count, bounded pattern, multiplicative scaling), doesn't guarantee existence of solution — general measure inference is generally undecidable (reduces to halting problem). Therefore cases outside templates must be explicitly given by the programmer (§6.9), otherwise compile error.
 
-When variables have linear bound annotations, the compiler enumerates candidate linear measures and
-verifies with SMT.
+#### 6.2 Strategy 1: Automatic Synthesis of Linear Rank Functions
+
+When variables have linear bound annotations, the compiler enumerates candidate linear measures and verifies with SMT.
 
 ```
 Input:
-  Variables v₁: UpTo(u₁), v₂: UpTo(u₂), ... (variables with upper/lower bounds)
+  Variables v₁: UpTo(u₁), v₂: UpTo(u₂), ... (variables with upper and lower bounds)
   Loop condition cond
-  Set of assignments in loop body
+  Assignment set in loop body
 
 Algorithm:
-  1. Extract each variable's bounds from type annotations: [low_i, high_i]
-  2. Enumerate candidate measures: v_i, u_i - v_i, v_i - v_j, etc. linear combinations
+  1. Extract bounds for each variable from type annotations: [low_i, high_i]
+  2. Enumerate candidate measures: v_i, u_i - v_i, v_i - v_j, linear combinations, etc.
   3. For each candidate measure m:
-     - SMT validates m ≥ 0 (derived from type bounds)
-     - For each execution path in loop body, SMT validates m' < m (strictly decreasing)
-  4. Find a satisfying linear combination → termination proved
+     - SMT verify m ≥ 0 (derived from type bounds)
+     - For each execution path in loop body, SMT verify m' < m (strictly decreasing)
+  4. Find a matching linear combination → Termination proved
 ```
 
-Coverage scope: any loop where a variable is assigned a linear expression (`v = a·v + b`) and has
-bounded type annotation. Includes `i += const`, `i -= const`, and binary search-style interval
-shrinking:
+Coverage: Any loop where variables are assigned linear expressions (`v = a·v + b`) and have bounded type annotations. Includes
+`i += const`, `i -= const`, and binary-search-style interval shrinking:
 
 ```yaoxiang
 # Binary search: low = mid + 1 or high = mid
@@ -635,49 +535,41 @@ binary_search: (arr: Sorted(Int, arr), key: Int) -> Option(Int) = {
 }
 ```
 
-#### 6.3 Strategy 2: Predicate Violation Counting—Automatic Measure Extraction from Target Type <span style="color:orange">【Experimental Strategy】</span>
+#### 6.3 Strategy 2: Predicate Violation Counting — Measure Automatically Extracted from Target Type <span style="color:orange">【Experimental Strategy】</span>
 
-> ⚠️ **Current status: experimental strategy, decide whether to include based on actual feasibility
-> when implementing Phase 3.** This strategy is effective for adjacent swap operations (bubble sort,
-> insertion sort), but cannot automatically prove non-adjacent operations (quicksort partition,
-> heapsort sift-down). Coverage boundary see table below. If Phase 3 validation proves infeasible,
-> this strategy will be removed or downgraded to future work.
+> ⚠️ **Current status: Experimental strategy, inclusion decided during Phase 3 implementation based on actual feasibility.**
+> This strategy is effective for adjacent swap operations (bubble sort, insertion sort), but cannot automatically prove non-adjacent operations (quicksort partition, heapsort sift-down). See the coverage table below. If Phase 3 verification proves infeasible, this strategy will be removed or demoted to future work.
 
-Core insight: **the specifications users write are material for compiler reasoning.** The compiler
-doesn't need to have built-in "what is sorting"—it reads the definition of `Sorted` and
-automatically extracts measures from it.
+Core insight: **User-written specifications are materials for compiler reasoning.** The compiler doesn't need to build in "what sorting is" — it reads the definition of `Sorted`, automatically extracting measures from it.
 
 ```
 Input:
-  Target type: Sorted(arr) = { forall i in 0..arr.len-1: arr[i] <= arr[i+1] }
-  Loop body operations: adjacent element swaps
+  Target type: Sorted(arr) = { forall i in range: cond(i, arr) }
+  Loop body operations: Adjacent element swaps
 
 Algorithm:
   1. Parse predicate definition: forall i in range: cond(i, arr)
   2. Automatically generate measure: violation_count = |{ i | ¬cond(i, arr) }|
   3. Analyze operation's effect on measure:
      - Adjacent swap arr[j], arr[j+1] = arr[j+1], arr[j]
-     - Only affects index pairs j-1, j, j+1
-     - If arr[j] > arr[j+1] (violates predicate), after swap this pair satisfies predicate
+     - Only affects pairs at indices j-1, j, j+1
+     - If arr[j] > arr[j+1] (predicate violation), swap satisfies the predicate for this pair
      - violation_count decreases by at least 1
-  4. Upper bound: n·(n-1)/2 (max adjacent inversions), lower bound: 0
+  4. Upper bound: n·(n-1)/2 (maximum adjacent inversion count), lower bound: 0
   → Termination proved
 ```
 
-**Current coverage scope**:
+**Current coverage**:
 
-| Algorithm      | Operation Pattern | Strategy 2 Proves? | Reason                                               |
-| -------------- | ----------------- | :----------------: | ---------------------------------------------------- |
-| Bubble sort    | Adjacent swap     |         ✅         | violation_count strictly decreases per swap          |
-| Insertion sort | Adjacent shift    |         ✅         | Each shift eliminates one violation pair             |
-| Selection sort | Non-adjacent swap |         ❌         | Single swap may increase violation_count             |
-| Quicksort      | Partition         |         ❌         | Non-adjacent swap, no monotonic decrease             |
-| Heapsort       | sift-down         |         ❌         | Tree-shaped operation, violation_count non-monotonic |
+| Algorithm | Operation Pattern | Strategy 2 Proves? | Reason |
+| -------- | -------------- | :-------------: | -------------------------------------------- |
+| Bubble sort | Adjacent swap | ✅ | violation_count strictly decreases per swap |
+| Insertion sort | Adjacent move | ✅ | Each shift eliminates one violation pair |
+| Selection sort | Non-adjacent swap | ❌ | Single swap may increase violation_count |
+| Quicksort | partition | ❌ | Non-adjacent swap, doesn't guarantee monotonic decrease |
+| Heapsort | sift-down | ❌ | Tree operations, violation_count non-monotonic |
 
-**Complementary strategy**: for quicksort, `low < high` interval shrinking can be covered by
-Strategy 1 (linear rank function)—outer partition recursion, interval halves each time. Strategy 1
-and Strategy 2 complement each other, covering most practical algorithms' termination. But
-generalizing Strategy 2 (non-adjacent operations, tree-shaped operations) remains an open problem.
+**Complementary strategies**: For quicksort, the `low < high` interval shrinking is covered by Strategy 1 (linear rank function) — outer partition recursion, each interval halved. Strategy 1 and Strategy 2 complement each other's coverage; most real algorithms' termination can be proved by one of them. But generalizing Strategy 2 (non-adjacent operations, tree operations) remains an open problem.
 
 ```yaoxiang
 sort: (arr: Array(Int)) -> (result: Sorted(result)) = {
@@ -698,135 +590,147 @@ sort: (arr: Array(Int)) -> (result: Sorted(result)) = {
 
 #### 6.4 Strategy 3: Bounded Increment/Decrement Pattern
 
-`v += const` (positive constant), variable has upper bound type annotation → measure
-`upper_bound - v` decreases by `const` each time, lower bound 0. This is a degenerate case of
-Strategy 1, which the compiler handles first as a fast path.
+`v += const` (normal constant), variable has upper bound type annotation → measure `upper_bound - v` decreases by `const` each time, lower bound 0. This is a degenerate case of Strategy 1, handled quickly at the front.
 
 #### 6.5 Strategy 4: Multiplicative Scaling Measure Template
 
-`v *= const` (const > 1), variable has upper and lower bound type annotation. The compiler has
-built-in logarithmic measure template `ceil(log_const(upper/v))`, each multiply by const decreases
-measure by 1.
+`v *= const` (const > 1), variable has upper and lower bound type annotations. Compiler has built-in logarithmic measure template
+`ceil(log_const(upper/v))`, each multiply by const decreases measure by 1.
 
 ```yaoxiang
 mut i: Positive(i) = 1
 while i < n {
-    # Compiler automatically derives: measure ceil(log₂(n/i)), each multiply by 2 decreases measure by 1
+    # Compiler automatically infers: measure ceil(log₂(n/i)), each multiply by 2 decreases measure by 1
     i *= 2
 }
 ```
 
-#### 6.6 Termination and Correctness Separation
+#### 6.6 Separation of Termination and Correctness
 
 Termination proof and correctness proof are independent:
 
-- **Termination**: the above four strategies automatically prove the loop exits in finite steps
-- **Correctness**: whether the loop body advances toward the target type, checked by the
-  compile-time proof pipeline through verification conditions
+- **Termination**: The four strategies above automatically prove loops exit in finite steps; when exploration fails, programmer provides measure in type position (§6.9)
+- **Correctness**: Whether loop body advances toward target type, checked by compile-time proof pipeline through verification conditions
 
-Both pass → compilation passes. Termination proved but correctness fails → compile error +
-counterexample. Correctness proved but termination unprovable → compile error pointing out the
-variables or operations that cannot be analyzed. Both fail → compile error reporting both failure
-reasons separately.
+Both pass → Compilation passes. Termination proved but correctness fails → Compile error + counterexample. Correctness proved but termination cannot be proved → Compile error pointing out unanalyzable variables or operations. Both fail → Compile error reporting both failures separately.
 
-#### 6.7 Recursive Function Termination Checking
+#### 6.7 Termination Checking for Recursive Functions
 
-For recursive functions that need to be evaluated at compile time, the compiler checks argument
-decrease:
+For recursive functions with refined signatures, the compiler checks parameter decrease at each recursive call site:
 
 ```yaoxiang
-factorial: (n: Int) -> Int = {
-    if n <= 1 { return 1 }
-    return n * factorial(n - 1)  # Compiler analyzes: n-1 < n → decreases → terminates
+gcd: (a: Int, b: NonNegative(b)) -> Int = {
+    if b == 0 { return a }
+    return gcd(b, a % b)  // Compiler explores: (b, a % b) well-founded order measure decreases → Terminates
 }
-
-# Compile-time use—compiler guarantees factorial terminates at compile time
-arr: Array(Int, factorial(5)) = Array(Int, 120)()  # 5! = 120, done at compile time
 ```
 
-| Scenario                                              | Behavior                    |
-| ----------------------------------------------------- | --------------------------- |
-| Compiler can analyze recursive decrease (e.g., `n-1`) | Compile-time evaluation     |
-| No decrease / cannot determine decrease               | Compile error               |
-| Runtime call (not in type position)                   | No termination check needed |
+Parameter decrease is the strongest automatic path (structural recursion). When exploration fails, programmer explicitly gives measure in type position (§6.9).
 
 #### 6.8 Hard Boundary
 
-`i = f(i)` where `f` is irreversible, not closed, and doesn't preserve any
-monotonicity—mathematically impossible to automatically prove termination. Compile error:
+`i = f(i)` where `f` is non-invertible, not closed, doesn't preserve any monotonicity — mathematically impossible to automatically prove termination. Compile error:
 
-> This loop cannot be automatically proven to terminate. The loop variable depends on the
-> unanalyzable function `f`. Please use an iteration pattern analyzable by the compiler, or provide
-> a measure function and termination proof function (see RFC-027a).
+> This loop cannot have termination automatically proved. Loop variable depends on unanalyzable function
+> `f`. Please use an iteration pattern the compiler can analyze, or bind a name to this loop and provide a measure in type position (§6.9).
 
-This is not a compiler failure. Whatever cannot be statically proven safe shall not pass
-compilation.
+This is not the compiler's failure. Any code that cannot be statically proved safe must not pass compilation. Even with explicit measures, they must be decided true by SMT to pass — if the measure is wrong, the counterexample sends it back; humans can only fail to prove, not prove incorrectly.
 
-### 8. SMT Solver: Type Checker's Acceleration Module
+#### 6.9 Explicit Measure: `Terminates`
 
-The SMT solver is an external tool in traditional languages (e.g., F\* calls Z3, Dafny calls Z3). In
-YaoXiang, it is an **acceleration module of the type checker**—only called when the compiler kernel
-itself cannot directly determine. SMT helps find proofs, but validating the proof is the type
-checker.
+When automatic exploration fails to find a measure, the programmer writes the measure in the **type position** — same mechanism as `Positive(b)`, `IsMax(T, arr, result)` (predicate application), zero new syntax:
 
-**Trust model**: the type checker is the sole trust root. The SMT solver is an acceleration
-module—it helps find proofs, but SMT is not an independent trust boundary. The compiler trusts Z3's
-`unsat` result (consistent with the F\*/Dafny route—Z3's error rate is lower than the compiler's own
-bug rate, an engineering pragmatic choice). The true unreliability control is in the SMT translation
-layer—if the translation has bugs, the compiler will be exposed in other tests.
+```yaoxiang
+// Measure: ordinary function, can be unit-tested, can be reused, does not participate in runtime
+gcd_measure: (a: Int, b: Int) -> Int = { b }
 
-**Interface**: the compiler internally translates to SMT-LIB 2.6 standard format, rather than
-binding to specific solver APIs. SMT-LIB is an ISO standard, natively supported by Z3, CVC5,
-MathSAT, Yices.
+// Termination component lives in the function's own type position
+gcd: Terminates((a: Int, b: Int) -> Int, gcd_measure) = {
+    if b == 0 { return a }
+    return gcd(b, a % b)
+}
 
-**Default backend**: Z3 (MIT license, most extensive documentation and community validation). CVC5
-as SMT-LIB compatible alternative—users can switch via compiler flags at compile time.
+// Loop: binding name is the anchor, measure obtains the in-scope quantity by name
+loop: (n: Int) -> Int = {
+    mut i = 0
+    acc: Terminates(n - i) = while i < n {
+        i = i + 1
+    }
+    return acc
+}
+```
 
-No "general solver abstraction layer"—SMT-LIB is the abstraction layer. If CVC5 makes breakthroughs
-in specific theories in the future, switching only requires changing the binary, no compiler code
-changes needed.
+The reasoning for loops here: `Terminates(m)` refines the type of the loop body's tail expression; the anchor is provided by the binding name `acc` — this makes the loop referable, eliminating the "anonymous construct cannot be referenced" blind spot.
+
+**`Terminates` is a built-in predicate**, alongside `Int`, `Never`
+as core primitives. It's the only predicate **whose function body is written by the compiler** — its assertion ("measure strictly decreases at each recursive call site/loop back edge") lives in the computation structure, users' predicates cannot reference function bodies or loop bodies, so it cannot be expressed using the "syntax" section's predicate definition syntax. The built-in aspect converges to this one name.
+
+**Arity**. `Terminates(FnType, m)` and `Terminates(m)` are two arities of the same predicate, not two different constructs:
+
+| Form | Anchor | Purpose |
+| ----------------------- | -------------- | -------------------------- |
+| `Terminates(m)` | Name of containing binding | Self-recursive functions, loops — default form |
+| `Terminates(FnType, m)` | Explicit function type | Mutual recursion and other scenarios where anchor is not unique |
+
+Both are essentially the same: termination obligation always falls on "the computation annotated by the refined type position."
+
+**Measure does not restrict return type.**
+The measure can be an expression of any type (not forced to natural numbers); the "strictly decreasing" on it is given by a well-founded order available on that type. Whether the measure is well-founded (e.g., when returning `Int`, whether it is `>= 0`) is an **independent obligation**, like the decreasing obligation, also delegated to refined derivation or SMT; when both cannot be derived, diagnosis **does not directly reject**, but rather suggests checking direction (whether measure has lower bound, whether recursive parameters truly advance in that direction).
+
+**Relationship with automatic exploration**: Explicit measures are not a separate pipeline, but input after exploration failure. After giving a measure, still go through the same SMT to verify decreasing and well-foundedness; if not satisfied, error with counterexample.
+
+For implementation mechanisms of obligation generation, judgment pipeline, diagnostic directions, measure sharing for mutual recursion (SCC), etc., see
+[RFC-027a: Explicit Measures for Termination Checking](../review/027a-termination-explicit-measure.md).
+
+### 8. SMT Solver: Acceleration Module for Type Checker
+
+In traditional languages, the SMT solver is an external tool (F\* calls Z3, Dafny calls Z3). In YaoXiang, it's an **acceleration module within the type checker** — only called when the compiler kernel itself cannot directly decide. SMT helps find proofs, but the type checker verifies proofs.
+
+**Trust model**: The type checker is the sole trust root. The SMT solver is an acceleration module — it helps find proofs, but SMT is not an independent trust boundary. The compiler trusts Z3's
+`unsat`
+result (consistent with F\*/Dafny approach — probability of Z3 error is lower than probability of compiler's own bugs, pragmatic engineering choice). True unreliability control is in the SMT translation layer — if there's a bug in translation, the compiler will expose it in other tests.
+
+**Interface**: Compiler internally translates to SMT-LIB
+2.6 standard format, rather than binding specific solver APIs. SMT-LIB is an ISO standard, natively supported by Z3, CVC5, MathSAT, and Yices.
+
+**Default backend**: Z3 (MIT license, most extensive documentation and community verification). CVC5 as SMT-LIB-compatible alternative — users can switch via compiler flags at compile time.
+
+No "general solver abstraction layer" — SMT-LIB is the abstraction layer. If CVC5 makes breakthroughs in specific theories in the future, switching only requires swapping binaries, no compiler code changes needed.
 
 ```
 Compile-time Bool expression
         │
-        ├── Compiler kernel can directly determine (structural equivalence, simple arithmetic,
+        ├── Compiler kernel can decide directly (structural equivalence, simple arithmetic,
         │   trivial formulas after constant folding)
-        │   → Directly return Proved / Disproved
+        │   → Return Proved / Disproved directly
         │
-        └── Compiler kernel cannot directly determine (quantifiers, symbolic variables)
+        └── Compiler kernel cannot decide directly (quantifiers, symbolic variables)
             → Dependent type pre-reduction (factorial(5) → 120)
             → Translate to SMT-LIB format
-            → Send to Z3/CVC5 (with budget limits)
-            → Return: unsat → Proved  │  sat + model → Disproved  │  unknown → Unproven
+            → Send to Z3/CVC5 (with budget limit)
+            → Return: unsat → Proved │ sat + model → Disproved │ unknown → Unproven
 ```
 
-**Solver budget—hard limit, like stack depth**:
+**Solving budget — hard limits, like stack depth**:
 
-| Budget dimension               | Default | Description                                                                                                                                              |
-| ------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Solving steps                  | 10,000  | Z3 typically within a hundred steps for linear arithmetic. 10,000 steps covers 99% of practical predicates.                                              |
-| Time                           | 100ms   | Single predicate exceeding 100ms = user is writing compile-time program, not type annotation. 100ms × 50 predicates = 5 second compile time upper bound. |
-| Quantifier instantiation depth | 3       | Three-level nested quantifiers cover practical patterns. Beyond three levels is likely a logic exercise.                                                 |
+| Budget Dimension | Default | Description |
+| -------------- | ------ | ----------------------------------------------------------------------------------------- |
+| Solving steps | 10,000 | Z3 usually finishes linear arithmetic within a few hundred steps. 10,000 steps covers 99% of practical predicates. |
+| Time | 100ms | Single predicate exceeding 100ms = user is writing compile-time programs, not type annotations. 100ms × 50 predicates = 5 second compilation time limit. |
+| Quantifier instantiation depth | 3 | Three levels of nested quantifiers covers practical patterns. Beyond three levels is likely writing logic exercises. |
 
-Over budget returns Unproven, compile error + predicate location + consumption. No degradation, no
-runtime check, no silent pass.
+Over budget returns Unproven, compile error + predicate location + consumption. No degradation, no runtime checks, no silent pass.
 
-**Why this is actually feasible**: 95% of practical predicates in engineering are linear
-arithmetic—`x > 0`, `arr.len > 0`, `0 <= idx < arr.len`—all within the decidable fragment, SMT
-solvers return millisecond-level for these problems. For the rare complex predicates that exceed
-budget, the programmer writes a proof function.
+**Why this is practically feasible**: In practice, 95% of actual predicates are linear arithmetic — `x > 0`, `arr.len > 0`, `0 <= idx < arr.len` — all within the decidable fragment, SMT solvers return in milliseconds for such problems. When encountering the rare complex predicate over budget, programmer writes a proof function.
 
-Dependent types do a layer of pre-reduction before SMT calls: `factorial(5)` directly evaluates to
-`120` at compile time, `append([1,2], [3])` directly evaluates to `[1,2,3]`. These deterministic
-value calculations don't consume SMT budget.
+Dependent types go through a layer of pre-reduction before SMT calls: `factorial(5)` directly evaluates to `120` at compile time, `append([1,2], [3])`
+directly evaluates to `[1,2,3]`. These deterministic value calculations don't consume SMT budget.
 
-Programmers don't need to know SMT exists. Mental model is: **the compiler can prove → pass, cannot
-→ error—if the compiler doesn't, you can write a function to prove to it**.
+Programmers don't need to know SMT exists. Mental model: **If the compiler can prove it, it passes; if not, it errors — if the compiler can't, you can write a function to prove it.**
 
-### 9. Compile-time Predicate Composition
+### 9. Compose Compile-Time Predicates
 
-Compile-time predicates are functions that return Type, composition is naturally achieved through
-function composition:
+Compile-time predicates are functions returning Type, composition is natural function composition:
 
 ```yaoxiang
 SortedNonEmpty: (T: Ord, arr: Array(T)) -> Type = {
@@ -836,15 +740,15 @@ SortedNonEmpty: (T: Ord, arr: Array(T)) -> Type = {
 
 ### 10. Code Examples
 
-#### 9.1 Division Safety
+#### 9.1 Safe Division
 
 ```yaoxiang
 Positive: (x: Int) -> Type = { x > 0 }
 
 divide: (a: Int, b: Positive(b)) -> Int = a / b
 
-result = divide(10, 2)   # ✅ Compiler validates Positive(2) = { 2 > 0 } → True
-# result = divide(10, 0)  # ❌ Compiler validates Positive(0) = { 0 > 0 } → False
+result = divide(10, 2)   # ✅ Compiler verifies Positive(2) = { 2 > 0 } → True
+# result = divide(10, 0)  # ❌ Compiler verifies Positive(0) = { 0 > 0 } → False
 ```
 
 #### 9.2 Array Access Safety
@@ -855,11 +759,11 @@ InBounds: (idx: Int, arr: Array(T)) -> Type = { 0 <= idx and idx < arr.len }
 get: (arr: Array(T), idx: InBounds(idx, arr)) -> T = arr.data[idx]
 
 arr = Array(Int)(1, 2, 3)
-x = get(arr, 1)   # ✅ Compiler validates InBounds(1, arr) = { 0 <= 1 and 1 < 3 } → True
-# y = get(arr, 5)  # ❌ Compiler validates InBounds(5, arr) = { 0 <= 5 and 5 < 3 } → False
+x = get(arr, 1)   # ✅ Compiler verifies InBounds(1, arr) = { 0 <= 1 and 1 < 3 } → True
+# y = get(arr, 5)  # ❌ Compiler verifies InBounds(5, arr) = { 0 <= 5 and 5 < 3 } → False
 ```
 
-#### 9.3 Sort Correctness
+#### 9.3 Sorting Correctness
 
 ```yaoxiang
 Sorted: (T: Ord, arr: Array(T)) -> Type = {
@@ -868,7 +772,7 @@ Sorted: (T: Ord, arr: Array(T)) -> Type = {
 
 sort: (T: Ord) -> ((arr: Array(T))) -> (result: Sorted(T, result)) = {
     result = arr.clone()
-    # ... sort algorithm implementation ...
+    # ... sorting algorithm implementation ...
     return result
 }
 ```
@@ -890,27 +794,21 @@ sum: (arr: Array(Int)) -> Int = {
 }
 ```
 
-### 11. Dispatch Pipeline: Unified Dispatch for Compile-time and Runtime
+### 11. Dispatch Pipeline: Unified Compilation-Time and Runtime Dispatch
 
-`assert` and `Assert` are two sides of the same refinement type primitive. The dispatch pipeline
-`dispatch` automatically decides between compile-time proof and runtime check based on **whether the
-predicate's free variables are accessible at compile time**:
+`assert` and `Assert` are two faces of the same refined type primitive. The dispatch pipeline `dispatch`
+automatically decides whether to go through compile-time proof or runtime check based on **whether the predicate's free variables are accessible at compile-time**:
 
-| Criterion                                                                                  | Mode            | Behavior                                                                                 |
-| ------------------------------------------------------------------------------------------ | --------------- | ---------------------------------------------------------------------------------------- |
-| All free variables known at compile time (generic parameters, compile-time constants)      | **CompileTime** | Enter proof pipeline: Proved → erase, Disproved → compile error, Unknown → require proof |
-| Some free variables come from runtime (function parameters, external input, mut variables) | **Runtime**     | Insert runtime check, inject refinement fact into flow-sensitive assumption set Γ        |
+| Criterion | Mode | Behavior |
+| ------------------------------------------------------ | --------------- | ------------------------------------------------------------------- |
+| All free variables known at compile-time (generic parameters, compile-time constants) | **CompileTime** | Enter proof pipeline: Proved → erase, Disproved → compile error, Unknown → require proof |
+| Free variables from runtime exist (function parameters, external input, mut variables) | **Runtime** | Insert runtime check, inject refined facts into flow-sensitive hypothesis set Γ |
 
-**Key**: "Cannot determine" ≠ "disproved". In CompileTime mode, Unknown requires proof (no silent
-degradation); in Runtime mode, the proposition has no truth value at compile time at all—no matter
-how strong the prover is, it cannot write a always-true proof for "user might input a negative
-number", runtime check is the only sound choice. This is not the prover being too weak, it is
-theoretical necessity.
+**Key point**: "Cannot decide" ≠ "Disproved". In CompileTime mode, Unknown requires proof (no silent degradation), while in Runtime mode the proposition doesn't even have a truth value at compile-time — no prover, however strong, can write a tautology for "user may have entered a negative number"; runtime check is the only sound choice. This is not the prover being insufficiently strong, it's theoretical necessity.
 
-### 12. Flow-sensitive Assumption Set Γ: Strongest Postcondition Propagation
+### 12. Flow-Sensitive Hypothesis Set Γ: Strongest Postcondition Propagation
 
-The compiler maintains a flow-sensitive assumption set Γ, tracking propositions known to hold at
-each control flow point.
+The compiler maintains a flow-sensitive hypothesis set Γ, tracking propositions known to hold at each control flow point.
 
 **SP (Strongest Postcondition) propagation**:
 
@@ -919,246 +817,171 @@ assert(x > 0)       // Γ = {x > 0}
 y = x + 1           // Γ = {x > 0, y > 1}  ← SP propagation
 ```
 
-**Kill set for `mut` variables**: when a `mut` variable is reassigned, all assumptions involving
-that variable are removed from Γ:
+**Kill set for mut variables**: After a `mut` variable is reassigned, all hypotheses involving that variable are removed from Γ:
 
 ```yaoxiang
 assert(x > 0)       // Γ = {x > 0}
 mut x = x - 5       // Γ = {}  ← x > 0 is killed
 ```
 
-This is a hard requirement of soundness—variable value changed, old assumptions invalid.
+This is a hard requirement for soundness — variable value changed, old hypothesis invalid.
 
-**Branch confluence**: when IF/ELSE or match branches merge, Γ takes the intersection of each
-branch's assumptions. Only propositions that hold on all paths are carried out of the branch.
+**Branch merging**: When IF/ELSE or match branches merge, Γ takes the intersection of each branch's hypotheses. Only propositions holding across all paths carry out of the branch.
 
 ### 13. Erasure Model Clarification: Witness Erasure ≠ Check Erasure
 
-RFC-027's assertion that "refinement types are **completely erased** at runtime" refers to **proof
-witnesses**—proof terms already verified at compile time produce no runtime code. But runtime checks
-inserted by Runtime mode dispatch **are retained**—they are Bool checks executed at the value level,
-not witnesses at the type level.
+The RFC-027 assertion that "refined types are **completely erased** at runtime" refers to **proof witnesses (proof tokens)** — proof terms verified at compile-time don't produce runtime code. But the runtime checks inserted by dispatch in Runtime mode are **preserved** — they are Bool checks executed at the value level, not witnesses at the type level.
 
-Summary: witnesses are erased, checks are retained. The two things don't conflict, RFC-027's
-original assertion is unchanged.
+Summary: witness erasure, check retention. These two things don't conflict, RFC-027's original assertion stands.
 
 ## Detailed Design
 
 ### Syntax Changes
 
-| Before (RFC-022)                      | After (This RFC)                                                             |
+| Before (RFC-022) | After (This RFC) |
 | ------------------------------------- | ---------------------------------------------------------------------------- |
-| `//! requires: NonEmpty(n) = n > 0`   | Compile-time predicate as parameter type `(b: Positive(b))`                  |
-| `//! ensures: ExistsMax(result, arr)` | Return type uses return value parameter `-> (result: IsMax(T, arr, result))` |
-| `/*! invariant: ... !*/`              | Compile-time predicate type annotation on variable—Floyd-Hoare invariant     |
-| `//! decreases: n`                    | Compiler fully automatic measure function derivation                         |
-| Specification is annotation           | Specification is type system                                                 |
+| `//! requires: NonEmpty(n) = n > 0` | Compile-time predicate as parameter type `(b: Positive(b))` |
+| `//! ensures: ExistsMax(result, arr)` | Return type using return value parameter `-> (result: IsMax(T, arr, result))` |
+| `/*! invariant: ... !*/` | Compile-time predicate type annotation on variables — Floyd-Hoare invariants |
+| `//! decreases: n` | Measure written in refined type position (`Terminates`); compiler explores automatically first, requires explicit only when exploration fails |
+| Specifications are comments | Specifications are type system |
 
 ### Syntax
 
-**Compile-time predicates have no new keywords.** `{}` is the proof space, exactly consistent with
-existing type definition syntax. A compile-time predicate is a function that returns
-Type—`name: (params) -> Type = { assertions }`. Usage is a function call—`Positive(b)`,
-`IsMax(T, arr, result)`.
+**Compile-time predicates have no new keywords.** `{}`
+is the proof space, fully consistent with existing type definition syntax. Compile-time predicates are functions returning Type — `name: (params) -> Type = { assertions }`. When used, it's a function call — `Positive(b)`, `IsMax(T, arr, result)`.
 
 ```bnf
-# Compile-time predicate = function returning Type, {} contains compiler-validated assertions
+# Compile-time predicate = function returning Type, {} contains assertions verified by compiler
 # Uses existing function/type syntax, no new BNF rules needed
 predicate ::= identifier ':' params '->' 'Type' '=' '{' assertions '}'
 ```
 
-**Predicate application arguments must be compile-time constant forms**—literals, variables (bound
-by name), or single-argument type applications (recursive extraction). Arguments that cannot be
-converted to constant expressions report **E1092**, argument count mismatching predicate parameters
-report **E1093**—refinement constraints are **never silently discarded** (previously, inconvertible
-arguments caused constraints to silently disappear, and bindings violating constraints silently
-passed).
+**Predicate application actual arguments must be compile-time constant forms** — literals, variables (by-name binding), type applications (recursive extraction), or **compile-time referable function references** (function name). Actual arguments not convertible to constant expressions report
+**E1092**, actual argument count doesn't match predicate declaration parameter count report
+**E1093**. Arguments bind positionally to parameter list, predicate arity is determined by declaration — `Positive(x)` is unary, `IsMax(T, arr, result)` is ternary, `Terminates(m)` and `Terminates(FnType, m)`
+are unary and binary — refined constraints **are never silently dropped** (previously, non-convertible actual arguments would cause constraints to silently disappear, allowing bindings violating constraints to silently pass).
 
-**New syntax concept: return value parameter**—`name` in `-> (name: Type)` is a return value
-parameter.
+**New syntactic concept: return value parameter** — in `-> (name: Type)`, `name` is the return value parameter.
 
-The return value parameter is the **only syntax concept** YaoXiang introduces on existing function
-syntax. Its semantics:
+The return value parameter is the **only syntactic concept** YaoXiang introduces on top of existing function syntax. Its semantics:
 
-- `name`'s value is provided by the `return` statement
-- `name` only exists in the type signature, referenced by postcondition predicates (e.g.,
-  `-> (result: IsMax(T, arr, result))`)
-- `name` does not enter the function body scope, does not appear at the caller
-- Return value parameter **is optional**—when no postcondition, signature is identical to ordinary
-  function (`-> Int`), introducing no extra burden
+- `name`'s value is provided by `return` statement
+- `name` only exists in the type signature, referenced by postcondition predicates (e.g., `-> (result: IsMax(T, arr, result))`)
+- `name` does not enter function body scope, doesn't appear at call sites
+- Return value parameter **optional** — when no postcondition, signature is identical to regular function (`-> Int`), no extra burden introduced
 
-Reason for introducing it: postconditions need to reference "the value the function will return".
-Without return value parameters, the compiler can only use special rules (such as implicit variable
-`$result` or `__retval__`) to let the predicate reference the return value. The return value
-parameter makes this reference explicit—it is just a parameter, just that the value is provided by
+The reason for introducing it: postconditions need to reference "the value the function will return". Without return value parameters, the compiler could only let predicates reference the return value through special rules (e.g., implicit variables like `$result` or `__retval__`). Return value parameters make this reference explicit — it's just a parameter, just that its value comes from
 `return` rather than the caller.
 
-**Proof function** is not a new concept—it is a YaoXiang function whose return type is the asserted
-proposition. When the compiler returns Unproven, the programmer provides a proof function, and the
-type checker validates it the same way it validates any function's return type. No new syntax, no
-new keywords, no new rules needed.
+**Proof function** is not a new concept — it's just a YaoXiang function whose return type is the asserted proposition. When the compiler returns Unproven, the programmer provides a proof function, and the type checker verifies it in exactly the same way it verifies any function's return type. No new syntax, new keywords, or new rules needed.
+
+> **The boundary between the two.**
+> Correctness domain (predicate Unproven) adds proof in the **body**: write a function whose return type is the proposition to be proved. Termination domain (§6.9) adds measure in the **type position**: write
+> `Terminates(measure)`
+> as the type of a binding or function signature. The former is "write a proof for an unprovable proposition," the latter is "declare a measure the exploration couldn't find" — the mechanism is the same (both are refined type applications), but the landing spots differ. Termination domain **does not need** to write a `_proof` function.
 
 ### Type System Impact
 
-- **Type universe**: compile-time predicates are at the Type₂ layer—functions taking values and
-  returning Type, same layer as type constructors
-- **Generic interaction**: compile-time predicates can take generic parameters, e.g.,
-  `NonEmpty: (T: Type) -> (arr: Array(T)) -> Type`
-- **Ownership interaction**: expressions in compile-time predicates obey ownership rules, only
-  readable, not writable
-- **Type inference**: compile-time predicate arguments participate in HM type inference
+- **Type universe**: Compile-time predicates are at Type₂ level — functions accepting values and returning Type, same level as type constructors
+- **Generic interaction**: Compile-time predicates can have generic parameters, e.g., `NonEmpty: (T: Type) -> (arr: Array(T)) -> Type`
+- **Ownership interaction**: Expressions in compile-time predicates follow ownership rules, read-only, no write
+- **Type inference**: Parameters of compile-time predicates participate in HM type inference
 
 ### Runtime Representation
 
-Compile-time predicates are handled at runtime **according to dispatch pipeline results**:
+Compile-time predicates are processed at runtime **according to dispatch result**:
 
-- **CompileTime mode** (all free variables known at compile time): after proof passes, the witness
-  is completely erased. `Positive: (x: Int) -> Type = { x > 0 }`—the parameter `b: Positive(5)`
-  runtime representation is just `Int`. The refinement condition `{ 5 > 0 }` has passed, erased.
-- **Runtime mode** (runtime free variables exist): retain runtime check—execute Bool check at the
-  value level, inject into flow-sensitive assumption set Γ. See §11 dispatch pipeline and §13
-  erasure model clarification for details.
+- **CompileTime mode** (all free variables known at compile-time): After proof passes, witness tokens are completely erased. `Positive: (x: Int) -> Type = { x > 0 }` — parameter `b: Positive(5)` at runtime is just `Int`. Refined condition `{ 5 > 0 }` has passed, erased.
+- **Runtime mode** (runtime free variables exist): Runtime check retained — Bool check executed at value level, injected into flow-sensitive hypothesis set Γ. See §11
+  dispatch pipeline and §13 erasure model clarification for details.
 
-Placing compile-time predicates in type position (e.g., `f(x: Positive(x))`) produces no wrapper
-type, no extra memory allocation. But when `x` comes from runtime input, **it will** insert a
-runtime Bool check.
+Placing compile-time predicates in type positions (e.g., `f(x: Positive(x))`) does not create wrapper types, doesn't allocate extra memory. But when `x`
+comes from runtime input, a runtime Bool check **is** inserted.
 
-**Interaction constraint with `ref`**: compile-time predicates can only reference immutable borrows
-or values with transferred ownership. Compile-time predicates referencing mutable borrows, the
-compiler cannot guarantee at compile time that the validation result still holds at runtime—such
-usage directly reports a compile error.
+**Interaction constraint with `ref`**: Compile-time predicates can only reference immutable borrows or values whose ownership has been transferred. Compile-time predicates referencing mutable borrows — the compiler cannot guarantee at compile-time that verification results still hold at runtime — such usage directly reports compile error.
 
 ### Compiler Changes
 
-1. **Parser**: compile-time predicates use standard function syntax, no extra parsing rules needed
-2. **Compile-time proof pipeline**: unified Proved/Disproved/Unproven return interface, automatic
-   strategy selection
-3. **SMT acceleration module**: SMT-LIB 2.6 translation layer, default backend Z3, CVC5 alternative
-4. **Type checker kernel**: inference rule implementation—structural equivalence, βδι-reduction,
-   universal quantifier introduction/elimination. This is the sole trust root, SMT and programmer
-   proofs are both validated through this
+1. **Parser**: Compile-time predicates use standard function syntax, no additional parsing rules needed
+2. **Compile-time proof pipeline**: Unified Proved/Disproved/Unproven return interface, automatic strategy selection
+3. **SMT acceleration module**: SMT-LIB 2.6 translation layer, default backend Z3, CVC5 as backup
+4. **Type checker kernel**: Inference rules implementation — structural equivalence, βδι-reduction, universal quantifier introduction/elimination. This is the sole trust root; SMT and programmer proofs are all verified through this
 5. **Verification condition generation**: WP/SP calculus + loop invariant proof obligations
-6. **Error reporting**: counterexample formatting + unsolved proposition report + source location
-   association
+6. **Error reporting**: Counterexample formatting + unproven proposition reporting + source location association
 
 ### Backward Compatibility
 
-- ✅ Code not using compile-time predicates is completely unchanged
-- ✅ Compile-time predicates have zero runtime overhead in CompileTime mode, Runtime mode only
-  retains necessary Bool checks
-- ⚠️ RFC-022's `//!` syntax is no longer supported—but 022 was never implemented, no migration
-  burden
+- ✅ Code not using compile-time predicates remains completely unchanged
+- ✅ Compile-time predicates in CompileTime mode have zero runtime overhead, Runtime mode only retains necessary Bool checks
+- ⚠️ RFC-022's `//!` syntax is no longer supported — but 022 was never implemented, no migration burden
 
 ## Trade-offs
 
 ### Advantages
 
-- **Full realization of Curry-Howard isomorphism**: types are propositions, programs are proofs,
-  `name: Proposition = Proof`
-- **Unity**: compile-time predicates and ordinary functions use exactly the same syntax, no
-  conceptual split
-- **SMT transparency**: programmers don't need to know SMT exists, mental model consistent with type
-  checking
-- **Progressive adoption**: can start with one compile-time predicate, gradually increase coverage
-- **Minimal runtime overhead**: zero overhead in CompileTime mode, Runtime mode only retains
-  necessary Bool checks
+- **Curry-Howard isomorphism fully realized**: Types are propositions, programs are proofs, `name: Proposition = Proof`
+- **Unity**: Compile-time predicates use exactly the same syntax as regular functions, no conceptual split
+- **SMT transparency**: Programmers don't need to know SMT exists, mental model is consistent with type checking
+- **Gradual adoption**: Can start with one compile-time predicate, incrementally increase coverage
+- **Minimal runtime overhead**: CompileTime mode zero overhead, Runtime mode only retains necessary Bool checks
 
 ### Disadvantages
 
-- **Compile time**: SMT solving increases compile time, but hard budget limits keep the upper bound
-  controllable
-- **Automatic proof boundary**: complex predicates beyond first-order linear arithmetic may require
-  programmers to write proof functions. This is not a language defect—this is the inevitable
-  conclusion of the halting problem. The compiler honestly reports Unproven rather than falsely
-  claiming True/False
-- **Learning curve**: writing effective compile-time predicates and proof functions requires
-  understanding the basic intuition of Curry-Howard isomorphism
-- **Implementation complexity**: unifying the compile-time proof pipeline requires careful design
+- **Compilation time**: SMT solving increases compilation time, but hard budget limits ensure an upper bound
+- **Automatic proof boundary**: Complex predicates beyond first-order linear arithmetic may require programmer-written proof functions. This is not a language defect — it's the inevitable conclusion of the halting problem. Compiler honestly reports Unproven rather than falsely claiming True/False
+- **Learning curve**: Writing effective compile-time predicates and proof functions requires understanding basic intuition of Curry-Howard isomorphism
+- **Implementation complexity**: Unifying the compile-time proof pipeline requires careful design
 
 ### Risk Mitigation
 
-- SMT solver budget hard limits (10,000 steps / 100ms / instantiation depth 3), over budget returns
-  Unproven
-- Dependent type pre-reduction: deterministic value calculations are consumed first, SMT only chews
-  on the non-deterministic part
-- Unproven is not a dead end: programmers can write proof functions, type checker
-  validates—consistent with validating any function return type
-- Incremental validation: only validate changed modules
-- Clear error messages + counterexample display + budget consumption report + unsolved proposition +
-  suggestions (if compiler can give them)
+- SMT solving budget hard limits (steps 10,000 / time 100ms / instantiation depth 3), over budget returns Unproven
+- Dependent type pre-reduction: Deterministic value calculations are consumed first, SMT only tackles non-deterministic parts
+- Unproven is not a dead end: Correctness domain writes proof function (return type is proposition), termination domain gives measure in type position (§6.9) — both are verified by type checker
+- Incremental verification: Only verify changed modules
+- Clear error messages + counterexample display + budget consumption report + unproven propositions + suggestions (if compiler can provide)
 
-## Alternatives
+## Alternative Approaches
 
-| Alternative                                                    | Why Not                                                                                                                                                             |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC-022: `//!` annotation-style specifications                 | Specifications and types are split, violating Curry-Howard isomorphism                                                                                              |
-| Independent specification files (e.g., CVL)                    | Specifications and code separated, increasing maintenance cost                                                                                                      |
-| Runtime assertions only                                        | Cannot statically guarantee correctness                                                                                                                             |
-| External proof assistant (e.g., Coq)                           | Disconnected from compiler, requiring independent proof language and trust boundary. YaoXiang's choice: proof is YaoXiang code, type checker is the sole trust root |
-| **This plan: compile-time predicates as first-class citizens** | ✅                                                                                                                                                                  |
+| Approach | Why Not Chosen |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| RFC-022: `//!` comment-style specifications | Specification split from types, violates Curry-Howard isomorphism |
+| Separate specification files (e.g., CVL) | Specification separated from code, increases maintenance cost |
+| Runtime assertions only | Cannot statically guarantee correctness |
+| External proof assistants (e.g., Coq) | Disconnected from compiler, requires separate proof language and trust boundary. YaoXiang's choice: proof is YaoXiang code, type checker is the sole trust root |
+| **This proposal: Compile-time predicates as first-class citizens** | ✅ |
 
 ## Implementation Strategy
 
-### Phase Division
+### Phase Breakdown
 
-| Phase       | Content                                                                                                                                                                 |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Phase 1** | Compiler kernel: structural equivalence + βδι-reduction + universal quantifier introduction/elimination. Supports simple arithmetic predicates (`x > 0`, `arr.len > 0`) |
-| **Phase 2** | SMT-LIB translation layer + Z3/CVC5 integration. Pipeline returns Proved/Disproved/Unproven. Unproven supports programmer writing proof functions                       |
-| **Phase 3** | Loop invariant VC generation + termination checking (linear rank function + predicate violation counting + bounded pattern + combinatorial explosion control)           |
-| **Phase 4** | Incremental validation + caching + IDE support                                                                                                                          |
+| Phase | Content |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| **Phase 1** | Compiler kernel: structural equivalence + βδι-reduction + universal quantifier introduction/elimination. Support simple arithmetic predicates (`x > 0`, `arr.len > 0`) |
+| **Phase 2** | SMT-LIB translation layer + Z3/CVC5 integration. Pipeline returns Proved/Disproved/Unproven. Support programmer writing proof functions when Unproven |
+| **Phase 3** | Loop invariant VC generation + termination checking (four measure exploration strategies + `Terminates` explicit measure, §6, §6.9) |
+| **Phase 4** | Incremental verification + caching + IDE support |
 
 ### Dependencies
 
 - RFC-010: Unified Type Syntax — compile-time predicates based on `name: type = value`
-- RFC-011: Generic Type System — compile-time predicates can take generic parameters
-- RFC-009: Ownership Model — expressions in compile-time predicates obey ownership rules
+- RFC-011: Generic Type System — compile-time predicates can have generic parameters
+- RFC-009: Ownership Model — expressions in compile-time predicates follow ownership rules
 
 ## Open Questions
 
-- [x] **SMT solver choice**: default Z3 (MIT license, most extensively validated). CVC5 as SMT-LIB
-      compatible alternative, switched via compiler flag. Compiler internal translation target is
-      SMT-LIB 2.6 standard format—SMT-LIB is the abstraction layer, no custom general solver
-      interface.
-- [x] **Specific solver budget values**: 10,000 steps / 100ms / quantifier instantiation depth 3.
-      Fixed inside compiler, no knob. If actual use proves insufficient (not "user wrote wrong"),
-      adjust then.
-- [x] **Quantifier support range**: language level doesn't limit quantifier order. Compile-time
-      predicates accept Type parameters—Type includes function types—therefore higher-order
-      quantifiers are natural inference of the type system, no special syntax needed. SMT solver can
-      automatically determine first-order quantifiers (forall/exists, supports interleaved nesting,
-      limited by budget depth 3). Higher-order quantifiers: SMT returns Unproven, compiler hints
-      "this predicate exceeds automatic proof range, please provide proof function". Programmer
-      writes a YaoXiang function whose return type equals the proposition—type checker validates
-      that function. No external export, no AI, no interactive proof mode needed. Everything is
-      YaoXiang code, everything is validated by the type checker.
-- [x] **Counterexample formatting**: source variable names directly used as SMT variable names (with
-      module prefix to avoid conflicts). Z3 model returns query by variable name. Output format:
-      variable name = specific value + source location + predicate definition location. No complex
-      mapping layer.
-- [x] ~~**Interaction of compile-time predicates with `ref` smart pointers?**~~ → Decided:
-      compile-time predicates only allow immutable borrows or values with transferred ownership.
-      Values with mutable borrows cannot appear in compile-time predicates.
-- [x] **Extension of `forall` predicate violation count measure to non-adjacent operations?** → Not
-      extended. Current coverage scope (adjacent swap, adjacent shift) is complemented by Strategy 1
-      (linear rank function)—quicksort outer interval shrinking backed by Strategy 1, heapsort
-      backed by Strategy 1 (array index pattern). Loops where no strategy can prove termination, the
-      compiler directly errors—this is hard safety philosophy, not a defect. If future has real
-      scenarios (not academic constructions) where algorithms cannot be covered by any of the four
-      strategies, discuss again. → **Re-discussion triggered (2026-09-14, #318)**: non-structural
-      recursion (gcd-style non-direct decrease, mutual recursion, merge partition) is the real
-      scenario anticipated by this clause—current pipeline cannot automatically prove their
-      termination, and they cannot be rewritten into analyzable iteration patterns without breaking
-      readability. Conclusion: full-automation priority unchanged; after Unproven add proof function
-      fallback—measure and termination proof are ordinary YaoXiang functions, zero new syntax, type
-      checker validates. Landed in
-      [RFC-027a: Termination Proof Function Fallback](../draft/027a-termination-proof-fallback.md).
-- [x] **Linear rank function enumeration combinatorial explosion**: candidate enumeration upper
-      limit is 3 bounded variables. ≤3 enumerate all linear combinations and SMT validates each. >3
-      only try single-variable measures (`v_i`, `u_i - v_i`), failure directly reports compile
-      error—hints programmer "loop has >3 bounded variables, compiler cannot automatically
-      synthesize multi-variable measure". This is not an engineering compromise—it forces
-      programmers to write simpler loops.
+- [x] **SMT solver choice**: Default Z3 (MIT license, most extensively verified). CVC5 as SMT-LIB-compatible alternative, switchable via compiler flag. Compiler internally translates to SMT-LIB
+      2.6 standard format — SMT-LIB is the abstraction layer, no custom general solver interface.
+- [x] **Specific values for solving budget**: Steps 10,000 / time 100ms
+      / quantifier instantiation depth 3. Compiler internally fixed, no knobs. If real usage proves insufficient (not "user wrote it wrong"), adjust.
+- [x] **Quantifier support scope**: No language-level restriction on quantifier order. Compile-time predicates accept Type parameters — Type includes function types — therefore higher-order quantifiers are natural consequences of the type system, no special syntax needed. SMT solver can automatically decide first-order quantifiers (forall/exists, supports interleaved nesting, limited by budget depth 3). Higher-order quantifiers: SMT returns Unproven, compiler hints "this predicate exceeds automatic proof scope, please provide proof function". Programmer writes a YaoXiang function whose return type equals that proposition — type checker verifies the function. No external export, no AI, no interactive proof mode. Everything is YaoXiang code, everything is verified by the type checker.
+- [x] **Counterexample formatting**: Source variable names directly used as SMT variable names (plus module prefix to avoid conflicts). When Z3 model returns, look up by variable name. Output format: variable name = concrete value + source location + predicate definition location. No complex mapping layer.
+- [x] ~~**Interaction of compile-time predicates with `ref` smart pointers?**~~
+      → Decided: Compile-time predicates only allow immutable borrows or values with transferred ownership. Values with mutable borrows cannot appear in compile-time predicates.
+- [x] **Extension of forall predicate violation counting measure to non-adjacent operations?**
+      → Not extended. Current coverage (adjacent swap, adjacent move) is complemented by Strategy 1 (linear rank function) — quicksort outer interval shrinking is backed by Strategy 1, heapsort is backed by Strategy 1 (array index pattern). Loops that cannot have termination proved by any strategy — compiler directly errors — this is hard safety philosophy, not a defect. If there are real-world algorithms (not academic constructs) that no strategy covers in the future, revisit. →
+      **Revisit triggered (2026-09-14, #318)**: Non-structural recursion (gcd-style non-direct decrease, mutual recursion, merge partition) is exactly the real scenario this clause anticipated — the measure exploration template sequence cannot automatically handle them, and they cannot be rewritten into analyzable iteration patterns without breaking readability. Conclusion: Hard safety philosophy unchanged (incorrect measures still get SMT counterexamples, humans can only fail to prove, not prove incorrectly), but "exploration failure means rejection" is loosened to "exploration failure allows programmer to explicitly give measure in type position" — see §6.9.
+- [x] **Linear rank function enumeration combinatorial explosion**: Candidate enumeration upper bound is 3 bounded variables. ≤3: enumerate all linear combinations and SMT verify each. >3: only try single-variable measures (`v_i`, `u_i - v_i`), on failure directly report compile error — hint "loop has >3 bounded variables, compiler cannot automatically synthesize multi-variable measure". This is not an engineering compromise — it's forcing programmers to write simpler loops.
 
 ## References
 
@@ -1174,7 +997,7 @@ usage directly reports a compile error.
 
 ---
 
-## Lifecycle and Destination
+## Lifecycle and Disposition
 
 ```
 ┌─────────────┐
@@ -1183,20 +1006,19 @@ usage directly reports a compile error.
        │
        ▼
 ┌─────────────┐
-│ Under       │  ← Current state: community discussion
-│ Review      │
+│  Under Review│  ← Current status: Community discussion
 └──────┬──────┘
        │
        ├──────────────────┐
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
-│  Accepted   │    │  Rejected   │
+│   Accepted  │    │   Rejected  │
 └──────┬──────┘    └──────┬──────┘
        │                  │
        ▼                  ▼
 ┌─────────────┐    ┌─────────────┐
 │ accepted/   │    │  rejected/  │
-│ (Formal     │    │ (Kept in    │
-│  design)    │    │  place)     │
+│ (official   │    │ (preserved  │
+│  design)    │    │  in place)  │
 └─────────────┘    └─────────────┘
 ```

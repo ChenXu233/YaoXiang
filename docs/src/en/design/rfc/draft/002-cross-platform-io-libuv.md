@@ -1,50 +1,47 @@
 ---
-title: 'RFC-002: Resource Type IO Implementation Layer Based on libuv'
+title: 'RFC-002: libuv-based Resource Type IO Implementation Layer'
 status: 'Draft'
-author: 'Chenxu'
+author: 'Chen Xu'
 created: '2026-01-05'
 updated: '2026-07-05'
 issue: '#102'
 ---
 
-# RFC-002: Resource Type IO Implementation Layer Based on libuv
+# RFC-002: libuv-based Resource Type IO Implementation Layer
 
 > **References**:
 >
-> - [RFC-024: Concurrency Model Based on spawn Blocks](./024-concurrency-model.md)
-> - [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](./008-runtime-concurrency-model.md)
-> - [RFC-009: Ownership Model Design](./009-ownership-model.md)
-> - [Concurrency Model Specification](/reference/language-spec/concurrency.md)
+> - [RFC-024: Concurrency Model Based on spawn Blocks](../accepted/024-concurrency-model.md)
+> - [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](../accepted/008-runtime-concurrency-model.md)
+> - [RFC-009: Ownership Model Design](../accepted/009-ownership-model.md)
+> - [Concurrency Model Specification](../../../../reference/language-spec/concurrency.md)
 
 ## Abstract
 
-This document defines YaoXiang's IO implementation layer: providing cross-platform IO capabilities
-based on libuv, serving as the underlying implementation for the resource type system defined in
-RFC-024.
+This document defines the IO implementation layer for YaoXiang: providing cross-platform IO capabilities based on libuv, serving as the underlying implementation for the RFC-024 resource type system.
 
 **Core Positioning**:
 
 ```
 RFC-024: Resource Type Definitions (FilePath, HttpUrl, DBUrl, Console)
-    ↓ uses
+    ↓ Uses
 RFC-002: Resource Type IO Implementation (based on libuv)
-    ↓ underlying layer
-libuv: Cross-platform IO Engine (Event Loop + Thread Pool)
+    ↓ Underlying
+libuv: Cross-platform IO Engine (event loop + thread pool)
 ```
 
-**What It Is Not**:
+**What It Is NOT**:
 
-- ❌ Not "transparent async"—users explicitly control concurrency through spawn blocks
-- ❌ Not "automatic async-ification"—IO operations must be explicitly invoked within spawn blocks
-- ❌ Not "developers need not care about underlying details"—the resource type system ensures
-  concurrency safety
+- ❌ NOT "transparent async" — users explicitly control concurrency through spawn blocks
+- ❌ NOT "automatic async-ification" — IO operations need explicit calls inside spawn blocks
+- ❌ NOT "developers don't need to care about underlying details" — the resource type system ensures concurrency safety
 
-**What It Is**:
+**What It IS**:
 
 - ✅ IO implementation layer for resource types (FilePath, HttpUrl, DBUrl, Console)
 - ✅ Cross-platform IO unification (libuv handles Windows/Linux/macOS differences)
 - ✅ Shared event loop architecture (one libuv event loop handles all IO)
-- ✅ Integration with the RFC-024 resource type system
+- ✅ Integration with RFC-024 resource type system
 
 ## Motivation
 
@@ -52,38 +49,38 @@ libuv: Cross-platform IO Engine (Event Loop + Thread Pool)
 
 RFC-024 defines the resource type system:
 
-- `FilePath` - Filesystem path
+- `FilePath` - file system path
 - `HttpUrl` - HTTP endpoint
-- `DBUrl` - Database connection
-- `Console` - Standard output
+- `DBUrl` - database connection
+- `Console` - standard output
 
-These resource types require underlying IO implementations. libuv provides:
+These resource types need underlying IO implementation. libuv provides:
 
-| Need               | What libuv Provides                             |
-| ------------------ | ----------------------------------------------- |
-| Cross-platform IO  | Unified Windows/Linux/macOS API                 |
-| Async capability   | Shared event loop, all worker IO centralized    |
-| Thread pool        | Dedicated thread pool for blocking operations   |
+| Requirement     | libuv Provides                                  |
+| -------------- | ----------------------------------------------- |
+| Cross-platform IO | Unified Windows/Linux/macOS API              |
+| Async capability | Shared event loop, all workers' IO centrally managed |
+| Thread pool    | Dedicated thread pool for blocking operations   |
 | Concurrency safety | Single-threaded event loop, naturally race-free |
 
 ### Relationship with RFC-024
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  RFC-024: Concurrency Model                              │
+│  RFC-024: Concurrency Model                             │
 │  - spawn {} blocks (explicit concurrency)               │
 │  - Resource type definitions (FilePath, HttpUrl, DBUrl, Console) │
-│  - Resource conflict detection (same path auto-serial)  │
+│  - Resource conflict detection (same path auto-serialized) │
 └─────────────────────────────────────────────────────────┘
-                          ↓ uses
+                          ↓ Uses
 ┌─────────────────────────────────────────────────────────┐
-│  RFC-002: Resource Type IO Implementation                │
+│  RFC-002: Resource Type IO Implementation               │
 │  - FilePath → libuv file IO                             │
 │  - HttpUrl → libuv network IO                           │
 │  - DBUrl → database connection pool                     │
-│  - Console → serialized standard output                 │
+│  - Console → standard output serialization              │
 └─────────────────────────────────────────────────────────┘
-                          ↓ underlying layer
+                          ↓ Underlying
 ┌─────────────────────────────────────────────────────────┐
 │  libuv: Cross-platform IO Engine                        │
 │  - Event loop                                           │
@@ -102,38 +99,39 @@ These resource types require underlying IO implementations. libuv provides:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Runtime                               │
+│                    Runtime                              │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
 │  │  Worker 0   │  │  Worker 1   │  │  Worker N   │    │
-│  │ Compute task│  │ Compute task│  │ Compute task│    │
+│  │  Compute    │  │  Compute    │  │  Compute    │    │
+│  │  tasks      │  │  tasks      │  │  tasks      │    │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │
 │         │                │                │            │
 │         └────────────────┼────────────────┘            │
 │                          ↓                              │
 │  ┌─────────────────────────────────────────────────┐  │
-│  │       libuv Event Loop (dedicated thread)        │  │
-│  │       Handles all IO operations                  │  │
+│  │          libuv Event Loop (dedicated thread)    │  │
+│  │          Handles all IO operations              │  │
 │  └─────────────────────────────────────────────────┘  │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Key Properties**:
+**Key Features**:
 
 - One shared libuv event loop (running on a dedicated thread)
-- All workers' IO operations are submitted to this shared event loop
-- The single-threaded event loop naturally avoids races
-- Resource-efficient—no need to create an event loop per worker
+- All workers' IO operations submit to this shared event loop
+- Single-threaded event loop naturally avoids races
+- High resource efficiency, no need to create an event loop for each worker
 
 #### 1.2 Concurrency Safety Mechanism
 
-| libuv Feature              | YaoXiang Equivalent                      | Concurrency Safety      |
-| -------------------------- | ---------------------------------------- | ----------------------- |
-| Single-threaded event loop | Sequential execution within spawn blocks | Naturally race-free     |
-| Thread pool isolation      | Blocking ops don't block main thread     | No shared state         |
-| Async callbacks            | DAG scheduler manages dependencies       | Deterministic execution |
+| libuv Feature         | YaoXiang Correspondence      | Concurrency Safety      |
+| -------------------- | ---------------------------- | ----------------------- |
+| Single-threaded event loop | Sequential execution within spawn blocks | Naturally race-free |
+| Thread pool isolation | Blocking ops don't block main thread | No shared state |
+| Async callbacks      | DAG scheduler manages dependencies | Deterministic execution |
 
 ### 2. Resource Type IO Mapping
 
@@ -146,7 +144,7 @@ pub struct IoModule;
 impl StdModule for IoModule {
     fn exports(&self) -> Vec<NativeExport> {
         vec![
-            // File operations → libuv fs_* APIs
+            // File operations → libuv fs_* API
             NativeExport::new("read_file", "std.io.read_file",
                 "(path: FilePath) -> String", native_read_file),
             NativeExport::new("write_file", "std.io.write_file",
@@ -167,7 +165,7 @@ fn native_read_file(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<Ru
     let path = extract_file_path(args)?;
 
     // Submit to libuv event loop
-    // libuv asynchronously reads the file
+    // libuv async file read
     // Return result
     ctx.uv_loop.fs_read(path)
 }
@@ -196,7 +194,7 @@ fn native_http_get(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<Run
     let url = extract_http_url(args)?;
 
     // Submit to libuv event loop
-    // libuv asynchronous HTTP request
+    // libuv async HTTP request
     // Return result
     ctx.uv_loop.http_get(url)
 }
@@ -224,17 +222,17 @@ fn native_query(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<Runtim
     let sql = extract_sql(args)?;
 
     // Submit to libuv thread pool
-    // Database query executes in the thread pool
-    // Notify main thread via callback upon completion
+    // Database query executes in thread pool
+    // Callback notifies main thread on completion
     ctx.uv_loop.db_query(url, sql)
 }
 ```
 
-#### 2.4 Console → Serialized Standard Output
+#### 2.4 Console → Standard Output Serialization
 
 ```rust
-// Console operations are auto-serialized (RFC-024 resource type rules)
-// All Console operations execute sequentially within the same thread
+// Console operations auto-serialized (RFC-024 resource type rules)
+// All Console operations execute sequentially in the same thread
 fn native_print(args: &[RuntimeValue], ctx: &mut NativeContext) -> Result<RuntimeValue, ExecutorError> {
     let output = format_args(args);
 
@@ -257,20 +255,20 @@ HttpUrl: Resource
 File.read: (FilePath) -> String
 HTTP.get: (HttpUrl) -> Response
 
-# User-explicit concurrency (RFC-024)
+# User explicit concurrency (RFC-024)
 (a, b) = spawn {
-    read_file("data.txt"),      # Resource type FilePath, libuv underneath
-    fetch("http://example.com") # Resource type HttpUrl, libuv underneath
+    read_file("data.txt"),      # Resource type FilePath, underlying libuv
+    fetch("http://example.com") # Resource type HttpUrl, underlying libuv
 }
-# Compiler: FilePath and HttpUrl have no conflict; can execute in parallel
+# Compiler: FilePath and HttpUrl have no conflict, can run in parallel
 ```
 
-#### 3.2 Compile-Time Analysis
+#### 3.2 Compile-time Analysis
 
 ```
-Compiler analyzes spawn block:
+Compiler analyzes spawn blocks:
 1. Identify resource type operations
-2. Detect resource conflicts (same path/URL auto-serialized)
+2. Detect resource conflicts (same path/same URL auto-serialized)
 3. Generate DAG execution plan
 4. Mark IO nodes (submit to libuv)
 ```
@@ -278,27 +276,27 @@ Compiler analyzes spawn block:
 #### 3.3 Runtime Execution
 
 ```
-Runtime executes spawn block:
+Runtime executes spawn blocks:
 1. Worker 0 submits IO task → shared event loop
 2. Worker 1 submits IO task → shared event loop
-3. Event loop handles all IO operations uniformly
-4. Notify corresponding Worker upon IO completion
+3. Event loop uniformly handles all IO operations
+4. After IO completes, notify corresponding Worker
 5. Worker continues executing subsequent tasks
 ```
 
-### 4. Runtime Three-Layer Architecture and libuv
+### 4. Runtime Three-layer Architecture and libuv
 
-| Layer            | libuv Usage       | Async Capability    | Applicable Scenarios                       |
-| ---------------- | ----------------- | ------------------- | ------------------------------------------ |
-| Embedded Runtime | No libuv          | No async            | WASM, game scripts                         |
-| Standard Runtime | Shared event loop | IO async            | Web services, data pipelines               |
-| Full Runtime     | Shared event loop | IO async + parallel | Scientific computing, large-scale parallel |
+| Layer                | libuv Usage      | Async Capability        | Use Cases                     |
+| -------------------- | ---------------- | ---------------------- | ------------------------------ |
+| Embedded Runtime     | No libuv         | No async               | WASM, game scripts            |
+| Standard Runtime     | Shared event loop | IO async              | Web services, data pipelines   |
+| Full Runtime         | Shared event loop | IO async + parallelism | Scientific computing, large-scale parallelism |
 
 **Embedded Runtime**: No libuv, immediate execution, no async capability.
 
 **Standard Runtime**: Shared libuv event loop, all IO operations handled asynchronously.
 
-**Full Runtime**: Shared libuv event loop, multi-threaded parallel + IO async.
+**Full Runtime**: Shared libuv event loop, multi-threaded parallelism + IO async.
 
 ---
 
@@ -353,12 +351,12 @@ src/std/
 ### 3. Integration with DAG Scheduler
 
 ```rust
-// IO node interface (defined in RFC-008)
+// IO node interface (defined by RFC-008)
 trait IoScheduler {
     // Submit IO task, return handle
     fn submit_io(&self, task: IoTask) -> IoHandle;
 
-    // Called by libuv when IO completes, wakes DAG node
+    // Called by libuv when IO completes, wake up DAG node
     fn on_io_complete(&self, handle: IoHandle);
 }
 
@@ -374,7 +372,7 @@ impl IoScheduler for UvLoop {
     }
 
     fn on_io_complete(&self, handle: IoHandle) {
-        // Notify DAG scheduler to wake downstream nodes
+        // Notify DAG scheduler to wake up downstream nodes
         self.dag_scheduler.wake_dependents(handle.node_id);
     }
 }
@@ -387,29 +385,28 @@ impl IoScheduler for UvLoop {
 ### Advantages
 
 1. **Cross-platform unification**: libuv handles Windows/Linux/macOS differences
-2. **IO async capability**: Shared event loop handles all IO, no need for async/await
-3. **Concurrency safety**: Single-threaded event loop is naturally race-free
-4. **Resource efficiency**: One event loop, low memory overhead
-5. **Alignment with RFC-024**: Resource type system ensures concurrency safety
-6. **Mature and stable**: libuv has been battle-tested at scale by Node.js
+2. **IO async capability**: shared event loop handles all IO, no need for async/await
+3. **Concurrency safety**: single-threaded event loop is naturally race-free
+4. **Resource efficiency**: one event loop, low memory overhead
+5. **Aligned with RFC-024**: resource type system ensures concurrency safety
+6. **Mature and stable**: libuv is battle-tested by Node.js at scale
 
 ### Disadvantages
 
-1. **C library dependency**: Requires binding the libuv C library
-2. **Bootstrapping limitation**: May need to replace with YaoXiang-native implementation after
-   bootstrap
-3. **WASM support**: Requires additional adaptation work
+1. **C library dependency**: requires binding to libuv C library
+2. **Bootstrap limitation**: may need to replace with YaoXiang native implementation after bootstrap
+3. **WASM support**: requires additional adaptation work
 
 ---
 
-## Alternatives
+## Alternative Approaches
 
-| Option             | Why Not Chosen                                                                       |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| Rust std::io       | Synchronous blocking, cannot cooperate with spawn blocks for async                   |
-| tokio              | Designed for Rust async/await, misaligned with YaoXiang's explicit concurrency model |
-| mio                | Provides only raw async primitives, lacks high-level IO features                     |
-| Build from scratch | Complex and error-prone, cannot match libuv's maturity                               |
+| Approach          | Why Not Chosen                                              |
+| ---------------- | ----------------------------------------------------------- |
+| Rust std::io     | Synchronous blocking, cannot cooperate with spawn blocks for async |
+| tokio            | Designed for Rust async/await, not aligned with YaoXiang's explicit concurrency model |
+| mio              | Only provides raw async primitives, lacks high-level IO functionality |
+| Implement from scratch | Complex and error-prone, cannot match libuv's maturity   |
 
 ---
 
@@ -418,38 +415,38 @@ impl IoScheduler for UvLoop {
 ### Phases
 
 1. **Phase 1 (v0.3)**: libuv bindings, basic file IO
-2. **Phase 2 (v0.5)**: Network IO, HTTP support
-3. **Phase 3 (v0.7)**: Database IO, connection pool
+2. **Phase 2 (v0.5)**: network IO, HTTP support
+3. **Phase 3 (v0.7)**: database IO, connection pool
 4. **Phase 4 (v1.0)**: WASM adaptation, performance optimization
 
 ### Dependencies
 
-- RFC-024 (Concurrency Model) → Completed
-- RFC-008 (Runtime Architecture) → Completed
-- RFC-009 (Ownership Model) → Completed
-- RFC-011 (Generics System) → Completed
+- RFC-024 (concurrency model) → Completed
+- RFC-008 (runtime architecture) → Completed
+- RFC-009 (ownership model) → Completed
+- RFC-011 (generics system) → Completed
 
 ---
 
 ## Design Decision Records
 
-| Decision                 | Choice                                | Reason                                               | Date       |
-| ------------------------ | ------------------------------------- | ---------------------------------------------------- | ---------- |
-| IO implementation layer  | libuv                                 | Cross-platform, async capability, concurrency safety | 2025-01-05 |
-| Positioning              | Resource type IO implementation layer | Integration with RFC-024 resource type system        | 2026-06-16 |
-| Event loop architecture  | Shared event loop                     | Resource-efficient, avoids redundant creation        | 2026-06-16 |
-| Concurrency safety       | Single-threaded event loop            | Naturally race-free, aligns with RFC-024             | 2026-06-16 |
-| Standard library rewrite | std.io/std.net based on libuv         | Cross-platform unification, async capability         | 2026-06-16 |
+| Decision         | Decision                           | Reason                                              | Date        |
+| --------------- | ---------------------------------- | --------------------------------------------------- | ----------- |
+| IO implementation layer | libuv                        | Cross-platform, async capability, concurrency safety | 2025-01-05 |
+| Positioning     | Resource type IO implementation layer | Integrated with RFC-024 resource type system   | 2026-06-16 |
+| Event loop architecture | Shared event loop         | High resource efficiency, avoid redundant creation  | 2026-06-16 |
+| Concurrency safety | Single-threaded event loop    | Naturally race-free, aligned with RFC-024          | 2026-06-16 |
+| Standard library rewrite | std.io/std.net based on libuv | Cross-platform unification, async capability   | 2026-06-16 |
 
 ---
 
-## Open Issues
+## Open Questions
 
-- [ ] libuv adaptation scheme in WASM environments
+- [ ] libuv adaptation solution in WASM environment
 - [ ] Database connection pool design
-- [ ] Complete implementation of HTTP client
-- [ ] Cross-platform consistency of filesystem events
-- [ ] Timeout mechanism design for network IO
+- [ ] Complete HTTP client implementation
+- [ ] Cross-platform consistency of file system events
+- [ ] Network IO timeout mechanism design
 - [ ] libuv replacement strategy after bootstrap
 
 ---
@@ -458,10 +455,10 @@ impl IoScheduler for UvLoop {
 
 ### YaoXiang Official Documentation
 
-- [RFC-024 Concurrency Model](./024-concurrency-model.md)
-- [RFC-008 Runtime Architecture](./008-runtime-concurrency-model.md)
-- [RFC-009 Ownership Model](./009-ownership-model.md)
-- [Concurrency Model Specification](/reference/language-spec/concurrency.md)
+- [RFC-024 Concurrency Model](../accepted/024-concurrency-model.md)
+- [RFC-008 Runtime Architecture](../accepted/008-runtime-concurrency-model.md)
+- [RFC-009 Ownership Model](../accepted/009-ownership-model.md)
+- [Concurrency Model Specification](../../../../reference/language-spec/concurrency.md)
 
 ### External References
 
@@ -471,8 +468,8 @@ impl IoScheduler for UvLoop {
 
 ---
 
-## Lifecycle and Status
+## Lifecycle and Disposition
 
-| Status    | Location                 | Notes           |
-| --------- | ------------------------ | --------------- |
-| **Draft** | `docs/design/rfc/draft/` | Under re-review |
+| Status      | Location                        | Description     |
+| ----------- | ------------------------------- | --------------- |
+| **Draft**   | `docs/design/rfc/draft/`        | Under review    |
