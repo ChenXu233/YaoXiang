@@ -229,9 +229,9 @@ pub struct AstToIrGenerator {
     /// `==`/`!=` 命中显式 Equal 实例化时，原生比较指令替换为方法调用。
     operator_dispatches: HashMap<Span, (String, String, bool)>,
 
-    /// RFC-010: 变体构造调用点（span → 和类型名, 变体序号, 载荷数）。
-    /// 调用整体替换为 CreateVariant（tagged union 构造）。
-    variant_ctor_calls: HashMap<Span, (String, usize, usize)>,
+    /// RFC-010: 和类型变体名表（类型名 → 变体名列表，声明序）。
+    /// 变体构造调用（形态检测命中）据此取变体序号。
+    sum_type_variants: HashMap<String, Vec<String>>,
     /// RFC-011a §6.2: 编译期类型收集——接口 → 实现类型列表（ImplementationProof
     /// 按类型名定序），变体分发与包装定序共用。
     interface_variants: HashMap<String, Vec<String>>,
@@ -372,10 +372,15 @@ impl AstToIrGenerator {
                 .iter()
                 .map(|d| (d.span, (d.type_name.clone(), d.method.clone(), d.negate)))
                 .collect(),
-            variant_ctor_calls: type_result
-                .variant_ctor_calls
+            sum_type_variants: type_result
+                .sum_types
                 .iter()
-                .map(|c| (c.span, (c.type_name.clone(), c.variant_index, c.payload_count)))
+                .map(|(n, vs)| {
+                    (
+                        n.clone(),
+                        vs.iter().map(|v| v.name.clone()).collect::<Vec<_>>(),
+                    )
+                })
                 .collect(),
             interface_variants: {
                 let mut map: HashMap<String, Vec<String>> = HashMap::new();
@@ -6647,6 +6652,38 @@ impl AstToIrGenerator {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// RFC-010: 变体构造形态检测——`Result(Int, String).ok(5)` / `Color.red()`。
+    /// 与 typecheck 的变体构造识别同一 AST 形态；span 键跨系统不可靠（两端
+    /// 对 Call 节点 span 的语义不同），故就地检测并从 sum_type_variants 取变体序。
+    fn detect_variant_ctor_call(
+        &self,
+        func: &Expr,
+    ) -> Option<(String, usize, usize)> {
+        use crate::frontend::core::parser::ast::Expr;
+        if let Expr::FieldAccess {
+            expr: base_expr,
+            field: variant_name,
+            ..
+        } = func
+        {
+            // 两种 base 形态：泛型 `Call(Var(名), 类型实参)` / 非泛型 `Var(名)`
+            let type_name = match base_expr.as_ref() {
+                Expr::Call {
+                    func: inner_func, ..
+                } => match inner_func.as_ref() {
+                    Expr::Var(n, _) => Some(n),
+                    _ => None,
+                },
+                Expr::Var(n, _) => Some(n),
+                _ => None,
+            }?;
+            let variants = self.sum_type_variants.get(type_name)?;
+            let idx = variants.iter().position(|v| v == variant_name)?;
+            return Some((type_name.clone(), idx, 0));
+        }
+        None
+    }
+
     fn generate_call_expr_ir(
         &mut self,
         func: &Expr,
@@ -6662,9 +6699,8 @@ impl AstToIrGenerator {
         // 整个调用替换为 CreateVariant：载荷求值进寄存器（多载荷先打包
         // Tuple、零载荷用 Void 哨兵），group 携带和类型名（解释器 intern
         // 为类型身份），variant 为声明序号。
-        if let Some((type_name, variant_index, payload_count)) =
-            self.variant_ctor_calls.get(span).cloned()
-        {
+        if let Some((type_name, variant_index, _)) = self.detect_variant_ctor_call(func) {
+            let payload_count = args.len();
             let payload_reg = self.next_temp_reg();
             if payload_count == 0 {
                 instructions.push(Instruction::Load {

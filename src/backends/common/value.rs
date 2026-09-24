@@ -136,6 +136,22 @@ pub enum ValueType {
 pub struct TypeId(pub u32);
 
 impl TypeId {
+    /// RFC-010: 和类型的类型身份——由类型名确定性派生（FNV-1a）。
+    ///
+    /// 同名和类型在任何执行路径（新机制构造 / std native）得到同一身份，
+    /// 值比较才有一致语义；不同名碰撞概率在语言规模下可忽略（u32 全域，
+    /// 且仅在 `Enum` 值的相等判定中比较）。
+    pub fn from_sum_type_name(name: &str) -> Self {
+        let mut h: u32 = 0x811c_9dc5;
+        for b in name.as_bytes() {
+            h ^= u32::from(*b);
+            h = h.wrapping_mul(0x0100_0193);
+        }
+        TypeId(h)
+    }
+}
+
+impl TypeId {
     /// Enum/sum type (includes Result, Option). Matches MonoTypeExt::to_type_id().
     pub const ENUM: TypeId = TypeId(21);
     /// Struct/record type (includes Error). Matches MonoTypeExt::to_type_id().
