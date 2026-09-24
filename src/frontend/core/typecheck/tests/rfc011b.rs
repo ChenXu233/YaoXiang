@@ -546,3 +546,73 @@ fn test_rfc011b_unregistered_index_reports_e1002() {
         result.diagnostics
     );
 }
+
+// ===== RFC-010 变体构造（阶段 2 第一块）=====
+
+/// 规范（RFC-010 判定规则）：字段全为函数且返回自身 → 判定为和类型；
+/// `Result(Int, String)` 值位置实例化为 Generic 形态（类型自足）
+#[test]
+fn test_rfc010_sum_type_detection_and_instantiation() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        main: () -> Void = {
+            x = Result(Int, String)
+            return
+        }
+    "#;
+    let (result, mut checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "sum type declaration + instantiation should pass: {:?}",
+        result.diagnostics
+    );
+    let variants = checker
+        .env()
+        .sum_types
+        .get("Result")
+        .expect("Result should be detected as sum type");
+    assert_eq!(variants.len(), 2);
+    assert_eq!(variants[0].name, "ok");
+    assert_eq!(variants[1].name, "err");
+}
+
+/// 规范（判定规则·反例）：字段返回非自身 → 不判定为和类型（普通记录）
+#[test]
+fn test_rfc010_not_sum_type_when_return_differs() {
+    let source = r#"
+        Wrapper: Type = {
+            make: () -> Int,
+        }
+        main: () -> Void = {
+            return
+        }
+    "#;
+    let (_result, mut checker) = check_source_with_checker(source);
+    assert!(
+        !checker.env().sum_types.contains_key("Wrapper"),
+        "returning Int is not sum type"
+    );
+}
+
+/// 规范（判定规则·反例）：存在方法绑定 → 不判定（全有或全无）
+#[test]
+fn test_rfc010_not_sum_type_with_binding() {
+    let source = r#"
+        helper: () -> Int = 1
+        Weird: Type = {
+            make: () -> Weird,
+            make = helper[0],
+        }
+        main: () -> Void = {
+            return
+        }
+    "#;
+    let (_result, mut checker) = check_source_with_checker(source);
+    assert!(
+        !checker.env().sum_types.contains_key("Weird"),
+        "binding item disqualifies sum type"
+    );
+}

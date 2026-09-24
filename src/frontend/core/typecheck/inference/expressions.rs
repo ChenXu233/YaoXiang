@@ -37,6 +37,11 @@ static EMPTY_INTERFACE_IMPL_REGISTRY: std::sync::LazyLock<
     HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
 > = std::sync::LazyLock::new(HashMap::new);
 
+/// RFC-010: 空和类型登记表（未注入时使用）
+static EMPTY_SUM_TYPES: std::sync::LazyLock<
+    HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
+> = std::sync::LazyLock::new(HashMap::new);
+
 /// 表达式类型推断器
 ///
 /// 使用统一的 ScopeManager 管理变量作用域，
@@ -70,6 +75,9 @@ pub struct ExpressionInferrer<'a> {
     /// RFC-011b: 接口实现登记表（运算符查询唯一判据，不经名字解析）
     interface_impl_registry:
         &'a HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
+    /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
+    sum_types:
+        &'a HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析（字段访问等）
     type_defs: &'a HashMap<String, MonoType>,
@@ -126,6 +134,7 @@ impl<'a> ExpressionInferrer<'a> {
             last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
+            sum_types: &EMPTY_SUM_TYPES,
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -159,6 +168,7 @@ impl<'a> ExpressionInferrer<'a> {
             last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
+            sum_types: &EMPTY_SUM_TYPES,
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -193,6 +203,7 @@ impl<'a> ExpressionInferrer<'a> {
             last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
+            sum_types: &EMPTY_SUM_TYPES,
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -229,6 +240,7 @@ impl<'a> ExpressionInferrer<'a> {
             last_type_args: Vec::new(),
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
+            sum_types: &EMPTY_SUM_TYPES,
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -307,6 +319,17 @@ impl<'a> ExpressionInferrer<'a> {
         >,
     ) {
         self.interface_impl_registry = registry;
+    }
+
+    /// RFC-010: 注入和类型登记表
+    pub fn set_sum_types(
+        &mut self,
+        sum_types: &'a HashMap<
+            String,
+            Vec<crate::frontend::core::typecheck::environment::SumVariantDef>,
+        >,
+    ) {
+        self.sum_types = sum_types;
     }
 
     /// 设置类型定义表
@@ -1775,6 +1798,13 @@ impl<'a> ExpressionInferrer<'a> {
                     // 因为 assign_var 已经将更新后的类型写入了 scope
                     // 不需要再通过 solver 解析（solver 不知道 scope 的更新）
                     Ok(poly.body)
+                } else if self.sum_types.contains_key(name) {
+                    // RFC-010: 和类型名在表达式位置 — Type 宇宙的值
+                    // （`Result(Int, String)` 的内层 Var；构造分派在 Call 臂）
+                    Ok(crate::frontend::core::types::MonoType::MetaType {
+                        universe_level: crate::frontend::core::types::mono::UniverseLevel::type0(),
+                        type_params: Vec::new(),
+                    })
                 } else if is_builtin_type_name(name) {
                     // 内置类型名在表达式位置 — 当作 Type 宇宙的值
                     Ok(crate::frontend::core::types::MonoType::MetaType {
@@ -2292,6 +2322,61 @@ impl<'a> ExpressionInferrer<'a> {
                                 return Ok(self.solver.new_var());
                             }
                         }
+                    }
+                }
+
+                // RFC-010: 和类型的类型实参应用——`Result(Int, String)`。
+                // func 是 Var、名已判定为和类型、func_ty 是 MetaType（Var 臂开口）
+                // 时收成 `Generic{名, [实参…]}`（声明序变体集保留在 sum_types，
+                // 变体构造在 FieldAccess+Call 形态处理）。类型表示与 `Result(T,E)`
+                // 在类型位置的既有形态一致。
+                if let crate::frontend::core::parser::ast::Expr::Var(type_name, _) = func.as_ref() {
+                    if self.sum_types.contains_key(type_name)
+                        && matches!(
+                            func_ty,
+                            crate::frontend::core::types::MonoType::MetaType { .. }
+                        )
+                    {
+                        let type_param_count = self
+                            .generic_type_defs
+                            .get(type_name)
+                            .map(|d| d.type_param_names.len())
+                            .unwrap_or(0);
+                        if args.len() != type_param_count {
+                            return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                type_name,
+                                type_param_count,
+                                args.len(),
+                            )
+                            .at(*span)
+                            .build());
+                        }
+                        let concrete: Vec<MonoType> = args
+                            .iter()
+                            .zip(value_arg_types.iter())
+                            .map(|(a, ty)| {
+                                if !matches!(ty, MonoType::MetaType { .. }) {
+                                    return None;
+                                }
+                                concrete_type_from_expr_arg(
+                                    a,
+                                    self.type_defs,
+                                    self.generic_type_defs,
+                                )
+                            })
+                            .collect::<Option<Vec<_>>>()
+                            .ok_or_else(|| {
+                                ErrorCodeDefinition::type_mismatch(
+                                    "类型实参",
+                                    "值（和类型实参必须是类型名）",
+                                )
+                                .at(*span)
+                                .build()
+                            })?;
+                        return Ok(MonoType::Generic {
+                            name: type_name.clone(),
+                            args: concrete,
+                        });
                     }
                 }
 

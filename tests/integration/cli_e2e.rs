@@ -1190,10 +1190,10 @@ fn test_e2e_yaoxiang_lang_env_selects_every_shipped_language() {
     // 任一语言若被白名单拦掉，就会回落 en——由下面的英文标记断言揭穿。
     let expectations: &[(&str, &str)] = &[
         ("zh", "不是类型语法"),
-        ("ja", "は型構文ではありません"),
-        ("ru", "не является синтаксисом типа"),
-        ("zh-classical", "非类型语法"),
-        ("zh-x-miao", "圆括号喵"),
+        ("ja", "は型の構文ではありません"),
+        ("ru", "это не синтаксис типа"),
+        ("zh-classical", "非类型之语法"),
+        ("zh-x-miao", "構文じゃないのにゃ"),
     ];
     // en 的 template 特征——它是回落目标，出现即说明语言选择失效
     let english_marker = "is not type syntax";

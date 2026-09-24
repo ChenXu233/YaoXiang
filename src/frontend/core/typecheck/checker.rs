@@ -803,6 +803,7 @@ impl TypeChecker {
         body_checker.set_method_bindings(self.env.method_bindings.clone());
         // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
         body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
+        body_checker.set_sum_types(self.env.sum_types.clone());
         // 设置类型定义表（用于 TypeRef → Struct 解析）
         let type_defs: HashMap<String, MonoType> = self
             .env
@@ -1055,6 +1056,7 @@ impl TypeChecker {
             operator_dispatches,
             implementation_proofs: self.env.implementation_proofs.clone(),
             interface_impl_registry: self.env.interface_impl_registry.clone(),
+            sum_types: self.env.sum_types.clone(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
             warnings: import_warnings,
         }
@@ -2762,7 +2764,90 @@ impl TypeChecker {
 
         // 自动为 Record 类型派生标准库 traits
         self.auto_derive_traits(name, definition);
+
+        // RFC-010: 记录式和类型判定（全有或全无，见「变体构造（权威定义）」节）
+        if let Some(variants) = detect_sum_type(name, &param_names, definition) {
+            self.env.sum_types.insert(name.to_string(), variants);
+        }
     }
+}
+
+/// RFC-010 记录式和类型判定：字段全为函数且返回自身 → 变体定义表（声明序）。
+/// 全有或全无——存在绑定项即不判定；任一字段返回非自身 → 普通记录（零诊断）。
+fn detect_sum_type(
+    name: &str,
+    param_names: &[String],
+    definition: &crate::frontend::core::parser::ast::Type,
+) -> Option<Vec<super::environment::SumVariantDef>> {
+    use crate::frontend::core::parser::ast::{Type, TypeBodyItem};
+    let body = match definition {
+        Type::Struct { body } => body,
+        _ => return None,
+    };
+    let mut fields = Vec::new();
+    for item in body {
+        match item {
+            TypeBodyItem::Field(f) => fields.push(f),
+            // 方法绑定 = 携带行为的普通记录，不判定
+            TypeBodyItem::Binding(_) => return None,
+            _ => {}
+        }
+    }
+    if fields.is_empty() {
+        return None;
+    }
+    // ast 名字提取（只认裸名；形参引用在声明处即裸名）
+    fn head_name(t: &Type) -> Option<&str> {
+        match t {
+            Type::Name { name, .. } => Some(name),
+            _ => None,
+        }
+    }
+    // 「返回自身」：return 的实参名字序列与形参表一致
+    let returns_self = |ret: &Type| -> bool {
+        let params_match = |args: &[Type]| -> bool {
+            args.len() == param_names.len()
+                && args
+                    .iter()
+                    .zip(param_names.iter())
+                    .all(|(a, p)| head_name(a) == Some(p.as_str()))
+        };
+        match ret {
+            // `Result(T, E)` 被 parser 特判为 Type::Result
+            Type::Result(a, b) => {
+                param_names.len() == 2
+                    && head_name(a) == param_names.first().map(|s| s.as_str())
+                    && head_name(b) == param_names.get(1).map(|s| s.as_str())
+            }
+            // `Option(T)` 特判为 Type::Option
+            Type::Option(inner) => {
+                param_names.len() == 1
+                    && head_name(inner) == param_names.first().map(|s| s.as_str())
+            }
+            Type::Generic { name: n, args, .. } => n == name && params_match(args),
+            // 非泛型：`Color` 或 `Self`
+            Type::Name { name: n, .. } => param_names.is_empty() && (n == name || n == "Self"),
+            _ => false,
+        }
+    };
+    let mut variants = Vec::new();
+    for f in fields {
+        let Type::Fn {
+            params,
+            return_type,
+        } = &f.ty
+        else {
+            return None;
+        };
+        if !returns_self(return_type) {
+            return None;
+        }
+        variants.push(super::environment::SumVariantDef {
+            name: f.name.clone(),
+            params: params.iter().map(|t| MonoType::from(t.clone())).collect(),
+        });
+    }
+    Some(variants)
 }
 
 /// 处理类型体中的类型表达式项，收集 const 约束到对应的 const binder。
