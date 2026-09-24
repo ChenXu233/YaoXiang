@@ -37,6 +37,10 @@ env:
   # 固定 tag。不能写成含 `4.16.0` 的形态，否则会命中 dist-release.yml 的
   # `**[0-9]+.[0-9]+.[0-9]+*` tag 过滤器，白白触发一次发版流水线。
   RELEASE_TAG: 'z3-wasm'
+  # gh 需要知道目标是哪个仓库。本 workflow 的 checkout 把 Z3 源码检到
+  # z3-src/，工作区根目录没有 .git，gh 无法从本地推断——所有 gh release
+  # 调用都必须显式带 --repo，或由 GH_REPO 环境变量提供。
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   upstream-check:
@@ -66,7 +70,22 @@ jobs:
           # 为什么不另用 `libz3-<ver>.a.txt` 之类的标记文件：那就成了两个真相源，
           # 且旧标记不会被自动清掉——版本从 4.15.0 升到 4.16.0 后两个标记并存，
           # 取第一个就误判成 4.15.0，导致每周都重建。
-          NAMES="$(gh release view "$RELEASE_TAG" --json assets -q '.assets[].name' 2>/dev/null || true)"
+          #
+          # 必须显式 --repo：本 workflow 的 checkout 把 Z3 源码检到 z3-src/，
+          # 工作区根目录**没有 .git**，gh 无从推断仓库。此前漏了 --repo，
+          # 又用 2>/dev/null 掩掉报错，导致这里恒返回空 → 恒判「未发布」→
+          # 每周都重建（正是我想避免的开销）。
+          if ! NAMES="$(gh release view "$RELEASE_TAG" \
+                           --json assets -q '.assets[].name' 2>&1)"; then
+            # Release 不存在时按「未发布」处理；其他错误如实报出，不静默
+            if grep -qi "not found" <<<"$NAMES"; then
+              echo "release $RELEASE_TAG 尚未创建 → 视为未发布"
+              NAMES=""
+            else
+              echo "::error::读取 release 失败：$NAMES"
+              exit 1
+            fi
+          fi
           VER="$(printf '%s\n' "$NAMES" | sed -n 's/^z3-wasm-\(.*\)\.tar\.gz$/\1/p')"
           COUNT="$(printf '%s\n' "$VER" | grep -c . || true)"
           if [[ "$COUNT" -gt 1 ]]; then
@@ -212,6 +231,7 @@ jobs:
               --title "Z3 wasm (prebuilt static lib)" \
               --notes "$NOTES" \
               --prerelease \
+              --target "${{ github.sha }}" \
               "${ASSETS[@]}"
           fi
           # 这是产物仓库，不能抢占「最新版本」：install.sh 靠 /releases/latest
