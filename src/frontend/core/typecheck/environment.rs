@@ -49,6 +49,18 @@ pub struct SumVariantDef {
     pub params: Vec<MonoType>,
 }
 
+/// RFC-010: 变体构造调用点（span 键控，ir_gen 据此生成 CreateVariant）。
+#[derive(Debug, Clone)]
+pub struct VariantCtorCall {
+    pub span: crate::util::span::Span,
+    /// 和类型名（CreateVariant 的 group，也是类型身份来源）
+    pub type_name: String,
+    /// 变体序号（类型体声明序）
+    pub variant_index: usize,
+    /// 载荷数（0 = 零载荷；>1 运行时打包 Tuple）
+    pub payload_count: usize,
+}
+
 /// RFC-011b: 接口实现登记表条目。
 ///
 /// `ImplementationProof` 不带类型实参，无法区分同一接口的不同实例化

@@ -86,6 +86,8 @@ pub struct StatementChecker {
         HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types: HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
+    /// RFC-010: 变体构造调用点（span 键控）
+    pub variant_ctor_calls: Vec<crate::frontend::core::typecheck::environment::VariantCtorCall>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
     pub operator_dispatches:
         Vec<crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch>,
@@ -157,6 +159,7 @@ impl StatementChecker {
             existential_coercions: Vec::new(),
             interface_impl_registry: HashMap::new(),
             sum_types: HashMap::new(),
+            variant_ctor_calls: Vec::new(),
             operator_dispatches: Vec::new(),
             gamma,
             dep_env,
@@ -2372,6 +2375,7 @@ impl StatementChecker {
                             .extend(inferrer.existential_coercions);
                         self.operator_dispatches
                             .extend(inferrer.operator_dispatches);
+                        self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
                         result
                     }
                 }
@@ -2450,6 +2454,7 @@ impl StatementChecker {
                     .extend(inferrer.existential_coercions);
                 self.operator_dispatches
                     .extend(inferrer.operator_dispatches);
+                self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
                 result
             }
         }

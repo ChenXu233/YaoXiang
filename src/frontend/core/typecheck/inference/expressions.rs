@@ -78,6 +78,8 @@ pub struct ExpressionInferrer<'a> {
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types:
         &'a HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
+    /// RFC-010: 变体构造调用点（span 键控，ir_gen 生成 CreateVariant）
+    pub variant_ctor_calls: Vec<crate::frontend::core::typecheck::environment::VariantCtorCall>,
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析（字段访问等）
     type_defs: &'a HashMap<String, MonoType>,
@@ -135,6 +137,7 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
+            variant_ctor_calls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -169,6 +172,7 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
+            variant_ctor_calls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -204,6 +208,7 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
+            variant_ctor_calls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -241,6 +246,7 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
+            variant_ctor_calls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -738,6 +744,105 @@ impl<'a> ExpressionInferrer<'a> {
             }
             BinOp::Assign => Ok(MonoType::Void),
         }
+    }
+
+    /// RFC-010: 变体构造调用检查——`Result(Int, String).ok(5)` / `Color.red()`。
+    ///
+    /// 前置：func 形如 `FieldAccess { expr: Call(Var(和类型名), 类型实参), field: 变体名 }`
+    /// 且和类型名已判定（sum_types）。流程：内层实例化（Call 臂和类型分支产出
+    /// `Generic{名, 实参}`）→ 变体查找（声明序）→ 变体参数按类型实参替换 →
+    /// 载荷逐参 unify → 记录 VariantCtorCall（span 键控）→ 返回该和类型。
+    #[allow(clippy::too_many_arguments)]
+    fn infer_variant_ctor_call(
+        &mut self,
+        _type_name: &str,
+        variant_name: &str,
+        base_call: &crate::frontend::core::parser::ast::Expr,
+        value_args: &[crate::frontend::core::parser::ast::Expr],
+        named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
+        span: crate::util::span::Span,
+    ) -> Result<MonoType> {
+        let base_ty = self.infer_expr(base_call)?;
+        let base_ty = self.solver.resolve_type(&base_ty);
+        let MonoType::Generic {
+            name: sum_name,
+            args: concrete,
+        } = &base_ty
+        else {
+            return Err(ErrorCodeDefinition::type_mismatch(
+                "和类型实例化结果",
+                &format!("{}", base_ty),
+            )
+            .at(span)
+            .build());
+        };
+        let Some(variants) = self.sum_types.get(sum_name) else {
+            return Err(ErrorCodeDefinition::field_not_found(variant_name, sum_name)
+                .at(span)
+                .build());
+        };
+        let Some((variant_index, vdef)) = variants
+            .iter()
+            .enumerate()
+            .find(|(_, v)| v.name == variant_name)
+        else {
+            return Err(ErrorCodeDefinition::field_not_found(variant_name, sum_name)
+                .at(span)
+                .build());
+        };
+        // 载荷签名 = 变体参数经类型实参替换
+        let param_names = self.generic_type_defs[sum_name].type_param_names.clone();
+        let subst_params: Vec<MonoType> = vdef
+            .params
+            .iter()
+            .map(|pty| {
+                crate::frontend::core::typecheck::TypeEnvironment::replace_type_params(
+                    pty,
+                    &param_names,
+                    concrete,
+                )
+            })
+            .collect();
+        if !named_args.is_empty() {
+            return Err(ErrorCodeDefinition::type_mismatch(
+                "位置实参（变体构造不支持命名参数）",
+                &format!("命名参数 {} 个", named_args.len()),
+            )
+            .at(span)
+            .build());
+        }
+        let value_arg_types: Vec<MonoType> = value_args
+            .iter()
+            .map(|a| self.infer_expr(a))
+            .collect::<Result<_>>()?;
+        if value_arg_types.len() != subst_params.len() {
+            return Err(ErrorCodeDefinition::argument_count_mismatch(
+                variant_name,
+                subst_params.len(),
+                value_arg_types.len(),
+            )
+            .at(span)
+            .build());
+        }
+        for (pty, aty) in subst_params.iter().zip(value_arg_types.iter()) {
+            if self.solver.unify(pty, aty).is_err() {
+                return Err(ErrorCodeDefinition::type_mismatch(
+                    &format!("{}", pty),
+                    &format!("{}", aty),
+                )
+                .at(span)
+                .build());
+            }
+        }
+        self.variant_ctor_calls.push(
+            crate::frontend::core::typecheck::environment::VariantCtorCall {
+                span,
+                type_name: sum_name.clone(),
+                variant_index,
+                payload_count: subst_params.len(),
+            },
+        );
+        Ok(base_ty)
     }
 
     /// RFC-011b: 算术运算的登记表查询。命中用户实例化时记录 OperatorDispatch
@@ -2064,6 +2169,21 @@ impl<'a> ExpressionInferrer<'a> {
 
                 let namespace_path = extract_namespace_path(obj);
 
+                // RFC-010: 和类型的字段访问拒绝——变体名升格（全有或全无），
+                // 运行时 tagged union 不携带字段表；构造用 `类型.变体(...)`（在
+                // Call 臂拦截），取回载荷用 match 变体解构（RFC-039）
+                if let MonoType::Generic { name: sum_name, .. } = &resolved {
+                    if self.sum_types.contains_key(sum_name) {
+                        if self.sum_types[sum_name].iter().any(|v| v.name == *field) {
+                            return Err(ErrorCodeDefinition::variant_used_as_field(
+                                sum_name, field,
+                            )
+                            .build());
+                        }
+                        return Err(ErrorCodeDefinition::field_not_found(field, sum_name).build());
+                    }
+                }
+
                 // 泛型类型实例展开：`Box(T)` 是 `Generic{name:"Box", args:[T]}`，
                 // 字段定义存在 generic_type_defs 里而非 struct 表。若目标名命中
                 // 泛型类型定义，先实例化成 Struct 再做字段/方法查找——
@@ -2195,6 +2315,36 @@ impl<'a> ExpressionInferrer<'a> {
                 span,
                 ..
             } => {
+                // RFC-010: 变体构造——Result(Int, String).ok(5) / Color.red()。
+                // 构造器只以调用形态存在（无一等构造器值），在 infer(func) 之前
+                // 拦截，避免 FieldAccess 臂的变体字段拒绝。
+                if let crate::frontend::core::parser::ast::Expr::FieldAccess {
+                    expr: base_call,
+                    field: variant_name,
+                    ..
+                } = func.as_ref()
+                {
+                    if let crate::frontend::core::parser::ast::Expr::Call {
+                        func: inner_func, ..
+                    } = base_call.as_ref()
+                    {
+                        if let crate::frontend::core::parser::ast::Expr::Var(type_name, _) =
+                            &**inner_func
+                        {
+                            if self.sum_types.contains_key(type_name) {
+                                return self.infer_variant_ctor_call(
+                                    type_name,
+                                    variant_name,
+                                    base_call,
+                                    args,
+                                    named_args,
+                                    *span,
+                                );
+                            }
+                        }
+                    }
+                }
+
                 let func_ty = self.infer_expr(func)?;
 
                 // 可调用性校验：被调对象必须是函数（或 LibraryRef）。
@@ -2331,12 +2481,9 @@ impl<'a> ExpressionInferrer<'a> {
                 // 变体构造在 FieldAccess+Call 形态处理）。类型表示与 `Result(T,E)`
                 // 在类型位置的既有形态一致。
                 if let crate::frontend::core::parser::ast::Expr::Var(type_name, _) = func.as_ref() {
-                    if self.sum_types.contains_key(type_name)
-                        && matches!(
-                            func_ty,
-                            crate::frontend::core::types::MonoType::MetaType { .. }
-                        )
-                    {
+                    // func_ty 在此处可能是 MetaType（Var 臂开口）或 Struct（类型声明的
+                    // scope 镜像先命中 Var 臂）——两者都收成 Generic 形态
+                    if self.sum_types.contains_key(type_name) {
                         let type_param_count = self
                             .generic_type_defs
                             .get(type_name)
