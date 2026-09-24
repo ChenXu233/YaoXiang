@@ -990,7 +990,7 @@
   "E3008": {
     "title": "Unsupported match pattern",
     "template": "match pattern '{pattern}' is not yet implemented: currently only literal and wildcard (_) patterns are supported",
-    "help": "Variant destructuring (ok(v)/err(e)/some(x)), structs, tuples, or patterns with guards are not yet landed (planned in RFC-039). Previous implementations would silently miscompile; this is now a compile-time rejection. To handle Result, use the `?` operator instead."
+    "help": "Variant destructuring (ok(v)/err(e)/some(x)), structs, tuples, or-patterns, and guards are not yet implemented (planned in RFC-010b). The previous implementation would silently miscompile; this is now rejected at compile-time. Use the `?` operator to handle Result."
   },
   "E3018": {
     "title": "Monomorphization instantiation failed",
@@ -1023,5 +1023,11 @@
     "message": "Operator interface implementations must be written in the type's defining module",
     "template": "Type '{type}' is not defined in this module; interface '{interface}' cannot be implemented for it in this module",
     "help": "Orphan rule: implementations follow the type's defining module. Interface instantiations can only be written for types defined in this module (e.g., `Add(Point, Point, Point)`); operator interfaces for builtin types (Int/List, etc.) are provided by the core and cannot be supplemented"
+  },
+  "E1105": {
+    "title": "variant constructor cannot be accessed as a field",
+    "message": "a variant constructor can only be used in the call form `Type.variant(...)`",
+    "template": "'{variant}' is a variant constructor of the enum type '{type}', not a data field",
+    "help": "To construct a value, write `{type}.{variant}(...)`; to extract the payload from an enum type value, use match with variant destructuring (RFC-010b). All record-style fields of an enum type have been promoted to variants; runtime values do not carry a field table."
   }
 }
