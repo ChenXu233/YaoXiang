@@ -1,16 +1,130 @@
 name: Build Z3 Wasm
 
+# 用 Emscripten 把 Z3 编译成 wasm 静态库（libz3.a），供 _build-wasm.yml 取用。
+#
+# ## 为什么产物放 Release 而不是 Actions artifact
+#
+# 原先走 upload-artifact + 跨 run 下载（dawidd6/action-download-artifact），
+# 有硬伤：artifact 有效期上限 90 天，过期后下载报
+# `no downloadable artifacts found (expired)`，而消费方是 continue-on-error，
+# 于是静默降级成「Z3 features disabled」——2026-09-15 起就这样，8 天无人察觉。
+#
+# 改为发布到固定的 `z3-wasm` Release：release 资产不过期，消费方按固定 URL
+# 下载，不需要跨 run 检索，也不再依赖第三方下载 action。
+#
+# ## 触发策略
+#
+# 不做「每次都全量重建」，也不做「无人看管」：
+#   - schedule       每周一次，先问上游有没有变化，变了才重建
+#   - workflow_dispatch  手动（改 Z3 版本后重建）
+#
+# 是否需要重建由 upstream-check job 判定（比较仓库 pin 的版本与已发布资产），
+# 一致则 build job 直接跳过，不白烧 30 分钟 Emscripten 编译。
+
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Even if already published, rebuild and re-upload'
+        type: boolean
+        default: false
+  schedule:
+    # 每周一 03:07 UTC（与 nightly 的 22:17 错开）
+    - cron: '7 3 * * 1'
 
 env:
-  Z3_VERSION: "4.16.0"
+  Z3_VERSION: '4.16.0'
+  # 固定 tag。不能写成含 `4.16.0` 的形态，否则会命中 dist-release.yml 的
+  # `**[0-9]+.[0-9]+.[0-9]+*` tag 过滤器，白白触发一次发版流水线。
+  RELEASE_TAG: 'z3-wasm'
 
 jobs:
-  build:
-    name: Build Z3 4.16.0 (wasm)
+  upstream-check:
+    name: Check for updates
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
+    outputs:
+      should-build: ${{ steps.decide.outputs.should_build }}
+      published: ${{ steps.published.outputs.version }}
+    steps:
+      - name: Query upstream Z3 latest tag
+        id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="$(gh api repos/Z3Prover/z3/releases/latest -q .tag_name)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "上游 Z3 最新 tag: $TAG"
+
+      - name: Read currently published wasm build
+        id: published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 以**归档资产名**为唯一真相源。
+          #
+          # 为什么不另用 `libz3-<ver>.a.txt` 之类的标记文件：那就成了两个真相源，
+          # 且旧标记不会被自动清掉——版本从 4.15.0 升到 4.16.0 后两个标记并存，
+          # 取第一个就误判成 4.15.0，导致每周都重建。
+          NAMES="$(gh release view "$RELEASE_TAG" --json assets -q '.assets[].name' 2>/dev/null || true)"
+          VER="$(printf '%s\n' "$NAMES" | sed -n 's/^z3-wasm-\(.*\)\.tar\.gz$/\1/p')"
+          COUNT="$(printf '%s\n' "$VER" | grep -c . || true)"
+          if [[ "$COUNT" -gt 1 ]]; then
+            # 不该发生（发布时会清掉旧版本）；出现说明有历史残留→报警并强制重建
+            echo "::warning::release 里存在多份归档：$(printf '%s' "$VER" | tr '\n' ' ')——将强制重建并清理"
+            VER=""
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "已发布产物对应的 Z3 版本: ${VER:-无}"
+
+      - name: Decide whether to build
+        id: decide
+        run: |
+          # 判据：仓库 pin 的 Z3_VERSION 与「已发布产物」是否一致。
+          # 不用「上游 latest」作判据——本项目依赖固定版本，上游发新版只提示，
+          # 升版本要连带重新验证 playground 行为，不该由 cron 自动跟进。
+          PINNED="${{ env.Z3_VERSION }}"
+          PUB="${{ steps.published.outputs.version }}"
+          UP="${{ steps.upstream.outputs.tag }}"
+
+          if [[ "${{ inputs.force }}" == "true" ]]; then
+            echo "强制重建（force=true）"
+            SHOULD=true
+          elif [[ -z "$PUB" ]]; then
+            echo "尚未发布任何 wasm 产物 → 需要构建"
+            SHOULD=true
+          elif [[ "$PUB" != "$PINNED" ]]; then
+            echo "已发布 $PUB，仓库 pin 的是 $PINNED → 需要重建"
+            SHOULD=true
+          else
+            echo "已发布 $PUB 与仓库 pin 一致 → 跳过构建"
+            SHOULD=false
+          fi
+          echo "should_build=$SHOULD" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Z3 wasm 构建检查"
+            echo
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 仓库 pin 的版本 | \`$PINNED\` |"
+            echo "| 已发布产物版本 | \`${PUB:-无}\` |"
+            echo "| 上游最新 tag | \`$UP\` |"
+            echo "| 本次是否重建 | $SHOULD |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$UP" != "z3-$PINNED" ]]; then
+            echo "::notice::上游 Z3 已到 $UP，本仓库仍 pin $PINNED；如需跟进，改 build.rs 的 Z3_VERSION 后手动触发本 workflow"
+          fi
+
+  build:
+    name: Build Z3 wasm
+    needs: upstream-check
+    if: needs.upstream-check.outputs.should-build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
     steps:
       - name: Checkout Z3 source
         uses: actions/checkout@v7
@@ -42,7 +156,7 @@ jobs:
       - name: Build Z3
         run: cd z3-build && ninja
 
-      - name: Prepare artifact
+      - name: Package artifact
         run: |
           mkdir -p dist/lib dist/include
           cp z3-build/lib/libz3.a dist/lib/ 2>/dev/null || \
@@ -50,9 +164,71 @@ jobs:
           cp z3-src/src/api/z3.h dist/include/
           cp z3-src/src/api/z3_api.h dist/include/ 2>/dev/null || true
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: z3-wasm-${{ env.Z3_VERSION }}
-          path: dist/
-          retention-days: 90
+          # 自检：产不出 libz3.a 就失败，不发残缺资产出去
+          [ -s dist/lib/libz3.a ] || { echo "::error::libz3.a not produced"; exit 1; }
+
+          # 打成一个 tar.gz（解压根即 include/ + lib/），资产越少越省事
+          tar czf "z3-wasm-${Z3_VERSION}.tar.gz" -C dist .
+          ls -la "z3-wasm-${Z3_VERSION}.tar.gz"
+
+          # 版本标记：upstream-check 靠「归档资产名」判断已发布版本，
+          # 不再另写标记文件（两个真相源会漂移）。
+
+      - name: Publish to z3-wasm release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="$RELEASE_TAG"
+          ASSETS=("z3-wasm-${Z3_VERSION}.tar.gz")
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # 先删掉非本版本的旧归档：保留多份会让 upstream-check 无法确定
+            # 「当前发布的是哪个」（且会让消费者猜）。这里保证恒为单一版本。
+            gh release view "$TAG" --json assets -q '.assets[].name' \
+              | sed -n 's/^\(z3-wasm-.*\.tar\.gz\)$/\1/p' \
+              | grep -vx "z3-wasm-${Z3_VERSION}.tar.gz" \
+              | while read -r old; do
+                  [ -n "$old" ] && gh release delete-asset "$TAG" "$old" --yes
+                done
+            # 历史遗留的标记文件（早期实现产物）一并清掉
+            gh release view "$TAG" --json assets -q '.assets[].name' \
+              | sed -n 's/^\(libz3-.*\.a\.txt\)$/\1/p' \
+              | while read -r old; do
+                  [ -n "$old" ] && gh release delete-asset "$TAG" "$old" --yes
+                done
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            NOTES="$(printf '%s\n' \
+              'Emscripten 编译的 Z3 静态库（`libz3.a` + 头文件），供 `_build-wasm.yml` 构建 wasm playground 时取用。' \
+              '' \
+              '## 为什么放在 Release 里' \
+              '' \
+              'Actions artifact 有有效期上限（90 天），过期后消费方会静默降级（见仓库历史）。' \
+              'Release 资产不过期，消费方按固定 URL 直接下载。' \
+              '' \
+              "## 更新" \
+              '' \
+              '由 `_build-z3-wasm.yml` 每周检查上游；Z3 版本变更后改 `build.rs` 的 `Z3_VERSION`，再手动触发该 workflow。')"
+            gh release create "$TAG" \
+              --title "Z3 wasm (prebuilt static lib)" \
+              --notes "$NOTES" \
+              --prerelease \
+              "${ASSETS[@]}"
+          fi
+          # 这是产物仓库，不能抢占「最新版本」：install.sh 靠 /releases/latest
+          # 取正式版，若它返回 z3-wasm，则 sed 提不出 v 前缀的版本号，一键安装直接失败。
+          #
+          # 用 prerelease 标记而非 --latest=false：官方文档明确
+          # "Drafts and prereleases **cannot** be set as latest"，
+          # /releases/latest 的定义也是「most recent **non-prerelease**, non-draft
+          # release」——这是 API 语义级保证，不依赖 flag 的时序。
+          # 仓库已有先例：nightly 是 prerelease，latest 仍为 v0.8.1。
+          gh release edit "$TAG" --prerelease
+
+      - name: Verify published asset is downloadable
+        run: |
+          URL="https://github.com/ChenXu233/YaoXiang/releases/download/$RELEASE_TAG/z3-wasm-${Z3_VERSION}.tar.gz"
+          curl -fsSL -o /tmp/check.tar.gz "$URL"
+          tar tzf /tmp/check.tar.gz | head -5
+          tar tzf /tmp/check.tar.gz | grep -q 'lib/libz3.a' \
+            || { echo "::error::published archive missing lib/libz3.a"; exit 1; }
+          echo "已发布且可下载：$URL"

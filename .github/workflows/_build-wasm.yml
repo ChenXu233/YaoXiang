@@ -32,20 +32,31 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      - name: Download Z3 wasm (cross-run)
-        uses: dawidd6/action-download-artifact@v24
-        with:
-          workflow: _build-z3-wasm.yml
-          name: z3-wasm-4.16.0
-          path: .z3/z3-4.16.0-wasm
-        continue-on-error: true
+      # 从固定的 z3-wasm Release 取预编译静态库（不用 Actions artifact：
+      # artifact 有 90 天有效期，过期后这里会静默降级成「无 Z3」）。
+      # 仓库为 private 时需带 token；public 下匿名 URL 即可，token 无害。
+      - name: Download Z3 wasm (prebuilt from release)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p .z3/z3-4.16.0-wasm
+          URL="https://github.com/${{ github.repository }}/releases/download/z3-wasm/z3-wasm-4.16.0.tar.gz"
+          if curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -o /tmp/z3-wasm.tar.gz "$URL"; then
+            tar xzf /tmp/z3-wasm.tar.gz -C .z3/z3-4.16.0-wasm
+            echo "Z3 wasm 已就位：$(du -sh .z3/z3-4.16.0-wasm | cut -f1)"
+          else
+            # 取不到就降级，但必须显式告警：静默降级正是这个仓库踩过的坑
+            echo "::warning::Z3 wasm 构件下载失败（$URL）——本次构建无 Z3"
+          fi
 
       - name: Verify Z3 wasm
         run: |
           if [ -f ".z3/z3-4.16.0-wasm/lib/libz3.a" ]; then
             echo "Z3 wasm found"
+            echo "### Z3 wasm: 已链接" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Z3 wasm not found, Z3 features disabled"
+            echo "::warning::未找到 .z3/z3-4.16.0-wasm/lib/libz3.a，本次 wasm 构建不含 Z3"
+            echo "### ⚠ Z3 wasm: 缺失（构建未含 Z3）" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Cache cargo
