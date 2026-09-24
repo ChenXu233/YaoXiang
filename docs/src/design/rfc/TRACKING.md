@@ -36,7 +36,6 @@
 | 002-cross-platform-io-libuv.md | RFC-002：基于 libuv 的资源类型 IO 实现层 | 草案 | draft\002-cross-platform-io-libuv.md | #102 | -- | -- | -- |
 | 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 草案 | draft\019-typed-homoiconicity.md | -- | -- | -- | -- |
 | 026b-yx-bindgen.md | RFC-026b: yx-bindgen 工具链 | 草案 | draft\026b-yx-bindgen.md | -- | -- | -- | -- |
-| 027a-termination-proof-fallback.md | RFC-027a: 终止检查的证明函数兜底 | 草案 | draft\027a-termination-proof-fallback.md | #318 | -- | -- | -- |
 | 028-jit-compiler.md | RFC-028：JIT 编译器 — VM 内多级执行引擎 | 草案 | draft\028-jit-compiler.md | #101 | -- | -- | -- |
 | 029a-module-cache-incremental.md | RFC-029a: 模块缓存与增量重编译 | 草案 | draft\029a-module-cache-incremental.md | #293 | -- | -- | -- |
 | 031-optimization-levels.md | RFC-031：优化级别与 Pass 管理器 | 草案 | draft\031-optimization-levels.md | -- | -- | -- | -- |
@@ -52,6 +51,7 @@
 | 014b-build-system.md | RFC-014b: 构建系统与二进制分发 | 审核中 | review\014b-build-system.md | #91 | -- | -- | -- |
 | 014c-workspace.md | RFC-014c: 工作空间支持 | 审核中 | review\014c-workspace.md | #113 | -- | -- | -- |
 | 026a-extensible-ffi-system.md | RFC-026a: 可扩展 FFI 机制体系 | 审核中 | review\026a-extensible-ffi-system.md | #135 | -- | -- | -- |
+| 027a-termination-explicit-measure.md | RFC-027a: 终止检查的显式测度 | 审核中 | review\027a-termination-explicit-measure.md | #318 | -- | -- | -- |
 | 032-spawn-unified-expression.md | RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况 | 审核中 | review\032-spawn-unified-expression.md | #98 | -- | -- | -- |
 
 > 此文件由 check-rfc-tracking.py 自动生成，请勿手动修改。
