@@ -11,7 +11,7 @@ issue: '#98'
 
 > **本文档定义 `spawn`
 > 的语法、AST/IR 重构**。运行时行为语义（任务拆解粒度、所有权、作用域、错误传播、资源类型、嵌套）见
-> [RFC-024: 基于 spawn 的并发运行时语义](./024-concurrency-model.md)。
+> [RFC-024: 基于 spawn 的并发运行时语义](../accepted/024-concurrency-model.md)。
 >
 > 两个 RFC 协同定义 `spawn` —— 024 回答"做什么"，032 回答"怎么表示"。
 
@@ -272,7 +272,7 @@ spawn if use_cache {
 
 本 RFC 删除 `SpawnFor` 后，`spawn` 的证明管道集成面临一个架构问题：证明管道工作在类型层，需要知道 spawn 内部的计算结构（For/While/Block/If/Call）才能选择正确的证明策略。当前证明管道通过 AST 分发，但长期方向是将计算结构编码为 `MonoType` 变体（`Block`/`ForExpr`/`WhileExpr`/`IfExpr`/`Call`/`Spawn`），使管道完全在类型层工作。
 
-这是 [RFC-019: 类型级同像性](./019-typed-homoiconicity.md) 的弱化实用版——编译器内置的计算结构进入类型系统，但不开放用户自定义语法。理论基础为 ECMTT（Contextual Modal Types for Algebraic Effects and Handlers, ICFP 2021）：`Spawn<T>` 对应模态算子 `□`，证明管道对应 handler。
+这是 [RFC-019: 类型级同像性](../draft/019-typed-homoiconicity.md) 的弱化实用版——编译器内置的计算结构进入类型系统，但不开放用户自定义语法。理论基础为 ECMTT（Contextual Modal Types for Algebraic Effects and Handlers, ICFP 2021）：`Spawn<T>` 对应模态算子 `□`，证明管道对应 handler。
 
 该机制不限于 spawn——未来任何 effect（纯计算、IO、fallible）都可以通过同一种模式进入类型系统。spawn 是第一个消费者，不是唯一消费者。
 
@@ -321,10 +321,10 @@ spawn if use_cache {
 
 ## 参考文献
 
-- [RFC-024: 基于 spawn 块的并发模型](./024-concurrency-model.md)
-- [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
+- [RFC-024: 基于 spawn 块的并发模型](../accepted/024-concurrency-model.md)
+- [RFC-010: 统一类型语法](../accepted/010-unified-type-syntax.md)
 - [ECMTT: Contextual Modal Types for Algebraic Effects and Handlers (ICFP 2021)](https://arxiv.org/abs/2103.02976) — 计算结构类型的理论基础
-- [并发模型规范](../../reference/language-spec/concurrency.md)
+- [并发模型规范](../../../reference/language-spec/concurrency.md)
 - [spawn for 正交性悬置（讨论稿）](../../dev/plan/ongoing/spawn-for-orthogonality.md)
 
 ---

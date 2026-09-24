@@ -14,7 +14,7 @@ issue: '#136'
 > - [RFC-010: 统一类型语法 - name: type = value 模型](../accepted/010-unified-type-syntax.md)
 > - [RFC-011: 泛型系统设计](../accepted/011-generic-type-system.md)
 > - [RFC-027: 编译期谓词与统一静态验证](../accepted/027-compile-time-evaluation-types.md)
-> - [RFC-011a: 接口实现与动态分发](../draft/011a-interface-implementation.md)
+> - [RFC-011a: 接口实现与动态分发](../accepted/011a-interface-implementation.md)
 
 ## 摘要
 
@@ -327,7 +327,7 @@ Phase 4        Phase 5
 - [RFC-010: 统一类型语法](../accepted/010-unified-type-syntax.md)
 - [RFC-011: 泛型系统设计](../accepted/011-generic-type-system.md)
 - [RFC-027: 编译期谓词与统一静态验证](../accepted/027-compile-time-evaluation-types.md)
-- [RFC-011a: 接口实现与动态分发](../draft/011a-interface-implementation.md)
+- [RFC-011a: 接口实现与动态分发](../accepted/011a-interface-implementation.md)
 - [C++26 反射提案](https://wg21.link/P2996)
 
 ---

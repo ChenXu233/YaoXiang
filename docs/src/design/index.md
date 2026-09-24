@@ -219,7 +219,7 @@ process: () -> Result(Data, Error) = {
 - [参考文档](../reference/) - API 和标准库
 - [语言规范](../reference/language-spec/index.md) - 完整的语言规范
 - [GitHub Discussions](https://github.com/ChenXu233/YaoXiang/discussions)
-- [贡献指南](../tutorial/contributing.md)
+- [贡献指南](../dev/contributing.md)
 
 ## 历史归档
 

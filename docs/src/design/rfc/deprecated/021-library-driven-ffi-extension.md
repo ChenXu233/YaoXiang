@@ -8,12 +8,12 @@ updated: '2026-06-05（废弃）'
 
 # RFC-021: 库驱动 FFI 扩展与跨语言调用支持
 
-> **⚠️ 废弃**：本文档已废弃，内容已合并到 [RFC-026: FFI 核心机制](./026-ffi-core-mechanism.md)。
+> **⚠️ 废弃**：本文档已废弃，内容已合并到 [RFC-026: FFI 核心机制](../accepted/026-ffi-core-mechanism.md)。
 
 > **参考**:
 >
 > - [RFC-001: 并作模型与错误处理系统](./001-concurrent-model-error-handling.md)
-> - [RFC-008: Runtime 并发模型与调度器脱耦设计](./008-runtime-concurrency-model.md)
+> - [RFC-008: Runtime 并发模型与调度器脱耦设计](../accepted/008-runtime-concurrency-model.md)
 > - [FFI 实现计划](../reference/plan/completed/FFI.md)
 
 ## 摘要
@@ -423,7 +423,7 @@ import "math_bindings.yx"
 ## 参考文献
 
 - [RFC-001: 并作模型与错误处理系统](./001-concurrent-model-error-handling.md)
-- [RFC-008: Runtime 并发模型与调度器脱耦设计](./008-runtime-concurrency-model.md)
+- [RFC-008: Runtime 并发模型与调度器脱耦设计](../accepted/008-runtime-concurrency-model.md)
 - [FFI 实现计划](../reference/plan/completed/FFI.md)
 - [Python ctypes 文档](https://docs.python.org/3/library/ctypes.html)
 - [Rust libloading crate](https://docs.rs/libloading/latest/libloading/)

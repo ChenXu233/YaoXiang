@@ -480,7 +480,7 @@ spawn {          // Step Over → 跑完整个 spawn 块
 - [RFC-024：基于 spawn 块的并发模型](../accepted/024-concurrency-model.md)
 - [RFC-027：编译期谓词与统一静态验证](../accepted/027-compile-time-evaluation-types.md)
 - [RFC-028：JIT 编译器 — VM 内多级执行引擎](../draft/028-jit-compiler.md)
-- [RFC-030：assert 断言机制](../review/030-assert-mechanism.md)
+- [RFC-030：assert 断言机制](../accepted/030-assert-mechanism.md)
 - [DAP 协议规范](https://microsoft.github.io/debug-adapter-protocol/)
 - [debugpy — Python DAP 实现参考](https://github.com/microsoft/debugpy)
 - [Delve — Go 调试器参考](https://github.com/go-delve/delve)

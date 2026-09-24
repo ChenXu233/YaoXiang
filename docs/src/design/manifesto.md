@@ -290,7 +290,7 @@ d3 = dist_from_p1(p2)       # 2.828
 | **并作图**     | 惰性计算图(DAG)             | 并作发生的舞台，描述依赖与并行关系       |
 | **并作调度器** | 运行时任务调度器            | 协调万物，让它们在正确时机并作的智能中枢 |
 
-> **详见**：[RFC-001 并作模型](./rfc/001-concurrent-model-error-handling.md)
+> **详见**：[RFC-001 并作模型](./rfc/deprecated/001-concurrent-model-error-handling.md)
 
 ```yaoxiang
 # === 并作函数 ===
@@ -340,7 +340,7 @@ main: () -> Void = {
 
 **技术文档**：
 
-- 详见 [RFC-001 并作模型](./rfc/accepted/001-concurrent-model-error-handling.md)
+- 详见 [RFC-001 并作模型](./rfc/deprecated/001-concurrent-model-error-handling.md)
 
 **创新价值**：异步编程的认知负担降为零，代码可读性与同步代码完全相同，同时获得高性能并行的执行效率。
 
@@ -864,7 +864,7 @@ A:
 
 **Q: 什么时候会发布 1.0 版本？**
 
-A: v1.0 目标：生产可用。发布时间取决于实现进度，详见 [版本规划 RFC](./rfc/003-version-planning.md)。
+A: v1.0 目标：生产可用。发布时间取决于实现进度，详见 [版本规划 RFC](./rfc/rejected/003-version-planning.md)。
 
 **Q: 如何联系核心团队？**
 

@@ -15,9 +15,9 @@ updated: '2026-06-16'
 
 > **参考**:
 >
-> - [RFC-007: 函数语法统一](./accepted/007-function-syntax-unification.md)
-> - [RFC-009: 所有权模型 v9](./accepted/009-ownership-model.md)
-> - [RFC-011: 泛型系统设计](./accepted/011-generic-type-system.md)
+> - [RFC-007: 函数语法统一](../accepted/007-function-syntax-unification.md)
+> - [RFC-009: 所有权模型 v9](../accepted/009-ownership-model.md)
+> - [RFC-011: 泛型系统设计](../accepted/011-generic-type-system.md)
 >   — 第 2.4 节：Dup/Clone 内置 marker trait
 
 ## 摘要
@@ -244,9 +244,9 @@ for captured in captures {
 
 ### YaoXiang 官方文档
 
-- [RFC-007: 函数语法统一](./accepted/007-function-syntax-unification.md)
-- [RFC-009: 所有权模型 v9](./accepted/009-ownership-model.md)
-- [RFC-011: 泛型系统设计](./accepted/011-generic-type-system.md) — 第 2.4 节：Dup/Clone 内置 marker
+- [RFC-007: 函数语法统一](../accepted/007-function-syntax-unification.md)
+- [RFC-009: 所有权模型 v9](../accepted/009-ownership-model.md)
+- [RFC-011: 泛型系统设计](../accepted/011-generic-type-system.md) — 第 2.4 节：Dup/Clone 内置 marker
   trait
 
 ### 外部参考

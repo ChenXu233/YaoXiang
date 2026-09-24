@@ -429,7 +429,7 @@ d = { "a": 1 }             // 值：Dict（内容自描述）
 ### `{}` 的落位
 
 `Dict` 文法要求至少一个键，`{}` 无内容可依据，故取块结构的零形态 → 空块，值 `Void`。
-空字典用 `dict.new()`。详见 spec [§2.9.1](../.../reference/language-spec/syntax.md)。
+空字典用 `dict.new()`。详见 spec [§2.9.1](../../../reference/language-spec/syntax.md)。
 
 ### 伴随的实现修正
 

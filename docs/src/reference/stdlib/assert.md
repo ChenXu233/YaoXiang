@@ -65,5 +65,5 @@ main: () -> Void = {
 
 ## 相关
 
-- [测试规范](../dev/test-specification.md) —— 语料组织与判定约定
+- [测试规范](../../dev/test-specification.md) —— 语料组织与判定约定
 - [错误码参考](../error-code/) —— `E6005` 断言失败

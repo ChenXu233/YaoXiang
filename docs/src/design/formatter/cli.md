@@ -41,4 +41,4 @@ yaoxiang format -w src/
 
 - [Issue #13: 实现 yaoxiang format 代码格式化工具](https://github.com/ChenXu233/YaoXiang/issues/13)
 - [Rustfmt 风格指南](https://rust-lang.github.io/rustfmt/)
-- [测试编写规范](../test-specification.md)
+- [测试编写规范](../../dev/test-specification.md)

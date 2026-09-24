@@ -11,7 +11,7 @@ issue: '#89'
 # RFC-024：基于 spawn 的并发运行时语义
 
 > **本文档定义 `spawn` 的运行时行为语义**。语法正交性、AST/IR 重构、类型系统扩展见
-> [RFC-032](./032-spawn-unified-expression.md)。
+> [RFC-032](../review/032-spawn-unified-expression.md)。
 >
 > 两个 RFC 协同定义 `spawn` —— 024 回答"做什么"，032 回答"怎么表示"。
 
@@ -21,7 +21,7 @@ issue: '#89'
 > - [RFC-008: Runtime 并发模型与调度器脱耦设计](./008-runtime-concurrency-model.md)
 > - [RFC-009: 所有权模型设计](./009-ownership-model.md)
 > - [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
-> - [RFC-032: spawn 统一表达式修饰 — AST/IR 重构](./032-spawn-unified-expression.md)
+> - [RFC-032: spawn 统一表达式修饰 — AST/IR 重构](../review/032-spawn-unified-expression.md)
 
 ## 摘要
 
@@ -56,7 +56,7 @@ spawn <expr>               ← 唯一并行原语
 | [RFC-008](./008-runtime-concurrency-model.md)                            | 运行时架构，与本文正交            |
 | [RFC-009](./009-ownership-model.md)                                      | 所有权模型，不变                  |
 | [RFC-010](./010-unified-type-syntax.md)                                  | 统一类型语法                      |
-| [RFC-032](./032-spawn-unified-expression.md)                             | AST/IR 重构，与本文协同定义 spawn |
+| [RFC-032](../review/032-spawn-unified-expression.md)                             | AST/IR 重构，与本文协同定义 spawn |
 
 ## 动机
 
@@ -133,11 +133,11 @@ result = {
 | `spawn expr`（任意表达式）      | 表达式本身 → 1 个任务                    | 等待表达式完成   |
 
 > **设计动机**：为什么 spawn 能修饰任意表达式？详见
-> [RFC-032 §核心设计](./032-spawn-unified-expression.md)。
+> [RFC-032 §核心设计](../review/032-spawn-unified-expression.md)。
 >
 > **控制流正交性**：`spawn <expr>`（spawn 在前）与
 > `<expr> spawn { body }`（spawn 在后）的语义差异，详见
-> [RFC-032 §控制流正交性](./032-spawn-unified-expression.md)（核心定义）。所有反着写组合（`for ... spawn { }`
+> [RFC-032 §控制流正交性](../review/032-spawn-unified-expression.md)（核心定义）。所有反着写组合（`for ... spawn { }`
 > / `while ... spawn { }` /
 > `if ... spawn { }`）的运行时行为——错误传播、资源类型、嵌套规则——继承本文 §2.4 / §2.5 /
 > §2.6 的规则。
@@ -550,7 +550,7 @@ frontend/core/spawn/
 - [RFC-009 所有权模型](./009-ownership-model.md)
 - [RFC-010 统一类型语法](./010-unified-type-syntax.md)
 - [RFC-011 泛型系统](./011-generic-type-system.md)
-- [RFC-032 spawn 统一表达式修饰 — AST/IR 重构](./032-spawn-unified-expression.md)
+- [RFC-032 spawn 统一表达式修饰 — AST/IR 重构](../review/032-spawn-unified-expression.md)
 
 ### 外部参考
 

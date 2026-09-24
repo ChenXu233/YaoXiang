@@ -281,5 +281,5 @@ Hello, YaoXiang!
 
 - [语义化版本 2.0.0](https://semver.org/lang/zh-CN/)
 - [Rust 发布模型](https://forge.rust-lang.org/release.html)
-- [RFC-001: 并发模型与错误处理](./001-concurrent-model-error-handling.md)
-- [RFC-008: Runtime 并发模型](./008-runtime-concurrency-model.md)
+- [RFC-001: 并发模型与错误处理](../deprecated/001-concurrent-model-error-handling.md)
+- [RFC-008: Runtime 并发模型](../accepted/008-runtime-concurrency-model.md)
