@@ -1,6 +1,11 @@
 //! 终止检查器单元测试
 //!
-//! RFC-027 Section 7: Termination Checker Tests
+//! 规范来源：
+//! - RFC-027《编译期谓词与统一静态验证》§7「循环终止性证明」
+//!   - §7.2 策略 1：线性秩函数自动合成（SMT 验证）—— 见文末 tripwire
+//!   - §7.3 策略 2：谓词违反计数（框架占位）
+//!   - §7.5 策略 4：乘法缩放度量
+//! - 语言规范 §控制流「while 循环」
 
 use crate::frontend::core::typecheck::layers::termination::TerminationChecker;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
@@ -127,6 +132,42 @@ fn run_check(expr: &Expr) -> Vec<ProofResult> {
     };
     let env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
     let mut checker = TerminationChecker::new();
+    checker.check_module(&module, &env)
+}
+
+/// 运行终止检查器，并注入一个**确定性**桩求解器
+///
+/// 桩恒返回 `Unsat`（即「候选在所有路径上严格递减」）。这样用例不依赖
+/// 本机是否安装 Z3，也就能在 CI 上稳定判定策略 1 的可用性。
+#[cfg(not(target_arch = "wasm32"))]
+fn run_check_with_stub_solver(expr: &Expr) -> Vec<ProofResult> {
+    use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTResult};
+    use crate::frontend::core::typecheck::proof::smt::backend::Solver;
+
+    /// 恒「验证通过」的桩：任何候选都被判定为严格递减
+    #[derive(Debug)]
+    struct AlwaysUnsat;
+    impl Solver for AlwaysUnsat {
+        fn solve(
+            &self,
+            _commands: &[SMTCommand],
+            _timeout_ms: u64,
+        ) -> SMTResult {
+            SMTResult::Unsat
+        }
+    }
+    static ALWAYS_UNSAT: AlwaysUnsat = AlwaysUnsat;
+
+    let stmt = Stmt {
+        kind: StmtKind::Expr(Box::new(expr.clone())),
+        span: dummy_span(),
+    };
+    let module = crate::frontend::core::parser::ast::Module {
+        items: vec![stmt],
+        span: dummy_span(),
+    };
+    let env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
+    let mut checker = TerminationChecker::new().with_solver(&ALWAYS_UNSAT);
     checker.check_module(&module, &env)
 }
 
@@ -318,5 +359,75 @@ fn test_nested_while_inner_fails() {
     assert!(
         !unproven.is_empty(),
         "Expected at least one Unproven result for inner non-terminating loop"
+    );
+}
+
+// ==================== 策略 1 可用性 tripwire（#377）====================
+
+/// 策略 1 当前不产出任何可用度量，故 `i < j { i += 1; j -= 1 }` 无法被证明
+///
+/// RFC-027 §7 把「四种策略都无法自动拿下」的循环交给策略 1（线性秩函数自动
+/// 合成），其典型例子正是本用例的形状。但实测策略 1 恒空手，两处独立缺陷：
+///
+/// - **(a) 输入为空**：`check_while_loop` 的 `bound_is_loop_invariant` 过滤会
+///   剔除「在循环体内被赋值的边界变量」，而这类循环的边界按定义就在体内被改
+///   → `bounds` 为空 → 零候选。
+/// - **(b) 判定符号相反**：`generate_rank_candidates` 产出的 `delta` 恒为 `+1`，
+///   而 `verify_rank_candidate` 构造 `m' = m + delta` 后断言 `not (m' < m)`；
+///   `m + 1 < m` 恒假 → 求解器返回 Sat → 验证恒失败。
+///
+/// 本用例**端到端**锁定「该形状当前不被证明」这一事实，并用恒返回 `Unsat`
+/// （即无条件判定「严格递减成立」）的桩求解器，使之不依赖本机 Z3、CI 上稳定。
+/// 桩都救不回来，正说明缺陷在度量合成侧而非求解器侧。
+///
+/// 修好 (a)（或 (a)+(b)）后此处会失败——届时请把断言翻转成「该循环被证明」
+/// 并更新用例名，不要删除用例。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_strategy1_cannot_prove_dual_variable_loop_currently() {
+    // Arrange — i < j { i += 1; j -= 1 }：边界 j 在循环体内被赋值
+    let while_expr = make_while(
+        make_lt_condition("i", "j"),
+        vec![make_increment("i", 1), make_decrement("j", 1)],
+    );
+
+    // Act — 注入恒 Unsat（「候选严格递减」）的桩求解器
+    let results = run_check_with_stub_solver(&while_expr);
+
+    // Assert — 即便求解器无条件认可任何候选，该循环仍未被证明
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        !unproven.is_empty(),
+        "策略 1 当前恒空手（#377 缺陷 a：边界过滤清空输入；缺陷 b：delta 符号相反），
+         故恒 Unsat 桩求解器下该循环仍不应被证明。
+         若此处开始通过，说明策略 1 已可用——请翻转断言并更新用例名。results={:?}",
+        results
+    );
+}
+
+/// 终止策略 2（谓词违反计数）是框架占位，恒不产出度量（RFC-027 §7.3）
+///
+/// 实现注释标注「框架占位」：完整实现需 parser 支持 forall 量词语法，而语言
+/// 层面尚无该语法。本用例与上一条同形——两者合起来说明「策略 1 空手 + 策略 2
+/// 占位」时该形状无任何自动证明路径。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_strategy2_violation_count_is_placeholder_not_usable() {
+    // Arrange
+    let while_expr = make_while(
+        make_lt_condition("i", "j"),
+        vec![make_increment("i", 1), make_decrement("j", 1)],
+    );
+
+    // Act
+    let results = run_check_with_stub_solver(&while_expr);
+
+    // Assert — 无任何策略成立
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        !unproven.is_empty(),
+        "策略 2 当前为框架占位（需 forall 量词），不应产出度量。
+         若此处开始通过，说明策略 2 已实装——请更新断言与用例名。results={:?}",
+        results
     );
 }

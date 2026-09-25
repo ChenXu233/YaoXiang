@@ -384,6 +384,17 @@ impl TerminationChecker {
         }
 
         // 策略 1：线性秩函数自动合成（SMT 验证）
+        //
+        // ⚠ 当前**恒不生效**，见 #377。注入求解器也无法救回任何循环：
+        //   (a) 上游 bound_is_loop_invariant 过滤把「在循环体内被赋值的边界变量」
+        //       全部剔除，而需要秩函数的形状（i<j { i+=1; j-=1 }、while flag）
+        //       边界必定在体内被改 → bounds 恒为空 → 零候选
+        //   (b) generate_rank_candidates 产出的 delta 恒为 +1，而
+        //       verify_rank_candidate 构造 m' = m + delta 后断言 not(m' < m)，
+        //       m+1 < m 恒假 → not(false) 恒真 → Sat 而非 Unsat → 恒返回 false
+        // 实测：注入 default_solver() 后与原版逐字节相同（12 种循环形状）
+        // 下面的 tripwire 测试锁定该事实；修好 (a)(b) 后它会失败，届时请
+        // 连同本注释与 #377 一起更新，而不是删掉断言
         #[cfg(not(target_arch = "wasm32"))]
         if self.solver.is_some() {
             if let Some(measure) =
@@ -843,6 +854,10 @@ impl TerminationChecker {
         _condition: &Expr,
         _span: crate::util::span::Span,
     ) -> Option<LinearMeasure> {
+        // ⚠ 本函数当前对任何输入都返回 None，见 #377（终止策略 1 不可用）。
+        // 调用点见 check_while_loop 的同名注释。两处缺陷：
+        //   (a) `bounds` 进到这里时已被 bound_is_loop_invariant 清空；
+        //   (b) 即使非空，verify_rank_candidate 的 delta 符号也是错的。
         let solver = self.solver?;
 
         let bounded_vars: Vec<&str> = bounds.iter().map(|(v, _)| v.as_str()).collect();
@@ -858,6 +873,13 @@ impl TerminationChecker {
     }
 
     /// 生成秩函数候选列表
+    ///
+    /// ⚠ 缺陷 (b) 在本函数：所有候选的 `delta` 入口恒为 `1`（见下方
+    /// `increasing(v, .., 1)`）。而 `verify_rank_candidate` 构造
+    /// `m' = var + delta` 后断言 `not (m' < m)`——`m' = m + 1` 使 `m' < m`
+    /// 恒假，`not(false)` 恒真 → 求解器返回 Sat → 验证恒失败。
+    /// 需按 `Direction` 决定 delta 符号（Increasing 度量应是 `bound - v`，其
+    /// 每次迭代减 1；而非直接对 `v` 加 delta）。见 #377。
     fn generate_rank_candidates(
         &self,
         bounded_vars: &[&str],
