@@ -1733,10 +1733,6 @@ impl TypeChecker {
                             // 用宽松类型注册成值变量会污染值位置的类型名解析。
                             for export in exports_to_import {
                                 if matches!(export.kind, crate::frontend::module::ExportKind::Type)
-                                    && matches!(
-                                        export.kind,
-                                        crate::frontend::module::ExportKind::Type
-                                    )
                                     && export.type_payload.is_some()
                                 {
                                     self.register_use_export(&export.name, export, false);
@@ -1757,10 +1753,6 @@ impl TypeChecker {
                             }
                             for export in exports_to_import {
                                 if matches!(export.kind, crate::frontend::module::ExportKind::Type)
-                                    && matches!(
-                                        export.kind,
-                                        crate::frontend::module::ExportKind::Type
-                                    )
                                     && export.type_payload.is_some()
                                 {
                                     self.register_use_export(&export.name, export, false);

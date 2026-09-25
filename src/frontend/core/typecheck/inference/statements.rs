@@ -773,6 +773,10 @@ impl StatementChecker {
     /// `f: () -> Int = { "s" }` 能编译通过、拖到运行时才报错。
     ///
     /// `value_params`：见 [`Self::check_fn_def_with_subst`]。
+    // 形参已含 self 共 8 个：函数体检查需同时拿到声明返回类型（RFC-010a 规则①）
+    // 与值级形参签名（#泛型柯里化下传），两者来源不同不宜合并。与仓库既有
+    // ir_gen.rs / formatter/handlers/stmt.rs 的同类签名一致。
+    #[allow(clippy::too_many_arguments)]
     fn check_fn_body(
         &mut self,
         name: &str,
