@@ -2699,6 +2699,12 @@ impl<'a> ExpressionInferrer<'a> {
                             .iter()
                             .zip(value_arg_types.iter())
                             .map(|(a, ty)| {
+                                // 类型参数位（泛型方法体内 `Result(T, E)` 的 T/E）：
+                                // 解析为同一批新鲜类型变量，构造出的 Generic 与
+                                // 值级签名可直接 unify
+                                if let MonoType::TypeVar(_) = ty {
+                                    return Some(ty.clone());
+                                }
                                 if !matches!(ty, MonoType::MetaType { .. }) {
                                     return None;
                                 }

@@ -663,6 +663,13 @@ impl MonoType {
                 name: name.clone(),
                 args: args.iter().map(|t| t.substitute(subst)).collect(),
             },
+            // 引用是结构透明层：`&Result(T, E)` 里的 T/E 同样要替换。
+            // 此前 Ref 落入 other 分支整块克隆，泛型方法签名的 `self: &T`
+            // 参数永远替换不动（悬空 TypeRef 的来源之一）。
+            MonoType::Ref { mutable, inner } => MonoType::Ref {
+                mutable: *mutable,
+                inner: Box::new(inner.substitute(subst)),
+            },
             other => other.clone(),
         }
     }

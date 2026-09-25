@@ -840,3 +840,119 @@ fn test_rfc010b_duplicate_variant_reports_e1031() {
         result.diagnostics
     );
 }
+
+// ============================================================================
+// 议题 1：泛型柯里化方法体参数对齐（期望类型下传）
+// ============================================================================
+// 方法绑定 `Type.method: (T: Type, E: Type) -> ((self: ...) -> R) = (self) => ...`
+// 的函数体走 check_fn_stmt → check_fn_body：签名剥层 + T/E 替换为新鲜类型
+// 变量后的「值级签名」按位置下传给参数绑定。lambda 参数不再从 AST 标注抄
+// 悬空名字（旧 AST 补型路径已删除）。
+
+/// result.yx 挂起形态：泛型柯里化方法体里 self 拿到 `&Result(T, E)`，
+/// match 变体分发成功，零诊断。
+#[test]
+fn test_rfc011b_generic_curried_method_body_self_typed() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        Result.is_failure: (T: Type, E: Type) -> ((self: &Result(T, E)) -> Bool) = (self) => {
+            match self {
+                err(_) => true,
+                ok(_) => false,
+            }
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "generic curried method body should typecheck: {:?}",
+        result.diagnostics
+    );
+}
+
+/// from_error：泛型方法体内变体构造（T/E 是新鲜类型变量时载荷替换成立）。
+#[test]
+fn test_rfc011b_generic_method_body_variant_ctor() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        Result.from_error: (T: Type, E: Type) -> ((e: E) -> Result(T, E)) = (e) => {
+            Result(T, E).err(e)
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "variant ctor with type-variable args should typecheck: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 带注解 lambda 的 let 绑定：参数从注解的值级签名对齐（非泛型场景，
+/// 泛型实例化路径由 try_instantiate_generic_type 处理，此处保底行为不变）。
+#[test]
+fn test_rfc011b_annotated_lambda_binding_params_aligned() {
+    let source = r#"
+        main: () -> Void = {
+            f: (x: Int) -> Int = (x) => { return x + 1 }
+            f(1)
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "annotated lambda binding should typecheck: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 隔离 A：泛型柯里化方法体不含 match——只验值级参数下传。
+#[test]
+fn test_dbg_curried_body_no_match() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        Result.is_failure: (T: Type, E: Type) -> ((self: &Result(T, E)) -> Bool) = (self) => {
+            return true
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "no-match body should typecheck: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 隔离 B：match 泛型和类型实例的基线（非方法体，&self 无关）。
+#[test]
+fn test_dbg_match_baseline() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        main: () -> Void = {
+            r = Result(Int, String).ok(5)
+            v = match r {
+                ok(x) => x,
+                err(_) => 0,
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "match baseline should typecheck: {:?}",
+        result.diagnostics
+    );
+}

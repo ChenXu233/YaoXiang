@@ -376,35 +376,49 @@ fn parse_assign_after_target(
                             .take(own_param_count)
                             .cloned()
                             .collect();
-                        let inner = Expr::Lambda {
-                            params: merged,
-                            body: body.clone(),
-                            span,
+                        // 首组**全是类型参数**（`(T: Type, E: Type) -> ((self: &R) -> Bool)`）：
+                        // 类型位擦除后本层不占运行时参数位，paren 层就是值层——
+                        // 作者写的 lambda 本身即值级函数，不做「返回闭包」包装。
+                        // 运行时闭包形态（`make_adder: (a: Int) -> ((b: Int) -> Int)`）
+                        // 首组含值参数，仍走下面的包装。
+                        let first_group_has_type_params = match type_annotation.as_ref() {
+                            Some(Type::Fn { params, .. }) => {
+                                params.iter().any(|t| is_type_param_annotation(Some(t)))
+                            }
+                            _ => false,
                         };
-                        let value = Expr::Lambda {
-                            params: own_params,
-                            body: Box::new(Block {
-                                stmts: vec![Stmt {
-                                    kind: StmtKind::Expr(Box::new(inner)),
+                        if !own_params.is_empty() || !first_group_has_type_params {
+                            let inner = Expr::Lambda {
+                                params: merged,
+                                body: body.clone(),
+                                span,
+                            };
+                            let value = Expr::Lambda {
+                                params: own_params,
+                                body: Box::new(Block {
+                                    stmts: vec![Stmt {
+                                        kind: StmtKind::Expr(Box::new(inner)),
+                                        span,
+                                    }],
                                     span,
-                                }],
+                                }),
                                 span,
-                            }),
-                            span,
-                        };
-                        state.skip(&TokenKind::Semicolon);
-                        return Some(Stmt {
-                            kind: StmtKind::Assign {
-                                target: Box::new(target),
-                                type_annotation,
-                                signature_params: extracted_params.clone(),
-                                value: Some(Box::new(value)),
-                                is_pub,
-                                is_mut,
+                            };
+                            state.skip(&TokenKind::Semicolon);
+                            return Some(Stmt {
+                                kind: StmtKind::Assign {
+                                    target: Box::new(target),
+                                    type_annotation,
+                                    signature_params: extracted_params.clone(),
+                                    value: Some(Box::new(value)),
+                                    is_pub,
+                                    is_mut,
+                                    span,
+                                },
                                 span,
-                            },
-                            span,
-                        });
+                            });
+                        }
+                        // 首组全为类型参数：落穿到标准 Lambda value 路径
                     }
 
                     // 构建 Lambda value（包含 merged params 和 body）
