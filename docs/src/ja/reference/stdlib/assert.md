@@ -5,7 +5,7 @@ description: 'アサーション'
 
 # std.assert
 
-アサーションモジュール。テストとサンプルで最も使用されるツール。
+アサーションモジュール。テストとサンプルで最もよく使われるツールです。
 
 ```yaoxiang
 use std.assert
@@ -15,9 +15,9 @@ use std.assert
 
 <!-- stdlib:table:assert start -->
 
-| 関数     | シグネチャ                           |
-| -------- | ------------------------------------ |
-| `assert` | `(cond: Bool, ?msg: String) -> Void` |
+| 関数     | シグネチャ                            |
+| -------- | ------------------------------------- |
+| `assert` | `(cond: Bool, ?msg: String) -> Never` |
 
 <!-- stdlib:table:assert end -->
 
@@ -28,29 +28,31 @@ use std.assert
 <!-- stdlib:sig:assert.assert start -->
 
 ```yaoxiang
-assert: (cond: Bool, ?msg: String) -> Void
+assert: (cond: Bool, ?msg: String) -> Never
 ```
 
 <!-- stdlib:sig:assert.assert end -->
 
-`cond`が真であることをアサートする。
+`cond` が真であることをアサートします。
 
-- `cond` —— 判定するブール式
-- `msg` —— 任意メッセージ、`?`は省略可能；条件不成立時に診断情報と一緒に出力される
+- `cond` —— 判定対象のブール式
+- `msg` —— オプションメッセージ。`?`
+  は省略可能であることを示します。条件が成立しない場合、診断と一緒に出力されます
 
-戻る：条件成立時に`Void`を返し、中断しない。エラー：条件が偽の場合`E6005`（アサーション失敗）をスローし、プログラムは非ゼロで終了する。
+戻り値：条件が成立する場合は `Void`
+を返し、実行を中断しません。エラー：条件が偽の場合、`E6005`（アサーション失敗）をスローし、プログラムは非ゼロコードで終了します。
 
 ```yaoxiang
 use std.assert
 
 main: () -> Void = {
     assert(1 > 0)
-    assert(1 > 0, "このリテラルアサーションは常に成立する")
+    assert(1 > 0, "この自明なアサーションは必ず成立する")
 }
 ```
 
-アサーションは**テストスイートの主判定手段**——`src/std/tests/*.yx` と `tests/yaoxiang/**` はどちらも
-`assert` の失敗時にプロセスエラーで終了する：
+アサーションは**テストコーパスの主要な判定手段**です——`src/std/tests/*.yx` と `tests/yaoxiang/**`
+はいずれも、`assert` の失敗が即座にプロセスエラーとなる方式で動作します：
 
 ```yaoxiang
 use std.assert
@@ -64,5 +66,5 @@ main: () -> Void = {
 
 ## 関連
 
-- [テスト仕様](../../dev/test-specification.md) —— テストスイートの構成と判定規則
-- [エラーコード参照](../error-code/) —— `E6005` アサーション失敗
+- [テスト仕様](../../dev/test-specification.md) —— コーパスの構成と判定規約
+- [エラーコードリファレンス](../error-code/) —— `E6005` アサーション失敗

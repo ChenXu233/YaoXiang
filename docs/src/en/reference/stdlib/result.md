@@ -5,24 +5,37 @@ description: 'Construction and unpacking of Result and Error'
 
 # std.result
 
-Construction and unpacking of `Result(T, E)`, and field access for the `Error` carrier.
+Unpacking of `Result(T, E)` and field access of the `Error` carrier. `Result` itself is a
+record-style sum type exported by `std.result` (RFC-010): construction uses **variant construction
+syntax**, deconstruction uses `match` variant patterns, and `?` propagation is driven by the `Try`
+interface (see below).
 
 ```yaoxiang
 use std.result
+
+r = Result(Int, String).ok(5)
+e = Result(Int, String).err("boom")
 ```
 
 ## Runtime Representation
 
-| Value               | Representation                        |
-| ------------------- | ------------------------------------- |
-| `Result.ok(value)`  | enum variant, carrying `value`        |
-| `Result.err(error)` | enum variant, carrying `error`        |
-| `Error`             | struct, with fields `(code, message)` |
+| Value                     | Representation                        |
+| ------------------------- | ------------------------------------- |
+| `Result(T, E).ok(value)`  | Enum variant, carrying `value`        |
+| `Result(T, E).err(error)` | Enum variant, carrying `error`        |
+| `Error`                   | Struct, with fields `(code, message)` |
 
-`Error.code` is a registered code from the `E6xxx` / `E7xxx` range per RFC-013 (a stable contract
-across versions), and `Error.message` is a human-readable description.
+`Error.code` is the registered code from the `E6xxx` / `E7xxx` segment of RFC-013 (a stable contract
+across versions), and `Error.message` is the human-readable description.
 
-## Function Summary
+## Try Interface (`?` propagation)
+
+`Result` instantiates the four-method `Try(Result(T, E), T, E)` interface in its type body, and the
+`?` operator is driven accordingly: `is_failure` determines failure, `success` retrieves the success
+payload, `residual` retrieves the failure payload, and `from_error` reconstructs a `Result` from an
+error value. These methods can also be called explicitly.
+
+## Function Overview
 
 <!-- stdlib:table:result start -->
 
@@ -32,62 +45,11 @@ across versions), and `Error.message` is a human-readable description.
 | `is_err`     | `(T: Type, E: Type)(self: &Result(T, E)) -> Bool`          |
 | `unwrap`     | `(T: Type, E: Type)(self: &Result(T, E)) -> T`             |
 | `unwrap_or`  | `(T: Type, E: Type)(self: &Result(T, E), default: T) -> T` |
-| `ok`         | `(T: Type, E: Type)(value: T) -> Result(T, E)`             |
-| `err`        | `(T: Type, E: Type)(error: E) -> Result(T, E)`             |
 | `unwrap_err` | `(T: Type, E: Type)(self: &Result(T, E)) -> E`             |
 | `code`       | `(self: &Error) -> String`                                 |
 | `message`    | `(self: &Error) -> String`                                 |
 
 <!-- stdlib:table:result end -->
-
-## Construction
-
-### ok
-
-<!-- stdlib:sig:result.ok start -->
-
-```yaoxiang
-ok: (T: Type, E: Type)(value: T) -> Result(T, E)
-```
-
-<!-- stdlib:sig:result.ok end -->
-
-Wraps a success value.
-
-The `Ok` value unpacked by `?` must be re-wrapped before it can continue to propagate along a
-`Result` return type; `ok` is that wrapper.
-
-```yaoxiang
-use std.assert
-use std.result
-
-main: () -> Void = {
-    r = result.ok(42)
-    assert(result.is_ok(r))
-}
-```
-
-### err
-
-<!-- stdlib:sig:result.err start -->
-
-```yaoxiang
-err: (T: Type, E: Type)(error: E) -> Result(T, E)
-```
-
-<!-- stdlib:sig:result.err end -->
-
-Wraps an error value.
-
-```yaoxiang
-use std.assert
-use std.result
-
-main: () -> Void = {
-    r = result.err("boom")
-    assert(result.is_err(r))
-}
-```
 
 ## Predicates
 
@@ -101,14 +63,14 @@ is_ok: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_ok end -->
 
-Whether this is the success variant. Read-only borrow; `self` can be used repeatedly.
+Whether it is the success variant. Read-only borrow; `self` can be used repeatedly.
 
 ```yaoxiang
 use std.assert
 use std.result
 
 main: () -> Void = {
-    r = result.ok(1)
+    r = Result(Int, String).ok(1)
     assert(result.is_ok(r))
     assert(result.is_ok(r))      // reusable
 }
@@ -124,19 +86,19 @@ is_err: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_err end -->
 
-Whether this is the error variant. Read-only borrow.
+Whether it is the error variant. Read-only borrow.
 
 ```yaoxiang
 use std.assert
 use std.result
 
 main: () -> Void = {
-    r = result.err("e")
+    r = Result(Int, String).err("e")
     assert(result.is_err(r))
 }
 ```
 
-## Extracting Values
+## Value Extraction
 
 ### unwrap
 
@@ -148,12 +110,12 @@ unwrap: (T: Type, E: Type)(self: &Result(T, E)) -> T
 
 <!-- stdlib:sig:result.unwrap end -->
 
-Extracts the success value.
+Extract the success value.
 
 Returns: the value carried by the `Ok` variant. Error: calling on an `Err` value throws `E6007`,
-with the message **including the original error code and description**, in a form like
-`unwrap called on Err value (E6010: parse_int: ...)`, so the failure reason is visible without first
-calling `unwrap_err`.
+with the message **including the original error code and description**, in the form
+`unwrap called on Err value (E6010: parse_int: ...)`, so there is no need to call `unwrap_err` first
+to see the cause of failure.
 
 ```yaoxiang
 use std.assert
@@ -176,9 +138,9 @@ unwrap_or: (T: Type, E: Type)(self: &Result(T, E), default: T) -> T
 
 <!-- stdlib:sig:result.unwrap_or end -->
 
-Extracts the success value, or returns `default` on `Err`.
+Extract the success value, or return `default` when it is `Err`.
 
-- `default` —— fallback value when `Err`
+- `default` — the fallback value when `Err`
 
 ```yaoxiang
 use std.assert
@@ -204,7 +166,7 @@ unwrap_err: (T: Type, E: Type)(self: &Result(T, E)) -> E
 
 <!-- stdlib:sig:result.unwrap_err end -->
 
-Extracts the error value.
+Extract the error value.
 
 Returns: the value carried by the `Err` variant. Error: calling on an `Ok` value throws `E6007`.
 
@@ -232,7 +194,7 @@ code: (self: &Error) -> String
 
 <!-- stdlib:sig:result.code end -->
 
-Reads the error code string, such as `"E6010"`.
+Read the error code string, such as `"E6010"`.
 
 > The signature type is `Error`, but the runtime error carrier is a struct with fields
 > `(code, message)`. Call directly on an `Error` value.
@@ -259,7 +221,7 @@ message: (self: &Error) -> String
 
 <!-- stdlib:sig:result.message end -->
 
-Reads the error description text.
+Read the error description text.
 
 ```yaoxiang
 use std.assert
@@ -273,7 +235,7 @@ main: () -> Void = {
 }
 ```
 
-## Related
+## See Also
 
-- [`std.string`](./string#parse_int) —— parsing function that produces a `Result`
-- [Error code reference](../error-code/) —— runtime error value codes such as `E6010` / `E6011`
+- [`std.string`](./string#parse_int) — parsing function that produces `Result`
+- [Error code reference](../error-code/) — runtime error value codes such as `E6010` / `E6011`
