@@ -6,9 +6,13 @@ created: '2026-05-29'
 updated: '2026-06-16'
 ---
 
-> **Deprecation Reason**: 2026-06-16 Language design decision — Lambdas/function values do not implicitly capture outer variables, instead using explicit parameter passing. `spawn { }` executes in the same frame and does not involve closure capture. This RFC's capture analysis system has been completely removed (~850 lines of code).
-> The correct solution for context dependence = closures only take parameters + currying solidifies at creation point (SPEC §12.3 / RFC-009 §2.3).
-> See [RFC-009 Design Decisions](../accepted/009-ownership-model.md#design-decision-record) for details.
+> **Deprecation Reason**: 2026-06-16 Language design decision — Lambdas/function values do not
+> implicitly capture outer variables, instead using explicit parameter passing. `spawn { }` executes
+> in the same frame and does not involve closure capture. This RFC's capture analysis system has
+> been completely removed (~850 lines of code). The correct solution for context dependence =
+> closures only take parameters + currying solidifies at creation point (SPEC §12.3 / RFC-009 §2.3).
+> See [RFC-009 Design Decisions](../accepted/009-ownership-model.md#design-decision-record) for
+> details.
 
 # RFC-023: Closure Capture Model
 
@@ -16,18 +20,24 @@ updated: '2026-06-16'
 >
 > - [RFC-007: Function Syntax Unification](../accepted/007-function-syntax-unification.md)
 > - [RFC-009: Ownership Model v9](../accepted/009-ownership-model.md)
-> - [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md)
->   — Section 2.4: Dup/Clone builtin marker trait
+> - [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md) — Section 2.4:
+>   Dup/Clone builtin marker trait
 
 ## Summary
 
-This RFC defines the **closure capture model** for the YaoXiang language. The compiler automatically analyzes external variables referenced within closure bodies, and based on variable types (Dup/non-Dup) and whether the closure escapes, automatically selects the capture mode — Dup types are copied directly, non-Dup non-escaping uses borrowing, and non-Dup escaping uses Move. Zero user annotations, sharing the same rules as automatic borrowing selection for function calls.
+This RFC defines the **closure capture model** for the YaoXiang language. The compiler automatically
+analyzes external variables referenced within closure bodies, and based on variable types
+(Dup/non-Dup) and whether the closure escapes, automatically selects the capture mode — Dup types
+are copied directly, non-Dup non-escaping uses borrowing, and non-Dup escaping uses Move. Zero user
+annotations, sharing the same rules as automatic borrowing selection for function calls.
 
 ## Motivation
 
 ### Why is it needed?
 
-Currently, closure capture is **not implemented** — the `env` field of the `MakeClosure` instruction is always empty, and lambdas cannot reference any external variables. The borrow token system requires closures to capture `&T` tokens (zero-cost copy), which is a core use case.
+Currently, closure capture is **not implemented** — the `env` field of the `MakeClosure` instruction
+is always empty, and lambdas cannot reference any external variables. The borrow token system
+requires closures to capture `&T` tokens (zero-cost copy), which is a core use case.
 
 ### Current Problem
 
@@ -42,7 +52,8 @@ filter_by: (items: List(Point), threshold: &Float) -> List(Point) = {
 
 ### Core Design
 
-Closure capture is fully automatically determined by the compiler. The rules are **exactly the same** as automatic borrowing selection for function calls:
+Closure capture is fully automatically determined by the compiler. The rules are **exactly the
+same** as automatic borrowing selection for function calls:
 
 ```
 Variable Type    Closure Escapes    Capture Mode
@@ -107,22 +118,24 @@ bad: (buf: Buffer) -> Void = {
 
 ### Syntax Changes
 
-**Zero syntax changes**. Capture mode is automatically determined by the compiler, and users do not need to annotate.
+**Zero syntax changes**. Capture mode is automatically determined by the compiler, and users do not
+need to annotate.
 
 ## Detailed Design
 
 ### Type System Impact
 
-Lambda type signatures remain unchanged: `(params) -> Return`. Captured variables are not reflected in the type signature; they are handled by the compiler during IR generation.
+Lambda type signatures remain unchanged: `(params) -> Return`. Captured variables are not reflected
+in the type signature; they are handled by the compiler during IR generation.
 
 ### Compiler Changes
 
-| Component                 | Changes                            | Notes   |
-| ------------------------- | ---------------------------------- | ------- |
-| `capture.rs` (new)        | Capture analysis + escape analysis + pattern selection | ~150 lines |
-| `expressions.rs`          | Lambda type inference calls capture analysis | ~10 lines  |
-| `ir_gen.rs`               | MakeClosure env population; ZST skip | ~80 lines  |
-| `ir.rs`                   | MakeClosure env type may need adjustment | ~5 lines   |
+| Component          | Changes                                                | Notes      |
+| ------------------ | ------------------------------------------------------ | ---------- |
+| `capture.rs` (new) | Capture analysis + escape analysis + pattern selection | ~150 lines |
+| `expressions.rs`   | Lambda type inference calls capture analysis           | ~10 lines  |
+| `ir_gen.rs`        | MakeClosure env population; ZST skip                   | ~80 lines  |
+| `ir.rs`            | MakeClosure env type may need adjustment               | ~5 lines   |
 
 **Capture Analysis Flow**:
 
@@ -176,14 +189,16 @@ for captured in captures {
 
 Capture mode does not affect runtime performance:
 
-- **Dup + ZST** (e.g., `&T` token) → zero instructions, closure body directly references outer variable
+- **Dup + ZST** (e.g., `&T` token) → zero instructions, closure body directly references outer
+  variable
 - **Dup + non-ZST** (e.g., Int) → one register copy
 - **Borrow/BorrowMut** → token creation (compile-time concept, zero overhead)
 - **Move** → same cost as normal Move
 
 ### Backward Compatibility
 
-Fully compatible. Currently all lambdas cannot capture outer variables; this RFC only adds expressiveness and does not break any existing code.
+Fully compatible. Currently all lambdas cannot capture outer variables; this RFC only adds
+expressiveness and does not break any existing code.
 
 ## Trade-offs
 
@@ -196,32 +211,36 @@ Fully compatible. Currently all lambdas cannot capture outer variables; this RFC
 
 ### Disadvantages
 
-1. **Conservative escape analysis**: When unable to determine, treats as escaping, potentially unnecessarily moving
+1. **Conservative escape analysis**: When unable to determine, treats as escaping, potentially
+   unnecessarily moving
 2. **Implicit**: Capture mode is not visible in code; debugging requires compiler output
 
 ## Alternative Solutions
 
-| Solution                    | Why Not Chosen                     |
-| --------------------------- | ---------------------------------- |
-| Rust-style explicit `move` keyword | Introduces new syntax, increases user cognitive burden |
-| All Move                    | Cannot express zero-cost token borrowing |
-| All Borrow                  | Closure escape would lead to dangling references |
-| User manually annotates capture mode | Violates "compiler fully automatic" design philosophy |
+| Solution                             | Why Not Chosen                                         |
+| ------------------------------------ | ------------------------------------------------------ |
+| Rust-style explicit `move` keyword   | Introduces new syntax, increases user cognitive burden |
+| All Move                             | Cannot express zero-cost token borrowing               |
+| All Borrow                           | Closure escape would lead to dangling references       |
+| User manually annotates capture mode | Violates "compiler fully automatic" design philosophy  |
 
 ## Implementation Strategy
 
 ### Phase Division
 
-1. **Phase 1**: Capture analysis (only identify external variable references, no capture mode distinction)
+1. **Phase 1**: Capture analysis (only identify external variable references, no capture mode
+   distinction)
 2. **Phase 2**: Escape analysis + pattern selection
 3. **Phase 3**: IR generation + ZST optimization
 4. **Phase 4**: Borrow conflict detection integration
 
 ### Dependencies
 
-- Depends on RFC-011 (generic type system, Section 2.4 Dup/Clone trait) — needs Dup trait to determine if variable is copyable
+- Depends on RFC-011 (generic type system, Section 2.4 Dup/Clone trait) — needs Dup trait to
+  determine if variable is copyable
 - Depends on RFC-009 v9 (borrow tokens) — Borrow/BorrowMut capture modes need token types
-- After RFC-023 and this RFC implementation, the borrow token system (RFC-009 v9 implementation) can begin
+- After RFC-023 and this RFC implementation, the borrow token system (RFC-009 v9 implementation) can
+  begin
 
 ### Risks
 
@@ -230,12 +249,12 @@ Fully compatible. Currently all lambdas cannot capture outer variables; this RFC
 
 ## Design Decision Record
 
-| Decision                       | Decision           | Reason                              | Date       |
-| ------------------------------ | ------------------ | ----------------------------------- | ---------- |
-| Capture mode selection         | Fully automatic    | Unified with function call rules    | 2026-05-29 |
-| Escape analysis               | Conservative principle | When in doubt, treat as escaping, safety first | 2026-05-29 |
-| ZST optimization              | Skip at IR generation | Simpler than subsequent optimization pass | 2026-05-29 |
-| Capture not reflected in type signature | Compiler internal handling | Keep lambda type concise      | 2026-05-29 |
+| Decision                                | Decision                   | Reason                                         | Date       |
+| --------------------------------------- | -------------------------- | ---------------------------------------------- | ---------- |
+| Capture mode selection                  | Fully automatic            | Unified with function call rules               | 2026-05-29 |
+| Escape analysis                         | Conservative principle     | When in doubt, treat as escaping, safety first | 2026-05-29 |
+| ZST optimization                        | Skip at IR generation      | Simpler than subsequent optimization pass      | 2026-05-29 |
+| Capture not reflected in type signature | Compiler internal handling | Keep lambda type concise                       | 2026-05-29 |
 
 ## References
 
@@ -243,8 +262,8 @@ Fully compatible. Currently all lambdas cannot capture outer variables; this RFC
 
 - [RFC-007: Function Syntax Unification](../accepted/007-function-syntax-unification.md)
 - [RFC-009: Ownership Model v9](../accepted/009-ownership-model.md)
-- [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md) — Section 2.4: Dup/Clone builtin marker
-  trait
+- [RFC-011: Generic Type System Design](../accepted/011-generic-type-system.md) — Section 2.4:
+  Dup/Clone builtin marker trait
 
 ### External References
 

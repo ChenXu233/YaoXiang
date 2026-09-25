@@ -15,7 +15,7 @@ use std.assert
 
 <!-- stdlib:table:assert start -->
 
-| Function | Signature                           |
+| Function | Signature                            |
 | -------- | ------------------------------------ |
 | `assert` | `(cond: Bool, ?msg: String) -> Void` |
 
@@ -36,9 +36,11 @@ assert: (cond: Bool, ?msg: String) -> Void
 Asserts that `cond` is true.
 
 - `cond` — The boolean expression to evaluate
-- `msg` — Optional message, `?` indicates it can be omitted; output together with diagnostics when the condition doesn't hold
+- `msg` — Optional message, `?` indicates it can be omitted; output together with diagnostics when
+  the condition doesn't hold
 
-Returns: Returns `Void` when the condition holds, without interrupting execution. Error: Throws `E6005` (assertion failed) when the condition is false, and the program exits with a non-zero code.
+Returns: Returns `Void` when the condition holds, without interrupting execution. Error: Throws
+`E6005` (assertion failed) when the condition is false, and the program exits with a non-zero code.
 
 ```yaoxiang
 use std.assert
@@ -49,7 +51,9 @@ main: () -> Void = {
 }
 ```
 
-Assertions are the **primary judgment mechanism in test suites** — both `src/std/tests/*.yx` and `tests/yaoxiang/**` operate on the principle that an `assert` failure causes the process to report an error:
+Assertions are the **primary judgment mechanism in test suites** — both `src/std/tests/*.yx` and
+`tests/yaoxiang/**` operate on the principle that an `assert` failure causes the process to report
+an error:
 
 ```yaoxiang
 use std.assert

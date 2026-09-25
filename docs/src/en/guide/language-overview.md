@@ -1,11 +1,11 @@
 ---
-title: 'Syntax Cheatsheet'
+title: 'Syntax Cheat Sheet'
 ---
 
-# Syntax Cheatsheet
+# Syntax Cheat Sheet
 
-Understand YaoXiang core syntax in 5 minutes. For in-depth learning, visit the
-[Tutorial](../../tutorial/index.md).
+Understand YaoXiang's core syntax in 5 minutes. For deeper learning, visit the
+[Tutorial](../tutorial/index.md).
 
 ## Variables
 
@@ -21,7 +21,7 @@ pub version = "1.0"       // 公开导出
 
 ## Functions
 
-Everything is `name: type = value`. Functions are also values.
+Everything is `name: type = value`. Functions are values too.
 
 ```yaoxiang
 // 表达式形式（直接返回值）
@@ -53,7 +53,7 @@ greet: (name: String) -> Void = {
 
 ## Types
 
-No `type`, `struct`, `trait`, `impl` keywords. A unified declaration handles everything.
+No `type`, `struct`, `trait`, or `impl` keywords. A single unified declaration handles everything.
 
 ```yaoxiang
 // 记录类型
@@ -226,7 +226,7 @@ backup = data.clone()
 
 ## Concurrency
 
-spawn is the only parallel primitive. No async/await, no Send/Sync.
+`spawn` is the only parallelism primitive. No async/await, no Send/Sync.
 
 ```yaoxiang
 // spawn 块：子表达式自动并行

@@ -4,7 +4,9 @@ title: FFI Specification
 
 # FFI Specification
 
-This document defines the FFI (Foreign Function Interface) specification for the YaoXiang programming language, including type definitions, function declarations, method bindings, and opaque type handling.
+This document defines the FFI (Foreign Function Interface) specification for the YaoXiang
+programming language, including type definitions, function declarations, method bindings, and opaque
+type handling.
 
 > **Detailed Design**: For the complete FFI design, motivation, and trade-offs, see
 > [RFC-026: FFI Core Mechanism](../../design/rfc/accepted/026-ffi-core-mechanism.md).
@@ -22,11 +24,11 @@ Default no return returns Void
 
 ### 1.2 Components of FFI
 
-| Component     | Description                          | Syntax                   |
-| ------------- | ------------------------------------ | ------------------------ |
-| Type Definition | Define FFI types (opaque or transparent) | `unsafe {}` + `return` |
-| Function Declaration | Declare external functions      | `native("symbol")`       |
-| Method Binding | Bind methods to types                | `[0]` syntax             |
+| Component            | Description                              | Syntax                 |
+| -------------------- | ---------------------------------------- | ---------------------- |
+| Type Definition      | Define FFI types (opaque or transparent) | `unsafe {}` + `return` |
+| Function Declaration | Declare external functions               | `native("symbol")`     |
+| Method Binding       | Bind methods to types                    | `[0]` syntax           |
 
 ---
 
@@ -107,21 +109,22 @@ sqlite3_exec: (db: SqliteDb, sql: String) -> Int32 = native("sqlite3_exec")
 
 ### 3.2 Parameter Type Mapping
 
-FFI function parameter types directly use YaoXiang types, and the compiler automatically handles C type mapping:
+FFI function parameter types directly use YaoXiang types, and the compiler automatically handles C
+type mapping:
 
-| C Type               | YaoXiang Type     |
-| -------------------- | ----------------- |
-| `int`                | `Int32`           |
-| `long`               | `Int64`           |
-| `float`              | `Float32`         |
-| `double`             | `Float64`         |
-| `char`               | `Char`            |
-| `char*`              | `String`          |
-| `bool`               | `Bool`            |
-| `size_t`             | `Uint`            |
-| `void*`              | `*Void`           |
-| `struct T*`          | `T` (transparent type)   |
-| `typedef struct T T` | `T` (opaque type) |
+| C Type               | YaoXiang Type          |
+| -------------------- | ---------------------- |
+| `int`                | `Int32`                |
+| `long`               | `Int64`                |
+| `float`              | `Float32`              |
+| `double`             | `Float64`              |
+| `char`               | `Char`                 |
+| `char*`              | `String`               |
+| `bool`               | `Bool`                 |
+| `size_t`             | `Uint`                 |
+| `void*`              | `*Void`                |
+| `struct T*`          | `T` (transparent type) |
+| `typedef struct T T` | `T` (opaque type)      |
 
 ### 3.3 Return Types
 

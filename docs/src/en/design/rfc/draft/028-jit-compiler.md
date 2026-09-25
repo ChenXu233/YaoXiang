@@ -17,7 +17,11 @@ issue: '#101'
 
 ## Abstract
 
-This document proposes introducing a Cranelift JIT compiler for YaoXiang's VM backend, upgrading the VM from a pure interpreter to a **multi-level execution engine**: cold code executes via interpretation, hot functions are compiled to native code via Cranelift. The JIT path shares the IR normalization pass with RFC-018's LLVM AOT path; Cranelift handles fast JIT compilation while LLVM handles deep AOT optimization—each excels at its own use case.
+This document proposes introducing a Cranelift JIT compiler for YaoXiang's VM backend, upgrading the
+VM from a pure interpreter to a **multi-level execution engine**: cold code executes via
+interpretation, hot functions are compiled to native code via Cranelift. The JIT path shares the IR
+normalization pass with RFC-018's LLVM AOT path; Cranelift handles fast JIT compilation while LLVM
+handles deep AOT optimization—each excels at its own use case.
 
 **Core positioning: JIT serves the VM, not replaces it.**
 
@@ -25,22 +29,27 @@ This document proposes introducing a Cranelift JIT compiler for YaoXiang's VM ba
 
 ### Why do we need JIT?
 
-The current VM backend is a pure interpreter, executing 10-100x slower than native code. During development, tests, scripts, and local debugging are frequently run—these scenarios don't need AOT's extreme optimization, but require noticeably faster execution than an interpreter.
+The current VM backend is a pure interpreter, executing 10-100x slower than native code. During
+development, tests, scripts, and local debugging are frequently run—these scenarios don't need AOT's
+extreme optimization, but require noticeably faster execution than an interpreter.
 
 ### Why not use only LLVM AOT?
 
-LLVM AOT compilation takes a long time (seconds), unsuitable for development iteration. Development requires a "change and run" experience: modify one line of code → rerun → see results almost instantly. Cranelift JIT compiles a single function in just 1-5ms, imperceptible to users.
+LLVM AOT compilation takes a long time (seconds), unsuitable for development iteration. Development
+requires a "change and run" experience: modify one line of code → rerun → see results almost
+instantly. Cranelift JIT compiles a single function in just 1-5ms, imperceptible to users.
 
 ### Why Cranelift instead of LLVM ORC JIT?
 
-| Dimension      | Cranelift JIT          | LLVM ORC JIT            |
-| -------------- | ---------------------- | ----------------------- |
-| Compilation speed | 1-5ms/function      | 10-100ms/function       |
-| Dependency size   | Small               | Large (requires full LLVM) |
-| Code quality   | 70-80% of LLVM -O2    | Extremely high          |
-| Use case       | Development debugging, rapid iteration | Not suitable (see tradeoffs in this document) |
+| Dimension         | Cranelift JIT                          | LLVM ORC JIT                                  |
+| ----------------- | -------------------------------------- | --------------------------------------------- |
+| Compilation speed | 1-5ms/function                         | 10-100ms/function                             |
+| Dependency size   | Small                                  | Large (requires full LLVM)                    |
+| Code quality      | 70-80% of LLVM -O2                     | Extremely high                                |
+| Use case          | Development debugging, rapid iteration | Not suitable (see tradeoffs in this document) |
 
-Cranelift compiles fast with sufficient code quality. LLVM is reserved for AOT's offline deep optimization. One tool, one job.
+Cranelift compiles fast with sufficient code quality. LLVM is reserved for AOT's offline deep
+optimization. One tool, one job.
 
 ## Proposal
 
@@ -77,7 +86,8 @@ Source code → Frontend (shared) → IR → ┬→ Bytecode codegen → VM Inte
                                          └→ LLVM AOT codegen → .o → link → exe (production)
 ```
 
-JIT and AOT share the **IR normalization pass** (`middle/passes/ir_normalize.rs`), with the underlying codegen switching from LLVM to Cranelift.
+JIT and AOT share the **IR normalization pass** (`middle/passes/ir_normalize.rs`), with the
+underlying codegen switching from LLVM to Cranelift.
 
 ### Execution Flow
 
@@ -122,9 +132,11 @@ src/
 
 **Key constraints**:
 
-- `backends/jit/` depends only on `middle/` (IR definitions, normalization passes), standard library, and Cranelift crate
+- `backends/jit/` depends only on `middle/` (IR definitions, normalization passes), standard
+  library, and Cranelift crate
 - `backends/jit/` does not depend on `backends/llvm/`, they are peer backends
-- `backends/jit/` does not depend on `backends/interpreter/`, interacts through `FunctionEntry` interface
+- `backends/jit/` does not depend on `backends/interpreter/`, interacts through `FunctionEntry`
+  interface
 
 ### 2. Profiling Analysis and Tiered Triggering
 
@@ -136,7 +148,8 @@ Warm ──(invocation > 200)─────────────────
 Hot ──(submit compilation queue, compilation complete)──→ Compiled
 ```
 
-> Thresholds are configurable; these are default values. Reference: actual threshold ranges from LuaJIT, JVM C1, V8 Sparkplug (50-1000).
+> Thresholds are configurable; these are default values. Reference: actual threshold ranges from
+> LuaJIT, JVM C1, V8 Sparkplug (50-1000).
 
 #### 2.2 Counters
 
@@ -151,7 +164,9 @@ state: AtomicU8,              // Cold | Warm | Hot | Compiled
 
 #### 2.3 Decay Mechanism
 
-Every 5 seconds, all counters shift right by 1 bit (multiply by 0.5). Prevents code that runs at high frequency but only once during startup (such as initialization traversal) from triggering unnecessary JIT compilation.
+Every 5 seconds, all counters shift right by 1 bit (multiply by 0.5). Prevents code that runs at
+high frequency but only once during startup (such as initialization traversal) from triggering
+unnecessary JIT compilation.
 
 ```rust
 fn decay(entry: &FunctionEntry) {
@@ -178,7 +193,8 @@ Interpreter thread                          Background JIT thread
     │  Goes directly to native code              │
 ```
 
-During compilation, the function still executes via the interpreter. After compilation completes, the next call switches atomically to JIT code.
+During compilation, the function still executes via the interpreter. After compilation completes,
+the next call switches atomically to JIT code.
 
 ### 3. IR → Cranelift Compilation Pipeline
 
@@ -194,49 +210,54 @@ YaoXiang IR (stack form)
 
 #### 3.2 YaoXiang Type → Cranelift Type
 
-| YaoXiang Type | Cranelift Type        | Description                        |
-| ------------- | --------------------- | ---------------------------------- |
-| `Int`         | `i64`                 |                                    |
-| `Int32`       | `i32`                 |                                    |
-| `Float`       | `f64`                 |                                    |
-| `Float32`     | `f32`                 |                                    |
-| `Bool`        | `i8`                  | Cranelift has no `i1`, use `i8`   |
-| `Char`        | `i32`                 | Unicode code point                 |
-| `String`      | `{ i64, i64 }`        | Pointer + length                   |
-| `Void`        | Empty tuple           |                                    |
-| `&T`          | —                     | Zero-sized, disappears after compilation |
-| `&mut T`      | —                     | Zero-sized, disappears after compilation |
-| `ref T`       | `{ i64, i64 }`        | Reference count pointer + data pointer |
-| `*T`          | `i64`                 | Raw pointer                        |
-| `List(T)`     | `{ i64, i64, i64 }`   | Data pointer + length + capacity   |
-| Struct        | Cranelift struct      |                                    |
-| Record enum   | `{ i64, [max_payload] }` | Tag + union                    |
-| `?T`          | `{ i8, T }`           | Has-value flag + data              |
+| YaoXiang Type | Cranelift Type           | Description                              |
+| ------------- | ------------------------ | ---------------------------------------- |
+| `Int`         | `i64`                    |                                          |
+| `Int32`       | `i32`                    |                                          |
+| `Float`       | `f64`                    |                                          |
+| `Float32`     | `f32`                    |                                          |
+| `Bool`        | `i8`                     | Cranelift has no `i1`, use `i8`          |
+| `Char`        | `i32`                    | Unicode code point                       |
+| `String`      | `{ i64, i64 }`           | Pointer + length                         |
+| `Void`        | Empty tuple              |                                          |
+| `&T`          | —                        | Zero-sized, disappears after compilation |
+| `&mut T`      | —                        | Zero-sized, disappears after compilation |
+| `ref T`       | `{ i64, i64 }`           | Reference count pointer + data pointer   |
+| `*T`          | `i64`                    | Raw pointer                              |
+| `List(T)`     | `{ i64, i64, i64 }`      | Data pointer + length + capacity         |
+| Struct        | Cranelift struct         |                                          |
+| Record enum   | `{ i64, [max_payload] }` | Tag + union                              |
+| `?T`          | `{ i8, T }`              | Has-value flag + data                    |
 
-> Compared with LLVM type table in RFC-018 §3: Cranelift doesn't distinguish pointer types and has no `i1`, making it overall simpler.
+> Compared with LLVM type table in RFC-018 §3: Cranelift doesn't distinguish pointer types and has
+> no `i1`, making it overall simpler.
 
 #### 3.3 Key Instruction Translation
 
-| IR Instruction              | Cranelift IR                               |
-| --------------------------- | ------------------------------------------ |
-| `Add { dst, lhs, rhs }`     | `iadd` (integer) / `fadd` (float)         |
-| `Sub { dst, lhs, rhs }`     | `isub` / `fsub`                            |
-| `Mul { dst, lhs, rhs }`     | `imul` / `fmul`                            |
-| `Div { dst, lhs, rhs }`     | `sdiv` / `udiv` / `fdiv`                   |
-| `Eq { dst, lhs, rhs }`      | `icmp eq` / `fcmp eq`                      |
-| `Jmp(label)`                | `jump`                                     |
-| `JmpIf(cond, label)`        | `brnz`                                     |
-| `Ret(Some(v))`              | `return`                                   |
-| `Call { dst, func, args }`  | `call`                                     |
-| `Load { dst, src }`         | `load`                                     |
-| `Store { dst, src }`        | `store`                                    |
-| `Spawn { ... }`             | Call runtime `task_spawn` + `task_wait_all` |
+| IR Instruction             | Cranelift IR                                |
+| -------------------------- | ------------------------------------------- |
+| `Add { dst, lhs, rhs }`    | `iadd` (integer) / `fadd` (float)           |
+| `Sub { dst, lhs, rhs }`    | `isub` / `fsub`                             |
+| `Mul { dst, lhs, rhs }`    | `imul` / `fmul`                             |
+| `Div { dst, lhs, rhs }`    | `sdiv` / `udiv` / `fdiv`                    |
+| `Eq { dst, lhs, rhs }`     | `icmp eq` / `fcmp eq`                       |
+| `Jmp(label)`               | `jump`                                      |
+| `JmpIf(cond, label)`       | `brnz`                                      |
+| `Ret(Some(v))`             | `return`                                    |
+| `Call { dst, func, args }` | `call`                                      |
+| `Load { dst, src }`        | `load`                                      |
+| `Store { dst, src }`       | `store`                                     |
+| `Spawn { ... }`            | Call runtime `task_spawn` + `task_wait_all` |
 
-> See the main RFC body for the complete translation table. Core principle: Cranelift's instruction set covers all YaoXiang IR operations, no semantic gaps.
+> See the main RFC body for the complete translation table. Core principle: Cranelift's instruction
+> set covers all YaoXiang IR operations, no semantic gaps.
 
 #### 3.4 Coexistence of Two Normalization Forms
 
-The VM interpreter needs stack semantics (`Push`/`Pop`/`Dup`/`Swap`), while Cranelift JIT and LLVM AOT need register/SSA. The IR normalization pass performs one conversion (RFC-018 §4.0), shared by JIT and AOT, without changing the IR representation itself. Each backend consumes the same IR according to its own requirements.
+The VM interpreter needs stack semantics (`Push`/`Pop`/`Dup`/`Swap`), while Cranelift JIT and LLVM
+AOT need register/SSA. The IR normalization pass performs one conversion (RFC-018 §4.0), shared by
+JIT and AOT, without changing the IR representation itself. Each backend consumes the same IR
+according to its own requirements.
 
 ### 4. Function Entry Table and Atomic Replacement
 
@@ -265,7 +286,8 @@ Caller
     └─ JIT code address           → Jump directly to native code
 ```
 
-One pointer dereference. Modern CPU branch predictors handle indirect jumps: first prediction is wrong, then all correct. Cost ~1 cycle.
+One pointer dereference. Modern CPU branch predictors handle indirect jumps: first prediction is
+wrong, then all correct. Cost ~1 cycle.
 
 #### 4.3 Atomic Switch
 
@@ -282,7 +304,8 @@ fn install_jit_code(entry: &FunctionEntry, jit_code: *mut u8) -> bool {
 }
 ```
 
-No interpreter pause, no safepoint wait, no call site traversal. One atomic operation completes the switch.
+No interpreter pause, no safepoint wait, no call site traversal. One atomic operation completes the
+switch.
 
 ### 5. Code Cache
 
@@ -319,11 +342,15 @@ impl CodeCache {
 }
 ```
 
-Each module allocates contiguous mmap executable pages; all JIT functions within a module are allocated from the same page. When a module is invalidated, the entire page is reclaimed, no need to free function by function.
+Each module allocates contiguous mmap executable pages; all JIT functions within a module are
+allocated from the same page. When a module is invalidated, the entire page is reclaimed, no need to
+free function by function.
 
 ### 6. Reserved Extension Points for Hot Reload
 
-The following interfaces compile but are not called before hot reload implementation. Interface design principle: **JIT implementation only needs `insert` and single-function `compare_exchange`; module-level operations are left for hot reload.**
+The following interfaces compile but are not called before hot reload implementation. Interface
+design principle: **JIT implementation only needs `insert` and single-function `compare_exchange`;
+module-level operations are left for hot reload.**
 
 ```rust
 /// Code cache extension interface (reserved, not implemented)
@@ -345,44 +372,55 @@ trait CompileQueueExt {
 }
 ```
 
-**Why group by module?**
-JIT itself only needs functions. Organizing by module is entirely for hot reload: after a module is recompiled, the entire function set can be atomically replaced instead of CAS per function—the latter would cause inconsistent state when there are circular dependencies between functions.
+**Why group by module?** JIT itself only needs functions. Organizing by module is entirely for hot
+reload: after a module is recompiled, the entire function set can be atomically replaced instead of
+CAS per function—the latter would cause inconsistent state when there are circular dependencies
+between functions.
 
 ## Tradeoffs
 
 ### Advantages
 
-1. **Zero-perceptible compilation delay**: Cranelift 1-5ms/function, background thread compilation, interpreter doesn't pause
-2. **Shared infrastructure**: JIT and AOT share the IR normalization pass (RFC-018 §4.0), no reinventing the wheel
-3. **Non-disruptive**: Pure incremental feature. VM unchanged, interpreter unchanged, just one more faster hot path
+1. **Zero-perceptible compilation delay**: Cranelift 1-5ms/function, background thread compilation,
+   interpreter doesn't pause
+2. **Shared infrastructure**: JIT and AOT share the IR normalization pass (RFC-018 §4.0), no
+   reinventing the wheel
+3. **Non-disruptive**: Pure incremental feature. VM unchanged, interpreter unchanged, just one more
+   faster hot path
 4. **No LLVM dependency**: VM doesn't introduce LLVM, remains lightweight
-5. **Native multi-platform support**: Cranelift natively supports x86_64 and ARM64, covering all target platforms
-6. **Hot reload reservation**: Code cache grouped by module + function entry indirect jump, laying structural foundation for future hot reload
+5. **Native multi-platform support**: Cranelift natively supports x86_64 and ARM64, covering all
+   target platforms
+6. **Hot reload reservation**: Code cache grouped by module + function entry indirect jump, laying
+   structural foundation for future hot reload
 
 ### Disadvantages
 
-1. **Cranelift new dependency**: Introduces new external crate, requires familiarization with its API
-2. **Debugging complexity**: JIT-generated code stack frames need to be compatible with interpreter stack frames, debug info mapping requires extra handling
-3. **Cold start heat delay**: First few seconds after program startup have no JIT acceleration, heat needs to accumulate
-4. **Platform ABI**: mmap and calling conventions on different platforms (Linux/macOS/Windows) need separate adaptation
+1. **Cranelift new dependency**: Introduces new external crate, requires familiarization with its
+   API
+2. **Debugging complexity**: JIT-generated code stack frames need to be compatible with interpreter
+   stack frames, debug info mapping requires extra handling
+3. **Cold start heat delay**: First few seconds after program startup have no JIT acceleration, heat
+   needs to accumulate
+4. **Platform ABI**: mmap and calling conventions on different platforms (Linux/macOS/Windows) need
+   separate adaptation
 
 ### Consistency with Related RFCs
 
-| RFC                    | Consistency                                          |
-| ---------------------- | ---------------------------------------------------- |
-| RFC-018 LLVM AOT       | ✅ Shares IR normalization pass, JIT and AOT are peer backends |
-| RFC-024 spawn block concurrency | ✅ Spawn blocks compiled to runtime function calls |
-| RFC-008 Runtime architecture | ✅ All three runtime tiers (Embedded/Standard/Full) support JIT |
+| RFC                             | Consistency                                                     |
+| ------------------------------- | --------------------------------------------------------------- |
+| RFC-018 LLVM AOT                | ✅ Shares IR normalization pass, JIT and AOT are peer backends  |
+| RFC-024 spawn block concurrency | ✅ Spawn blocks compiled to runtime function calls              |
+| RFC-008 Runtime architecture    | ✅ All three runtime tiers (Embedded/Standard/Full) support JIT |
 
 ## Alternative Solutions
 
-| Solution                     | Why not chosen                                        |
-| ---------------------------- | ----------------------------------------------------- |
-| Only LLVM AOT, no JIT        | During development, need to recompile entire program, loses rapid iteration experience |
-| LLVM ORC JIT                | High compilation delay (10-100ms), large LLVM dependency, unsuitable for embedding in VM |
-| Custom lightweight JIT (dynasm) | Hand-written backend has high maintenance cost, Cranelift is more mature |
-| Template JIT                | Zero optimization, poor code quality, wastes JIT compilation time for nothing |
-| Whole-program JIT (no interpreter) | Slow cold start, simple scripts don't deserve compilation |
+| Solution                           | Why not chosen                                                                           |
+| ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| Only LLVM AOT, no JIT              | During development, need to recompile entire program, loses rapid iteration experience   |
+| LLVM ORC JIT                       | High compilation delay (10-100ms), large LLVM dependency, unsuitable for embedding in VM |
+| Custom lightweight JIT (dynasm)    | Hand-written backend has high maintenance cost, Cranelift is more mature                 |
+| Template JIT                       | Zero optimization, poor code quality, wastes JIT compilation time for nothing            |
+| Whole-program JIT (no interpreter) | Slow cold start, simple scripts don't deserve compilation                                |
 
 ## Dependencies
 
@@ -397,14 +435,15 @@ JIT itself only needs functions. Organizing by module is entirely for hot reload
 - [RFC-018: LLVM AOT Compiler Design](../accepted/018-llvm-aot-compiler.md)
 - [RFC-024: Concurrency Model Based on Spawn Blocks](../accepted/024-concurrency-model.md)
 - [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](../accepted/008-runtime-concurrency-model.md)
-- Hölzle, U. (1994). _Adaptive Optimization for Self: Reconciling High Performance with Exploratory Programming_. Stanford.
+- Hölzle, U. (1994). _Adaptive Optimization for Self: Reconciling High Performance with Exploratory
+  Programming_. Stanford.
 
 ---
 
 ## Lifecycle and Destination
 
-| Status       | Location                              | Description                        |
-| ------------ | ------------------------------------- | ---------------------------------- |
-| **Draft**    | `docs/src/design/rfc/draft/`          | Author draft, awaiting review      |
-| **In Review**| `docs/src/design/rfc/review/`          | Open for community discussion      |
-| **Accepted** | `docs/src/design/rfc/accepted/`       | Becomes official design document   |
+| Status        | Location                        | Description                      |
+| ------------- | ------------------------------- | -------------------------------- |
+| **Draft**     | `docs/src/design/rfc/draft/`    | Author draft, awaiting review    |
+| **In Review** | `docs/src/design/rfc/review/`   | Open for community discussion    |
+| **Accepted**  | `docs/src/design/rfc/accepted/` | Becomes official design document |

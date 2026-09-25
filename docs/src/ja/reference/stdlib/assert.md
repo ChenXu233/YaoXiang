@@ -49,7 +49,8 @@ main: () -> Void = {
 }
 ```
 
-アサーションは**テストスイートの主判定手段**——`src/std/tests/*.yx` と `tests/yaoxiang/**` はどちらも `assert` の失敗時にプロセスエラーで終了する：
+アサーションは**テストスイートの主判定手段**——`src/std/tests/*.yx` と `tests/yaoxiang/**` はどちらも
+`assert` の失敗時にプロセスエラーで終了する：
 
 ```yaoxiang
 use std.assert

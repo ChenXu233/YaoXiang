@@ -1,5 +1,5 @@
 ---
-title: "yaoxiang format コマンドライン用法"
+title: 'yaoxiang format コマンドライン用法'
 description: フォーマットツールのコマンドラインパラメータと使用方法
 ---
 
@@ -27,15 +27,15 @@ yaoxiang format -w src/
 
 ## B. CLI パラメータ
 
-| パラメータ         | 説明                         | デフォルト値 |
-| ------------------ | ---------------------------- | ------------ |
-| `--dry-run`        | チェックモード、ファイルを変更しない | false        |
-| `-w`, `--write`    | 書き込みモード、ファイルを変更する   | false        |
-| `--stdout`         | stdout に出力                     | false        |
-| `--indent-width`   | インデント幅                       | 4            |
-| `--line-width`     | 最大行幅                           | 120          |
-| `--use-tabs`       | tab インデントを使用               | false        |
-| `--single-quote`   | シングルクォートを使用             | false        |
+| パラメータ       | 説明                                 | デフォルト値 |
+| ---------------- | ------------------------------------ | ------------ |
+| `--dry-run`      | チェックモード、ファイルを変更しない | false        |
+| `-w`, `--write`  | 書き込みモード、ファイルを変更する   | false        |
+| `--stdout`       | stdout に出力                        | false        |
+| `--indent-width` | インデント幅                         | 4            |
+| `--line-width`   | 最大行幅                             | 120          |
+| `--use-tabs`     | tab インデントを使用                 | false        |
+| `--single-quote` | シングルクォートを使用               | false        |
 
 ---
 

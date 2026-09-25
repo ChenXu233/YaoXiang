@@ -4,12 +4,15 @@ title: 'Function Definition and Calling'
 
 # Function Definition and Calling
 
-In the previous chapter, you learned how to declare variables. This chapter will take you through the core of YaoXiang—functions. YaoXiang's function syntax shares the same
-`name: type = value` model with variable declarations, so it should feel familiar.
+In the previous chapter, you learned how to declare variables. This chapter will take you through
+the core of YaoXiang—functions. YaoXiang's function syntax shares the same `name: type = value`
+model with variable declarations, so it should feel familiar.
 
 ## Functions Are Lambdas
 
-Let's start with the most important concept: **In YaoXiang, a function is essentially a lambda expression**. No special `fn` keyword, no complex ceremony. Defining a function is simply giving a name to a lambda.
+Let's start with the most important concept: **In YaoXiang, a function is essentially a lambda
+expression**. No special `fn` keyword, no complex ceremony. Defining a function is simply giving a
+name to a lambda.
 
 ```
 # Any function is essentially a combination of these four parts:
@@ -21,13 +24,15 @@ name: (params) -> Return = body
  +-- Function name
 ```
 
-This is completely consistent with the `name: type = value` you learned in the previous chapter—the only difference is that the "type" here happens to be a function type.
+This is completely consistent with the `name: type = value` you learned in the previous chapter—the
+only difference is that the "type" here happens to be a function type.
 
 ---
 
 ## Expression Form: Return Value Directly
 
-The simplest functions don't need a `return` keyword. When the function body is a single expression, it serves directly as the return value:
+The simplest functions don't need a `return` keyword. When the function body is a single expression,
+it serves directly as the return value:
 
 ```yaoxiang
 // Expression form—return value directly, no return needed
@@ -44,7 +49,9 @@ sq = square(4)           // sq = 16
 msg = greet("World")     // msg = "Hello, World"
 ```
 
-This is called the **expression form**. When the function body is an expression (not a `{ }` code block), its value serves directly as the function's return value. No need to write `return`, and writing it would actually be wrong.
+This is called the **expression form**. When the function body is an expression (not a `{ }` code
+block), its value serves directly as the function's return value. No need to write `return`, and
+writing it would actually be wrong.
 
 ```yaoxiang
 // Correct: expression serves directly as return value
@@ -58,7 +65,8 @@ double: (x: Int) -> Int = x * 2
 
 ## Block Form: Explicit Return
 
-When a function involves multi-step calculations, wrap the function body in a `{ }` code block. **In code blocks, you must use the `return` statement to return a value**:
+When a function involves multi-step calculations, wrap the function body in a `{ }` code block. **In
+code blocks, you must use the `return` statement to return a value**:
 
 ```yaoxiang
 // Block form—must use return to return a value
@@ -73,7 +81,8 @@ factorial: (n: Int) -> Int = {
 f5 = factorial(5)        // f5 = 120
 ```
 
-The rule is simple: **expression form returns value directly; block form must use explicit `return`**. If you forget to write `return` in a block, the function defaults to returning `Void`.
+The rule is simple: **expression form returns value directly; block form must use explicit
+`return`**. If you forget to write `return` in a block, the function defaults to returning `Void`.
 
 ```yaoxiang
 // Note: this function has a bug
@@ -89,10 +98,10 @@ good_add: (a: Int, b: Int) -> Int = {
 
 Summary:
 
-| Form         | Syntax               | Return Value Method           |
-| ------------ | -------------------- | ----------------------------- |
-| Expression   | `name: ... = expr`   | Expression value directly     |
-| Block        | `name: ... = { ... }`| Must use explicit `return`    |
+| Form       | Syntax                | Return Value Method        |
+| ---------- | --------------------- | -------------------------- |
+| Expression | `name: ... = expr`    | Expression value directly  |
+| Block      | `name: ... = { ... }` | Must use explicit `return` |
 
 ---
 
@@ -109,7 +118,9 @@ multiply: (a: Int, b: Int) -> Int = a * b
 
 ### Parameter Types Must Be Annotated in Either Signature or Lambda Head
 
-YaoXiang's rule is: **when there are input parameters, the parameter types must be explicitly shown in at least one of the signature or lambda head**. Omitting from both sides will be rejected by the compiler.
+YaoXiang's rule is: **when there are input parameters, the parameter types must be explicitly shown
+in at least one of the signature or lambda head**. Omitting from both sides will be rejected by the
+compiler.
 
 ```yaoxiang
 // Method 1: Parameter types in signature (omit lambda head)
@@ -125,13 +136,15 @@ add: (a: Int, b: Int) -> Int = (a, b) => a + b
 // add = (a, b) => a + b   // ❌ compiler cannot infer parameter types
 ```
 
-**Method 1 is recommended**—parameter types in the signature, omit the lambda head. This is the most concise and clearest style.
+**Method 1 is recommended**—parameter types in the signature, omit the lambda head. This is the most
+concise and clearest style.
 
 ---
 
 ## Return Values
 
-The return value type of a function is written after `->`. `->` is the function type marker and cannot be omitted (if omitted, it will be parsed as other types).
+The return value type of a function is written after `->`. `->` is the function type marker and
+cannot be omitted (if omitted, it will be parsed as other types).
 
 ```yaoxiang
 // Return Int
@@ -176,11 +189,13 @@ In the syntax specification, function call form is defined as:
 Expr '(' ArgList? ')'
 ```
 
-Translated to everyday language: an expression followed by a pair of parentheses, with an optional parameter list inside the parentheses.
+Translated to everyday language: an expression followed by a pair of parentheses, with an optional
+parameter list inside the parentheses.
 
 ### Named Arguments
 
-In addition to positional arguments, YaoXiang also supports **named arguments**—specifying values by parameter name, order doesn't matter:
+In addition to positional arguments, YaoXiang also supports **named arguments**—specifying values by
+parameter name, order doesn't matter:
 
 ```yaoxiang
 // Named arguments—parameter name followed by equals, then value
@@ -205,7 +220,8 @@ msg = send(
 )
 ```
 
-Misspelling a parameter name or specifying it twice will result in a compile-time error, not silently treating it as positional:
+Misspelling a parameter name or specifying it twice will result in a compile-time error, not
+silently treating it as positional:
 
 ```yaoxiang
 // ❌ add has no parameter named c → E1014
@@ -259,7 +275,8 @@ main: () -> Void = {
 
 ## Multi-line Functions
 
-When function logic is more complex, use the block form to organize code. YaoXiang requires 4 spaces for indentation:
+When function logic is more complex, use the block form to organize code. YaoXiang requires 4 spaces
+for indentation:
 
 ```yaoxiang
 // Multi-step calculation
@@ -284,13 +301,16 @@ calculate_stats: (numbers: List(Int)) -> Float = {
 }
 ```
 
-In multi-line functions, you can use `#` for comments, declare `mut` local variables, and use `for` and `if` to build logic.
+In multi-line functions, you can use `#` for comments, declare `mut` local variables, and use `for`
+and `if` to build logic.
 
 ---
 
 ## pub and Auto Binding
 
-In a module, functions declared with the `pub` keyword can be imported and used by other modules. More interestingly, **`pub` functions automatically bind to types defined in the same file**, allowing OOP-style calls.
+In a module, functions declared with the `pub` keyword can be imported and used by other modules.
+More interestingly, **`pub` functions automatically bind to types defined in the same file**,
+allowing OOP-style calls.
 
 ```yaoxiang
 // point.yx
@@ -313,7 +333,9 @@ d1 = distance(p1, p2)       // Functional call
 d2 = p1.distance(p2)        // OOP style call (syntactic sugar)
 ```
 
-When the compiler sees `pub distance(p1: Point, p2: Point)`, it finds that `Point` is defined in the same file and automatically creates a `Point.distance` binding. You don't need to write any extra `impl` code.
+When the compiler sees `pub distance(p1: Point, p2: Point)`, it finds that `Point` is defined in the
+same file and automatically creates a `Point.distance` binding. You don't need to write any extra
+`impl` code.
 
 ---
 
@@ -356,12 +378,18 @@ result = add(1, b = 2)      // Mixed (positional first)
 
 You've mastered the core knowledge of YaoXiang functions:
 
-- **Unified syntax**: `name: (params) -> Return = body`, derived from variable declaration `name: type = value`
-- **Expression form**: `= expr`, expression value serves directly as return value, no `return` needed
+- **Unified syntax**: `name: (params) -> Return = body`, derived from variable declaration
+  `name: type = value`
+- **Expression form**: `= expr`, expression value serves directly as return value, no `return`
+  needed
 - **Block form**: `= { ...; return expr }`, must use explicit `return` inside blocks
-- **Parameter type annotations**: must write types in either signature or lambda head, recommended in signature
+- **Parameter type annotations**: must write types in either signature or lambda head, recommended
+  in signature
 - **Calling**: positional or named arguments, named arguments can be in any order
-- **pub auto binding**: `pub` functions automatically bind to types in the same file, supporting `obj.method()` calls
+- **pub auto binding**: `pub` functions automatically bind to types in the same file, supporting
+  `obj.method()` calls
 - **Simplest no-parameter**: `name = { ... }`, compiler automatically infers as `() -> Void`
 
-Next, you can continue learning the [Control Flow](../../../design/formatter/formatting-rules/control-flow.md) chapter to understand how to use `if`, `for`, and `while` in functions.
+Next, you can continue learning the
+[Control Flow](../../../design/formatter/formatting-rules/control-flow.md) chapter to understand how
+to use `if`, `for`, and `while` in functions.

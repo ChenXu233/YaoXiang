@@ -1,5 +1,5 @@
 ---
-title: "yaoxiang format CLI Usage"
+title: 'yaoxiang format CLI Usage'
 description: Command-line arguments and usage for the formatting tool
 ---
 
@@ -27,15 +27,15 @@ yaoxiang format -w src/
 
 ## B. CLI Parameters
 
-| Argument          | Description                     | Default |
-| ------------------|---------------------------------|---------|
-| `--dry-run`       | Check mode, does not modify files | false   |
-| `-w`, `--write`   | Write mode, modifies files       | false   |
-| `--stdout`        | Output to stdout                 | false   |
-| `--indent-width`  | Indent width                     | 4       |
-| `--line-width`    | Max line width                   | 120     |
-| `--use-tabs`      | Use tab indentation              | false   |
-| `--single-quote`  | Use single quotes                | false   |
+| Argument         | Description                       | Default |
+| ---------------- | --------------------------------- | ------- |
+| `--dry-run`      | Check mode, does not modify files | false   |
+| `-w`, `--write`  | Write mode, modifies files        | false   |
+| `--stdout`       | Output to stdout                  | false   |
+| `--indent-width` | Indent width                      | 4       |
+| `--line-width`   | Max line width                    | 120     |
+| `--use-tabs`     | Use tab indentation               | false   |
+| `--single-quote` | Use single quotes                 | false   |
 
 ---
 
