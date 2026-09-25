@@ -38,7 +38,7 @@ title: 'RFC 索引'
 | RFC-033 | [RFC-033: `^^` 反射运算符](./draft/033-reflection-operator.md) | 晨煦 | 2026-06-16 | 审核中 |
 | RFC-034 | [RFC-034: 统一调试工具链](./draft/034-debug-toolchain.md) | 晨煦 | 2026-07-06 | 草案 |
 | RFC-035 | [RFC-035: MCP Server 支持（AI Agent 集成）](./draft/035-mcp-server.md) | 晨煦 | 2026-07-11 | 草案 |
-| RFC-027a | [RFC-027a: 终止检查的证明函数兜底](./draft/027a-termination-proof-fallback.md) | 晨煦 | 2026-09-14 | 草案 |
+| RFC-027a | [RFC-027a: 终止检查的显式测度](./review/027a-termination-explicit-measure.md) | 晨煦 | 2026-09-14 | 审核中 |
 | RFC-029a | [RFC-029a: 模块缓存与增量重编译](./draft/029a-module-cache-incremental.md) | 晨煦 | 2026-09-07 | 草案 |
 
 ---
