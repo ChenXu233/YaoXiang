@@ -39,7 +39,7 @@ title: 'RFC Index'
 | RFC-033 | [RFC-033: `^^` Reflection Operator](./draft/033-reflection-operator.md)                                    | 晨煦   | 2026-06-16  | Under Review |
 | RFC-034 | [RFC-034: Unified Debug Toolchain](./draft/034-debug-toolchain.md)                                          | 晨煦   | 2026-07-06  | Draft  |
 | RFC-035 | [RFC-035: MCP Server Support (AI Agent Integration)](./draft/035-mcp-server.md)                             | 晨煦   | 2026-07-11  | Draft  |
-| RFC-039 | [RFC-039: Pattern Matching Completeness](./draft/039-pattern-matching-completeness.md)                      | 晨煦   | 2026-09-03  | Draft  |
+| RFC-010b | [RFC-010b: Pattern Matching Completeness](./draft/010b-pattern-matching-completeness.md)                    | 晨煦   | 2026-09-03  | Draft  |
 | RFC-027a| [RFC-027a: Explicit Measures for Termination Checking](./review/027a-termination-explicit-measure.md)      | 晨煦   | 2026-09-14  | Under Review |
 | RFC-029a| [RFC-029a: Module Cache and Incremental Recompilation](./draft/029a-module-cache-incremental.md)           | 晨煦   | 2026-09-07  | Draft  |
 

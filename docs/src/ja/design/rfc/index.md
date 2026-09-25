@@ -38,7 +38,7 @@ title: 'RFC インデックス'
 | RFC-033  | [RFC-033: `^^` リフレクション演算子](./draft/033-reflection-operator.md)                                 | 晨煦 | 2026-06-16 | レビュー中 |
 | RFC-034  | [RFC-034: 統一デバッグツールチェーン](./draft/034-debug-toolchain.md)                                      | 晨煦 | 2026-07-06 | 草案   |
 | RFC-035  | [RFC-035: MCPサーバーサポート（AI Agent統合）](./draft/035-mcp-server.md)                         | 晨煦 | 2026-07-11 | 草案   |
-| RFC-039  | [RFC-039: パターンマッチング完全性](./draft/039-pattern-matching-completeness.md)                        | 晨煦 | 2026-09-03 | 草案   |
+| RFC-010b  | [RFC-010b: パターンマッチング完全性](./draft/010b-pattern-matching-completeness.md)                        | 晨煦 | 2026-09-03 | 草案   |
 | RFC-027a | [RFC-027a: 終了検査の明示的測度](./review/027a-termination-explicit-measure.md)                  | 晨煦 | 2026-09-14 | レビュー中 |
 | RFC-029a | [RFC-029a: モジュールキャッシュと增量再コンパイル](./draft/029a-module-cache-incremental.md)                     | 晨煦 | 2026-09-07 | 草案   |
 
