@@ -366,16 +366,16 @@
     "error_output": "error[E1071]: type definitions are only allowed at module level\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ type definition '{name}' is only allowed at module level (top level of the module)"
   },
   "E1081": {
-    "title": "`?` is only allowed in functions returning Result",
-    "message": "Encountered `expr?`, but the current function's return type is not Result",
-    "template": "`?` is only allowed in functions returning Result",
-    "help": "Please first change the outer function's return type to `Result[T, E]`, then use `expr?` for error propagation."
+    "title": "`?` is only allowed inside functions returning a propagatable type",
+    "message": "`?` can only be used inside functions returning a type that implements Try",
+    "template": "`?` is only allowed inside functions returning a type that implements `Try`",
+    "help": "The failure value of `?` propagates along the function's return type—the return type must implement the `Try` interface (such as `Result(T, E)`)"
   },
   "E1082": {
-    "title": "`?` can only be used on Result expressions",
-    "message": "The expression type of `expr?` is not Result",
-    "template": "`?` can only be used on Result expressions, actual type '{type}'",
-    "help": "Please only use `?` on expressions of type `Result[T, E]`."
+    "title": "`?` can only be used on types that implement Try",
+    "message": "`?` can only be used on expressions of a type that implements the Try interface",
+    "template": "'{type}' does not implement the `Try` interface; `?` cannot be used",
+    "help": "Implement the four members of the `Try` interface (is_failure/success/residual/from_error) for this type, or use `Result(T, E)` instead"
   },
   "E1083": {
     "title": "`?` error type mismatch",

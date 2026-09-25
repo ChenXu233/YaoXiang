@@ -329,16 +329,16 @@
     "error_output": "error[E1071]: 类型定义只能在模块级喵～\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ 类型定义 '{name}' 只能在模块级（模块顶层）nya"
   },
   "E1081": {
-    "title": "`?` 只能在返回 Result 的函数里面用喵～",
-    "message": "遇到了 `expr?`，可是当前函数的返回类型不是 Result 喵～",
-    "template": "`?` 只能在返回 Result 的函数里面用喵～",
-    "help": "请先把外层函数的返回类型改成 `Result[T, E]`，然后再用 `expr?` 来做错误传播喵～"
+    "title": "`?` 只允许在返回可传播类型的函数里面使用喵~",
+    "message": "`?` 只能在返回实现 Try 的类型的函数里面使用nya~",
+    "template": "`?` 只允许在返回实现 `Try` 的类型的函数里面使用喵~",
+    "help": "`?` 的失败值要沿着函数返回类型传播的喵~——返回类型必须实现 `Try` 接口（比如 `Result(T, E)`）nya~"
   },
   "E1082": {
-    "title": "`?` 只能用在 Result 表达式上喵～",
-    "message": "`expr?` 的表达式类型不是 Result 喵～",
-    "template": "`?` 只能用在 Result 表达式上哦喵～，实际类型是 '{type}' nya",
-    "help": "请只对类型是 `Result[T, E]` 的表达式使用 `?` 喵～"
+    "title": "`?` 只能用在实现了 Try 的类型上喵~",
+    "message": "`?` 只能用在实现了 Try 接口的类型的表达式上面nya~",
+    "template": "'{type}' 没有实现 `Try` 接口，不能用 `?` 喵~",
+    "help": "给这个类型实现 `Try` 接口的四个成员（is_failure/success/residual/from_error）喵，或者换成 `Result(T, E)` 也行的nya~"
   },
   "E1083": {
     "title": "`?` 的错误类型对不上喵～",

@@ -308,16 +308,16 @@
     "error_output": "error[E1071]: 类型定义唯于模块级\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ 类型定义 '{name}' 唯于模块级（模块顶层）"
   },
   "E1081": {
-    "title": "`?` 唯许用于返 Result 之函数内",
-    "message": "遇 `expr?`，然今函数返非 Result",
-    "template": "`?` 唯许用于返 Result 之函数内",
-    "help": "请先改外层函数返类型为 `Result[T, E]`，复用 `expr?` 以行错误传播。"
+    "title": "`?` 唯许用於返可传播之类型之函内",
+    "message": "`?` 唯用於返实现 Try 之类型之函内",
+    "template": "`?` 唯许用於返实现 `Try` 之类型之函内",
+    "help": "`?` 之失值须沿函返类型而传播——返类型须实现 `Try` 接口（如 `Result(T, E)`）"
   },
   "E1082": {
-    "title": "`?` 唯用于 Result 表达式",
-    "message": "`expr?` 表达式之类型非 Result",
-    "template": "`?` 唯用于 Result 表达式，实乃 '{type}'",
-    "help": "唯类型为 `Result[T, E]` 之表达式方可用 `?`。"
+    "title": "`?` 唯用於实现 Try 之类型",
+    "message": "`?` 唯用於实现 Try 接口之类型之表达式",
+    "template": "'{type}' 未实现 `Try` 接口，不得用 `?`",
+    "help": "当为该类型实现 `Try` 接口之四成员（is_failure/success/residual/from_error），或改用 `Result(T, E)`"
   },
   "E1083": {
     "title": "`?` 之错误类型不相合",
