@@ -958,10 +958,10 @@
     "help": "Add a proof function or provide a runtime check"
   },
   "E4021": {
-    "title": "Loop termination cannot be proven automatically",
-    "message": "The compiler cannot synthesize a decreasing measure for this loop, so termination cannot be proven automatically",
-    "template": "Cannot prove loop termination automatically: no valid decreasing measure was found",
-    "help": "This is a limit of the compiler's automatic reasoning, not a program error. Use a loop form with an explicit decreasing variable (e.g. a counter with a lower bound decremented each iteration), or see RFC-027 §7 for the measure strategies and their coverage."
+    "title": "Loop termination cannot be automatically proven",
+    "message": "The compiler cannot synthesize a decreasing metric for this loop, and thus cannot automatically prove its termination",
+    "template": "Cannot automatically prove loop termination: no valid decreasing metric found",
+    "help": "This is a coverage boundary of the compiler's automatic reasoning, not a program error. Please use a loop form with an explicit decreasing variable (e.g., a bounded counter variable that decreases each iteration), or refer to RFC-027 §7 for the metric strategy and coverage scope."
   },
   "W1080": {
     "title": "Compile-time proof degradation",
