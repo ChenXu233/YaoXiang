@@ -2932,6 +2932,20 @@ impl TypeChecker {
         // RFC-010: 记录式和类型判定（全有或全无，见「变体构造（权威定义）」节）
         if let Some(variants) = detect_sum_type(name, &param_names, definition) {
             self.env.sum_types.insert(name.to_string(), variants);
+            // 和类型的泛型模板 body 归一化为 Generic 自身形态：值表示是
+            // tagged union，不是函数字段 Struct——保留定义体会让注解实例化
+            // `Option(Arc(Int))` 展开成构造器字段 Struct，与 Enum 值形态
+            // 冲突（坑⑦，预置登记时代同一约定）。非泛型和类型无模板，跳过。
+            if let Some(def) = self.env.generic_type_defs.get_mut(name) {
+                def.poly.body = MonoType::Generic {
+                    name: name.to_string(),
+                    args: def
+                        .type_param_names
+                        .iter()
+                        .map(|p| MonoType::TypeRef(p.clone()))
+                        .collect(),
+                };
+            }
         }
     }
 }

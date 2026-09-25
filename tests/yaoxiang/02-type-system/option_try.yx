@@ -21,13 +21,13 @@ main: () -> Void = {
     bumped = bump(&some_case)
     match bumped {
         some(v) => assert(v == 5, "? keeps some payload"),
-        _ => assert(false, "? must not turn some into none"),
+        none() => assert(false, "? must not turn some into none"),
     }
 
     propagated = bump(&none_case)
     match propagated {
         some(_) => assert(false, "? must not fabricate a value"),
-        _ => assert(true, "? propagates none"),
+        none() => assert(true, "? propagates none"),
     }
 }
 

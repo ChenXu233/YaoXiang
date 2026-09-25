@@ -871,7 +871,20 @@ impl<'a> ExpressionInferrer<'a> {
                         ),
                     };
                     match pattern.as_deref() {
-                        None | Some(Pattern::Wildcard) => {}
+                        // 零载荷模式（`none()`）：变体必须真的无参数，
+                        // `ok()` 写在带载荷变体上是元数错误
+                        None => {
+                            if !vdef.params.is_empty() {
+                                return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                    variant,
+                                    vdef.params.len(),
+                                    0,
+                                )
+                                .at(arm.span)
+                                .build());
+                            }
+                        }
+                        Some(Pattern::Wildcard) => {}
                         Some(Pattern::Identifier(bn)) => {
                             binds.push((bn.clone(), payload_ty));
                         }
@@ -2077,6 +2090,170 @@ impl<'a> ExpressionInferrer<'a> {
         Some(key)
     }
 
+    /// 带期望类型的表达式推断：只有匿名 lambda 消费期望——被调签名的
+    /// 形参位就是它的权威签名（议题 1 机制的 Call 臂延伸）。其余表达式
+    /// 形态与 [`Self::infer_expr`] 完全一致。
+    pub fn infer_expr_with_expected(
+        &mut self,
+        expr: &crate::frontend::core::parser::ast::Expr,
+        expected: Option<&MonoType>,
+    ) -> Result<MonoType> {
+        match expr {
+            crate::frontend::core::parser::ast::Expr::Lambda { params, body, .. } => {
+                self.infer_lambda(params, body, expected)
+            }
+            _ => self.infer_expr(expr),
+        }
+    }
+
+    /// Any 多态槽位判定：`TypeRef("Any")`（可带 Ref 壳）。求解器对
+    /// `unify(Any, T)` 恒放行，期望传播时此类位退回 fresh var。
+    fn is_any_slot(ty: &MonoType) -> bool {
+        match ty {
+            MonoType::Ref { inner, .. } => Self::is_any_slot(inner),
+            MonoType::TypeRef(n) => n == "Any",
+            _ => false,
+        }
+    }
+
+    /// 期望 Fn 类型剥纯类型参数层（议题 1 已拍板规则）：只有「参数全是
+    /// 类型位（MetaType）」的层才剥；混合层无法安全剥除 → None，调用方
+    /// 退回无期望推断。期望不是 Fn 同样 None。
+    fn value_level_expected(expected: &MonoType) -> Option<MonoType> {
+        let mut cur = expected.clone();
+        loop {
+            match cur {
+                MonoType::Fn {
+                    ref params,
+                    ref return_type,
+                } => {
+                    if params.is_empty() {
+                        return Some(cur);
+                    }
+                    let meta_flags = params
+                        .iter()
+                        .map(|p| matches!(p, MonoType::MetaType { .. }))
+                        .collect::<Vec<_>>();
+                    if meta_flags.iter().any(|&m| m) {
+                        if !meta_flags.iter().all(|&m| m) {
+                            return None;
+                        }
+                        cur = *return_type.clone();
+                    } else {
+                        return Some(cur);
+                    }
+                }
+                _ => return None,
+            }
+        }
+    }
+
+    /// 匿名 lambda 推断（从 infer_expr 的 Lambda 臂抽出，供期望下传共用）。
+    ///
+    /// `expected`：被调签名的形参位类型（None = 无期望，行为与历史一致）。
+    /// 有期望时剥掉纯类型参数层，参数按期望位取（调用方签名是匿名 lambda
+    /// 的权威对齐来源，自带标注与期望的分歧由后续 unify 暴露），体的
+    /// return 检查以期望返回位为准。
+    fn infer_lambda(
+        &mut self,
+        params: &[crate::frontend::core::parser::ast::Param],
+        body: &crate::frontend::core::parser::ast::Block,
+        expected: Option<&MonoType>,
+    ) -> Result<MonoType> {
+        let value_sig: Option<(Vec<MonoType>, MonoType)> = expected
+            .and_then(Self::value_level_expected)
+            .and_then(|ty| match ty {
+                MonoType::Fn {
+                    params: ps,
+                    return_type,
+                } if ps.len() == params.len() => Some((ps, *return_type)),
+                _ => None,
+            });
+
+        self.scope.enter_fn();
+        // #295：三链模型——enter_fn 推新局部层，外层函数局部变量不在链上（闭包不捕获），
+        // 参数链跨边界累积可见（柯里化固化）。
+        for (i, param) in params.iter().enumerate() {
+            // 两类期望位不传播（退回标注/fresh var，保留旧路径行为）：
+            // - Any 多态槽位（std range/list 的 `fn(Any) -> Any` 回调位）：
+            //   钉死会让体推断失去自由度；fresh var 与 Any 的 unify 恒成立
+            //   且发生在体检查之后（延迟绑定）
+            // - 含未解析参数（TypeVar / 声明名 TypeRef，如泛型被调的 `T`，
+            //   调用点尚未实例化）：钉死悬空名字会让 `x * 2` 立即报错
+            let param_ty = match value_sig.as_ref().and_then(|(ps, _)| ps.get(i)) {
+                Some(ty)
+                    if !Self::is_any_slot(ty)
+                        && !super::statements::contains_unresolved_param(ty) =>
+                {
+                    ty.clone()
+                }
+                _ => match &param.ty {
+                    Some(t) => MonoType::from(t.clone()),
+                    None => self.solver.new_var(),
+                },
+            };
+            self.add_param(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
+        }
+
+        // Lambda is a function boundary: it must not inherit outer `Result` context.
+        let saved_result_err = self.result_err.take();
+        self.result_err = None;
+        // Lambda is also a return type boundary
+        let saved_expected_ret = self.expected_return_type.take();
+        // 期望返回位：体的 return 检查以被调签名的返回类型为准
+        self.expected_return_type = value_sig.as_ref().map(|(_, r)| r.clone());
+        // #311：函数体同样是循环上下文边界
+        let saved_loop_depth = self.loop_depth;
+        self.loop_depth = 0;
+        let body_ty = self.infer_block(body, true, None);
+        // 箭头 lambda（`(x) => expr`）的体被解析成只含 `return expr` 的块，
+        // 块值按规则恒为 `Never`（`return : Never`）。此处**在退出 lambda 作用域前**
+        // 取出载荷类型——退出后形参已不在 scope，重推会失败。
+        let arrow_payload_ty = match &body_ty {
+            Ok(MonoType::Never) if body.stmts.len() == 1 => match &body.stmts[0].kind {
+                crate::frontend::core::parser::ast::StmtKind::Return(Some(e)) => {
+                    self.infer_expr(e).ok()
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        self.loop_depth = saved_loop_depth;
+        self.expected_return_type = saved_expected_ret;
+        self.result_err = saved_result_err;
+
+        self.scope.exit_fn();
+        let body_ty = body_ty?;
+
+        // 返回的 Fn 形态与参数注册同源：期望位优先（Any 槽位同上退回），
+        // 否则标注/fresh var
+        let param_types: Vec<MonoType> = params
+            .iter()
+            .enumerate()
+            .map(
+                |(i, p)| match value_sig.as_ref().and_then(|(ps, _)| ps.get(i)) {
+                    Some(ty)
+                        if !Self::is_any_slot(ty)
+                            && !super::statements::contains_unresolved_param(ty) =>
+                    {
+                        ty.clone()
+                    }
+                    _ => match &p.ty {
+                        Some(t) => MonoType::from(t.clone()),
+                        None => self.solver.new_var(),
+                    },
+                },
+            )
+            .collect();
+
+        let return_type = arrow_payload_ty.unwrap_or_else(|| body_ty.clone());
+
+        Ok(MonoType::Fn {
+            params: param_types,
+            return_type: Box::new(return_type),
+        })
+    }
+
     /// 推断表达式的类型
     #[allow(irrefutable_let_patterns)]
     pub fn infer_expr(
@@ -2629,9 +2806,26 @@ impl<'a> ExpressionInferrer<'a> {
                     .build());
                 }
 
+                // 闭包作实参的期望类型传播（议题 1 机制的 Call 臂延伸）：
+                // 被调签名已知时，形参位就是匿名 lambda 的权威对齐来源
+                // （`apply(&xs, (x) => x * 2)` 的 x 从形参位取得类型）。
+                // 个数对不上（方法调用的 params 含接收者位、部分应用等）
+                // 不传播，行为与历史一致。
+                let expected_params: Option<Vec<MonoType>> =
+                    match self.solver.resolve_type(&func_ty) {
+                        MonoType::Fn { params, .. } => Some(params.clone()),
+                        _ => None,
+                    };
                 let arg_types: Vec<MonoType> = args
                     .iter()
-                    .map(|arg| self.infer_expr(arg))
+                    .enumerate()
+                    .map(|(i, arg)| {
+                        let expected = expected_params
+                            .as_ref()
+                            .filter(|ps| ps.len() == args.len())
+                            .and_then(|ps| ps.get(i));
+                        self.infer_expr_with_expected(arg, expected)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
 
                 // D6.3：显式类型实参（`mk(Int)(5)` 的内层 `mk(Int)`）。
@@ -3666,62 +3860,7 @@ impl<'a> ExpressionInferrer<'a> {
                 body,
                 span: _span,
                 ..
-            } => {
-                self.scope.enter_fn();
-                // #295：三链模型——enter_fn 推新局部层，外层函数局部变量不在链上（闭包不捕获），
-                // 参数链跨边界累积可见（柯里化固化）。
-                for param in params {
-                    let param_ty = self.solver.new_var();
-                    self.add_param(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
-                }
-
-                // Lambda is a function boundary: it must not inherit outer `Result` context.
-                let saved_result_err = self.result_err.take();
-                self.result_err = None;
-                // Lambda is also a return type boundary
-                let saved_expected_ret = self.expected_return_type.take();
-                self.expected_return_type = None;
-                // #311：函数体同样是循环上下文边界
-                let saved_loop_depth = self.loop_depth;
-                self.loop_depth = 0;
-                let body_ty = self.infer_block(body, true, None);
-                // 箭头 lambda（`(x) => expr`）的体被解析成只含 `return expr` 的块，
-                // 块值按规则恒为 `Never`（`return : Never`）。此处**在退出 lambda 作用域前**
-                // 取出载荷类型——退出后形参已不在 scope，重推会失败。
-                let arrow_payload_ty = match &body_ty {
-                    Ok(MonoType::Never) if body.stmts.len() == 1 => match &body.stmts[0].kind {
-                        crate::frontend::core::parser::ast::StmtKind::Return(Some(e)) => {
-                            self.infer_expr(e).ok()
-                        }
-                        _ => None,
-                    },
-                    _ => None,
-                };
-                self.loop_depth = saved_loop_depth;
-                self.expected_return_type = saved_expected_ret;
-                self.result_err = saved_result_err;
-
-                self.scope.exit_fn();
-                let body_ty = body_ty?;
-
-                // 参数类型：有显式标注用标注（`(x: Int) => ..`），否则 fresh var。
-                // 此前一律 `new_var()`，把标注丢掉了——于是 `(x: Int) => x * 2` 的
-                // 参数类型是未绑定变量，与形参 `(item: T) -> R` unify 时无法推出 R。
-                let param_types: Vec<MonoType> = params
-                    .iter()
-                    .map(|p| match &p.ty {
-                        Some(t) => MonoType::from(t.clone()),
-                        None => self.solver.new_var(),
-                    })
-                    .collect();
-
-                let return_type = arrow_payload_ty.unwrap_or_else(|| body_ty.clone());
-
-                Ok(MonoType::Fn {
-                    params: param_types,
-                    return_type: Box::new(return_type),
-                })
-            }
+            } => self.infer_lambda(params, body, None),
 
             // Match 表达式
             crate::frontend::core::parser::ast::Expr::Match { expr, arms, .. } => {

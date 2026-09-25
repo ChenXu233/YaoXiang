@@ -22,22 +22,22 @@ pub Option: (T: Type) -> Type = {
 
 Option.is_failure: (T: Type) -> ((self: &Option(T)) -> Bool) = (self) => {
     match self {
+        none() => true,
         some(_) => false,
-        _ => true,
     }
 }
 
 Option.success: (T: Type) -> ((self: &Option(T)) -> T) = (self) => {
     match self {
         some(v) => v,
-        _ => assert(false),
+        none() => assert(false),
     }
 }
 
 Option.residual: (T: Type) -> ((self: &Option(T)) -> Void) = (self) => {
-    match self.is_failure() {
-        true => void,
-        _ => assert(false),
+    match self {
+        none() => void,
+        some(_) => assert(false),
     }
 }
 

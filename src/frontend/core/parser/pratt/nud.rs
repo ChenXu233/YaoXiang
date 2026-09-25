@@ -1000,6 +1000,17 @@ impl<'a> ParserState<'a> {
             Expr::Call { func, args, .. } => {
                 // Constructor pattern: Name(patterns)
                 if let Expr::Var(name, _) = func.as_ref() {
+                    // 零载荷变体模式：`none()` 空括号 = 无载荷绑定（Union 内
+                    // 模式为 None）。此前空参落进下方多参分支被编码成空元组
+                    // 内模式，typecheck/IR 按「尚未实现的元组模式」拒绝——
+                    // 零载荷变体从此无法 match。
+                    if args.is_empty() {
+                        return Pattern::Union {
+                            name: name.clone(),
+                            variant: name.clone(),
+                            pattern: None,
+                        };
+                    }
                     // Check if this looks like a struct pattern: Name { field, field, ... }
                     // This would be parsed as a call with the struct literal
                     if args.len() == 1 {

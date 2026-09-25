@@ -16,22 +16,22 @@ Maybe: Type = {
 
 Maybe.is_failure: (self: &Maybe) -> Bool = (self) => {
     match self {
+        nothing() => true,
         just(_) => false,
-        _ => true,
     }
 }
 
 Maybe.success: (self: &Maybe) -> Int = (self) => {
     match self {
         just(v) => v,
-        _ => assert(false),
+        nothing() => assert(false),
     }
 }
 
 Maybe.residual: (self: &Maybe) -> String = (self) => {
-    match self.is_failure() {
-        true => "empty",
-        _ => assert(false),
+    match self {
+        nothing() => "empty",
+        just(_) => assert(false),
     }
 }
 
@@ -53,13 +53,13 @@ main: () -> Void = {
     bumped = bump(&some_case)
     match bumped {
         just(v) => assert(v == 5, "? keeps payload"),
-        _ => assert(false, "? must not lose the payload"),
+        nothing() => assert(false, "? must not lose the payload"),
     }
 
     propagated = bump(&none_case)
     match propagated {
         just(_) => assert(false, "? must not fabricate a value"),
-        _ => assert(true, "? propagates nothing"),
+        nothing() => assert(true, "? propagates nothing"),
     }
 }
 
