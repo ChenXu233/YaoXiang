@@ -3,7 +3,21 @@ name: Deploy Docs
 on:
   push:
     branches: [main, dev]
-    paths: ['docs/**', 'src/**', 'Cargo.toml', 'Cargo.lock', '!.obsidian/**', '!.git/**']
+    # 含 .github/workflows/**：否则改本 workflow 自身不会触发一次验证运行
+    paths:
+      [
+        'docs/**',
+        'src/**',
+        'Cargo.toml',
+        'Cargo.lock',
+        '.github/workflows/docs-deploy.yml',
+        '.github/workflows/_build-wasm.yml',
+        '!.obsidian/**',
+        '!.git/**',
+      ]
+  # 手动触发：workflow 自身改动 / 依赖策略变更后需可主动验证，
+  # 否则只能等下一次 docs 提交，失败也无从复现
+  workflow_dispatch:
 
 jobs:
   build-wasm:
@@ -21,6 +35,12 @@ jobs:
       contents: read
       pages: write
       id-token: write
+    # ponytail: 只关 CI 的 24h 发布窗口检查；本地 pnpm-workspace.yaml 保持默认保护。
+    # pnpm 11 默认 minimumReleaseAge=1440min，新包(<24h)直接拒装。
+    # 必须置在 job 级：`pnpm run docs:build` 自身会触发 pnpm 依赖状态检查（再走一次
+    # install 逻辑），置在单个 step 的 env 上覆盖不到它 → Build Docs 仍被拦。
+    env:
+      PNPM_CONFIG_MINIMUM_RELEASE_AGE: 0
     steps:
       - uses: actions/checkout@v7
 
@@ -50,10 +70,6 @@ jobs:
       - name: Install Dependencies
         working-directory: docs
         run: pnpm install
-        # ponytail: 只关 CI 的 24h 发布窗口检查；本地 pnpm-workspace.yaml 保持默认保护。
-        # pnpm 11 默认 minimumReleaseAge=1440min，新包(<24h)直接拒装，dependabot 一升级就挂。
-        env:
-          PNPM_CONFIG_MINIMUM_RELEASE_AGE: 0
 
       - name: Build Docs
         working-directory: docs
