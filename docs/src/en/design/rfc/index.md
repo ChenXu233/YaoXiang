@@ -6,7 +6,7 @@ title: 'RFC Index'
 
 > RFC (Request for Comments) is the formal submission format for YaoXiang language feature design proposals.
 
-## Table of Contents
+## Contents
 
 - [Templates](#templates)
 - [Draft RFCs](#draft-rfcs)
@@ -171,7 +171,7 @@ The following incorrect information may be preserved:
 2. Reference [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) to learn the writing style
 3. Create a new file, named `number-descriptive-title.md`
 4. Place the file in the `docs/reference/rfc/draft/` directory
-5. Update this index file, adding the new RFC entry
+5. Update this index file to add the new RFC entry
 6. Submit a PR to enter the review process
 
 ---

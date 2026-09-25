@@ -752,3 +752,91 @@ fn test_rfc010_sum_type_equality_allowed() {
         result.diagnostics
     );
 }
+
+// ===== RFC-010b: match 变体解构 =====
+
+/// 规范（RFC-010b）：变体解构类型检查——变体集按 scrutinee 消歧、
+/// 载荷绑定进臂作用域、各臂类型 unify
+#[test]
+fn test_rfc010b_match_variant_destructuring() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        main: () -> Void = {
+            a = Result(Int, String).ok(21)
+            v = match a {
+                ok(value) => value * 2,
+                err(e) => 0,
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "variant destructuring should pass: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(
+        result.local_var_types.get("v"),
+        Some(&crate::frontend::core::types::MonoType::Int(64)),
+        "payload bound as Int, arm type is Int"
+    );
+}
+
+/// 规范（穷尽性）：漏 err 变体且无兜底臂 → E1030（列出缺失变体）
+#[test]
+fn test_rfc010b_non_exhaustive_reports_e1030() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        main: () -> Void = {
+            a = Result(Int, String).ok(5)
+            v = match a {
+                ok(v) => v,
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    let d = result
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "E1030")
+        .expect("missing variant should report E1030");
+    assert!(
+        d.message.contains("err"),
+        "diagnostic should name the missing variant: {}",
+        d.message
+    );
+}
+
+/// 规范（不可达）：重复变体臂 → E1031
+#[test]
+fn test_rfc010b_duplicate_variant_reports_e1031() {
+    let source = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        main: () -> Void = {
+            a = Result(Int, String).ok(5)
+            v = match a {
+                ok(v) => v,
+                ok(w) => w,
+                err(e) => 0,
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1031"),
+        "duplicate variant arm should report E1031: {:?}",
+        result.diagnostics
+    );
+}

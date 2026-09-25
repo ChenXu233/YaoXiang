@@ -75,6 +75,139 @@ pub fn spec(name: &str) -> Option<&'static OperatorInterfaceSpec> {
     SPECS.iter().find(|s| s.name == name)
 }
 
+/// RFC-011b 阶段 2: `?` 传播接口（四方法，语义按 Rust Try）。
+///
+/// `e?` 的三件事各有对应成员：`is_failure` 判定成败、`success` 成功侧取
+/// 载荷、`residual` 失败侧取错误值；`from_error` 从错误值构造失败值——
+/// 跨类型传播（`f()?` 的 T ≠ 外层 U）的桥，无需运行时类型擦除作弊。
+/// 与 Rust `Try` trait（branch/residual/from_error + Output）对应，
+/// 关联类型 Output 用显式类型参数 `T` 表达（RFC-011a 定案）。
+pub const TRY_NAME: &str = "Try";
+pub const TRY_METHODS: &[&str] = &["is_failure", "success", "residual", "from_error"];
+
+/// Try 成员签名模板（形参名 `Self`/`T`/`E` 表达，实例化时替换）
+pub fn try_member_signature(method: &str) -> MonoType {
+    let borrow = |t: MonoType| MonoType::Ref {
+        mutable: false,
+        inner: Box::new(t),
+    };
+    let p = |n: &str| MonoType::TypeRef(n.to_string());
+    match method {
+        "is_failure" => MonoType::Fn {
+            params: vec![borrow(p("Self"))],
+            return_type: Box::new(MonoType::Bool),
+        },
+        "success" => MonoType::Fn {
+            params: vec![borrow(p("Self"))],
+            return_type: Box::new(p("T")),
+        },
+        "residual" => MonoType::Fn {
+            params: vec![borrow(p("Self"))],
+            return_type: Box::new(p("E")),
+        },
+        // 关联函数形态（无接收者）：从错误值构造失败值
+        "from_error" => MonoType::Fn {
+            params: vec![p("E")],
+            return_type: Box::new(p("Self")),
+        },
+        other => unreachable!("unknown Try member: {other}"),
+    }
+}
+
+/// RFC-010: std 预置和类型的变体表（类型名 → [(变体名, 参数类型模板)]）。
+/// `Result(T, E)` / `Option(T)` 的类型定义由此登记（记录式和类型，
+/// 变体序即声明序），parser 不再持有专用 AST 节点。
+pub fn register_builtin_sum_types(env: &mut TypeEnvironment) {
+    // body 用 Generic 自身形态（与内建容器 Vec 同款）：注解
+    // `Option(Arc(Int))` 实例化展开后仍是 Generic（和类型值是 tagged
+    // union Enum，不是字段记录——展开成函数字段 Struct 会与值形态冲突）
+    let t = MonoType::TypeRef("T".to_string());
+    let e = MonoType::TypeRef("E".to_string());
+    let result_body = MonoType::Generic {
+        name: "Result".to_string(),
+        args: vec![t.clone(), e.clone()],
+    };
+    let option_body = MonoType::Generic {
+        name: "Option".to_string(),
+        args: vec![t.clone()],
+    };
+    for (name, body, param_names) in [
+        (
+            "Result",
+            result_body,
+            vec!["T".to_string(), "E".to_string()],
+        ),
+        ("Option", option_body, vec!["T".to_string()]),
+    ] {
+        let type_binders: Vec<TypeVar> = (0..param_names.len()).map(TypeVar::new).collect();
+        env.generic_type_defs.insert(
+            name.to_string(),
+            GenericTypeDef {
+                poly: PolyType::new(type_binders, body),
+                type_param_names: param_names.clone(),
+            },
+        );
+    }
+    // 变体定义（声明序）——构造与解构共用
+    env.sum_types.insert(
+        "Result".to_string(),
+        vec![
+            super::environment::SumVariantDef {
+                name: "ok".to_string(),
+                params: vec![MonoType::TypeRef("T".to_string())],
+            },
+            super::environment::SumVariantDef {
+                name: "err".to_string(),
+                params: vec![MonoType::TypeRef("E".to_string())],
+            },
+        ],
+    );
+    env.sum_types.insert(
+        "Option".to_string(),
+        vec![
+            super::environment::SumVariantDef {
+                name: "some".to_string(),
+                params: vec![MonoType::TypeRef("T".to_string())],
+            },
+            super::environment::SumVariantDef {
+                name: "none".to_string(),
+                params: Vec::new(),
+            },
+        ],
+    );
+}
+
+/// 注册 Try 接口（四成员 GenericTypeDef，实例化检查管线用）
+pub fn register_try_interface_def(env: &mut TypeEnvironment) {
+    let fields: Vec<(String, MonoType)> = TRY_METHODS
+        .iter()
+        .map(|m| (m.to_string(), try_member_signature(m)))
+        .collect();
+    let body = MonoType::Struct(empty_struct(TRY_NAME, fields));
+    let type_binders: Vec<TypeVar> = (0..3).map(TypeVar::new).collect();
+    env.generic_type_defs.insert(
+        TRY_NAME.to_string(),
+        GenericTypeDef {
+            poly: PolyType::new(type_binders, body),
+            type_param_names: vec!["Self".to_string(), "T".to_string(), "E".to_string()],
+        },
+    );
+}
+
+/// Try 实例化的成员展开（expand_interface_members 短路用）：
+/// 返回四成员的（方法名, 形参替换后签名）
+pub fn expand_try_members(args: &[MonoType]) -> Vec<(String, MonoType)> {
+    let param_names: [String; 3] = ["Self".to_string(), "T".to_string(), "E".to_string()];
+    TRY_METHODS
+        .iter()
+        .map(|m| {
+            let sig = try_member_signature(m);
+            let substituted = TypeEnvironment::replace_type_params(&sig, &param_names, args);
+            (m.to_string(), substituted)
+        })
+        .collect()
+}
+
 /// Layer 0：算术运算符 → 接口名（比较运算符保留原生指令，不在此表）
 pub fn arithmetic_interface(op: &BinOp) -> Option<&'static str> {
     match op {

@@ -49,7 +49,7 @@ This RFC is accepted. Implementation status of the three rules:
 | ① Protection via type check | Empty block / trailing statement escape check | ✅ Implemented (#342 Issue 5)      |
 | ① Block value = tail expr  | `spawn {}` value exit (tail expression) | ✅ Implemented (#365)                 |
 
-Corpus coverage: `tests/yaoxiang/03-semantics/rfc010a_block_value.yx` (positive) +
+Test coverage: `tests/yaoxiang/03-semantics/rfc010a_block_value.yx` (positive) +
 `tests/yaoxiang/06-compile-errors/tail_expr_type_mismatch{,_with_stmts}_err.yx` (negative).
 
 ## Motivation
@@ -113,7 +113,7 @@ claimed "tail expressions no longer implicitly return" but didn't cover that cas
 
 ## Proposal
 
-### The Three Rules
+### Three Rules
 
 ```
 ① Block value = tail expression (single exit point)
@@ -205,13 +205,13 @@ fib: (n: Int) -> Int = {
 
 ## Detailed Design
 
-### Formalization of Block and Tail Expression
+### Formalizing Blocks and Tail Expressions
 
 ```
-Block        ::= '{' Stmt* '}'                     // empty block → Void
-               | '{' Stmt* Expr '}'                // value = Expr
+Block        ::= '{' Stmt* '}'                     // Empty block → Void
+               | '{' Stmt* Expr '}'                // Value = Expr
 Expr         ::= ...
-               | Return                            // type Never
+               | Return                            // Type Never
 Stmt         ::= Assignment | ExprStmt | ...
 
 value(Block):
@@ -248,7 +248,7 @@ RFC-007's examples **fully comply with this RFC**, no revisions needed:
 ```yaoxiang
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }          // Never branch, ignored by join
-    return n * factorial(n - 1)     // function exit
+    return n * factorial(n - 1)     // Function exit
 }
 ```
 
@@ -266,7 +266,7 @@ RFC-010's definitions have been revised per this RFC, differences as follows:
 
 **RFC-010's core design (`{}` as dependency-driven computation unit) remains unchanged**; only the value exit changed from `return` to tail expression.
 
-### Unified Perspective (Design Principle)
+### Unifying Perspectives (Design Principle)
 
 The braces of `if` / `while`
 **serve both as imperative control bodies and declarative evaluation units** — this is **a difference in perspective, not two different language constructs**. Therefore:
@@ -294,7 +294,7 @@ c = spawn { fetch("a") }
 - **Consistent with mature languages**: Rust similarly coexists with "tail expression + `return : !`"
 - **Zero new syntax**: No keywords added, parser syntax rules unchanged
 
-### Drawbacks
+### Disadvantages
 
 - **"Accidental return" risk with last expression as value**: Forgetting to delete the last line silently changes the return value
   - Mitigation: Type checking catches type mismatches; language doesn't promise to prevent intent errors (see design criterion)
@@ -355,7 +355,7 @@ All reproduced on 0.8.0.
 | `while { if i==2 { return 42 } }`                  | `42` (exits loop)              |
 | Nested `{ { return 5 } return 1 }`                 | `5` (exits bare block)         |
 
-## Appendix B: Design Decision Record
+## Appendix B: Design Decision Log
 
 | Decision                      | Decision                                             | Rationale                              | Date        |
 | ----------------------------- | ---------------------------------------------------- | -------------------------------------- | ----------- |
@@ -378,15 +378,15 @@ All reproduced on 0.8.0.
 | Value-bearing block | `= {}` / `spawn {}` / `unsafe {}` — value exit is tail expression                                       |
 | join              | Multi-branch merge rule; `Never` branches don't participate in merging                                  |
 
-## Appendix D: Function / Block Value Ambiguity Adjudication
+## Appendix D: Function / Block Value Disambiguation
 
-### Problem
+### The Problem
 
 `name = { ... }` was defined differently by two accepted RFCs: RFC-007 (function syntax) treated it as a function
 ("simplest no-argument form" `name = { return ... }`), while RFC-010 / 010a treated it as a block value (`= {}` is a value-bearing block,
 value is tail expression). Same syntactic position, two sets of semantics; implementation had `callable_parts()` registering blocks as 0-arg functions while `generate_block_ir` evaluated them as block values — two layers of understanding inconsistent.
 
-### Ruling: Content Determines the Type
+### Resolution: Content Determines the Type
 
 The same principle should apply consistently to dict literals and blocks:
 
@@ -416,7 +416,7 @@ the same `{` in the same no-annotation position yields different kinds of things
 **Type is determined by content**, not by presence or absence of annotation. Annotations still declare types (`f: () -> Int`),
 but don't impose a default just because "annotation is absent".
 
-### Placement of `{}`
+### Where `{}` Falls
 
 Dict grammar requires at least one key; `{}` has no content to go by, so block structure's zero form is taken → empty block, value `Void`.
 Empty dict uses `dict.new()`. See spec [§2.9.1](../../../reference/language-spec/syntax.md).

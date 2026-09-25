@@ -154,6 +154,11 @@ impl TypeChecker {
         // RFC-011b: 运算符接口声明（接口构造器形态）+ 核心默认登记
         super::operator_interfaces::register_interface_defs(&mut env);
         super::operator_interfaces::register_native_entries(&mut env);
+        // RFC-011b 阶段 2: `?` 传播接口（四方法）
+        super::operator_interfaces::register_try_interface_def(&mut env);
+        // RFC-010: std 预置和类型（Result/Option 记录式定义，变体构造与
+        // match 解构走通用机制；parser 不再持有专用 AST 节点）
+        super::operator_interfaces::register_builtin_sum_types(&mut env);
         add_native_function_types(&mut env);
         Self::register_builtin_container_defs(&mut env);
 
@@ -2049,6 +2054,20 @@ impl TypeChecker {
             return Ok(Vec::new());
         }
         visiting.push(interface_name.to_string());
+
+        // RFC-011b 阶段 2: Try 接口（四成员）编译器侧展开
+        if interface_name == super::operator_interfaces::TRY_NAME {
+            if args.len() != 3 {
+                self.add_error(
+                    ErrorCodeDefinition::interface_arity_mismatch(interface_name, 3, args.len())
+                        .at(span)
+                        .build(),
+                );
+                return Err(());
+            }
+            visiting.pop();
+            return Ok(super::operator_interfaces::expand_try_members(args));
+        }
 
         // RFC-011b: 七个运算符接口走编译器侧规格（成员签名模板），
         // 不依赖用户源码声明体；其余接口照旧从 generic_type_defs + 声明体展开
