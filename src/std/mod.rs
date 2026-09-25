@@ -326,6 +326,7 @@ pub trait StdModule {
                 mono_type: None,
                 type_params: None,
                 param_names: None,
+                type_payload: None,
             });
         }
 
@@ -339,6 +340,7 @@ pub trait StdModule {
                 mono_type: None,
                 type_params: None,
                 param_names: None,
+                type_payload: None,
             });
         }
 

@@ -489,3 +489,57 @@ main = () => {
 "#;
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
 }
+
+/// 议题 2 基石：跨模块和类型传播。
+/// lib 定义和类型（变体构造器 + match 解构），main 导入后使用——
+/// 要求导入方 typecheck 环境拥有 generic_type_defs / sum_types /
+/// 接口实现登记（Export 通道此前完全不携带，导入方全部落空）。
+#[test]
+fn test_multifile_sum_type_cross_module() {
+    let lib = r#"
+Shape: Type = {
+    circle: (Float) -> Shape,
+    square: (String) -> Shape,
+}
+"#;
+    let main = r#"
+use std.assert
+use lib.{Shape}
+
+main = () => {
+    c = Shape.circle(2.0)
+    v = match c {
+        circle(r) => r,
+        square(_) => 0.0,
+    }
+    assert.assert(v == 2.0, "cross-module sum type ctor + match")
+}
+"#;
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+/// 同上，但走**整体导入**（`use lib`）——类型导出按自身名补镜像，
+/// 裸名 `Shape` 直接可用（预置退役后 std.result 的实际用法）。
+#[test]
+fn test_multifile_sum_type_whole_import() {
+    let lib = r#"
+Shape: Type = {
+    circle: (Float) -> Shape,
+    square: (String) -> Shape,
+}
+"#;
+    let main = r#"
+use std.assert
+use lib
+
+main = () => {
+    s = Shape.square("hi")
+    v = match s {
+        circle(r) => r,
+        square(_) => 1.0,
+    }
+    assert.assert(v == 1.0, "whole-import sum type ctor + match")
+}
+"#;
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}

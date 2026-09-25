@@ -274,6 +274,7 @@ impl ModuleRegistry {
                 mono_type: None,
                 type_params: None,
                 param_names: None,
+                type_payload: None,
             });
 
             // 注册模块信息
@@ -309,6 +310,7 @@ impl ModuleRegistry {
                         mono_type: None,
                         type_params: None,
                         param_names: None,
+                        type_payload: None,
                     });
                     self.register(info);
                 }
@@ -339,6 +341,7 @@ mod tests {
             mono_type: Some(MonoType::Int(64)),
             type_params: None,
             param_names: None,
+            type_payload: None,
         }
     }
 

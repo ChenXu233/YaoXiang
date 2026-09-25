@@ -1055,9 +1055,14 @@ fn extract_module_info(
 
     for stmt in &ast.items {
         match &stmt.kind {
-            StmtKind::TypeDefinition { name, .. } => {
+            StmtKind::TypeDefinition {
+                name, definition, ..
+            } => {
                 if let Some(ty) = lookup(&types, name) {
-                    info.add_export(make_export(module_key, name, ExportKind::Type, ty));
+                    let mut export = make_export(module_key, name, ExportKind::Type, ty);
+                    // 跨模块类型传播：泛型模板 + 和类型变体 + 接口实现随导出携带
+                    export.type_payload = checker.type_def_export_payload(name, definition);
+                    info.add_export(export);
                 }
             }
             StmtKind::Assign {
@@ -1110,6 +1115,7 @@ fn make_export(
         mono_type: Some(ty),
         type_params: None,
         param_names: None,
+        type_payload: None,
     }
 }
 

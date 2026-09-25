@@ -1715,8 +1715,22 @@ impl TypeChecker {
                             }
                             // 首先将模块本身注册为 Struct 类型（包含所有导出作为字段）
                             self.register_module_as_struct(path, module_alias, &module);
-                            // 然后注册每个导出
+                            // 然后注册每个导出。带载荷的类型导出额外按**自身名**
+                            // 补镜像：整体导入此前只注册模块 Struct，类型裸名
+                            // （`use std.result` 后写 `Result(Int, String)`）不可用。
+                            // 仅限 type_payload 非空的导出——native 类型家族桩
+                            // （mono_type None）经 with_std 预载已有解析路径，
+                            // 用宽松类型注册成值变量会污染值位置的类型名解析。
                             for export in exports_to_import {
+                                if matches!(export.kind, crate::frontend::module::ExportKind::Type)
+                                    && matches!(
+                                        export.kind,
+                                        crate::frontend::module::ExportKind::Type
+                                    )
+                                    && export.type_payload.is_some()
+                                {
+                                    self.register_use_export(&export.name, export, false);
+                                }
                                 self.register_use_export(module_alias, export, true);
                             }
                         }
@@ -1732,6 +1746,15 @@ impl TypeChecker {
                                     .insert(alias_name.clone(), path.clone());
                             }
                             for export in exports_to_import {
+                                if matches!(export.kind, crate::frontend::module::ExportKind::Type)
+                                    && matches!(
+                                        export.kind,
+                                        crate::frontend::module::ExportKind::Type
+                                    )
+                                    && export.type_payload.is_some()
+                                {
+                                    self.register_use_export(&export.name, export, false);
+                                }
                                 self.register_use_export(alias_name, export, true);
                             }
                         }
@@ -2037,6 +2060,79 @@ impl TypeChecker {
                 inst.span,
             );
         }
+    }
+
+    /// 构造类型定义导出载荷（跨模块类型传播）。
+    ///
+    /// 在**签名收集期**的 checker env 上读取三张表：泛型模板、和类型变体、
+    /// 类型体接口应用。接口应用条目与 `pending_interface_instantiations`
+    /// 同源同构（AST `Expr(Generic)` 应用项，`is_interface_application` 判定），
+    /// 区别仅在签名期不做完整性检查（那要在方法绑定齐备后进行，属定义方
+    /// 模块自身的 finalize 职责）——分发查询只匹配 impl_type + args，导入方
+    /// 据此恢复登记表即可。三张表全空的普通记录类型返回 None（导出退化为
+    /// 既有 mono_type 快照，零开销）。
+    pub fn type_def_export_payload(
+        &self,
+        name: &str,
+        definition: &crate::frontend::core::parser::ast::Type,
+    ) -> Option<crate::frontend::module::TypeDefPayload> {
+        use crate::frontend::core::parser::ast::{Type, TypeBodyItem};
+        let type_def = self.env.generic_type_defs.get(name).cloned();
+        let sum_variants = self.env.sum_types.get(name).cloned().unwrap_or_default();
+        let mut interface_impls: Vec<(String, super::environment::InterfaceImplEntry)> = Vec::new();
+        if let Type::Struct { body } = definition {
+            for item in body {
+                let TypeBodyItem::Expr(ty) = item else {
+                    continue;
+                };
+                if !self.is_interface_application(ty) {
+                    continue;
+                }
+                let Type::Generic {
+                    name: head,
+                    args: ast_args,
+                    ..
+                } = ty
+                else {
+                    continue;
+                };
+                let mono_args: Vec<MonoType> =
+                    ast_args.iter().map(|a| MonoType::from(a.clone())).collect();
+                // 尽力收集成员名（接口模板体的函数字段名）；完整性检查
+                // 仍由定义方 finalize 负责，分发查询只匹配 impl_type + args
+                let methods = self
+                    .env
+                    .generic_type_defs
+                    .get(head)
+                    .map(|d| match &d.poly.body {
+                        MonoType::Struct(s) => s
+                            .fields
+                            .iter()
+                            .filter(|(_, t)| matches!(t, MonoType::Fn { .. }))
+                            .map(|(n, _)| n.clone())
+                            .collect(),
+                        _ => Vec::new(),
+                    })
+                    .unwrap_or_default();
+                interface_impls.push((
+                    head.clone(),
+                    super::environment::InterfaceImplEntry {
+                        impl_type: name.to_string(),
+                        args: mono_args,
+                        methods,
+                        native: false,
+                    },
+                ));
+            }
+        }
+        if type_def.is_none() && sum_variants.is_empty() && interface_impls.is_empty() {
+            return None;
+        }
+        Some(crate::frontend::module::TypeDefPayload {
+            type_def,
+            sum_variants,
+            interface_impls,
+        })
     }
 
     /// RFC-011a: 展开接口成员列表（递归支持接口继承，Self 延迟替换）。
@@ -2449,13 +2545,22 @@ impl TypeChecker {
             crate::frontend::module::ExportKind::Type => {
                 // 类型导出：镜像本地类型定义，同时注册到类型空间与值空间，
                 // 使构造（Point(...)）与字段访问（p.x）能解析结构体。
-                if self.env.get_var(&register_name).is_some() {
+                // 类型空间已有同名（native 类型家族经 with_std 预载，如 std.result
+                // 的 Error）时不得用宽松类型覆盖值空间——否则该名字在值位置
+                // 不再解析为类型名，和类型实参报 E1002。
+                if self.env.get_var(&register_name).is_some()
+                    || self.env.types.contains_key(&register_name)
+                {
                     return;
                 }
                 let ty = self.export_register_type(export);
                 let poly = PolyType::mono(ty);
                 self.env.add_type(register_name.clone(), poly.clone());
-                self.env.add_var(register_name, poly);
+                self.env.add_var(register_name.clone(), poly);
+                // 跨模块类型传播：恢复定义方三张表（泛型模板 / 和类型变体 /
+                // 接口实现登记）——变体构造、match 变体解构、`?` 与运算符
+                // 分发的唯一判据都在这三张表里
+                self.register_type_payload(&register_name, export);
             }
             _ => {
                 // 如果变量已存在（比如已经是 Struct 类型），则跳过
@@ -2465,6 +2570,30 @@ impl TypeChecker {
                 let ty = self.export_register_type(export);
                 self.env.add_var(register_name, PolyType::mono(ty));
             }
+        }
+    }
+
+    /// 跨模块类型传播：把类型导出载荷写入导入方 env 的三张表
+    /// （`generic_type_defs` / `sum_types` / `interface_impl_registry`）。
+    /// 无载荷（普通记录类型导出、native 导出）为空操作。
+    fn register_type_payload(
+        &mut self,
+        name: &str,
+        export: &crate::frontend::module::Export,
+    ) {
+        let Some(payload) = &export.type_payload else {
+            return;
+        };
+        if let Some(def) = &payload.type_def {
+            self.env.add_generic_type_def(name.to_string(), def.clone());
+        }
+        if !payload.sum_variants.is_empty() {
+            self.env
+                .sum_types
+                .insert(name.to_string(), payload.sum_variants.clone());
+        }
+        for (interface_name, entry) in &payload.interface_impls {
+            self.env.add_interface_impl(interface_name, entry.clone());
         }
     }
 
