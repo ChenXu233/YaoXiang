@@ -20,7 +20,7 @@ YaoXiang 标准库（`std`）以模块为组织单位，每个模块通过 `use`
 | [`std.math`](./math) | 18 | 整数、浮点与三角函数，含 PI/E/TAU 常量 |
 | [`std.string`](./string) | 19 | 字符串查找、切分、格式化与解析 |
 | [`std.time`](./time) | 14 | 时间戳、格式化与 DateTime 字段访问 |
-| [`std.result`](./result) | 9 | Result 与 Error 的构造和拆包 |
+| [`std.result`](./result) | 7 | Result 与 Error 的构造和拆包 |
 | [`std.range`](./range) | 10 | 区间迭代、谓词与惰性适配器 |
 | [`std.assert`](./assert) | 1 | 断言 |
 | [`std.net`](./net) | 4 | HTTP 请求与 URL 百分号编解码 |

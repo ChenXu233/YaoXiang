@@ -6784,6 +6784,12 @@ impl AstToIrGenerator {
         scrutinee: &Expr,
     ) -> Option<String> {
         let ty = self.get_expr_mono_type(scrutinee)?;
+        // 剥掉 Ref 层：`self: &Result(T, E)` 借用形态的方法体 match 与
+        // 值形态走同一条变体分发（运行时借用擦除，拿到的是 Enum 值本身）
+        let mut ty = ty;
+        while let crate::frontend::core::types::MonoType::Ref { inner, .. } = ty {
+            ty = *inner;
+        }
         match ty {
             crate::frontend::core::types::MonoType::Generic { name, .. }
                 if self.sum_type_variants.contains_key(&name) =>
@@ -7131,6 +7137,43 @@ impl AstToIrGenerator {
                                 // "&mut Point"，方法名应基于底层结构体 "Point"
                                 let base = Self::strip_ref_prefix(type_name);
                                 format!("{}.{}", base, field)
+                            } else if let Some(ty) = self.get_expr_mono_type(expr) {
+                                // local_var_types 未收录时从类型检查结果取接收者
+                                // 类型名（`r.is_failure()` 的 r: Result(..)）；
+                                // std yx 方法经注册表限定名映射改写
+                                // （"Result.is_failure" → "std.result.is_failure"）。
+                                let mut ty = ty;
+                                while let crate::frontend::core::types::MonoType::Ref {
+                                    inner,
+                                    ..
+                                } = ty
+                                {
+                                    ty = *inner;
+                                }
+                                let base = match &ty {
+                                    crate::frontend::core::types::MonoType::Generic {
+                                        name,
+                                        ..
+                                    } => Some(name.clone()),
+                                    crate::frontend::core::types::MonoType::Struct(s) => {
+                                        Some(s.name.clone())
+                                    }
+                                    crate::frontend::core::types::MonoType::TypeRef(n) => {
+                                        Some(n.clone())
+                                    }
+                                    _ => None,
+                                };
+                                match base {
+                                    Some(base) => {
+                                        let key = format!("{}.{}", base, field);
+                                        self.registry
+                                            .std_method_binding_qualified_map()
+                                            .get(&key)
+                                            .cloned()
+                                            .unwrap_or(key)
+                                    }
+                                    None => self.resolve_field_path(expr, field),
+                                }
                             } else {
                                 self.resolve_field_path(expr, field)
                             }

@@ -1,13 +1,20 @@
 // std/result.yx — 纯 YaoXiang 标准库：错误处理和类型（RFC-010 记录式和类型）
 //
-// `Result(T, E)` 是 std 预置的记录式和类型，与用户自定义和类型同一套机制：
-// 变体构造（`Result.ok(5)` / `Result.err(e)`）、match 变体解构、穷尽性检查。
+// `Result(T, E)` 是 std.result 模块导出的记录式和类型，与用户自定义和类型
+// 同一套机制：变体构造（`Result(T, E).ok(5)` / `Result(T, E).err(e)`）、
+// match 变体解构、穷尽性检查。使用前 `use std.result`。
 //
 // `Try` 实例化提供 `?` 传播（RFC-011b 阶段 2）：四方法语义按 Rust Try——
 // is_failure 判定、success 成功载荷、residual 失败载荷、from_error 跨类型
 // 传播的桥（`f()?` 的 T ≠ 外层 U 时从 E 重新构造失败值）。
 //
+// 死路分支（success 的 err 臂、residual 的 ok 臂）用 `assert(false)` 发散：
+// assert 返回 Never（type-system.md §2.2 爆炸原理），`Never <: T` 放行。
+// 契约上 `?` 调用链只在对应分支调用它们，死路不可达。
+//
 // 构建时经 include_str! 嵌入二进制（见 src/std/yx_sources.rs）。
+
+use std.assert
 
 pub Result: (T: Type, E: Type) -> Type = {
     ok: (T) -> Result(T, E),
@@ -20,4 +27,22 @@ Result.is_failure: (T: Type, E: Type) -> ((self: &Result(T, E)) -> Bool) = (self
         err(_) => true,
         ok(_) => false,
     }
+}
+
+Result.success: (T: Type, E: Type) -> ((self: &Result(T, E)) -> T) = (self) => {
+    match self {
+        ok(v) => v,
+        err(_) => assert(false),
+    }
+}
+
+Result.residual: (T: Type, E: Type) -> ((self: &Result(T, E)) -> E) = (self) => {
+    match self {
+        err(e) => e,
+        ok(_) => assert(false),
+    }
+}
+
+Result.from_error: (T: Type, E: Type) -> ((e: E) -> Result(T, E)) = (e) => {
+    Result(T, E).err(e)
 }

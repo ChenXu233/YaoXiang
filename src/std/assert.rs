@@ -3,7 +3,8 @@
 //! 同时导出类型族（类型宇宙）和 native 函数（值宇宙）：
 //! - IsTrue: (b: Bool) -> Type = match b { true => Void, false => Never }
 //! - Assert: (cond: Bool) -> Type = IsTrue(cond)
-//! - assert: (cond: Bool, ?msg: String) -> Void — 运行时断言，false 时 panic
+//! - assert: (cond: Bool, ?msg: String) -> Never — 运行时断言，false 时 panic
+//!   （返回 Never = ⊥：爆炸原理 `Never <: T`，规格 type-system.md §2.2）
 
 use crate::backends::common::value::RuntimeValue;
 use crate::ExecutorError;
@@ -23,7 +24,7 @@ impl StdModule for AssertModule {
         vec![export!(
             "assert",
             "std.assert.assert",
-            "(cond: Bool, ?msg: String) -> Void",
+            "(cond: Bool, ?msg: String) -> Never",
             native_assert
         )]
     }

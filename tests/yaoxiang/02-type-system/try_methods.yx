@@ -1,0 +1,37 @@
+// 02-type-system/try_methods.yx
+// 覆盖: Try 接口四方法（RFC-011b 阶段 2）——std.result 以纯 YaoXiang
+// 实现（std/result.yx），方法经跨模块方法绑定传播，运行时走泛型方法特化。
+// 验证:
+//   - is_failure 判定 ok/err 两态
+//   - success 取成功载荷、residual 取失败载荷
+//   - from_error 从错误值重建 Result
+// 状态: ✅ 可运行
+
+use std.assert
+use std.result
+
+check: (n: Int) -> Result(Int, String) = {
+    if n > 0 {
+        return Result(Int, String).ok(n)
+    }
+    return Result(Int, String).err("non-positive")
+}
+
+main: () -> Void = {
+    ok_case = check(5)
+    err_case = check(-1)
+
+    assert(ok_case.is_failure() == false, "ok is not failure")
+    assert(err_case.is_failure() == true, "err is failure")
+
+    v = ok_case.success()
+    assert(v == 5, "success extracts payload")
+
+    e = err_case.residual()
+    assert(e == "non-positive", "residual extracts error")
+
+    rebuilt = ok_case.from_error("fresh")
+    assert(rebuilt.is_failure(), "from_error rebuilds as failure")
+}
+
+main()

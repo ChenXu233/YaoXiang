@@ -114,69 +114,6 @@ pub fn try_member_signature(method: &str) -> MonoType {
     }
 }
 
-/// RFC-010: std 预置和类型的变体表（类型名 → [(变体名, 参数类型模板)]）。
-/// `Result(T, E)` / `Option(T)` 的类型定义由此登记（记录式和类型，
-/// 变体序即声明序），parser 不再持有专用 AST 节点。
-pub fn register_builtin_sum_types(env: &mut TypeEnvironment) {
-    // body 用 Generic 自身形态（与内建容器 Vec 同款）：注解
-    // `Option(Arc(Int))` 实例化展开后仍是 Generic（和类型值是 tagged
-    // union Enum，不是字段记录——展开成函数字段 Struct 会与值形态冲突）
-    let t = MonoType::TypeRef("T".to_string());
-    let e = MonoType::TypeRef("E".to_string());
-    let result_body = MonoType::Generic {
-        name: "Result".to_string(),
-        args: vec![t.clone(), e.clone()],
-    };
-    let option_body = MonoType::Generic {
-        name: "Option".to_string(),
-        args: vec![t.clone()],
-    };
-    for (name, body, param_names) in [
-        (
-            "Result",
-            result_body,
-            vec!["T".to_string(), "E".to_string()],
-        ),
-        ("Option", option_body, vec!["T".to_string()]),
-    ] {
-        let type_binders: Vec<TypeVar> = (0..param_names.len()).map(TypeVar::new).collect();
-        env.generic_type_defs.insert(
-            name.to_string(),
-            GenericTypeDef {
-                poly: PolyType::new(type_binders, body),
-                type_param_names: param_names.clone(),
-            },
-        );
-    }
-    // 变体定义（声明序）——构造与解构共用
-    env.sum_types.insert(
-        "Result".to_string(),
-        vec![
-            super::environment::SumVariantDef {
-                name: "ok".to_string(),
-                params: vec![MonoType::TypeRef("T".to_string())],
-            },
-            super::environment::SumVariantDef {
-                name: "err".to_string(),
-                params: vec![MonoType::TypeRef("E".to_string())],
-            },
-        ],
-    );
-    env.sum_types.insert(
-        "Option".to_string(),
-        vec![
-            super::environment::SumVariantDef {
-                name: "some".to_string(),
-                params: vec![MonoType::TypeRef("T".to_string())],
-            },
-            super::environment::SumVariantDef {
-                name: "none".to_string(),
-                params: Vec::new(),
-            },
-        ],
-    );
-}
-
 /// 注册 Try 接口（四成员 GenericTypeDef，实例化检查管线用）
 pub fn register_try_interface_def(env: &mut TypeEnvironment) {
     let fields: Vec<(String, MonoType)> = TRY_METHODS

@@ -15,9 +15,9 @@ use std.assert
 
 <!-- stdlib:table:assert start -->
 
-| 函数     | 签名                                 |
-| -------- | ------------------------------------ |
-| `assert` | `(cond: Bool, ?msg: String) -> Void` |
+| 函数 | 签名 |
+| ---- | ---- |
+| `assert` | `(cond: Bool, ?msg: String) -> Never` |
 
 <!-- stdlib:table:assert end -->
 
@@ -28,7 +28,7 @@ use std.assert
 <!-- stdlib:sig:assert.assert start -->
 
 ```yaoxiang
-assert: (cond: Bool, ?msg: String) -> Void
+assert: (cond: Bool, ?msg: String) -> Never
 ```
 
 <!-- stdlib:sig:assert.assert end -->

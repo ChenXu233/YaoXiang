@@ -2348,7 +2348,9 @@ impl<'a> ExpressionInferrer<'a> {
 
                 // RFC-010: 和类型的字段访问拒绝——变体名升格（全有或全无），
                 // 运行时 tagged union 不携带字段表；构造用 `类型.变体(...)`（在
-                // Call 臂拦截），取回载荷用 match 变体解构（RFC-039）
+                // Call 臂拦截），取回载荷用 match 变体解构（RFC-039）。
+                // 方法调用（`r.is_failure()`，Try 接口方法）除外：先查方法绑定表
+                // （含跨模块导入的 yx std 方法），命中即按方法返回，不落字段拒绝。
                 if let MonoType::Generic { name: sum_name, .. } = &resolved {
                     if self.sum_types.contains_key(sum_name) {
                         if self.sum_types[sum_name].iter().any(|v| v.name == *field) {
@@ -2356,6 +2358,11 @@ impl<'a> ExpressionInferrer<'a> {
                                 sum_name, field,
                             )
                             .build());
+                        }
+                        if let Some(method_ty) =
+                            self.method_bindings.get(&format!("{}.{}", sum_name, field))
+                        {
+                            return Ok(method_ty.clone());
                         }
                         return Err(ErrorCodeDefinition::field_not_found(field, sum_name).build());
                     }

@@ -156,11 +156,15 @@ impl TypeChecker {
         super::operator_interfaces::register_native_entries(&mut env);
         // RFC-011b 阶段 2: `?` 传播接口（四方法）
         super::operator_interfaces::register_try_interface_def(&mut env);
-        // RFC-010: std 预置和类型（Result/Option 记录式定义，变体构造与
-        // match 解构走通用机制；parser 不再持有专用 AST 节点）
-        super::operator_interfaces::register_builtin_sum_types(&mut env);
         add_native_function_types(&mut env);
         Self::register_builtin_container_defs(&mut env);
+
+        // std 注册表的方法绑定注入（与 orchestrator 逐文件注入同一规则）：
+        // 嵌入 yx std 模块的方法（`Result.is_failure` 等）在单文件模式下
+        // 也按方法调用解析。
+        for (key, ty) in env.module_registry.all_method_bindings() {
+            env.method_bindings.insert(key, ty);
+        }
 
         // 注册预定义的 const 函数
         Self::register_predefined_const_functions(&mut env);

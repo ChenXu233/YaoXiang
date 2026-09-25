@@ -12,10 +12,8 @@
 pub const STD_YX_FILES: &[(&str, &str)] = &[
     ("std/list.yx", include_str!("list.yx")),
     ("std/test.yx", include_str!("test.yx")),
-    // ("std/result.yx", include_str!("result.yx")),
-    // ponytail: 挂起——泛型柯里化方法体（Result.is_failure 等）的 self
-    // 参数推断为 fresh var（Lambda 臂无期望类型对齐），待推断层补
-    // 「lambda 参数从期望 Fn 对齐（剥类型参数层）」后启用。
+    ("std/result.yx", include_str!("result.yx")),
+    ("std/option.yx", include_str!("option.yx")),
 ];
 
 /// use 路径（`std.test`）查嵌入源；未命中（native 模块或用户模块）返回 None。

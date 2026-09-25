@@ -200,6 +200,26 @@ impl ModuleRegistry {
         map
     }
 
+    /// 方法绑定的**限定名**映射（`"Result.is_failure"` → `"std.result.is_failure"`）。
+    ///
+    /// yx std 模块的方法（`Type.method` 定义）在方法调用点按 `{类型名}.{方法}`
+    /// 命名，但 IR 函数表里的名字是模块限定的（`std.result.is_failure`）——
+    /// 此映射补齐两者。仅收录 std 模块（用户模块方法本就在入口 IR 里以
+    /// `Type.method` 原名存在，限定会错分发）。
+    pub fn std_method_binding_qualified_map(&self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        for module in self.modules.values() {
+            if module.source != ModuleSource::Std {
+                continue;
+            }
+            for key in module.method_bindings.keys() {
+                map.entry(key.clone())
+                    .or_insert_with(|| format!("{}.{}", module.path, key));
+            }
+        }
+        map
+    }
+
     /// 获取所有 native 函数名列表（用于 IR 生成的快速查找）
     pub fn native_names(&self) -> Vec<String> {
         let mut names = Vec::new();
@@ -291,6 +311,26 @@ impl ModuleRegistry {
             for (file, _) in crate::std::yx_sources::STD_YX_FILES {
                 let use_path = file.strip_suffix(".yx").unwrap_or(file).replace('/', ".");
                 if let Some(info) = crate::std::yx_sources::embedded_std_module_info(&use_path) {
+                    // 同名路径的 native 模块（如 std.result 已有 is_ok/unwrap 等
+                    // native 导出）：**表面合并**而非整体覆盖——yx 导出与 native
+                    // 导出按名字并集，同名冲突 yx 优先（纯 YaoXiang 定义是权威
+                    // 表面），方法绑定同规则。注册顺序在 native 之后，直接
+                    // insert 会把 native 导出整个顶掉（result.is_ok 报 E1042）。
+                    if let Some(existing) = self.modules.get_mut(&info.path) {
+                        for (name, export) in info.exports {
+                            existing.exports.insert(name, export);
+                        }
+                        for (key, ty) in info.method_bindings {
+                            existing.method_bindings.insert(key, ty);
+                        }
+                        let submodule_name = info
+                            .path
+                            .strip_prefix("std.")
+                            .unwrap_or(&info.path)
+                            .to_string();
+                        std_root.add_submodule(submodule_name.clone());
+                        continue;
+                    }
                     let submodule_name = info
                         .path
                         .strip_prefix("std.")
@@ -327,6 +367,41 @@ impl ModuleRegistry {
 mod tests {
     use super::*;
     use crate::frontend::core::types::mono::MonoType;
+
+    /// 表面锁：std.result 合并表面 = yx（Result 类型 + Try 四方法）∪
+    /// native（is_ok/unwrap 等工具族）；ok/err 构造器已退役（变体构造
+    /// 语法 `Result(T, E).ok(v)` 是唯一构造通道）。
+    #[test]
+    fn std_result_merged_surface() {
+        let registry = ModuleRegistry::with_std();
+        let m = registry
+            .get("std.result")
+            .expect("std.result should be registered");
+        assert!(m.exports.contains_key("Result"), "yx type export missing");
+        for method in ["is_failure", "success", "residual", "from_error"] {
+            let key = format!("Result.{method}");
+            assert!(
+                m.method_bindings.contains_key(&key),
+                "missing yx Try method {key}"
+            );
+        }
+        for f in [
+            "is_ok",
+            "is_err",
+            "unwrap",
+            "unwrap_or",
+            "unwrap_err",
+            "code",
+            "message",
+        ] {
+            assert!(m.exports.contains_key(f), "missing native export {f}");
+        }
+        assert!(!m.exports.contains_key("ok"), "native ok must stay retired");
+        assert!(
+            !m.exports.contains_key("err"),
+            "native err must stay retired"
+        );
+    }
 
     fn export(
         name: &str,

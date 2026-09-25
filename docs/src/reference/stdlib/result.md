@@ -5,88 +5,49 @@ description: 'Result 与 Error 的构造和拆包'
 
 # std.result
 
-`Result(T, E)` 的构造与拆包，以及 `Error` 载体的字段访问。
+`Result(T, E)` 的拆包与 `Error` 载体的字段访问。`Result` 本身是 `std.result`
+导出的记录式和类型（RFC-010）：构造用**变体构造语法**，解构用 `match` 变体模式，
+`?` 传播由 `Try` 接口驱动（见下文）。
 
 ```yaoxiang
 use std.result
+
+r = Result(Int, String).ok(5)
+e = Result(Int, String).err("boom")
 ```
 
 ## 运行时表示
 
-| 值                  | 表示                             |
-| ------------------- | -------------------------------- |
-| `Result.ok(value)`  | 枚举变体，携带 `value`           |
-| `Result.err(error)` | 枚举变体，携带 `error`           |
-| `Error`             | 结构体，字段为 `(code, message)` |
+| 值                            | 表示                             |
+| ----------------------------- | -------------------------------- |
+| `Result(T, E).ok(value)`      | 枚举变体，携带 `value`           |
+| `Result(T, E).err(error)`     | 枚举变体，携带 `error`           |
+| `Error`                       | 结构体，字段为 `(code, message)` |
 
 `Error.code` 为 RFC-013 的 `E6xxx` / `E7xxx` 段注册码（跨版本稳定契约）， `Error.message`
 为人类可读描述。
+
+## Try 接口（`?` 传播）
+
+`Result` 在类型体里实例化了 `Try(Result(T, E), T, E)` 四方法接口，`?` 运算符
+据此驱动：`is_failure` 判定失败、`success` 取成功载荷、`residual` 取失败载荷、
+`from_error` 从错误值重建 `Result`。这些方法也可显式调用。
 
 ## 函数一览
 
 <!-- stdlib:table:result start -->
 
-| 函数         | 签名                                                       |
-| ------------ | ---------------------------------------------------------- |
-| `is_ok`      | `(T: Type, E: Type)(self: &Result(T, E)) -> Bool`          |
-| `is_err`     | `(T: Type, E: Type)(self: &Result(T, E)) -> Bool`          |
-| `unwrap`     | `(T: Type, E: Type)(self: &Result(T, E)) -> T`             |
-| `unwrap_or`  | `(T: Type, E: Type)(self: &Result(T, E), default: T) -> T` |
-| `ok`         | `(T: Type, E: Type)(value: T) -> Result(T, E)`             |
-| `err`        | `(T: Type, E: Type)(error: E) -> Result(T, E)`             |
-| `unwrap_err` | `(T: Type, E: Type)(self: &Result(T, E)) -> E`             |
-| `code`       | `(self: &Error) -> String`                                 |
-| `message`    | `(self: &Error) -> String`                                 |
+| 函数 | 签名 |
+| ---- | ---- |
+| `is_ok` | `(T: Type, E: Type)(self: &Result(T, E)) -> Bool` |
+| `is_err` | `(T: Type, E: Type)(self: &Result(T, E)) -> Bool` |
+| `unwrap` | `(T: Type, E: Type)(self: &Result(T, E)) -> T` |
+| `unwrap_or` | `(T: Type, E: Type)(self: &Result(T, E), default: T) -> T` |
+| `unwrap_err` | `(T: Type, E: Type)(self: &Result(T, E)) -> E` |
+| `code` | `(self: &Error) -> String` |
+| `message` | `(self: &Error) -> String` |
 
-<!-- stdlib:table:result end -->## 构造
-
-### ok
-
-<!-- stdlib:sig:result.ok start -->
-
-```yaoxiang
-ok: (T: Type, E: Type)(value: T) -> Result(T, E)
-```
-
-<!-- stdlib:sig:result.ok end -->
-
-包装成功值。
-
-`?` 解包出的 `Ok` 值需要重新包装才能沿 `Result` 返回类型继续传播， `ok` 就是那个包装器。
-
-```yaoxiang
-use std.assert
-use std.result
-
-main: () -> Void = {
-    r = result.ok(42)
-    assert(result.is_ok(r))
-}
-```
-
-### err
-
-<!-- stdlib:sig:result.err start -->
-
-```yaoxiang
-err: (T: Type, E: Type)(error: E) -> Result(T, E)
-```
-
-<!-- stdlib:sig:result.err end -->
-
-包装错误值。
-
-```yaoxiang
-use std.assert
-use std.result
-
-main: () -> Void = {
-    r = result.err("boom")
-    assert(result.is_err(r))
-}
-```
-
-## 判定
+<!-- stdlib:table:result end -->## 判定
 
 ### is_ok
 
@@ -105,7 +66,7 @@ use std.assert
 use std.result
 
 main: () -> Void = {
-    r = result.ok(1)
+    r = Result(Int, String).ok(1)
     assert(result.is_ok(r))
     assert(result.is_ok(r))      // 可复用
 }
@@ -128,7 +89,7 @@ use std.assert
 use std.result
 
 main: () -> Void = {
-    r = result.err("e")
+    r = Result(Int, String).err("e")
     assert(result.is_err(r))
 }
 ```

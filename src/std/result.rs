@@ -92,20 +92,6 @@ impl StdModule for ResultModule {
                 "(T: Type, E: Type)(self: &Result(T, E), default: T) -> T",
                 native_result_unwrap_or
             ),
-            // #301：ok/err 构造器——用户代码重组 Result 值（? 解包后的 Ok 路径
-            // 需要 result.ok(t) 重新包装才能沿 Result 返回类型传播）
-            export!(
-                "ok",
-                "std.result.ok",
-                "(T: Type, E: Type)(value: T) -> Result(T, E)",
-                native_result_ok
-            ),
-            export!(
-                "err",
-                "std.result.err",
-                "(T: Type, E: Type)(error: E) -> Result(T, E)",
-                native_result_err
-            ),
             // #323 M4：错误值可观测面——unwrap_err 取出 Err 载体，
             // code/message 读取规范化错误码与消息
             export!(
@@ -246,24 +232,6 @@ pub(crate) fn native_result_unwrap_or(
         }) => Ok((**payload).clone()),
         _ => Ok(args.get(1).cloned().unwrap_or(RuntimeValue::Void)),
     }
-}
-
-pub(crate) fn native_result_ok(
-    args: &[RuntimeValue],
-    _ctx: &mut NativeContext<'_>,
-) -> Result<RuntimeValue, ExecutorError> {
-    Ok(result_ok(
-        args.first().cloned().unwrap_or(RuntimeValue::Void),
-    ))
-}
-
-pub(crate) fn native_result_err(
-    args: &[RuntimeValue],
-    _ctx: &mut NativeContext<'_>,
-) -> Result<RuntimeValue, ExecutorError> {
-    Ok(result_err(
-        args.first().cloned().unwrap_or(RuntimeValue::Void),
-    ))
 }
 
 // #323 M4：错误值可观测面

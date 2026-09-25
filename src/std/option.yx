@@ -1,0 +1,46 @@
+// std/option.yx — 纯 YaoXiang 标准库：可选值和类型（RFC-010 记录式和类型）
+//
+// `Option(T)` 表示「有值（some）或无值（none）」，与用户自定义和类型同一套
+// 机制：变体构造（`Option(T).some(v)` / `Option(T).none()`）、match 变体解构、
+// 穷尽性检查。使用前 `use std.option`。
+//
+// `Try` 实例化提供 `?` 传播：失败即 none，残余类型取 Void（对应 Rust Try
+// 实验的 NoneT 语义）——`f()?` 在返回 Option 的函数里把 none 原样上抛。
+//
+// 死路分支（success 的 none 臂、residual 的 some 臂）用 `assert(false)` 发散
+// （同 std/result.yx）。
+//
+// 构建时经 include_str! 嵌入二进制（见 src/std/yx_sources.rs）。
+
+use std.assert
+
+pub Option: (T: Type) -> Type = {
+    some: (T) -> Option(T),
+    none: () -> Option(T),
+    Try(Option(T), T, Void),
+}
+
+Option.is_failure: (T: Type) -> ((self: &Option(T)) -> Bool) = (self) => {
+    match self {
+        none() => true,
+        some(_) => false,
+    }
+}
+
+Option.success: (T: Type) -> ((self: &Option(T)) -> T) = (self) => {
+    match self {
+        some(v) => v,
+        none() => assert(false),
+    }
+}
+
+Option.residual: (T: Type) -> ((self: &Option(T)) -> Void) = (self) => {
+    match self {
+        none() => void,
+        some(_) => assert(false),
+    }
+}
+
+Option.from_error: (T: Type) -> ((Void) -> Option(T)) = (void) => {
+    Option(T).none()
+}
