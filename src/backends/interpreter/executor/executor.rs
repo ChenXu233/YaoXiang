@@ -55,6 +55,10 @@ pub struct Interpreter {
     /// 用 `Arc` 包裹：跨线程任务可直接共享同一份只读数据，
     /// 无需原先 `SendPtr` 裸指针 + `unsafe impl Send` 的绕道。
     pub(super) image: Arc<Image>,
+    /// RFC-010: 和类型名 → 类型身份 intern 表（同名字符串必得同一 id；
+    /// 预置段 Result/Option 构造时预插固定值，用户段从 SUM_USER_BASE 递增）
+    pub(super) sum_type_intern:
+        std::cell::RefCell<HashMap<String, crate::backends::common::value::TypeId>>,
     /// Heap for dynamic allocation
     pub(super) heap: Heap,
     /// Call stack
@@ -129,6 +133,7 @@ impl Interpreter {
 
         Self {
             image: Arc::new(Image::new()),
+            sum_type_intern: std::cell::RefCell::new(Self::preset_sum_type_intern()),
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             state: ExecutionState::default(),
@@ -189,6 +194,7 @@ impl Interpreter {
 
         Self {
             image,
+            sum_type_intern: std::cell::RefCell::new(Self::preset_sum_type_intern()),
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             state: ExecutionState::default(),
@@ -1085,6 +1091,45 @@ impl Interpreter {
 
     /// RFC-011b：floor 取模（结果符号跟随除数，Python % 语义）。
     /// 注意 rem_euclid 是恒非负的欧几里得取模，不符合文档「取模」语义。
+    /// RFC-010: 和类型名 intern——同名字符串必得同一 TypeId。
+    /// 预置段固定（Result/Option 与 native 常量一致），用户段递增分配。
+    pub(super) fn intern_sum_type(
+        &self,
+        name: &str,
+    ) -> crate::backends::common::value::TypeId {
+        if let Some(id) = self.sum_type_intern.borrow().get(name) {
+            return *id;
+        }
+        let next = crate::backends::common::value::TypeId(
+            self.sum_type_intern
+                .borrow()
+                .values()
+                .map(|t| t.0)
+                .max()
+                .unwrap_or(crate::backends::common::value::TypeId::SUM_USER_BASE)
+                .max(crate::backends::common::value::TypeId::SUM_USER_BASE)
+                + 1,
+        );
+        self.sum_type_intern
+            .borrow_mut()
+            .insert(name.to_string(), next);
+        next
+    }
+
+    /// 预置和类型的固定身份段
+    fn preset_sum_type_intern() -> HashMap<String, crate::backends::common::value::TypeId> {
+        HashMap::from([
+            (
+                "Result".to_string(),
+                crate::backends::common::value::TypeId::RESULT,
+            ),
+            (
+                "Option".to_string(),
+                crate::backends::common::value::TypeId::OPTION,
+            ),
+        ])
+    }
+
     pub(super) fn floor_mod_float(
         a: f64,
         b: f64,

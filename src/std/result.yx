@@ -1,0 +1,23 @@
+// std/result.yx — 纯 YaoXiang 标准库：错误处理和类型（RFC-010 记录式和类型）
+//
+// `Result(T, E)` 是 std 预置的记录式和类型，与用户自定义和类型同一套机制：
+// 变体构造（`Result.ok(5)` / `Result.err(e)`）、match 变体解构、穷尽性检查。
+//
+// `Try` 实例化提供 `?` 传播（RFC-011b 阶段 2）：四方法语义按 Rust Try——
+// is_failure 判定、success 成功载荷、residual 失败载荷、from_error 跨类型
+// 传播的桥（`f()?` 的 T ≠ 外层 U 时从 E 重新构造失败值）。
+//
+// 构建时经 include_str! 嵌入二进制（见 src/std/yx_sources.rs）。
+
+pub Result: (T: Type, E: Type) -> Type = {
+    ok: (T) -> Result(T, E),
+    err: (E) -> Result(T, E),
+    Try(Result(T, E), T, E),
+}
+
+Result.is_failure: (T: Type, E: Type) -> ((self: &Result(T, E)) -> Bool) = (self) => {
+    match self {
+        err(_) => true,
+        ok(_) => false,
+    }
+}

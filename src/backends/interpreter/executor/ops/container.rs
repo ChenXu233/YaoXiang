@@ -3,7 +3,6 @@
 //! `execute_instr` 按指令族拆分的一部分。arm 体自原单函数逐字搬迁，
 //! 仅去掉外层 `match` 包裹并统一以 `return` 形式返回，语义不变。
 
-use crate::backends::common::value::TypeId;
 use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::executor::debug::StepOutcome;
 use crate::backends::interpreter::executor::Interpreter;
@@ -121,10 +120,13 @@ impl Interpreter {
             } => {
                 let payload_val = self.force_slot(fi, *payload)?;
                 let group = self.const_string(*group_idx);
+                let type_id = self.intern_sum_type(&group);
                 self.call_stack[fi].set_slot(
                     dst.0 as usize,
                     RuntimeValue::Enum {
-                        type_id: TypeId::from_sum_type_name(&group),
+                        // RFC-010: 类型身份 = intern(组名)——同名字符串必得
+                        // 同一 id（无派生碰撞），预置段固定、用户段递增
+                        type_id,
                         variant_id: *variant,
                         payload: Box::new(payload_val),
                     },
