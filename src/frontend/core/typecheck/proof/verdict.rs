@@ -212,6 +212,11 @@ pub enum UnprovenReason {
     BudgetExceeded,
     /// Phase 2.5: 需要程序员提供的证明函数
     ProofFunctionRequired,
+    /// 循环终止性无法自动证明
+    ///
+    /// 这是**编译器能力边界**，不是程序错误，更不是内部故障。
+    /// 必须与 `BeyondKernel` 区分：后者的文案路径会走 ICE（E8001）。
+    LoopTerminationUnproven,
 }
 
 /// 求解预算报告
@@ -232,10 +237,30 @@ impl ProofResult {
         match self {
             Self::Proved => Ok(()),
             Self::Disproved(model) => Err(model.into_diagnostic()),
-            Self::Unproven { reason, .. } => {
-                // #322 M3：走注册表快捷方法（i18n 模板渲染）
-                Err(ErrorCodeDefinition::internal_error(&format!("无法证明: {:?}", reason)).build())
+            Self::Unproven { reason, .. } => Err(reason.to_diagnostic()),
+        }
+    }
+}
+
+impl UnprovenReason {
+    /// 将「无法证明」转为用户可读诊断
+    ///
+    /// # 为什么不用统一走 E8001
+    ///
+    /// `E8001` 是 `Internal` 类的 ICE，文案是「内部编译器错误，请去提 issue」。
+    /// 把「编译器推理能力边界」套用该码，会误导用户以为编译器故障。
+    /// 能力边界必须走各自语义的用户域错误码。
+    ///
+    /// 下方 `_` 分支保留 E8001：走到那里的确属于未分类的内部情况，
+    /// 指向 issue 是正确出路。新增可预期的能力边界时，应补显式分支
+    /// 而非依赖该兵底。
+    fn to_diagnostic(&self) -> Diagnostic {
+        match self {
+            Self::LoopTerminationUnproven => {
+                ErrorCodeDefinition::loop_termination_unproven().build()
             }
+            Self::ProofFunctionRequired => ErrorCodeDefinition::proof_function_required().build(),
+            _ => ErrorCodeDefinition::internal_error(&format!("无法证明: {:?}", self)).build(),
         }
     }
 }

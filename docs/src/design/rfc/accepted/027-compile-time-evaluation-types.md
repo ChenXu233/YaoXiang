@@ -997,6 +997,16 @@ predicate ::= identifier ':' params '->' 'Type' '=' '{' assertions '}'
 
 ## 开放问题
 
+- [x] **wasm32 目标的 Z3 可用性**：wasm 下无 Z3（SMT 代码全部 `cfg(not(target_arch = "wasm32"))` 排除）。
+      影响范围与降级方向：
+      - `ownership.rs` `smt_cut` 恒返回 `false` → 回边穿越 → **保守拒绝**（sound 方向，只是少收窄）
+      - 终止检查策略 1、谓词第 2b/3 级整体跳过
+      当前**不可达**：`TypeEnvironment::predicate_defs` 在生产从无填充（仅测试），`parser`
+      不产生 `MonoType::Refined`，故精化谓词路径在生产不存在；终止策略 1 的注入点
+      （`TerminationChecker::with_solver`）生产从不调用，native 同样不执行。
+      因此 wasm 与 native 的**实际行为差异仅在于 `smt_cut` 的精度**，不影响 soundness。
+      后续若要在 wasm 启用 Z3，方案与代价见 issue #376（结论：优先 JS 侧 Z3 实例，
+      而非把 Z3 链进主 wasm——后者需换 emcc 构建体系且产物从 3 MB 涨到 ~20 MB）。
 - [x] **SMT 求解器选择**：默认 Z3（MIT 协议，最广泛验证）。CVC5 作为 SMT-LIB 兼容备选，编译器标志切换。编译器内部翻译目标为 SMT-LIB
       2.6 标准格式——SMT-LIB 就是抽象层，不做自定义通用求解器接口。
 - [x] **求解预算的具体数值**：步数 10,000 / 时间 100ms

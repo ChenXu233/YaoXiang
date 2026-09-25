@@ -27,4 +27,10 @@ define_codes!(E4XXX, {
     ("E4019", Generic, false, type_mismatch_in_proof(expected: &str, found: &str) => .param("expected", expected) .param("found", found)),
     // E4020 需要证明函数来验证约束
     ("E4020", Generic, false, proof_function_required() => ),
+    // E4021 循环终止性无法自动证明
+    // span_exempt=true：位置信息未从 ProofResult::Unproven 透传（该变体无 span 字段）。
+    // 与兄弟码 E4018 refinement_violated 同样豁免（同为「证明未成立」类，非语法错误）。
+    // 升级路径：给 ProofResult::Unproven 加 span 字段后，本码可改为要求 span。
+    // 无 param：文案全部由 locales 提供，避免在 Rust 侧写死中文而污染其他语言输出。
+    ("E4021", Generic, true, loop_termination_unproven() => ),
 });

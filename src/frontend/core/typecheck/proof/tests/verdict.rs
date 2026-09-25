@@ -6,7 +6,9 @@
 //! E4018: 精化谓词违反 → PredicateViolation → DisproofModel::into_diagnostic()
 //! E4019: 类型等式不成立 → TypeMismatch → DisproofModel::into_diagnostic()
 
-use crate::frontend::core::typecheck::proof::verdict::{DisproofKind, DisproofModel, ProofResult};
+use crate::frontend::core::typecheck::proof::verdict::{
+    BudgetReport, DisproofKind, DisproofModel, ProofResult, UnprovenReason,
+};
 use crate::util::diagnostic::Severity;
 use crate::util::span::{Position, Span};
 
@@ -293,6 +295,63 @@ fn test_into_result_disproved_returns_diagnostic_error() {
     assert_eq!(
         err.code, "E4018",
         "Disproved error must be E4018. Got: '{}'",
+        err.code
+    );
+}
+
+// UnprovenReason 的诊断映射（能力边界 vs ICE）
+
+/// 循环终止性无法证明必须走 E4021，**不得**降级为 E8001 ICE
+///
+/// 回归性质：`LoopTerminationUnproven` 变体引入前，终止检查用
+/// `BeyondKernel("循环无法证明终止…")`，`into_result()` 将其一律转成
+/// `E8001`（Internal 类 ICE，文案引导用户「报告此错误」）。
+/// 编译器推理能力边界被误诊为编译器故障。
+#[test]
+fn test_into_result_loop_termination_unproven_is_user_domain_code() {
+    // Arrange
+    let result = ProofResult::Unproven {
+        reason: UnprovenReason::LoopTerminationUnproven,
+        proof_calls: vec![],
+        budget: BudgetReport {
+            steps_used: 0,
+            steps_limit: 0,
+        },
+    };
+
+    // Act
+    let outcome = result.into_result();
+
+    // Assert — 必须是用户域码 E4021，而非 ICE E8001
+    let err = outcome.expect_err("Unproven 必须转成 Err(Diagnostic)");
+    assert_eq!(
+        err.code, "E4021",
+        "终止性无法证明须映射到 E4021（用户域），不得为 E8001 ICE。实际: '{}'",
+        err.code
+    );
+}
+
+/// 未分类的 `Unproven` 仍走 ICE — 保证兜底未被本改动误伤
+#[test]
+fn test_into_result_unclassified_unproven_still_reports_ice() {
+    // Arrange — BeyondKernel 目前无专属码，属未分类情况
+    let result = ProofResult::Unproven {
+        reason: UnprovenReason::BeyondKernel("未分类情形".into()),
+        proof_calls: vec![],
+        budget: BudgetReport {
+            steps_used: 0,
+            steps_limit: 0,
+        },
+    };
+
+    // Act
+    let outcome = result.into_result();
+
+    // Assert — 兜底保持 E8001（指引报 issue 是正确出路）
+    let err = outcome.expect_err("Unproven 必须转成 Err(Diagnostic)");
+    assert_eq!(
+        err.code, "E8001",
+        "未分类的 Unproven 应保持 E8001 兜底。实际: '{}'",
         err.code
     );
 }

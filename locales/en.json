@@ -957,6 +957,12 @@
     "template": "A proof function is required to verify the constraint",
     "help": "Add a proof function or provide a runtime check"
   },
+  "E4021": {
+    "title": "Loop termination cannot be proven automatically",
+    "message": "The compiler cannot synthesize a decreasing measure for this loop, so termination cannot be proven automatically",
+    "template": "Cannot prove loop termination automatically: no valid decreasing measure was found",
+    "help": "This is a limit of the compiler's automatic reasoning, not a program error. Use a loop form with an explicit decreasing variable (e.g. a counter with a lower bound decremented each iteration), or see RFC-027 §7 for the measure strategies and their coverage."
+  },
   "W1080": {
     "title": "Compile-time proof degradation",
     "message": "Constraint cannot be proven at compile-time, has been downgraded to runtime check",

@@ -1005,8 +1005,10 @@ impl TerminationChecker {
         &mut self,
         _span: crate::util::span::Span,
     ) {
-        let reason =
-            UnprovenReason::BeyondKernel("循环无法证明终止：未找到有效的递减度量".to_string());
+        // 能力边界，不是程序错误：用 LoopTerminationUnproven（→ E4021），
+        // 不用 BeyondKernel（后者在 into_result 下会走 ICE E8001）。
+        // 具体描述由 locales 提供，不在此写死中文以免污染其他语言。
+        let reason = UnprovenReason::LoopTerminationUnproven;
         self.results.push(ProofResult::Unproven {
             reason,
             proof_calls: vec![],
