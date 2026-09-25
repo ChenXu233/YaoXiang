@@ -137,7 +137,7 @@ use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::verdict::{BudgetReport, ProofResult, UnprovenReason};
 use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort};
 #[cfg(not(target_arch = "wasm32"))]
-use super::super::proof::smt::z3_backend::Z3Backend;
+use super::super::proof::smt::backend::Solver;
 
 /// 终止检查器
 ///
@@ -147,9 +147,9 @@ use super::super::proof::smt::z3_backend::Z3Backend;
 pub struct TerminationChecker {
     /// 收集到的证明结果
     results: Vec<ProofResult>,
-    /// Z3 后端引用——策略 1 秩函数 SMT 验证
+    /// 求解器引用——策略 1 秩函数 SMT 验证
     #[cfg(not(target_arch = "wasm32"))]
-    z3: Option<&'static Z3Backend>,
+    solver: Option<&'static dyn Solver>,
 }
 
 impl Default for TerminationChecker {
@@ -164,16 +164,16 @@ impl TerminationChecker {
         Self {
             results: Vec::new(),
             #[cfg(not(target_arch = "wasm32"))]
-            z3: None,
+            solver: None,
         }
     }
-    /// 设置 Z3 后端（由调用方在初始化后注入）
+    /// 注入求解器后端
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn with_z3(
+    pub fn with_solver(
         mut self,
-        z3: &'static Z3Backend,
+        solver: &'static dyn Solver,
     ) -> Self {
-        self.z3 = Some(z3);
+        self.solver = Some(solver);
         self
     }
 
@@ -385,7 +385,7 @@ impl TerminationChecker {
 
         // 策略 1：线性秩函数自动合成（SMT 验证）
         #[cfg(not(target_arch = "wasm32"))]
-        if self.z3.is_some() {
+        if self.solver.is_some() {
             if let Some(measure) =
                 self.try_linear_rank_function(&bounds, &assignments, condition, span)
             {
@@ -843,13 +843,13 @@ impl TerminationChecker {
         _condition: &Expr,
         _span: crate::util::span::Span,
     ) -> Option<LinearMeasure> {
-        let z3 = self.z3?;
+        let solver = self.solver?;
 
         let bounded_vars: Vec<&str> = bounds.iter().map(|(v, _)| v.as_str()).collect();
         let candidates = self.generate_rank_candidates(&bounded_vars, bounds);
 
         for candidate in &candidates {
-            if self.verify_rank_candidate(candidate, bounds, assignments, z3) {
+            if self.verify_rank_candidate(candidate, bounds, assignments, solver) {
                 return Some(candidate.clone());
             }
         }
@@ -910,7 +910,7 @@ impl TerminationChecker {
         candidate: &LinearMeasure,
         _bounds: &[(String, (BoundOp, BoundExpr))],
         _assignments: &[LoopAssignment],
-        z3: &Z3Backend,
+        solver: &dyn Solver,
     ) -> bool {
         let mut commands = Vec::new();
 
@@ -942,7 +942,7 @@ impl TerminationChecker {
 
         // unsat = m' < m 在所有情况下成立 → 严格递减
         matches!(
-            z3.solve(&commands, 50),
+            solver.solve(&commands, 50),
             crate::frontend::core::typecheck::proof::smt::ast::SMTResult::Unsat
         )
     }

@@ -6826,6 +6826,10 @@ impl AstToIrGenerator {
         None
     }
 
+    /// 生成 Call 表达式 IR
+    ///
+    /// `_expr` 为分发点透传的原表达式（当前未使用，保留以对齐其余外提臂的签名）。
+    #[allow(clippy::too_many_arguments)]
     fn generate_call_expr_ir(
         &mut self,
         func: &Expr,

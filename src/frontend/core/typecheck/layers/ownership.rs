@@ -19,7 +19,7 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 use crate::frontend::core::typecheck::proof::smt::ast::{SMTSort, SMTResult};
 use crate::frontend::core::typecheck::proof::smt::translate::translate_constraint;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::frontend::core::typecheck::proof::smt::z3_backend::Z3Backend;
+use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
 
 // ── ReleasePlan ───────────────────────────────────────────
 
@@ -624,9 +624,9 @@ pub(crate) fn smt_cut(
 
         let commands = translate_constraint(&constraint, &[], &var_sorts);
 
-        let backend = match Z3Backend::new() {
-            Ok(b) => b,
-            Err(_) => return false, // Z3 不可用 → 保守不切断（回边穿越）
+        let backend = match default_solver() {
+            Some(b) => b,
+            None => return false, // 求解器不可用 → 保守不切断（回边穿越）
         };
 
         matches!(backend.solve(&commands, 100), SMTResult::Unsat)
