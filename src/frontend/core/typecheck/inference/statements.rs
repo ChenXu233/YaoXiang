@@ -89,6 +89,7 @@ pub struct StatementChecker {
     /// RFC-010: 变体构造调用点（span 键控）
     pub variant_ctor_calls: Vec<crate::frontend::core::typecheck::environment::VariantCtorCall>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
+    pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
     pub operator_dispatches:
         Vec<crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
@@ -160,6 +161,7 @@ impl StatementChecker {
             interface_impl_registry: HashMap::new(),
             sum_types: HashMap::new(),
             variant_ctor_calls: Vec::new(),
+            try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             gamma,
             dep_env,
@@ -2380,6 +2382,7 @@ impl StatementChecker {
                         self.call_ownership.extend(inferrer.call_ownership);
                         self.existential_coercions
                             .extend(inferrer.existential_coercions);
+                        self.try_expr_impls.append(&mut inferrer.try_expr_impls);
                         self.operator_dispatches
                             .extend(inferrer.operator_dispatches);
                         self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
@@ -2459,6 +2462,7 @@ impl StatementChecker {
                 self.call_ownership.extend(inferrer.call_ownership);
                 self.existential_coercions
                     .extend(inferrer.existential_coercions);
+                self.try_expr_impls.append(&mut inferrer.try_expr_impls);
                 self.operator_dispatches
                     .extend(inferrer.operator_dispatches);
                 self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);

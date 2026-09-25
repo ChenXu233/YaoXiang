@@ -46,6 +46,9 @@ pub struct TypeCheckResult {
     pub variant_ctor_calls: Vec<super::environment::VariantCtorCall>,
     /// RFC-011b 运算符派发点（span 键控；ir_gen 据此把原生指令换为方法调用）
     pub operator_dispatches: Vec<super::operator_interfaces::OperatorDispatch>,
+    /// RFC-011b `?` 表达式的 Try 实现类型名（span 键控；ir_gen 据此命名
+    /// 四方法调用链——接收者是任意表达式时类型名别无来处）
+    pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
     /// 用户模块命名空间别名表（别名 → 模块限定键）。
     /// 模块解析归 typecheck 所有：由整体导入（`use lib` / `use lib as l`）登记，IR 生成直接消费。
     pub module_namespaces: HashMap<String, String>,

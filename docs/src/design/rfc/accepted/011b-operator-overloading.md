@@ -188,7 +188,7 @@ Layer 2  接口契约（泛型约束用）
 | `%`               | `Modulo`                      | `modulo`           | ✅        |
 | `==` `!=`         | `Equal`                       | `equal`            | ✅        |
 | `[]`              | `Index`                       | `index`            | ✅        |
-| `?`               | `Try`（形状未定，见开放问题） | `residual`（暂定） | ❌ 阶段 2 |
+| `?`               | `Try`（四方法，阶段 2 定案）  | `is_failure` 等    | ✅ 已落地 |
 | `<` `<=` `>` `>=` | —（保留原生指令）             | —                  | ❌        |
 | `and` `or`        | —（短路是语言语义，不可重载） | —                  | ❌        |
 | 位运算 5 个       | —                             | —                  | ❌        |
@@ -332,16 +332,35 @@ Grid    实例化 Index(Grid, Tuple(Int, Int), Float)       → g[0, 1]
 
 **同一类型的同名接口允许多个实例化**，按其注入方法的签名区分、遵循 RFC-011a 方法级重载规则共存。RFC-011a 的重载明文只到方法级，本条在其上补一层实例化级规则：同名接口实例化共存的合法性由展开后方法签名是否冲突决定（冲突即 E1097，与字段/方法命名空间规则同源）。
 
-#### 传播接口（阶段 2，形状未定）
+#### 传播接口 Try（阶段 2 已定案并落地）
 
-`?` 的接口化目标接口名为 `Try`，但**完整形状未定**，不进入首批。理由：
+`?` 的接口化接口名为 `Try`，四方法形状（2026-09-22 阶段 2 定案）：
 
-1. `?` 实际做三件事：判定成败（现靠硬编码 variant
-   0）、取出成功载荷、失败路径把整个值原样从当前函数返回。仅有 `residual: (self: &Self) -> E`
-   一个方法只覆盖第三件事的一角，现在写死将来大概率返工；
-2. 阶段 2 本就依赖 RFC-010（构造 `Result` 值）与 RFC-010b（变体解构）落地；
-3. 伴生的**构造子焊死问题**（`ok` / `err` / `some` 由解析器识别，语言规范 §1.4.2）与 `?`
-   的类型名焊死是同一件事的两半，「Result 归 std」必须两半一起解，均归阶段 2 范围。
+```yaoxiang
+Try: (Self: Type, T: Type, E: Type) -> Type = {
+    is_failure: (self: &Self) -> Bool,
+    success:    (self: &Self) -> T,
+    residual:   (self: &Self) -> E,
+    from_error: (E) -> Self,
+}
+```
+
+- **语义分工**：`is_failure` 判定成败、`success` 取成功载荷、`residual` 取失败
+  载荷、`from_error` 做跨类型传播的桥（`f()?` 的 `T` ≠ 外层 `U` 时从 `E` 重建
+  失败值）。`?` 的 lowering 统一生成四方法调用链——`is_failure(t)` 为真则
+  `Ret from_error(residual(t))`，否则表达式值为 `success(t)`；不再手写变体
+  检查序列，`Result` / `Option`（std yx 实现）与用户自定义 Try 类型同一路径。
+- **死路分支**：`success` 的失败臂与 `residual` 的成功臂契约上不可达，实现用
+  `assert(false)` 发散（`assert` 返回 `Never`，爆炸原理 `Never <: T` 放行，
+  type-system.md §2.2）。
+- **检查**：typecheck 查接口实现登记表（Self 位名义匹配，抽象条目按 scrutinee
+  实参实例化）；外层函数返回类型必须也实现 `Try` 且 `E` 位可接住失败值
+  （E1081/E1082/E1083 语义随之接口化）。
+- **Result 归 std**：`Result` / `Option` 的类型定义与 Try 实现迁入
+  `std/result.yx` / `std/option.yx`（纯 YaoXiang），native `ok`/`err` 构造器
+  退役——变体构造语法 `Result(T, E).ok(v)` 是唯一构造通道（构造子焊死问题
+  随 parser 特判退役一并解决）。Option 的 Try 残余类型取 `Void`（对应 Rust
+  Try 实验的 NoneT 语义）。
 
 ### 示例
 
@@ -702,7 +721,7 @@ Instruction::VariantTag { group: "Result".to_string(), .. }
 | 名字与登记分离       | 运算符只查接口实现登记表，不走名字解析               | 本地同名绑定（类型级 `Add` 家族等）与运算符互不干扰；RFC-011 §5.2 示例无需改动                          | 2026-09-22 |
 | 孤儿规则             | 实现跟随类型的定义模块                               | 所有类型一视同仁，内建类型无特权                                                                        | 2026-09-22 |
 | `Any` 的 `==`        | 保持运行时比较，不查登记表                           | RFC-036 `assert_eq` 断言族已依赖此行为                                                                  | 2026-09-22 |
-| `Try` 形状           | 挂起至阶段 2 开工前定案                              | `?` 需三件事，单方法 `residual` 不够；构造子 parser 特判一并纳入                                        | 2026-09-22 |
+| `Try` 形状           | 定案：四方法（is_failure/success/residual/from_error）+ assert-Never 死路语义；已落地 | `?` 需三件事，单方法 `residual` 不够；构造子 parser 特判随 Result 归 std 一并退役                          | 2026-09-22 |
 | `%` 语义定性         | 缺陷修正（文档已承诺取模），不留兼容期               | `reference/index.md`「乘除取模」为先证                                                                  | 2026-09-22 |
 | `Result` 归 std 依据 | 引 RFC-013 既有定位，不再引用不存在的编号            | RFC-013 已写「std 库 `Result(T, Error)`」                                                               | 2026-09-22 |
 

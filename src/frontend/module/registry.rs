@@ -200,12 +200,13 @@ impl ModuleRegistry {
         map
     }
 
-    /// 方法绑定的**限定名**映射（`"Result.is_failure"` → `"std.result.is_failure"`）。
+    /// 方法绑定的**限定名**映射（`"Result.is_failure"` → `"std.result.Result.is_failure"`）。
     ///
     /// yx std 模块的方法（`Type.method` 定义）在方法调用点按 `{类型名}.{方法}`
-    /// 命名，但 IR 函数表里的名字是模块限定的（`std.result.is_failure`）——
-    /// 此映射补齐两者。仅收录 std 模块（用户模块方法本就在入口 IR 里以
-    /// `Type.method` 原名存在，限定会错分发）。
+    /// 命名，但 IR 函数表里的名字是「模块路径 + 方法全键」限定的
+    /// （`std.result.Result.is_failure`，模块内原名含类型前缀）——此映射补齐。
+    /// 仅收录 std 模块（用户模块方法本就在入口 IR 里以 `Type.method` 原名
+    /// 存在，限定会错分发）。
     pub fn std_method_binding_qualified_map(&self) -> HashMap<String, String> {
         let mut map = HashMap::new();
         for module in self.modules.values() {

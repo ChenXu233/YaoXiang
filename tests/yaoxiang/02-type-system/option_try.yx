@@ -1,0 +1,34 @@
+// 02-type-system/option_try.yx
+// 覆盖: `?` 在返回 Option 的函数里传播 none（RFC-011b 阶段 2：Try 残余
+// 类型取 Void，对应 Rust Try 实验的 NoneT 语义）
+// 验证:
+//   - some 经 `?` 解出载荷
+//   - none 经 `?` 从函数原样上抛（from_error(Void) → none）
+// 状态: ✅ 可运行
+
+use std.assert
+use std.option
+
+bump: (o: &Option(Int)) -> Option(Int) = (o) => {
+    v = o?
+    return Option(Int).some(v + 1)
+}
+
+main: () -> Void = {
+    some_case = Option(Int).some(4)
+    none_case = Option(Int).none()
+
+    bumped = bump(&some_case)
+    match bumped {
+        some(v) => assert(v == 5, "? keeps some payload"),
+        _ => assert(false, "? must not turn some into none"),
+    }
+
+    propagated = bump(&none_case)
+    match propagated {
+        some(_) => assert(false, "? must not fabricate a value"),
+        _ => assert(true, "? propagates none"),
+    }
+}
+
+main()

@@ -98,6 +98,7 @@ pub struct ExpressionInferrer<'a> {
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
+    pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
     pub operator_dispatches:
         Vec<crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch>,
     /// 依赖类型环境（效应查询）—— 由 StatementChecker 注入
@@ -138,6 +139,7 @@ impl<'a> ExpressionInferrer<'a> {
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
             variant_ctor_calls: Vec::new(),
+            try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -173,6 +175,7 @@ impl<'a> ExpressionInferrer<'a> {
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
             variant_ctor_calls: Vec::new(),
+            try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -209,6 +212,7 @@ impl<'a> ExpressionInferrer<'a> {
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
             variant_ctor_calls: Vec::new(),
+            try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -247,6 +251,7 @@ impl<'a> ExpressionInferrer<'a> {
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
             variant_ctor_calls: Vec::new(),
+            try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             dep_env: None,
@@ -773,6 +778,20 @@ impl<'a> ExpressionInferrer<'a> {
                 Some(name.clone())
             }
             MonoType::Struct(st) if self.sum_types.contains_key(&st.name) => Some(st.name.clone()),
+            // 非泛型和类型的方法体（`self: &Maybe`）：Ref 剥离后是 TypeRef，
+            // 名义命中 sum_types 即和类型（经类型镜像复核）
+            MonoType::TypeRef(n) => {
+                if self.sum_types.contains_key(n) {
+                    Some(n.clone())
+                } else {
+                    match self.type_defs.get(n) {
+                        Some(MonoType::Struct(st)) if self.sum_types.contains_key(&st.name) => {
+                            Some(st.name.clone())
+                        }
+                        _ => None,
+                    }
+                }
+            }
             _ => None,
         };
         let Some(sum_name) = sum_name else {
@@ -3709,35 +3728,65 @@ impl<'a> ExpressionInferrer<'a> {
                 self.check_match_expr(expr, arms)
             }
 
-            // Try 表达式: expr?
+            // Try 表达式: expr?（RFC-011b 阶段 2 定案：接口驱动，不硬绑 Result）
             crate::frontend::core::parser::ast::Expr::Try { expr, span } => {
-                let Some(expected_err) = self.result_err.clone() else {
-                    return Err(ErrorCodeDefinition::try_only_allowed_in_result()
-                        .at(*span)
-                        .build());
-                };
-
                 let inner_ty = self.infer_expr(expr)?;
-                let ok_ty = self.solver.new_var();
-                let expected_result = MonoType::make_result(ok_ty.clone(), expected_err.clone());
+                let mut resolved = self.solver.resolve_type(&inner_ty);
+                while let MonoType::Ref { inner, .. } = resolved {
+                    resolved = *inner;
+                }
+                let resolved = self.solver.resolve_type(&resolved);
 
-                if let Err(_e) = self.solver.unify(&inner_ty, &expected_result) {
-                    let resolved = self.solver.resolve_type(&inner_ty);
-                    if resolved.is_result() {
-                        let err = &resolved.generic_args().expect("Result args")[1];
-                        return Err(ErrorCodeDefinition::try_error_type_mismatch(
-                            &expected_err.to_string(),
-                            &err.to_string(),
-                        )
-                        .at(*span)
-                        .build());
-                    }
+                // 1) 接收者类型必须实现 Try（登记表查询，Self 位名义匹配 +
+                //    抽象条目按 scrutinee 实参实例化）
+                let Some((impl_name, ok_ty, err_ty)) =
+                    super::super::operator_interfaces::query_try_impl(
+                        self.interface_impl_registry,
+                        &resolved,
+                    )
+                else {
                     return Err(
                         ErrorCodeDefinition::try_requires_result(&resolved.to_string())
                             .at(*span)
                             .build(),
                     );
+                };
+
+                // 2) 外层函数返回类型必须也实现 Try，且 E 位接得住 err_ty
+                //    （`?` 的失败值经 from_error 桥沿返回类型传播）
+                let Some(expected_ret) = self.expected_return_type.clone() else {
+                    return Err(ErrorCodeDefinition::try_only_allowed_in_result()
+                        .at(*span)
+                        .build());
+                };
+                let mut expected = self.solver.resolve_type(&expected_ret);
+                while let MonoType::Ref { inner, .. } = expected {
+                    expected = *inner;
                 }
+                let expected = self.solver.resolve_type(&expected);
+                match super::super::operator_interfaces::query_try_impl(
+                    self.interface_impl_registry,
+                    &expected,
+                ) {
+                    Some((_, _, ret_err_ty)) => {
+                        if self.solver.unify(&ret_err_ty, &err_ty).is_err() {
+                            return Err(ErrorCodeDefinition::try_error_type_mismatch(
+                                &self.solver.resolve_type(&ret_err_ty).to_string(),
+                                &self.solver.resolve_type(&err_ty).to_string(),
+                            )
+                            .at(*span)
+                            .build());
+                        }
+                    }
+                    None => {
+                        return Err(ErrorCodeDefinition::try_only_allowed_in_result()
+                            .at(*span)
+                            .build());
+                    }
+                }
+
+                // 记录实现类型名（ir_gen 按同一 AST span 查表命名四方法调用）
+                self.try_expr_impls.push((*span, impl_name));
 
                 Ok(ok_ty)
             }

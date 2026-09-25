@@ -1,0 +1,66 @@
+// 02-type-system/user_try_type.yx
+// 覆盖: 用户自定义和类型实现 Try 接口（孤儿规则 E1104：Self 位与声明
+// 类型名义相同）——`?` 与 Result/Option 走同一条接口驱动路径
+// 验证:
+//   - 非泛型自定义和类型的四方法实现通过完整性检查
+//   - `?` 在返回该类型的函数里按接口语义传播
+// 状态: ✅ 可运行
+
+use std.assert
+
+Maybe: Type = {
+    just: (Int) -> Maybe,
+    nothing: () -> Maybe,
+    Try(Maybe, Int, String),
+}
+
+Maybe.is_failure: (self: &Maybe) -> Bool = (self) => {
+    match self {
+        just(_) => false,
+        _ => true,
+    }
+}
+
+Maybe.success: (self: &Maybe) -> Int = (self) => {
+    match self {
+        just(v) => v,
+        _ => assert(false),
+    }
+}
+
+Maybe.residual: (self: &Maybe) -> String = (self) => {
+    match self.is_failure() {
+        true => "empty",
+        _ => assert(false),
+    }
+}
+
+Maybe.from_error: (e: String) -> Maybe = (e) => {
+    match e {
+        _ => Maybe.nothing(),
+    }
+}
+
+bump: (m: &Maybe) -> Maybe = (m) => {
+    v = m?
+    return Maybe.just(v + 1)
+}
+
+main: () -> Void = {
+    some_case = Maybe.just(4)
+    none_case = Maybe.nothing()
+
+    bumped = bump(&some_case)
+    match bumped {
+        just(v) => assert(v == 5, "? keeps payload"),
+        _ => assert(false, "? must not lose the payload"),
+    }
+
+    propagated = bump(&none_case)
+    match propagated {
+        just(_) => assert(false, "? must not fabricate a value"),
+        _ => assert(true, "? propagates nothing"),
+    }
+}
+
+main()

@@ -1041,6 +1041,11 @@ impl TypeChecker {
         } else {
             Vec::new()
         };
+        let try_expr_impls = if let Some(ref bc) = self.body_checker {
+            bc.try_expr_impls.clone()
+        } else {
+            Vec::new()
+        };
         let operator_dispatches = if let Some(ref bc) = self.body_checker {
             bc.operator_dispatches.clone()
         } else {
@@ -1067,6 +1072,7 @@ impl TypeChecker {
             escaped_refs,
             instantiation_requests,
             existential_coercions,
+            try_expr_impls,
             operator_dispatches,
             variant_ctor_calls,
             implementation_proofs: self.env.implementation_proofs.clone(),

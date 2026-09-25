@@ -369,6 +369,69 @@ pub fn args_compatible(
     }
 }
 
+/// `?` 的 Try 实现查询（RFC-011b 阶段 2 定案：`?` 接口驱动）。
+///
+/// 按 scrutinee 类型名在登记表找 Try 条目（Self 位名义相同），抽象条目
+/// （Self 形态的实参是声明类型参数，如 `Try(Result(T, E), T, E)`）按
+/// scrutinee 实参做结构对齐实例化。返回 (成功载荷 T, 失败残余 E)。
+pub fn query_try_impl(
+    registry: &HashMap<String, Vec<InterfaceImplEntry>>,
+    scrutinee: &MonoType,
+) -> Option<(String, MonoType, MonoType)> {
+    let impl_name: &str = match scrutinee {
+        MonoType::Generic { name, .. } => name.as_str(),
+        MonoType::Struct(s) => s.name.as_str(),
+        MonoType::TypeRef(n) => n.as_str(),
+        _ => return None,
+    };
+    let entry = registry
+        .get(TRY_NAME)?
+        .iter()
+        .find(|e| e.impl_type == impl_name)?;
+    if entry.args.len() != 3 {
+        return None;
+    }
+    // Self 形态与 scrutinee 结构对齐：TypeRef 位逐一绑定 scrutinee 实参
+    //（`Result(T, E)` vs `Result(Int, String)` → T:=Int, E:=String）；
+    // 具体条目（非泛型用户类型）无位可绑，T/E 即实参原值。
+    let mut subst = HashMap::new();
+    bind_pattern_args(&entry.args[0], scrutinee, &mut subst);
+    let t = entry.args[1].substitute(&subst);
+    let e = entry.args[2].substitute(&subst);
+    Some((impl_name.to_string(), t, e))
+}
+
+/// Self 形态与 scrutinee 的结构对齐：形状同处（Generic 位、Ref 内层、
+/// 字段位）逐点把形态侧 TypeRef 绑到 scrutinee 侧实参。
+fn bind_pattern_args(
+    shape: &MonoType,
+    actual: &MonoType,
+    subst: &mut HashMap<String, MonoType>,
+) {
+    match (shape, actual) {
+        (MonoType::TypeRef(n), actual) => {
+            subst.insert(n.clone(), actual.clone());
+        }
+        (
+            MonoType::Generic { args, .. },
+            MonoType::Generic {
+                args: actual_args, ..
+            },
+        ) => {
+            for (s, a) in args.iter().zip(actual_args.iter()) {
+                bind_pattern_args(s, a, subst);
+            }
+        }
+        (MonoType::Ref { inner, .. }, _) => bind_pattern_args(inner, actual, subst),
+        (MonoType::Struct(s), MonoType::Struct(sa)) => {
+            for ((_, st), (_, at)) in s.fields.iter().zip(sa.fields.iter()) {
+                bind_pattern_args(st, at, subst);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// 全实参查询：命中返回条目（如 `Equal` 的 `[Self, R]` 查询）。
 pub fn query_exact<'e>(
     registry: &'e HashMap<String, Vec<InterfaceImplEntry>>,

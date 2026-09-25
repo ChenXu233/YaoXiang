@@ -228,6 +228,8 @@ pub struct AstToIrGenerator {
     /// RFC-011b: 运算符派发点（span → 接收者类型名, 方法名, 取反）。
     /// `==`/`!=` 命中显式 Equal 实例化时，原生比较指令替换为方法调用。
     operator_dispatches: HashMap<Span, (String, String, bool)>,
+    /// RFC-011b：`?` 表达式的 Try 实现类型名（span 键控）
+    try_expr_impls: HashMap<Span, String>,
 
     /// RFC-010: 和类型变体名表（类型名 → 变体名列表，声明序）。
     /// 变体构造调用（形态检测命中）据此取变体序号。
@@ -371,6 +373,11 @@ impl AstToIrGenerator {
                 .operator_dispatches
                 .iter()
                 .map(|d| (d.span, (d.type_name.clone(), d.method.clone(), d.negate)))
+                .collect(),
+            try_expr_impls: type_result
+                .try_expr_impls
+                .iter()
+                .map(|(span, name)| (*span, name.clone()))
                 .collect(),
             sum_type_variants: type_result
                 .sum_types
@@ -5749,67 +5756,99 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
-        // #301：`?` 真实语义——Result 解包 + Err 提前返回（错误
-        // 传播通道，type-system.md §4.2 Result(T, E)）。
-        // 求值 expr（Result(T, E)，运行时 Enum{variant 0=ok/1=err}）：
-        //   variant 0 → 表达式值为解包后的 T（payload）
-        //   variant 1 → 以整个 Enum 值提前 Ret 当前函数（沿调用栈传播）
-        // typecheck 侧已拦截：非 Result 表达式（E1082）、函数返回类型
-        // 非 Result（E1081）、错误类型不匹配（E1083）。
+        // `?` 的接口驱动 lowering（RFC-011b 阶段 2 定案）：不再手写
+        // VariantTag/Eq/Payload 序列，统一生成 Try 四方法调用链——
+        //   is_failure(t) 为真 → Ret from_error(residual(t))
+        //   为假           → 表达式值为 success(t)
+        // Result / Option（std yx 实现）与用户自定义 Try 类型同一路径；
+        // 方法名经 std 方法绑定限定名映射改写（用户类型用 `Type.method`
+        // 原名）。typecheck 侧已拦截：未实现 Try（E1082）、外层返回类型
+        // 未实现 Try（E1081）、错误类型不匹配（E1083）。
+        //
+        // 特化说明：方法调用不产生单态化请求，`std.` 前缀函数按 mono
+        // 保留规则以未特化原版存活（解释器类型擦除执行），与显式方法
+        // 调用同一执行模型。
         self.generate_expr_ir(expr, result_reg, instructions, constants)?;
         let span = *span;
-        let tag_reg = self.next_temp_reg();
-        instructions.push(Instruction::VariantTag {
-            dst: Operand::Local(tag_reg),
-            obj: Operand::Local(result_reg),
-            group: "Result".to_string(),
+
+        // 接收者类型名 → 四个方法的目标名。
+        // 优先按 span 查 typecheck 记录的实现类型名（接收者是任意表达式时
+        // 这是唯一来处）；退回表达式类型推导（局部变量形态）。
+        let base_name = self.try_expr_impls.get(&span).cloned().or_else(|| {
+            self.get_expr_mono_type(expr).and_then(|ty| {
+                let mut ty = ty;
+                while let crate::frontend::core::types::MonoType::Ref { inner, .. } = ty {
+                    ty = *inner;
+                }
+                match ty {
+                    crate::frontend::core::types::MonoType::Generic { name, .. } => Some(name),
+                    crate::frontend::core::types::MonoType::Struct(s) => Some(s.name.clone()),
+                    crate::frontend::core::types::MonoType::TypeRef(n) => Some(n.clone()),
+                    _ => None,
+                }
+            })
+        });
+        let method_names = base_name.map(|base| {
+            let qualified = self.registry.std_method_binding_qualified_map();
+            ["is_failure", "residual", "from_error", "success"].map(|m| {
+                let key = format!("{}.{}", base, m);
+                qualified.get(&key).cloned().unwrap_or(key)
+            })
+        });
+        let Some([is_failure_name, residual_name, from_error_name, success_name]) = method_names
+        else {
+            // typecheck 已保证接收者实现 Try；无类型名属于防御性分支
+            return Err(ErrorCodeDefinition::ir_unsupported_pattern("try receiver")
+                .at(span)
+                .build());
+        };
+        let call_method = |name: &str, dst: usize, arg: usize| Instruction::Call {
+            dst: Some(Operand::Local(dst)),
+            func: Operand::Const(ConstValue::String(name.to_string())),
+            args: vec![Operand::Local(arg)],
             span,
-        });
-        let ok_const = self.next_temp_reg();
-        instructions.push(Instruction::Load {
-            dst: Operand::Local(ok_const),
-            src: Operand::Const(ConstValue::Int(0)),
-            span: self.cur_span,
-        });
-        let eq_reg = self.next_temp_reg();
-        instructions.push(Instruction::Eq {
-            dst: Operand::Local(eq_reg),
-            lhs: Operand::Local(tag_reg),
-            rhs: Operand::Local(ok_const),
-            span: self.cur_span,
-        });
-        // variant != 0（Err）→ 跳到提前返回
-        let is_err_idx = instructions.len();
-        instructions.push(Instruction::JmpIfNot {
-            cond: Operand::Local(eq_reg),
+            def: None,
+        };
+
+        // is_failure(t) 为真 → 失败路径
+        let f_reg = self.next_temp_reg();
+        instructions.push(call_method(&is_failure_name, f_reg, result_reg));
+        let fail_jmp_idx = instructions.len();
+        instructions.push(Instruction::JmpIf {
+            cond: Operand::Local(f_reg),
             target: 0,
             span: self.cur_span,
         });
-        // Ok 路径：解包 payload 作为表达式值
-        instructions.push(Instruction::VariantPayload {
+        // 成功路径：表达式值为 success(t)
+        let s_reg = self.next_temp_reg();
+        instructions.push(call_method(&success_name, s_reg, result_reg));
+        instructions.push(Instruction::Load {
             dst: Operand::Local(result_reg),
-            obj: Operand::Local(result_reg),
-            group: "Result".to_string(),
-            span,
+            src: Operand::Local(s_reg),
+            span: self.cur_span,
         });
-        let end_idx = instructions.len();
+        let end_jmp_idx = instructions.len();
         instructions.push(Instruction::Jmp {
             target: 0,
             span: self.cur_span,
         });
-        // Err 路径：以整个 Result 值提前返回（Err(e) 沿调用栈传播）
-        let err_target = instructions.len();
-        instructions[is_err_idx] = Instruction::JmpIfNot {
-            cond: Operand::Local(eq_reg),
-            target: err_target,
+        // 失败路径：Ret from_error(residual(t))
+        let fail_target = instructions.len();
+        instructions[fail_jmp_idx] = Instruction::JmpIf {
+            cond: Operand::Local(f_reg),
+            target: fail_target,
             span: self.cur_span,
         };
+        let e_reg = self.next_temp_reg();
+        instructions.push(call_method(&residual_name, e_reg, result_reg));
+        let err_reg = self.next_temp_reg();
+        instructions.push(call_method(&from_error_name, err_reg, e_reg));
         instructions.push(Instruction::Ret {
-            value: Some(Operand::Local(result_reg)),
+            value: Some(Operand::Local(err_reg)),
             span: self.cur_span,
         });
         let end_target = instructions.len();
-        instructions[end_idx] = Instruction::Jmp {
+        instructions[end_jmp_idx] = Instruction::Jmp {
             target: end_target,
             span: self.cur_span,
         };
@@ -6795,6 +6834,18 @@ impl AstToIrGenerator {
                 if self.sum_type_variants.contains_key(&name) =>
             {
                 Some(name)
+            }
+            // 非泛型和类型的方法体（`self: &Maybe`）：剥 Ref 后是 TypeRef /
+            // Struct 镜像，名义命中变体表即和类型（与 typecheck 同款判定）
+            crate::frontend::core::types::MonoType::TypeRef(n)
+                if self.sum_type_variants.contains_key(n.as_str()) =>
+            {
+                Some(n.clone())
+            }
+            crate::frontend::core::types::MonoType::Struct(s)
+                if self.sum_type_variants.contains_key(&s.name) =>
+            {
+                Some(s.name.clone())
             }
             _ => None,
         }
