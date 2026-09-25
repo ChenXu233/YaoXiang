@@ -374,21 +374,15 @@ fn parse_constructor_type(
 
     state.expect(&TokenKind::RParen);
 
-    // Lower well-known generic types to dedicated AST nodes.
-    match (name.as_str(), args.len()) {
-        ("Option", 1) => Some(Type::Option(Box::new(args.into_iter().next()?))),
-        ("Result", 2) => {
-            let mut it = args.into_iter();
-            let ok = it.next()?;
-            let err = it.next()?;
-            Some(Type::Result(Box::new(ok), Box::new(err)))
-        }
-        _ => Some(Type::Generic {
-            name,
-            name_span,
-            args,
-        }),
-    }
+    // RFC-010: Result/Option 不再 lower 成专用 AST 节点——它们是 std
+    // 预置的记录式和类型（编译器注册 GenericTypeDef + sum_types），
+    // 与用户自定义泛型类型走同一 `Type::Generic` 路径。类型表示仍为
+    // `Generic{"Result"/"Option", args}`（MonoType 层不变）。
+    Some(Type::Generic {
+        name,
+        name_span,
+        args,
+    })
 }
 
 /// Parse function type with parameter names: `(a: Int, b: Int) -> Int`

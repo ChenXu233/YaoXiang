@@ -5135,9 +5135,14 @@ impl AstToIrGenerator {
             );
 
             // RFC-010b: Identifier 兜底臂——无条件匹配并绑定 scrutinee
-            if let ast::Pattern::Identifier(bn) = &arm.pattern {
+            //（臂专属 scope，结束恢复外层映射）
+            let bound_scrutinee = if let ast::Pattern::Identifier(bn) = &arm.pattern {
+                self.enter_scope();
                 self.register_local(bn, scrutinee_reg);
-            }
+                Some(bn.clone())
+            } else {
+                None
+            };
 
             let jump_to_next_idx = if needs_condition {
                 // Wildcard / Identifier: 始终匹配，不需条件跳转
@@ -5200,8 +5205,11 @@ impl AstToIrGenerator {
                             span: self.cur_span,
                         });
 
-                        // 载荷绑定：Identifier 载荷 → 局部名
-                        if let ast::Pattern::Identifier(bn) =
+                        // 载荷绑定：Identifier 载荷 → 臂专属作用域内的局部名。
+                        // 必须包 scope 层：同名遮蔽外层变量时，臂结束要恢复
+                        // 外层槽位映射（否则后续 match 以该名为 scrutinee 会
+                        // 读到从未写入的载荷槽 → 运行时 Void）
+                        let bound_payload = if let ast::Pattern::Identifier(bn) =
                             pattern.as_deref().unwrap_or(&ast::Pattern::Wildcard)
                         {
                             let payload_reg = self.next_temp_reg();
@@ -5211,8 +5219,12 @@ impl AstToIrGenerator {
                                 group: sum_name.clone(),
                                 span: self.cur_span,
                             });
+                            self.enter_scope();
                             self.register_local(bn, payload_reg);
-                        }
+                            Some(bn.clone())
+                        } else {
+                            None
+                        };
 
                         // 交由下方通用的 body 生成与跳转修复处理：
                         // 借 Union 臂不做 Literal 比较，直接把 jump 标记传下去
@@ -5223,6 +5235,9 @@ impl AstToIrGenerator {
                             instructions,
                             constants,
                         )?;
+                        if bound_payload.is_some() {
+                            self.exit_scope();
+                        }
                         instructions.push(Instruction::Move {
                             dst: Operand::Local(result_reg),
                             src: Operand::Local(arm_result_reg),
@@ -5308,6 +5323,11 @@ impl AstToIrGenerator {
                 span: self.cur_span,
             }); // 占位符
             jumps_to_end.push(jmp_end_idx);
+
+            // Identifier 兜底臂的绑定作用域结束（恢复外层映射）
+            if bound_scrutinee.is_some() {
+                self.exit_scope();
+            }
 
             // 修复条件跳转目标（指向当前 arm 之后的代码）
             if let Some(jmp_idx) = jump_to_next_idx {

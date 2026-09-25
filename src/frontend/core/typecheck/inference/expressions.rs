@@ -2702,11 +2702,19 @@ impl<'a> ExpressionInferrer<'a> {
                                 if !matches!(ty, MonoType::MetaType { .. }) {
                                     return None;
                                 }
+                                // 具名类型解包失败（Any 等非注册名）时保留
+                                // 名义引用 TypeRef(名)——错拼名由类型名校验拦截
                                 concrete_type_from_expr_arg(
                                     a,
                                     self.type_defs,
                                     self.generic_type_defs,
                                 )
+                                .or_else(|| match a {
+                                    crate::frontend::core::parser::ast::Expr::Var(n, _) => {
+                                        Some(MonoType::TypeRef(n.clone()))
+                                    }
+                                    _ => None,
+                                })
                             })
                             .collect::<Option<Vec<_>>>()
                             .ok_or_else(|| {
@@ -4321,6 +4329,10 @@ fn is_builtin_type_name(name: &str) -> bool {
     MonoType::from_builtin_name(name).is_some()
         || is_builtin_generic_type_name(name)
         || name == "Type"
+        // RFC-010: std 预置类型名（封闭集合）——Any 顶类型、
+        // Error 错误载体（RFC-013 类型族），值位置实参位合法
+        || name == "Any"
+        || name == "Error"
 }
 
 /// 内置泛型容器的类型名（值位置可作类型构造器用）。

@@ -13,12 +13,12 @@ use std.assert
 
 parse_double: (s: &String) -> Result(Int, Error) = {
     n = string.parse_int(s)?
-    return result.ok(n * 2)
+    return Result(Int, Error).ok(n * 2)
 }
 
 parse_chain: (s: &String) -> Result(Int, Error) = {
     d = parse_double(s)?
-    return result.ok(d + 1)
+    return Result(Int, Error).ok(d + 1)
 }
 
 main: () -> Void = {
@@ -33,7 +33,7 @@ main: () -> Void = {
     assert.assert(result.unwrap_or(err, -1) == -1, "chain err: unwrap_or default")
 
     // 构造器直用
-    e = result.err("boom")
+    e = Result(Int, String).err("boom")
     assert.assert(result.is_err(e), "result.err is_err")
 
     print("question_propagation_ok")
