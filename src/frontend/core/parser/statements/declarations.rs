@@ -34,24 +34,46 @@ fn is_type_param_annotation(ty: Option<&Type>) -> bool {
 
 /// 结构判定：参数名是否在给定类型中作为类型引用（`Type::Name`）出现。
 /// 用于识别 const 泛型参数——如 `(n: N)` 里的 N 被当类型用。不看大小写。
+///
+/// RFC-027a：`is_predicate` 判定「类型应用名是否编译期谓词」——谓词应用的
+/// 实参位是**值**（`Terminates(b)` 的 `b`），不是类型引用。不排除则形参 `b`
+/// 被误认为 const 泛型参数，从而被从 lambda params 中剔除、并当作类型替换
+/// （实测：`(a: Int, b: Int) -> Terminates(b)` 的 lambda params 退化为 `[a]`）。
 fn name_used_as_type(
     name: &str,
     ty: &Type,
+    is_predicate: &dyn Fn(&str) -> bool,
 ) -> bool {
     match ty {
         Type::Name { name: n, .. } => n == name,
-        Type::Generic { args, .. } => args.iter().any(|a| name_used_as_type(name, a)),
+        Type::Generic {
+            name: app_name,
+            args,
+            ..
+        } => {
+            if is_predicate(app_name) {
+                return false;
+            }
+            args.iter()
+                .any(|a| name_used_as_type(name, a, is_predicate))
+        }
         Type::Fn {
             params,
             return_type,
         } => {
-            params.iter().any(|p| name_used_as_type(name, p))
-                || name_used_as_type(name, return_type)
+            params
+                .iter()
+                .any(|p| name_used_as_type(name, p, is_predicate))
+                || name_used_as_type(name, return_type, is_predicate)
         }
-        Type::Option(inner) | Type::Ptr(inner) => name_used_as_type(name, inner),
-        Type::Ref { inner, .. } => name_used_as_type(name, inner),
-        Type::Result(a, b) => name_used_as_type(name, a) || name_used_as_type(name, b),
-        Type::Tuple(types) | Type::Sum(types) => types.iter().any(|t| name_used_as_type(name, t)),
+        Type::Option(inner) | Type::Ptr(inner) => name_used_as_type(name, inner, is_predicate),
+        Type::Ref { inner, .. } => name_used_as_type(name, inner, is_predicate),
+        Type::Result(a, b) => {
+            name_used_as_type(name, a, is_predicate) || name_used_as_type(name, b, is_predicate)
+        }
+        Type::Tuple(types) | Type::Sum(types) => types
+            .iter()
+            .any(|t| name_used_as_type(name, t, is_predicate)),
         Type::Literal { name: n, .. } => n == name,
         _ => false,
     }
@@ -445,16 +467,27 @@ fn parse_assign_after_target(
                     // 直接表达式: name: (a: Int, b: Int) -> Int = a + b
                     state.skip(&TokenKind::Semicolon);
 
-                    // 值参数判定
+                    // 值参数判定。
+                    //
+                    // RFC-027a：`name_used_as_type` 会把「类型应用实参位」也算作
+                    // 类型引用，于是 `-> Terminates(b)` 使 `b` 被当作 const 泛型参数
+                    // 从 lambda params 中剔除（实测退化为 `[a]`，函数体引用 `b` 报
+                    // E3006）。此处排除谓词应用。
+                    //
+                    // parser 不持有类型环境，无法查「是否已注册谓词」，故只能
+                    // 逐个内置谓词硬编码。目前只有 `Terminates`（RFC-027 §6.9）；
+                    // 随后续内置谓词增加而扩展（未来的开集方案：把谓词名下传给
+                    // parser，或改成语法层可判定的形态）。
+                    let is_predicate_app = |n: &str| n == "Terminates";
                     let value_params: Vec<Param> = extracted_params
                         .iter()
                         .filter(|p| {
                             if is_type_param_annotation(p.ty.as_ref()) {
                                 return false;
                             }
-                            let used_as_const = type_annotation
-                                .as_ref()
-                                .is_some_and(|ann| name_used_as_type(&p.name, ann));
+                            let used_as_const = type_annotation.as_ref().is_some_and(|ann| {
+                                name_used_as_type(&p.name, ann, &is_predicate_app)
+                            });
                             !used_as_const
                         })
                         .cloned()

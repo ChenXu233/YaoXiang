@@ -1330,6 +1330,32 @@ impl StatementChecker {
         }
     }
 
+    /// 值级返回位的**精化应用**剥除：取基类型（RFC-027 §6 / #377 A 同源）。
+    ///
+    /// 精化是编译期约束，不是运行时类型——`f: (p: Int) -> IsPositive(5)` 的
+    /// 值级返回类型就是 `Int`。
+    ///
+    /// 为何用 `proof_fn_bases` 而非 `Refined`：本函数拿到的是
+    /// `MonoType::from(ast::Type)` 的**原始**产物（`Generic{IsPositive,[5]}`），
+    /// 尚未经 `resolve_type_annotation` 正格化，故看不到 `Refined`。
+    /// `proof_fn_bases` 正是「返回 Type 的函数名 → 其基类型」表，与
+    /// `resolve_type_annotation` 的证明函数路径同源。
+    ///
+    /// 注意：精化**只在变量绑定位被处理过**（statements.rs 入 scope 处）；
+    /// 返回位此前从未被处理，故「返回位写精化」从未可用。
+    fn strip_refined_value_type(
+        &mut self,
+        ty: MonoType,
+    ) -> MonoType {
+        match ty {
+            MonoType::Generic { ref name, .. } if name == "Terminates" => self.solver.new_var(),
+            MonoType::Generic { ref name, .. } if self.proof_fn_bases.contains_key(name) => {
+                self.proof_fn_bases.get(name).cloned().unwrap_or(ty)
+            }
+            other => other,
+        }
+    }
+
     /// 检查函数语句
     #[allow(clippy::too_many_arguments)]
     fn check_fn_stmt(
@@ -1403,7 +1429,12 @@ impl StatementChecker {
 
         let mut used_as_const: std::collections::HashSet<String> = std::collections::HashSet::new();
         if !candidate_names.is_empty() {
-            // 扫描内层 Fn 的 params 判断 const 用途
+            // 扫描内层 Fn 的 params 判断 const 用途。
+            //
+            // RFC-027a：谓词应用的实参位是编译期表达式（值）而非类型引用
+            //（`Terminates(b)` 的 `b`），不得计入 const 用途——见
+            // `collect_used_in_type` 的 `is_predicate` 参数。
+            let is_predicate = |n: &str| n == "Terminates" || self.proof_fn_bases.contains_key(n);
             if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
                 type_annotation
             {
@@ -1413,10 +1444,20 @@ impl StatementChecker {
                 } = return_type.as_ref()
                 {
                     for p in inner_params {
-                        collect_used_in_type(p, &candidate_names, &mut used_as_const);
+                        collect_used_in_type(
+                            p,
+                            &candidate_names,
+                            &mut used_as_const,
+                            &is_predicate,
+                        );
                     }
                 }
-                collect_used_in_type(return_type, &candidate_names, &mut used_as_const);
+                collect_used_in_type(
+                    return_type,
+                    &candidate_names,
+                    &mut used_as_const,
+                    &is_predicate,
+                );
             }
         }
 
@@ -1457,6 +1498,10 @@ impl StatementChecker {
                     .map(|t| MonoType::from(t.clone()))
                     .collect();
                 let fn_return_type = MonoType::from(*return_type.clone());
+                // RFC-027：值级返回位的精化剥除（`IsPositive(5)` → `Int`；
+                // `Terminates(b)` → 新鲜变量）。不剥则 `Refined` 直接参与 return
+                // 统一 → E1002。精化是编译期约束，不是运行时类型。
+                let fn_return_type = self.strip_refined_value_type(fn_return_type);
 
                 // 闭包包装形态：体的末位是单个 lambda 表达式语句
                 //（parser paren_return 包装的标记，declarations.rs）
@@ -1687,7 +1732,35 @@ impl StatementChecker {
                 } = type_ann
                 {
                     if !args.is_empty() {
-                        if let Some(base) = self.proof_fn_bases.get(name) {
+                        // RFC-027a：`Terminates(m)` 是内置谓词（无源码声明），
+                        // 故不在 `proof_fn_bases` 里——单独分支正格化为 `Refined`。
+                        // 基类型取新鲜变量：终止性见证不约束值类型。
+                        //
+                        // ⚠ 测度保真缺口（T2 范围）：下面只收 `Type::ConstExpr` 实参，
+                        // 而 `Terminates(b)` 的 `b` 在 AST 里是 `Type::Name`，故此处
+                        // `constraint_args` 可能为空。T1 的验收是「不报错」，已达成；
+                        // 测度的实际提取与保真由 T2 处理（需同时收 `Name` 与
+                        // `ConstExpr` 两种形态）。与证明函数路径同型限制。
+                        if name == "Terminates" && args.len() == 1 {
+                            let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
+                                .iter()
+                                .filter_map(|a| {
+                                    if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = a {
+                                        crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            MonoType::Refined {
+                                base: Box::new(self.solver.new_var()),
+                                constraint:
+                                    crate::frontend::core::types::const_data::ConstExpr::Call {
+                                        func: "Terminates".into(),
+                                        args: constraint_args,
+                                    },
+                            }
+                        } else if let Some(base) = self.proof_fn_bases.get(name) {
                             let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
                                 .iter()
                                 .filter_map(|a| {

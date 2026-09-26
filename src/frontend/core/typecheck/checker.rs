@@ -1298,6 +1298,7 @@ impl TypeChecker {
                         },
                         other => other,
                     };
+                    let fn_ty = self.resolve_terminates_base(fn_ty);
                     self.env.errors.extend_errors(refined_diags);
 
                     self.env.add_var(name.clone(), PolyType::mono(fn_ty));
@@ -1545,6 +1546,12 @@ impl TypeChecker {
                     // 扫描内层 Fn 的 params：对于 (N: Int) -> (n: N) -> Int，
                     // type_annotation.return_type 是 Fn { params: [Type::Name("N")], ... }。
                     // N 出现在内层 params 中 → const。
+                    //
+                    // RFC-027a：扫描需排除**谓词应用的实参位置**——`Terminates(b)`
+                    // 的 `b`、`IsPositive(n)` 的 `n` 是编译期表达式（值），不是类型
+                    // 引用。不排除则形参名被误判为 const 泛型参数并替换成底层类型，
+                    // 精化约束/测度在到达消费端之前就丢了（E1092）。
+                    let is_predicate = |n: &str| self.is_predicate_application(n);
                     if let Some(crate::frontend::core::parser::ast::Type::Fn {
                         return_type, ..
                     }) = type_annotation
@@ -1555,11 +1562,21 @@ impl TypeChecker {
                         } = return_type.as_ref()
                         {
                             for p in inner_params {
-                                collect_used_in_type(p, &candidate_names, &mut used_as_const);
+                                collect_used_in_type(
+                                    p,
+                                    &candidate_names,
+                                    &mut used_as_const,
+                                    &is_predicate,
+                                );
                             }
                         }
                         // 也扫描 return_type 自身（深度嵌套场景）
-                        collect_used_in_type(return_type, &candidate_names, &mut used_as_const);
+                        collect_used_in_type(
+                            return_type,
+                            &candidate_names,
+                            &mut used_as_const,
+                            &is_predicate,
+                        );
                     }
                 }
 
@@ -1644,6 +1661,7 @@ impl TypeChecker {
                     },
                     other => other,
                 };
+                let fn_ty = self.resolve_terminates_base(fn_ty);
                 self.env.errors.extend_errors(refined_diags);
 
                 // 如果有 type_name（显式方法绑定），使用 add_fn_binding
@@ -3079,8 +3097,12 @@ fn collect_used_const_names(
     if let Type::Struct { body } = definition {
         for item in body {
             match item {
-                TypeBodyItem::Expr(ty) => collect_used_in_type(ty, candidates, &mut found),
-                TypeBodyItem::Field(f) => collect_used_in_type(&f.ty, candidates, &mut found),
+                TypeBodyItem::Expr(ty) => {
+                    collect_used_in_type(ty, candidates, &mut found, &|_| false)
+                }
+                TypeBodyItem::Field(f) => {
+                    collect_used_in_type(&f.ty, candidates, &mut found, &|_| false)
+                }
                 _ => {}
             }
         }
@@ -3089,10 +3111,15 @@ fn collect_used_const_names(
 }
 
 /// 递归扫描类型表达式，收集被引用的候选参数名。
+///
+/// `is_predicate` 判定「该类型应用名是否解析为编译期谓词」——谓词应用的
+/// 实参位是**编译期表达式操作数**（`Terminates(b)` 的 `b`），不是类型引用，
+/// 必须跳过（RFC-027a T1）。
 pub(crate) fn collect_used_in_type(
     ty: &crate::frontend::core::parser::ast::Type,
     candidates: &HashSet<String>,
     found: &mut HashSet<String>,
+    is_predicate: &dyn Fn(&str) -> bool,
 ) {
     use crate::frontend::core::parser::ast::Type;
     match ty {
@@ -3100,9 +3127,19 @@ pub(crate) fn collect_used_in_type(
             found.insert(name.clone());
         }
         Type::ConstExpr(expr) => collect_used_in_expr(expr, candidates, found),
-        Type::Generic { args, .. } => {
+        Type::Generic { name, args, .. } => {
+            // 谓词/证明函数应用：实参是编译期表达式，不是类型引用。
+            //
+            // `Terminates(b)` 的 `b`、`IsPositive(n)` 的 `n` 都是**值**——
+            // 把它们计入 const 泛型用途会让形参名被当作 const 绑定并被替换成
+            // 底层具体类型（`b` → `Int(64)`），精化约束/测度在到达消费端
+            // 前就丢了（E1092）。对照 `Array(T, N)`：`Array` 不是谓词，
+            // 其 `N` 确实是 const 泛型引用，照常计入。
+            if is_predicate(name) {
+                return;
+            }
             for arg in args {
-                collect_used_in_type(arg, candidates, found);
+                collect_used_in_type(arg, candidates, found, is_predicate);
             }
         }
         Type::Fn {
@@ -3110,21 +3147,21 @@ pub(crate) fn collect_used_in_type(
             return_type,
         } => {
             for p in params {
-                collect_used_in_type(p, candidates, found);
+                collect_used_in_type(p, candidates, found, is_predicate);
             }
-            collect_used_in_type(return_type, candidates, found);
+            collect_used_in_type(return_type, candidates, found, is_predicate);
         }
         Type::Option(inner) | Type::Ptr(inner) => {
-            collect_used_in_type(inner, candidates, found);
+            collect_used_in_type(inner, candidates, found, is_predicate);
         }
-        Type::Ref { inner, .. } => collect_used_in_type(inner, candidates, found),
+        Type::Ref { inner, .. } => collect_used_in_type(inner, candidates, found, is_predicate),
         Type::Result(a, b) => {
-            collect_used_in_type(a, candidates, found);
-            collect_used_in_type(b, candidates, found);
+            collect_used_in_type(a, candidates, found, is_predicate);
+            collect_used_in_type(b, candidates, found, is_predicate);
         }
         Type::Tuple(types) | Type::Sum(types) => {
             for t in types {
-                collect_used_in_type(t, candidates, found);
+                collect_used_in_type(t, candidates, found, is_predicate);
             }
         }
         _ => {}
@@ -3335,6 +3372,70 @@ impl TypeChecker {
     }
     // ============ RFC-027 阶段 1：编译期谓词集成 ============
 
+    /// 判定一个类型应用名是否解析为**编译期谓词**（RFC-027 §6.9 / RFC-027a）。
+    ///
+    /// 谓词应用的实参位是编译期表达式（值），不是类型引用——`Terminates(b)` 的
+    /// `b`、`IsPositive(n)` 的 `n` 都是值。这些位置不得参与 const 泛型用途分析。
+    ///
+    /// 判据取两条同源路径（与 `resolve_type_annotation` 一致）：
+    /// 1. 已在 `predicate_defs` 注册的谓词
+    /// 2. 返回 `Type` 的证明函数（如 `IsPositive: (x: Int) -> Type = { x > 0 }`）
+    /// 3. `Terminates`——内置谓词，无源码声明（RFC-027 §6.9）
+    fn is_predicate_application(
+        &self,
+        name: &str,
+    ) -> bool {
+        if name == "Terminates" {
+            return true;
+        }
+        if self.env.predicate_defs.contains_key(name) {
+            return true;
+        }
+        matches!(
+            self.env.get_var(name).map(|p| &p.body),
+            Some(MonoType::Fn { return_type, .. })
+                if matches!(return_type.as_ref(), MonoType::MetaType { .. })
+        )
+    }
+
+    /// 把 `Terminates` 精化的占位 base 换成**新类型变量**（RFC-027a）。
+    ///
+    /// `resolve_type_annotation` 是 `&self`，不能 mint 类型变量，故用 `Void`
+    /// 作占位；此处（`&mut self`）就地替换，使 `Terminates` 标注**不约束**
+    /// 被标注计算的值类型：`gcd` 返 `Int`、`is_even` 返 `Bool` 都能与 base 统一。
+    /// 若不用占位而取固定 `Int`，返回 `Bool` 的函数会撞 E1002。
+    fn resolve_terminates_base(
+        &mut self,
+        ty: MonoType,
+    ) -> MonoType {
+        match ty {
+            MonoType::Refined { base, constraint } => {
+                let is_terminates = matches!(
+                    &constraint,
+                    ConstExpr::Call { func, .. } if func == "Terminates"
+                );
+                if is_terminates && matches!(base.as_ref(), MonoType::Void) {
+                    return MonoType::Refined {
+                        base: Box::new(self.env.solver().new_var()),
+                        constraint,
+                    };
+                }
+                MonoType::Refined { base, constraint }
+            }
+            MonoType::Fn {
+                params,
+                return_type,
+            } => MonoType::Fn {
+                params: params
+                    .into_iter()
+                    .map(|p| self.resolve_terminates_base(p))
+                    .collect(),
+                return_type: Box::new(self.resolve_terminates_base(*return_type)),
+            },
+            other => other,
+        }
+    }
+
     /// 解析类型标注：如果是编译期谓词调用，正格化为 Refined（#263：非法用法写诊断汇入 diags，不静默）
     ///
     /// Generic("Positive", [arg]) -> 尝试 PredicateResolver::try_resolve
@@ -3346,6 +3447,61 @@ impl TypeChecker {
     ) -> MonoType {
         match ty {
             MonoType::Generic { name, args } if !args.is_empty() => {
+                // RFC-027a：`Terminates(m)` —— 终止测度标注（一元形态）。
+                //
+                // `Terminates` 本身不是类型，而是**内置谓词**（RFC-027 §6.9，与
+                // `Int`/`Never` 同属核心原语）：它把测度 `m` 绑定到所在类型位标注的
+                // 那段计算上，声明该计算终止。故正格化为 `Refined`，基类型取
+                // **`Void`**——测度是编译期见证，随 witness 擦除，不参与运行时类型。
+                //
+                // 为何是 `Void` 而非 `Int`：测度返回类型不受限（RFC-027a §非目标：
+                // 不强制自然数），且 `Terminates` 标注的计算**不产出值**
+                // （函数形态下它就是函数自身的终止性声明）。取 `Int` 会让
+                // `gcd(...) -> Terminates(b)` 的函数返回类型错变成 Int。
+                //
+                // 归档到 `Refined` 的收益：`resolves_type_name` 不必再特判，
+                // 且下游已有「`Refined` 取 `base` 做 unify」的成熟路径
+                // （inference/statements.rs），无需新机制。
+                if name == "Terminates" {
+                    if args.len() != 1 {
+                        // 元数不对：二元形态（`Terminates(fn_ty, m)`）尚未实现
+                        // （见 RFC-027a D1 park），多余实参不得静默忽略。
+                        // 复用 E1093（精化类型实参个数不匹配）——同为「精化谓词
+                        // 实参数量不对」类，不新增码位。
+                        diags.push(
+                            ErrorCodeDefinition::refined_arity_mismatch(
+                                "Terminates",
+                                1,
+                                args.len(),
+                            )
+                            .build(),
+                        );
+                        return ty.clone();
+                    }
+                    // 测度实参转 `ConstExpr`（与证明函数路径同一转换）
+                    let const_args: Option<Vec<ConstExpr>> = args
+                        .iter()
+                        .map(|a| self.mono_type_to_const_expr(a))
+                        .collect();
+                    let Some(const_args) = const_args else {
+                        // 实参形态不可转换（如嵌套泛型）——与证明函数路径同码 #263
+                        diags
+                            .push(ErrorCodeDefinition::refined_arg_not_const("Terminates").build());
+                        return ty.clone();
+                    };
+                    return MonoType::Refined {
+                        // 占位 base：`Terminates(b)` 写在返回位时**没有**声明值类型
+                        //（测度只是终止性见证，不约束返回值——RFC-027 §6.9：
+                        // `Terminates(m)` 精化的是「该计算的值类型」自身）。
+                        // 调用方（`collect_function_signature`）会把此占位 base
+                        // 换成新类型变量，使其可与函数体的真实返回类型统一。
+                        base: Box::new(MonoType::Void),
+                        constraint: ConstExpr::Call {
+                            func: "Terminates".into(),
+                            args: const_args,
+                        },
+                    };
+                }
                 // 尝试原有 PredicateResolver（三值结果，#263）
                 match PredicateResolver::try_resolve(&self.env, name, args) {
                     Some(Ok(refined)) => return refined,
