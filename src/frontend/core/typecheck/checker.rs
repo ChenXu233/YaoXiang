@@ -901,8 +901,13 @@ impl TypeChecker {
 
         // RFC-027: 终止检查 — 在类型检查之后、约束求解之前运行
         // 分析循环和递归函数，自动证明终止性
+        //
+        // §7 验证模式门控：只有带精化标注的变量参与「度量变量」判定，裸 `while`
+        // 不进验证模式。此处先收集精化变量名，再注入检查器。
+        let refined_vars = self.collect_refined_var_names(module);
         let term_results = {
-            let mut term_checker = super::layers::termination::TerminationChecker::new();
+            let mut term_checker = super::layers::termination::TerminationChecker::new()
+                .set_refined_vars(refined_vars);
             term_checker.check_module(module, self.env())
         };
         for result in term_results {
@@ -3515,6 +3520,114 @@ impl TypeChecker {
     ///
     /// 阶段 1：遍历模块，构建 TypeDepGraph + 检查初始化绑定
     /// 阶段 2：遍历赋值点，查询依赖图，生成 VC
+    /// 收集带精化标注的**变量名**（RFC-027 §7 验证模式的判据）
+    ///
+    /// 只做「该绑定是否解析为精化类型」的判定，不复用
+    /// `collect_refined_binding_checks`——后者会顺带执行证明调用与依赖图构建，
+    /// 此处重复调用会产生两遍副作用。故独立走一遍轻量遍历。
+    ///
+    /// 只处理变量绑定（`y: T = ...`）与函数签名（参数/返回类型精化，供递归
+    /// 终止使用）。判据是 `resolve_type_annotation` 的结果为 `Refined`——与
+    /// 生成 E4018 的那条路径同一真相源。
+    fn collect_refined_var_names(
+        &self,
+        module: &Module,
+    ) -> std::collections::HashSet<String> {
+        let mut names = std::collections::HashSet::new();
+        for stmt in &module.items {
+            // #324：本遍历会调用 resolve_type_annotation，它会发 E1092/E1093 类
+            // 需 span 的诊断。这些诊断此处丢弃（另一遍负责报出），但**构造**过程
+            // 在 debug 下会因缺 span 而 panic——故须挂 walk 上下文，与
+            // collect_refined_binding_checks 同款。
+            let _span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            self.collect_refined_var_names_in_stmt(stmt, &mut names);
+        }
+        names
+    }
+
+    /// 递归收集单条语句中的精化变量名（含函数体内的嵌套绑定）
+    fn collect_refined_var_names_in_stmt(
+        &self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+        names: &mut std::collections::HashSet<String>,
+    ) {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+
+        // 轻量解析：只关心「注解是否解析为 Refined」，诊断丢弃（另一遍会报）
+        let mut sink = Vec::new();
+
+        match &stmt.kind {
+            StmtKind::Assign {
+                target,
+                type_annotation: Some(type_ann),
+                value,
+                ..
+            } => {
+                if let Expr::Var(name, _) = target.as_ref() {
+                    let mono_ty = MonoType::from(type_ann.clone());
+                    let resolved = self.resolve_type_annotation(&mono_ty, &mut sink);
+                    if matches!(resolved, MonoType::Refined { .. }) {
+                        names.insert(name.clone());
+                    }
+                }
+                // 函数体内的嵌套精化绑定同样计入
+                if let Some(expr) = value.as_deref() {
+                    self.collect_refined_var_names_in_expr(expr, names);
+                }
+            }
+            StmtKind::Expr(expr) => self.collect_refined_var_names_in_expr(expr, names),
+            StmtKind::If {
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                for s in &then_branch.stmts {
+                    self.collect_refined_var_names_in_stmt(s, names);
+                }
+                for (_, body) in else_if_branches {
+                    for s in &body.stmts {
+                        self.collect_refined_var_names_in_stmt(s, names);
+                    }
+                }
+                if let Some(eb) = else_branch {
+                    for s in &eb.stmts {
+                        self.collect_refined_var_names_in_stmt(s, names);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 递归收集表达式内的精化绑定（块/循环体/函数体）
+    fn collect_refined_var_names_in_expr(
+        &self,
+        expr: &crate::frontend::core::parser::ast::Expr,
+        names: &mut std::collections::HashSet<String>,
+    ) {
+        use crate::frontend::core::parser::ast::Expr;
+
+        match expr {
+            Expr::Block(block) => {
+                for s in &block.stmts {
+                    self.collect_refined_var_names_in_stmt(s, names);
+                }
+            }
+            Expr::While { body, .. } | Expr::For { body, .. } => {
+                for s in &body.stmts {
+                    self.collect_refined_var_names_in_stmt(s, names);
+                }
+            }
+            Expr::Lambda { body, .. } => {
+                for s in &body.stmts {
+                    self.collect_refined_var_names_in_stmt(s, names);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn collect_refined_binding_checks(
         &mut self,
         module: &Module,

@@ -150,6 +150,15 @@ pub struct TerminationChecker {
     /// 求解器引用——策略 1 秩函数 SMT 验证
     #[cfg(not(target_arch = "wasm32"))]
     solver: Option<&'static dyn Solver>,
+    /// 带精化标注的变量名集合——决定循环是否进**验证模式**（RFC-027 §7）
+    ///
+    /// RFC-027 §7：终止性不是独立开关，而是验证模式的一部分。**裸 `while`
+    /// 不进验证模式**，不生成任何终止义务；仅当度量变量带精化标注
+    /// （如 `i: UpTo(n)`）时才须证终止。
+    ///
+    /// 空集合 = 无任何精化标注 → 所有循环都不检查（与 RFC 一致）。
+    /// 由 `set_refined_vars` 注入；未注入时保持空集，即「不检查」。
+    refined_vars: std::collections::HashSet<String>,
 }
 
 impl Default for TerminationChecker {
@@ -165,7 +174,21 @@ impl TerminationChecker {
             results: Vec::new(),
             #[cfg(not(target_arch = "wasm32"))]
             solver: None,
+            refined_vars: std::collections::HashSet::new(),
         }
+    }
+
+    /// 注入带精化标注的变量名集合（RFC-027 §7 验证模式的判据）
+    ///
+    /// 门控方向是**放开检查**：精化集合外的变量 → 循环不进验证模式 → 不报
+    /// E4021。因此注入缺失会导致「该查的没查」——调用方必须传真实集合，
+    /// 不能用空集偷懒。
+    pub fn set_refined_vars(
+        mut self,
+        vars: std::collections::HashSet<String>,
+    ) -> Self {
+        self.refined_vars = vars;
+        self
     }
     /// 注入求解器后端
     #[cfg(not(target_arch = "wasm32"))]
@@ -337,6 +360,37 @@ impl TerminationChecker {
 
     // ==================== 循环终止检查 ====================
 
+    /// 循环是否进「验证模式」（RFC-027 §7）
+    ///
+    /// 判据：循环条件里的界变量、或循环体中被赋值的变量，**任一**带精化标注。
+    /// 取「任一」而非「全部」是保守方向——宁可多查（报 E4021 是能力边界提示），
+    /// 不可漏查。
+    /// 判据取 RFC §7「度量变量带精化标注」的**宽读**：循环条件中的变量、或
+    /// 循环体中被赋值的变量，任一带精化即进验证模式。
+    ///
+    /// §7 的范例是 `i: UpTo(n)` 配 `while i < n { i = i + 1 }`——精化变量 i
+    /// 正在条件里。故条件变量必须计入；只看体中被赋值者会漏掉「有精化但本轮
+    /// 未推进」的循环（如 `while i < n { f(i) }`），那是该查而未查。
+    ///
+    /// 方向性：门控是**放开检查**（不生成义务），故取宽读更保守——宽读多生成
+    /// 义务（可能报 E4021），窄读会静默漏查。漏查不可接受，故宁可宽。
+    fn loop_is_in_verification_mode(
+        &self,
+        condition: &Expr,
+        body: &ast::Block,
+    ) -> bool {
+        // 条件中的变量（§7 范例形态：i: UpTo(n) 出现在 `i < n` 里）
+        for (var, _) in self.extract_bounds_from_condition(condition) {
+            if self.refined_vars.contains(&var) {
+                return true;
+            }
+        }
+        // 循环体中被赋值的变量（候选度量）
+        self.collect_assignments(body)
+            .iter()
+            .any(|assign| self.refined_vars.contains(&assign.var))
+    }
+
     /// 分析 while 循环的终止性
     fn check_while_loop(
         &mut self,
@@ -347,6 +401,24 @@ impl TerminationChecker {
     ) {
         // Never 返回函数：循环不终止是类型签名保证的语义，直接放行
         if is_never {
+            return;
+        }
+        // RFC-027 §7：验证模式门控——**裸 `while` 不生成终止义务**。
+        //
+        // 终止性不是独立开关，而是「验证模式」的一部分：类型一旦被精化，它
+        // 标注的那段计算才进验证模式。故只有当循环的**度量变量**（被
+        // 赋值的循环变量）带精化标注时，才要求证明终止。
+        //
+        // 反例（修复前会误报）：`mut i: Int = 0; while i < 10 { i = i + 1 }`
+        // 是普通 Int 循环，按 §7 完全不需要终止证明，此前却报 E4021。
+        //
+        // ⚠ 门控方向是**放开检查**：判错会漏查而非误查。故只看「是否有任一
+        // 度量变量带精化」，不做额外启发式猜测。
+        if !self.loop_is_in_verification_mode(condition, body) {
+            // 仍要下钻循环体，检查其中的嵌套循环（内层可能带精化）
+            for s in &body.stmts {
+                self.check_stmt(s, is_never);
+            }
             return;
         }
         // 1. 从条件中提取边界信息（仅保留循环不变量——上界在循环体内被赋值时

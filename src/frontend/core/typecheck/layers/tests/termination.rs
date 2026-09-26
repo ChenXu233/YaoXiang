@@ -119,6 +119,29 @@ fn make_for(
     })
 }
 
+/// 运行终止检查器，**并把给定变量标记为已精化**（进 RFC-027 §7 验证模式）
+///
+/// §7：裸 `while` 不进验证模式，只有度量变量带精化标注时才生成终止义务。
+/// 未标注精化的循环用 `run_check`（期望「不检查」）；要验证「检查确实发生」
+/// 必须用本函数显式声明精化，否则测的是门控而非检查逻辑。
+fn run_check_with_refined(
+    expr: &Expr,
+    refined: &[&str],
+) -> Vec<ProofResult> {
+    let stmt = Stmt {
+        kind: StmtKind::Expr(Box::new(expr.clone())),
+        span: dummy_span(),
+    };
+    let module = crate::frontend::core::parser::ast::Module {
+        items: vec![stmt],
+        span: dummy_span(),
+    };
+    let env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
+    let vars: std::collections::HashSet<String> = refined.iter().map(|s| s.to_string()).collect();
+    let mut checker = TerminationChecker::new().set_refined_vars(vars);
+    checker.check_module(&module, &env)
+}
+
 /// 运行终止检查器
 fn run_check(expr: &Expr) -> Vec<ProofResult> {
     // 将表达式包装为模块语句
@@ -168,6 +191,44 @@ fn run_check_with_stub_solver(expr: &Expr) -> Vec<ProofResult> {
     };
     let env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
     let mut checker = TerminationChecker::new().with_solver(&ALWAYS_UNSAT);
+    checker.check_module(&module, &env)
+}
+
+/// 同 `run_check_with_stub_solver`，并声明给定变量已精化（进 §7 验证模式）
+#[cfg(not(target_arch = "wasm32"))]
+fn run_check_with_stub_solver_refined(
+    expr: &Expr,
+    refined: &[&str],
+) -> Vec<ProofResult> {
+    use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTResult};
+    use crate::frontend::core::typecheck::proof::smt::backend::Solver;
+
+    #[derive(Debug)]
+    struct AlwaysUnsat;
+    impl Solver for AlwaysUnsat {
+        fn solve(
+            &self,
+            _commands: &[SMTCommand],
+            _timeout_ms: u64,
+        ) -> SMTResult {
+            SMTResult::Unsat
+        }
+    }
+    static ALWAYS_UNSAT: AlwaysUnsat = AlwaysUnsat;
+
+    let stmt = Stmt {
+        kind: StmtKind::Expr(Box::new(expr.clone())),
+        span: dummy_span(),
+    };
+    let module = crate::frontend::core::parser::ast::Module {
+        items: vec![stmt],
+        span: dummy_span(),
+    };
+    let env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
+    let vars: std::collections::HashSet<String> = refined.iter().map(|s| s.to_string()).collect();
+    let mut checker = TerminationChecker::new()
+        .with_solver(&ALWAYS_UNSAT)
+        .set_refined_vars(vars);
     checker.check_module(&module, &env)
 }
 
@@ -223,7 +284,8 @@ fn test_while_constant_condition_fails() {
         span: dummy_span(),
     });
 
-    let results = run_check(&while_expr);
+    // §7：体中是 `x = 1`（非递减），但传入精化集合 {x} 使其进验证模式
+    let results = run_check_with_refined(&while_expr, &["x"]);
     assert!(
         !results.is_empty(),
         "Expected unproven result for non-terminating loop"
@@ -232,6 +294,43 @@ fn test_while_constant_condition_fails() {
         matches!(&results[0], ProofResult::Unproven { .. }),
         "Expected Unproven, got: {:?}",
         results[0]
+    );
+}
+
+/// RFC-027 §7：**裸 `while` 不进验证模式**，不生成任何终止义务
+///
+/// 回归性质：此前实现对所有循环无差别要求终止证明，导致
+/// `mut i: Int = 0; while true { x = 1 }` 这类无精化标注的循环被误报 E4021。
+/// §7 明确「裸 `while` 不进验证模式」——无精化 → 不检查 → 无诊断。
+#[test]
+fn test_bare_while_without_refinement_generates_no_obligation() {
+    // Arrange — 同一个非终止循环，但**不传**精化集合
+    let body_stmt = Box::new(Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::BinOp {
+            op: BinOp::Assign,
+            left: Box::new(Expr::Var("x".to_string(), dummy_span())),
+            right: Box::new(Expr::Lit(Literal::Int(1), dummy_span())),
+            span: dummy_span(),
+        })),
+        span: dummy_span(),
+    });
+    let while_expr = Box::new(Expr::While {
+        condition: Box::new(Expr::Lit(Literal::Bool(true), dummy_span())),
+        body: Box::new(Block {
+            stmts: vec![*body_stmt],
+            span: dummy_span(),
+        }),
+        span: dummy_span(),
+    });
+
+    // Act — 不经 set_refined_vars（空集 = 无精化）
+    let results = run_check(&while_expr);
+
+    // Assert — 不进验证模式，故无任何终止义务（不应出现 Unproven）
+    assert!(
+        results.iter().all(|r| r.is_proved()),
+        "裸 while 按 §7 不进验证模式，不应生成 Unproven。实际: {:?}",
+        results
     );
 }
 
@@ -244,7 +343,7 @@ fn test_while_no_assignment_fails() {
     };
     let while_expr = make_while(make_lt_condition("i", "n"), vec![body_stmt]);
 
-    let results = run_check(&while_expr);
+    let results = run_check_with_refined(&while_expr, &["i"]);
     assert!(
         !results.is_empty(),
         "Expected unproven result for loop with no progress"
@@ -261,7 +360,7 @@ fn test_while_decrement_wrong_direction_fails() {
     // while i < n { i -= 1 } — i 递减但上界是 n，方向错误
     let while_expr = make_while(make_lt_condition("i", "n"), vec![make_decrement("i", 1)]);
 
-    let results = run_check(&while_expr);
+    let results = run_check_with_refined(&while_expr, &["i"]);
     assert!(
         !results.is_empty(),
         "Expected unproven result: i decreases when it should increase toward bound"
@@ -335,11 +434,15 @@ fn test_nested_while_both_terminating() {
 
 #[test]
 fn test_nested_while_inner_fails() {
-    // 外层终止，内层不终止
+    // 外层终止，内层不终止。
+    //
+    // §7：内层必须有带精化的度量变量才会进验证模式——空体 `while true {}`
+    // 无变量可言，按 §7 不生成义务，故此处用 `while j > 0 { j = j + 1 }`：
+    // 有度量变量 j、方向错误故不终止，且声明 j 已精化。
     let inner_while = Box::new(Expr::While {
-        condition: Box::new(Expr::Lit(Literal::Bool(true), dummy_span())),
+        condition: make_gt_condition("j", 0),
         body: Box::new(Block {
-            stmts: vec![],
+            stmts: vec![make_increment("j", 1)],
             span: dummy_span(),
         }),
         span: dummy_span(),
@@ -353,7 +456,7 @@ fn test_nested_while_inner_fails() {
         vec![make_increment("i", 1), inner_stmt],
     );
 
-    let results = run_check(&outer_while);
+    let results = run_check_with_refined(&outer_while, &["i", "j"]);
     // 外层终止(Proved)但内层不终止(Unproven) → 至少 1 个 Unproven
     let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
     assert!(
@@ -391,8 +494,9 @@ fn test_strategy1_cannot_prove_dual_variable_loop_currently() {
         vec![make_increment("i", 1), make_decrement("j", 1)],
     );
 
-    // Act — 注入恒 Unsat（「候选严格递减」）的桩求解器
-    let results = run_check_with_stub_solver(&while_expr);
+    // Act — 注入恒 Unsat（「候选严格递减」）的桩求解器。
+    // 声明 i/j 已精化，使该循环进 §7 验证模式——否则测的是门控而非策略 1。
+    let results = run_check_with_stub_solver_refined(&while_expr, &["i", "j"]);
 
     // Assert — 即便求解器无条件认可任何候选，该循环仍未被证明
     let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
@@ -419,8 +523,8 @@ fn test_strategy2_violation_count_is_placeholder_not_usable() {
         vec![make_increment("i", 1), make_decrement("j", 1)],
     );
 
-    // Act
-    let results = run_check_with_stub_solver(&while_expr);
+    // Act — 声明 i/j 精化以进 §7 验证模式（否则门控直接放行，测不到策略 2）
+    let results = run_check_with_stub_solver_refined(&while_expr, &["i", "j"]);
 
     // Assert — 无任何策略成立
     let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
