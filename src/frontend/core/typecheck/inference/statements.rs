@@ -1885,6 +1885,22 @@ impl StatementChecker {
                     && matches!(resolved_init, MonoType::Struct(_))
                 {
                     resolved_init
+                } else if let MonoType::Refined { base, .. } = &ann_ty {
+                    // RFC-027 §6 / #377 A：精化变量入 scope 的必须是其 **base**。
+                    //
+                    // 精化是编译期约束，不是运行时类型——`y: IsPositive(5)` 的运行时
+                    // 类型就是 `Int`。此前走到下面的 Generic 臂，存回
+                    // `Generic{name:"IsPositive"}`，于是下游每个「期望 base」的位置
+                    // （`z: Int = y`、`return y`、作实参）都撞 E1002。
+                    //
+                    // 约束本身不在此消费：`IsPositive(5)` 校验的是**注解里的字面量
+                    // 5**（静态命题「5 > 0」），与变量后续取值无关——`y: IsPositive(5)
+                    // = -9999` 亦不报错，故「重赋值是否违反约束」不是本层能判定的事。
+                    // 该命题为假时已由注解处的证明调用报 E4018（pipeline.rs）。
+                    //
+                    // 依赖型精化（`s: SumUpTo(n, 6)`，n 变更后重验证）是另一条独立
+                    // 缺口：VC 生成器查 env 得 None 而静默跳过，见 #379。
+                    (**base).clone()
                 } else if let crate::frontend::core::parser::ast::Type::Generic {
                     name, args, ..
                 } = type_ann

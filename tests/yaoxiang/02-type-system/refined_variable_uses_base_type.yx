@@ -1,0 +1,26 @@
+// 02-type-system/refined_variable_uses_base_type.yx
+// 覆盖: RFC-027 §6 —— 精化是编译期约束，变量的运行时类型是其 base
+// 验证: `y: IsPositive(5)` 的运行时类型是 Int，故 y 可自由用于任何期望 Int
+//       的位置（下游标注绑定、返回值、算术）。修复前这些位置均撞 E1002——
+//       变量被存成 Refined/Generic 本体，把编译期约束当成了运行时类型。
+// 状态: ✅ 可运行
+
+use std.assert
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+main: () -> Void = {
+    // 精化变量绑定到 Int 标注的变量（修复前：E1002）
+    y: IsPositive(5) = 5
+    z: Int = y
+    assert.assert(z == 5, "精化变量的运行时值应原样传递")
+
+    // 精化变量参与算术（修复前：E1002）
+    total: Int = y + 1
+    assert.assert(total == 6, "精化变量应可参与 Int 算术")
+
+    // 精化变量重赋同为 base 的值（修复前：E1002 一刀切拒绝任何重赋值）
+    mut w: IsPositive(5) = 5
+    w = 6
+    assert.assert(w == 6, "精化变量的运行时类型是 Int，应可重赋 Int 值")
+}
