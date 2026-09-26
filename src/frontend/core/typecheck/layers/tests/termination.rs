@@ -158,43 +158,14 @@ fn run_check(expr: &Expr) -> Vec<ProofResult> {
     checker.check_module(&module, &env)
 }
 
-/// 运行终止检查器，并注入一个**确定性**桩求解器
+/// 运行终止检查器，并注入一个**确定性**桩求解器，同时声明给定变量已精化
 ///
 /// 桩恒返回 `Unsat`（即「候选在所有路径上严格递减」）。这样用例不依赖
 /// 本机是否安装 Z3，也就能在 CI 上稳定判定策略 1 的可用性。
-#[cfg(not(target_arch = "wasm32"))]
-fn run_check_with_stub_solver(expr: &Expr) -> Vec<ProofResult> {
-    use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTResult};
-    use crate::frontend::core::typecheck::proof::smt::backend::Solver;
-
-    /// 恒「验证通过」的桩：任何候选都被判定为严格递减
-    #[derive(Debug)]
-    struct AlwaysUnsat;
-    impl Solver for AlwaysUnsat {
-        fn solve(
-            &self,
-            _commands: &[SMTCommand],
-            _timeout_ms: u64,
-        ) -> SMTResult {
-            SMTResult::Unsat
-        }
-    }
-    static ALWAYS_UNSAT: AlwaysUnsat = AlwaysUnsat;
-
-    let stmt = Stmt {
-        kind: StmtKind::Expr(Box::new(expr.clone())),
-        span: dummy_span(),
-    };
-    let module = crate::frontend::core::parser::ast::Module {
-        items: vec![stmt],
-        span: dummy_span(),
-    };
-    let env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
-    let mut checker = TerminationChecker::new().with_solver(&ALWAYS_UNSAT);
-    checker.check_module(&module, &env)
-}
-
-/// 同 `run_check_with_stub_solver`，并声明给定变量已精化（进 §7 验证模式）
+///
+/// §7：裸 `while` 不进验证模式，只有度量变量带精化标注时才生成终止义务。
+/// 未标注精化的循环用 `run_check`（期望「不检查」）；要验证「检查确实发生」
+/// 必须用本函数显式声明精化，否则测的是门控而非检查逻辑。
 #[cfg(not(target_arch = "wasm32"))]
 fn run_check_with_stub_solver_refined(
     expr: &Expr,
