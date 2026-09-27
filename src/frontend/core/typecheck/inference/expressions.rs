@@ -1323,8 +1323,13 @@ impl<'a> ExpressionInferrer<'a> {
     ) -> Option<MonoType> {
         use crate::frontend::core::typecheck::operator_interfaces as ops;
         let iface = ops::arithmetic_interface(op)?;
-        let (entry, remaining) =
-            ops::query_prefix(self.interface_impl_registry, iface, &[l.clone(), r.clone()])?;
+        let (entry, remaining) = ops::query_operator_template(
+            self.interface_impl_registry,
+            self.generic_type_defs,
+            self.solver,
+            iface,
+            &[l.clone(), r.clone()],
+        )?;
         let result_ty = remaining.first()?.clone();
         if !entry.native {
             self.operator_dispatches.push(ops::OperatorDispatch {
@@ -1375,8 +1380,10 @@ impl<'a> ExpressionInferrer<'a> {
 
         // 显式 Equal 实例化优先（登记表查询，名义结构匹配；
         // native 条目只含基础类型，Struct 查询命中的必为用户条目）
-        if let Some(entry) = ops::query_exact(
+        if let Some(entry) = ops::query_exact_template(
             self.interface_impl_registry,
+            self.generic_type_defs,
+            self.solver,
             ops::EQUAL_INTERFACE,
             &[l.clone(), r.clone()],
         ) {
@@ -2742,8 +2749,10 @@ impl<'a> ExpressionInferrer<'a> {
                         use crate::frontend::core::typecheck::operator_interfaces as ops;
                         let key_ty = self.infer_expr(index)?;
                         let key_ty = self.solver.resolve_type(&key_ty);
-                        let (entry, remaining) = match ops::query_prefix(
+                        let (entry, remaining) = match ops::query_operator_template(
                             self.interface_impl_registry,
+                            self.generic_type_defs,
+                            self.solver,
                             ops::INDEX_INTERFACE,
                             &[other.clone(), key_ty],
                         ) {

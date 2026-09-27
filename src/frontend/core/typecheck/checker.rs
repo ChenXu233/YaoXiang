@@ -2103,6 +2103,46 @@ impl TypeChecker {
     /// 模块自身的 finalize 职责）——分发查询只匹配 impl_type + args，导入方
     /// 据此恢复登记表即可。三张表全空的普通记录类型返回 None（导出退化为
     /// 既有 mono_type 快照，零开销）。
+    /// 类型表达式是否引用指定类型名（模板 Self 位判定：
+    /// `Index(Box(T), Int, T)` 的 `Box(T)` 引用 Box 自身）
+    fn type_mentions_type(
+        ty: &crate::frontend::core::parser::ast::Type,
+        name: &str,
+    ) -> bool {
+        use crate::frontend::core::parser::ast::Type;
+        match ty {
+            Type::Name { name: n, .. } => n == name,
+            Type::Generic { name: n, args, .. } => {
+                n == name || args.iter().any(|a| Self::type_mentions_type(a, name))
+            }
+            Type::Ref { inner, .. } => Self::type_mentions_type(inner, name),
+            _ => false,
+        }
+    }
+
+    /// 模板条目的成员名：编译器侧规格接口取固定方法名，用户接口取
+    /// 声明体的函数字段名（best-effort——完整性检查在方法定义处另行把关）
+    fn interface_template_methods(
+        head: &str,
+        env: &TypeEnvironment,
+    ) -> Vec<String> {
+        if let Some(spec) = super::operator_interfaces::spec(head) {
+            return vec![spec.method.to_string()];
+        }
+        env.generic_type_defs
+            .get(head)
+            .map(|d| match &d.poly.body {
+                MonoType::Struct(s) => s
+                    .fields
+                    .iter()
+                    .filter(|(_, t)| matches!(t, MonoType::Fn { .. }))
+                    .map(|(n, _)| n.clone())
+                    .collect(),
+                _ => Vec::new(),
+            })
+            .unwrap_or_default()
+    }
+
     pub fn type_def_export_payload(
         &self,
         name: &str,
@@ -2861,6 +2901,15 @@ impl TypeChecker {
                             let abstract_ref = args
                                 .iter()
                                 .any(|a| Self::type_arg_references(a, &enclosing_params));
+                            // Self 位引用类型自身名字（`Index(Box(T), Int, T)` 的
+                            // `Box(T)`）→ 泛型类型**自身的**接口实例化：注册为模板
+                            // 条目（TypeRef 形参原样保留，派发查询按 scrutinee
+                            // 实参结构对齐绑定后替换）。abstract_ref 的原本判定
+                            // 是为接口继承链接（`Animal(Self)`）设计的，会误伤
+                            // 此形态——Box(T) index 端到端缺口（#341）的根因。
+                            let self_is_own_shape = args
+                                .first()
+                                .is_some_and(|a| Self::type_mentions_type(a, name));
                             if !abstract_ref {
                                 self.pending_interface_instantiations.push(
                                     PendingInterfaceInstantiation {
@@ -2868,6 +2917,19 @@ impl TypeChecker {
                                         interface_name: head.clone(),
                                         args: args.clone(),
                                         span,
+                                    },
+                                );
+                            } else if self_is_own_shape {
+                                let mono_args: Vec<MonoType> =
+                                    args.iter().map(|a| MonoType::from(a.clone())).collect();
+                                let methods = Self::interface_template_methods(head, &self.env);
+                                self.env.add_interface_impl(
+                                    head,
+                                    super::environment::InterfaceImplEntry {
+                                        impl_type: name.to_string(),
+                                        args: mono_args,
+                                        methods,
+                                        native: false,
                                     },
                                 );
                             }

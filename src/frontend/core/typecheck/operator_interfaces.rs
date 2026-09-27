@@ -432,6 +432,127 @@ fn bind_pattern_args(
     }
 }
 
+/// RFC-010b/011b：运算符接口**模板查询**——泛型类型体的接口实例化
+///（`Index(Box(T), Int, T)`，实参引用声明参数）注册为模板条目（TypeRef
+/// 形参原样保留），查询时按 scrutinee 结构对齐绑定形参（T:=Int）后整组
+/// 替换。具体实参条目走原查询，行为不变。
+///
+/// `solver` 用于裸 Struct 形态 scrutinee（构造器/注解的代入产物）的
+/// Self 形状实例化 unify 绑参。
+pub fn query_operator_template(
+    registry: &HashMap<String, Vec<InterfaceImplEntry>>,
+    generic_type_defs: &HashMap<String, GenericTypeDef>,
+    solver: &mut crate::frontend::core::types::solver::TypeConstraintSolver,
+    interface: &str,
+    prefix: &[MonoType],
+) -> Option<(InterfaceImplEntry, Vec<MonoType>)> {
+    // 常规查询优先（具体条目，语义不变）
+    if let Some((e, rem)) = query_prefix(registry, interface, prefix) {
+        return Some((e.clone(), rem));
+    }
+    let entries = registry.get(interface)?.clone();
+    for e in entries {
+        if e.args.is_empty() || e.args.len() <= prefix.len() || prefix.is_empty() {
+            continue;
+        }
+        let Some(subst) = bind_template_self(generic_type_defs, solver, &e.args[0], &prefix[0])
+        else {
+            continue;
+        };
+        let bound: Vec<MonoType> = e.args.iter().map(|a| a.substitute(&subst)).collect();
+        // Self 位已由形状对齐验证；校验剩余前缀位（Key 等）
+        if bound[1..prefix.len()]
+            .iter()
+            .zip(prefix[1..].iter())
+            .all(|(x, y)| args_compatible(x, y))
+        {
+            let remaining = bound[prefix.len()..].to_vec();
+            return Some((e, remaining));
+        }
+    }
+    None
+}
+
+/// 全实参模板查询（Equal 的 `[Self, R]` 形态）：绑定后全位校验
+///（Self 位跳过——已由形状对齐验证）。
+pub fn query_exact_template(
+    registry: &HashMap<String, Vec<InterfaceImplEntry>>,
+    generic_type_defs: &HashMap<String, GenericTypeDef>,
+    solver: &mut crate::frontend::core::types::solver::TypeConstraintSolver,
+    interface: &str,
+    prefix: &[MonoType],
+) -> Option<InterfaceImplEntry> {
+    if let Some(hit) = query_exact(registry, interface, prefix) {
+        return Some(hit.clone());
+    }
+    let entries = registry.get(interface)?.clone();
+    for e in entries {
+        if e.args.len() != prefix.len() || prefix.is_empty() {
+            continue;
+        }
+        let Some(subst) = bind_template_self(generic_type_defs, solver, &e.args[0], &prefix[0])
+        else {
+            continue;
+        };
+        let bound: Vec<MonoType> = e.args.iter().map(|a| a.substitute(&subst)).collect();
+        if bound[1..]
+            .iter()
+            .zip(prefix[1..].iter())
+            .all(|(x, y)| args_compatible(x, y))
+        {
+            return Some(e);
+        }
+    }
+    None
+}
+
+/// 模板 Self 形状与 scrutinee 的对齐绑定：返回 形参名→实参。
+/// 两种 scrutinee 形态：Generic（同形按位绑定）、裸 Struct（构造器/注解
+/// 的代入产物——实例化 Self 形状后 Struct-unify 绑参）。
+fn bind_template_self(
+    generic_type_defs: &HashMap<String, GenericTypeDef>,
+    solver: &mut crate::frontend::core::types::solver::TypeConstraintSolver,
+    self_shape: &MonoType,
+    scrutinee: &MonoType,
+) -> Option<HashMap<String, MonoType>> {
+    use crate::frontend::core::typecheck::TypeEnvironment;
+    let MonoType::Generic { name, args } = self_shape else {
+        return None;
+    };
+    let def = generic_type_defs.get(name)?.clone();
+    let mut subst: HashMap<String, MonoType> = HashMap::new();
+    match scrutinee {
+        MonoType::Generic { name: n2, args: a2 } if n2 == name && a2.len() == args.len() => {
+            for (shape_arg, actual) in args.iter().zip(a2.iter()) {
+                if let MonoType::TypeRef(pn) = shape_arg {
+                    subst.insert(pn.clone(), actual.clone());
+                }
+            }
+        }
+        _ => {
+            let fresh: Vec<MonoType> = args.iter().map(|_| solver.new_var()).collect();
+            let inst = TypeEnvironment::instantiate_generic_type(&def, &fresh).ok()?;
+            let mut p0 = scrutinee.clone();
+            while let MonoType::Ref { inner, .. } = p0 {
+                p0 = *inner;
+            }
+            if solver.unify(&inst, &p0).is_err() {
+                return None;
+            }
+            for (shape_arg, fv) in args.iter().zip(fresh.iter()) {
+                if let MonoType::TypeRef(pn) = shape_arg {
+                    subst.insert(pn.clone(), solver.resolve_type(fv));
+                }
+            }
+        }
+    }
+    if subst.is_empty() {
+        None
+    } else {
+        Some(subst)
+    }
+}
+
 /// 全实参查询：命中返回条目（如 `Equal` 的 `[Self, R]` 查询）。
 pub fn query_exact<'e>(
     registry: &'e HashMap<String, Vec<InterfaceImplEntry>>,

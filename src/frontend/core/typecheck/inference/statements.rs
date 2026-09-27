@@ -2384,8 +2384,10 @@ impl StatementChecker {
                             {
                                 use crate::frontend::core::typecheck::operator_interfaces as ops;
                                 if let Some(iface) = ops::arithmetic_interface(op) {
-                                    if let Some((entry, remaining)) = ops::query_prefix(
+                                    if let Some((entry, remaining)) = ops::query_operator_template(
                                         &self.interface_impl_registry,
+                                        &self.generic_type_defs,
+                                        &mut self.solver,
                                         iface,
                                         &[l.clone(), r.clone()],
                                     ) {
