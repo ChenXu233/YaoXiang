@@ -919,10 +919,23 @@ impl<'a> ExpressionInferrer<'a> {
                 }
             }
 
+            // 各臂类型必须互相兼容，否则报错——此前 `let _ = unify(...)` 丢掉
+            // 错误，`match o { some(v) => v, none() => "str" }` 能编译通过，
+            // 与实际声明的返回类型不一致，拖到运行时才炸（E6007）。
+            // 与函数尾表达式/if-else 的纪律一致：类型层不认的组合宁拒不静默。
             result_ty = Some(match result_ty {
                 None => arm_ty,
                 Some(prev) => {
-                    let _ = self.solver.unify(&prev, &arm_ty);
+                    if self.solver.unify(&prev, &arm_ty).is_err() {
+                        let prev_r = self.solver.resolve_type(&prev);
+                        let arm_r = self.solver.resolve_type(&arm_ty);
+                        return Err(ErrorCodeDefinition::type_mismatch(
+                            &format!("{}", prev_r),
+                            &format!("{}", arm_r),
+                        )
+                        .at(arm.span)
+                        .build());
+                    }
                     self.solver.resolve_type(&prev)
                 }
             });
@@ -1368,6 +1381,22 @@ impl<'a> ExpressionInferrer<'a> {
 
         let l_record = self.as_user_record(&l);
         let r_record = self.as_user_record(&r);
+
+        // RFC-010：和类型相等 = 类型身份 + 变体序 + 载荷（RFC-010「运行时表示与相等」），
+        // **不走结构推导**——和类型的字段全是变体构造器（函数），结构推导必然判
+        // 「字段不可比较」而拒绝。此前 `Color.green() == Color.green()`（两侧都是
+        // 构造器产物 Generic）走本函数的早退分支能过，但 `mk() == Color.green()`
+        // （一侧是注解形态 TypeRef，经 type_defs 落成 Struct）会掉进结构推导报
+        // E1101——同一表达式因变量来源不同而结果不同。名义命中即放行。
+        let l_sum = self.as_sum_type_name(&l);
+        let r_sum = self.as_sum_type_name(&r);
+        if let (Some(ln), Some(rn)) = (&l_sum, &r_sum) {
+            if ln == rn {
+                let _ = self.solver.unify(left_ty, right_ty);
+                return Ok(MonoType::Bool);
+            }
+        }
+
         if l_record.is_none() && r_record.is_none() {
             let _ = self.solver.unify(left_ty, right_ty);
             return Ok(MonoType::Bool);
@@ -1424,6 +1453,37 @@ impl<'a> ExpressionInferrer<'a> {
         )
         .at(span)
         .build())
+    }
+
+    /// RFC-010: 和类型名义名——`Generic`/`Struct`/`TypeRef` 三形态统一判定入口。
+    ///
+    /// 和类型的相等判定不得依赖 `as_user_record`（它只认 Struct/TypeRef，
+    /// 会把 Generic 形态的构造器产物漏掉），故单立此查询。判定口径与
+    /// `check_match_expr` / `match_scrutinee_sum_type` 同源（三形态 + 类型镜像）。
+    fn as_sum_type_name(
+        &self,
+        ty: &MonoType,
+    ) -> Option<String> {
+        match ty {
+            MonoType::Generic { name, .. } if self.sum_types.contains_key(name) => {
+                Some(name.clone())
+            }
+            MonoType::Struct(s) if self.sum_types.contains_key(&s.name) => Some(s.name.clone()),
+            MonoType::TypeRef(n) => {
+                if self.sum_types.contains_key(n) {
+                    Some(n.clone())
+                } else {
+                    // 注解形态经类型镜像复核（与 match 的和类型判定同款）
+                    match self.type_defs.get(n) {
+                        Some(MonoType::Struct(st)) if self.sum_types.contains_key(&st.name) => {
+                            Some(st.name.clone())
+                        }
+                        _ => None,
+                    }
+                }
+            }
+            _ => None,
+        }
     }
 
     /// RFC-011b: 解析为用户记录类型（Struct 或 type_defs 可解析的 TypeRef）
