@@ -1097,12 +1097,13 @@ impl TerminationChecker {
 
     fn emit_loop_not_terminating(
         &mut self,
-        _span: crate::util::span::Span,
+        span: crate::util::span::Span,
     ) {
         // 能力边界，不是程序错误：用 LoopTerminationUnproven（→ E4021），
         // 不用 BeyondKernel（后者在 into_result 下会走 ICE E8001）。
         // 具体描述由 locales 提供，不在此写死中文以免污染其他语言。
-        let reason = UnprovenReason::LoopTerminationUnproven;
+        // span 随原因携带，使诊断指向具体循环（B10）。
+        let reason = UnprovenReason::LoopTerminationUnproven { span };
         self.results.push(ProofResult::Unproven {
             reason,
             proof_calls: vec![],

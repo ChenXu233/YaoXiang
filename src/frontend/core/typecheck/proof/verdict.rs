@@ -216,7 +216,10 @@ pub enum UnprovenReason {
     ///
     /// 这是**编译器能力边界**，不是程序错误，更不是内部故障。
     /// 必须与 `BeyondKernel` 区分：后者的文案路径会走 ICE（E8001）。
-    LoopTerminationUnproven,
+    ///
+    /// 携带循环位置的 span，使 E4021 能指向具体循环（#377 的升级路径：
+    /// 原 `ProofResult::Unproven` 不带位置，诊断只能无 span 输出）。
+    LoopTerminationUnproven { span: crate::util::span::Span },
 }
 
 /// 求解预算报告
@@ -256,8 +259,10 @@ impl UnprovenReason {
     /// 而非依赖该兵底。
     fn to_diagnostic(&self) -> Diagnostic {
         match self {
-            Self::LoopTerminationUnproven => {
-                ErrorCodeDefinition::loop_termination_unproven().build()
+            Self::LoopTerminationUnproven { span } => {
+                ErrorCodeDefinition::loop_termination_unproven()
+                    .at(*span)
+                    .build()
             }
             Self::ProofFunctionRequired => ErrorCodeDefinition::proof_function_required().build(),
             _ => ErrorCodeDefinition::internal_error(&format!("无法证明: {:?}", self)).build(),

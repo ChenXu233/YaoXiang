@@ -311,7 +311,9 @@ fn test_into_result_disproved_returns_diagnostic_error() {
 fn test_into_result_loop_termination_unproven_is_user_domain_code() {
     // Arrange
     let result = ProofResult::Unproven {
-        reason: UnprovenReason::LoopTerminationUnproven,
+        reason: UnprovenReason::LoopTerminationUnproven {
+            span: crate::util::span::Span::default(),
+        },
         proof_calls: vec![],
         budget: BudgetReport {
             steps_used: 0,
