@@ -859,20 +859,37 @@ impl<'a> ParserState<'a> {
             // parse_expression(12) 会把 `ok` 停成裸 Var、`(` 成意外 token——
             // 特判 Var 后跟 LParen 的形态，手动走 parse_call 重组调用
             //（expr_to_pattern 随后把它转成 Union 变体模式）。
-            let pattern_expr = {
-                let mut pattern_expr_opt: Option<Expr> = None;
-                let probe = self.parse_expression(12)?;
-                if self.at(&TokenKind::LParen) && matches!(&probe, Expr::Var(_, _)) {
-                    if let Some(called) = self.parse_call(probe.clone(), 0) {
-                        pattern_expr_opt = Some(called);
-                    }
+            let pattern = {
+                let first_expr = self.parse_pattern_expr()?;
+                let mut patterns: Vec<Pattern> = vec![self.expr_to_pattern(&first_expr)];
+                // RFC-010b: 或模式 `1 | 2` / `some(v) | none()`——`|` 结合力
+                // 低于模式解析阈值，表达式循环到不了它，这里显式收链
+                while self.at(&TokenKind::Pipe) {
+                    self.bump();
+                    let next_expr = self.parse_pattern_expr()?;
+                    patterns.push(self.expr_to_pattern(&next_expr));
                 }
-                match pattern_expr_opt {
-                    Some(e) => e,
-                    None => probe,
+                if patterns.len() == 1 {
+                    patterns.pop().unwrap()
+                } else {
+                    Pattern::Or(patterns)
                 }
             };
-            let pattern = self.expr_to_pattern(&pattern_expr);
+            // RFC-010b: 守卫 `pat if cond => ...`——守卫表达式在 no_fat_arrow
+            // 模式下完整解析并停在 `=>`
+            let pattern = if self.at(&TokenKind::KwIf) {
+                self.bump();
+                let saved = self.no_fat_arrow;
+                self.no_fat_arrow = true;
+                let condition = self.parse_expression(BP_LOWEST);
+                self.no_fat_arrow = saved;
+                Pattern::Guard {
+                    pattern: Box::new(pattern),
+                    condition: condition?,
+                }
+            } else {
+                pattern
+            };
 
             self.expect(&TokenKind::FatArrow);
 
@@ -976,6 +993,22 @@ impl<'a> ParserState<'a> {
                 None
             }
         }
+    }
+
+    /// 解析单个模式表达式：parse_expression(12) + Var 后跟 LParen 的
+    /// 变体调用重组（`ok(v)` 停成裸 Var 的特判，见 parse_match 注释）
+    fn parse_pattern_expr(&mut self) -> Option<Expr> {
+        let mut pattern_expr_opt: Option<Expr> = None;
+        let probe = self.parse_expression(12)?;
+        if self.at(&TokenKind::LParen) && matches!(&probe, Expr::Var(_, _)) {
+            if let Some(called) = self.parse_call(probe.clone(), 0) {
+                pattern_expr_opt = Some(called);
+            }
+        }
+        Some(match pattern_expr_opt {
+            Some(e) => e,
+            None => probe,
+        })
     }
 
     /// Convert an expression to a pattern for match arms
