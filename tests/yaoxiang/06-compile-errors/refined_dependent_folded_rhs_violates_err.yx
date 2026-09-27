@@ -1,0 +1,17 @@
+// 06-compile-errors/refined_dependent_folded_rhs_violates_err.yx
+// 覆盖: RFC-027 §6.1 依赖追踪 —— 非字面量 RHS 的常量折叠（#379 第二轮）
+// 验证: `n = n + 2` 以旧值折叠出新值（3+2=5），s 的约束以 n=5 重判
+//       （6 == 5*2 为假）→ E4018。修复前非字面量 RHS 直接作废值环境、
+//       静默放行；折叠复用 check_predicate 第 1 级同一台求值器，语义一致。
+// 状态: ❌ 应被编译期拒绝
+
+// expect: compile-error E4018
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+main: () -> Int = {
+    mut n: Int = 3
+    mut s: SumUpTo(n, 6) = 6
+    n = n + 2
+    return s
+}

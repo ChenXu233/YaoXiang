@@ -482,7 +482,12 @@ impl TypeChecker {
             // （`Array(Int, factorial(5))` 的 `factorial`、`StaticArray(Int, n)` 的 `n`）。
             // parser 在类型位置一律产 `Type::Name`/`Type::Generic`，区分不了；
             // 此处按「该名字是否解析为已声明的值/函数」容错。
-            if self.env.vars.contains_key(&name) || self.env.get_var(&name).is_some() {
+            // 顶层值绑定名在 pass2 只进 early_value_bindings（pass3 才入 env），
+            // 模块级依赖精化 `mut s: SumUpTo(n, 6)` 的 `n` 由此容错（#379）。
+            if self.env.vars.contains_key(&name)
+                || self.early_value_bindings.contains_key(&name)
+                || self.env.get_var(&name).is_some()
+            {
                 continue;
             }
             // 方括号写法（`List[Int]`）→ 专用码，直接给出 `List(...)` 的写法；
@@ -3712,38 +3717,34 @@ impl TypeChecker {
         }
     }
 
-    /// 从表达式中提取字面量常量值（精化值环境的数据源）
+    /// 常量折叠：表达式在字面量值环境下求成具体值（精化值环境的数据源）
     ///
-    /// 只认字面量与负字面量——其余表达式不做常量折叠，缺值走
-    /// 「不送检」的分阶段策略（见 collect_refined_binding_checks）
-    fn extract_const_value(expr: &Expr) -> Option<ConstValue> {
-        match expr {
-            Expr::Lit(literal, _) => match literal {
-                crate::frontend::core::parser::ast::Literal::Int(n) => {
-                    Some(crate::frontend::core::types::ConstValue::Int(*n))
-                }
-                crate::frontend::core::parser::ast::Literal::Float(f) => {
-                    Some(crate::frontend::core::types::ConstValue::Float(*f as f32))
-                }
-                crate::frontend::core::parser::ast::Literal::Bool(b) => {
-                    Some(crate::frontend::core::types::ConstValue::Bool(*b))
-                }
-                _ => None,
-            },
-            // 处理一元负号：-1
-            Expr::UnOp {
-                op: crate::frontend::core::parser::ast::UnOp::Neg,
-                expr: inner,
-                ..
-            } => {
-                if let Some(crate::frontend::core::types::ConstValue::Int(n)) =
-                    Self::extract_const_value(inner)
-                {
-                    Some(crate::frontend::core::types::ConstValue::Int(-n))
-                } else {
-                    None
-                }
-            }
+    /// 复用 convert_expr_to_const_expr + Evaluator——与 check_predicate
+    /// 第 1 级同一台求值器，折叠语义与约束判定严格一致。转换/求值失败
+    /// （变量值未知、调用等非内核形态）→ None：值回到「未知」，走
+    /// 「缺值不送检」路径，绝不用陈旧值凑数。
+    fn fold_value(
+        ctx: &crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
+        expr: &Expr,
+        values: &HashMap<String, ConstValue>,
+    ) -> Option<ConstValue> {
+        let const_expr = convert_expr_to_const_expr(expr)?;
+        let mut evaluator = crate::frontend::core::types::eval::evaluator::Evaluator::new(
+            ctx.env,
+            &ctx.budget,
+            &ctx.dep_env,
+        );
+        evaluator.eval_expr(&const_expr, values).ok()
+    }
+
+    /// 条件在值环境下可判定为 Bool（if 链守卫裁剪的判据）
+    fn fold_bool(
+        ctx: &crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
+        expr: &Expr,
+        values: &HashMap<String, ConstValue>,
+    ) -> Option<bool> {
+        match Self::fold_value(ctx, expr, values)? {
+            ConstValue::Bool(b) => Some(b),
             _ => None,
         }
     }
@@ -3870,11 +3871,13 @@ impl TypeChecker {
     /// 初始校验与重验证统一经 check_predicate 送证明管道：
     /// - Proved → 通过
     /// - Disproved → E2030，反例进诊断
-    /// - Unproven{calls} → 上抛 proof_calls，由 pipeline 编译期执行
+    /// - Unproven{calls} → 上抛 proof_calls，由 pipeline 编译期执行；
+    ///   空调用集 → E2031（RFC-027 §9：Unproven 不得静默放行）
     /// - 约束自由变量缺已知值时**不送检**：缺值送 SMT 会退化成「对所有值
-    ///   成立」的全称检查，产生伪反例。分阶段策略下放行（字面量可判定子集
-    ///   先闭合）；RFC-027 §9「Unproven → 编译错误」的严格处刑与完整数据流
-    ///   推理见 follow-up / #377
+    ///   成立」的全称检查，产生伪反例。值环境由常量折叠供给（`n = n + 1`
+    ///   以旧值折叠出新值）；折叠不出的（函数参数、I/O 等运行期值）是
+    ///   当前机制的已知边界——精确处刑需假设注入 + 路径条件（RFC-027 §6
+    ///   Floyd-Hoare 全貌，随数据流推理落地，#377 同盘）
     fn collect_refined_binding_checks(
         &mut self,
         module: &Module,
@@ -3941,23 +3944,26 @@ impl TypeChecker {
                 if let Expr::Var(name, _) = target.as_ref() {
                     let mono_ty = MonoType::from(type_ann.clone());
                     let resolved_ty = self.resolve_type_annotation(&mono_ty, ctx.diags);
+                    // 初始值常量折叠（对前置值环境求值）——初始校验与值追踪共用
+                    let init_value = value
+                        .as_deref()
+                        .and_then(|v| Self::fold_value(&*ctx.shared_ctx, v, &unit.values));
                     if matches!(resolved_ty, MonoType::Refined { .. })
                         && !constraint_is_terminates(&resolved_ty)
                     {
                         unit.deps.register_refined(name, &resolved_ty);
                         registered.push(name.clone());
-                        // 初始校验：bindings 代入 name 自身的初始值（若为字面量）
-                        let init_value = value.as_deref().and_then(Self::extract_const_value);
+                        // 初始校验：bindings 代入 name 自身的初始值（若可折叠）
                         self.revalidate_refined(
                             name,
                             name,
                             &resolved_ty,
-                            (name, init_value),
+                            (name, init_value.clone()),
                             &unit.values,
                             ctx,
                         );
                     }
-                    unit.track(name, value.as_deref().and_then(Self::extract_const_value));
+                    unit.track(name, init_value.clone());
                 }
                 // 绑定值是函数体 → 嵌套函数体独立单元走查（判定与
                 // `block_binding_is_function` 同源，#363：注解是推荐的函数写法）
@@ -3978,7 +3984,8 @@ impl TypeChecker {
                 ..
             } => {
                 if let Expr::Var(name, _) = target.as_ref() {
-                    let new_value = Self::extract_const_value(rhs);
+                    // RHS 对**前置**值环境折叠：`n = n + 1` 以旧 n 值算出新值
+                    let new_value = Self::fold_value(&*ctx.shared_ctx, rhs, &unit.values);
                     // RFC-027 §6.1：x 变更 → 对每个依赖 x 的变量生成 VC 重验证
                     for dependant in unit.deps.affected_by(name) {
                         let dependant = dependant.to_string();
@@ -4010,24 +4017,24 @@ impl TypeChecker {
                 Vec::new()
             }
             StmtKind::If {
+                condition,
                 then_branch,
                 else_if_branches,
                 else_branch,
                 ..
             } => {
-                // 分支敏感：各分支从同一前置值环境出发，汇合取等值交集——
+                // 分支敏感 + 守卫裁剪：条件在当前值环境下可判定时只走会执行
+                // 的分支（不可达分支不产生验证义务、不并进汇合）；不可判定时
+                // 保守展开。各路径从同一前置值环境出发，汇合取等值交集——
                 // 仅部分分支改写（或声明）的变量出块即值未知
-                let mut paths: Vec<HashMap<String, crate::frontend::core::types::ConstValue>> =
-                    Vec::new();
-                paths.push(self.refined_walk_branch(&then_branch.stmts, unit, ctx));
-                for (_, body) in else_if_branches {
-                    paths.push(self.refined_walk_branch(&body.stmts, unit, ctx));
-                }
-                // else 分支；缺省时补「所有条件都不中」的隐式路径（取当前值）
-                paths.push(match else_branch {
-                    Some(eb) => self.refined_walk_branch(&eb.stmts, unit, ctx),
-                    None => unit.values.clone(),
-                });
+                let paths = self.refined_walk_if_paths(
+                    condition,
+                    &then_branch.stmts,
+                    else_if_branches,
+                    else_branch.as_deref(),
+                    unit,
+                    ctx,
+                );
                 unit.values = meet_value_paths(paths);
                 Vec::new()
             }
@@ -4055,16 +4062,67 @@ impl TypeChecker {
         }
     }
 
-    /// 走查一个分支：从当前值环境出发，返回分支出口的值环境（前置值不受影响）
-    fn refined_walk_branch(
+    /// 走查 if 链：返回所有**可达**路径的出口值环境（进入态不被污染）。
+    ///
+    /// 守卫裁剪：条件以当前值环境折叠可判定（`Some(true/false)`）时，只走
+    /// 会执行的分支——不可达分支内的赋值不产生保守误报，其内的精化声明
+    /// 不产生验证义务（块局部，出块即清理）。不可判定时保守展开为多路径。
+    fn refined_walk_if_paths(
         &self,
-        stmts: &[crate::frontend::core::parser::ast::Stmt],
+        condition: &crate::frontend::core::parser::ast::Expr,
+        then_stmts: &[crate::frontend::core::parser::ast::Stmt],
+        else_ifs: &[(
+            Box<crate::frontend::core::parser::ast::Expr>,
+            Box<crate::frontend::core::parser::ast::Block>,
+        )],
+        else_branch: Option<&crate::frontend::core::parser::ast::Block>,
         unit: &mut RefinedScopeUnit,
         ctx: &mut RefinedWalkCtx<'_, '_>,
-    ) -> HashMap<String, crate::frontend::core::types::ConstValue> {
-        let pre = unit.values.clone();
-        self.refined_walk_stmts(stmts, unit, ctx);
-        std::mem::replace(&mut unit.values, pre)
+    ) -> Vec<HashMap<String, crate::frontend::core::types::ConstValue>> {
+        match Self::fold_bool(&*ctx.shared_ctx, condition, &unit.values) {
+            Some(true) => {
+                self.refined_walk_stmts(then_stmts, unit, ctx);
+                vec![unit.values.clone()]
+            }
+            Some(false) => match else_ifs.split_first() {
+                Some(((cond, body), rest)) => {
+                    self.refined_walk_if_paths(cond, &body.stmts, rest, else_branch, unit, ctx)
+                }
+                None => match else_branch {
+                    Some(eb) => {
+                        self.refined_walk_stmts(&eb.stmts, unit, ctx);
+                        vec![unit.values.clone()]
+                    }
+                    None => vec![unit.values.clone()],
+                },
+            },
+            None => {
+                // then 臂是一条候选路径：从进入态走查后恢复
+                let pre = unit.values.clone();
+                self.refined_walk_stmts(then_stmts, unit, ctx);
+                let mut paths = vec![std::mem::replace(&mut unit.values, pre)];
+                // 余下链递归（后续条件同样剪枝）；无 else-if 时
+                // 「全部条件都不中」的路径 = else 臂（有 else）或进入态原样
+                match else_ifs.split_first() {
+                    Some(((cond, body), rest)) => paths.extend(self.refined_walk_if_paths(
+                        cond,
+                        &body.stmts,
+                        rest,
+                        else_branch,
+                        unit,
+                        ctx,
+                    )),
+                    None => match else_branch {
+                        Some(eb) => {
+                            self.refined_walk_stmts(&eb.stmts, unit, ctx);
+                            paths.push(unit.values.clone());
+                        }
+                        None => paths.push(unit.values.clone()),
+                    },
+                }
+                paths
+            }
+        }
     }
 
     /// 走查循环体：迭代间被改写的变量值未知——入环与出环都作废其字面量值
@@ -4159,10 +4217,24 @@ impl TypeChecker {
             ProofResult::Unproven {
                 proof_calls: calls, ..
             } => {
-                if !calls.is_empty() {
+                if calls.is_empty() {
+                    // RFC-027 §4/§9：Unproven → 编译错误，无降级、无 silent pass。
+                    // 此分支 = 绑定完备仍证不出（约束形态超出证明内核：If/Range
+                    // 形约束、SMT unknown、超预算）。当前注解语法只产 Call 形
+                    // 约束（实参 Lit/NamedVar），本分支实际不可达——防线是前瞻性
+                    // 的：predicate_defs（#377-3）或内联精化落地后，约束形态
+                    // 扩展，不得让 silent pass 复活。
+                    ctx.diags.push(
+                        ErrorCodeDefinition::refined_unproven(
+                            trigger,
+                            dependant,
+                            &refined.to_string(),
+                        )
+                        .build(),
+                    );
+                } else {
                     ctx.proof_calls.extend(calls.clone());
                 }
-                // 空调用集的 Unproven（值不可得/超出内核）：分阶段策略下放行
             }
         }
     }

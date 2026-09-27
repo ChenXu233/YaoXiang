@@ -1,0 +1,21 @@
+// 02-type-system/refined_dependent_module_scope.yx
+// 覆盖: RFC-027 §6.1 依赖追踪 —— 模块级依赖精化（#379 第二轮）
+// 验证: 依赖精化写在模块层同样端到端：n 重赋 3 后 6 == 3*2 成立，重验证
+//       静默通过，运行时值正确。修复前该形态被注解类型名预扫描误报
+//       E1003「Unknown type: 'n'」——预扫描的值空间容错只查 env.vars，
+//       而顶层值绑定在 pass2 只进 early_value_bindings。
+// 状态: ✅ 可运行
+
+use std.assert
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+mut n: Int = 3
+mut s: SumUpTo(n, 6) = 6
+
+n = 3
+
+main: () -> Void = {
+    assert.assert(s == 6, "模块级依赖精化：约束成立的重赋应静默通过")
+    assert.assert(n == 3, "模块级 mut 变量重赋生效")
+}

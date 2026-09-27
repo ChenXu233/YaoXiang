@@ -19,6 +19,19 @@ keep_valid: () -> Int = {
     s
 }
 
+pruned_branch: () -> Int = {
+    mut n: Int = 3
+    mut s: SumUpTo(n, 6) = 6
+    // 守卫裁剪：n=3 时条件在值环境下恒真，else 臂不可达——其内 `n = 4`
+    // 不产生保守误报（无裁剪时该形态会以不可达路径上的违反被拒绝）
+    if n > 2 {
+        n = 3
+    } else {
+        n = 4
+    }
+    s
+}
+
 other: (n: Int) -> Int = {
     mut s: SumUpTo(n, 6) = 6
     s
@@ -26,6 +39,7 @@ other: (n: Int) -> Int = {
 
 main: () -> Void = {
     assert.assert(keep_valid() == 6, "约束成立时重验证应静默通过")
+    assert.assert(pruned_branch() == 6, "守卫裁剪：不可达分支不产生保守误报")
 
     // 同名不同函数：main 的 n 赋值不影响 other 的依赖（参数值未知不送检）
     mut n: Int = 3

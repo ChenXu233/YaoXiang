@@ -1,0 +1,17 @@
+// 06-compile-errors/refined_dependent_module_reassign_violates_err.yx
+// 覆盖: RFC-027 §6.1 依赖追踪 —— 模块级依赖精化的重验证（#379 第二轮）
+// 验证: 模块层 `mut s: SumUpTo(n, 6)` 依赖模块层 `mut n`；`n = 5` 后以
+//       新值重判（6 == 5*2 为假）→ E4018。依赖图以词法块为单位注册，
+//       模块层单元与函数体单元同机制。
+// 状态: ❌ 应被编译期拒绝
+
+// expect: compile-error E4018
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+mut n: Int = 3
+mut s: SumUpTo(n, 6) = 6
+
+n = 5
+
+main: () -> Int = { return s }
