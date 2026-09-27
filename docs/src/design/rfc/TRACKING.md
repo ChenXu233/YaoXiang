@@ -34,7 +34,7 @@
 | 022-hoare-logic-static-verification.md | RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型） | 已废弃 | deprecated\022-hoare-logic-static-verification.md | -- | -- | -- | -- |
 | 023-closure-capture-model.md | RFC-023: 闭包捕获模型 | 已废弃 | deprecated\023-closure-capture-model.md | -- | -- | -- | -- |
 | 002-cross-platform-io-libuv.md | RFC-002：基于 libuv 的资源类型 IO 实现层 | 草案 | draft\002-cross-platform-io-libuv.md | #102 | -- | -- | -- |
-| 010b-pattern-matching-completeness.md | RFC-010b: 模式匹配完备化（变体解构与穷尽性） | 草案 | draft\010b-pattern-matching-completeness.md | #330 | -- | -- | -- |
+| 010b-pattern-matching-completeness.md | RFC-010b: 模式匹配完备化（变体解构与穷尽性） | 草案（正文已充实并随实现落地，2026-09-27） | draftb-pattern-matching-completeness.md | #330 | -- | -- | -- |
 | 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 草案 | draft\019-typed-homoiconicity.md | -- | -- | -- | -- |
 | 026b-yx-bindgen.md | RFC-026b: yx-bindgen 工具链 | 草案 | draft\026b-yx-bindgen.md | -- | -- | -- | -- |
 | 028-jit-compiler.md | RFC-028：JIT 编译器 — VM 内多级执行引擎 | 草案 | draft\028-jit-compiler.md | #101 | -- | -- | -- |
