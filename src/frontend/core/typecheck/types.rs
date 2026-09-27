@@ -42,6 +42,9 @@ pub struct TypeCheckResult {
     pub interface_impl_registry: HashMap<String, Vec<super::environment::InterfaceImplEntry>>,
     /// RFC-010 和类型登记表（类型名 → 变体定义，声明序）
     pub sum_types: HashMap<String, Vec<super::environment::SumVariantDef>>,
+    /// RFC-010 和类型的类型参数名（类型名 → [T, E]，声明序）——ir_gen
+    /// 载荷类型替换用（变体 params 里的 TypeRef(名) 按位绑定 scrutinee 实参）
+    pub sum_type_param_names: HashMap<String, Vec<String>>,
     /// RFC-010 变体构造调用点（span 键控；ir_gen 生成 CreateVariant）
     pub variant_ctor_calls: Vec<super::environment::VariantCtorCall>,
     /// RFC-011b 运算符派发点（span 键控；ir_gen 据此把原生指令换为方法调用）

@@ -65,26 +65,6 @@ fn type_implements_stringable(mono_type: &MonoType) -> bool {
     }
 }
 
-/// 未支持 match 模式的短标签（E3008 消息参数）：用户符号给名字，匿名形状给类型名
-fn pattern_label(pattern: &ast::Pattern) -> String {
-    match pattern {
-        ast::Pattern::Identifier(name) => name.clone(),
-        ast::Pattern::Tuple(_) => "tuple".to_string(),
-        ast::Pattern::Struct { name, .. } => name.clone(),
-        ast::Pattern::Union {
-            variant,
-            pattern: Some(_),
-            ..
-        } => format!("{variant}(..)"),
-        ast::Pattern::Union { variant, .. } => variant.clone(),
-        ast::Pattern::Or(_) => "or".to_string(),
-        ast::Pattern::Guard { .. } => "guard".to_string(),
-        ast::Pattern::Wildcard | ast::Pattern::Literal(_) => {
-            unreachable!("字面量与通配符模式有 IR 编码，不进 E3008")
-        }
-    }
-}
-
 /// 获取类型的字符串表示（用于兜底实现）
 fn get_type_fallback_string(mono_type: &MonoType) -> String {
     match mono_type {
@@ -140,6 +120,8 @@ pub struct AstToIrGenerator {
     /// 结构体定义映射（类型名 -> 字段列表）
     /// 用于构造器调用时填充默认值
     struct_definitions: HashMap<String, Vec<crate::frontend::core::parser::ast::StructField>>,
+    /// RFC-010 和类型的类型参数名（载荷类型替换用，见 sum_type_variants）
+    sum_type_param_names: HashMap<String, Vec<String>>,
     /// 本模块声明的**全部**类型名（含泛型类型定义）。
     ///
     /// `struct_definitions` 只收非泛型结构体；泛型类型（`E: (T: Type) -> Type = ..`）
@@ -233,7 +215,7 @@ pub struct AstToIrGenerator {
 
     /// RFC-010: 和类型变体名表（类型名 → 变体名列表，声明序）。
     /// 变体构造调用（形态检测命中）据此取变体序号。
-    sum_type_variants: HashMap<String, Vec<String>>,
+    sum_type_variants: HashMap<String, Vec<(String, Vec<MonoType>)>>,
     /// RFC-011a §6.2: 编译期类型收集——接口 → 实现类型列表（ImplementationProof
     /// 按类型名定序），变体分发与包装定序共用。
     interface_variants: HashMap<String, Vec<String>>,
@@ -385,9 +367,16 @@ impl AstToIrGenerator {
                 .map(|(n, vs)| {
                     (
                         n.clone(),
-                        vs.iter().map(|v| v.name.clone()).collect::<Vec<_>>(),
+                        vs.iter()
+                            .map(|v| (v.name.clone(), v.params.clone()))
+                            .collect::<Vec<(String, Vec<MonoType>)>>(),
                     )
                 })
+                .collect(),
+            sum_type_param_names: type_result
+                .sum_type_param_names
+                .iter()
+                .map(|(n, ps)| (n.clone(), ps.clone()))
                 .collect(),
             interface_variants: {
                 let mut map: HashMap<String, Vec<String>> = HashMap::new();
@@ -5117,202 +5106,66 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
-        // Match 表达式 IR 生成
-        // 模式: match scrutinee { pat1 => body1, pat2 => body2, _ => bodyN }
+        // Match 表达式 IR 生成（RFC-010b：递归模式编译器）
         //
-        // IR 结构:
-        //   1. 评估 scrutinee
-        //   2. 对每个 arm:
-        //      a. 如果模式是 Literal: 比较 scrutinee == literal, JmpIfNot 到下一个 arm
-        //      b. 如果模式是 Wildcard: 始终匹配
-        //      c. 生成 arm body, Move 结果到 result_reg, Jmp 到 end
-        //   3. 修复所有跳转目标
-
-        // 1. 评估 scrutinee
+        // 每臂统一结构：测试链（compile_pattern 递归发射，失败跳下一臂）→
+        // 守卫（可选，失败同样跳下一臂）→ 体 → Move 结果 → Jmp end。
+        // 绑定进臂专属 scope（遮蔽外层，出臂恢复外层槽位映射——否则后续
+        // match 以该名为 scrutinee 会读到从未写入的载荷槽 → 运行时 Void）。
+        //
+        // 1. 评估 scrutinee（类型信息驱动嵌套模式的载荷/字段/元组类型解析）
         let scrutinee_reg = self.next_temp_reg();
         self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
+        let scrutinee_ty = self.get_expr_mono_type(match_expr);
 
         let mut jumps_to_end: Vec<usize> = Vec::new();
 
         for arm in arms {
-            // 检查模式是否匹配
-            let needs_condition = matches!(
-                arm.pattern,
-                ast::Pattern::Wildcard | ast::Pattern::Identifier(_)
-            );
+            // RFC-010b：守卫解包——`pat if cond => body`
+            let (pat, guard): (&ast::Pattern, Option<&Expr>) = match &arm.pattern {
+                ast::Pattern::Guard { pattern, condition } => (pattern, Some(condition)),
+                p => (p, None),
+            };
 
-            // RFC-010b: Identifier 兜底臂——无条件匹配并绑定 scrutinee
-            //（臂专属 scope，结束恢复外层映射）
-            let bound_scrutinee = if let ast::Pattern::Identifier(bn) = &arm.pattern {
+            let mut fail_jumps: Vec<usize> = Vec::new();
+            let mut binds: Vec<(String, usize)> = Vec::new();
+            // 预分配绑定寄存器：或模式各备选对同名绑定的载荷提取落到
+            // 同一寄存器（体读到的必然是命中备选写入的值）
+            let bind_names = Self::collect_binding_names(pat);
+            let mut pre: HashMap<String, usize> = HashMap::new();
+            for bn in &bind_names {
+                pre.insert(bn.clone(), self.next_temp_reg());
+            }
+            let needs_scope = !bind_names.is_empty();
+            if needs_scope {
                 self.enter_scope();
-                self.register_local(bn, scrutinee_reg);
-                Some(bn.clone())
-            } else {
-                None
-            };
+            }
+            self.compile_pattern(
+                scrutinee_reg,
+                pat,
+                scrutinee_ty.as_ref(),
+                &pre,
+                &mut fail_jumps,
+                &mut binds,
+                instructions,
+                constants,
+            )?;
+            for (bn, reg) in &binds {
+                self.register_local(bn, *reg);
+            }
 
-            let jump_to_next_idx = if needs_condition {
-                // Wildcard / Identifier: 始终匹配，不需条件跳转
-                None
-            } else {
-                // 生成条件: 比较 scrutinee 和模式值
-                let cmp_reg = self.next_temp_reg();
-
-                match &arm.pattern {
-                    ast::Pattern::Union {
-                        variant, pattern, ..
-                    } => {
-                        // RFC-010b: 变体解构——VariantTag 取声明序 tag 比较，
-                        // 命中后 VariantPayload 取载荷绑定进臂作用域
-                        let Some(sum_name) = self.match_scrutinee_sum_type(match_expr) else {
-                            return Err(ErrorCodeDefinition::ir_unsupported_pattern(
-                                &pattern_label(&arm.pattern),
-                            )
-                            .at(arm.span)
-                            .build());
-                        };
-                        let Some(variants) = self.sum_type_variants.get(&sum_name) else {
-                            return Err(ErrorCodeDefinition::ir_unsupported_pattern(
-                                &pattern_label(&arm.pattern),
-                            )
-                            .at(arm.span)
-                            .build());
-                        };
-                        let Some(variant_index) = variants.iter().position(|v| v == variant) else {
-                            return Err(ErrorCodeDefinition::ir_unsupported_pattern(variant)
-                                .at(arm.span)
-                                .build());
-                        };
-                        let tag_reg = self.next_temp_reg();
-                        instructions.push(Instruction::VariantTag {
-                            dst: Operand::Local(tag_reg),
-                            obj: Operand::Local(scrutinee_reg),
-                            group: sum_name.clone(),
-                            span: self.cur_span,
-                        });
-                        let idx_reg = self.next_temp_reg();
-                        instructions.push(Instruction::Load {
-                            dst: Operand::Local(idx_reg),
-                            src: Operand::Const(ConstValue::Int(variant_index as i128)),
-                            span: self.cur_span,
-                        });
-                        // 比较: tag == variant_index
-                        let eq_reg = self.next_temp_reg();
-                        instructions.push(Instruction::Eq {
-                            dst: Operand::Local(eq_reg),
-                            lhs: Operand::Local(tag_reg),
-                            rhs: Operand::Local(idx_reg),
-                            span: self.cur_span,
-                        });
-                        // 如果不相等，跳到下一个 arm
-                        let jmp_idx = instructions.len();
-                        instructions.push(Instruction::JmpIfNot {
-                            cond: Operand::Local(eq_reg),
-                            target: 0, // 占位符
-                            span: self.cur_span,
-                        });
-
-                        // 载荷绑定：Identifier 载荷 → 臂专属作用域内的局部名。
-                        // 必须包 scope 层：同名遮蔽外层变量时，臂结束要恢复
-                        // 外层槽位映射（否则后续 match 以该名为 scrutinee 会
-                        // 读到从未写入的载荷槽 → 运行时 Void）
-                        let bound_payload = if let ast::Pattern::Identifier(bn) =
-                            pattern.as_deref().unwrap_or(&ast::Pattern::Wildcard)
-                        {
-                            let payload_reg = self.next_temp_reg();
-                            instructions.push(Instruction::VariantPayload {
-                                dst: Operand::Local(payload_reg),
-                                obj: Operand::Local(scrutinee_reg),
-                                group: sum_name.clone(),
-                                span: self.cur_span,
-                            });
-                            self.enter_scope();
-                            self.register_local(bn, payload_reg);
-                            Some(bn.clone())
-                        } else {
-                            None
-                        };
-
-                        // 交由下方通用的 body 生成与跳转修复处理：
-                        // 借 Union 臂不做 Literal 比较，直接把 jump 标记传下去
-                        let arm_result_reg = self.next_temp_reg();
-                        self.generate_block_ir(
-                            &arm.body,
-                            Some(arm_result_reg),
-                            instructions,
-                            constants,
-                        )?;
-                        if bound_payload.is_some() {
-                            self.exit_scope();
-                        }
-                        instructions.push(Instruction::Move {
-                            dst: Operand::Local(result_reg),
-                            src: Operand::Local(arm_result_reg),
-                            span: self.cur_span,
-                        });
-                        let jmp_end_idx = instructions.len();
-                        instructions.push(Instruction::Jmp {
-                            target: 0,
-                            span: self.cur_span,
-                        });
-                        jumps_to_end.push(jmp_end_idx);
-                        let current_pos = instructions.len();
-                        if let Instruction::JmpIfNot {
-                            cond: _,
-                            ref mut target,
-                            span: _,
-                        } = instructions[jmp_idx]
-                        {
-                            *target = current_pos;
-                        }
-                        continue;
-                    }
-                    ast::Pattern::Literal(lit) => {
-                        let const_val = match lit {
-                            ast::Literal::Int(n) => ConstValue::Int(*n),
-                            ast::Literal::Float(f) => ConstValue::Float(*f),
-                            ast::Literal::Bool(b) => ConstValue::Bool(*b),
-                            ast::Literal::String(s) => ConstValue::String(s.clone()),
-                            ast::Literal::Char(c) => ConstValue::Char(*c),
-                            ast::Literal::Void => ConstValue::Void,
-                        };
-                        constants.push(const_val.clone());
-                        instructions.push(Instruction::Load {
-                            dst: Operand::Local(cmp_reg),
-                            src: Operand::Const(const_val),
-                            span: self.cur_span,
-                        });
-                    }
-                    other => {
-                        // #330 安全网：非字面量/通配符模式尚无 IR 编码，
-                        // 原 stub 加载 0 永不匹配、scrutinee 为 0 时误匹配——
-                        // 宁可编译期拒绝，不可静默错译（完备支持见 RFC-010b）
-                        return Err(ErrorCodeDefinition::ir_unsupported_pattern(&pattern_label(
-                            other,
-                        ))
-                        .at(arm.span)
-                        .build());
-                    }
-                }
-
-                // 比较: scrutinee == pattern_value
-                let eq_reg = self.next_temp_reg();
-                instructions.push(Instruction::Eq {
-                    dst: Operand::Local(eq_reg),
-                    lhs: Operand::Local(scrutinee_reg),
-                    rhs: Operand::Local(cmp_reg),
-                    span: self.cur_span,
-                });
-
-                // 如果不相等，跳到下一个 arm
-                let jmp_idx = instructions.len();
+            // 守卫：绑定已注册（对守卫可见），失败同样落到下一臂
+            if let Some(cond) = guard {
+                let g_reg = self.next_temp_reg();
+                self.generate_expr_ir(cond, g_reg, instructions, constants)?;
+                let j = instructions.len();
                 instructions.push(Instruction::JmpIfNot {
-                    cond: Operand::Local(eq_reg),
-                    target: 0, // 占位符
+                    cond: Operand::Local(g_reg),
+                    target: 0,
                     span: self.cur_span,
                 });
-                Some(jmp_idx)
-            };
+                fail_jumps.push(j);
+            }
 
             // 生成 arm body，结果放入 result_reg
             let arm_result_reg = self.next_temp_reg();
@@ -5328,24 +5181,24 @@ impl AstToIrGenerator {
             instructions.push(Instruction::Jmp {
                 target: 0,
                 span: self.cur_span,
-            }); // 占位符
+            });
             jumps_to_end.push(jmp_end_idx);
 
-            // Identifier 兜底臂的绑定作用域结束（恢复外层映射）
-            if bound_scrutinee.is_some() {
+            // 绑定作用域结束（恢复外层槽位映射）
+            if needs_scope {
                 self.exit_scope();
             }
 
-            // 修复条件跳转目标（指向当前 arm 之后的代码）
-            if let Some(jmp_idx) = jump_to_next_idx {
-                let current_pos = instructions.len();
+            // 修复本臂全部失败跳转 → 下一臂起点
+            let next_arm_pos = instructions.len();
+            for j in fail_jumps {
                 if let Instruction::JmpIfNot {
                     cond: _,
                     ref mut target,
                     span: _,
-                } = instructions[jmp_idx]
+                } = instructions[j]
                 {
-                    *target = current_pos;
+                    *target = next_arm_pos;
                 }
             }
         }
@@ -5362,6 +5215,348 @@ impl AstToIrGenerator {
             }
         }
         Ok(())
+    }
+
+    /// 收集模式引入的绑定名（去重，声明序）——臂级预分配寄存器用
+    fn collect_binding_names(pattern: &ast::Pattern) -> Vec<String> {
+        fn walk(
+            p: &ast::Pattern,
+            out: &mut Vec<String>,
+        ) {
+            match p {
+                ast::Pattern::Identifier(n) => {
+                    if !out.contains(n) {
+                        out.push(n.clone());
+                    }
+                }
+                ast::Pattern::Tuple(ps) | ast::Pattern::Or(ps) => {
+                    for c in ps {
+                        walk(c, out);
+                    }
+                }
+                ast::Pattern::Struct { fields, .. } => {
+                    for (_, _, c) in fields {
+                        walk(c, out);
+                    }
+                }
+                ast::Pattern::Union { pattern, .. } => {
+                    if let Some(c) = pattern.as_deref() {
+                        walk(c, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        walk(pattern, &mut out);
+        out
+    }
+
+    /// RFC-010b：递归模式编译——按 `pattern` 匹配 `reg` 中的值。
+    ///
+    /// 失败路径：每处比较发射 JmpIfNot 占位，调用方回填 target = 下一臂起点；
+    /// 绑定：`(名字, 寄存器)` 收集进 `binds`，由调用方统一 register_local
+    ///（守卫与体都在注册后生成，绑定对两者可见）。
+    /// `ty`：被匹配值的静态类型——Union 载荷 / 元组元素 / 结构体字段的
+    /// 嵌套模式类型由此解析；None 时仅 Wildcard/Identifier/Literal 可用。
+    #[allow(clippy::too_many_arguments)]
+    fn compile_pattern(
+        &mut self,
+        reg: usize,
+        pattern: &ast::Pattern,
+        ty: Option<&MonoType>,
+        pre: &HashMap<String, usize>,
+        fail: &mut Vec<usize>,
+        binds: &mut Vec<(String, usize)>,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let cur_span = self.cur_span;
+        let unsupported = |label: &str| {
+            ErrorCodeDefinition::ir_unsupported_pattern(label)
+                .at(cur_span)
+                .build()
+        };
+        match pattern {
+            ast::Pattern::Wildcard => Ok(()),
+            ast::Pattern::Identifier(bn) => {
+                if let Some(r) = pre.get(bn) {
+                    // 或模式共享寄存器：把值拷进臂级预分配槽（仅命中路径执行）
+                    instructions.push(Instruction::Move {
+                        dst: Operand::Local(*r),
+                        src: Operand::Local(reg),
+                        span: self.cur_span,
+                    });
+                    binds.push((bn.clone(), *r));
+                } else {
+                    binds.push((bn.clone(), reg));
+                }
+                Ok(())
+            }
+            ast::Pattern::Literal(lit) => {
+                let const_val = match lit {
+                    ast::Literal::Int(n) => ConstValue::Int(*n),
+                    ast::Literal::Float(f) => ConstValue::Float(*f),
+                    ast::Literal::Bool(b) => ConstValue::Bool(*b),
+                    ast::Literal::String(s) => ConstValue::String(s.clone()),
+                    ast::Literal::Char(c) => ConstValue::Char(*c),
+                    ast::Literal::Void => ConstValue::Void,
+                };
+                constants.push(const_val.clone());
+                let cmp_reg = self.next_temp_reg();
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(cmp_reg),
+                    src: Operand::Const(const_val),
+                    span: self.cur_span,
+                });
+                let eq_reg = self.next_temp_reg();
+                instructions.push(Instruction::Eq {
+                    dst: Operand::Local(eq_reg),
+                    lhs: Operand::Local(reg),
+                    rhs: Operand::Local(cmp_reg),
+                    span: self.cur_span,
+                });
+                let j = instructions.len();
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(eq_reg),
+                    target: 0,
+                    span: self.cur_span,
+                });
+                fail.push(j);
+                Ok(())
+            }
+            ast::Pattern::Tuple(ps) => {
+                let Some(MonoType::Generic { name, args }) = ty else {
+                    return Err(unsupported("tuple"));
+                };
+                if name != "Tuple" {
+                    return Err(unsupported("tuple"));
+                }
+                if args.len() != ps.len() {
+                    return Err(unsupported("tuple arity"));
+                }
+                for (i, p) in ps.iter().enumerate() {
+                    let elem_reg = self.next_temp_reg();
+                    instructions.push(Instruction::LoadField {
+                        dst: Operand::Local(elem_reg),
+                        src: Operand::Local(reg),
+                        field: i,
+                        span: self.cur_span,
+                    });
+                    self.compile_pattern(
+                        elem_reg,
+                        p,
+                        Some(&args[i]),
+                        pre,
+                        fail,
+                        binds,
+                        instructions,
+                        constants,
+                    )?;
+                }
+                Ok(())
+            }
+            ast::Pattern::Struct { name, fields } => {
+                // 非泛型结构体（struct_definitions 只收非泛型；泛型结构体
+                // 模式由 typecheck 前置拒绝——此处防御性报 unsupported）
+                let Some(decl_fields) = self.struct_definitions.get(name).cloned() else {
+                    return Err(unsupported(name));
+                };
+                for (fname, _fmut, fpat) in fields {
+                    let Some(pos) = decl_fields.iter().position(|f| &f.name == fname) else {
+                        return Err(unsupported(fname));
+                    };
+                    let field_ty = MonoType::from(decl_fields[pos].ty.clone());
+                    let elem_reg = self.next_temp_reg();
+                    instructions.push(Instruction::LoadField {
+                        dst: Operand::Local(elem_reg),
+                        src: Operand::Local(reg),
+                        field: pos,
+                        span: self.cur_span,
+                    });
+                    self.compile_pattern(
+                        elem_reg,
+                        fpat,
+                        Some(&field_ty),
+                        pre,
+                        fail,
+                        binds,
+                        instructions,
+                        constants,
+                    )?;
+                }
+                Ok(())
+            }
+            ast::Pattern::Union {
+                variant,
+                pattern: payload,
+                ..
+            } => {
+                // 和类型上下文从被匹配类型解析（载荷位可能是另一和类型）
+                let mut stripped = ty.cloned();
+                while let Some(MonoType::Ref { inner, .. }) = stripped {
+                    stripped = Some(*inner);
+                }
+                let (sum_name, args): (String, Vec<MonoType>) = match &stripped {
+                    Some(MonoType::Generic { name, args })
+                        if self.sum_type_variants.contains_key(name) =>
+                    {
+                        (name.clone(), args.clone())
+                    }
+                    Some(MonoType::Struct(s)) if self.sum_type_variants.contains_key(&s.name) => {
+                        (s.name.clone(), Vec::new())
+                    }
+                    Some(MonoType::TypeRef(n))
+                        if self.sum_type_variants.contains_key(n.as_str()) =>
+                    {
+                        (n.clone(), Vec::new())
+                    }
+                    _ => return Err(unsupported(variant)),
+                };
+                let Some(variants) = self.sum_type_variants.get(&sum_name).cloned() else {
+                    return Err(unsupported(variant));
+                };
+                let Some((variant_index, params)) = variants
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (n, _))| n == variant)
+                    .map(|(i, (_, params))| (i, params.clone()))
+                else {
+                    return Err(unsupported(variant));
+                };
+                // tag 比较（VariantTag 取声明序 tag）
+                let tag_reg = self.next_temp_reg();
+                instructions.push(Instruction::VariantTag {
+                    dst: Operand::Local(tag_reg),
+                    obj: Operand::Local(reg),
+                    group: sum_name.clone(),
+                    span: self.cur_span,
+                });
+                let idx_reg = self.next_temp_reg();
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(idx_reg),
+                    src: Operand::Const(ConstValue::Int(variant_index as i128)),
+                    span: self.cur_span,
+                });
+                let eq_reg = self.next_temp_reg();
+                instructions.push(Instruction::Eq {
+                    dst: Operand::Local(eq_reg),
+                    lhs: Operand::Local(tag_reg),
+                    rhs: Operand::Local(idx_reg),
+                    span: self.cur_span,
+                });
+                let j = instructions.len();
+                instructions.push(Instruction::JmpIfNot {
+                    cond: Operand::Local(eq_reg),
+                    target: 0,
+                    span: self.cur_span,
+                });
+                fail.push(j);
+                // 载荷
+                match payload.as_deref() {
+                    None => {
+                        if !params.is_empty() {
+                            return Err(unsupported("variant payload arity"));
+                        }
+                        Ok(())
+                    }
+                    Some(p) => {
+                        if params.is_empty() {
+                            return Err(unsupported("variant payload arity"));
+                        }
+                        let payload_reg = self.next_temp_reg();
+                        instructions.push(Instruction::VariantPayload {
+                            dst: Operand::Local(payload_reg),
+                            obj: Operand::Local(reg),
+                            group: sum_name.clone(),
+                            span: self.cur_span,
+                        });
+                        // 载荷类型：变体参数按 scrutinee 实参（声明序）替换
+                        let param_names = self
+                            .sum_type_param_names
+                            .get(&sum_name)
+                            .cloned()
+                            .unwrap_or_default();
+                        let mut subst: HashMap<String, MonoType> = HashMap::new();
+                        for (i, pn) in param_names.iter().enumerate() {
+                            if let Some(a) = args.get(i) {
+                                subst.insert(pn.clone(), a.clone());
+                            }
+                        }
+                        let substituted: Vec<MonoType> =
+                            params.iter().map(|pty| pty.substitute(&subst)).collect();
+                        let payload_ty = match substituted.len() {
+                            1 => substituted.into_iter().next().unwrap(),
+                            _ => MonoType::make_tuple(substituted),
+                        };
+                        self.compile_pattern(
+                            payload_reg,
+                            p,
+                            Some(&payload_ty),
+                            pre,
+                            fail,
+                            binds,
+                            instructions,
+                            constants,
+                        )
+                    }
+                }
+            }
+            ast::Pattern::Or(alts) => {
+                // 各备选顺序发射：备选 i 的测试链失败 → 备选 i+1 起点
+                //（继续尝试）；命中则提取载荷后直接跳臂体（跳过后续备选）。
+                // 末位备选失败 → 下一臂（fail 交给调用方），成功自然落穿。
+                let last = alts.len().saturating_sub(1);
+                let mut success_jumps: Vec<usize> = Vec::new();
+                for (i, alt) in alts.iter().enumerate() {
+                    let mut alt_fail: Vec<usize> = Vec::new();
+                    self.compile_pattern(
+                        reg,
+                        alt,
+                        ty,
+                        pre,
+                        &mut alt_fail,
+                        binds,
+                        instructions,
+                        constants,
+                    )?;
+                    if i < last {
+                        let sj = instructions.len();
+                        instructions.push(Instruction::Jmp {
+                            target: 0,
+                            span: self.cur_span,
+                        });
+                        success_jumps.push(sj);
+                        let next_alt_pos = instructions.len();
+                        for j in alt_fail {
+                            if let Instruction::JmpIfNot {
+                                cond: _,
+                                ref mut target,
+                                span: _,
+                            } = instructions[j]
+                            {
+                                *target = next_alt_pos;
+                            }
+                        }
+                    } else {
+                        fail.append(&mut alt_fail);
+                    }
+                }
+                // 命中跳转回填到臂体起点（Or 全部发射完成处）
+                let body_pos = instructions.len();
+                for sj in success_jumps {
+                    if let Instruction::Jmp {
+                        ref mut target,
+                        span: _,
+                    } = instructions[sj]
+                    {
+                        *target = body_pos;
+                    }
+                }
+                Ok(())
+            }
+            ast::Pattern::Guard { .. } => Err(unsupported("guard")),
+        }
     }
 
     fn generate_tuple_expr_ir(
@@ -6816,41 +7011,6 @@ impl AstToIrGenerator {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    /// RFC-010b: scrutinee 是否为已登记和类型（返回类型名）
-    fn match_scrutinee_sum_type(
-        &self,
-        scrutinee: &Expr,
-    ) -> Option<String> {
-        let ty = self.get_expr_mono_type(scrutinee)?;
-        // 剥掉 Ref 层：`self: &Result(T, E)` 借用形态的方法体 match 与
-        // 值形态走同一条变体分发（运行时借用擦除，拿到的是 Enum 值本身）
-        let mut ty = ty;
-        while let crate::frontend::core::types::MonoType::Ref { inner, .. } = ty {
-            ty = *inner;
-        }
-        match ty {
-            crate::frontend::core::types::MonoType::Generic { name, .. }
-                if self.sum_type_variants.contains_key(&name) =>
-            {
-                Some(name)
-            }
-            // 非泛型和类型的方法体（`self: &Maybe`）：剥 Ref 后是 TypeRef /
-            // Struct 镜像，名义命中变体表即和类型（与 typecheck 同款判定）
-            crate::frontend::core::types::MonoType::TypeRef(n)
-                if self.sum_type_variants.contains_key(n.as_str()) =>
-            {
-                Some(n.clone())
-            }
-            crate::frontend::core::types::MonoType::Struct(s)
-                if self.sum_type_variants.contains_key(&s.name) =>
-            {
-                Some(s.name.clone())
-            }
-            _ => None,
-        }
-    }
-
     /// RFC-010: 变体构造形态检测——`Result(Int, String).ok(5)` / `Color.red()`。
     /// 与 typecheck 的变体构造识别同一 AST 形态；span 键跨系统不可靠（两端
     /// 对 Call 节点 span 的语义不同），故就地检测并从 sum_type_variants 取变体序。
@@ -6877,7 +7037,7 @@ impl AstToIrGenerator {
                 _ => None,
             }?;
             let variants = self.sum_type_variants.get(type_name)?;
-            let idx = variants.iter().position(|v| v == variant_name)?;
+            let idx = variants.iter().position(|v| v.0 == *variant_name)?;
             return Some((type_name.clone(), idx, 0));
         }
         None

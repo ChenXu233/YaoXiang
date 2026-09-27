@@ -860,14 +860,12 @@ impl<'a> ParserState<'a> {
             // 特判 Var 后跟 LParen 的形态，手动走 parse_call 重组调用
             //（expr_to_pattern 随后把它转成 Union 变体模式）。
             let pattern = {
-                let first_expr = self.parse_pattern_expr()?;
-                let mut patterns: Vec<Pattern> = vec![self.expr_to_pattern(&first_expr)];
+                let mut patterns: Vec<Pattern> = vec![self.parse_pattern()?];
                 // RFC-010b: 或模式 `1 | 2` / `some(v) | none()`——`|` 结合力
                 // 低于模式解析阈值，表达式循环到不了它，这里显式收链
                 while self.at(&TokenKind::Pipe) {
                     self.bump();
-                    let next_expr = self.parse_pattern_expr()?;
-                    patterns.push(self.expr_to_pattern(&next_expr));
+                    patterns.push(self.parse_pattern()?);
                 }
                 if patterns.len() == 1 {
                     patterns.pop().unwrap()
@@ -995,20 +993,47 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    /// 解析单个模式表达式：parse_expression(12) + Var 后跟 LParen 的
-    /// 变体调用重组（`ok(v)` 停成裸 Var 的特判，见 parse_match 注释）
-    fn parse_pattern_expr(&mut self) -> Option<Expr> {
-        let mut pattern_expr_opt: Option<Expr> = None;
+    /// 解析单个模式（RFC-010b）：parse_expression(12) 探测 + 三分支——
+    /// Var+LParen 变体调用重组（`ok(v)` 停成裸 Var 的特判）、Var+LBrace
+    /// 结构体模式（`Point { x, y: b }`，字段为简写绑定或 `名: 子模式`）、
+    /// 其余经 expr_to_pattern 转换
+    fn parse_pattern(&mut self) -> Option<Pattern> {
         let probe = self.parse_expression(12)?;
         if self.at(&TokenKind::LParen) && matches!(&probe, Expr::Var(_, _)) {
-            if let Some(called) = self.parse_call(probe.clone(), 0) {
-                pattern_expr_opt = Some(called);
+            let called = match self.parse_call(probe.clone(), 0) {
+                Some(c) => c,
+                None => probe,
+            };
+            return Some(self.expr_to_pattern(&called));
+        }
+        if self.at(&TokenKind::LBrace) {
+            if let Expr::Var(name, _) = &probe {
+                self.bump(); // {
+                let mut fields: Vec<(String, bool, Box<Pattern>)> = Vec::new();
+                while !self.at(&TokenKind::RBrace) && !self.at_end() {
+                    let fname = match self.current().map(|t| &t.kind) {
+                        Some(TokenKind::Identifier(n)) => n.clone(),
+                        _ => return None,
+                    };
+                    self.bump();
+                    let fpat = if self.skip(&TokenKind::Colon) {
+                        Box::new(self.parse_pattern()?)
+                    } else {
+                        Box::new(Pattern::Identifier(fname.clone()))
+                    };
+                    fields.push((fname, false, fpat));
+                    if !self.skip(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                self.expect(&TokenKind::RBrace);
+                return Some(Pattern::Struct {
+                    name: name.clone(),
+                    fields,
+                });
             }
         }
-        Some(match pattern_expr_opt {
-            Some(e) => e,
-            None => probe,
-        })
+        Some(self.expr_to_pattern(&probe))
     }
 
     /// Convert an expression to a pattern for match arms

@@ -1,0 +1,53 @@
+// 02-type-system/pattern_destructure.yx
+// 覆盖: RFC-010b 解构模式——多载荷变体解构（构造/解构成对）、结构体
+// 模式（字段重命名绑定）、零载荷变体、载荷位嵌套绑定
+// 验证:
+//   - Pair.make(3, 4) 构造 → make(a, b) 解构（多载荷 Tuple 拆包）
+//   - Pair.empty() → empty() 零载荷臂
+//   - Point { x, y: b } 结构体模式：简写绑定 + 字段重命名
+//   - ok(v) 载荷绑定进臂作用域
+// 状态: ✅ 可运行
+
+use std.assert
+use std.result
+
+Pair: Type = {
+    make: (Int, Int) -> Pair,
+    empty: () -> Pair,
+}
+
+Point: Type = { x: Int, y: Int }
+
+main: () -> Void = {
+    // 多载荷变体：构造与解构成对
+    p = Pair.make(3, 4)
+    v = match p {
+        make(a, b) => a * b,
+        empty() => 0,
+    }
+    assert(v == 12, "multi-payload destructure")
+
+    q = Pair.empty()
+    w = match q {
+        make(a, b) => a + b,
+        empty() => 42,
+    }
+    assert(w == 42, "zero-payload arm")
+
+    // 结构体模式：简写 x 绑定同名字段，y: b 重命名
+    pt = Point(3, 4)
+    area = match pt {
+        Point { x, y: b } => x * b,
+    }
+    assert(area == 12, "struct pattern with rename")
+
+    // 变体载荷绑定
+    r = Result(Int, String).ok(7)
+    got = match r {
+        ok(n) => n,
+        err(_) => 0,
+    }
+    assert(got == 7, "variant payload binding")
+}
+
+main()

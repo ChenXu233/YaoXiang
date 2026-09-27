@@ -870,14 +870,9 @@ impl<'a> ExpressionInferrer<'a> {
             self.scope.enter_block();
             let arm_ty = {
                 let mut binds: Vec<(String, MonoType)> = Vec::new();
-                let checked = self
-                    .check_pattern_alts(pat, &resolved, &mut binds, arm.span)
-                    .and_then(|()| match guard {
-                        Some(cond) => self.check_guard_condition(cond),
-                        None => Ok(()),
-                    });
-                match checked {
+                let checked = match self.check_pattern_alts(pat, &resolved, &mut binds, arm.span) {
                     Err(e) => Err(e),
+                    // 绑定先注册再查守卫——守卫表达式对模式绑定可见
                     Ok(()) => {
                         for (bn, bty) in &binds {
                             self.scope.add_var(
@@ -887,8 +882,15 @@ impl<'a> ExpressionInferrer<'a> {
                                 arm.span,
                             );
                         }
-                        self.infer_block(&arm.body, true, None)
+                        match guard {
+                            Some(cond) => self.check_guard_condition(cond),
+                            None => Ok(()),
+                        }
                     }
+                };
+                match checked {
+                    Err(e) => Err(e),
+                    Ok(()) => self.infer_block(&arm.body, true, None),
                 }
             };
             self.scope.exit_block();
