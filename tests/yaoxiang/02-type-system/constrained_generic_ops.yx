@@ -1,0 +1,35 @@
+// 02-type-system/constrained_generic_ops.yx
+// 覆盖: RFC-011 §5.2 约束泛型的运算符——`T: Add` 定义体内的 `a + b`
+// 延迟派发（Call "T.add"），mono 按类型实参改写（Int.add FFI / Vec3.add
+// 用户方法），调用点复检（未实现者 E1106）
+// 验证:
+//   - 约束泛型在 Int 上实例化（原生背书）
+//   - 约束泛型在用户类型上实例化（Vec3.add 方法派发）
+// 状态: ✅ 可运行
+
+use std.assert
+
+Vec3: Type = {
+    x: Float,
+    y: Float,
+    z: Float,
+    Add(Vec3, Vec3, Vec3),
+}
+
+Vec3.add: (self: &Vec3, other: &Vec3) -> Vec3 = (self, other) => {
+    return Vec3(self.x + other.x, self.y + other.y, self.z + other.z)
+}
+
+sum: (T: Add) -> (a: T, b: T) -> T = a + b
+
+main: () -> Void = {
+    i = sum(1, 2)
+    assert(i == 3, "constrained generic over Int")
+
+    a = Vec3(1.0, 2.0, 3.0)
+    b = Vec3(4.0, 5.0, 6.0)
+    v = sum(a, b)
+    assert(v.x == 5.0, "constrained generic over Vec3")
+}
+
+main()

@@ -84,6 +84,10 @@ pub struct StatementChecker {
     /// RFC-011b: 接口实现登记表（运算符查询唯一判据，不经名字解析）
     interface_impl_registry:
         HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
+    /// RFC-011 §5.2：泛型函数约束表（fn 名 → [(形参, 接口名)]）——调用点复检
+    generic_fn_constraints: std::collections::HashMap<String, Vec<(String, String)>>,
+    /// 当前函数的约束形参（形参 → 接口名）：定义体内运算符延迟派发的依据
+    current_fn_param_constraints: Option<std::collections::HashMap<String, String>>,
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types: HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
     /// RFC-010: 变体构造调用点（span 键控）
@@ -150,6 +154,8 @@ impl StatementChecker {
             collect_all_errors: false,
             function_local_vars: HashMap::new(),
             result_err_stack: Vec::new(),
+            generic_fn_constraints: std::collections::HashMap::new(),
+            current_fn_param_constraints: None,
             expected_return_type: None,
             generic_type_defs: std::collections::HashMap::new(),
             method_bindings: HashMap::new(),
@@ -1115,6 +1121,59 @@ impl StatementChecker {
                 // 从 value 提取 Lambda params/body。
                 // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值（交给 check_var_stmt 按普通变量审）。
+                // RFC-010 §3（具名函数本质是 lambda 语法糖）：Fn 注解 +
+                // 表达式体（`sum: (T: Add) -> (a: T, b: T) -> T = a + b`）
+                // 合成值级 lambda，与 lambda 体走同一条 check_fn_stmt 路径——
+                // 否则注册形态停留在完整柯里注解（arity 含类型位），调用点
+                // arity 全错，且定义体的约束延迟派发无从发生。
+                // 仅表达式体走此路：lambda 体已被上方臂提取
+                if type_annotation.as_ref().is_some_and(|t| {
+                    matches!(t, crate::frontend::core::parser::ast::Type::Fn { .. })
+                }) && value
+                    .as_deref()
+                    .is_some_and(|v| !matches!(v, Expr::Lambda { .. }))
+                {
+                    let value_params: Vec<Param> =
+                        signature_params
+                            .iter()
+                            .filter(|p| {
+                                match &p.ty {
+                        Some(crate::frontend::core::parser::ast::Type::MetaType { .. }) => false,
+                        Some(crate::frontend::core::parser::ast::Type::Name { name: n, .. }) => {
+                            !(self.trait_table.has_trait(n)
+                                || crate::frontend::core::typecheck::operator_interfaces::spec(n)
+                                    .is_some())
+                        }
+                        _ => true,
+                    }
+                            })
+                            .cloned()
+                            .collect();
+                    let synthetic_body = Block {
+                        stmts: vec![Stmt {
+                            kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                                value.as_deref().cloned().unwrap_or({
+                                    crate::frontend::core::parser::ast::Expr::Lit(
+                                        crate::frontend::core::lexer::tokens::Literal::Void,
+                                        stmt.span,
+                                    )
+                                }),
+                            )),
+                            span: stmt.span,
+                        }],
+                        span: stmt.span,
+                    };
+                    return self.check_fn_stmt(
+                        &name,
+                        type_annotation.as_ref(),
+                        signature_params,
+                        &value_params,
+                        &[],
+                        synthetic_body,
+                        *stmt_span,
+                    );
+                }
+
                 let (params, body_stmts) = match value {
                     Some(v) => {
                         if let Expr::Lambda { params, body, .. } = v.as_ref() {
@@ -1371,8 +1430,36 @@ impl StatementChecker {
         // #353：记录绑定语句的位置，供尾表达式不符时指向它（而非体的末行）。
         // 真正该改的是注解所在的声明，不是体里那个（可能完全正确的）值。
         self.tail_annotation_span = Some(_span);
-        let generic_params =
-            classify_generic_params(signature_params, &|name| self.trait_table.has_trait(name));
+        // RFC-011 §5.2：收集约束形参（`T: Add` 的标注名为接口名）——
+        // 调用点复检与定义体内运算符延迟派发的依据
+        {
+            let constraints: Vec<(String, String)> = signature_params
+                .iter()
+                .filter_map(|p| match &p.ty {
+                    Some(crate::frontend::core::parser::ast::Type::Name { name: n, .. })
+                        if self.trait_table.has_trait(n)
+                            || crate::frontend::core::typecheck::operator_interfaces::spec(n)
+                                .is_some() =>
+                    {
+                        Some((p.name.clone(), n.clone()))
+                    }
+                    _ => None,
+                })
+                .collect();
+            if !constraints.is_empty() {
+                self.generic_fn_constraints
+                    .insert(name.to_string(), constraints.clone());
+            }
+            self.current_fn_param_constraints = if constraints.is_empty() {
+                None
+            } else {
+                Some(constraints.into_iter().collect())
+            };
+        }
+        let generic_params = classify_generic_params(signature_params, &|name| {
+            self.trait_table.has_trait(name)
+                || crate::frontend::core::typecheck::operator_interfaces::spec(name).is_some()
+        });
 
         // 检查是否与结构体重名
         if let Some(existing) = self.scope.get_var(name) {
@@ -1690,6 +1777,7 @@ impl StatementChecker {
 
         // 退出函数 Result 上下文
         let _ = self.result_err_stack.pop();
+        self.current_fn_param_constraints = None;
 
         out
     }
@@ -2409,6 +2497,36 @@ impl StatementChecker {
                                     }
                                 }
                             }
+                            // RFC-011 §5.2：约束形参延迟派发（定义体内 T 上的
+                            // 运算符）——与 ExpressionInferrer 同款判定
+                            if let Some(iface) =
+                                crate::frontend::core::typecheck::operator_interfaces::arithmetic_interface(op)
+                            {
+                                if let Some(constraints) = &self.current_fn_param_constraints {
+                                    let operands = [&l, &r];
+                                    for operand in operands {
+                                        if let MonoType::TypeRef(pn) = operand {
+                                            if constraints.get(pn).map(|s| s.as_str())
+                                                == Some(iface)
+                                            {
+                                                if let Some(spec) =
+                                                    crate::frontend::core::typecheck::operator_interfaces::spec(iface)
+                                                {
+                                                    self.operator_dispatches.push(
+                                                        crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch {
+                                                            span: *span,
+                                                            type_name: pn.clone(),
+                                                            method: spec.method.to_string(),
+                                                            negate: false,
+                                                        },
+                                                    );
+                                                }
+                                                return Ok(operand.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             // 与 infer_binary 同款纪律：类型层不认的组合宁拒不
                             // 静默，fresh var 兜底会把错译推迟到运行时 E6007
                             //
@@ -2462,6 +2580,10 @@ impl StatementChecker {
                         inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
                         inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
+                        inferrer.set_current_fn_param_constraints(
+                            self.current_fn_param_constraints.as_ref(),
+                        );
+                        inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                         inferrer.set_loop_depth(self.loop_depth);
@@ -2542,6 +2664,9 @@ impl StatementChecker {
                 inferrer.set_sum_types(&self.sum_types);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
                 inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
+                inferrer
+                    .set_current_fn_param_constraints(self.current_fn_param_constraints.as_ref());
+                inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                 inferrer.set_loop_depth(self.loop_depth);

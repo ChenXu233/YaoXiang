@@ -1053,5 +1053,11 @@
     "message": "结构体模式未覆盖字段 '{field}'",
     "template": "结构体模式缺少字段 '{field}'（'{struct}' 的字段须完整覆盖）",
     "help": "结构体模式必须列出全部字段；`..` 略名尚未支持"
+  },
+  "E1106": {
+    "title": "约束未满足",
+    "message": "类型 '{type}' 未实现接口 '{interface}'（约束 '{param}: {interface}'）",
+    "template": "类型 '{type}' 未实现 `{interface}`——泛型参数 `{param}` 的约束 `{param}: {interface}` 在此调用点不成立",
+    "help": "为该类型实现对应接口（类型体内写接口实例化并定义方法），或改用已实现该接口的实参"
   }
 }

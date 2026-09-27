@@ -492,8 +492,10 @@ impl AstToIrGenerator {
                     // 类型参数层（如 `(T: Type)`）是编译期参数：不占运行时参数位，
                     // 该层擦除（不生成运行时函数层）。调用点 T 由类型推断填充（RFC-011）。
                     // ponytail: 仅处理纯类型参数层；类型/值参数混合同层视为值层（罕见，暂不拆）
-                    let is_type_layer =
-                        !type_params.is_empty() && type_params.iter().all(Self::is_type_param_ann);
+                    let is_type_layer = !type_params.is_empty()
+                        && type_params.iter().all(|t| {
+                            Self::is_type_param_ann(t) || Self::is_constraint_param_ann(t)
+                        });
 
                     // RFC-004 括号语义：返回位置的 `Paren` ⇔ 链条在此终止。
                     // 该括号内的参数**不属于本函数**——它们是被返回函数的参数。
@@ -526,6 +528,18 @@ impl AstToIrGenerator {
         match ty {
             ast::Type::MetaType { .. } => true,
             ast::Type::Name { name, .. } => name == "Type",
+            _ => false,
+        }
+    }
+
+    /// 约束形参判定（RFC-011 §5.2）：标注是运算符接口/约束名（`T: Add` 的
+    /// `Add`）→ 类型位。split_curry 的层擦除判据与它同源——漏判会让约束
+    /// 形参落成运行时参数（sum 外层 Parameters: (Add)），调用 arity 全错。
+    fn is_constraint_param_ann(ty: &ast::Type) -> bool {
+        match ty {
+            ast::Type::Name { name, .. } => {
+                crate::frontend::core::typecheck::operator_interfaces::spec(name).is_some()
+            }
             _ => false,
         }
     }

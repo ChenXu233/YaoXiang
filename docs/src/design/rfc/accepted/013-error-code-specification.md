@@ -341,6 +341,7 @@ E1001::unknown_variable(&var_name)
 | E1103 | 类型位置不能使用方括号           |
 | E1104 | 接口实现不在类型的定义模块         |
 | E1105 | 变体构造器不可作为字段访问         |
+| E1106 | 约束未满足                 |
 <!-- code-table:E1xxx end -->
 
 > **RFC-011b 关联（2026-09-22 注）**：[RFC-011b: 运算符重载](./011b-operator-overloading.md)

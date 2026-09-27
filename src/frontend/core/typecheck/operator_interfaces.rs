@@ -553,6 +553,20 @@ fn bind_template_self(
     }
 }
 
+/// 约束泛型运算符派发的具体类型显示名（mono 改写 `T.add` → `Vec3.add` /
+/// `Int.add` 与 E1106 诊断共用）：原语用规范大写名（与 FFI 背书条目一致），
+/// 用户类型用名义名。
+pub fn operator_type_display(ty: &MonoType) -> String {
+    let tn = ty.type_name();
+    match tn.as_str() {
+        "int64" => "Int".to_string(),
+        "float64" => "Float".to_string(),
+        "string" => "String".to_string(),
+        "bool" => "Bool".to_string(),
+        _ => tn,
+    }
+}
+
 /// 全实参查询：命中返回条目（如 `Equal` 的 `[Self, R]` 查询）。
 pub fn query_exact<'e>(
     registry: &'e HashMap<String, Vec<InterfaceImplEntry>>,

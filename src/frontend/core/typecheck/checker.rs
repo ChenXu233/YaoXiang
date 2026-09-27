@@ -1650,7 +1650,6 @@ impl TypeChecker {
                     params: final_param_types.clone(),
                     return_type: Box::new(final_return_type),
                 };
-
                 // RFC-027: 解析类型标注中的编译期谓词（如 Positive(5) -> Refined）
                 let mut refined_diags = Vec::new();
                 let fn_ty = match fn_ty {
