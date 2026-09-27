@@ -1065,5 +1065,10 @@
     "message": "'{key}' has {count} candidate matches and cannot be resolved",
     "template": "Method overload ambiguity: '{key}' has {count} candidate matches that cannot be distinguished",
     "help": "Add a type annotation to the call result (e.g., `x: T = obj.m()`), or make the parameter types of the overload candidates distinguishable"
+  },
+  "E2031": {
+    "title": "Refinement constraint cannot be proven",
+    "template": "After assigning to '{assigned}', the refinement type constraint of '{var}': {constraint} cannot be statically proven within the proof kernel",
+    "help": "RFC-027 requires all refinement constraints to be proven at compile-time — unproven ones result in a compile error. Please rewrite the constraint so its arguments can be statically evaluated (literals or literal-foldable expressions), or provide a proof function returning Type to participate in compile-time execution."
   }
 }
