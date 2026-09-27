@@ -1035,5 +1035,23 @@
     "message": "a variant constructor can only be used in the call form `Type.variant(...)`",
     "template": "'{variant}' is a variant constructor of the enum type '{type}', not a data field",
     "help": "To construct a value, write `{type}.{variant}(...)`; to extract the payload from an enum type value, use match with variant destructuring (RFC-010b). All record-style fields of an enum type have been promoted to variants; runtime values do not carry a field table."
+  },
+  "E1032": {
+    "title": "duplicate pattern binding",
+    "message": "'{name}' is bound more than once in the same pattern",
+    "template": "duplicate pattern binding: '{name}' appears more than once in the same pattern",
+    "help": "each name can only be bound once in a pattern; to match two identical fields, use different names (same as Rust semantics)"
+  },
+  "E1033": {
+    "title": "inconsistent bindings in or-pattern",
+    "message": "alternatives separated by `|` bind different sets of names",
+    "template": "inconsistent bindings in or-pattern: both sides of `|` must bind the same set of names",
+    "help": "every alternative of an or-pattern `a(x) | b(x)` must introduce exactly the same binding names (same as Rust semantics)"
+  },
+  "E1034": {
+    "title": "missing field in struct pattern",
+    "message": "struct pattern does not cover field '{field}'",
+    "template": "struct pattern missing field '{field}' (fields of '{struct}' must be fully covered)",
+    "help": "struct pattern must list all fields; `..` shorthand is not yet supported"
   }
 }

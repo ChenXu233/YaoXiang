@@ -1083,6 +1083,13 @@ impl TypeChecker {
             implementation_proofs: self.env.implementation_proofs.clone(),
             interface_impl_registry: self.env.interface_impl_registry.clone(),
             sum_types: self.env.sum_types.clone(),
+            sum_type_param_names: self
+                .env
+                .generic_type_defs
+                .iter()
+                .filter(|(name, _)| self.env.sum_types.contains_key(*name))
+                .map(|(name, d)| (name.clone(), d.type_param_names.clone()))
+                .collect(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
             warnings: import_warnings,
         }

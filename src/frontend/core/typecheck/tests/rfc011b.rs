@@ -956,3 +956,166 @@ fn test_dbg_match_baseline() {
         result.diagnostics
     );
 }
+
+// ============================================================================
+// RFC-010b：或模式 / 守卫 / 结构体模式的检查器语义
+// ============================================================================
+
+/// 规范：同一模式内重复绑定同名 → E1032
+#[test]
+fn test_rfc010b_duplicate_binding_reports_e1032() {
+    let source = r#"
+        Pair: Type = {
+            make: (Int, Int) -> Pair,
+            empty: () -> Pair,
+        }
+        main: () -> Void = {
+            p = Pair.make(1, 2)
+            v = match p {
+                make(a, a) => a,
+                empty() => 0,
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1032"),
+        "duplicate pattern binding should report E1032: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范：或模式各备选绑定名集不一致 → E1033
+#[test]
+fn test_rfc010b_or_binding_mismatch_reports_e1033() {
+    let source = r#"
+        Option: (T: Type) -> Type = {
+            some: (T) -> Option(T),
+            none: () -> Option(T),
+        }
+        main: () -> Void = {
+            o = Option(Int).some(1)
+            v = match o {
+                some(x) | none() => x,
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1033"),
+        "or-pattern binding mismatch should report E1033: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范：结构体模式缺字段 → E1034
+#[test]
+fn test_rfc010b_struct_pattern_missing_field_reports_e1034() {
+    let source = r#"
+        Point: Type = { x: Int, y: Int }
+        main: () -> Void = {
+            p = Point(1, 2)
+            v = match p {
+                Point { x } => x,
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1034"),
+        "struct pattern missing field should report E1034: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范：带守卫的臂不计入穷尽性覆盖（守卫可能不命中，Rust 同规）
+#[test]
+fn test_rfc010b_guarded_arm_not_exhaustive() {
+    let source = r#"
+        Option: (T: Type) -> Type = {
+            some: (T) -> Option(T),
+            none: () -> Option(T),
+        }
+        main: () -> Void = {
+            o = Option(Int).some(1)
+            v = match o {
+                some(x) if x > 0 => x,
+                none() => 0,
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1030"),
+        "guarded arm should not count toward exhaustiveness: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范：守卫条件必须产出 Bool
+#[test]
+fn test_rfc010b_guard_non_bool_rejected() {
+    let source = r#"
+        main: () -> Void = {
+            x = 5
+            v = match x {
+                n if n => "bad",
+                _ => "other",
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1002"),
+        "non-Bool guard should be rejected: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范（全穷尽，2026-09-27 定案）：非和类型 scrutinee 无兜底臂 → E1030
+/// （不该隐式的地方不隐式；Int/String 等值域开放，字面量臂必须补 `_`）
+#[test]
+fn test_rfc010b_nonsum_match_requires_fallback_e1030() {
+    let source = r#"
+        main: () -> Void = {
+            x = 2
+            t = match x {
+                1 => "一",
+                2 => "二",
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1030"),
+        "non-sum match without fallback should report E1030: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范：Bool 是可枚举例外——true+false 双字面量臂即穷尽，无需兜底
+#[test]
+fn test_rfc010b_bool_literal_coverage_exhaustive() {
+    let source = r#"
+        main: () -> Void = {
+            b = true
+            t = match b {
+                true => 1,
+                false => 0,
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "bool true+false should be exhaustive: {:?}",
+        result.diagnostics
+    );
+}

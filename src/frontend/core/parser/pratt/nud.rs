@@ -859,20 +859,35 @@ impl<'a> ParserState<'a> {
             // parse_expression(12) 会把 `ok` 停成裸 Var、`(` 成意外 token——
             // 特判 Var 后跟 LParen 的形态，手动走 parse_call 重组调用
             //（expr_to_pattern 随后把它转成 Union 变体模式）。
-            let pattern_expr = {
-                let mut pattern_expr_opt: Option<Expr> = None;
-                let probe = self.parse_expression(12)?;
-                if self.at(&TokenKind::LParen) && matches!(&probe, Expr::Var(_, _)) {
-                    if let Some(called) = self.parse_call(probe.clone(), 0) {
-                        pattern_expr_opt = Some(called);
-                    }
+            let pattern = {
+                let mut patterns: Vec<Pattern> = vec![self.parse_pattern()?];
+                // RFC-010b: 或模式 `1 | 2` / `some(v) | none()`——`|` 结合力
+                // 低于模式解析阈值，表达式循环到不了它，这里显式收链
+                while self.at(&TokenKind::Pipe) {
+                    self.bump();
+                    patterns.push(self.parse_pattern()?);
                 }
-                match pattern_expr_opt {
-                    Some(e) => e,
-                    None => probe,
+                if patterns.len() == 1 {
+                    patterns.pop().unwrap()
+                } else {
+                    Pattern::Or(patterns)
                 }
             };
-            let pattern = self.expr_to_pattern(&pattern_expr);
+            // RFC-010b: 守卫 `pat if cond => ...`——守卫表达式在 no_fat_arrow
+            // 模式下完整解析并停在 `=>`
+            let pattern = if self.at(&TokenKind::KwIf) {
+                self.bump();
+                let saved = self.no_fat_arrow;
+                self.no_fat_arrow = true;
+                let condition = self.parse_expression(BP_LOWEST);
+                self.no_fat_arrow = saved;
+                Pattern::Guard {
+                    pattern: Box::new(pattern),
+                    condition: condition?,
+                }
+            } else {
+                pattern
+            };
 
             self.expect(&TokenKind::FatArrow);
 
@@ -978,6 +993,49 @@ impl<'a> ParserState<'a> {
         }
     }
 
+    /// 解析单个模式（RFC-010b）：parse_expression(12) 探测 + 三分支——
+    /// Var+LParen 变体调用重组（`ok(v)` 停成裸 Var 的特判）、Var+LBrace
+    /// 结构体模式（`Point { x, y: b }`，字段为简写绑定或 `名: 子模式`）、
+    /// 其余经 expr_to_pattern 转换
+    fn parse_pattern(&mut self) -> Option<Pattern> {
+        let probe = self.parse_expression(12)?;
+        if self.at(&TokenKind::LParen) && matches!(&probe, Expr::Var(_, _)) {
+            let called = match self.parse_call(probe.clone(), 0) {
+                Some(c) => c,
+                None => probe,
+            };
+            return Some(self.expr_to_pattern(&called));
+        }
+        if self.at(&TokenKind::LBrace) {
+            if let Expr::Var(name, _) = &probe {
+                self.bump(); // {
+                let mut fields: Vec<(String, bool, Box<Pattern>)> = Vec::new();
+                while !self.at(&TokenKind::RBrace) && !self.at_end() {
+                    let fname = match self.current().map(|t| &t.kind) {
+                        Some(TokenKind::Identifier(n)) => n.clone(),
+                        _ => return None,
+                    };
+                    self.bump();
+                    let fpat = if self.skip(&TokenKind::Colon) {
+                        Box::new(self.parse_pattern()?)
+                    } else {
+                        Box::new(Pattern::Identifier(fname.clone()))
+                    };
+                    fields.push((fname, false, fpat));
+                    if !self.skip(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                self.expect(&TokenKind::RBrace);
+                return Some(Pattern::Struct {
+                    name: name.clone(),
+                    fields,
+                });
+            }
+        }
+        Some(self.expr_to_pattern(&probe))
+    }
+
     /// Convert an expression to a pattern for match arms
     #[allow(clippy::only_used_in_recursion)]
     fn expr_to_pattern(
@@ -993,6 +1051,18 @@ impl<'a> ParserState<'a> {
                 }
             }
             Expr::Lit(lit, _) => Pattern::Literal(lit.clone()),
+            // RFC-010b: 嵌套或模式——载荷位的 `ok(1 | 2)`：实参表达式解析
+            // 把 `|` 收成 BinOp(BitOr)，这里还原为 Or 模式（顶层或模式由
+            // parse_match 的显式收链处理，走不到此臂）
+            Expr::BinOp {
+                op: crate::frontend::core::parser::ast::BinOp::BitOr,
+                left,
+                right,
+                ..
+            } => Pattern::Or(vec![
+                self.expr_to_pattern(left),
+                self.expr_to_pattern(right),
+            ]),
             Expr::Tuple(elements, _) => {
                 let patterns = elements.iter().map(|e| self.expr_to_pattern(e)).collect();
                 Pattern::Tuple(patterns)

@@ -1,0 +1,54 @@
+// 02-type-system/pattern_or_guard.yx
+// 覆盖: RFC-010b 或模式与守卫——`|` 备选共享臂体、`if cond` 细化臂、
+// 带守卫臂不计入穷尽性覆盖（Rust 同规）
+// 验证:
+//   - 1 | 2 命中与未命中两路
+//   - some(v) | none() 变体或模式（备选绑定一致性）
+//   - n if n > 3 命中与落空（守卫失败落下一臂）
+// 状态: ✅ 可运行
+
+use std.assert
+use std.option
+
+main: () -> Void = {
+    // 或模式：字面量
+    x = 2
+    t = match x {
+        1 | 2 => "低",
+        _ => "其他",
+    }
+    assert(t == "低", "or matches first alternative")
+
+    y = 5
+    u = match y {
+        1 | 2 => "低",
+        _ => "其他",
+    }
+    assert(u == "其他", "or falls through")
+
+    // 或模式：变体备选（绑定集须一致——some(_)/none() 均无绑定；
+    // some(v) | none() 会报 E1033）
+    a = Option(Int).some(9)
+    label = match a {
+        some(_) | none() => "有形状",
+    }
+    assert(label == "有形状", "variant or-pattern")
+
+    // 守卫：命中
+    b = 5
+    size = match b {
+        n if n > 3 => "大",
+        _ => "小",
+    }
+    assert(size == "大", "guard true arm")
+
+    // 守卫：失败落下一臂
+    c = 2
+    size2 = match c {
+        n if n > 3 => "大",
+        _ => "小",
+    }
+    assert(size2 == "小", "guard falls through")
+}
+
+main()

@@ -29,6 +29,12 @@ define_codes!(E1XXX, {
     ("E1030", TypeCheck, false, pattern_non_exhaustive(patterns: &str) => .param("patterns", patterns)),
     // E1031 不可达模式
     ("E1031", TypeCheck, false, unreachable_pattern(pattern: &str) => .param("pattern", pattern)),
+    // E1032 模式重复绑定（RFC-010b：同一模式内同名绑定出现多次）
+    ("E1032", TypeCheck, false, duplicate_pattern_binding(name: &str) => .param("name", name)),
+    // E1033 或模式绑定不一致（RFC-010b：各备选绑定的名字集不同）
+    ("E1033", TypeCheck, false, or_pattern_binding_mismatch() => ),
+    // E1034 结构体模式缺字段（RFC-010b：字段须完整覆盖，`..` 略名未支持）
+    ("E1034", TypeCheck, false, struct_pattern_missing_field(struct_: &str, field: &str) => .param("struct", struct_) .param("field", field)),
     // E1040 不支持的操作
     ("E1040", TypeCheck, false, unsupported_operation(op: &str, type_: &str) => .param("op", op).param("type", type_)),
     // E1041 数组越界
