@@ -23,7 +23,7 @@ issue: '#341'
 >   — 和类型 = 字段全返回自身类型的记录
 > - [RFC-013: 错误码规范](./013-error-code-specification.md) — `Result`
 >   归 std 的既有定位、E108x
-> - [RFC-010b: 模式匹配完备化（变体解构与穷尽性）](../draft/010b-pattern-matching-completeness.md) — 变体解构（依赖）
+> - [RFC-010b: 模式匹配完备化（变体解构与穷尽性）](../accepted/010b-pattern-matching-completeness.md) — 变体解构（依赖）
 
 ## 摘要
 
@@ -749,7 +749,7 @@ Instruction::VariantTag { group: "Result".to_string(), .. }
 - [RFC-010: 统一类型语法](./010-unified-type-syntax.md) — 和类型表达
 - [RFC-013: 错误码规范](./013-error-code-specification.md) — `Result`
   归 std 定位、错误码流程
-- [RFC-010b: 模式匹配完备化（变体解构与穷尽性）](../draft/010b-pattern-matching-completeness.md)
+- [RFC-010b: 模式匹配完备化（变体解构与穷尽性）](../accepted/010b-pattern-matching-completeness.md)
 - [Rust `std::ops::Index`](https://doc.rust-lang.org/std/ops/trait.Index.html) — 关联类型 `Output`
   设计
 - [Swift Subscripts](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/subscripts/)
