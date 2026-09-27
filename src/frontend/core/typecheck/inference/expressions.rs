@@ -711,7 +711,21 @@ impl<'a> ExpressionInferrer<'a> {
                 }
             }
             BinOp::Eq | BinOp::Neq | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
-                let _ = self.solver.unify(left, right);
+                // 比较两侧必须同型：`unify` 失败即报错，不再丢弃。
+                //
+                // 此前 `let _ = unify(...)` 吞掉错误，`1 < "x"` / `1 < 2.5`
+                // 编译期放行、运行期报 E6007；而常量折叠路径（ir_gen）却能
+                // 折出结果——同一表达式写在顶层能折、写在函数体内就炸（B9）。
+                // RFC-011b 只承诺混合**算术**（Add/Sub/Mul/Div），比较保持
+                // 「两侧同型」的原生快路径，故此处按纪律拒绝。
+                if self.solver.unify(left, right).is_err() {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &format!("{}", self.solver.resolve_type(left)),
+                        &format!("{}", self.solver.resolve_type(right)),
+                    )
+                    .at(span)
+                    .build());
+                }
                 Ok(MonoType::Bool)
             }
             BinOp::And | BinOp::Or => {
@@ -1388,13 +1402,30 @@ impl<'a> ExpressionInferrer<'a> {
         // 构造器产物 Generic）走本函数的早退分支能过，但 `mk() == Color.green()`
         // （一侧是注解形态 TypeRef，经 type_defs 落成 Struct）会掉进结构推导报
         // E1101——同一表达式因变量来源不同而结果不同。名义命中即放行。
+        //
+        // 同名还必须**实参兼容**：`Option(Int).none() == Option(String).none()`
+        // 名义都是 "Option"，只比名字会静默判等（实为不同类型身份的变体）。
         let l_sum = self.as_sum_type_name(&l);
         let r_sum = self.as_sum_type_name(&r);
         if let (Some(ln), Some(rn)) = (&l_sum, &r_sum) {
             if ln == rn {
-                let _ = self.solver.unify(left_ty, right_ty);
+                if self.solver.unify(left_ty, right_ty).is_err() {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &format!("{}", self.solver.resolve_type(left_ty)),
+                        &format!("{}", self.solver.resolve_type(right_ty)),
+                    )
+                    .at(span)
+                    .build());
+                }
                 return Ok(MonoType::Bool);
             }
+            // 不同名和类型（如 Maybe vs Color）：身份不同，不可比
+            return Err(ErrorCodeDefinition::type_mismatch(
+                &format!("{}", self.solver.resolve_type(left_ty)),
+                &format!("{}", self.solver.resolve_type(right_ty)),
+            )
+            .at(span)
+            .build());
         }
 
         if l_record.is_none() && r_record.is_none() {

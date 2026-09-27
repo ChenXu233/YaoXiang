@@ -1,0 +1,14 @@
+// 06-compile-errors/in_body_unknown_type_err.yx
+// 覆盖: #371/#372 —— 注解类型名校验必须覆盖**函数体内**的绑定与 lambda 形参
+// expect: compile-error E1003
+// 验证: 函数体内同样的错拼类型名必须报 E1003，与顶层一致。
+//       此前校验只扫 module.items，`main = { g: (a: BogusType) -> Int = ... }`
+//       编译通过，同一错误在顶层却报 E1003 —— 校验覆盖不完整（B6）。
+// 状态: ❌ 应编译失败
+
+main: () -> Void = {
+    g: (a: BogusType) -> Int = (a) => 1
+    x = g(1)
+}
+
+main()

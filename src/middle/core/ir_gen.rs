@@ -2294,12 +2294,10 @@ impl AstToIrGenerator {
                         B::Sub => Some(ConstValue::Float(a as f64 - b)),
                         B::Mul => Some(ConstValue::Float(a as f64 * b)),
                         B::Mod => Some(ConstValue::Float(floor_mod_float(a as f64, b))),
-                        B::Eq => Some(ConstValue::Bool(a as f64 == b)),
-                        B::Neq => Some(ConstValue::Bool(a as f64 != b)),
-                        B::Lt => Some(ConstValue::Bool((a as f64) < b)),
-                        B::Le => Some(ConstValue::Bool((a as f64) <= b)),
-                        B::Gt => Some(ConstValue::Bool((a as f64) > b)),
-                        B::Ge => Some(ConstValue::Bool((a as f64) >= b)),
+                        // 比较：混合 Int/Float **不折**，与运行时比较臂（无混合臂）
+                        // 及 typecheck 的「比较两侧同型」纪律保持一致（B9）。
+                        // 折了会让同一表达式在顶层能编、在函数体内报 E6007。
+                        B::Eq | B::Neq | B::Lt | B::Le | B::Gt | B::Ge => None,
                         _ => None,
                     },
                     (ConstValue::Float(a), ConstValue::Int(b)) => match op {
@@ -2307,12 +2305,8 @@ impl AstToIrGenerator {
                         B::Sub => Some(ConstValue::Float(a - b as f64)),
                         B::Mul => Some(ConstValue::Float(a * b as f64)),
                         B::Mod => Some(ConstValue::Float(floor_mod_float(a, b as f64))),
-                        B::Eq => Some(ConstValue::Bool(a == b as f64)),
-                        B::Neq => Some(ConstValue::Bool(a != b as f64)),
-                        B::Lt => Some(ConstValue::Bool(a < b as f64)),
-                        B::Le => Some(ConstValue::Bool(a <= b as f64)),
-                        B::Gt => Some(ConstValue::Bool(a > b as f64)),
-                        B::Ge => Some(ConstValue::Bool(a >= b as f64)),
+                        // 比较：同上，不折
+                        B::Eq | B::Neq | B::Lt | B::Le | B::Gt | B::Ge => None,
                         _ => None,
                     },
                     (ConstValue::String(a), ConstValue::String(b)) => match op {

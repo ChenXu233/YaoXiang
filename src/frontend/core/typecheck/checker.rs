@@ -340,6 +340,27 @@ impl TypeChecker {
         self.env.errors.add_error(error);
     }
 
+    /// 名是否是「返回 `Type` 的函数」（精化谓词 / 证明函数）或是内置谓词 `Terminates`。
+    ///
+    /// 这类名字在类型位置合法：`val: IsPositive(5)`、`acc: Terminates(n)`——
+    /// 其实参是**值表达式/度量**，不是类型引用（RFC-028 §6.9、RFC-027a）。
+    /// 判定与 `body_checker` 的 `proof_fn_bases` 同源（`Fn` 且返回 `MetaType`）。
+    fn is_type_returning_fn(
+        &self,
+        name: &str,
+    ) -> bool {
+        if name == "Terminates" {
+            return true;
+        }
+        self.env.vars.get(name).is_some_and(|poly| {
+            matches!(
+                &poly.body,
+                MonoType::Fn { return_type, .. }
+                    if matches!(return_type.as_ref(), MonoType::MetaType { .. })
+            )
+        })
+    }
+
     /// 从一条语句里抽出所有类型注解并校验（#371/#372）。
     ///
     /// 覆盖位置：绑定/函数的类型注解（含返回位）、各层形参、类型定义体。
@@ -347,6 +368,18 @@ impl TypeChecker {
     fn check_annotation_type_names(
         &mut self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
+    ) {
+        self.check_annotation_type_names_with(stmt, &[]);
+    }
+
+    /// `check_annotation_type_names` 的带继承参数版（B6）。
+    ///
+    /// `inherited`：外层作用域已声明的类型参数名（如外层函数的 `T`/`N`）。
+    /// 函数体内的绑定/lambda 形参注解可以引用它们，不能当未知名报错。
+    fn check_annotation_type_names_with(
+        &mut self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+        inherited: &[String],
     ) {
         use crate::frontend::core::parser::ast::{StmtKind, Type as T};
 
@@ -364,15 +397,41 @@ impl TypeChecker {
             _ => return,
         };
 
-        // 签名参数名：类型参数（`A: Type`）与编译期值参数（`N: Int`）都是**声明处
-        // 绑定的局部名字**，在类型位置出现时不算未知名，先行剔除。
-        // （不区分两者：只看「有注解即视为该签名的绑定名」——即使误剔，
-        //   真未知名会在别处报出，不会洩漏。）
-        let generic_names: Vec<String> = signature_params
-            .iter()
-            .filter(|p| p.ty.is_some())
-            .map(|p| p.name.clone())
-            .collect();
+        // 签名参数名：**类型参数**（`A: Type`）与**编译期值参数**（`N: Int`，靠
+        // `(n: N)` 这种「形参被当类型用」的形态识别）都是声明处绑定的局部名字，
+        // 在类型位置出现时不算未知名，先行剔除。
+        //
+        // ⚠ 不能只看「有注解」：那会把普通值形参（`x: Int` 的 `x`）也算作类型名，
+        // 于是 `f: (bogus: Int) -> bogus = ...` 的返回位 `bogus` 被当合法类型
+        // 放行，该函数的返回类型检查形同虚设（B5）。
+        let generic_names: Vec<String> = {
+            use crate::frontend::core::parser::ast::name_used_as_type_in;
+            let mut names: Vec<String> = inherited.to_vec();
+            for p in signature_params {
+                let Some(ty) = p.ty.as_ref() else { continue };
+                // 类型参数（`A: Type` 形态）直接计入
+                if matches!(ty, T::MetaType { .. }) {
+                    names.push(p.name.clone());
+                    continue;
+                }
+                // 值参数：其名在**签名注解或类型定义体的类型位**被引用时才算类型名
+                // （`(N: Int) -> (n: N) -> Int` 的内层 `N`；
+                //   `SafeArray: (T: Type, N: Int) -> Type = { data: Array(T, N) }` 的 `N`）
+                let referenced = signature_params.iter().any(|q| {
+                    q.ty.as_ref()
+                        .is_some_and(|t| name_used_as_type_in(&p.name, t))
+                }) || type_annotation
+                    .as_ref()
+                    .is_some_and(|t| name_used_as_type_in(&p.name, t))
+                    || definition
+                        .as_ref()
+                        .is_some_and(|t| name_used_as_type_in(&p.name, t));
+                if referenced {
+                    names.push(p.name.clone());
+                }
+            }
+            names
+        };
 
         // 各层形参注解（`A: Type` 形态的类型参数位自身不引用类型，跳过）
         for p in signature_params {
@@ -395,6 +454,114 @@ impl TypeChecker {
             let mut in_body = generic_names.clone();
             Self::collect_member_names(def, &mut in_body);
             self.check_type_names_in(def, &in_body);
+        }
+
+        // B6：体递归——本条语句的函数体/块/分支/循环里的绑定与 lambda
+        // 形参注解同样受校验，且可引用外层已声明的类型参数（`inherited` +
+        // 本条签名自身的 generic_names 向下传递）。
+        //
+        // 此前只扫 module.items，函数体内的错拼完全逃逸
+        // （`main = { g: (a: BogusType) -> Int = ... }` 编译通过）。
+        let mut nested_inherited = inherited.to_vec();
+        nested_inherited.extend(generic_names.iter().cloned());
+        self.check_nested_annotations(stmt, &nested_inherited);
+    }
+
+    /// 下钻语句的嵌套作用域校验注解（B6）。只下钻承载函数体/块的位置。
+    fn check_nested_annotations(
+        &mut self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+        inherited: &[String],
+    ) {
+        use crate::frontend::core::parser::ast::StmtKind;
+        match &stmt.kind {
+            StmtKind::Assign { value, .. } => {
+                if let Some(e) = value.as_deref() {
+                    self.check_nested_annotations_in_expr(e, inherited);
+                }
+            }
+            StmtKind::Expr(e) => self.check_nested_annotations_in_expr(e, inherited),
+            StmtKind::Return(Some(e)) => self.check_nested_annotations_in_expr(e, inherited),
+            StmtKind::If {
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                for s in &then_branch.stmts {
+                    self.check_annotation_type_names_with(s, inherited);
+                }
+                for (_, body) in else_if_branches {
+                    for s in &body.stmts {
+                        self.check_annotation_type_names_with(s, inherited);
+                    }
+                }
+                if let Some(b) = else_branch {
+                    for s in &b.stmts {
+                        self.check_annotation_type_names_with(s, inherited);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 表达式内的嵌套作用域下钻（块 / lambda / 循环 / 分支）。
+    fn check_nested_annotations_in_expr(
+        &mut self,
+        expr: &crate::frontend::core::parser::ast::Expr,
+        inherited: &[String],
+    ) {
+        use crate::frontend::core::parser::ast::Expr;
+        match expr {
+            Expr::Block(b) => {
+                for s in &b.stmts {
+                    self.check_annotation_type_names_with(s, inherited);
+                }
+            }
+            Expr::While {
+                condition, body, ..
+            } => {
+                self.check_nested_annotations_in_expr(condition, inherited);
+                for s in &body.stmts {
+                    self.check_annotation_type_names_with(s, inherited);
+                }
+            }
+            Expr::For { iterable, body, .. } => {
+                self.check_nested_annotations_in_expr(iterable, inherited);
+                for s in &body.stmts {
+                    self.check_annotation_type_names_with(s, inherited);
+                }
+            }
+            Expr::If {
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                self.check_nested_annotations_in_expr(condition, inherited);
+                for s in &then_branch.stmts {
+                    self.check_annotation_type_names_with(s, inherited);
+                }
+                for (c, body) in else_if_branches {
+                    self.check_nested_annotations_in_expr(c, inherited);
+                    for s in &body.stmts {
+                        self.check_annotation_type_names_with(s, inherited);
+                    }
+                }
+                if let Some(b) = else_branch {
+                    for s in &b.stmts {
+                        self.check_annotation_type_names_with(s, inherited);
+                    }
+                }
+            }
+            Expr::Lambda { body, .. } => {
+                for s in &body.stmts {
+                    self.check_annotation_type_names_with(s, inherited);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -475,11 +642,16 @@ impl TypeChecker {
         let mut unknown: Vec<(String, crate::util::span::Span, bool)> = Vec::new();
         Self::collect_unknown_type_names(ty, generic_names, &self.env, &mut unknown);
         for (name, span, was_bracket) in unknown {
-            // 值空间兼容：泛型实参位的名字可能是**编译期值**而非类型
-            // （`Array(Int, factorial(5))` 的 `factorial`、`StaticArray(Int, n)` 的 `n`）。
-            // parser 在类型位置一律产 `Type::Name`/`Type::Generic`，区分不了；
-            // 此处按「该名字是否解析为已声明的值/函数」容错。
-            if self.env.vars.contains_key(&name) || self.env.get_var(&name).is_some() {
+            // 值空间兼容（两类合法形态）：
+            //
+            // 1. **编译期值函数**：`Array(Int, factorial(5))` 的 `factorial`。
+            // 2. **精化谓词 / 证明函数**：`IsPositive(5)`、`Terminates(n)`——
+            //    其类型位写的是「返回 Type 的函数名（类型宇宙）或内置谓词」，
+            //    实参是值表达式或度量。 RFC-027 §6.9 / RFC-027a。
+            //
+            // ⚠ 不能把「任何已声明值」都放行：那会让 `f: (x: println) -> Int`
+            // 通过（`println` 是值位置的函数名），该形参的类型检查形同虚设（B5）。
+            if self.env.is_const_function(&name) || self.is_type_returning_fn(&name) {
                 continue;
             }
             // 方括号写法（`List[Int]`）→ 专用码，直接给出 `List(...)` 的写法；
@@ -514,6 +686,12 @@ impl TypeChecker {
             } => {
                 if !generic_names.iter().any(|g| g == name) && !env.resolves_type_name(name) {
                     out.push((name.clone(), *name_span, false));
+                }
+                // 精化谓词 / 证明函数的**实参位是值**（`Terminates(n)` 的测度 n、
+                // `IsPositive(5)` 的 5），不是类型引用——不下钻，否则测度里的
+                // 局部变量名会被误报为未知名类型（RFC-027a）。
+                if is_predicate_head(name, env) {
+                    return;
                 }
                 for a in args {
                     Self::collect_unknown_type_names(a, generic_names, env, out);
@@ -784,6 +962,9 @@ impl TypeChecker {
         // 放在此处（而非签名收集时）是因为 `use` 导入的类型、接口、泛型构造器、
         // std 导出都在前面各步才陆续进 env——提前校验会把 `Vec`/`Iterator`/
         // `Error` 这类合法名误判为未知（实测踩过）。
+        //
+        // 递归进函数体（B6）：此前只扫 module.items，函数体内同样的错拼
+        // （`main = { g: (a: BogusType) -> Int = ... }`）完全逃逸校验。
         for stmt in &module.items {
             let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
             self.check_annotation_type_names(stmt);
@@ -2970,6 +3151,27 @@ impl TypeChecker {
             }
         }
     }
+}
+
+/// 精化谓词 / 证明函数的头名判定：`Terminates` 或「返回 `Type` 的函数」。
+///
+/// 这类应用（`Terminates(n)`、`IsPositive(5)`）的**实参位是值**，解析器与
+/// 谓词解析器都按值处理；注解类型名校验因此不得下钻其实参，否则测度里的
+/// 局部变量名会被误报为未知名类型（RFC-027 §6.9 / RFC-027a）。
+fn is_predicate_head(
+    name: &str,
+    env: &crate::frontend::core::typecheck::environment::TypeEnvironment,
+) -> bool {
+    if name == "Terminates" {
+        return true;
+    }
+    env.get_var(name).is_some_and(|poly| {
+        matches!(
+            &poly.body,
+            crate::frontend::core::types::MonoType::Fn { return_type, .. }
+                if matches!(return_type.as_ref(), crate::frontend::core::types::MonoType::MetaType { .. })
+        )
+    })
 }
 
 /// RFC-010 记录式和类型判定：字段全为函数且返回自身 → 变体定义表（声明序）。
