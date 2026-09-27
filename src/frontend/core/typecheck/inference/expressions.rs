@@ -794,142 +794,128 @@ impl<'a> ExpressionInferrer<'a> {
             }
             _ => None,
         };
-        let Some(sum_name) = sum_name else {
-            // 非和类型：出现 Union 模式直接拒绝；否则保持旧宽松语义
-            if arms
-                .iter()
-                .any(|a| matches!(a.pattern, Pattern::Union { .. }))
-            {
-                return Err(ErrorCodeDefinition::type_mismatch(
-                    "和类型（变体解构要求 scrutinee 实现该变体集）",
-                    &format!("{}", resolved),
-                )
-                .build());
-            }
-            for arm in arms {
-                self.infer_block(&arm.body, true, None)?;
-            }
-            return Ok(self.solver.new_var());
-        };
-
-        let variants = self.sum_types[&sum_name].clone();
-        let param_names = self
-            .generic_type_defs
-            .get(&sum_name)
+        // RFC-010b：统一模式检查——非和类型 scrutinee 走同一条臂循环
+        //（字面量/元组/结构体/或模式/守卫/标识符绑定全部可用），Union
+        // 模式仅在和类型上有定义（check_pattern 内按类型自足解析）
+        let variants = sum_name
+            .as_ref()
+            .map(|n| self.sum_types[n].clone())
+            .unwrap_or_default();
+        let param_names = sum_name
+            .as_ref()
+            .and_then(|n| self.generic_type_defs.get(n))
             .map(|d| d.type_param_names.clone())
             .unwrap_or_default();
+        let _ = (&variants, &param_names);
         let concrete = match &resolved {
-            MonoType::Generic { args, .. } => args.clone(),
+            MonoType::Generic { args, .. } if sum_name.is_some() => args.clone(),
             _ => Vec::new(),
         };
+        let _ = &concrete;
 
         let mut seen_variants: HashSet<String> = HashSet::new();
+        let mut seen_literals: HashSet<String> = HashSet::new();
         let mut fallback_seen = false;
         let mut result_ty: Option<MonoType> = None;
 
         for arm in arms {
-            let mut binds: Vec<(String, MonoType)> = Vec::new();
-            match &arm.pattern {
-                Pattern::Union {
-                    variant, pattern, ..
-                } => {
-                    if fallback_seen || seen_variants.contains(variant) {
-                        return Err(ErrorCodeDefinition::unreachable_pattern(variant)
-                            .at(arm.span)
-                            .build());
-                    }
-                    let Some((variant_index, vdef)) = variants
-                        .iter()
-                        .enumerate()
-                        .find(|(_, v)| v.name == *variant)
-                    else {
-                        return Err(ErrorCodeDefinition::field_not_found(variant, &sum_name)
-                            .at(arm.span)
-                            .build());
-                    };
-                    seen_variants.insert(variant.clone());
-                    let _ = variant_index;
-                    // 载荷类型：0 参 Void；1 参原样；多参 Tuple（与构造打包对称）
-                    let payload_ty: MonoType = match vdef.params.len() {
-                        0 => MonoType::Void,
-                        1 => crate::frontend::core::typecheck::TypeEnvironment::replace_type_params(
-                            &vdef.params[0],
-                            &param_names,
-                            &concrete,
-                        ),
-                        _ => MonoType::make_tuple(
-                            vdef.params
-                                .iter()
-                                .map(|p| {
-                                    crate::frontend::core::typecheck::TypeEnvironment::replace_type_params(
-                                        p,
-                                        &param_names,
-                                        &concrete,
-                                    )
-                                })
-                                .collect(),
-                        ),
-                    };
-                    match pattern.as_deref() {
-                        // 零载荷模式（`none()`）：变体必须真的无参数，
-                        // `ok()` 写在带载荷变体上是元数错误
-                        None => {
-                            if !vdef.params.is_empty() {
-                                return Err(ErrorCodeDefinition::argument_count_mismatch(
-                                    variant,
-                                    vdef.params.len(),
-                                    0,
+            // RFC-010b：守卫解包——`pat if cond => body`，绑定对守卫可见
+            let (pat, guard): (&Pattern, Option<&crate::frontend::core::parser::ast::Expr>) =
+                match &arm.pattern {
+                    Pattern::Guard { pattern, condition } => (pattern, Some(condition)),
+                    p => (p, None),
+                };
+
+            // 兜底臂之后的任何臂都不可达（E1031）。兜底 = 无条件命中的
+            // 不可驳斥模式（Identifier/Wildcard/Tuple/Struct，未带守卫）
+            if fallback_seen {
+                return Err(
+                    ErrorCodeDefinition::unreachable_pattern(&local_pattern_label(pat))
+                        .at(arm.span)
+                        .build(),
+                );
+            }
+
+            // 无守卫臂的重复可达性：变体重复、字面量重复 → E1031
+            //（带守卫的重复臂可达——它是对前臂的细化，Rust 同规）
+            if guard.is_none() {
+                let alts: Vec<&Pattern> = match pat {
+                    Pattern::Or(ps) => ps.iter().collect(),
+                    p => vec![p],
+                };
+                for alt in alts {
+                    match alt {
+                        Pattern::Union { variant, .. } => {
+                            if seen_variants.contains(variant) {
+                                return Err(ErrorCodeDefinition::unreachable_pattern(variant)
+                                    .at(arm.span)
+                                    .build());
+                            }
+                        }
+                        Pattern::Literal(lit) => {
+                            let key = Self::literal_pattern_type(lit).to_string();
+                            if !seen_literals.insert(format!("{key}:{lit:?}")) {
+                                return Err(ErrorCodeDefinition::unreachable_pattern(
+                                    &local_pattern_label(alt),
                                 )
                                 .at(arm.span)
                                 .build());
                             }
                         }
-                        Some(Pattern::Wildcard) => {}
-                        Some(Pattern::Identifier(bn)) => {
-                            binds.push((bn.clone(), payload_ty));
-                        }
-                        Some(other) => {
-                            return Err(ErrorCodeDefinition::ir_unsupported_pattern(
-                                &local_pattern_label(other),
-                            )
-                            .at(arm.span)
-                            .build());
-                        }
+                        _ => {}
                     }
-                }
-                Pattern::Wildcard | Pattern::Identifier(_) => {
-                    if fallback_seen {
-                        return Err(ErrorCodeDefinition::unreachable_pattern(
-                            &local_pattern_label(&arm.pattern),
-                        )
-                        .at(arm.span)
-                        .build());
-                    }
-                    if let Pattern::Identifier(bn) = &arm.pattern {
-                        binds.push((bn.clone(), resolved.clone()));
-                    }
-                    fallback_seen = true;
-                }
-                other => {
-                    return Err(
-                        ErrorCodeDefinition::ir_unsupported_pattern(&local_pattern_label(other))
-                            .at(arm.span)
-                            .build(),
-                    );
                 }
             }
 
-            // 臂绑定包一层作用域；body 类型并入 match 结果类型
             self.scope.enter_block();
             let arm_ty = {
-                for (bn, bty) in &binds {
-                    self.scope
-                        .add_var(bn.clone(), PolyType::mono(bty.clone()), false, arm.span);
+                let mut binds: Vec<(String, MonoType)> = Vec::new();
+                let checked = self
+                    .check_pattern_alts(pat, &resolved, &mut binds, arm.span)
+                    .and_then(|()| match guard {
+                        Some(cond) => self.check_guard_condition(cond),
+                        None => Ok(()),
+                    });
+                match checked {
+                    Err(e) => Err(e),
+                    Ok(()) => {
+                        for (bn, bty) in &binds {
+                            self.scope.add_var(
+                                bn.clone(),
+                                PolyType::mono(bty.clone()),
+                                false,
+                                arm.span,
+                            );
+                        }
+                        self.infer_block(&arm.body, true, None)
+                    }
                 }
-                self.infer_block(&arm.body, true, None)
             };
             self.scope.exit_block();
             let arm_ty = arm_ty?;
+
+            // 穷尽性记账：带守卫的臂不计入（守卫可能不命中，Rust 同规）；
+            // Union 臂标记变体覆盖，不可驳斥臂视为兜底
+            if guard.is_none() {
+                let alts: Vec<&Pattern> = match pat {
+                    Pattern::Or(ps) => ps.iter().collect(),
+                    p => vec![p],
+                };
+                for alt in alts {
+                    match alt {
+                        Pattern::Union { variant, .. } => {
+                            seen_variants.insert(variant.clone());
+                        }
+                        Pattern::Wildcard
+                        | Pattern::Identifier(_)
+                        | Pattern::Tuple(_)
+                        | Pattern::Struct { .. } => {
+                            fallback_seen = true;
+                        }
+                        _ => {}
+                    }
+                }
+            }
 
             result_ty = Some(match result_ty {
                 None => arm_ty,
@@ -940,21 +926,277 @@ impl<'a> ExpressionInferrer<'a> {
             });
         }
 
-        // 穷尽性：无兜底臂时变体集必须被 Union 臂全覆盖
-        if !fallback_seen {
-            let missing: Vec<String> = variants
-                .iter()
-                .filter(|v| !seen_variants.contains(&v.name))
-                .map(|v| v.name.clone())
-                .collect();
-            if !missing.is_empty() {
-                return Err(
-                    ErrorCodeDefinition::pattern_non_exhaustive(&missing.join(", ")).build(),
-                );
+        // 穷尽性（仅和类型）：无兜底臂时变体集必须被 Union 臂全覆盖
+        if let Some(sum_name) = &sum_name {
+            if !fallback_seen {
+                let missing: Vec<String> = self.sum_types[sum_name]
+                    .iter()
+                    .filter(|v| !seen_variants.contains(&v.name))
+                    .map(|v| v.name.clone())
+                    .collect();
+                if !missing.is_empty() {
+                    return Err(
+                        ErrorCodeDefinition::pattern_non_exhaustive(&missing.join(", ")).build(),
+                    );
+                }
             }
         }
 
         Ok(result_ty.unwrap_or_else(|| self.solver.new_var()))
+    }
+
+    /// RFC-010b：或模式检查——各备选逐一检查，绑定名集必须一致（E1033）。
+    /// 首个备选的绑定进入 `binds`（同名绑定的类型必然一致：同一被匹配类型）。
+    fn check_pattern_alts(
+        &mut self,
+        pattern: &crate::frontend::core::parser::ast::Pattern,
+        ty: &MonoType,
+        binds: &mut Vec<(String, MonoType)>,
+        span: crate::util::span::Span,
+    ) -> Result<()> {
+        use crate::frontend::core::parser::ast::Pattern;
+        let alts: Vec<&Pattern> = match pattern {
+            Pattern::Or(ps) => ps.iter().collect(),
+            p => vec![p],
+        };
+        let mut consensus: Option<HashSet<String>> = None;
+        for alt in &alts {
+            let mut scratch: Vec<(String, MonoType)> = Vec::new();
+            self.check_pattern(alt, ty, &mut scratch, span)?;
+            let names: HashSet<String> = scratch.iter().map(|(n, _)| n.clone()).collect();
+            match &consensus {
+                None => {
+                    consensus = Some(names);
+                    *binds = scratch;
+                }
+                Some(prev) if *prev != names => {
+                    return Err(ErrorCodeDefinition::or_pattern_binding_mismatch()
+                        .at(span)
+                        .build());
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// RFC-010b：单备选模式检查——按被匹配类型递归。Union 的和类型上下文
+    /// 从 `ty` 自足解析（载荷位可能是另一和类型，如 `ok(some(v))`）。
+    fn check_pattern(
+        &mut self,
+        pattern: &crate::frontend::core::parser::ast::Pattern,
+        ty: &MonoType,
+        binds: &mut Vec<(String, MonoType)>,
+        span: crate::util::span::Span,
+    ) -> Result<()> {
+        use crate::frontend::core::parser::ast::Pattern;
+        let resolved = self.solver.resolve_type(ty);
+        match pattern {
+            Pattern::Wildcard => Ok(()),
+            Pattern::Identifier(bn) => {
+                if binds.iter().any(|(n, _)| n == bn) {
+                    return Err(ErrorCodeDefinition::duplicate_pattern_binding(bn)
+                        .at(span)
+                        .build());
+                }
+                binds.push((bn.clone(), resolved.clone()));
+                Ok(())
+            }
+            Pattern::Literal(lit) => {
+                let lit_ty = Self::literal_pattern_type(lit);
+                if self.solver.unify(&resolved, &lit_ty).is_err() {
+                    return Err(ErrorCodeDefinition::type_mismatch(
+                        &resolved.to_string(),
+                        &lit_ty.to_string(),
+                    )
+                    .at(span)
+                    .build());
+                }
+                Ok(())
+            }
+            Pattern::Tuple(ps) => {
+                let args: Vec<MonoType> = match &resolved {
+                    MonoType::Generic { name, args } if name == "Tuple" => args.clone(),
+                    other => {
+                        return Err(
+                            ErrorCodeDefinition::type_mismatch("元组", &other.to_string())
+                                .at(span)
+                                .build(),
+                        );
+                    }
+                };
+                if args.len() != ps.len() {
+                    return Err(ErrorCodeDefinition::argument_count_mismatch(
+                        "元组模式",
+                        args.len(),
+                        ps.len(),
+                    )
+                    .at(span)
+                    .build());
+                }
+                for (p, t) in ps.iter().zip(args.iter()) {
+                    self.check_pattern(p, t, binds, span)?;
+                }
+                Ok(())
+            }
+            Pattern::Struct { name, fields } => {
+                // 解析结构体类型：Struct 直接用；TypeRef 经类型镜像复核
+                let struct_ty: crate::frontend::core::types::mono::StructType = match &resolved {
+                    MonoType::Struct(s) if &s.name == name => s.clone(),
+                    MonoType::TypeRef(n) if n == name => match self.type_defs.get(n) {
+                        Some(MonoType::Struct(s)) => s.clone(),
+                        _ => {
+                            return Err(ErrorCodeDefinition::type_mismatch(
+                                name,
+                                &resolved.to_string(),
+                            )
+                            .at(span)
+                            .build());
+                        }
+                    },
+                    other => {
+                        return Err(ErrorCodeDefinition::type_mismatch(name, &other.to_string())
+                            .at(span)
+                            .build());
+                    }
+                };
+                // 声明字段必须被完整覆盖（`..` 略名尚未支持）；未知字段拒绝
+                for (fname, fty) in &struct_ty.fields {
+                    let matched: Vec<&(String, bool, Box<Pattern>)> =
+                        fields.iter().filter(|(n, _, _)| n == fname).collect();
+                    if matched.is_empty() {
+                        return Err(
+                            ErrorCodeDefinition::struct_pattern_missing_field(name, fname)
+                                .at(span)
+                                .build(),
+                        );
+                    }
+                    if matched.len() > 1 {
+                        return Err(ErrorCodeDefinition::duplicate_pattern_binding(fname)
+                            .at(span)
+                            .build());
+                    }
+                    self.check_pattern(&matched[0].2, fty, binds, span)?;
+                }
+                for (fname, _, _) in fields {
+                    if !struct_ty.fields.iter().any(|(n, _)| n == fname) {
+                        return Err(ErrorCodeDefinition::field_not_found(fname, name)
+                            .at(span)
+                            .build());
+                    }
+                }
+                Ok(())
+            }
+            Pattern::Union {
+                variant, pattern, ..
+            } => {
+                let (sum_name, variants, param_names, concrete) = match &resolved {
+                    MonoType::Generic { name, args } if self.sum_types.contains_key(name) => {
+                        let param_names = self
+                            .generic_type_defs
+                            .get(name)
+                            .map(|d| d.type_param_names.clone())
+                            .unwrap_or_default();
+                        (
+                            name.clone(),
+                            self.sum_types[name].clone(),
+                            param_names,
+                            args.clone(),
+                        )
+                    }
+                    MonoType::Struct(s) if self.sum_types.contains_key(&s.name) => (
+                        s.name.clone(),
+                        self.sum_types[&s.name].clone(),
+                        Vec::new(),
+                        Vec::new(),
+                    ),
+                    MonoType::TypeRef(n) if self.sum_types.contains_key(n) => {
+                        (n.clone(), self.sum_types[n].clone(), Vec::new(), Vec::new())
+                    }
+                    other => {
+                        return Err(ErrorCodeDefinition::type_mismatch(
+                            "和类型（变体解构要求 scrutinee 实现该变体集）",
+                            &other.to_string(),
+                        )
+                        .at(span)
+                        .build());
+                    }
+                };
+                let Some(vdef) = variants.iter().find(|v| &v.name == variant) else {
+                    return Err(ErrorCodeDefinition::field_not_found(variant, &sum_name)
+                        .at(span)
+                        .build());
+                };
+                match pattern.as_deref() {
+                    // 零载荷模式（`none()`）：变体必须真的无参数
+                    None => {
+                        if !vdef.params.is_empty() {
+                            return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                variant,
+                                vdef.params.len(),
+                                0,
+                            )
+                            .at(span)
+                            .build());
+                        }
+                        Ok(())
+                    }
+                    Some(p) => {
+                        if vdef.params.is_empty() {
+                            return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                variant, 0, 1,
+                            )
+                            .at(span)
+                            .build());
+                        }
+                        let substituted: Vec<MonoType> = vdef
+                            .params
+                            .iter()
+                            .map(|pty| {
+                                crate::frontend::core::typecheck::TypeEnvironment::replace_type_params(
+                                    pty, &param_names, &concrete,
+                                )
+                            })
+                            .collect();
+                        // 载荷类型：1 参原样；多参 Tuple（与构造打包对称）
+                        let payload_ty = match substituted.len() {
+                            1 => substituted.into_iter().next().unwrap(),
+                            _ => MonoType::make_tuple(substituted),
+                        };
+                        self.check_pattern(p, &payload_ty, binds, span)
+                    }
+                }
+            }
+            Pattern::Or(_) => self.check_pattern_alts(pattern, ty, binds, span),
+            Pattern::Guard { .. } => Err(ErrorCodeDefinition::ir_unsupported_pattern("guard")
+                .at(span)
+                .build()),
+        }
+    }
+
+    /// 守卫条件检查：必须产出 Bool（绑定已在臂作用域内，check_expr 期间可见）
+    fn check_guard_condition(
+        &mut self,
+        cond: &crate::frontend::core::parser::ast::Expr,
+    ) -> Result<()> {
+        let cond_ty = self.infer_expr(cond)?;
+        let cond_ty = self.solver.resolve_type(&cond_ty);
+        if !matches!(cond_ty, MonoType::Bool) {
+            return Err(ErrorCodeDefinition::type_mismatch("Bool", &cond_ty.to_string()).build());
+        }
+        Ok(())
+    }
+
+    /// 字面量模式的类型（模式位置的字面量按字面类型对齐 scrutinee）
+    fn literal_pattern_type(lit: &crate::frontend::core::lexer::tokens::Literal) -> MonoType {
+        match lit {
+            crate::frontend::core::lexer::tokens::Literal::Int(_) => MonoType::Int(64),
+            crate::frontend::core::lexer::tokens::Literal::Float(_) => MonoType::Float(64),
+            crate::frontend::core::lexer::tokens::Literal::Bool(_) => MonoType::Bool,
+            crate::frontend::core::lexer::tokens::Literal::String(_) => MonoType::make_string(),
+            crate::frontend::core::lexer::tokens::Literal::Char(_) => MonoType::Char,
+            crate::frontend::core::lexer::tokens::Literal::Void => MonoType::Void,
+        }
     }
 
     /// RFC-010: 变体构造调用检查——`Result(Int, String).ok(5)` / `Color.red()`。

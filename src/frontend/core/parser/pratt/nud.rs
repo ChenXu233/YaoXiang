@@ -1026,6 +1026,18 @@ impl<'a> ParserState<'a> {
                 }
             }
             Expr::Lit(lit, _) => Pattern::Literal(lit.clone()),
+            // RFC-010b: 嵌套或模式——载荷位的 `ok(1 | 2)`：实参表达式解析
+            // 把 `|` 收成 BinOp(BitOr)，这里还原为 Or 模式（顶层或模式由
+            // parse_match 的显式收链处理，走不到此臂）
+            Expr::BinOp {
+                op: crate::frontend::core::parser::ast::BinOp::BitOr,
+                left,
+                right,
+                ..
+            } => Pattern::Or(vec![
+                self.expr_to_pattern(left),
+                self.expr_to_pattern(right),
+            ]),
             Expr::Tuple(elements, _) => {
                 let patterns = elements.iter().map(|e| self.expr_to_pattern(e)).collect();
                 Pattern::Tuple(patterns)
