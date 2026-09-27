@@ -1062,5 +1062,11 @@
     "message": "結構模式未覆字段 '{field}'",
     "template": "結構模式缺字段 '{field}'（'{struct}' 之字段須全覆）",
     "help": "結構模式須列舉全部字段；`..` 略名今未之支持"
+  },
+  "E1106": {
+    "title": "約束不立",
+    "message": "類 `{type}` 未踐接口 `{interface}`（約束 `{param}: {interface}`）",
+    "template": "類 `{type}` 未踐 `{interface}`——泛型參數 `{param}` 之約束 `{param}: {interface}` 於此調用之處不立",
+    "help": "為此類踐相應之接口（於類體內書接口實例化並定義方法），或改用已踐此接口之實參"
   }
 }

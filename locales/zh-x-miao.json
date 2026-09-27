@@ -1053,5 +1053,11 @@
     "message": "结构体模式没有覆盖到字段 '{field}' 喵～",
     "template": "结构体模式缺少字段 '{field}' 喵～（'{struct}' 的字段必须要完整覆盖nya～）",
     "help": "结构体模式必须要列出全部字段哦喵～`..` 略名暂时还不支持nya～对不起的说～"
+  },
+  "E1106": {
+    "title": "约束没有被满足喵~",
+    "message": "类型 '{type}' 没有实现接口 '{interface}' 喵~（约束 '{param}: {interface}' 不够满足呢 nya~）",
+    "template": "类型 '{type}' 还没有实现 `{interface}` 喵——泛型参数 `{param}` 的约束 `{param}: {interface}` 在这个调用点不成立 nya~",
+    "help": "要帮这个类型实现对应的接口哦喵~（在类型体里面写接口实例化然后定义方法 nya~），或者换成已经实现该接口的实参喵~"
   }
 }
