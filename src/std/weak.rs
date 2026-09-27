@@ -95,8 +95,13 @@ fn native_weak_new(
 /// Native handler wrapper for weak_upgrade.
 ///
 /// Returns Option[Arc(T)] as a RuntimeValue::Enum:
-/// - Some(arc): Enum { type_id: ENUM, variant_id: 0, payload: arc }
-/// - None:      Enum { type_id: ENUM, variant_id: 1, payload: Void }
+/// - Some(arc): Enum { type_id: OPTION, variant_id: 0, payload: arc }
+/// - None:      Enum { type_id: OPTION, variant_id: 1, payload: Void }
+///
+/// RFC-010：类型身份必须是 `TypeId::OPTION`（与 `Option(T).some/none()` 的
+/// `intern_sum_type("Option")` 同值）。此前用 `TypeId::ENUM`（21）——与构造器
+/// 路径的 OPTION（101）不同，于是 `weak.upgrade(w) == Option(Int).none()`
+/// 静默 false（Enum 相等现在比 type_id）。
 fn native_weak_upgrade(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -108,12 +113,12 @@ fn native_weak_upgrade(
     }
     match weak_upgrade(&args[0]) {
         Some(val) => Ok(RuntimeValue::Enum {
-            type_id: TypeId::ENUM,
+            type_id: TypeId::OPTION,
             variant_id: 0,
             payload: Box::new(val),
         }),
         None => Ok(RuntimeValue::Enum {
-            type_id: TypeId::ENUM,
+            type_id: TypeId::OPTION,
             variant_id: 1,
             payload: Box::new(RuntimeValue::Void),
         }),
