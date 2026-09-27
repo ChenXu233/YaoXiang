@@ -3592,7 +3592,16 @@ impl<'a> ExpressionInferrer<'a> {
                                         self.overload_resolutions.push((*span, ir.clone()));
                                         Some(f.clone())
                                     }),
-                                    _ => None, // 0 = 无匹配（落旧路径报错）；>1 = 歧义（同落）
+                                    // 多候选无法区分 = 隐式假设调用者想要哪一个——
+                                    // 不该隐式的地方不隐式：歧义即报错（E1107）
+                                    n if n > 1 => {
+                                        return Err(
+                                            ErrorCodeDefinition::ambiguous_method_overload(key, n)
+                                                .at(*span)
+                                                .build(),
+                                        );
+                                    }
+                                    _ => None, // 0 = 无实参匹配的候选（落旧路径报错）
                                 }
                             }
                             _ => None,
