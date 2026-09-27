@@ -90,6 +90,13 @@ pub struct ExpressionInferrer<'a> {
     /// RFC-011 §5.2：当前函数的约束形参（形参 → 接口名）——定义体内
     /// 约束类型上的运算符延迟派发依据
     current_fn_param_constraints: Option<&'a HashMap<String, String>>,
+    /// RFC-011a §3：重载候选签名与 IR 混编名（方法级重载决议）
+    method_overloads: Option<&'a HashMap<String, Vec<MonoType>>>,
+    method_overload_ir_names: Option<&'a HashMap<String, Vec<String>>>,
+    /// 期望类型（带注解绑定传入，方法重载按期望返回决议）
+    current_expected: Option<MonoType>,
+    /// RFC-011a §3：重载决议点（span → 混编 IR 名）
+    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
     /// RFC-011 §5.2：泛型函数约束表——调用点复检
     generic_fn_constraints: Option<&'a HashMap<String, Vec<(String, String)>>>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
@@ -138,6 +145,10 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
+            method_overloads: None,
+            method_overload_ir_names: None,
+            current_expected: None,
+            overload_resolutions: Vec::new(),
             generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
@@ -176,6 +187,10 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
+            method_overloads: None,
+            method_overload_ir_names: None,
+            current_expected: None,
+            overload_resolutions: Vec::new(),
             generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
@@ -215,6 +230,10 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
+            method_overloads: None,
+            method_overload_ir_names: None,
+            current_expected: None,
+            overload_resolutions: Vec::new(),
             generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
@@ -256,6 +275,10 @@ impl<'a> ExpressionInferrer<'a> {
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
+            method_overloads: None,
+            method_overload_ir_names: None,
+            current_expected: None,
+            overload_resolutions: Vec::new(),
             generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
@@ -386,6 +409,24 @@ impl<'a> ExpressionInferrer<'a> {
         constraints: &'a HashMap<String, Vec<(String, String)>>,
     ) {
         self.generic_fn_constraints = Some(constraints);
+    }
+
+    /// RFC-011a §3：重载候选签名与 IR 混编名
+    pub fn set_method_overloads(
+        &mut self,
+        overloads: &'a HashMap<String, Vec<MonoType>>,
+        ir_names: &'a HashMap<String, Vec<String>>,
+    ) {
+        self.method_overloads = Some(overloads);
+        self.method_overload_ir_names = Some(ir_names);
+    }
+
+    /// 期望类型（方法重载按期望返回决议）
+    pub fn set_current_expected(
+        &mut self,
+        expected: Option<MonoType>,
+    ) {
+        self.current_expected = expected;
     }
 
     /// 注入泛型函数的声明序类型参数名表（调用点做类型参数替换的依据）。
@@ -3478,6 +3519,88 @@ impl<'a> ExpressionInferrer<'a> {
                 // 接收者占签名 params[0]——arity 按「实参数+1==形参数」校验，
                 // 逐参 unify 对齐 params[1..]（下方分发臂）
                 let method_key = self.method_binding_call_key(func);
+
+                // RFC-011a §3：方法级重载决议——同名多候选按 实参兼容 +
+                // 期望返回 选择。候选的形参变量是 pass2 注册期共享的，
+                // 逐调用 fresh 化后再 unify。选中后：
+                //   - 以候选签名作为本调用的函数类型（分派/所有权同源）
+                //   - 记录决议（span → 混编 IR 名），ir_gen 据此命名调用
+                let selected_overload: Option<MonoType> = match &method_key {
+                    Some(key) => {
+                        let cands = self.method_overloads.as_ref().and_then(|m| m.get(key));
+                        let irs = self
+                            .method_overload_ir_names
+                            .as_ref()
+                            .and_then(|m| m.get(key));
+                        match (cands, irs) {
+                            (Some(cands), Some(irs))
+                                if cands.len() > 1 && irs.len() == cands.len() =>
+                            {
+                                let mut matches: Vec<(usize, MonoType)> = Vec::new();
+                                for (i, cand) in cands.iter().enumerate() {
+                                    let Some(MonoType::Fn { params, .. }) = Some(cand) else {
+                                        continue;
+                                    };
+                                    if params.len() != arg_types.len() + 1 {
+                                        continue;
+                                    }
+                                    // 逐调用 fresh 化（共享 pass2 变量会跨调用串型）
+                                    let freshened = {
+                                        let mut idxs = std::collections::HashSet::new();
+                                        Self::collect_type_var_indices(cand, &mut idxs);
+                                        let mut subst = HashMap::new();
+                                        for idx in idxs {
+                                            subst.insert(idx, self.solver.new_var());
+                                        }
+                                        Self::substitute_type_vars(cand, &subst)
+                                    };
+                                    let Some(MonoType::Fn {
+                                        params: fp,
+                                        return_type: fr,
+                                    }) = Some(&freshened)
+                                    else {
+                                        continue;
+                                    };
+                                    let mut ok = true;
+                                    for (p, a) in fp[1..].iter().zip(arg_types.iter()) {
+                                        // 参数带借用而实参是值：自动借用形态兼容
+                                        let pr = self.solver.resolve_type(p);
+                                        let ar = self.solver.resolve_type(a);
+                                        let borrow_ok = matches!(&pr, MonoType::Ref { .. })
+                                            && !matches!(&ar, MonoType::Ref { .. });
+                                        if !borrow_ok && self.solver.unify(&ar, &pr).is_err() {
+                                            ok = false;
+                                            break;
+                                        }
+                                    }
+                                    if !ok {
+                                        continue;
+                                    }
+                                    // 期望返回过滤（带注解绑定的调用点传入）
+                                    if let Some(exp) = &self.current_expected {
+                                        let er = self.solver.resolve_type(exp);
+                                        let frr = self.solver.resolve_type(fr);
+                                        if self.solver.unify(&frr, &er).is_err() {
+                                            continue;
+                                        }
+                                    }
+                                    matches.push((i, freshened));
+                                }
+                                match matches.len() {
+                                    1 => matches.first().and_then(|(i, f)| {
+                                        let ir = irs.get(*i)?;
+                                        self.overload_resolutions.push((*span, ir.clone()));
+                                        Some(f.clone())
+                                    }),
+                                    _ => None, // 0 = 无匹配（落旧路径报错）；>1 = 歧义（同落）
+                                }
+                            }
+                            _ => None,
+                        }
+                    }
+                    None => None,
+                };
+                let mono_func_ty = selected_overload.unwrap_or(mono_func_ty);
 
                 // 两层调用：Container(Int)(42, 43) —— func 是泛型类型构造调用，
                 // 内层已完成实例化（func_ty 是具体 Struct），外层实参是构造参数。

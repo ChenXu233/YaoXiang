@@ -88,6 +88,14 @@ pub struct StatementChecker {
     generic_fn_constraints: std::collections::HashMap<String, Vec<(String, String)>>,
     /// 当前函数的约束形参（形参 → 接口名）：定义体内运算符延迟派发的依据
     current_fn_param_constraints: Option<std::collections::HashMap<String, String>>,
+    /// RFC-011a §3：重载候选签名（key → [候选 Fn]，与 ir_names 候选序对应）
+    pub method_overloads: std::collections::HashMap<String, Vec<MonoType>>,
+    /// RFC-011a §3：重载候选的 IR 混编名
+    pub method_overload_ir_names: std::collections::HashMap<String, Vec<String>>,
+    /// RFC-011a §3：重载决议点（span → 混编 IR 名）
+    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
+    /// 期望类型（带注解绑定的初始化推断时设置，方法重载按期望返回决议）
+    pub current_expected: Option<MonoType>,
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types: HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
     /// RFC-010: 变体构造调用点（span 键控）
@@ -156,6 +164,10 @@ impl StatementChecker {
             result_err_stack: Vec::new(),
             generic_fn_constraints: std::collections::HashMap::new(),
             current_fn_param_constraints: None,
+            method_overloads: std::collections::HashMap::new(),
+            method_overload_ir_names: std::collections::HashMap::new(),
+            overload_resolutions: Vec::new(),
+            current_expected: None,
             expected_return_type: None,
             generic_type_defs: std::collections::HashMap::new(),
             method_bindings: HashMap::new(),
@@ -1806,7 +1818,22 @@ impl StatementChecker {
 
         let ty = match (initializer, type_annotation) {
             (Some(init_expr), Some(type_ann)) => {
-                let init_ty = self.check_expr(init_expr)?;
+                // 期望类型先行（方法重载按期望返回决议）：注解解析 →
+                // 设为当前期望 → init 推断 → 恢复
+                let ann_expected = type_annotation
+                    .and_then(|t| self.try_instantiate_generic_type(t))
+                    .or_else(|| type_annotation.map(|t| MonoType::from(t.clone())));
+                self.current_expected = ann_expected.clone();
+                let init_ty = match self.check_expr(init_expr) {
+                    Ok(t) => {
+                        self.current_expected = None;
+                        t
+                    }
+                    Err(e) => {
+                        self.current_expected = None;
+                        return Err(e);
+                    }
+                };
                 // Try generic type instantiation for List(Int) → struct expansion
                 let ann_ty = self
                     .try_instantiate_generic_type(type_ann)
@@ -2584,6 +2611,11 @@ impl StatementChecker {
                             self.current_fn_param_constraints.as_ref(),
                         );
                         inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
+                        inferrer.set_method_overloads(
+                            &self.method_overloads,
+                            &self.method_overload_ir_names,
+                        );
+                        inferrer.set_current_expected(self.current_expected.clone());
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                         inferrer.set_loop_depth(self.loop_depth);
@@ -2600,6 +2632,8 @@ impl StatementChecker {
                         self.existential_coercions
                             .extend(inferrer.existential_coercions);
                         self.try_expr_impls.append(&mut inferrer.try_expr_impls);
+                        self.overload_resolutions
+                            .append(&mut inferrer.overload_resolutions);
                         self.operator_dispatches
                             .extend(inferrer.operator_dispatches);
                         self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
@@ -2667,6 +2701,9 @@ impl StatementChecker {
                 inferrer
                     .set_current_fn_param_constraints(self.current_fn_param_constraints.as_ref());
                 inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
+                inferrer
+                    .set_method_overloads(&self.method_overloads, &self.method_overload_ir_names);
+                inferrer.set_current_expected(self.current_expected.clone());
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                 inferrer.set_loop_depth(self.loop_depth);
@@ -2683,6 +2720,8 @@ impl StatementChecker {
                 self.existential_coercions
                     .extend(inferrer.existential_coercions);
                 self.try_expr_impls.append(&mut inferrer.try_expr_impls);
+                self.overload_resolutions
+                    .append(&mut inferrer.overload_resolutions);
                 self.operator_dispatches
                     .extend(inferrer.operator_dispatches);
                 self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);

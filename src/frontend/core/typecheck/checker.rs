@@ -810,6 +810,8 @@ impl TypeChecker {
         body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
         // 设置方法绑定表
         body_checker.set_method_bindings(self.env.method_bindings.clone());
+        body_checker.method_overloads = self.env.method_overloads.clone();
+        body_checker.method_overload_ir_names = self.env.method_overload_ir_names.clone();
         // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
         body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
         body_checker.set_sum_types(self.env.sum_types.clone());
@@ -1078,6 +1080,12 @@ impl TypeChecker {
             instantiation_requests,
             existential_coercions,
             try_expr_impls,
+            method_overload_ir_names: self.env.method_overload_ir_names.clone(),
+            overload_resolutions: if let Some(ref bc) = self.body_checker {
+                bc.overload_resolutions.clone()
+            } else {
+                Vec::new()
+            },
             operator_dispatches,
             variant_ctor_calls,
             implementation_proofs: self.env.implementation_proofs.clone(),

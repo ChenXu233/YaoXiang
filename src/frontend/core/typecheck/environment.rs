@@ -124,6 +124,8 @@ pub struct TypeEnvironment {
     /// 需要「任一候选签名匹配」语义（同一类型的同名接口多实例化共存，
     /// 如 Grid 同时实现 Index(Grid, Int, V) 与 Index(Grid, Tuple(Int,Int), V)）。
     pub method_overloads: HashMap<String, Vec<MonoType>>,
+    /// RFC-011a §3：重载候选的 IR 混编名（与 method_overloads 候选序一一对应）
+    pub method_overload_ir_names: HashMap<String, Vec<String>>,
     /// RFC-011a: 已通过的接口实现证明（编译期，运行时擦除）
     pub implementation_proofs: Vec<ImplementationProof>,
     /// RFC-011b: 接口实现登记表（接口名 → 实例化条目，带类型实参维度）。
@@ -182,6 +184,18 @@ impl TypeEnvironment {
         let list = self.method_overloads.entry(key.to_string()).or_default();
         if !list.contains(&ty) {
             list.push(ty);
+            // RFC-011a §3：重载候选的 IR 混编名（注册序，0=裸名）——
+            // 定义侧 ir_gen 按同一 AST 序混编，调用点决议后按名派发
+            let ordinal = list.len() - 1;
+            let ir_name = if ordinal == 0 {
+                key.to_string()
+            } else {
+                format!("{key}#{ordinal}")
+            };
+            self.method_overload_ir_names
+                .entry(key.to_string())
+                .or_default()
+                .push(ir_name);
         }
     }
 

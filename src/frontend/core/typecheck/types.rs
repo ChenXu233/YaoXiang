@@ -49,6 +49,11 @@ pub struct TypeCheckResult {
     pub variant_ctor_calls: Vec<super::environment::VariantCtorCall>,
     /// RFC-011b 运算符派发点（span 键控；ir_gen 据此把原生指令换为方法调用）
     pub operator_dispatches: Vec<super::operator_interfaces::OperatorDispatch>,
+    /// RFC-011a §3：方法级重载的 IR 混编名表（key → [混编名，候选序]）
+    pub method_overload_ir_names: HashMap<String, Vec<String>>,
+    /// RFC-011a §3：重载决议点（span 键控；ir_gen 据此把方法调用命名为
+    /// 决议出的混编名——同名多候选时裸名会撞函数表）
+    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
     /// RFC-011b `?` 表达式的 Try 实现类型名（span 键控；ir_gen 据此命名
     /// 四方法调用链——接收者是任意表达式时类型名别无来处）
     pub try_expr_impls: Vec<(crate::util::span::Span, String)>,

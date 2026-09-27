@@ -212,6 +212,10 @@ pub struct AstToIrGenerator {
     operator_dispatches: HashMap<Span, (String, String, bool)>,
     /// RFC-011b：`?` 表达式的 Try 实现类型名（span 键控）
     try_expr_impls: HashMap<Span, String>,
+    /// RFC-011a §3：方法级重载决议（span 键控 → 混编 IR 名）
+    overload_resolutions: HashMap<Span, String>,
+    /// 方法定义序（key → 已生成定义数）：混编名的定义侧计数
+    method_def_ordinals: HashMap<String, usize>,
 
     /// RFC-010: 和类型变体名表（类型名 → 变体名列表，声明序）。
     /// 变体构造调用（形态检测命中）据此取变体序号。
@@ -361,6 +365,12 @@ impl AstToIrGenerator {
                 .iter()
                 .map(|(span, name)| (*span, name.clone()))
                 .collect(),
+            overload_resolutions: type_result
+                .overload_resolutions
+                .iter()
+                .map(|(span, name)| (*span, name.clone()))
+                .collect(),
+            method_def_ordinals: HashMap::new(),
             sum_type_variants: type_result
                 .sum_types
                 .iter()
@@ -1653,7 +1663,20 @@ impl AstToIrGenerator {
         // 命名空间机制：方法函数名 = Type.method
         // 例如：Point.get_x 生成函数名 "Point.get_x"
         // 调用时：p.get_x() -> Point.get_x(p)
-        let func_name = format!("{}.{}", type_name, method_name);
+        let base_name = format!("{}.{}", type_name, method_name);
+        // RFC-011a §3：同名重载的定义序混编（首定义裸名，后续 #序）——
+        // 与 typecheck 注册序（AST 序）对齐，调用点决议按名派发
+        let ordinal = self
+            .method_def_ordinals
+            .entry(base_name.clone())
+            .or_insert(0);
+        let counted = *ordinal;
+        *ordinal += 1;
+        let func_name = if counted == 0 {
+            base_name
+        } else {
+            format!("{base_name}#{counted}")
+        };
 
         // 注册方法到 type_bindings，使方法调用脱糖能找到绑定
         let binding_entry = ast::TypeBodyBinding {
@@ -7207,6 +7230,22 @@ impl AstToIrGenerator {
                 });
 
                 if let Some(binding) = binding_info {
+                    // RFC-011a §3：方法级重载决议命中时，binding.function
+                    // （后定义覆盖的单值）替换为决议出的混编名
+                    // RFC-011a §3：方法级重载决议命中时，binding.function
+                    //（后定义覆盖的单值）替换为决议出的混编名
+                    let binding = if named_args.is_empty() {
+                        if let Some(mangled) = self.overload_resolutions.get(span) {
+                            BindingInfo {
+                                function: mangled.clone(),
+                                positions: binding.positions.clone(),
+                            }
+                        } else {
+                            binding
+                        }
+                    } else {
+                        binding
+                    };
                     // 绑定方法调用：按 RFC-004 进行参数重排
                     // obj.method(arg1, arg2) + binding positions [0]
                     // → original_function(obj, arg1, arg2)
@@ -7266,6 +7305,28 @@ impl AstToIrGenerator {
                     });
                 } else {
                     // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
+                    // RFC-011a §3：方法级重载决议命中时直接调用混编名
+                    //（typecheck 按 实参+期望返回 决议，span 键控）
+                    if named_args.is_empty() {
+                        if let Some(mangled) = self.overload_resolutions.get(span).cloned() {
+                            let obj_reg = self.next_temp_reg();
+                            self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                            let mut call_args = vec![Operand::Local(obj_reg)];
+                            for a in args {
+                                let r = self.next_temp_reg();
+                                self.generate_expr_ir(a, r, instructions, constants)?;
+                                call_args.push(Operand::Local(r));
+                            }
+                            instructions.push(Instruction::Call {
+                                dst: Some(Operand::Local(result_reg)),
+                                func: Operand::Const(ConstValue::String(mangled)),
+                                args: call_args,
+                                span: *span,
+                                def: None,
+                            });
+                            return Ok(());
+                        }
+                    }
                     // 接口直接赋值优化：检查对象是否是约束变量
                     let mut arg_regs = Vec::new();
 
