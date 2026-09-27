@@ -1,0 +1,34 @@
+// 02-type-system/refined_dependent_revalidate.yx
+// 覆盖: RFC-027 §6.1 依赖追踪 —— 重验证通过路径 + 依赖图以函数体为边界
+// 验证: (1) 被依赖变量重赋后约束仍成立时不误报：keep_valid 里 n 重赋 3，
+//       6 == 3*2 为真，重验证静默通过。
+//       (2) 依赖不跨函数串扰：other 的 s 依赖其参数 n，main 内对同名 n 的
+//       赋值不得触发 other 内的重验证（修复前的模块级共享名字键图会误报，
+//       但因 env 查找失守从未显形；#379 微重构按函数切单元后正面钉死）。
+// 状态: ✅ 可运行
+
+use std.assert
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+keep_valid: () -> Int = {
+    mut n: Int = 3
+    mut s: SumUpTo(n, 6) = 6
+    // 重赋同值：约束以新值重判，6 == 3*2 成立
+    n = 3
+    s
+}
+
+other: (n: Int) -> Int = {
+    mut s: SumUpTo(n, 6) = 6
+    s
+}
+
+main: () -> Void = {
+    assert.assert(keep_valid() == 6, "约束成立时重验证应静默通过")
+
+    // 同名不同函数：main 的 n 赋值不影响 other 的依赖（参数值未知不送检）
+    mut n: Int = 3
+    n = 5
+    assert.assert(other(3) == 6, "跨函数同名不触发误报，other 正常求值")
+}

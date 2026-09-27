@@ -212,9 +212,19 @@ fn test_e2e_level2b_fallback_to_level3() {
 fn test_e2e_dep_graph_assignment_triggers_affected_by() {
     // Arrange — 构建依赖图
     let mut dep_graph = TypeDepGraph::new();
-    // s 的类型标注 SumUpTo(arr, i) 引用了 i 和 arr
-    dep_graph.add_dep("s", "i");
-    dep_graph.add_dep("s", "arr");
+    // s 的类型标注 { s == arr + i }（SumUpTo(arr, i) 的内联形态）引用了 i 和 arr
+    dep_graph.register_refined(
+        "s",
+        &refined_int(binop(
+            BinOp::Eq,
+            ConstExpr::NamedVar("s".into()),
+            binop(
+                BinOp::Add,
+                ConstExpr::NamedVar("arr".into()),
+                ConstExpr::NamedVar("i".into()),
+            ),
+        )),
+    );
 
     // Act — i 被赋值，查询受影响变量
     let affected = dep_graph.affected_by("i");
@@ -240,10 +250,20 @@ fn test_e2e_no_dependency_no_vc_triggered() {
 /// E2E: 组合依赖 — 一个变量依赖多个被依赖变量
 #[test]
 fn test_e2e_combined_dependency_multiple_triggers() {
-    // Arrange — t: BoundedBy(i, j) 同时依赖 i 和 j
+    // Arrange — t: { t == i + j }（BoundedBy(i, j) 的内联形态）同时依赖 i 和 j
     let mut dep_graph = TypeDepGraph::new();
-    dep_graph.add_dep("t", "i");
-    dep_graph.add_dep("t", "j");
+    dep_graph.register_refined(
+        "t",
+        &refined_int(binop(
+            BinOp::Eq,
+            ConstExpr::NamedVar("t".into()),
+            binop(
+                BinOp::Add,
+                ConstExpr::NamedVar("i".into()),
+                ConstExpr::NamedVar("j".into()),
+            ),
+        )),
+    );
 
     // Act & Assert
     let affected_by_i = dep_graph.affected_by("i");

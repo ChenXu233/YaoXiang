@@ -1,0 +1,16 @@
+// 06-compile-errors/refined_dependent_init_violates_err.yx
+// 覆盖: RFC-027 §6.1 依赖追踪 —— 含变量实参的初始绑定校验（#379 姊妹缺口）
+// 验证: mut s: SumUpTo(n, 7) = 7 在 n=3 时初始化即违反（7 != 3*2）→ E4018。
+//       修复前阶段 1 只对全字面量实参发射证明调用，含变量实参的初始化
+//       一律不校验、静默通过。
+// 状态: ❌ 应被编译期拒绝
+
+// expect: compile-error E4018
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+main: () -> Int = {
+    mut n: Int = 3
+    mut s: SumUpTo(n, 7) = 7
+    return s
+}

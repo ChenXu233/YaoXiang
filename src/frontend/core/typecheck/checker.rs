@@ -12,6 +12,9 @@ use crate::frontend::core::types::const_data::{ConstExpr, ConstValue, BinOp, Con
 use crate::frontend::core::types::eval::const_eval::{ConstFunction, convert_expr_to_const_expr};
 use crate::frontend::core::typecheck::predicate_resolver::PredicateResolver;
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
+use crate::frontend::core::typecheck::proof::dep_graph::{
+    constraint_is_terminates, refined_free_vars, RefinedScopeUnit,
+};
 use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 use crate::std::StdModule;
 
@@ -3709,14 +3712,11 @@ impl TypeChecker {
         }
     }
 
-    /// 从表达式中提取常量值
+    /// 从表达式中提取字面量常量值（精化值环境的数据源）
     ///
-    /// 用于从初始化器中提取值，以便在精化类型检查中使用。
-    #[allow(dead_code)]
-    fn extract_const_value(
-        &self,
-        expr: &Expr,
-    ) -> Option<crate::frontend::core::types::ConstValue> {
+    /// 只认字面量与负字面量——其余表达式不做常量折叠，缺值走
+    /// 「不送检」的分阶段策略（见 collect_refined_binding_checks）
+    fn extract_const_value(expr: &Expr) -> Option<ConstValue> {
         match expr {
             Expr::Lit(literal, _) => match literal {
                 crate::frontend::core::parser::ast::Literal::Int(n) => {
@@ -3737,7 +3737,7 @@ impl TypeChecker {
                 ..
             } => {
                 if let Some(crate::frontend::core::types::ConstValue::Int(n)) =
-                    self.extract_const_value(inner)
+                    Self::extract_const_value(inner)
                 {
                     Some(crate::frontend::core::types::ConstValue::Int(-n))
                 } else {
@@ -3860,371 +3860,154 @@ impl TypeChecker {
         }
     }
 
+    /// Phase 2.5：精化类型绑定与依赖重验证（RFC-027 §6.1，#379 微重构）
+    ///
+    /// 单遍顺序走查，按 [`RefinedScopeUnit`] 切分作用域（模块层一个单元，
+    /// 每个函数体一个新单元）。声明序即验证序：赋值点只重验证**当时已声明**
+    /// 的依赖者——旧实现两遍全模块共享一张名字键图，跨函数同名误报与
+    /// 「赋值先于声明」误触发都源于此。
+    ///
+    /// 初始校验与重验证统一经 check_predicate 送证明管道：
+    /// - Proved → 通过
+    /// - Disproved → E2030，反例进诊断
+    /// - Unproven{calls} → 上抛 proof_calls，由 pipeline 编译期执行
+    /// - 约束自由变量缺已知值时**不送检**：缺值送 SMT 会退化成「对所有值
+    ///   成立」的全称检查，产生伪反例。分阶段策略下放行（字面量可判定子集
+    ///   先闭合）；RFC-027 §9「Unproven → 编译错误」的严格处刑与完整数据流
+    ///   推理见 follow-up / #377
     fn collect_refined_binding_checks(
         &mut self,
         module: &Module,
         proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
     ) {
-        use crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph;
-
-        let mut dep_graph = TypeDepGraph::new();
         let mut shared_ctx =
             crate::frontend::core::typecheck::proof::context::ProofContext::new(&self.env);
         // #263：shared_ctx 持有 &self.env，精化解析诊断先汇入 sink，
         // 待 shared_ctx 释放后再写入 env.errors
         let mut refined_diags = Vec::new();
-
-        // 阶段 1：构建依赖图 + 初始绑定检查
-        for stmt in &module.items {
-            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
-            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            self.build_dep_graph_and_check_init(
-                stmt,
-                &mut dep_graph,
-                &mut shared_ctx,
+        {
+            let mut ctx = RefinedWalkCtx {
+                shared_ctx: &mut shared_ctx,
                 proof_calls,
-                &mut refined_diags,
-            );
+                diags: &mut refined_diags,
+            };
+            let mut module_unit = RefinedScopeUnit::new();
+            self.refined_walk_stmts(&module.items, &mut module_unit, &mut ctx);
         }
-
-        // 阶段 2：遍历赋值点，生成 VC
-        let mut vc_diags = Vec::new();
-        for stmt in &module.items {
-            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
-            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            self.check_assignments_with_deps(
-                stmt,
-                &dep_graph,
-                &mut shared_ctx,
-                proof_calls,
-                &mut vc_diags,
-            );
-        }
-
-        // VC 证伪诊断汇入（shared_ctx 已释放，#263 同款时序）
-        self.env.errors.extend_errors(vc_diags);
 
         // #263：精化解析诊断汇入（shared_ctx 已不再被使用，借用结束）
         self.env.errors.extend_errors(refined_diags);
     }
 
-    /// 遍历绑定值的**函数体语句**（精化收集的两阶段共用）。
+    /// 精化走查：一个语句列表 = 一个词法块。
     ///
-    /// 判定与 `block_binding_is_function` 同源：`Lambda`（`=>`）恒为函数体；
-    /// `Block` 仅在是函数定义时才下钻（值块不是函数体，其语句由表达式求值处理）。
-    ///
-    /// 存在的理由：两阶段此前各写一份 `if Lambda … else if Block …`，且
-    /// `build_dep_graph_and_check_init` 的注解臂根本没有下钻——见 #363。
-    fn walk_fn_body_for_refined<F>(
+    /// 块内注册的精化 dependant 在块退出时从依赖图移除（块局部变量出块即亡）；
+    /// 函数体/模块层作为最外层块，单元随走查结束整体丢弃，移除只是兜底。
+    fn refined_walk_stmts(
         &self,
-        value: &crate::frontend::core::parser::ast::Expr,
-        f: &mut F,
-    ) where
-        F: FnMut(&crate::frontend::core::parser::ast::Stmt),
-    {
-        use crate::frontend::core::parser::ast::Expr;
-        let body = match value {
-            Expr::Lambda { body, .. } => Some(body.as_ref()),
-            Expr::Block(block) => Some(block),
-            _ => None,
-        };
-        if let Some(body) = body {
-            for s in &body.stmts {
-                f(s);
-            }
+        stmts: &[crate::frontend::core::parser::ast::Stmt],
+        unit: &mut RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        let mut registered: Vec<String> = Vec::new();
+        for stmt in stmts {
+            // #324：嵌套语句逐条挂当前 span，诊断落到真实语句行
+            let _span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            registered.extend(self.refined_walk_stmt(stmt, unit, ctx));
+        }
+        for name in &registered {
+            unit.deps.remove_dependant(name);
         }
     }
 
-    /// 阶段 1：递归遍历语句树——构建依赖图 + 检查初始化绑定
-    fn build_dep_graph_and_check_init(
+    /// 精化走查：单条语句。返回本语句注册的精化 dependant 名（供块退出清理）。
+    fn refined_walk_stmt(
         &self,
         stmt: &crate::frontend::core::parser::ast::Stmt,
-        dep_graph: &mut crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
-        shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
-        proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
-        diags: &mut Vec<Diagnostic>,
-    ) {
-        use crate::frontend::core::parser::ast::StmtKind;
+        unit: &mut RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) -> Vec<String> {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind};
 
         match &stmt.kind {
+            // 注解绑定 `x: T = v`：解析精化 → 注册依赖 + 初始校验 → 记录字面量值
             StmtKind::Assign {
                 target,
                 type_annotation: Some(type_ann),
                 value,
                 ..
             } => {
-                let name = match target.as_ref() {
-                    Expr::Var(n, _) => n.clone(),
-                    _ => return,
-                };
-                let mono_ty = MonoType::from(type_ann.clone());
-                let resolved_ty = self.resolve_type_annotation(&mono_ty, diags);
-                if let MonoType::Refined { constraint, .. } = &resolved_ty {
-                    // RFC-027 Phase 2.5: Call 约束直接生成 proof call
-                    if let crate::frontend::core::types::const_data::ConstExpr::Call {
-                        func,
-                        args,
-                    } = constraint
+                let mut registered = Vec::new();
+                if let Expr::Var(name, _) = target.as_ref() {
+                    let mono_ty = MonoType::from(type_ann.clone());
+                    let resolved_ty = self.resolve_type_annotation(&mono_ty, ctx.diags);
+                    if matches!(resolved_ty, MonoType::Refined { .. })
+                        && !constraint_is_terminates(&resolved_ty)
                     {
-                        // 仅全 Lit 实参发射执行调用；含变量实参（NamedVar 等）
-                        // 编译期不可取值，留给 check_predicate/VC 符号化管道——
-                        // 此前 filter_map 静默丢非 Lit 实参，产出无参调用、
-                        // 参数在解释器里读成 Void 错译
-                        let mut call_args: Vec<crate::frontend::core::types::ConstValue> =
-                            Vec::new();
-                        let mut all_literal = true;
-                        for a in args {
-                            if let crate::frontend::core::types::const_data::ConstExpr::Lit(v) = a {
-                                call_args.push(v.clone());
-                            } else {
-                                all_literal = false;
-                                break;
-                            }
-                        }
-                        if all_literal {
-                            proof_calls.push(
-                            crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall {
-                                func_name: func.clone(),
-                                args: call_args,
-                            },
-                        );
-                        }
-                    }
-                    let free_vars = Self::extract_free_vars(constraint);
-                    for fv in &free_vars {
-                        if fv != &name {
-                            dep_graph.add_dep(&name, fv);
-                        }
-                    }
-                }
-
-                // 注解绑定的**函数体也要下钻**。
-                //
-                // 此前本臂到此为止，而下一个臂（无 type_annotation）才递归
-                // Lambda/Block 体——于是 `f: () -> Void = { y: IsSmall(1,2) = 5 }`
-                // 体内的精化实参**全不校验**（E1092/E1093 静默失守），
-                // 而 `f = () => { ... }` 正常报出。注解是推荐的函数写法，
-                // 却成了校验最弱的一条路径。（#363）
-                if let Some(expr) = value.as_deref() {
-                    self.walk_fn_body_for_refined(expr, &mut |s| {
-                        self.build_dep_graph_and_check_init(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
-                    });
-                }
-            }
-            StmtKind::Assign {
-                value: Some(expr), ..
-            } => {
-                if let crate::frontend::core::parser::ast::Expr::Lambda { body, .. } = expr.as_ref()
-                {
-                    for s in &body.stmts {
-                        self.build_dep_graph_and_check_init(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
+                        unit.deps.register_refined(name, &resolved_ty);
+                        registered.push(name.clone());
+                        // 初始校验：bindings 代入 name 自身的初始值（若为字面量）
+                        let init_value = value.as_deref().and_then(Self::extract_const_value);
+                        self.revalidate_refined(
+                            name,
+                            name,
+                            &resolved_ty,
+                            (name, init_value),
+                            &unit.values,
+                            ctx,
                         );
                     }
-                } else if let crate::frontend::core::parser::ast::Expr::Block(block) = expr.as_ref()
-                {
-                    for s in &block.stmts {
-                        self.build_dep_graph_and_check_init(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
+                    unit.track(name, value.as_deref().and_then(Self::extract_const_value));
+                }
+                // 绑定值是函数体 → 嵌套函数体独立单元走查（判定与
+                // `block_binding_is_function` 同源，#363：注解是推荐的函数写法）
+                if crate::frontend::core::parser::ast::Expr::block_binding_is_function(
+                    Some(type_ann),
+                    value.as_deref(),
+                ) {
+                    if let Some(body) = extract_fn_body(value.as_deref()) {
+                        self.refined_walk_fn_body(body, ctx);
                     }
                 }
+                registered
             }
-            StmtKind::Expr(expr) => {
-                self.build_dep_graph_from_expr(
-                    expr.as_ref(),
-                    dep_graph,
-                    shared_ctx,
-                    proof_calls,
-                    diags,
-                );
-            }
-            StmtKind::If {
-                then_branch,
-                else_if_branches,
-                else_branch,
-                ..
-            } => {
-                for s in &then_branch.stmts {
-                    self.build_dep_graph_and_check_init(
-                        s,
-                        dep_graph,
-                        shared_ctx,
-                        proof_calls,
-                        diags,
-                    );
-                }
-                for (_, body) in else_if_branches {
-                    for s in &body.stmts {
-                        self.build_dep_graph_and_check_init(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
-                    }
-                }
-                if let Some(else_body) = else_branch {
-                    for s in &else_body.stmts {
-                        self.build_dep_graph_and_check_init(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
-                    }
-                }
-            }
-            StmtKind::For { body, .. } => {
-                for s in &body.stmts {
-                    self.build_dep_graph_and_check_init(
-                        s,
-                        dep_graph,
-                        shared_ctx,
-                        proof_calls,
-                        diags,
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// 从表达式递归构建依赖图（处理 While/Block/For 等包含语句的表达式）
-    fn build_dep_graph_from_expr(
-        &self,
-        expr: &crate::frontend::core::parser::ast::Expr,
-        dep_graph: &mut crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
-        shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
-        proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
-        diags: &mut Vec<Diagnostic>,
-    ) {
-        match expr {
-            crate::frontend::core::parser::ast::Expr::Block(block) => {
-                for s in &block.stmts {
-                    self.build_dep_graph_and_check_init(
-                        s,
-                        dep_graph,
-                        shared_ctx,
-                        proof_calls,
-                        diags,
-                    );
-                }
-            }
-            crate::frontend::core::parser::ast::Expr::While { body, .. } => {
-                for s in &body.stmts {
-                    self.build_dep_graph_and_check_init(
-                        s,
-                        dep_graph,
-                        shared_ctx,
-                        proof_calls,
-                        diags,
-                    );
-                }
-            }
-            crate::frontend::core::parser::ast::Expr::For { body, .. } => {
-                for s in &body.stmts {
-                    self.build_dep_graph_and_check_init(
-                        s,
-                        dep_graph,
-                        shared_ctx,
-                        proof_calls,
-                        diags,
-                    );
-                }
-            }
-            crate::frontend::core::parser::ast::Expr::If {
-                then_branch,
-                else_if_branches,
-                else_branch,
-                ..
-            } => {
-                for s in &then_branch.stmts {
-                    self.build_dep_graph_and_check_init(
-                        s,
-                        dep_graph,
-                        shared_ctx,
-                        proof_calls,
-                        diags,
-                    );
-                }
-                for (_, body) in else_if_branches {
-                    for s in &body.stmts {
-                        self.build_dep_graph_and_check_init(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
-                    }
-                }
-                if let Some(else_body) = else_branch {
-                    for s in &else_body.stmts {
-                        self.build_dep_graph_and_check_init(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// 阶段 2：遍历赋值点，查询依赖图，生成 VC
-    fn check_assignments_with_deps(
-        &self,
-        stmt: &crate::frontend::core::parser::ast::Stmt,
-        dep_graph: &crate::frontend::core::typecheck::proof::dep_graph::TypeDepGraph,
-        shared_ctx: &mut crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
-        proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
-        diags: &mut Vec<Diagnostic>,
-    ) {
-        use crate::frontend::core::parser::ast::{StmtKind, Expr};
-
-        match &stmt.kind {
-            // 赋值语句：x = expr（有 value 的 Assign，target 是 Var）
+            // 无注解赋值/绑定 `x = v`：更新值环境 + 重验证依赖者
             StmtKind::Assign {
                 target,
-                value: Some(v),
+                value: Some(rhs),
                 ..
             } => {
                 if let Expr::Var(name, _) = target.as_ref() {
-                    let affected = dep_graph.affected_by(name);
-                    if !affected.is_empty() {
-                        self.generate_vc_for_dependants(
-                            name,
-                            &affected,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
+                    let new_value = Self::extract_const_value(rhs);
+                    // RFC-027 §6.1：x 变更 → 对每个依赖 x 的变量生成 VC 重验证
+                    for dependant in unit.deps.affected_by(name) {
+                        let dependant = dependant.to_string();
+                        if let Some(refined) = unit.deps.constraint_of(&dependant) {
+                            self.revalidate_refined(
+                                name,
+                                &dependant,
+                                refined,
+                                (name, new_value.clone()),
+                                &unit.values,
+                                ctx,
+                            );
+                        }
                     }
+                    unit.track(name, new_value);
                 }
-                // 递归处理 Lambda/Block 函数体（含注解绑定：`f: T = { ... }`）
-                self.walk_fn_body_for_refined(v, &mut |s| {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls, diags);
-                });
+                // 复杂赋值目标（索引/解构）：v1 不建模对依赖者的影响（与旧实现一致）
+                // RHS 内嵌函数体：`f = () => {...}` 同样独立单元
+                match rhs.as_ref() {
+                    Expr::Lambda { body, .. } => {
+                        self.refined_walk_fn_body(body, ctx);
+                    }
+                    // 无注解的块值在当前作用域顺序执行：同单元走查
+                    Expr::Block(block) => {
+                        self.refined_walk_stmts(&block.stmts, unit, ctx);
+                    }
+                    _ => {}
+                }
+                Vec::new()
             }
             StmtKind::If {
                 then_branch,
@@ -4232,143 +4015,273 @@ impl TypeChecker {
                 else_branch,
                 ..
             } => {
-                for s in &then_branch.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls, diags);
-                }
+                // 分支敏感：各分支从同一前置值环境出发，汇合取等值交集——
+                // 仅部分分支改写（或声明）的变量出块即值未知
+                let mut paths: Vec<HashMap<String, crate::frontend::core::types::ConstValue>> =
+                    Vec::new();
+                paths.push(self.refined_walk_branch(&then_branch.stmts, unit, ctx));
                 for (_, body) in else_if_branches {
-                    for s in &body.stmts {
-                        self.check_assignments_with_deps(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
-                    }
+                    paths.push(self.refined_walk_branch(&body.stmts, unit, ctx));
                 }
-                if let Some(else_body) = else_branch {
-                    for s in &else_body.stmts {
-                        self.check_assignments_with_deps(
-                            s,
-                            dep_graph,
-                            shared_ctx,
-                            proof_calls,
-                            diags,
-                        );
-                    }
-                }
+                // else 分支；缺省时补「所有条件都不中」的隐式路径（取当前值）
+                paths.push(match else_branch {
+                    Some(eb) => self.refined_walk_branch(&eb.stmts, unit, ctx),
+                    None => unit.values.clone(),
+                });
+                unit.values = meet_value_paths(paths);
+                Vec::new()
             }
-            StmtKind::For { body, .. } => {
-                for s in &body.stmts {
-                    self.check_assignments_with_deps(s, dep_graph, shared_ctx, proof_calls, diags);
-                }
+            StmtKind::For { var, body, .. } => {
+                self.refined_walk_loop_body(Some(var), body, unit, ctx);
+                Vec::new()
             }
-            _ => {}
+            StmtKind::Expr(expr) => {
+                match expr.as_ref() {
+                    // 值块：当前作用域顺序执行
+                    Expr::Block(block) => {
+                        self.refined_walk_stmts(&block.stmts, unit, ctx);
+                    }
+                    Expr::While { body, .. } => {
+                        self.refined_walk_loop_body(None, body, unit, ctx);
+                    }
+                    Expr::For { var, body, .. } | Expr::SpawnFor { var, body, .. } => {
+                        self.refined_walk_loop_body(Some(var), body, unit, ctx);
+                    }
+                    _ => {}
+                }
+                Vec::new()
+            }
+            _ => Vec::new(),
         }
     }
 
-    /// 为依赖变量生成验证条件并送入证明管道
-    ///
-    /// 当 x 被赋值时，对每个依赖 x 的变量 v：
-    /// 1. 从 TypeEnvironment 查找 v 的类型标注
-    /// 2. 调用 check_predicate() 验证约束
-    fn generate_vc_for_dependants(
+    /// 走查一个分支：从当前值环境出发，返回分支出口的值环境（前置值不受影响）
+    fn refined_walk_branch(
         &self,
-        assigned_var: &str,
-        affected: &[&str],
-        shared_ctx: &crate::frontend::core::typecheck::proof::context::ProofContext<'_>,
-        proof_calls: &mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
-        diags: &mut Vec<Diagnostic>,
+        stmts: &[crate::frontend::core::parser::ast::Stmt],
+        unit: &mut RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) -> HashMap<String, crate::frontend::core::types::ConstValue> {
+        let pre = unit.values.clone();
+        self.refined_walk_stmts(stmts, unit, ctx);
+        std::mem::replace(&mut unit.values, pre)
+    }
+
+    /// 走查循环体：迭代间被改写的变量值未知——入环与出环都作废其字面量值
+    /// （第 2+ 次迭代的取值与入口值不同，入口值对体内 VC 不安全）
+    fn refined_walk_loop_body(
+        &self,
+        loop_var: Option<&str>,
+        body: &crate::frontend::core::parser::ast::Block,
+        unit: &mut RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
     ) {
-        for dependant in affected {
-            // 从环境中查找 dependant 的类型
-            if let Some(poly_ty) = self.env.get_var(dependant) {
-                let mono_ty = &poly_ty.body;
-
-                // 只处理 Refined 类型
-                if let MonoType::Refined { constraint, .. } = mono_ty {
-                    // 构造 bindings：变量值未知 → SMT 符号化处理
-                    let bindings = HashMap::new();
-
-                    let proof_result =
-                        crate::frontend::core::typecheck::layers::predicate::check_predicate(
-                            shared_ctx, mono_ty, &bindings,
-                        );
-
-                    match &proof_result {
-                        ProofResult::Proved => {
-                            // VC 成立
-                        }
-                        ProofResult::Disproved(model) => {
-                            // 证伪即编译错误：反例进诊断，不再 tracing log 吞掉
-                            let counterexample = model
-                                .assignments
-                                .iter()
-                                .map(|(k, v)| format!("{k}={v}"))
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            let constraint_str = constraint.to_string();
-                            diags.push(
-                                ErrorCodeDefinition::refined_constraint_violated(
-                                    assigned_var,
-                                    dependant,
-                                    &constraint_str,
-                                    &counterexample,
-                                )
-                                .build(),
-                            );
-                        }
-                        ProofResult::Unproven {
-                            proof_calls: calls, ..
-                        } => {
-                            if !calls.is_empty() {
-                                proof_calls.extend(calls.clone());
-                            }
-                        }
-                    }
-                }
-            }
+        let mut assigned = collect_assigned_var_names(&body.stmts);
+        if let Some(var) = loop_var {
+            assigned.insert(var.to_string());
+        }
+        for name in &assigned {
+            unit.values.remove(name);
+        }
+        self.refined_walk_stmts(&body.stmts, unit, ctx);
+        for name in &assigned {
+            unit.values.remove(name);
         }
     }
 
-    /// 从 ConstExpr 中提取所有自由变量名
-    ///
-    /// 遍历约束表达式树，收集所有 NamedVar 引用。
-    /// 用于构建 TypeDepGraph 时判断"x 的类型标注引用了 y"。
-    fn extract_free_vars(
-        expr: &crate::frontend::core::types::const_data::ConstExpr
-    ) -> Vec<String> {
-        let mut vars = Vec::new();
-        Self::collect_free_vars(expr, &mut vars);
-        vars
+    /// 走查函数体：独立单元——依赖与值环境以函数体为边界，
+    /// 不与外层或兄弟函数互通（跨函数同名不互相触发重验证）
+    fn refined_walk_fn_body(
+        &self,
+        body: &crate::frontend::core::parser::ast::Block,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        let mut fn_unit = RefinedScopeUnit::new();
+        self.refined_walk_stmts(&body.stmts, &mut fn_unit, ctx);
     }
 
-    fn collect_free_vars(
-        expr: &crate::frontend::core::types::const_data::ConstExpr,
-        out: &mut Vec<String>,
+    /// 重验证 dependant 的精化约束（VC 生成 → 证明管道）
+    ///
+    /// `trigger` 进 E2030 文案（赋值场景 = 被赋值变量名，初始校验 = 声明名）。
+    /// `changed`：本次变更 (变量, 新值)——已知则代入 bindings；未知（非字面量
+    /// RHS）则作废旧值，用陈旧值判约束会产生伪 Proved。
+    fn revalidate_refined(
+        &self,
+        trigger: &str,
+        dependant: &str,
+        refined: &MonoType,
+        changed: (&str, Option<crate::frontend::core::types::ConstValue>),
+        values: &HashMap<String, crate::frontend::core::types::ConstValue>,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
     ) {
-        match expr {
-            crate::frontend::core::types::const_data::ConstExpr::NamedVar(name) => {
-                out.push(name.clone());
+        let mut bindings = values.clone();
+        match changed.1 {
+            Some(v) => {
+                bindings.insert(changed.0.to_string(), v);
             }
-            crate::frontend::core::types::const_data::ConstExpr::Var(var) => {
-                out.push(var.to_string());
+            None => {
+                bindings.remove(changed.0);
             }
-            crate::frontend::core::types::const_data::ConstExpr::BinOp { left, right, .. } => {
-                Self::collect_free_vars(left, out);
-                Self::collect_free_vars(right, out);
-            }
-            crate::frontend::core::types::const_data::ConstExpr::UnOp { expr: inner, .. } => {
-                Self::collect_free_vars(inner, out);
-            }
-            crate::frontend::core::types::const_data::ConstExpr::Call { args, .. } => {
-                for a in args {
-                    Self::collect_free_vars(a, out);
+        }
+        // 缺值闸门：约束的自由变量不全有已知值则不送检（防全称检查伪反例）
+        if !refined_free_vars(refined)
+            .iter()
+            .all(|v| bindings.contains_key(v))
+        {
+            return;
+        }
+        match crate::frontend::core::typecheck::layers::predicate::check_predicate(
+            ctx.shared_ctx,
+            refined,
+            &bindings,
+        ) {
+            ProofResult::Proved => {}
+            ProofResult::Disproved(model) => {
+                // 证伪即编译错误：反例进诊断
+                let counterexample = model
+                    .assignments
+                    .iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if let MonoType::Refined { constraint, .. } = refined {
+                    ctx.diags.push(
+                        ErrorCodeDefinition::refined_constraint_violated(
+                            trigger,
+                            dependant,
+                            &constraint.to_string(),
+                            &counterexample,
+                        )
+                        .build(),
+                    );
                 }
             }
-            // Lit, If, Range 不含变量引用
-            _ => {}
+            ProofResult::Unproven {
+                proof_calls: calls, ..
+            } => {
+                if !calls.is_empty() {
+                    ctx.proof_calls.extend(calls.clone());
+                }
+                // 空调用集的 Unproven（值不可得/超出内核）：分阶段策略下放行
+            }
         }
     }
 }
+
+/// 精化走查的共享管道三件套：证明上下文 / 证明调用收集 / 诊断汇。
+/// 走查各环节（初始校验、重验证、分支与循环下钻）都经它流转，
+/// 不再逐层透传散参数。
+struct RefinedWalkCtx<'a, 'env> {
+    shared_ctx: &'a mut crate::frontend::core::typecheck::proof::context::ProofContext<'env>,
+    proof_calls: &'a mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
+    diags: &'a mut Vec<Diagnostic>,
+}
+
+/// 提取绑定值的函数体（判定已由调用方完成，这里只取形态）：
+/// `Lambda` 恒为函数体；`Block` 在是函数定义时才是（值块返回 None）
+fn extract_fn_body(
+    value: Option<&crate::frontend::core::parser::ast::Expr>
+) -> Option<&crate::frontend::core::parser::ast::Block> {
+    match value? {
+        crate::frontend::core::parser::ast::Expr::Lambda { body, .. } => Some(body.as_ref()),
+        crate::frontend::core::parser::ast::Expr::Block(block) => Some(block),
+        _ => None,
+    }
+}
+
+/// 分支汇合：仅保留所有路径出口**等值**的变量。
+/// 被任一路径改写（或仅部分路径声明）的变量出块即值未知——
+/// 保守作废是 sound 的：宁可少判，不可用错值判。
+fn meet_value_paths(
+    paths: Vec<HashMap<String, crate::frontend::core::types::ConstValue>>
+) -> HashMap<String, crate::frontend::core::types::ConstValue> {
+    let mut meet = HashMap::new();
+    let Some(first) = paths.first() else {
+        return meet;
+    };
+    'outer: for (name, value) in first {
+        for path in &paths[1..] {
+            if path.get(name) != Some(value) {
+                continue 'outer;
+            }
+        }
+        meet.insert(name.clone(), value.clone());
+    }
+    meet
+}
+
+/// 收集语句列表中被**改写**的变量名（无注解赋值 `x = v` 的目标），
+/// 供循环体作废字面量值。注解绑定（`mut x: T = ...`）每次迭代重新
+/// 初始化且字面量值恒定，不在收集之列。递归覆盖嵌套控制流与值块。
+fn collect_assigned_var_names(
+    stmts: &[crate::frontend::core::parser::ast::Stmt]
+) -> std::collections::HashSet<String> {
+    use crate::frontend::core::parser::ast::{Expr, StmtKind};
+    let mut assigned = std::collections::HashSet::new();
+    for stmt in stmts {
+        match &stmt.kind {
+            StmtKind::Assign {
+                target,
+                type_annotation: None,
+                value,
+                ..
+            } => {
+                if let Expr::Var(name, _) = target.as_ref() {
+                    assigned.insert(name.clone());
+                }
+                if let Some(v) = value.as_deref() {
+                    collect_assigned_in_expr(v, &mut assigned);
+                }
+            }
+            StmtKind::Assign { value, .. } => {
+                if let Some(v) = value.as_deref() {
+                    collect_assigned_in_expr(v, &mut assigned);
+                }
+            }
+            StmtKind::If {
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                assigned.extend(collect_assigned_var_names(&then_branch.stmts));
+                for (_, body) in else_if_branches {
+                    assigned.extend(collect_assigned_var_names(&body.stmts));
+                }
+                if let Some(eb) = else_branch {
+                    assigned.extend(collect_assigned_var_names(&eb.stmts));
+                }
+            }
+            StmtKind::For { var, body, .. } => {
+                assigned.insert(var.clone());
+                assigned.extend(collect_assigned_var_names(&body.stmts));
+            }
+            StmtKind::Expr(expr) => collect_assigned_in_expr(expr, &mut assigned),
+            _ => {}
+        }
+    }
+    assigned
+}
+
+/// 表达式形态的控制流体内改写收集（值块 / While / For 表达式）
+fn collect_assigned_in_expr(
+    expr: &crate::frontend::core::parser::ast::Expr,
+    assigned: &mut std::collections::HashSet<String>,
+) {
+    use crate::frontend::core::parser::ast::Expr;
+    match expr {
+        Expr::Block(block) => {
+            assigned.extend(collect_assigned_var_names(&block.stmts));
+        }
+        Expr::While { body, .. } => {
+            assigned.extend(collect_assigned_var_names(&body.stmts));
+        }
+        Expr::For { var, body, .. } => {
+            assigned.insert(var.clone());
+            assigned.extend(collect_assigned_var_names(&body.stmts));
+        }
+        _ => {}
+    }
+}
+
 include!("checker/semantic_tokens.rs");

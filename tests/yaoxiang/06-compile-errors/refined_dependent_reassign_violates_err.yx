@@ -1,0 +1,20 @@
+// 06-compile-errors/refined_dependent_reassign_violates_err.yx
+// 覆盖: RFC-027 §6.1 依赖追踪 —— 被依赖变量变更后重验证依赖变量（#379）
+// 验证: n 变更后 s 的约束 SumUpTo(n, 6) 以 n 的新值重判：n=5 时 6 == 5*2
+//       为假 → E4018。修复前 VC 生成器查模块级 env 得 None，静默跳过
+//       （依赖图正确、调用点正确、唯独变量查找失败——两层 if let 无诊断）。
+// 状态: ❌ 应被编译期拒绝
+//
+// 注：编译期拒绝测试（`// expect: compile-error`），判定契约是
+// 「check 非 0 且输出含预期码」，不执行运行期语句。
+
+// expect: compile-error E4018
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+main: () -> Int = {
+    mut n: Int = 3
+    mut s: SumUpTo(n, 6) = 6
+    n = 5
+    return s
+}
