@@ -1059,5 +1059,11 @@
     "message": "Type '{type}' does not implement interface '{interface}' (constraint '{param}: {interface}')",
     "template": "Type '{type}' does not implement `{interface}` — constraint `{param}: {interface}` for generic parameter `{param}` does not hold at this call site",
     "help": "Implement the corresponding interface for this type (write the interface instantiation in the type body and define its methods), or use an argument that already implements the interface"
+  },
+  "E1107": {
+    "title": "Method Overload Ambiguity",
+    "message": "'{key}' has {count} candidate matches and cannot be resolved",
+    "template": "Method overload ambiguity: '{key}' has {count} candidate matches that cannot be distinguished",
+    "help": "Add a type annotation to the call result (e.g., `x: T = obj.m()`), or make the parameter types of the overload candidates distinguishable"
   }
 }

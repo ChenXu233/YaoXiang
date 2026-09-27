@@ -1068,5 +1068,11 @@
     "message": "類 `{type}` 未踐接口 `{interface}`（約束 `{param}: {interface}`）",
     "template": "類 `{type}` 未踐 `{interface}`——泛型參數 `{param}` 之約束 `{param}: {interface}` 於此調用之處不立",
     "help": "為此類踐相應之接口（於類體內書接口實例化並定義方法），或改用已踐此接口之實參"
+  },
+  "E1107": {
+    "title": "方法重载之歧",
+    "message": "'{key}' 有 {count} 候选之合，莫能裁决",
+    "template": "方法重载之歧：'{key}' 有 {count} 候选之合，弗克甄别",
+    "help": "于调用之果增类型注解（如 `x: T = obj.m()`），或使重载候选之参类型可辨"
   }
 }

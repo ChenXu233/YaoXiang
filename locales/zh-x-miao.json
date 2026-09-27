@@ -1059,5 +1059,11 @@
     "message": "类型 '{type}' 没有实现接口 '{interface}' 喵~（约束 '{param}: {interface}' 不够满足呢 nya~）",
     "template": "类型 '{type}' 还没有实现 `{interface}` 喵——泛型参数 `{param}` 的约束 `{param}: {interface}` 在这个调用点不成立 nya~",
     "help": "要帮这个类型实现对应的接口哦喵~（在类型体里面写接口实例化然后定义方法 nya~），或者换成已经实现该接口的实参喵~"
+  },
+  "E1107": {
+    "title": "方法重载歧义喵~",
+    "message": "'{key}' 有 {count} 个候选匹配，无法决议 nya~",
+    "template": "方法重载歧义喵~：'{key}' 有 {count} 个候选匹配且无法区分的说",
+    "help": "为调用结果添加类型注解（如 `x: T = obj.m()`），或让重载候选的参数类型可区分喵~"
   }
 }
