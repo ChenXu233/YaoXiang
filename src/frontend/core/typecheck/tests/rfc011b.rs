@@ -1076,3 +1076,46 @@ fn test_rfc010b_guard_non_bool_rejected() {
         result.diagnostics
     );
 }
+
+/// 规范（全穷尽，2026-09-27 定案）：非和类型 scrutinee 无兜底臂 → E1030
+/// （不该隐式的地方不隐式；Int/String 等值域开放，字面量臂必须补 `_`）
+#[test]
+fn test_rfc010b_nonsum_match_requires_fallback_e1030() {
+    let source = r#"
+        main: () -> Void = {
+            x = 2
+            t = match x {
+                1 => "一",
+                2 => "二",
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E1030"),
+        "non-sum match without fallback should report E1030: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范：Bool 是可枚举例外——true+false 双字面量臂即穷尽，无需兜底
+#[test]
+fn test_rfc010b_bool_literal_coverage_exhaustive() {
+    let source = r#"
+        main: () -> Void = {
+            b = true
+            t = match b {
+                true => 1,
+                false => 0,
+            }
+            return
+        }
+    "#;
+    let (result, _checker) = check_source_with_checker(source);
+    assert!(
+        result.diagnostics.is_empty(),
+        "bool true+false should be exhaustive: {:?}",
+        result.diagnostics
+    );
+}

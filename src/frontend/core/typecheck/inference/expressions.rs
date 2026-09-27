@@ -928,7 +928,11 @@ impl<'a> ExpressionInferrer<'a> {
             });
         }
 
-        // 穷尽性（仅和类型）：无兜底臂时变体集必须被 Union 臂全覆盖
+        // 穷尽性（全类型，2026-09-27 定案：不该隐式的地方不隐式）。
+        // 和类型：无兜底臂时变体集必须被 Union 臂全覆盖；
+        // 非和类型：无兜底臂时，字面量臂必须覆盖全部可居留值——仅 Bool
+        //（true+false）可枚举；Int/String/Char 等值域开放，必须有兜底臂。
+        // Void 空类型无可居留值，vacuously 穷尽。
         if let Some(sum_name) = &sum_name {
             if !fallback_seen {
                 let missing: Vec<String> = self.sum_types[sum_name]
@@ -941,6 +945,15 @@ impl<'a> ExpressionInferrer<'a> {
                         ErrorCodeDefinition::pattern_non_exhaustive(&missing.join(", ")).build(),
                     );
                 }
+            }
+        } else if !fallback_seen {
+            let is_void = matches!(resolved, MonoType::Void);
+            let bool_covered = resolved == MonoType::Bool
+                && ["bool:Bool(true)", "bool:Bool(false)"]
+                    .iter()
+                    .all(|k| seen_literals.contains(*k));
+            if !is_void && !bool_covered {
+                return Err(ErrorCodeDefinition::pattern_non_exhaustive("`_`").build());
             }
         }
 
