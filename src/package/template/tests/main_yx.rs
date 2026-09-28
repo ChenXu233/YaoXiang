@@ -23,7 +23,7 @@ fn test_generate_main_yx_contains_hello() {
 #[test]
 fn test_generate_main_yx_contains_main_fn() {
     let content = generate_main_yx("test");
-    // YaoXiang 使用 `main = {...}` 语法而非 `fn main() {}`
+    // Bin 模式入口必须是函数：`main = () => { ... }`（值块形态会在 E3021 被拒）
     assert!(content.contains("main ="));
 }
 

@@ -799,7 +799,7 @@
   "E3021": {
     "title": "Entry is not a function",
     "template": "Program entry '{name}' must be a function, but it is a value binding",
-    "help": "Entry must be callable: write as main = { ... } or main: () -> Void = { ... }; value bindings (such as main: Int = 5) will not be executed."
+    "help": "Entry must be a function: write as main = () => { ... } or annotate it main: () -> Void = ... . A plain block binding main = { ... } is a value (evaluated during module init), not an entry point."
   },
   "E4010": {
     "title": "Constant division by zero",

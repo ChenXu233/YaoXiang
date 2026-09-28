@@ -413,6 +413,33 @@ fn test_e2e_init_binary_project_creates_expected_files() {
     );
 }
 
+/// init 模板的 `main = () => { ... }` 必须能直接 run——Bin 模式入口要求函数
+/// 形态，值块形态（`main = { ... }`，初始化期求值）会被 E3021 拒绝。
+/// 模板曾生成值块形态，开箱即坏（E3021），此测试防回归。
+#[test]
+fn test_e2e_init_template_main_runs_out_of_box() {
+    // Arrange - init 默认（binary）项目
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("boot_app");
+    let (code, _stdout, _stderr) = run_yx(&["init", "boot_app"], tmp.path());
+    assert_eq!(code, 0, "init should succeed");
+
+    let main_yx = project_dir.join("src/main.yx");
+
+    // Act - 模板原样 run
+    let (code, stdout, stderr) = run_yx(&["run", main_yx.to_str().unwrap()], tmp.path());
+
+    // Assert - 零修改可运行且打印问候（问候文本随项目名变化）
+    assert_eq!(
+        code, 0,
+        "template main should run out of box, stderr: {stderr:?}"
+    );
+    assert!(
+        stdout.contains("boot_app"),
+        "should print greeting, stdout: {stdout:?}"
+    );
+}
+
 #[test]
 fn test_e2e_init_library_project_creates_lib_yx() {
     // Arrange
