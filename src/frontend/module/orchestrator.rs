@@ -85,12 +85,19 @@ pub enum OrchestratorError {
         first: String,
         second: String,
     },
+    /// RFC-014 §项目模式：vendor 与 yaoxiang.lock 不一致（Node 语义：
+    /// 不静默自动安装，须显式 `yaoxiang install`）
+    #[error("vendor 目录与 yaoxiang.lock 不一致：\n{}\n运行 `yaoxiang install` 同步", report.describe())]
+    VendorLockInconsistent {
+        report: super::consistency::ConsistencyReport,
+    },
 }
 
 /// 编排一个项目：发现源文件 → 构建 Registry → 逐文件 typecheck → 整体编译。
 ///
 /// 返回合并后的 `ModuleIR`，可直接交给 codegen。入口文件的 `main` 函数即程序入口。
 pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
+    let vendor_root = ensure_vendor_consistency(entry)?;
     let files = discover(entry)?;
     let registry = build_registry_from(&files)?;
 
@@ -110,6 +117,10 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
         let mut checker = TypeChecker::new("<module>");
         checker.env().module_registry = registry.clone();
         checker.env().method_bindings = method_bindings.clone();
+        // RFC-014：vendor 根注入（缺依赖包的 E5001 追加 install 提示）
+        if let Some(ref vendor_root) = vendor_root {
+            checker.set_vendor_root(vendor_root.clone());
+        }
         let result = checker.check_module(ast);
         if !result.diagnostics.is_empty() {
             let msg = result
@@ -267,6 +278,7 @@ fn entry_span(_entry: &Path) -> crate::util::span::Span {
 ///
 /// 警告为 Warning severity，不阻断、不计入错误数。
 pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, OrchestratorError> {
+    let vendor_root = ensure_vendor_consistency(entry)?;
     let (files, used_by) = discover_with_used(entry)?;
     let registry = build_registry_from(&files)?;
     let method_bindings = registry.all_method_bindings();
@@ -306,7 +318,8 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
 
     let mut out = Vec::new();
     for (file, ast) in &parsed {
-        let result = typecheck_with_registry(ast, &registry, &method_bindings);
+        let result =
+            typecheck_with_registry_in(ast, &registry, &method_bindings, vendor_root.as_deref());
 
         let file_canon = file
             .path
@@ -411,13 +424,19 @@ pub fn check_source_in_project(
     let registry = build_registry_from(&files)?;
     let method_bindings = registry.all_method_bindings();
 
+    let vendor_root = ensure_vendor_consistency(path)?;
     let tokens = tokenize(source).map_err(|e| OrchestratorError::Parse {
         path: path.display().to_string(),
         message: format!("{:?}", e),
     })?;
     let parse_result = parser::parse(&tokens);
     let mut diagnostics: Vec<Diagnostic> = parse_result.errors.to_vec();
-    let result = typecheck_with_registry(&parse_result.module, &registry, &method_bindings);
+    let result = typecheck_with_registry_in(
+        &parse_result.module,
+        &registry,
+        &method_bindings,
+        vendor_root.as_deref(),
+    );
     // 错误 + 警告（W1003 等 Warning 级，LSP 侧以 severity 区分呈现）
     diagnostics.extend(result.diagnostics);
     diagnostics.extend(result.warnings);
@@ -426,15 +445,61 @@ pub fn check_source_in_project(
 
 /// 用预构建注册表检查单个模块（collect_all 模式，不早退）。
 /// 返回完整结果——调用方取 `diagnostics`（错误）与 `warnings`（W 码警告）。
-fn typecheck_with_registry(
+/// `vendor_root` 非 None 时（RFC-014 §项目模式）缺依赖包的 E5001
+/// 追加 `yaoxiang install` 提示。
+fn typecheck_with_registry_in(
     ast: &Module,
     registry: &ModuleRegistry,
     method_bindings: &HashMap<String, MonoType>,
+    vendor_root: Option<&Path>,
 ) -> TypeCheckResult {
     let mut checker = TypeChecker::new("<module>");
     checker.env().module_registry = registry.clone();
     checker.env().method_bindings = method_bindings.clone();
+    if let Some(vendor_root) = vendor_root {
+        checker.set_vendor_root(vendor_root.to_path_buf());
+    }
     checker.check_module_collect_all(ast)
+}
+
+/// RFC-014 §项目模式前置检查（2026-09-15 决议）。
+///
+/// 项目处于 vendor 核心包源模式（`.yaoxiang/vendor/` 存在）时：
+/// 1. 校验 vendor 与 `yaoxiang.lock` 一致，不一致报错并提示
+///    `yaoxiang install`（Node 语义：不静默自动安装）；
+/// 2. 返回 vendor 根路径供 typecheck 注入（缺依赖包的 E5001 追加 install
+///    提示）。
+///
+/// 无 vendor（单文件/未 install 项目）返回 `Ok(None)`——零配置可用，
+/// 「manifest 有依赖但从未 install」由 E5001 的 install 提示负责。
+fn ensure_vendor_consistency(entry: &Path) -> Result<Option<PathBuf>, OrchestratorError> {
+    // wasm32 下 package 模块不编译（与角色上下文同一降级策略）
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = entry;
+        Ok(None)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let Some(project_root) = find_project_root(entry) else {
+            return Ok(None);
+        };
+        let vendor_root = project_root.join(".yaoxiang").join("vendor");
+        if !vendor_root.is_dir() {
+            return Ok(None);
+        }
+        let report =
+            super::consistency::check_vendor_lock_consistency(&project_root).map_err(|e| {
+                OrchestratorError::Io {
+                    path: project_root.display().to_string(),
+                    reason: e.to_string(),
+                }
+            })?;
+        if !report.is_consistent() {
+            return Err(OrchestratorError::VendorLockInconsistent { report });
+        }
+        Ok(Some(vendor_root))
+    }
 }
 
 /// 顶层是否存在 `main` 绑定（角色推断的 Bin 信号，RFC-029f）
@@ -677,6 +742,12 @@ fn discover_with_used(
     entry: &Path
 ) -> Result<(Vec<DiscoveredFile>, HashSet<PathBuf>), OrchestratorError> {
     let project_root = find_project_root(entry);
+    // RFC-014 §项目模式：lock 优先的 vendor 解析——lock 有条目的依赖只解析
+    // 锁定版本目录（读取失败降级为无 lock，回退最高版本）
+    let lock_versions: HashMap<String, String> = project_root
+        .as_deref()
+        .and_then(|root| super::consistency::lock_versions(root).ok())
+        .unwrap_or_default();
     let mut files: Vec<DiscoveredFile> = Vec::new();
     let mut used_by: HashSet<PathBuf> = HashSet::new();
     let mut visited: HashSet<PathBuf> = HashSet::new();
@@ -722,9 +793,12 @@ fn discover_with_used(
                 continue;
             }
             // 未命中留给 typecheck 报「模块未找到」，发现阶段不判死
-            if let Some(resolved) =
-                resolve_module_path(&use_path, importer_dir.as_deref(), project_root.as_deref())
-            {
+            if let Some(resolved) = resolve_module_path(
+                &use_path,
+                importer_dir.as_deref(),
+                project_root.as_deref(),
+                &lock_versions,
+            ) {
                 // use 边：被引用文件记入 used_by（角色推断 Lib 信号）
                 used_by.insert(resolved.canonicalize().unwrap_or_else(|_| resolved.clone()));
                 queue.push_back((resolved, use_path, None));
@@ -755,14 +829,18 @@ pub(crate) fn find_project_root(entry: &Path) -> Option<PathBuf> {
 }
 
 /// 解析模块路径为文件：`a.b` → `<base>/a/b.yx` 或 `<base>/a/b/mod.yx`。
-/// 顺序：vendor 依赖（RFC-014 §模块解析顺序 priority 2）→ 导入者目录 → 项目根。
+/// 顺序：vendor 依赖（RFC-014 §模块解析顺序 priority 2，lock 优先）→ 导入者目录 → 项目根。
 fn resolve_module_path(
     use_path: &str,
     importer_dir: Option<&Path>,
     project_root: Option<&Path>,
+    lock_versions: &HashMap<String, String>,
 ) -> Option<PathBuf> {
     if let Some(root) = project_root {
-        if let Some(path) = resolve_in_vendor(use_path, root) {
+        let pkg = use_path.split('.').next().unwrap_or(use_path);
+        if let Some(path) =
+            resolve_in_vendor_with_lock(use_path, root, lock_versions.get(pkg).map(|v| v.as_str()))
+        {
             return Some(path);
         }
     }
@@ -796,14 +874,19 @@ fn dep_import_surface(_dep_root: &Path) -> Option<std::collections::HashSet<Path
     None
 }
 
-/// 在 `<project_root>/.yaoxiang/vendor/` 中解析 `use <pkg>[.<rest>]`。///
+/// 在 `<project_root>/.yaoxiang/vendor/` 中解析 `use <pkg>[.<rest>]`。
+///
 /// 布局（RFC-014 §模块解析顺序）：`<pkg>-<ver>/src/<pkg>/<rest>.yx`；
 /// 裸包名回退 `<pkg>-<ver>/src/<pkg>.yx`、`src/lib.yx`、`src/main.yx`、`mod.yx`。
-/// ponytail: 多版本取版本号最大者（预发布后于正式版）；按 lock 精确选择留给
-/// RFC-014 Phase 3。
-pub(crate) fn resolve_in_vendor(
+/// 版本选择：lock 锁定的版本优先（RFC-014 §项目模式， vendor/lock 一致性由
+/// `consistency` 前置把关）；lock 无条目时取最高版本（旧语义，未 install 的
+/// 项目仍可解析手放的 vendor 目录）。
+/// `locked_version` 为 `Some(v)` 时仅尝试 `<pkg>-v` 目录（精确命中 lock）；
+/// 为 `None` 时回退最高版本（供 LSP 与单文件等无 lock 上下文的调用方）。
+pub(crate) fn resolve_in_vendor_with_lock(
     use_path: &str,
     project_root: &Path,
+    locked_version: Option<&str>,
 ) -> Option<PathBuf> {
     let vendor_dir = project_root.join(".yaoxiang").join("vendor");
     if !vendor_dir.is_dir() {
@@ -821,6 +904,12 @@ pub(crate) fn resolve_in_vendor(
         let Some(version) = dir_name.strip_prefix(&prefix) else {
             continue;
         };
+        // lock 精确选择：只收锁定版本（其余候选不进入解析）
+        if let Some(locked) = locked_version {
+            if version != locked {
+                continue;
+            }
+        }
         let path = entry.path();
         if path.is_dir() {
             candidates.push((version.to_string(), path));
