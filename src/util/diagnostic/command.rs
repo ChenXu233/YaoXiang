@@ -31,6 +31,7 @@ pub fn run_check_command_once(
     json: bool,
     use_colors: bool,
     no_progress: bool,
+    deny_shadowing: bool,
 ) -> Result<(usize, usize)> {
     let paths = normalize_check_paths(paths)?;
     let files = collect_yx_files_from_paths(&paths, excludes)?;
@@ -64,6 +65,21 @@ pub fn run_check_command_once(
             eprintln!(
                 "Summary: {} error(s), {} warning(s)",
                 result.error_count, result.warning_count
+            );
+        }
+    }
+
+    // RFC-014 §项目模式：--deny-shadowing 把 W1006 遮蔽警告升级为失败
+    //（诊断保持 W 级输出原文；此处仅决定退出码）
+    if deny_shadowing {
+        let shadows = result
+            .diagnostics
+            .iter()
+            .filter(|d| d.diagnostic.code == "W1006")
+            .count();
+        if shadows > 0 {
+            anyhow::bail!(
+                "check failed: {shadows} local module(s) shadow vendored dependencies (--deny-shadowing)"
             );
         }
     }

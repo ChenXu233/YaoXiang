@@ -36,6 +36,7 @@ fn check_file(path: &PathBuf) -> Result<usize, anyhow::Error> {
         false, // json
         false, // use_colors
         true,  // no_progress — 抑制进度输出
+        false, // deny_shadowing
     )
     .map(|(errors, _warnings)| errors)
 }

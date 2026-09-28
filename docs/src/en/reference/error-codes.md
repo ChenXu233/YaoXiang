@@ -160,11 +160,12 @@ issues in the code.
 | W1003      | `Unused import: '{name}'`                                                          | Unused import                                |
 | W1004      | `Unused exported variable: '{name}'`                                               | Unused exported variable                     |
 | W1005      | `Unused exported method: '{name}'`                                                 | Unused exported method                       |
+| W1006  | `local module '{module}' shadows dependency '{dependency}'`                            | Local module shadows dependency |
 | W1063      | ``const generic constraint cannot be evaluated: `{constraint}` ({var} = {value})`` | const generic constraint cannot be evaluated |
 | W1080      | `Constraint cannot be proven at compile-time, degraded to runtime check`           | Compile-time proof degradation               |
 
 ---
 
-A total of **118** diagnostic codes (111 error codes + 7 warning codes), with the `define_codes!`
+A total of **119** diagnostic codes (111 error codes + 8 warning codes), with the `define_codes!`
 registry (`src/util/diagnostic/codes/`) as the authoritative source; the complete registration list
 for each code follows the registry, and this page lists common codes by family.

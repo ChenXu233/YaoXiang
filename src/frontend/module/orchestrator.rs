@@ -279,7 +279,7 @@ fn entry_span(_entry: &Path) -> crate::util::span::Span {
 /// 警告为 Warning severity，不阻断、不计入错误数。
 pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, OrchestratorError> {
     let vendor_root = ensure_vendor_consistency(entry)?;
-    let (files, used_by) = discover_with_used(entry)?;
+    let (files, used_by, shadow_events) = discover_with_used(entry)?;
     let registry = build_registry_from(&files)?;
     let method_bindings = registry.all_method_bindings();
 
@@ -338,6 +338,21 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
         // 警告属于其所属包，不混入消费方的 check 输出
         let mut diagnostics = result.diagnostics;
         if in_project(&file_canon) {
+            // RFC-014 §项目模式：W1006 本地模块遮蔽依赖包（发现期事件，
+            // 附着在做遮蔽 use 的文件上；Warning severity 不阻断）
+            for (shadow_path, use_path, span, pkg) in &shadow_events {
+                if shadow_path == &file.path {
+                    // use 路径在模板里显示为文件式路径（data/json）
+                    diagnostics.push(
+                        ErrorCodeDefinition::module_shadows_dependency(
+                            &use_path.replace('.', "/"),
+                            pkg,
+                        )
+                        .at(*span)
+                        .build(),
+                    );
+                }
+            }
             // W1003 未使用导入随 W 码通道流出（Warning severity，不阻断编译）
             diagnostics.extend(result.warnings);
             // 角色感知死代码（RFC-029f）：
@@ -733,14 +748,19 @@ fn is_vendor_path(path: &Path) -> bool {
 /// 解析双根：`use a.b` 先按**导入者所在目录**解析，未命中再按**项目根**
 /// （最近的 yaoxiang.toml 祖先）解析。模块键 = use 路径，与解析自哪个根无关。
 fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
-    discover_with_used(entry).map(|(files, _)| files)
+    discover_with_used(entry).map(|(files, _, _)| files)
 }
 
+/// 遮蔽事件：文件路径、use 路径、use 的 span、被遮蔽的包名
+type ShadowEvent = (PathBuf, String, crate::util::span::Span, String);
+
+/// 发现产物：可达文件、use 边集合、遮蔽事件
+type Discovery = (Vec<DiscoveredFile>, HashSet<PathBuf>, Vec<ShadowEvent>);
+
 /// 同 [`discover`]，附带 use 边信息：被 ≥1 个文件 `use` 的文件路径集合
-/// （canonical 化，与发现文件路径同口径比对）——角色推断的 Lib 信号（RFC-029f）。
-fn discover_with_used(
-    entry: &Path
-) -> Result<(Vec<DiscoveredFile>, HashSet<PathBuf>), OrchestratorError> {
+/// （canonical 化，与发现文件路径同口径比对）——角色推断的 Lib 信号（RFC-029f）；
+/// 以及本地模块遮蔽依赖包事件（RFC-014 §项目模式，W1006）。
+fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
     let project_root = find_project_root(entry);
     // RFC-014 §项目模式：lock 优先的 vendor 解析——lock 有条目的依赖只解析
     // 锁定版本目录（读取失败降级为无 lock，回退最高版本）
@@ -755,6 +775,8 @@ fn discover_with_used(
     // (路径, 模块键, 嵌入源)——嵌入 std 模块（std.test）的路径是虚拟的，源随身带
     let mut queue: VecDeque<(PathBuf, String, Option<&'static str>)> = VecDeque::new();
     queue.push_back((entry.to_path_buf(), entry_module_key(entry), None));
+    // RFC-014 §项目模式：本地模块遮蔽依赖包事件（文件路径, use 路径, span, 包名）
+    let mut shadow_events: Vec<ShadowEvent> = Vec::new();
 
     while let Some((path, key, embedded)) = queue.pop_front() {
         let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
@@ -779,7 +801,8 @@ fn discover_with_used(
         key_to_path.insert(key.clone(), path.clone());
 
         let importer_dir = path.parent().map(|p| p.to_path_buf());
-        for use_path in scan_use_paths(&source) {
+        for use_ref in scan_use_refs(&source) {
+            let use_path = use_ref.path;
             // std 整体或 native std 模块不走文件解析
             if use_path == "std" {
                 continue;
@@ -793,12 +816,18 @@ fn discover_with_used(
                 continue;
             }
             // 未命中留给 typecheck 报「模块未找到」，发现阶段不判死
-            if let Some(resolved) = resolve_module_path(
+            if let Some((resolved, shadows_dep)) = resolve_module_path(
                 &use_path,
                 importer_dir.as_deref(),
                 project_root.as_deref(),
                 &lock_versions,
             ) {
+                if shadows_dep {
+                    // RFC-014 §项目模式：本地模块遮蔽依赖包（W1006，
+                    // span 指向 use 路径）
+                    let pkg = use_path.split('.').next().unwrap_or(&use_path).to_string();
+                    shadow_events.push((path.clone(), use_path.clone(), use_ref.span, pkg));
+                }
                 // use 边：被引用文件记入 used_by（角色推断 Lib 信号）
                 used_by.insert(resolved.canonicalize().unwrap_or_else(|_| resolved.clone()));
                 queue.push_back((resolved, use_path, None));
@@ -813,7 +842,7 @@ fn discover_with_used(
 
     // 稳定顺序，保证编译/合并可复现
     files.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok((files, used_by))
+    Ok((files, used_by, shadow_events))
 }
 
 /// 从 entry 向上找最近的含 yaoxiang.toml 的目录（项目根）。
@@ -829,21 +858,17 @@ pub(crate) fn find_project_root(entry: &Path) -> Option<PathBuf> {
 }
 
 /// 解析模块路径为文件：`a.b` → `<base>/a/b.yx` 或 `<base>/a/b/mod.yx`。
-/// 顺序：vendor 依赖（RFC-014 §模块解析顺序 priority 2，lock 优先）→ 导入者目录 → 项目根。
+/// 顺序（RFC-014 §模块解析顺序）：导入者目录 → 项目根（本地，最高优先级）
+/// → vendor 依赖（lock 优先）。
+///
+/// 返回 `(路径, 是否遮蔽依赖包)`：本地命中且 vendor 中存在同名首段的包
+/// 目录时为 true（RFC-014 §项目模式：遮蔽发 W1006）。
 fn resolve_module_path(
     use_path: &str,
     importer_dir: Option<&Path>,
     project_root: Option<&Path>,
     lock_versions: &HashMap<String, String>,
-) -> Option<PathBuf> {
-    if let Some(root) = project_root {
-        let pkg = use_path.split('.').next().unwrap_or(use_path);
-        if let Some(path) =
-            resolve_in_vendor_with_lock(use_path, root, lock_versions.get(pkg).map(|v| v.as_str()))
-        {
-            return Some(path);
-        }
-    }
+) -> Option<(PathBuf, bool)> {
     let rel: PathBuf = use_path.split('.').collect();
     for base in [importer_dir, project_root].into_iter().flatten() {
         for cand in [
@@ -851,11 +876,44 @@ fn resolve_module_path(
             base.join(&rel).join("mod.yx"),
         ] {
             if cand.is_file() {
-                return Some(cand);
+                // 遮蔽判定：vendor 中存在同首段包目录（本地已优先胜出）
+                let shadowed = project_root
+                    .map(|root| vendor_has_package(root, use_path))
+                    .unwrap_or(false);
+                return Some((cand, shadowed));
             }
         }
     }
+    if let Some(root) = project_root {
+        let pkg = use_path.split('.').next().unwrap_or(use_path);
+        if let Some(path) =
+            resolve_in_vendor_with_lock(use_path, root, lock_versions.get(pkg).map(|v| v.as_str()))
+        {
+            return Some((path, false));
+        }
+    }
     None
+}
+
+/// vendor 中是否存在该 use 路径首段对应的包目录（`<pkg>-*`）
+fn vendor_has_package(
+    project_root: &Path,
+    use_path: &str,
+) -> bool {
+    let vendor_dir = project_root.join(".yaoxiang").join("vendor");
+    if !vendor_dir.is_dir() {
+        return false;
+    }
+    let pkg = use_path.split('.').next().unwrap_or(use_path);
+    let prefix = format!("{pkg}-");
+    std::fs::read_dir(&vendor_dir)
+        .ok()
+        .map(|entries| {
+            entries
+                .flatten()
+                .any(|e| e.file_name().to_string_lossy().starts_with(&prefix) && e.path().is_dir())
+        })
+        .unwrap_or(false)
 }
 
 /// 依赖包的导入面（RFC-029f）：`[exports]` 值集合优先，`[lib].path` 次之；
@@ -988,24 +1046,38 @@ pub(crate) fn compare_version(
 #[cfg(test)]
 mod tests;
 
+/// use 路径及其源码位置（`use` 关键字到路径末段）
+pub(crate) struct UsePathRef {
+    pub path: String,
+    pub span: crate::util::span::Span,
+}
+
 /// 只读 use 行：词法级扫描源码中的模块路径（不解析函数体——RFC-029 发现协议）。
 /// 词法失败的文件返回空，真正的错误由后续 parse 阶段报告。
 pub(crate) fn scan_use_paths(source: &str) -> Vec<String> {
+    scan_use_refs(source).into_iter().map(|u| u.path).collect()
+}
+
+/// 同 [`scan_use_paths`]，附带各 use 路径的 span（W1006 遮蔽诊断定位用）
+pub(crate) fn scan_use_refs(source: &str) -> Vec<UsePathRef> {
     use crate::frontend::core::lexer::TokenKind;
     let Ok(tokens) = tokenize(source) else {
         return Vec::new();
     };
-    let mut paths = Vec::new();
+    let mut paths: Vec<UsePathRef> = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
         if !matches!(tokens[i].kind, TokenKind::KwUse) {
             i += 1;
             continue;
         }
+        let use_start = tokens[i].span.start;
         i += 1;
         let mut segments: Vec<String> = Vec::new();
+        let mut last_end = use_start;
         while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
             segments.push(name.clone());
+            last_end = tokens[i].span.end;
             i += 1;
             match tokens.get(i).map(|t| &t.kind) {
                 // `use lib.{x}`：模块路径到 { 为止
@@ -1024,6 +1096,7 @@ pub(crate) fn scan_use_paths(source: &str) -> Vec<String> {
             continue;
         }
         let prefix = segments.join(".");
+        let prefix_span = crate::util::span::Span::new(use_start, last_end);
         // `use std.{io, list}`：花括号里的每个名字都是**同一前缀下的子模块**，
         // 需展开成 `std.io` / `std.list`。此前只收集到前缀 `std`，
         // 于是纯 yx 子模块（std.list）永远不被纳入编译单元——`use std.list`
@@ -1039,7 +1112,10 @@ pub(crate) fn scan_use_paths(source: &str) -> Vec<String> {
         {
             i += 2; // 跳过 `.{`
             while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
-                paths.push(format!("{prefix}.{name}"));
+                paths.push(UsePathRef {
+                    path: format!("{prefix}.{name}"),
+                    span: tokens[i].span,
+                });
                 expanded = true;
                 i += 1;
                 match tokens.get(i).map(|t| &t.kind) {
@@ -1051,7 +1127,10 @@ pub(crate) fn scan_use_paths(source: &str) -> Vec<String> {
             }
         }
         if !expanded {
-            paths.push(prefix);
+            paths.push(UsePathRef {
+                path: prefix,
+                span: prefix_span,
+            });
         }
     }
     paths

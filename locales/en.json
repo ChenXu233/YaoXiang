@@ -1079,5 +1079,13 @@
   "package_clean_removed": "  Removed {0}",
   "package_clean_nothing": "Nothing to clean.",
   "package_cache_cleaned": "Cache cleaned ({0} freed)",
-  "package_cache_empty": "Cache is already empty."
+  "package_cache_empty": "Cache is already empty.",
+  "W1006": {
+    "title": "local module shadows dependency",
+    "message": "a local module takes precedence over a vendored dependency of the same name",
+    "template": "local module '{module}' shadows dependency '{dependency}'",
+    "help": "local modules have the highest resolution priority (RFC-014): './src/{module}' overrides the vendored package '{dependency}' in .yaoxiang/vendor/. Rename the local module if this shadowing is unintended, or run with --deny-shadowing to treat it as an error",
+    "example": "// ./src/data.yx exists while 'data' is also a vendored dependency\nuse data.json; // resolves to ./src/data.yx, not the dependency",
+    "error_output": "warning[W1006]: local module 'data' shadows dependency 'data'\n --> example.yx:1:1\n  |\n1 | use data.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: a local module takes precedence over a vendored dependency of the same name"
+  }
 }

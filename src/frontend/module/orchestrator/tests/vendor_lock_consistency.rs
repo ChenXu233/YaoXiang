@@ -262,3 +262,87 @@ fn test_consistent_vendor_project_checks_clean() {
         Err(e) => panic!("expected clean check, got error: {e}"),
     }
 }
+
+// === 解析顺序拨正 + W1006 遮蔽（RFC-014 §项目模式：本地最高优先级）===
+
+#[test]
+fn test_local_module_shadows_dependency_with_w1006() {
+    // Arrange - vendor 有 foo-1.2.0（含 foo/mod.yx），本地也有 src/foo/mod.yx
+    let (_tmp, root) = setup_project("[dependencies]\nfoo = \"^1.0\"\n");
+    write_vendor_pkg(&root, "foo", "1.2.0");
+    write_lock(&root, &[("foo", "1.2.0")]);
+    // 本地同名模块（f 返回 2，与 vendor 的 1 区分）
+    fs::create_dir_all(root.join("src").join("foo")).unwrap();
+    fs::write(root.join("src").join("foo").join("mod.yx"), "f = () => 2\n").unwrap();
+    fs::write(
+        root.join("src").join("main.yx"),
+        "use foo;\n\nmain = { foo.f() }\n",
+    )
+    .unwrap();
+
+    // Act
+    let files = super::super::check_project(&root.join("src").join("main.yx")).unwrap();
+
+    // Assert - 本地胜出（f() = 2 语义由解析路径保证：main 引用的是 src/foo）
+    // 且发射 W1006
+    let w1006: Vec<&String> = files
+        .iter()
+        .flat_map(|(_, diags)| diags.iter())
+        .filter(|d| d.code == "W1006")
+        .map(|d| &d.message)
+        .collect();
+    assert_eq!(w1006.len(), 1, "expected exactly one W1006, got {w1006:?}");
+    assert!(
+        w1006[0].contains("foo"),
+        "message should name the package: {w1006:?}"
+    );
+}
+
+#[test]
+fn test_dependency_resolves_when_no_local_shadow() {
+    // Arrange - 只有 vendor 包，无本地同名模块
+    let (_tmp, root) = setup_project("[dependencies]\nfoo = \"^1.0\"\n");
+    write_vendor_pkg(&root, "foo", "1.2.0");
+    write_lock(&root, &[("foo", "1.2.0")]);
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src").join("main.yx"),
+        "use foo;\n\nmain = { foo.f() }\n",
+    )
+    .unwrap();
+
+    // Act
+    let files = super::super::check_project(&root.join("src").join("main.yx")).unwrap();
+
+    // Assert - 无 W1006
+    let w1006 = files
+        .iter()
+        .flat_map(|(_, diags)| diags.iter())
+        .filter(|d| d.code == "W1006")
+        .count();
+    assert_eq!(w1006, 0, "no shadow expected");
+}
+
+#[test]
+fn test_no_shadow_warning_without_vendor_dir() {
+    // Arrange - 本地 foo 模块但项目无 vendor（非 vendor 模式）
+    let (_tmp, root) = setup_project("");
+    fs::create_dir_all(root.join("src").join("foo")).unwrap();
+    fs::write(root.join("src").join("foo").join("mod.yx"), "f = () => 2\n").unwrap();
+    fs::write(
+        root.join("src").join("main.yx"),
+        "use foo;\n\nmain = { foo.f() }\n",
+    )
+    .unwrap();
+
+    // Act
+    let files = super::super::check_project(&root.join("src").join("main.yx")).unwrap();
+
+    // Assert - 无 W1006（没有依赖被遮蔽）
+    let w1006 = files
+        .iter()
+        .flat_map(|(_, diags)| diags.iter())
+        .filter(|d| d.code == "W1006")
+        .count();
+    assert_eq!(w1006, 0);
+}

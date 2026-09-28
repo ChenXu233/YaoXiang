@@ -143,6 +143,10 @@ enum Commands {
         /// Treat warnings as errors (non-zero exit if any warning, #321 M2)
         #[arg(long)]
         deny_warnings: bool,
+
+        /// Fail when a local module shadows a vendored dependency (RFC-014, W1006)
+        #[arg(long)]
+        deny_shadowing: bool,
     },
 
     /// Run project tests (RFC-036)
@@ -478,6 +482,7 @@ fn main() -> Result<()> {
             color,
             no_progress,
             deny_warnings,
+            deny_shadowing,
         } => {
             let use_colors = match color {
                 ColorChoice::Always => true,
@@ -485,7 +490,14 @@ fn main() -> Result<()> {
                 ColorChoice::Auto => std::io::stderr().is_terminal(),
             };
 
-            match run_check_command_once(&paths, &exclude, json, use_colors, no_progress) {
+            match run_check_command_once(
+                &paths,
+                &exclude,
+                json,
+                use_colors,
+                no_progress,
+                deny_shadowing,
+            ) {
                 Ok((error_count, warning_count)) => {
                     if error_count > 0 || (deny_warnings && warning_count > 0) {
                         ::std::process::exit(1);
