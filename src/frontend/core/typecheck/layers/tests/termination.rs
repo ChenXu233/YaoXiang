@@ -506,3 +506,69 @@ fn test_strategy2_violation_count_is_placeholder_not_usable() {
         results
     );
 }
+
+// ==================== 测试：显式测度注入（RFC-027a §2，T2）====================
+
+/// RFC-027a §2 —— 注入的显式测度须可按被标注名精确取回。
+///
+/// T2 的交付是「测度可提取、可注入」；本用例锁住注入侧的契约：键是被标注的
+/// 绑定/函数名，值是测度的无损 `ConstExpr`。**复合测度不得被压成单变量**——
+/// 压扁后 SMT 会拿到错误的测度（`n - i` 变成 `n`），义务生成随之错误。
+#[test]
+fn test_injected_explicit_measures_are_retrievable() {
+    use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstExpr};
+
+    // Arrange
+    let mut measures = std::collections::HashMap::new();
+    measures.insert("gcd".to_string(), ConstExpr::NamedVar("b".to_string()));
+    measures.insert(
+        "acc".to_string(),
+        ConstExpr::BinOp {
+            op: ConstBinOp::Sub,
+            left: Box::new(ConstExpr::NamedVar("n".to_string())),
+            right: Box::new(ConstExpr::NamedVar("i".to_string())),
+        },
+    );
+
+    // Act
+    let checker = TerminationChecker::new().set_measures(measures);
+
+    // Assert
+    assert_eq!(
+        checker.measures().get("gcd"),
+        Some(&ConstExpr::NamedVar("b".to_string())),
+        "函数名键应取回其返回类型位的测度"
+    );
+    let compound = checker.measures().get("acc").expect("acc 的测度应可取回");
+    assert!(
+        matches!(
+            compound,
+            ConstExpr::BinOp {
+                op: ConstBinOp::Sub,
+                ..
+            }
+        ),
+        "复合测度 n - i 应保留 BinOp(Sub) 结构，不得退化为单变量；实际: {compound:?}"
+    );
+    assert_eq!(
+        checker.measures().len(),
+        2,
+        "只应注入两个测度，实际: {:?}",
+        checker.measures()
+    );
+}
+
+/// RFC-027a §2 —— 未注入时测度表为空（不得凭空产生测度）。
+#[test]
+fn test_no_measures_injected_means_empty_table() {
+    // Arrange / Act
+    let checker = TerminationChecker::new();
+
+    // Assert
+    assert!(
+        checker.measures().is_empty(),
+        "未调用 set_measures 时测度表应为空（默认不检查任何显式测度），\
+         实际: {:?}",
+        checker.measures()
+    );
+}

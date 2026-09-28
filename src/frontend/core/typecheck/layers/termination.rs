@@ -159,6 +159,15 @@ pub struct TerminationChecker {
     /// 空集合 = 无任何精化标注 → 所有循环都不检查（与 RFC 一致）。
     /// 由 `set_refined_vars` 注入；未注入时保持空集，即「不检查」。
     refined_vars: std::collections::HashSet<String>,
+    /// 显式测度表：绑定/函数名 → 测度表达式（RFC-027a §2）。
+    ///
+    /// 由 `set_measures` 注入，调用方（`TypeChecker`）从 **AST** 提取——
+    /// 不走已解析的 `MonoType`（那是有损转换，T1 调查中它把测度表达式丢成
+    /// `Int(64)`）。
+    ///
+    /// 空表 = 源码里没有任何 `Terminates(m)` 标注。
+    measures:
+        std::collections::HashMap<String, crate::frontend::core::types::const_data::ConstExpr>,
 }
 
 impl Default for TerminationChecker {
@@ -175,7 +184,35 @@ impl TerminationChecker {
             #[cfg(not(target_arch = "wasm32"))]
             solver: None,
             refined_vars: std::collections::HashSet::new(),
+            measures: std::collections::HashMap::new(),
         }
+    }
+
+    /// 注入显式测度表（RFC-027a §2）。
+    ///
+    /// 键是**被标注的绑定名或函数名**：函数返回类型位的 `Terminates(b)` 挂在
+    /// 函数名下（`gcd`），变量绑定位的 `Terminates(n - i)` 挂在绑定名下（`acc`）。
+    /// 值是该测度的 `ConstExpr` 无损形态——复合测度（`n - i`）必须完整保留，
+    /// 压成单变量会让 SMT 拿到错误的测度。
+    pub fn set_measures(
+        mut self,
+        measures: std::collections::HashMap<
+            String,
+            crate::frontend::core::types::const_data::ConstExpr,
+        >,
+    ) -> Self {
+        self.measures = measures;
+        self
+    }
+
+    /// 读取已注入的显式测度表（RFC-027a §2）。
+    ///
+    /// 供义务生成（T3）按被标注名查测度；亦供测试断言注入是否生效。
+    pub fn measures(
+        &self
+    ) -> &std::collections::HashMap<String, crate::frontend::core::types::const_data::ConstExpr>
+    {
+        &self.measures
     }
 
     /// 注入带精化标注的变量名集合（RFC-027 §7 验证模式的判据）

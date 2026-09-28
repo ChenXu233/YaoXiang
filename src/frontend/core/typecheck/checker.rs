@@ -1098,9 +1098,13 @@ impl TypeChecker {
         // §7 验证模式门控：只有带精化标注的变量参与「度量变量」判定，裸 `while`
         // 不进验证模式。此处先收集精化变量名，再注入检查器。
         let refined_vars = self.collect_refined_var_names(module);
+        // RFC-027a §2：显式测度（`Terminates(m)`）从 AST 提取后注入，供义务
+        // 生成按被标注名查测度。与 `refined_vars` 同源（同一遍 AST 遍历）。
+        let measures = self.collect_termination_measures(module);
         let term_results = {
             let mut term_checker = super::layers::termination::TerminationChecker::new()
-                .set_refined_vars(refined_vars);
+                .set_refined_vars(refined_vars)
+                .set_measures(measures);
             term_checker.check_module(module, self.env())
         };
         for result in term_results {
@@ -4062,6 +4066,149 @@ impl TypeChecker {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// 收集全模块的**显式测度**表：被标注的绑定/函数名 → 测度表达式（RFC-027a §2）。
+    ///
+    /// 从 **AST** 提取而不从已解析的 `MonoType` 取：`MonoType::from` 是有损
+    /// 转换，T1 调查中它把 `Terminates(b)` 的测度解析成 `Int(64)`，测度表达式
+    /// 在到达消费端前就丢了。AST 是测度的无损来源。
+    ///
+    /// 两种标注位都收（RFC-027a §2.1）：
+    /// - 函数返回类型位 `gcd: (a: Int, b: Int) -> Terminates(b)` → 键 `gcd`
+    /// - 变量绑定位 `acc: Terminates(n - i) = ...` → 键 `acc`
+    ///
+    /// 无 `Terminates` 标注时返回空表。
+    pub(crate) fn collect_termination_measures(
+        &self,
+        module: &Module,
+    ) -> std::collections::HashMap<String, crate::frontend::core::types::const_data::ConstExpr>
+    {
+        let mut measures = std::collections::HashMap::new();
+        for stmt in &module.items {
+            self.collect_termination_measures_in_stmt(stmt, &mut measures);
+        }
+        measures
+    }
+
+    /// 递归收集单条语句中的显式测度（含函数体内的嵌套绑定）
+    fn collect_termination_measures_in_stmt(
+        &self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+        measures: &mut std::collections::HashMap<
+            String,
+            crate::frontend::core::types::const_data::ConstExpr,
+        >,
+    ) {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind, Type};
+
+        match &stmt.kind {
+            StmtKind::Assign {
+                target,
+                type_annotation: Some(type_ann),
+                value,
+                ..
+            } => {
+                if let Expr::Var(name, _) = target.as_ref() {
+                    // 函数签名形态：测度在返回类型位
+                    let annotated = match type_ann {
+                        Type::Fn { return_type, .. } => return_type.as_ref(),
+                        other => other,
+                    };
+                    if let Some(measure) = Self::terminates_measure(annotated) {
+                        measures.insert(name.clone(), measure);
+                    }
+                }
+                // 函数体内的嵌套绑定同样计入
+                if let Some(expr) = value.as_deref() {
+                    self.collect_termination_measures_in_expr(expr, measures);
+                }
+            }
+            StmtKind::Expr(expr) => self.collect_termination_measures_in_expr(expr, measures),
+            StmtKind::If {
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                for s in &then_branch.stmts {
+                    self.collect_termination_measures_in_stmt(s, measures);
+                }
+                for (_, body) in else_if_branches {
+                    for s in &body.stmts {
+                        self.collect_termination_measures_in_stmt(s, measures);
+                    }
+                }
+                if let Some(eb) = else_branch {
+                    for s in &eb.stmts {
+                        self.collect_termination_measures_in_stmt(s, measures);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 递归收集表达式内的显式测度（块/循环体/函数体）
+    fn collect_termination_measures_in_expr(
+        &self,
+        expr: &crate::frontend::core::parser::ast::Expr,
+        measures: &mut std::collections::HashMap<
+            String,
+            crate::frontend::core::types::const_data::ConstExpr,
+        >,
+    ) {
+        use crate::frontend::core::parser::ast::Expr;
+
+        match expr {
+            Expr::Block(block) => {
+                for s in &block.stmts {
+                    self.collect_termination_measures_in_stmt(s, measures);
+                }
+            }
+            Expr::While { body, .. } | Expr::For { body, .. } => {
+                for s in &body.stmts {
+                    self.collect_termination_measures_in_stmt(s, measures);
+                }
+            }
+            Expr::Lambda { body, .. } => {
+                for s in &body.stmts {
+                    self.collect_termination_measures_in_stmt(s, measures);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 从类型注解中取出 `Terminates(m)` 的测度表达式 `m`（RFC-027a §2）。
+    ///
+    /// 只认一元形态；非 `Terminates` 或元数不符返回 `None`（元数错误由
+    /// `resolve_type_annotation` 报 E1093，此处不重复报）。
+    ///
+    /// 测度实参在 AST 里两种形态（探针实测）：
+    /// - `Type::Name` —— 单变量测度（`Terminates(b)`）
+    /// - `Type::ConstExpr` —— 表达式测度（`Terminates(n - i)`）
+    ///
+    /// `Type::Generic` 形态（`Terminates(f(n))`，解析器读作类型应用）不是测度
+    /// 表达式，需要 const fn 求值才能定值，暂不支持——返回 `None` 而非猜一个值。
+    fn terminates_measure(
+        ty: &crate::frontend::core::parser::ast::Type
+    ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
+        use crate::frontend::core::parser::ast::Type;
+        use crate::frontend::core::types::const_data::ConstExpr;
+        use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+
+        let Type::Generic { name, args, .. } = ty else {
+            return None;
+        };
+        if name != "Terminates" || args.len() != 1 {
+            return None;
+        }
+        match &args[0] {
+            Type::Name { name, .. } => Some(ConstExpr::NamedVar(name.clone())),
+            Type::ConstExpr(expr) => convert_expr_to_const_expr(expr),
+            _ => None,
         }
     }
 
