@@ -379,7 +379,7 @@ mod tests {
             .get("std.result")
             .expect("std.result should be registered");
         assert!(m.exports.contains_key("Result"), "yx type export missing");
-        for method in ["is_failure", "success", "residual", "from_error"] {
+        for method in crate::frontend::core::typecheck::operator_interfaces::TRY_METHODS {
             let key = format!("Result.{method}");
             assert!(
                 m.method_bindings.contains_key(&key),

@@ -351,14 +351,10 @@ impl ConstGenericEval {
                 if *b == 0 {
                     Err(ErrorCodeDefinition::const_division_by_zero().build())
                 } else {
-                    // RFC-011b：`%` floor 取模（符号随除数）
-                    let r = a % b;
-                    let adjusted = if r != 0 && (r < 0) != (*b < 0) {
-                        r + b
-                    } else {
-                        r
-                    };
-                    Ok(ConstValue::Int(adjusted))
+                    // RFC-011b：`%` floor 取模（共享实现，见 util::arith）
+                    crate::util::arith::floor_mod_signed(*a, *b)
+                        .map(ConstValue::Int)
+                        .ok_or_else(|| ErrorCodeDefinition::const_division_by_zero().build())
                 }
             }
 

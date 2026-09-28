@@ -74,14 +74,8 @@ impl ArithOp {
             }
             (ArithOp::Mod, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
                 if *b != 0 {
-                    // RFC-011b：`%` floor 取模（符号随除数）
-                    let r = a % b;
-                    let adjusted = if r != 0 && (r < 0) != (*b < 0) {
-                        r + b
-                    } else {
-                        r
-                    };
-                    Some(TypeLevelValue::Int(adjusted))
+                    // RFC-011b：`%` floor 取模（共享实现，见 util::arith）
+                    crate::util::arith::floor_mod_signed(*a, *b).map(TypeLevelValue::Int)
                 } else {
                     None
                 }

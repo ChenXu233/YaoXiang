@@ -55,10 +55,6 @@ pub struct Interpreter {
     /// 用 `Arc` 包裹：跨线程任务可直接共享同一份只读数据，
     /// 无需原先 `SendPtr` 裸指针 + `unsafe impl Send` 的绕道。
     pub(super) image: Arc<Image>,
-    /// RFC-010: 和类型名 → 类型身份 intern 表（同名字符串必得同一 id；
-    /// 预置段 Result/Option 构造时预插固定值，用户段从 SUM_USER_BASE 递增）
-    pub(super) sum_type_intern:
-        std::cell::RefCell<HashMap<String, crate::backends::common::value::TypeId>>,
     /// Heap for dynamic allocation
     pub(super) heap: Heap,
     /// Call stack
@@ -133,7 +129,6 @@ impl Interpreter {
 
         Self {
             image: Arc::new(Image::new()),
-            sum_type_intern: std::cell::RefCell::new(Self::preset_sum_type_intern()),
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             state: ExecutionState::default(),
@@ -194,7 +189,6 @@ impl Interpreter {
 
         Self {
             image,
-            sum_type_intern: std::cell::RefCell::new(Self::preset_sum_type_intern()),
             heap: Heap::new(),
             call_stack: Vec::with_capacity(DEFAULT_MAX_STACK_DEPTH),
             state: ExecutionState::default(),
@@ -841,16 +835,8 @@ impl Interpreter {
                 }
                 // RFC-011b：`%` 为 floor 取模（结果符号跟随除数，Python 语义）——
                 // 语言参考优先级表早已写「乘除取模」，截断余数是违反文档的实现缺陷。
-                // 注意 rem_euclid 是恒非负的欧几里得取模（7 % -3 = 1），不符合本文档语义
-                return self.int_op(fi, dst, "%", l, r, |a, b| {
-                    let r = a.checked_rem(b)?;
-                    let adjusted = if r != 0 && (r < 0) != (b < 0) {
-                        r.checked_add(b)?
-                    } else {
-                        r
-                    };
-                    Some(adjusted)
-                });
+                // 溢出（MIN % -1）由共享实现返回 None → int_op 报整数溢出。
+                return self.int_op(fi, dst, "%", l, r, crate::util::arith::floor_mod_i64);
             }
             (BinaryOp::And, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l & r),
             (BinaryOp::Or, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l | r),
@@ -878,14 +864,8 @@ impl Interpreter {
                 RuntimeValue::Float(l / r)
             }
             (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
-                // RFC-011b：floor 取模（符号随除数），与整数臂语义一致
-                let r0 = l % r;
-                let adjusted = if r0 != 0.0 && (r0 < 0.0) != (r < 0.0) {
-                    r0 + r
-                } else {
-                    r0
-                };
-                RuntimeValue::Float(adjusted)
+                // RFC-011b：floor 取模（符号随除数），与整数臂共享同一实现
+                RuntimeValue::Float(crate::util::arith::floor_mod_f64(l, r))
             }
             // RFC-011b：Int~Float 混合算术（typecheck 层 widening 的运行时对应）
             // ——Int 侧提升为 f64 后运算，与 std.time sleep 的既有先例一致
@@ -914,10 +894,10 @@ impl Interpreter {
                 RuntimeValue::Float(l / r as f64)
             }
             (BinaryOp::Rem, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
-                RuntimeValue::Float(Self::floor_mod_float(l as f64, r))
+                RuntimeValue::Float(crate::util::arith::floor_mod_f64(l as f64, r))
             }
             (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
-                RuntimeValue::Float(Self::floor_mod_float(l, r as f64))
+                RuntimeValue::Float(crate::util::arith::floor_mod_f64(l, r as f64))
             }
             (BinaryOp::Add, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 let mut result = (*l).to_string();
@@ -1089,57 +1069,15 @@ impl Interpreter {
         Ok(())
     }
 
-    /// RFC-011b：floor 取模（结果符号跟随除数，Python % 语义）。
-    /// 注意 rem_euclid 是恒非负的欧几里得取模，不符合文档「取模」语义。
-    /// RFC-010: 和类型名 intern——同名字符串必得同一 TypeId。
-    /// 预置段固定（Result/Option 与 native 常量一致），用户段递增分配。
+    /// RFC-010: 和类型身份——委托到 `TypeId::for_sum_name`（纯函数，无实例状态）。
+    ///
+    /// 见 `TypeId::for_sum_name` 的文档：身份必须是**名字的确定性函数**，
+    /// 不能是「本解释器首次构造顺序」，否则跨 spawn / 跨解释器比较会静默判不等。
     pub(super) fn intern_sum_type(
         &self,
         name: &str,
     ) -> crate::backends::common::value::TypeId {
-        if let Some(id) = self.sum_type_intern.borrow().get(name) {
-            return *id;
-        }
-        let next = crate::backends::common::value::TypeId(
-            self.sum_type_intern
-                .borrow()
-                .values()
-                .map(|t| t.0)
-                .max()
-                .unwrap_or(crate::backends::common::value::TypeId::SUM_USER_BASE)
-                .max(crate::backends::common::value::TypeId::SUM_USER_BASE)
-                + 1,
-        );
-        self.sum_type_intern
-            .borrow_mut()
-            .insert(name.to_string(), next);
-        next
-    }
-
-    /// 预置和类型的固定身份段
-    fn preset_sum_type_intern() -> HashMap<String, crate::backends::common::value::TypeId> {
-        HashMap::from([
-            (
-                "Result".to_string(),
-                crate::backends::common::value::TypeId::RESULT,
-            ),
-            (
-                "Option".to_string(),
-                crate::backends::common::value::TypeId::OPTION,
-            ),
-        ])
-    }
-
-    pub(super) fn floor_mod_float(
-        a: f64,
-        b: f64,
-    ) -> f64 {
-        let r = a % b;
-        if r != 0.0 && (r < 0.0) != (b < 0.0) {
-            r + b
-        } else {
-            r
-        }
+        crate::backends::common::value::TypeId::for_sum_name(name)
     }
 
     /// #304：递归结构相等——vec 类容器（Tuple/List/Array）按内容逐元素比较，

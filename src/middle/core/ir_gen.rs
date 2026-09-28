@@ -293,20 +293,6 @@ struct CurryLayer {
     return_type: ast::Type,
 }
 
-/// RFC-011b：floor 取模（结果符号跟随除数，Python % 语义）。
-/// rem_euclid 是恒非负的欧几里得取模，不符合语言参考「乘除取模」的语义。
-fn floor_mod_float(
-    a: f64,
-    b: f64,
-) -> f64 {
-    let r = a % b;
-    if r != 0.0 && (r < 0.0) != (b < 0.0) {
-        r + b
-    } else {
-        r
-    }
-}
-
 impl AstToIrGenerator {
     /// 创建新的 IR 生成器（带类型信息）
     pub fn new_with_type_result(
@@ -2240,16 +2226,12 @@ impl AstToIrGenerator {
                         B::Add => Some(ConstValue::Int(a.wrapping_add(b))),
                         B::Sub => Some(ConstValue::Int(a.wrapping_sub(b))),
                         B::Mul => Some(ConstValue::Int(a.wrapping_mul(b))),
-                        // RFC-011b：`%` floor 取模（符号随除数；rem_euclid 是
-                        // 恒非负的欧几里得取模，不符语义，故手写调整式）
-                        B::Mod => (b != 0).then(|| {
-                            let r = a % b;
-                            if r != 0 && (r < 0) != (b < 0) {
-                                ConstValue::Int(r + b)
-                            } else {
-                                ConstValue::Int(r)
-                            }
-                        }),
+                        // RFC-011b：`%` floor 取模（共享实现，见 util::arith）。
+                        // 溢出（MIN % -1）折不出 → 返回 None 交给运行时报错。
+                        B::Mod => (b != 0)
+                            .then(|| crate::util::arith::floor_mod_signed(a, b))
+                            .flatten()
+                            .map(ConstValue::Int),
                         B::Eq => Some(ConstValue::Bool(a == b)),
                         B::Neq => Some(ConstValue::Bool(a != b)),
                         B::Lt => Some(ConstValue::Bool(a < b)),
@@ -2275,7 +2257,7 @@ impl AstToIrGenerator {
                         B::Sub => Some(ConstValue::Float(a - b)),
                         B::Mul => Some(ConstValue::Float(a * b)),
                         // RFC-011b：`%` floor 取模（符号随除数）
-                        B::Mod => Some(ConstValue::Float(floor_mod_float(a, b))),
+                        B::Mod => Some(ConstValue::Float(crate::util::arith::floor_mod_f64(a, b))),
                         B::Eq => Some(ConstValue::Bool(a == b)),
                         B::Neq => Some(ConstValue::Bool(a != b)),
                         B::Lt => Some(ConstValue::Bool(a < b)),
@@ -2293,7 +2275,9 @@ impl AstToIrGenerator {
                         B::Add => Some(ConstValue::Float(a as f64 + b)),
                         B::Sub => Some(ConstValue::Float(a as f64 - b)),
                         B::Mul => Some(ConstValue::Float(a as f64 * b)),
-                        B::Mod => Some(ConstValue::Float(floor_mod_float(a as f64, b))),
+                        B::Mod => Some(ConstValue::Float(crate::util::arith::floor_mod_f64(
+                            a as f64, b,
+                        ))),
                         // 比较：混合 Int/Float **不折**，与运行时比较臂（无混合臂）
                         // 及 typecheck 的「比较两侧同型」纪律保持一致（B9）。
                         // 折了会让同一表达式在顶层能编、在函数体内报 E6007。
@@ -2304,7 +2288,9 @@ impl AstToIrGenerator {
                         B::Add => Some(ConstValue::Float(a + b as f64)),
                         B::Sub => Some(ConstValue::Float(a - b as f64)),
                         B::Mul => Some(ConstValue::Float(a * b as f64)),
-                        B::Mod => Some(ConstValue::Float(floor_mod_float(a, b as f64))),
+                        B::Mod => Some(ConstValue::Float(crate::util::arith::floor_mod_f64(
+                            a, b as f64,
+                        ))),
                         // 比较：同上，不折
                         B::Eq | B::Neq | B::Lt | B::Le | B::Gt | B::Ge => None,
                         _ => None,
@@ -5978,13 +5964,24 @@ impl AstToIrGenerator {
             })
         });
         let method_names = base_name.map(|base| {
+            use crate::frontend::core::typecheck::operator_interfaces::TRY_METHODS;
             let qualified = self.registry.std_method_binding_qualified_map();
-            ["is_failure", "residual", "from_error", "success"].map(|m| {
-                let key = format!("{}.{}", base, m);
-                qualified.get(&key).cloned().unwrap_or(key)
-            })
+            // 名字集合的唯一真相源是 `TRY_METHODS`（typecheck 侧注册同表）；
+            // 此处不再手抄一遍，否则改名时两边静默漂移。
+            let names: Vec<String> = TRY_METHODS
+                .iter()
+                .map(|m| {
+                    let key = format!("{}.{}", base, m);
+                    qualified.get(&key).cloned().unwrap_or(key)
+                })
+                .collect();
+            // TRY_METHODS 恒为四元（见 operator_interfaces.rs 定义）
+            match <[String; 4]>::try_from(names) {
+                Ok(arr) => arr,
+                Err(_) => unreachable!("TRY_METHODS 必须是四个方法名"),
+            }
         });
-        let Some([is_failure_name, residual_name, from_error_name, success_name]) = method_names
+        let Some([is_failure_name, success_name, residual_name, from_error_name]) = method_names
         else {
             // typecheck 已保证接收者实现 Try；无类型名属于防御性分支
             return Err(ErrorCodeDefinition::ir_unsupported_pattern("try receiver")

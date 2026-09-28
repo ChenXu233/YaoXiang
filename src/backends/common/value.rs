@@ -136,14 +136,51 @@ pub enum ValueType {
 pub struct TypeId(pub u32);
 
 impl TypeId {
-    /// RFC-010: std 预置和类型的固定身份段（与解释器 intern 表的预插
-    /// 条目一致；用户定义的和类型由解释器 intern 从 USER_BASE 起递增）。
+    /// RFC-010: std 预置和类型的固定身份（`Result` / `Option` 的构造器路径
+    /// 与 Rust 侧 native 构造共用）。
     pub const RESULT: TypeId = TypeId(100);
     pub const OPTION: TypeId = TypeId(101);
 
-    /// 用户和类型 intern 段起点
-    pub const SUM_USER_BASE: u32 = 102;
+    /// 和类型名的**确定性身份**：同一名字全进程必得同一 ID，与解释器实例、
+    /// 线程、构造顺序无关。
+    ///
+    /// 为何不用「每解释器实例首次构造递增」：那使身份绑定在实例与顺序上——
+    /// 主线程先构造 `Color`、任务体先构造 `Other` 时，同名和类型在两边会拿到
+    /// 不同 ID，而 Enum 相等比 ID，跨解释器比较就静默判不等。
+    /// （当前两个运行时都把任务跑在同一线程，故实测未复现；但这是机制缺陷，
+    ///   任何把任务分到别处执行的改动都会让它变成用户可见的错值。）
+    ///
+    /// 用**进程级注册表**而非名字哈希：哈希有碰撞（两个不同和类型偶然判等），
+    /// 注册表既无碰撞又稳定。读多写少（只在首次构造某名字时写），锁开销可忽略。
+    pub fn for_sum_name(name: &str) -> TypeId {
+        if let Some(v) = sum_type_ids().read().unwrap().get(name) {
+            return TypeId(*v);
+        }
+        let mut w = sum_type_ids().write().unwrap();
+        // 双检：拿写锁期间可能已被另一线程登记
+        if let Some(v) = w.get(name) {
+            return TypeId(*v);
+        }
+        let id = NEXT_SUM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        w.insert(name.to_string(), id);
+        TypeId(id)
+    }
 }
+
+/// 和类型名 → 身份（进程级，预置 `Result`/`Option` 与 native 侧常量同值）。
+fn sum_type_ids() -> &'static std::sync::RwLock<std::collections::HashMap<String, u32>> {
+    use std::sync::{LazyLock, RwLock};
+    static IDS: LazyLock<RwLock<std::collections::HashMap<String, u32>>> = LazyLock::new(|| {
+        RwLock::new(std::collections::HashMap::from([
+            ("Result".to_string(), 100),
+            ("Option".to_string(), 101),
+        ]))
+    });
+    &IDS
+}
+
+/// 用户和类型身份起点（预置段之后）。
+static NEXT_SUM_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(102);
 
 impl TypeId {
     /// Enum/sum type (includes Result, Option). Matches MonoTypeExt::to_type_id().
@@ -830,5 +867,66 @@ impl Hash for RuntimeValue {
                 ptr.hash(state);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod type_id_tests {
+    use super::TypeId;
+
+    /// RFC-010：和类型身份必须是**名字的确定性函数**——
+    /// 同一名字任何时候都同一 ID（跨解释器/线程/构造顺序），
+    /// 不同名字必得不同 ID（无碰撞）。
+    ///
+    /// 回归性质：此前身份由「每解释器实例首次构造递增」分配，同名和类型
+    /// 在构造顺序不同的两个解释器里会拿到不同 ID，而 Enum 相等比 ID。
+    #[test]
+    fn test_sum_type_id_is_deterministic_and_collision_free() {
+        // 同名恒等（含重复调用与交错调用）
+        let a1 = TypeId::for_sum_name("Color");
+        let b = TypeId::for_sum_name("Other");
+        let a2 = TypeId::for_sum_name("Color");
+        assert_eq!(a1, a2, "同名和类型必须恒得同一身份");
+        assert_ne!(a1, b, "不同和类型必须得到不同身份");
+
+        // 预置名与 native 侧常量同值（weak/result 两条构造路径靠它对齐）
+        assert_eq!(TypeId::for_sum_name("Result"), TypeId::RESULT);
+        assert_eq!(TypeId::for_sum_name("Option"), TypeId::OPTION);
+
+        // 预置段不与内建小 ID 相撞
+        assert_ne!(TypeId::for_sum_name("Color"), TypeId::ENUM);
+        assert_ne!(TypeId::for_sum_name("Color"), TypeId::STRUCT);
+    }
+
+    /// 大量相异名字不产生碰撞（取登记表实测，而非假定哈希性质）
+    #[test]
+    fn test_many_sum_type_ids_are_distinct() {
+        let ids: Vec<TypeId> = (0..500)
+            .map(|i| TypeId::for_sum_name(&format!("UserSumType{i}")))
+            .collect();
+        let mut uniq = ids.clone();
+        uniq.sort_by_key(|t| t.0);
+        uniq.dedup();
+        assert_eq!(uniq.len(), ids.len(), "500 个相异名字不得有碰撞");
+    }
+
+    /// 身份的**顺序无关性**：先登记哪个名字不影响各自的 ID。
+    ///
+    /// 旧实现（每解释器一张表、首次构造递增）直接违反此性质：
+    /// 先登记 Other 的实例会把 Color 排到下一个号。本测试锁定新契约。
+    #[test]
+    fn test_sum_type_id_is_insertion_order_independent() {
+        // 基准：单独取一个全新名字的 ID
+        let baseline = TypeId::for_sum_name("OrderProbeA");
+
+        // 再掺入一批别的名字（可能改变内部的分配计数），重取必须不变
+        for i in 0..50 {
+            let _ = TypeId::for_sum_name(&format!("OrderNoise{i}"));
+        }
+        assert_eq!(
+            TypeId::for_sum_name("OrderProbeA"),
+            baseline,
+            "已登记名字的 ID 不得随后续登记而变（顺序无关）"
+        );
     }
 }

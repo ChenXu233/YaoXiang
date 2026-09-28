@@ -1,5 +1,6 @@
 //! Utility types and functions
 
+pub mod arith;
 pub mod cache;
 pub mod config;
 pub mod diagnostic;
