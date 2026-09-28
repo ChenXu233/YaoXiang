@@ -179,18 +179,27 @@ use foo.bar.baz;
 查找顺序:
 1. ./src/foo/bar/baz.yx     本地模块 —— 最高优先级，可覆盖核心源中的同名模块
 2. <核心包源>/foo/bar/baz.yx
-   · vendor 模式: .yaoxiang/vendor/<pkg>-<ver>/src/foo/bar/baz.yx（std 也在 vendor 内）
+   · vendor 模式: .yaoxiang/vendor/<pkg>-<ver>/src/foo/bar/baz.yx（2026-09-28 修订：std 不在 vendor 内，见项目模式规则）
    · 全局模式:   <install-dir>/yx/<ver>/std/foo/bar/baz.yx + ~/.yaoxiang/cache/...
-3. std.* 专属兜底: 嵌入二进制（仅 std.* 命名空间；文件系统 std 落地前的过渡层，版本绑定编译器）
+3. std.* 专属兜底: 嵌入二进制（仅 std.* 命名空间；2026-09-28 修订：正式机制，见项目模式规则）
 4. 报错（模块不存在）；vendor 模式下缺包提示 `yaoxiang install`
 ```
 
 **项目模式规则**：
 
-- `yaoxiang add std@1.0.1` 把 std 作为普通依赖装入 vendor、锁定版本；此时嵌入二进制 std 不再生效（vendor 内 std 优先）
 - vendor 存在但与 `yaoxiang.lock` 不一致时，`run`/`build` 报错并提示 `yaoxiang install`（Node 语义：不静默自动安装）
-- 本地模块覆盖核心源同名模块时，默认发射 W 级诊断提示遮蔽（`--deny-shadowing` 可升级为错误）；覆盖 `std.*` 时诊断文案显式警告
+- 本地模块覆盖核心源同名模块时，默认发射 W 级诊断提示遮蔽（`--deny-shadowing` 可升级为错误）
 - `path` 依赖视同本地模块的延伸，直接按路径解析，不经核心包源
+
+> **2026-09-28 修订：std 不包化（推翻 2026-09-15 决议中的 std 包化部分）。**
+> 嵌入二进制 std 从「过渡兜底」转正为**正式机制**：std 与编译器 ABI 级耦合
+> （native 层/runtime 内建须匹配 VM 布局），按包锁 std 版本会制造「std-1.0.1 +
+> 编译器 1.0.2」式的隐晦错乱；std 漂移的正解是项目级工具链锁定（如需，另议），
+> 而非 std 包。Go/Rust/Python 先例一致——语言自带的 std 跟工具链走。
+> `yaoxiang add std@<ver>` 不可用；`std.*` 为保留命名空间，本地模块不可遮蔽
+> （嵌入 std 无文件形态，遮蔽无从谈起）；RFC-037 的 `.yaoxiang/vendor/std/`
+> 接口文件目录（LSP 查找链第一级）保留，继续承担「查看源码」职责。
+> 顺带修正：本地模块遮蔽的诊断范围即依赖包，不再含 std.* 特例文案。
 
 #### 单文件模式（无 yaoxiang.toml）
 
@@ -231,7 +240,8 @@ use foo.bar.baz;
 
 #### 项目级标准库
 
-> **2026-09-15 决议：不再设独立 `.yaoxiang/std/` 目录。** std 是核心包源中的普通包：`yaoxiang add std@1.0.1` 后落入 `.yaoxiang/vendor/std-<version>/`，与其它依赖同规则管理。原「项目级 std 存在则全局 std 失效」不再需要专门规则——核心包源互斥天然保证。
+> **2026-09-15 决议：不再设独立 `.yaoxiang/std/` 目录。**
+> **2026-09-28 修订：std 不包化**（推理见「项目模式规则」末尾）——std 保持嵌入二进制 + RFC-037 接口文件目录，`add std@<ver>` 不可用，`std.*` 保留不可遮蔽。目录互斥结论（无独立 `.yaoxiang/std/`）维持有效。
 
 ```
 my-project/
@@ -250,7 +260,7 @@ my-project/
 - 嵌入二进制作为兼容层：在文件系统标准库完全落地前，先通过嵌入二进制提供 std 模块
 - 版本目录隔离：`yx/<version>/std/` 使不同版本的标准库共存，不会互相影响
 - std 与普通依赖同机制（add/lock/vendor），无特殊目录、无特殊查找层
-- 单文件模式退回全局 std；vendor 存在时 std 必须来自 vendor（或经显式 `add std@` 锁定）
+- 单文件模式退回全局 std；vendor 存在时 std 同样来自嵌入二进制/接口目录（2026-09-28 修订：std 不包化，不随 vendor）
 
 ### 核心数据结构
 
