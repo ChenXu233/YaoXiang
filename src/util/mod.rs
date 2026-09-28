@@ -11,3 +11,6 @@ pub mod test_markers;
 #[cfg(feature = "cli")]
 pub mod test_runner;
 pub mod time_compat;
+
+#[cfg(test)]
+mod tests;

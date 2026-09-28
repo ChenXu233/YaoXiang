@@ -102,7 +102,7 @@ fn native_weak_new(
 /// `intern_sum_type("Option")` 同值）。此前用 `TypeId::ENUM`（21）——与构造器
 /// 路径的 OPTION（101）不同，于是 `weak.upgrade(w) == Option(Int).none()`
 /// 静默 false（Enum 相等现在比 type_id）。
-fn native_weak_upgrade(
+pub(crate) fn native_weak_upgrade(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
@@ -122,52 +122,5 @@ fn native_weak_upgrade(
             variant_id: 1,
             payload: Box::new(RuntimeValue::Void),
         }),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::backends::common::value::TypeId;
-    use std::sync::Arc;
-
-    /// RFC-010：`weak.upgrade` 产出的 Option 必须带**和构造器路径相同的类型身份**。
-    ///
-    /// 回归 #377 同族缺陷：本函数曾用 `TypeId::ENUM`(21)，而 `Option(T).some/none()`
-    /// 经 `intern_sum_type("Option")` 得 `TypeId::OPTION`(101)。运行时 Enum 相等
-    /// 比 type_id，两条构造路径的 none 因此静默判不等。
-    ///
-    /// 该缺陷无法从 .yx 源码观察（`Arc` 不在值位置类型名白名单里，
-    /// 无法书写 `Option(Arc(Int)).none()` 做对比），故在 Rust 层锁定。
-    #[test]
-    fn test_weak_upgrade_option_type_identity() {
-        // Arrange：构造 none（Arc 已释放）
-        let dead_weak = {
-            let arc_inner: Arc<RuntimeValue> = Arc::new(RuntimeValue::Int(7));
-            RuntimeValue::from_arc_into_weak(RuntimeValue::Arc(arc_inner))
-        };
-        let mut heap = crate::backends::common::Heap::new();
-
-        // Act
-        let none_val = native_weak_upgrade(&[dead_weak], &mut NativeContext::new(&mut heap))
-            .expect("native upgrade");
-
-        // Assert：类型身份必须是 OPTION（与构造器路径同值）
-        match none_val {
-            RuntimeValue::Enum {
-                type_id,
-                variant_id,
-                ..
-            } => {
-                assert_eq!(
-                    type_id,
-                    TypeId::OPTION,
-                    "weak.upgrade 的 Option 必须用 TypeId::OPTION（构造器路径同值），\
-                     否则 weak 的 none 与 Option(T).none() 静默判不等"
-                );
-                assert_eq!(variant_id, 1, "none 是 variant 1");
-            }
-            other => panic!("期望 Enum，实际 {:?}", other),
-        }
     }
 }
