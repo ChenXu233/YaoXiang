@@ -32,6 +32,17 @@ jobs:
           echo "value=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
+      # 必须在 check 之前：workflow_dispatch 手动重发时先清掉旧 tag，
+      # 否则 check 会看到 tag 已存在并把 should_release 置为 false，
+      # 后面所有 job 都跳过，重发永远起不来。
+      - name: Delete existing tag (if any)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="v${{ steps.version.outputs.value }}"
+          git tag -d "$TAG" 2>/dev/null || true
+          git push origin --delete "$TAG" 2>/dev/null || true
+          echo "Tag cleanup complete (was either absent or deleted)"
+
       - name: Check if tag exists
         id: check
         run: |
@@ -43,13 +54,6 @@ jobs:
             echo "Tag $TAG not found, will release"
             echo "should_release=true" >> $GITHUB_OUTPUT
           fi
-      - name: Delete existing tag (if any)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          TAG="v${{ steps.version.outputs.value }}"
-          git tag -d "$TAG" 2>/dev/null || true
-          git push origin --delete "$TAG" 2>/dev/null || true
-          echo "Tag cleanup complete (was either absent or deleted)"
 
   build:
     name: Build Platforms
@@ -174,9 +178,17 @@ jobs:
       - name: Get previous tag
         id: prev-tag
         run: |
-          PREV=$(git tag --sort=-version:refname | head -2 | tail -1)
+          CURRENT="v${{ needs.check-version.outputs.version }}"
+          # 只认 vX.Y.Z 形式的发版 tag。nightly / z3-wasm 这类非版本 tag
+          # 在 version:refname 排序里会被排到版本号前面，用位置取值曾取到
+          # CURRENT 自身（v0.8.2 发版时 --from-tag == --to-tag，提交列表为空）。
+          PREV=$(git tag --list 'v[0-9]*' --sort=-version:refname | grep -vx "$CURRENT" | head -1)
+          if [ -z "$PREV" ]; then
+            echo "::error::No previous release tag found (current: $CURRENT)"
+            exit 1
+          fi
           echo "value=$PREV" >> $GITHUB_OUTPUT
-          echo "Previous tag: $PREV"
+          echo "Previous tag: $PREV (current: $CURRENT)"
 
       - name: Generate commit list with @mentions
         run: |
