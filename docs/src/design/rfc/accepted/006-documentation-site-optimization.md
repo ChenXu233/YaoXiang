@@ -10,7 +10,7 @@ issue: '#130'
 
 # RFC-006: 文档站点建设
 
-> **参考**: 查看 [RFC 模板](RFC_TEMPLATE.md) 了解 RFC 规范。
+> **参考**: 查看 [RFC 模板](../RFC_TEMPLATE.md) 了解 RFC 规范。
 
 ## 摘要
 

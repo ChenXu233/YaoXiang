@@ -1,0 +1,16 @@
+// 06-compile-errors/value_name_as_type_err.yx
+// 覆盖: #371/#372 —— 注解里的类型名校验（值位置名字不得当类型）
+// expect: compile-error E1003
+// 验证: `println` 是值位置的函数名，写在形参注解位必须报 E1003。
+//       此前 check_type_names_in 的值空间豁免写了「任何已声明值」都放行，
+//       `f: (x: println) -> Int` 通过且任意实参都能传——该形参的类型检查
+//       形同虚设。现收窄为只放行编译期值函数（如 Array(Int, factorial(5)))。
+// 状态: ❌ 应编译失败
+
+f: (x: println) -> Int = (x) => 42
+
+main: () -> Void = {
+    y = f("anything")
+}
+
+main()

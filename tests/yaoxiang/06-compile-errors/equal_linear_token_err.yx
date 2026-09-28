@@ -1,0 +1,19 @@
+// 06-compile-errors/equal_linear_token_err.yx
+// 含 &mut 线性令牌字段的记录不可比较（RFC-011b Equal 前置约束：
+// 线性令牌读一次即消耗，无法同时取出两个值来比）
+// expect: compile-error E1101
+// 验证: 编译期拒绝并指明拖后腿的字段；手写 Equal 实例化可覆盖
+// 状态: ❌ 应编译失败
+
+Token: Type = {
+    name: String,
+    lock: &mut Int,
+}
+
+main: () -> Void = {
+    a = Token("x", 1)
+    b = Token("y", 2)
+    if a == b {
+        return
+    }
+}

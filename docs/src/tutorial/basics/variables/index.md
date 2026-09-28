@@ -224,4 +224,4 @@ result = {
 | 类型推断     | HM 算法自动推断，也可以写 `: Type` 明确标注    |
 | 作用域       | 每个 `{}` 创建一个作用域，内可看外，外不可看内 |
 
-接下来你可以继续学习[基本类型](./types.md)的更多细节，或者直接进入[控制流](./control-flow.md)章节。
+接下来你可以继续学习[基本类型](../../../design/formatter/formatting-rules/types.md)的更多细节，或者直接进入[控制流](../../../design/formatter/formatting-rules/control-flow.md)章节。

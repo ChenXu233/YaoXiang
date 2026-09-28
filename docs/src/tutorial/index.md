@@ -52,7 +52,7 @@ description: '系统学习 YaoXiang 核心概念'
 
 如果你是没有编程基础的用户，我们建议你从「零基础入门」开始。
 
-[💡 零基础入门 →](./basics/01-hello-program.md)
+[💡 零基础入门 →](./basics/variables/index.md)
 
 > **💡 提示**：没有编程基础反而是优势——没有其他语言的包袱，能最直接地理解爻象的设计哲学。
 

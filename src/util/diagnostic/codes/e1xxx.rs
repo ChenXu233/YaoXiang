@@ -29,6 +29,12 @@ define_codes!(E1XXX, {
     ("E1030", TypeCheck, false, pattern_non_exhaustive(patterns: &str) => .param("patterns", patterns)),
     // E1031 不可达模式
     ("E1031", TypeCheck, false, unreachable_pattern(pattern: &str) => .param("pattern", pattern)),
+    // E1032 模式重复绑定（RFC-010b：同一模式内同名绑定出现多次）
+    ("E1032", TypeCheck, false, duplicate_pattern_binding(name: &str) => .param("name", name)),
+    // E1033 或模式绑定不一致（RFC-010b：各备选绑定的名字集不同）
+    ("E1033", TypeCheck, false, or_pattern_binding_mismatch() => ),
+    // E1034 结构体模式缺字段（RFC-010b：字段须完整覆盖，`..` 略名未支持）
+    ("E1034", TypeCheck, false, struct_pattern_missing_field(struct_: &str, field: &str) => .param("struct", struct_) .param("field", field)),
     // E1040 不支持的操作
     ("E1040", TypeCheck, false, unsupported_operation(op: &str, type_: &str) => .param("op", op).param("type", type_)),
     // E1041 数组越界
@@ -92,4 +98,20 @@ define_codes!(E1XXX, {
     ("E1101", TypeCheck, false, type_does_not_implement_interface(type_: &str, interface: &str) => .param("type", type_) .param("interface", interface)),
     // E1102 break/continue 出现在循环外（#311：仅 while/for 体内允许循环控制流）
     ("E1102", TypeCheck, false, break_outside_loop(keyword: &str) => .param("keyword", keyword)),
+    // E1103 类型位置的方括号写法（#371）。
+    // `List[Int]` 会被解析成索引表达式 → 占位类型 `<const-expr>`，
+    // 注解处无诊断，错误拖到使用处才爆（且报的是「不可索引」这种无关信息）。
+    // 本码专给这个误解，直接给出正确写法。
+    ("E1103", TypeCheck, true, bracket_in_type_position(name: &str) => .param("name", name)),
+    // E1104 接口实现写在了非定义模块（RFC-011b 孤儿规则：实现跟随类型的
+    // 定义模块——`Int` 的定义在核心，只有核心能给 `Int` 登记运算符接口；
+    // 用户只能为本模块定义的类型登记）
+    ("E1104", TypeCheck, false, interface_impl_outside_defining_module(type_: &str, interface: &str) => .param("type", type_) .param("interface", interface)),
+    // E1105 变体构造器被当作字段访问（RFC-010 记录式和类型：变体名升格，
+    // 构造只以 `类型.变体(...)` 调用形态存在，值上无变体数据字段）
+    ("E1105", TypeCheck, false, variant_used_as_field(type_: &str, variant: &str) => .param("type", type_) .param("variant", variant)),
+    // E1106 约束未满足（RFC-011 §5.2 调用点复检）
+    ("E1106", TypeCheck, false, constraint_unsatisfied(type_: &str, param: &str, interface: &str) => .param("type", type_) .param("param", param) .param("interface", interface)),
+    // E1107 方法重载歧义（RFC-011a §3：多候选且无期望类型可区分）
+    ("E1107", TypeCheck, false, ambiguous_method_overload(key: &str, count: usize) => .param("key", key) .param("count", count.to_string())),
 });

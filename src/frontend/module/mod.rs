@@ -70,6 +70,30 @@ pub struct Export {
     /// 重排到声明序。定义方的 `fn_param_names` 只在本模块的 IR 生成器实例里，
     /// 调用方拿不到（`FunctionIR.params` 只有类型没有名字）——所以随导出携带。
     pub param_names: Option<Vec<String>>,
+    /// 类型定义导出载荷（仅 `ExportKind::Type`）：泛型模板 + 和类型变体表 +
+    /// 接口实现登记。
+    ///
+    /// 类型导出曾只携带 `mono_type` 快照——导入方 typecheck 环境的三张表
+    /// （`generic_type_defs` / `sum_types` / `interface_impl_registry`）全部落空，
+    /// 变体构造、match 变体解构在导入方即失败。载荷随导出传播，导入方
+    /// `register_use_export` 据此写入同构的三张表。
+    pub type_payload: Option<TypeDefPayload>,
+}
+
+/// 类型定义导出载荷（见 [`Export::type_payload`]）。
+#[derive(Debug, Clone)]
+pub struct TypeDefPayload {
+    /// 泛型模板（声明序类型参数名 + poly），非泛型类型为 None
+    pub type_def: Option<crate::frontend::core::typecheck::environment::GenericTypeDef>,
+    /// 和类型变体（声明序即 variant_id）；非和类型为空
+    pub sum_variants: Vec<crate::frontend::core::typecheck::environment::SumVariantDef>,
+    /// 类型体内接口应用（`Try(Result(T, E), T, E)` / `Equal` 等）：
+    /// （接口名，实现登记）列表。实参引用声明类型参数的抽象条目原样携带
+    /// （与定义方待决队列同源），具体条目与 finalize 产物同构。
+    pub interface_impls: Vec<(
+        String,
+        crate::frontend::core::typecheck::environment::InterfaceImplEntry,
+    )>,
 }
 
 /// 模块源类型

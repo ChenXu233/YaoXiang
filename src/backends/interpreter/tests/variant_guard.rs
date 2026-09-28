@@ -120,6 +120,8 @@ fn test_variant_tag_guard_rejects_unwrapped_value() {
         entry_point: Some(0),
         init_function: None,
         debug_sources: None,
+        // #368：本用例不涉及索引越界的变量名回溯，空表即可
+        global_names: std::collections::HashMap::new(),
     };
 
     let interp = crate::backends::interpreter::Interpreter::new();

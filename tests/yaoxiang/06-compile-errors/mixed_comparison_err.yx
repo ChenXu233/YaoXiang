@@ -1,0 +1,13 @@
+// 06-compile-errors/mixed_comparison_err.yx
+// 覆盖: RFC-011b —— 混合算术 widening 仅限 Add/Sub/Mul/Div，比较保持「两侧同型」
+// expect: compile-error E1002
+// 验证: `1 < 2.5` 必须编译期拒绝，且**顶层与函数体内行为一致**。
+//       此前常量折叠路径折 Int/Float 混合比较、运行时比较臂却无混合臂：
+//       同一表达式写在顶层折出 true、写在函数体内运行期报 E6007。
+// 状态: ❌ 应编译失败
+
+main: () -> Void = {
+    x = 1 < 2.5
+}
+
+main()

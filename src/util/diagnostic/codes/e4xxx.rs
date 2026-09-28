@@ -27,4 +27,9 @@ define_codes!(E4XXX, {
     ("E4019", Generic, false, type_mismatch_in_proof(expected: &str, found: &str) => .param("expected", expected) .param("found", found)),
     // E4020 需要证明函数来验证约束
     ("E4020", Generic, false, proof_function_required() => ),
+    // E4021 循环终止性无法自动证明
+    // span_exempt=false：位置经 `UnprovenReason::LoopTerminationUnproven { span }`
+    // 从终止检查层透传，诊断指向具体循环。
+    // 无 param：文案全部由 locales 提供，避免在 Rust 侧写死中文而污染其他语言输出。
+    ("E4021", Generic, false, loop_termination_unproven() => ),
 });

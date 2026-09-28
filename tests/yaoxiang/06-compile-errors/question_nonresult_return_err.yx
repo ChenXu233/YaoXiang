@@ -5,6 +5,7 @@
 // 验证: 外层函数返回类型非 Result 时 `expr?` 被拒绝
 // 状态: ✅
 
+use std.result
 use std.string
 
 f: () -> Int = {

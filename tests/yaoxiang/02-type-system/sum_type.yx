@@ -1,0 +1,40 @@
+// 02-type-system/sum_type.yx
+// 覆盖: RFC-010 记录式和类型的变体构造（权威定义节）
+// 验证: 类型限定调用、零载荷变体、载荷类型检查、相等（身份+变体序+载荷）
+// 状态: ✅ 可运行
+
+use std.io
+
+Color: Type = {
+    red: () -> Color,
+    green: () -> Color,
+    blue: () -> Color,
+}
+
+Result: (T: Type, E: Type) -> Type = {
+    ok: (T) -> Result(T, E),
+    err: (E) -> Result(T, E),
+}
+
+main: () -> Void = {
+    // 零载荷变体：函数调用形态
+    c = Color.green()
+
+    // 泛型和类型：类型限定调用，类型自足
+    a = Result(Int, String).ok(5)
+    b = Result(Int, String).ok(5)
+    e = Result(Int, String).err("bad")
+
+    // 相等：身份 + 变体序 + 载荷
+    if a == b {
+        io.println("EQ_OK")
+    }
+    if a != e {
+        io.println("NE_OK")
+    }
+    if c == Color.green() {
+        io.println("ZERO_PAYLOAD_EQ_OK")
+    }
+}
+
+main()

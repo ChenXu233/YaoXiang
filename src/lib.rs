@@ -196,6 +196,14 @@ pub fn build_bytecode_with_options(
     let mut compiler = frontend::Compiler::new();
     let module = compiler.compile_with_source(&source_path_str, &source)?;
 
+    // #368：全局槽位名表在 move 进 codegen 前收集——
+    // 顶层绑定的名字只能从 ModuleIR.globals 取。
+    let global_names: ::std::collections::HashMap<usize, String> = module
+        .globals
+        .iter()
+        .map(|g| (g.index, g.name.clone()))
+        .collect();
+
     // Generate bytecode
     let mut ctx = CodegenContext::new(module);
     ctx.set_generate_debug_info(debug_info);
@@ -207,9 +215,10 @@ pub fn build_bytecode_with_options(
         let mut sources = crate::util::span::SourceMap::new();
         sources.add_file(source_path_str.clone(), source.clone());
         bytecode_file.debug_section = Some(
-            crate::middle::passes::codegen::bytecode::DebugSection::from_sources_and_functions(
+            crate::middle::passes::codegen::bytecode::DebugSection::with_global_names(
                 sources,
                 &bytecode_file.code_section.functions,
+                global_names,
             ),
         );
     }

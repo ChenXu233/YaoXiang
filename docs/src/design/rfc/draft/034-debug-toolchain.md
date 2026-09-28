@@ -381,7 +381,8 @@ spawn {          // Step Over → 跑完整个 spawn 块
 | 交付项 | 状态 | 落地形式 |
 | --- | --- | --- |
 | 源码位置 | 已完成 | 全部 76 个 `Instruction` 变体携带 `span` 字段；`span()` 方法刻意不设通配臂，新增变体漏带 span 即编译失败。位置覆盖 40/41 指令 |
-| 变量名 | 已完成 | `LocalSlot { name, ty, scope_depth }` 挂 `FunctionBody::Code::locals`；`register_local` 生成期就地对写入。`.42` 调试段 v2 携带名字，v1 产物向后兼容读取 |
+| 变量名 | 已完成 | `LocalSlot { name, ty, scope_depth }` 挂 `FunctionBody::Code::locals`；`register_local` 生成期就地对写入。`.42` 调试段 v2 携带名字，v1 产物向后兼容读取。 |
+| 全局槽位名 | 已完成 | `.42` 调试段 v3 携带「槽位号 → 顶层绑定名」表。顶层绑定走 `Operand::Global`，不在任何函数的局部名表里，没这张表就只能报数值、报不出变量名。v1/v2 产物补空表读取 |
 | 类型信息 | 部分 | 槽位已含 `ty`；`TypeAnnotation` 独立元数据未做 |
 | dump 可见性 | 已完成 | `dump` 逐指令输出 `; <file>:<line>:<col>`，并列出 `locals: 名字@槽位` |
 
@@ -479,7 +480,7 @@ spawn {          // Step Over → 跑完整个 spawn 块
 - [RFC-024：基于 spawn 块的并发模型](../accepted/024-concurrency-model.md)
 - [RFC-027：编译期谓词与统一静态验证](../accepted/027-compile-time-evaluation-types.md)
 - [RFC-028：JIT 编译器 — VM 内多级执行引擎](../draft/028-jit-compiler.md)
-- [RFC-030：assert 断言机制](../review/030-assert-mechanism.md)
+- [RFC-030：assert 断言机制](../accepted/030-assert-mechanism.md)
 - [DAP 协议规范](https://microsoft.github.io/debug-adapter-protocol/)
 - [debugpy — Python DAP 实现参考](https://github.com/microsoft/debugpy)
 - [Delve — Go 调试器参考](https://github.com/go-delve/delve)

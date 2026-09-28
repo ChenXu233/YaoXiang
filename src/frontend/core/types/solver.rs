@@ -429,6 +429,22 @@ impl TypeConstraintSolver {
             (MonoType::TypeRef(n), _) if n == "Any" => Ok(()),
             (_, MonoType::TypeRef(n)) if n == "Any" => Ok(()),
 
+            // 非泛型类型的双表示等价：构造器产物 `Generic{Maybe, []}` 与
+            // 注解形态 `TypeRef(Maybe)` 是同一名义类型（RFC-010 记录式和
+            // 类型的构造分支对零参数类型返回零实参 Generic，与 `Maybe.just(..)`
+            // 的返回注解 `-> Maybe` 在此汇合）。空实参限定等价范围，不会
+            // 吞掉真正的 `Generic` 实参不匹配。
+            (MonoType::Generic { name, args }, MonoType::TypeRef(n))
+                if args.is_empty() && name == n =>
+            {
+                Ok(())
+            }
+            (MonoType::TypeRef(n), MonoType::Generic { name, args })
+                if args.is_empty() && name == n =>
+            {
+                Ok(())
+            }
+
             // 类型变量 unify
             (MonoType::TypeVar(v1), MonoType::TypeVar(v2)) => {
                 let v1 = self.find(*v1);

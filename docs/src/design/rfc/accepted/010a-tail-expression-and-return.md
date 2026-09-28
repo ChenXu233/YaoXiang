@@ -16,7 +16,7 @@ issue: '#342'
 >   依赖驱动计算单元
 > - [RFC-007: 函数定义语法统一方案](./007-function-syntax-unification.md) — 代码块返回规则、提前返回
 > - [RFC-038: 语句终止与换行规则](038-statement-termination.md) — 语句与表达式的换行行为
-> - [语言规范 §类型系统](/reference/language-spec/type-system.md) — `Never` 爆炸原理
+> - [语言规范 §类型系统](../../../reference/language-spec/type-system.md) — `Never` 爆炸原理
 
 ## 摘要
 
@@ -338,7 +338,7 @@ clause（`if err { return }`）彻底不可写，只能把函数写成层层嵌�
       均为块值
 - [x] `name = { ... }` 何时是函数、何时是块值绑定——见附录D（内容决定类型）
 - [x] `unsafe {}` / `spawn {}` 改写后的具体形态——两者尾表达式均已实测可用
-- [x] `match` 分支的 `join` 与穷尽性检查的交互（依赖 RFC-039）——已实测：`Never` 分支不参与合并，
+- [x] `match` 分支的 `join` 与穷尽性检查的交互（依赖 RFC-010b）——已实测：`Never` 分支不参与合并，
       多分支 `if` / `match` 的 join 行为正确
 - [x] 空块 `{}` 作为函数体且返回类型非 `Void` 时的诊断文案——复用既有 `E1012`，位置指向注解
 
@@ -429,7 +429,7 @@ d = { "a": 1 }             // 值：Dict（内容自描述）
 ### `{}` 的落位
 
 `Dict` 文法要求至少一个键，`{}` 无内容可依据，故取块结构的零形态 → 空块，值 `Void`。
-空字典用 `dict.new()`。详见 spec [§2.9.1](../.../reference/language-spec/syntax.md)。
+空字典用 `dict.new()`。详见 spec [§2.9.1](../../../reference/language-spec/syntax.md)。
 
 ### 伴随的实现修正
 
@@ -445,6 +445,6 @@ d = { "a": 1 }             // 值：Dict（内容自描述）
 - [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
 - [RFC-038: 语句终止与换行规则](038-statement-termination.md)
 - [RFC-030: assert 断言机制](./030-assert-mechanism.md) — `Never` 的精化类型应用
-- [语言规范 §类型系统](/reference/language-spec/type-system.md) — `Never` / `Void` 的 ⊥ / ⊤ 定位
+- [语言规范 §类型系统](../../../reference/language-spec/type-system.md) — `Never` / `Void` 的 ⊥ / ⊤ 定位
 - [Rust Reference: `!` never type](https://doc.rust-lang.org/reference/types/never.html)
   — 同构的爆炸原理应用

@@ -44,12 +44,25 @@ fn run_yx(
     args: &[&str],
     cwd: &std::path::Path,
 ) -> (i32, String, String) {
-    let output = Command::new(yx_bin())
-        .args(args)
+    run_yx_env(args, cwd, &[])
+}
+
+/// 同上，但可注入环境变量（用于验证 `YAOXIANG_LANG` 语言选择）
+fn run_yx_env(
+    args: &[&str],
+    cwd: &std::path::Path,
+    envs: &[(&str, &str)],
+) -> (i32, String, String) {
+    let mut cmd = Command::new(yx_bin());
+    cmd.args(args)
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+    let output = cmd
         .output()
         .unwrap_or_else(|e| panic!("failed to spawn yaoxiang: {e}"));
     let code = output.status.code().unwrap_or(-1);
@@ -1009,4 +1022,202 @@ fn test_e2e_runtime_bounds_error_omits_clause_for_literals() {
         !combined.contains("()"),
         "无变量名时不应留空子句；combined: {combined:?}"
     );
+}
+
+#[test]
+fn test_e2e_script_mode_top_level_diagnostic_has_span_and_var_name() {
+    // Arrange: #368——顶层语句编入合成函数 `__yx_module_init`。
+    // 此前该函数的调试元数据整段为空：运行期错误既没有 `-->` 源码行，
+    // 也报不出索引变量名（只有数值）。不是函数体内专属问题。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "top_oob.yx",
+        "use std.io\n\na = [1, 2, 3]\ni = 5\nio.println(a[i])\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_ne!(
+        code, 0,
+        "顶层越界应是非零退出；stdout: {stdout:?} stderr: {stderr:?}"
+    );
+    assert!(
+        combined.contains("E6003"),
+        "应报 E6003 索引越界；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("--> "),
+        "顶层语句的错误应带 `-->` 源码位置（此前完全缺失）；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("(i)"),
+        "顶层绑定的索引变量名应可见（走全局槽位名表）；combined: {combined:?}"
+    );
+}
+
+#[test]
+fn test_e2e_script_mode_top_level_for_loop_completes() {
+    // Arrange: #368 附带修复——顶层 `for` 的循环出口跳转目标落在
+    // 初始化序列段尾，`translate_init_sequence` 缺段尾哨兵时该目标查不到，
+    // 偏移停在占位 0 → 运行时 E6007「跳转偏移非法」。
+    // 函数体内的同名循环一直正常，差别只在合成函数的回填表。
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "top_for.yx",
+        "use std.io\n\nfor i in 0..3 {\n    io.println(i)\n}\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_eq!(code, 0, "顶层 for 应正常跑完；combined: {combined:?}");
+    assert!(
+        !combined.contains("E6007"),
+        "不应出现跳转回填错误 E6007；combined: {combined:?}"
+    );
+    assert!(
+        stdout.contains('0') && stdout.contains('1') && stdout.contains('2'),
+        "循环体应执行三次（0/1/2）；stdout: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_e2e_bin_mode_top_level_statement_is_user_error() {
+    // Arrange: 规范 §3.11——Bin 角色（有 yaoxiang.toml）顶层不允许可执行语句。
+    // 这是**文档化的用户写法错误**，必须报可行动的编译错误；
+    // 此前它挨 E3005「IR 内部错误，请报告此问题」并把 `Discriminant(N)` 泄给用户，
+    // 既指错方向又误导提单（同族：#360 索引赋值、#311 break）。
+    let tmp = TempDir::new().unwrap();
+    std::fs::write(
+        tmp.path().join("yaoxiang.toml"),
+        "[package]\nname = \"bintl\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use std.io\n\nio.println(\"top level\")\n\nmain: () -> Void = {\n    io.println(\"main\")\n}\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_ne!(code, 0, "编译应失败；combined: {combined:?}");
+    assert!(
+        combined.contains("E3023"),
+        "应报专门的 E3023 顶层语句错误码；combined: {combined:?}"
+    );
+    assert!(
+        !combined.contains("E3005"),
+        "不应再落入 IR 内部错误码 E3005；combined: {combined:?}"
+    );
+    assert!(
+        !combined.contains("Discriminant"),
+        "不应把内部判别式泄给用户；combined: {combined:?}"
+    );
+    assert!(
+        !combined.contains("please report this issue"),
+        "用户写法错误不应叫用户提单；combined: {combined:?}"
+    );
+}
+
+#[test]
+fn test_e2e_multifile_init_failure_points_at_owning_file() {
+    // Arrange: #368 遗留项——多文件下各文件的初始化序列被拼成一条 `init`，
+    // 而 `Instruction` 只带 Span（行/列）不带文件。没有逐条 file_id 表时，
+    // 所有段的错误都指向同一个（错的）文件：用户按报出的位置去看，
+    // 那里根本没有那行代码。
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "mfsrc", "");
+    std::fs::write(tmp.path().join("liba.yx"), "a_val: Int = 1\n").unwrap();
+    // 出错的绑定在第二个库里——报错须指向 libb.yx，而非 main.yx 或 liba.yx。
+    std::fs::write(tmp.path().join("libb.yx"), "b_val: Int = 2 / 0\n").unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use std.assert\nuse liba.{a_val}\nuse libb.{b_val}\n\nmain: () -> Void = {\n    assert.assert(a_val == 1, \"a\")\n}\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+    let combined = format!("{stdout}{stderr}");
+
+    // Assert
+    assert_ne!(
+        code, 0,
+        "libb 的 2 / 0 应让运行失败；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("E6001"),
+        "应报除零错误 E6001；combined: {combined:?}"
+    );
+    assert!(
+        combined.contains("libb.yx"),
+        "报错应指向拥有该绑定的 libb.yx；combined: {combined:?}"
+    );
+    assert!(
+        !combined.contains("liba.yx:"),
+        "不应把错误归到 liba.yx；combined: {combined:?}"
+    );
+}
+
+/// `YAOXIANG_LANG` 必须能选中所有随包发布的语言。
+///
+/// 回归：`src/main.rs` 曾硬编码白名单 `["en","zh","zh-x-miao","zh-miao"]`，
+/// `ja`/`ru`/`zh-classical` 被静默丢弃后回落 `en`——译文就在 locales/*.json 里，
+/// 用户却永远看到英文。`zh-miao` 更是个**从未存在**的语言（locales 里只有
+/// `zh-x-miao`）。白名单现已改为从 `i18n::available_langs()` 派生。
+#[test]
+fn test_e2e_yaoxiang_lang_env_selects_every_shipped_language() {
+    // Arrange: 取一个必然报错的源，借错误文案判定实际生效的语言
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "lang_probe.yx",
+        "pick: (xs: List[Int]) -> Int = (xs) => xs[0]\nmain: () -> Void = { }\n",
+    );
+
+    // 每个语言：locales/<lang>.json 里 E1103 template 的特征片段。
+    // 任一语言若被白名单拦掉，就会回落 en——由下面的英文标记断言揭穿。
+    let expectations: &[(&str, &str)] = &[
+        ("zh", "不是类型语法"),
+        ("ja", "は型の構文ではありません"),
+        ("ru", "это не синтаксис типа"),
+        ("zh-classical", "非类型之语法"),
+        ("zh-x-miao", "構文じゃないのにゃ"),
+    ];
+    // en 的 template 特征——它是回落目标，出现即说明语言选择失效
+    let english_marker = "is not type syntax";
+
+    // Act & Assert
+    for (lang, expected_fragment) in expectations {
+        let (_, stdout, stderr) = run_yx_env(
+            &["check", src.to_str().unwrap()],
+            tmp.path(),
+            &[("YAOXIANG_LANG", lang)],
+        );
+        let combined = format!("{stdout}{stderr}");
+
+        assert!(
+            combined.contains("E1103"),
+            "应报 E1103；lang={lang} combined: {combined:?}"
+        );
+        assert!(
+            combined.contains(expected_fragment),
+            "YAOXIANG_LANG={lang} 应显示该语言译文（期望片段 {expected_fragment:?}）；combined: {combined:?}"
+        );
+        assert!(
+            !combined.contains(english_marker),
+            "YAOXIANG_LANG={lang} 不应回落英文；combined: {combined:?}"
+        );
+    }
 }

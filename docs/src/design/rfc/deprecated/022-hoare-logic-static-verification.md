@@ -9,7 +9,7 @@ updated: '2026-06-07（废弃：被编译期求值类型体系取代）'
 > **⚠️ 已废弃 (DEPRECATED)**
 >
 > 本 RFC 已被
-> **[RFC-027：编译期求值类型与统一静态验证](../review/027-compile-time-evaluation-types.md)** 取代。
+> **[RFC-027：编译期求值类型与统一静态验证](../accepted/027-compile-time-evaluation-types.md)** 取代。
 >
 > **废弃原因**：022 将规约设计为 `//!`
 > 注释形式的外挂语法，这与 Curry-Howard 同构的根本原则相悖——"没有 `//! `
@@ -327,9 +327,9 @@ postcondition 演算，结合循环不变式，生成一阶逻辑公式。生成
 
 ## 参考文献
 
-- [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
-- [RFC-011: 泛型系统设计](./011-generic-type-system.md)
-- [RFC-009: 所有权模型](./009-ownership-model.md)
+- [RFC-010: 统一类型语法](../accepted/010-unified-type-syntax.md)
+- [RFC-011: 泛型系统设计](../accepted/011-generic-type-system.md)
+- [RFC-009: 所有权模型](../accepted/009-ownership-model.md)
 - [JML Reference Manual](https://www.openjml.org/)
 - [The SPARK Toolset](https://www.adacore.com/about-spark)
 - [Z3 SMT Solver](https://github.com/Z3Prover/z3)

@@ -21,7 +21,7 @@ const DEBUG_SECTION_MAGIC: u32 = 0x59584442; // 'Y' 'X' 'D' 'B'
 /// 调试段格式版本。
 /// v1: 源文件表 + 每函数 ip→span 映射
 /// v2: 追加每函数局部变量名表（与 v1 布局向后兼容读取，见 decode）
-const DEBUG_SECTION_VERSION: u32 = 2;
+const DEBUG_SECTION_VERSION: u32 = 3;
 
 /// 字节码文件结构
 #[derive(Debug, Clone)]
@@ -82,6 +82,12 @@ pub struct DebugSection {
     pub function_debug_maps: Vec<HashMap<usize, DebugSpan>>,
     /// 每函数的局部变量名表，与 `function_debug_maps` 平行（同一函数序号）
     pub function_local_names: Vec<HashMap<usize, String>>,
+    /// 全局槽位名表（槽位号 → 顶层绑定名）。
+    ///
+    /// #368：顶层绑定走 `Operand::Global`，不在任何函数的局部名表里；
+    /// 没有这张表，顶层 `a[i]` 的越界诊断只能报数值、报不出 `i`。
+    /// v3 起才有；v1/v2 产物补空表。
+    pub global_names: HashMap<usize, String>,
 }
 
 impl DebugSection {
@@ -89,12 +95,22 @@ impl DebugSection {
         sources: SourceMap,
         functions: &[FunctionCode],
     ) -> Self {
+        Self::with_global_names(sources, functions, HashMap::new())
+    }
+
+    /// 带全局槽位名表的构造（#368）。
+    pub fn with_global_names(
+        sources: SourceMap,
+        functions: &[FunctionCode],
+        global_names: HashMap<usize, String>,
+    ) -> Self {
         let function_debug_maps = functions.iter().map(|f| f.debug_map.clone()).collect();
         let function_local_names = functions.iter().map(|f| f.local_names.clone()).collect();
         Self {
             sources,
             function_debug_maps,
             function_local_names,
+            global_names,
         }
     }
 
@@ -135,6 +151,16 @@ impl DebugSection {
             }
         }
 
+        // v3：全局槽位名表（排序保证字节确定）
+        let mut globals: Vec<(usize, &String)> =
+            self.global_names.iter().map(|(k, v)| (*k, v)).collect();
+        globals.sort_by_key(|(idx, _)| *idx);
+        out.write_all(&(globals.len() as u32).to_le_bytes())?;
+        for (idx, name) in globals {
+            out.write_all(&(idx as u32).to_le_bytes())?;
+            write_string(&mut out, name)?;
+        }
+
         Ok(out)
     }
 
@@ -142,8 +168,8 @@ impl DebugSection {
         let mut cursor = io::Cursor::new(bytes);
 
         let version = read_u32(&mut cursor)?;
-        // 接受 v1 与 v2：v1 无局部名表，读完后补空表，读取路径不得 panic。
-        if version != 1 && version != DEBUG_SECTION_VERSION {
+        // 接受 v1/v2/v3：v1 无局部名表、v2 无全局名表，读完补空表，读取路径不得 panic。
+        if !(1..=DEBUG_SECTION_VERSION).contains(&version) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unsupported debug section version: {version}"),
@@ -192,10 +218,25 @@ impl DebugSection {
             vec![HashMap::new(); func_count]
         };
 
+        // v3 起才有全局槽位名表；v1/v2 产物补空表（#368）
+        let global_names = if version >= 3 {
+            let count = read_u32(&mut cursor)? as usize;
+            let mut map = HashMap::with_capacity(count);
+            for _ in 0..count {
+                let idx = read_u32(&mut cursor)? as usize;
+                let name = read_string(&mut cursor)?;
+                map.insert(idx, name);
+            }
+            map
+        } else {
+            HashMap::new()
+        };
+
         Ok(Self {
             sources,
             function_debug_maps,
             function_local_names,
+            global_names,
         })
     }
 

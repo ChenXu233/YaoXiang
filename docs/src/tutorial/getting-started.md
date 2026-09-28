@@ -354,12 +354,12 @@ match result {
 
 ## 下一步
 
-- 📚 查看 [语言规范](../YaoXiang-language-specification.md) 了解完整语法
-- 🏗️ 浏览 [架构文档](../architecture/) 了解实现细节
-- 💡 查看 [设计宣言](../YaoXiang-design-manifesto.md) 了解核心理念
+- 📚 查看 [语言规范](../reference/language-spec/index.md) 了解完整语法
+- 🏗️ 浏览 [设计文档](../design/) 了解实现细节
+- 💡 查看 [设计宣言](../design/manifesto.md) 了解核心理念
 
 ## 相关资源
 
 - [GitHub 仓库](https://github.com/yourusername/yaoxiang)
 - [Issue 反馈](https://github.com/yourusername/yaoxiang/issues)
-- [贡献指南](../guides/dev/)
+- [贡献指南](../dev/contributing.md)

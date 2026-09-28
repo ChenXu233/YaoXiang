@@ -136,6 +136,53 @@ pub enum ValueType {
 pub struct TypeId(pub u32);
 
 impl TypeId {
+    /// RFC-010: std 预置和类型的固定身份（`Result` / `Option` 的构造器路径
+    /// 与 Rust 侧 native 构造共用）。
+    pub const RESULT: TypeId = TypeId(100);
+    pub const OPTION: TypeId = TypeId(101);
+
+    /// 和类型名的**确定性身份**：同一名字全进程必得同一 ID，与解释器实例、
+    /// 线程、构造顺序无关。
+    ///
+    /// 为何不用「每解释器实例首次构造递增」：那使身份绑定在实例与顺序上——
+    /// 主线程先构造 `Color`、任务体先构造 `Other` 时，同名和类型在两边会拿到
+    /// 不同 ID，而 Enum 相等比 ID，跨解释器比较就静默判不等。
+    /// （当前两个运行时都把任务跑在同一线程，故实测未复现；但这是机制缺陷，
+    ///   任何把任务分到别处执行的改动都会让它变成用户可见的错值。）
+    ///
+    /// 用**进程级注册表**而非名字哈希：哈希有碰撞（两个不同和类型偶然判等），
+    /// 注册表既无碰撞又稳定。读多写少（只在首次构造某名字时写），锁开销可忽略。
+    pub fn for_sum_name(name: &str) -> TypeId {
+        if let Some(v) = sum_type_ids().read().unwrap().get(name) {
+            return TypeId(*v);
+        }
+        let mut w = sum_type_ids().write().unwrap();
+        // 双检：拿写锁期间可能已被另一线程登记
+        if let Some(v) = w.get(name) {
+            return TypeId(*v);
+        }
+        let id = NEXT_SUM_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        w.insert(name.to_string(), id);
+        TypeId(id)
+    }
+}
+
+/// 和类型名 → 身份（进程级，预置 `Result`/`Option` 与 native 侧常量同值）。
+fn sum_type_ids() -> &'static std::sync::RwLock<std::collections::HashMap<String, u32>> {
+    use std::sync::{LazyLock, RwLock};
+    static IDS: LazyLock<RwLock<std::collections::HashMap<String, u32>>> = LazyLock::new(|| {
+        RwLock::new(std::collections::HashMap::from([
+            ("Result".to_string(), 100),
+            ("Option".to_string(), 101),
+        ]))
+    });
+    &IDS
+}
+
+/// 用户和类型身份起点（预置段之后）。
+static NEXT_SUM_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(102);
+
+impl TypeId {
     /// Enum/sum type (includes Result, Option). Matches MonoTypeExt::to_type_id().
     pub const ENUM: TypeId = TypeId(21);
     /// Struct/record type (includes Error). Matches MonoTypeExt::to_type_id().

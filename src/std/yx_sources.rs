@@ -12,6 +12,8 @@
 pub const STD_YX_FILES: &[(&str, &str)] = &[
     ("std/list.yx", include_str!("list.yx")),
     ("std/test.yx", include_str!("test.yx")),
+    ("std/result.yx", include_str!("result.yx")),
+    ("std/option.yx", include_str!("option.yx")),
 ];
 
 /// use 路径（`std.test`）查嵌入源；未命中（native 模块或用户模块）返回 None。
@@ -63,8 +65,12 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
 
     for stmt in &parsed.module.items {
         match &stmt.kind {
-            parser::ast::StmtKind::TypeDefinition { name, .. } => {
+            parser::ast::StmtKind::TypeDefinition {
+                name, definition, ..
+            } => {
                 if let Some(ty) = types.get(name).map(|p| p.body.clone()) {
+                    // 跨模块类型传播：泛型模板 + 和类型变体 + 接口实现随导出携带
+                    let type_payload = checker.type_def_export_payload(name, definition);
                     info.add_export(Export {
                         name: name.clone(),
                         full_path: SymbolTable::qualify(use_path, name),
@@ -73,6 +79,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                         mono_type: Some(ty),
                         type_params: None,
                         param_names: None,
+                        type_payload,
                     });
                 }
             }
@@ -99,6 +106,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             mono_type: Some(ty),
                             type_params: fn_type_params.get(name).cloned(),
                             param_names,
+                            type_payload: None,
                         });
                     }
                 }

@@ -14,12 +14,12 @@ use std.result
 first_of: (n: Int) -> Result(Any, Error) = {
     r = 1..10..n
     it = range.iter(r)?
-    return result.ok(range.next(it))
+    return Result(Any, Error).ok(range.next(it))
 }
 
 contains_low: (n: Int, x: Int) -> Result(Bool, Error) = {
     r = 0..10..n
-    return result.ok(range.contains(r, x)?)
+    return Result(Bool, Error).ok(range.contains(r, x)?)
 }
 
 main: () -> Void = {

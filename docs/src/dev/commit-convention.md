@@ -540,7 +540,7 @@ git config commit.template .gitmessage.txt
 
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [gitmoji](https://gitmoji.carloscuesta.me/)
-- [emoji.md](emoji.md) - Emoji 完整列表
+- [Emoji 完整列表](#完整-emoji-参考)
 - [release.md](release.md) - 发版模板
 
 ---

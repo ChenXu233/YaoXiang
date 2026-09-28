@@ -8,7 +8,7 @@
 use std.result
 
 f: () -> Result(Int, Error) = {
-    return result.ok((1 + 1)?)
+    return Result(Int, Error).ok((1 + 1)?)
 }
 main: () -> Void = {
     print("never")

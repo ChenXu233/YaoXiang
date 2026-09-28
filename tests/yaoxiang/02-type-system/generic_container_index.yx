@@ -1,0 +1,41 @@
+// 02-type-system/generic_container_index.yx
+// 覆盖: RFC-011b Index 接口在**泛型容器**上的端到端——类型体内
+// `Index(Box(T), Int, T)` 注册为模板条目（Self 位引用声明参数），
+// 派发查询按 scrutinee 实参结构对齐绑参（T:=Int / T:=String）。
+// 阶段 1 评论的「Box(T) index 端到端」已知边界就此闭合。
+// 验证:
+//   - 泛型构造 Box(42, 1) → b[0] 派发 Box.index，值类型 T=Int
+//   - 第二类型实参实例 Box("hi", 1) → 同一模板绑 T=String
+//   - 泛型柯里化方法体 self 推断（阶段 1 缺口，议题 1 已修）协同
+// 状态: ✅ 可运行
+
+use std.assert
+
+Box: (T: Type) -> Type = {
+    v: T,
+    n: Int,
+    Index(Box(T), Int, T),
+}
+
+Box.index: (T: Type) -> ((self: &Box(T), i: Int) -> T) = (self, i) => {
+    return self.v
+}
+
+Box.get: (T: Type) -> ((self: &Box(T)) -> T) = (self) => {
+    return self.v
+}
+
+main: () -> Void = {
+    b = Box(42, 1)
+    v = b[0]
+    assert(v == 42, "generic container index, T = Int")
+
+    s = Box("hi", 1)
+    w = s[0]
+    assert(w == "hi", "same template binds T = String")
+
+    g = b.get()
+    assert(g == 42, "generic curried method call")
+}
+
+main()

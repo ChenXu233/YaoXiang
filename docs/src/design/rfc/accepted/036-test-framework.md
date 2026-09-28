@@ -528,5 +528,5 @@ test.assert_err_code(r, "E6009")
 
 - [RFC-014: 包管理系统设计](../accepted/014-package-manager.md) — 标准库目录结构
 - [RFC-015: 配置系统](../accepted/015-configuration-system.md) — `[tool.test]` 配置段
-- [RFC-030: assert 断言机制](../review/030-assert-mechanism.md) — 底层依赖
+- [RFC-030: assert 断言机制](./030-assert-mechanism.md) — 底层依赖
 - [Rust `#[test]` 机制](https://doc.rust-lang.org/book/ch11-01-writing-tests.html) — 参考设计

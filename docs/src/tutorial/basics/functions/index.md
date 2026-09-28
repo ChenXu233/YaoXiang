@@ -369,4 +369,4 @@ result = add(1, b = 2)      // 混用（位置在前）
 - **pub 自动绑定**：`pub` 函数自动绑定到同文件的类型上，支持 `obj.method()` 调用
 - **无参最简**：`name = { ... }`，编译器自动推断为 `() -> Void`
 
-下一步，你可以继续学习[控制流](./control-flow.md)章节，了解如何在函数中使用 `if`、`for` 和 `while`。
+下一步，你可以继续学习[控制流](../../../design/formatter/formatting-rules/control-flow.md)章节，了解如何在函数中使用 `if`、`for` 和 `while`。

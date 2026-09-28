@@ -74,7 +74,8 @@ impl ArithOp {
             }
             (ArithOp::Mod, TypeLevelValue::Int(a), TypeLevelValue::Int(b)) => {
                 if *b != 0 {
-                    Some(TypeLevelValue::Int(a % b))
+                    // RFC-011b：`%` floor 取模（共享实现，见 util::arith）
+                    crate::util::arith::floor_mod_signed(*a, *b).map(TypeLevelValue::Int)
                 } else {
                     None
                 }

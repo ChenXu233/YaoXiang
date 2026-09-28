@@ -2,30 +2,30 @@
 
 > This document is under construction...
 
-YaoXiang is currently in the **experimental validation stage**, with the standard library and API
-being gradually improved.
+YaoXiang is currently in the **experimental validation stage**, with its standard library and API
+being progressively refined.
 
 ## Language Specification
 
 - [Language Specification Overview](./language-spec/index.md)
 - [Syntax Specification](./language-spec/syntax.md) - Lexical structure, grammar rules, operator
   precedence
-- [Type System](./language-spec/type-system.md) - primitive types, composite types, generics, trait
-- [Module System](./language-spec/modules.md) - module definition, import/export, scope
-- [Concurrency Model](./language-spec/concurrency.md) - asynchronous programming, concurrency
+- [Type System](./language-spec/type-system.md) - Basic types, compound types, generics, trait
+- [Module System](./language-spec/modules.md) - Module definitions, imports/exports, scope
+- [Concurrency Model](./language-spec/concurrency.md) - Asynchronous programming, concurrency
   primitives, memory model
-- [Standard Library](./language-spec/stdlib.md) - core library, IO library, math library
+- [Standard Library](./language-spec/stdlib.md) - Core library, IO library, math library
 
 ## Current Status
 
 | Module           | Status         | Description                 |
 | ---------------- | -------------- | --------------------------- |
-| `std.io`         | 🔨 In progress | Input/Output                |
-| `std.string`     | 🔨 In progress | String operations           |
-| `std.list`       | 🔨 In progress | List operations             |
+| `std.io`         | 🔨 In Progress | Input/Output                |
+| `std.string`     | 🔨 In Progress | String operations           |
+| `std.list`       | 🔨 In Progress | List operations             |
 | `std.dict`       | ✅ Implemented | Dictionary operations       |
 | `std.range`      | ✅ Implemented | Ranges and iterators (#302) |
-| `std.math`       | 🔨 In progress | Math functions              |
+| `std.math`       | 🔨 In Progress | Math functions              |
 | `std.net`        | 📋 Planned     | Network operations          |
 | `std.concurrent` | 📋 Planned     | Concurrency primitives      |
 
@@ -33,43 +33,43 @@ being gradually improved.
 
 ### Primitive Types
 
-| Type     | Description            | Example         |
-| -------- | ---------------------- | --------------- |
-| `Void`   | void / no return value | `()`            |
-| `Bool`   | Boolean                | `true`, `false` |
-| `Int`    | Integer                | `42`, `-10`     |
-| `Float`  | Float                  | `3.14`, `-0.5`  |
-| `Char`   | Character              | `'a'`, `'中'`   |
-| `String` | String                 | `"hello"`       |
+| Type     | Description             | Examples        |
+| -------- | ----------------------- | --------------- |
+| `Void`   | Empty value / no return | `()`            |
+| `Bool`   | Boolean                 | `true`, `false` |
+| `Int`    | Integer                 | `42`, `-10`     |
+| `Float`  | Floating-point number   | `3.14`, `-0.5`  |
+| `Char`   | Character               | `'a'`, `'中'`   |
+| `String` | String                  | `"hello"`       |
 
-### Composite Types
+### Compound Types
 
-| Type                 | Description                 | Example        |
-| -------------------- | --------------------------- | -------------- |
-| `Tuple(T1, T2, ...)` | Heterogeneous element tuple | `(1, "hello")` |
-| `(Args) -> Ret`      | Function type               | `(Int) -> Int` |
+| Type                 | Description         | Examples       |
+| -------------------- | ------------------- | -------------- |
+| `Tuple(T1, T2, ...)` | Heterogeneous tuple | `(1, "hello")` |
+| `(Args) -> Ret`      | Function type       | `(Int) -> Int` |
 
 > #299: Container types (`List(T)` / `Vec(T)` / `Array(T, N)` / `Dict(K, V)`) are not built-in
-> primitives — they are generic type constructors, treated the same as user-defined generics, and
-> handled through the unified generics instantiation path. The literal syntax (`[...]` / `{...}`)
-> remains in the core, with placement decided by context annotation. Set has been removed (#300);
-> see the [Language Specification](language-spec/syntax.md) for details.
+> primitives — they are generic type constructors, treated the same as user-defined generics,
+> processed through the unified generic instantiation path. Literal syntax (`[...]` / `{...}`) is
+> retained in the core, with the landing point determined by context annotations. Set has been
+> removed (#300); see [Language Specification](language-spec/syntax.md) for details.
 >
-> The three container concepts are distinguished by where the length information lives:
-> `Array(T, N)` — length in the type (fixed-length), `Vec(T)` — length is a runtime value (raw
-> buffer primitive), `List(T)` — a standard library type (`{ data: Vec(T), length: Int }`, with all
-> strategy in the library).
+> The three container concepts are distinguished by where length information resides: `Array(T, N)`
+> carries length in the type (fixed-length), `Vec(T)` carries length as a runtime value (primitive
+> buffer), and `List(T)` is a standard library type (`{ data: Vec(T), length: Int }`, with all
+> policies in the library).
 
 ### User-Defined Types
 
 ```yaoxiang
-// record type (struct)
+// Record type (struct)
 Point: Type = { x: Float, y: Float }
 
-// enum type
+// Enum type
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// interface type (all fields are functions)
+// Interface type (all fields are functions)
 Callable: Type = { call: (String) -> Void }
 ```
 
@@ -78,50 +78,50 @@ Callable: Type = { call: (String) -> Void }
 ### Output
 
 ```yaoxiang
-print(value)           // print, no newline
-println(value)         // print, with newline
+print(value)           // Print, no newline
+println(value)         // Print, with newline
 ```
 
 ### Conversion
 
 ```yaoxiang
-to_string(value)       // convert to string
-to_int(value)          // convert to integer
-to_float(value)        // convert to float
+to_string(value)       // Convert to string
+to_int(value)          // Convert to integer
+to_float(value)        // Convert to float
 ```
 
-### Type Check
+### Type Checking
 
 ```yaoxiang
-typeof(value)         // return type name
-is_type(value, type)  // check type
+typeof(value)         // Return type name
+is_type(value, type)  // Check type
 ```
 
 ## Keywords
 
-| Keyword                   | Description         |
-| ------------------------- | ------------------- |
-| `Type`                    | meta type           |
-| `spawn`                   | mark spawn function |
-| `spawn for`               | parallel loop       |
-| `spawn {}`                | spawn block         |
-| `if` / `else if` / `else` | conditional branch  |
-| `match`                   | pattern matching    |
-| `while` / `for`           | loop                |
-| `return`                  | return value        |
-| `ref`                     | create reference    |
-| `mut`                     | mutable marker      |
+| Keyword                   | Description           |
+| ------------------------- | --------------------- |
+| `Type`                    | Meta type             |
+| `spawn`                   | Mark spawn function   |
+| `spawn for`               | Parallel loop         |
+| `spawn {}`                | Spawn block           |
+| `if` / `else if` / `else` | Conditional branching |
+| `match`                   | Pattern matching      |
+| `while` / `for`           | Loops                 |
+| `return`                  | Return value          |
+| `ref`                     | Create reference      |
+| `mut`                     | Mutable marker        |
 
-## Syntax Quick Reference
+## Syntax Cheatsheet
 
 ### Variable Declaration
 
 ```yaoxiang
-// immutable variable (default)
+// Immutable variable (default)
 x: Int = 42
-y = 42                 // type inference
+y = 42                 // Type inference
 
-// mutable variable
+// Mutable variable
 mut count: Int = 0
 count = count + 1
 ```
@@ -129,20 +129,20 @@ count = count + 1
 ### Function Definition
 
 ```yaoxiang
-// regular function
+// Regular function
 add: (a: Int, b: Int) -> Int = a + b
 
-// spawn function (automatic concurrency)
+// Spawn function (automatically concurrent)
 fetch: (url: String) -> JSON spawn = HTTP.get(url).json()
 
-// generic function
+// Generic function
 identity: [T](x: T) -> T = x
 ```
 
 ### Control Flow
 
 ```yaoxiang
-// conditional
+// Conditional
 if x > 0 {
     print("positive")
 } else if x < 0 {
@@ -151,13 +151,13 @@ if x > 0 {
     print("zero")
 }
 
-// pattern matching
+// Pattern matching
 match result {
     ok(value) => print("success: " + value),
     err(error) => print("error: " + error),
 }
 
-// loop
+// Loop
 for i in 0..10 {
     print(i)
 }
@@ -172,48 +172,49 @@ data = fetch_file(path)?
 
 ## Operator Precedence
 
-| Precedence | Operator                                 |
-| ---------- | ---------------------------------------- |
-| Highest    | `( )` function call                      |
-|            | `.` field access                         |
-|            | `[ ]` indexing                           |
-|            | `unary -` unary minus                    |
-|            | `* / %` multiplication, division, modulo |
-|            | `+ -` addition, subtraction              |
-|            | `== != < > <= >=` comparison             |
-|            | `and or` logical operations              |
-| Lowest     | `=` assignment                           |
+| Precedence | Operators                                                                                                                                                                             |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Highest    | `( )` function call                                                                                                                                                                   |
+|            | `.` field access                                                                                                                                                                      |
+|            | `[ ]` index                                                                                                                                                                           |
+|            | `unary -` unary negation                                                                                                                                                              |
+|            | `* / %` multiply/divide/modulo                                                                                                                                                        |
+|            | (Operator precedence and associativity are language-fixed; the semantics of `+ - * / %` `== !=` `[]` can be overloaded by types implementing the corresponding interfaces (RFC-011b)) |
+|            | `+ -` addition/subtraction                                                                                                                                                            |
+|            | `== != < > <= >=` comparison                                                                                                                                                          |
+|            | `and or` logical operations                                                                                                                                                           |
+| Lowest     | `=` assignment                                                                                                                                                                        |
 
 ## Standard Library Usage Examples
 
 ```yaoxiang
-// import standard library
+// Import standard library
 use std.io.{print, println}
 
-// list operations
+// List operations
 use std.list.{list_push, list_pop, list_len}
 
-// math functions
+// Math functions
 use std.math.{sqrt, sin, cos, PI}
 
-// usage
+// Usage
 println("Hello, YaoXiang!")
 result = sqrt(16.0)  // 4.0
 ```
 
-## Command-Line Tool
+## Command-line Tool
 
 ```bash
-# run script
+# Run a script
 yx run hello.yx
 
-# build bytecode
+# Build bytecode
 yx build hello.yx -o hello.42
 
-# interpret and execute
+# Interpret execution
 yx eval 'println("Hello")'
 
-# view help
+# View help
 yaoxiang --help
 ```
 
@@ -223,14 +224,14 @@ yaoxiang --help
 use std.convert
 use std.io
 
-// compute Fibonacci sequence
+// Compute Fibonacci sequence
 fib: (n: Int) -> Int = if n <= 1 {
     n
 } else {
     fib(n - 1) + fib(n - 2)
 }
 
-// main function
+// Main function
 main: () -> Void = {
     io.println("Fibonacci(10) = " + convert.to_string(fib(10)))
 }
@@ -238,7 +239,7 @@ main: () -> Void = {
 
 ## Related Resources
 
-- [Tutorials](../tutorial/) - Learn YaoXiang
+- [Tutorial](../tutorial/) - Learn YaoXiang
 - [Design Documents](../design/) - Language design decisions
 - [GitHub](https://github.com/ChenXu233/YaoXiang)
 
@@ -246,7 +247,7 @@ main: () -> Void = {
 
 The standard library is under construction — contributions are welcome!
 
-1. Choose a module (e.g. `std.io`, `std.net`)
+1. Choose a module (e.g., `std.io`, `std.net`)
 2. Implement functions in `src/std/`
 3. Add documentation comments
 4. Submit a PR

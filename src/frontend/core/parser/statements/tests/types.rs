@@ -239,15 +239,23 @@ fn test_generic_multi_arg() {
 
 #[test]
 fn test_option_type() {
+    // RFC-010: 同 test_result_type——普通泛型类型应用
     with_type("Option(Int)", |t| {
-        assert!(matches!(t, Type::Option(..)));
+        assert!(
+            matches!(t, Type::Generic { ref name, ref args, .. } if name == "Option" && args.len() == 1),
+            "Option(Int) should lower to Generic, got {t:?}"
+        );
     });
 }
 
 #[test]
 fn test_result_type() {
+    // RFC-010: Result/Option 不再 lower 成专用 AST 节点——普通泛型类型应用
     with_type("Result(Int, String)", |t| {
-        assert!(matches!(t, Type::Result(..)));
+        assert!(
+            matches!(t, Type::Generic { ref name, ref args, .. } if name == "Result" && args.len() == 2),
+            "Result(Int, String) should lower to Generic, got {t:?}"
+        );
     });
 }
 

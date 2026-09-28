@@ -1,0 +1,26 @@
+// 06-compile-errors/refined_annotation_literal_violates_err.yx
+// 覆盖: RFC-027 §4.2 Phase 2.5 —— 证明函数返回 false 即精化违反（E4018）
+// 验证: 注解里的字面量本身使约束为假时必须报错。
+//       约束的语义是「注解字面量」而非「变量后来的取值」：IsPositive(-5)
+//       断言 -5 > 0，该静态命题为假 → E4018。
+//       （对照：IsPositive(5) = -9999 不报错——5 > 0 为真，与 RHS 无关。）
+// 状态: ❌ 应被编译期拒绝
+//
+// 注：本文件是**编译期拒绝测试**（`// expect: compile-error`），判定契约是
+// 「check 非 0 且输出含预期码」，不执行任何运行期语句——故无 assert.assert。
+//
+// 本用例在 .yx 层而非 typecheck 单测层：证明调用（E4018）由 pipeline.rs 在
+// check_module **之后**执行，单测直调 check_module 看不到该诊断。
+
+// expect: compile-error E4018
+
+use std.io
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+main: () -> Int = {
+    y: IsPositive(-5) = 5
+    y
+}
+
+main()

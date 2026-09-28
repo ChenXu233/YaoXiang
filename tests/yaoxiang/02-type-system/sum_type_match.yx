@@ -1,0 +1,43 @@
+// 02-type-system/sum_type_match.yx
+// 覆盖: RFC-010b match 变体解构（和类型 + 载荷绑定 + 穷尽性）
+// 验证: 裸变体名按 scrutinee 消歧、载荷绑定进臂作用域、兜底臂
+// 状态: ✅ 可运行
+
+use std.io
+
+Result: (T: Type, E: Type) -> Type = {
+    ok: (T) -> Result(T, E),
+    err: (E) -> Result(T, E),
+}
+
+describe: (T: Type, E: Type) -> ((r: Result(T, E), tag: String) -> String) = (r, tag) => {
+    return tag
+}
+
+main: () -> Void = {
+    a = Result(Int, String).ok(21)
+    b = Result(Int, String).err("bad")
+
+    // 载荷绑定：ok 载荷进臂作用域，value * 2 = 42
+    v = match a {
+        ok(value) => value * 2,
+        err(e) => 0,
+    }
+    io.println(v)
+
+    // 各臂结果类型一致
+    msg = match b {
+        ok(x) => "number",
+        err(msg) => msg,
+    }
+    io.println(msg)
+
+    // 通配兜底臂豁免穷尽性
+    tag = match a {
+        ok(x) => "is-ok",
+        other => "not-ok",
+    }
+    io.println(tag)
+}
+
+main()

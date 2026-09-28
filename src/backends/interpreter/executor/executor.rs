@@ -833,7 +833,10 @@ impl Interpreter {
                     // #282：携带触发表达式文本
                     return Err(ExecutorError::division_by_zero(format!("{l} % {r}"), stack));
                 }
-                return self.int_op(fi, dst, "%", l, r, i64::checked_rem);
+                // RFC-011b：`%` 为 floor 取模（结果符号跟随除数，Python 语义）——
+                // 语言参考优先级表早已写「乘除取模」，截断余数是违反文档的实现缺陷。
+                // 溢出（MIN % -1）由共享实现返回 None → int_op 报整数溢出。
+                return self.int_op(fi, dst, "%", l, r, crate::util::arith::floor_mod_i64);
             }
             (BinaryOp::And, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l & r),
             (BinaryOp::Or, RuntimeValue::Int(l), RuntimeValue::Int(r)) => RuntimeValue::Int(l | r),
@@ -861,7 +864,40 @@ impl Interpreter {
                 RuntimeValue::Float(l / r)
             }
             (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
-                RuntimeValue::Float(l % r)
+                // RFC-011b：floor 取模（符号随除数），与整数臂共享同一实现
+                RuntimeValue::Float(crate::util::arith::floor_mod_f64(l, r))
+            }
+            // RFC-011b：Int~Float 混合算术（typecheck 层 widening 的运行时对应）
+            // ——Int 侧提升为 f64 后运算，与 std.time sleep 的既有先例一致
+            (BinaryOp::Add, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l as f64 + r)
+            }
+            (BinaryOp::Add, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Float(l + r as f64)
+            }
+            (BinaryOp::Sub, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l as f64 - r)
+            }
+            (BinaryOp::Sub, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Float(l - r as f64)
+            }
+            (BinaryOp::Mul, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l as f64 * r)
+            }
+            (BinaryOp::Mul, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Float(l * r as f64)
+            }
+            (BinaryOp::Div, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(l as f64 / r)
+            }
+            (BinaryOp::Div, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Float(l / r as f64)
+            }
+            (BinaryOp::Rem, RuntimeValue::Int(l), RuntimeValue::Float(r)) => {
+                RuntimeValue::Float(crate::util::arith::floor_mod_f64(l as f64, r))
+            }
+            (BinaryOp::Rem, RuntimeValue::Float(l), RuntimeValue::Int(r)) => {
+                RuntimeValue::Float(crate::util::arith::floor_mod_f64(l, r as f64))
             }
             (BinaryOp::Add, RuntimeValue::String(l), RuntimeValue::String(r)) => {
                 let mut result = (*l).to_string();
@@ -996,6 +1032,21 @@ impl Interpreter {
                 RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
                 RuntimeValue::Tuple(_) | RuntimeValue::List(_) | RuntimeValue::Array(_),
             ) => RuntimeValue::Bool(!Self::runtime_value_deep_eq(&a, &b)),
+            // RFC-011b：Struct Eq/Ne 逐字段结构相等——Equal 自动派生的运行时
+            // 路径（显式 equal 实例化在 IR 层派发为方法调用，不到这里）
+            (CompareOp::Eq, RuntimeValue::Struct { .. }, RuntimeValue::Struct { .. }) => {
+                RuntimeValue::Bool(Self::runtime_value_deep_eq(&a, &b))
+            }
+            (CompareOp::Ne, RuntimeValue::Struct { .. }, RuntimeValue::Struct { .. }) => {
+                RuntimeValue::Bool(!Self::runtime_value_deep_eq(&a, &b))
+            }
+            // RFC-010：和类型值 Eq/Ne——类型身份 + 变体序 + 载荷递归
+            (CompareOp::Eq, RuntimeValue::Enum { .. }, RuntimeValue::Enum { .. }) => {
+                RuntimeValue::Bool(Self::runtime_value_deep_eq(&a, &b))
+            }
+            (CompareOp::Ne, RuntimeValue::Enum { .. }, RuntimeValue::Enum { .. }) => {
+                RuntimeValue::Bool(!Self::runtime_value_deep_eq(&a, &b))
+            }
             // #302：Range 结构相等（三标量按值比较，PartialEq 已实现）
             (CompareOp::Eq, RuntimeValue::Range { .. }, RuntimeValue::Range { .. }) => {
                 RuntimeValue::Bool(a == b)
@@ -1016,6 +1067,17 @@ impl Interpreter {
 
         self.call_stack[fi].set_slot(dst.0 as usize, result);
         Ok(())
+    }
+
+    /// RFC-010: 和类型身份——委托到 `TypeId::for_sum_name`（纯函数，无实例状态）。
+    ///
+    /// 见 `TypeId::for_sum_name` 的文档：身份必须是**名字的确定性函数**，
+    /// 不能是「本解释器首次构造顺序」，否则跨 spawn / 跨解释器比较会静默判不等。
+    pub(super) fn intern_sum_type(
+        &self,
+        name: &str,
+    ) -> crate::backends::common::value::TypeId {
+        crate::backends::common::value::TypeId::for_sum_name(name)
     }
 
     /// #304：递归结构相等——vec 类容器（Tuple/List/Array）按内容逐元素比较，
@@ -1063,6 +1125,37 @@ impl Interpreter {
             | (RuntimeValue::List(x), RuntimeValue::List(y))
             | (RuntimeValue::Array(x), RuntimeValue::Array(y)) => {
                 items_eq(x, y).unwrap_or_else(|| a == b)
+            }
+            // RFC-010：和类型递归（类型身份 + 变体序 + 载荷）
+            (
+                RuntimeValue::Enum {
+                    type_id: tx,
+                    variant_id: vx,
+                    payload: px,
+                },
+                RuntimeValue::Enum {
+                    type_id: ty,
+                    variant_id: vy,
+                    payload: py,
+                },
+            ) => tx == ty && vx == vy && Self::runtime_value_deep_eq(px, py),
+            // RFC-011b：Struct 逐字段递归（fields 是堆上 Tuple 载体）
+            (
+                RuntimeValue::Struct {
+                    fields: fx,
+                    type_id: tx,
+                    ..
+                },
+                RuntimeValue::Struct {
+                    fields: fy,
+                    type_id: ty_,
+                    ..
+                },
+            ) => {
+                if tx != ty_ {
+                    return false;
+                }
+                items_eq(fx, fy).unwrap_or(false)
             }
             _ => a == b,
         }

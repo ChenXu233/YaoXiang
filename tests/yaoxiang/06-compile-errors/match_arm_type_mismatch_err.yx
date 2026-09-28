@@ -1,0 +1,22 @@
+// 06-compile-errors/match_arm_type_mismatch_err.yx
+// 覆盖: RFC-010b match 变体解构 —— 各臂 body 类型必须互相统一
+// expect: compile-error E1002
+// 验证: `none() => "str"` 在返回 Int 的函数里必须编译期拒绝。
+//       此前 check_match_expr 用 `let _ = unify(...)` 丢弃错误，臂类型不一致
+//       静默通过，与实际声明返回类型不符，拖到运行时才报 E6007。
+// 状态: ❌ 应编译失败
+
+Maybe: Type = {
+    just: (Int) -> Maybe,
+    nothing: () -> Maybe,
+}
+
+main: () -> Void = {
+    m = Maybe.just(1)
+    v: Int = match m {
+        just(x) => x,
+        nothing() => "not an int",
+    }
+}
+
+main()

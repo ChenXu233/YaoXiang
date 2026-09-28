@@ -44,7 +44,7 @@ Rust 社区没有停在原地。生命周期省略规则让大多数简单函数
 
 ## 换个角度：借用不是指针，是令牌
 
-YaoXiang 的核心设计记录在 [RFC-009（所有权模型）](/design/rfc/accepted/009-ownership-model)
+YaoXiang 的核心设计记录在 [RFC-009（所有权模型）](../design/rfc/accepted/009-ownership-model.md)
 中。它没有改变默认语义（都是 Move），而是改变了**借用的本体**。
 
 在 YaoXiang 中，`&T` 和 `&mut T`
@@ -166,7 +166,7 @@ Rust 的 `'a`
 
 ## 令牌冲突检测：同一套证明管道
 
-Rust 有独立的"借用检查器"。YaoXiang 的**设计方向**是把借用冲突统一进类型检查的证明管道（[RFC-027（编译期谓词与统一静态验证）](/design/rfc/accepted/027-compile-time-evaluation-types)）。
+Rust 有独立的"借用检查器"。YaoXiang 的**设计方向**是把借用冲突统一进类型检查的证明管道（[RFC-027（编译期谓词与统一静态验证）](../design/rfc/accepted/027-compile-time-evaluation-types.md)）。
 
 令牌冲突是一条霍尔命题：
 
@@ -301,6 +301,6 @@ DAG 语义）给了编译器更干净的输入，品牌推导也许能在 Rust �
 ---
 
 _YaoXiang 是一个正在开发中的编程语言。所有权模型见
-[RFC-009](/design/rfc/accepted/009-ownership-model)，闭包捕获见
-[RFC-023](/design/rfc/accepted/023-closure-capture-model)，并发模型见
-[RFC-024](/design/rfc/accepted/024-concurrency-model)。_
+[RFC-009](../design/rfc/accepted/009-ownership-model.md)，闭包捕获见
+[RFC-023](../design/rfc/deprecated/023-closure-capture-model.md)，并发模型见
+[RFC-024](../design/rfc/accepted/024-concurrency-model.md)。_

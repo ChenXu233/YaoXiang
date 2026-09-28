@@ -1,0 +1,16 @@
+// 06-compile-errors/sum_type_field_err.yx
+// RFC-010 变体名升格：和类型值的变体构造器不可作为字段访问——
+// 运行时 tagged union 不携带字段表，放行必然静默错译
+// expect: compile-error E1105
+// 验证: 构造用 类型.变体(...)，取回载荷用 match 变体解构（RFC-010b）
+// 状态: ❌ 应编译失败
+
+Color: Type = {
+    red: () -> Color,
+    green: () -> Color,
+}
+
+main: () -> Void = {
+    c = Color.red()
+    x = c.red
+}

@@ -31,6 +31,6 @@ yaoxiang 语言的语法和语义规范文档。
 
 ### 相关资源
 
-- [YaoXiang 指南](../../guide/YaoXiang-book.md) - 教程和示例代码
+- [教程](../../tutorial/index.md) - 入门教程与示例代码
 - [设计文档](../../design/) - 语言设计文档
 - [RFC 文档](../../design/rfc/) - 语言变更提案

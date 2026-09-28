@@ -1,5 +1,5 @@
 ---
-title: "RFC 索引"
+title: 'RFC 索引'
 ---
 
 # YaoXiang RFC（请求评议）索引
@@ -20,9 +20,9 @@ title: "RFC 索引"
 
 ## 模板
 
-| 文件 | 说明 |
-|------|------|
-| [RFC_TEMPLATE.md](RFC_TEMPLATE.md) | RFC标准模板 |
+| 文件                                                                 | 说明                     |
+| -------------------------------------------------------------------- | ------------------------ |
+| [RFC_TEMPLATE.md](RFC_TEMPLATE.md)                                   | RFC标准模板              |
 | [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) | 完整示例（模式匹配增强） |
 
 ---
@@ -38,16 +38,15 @@ title: "RFC 索引"
 | RFC-033 | [RFC-033: `^^` 反射运算符](./draft/033-reflection-operator.md) | 晨煦 | 2026-06-16 | 审核中 |
 | RFC-034 | [RFC-034: 统一调试工具链](./draft/034-debug-toolchain.md) | 晨煦 | 2026-07-06 | 草案 |
 | RFC-035 | [RFC-035: MCP Server 支持（AI Agent 集成）](./draft/035-mcp-server.md) | 晨煦 | 2026-07-11 | 草案 |
-| RFC-039 | [RFC-039: 模式匹配完备化](./draft/039-pattern-matching-completeness.md) | 晨煦 | 2026-09-03 | 草案 |
-| RFC-027a | [RFC-027a: 终止检查的证明函数兜底](./draft/027a-termination-proof-fallback.md) | 晨煦 | 2026-09-14 | 草案 |
+| RFC-027a | [RFC-027a: 终止检查的显式测度](./review/027a-termination-explicit-measure.md) | 晨煦 | 2026-09-14 | 审核中 |
 | RFC-029a | [RFC-029a: 模块缓存与增量重编译](./draft/029a-module-cache-incremental.md) | 晨煦 | 2026-09-07 | 草案 |
 
 ---
 
 ## 审核中RFC
 
-| 编号 | 标题 | 作者 | 创建日期 | 状态 |
-|------|------|------|----------|------|
+| 编号    | 标题                                                                                                | 作者 | 创建日期   | 状态   |
+| ------- | --------------------------------------------------------------------------------------------------- | ---- | ---------- | ------ |
 | RFC-032 | [RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况](./review/032-spawn-unified-expression.md) | 晨煦 | 2026-06-16 | 审核中 |
 
 ---
@@ -64,9 +63,10 @@ title: "RFC 索引"
 | ↳ RFC-009a | [RFC-009a: 令牌生命期分析——基于霍尔证明管道](./accepted/009a-borrow-proof-pipeline.md) | 晨煦 | 2026-06-13 | 已接受 |
 | RFC-010 | [RFC-010: 统一类型语法 - name: type = value 模型](./accepted/010-unified-type-syntax.md) | 晨煦 |  | 已接受 |
 | ↳ RFC-010a | [RFC-010a: 尾表达式求值与 return 语义](./accepted/010a-tail-expression-and-return.md) | 晨煦 | 2026-09-15 | 已接受 |
+| ↳ RFC-010b | [RFC-010b: 模式匹配完备化（变体解构与穷尽性）](./accepted/010b-pattern-matching-completeness.md) | 晨煦 | 2026-09-03 | 已接受 |
 | RFC-011 | [RFC-011: 泛型系统设计 - 零成本抽象与宏替代](./accepted/011-generic-type-system.md) | 晨煦 |  | 已接受 |
 | ↳ RFC-011a | [RFC-011a: 接口实现与动态分发](./accepted/011a-interface-implementation.md) | 晨煦 | 2026-06-14 | 已接受 |
-| ↳ RFC-011b | [RFC-011b: 运算符重载与接口驱动运算符](./draft/011b-operator-overloading.md) | 晨煦 | 2026-09-15 | 草案RFC |
+| ↳ RFC-011b | [RFC-011b: 运算符重载与接口驱动运算符](./accepted/011b-operator-overloading.md) | 晨煦 | 2026-09-22 | 已接受 |
 | RFC-012 | [RFC 012: F-String 模板字符串](./accepted/012-f-string-template-strings.md) | Chen Xu | 2025-01-27 | 已接受 |
 | RFC-013 | [RFC 013: 错误代码规范](./accepted/013-error-code-specification.md) | 晨煦 | 2026-02-02 | 已接受 |
 | RFC-014 | [RFC-014: 包管理系统设计](./accepted/014-package-manager.md) | 晨煦 | 2026-02-12 | 已接受 |
@@ -92,24 +92,24 @@ title: "RFC 索引"
 
 ## 已废弃RFC
 
-| 编号 | 标题 | 作者 | 创建日期 | 状态 |
-|------|------|------|----------|------|
-| RFC-001 | [RFC-001：并作模型与错误处理系统](./deprecated/001-concurrent-model-error-handling.md) | 晨煦 | 2025-01-05 | 已废弃（被 RFC-024 取代） |
-| RFC-020 | [RFC-020：动态模块与 FFI 集成](./deprecated/020-dynamic-modules-ffi.md) | 晨煦 | 2026-03-14 | 已废弃 |
-| RFC-021 | [RFC-021: 库驱动 FFI 扩展与跨语言调用支持](./deprecated/021-library-driven-ffi-extension.md) | 晨煦 | 2026-03-14 | 已废弃 |
+| 编号    | 标题                                                                                                       | 作者 | 创建日期   | 状态                      |
+| ------- | ---------------------------------------------------------------------------------------------------------- | ---- | ---------- | ------------------------- |
+| RFC-001 | [RFC-001：并作模型与错误处理系统](./deprecated/001-concurrent-model-error-handling.md)                     | 晨煦 | 2025-01-05 | 已废弃（被 RFC-024 取代） |
+| RFC-020 | [RFC-020：动态模块与 FFI 集成](./deprecated/020-dynamic-modules-ffi.md)                                    | 晨煦 | 2026-03-14 | 已废弃                    |
+| RFC-021 | [RFC-021: 库驱动 FFI 扩展与跨语言调用支持](./deprecated/021-library-driven-ffi-extension.md)               | 晨煦 | 2026-03-14 | 已废弃                    |
 | RFC-022 | [RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型）](./deprecated/022-hoare-logic-static-verification.md) | 晨煦 | 2026-03-16 | 已废弃（被 RFC-027 取代） |
-| RFC-023 | [RFC-023: 闭包捕获模型](./deprecated/023-closure-capture-model.md) | 晨煦 | 2026-05-29 | 已废弃 |
+| RFC-023 | [RFC-023: 闭包捕获模型](./deprecated/023-closure-capture-model.md)                                         | 晨煦 | 2026-05-29 | 已废弃                    |
 
 ---
 
 ## 已拒绝RFC
 
-| 编号 | 标题 | 作者 | 创建日期 | 状态 |
-|------|------|------|----------|------|
-| RFC-003 | [RFC-003：版本规划](./rejected/003-version-planning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
-| RFC-005 | [RFC-005: 自动化CVE安全检查系统](./rejected/005-automated-cve-scanning.md) | 晨煦 | 2025-01-05 | 已拒绝 |
+| 编号    | 标题                                                                            | 作者 | 创建日期   | 状态   |
+| ------- | ------------------------------------------------------------------------------- | ---- | ---------- | ------ |
+| RFC-003 | [RFC-003：版本规划](./rejected/003-version-planning.md)                         | 晨煦 | 2025-01-05 | 已拒绝 |
+| RFC-005 | [RFC-005: 自动化CVE安全检查系统](./rejected/005-automated-cve-scanning.md)      | 晨煦 | 2025-01-05 | 已拒绝 |
 | RFC-016 | [RFC 016: 量子原生支持与多重后端集成](./rejected/016-quantum-native-support.md) | 晨煦 | 2026-02-13 | 已拒绝 |
-| RFC-025 | [RFC-025: 可扩展原语类型机制](./rejected/025-primitive-extension.md) | 晨煦 | 2026-06-05 | 已拒绝 |
+| RFC-025 | [RFC-025: 可扩展原语类型机制](./rejected/025-primitive-extension.md)            | 晨煦 | 2026-06-05 | 已拒绝 |
 
 ---
 
@@ -123,13 +123,13 @@ title: "RFC 索引"
 
 ### 状态说明
 
-| 状态 | 位置 | 说明 |
-|------|------|------|
-| **草案** | `rfc/draft/` | 作者草稿，等待提交审核 |
-| **审核中** | `rfc/review/` | 开放社区讨论和反馈 |
-| **已接受** | `rfc/accepted/` | 成为正式设计文档，进入实现阶段 |
-| **已废弃** | `rfc/deprecated/` | 曾被接受，被新设计取代 |
-| **已拒绝** | `rfc/rejected/` | 被拒绝的RFC文档 |
+| 状态       | 位置              | 说明                           |
+| ---------- | ----------------- | ------------------------------ |
+| **草案**   | `rfc/draft/`      | 作者草稿，等待提交审核         |
+| **审核中** | `rfc/review/`     | 开放社区讨论和反馈             |
+| **已接受** | `rfc/accepted/`   | 成为正式设计文档，进入实现阶段 |
+| **已废弃** | `rfc/deprecated/` | 曾被接受，被新设计取代         |
+| **已拒绝** | `rfc/rejected/`   | 被拒绝的RFC文档                |
 
 ---
 
@@ -138,17 +138,16 @@ title: "RFC 索引"
 **RFC 文档只能包含正确信息。** 设计变更时，直接修改原文使其表达当前正确语义；
 **不得保留错误内容再添加「勘误」块修正**。
 
-保留「原文 + 勘误」是最差的写法：读者读到一半才发现前面全作废，前面的阅读成本被浪费，
-且容易误把已废止的段落当作现行语义引用。勘误块看上去谨慎，实际是把整理成本转嫁给了读者。
+保留「原文 + 勘误」是最差的写法：读者读到一半才发现前面全作废，前面的阅读成本被浪费，且容易误把已废止的段落当作现行语义引用。勘误块看上去谨慎，实际是把整理成本转嫁给了读者。
 
 ### 正确做法
 
-| 情形 | 做法 |
-|------|------|
-| 实现与原文不符、原文被推翻 | 直接改写该段落为正确内容，删除原表述 |
-| 示例代码不再可运行 | 直接改成可运行的形态，不要保留旧示例 |
+| 情形                           | 做法                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------ |
+| 实现与原文不符、原文被推翻     | 直接改写该段落为正确内容，删除原表述                                     |
+| 示例代码不再可运行             | 直接改成可运行的形态，不要保留旧示例                                     |
 | 需要让读者知道「以前是什么样」 | 只在**特意做错误对比**时保留错误内容，并紧邻标注「此写法是错误的」及原因 |
-| 需要追溯设计演变 | 写在 Git 提交信息或 issue 中，不写进 RFC 正文 |
+| 需要追溯设计演变               | 写在 Git 提交信息或 issue 中，不写进 RFC 正文                            |
 
 ### 例外
 
@@ -178,4 +177,4 @@ title: "RFC 索引"
 
 ## 贡献指南
 
-请参阅 [CONTRIBUTING.md](../../../../CONTRIBUTING.md) 了解贡献指南。
+请参阅 CONTRIBUTING.md 了解贡献指南。

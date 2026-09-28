@@ -130,7 +130,7 @@ ErrorPropagate ::= Expr '?'
 // 成功时返回值，失败时向上返回 err
 data = fetch_data()?
 
-// 概念等价形式（注意：变体解构 match 尚未落地——RFC-039 交付前
+// 概念等价形式（注意：变体解构 match 尚未落地——RFC-010b 交付前
 // 会报编译错误 E3008，`?` 是当前唯一可用的错误传播写法）
 data = match fetch_data() {
     ok(v) => v

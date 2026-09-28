@@ -24,6 +24,21 @@ pub struct Z3Backend {
 // Z3 C API 的每个 context 是独立的，互斥访问下跨线程安全。
 unsafe impl Send for Z3Backend {}
 
+/// `Solver` 抽象实现——使上层不再依赖 Z3 具体类型（RFC-027 §8）。
+///
+/// 注意：**不**实现 `Sync`。内部 `RefCell` 缓存与 Z3 context 都禁止并发访问，
+/// 并发必须经 `Mutex` 串行化（见 `predicate.rs` 的 `SOLVER`）。
+impl super::backend::Solver for Z3Backend {
+    fn solve(
+        &self,
+        commands: &[SMTCommand],
+        timeout_ms: u64,
+    ) -> SMTResult {
+        // 委托给固有方法，避免递归
+        Z3Backend::solve(self, commands, timeout_ms)
+    }
+}
+
 impl fmt::Debug for Z3Backend {
     fn fmt(
         &self,

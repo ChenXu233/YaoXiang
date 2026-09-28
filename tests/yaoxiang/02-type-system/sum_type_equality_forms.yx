@@ -1,0 +1,36 @@
+// 02-type-system/sum_type_equality_forms.yx
+// 覆盖: RFC-010 记录式和类型的相等（类型身份 + 变体序 + 载荷）
+// 验证: 和类型值的 `==` **不因变量来源不同而结果不同**——
+//       构造器直产（Generic 形态）与带注解返回（TypeRef 经类型镜像落成 Struct）
+//       必须走同一判定。此前 `as_user_record` 只认 Struct/TypeRef，
+//       `mk() == Color.green()` 会掉进结构推导，因变体字段全是函数而误报 E1101，
+//       而 `Color.green() == Color.green()` 却能通过。
+// 状态: ✅ 可运行
+
+use std.assert
+
+Color: Type = {
+    red: () -> Color,
+    green: () -> Color,
+    blue: () -> Color,
+}
+
+mk: () -> Color = {
+    Color.green()
+}
+
+main: () -> Void = {
+    // 两侧都是构造器直产（Generic 形态）
+    direct = Color.green() == Color.green()
+    assert.assert(direct, "构造器直产两侧相等")
+
+    // 一侧是带注解返回（TypeRef → Struct 镜像），一侧是构造器直产
+    mixed = mk() == Color.green()
+    assert.assert(mixed, "带注解返回与构造器直产必须同判（旧实现误报 E1101）")
+
+    // 不同变体不相等（身份相同、变体序不同）
+    differ = mk() != Color.red()
+    assert.assert(differ, "不同变体不相等")
+}
+
+main()

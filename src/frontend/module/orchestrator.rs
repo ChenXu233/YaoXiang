@@ -578,6 +578,8 @@ fn link_module_irs(
         globals: Vec::new(),
         functions: Vec::new(),
         init: Vec::new(),
+        init_locals: Vec::new(),
+        init_file_ids: Vec::new(),
         ffi_libs: Vec::new(),
         ffi_bindings: Vec::new(),
         entry_function: Some(format!("{}.main", entry_key)),
@@ -589,11 +591,19 @@ fn link_module_irs(
             merged.function_files.insert(func.name.clone(), i);
         }
     }
-    for (_, ir) in irs {
+    for (file_idx, (_, ir)) in irs.into_iter().enumerate() {
         merged.globals.extend(ir.globals);
         merged.functions.extend(ir.functions);
         // T5：各文件的初始化序列按发现顺序拼接（被依赖模块先于入口文件）。
+        // #368：每条指令记下所属文件——多文件下按它给 debug span 定 file_id，
+        // 否则所有段的错误都指向同一个（错的）文件。
+        merged
+            .init_file_ids
+            .extend(std::iter::repeat_n(file_idx, ir.init.len()));
         merged.init.extend(ir.init);
+        // 不合并 init_locals：各文件槽位号从 0 起算，直接拼接会错位。
+        // 多文件下顶层只有声明（可执行语句被 E3023 拒），具名局部仅出现在
+        // Script 模式，故此处不需要它。
         merged.ffi_libs.extend(ir.ffi_libs);
         merged.ffi_bindings.extend(ir.ffi_bindings);
     }
@@ -1045,9 +1055,14 @@ fn extract_module_info(
 
     for stmt in &ast.items {
         match &stmt.kind {
-            StmtKind::TypeDefinition { name, .. } => {
+            StmtKind::TypeDefinition {
+                name, definition, ..
+            } => {
                 if let Some(ty) = lookup(&types, name) {
-                    info.add_export(make_export(module_key, name, ExportKind::Type, ty));
+                    let mut export = make_export(module_key, name, ExportKind::Type, ty);
+                    // 跨模块类型传播：泛型模板 + 和类型变体 + 接口实现随导出携带
+                    export.type_payload = checker.type_def_export_payload(name, definition);
+                    info.add_export(export);
                 }
             }
             StmtKind::Assign {
@@ -1100,6 +1115,7 @@ fn make_export(
         mono_type: Some(ty),
         type_params: None,
         param_names: None,
+        type_payload: None,
     }
 }
 

@@ -1,0 +1,35 @@
+// 02-type-system/closure_arg_inference.yx
+// 覆盖: 闭包作实参的期望类型传播——被调签名的形参位是匿名 lambda 的
+// 权威对齐来源（议题 1 期望下传机制的 Call 臂延伸）
+// 验证:
+//   - 无标注 lambda 传给泛型高阶函数：参数从形参位取类型
+//   - 无标注 lambda 传给具体签名函数：体内即按签名类型检查
+//   - Any 多态槽位（fn(Any) -> Any）不钉死参数：fresh var 延迟绑定
+// 状态: ✅ 可运行
+
+use std.assert
+
+apply_int: (f: (x: Int) -> Int) -> Int = (f) => {
+    return f(1)
+}
+
+pick: (T: Type) -> (v: T, f: (x: T) -> T) -> T = (v, f) => {
+    return f(v)
+}
+
+double: (x: Int) -> Int = (x) => x * 2
+
+main: () -> Void = {
+    // 具体签名：lambda 体按签名类型检查（x 为 Int，x + "s" 会在此报错）
+    a = apply_int((x) => x + 1)
+    assert(a == 2, "concrete-signature closure arg")
+
+    // 泛型高阶函数：参数位类型实参由实参侧解出（v: Int → T = Int）
+    b = pick(3, (x) => x * 2)
+    assert(b == 6, "generic higher-order closure arg")
+
+    // 具名函数实参行为不变
+    c = apply_int(double)
+    assert(c == 2, "named fn arg unchanged")
+    return
+}

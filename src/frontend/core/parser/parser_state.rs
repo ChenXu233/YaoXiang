@@ -18,6 +18,10 @@ pub struct ParserState<'a> {
     tokens: &'a [Token],
     pos: usize,
     errors: Vec<Diagnostic>,
+    /// match 臂守卫模式（RFC-010b）：为真时 `=>` 不作为 lambda 中缀被
+    /// 表达式循环消费——守卫表达式 `n if n > 3 => ...` 要完整解析 `n > 3`
+    /// 并停在 `=>`。save/restore 语义，嵌套（守卫里再写 match）安全。
+    pub(crate) no_fat_arrow: bool,
 }
 
 impl<'a> ParserState<'a> {
@@ -26,6 +30,7 @@ impl<'a> ParserState<'a> {
             tokens,
             pos: 0,
             errors: Vec::new(),
+            no_fat_arrow: false,
         }
     }
     pub fn at_end(&self) -> bool {

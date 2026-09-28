@@ -41,6 +41,44 @@ pub struct ImplementationProof {
     pub methods: Vec<String>,
 }
 
+/// RFC-010 记录式和类型：变体定义（声明序即 variant_id）。
+/// params 保留声明形态（形参名为 TypeRef），实例化时按类型实参替换。
+#[derive(Debug, Clone)]
+pub struct SumVariantDef {
+    pub name: String,
+    pub params: Vec<MonoType>,
+}
+
+/// RFC-010: 变体构造调用点（span 键控，ir_gen 据此生成 CreateVariant）。
+#[derive(Debug, Clone)]
+pub struct VariantCtorCall {
+    pub span: crate::util::span::Span,
+    /// 和类型名（CreateVariant 的 group，也是类型身份来源）
+    pub type_name: String,
+    /// 变体序号（类型体声明序）
+    pub variant_index: usize,
+    /// 载荷数（0 = 零载荷；>1 运行时打包 Tuple）
+    pub payload_count: usize,
+}
+
+/// RFC-011b: 接口实现登记表条目。
+///
+/// `ImplementationProof` 不带类型实参，无法区分同一接口的不同实例化
+/// （`Add(Int, Float, Float)` 与 `Add(Point, Point, Point)`）；运算符查询
+/// 与约束求解需要实参维度，故另立此表，与 proof 在实例化检查通过时
+/// 同步写入（check_interface_instantiation）。
+#[derive(Debug, Clone)]
+pub struct InterfaceImplEntry {
+    /// 实现类型头名（用户条目如 "Point"；native 条目为 "Int" 等基本类型名）
+    pub impl_type: String,
+    /// 接口类型实参，与接口形参表一一对应（如 [Point, Point, Point]）
+    pub args: Vec<MonoType>,
+    /// 已验证的方法名
+    pub methods: Vec<String>,
+    /// 核心默认登记：原生指令路径，无用户方法绑定（运算符代码生成不走方法调用）
+    pub native: bool,
+}
+
 /// 类型环境
 ///
 /// 存储类型检查过程中的所有状态信息：
@@ -81,8 +119,22 @@ pub struct TypeEnvironment {
     /// 方法绑定关系: "Type.method" -> FunctionType
     /// 用于存储显式绑定和 pub 自动绑定
     pub method_bindings: HashMap<String, MonoType>,
+    /// RFC-011b: 同名方法的重载候选表（"Type.method" -> 全部签名）。
+    /// `method_bindings` 是单值表，同键互相覆盖；接口实例化的完整性检查
+    /// 需要「任一候选签名匹配」语义（同一类型的同名接口多实例化共存，
+    /// 如 Grid 同时实现 Index(Grid, Int, V) 与 Index(Grid, Tuple(Int,Int), V)）。
+    pub method_overloads: HashMap<String, Vec<MonoType>>,
+    /// RFC-011a §3：重载候选的 IR 混编名（与 method_overloads 候选序一一对应）
+    pub method_overload_ir_names: HashMap<String, Vec<String>>,
     /// RFC-011a: 已通过的接口实现证明（编译期，运行时擦除）
     pub implementation_proofs: Vec<ImplementationProof>,
+    /// RFC-011b: 接口实现登记表（接口名 → 实例化条目，带类型实参维度）。
+    /// 运算符查询与约束求解的唯一判据；不经普通名字解析（§名字与登记）。
+    pub interface_impl_registry: HashMap<String, Vec<InterfaceImplEntry>>,
+    /// RFC-010: 记录式和类型登记表（类型名 → 变体定义表，声明序）。
+    /// 判定规则见 RFC-010「记录式和类型的变体构造（权威定义）」：
+    /// 字段全为函数且返回自身 → 判定，全部函数字段升格为变体构造器。
+    pub sum_types: HashMap<String, Vec<SumVariantDef>>,
     /// 模块名称
     pub module_name: String,
     /// 重载候选存储: 函数名 -> 多个重载版本
@@ -120,6 +172,64 @@ impl TypeEnvironment {
             trait_table: crate::frontend::core::types::TraitTable::default(),
             module_registry: crate::frontend::module::registry::ModuleRegistry::with_std(),
             ..Self::default()
+        }
+    }
+
+    /// RFC-011b: 登记方法重载候选（同签名去重）
+    pub fn add_method_overload(
+        &mut self,
+        key: &str,
+        ty: MonoType,
+    ) {
+        let list = self.method_overloads.entry(key.to_string()).or_default();
+        if !list.contains(&ty) {
+            list.push(ty);
+            // RFC-011a §3：重载候选的 IR 混编名（注册序，0=裸名）——
+            // 定义侧 ir_gen 按同一 AST 序混编，调用点决议后按名派发
+            let ordinal = list.len() - 1;
+            let ir_name = if ordinal == 0 {
+                key.to_string()
+            } else {
+                format!("{key}#{ordinal}")
+            };
+            self.method_overload_ir_names
+                .entry(key.to_string())
+                .or_default()
+                .push(ir_name);
+        }
+    }
+
+    /// RFC-011b: 查方法重载候选
+    pub fn get_method_overloads(
+        &self,
+        key: &str,
+    ) -> Option<&Vec<MonoType>> {
+        self.method_overloads.get(key)
+    }
+
+    /// RFC-010: 类型名是否为已判定的和类型
+    pub fn is_sum_type(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.sum_types.contains_key(name)
+    }
+
+    /// RFC-011b: 登记接口实现（完全同参的重复条目去重）
+    pub fn add_interface_impl(
+        &mut self,
+        interface_name: &str,
+        entry: InterfaceImplEntry,
+    ) {
+        let list = self
+            .interface_impl_registry
+            .entry(interface_name.to_string())
+            .or_default();
+        if !list
+            .iter()
+            .any(|e| e.impl_type == entry.impl_type && e.args == entry.args)
+        {
+            list.push(entry);
         }
     }
 
@@ -533,6 +643,110 @@ impl TypeEnvironment {
         name: &str,
     ) -> bool {
         self.trait_table.has_trait(name)
+    }
+
+    /// 类型名在本环境里是否可解析（#371/#372）。
+    ///
+    /// **这是「合法类型名」的唯一真相源。** 此前不存在这样一个查询，各消费点
+    /// 各自判断（有查 `types`、有查 `generic_type_defs`、有查 `trait_table`），
+    /// 而 `MonoType::from(ast::Type)` 对 `Type::Name` 干脆不查——直接包成
+    /// `TypeRef(name)`。后果是形参/字段里的错拼类型名静默变成一个「合法类型」，
+    /// 该参数上的类型检查随之全部失效（任意实参都能传）。
+    ///
+    /// 允许集（按来源）：
+    /// - **内置名**：`Int`/`String`/... —— `from_builtin_name`
+    /// - **编译器级顶类型**：`Any` —— 与 `Void`/`Never` 同族，solver 特判，不需声明
+    /// - **已登记类型**：`types`（本地类型定义 + `use` 导入的类型）
+    /// - **泛型构造器**：`generic_type_defs`（`Vec`/`Array` + 用户泛型类型）
+    /// - **接口/特质**：`trait_table`（存在类型位置，RFC-011a）
+    /// - **std 导出类型**：`module_registry` 里标记为 `Type` 的导出
+    ///   （`Error`/`File`/`Iterator`... —— 它们由 Rust 侧 `export!` 宏登记，
+    ///   不进 `types`；此前完全无人可查，却能隐式通过）
+    ///
+    /// 注意：**不含**泛型参数名（`T`/`Self`）与编译期值参数名——那些是声明处
+    /// 绑定的局部名字，由调用方（`TypeNameScope`）先行剔除后再查询。
+    pub fn resolves_type_name(
+        &self,
+        name: &str,
+    ) -> bool {
+        if MonoType::from_builtin_name(name).is_some() {
+            return true;
+        }
+        // `Any` 是编译器级顶类型：`from_builtin_name` 不含它，solver 直接特判
+        // （`solver.rs` 的 `(TypeRef(n), _) if n == "Any" => Ok(())`）。
+        // `Self` 是语言关键字：在类型体/接口方法签名里指当前类型，
+        // 由接口实例化阶段替换（RFC-011a），同样没有也不可能有声明。
+        if name == "Any" || name == "Self" {
+            return true;
+        }
+        // RFC-027 §6.9：`Terminates` 是**内置谓词**，与 `Int`、`Never` 同属核心原语
+        // （内建名，不是关键字）——它把一个测度绑定到一段计算上声明该计算终止。
+        // 与 `Never` 同样不需也不可能存在源码声明；语义（测度与义务）由
+        // `resolve_type_annotation` 与终止检查层消费（RFC-027a）。
+        if name == "Terminates" {
+            return true;
+        }
+        // 编译器级容器/引用类型：这些名字在类型位置由编译器直接识别
+        // （`mono.rs` 的 `is_vec`/`is_arc`/`is_weak`/`is_range` 等谓词、
+        // `type_name()` 的专门臂），不需要也不存在源码声明。
+        // 注意：它们只在**类型位置**成立；值位置的构造器另有限制
+        // （见 `is_builtin_generic_type_name`，那里只放 `Vec`/`Array`）。
+        if Self::is_compiler_container_type(name) {
+            return true;
+        }
+        if self.types.contains_key(name) || self.generic_type_defs.contains_key(name) {
+            return true;
+        }
+        if self.has_trait(name) {
+            return true;
+        }
+        // std 导出类型：`Error`/`File`/`Native`/`Weak`/`Arc` 等由 Rust 侧登记，
+        // 只活在模块注册表里。逐个 std 子模块查同名 Type 导出。
+        self.std_export_type_name(name)
+    }
+
+    /// 编译器直接识别的容器/引用类型名（类型位置合法，无源码声明）。
+    ///
+    /// 与 `mono.rs` 的 `is_vec`/`is_arc`/`is_weak`/`is_range` 等谓词同源——
+    /// 那些谓词按名字判定，本表列出同一批名字，供名字解析查询。
+    /// 新增此类内置容器时**两处都要改**（谓词 + 本表）。
+    fn is_compiler_container_type(name: &str) -> bool {
+        matches!(
+            name,
+            "Vec"
+                | "Array"
+                | "List"
+                | "Dict"
+                | "Tuple"
+                | "Option"
+                | "Result"
+                | "Range"
+                | "Bytes"
+                | "Set"
+                | "Arc"
+                | "Weak"
+        )
+    }
+
+    /// 名字是否是某个 std 子模块导出的**类型**（`ExportKind::Type`）。
+    ///
+    /// 兜底顺序上放在最后：它要遍历子模块，比前几项的表查询贵，
+    /// 而绝大多数名字在前面就命中了。
+    fn std_export_type_name(
+        &self,
+        name: &str,
+    ) -> bool {
+        use crate::frontend::module::ExportKind;
+        self.module_registry
+            .std_submodule_names()
+            .iter()
+            .any(|sub| {
+                let path = format!("std.{sub}");
+                self.module_registry
+                    .get(&path)
+                    .and_then(|m| m.get_export(name))
+                    .is_some_and(|e| matches!(e.kind, ExportKind::Type))
+            })
     }
 
     /// 添加 Trait 实现

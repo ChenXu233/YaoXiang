@@ -75,7 +75,7 @@ fn test_termination_checker_new() {
     let _ = checker;
 }
 
-/// TerminationChecker 可以通过 with_z3 注入 Z3 后端（None 时不崩溃）
+/// TerminationChecker 可以通过 with_solver 注入后端（不注入时不崩溃）
 #[test]
 fn test_termination_checker_without_z3_does_not_crash() {
     let checker = TerminationChecker::new();
@@ -109,12 +109,31 @@ fn test_strategy4_multiplicative_requires_upper_bound() {
 
 // RFC-027 §7.2: 策略 1 秩函数候选
 
-/// 策略 1：TerminationChecker 的 with_z3 正确设置字段
+/// 策略 1：`TerminationChecker::with_solver` 接受任意 `Solver` 实现
+///
+/// 回归性质：注入点由 `&'static Z3Backend` 泛化为 `&'static dyn Solver`，
+/// 非 Z3 后端（此处为桩）必须能接入。
+#[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn test_strategy1_termination_checker_with_z3_builder() {
-    let checker = TerminationChecker::new();
-    // 无 Z3 时策略 1 跳过，不崩溃
-    // checker 在无 Z3 时应能正常 drop
+fn test_strategy1_termination_checker_with_solver_builder() {
+    // Arrange — 一个与 Z3 无关的桩求解器
+    #[derive(Debug)]
+    struct StubSolver;
+    impl crate::frontend::core::typecheck::proof::smt::backend::Solver for StubSolver {
+        fn solve(
+            &self,
+            _commands: &[crate::frontend::core::typecheck::proof::smt::ast::SMTCommand],
+            _timeout_ms: u64,
+        ) -> crate::frontend::core::typecheck::proof::smt::ast::SMTResult {
+            crate::frontend::core::typecheck::proof::smt::ast::SMTResult::Unsat
+        }
+    }
+    static STUB: StubSolver = StubSolver;
+
+    // Act — 注入非 Z3 后端
+    let checker = TerminationChecker::new().with_solver(&STUB);
+
+    // Assert — 未崩溃即证明注入点已泛化（drop 走完整生命周期）
     drop(checker);
 }
 

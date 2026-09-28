@@ -321,6 +321,8 @@ fn spawn_concurrent_standard_mode() {
         entry_point: Some(2), // main 函数
         init_function: None,
         debug_sources: None,
+        // #368：本用例不涉及索引越界的变量名回溯，空表即可
+        global_names: std::collections::HashMap::new(),
     };
 
     // 配置 Standard 模式 + 1 worker（避免多线程并发问题）

@@ -36,11 +36,18 @@ impl From<LogLevelArg> for LogLevel {
 }
 
 /// Language enum for CLI
+///
+/// 仅列入**随包发布**的语言（`locales/*.json` 编译期嵌入，见
+/// `i18n::available_langs`）。`zh-x-miao` 的 clap 名是 `zh-x-miao`，
+/// 不接受旧文档里的 `zh-miao` 别名——那是从未存在过的语言。
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum LangArg {
     En,
     Zh,
-    ZhMiao,
+    Ja,
+    Ru,
+    ZhClassical,
+    ZhXMiao,
 }
 
 impl From<LangArg> for String {
@@ -48,7 +55,10 @@ impl From<LangArg> for String {
         match lang {
             LangArg::En => "en".to_string(),
             LangArg::Zh => "zh".to_string(),
-            LangArg::ZhMiao => "zh-x-miao".to_string(),
+            LangArg::Ja => "ja".to_string(),
+            LangArg::Ru => "ru".to_string(),
+            LangArg::ZhClassical => "zh-classical".to_string(),
+            LangArg::ZhXMiao => "zh-x-miao".to_string(),
         }
     }
 }
@@ -79,7 +89,7 @@ struct Args {
     #[arg(short, long, value_enum)]
     log_level: Option<LogLevelArg>,
 
-    /// Set language (en, zh, zh-miao)
+    /// Set language (en, zh, ja, ru, zh-classical, zh-x-miao)
     #[arg(short = 'L', long, value_enum)]
     lang: Option<LangArg>,
 }
@@ -243,7 +253,7 @@ enum Commands {
         #[arg(short, long)]
         json: bool,
 
-        /// Language for explanation (en, zh)
+        /// Language for explanation (en, zh, ja, ru, zh-classical, zh-x-miao)
         #[arg(short, long, value_enum)]
         lang: Option<LangArg>,
     },
@@ -313,12 +323,20 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     // Set language first (before logger init)
-    let lang = args.lang.map(Into::<String>::into).unwrap_or_else(|| {
-        std::env::var("YAOXIANG_LANG")
-            .ok()
-            .filter(|s| ["en", "zh", "zh-x-miao", "zh-miao"].contains(&s.as_str()))
-            .unwrap_or_else(|| "en".to_string())
-    });
+    //
+    // 环境变量的合法性以 `available_langs()` 为唯一真相源（编译期嵌入的
+    // locale 文件集）。此前这里硬编码 `["en","zh","zh-x-miao","zh-miao"]`，
+    // 导致 ja/ru/zh-classical 被静默丢弃后回落 en——译文就在 locales/ 里，
+    // 用户却永远看到英文。
+    let lang = args
+        .lang
+        .map(Into::<String>::into)
+        .or_else(|| {
+            std::env::var("YAOXIANG_LANG")
+                .ok()
+                .filter(|s| yaoxiang::util::i18n::available_langs().contains(&s.as_str()))
+        })
+        .unwrap_or_else(|| "en".to_string());
     set_lang_from_string(lang);
 
     // 如果没有提供子命令，启动 TUI REPL

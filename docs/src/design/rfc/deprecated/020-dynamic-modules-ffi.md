@@ -9,14 +9,14 @@ updated: '2026-06-05（废弃）'
 # RFC-020：动态模块与 FFI 集成
 
 > **⚠️ 废弃**：本文档已废弃，内容已合并到
-> [RFC-026: FFI 核心机制](../review/026-ffi-core-mechanism.md)。
+> [RFC-026: FFI 核心机制](../accepted/026-ffi-core-mechanism.md)。
 
 > **参考**:
 >
 > - [RFC-001: 并作模型与错误处理系统](./001-concurrent-model-error-handling.md)
-> - [RFC-008: Runtime 并发模型与调度器脱耦设计](./008-runtime-concurrency-model.md)
-> - [RFC-018: LLVM AOT 编译器与 L3 透明并发设计](./018-llvm-aot-compiler.md)
-> - [RFC-021: 库驱动 FFI 扩展与跨语言调用支持](../review/021-library-driven-ffi-extension.md)
+> - [RFC-008: Runtime 并发模型与调度器脱耦设计](../accepted/008-runtime-concurrency-model.md)
+> - [RFC-018: LLVM AOT 编译器与 L3 透明并发设计](../accepted/018-llvm-aot-compiler.md)
+> - [RFC-021: 库驱动 FFI 扩展与跨语言调用支持](./021-library-driven-ffi-extension.md)
 
 ## 摘要
 
@@ -25,7 +25,7 @@ updated: '2026-06-05（废弃）'
 
 1. **动态模块元数据契约**：为同一语言编写的动态库提供编译时依赖描述，使主程序能静态构建 DAG，同时保持透明并发。
 2. **FFI 调度语义**：外部函数在 DAG 中默认作为 `@block` 节点，可通过注解融入并行调度（FFI 工具链详见
-   [RFC-021](../review/021-library-driven-ffi-extension.md)）。
+   [RFC-021](./021-library-driven-ffi-extension.md)）。
 3. **基于调用上下文的优化**：取代静态阈值回退，编译器根据函数在 DAG 中的实际角色（消费者数量、副作用等）智能决定是否内联或作为独立节点调度。
 4. **控制流与 DAG 的合并机制**：通过 Phi 节点和动态展开，将 `if`、`loop`
    等动态结构自然融入数据流图。
@@ -97,7 +97,7 @@ RFC-001/008/018 构建了优雅的透明并发模型，但面对现实世界需�
 ### 2. FFI 在 DAG 中的调度语义
 
 FFI 的完整工具链支持（动态库加载、绑定生成、类型转换、内存所有权）由
-[RFC-021](../review/021-library-driven-ffi-extension.md)
+[RFC-021](./021-library-driven-ffi-extension.md)
 定义。本节仅描述 FFI 调用在 DAG 调度中的行为。
 
 #### 2.1 默认调度行为
@@ -111,7 +111,7 @@ FFI 的完整工具链支持（动态库加载、绑定生成、类型转换、�
 #### 2.2 可选并发标注
 
 开发者可通过注解使 FFI 调用融入 DAG 调度（详见
-[RFC-021 §2.2](../review/021-library-driven-ffi-extension.md)）：
+[RFC-021 §2.2](./021-library-driven-ffi-extension.md)）：
 
 - `@pure`：视为普通 DAG 节点，可与其他无依赖节点并行。
 - `@io`：参与资源依赖分析，对同一资源的多次调用自动串行化。
@@ -393,8 +393,8 @@ enum NodeKind {
 ## 参考文献
 
 - [RFC-001: 并作模型与错误处理系统](./001-concurrent-model-error-handling.md)
-- [RFC-008: Runtime 并发模型与调度器脱耦设计](./008-runtime-concurrency-model.md)
-- [RFC-018: LLVM AOT 编译器与 L3 透明并发设计](./018-llvm-aot-compiler.md)
-- [RFC-021: 库驱动 FFI 扩展与跨语言调用支持](../review/021-library-driven-ffi-extension.md)
+- [RFC-008: Runtime 并发模型与调度器脱耦设计](../accepted/008-runtime-concurrency-model.md)
+- [RFC-018: LLVM AOT 编译器与 L3 透明并发设计](../accepted/018-llvm-aot-compiler.md)
+- [RFC-021: 库驱动 FFI 扩展与跨语言调用支持](./021-library-driven-ffi-extension.md)
 - [SSA 形式与 Phi 函数](https://en.wikipedia.org/wiki/Static_single_assignment_form)
 - [Chase-Lev 双端队列](https://en.wikipedia.org/wiki/Double-ended_queue#Chase-Lev_deque)

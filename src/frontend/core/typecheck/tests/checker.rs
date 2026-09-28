@@ -629,3 +629,98 @@ main = {
             .collect::<Vec<_>>()
     );
 }
+
+// RFC-027 §6 / #377（A）：精化变量向下游表现为 base 类型
+//
+// 精化是**编译期约束**，不是运行时类型：`y: IsPositive(5)` 的运行时类型就是
+// `Int`。当前变量注册时存的是 `Refined`/`Generic` 本体，导致下游任何「期望
+// base」的位置都撞 E1002。
+//
+// 注意约束的语义（实测判定）：`IsPositive(5)` 校验的是**注解里的字面量 5**，
+// 与变量后来被赋什么值无关——`y: IsPositive(5) = -9999` 不报错，而
+// `y: IsPositive(-5) = 5` 报 E4018。故「重赋值是否违反约束」不是本层能判定
+// 的事，本文件不做该断言（见下方说明）。
+
+#[test]
+fn test_refined_variable_passes_to_int_annotation_downstream() {
+    // Arrange: 精化变量被下游用 base 类型标注重绑定
+    let source = r#"
+IsPositive: (x: Int) -> Type = { x > 0 }
+main: () -> Int = {
+    y: IsPositive(5) = 5
+    z: Int = y
+    z
+}
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert: 精化变量的运行时类型是其 base（Int），不得报类型不匹配
+    assert!(
+        !result.diagnostics.iter().any(|d| d.code == "E1002"),
+        "精化变量 y 的运行时类型是 Int，绑定到 z: Int 不应报 E1002。实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_refined_variable_returns_as_base_type() {
+    // Arrange: 精化变量直接作为函数返回值
+    let source = r#"
+IsPositive: (x: Int) -> Type = { x > 0 }
+main: () -> Int = {
+    y: IsPositive(5) = 5
+    y
+}
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert: y 作返回值即返回其 base（Int），与声明返回类型 Int 一致
+    assert!(
+        !result.diagnostics.iter().any(|d| d.code == "E1002"),
+        "精化变量作返回值时类型应为其 base（Int）。实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_refined_variable_reassignment_to_base_value_is_accepted() {
+    // Arrange: 精化变量被重赋一个同为 base 类型的值
+    //
+    // 语义依据（实测）：`IsPositive(5)` 的约束是「5 > 0」这一静态命题，与
+    // 变量后续取值无关（`y: IsPositive(5) = -9999` 亦不报错）。故重赋 Int
+    // 值不应被拒——当前 E1002 把精化变量当运行时类型，对任何重赋值一刀切。
+    let source = r#"
+IsPositive: (x: Int) -> Type = { x > 0 }
+main: () -> Int = {
+    mut y: IsPositive(5) = 5
+    y = 6
+    y
+}
+"#;
+
+    // Act
+    let result = check_source_for_refined(source);
+
+    // Assert: y 的运行时类型是 Int，重赋 Int 值应被接受
+    assert!(
+        !result.diagnostics.iter().any(|d| d.code == "E1002"),
+        "精化变量的运行时类型是 Int，重赋 Int 值不应报 E1002。实际诊断: {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| &d.code)
+            .collect::<Vec<_>>()
+    );
+}

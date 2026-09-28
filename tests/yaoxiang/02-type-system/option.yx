@@ -4,14 +4,16 @@
 //   - weak.upgrade 返回 Option(Arc(T))，调用点泛型绑定
 //   - 显式注解 Option(Arc(Int)) 与推断类型一致（mono.rs Arc/Weak lower，#251 P0-5）
 //   - 类型不匹配负例（Option(Int) vs Option(Arc(Int))）由 06-compile-errors 覆盖
-// 注: Option 变体消费（match some(v)）语法未落地，值无法断言（weak_ops.yx 同）；
-// 编译期注解匹配即验证目标，println 仅确认运行成功
+// 注: 变体消费（match some(v)/none()）已随零载荷变体模式落地，
+// 覆盖见 option_try.yx。本文件的验证目标是注解绑定；另注：weak.new
+// 按值取走 Arc 降级后强引用归零，upgrade 返回 none 是 std.weak 的
+// 真实语义（勿在 upgrade 结果上断言 some）
 // 状态: ✅
 
 use std.weak
 
 main: () -> Void = {
-    // ref 创建 Arc[Int]，weak.new 登记，upgrade 返回存活 Option(Arc(Int))
+    // ref 创建 Arc[Int]，weak.new 登记，upgrade 返回 Option(Arc(Int))
     p = ref 42
     w = weak.new(p)
     u = weak.upgrade(w)

@@ -293,7 +293,12 @@ fn test_rfc010_record_type_default_values() {
 #[test]
 fn test_rfc010_interface_definition() {
     // Arrange
+    // #372：`Surface`/`Rect` 必须有定义——它们此前从未声明，用例却能过，
+    // 正是因为形参/字段里的未知名**没人校验**（本用例意外地钉住了那个缺口）。
+    // 本用例要验证的是「接口字段必须是函数」，与名字解析无关，故补齐占位类型。
     let source = r#"
+        Surface: Type = { w: Int, h: Int }
+        Rect: Type = { x: Int, y: Int, w: Int, h: Int }
         Drawable: Type = {
             draw: (Surface) -> Void,
             bounding_box: () -> Rect

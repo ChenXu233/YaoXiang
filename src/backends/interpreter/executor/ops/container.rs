@@ -3,7 +3,6 @@
 //! `execute_instr` 按指令族拆分的一部分。arm 体自原单函数逐字搬迁，
 //! 仅去掉外层 `match` 包裹并统一以 `return` 形式返回，语义不变。
 
-use crate::backends::common::value::TypeId;
 use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::executor::debug::StepOutcome;
 use crate::backends::interpreter::executor::Interpreter;
@@ -113,20 +112,21 @@ impl Interpreter {
             // RFC-011a §6: 包装具体值为存在类型变体（Animal$Group.Dog(payload)）
             BytecodeInstr::CreateVariant {
                 dst,
-                // 见下方说明：构造点不需要组名
-                group_idx: _,
+                // RFC-010: group 携带和类型名——确定性派生类型身份，
+                // 使跨构造路径（新机制 / std native）的值可比较、可穷尽
+                group_idx,
                 variant,
                 payload,
             } => {
                 let payload_val = self.force_slot(fi, *payload)?;
-                // group_idx 在此**不使用**：Enum 用 `TypeId::ENUM` 承载类型身份，
-                // 组名只在 VariantTag/VariantPayload 的守卫错误消息里出现。
-                // 此前无条件 `const_string(...)` 再丢弃，是每次构造变体都做的
-                // 常量池解析 + String 分配的无用功（构造点在热循环内）。
+                let group = self.const_string(*group_idx);
+                let type_id = self.intern_sum_type(&group);
                 self.call_stack[fi].set_slot(
                     dst.0 as usize,
                     RuntimeValue::Enum {
-                        type_id: TypeId::ENUM,
+                        // RFC-010: 类型身份 = intern(组名)——同名字符串必得
+                        // 同一 id（无派生碰撞），预置段固定、用户段递增
+                        type_id,
                         variant_id: *variant,
                         payload: Box::new(payload_val),
                     },

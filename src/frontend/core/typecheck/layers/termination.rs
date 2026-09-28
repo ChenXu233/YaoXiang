@@ -137,7 +137,7 @@ use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::verdict::{BudgetReport, ProofResult, UnprovenReason};
 use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort};
 #[cfg(not(target_arch = "wasm32"))]
-use super::super::proof::smt::z3_backend::Z3Backend;
+use super::super::proof::smt::backend::Solver;
 
 /// 终止检查器
 ///
@@ -147,9 +147,18 @@ use super::super::proof::smt::z3_backend::Z3Backend;
 pub struct TerminationChecker {
     /// 收集到的证明结果
     results: Vec<ProofResult>,
-    /// Z3 后端引用——策略 1 秩函数 SMT 验证
+    /// 求解器引用——策略 1 秩函数 SMT 验证
     #[cfg(not(target_arch = "wasm32"))]
-    z3: Option<&'static Z3Backend>,
+    solver: Option<&'static dyn Solver>,
+    /// 带精化标注的变量名集合——决定循环是否进**验证模式**（RFC-027 §7）
+    ///
+    /// RFC-027 §7：终止性不是独立开关，而是验证模式的一部分。**裸 `while`
+    /// 不进验证模式**，不生成任何终止义务；仅当度量变量带精化标注
+    /// （如 `i: UpTo(n)`）时才须证终止。
+    ///
+    /// 空集合 = 无任何精化标注 → 所有循环都不检查（与 RFC 一致）。
+    /// 由 `set_refined_vars` 注入；未注入时保持空集，即「不检查」。
+    refined_vars: std::collections::HashSet<String>,
 }
 
 impl Default for TerminationChecker {
@@ -164,16 +173,30 @@ impl TerminationChecker {
         Self {
             results: Vec::new(),
             #[cfg(not(target_arch = "wasm32"))]
-            z3: None,
+            solver: None,
+            refined_vars: std::collections::HashSet::new(),
         }
     }
-    /// 设置 Z3 后端（由调用方在初始化后注入）
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn with_z3(
+
+    /// 注入带精化标注的变量名集合（RFC-027 §7 验证模式的判据）
+    ///
+    /// 门控方向是**放开检查**：精化集合外的变量 → 循环不进验证模式 → 不报
+    /// E4021。因此注入缺失会导致「该查的没查」——调用方必须传真实集合，
+    /// 不能用空集偷懒。
+    pub fn set_refined_vars(
         mut self,
-        z3: &'static Z3Backend,
+        vars: std::collections::HashSet<String>,
     ) -> Self {
-        self.z3 = Some(z3);
+        self.refined_vars = vars;
+        self
+    }
+    /// 注入求解器后端
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_solver(
+        mut self,
+        solver: &'static dyn Solver,
+    ) -> Self {
+        self.solver = Some(solver);
         self
     }
 
@@ -337,6 +360,37 @@ impl TerminationChecker {
 
     // ==================== 循环终止检查 ====================
 
+    /// 循环是否进「验证模式」（RFC-027 §7）
+    ///
+    /// 判据：循环条件里的界变量、或循环体中被赋值的变量，**任一**带精化标注。
+    /// 取「任一」而非「全部」是保守方向——宁可多查（报 E4021 是能力边界提示），
+    /// 不可漏查。
+    /// 判据取 RFC §7「度量变量带精化标注」的**宽读**：循环条件中的变量、或
+    /// 循环体中被赋值的变量，任一带精化即进验证模式。
+    ///
+    /// §7 的范例是 `i: UpTo(n)` 配 `while i < n { i = i + 1 }`——精化变量 i
+    /// 正在条件里。故条件变量必须计入；只看体中被赋值者会漏掉「有精化但本轮
+    /// 未推进」的循环（如 `while i < n { f(i) }`），那是该查而未查。
+    ///
+    /// 方向性：门控是**放开检查**（不生成义务），故取宽读更保守——宽读多生成
+    /// 义务（可能报 E4021），窄读会静默漏查。漏查不可接受，故宁可宽。
+    fn loop_is_in_verification_mode(
+        &self,
+        condition: &Expr,
+        body: &ast::Block,
+    ) -> bool {
+        // 条件中的变量（§7 范例形态：i: UpTo(n) 出现在 `i < n` 里）
+        for (var, _) in self.extract_bounds_from_condition(condition) {
+            if self.refined_vars.contains(&var) {
+                return true;
+            }
+        }
+        // 循环体中被赋值的变量（候选度量）
+        self.collect_assignments(body)
+            .iter()
+            .any(|assign| self.refined_vars.contains(&assign.var))
+    }
+
     /// 分析 while 循环的终止性
     fn check_while_loop(
         &mut self,
@@ -347,6 +401,24 @@ impl TerminationChecker {
     ) {
         // Never 返回函数：循环不终止是类型签名保证的语义，直接放行
         if is_never {
+            return;
+        }
+        // RFC-027 §7：验证模式门控——**裸 `while` 不生成终止义务**。
+        //
+        // 终止性不是独立开关，而是「验证模式」的一部分：类型一旦被精化，它
+        // 标注的那段计算才进验证模式。故只有当循环的**度量变量**（被
+        // 赋值的循环变量）带精化标注时，才要求证明终止。
+        //
+        // 反例（修复前会误报）：`mut i: Int = 0; while i < 10 { i = i + 1 }`
+        // 是普通 Int 循环，按 §7 完全不需要终止证明，此前却报 E4021。
+        //
+        // ⚠ 门控方向是**放开检查**：判错会漏查而非误查。故只看「是否有任一
+        // 度量变量带精化」，不做额外启发式猜测。
+        if !self.loop_is_in_verification_mode(condition, body) {
+            // 仍要下钻循环体，检查其中的嵌套循环（内层可能带精化）
+            for s in &body.stmts {
+                self.check_stmt(s, is_never);
+            }
             return;
         }
         // 1. 从条件中提取边界信息（仅保留循环不变量——上界在循环体内被赋值时
@@ -384,8 +456,19 @@ impl TerminationChecker {
         }
 
         // 策略 1：线性秩函数自动合成（SMT 验证）
+        //
+        // ⚠ 当前**恒不生效**，见 #377。注入求解器也无法救回任何循环：
+        //   (a) 上游 bound_is_loop_invariant 过滤把「在循环体内被赋值的边界变量」
+        //       全部剔除，而需要秩函数的形状（i<j { i+=1; j-=1 }、while flag）
+        //       边界必定在体内被改 → bounds 恒为空 → 零候选
+        //   (b) generate_rank_candidates 产出的 delta 恒为 +1，而
+        //       verify_rank_candidate 构造 m' = m + delta 后断言 not(m' < m)，
+        //       m+1 < m 恒假 → not(false) 恒真 → Sat 而非 Unsat → 恒返回 false
+        // 实测：注入 default_solver() 后与原版逐字节相同（12 种循环形状）
+        // 下面的 tripwire 测试锁定该事实；修好 (a)(b) 后它会失败，届时请
+        // 连同本注释与 #377 一起更新，而不是删掉断言
         #[cfg(not(target_arch = "wasm32"))]
-        if self.z3.is_some() {
+        if self.solver.is_some() {
             if let Some(measure) =
                 self.try_linear_rank_function(&bounds, &assignments, condition, span)
             {
@@ -843,13 +926,17 @@ impl TerminationChecker {
         _condition: &Expr,
         _span: crate::util::span::Span,
     ) -> Option<LinearMeasure> {
-        let z3 = self.z3?;
+        // ⚠ 本函数当前对任何输入都返回 None，见 #377（终止策略 1 不可用）。
+        // 调用点见 check_while_loop 的同名注释。两处缺陷：
+        //   (a) `bounds` 进到这里时已被 bound_is_loop_invariant 清空；
+        //   (b) 即使非空，verify_rank_candidate 的 delta 符号也是错的。
+        let solver = self.solver?;
 
         let bounded_vars: Vec<&str> = bounds.iter().map(|(v, _)| v.as_str()).collect();
         let candidates = self.generate_rank_candidates(&bounded_vars, bounds);
 
         for candidate in &candidates {
-            if self.verify_rank_candidate(candidate, bounds, assignments, z3) {
+            if self.verify_rank_candidate(candidate, bounds, assignments, solver) {
                 return Some(candidate.clone());
             }
         }
@@ -858,6 +945,13 @@ impl TerminationChecker {
     }
 
     /// 生成秩函数候选列表
+    ///
+    /// ⚠ 缺陷 (b) 在本函数：所有候选的 `delta` 入口恒为 `1`（见下方
+    /// `increasing(v, .., 1)`）。而 `verify_rank_candidate` 构造
+    /// `m' = var + delta` 后断言 `not (m' < m)`——`m' = m + 1` 使 `m' < m`
+    /// 恒假，`not(false)` 恒真 → 求解器返回 Sat → 验证恒失败。
+    /// 需按 `Direction` 决定 delta 符号（Increasing 度量应是 `bound - v`，其
+    /// 每次迭代减 1；而非直接对 `v` 加 delta）。见 #377。
     fn generate_rank_candidates(
         &self,
         bounded_vars: &[&str],
@@ -910,7 +1004,7 @@ impl TerminationChecker {
         candidate: &LinearMeasure,
         _bounds: &[(String, (BoundOp, BoundExpr))],
         _assignments: &[LoopAssignment],
-        z3: &Z3Backend,
+        solver: &dyn Solver,
     ) -> bool {
         let mut commands = Vec::new();
 
@@ -942,7 +1036,7 @@ impl TerminationChecker {
 
         // unsat = m' < m 在所有情况下成立 → 严格递减
         matches!(
-            z3.solve(&commands, 50),
+            solver.solve(&commands, 50),
             crate::frontend::core::typecheck::proof::smt::ast::SMTResult::Unsat
         )
     }
@@ -1003,10 +1097,13 @@ impl TerminationChecker {
 
     fn emit_loop_not_terminating(
         &mut self,
-        _span: crate::util::span::Span,
+        span: crate::util::span::Span,
     ) {
-        let reason =
-            UnprovenReason::BeyondKernel("循环无法证明终止：未找到有效的递减度量".to_string());
+        // 能力边界，不是程序错误：用 LoopTerminationUnproven（→ E4021），
+        // 不用 BeyondKernel（后者在 into_result 下会走 ICE E8001）。
+        // 具体描述由 locales 提供，不在此写死中文以免污染其他语言。
+        // span 随原因携带，使诊断指向具体循环（B10）。
+        let reason = UnprovenReason::LoopTerminationUnproven { span };
         self.results.push(ProofResult::Unproven {
             reason,
             proof_calls: vec![],

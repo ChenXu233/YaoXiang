@@ -81,6 +81,29 @@ pub struct StatementChecker {
     pub call_ownership: super::call_ownership::CallOwnershipTable,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
+    /// RFC-011b: 接口实现登记表（运算符查询唯一判据，不经名字解析）
+    interface_impl_registry:
+        HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
+    /// RFC-011 §5.2：泛型函数约束表（fn 名 → [(形参, 接口名)]）——调用点复检
+    generic_fn_constraints: std::collections::HashMap<String, Vec<(String, String)>>,
+    /// 当前函数的约束形参（形参 → 接口名）：定义体内运算符延迟派发的依据
+    current_fn_param_constraints: Option<std::collections::HashMap<String, String>>,
+    /// RFC-011a §3：重载候选签名（key → [候选 Fn]，与 ir_names 候选序对应）
+    pub method_overloads: std::collections::HashMap<String, Vec<MonoType>>,
+    /// RFC-011a §3：重载候选的 IR 混编名
+    pub method_overload_ir_names: std::collections::HashMap<String, Vec<String>>,
+    /// RFC-011a §3：重载决议点（span → 混编 IR 名）
+    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
+    /// 期望类型（带注解绑定的初始化推断时设置，方法重载按期望返回决议）
+    pub current_expected: Option<MonoType>,
+    /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
+    sum_types: HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
+    /// RFC-010: 变体构造调用点（span 键控）
+    pub variant_ctor_calls: Vec<crate::frontend::core::typecheck::environment::VariantCtorCall>,
+    /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
+    pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
+    pub operator_dispatches:
+        Vec<crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
     gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
     /// 依赖类型环境（类型族注册与查找）
@@ -139,6 +162,12 @@ impl StatementChecker {
             collect_all_errors: false,
             function_local_vars: HashMap::new(),
             result_err_stack: Vec::new(),
+            generic_fn_constraints: std::collections::HashMap::new(),
+            current_fn_param_constraints: None,
+            method_overloads: std::collections::HashMap::new(),
+            method_overload_ir_names: std::collections::HashMap::new(),
+            overload_resolutions: Vec::new(),
+            current_expected: None,
             expected_return_type: None,
             generic_type_defs: std::collections::HashMap::new(),
             method_bindings: HashMap::new(),
@@ -147,6 +176,11 @@ impl StatementChecker {
             instantiation_requests: Vec::new(),
             call_ownership: super::call_ownership::CallOwnershipTable::new(),
             existential_coercions: Vec::new(),
+            interface_impl_registry: HashMap::new(),
+            sum_types: HashMap::new(),
+            variant_ctor_calls: Vec::new(),
+            try_expr_impls: Vec::new(),
+            operator_dispatches: Vec::new(),
             gamma,
             dep_env,
             trait_table,
@@ -269,6 +303,28 @@ impl StatementChecker {
         bindings: HashMap<String, MonoType>,
     ) {
         self.method_bindings = bindings;
+    }
+
+    /// RFC-011b: 注入接口实现登记表
+    pub fn set_interface_impl_registry(
+        &mut self,
+        registry: HashMap<
+            String,
+            Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>,
+        >,
+    ) {
+        self.interface_impl_registry = registry;
+    }
+
+    /// RFC-010: 注入和类型登记表
+    pub fn set_sum_types(
+        &mut self,
+        sum_types: HashMap<
+            String,
+            Vec<crate::frontend::core::typecheck::environment::SumVariantDef>,
+        >,
+    ) {
+        self.sum_types = sum_types;
     }
 
     /// 设置证明函数基类型表（RFC-027 Phase 2.5）
@@ -689,19 +745,43 @@ impl StatementChecker {
         params: &[Param],
         body: &Block,
     ) -> Result<(), Box<Diagnostic>> {
-        self.check_fn_def_with_subst(name, params, body, &std::collections::HashMap::new())
+        self.check_fn_def_with_subst(
+            name,
+            params,
+            body,
+            &std::collections::HashMap::new(),
+            None,
+            &std::collections::HashMap::new(),
+        )
     }
 
     /// 带 const 替换的 check_fn_def（const 泛型参数名 → 底层类型的 MonoType）
+    ///
+    /// `value_params`：值级参数类型（签名剥层+替换后的结果，位置与 `params`
+    /// 对应）。函数体就是这个值级函数，参数绑定以它为准——lambda 参数缺
+    /// 标注时不再从 AST 标注抄名字（那是悬空 TypeRef 的来源）。
+    ///
+    /// `type_param_vars`：类型参数名 → 新鲜类型变量，进参数链供体内值位置
+    /// 引用（`Result(T, E).err(e)` 的 T/E）。
     fn check_fn_def_with_subst(
         &mut self,
         name: &str,
         params: &[Param],
         body: &Block,
         const_subst: &std::collections::HashMap<String, MonoType>,
+        value_params: Option<&[MonoType]>,
+        type_param_vars: &std::collections::HashMap<String, MonoType>,
     ) -> Result<(), Box<Diagnostic>> {
         let expected_ret = self.expected_return_type.clone();
-        self.check_fn_body(name, params, body, const_subst, expected_ret)
+        self.check_fn_body(
+            name,
+            params,
+            body,
+            const_subst,
+            expected_ret,
+            value_params,
+            type_param_vars,
+        )
     }
 
     /// `check_fn_def_with_subst` 的实现体。
@@ -709,6 +789,12 @@ impl StatementChecker {
     /// `expected_ret`：声明的返回类型（None = 未标注）。用于 RFC-010a 规则①
     /// 的尾表达式类型检查——此前函数体从不与声明返回类型做统一，
     /// `f: () -> Int = { "s" }` 能编译通过、拖到运行时才报错。
+    ///
+    /// `value_params`：见 [`Self::check_fn_def_with_subst`]。
+    // 形参已含 self 共 8 个：函数体检查需同时拿到声明返回类型（RFC-010a 规则①）
+    // 与值级形参签名（#泛型柯里化下传），两者来源不同不宜合并。与仓库既有
+    // ir_gen.rs / formatter/handlers/stmt.rs 的同类签名一致。
+    #[allow(clippy::too_many_arguments)]
     fn check_fn_body(
         &mut self,
         name: &str,
@@ -716,6 +802,8 @@ impl StatementChecker {
         body: &Block,
         const_subst: &std::collections::HashMap<String, MonoType>,
         expected_ret: Option<MonoType>,
+        value_params: Option<&[MonoType]>,
+        type_param_vars: &std::collections::HashMap<String, MonoType>,
     ) -> Result<(), Box<Diagnostic>> {
         // 检查是否已经检查过
         if self.checked_functions.contains_key(name) {
@@ -740,13 +828,22 @@ impl StatementChecker {
         // 创建函数作用域（#295 三链模型：参数层 + 新局部层，外层函数局部变量不可见）
         self.scope.enter_fn();
 
-        // 添加参数到函数作用域，const 泛型引用用 subst 替换
-        for param in params {
-            let param_ty = param
-                .ty
-                .as_ref()
-                .map(|t| MonoType::from(t.clone()))
-                .unwrap_or_else(|| self.solver.new_var());
+        // 添加参数到函数作用域。值级签名可用且参数个数对得上时，按位置取
+        // 签名侧类型（T/E 已替换为新鲜类型变量）；否则退回参数自身标注/
+        // fresh var（无签名或柯里化补参导致个数不齐的旧路径）。
+        // 只补空洞：参数自带标注时保留标注形态（TypeRef 名字是 IR 单态化
+        // 按声明名改写的链路，替换成匿名 TypeVar 会断链——monomorphization.yx
+        // 嵌套泛型调用回归实证）；缺标注时才用值级签名的对应位填充。
+        let positional_types = value_params.filter(|v| v.len() == params.len());
+        for (i, param) in params.iter().enumerate() {
+            let param_ty = match positional_types {
+                Some(vp) if param.ty.is_none() => vp[i].clone(),
+                _ => param
+                    .ty
+                    .as_ref()
+                    .map(|t| MonoType::from(t.clone()))
+                    .unwrap_or_else(|| self.solver.new_var()),
+            };
             let param_ty = param_ty.substitute(const_subst);
             self.add_param(
                 param.name.clone(),
@@ -763,6 +860,20 @@ impl StatementChecker {
                 self.add_param(
                     const_name.clone(),
                     PolyType::mono(const_ty.clone()),
+                    false,
+                    crate::util::span::Span::default(),
+                );
+            }
+        }
+
+        // 类型参数进参数链（与值级签名同一批新鲜变量）：体内值位置引用
+        // `Result(T, E)` 的 T/E 由此解析为类型级值。IR 层变体构造擦除类型位，
+        // 不产生运行时形态。
+        for (tp_name, tp_ty) in type_param_vars {
+            if !params.iter().any(|p| &p.name == tp_name) {
+                self.add_param(
+                    tp_name.clone(),
+                    PolyType::mono(tp_ty.clone()),
                     false,
                     crate::util::span::Span::default(),
                 );
@@ -1022,6 +1133,59 @@ impl StatementChecker {
                 // 从 value 提取 Lambda params/body。
                 // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值（交给 check_var_stmt 按普通变量审）。
+                // RFC-010 §3（具名函数本质是 lambda 语法糖）：Fn 注解 +
+                // 表达式体（`sum: (T: Add) -> (a: T, b: T) -> T = a + b`）
+                // 合成值级 lambda，与 lambda 体走同一条 check_fn_stmt 路径——
+                // 否则注册形态停留在完整柯里注解（arity 含类型位），调用点
+                // arity 全错，且定义体的约束延迟派发无从发生。
+                // 仅表达式体走此路：lambda 体已被上方臂提取
+                if type_annotation.as_ref().is_some_and(|t| {
+                    matches!(t, crate::frontend::core::parser::ast::Type::Fn { .. })
+                }) && value
+                    .as_deref()
+                    .is_some_and(|v| !matches!(v, Expr::Lambda { .. }))
+                {
+                    let value_params: Vec<Param> =
+                        signature_params
+                            .iter()
+                            .filter(|p| {
+                                match &p.ty {
+                        Some(crate::frontend::core::parser::ast::Type::MetaType { .. }) => false,
+                        Some(crate::frontend::core::parser::ast::Type::Name { name: n, .. }) => {
+                            !(self.trait_table.has_trait(n)
+                                || crate::frontend::core::typecheck::operator_interfaces::spec(n)
+                                    .is_some())
+                        }
+                        _ => true,
+                    }
+                            })
+                            .cloned()
+                            .collect();
+                    let synthetic_body = Block {
+                        stmts: vec![Stmt {
+                            kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                                value.as_deref().cloned().unwrap_or({
+                                    crate::frontend::core::parser::ast::Expr::Lit(
+                                        crate::frontend::core::lexer::tokens::Literal::Void,
+                                        stmt.span,
+                                    )
+                                }),
+                            )),
+                            span: stmt.span,
+                        }],
+                        span: stmt.span,
+                    };
+                    return self.check_fn_stmt(
+                        &name,
+                        type_annotation.as_ref(),
+                        signature_params,
+                        &value_params,
+                        &[],
+                        synthetic_body,
+                        *stmt_span,
+                    );
+                }
+
                 let (params, body_stmts) = match value {
                     Some(v) => {
                         if let Expr::Lambda { params, body, .. } = v.as_ref() {
@@ -1237,6 +1401,32 @@ impl StatementChecker {
         }
     }
 
+    /// 值级返回位的**精化应用**剥除：取基类型（RFC-027 §6 / #377 A 同源）。
+    ///
+    /// 精化是编译期约束，不是运行时类型——`f: (p: Int) -> IsPositive(5)` 的
+    /// 值级返回类型就是 `Int`。
+    ///
+    /// 为何用 `proof_fn_bases` 而非 `Refined`：本函数拿到的是
+    /// `MonoType::from(ast::Type)` 的**原始**产物（`Generic{IsPositive,[5]}`），
+    /// 尚未经 `resolve_type_annotation` 正格化，故看不到 `Refined`。
+    /// `proof_fn_bases` 正是「返回 Type 的函数名 → 其基类型」表，与
+    /// `resolve_type_annotation` 的证明函数路径同源。
+    ///
+    /// 注意：精化**只在变量绑定位被处理过**（statements.rs 入 scope 处）；
+    /// 返回位此前从未被处理，故「返回位写精化」从未可用。
+    fn strip_refined_value_type(
+        &mut self,
+        ty: MonoType,
+    ) -> MonoType {
+        match ty {
+            MonoType::Generic { ref name, .. } if name == "Terminates" => self.solver.new_var(),
+            MonoType::Generic { ref name, .. } if self.proof_fn_bases.contains_key(name) => {
+                self.proof_fn_bases.get(name).cloned().unwrap_or(ty)
+            }
+            other => other,
+        }
+    }
+
     /// 检查函数语句
     #[allow(clippy::too_many_arguments)]
     fn check_fn_stmt(
@@ -1252,8 +1442,36 @@ impl StatementChecker {
         // #353：记录绑定语句的位置，供尾表达式不符时指向它（而非体的末行）。
         // 真正该改的是注解所在的声明，不是体里那个（可能完全正确的）值。
         self.tail_annotation_span = Some(_span);
-        let generic_params =
-            classify_generic_params(signature_params, &|name| self.trait_table.has_trait(name));
+        // RFC-011 §5.2：收集约束形参（`T: Add` 的标注名为接口名）——
+        // 调用点复检与定义体内运算符延迟派发的依据
+        {
+            let constraints: Vec<(String, String)> = signature_params
+                .iter()
+                .filter_map(|p| match &p.ty {
+                    Some(crate::frontend::core::parser::ast::Type::Name { name: n, .. })
+                        if self.trait_table.has_trait(n)
+                            || crate::frontend::core::typecheck::operator_interfaces::spec(n)
+                                .is_some() =>
+                    {
+                        Some((p.name.clone(), n.clone()))
+                    }
+                    _ => None,
+                })
+                .collect();
+            if !constraints.is_empty() {
+                self.generic_fn_constraints
+                    .insert(name.to_string(), constraints.clone());
+            }
+            self.current_fn_param_constraints = if constraints.is_empty() {
+                None
+            } else {
+                Some(constraints.into_iter().collect())
+            };
+        }
+        let generic_params = classify_generic_params(signature_params, &|name| {
+            self.trait_table.has_trait(name)
+                || crate::frontend::core::typecheck::operator_interfaces::spec(name).is_some()
+        });
 
         // 检查是否与结构体重名
         if let Some(existing) = self.scope.get_var(name) {
@@ -1310,7 +1528,12 @@ impl StatementChecker {
 
         let mut used_as_const: std::collections::HashSet<String> = std::collections::HashSet::new();
         if !candidate_names.is_empty() {
-            // 扫描内层 Fn 的 params 判断 const 用途
+            // 扫描内层 Fn 的 params 判断 const 用途。
+            //
+            // RFC-027a：谓词应用的实参位是编译期表达式（值）而非类型引用
+            //（`Terminates(b)` 的 `b`），不得计入 const 用途——见
+            // `collect_used_in_type` 的 `is_predicate` 参数。
+            let is_predicate = |n: &str| n == "Terminates" || self.proof_fn_bases.contains_key(n);
             if let Some(crate::frontend::core::parser::ast::Type::Fn { return_type, .. }) =
                 type_annotation
             {
@@ -1320,10 +1543,20 @@ impl StatementChecker {
                 } = return_type.as_ref()
                 {
                     for p in inner_params {
-                        collect_used_in_type(p, &candidate_names, &mut used_as_const);
+                        collect_used_in_type(
+                            p,
+                            &candidate_names,
+                            &mut used_as_const,
+                            &is_predicate,
+                        );
                     }
                 }
-                collect_used_in_type(return_type, &candidate_names, &mut used_as_const);
+                collect_used_in_type(
+                    return_type,
+                    &candidate_names,
+                    &mut used_as_const,
+                    &is_predicate,
+                );
             }
         }
 
@@ -1336,7 +1569,23 @@ impl StatementChecker {
         let const_binders: Vec<crate::frontend::core::types::const_data::ConstVarDef> =
             resolved.const_binders;
 
-        // 将函数自身注册到变量环境中
+        // 将函数自身注册到变量环境中。
+        //
+        // 两个产物，别混：
+        // - **注册形态**（registered，进 scope 给调用点）：类型泛型嵌套剥掉
+        //   类型层（调用点由类型推断填充，RFC-011）；const 柯里化与闭包包装
+        //   保持柯里形态（`f: (N: Int) -> (n: N) -> Int` 的 `f(42)(5)` 是两次
+        //   应用）。
+        // - **值级形态**（value_sig，给函数体）：函数体到底是哪层函数——
+        //   闭包包装形态（parser 对 `-> ((b: Int) -> R) = (b) => ...` 且首组
+        //   含值参数时包成「外层返回内层 lambda」）的体是**外层**函数；
+        //   其余（curried 泛型、普通函数）的体是**最内层**值函数。
+        //
+        // 类型参数名 → 新鲜类型变量（与签名同一批变量）：函数体值位置引用
+        // 类型参数（如 `Result(T, E).err(e)` 的 T/E）以此为解析依据。
+        let mut value_sig: Option<(Vec<MonoType>, MonoType)> = None;
+        let mut type_param_vars: std::collections::HashMap<String, MonoType> =
+            std::collections::HashMap::new();
         if let Some(type_ann) = type_annotation {
             if let crate::frontend::core::parser::ast::Type::Fn {
                 params: param_types,
@@ -1348,102 +1597,94 @@ impl StatementChecker {
                     .map(|t| MonoType::from(t.clone()))
                     .collect();
                 let fn_return_type = MonoType::from(*return_type.clone());
+                // RFC-027：值级返回位的精化剥除（`IsPositive(5)` → `Int`；
+                // `Terminates(b)` → 新鲜变量）。不剥则 `Refined` 直接参与 return
+                // 统一 → E1002。精化是编译期约束，不是运行时类型。
+                let fn_return_type = self.strip_refined_value_type(fn_return_type);
 
-                // 泛型函数处理：剥离类型级参数，替换 TypeRef 为类型变量
-                let (final_params, final_ret) = if !type_generic_params.is_empty()
-                    && fn_param_types.len() >= type_generic_params.len()
-                {
-                    let mut subst = std::collections::HashMap::new();
-                    for gp in &type_generic_params {
-                        let fresh_var = self.solver.new_var();
-                        subst.insert(gp.name.clone(), fresh_var);
-                    }
+                // 闭包包装形态：体的末位是单个 lambda 表达式语句
+                //（parser paren_return 包装的标记，declarations.rs）
+                let wrapped_closure = body.stmts.len() == 1
+                    && matches!(
+                        &body.stmts[0].kind,
+                        crate::frontend::core::parser::ast::StmtKind::Expr(e)
+                            if matches!(e.as_ref(), crate::frontend::core::parser::ast::Expr::Lambda { .. })
+                    );
 
-                    // 添加 const 参数名到 subst
-                    for cb in &const_binders {
-                        let base_ty = match cb.kind {
-                            crate::frontend::core::types::const_data::ConstKind::Int(_) => {
-                                MonoType::Int(64)
-                            }
-                            crate::frontend::core::types::const_data::ConstKind::Bool => {
-                                MonoType::Bool
-                            }
-                            crate::frontend::core::types::const_data::ConstKind::Float(_) => {
-                                MonoType::Float(64)
-                            }
-                        };
-                        subst.insert(cb.name.clone(), base_ty);
-                    }
+                let mut subst = std::collections::HashMap::new();
+                for gp in &type_generic_params {
+                    let fresh_var = self.solver.new_var();
+                    subst.insert(gp.name.clone(), fresh_var.clone());
+                    type_param_vars.insert(gp.name.clone(), fresh_var);
+                }
+                for cb in &const_binders {
+                    let base_ty = match cb.kind {
+                        crate::frontend::core::types::const_data::ConstKind::Int(_) => {
+                            MonoType::Int(64)
+                        }
+                        crate::frontend::core::types::const_data::ConstKind::Bool => MonoType::Bool,
+                        crate::frontend::core::types::const_data::ConstKind::Float(_) => {
+                            MonoType::Float(64)
+                        }
+                    };
+                    subst.insert(cb.name.clone(), base_ty);
+                }
+                let substituted_ret = fn_return_type.clone().substitute(&subst);
+                let substituted_params: Vec<MonoType> = fn_param_types
+                    .iter()
+                    .map(|t| t.clone().substitute(&subst))
+                    .collect();
 
-                    let inner_fn_ty = fn_return_type.clone().substitute(&subst);
-                    match inner_fn_ty {
-                        MonoType::Fn {
-                            params: inner_params,
-                            return_type: inner_ret,
-                            ..
-                        } => (inner_params, *inner_ret),
-                        // return_type 不是 Fn（可能是单值泛型），保持原样
-                        _ => (fn_param_types, fn_return_type),
-                    }
-                } else if !const_binders.is_empty() {
-                    // 没有 Type 泛型但有 const 泛型：替换 param_types 和 return_type 中的 const ref
-                    let mut subst = std::collections::HashMap::new();
-                    for cb in &const_binders {
-                        let base_ty = match cb.kind {
-                            crate::frontend::core::types::const_data::ConstKind::Int(_) => {
-                                MonoType::Int(64)
-                            }
-                            crate::frontend::core::types::const_data::ConstKind::Bool => {
-                                MonoType::Bool
-                            }
-                            crate::frontend::core::types::const_data::ConstKind::Float(_) => {
-                                MonoType::Float(64)
-                            }
-                        };
-                        subst.insert(cb.name.clone(), base_ty);
-                    }
-                    let substituted_params: Vec<MonoType> = fn_param_types
-                        .iter()
-                        .map(|t| t.clone().substitute(&subst))
-                        .collect();
-                    let substituted_ret = fn_return_type.clone().substitute(&subst);
+                let (registered_params, registered_ret) = if wrapped_closure {
+                    // 闭包包装：整体替换后的柯里形态（体检查走外层）
                     (substituted_params, substituted_ret)
                 } else if !type_generic_params.is_empty() {
-                    // 平铺形态的类型参数层。
-                    //
-                    // `mk: (A: Type) -> (x: A) -> A` 解析为**平铺**
-                    // `Fn{params: [MetaType(A), A], return: A}`（不是嵌套 Fn），
-                    // 于是上面 `return_type 是 Fn` 的剥层分支进不去。
-                    // IR 侧 `split_curry` 对「纯类型参数层」的判据是
-                    // 「不占运行时参数位、该层擦除」（调用点由类型推断填充，RFC-011）
-                    // ——这里必须一致，否则 `mk(Int)` 会被当成传一个**值**给 A，
-                    // 返回类型变成 `MetaType` 而非 `A`（D6.3：`mk(Int)(5)` 静默出 void）。
-                    let n = type_generic_params.len();
-                    // 仅当前缀确为类型参数位时剥离（保持与 split_curry 同款保守：
-                    // 类型/值混合同层时不拆）
-                    let prefix_is_type_slots = fn_param_types
-                        .iter()
-                        .take(n)
-                        .all(|t| matches!(t, MonoType::TypeRef(_) | MonoType::MetaType { .. }));
-                    if prefix_is_type_slots && fn_param_types.len() > n {
-                        let mut subst = std::collections::HashMap::new();
-                        for gp in &type_generic_params {
-                            subst.insert(gp.name.clone(), self.solver.new_var());
-                        }
-                        (
-                            fn_param_types[n..].to_vec(),
-                            fn_return_type.clone().substitute(&subst),
-                        )
+                    // 类型泛型：
+                    // - 嵌套形态（`(T: Type, E: Type) -> ((self: &Result(T, E)) -> Bool)`）
+                    //   return_type 整体是内层 Fn，替换后剥出值级参数与返回类型；
+                    // - 平铺形态（`mk: (A: Type, item: A) -> Box(A)`）**不剥也不替换**，
+                    //   保持 TypeRef 名字的完整槽位形态——调用点 monomorphize 按
+                    //   声明名（TypeRef）绑类型实参、split_curry 按位消化类型槽，
+                    //   提前替换成 TypeVar 会断开声明名链路（generic_slot_alignment
+                    //   回归实证）。
+                    if let MonoType::Fn {
+                        params: inner_params,
+                        return_type: inner_ret,
+                        ..
+                    } = substituted_ret
+                    {
+                        (inner_params, *inner_ret)
                     } else {
                         (fn_param_types, fn_return_type)
                     }
                 } else {
-                    (fn_param_types, fn_return_type)
+                    // const 柯里 / 普通函数：整体替换后的形态
+                    (substituted_params, substituted_ret)
                 };
 
+                // 值级形态：闭包包装 = 外层函数本体；否则取最内层 Fn
+                let (value_params, value_ret) = if wrapped_closure {
+                    (registered_params.clone(), registered_ret.clone())
+                } else {
+                    let mut vp = registered_params.clone();
+                    let mut vr = registered_ret.clone();
+                    while let MonoType::Fn {
+                        params: inner_params,
+                        return_type: inner_ret,
+                        ..
+                    } = vr
+                    {
+                        vp = inner_params;
+                        vr = *inner_ret;
+                    }
+                    (vp, vr)
+                };
+
+                value_sig = Some((value_params, value_ret));
+
                 let fn_type = MonoType::Fn {
-                    params: final_params,
-                    return_type: Box::new(final_ret),
+                    params: registered_params,
+                    return_type: Box::new(registered_ret),
                 };
                 let poly = if const_binders.is_empty() {
                     PolyType::mono(fn_type)
@@ -1479,19 +1720,9 @@ impl StatementChecker {
             );
         }
 
-        // 从函数签名提取最内层返回类型（curried 函数的值级返回类型）
-        let innermost_ret = type_annotation.and_then(|t| {
-            if let crate::frontend::core::parser::ast::Type::Fn { return_type, .. } = t {
-                Some(MonoType::from(
-                    innermost_return_type(return_type.as_ref()).clone(),
-                ))
-            } else {
-                None
-            }
-        });
-
-        // Result 错误类型（用于 `?` 运算符检查）
-        let fn_result_err = innermost_ret.as_ref().and_then(|ret| match ret {
+        // Result 错误类型（用于 `?` 运算符检查）——取值级返回类型的 E 位
+        //（已替换为新鲜类型变量，不再是悬空的 TypeRef 名字）
+        let fn_result_err = value_sig.as_ref().and_then(|(_, ret)| match ret {
             m if m.is_result() => {
                 let args = m.generic_args().unwrap();
                 Some(args[1].clone())
@@ -1500,53 +1731,8 @@ impl StatementChecker {
         });
         self.result_err_stack.push(fn_result_err);
 
-        // 预期返回类型（用于 return 语句类型检查）
-        self.expected_return_type = innermost_ret;
-
-        // 当 body 的参数缺少类型标注时，从函数签名中补全
-        // 例如: Point.getX: (self: &Point) -> Float = (self) => { ... }
-        // 此时 body 的 params 为 [Param { name: "self", ty: None }]
-        // 需要从 type_annotation 的 Fn params 中获取类型
-        let owned_merged_params: Vec<Param>;
-        let params = if let Some(crate::frontend::core::parser::ast::Type::Fn {
-            params: sig_param_types,
-            return_type,
-            ..
-        }) = type_annotation
-        {
-            // 当 lambda 参数缺类型标注时，从最内层 Fn（值级参数层）补全类型
-            let value_param_types = innermost_fn_param_types(sig_param_types, return_type);
-            let needs_merge = params.iter().any(|p| p.ty.is_none())
-                && !params.is_empty()
-                && value_param_types.len() >= params.len();
-            if needs_merge {
-                owned_merged_params = params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, p)| {
-                        if p.ty.is_none() {
-                            if let Some(sig_ty) = value_param_types.get(i) {
-                                Param {
-                                    name: p.name.clone(),
-                                    ty: Some(sig_ty.clone()),
-                                    is_mut: p.is_mut,
-                                    span: p.span,
-                                }
-                            } else {
-                                p.clone()
-                            }
-                        } else {
-                            p.clone()
-                        }
-                    })
-                    .collect();
-                &owned_merged_params
-            } else {
-                params
-            }
-        } else {
-            params
-        };
+        // 预期返回类型（用于 return 语句类型检查）——值级返回类型
+        self.expected_return_type = value_sig.as_ref().map(|(_, ret)| ret.clone());
 
         // 补充 curry 后续组的值参数（如 `factorial: (N: Int) -> (n: N) -> Int` 的 `n`）。
         // 跳过：Type 泛型参数（编译期擦除）、用途分析注册的 const 泛型参数（经 const_subst 注册）。
@@ -1589,13 +1775,21 @@ impl StatementChecker {
             std::collections::HashMap::new()
         };
 
-        let out = self.check_fn_def_with_subst(name, &params, &body, &const_subst);
+        let out = self.check_fn_def_with_subst(
+            name,
+            &params,
+            &body,
+            &const_subst,
+            value_sig.as_ref().map(|(ps, _)| ps.as_slice()),
+            &type_param_vars,
+        );
 
         // Clear expected return type after function body checking
         self.expected_return_type = None;
 
         // 退出函数 Result 上下文
         let _ = self.result_err_stack.pop();
+        self.current_fn_param_constraints = None;
 
         out
     }
@@ -1624,7 +1818,22 @@ impl StatementChecker {
 
         let ty = match (initializer, type_annotation) {
             (Some(init_expr), Some(type_ann)) => {
-                let init_ty = self.check_expr(init_expr)?;
+                // 期望类型先行（方法重载按期望返回决议）：注解解析 →
+                // 设为当前期望 → init 推断 → 恢复
+                let ann_expected = type_annotation
+                    .and_then(|t| self.try_instantiate_generic_type(t))
+                    .or_else(|| type_annotation.map(|t| MonoType::from(t.clone())));
+                self.current_expected = ann_expected.clone();
+                let init_ty = match self.check_expr(init_expr) {
+                    Ok(t) => {
+                        self.current_expected = None;
+                        t
+                    }
+                    Err(e) => {
+                        self.current_expected = None;
+                        return Err(e);
+                    }
+                };
                 // Try generic type instantiation for List(Int) → struct expansion
                 let ann_ty = self
                     .try_instantiate_generic_type(type_ann)
@@ -1638,7 +1847,35 @@ impl StatementChecker {
                 } = type_ann
                 {
                     if !args.is_empty() {
-                        if let Some(base) = self.proof_fn_bases.get(name) {
+                        // RFC-027a：`Terminates(m)` 是内置谓词（无源码声明），
+                        // 故不在 `proof_fn_bases` 里——单独分支正格化为 `Refined`。
+                        // 基类型取新鲜变量：终止性见证不约束值类型。
+                        //
+                        // ⚠ 测度保真缺口（T2 范围）：下面只收 `Type::ConstExpr` 实参，
+                        // 而 `Terminates(b)` 的 `b` 在 AST 里是 `Type::Name`，故此处
+                        // `constraint_args` 可能为空。T1 的验收是「不报错」，已达成；
+                        // 测度的实际提取与保真由 T2 处理（需同时收 `Name` 与
+                        // `ConstExpr` 两种形态）。与证明函数路径同型限制。
+                        if name == "Terminates" && args.len() == 1 {
+                            let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
+                                .iter()
+                                .filter_map(|a| {
+                                    if let crate::frontend::core::parser::ast::Type::ConstExpr(expr) = a {
+                                        crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(expr)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+                            MonoType::Refined {
+                                base: Box::new(self.solver.new_var()),
+                                constraint:
+                                    crate::frontend::core::types::const_data::ConstExpr::Call {
+                                        func: "Terminates".into(),
+                                        args: constraint_args,
+                                    },
+                            }
+                        } else if let Some(base) = self.proof_fn_bases.get(name) {
                             let constraint_args: Vec<crate::frontend::core::types::const_data::ConstExpr> = args
                                 .iter()
                                 .filter_map(|a| {
@@ -1836,6 +2073,22 @@ impl StatementChecker {
                     && matches!(resolved_init, MonoType::Struct(_))
                 {
                     resolved_init
+                } else if let MonoType::Refined { base, .. } = &ann_ty {
+                    // RFC-027 §6 / #377 A：精化变量入 scope 的必须是其 **base**。
+                    //
+                    // 精化是编译期约束，不是运行时类型——`y: IsPositive(5)` 的运行时
+                    // 类型就是 `Int`。此前走到下面的 Generic 臂，存回
+                    // `Generic{name:"IsPositive"}`，于是下游每个「期望 base」的位置
+                    // （`z: Int = y`、`return y`、作实参）都撞 E1002。
+                    //
+                    // 约束本身不在此消费：`IsPositive(5)` 校验的是**注解里的字面量
+                    // 5**（静态命题「5 > 0」），与变量后续取值无关——`y: IsPositive(5)
+                    // = -9999` 亦不报错，故「重赋值是否违反约束」不是本层能判定的事。
+                    // 该命题为假时已由注解处的证明调用报 E4018（pipeline.rs）。
+                    //
+                    // 依赖型精化（`s: SumUpTo(n, 6)`，n 变更后重验证）是另一条独立
+                    // 缺口：VC 生成器查 env 得 None 而静默跳过，见 #379。
+                    (**base).clone()
                 } else if let crate::frontend::core::parser::ast::Type::Generic {
                     name, args, ..
                 } = type_ann
@@ -2221,6 +2474,11 @@ impl StatementChecker {
                             Ok(l)
                         } else if let (MonoType::Float(_), MonoType::Float(_)) = (&l, &r) {
                             Ok(l)
+                        } else if let (MonoType::Int(_), MonoType::Float(_))
+                        | (MonoType::Float(_), MonoType::Int(_)) = (&l, &r)
+                        {
+                            // RFC-011b：Int~Float 混合 widening，结果恒 Float
+                            Ok(MonoType::Float(64))
                         } else if l.is_string() && r.is_string() {
                             Ok(MonoType::make_string())
                         } else if l.is_list() && r.is_list() {
@@ -2236,6 +2494,65 @@ impl StatementChecker {
                                 || matches!(right_ty, MonoType::TypeVar(_))
                             {
                                 return Ok(self.solver.new_var());
+                            }
+                            // RFC-011b：登记表查询（用户实例化的运算符重载）
+                            {
+                                use crate::frontend::core::typecheck::operator_interfaces as ops;
+                                if let Some(iface) = ops::arithmetic_interface(op) {
+                                    if let Some((entry, remaining)) = ops::query_operator_template(
+                                        &self.interface_impl_registry,
+                                        &self.generic_type_defs,
+                                        &mut self.solver,
+                                        iface,
+                                        &[l.clone(), r.clone()],
+                                    ) {
+                                        if !entry.native {
+                                            self.operator_dispatches.push(ops::OperatorDispatch {
+                                                span: *span,
+                                                type_name: entry.impl_type.clone(),
+                                                method: entry
+                                                    .methods
+                                                    .first()
+                                                    .cloned()
+                                                    .unwrap_or_else(|| "add".to_string()),
+                                                negate: false,
+                                            });
+                                        }
+                                        if let Some(result_ty) = remaining.first() {
+                                            return Ok(result_ty.clone());
+                                        }
+                                    }
+                                }
+                            }
+                            // RFC-011 §5.2：约束形参延迟派发（定义体内 T 上的
+                            // 运算符）——与 ExpressionInferrer 同款判定
+                            if let Some(iface) =
+                                crate::frontend::core::typecheck::operator_interfaces::arithmetic_interface(op)
+                            {
+                                if let Some(constraints) = &self.current_fn_param_constraints {
+                                    let operands = [&l, &r];
+                                    for operand in operands {
+                                        if let MonoType::TypeRef(pn) = operand {
+                                            if constraints.get(pn).map(|s| s.as_str())
+                                                == Some(iface)
+                                            {
+                                                if let Some(spec) =
+                                                    crate::frontend::core::typecheck::operator_interfaces::spec(iface)
+                                                {
+                                                    self.operator_dispatches.push(
+                                                        crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch {
+                                                            span: *span,
+                                                            type_name: pn.clone(),
+                                                            method: spec.method.to_string(),
+                                                            negate: false,
+                                                        },
+                                                    );
+                                                }
+                                                return Ok(operand.clone());
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             // 与 infer_binary 同款纪律：类型层不认的组合宁拒不
                             // 静默，fresh var 兜底会把错译推迟到运行时 E6007
@@ -2284,10 +2601,21 @@ impl StatementChecker {
                                 current_result_err,
                             );
                         inferrer.set_method_bindings(&self.method_bindings);
+                        inferrer.set_interface_impl_registry(&self.interface_impl_registry);
+                        inferrer.set_sum_types(&self.sum_types);
                         inferrer.set_type_defs(&self.type_defs);
                         inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
                         inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
+                        inferrer.set_current_fn_param_constraints(
+                            self.current_fn_param_constraints.as_ref(),
+                        );
+                        inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
+                        inferrer.set_method_overloads(
+                            &self.method_overloads,
+                            &self.method_overload_ir_names,
+                        );
+                        inferrer.set_current_expected(self.current_expected.clone());
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                         inferrer.set_loop_depth(self.loop_depth);
@@ -2303,6 +2631,12 @@ impl StatementChecker {
                         self.call_ownership.extend(inferrer.call_ownership);
                         self.existential_coercions
                             .extend(inferrer.existential_coercions);
+                        self.try_expr_impls.append(&mut inferrer.try_expr_impls);
+                        self.overload_resolutions
+                            .append(&mut inferrer.overload_resolutions);
+                        self.operator_dispatches
+                            .extend(inferrer.operator_dispatches);
+                        self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
                         result
                     }
                 }
@@ -2360,8 +2694,16 @@ impl StatementChecker {
                     &self.method_bindings,
                 );
                 inferrer.set_type_defs(&self.type_defs);
+                inferrer.set_interface_impl_registry(&self.interface_impl_registry);
+                inferrer.set_sum_types(&self.sum_types);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
                 inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
+                inferrer
+                    .set_current_fn_param_constraints(self.current_fn_param_constraints.as_ref());
+                inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
+                inferrer
+                    .set_method_overloads(&self.method_overloads, &self.method_overload_ir_names);
+                inferrer.set_current_expected(self.current_expected.clone());
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                 inferrer.set_loop_depth(self.loop_depth);
@@ -2377,44 +2719,18 @@ impl StatementChecker {
                 self.call_ownership.extend(inferrer.call_ownership);
                 self.existential_coercions
                     .extend(inferrer.existential_coercions);
+                self.try_expr_impls.append(&mut inferrer.try_expr_impls);
+                self.overload_resolutions
+                    .append(&mut inferrer.overload_resolutions);
+                self.operator_dispatches
+                    .extend(inferrer.operator_dispatches);
+                self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
                 result
             }
         }
     }
 }
 
-/// 从最内层 Fn 类型中提取参数类型（值级参数层）
-///
-/// `(T: Type) -> ((x: Int) -> Int)` → `[Int]`（最内层 Fn 的参数）
-/// 非嵌套场景 `(x: Int) -> Int` → `[Int]`
-fn innermost_fn_param_types(
-    outer_params: &[crate::frontend::core::parser::ast::Type],
-    return_type: &crate::frontend::core::parser::ast::Type,
-) -> Vec<crate::frontend::core::parser::ast::Type> {
-    if let crate::frontend::core::parser::ast::Type::Fn {
-        params: inner_params,
-        return_type: inner_ret,
-    } = return_type
-    {
-        innermost_fn_param_types(inner_params, inner_ret)
-    } else {
-        outer_params.to_vec()
-    }
-}
-
-/// 从嵌套 Fn 类型中提取最内层的返回类型
-///
-/// `(Int) -> ((Int) -> Int)` → `Int`
-/// `Int` → `Int`（非 Fn 直接返回自身）
-fn innermost_return_type(
-    ty: &crate::frontend::core::parser::ast::Type
-) -> &crate::frontend::core::parser::ast::Type {
-    if let crate::frontend::core::parser::ast::Type::Fn { return_type, .. } = ty {
-        innermost_return_type(return_type.as_ref())
-    } else {
-        ty
-    }
-}
 /// #286: 检查 MonoType 是否含未解析的泛型参数（TypeRef/TypeVar）。
 /// 用于区分「构造器推断的悬空泛型实例」（字段还是 TypeRef 占位，合法豁免）
 /// 与「实参已确定具体类型但 unify 失败」（真不匹配，必须报错）。

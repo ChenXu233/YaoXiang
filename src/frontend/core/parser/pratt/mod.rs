@@ -85,6 +85,13 @@ impl ParserState<'_> {
         let mut left = left;
 
         while let Some(_token) = self.current().cloned() {
+            // match 臂守卫模式（RFC-010b）：`=>` 是臂分隔符不是 lambda 中缀，
+            // 守卫表达式在此完整收尾（`n if n > 3 => ...` 的 `n > 3` 不被截断）
+            if self.no_fat_arrow
+                && matches!(self.current().map(|t| &t.kind), Some(TokenKind::FatArrow))
+            {
+                break;
+            }
             // 使用 led.rs 的 infix_info 分发所有中缀解析
             let (bp_left, bp_right, parser_fn) = match self.infix_info() {
                 Some(info) => info,

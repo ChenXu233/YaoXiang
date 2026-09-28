@@ -11,7 +11,7 @@ issue: '#101'
 
 > **参考**:
 >
-> - [RFC-018：LLVM AOT 编译器设计](../review/018-llvm-aot-compiler.md)
+> - [RFC-018：LLVM AOT 编译器设计](../accepted/018-llvm-aot-compiler.md)
 > - [RFC-024：基于 spawn 块的并发模型](../accepted/024-concurrency-model.md)
 > - [RFC-008：Runtime 并发模型与调度器脱耦设计](../accepted/008-runtime-concurrency-model.md)
 
@@ -402,7 +402,7 @@ JIT 本身只需要函数。按模块组织完全是为热重载服务的：模�
 ## 参考文献
 
 - [Cranelift IR Documentation](https://github.com/bytecodealliance/wasmtools/tree/main/cranelift)
-- [RFC-018：LLVM AOT 编译器设计](../review/018-llvm-aot-compiler.md)
+- [RFC-018：LLVM AOT 编译器设计](../accepted/018-llvm-aot-compiler.md)
 - [RFC-024：基于 spawn 块的并发模型](../accepted/024-concurrency-model.md)
 - [RFC-008：Runtime 并发模型与调度器脱耦设计](../accepted/008-runtime-concurrency-model.md)
 - Hölzle, U. (1994). _Adaptive Optimization for Self: Reconciling High Performance with Exploratory

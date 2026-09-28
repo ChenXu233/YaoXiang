@@ -812,7 +812,7 @@ pub const CONST_PARAM_TYPES: &[&str] = &[
 ///
 /// 与 `declarations.rs` 的 `name_used_as_type` 同义，此处独立实现以避免
 /// parser 内部跨模块依赖。
-fn name_used_as_type_in(
+pub fn name_used_as_type_in(
     name: &str,
     ty: &Type,
 ) -> bool {
@@ -832,6 +832,21 @@ fn name_used_as_type_in(
         Type::Result(a, b) => name_used_as_type_in(name, a) || name_used_as_type_in(name, b),
         Type::Tuple(types) | Type::Sum(types) => {
             types.iter().any(|t| name_used_as_type_in(name, t))
+        }
+        // 类型定义体：字段类型里的引用也算（`SafeArray = { data: Array(T, N) }`
+        // 的 `N`）。此前缺这两个分支，const 泛型参数在定义体内被引用时
+        // 判不出「被当类型用」，注解校验会把合法 const 参数误报未知名。
+        Type::Struct { body } => body.iter().any(|item| match item {
+            crate::frontend::core::parser::ast::TypeBodyItem::Field(f) => {
+                name_used_as_type_in(name, &f.ty)
+            }
+            crate::frontend::core::parser::ast::TypeBodyItem::Expr(e) => {
+                name_used_as_type_in(name, e)
+            }
+            _ => false,
+        }),
+        Type::NamedStruct { fields, .. } => {
+            fields.iter().any(|f| name_used_as_type_in(name, &f.ty))
         }
         _ => false,
     }
@@ -875,6 +890,18 @@ pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
                     } else {
                         None
                     }
+                }
+                // RFC-011 §5.2：约束形参（`T: Add`——标注为运算符接口名）。
+                // 接口规格是编译器侧封闭集合，此处可静态判定；其余 Name
+                // （用户类型标注的值参数）仍保守跳过
+                Type::Name { name, .. }
+                    if crate::frontend::core::typecheck::operator_interfaces::spec(name)
+                        .is_some() =>
+                {
+                    Some(GenericParamName {
+                        name: p.name.clone(),
+                        constraints: vec![ty.clone()],
+                    })
                 }
                 Type::Name { .. } => {
                     // 无法确认是否为 trait → 保守不下泛型参数

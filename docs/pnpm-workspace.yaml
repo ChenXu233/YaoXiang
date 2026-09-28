@@ -1,6 +1,11 @@
 allowBuilds:
   esbuild: true
 overrides:
+  # GHSA-r5fr-rjxr-66jc / GHSA-f23m-r3pf-42rh：lodash-es <=4.17.23 有原型污染等告警，
+  # 4.18.0 起修复。消费链 mermaid@12.0.0 -> chevrotain@11.1.2 -> lodash-es（精确锁 4.17.23），
+  # mermaid 最新版仍锁 chevrotain ~11.1.2，无法靠升级父依赖解决，故在此拉平。
+  # chevrotain 与 dagre-d3-es 均只用 lodash-es 的基础工具函数，4.18.x 无 API 移除。
+  lodash-es@<=4.17.23: ^4.18.1
   js-yaml@<4.1.1: ^4.1.1
   # advisories 的 "patched: None" 是元数据滞后：2.0.3/2.0.4 已修
   # （GHSA-5p2g-fcmc-qvqq / GHSA-w3rx-r6r6-pgpr）

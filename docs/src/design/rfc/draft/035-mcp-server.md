@@ -448,10 +448,10 @@ pub struct ParseSourceInput {
 
 ## 参考文献
 
-- [RFC-017: 语言服务器协议（LSP）支持设计](./accepted/017-lsp-support.md)
-- [RFC-013: 错误代码规范设计](./accepted/013-error-code-specification.md)
-- [RFC-014: 包管理系统设计](./accepted/014-package-manager.md)
-- [RFC-015: YaoXiang 配置系统设计](./accepted/015-configuration-system.md)
+- [RFC-017: 语言服务器协议（LSP）支持设计](../accepted/017-lsp-support.md)
+- [RFC-013: 错误代码规范设计](../accepted/013-error-code-specification.md)
+- [RFC-014: 包管理系统设计](../accepted/014-package-manager.md)
+- [RFC-015: YaoXiang 配置系统设计](../accepted/015-configuration-system.md)
 - [MCP 规范](https://modelcontextprotocol.io/)
 - [MCP Rust SDK](https://github.com/modelcontextprotocol/rust-sdk)
 - [JSON-RPC 2.0](https://www.jsonrpc.org/specification)

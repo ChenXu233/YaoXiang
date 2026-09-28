@@ -22,7 +22,7 @@ mk_range: (n: Int) -> Result(Iterator(Any), Error) = {
 step0: (n: Int) -> Result(Any, Error) = {
     r = 1..10..n
     it = range.iter(r)?
-    return result.ok(range.next(it))
+    return Result(Any, Error).ok(range.next(it))
 }
 
 main: () -> Void = {

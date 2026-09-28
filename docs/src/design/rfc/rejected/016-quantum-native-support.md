@@ -12,11 +12,11 @@ updated: '2026-06-05'
 
 > **依赖**:
 >
-> - [RFC-001: 并作模型与错误处理系统](./001-concurrent-model-error-handling.md)
-> - [RFC-008: Runtime 并发模型与调度器脱耦设计](./008-runtime-concurrency-model.md)
-> - [RFC-009: 所有权模型设计](./009-ownership-model.md)
-> - [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
-> - [RFC-011: 泛型系统设计](./011-generic-type-system.md)
+> - [RFC-001: 并作模型与错误处理系统](../deprecated/001-concurrent-model-error-handling.md)
+> - [RFC-008: Runtime 并发模型与调度器脱耦设计](../accepted/008-runtime-concurrency-model.md)
+> - [RFC-009: 所有权模型设计](../accepted/009-ownership-model.md)
+> - [RFC-010: 统一类型语法](../accepted/010-unified-type-syntax.md)
+> - [RFC-011: 泛型系统设计](../accepted/011-generic-type-system.md)
 
 ## 摘要
 

@@ -43,7 +43,7 @@ design/
 | [RFC-024 并发模型](./rfc/accepted/024-concurrency-model.md)                                                              | ✅ 已接受 | spawn并发原语语义    |
 | [RFC-027 编译期断言](./rfc/accepted/027-compile-time-evaluation-types.md)                                                | ✅ 已接受 | 编译期谓词与静态验证 |
 
-> 查看 [`rfc/accepted/`](./rfc/accepted/) 目录获取完整列表（共16个），及 [`rfc/index.md`](./rfc/index.md) 查看最新状态。
+> 查看 [`rfc/accepted/`](./rfc/) 目录获取完整列表（共16个），及 [`rfc/index.md`](./rfc/index.md) 查看最新状态。
 
 ## RFC 提案
 
@@ -219,11 +219,11 @@ process: () -> Result(Data, Error) = {
 - [参考文档](../reference/) - API 和标准库
 - [语言规范](../reference/language-spec/index.md) - 完整的语言规范
 - [GitHub Discussions](https://github.com/ChenXu233/YaoXiang/discussions)
-- [贡献指南](../tutorial/contributing.md)
+- [贡献指南](../dev/contributing.md)
 
 ## 历史归档
 
-设计过程中的历史文档已移至 [`docs/old/`](../../old/) 目录，包括：
+设计过程中的历史文档已移至 `docs/src/archive/` 目录（该目录不参与站点构建），包括：
 
 - 早期架构设计
 - 已废弃的提案

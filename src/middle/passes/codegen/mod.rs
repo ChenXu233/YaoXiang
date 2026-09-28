@@ -219,9 +219,18 @@ impl CodegenContext {
                     .unwrap_or_default();
                 sources.add_file(path.clone(), content);
             }
-            super::codegen::bytecode::DebugSection::from_sources_and_functions(
+            // #368：全局槽位名表——顶层绑定不在任何函数局部名表里，
+            // 没有它顶层 `a[i]` 的越界诊断报不出变量名。
+            let global_names: std::collections::HashMap<usize, String> = self
+                .module
+                .globals
+                .iter()
+                .map(|g| (g.index, g.name.clone()))
+                .collect();
+            super::codegen::bytecode::DebugSection::with_global_names(
                 sources,
                 &output.code_section.functions,
+                global_names,
             )
         });
 

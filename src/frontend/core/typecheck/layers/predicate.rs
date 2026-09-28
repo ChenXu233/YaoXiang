@@ -18,17 +18,21 @@ use super::super::proof::context::ProofContext;
 #[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::ast::SMTResult;
 #[cfg(not(target_arch = "wasm32"))]
-use super::super::proof::smt::translate;
+use super::super::proof::smt::backend::{default_solver, Solver};
 #[cfg(not(target_arch = "wasm32"))]
-use super::super::proof::smt::z3_backend::Z3Backend;
+use super::super::proof::smt::translate;
 use super::super::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofFunctionCall, ProofResult, UnprovenReason,
 };
 
-/// Z3 实例——整个编译过程只初始化一次
+/// 求解器实例——整个编译过程只初始化一次。
+///
+/// 具体后端由 `backend::default_solver()` 决定（RFC-027 §8：不绑定具体求解器）。
+/// 初始化失败保持**硬失败**：软化会把「Z3 未安装」误诊为「约束超出内核能力」，
+/// 任何静默跳过验证的降级都不 sound。
 #[cfg(not(target_arch = "wasm32"))]
-static Z3_INSTANCE: LazyLock<Mutex<Z3Backend>> = LazyLock::new(|| {
-    Mutex::new(Z3Backend::new().expect("Z3 solver initialization failed — is libz3 installed?"))
+static SOLVER: LazyLock<Mutex<Box<dyn Solver>>> = LazyLock::new(|| {
+    Mutex::new(default_solver().expect("Z3 solver initialization failed — is libz3 installed?"))
 });
 
 /// 检查精化谓词是否成立
@@ -140,7 +144,7 @@ fn try_implication(
 
     let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
 
-    match Z3_INSTANCE
+    match SOLVER
         .lock()
         .unwrap()
         .solve(&commands, ctx.budget.time_ms_limit())
@@ -164,7 +168,7 @@ fn try_smt_solve(
     let assumptions = ctx.assumptions.current();
     let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
 
-    match Z3_INSTANCE
+    match SOLVER
         .lock()
         .unwrap()
         .solve(&commands, ctx.budget.time_ms_limit())

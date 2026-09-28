@@ -865,6 +865,10 @@ pub struct BytecodeModule {
     /// Debug sources（#327）：带 DebugSection 的 .42 直跑时用于渲染栈帧源码上下文；
     /// 无 DebugSection（构建未带 --debug-info）时为 None，渲染降级为无片段
     pub debug_sources: Option<crate::util::span::SourceMap>,
+    /// 全局槽位名表（槽位号 → 顶层绑定名，#368）。
+    /// 供诊断层反查「顶层 `a[i]` 里的 `i` 叫什么」——局部名表盖不到全局槽位。
+    /// v3 调试段带该表；v1/v2 产物为空表。
+    pub global_names: std::collections::HashMap<usize, String>,
 }
 
 /// Global variable information
@@ -893,6 +897,7 @@ impl BytecodeModule {
             entry_point: None,
             init_function: None,
             debug_sources: None,
+            global_names: std::collections::HashMap::new(),
         }
     }
 
@@ -944,6 +949,10 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
         // 同时把 sources 贯通到 debug_sources 供运行时错误渲染
         let debug_section = file.debug_section;
         let debug_sources = debug_section.as_ref().map(|d| d.sources.clone());
+        let global_names = debug_section
+            .as_ref()
+            .map(|d| d.global_names.clone())
+            .unwrap_or_default();
 
         // Convert functions
         let mut functions = Vec::new();
@@ -2334,6 +2343,8 @@ impl From<crate::middle::passes::codegen::bytecode::BytecodeFile> for BytecodeMo
             init_function,
             // #327：贯通 DebugSection.sources——.42 直跑也能渲染栈帧源码上下文
             debug_sources,
+            // #368：全局槽位名表随调试段进模块
+            global_names,
         }
     }
 }

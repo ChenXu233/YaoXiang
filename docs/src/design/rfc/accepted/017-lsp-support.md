@@ -16,7 +16,7 @@ issue: '#11'
 
 >
 
-> **参考**: 查看 [完整示例](EXAMPLE_full_feature_proposal.md) 了解如何编写 RFC。
+> **参考**: 查看 [完整示例](../EXAMPLE_full_feature_proposal.md) 了解如何编写 RFC。
 
 ## ⚠️ 实现前置条件（重要）
 

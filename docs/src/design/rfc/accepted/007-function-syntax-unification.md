@@ -14,7 +14,7 @@ updated: '2026-09-15'
 > 无注解时按内容推断。见 [RFC-010a](./010a-tail-expression-and-return.md) 附录D。
 >
 > **相关补充**：函数体（`{ ... }` 代码块）内的语句终止与换行规则（`;`
-> 显式分隔、换行终止、续行例外）由 [RFC-038（草案）](../draft/038-statement-termination.md)
+> 显式分隔、换行终止、续行例外）由 [RFC-038（草案）](./038-statement-termination.md)
 > 定义，本 RFC 不涉及。
 
 ## 摘要

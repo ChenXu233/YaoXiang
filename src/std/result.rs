@@ -16,7 +16,9 @@
 use crate::backends::common::value::TypeId;
 use crate::backends::common::{HeapValue, RuntimeValue};
 use crate::backends::ExecutorError;
-use crate::std::{NativeContext, NativeExport, StdModule};
+use crate::frontend::core::types::eval::dependent_types::AssociatedTypeDef;
+use crate::frontend::core::types::MonoType;
+use crate::std::{NativeContext, NativeExport, StdModule, TypeFamilyExport};
 
 /// 运行时错误值码注册表（码 → 默认语义）。
 ///
@@ -33,6 +35,35 @@ pub struct ResultModule;
 impl StdModule for ResultModule {
     fn module_path(&self) -> &str {
         "std.result"
+    }
+
+    /// `Error`：`Result(T, E)` 的 Err 载体。
+    ///
+    /// 运行时是 `Struct { fields: [code, message] }`（#323 M4）——code 是 RFC-013
+    /// E6xxx/E7xxx 段注册码，message 是人类可读描述。
+    ///
+    /// 此前它**从未被声明**：签名里用了 26 处（`(self: &Error) -> String` 等）
+    /// 却没有任何导出/定义，靠 `MonoType::from` 的 `_ => TypeRef(name)`
+    /// 静默兜底活着。后果见 #371/#372——形参/字段注解里的类型名没人校验，
+    /// 因为「已知类型」根本无从判定。此处起它有了正式身份。
+    fn type_families(&self) -> Vec<TypeFamilyExport> {
+        vec![TypeFamilyExport::new(
+            "Error",
+            vec![],
+            AssociatedTypeDef::Direct(MonoType::Struct(
+                crate::frontend::core::types::mono::StructType {
+                    name: "Error".to_string(),
+                    fields: vec![
+                        ("code".to_string(), MonoType::make_string()),
+                        ("message".to_string(), MonoType::make_string()),
+                    ],
+                    methods: std::collections::HashMap::new(),
+                    field_mutability: Vec::new(),
+                    field_has_default: Vec::new(),
+                    interfaces: vec![],
+                },
+            )),
+        )]
     }
 
     fn exports(&self) -> Vec<NativeExport> {
@@ -60,20 +91,6 @@ impl StdModule for ResultModule {
                 "std.result.unwrap_or",
                 "(T: Type, E: Type)(self: &Result(T, E), default: T) -> T",
                 native_result_unwrap_or
-            ),
-            // #301：ok/err 构造器——用户代码重组 Result 值（? 解包后的 Ok 路径
-            // 需要 result.ok(t) 重新包装才能沿 Result 返回类型传播）
-            export!(
-                "ok",
-                "std.result.ok",
-                "(T: Type, E: Type)(value: T) -> Result(T, E)",
-                native_result_ok
-            ),
-            export!(
-                "err",
-                "std.result.err",
-                "(T: Type, E: Type)(error: E) -> Result(T, E)",
-                native_result_err
             ),
             // #323 M4：错误值可观测面——unwrap_err 取出 Err 载体，
             // code/message 读取规范化错误码与消息
@@ -106,7 +123,7 @@ pub const RESULT_MODULE: ResultModule = ResultModule;
 /// 构造 Result.ok(value)，variant_id=0
 pub fn result_ok(value: RuntimeValue) -> RuntimeValue {
     RuntimeValue::Enum {
-        type_id: TypeId::ENUM,
+        type_id: crate::backends::common::value::TypeId::RESULT,
         variant_id: 0,
         payload: Box::new(value),
     }
@@ -115,7 +132,7 @@ pub fn result_ok(value: RuntimeValue) -> RuntimeValue {
 /// 构造 Result.err(error)，variant_id=1
 pub fn result_err(error: RuntimeValue) -> RuntimeValue {
     RuntimeValue::Enum {
-        type_id: TypeId::ENUM,
+        type_id: crate::backends::common::value::TypeId::RESULT,
         variant_id: 1,
         payload: Box::new(error),
     }
@@ -215,24 +232,6 @@ pub(crate) fn native_result_unwrap_or(
         }) => Ok((**payload).clone()),
         _ => Ok(args.get(1).cloned().unwrap_or(RuntimeValue::Void)),
     }
-}
-
-pub(crate) fn native_result_ok(
-    args: &[RuntimeValue],
-    _ctx: &mut NativeContext<'_>,
-) -> Result<RuntimeValue, ExecutorError> {
-    Ok(result_ok(
-        args.first().cloned().unwrap_or(RuntimeValue::Void),
-    ))
-}
-
-pub(crate) fn native_result_err(
-    args: &[RuntimeValue],
-    _ctx: &mut NativeContext<'_>,
-) -> Result<RuntimeValue, ExecutorError> {
-    Ok(result_err(
-        args.first().cloned().unwrap_or(RuntimeValue::Void),
-    ))
 }
 
 // #323 M4：错误值可观测面

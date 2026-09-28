@@ -343,12 +343,19 @@ fn test_rfc011_associated_type() {
     assert!(result.diagnostics.is_empty(), "associated type should pass");
 }
 
-/// 规范：泛型关联类型（GAT）
+/// 规范：RFC-011 §3.2 泛型关联类型（GAT）
 ///
 /// `Container: (Item: Type) -> Type = { IteratorType: Iterator(Item), iter: (Self) -> IteratorType }`
 ///
 /// 预期行为：
-/// - 关联类型可以是泛型的
+/// - 类型体内声明的成员名（关联类型）在本体内可作类型名引用
+/// - `iter: (Self) -> IteratorType` 能解析到同体声明的 `IteratorType`
+/// - 成员名**不溢出**到其他类型体与函数签名
+///
+/// ⚠️ 注：这是**体级名字作用域**，不是完整的 GAT 语义。
+/// 关联类型目前不能被当作独立类型在外部引用（`Container(Int).IteratorType`
+/// 这种写法解析不了，`AssocType` 节点也无 typecheck 实现）。
+/// 完整 GAT 仍属 RFC-011a 待办项；本用例钉住的是现已工作的那部分。
 #[test]
 fn test_rfc011_generic_associated_type() {
     // Arrange
@@ -368,7 +375,42 @@ fn test_rfc011_generic_associated_type() {
     let result = check_source(source);
 
     // Assert
-    assert!(result.diagnostics.is_empty(), "GAT should pass");
+    assert!(
+        result.diagnostics.is_empty(),
+        "体内成员名应能作类型引用；diagnostics: {:?}",
+        result.diagnostics
+    );
+}
+
+/// 规范：RFC-011 §3.1 关联类型定义（体级名字作用域）
+///
+/// 体级名字**不得**溢出——否则成员名会变成全局合法类型，
+/// 静默掩盖真实的拼写错误（即 #372 要堵的那类缺口）。
+#[test]
+fn test_rfc011_associated_type_scope_is_body_local() {
+    // Arrange：`member` 只在 A 体内声明；B 体与函数签名引用它都应报错。
+    let other_body = r#"
+        A: Type = { member: Int }
+        B: Type = { x: member }
+    "#;
+    let in_signature = r#"
+        A: Type = { member: Int }
+        f: (x: member) -> Void = (x) => {}
+    "#;
+
+    // Act
+    let body_result = check_source(other_body);
+    let sig_result = check_source(in_signature);
+
+    // Assert
+    assert!(
+        !body_result.diagnostics.is_empty(),
+        "别的类型体不应看到 member"
+    );
+    assert!(
+        !sig_result.diagnostics.is_empty(),
+        "函数签名不应看到 member"
+    );
 }
 
 // RFC-011 §4: 编译期泛型

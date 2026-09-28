@@ -1,28 +1,41 @@
 ---
 title: 'std.result'
-description: 'Создание и распаковка Result и Error'
+description: 'Конструирование и распаковка Result и Error'
 ---
 
 # std.result
 
-Создание и распаковка `Result(T, E)`, а также доступ к полям носителя `Error`.
+Распаковка `Result(T, E)` и доступ к полям носителя `Error`. Сам `Result` — это запись-подобный
+суммарный тип (RFC-010), экспортируемый из `std.result`: конструирование выполняется **синтаксисом
+конструирования вариантов**, деструктуризация — с помощью `match` и шаблонов вариантов, а
+распространение `?` управляется интерфейсом `Try` (см. ниже).
 
 ```yaoxiang
 use std.result
+
+r = Result(Int, String).ok(5)
+e = Result(Int, String).err("boom")
 ```
 
 ## Представление во время выполнения
 
-| Значение            | Представление                                  |
-| ------------------- | ---------------------------------------------- |
-| `Result.ok(value)`  | значение-вариант перечисления, несущий `value` |
-| `Result.err(error)` | значение-вариант перечисления, несущий `error` |
-| `Error`             | структура с полями `(code, message)`           |
+| Значение                  | Представление                        |
+| ------------------------- | ------------------------------------ |
+| `Result(T, E).ok(value)`  | вариант перечисления, несёт `value`  |
+| `Result(T, E).err(error)` | вариант перечисления, несёт `error`  |
+| `Error`                   | структура с полями `(code, message)` |
 
-`Error.code` — это регистрационный код сегмента `E6xxx` / `E7xxx` из RFC-013 (стабильный контракт
-между версиями), `Error.message` — удобочитаемое описание для человека.
+`Error.code` — это стабильный межверсионный код из сегментов `E6xxx` / `E7xxx` согласно RFC-013,
+`Error.message` — человекочитаемое описание.
 
-## Обзор функций
+## Интерфейс Try (распространение `?`)
+
+`Result` инстанцирует в теле типа интерфейс `Try(Result(T, E), T, E)` с четырьмя методами, которыми
+управляет оператор `?`: `is_failure` определяет неудачу, `success` извлекает полезную нагрузку
+успеха, `residual` — полезную нагрузку неудачи, `from_error` восстанавливает `Result` из значения
+ошибки. Эти методы также могут вызываться явно.
+
+## Список функций
 
 <!-- stdlib:table:result start -->
 
@@ -32,62 +45,11 @@ use std.result
 | `is_err`     | `(T: Type, E: Type)(self: &Result(T, E)) -> Bool`          |
 | `unwrap`     | `(T: Type, E: Type)(self: &Result(T, E)) -> T`             |
 | `unwrap_or`  | `(T: Type, E: Type)(self: &Result(T, E), default: T) -> T` |
-| `ok`         | `(T: Type, E: Type)(value: T) -> Result(T, E)`             |
-| `err`        | `(T: Type, E: Type)(error: E) -> Result(T, E)`             |
 | `unwrap_err` | `(T: Type, E: Type)(self: &Result(T, E)) -> E`             |
 | `code`       | `(self: &Error) -> String`                                 |
 | `message`    | `(self: &Error) -> String`                                 |
 
 <!-- stdlib:table:result end -->
-
-## Создание
-
-### ok
-
-<!-- stdlib:sig:result.ok start -->
-
-```yaoxiang
-ok: (T: Type, E: Type)(value: T) -> Result(T, E)
-```
-
-<!-- stdlib:sig:result.ok end -->
-
-Оборачивает успешное значение.
-
-Значение `Ok`, распакованное через `?`, необходимо обернуть заново, чтобы продолжить распространение
-по типу возврата `Result`; `ok` — именно этот обёртчик.
-
-```yaoxiang
-use std.assert
-use std.result
-
-main: () -> Void = {
-    r = result.ok(42)
-    assert(result.is_ok(r))
-}
-```
-
-### err
-
-<!-- stdlib:sig:result.err start -->
-
-```yaoxiang
-err: (T: Type, E: Type)(error: E) -> Result(T, E)
-```
-
-<!-- stdlib:sig:result.err end -->
-
-Оборачивает значение ошибки.
-
-```yaoxiang
-use std.assert
-use std.result
-
-main: () -> Void = {
-    r = result.err("boom")
-    assert(result.is_err(r))
-}
-```
 
 ## Проверка
 
@@ -101,16 +63,17 @@ is_ok: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_ok end -->
 
-Является ли вариантом успеха. Только чтение по ссылке, `self` можно использовать многократно.
+Является ли значение успешным вариантом. Только-для-чтения заимствование, `self` может
+использоваться повторно.
 
 ```yaoxiang
 use std.assert
 use std.result
 
 main: () -> Void = {
-    r = result.ok(1)
+    r = Result(Int, String).ok(1)
     assert(result.is_ok(r))
-    assert(result.is_ok(r))      // можно использовать повторно
+    assert(result.is_ok(r))      // можно повторно использовать
 }
 ```
 
@@ -124,19 +87,19 @@ is_err: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_err end -->
 
-Является ли вариантом ошибки. Только чтение по ссылке.
+Является ли значение вариантом ошибки. Только-для-чтения заимствование.
 
 ```yaoxiang
 use std.assert
 use std.result
 
 main: () -> Void = {
-    r = result.err("e")
+    r = Result(Int, String).err("e")
     assert(result.is_err(r))
 }
 ```
 
-## Извлечение значения
+## Извлечение
 
 ### unwrap
 
@@ -148,12 +111,12 @@ unwrap: (T: Type, E: Type)(self: &Result(T, E)) -> T
 
 <!-- stdlib:sig:result.unwrap end -->
 
-Извлекает успешное значение.
+Извлекает значение успеха.
 
-Возврат: значение, которое несёт вариант `Ok`. Ошибка: при вызове на значении `Err` выбрасывается
-`E6007`, а сообщение **содержит исходный код ошибки и описание**, например
-`unwrap called on Err value (E6010: parse_int: ...)`, поэтому нет необходимости сначала вызывать
-`unwrap_err`, чтобы увидеть причину сбоя.
+Возврат: значение, которое несёт вариант `Ok`. Ошибка: при вызове на значении `Err` выбрасывает
+`E6007`, при этом **содержит исходный код ошибки и описание**, вида
+`unwrap called on Err value (E6010: parse_int: ...)`, поэтому можно увидеть причину неудачи без
+необходимости сначала вызывать `unwrap_err`.
 
 ```yaoxiang
 use std.assert
@@ -176,9 +139,9 @@ unwrap_or: (T: Type, E: Type)(self: &Result(T, E), default: T) -> T
 
 <!-- stdlib:sig:result.unwrap_or end -->
 
-Извлекает успешное значение или возвращает `default` в случае `Err`.
+Извлекает значение успеха или возвращает `default` в случае `Err`.
 
-- `default` — резервное значение в случае `Err`
+- `default` — резервное значение на случай `Err`
 
 ```yaoxiang
 use std.assert
@@ -206,7 +169,7 @@ unwrap_err: (T: Type, E: Type)(self: &Result(T, E)) -> E
 
 Извлекает значение ошибки.
 
-Возврат: значение, которое несёт вариант `Err`. Ошибка: при вызове на значении `Ok` выбрасывается
+Возврат: значение, которое несёт вариант `Err`. Ошибка: при вызове на значении `Ok` выбрасывает
 `E6007`.
 
 ```yaoxiang
@@ -233,9 +196,9 @@ code: (self: &Error) -> String
 
 <!-- stdlib:sig:result.code end -->
 
-Считывает строку кода ошибки, например `"E6010"`.
+Читает строку кода ошибки, например `"E6010"`.
 
-> Сигнатура типизирована как `Error`, но носитель ошибки во время выполнения — структура с полями
+> Тип в сигнатуре — `Error`, но носитель ошибки во время выполнения — структура с полями
 > `(code, message)`. Вызывается непосредственно на значении `Error`.
 
 ```yaoxiang
@@ -260,7 +223,7 @@ message: (self: &Error) -> String
 
 <!-- stdlib:sig:result.message end -->
 
-Считывает текст описания ошибки.
+Читает текст описания ошибки.
 
 ```yaoxiang
 use std.assert
@@ -274,8 +237,8 @@ main: () -> Void = {
 }
 ```
 
-## Связанные ссылки
+## Связанные
 
 - [`std.string`](./string#parse_int) — функция разбора, возвращающая `Result`
-- [Справочник по кодам ошибок](../error-code/) — коды значений ошибок времени выполнения, такие как
-  `E6010` / `E6011`
+- [Справочник по кодам ошибок](../error-code/) — коды ошибок времени выполнения, такие как `E6010` /
+  `E6011`

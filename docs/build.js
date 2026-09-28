@@ -21,7 +21,7 @@ const wasmDistDir = path.join(distDir, 'wasm')
 // Step 1: 同步 TextMate grammar (canonical source → docs 目录)
 console.log('Syncing TextMate grammar from canonical source...')
 const { execSync } = await import('child_process')
-const syncScript = path.join(__dirname, '..', 'scripts', 'sync-syntax.mjs')
+const syncScript = path.join(__dirname, '..', 'scripts', 'sync-syntax.ts')
 execSync(`node "${syncScript}"`, { stdio: 'inherit', cwd: path.join(__dirname, '..') })
 
 console.log('Building docs from', root)

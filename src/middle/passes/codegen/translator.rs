@@ -173,7 +173,13 @@ impl Translator {
         // 必须在 take_constant_pool() 之前翻译：init 里的字面量要进常量池，
         // 否则 LoadConst 会指向其他函数的常量（错位）。
         if !module.init.is_empty() {
-            let init_func = self.translate_init_sequence(&module.init)?;
+            // #368：单文件恒 file_id 0；多文件按 `init_file_ids` 逐条定文件，
+            // 两路都挂源码位置。
+            let init_func = self.translate_init_sequence(
+                &module.init,
+                &module.init_locals,
+                &module.init_file_ids,
+            )?;
             code_section.functions.push(init_func);
         }
 
@@ -190,27 +196,59 @@ impl Translator {
     /// 与 `translate_function` 的差别只在尾部：初始化无返回值，故补 `Return`。
     /// **跳转回填与函数体同路** —— `for`/`while` 在顶层（Script 模式）
     /// 会生成回跳，漏回填会让 target 停在占位 0（实测：顶层 for 只跑一次）。
+    ///
+    /// #368：调试元数据（ip→span、局部名）与函数体同路生成。此前这里
+    /// 硬编码空表，导致顶层语句的运行期错误既无源码位置也无变量名。
+    ///
+    /// `file_ids` 逐条给出该指令的源文件序号（单文件为空 → 恒 file_id 0）。
     fn translate_init_sequence(
         &mut self,
         init: &[Instruction],
+        locals: &[LocalSlot],
+        file_ids: &[usize],
     ) -> Result<super::FunctionCode, Diagnostic> {
         let mut instructions = Vec::new();
+        let mut debug_map = HashMap::new();
         let mut pending_jumps: Vec<(usize, usize, u8)> = Vec::new();
 
-        for (ir_idx, instr) in init.iter().enumerate() {
+        // 只保留具名槽位；临时寄存器不进调试信息（与 translate_function 同款）
+        let local_names: HashMap<usize, String> = locals
+            .iter()
+            .enumerate()
+            .filter_map(|(i, slot)| slot.name.as_ref().map(|n| (i, n.clone())))
+            .collect();
+
+        for (init_idx, instr) in init.iter().enumerate() {
+            let bytecode_idx = instructions.len();
+            if self.generate_debug_info {
+                // 位置直接来自指令自身：生成期就地捕获，无跨调用配对状态
+                let span = instr.span();
+                if !span.is_dummy() {
+                    let file_id = file_ids.get(init_idx).copied().unwrap_or(0) as FileId;
+                    debug_map.insert(bytecode_idx, DebugSpan::new(file_id, span));
+                }
+            }
             if let Some((target, opcode)) = Self::get_jump_target(instr) {
-                pending_jumps.push((instructions.len(), target, opcode));
+                pending_jumps.push((bytecode_idx, target, opcode));
             }
             let bc = self.translate_instruction(instr)?;
             instructions.push(bc);
-            let _ = ir_idx;
         }
-        // 末尾补 Return（初始化无返回值）
-        instructions.push(super::BytecodeInstruction::new(opcode::RETURN, vec![]));
 
         // IR 下标 → 字节码下标（此处一条 IR 指令→一条字节码指令，恒等映射；
         // 用 map 而非直等是为了与 translate_function 同形，未来指令展开时不错位）
-        let ir_to_bytecode_map: HashMap<usize, usize> = (0..init.len()).map(|i| (i, i)).collect();
+        let mut ir_to_bytecode_map: HashMap<usize, usize> =
+            (0..init.len()).map(|i| (i, i)).collect();
+        // 段尾哨兵：IR 长度 → 字节码长度。循环出口这类「跳到段尾之后」的目标
+        // 落在 init.len()，不在表里就查不到 → 偏移留在占位 0 → 运行时 E6007。
+        // `translate_function` 尾部有同款哨兵（见其 global_ir_index 收尾），
+        // 此处此前漏了：顶层 `for` 是最后一个语句时必崩。
+        // 必须在补 Return **之前**取长度——那里正是段尾。
+        ir_to_bytecode_map.insert(init.len(), instructions.len());
+
+        // 末尾补 Return（初始化无返回值）
+        instructions.push(super::BytecodeInstruction::new(opcode::RETURN, vec![]));
+
         Self::backfill_jumps_impl(&mut instructions, &ir_to_bytecode_map, &pending_jumps);
 
         Ok(super::FunctionCode {
@@ -218,9 +256,11 @@ impl Translator {
             params: Vec::new(),
             return_type: MonoType::Void,
             instructions,
-            local_count: 0,
-            local_names: HashMap::new(),
-            debug_map: HashMap::new(),
+            // #368：不再是硬编码 0。槽位表长度覆盖具名局部；纯临时寄存器
+            // 由 `Frame::set_slot` 按需扩容（顶层语句的临时量是即用即弃的）。
+            local_count: locals.len(),
+            local_names,
+            debug_map,
         })
     }
 

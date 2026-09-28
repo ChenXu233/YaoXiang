@@ -1,0 +1,33 @@
+// 02-type-system/method_overload.yx
+// 覆盖: RFC-011a §3 方法级重载的调用点决议——同名方法不同签名共存
+// （E1100 仅拦同签名重复），调用点按 实参兼容 + 期望返回 决议候选，
+// IR 定义侧按声明序混编（Temp.to / Temp.to#1），决议表 span 键控派发。
+// 阶段 1 评论的「同名方法运行时无签名分发」边界就此闭合。
+// 验证:
+//   - 同名重载按期望返回各归其位（Float / String 双候选）
+//   - 定义顺序无关（先定义的候选同样可被决议命中）
+// 另: 无期望上下文的歧义调用（`x = t.to()`）报 E1107——不该隐式的地方
+// 不隐式（2026-09-27 定案，负例由 06-compile-errors 覆盖形态）
+// 状态: ✅ 可运行
+
+use std.assert
+
+Temp: Type = { value: Float }
+
+Temp.to: (self: &Temp) -> Float = (self) => {
+    return self.value
+}
+
+Temp.to: (self: &Temp) -> String = (self) => {
+    return "hot"
+}
+
+main: () -> Void = {
+    t = Temp(1.0)
+    a: Float = t.to()
+    b: String = t.to()
+    assert(a == 1.0, "float overload")
+    assert(b == "hot", "string overload")
+}
+
+main()

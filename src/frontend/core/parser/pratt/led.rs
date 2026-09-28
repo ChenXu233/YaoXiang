@@ -203,7 +203,7 @@ impl<'a> ParserState<'a> {
     }
 
     /// Parse function call expression
-    fn parse_call(
+    pub(crate) fn parse_call(
         &mut self,
         lhs: Expr,
         _left_bp: u8,

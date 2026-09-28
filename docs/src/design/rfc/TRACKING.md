@@ -12,6 +12,7 @@
 | 010a-tail-expression-and-return.md | RFC-010a: 尾表达式求值与 return 语义 | 已接受 | accepted\010a-tail-expression-and-return.md | #342 | -- | -- | -- |
 | 011-generic-type-system.md | RFC-011: 泛型系统设计 - 零成本抽象与宏替代 | 已接受 | accepted\011-generic-type-system.md | #128 | #45, #46, #73, #90, #96, #40, #151 | #122 | -- |
 | 011a-interface-implementation.md | RFC-011a: 接口实现与动态分发 | 已接受 | accepted\011a-interface-implementation.md | -- | -- | -- | -- |
+| 011b-operator-overloading.md | RFC-011b: 运算符重载与接口驱动运算符 | 已接受 | accepted\011b-operator-overloading.md | #341 | -- | -- | -- |
 | 012-f-string-template-strings.md | RFC 012: F-String 模板字符串 | 已接受 | accepted\012-f-string-template-strings.md | #124 | -- | -- | -- |
 | 013-error-code-specification.md | RFC 013: 错误代码规范 | 已接受 | accepted\013-error-code-specification.md | #125 | #125 | #7, #9, #29, #66 | -- |
 | 014-package-manager.md | RFC-014: 包管理系统设计 | 已接受 | accepted\014-package-manager.md | #88 | -- | -- | -- |
@@ -33,17 +34,15 @@
 | 022-hoare-logic-static-verification.md | RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型） | 已废弃 | deprecated\022-hoare-logic-static-verification.md | -- | -- | -- | -- |
 | 023-closure-capture-model.md | RFC-023: 闭包捕获模型 | 已废弃 | deprecated\023-closure-capture-model.md | -- | -- | -- | -- |
 | 002-cross-platform-io-libuv.md | RFC-002：基于 libuv 的资源类型 IO 实现层 | 草案 | draft\002-cross-platform-io-libuv.md | #102 | -- | -- | -- |
-| 011b-operator-overloading.md | RFC-011b: 运算符重载与接口驱动运算符 | 草案 | draft\011b-operator-overloading.md | #341 | -- | -- | -- |
+| 010b-pattern-matching-completeness.md | RFC-010b: 模式匹配完备化（变体解构与穷尽性） | 已接受 | accepted\010b-pattern-matching-completeness.md | #330 | -- | -- | -- |
 | 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 草案 | draft\019-typed-homoiconicity.md | -- | -- | -- | -- |
 | 026b-yx-bindgen.md | RFC-026b: yx-bindgen 工具链 | 草案 | draft\026b-yx-bindgen.md | -- | -- | -- | -- |
-| 027a-termination-proof-fallback.md | RFC-027a: 终止检查的证明函数兜底 | 草案 | draft\027a-termination-proof-fallback.md | #318 | -- | -- | -- |
 | 028-jit-compiler.md | RFC-028：JIT 编译器 — VM 内多级执行引擎 | 草案 | draft\028-jit-compiler.md | #101 | -- | -- | -- |
 | 029a-module-cache-incremental.md | RFC-029a: 模块缓存与增量重编译 | 草案 | draft\029a-module-cache-incremental.md | #293 | -- | -- | -- |
 | 031-optimization-levels.md | RFC-031：优化级别与 Pass 管理器 | 草案 | draft\031-optimization-levels.md | -- | -- | -- | -- |
 | 033-reflection-operator.md | RFC-033: `^^` 反射运算符 | 草案 | draft\033-reflection-operator.md | #136 | -- | -- | -- |
 | 034-debug-toolchain.md | RFC-034: 统一调试工具链 | 草案 | draft\034-debug-toolchain.md | #164 | -- | -- | -- |
 | 035-mcp-server.md | RFC-035: MCP Server 支持（AI Agent 集成） | 草案 | draft\035-mcp-server.md | #154 | -- | -- | -- |
-| 039-pattern-matching-completeness.md | RFC-039: 模式匹配完备化 | 草案 | draft\039-pattern-matching-completeness.md | #330 | -- | -- | -- |
 | 003-version-planning.md | RFC-003：版本规划 | 已拒绝 | rejected\003-version-planning.md | -- | -- | -- | -- |
 | 005-automated-cve-scanning.md | RFC-005: 自动化CVE安全检查系统 | 已拒绝 | rejected\005-automated-cve-scanning.md | -- | -- | -- | -- |
 | 016-quantum-native-support.md | RFC 016: 量子原生支持与多重后端集成 | 已拒绝 | rejected\016-quantum-native-support.md | -- | -- | -- | -- |
@@ -52,6 +51,7 @@
 | 014b-build-system.md | RFC-014b: 构建系统与二进制分发 | 审核中 | review\014b-build-system.md | #91 | -- | -- | -- |
 | 014c-workspace.md | RFC-014c: 工作空间支持 | 审核中 | review\014c-workspace.md | #113 | -- | -- | -- |
 | 026a-extensible-ffi-system.md | RFC-026a: 可扩展 FFI 机制体系 | 审核中 | review\026a-extensible-ffi-system.md | #135 | -- | -- | -- |
+| 027a-termination-explicit-measure.md | RFC-027a: 终止检查的显式测度 | 审核中 | review\027a-termination-explicit-measure.md | #318 | -- | -- | -- |
 | 032-spawn-unified-expression.md | RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况 | 审核中 | review\032-spawn-unified-expression.md | #98 | -- | -- | -- |
 
 > 此文件由 check-rfc-tracking.py 自动生成，请勿手动修改。
