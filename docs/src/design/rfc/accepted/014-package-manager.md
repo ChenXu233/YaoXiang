@@ -468,7 +468,7 @@ token = "xxx"
 | ------------- | -------------------------------------------- | --------- |
 | **Phase 1**   | toml 解析、本地依赖、lock 生成、基础算法     | ✅ 已完成 |
 | **Phase 2**   | GitHub 支持、.yaoxiang/vendor 管理、下载工具 | ✅ 已完成 |
-| **Phase 3**   | 全局缓存、semver crate 替换、CLI 完善        | 待开始    |
+| **Phase 3**   | 全局缓存、semver crate 替换、CLI 完善        | ✅ 已完成 |
 | **Phase 3.5** | Source trait 改 async、async-trait 集成      | 待开始    |
 | **Phase 4**   | GitHub 适配层、.yxpkg 打包、publish --github（RFC-014a 缩减后范围；官方 Registry/auth/yank 后置） | 待开始    |
 | **Phase 5**   | 构建系统、预编译二进制（RFC-014b）           | 待开始    |
@@ -479,6 +479,13 @@ token = "xxx"
 - 工作空间（Phase 6）提前至构建系统之前——它不依赖网络与构建系统（纯本地路径解析 + 共享 lockfile），对多包开发收益最直接。
 - Phase 4 范围缩减：**官方 Registry 服务器与 auth/yank 无限期后置**，先交付 GitHub Release/Git 适配层 + `.yxpkg` 打包 + `publish --github`。生态冷启动只需 git/GitHub 渠道（Go 早期同型），Registry 服务器的运维与治理成本在无第三方包阶段是纯负债。
 - 随之约束：官方 Registry 上线前 `yaoxiang add <裸包名>` 不可用，添加依赖须显式来源（`--git` / `--path`）。
+
+**Phase 3 落地说明（2026-09-28）**：
+
+- 全局缓存先覆盖 **git 渠道**（`cache/git/<url>-<tag|rev|commit>/`，分支经 `ls-remote` 解析 commit 入缓存并写指针文件供离线回退）；`cache/registry/`、`cache/binaries/` 为目录预留。vendor 副本剔除 `.git`，目录名以依赖 manifest 探测到的真实版本命名（vendor/lock/清理三者同源）。
+- `semver` 与 `sha2` crate 按依赖表替换手写实现；`is_compatible` 由 10 万次枚举改为区间交集判定。
+- CLI 新增 `outdated` / `clean` / `cache clean`，并给 `add` 加上 `--git` / `--path` 显式来源（即上述约束的落地）。`clean` 除 `.yaoxiang/build/` 外同时裁剪 vendor 中不被 lock 引用的残留包。
+- 缓存 `[cache] dir` 配置并入既有 `~/.config/yaoxiang/config.toml` 用户配置体系（RFC 草拟时的 `~/.yaoxiang/config.toml` 未曾存在），缓存数据默认位置仍为 `~/.yaoxiang/cache`。
 
 ### 依赖关系
 
