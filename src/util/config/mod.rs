@@ -38,6 +38,17 @@ pub struct UserConfig {
     /// Format settings
     #[serde(default)]
     pub fmt: FmtConfig,
+    /// Global package cache settings (RFC-014 Phase 3)
+    #[serde(default)]
+    pub cache: CacheConfig,
+}
+
+/// Global package cache configuration (RFC-014 Phase 3)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CacheConfig {
+    /// Cache root directory (default `~/.yaoxiang/cache`)
+    #[serde(default)]
+    pub dir: Option<String>,
 }
 
 /// I18n configuration

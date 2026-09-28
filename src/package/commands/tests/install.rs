@@ -60,7 +60,7 @@ fn test_install_registry_dependency_fails() {
     // 注册表来源（无 git/path）尚未实现（RFC-014a）——必须明确失败，
     // 不再打印"已安装"并返回 Ok（旧行为：静默跳过 + 锁文件记账）
     let (_tmp, project_dir) = setup_project();
-    add::exec_in(&project_dir, "foo", Some("1.0.0"), false).unwrap();
+    add::exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false).unwrap();
 
     let result = exec_in(&project_dir);
 

@@ -1070,5 +1070,14 @@
     "title": "Refinement constraint cannot be proven",
     "template": "After assigning to '{assigned}', the refinement type constraint of '{var}': {constraint} cannot be statically proven within the proof kernel",
     "help": "RFC-027 requires all refinement constraints to be proven at compile-time — unproven ones result in a compile error. Please rewrite the constraint so its arguments can be statically evaluated (literals or literal-foldable expressions), or provide a proof function returning Type to participate in compile-time execution."
-  }
+  },
+  "package_outdated_none": "All dependencies are up to date.",
+  "package_outdated_found": "{0} outdated dependencies:",
+  "package_outdated_row": "  {0}: {1} -> {2}",
+  "package_outdated_pinned": "  {0} ({1}) [pinned]",
+  "package_outdated_failed": "  {0} ({1}) [check failed: {2}]",
+  "package_clean_removed": "  Removed {0}",
+  "package_clean_nothing": "Nothing to clean.",
+  "package_cache_cleaned": "Cache cleaned ({0} freed)",
+  "package_cache_empty": "Cache is already empty."
 }

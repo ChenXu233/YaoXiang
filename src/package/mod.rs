@@ -3,6 +3,7 @@
 //! Provides package management functionality including project initialization,
 //! dependency management, and lock file generation.
 
+pub mod cache;
 pub mod commands;
 pub mod dependency;
 pub mod error;

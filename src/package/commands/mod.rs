@@ -1,9 +1,12 @@
 //! Package management CLI commands
 
 pub mod add;
+pub mod cache;
+pub mod clean;
 pub mod init;
 pub mod install;
 pub mod list;
+pub mod outdated;
 pub mod rm;
 pub mod update;
 

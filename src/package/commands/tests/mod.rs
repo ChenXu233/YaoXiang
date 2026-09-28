@@ -1,9 +1,11 @@
 //! Package commands 测试模块
 
 mod add;
+mod clean;
 mod init;
 mod install;
 mod list;
+mod outdated;
 mod rm;
 mod update;
 

@@ -30,6 +30,10 @@ pub enum PackageError {
     #[error("Invalid yaoxiang.toml format: {0}")]
     InvalidManifest(String),
 
+    /// Global package cache error (RFC-014 Phase 3)
+    #[error("cache error: {0}")]
+    Cache(String),
+
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

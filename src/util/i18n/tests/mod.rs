@@ -31,3 +31,19 @@ fn test_t_miao() {
         assert!(result.contains("喵"));
     }
 }
+
+#[test]
+fn test_t_key_level_fallback() {
+    // 键在请求语言中缺失时按键级回退 zh/en，而不是暴露裸键名
+    // （Phase 3 新增词条在 bot 补齐 ja/ru 等语言前必须落到回退链）
+    let result = t_simple(MSG::PackageOutdatedNone, "ja");
+    assert_ne!(result, "package_outdated_none");
+    assert!(!result.is_empty());
+}
+
+#[test]
+fn test_t_missing_everywhere_returns_key() {
+    // 所有语言都缺此键时才回落键名（仅当新增 MSG 未配词条时发生）
+    let key = MSG::PackageOutdatedRow.key();
+    assert_eq!(key, "package_outdated_row");
+}

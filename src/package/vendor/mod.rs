@@ -2,7 +2,7 @@
 //!
 //! 管理 `.yaoxiang/vendor/` 目录中的已下载依赖。
 
-pub mod cache;
+pub mod checksum;
 pub mod fetcher;
 
 use std::path::{Path, PathBuf};
@@ -10,6 +10,9 @@ use std::path::{Path, PathBuf};
 use crate::package::dependency::DependencySpec;
 use crate::package::error::PackageResult;
 use crate::package::source::{self, ResolvedPackage};
+
+#[cfg(test)]
+mod tests;
 
 /// Vendor 目录名称
 pub const VENDOR_DIR: &str = ".yaoxiang";
@@ -77,7 +80,9 @@ impl VendorManager {
 
     /// 安装单个依赖
     ///
-    /// 根据依赖规格选择来源，下载并安装到 vendor 目录。
+    /// 根据依赖规格选择来源，经全局缓存下载并安装到 vendor 目录。
+    /// git 依赖不做安装前预检查——防重复由 lock 完整性校验负责，
+    /// 缓存命中使重复下载成本可忽略；vendor 目录名以探测到的真实版本为准。
     pub fn install_dependency(
         &self,
         spec: &DependencySpec,
@@ -86,33 +91,11 @@ impl VendorManager {
 
         let source = source::select_source(spec).expect("dependency must have git or path field");
 
-        // 解析版本
-        let resolved_version = source.resolve(spec)?;
-
-        // 检查是否已安装
-        if self.is_installed(&spec.name, &resolved_version) {
-            // 已安装，直接返回信息
-            let local_path = self.dep_path(&spec.name, &resolved_version);
-            let checksum = cache::compute_directory_checksum(&local_path)?;
-            return Ok(ResolvedPackage {
-                name: spec.name.clone(),
-                version: resolved_version,
-                source_kind: source.kind(),
-                source_url: spec
-                    .git
-                    .clone()
-                    .or_else(|| spec.path.clone())
-                    .unwrap_or_else(|| "registry".to_string()),
-                local_path,
-                checksum: Some(checksum),
-            });
-        }
-
-        // 下载依赖
+        // 下载依赖（GitSource 内部经全局缓存；目录名 = 探测版本）
         let mut resolved = source.download(spec, &self.vendor_dir)?;
 
         // 计算校验和
-        let checksum = cache::compute_directory_checksum(&resolved.local_path)?;
+        let checksum = checksum::compute_directory_checksum(&resolved.local_path)?;
         resolved.checksum = Some(checksum);
 
         Ok(resolved)
@@ -189,7 +172,7 @@ impl VendorManager {
             return Ok(false);
         }
 
-        let actual_checksum = cache::compute_directory_checksum(&path)?;
+        let actual_checksum = checksum::compute_directory_checksum(&path)?;
         Ok(actual_checksum == expected_checksum)
     }
 }

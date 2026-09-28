@@ -1,211 +1,246 @@
-//! 测试语义化版本解析器
+//! 测试语义化版本解析入口（semver crate 后端）
 //!
 //! 覆盖:
-//! - SemVer 解析（完整/两段/单段/预发布版本）
-//! - 版本 Display 输出
-//! - 版本排序
-//! - 无效版本解析错误
-//! - VersionReq 解析（caret/tilde/exact/wildcard/gte/gt/lte/lt/compound）
-//! - VersionReq 匹配检查
-//! - VersionReq Display 输出
+//! - parse_version（完整/两段/单段/预发布/无效）
+//! - parse_version_req（裸版本=精确、caret/tilde/比较器/通配/组合、无效输入）
 //! - select_best 选择最佳版本
-//! - 版本兼容性检查
+//! - is_compatible 区间交集判定（含旧枚举实现误判的高版本区间）
 
-use crate::package::source::resolver::{SemVer, VersionReq};
+use crate::package::source::resolver::{is_compatible, parse_version, parse_version_req, select_best};
 
-// === SemVer 解析测试 ===
+fn v(s: &str) -> semver::Version {
+    parse_version(s).unwrap()
+}
+
+fn req(s: &str) -> semver::VersionReq {
+    parse_version_req(s).unwrap()
+}
+
+// === parse_version 测试 ===
 
 #[test]
 fn test_parse_full_version() {
-    let v = SemVer::parse("1.2.3").unwrap();
-    assert_eq!(v.major, 1);
-    assert_eq!(v.minor, 2);
-    assert_eq!(v.patch, 3);
-    assert_eq!(v.pre, None);
+    let ver = v("1.2.3");
+    assert_eq!(ver.major, 1);
+    assert_eq!(ver.minor, 2);
+    assert_eq!(ver.patch, 3);
+    assert!(ver.pre.is_empty());
 }
 
 #[test]
 fn test_parse_two_part_version() {
-    let v = SemVer::parse("1.2").unwrap();
-    assert_eq!(v.major, 1);
-    assert_eq!(v.minor, 2);
-    assert_eq!(v.patch, 0);
+    let ver = v("1.2");
+    assert_eq!((ver.major, ver.minor, ver.patch), (1, 2, 0));
 }
 
 #[test]
 fn test_parse_single_part_version() {
-    let v = SemVer::parse("1").unwrap();
-    assert_eq!(v.major, 1);
-    assert_eq!(v.minor, 0);
-    assert_eq!(v.patch, 0);
+    let ver = v("1");
+    assert_eq!((ver.major, ver.minor, ver.patch), (1, 0, 0));
 }
 
 #[test]
 fn test_parse_prerelease_version() {
-    let v = SemVer::parse("1.0.0-alpha").unwrap();
-    assert_eq!(v.major, 1);
-    assert_eq!(v.minor, 0);
-    assert_eq!(v.patch, 0);
-    assert_eq!(v.pre, Some("alpha".to_string()));
+    let ver = v("1.0.0-alpha");
+    assert_eq!((ver.major, ver.minor, ver.patch), (1, 0, 0));
+    assert_eq!(ver.pre.to_string(), "alpha");
 }
 
 #[test]
-fn test_version_display() {
-    assert_eq!(SemVer::new(1, 2, 3).to_string(), "1.2.3");
-    assert_eq!(SemVer::with_pre(1, 0, 0, "beta").to_string(), "1.0.0-beta");
+fn test_parse_two_part_prerelease_version() {
+    // 两段 + 预发布段：补齐后仍可解析（旧解析器同语义）
+    let ver = v("1.2-beta");
+    assert_eq!((ver.major, ver.minor, ver.patch), (1, 2, 0));
+    assert_eq!(ver.pre.to_string(), "beta");
 }
 
 #[test]
-fn test_version_ordering() {
-    assert!(SemVer::new(1, 0, 0) < SemVer::new(2, 0, 0));
-    assert!(SemVer::new(1, 0, 0) < SemVer::new(1, 1, 0));
-    assert!(SemVer::new(1, 0, 0) < SemVer::new(1, 0, 1));
-    assert!(SemVer::with_pre(1, 0, 0, "alpha") < SemVer::new(1, 0, 0));
+fn test_parse_version_display() {
+    assert_eq!(v("1.2.3").to_string(), "1.2.3");
+    assert_eq!(v("1.0.0-beta").to_string(), "1.0.0-beta");
+}
+
+#[test]
+fn test_parse_version_ordering() {
+    assert!(v("1.0.0") < v("2.0.0"));
+    assert!(v("1.0.0") < v("1.1.0"));
+    assert!(v("1.0.0") < v("1.0.1"));
+    // 预发布版本比正式版本低（semver crate 按 spec 逐标识比较）
+    assert!(v("1.0.0-alpha") < v("1.0.0"));
+    assert!(v("1.0.0-alpha") < v("1.0.0-beta"));
 }
 
 #[test]
 fn test_parse_invalid_version() {
-    assert!(SemVer::parse("invalid").is_err());
-    assert!(SemVer::parse("1.2.3.4").is_err());
+    assert!(parse_version("invalid").is_err());
+    assert!(parse_version("1.2.3.4").is_err());
+    assert!(parse_version("").is_err());
 }
 
-// === VersionReq 解析测试 ===
+// === parse_version_req 测试 ===
 
 #[test]
 fn test_parse_caret_version() {
     // ^1.2.3 → >=1.2.3, <2.0.0
-    let req = VersionReq::parse("^1.2.3").unwrap();
-    assert!(req.matches(&SemVer::new(1, 2, 3)));
-    assert!(req.matches(&SemVer::new(1, 9, 9)));
-    assert!(!req.matches(&SemVer::new(2, 0, 0)));
-    assert!(!req.matches(&SemVer::new(1, 2, 2)));
+    let r = req("^1.2.3");
+    assert!(r.matches(&v("1.2.3")));
+    assert!(r.matches(&v("1.9.9")));
+    assert!(!r.matches(&v("2.0.0")));
+    assert!(!r.matches(&v("1.2.2")));
 }
 
 #[test]
 fn test_parse_caret_zero_major() {
     // ^0.2.3 → >=0.2.3, <0.3.0
-    let req = VersionReq::parse("^0.2.3").unwrap();
-    assert!(req.matches(&SemVer::new(0, 2, 3)));
-    assert!(req.matches(&SemVer::new(0, 2, 9)));
-    assert!(!req.matches(&SemVer::new(0, 3, 0)));
+    let r = req("^0.2.3");
+    assert!(r.matches(&v("0.2.3")));
+    assert!(r.matches(&v("0.2.9")));
+    assert!(!r.matches(&v("0.3.0")));
 }
 
 #[test]
 fn test_parse_tilde_version() {
     // ~1.2.3 → >=1.2.3, <1.3.0
-    let req = VersionReq::parse("~1.2.3").unwrap();
-    assert!(req.matches(&SemVer::new(1, 2, 3)));
-    assert!(req.matches(&SemVer::new(1, 2, 9)));
-    assert!(!req.matches(&SemVer::new(1, 3, 0)));
-    assert!(!req.matches(&SemVer::new(1, 2, 2)));
+    let r = req("~1.2.3");
+    assert!(r.matches(&v("1.2.3")));
+    assert!(r.matches(&v("1.2.9")));
+    assert!(!r.matches(&v("1.3.0")));
+    assert!(!r.matches(&v("1.2.2")));
 }
 
 #[test]
-fn test_parse_exact_version() {
-    let req = VersionReq::parse("1.0.0").unwrap();
-    assert!(req.matches(&SemVer::new(1, 0, 0)));
-    assert!(!req.matches(&SemVer::new(1, 0, 1)));
-    assert!(!req.matches(&SemVer::new(0, 9, 9)));
+fn test_parse_bare_version_is_exact() {
+    // 裸版本 = 精确匹配（`add` 的文档化语义，非 Cargo 的 caret 默认）
+    let r = req("1.0.0");
+    assert!(r.matches(&v("1.0.0")));
+    assert!(!r.matches(&v("1.0.1")));
+    assert!(!r.matches(&v("0.9.9")));
+
+    // 两段裸版本补齐后仍精确
+    let r = req("1.2");
+    assert!(r.matches(&v("1.2.0")));
+    assert!(!r.matches(&v("1.2.1")));
 }
 
 #[test]
 fn test_parse_wildcard() {
-    let req = VersionReq::parse("*").unwrap();
-    assert!(req.matches(&SemVer::new(0, 0, 0)));
-    assert!(req.matches(&SemVer::new(99, 99, 99)));
+    let r = req("*");
+    assert!(r.matches(&v("0.0.0")));
+    assert!(r.matches(&v("99.99.99")));
+
+    // 通配比较器（旧解析器不支持，现为超集）
+    let r = req("1.2.*");
+    assert!(r.matches(&v("1.2.0")));
+    assert!(r.matches(&v("1.2.9")));
+    assert!(!r.matches(&v("1.3.0")));
 }
 
 #[test]
 fn test_parse_gte() {
-    let req = VersionReq::parse(">=1.0.0").unwrap();
-    assert!(req.matches(&SemVer::new(1, 0, 0)));
-    assert!(req.matches(&SemVer::new(2, 0, 0)));
-    assert!(!req.matches(&SemVer::new(0, 9, 9)));
+    let r = req(">=1.0.0");
+    assert!(r.matches(&v("1.0.0")));
+    assert!(r.matches(&v("2.0.0")));
+    assert!(!r.matches(&v("0.9.9")));
 }
 
 #[test]
 fn test_parse_gt() {
-    let req = VersionReq::parse(">1.0.0").unwrap();
-    assert!(!req.matches(&SemVer::new(1, 0, 0)));
-    assert!(req.matches(&SemVer::new(1, 0, 1)));
+    let r = req(">1.0.0");
+    assert!(!r.matches(&v("1.0.0")));
+    assert!(r.matches(&v("1.0.1")));
 }
 
 #[test]
 fn test_parse_lte() {
-    let req = VersionReq::parse("<=1.0.0").unwrap();
-    assert!(req.matches(&SemVer::new(1, 0, 0)));
-    assert!(req.matches(&SemVer::new(0, 9, 9)));
-    assert!(!req.matches(&SemVer::new(1, 0, 1)));
+    let r = req("<=1.0.0");
+    assert!(r.matches(&v("1.0.0")));
+    assert!(r.matches(&v("0.9.9")));
+    assert!(!r.matches(&v("1.0.1")));
 }
 
 #[test]
 fn test_parse_lt() {
-    let req = VersionReq::parse("<1.0.0").unwrap();
-    assert!(!req.matches(&SemVer::new(1, 0, 0)));
-    assert!(req.matches(&SemVer::new(0, 9, 9)));
+    let r = req("<1.0.0");
+    assert!(!r.matches(&v("1.0.0")));
+    assert!(r.matches(&v("0.9.9")));
 }
 
 #[test]
 fn test_parse_compound() {
     // >=1.2.3, <2.0.0
-    let req = VersionReq::parse(">=1.2.3, <2.0.0").unwrap();
-    assert!(req.matches(&SemVer::new(1, 2, 3)));
-    assert!(req.matches(&SemVer::new(1, 9, 9)));
-    assert!(!req.matches(&SemVer::new(2, 0, 0)));
-    assert!(!req.matches(&SemVer::new(1, 2, 2)));
+    let r = req(">=1.2.3, <2.0.0");
+    assert!(r.matches(&v("1.2.3")));
+    assert!(r.matches(&v("1.9.9")));
+    assert!(!r.matches(&v("2.0.0")));
+    assert!(!r.matches(&v("1.2.2")));
 }
 
 #[test]
-fn test_version_req_display() {
-    let req = VersionReq::parse("*").unwrap();
-    assert_eq!(req.to_string(), "*");
-
-    let req = VersionReq::parse("^1.0.0").unwrap();
-    assert_eq!(req.to_string(), ">=1.0.0, <2.0.0");
+fn test_parse_invalid_req() {
+    assert!(parse_version_req("invalid").is_err());
+    assert!(parse_version_req("1.2.3.4").is_err());
 }
 
 // === select_best 测试 ===
 
 #[test]
 fn test_select_best_version() {
-    let req = VersionReq::parse("^1.0.0").unwrap();
-    let versions = vec![
-        SemVer::new(0, 9, 0),
-        SemVer::new(1, 0, 0),
-        SemVer::new(1, 5, 0),
-        SemVer::new(1, 9, 9),
-        SemVer::new(2, 0, 0),
-    ];
-    let best = req.select_best(&versions).unwrap();
-    assert_eq!(*best, SemVer::new(1, 9, 9));
+    let r = req("^1.0.0");
+    let versions = vec![v("0.9.0"), v("1.0.0"), v("1.5.0"), v("1.9.9"), v("2.0.0")];
+    assert_eq!(select_best(&r, &versions), Some(&v("1.9.9")));
 }
 
 #[test]
 fn test_select_best_no_match() {
-    let req = VersionReq::parse("^3.0.0").unwrap();
-    let versions = vec![SemVer::new(1, 0, 0), SemVer::new(2, 0, 0)];
-    assert!(req.select_best(&versions).is_none());
+    let r = req("^3.0.0");
+    let versions = vec![v("1.0.0"), v("2.0.0")];
+    assert!(select_best(&r, &versions).is_none());
 }
 
-// === 兼容性测试 ===
+// === 兼容性测试（区间交集）===
 
 #[test]
 fn test_compatible_versions() {
-    let req1 = VersionReq::parse("^1.0.0").unwrap();
-    let req2 = VersionReq::parse("^1.5.0").unwrap();
-    assert!(req1.is_compatible(&req2));
+    assert!(is_compatible(&req("^1.0.0"), &req("^1.5.0")));
+    // 相同区间兼容（旧枚举实现在 major<100 内枚举碰巧成立，区间法直接成立）
+    assert!(is_compatible(&req("^1.0.0"), &req(">=1.2.0, <1.9.0")));
 }
 
 #[test]
 fn test_incompatible_versions() {
-    let req1 = VersionReq::parse("^1.0.0").unwrap();
-    let req2 = VersionReq::parse("^2.0.0").unwrap();
-    assert!(!req1.is_compatible(&req2));
+    assert!(!is_compatible(&req("^1.0.0"), &req("^2.0.0")));
+    assert!(!is_compatible(&req(">=1.0.0, <1.2.0"), &req(">=1.3.0")));
 }
 
 #[test]
 fn test_wildcard_compatible_with_anything() {
-    let req1 = VersionReq::parse("*").unwrap();
-    let req2 = VersionReq::parse("^1.0.0").unwrap();
-    assert!(req1.is_compatible(&req2));
+    assert!(is_compatible(&req("*"), &req("^1.0.0")));
+    assert!(is_compatible(&req("^1.0.0"), &req("*")));
+}
+
+#[test]
+fn test_compatible_high_major_range() {
+    // 旧枚举实现 major<100/minor<50/patch<20 的盲区：高版本区间被误判不兼容
+    assert!(is_compatible(&req("^200.0.0"), &req("^200.5.0")));
+    assert!(is_compatible(&req(">=500.0.0"), &req(">=600.0.0")));
+}
+
+#[test]
+fn test_incompatible_upper_bound() {
+    // 交集为空的上界约束（旧实现靠枚举命中，区间法直接判定）
+    assert!(!is_compatible(&req("<=1.0.0"), &req(">=1.0.1")));
+    assert!(!is_compatible(&req("=1.0.0"), &req("=1.0.1")));
+    assert!(is_compatible(&req("=1.0.0"), &req("=1.0.0")));
+}
+
+#[test]
+fn test_compatible_exact_and_range() {
+    assert!(is_compatible(&req("=1.5.0"), &req("^1.0.0")));
+    assert!(!is_compatible(&req("=2.5.0"), &req("^1.0.0")));
+}
+
+#[test]
+fn test_compatible_tilde() {
+    assert!(is_compatible(&req("~1.2.3"), &req("~1.2.9")));
+    assert!(!is_compatible(&req("~1.2.3"), &req("~1.3.0")));
 }

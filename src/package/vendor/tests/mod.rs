@@ -13,8 +13,12 @@
 //! - 空列表查询
 //! - 完整性验证
 
-use crate::package::vendor::{VendorManager, cache};
+use crate::package::vendor::checksum::compute_directory_checksum;
+use crate::package::vendor::VendorManager;
 use tempfile::TempDir;
+
+mod checksum;
+mod fetcher;
 
 #[test]
 fn test_vendor_manager_new() {
@@ -158,12 +162,16 @@ fn test_verify_integrity() {
     std::fs::write(dep_path.join("lib.yx"), "main = { 42 }").unwrap();
 
     // 计算校验和
-    let checksum = cache::compute_directory_checksum(&dep_path).unwrap();
+    let checksum_value = compute_directory_checksum(&dep_path).unwrap();
 
     // 校验应通过
-    assert!(manager.verify_integrity("foo", "1.0.0", &checksum).unwrap());
+    assert!(manager
+        .verify_integrity("foo", "1.0.0", &checksum_value)
+        .unwrap());
 
     // 修改文件后校验应失败
     std::fs::write(dep_path.join("lib.yx"), "main = { 0 }").unwrap();
-    assert!(!manager.verify_integrity("foo", "1.0.0", &checksum).unwrap());
+    assert!(!manager
+        .verify_integrity("foo", "1.0.0", &checksum_value)
+        .unwrap());
 }

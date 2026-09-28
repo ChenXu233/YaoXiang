@@ -1070,5 +1070,14 @@
     "message": "'{key}' 有 {count} 个候选匹配，无法决议",
     "template": "方法重载歧义：'{key}' 有 {count} 个候选匹配且无法区分",
     "help": "为调用结果添加类型注解（如 `x: T = obj.m()`），或让重载候选的参数类型可区分"
-  }
+  },
+  "package_outdated_none": "所有依赖均为最新。",
+  "package_outdated_found": "发现 {0} 个过时依赖:",
+  "package_outdated_row": "  {0}: {1} -> {2}",
+  "package_outdated_pinned": "  {0} ({1}) [已固定]",
+  "package_outdated_failed": "  {0} ({1}) [检查失败: {2}]",
+  "package_clean_removed": "  已移除 {0}",
+  "package_clean_nothing": "没有需要清理的内容。",
+  "package_cache_cleaned": "缓存已清理（释放 {0}）",
+  "package_cache_empty": "缓存已是空的。"
 }

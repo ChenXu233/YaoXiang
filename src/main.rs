@@ -282,6 +282,14 @@ enum Commands {
         #[arg(short, long)]
         version: Option<String>,
 
+        /// Git repository URL (explicit source; required before registry launch — RFC-014a)
+        #[arg(long, conflicts_with = "path")]
+        git: Option<String>,
+
+        /// Local path (explicit source)
+        #[arg(long)]
+        path: Option<String>,
+
         /// Add as dev-dependency
         #[arg(short = 'D', long)]
         dev: bool,
@@ -311,12 +319,31 @@ enum Commands {
     /// List all dependencies
     List,
 
+    /// Check for outdated dependencies (RFC-014)
+    Outdated,
+
+    /// Clean build artifacts and stale vendor packages (RFC-014)
+    Clean,
+
+    /// Manage the global package cache (RFC-014)
+    Cache {
+        #[command(subcommand)]
+        command: CacheCommand,
+    },
+
     /// Start the Language Server Protocol (LSP) server
     Lsp {
         /// Enable debug mode (show debug! macro output)
         #[arg(long)]
         debug: bool,
     },
+}
+
+/// `yaoxiang cache` 子命令
+#[derive(Subcommand, Debug)]
+enum CacheCommand {
+    /// Remove all cached packages
+    Clean,
 }
 
 fn main() -> Result<()> {
@@ -595,9 +622,21 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Add { dep, version, dev } => {
-            package::commands::add::exec(&dep, version.as_deref(), dev)
-                .context("Failed to add dependency")?;
+        Commands::Add {
+            dep,
+            version,
+            git,
+            path,
+            dev,
+        } => {
+            package::commands::add::exec(
+                &dep,
+                version.as_deref(),
+                git.as_deref(),
+                path.as_deref(),
+                dev,
+            )
+            .context("Failed to add dependency")?;
         }
         Commands::Rm { dep, dev } => {
             package::commands::rm::exec(&dep, dev).context("Failed to remove dependency")?;
@@ -618,6 +657,17 @@ fn main() -> Result<()> {
         }
         Commands::List => {
             package::commands::list::exec().context("Failed to list dependencies")?;
+        }
+        Commands::Outdated => {
+            package::commands::outdated::exec().context("Failed to check outdated dependencies")?;
+        }
+        Commands::Clean => {
+            package::commands::clean::exec().context("Failed to clean project")?;
+        }
+        Commands::Cache {
+            command: CacheCommand::Clean,
+        } => {
+            package::commands::cache::clean().context("Failed to clean package cache")?;
         }
         Commands::Lsp { .. } => {
             // LSP 服务器使用 stderr 记录日志（stdout 用于 JSON-RPC 通信）
