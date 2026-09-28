@@ -891,6 +891,18 @@ pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
                         None
                     }
                 }
+                // RFC-011 §5.2：约束形参（`T: Add`——标注为运算符接口名）。
+                // 接口规格是编译器侧封闭集合，此处可静态判定；其余 Name
+                // （用户类型标注的值参数）仍保守跳过
+                Type::Name { name, .. }
+                    if crate::frontend::core::typecheck::operator_interfaces::spec(name)
+                        .is_some() =>
+                {
+                    Some(GenericParamName {
+                        name: p.name.clone(),
+                        constraints: vec![ty.clone()],
+                    })
+                }
                 Type::Name { .. } => {
                     // 无法确认是否为 trait → 保守不下泛型参数
                     None

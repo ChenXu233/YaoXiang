@@ -84,6 +84,18 @@ pub struct StatementChecker {
     /// RFC-011b: 接口实现登记表（运算符查询唯一判据，不经名字解析）
     interface_impl_registry:
         HashMap<String, Vec<crate::frontend::core::typecheck::environment::InterfaceImplEntry>>,
+    /// RFC-011 §5.2：泛型函数约束表（fn 名 → [(形参, 接口名)]）——调用点复检
+    generic_fn_constraints: std::collections::HashMap<String, Vec<(String, String)>>,
+    /// 当前函数的约束形参（形参 → 接口名）：定义体内运算符延迟派发的依据
+    current_fn_param_constraints: Option<std::collections::HashMap<String, String>>,
+    /// RFC-011a §3：重载候选签名（key → [候选 Fn]，与 ir_names 候选序对应）
+    pub method_overloads: std::collections::HashMap<String, Vec<MonoType>>,
+    /// RFC-011a §3：重载候选的 IR 混编名
+    pub method_overload_ir_names: std::collections::HashMap<String, Vec<String>>,
+    /// RFC-011a §3：重载决议点（span → 混编 IR 名）
+    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
+    /// 期望类型（带注解绑定的初始化推断时设置，方法重载按期望返回决议）
+    pub current_expected: Option<MonoType>,
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types: HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
     /// RFC-010: 变体构造调用点（span 键控）
@@ -150,6 +162,12 @@ impl StatementChecker {
             collect_all_errors: false,
             function_local_vars: HashMap::new(),
             result_err_stack: Vec::new(),
+            generic_fn_constraints: std::collections::HashMap::new(),
+            current_fn_param_constraints: None,
+            method_overloads: std::collections::HashMap::new(),
+            method_overload_ir_names: std::collections::HashMap::new(),
+            overload_resolutions: Vec::new(),
+            current_expected: None,
             expected_return_type: None,
             generic_type_defs: std::collections::HashMap::new(),
             method_bindings: HashMap::new(),
@@ -1115,6 +1133,59 @@ impl StatementChecker {
                 // 从 value 提取 Lambda params/body。
                 // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值（交给 check_var_stmt 按普通变量审）。
+                // RFC-010 §3（具名函数本质是 lambda 语法糖）：Fn 注解 +
+                // 表达式体（`sum: (T: Add) -> (a: T, b: T) -> T = a + b`）
+                // 合成值级 lambda，与 lambda 体走同一条 check_fn_stmt 路径——
+                // 否则注册形态停留在完整柯里注解（arity 含类型位），调用点
+                // arity 全错，且定义体的约束延迟派发无从发生。
+                // 仅表达式体走此路：lambda 体已被上方臂提取
+                if type_annotation.as_ref().is_some_and(|t| {
+                    matches!(t, crate::frontend::core::parser::ast::Type::Fn { .. })
+                }) && value
+                    .as_deref()
+                    .is_some_and(|v| !matches!(v, Expr::Lambda { .. }))
+                {
+                    let value_params: Vec<Param> =
+                        signature_params
+                            .iter()
+                            .filter(|p| {
+                                match &p.ty {
+                        Some(crate::frontend::core::parser::ast::Type::MetaType { .. }) => false,
+                        Some(crate::frontend::core::parser::ast::Type::Name { name: n, .. }) => {
+                            !(self.trait_table.has_trait(n)
+                                || crate::frontend::core::typecheck::operator_interfaces::spec(n)
+                                    .is_some())
+                        }
+                        _ => true,
+                    }
+                            })
+                            .cloned()
+                            .collect();
+                    let synthetic_body = Block {
+                        stmts: vec![Stmt {
+                            kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
+                                value.as_deref().cloned().unwrap_or({
+                                    crate::frontend::core::parser::ast::Expr::Lit(
+                                        crate::frontend::core::lexer::tokens::Literal::Void,
+                                        stmt.span,
+                                    )
+                                }),
+                            )),
+                            span: stmt.span,
+                        }],
+                        span: stmt.span,
+                    };
+                    return self.check_fn_stmt(
+                        &name,
+                        type_annotation.as_ref(),
+                        signature_params,
+                        &value_params,
+                        &[],
+                        synthetic_body,
+                        *stmt_span,
+                    );
+                }
+
                 let (params, body_stmts) = match value {
                     Some(v) => {
                         if let Expr::Lambda { params, body, .. } = v.as_ref() {
@@ -1371,8 +1442,36 @@ impl StatementChecker {
         // #353：记录绑定语句的位置，供尾表达式不符时指向它（而非体的末行）。
         // 真正该改的是注解所在的声明，不是体里那个（可能完全正确的）值。
         self.tail_annotation_span = Some(_span);
-        let generic_params =
-            classify_generic_params(signature_params, &|name| self.trait_table.has_trait(name));
+        // RFC-011 §5.2：收集约束形参（`T: Add` 的标注名为接口名）——
+        // 调用点复检与定义体内运算符延迟派发的依据
+        {
+            let constraints: Vec<(String, String)> = signature_params
+                .iter()
+                .filter_map(|p| match &p.ty {
+                    Some(crate::frontend::core::parser::ast::Type::Name { name: n, .. })
+                        if self.trait_table.has_trait(n)
+                            || crate::frontend::core::typecheck::operator_interfaces::spec(n)
+                                .is_some() =>
+                    {
+                        Some((p.name.clone(), n.clone()))
+                    }
+                    _ => None,
+                })
+                .collect();
+            if !constraints.is_empty() {
+                self.generic_fn_constraints
+                    .insert(name.to_string(), constraints.clone());
+            }
+            self.current_fn_param_constraints = if constraints.is_empty() {
+                None
+            } else {
+                Some(constraints.into_iter().collect())
+            };
+        }
+        let generic_params = classify_generic_params(signature_params, &|name| {
+            self.trait_table.has_trait(name)
+                || crate::frontend::core::typecheck::operator_interfaces::spec(name).is_some()
+        });
 
         // 检查是否与结构体重名
         if let Some(existing) = self.scope.get_var(name) {
@@ -1690,6 +1789,7 @@ impl StatementChecker {
 
         // 退出函数 Result 上下文
         let _ = self.result_err_stack.pop();
+        self.current_fn_param_constraints = None;
 
         out
     }
@@ -1718,7 +1818,22 @@ impl StatementChecker {
 
         let ty = match (initializer, type_annotation) {
             (Some(init_expr), Some(type_ann)) => {
-                let init_ty = self.check_expr(init_expr)?;
+                // 期望类型先行（方法重载按期望返回决议）：注解解析 →
+                // 设为当前期望 → init 推断 → 恢复
+                let ann_expected = type_annotation
+                    .and_then(|t| self.try_instantiate_generic_type(t))
+                    .or_else(|| type_annotation.map(|t| MonoType::from(t.clone())));
+                self.current_expected = ann_expected.clone();
+                let init_ty = match self.check_expr(init_expr) {
+                    Ok(t) => {
+                        self.current_expected = None;
+                        t
+                    }
+                    Err(e) => {
+                        self.current_expected = None;
+                        return Err(e);
+                    }
+                };
                 // Try generic type instantiation for List(Int) → struct expansion
                 let ann_ty = self
                     .try_instantiate_generic_type(type_ann)
@@ -2384,8 +2499,10 @@ impl StatementChecker {
                             {
                                 use crate::frontend::core::typecheck::operator_interfaces as ops;
                                 if let Some(iface) = ops::arithmetic_interface(op) {
-                                    if let Some((entry, remaining)) = ops::query_prefix(
+                                    if let Some((entry, remaining)) = ops::query_operator_template(
                                         &self.interface_impl_registry,
+                                        &self.generic_type_defs,
+                                        &mut self.solver,
                                         iface,
                                         &[l.clone(), r.clone()],
                                     ) {
@@ -2403,6 +2520,36 @@ impl StatementChecker {
                                         }
                                         if let Some(result_ty) = remaining.first() {
                                             return Ok(result_ty.clone());
+                                        }
+                                    }
+                                }
+                            }
+                            // RFC-011 §5.2：约束形参延迟派发（定义体内 T 上的
+                            // 运算符）——与 ExpressionInferrer 同款判定
+                            if let Some(iface) =
+                                crate::frontend::core::typecheck::operator_interfaces::arithmetic_interface(op)
+                            {
+                                if let Some(constraints) = &self.current_fn_param_constraints {
+                                    let operands = [&l, &r];
+                                    for operand in operands {
+                                        if let MonoType::TypeRef(pn) = operand {
+                                            if constraints.get(pn).map(|s| s.as_str())
+                                                == Some(iface)
+                                            {
+                                                if let Some(spec) =
+                                                    crate::frontend::core::typecheck::operator_interfaces::spec(iface)
+                                                {
+                                                    self.operator_dispatches.push(
+                                                        crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch {
+                                                            span: *span,
+                                                            type_name: pn.clone(),
+                                                            method: spec.method.to_string(),
+                                                            negate: false,
+                                                        },
+                                                    );
+                                                }
+                                                return Ok(operand.clone());
+                                            }
                                         }
                                     }
                                 }
@@ -2460,6 +2607,15 @@ impl StatementChecker {
                         inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
                         inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
+                        inferrer.set_current_fn_param_constraints(
+                            self.current_fn_param_constraints.as_ref(),
+                        );
+                        inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
+                        inferrer.set_method_overloads(
+                            &self.method_overloads,
+                            &self.method_overload_ir_names,
+                        );
+                        inferrer.set_current_expected(self.current_expected.clone());
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                         inferrer.set_loop_depth(self.loop_depth);
@@ -2476,6 +2632,8 @@ impl StatementChecker {
                         self.existential_coercions
                             .extend(inferrer.existential_coercions);
                         self.try_expr_impls.append(&mut inferrer.try_expr_impls);
+                        self.overload_resolutions
+                            .append(&mut inferrer.overload_resolutions);
                         self.operator_dispatches
                             .extend(inferrer.operator_dispatches);
                         self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
@@ -2540,6 +2698,12 @@ impl StatementChecker {
                 inferrer.set_sum_types(&self.sum_types);
                 inferrer.set_generic_type_defs(&self.generic_type_defs);
                 inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
+                inferrer
+                    .set_current_fn_param_constraints(self.current_fn_param_constraints.as_ref());
+                inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
+                inferrer
+                    .set_method_overloads(&self.method_overloads, &self.method_overload_ir_names);
+                inferrer.set_current_expected(self.current_expected.clone());
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                 inferrer.set_loop_depth(self.loop_depth);
@@ -2556,6 +2720,8 @@ impl StatementChecker {
                 self.existential_coercions
                     .extend(inferrer.existential_coercions);
                 self.try_expr_impls.append(&mut inferrer.try_expr_impls);
+                self.overload_resolutions
+                    .append(&mut inferrer.overload_resolutions);
                 self.operator_dispatches
                     .extend(inferrer.operator_dispatches);
                 self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);

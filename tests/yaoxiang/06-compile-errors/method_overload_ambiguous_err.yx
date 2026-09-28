@@ -1,0 +1,21 @@
+// 06-compile-errors/method_overload_ambiguous_err.yx
+// 方法重载歧义：同名重载多候选且调用点无期望类型可区分 → E1107
+// （不该隐式的地方不隐式：必须添加类型注解显式化意图）
+// expect: compile-error E1107
+// 状态: ✅
+
+Temp: Type = { value: Float }
+
+Temp.to: (self: &Temp) -> Float = (self) => {
+    return self.value
+}
+
+Temp.to: (self: &Temp) -> String = (self) => {
+    return "hot"
+}
+
+main: () -> Void = {
+    t = Temp(1.0)
+    x = t.to()
+    println(x)
+}

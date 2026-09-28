@@ -405,6 +405,33 @@ impl Monomorphizer {
             .join(", ");
         let specialized_name = format!("{}({})", generic.name, type_args_str);
 
+        // RFC-011 §5.2：约束形参的运算符派发改写——泛型定义体的
+        // `a + b`（T 带约束）发射 `Call "T.add"`，此处按类型实参改写为
+        // `Call "Vec3.add"`（用户方法）或 `Call "Int.add"`（FFI 原生背书）
+        let mut blocks = new_blocks;
+        for block in &mut blocks {
+            for instr in &mut block.instructions {
+                if let Instruction::Call {
+                    func: Operand::Const(ConstValue::String(name)),
+                    ..
+                } = instr
+                {
+                    for (i, pn) in type_params.iter().enumerate() {
+                        let prefix = format!("{pn}.");
+                        if name.starts_with(&prefix) {
+                            if let Some(concrete) = type_args.get(i) {
+                                *name = format!(
+                                    "{}.{}",
+                                    crate::frontend::core::typecheck::operator_interfaces::operator_type_display(concrete),
+                                    &name[prefix.len()..]
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // 构建特化函数
         Some(FunctionIR {
             name: specialized_name,
@@ -414,7 +441,7 @@ impl Monomorphizer {
             return_type: new_return_type,
             generic_params: None, // 清除泛型标记
             body: FunctionBody::Code {
-                blocks: new_blocks,
+                blocks,
                 entry: new_entry,
                 locals: new_locals,
             },

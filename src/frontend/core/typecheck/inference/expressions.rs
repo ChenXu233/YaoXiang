@@ -87,6 +87,18 @@ pub struct ExpressionInferrer<'a> {
     /// 用于 List(1, 2, 3) 等泛型类型构造调用的实例化
     generic_type_defs:
         &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
+    /// RFC-011 §5.2：当前函数的约束形参（形参 → 接口名）——定义体内
+    /// 约束类型上的运算符延迟派发依据
+    current_fn_param_constraints: Option<&'a HashMap<String, String>>,
+    /// RFC-011a §3：重载候选签名与 IR 混编名（方法级重载决议）
+    method_overloads: Option<&'a HashMap<String, Vec<MonoType>>>,
+    method_overload_ir_names: Option<&'a HashMap<String, Vec<String>>>,
+    /// 期望类型（带注解绑定传入，方法重载按期望返回决议）
+    current_expected: Option<MonoType>,
+    /// RFC-011a §3：重载决议点（span → 混编 IR 名）
+    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
+    /// RFC-011 §5.2：泛型函数约束表——调用点复检
+    generic_fn_constraints: Option<&'a HashMap<String, Vec<(String, String)>>>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
     /// 泛型函数的声明序类型参数名：函数名 -> ["T", "Acc", ...]（由 StatementChecker 注入）。
@@ -132,6 +144,12 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
+            current_fn_param_constraints: None,
+            method_overloads: None,
+            method_overload_ir_names: None,
+            current_expected: None,
+            overload_resolutions: Vec::new(),
+            generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
@@ -168,6 +186,12 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
+            current_fn_param_constraints: None,
+            method_overloads: None,
+            method_overload_ir_names: None,
+            current_expected: None,
+            overload_resolutions: Vec::new(),
+            generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
@@ -205,6 +229,12 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_SIGNATURES,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
+            current_fn_param_constraints: None,
+            method_overloads: None,
+            method_overload_ir_names: None,
+            current_expected: None,
+            overload_resolutions: Vec::new(),
+            generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
@@ -244,6 +274,12 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings,
             type_defs: &EMPTY_SIGNATURES,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
+            current_fn_param_constraints: None,
+            method_overloads: None,
+            method_overload_ir_names: None,
+            current_expected: None,
+            overload_resolutions: Vec::new(),
+            generic_fn_constraints: None,
             instantiation_requests: Vec::new(),
             generic_fn_type_params: &EMPTY_FN_TYPE_PARAMS,
             last_type_args: Vec::new(),
@@ -357,6 +393,40 @@ impl<'a> ExpressionInferrer<'a> {
         defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     ) {
         self.generic_type_defs = defs;
+    }
+
+    /// RFC-011 §5.2：当前函数的约束形参（定义体延迟派发）
+    pub fn set_current_fn_param_constraints(
+        &mut self,
+        constraints: Option<&'a HashMap<String, String>>,
+    ) {
+        self.current_fn_param_constraints = constraints;
+    }
+
+    /// RFC-011 §5.2：泛型函数约束表（调用点复检）
+    pub fn set_generic_fn_constraints(
+        &mut self,
+        constraints: &'a HashMap<String, Vec<(String, String)>>,
+    ) {
+        self.generic_fn_constraints = Some(constraints);
+    }
+
+    /// RFC-011a §3：重载候选签名与 IR 混编名
+    pub fn set_method_overloads(
+        &mut self,
+        overloads: &'a HashMap<String, Vec<MonoType>>,
+        ir_names: &'a HashMap<String, Vec<String>>,
+    ) {
+        self.method_overloads = Some(overloads);
+        self.method_overload_ir_names = Some(ir_names);
+    }
+
+    /// 期望类型（方法重载按期望返回决议）
+    pub fn set_current_expected(
+        &mut self,
+        expected: Option<MonoType>,
+    ) {
+        self.current_expected = expected;
     }
 
     /// 注入泛型函数的声明序类型参数名表（调用点做类型参数替换的依据）。
@@ -1350,8 +1420,34 @@ impl<'a> ExpressionInferrer<'a> {
     ) -> Option<MonoType> {
         use crate::frontend::core::typecheck::operator_interfaces as ops;
         let iface = ops::arithmetic_interface(op)?;
-        let (entry, remaining) =
-            ops::query_prefix(self.interface_impl_registry, iface, &[l.clone(), r.clone()])?;
+        let hit = ops::query_operator_template(
+            self.interface_impl_registry,
+            self.generic_type_defs,
+            self.solver,
+            iface,
+            &[l.clone(), r.clone()],
+        );
+        let (entry, remaining) = match hit {
+            Some(hit) => hit,
+            None => {
+                // RFC-011 §5.2：约束形参延迟派发——操作数是带匹配约束的
+                // 当前函数类型形参（TypeRef("T")）→ 记形参名派发，ir_gen
+                // 发 `Call "T.add"`，mono 特化时按类型实参改写
+                if let Some(pn) = self.constrained_operand_param(op, l, r) {
+                    let method = ops::spec(iface)
+                        .map(|s| s.method.to_string())
+                        .unwrap_or_else(|| "add".to_string());
+                    self.operator_dispatches.push(ops::OperatorDispatch {
+                        span,
+                        type_name: pn.clone(),
+                        method,
+                        negate: false,
+                    });
+                    return Some(MonoType::TypeRef(pn));
+                }
+                return None;
+            }
+        };
         let result_ty = remaining.first()?.clone();
         if !entry.native {
             self.operator_dispatches.push(ops::OperatorDispatch {
@@ -1366,6 +1462,27 @@ impl<'a> ExpressionInferrer<'a> {
             });
         }
         Some(result_ty)
+    }
+
+    /// 约束形参判定：操作数是 TypeRef("T") 且 T 带与运算符匹配的约束接口
+    /// → 返回形参名（延迟派发）
+    fn constrained_operand_param(
+        &self,
+        op: &BinOp,
+        l: &MonoType,
+        r: &MonoType,
+    ) -> Option<String> {
+        use crate::frontend::core::typecheck::operator_interfaces as ops;
+        let iface = ops::arithmetic_interface(op)?;
+        let constraints = self.current_fn_param_constraints.as_ref()?;
+        for operand in [l, r] {
+            if let MonoType::TypeRef(pn) = operand {
+                if constraints.get(pn).map(|s| s.as_str()) == Some(iface) {
+                    return Some(pn.clone());
+                }
+            }
+        }
+        None
     }
 
     /// RFC-011b: `==` / `!=` 的类型判定与派发记录。
@@ -1435,8 +1552,10 @@ impl<'a> ExpressionInferrer<'a> {
 
         // 显式 Equal 实例化优先（登记表查询，名义结构匹配；
         // native 条目只含基础类型，Struct 查询命中的必为用户条目）
-        if let Some(entry) = ops::query_exact(
+        if let Some(entry) = ops::query_exact_template(
             self.interface_impl_registry,
+            self.generic_type_defs,
+            self.solver,
             ops::EQUAL_INTERFACE,
             &[l.clone(), r.clone()],
         ) {
@@ -2832,8 +2951,10 @@ impl<'a> ExpressionInferrer<'a> {
                         use crate::frontend::core::typecheck::operator_interfaces as ops;
                         let key_ty = self.infer_expr(index)?;
                         let key_ty = self.solver.resolve_type(&key_ty);
-                        let (entry, remaining) = match ops::query_prefix(
+                        let (entry, remaining) = match ops::query_operator_template(
                             self.interface_impl_registry,
+                            self.generic_type_defs,
+                            self.solver,
                             ops::INDEX_INTERFACE,
                             &[other.clone(), key_ty],
                         ) {
@@ -3555,7 +3676,7 @@ impl<'a> ExpressionInferrer<'a> {
                 ..
             } = base_expr.as_ref()
             {
-                &**inner_func
+                inner_func
             } else {
                 base_expr.as_ref()
             };
@@ -3591,7 +3712,6 @@ impl<'a> ExpressionInferrer<'a> {
         }
 
         let func_ty = self.infer_expr(func)?;
-
         // 可调用性校验：被调对象必须是函数（或 LibraryRef）。
         //
         // 此前完全不检——`x = 5; x()` 编译期静默通过，到运行时才报
@@ -3871,6 +3991,55 @@ impl<'a> ExpressionInferrer<'a> {
         // 收集实例化请求：检测泛型函数调用并记录
         self.collect_instantiation_request(&func_ty, func, &arg_types, &mono_func_ty, span);
 
+        // RFC-011 §5.2 调用点复检：约束形参的具体类型必须实现约束
+        // 接口（定义体内运算符已延迟派发为 `Call "T.add"`，mono 按
+        // 实参改写——此处保证改写目标存在，未实现者调用点即报错）
+        if let Some(fname) = fn_name_for_mono {
+            use crate::frontend::core::typecheck::operator_interfaces as ops;
+            if let Some(constraints) = self.generic_fn_constraints.and_then(|m| m.get(fname)) {
+                if let Some(param_names) = self.generic_fn_type_params.get(fname) {
+                    for (pn, iface) in constraints {
+                        let Some(idx) = param_names.iter().position(|n| n == pn) else {
+                            continue;
+                        };
+                        let Some(concrete) = self.last_type_args.get(idx) else {
+                            continue;
+                        };
+                        if super::statements::contains_unresolved_param(concrete) {
+                            continue;
+                        }
+                        let satisfied = match iface.as_str() {
+                            "Equal" => ops::query_exact_template(
+                                self.interface_impl_registry,
+                                self.generic_type_defs,
+                                self.solver,
+                                iface,
+                                &[concrete.clone(), concrete.clone()],
+                            )
+                            .is_some(),
+                            _ => ops::query_operator_template(
+                                self.interface_impl_registry,
+                                self.generic_type_defs,
+                                self.solver,
+                                iface,
+                                &[concrete.clone(), concrete.clone()],
+                            )
+                            .is_some(),
+                        };
+                        if !satisfied {
+                            return Err(ErrorCodeDefinition::constraint_unsatisfied(
+                                &ops::operator_type_display(concrete),
+                                pn,
+                                iface,
+                            )
+                            .at(span)
+                            .build());
+                        }
+                    }
+                }
+            }
+        }
+
         // #335 G3 类型信息流接口：按单态化结果记录调用点所有权
         //（Ref{mutable}→Write/Read 借用，其余 Move；impl 方法 params[0]
         //  为接收者位；std 可变方法首实参为容器写借用）
@@ -3921,6 +4090,93 @@ impl<'a> ExpressionInferrer<'a> {
         // 接收者占签名 params[0]——arity 按「实参数+1==形参数」校验，
         // 逐参 unify 对齐 params[1..]（下方分发臂）
         let method_key = self.method_binding_call_key(func);
+
+        // RFC-011a §3：方法级重载决议——同名多候选按 实参兼容 +
+        // 期望返回 选择。候选的形参变量是 pass2 注册期共享的，
+        // 逐调用 fresh 化后再 unify。选中后：
+        //   - 以候选签名作为本调用的函数类型（分派/所有权同源）
+        //   - 记录决议（span → 混编 IR 名），ir_gen 据此命名调用
+        let selected_overload: Option<MonoType> = match &method_key {
+            Some(key) => {
+                let cands = self.method_overloads.as_ref().and_then(|m| m.get(key));
+                let irs = self
+                    .method_overload_ir_names
+                    .as_ref()
+                    .and_then(|m| m.get(key));
+                match (cands, irs) {
+                    (Some(cands), Some(irs)) if cands.len() > 1 && irs.len() == cands.len() => {
+                        let mut matches: Vec<(usize, MonoType)> = Vec::new();
+                        for (i, cand) in cands.iter().enumerate() {
+                            let Some(MonoType::Fn { params, .. }) = Some(cand) else {
+                                continue;
+                            };
+                            if params.len() != arg_types.len() + 1 {
+                                continue;
+                            }
+                            // 逐调用 fresh 化（共享 pass2 变量会跨调用串型）
+                            let freshened = {
+                                let mut idxs = std::collections::HashSet::new();
+                                Self::collect_type_var_indices(cand, &mut idxs);
+                                let mut subst = HashMap::new();
+                                for idx in idxs {
+                                    subst.insert(idx, self.solver.new_var());
+                                }
+                                Self::substitute_type_vars(cand, &subst)
+                            };
+                            let Some(MonoType::Fn {
+                                params: fp,
+                                return_type: fr,
+                            }) = Some(&freshened)
+                            else {
+                                continue;
+                            };
+                            let mut ok = true;
+                            for (p, a) in fp[1..].iter().zip(arg_types.iter()) {
+                                // 参数带借用而实参是值：自动借用形态兼容
+                                let pr = self.solver.resolve_type(p);
+                                let ar = self.solver.resolve_type(a);
+                                let borrow_ok = matches!(&pr, MonoType::Ref { .. })
+                                    && !matches!(&ar, MonoType::Ref { .. });
+                                if !borrow_ok && self.solver.unify(&ar, &pr).is_err() {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                            if !ok {
+                                continue;
+                            }
+                            // 期望返回过滤（带注解绑定的调用点传入）
+                            if let Some(exp) = &self.current_expected {
+                                let er = self.solver.resolve_type(exp);
+                                let frr = self.solver.resolve_type(fr);
+                                if self.solver.unify(&frr, &er).is_err() {
+                                    continue;
+                                }
+                            }
+                            matches.push((i, freshened));
+                        }
+                        match matches.len() {
+                            1 => matches.first().and_then(|(i, f)| {
+                                let ir = irs.get(*i)?;
+                                self.overload_resolutions.push((span, ir.clone()));
+                                Some(f.clone())
+                            }),
+                            // 多候选无法区分 = 隐式假设调用者想要哪一个——
+                            // 不该隐式的地方不隐式：歧义即报错（E1107）
+                            n if n > 1 => {
+                                return Err(ErrorCodeDefinition::ambiguous_method_overload(key, n)
+                                    .at(span)
+                                    .build());
+                            }
+                            _ => None, // 0 = 无实参匹配的候选（落旧路径报错）
+                        }
+                    }
+                    _ => None,
+                }
+            }
+            None => None,
+        };
+        let mono_func_ty = selected_overload.unwrap_or(mono_func_ty);
 
         // 两层调用：Container(Int)(42, 43) —— func 是泛型类型构造调用，
         // 内层已完成实例化（func_ty 是具体 Struct），外层实参是构造参数。
@@ -4234,14 +4490,14 @@ impl<'a> ExpressionInferrer<'a> {
                     // 不用 `if let`（那需要 `#[allow(irrefutable_let_patterns)]`，
                     // 而那个 allow 掩盖的是「本可写成 let 的多余判断」）。
                     for crate::frontend::core::types::eval::dependent_types::Effect::GammaAssume { predicate_arg } in &spec.effects {
-                        if let Some(arg_expr) = args.get(*predicate_arg) {
-                            if let Some(pred) = crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(arg_expr) {
-                                if let Some(gamma) = self.gamma.as_deref_mut() {
-                                    gamma.inject(pred);
+                            if let Some(arg_expr) = args.get(*predicate_arg) {
+                                if let Some(pred) = crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(arg_expr) {
+                                    if let Some(gamma) = self.gamma.as_deref_mut() {
+                                        gamma.inject(pred);
+                                    }
                                 }
                             }
                         }
-                    }
                 }
             }
         }

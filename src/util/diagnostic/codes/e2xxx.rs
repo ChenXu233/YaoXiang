@@ -46,4 +46,7 @@ define_codes!(E2XXX, {
     // E2030 精化类型约束违反（赋值后依赖变量 VC 被 SMT 证伪——
     // 此前仅 tracing log 吞掉，静默放行违反约束的程序）
     ("E2030", Semantic, false, refined_constraint_violated(assigned: &str, var: &str, constraint: &str, counterexample: &str) => .param("assigned", assigned).param("var", var).param("constraint", constraint).param("counterexample", counterexample)),
+    // E2031 精化约束无法证明（RFC-027 §4/§9：Unproven → 编译错误 + 未解命题，
+    // 无降级无 silent pass。绑定完备仍证不出 = 约束形态超出证明内核）
+    ("E2031", Semantic, false, refined_unproven(assigned: &str, var: &str, constraint: &str) => .param("assigned", assigned).param("var", var).param("constraint", constraint)),
 });

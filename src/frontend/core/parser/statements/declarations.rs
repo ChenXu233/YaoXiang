@@ -485,6 +485,15 @@ fn parse_assign_after_target(
                             if is_type_param_annotation(p.ty.as_ref()) {
                                 return false;
                             }
+                            // RFC-011 §5.2：约束形参（`T: Add`——标注名为运算符
+                            // 接口/约束名，非具体类型）是类型位，不占运行时参数
+                            if let Some(Type::Name { name: n, .. }) = &p.ty {
+                                if crate::frontend::core::typecheck::operator_interfaces::spec(n)
+                                    .is_some()
+                                {
+                                    return false;
+                                }
+                            }
                             let used_as_const = type_annotation.as_ref().is_some_and(|ann| {
                                 name_used_as_type(&p.name, ann, &is_predicate_app)
                             });

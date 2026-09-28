@@ -110,4 +110,8 @@ define_codes!(E1XXX, {
     // E1105 变体构造器被当作字段访问（RFC-010 记录式和类型：变体名升格，
     // 构造只以 `类型.变体(...)` 调用形态存在，值上无变体数据字段）
     ("E1105", TypeCheck, false, variant_used_as_field(type_: &str, variant: &str) => .param("type", type_) .param("variant", variant)),
+    // E1106 约束未满足（RFC-011 §5.2 调用点复检）
+    ("E1106", TypeCheck, false, constraint_unsatisfied(type_: &str, param: &str, interface: &str) => .param("type", type_) .param("param", param) .param("interface", interface)),
+    // E1107 方法重载歧义（RFC-011a §3：多候选且无期望类型可区分）
+    ("E1107", TypeCheck, false, ambiguous_method_overload(key: &str, count: usize) => .param("key", key) .param("count", count.to_string())),
 });
