@@ -10,7 +10,7 @@ status: '已接受'
 
 # RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包
 
-> 本 RFC 与 [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md) 互补。RFC-014b 定义了
+> 本 RFC 与 [RFC-014b: 构建系统与二进制分发](../accepted/014b-build-system.md) 互补。RFC-014b 定义了
 > **YaoXiang 包管理器**如何构建和分发第三方包；本 RFC 定义
 > **YaoXiang 编译器/工具链本身**如何打包和分发。
 
@@ -496,6 +496,6 @@ allow-dirty = ["ci"]
 
 - [cargo-dist 官方文档](https://axodotdev.github.io/cargo-dist/)
 - [cargo-dist GitHub](https://github.com/axodotdev/cargo-dist)
-- [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md)
+- [RFC-014b: 构建系统与二进制分发](../accepted/014b-build-system.md)
 - [cargo-dist nightly feature request](https://github.com/axodotdev/cargo-dist/issues/1143)
 - [Z3 构建配置 — CMakeLists.txt](https://github.com/Z3Prover/z3/blob/master/src/CMakeLists.txt)

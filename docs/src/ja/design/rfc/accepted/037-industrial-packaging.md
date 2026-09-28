@@ -12,7 +12,7 @@ status: '承認済み'
 
 # RFC-037: 産業化ディストリビューション方案 — cargo-dist に基づくコンパイラ/ツールチェーンパッケージング
 
-> 本 RFC は [RFC-014b: ビルドシステムとバイナリ配布](../review/014b-build-system.md)
+> 本 RFC は [RFC-014b: ビルドシステムとバイナリ配布](../accepted/014b-build-system.md)
 > と補完関係にある。RFC-014b は
 > **YaoXiang パッケージマネージャ**がサードパーティパッケージをどのようにビルド・配布するかを定義しており、本 RFC は
 > **YaoXiang コンパイラ/ツールチェーン自体**をどのようにパッケージング・配布するかを定義する。
@@ -656,6 +656,6 @@ allow-dirty = ["ci"]
 
 - [cargo-dist 公式ドキュメント](https://axodotdev.github.io/cargo-dist/)
 - [cargo-dist GitHub](https://github.com/axodotdev/cargo-dist)
-- [RFC-014b: ビルドシステムとバイナリ配布](../review/014b-build-system.md)
+- [RFC-014b: ビルドシステムとバイナリ配布](../accepted/014b-build-system.md)
 - [cargo-dist nightly feature request](https://github.com/axodotdev/cargo-dist/issues/1143)
 - [Z3 ビルド設定 — CMakeLists.txt](https://github.com/Z3Prover/z3/blob/master/src/CMakeLists.txt)

@@ -14,9 +14,9 @@ impl_status: 'partial'
 
 > **子 RFC：**
 >
-> - [RFC-014a: Registry 协议规范](../review/014a-registry-protocol.md)
-> - [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md)
-> - [RFC-014c: 工作空间支持](../review/014c-workspace.md)
+> - [RFC-014a: Registry 协议规范](../accepted/014a-registry-protocol.md)
+> - [RFC-014b: 构建系统与二进制分发](../accepted/014b-build-system.md)
+> - [RFC-014c: 工作空间支持](../accepted/014c-workspace.md)
 
 ## 摘要
 
@@ -422,19 +422,19 @@ token = "xxx"
 
 ### Registry 协议
 
-详见 [RFC-014a: Registry 协议规范](../review/014a-registry-protocol.md)。
+详见 [RFC-014a: Registry 协议规范](../accepted/014a-registry-protocol.md)。
 
 核心设计：开放协议 + 适配层。官方 Registry 为主，GitHub Release/main 分支为辅，支持自定义 Registry。
 
 ### 构建系统
 
-详见 [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md)。
+详见 [RFC-014b: 构建系统与二进制分发](../accepted/014b-build-system.md)。
 
 核心设计：声明式 `[build]` 配置，预编译优先/源码兜底，支持 cargo/cmake/custom 策略。
 
 ### 工作空间
 
-详见 [RFC-014c: 工作空间支持](../review/014c-workspace.md)。
+详见 [RFC-014c: 工作空间支持](../accepted/014c-workspace.md)。
 
 核心设计：字典形式 members 声明，共享 lockfile，路径依赖，Cargo workspace 集成。
 

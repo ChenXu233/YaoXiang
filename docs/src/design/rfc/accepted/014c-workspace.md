@@ -1,9 +1,9 @@
 ---
 title: 'RFC-014c: 工作空间支持'
-status: '审核中'
+status: '已接受'
 author: '晨煦'
 created: '2026-06-11'
-updated: '2026-09-15'
+updated: '2026-09-28'
 group: 'rfc-014'
 issue: '#113'
 ---

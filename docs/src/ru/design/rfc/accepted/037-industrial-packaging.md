@@ -12,7 +12,7 @@ status: 'Принято'
 # RFC-037: Промышленная схема распространения — упаковка компилятора/тулчейна на базе cargo-dist
 
 > Настоящий RFC дополняет
-> [RFC-014b: Система сборки и распространение бинарников](../review/014b-build-system.md). RFC-014b
+> [RFC-014b: Система сборки и распространение бинарников](../accepted/014b-build-system.md). RFC-014b
 > определяет, как **менеджер пакетов YaoXiang** собирает и распространяет сторонние пакеты;
 > настоящий RFC определяет, как **сам компилятор/тулчейн YaoXiang** упаковывается и
 > распространяется.
@@ -719,6 +719,6 @@ allow-dirty = ["ci"]
 
 - [Официальная документация cargo-dist](https://axodotdev.github.io/cargo-dist/)
 - [cargo-dist на GitHub](https://github.com/axodotdev/cargo-dist)
-- [RFC-014b: Система сборки и распространение бинарников](../review/014b-build-system.md)
+- [RFC-014b: Система сборки и распространение бинарников](../accepted/014b-build-system.md)
 - [Запрос на поддержку nightly в cargo-dist](https://github.com/axodotdev/cargo-dist/issues/1143)
 - [Конфигурация сборки Z3 — CMakeLists.txt](https://github.com/Z3Prover/z3/blob/master/src/CMakeLists.txt)

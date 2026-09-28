@@ -1,9 +1,9 @@
 ---
 title: 'RFC-014b: 构建系统与二进制分发'
-status: '审核中'
+status: '已接受'
 author: '晨煦'
 created: '2026-06-11'
-updated: '2026-09-15'
+updated: '2026-09-28'
 group: 'rfc-014'
 issue: '#91'
 impl: '0%'
