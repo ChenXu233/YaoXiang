@@ -972,7 +972,7 @@
   },
   "E3020": {
     "title": "缺少程序入口喵~",
-    "template": "可执行文件缺少 main 函数喵~（{path}）",
+    "template": "可执行文件缺少 main 绑定喵~（{path}）nya~",
     "help": "定义入口喵~：main = { ... }。Bin 角色下没有 main 的时候，全部函数都不可达 nya~"
   },
   "E3021": {
