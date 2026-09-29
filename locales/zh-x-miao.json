@@ -953,7 +953,7 @@
   "E3008": {
     "title": "这个 match 模式还不支持喵~",
     "template": "match 模式 '{pattern}' 还没实现喵~：现在只支持字面量和通配符（_）模式nya~",
-    "help": "变体解构（ok(v)/err(e)/some(x)）、结构体、元组、还有模式与守卫都还没落地喵（RFC-010b 规划中nya~），之前的实现会悄悄错译，现在改成编译期拒绝。处理 Result 请用 `?` 运算符喵~"
+    "help": "IR 层没法确定被匹配值的和类型喵～（变体解构需要精确的类型信息nya）：先把 scrutinee 绑定到变量再 match 喵～。如果这种形态应该被支持的话，请附上最小复现报告给主人哦～"
   },
   "E3018": {
     "title": "单态化实例化失败了喵~",
@@ -1076,5 +1076,11 @@
     "message": "from_char_code 收到了非法码点喵～（负数、代理区或者超出 U+10FFFF nya）",
     "template": "码点非法nya～：{input}",
     "help": "检查码点是不是在 U+0000..U+10FFFF 范围内，而且不在代理区（U+D800..U+DFFF）喵～"
+  },
+  "E6013": {
+    "title": "JSON 解析失败喵～",
+    "message": "json.parse 解析 JSON 文本失败了喵～",
+    "template": "JSON 解析失败喵～：{detail}",
+    "help": "检查一下 JSON 语法是不是合法的喵～（RFC 8259 nya）；错误消息里含有 行:列 定位和原因哦～"
   }
 }

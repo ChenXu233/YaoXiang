@@ -996,7 +996,7 @@
   "E3008": {
     "title": "Unsupported match pattern",
     "template": "match pattern '{pattern}' is not yet implemented: currently only literal and wildcard (_) patterns are supported",
-    "help": "Variant destructuring (ok(v)/err(e)/some(x)), struct, tuple, or pattern-with-guard are not yet implemented (planned in RFC-010b); the previous implementation silently mis-translated these, and is now rejected at compile-time. For handling Result, please use the `?` operator instead."
+    "help": "IR layer cannot determine the sum type of the matched value (variant destructuring requires precise type information): bind the scrutinee to a variable first, then match. If this form should be supported, please attach a minimal reproduction report."
   },
   "E3018": {
     "title": "Monomorphization instantiation failure",
@@ -1076,5 +1076,11 @@
     "message": "from_char_code received an invalid code point (negative, in the surrogate range, or beyond U+10FFFF)",
     "template": "Invalid code point: {input}",
     "help": "Check that the code point is within U+0000..U+10FFFF and not in the surrogate range (U+D800..U+DFFF)"
+  },
+  "E6013": {
+    "title": "JSON parsing failed",
+    "message": "json.parse failed to parse JSON text",
+    "template": "JSON parsing failed: {detail}",
+    "help": "Check whether the JSON syntax is valid (RFC 8259); the error message contains line:column position and reason"
   }
 }
