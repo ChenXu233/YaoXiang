@@ -371,6 +371,12 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
                         analyzer.set_exempt_pub(true);
                         analyzer.set_project_refs(project_refs.clone());
                     }
+                    // Lib（被包内 use 的文件，029f 推断规则）：pub 维持绝对豁免
+                    //（分发边界，宁漏报），非 pub 按包内引用池判定——跨文件
+                    // 消费者不可见曾是 W1001 误报根因
+                    FileRole::Lib => {
+                        analyzer.set_cross_file_refs(project_refs.clone());
+                    }
                     _ => {}
                 }
                 let warnings = analyzer.analyze(ast);

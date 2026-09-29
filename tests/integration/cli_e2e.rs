@@ -1248,3 +1248,86 @@ fn test_e2e_yaoxiang_lang_env_selects_every_shipped_language() {
         );
     }
 }
+
+// Lib 角色非 pub 死代码判定（029f「宁漏报」补遗，RFC-014 项目模式盘出）：
+// 被 use 的文件推断为 Lib，其消费者在文件外——非 pub 定义必须看包内引用池，
+// 否则跨文件引用判死（W1001 误报）。pub 维持绝对豁免不受影响。
+
+#[test]
+fn test_e2e_lib_non_pub_fn_used_cross_file_not_flagged() {
+    // Arrange: main 使用 util.g —— util 是 Lib 角色，g 非 pub 但有跨文件引用
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    std::fs::create_dir_all(tmp.path().join("src/util")).unwrap();
+    write_yx(tmp.path(), "src/util/mod.yx", "g = () => 2\n");
+    write_yx(
+        tmp.path(),
+        "src/main.yx",
+        "use util;\n\nmain = () => { print(util.g()) }\n",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", "src/main.yx"], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "check should pass, stderr: {stderr:?}");
+    assert!(
+        !stderr.contains("W1001"),
+        "cross-file used non-pub fn must not be flagged, stderr: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_lib_truly_dead_non_pub_fn_still_flagged() {
+    // Arrange: util 里两个函数，g 被跨文件引用，dead_g 无人引用
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    std::fs::create_dir_all(tmp.path().join("src/util")).unwrap();
+    write_yx(
+        tmp.path(),
+        "src/util/mod.yx",
+        "g = () => 2\ndead_g = () => 3\n",
+    );
+    write_yx(
+        tmp.path(),
+        "src/main.yx",
+        "use util;\n\nmain = () => { print(util.g()) }\n",
+    );
+
+    // Act
+    let (_code, _stdout, stderr) = run_yx(&["check", "src/main.yx"], tmp.path());
+
+    // Assert - 引用池只豁免 g；真死的 dead_g 仍报
+    assert!(
+        stderr.contains("W1001") && stderr.contains("dead_g"),
+        "truly dead non-pub fn should still be flagged, stderr: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("'g'"),
+        "referenced g must not be flagged, stderr: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_lib_unused_pub_fn_still_exempt() {
+    // Arrange: Lib 文件的 pub 无人引用 —— 分发边界语义维持绝对豁免（宁漏报）
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    std::fs::create_dir_all(tmp.path().join("src/util")).unwrap();
+    write_yx(tmp.path(), "src/util/mod.yx", "pub api = () => 9\n");
+    write_yx(
+        tmp.path(),
+        "src/main.yx",
+        "use util;\n\nmain = () => { print(1) }\n",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", "src/main.yx"], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0);
+    assert!(
+        !stderr.contains("W1001"),
+        "pub in Lib must stay unconditionally exempt, stderr: {stderr:?}"
+    );
+}
