@@ -1386,3 +1386,81 @@ fn test_e2e_workspace_list_outside_workspace_fails() {
         "stderr: {stderr:?}"
     );
 }
+
+// workspace 成员管理（RFC-014c：init 自动注册 + workspace add/remove）
+
+#[test]
+fn test_e2e_init_inside_workspace_auto_registers() {
+    // Arrange - 单成员工作空间
+    let tmp = TempDir::new().unwrap();
+    let ws = tmp.path().join("ws");
+    std::fs::create_dir_all(ws.join("packages/seed")).unwrap();
+    std::fs::write(
+        ws.join("yaoxiang.toml"),
+        "[workspace.members]\nseed = \"packages/seed/yaoxiang.toml\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("packages/seed/yaoxiang.toml"),
+        "[package]\nname = \"seed\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+
+    // Act - 在工作空间内 init
+    let (code, _stdout, stderr) = run_yx(&["init", "newapp"], &ws);
+    assert_eq!(code, 0, "init should succeed, stderr: {stderr:?}");
+
+    // Assert - 根 toml 自动登记（存 toml 文件路径而非目录）
+    let root_toml = std::fs::read_to_string(ws.join("yaoxiang.toml")).unwrap();
+    assert!(
+        root_toml.contains("newapp = \"newapp/yaoxiang.toml\""),
+        "root toml should register member with toml file path: {root_toml:?}"
+    );
+
+    // workspace list 能看到（登记格式合法的旁证）
+    let (code, stdout, stderr) = run_yx(&["workspace", "list"], &ws);
+    assert_eq!(
+        code, 0,
+        "list should work after auto-registration, stderr: {stderr:?}"
+    );
+    assert!(
+        stdout.contains("newapp"),
+        "list should show new member: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_e2e_workspace_add_remove_roundtrip() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let ws = tmp.path().join("ws");
+    std::fs::create_dir_all(ws.join("packages/extra")).unwrap();
+    std::fs::write(ws.join("yaoxiang.toml"), "[workspace.members]\n").unwrap();
+    std::fs::write(
+        ws.join("packages/extra/yaoxiang.toml"),
+        "[package]\nname = \"extra\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+
+    // Act - add（默认 key = [package].name）
+    let (code, _stdout, stderr) = run_yx(&["workspace", "add", "packages/extra"], &ws);
+    assert_eq!(code, 0, "add should succeed, stderr: {stderr:?}");
+    let root_toml = std::fs::read_to_string(ws.join("yaoxiang.toml")).unwrap();
+    assert!(
+        root_toml.contains("extra = \"packages/extra/yaoxiang.toml\""),
+        "{root_toml:?}"
+    );
+
+    // add 重复 key 失败
+    let (code, _stdout, _stderr) = run_yx(&["workspace", "add", "packages/extra"], &ws);
+    assert_ne!(code, 0, "duplicate key should fail");
+
+    // remove
+    let (code, _stdout, stderr) = run_yx(&["workspace", "remove", "extra"], &ws);
+    assert_eq!(code, 0, "remove should succeed, stderr: {stderr:?}");
+    let root_toml = std::fs::read_to_string(ws.join("yaoxiang.toml")).unwrap();
+    assert!(
+        !root_toml.contains("extra"),
+        "member should be gone: {root_toml:?}"
+    );
+}

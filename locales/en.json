@@ -1089,5 +1089,9 @@
     "error_output": "warning[W1006]: local module 'data' shadows dependency 'data'\n --> example.yx:1:1\n  |\n1 | use data.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: a local module takes precedence over a vendored dependency of the same name"
   },
   "workspace_list_header": "workspace at {0} ({1} members)",
-  "workspace_list_member_row": "  {0} {1}  ({2})"
+  "workspace_list_member_row": "  {0} {1}  ({2})",
+  "workspace_member_added": "✓ Added workspace member '{0}' ({1})",
+  "workspace_member_removed": "✓ Removed workspace member '{0}'",
+  "workspace_member_referenced": "⚠ member {0} is still referenced by: {1}",
+  "workspace_auto_registered": "✓ Registered to workspace {0} as '{1}'"
 }

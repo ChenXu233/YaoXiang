@@ -507,9 +507,13 @@ pub enum MSG {
     PackageCacheCleaned,
     PackageCacheEmpty,
 
-    // Workspace (RFC-014c Phase 6a)
+    // Workspace (RFC-014c Phase 6a/6b)
     WorkspaceListHeader,
     WorkspaceListMemberRow,
+    WorkspaceMemberAdded,
+    WorkspaceMemberRemoved,
+    WorkspaceMemberReferenced,
+    WorkspaceAutoRegistered,
 }
 
 impl MSG {
@@ -631,6 +635,10 @@ impl MSG {
             // Workspace (RFC-014c Phase 6a)
             MSG::WorkspaceListHeader => "workspace_list_header",
             MSG::WorkspaceListMemberRow => "workspace_list_member_row",
+            MSG::WorkspaceMemberAdded => "workspace_member_added",
+            MSG::WorkspaceMemberRemoved => "workspace_member_removed",
+            MSG::WorkspaceMemberReferenced => "workspace_member_referenced",
+            MSG::WorkspaceAutoRegistered => "workspace_auto_registered",
 
             _ => "unknown_message",
         }

@@ -338,6 +338,90 @@ fn req_to_manifest_string(req: &semver::VersionReq) -> String {
     parts.join(", ")
 }
 
+/// 把成员目录登记进工作空间根（`workspace add` 与 init 自动注册共用，
+/// RFC-014c：key 取成员 `[package].name`，`key_override` 可显式指定）
+///
+/// 校验：目录存在且有（非 workspace 的）yaoxiang.toml；目录必须位于工作
+/// 空间根之下（成员路径相对根存放）；key 唯一；同一路径不重复登记。
+/// 成功返回实际使用的 key。
+pub fn register_member(
+    ws_root: &Path,
+    member_dir: &Path,
+    key_override: Option<&str>,
+) -> PackageResult<String> {
+    if !member_dir
+        .join(crate::package::manifest::MANIFEST_FILE)
+        .exists()
+    {
+        return Err(PackageError::InvalidManifest(format!(
+            "{} 中没有 yaoxiang.toml，不是可登记的成员包",
+            member_dir.display()
+        )));
+    }
+    if detect_manifest_kind(member_dir) == Some(ManifestKind::Workspace) {
+        return Err(PackageError::NestedWorkspace {
+            key: member_dir.display().to_string(),
+            path: member_dir
+                .join(crate::package::manifest::MANIFEST_FILE)
+                .display()
+                .to_string(),
+        });
+    }
+
+    let member_manifest = PackageManifest::load(member_dir)?;
+    let key = key_override
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| member_manifest.package.name.clone());
+
+    // 成员路径相对工作空间根（014c 结构约束：成员在根之下）
+    let member_canon = member_dir
+        .canonicalize()
+        .unwrap_or_else(|_| member_dir.to_path_buf());
+    let ws_canon = ws_root
+        .canonicalize()
+        .unwrap_or_else(|_| ws_root.to_path_buf());
+    let rel = member_canon.strip_prefix(&ws_canon).map_err(|_| {
+        PackageError::InvalidManifest(format!(
+            "成员目录 {} 不在工作空间 {} 之下",
+            member_dir.display(),
+            ws_root.display()
+        ))
+    })?;
+    // [workspace.members] 的 value 是成员 **toml 文件**的相对路径（014c 契约），
+    // 不是目录——登记时拼上清单文件名
+    let rel_str = rel
+        .join(crate::package::manifest::MANIFEST_FILE)
+        .to_string_lossy()
+        .replace('\\', "/");
+
+    let mut manifest = load_workspace_manifest(ws_root)?;
+    if manifest.workspace.members.contains_key(&key) {
+        return Err(PackageError::InvalidManifest(format!(
+            "工作空间已存在同名成员 key '{key}'（重名请用 --as 指定其他 key）"
+        )));
+    }
+    if manifest.workspace.members.values().any(|p| *p == rel_str) {
+        return Err(PackageError::InvalidManifest(format!(
+            "路径 {rel_str} 已登记为工作空间成员"
+        )));
+    }
+
+    manifest.workspace.members.insert(key.clone(), rel_str);
+    save_workspace_manifest(ws_root, &manifest)?;
+    Ok(key)
+}
+
+/// 保存工作空间根 manifest
+pub fn save_workspace_manifest(
+    ws_root: &Path,
+    manifest: &WorkspaceManifest,
+) -> PackageResult<()> {
+    let path = ws_root.join(crate::package::manifest::MANIFEST_FILE);
+    let content = toml::to_string_pretty(manifest)?;
+    std::fs::write(path, content)?;
+    Ok(())
+}
+
 /// 从起始目录向上找最近的工作空间根（含 `[workspace]` 段的 yaoxiang.toml）。
 ///
 /// 沿途遇到普通项目根（无 [workspace] 的 yaoxiang.toml）不算命中——工作空间

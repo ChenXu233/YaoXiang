@@ -1089,5 +1089,9 @@
     "error_output": "warning[W1006]: 本地模块 'data' 遮蔽了依赖包 'data'\n --> example.yx:1:1\n  |\n1 | use data.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: 本地模块优先级高于 vendor 中的同名依赖"
   },
   "workspace_list_header": "工作空间 {0}（{1} 个成员）",
-  "workspace_list_member_row": "  {0} {1}  （{2}）"
+  "workspace_list_member_row": "  {0} {1}  （{2}）",
+  "workspace_member_added": "✓ 已登记工作空间成员 '{0}'（{1}）",
+  "workspace_member_removed": "✓ 已移除工作空间成员 '{0}'",
+  "workspace_member_referenced": "⚠ 成员 {0} 仍被以下成员引用：{1}",
+  "workspace_auto_registered": "✓ 已登记到工作空间 {0}（key '{1}'）"
 }

@@ -75,6 +75,20 @@ pub fn exec_in(
         eprintln!("Warning: failed to generate std interface files: {}", e);
     }
 
+    // RFC-014c：项目落在工作空间内时自动登记为成员（Cargo 式开箱体验；
+    // key = [package].name，登记失败即报错——重名时用户改名重建）
+    if let Some(ws_root) = crate::package::workspace::find_workspace_root(&project_dir) {
+        let key = crate::package::workspace::register_member(&ws_root, &project_dir, None)?;
+        println!(
+            "{}",
+            t(
+                MSG::WorkspaceAutoRegistered,
+                current_lang(),
+                Some(&[&ws_root.display().to_string(), &key])
+            )
+        );
+    }
+
     let lang = current_lang();
     if options.lib {
         println!(
@@ -234,6 +248,21 @@ pub fn exec_here(options: &InitOptions) -> PackageResult<()> {
     println!("  .gitignore");
     println!("  tests/");
     println!("  .yaoxiang/vendor/std/");
+
+    // RFC-014c：工作空间内 init（exec_here）同样自动登记（key = [package].name）
+    if let Some(ws_root) = crate::package::workspace::find_workspace_root(&cwd) {
+        if ws_root != cwd {
+            let key = crate::package::workspace::register_member(&ws_root, &cwd, None)?;
+            println!(
+                "{}",
+                t(
+                    MSG::WorkspaceAutoRegistered,
+                    current_lang(),
+                    Some(&[&ws_root.display().to_string(), &key])
+                )
+            );
+        }
+    }
 
     Ok(())
 }

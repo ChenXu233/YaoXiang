@@ -369,3 +369,88 @@ fn test_merge_different_git_urls_conflict() {
     let err = merged_dependencies(&ws).unwrap_err().to_string();
     assert!(err.contains("不同的 git 仓库"), "{err}");
 }
+
+// === 成员登记（workspace add / init 自动注册共用）===
+
+use crate::package::workspace::register_member;
+
+#[test]
+fn test_register_member_stores_toml_file_path() {
+    let (_tmp, root) = setup_workspace();
+    fs::create_dir_all(root.join("packages/app/src")).unwrap();
+    fs::write(
+        root.join("packages/app/yaoxiang.toml"),
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+
+    // 登记的是成员【目录】，存储的是【toml 文件】相对路径（014c 契约）
+    let key = register_member(&root, &root.join("packages/app"), None).unwrap();
+    assert_eq!(key, "app");
+
+    let manifest = load_workspace_manifest(&root).unwrap();
+    assert_eq!(
+        manifest.workspace.members.get("app").map(|s| s.as_str()),
+        Some("packages/app/yaoxiang.toml"),
+        "登记值必须是 toml 文件路径而非目录（否则嵌套检查会误判）"
+    );
+    // 登记后 load_workspace 可完整加载
+    let ws = load_workspace(&root).unwrap();
+    assert_eq!(ws.members.len(), 3);
+}
+
+#[test]
+fn test_register_member_key_override_and_conflicts() {
+    let (_tmp, root) = setup_workspace();
+    fs::create_dir_all(root.join("packages/app")).unwrap();
+    fs::write(
+        root.join("packages/app/yaoxiang.toml"),
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+
+    // --as 覆盖 key
+    let key = register_member(&root, &root.join("packages/app"), Some("core2")).unwrap();
+    assert_eq!(key, "core2");
+
+    // key 冲突
+    fs::create_dir_all(root.join("packages/other")).unwrap();
+    fs::write(
+        root.join("packages/other/yaoxiang.toml"),
+        "[package]\nname = \"other\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    assert!(register_member(&root, &root.join("packages/other"), Some("core2")).is_err());
+
+    // 同路径重复登记
+    assert!(register_member(&root, &root.join("packages/app"), None).is_err());
+}
+
+#[test]
+fn test_register_member_rejects_outside_root_and_workspace_dir() {
+    let (_tmp, root) = setup_workspace();
+
+    // 工作空间根之外（独立目录树）
+    let outside_tmp = TempDir::new().unwrap();
+    let outside = outside_tmp.path().join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(
+        outside.join("yaoxiang.toml"),
+        "[package]\nname = \"o\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    assert!(register_member(&root, &outside, None).is_err());
+
+    // 目录自身是 workspace（嵌套）
+    let nested = root.join("packages/nested");
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(
+        nested.join("yaoxiang.toml"),
+        "[workspace.members]\nx = \"x/yaoxiang.toml\"\n",
+    )
+    .unwrap();
+    assert!(matches!(
+        register_member(&root, &nested, None),
+        Err(PackageError::NestedWorkspace { .. })
+    ));
+}

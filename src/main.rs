@@ -361,6 +361,22 @@ enum CacheCommand {
 enum WorkspaceCommand {
     /// List workspace members
     List,
+    /// Register an existing package directory as a member
+    Add {
+        /// Path to the member package directory
+        #[arg(value_name = "PATH")]
+        path: String,
+
+        /// Override the member key (defaults to [package].name)
+        #[arg(long = "as")]
+        as_key: Option<String>,
+    },
+    /// Remove a member registration (directory is kept)
+    Remove {
+        /// Member key in [workspace.members]
+        #[arg(value_name = "KEY")]
+        key: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -698,6 +714,18 @@ fn main() -> Result<()> {
             command: WorkspaceCommand::List,
         } => {
             package::commands::workspace::list().context("Failed to list workspace")?;
+        }
+        Commands::Workspace {
+            command: WorkspaceCommand::Add { path, as_key },
+        } => {
+            package::commands::workspace::add(&path, as_key.as_deref())
+                .context("Failed to add workspace member")?;
+        }
+        Commands::Workspace {
+            command: WorkspaceCommand::Remove { key },
+        } => {
+            package::commands::workspace::remove(&key)
+                .context("Failed to remove workspace member")?;
         }
         Commands::Lsp { .. } => {
             // LSP 服务器使用 stderr 记录日志（stdout 用于 JSON-RPC 通信）
