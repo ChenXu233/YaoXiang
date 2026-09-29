@@ -299,10 +299,10 @@ cargo-dist 生成的流水线是 tag 驱动、自带 announce/publish，且不�
 
 整合原则：**触发与门禁保持现状，构建交给 `cargo dist build`，发布保持现状。**
 
-1. check-version / security / test 三个 job 保持现状（push main 触发、打 tag 前置门禁）
-2. 全部通过后由 release job 创建并推送 `v{version}` tag（现状不变）
-3. tag push 触发新的 `dist-release.yml`：plan job 由 dist 计算 runner/系统依赖矩阵 → `cargo dist build`（5 target）→ `package-dist.sh` 逐 target 重组 → Inno Setup job（吃 Windows 重组包构建向导，`/DMyAppVersion=` 注入版本，不再二次编译）→ `_build-wasm.yml`（并行 job）
-4. publish job：`generate-commit-list.ts` 生成 body（现状脚本复用）→ 追加上传重组包 + `.sha256` + `.deb` + wasm + Setup exe；独立 `publish-apt` job 发布 GitHub Pages apt 仓库元数据（`secrets.APT_GPG_KEY` 未配置时自动跳过，不影响其余渠道）
+1. check-version / security / test 与打 tag 一并移入 `dist-release.yml` 的 `gate` / `security` / `test` / `tag` job，触发保持 push main（**tag 驱动不可行**：workflow 用 `GITHUB_TOKEN` 推的 tag 不触发其它 workflow；旧 `release.yml` 因此只能自己发扁平二进制，已与 `_build-platforms.yml` 一起删除，发版单点为本文件）
+2. tag 产生后才构建：`plan` job 由 dist 计算 runner/系统依赖矩阵 → `cargo dist build`（5 target）→ `package-dist.sh` 逐 target 重组 → Inno Setup job（吃 Windows 重组包构建向导，`/DMyAppVersion=` 注入版本，不再二次编译）→ `_build-wasm.yml`（并行 job）
+3. publish job：`generate-commit-list.ts` 生成 body（现状脚本复用）→ 上传重组包 + `.sha256` + `.deb` + wasm + Setup exe，`action-gh-release` 自建 Release；独立 `publish-apt` job 发布 GitHub Pages apt 仓库元数据（`secrets.APT_GPG_KEY` 未配置时自动跳过，不影响其余渠道）
+4. 重发/重构建：`workflow_dispatch` 指定已存在的 tag（`gate` 据此跳过打 tag 步骤）
 
 ### Nightly 发布
 
@@ -358,7 +358,7 @@ allow-dirty = ["ci"]
 | 文件                                     | 行数        | 处置                                       |
 | ---------------------------------------- | ----------- | ------------------------------------------ |
 | `.github/workflows/_build-platforms.yml` | 254         | 删除（cargo-dist 构建矩阵替代）            |
-| `.github/workflows/release.yml`          | 189         | 收缩为门禁 + 打 tag（构建/发布移入 dist-release.yml） |
+| `.github/workflows/release.yml`          | 189         | 删除（门禁与打 tag 并入 dist-release.yml，发版单点） |
 | `.github/workflows/nightly.yml`          | 173         | 构建段换 `cargo dist build`，发布逻辑保留  |
 | `scripts/build/setup.iss`                | ~250        | **保留并转正**（Windows 向导）         |
 | **合计删减**                             | **~600 行** |                                            |
@@ -443,12 +443,12 @@ allow-dirty = ["ci"]
 
 1. 跑 `cargo dist init` 生成初始配置（`installers = []`，锁定 dist-version）
 2. 编写 `package-dist.sh`（重组 + .yx 源码复制 + checksum 重算）
-3. 新建 `dist-release.yml`（tag 驱动：dist build → 重组 → wasm 并行 → 自有 publish）；`release.yml` 收缩为门禁 + 打 tag
+3. `dist-release.yml` 承载全部：push main 触发 → gate 版本门 → 门禁（audit / fmt / clippy / test）→ 打 tag → dist build → 重组 → wasm 并行 → 自有 publish + apt；`release.yml` 与 `_build-platforms.yml` 删除
 4. 双跑新旧流水线，按验收标准逐项核验
 
 ### 阶段三：旧 CI 下线（P1）
 
-1. 确认无误后删除 `_build-platforms.yml`
+1. `_build-platforms.yml` 与 `release.yml` 一并删除（发版单点：`dist-release.yml`）
 2. `nightly.yml` 构建段换 `cargo dist build`
 3. `setup.iss` 接入新产物结构（Inno 转正；版本号从 Cargo.toml 注入，消灭 sed 替换）
 

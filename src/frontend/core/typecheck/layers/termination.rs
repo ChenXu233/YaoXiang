@@ -139,6 +139,35 @@ use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort};
 #[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::backend::Solver;
 
+/// 显式测度在递归回边上产生的**义务原料**（RFC-027a §义务生成）。
+///
+/// T3 只**生成/记录**：把「形参 + 测度 + 调用实参」三样备齐，T4 才能构造
+/// `m[形参 := 实参] < m` 并送 SMT 判定。本结构不携带判定结果。
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeasureObligation {
+    /// 发起递归的函数名（义务归属）
+    pub fn_name: String,
+    /// 函数形参名（按声明序）——供 T4 做「形参 := 实参」替换
+    pub params: Vec<String>,
+    /// 程序员在类型位声明的测度原式
+    pub measure: crate::frontend::core::types::const_data::ConstExpr,
+    /// 自递归调用点的实参（按位置对应 `params`）
+    pub call_args: Vec<crate::frontend::core::types::const_data::ConstExpr>,
+    /// 自递归调用点位置
+    pub span: crate::util::span::Span,
+}
+
+/// 当前正在遍历的、**带显式测度**的函数上下文（RFC-027a §义务生成）。
+///
+/// 只在函数有显式测度时建立——无测度的递归不走显式测度路径（RFC-027 §7
+/// 「无测度 → 硬边界」）。
+#[derive(Debug, Clone)]
+struct FnMeasureContext {
+    name: String,
+    params: Vec<String>,
+    measure: crate::frontend::core::types::const_data::ConstExpr,
+}
+
 /// 终止检查器
 ///
 /// 在类型检查之后、约束求解之前运行。
@@ -168,6 +197,11 @@ pub struct TerminationChecker {
     /// 空表 = 源码里没有任何 `Terminates(m)` 标注。
     measures:
         std::collections::HashMap<String, crate::frontend::core::types::const_data::ConstExpr>,
+    /// 当前正在遍历的带测度函数上下文（RFC-027a §义务生成）。
+    /// `None` = 不在带测度的函数体内，自调用不产生测度义务。
+    current_fn: Option<FnMeasureContext>,
+    /// 已生成的测度义务（RFC-027a §义务生成）。T3 生成，T4 判定。
+    measure_obligations: Vec<MeasureObligation>,
 }
 
 impl Default for TerminationChecker {
@@ -185,6 +219,8 @@ impl TerminationChecker {
             solver: None,
             refined_vars: std::collections::HashSet::new(),
             measures: std::collections::HashMap::new(),
+            current_fn: None,
+            measure_obligations: Vec::new(),
         }
     }
 
@@ -213,6 +249,13 @@ impl TerminationChecker {
     ) -> &std::collections::HashMap<String, crate::frontend::core::types::const_data::ConstExpr>
     {
         &self.measures
+    }
+
+    /// 读取已生成的测度义务（RFC-027a §义务生成）。
+    ///
+    /// T3 交付「生成」；判定在 T4，故此处只暴露原料。
+    pub fn measure_obligations(&self) -> &[MeasureObligation] {
+        &self.measure_obligations
     }
 
     /// 注入带精化标注的变量名集合（RFC-027 §7 验证模式的判据）
@@ -262,12 +305,18 @@ impl TerminationChecker {
         match &stmt.kind {
             StmtKind::Expr(expr) => self.check_expr(expr, is_never),
             StmtKind::Assign {
+                target,
+                signature_params,
                 value: Some(v),
                 type_annotation,
                 ..
             } => {
                 use crate::frontend::core::parser::ast::Expr;
                 let child_never = is_never || is_never_return_type(type_annotation.as_ref());
+                // RFC-027a：带显式测度的函数体进上下文，使自递归调用可被识别。
+                // 用 `signature_params` 而非 `Type::Fn.params` 取形参名——后者只有
+                // 类型（`[Int, Int]`），名字在签名参数里。
+                let saved_ctx = self.enter_measured_fn(target, signature_params);
                 if let Expr::Lambda { body, .. } = v.as_ref() {
                     for s in &body.stmts {
                         self.check_stmt(s, child_never);
@@ -279,6 +328,7 @@ impl TerminationChecker {
                 } else {
                     self.check_expr(v, child_never);
                 }
+                self.current_fn = saved_ctx;
             }
             StmtKind::If {
                 condition,
@@ -390,6 +440,10 @@ impl TerminationChecker {
                     self.check_stmt(s, is_never);
                 }
             }
+            // RFC-027a：`return f(...)` 的调用在 Return 内部。本分支此前缺位，
+            // 使 Return 成叶子——**函数体的自递归调用从来不会被访问**，这也是
+            // `check_possible_recursive_call` 恒空的原因之一。
+            Expr::Return(Some(inner), _) => self.check_expr(inner, is_never),
             // 叶子节点不需要检查
             _ => {}
         }
@@ -1109,16 +1163,69 @@ impl TerminationChecker {
         }
     }
 
+    /// 若该绑定带显式测度，进入其函数体上下文（RFC-027a §义务生成）。
+    ///
+    /// 返回**进入前**的上下文，供遍历结束后恢复——函数体可嵌套（lambda 套
+    /// lambda），恢复而非盲置 `None` 才能正确处理嵌套。
+    ///
+    /// 无测度的函数**不建立上下文**（返回 `None`）：其递归不走显式测度路径，
+    /// 保持 RFC-027 §7「无测度 → 硬边界」语义。
+    fn enter_measured_fn(
+        &mut self,
+        target: &Expr,
+        signature_params: &[ast::Param],
+    ) -> Option<FnMeasureContext> {
+        let Expr::Var(name, _) = target else {
+            return None;
+        };
+        let measure = self.measures.get(name).cloned()?;
+        let ctx = FnMeasureContext {
+            name: name.clone(),
+            params: signature_params.iter().map(|p| p.name.clone()).collect(),
+            measure,
+        };
+        self.current_fn.replace(ctx)
+    }
+
     /// 检查可能的递归调用
+    ///
+    /// RFC-027a §义务生成：当前函数带显式测度且被调用者就是它自己时，生成一条
+    /// 测度义务（形参 + 测度 + 实参）。若实参个数与形参不符、或实参转不出编译期
+    /// 表达式，**放弃该条而不是猜值**——T4 拿不到完整替换就无法判定，宁缺勿错。
+    ///
+    /// 只认直接自递归。互递归需 SCC（本期非目标，计划 §五）。
     fn check_possible_recursive_call(
         &mut self,
         func: &Expr,
         args: &[Expr],
     ) {
-        // 目前只检查直接递归调用（函数名 == 变量引用）
-        // 后续可扩展到间接递归
-        let _ = args;
-        let _ = func;
+        let Some(ctx) = self.current_fn.clone() else {
+            return;
+        };
+        let Expr::Var(callee, span) = func else {
+            return;
+        };
+        if *callee != ctx.name {
+            return;
+        }
+        // 实参数与形参数必须一致，否则「形参 := 实参」替换无意义
+        if args.len() != ctx.params.len() {
+            return;
+        }
+        let converted: Option<Vec<_>> = args
+            .iter()
+            .map(crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr)
+            .collect();
+        let Some(call_args) = converted else {
+            return;
+        };
+        self.measure_obligations.push(MeasureObligation {
+            fn_name: ctx.name,
+            params: ctx.params,
+            measure: ctx.measure,
+            call_args,
+            span: *span,
+        });
     }
 
     // ==================== 诊断输出 ====================

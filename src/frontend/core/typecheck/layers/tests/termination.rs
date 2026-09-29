@@ -7,7 +7,7 @@
 //!   - §7.5 策略 4：乘法缩放度量
 //! - 语言规范 §控制流「while 循环」
 
-use crate::frontend::core::typecheck::layers::termination::TerminationChecker;
+use crate::frontend::core::typecheck::layers::termination::{MeasureObligation, TerminationChecker};
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, Stmt, StmtKind};
 use crate::util::span::Span;
@@ -570,5 +570,157 @@ fn test_no_measures_injected_means_empty_table() {
         "未调用 set_measures 时测度表应为空（默认不检查任何显式测度），\
          实际: {:?}",
         checker.measures()
+    );
+}
+
+// ==================== 测试：显式测度的递归义务（RFC-027a §义务生成，T3）====================
+
+/// 解析源码 → 注入测度表 → 跑终止检查 → 取生成的测度义务
+fn measure_obligations_of(
+    source: &str,
+    measures: &[(&str, crate::frontend::core::types::const_data::ConstExpr)],
+) -> Vec<MeasureObligation> {
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::parse;
+    use crate::frontend::core::typecheck::environment::TypeEnvironment;
+
+    let tokens = tokenize(source).expect("词法分析应成功");
+    let parsed = parse(&tokens);
+    assert!(
+        !parsed.has_errors,
+        "解析应无错误，实际: {:?}",
+        parsed.errors
+    );
+    let table = measures
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect();
+    let env = TypeEnvironment::new();
+    let mut checker = TerminationChecker::new().set_measures(table);
+    checker.check_module(&parsed.module, &env);
+    checker.measure_obligations().to_vec()
+}
+
+/// RFC-027a §义务生成 —— 带显式测度的函数，其**自递归调用**须产生测度义务。
+///
+/// 这是本期交付面（§五 风险 4：函数形态的非结构递归，gcd）。义务原料 = 形参 +
+/// 测度 + 调用实参——三者齐备，T4 才能构造 `m[形参:=实参] < m` 并送 SMT。
+#[test]
+fn test_recursive_self_call_generates_measure_obligation() {
+    use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstExpr};
+
+    // Arrange — gcd 形态：测度 b，自调用 gcd(b, a % b)
+    let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
+                  if b == 0 { return a } \
+                  return gcd(b, a % b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+
+    // Act
+    let obligations = measure_obligations_of(source, &measures);
+
+    // Assert
+    assert_eq!(
+        obligations.len(),
+        1,
+        "gcd 有 1 处自递归调用，应生成 1 条测度义务；实际: {obligations:?}"
+    );
+    let ob = &obligations[0];
+    assert_eq!(ob.fn_name, "gcd", "义务应归属发起递归的函数");
+    assert_eq!(
+        ob.params,
+        vec!["a".to_string(), "b".to_string()],
+        "义务须带上形参表，T4 才能做「形参 := 实参」替换"
+    );
+    assert_eq!(
+        ob.measure,
+        ConstExpr::NamedVar("b".to_string()),
+        "义务须带显式测度原式"
+    );
+    assert_eq!(
+        ob.call_args.len(),
+        2,
+        "调用实参 gcd(b, a % b) 应有两个，实际: {:?}",
+        ob.call_args
+    );
+    assert_eq!(
+        ob.call_args[0],
+        ConstExpr::NamedVar("b".to_string()),
+        "首个实参应为 NamedVar(b)"
+    );
+    assert!(
+        matches!(
+            ob.call_args[1],
+            ConstExpr::BinOp {
+                op: ConstBinOp::Mod,
+                ..
+            }
+        ),
+        "次个实参应为 a % b 的 BinOp(Mod) 结构（不得丢表达式），实际: {:?}",
+        ob.call_args[1]
+    );
+}
+
+/// RFC-027a §义务生成 —— **无显式测度**的函数即便自递归也不得产生义务。
+///
+/// 反例守卫：否则任何递归函数都会被显式测度路径接管，绕过 RFC-027 §7 的
+/// 「无测度 → 硬边界」语义。
+#[test]
+fn test_recursive_without_explicit_measure_generates_no_obligation() {
+    // Arrange — 同样是自递归，但测度表为空
+    let source = "f: (n: Int) -> Int = { \
+                  if n == 0 { return 0 } \
+                  return f(n - 1) }";
+
+    // Act
+    let obligations = measure_obligations_of(source, &[]);
+
+    // Assert
+    assert!(
+        obligations.is_empty(),
+        "未声明显式测度的函数不应走显式测度路径；实际: {obligations:?}"
+    );
+}
+
+/// RFC-027a §义务生成 —— 调用**其它**函数不是自递归，不产生义务。
+///
+/// 反例守卫：只按「函数名 == 当前函数名」判定自调用；否则任何函数调用都会被
+/// 误当回边（互递归需 SCC，本期不做——见计划 §五 非目标）。
+#[test]
+fn test_call_to_other_function_generates_no_obligation() {
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange — gcd 有测度，但调用的是别的函数
+    let source = "helper: (x: Int) -> Int = { x }\n\
+                  gcd: (a: Int, b: Int) -> Terminates(b) = { \
+                  if b == 0 { return a } \
+                  return helper(b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+
+    // Act
+    let obligations = measure_obligations_of(source, &measures);
+
+    // Assert
+    assert!(
+        obligations.is_empty(),
+        "对 helper 的调用不是 gcd 的自递归，不应产生测度义务；实际: {obligations:?}"
+    );
+}
+
+/// RFC-027a §义务生成 —— 有测度但体内无自调用（纯迭代实现）时零义务。
+#[test]
+fn test_measured_function_without_self_call_generates_no_obligation() {
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange
+    let source = "g: (a: Int, b: Int) -> Terminates(b) = { a + b }";
+    let measures = [("g", ConstExpr::NamedVar("b".to_string()))];
+
+    // Act
+    let obligations = measure_obligations_of(source, &measures);
+
+    // Assert
+    assert!(
+        obligations.is_empty(),
+        "体内无自递归调用时不应产生义务；实际: {obligations:?}"
     );
 }

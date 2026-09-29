@@ -1,14 +1,19 @@
-# Dist Release（RFC-037）
+# Dist Release（RFC-037）——发版单点
 #
 # 基于 cargo-dist 0.32.0 生成的工作流改造（生成物 vendor 进仓库接受 review）：
-# * tag 驱动（v* 格式，与既有 release.yml 的 tag 命名一致）
-# * 构建交给 `cargo dist build`（plan job 计算各 target 的 runner 矩阵与交叉编译依赖）
+# * push main 驱动：gate 读 Cargo.toml 版本 → `v{version}` tag 不存在才放行
+# * 门禁沿用旧 release.yml：cargo audit + fmt/clippy/单测/doc test 全过才打 tag
+# * 打 tag 后才构建：`cargo dist build`（plan job 计算各 target 的 runner 矩阵与交叉编译依赖）
 # * 逐 target 跑 scripts/release/package-dist.sh 重组为 bin/ + lib/ 结构并重算 checksum
-# * 发布保持现状：generate-commit-list.ts 生成 merge-commit changelog body，
-#   追加上传到 GitHub Release（双跑期与旧 release.yml 共存同一 Release，阶段三后接管）
+# * 发布：generate-commit-list.ts 生成 merge-commit changelog body，上传重组包，
+#   `action-gh-release` 自建 Release；apt 仓库另发 GitHub Pages
+#
+# 为什么门禁与打 tag 在本文件而不在 release.yml：tag push 触发本 workflow 的方案不可行
+# ——tag 由 workflow 用 GITHUB_TOKEN 推送，而 GITHUB_TOKEN 的推送不触发任何 workflow。
+# 旧 release.yml 因此只能自己发布扁平二进制，故整体并入本文件并删除（含 _build-platforms.yml）。
 #
 # 与生成版的差异：去掉 pull_request 触发 / host / announce / global artifacts
-# （installers = []，无全局产物）；发布段换自有逻辑；外挂 wasm 与 Inno Setup job。
+# （installers = []，无全局产物）；触发与门禁自有；外挂 wasm 与 Inno Setup job。
 
 name: Dist Release
 
@@ -24,39 +29,167 @@ env:
 
 on:
   push:
-    tags:
-      - '**[0-9]+.[0-9]+.[0-9]+*'
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build (e.g. v0.7.14); must already exist'
+        description: 'Existing tag to rebuild/re-publish (e.g. v0.8.2)'
         required: true
         type: string
 
 jobs:
-  # ── dist plan：计算构建矩阵（target/runner/系统依赖） ──────────
-  plan:
-    name: Plan dist build
-    runs-on: "ubuntu-22.04"
+  # ── 版本门：push main 按 Cargo.toml 版本决定是否发版；手动触发按输入 tag 重发 ──
+  gate:
+    name: Resolve release version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
-      val: ${{ steps.plan.outputs.manifest }}
-      tag: ${{ steps.tag.outputs.tag }}
-      version: ${{ steps.tag.outputs.version }}
+      should-release: ${{ steps.check.outputs.should_release }}
+      create-tag: ${{ steps.check.outputs.create_tag }}
+      tag: ${{ steps.check.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
-          # 手动触发时按输入 tag 检出，保证构建内容与 tag 一致
-          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          fetch-depth: 0
+      - id: check
+        name: Resolve version and tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.tag }}" ]; then
+            # 手动重发：tag 已存在，只重建重发
+            TAG="${{ inputs.tag }}"
+            git rev-parse -q --verify "refs/tags/$TAG" >/dev/null \
+              || { echo "tag $TAG not found" >&2; exit 1; }
+            SHOULD=true
+            CREATE=false
+          else
+            VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+            TAG="v$VERSION"
+            # 末尾锚定：防 v0.8.2 匹配到 v0.8.20。先查本地 tag（fetch-depth: 0 已拉全
+            # tags），再回退 ls-remote 防 checkout 未取 tags
+            if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null \
+              || git ls-remote --tags origin "$TAG" | grep -q "refs/tags/$TAG$"; then
+              echo "Tag $TAG already exists, skipping release"
+              SHOULD=false
+              CREATE=false
+            else
+              SHOULD=true
+              CREATE=true
+            fi
+          fi
+          {
+            echo "should_release=$SHOULD"
+            echo "create_tag=$CREATE"
+            echo "tag=$TAG"
+            echo "version=${TAG#v}"
+          } >> "$GITHUB_OUTPUT"
+
+  # ── 门禁（与旧 release.yml 一致）：全过才打 tag ──────────────────
+  security:
+    name: Security Audit
+    needs: gate
+    if: needs.gate.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --quiet
+
+      - name: Run audit
+        run: cargo audit
+
+  test:
+    name: Test
+    needs: gate
+    if: needs.gate.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ vars.RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: release-test-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            release-test-${{ runner.os }}-cargo-
+
+      - name: Format check
+        run: cargo fmt --check --all
+
+      - name: Clippy
+        run: cargo clippy --all --all-features -- -D warnings
+
+      - name: Run tests
+        run: |
+          # 先产出普通可执行文件：`cargo test --lib --bins` 只构建测试壳，
+          # 不落 target/debug/yaoxiang-rs，stdlib 文档门禁会找不到解释器。
+          # （同 ci.yml MSRV job，V0.8.1 发版时已踩过一次）
+          cargo build --all-features --bins
+          cargo test --all-features --lib --bins
+
+      - name: Doc tests
+        run: cargo test --doc --all-features
+
+  # ── 打 tag：门禁通过后 ubuntu-22.04 上产生 v{version}（重发路径已存在则跳过）──
+  tag:
+    name: Create and push tag
+    needs: [gate, security, test]
+    if: needs.gate.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Create and push tag
+        if: needs.gate.outputs.create-tag == 'true'
+        run: |
+          TAG="${{ needs.gate.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG"
+          git push origin "$TAG"
+
+  # ── dist plan：计算构建矩阵（target/runner/系统依赖） ──────────
+  plan:
+    name: Plan dist build
+    needs: [gate, tag]
+    runs-on: "ubuntu-22.04"
+    outputs:
+      val: ${{ steps.plan.outputs.manifest }}
+      tag: ${{ needs.gate.outputs.tag }}
+      version: ${{ needs.gate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 按 gate 解析出的 tag 检出，保证构建内容与 tag 一致
+          ref: refs/tags/${{ needs.gate.outputs.tag }}
           persist-credentials: false
           submodules: recursive
       - name: Install dist
         shell: bash
         run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.32.0/cargo-dist-installer.sh | sh"
-      - id: tag
-        run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
       - id: plan
         run: |
           dist plan --output-format=json > plan-dist-manifest.json
