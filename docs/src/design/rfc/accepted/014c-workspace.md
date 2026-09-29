@@ -211,8 +211,8 @@ my-workspace/
 | 命令                               | 功能                           |
 | ---------------------------------- | ------------------------------ |
 | `yaoxiang workspace list`          | 列出工作空间成员               |
-| `yaoxiang workspace add <path>`    | 添加成员                       |
-| `yaoxiang workspace remove <name>` | 移除成员                       |
+| `yaoxiang workspace add <path>`    | 添加成员（key 取 [package].name，`--as` 可覆盖；✅ 已实现） |
+| `yaoxiang workspace remove <name>` | 移除成员（仅摘登记不删目录；仍被引用时提示；✅ 已实现） |
 | `yaoxiang build`                   | 构建所有成员（按依赖拓扑排序） |
 | `yaoxiang build core`              | 构建指定成员                   |
 | `yaoxiang test`                    | 运行所有成员的测试             |
