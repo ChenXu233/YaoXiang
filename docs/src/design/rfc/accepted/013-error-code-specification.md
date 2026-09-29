@@ -450,6 +450,7 @@ E1001::unknown_variable(&var_name)
 | E6010 | 整数解析失败     |
 | E6011 | 浮点解析失败     |
 | E6012 | 码点非法       |
+| E6013 | JSON 解析失败  |
 <!-- code-table:E6xxx end -->
 
 > **码表修订（2026-08-09）**：码表原按 Rust 语义草案（Assertion failed/Arithmetic overflow/Heap

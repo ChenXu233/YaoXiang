@@ -1076,5 +1076,11 @@
     "message": "from_char_code 收到非法码点（负数、代理区或超出 U+10FFFF）",
     "template": "码点非法：{input}",
     "help": "检查码点是否在 U+0000..U+10FFFF 内且不在代理区（U+D800..U+DFFF）"
+  },
+  "E6013": {
+    "title": "JSON 解析失败",
+    "message": "json.parse 解析 JSON 文本失败",
+    "template": "JSON 解析失败：{detail}",
+    "help": "检查 JSON 语法是否合法（RFC 8259）；错误消息含 行:列 定位与原因"
   }
 }

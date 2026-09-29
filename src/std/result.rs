@@ -10,8 +10,8 @@
 //!   - code: RFC-013 E6xxx/E7xxx 段注册码（跨版本稳定契约）
 //!   - message: 人类可读描述
 //!
-//! 运行时错误值码注册表：[`RUNTIME_ERROR_CODES`]（与 RFC-013 码表、locales 三方对齐，
-//! 由 scripts/check_error_codes.py 校验）。
+//! 运行时错误值码注册表：[`RUNTIME_ERROR_CODES`]（与 RFC-013 码表、locales
+//! 三方对齐，由构建期 code-tables 校验——build.rs 任一不一致即拒绝编译）。
 
 use crate::backends::common::value::TypeId;
 use crate::backends::common::{HeapValue, RuntimeValue};
@@ -28,6 +28,7 @@ pub static RUNTIME_ERROR_CODES: &[(&str, &str)] = &[
     ("E6010", "parse_int failed（整数解析失败）"),
     ("E6011", "parse_float failed（浮点解析失败）"),
     ("E6012", "invalid codepoint（码点非法，from_char_code）"),
+    ("E6013", "json parse failed（JSON 解析失败，json.parse）"),
 ];
 
 #[derive(Default)]
