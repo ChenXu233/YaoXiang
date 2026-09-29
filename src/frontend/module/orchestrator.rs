@@ -167,33 +167,26 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
     let entry_key = entry_module_key(entry);
     let merged = link_module_irs(module_irs, &entry_key)?;
 
-    // T4：入口语义（RFC-029f 角色驱动）。
+    // T4：入口语义（RFC-029f 角色驱动；#388 定案：按**绑定存在性**判定）。
     //
     // - Script（无 yaoxiang.toml，单文件直跑）：无入口概念，顶层代码本身就是
     //   程序（顶层语句与绑定编入模块初始化序列）；`main` 不特殊（想跑就写 `main()`）。
-    // - Bin（有 manifest）：要求 `main` 且必须是函数。无 main 时**全部函数
-    //   不可达**，属编译错误——而非静默执行函数表第一个函数。
+    // - Bin（有 manifest）：要求存在名为 `main` 的绑定，值或函数皆可——
+    //   函数已是值（类型层统一），两者只差求值策略：值 main 在初始化期
+    //   求值即执行，函数 main 在入口期零参调用（求值结果即使是函数值
+    //   也不再调用）。缺 main 时**全部函数不可达**，属编译错误——而非静默
+    //   执行函数表第一个函数。
     if is_bin_role(entry) {
-        // 入口名是 `{entry_key}.main`（限定名）；只查名字不查签名，
-        // 因为 `main: Int = 5` 会落入全局槽位、不进函数表。
-        let has_main_fn = merged
-            .functions
+        // 值绑定的名字已限定（`{entry_key}.main`），两种形态都要查。
+        let qualified_main = format!("{entry_key}.main");
+        let has_main_fn = merged.functions.iter().any(|f| f.name == qualified_main);
+        let has_main_value = merged
+            .globals
             .iter()
-            .any(|f| f.name == format!("{entry_key}.main"));
-        if !has_main_fn {
-            // 区分「没有 main」与「main 存在但不是函数」——后者更常见且更好修。
-            // 值绑定的名字已限定（`{entry_key}.main`），两种形态都要查。
-            let qualified_main = format!("{entry_key}.main");
-            let main_as_value = merged
-                .globals
-                .iter()
-                .any(|g| g.name == "main" || g.name == qualified_main);
-            let diag = if main_as_value {
-                ErrorCodeDefinition::bin_main_not_function("main").at(entry_span(entry))
-            } else {
-                ErrorCodeDefinition::bin_missing_main(&entry.display().to_string())
-                    .at(entry_span(entry))
-            };
+            .any(|g| g.name == "main" || g.name == qualified_main);
+        if !has_main_fn && !has_main_value {
+            let diag = ErrorCodeDefinition::bin_missing_main(&entry.display().to_string())
+                .at(entry_span(entry));
             return Err(OrchestratorError::TypeCheck {
                 path: entry.display().to_string(),
                 message: diag.build().to_string(),
@@ -349,6 +342,23 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
                 diagnostics.extend(analyzer.to_diagnostics(&warnings));
             }
         }
+        // 入口存在性（#388 定案：check 与 run 同判据）：manifest 声明面里的
+        // 入口文件（`[[bin]].path` / `[run].main`，与 roles::classify 同源的
+        // canonical 匹配）必须有名为 `main` 的绑定（值/函数皆可）。
+        // 声明面之外的文件不查——Lib/Internal/Test 不要求 main（RFC-029f
+        // 角色语义）：被 check ≠ 被当程序跑，`run` 的入口要求只在真正执行
+        // 某文件时生效（is_bin_role）。
+        if surfaces
+            .as_ref()
+            .is_some_and(|s| s.bins.contains(&file_canon))
+            && !ast_has_main(ast)
+        {
+            diagnostics.push(
+                ErrorCodeDefinition::bin_missing_main(&file.path.display().to_string())
+                    .at(entry_span(&file.path))
+                    .build(),
+            );
+        }
         out.push((file.path.clone(), diagnostics));
     }
     Ok(out)
@@ -497,7 +507,8 @@ fn collect_project_refs(project_root: &Path) -> HashSet<String> {
 
 /// 提取一个文件定义的全局变量（顶层非函数绑定）的名字与类型。
 ///
-/// 镜像 `generate_stmt_ir` 的函数/全局分流：值为 Lambda/Block 视为函数，否则为全局。
+/// 镜像 `generate_stmt_ir` 的函数/全局分流（`block_binding_is_function`
+/// 单源判定）：Lambda 或 Fn 注解块为函数，其余为全局。
 /// 用于跨文件全局解析——其他文件引用这些名字时生成 `Call(访问器函数)`。
 fn extract_global_defs(ast: &Module) -> Vec<(String, MonoType)> {
     let mut out = Vec::new();
@@ -510,8 +521,9 @@ fn extract_global_defs(ast: &Module) -> Vec<(String, MonoType)> {
         } = &stmt.kind
         {
             if let Expr::Var(name, _) = target.as_ref() {
-                // RFC-010a 附录D：注解是 Fn → 函数；非 Fn 注解 → 块值；
-                // 无注解 → 函数。此前这里写「Block 就是函数」，把 `x: Int = { 5 }`
+                // RFC-010a 附录D + B 方案（33f2ebbe）：Lambda → 函数；注解是
+                // Fn → 函数；其余（含无注解块，内容决定类型）→ 块值。
+                // 此前这里写「Block 就是函数」，把 `x: Int = { 5 }`
                 // 误判为函数——与 ir_gen 的注册口径不一致，导致跨文件引用
                 // `use lib.{x}` 找不到槽位（T5）。
                 let is_fn =
@@ -554,8 +566,9 @@ fn allocate_global_slots(asts: &[(String, PathBuf, Module)]) -> (Vec<(String, us
 /// 链接多个文件的 `ModuleIR`：拼接函数/全局/FFI，合并 per-function 映射。
 ///
 /// 各文件的函数已带模块限定名（`qualify_module_ir`），跨文件同名函数天然共存。
-/// 仅当同一限定名出现两次（同名文件重复发现等病态情形）才报错。入口函数设为
-/// `{entry_key}.main`，供 codegen 精确定位。
+/// 仅当同一限定名出现两次（同名文件重复发现等病态情形）才报错。入口函数：
+/// main 为函数绑定时设 `{entry_key}.main`；值 main 时为 None——程序体就是
+/// 初始化序列（#388 定案：值 main 初始化期求值即执行）。
 fn link_module_irs(
     irs: Vec<(String, ModuleIR)>,
     entry_key: &str,
@@ -582,7 +595,7 @@ fn link_module_irs(
         init_file_ids: Vec::new(),
         ffi_libs: Vec::new(),
         ffi_bindings: Vec::new(),
-        entry_function: Some(format!("{}.main", entry_key)),
+        entry_function: None,
         source_files: irs.iter().map(|(p, _)| p.clone()).collect(),
         function_files: HashMap::new(),
     };
@@ -610,6 +623,15 @@ fn link_module_irs(
     // 槽位号已由 allocate_global_slots 全局唯一，此处仅按索引稳定排序，
     // 便于调试与运行时按索引直取。
     merged.globals.sort_by_key(|g| g.index);
+
+    // 入口函数仅在 main 为**函数**绑定时设置：值 main 的程序体就是初始化
+    // 序列（求值即执行），无需入口调用——与 Script 同款执行形态（#356
+    // 防双跑：初始化与入口调用绝不叠加）。
+    let entry_fn = format!("{}.main", entry_key);
+    if merged.functions.iter().any(|f| f.name == entry_fn) {
+        merged.entry_function = Some(entry_fn);
+    }
+
     Ok(merged)
 }
 

@@ -755,22 +755,48 @@ fn test_e2e_bin_missing_main_reports_e3020() {
     );
 }
 
-/// Bin 角色 main 是值绑定而非函数 → E3021 编译错误。
+/// Bin 角色值绑定 main 是合法入口（#388 定案：入口按绑定存在性判定）。
 ///
-/// 此前 `main: Int = 5` 被当作入口编译成零参访问器函数，静默“成功”且无输出。
+/// 值 main 在初始化期求值即执行——`main = { io.println("1") }` 直接产出输出。
+/// 此前（T4 原始语义）无注解块 main 报 E3021「入口不是函数」。
 #[test]
-fn test_e2e_bin_main_not_function_reports_e3021() {
+fn test_e2e_bin_value_main_runs_eagerly() {
+    // Arrange: Bin 角色（有 manifest）+ 无注解块值绑定 main
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    let src = write_yx(
+        tmp.path(),
+        "main.yx",
+        "use std.io\nmain = { io.println(\"1\") }\n",
+    );
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert: 值 main 初始化期求值，副作用可见
+    assert_eq!(code, 0, "值 main 应是合法入口；stderr: {stderr:?}");
+    assert!(
+        stdout.contains("1"),
+        "值 main 应在初始化期求值执行；stdout: {stdout:?}"
+    );
+}
+
+/// 值 main 不要求可调用：`main: Int = 5` 是合法但无观察效果的程序。
+///
+/// 对标 Rust 空 `fn main() {}`——合法、无意义、不报错。此前该写法被
+/// E3021 拒绝（更早还被编成零参访问器静默“成功”）。
+#[test]
+fn test_e2e_bin_value_main_non_callable_is_legal() {
+    // Arrange: Bin 角色 + 不可调用的值绑定 main
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "");
     let src = write_yx(tmp.path(), "main.yx", "main: Int = 5\n");
 
+    // Act
     let (code, _stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
 
-    assert_ne!(code, 0, "main 非函数应编译失败");
-    assert!(
-        stderr.contains("E3021"),
-        "应报 E3021（入口非函数），实际 stderr: {stderr:?}"
-    );
+    // Assert: 编译运行皆成功（求值 `5`，程序正常退出）
+    assert_eq!(code, 0, "不可调用的值 main 也应合法；stderr: {stderr:?}");
 }
 
 /// Bin 角色入口 main 带参数 → E3022（#357）。
