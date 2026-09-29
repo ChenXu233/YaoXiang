@@ -482,7 +482,7 @@ token = "xxx"
 | **Phase 3.5** | Source 分发 enum 化 + 原生 async（014a 决议 4，不引 async-trait） | ✅ 已完成 |
 | **Phase 4**   | GitHub 适配层、.yxpkg 打包、publish --github（RFC-014a 缩减后范围；官方 Registry/auth/yank 后置） | 待开始    |
 | **Phase 5**   | 构建系统、预编译二进制（RFC-014b）           | 待开始    |
-| **Phase 6**   | 工作空间支持（RFC-014c）                     | 待开始    |
+| **Phase 6**   | 工作空间支持（RFC-014c）                     | 🚧 6a-c 完成 |
 
 **执行顺序调整（2026-09-15）**：`3 → 3.5 → 6 → 4 → 5`。
 
