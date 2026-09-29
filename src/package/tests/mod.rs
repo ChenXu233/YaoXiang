@@ -6,3 +6,4 @@ mod error;
 mod lock;
 mod manifest;
 mod workspace;
+mod yxpkg;

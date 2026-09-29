@@ -13,6 +13,7 @@ pub mod source;
 pub mod template;
 pub mod vendor;
 pub mod workspace;
+pub mod yxpkg;
 
 #[cfg(test)]
 mod tests;

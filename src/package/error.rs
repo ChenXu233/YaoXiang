@@ -50,6 +50,19 @@ pub enum PackageError {
     #[error("nested workspace is not supported: member '{key}' at {path} has its own [workspace] section")]
     NestedWorkspace { key: String, path: String },
 
+    /// Package content exceeds the source-package size limit
+    /// (RFC-014a 2026-09-15 decision 7: 20 MiB)
+    #[error("package too large: {0}")]
+    PackageTooLarge(String),
+
+    /// Checksum mismatch (RFC-014a)
+    #[error("checksum mismatch: expected {expected}, got {actual}")]
+    ChecksumMismatch { expected: String, actual: String },
+
+    /// Invalid package archive (missing manifest, path escape, bad entry type, ...)
+    #[error("invalid package: {0}")]
+    InvalidPackage(String),
+
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
