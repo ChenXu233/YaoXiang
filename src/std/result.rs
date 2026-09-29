@@ -27,6 +27,7 @@ pub static RUNTIME_ERROR_CODES: &[(&str, &str)] = &[
     ("E6009", "invalid range step（range 步长非法，如 step=0）"),
     ("E6010", "parse_int failed（整数解析失败）"),
     ("E6011", "parse_float failed（浮点解析失败）"),
+    ("E6012", "invalid codepoint（码点非法，from_char_code）"),
 ];
 
 #[derive(Default)]
@@ -111,6 +112,14 @@ impl StdModule for ResultModule {
                 "std.result.message",
                 "(self: &Error) -> String",
                 native_result_error_message
+            ),
+            // 纯 yx 层构造 Error 的唯一通道（Error 类型族只注册类型身份，
+            // 无值空间构造子——yx 里 `Error("E…", msg)` 会 IR 层 E3006）。
+            export!(
+                "error",
+                "std.result.error",
+                "(code: &String, message: &String) -> Error",
+                native_result_error_new
             ),
         ]
     }
@@ -287,4 +296,22 @@ pub(crate) fn native_result_error_message(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     error_field(args, 1)
+}
+
+/// `result.error(code, message)`：纯 yx 层构造 Error 值。
+/// 与 parse_int 等 native 内部 `error_new` 同一运行时表示
+/// （Struct { code, message }，#323 M4）。
+pub(crate) fn native_result_error_new(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let code = args
+        .first()
+        .map(crate::std::string::extract_string)
+        .unwrap_or_default();
+    let message = args
+        .get(1)
+        .map(crate::std::string::extract_string)
+        .unwrap_or_default();
+    Ok(error_new(&code, &message, ctx))
 }

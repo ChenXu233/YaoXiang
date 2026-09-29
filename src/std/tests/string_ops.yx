@@ -45,6 +45,28 @@ main: () -> Void = {
     assert.assert(result.is_err(err_r), "parse_int err on invalid")
     err_f = string.parse_float("xxx")
     assert.assert(result.is_err(err_f), "parse_float err on invalid")
+
+    // char_code：Unicode 标量值口径（与 substring/chars 同域）
+    assert.assert(string.char_code("A", 0) == 65, "char_code ASCII")
+    assert.assert(string.char_code("é", 0) == 233, "char_code Latin-1")
+    assert.assert(string.char_code("字", 0) == 23383, "char_code CJK")
+    assert.assert(string.char_code("héllo", 1) == 233, "char_code index past multibyte")
+    assert.assert(string.char_code("hi", 2) == -1, "char_code out of range → -1")
+    assert.assert(string.char_code("", 0) == -1, "char_code on empty → -1")
+
+    // from_char_code：合法码点 → 单字符字符串（Result ok）
+    ok_c = string.from_char_code(65)
+    assert.assert(result.is_ok(ok_c), "from_char_code ok")
+    assert.assert(result.unwrap(ok_c) == "A", "from_char_code roundtrip ASCII")
+    // 星面码点（U+1F600）直接产出合法 UTF-8，char_code 往返同值
+    ok_e = string.from_char_code(128512)
+    assert.assert(result.is_ok(ok_e), "from_char_code astral ok")
+    assert.assert(string.char_code(result.unwrap(ok_e), 0) == 128512, "astral roundtrip")
+
+    // from_char_code 错误路径：负数 / 代理区 / 超出上界 → E6012
+    assert.assert(result.is_err(string.from_char_code(-1)), "negative codepoint err")
+    assert.assert(result.is_err(string.from_char_code(0xD800)), "surrogate half err")
+    assert.assert(result.is_err(string.from_char_code(0x110000)), "beyond max err")
 }
 
 main()

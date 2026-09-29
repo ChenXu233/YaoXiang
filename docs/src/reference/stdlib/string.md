@@ -41,6 +41,8 @@ use std.string
 | `format` | `(format: &String, ...args) -> String` |
 | `parse_int` | `(s: &String) -> Result(Int, Error)` |
 | `parse_float` | `(s: &String) -> Result(Float, Error)` |
+| `char_code` | `(s: &String, i: Int) -> Int` |
+| `from_char_code` | `(n: Int) -> Result(String, Error)` |
 
 <!-- stdlib:table:string end -->## 函数
 

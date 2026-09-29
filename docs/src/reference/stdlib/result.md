@@ -46,6 +46,7 @@ e = Result(Int, String).err("boom")
 | `unwrap_err` | `(T: Type, E: Type)(self: &Result(T, E)) -> E` |
 | `code` | `(self: &Error) -> String` |
 | `message` | `(self: &Error) -> String` |
+| `error` | `(code: &String, message: &String) -> Error` |
 
 <!-- stdlib:table:result end -->## 判定
 

@@ -130,6 +130,18 @@ impl StdModule for StringModule {
                 "(s: &String) -> Result(Float, Error)",
                 native_parse_float
             ),
+            export!(
+                "char_code",
+                "std.string.char_code",
+                "(s: &String, i: Int) -> Int",
+                native_char_code
+            ),
+            export!(
+                "from_char_code",
+                "std.string.from_char_code",
+                "(n: Int) -> Result(String, Error)",
+                native_from_char_code
+            ),
         ]
     }
 }
@@ -140,7 +152,7 @@ pub const STRING_MODULE: StringModule = StringModule;
 // Helper functions
 
 /// Extract String from RuntimeValue
-fn extract_string(arg: &RuntimeValue) -> String {
+pub(crate) fn extract_string(arg: &RuntimeValue) -> String {
     match arg {
         RuntimeValue::String(s) => s.to_string(),
         _ => String::new(),
@@ -570,6 +582,44 @@ pub(crate) fn native_parse_float(
         Err(e) => Ok(result_err(error_new(
             "E6011",
             &format!("parse_float: {}", e),
+            ctx,
+        ))),
+    }
+}
+
+// Native implementations: char_code / from_char_code
+
+/// Native implementation: char_code - 取第 i 个字符的码点（Unicode 标量值口径，
+/// 与 substring/chars 同域）。越界返回 -1（与 index_of 未命中同一惯例；
+/// 码点非负，-1 无歧义）。
+fn native_char_code(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let s = args.first().map(extract_string).unwrap_or_default();
+    let i = args.get(1).map(extract_int).unwrap_or(0);
+    let code = s
+        .chars()
+        .nth(i.max(0) as usize)
+        .map(|c| c as u32 as i64)
+        .unwrap_or(-1);
+    Ok(RuntimeValue::Int(code))
+}
+
+/// Native implementation: from_char_code - 码点转单字符字符串。
+/// 非法码点（负数 / 代理区 / > U+10FFFF）返回 E6012；校验用 `char::from_u32`，
+/// 与词法层 `\u{...}` 转义同一套判定。0x10000..=0x10FFFF 直接产出合法
+/// UTF-8（4 字节），UTF-16 代理对组合留给 yx 层。
+fn native_from_char_code(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let n = args.first().map(extract_int).unwrap_or(0);
+    match u32::try_from(n).ok().and_then(char::from_u32) {
+        Some(c) => Ok(result_ok(RuntimeValue::String(c.to_string().into()))),
+        None => Ok(result_err(error_new(
+            "E6012",
+            &format!("from_char_code: invalid codepoint {}", n),
             ctx,
         ))),
     }
