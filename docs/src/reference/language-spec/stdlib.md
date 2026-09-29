@@ -124,14 +124,14 @@ if result.is_err(r) {
 ErrorPropagate ::= Expr '?'
 ```
 
-`?` 运算符自动传播 Result 类型的错误：
+`?` 运算符自动传播 Result 类型的错误（`use std.result` 后，match 变体解构是
+`?` 的显式等价形式——变体集随 `use` 导入，见 §2.8 match）：
 
 ```
 // 成功时返回值，失败时向上返回 err
 data = fetch_data()?
 
-// 概念等价形式（注意：变体解构 match 尚未落地——RFC-010b 交付前
-// 会报编译错误 E3008，`?` 是当前唯一可用的错误传播写法）
+// 概念等价形式
 data = match fetch_data() {
     ok(v) => v
     err(e) => return err(e)

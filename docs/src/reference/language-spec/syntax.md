@@ -48,11 +48,14 @@ YaoXiang 的"保留字"分三层，分别由解析器（parser）和类型检查
 | `false` | Bool     | 布尔假值                                                                            |
 | `void`  | Void     | Void 字面量（Unit 值）。小写 `void` 是值字面量；大写 `Void` 是类型名（见 §1.4.3）。 |
 
-#### 1.4.2 构造子表达式
+#### 1.4.2 变体名
 
-以下构造子在模式匹配和表达式上下文中由解析器识别：
+变体名在**模式**上下文中由解析器识别（裸名按 scrutinee 类型的变体集裁决，
+见 §2.8）；在**表达式**上下文中构造变体必须类型限定——`Result(Int, String).ok(5)`、
+`Option(T).some(v)`、`Color.green()`（RFC-010 记录式和类型：变体构造子是类型
+定义里的函数型字段，裸名 `ok(5)` 不是构造器调用）。
 
-| 构造子    | 所属类型 | 说明              |
+| 变体名    | 所属类型 | 说明              |
 | --------- | -------- | ----------------- |
 | `some(T)` | Option   | Option 值变体构造 |
 | `ok(T)`   | Result   | Result 成功变体   |
@@ -302,6 +305,13 @@ Pattern     ::= Literal
               | EnumPattern
               | OrPattern
 ```
+
+> **变体解构的变体集要求**（RFC-010b）：`EnumPattern`（`ok(v)`、`some(x)` 等
+> 变体名按 scrutinee 裁决）要求 scrutinee 的类型是**变体集在场的和类型**。
+> 变体集只随类型定义或 `use` 导入进入检查器——`Result`/`Option` 由
+> `std.result`/`std.option` 定义，使用前须 `use std.result` / `use std.option`
+> （整模块与分组 `use std.{...}` 两种形态同权）；否则变体解构报 E1002。
+> 穷尽性判定同源：兜底臂豁免穷尽性，无兜底臂时按变体集全查。
 
 ### 2.9 块表达式
 

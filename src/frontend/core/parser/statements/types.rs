@@ -374,9 +374,10 @@ fn parse_constructor_type(
 
     state.expect(&TokenKind::RParen);
 
-    // RFC-010: Result/Option 不再 lower 成专用 AST 节点——它们是 std
-    // 预置的记录式和类型（编译器注册 GenericTypeDef + sum_types），
-    // 与用户自定义泛型类型走同一 `Type::Generic` 路径。类型表示仍为
+    // RFC-010: Result/Option 不 lower 成专用 AST 节点——它们是 std.result /
+    // std.option 定义的记录式和类型（0e91d9f1 起编译器不再预置注册，
+    // 变体集随 `use` 导入，见 type-system.md §4.2），与用户自定义泛型类型
+    // 走同一 `Type::Generic` 路径。类型表示仍为
     // `Generic{"Result"/"Option", args}`（MonoType 层不变）。
     Some(Type::Generic {
         name,

@@ -74,22 +74,24 @@ upgrade: (T: Type)(weak: Weak(T)) -> Option(Arc(T))
 表达“目标是否还在”。
 
 ```yaoxiang
-use std.assert
 use std.weak
+use std.option
 
 main: () -> Void = {
     p = ref 42
     w = weak.new(p)
 
-    // 目标存活：得到 some 变体
+    // upgrade：目标存活返回 some(v)，已释放返回 none()
     u = weak.upgrade(w)
-    assert(true)
+    match u {
+        some(v) => println("alive"),
+        none() => println("dropped"),
+    }
 }
 ```
 
-> **语法限制**：`Option`
-> 的变体解构（`match some(v)`）语法尚未落地，因此目前只能验证调用成功，无法在源码里分支处理 `some` /
-> `none`。参见 `src/std/tests/weak_ops.yx` 的说明。
+> **变体解构前置**：`Option` 的变体解构要求变体集在场——`use std.option`
+> 导入后即可 `match some(v)` / `none()`（见语言规范 §2.8 match）。
 
 ## 语义说明
 
