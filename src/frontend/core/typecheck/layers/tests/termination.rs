@@ -7,7 +7,9 @@
 //!   - §7.5 策略 4：乘法缩放度量
 //! - 语言规范 §控制流「while 循环」
 
-use crate::frontend::core::typecheck::layers::termination::{MeasureObligation, TerminationChecker};
+use crate::frontend::core::typecheck::layers::termination::{
+    MeasureObligation, MeasureVerdict, TerminationChecker,
+};
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, Stmt, StmtKind};
 use crate::util::span::Span;
@@ -185,7 +187,6 @@ fn run_check_with_stub_solver_refined(
             SMTResult::Unsat
         }
     }
-    static ALWAYS_UNSAT: AlwaysUnsat = AlwaysUnsat;
 
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(expr.clone())),
@@ -198,7 +199,7 @@ fn run_check_with_stub_solver_refined(
     let env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
     let vars: std::collections::HashSet<String> = refined.iter().map(|s| s.to_string()).collect();
     let mut checker = TerminationChecker::new()
-        .with_solver(&ALWAYS_UNSAT)
+        .with_solver_owned(Box::new(AlwaysUnsat))
         .set_refined_vars(vars);
     checker.check_module(&module, &env)
 }
@@ -722,5 +723,243 @@ fn test_measured_function_without_self_call_generates_no_obligation() {
     assert!(
         obligations.is_empty(),
         "体内无自递归调用时不应产生义务；实际: {obligations:?}"
+    );
+}
+
+// ==================== 测试：测度义务的 SMT 判定（RFC-027a §判定管线，T4）====================
+
+/// 解析源码 → 注入测度 → 可选注入求解器 → 跑终止检查 → 取判定结果
+#[cfg(not(target_arch = "wasm32"))]
+fn measure_verdicts_of(
+    source: &str,
+    measures: &[(&str, crate::frontend::core::types::const_data::ConstExpr)],
+    solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
+) -> Vec<MeasureVerdict> {
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::parse;
+    use crate::frontend::core::typecheck::environment::TypeEnvironment;
+
+    let tokens = tokenize(source).expect("词法分析应成功");
+    let parsed = parse(&tokens);
+    assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
+    let table = measures
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect();
+    let mut checker = TerminationChecker::new().set_measures(table);
+    if let Some(s) = solver {
+        checker = checker.with_solver_owned(s);
+    }
+    let env = TypeEnvironment::new();
+    checker.check_module(&parsed.module, &env);
+    checker.measure_verdicts().to_vec()
+}
+
+/// 恒返回 `Unsat` 的桩（语义：所有取值下测度都严格递减）
+#[cfg(not(target_arch = "wasm32"))]
+fn always_unsat() -> Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver> {
+    use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTResult};
+    use crate::frontend::core::typecheck::proof::smt::backend::Solver;
+
+    #[derive(Debug)]
+    struct AlwaysUnsat;
+    impl Solver for AlwaysUnsat {
+        fn solve(
+            &self,
+            _commands: &[SMTCommand],
+            _timeout_ms: u64,
+        ) -> SMTResult {
+            SMTResult::Unsat
+        }
+    }
+    Box::new(AlwaysUnsat)
+}
+
+/// 恒返回 `Sat` 的桩（语义：存在反例，测度未严格递减）
+#[cfg(not(target_arch = "wasm32"))]
+fn always_sat() -> Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver> {
+    use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTModel, SMTResult};
+    use crate::frontend::core::typecheck::proof::smt::backend::Solver;
+
+    #[derive(Debug)]
+    struct AlwaysSat;
+    impl Solver for AlwaysSat {
+        fn solve(
+            &self,
+            _commands: &[SMTCommand],
+            _timeout_ms: u64,
+        ) -> SMTResult {
+            SMTResult::Sat {
+                model: SMTModel {
+                    assignments: vec![],
+                },
+            }
+        }
+    }
+    Box::new(AlwaysSat)
+}
+
+/// RFC-027a §判定管线 —— 义务经 SMT 判定，Unsat → 「严格递减成立」。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_measure_obligation_proved_when_solver_reports_unsat() {
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange — gcd 形态，测度 b；恒 Unsat 桩
+    let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
+                  if b == 0 { return a } \
+                  return gcd(b, a % b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+
+    // Act
+    let verdicts = measure_verdicts_of(source, &measures, Some(always_unsat()));
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![MeasureVerdict::Decreases],
+        "Unsat 应判为严格递减成立；实际: {verdicts:?}"
+    );
+}
+
+/// RFC-027a §判定管线 —— Sat（求解器给出反例）时**不得**宣称成立。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_measure_obligation_not_proved_when_solver_reports_sat() {
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange
+    let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
+                  if b == 0 { return a } \
+                  return gcd(b, a % b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+
+    // Act
+    let verdicts = measure_verdicts_of(source, &measures, Some(always_sat()));
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![MeasureVerdict::NotProved],
+        "Sat = 有反例，测度未严格递减，不得判为成立；实际: {verdicts:?}"
+    );
+}
+
+/// RFC-027a §判定管线 —— 无求解器（wasm / Z3 缺失）时义务**不判定**。
+///
+/// 方向性：返回 `Unjudged` 而非 `Decreases`——把「没判」当成「成立」会静默
+/// 放行未证明的程序。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_measure_obligation_unjudged_without_solver() {
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange
+    let source = "f: (n: Int) -> Terminates(n) = { \
+                  if n == 0 { return 0 } \
+                  return f(n - 1) }";
+    let measures = [("f", ConstExpr::NamedVar("n".to_string()))];
+
+    // Act — 不注入求解器
+    let verdicts = measure_verdicts_of(source, &measures, None);
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![MeasureVerdict::Unjudged],
+        "无求解器时不应宣称任何判定；实际: {verdicts:?}"
+    );
+}
+
+/// RFC-027a §判定管线（**真实 Z3**）—— 真递减的测度必须被判为成立。
+///
+/// `f(n - 1)` 的测度 `n`：代入后 `n - 1 < n` 恒真 → Unsat → 成立。
+/// 本用例断言的是**数学**，不是埋管：桩解算器无法区分真假递减。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_real_solver_proves_genuinely_decreasing_measure() {
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange
+    let source = "f: (n: Int) -> Terminates(n) = { \
+                  if n == 0 { return 0 } \
+                  return f(n - 1) }";
+    let measures = [("f", ConstExpr::NamedVar("n".to_string()))];
+    let solver = default_solver().expect("本用例需要 Z3（default_solver）");
+
+    // Act
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver));
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![MeasureVerdict::Decreases],
+        "n - 1 < n 恒真，真实 Z3 应判为严格递减成立；实际: {verdicts:?}"
+    );
+}
+
+/// RFC-027a §判定管线（**真实 Z3**）—— 递增的测度必须被判为**不成立**。
+///
+/// 反例守卫：若判定接线接反（把 Sat 当成立），本用例与上一个会同时绿——
+/// 两者一起才钉死方向。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_real_solver_rejects_increasing_measure() {
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange — f(n + 1)：n + 1 < n 有反例
+    let source = "f: (n: Int) -> Terminates(n) = { \
+                  if n == 0 { return 0 } \
+                  return f(n + 1) }";
+    let measures = [("f", ConstExpr::NamedVar("n".to_string()))];
+    let solver = default_solver().expect("本用例需要 Z3（default_solver）");
+
+    // Act
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver));
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![MeasureVerdict::NotProved],
+        "n + 1 < n 存在反例，真实 Z3 应判为不成立；实际: {verdicts:?}"
+    );
+}
+
+/// **tripwire（T4 已知边界）** —— gcd 的递减义务当前被判为**不成立**。
+///
+/// 原因：义务判定只代入实参，**不采集路径守卫**，也不加良基性假设。
+/// RFC-027a §示例要求：
+/// 1. 路径守卫 `b != 0`（来自 `if b == 0 { return a }` 之后）
+/// 2. 良基性 `b >= 0`（来自形参精化 `NonNegative(b)`）
+///
+/// 二者齐备才能断言 `b > 0`，进而 `a % b < b` 成立。当前两者都缺，Z3 会给出
+/// 反例（`b` 取负）→ `NotProved`。
+///
+/// **T5 必须先把守卫与良基性接上再发射 E4022**——否则 gcd 这个正例会报错。
+/// 修好之后本用例会失败：届时应更新本断言与注释，而不是删掉它。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_gcd_measure_decrease_unprovable_until_guards_wired() {
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange
+    let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
+                  if b == 0 { return a } \
+                  return gcd(b, a % b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+    let solver = default_solver().expect("本用例需要 Z3（default_solver）");
+
+    // Act
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver));
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![MeasureVerdict::NotProved],
+        "守卫与良基性未接线前，gcd 的 a % b < b 判不出（b 可取负）——本断言锁定该边界，\
+         提醒 T5 不得在此之前发射 E4022；实际: {verdicts:?}"
     );
 }

@@ -135,7 +135,7 @@ impl LinearMeasure {
 use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::proof::verdict::{BudgetReport, ProofResult, UnprovenReason};
-use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort};
+use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort, SMTResult};
 #[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::backend::Solver;
 
@@ -157,6 +157,17 @@ pub struct MeasureObligation {
     pub span: crate::util::span::Span,
 }
 
+/// 单条测度义务的判定结果（RFC-027a §判定管线）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeasureVerdict {
+    /// 严格递减成立：`not (m[形参:=实参] < m)` 不可满足
+    Decreases,
+    /// 未证明：求解器给出模型（= 反例），或返回 unknown
+    NotProved,
+    /// 未判定：无求解器可用（wasm / Z3 缺失）
+    Unjudged,
+}
+
 /// 当前正在遍历的、**带显式测度**的函数上下文（RFC-027a §义务生成）。
 ///
 /// 只在函数有显式测度时建立——无测度的递归不走显式测度路径（RFC-027 §7
@@ -176,9 +187,12 @@ struct FnMeasureContext {
 pub struct TerminationChecker {
     /// 收集到的证明结果
     results: Vec<ProofResult>,
-    /// 求解器引用——策略 1 秩函数 SMT 验证
+    /// 求解器（持有所有权）——策略 1 秩函数 SMT 验证 + 显式测度义务判定
+    ///
+    /// RFC-027a T4：生产在 `checker.rs` 注入 `default_solver()`；未注入则为
+    /// `None`，SMT 相关路径整体不执行（wasm 下无 Z3，见 #376）。
     #[cfg(not(target_arch = "wasm32"))]
-    solver: Option<&'static dyn Solver>,
+    solver: Option<Box<dyn Solver>>,
     /// 带精化标注的变量名集合——决定循环是否进**验证模式**（RFC-027 §7）
     ///
     /// RFC-027 §7：终止性不是独立开关，而是验证模式的一部分。**裸 `while`
@@ -202,6 +216,11 @@ pub struct TerminationChecker {
     current_fn: Option<FnMeasureContext>,
     /// 已生成的测度义务（RFC-027a §义务生成）。T3 生成，T4 判定。
     measure_obligations: Vec<MeasureObligation>,
+    /// 已判定结果，与 `measure_obligations` **同序同长**：
+    /// `measure_verdicts[i]` 是 `measure_obligations[i]` 的判定。
+    ///
+    /// RFC-027a T4：只判定并记录，不发射诊断（E4022 与路径守卫属 T5）。
+    measure_verdicts: Vec<MeasureVerdict>,
 }
 
 impl Default for TerminationChecker {
@@ -221,6 +240,7 @@ impl TerminationChecker {
             measures: std::collections::HashMap::new(),
             current_fn: None,
             measure_obligations: Vec::new(),
+            measure_verdicts: Vec::new(),
         }
     }
 
@@ -258,6 +278,13 @@ impl TerminationChecker {
         &self.measure_obligations
     }
 
+    /// 读取测度义务的判定结果（RFC-027a §判定管线）。
+    ///
+    /// 与 [`Self::measure_obligations`] 同序同长。
+    pub fn measure_verdicts(&self) -> &[MeasureVerdict] {
+        &self.measure_verdicts
+    }
+
     /// 注入带精化标注的变量名集合（RFC-027 §7 验证模式的判据）
     ///
     /// 门控方向是**放开检查**：精化集合外的变量 → 循环不进验证模式 → 不报
@@ -270,11 +297,15 @@ impl TerminationChecker {
         self.refined_vars = vars;
         self
     }
-    /// 注入求解器后端
+    /// 注入求解器后端（持有所有权，不泄露）
+    ///
+    /// RFC-027a T4：终止检查器**持有**求解器而非借 `&'static`——后者迫使调用方
+    /// 用 `Box::leak` 把 `default_solver()` 的 `Box<dyn Solver>` 变成静态引用，
+    /// 泄漏虽小但无必要（计划 D3）。
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn with_solver(
+    pub fn with_solver_owned(
         mut self,
-        solver: &'static dyn Solver,
+        solver: Box<dyn Solver>,
     ) -> Self {
         self.solver = Some(solver);
         self
@@ -292,7 +323,68 @@ impl TerminationChecker {
         for stmt in &module.items {
             self.check_stmt(stmt, false);
         }
+        self.judge_measure_obligations();
         std::mem::take(&mut self.results)
+    }
+
+    /// 判定已生成的测度义务（RFC-027a §判定管线）
+    ///
+    /// 对每条义务构造 `not (m[形参:=实参] < m)` 送求解器：Unsat = 严格递减成立。
+    ///
+    /// 本任务只**判定并记录**，不发射诊断——E4022 与路径守卫的完备采集属 T5。
+    /// 故用户可见行为不变（与 T3 同：机制就位但无人裁决）。
+    fn judge_measure_obligations(&mut self) {
+        let verdicts = self.compute_measure_verdicts();
+        self.measure_verdicts = verdicts;
+    }
+
+    /// 逐条计算测度义务的判定结果（无求解器时全部 `Unjudged`）。
+    ///
+    /// 取 `&self` 并返回 owned Vec，避开「借 `self.solver` 的同时写
+    /// `self.measure_verdicts`」的借用冲突。
+    #[cfg(not(target_arch = "wasm32"))]
+    fn compute_measure_verdicts(&self) -> Vec<MeasureVerdict> {
+        use crate::frontend::core::types::const_data::ConstExpr;
+
+        let Some(solver) = self.solver.as_deref() else {
+            return vec![MeasureVerdict::Unjudged; self.measure_obligations.len()];
+        };
+        self.measure_obligations
+            .iter()
+            .map(|ob| {
+                // m[形参 := 实参] —— 下一轮取值
+                let next = substitute_const_expr(&ob.measure, &ob.params, &ob.call_args);
+                let decreasing = ConstExpr::BinOp {
+                    op: crate::frontend::core::types::const_data::BinOp::Lt,
+                    left: Box::new(next),
+                    right: Box::new(ob.measure.clone()),
+                };
+                // 无绑定环境：未知名按 Int 处理（测度是整型表达式）
+                let var_sorts =
+                    crate::frontend::core::typecheck::proof::smt::translate::infer_var_sorts(
+                        &decreasing,
+                        &std::collections::HashMap::new(),
+                    );
+                // translate_constraint 断言目标取反：Unsat = 递减在所有取值下成立
+                let commands =
+                    crate::frontend::core::typecheck::proof::smt::translate::translate_constraint(
+                        &decreasing,
+                        &[],
+                        &var_sorts,
+                    );
+                match solver.solve(&commands, 100) {
+                    SMTResult::Unsat => MeasureVerdict::Decreases,
+                    // sat = 有反例（测度未严格递减）；unknown = 判不了 → 均不得宣称成立
+                    SMTResult::Sat { .. } | SMTResult::Unknown { .. } => MeasureVerdict::NotProved,
+                }
+            })
+            .collect()
+    }
+
+    /// wasm 无 Z3（#376）：义务一律不判定。
+    #[cfg(target_arch = "wasm32")]
+    fn compute_measure_verdicts(&self) -> Vec<MeasureVerdict> {
+        vec![MeasureVerdict::Unjudged; self.measure_obligations.len()]
     }
 
     // ==================== 语句遍历 ====================
@@ -1021,7 +1113,7 @@ impl TerminationChecker {
         // 调用点见 check_while_loop 的同名注释。两处缺陷：
         //   (a) `bounds` 进到这里时已被 bound_is_loop_invariant 清空；
         //   (b) 即使非空，verify_rank_candidate 的 delta 符号也是错的。
-        let solver = self.solver?;
+        let solver = self.solver.as_deref()?;
 
         let bounded_vars: Vec<&str> = bounds.iter().map(|(v, _)| v.as_str()).collect();
         let candidates = self.generate_rank_candidates(&bounded_vars, bounds);
@@ -1317,4 +1409,62 @@ fn is_never_return_type(ty: Option<&Type>) -> bool {
 /// 递归判断 Type 是否为 Never（支持 Type::Name { name: "Never", .. }）
 fn is_type_never(ty: &Type) -> bool {
     matches!(ty, Type::Name { name, .. } if name == "Never" || name == "never")
+}
+
+/// 在 `ConstExpr` 中把形参名替换为调用实参（RFC-027a §判定管线）。
+///
+/// 测度写成**形参的函数**（`gcd` 的测度 `b` 对应形参 `b`），调用点的实参给出
+/// 下一轮取值，代入后即 `m[形参 := 实参]`。
+///
+/// 未出现在形参表内的名字**保持原样**（如已在外层作用域的变量、或字面量），
+/// 而不是替换成空——替换错会让义务判成一个无关的式子。
+///
+/// 递归覆盖全部复合形态（`BinOp`/`UnOp`/`Call`/`If`/`Range`）：测度可以写成
+/// `n - i`、`if c { a } else { b }` 等；只替换顶层会让内层测度悄悄不代入。
+fn substitute_const_expr(
+    expr: &crate::frontend::core::types::const_data::ConstExpr,
+    params: &[String],
+    args: &[crate::frontend::core::types::const_data::ConstExpr],
+) -> crate::frontend::core::types::const_data::ConstExpr {
+    use crate::frontend::core::types::const_data::ConstExpr as CE;
+
+    let sub = |e: &CE| substitute_const_expr(e, params, args);
+
+    match expr {
+        CE::NamedVar(name) => match params.iter().position(|p| p == name) {
+            Some(i) if i < args.len() => args[i].clone(),
+            _ => expr.clone(),
+        },
+        CE::BinOp { op, left, right } => CE::BinOp {
+            op: *op,
+            left: Box::new(sub(left)),
+            right: Box::new(sub(right)),
+        },
+        CE::UnOp { op, expr: inner } => CE::UnOp {
+            op: *op,
+            expr: Box::new(sub(inner)),
+        },
+        CE::Call {
+            func,
+            args: call_args,
+        } => CE::Call {
+            func: func.clone(),
+            args: call_args.iter().map(sub).collect(),
+        },
+        CE::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => CE::If {
+            condition: Box::new(sub(condition)),
+            then_branch: Box::new(sub(then_branch)),
+            else_branch: Box::new(sub(else_branch)),
+        },
+        CE::Range { start, end } => CE::Range {
+            start: Box::new(sub(start)),
+            end: Box::new(sub(end)),
+        },
+        // Lit / Var(ConstVar)：不引用程序变量，原样
+        other => other.clone(),
+    }
 }

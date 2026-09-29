@@ -1104,9 +1104,17 @@ impl TypeChecker {
         // 生成按被标注名查测度。与 `refined_vars` 同源（同一遍 AST 遍历）。
         let measures = self.collect_termination_measures(module);
         let term_results = {
+            #[allow(unused_mut)]
             let mut term_checker = super::layers::termination::TerminationChecker::new()
                 .set_refined_vars(refined_vars)
                 .set_measures(measures);
+            // RFC-027a T4（即 #377-1）：生产在此注入求解器后端。此前从不调用
+            // 注入点，`self.solver` 恒为 `None`，SMT 相关路径在任何平台都不执行。
+            // wasm 下无 Z3（#376），`default_solver()` 返回 `None` 时保持不注入。
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(solver) = super::proof::smt::backend::default_solver() {
+                term_checker = term_checker.with_solver_owned(solver);
+            }
             term_checker.check_module(module, self.env())
         };
         for result in term_results {
