@@ -319,7 +319,7 @@ impl Source for RegistrySource {
 | `reqwest`        | HTTP 客户端      |
 | `sha2`           | SHA-256 校验     |
 | `flate2` + `tar` | 包格式处理       |
-| `async-trait`    | async trait 支持 |
+| ~~`async-trait`~~ | 弃置——决议 4 采用 enum 分发 + 原生 async fn in trait，无此依赖 |
 
 ### 错误类型
 
@@ -378,7 +378,7 @@ pub enum RegistryError {
 
 | 阶段      | 内容                                               |
 | --------- | -------------------------------------------------- |
-| Phase 3.5 | Source trait 改 async + async-trait + 所有实现迁移 |
+| Phase 3.5 | Source 分发 enum 化（决议 4）+ 原生 async fn in trait + 所有实现迁移 |
 | Phase 4a  | Registry trait + reqwest 集成 + 本地 Registry mock |
 | Phase 4b  | GitHub Release 适配                                |
 | Phase 4c  | publish 命令 + 包格式打包                          |

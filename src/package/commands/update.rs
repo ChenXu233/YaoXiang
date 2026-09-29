@@ -108,9 +108,8 @@ pub fn exec_single_in(
     let spec = crate::package::dependency::DependencySpec::parse(name, dep_value);
     let source = crate::package::source::select_source(&spec);
     let resolved_version = source
-        .as_ref()
-        .map(|s| s.resolve(&spec).unwrap_or_else(|_| spec.version.clone()))
-        .unwrap_or_else(|| spec.version.clone());
+        .resolve(&spec)
+        .unwrap_or_else(|_| spec.version.clone());
 
     // 根据来源类型处理
     let lang = current_lang();

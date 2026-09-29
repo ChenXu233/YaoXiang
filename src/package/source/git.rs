@@ -28,7 +28,7 @@ pub enum GitRef {
 /// 从 Git 仓库克隆并下载依赖。
 /// 支持 `?tag=`, `?branch=`, `?rev=` 参数。
 /// 下载经由全局缓存（RFC-014 Phase 3），vendor 目录从缓存复制。
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GitSource {
     /// 注入的缓存（测试用）；None 时按用户配置惰性定位
     cache: Option<GlobalCache>,

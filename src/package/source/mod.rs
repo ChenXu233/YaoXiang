@@ -12,7 +12,7 @@ mod tests;
 use std::path::{Path, PathBuf};
 
 use crate::package::dependency::DependencySpec;
-use crate::package::error::PackageResult;
+use crate::package::error::{PackageError, PackageResult};
 
 /// 依赖来源类型
 #[derive(Debug, Clone, PartialEq)]
@@ -21,8 +21,10 @@ pub enum SourceKind {
     Local,
     /// Git 仓库来源
     Git,
-    /// 注册表来源（预留）
+    /// 注册表来源（Phase 4 后置，RFC-014a 决议 2）
     Registry,
+    /// GitHub Release 适配层（Phase 4 落地）
+    GitHub,
 }
 
 impl std::fmt::Display for SourceKind {
@@ -34,6 +36,7 @@ impl std::fmt::Display for SourceKind {
             SourceKind::Local => write!(f, "path"),
             SourceKind::Git => write!(f, "git"),
             SourceKind::Registry => write!(f, "registry"),
+            SourceKind::GitHub => write!(f, "github"),
         }
     }
 }
@@ -86,7 +89,7 @@ pub trait Source {
 /// 本地路径来源
 ///
 /// 从本地文件系统路径加载依赖。
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocalSource;
 
 impl LocalSource {
@@ -149,15 +152,90 @@ impl Source for LocalSource {
     }
 }
 
+/// 内置依赖来源（RFC-014a 决议 4：封闭集合 enum 分发）
+///
+/// 避免 dyn-async 的 Send 约束与 `async-trait` 依赖；[`Source`] trait 保留在
+/// 语义层，未来若开放第三方 Source 再经 trait 对象接入。Registry/GitHub 在
+/// Phase 4 落地前返回明确的「后置」错误（RFC-014a 决议 2：官方 Registry
+/// 无限期后置）。
+#[derive(Debug, Clone)]
+pub enum AnySource {
+    /// 本地路径来源
+    Local(LocalSource),
+    /// Git 仓库来源
+    Git(git::GitSource),
+    /// 官方 Registry（Phase 4 后置；`--git`/`--path` 显式来源上线前的占位）
+    Registry,
+    /// GitHub Release 适配层（Phase 4 落地）
+    GitHub,
+}
+
+impl AnySource {
+    /// 来源名称
+    pub fn name(&self) -> &'static str {
+        match self {
+            AnySource::Local(_) => "local",
+            AnySource::Git(_) => "git",
+            AnySource::Registry => "registry",
+            AnySource::GitHub => "github",
+        }
+    }
+
+    /// 来源类型
+    pub fn kind(&self) -> SourceKind {
+        match self {
+            AnySource::Local(_) => SourceKind::Local,
+            AnySource::Git(_) => SourceKind::Git,
+            AnySource::Registry => SourceKind::Registry,
+            AnySource::GitHub => SourceKind::GitHub,
+        }
+    }
+
+    /// 解析依赖版本（各具体来源实现见 [`Source`]）
+    pub fn resolve(
+        &self,
+        spec: &DependencySpec,
+    ) -> PackageResult<String> {
+        match self {
+            AnySource::Local(s) => s.resolve(spec),
+            AnySource::Git(s) => s.resolve(spec),
+            AnySource::Registry | AnySource::GitHub => Err(unsupported_source(self.name())),
+        }
+    }
+
+    /// 下载依赖到指定目录
+    pub fn download(
+        &self,
+        spec: &DependencySpec,
+        dest: &Path,
+    ) -> PackageResult<ResolvedPackage> {
+        match self {
+            AnySource::Local(s) => s.download(spec, dest),
+            AnySource::Git(s) => s.download(spec, dest),
+            AnySource::Registry | AnySource::GitHub => Err(unsupported_source(self.name())),
+        }
+    }
+}
+
+/// 未落地来源的统一错误（Phase 4 后置，RFC-014a 决议 2/4）
+fn unsupported_source(name: &str) -> PackageError {
+    PackageError::DependencyNotFound(format!(
+        "source '{name}' not implemented yet (deferred to Phase 4, RFC-014a); \
+         use --git or --path dependencies"
+    ))
+}
+
 /// 根据依赖规格选择合适的来源
 ///
-/// 如果既没有 path 也没有 git 字段，返回 `None`（注册表来源尚未实现）。
-pub fn select_source(spec: &DependencySpec) -> Option<Box<dyn Source>> {
+/// 014a 决议 4：内置来源是封闭集合，裸版本依赖（无 git/path）归 Registry
+/// 占位——resolve/download 返回明确的「后置」错误，由调用方（fetcher 预检）
+/// 决定呈现方式。
+pub fn select_source(spec: &DependencySpec) -> AnySource {
     if spec.path.is_some() {
-        Some(Box::new(LocalSource::new()))
+        AnySource::Local(LocalSource::new())
     } else if spec.git.is_some() {
-        Some(Box::new(git::GitSource::new()))
+        AnySource::Git(git::GitSource::new())
     } else {
-        None
+        AnySource::Registry
     }
 }

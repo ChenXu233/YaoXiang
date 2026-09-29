@@ -479,7 +479,7 @@ token = "xxx"
 | **Phase 1**   | toml 解析、本地依赖、lock 生成、基础算法     | ✅ 已完成 |
 | **Phase 2**   | GitHub 支持、.yaoxiang/vendor 管理、下载工具 | ✅ 已完成 |
 | **Phase 3**   | 全局缓存、semver crate 替换、CLI 完善        | ✅ 已完成 |
-| **Phase 3.5** | Source trait 改 async、async-trait 集成      | 待开始    |
+| **Phase 3.5** | Source 分发 enum 化 + 原生 async（014a 决议 4，不引 async-trait） | 进行中    |
 | **Phase 4**   | GitHub 适配层、.yxpkg 打包、publish --github（RFC-014a 缩减后范围；官方 Registry/auth/yank 后置） | 待开始    |
 | **Phase 5**   | 构建系统、预编译二进制（RFC-014b）           | 待开始    |
 | **Phase 6**   | 工作空间支持（RFC-014c）                     | 待开始    |
@@ -525,7 +525,7 @@ token = "xxx"
 | 用途        | crate            | 说明           |
 | ----------- | ---------------- | -------------- |
 | 语义化版本  | `semver`         | 替换手写解析器 |
-| HTTP 客户端 | `reqwest`        | Registry 通信  |
+| HTTP 客户端 | `reqwest`        | Registry 通信（Phase 4） |
 | SHA-256     | `sha2`           | 完整性校验     |
 | 压缩        | `flate2` + `tar` | 包格式处理     |
 

@@ -89,7 +89,7 @@ impl VendorManager {
     ) -> PackageResult<ResolvedPackage> {
         self.ensure_vendor_dir()?;
 
-        let source = source::select_source(spec).expect("dependency must have git or path field");
+        let source = source::select_source(spec);
 
         // 下载依赖（GitSource 内部经全局缓存；目录名 = 探测版本）
         let mut resolved = source.download(spec, &self.vendor_dir)?;
