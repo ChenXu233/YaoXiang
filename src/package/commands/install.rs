@@ -46,7 +46,7 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
     // Phase 3.5：Source 层 async 化，命令层 block_on 驱动（无运行时，
     // Phase 4 接 reqwest 时此处换真执行器即可）
     let result =
-        futures::executor::block_on(fetcher::fetch_all(project_dir, &all_deps, &mut lock))?;
+        crate::package::runtime::drive(fetcher::fetch_all(project_dir, &all_deps, &mut lock))?;
 
     // 保存更新后的锁文件
     lock.save(project_dir)?;
@@ -122,7 +122,7 @@ fn exec_workspace(ws_root: &Path) -> PackageResult<()> {
 
     let mut lock = ws.lock;
     let result =
-        futures::executor::block_on(fetcher::fetch_all(ws_root, &merged.fetch, &mut lock))?;
+        crate::package::runtime::drive(fetcher::fetch_all(ws_root, &merged.fetch, &mut lock))?;
 
     // 成员引用：校验通过的 key 直接登记（不进 vendor）
     for (name, key) in &merged.member_refs {

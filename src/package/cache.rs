@@ -60,6 +60,13 @@ impl GlobalCache {
         dir
     }
 
+    /// GitHub API 响应缓存目录（ETag 条件请求，RFC-014a 决议 6；按需创建）
+    pub fn github_dir(&self) -> PathBuf {
+        let dir = self.root.join("github");
+        let _ = std::fs::create_dir_all(&dir);
+        dir
+    }
+
     /// git 依赖的缓存条目路径
     ///
     /// 格式: `<cache>/git/<sanitized-url>-<sanitized-key>`

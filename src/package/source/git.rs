@@ -187,25 +187,7 @@ impl GitSource {
         tags: &[String],
         version_req: &str,
     ) -> PackageResult<Option<String>> {
-        use crate::package::source::resolver::{parse_version, parse_version_req};
-
-        let req = parse_version_req(version_req)?;
-
-        let mut matching_versions: Vec<(String, semver::Version)> = Vec::new();
-
-        for tag in tags {
-            // 去掉 "v" 前缀
-            let version_str = tag.strip_prefix('v').unwrap_or(tag);
-            if let Ok(version) = parse_version(version_str) {
-                if req.matches(&version) {
-                    matching_versions.push((tag.clone(), version));
-                }
-            }
-        }
-
-        // 选择最高匹配版本
-        matching_versions.sort_by(|a, b| b.1.cmp(&a.1));
-        Ok(matching_versions.into_iter().next().map(|(tag, _)| tag))
+        super::resolver::select_best_tag(tags, version_req)
     }
 
     /// 获取克隆目录中的版本信息

@@ -79,9 +79,11 @@ sha2 = "0.10"
 flate2 = "1"
 tar = "0.4"
 
-# async 执行驱动（RFC-014 Phase 3.5：block_on 边界用；无运行时，
-# Git 子进程保持 std::process，Phase 4 的 reqwest 再引入真运行时）
-futures = { version = "0.3", default-features = false, features = ["executor", "std"] }
+# HTTP 客户端（RFC-014a Phase 4：GitHub 适配层；rustls 免 OpenSSL 交叉编译）
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "system-proxy"] }
+
+# tokio 运行时（仅包管理命令层 drive()；current_thread + IO/时间驱动）
+tokio = { version = "1", default-features = false, features = ["rt", "net", "time"] }
 
 # 错误处理
 anyhow = "1"

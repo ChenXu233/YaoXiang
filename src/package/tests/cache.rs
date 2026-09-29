@@ -213,7 +213,7 @@ fn test_git_download_uses_global_cache() {
     let spec = git_spec("fixture", &repo, "1.0.0");
 
     // 首次下载：条目缺失 → 克隆入缓存 → 复制到 vendor
-    let resolved = futures::executor::block_on(source.download(&spec, &vendor)).unwrap();
+    let resolved = crate::package::runtime::drive(source.download(&spec, &vendor)).unwrap();
 
     // semver 择优（req 1.0.0 → tag v1.0.0）；版本探测读取该 tag 处 manifest
     assert_eq!(resolved.version, "1.0.0");
@@ -236,13 +236,13 @@ fn test_git_download_uses_global_cache() {
     // 第二次下载到全新 vendor：命中缓存复用
     let vendor2 = tmp.path().join("vendor2");
     std::fs::create_dir_all(&vendor2).unwrap();
-    let resolved2 = futures::executor::block_on(source.download(&spec, &vendor2)).unwrap();
+    let resolved2 = crate::package::runtime::drive(source.download(&spec, &vendor2)).unwrap();
     assert_eq!(resolved2.version, "1.0.0");
     assert!(vendor2.join("fixture-1.0.0").join("lib.yx").exists());
 
     // tilde 择优（~1.1 → tag v1.1.0）→ 版本探测走 v1.1.0 处 manifest
     let spec_1_1 = git_spec("fixture", &repo, "~1.1");
-    let resolved_1_1 = futures::executor::block_on(source.download(&spec_1_1, &vendor)).unwrap();
+    let resolved_1_1 = crate::package::runtime::drive(source.download(&spec_1_1, &vendor)).unwrap();
     assert_eq!(resolved_1_1.version, "1.1.0");
     assert!(vendor.join("fixture-1.1.0").join("lib.yx").exists());
     assert_eq!(
@@ -267,7 +267,7 @@ fn test_git_download_tag_pinned() {
         path: None,
     };
 
-    let resolved = futures::executor::block_on(source.download(&spec, &vendor)).unwrap();
+    let resolved = crate::package::runtime::drive(source.download(&spec, &vendor)).unwrap();
     // tag 钉住的 ref 不做 semver 择优；版本探测读取该 tag 处 manifest
     assert_eq!(resolved.version, "1.0.0");
     assert!(vendor.join("fixture-1.0.0").exists());

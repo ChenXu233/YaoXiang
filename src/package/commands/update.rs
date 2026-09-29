@@ -37,7 +37,7 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
 
     // 使用 fetcher 重新下载所有依赖
     let result =
-        futures::executor::block_on(fetcher::fetch_all(project_dir, &all_deps, &mut lock))?;
+        crate::package::runtime::drive(fetcher::fetch_all(project_dir, &all_deps, &mut lock))?;
 
     // 保存更新后的锁文件
     lock.save(project_dir)?;
@@ -108,14 +108,14 @@ pub fn exec_single_in(
     // 重新安装单个依赖
     let spec = crate::package::dependency::DependencySpec::parse(name, dep_value);
     let source = crate::package::source::select_source(&spec);
-    let resolved_version =
-        futures::executor::block_on(source.resolve(&spec)).unwrap_or_else(|_| spec.version.clone());
+    let resolved_version = crate::package::runtime::drive(source.resolve(&spec))
+        .unwrap_or_else(|_| spec.version.clone());
 
     // 根据来源类型处理
     let lang = current_lang();
     if spec.git.is_some() {
         let manager = VendorManager::new(project_dir);
-        match futures::executor::block_on(manager.install_dependency(&spec)) {
+        match crate::package::runtime::drive(manager.install_dependency(&spec)) {
             Ok(resolved) => {
                 lock.lock_dependency_full(
                     &resolved.name,

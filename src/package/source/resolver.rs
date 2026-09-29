@@ -78,6 +78,29 @@ pub fn select_best<'a>(
     candidates.into_iter().next()
 }
 
+/// 从 git 标签列表中选出满足版本要求的最佳标签（Git/GitHub 来源共用）
+///
+/// 标签允许 `v` 前缀（`v1.2.0` ≡ `1.2.0`）；无匹配返回 None（不报错）。
+pub fn select_best_tag(
+    tags: &[String],
+    version_req: &str,
+) -> PackageResult<Option<String>> {
+    let req = parse_version_req(version_req)?;
+
+    let mut matching: Vec<(String, Version)> = Vec::new();
+    for tag in tags {
+        let version_str = tag.strip_prefix('v').unwrap_or(tag);
+        if let Ok(version) = parse_version(version_str) {
+            if req.matches(&version) {
+                matching.push((tag.clone(), version));
+            }
+        }
+    }
+
+    matching.sort_by(|a, b| b.1.cmp(&a.1));
+    Ok(matching.into_iter().next().map(|(tag, _)| tag))
+}
+
 /// 两个版本要求是否兼容（存在同时满足两者的版本）
 ///
 /// 将每个要求折算为半开区间后取交集。预发布版本存在 crate 级匹配限制

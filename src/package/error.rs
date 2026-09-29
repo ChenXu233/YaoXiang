@@ -63,6 +63,14 @@ pub enum PackageError {
     #[error("invalid package: {0}")]
     InvalidPackage(String),
 
+    /// Network request failed (GitHub adapter, RFC-014a Phase 4)
+    #[error("network error: {0}")]
+    Network(String),
+
+    /// API rate limit exhausted (RFC-014a decision 6)
+    #[error("rate limited: {0}")]
+    RateLimited(String),
+
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
