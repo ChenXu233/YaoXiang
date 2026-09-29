@@ -1213,23 +1213,24 @@ fn test_e2e_yaoxiang_lang_env_selects_every_shipped_language() {
         "pick: (xs: List[Int]) -> Int = (xs) => xs[0]\nmain: () -> Void = { }\n",
     );
 
-    // 每个语言：locales/<lang>.json 里 E1103 template 的特征片段。
-    // 片段须与 bot 译文产物保持同步（en/ja/ru/… 由 bot 全权重译，
-    // 期望片段漂移是测试债：aafc8db1 重译后 ja 丢「の」、ru 改写、
-    // zh-x-miao 整句改中文喵腔）。
-    // 任一语言若被白名单拦掉，就会回落 en——由下面的英文标记断言揭穿。
-    let expectations: &[(&str, &str)] = &[
-        ("zh", "不是类型语法"),
-        ("ja", "は型構文ではありません"),
-        ("ru", "не является синтаксисом типа"),
-        ("zh-classical", "非类型之语法"),
-        ("zh-x-miao", "不是类型语法喵"),
-    ];
+    // 锚定纪律（#325 定案 + test-specification 原则 0）：bot 产物译文
+    // （en/ja/ru/zh-classical/zh-x-miao）只锚定结构不断言精确文本——bot
+    // 全权重译，精确片段随每次重译漂移（aafc8db1 实证弄断过本测试）。
+    // 结构判据 = 与 en 基线逐字节不同 + 无英文特征串：语言命中专属译文
+    // 必然异于回落目标，且不依赖任何措辞。zh 是唯一人工翻译源，保留
+    // 精确片段锚定。
+    let (_, en_stdout, en_stderr) = run_yx_env(
+        &["check", src.to_str().unwrap()],
+        tmp.path(),
+        &[("YAOXIANG_LANG", "en")],
+    );
+    let en_baseline = format!("{en_stdout}{en_stderr}");
+    let languages = &["zh", "ja", "ru", "zh-classical", "zh-x-miao"];
     // en 的 template 特征——它是回落目标，出现即说明语言选择失效
     let english_marker = "is not type syntax";
 
     // Act & Assert
-    for (lang, expected_fragment) in expectations {
+    for lang in languages {
         let (_, stdout, stderr) = run_yx_env(
             &["check", src.to_str().unwrap()],
             tmp.path(),
@@ -1242,12 +1243,18 @@ fn test_e2e_yaoxiang_lang_env_selects_every_shipped_language() {
             "应报 E1103；lang={lang} combined: {combined:?}"
         );
         assert!(
-            combined.contains(expected_fragment),
-            "YAOXIANG_LANG={lang} 应显示该语言译文（期望片段 {expected_fragment:?}）；combined: {combined:?}"
-        );
-        assert!(
             !combined.contains(english_marker),
             "YAOXIANG_LANG={lang} 不应回落英文；combined: {combined:?}"
+        );
+        if *lang == "zh" {
+            assert!(
+                combined.contains("不是类型语法"),
+                "YAOXIANG_LANG=zh 应显示人工源译文（精确锚定）；combined: {combined:?}"
+            );
+        }
+        assert!(
+            combined != en_baseline,
+            "YAOXIANG_LANG={lang} 应命中专属译文而非回落 en（与 en 基线全等）；combined: {combined:?}"
         );
     }
 }
