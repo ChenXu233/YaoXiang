@@ -83,7 +83,7 @@ impl VendorManager {
     /// 根据依赖规格选择来源，经全局缓存下载并安装到 vendor 目录。
     /// git 依赖不做安装前预检查——防重复由 lock 完整性校验负责，
     /// 缓存命中使重复下载成本可忽略；vendor 目录名以探测到的真实版本为准。
-    pub fn install_dependency(
+    pub async fn install_dependency(
         &self,
         spec: &DependencySpec,
     ) -> PackageResult<ResolvedPackage> {
@@ -92,7 +92,7 @@ impl VendorManager {
         let source = source::select_source(spec);
 
         // 下载依赖（GitSource 内部经全局缓存；目录名 = 探测版本）
-        let mut resolved = source.download(spec, &self.vendor_dir)?;
+        let mut resolved = source.download(spec, &self.vendor_dir).await?;
 
         // 计算校验和
         let checksum = checksum::compute_directory_checksum(&resolved.local_path)?;

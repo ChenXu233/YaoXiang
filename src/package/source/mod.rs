@@ -71,7 +71,12 @@ pub trait Source {
     /// 解析依赖版本
     ///
     /// 根据依赖规格查找可用版本，返回最佳匹配的版本字符串。
-    fn resolve(
+    ///
+    /// Phase 3.5 起为 async（014a 决议 4：enum 分发 + 原生 async fn in
+    /// trait，无 async-trait）；当前实现内部为阻塞操作（std::process），
+    /// 由调用方 block_on 驱动——Phase 4 换真异步后端（reqwest/tokio）时
+    /// 签名不变。
+    async fn resolve(
         &self,
         spec: &DependencySpec,
     ) -> PackageResult<String>;
@@ -79,7 +84,7 @@ pub trait Source {
     /// 下载依赖到指定目录
     ///
     /// 将依赖下载到 `dest` 目录，返回已解析的包信息。
-    fn download(
+    async fn download(
         &self,
         spec: &DependencySpec,
         dest: &Path,
@@ -114,7 +119,7 @@ impl Source for LocalSource {
         SourceKind::Local
     }
 
-    fn resolve(
+    async fn resolve(
         &self,
         spec: &DependencySpec,
     ) -> PackageResult<String> {
@@ -122,7 +127,7 @@ impl Source for LocalSource {
         Ok(spec.version.clone())
     }
 
-    fn download(
+    async fn download(
         &self,
         spec: &DependencySpec,
         _dest: &Path,
@@ -192,26 +197,26 @@ impl AnySource {
     }
 
     /// 解析依赖版本（各具体来源实现见 [`Source`]）
-    pub fn resolve(
+    pub async fn resolve(
         &self,
         spec: &DependencySpec,
     ) -> PackageResult<String> {
         match self {
-            AnySource::Local(s) => s.resolve(spec),
-            AnySource::Git(s) => s.resolve(spec),
+            AnySource::Local(s) => s.resolve(spec).await,
+            AnySource::Git(s) => s.resolve(spec).await,
             AnySource::Registry | AnySource::GitHub => Err(unsupported_source(self.name())),
         }
     }
 
     /// 下载依赖到指定目录
-    pub fn download(
+    pub async fn download(
         &self,
         spec: &DependencySpec,
         dest: &Path,
     ) -> PackageResult<ResolvedPackage> {
         match self {
-            AnySource::Local(s) => s.download(spec, dest),
-            AnySource::Git(s) => s.download(spec, dest),
+            AnySource::Local(s) => s.download(spec, dest).await,
+            AnySource::Git(s) => s.download(spec, dest).await,
             AnySource::Registry | AnySource::GitHub => Err(unsupported_source(self.name())),
         }
     }

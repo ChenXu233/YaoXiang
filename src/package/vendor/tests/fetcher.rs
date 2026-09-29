@@ -16,7 +16,7 @@ fn test_fetch_empty_deps() {
     let deps = BTreeMap::new();
     let mut lock = LockFile::new();
 
-    let result = fetch_all(tmp.path(), &deps, &mut lock).unwrap();
+    let result = futures::executor::block_on(fetch_all(tmp.path(), &deps, &mut lock)).unwrap();
     assert!(result.installed.is_empty());
     assert!(result.skipped.is_empty());
     assert!(result.failed.is_empty());
@@ -44,7 +44,7 @@ fn test_fetch_local_dep() {
     deps.insert("local-dep".to_string(), toml::Value::Table(dep_table));
 
     let mut lock = LockFile::new();
-    let result = fetch_all(tmp.path(), &deps, &mut lock).unwrap();
+    let result = futures::executor::block_on(fetch_all(tmp.path(), &deps, &mut lock)).unwrap();
     assert_eq!(result.skipped.len(), 1);
     assert_eq!(result.skipped[0].0, "local-dep");
 }

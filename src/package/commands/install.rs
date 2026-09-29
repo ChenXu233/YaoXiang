@@ -34,7 +34,10 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
     conflict::check_conflicts(&dep_specs, &dev_dep_specs)?;
 
     // 使用 fetcher 下载所有依赖
-    let result = fetcher::fetch_all(project_dir, &all_deps, &mut lock)?;
+    // Phase 3.5：Source 层 async 化，命令层 block_on 驱动（无运行时，
+    // Phase 4 接 reqwest 时此处换真执行器即可）
+    let result =
+        futures::executor::block_on(fetcher::fetch_all(project_dir, &all_deps, &mut lock))?;
 
     // 保存更新后的锁文件
     lock.save(project_dir)?;

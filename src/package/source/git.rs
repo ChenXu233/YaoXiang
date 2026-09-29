@@ -264,7 +264,7 @@ impl Source for GitSource {
         SourceKind::Git
     }
 
-    fn resolve(
+    async fn resolve(
         &self,
         spec: &DependencySpec,
     ) -> PackageResult<String> {
@@ -296,7 +296,7 @@ impl Source for GitSource {
         }
     }
 
-    fn download(
+    async fn download(
         &self,
         spec: &DependencySpec,
         dest: &Path,

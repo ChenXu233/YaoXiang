@@ -25,7 +25,7 @@ pub struct FetchResult {
 /// 批量下载依赖
 ///
 /// 从 manifest 的依赖列表下载所有依赖到 vendor 目录，并更新锁文件。
-pub fn fetch_all(
+pub async fn fetch_all(
     project_dir: &Path,
     deps: &BTreeMap<String, toml::Value>,
     lock: &mut LockFile,
@@ -78,7 +78,7 @@ pub fn fetch_all(
             }
         }
 
-        match manager.install_dependency(spec) {
+        match manager.install_dependency(spec).await {
             Ok(resolved) => {
                 let source_kind_str = resolved.source_kind.to_string();
                 lock.lock_dependency_full(
