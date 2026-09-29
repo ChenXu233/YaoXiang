@@ -5,6 +5,7 @@
 //!
 //! 规范来源：
 //! - RFC-014: 包管理系统 (init/new/add/rm/install/list/update)
+//! - RFC-029f: 编译目标角色与入口语义（Bin 入口按绑定存在性判定，#388 定案）
 //! - docs/src/design/language-spec.md: 执行与编译章节
 //! - docs/src/dev/test-specification.md §集成测试规范 规则 9.1: E2E 三条路径
 //! - docs/superpowers/specs/2026-07-26-issue231-bytecode-run-magic-probe-design.md: 魔数探针
