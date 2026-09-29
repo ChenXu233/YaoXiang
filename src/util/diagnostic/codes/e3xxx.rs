@@ -30,10 +30,16 @@ define_codes!(E3XXX, {
     // E3019 顶层绑定循环依赖（T3）：a 依赖 b、b 依赖 a 时列出环上的名字。
     // 此前这类写法报 E1001（前向引用不可用）或静默取到未初始化值。
     ("E3019", Codegen, false, global_init_cycle(cycle: &str) => .param("cycle", cycle)),
-    // E3020/E3021 入口点语义（T4，RFC-029f Bin 角色）。
+    // E3020 入口点语义（T4，RFC-029f Bin 角色）。
     // 无 main ⇒ 全部函数不可达（Bin 没有外部消费者，main 是唯一可达性根），
     // 属编译错误；此前静默执行函数表第一个函数（#271 静默错误族）。
     ("E3020", Codegen, false, bin_missing_main(path: &str) => .param("path", path)),
+    // E3021 入口非函数（码号保留，**已不再产生**）。
+    //
+    // T4 引入时：Bin 入口要求 main 必须是函数，值绑定 main 报本码。
+    // #388 定案：入口按**绑定存在性**判定（函数已是值，类型层统一）——
+    // 值 main 在初始化期求值即执行，是合法入口，本码失去语义。
+    // 保留定义以避免码号复用撞上旧产物（.42/日志）的诊断。
     ("E3021", Codegen, false, bin_main_not_function(name: &str) => .param("name", name)),
     // E3022 入口 main 签名不符（运行期以零参调用）
     ("E3022", Codegen, false, bin_main_signature(name: &str, expected: &str, found: &str) => .param("name", name).param("expected", expected).param("found", found)),

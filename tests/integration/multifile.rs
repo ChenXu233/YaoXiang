@@ -3,6 +3,7 @@
 //! 验证跨文件 `use` 导入：本地模块的类型与函数能被另一个文件导入、构造、调用并正确执行。
 //! 正确性用语言内 `assert` 验证——断言失败会使 `run_project` 返回 Err。
 //! 发现语义（#247）：沿 use 追踪 + 双根解析（导入者目录优先，项目根兑底）。
+//! 入口语义：RFC-029f（Bin 入口按绑定存在性判定、值 main 初始化期求值，#388 定案）。
 
 /// 在临时目录写入多文件项目并运行入口文件，返回运行结果（错误为调试文本）。
 fn run_project(
@@ -450,6 +451,32 @@ helper: (x: Int) -> Int = (x) => {
 }
 
 // T5：跨文件顶层绑定（全局槽位）
+
+/// 入口 main 是**无注解块值绑定**的多文件项目（#388 定案：入口按绑定存在性）。
+///
+/// 该形态在 B 方案（33f2ebbe）后落全局槽位而非函数表，T4 原始入口检查曾
+/// 报 E3021「入口不是函数」。定案后值 main 在初始化期求值即执行——这是
+/// 「Script 顶层语句包进 main 迁入 Bin」的自然迁移形态。
+#[test]
+fn test_multifile_entry_value_main_block_binding() {
+    // Arrange - lib 导出函数，入口文件以无注解块 main 调用它
+    let lib = r#"
+answer: () -> Int = () => {
+    return 42
+}
+"#;
+    let main = r#"
+use std.assert
+use lib.{answer}
+
+main = {
+    assert.assert(answer() == 42, "answer should be 42")
+}
+"#;
+
+    // Act & Assert - 值 main 合法入口，断言在初始化期真实执行
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
 
 /// 跨文件块值绑定：`x: Int = { 5 }` 在 lib 中定义，入口文件读取。
 ///
