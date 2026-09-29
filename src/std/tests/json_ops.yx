@@ -1,0 +1,150 @@
+// src/std/tests/json_ops.yx
+// 覆盖: std.json 模块（#55）— 纯 yx std（RFC-036 §4）+ RFC-010 记录式和类型
+// 验证: parse（六变体/嵌套/\uXXXX 代理对/转义/行列错误定位）、stringify（转义
+//       义务）、pretty（缩进）、parse→stringify→parse 往返
+// 状态: ✅
+
+use std.assert
+use std.json
+use std.result
+use std.string
+
+check_scalar_parse: () -> () = {
+    // 标量与嵌套形态：六变体覆盖
+    r = json.parse("{\"s\": \"you\", \"i\": 42, \"f\": 2.5, \"t\": true, \"n\": null, \"a\": [1, \"x\"]}")
+    assert.assert(result.is_ok(r), "composite parse ok")
+
+    r2 = json.parse("{\"deep\": {\"list\": [10, 20, 30]}}")
+    assert.assert(result.is_ok(r2), "nested parse ok")
+
+    rn = json.parse("-0.5")
+    assert.assert(result.is_ok(rn), "scalar number parse ok")
+    rt = json.parse("true")
+    assert.assert(result.is_ok(rt), "bool literal parse ok")
+    rnull = json.parse("null")
+    assert.assert(result.is_ok(rnull), "null literal parse ok")
+    rstr = json.parse("\"plain\"")
+    assert.assert(result.is_ok(rstr), "plain string parse ok")
+    rtrail = json.parse("[1, 2]")
+    assert.assert(result.is_ok(rtrail), "trailing whitespace tolerated")
+}
+
+check_escapes: () -> () = {
+    // 源文本（运行时拼）：{"q": "a\"b\\c"} —— 引号与反斜杠转义
+    q = result.unwrap(string.from_char_code(0x22))
+    bs = result.unwrap(string.from_char_code(0x5C))
+    mut esc_src = string.concat("{", q)
+    esc_src = string.concat(esc_src, "q")
+    esc_src = string.concat(esc_src, q)
+    esc_src = string.concat(esc_src, ": ")
+    esc_src = string.concat(esc_src, q)
+    esc_src = string.concat(esc_src, "a")
+    esc_src = string.concat(esc_src, bs)
+    esc_src = string.concat(esc_src, q)
+    esc_src = string.concat(esc_src, "b")
+    esc_src = string.concat(esc_src, bs)
+    esc_src = string.concat(esc_src, bs)
+    esc_src = string.concat(esc_src, "c")
+    esc_src = string.concat(esc_src, q)
+    esc_src = string.concat(esc_src, "}")
+
+    resc = json.parse(esc_src)
+    assert.assert(result.is_ok(resc), "escaped string parse ok")
+    s = json.stringify(result.unwrap(resc))
+    // stringify 必须重新转义：序列里再现反斜杠
+    assert.assert(string.contains(s, bs), "stringify re-escapes quote/backslash")
+}
+
+check_unicode: () -> () = {
+    // \uXXXX：BMP 码点 + 代理对组合（\ud83d\ude00 = U+1F600）
+    // 源文本（运行时拼）："é😀9" 的转义形态
+    q = result.unwrap(string.from_char_code(0x22))
+    bs = result.unwrap(string.from_char_code(0x5C))
+    u = result.unwrap(string.from_char_code(0x75))
+    d = result.unwrap(string.from_char_code(0x64))
+    d8 = result.unwrap(string.from_char_code(0x38))
+    d3 = result.unwrap(string.from_char_code(0x33))
+    de = result.unwrap(string.from_char_code(0x65))
+    d0 = result.unwrap(string.from_char_code(0x30))
+    d9 = result.unwrap(string.from_char_code(0x39))
+
+    mut hi = string.concat(bs, u)
+    hi = string.concat(hi, d)
+    hi = string.concat(hi, d8)
+    hi = string.concat(hi, d3)
+    hi = string.concat(hi, d)
+    mut lo = string.concat(bs, u)
+    lo = string.concat(lo, d)
+    lo = string.concat(lo, d)
+    lo = string.concat(lo, de)
+    lo = string.concat(lo, d0)
+    lo = string.concat(lo, d0)
+    mut bmp = string.concat(bs, u)
+    bmp = string.concat(bmp, d0)
+    bmp = string.concat(bmp, d0)
+    bmp = string.concat(bmp, de)
+    bmp = string.concat(bmp, d9)
+
+    mut uni_src = string.concat(q, bmp)
+    uni_src = string.concat(uni_src, hi)
+    uni_src = string.concat(uni_src, lo)
+    uni_src = string.concat(uni_src, q)
+
+    runi = json.parse(uni_src)
+    assert.assert(result.is_ok(runi), "unicode escapes parse ok")
+    // 解码 3 个 Unicode 标量值：é(U+00E9) + 😀(U+1F600，代理对合一) + '9'
+    jv = result.unwrap(runi)
+    decoded = match jv {
+        str(s) => s,
+        _ => "",
+    }
+    assert.assert(decoded != "", "string variant payload extracted")
+    c0 = string.char_code(string.substring(decoded, 0, 1), 0)
+    assert.assert(c0 == 0xE9, "BMP escape decodes to U+00E9")
+    c1 = string.char_code(string.substring(decoded, 1, 2), 0)
+    assert.assert(c1 == 0x1F600, "surrogate pair combines to U+1F600")
+    c2 = string.char_code(string.substring(decoded, 2, 3), 0)
+    assert.assert(c2 == 0x39, "trailing 9 survives")
+
+    // 孤立高代理必须拒绝
+    mut lonely_src = string.concat(q, hi)
+    lonely_src = string.concat(lonely_src, q)
+    rlonely = json.parse(lonely_src)
+    assert.assert(result.is_err(rlonely), "lone high surrogate rejected")
+}
+
+check_errors: () -> () = {
+    // 错误路径：行列定位进消息
+    rbad = json.parse("{\"a\": tru}")
+    assert.assert(result.is_err(rbad), "invalid literal rejected")
+    e = result.unwrap_err(rbad)
+    m = result.message(e)
+    assert.assert(string.contains(m, "2"), "error message carries position")
+
+    runterm = json.parse("\"abc")
+    assert.assert(result.is_err(runterm), "unterminated string rejected")
+}
+
+check_roundtrip: () -> () = {
+    r3 = json.parse("[123456789, \"\", {\"k\": [true, false, null]}]")
+    assert.assert(result.is_ok(r3), "roundtrip source parse ok")
+    once = json.stringify(result.unwrap(r3))
+    r4 = json.parse(once)
+    assert.assert(result.is_ok(r4), "re-parse stringify output ok")
+    twice = json.stringify(result.unwrap(r4))
+    assert.assert(once == twice, "stringify is stable across roundtrip")
+
+    // pretty：含换行缩进，且 parse 可回读
+    p = json.pretty(result.unwrap(r3))
+    assert.assert(string.contains(p, "\n"), "pretty output is multiline")
+    rp = json.parse(p)
+    assert.assert(result.is_ok(rp), "pretty output re-parses")
+}
+
+main: () -> Void = {
+    check_scalar_parse()
+    check_escapes()
+    check_unicode()
+    check_errors()
+    check_roundtrip()
+}

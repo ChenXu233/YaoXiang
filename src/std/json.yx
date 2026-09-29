@@ -17,14 +17,6 @@
 // 运行时以虚拟路径作种子模块注入 orchestrator。
 
 use std.assert
-
-/// string.concat 的本地包装。所有权层对 use 绑定（模块限定名）调用的实参
-/// 所有权解析退化 Move（#387）：循环内 `out = cat(out, c)` 的
-/// loop-carried 状态在循环出口被判 moved。本地声明的函数签名可查，实参
-/// 按借用语义处理，循环重赋值模式可用。根因修复后此助手可退役。
-cat: (a: &String, b: &String) -> String = {
-    return cat(a, b)
-}
 use std.string
 use std.dict
 use std.result
@@ -167,7 +159,7 @@ parse_string: (cs: &Vec(String), src: &String, i: Int) -> Result(StrSpanned, Err
                     errpos = j
                 }
                 if errmsg == "" {
-                    out = cat(out, c)
+                    out = string.concat(out, c)
                     j = j + 1
                 }
             }
@@ -180,35 +172,35 @@ parse_string: (cs: &Vec(String), src: &String, i: Int) -> Result(StrSpanned, Err
                     e = cs[j + 1]
                     mut adv = 0
                     if e == "\"" {
-                        out = cat(out, "\"")
+                        out = string.concat(out, "\"")
                         adv = 2
                     }
                     if e == "\\" {
-                        out = cat(out, "\\")
+                        out = string.concat(out, "\\")
                         adv = 2
                     }
                     if e == "/" {
-                        out = cat(out, "/")
+                        out = string.concat(out, "/")
                         adv = 2
                     }
                     if e == "b" {
-                        out = cat(out, "\u{0008}")
+                        out = string.concat(out, "\u{0008}")
                         adv = 2
                     }
                     if e == "f" {
-                        out = cat(out, "\u{000C}")
+                        out = string.concat(out, "\u{000C}")
                         adv = 2
                     }
                     if e == "n" {
-                        out = cat(out, "\n")
+                        out = string.concat(out, "\n")
                         adv = 2
                     }
                     if e == "r" {
-                        out = cat(out, "\r")
+                        out = string.concat(out, "\r")
                         adv = 2
                     }
                     if e == "t" {
-                        out = cat(out, "\t")
+                        out = string.concat(out, "\t")
                         adv = 2
                     }
                     if e == "u" {
@@ -219,7 +211,7 @@ parse_string: (cs: &Vec(String), src: &String, i: Int) -> Result(StrSpanned, Err
                         }
                         if errmsg == "" {
                             uv = result.unwrap(u)
-                            out = cat(out, uv.text)
+                            out = string.concat(out, uv.text)
                             adv = uv.end - j
                         }
                     }
@@ -481,11 +473,11 @@ err_at: (cs: &Vec(String), i: Int, msg: &String) -> Error = {
         }
         k = k + 1
     }
-    where_ = cat(
-        cat(msg, " at line "),
-        cat(
+    where_ = string.concat(
+        string.concat(msg, " at line "),
+        string.concat(
             convert.to_string(line),
-            cat(", column ", convert.to_string(col)),
+            string.concat(", column ", convert.to_string(col)),
         ),
     )
     return result.error("E6013", where_)
@@ -536,20 +528,20 @@ write_array: (items: &Vec(Json), pretty_mode: Bool, depth: Int) -> String = {
     mut i = 0
     while i < items.length {
         if pretty_mode {
-            out = cat(out, "\n")
-            out = cat(out, indent(depth + 1))
+            out = string.concat(out, "\n")
+            out = string.concat(out, indent(depth + 1))
         }
-        out = cat(out, write_value(items[i], pretty_mode, depth + 1))
+        out = string.concat(out, write_value(items[i], pretty_mode, depth + 1))
         if i + 1 < items.length {
-            out = cat(out, ",")
+            out = string.concat(out, ",")
         }
         i = i + 1
     }
     if pretty_mode {
-        out = cat(out, "\n")
-        out = cat(out, indent(depth))
+        out = string.concat(out, "\n")
+        out = string.concat(out, indent(depth))
     }
-    return cat(out, "]")
+    return string.concat(out, "]")
 }
 
 write_object: (d: &Dict(String, Json), pretty_mode: Bool, depth: Int) -> String = {
@@ -558,25 +550,25 @@ write_object: (d: &Dict(String, Json), pretty_mode: Bool, depth: Int) -> String 
     mut i = 0
     while i < keys.length {
         if pretty_mode {
-            out = cat(out, "\n")
-            out = cat(out, indent(depth + 1))
+            out = string.concat(out, "\n")
+            out = string.concat(out, indent(depth + 1))
         }
-        out = cat(out, escape_string(keys[i]))
-        out = cat(out, ":")
+        out = string.concat(out, escape_string(keys[i]))
+        out = string.concat(out, ":")
         if pretty_mode {
-            out = cat(out, " ")
+            out = string.concat(out, " ")
         }
-        out = cat(out, write_value(dict.get(d, keys[i]), pretty_mode, depth + 1))
+        out = string.concat(out, write_value(dict.get(d, keys[i]), pretty_mode, depth + 1))
         if i + 1 < keys.length {
-            out = cat(out, ",")
+            out = string.concat(out, ",")
         }
         i = i + 1
     }
     if pretty_mode {
-        out = cat(out, "\n")
-        out = cat(out, indent(depth))
+        out = string.concat(out, "\n")
+        out = string.concat(out, indent(depth))
     }
-    return cat(out, "}")
+    return string.concat(out, "}")
 }
 
 indent: (depth: Int) -> String = {
@@ -589,10 +581,10 @@ escape_string: (s: &String) -> String = {
     cs = string.chars(s)
     mut i = 0
     while i < cs.length {
-        out = cat(out, escape_char(cs[i]))
+        out = string.concat(out, escape_char(cs[i]))
         i = i + 1
     }
-    return cat(out, "\"")
+    return string.concat(out, "\"")
 }
 
 escape_char: (c: String) -> String = {
@@ -621,7 +613,7 @@ escape_char: (c: String) -> String = {
     if code >= 0 and code < 0x20 {
         hi = code / 16
         lo = code - hi * 16
-        return cat("\\u00", cat(hex_digit(hi), hex_digit(lo)))
+        return string.concat("\\u00", string.concat(hex_digit(hi), hex_digit(lo)))
     }
     return c
 }
