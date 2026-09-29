@@ -11,523 +11,523 @@
   "cmd_received": "奉运行之令",
   "run_file": "运行文件",
   "reading_file": "方读文件：{0}",
-  "build_bytecode": "造字节码",
+  "build_bytecode": "构建字节码",
   "writing_bytecode": "方书字节码：{0}",
   "lex_start": "始行词法分析",
-  "lex_complete_tokens": "词法分析毕，token 共 {0}",
+  "lex_complete_tokens": "词法分析毕：{0} token",
   "codegen_start": "始行代码生成",
   "codegen_complete": "代码生成毕",
-  "codegen_functions": "代码生成毕，函数共 {0}",
-  "codegen_const_pool": "方生常量池，常量共 {0}",
-  "codegen_code_section": "方生代码段，函数共 {0}",
-  "codegen_type_table": "方生类型表，类型共 {0}",
-  "vm_start": "虚拟机始行",
-  "vm_complete": "虚拟机行毕",
-  "compilation_start": "编译始",
-  "compiling_source": "源码编译中（凡 {0} 字节）",
-  "debug_run_called": "run() 已为所调",
-  "bytecode_dump_header": "=== {0} 之字节码转储 ===",
-  "bytecode_dump_type_table": "=== 类型表（凡 {0} 种）===",
-  "bytecode_dump_constants": "=== 常量（凡 {0} 项）===",
-  "bytecode_dump_functions": "=== 函数（凡 {0} 个）===",
+  "codegen_functions": "代码生成毕：{0} 函数",
+  "codegen_const_pool": "方生常量池：{0} 常量",
+  "codegen_code_section": "方生代码段：{0} 函数",
+  "codegen_type_table": "方生类型表：{0} 类型",
+  "vm_start": "VM 始行",
+  "vm_complete": "VM 行毕",
+  "compilation_start": "始编译",
+  "compiling_source": "方编译源码（{0} 字节）",
+  "debug_run_called": "run() 见调",
+  "bytecode_dump_header": "=== {0} 字节码转储 ===",
+  "bytecode_dump_type_table": "=== 类型表（凡 {0}）===",
+  "bytecode_dump_constants": "=== 常量（凡 {0}）===",
+  "bytecode_dump_functions": "=== 函数（凡 {0}）===",
   "bytecode_magic": "  魔数：0x{0}",
   "bytecode_version": "  版本：{0}",
-  "bytecode_flags": "  旗标：0x{0}",
+  "bytecode_flags": "  旗：0x{0}",
   "bytecode_entry_point": "  入口：{0}",
   "bytecode_section_count": "  段数：{0}",
-  "bytecode_file_size": "  文件大小：{0} 字节",
-  "bytecode_func_params": "  形参：{0}",
-  "bytecode_func_return_type": "  归类型：{0}",
+  "bytecode_file_size": "  文件之大小：{0} 字节",
+  "bytecode_func_params": "  参数：{0}",
+  "bytecode_func_return_type": "  返类型：{0}",
   "bytecode_func_local_count": "  局部变量之数：{0}",
   "bytecode_func_local_names": "  局部变量：{0}",
   "bytecode_func_instr_count": "  指令之数：{0}",
   "bytecode_func_code": "  代码：",
   "bytecode_instr_index": "    [{0}] {1} {2}",
   "bytecode_instr_span": " ; {0}:{1}:{2}",
-  "bytecode_unknown_opcode": "    [{0}] 未识操作码：0x{1}  ({2})",
-  "shell_loaded": "已载入：{0}",
+  "bytecode_unknown_opcode": "    [{0}] 未知操作码：0x{1}  ({2})",
+  "shell_loaded": "已载：{0}",
   "debug_binary_op": "调试：左值={0}, 右值={1}",
   "debug_registers": "调试：寄存器.len={0}, 左索引={1}, 右索引={2}",
-  "package_project_created_lib": "✓ 已建库项目 '{0}'",
-  "package_init_here": "✓ 已于此目录肇始项目 '{0}'",
+  "package_project_created_lib": "✓ 建库项目 '{0}'",
+  "package_init_here": "✓ 已于此目录初设项目 '{0}'",
   "package_file_skipped": "  略既存文件 '{0}'",
   "E0001": {
     "title": "字符非法",
-    "message": "源码内含非法字符",
-    "template": "字符非法：'{char}'",
-    "help": "删非法字符，或用合规之编码",
+    "message": "源码含非法字符",
+    "template": "非法字符：'{char}'",
+    "help": "删非法字符，或用合规编码",
     "example": "x = ¥100;",
     "error_output": "error[E0001]：字符非法\n --> example.yx:1:5\n  |\n1 | x = ¥100;\n  |     ^ 非法字符 '¥'"
   },
   "E0002": {
     "title": "数字字面量非法",
-    "message": "数字字面量之式弗正",
-    "template": "数字字面量非法：'{literal}'",
+    "message": "数字字面量之格式弗正",
+    "template": "非法数字字面量：'{literal}'",
     "help": "审数字字面量之格式",
     "example": "x = 1_2_3_;",
-    "error_output": "error[E0002]: 无效数字字面量\n --> example.yx:1:5\n  |\n1 | x = 1_2_3_;\n  |     ^ 无效之数"
+    "error_output": "error[E0002]: 數字字面量之無效\n --> example.yx:1:5\n  |\n1 | x = 1_2_3_;\n  |     ^ 數字之無效"
   },
   "E0003": {
-    "title": "未终之字符串",
-    "message": "字符串字面量缺闭合引号",
-    "template": "字符串自第 {line} 行始未终",
-    "help": "为字符串补闭合引号",
+    "title": "字符串之未畢",
+    "message": "字符串字面量闕閉合之引號",
+    "template": "字符串始自第 {line} 行而未畢",
+    "help": "為字符串添閉合之引號",
     "example": "x = \"hello world;",
-    "error_output": "error[E0003]: 未终之字符串\n --> example.yx:1:5\n  |\n1 | x = \"hello world;\n  |     ^ 未终之字符串"
+    "error_output": "error[E0003]: 字符串之未畢\n --> example.yx:1:5\n  |\n1 | x = \"hello world;\n  |     ^ 字符串之未畢"
   },
   "E0004": {
-    "title": "无效字符字面量",
-    "message": "字符字面量有误",
-    "template": "无效字符字面量：'{literal}'",
-    "help": "字符字面量止容一字符",
+    "title": "字符字面量之無效",
+    "message": "字符字面量有誤",
+    "template": "字符字面量之無效：'{literal}'",
+    "help": "字符字面量僅容一字符",
     "example": "x = 'ab';",
-    "error_output": "error[E0004]: 无效字符字面量\n --> example.yx:1:5\n  |\n1 | x = 'ab';\n  |     ^ 字符字面量含多字符"
+    "error_output": "error[E0004]: 字符字面量之無效\n --> example.yx:1:5\n  |\n1 | x = 'ab';\n  |     ^ 字符字面量含多字符"
   },
   "E0010": {
     "title": "所期之令牌",
-    "message": "解析器期特定令牌",
-    "template": "期 {expected}，得 {found}",
-    "help": "审语法并补所期之令牌",
+    "message": "解析器期特定之令牌",
+    "template": "期 {expected}，而得 {found}",
+    "help": "詳審語法，補所期之令牌",
     "example": "x = 1, 2;",
     "error_output": "error[E0010]: 所期之令牌\n --> example.yx:1:7\n  |\n1 | x = 1, 2;\n  |       ^ 期 ',' 或 ';'"
   },
   "E0011": {
-    "title": "不期之令牌",
-    "message": "遭遇意外之令牌",
-    "template": "意外之令牌：'{token}'",
-    "help": "删去或更替此意外令牌",
+    "title": "意外之令牌",
+    "message": "遇非所期之令牌",
+    "template": "非所期之令牌：'{token}'",
+    "help": "删去或更换非所期之令牌",
     "example": "x = 1 @ 2;",
-    "error_output": "error[E0011]: 意外之令牌\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 意外之令牌 '@'"
+    "error_output": "error[E0011]: 非所期之令牌\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 非所期之令牌 '@'"
   },
   "E0012": {
-    "title": "语法乖舛",
-    "message": "表达式或语句存语法之误",
-    "template": "语法乖舛：{reason}",
+    "title": "语法有误",
+    "message": "表达式或语句存语法之失",
+    "template": "语法有误：{reason}",
     "help": "审表达式或语句之语法",
     "example": "if x { }",
-    "error_output": "error[E0012]: 语法乖舛\n --> example.yx:1:3\n  |\n1 | if x { }\n  |    ^ 阙条件"
+    "error_output": "error[E0012]: 语法有误\n --> example.yx:1:3\n  |\n1 | if x { }\n  |    ^ 阙其条件"
   },
   "E0013": {
-    "title": "括号失配",
-    "message": "圆括号、方括号或花括号失配",
-    "template": "{bracket_type}失配：始于第 {open_line} 行、第 {open_col} 列，未得闭合",
-    "help": "务使诸括号悉数闭合无讹",
+    "title": "括号不匹",
+    "message": "圆括号、方括号或花括号不相匹配",
+    "template": "不匹配之 {bracket_type}：始於第 {open_line} 行、第 {open_col} 列，未得闭合",
+    "help": "务使诸括号皆得闭合适当",
     "example": "x = (1 + 2;",
-    "error_output": "error[E0013]: 括号失配\n --> example.yx:1:1\n  |\n1 | x = (1 + 2;\n  |     ^ 未闭之圆括号"
+    "error_output": "error[E0013]: 括号不匹\n --> example.yx:1:1\n  |\n1 | x = (1 + 2;\n  |     ^ 未闭合之圆括号"
   },
   "E0014": {
     "title": "阙分号",
-    "message": "语句乏分号",
+    "message": "语句阙分号",
     "template": "{statement} 后阙分号",
-    "help": "于语句末添分号",
+    "help": "于语句末增分号",
     "example": "x = 1\ny = 2",
-    "error_output": "error[E0014]: 缺分号\n --> example.yx:1:5\n  |\n1 | x = 1\n  |       ^ 缺分号"
+    "error_output": "error[E0014]: 乏分号\n --> example.yx:1:5\n  |\n1 | x = 1\n  |       ^ 乏分号"
   },
   "E1001": {
-    "title": "未知变量",
+    "title": "未识变量",
     "message": "所引之变量未尝定义",
-    "template": "未知变量：'{name}'",
-    "help": "审其名是否书写无误，或先定义之",
+    "template": "未识变量：'{name}'",
+    "help": "核校变量之名拼写是否合宜，或先定义之",
     "example": "x = y + 1;",
-    "error_output": "error[E1001]: 未知变量\n --> example.yx:1:5\n  |\n1 | x = y + 1;\n  |       ^ 未定义之变量 'y'"
+    "error_output": "error[E1001]: 未识变量\n --> example.yx:1:5\n  |\n1 | x = y + 1;\n  |       ^ 未尝定义之变量 'y'"
   },
   "E1002": {
-    "title": "类型不契",
-    "message": "所期类型与实际类型不契",
-    "template": "期望类型 '{expected}'，实际类型 '{found}'",
-    "help": "用正类型或添类型转换",
+    "title": "类型不协",
+    "message": "所期之类型与实有之类型不协",
+    "template": "所期类型 '{expected}'，实有类型 '{found}'",
+    "help": "用合宜之类型，或增类型之转换",
     "example": "x: Int = \"hello\";",
-    "error_output": "error[E1002]: 类型不契\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 期望 'Int'，实得 'String'"
+    "error_output": "error[E1002]: 类型不协\n --> example.yx:1:12\n  |\n1 | x: Int = \"hello\";\n  |            ^ 所期 'Int'，所得 'String'"
   },
   "E1003": {
-    "title": "未知类型",
-    "message": "所引之类型不存",
-    "template": "未知类型：'{type}'",
-    "help": "审其类型名是否书写无误",
+    "title": "未识类型",
+    "message": "所引之类型未尝存焉",
+    "template": "未识类型：'{type}'",
+    "help": "核校类型之名拼写是否合宜",
     "example": "x: MyType = 1;",
-    "error_output": "error[E1003]: 未知类型\n --> example.yx:1:5\n  |\n1 | x: MyType = 1;\n  |     ^ 类型 'MyType' 未定义"
+    "error_output": "error[E1003]: 未知之型\n --> example.yx:1:5\n  |\n1 | x: MyType = 1;\n  |     ^ 未定义之类型 'MyType'"
   },
   "E1010": {
-    "title": "参数之数未合",
-    "message": "函数调用之参数与定义未合",
-    "template": "函数 '{func}' 期 {expected} 参数，得 {found}",
-    "help": "审函数调用之参数数",
+    "title": "参数之数不协",
+    "message": "函数调用之参数与定义乖违",
+    "template": "函数 '{func}' 期 {expected} 参，乃获 {found} 参",
+    "help": "审函数调用参数之数",
     "example": "add(1, 2, 3);",
-    "error_output": "error[E1010]: 参数之数未合\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 函数期二参数，得三"
+    "error_output": "error[E1010]: 参数之数不协\n --> example.yx:1:1\n  |\n1 | add(1, 2, 3);\n  |     ^ 函数期 2 参，乃获 3 参"
   },
   "E1011": {
-    "title": "参数之类型未合",
-    "message": "参数之类型检核未成",
-    "template": "参数之类型未合：期 '{expected}'，实 '{found}'",
-    "help": "须令参数之类型与函数之签相合",
+    "title": "参数之型不协",
+    "message": "参数之型检核未果",
+    "template": "参数之型乖违：期 '{expected}'，实 '{found}'",
+    "help": "务使参数之型与函数符号相符",
     "example": "add(\"hello\", 2);",
-    "error_output": "error[E1011]: 参数之类型未合\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ 期 'Int'，得 'String'"
+    "error_output": "error[E1011]: 参数之型不协\n --> example.yx:1:5\n  |\n1 | add(\"hello\", 2);\n  |     ^ 期 'Int'，实得 'String'"
   },
   "E1012": {
-    "title": "返回之类型未合",
-    "message": "函数返回之类型有违",
-    "template": "返回之类型未合：期 '{expected}'，实 '{found}'",
-    "help": "函数体之值与所声明之返回类型未合。或改函数体，或正注解——须知 `h: () -> Int = f` 之意乃「h 返回 Int」，而非「h 即 f」；若欲为函数立别名，请书 `h = f`。",
+    "title": "返回之型不协",
+    "message": "函数返回之型有乖",
+    "template": "返回之型乖违：期 '{expected}'，实 '{found}'",
+    "help": "函数体之值与所声明之返回类型相悖。或改函数体，或正注解。须留意 `h: () -> Int = f` 之意为「h 返回 Int」，而非「h 即 f」；若欲为函数立别名，请书 `h = f`。",
     "example": "fn foo() -> Int { \"hello\" }",
-    "error_output": "error[E1012]: 返回之类型未合\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 期 'Int'，得 'String'"
+    "error_output": "error[E1012]: 返回之型不协\n --> example.yx:1:19\n  |\n1 | fn foo() -> Int { \"hello\" }\n  |                   ^ 期 'Int'，实得 'String'"
   },
   "E1013": {
     "title": "函数未得",
     "message": "调用未定义之函数",
     "template": "函数未得：'{func}'",
-    "help": "审函数名拼写之正误",
+    "help": "宜查验函数名拼写是否无误",
     "example": "unknown_fn();",
     "error_output": "error[E1013]: 函数未得\n --> example.yx:1:1\n  |\n1 | unknown_fn();\n  | ^ 未定义之函数 'unknown_fn'"
   },
   "E1020": {
-    "title": "类型无以推导",
+    "title": "类型不可推",
     "message": "上下文无以推类型",
-    "template": "无以推 '{expr}' 之类型",
-    "help": "添类型注解或显式类型参数",
+    "template": "'{expr}' 之类型不可推",
+    "help": "增类型注解或显式类型参数",
     "example": "let x = nil;",
-    "error_output": "error[E1020]: 类型不可推导\n --> example.yx:1:9\n  |\n1 | let x = nil;\n  |         ^ 不能自 'nil' 推类型"
+    "error_output": "error[E1020]: 不能推类型\n --> example.yx:1:9\n  |\n1 | let x = nil;\n  |         ^ 不能自 'nil' 推类型"
   },
   "E1021": {
-    "title": "类型推导相违",
-    "message": "多约束致类型相违",
-    "template": "类型推导相违：{reason}",
-    "help": "审类型注解之一致",
+    "title": "类型推断相冲",
+    "message": "诸约束致类型矛盾",
+    "template": "类型推断相冲：{reason}",
+    "help": "验类型注解之一致性",
     "example": "let x: Int = \"hello\";",
-    "error_output": "error[E1021]: 类型推导相违\n --> example.yx:1:11\n  |\n1 | let x: Int = \"hello\";\n  |           ^ 类型注解与所推类型相违"
+    "error_output": "error[E1021]: 类型推断相冲\n --> example.yx:1:11\n  |\n1 | let x: Int = \"hello\";\n  |           ^ 类型注解与推断类型相冲"
   },
   "E1030": {
-    "title": "模式未全",
+    "title": "模式未备",
     "message": "match 表达式未遍诸况",
-    "template": "模式未全：阙 {patterns}",
-    "help": "为 match 表达式补所阙之模式",
+    "template": "模式未备：缺 {patterns}",
+    "help": "为 match 表达式补所缺之模式",
     "example": "match x { Some(_) => 1 }",
-    "error_output": "error[E1030]: 模式未全\n --> example.yx:1:1\n  |\n1 | match x { Some(_) => 1 }\n  |     ^ 模式 'None' 未覆"
+    "error_output": "error[E1030]: 模式未备\n --> example.yx:1:1\n  |\n1 | match x { Some(_) => 1 }\n  |     ^ 模式 'None' 未覆"
   },
   "E1031": {
-    "title": "不可达模式",
-    "message": "永不可匹配之模式",
-    "template": "不可达模式：'{pattern}'",
-    "help": "删或改不可达之模式",
+    "title": "不可至模式",
+    "message": "终不可契之模式",
+    "template": "不可至模式：'{pattern}'",
+    "help": "删或改不可至之模式",
     "example": "match x { 1 => \"one\", 1 => \"another\" }",
-    "error_output": "error[E1031]: 不可致之模式\n --> example.yx:1:18\n  |\n1 | match x { 1 => \"one\", 1 => \"another\" }\n  |                  ^ 模式 '1' 已为前项所覆"
+    "error_output": "error[E1031]: 不可达模式\n --> example.yx:1:18\n  |\n1 | match x { 1 => \"one\", 1 => \"another\" }\n  |                  ^ 模式 '1' 已为前式所覆"
   },
   "E1040": {
-    "title": "操作弗允",
-    "message": "类型弗允此操作",
-    "template": "类型 '{type}' 弗允操作 '{op}'",
-    "help": "审其类型所允之操作",
+    "title": "操作弗支持",
+    "message": "类型弗支持此操作",
+    "template": "类型 '{type}' 弗支持操作 '{op}'",
+    "help": "审此类所支持之操作",
     "example": "\"hello\" + 1;",
-    "error_output": "error[E1040]: 操作弗允\n --> example.yx:1:9\n  |\n1 | \"hello\" + 1;\n  |         ^ String 类型弗允 '+' 操作"
+    "error_output": "error[E1040]: 操作弗支持\n --> example.yx:1:9\n  |\n1 | \"hello\" + 1;\n  |         ^ String 类型弗支持 '+' 操作"
   },
   "E1041": {
     "title": "索引越界",
-    "message": "数组/列表索引逾其度",
-    "template": "索引越界：有效之域乃 0..{max}，乃得 {index}",
-    "help": "务使索引处于集合之域内",
+    "message": "数组/列表索引逾其范围",
+    "template": "索引越界：有效范围为 0..{max}，得 {index}",
+    "help": "务使索引在集合范围之内",
     "example": "arr[10];",
-    "error_output": "error[E1041]: 索引越界\n --> example.yx:1:5\n  |\n1 | arr[10];\n  |     ^ 索引 10 逾数组之度 5"
+    "error_output": "error[E1041]: 索引越界\n --> example.yx:1:5\n  |\n1 | arr[10];\n  |     ^ 索引 10 逾数组之长度 5"
   },
   "E1042": {
-    "title": "字段未获",
-    "message": "访结构体所无之字段",
-    "template": "结构体 '{struct}' 中未得字段 '{field}'",
-    "help": "审其结构体之可用字段",
+    "title": "字段未得",
+    "message": "访问结构体之不存字段",
+    "template": "于结构体 '{struct}' 中未得字段 '{field}'",
+    "help": "审结构体之可用字段",
     "example": "point.z;",
-    "error_output": "error[E1042]: 字段未获\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 结构体 'Point' 中未得字段 'z'"
+    "error_output": "error[E1042]: 字段未得\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 于结构体 'Point' 中未得字段 'z'"
   },
   "E1050": {
-    "title": "须布尔操作数",
-    "message": "逻辑运算需布尔操作数",
-    "template": "逻辑运算需布尔操作数，实为 '{left}' 与 '{right}'",
-    "help": "请转操作数为布尔类型，或用别运算符",
+    "title": "需布尔操作数",
+    "message": "逻辑运算须以布尔为操作数",
+    "template": "逻辑运算须以布尔为操作数，今乃'{left}'与'{right}'",
+    "help": "当转操作数为布尔类型，或改用他运算符",
     "example": "let x = 1 && 2;",
-    "error_output": "error[E1050]: 需布尔操作数\n --> example.yx:1:9\n  |\n1 | let x = 1 && 2;\n  |         ^ 逻辑运算需布尔操作数"
+    "error_output": "error[E1050]: 须以布尔为操作数\n --> example.yx:1:9\n  |\n1 | let x = 1 && 2;\n  |         ^ 逻辑运算须以布尔为操作数"
   },
   "E1051": {
-    "title": "逻辑非（NOT）需布尔操作数",
-    "message": "逻辑非（NOT）运算需布尔操作数",
-    "template": "逻辑非（NOT）需布尔操作数，实为 '{type}'",
-    "help": "施非（NOT）前，请转操作数为布尔类型",
+    "title": "逻辑非须以布尔为操作数",
+    "message": "逻辑非运算须以布尔为操作数",
+    "template": "逻辑非须以布尔为操作数，今乃'{type}'",
+    "help": "施非运算前，当先转操作数为布尔类型",
     "example": "let x = !42;",
-    "error_output": "error[E1051]: 逻辑非需布尔操作数\n --> example.yx:1:9\n  |\n1 | let x = !42;\n  |         ^ 非（NOT）需布尔操作数，实为 'Int'"
+    "error_output": "error[E1051]: 逻辑非须以布尔为操作数\n --> example.yx:1:9\n  |\n1 | let x = !42;\n  |         ^ 非须以布尔为操作数，实乃'Int'"
   },
   "E1052": {
     "title": "解引用无效",
-    "message": "非指针类型不可解引用",
-    "template": "类型 '{type}' 不可解引用，当为指针类型",
+    "message": "弗能解引用非指针之类型",
+    "template": "弗能解引用类型'{type}'，所期者指针类型也",
     "help": "唯指针类型可解引用",
     "example": "let x = *42;",
-    "error_output": "error[E1052]: 解引用无效\n --> example.yx:1:9\n  |\n1 | let x = *42;\n  |         ^ 'Int' 不可解引用"
+    "error_output": "error[E1052]: 解引用无效\n --> example.yx:1:9\n  |\n1 | let x = *42;\n  |         ^ 弗能解引用'Int'"
   },
   "E1053": {
     "title": "非结构体字段之访问",
-    "message": "非结构体类型不可访其字段",
-    "template": "非结构体类型 '{type}' 不可访其字段",
-    "help": "字段之访，唯宜于结构体之类型",
+    "message": "弗能于非结构体类型上访问字段",
+    "template": "弗能于非结构体类型'{type}'上访问字段",
+    "help": "字段之访问，唯施于结构体类型",
     "example": "let x = 42.field;",
-    "error_output": "error[E1053]: 非结构体字段之访\n --> example.yx:1:12\n  |\n1 | let x = 42.field;\n  |            ^ 弗能于 'Int' 上访字段"
+    "error_output": "error[E1053]: 非结构体字段之访问\n --> example.yx:1:12\n  |\n1 | let x = 42.field;\n  |            ^ 未能在 'Int' 上访问字段"
   },
   "E1054": {
-    "title": "条件类型不契",
-    "message": "条件之表达式必为布尔类型",
-    "template": "条件须为布尔类型，今实为 '{type}'",
-    "help": "用布尔之表达式，或转之为布尔类型",
+    "title": "条件类型不合",
+    "message": "条件表达式须为布尔类型",
+    "template": "条件须为布尔类型，实乃 '{type}'",
+    "help": "用布尔表达式，或转为布尔类型",
     "example": "if 42 { }",
-    "error_output": "error[E1054]: 条件类型不契\n --> example.yx:1:4\n  |\n1 | if 42 { }\n  |    ^ 条件须为布尔类型，实乃 'Int'"
+    "error_output": "error[E1054]: 条件类型不合\n --> example.yx:1:4\n  |\n1 | if 42 { }\n  |    ^ 条件须为布尔类型，实乃 'Int'"
   },
   "E1055": {
-    "title": "约束见于非泛型之境",
-    "message": "约束类型用于非泛型之境",
-    "template": "约束类型 '{type}' 唯用于泛型之境",
-    "help": "以具体类型易约束类型",
+    "title": "约束见于非泛型之上下文",
+    "message": "约束类型用于非泛型之上下文",
+    "template": "约束类型 '{type}' 唯可用于泛型之上下文",
+    "help": "以具体类型代约束类型",
     "example": "let x: Eq = 42;",
-    "error_output": "error[E1055]: 约束见于非泛型之境\n --> example.yx:1:8\n  |\n1 | let x: Eq = 42;\n  |        ^ 约束类型弗用于此"
+    "error_output": "error[E1055]: 约束见于非泛型之上下文\n --> example.yx:1:8\n  |\n1 | let x: Eq = 42;\n  |        ^ 约束类型不可用于此处"
   },
   "E1060": {
-    "title": "类型参数之数不契",
-    "message": "所予类型参数之数有乖",
-    "template": "期 {expected} 个类型参数，今 {found} 个",
-    "help": "供合数之类型参数",
+    "title": "类型参数之数不合",
+    "message": "所供类型参数之数有谬",
+    "template": "期 {expected} 个类型参数，实 {found} 个",
+    "help": "供以相当数量之类型参数",
     "example": "let x: Vec<Int, String> = vec![];",
-    "error_output": "error[E1060]: 类型参数之数弗合\n --> example.yx:1:8\n  |\n1 | let x: Vec<Int, String> = vec![];\n  |        ^ 期望类型参数一，乃得二者"
+    "error_output": "error[E1060]: 类型参数之数未协\n --> example.yx:1:8\n  |\n1 | let x: Vec<Int, String> = vec![];\n  |        ^ 本期类型参数一，乃得其二"
   },
   "E1061": {
-    "title": "泛型弗能实例化",
-    "message": "泛型类型弗能以所给参数实例化",
-    "template": "弗能以所给参数实例化泛型类型",
-    "help": "务使类型参数悉合约束",
+    "title": "泛型不可成实例",
+    "message": "泛型类型难凭所与参数以成实例",
+    "template": "难凭所与参数以成泛型类型之实例",
+    "help": "务使类型参数尽合乎一切约束",
     "example": "let x = Foo::<Int>();",
-    "error_output": "error[E1061]: 泛型弗能实例化\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 弗能以所给参数实例化"
+    "error_output": "error[E1061]: 泛型不可成实例\n --> example.yx:1:9\n  |\n1 | let x = Foo::<Int>();\n  |         ^ 难凭所与参数以成实例"
   },
   "E1071": {
-    "title": "类型定义唯许在模块级",
-    "message": "类型定义唯现于模块顶层",
-    "template": "类型定义 '{name}' 唯于模块级（模块顶层）",
-    "help": "请移类型定义于模块顶层",
+    "title": "类型定义唯可于模块级",
+    "message": "类型定义唯现于模块之顶层",
+    "template": "类型定义 '{name}' 唯可于模块级（模块顶层）",
+    "help": "请移类型定义至模块顶层",
     "example": "main = { Point: Type = { x: Int } }",
-    "error_output": "error[E1071]: 类型定义唯于模块级\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ 类型定义 '{name}' 唯于模块级（模块顶层）"
+    "error_output": "error[E1071]: 类型定义唯可于模块级\n --> example.yx:1:9\n  |\n1 | main = { Point: Type = { x: Int } }\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^ 类型定义 '{name}' 唯可于模块级（模块顶层）"
   },
   "E1081": {
-    "title": "`?` 唯许用於返可传播之类型之函内",
-    "message": "`?` 唯用於返实现 Try 之类型之函内",
-    "template": "`?` 唯许用於返实现 `Try` 之类型之函内",
-    "help": "`?` 之失值须沿函返类型而传播——返类型须实现 `Try` 接口（如 `Result(T, E)`）"
+    "title": "`?` 唯许用于返可传播类型之函数中",
+    "message": "`?` 唯可用于返实现 Try 之类型之函数中",
+    "template": "`?` 唯许用于返实现 `Try` 之类型之函数中",
+    "help": "`?` 之失败值须沿函数返回类型而传——返回类型须实现 `Try` 接口（如 `Result(T, E)`）"
   },
   "E1082": {
-    "title": "`?` 唯用於实现 Try 之类型",
-    "message": "`?` 唯用於实现 Try 接口之类型之表达式",
-    "template": "'{type}' 未实现 `Try` 接口，不得用 `?`",
-    "help": "当为该类型实现 `Try` 接口之四成员（is_failure/success/residual/from_error），或改用 `Result(T, E)`"
+    "title": "`?` 唯可用于实现 Try 之类型",
+    "message": "`?` 唯可用于实现 Try 接口之类型之表达式",
+    "template": "'{type}' 未实现 `Try` 接口，不可施 `?`",
+    "help": "请为此类型实现 `Try` 接口之四成员（is_failure/success/residual/from_error），或改用 `Result(T, E)`"
   },
   "E1083": {
-    "title": "`?` 之错误类型不相合",
-    "message": "`expr?` 之错误类型与外层函数返类型不相合",
-    "template": "`?` 之错误类型不相合：期 '{expected}'，实 '{found}'",
-    "help": "请保今函数返类型 `Result[_, E]` 之错误类型 `E`，与所解 `Result[_, E]` 之错误类型相符。"
+    "title": "`?` 之错误类型不契",
+    "message": "`expr?` 之错误类型与外层函数返回类型不契",
+    "template": "`?` 之错误类型不契：所期 '{expected}'，实得 '{found}'",
+    "help": "请保当前函数返回类型 `Result[_, E]` 之错误类型 `E` 与所解之 `Result[_, E]` 之错误类型相符。"
   },
   "E2001": {
-    "title": "作用域谬误",
-    "message": "变量非在当前作用域",
-    "template": "变量 '{name}' 不在作用域中",
-    "help": "审变量之作用域，俾此处可访",
+    "title": "作用域舛误",
+    "message": "变量不隶现行作用域",
+    "template": "变量 '{name}' 不隶作用域",
+    "help": "审变量之作用域，俾此处可达",
     "example": "fn foo() { x }",
-    "error_output": "error[E2001]: 作用域谬误\n --> example.yx:1:8\n  |\n1 | fn foo() { x }\n  |        ^ 变量 'x' 不在作用域中"
+    "error_output": "error[E2001]: 作用域舛误\n --> example.yx:1:8\n  |\n1 | fn foo() { x }\n  |        ^ 变量 'x' 不隶作用域"
   },
   "E2002": {
-    "title": "重复定义",
-    "message": "变量于同作用域中数定义",
-    "template": "重复定义：'{name}' 已定于当前作用域",
-    "help": "更名或删重复之定义",
+    "title": "重定义",
+    "message": "变量于同作用域中数定",
+    "template": "重定义：'{name}' 已定于现行作用域",
+    "help": "更其名，或删其重",
     "example": "let x = 1; let x = 2;",
-    "error_output": "error[E2002]: 重复定义\n --> example.yx:1:11\n  |\n1 | let x = 1; let x = 2;\n  |           ^ 'x' 已定义"
+    "error_output": "error[E2002]: 重定义\n --> example.yx:1:11\n  |\n1 | let x = 1; let x = 2;\n  |           ^ 'x' 已定"
   },
   "E2003": {
-    "title": "所有权谬误",
-    "message": "所有权约束未惬",
+    "title": "所有权舛误",
+    "message": "所有权之约束未协",
     "template": "所有权约束违：{reason}",
-    "help": "审值之所有权语义",
+    "help": "审值所有权之义",
     "example": "let a = vec![1, 2, 3]; let b = a;",
-    "error_output": "error[E2003]: 所有权谬误\n --> example.yx:1:19\n  |\n1 | let a = vec![1, 2, 3]; let b = a;\n  |                   ^ 值已迁"
+    "error_output": "error[E2003]: 所有权舛误\n --> example.yx:1:19\n  |\n1 | let a = vec![1, 2, 3]; let b = a;\n  |                   ^ 值已移"
   },
   "E2010": {
-    "title": "不可变赋值",
-    "message": "欲改不可变之变量",
-    "template": "不可赋于不可变变量'{name}'",
+    "title": "不可变赋",
+    "message": "欲更不可变之变量",
+    "template": "不可赋不可变变量'{name}'",
     "help": "以'mut'声明可变变量",
     "example": "let x = 1; x = 2;",
-    "error_output": "error[E2010]: 不可变赋值\n --> example.yx:1:11\n  |\n1 | let x = 1; x = 2;\n  |           ^ 不可赋于不可变变量"
+    "error_output": "error[E2010]: 不可变赋值\n --> example.yx:1:11\n  |\n1 | let x = 1; x = 2;\n  |           ^ 不可赋不可变变量"
   },
   "E2011": {
-    "title": "用未始化变量",
-    "message": "用未始化之变量",
-    "template": "用未始化变量'{name}'",
-    "help": "用前始化之",
+    "title": "变量未始而用之",
+    "message": "用未始之变量",
+    "template": "用未始之变量'{name}'",
+    "help": "用前须初始化之",
     "example": "let x; println!(x);",
-    "error_output": "error[E2011]: 用未始化变量\n --> example.yx:1:12\n  |\n1 | let x; println!(x);\n  |            ^ 用未始化之变量"
+    "error_output": "error[E2011]: 变量未始而用之\n --> example.yx:1:12\n  |\n1 | let x; println!(x);\n  |            ^ 用未始之变量"
   },
   "E2012": {
     "title": "可变性相忤",
-    "message": "于不可变上下文中用可变引用",
-    "template": "可变性相忤：不可于不可变上下文中用可变引用",
-    "help": "须使引用之可变性契合所用上下文",
+    "message": "于不可变上下文用可变引用",
+    "template": "可变性相忤：不可于不可变上下文用可变引用",
+    "help": "须使引用之可变性合于上下文",
     "example": "let mut v = vec![1, 2]; let r = &v; v.push(3);",
-    "error_output": "error[E2012]: 可变性相忤\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ 不可经不可变引用而改之"
+    "error_output": "error[E2012]: 可变性相忤\n --> example.yx:1:29\n  |\n1 | let mut v = vec![1, 2]; let r = &v; v.push(3);\n  |                             ^ 不可经不可变引用改之"
   },
   "E2013": {
     "title": "变量遮蔽",
-    "message": "不可遮蔽既有变量",
-    "template": "不可遮蔽既有变量'{name}'",
-    "help": "用异名，或于别一作用域中声明之",
+    "message": "不可遮蔽已有变量",
+    "template": "不可遮蔽已有变量'{name}'",
+    "help": "别用异名，或于异作用域中声明之",
     "example": "i = 10; for i in 1..5 { print(i) }",
-    "error_output": "error[E2013]: 变量遮蔽\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ 不可遮蔽既存变量 'i'"
+    "error_output": "error[E2013]: 变量遮蔽\n --> example.yx:1:17\n  |\n1 | i = 10; for i in 1..5 { print(i) }\n  |                 ^ 不可遮蔽既有变量 'i'"
   },
   "E2090": {
-    "title": "签名无效",
-    "message": "函数签名解析不成",
-    "template": "签名无效：{reason}",
-    "help": "核验函数签名之式是否合度",
+    "title": "签不符",
+    "message": "函数签名析之不成",
+    "template": "签不符：{reason}",
+    "help": "审函数签名格式合否",
     "example": "\"(x: Unknown) -> Int\"",
-    "error_output": "error[E2090]: 签名无效\n --> std/list.yx:1:1\n  |\n1 | \"(x: Unknown) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2090]: 签不符\n --> std/list.yx:1:1\n  |\n1 | \"(x: Unknown) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2091": {
-    "title": "签名含未知类型",
-    "message": "签名中含未知类型",
-    "template": "签名无效：未知类型 '{type_name}'",
-    "help": "宜用有效类型，如'(T) -> T'之式以表函数参数",
+    "title": "签名含未识之型",
+    "message": "签名中含未识之型",
+    "template": "签不符：未识之型 '{type_name}'",
+    "help": "用有效之型，如 '(T) -> T' 以示函数参",
     "example": "\"(list: List, fn: Fn) -> List\"",
-    "error_output": "error[E2091]: 签名含未知类型\n --> std/list.yx:1:1\n  |\n1 | \"(list: List, fn: Fn) -> List\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2091]: 签名含未识之型\n --> std/list.yx:1:1\n  |\n1 | \"(list: List, fn: Fn) -> List\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2092": {
     "title": "签名缺箭头",
     "message": "签名中缺 '->'",
-    "template": "签名无效：缺 '->'",
-    "help": "必使签名之式为'(参数表) -> 返类型'",
+    "template": "签不符：缺 '->'",
+    "help": "务令签名格式为 '(参数列表) -> 返回类型'",
     "example": "\"(x: Int) Int\"",
     "error_output": "error[E2092]: 签名缺箭头\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int) Int\"\n  | ^^^^^^^^^^^^^^^^"
   },
   "E2093": {
-    "title": "参数名重出",
-    "message": "签名内参数名重出",
-    "template": "签名有误：参数名'{name}'重出",
-    "help": "宜令各参数名独一无二",
+    "title": "参数重名",
+    "message": "签名内参数重名",
+    "template": "签名无效：参数重名 '{name}'",
+    "help": "各参数名须互异",
     "example": "\"(x: Int, x: Int) -> Int\"",
-    "error_output": "error[E2093]: 参数名重出\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int, x: Int) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2093]: 参数重名\n --> std/list.yx:1:1\n  |\n1 | \"(x: Int, x: Int) -> Int\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2094": {
-    "title": "泛型参数相蔽",
-    "message": "泛型参数蔽外层泛型参数",
-    "template": "签名有误：泛型参数'{name}'蔽外层泛型参数",
-    "help": "内层函数类型当别用泛型参数之名",
+    "title": "泛型参数遮蔽",
+    "message": "泛型参数遮外层泛型参数",
+    "template": "签名无效：泛型参数 '{name}' 遮外层泛型参数",
+    "help": "内层函数类型宜用别样泛型参数名",
     "example": "\"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"",
-    "error_output": "error[E2094]: 泛型参数相蔽\n --> std/list.yx:1:1\n  |\n1 | \"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2094]: 泛型参数遮蔽\n --> std/list.yx:1:1\n  |\n1 | \"[T](list: List[T], fn: [T](item: T) -> T) -> List[T]\"\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
   },
   "E2095": {
-    "title": "参数名蔽泛型",
+    "title": "参数名遮蔽泛型",
     "message": "参数名与泛型参数同名",
-    "template": "签名有误：参数名'{name}'蔽泛型参数",
+    "template": "签名无效：参数名 '{name}' 遮蔽泛型参数",
     "help": "参数名不可与泛型参数同名",
     "example": "\"[T](T: Int) -> T\"",
-    "error_output": "error[E2095]: 参数名蔽泛型\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
+    "error_output": "error[E2095]: 参数名遮蔽泛型\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
   },
   "E4001": {
-    "title": "违泛型之约",
-    "message": "类型未合泛型之约",
-    "template": "类型 '{type}' 未契特质之约束 '{trait}'",
-    "help": "务使类型悉契所需特质之疆界",
+    "title": "违泛型约束",
+    "message": "类型不契泛型约束",
+    "template": "类型 '{type}' 未惬特质约束 '{trait}'",
+    "help": "务使类型惬诸所须特质之界",
     "example": "let x: &Display = &5;",
-    "error_output": "error[E4001]: 泛型约束有违\n --> example.yx:1:17\n  |\n1 | let x: &Display = &5;\n  |                 ^ 类型 'Int' 未行 'Display'"
+    "error_output": "error[E4001]: 泛型约束违\n --> example.yx:1:17\n  |\n1 | let x: &Display = &5;\n  |                 ^ 类型 'Int' 未行 'Display'"
   },
   "E4002": {
-    "title": "特质未寻得",
-    "message": "所引之特质无有",
-    "template": "特质 '{trait}' 未寻得",
-    "help": "核验特质之名，或导入合宜之特质",
+    "title": "特质未得",
+    "message": "所引特质弗存",
+    "template": "特质 '{trait}' 未得",
+    "help": "核特质之名，或导入正确之特质",
     "example": "impl MyTrait for Int {}",
-    "error_output": "error[E4002]: 特质未寻得\n --> example.yx:1:6\n  |\n1 | impl MyTrait for Int {}\n  |      ^ 未定义之特质 'MyTrait'"
+    "error_output": "error[E4002]: 特质未得\n --> example.yx:1:6\n  |\n1 | impl MyTrait for Int {}\n  |      ^ 未定义之特质 'MyTrait'"
   },
   "E4003": {
-    "title": "特质之行有缺",
-    "message": "类型未行所需之特质",
-    "template": "类型 '{type}' 乏特质 '{trait}' 之行",
-    "help": "为此类型增益特质之行",
+    "title": "特质之行缺失",
+    "message": "类型未行所须之特质",
+    "template": "类型 '{type}' 阙特质 '{trait}' 之行",
+    "help": "为该类型增特质之行",
     "example": "println!(\"{}\", vec![1, 2, 3]);",
-    "error_output": "error[E4003]: 特质之行有缺\n --> example.yx:1:20\n  |\n1 | println!(\"{}\", vec![1, 2, 3]);\n  |                    ^ 类型 'Vec<Int>' 未行 'Display'"
+    "error_output": "error[E4003]: 特质之行缺失\n --> example.yx:1:20\n  |\n1 | println!(\"{}\", vec![1, 2, 3]);\n  |                    ^ 类型 'Vec<Int>' 未行 'Display'"
   },
   "E4004": {
-    "title": "特质之行相牾",
-    "message": "诸特质之行相牾",
-    "template": "特质 '{trait}' 之行相牾",
-    "help": "消解相牾之行",
+    "title": "特质之行相冲",
+    "message": "诸特质之行相冲",
+    "template": "特质 '{trait}' 之行相冲",
+    "help": "消解相冲之行",
     "example": "impl<T> Display for T {}",
-    "error_output": "error[E4004]: 特质实现相忤\n --> example.yx:1:1\n  |\n1 | impl<T> Display for T {}\n  | ^ 实现相冲"
+    "error_output": "error[E4004]: 特质实现冲突\n --> example.yx:1:1\n  |\n1 | impl<T> Display for T {}\n  | ^ 实现冲突"
   },
   "E4005": {
     "title": "关联类型未寻得",
-    "message": "容器中不存所引之关联类型",
-    "template": "於 '{container}' 中未得关联类型 '{assoc_type}'",
+    "message": "容器中无引用之关联类型",
+    "template": "于 '{container}' 中未寻得关联类型 '{assoc_type}'",
     "help": "审关联类型之名与容器之定义",
     "example": "type Output = Foo::Bar;",
-    "error_output": "error[E4005]: 关联类型未寻得\n --> example.yx:1:15\n  |\n1 | type Output = Foo::Bar;\n  |               ^ 於 'Foo' 中未得 'Bar'"
+    "error_output": "error[E4005]: 关联类型未寻得\n --> example.yx:1:15\n  |\n1 | type Output = Foo::Bar;\n  |               ^ 于 'Foo' 中未寻得 'Bar'"
   },
   "E5001": {
     "title": "模块未寻得",
-    "message": "所引之模块不存",
+    "message": "所引之模块非有",
     "template": "模块 '{module}' 未寻得",
-    "help": "审模块路径，俾其存焉",
+    "help": "审模块路径，以保其存",
     "example": "use foo::bar;",
     "error_output": "error[E5001]: 模块未寻得\n --> example.yx:1:5\n  |\n1 | use foo::bar;\n  |     ^ 模块 'foo' 未寻得"
   },
   "E5002": {
     "title": "导入有误",
-    "message": "导入模块失",
-    "template": "导入模块 '{module}' 失：{reason}",
+    "message": "导入模块失败",
+    "template": "导入模块 '{module}' 失败：{reason}",
     "help": "审导入路径与模块解析",
     "example": "use std::unknown;",
-    "error_output": "error[E5002]: 导入有误\n --> example.yx:1:5\n  |\n1 | use std::unknown;\n  |     ^ 未得模块 'unknown'"
+    "error_output": "error[E5002]: 导入有误\n --> example.yx:1:5\n  |\n1 | use std::unknown;\n  |     ^ 未寻得模块 'unknown'"
   },
   "E5003": {
-    "title": "导出未获",
-    "message": "模中无此导出",
-    "template": "于模 '{module}' 中未获导出 '{export}'",
-    "help": "审模之导出",
+    "title": "导出未得",
+    "message": "模块中不存之导出",
+    "template": "于模块'{module}'中未得导出'{export}'",
+    "help": "审模块之导出",
     "example": "use std::foo;",
-    "error_output": "error[E5003]: 导出未获\n --> example.yx:1:5\n  |\n1 | use std::foo;\n  |     ^ 'foo' 非 'std' 之导出"
+    "error_output": "error[E5003]: 导出未得\n --> example.yx:1:5\n  |\n1 | use std::foo;\n  |     ^ 'foo'非'std'之导出"
   },
   "E5004": {
     "title": "循环依赖",
-    "message": "模存循环依赖",
-    "template": "检得循环依赖：{path}",
-    "help": "重构以去循环依赖",
+    "message": "模块存循环依赖",
+    "template": "察循环依赖：{path}",
+    "help": "重构以除循环依赖",
     "example": "mod a { use b; } mod b { use a; }",
     "error_output": "error[E5004]: 循环依赖\n --> example.yx:1:1\n  |\n1 | mod a { use b; } mod b { use a; }\n  | ^ 循环依赖：a -> b -> a"
   },
   "E6001": {
     "title": "除零之误",
     "message": "欲除以零",
-    "template": "算式 {expr} 除以零",
-    "help": "增设查验，以防除零",
+    "template": "算式{expr}除以零",
+    "help": "添检以防除以零",
     "example": "let x = 10 / 0;",
     "error_output": "error[E6001]: 除零之误\n --> runtime\n  |\n  | let x = 10 / 0;\n  |     ^ 除以零"
   },
   "E6003": {
-    "title": "数组索引逾界",
-    "message": "数组索引于运行之时逾界",
-    "template": "数组索引逾界：有效之域 0..{max}，得 {index}",
-    "help": "宜令索引处数组域中",
+    "title": "数组索引越界",
+    "message": "数组索引于运行时越界",
+    "template": "数组索引逾界：有效区间 0..{max}，今得 {index}",
+    "help": "须保索引在数组区间之内",
     "example": "let arr = [1, 2, 3]; println!(arr[10]);",
-    "error_output": "error[E6003]: 数组索引逾界\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ 索引十出于长度三"
+    "error_output": "error[E6003]: 数组索引逾界\n --> runtime\n  |\n  | println!(arr[10]);\n  |     ^ 索引 10 逾其长 3"
   },
   "E6008": {
     "title": "键不存",
     "message": "字典于运行时不得此键",
     "template": "键不存：{key}",
-    "help": "索引之前，先以 dict.has 察键之存否"
+    "help": "索引之前，先以 dict.has 审键之存否"
   },
   "E6004": {
     "title": "栈溢",
-    "message": "递归之深越于栈限",
-    "template": "栈溢：递归之深越限 {limit}",
-    "help": "减递归之深，或以迭代代之",
+    "message": "递归之深逾栈之限",
+    "template": "栈溢：递归之深逾限 {limit}",
+    "help": "减递归之深，或用迭代",
     "example": "fn foo() { foo(); } foo();",
     "error_output": "error[E6004]: 栈溢\n --> runtime\n  |\n  | fn foo() { foo(); } foo();\n  |     ^ 栈溢"
   },
@@ -535,55 +535,55 @@
     "title": "断言失",
     "message": "运行时断言失",
     "template": "断言失：{condition}",
-    "help": "正断言之条件，或与有效之输入",
+    "help": "修断言之据，或供有效之入",
     "example": "assert!(x > 0);",
     "error_output": "error[E6005]: 断言失\n --> runtime\n  |\n  | assert!(x > 0);\n  |     ^ 断言失：x > 0"
   },
   "E7001": {
-    "title": "文件未獲",
-    "message": "所指文件不存",
-    "template": "文件未獲：'{path}'",
-    "help": "审文件路径，期文件存焉",
+    "title": "文卷未获",
+    "message": "所指文卷不存",
+    "template": "文卷未获：「{path}」",
+    "help": "审视文卷路径，务保其存",
     "example": "let content = read(\"missing.txt\");",
-    "error_output": "error[E7001]: 文件未獲\n --> example.yx:1:19\n  |\n1 | let content = read(\"missing.txt\");\n  |                   ^ 文件 'missing.txt' 未獲"
+    "error_output": "error[E7001]：文卷未获\n --> example.yx:1:19\n  |\n1 | let content = read(\"missing.txt\");\n  |                   ^ 文卷「missing.txt」未获"
   },
   "E7002": {
     "title": "权限见拒",
-    "message": "访问文件之权弗足",
-    "template": "权限见拒：'{path}'",
-    "help": "审文件之权，或以适当之权运行",
+    "message": "通览文卷之权未足",
+    "template": "权限见拒：「{path}」",
+    "help": "审视文卷权限，或以相当之权运行",
     "example": "let content = read(\"/root/secret.txt\");",
-    "error_output": "error[E7002]: 权限见拒\n --> example.yx:1:19\n  |\n1 | let content = read(\"/root/secret.txt\");\n  |                   ^ '/root/secret.txt' 权限见拒"
+    "error_output": "error[E7002]：权限见拒\n --> example.yx:1:19\n  |\n1 | let content = read(\"/root/secret.txt\");\n  |                   ^ 「/root/secret.txt」权限见拒"
   },
   "E7003": {
-    "title": "I/O 误",
-    "message": "生未指明之 I/O 误",
-    "template": "I/O 误：{reason}",
-    "help": "审错误详情，以获更多信息",
+    "title": "I/O 错误",
+    "message": "未明之 I/O 错误生焉",
+    "template": "I/O 错误：{reason}",
+    "help": "审视错误详情，俾知其详",
     "example": "let content = read(\"/dev/full\");",
-    "error_output": "error[E7003]: I/O 误\n --> example.yx:1:19\n  |\n1 | let content = read(\"/dev/full\");\n  |                   ^ I/O 误：设备已满"
+    "error_output": "error[E7003]：I/O 错误\n --> example.yx:1:19\n  |\n1 | let content = read(\"/dev/full\");\n  |                   ^ I/O 错误：器已盈"
   },
   "E7004": {
-    "title": "网络之误",
-    "message": "生网络之误",
+    "title": "网络错误",
+    "message": "忽生网络之误",
     "template": "网络之误：{reason}",
-    "help": "审网络之连而复试之",
+    "help": "审网络之连通，再试之",
     "example": "let response = http_get(\"https://example.com\");",
-    "error_output": "error[E7004]：网络之误\n --> example.yx:1:21\n  |\n1 | let response = http_get(\"https://example.com\");\n  |                     ^ 连接见拒"
+    "error_output": "error[E7004]: 网络之误\n --> example.yx:1:21\n  |\n1 | let response = http_get(\"https://example.com\");\n  |                     ^ 连接见拒"
   },
   "E8001": {
-    "title": "内部编译器之误",
-    "message": "编译器内部生误",
-    "template": "内部编译器之误：{message}",
-    "help": "请于 https://github.com/ChenXu233/YaoXiang/issues/new 呈此误",
+    "title": "编译器内部之误",
+    "message": "编译器生内部之误",
+    "template": "编译器内部之误：{message}",
+    "help": "请于 https://github.com/ChenXu233/YaoXiang/issues/new 呈报此误",
     "example": "",
     "error_output": ""
   },
   "E8002": {
-    "title": "意外 Panic",
+    "title": "意外之 Panic",
     "message": "编译器逢意外之 panic",
     "template": "意外编译器 panic：{reason}",
-    "help": "请以 panic 详情呈此误",
+    "help": "请以 panic 详情呈报此误",
     "example": "",
     "error_output": ""
   },
@@ -597,103 +597,103 @@
   },
   "E1090": {
     "title": "✨ 不可言说 ✨",
-    "message": "君已触达YaoXiang之哲学边界",
+    "message": "君已臻 YaoXiang 哲学之境",
     "template": "Type: Type = Type",
-    "help": "此乃语言之源，编译器在此沉默",
+    "help": "此乃语言之源，编译器于此缄默",
     "example": "Type: Type = Type",
-    "zen_message": "\n╔══════════════════════════════════════════════════════════════╗\n║                                                               ║\n║   一生二，二生三，三生万物。                                      ║\n║   易有太极，是生两仪。                                           ║\n║                                                               ║\n║   Type: Type = Type                                             ║\n║   此乃爻象之源，语言之边界。                                     ║\n║   编译器在此沉默，哲学在此驻足。                                 ║\n║                                                               ║\n║   感君触达语言之哲学边界。                                       ║\n║                                                               ║\n╚══════════════════════════════════════════════════════════════╝"
+    "zen_message": "\n╔══════════════════════════════════════════════════════════════╗\n║                                                               ║\n║   一生二，二生三，三生万物。                                      ║\n║   易有太极，是生两仪。                                           ║\n║                                                               ║\n║   Type: Type = Type                                             ║\n║   此乃爻象之源，语言之边界。                                     ║\n║   编译器于此缄默，哲学于此驻足。                                 ║\n║                                                               ║\n║   谢君触此哲学之境。                                             ║\n║                                                               ║\n╚══════════════════════════════════════════════════════════════╝"
   },
   "E1091": {
     "title": "无效之泛型元类型",
-    "message": "泛型元类型之自引用乃所不许",
-    "template": "泛型元类型之自引用弗许：'{decl}'",
-    "help": "类型构造器若 'Type[T]' 弗能自引Type",
+    "message": "泛型元类型自引用，弗允也",
+    "template": "泛型元类型自引用弗允：'{decl}'",
+    "help": "'Type[T]' 之类构造器，弗得自引 Type",
     "example": "Type: Type[T] = { data: T }",
-    "error_output": "error[E1091]: 泛型元类型之自引用弗许：'Type: Type[T] = ...'"
+    "error_output": "error[E1091]: 泛型元类型自引用弗允：'Type: Type[T] = ...'"
   },
   "W1001": {
     "title": "未用之私有函数",
-    "message": "私有函数从未受调用",
+    "message": "私有函数未尝调用",
     "template": "未用之函数：'{name}'",
-    "help": "函数从未被引，可思删之或增其调用；pub函数者，对外之接口也，弗报此警",
+    "help": "函数未尝引用，可去之或增其调用；pub 函数乃对外接口，不发此警",
     "example": "fn dead_function() { }",
-    "error_output": "warning[W1001]: 未用之函数：'dead_function'\n --> example.yx:1:1\n  |\n1 | fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 函数从未被用"
+    "error_output": "warning[W1001]: 未用之函数：'dead_function'\n --> example.yx:1:1\n  |\n1 | fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 此函数未尝调用"
   },
   "W1002": {
-    "title": "未用私有类型",
-    "message": "私有类型未尝用之",
+    "title": "未用之私有类型",
+    "message": "私有类型素未用之",
     "template": "未用之类型：'{name}'",
-    "help": "类型未尝被引，可删之或用之；pub 类型乃对外之接口，不报此警",
+    "help": "类型从未被引，可去之或用之；pub 类型者，对外之接口也，不警此",
     "example": "type DeadType = Int",
-    "error_output": "warning[W1002]: 未用之类型：'DeadType'\n --> example.yx:1:1\n  |\n1 | type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 类型未尝用之"
+    "error_output": "warning[W1002]: 未用之类型：'DeadType'\n --> example.yx:1:1\n  |\n1 | type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 类型素未用之"
   },
   "W1003": {
     "title": "未用之导入",
-    "message": "导入之模块或符号未尝用之",
+    "message": "导入之模块或符号素未用之",
     "template": "未用之导入：'{name}'",
-    "help": "可删未用之导入",
-    "example": "use std.json; // json 未尝用之",
-    "error_output": "warning[W1003]: 未用之导入：'json'\n --> example.yx:1:1\n  |\n1 | use std.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: 导入未尝用之"
+    "help": "可去未用之导入",
+    "example": "use std.json; // json 素未用之",
+    "error_output": "warning[W1003]: 未用之导入：'json'\n --> example.yx:1:1\n  |\n1 | use std.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: 导入素未用之"
   },
   "W1004": {
-    "title": "未用私有变量",
-    "message": "私有变量未尝用之",
+    "title": "未用之私有变量",
+    "message": "私有变量素未用之",
     "template": "未用之变量：'{name}'",
-    "help": "变量未尝被引，可删之或用之；pub 变量乃对外之接口，不报此警",
+    "help": "变量从未被引，可去之或用之；pub 变量者，对外之接口也，不警此",
     "example": "dead_var = 42",
-    "error_output": "warning[W1004]: 未用之变量：'dead_var'\n --> example.yx:1:1\n  |\n1 | dead_var = 42\n  | ^^^^^^^^^^^^^\n  |\n  = note: 变量未尝用之"
+    "error_output": "warning[W1004]: 未用之变量：'dead_var'\n --> example.yx:1:1\n  |\n1 | dead_var = 42\n  | ^^^^^^^^^^^^^\n  |\n  = note: 变量素未用之"
   },
   "W1005": {
-    "title": "未用私有方法",
-    "message": "私有方法未尝被调",
+    "title": "未用之私有方法",
+    "message": "私有方法素未调之",
     "template": "未用之法：'{name}'",
-    "help": "此法未尝引用，可删之或增其调用；pub之法乃对外之接口，不报此警",
+    "help": "此法从无引用，宜删之或增其调用；pub 乃对外之接口，故不示此警",
     "example": "fn Foo.dead_method() { }",
-    "error_output": "warning[W1005]: 未用之法：'dead_method'\n --> example.yx:1:1\n  |\n1 | fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 此法未尝用焉"
+    "error_output": "warning[W1005]: 未用之法：'dead_method'\n --> example.yx:1:1\n  |\n1 | fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: 此法从未用之"
   },
   "E2014": {
     "title": "用已移之值",
-    "template": "'{name}' 已移，不可复用",
-    "help": "此值已归新主。若欲复用，当用引用或克隆之术。"
+    "template": "'{name}' 既已移主，不堪复用",
+    "help": "此值已归于新主。若欲复用，当以引用或克隆之。"
   },
   "E2016": {
-    "title": "不可变赋值",
-    "template": "不可变变量 '{name}'，不可赋之值",
-    "help": "当以 `mut` 宣变量，方可赋值。"
+    "title": "不可变之赋值",
+    "template": "不可变之变量 '{name}' 不可赋以值",
+    "help": "以 `mut` 宣其变量，方许赋值。"
   },
   "E2018": {
-    "title": "可变不可变借用相冲",
-    "template": "'{name}' 已为不可变所借，不可再可变借之",
-    "help": "须保创建可变引用之先，并无不可变引用存焉。"
+    "title": "可变、不可变借用相悖",
+    "template": "'{name}' 已为不可变所借，不可以可变借之",
+    "help": "宜先废其不可变之引，方可立可变之引。"
   },
   "E2019": {
-    "title": "二度释放",
-    "template": "值 '{name}' 二经释放",
-    "help": "须保其值只释一遭。"
+    "title": "双重释之",
+    "template": "值 '{name}' 释者再矣",
+    "help": "当令此值仅释一次。"
   },
   "E2020": {
-    "title": "释而复用",
+    "title": "释而后用",
     "template": "'{name}' 既释而复用",
-    "help": "当于释前用之，或重构其代码。"
+    "help": "当于未释之先用之，或重构其码。"
   },
   "E2027": {
-    "title": "unsafe 解引用",
-    "template": "unsafe 块外不得解引用裸指针",
+    "title": "unsafe 解其引",
+    "template": "裸指针之解引用，不可于 unsafe 块外为之",
     "help": "宜以 `unsafe` 块包裹解引用之操作。"
   },
   "E3004": {
-    "title": "迭代器之不协",
-    "template": "迭代器类型非所允：{iter_type}",
-    "help": "今所允者，唯范围与列表迭代器耳。"
+    "title": "未获支持之迭代器",
+    "template": "未获支持之迭代器类型：{iter_type}",
+    "help": "今者唯范围与列表迭代器获支持。"
   },
   "E3005": {
     "title": "IR 生成之误",
-    "template": "IR 生成有误：{message}",
-    "help": "此乃内部之误，恳请上报此患。"
+    "template": "IR 生成之误：{message}",
+    "help": "此乃内部之误，恳请上报此问题。"
   },
   "E3014": {
-    "title": "寄存器溢出",
-    "template": "寄存器溢出：{id} 逾其限 {limit}",
+    "title": "寄存器溢",
+    "template": "寄存器溢：{id} 逾限 {limit}",
     "help": "减局部变量之数，或简其表达式。"
   },
   "E3017": {
@@ -702,117 +702,117 @@
     "help": "审操作数之类型与用法。"
   },
   "E4010": {
-    "title": "常量除零",
+    "title": "常量除以零",
     "template": "常量表达式除以零",
-    "help": "须使常量表达式中之除数非零。"
+    "help": "务使常量表达式中之除数非零。"
   },
   "E4011": {
-    "title": "常量溢出",
-    "template": "常量表达式溢出",
-    "help": "常量表达式之果溢于类型之域。"
+    "title": "常量溢",
+    "template": "常量表达式溢",
+    "help": "常量表达式之果，溢于类型之界。"
   },
   "E4012": {
     "title": "常量递归过深",
-    "template": "常量求值逾最大递归深度 {limit}",
-    "help": "简常量表达式以省递归。"
+    "template": "常量求值，越最大递归之度 {limit}",
+    "help": "化简常量之式，以省递归。"
   },
   "E4014": {
     "title": "常量求值不成",
-    "template": "常量表达式不可求值：{reason}",
-    "help": "务使表达式可于编译期求值。"
+    "template": "常量之式不可求值：{reason}",
+    "help": "当令此式得于编译期求值。"
   },
   "E4018": {
-    "title": "精化谓词违",
-    "message": "精化类型约束见证为伪",
-    "template": "精化谓词违：{constraint}\n\n反例：\n{counterexample}",
-    "help": "谓词见证为伪——有赋值使约束为假。请审变量之值，或宽其约束。"
+    "title": "精化谓词被违",
+    "message": "精化类型之约束见驳",
+    "template": "精化谓词被违：{constraint}\n\n反例：\n{counterexample}",
+    "help": "谓词见驳——有赋值使约束为假。宜校变量之值，或宽其约束。"
   },
   "E4019": {
     "title": "类型等式不立",
-    "message": "类型等式于证明管道内见证为伪",
-    "template": "类型等式不立：所期 {expected}，所得 {found}",
-    "help": "审组件之类型演算，或供证函数。"
+    "message": "类型等式于证道内见驳",
+    "template": "类型等式不立：望 {expected}，实 {found}",
+    "help": "宜校组件之类型计算，或设证道之函数。"
   },
   "E5005": {
-    "title": "模块路径无效",
-    "template": "模块路径无效：'{path}'",
-    "help": "审模块路径之格式"
+    "title": "模块路径乖谬",
+    "template": "模块路径乖谬：'{path}'",
+    "help": "请核模块路径之制式"
   },
   "E5006": {
-    "title": "重复导入",
-    "template": "重复导入：'{name}' 既已导入",
+    "title": "导入重复",
+    "template": "导入重复：'{name}' 已导入矣",
     "help": "去除重复之导入语句"
   },
   "E5007": {
     "title": "模块导出",
-    "template": "模块'{module}'之导出：{available}",
-    "help": "可用之导出，列于错误消息中"
+    "template": "模块 '{module}' 之导出：{available}",
+    "help": "可导出者列于错误消息中"
   },
   "E6006": {
     "title": "函数未获（运行时）",
     "template": "函数未获：'{func}'",
-    "help": "务须函数已然定义，且拼写无误"
+    "help": "须确保函数已定义而拼写无误"
   },
   "E6007": {
-    "title": "运行时之误",
-    "template": "运行时之误：{message}",
-    "help": "详审错误消息，以察其详"
+    "title": "运行时之错",
+    "template": "运行时之错：{message}",
+    "help": "查阅错误消息以悉详情"
   },
   "E0016": {
     "title": "期得表达式",
     "message": "解析器期得一表达式",
     "template": "期得表达式：{context}",
-    "help": "于此处当供有效之表达式",
+    "help": "于此处供一有效之表达式",
     "example": "x = ;",
-    "error_output": "error[E0016]: 期得表达式\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ 期得'='后之表达式"
+    "error_output": "error[E0016]: 期得表达式\n --> example.yx:1:5\n  |\n1 | x = ;\n  |     ^ 期得 '=' 后之表达式"
   },
   "E0018": {
-    "title": "关键字为名",
+    "title": "以关键字为名",
     "message": "关键字不可用作变量或表达式之名",
-    "template": "'{keyword}'乃关键字，不可用为名",
-    "help": "当以异标识符代之",
+    "template": "'{keyword}' 乃关键字，不可用于名",
+    "help": "另择异标识符以代关键字",
     "example": "if = 1;",
-    "error_output": "error[E0018]: 关键字以作名\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' 乃关键字"
+    "error_output": "error[E0018]: 关键字作名称\n --> example.yx:1:1\n  |\n1 | if = 1;\n  | ^^ 'if' 乃关键字"
   },
   "E1062": {
-    "title": "const 泛型约束不立",
-    "message": "const 泛型参数之值约束不遂",
-    "template": "const 泛型约束不立: `{constraint}` 不成",
-    "help": "更易 const 参数之值，以合约束",
-    "example": "BadArray(Int, 0)  // Assert(0 > 0) 不立",
-    "error_output": "error[E1062]: const 泛型约束不立\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 约束 `N > 0` 不成 (N = 0)"
+    "title": "const 泛型之约束未遂",
+    "message": "const 泛型参数之值约束未得满足",
+    "template": "const 泛型之约束未遂：`{constraint}` 不立",
+    "help": "更易 const 参数之值，使合于约束",
+    "example": "BadArray(Int, 0)  // 断言(0 > 0) 未遂",
+    "error_output": "error[E1062]: const 泛型之约束未遂\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, 0)\n  | ^ const 约束 `N > 0` 不立 (N = 0)"
   },
   "W1063": {
-    "title": "const 泛型约束弗能求值",
-    "message": "const 泛型参数之值约束弗能于编译期求值",
-    "template": "const 泛型约束弗能求值: `{constraint}` ({var} = {value})",
-    "help": "务使 const 参数为编译期常量",
-    "example": "BadArray(Int, n)  // n 非编译期常量",
-    "error_output": "warning[W1063]: const 泛型约束弗能求值\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 弗能于编译期求值约束 `N > 0`"
+    "title": "const 泛型之约束难于求值",
+    "message": "const 泛型参数之值约束难于编译期求值",
+    "template": "const 泛型之约束难于求值：`{constraint}` ({var} = {value})",
+    "help": "务使 const 参数为编译期之常量",
+    "example": "BadArray(Int, n)  // n 非编译期之常量",
+    "error_output": "warning[W1063]: const 泛型之约束难于求值\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ `N > 0` 约束编译期难于求值"
   },
   "E1092": {
     "title": "精化类型实参之形非法",
-    "message": "精化类型实参弗能化为编译期常量之式",
-    "template": "'{name}' 须编译期常量实参，然所授实参弗能化",
-    "help": "谓词/证明函数之实参必为字面量、变量或单参数类型之应，否则精化约束弗能成",
+    "message": "精化类型实参不能化为编译期常量之式",
+    "template": "'{name}' 须编译期常量实参，然所予实参不能化",
+    "help": "谓词/证明函数之实参必为字面量、变量或单参类型之用，否则精化约束无由生",
     "example": "y: IsSmall(List(Int)) = 9999",
-    "error_output": "error[E1092]: 'IsSmall' 须编译期常量实参，然所授实参弗能化"
+    "error_output": "error[E1092]: 'IsSmall' 须编译期常量实参，然所予实参不能化"
   },
   "E1093": {
-    "title": "精化实参之数不匹",
-    "message": "谓词/证明函数实参之数不匹",
-    "template": "'{name}' 望 {expected} 实参，乃得 {found}",
-    "help": "实参之数必与谓词之陈相符，否则精化约束弗能成",
+    "title": "精化实参之数不合",
+    "message": "谓词/证明函数实参之数不合",
+    "template": "'{name}' 望 {expected} 实参，实有 {found}",
+    "help": "实参之数须与谓词所陈相符，否则精化约束无由生",
     "example": "y: IsSmall(1, 2) = 5",
     "error_output": "error[E1093]: 'IsSmall' 望一实参，实有二"
   },
   "E1094": {
-    "title": "未用之编译期值参数",
-    "message": "编译期值参数未于类型体中援引",
-    "template": "'{param}' 陈为 '{type}' 之编译期值参数，然未于类型体中援引",
-    "help": "请于类型之位（字段类型、内层 Fn 参数类型、Assert/Array 类型实参）援引此参，或自所陈中删之",
+    "title": "未用之编译期值参",
+    "message": "编译期值参未于类型体中援引",
+    "template": "'{param}' 列为 '{type}' 之编译期值参，然未于类型体中援引",
+    "help": "请于类型之位（字段类型、内层 Fn 参数类型、Assert/Array 类型实参）援引此参，或自所列中除之",
     "example": "Foo: (T: Type, N: Int) -> Type = { x: T }",
-    "error_output": "error[E1094]: 'N' 陈为 'Foo' 之编译期值参数，然未于类型体中援引"
+    "error_output": "error[E1094]: 'N' 列为 'Foo' 之编译期值参，然未于类型体中援引"
   },
   "lex_token_identifier": "词法分析：标识符 {0}",
   "lex_token_keyword": "词法分析：关键字 {0}",
@@ -822,262 +822,268 @@
   "lex_token_operator": "词法分析：运算符 {0}",
   "lex_token_punctuation": "词法分析：标点 {0}",
   "vm_call_func": "调函数：{0}",
-  "vm_return_func": "函数归",
-  "vm_i64_add": "运算 {0} + {1}",
-  "debug_loading_function": "载函数 '{0}' 入解译器",
-  "debug_total_functions": "已载函数之数：{0}",
-  "debug_available_functions": "可用之函数：{0}",
-  "debug_exec_binary_op": "行二元算：左={0}，右={1}，算={2}",
+  "vm_return_func": "函数返",
+  "vm_i64_add": "算 {0} + {1}",
+  "debug_loading_function": "载函数 '{0}' 入解释器",
+  "debug_total_functions": "已载函数凡 {0}",
+  "debug_available_functions": "可用函数：{0}",
+  "debug_exec_binary_op": "行二元算：左={0}, 右={1}, 算={2}",
   "debug_adding_numbers": "算 {0} + {1}",
   "debug_generating_ir_binop": "为二元算生 IR {0}",
-  "ir_gen_enter_scope": "调试 IR 生成：入作用域，符号栈深度前：{0}",
+  "ir_gen_enter_scope": "调试 IR 生成：入作用域，符号栈深度之前：{0}",
   "ir_gen_exit_scope": "调试 IR 生成：出作用域，符号栈深度：{0}",
   "ir_gen_register_local": "调试 IR 生成：注册局部变量 '{0}'，local_idx={1}",
-  "ir_gen_lookup_local": "调试 IR 生成：查找局部变量 '{0}' -> local_idx={1}",
-  "ir_gen_lookup_local_not_found": "调试 IR 生成：查局部变量 '{0}' -> None",
-  "ir_gen_before_process_stmt": "调试 IR 生成：处理语句前，符号深度={0}",
-  "ir_gen_after_process_stmt": "调试 IR 生成：处理语句后，符号深度={0}",
-  "ir_gen_about_to_exit_scope": "调试 IR 生成：即将出作用域，符号深度={0}",
-  "ir_gen_after_exit_scope": "调试 IR 生成：出作用域后，符号深度={0}",
-  "parser_test_parsed_params": "已析参数：{0:?}",
-  "parser_test_parsed_return_type": "已析返回类型：{0:?}",
-  "parser_test_parsed_as_var": "析为变量而非函数",
-  "parser_test_name": "名：{0}",
-  "parser_test_annotation": "注解：{0:?}",
-  "package_no_deps_to_update": "无依赖需更。",
-  "package_no_deps_to_install": "无依赖需装。",
-  "package_deps_updated": "✓ 已更 {0} 个依赖：",
-  "package_deps_resolved": "✓ 已析 {0} 个依赖：",
-  "package_dep_installed": "已装",
-  "package_dep_cached": "已蓄",
-  "package_deps_install_failed": "⚠ {0} 个依赖装败：",
-  "package_lock_updated": "已更 yaoxiang.lock",
-  "package_no_deps": "无依赖。",
-  "package_dev_dep_added": "✓ 已添开发依赖 '{0}' ({1})",
-  "package_dep_added": "✓ 已增依赖 '{0}'（{1}）",
-  "package_dev_dep_removed": "✓ 已删开发依赖 '{0}'",
-  "package_dep_removed": "✓ 已删依赖 '{0}'",
-  "package_project_created": "✓ 已建项目 '{0}'",
-  "package_lock_generated": "# 此文乃 yaoxiang 自动所生，切勿手自删改。",
-  "package_update_failed": "⚠ {0} 更新未遂：{1}",
+  "ir_gen_lookup_local": "调试 IR 生成：寻局部变量 '{0}' -> local_idx={1}",
+  "ir_gen_lookup_local_not_found": "調試 IR 生成：覈局部變量 '{0}' -> None",
+  "ir_gen_before_process_stmt": "調試 IR 生成：治語句前，符號深度={0}",
+  "ir_gen_after_process_stmt": "調試 IR 生成：治語句後，符號深度={0}",
+  "ir_gen_about_to_exit_scope": "調試 IR 生成：將退作用域，符號深度={0}",
+  "ir_gen_after_exit_scope": "調試 IR 生成：退作用域後，符號深度={0}",
+  "parser_test_parsed_params": "析參數：{0:?}",
+  "parser_test_parsed_return_type": "析返類型：{0:?}",
+  "parser_test_parsed_as_var": "析為變量而非函數",
+  "parser_test_name": "名曰：{0}",
+  "parser_test_annotation": "註：{0:?}",
+  "package_no_deps_to_update": "無依賴待新。",
+  "package_no_deps_to_install": "無依賴待裝。",
+  "package_deps_updated": "✓ 已新 {0} 依賴：",
+  "package_deps_resolved": "✓ 已析 {0} 依賴：",
+  "package_dep_installed": "已裝",
+  "package_dep_cached": "已存",
+  "package_deps_install_failed": "⚠ {0} 依賴裝敗：",
+  "package_lock_updated": "已新 yaoxiang.lock",
+  "package_no_deps": "無依賴。",
+  "package_dev_dep_added": "✓ 已增開發依賴 '{0}' ({1})",
+  "package_dep_added": "✓ 增依赖 '{0}' ({1})",
+  "package_dev_dep_removed": "✓ 除开发依赖 '{0}'",
+  "package_dep_removed": "✓ 除依赖 '{0}'",
+  "package_project_created": "✓ 建项目 '{0}'",
+  "package_lock_generated": "# 此文件由 yaoxiang 自动生成，勿手自改之。",
+  "package_update_failed": "⚠ {0} 更新弗成：{1}",
   "E3006": {
-    "title": "变量未析",
-    "template": "IR 生成内部有误：变量 '{name}' 未得解析",
-    "help": "变量引用于 IR 生成之阶尚未解析，足见类型检查器有所疏漏。此乃编译器内部一致之患，恳请上报此患。"
+    "title": "未解析之变量",
+    "template": "IR 生成之内部误：变量 '{name}' 未得解析",
+    "help": "变量引用至 IR 生成之阶犹未解析，乃类型检查器之疏漏也。此编译器内部一致之失，恳请上报此问题。"
   },
   "E3007": {
-    "title": "顶层绑定之初值必为常量",
-    "template": "顶层绑定 '{name}' 之初值必为编译期常量表达式",
-    "help": "顶层绑定乃编译期常量（访问器函数直返折叠之值），不允运行时所算之初值。宜将所算改为字面量或常量之算，或移入函数体中。"
+    "title": "顶层绑定之初始化必为常量",
+    "template": "顶层绑定 '{name}' 之初始化，必为编译期之常量表达式",
+    "help": "顶层绑定者，编译期之常量也（访问器函数直返折叠之值），不纳运行时之计算。宜改为字面量或常量之算，或移诸函数体内。"
   },
   "E1095": {
-    "title": "未知接口",
-    "message": "未知接口",
-    "template": "未知接口：'{name}'（类型体所引之名，非已注册之类型构造器）",
-    "help": "当审名之拼写，或先以 `Iface: (Self: Type) -> Type = {{ ... }}` 声明之"
+    "title": "接口未识",
+    "message": "接口未识",
+    "template": "接口未识：'{name}'（类型体所引之名非已注册之类型构造器）",
+    "help": "审其名之拼写，或先以 `Iface: (Self: Type) -> Type = {{ ... }}` 宣此接口"
   },
   "E1096": {
-    "title": "接口参数之数不协",
-    "message": "接口参数之数不协",
-    "template": "接口 '{name}' 冀 {expected} 个类型参数，实得 {found} 个",
-    "help": "当依接口所声明之类型参数之数而供实参"
+    "title": "接口之参数其数不合",
+    "message": "接口之参数其数不合",
+    "template": "接口 '{name}' 期类型之参 {expected}，乃得 {found}",
+    "help": "依接口所宣类型参之数以供实参"
   },
   "E1097": {
     "title": "接口成员命名相冲",
     "message": "接口成员命名相冲",
-    "template": "类型 '{type}' 之成员 '{member}' 与接口成员相冲（字段与方法共命名之域，§1.2）",
-    "help": "更字段或接口成员之名"
+    "template": "类型 '{type}' 之成员 '{member}' 与接口之成员相冲（字段与方法共其命名之域，§1.2）",
+    "help": "更其字段或接口成员之名"
   },
   "E1098": {
-    "title": "接口方法未备",
-    "message": "接口方法未备",
-    "template": "类型 '{type}' 未备接口 '{interface}' 之方法 '{method}'",
-    "help": "当以 `Type.method: 签名 = ...` 声明此法，或于类型体内供其绑定"
+    "title": "接口之法未行",
+    "message": "接口之法未行",
+    "template": "类型 '{type}' 未行接口 '{interface}' 之法 '{method}'",
+    "help": "以 `Type.method: 签名 = ...` 宣此法，或于类型体内与之绑定"
   },
   "E1099": {
-    "title": "接口方法签名不协",
-    "message": "接口方法签名不协",
-    "template": "类型 '{type}' 之方法 '{method}' 与接口之签名不合：冀 {expected}，实 {found}",
-    "help": "务使实现之签名与接口成员之签名毕同（§3 禁覆盖，许重载）"
+    "title": "接口之法其签名不合",
+    "message": "接口之法其签名不合",
+    "template": "类型 '{type}' 之法 '{method}' 与接口之签名不符：期 {expected}，实 {found}",
+    "help": "使所行之签名与接口成员之签名全然相符（§3 禁覆盖，许重载）"
   },
   "E1100": {
-    "title": "接口方法重复实现",
-    "message": "接口方法重复实现",
-    "template": "类型 '{type}' 之方法 '{method}' 重复实现（同签名之覆盖见禁，§3）",
-    "help": "删其重复，存一即可"
+    "title": "接口之法重复实现",
+    "message": "接口之法重复实现",
+    "template": "类型 '{type}' 之法 '{method}' 重复实现（同签覆写见禁，§3）",
+    "help": "删其重复，留其一"
   },
   "E1101": {
-    "title": "类型未实现接口",
-    "message": "类型未实现接口",
-    "template": "类型 '{type}' 未实现接口 '{interface}'，不得入此存在类型之位",
-    "help": "实现该接口之诸成员，并于类型体内实例之（如 `Animal(Dog)`）；若 RFC-011b 之景（相等/运算符），宜为类型实现相应之接口，线性令牌字段须先除去"
+    "title": "类型未践接口",
+    "message": "类型未践接口",
+    "template": "类型 '{type}' 未践接口 '{interface}'，不可入此存在类型之位",
+    "help": "须践此接口之诸成员，并于类型体内实例之（如 `Animal(Dog)`）；若 RFC-011b 之景（相等/运算符），当为类型践对应之接口，线性令牌之字段宜先除之"
   },
   "E1102": {
-    "title": "循环控制之文出于循环外",
-    "message": "break/continue 唯可用于 while/for 循环体中",
-    "template": "'{keyword}' 出于循环外",
-    "help": "移 '{keyword}' 入 while/for 循环体中"
+    "title": "循环制御之语出于循环之外",
+    "message": "break/continue 唯可行于 while/for 循环之内",
+    "template": "'{keyword}' 出于循环之外",
+    "help": "移 '{keyword}' 入 while/for 循环之内"
   },
   "E1064": {
-    "title": "绑定位置索引无效",
-    "template": "绑定位置索引无效：{positions}（函数共 {total} 参数）",
-    "help": "绑定位置须落于被绑函数之参数范围内（越界或归一后仍为负）。请审方法绑定之位置编号。"
+    "title": "绑定之位索引无效",
+    "template": "绑定之位索引无效：{positions}（函数共 {total} 参数）",
+    "help": "绑定之位须落被绑函数之参数域中（越界或归一之后犹为负）。请审方法绑定之位编号。"
   },
   "E4020": {
-    "title": "需证明函数",
-    "message": "约束弗可于编译期证，须供证明函数",
-    "template": "需证明函数以验约束",
-    "help": "添证明函数，或供运行时检查"
+    "title": "需证之函数",
+    "message": "约束难证于编译期，须供证之函数",
+    "template": "需证之函数以验约束",
+    "help": "增益证之函数，或供运行期之检"
   },
   "W1080": {
     "title": "编译期证明降级",
-    "message": "约束于编译期未可证立，已降为运行时查验",
-    "template": "编译期未能证约束，已降为运行时查验",
-    "help": "宜增证验之函，以固其安"
+    "message": "约束无以于编译期证之，已降为运行时检查",
+    "template": "编译期无以证此约束，已降为运行时检查",
+    "help": "盍添证明函数以增其安全性"
   },
   "E6009": {
     "title": "Range 步长非法",
     "message": "Range 之步长须非零",
     "template": "Range 步长非法：step = {step}",
-    "help": "iter/contains 须动态步长非零，请审步长之式"
+    "help": "iter/contains 须动态步长非零，请审步长之表达式"
   },
   "E6010": {
-    "title": "整数解析未成",
-    "message": "字符串未能析为整数",
-    "template": "整数解析未成：{input}",
-    "help": "审字符串是否合规整数（可具正负之号）"
+    "title": "整数解析失败",
+    "message": "字符串无以解析为整数",
+    "template": "整数解析失败：{input}",
+    "help": "审字符串是否为合法之整数（可含正负之号）"
   },
   "E6011": {
-    "title": "浮点解析未成",
-    "message": "字符串未能析为浮点数",
-    "template": "浮点解析未成：{input}",
-    "help": "审字符串是否合规浮点数"
+    "title": "浮点解析失败",
+    "message": "字符串无以解析为浮点数",
+    "template": "浮点解析失败：{input}",
+    "help": "审字符串是否为合法之浮点数"
   },
   "E2029": {
-    "title": "spawn 内引用成环",
-    "message": "spawn 块内察引用成环",
-    "template": "spawn 内引用成环：{cycle}",
-    "help": "spawn 所获之引用不可成环，请审捕获之表"
+    "title": "spawn 内引用循环",
+    "message": "spawn 块内察引成环",
+    "template": "spawn 内引成环：{cycle}",
+    "help": "spawn 所获之引不得成循环之依，请审获之列"
   },
   "E3008": {
-    "title": "match 模式之不协",
-    "template": "match 模式 '{pattern}' 尚未施行：今所允者，唯字面量与通配符（_）模式耳。",
-    "help": "变体解构（ok(v)/err(e)/some(x)）、结构、元组、或模式与守卫，尚未施行（RFC-010b 筹议中）。旧时实现静默讹译，今则于编译期拒之。理 Result 者，请用 `?` 运算符。"
+    "title": "未获支持之 match 模式",
+    "template": "match 模式 '{pattern}' 犹未实现：今者唯字面量与通配符（_）模式获支持",
+    "help": "变体解构（ok(v)/err(e)/some(x)）、结构体、元组、模式与守卫诸法，犹未施行（RFC-010b 规划中）。曩者此实现静默而误译，今则于编译期拒之。处理 Result 者，请改用 `?` 运算符。"
   },
   "E3018": {
     "title": "单态化实例化之败",
-    "template": "泛型 '{func}' 实例化有误：{reason}",
-    "help": "单态化器未能按类型实参生成特化之版（常见之因：类型实参之数与泛型参数不侔）。曩者此误静默跳过，唯运行之时方报「函数表之缺」。"
+    "template": "泛型 '{func}' 实例化之败：{reason}",
+    "help": "单态化器不能依类型实参生成特化之版（常见之因：类型实参数与泛型参数不相应）。曩者此误静默而越，唯于运行时方报「函数表缺失」。"
   },
   "E2030": {
-    "title": "精化类型约束之违",
-    "template": "既以 '{assigned}' 赋之，'{var}' 不复满足精化类型之约束：{constraint}（反例：{counterexample}）",
-    "help": "精化类型之标注，须所依之变量于相关赋值之后仍合谓词之约束。请调其赋值以使约束立，或宽类型之标注。"
+    "title": "违精化类型之约束",
+    "template": "赋 '{assigned}' 之后，'{var}' 不复惬精化类型之约束：{constraint}（反例：{counterexample}）",
+    "help": "精化类型之标，须依其变量于相关赋值之后仍惬谓词之约束。请调其赋值使约束立，或宽类型之标。"
   },
   "E3019": {
     "title": "顶层绑定循环相依",
     "template": "顶层绑定之初始化成循环相依：{cycle}",
-    "help": "破其环：改其一绑定之初始化，俾不援引环内他绑定，或以函数延后求值。"
+    "help": "破其环：择其一绑定，改其初始化，使不引环内他绑定；或以函数延求值。"
   },
   "E3020": {
     "title": "缺程序入口",
     "template": "可执行文件缺 main 函数（{path}）",
-    "help": "定义入口：main = { ... }。Bin 角色若无 main，则诸函数皆弗可达。"
+    "help": "定义入口：main = { ... }。Bin 角色下若无 main，则诸函数皆不可达。"
   },
   "E3021": {
     "title": "入口非函数",
-    "template": "程序入口 '{name}' 须为函数，然其为值绑定",
-    "help": "入口须可调用：书作 main = { ... } 或 main: () -> Void = { ... }；值绑定（如 main: Int = 5）弗被执行。"
+    "template": "程序入口 '{name}' 须为函数，然乃值绑定",
+    "help": "入口须可调用：作 main = { ... } 或 main: () -> Void = { ... }；值绑定（如 main: Int = 5）不将执行。"
   },
   "E1065": {
-    "title": "以非函数之值调用",
+    "title": "调用非函数之值",
     "template": "类型 `{type}` 不可调用——非函数也",
-    "help": "唯函数值可调用耳。请审此处表达式之类型；欲定函数，须作 Fn 注 `f: () -> T = { ... }`。"
+    "help": "唯函数值可被调用。请审此处表达式之类型；欲定义函数，须书 Fn 注解 `f: () -> T = { ... }`。"
   },
   "E3022": {
     "title": "入口 main 签不合",
-    "template": "入口 '{name}' 之符不合：运行期以无参召之，而所需为 '{expected}'，实则 '{found}'",
-    "help": "程序入口恒以无参数之制召之。请作 main 为无参之形 `main: () -> Void = { ... }`；若需外来之入，可用 std.os 之 argv、环境变量。"
+    "template": "入口 '{name}' 之签不合：运行期以无参召之，而其需 '{expected}'，实则 '{found}'",
+    "help": "程序之口常以无参之式被召。请书 main 为无参之形 `main: () -> Void = { ... }`；需外输者，请用 std.os 之 argv/环境变量。"
   },
   "E1014": {
-    "title": "命名参数名未识",
-    "message": "调用所施之参数名不列函数形参中",
-    "template": "函数 '{func}' 无 '{name}' 之参数（可用：{params}）",
-    "help": "改循形参表所列之名，或依位次传参",
+    "title": "命名参数名未知",
+    "message": "调用时所标参数名不在函数形参之列",
+    "template": "函数 '{func}' 无名曰 '{name}' 之参数（可用者：{params}）",
+    "help": "宜改用形参所列之名，或按位次传参",
     "example": "add(b = 1, c = 2);",
-    "error_output": "error[E1014]: 命名参数名未识\n --> example.yx:1:1\n  |\n1 | add(b = 1, c = 2);\n  |     ^ 函数 'add' 无 'c' 之参数（可用：a, b）"
+    "error_output": "error[E1014]: 命名参数名未知\n --> example.yx:1:1\n  |\n1 | add(b = 1, c = 2);\n  |     ^ 函数 'add' 无名曰 'c' 之参数（可用者：a, b）"
   },
   "E1015": {
     "title": "参数重复指定",
-    "message": "同一形参以位次实参、命名实参同时指定",
-    "template": "函数 '{func}' 之参数 '{name}' 被重复指定",
-    "help": "每参数仅可传一次：去其冗余之命名实参或位次实参",
+    "message": "同一形参既以位次实参指定，复以命名实参指定",
+    "template": "函数 '{func}' 之参数 '{name}' 重复指定",
+    "help": "每参数仅可传一次：宜去冗余之命名实参或位次实参",
     "example": "add(1, a = 2);",
-    "error_output": "error[E1015]: 参数重复指定\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ 函数 'add' 之参数 'a' 被重复指定"
+    "error_output": "error[E1015]: 参数重复指定\n --> example.yx:1:1\n  |\n1 | add(1, a = 2);\n  |          ^ 函数 'add' 之参数 'a' 重复指定"
   },
   "E3023": {
-    "title": "顶层不允可执行之语句",
-    "message": "Bin 角色之程序主体为 main，顶层唯可声明",
-    "template": "Bin 角色（设有 yaoxiang.toml 者）下顶层不允可执行之语句——程序之体即 main",
-    "help": "请移此语句入 main 函数之体；若实欲以顶层语句为程序之体，则去 yaoxiang.toml 而改用 Script 之制（无 manifest 时顶层语句依书写之序而行）。"
+    "title": "顶层不许可执行之辞",
+    "message": "Bin 之体为 main，顶层唯宣而已",
+    "template": "Bin 之格（有 yaoxiang.toml）下顶层不许可执行之辞——程序之体即 main",
+    "help": "移此辞入 main 函数之体；若果欲以顶层之辞为程序之体，则去 yaoxiang.toml 改用 Script 之格（无 manifest 时顶层之辞依书次之行）。"
   },
   "E1103": {
-    "title": "类型之位不可用方括号",
-    "message": "类型实参用圆括号，方括号者值级之下标也",
-    "template": "'{name}[...]' 非类型之语法——类型实参当用圆括号",
-    "help": "当作 `{name}(...)`。方括号者**值级**之下标也（如 `list[0]`），类型之位唯可书圆括号：`List(Int)` 而非 `List[Int]`。"
+    "title": "类型之位不得用方括",
+    "message": "类型之实参用圆括，方括者值级之下标也",
+    "template": "'{name}[...]' 非类型之语法——类型实参须用圆括",
+    "help": "书作 `{name}(...)`。方括者**值级**之下标也（`list[0]`），类型之位唯可书圆括：`List(Int)` 而非 `List[Int]`。"
   },
   "E1104": {
-    "title": "接口之实现不在类型之定义模块",
-    "message": "运算符接口之实现必书于类型之定义模块中",
+    "title": "接口实现非在类型之定义模块",
+    "message": "运算符接口实现必书于类型之定义模块",
     "template": "类型 '{type}' 非本模块所定义，不得于本模块为其实现接口 '{interface}'",
-    "help": "孤儿之制：实现从于类型之定义模块。唯可为本模块所定义之类型作接口之实例（如 `Add(Point, Point, Point)`）；内建之类型（Int/List 等）其运算符之接口由核心所供，不可增补。"
+    "help": "孤儿之规：实现随类型之定义模块。唯本模块所定义之类型可书接口实例化（如 `Add(Point, Point, Point)`）；内建类型（Int/List 等）之运算符接口由核心所供，不可补"
   },
   "E1105": {
-    "title": "变体构造器不可作字段访之",
-    "message": "变体构造器唯以 类型.变体(...) 之调用形态用之",
-    "template": "'{variant}' 乃和类型 '{type}' 之变体构造器，非数据字段",
-    "help": "构造值当书 `{type}.{variant}(...)`；自和类型值取载荷，用 match 变体解构（RFC-010b）。和类型之记录字段皆升为变体，运行时值弗携字段表"
+    "title": "变体构造器不可以为字段而访问",
+    "message": "变体构造器唯可以 类型.变体(...) 之调用形态而用",
+    "template": "'{variant}' 者，和类型 '{type}' 之变体构造器也，非数据字段",
+    "help": "构造值书 `{type}.{variant}(...)`；自和类型之值取回载荷用 match 变体解构（RFC-010b）。和类型之记录字段悉升为变体，运行时之值不携字段表"
   },
   "E4021": {
-    "title": "循环终性弗克自证",
-    "message": "编译者弗克为兹循环合递减度量，弗克自证其终也",
-    "template": "循环终性弗克自证：未得合宜之递减度量",
-    "help": "此乃编译者自推所覆之界，非程序之过也。宜改用具显明递减变量之循环（如每轮减一有下界之计数变量），或参阅 RFC-027 §7 度量之策与覆盖之域。"
+    "title": "循环之终止性难自证",
+    "message": "编译器未克为此循环合成递减度量，无以自动证其终止",
+    "template": "未能证此循环终止：未得有效之递减度量",
+    "help": "此乃编译器自动推理之覆盖所及，非程序之过也。盍改用具明确递减变量之循环（如每轮减一有下界之计数变量），或参阅 RFC-027 §7 所载度量策略及覆盖范围。"
   },
   "E1032": {
-    "title": "模式重綁",
-    "message": "同一模式內 '{name}' 綁定屢矣",
-    "template": "模式重綁：'{name}' 同一模式中屢現",
-    "help": "一模式中同名僅可一綁；若欲匹配同字段二者，請用異名（與Rust語義同）"
+    "title": "模式重名之绑",
+    "message": "同一模式之中 '{name}' 绑定者数矣",
+    "template": "模式重名之绑：'{name}' 于同一模式之中数见也",
+    "help": "一模式之中，每名唯可一绑；欲匹两同字段，请用异名（Rust 之义亦同）"
   },
   "E1033": {
-    "title": "或模式綁定不一",
-    "message": "`|` 諸備選所綁名集各異",
-    "template": "或模式綁定不一：`|` 兩側須綁同名之集",
-    "help": "或模式 `a(x) | b(x)` 各備選必引全然相同之綁定名（與Rust語義同）"
+    "title": "或模式之绑不一",
+    "message": "`|` 各备所绑之名集异也",
+    "template": "或模式之绑不一：`|` 之两畔所绑之名集宜同",
+    "help": "或模式 `a(x) | b(x)` 之每备所引入之绑名宜悉同（Rust 之义亦同）"
   },
   "E1034": {
-    "title": "結構模式缺字段",
-    "message": "結構模式未覆字段 '{field}'",
-    "template": "結構模式缺字段 '{field}'（'{struct}' 之字段須全覆）",
-    "help": "結構模式須列舉全部字段；`..` 略名今未之支持"
+    "title": "结构体模式缺字段",
+    "message": "结构体模式未覆字段 '{field}'",
+    "template": "结构体模式缺字段 '{field}'（'{struct}' 之字段须全覆也）",
+    "help": "结构体模式宜悉列诸字段；`..` 略名尚未支持"
   },
   "E1106": {
-    "title": "約束不立",
-    "message": "類 `{type}` 未踐接口 `{interface}`（約束 `{param}: {interface}`）",
-    "template": "類 `{type}` 未踐 `{interface}`——泛型參數 `{param}` 之約束 `{param}: {interface}` 於此調用之處不立",
-    "help": "為此類踐相應之接口（於類體內書接口實例化並定義方法），或改用已踐此接口之實參"
+    "title": "约束未惬",
+    "message": "类型 '{type}' 未行接口 '{interface}'（约束 '{param}: {interface}'）",
+    "template": "类型 '{type}' 未行 `{interface}`——泛型参 `{param}` 之约束 `{param}: {interface}` 于此调用点弗立",
+    "help": "为此类型行相应接口（于类型体内书接口实例并定义方法），或改用已行此接口之实参"
   },
   "E1107": {
-    "title": "方法重载之歧",
-    "message": "'{key}' 有 {count} 候选之合，莫能裁决",
-    "template": "方法重载之歧：'{key}' 有 {count} 候选之合，弗克甄别",
-    "help": "于调用之果增类型注解（如 `x: T = obj.m()`），或使重载候选之参类型可辨"
+    "title": "方法重载之歧义",
+    "message": "'{key}' 有候选匹配 {count} 处，莫能决之",
+    "template": "方法重载之歧义：'{key}' 有候选匹配 {count} 处，莫能辨之",
+    "help": "于调用结果添类型注解（如 `x: T = obj.m()`），或令重载候选之参类型可辨"
   },
   "E2031": {
-    "title": "精化之约束，未克证成",
-    "template": "对 '{assigned}' 赋值之后，'{var}' 之精化类型约束：{constraint}，于证明内核之内，弗能静态证成",
-    "help": "RFC-027 规：凡精化之约束，皆须于编译期证之；弗克证者，即为编译之误。宜改写约束，使其实参得静态取值（字面量，或可折为字面量之式），或别备归 Type 之证明函数，以行于编译期。"
+    "title": "精化之约束莫能证",
+    "template": "赋 '{assigned}' 之后，'{var}' 之精化类型之约束：{constraint} 于证核之内莫能静态以证",
+    "help": "RFC-027 须诸精化之约束于编译期得证——证不出者即编译之过。请改写约束使其实参可静态取值（字面量或可折之字面量表达式），或进证函返 Type 者参编译期之行。"
+  },
+  "E6012": {
+    "title": "码点非法",
+    "message": "from_char_code 获非法码点（负数、代理区或逾 U+10FFFF）",
+    "template": "码点非法：{input}",
+    "help": "审码点是否在 U+0000..U+10FFFF 之内且非在代理区（U+D800..U+DFFF）"
   }
 }
