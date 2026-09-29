@@ -14,6 +14,10 @@ pub const STD_YX_FILES: &[(&str, &str)] = &[
     ("std/test.yx", include_str!("test.yx")),
     ("std/result.yx", include_str!("result.yx")),
     ("std/option.yx", include_str!("option.yx")),
+    // std/json.yx（#55）：实现完成并通过类型检查，但单文件模式下嵌入模块合并
+    // 不重映射 CallStatic 函数 id（#386），native 调用塌缩到错误槽位导致无限
+    // 自递归。#386 修复后启用注册。
+    // ("std/json.yx", include_str!("json.yx")),
 ];
 
 /// use 路径（`std.test`）查嵌入源；未命中（native 模块或用户模块）返回 None。
