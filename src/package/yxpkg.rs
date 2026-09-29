@@ -24,7 +24,7 @@ use flate2::Compression;
 use tar::{Builder, EntryType, Header};
 
 use crate::package::error::{PackageError, PackageResult};
-use crate::package::vendor::checksum::compute_file_checksum;
+use crate::package::vendor::checksum::{compute_bytes_checksum, compute_file_checksum};
 
 /// 校验清单文件名
 pub const SUMS_FILE: &str = "SHA256SUMS";
@@ -49,13 +49,59 @@ pub fn artifact_name(
     format!("{}-{}.yxpkg", name, version)
 }
 
+/// 归档条目
+struct PackEntry {
+    /// 归档内路径（/ 分隔）
+    arc_path: String,
+    /// 内容字节数
+    size: u64,
+    /// 内容源
+    source: EntrySource,
+}
+
+/// 条目内容源：磁盘文件或内存文本
+enum EntrySource {
+    Disk(PathBuf),
+    Inline(Vec<u8>),
+}
+
 /// 将项目目录打包为 `.yxpkg`，写入 `out`，返回源码内容总字节数
 pub fn pack(
     project_dir: &Path,
     out: &Path,
 ) -> PackageResult<u64> {
-    let files = collect_source_files(project_dir)?;
-    let total: u64 = files.iter().map(|(_, size)| size).sum();
+    let manifest =
+        std::fs::read_to_string(project_dir.join(crate::package::manifest::MANIFEST_FILE))?;
+    pack_with_manifest(project_dir, out, &manifest)
+}
+
+/// 同 [`pack`]，但 `yaoxiang.toml` 条目以 `manifest_toml` 内容为准
+///
+/// publish 在打包时物化 workspace 引用替换（RFC-014c 6d）：磁盘上的
+/// manifest 保持工作空间形态，归档内是发布形态。
+pub fn pack_with_manifest(
+    project_dir: &Path,
+    out: &Path,
+    manifest_toml: &str,
+) -> PackageResult<u64> {
+    let mut entries = collect_pack_entries(project_dir)?;
+
+    // manifest 条目：移除磁盘版，按字典序插入发布版（保持确定性）
+    let manifest_arc = crate::package::manifest::MANIFEST_FILE;
+    entries.retain(|e| e.arc_path != manifest_arc);
+    let pos = entries
+        .binary_search_by(|e| e.arc_path.as_str().cmp(manifest_arc))
+        .unwrap_or_else(|i| i);
+    entries.insert(
+        pos,
+        PackEntry {
+            arc_path: manifest_arc.to_string(),
+            size: manifest_toml.len() as u64,
+            source: EntrySource::Inline(manifest_toml.as_bytes().to_vec()),
+        },
+    );
+
+    let total: u64 = entries.iter().map(|e| e.size).sum();
     if total > MAX_PACKAGE_BYTES {
         return Err(PackageError::PackageTooLarge(format!(
             "{} bytes of source content, limit is {} bytes",
@@ -63,7 +109,7 @@ pub fn pack(
         )));
     }
 
-    let sums = build_sums(project_dir, &files)?;
+    let sums = build_sums(&entries)?;
 
     if let Some(parent) = out.parent() {
         std::fs::create_dir_all(parent)?;
@@ -73,8 +119,19 @@ pub fn pack(
     let gz = GzEncoder::new(file, Compression::default());
     let mut builder = Builder::new(gz);
 
-    for (rel, size) in &files {
-        builder = append_file_entry(builder, project_dir.join(rel), rel, *size)?;
+    for entry in &entries {
+        match &entry.source {
+            EntrySource::Disk(path) => {
+                builder = append_file_entry(builder, path, &entry.arc_path, entry.size)?;
+            }
+            EntrySource::Inline(bytes) => {
+                builder.append_data(
+                    &mut sums_header(entry.size),
+                    &entry.arc_path,
+                    bytes.as_slice(),
+                )?;
+            }
+        }
     }
     builder.append_data(
         &mut sums_header(sums.len() as u64),
@@ -104,22 +161,45 @@ fn sums_header(size: u64) -> Header {
 /// 追加一个普通文件条目（确定性元数据：mtime/uid/gid 归零，0644）
 fn append_file_entry(
     mut builder: Builder<GzEncoder<std::fs::File>>,
-    src: PathBuf,
+    src: &Path,
     arc_path: &str,
     size: u64,
 ) -> PackageResult<Builder<GzEncoder<std::fs::File>>> {
     let mut header = sums_header(size);
-    let file = std::fs::File::open(&src)?;
+    let file = std::fs::File::open(src)?;
     builder.append_data(&mut header, arc_path, file)?;
     Ok(builder)
 }
 
-/// 收集打包文件清单：`(归档内路径 / 分隔，字节数)`，按路径字典序
-fn collect_source_files(project_dir: &Path) -> PackageResult<Vec<(String, u64)>> {
+/// 生成 SHA256SUMS 清单内容（与归档条目一一对应）
+fn build_sums(entries: &[PackEntry]) -> PackageResult<String> {
+    let mut sums = String::new();
+    for entry in entries {
+        let hex = match &entry.source {
+            EntrySource::Disk(path) => compute_file_checksum(path)?,
+            EntrySource::Inline(bytes) => compute_bytes_checksum(bytes),
+        };
+        sums.push_str(&hex);
+        sums.push_str("  ");
+        sums.push_str(&entry.arc_path);
+        sums.push('\n');
+    }
+    Ok(sums)
+}
+
+/// 收集打包条目：按归档路径字典序（确定性）
+fn collect_pack_entries(project_dir: &Path) -> PackageResult<Vec<PackEntry>> {
     let mut files = Vec::new();
     collect_dir(project_dir, project_dir, &mut files)?;
     files.sort_by(|a, b| a.0.cmp(&b.0));
-    Ok(files)
+    Ok(files
+        .into_iter()
+        .map(|(rel, size)| PackEntry {
+            arc_path: rel.clone(),
+            size,
+            source: EntrySource::Disk(project_dir.join(rel)),
+        })
+        .collect())
 }
 
 fn collect_dir(
@@ -153,22 +233,6 @@ fn collect_dir(
         }
     }
     Ok(())
-}
-
-/// 生成 SHA256SUMS 清单内容
-fn build_sums(
-    project_dir: &Path,
-    files: &[(String, u64)],
-) -> PackageResult<String> {
-    let mut sums = String::new();
-    for (rel, _) in files {
-        let hex = compute_file_checksum(&project_dir.join(rel))?;
-        sums.push_str(&hex);
-        sums.push_str("  ");
-        sums.push_str(rel);
-        sums.push('\n');
-    }
-    Ok(sums)
 }
 
 /// 解包 `.yxpkg` 到 `dest`，完整性校验通过后保留文件，否则留下部分文件并报错

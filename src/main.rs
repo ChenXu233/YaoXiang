@@ -341,6 +341,17 @@ enum Commands {
         command: WorkspaceCommand,
     },
 
+    /// Publish the package (RFC-014a; official registry deferred)
+    Publish {
+        /// Validate and build the .yxpkg locally, without publishing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Publish as a GitHub Release with the .yxpkg as asset
+        #[arg(long)]
+        github: bool,
+    },
+
     /// Start the Language Server Protocol (LSP) server
     Lsp {
         /// Enable debug mode (show debug! macro output)
@@ -726,6 +737,13 @@ fn main() -> Result<()> {
         } => {
             package::commands::workspace::remove(&key)
                 .context("Failed to remove workspace member")?;
+        }
+        Commands::Publish { dry_run, github } => {
+            package::commands::publish::exec(package::commands::publish::PublishArgs {
+                dry_run,
+                github,
+            })
+            .context("Failed to publish package")?;
         }
         Commands::Lsp { .. } => {
             // LSP 服务器使用 stderr 记录日志（stdout 用于 JSON-RPC 通信）

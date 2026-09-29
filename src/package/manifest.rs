@@ -26,6 +26,9 @@ pub struct PackageInfo {
     /// Package license
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
+    /// Package repository URL（publish --github 的目标仓库解析来源之一）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
 }
 
 /// `[lib]` section (RFC-015): the package's library entry file.
@@ -100,6 +103,7 @@ impl PackageManifest {
                 description: None,
                 authors: Vec::new(),
                 license: None,
+                repository: None,
             },
             dependencies: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),

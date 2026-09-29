@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::package::cache::{sanitize_key, GlobalCache};
 use crate::package::dependency::DependencySpec;
@@ -37,6 +37,7 @@ const ASSET_TIMEOUT: Duration = Duration::from_secs(300);
 pub(crate) struct GitHubClient {
     http: reqwest::Client,
     api_base: String,
+    upload_base: String,
     token: Option<String>,
     cache: GlobalCache,
     backoff_base: Duration,
@@ -65,12 +66,30 @@ struct GhTag {
     name: String,
 }
 
+/// 创建 Release 的响应（publish 所需字段）
+#[derive(Debug, Deserialize)]
+pub(crate) struct GhCreatedRelease {
+    pub(crate) id: u64,
+    pub(crate) html_url: String,
+}
+
+/// 创建 Release 的请求体
+#[derive(Debug, Serialize)]
+struct GhCreateRelease<'a> {
+    tag_name: &'a str,
+    name: &'a str,
+    body: &'a str,
+}
+
 impl GitHubClient {
     /// 面向 github.com 的客户端（读 `$YX_GITHUB_TOKEN`）
     pub(crate) fn new(cache: GlobalCache) -> Self {
+        let api_base = "https://api.github.com".to_string();
+        let upload_base = derive_upload_base(&api_base);
         GitHubClient {
             http: build_http(false),
-            api_base: "https://api.github.com".to_string(),
+            api_base,
+            upload_base,
             token: std::env::var("YX_GITHUB_TOKEN")
                 .ok()
                 .filter(|s| !s.is_empty()),
@@ -86,13 +105,135 @@ impl GitHubClient {
         api_base: String,
         backoff_base: Duration,
     ) -> Self {
+        let upload_base = derive_upload_base(&api_base);
         GitHubClient {
             http: build_http(true),
             api_base,
+            upload_base,
             token: None,
             cache,
             backoff_base,
         }
+    }
+
+    /// 按 tag 的 Release 是否已存在（publish 版本查重；404 → false）
+    pub(crate) async fn release_exists(
+        &self,
+        owner: &str,
+        repo: &str,
+        tag: &str,
+    ) -> PackageResult<bool> {
+        let any: Option<serde::de::IgnoredAny> = self
+            .get_json_opt(&format!("/repos/{owner}/{repo}/releases/tags/{tag}"))
+            .await?;
+        Ok(any.is_some())
+    }
+
+    /// tag 是否存在（`/git/ref/tags/{tag}` 端点；publish 要求 tag 先行）
+    pub(crate) async fn tag_exists(
+        &self,
+        owner: &str,
+        repo: &str,
+        tag: &str,
+    ) -> PackageResult<bool> {
+        let any: Option<serde::de::IgnoredAny> = self
+            .get_json_opt(&format!("/repos/{owner}/{repo}/git/ref/tags/{tag}"))
+            .await?;
+        Ok(any.is_some())
+    }
+
+    /// 创建 Release（POST 不自动重试：非幂等，5xx 后重发可能重复创建）
+    pub(crate) async fn create_release(
+        &self,
+        owner: &str,
+        repo: &str,
+        tag: &str,
+        title: &str,
+        body: &str,
+    ) -> PackageResult<GhCreatedRelease> {
+        let payload = GhCreateRelease {
+            tag_name: tag,
+            name: title,
+            body,
+        };
+        self.post_json(&format!("/repos/{owner}/{repo}/releases"), &payload)
+            .await
+    }
+
+    /// 上传资产到 Release（octet-stream POST，同样不自动重试）
+    pub(crate) async fn upload_release_asset(
+        &self,
+        owner: &str,
+        repo: &str,
+        release_id: u64,
+        file_name: &str,
+        bytes: Vec<u8>,
+    ) -> PackageResult<()> {
+        let url = format!(
+            "{}/repos/{owner}/{repo}/releases/{release_id}/assets?name={file_name}",
+            self.upload_base
+        );
+        let mut req = self
+            .http
+            .post(&url)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream");
+        if let Some(token) = &self.token {
+            req = req.bearer_auth(token);
+        }
+        let resp = req
+            .timeout(ASSET_TIMEOUT)
+            .body(bytes)
+            .send()
+            .await
+            .map_err(|e| PackageError::Network(e.to_string()))?;
+        let status = resp.status();
+        if !status.is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(PackageError::Network(format!(
+                "asset upload failed: {status}: {}",
+                truncate(&text, 200)
+            )));
+        }
+        Ok(())
+    }
+
+    /// POST JSON：带认证与 API 版本头；无自动重试（非幂等）
+    async fn post_json<B: serde::Serialize, T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> PackageResult<T> {
+        let url = format!("{}{}", self.api_base, path);
+        let payload = serde_json::to_vec(body)
+            .map_err(|e| PackageError::InvalidManifest(format!("请求序列化失败: {}", e)))?;
+        let mut req = self
+            .http
+            .post(&url)
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", API_VERSION)
+            .header(reqwest::header::CONTENT_TYPE, "application/json");
+        if let Some(token) = &self.token {
+            req = req.bearer_auth(token);
+        }
+        let resp = req
+            .body(payload)
+            .send()
+            .await
+            .map_err(|e| PackageError::Network(e.to_string()))?;
+        let status = resp.status();
+        if !status.is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(PackageError::Network(format!(
+                "GitHub API POST {path}: {status}: {}",
+                truncate(&text, 200)
+            )));
+        }
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| PackageError::Network(e.to_string()))?;
+        parse_json::<T>(&text)?
+            .ok_or_else(|| PackageError::Network("empty response body".to_string()))
     }
 
     /// GET JSON：带 ETag 条件请求缓存与退避重试；404 → None
@@ -530,6 +671,17 @@ fn build_http(no_proxy: bool) -> reqwest::Client {
         builder = builder.no_proxy();
     }
     builder.build().expect("build reqwest client")
+}
+
+/// 资产上传基址：官方 api.github.com → uploads.github.com；自建/测试同源
+fn derive_upload_base(api_base: &str) -> String {
+    if let Some(rest) = api_base.strip_prefix("https://api.") {
+        format!("https://uploads.{rest}")
+    } else if let Some(rest) = api_base.strip_prefix("http://api.") {
+        format!("http://uploads.{rest}")
+    } else {
+        api_base.to_string()
+    }
 }
 
 /// JSON 响应解析

@@ -514,6 +514,15 @@ pub enum MSG {
     WorkspaceMemberRemoved,
     WorkspaceMemberReferenced,
     WorkspaceAutoRegistered,
+
+    // Package manager - publish (RFC-014a Phase 4)
+    PackagePublishPacked,
+    PackagePublishRegistryDeferred,
+    PackagePublishGitHubDone,
+    PackagePublishVersionExists,
+    PackagePublishTagMissing,
+    PackagePublishTokenMissing,
+    PackagePublishRepoUnresolved,
 }
 
 impl MSG {
@@ -639,6 +648,13 @@ impl MSG {
             MSG::WorkspaceMemberRemoved => "workspace_member_removed",
             MSG::WorkspaceMemberReferenced => "workspace_member_referenced",
             MSG::WorkspaceAutoRegistered => "workspace_auto_registered",
+            MSG::PackagePublishPacked => "package_publish_packed",
+            MSG::PackagePublishRegistryDeferred => "package_publish_registry_deferred",
+            MSG::PackagePublishGitHubDone => "package_publish_github_done",
+            MSG::PackagePublishVersionExists => "package_publish_version_exists",
+            MSG::PackagePublishTagMissing => "package_publish_tag_missing",
+            MSG::PackagePublishTokenMissing => "package_publish_token_missing",
+            MSG::PackagePublishRepoUnresolved => "package_publish_repo_unresolved",
 
             _ => "unknown_message",
         }

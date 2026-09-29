@@ -1093,5 +1093,12 @@
   "workspace_member_added": "✓ 已登记工作空间成员 '{0}'（{1}）",
   "workspace_member_removed": "✓ 已移除工作空间成员 '{0}'",
   "workspace_member_referenced": "⚠ 成员 {0} 仍被以下成员引用：{1}",
-  "workspace_auto_registered": "✓ 已登记到工作空间 {0}（key '{1}'）"
+  "workspace_auto_registered": "✓ 已登记到工作空间 {0}（key '{1}'）",
+  "package_publish_packed": "✓ 已打包 {0}（SHA-256 {1}）",
+  "package_publish_registry_deferred": "官方 Registry 无限期后置（RFC-014a 决议 1）：使用 --github 发布到 GitHub Release，或 --dry-run 仅本地打包",
+  "package_publish_github_done": "✓ 已发布 GitHub Release：{0}",
+  "package_publish_version_exists": "Release {0} 已存在，版本号不可复用",
+  "package_publish_tag_missing": "tag {0} 不存在：先创建并推送 tag（git tag {0} && git push origin {0}）",
+  "package_publish_token_missing": "缺少 GitHub 凭据：设置 $YX_GITHUB_TOKEN（014a 认证表）",
+  "package_publish_repo_unresolved": "无法解析 GitHub 仓库：在 [package] repository 填 GitHub URL，或配置 git remote origin"
 }

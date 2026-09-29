@@ -358,3 +358,71 @@ fn owner_repo_parsing() {
     assert_eq!(parse_owner_repo("https://gitlab.com/owner/repo"), None);
     assert_eq!(parse_owner_repo("https://github.com/owner"), None);
 }
+
+/// publish --github 全流程：版本查重（404）→ tag 校验（200）→ 创建 Release
+/// （201）→ 上传资产（201）
+#[test]
+fn publish_github_flow_creates_release_and_uploads() {
+    use crate::package::commands::publish::publish_github_flow;
+    use crate::package::source::github::GitHubClient;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let api = MockApi::spawn(vec![
+        json_resp(404, r#"{"message":"Not Found"}"#),
+        json_resp(
+            200,
+            r#"{"ref":"refs/tags/v1.0.0","object":{"sha":"abc","type":"commit"}}"#,
+        ),
+        json_resp(
+            201,
+            r#"{"id":42,"html_url":"https://github.com/owner/demo/releases/tag/v1.0.0"}"#,
+        ),
+        json_resp(201, "{}"),
+    ]);
+    let cache = GlobalCache::with_root(tmp.path().join("cache"));
+    let client = GitHubClient::for_tests(cache, api.url.clone(), Duration::from_millis(1));
+
+    let artifact = tmp.path().join("demo-1.0.0.yxpkg");
+    std::fs::write(&artifact, b"PKGBYTES").unwrap();
+
+    let url = runtime::drive(publish_github_flow(
+        &client, "owner", "demo", "demo", "1.0.0", "demo pkg", &artifact,
+    ))
+    .unwrap();
+    assert_eq!(url, "https://github.com/owner/demo/releases/tag/v1.0.0");
+    assert_eq!(
+        api.recorded().len(),
+        4,
+        "release 查重/tag 校验/创建/上传共 4 次请求"
+    );
+    api.handle.join().unwrap();
+}
+
+/// 版本已存在时 publish 必须拒绝（014a 发布前校验 2：版本号不可复用）
+#[test]
+fn publish_github_flow_rejects_existing_release() {
+    use crate::package::commands::publish::publish_github_flow;
+    use crate::package::source::github::GitHubClient;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let api = MockApi::spawn(vec![json_resp(
+        200,
+        r#"{"tag_name":"v1.0.0","draft":false,"prerelease":false,"assets":[]}"#,
+    )]);
+    let cache = GlobalCache::with_root(tmp.path().join("cache"));
+    let client = GitHubClient::for_tests(cache, api.url.clone(), Duration::from_millis(1));
+
+    let artifact = tmp.path().join("demo-1.0.0.yxpkg");
+    std::fs::write(&artifact, b"PKGBYTES").unwrap();
+
+    let err = runtime::drive(publish_github_flow(
+        &client, "owner", "demo", "demo", "1.0.0", "d", &artifact,
+    ))
+    .unwrap_err();
+    assert!(
+        matches!(err, crate::package::PackageError::VersionAlreadyExists(_)),
+        "got: {err}"
+    );
+    assert_eq!(api.recorded().len(), 1, "查重命中后不应继续");
+    api.handle.join().unwrap();
+}

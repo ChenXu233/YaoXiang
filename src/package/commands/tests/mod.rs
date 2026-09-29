@@ -6,6 +6,7 @@ mod init;
 mod install;
 mod list;
 mod outdated;
+mod publish;
 mod rm;
 mod update;
 mod workspace_install;

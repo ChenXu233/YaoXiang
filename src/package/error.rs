@@ -71,6 +71,22 @@ pub enum PackageError {
     #[error("rate limited: {0}")]
     RateLimited(String),
 
+    /// Bare `publish` without a channel (official registry deferred, RFC-014a decision 1)
+    #[error("official registry is deferred (RFC-014a); use `publish --github` or `--dry-run`")]
+    RegistryDeferred,
+
+    /// Release for the version already exists (RFC-014a publish validation)
+    #[error("release already exists: {0}")]
+    VersionAlreadyExists(String),
+
+    /// Authentication failed (RFC-014a)
+    #[error("auth failed: {0}")]
+    AuthFailed(String),
+
+    /// Publish target repository could not be resolved
+    #[error("publish target unresolved: {0}")]
+    PublishTarget(String),
+
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

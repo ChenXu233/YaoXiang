@@ -7,6 +7,7 @@ pub mod init;
 pub mod install;
 pub mod list;
 pub mod outdated;
+pub mod publish;
 pub mod rm;
 pub mod update;
 pub mod workspace;
