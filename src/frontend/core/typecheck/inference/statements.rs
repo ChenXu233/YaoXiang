@@ -42,6 +42,8 @@ pub struct StatementChecker {
         HashMap<String, Vec<crate::frontend::core::typecheck::passes::overload::OverloadCandidate>>,
     /// Native 函数签名表
     native_signatures: HashMap<String, MonoType>,
+    /// Native 函数 arity 区间表（#387，随签名表同源灌装）
+    native_arity: HashMap<String, (usize, Option<usize>)>,
     /// 模块注册表（用于在函数体/块作用域中处理 use 语句）
     module_registry: ModuleRegistry,
     /// 是否在顶层作用域（模块级，非函数内部）
@@ -155,6 +157,7 @@ impl StatementChecker {
             checked_functions: HashMap::new(),
             overload_candidates: HashMap::new(),
             native_signatures: HashMap::new(),
+            native_arity: HashMap::new(),
             module_registry: ModuleRegistry::with_std(),
             is_top_level: true,
             unsafe_depth: 0,
@@ -414,6 +417,14 @@ impl StatementChecker {
         signatures: HashMap<String, MonoType>,
     ) {
         self.native_signatures = signatures;
+    }
+
+    /// 设置 native 函数 arity 区间表（#387）
+    pub fn set_native_arities(
+        &mut self,
+        arities: HashMap<String, (usize, Option<usize>)>,
+    ) {
+        self.native_arity = arities;
     }
 
     /// 设置模块注册表
@@ -838,10 +849,15 @@ impl StatementChecker {
         for (i, param) in params.iter().enumerate() {
             let param_ty = match positional_types {
                 Some(vp) if param.ty.is_none() => vp[i].clone(),
+                // RFC-027 §6.1：形参**自带标注**时走的是注解（保留 TypeRef 声明名，
+                // 单态化依赖它），但精化标注必须剥成基类型——否则 `b: NonNegative(b)`
+                // 在体内是名义类型 `NonNegative(b)`，当值用报 E1012/E1002。
+                // 只剥证明函数名与 `Terminates`，普通类型名不受影响。
                 _ => param
                     .ty
                     .as_ref()
                     .map(|t| MonoType::from(t.clone()))
+                    .map(|t| self.strip_refined_value_type(t))
                     .unwrap_or_else(|| self.solver.new_var()),
             };
             let param_ty = param_ty.substitute(const_subst);
@@ -1423,6 +1439,13 @@ impl StatementChecker {
             MonoType::Generic { ref name, .. } if self.proof_fn_bases.contains_key(name) => {
                 self.proof_fn_bases.get(name).cloned().unwrap_or(ty)
             }
+            // 无参形态 `b: NonNegative`：`MonoType::from` 给出 `TypeRef("NonNegative")`。
+            // 不剥则它作为名义类型参与统一，拒绝一切基类型实参。
+            // 只剥「返回 Type 的证明函数」名——普通类型名（`Int`/自定义类型）
+            // 不在 `proof_fn_bases` 里，不受影响。
+            MonoType::TypeRef(ref name) if self.proof_fn_bases.contains_key(name) => {
+                self.proof_fn_bases.get(name).cloned().unwrap_or(ty)
+            }
             other => other,
         }
     }
@@ -1595,6 +1618,12 @@ impl StatementChecker {
                 let fn_param_types: Vec<MonoType> = param_types
                     .iter()
                     .map(|t| MonoType::from(t.clone()))
+                    // RFC-027 §6.1：形参上的精化标注同样是**透明**的——`b` 的值就是
+                    // 它的基类型。此前这里用裸 `MonoType::from`，精化形参停在名义形态
+                    // `NonNegative(b)`，于是 1) 体内 `b` 当值用报 E1012/E1002，
+                    // 2) 任何调用方传入基类型都报 E1002（**连 `f(5)` 都被拒**，
+                    // 不是谓词校验，是个坏类型）。故与返回位同规剥除。
+                    .map(|t| self.strip_refined_value_type(t))
                     .collect();
                 let fn_return_type = MonoType::from(*return_type.clone());
                 // RFC-027：值级返回位的精化剥除（`IsPositive(5)` → `Int`；
@@ -2600,6 +2629,7 @@ impl StatementChecker {
                                 &self.native_signatures,
                                 current_result_err,
                             );
+                        inferrer.set_native_arities(&self.native_arity);
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                         inferrer.set_sum_types(&self.sum_types);
@@ -2693,6 +2723,7 @@ impl StatementChecker {
                     self.expected_return_type.clone(),
                     &self.method_bindings,
                 );
+                inferrer.set_native_arities(&self.native_arity);
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                 inferrer.set_sum_types(&self.sum_types);

@@ -19,6 +19,10 @@ use super::call_ownership::{CallOwnership, CallOwnershipTable, ParamOwnership};
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
     std::sync::LazyLock::new(HashMap::new);
 
+/// #387：native arity 区间表空缺省
+static EMPTY_ARITY: std::sync::LazyLock<HashMap<String, (usize, Option<usize>)>> =
+    std::sync::LazyLock::new(HashMap::new);
+
 /// RFC-009 读视图：剥离借用层，算术/比较按 inner 类型判定（读穿透）
 pub(super) fn read_view(ty: &MonoType) -> MonoType {
     let mut cur = ty;
@@ -123,6 +127,8 @@ pub struct ExpressionInferrer<'a> {
     imported_used: HashSet<String>,
     /// #335 G3 类型信息流接口：调用点所有权解析表（按调用 span 键控）
     pub call_ownership: CallOwnershipTable,
+    /// #387：native arity 区间表（随签名表同源注入，缺省空表=无区间）
+    native_arity: &'a HashMap<String, (usize, Option<usize>)>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -160,6 +166,7 @@ impl<'a> ExpressionInferrer<'a> {
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
+            native_arity: &EMPTY_ARITY,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -202,6 +209,7 @@ impl<'a> ExpressionInferrer<'a> {
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
+            native_arity: &EMPTY_ARITY,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -245,6 +253,7 @@ impl<'a> ExpressionInferrer<'a> {
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
+            native_arity: &EMPTY_ARITY,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -290,6 +299,7 @@ impl<'a> ExpressionInferrer<'a> {
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
+            native_arity: &EMPTY_ARITY,
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -393,6 +403,14 @@ impl<'a> ExpressionInferrer<'a> {
         defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     ) {
         self.generic_type_defs = defs;
+    }
+
+    /// 设置 native arity 区间表（#387）
+    pub fn set_native_arities(
+        &mut self,
+        arities: &'a HashMap<String, (usize, Option<usize>)>,
+    ) {
+        self.native_arity = arities;
     }
 
     /// RFC-011 §5.2：当前函数的约束形参（定义体延迟派发）
@@ -4574,81 +4592,99 @@ impl<'a> ExpressionInferrer<'a> {
         // 泛型类型构造器（List(1,2,3) 值构造）豁免——其参数语义是类型参数+值参数，
         // 不适用字段计数（RFC-011），在 match 前拦下。
         if let crate::frontend::core::parser::ast::Expr::Var(ref fn_name, _) = *func {
-            // 豁免：泛型类型构造器（List(1,2,3) 值构造是 RFC-011 语义，非字段计数）；
-            // native 函数（std 可选参数 ?msg / 变参 ...args，签名 params.len() 不可靠，
-            // assert(1>0) 合法但 params 有 2 项——原 Fn 分支对数量不等静默跳过，
-            // 正是这种宽容路径）。
-            if !self.generic_type_defs.contains_key(fn_name)
-                && !self.native_signatures.contains_key(fn_name)
-            {
+            // 豁免：泛型类型构造器（List(1,2,3) 值构造是 RFC-011 语义，非字段计数）。
+            if !self.generic_type_defs.contains_key(fn_name) {
                 let provided = arg_types.len();
+                // #387：native arity 从整族豁免收紧为按签名 `?`/`...` 解析的
+                // [min, max] 区间。表区间与签名参数数矛盾视为用户同名遮蔽，
+                // 回退严格计数；无表项的 native（手注 FFI 签名路径）维持旧宽容。
+                let native_range = self
+                    .native_arity
+                    .get(fn_name)
+                    .copied()
+                    .filter(|(min, max)| {
+                        matches!(&mono_func_ty, MonoType::Fn { params, .. } if {
+                            let n = params.len();
+                            *min <= n && max.is_none_or(|m| n <= m)
+                        })
+                    });
                 match &mono_func_ty {
-                        MonoType::Struct(st) => {
-                            // 普通 struct 构造器：Point(1.0, 2.0)。
-                            // 有默认值的字段可省略 → 必需参数数 = 无默认值字段数。
-                            let total = st.fields.len();
-                            let required = st.field_has_default.iter().filter(|&&d| !d).count();
-                            if named_args.is_empty() {
-                                // 位置参数：Point(5) 缺参 / Point(5,6,7) 超参
-                                if provided < required || provided > total {
-                                    return Err(ErrorCodeDefinition::argument_count_mismatch(
-                                        &st.name, total, provided,
-                                    )
-                                    .at(span)
-                                    .build());
-                                }
-                            } else {
-                                // 命名参数：Point(x=6) 缺必需字段 → 静默 0（#271#1）。
-                                // 检查必需字段（无默认值）是否全部提供。
-                                let provided_names: std::collections::HashSet<&str> =
-                                    named_args.iter().map(|(n, _)| n.as_str()).collect();
-                                let missing: Vec<&str> = st
-                                    .fields
-                                    .iter()
-                                    .enumerate()
-                                    .filter(|(i, _)| !st.field_has_default[*i])
-                                    .map(|(_, (n, _))| n.as_str())
-                                    .filter(|n| !provided_names.contains(n))
-                                    .collect();
-                                if !missing.is_empty() {
-                                    let msg = format!(
-                                        "{} constructor missing required field(s): {}",
-                                        st.name,
-                                        missing.join(", ")
-                                    );
-                                    return Err(ErrorCodeDefinition::type_mismatch(
-                                        &msg,
-                                        &format!("provided {}", provided_names.len()),
-                                    )
-                                    .at(span)
-                                    .build());
-                                }
-                            }
-                        }
-                        MonoType::Fn { params, .. }
-                            // 普通函数调用：add(5) 缺参 → E6007 运行时错（晚且误导）；
-                            // add(1,2,3) 超参静默丢弃。拦为编译期 E1010。
-                            // 仅当 params 非空时检查：lambda/块函数绑定（mk: (Int,Int)->Int
-                            // = (x,y)=>x+y）在 scope 里参数类型丢失（params 为空），
-                            // 计数不可靠，跳过避免误伤（#271 记 lambda 绑定参数丢失）。
-                            //
-                            // 命名参数也计入总数：`add(a = 1, b = 2)` 传了 2 个。
-                            // 此前 `named_args.is_empty()` 门槛把命名实参整体豁免，
-                            // `add(a = 1)`（少传一个）就没人拦——IR 层补 0 凑数，
-                            // 静默算出 1 而不报错。现在按实际传参总数校验。
-                            if !params.is_empty()
-                                && provided + named_args.len() != params.len()
-                            => {
+                    MonoType::Struct(st) => {
+                        // 普通 struct 构造器：Point(1.0, 2.0)。
+                        // 有默认值的字段可省略 → 必需参数数 = 无默认值字段数。
+                        let total = st.fields.len();
+                        let required = st.field_has_default.iter().filter(|&&d| !d).count();
+                        if named_args.is_empty() {
+                            // 位置参数：Point(5) 缺参 / Point(5,6,7) 超参
+                            if provided < required || provided > total {
                                 return Err(ErrorCodeDefinition::argument_count_mismatch(
-                                    fn_name,
-                                    params.len(),
-                                    provided + named_args.len(),
+                                    &st.name, total, provided,
                                 )
                                 .at(span)
                                 .build());
                             }
-                        _ => {}
+                        } else {
+                            // 命名参数：Point(x=6) 缺必需字段 → 静默 0（#271#1）。
+                            // 检查必需字段（无默认值）是否全部提供。
+                            let provided_names: std::collections::HashSet<&str> =
+                                named_args.iter().map(|(n, _)| n.as_str()).collect();
+                            let missing: Vec<&str> = st
+                                .fields
+                                .iter()
+                                .enumerate()
+                                .filter(|(i, _)| !st.field_has_default[*i])
+                                .map(|(_, (n, _))| n.as_str())
+                                .filter(|n| !provided_names.contains(n))
+                                .collect();
+                            if !missing.is_empty() {
+                                let msg = format!(
+                                    "{} constructor missing required field(s): {}",
+                                    st.name,
+                                    missing.join(", ")
+                                );
+                                return Err(ErrorCodeDefinition::type_mismatch(
+                                    &msg,
+                                    &format!("provided {}", provided_names.len()),
+                                )
+                                .at(span)
+                                .build());
+                            }
+                        }
                     }
+                    MonoType::Fn { params, .. } => {
+                        // 普通函数调用：add(5) 缺参 → E6007 运行时错（晚且误导）；
+                        // add(1,2,3) 超参静默丢弃。拦为编译期 E1010。
+                        // 命名参数也计入总数：`add(a = 1, b = 2)` 传了 2 个。
+                        let range = native_range.or_else(|| {
+                            if self.native_signatures.contains_key(fn_name) {
+                                None // 无表项 native：维持旧宽容
+                            } else if params.is_empty() {
+                                // lambda/块函数绑定（mk: (Int,Int)->Int = (x,y)=>x+y）
+                                // 在 scope 里参数类型丢失（params 为空），计数不可靠，
+                                // 跳过避免误伤（#271 记 lambda 绑定参数丢失）
+                                None
+                            } else {
+                                Some((params.len(), Some(params.len())))
+                            }
+                        });
+                        if let Some((min_arity, max_arity)) = range {
+                            let total = provided + named_args.len();
+                            if total < min_arity || max_arity.is_some_and(|m| total > m) {
+                                let expected = if total < min_arity {
+                                    min_arity
+                                } else {
+                                    max_arity.unwrap_or(min_arity)
+                                };
+                                return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                    fn_name, expected, total,
+                                )
+                                .at(span)
+                                .build());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
         // #317：方法调用 arity 检查——#271#1 的 Var 门槛覆盖不到 FieldAccess
@@ -4666,6 +4702,72 @@ impl<'a> ExpressionInferrer<'a> {
                         )
                         .at(span)
                         .build());
+                    }
+                }
+            }
+        }
+        // #387：命名空间限定调用 arity 同规。RFC-029 §1/§6——模块 = record of
+        // bindings，对 typecheck 而言 `use std.io.{println}` 与用户模块操作完全
+        // 一样，native 特殊处理只属于 IR gen / codegen；此前 FieldAccess 形态
+        // 绕过 #271#1（Var 臂）与 #317（method_key 臂），超签实参静默接受、
+        // 落 ownership 层按 Move 兜底、运行时丢弃。判别两态：
+        // - 命中 native arity 表（直接或 `std.` 前缀回退）→ 命名空间 native，
+        //   区间严格，无接收者豁免（表区间与签名参数数矛盾视为同名遮蔽，回退
+        //   严格计数）；
+        // - 未命中表 → 按接收者形态判别：显式实参数+1==形参数（接收者占
+        //   params[0]，接口派发/impl 方法/Try 方法同族，#317 同款约定）放行，
+        //   否则按签名严格计数。params 为空（计数不可靠）维持跳过。
+        if method_key.is_none() {
+            if let crate::frontend::core::parser::ast::Expr::FieldAccess {
+                expr: obj, field, ..
+            } = func
+            {
+                if let MonoType::Fn { params, .. } = &mono_func_ty {
+                    let ns_key = extract_namespace_path(obj).map(|p| format!("{p}.{field}"));
+                    let table_range = ns_key
+                        .as_deref()
+                        .and_then(|k| self.native_arity.get(k).copied())
+                        .or_else(|| {
+                            ns_key
+                                .as_deref()
+                                .map(|k| format!("std.{k}"))
+                                .and_then(|k| self.native_arity.get(k.as_str()).copied())
+                        });
+                    let total = arg_types.len() + named_args.len();
+                    let range = match table_range {
+                        Some((min, max)) => {
+                            if min <= params.len() && max.is_none_or(|m| params.len() <= m) {
+                                Some((min, max))
+                            } else if params.is_empty() {
+                                None
+                            } else {
+                                // 用户同名遮蔽：按遮蔽者签名严格计数
+                                Some((params.len(), Some(params.len())))
+                            }
+                        }
+                        None => {
+                            if params.is_empty() || total + 1 == params.len() {
+                                // 接收者形态（或计数不可靠）：放行
+                                None
+                            } else {
+                                Some((params.len(), Some(params.len())))
+                            }
+                        }
+                    };
+                    if let Some((min_arity, max_arity)) = range {
+                        if total < min_arity || max_arity.is_some_and(|m| total > m) {
+                            let name = ns_key.unwrap_or_else(|| field.clone());
+                            let expected = if total < min_arity {
+                                min_arity
+                            } else {
+                                max_arity.unwrap_or(min_arity)
+                            };
+                            return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                &name, expected, total,
+                            )
+                            .at(span)
+                            .build());
+                        }
                     }
                 }
             }

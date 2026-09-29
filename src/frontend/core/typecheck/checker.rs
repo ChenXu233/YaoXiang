@@ -995,6 +995,8 @@ impl TypeChecker {
         );
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
+        // #387：native arity 区间表随签名表同源传递
+        body_checker.set_native_arities(self.env.native_arity.clone());
         // 设置模块注册表，支持函数体/块作用域 use
         body_checker.set_module_registry(self.env.module_registry.clone());
         // 设置泛型类型定义模板表
@@ -1310,6 +1312,8 @@ impl TypeChecker {
             );
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
+            // #387：native arity 区间表随签名表同源传递
+            body_checker.set_native_arities(self.env.native_arity.clone());
             // 设置模块注册表，支持函数体/块作用域 use
             body_checker.set_module_registry(self.env.module_registry.clone());
             self.body_checker = Some(body_checker);

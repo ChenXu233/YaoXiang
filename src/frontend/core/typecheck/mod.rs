@@ -221,6 +221,11 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
 
                 // 注册短名称
                 env.native_signatures.insert(export.name.clone(), fn_ty);
+
+                // #387：同源灌装 arity 区间（? 可选 / ... 变参），键与签名表对齐
+                let arity = signature::parse_signature_arity(&export.signature);
+                env.native_arity.insert(export.full_path.clone(), arity);
+                env.native_arity.insert(export.name.clone(), arity);
             }
         }
     }

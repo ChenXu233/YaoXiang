@@ -1,0 +1,15 @@
+// 06-compile-errors/namespace_extra_args_err.yx
+// #387——命名空间限定调用超签实参必须编译期拒绝。RFC-029 §1/§6：模块 =
+// record of bindings，对 typecheck 与本地调用同规；此前 `string.concat(...)`
+// 形态绕过 #271#1（Var 臂）与 #317（method_key 臂），超签实参静默接受、
+// 运行时丢弃。native 区间表：concat 严格 [2, 2]。
+// expect: compile-error E1010
+// （concat 签名 (s1: &String, s2: &String) -> String，第三实参无落点即错）
+// 验证: arity 检查覆盖命名空间 FieldAccess 形态
+// 状态: ❌ 应编译失败
+
+use std.string
+
+main: () -> Void = {
+    println(string.concat("x", "y", "z"))
+}

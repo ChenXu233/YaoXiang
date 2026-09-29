@@ -233,6 +233,70 @@ fn find_matching_close(
     None
 }
 
+/// 解析签名字符串的 arity 区间（#387）
+///
+/// `?` 前缀参数名可选（`?msg: String`），`...` 前缀变参（`...args`）。
+/// 返回 (min, max)：变参 max=None（不设上限）；常量签名/畸形输入返回
+/// (0, Some(0))——调用方对畸形签名维持既有宽容，不在此处报错。
+pub fn parse_signature_arity(signature: &str) -> (usize, Option<usize>) {
+    let signature = signature.trim();
+    let (_generic_params, rest) = parse_generic_prefix(signature);
+    if !rest.starts_with('(') {
+        return (0, Some(0));
+    }
+    let Some(closing) = find_matching_close(rest, 0) else {
+        return (0, Some(0));
+    };
+    let params_str = &rest[1..closing];
+    if params_str.trim().is_empty() {
+        return (0, Some(0));
+    }
+    let mut min = 0usize;
+    let mut max = 0usize;
+    let mut variadic = false;
+    for piece in split_params_top_level(params_str) {
+        if piece.starts_with("...") {
+            variadic = true;
+        } else {
+            max += 1;
+            if !piece.starts_with('?') {
+                min += 1;
+            }
+        }
+    }
+    if variadic {
+        (min, None)
+    } else {
+        (min, Some(max))
+    }
+}
+
+/// 按顶层逗号切分参数串（嵌套 `<>`/`()`/`[]` 内的逗号不计）
+fn split_params_top_level(params_str: &str) -> Vec<String> {
+    let mut pieces = Vec::new();
+    let mut depth: i32 = 0;
+    let mut start = 0;
+    for (i, c) in params_str.char_indices() {
+        match c {
+            '<' | '(' | '[' => depth += 1,
+            '>' | ')' | ']' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                let piece = params_str[start..i].trim();
+                if !piece.is_empty() {
+                    pieces.push(piece.to_string());
+                }
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    let last = params_str[start..].trim();
+    if !last.is_empty() {
+        pieces.push(last.to_string());
+    }
+    pieces
+}
+
 /// 解析参数字符串，返回类型列表和参数名列表
 fn parse_params_with_names(
     params_str: &str,
