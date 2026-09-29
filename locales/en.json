@@ -1087,5 +1087,7 @@
     "help": "local modules have the highest resolution priority (RFC-014): './src/{module}' overrides the vendored package '{dependency}' in .yaoxiang/vendor/. Rename the local module if this shadowing is unintended, or run with --deny-shadowing to treat it as an error",
     "example": "// ./src/data.yx exists while 'data' is also a vendored dependency\nuse data.json; // resolves to ./src/data.yx, not the dependency",
     "error_output": "warning[W1006]: local module 'data' shadows dependency 'data'\n --> example.yx:1:1\n  |\n1 | use data.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: a local module takes precedence over a vendored dependency of the same name"
-  }
+  },
+  "workspace_list_header": "workspace at {0} ({1} members)",
+  "workspace_list_member_row": "  {0} {1}  ({2})"
 }

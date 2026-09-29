@@ -335,6 +335,12 @@ enum Commands {
         command: CacheCommand,
     },
 
+    /// Workspace operations (RFC-014c)
+    Workspace {
+        #[command(subcommand)]
+        command: WorkspaceCommand,
+    },
+
     /// Start the Language Server Protocol (LSP) server
     Lsp {
         /// Enable debug mode (show debug! macro output)
@@ -348,6 +354,13 @@ enum Commands {
 enum CacheCommand {
     /// Remove all cached packages
     Clean,
+}
+
+/// `yaoxiang workspace` 子命令（RFC-014c）
+#[derive(Subcommand, Debug)]
+enum WorkspaceCommand {
+    /// List workspace members
+    List,
 }
 
 fn main() -> Result<()> {
@@ -680,6 +693,11 @@ fn main() -> Result<()> {
             command: CacheCommand::Clean,
         } => {
             package::commands::cache::clean().context("Failed to clean package cache")?;
+        }
+        Commands::Workspace {
+            command: WorkspaceCommand::List,
+        } => {
+            package::commands::workspace::list().context("Failed to list workspace")?;
         }
         Commands::Lsp { .. } => {
             // LSP 服务器使用 stderr 记录日志（stdout 用于 JSON-RPC 通信）

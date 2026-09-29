@@ -5,3 +5,4 @@ mod dependency;
 mod error;
 mod lock;
 mod manifest;
+mod workspace;

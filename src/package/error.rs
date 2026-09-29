@@ -34,6 +34,22 @@ pub enum PackageError {
     #[error("cache error: {0}")]
     Cache(String),
 
+    /// Not inside a YaoXiang workspace (no [workspace] in any yaoxiang.toml, RFC-014c)
+    #[error("not a YaoXiang workspace: [workspace] section not found")]
+    NotWorkspace,
+
+    /// Workspace member manifest missing (RFC-014c)
+    #[error("workspace member '{key}' not found: {path}")]
+    MemberMissing { key: String, path: String },
+
+    /// Workspace member manifest invalid (RFC-014c)
+    #[error("workspace member '{key}' invalid: {reason}")]
+    MemberInvalid { key: String, reason: String },
+
+    /// Nested workspace (forbidden, RFC-014c 2026-09-15 decision 4)
+    #[error("nested workspace is not supported: member '{key}' at {path} has its own [workspace] section")]
+    NestedWorkspace { key: String, path: String },
+
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

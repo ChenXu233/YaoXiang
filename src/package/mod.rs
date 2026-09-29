@@ -12,6 +12,7 @@ pub mod manifest;
 pub mod source;
 pub mod template;
 pub mod vendor;
+pub mod workspace;
 
 #[cfg(test)]
 mod tests;

@@ -9,6 +9,7 @@ pub mod list;
 pub mod outdated;
 pub mod rm;
 pub mod update;
+pub mod workspace;
 
 #[cfg(test)]
 mod tests;

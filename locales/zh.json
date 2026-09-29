@@ -1087,5 +1087,7 @@
     "help": "本地模块解析优先级最高（RFC-014）：'./src/{module}' 覆盖 .yaoxiang/vendor/ 中的依赖包 '{dependency}'。若遮蔽非本意请重命名本地模块；可用 --deny-shadowing 将其升级为错误",
     "example": "// ./src/data.yx 存在，同时 'data' 也是已安装的依赖\nuse data.json; // 解析到 ./src/data.yx 而非依赖包",
     "error_output": "warning[W1006]: 本地模块 'data' 遮蔽了依赖包 'data'\n --> example.yx:1:1\n  |\n1 | use data.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: 本地模块优先级高于 vendor 中的同名依赖"
-  }
+  },
+  "workspace_list_header": "工作空间 {0}（{1} 个成员）",
+  "workspace_list_member_row": "  {0} {1}  （{2}）"
 }

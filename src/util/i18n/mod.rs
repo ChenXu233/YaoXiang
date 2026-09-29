@@ -506,6 +506,10 @@ pub enum MSG {
     PackageCleanNothing,
     PackageCacheCleaned,
     PackageCacheEmpty,
+
+    // Workspace (RFC-014c Phase 6a)
+    WorkspaceListHeader,
+    WorkspaceListMemberRow,
 }
 
 impl MSG {
@@ -623,6 +627,10 @@ impl MSG {
             MSG::PackageCleanNothing => "package_clean_nothing",
             MSG::PackageCacheCleaned => "package_cache_cleaned",
             MSG::PackageCacheEmpty => "package_cache_empty",
+
+            // Workspace (RFC-014c Phase 6a)
+            MSG::WorkspaceListHeader => "workspace_list_header",
+            MSG::WorkspaceListMemberRow => "workspace_list_member_row",
 
             _ => "unknown_message",
         }

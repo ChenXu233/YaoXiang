@@ -1331,3 +1331,58 @@ fn test_e2e_lib_unused_pub_fn_still_exempt() {
         "pub in Lib must stay unconditionally exempt, stderr: {stderr:?}"
     );
 }
+
+// workspace list（RFC-014c Phase 6a）
+
+#[test]
+fn test_e2e_workspace_list_from_member_dir() {
+    // Arrange - 两成员工作空间
+    let tmp = TempDir::new().unwrap();
+    let ws = tmp.path().join("ws");
+    std::fs::create_dir_all(ws.join("packages/core")).unwrap();
+    std::fs::create_dir_all(ws.join("packages/utils")).unwrap();
+    std::fs::write(
+        ws.join("yaoxiang.toml"),
+        "[workspace.members]\ncore = \"packages/core/yaoxiang.toml\"\nutils = \"packages/utils/yaoxiang.toml\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("packages/core/yaoxiang.toml"),
+        "[package]\nname = \"core\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("packages/utils/yaoxiang.toml"),
+        "[package]\nname = \"utils\"\nversion = \"0.2.0\"\n",
+    )
+    .unwrap();
+
+    // Act - 从成员目录执行（向上探测）
+    let (code, stdout, stderr) = run_yx(&["workspace", "list"], &ws.join("packages/core"));
+
+    // Assert
+    assert_eq!(code, 0, "workspace list should succeed, stderr: {stderr:?}");
+    assert!(stdout.contains("core"), "should list core: {stdout:?}");
+    assert!(stdout.contains("utils"), "should list utils: {stdout:?}");
+    assert!(
+        stdout.contains("0.2.0"),
+        "should show member version: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_e2e_workspace_list_outside_workspace_fails() {
+    // Arrange - 普通项目（无 [workspace]）
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "plain", "");
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["workspace", "list"], tmp.path());
+
+    // Assert
+    assert_ne!(code, 0, "plain project is not a workspace");
+    assert!(
+        stderr.contains("not a YaoXiang workspace"),
+        "stderr: {stderr:?}"
+    );
+}
