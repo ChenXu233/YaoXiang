@@ -3,7 +3,7 @@ title: 'RFC-014c: 工作空间支持'
 status: '已接受'
 author: '晨煦'
 created: '2026-06-11'
-updated: '2026-09-28'
+updated: '2026-09-29'
 group: 'rfc-014'
 issue: '#113'
 ---
@@ -305,13 +305,13 @@ struct WorkspaceMember {
 
 ### 阶段划分
 
-| 阶段     | 内容                                           |
-| -------- | ---------------------------------------------- |
-| Phase 6a | `[workspace.members]` 解析 + WorkspaceManifest |
-| Phase 6b | 共享 lockfile + 依赖合并解析                   |
-| Phase 6c | `{ workspace = "name" }` 路径依赖引用          |
-| Phase 6d | 发布时路径依赖自动替换                         |
-| Phase 6e | Cargo workspace 集成                           |
+| 阶段     | 内容                                           | 状态 |
+| -------- | ---------------------------------------------- | ---- |
+| Phase 6a | `[workspace.members]` 解析 + WorkspaceManifest | ✅ 已完成 |
+| Phase 6b | 共享 lockfile + 依赖合并解析（`[workspace.dependencies]` 继承，2026-09-29 修订） | ✅ 已完成 |
+| Phase 6c | `{ workspace = "name" }` 路径依赖引用（pnpm 式严格可见性，2026-09-29 修订） | ✅ 已完成 |
+| Phase 6d | 发布时路径依赖自动替换                         | ✅ 已完成（随 publish：替换在**打包时**物化进归档内 manifest，磁盘 manifest 保持工作空间形态；`workspace = true` 继承同样物化为根声明） |
+| Phase 6e | Cargo workspace 集成                           | 后置 |
 
 ### 依赖关系
 

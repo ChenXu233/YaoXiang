@@ -3,7 +3,7 @@ title: 'RFC-014: 包管理系统设计'
 status: '已接受'
 author: '晨煦'
 created: '2026-02-12'
-updated: '2026-09-15'
+updated: '2026-09-29'
 group: 'rfc-014' # 本 RFC 是包管理系统的总纲，子 RFC：014a/014b/014c
 issue: '#88'
 impl: '48%'
@@ -345,12 +345,13 @@ enum BuildStrategy {
 | `yaoxiang check`                   | 类型检查                   | `yaoxiang check`                                     |
 | `yaoxiang clean`                   | 清理构建产物               | `yaoxiang clean`                                     |
 | `yaoxiang task <name>`             | 运行自定义任务             | `yaoxiang task lint`                                 |
-| `yaoxiang publish`                 | 发布包到 Registry          | `yaoxiang publish`                                   |
-| `yaoxiang publish --github`        | 发布并创建 GitHub Release  | `yaoxiang publish --github`                          |
-| `yaoxiang yank <pkg>@<ver>`        | 删除已发布版本（不可恢复） | `yaoxiang yank foo@1.2.3`                            |
-| `yaoxiang login --registry <url>`  | Registry 认证              | `yaoxiang login --registry https://reg.example.com`  |
-| `yaoxiang login --github`          | GitHub 认证                | `yaoxiang login --github`                            |
-| `yaoxiang logout --registry <url>` | 登出                       | `yaoxiang logout --registry https://reg.example.com` |
+| `yaoxiang publish`                 | 发布包到 Registry          | 后置：官方 Registry 无限期后置，裸 publish 报错指路   |
+| `yaoxiang publish --dry-run`       | 校验 + 打包 `.yxpkg` 到 `target/yxpkg/` | `yaoxiang publish --dry-run`             |
+| `yaoxiang publish --github`        | 发布为 GitHub Release（`.yxpkg` 资产；要求 tag 已存在） | `yaoxiang publish --github` |
+| `yaoxiang yank <pkg>@<ver>`        | 删除已发布版本（不可恢复） | 后置：随官方 Registry                                 |
+| `yaoxiang login --registry <url>`  | Registry 认证              | 后置：随官方 Registry（GitHub 侧当前用 `$YX_GITHUB_TOKEN`） |
+| `yaoxiang login --github`          | GitHub 认证                | 后置：同上                                            |
+| `yaoxiang logout --registry <url>` | 登出                       | 后置：同上                                            |
 | `yaoxiang cache clean`             | 清理全局缓存               | `yaoxiang cache clean`                               |
 | `yaoxiang workspace <cmd>`         | 工作空间操作               | `yaoxiang workspace list`                            |
 
@@ -480,9 +481,9 @@ token = "xxx"
 | **Phase 2**   | GitHub 支持、.yaoxiang/vendor 管理、下载工具 | ✅ 已完成 |
 | **Phase 3**   | 全局缓存、semver crate 替换、CLI 完善        | ✅ 已完成 |
 | **Phase 3.5** | Source 分发 enum 化 + 原生 async（014a 决议 4，不引 async-trait） | ✅ 已完成 |
-| **Phase 4**   | GitHub 适配层、.yxpkg 打包、publish --github（RFC-014a 缩减后范围；官方 Registry/auth/yank 后置） | 待开始    |
+| **Phase 4**   | GitHub 适配层、.yxpkg 打包、publish --github（RFC-014a 缩减后范围；官方 Registry/auth/yank 后置） | ✅ 已完成 |
 | **Phase 5**   | 构建系统、预编译二进制（RFC-014b）           | 待开始    |
-| **Phase 6**   | 工作空间支持（RFC-014c）                     | 🚧 6a-c 完成 + 成员管理（6d 随 publish；6e 后置） |
+| **Phase 6**   | 工作空间支持（RFC-014c）                     | ✅ 6a-c + 成员管理 + 6d 完成（6e 后置） |
 
 **执行顺序调整（2026-09-15）**：`3 → 3.5 → 6 → 4 → 5`。
 
@@ -493,6 +494,11 @@ token = "xxx"
 **Phase 3 落地说明（2026-09-28）**：
 
 - Phase 3.5 落地说明（2026-09-29）：Source 分发按决议 4 采用 `AnySource` 四源封闭集合（Local/Git/Registry/GitHub，后两者为 Phase 4 占位）；`Source` trait 的 resolve/download 为原生 async fn in trait，命令层以 `futures::executor::block_on` 驱动（无运行时，Git 子进程保持 std::process；Phase 4 接 reqwest 时换真执行器即可）；新增 `futures` 依赖（wasm32 兼容）。install 并行下载推迟到引入真运行时时一并做。
+- Phase 4 落地说明（2026-09-29，提交 234dfea5/e1873133/5ffee636）：
+  - **GitHub 适配层**（4a）：github.com 的 git 依赖路由到 `GitHubSource`——版本解析走 REST API（releases 端点，空则回退 tags），下载优先 Release 的 `.yxpkg` 资产（解包校验后入 `cache/github/` 再复制 vendor），无资产回退 git 克隆（SourceKind 如实报 `Git`）。API 访问带指数退避（1s/2s/4s，Retry-After 优先）+ **ETag 条件请求缓存**（`cache/github/*.etag|body`，304 不计 GitHub 速率配额）；403+`x-ratelimit-remaining: 0` 识别为主速率限制、不重试。
+  - **`.yxpkg` 包格式**（4b）：tar.gz + `SHA256SUMS` 清单（coreutils 双空格格式），打包确定性（条目排序、mtime/uid/gid 归零）；解包强制校验（清单缺失/篡改/清单外文件/路径逃逸/解压总量超限一律报错）；内容总量 20 MiB 上限（决议 7）。排除项取黑名单（`.git`/`.yaoxiang`/`target`/`node_modules`/`*.yxpkg` 等）而非白名单——`[exports]` 允许把 src/ 外的文件纳入导出面，白名单会静默漏掉。
+  - **`publish`**（4c）：裸 `publish` 报错指路（Registry 后置）；`--dry-run` 完成「校验（description 必填）→ 打包 → SHA-256」；`--github` 继而查重 Release → 校验 tag 已存在（Cargo 同款语义：打 tag 是用户的事）→ 创建 Release → 上传资产。目标仓库取 `[package].repository`，回退 `git remote origin`；认证读 `$YX_GITHUB_TOKEN`（credentials.toml 随官方 Registry 落地）。HTTP 栈为 reqwest（rustls）+ 包管理自有 tokio current_thread 运行时（`package::runtime::drive`），`futures` 依赖随之移除。
+  - 发布前测试运行（014a 校验清单第 3 步）未接线，随 RFC-014b 构建系统一并做。
 
 - 全局缓存先覆盖 **git 渠道**（`cache/git/<url>-<tag|rev|commit>/`，分支经 `ls-remote` 解析 commit 入缓存并写指针文件供离线回退）；`cache/registry/`、`cache/binaries/` 为目录预留。vendor 副本剔除 `.git`，目录名以依赖 manifest 探测到的真实版本命名（vendor/lock/清理三者同源）。
 - `semver` 与 `sha2` crate 按依赖表替换手写实现；`is_compatible` 由 10 万次枚举改为区间交集判定。
