@@ -479,7 +479,7 @@ token = "xxx"
 | **Phase 1**   | toml 解析、本地依赖、lock 生成、基础算法     | ✅ 已完成 |
 | **Phase 2**   | GitHub 支持、.yaoxiang/vendor 管理、下载工具 | ✅ 已完成 |
 | **Phase 3**   | 全局缓存、semver crate 替换、CLI 完善        | ✅ 已完成 |
-| **Phase 3.5** | Source 分发 enum 化 + 原生 async（014a 决议 4，不引 async-trait） | 进行中    |
+| **Phase 3.5** | Source 分发 enum 化 + 原生 async（014a 决议 4，不引 async-trait） | ✅ 已完成 |
 | **Phase 4**   | GitHub 适配层、.yxpkg 打包、publish --github（RFC-014a 缩减后范围；官方 Registry/auth/yank 后置） | 待开始    |
 | **Phase 5**   | 构建系统、预编译二进制（RFC-014b）           | 待开始    |
 | **Phase 6**   | 工作空间支持（RFC-014c）                     | 待开始    |
@@ -491,6 +491,8 @@ token = "xxx"
 - 随之约束：官方 Registry 上线前 `yaoxiang add <裸包名>` 不可用，添加依赖须显式来源（`--git` / `--path`）。
 
 **Phase 3 落地说明（2026-09-28）**：
+
+- Phase 3.5 落地说明（2026-09-29）：Source 分发按决议 4 采用 `AnySource` 四源封闭集合（Local/Git/Registry/GitHub，后两者为 Phase 4 占位）；`Source` trait 的 resolve/download 为原生 async fn in trait，命令层以 `futures::executor::block_on` 驱动（无运行时，Git 子进程保持 std::process；Phase 4 接 reqwest 时换真执行器即可）；新增 `futures` 依赖（wasm32 兼容）。install 并行下载推迟到引入真运行时时一并做。
 
 - 全局缓存先覆盖 **git 渠道**（`cache/git/<url>-<tag|rev|commit>/`，分支经 `ls-remote` 解析 commit 入缓存并写指针文件供离线回退）；`cache/registry/`、`cache/binaries/` 为目录预留。vendor 副本剔除 `.git`，目录名以依赖 manifest 探测到的真实版本命名（vendor/lock/清理三者同源）。
 - `semver` 与 `sha2` crate 按依赖表替换手写实现；`is_compatible` 由 10 万次枚举改为区间交集判定。
