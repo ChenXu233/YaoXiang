@@ -1,0 +1,38 @@
+// 02-type-system/refined_param_uses_base_type.yx
+// 覆盖: RFC-027 §6 —— 精化是编译期约束，形参的运行时类型是其 base
+// 验证: `b: IsPositive` 的运行时类型是 Int，故 b 可在体内用于任何期望
+//       Int 的位置（返回、算术、传参），且调用方可传入基类型实参。
+//       修复前这些位置均撞 E1002/E1012——形参被存成名义类型
+//       `IsPositive` 本体，把编译期约束当成了运行时类型；连**合法的**
+//       `identity(7)` 都被拒（不是谓词校验，是名义不匹配拒绝所有调用方）。
+//       对照绑定位同类修复：refined_variable_uses_base_type.yx。
+// 状态: ✅ 可运行
+//
+// 注 1：带实参形态 `(b: IsPositive(b))` 在**解析器**层尚不可用——谓词应用的
+//       实参位被判成类型引用，值形参 `b` 因此被当 const 泛型剔除，函数体引用
+//       报 E3006。解析器不持有类型环境，只硬编码了内置谓词 `Terminates`
+//       （见 parser/statements/declarations.rs 的 is_predicate_app）。
+//       本文件故用零参形态。
+// 注 2：形参精化在**调用点**尚未被语义校验（传违反值不报 E4018），
+//       见 src/frontend/core/typecheck/tests/rfc027_refined_transparency.rs
+//       的 tripwire 用例。
+
+use std.assert
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+// 精化形参当值返回（修复前：E1012）
+identity: (b: IsPositive) -> Int = { b }
+
+// 精化形参参与算术（修复前：E1002）
+succ: (b: IsPositive) -> Int = { b + 1 }
+
+// 精化形参传给接受基类型的函数（修复前：E1002）
+plain: (x: Int) -> Int = { x * 2 }
+doubled: (b: IsPositive) -> Int = { plain(b) }
+
+main: () -> Void = {
+    assert.assert(identity(7) == 7, "精化形参的运行时值应原样返回")
+    assert.assert(succ(7) == 8, "精化形参应可参与 Int 算术")
+    assert.assert(doubled(7) == 14, "精化形参应可传给期望 Int 的函数")
+}

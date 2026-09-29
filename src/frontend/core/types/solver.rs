@@ -25,6 +25,18 @@ pub struct TypeConstraintSolver {
     generic_vars: HashMap<usize, usize>,
 }
 
+/// RFC-027 §6.1：精化类型对统一**透明**——取其基类型。
+///
+/// `{x: T | p(x)}` 是编译期约束，不是独立的运行时类型。只剥**顶层**：嵌套在
+/// 泛型实参里的精化（`List(NonNegative)`）目前不剥——先只覆盖实际用例，
+/// 若出现需要再下推（避免无证据的深展开）。
+fn strip_refined_for_unify(ty: MonoType) -> MonoType {
+    match ty {
+        MonoType::Refined { base, .. } => *base,
+        other => other,
+    }
+}
+
 impl TypeConstraintSolver {
     /// 创建新的求解器
     pub fn new() -> Self {
@@ -404,6 +416,18 @@ impl TypeConstraintSolver {
         // eprintln!("DEBUG unify: t1={:?}, t2={:?}", t1, t2);
         let t1 = self.expand_type(t1);
         let t2 = self.expand_type(t2);
+        // RFC-027 §6.1：精化类型对**统一透明**——`{x: T | p(x)}` 是编译期约束，
+        // 不是独立的运行时类型；它的值就是一个 `T` 的值，凡接受 `T` 处皆应接受它。
+        //
+        // 此前该规则只在变量绑定位逐点手动剥除（`statements.rs`），形参位、
+        // 调用实参位、操作数位都不成立，同一件事散在多处且漏。提到统一入口后
+        // 一条规则覆盖全部比较点。
+        //
+        // **不在 `expand_type` 里做**：`Refined` 的原始形态是别处需要的东西
+        // （`collect_refined_var_names` 靠它判定哪些变量带精化标注，进而决定
+        // 循环是否进验证模式），全局展开会打断那条链路。
+        let t1 = strip_refined_for_unify(t1);
+        let t2 = strip_refined_for_unify(t2);
         // eprintln!("DEBUG unify: after expand, t1={:?}, t2={:?}", t1, t2);
 
         match (&t1, &t2) {

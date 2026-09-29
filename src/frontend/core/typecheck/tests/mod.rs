@@ -33,6 +33,7 @@ mod rfc027_phase31_dep_vc;
 mod rfc027_phase33_termination;
 mod rfc027_phase3_e2e;
 mod rfc027_phase4_e2e;
+mod rfc027_refined_transparency;
 mod rfc027a;
 mod signature;
 mod types;
