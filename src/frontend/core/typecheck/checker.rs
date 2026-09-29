@@ -1260,6 +1260,12 @@ impl TypeChecker {
         } else {
             Vec::new()
         };
+        // #389：match scrutinee 推断类型（ir_gen 按 span 回查）
+        let match_scrutinee_types = if let Some(ref bc) = self.body_checker {
+            bc.match_scrutinee_types.clone()
+        } else {
+            HashMap::new()
+        };
 
         // #321 W1003：未使用导入警告（Warning 级，不阻断编译，经 warnings 通道流出）
         let import_warnings = self.collect_unused_import_warnings(module);
@@ -1277,6 +1283,7 @@ impl TypeChecker {
             instantiation_requests,
             existential_coercions,
             try_expr_impls,
+            match_scrutinee_types,
             method_overload_ir_names: self.env.method_overload_ir_names.clone(),
             overload_resolutions: if let Some(ref bc) = self.body_checker {
                 bc.overload_resolutions.clone()

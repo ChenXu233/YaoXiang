@@ -129,6 +129,9 @@ pub struct ExpressionInferrer<'a> {
     pub call_ownership: CallOwnershipTable,
     /// #387：native arity 区间表（随签名表同源注入，缺省空表=无区间）
     native_arity: &'a HashMap<String, (usize, Option<usize>)>,
+    /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
+    /// generate_match_expr_ir 按 span 回查，替代对复合 scrutinee 的 AST 猜测
+    pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -167,6 +170,7 @@ impl<'a> ExpressionInferrer<'a> {
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            match_scrutinee_types: HashMap::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -210,6 +214,7 @@ impl<'a> ExpressionInferrer<'a> {
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            match_scrutinee_types: HashMap::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -254,6 +259,7 @@ impl<'a> ExpressionInferrer<'a> {
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            match_scrutinee_types: HashMap::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -300,6 +306,7 @@ impl<'a> ExpressionInferrer<'a> {
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            match_scrutinee_types: HashMap::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -864,6 +871,7 @@ impl<'a> ExpressionInferrer<'a> {
         &mut self,
         scrutinee: &crate::frontend::core::parser::ast::Expr,
         arms: &[crate::frontend::core::parser::ast::MatchArm],
+        match_span: crate::util::span::Span,
     ) -> Result<MonoType> {
         use crate::frontend::core::parser::ast::Pattern;
         let scrutinee_ty = self.infer_expr(scrutinee)?;
@@ -873,6 +881,13 @@ impl<'a> ExpressionInferrer<'a> {
             resolved = *inner;
         }
         let resolved = self.solver.resolve_type(&resolved);
+
+        // #389：scrutinee 推断类型按 match 节点 span 落表——IR 生成期
+        // generate_match_expr_ir 的 AST 猜测器（get_expr_mono_type）对
+        // 调用/内联构造/字段访问形态返回 None，Union 模式解析随之失败
+        // 被 #330 安全网误拦（E3008）；checker 的推断结果是唯一权威。
+        self.match_scrutinee_types
+            .insert(match_span, resolved.clone());
 
         // 和类型判定（Generic 形态 / scope 镜像 Struct 形态）
         let sum_name: Option<String> = match &resolved {
@@ -3411,8 +3426,8 @@ impl<'a> ExpressionInferrer<'a> {
             } => self.infer_lambda(params, body, None),
 
             // Match 表达式
-            crate::frontend::core::parser::ast::Expr::Match { expr, arms, .. } => {
-                self.check_match_expr(expr, arms)
+            crate::frontend::core::parser::ast::Expr::Match { expr, arms, span } => {
+                self.check_match_expr(expr, arms, *span)
             }
 
             // Try 表达式: expr?（RFC-011b 阶段 2 定案：接口驱动，不硬绑 Result）

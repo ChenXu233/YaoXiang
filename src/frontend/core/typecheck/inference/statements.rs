@@ -106,6 +106,8 @@ pub struct StatementChecker {
     pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
     pub operator_dispatches:
         Vec<crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch>,
+    /// #389：match scrutinee 推断类型（match 节点 span 键控，ir_gen 回查）
+    pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
     gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
     /// 依赖类型环境（类型族注册与查找）
@@ -184,6 +186,7 @@ impl StatementChecker {
             variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
+            match_scrutinee_types: HashMap::new(),
             gamma,
             dep_env,
             trait_table,
@@ -2667,6 +2670,9 @@ impl StatementChecker {
                         self.operator_dispatches
                             .extend(inferrer.operator_dispatches);
                         self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
+                        // #389：match scrutinee 类型表随委托回流
+                        self.match_scrutinee_types
+                            .extend(inferrer.match_scrutinee_types);
                         result
                     }
                 }
@@ -2756,6 +2762,9 @@ impl StatementChecker {
                 self.operator_dispatches
                     .extend(inferrer.operator_dispatches);
                 self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
+                // #389：match scrutinee 类型表随委托回流
+                self.match_scrutinee_types
+                    .extend(inferrer.match_scrutinee_types);
                 result
             }
         }

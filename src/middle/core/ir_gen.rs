@@ -5119,6 +5119,7 @@ impl AstToIrGenerator {
         &mut self,
         match_expr: &Expr,
         arms: &Vec<ast::MatchArm>,
+        match_span: crate::util::span::Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -5133,7 +5134,15 @@ impl AstToIrGenerator {
         // 1. 评估 scrutinee（类型信息驱动嵌套模式的载荷/字段/元组类型解析）
         let scrutinee_reg = self.next_temp_reg();
         self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
-        let scrutinee_ty = self.get_expr_mono_type(match_expr);
+        // #389：scrutinee 类型优先回查 checker 落的 span 表（推断权威），
+        // miss（无 type_result 的路径）回退 AST 猜测器。猜测器对调用/内联
+        // 构造/字段访问形态返回 None，Union 模式会被 #330 安全网误拦。
+        let scrutinee_ty = self
+            .type_result
+            .as_ref()
+            .and_then(|tr| tr.match_scrutinee_types.get(&match_span))
+            .cloned()
+            .or_else(|| self.get_expr_mono_type(match_expr));
 
         let mut jumps_to_end: Vec<usize> = Vec::new();
 
@@ -8027,9 +8036,16 @@ impl AstToIrGenerator {
             Expr::Match {
                 expr: match_expr,
                 arms,
-                ..
+                span,
             } => {
-                self.generate_match_expr_ir(match_expr, arms, result_reg, instructions, constants)?;
+                self.generate_match_expr_ir(
+                    match_expr,
+                    arms,
+                    *span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
             // RFC-012: F-string 代码生成
             Expr::FString { segments, span, .. } => {

@@ -57,6 +57,10 @@ pub struct TypeCheckResult {
     /// RFC-011b `?` 表达式的 Try 实现类型名（span 键控；ir_gen 据此命名
     /// 四方法调用链——接收者是任意表达式时类型名别无来处）
     pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
+    /// #389 match scrutinee 推断类型（match 节点 span 键控；ir_gen 的
+    /// generate_match_expr_ir 按 span 回查——AST 猜测器对调用/内联构造/
+    /// 字段访问形态返回 None，Union 模式会被 #330 安全网误拦 E3008）
+    pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
     /// 用户模块命名空间别名表（别名 → 模块限定键）。
     /// 模块解析归 typecheck 所有：由整体导入（`use lib` / `use lib as l`）登记，IR 生成直接消费。
     pub module_namespaces: HashMap<String, String>,
