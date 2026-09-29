@@ -5,20 +5,20 @@ description: 'Arc / Weak 弱参照'
 
 # std.weak
 
-弱参照モジュール。`Arc` と組み合わせて使用し、参照サイクルを断ち切る。
+弱参照モジュール。`Arc` と組み合わせて使用することで参照環を断ち切る。
 
 ```yaoxiang
 use std.weak
 ```
 
 > 本モジュールはアトミック参照カウントに依存しており、`wasm32`
-> ターゲット上には**エクスポートされない**。
+> ターゲットでは**エクスポートされません**。
 
 ## 関数一覧
 
 <!-- stdlib:table:weak start -->
 
-| 関数      | シグネチャ                                   |
+| 関数      | 署名                                         |
 | --------- | -------------------------------------------- |
 | `new`     | `(T: Type)(arc: Arc(T)) -> Weak(T)`          |
 | `upgrade` | `(T: Type)(weak: Weak(T)) -> Option(Arc(T))` |
@@ -39,19 +39,19 @@ new: (T: Type)(arc: Arc(T)) -> Weak(T)
 
 `Arc` から対応する弱参照を作成する。
 
-- `arc` —— 強参照値。値渡しで渡され、呼び出し後に**ムーブ**される。
+- `arc` —— 強参照値。値渡しされ、呼び出し後に**移動**される
 
-戻り値：同一の割り当てブロックを指す `Weak` ハンドル。強参照カウントは**増やさない**。
+戻り値：同じ割り当てブロックを指す `Weak` ハンドル。強参照カウントは**増加しない**。
 
 ```yaoxiang
 use std.assert
 use std.weak
 
 main: () -> Void = {
-    // ref は Arc[Int] を作成する
+    // ref で Arc[Int] を作成
     p = ref 42
 
-    // Arc → Weak への登録
+    // Arc → Weak 登録
     w = weak.new(p)
     assert(true)
 }
@@ -67,37 +67,39 @@ upgrade: (T: Type)(weak: Weak(T)) -> Option(Arc(T))
 
 <!-- stdlib:sig:weak.upgrade end -->
 
-弱参照を強参照への昇格を試みる。
+弱参照を強参照に昇格することを試みる。
 
 - `weak` —— 弱参照ハンドル
 
-戻り値：割り当てブロックが生存している場合は `Option.some(Arc)`、既に解放されている場合は
-`Option.none()`。**エラーは発生しない**——「対象がまだ存在するか」を `Option` で表現する。
+戻り値：割り当てブロックが生存している場合は `Option.some(Arc)`、解放済みの場合は
+`Option.none()`。**エラーは報告されない**——`Option` で「対象がまだ存在するか」を表現する。
 
 ```yaoxiang
-use std.assert
 use std.weak
+use std.option
 
 main: () -> Void = {
     p = ref 42
     w = weak.new(p)
 
-    // 対象が生存している場合：some バリアントが得られる
+    // upgrade：対象が生存していれば some(v)、解放済みなら none()
     u = weak.upgrade(w)
-    assert(true)
+    match u {
+        some(v) => println("alive"),
+        none() => println("dropped"),
+    }
 }
 ```
 
-> **構文制限**：`Option`
-> のバリアント分解（`match some(v)`）構文はまだ実装されていないため、現時点では呼び出しが成功したことしか検証できず、ソースコード内で
-> `some` / `none` を分岐処理することはできない。詳細は `src/std/tests/weak_ops.yx` の説明を参照。
+> **バリアント分解の前提**：`Option` のバリアント分解にはバリアント集合が必要です——`use std.option`
+> でインポートすれば `match some(v)` / `none()` が利用可能になります（言語仕様 §2.8 match を参照）。
 
-## セマンティクス説明
+## 意味論的説明
 
-弱参照は所有権を**保持しない**：`Weak`
-が存在しても対象の解放を妨げない。典型的な用途は循環参照を断ち切ることである——親ノードが子ノードを指す
-`Arc` を保持し、子ノードは親ノードを指す `Weak` のみを保持することで、サイクルが断ち切られる。
+弱参照は**所有権を保持しない**：`Weak`
+が存在しても対象が解放されるのを防ぎません。典型的な用途は循環参照の解消です——親ノードが子ノードへの
+`Arc` を保持し、子ノードは親ノードを指す `Weak` のみを保持することで、環を断ち切ります。
 
 ## 関連
 
-- [言語仕様：型システム](../language-spec/type-system.md) —— `Arc` / `Weak` の所有権セマンティクス
+- [言語仕様：型システム](../language-spec/type-system.md) —— `Arc` / `Weak` の所有権意味論

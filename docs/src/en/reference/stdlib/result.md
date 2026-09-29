@@ -5,10 +5,10 @@ description: 'Construction and unpacking of Result and Error'
 
 # std.result
 
-Unpacking of `Result(T, E)` and field access of the `Error` carrier. `Result` itself is a
-record-style sum type exported by `std.result` (RFC-010): construction uses **variant construction
-syntax**, deconstruction uses `match` variant patterns, and `?` propagation is driven by the `Try`
-interface (see below).
+Unpacking of `Result(T, E)` and field access for the `Error` carrier. `Result` itself is a record
+sum type exported by `std.result` (RFC-010): construction uses **variant construction syntax**,
+deconstruction uses `match` variant patterns, and `?` propagation is driven by the `Try` interface
+(see below).
 
 ```yaoxiang
 use std.result
@@ -19,21 +19,21 @@ e = Result(Int, String).err("boom")
 
 ## Runtime Representation
 
-| Value                     | Representation                        |
-| ------------------------- | ------------------------------------- |
-| `Result(T, E).ok(value)`  | Enum variant, carrying `value`        |
-| `Result(T, E).err(error)` | Enum variant, carrying `error`        |
-| `Error`                   | Struct, with fields `(code, message)` |
+| Value                     | Representation                       |
+| ------------------------- | ------------------------------------ |
+| `Result(T, E).ok(value)`  | enum variant, carrying `value`       |
+| `Result(T, E).err(error)` | enum variant, carrying `error`       |
+| `Error`                   | struct with fields `(code, message)` |
 
-`Error.code` is the registered code from the `E6xxx` / `E7xxx` segment of RFC-013 (a stable contract
-across versions), and `Error.message` is the human-readable description.
+`Error.code` is the segment registration code in the `E6xxx` / `E7xxx` ranges from RFC-013 (a
+cross-version stable contract), and `Error.message` is a human-readable description.
 
 ## Try Interface (`?` propagation)
 
-`Result` instantiates the four-method `Try(Result(T, E), T, E)` interface in its type body, and the
-`?` operator is driven accordingly: `is_failure` determines failure, `success` retrieves the success
-payload, `residual` retrieves the failure payload, and `from_error` reconstructs a `Result` from an
-error value. These methods can also be called explicitly.
+`Result` instantiates the `Try(Result(T, E), T, E)` four-method interface in its type body. The `?`
+operator is driven by it: `is_failure` detects failure, `success` takes the success payload,
+`residual` takes the failure payload, and `from_error` reconstructs a `Result` from an error value.
+These methods can also be called explicitly.
 
 ## Function Overview
 
@@ -48,6 +48,7 @@ error value. These methods can also be called explicitly.
 | `unwrap_err` | `(T: Type, E: Type)(self: &Result(T, E)) -> E`             |
 | `code`       | `(self: &Error) -> String`                                 |
 | `message`    | `(self: &Error) -> String`                                 |
+| `error`      | `(code: &String, message: &String) -> Error`               |
 
 <!-- stdlib:table:result end -->
 
@@ -98,7 +99,7 @@ main: () -> Void = {
 }
 ```
 
-## Value Extraction
+## Accessors
 
 ### unwrap
 
@@ -112,10 +113,10 @@ unwrap: (T: Type, E: Type)(self: &Result(T, E)) -> T
 
 Extract the success value.
 
-Returns: the value carried by the `Ok` variant. Error: calling on an `Err` value throws `E6007`,
-with the message **including the original error code and description**, in the form
+Returns: the value carried by the `Ok` variant. Error: throws `E6007` when called on an `Err` value.
+The message **includes the original error code and description**, in the form
 `unwrap called on Err value (E6010: parse_int: ...)`, so there is no need to call `unwrap_err` first
-to see the cause of failure.
+to see the failure cause.
 
 ```yaoxiang
 use std.assert
@@ -138,7 +139,7 @@ unwrap_or: (T: Type, E: Type)(self: &Result(T, E), default: T) -> T
 
 <!-- stdlib:sig:result.unwrap_or end -->
 
-Extract the success value, or return `default` when it is `Err`.
+Extract the success value, or return `default` on `Err`.
 
 - `default` — the fallback value when `Err`
 
@@ -168,7 +169,7 @@ unwrap_err: (T: Type, E: Type)(self: &Result(T, E)) -> E
 
 Extract the error value.
 
-Returns: the value carried by the `Err` variant. Error: calling on an `Ok` value throws `E6007`.
+Returns: the value carried by the `Err` variant. Error: throws `E6007` when called on an `Ok` value.
 
 ```yaoxiang
 use std.assert
@@ -235,7 +236,7 @@ main: () -> Void = {
 }
 ```
 
-## See Also
+## Related
 
-- [`std.string`](./string#parse_int) — parsing function that produces `Result`
-- [Error code reference](../error-code/) — runtime error value codes such as `E6010` / `E6011`
+- [`std.string`](./string#parse_int) — parsing functions that produce `Result`
+- [Error Code Reference](../error-code/) — runtime error value codes such as `E6010` / `E6011`

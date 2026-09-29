@@ -6,8 +6,8 @@ description: 'Result と Error の構築とアンラップ'
 # std.result
 
 `Result(T, E)` のアンラップと `Error` キャリアのフィールドアクセス。`Result` 自体は `std.result`
-がエクスポートするレコード型（RFC-010）：構築は**バリアント構築構文**、分解は `match`
-バリアントパターン、 `?` 伝播は `Try` インターフェースで駆動（以下参照）。
+がエクスポートする和型（RFC-010）です。構築は**バリアント構築構文**、分解は `match`
+バリアントパターン、 `?` 伝播は `Try` インターフェースが駆動します（以下参照）。
 
 ```yaoxiang
 use std.result
@@ -20,19 +20,19 @@ e = Result(Int, String).err("boom")
 
 | 値                        | 表現                                   |
 | ------------------------- | -------------------------------------- |
-| `Result(T, E).ok(value)`  | enum バリアント、`value` を保持        |
-| `Result(T, E).err(error)` | enum バリアント、`error` を保持        |
+| `Result(T, E).ok(value)`  | 列挙バリアント、`value` を保持         |
+| `Result(T, E).err(error)` | 列挙バリアント、`error` を保持         |
 | `Error`                   | 構造体、フィールドは `(code, message)` |
 
-`Error.code` は RFC-013 の `E6xxx` / `E7xxx` セグメント登録コード（バージョン間で安定的な契約）、
-`Error.message` は人間が読める説明です。
+`Error.code` は RFC-013 の `E6xxx` / `E7xxx`
+セグメント登録コード（バージョン間で安定的な契約）、`Error.message` は人間が読める説明です。
 
 ## Try インターフェース（`?` 伝播）
 
-`Result` は `Try(Result(T, E), T, E)` の 4 メソッドインターフェースを型本体に実装しており、`?`
-演算子はこれに基づいて駆動されます：`is_failure` は失敗を判定し、`success`
-は成功ペイロードを取得し、 `residual` は失敗ペイロードを取得し、`from_error` はエラー値から `Result`
-を再構築します。これらのメソッドは明示的にも呼び出すことができます。
+`Result` は型本体で `Try(Result(T, E), T, E)` の 4 メソッドインターフェースをインスタンス化し、`?`
+演算子はこれに基づいて駆動します。`is_failure` は失敗を判定、`success`
+は成功ペイロードを取得、`residual` は失敗ペイロードを取得、 `from_error` はエラー値から `Result`
+を再構築します。これらのメソッドは明示的にも呼び出せます。
 
 ## 関数一覧
 
@@ -47,6 +47,7 @@ e = Result(Int, String).err("boom")
 | `unwrap_err` | `(T: Type, E: Type)(self: &Result(T, E)) -> E`             |
 | `code`       | `(self: &Error) -> String`                                 |
 | `message`    | `(self: &Error) -> String`                                 |
+| `error`      | `(code: &String, message: &String) -> Error`               |
 
 <!-- stdlib:table:result end -->## 判定
 
@@ -60,7 +61,7 @@ is_ok: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_ok end -->
 
-成功バリアントかどうかを判定します。読み取り専用借用で、`self` を再利用できます。
+成功バリアントかどうかを判定します。読み取り専用借用で、`self` は繰り返し使用可能です。
 
 ```yaoxiang
 use std.assert
@@ -69,7 +70,7 @@ use std.result
 main: () -> Void = {
     r = Result(Int, String).ok(1)
     assert(result.is_ok(r))
-    assert(result.is_ok(r))      // 再利用可能
+    assert(result.is_ok(r))      // 再利用可
 }
 ```
 
@@ -83,7 +84,7 @@ is_err: (T: Type, E: Type)(self: &Result(T, E)) -> Bool
 
 <!-- stdlib:sig:result.is_err end -->
 
-エラーバリアントかどうかを判定します。読み取り専用借用。
+エラーバリアントかどうかを判定します。読み取り専用借用です。
 
 ```yaoxiang
 use std.assert
@@ -95,7 +96,7 @@ main: () -> Void = {
 }
 ```
 
-## 値の取り出し
+## 値の取得
 
 ### unwrap
 
@@ -110,9 +111,9 @@ unwrap: (T: Type, E: Type)(self: &Result(T, E)) -> T
 成功値を取り出します。
 
 戻り値：`Ok` バリアントが保持する値。エラー：`Err` 値に対して呼び出すと `E6007`
-がスローされ、メッセージには **元のエラーコードと説明が含まれ**、形式は
-`unwrap called on Err value (E6010: parse_int: ...)` のようになるため、先に `unwrap_err`
-を呼び出さなくても失敗原因を確認できます。
+をスローし、メッセージには**元のエラーコードと説明が含まれます**。形式は
+`unwrap called on Err value (E6010: parse_int: ...)` のようになり、`unwrap_err`
+を先に呼ばなくても失敗原因を確認できます。
 
 ```yaoxiang
 use std.assert
@@ -137,7 +138,7 @@ unwrap_or: (T: Type, E: Type)(self: &Result(T, E), default: T) -> T
 
 成功値を取り出すか、`Err` の場合は `default` を返します。
 
-- `default` —— `Err` の場合のフォールバック値
+- `default` — `Err` 時のフォールバック値
 
 ```yaoxiang
 use std.assert
@@ -165,7 +166,7 @@ unwrap_err: (T: Type, E: Type)(self: &Result(T, E)) -> E
 
 エラー値を取り出します。
 
-戻り値：`Err` バリアントが保持する値。エラー：`Ok` 値に対して呼び出すと `E6007` がスローされます。
+戻り値：`Err` バリアントが保持する値。エラー：`Ok` 値に対して呼び出すと `E6007` をスローします。
 
 ```yaoxiang
 use std.assert
@@ -191,9 +192,9 @@ code: (self: &Error) -> String
 
 <!-- stdlib:sig:result.code end -->
 
-エラーコード文字列（例：`"E6010"`）を読み取ります。
+エラーコード文字列を読み取ります（例：`"E6010"`）。
 
-> シグネチャ型は `Error` ですが、ランタイムエラーキャリアは `(code, message)`
+> シグネチャの型は `Error` ですが、ランタイムのエラーキャリアは `(code, message)`
 > をフィールドとする構造体です。`Error` 値に対して直接呼び出します。
 
 ```yaoxiang
@@ -218,7 +219,7 @@ message: (self: &Error) -> String
 
 <!-- stdlib:sig:result.message end -->
 
-エラーの説明テキストを読み取ります。
+エラー説明テキストを読み取ります。
 
 ```yaoxiang
 use std.assert
@@ -234,5 +235,5 @@ main: () -> Void = {
 
 ## 関連
 
-- [`std.string`](./string#parse_int) —— `Result` を生成する解析関数
-- [エラーコードリファレンス](../error-code/) —— `E6010` / `E6011` などのランタイムエラー値コード
+- [`std.string`](./string#parse_int) — `Result` を生成する解析関数
+- [エラーコードリファレンス](../error-code/) — `E6010` / `E6011` などのランタイムエラー値コード
