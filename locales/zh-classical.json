@@ -981,7 +981,7 @@
   },
   "E3020": {
     "title": "缺程序入口",
-    "template": "可执行文件缺 main 函数（{path}）",
+    "template": "可执行之文，缺 main 绑定（{path}）",
     "help": "定义入口：main = { ... }。Bin 角色下若无 main，则诸函数皆不可达。"
   },
   "E3021": {
