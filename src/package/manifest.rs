@@ -60,6 +60,64 @@ pub struct RunConfig {
     pub args: Vec<String>,
 }
 
+/// `[build]` section (RFC-014b)：构建声明。
+/// strategy 缺省视为 "none"（纯 .yx 包）；类型校验在 `build` 模块的
+/// `BuildStrategy::parse`（未知名在那里报错，manifest 保持宽容解析）。
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct BuildConfig {
+    /// 构建策略名：`none` / `cargo` / `cmake` / `custom`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<String>,
+    /// 需要 yx-bindgen 处理的 C 头文件（RFC-026b 集成点）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub headers: Vec<String>,
+    /// cargo 策略配置（`strategy = "cargo"` 时读取）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cargo: Option<CargoBuildConfig>,
+    /// 构建工具预检：工具名 → 版本要求（如 `">= 1.70"`）
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub requirements: BTreeMap<String, String>,
+    /// 平台特定覆盖：target triple → 覆盖项（如 `cargo-features`）
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub platforms: BTreeMap<String, PlatformOverrides>,
+}
+
+/// `[build.cargo]` section (RFC-014b)
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct CargoBuildConfig {
+    /// `cargo build --features <逗号合并>`
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<String>,
+    /// 构建档位：`"release"`（默认）或 `"debug"`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+}
+
+/// `[build.platforms.<triple>]` 覆盖项 (RFC-014b)
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct PlatformOverrides {
+    /// 追加到基础 features 之后的平台特征
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "cargo-features"
+    )]
+    pub cargo_features: Vec<String>,
+}
+
+/// `[binaries.<triple>]` 条目 (RFC-014b)
+///
+/// sha256 缺省 = 该平台预编译路径不可用（完整性不可验证即不启用，
+/// 回退源码构建——RFC「跳过构建的条件」要求校验通过）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BinaryArtifact {
+    /// 下载地址（绝对 URL，或相对包仓库根的路径）
+    pub url: String,
+    /// 整包（tar.gz）的 SHA-256
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+}
+
 /// Represents the complete yaoxiang.toml manifest
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageManifest {
@@ -91,6 +149,13 @@ pub struct PackageManifest {
     /// `[run]` default entry (RFC-015)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunConfig>,
+    /// `[build]` 构建声明（RFC-014b）。成员自包含（014c 决议 2：无 workspace 级 [build]）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<BuildConfig>,
+    /// `[binaries]` 预编译产物声明（RFC-014b：唯一二进制分发机制；
+    /// 平台三元组 → 产物）。存在即触发预编译优先，无需显式 strategy。
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub binaries: BTreeMap<String, BinaryArtifact>,
 }
 
 impl PackageManifest {
@@ -112,6 +177,8 @@ impl PackageManifest {
             bin: Vec::new(),
             exports: BTreeMap::new(),
             run: None,
+            build: None,
+            binaries: BTreeMap::new(),
         }
     }
 
