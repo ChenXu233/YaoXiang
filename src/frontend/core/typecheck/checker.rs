@@ -2800,10 +2800,20 @@ impl TypeChecker {
                 // 子模块作为命名空间
                 let sub_module_path = export.full_path.clone();
                 let mut fields = Vec::new();
+                let mut payload_type_exports = Vec::new();
                 if let Some(sub_module) = self.env.module_registry.get(&sub_module_path).cloned() {
                     for sub_export in sub_module.exports.values() {
                         let field_ty = self.export_register_type(sub_export);
                         fields.push((sub_export.name.clone(), field_ty));
+                        // 分组 use（`use std.{result}`）与整模块 use 同权：子模块内
+                        // 带载荷的 Type 导出按裸名补镜像——裸名构造
+                        // （`Result(Int, String)`）与 match 变体解构的变体集
+                        // （sum_types）都依赖这份注册，与整模块导入臂同一规则。
+                        if matches!(sub_export.kind, crate::frontend::module::ExportKind::Type)
+                            && sub_export.type_payload.is_some()
+                        {
+                            payload_type_exports.push(sub_export.clone());
+                        }
                     }
                 }
                 let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
@@ -2815,6 +2825,9 @@ impl TypeChecker {
                     interfaces: vec![],
                 });
                 self.env.add_var(register_name, PolyType::mono(module_ty));
+                for sub_export in &payload_type_exports {
+                    self.register_use_export(&sub_export.name, sub_export, false);
+                }
             }
             crate::frontend::module::ExportKind::Type => {
                 // 类型导出：镜像本地类型定义，同时注册到类型空间与值空间，

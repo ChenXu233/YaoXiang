@@ -3887,6 +3887,75 @@ impl<'a> ExpressionInferrer<'a> {
                             return Some(ty.clone());
                         }
                         if !matches!(ty, MonoType::MetaType { .. }) {
+                            // 用户自定义类型名作实参（`Result(J, Error)` 的 J）：
+                            // 类型声明的 scope 镜像先命中 Var 臂，ty 是 Struct
+                            // 而非 MetaType。零类型参数的和类型收成与变体构造
+                            // 输出一致的 `Generic{名, []}`（TypeRef 与之不 unify）；
+                            // 其余按名收名义引用
+                            if let crate::frontend::core::parser::ast::Expr::Var(n, _) = a {
+                                if self.sum_types.contains_key(n) {
+                                    let has_params = self
+                                        .generic_type_defs
+                                        .get(n)
+                                        .map(|d| !d.type_param_names.is_empty())
+                                        .unwrap_or(false);
+                                    if has_params {
+                                        return Some(MonoType::TypeRef(n.clone()));
+                                    }
+                                    return Some(MonoType::Generic {
+                                        name: n.clone(),
+                                        args: vec![],
+                                    });
+                                }
+                                if self.generic_type_defs.contains_key(n)
+                                    || self.type_defs.contains_key(n)
+                                {
+                                    return Some(MonoType::TypeRef(n.clone()));
+                                }
+                            }
+                            // 元组类型实参（`Result((Json, Int), Error)`）：语法
+                            // 位置的元组即类型元组，元素按类型名收集
+                            if let crate::frontend::core::parser::ast::Expr::Tuple(items, _) = a {
+                                let parts: Option<Vec<MonoType>> =
+                                    items
+                                        .iter()
+                                        .map(|e| match e {
+                                            crate::frontend::core::parser::ast::Expr::Var(n, _) => {
+                                                concrete_type_from_expr_arg(
+                                                    e,
+                                                    self.type_defs,
+                                                    self.generic_type_defs,
+                                                )
+                                                .or_else(|| {
+                                                    if self.sum_types.contains_key(n) {
+                                                        let has_params = self
+                                                            .generic_type_defs
+                                                            .get(n)
+                                                            .map(|d| !d.type_param_names.is_empty())
+                                                            .unwrap_or(false);
+                                                        if has_params {
+                                                            return Some(MonoType::TypeRef(
+                                                                n.clone(),
+                                                            ));
+                                                        }
+                                                        return Some(MonoType::Generic {
+                                                            name: n.clone(),
+                                                            args: vec![],
+                                                        });
+                                                    }
+                                                    None
+                                                })
+                                            }
+                                            _ => None,
+                                        })
+                                        .collect();
+                                if let Some(ps) = parts {
+                                    return Some(MonoType::Generic {
+                                        name: "Tuple".to_string(),
+                                        args: ps,
+                                    });
+                                }
+                            }
                             return None;
                         }
                         // 具名类型解包失败（Any 等非注册名）时保留

@@ -1094,7 +1094,9 @@ impl OwnershipChecker {
             return false;
         };
         let env = unsafe { &*env_ptr };
-        env.types.contains_key(name) || env.generic_type_defs.contains_key(name)
+        env.types.contains_key(name)
+            || env.generic_type_defs.contains_key(name)
+            || env.sum_types.contains_key(name)
     }
 
     /// 从 TypeEnvironment 查询函数参数的所有权语义
@@ -2015,8 +2017,18 @@ impl OwnershipChecker {
                             .unwrap_or_else(|| vec![ParamOwnership::Move; args.len()]),
                     },
                 };
+                // 和类型应用（`Result(Json, Error)`）：实参整体是类型实参，
+                // 同 #361 理由不参与 Move 分析——Error 类型族与 sum_types 里
+                // 的用户和类型不在 env.types/generic_type_defs，逐实参判定漏网
+                let sum_type_application = match func.as_ref() {
+                    Expr::Var(n, _) => env.sum_types.contains_key(n),
+                    _ => false,
+                };
                 // 处理显式参数
                 for (i, arg) in args.iter().enumerate() {
+                    if sum_type_application {
+                        continue;
+                    }
                     // 类型实参不是值：`M(Int, Int)` 里的 `Int` 是类型名而非变量引用，
                     // 不参与 Move/借用分析。若当值走，同一类型名出现两次即报
                     // E2014「'Int' has been moved」（#361）——泛型构造实参位

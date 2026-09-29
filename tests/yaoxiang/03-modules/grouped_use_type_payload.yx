@@ -1,0 +1,28 @@
+// 03-modules/grouped_use_type_payload.yx
+// 覆盖: 规范 §7.2 模块导入 + RFC-010 记录式和类型（跨模块类型载荷传播）
+// 验证: 分组 use std.{...} 与整模块 use std.result 同权——分组形式命中的是
+//       std 根的 SubModule 导出，子模块内 Type 导出的裸名与变体集载荷
+//       （sum_types）必须随组导入注册，否则裸名构造与 match 解构均报错
+// 状态: ✅ 可运行
+
+use std.{assert, string, result}
+
+main: () -> Void = {
+    // 分组 use 后类型裸名可用（构造）
+    a = Result(Int, String).ok(21)
+    v = match a {
+        ok(x) => x * 2,
+        err(_) => 0,
+    }
+    assert.assert(v == 42, "grouped use type bare name + match")
+
+    // 分组 use 后 match native 返回的 Result
+    n = string.parse_int("nope")
+    tag = match n {
+        ok(_) => "parsed",
+        err(_) => "failed",
+    }
+    assert.assert(tag == "failed", "grouped use match native Result")
+}
+
+main()
