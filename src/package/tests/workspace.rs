@@ -182,3 +182,190 @@ fn test_find_workspace_root_none_for_plain_project() {
     // 普通项目不是工作空间
     assert_eq!(find_workspace_root(tmp.path()), None);
 }
+
+// === 6b：合并解析（继承 / 成员引用 / 冲突检测）===
+
+use crate::package::workspace::merged_dependencies;
+
+/// 给成员 toml 追加依赖表
+fn set_member_deps(
+    root: &std::path::Path,
+    key: &str,
+    deps_toml: &str,
+) {
+    let path = root.join("packages").join(key).join("yaoxiang.toml");
+    let mut body = fs::read_to_string(&path).unwrap();
+    body.push('\n');
+    body.push_str(deps_toml);
+    fs::write(path, body).unwrap();
+}
+
+#[test]
+fn test_merge_compatible_reqs_unify_to_intersection() {
+    let (_tmp, root) = setup_workspace();
+    set_member_deps(&root, "core", "[dependencies]\nregex = \">=1.0, <2.0\"\n");
+    set_member_deps(&root, "utils", "[dependencies]\nregex = \"^1.5\"\n");
+
+    let ws = load_workspace(&root).unwrap();
+    let merged = merged_dependencies(&ws).unwrap();
+    // 交集 [1.5, 2.0)
+    assert_eq!(
+        merged.fetch.get("regex").map(|v| v.to_string()),
+        Some("\">=1.5.0, <2.0.0\"".to_string())
+    );
+    assert!(merged.member_refs.is_empty());
+}
+
+#[test]
+fn test_merge_conflicting_reqs_error_names_members() {
+    let (_tmp, root) = setup_workspace();
+    set_member_deps(&root, "core", "[dependencies]\nregex = \"^1.0\"\n");
+    set_member_deps(&root, "utils", "[dependencies]\nregex = \"^2.0\"\n");
+
+    let ws = load_workspace(&root).unwrap();
+    let err = merged_dependencies(&ws).unwrap_err().to_string();
+    assert!(err.contains("版本冲突"), "{err}");
+    assert!(err.contains("core") && err.contains("utils"), "{err}");
+}
+
+#[test]
+fn test_merge_workspace_true_inherits_from_root() {
+    let (_tmp, root) = setup_workspace();
+    fs::write(
+        root.join("yaoxiang.toml"),
+        "[workspace.members]\ncore = \"packages/core/yaoxiang.toml\"\nutils = \"packages/utils/yaoxiang.toml\"\n\n[workspace.dependencies]\nregex = \"^1.0\"\n",
+    )
+    .unwrap();
+    set_member_deps(
+        &root,
+        "core",
+        "[dependencies]\nregex = { workspace = true }\n",
+    );
+    set_member_deps(
+        &root,
+        "utils",
+        "[dependencies]\nregex = { workspace = true }\n",
+    );
+
+    let ws = load_workspace(&root).unwrap();
+    let merged = merged_dependencies(&ws).unwrap();
+    assert_eq!(
+        merged.fetch.get("regex").map(|v| v.to_string()),
+        Some("\">=1.0.0, <2.0.0\"".to_string())
+    );
+}
+
+#[test]
+fn test_merge_workspace_true_missing_in_root_errors() {
+    let (_tmp, root) = setup_workspace();
+    set_member_deps(
+        &root,
+        "core",
+        "[dependencies]\nregex = { workspace = true }\n",
+    );
+
+    let ws = load_workspace(&root).unwrap();
+    let err = merged_dependencies(&ws).unwrap_err().to_string();
+    assert!(err.contains("未定义"), "{err}");
+}
+
+#[test]
+fn test_merge_workspace_true_mixed_fields_error() {
+    let (_tmp, root) = setup_workspace();
+    fs::write(
+        root.join("yaoxiang.toml"),
+        "[workspace.members]\ncore = \"packages/core/yaoxiang.toml\"\nutils = \"packages/utils/yaoxiang.toml\"\n\n[workspace.dependencies]\nregex = \"^1.0\"\n",
+    )
+    .unwrap();
+    set_member_deps(
+        &root,
+        "core",
+        "[dependencies]\nregex = { workspace = true, version = \"^9\" }\n",
+    );
+
+    let ws = load_workspace(&root).unwrap();
+    assert!(merged_dependencies(&ws).is_err());
+}
+
+#[test]
+fn test_merge_member_ref_validated_and_recorded() {
+    let (_tmp, root) = setup_workspace();
+    set_member_deps(
+        &root,
+        "core",
+        "[dependencies]\nutils = { workspace = \"utils\" }\n",
+    );
+
+    let ws = load_workspace(&root).unwrap();
+    let merged = merged_dependencies(&ws).unwrap();
+    assert_eq!(
+        merged.member_refs.get("utils").map(|s| s.as_str()),
+        Some("utils")
+    );
+    assert!(!merged.fetch.contains_key("utils"), "成员引用不进 fetch");
+}
+
+#[test]
+fn test_merge_member_ref_unknown_key_errors() {
+    let (_tmp, root) = setup_workspace();
+    set_member_deps(
+        &root,
+        "core",
+        "[dependencies]\nghost = { workspace = \"ghost\" }\n",
+    );
+
+    let ws = load_workspace(&root).unwrap();
+    let err = merged_dependencies(&ws).unwrap_err().to_string();
+    assert!(err.contains("ghost"), "{err}");
+}
+
+#[test]
+fn test_merge_dev_deps_included() {
+    let (_tmp, root) = setup_workspace();
+    set_member_deps(&root, "core", "[dev-dependencies]\nregex = \"^1.0\"\n");
+    set_member_deps(&root, "utils", "[dev-dependencies]\nregex = \"^1.2\"\n");
+
+    let ws = load_workspace(&root).unwrap();
+    let merged = merged_dependencies(&ws).unwrap();
+    // dev 依赖同样并入共享 lock（测试可复现）
+    assert!(merged.fetch.contains_key("regex"));
+}
+
+#[test]
+fn test_merge_same_git_dep_intersects() {
+    let (_tmp, root) = setup_workspace();
+    let url = "https://example.com/u/repo";
+    set_member_deps(
+        &root,
+        "core",
+        &format!("[dependencies]\nrepo = {{ version = \">=1.0\", git = \"{url}\" }}\n"),
+    );
+    set_member_deps(
+        &root,
+        "utils",
+        &format!("[dependencies]\nrepo = {{ version = \"^1.2\", git = \"{url}\" }}\n"),
+    );
+
+    let ws = load_workspace(&root).unwrap();
+    let merged = merged_dependencies(&ws).unwrap();
+    assert!(merged.fetch.contains_key("repo"));
+}
+
+#[test]
+fn test_merge_different_git_urls_conflict() {
+    let (_tmp, root) = setup_workspace();
+    set_member_deps(
+        &root,
+        "core",
+        "[dependencies]\nrepo = { version = \"*\", git = \"https://example.com/u/a\" }\n",
+    );
+    set_member_deps(
+        &root,
+        "utils",
+        "[dependencies]\nrepo = { version = \"*\", git = \"https://example.com/u/b\" }\n",
+    );
+
+    let ws = load_workspace(&root).unwrap();
+    let err = merged_dependencies(&ws).unwrap_err().to_string();
+    assert!(err.contains("不同的 git 仓库"), "{err}");
+}

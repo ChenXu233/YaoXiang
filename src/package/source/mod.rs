@@ -75,20 +75,21 @@ pub trait Source {
     /// Phase 3.5 起为 async（014a 决议 4：enum 分发 + 原生 async fn in
     /// trait，无 async-trait）；当前实现内部为阻塞操作（std::process），
     /// 由调用方 block_on 驱动——Phase 4 换真异步后端（reqwest/tokio）时
-    /// 签名不变。
-    async fn resolve(
+    /// 签名不变。脱糖为 `impl Future + Send`：锁死 Send 保证，运行时接入
+    /// 无需破坏性变更。
+    fn resolve(
         &self,
         spec: &DependencySpec,
-    ) -> PackageResult<String>;
+    ) -> impl std::future::Future<Output = PackageResult<String>> + Send;
 
     /// 下载依赖到指定目录
     ///
     /// 将依赖下载到 `dest` 目录，返回已解析的包信息。
-    async fn download(
+    fn download(
         &self,
         spec: &DependencySpec,
         dest: &Path,
-    ) -> PackageResult<ResolvedPackage>;
+    ) -> impl std::future::Future<Output = PackageResult<ResolvedPackage>> + Send;
 }
 
 /// 本地路径来源

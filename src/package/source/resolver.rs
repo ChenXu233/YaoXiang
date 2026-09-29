@@ -90,6 +90,50 @@ pub fn is_compatible(
     intersect(&req_interval(a), &req_interval(b)).is_some()
 }
 
+/// 求一组版本要求的交集；空集返回 None（供工作空间合并解析使用，RFC-014c）。
+///
+/// 返回值是**合成要求**：`>=lo, <hi`（闭区间点则 `=lo`），与输入的书写形式
+/// （caret/tilde）无关——合并只关心数域。
+pub fn intersect_reqs(reqs: &[VersionReq]) -> Option<VersionReq> {
+    if reqs.is_empty() {
+        return VersionReq::parse("*").ok();
+    }
+    let mut acc = req_interval(&reqs[0]);
+    for req in &reqs[1..] {
+        acc = intersect(&acc, &req_interval(req))?;
+    }
+    interval_to_req(&acc)
+}
+
+/// 区间 → 等价要求串（供 intersect_reqs）
+fn interval_to_req(interval: &Interval) -> Option<VersionReq> {
+    let comparator = |op: Op, v: &Version| Comparator {
+        op,
+        major: v.major,
+        minor: Some(v.minor),
+        patch: Some(v.patch),
+        pre: semver::Prerelease::EMPTY,
+    };
+    let mut comparators = Vec::new();
+    match (&interval.lo, &interval.hi) {
+        (Some((lv, true)), Some((hv, true))) if lv == hv => {
+            comparators.push(comparator(Op::Exact, lv));
+        }
+        (lo, hi) => {
+            if let Some((lv, _)) = lo {
+                comparators.push(comparator(Op::GreaterEq, lv));
+            }
+            if let Some((hv, _)) = hi {
+                comparators.push(comparator(Op::Less, hv));
+            }
+        }
+    }
+    if comparators.is_empty() {
+        return VersionReq::parse("*").ok();
+    }
+    Some(VersionReq { comparators })
+}
+
 /// 闭/开边界标注的版本区间
 #[derive(Debug, Clone)]
 struct Interval {

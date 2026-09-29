@@ -8,6 +8,7 @@ mod list;
 mod outdated;
 mod rm;
 mod update;
+mod workspace_install;
 
 use crate::package::manifest::PackageManifest;
 use std::path::Path;

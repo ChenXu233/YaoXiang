@@ -55,15 +55,26 @@ workspace 的集成。
 core = "packages/core/yaoxiang.toml"
 utils = "packages/utils/yaoxiang.toml"
 app = "packages/app/yaoxiang.toml"
+
+[workspace.dependencies]        # 2026-09-29 修订：共享依赖权威版本
+regex = "^1.0"
+json = "^2.0"
 ```
 
-**根 toml 只做三件事：**
+**根 toml 只做四件事：**
 
 1. 声明成员列表（字典形式，key 为成员名，value 为 toml 路径）
 2. 提供共享 lockfile（`yaoxiang.lock`）
 3. 提供共享 vendor 目录（`.yaoxiang/vendor/`）
+4. （2026-09-29 修订）声明共享依赖版本（`[workspace.dependencies]`）
 
-**根 toml 不定义 dependencies。** 每个成员的依赖写在自己的 `yaoxiang.toml` 里。
+> **2026-09-29 修订：新增 `[workspace.dependencies]` 继承（原「根 toml 不定义
+> dependencies」放宽）。** 严格统一版本规则下，多成员各自声明同名包的摩擦可
+> 预见；吸收 Cargo/uv 先例，根声明共享依赖的权威版本，成员以
+> `{ workspace = true }` 逐条继承（升共享版本只改根一处）。成员引用仍是
+> `{ workspace = "<key>" }`（字符串）——同键不同型，与 Cargo 同构。
+> 合并解析：全部成员 deps + dev-deps 并入共享 lockfile；同名包要求求交集，
+> 空交集报冲突并列出来源成员；git 依赖 base URL 不一致视为冲突。
 
 ### 成员 yaoxiang.toml
 
