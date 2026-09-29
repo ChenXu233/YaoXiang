@@ -802,7 +802,7 @@
   },
   "E3020": {
     "title": "缺少程序入口",
-    "template": "可执行文件缺少 main 函数（{path}）",
+    "template": "可执行文件缺少 main 绑定（{path}）",
     "help": "定义入口：main = { ... }。Bin 角色下没有 main 时全部函数都不可达。"
   },
   "E3021": {

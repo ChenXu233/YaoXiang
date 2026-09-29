@@ -1214,13 +1214,16 @@ fn test_e2e_yaoxiang_lang_env_selects_every_shipped_language() {
     );
 
     // 每个语言：locales/<lang>.json 里 E1103 template 的特征片段。
+    // 片段须与 bot 译文产物保持同步（en/ja/ru/… 由 bot 全权重译，
+    // 期望片段漂移是测试债：aafc8db1 重译后 ja 丢「の」、ru 改写、
+    // zh-x-miao 整句改中文喵腔）。
     // 任一语言若被白名单拦掉，就会回落 en——由下面的英文标记断言揭穿。
     let expectations: &[(&str, &str)] = &[
         ("zh", "不是类型语法"),
-        ("ja", "は型の構文ではありません"),
-        ("ru", "это не синтаксис типа"),
+        ("ja", "は型構文ではありません"),
+        ("ru", "не является синтаксисом типа"),
         ("zh-classical", "非类型之语法"),
-        ("zh-x-miao", "構文じゃないのにゃ"),
+        ("zh-x-miao", "不是类型语法喵"),
     ];
     // en 的 template 特征——它是回落目标，出现即说明语言选择失效
     let english_marker = "is not type syntax";
