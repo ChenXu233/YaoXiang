@@ -505,6 +505,27 @@ fn ensure_vendor_consistency(entry: &Path) -> Result<Option<PathBuf>, Orchestrat
         let Some(project_root) = find_project_root(entry) else {
             return Ok(None);
         };
+
+        // RFC-014c：目录处于工作空间内 → 一致性针对 ws 根（合并后的依赖 vs
+        // 根 lock vs 根 vendor），vendor_root 也指向根共享 vendor
+        if let Some(ws_root) = crate::package::workspace::find_workspace_root(&project_root) {
+            if ws_root != project_root {
+                let report =
+                    super::consistency::check_workspace_consistency(&ws_root).map_err(|e| {
+                        OrchestratorError::Io {
+                            path: ws_root.display().to_string(),
+                            reason: e.to_string(),
+                        }
+                    })?;
+                if !report.is_consistent() {
+                    return Err(OrchestratorError::VendorLockInconsistent { report });
+                }
+                return Ok(Some(ws_root.join(".yaoxiang").join("vendor")));
+            }
+            // 工作空间根自身（[workspace]，无包依赖语义）：跳过
+            return Ok(None);
+        }
+
         let vendor_root = project_root.join(".yaoxiang").join("vendor");
         if !vendor_root.is_dir() {
             return Ok(None);
@@ -768,9 +789,17 @@ type Discovery = (Vec<DiscoveredFile>, HashSet<PathBuf>, Vec<ShadowEvent>);
 /// 以及本地模块遮蔽依赖包事件（RFC-014 §项目模式，W1006）。
 fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
     let project_root = find_project_root(entry);
+    // RFC-014c 6c：工作空间成员上下文——严格可见性（成员只见自己声明的依赖）
+    // 与成员引用/path 依赖的路径解析都从这里出发
+    let member_ctx = project_root.as_deref().and_then(member_context);
     // RFC-014 §项目模式：lock 优先的 vendor 解析——lock 有条目的依赖只解析
-    // 锁定版本目录（读取失败降级为无 lock，回退最高版本）
-    let lock_versions: HashMap<String, String> = project_root
+    // 锁定版本目录（读取失败降级为无 lock，回退最高版本）。
+    // 成员的 lock/vendor 都在工作空间根（决议 3：根 lockfile 唯一）
+    let lock_base: Option<PathBuf> = member_ctx
+        .as_ref()
+        .map(|c| c.ws_root.clone())
+        .or_else(|| project_root.clone());
+    let lock_versions: HashMap<String, String> = lock_base
         .as_deref()
         .and_then(|root| super::consistency::lock_versions(root).ok())
         .unwrap_or_default();
@@ -827,6 +856,7 @@ fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
                 importer_dir.as_deref(),
                 project_root.as_deref(),
                 &lock_versions,
+                member_ctx.as_ref(),
             ) {
                 if shadows_dep {
                     // RFC-014 §项目模式：本地模块遮蔽依赖包（W1006，
@@ -865,7 +895,7 @@ pub(crate) fn find_project_root(entry: &Path) -> Option<PathBuf> {
 
 /// 解析模块路径为文件：`a.b` → `<base>/a/b.yx` 或 `<base>/a/b/mod.yx`。
 /// 顺序（RFC-014 §模块解析顺序）：导入者目录 → 项目根（本地，最高优先级）
-/// → vendor 依赖（lock 优先）。
+/// → 工作空间成员引用 / path 依赖（6c，成员上下文）→ vendor 依赖（lock 优先）。
 ///
 /// 返回 `(路径, 是否遮蔽依赖包)`：本地命中且 vendor 中存在同名首段的包
 /// 目录时为 true（RFC-014 §项目模式：遮蔽发 W1006）。
@@ -874,7 +904,21 @@ fn resolve_module_path(
     importer_dir: Option<&Path>,
     project_root: Option<&Path>,
     lock_versions: &HashMap<String, String>,
+    member: Option<&MemberCtx>,
 ) -> Option<(PathBuf, bool)> {
+    let pkg = use_path.split('.').next().unwrap_or(use_path);
+
+    // RFC-014c 6c：成员引用与 path 依赖按路径解析（总纲：path 依赖视同
+    // 本地模块的延伸，不经核心包源）
+    if let Some(ctx) = member {
+        if let Some(ref_root) = ctx.refs.get(pkg) {
+            return resolve_in_package_root(use_path, ref_root).map(|p| (p, false));
+        }
+        if let Some(dep_root) = ctx.path_deps.get(pkg) {
+            return resolve_in_package_root(use_path, dep_root).map(|p| (p, false));
+        }
+    }
+
     let rel: PathBuf = use_path.split('.').collect();
     for base in [importer_dir, project_root].into_iter().flatten() {
         for cand in [
@@ -882,20 +926,155 @@ fn resolve_module_path(
             base.join(&rel).join("mod.yx"),
         ] {
             if cand.is_file() {
-                // 遮蔽判定：vendor 中存在同首段包目录（本地已优先胜出）
-                let shadowed = project_root
-                    .map(|root| vendor_has_package(root, use_path))
-                    .unwrap_or(false);
+                // 遮蔽判定：vendor 中存在同首段包目录（本地已优先胜出）。
+                // 成员的 vendor 在工作空间根，且只对可见依赖有意义
+                let vendor_base = member.as_ref().map(|c| c.ws_root.as_path());
+                let shadowed = match vendor_base {
+                    Some(root) => {
+                        vendor_has_package(root, use_path)
+                            && member.map(|c| c.visible.contains(pkg)).unwrap_or(true)
+                    }
+                    None => project_root
+                        .map(|root| vendor_has_package(root, use_path))
+                        .unwrap_or(false),
+                };
                 return Some((cand, shadowed));
             }
         }
     }
-    if let Some(root) = project_root {
-        let pkg = use_path.split('.').next().unwrap_or(use_path);
-        if let Some(path) =
-            resolve_in_vendor_with_lock(use_path, root, lock_versions.get(pkg).map(|v| v.as_str()))
-        {
-            return Some((path, false));
+
+    // vendor：成员 → 工作空间根（严格可见性：只解析自己声明的依赖）；
+    // 非成员 → 项目根全量
+    let (vendor_base, visible): (&Path, Option<&HashSet<String>>) = match member {
+        Some(ctx) => (ctx.ws_root.as_path(), Some(&ctx.visible)),
+        None => (project_root?, None),
+    };
+    if let Some(path) = resolve_in_vendor_with_lock(
+        use_path,
+        vendor_base,
+        lock_versions.get(pkg).map(|v| v.as_str()),
+        visible,
+    ) {
+        return Some((path, false));
+    }
+    None
+}
+
+/// RFC-014c 6c：工作空间成员的解析上下文（严格可见性）
+struct MemberCtx {
+    /// 工作空间根（共享 vendor 与共享 lock 所在，2026-09-15 决议 3）
+    ws_root: PathBuf,
+    /// 成员引用：依赖名 → 被引用成员的包根
+    refs: HashMap<String, PathBuf>,
+    /// path 依赖：依赖名 → 依赖包根（相对成员根展开）
+    path_deps: HashMap<String, PathBuf>,
+    /// 严格可见集：成员声明的版本类依赖（git/裸版本）包名——
+    /// 共享 vendor 只解析这些（防幽灵依赖，pnpm 纪律）
+    visible: HashSet<String>,
+}
+
+/// 计算入口文件所属工作空间成员的解析上下文；非成员（独立项目/工作空间根
+/// 自身）返回 None
+fn member_context(project_root: &Path) -> Option<MemberCtx> {
+    let ws_root = crate::package::workspace::find_workspace_root(project_root)?;
+    if ws_root == project_root {
+        return None; // 工作空间根自身不是成员（根 toml 无 [package]）
+    }
+    let ws = crate::package::workspace::load_workspace(&ws_root).ok()?;
+    let member = ws.members.iter().find(|m| m.root == project_root)?;
+
+    let mut refs = HashMap::new();
+    let mut path_deps = HashMap::new();
+    let mut visible = HashSet::new();
+    for (name, value) in member
+        .manifest
+        .dependencies
+        .iter()
+        .chain(member.manifest.dev_dependencies.iter())
+    {
+        match value {
+            toml::Value::Table(t) => match t.get("workspace") {
+                Some(toml::Value::String(key)) => {
+                    if let Some(target) = ws.members.iter().find(|m| m.name == *key) {
+                        refs.insert(name.clone(), target.root.clone());
+                    }
+                }
+                _ => {
+                    if let Some(p) = t.get("path").and_then(|v| v.as_str()) {
+                        path_deps.insert(name.clone(), member.root.join(p));
+                    } else {
+                        visible.insert(name.clone());
+                    }
+                }
+            },
+            // 裸版本 → 版本类依赖，vendor 可见
+            _ => {
+                visible.insert(name.clone());
+            }
+        }
+    }
+
+    Some(MemberCtx {
+        ws_root,
+        refs,
+        path_deps,
+        visible,
+    })
+}
+
+/// 在包根的 `src/` 布局中解析 `use <pkg>[.<rest>]`（成员引用与 path 依赖；
+/// 布局与 vendor 条目同构，无版本后缀），应用该包的导入面（RFC-029f）
+fn resolve_in_package_root(
+    use_path: &str,
+    pkg_root: &Path,
+) -> Option<PathBuf> {
+    let (pkg, rest) = match use_path.split_once('.') {
+        Some((pkg, rest)) => (pkg, Some(rest)),
+        None => (use_path, None),
+    };
+    let surface = dep_import_surface(pkg_root);
+    let src = pkg_root.join("src");
+
+    // 裸名时同时尝试 key 与 [package].name 形态的目录（014c：两者可不同）
+    let mut pkg_names = vec![pkg.to_string()];
+    if let Ok(manifest) = PackageManifest::load(pkg_root) {
+        let pn = manifest.package.name;
+        if pn != *pkg && !pkg_names.contains(&pn) {
+            pkg_names.push(pn);
+        }
+    }
+
+    let mut tries: Vec<PathBuf> = Vec::new();
+    match rest {
+        Some(rest) => {
+            let rel: PathBuf = rest.split('.').collect();
+            for name in &pkg_names {
+                tries.push(src.join(name).join(&rel).with_extension("yx"));
+                tries.push(src.join(name).join(&rel).join("mod.yx"));
+            }
+            tries.push(src.join(&rel).with_extension("yx"));
+            tries.push(src.join(&rel).join("mod.yx"));
+        }
+        None => {
+            for name in &pkg_names {
+                tries.push(src.join(name).with_extension("yx"));
+                tries.push(src.join(name).join("mod.yx"));
+            }
+            tries.push(src.join("lib.yx"));
+            tries.push(src.join("main.yx"));
+            tries.push(pkg_root.join("mod.yx"));
+        }
+    }
+
+    for cand in tries {
+        if cand.is_file() {
+            if let Some(allowed) = &surface {
+                let cand_canon = cand.canonicalize().unwrap_or_else(|_| cand.clone());
+                if !allowed.contains(&cand_canon) {
+                    continue; // 不在导出面：跨包不可见
+                }
+            }
+            return Some(cand);
         }
     }
     None
@@ -947,10 +1126,13 @@ fn dep_import_surface(_dep_root: &Path) -> Option<std::collections::HashSet<Path
 /// 项目仍可解析手放的 vendor 目录）。
 /// `locked_version` 为 `Some(v)` 时仅尝试 `<pkg>-v` 目录（精确命中 lock）；
 /// 为 `None` 时回退最高版本（供 LSP 与单文件等无 lock 上下文的调用方）。
+/// `visible`（RFC-014c 6c 严格可见性）为 Some 时，包名不在集合内一律不解析
+/// ——工作空间成员只见自己声明的依赖，共享 vendor 里别人声明的包不可见。
 pub(crate) fn resolve_in_vendor_with_lock(
     use_path: &str,
     project_root: &Path,
     locked_version: Option<&str>,
+    visible: Option<&HashSet<String>>,
 ) -> Option<PathBuf> {
     let vendor_dir = project_root.join(".yaoxiang").join("vendor");
     if !vendor_dir.is_dir() {
@@ -960,6 +1142,12 @@ pub(crate) fn resolve_in_vendor_with_lock(
         Some((pkg, rest)) => (pkg, Some(rest)),
         None => (use_path, None),
     };
+    // 严格可见性：未声明即未安装（pnpm 纪律，防幽灵依赖）
+    if let Some(vis) = visible {
+        if !vis.contains(pkg) {
+            return None;
+        }
+    }
     let prefix = format!("{pkg}-");
 
     let mut candidates: Vec<(String, PathBuf)> = Vec::new();

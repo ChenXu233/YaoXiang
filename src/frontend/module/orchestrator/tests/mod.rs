@@ -4,5 +4,6 @@
 
 mod vendor_lock_consistency;
 mod vendor_version_resolution;
+mod workspace_resolution;
 
 pub(crate) use super::{compare_version, resolve_in_vendor_with_lock};

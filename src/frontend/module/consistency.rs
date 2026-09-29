@@ -128,6 +128,69 @@ pub fn check_vendor_lock_consistency(project_root: &Path) -> PackageResult<Consi
     Ok(report)
 }
 
+/// 工作空间一致性检查（RFC-014c 6b/6c：合并后的依赖 vs 根 lock vs 根 vendor）
+///
+/// 与 [`check_vendor_lock_consistency`] 同构，但依赖来源是**合并解析**产物
+/// （成员引用不计——它们不经 vendor），清单是根（成员无自有 lock，决议 3）。
+pub fn check_workspace_consistency(ws_root: &Path) -> PackageResult<ConsistencyReport> {
+    let vendor_dir = ws_root.join(".yaoxiang").join("vendor");
+    if !vendor_dir.is_dir() {
+        return Ok(ConsistencyReport::default());
+    }
+
+    let ws = crate::package::workspace::load_workspace(ws_root)?;
+    let merged = crate::package::workspace::merged_dependencies(&ws)?;
+    let lock = LockFile::load(ws_root)?;
+
+    let mut report = ConsistencyReport::default();
+    for (name, value) in &merged.fetch {
+        let spec = DependencySpec::parse(name, value);
+        if spec.path.is_some() {
+            continue;
+        }
+        let Some(locked) = lock.package.get(name) else {
+            report.missing_in_lock.push(name.clone());
+            continue;
+        };
+        if !vendor_dir
+            .join(format!("{}-{}", name, locked.version))
+            .is_dir()
+        {
+            report
+                .missing_in_vendor
+                .push((name.clone(), locked.version.clone()));
+            continue;
+        }
+        let pinned = spec
+            .git
+            .as_ref()
+            .map(|url| {
+                !matches!(
+                    crate::package::source::git::GitSource::parse_git_url(url).1,
+                    crate::package::source::git::GitRef::DefaultBranch
+                )
+            })
+            .unwrap_or(false);
+        if !pinned {
+            if let Ok(req) = parse_version_req(&spec.version) {
+                if let Ok(locked_ver) =
+                    crate::package::source::resolver::parse_version(&locked.version)
+                {
+                    if !req.matches(&locked_ver) {
+                        report.requirement_mismatch.push((
+                            name.clone(),
+                            spec.version.clone(),
+                            locked.version.clone(),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(report)
+}
+
 /// 在 lock 中查依赖的锁定版本；不存在返回 None
 pub fn locked_version(
     project_root: &Path,

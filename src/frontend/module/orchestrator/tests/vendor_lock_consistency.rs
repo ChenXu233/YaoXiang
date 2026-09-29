@@ -137,7 +137,7 @@ fn test_resolve_lock_precise_selection() {
     write_vendor_pkg(tmp.path(), "foo", "2.0.0");
 
     // lock 锁 1.0.0：不取最高版本
-    let resolved = resolve_in_vendor_with_lock("foo", tmp.path(), Some("1.0.0")).unwrap();
+    let resolved = resolve_in_vendor_with_lock("foo", tmp.path(), Some("1.0.0"), None).unwrap();
     assert!(
         resolved.to_string_lossy().contains("foo-1.0.0"),
         "unexpected: {:?}",
@@ -151,7 +151,7 @@ fn test_resolve_falls_back_to_highest_without_lock() {
     write_vendor_pkg(tmp.path(), "foo", "1.0.0");
     write_vendor_pkg(tmp.path(), "foo", "2.0.0");
 
-    let resolved = resolve_in_vendor_with_lock("foo", tmp.path(), None).unwrap();
+    let resolved = resolve_in_vendor_with_lock("foo", tmp.path(), None, None).unwrap();
     assert!(resolved.to_string_lossy().contains("foo-2.0.0"));
 }
 
@@ -161,7 +161,7 @@ fn test_resolve_fails_when_locked_version_absent() {
     write_vendor_pkg(tmp.path(), "foo", "1.0.0");
 
     // lock 指向缺失版本：解析失败（一致性检查会先报出 missing_in_vendor）
-    assert!(resolve_in_vendor_with_lock("foo", tmp.path(), Some("9.9.9")).is_none());
+    assert!(resolve_in_vendor_with_lock("foo", tmp.path(), Some("9.9.9"), None).is_none());
 }
 
 #[test]

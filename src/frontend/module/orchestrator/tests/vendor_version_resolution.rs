@@ -53,7 +53,7 @@ fn test_resolve_in_vendor_prefers_release_over_prerelease() {
     }
 
     // Act
-    let resolved = resolve_in_vendor_with_lock("foo", tmp.path(), None);
+    let resolved = resolve_in_vendor_with_lock("foo", tmp.path(), None, None);
 
     // Assert - 必须选中正式版 1.0.0，预发布目录不得遮蔽
     let resolved = resolved.expect("vendor module must resolve");
@@ -78,7 +78,7 @@ fn test_resolve_in_vendor_picks_highest_numeric_version() {
     }
 
     // Act
-    let resolved = resolve_in_vendor_with_lock("foo", tmp.path(), None);
+    let resolved = resolve_in_vendor_with_lock("foo", tmp.path(), None, None);
 
     // Assert - 降序排序必须选中 1.2.0
     let resolved = resolved.expect("vendor module must resolve");

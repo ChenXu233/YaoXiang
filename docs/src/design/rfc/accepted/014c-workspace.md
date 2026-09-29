@@ -261,6 +261,17 @@ struct WorkspaceMember {
 - 发布时替换为 Registry 版本
 - 成员名必须在 `[workspace.members]` 中存在
 
+### 成员可见性（2026-09-29 落章：pnpm 式严格）
+
+成员代码的 `use` 只从**自己声明的依赖**（版本类 + path 依赖 + workspace 引用）
+解析——共享 vendor 里其他成员声明的包对本成员**不可见**。未声明即未安装，
+误用直接报「模块未找到」提示补声明：幽灵依赖（npm hoisting 的著名坑）在
+编译期暴露，而不是在包发布后成为消费者的炸弹。
+
+成员引用与 path 依赖按路径解析到目标包根的 `src/` 布局（同 vendor 条目
+结构，无版本后缀），并应用目标的导入面（RFC-029f）。一致性检查同样以
+工作空间根为锚：合并依赖 vs 根 lockfile vs 根 vendor。
+
 ### lockfile 共享
 
 - 工作空间只有一个 `yaoxiang.lock`（在根目录）
