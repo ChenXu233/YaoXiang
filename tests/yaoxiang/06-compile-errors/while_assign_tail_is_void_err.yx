@@ -1,0 +1,18 @@
+// 06-compile-errors/while_assign_tail_is_void_err.yx
+// 覆盖: spec §2.15 / RFC-010a 规则① —— 块的值为尾表达式；**末位为赋值语句时块值为 Void**。
+// 验证: `while` 的值 = 循环体块的值，体尾是赋值语句 ⇒ 循环值 `Void`，
+//       故绑定到 `Int` 报 E1002。这不是循环的特例，而是块规则在循环体上的直接结果。
+// 状态: ❌ 应被编译期拒绝
+//
+// 与 02-type-system/while_block_value.yx 成对：同一条规则的两侧。
+// 想要非 Void 的循环值就显式写尾表达式（`{ i = i + 1; i }`）。
+
+// expect: compile-error E1002
+
+main: () -> Void = {
+    mut i: Int = 0
+    last: Int = while i < 3 {
+        i = i + 1
+    }
+    print(last)
+}

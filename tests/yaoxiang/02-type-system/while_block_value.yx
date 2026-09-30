@@ -1,0 +1,32 @@
+// 02-type-system/while_block_value.yx
+// 覆盖: spec §2.15 / RFC-010a 规则① —— 所有 `{}` 块的值由尾表达式给出，**无例外**；
+//       循环体也是 `{}` 块，故 `while` 的值 = 循环体块的值。
+// 验证: 尾为表达式时循环取该表达式的类型与值（末次迭代的值）；
+//       尾为赋值语句时块值为 `Void`（该形态的负例见
+//       06-compile-errors/while_assign_tail_is_void_err.yx）。
+// 状态: ✅ 可运行
+//
+// 回归性质：`while` 此前**恒定**定型为 `Void`，与规范「无例外」相违，也与 `for`
+// （已取体块值）不一致。因 `Void` 与任何非 Void 类型都不同一，该形态连编译都过不了。
+// 运行时一直正确产生该值，缺陷纯在类型侧——本文件同时钉住两侧一致。
+
+use std.assert
+
+main: () -> Void = {
+    mut i: Int = 0
+    last: Int = while i < 3 {
+        i = i + 1
+        i
+    }
+    assert.assert(i == 3, "循环应执行 3 次，i 累加到 3")
+    assert.assert(last == 3, "循环的值应为末次迭代的尾表达式值 3")
+
+    // 循环值为空时不应影响可变变量的最终状态
+    mut j: Int = 0
+    total: Int = while j < 4 {
+        j = j + 1
+        j * 10
+    }
+    assert.assert(j == 4, "第二个循环应执行 4 次")
+    assert.assert(total == 40, "循环值应为末次迭代值 40，而非累加")
+}
