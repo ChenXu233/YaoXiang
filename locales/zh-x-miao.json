@@ -978,7 +978,7 @@
   "E3021": {
     "title": "入口不是函数喵~",
     "template": "程序入口 '{name}' 必须是函数喵~，但它是值绑定 nya~",
-    "help": "入口要可调用喵~：写成 main = { ... } 或 main: () -> Void = { ... }；值绑定（比如 main: Int = 5）是不会被执行的喵~"
+    "help": "入口必须是函数喵~ 写成 main = () => { ... } 这样就可以啦，或者加上函数注解 main: () -> Void = ... 也行的喵！裸块绑定 main = { ... } 是值绑定（会在模块初始化的时候被求值哦），不会被当作入口执行的nya~"
   },
   "E1065": {
     "title": "对不是函数的值进行了调用喵~",
@@ -1088,5 +1088,36 @@
     "message": "这个递归调用点上的测度没能严格递减喵...所以没法证明递归会乖乖停下来哦~（反例已经附上啦nya）",
     "template": "呜喵~测度不成立的说：此调用点无法证明测度严格递减喵...\n\n反例（nya~）：\n{counterexample}",
     "help": "喵~这是精化类型主张的终止性义务哦：带了 `Terminates` 测度的递归函数，在每个递归调用点都必须要证明测度严格递减nya。反例给出了一组让递减不成立的取值，请检查一下测度的选择是不是合适呢，或者补充分支守卫让递归路径上的下降成立喵~可以参考 RFC-027a 哦~"
-  }
+  },
+  "package_outdated_none": "所有依赖都是最新哒喵~ 主人可以放心使用nya~",
+  "package_outdated_found": "发现 {0} 个过时依赖喵：",
+  "package_outdated_row": "  {0}: {1} -> {2}",
+  "package_outdated_pinned": "  {0} ({1}) [已经固定住啦喵~]",
+  "package_outdated_failed": "  {0} ({1}) [检查失败了喵... 原因: {2}]",
+  "package_clean_removed": "  已经把 {0} 移除掉啦喵~",
+  "package_clean_nothing": "没有需要清理的东西喵~ 干干净净nya~",
+  "package_cache_cleaned": "缓存已经清理干净喵~（释放了 {0} nya~）",
+  "package_cache_empty": "缓存本来就是空的呢喵~",
+  "W1006": {
+    "title": "本地模块把依赖包遮住啦喵！",
+    "message": "本地模块的优先级比 vendor 里的同名依赖要高喵~",
+    "template": "本地模块 '{module}' 把依赖包 '{dependency}' 遮住啦喵~",
+    "help": "本地模块的解析优先级是最高哒（RFC-014）喵：'./src/{module}' 会覆盖掉 .yaoxiang/vendor/ 里的依赖包 '{dependency}' nya~ 如果这不是主人想要的效果，请重命名本地模块哦~ 加 --deny-shadowing 可以把它升级成错误呢~",
+    "example": "// ./src/data.yx 存在，同时 'data' 也是已经安装好的依赖喵\nuse data.json; // 这里解析到的是 ./src/data.yx 而不是依赖包nya~",
+    "error_output": "warning[W1006]: 本地模块 'data' 把依赖包 'data' 遮住啦喵！\n --> example.yx:1:1\n  |\n1 | use data.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: 本地模块的优先级比 vendor 里的同名依赖要高喵~"
+  },
+  "workspace_list_header": "工作空间 {0} 喵~（{1} 个成员 nya~）",
+  "workspace_list_member_row": "  {0} {1}  （{2}）",
+  "workspace_member_added": "✓ 已经把工作空间成员 '{0}' 登记好啦喵~（{1}）",
+  "workspace_member_removed": "✓ 已经把工作空间成员 '{0}' 移除啦喵~",
+  "workspace_member_referenced": "⚠ 成员 {0} 还在被这些家伙引用着喵~：{1}",
+  "workspace_auto_registered": "✓ 已经乖乖登记到工作空间 {0} 啦喵~（key '{1}'）",
+  "package_publish_packed": "✓ 已经把 {0} 打包好咯喵~（SHA-256 {1}）",
+  "package_publish_registry_deferred": "官方 Registry 被无限期推迟了喵~（RFC-014a 决议 1）：用 --github 发布到 GitHub Release，或者用 --dry-run 只在本地打包就好啦 nya~",
+  "package_publish_github_done": "✓ GitHub Release 已经发布成功啦喵~：{0}",
+  "package_publish_version_exists": "Release {0} 已经存在了喵~，这个版本号不可以重复用哦 nya~",
+  "package_publish_tag_missing": "tag {0} 不见啦喵~：要先创建再推上去呀（git tag {0} && git push origin {0}）nya~",
+  "package_publish_token_missing": "缺少 GitHub 凭据喵~：要设置 $YX_GITHUB_TOKEN 哦（014a 认证表）nya~",
+  "package_publish_testing": "正在跑发布前的测试喵~…",
+  "package_publish_repo_unresolved": "找不到 GitHub 仓库喵~：要在 [package] repository 填上 GitHub URL，或者把 git remote origin 配置好才行 nya~"
 }

@@ -981,7 +981,7 @@
   "E3021": {
     "title": "エントリが関数ではありません",
     "template": "プログラムエントリ '{name}' は関数である必要がありますが、値バインディングです",
-    "help": "エントリは呼び出し可能である必要があります：main = { ... } または main: () -> Void = { ... } と記述してください。値バインディング（main: Int = 5 など）は実行されません。"
+    "help": "エントリポイントは関数である必要があります：`main = () => { ... }` と書くか、関数注釈 `main: () -> Void = ...` を付けてください。素のブロック束縛 `main = { ... }` は値束縛（モジュール初期化時に評価）であり、エントリポイントとして実行されません。"
   },
   "E1065": {
     "title": "関数以外の値の呼び出し",
@@ -1091,5 +1091,36 @@
     "message": "この再帰呼び出し点の測度が厳密に減少せず、再帰の停止性を証明できません（反例添付済み）",
     "template": "測度が成立しない：この呼び出し点では測度の厳密な減少を証明できません\n\n反例：\n{counterexample}",
     "help": "これは精化型アサーションの停止性義務です：`Terminates` 測度を持つ再帰関数では、各再帰呼び出し点で測度が厳密に減少することを証明する必要があります。反例には、減少を成立させない値の組が示されています。測度の選択が適切かを確認するか、分岐ガードを補って再帰経路上での減少を成立させてください。RFC-027a を参照してください。"
-  }
+  },
+  "package_outdated_none": "すべての依存関係は最新です。",
+  "package_outdated_found": "{0} 個の古い依存関係が見つかりました:",
+  "package_outdated_row": "  {0}: {1} -> {2}",
+  "package_outdated_pinned": "  {0} ({1}) [固定済み]",
+  "package_outdated_failed": "  {0} ({1}) [確認失敗: {2}]",
+  "package_clean_removed": "  {0} を削除しました",
+  "package_clean_nothing": "クリーンアップする項目はありません。",
+  "package_cache_cleaned": "キャッシュをクリーンアップしました（{0} を解放）",
+  "package_cache_empty": "キャッシュは既に空です。",
+  "W1006": {
+    "title": "ローカルモジュールが依存パッケージをシャドウイングしています",
+    "message": "ローカルモジュールの優先度は vendor 内の同名の依存関係より高いです",
+    "template": "ローカルモジュール '{module}' が依存パッケージ '{dependency}' をシャドウイングしています",
+    "help": "ローカルモジュールの解決優先度が最も高いです（RFC-014）：`./src/{module}` は `.yaoxiang/vendor/` 内の依存パッケージ '{dependency}' を上書きします。シャドウイングが意図的でない場合はローカルモジュールの名前を変更してください；`--deny-shadowing` を使用してエラーに昇格できます",
+    "example": "// ./src/data.yx が存在し、同時に 'data' もインストール済みの依存関係です\nuse data.json; // 依存パッケージではなく ./src/data.yx に解決されます",
+    "error_output": "warning[W1006]: ローカルモジュール 'data' が依存パッケージ 'data' をシャドウイングしています\n --> example.yx:1:1\n  |\n1 | use data.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: ローカルモジュールの優先度は vendor 内の同名の依存関係より高いです"
+  },
+  "workspace_list_header": "ワークスペース {0}（{1} メンバー）",
+  "workspace_list_member_row": "  {0} {1}  （{2}）",
+  "workspace_member_added": "✓ ワークスペースメンバー '{0}'（{1}）を登録しました",
+  "workspace_member_removed": "✓ ワークスペースメンバー '{0}' を削除しました",
+  "workspace_member_referenced": "⚠ メンバー {0} は以下のメンバーから参照されています：{1}",
+  "workspace_auto_registered": "✓ ワークスペース {0} に登録しました（key '{1}'）",
+  "package_publish_packed": "✓ {0} をパッケージ化しました（SHA-256 {1}）",
+  "package_publish_registry_deferred": "公式 Registry は無期限に延期されています（RFC-014a 決議 1）：--github を使用して GitHub Release に公開するか、--dry-run でローカルのパッケージ化のみを行ってください",
+  "package_publish_github_done": "✓ GitHub Release に公開しました：{0}",
+  "package_publish_version_exists": "Release {0} は既に存在するため、バージョン番号は再利用できません",
+  "package_publish_tag_missing": "tag {0} が存在しません：先に tag を作成してプッシュしてください（git tag {0} && git push origin {0}）",
+  "package_publish_token_missing": "GitHub 認証情報がありません：$YX_GITHUB_TOKEN を設定してください（014a 認証テーブル）",
+  "package_publish_testing": "公開前のテストを実行しています…",
+  "package_publish_repo_unresolved": "GitHub リポジトリを解析できません：[package] repository に GitHub URL を記入するか、git remote origin を設定してください"
 }

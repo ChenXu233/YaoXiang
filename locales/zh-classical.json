@@ -987,7 +987,7 @@
   "E3021": {
     "title": "入口非函数",
     "template": "程序入口 '{name}' 须为函数，然乃值绑定",
-    "help": "入口须可调用：作 main = { ... } 或 main: () -> Void = { ... }；值绑定（如 main: Int = 5）不将执行。"
+    "help": "入口必为函数。可书 main = () => { ... }，或加函数注解 main: () -> Void = ...。main = { ... } 者，乃裸块之绑定，属值绑定（于模块初始化期求值），非入口也，故弗执行。"
   },
   "E1065": {
     "title": "调用非函数之值",
@@ -1097,5 +1097,36 @@
     "message": "此递归调用点之测度未能严降，无以证递归之终止（已附反例）",
     "template": "测度未立：此调用点弗能证测度之严降\n\n反例：\n{counterexample}",
     "help": "此乃精化类型主张之终止义务：凡递归函数之携 `Terminates` 测度者，各递归调用点皆须证其测度之严降。反例所示取值一组，使递减弗立。宜审测度之择是否允当，或补分支之卫，使递归路径上之降势成立。参 RFC-027a。"
-  }
+  },
+  "package_outdated_none": "诸依赖皆为最新。",
+  "package_outdated_found": "见过时依赖 {0} 枚：",
+  "package_outdated_row": "  {0}：{1} -> {2}",
+  "package_outdated_pinned": "  {0}（{1}）[已固定]",
+  "package_outdated_failed": "  {0}（{1}）[校验未果：{2}]",
+  "package_clean_removed": "  已除 {0}",
+  "package_clean_nothing": "无可清者。",
+  "package_cache_cleaned": "缓存已清（释 {0}）",
+  "package_cache_empty": "缓存本空。",
+  "W1006": {
+    "title": "本地模块遮蔽依赖包",
+    "message": "本地模块之序先于 vendor 中同名依赖",
+    "template": "本地模块 '{module}' 遮蔽依赖包 '{dependency}'",
+    "help": "本地模块解析之序最上（RFC-014）：'./src/{module}' 覆盖 .yaoxiang/vendor/ 中之依赖包 '{dependency}'。若遮蔽非本意，请更名本地模块；亦可用 --deny-shadowing 升之为错。",
+    "example": "// ./src/data.yx 已存，且 'data' 亦为已装之依赖\nuse data.json; // 解析至 ./src/data.yx，非依赖包",
+    "error_output": "warning[W1006]：本地模块 'data' 遮蔽依赖包 'data'\n --> example.yx:1:1\n  |\n1 | use data.json;\n  | ^^^^^^^^^^^^\n  |\n  = note：本地模块之序先于 vendor 中同名依赖"
+  },
+  "workspace_list_header": "工作空间 {0}（成员 {1} 员）",
+  "workspace_list_member_row": "  {0} {1}（{2}）",
+  "workspace_member_added": "✓ 已录工作空间成员 '{0}'（{1}）",
+  "workspace_member_removed": "✓ 已除工作空间成员 '{0}'",
+  "workspace_member_referenced": "⚠ 成员{0}尚为下列成员所引用：{1}",
+  "workspace_auto_registered": "✓ 已登于工作空间{0}（键'{1}'）",
+  "package_publish_packed": "✓ 已封装{0}（SHA-256 {1}）",
+  "package_publish_registry_deferred": "官方Registry无限期后置（RFC-014a决议一）：可用--github发布于GitHub Release，或--dry-run仅本地封装",
+  "package_publish_github_done": "✓ 已布GitHub Release：{0}",
+  "package_publish_version_exists": "Release {0}既存，版本号不可复用",
+  "package_publish_tag_missing": "tag {0}未存：先建而推之（git tag {0} && git push origin {0}）",
+  "package_publish_token_missing": "缺GitHub凭据：当设$YX_GITHUB_TOKEN（014a认证表）",
+  "package_publish_testing": "发布前测试方行…",
+  "package_publish_repo_unresolved": "GitHub仓库不可解析：于[package] repository填GitHub URL，或配置git remote origin"
 }
