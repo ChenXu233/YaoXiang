@@ -91,3 +91,38 @@ fn test_predicate_def_registration_keeps_valid_value_clean() {
         result.diagnostics
     );
 }
+
+/// 前置条件采集：形参精化（**谓词体**）进终止检查器的假设集。
+///
+/// 这是生产接线点 `collect_param_refinements` 的唯一测试。判定侧（良基性
+/// `m >= 0` 的 SMT 判定）另有单测；此处只钉住**采集**——它从 env 的已解析
+/// 函数类型里取约束，形态必须是谓词体 `b > 0` 而非不透明应用
+/// `IsPositive(b)`，否则 SMT 见到未解释函数、良基性永远判不出。
+#[test]
+fn test_collect_param_refinements_yields_predicate_body() {
+    use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+
+    // Arrange
+    let source = "IsPositive: (x: Int) -> Type = { x > 0 }\n\
+                  f: (b: IsPositive(b)) -> Int = { 0 }";
+    let tokens = tokenize(source).expect("词法分析应成功");
+    let parsed = parse(&tokens);
+    assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
+    let mut checker = TypeChecker::new("test");
+    checker.check_module(&parsed.module);
+
+    // Act
+    let collected = checker.collect_param_refinements();
+
+    // Assert
+    let expected = vec![ConstExpr::BinOp {
+        op: BinOp::Gt,
+        left: Box::new(ConstExpr::NamedVar("b".to_string())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    }];
+    assert_eq!(
+        collected.get("f"),
+        Some(&expected),
+        "形参 b: IsPositive(b) 的前置条件应为谓词体 b > 0；实际: {collected:?}"
+    );
+}

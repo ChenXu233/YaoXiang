@@ -817,7 +817,7 @@ fn test_measure_obligation_proved_when_solver_reports_unsat() {
     // Assert
     assert_eq!(
         verdicts,
-        vec![MeasureVerdict::Decreases],
+        vec![MeasureVerdict::Proved],
         "Unsat 应判为严格递减成立；实际: {verdicts:?}"
     );
 }
@@ -847,7 +847,7 @@ fn test_measure_obligation_not_proved_when_solver_reports_sat() {
 
 /// RFC-027a §判定管线 —— 无求解器（wasm / Z3 缺失）时义务**不判定**。
 ///
-/// 方向性：返回 `Unjudged` 而非 `Decreases`——把「没判」当成「成立」会静默
+/// 方向性：返回 `Unjudged` 而非 `Proved`——把「没判」当成「成立」会静默
 /// 放行未证明的程序。
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
@@ -894,7 +894,7 @@ fn test_real_solver_proves_genuinely_decreasing_measure() {
     // Assert
     assert_eq!(
         verdicts,
-        vec![MeasureVerdict::Decreases],
+        vec![MeasureVerdict::Proved],
         "n - 1 < n 恒真，真实 Z3 应判为严格递减成立；实际: {verdicts:?}"
     );
 }
@@ -961,5 +961,151 @@ fn test_gcd_measure_decrease_unprovable_until_guards_wired() {
         vec![MeasureVerdict::NotProved],
         "守卫与良基性未接线前，gcd 的 a % b < b 判不出（b 可取负）——本断言锁定该边界，\
          提醒 T5 不得在此之前发射 E4022；实际: {verdicts:?}"
+    );
+}
+
+/// 良基性判定的 harness（RFC-027a §良基性）。
+///
+/// 与 [`measure_verdicts_of`] 并列：那条判「递减」，这条判「测度落在自然数上」
+/// （`m >= 0`）。参数假设即函数前置条件（`b: NonNegative(b)` → `b >= 0`）。
+#[cfg(not(target_arch = "wasm32"))]
+fn well_founded_verdict_of(
+    source: &str,
+    measures: &[(&str, crate::frontend::core::types::const_data::ConstExpr)],
+    param_assumptions: &[(
+        &str,
+        Vec<crate::frontend::core::types::const_data::ConstExpr>,
+    )],
+    solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
+) -> Vec<(String, MeasureVerdict)> {
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::parse;
+    use crate::frontend::core::typecheck::environment::TypeEnvironment;
+
+    let tokens = tokenize(source).expect("词法分析应成功");
+    let parsed = parse(&tokens);
+    assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
+    let table = measures
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect();
+    let assumptions = param_assumptions
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect();
+    let mut checker = TerminationChecker::new()
+        .set_measures(table)
+        .set_param_assumptions(assumptions);
+    if let Some(s) = solver {
+        checker = checker.with_solver_owned(s);
+    }
+    let env = TypeEnvironment::new();
+    checker.check_module(&parsed.module, &env);
+    let mut out: Vec<(String, MeasureVerdict)> = checker
+        .well_founded_verdicts()
+        .iter()
+        .map(|(k, v)| (k.clone(), *v))
+        .collect();
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}
+
+/// RFC-027a §良基性（**真实 Z3**）—— 前置条件给出下界时测度良基。
+///
+/// `b: NonNegative(b)` 代入后的约束是 `b >= 0`，正是良基性目标本身，故
+/// 假设 + 目标取反 → Unsat → 成立。**这是它与非良基对照的区别所在**：
+/// 同一测度、同一求解器，只差这条假设。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_real_solver_well_founded_from_param_refinement() {
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange —— gcd 的标准形态：b 带下界精化
+    let source = "NonNegative: (x: Int) -> Type = { x >= 0 }\n\
+                  gcd: (a: Int, b: NonNegative(b)) -> Terminates(b) = { \
+                  if b == 0 { return a } \
+                  return gcd(b, a % b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+    // 前置条件：b >= 0（谓词体代入后的形态）
+    let assumptions = [(
+        "gcd",
+        vec![ConstExpr::BinOp {
+            op: crate::frontend::core::types::const_data::BinOp::Ge,
+            left: Box::new(ConstExpr::NamedVar("b".to_string())),
+            right: Box::new(ConstExpr::Lit(
+                crate::frontend::core::types::const_data::ConstValue::Int(0),
+            )),
+        }],
+    )];
+    let solver = default_solver().expect("本用例需要 Z3（default_solver）");
+
+    // Act
+    let verdicts = well_founded_verdict_of(source, &measures, &assumptions, Some(solver));
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![("gcd".to_string(), MeasureVerdict::Proved)],
+        "b >= 0 作为前置条件时，测度 b 的良基性应被证明（假设即目标）；实际: {verdicts:?}"
+    );
+}
+
+/// 同一测度、同一求解器，**去掉前置条件**即判不出（ℤ 上 `<` 不良基）。
+///
+/// 与上一个用例成对：两者一起才证明「假设确实在做功」，而非判定接线恒真。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_real_solver_well_founded_needs_param_refinement() {
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange —— 同源码，但 b 无下界精化
+    let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
+                  if b == 0 { return a } \
+                  return gcd(b, a % b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+    let solver = default_solver().expect("本用例需要 Z3（default_solver）");
+
+    // Act —— 无前置条件
+    let verdicts = well_founded_verdict_of(source, &measures, &[], Some(solver));
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![("gcd".to_string(), MeasureVerdict::NotProved)],
+        "b 可取负（-1,-2,… 在 ℤ 上无限下降），无下界精化时良基性不得被宣称成立；\
+         实际: {verdicts:?}"
+    );
+}
+
+/// 无求解器时不宣称任何良基性判定（不得把「未判」当「成立」）。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_well_founded_unjudged_without_solver() {
+    use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+
+    // Arrange
+    let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
+                  if b == 0 { return a } \
+                  return gcd(b, a % b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+    let assumptions = [(
+        "gcd",
+        vec![ConstExpr::BinOp {
+            op: BinOp::Ge,
+            left: Box::new(ConstExpr::NamedVar("b".to_string())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+        }],
+    )];
+
+    // Act —— 不注入求解器
+    let verdicts = well_founded_verdict_of(source, &measures, &assumptions, None);
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![("gcd".to_string(), MeasureVerdict::Unjudged)],
+        "无求解器时不得宣称良基性；实际: {verdicts:?}"
     );
 }

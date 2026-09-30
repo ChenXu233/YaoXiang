@@ -1108,11 +1108,15 @@ impl TypeChecker {
         // RFC-027a §2：显式测度（`Terminates(m)`）从 AST 提取后注入，供义务
         // 生成按被标注名查测度。与 `refined_vars` 同源（同一遍 AST 遍历）。
         let measures = self.collect_termination_measures(module);
+        // RFC-027a §良基性：函数前置条件（形参精化代入后的约束）——良基性
+        // `m >= 0` 的证据只能来自它（ℤ 上 `<` 不良基）。
+        let param_assumptions = self.collect_param_refinements();
         let term_results = {
             #[allow(unused_mut)]
             let mut term_checker = super::layers::termination::TerminationChecker::new()
                 .set_refined_vars(refined_vars)
-                .set_measures(measures);
+                .set_measures(measures)
+                .set_param_assumptions(param_assumptions);
             // RFC-027a T4（即 #377-1）：生产在此注入求解器后端。此前从不调用
             // 注入点，`self.solver` 恒为 `None`，SMT 相关路径在任何平台都不执行。
             // wasm 下无 Z3（#376），`default_solver()` 返回 `None` 时保持不注入。
@@ -4117,6 +4121,38 @@ impl TypeChecker {
     /// - 变量绑定位 `acc: Terminates(n - i) = ...` → 键 `acc`
     ///
     /// 无 `Terminates` 标注时返回空表。
+    /// 收集函数**前置条件**：各函数带精化的形参约束（RFC-027a §良基性）。
+    ///
+    /// 源是 env 里已解析的函数类型——形参位已由 `resolve_type_annotation` 规范化
+    /// 为 `Refined`，且谓词定义注册后约束是**谓词体**（`b: NonNegative(b)` →
+    /// `b >= 0`）。故这里取的与判定同一份形态，不必再从 AST 提取。
+    ///
+    /// 键 = 函数名，值 = 其精化形参的约束；`Terminates` 除外（那是终止测度，
+    /// 不是值约束）。
+    pub(crate) fn collect_param_refinements(
+        &self
+    ) -> std::collections::HashMap<String, Vec<crate::frontend::core::types::const_data::ConstExpr>>
+    {
+        let mut out: std::collections::HashMap<String, Vec<_>> = std::collections::HashMap::new();
+        for (name, poly) in &self.env.vars {
+            let MonoType::Fn { params, .. } = &poly.body else {
+                continue;
+            };
+            let constraints: Vec<_> = params
+                .iter()
+                .filter(|p| matches!(p, MonoType::Refined { .. }) && !constraint_is_terminates(p))
+                .filter_map(|p| match p {
+                    MonoType::Refined { constraint, .. } => Some(constraint.clone()),
+                    _ => None,
+                })
+                .collect();
+            if !constraints.is_empty() {
+                out.insert(name.clone(), constraints);
+            }
+        }
+        out
+    }
+
     /// 登记编译期谓词定义（#377-3）。
     ///
     /// 谓词 = 返回 `Type` 的**单参数**声明，其体表达式即约束模板：

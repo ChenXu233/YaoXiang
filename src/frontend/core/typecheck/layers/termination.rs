@@ -157,11 +157,15 @@ pub struct MeasureObligation {
     pub span: crate::util::span::Span,
 }
 
-/// 单条测度义务的判定结果（RFC-027a §判定管线）
+/// 单条义务的判定结果（RFC-027a §判定管线）
+///
+/// 两类义务共用此枚举：**递减**（`m[形参:=实参] < m` 不可满足）与**良基性**
+/// （`m >= 0` 在形参前置条件下不可满足取反）。两者都只问「目标取反是否不可
+/// 满足」，故用中性的「已证明」而非「递减」——否则良基性判定会被读成递减判定。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MeasureVerdict {
-    /// 严格递减成立：`not (m[形参:=实参] < m)` 不可满足
-    Decreases,
+    /// 已证明：目标取反不可满足
+    Proved,
     /// 未证明：求解器给出模型（= 反例），或返回 unknown
     NotProved,
     /// 未判定：无求解器可用（wasm / Z3 缺失）
@@ -221,6 +225,20 @@ pub struct TerminationChecker {
     ///
     /// RFC-027a T4：只判定并记录，不发射诊断（E4022 与路径守卫属 T5）。
     measure_verdicts: Vec<MeasureVerdict>,
+    /// 函数前置条件（型参精化的代入后约束，RFC-027a §良基性）。
+    ///
+    /// 键 = 函数名，值 = 该函数带精化的形参约束（如 `b: NonNegative(b)` →
+    /// `b >= 0`）。由 `set_param_assumptions` 注入。
+    ///
+    /// 用途：良基性 `m >= 0` 的证据只能来自它——ℤ 上 `<` 并**不**良基
+    /// （`-1,-2,…` 无限下降），无下界就不能宣称测度落在自然数上。
+    param_assumptions:
+        std::collections::HashMap<String, Vec<crate::frontend::core::types::const_data::ConstExpr>>,
+    /// 良基性判定结果：函数名 → 其测度 `m >= 0` 的判定。
+    ///
+    /// 与 `measure_verdicts`（逐调用点的递减判定）分开：良基性是**测度自身**
+    /// 的性质（每函数一条），递减是**每个递归调用点**的性质。
+    well_founded: std::collections::HashMap<String, MeasureVerdict>,
 }
 
 impl Default for TerminationChecker {
@@ -241,7 +259,31 @@ impl TerminationChecker {
             current_fn: None,
             measure_obligations: Vec::new(),
             measure_verdicts: Vec::new(),
+            param_assumptions: std::collections::HashMap::new(),
+            well_founded: std::collections::HashMap::new(),
         }
+    }
+
+    /// 注入函数前置条件（型参精化的代入后约束，RFC-027a §良基性）。
+    ///
+    /// 值必须是**已在形参名下**的约束（`b: NonNegative(b)` → `b >= 0`），
+    /// 因为良基性目标是 `测度 >= 0`，两者必须同名同名变量才能合证。
+    pub fn set_param_assumptions(
+        mut self,
+        assumptions: std::collections::HashMap<
+            String,
+            Vec<crate::frontend::core::types::const_data::ConstExpr>,
+        >,
+    ) -> Self {
+        self.param_assumptions = assumptions;
+        self
+    }
+
+    /// 读取良基性判定结果（函数名 → 测度 `m >= 0` 的判定）。
+    ///
+    /// 只暴露原料：发射 E4022 属 T5，本步只判不报。
+    pub fn well_founded_verdicts(&self) -> &std::collections::HashMap<String, MeasureVerdict> {
+        &self.well_founded
     }
 
     /// 注入显式测度表（RFC-027a §2）。
@@ -324,7 +366,71 @@ impl TerminationChecker {
             self.check_stmt(stmt, false);
         }
         self.judge_measure_obligations();
+        self.judge_well_foundedness();
         std::mem::take(&mut self.results)
+    }
+
+    /// 判定各带测度函数的**良基性**（RFC-027a §良基性：测度落在自然数上）。
+    ///
+    /// 目标 `m >= 0`，背景假设是该函数的形参精化（前置条件）。两者同名变量
+    /// 才能合证；无求解器 → `Unjudged`（不得把「未判」当「成立」）。
+    fn judge_well_foundedness(&mut self) {
+        self.well_founded = self.compute_well_foundedness();
+    }
+
+    /// 逐函数计算良基性判定。
+    #[cfg(not(target_arch = "wasm32"))]
+    fn compute_well_foundedness(&self) -> std::collections::HashMap<String, MeasureVerdict> {
+        use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+
+        let mut out = std::collections::HashMap::new();
+        for (fn_name, measure) in &self.measures {
+            let goal = ConstExpr::BinOp {
+                op: BinOp::Ge,
+                left: Box::new(measure.clone()),
+                right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+            };
+            let assumptions = self
+                .param_assumptions
+                .get(fn_name)
+                .cloned()
+                .unwrap_or_default();
+            let verdict = match self.solver.as_deref() {
+                None => MeasureVerdict::Unjudged,
+                Some(solver) => {
+                    // 未知按 Int：测度是整型表达式（同 `compute_measure_verdicts`）
+                    let var_sorts =
+                        crate::frontend::core::typecheck::proof::smt::translate::infer_var_sorts(
+                            &goal,
+                            &std::collections::HashMap::new(),
+                        );
+                    let commands =
+                        crate::frontend::core::typecheck::proof::smt::translate::translate_constraint(
+                            &goal,
+                            &assumptions,
+                            &var_sorts,
+                        );
+                    match solver.solve(&commands, 100) {
+                        SMTResult::Unsat => MeasureVerdict::Proved,
+                        // sat = 有反例（可取负）；unknown = 判不了 → 均不得宣称成立
+                        SMTResult::Sat { .. } | SMTResult::Unknown { .. } => {
+                            MeasureVerdict::NotProved
+                        }
+                    }
+                }
+            };
+            out.insert(fn_name.clone(), verdict);
+        }
+        out
+    }
+
+    /// 逐函数计算良基性判定（wasm: 无 Z3，恒 `Unjudged`）。
+    #[cfg(target_arch = "wasm32")]
+    fn compute_well_foundedness(&self) -> std::collections::HashMap<String, MeasureVerdict> {
+        self.measures
+            .keys()
+            .map(|k| (k.clone(), MeasureVerdict::Unjudged))
+            .collect()
     }
 
     /// 判定已生成的测度义务（RFC-027a §判定管线）
@@ -373,7 +479,7 @@ impl TerminationChecker {
                         &var_sorts,
                     );
                 match solver.solve(&commands, 100) {
-                    SMTResult::Unsat => MeasureVerdict::Decreases,
+                    SMTResult::Unsat => MeasureVerdict::Proved,
                     // sat = 有反例（测度未严格递减）；unknown = 判不了 → 均不得宣称成立
                     SMTResult::Sat { .. } | SMTResult::Unknown { .. } => MeasureVerdict::NotProved,
                 }
