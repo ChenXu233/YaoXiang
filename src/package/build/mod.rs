@@ -8,6 +8,7 @@
 //! 执行顺序（2026-09-15 决议 2）：`5a → 5b → 5c → 5d → 5f → 5e`——声明式先行，
 //! 任意代码执行殿后。
 
+pub mod cargo;
 pub mod requirements;
 
 use std::path::{Path, PathBuf};
@@ -108,11 +109,13 @@ pub struct TrustDecision {
 
 /// 执行安装决策树（在依赖包源码落位 `pkg_dir` 后调用）
 ///
-/// 无 `[build]` 且无 `[binaries]` 的包零构建直过——绝大多数纯 .yx 包的成本
-/// 是一次字段查找。
+/// `scratch_root` 是项目构建 scratch（`.yaoxiang/build/`），cargo target/
+/// 隔离于此（见 [`cargo`] 模块文档）。无 `[build]` 且无 `[binaries]` 的包
+/// 零构建直过——绝大多数纯 .yx 包的成本是一次字段查找。
 pub fn run_install_build(
-    _pkg_dir: &Path,
+    pkg_dir: &Path,
     manifest: &crate::package::manifest::PackageManifest,
+    scratch_root: &Path,
     _trust: &TrustDecision,
 ) -> PackageResult<BuildOutcome> {
     let build = match &manifest.build {
@@ -142,16 +145,17 @@ pub fn run_install_build(
         ));
     }
 
-    // 3. 策略执行
+    // 3. 策略执行（cargo/cmake 前先过工具预检，RFC-014b 5b）
     let strategy = build.parsed_strategy()?;
     match strategy {
         BuildStrategy::None => Ok(BuildOutcome {
             native_dir: None,
             via: "strategy-none",
         }),
-        BuildStrategy::Cargo => Err(PackageError::InvalidManifest(
-            "cargo 构建策略尚未实现（RFC-014b Phase 5c）".to_string(),
-        )),
+        BuildStrategy::Cargo => {
+            requirements::check(&build.requirements)?;
+            cargo::build(pkg_dir, build, scratch_root)
+        }
         BuildStrategy::Cmake => Err(PackageError::InvalidManifest(
             "cmake 构建策略尚未实现（RFC-014b Phase 5c 之后评估）".to_string(),
         )),

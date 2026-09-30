@@ -188,37 +188,118 @@ fn install_build_skips_plain_packages() {
         "[package]\nname = \"pure\"\nversion = \"0.1.0\"\n",
     );
     let manifest = PackageManifest::load(tmp.path()).unwrap();
-    let outcome =
-        build::run_install_build(tmp.path(), &manifest, &TrustDecision::default()).unwrap();
+    let outcome = build::run_install_build(
+        tmp.path(),
+        &manifest,
+        &tmp.path().join("scratch"),
+        &TrustDecision::default(),
+    )
+    .unwrap();
     assert_eq!(outcome.via, "no-build");
     assert!(outcome.native_dir.is_none());
 }
 
-/// 未落地分支如实报错（随 5c/5d/5e 提交逐一替换）
+/// 未落地分支如实报错（随 5d/5e 提交逐一替换）
 #[test]
 fn pending_phases_report_clear_errors() {
     let tmp = tempfile::tempdir().unwrap();
     write(
         &tmp.path().join("yaoxiang.toml"),
-        "[package]\nname = \"x\"\nversion = \"0.1.0\"\n\n[build]\nstrategy = \"cargo\"\n",
-    );
-    let manifest = PackageManifest::load(tmp.path()).unwrap();
-    let err =
-        build::run_install_build(tmp.path(), &manifest, &TrustDecision::default()).unwrap_err();
-    assert!(
-        matches!(err, PackageError::InvalidManifest(ref m) if m.contains("Phase 5c")),
-        "got: {err}"
-    );
-
-    write(
-        &tmp.path().join("yaoxiang.toml"),
         "[package]\nname = \"x\"\nversion = \"0.1.0\"\n\n[build]\nheaders = [\"a.h\"]\n",
     );
     let manifest = PackageManifest::load(tmp.path()).unwrap();
-    let err =
-        build::run_install_build(tmp.path(), &manifest, &TrustDecision::default()).unwrap_err();
+    let err = build::run_install_build(
+        tmp.path(),
+        &manifest,
+        &tmp.path().join("scratch"),
+        &TrustDecision::default(),
+    )
+    .unwrap_err();
     assert!(
         matches!(err, PackageError::InvalidManifest(ref m) if m.contains("yx-bindgen")),
+        "got: {err}"
+    );
+}
+
+/// cargo 策略端到端：真实编译一个最小 cdylib crate，产物落 build/native/<triple>/
+#[test]
+fn cargo_strategy_builds_real_crate_and_copies_artifacts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = tmp.path().join("native-demo-1.0.0");
+    write(
+        &pkg.join("yaoxiang.toml"),
+        "[package]\nname = \"native-demo\"\nversion = \"1.0.0\"\n\n[build]\nstrategy = \"cargo\"\n\n[build.cargo]\ntarget = \"release\"\n",
+    );
+    write(
+        &pkg.join("Cargo.toml"),
+        "[package]\nname = \"native_demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n",
+    );
+    write(
+        &pkg.join("src/lib.rs"),
+        "#[no_mangle]\npub extern \"C\" fn yx_demo_add(a: i32, b: i32) -> i32 { a + b }\n",
+    );
+
+    let manifest = PackageManifest::load(&pkg).unwrap();
+    let scratch = tmp.path().join(".yaoxiang").join("build");
+    let outcome =
+        build::run_install_build(&pkg, &manifest, &scratch, &TrustDecision::default()).unwrap();
+    assert_eq!(outcome.via, "cargo");
+    let native = outcome.native_dir.expect("应有产物目录");
+    assert!(native.ends_with(format!("build/native/{}", build::current_triple()).as_str()));
+    // 该平台对应扩展名的库文件已复制
+    let has_lib = std::fs::read_dir(&native).unwrap().flatten().any(|e| {
+        let n = e.file_name().to_string_lossy().to_string();
+        n.ends_with(".dll") || n.ends_with(".so") || n.ends_with(".dylib")
+    });
+    assert!(has_lib, "cdylib 产物应复制进 {:?}", native);
+
+    // scratch 不落包目录（target/ 隔离到项目 .yaoxiang/build/cargo/）
+    assert!(!pkg.join("target").exists(), "cargo scratch 不得污染包目录");
+    assert!(scratch.join("cargo").join("native-demo-1.0.0").exists());
+}
+
+/// 平台覆盖合并：当前平台的 cargo-features 追加进基础 features（去重）
+#[test]
+fn cargo_features_merge_platform_overrides() {
+    use crate::package::manifest::{BuildConfig, CargoBuildConfig, PlatformOverrides};
+    let mut config = BuildConfig {
+        cargo: Some(CargoBuildConfig {
+            features: vec!["ffi".to_string()],
+            target: None,
+        }),
+        ..Default::default()
+    };
+    config.platforms.insert(
+        build::current_triple(),
+        PlatformOverrides {
+            cargo_features: vec!["ffi".to_string(), "platform-extra".to_string()],
+        },
+    );
+    let merged = build::cargo::compose_features(&config);
+    assert_eq!(
+        merged,
+        vec!["ffi".to_string(), "platform-extra".to_string()]
+    );
+}
+
+#[test]
+fn cargo_target_validation() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = tmp.path().join("p-0.1.0");
+    write(
+        &pkg.join("yaoxiang.toml"),
+        "[package]\nname = \"p\"\nversion = \"0.1.0\"\n\n[build]\nstrategy = \"cargo\"\n\n[build.cargo]\ntarget = \"nightly\"\n",
+    );
+    let manifest = PackageManifest::load(&pkg).unwrap();
+    let err = build::run_install_build(
+        &pkg,
+        &manifest,
+        &tmp.path().join("scratch"),
+        &TrustDecision::default(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, PackageError::InvalidManifest(ref m) if m.contains("release")),
         "got: {err}"
     );
 }
