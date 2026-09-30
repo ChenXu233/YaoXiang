@@ -388,7 +388,7 @@ pub enum RegistryError {
 
 - HTTP 栈：reqwest（rustls，免 OpenSSL 交叉编译）+ 包管理自有 tokio current_thread 运行时（`package::runtime::drive`）；POST 类请求（创建 Release/上传资产）不做自动重试——非幂等，5xx 后重发可能重复创建。
 - publish 的目标仓库解析：`[package].repository` 优先，回退 `git remote origin`；要求 tag 已存在（Cargo 同款语义：publish 不代打 tag）。
-- 发布前测试运行（上方校验清单第 3 步）未接线，随 RFC-014b 构建系统一并做。
+- 发布前测试运行（上方校验清单第 3 步）已接线（2026-09-30，随 RFC-014b）：默认运行 `[tool.test]` 发现的测试，失败中止发布，`--no-test` 跳过。
 - `credentials.toml` 与 `login`/`logout`/`yank` 命令随官方 Registry 后置；当前认证仅 `$YX_GITHUB_TOKEN` 环境变量（优先级规则不变：环境变量 > 配置文件）。
 
 ### 依赖关系
