@@ -693,6 +693,11 @@ mod tests {
     }
 
     #[test]
+    // 本测试拿 `Path::join` 当**语义 oracle**（断言 native 实现与 std 一致），
+    // 而 clippy 的 join_absolute_paths 建议会把 `base.join("/abs")` 换成
+    // `PathBuf::from("/abs")`——碰巧同结果却抹掉被测的那条语义（绝对实参替换
+    // base）。故保留原写法。
+    #[allow(clippy::join_absolute_paths)]
     fn path_ops_match_path_semantics() {
         assert_eq!(string_of(call(native_path_join, &["a", "b"]).unwrap()), {
             Path::new("a").join("b").to_string_lossy().to_string()
