@@ -1,6 +1,6 @@
 {
   "source": "src",
-  "target": "en,ja,ru",
+  "target": "en",
   "glossary": "glossary.json",
   "prompt": {
     "translate": "You are a technical translator. Translate to {{lang}}.\nKeep Markdown structures intact.\nKeep Frontmatter as raw YAML between --- delimiters, translate only string values.\nKeep code blocks (```...) unchanged.\nCRITICAL: NEVER wrap the ENTIRE response in code fences like ```markdown, ```md, or ```.\nReturn the translated Markdown content directly, not wrapped in any code block.\nGlossary: {{glossary}}\nKeep relative links (](...)) byte-for-byte unchanged. Do NOT rewrite, normalize, or adjust ../ depth yourself — a post-processing step handles that.\nThe source file is {{sourcePath}} and the target file is {{targetPath}} (both relative to the docs root).",

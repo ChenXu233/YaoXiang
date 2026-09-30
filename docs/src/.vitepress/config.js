@@ -2,8 +2,6 @@ import { defineConfig } from 'vitepress'
 import { generateSidebar as _generateSidebar } from 'vitepress-sidebar'
 import yaoxiangGrammar from './syntaxes/yaoxiang.tmLanguage.json'
 import enI18n from './i18n/en.json'
-import jaI18n from './i18n/ja.json'
-import ruI18n from './i18n/ru.json'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import { groupIconMdPlugin, groupIconVitePlugin } from 'vitepress-plugin-group-icons'
 import { GitChangelog, GitChangelogMarkdownSection } from '@nolebase/vitepress-plugin-git-changelog'
@@ -416,7 +414,5 @@ export default defineConfig({
     },
 
     en: makeLocale(enI18n, "en", "en", "English"),
-    ja: makeLocale(jaI18n, "ja", "ja", "日本語"),
-    ru: makeLocale(ruI18n, "ru", "ru", "Русский"),
   },
 });

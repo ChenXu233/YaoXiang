@@ -3,8 +3,6 @@ docs/public
 docs/src/.vitepress
 docs/dist
 docs/src/en
-docs/src/ja
-docs/src/ru
 docs/src/archive
 docs/src/design/rfc/deprecated
 docs/src/design/rfc/rejected

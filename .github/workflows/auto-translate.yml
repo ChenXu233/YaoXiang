@@ -73,16 +73,16 @@ jobs:
         run: npm install -g prettier markdownlint-cli
 
       - name: Format translated Markdown files
-        run: prettier --write "docs/src/{en,ja,ru}/**/*.md" --config docs/.prettierrc.json
+        run: prettier --write "docs/src/en/**/*.md" --config docs/.prettierrc.json
 
       - name: Lint Markdown for common issues
-        run: markdownlint "docs/src/{en,ja,ru}/**/*.md" --config docs/.markdownlint.jsonc || echo "::warning::Some translated markdown files have lint issues. Run 'cd docs && npm run lint:md' to see details."
+        run: markdownlint "docs/src/en/**/*.md" --config docs/.markdownlint.jsonc || echo "::warning::Some translated markdown files have lint issues. Run 'cd docs && npm run lint:md' to see details."
 
       - name: Commit translations
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add docs/src/en/ docs/src/ja/ docs/src/ru/ docs/src/.i18n-cache.json docs/vpi18n.config.json
+          git add docs/src/en/ docs/src/.i18n-cache.json docs/vpi18n.config.json
           git diff --staged --quiet || git commit -m ":pencil: docs: auto-translate documentation"
           git pull --rebase origin dev
           git push
