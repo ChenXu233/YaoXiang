@@ -40,6 +40,11 @@ pub enum DisproofKind {
     SpawnCycleViolation,
     /// 复制 Linear 令牌（`&mut T` 非 Dup，赋值复制被拒绝，#257）→ E2003
     LinearTokenCopy,
+    /// 测度不成立（SMT 给出反例，RFC-027a §义务生成）→ E4022
+    ///
+    /// 只用于**递减**义务判伪。良基性「推不出下界」走 `Unproven` 而非判伪
+    /// （RFC-027a:223「只给方向不拒绝」）。
+    MeasureNotDecreasing,
 }
 
 /// 证明结果
@@ -106,6 +111,22 @@ impl DisproofModel {
                     builder = builder.at(span);
                 }
 
+                builder.build()
+            }
+            DisproofKind::MeasureNotDecreasing => {
+                let counterexample = if self.assignments.is_empty() {
+                    "（求解器未给出具体取值）".to_string()
+                } else {
+                    self.assignments
+                        .iter()
+                        .map(|(k, v)| format!("{k} = {v}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                let mut builder = ErrorCodeDefinition::measure_not_decreasing(&counterexample);
+                if let Some(span) = self.span {
+                    builder = builder.at(span);
+                }
                 builder.build()
             }
             DisproofKind::TypeMismatch => {

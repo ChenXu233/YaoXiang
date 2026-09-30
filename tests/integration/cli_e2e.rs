@@ -1539,7 +1539,12 @@ fn test_e2e_publish_dry_run_with_passing_tests() {
         "stdout: {stdout}
 stderr: {stderr}"
     );
-    assert!(stdout.contains("running pre-publish tests"), "{stdout}");
+    // 提示行的首字母大小写随实现变动过（实为 `Running pre-publish tests…`），
+    // 故只钉不可变的实词部分——本用例要验的是「确实跑了发布前测试」。
+    assert!(
+        stdout.contains("pre-publish tests"),
+        "stdout 应含发布前测试的提示行；stdout: {stdout}\nstderr: {stderr}"
+    );
     assert!(
         tmp.path().join("target/yxpkg/demo-1.0.0.yxpkg").is_file(),
         "产物应写入 target/yxpkg/"

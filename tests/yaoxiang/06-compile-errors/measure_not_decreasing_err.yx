@@ -1,0 +1,23 @@
+// 06-compile-errors/measure_not_decreasing_err.yx
+// 覆盖: RFC-027a §义务生成 —— 递归调用点测度未严格递减，且测度良基 → E4022
+// 验证: `f` 的测度是 `b`，但递归实参是 `b + 1`（递增），故 `b + 1 < b` 判伪。
+//       测度带下界精化 `b: NonNegative(b)` 使良基性可证，于是「不严格递减」
+//       成为真正的不终止证据 → E4022（附反例）。
+// 状态: ❌ 应被编译期拒绝
+//
+// 注：E4022 的**唯一**发射路径需两个条件同时成立：
+//       1. 递减义务被判伪（求解器给出反例，非 unknown）
+//       2. 测度良基性已证（否则 ℤ 上「不下降」≠「不终止」，见 027a:223）
+//     对照正例：tests/yaoxiang/02-type-system/ 下的 gcd 形态（`b - 1` 递减）。
+
+// expect: compile-error E4022
+
+NonNegative: (x: Int) -> Type = { x >= 0 }
+
+f: (n: Int, b: NonNegative(b)) -> Terminates(b) = {
+    if b == 0 { return n }
+    return f(n, b + 1)
+}
+
+main: () -> Void = {
+}

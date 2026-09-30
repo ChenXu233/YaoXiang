@@ -134,7 +134,9 @@ impl LinearMeasure {
 
 use crate::frontend::core::parser::ast::{self, Expr, Stmt, StmtKind, BinOp, Type};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
-use crate::frontend::core::typecheck::proof::verdict::{BudgetReport, ProofResult, UnprovenReason};
+use crate::frontend::core::typecheck::proof::verdict::{
+    BudgetReport, DisproofKind, DisproofModel, ProofResult, UnprovenReason,
+};
 use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort, SMTResult};
 #[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::backend::Solver;
@@ -167,11 +169,22 @@ pub struct MeasureObligation {
 /// 两类义务共用此枚举：**递减**（`m[形参:=实参] < m` 不可满足）与**良基性**
 /// （`m >= 0` 在形参前置条件下不可满足取反）。两者都只问「目标取反是否不可
 /// 满足」，故用中性的「已证明」而非「递减」——否则良基性判定会被读成递减判定。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// `Disproved` 与 `NotProved` **必须分开**（RFC-027a:77 与 :223 的分工）：
+/// 判伪（求解器给出反例）才是义务不成立，可报 E4022；求解器返回 unknown 只是
+/// 「判不出」，不是义务为假——把它当判伪会违反 :223「只给方向不拒绝」。
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MeasureVerdict {
     /// 已证明：目标取反不可满足
     Proved,
-    /// 未证明：求解器给出模型（= 反例），或返回 unknown
+    /// 判伪：求解器给出反例（存在使义务不成立的取值）
+    Disproved {
+        /// 反例赋值（变量 → 取值），进 E4022 文案。
+        /// 保留**结构**而非预格式化字符串：发射端要填进 `DisproofModel`，
+        /// 格式化在诊断侧统一做（与 `PredicateViolation` 同一取法）。
+        counterexample: Vec<(String, String)>,
+    },
+    /// 未证明：求解器返回 unknown（判不了，**不等于**义务为假）
     NotProved,
     /// 未判定：无求解器可用（wasm / Z3 缺失）
     Unjudged,
@@ -381,7 +394,43 @@ impl TerminationChecker {
         }
         self.judge_measure_obligations();
         self.judge_well_foundedness();
+        self.emit_measure_disproofs();
         std::mem::take(&mut self.results)
+    }
+
+    /// 递减义务判伪 → E4022（RFC-027a §义务生成）。
+    ///
+    /// **只发递减判伪**，两个门都没有放松：
+    /// - `NotProved`（求解器 unknown）不发——判不出不是义务为假（027a:223）
+    /// - 良基性未证时不发——ℤ 上 `<` 不良基，测度不降**不**等于不终止
+    ///   （`gcd` 在 `b` 为负时照样停）。良基性已证（测度高含下界）时，递减失守
+    ///   才是真正的不终止证据。
+    ///
+    /// 宽严方向：这两道门只会**少报**，不会误报。
+    fn emit_measure_disproofs(&mut self) {
+        for (ob, verdict) in self
+            .measure_obligations
+            .iter()
+            .zip(self.measure_verdicts.iter())
+        {
+            let MeasureVerdict::Disproved { counterexample } = verdict else {
+                continue;
+            };
+            // 良基性门：只有测度确实落在自然数上时，"不严格递减"才推出不终止
+            if !matches!(
+                self.well_founded.get(&ob.fn_name),
+                Some(MeasureVerdict::Proved)
+            ) {
+                continue;
+            }
+            self.results.push(ProofResult::Disproved(DisproofModel {
+                kind: DisproofKind::MeasureNotDecreasing,
+                assignments: counterexample.clone(),
+                constraint: ob.measure.to_string(),
+                span: Some(ob.span),
+                predicate_span: None,
+            }));
+        }
     }
 
     /// 判定各带测度函数的**良基性**（RFC-027a §良基性：测度落在自然数上）。
@@ -426,7 +475,10 @@ impl TerminationChecker {
                         );
                     match solver.solve(&commands, 100) {
                         SMTResult::Unsat => MeasureVerdict::Proved,
-                        // sat = 有反例（可取负）；unknown = 判不了 → 均不得宣称成立
+                        // 良基性 Sat = 「下界推不出」，而**不是**义务为假：
+                        // 测度在可达输入上未必真会取负，只是当前精化不足以导出下界。
+                        // RFC-027a:223 对此的规定是「推不出时进残余义务，且只给方向
+                        // 不拒绝」——故不得映射为 `Disproved`（否则会报 E4022 拒绝）。
                         SMTResult::Sat { .. } | SMTResult::Unknown { .. } => {
                             MeasureVerdict::NotProved
                         }
@@ -503,8 +555,12 @@ impl TerminationChecker {
                     );
                 match solver.solve(&commands, 100) {
                     SMTResult::Unsat => MeasureVerdict::Proved,
-                    // sat = 有反例（测度未严格递减）；unknown = 判不了 → 均不得宣称成立
-                    SMTResult::Sat { .. } | SMTResult::Unknown { .. } => MeasureVerdict::NotProved,
+                    // 判伪：存在使递减不成立的取值（b 取 0）。反例进 E4022。
+                    SMTResult::Sat { model } => MeasureVerdict::Disproved {
+                        counterexample: model.assignments.clone(),
+                    },
+                    // unknown：判不了，**不**等于义务为假（027a:223）
+                    SMTResult::Unknown { .. } => MeasureVerdict::NotProved,
                 }
             })
             .collect()

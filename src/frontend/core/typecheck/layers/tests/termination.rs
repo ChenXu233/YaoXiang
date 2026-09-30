@@ -848,7 +848,7 @@ fn test_measure_obligation_proved_when_solver_reports_unsat() {
 /// RFC-027a §判定管线 —— Sat（求解器给出反例）时**不得**宣称成立。
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn test_measure_obligation_not_proved_when_solver_reports_sat() {
+fn test_measure_obligation_disproved_when_solver_reports_sat() {
     use crate::frontend::core::types::const_data::ConstExpr;
 
     // Arrange
@@ -861,10 +861,9 @@ fn test_measure_obligation_not_proved_when_solver_reports_sat() {
     let verdicts = measure_verdicts_of(source, &measures, Some(always_sat()));
 
     // Assert
-    assert_eq!(
-        verdicts,
-        vec![MeasureVerdict::NotProved],
-        "Sat = 有反例，测度未严格递减，不得判为成立；实际: {verdicts:?}"
+    assert!(
+        matches!(verdicts.as_slice(), [MeasureVerdict::Disproved { .. }]),
+        "Sat 即存在反例，递减义务被判伪（可报 E4022）；实际: {verdicts:?}"
     );
 }
 
@@ -943,28 +942,29 @@ fn test_real_solver_rejects_increasing_measure() {
     let verdicts = measure_verdicts_of(source, &measures, Some(solver));
 
     // Assert
-    assert_eq!(
-        verdicts,
-        vec![MeasureVerdict::NotProved],
-        "n + 1 < n 存在反例，真实 Z3 应判为不成立；实际: {verdicts:?}"
+    assert!(
+        matches!(verdicts.as_slice(), [MeasureVerdict::Disproved { .. }]),
+        "n + 1 < n 存在反例，真实 Z3 应判为**判伪**（而非仅「未证明」）；\
+         实际: {verdicts:?}"
     );
 }
 
-/// **残余义务形态** —— 测度无下界精化时，递减义务判不出（RFC-027a:223）。
+/// 无下界精化时，递减义务被判伪（RFC-027a:77）。
 ///
 /// 与 `test_gcd_measure_decrease_proved_with_guard_and_precondition` 成对：
 /// **同一源码、同一守卫、同一求解器，只差形参下界**。此处的 `b: Int` 无精化，
-/// 下界无从导出，于是 `b` 可取负（`mod` 取负号）→ `a % b < b` 不成立 →
-/// `NotProved`。
+/// 下界无从导出，于是 `b` 可取负（`mod` 取负号）→ `a % b < b` 有反例 → 判伪。
 ///
-/// RFC-027a:223 对此的规定是「参数精化若已给出下界则自动导出；推不出时才进
-/// 残余义务，**且只给方向不拒绝**」——故 T5 发射 E4022 时不得把这条当成乱码。
+/// 区分两种「不成立」（这条容易搞混）：
+/// - **判伪**（本用例）：求解器给出反例 → 义务不成立 → 可报 E4022
+/// - **判不出**（`NotProved`）：求解器 unknown → 不是义务为假，只给方向不拒绝
+///   （RFC-027a:223）
 ///
 /// 历史：本用例的前身锁定「守卫与良基性未接线」的边界。守卫已在路径守卫累积中
 /// 落地，边界因此移到下界（前置条件）一侧。
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn test_gcd_measure_decrease_unprovable_without_lower_bound() {
+fn test_gcd_measure_decrease_disproved_without_lower_bound() {
     use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
     use crate::frontend::core::types::const_data::ConstExpr;
 
@@ -979,10 +979,9 @@ fn test_gcd_measure_decrease_unprovable_without_lower_bound() {
     let verdicts = measure_verdicts_of(source, &measures, Some(solver));
 
     // Assert
-    assert_eq!(
-        verdicts,
-        vec![MeasureVerdict::NotProved],
-        "无下界精化时 b 可取负，a % b < b 不成立，不得被判为递减；实际: {verdicts:?}"
+    assert!(
+        matches!(verdicts.as_slice(), [MeasureVerdict::Disproved { .. }]),
+        "无下界精化时 b 可取负，a % b < b 有反例 → 判伪；实际: {verdicts:?}"
     );
 }
 
@@ -1026,7 +1025,7 @@ fn well_founded_verdict_of(
     let mut out: Vec<(String, MeasureVerdict)> = checker
         .well_founded_verdicts()
         .iter()
-        .map(|(k, v)| (k.clone(), *v))
+        .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out
@@ -1204,9 +1203,162 @@ fn test_gcd_measure_decrease_needs_guard() {
     );
 
     // Assert
+    assert!(
+        matches!(verdicts.as_slice(), [MeasureVerdict::Disproved { .. }]),
+        "无 `b != 0` 守卫时 b 可取 0，`a % b < b` 有反例 → 判伪；实际: {verdicts:?}"
+    );
+}
+
+/// 恒返回 `Unknown` 的桩（语义：求解器判不了，**不等于**义务为假）
+#[cfg(not(target_arch = "wasm32"))]
+fn always_unknown() -> Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver> {
+    use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTResult};
+    use crate::frontend::core::typecheck::proof::smt::backend::Solver;
+
+    #[derive(Debug)]
+    struct AlwaysUnknown;
+    impl Solver for AlwaysUnknown {
+        fn solve(
+            &self,
+            _commands: &[SMTCommand],
+            _timeout_ms: u64,
+        ) -> SMTResult {
+            SMTResult::Unknown {
+                reason: "stub".to_string(),
+            }
+        }
+    }
+    Box::new(AlwaysUnknown)
+}
+
+/// **判不出 ≠ 判伪**（RFC-027a:223）—— 求解器 unknown 时须为 `NotProved` 而非 `Disproved`。
+///
+/// 与 `test_measure_obligation_disproved_when_solver_reports_sat` 成对：同一源码、
+/// 同一递减义务，只差求解器答案（unknown / sat）。把 unknown 当判伪会违反
+/// 「推不出时只给方向不拒绝」，进而在发射 E4022 时误伤。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_measure_obligation_not_proved_when_solver_reports_unknown() {
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange
+    let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
+                  if b == 0 { return a } \
+                  return gcd(b, a % b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+
+    // Act
+    let verdicts = measure_verdicts_of(source, &measures, Some(always_unknown()));
+
+    // Assert
     assert_eq!(
         verdicts,
         vec![MeasureVerdict::NotProved],
-        "无 `b != 0` 守卫时 b 可取 0，`a % b < b` 不成立，不得被判为递减；实际: {verdicts:?}"
+        "unknown 只是判不了，不是义务为假，不得判为 Disproved；实际: {verdicts:?}"
+    );
+}
+
+/// 递减义务判伪 + 良基性已证 → 发射 E4022（RFC-027a §义务生成）。
+///
+/// 这是 E4022 的**唯一**发射路径。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_measure_disproof_emits_e4022_when_well_founded() {
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::parse;
+    use crate::frontend::core::typecheck::environment::TypeEnvironment;
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+
+    // Arrange —— 测度 b：有下界精化（良基性可证），但递归实参不下降（b - 1 取代 b？）
+    // 用递增实参 `b + 1` 使 `b + 1 < b` 判伪
+    let source = "NonNegative: (x: Int) -> Type = { x >= 0 }\n\
+                  f: (n: Int, b: NonNegative(b)) -> Terminates(b) = { \
+                  if b == 0 { return n } \
+                  return f(n, b + 1) }";
+    let measures = [("f", ConstExpr::NamedVar("b".to_string()))];
+    let assumptions = [(
+        "f",
+        vec![ConstExpr::BinOp {
+            op: BinOp::Ge,
+            left: Box::new(ConstExpr::NamedVar("b".to_string())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+        }],
+    )]
+    .iter()
+    .map(|(k, v)| (k.to_string(), v.clone()))
+    .collect();
+    let tokens = tokenize(source).expect("词法分析应成功");
+    let parsed = parse(&tokens);
+    assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
+
+    let mut checker = TerminationChecker::new()
+        .set_measures(
+            measures
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.clone()))
+                .collect(),
+        )
+        .set_param_assumptions(assumptions)
+        .with_solver_owned(default_solver().expect("本用例需要 Z3"));
+    let env = TypeEnvironment::new();
+
+    // Act
+    let results = checker.check_module(&parsed.module, &env);
+
+    // Assert
+    let codes: Vec<String> = results
+        .into_iter()
+        .filter_map(|r| r.into_result().err())
+        .map(|d| d.code)
+        .collect();
+    assert_eq!(
+        codes,
+        vec!["E4022".to_string()],
+        "良基性已证 + 递减判伪 应发射 E4022；实际: {codes:?}"
+    );
+}
+
+/// 递减判伪但**良基性未证** → 不发射（ℤ 上不降 ≠ 不终止）。
+///
+/// 与上一个用例成对：同一源码、同一判伪结果，只差形参下界。少了这道门会
+/// 在 `b` 可取负时误报——`gcd` 在 `b` 为负时照样终止。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_measure_disproof_silent_without_well_foundedness() {
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::parse;
+    use crate::frontend::core::typecheck::environment::TypeEnvironment;
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange —— 同源码，但 b 无下界精化
+    let source = "f: (n: Int, b: Int) -> Terminates(b) = { \
+                  if b == 0 { return n } \
+                  return f(n, b + 1) }";
+    let measures = [("f", ConstExpr::NamedVar("b".to_string()))];
+    let tokens = tokenize(source).expect("词法分析应成功");
+    let parsed = parse(&tokens);
+    assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
+
+    let mut checker = TerminationChecker::new()
+        .set_measures(
+            measures
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.clone()))
+                .collect(),
+        )
+        .with_solver_owned(default_solver().expect("本用例需要 Z3"));
+    let env = TypeEnvironment::new();
+
+    // Act
+    let results = checker.check_module(&parsed.module, &env);
+
+    // Assert
+    assert!(
+        results.is_empty(),
+        "良基性未证时不得因递减判伪而报错（027a:223 只给方向不拒绝）；\
+         实际结果数: {}",
+        results.len()
     );
 }
