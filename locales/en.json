@@ -1084,9 +1084,9 @@
     "help": "Check whether the JSON syntax is valid (RFC 8259); the error message contains line:column position and reason"
   },
   "E4022": {
-    "title": "Measure does not decrease",
-    "message": "The measure at this recursive call site is not strictly decreasing, so termination cannot be proved (counterexample attached)",
-    "template": "Measure not decreasing: cannot prove the measure strictly decreases at this call site\n\nCounterexample:\n{counterexample}",
-    "help": "This is the termination obligation implied by the refinement type: every recursive call site of a function carrying a `Terminates` measure must prove the measure strictly decreases. The counterexample shows an assignment for which the decrease fails. Reconsider the measure, or add branch guards so the decrease holds on each recursive path. See RFC-027a."
+    "title": "Measure does not hold",
+    "message": "The measure at this recursive call site does not strictly decrease, so recursion termination cannot be proven (counterexample attached)",
+    "template": "Measure does not hold: this call site cannot prove that the measure strictly decreases\n\nCounterexample:\n{counterexample}",
+    "help": "This is a termination obligation of a refinement type assertion: for a recursive function with a `Terminates` measure, every recursive call site must prove that the measure strictly decreases. The counterexample provides a set of values for which the decrease does not hold. Please check whether the measure is chosen appropriately, or add branch guards to ensure the decrease holds along recursive paths. See RFC-027a."
   }
 }
