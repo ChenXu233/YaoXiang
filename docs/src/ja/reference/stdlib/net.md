@@ -1,6 +1,6 @@
 ---
 title: 'std.net'
-description: 'HTTPリクエストとURLパーセントエンコーディング'
+description: 'HTTP リクエストと URL パーセントエンコーディング'
 ---
 
 # std.net
@@ -11,22 +11,23 @@ description: 'HTTPリクエストとURLパーセントエンコーディング'
 use std.net
 ```
 
-> 本モジュールはオペレーティングシステムのネットワーク機能に依存しており、`wasm32`ターゲットでは**エクスポートされません**。
+> 本モジュールはオペレーティングシステムのネットワーク機能に依存しており、`wasm32`
+> ターゲットでは**エクスポートされません**。
 
-> **実装状態の警告（#56）**：本モジュールの4つの関数のうち、`url_encode` / `url_decode`
-> のみが実際の実装です。`http_get` / `http_post`
-> は**プレースホルダ実装であり、ネットワークリクエストを一切発行しません**。引数を文字列に連結して返すだけです。詳細は各項目を参照してください。
+HTTP 関数は同期ブロッキングクライアント実装（rustls
+TLS）に基づき、リダイレクトはデフォルトで追跡します（最大 5 回）。ブロッキングは呼び出しが置かれている実行スレッドにのみ作用し、[`spawn`](../../language-spec/concurrency)
+の明示的並列モデルと整合します。
 
 ## 関数一覧
 
 <!-- stdlib:table:net start -->
 
-| 関数         | シグネチャ                                |
-| ------------ | ----------------------------------------- |
-| `http_get`   | `(url: &String) -> String`                |
-| `http_post`  | `(url: &String, body: &String) -> String` |
-| `url_encode` | `(s: &String) -> String`                  |
-| `url_decode` | `(s: &String) -> String`                  |
+| 関数         | シグネチャ                                                                                                |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| `http_get`   | `(url: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) -> Dict(String, Any)`                |
+| `http_post`  | `(url: &String, body: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) -> Dict(String, Any)` |
+| `url_encode` | `(s: &String) -> String`                                                                                  |
+| `url_decode` | `(s: &String) -> String`                                                                                  |
 
 <!-- stdlib:table:net end -->
 
@@ -37,29 +38,47 @@ use std.net
 <!-- stdlib:sig:net.http_get start -->
 
 ```yaoxiang
-http_get: (url: &String) -> String
+http_get: (url: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) -> Dict(String, Any)
 ```
 
 <!-- stdlib:sig:net.http_get end -->
 
-> **プレースホルダ実装。HTTPクライアントには接続されていません（#56）。** 現在の動作は、引数を
-> `"GET: {url}"`
-> という文字列に連結して返すだけであり、**いかなるネットワークリクエストも発行しません**。レスポンスボディも返しません。これに依存して実際のHTTP呼び出しを行うと静かに失敗します。取得できるのはレスポンスの内容ではなく、説明用の文字列です。
+HTTP GET リクエストを発行し、構造化されたレスポンス辞書を返します。
 
-- `url` —— リクエストURL（読み取り専用借用）
+| キー      | 型                     | 意味                                                                   |
+| --------- | ---------------------- | ---------------------------------------------------------------------- |
+| `status`  | `Int`                  | HTTP ステータスコード（例：`200`、`404`）                              |
+| `headers` | `Dict(String, String)` | レスポンスヘッダー、キーは統一して小文字、同名の複数値は `", "` で結合 |
+| `body`    | `String`               | レスポンスボディ（UTF-8 でデコード）                                   |
 
-戻り値：`"GET: http://example.com"` 形式の文字列。エラー：引数が不足している場合 `E6007`
-をスローします。引数が `String` 以外の場合は型エラーをスローします。
+- `url` —— リクエストアドレス（読み取り専用借用）
+- `headers` —— オプションのリクエストヘッダー辞書、省略時は `{}` を送信
+- `timeout_secs` —— オプションの全体タイムアウト秒数、省略時は `30`
+
+**4xx/5xx は正常なレスポンス**（`status`
+フィールドにステータスコードを含む）であり、エラーではありません。トランスポート層の障害（DNS 解決失敗、接続拒否、タイムアウトなど）のみが
+`E6007` をスローします。
 
 ```yaoxiang
-use std.assert
 use std.net
 
-main: () -> Void = {
-    // 現在の実装はレスポンスボディではなく説明用文字列を返す
-    r = net.http_get("http://example.com")
-    assert(r == "GET: http://example.com")
-}
+// レスポンス形態の例（ネットワークが必要、実行可能なサンプルではありません）：
+// resp = net.http_get("https://httpbin.org/get")
+// status = resp["status"]        // 200
+// body   = resp["body"]          // レスポンスボディテキスト
+// ctype  = resp["headers"]["content-type"]
+```
+
+リクエストヘッダーとカスタムタイムアウトを携带：
+
+```yaoxiang
+use std.net
+
+// net.http_get(
+//     "https://api.example.com/v1/data",
+//     { "Authorization": "Bearer token123" },
+//     10,
+// )
 ```
 
 ### http_post
@@ -67,29 +86,28 @@ main: () -> Void = {
 <!-- stdlib:sig:net.http_post start -->
 
 ```yaoxiang
-http_post: (url: &String, body: &String) -> String
+http_post: (url: &String, body: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) -> Dict(String, Any)
 ```
 
 <!-- stdlib:sig:net.http_post end -->
 
-> **プレースホルダ実装。HTTPクライアントには接続されていません（#56）。**
-> 現在の動作は、`"POST {url}: {body}"`
-> を連結した文字列を返すだけであり、**いかなるネットワークリクエストも発行しません**。
+HTTP
+POST リクエストを発行します。リクエストボディは UTF-8 でエンコードされて送信され、`Content-Length`
+は自動的に設定されます。レスポンス辞書の構造は [`http_get`](#http_get) と同じです。
 
-- `url` —— リクエストURL（読み取り専用借用）
+- `url` —— リクエストアドレス（読み取り専用借用）
 - `body` —— リクエストボディ（読み取り専用借用）
-
-戻り値：`"POST http://example.com: hello"` 形式の文字列。エラー：引数が不足している場合 `E6007`
-をスローします。引数の型が一致しない場合は型エラーをスローします。
+- `headers` —— オプションのリクエストヘッダー辞書、省略時は `{}` を送信
+- `timeout_secs` —— オプションの全体タイムアウト秒数、省略時は `30`
 
 ```yaoxiang
-use std.assert
 use std.net
 
-main: () -> Void = {
-    r = net.http_post("http://example.com", "hello")
-    assert(r == "POST http://example.com: hello")
-}
+// net.http_post(
+//     "https://httpbin.org/post",
+//     "payload=1&name=yx",
+//     { "Content-Type": "application/x-www-form-urlencoded" },
+// )
 ```
 
 ### url_encode
@@ -106,11 +124,10 @@ url_encode: (s: &String) -> String
 
 - `s` —— エンコード対象の文字列（読み取り専用借用）
 
-戻り値：エンコード後の文字列。空白は `%20` にエンコードされます（`+` ではありません）。予約文字はRFC
-3986に従ってエスケープされます。非予約文字はそのまま保持されます。
+戻り値：エンコード後の文字列。スペースは `%20` にエンコード（`+` ではない）、予約文字は RFC
+3986 に従ってエスケープ、非予約文字はそのまま保持されます。
 
-エラー：引数が不足している場合 `E6007` をスローします。引数が `String`
-以外の場合は型エラーをスローします。
+エラー：引数が欠落している場合 `E6007` をスロー；引数が `String` でない場合は型エラーをスロー。
 
 ```yaoxiang
 use std.assert
@@ -132,14 +149,13 @@ url_decode: (s: &String) -> String
 
 <!-- stdlib:sig:net.url_decode end -->
 
-パーセントデコード。`url_encode` と逆関数の関係です。
+パーセントデコード。`url_encode` と可逆。
 
-- `s` —— エンコード済みの文字列（読み取り専用借用）
+- `s` —— エンコード済み文字列（読み取り専用借用）
 
 戻り値：デコード後の文字列。不正なエスケープシーケンスはそのまま保持されます。
 
-エラー：引数が不足している場合 `E6007` をスローします。引数が `String`
-以外の場合は型エラーをスローします。
+エラー：引数が欠落している場合 `E6007` をスロー；引数が `String` でない場合は型エラーをスロー。
 
 ```yaoxiang
 use std.assert
@@ -148,12 +164,12 @@ use std.net
 main: () -> Void = {
     assert(net.url_decode("a%20b") == "a b")
 
-    // ラウンドトリップで一致
+    // ラウンドトリップの一貫性
     orig = "hello world & friends"
     assert(net.url_decode(net.url_encode(orig)) == orig)
 }
 ```
 
-## 関連項目
+## 関連
 
 - [エラーコードリファレンス](../error-code/) —— `E6007` 汎用ランタイムエラー
