@@ -1100,5 +1100,6 @@
   "package_publish_version_exists": "Release {0} 已存在，版本号不可复用",
   "package_publish_tag_missing": "tag {0} 不存在：先创建并推送 tag（git tag {0} && git push origin {0}）",
   "package_publish_token_missing": "缺少 GitHub 凭据：设置 $YX_GITHUB_TOKEN（014a 认证表）",
+  "package_publish_testing": "运行发布前测试…",
   "package_publish_repo_unresolved": "无法解析 GitHub 仓库：在 [package] repository 填 GitHub URL，或配置 git remote origin"
 }

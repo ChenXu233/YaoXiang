@@ -523,6 +523,7 @@ pub enum MSG {
     PackagePublishTagMissing,
     PackagePublishTokenMissing,
     PackagePublishRepoUnresolved,
+    PackagePublishTesting,
 }
 
 impl MSG {
@@ -655,6 +656,7 @@ impl MSG {
             MSG::PackagePublishTagMissing => "package_publish_tag_missing",
             MSG::PackagePublishTokenMissing => "package_publish_token_missing",
             MSG::PackagePublishRepoUnresolved => "package_publish_repo_unresolved",
+            MSG::PackagePublishTesting => "package_publish_testing",
 
             _ => "unknown_message",
         }

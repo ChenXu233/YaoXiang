@@ -24,6 +24,8 @@ pub struct PublishArgs {
     pub dry_run: bool,
     /// 发布为 GitHub Release（`.yxpkg` 资产）
     pub github: bool,
+    /// 跳过发布前测试（RFC-014a 发布前校验 3：默认运行，--no-test 跳过）
+    pub no_test: bool,
 }
 
 /// 在给定目录执行 publish
@@ -40,6 +42,16 @@ pub fn exec_in(
             t_simple(MSG::PackagePublishRegistryDeferred, current_lang())
         );
         return Err(PackageError::RegistryDeferred);
+    }
+
+    // 发布前测试（RFC-014a 校验清单第 3 步）：失败即中止发布
+    if !args.no_test {
+        let failed = run_project_tests(project_dir)?;
+        if failed > 0 {
+            return Err(PackageError::TestsFailed(format!(
+                "{failed} test file(s) failed; publish aborted (use --no-test to skip)"
+            )));
+        }
     }
 
     // 6d：打包时物化 workspace 引用替换（磁盘 manifest 不动）
@@ -105,6 +117,36 @@ pub fn exec_in(
 /// 在当前目录执行 publish
 pub fn exec(args: PublishArgs) -> PackageResult<()> {
     exec_in(&std::env::current_dir()?, args)
+}
+
+/// 运行项目测试（RFC-036 机制：`[tool.test].patterns` 发现，run 退出 0 = PASS）
+///
+/// 测试发现相对项目根（cwd 临时切换，与 build.yx 同款恢复语义）。
+fn run_project_tests(project_dir: &Path) -> PackageResult<usize> {
+    println!("{}", t_simple(MSG::PackagePublishTesting, current_lang()));
+    let original = std::env::current_dir()?;
+    std::env::set_current_dir(project_dir).map_err(|e| {
+        PackageError::InvalidManifest(format!("无法切换工作目录到 {}: {e}", project_dir.display()))
+    })?;
+    let options = crate::util::test_runner::TestOptions {
+        paths: Vec::new(),
+        filter: None,
+        fail_fast: false,
+        verbose: false,
+        list: false,
+        no_progress: false,
+        json: false,
+        parallel: false,
+    };
+    let result = crate::util::test_runner::run_test_command(&options);
+    if let Err(e) = std::env::set_current_dir(&original) {
+        if result.is_ok() {
+            return Err(PackageError::InvalidManifest(format!(
+                "无法恢复工作目录: {e}"
+            )));
+        }
+    }
+    result.map_err(|e| PackageError::InvalidManifest(format!("测试运行失败: {e}")))
 }
 
 /// 发布前校验（014a）：name/version/description 必填

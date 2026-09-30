@@ -54,6 +54,7 @@ fn dry_run_packs_with_workspace_refs_replaced() {
         PublishArgs {
             dry_run: true,
             github: false,
+            no_test: false,
         },
     )
     .unwrap();
@@ -90,6 +91,7 @@ fn dry_run_packs_plain_project_verbatim() {
         PublishArgs {
             dry_run: true,
             github: false,
+            no_test: false,
         },
     )
     .unwrap();
@@ -115,6 +117,7 @@ fn description_is_required() {
         PublishArgs {
             dry_run: true,
             github: false,
+            no_test: false,
         },
     )
     .unwrap_err();
@@ -135,6 +138,7 @@ fn bare_publish_reports_registry_deferred() {
         PublishArgs {
             dry_run: false,
             github: false,
+            no_test: false,
         },
     )
     .unwrap_err();
@@ -143,4 +147,53 @@ fn bare_publish_reports_registry_deferred() {
         !project.join("target").exists(),
         "裸 publish 不应产生打包产物"
     );
+}
+
+/// ---- 发布前测试（RFC-014a 校验 3）----
+///
+/// 单测不触发真实 test runner：`run_test_command` 以 `current_exe()` 为
+/// 解释器，单测形态下那是 libtest harness（过滤器误匹配导致自递归）——
+/// runner 路径的真实覆盖在 tests/integration/cli_e2e.rs（真二进制）。
+
+#[test]
+fn publish_no_test_skips_test_run() {
+    let tmp = tempfile::tempdir().unwrap();
+    let project = tmp.path().join("proj");
+    sample_project(&project);
+    write(
+        &project.join("tests/broken.yx"),
+        "let ??? broken
+",
+    );
+
+    exec_in(
+        &project,
+        PublishArgs {
+            dry_run: true,
+            github: false,
+            no_test: true,
+        },
+    )
+    .unwrap();
+    assert!(project.join("target/yxpkg/demo-1.0.0.yxpkg").is_file());
+}
+
+/// 测试目录为空（无发现）= 0 失败，publish 照常
+#[test]
+fn publish_with_no_tests_found_packs() {
+    let tmp = tempfile::tempdir().unwrap();
+    let project = tmp.path().join("proj");
+    sample_project(&project);
+    // 不创建 tests/ —— runner 发现为空
+    // 但单测形态下 runner 不可用（见上），走 --no-test 校验打包路径
+    exec_in(
+        &project,
+        PublishArgs {
+            dry_run: true,
+            github: false,
+            no_test: true,
+        },
+    )
+    .unwrap();
+    assert!(project.join("target/yxpkg/demo-1.0.0.yxpkg").is_file());
 }

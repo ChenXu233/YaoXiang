@@ -1100,5 +1100,6 @@
   "package_publish_version_exists": "release {0} already exists; version numbers cannot be reused",
   "package_publish_tag_missing": "tag {0} not found: create and push it first (git tag {0} && git push origin {0})",
   "package_publish_token_missing": "missing GitHub credentials: set $YX_GITHUB_TOKEN (RFC-014a auth table)",
+  "package_publish_testing": "running pre-publish tests…",
   "package_publish_repo_unresolved": "cannot resolve the GitHub repository: set [package] repository to a GitHub URL, or configure git remote origin"
 }

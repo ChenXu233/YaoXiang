@@ -1464,3 +1464,75 @@ fn test_e2e_workspace_add_remove_roundtrip() {
         "member should be gone: {root_toml:?}"
     );
 }
+
+// publish — 发布前测试（RFC-014a 校验 3）：真二进制跑 runner 路径
+// （单测形态下 current_exe 是 libtest harness，不能触发 run_test_command）
+
+fn write_publish_project(
+    dir: &std::path::Path,
+    test_content: &str,
+) {
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join("tests")).unwrap();
+    std::fs::write(
+        dir.join("yaoxiang.toml"),
+        "[package]
+name = \"demo\"
+version = \"1.0.0\"
+description = \"demo pkg\"
+",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/main.yx"), "main = () => { print(1) }").unwrap();
+    std::fs::write(dir.join("tests/it.yx"), test_content).unwrap();
+}
+
+#[test]
+fn test_e2e_publish_dry_run_with_passing_tests() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    write_publish_project(tmp.path(), "main = () => { print(\"ok\") }");
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["publish", "--dry-run"], tmp.path());
+
+    // Assert
+    assert_eq!(
+        code, 0,
+        "stdout: {stdout}
+stderr: {stderr}"
+    );
+    assert!(stdout.contains("running pre-publish tests"), "{stdout}");
+    assert!(
+        tmp.path().join("target/yxpkg/demo-1.0.0.yxpkg").is_file(),
+        "产物应写入 target/yxpkg/"
+    );
+}
+
+#[test]
+fn test_e2e_publish_aborts_on_failing_tests() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    write_publish_project(tmp.path(), "let ??? broken");
+
+    // Act
+    let (code, _stdout, _stderr) = run_yx(&["publish", "--dry-run"], tmp.path());
+
+    // Assert：测试失败 → 非零退出，不产生产物
+    assert_ne!(code, 0, "failing tests must abort publish");
+    assert!(!tmp.path().join("target/yxpkg").exists());
+}
+
+#[test]
+fn test_e2e_publish_no_test_skips_failing_tests() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    write_publish_project(tmp.path(), "let ??? broken");
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["publish", "--dry-run", "--no-test"], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "--no-test should skip, stderr: {stderr}");
+    assert!(tmp.path().join("target/yxpkg/demo-1.0.0.yxpkg").is_file());
+}

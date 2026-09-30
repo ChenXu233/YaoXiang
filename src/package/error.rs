@@ -87,6 +87,10 @@ pub enum PackageError {
     #[error("publish target unresolved: {0}")]
     PublishTarget(String),
 
+    /// Pre-publish tests failed (RFC-014a publish validation step 3)
+    #[error("tests failed: {0}")]
+    TestsFailed(String),
+
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

@@ -362,6 +362,10 @@ enum Commands {
         /// Publish as a GitHub Release with the .yxpkg as asset
         #[arg(long)]
         github: bool,
+
+        /// Skip the pre-publish test run (RFC-014a publish validation)
+        #[arg(long)]
+        no_test: bool,
     },
 
     /// Start the Language Server Protocol (LSP) server
@@ -765,10 +769,15 @@ fn main() -> Result<()> {
             package::commands::workspace::remove(&key)
                 .context("Failed to remove workspace member")?;
         }
-        Commands::Publish { dry_run, github } => {
+        Commands::Publish {
+            dry_run,
+            github,
+            no_test,
+        } => {
             package::commands::publish::exec(package::commands::publish::PublishArgs {
                 dry_run,
                 github,
+                no_test,
             })
             .context("Failed to publish package")?;
         }
