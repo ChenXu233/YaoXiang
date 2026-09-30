@@ -1362,3 +1362,215 @@ fn test_measure_disproof_silent_without_well_foundedness() {
         results.len()
     );
 }
+
+// ==================== RFC-027a §义务生成：循环回边的显式测度 ====================
+
+/// 循环测度的构造捷径：`n - i`
+fn measure_n_minus_i() -> crate::frontend::core::types::const_data::ConstExpr {
+    use crate::frontend::core::types::const_data::{BinOp, ConstExpr};
+    ConstExpr::BinOp {
+        op: BinOp::Sub,
+        left: Box::new(ConstExpr::NamedVar("n".to_string())),
+        right: Box::new(ConstExpr::NamedVar("i".to_string())),
+    }
+}
+
+/// RFC-027a §义务生成 —— 测度绑在**循环**上时须产生回边义务。
+///
+/// 形态取自 RFC-027 §6.9 的循环范例（`acc: Terminates(n - i) = while i < n {…}`）。
+/// 义务与递归回边**同构**：`params` 是回边上被推进的变量、`call_args` 是其回边取值，
+/// 于是判定侧能复用同一条 `m[params:=call_args] < m`。
+///
+/// 守卫必须含**循环条件**：它是回边可达的唯一假设，也是良基性下界的来源
+///（`i < n` ⇒ `n - i > 0`）。缺它则循环测度的良基性恒推不出。
+#[test]
+fn test_loop_measure_generates_backedge_obligation() {
+    use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+
+    // Arrange —— mut i 未带精化，故走的不是探索路径，只能是显式测度义务
+    let source = "loop: (n: Int) -> Int = { \
+                  mut i: Int = 0 \
+                  acc: Terminates(n - i) = while i < n { i = i + 1; i } \
+                  return acc }";
+
+    // Act
+    let obligations = measure_obligations_of(source, &[("acc", measure_n_minus_i())]);
+
+    // Assert —— 恰一条回边义务，且原料齐备
+    assert_eq!(
+        obligations.len(),
+        1,
+        "循环回边应产生恰一条测度义务；实际: {obligations:?}"
+    );
+    let ob = &obligations[0];
+    assert_eq!(
+        ob.params,
+        vec!["i".to_string()],
+        "回边被推进的变量应作 params；实际: {:?}",
+        ob.params
+    );
+    assert_eq!(
+        ob.call_args,
+        vec![ConstExpr::BinOp {
+            op: BinOp::Add,
+            left: Box::new(ConstExpr::NamedVar("i".to_string())),
+            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
+        }],
+        "回边取值应为赋值右侧 `i + 1`，由此得 `m[params:=call_args]`；实际: {:?}",
+        ob.call_args
+    );
+    assert!(
+        ob.guards
+            .iter()
+            .any(|g| matches!(g, ConstExpr::BinOp { op: BinOp::Lt, .. })),
+        "守卫须含循环条件 `i < n`——它是下界来源；实际: {:?}",
+        ob.guards
+    );
+}
+
+/// RFC-027a §判定管线（**真实 Z3**）—— 循环测度真递减时须判成立。
+///
+/// `n - (i + 1) < n - i` 恒真（即 `-1 < 0`），与 `i`、`n` 取值无关。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_real_solver_proves_loop_measure_decrease() {
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+
+    // Arrange
+    let source = "loop: (n: Int) -> Int = { \
+                  mut i: Int = 0 \
+                  acc: Terminates(n - i) = while i < n { i = i + 1; i } \
+                  return acc }";
+    let solver = default_solver().expect("本用例需要 Z3（default_solver）");
+
+    // Act
+    let verdicts = measure_verdicts_of(source, &[("acc", measure_n_minus_i())], Some(solver));
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![MeasureVerdict::Proved],
+        "`n - (i+1) < n - i` 恒真，真实 Z3 应判为成立；实际: {verdicts:?}"
+    );
+}
+
+/// RFC-027a §判定管线（**真实 Z3**）—— 方向写反的循环测度须判**判伪**。
+///
+/// 反例守卫：与上一条成对。测度取 `i` 而体内 `i = i + 1`，于是 `i + 1 < i` 有反例。
+/// 两条一起才钉死方向——只留一条时，判定接线接反也能绿。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_real_solver_rejects_increasing_loop_measure() {
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange —— 测度取 i，而 i 每轮递增
+    let source = "loop: (n: Int) -> Int = { \
+                  mut i: Int = 0 \
+                  acc: Terminates(i) = while i < n { i = i + 1; i } \
+                  return acc }";
+    let measures = [("acc", ConstExpr::NamedVar("i".to_string()))];
+    let solver = default_solver().expect("本用例需要 Z3（default_solver）");
+
+    // Act
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver));
+
+    // Assert
+    assert!(
+        matches!(verdicts.as_slice(), [MeasureVerdict::Disproved { .. }]),
+        "`i + 1 < i` 有反例，应判**判伪**（而非仅「未证明」）；实际: {verdicts:?}"
+    );
+}
+
+/// 测度式**未引用任何被赋值变量**时不得生成义务（防止误报）。
+///
+/// 若照生成，义务是 `m[params:=call_args] < m`，而 `m` 与被推进的变量无关，
+/// 两侧**恒等** ⇒ `m < m` 恒假 ⇒ 判伪 ⇒ 报 E4022 **误报**。
+/// 宁缺勿错：这种情况直接不生成。
+#[test]
+fn test_loop_measure_skipped_when_measure_ignores_assigned_vars() {
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange —— 测度 `n` 与循环变量 `i` 无关
+    let source = "loop: (n: Int) -> Int = { \
+                  mut i: Int = 0 \
+                  acc: Terminates(n) = while i < n { i = i + 1; i } \
+                  return acc }";
+    let measures = [("acc", ConstExpr::NamedVar("n".to_string()))];
+
+    // Act
+    let obligations = measure_obligations_of(source, &measures);
+
+    // Assert
+    assert!(
+        obligations.is_empty(),
+        "测度未取到被赋值变量时义务恒为 `m < m`（恒假），生成即误报；实际: {obligations:?}"
+    );
+}
+
+/// 赋值之间相互引用时不得生成义务（同时代入语义未定义）。
+///
+/// `i = i + 1; j = i` —— `j` 的回边取值 `i` 是**推进后**的 `i`。逐个代入会按次序
+/// 得出 `n - i` 而非 `n - (i + 1)`，义务被判成一个无关的式子。宁缺勿错。
+#[test]
+fn test_loop_measure_skipped_on_mutual_assignment() {
+    use crate::frontend::core::types::const_data::{BinOp, ConstExpr};
+
+    // Arrange —— j 的右侧引用了同样被赋值的 i
+    let source = "loop: (n: Int) -> Int = { \
+                  mut i: Int = 0 \
+                  mut j: Int = 0 \
+                  acc: Terminates(n - j) = while i < n { i = i + 1; j = i; j } \
+                  return acc }";
+    let measure = ConstExpr::BinOp {
+        op: BinOp::Sub,
+        left: Box::new(ConstExpr::NamedVar("n".to_string())),
+        right: Box::new(ConstExpr::NamedVar("j".to_string())),
+    };
+    let measures = [("acc", measure)];
+
+    // Act
+    let obligations = measure_obligations_of(source, &measures);
+
+    // Assert
+    assert!(
+        obligations.is_empty(),
+        "赋值间相互引用需同时代入语义，逐个代入次序错；实际: {obligations:?}"
+    );
+}
+
+/// RFC-027a §良基性 —— 循环测度的下界来自**循环条件**（真实 Z3）。
+///
+/// 循环 `while i < n` 的守卫 `i < n` 导出 `n - i > 0`，故测度 `n - i` 良基。
+/// 这条假设来自**回边义务的守卫**，而不是形参精化——本用例特意不给任何形参
+/// 精化（`param_assumptions` 为空），于是它唯一钉住的就是「守卫进良基性假设」
+/// 这一步：去掉那一步，本用例的判定会退成 `NotProved`（下界推不出）。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_real_solver_loop_measure_well_founded_from_loop_guard() {
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+
+    // Arrange
+    let source = "loop: (n: Int) -> Int = { \
+                  mut i: Int = 0 \
+                  acc: Terminates(n - i) = while i < n { i = i + 1; i } \
+                  return acc }";
+    let solver = default_solver().expect("本用例需要 Z3（default_solver）");
+
+    // Act —— 刻意不给形参前置条件
+    let verdicts =
+        well_founded_verdict_of(source, &[("acc", measure_n_minus_i())], &[], Some(solver));
+
+    // Assert
+    let verdict = verdicts
+        .iter()
+        .find(|(name, _)| name == "acc")
+        .map(|(_, v)| v.clone())
+        .expect("测度表含 `acc`，良基性判定须含同名条目");
+    assert_eq!(
+        verdict,
+        MeasureVerdict::Proved,
+        "循环守卫 `i < n` 应导出 `n - i > 0` ⇒ 良基；若判定退为 NotProved，\
+         说明守卫未进良基性假设；实际: {verdicts:?}"
+    );
+}

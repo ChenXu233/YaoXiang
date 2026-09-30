@@ -453,11 +453,29 @@ impl TerminationChecker {
                 left: Box::new(measure.clone()),
                 right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
             };
-            let assumptions = self
-                .param_assumptions
-                .get(fn_name)
-                .cloned()
-                .unwrap_or_default();
+            // 背景假设 = 形参前置条件 + 该名字下各回边的路径守卫。
+            //
+            // 守卫必需：循环测度的下界正是从循环条件导出的（`while i < n` ⇒
+            // `n - i > 0`）。守卫在该回边处确实成立，故用作假设是可靠的。
+            let assumptions = {
+                let mut a = self
+                    .param_assumptions
+                    .get(fn_name)
+                    .cloned()
+                    .unwrap_or_default();
+                for ob in self
+                    .measure_obligations
+                    .iter()
+                    .filter(|o| o.fn_name == *fn_name)
+                {
+                    for g in &ob.guards {
+                        if !a.contains(g) {
+                            a.push(g.clone());
+                        }
+                    }
+                }
+                a
+            };
             let verdict = match self.solver.as_deref() {
                 None => MeasureVerdict::Unjudged,
                 Some(solver) => {
@@ -598,6 +616,25 @@ impl TerminationChecker {
                     self.check_stmts(&body.stmts, child_never);
                 } else if let Expr::Block(block) = v.as_ref() {
                     self.check_stmts(&block.stmts, child_never);
+                } else if let Expr::While {
+                    condition, body, ..
+                } = v.as_ref()
+                {
+                    // RFC-027 §6.9 / 027a §义务生成：测度直接绑在**循环**上（`acc:
+                    // Terminates(n - i) = while …`）——此绑定的测度就是该循环的兜底测度，
+                    // 生成回边义务。
+                    //
+                    // 只在「循环是带测度绑定的**直接值**」时走这支：函数体（Block）内的
+                    // 循环属于外层函数的测度域，不能把函数的测度当成循环的。
+                    if let Some(ctx) = self.current_fn.clone() {
+                        self.check_expr(condition, child_never);
+                        self.generate_loop_measure_obligation(&ctx, condition, body, stmt.span);
+                        // 有显式测度即已有兜底路径，不做自动探索、不报 E4021（§6.9：
+                        // 探索失败才用显式测度；此处程序员已直接给出）。
+                        self.check_stmts(&body.stmts, child_never);
+                    } else {
+                        self.check_expr(v, child_never);
+                    }
                 } else {
                     self.check_expr(v, child_never);
                 }
@@ -1556,6 +1593,87 @@ impl TerminationChecker {
         });
     }
 
+    /// 循环回边的显式测度义务（RFC-027 §6.9 兜底路径）。
+    ///
+    /// 与递归回边**同构**：`m[变量 := 回边取值] < m`。当前侧的 `m` 用声明原式，
+    /// 下一侧用体内赋值代入后的式子（复用 `substitute_const_expr`）。
+    ///
+    /// 守卫取**循环条件 + 体内已累积的路径守卫**——循环条件在进入本轮时成立，
+    /// 是回边可达的唯一假设（也是良基性下界的来源：`i < n` 导出 `n - i > 0`）。
+    ///
+    /// 三种情形**放弃生成**（宁缺勿错，与 `check_possible_recursive_call` 同方针）：
+    ///
+    /// 1. 体内无所属变量的赋值——没有回边状态可谈
+    /// 2. 某赋值的右侧引用了**另一个也被赋值的变量**——那需要「同时代入」语义，
+    ///    逐个代入会因次序得出无关的式子，宁可不判
+    /// 3. 测度式**未引用任何**被赋值变量——义务退化为 `m < m`，恒假即误报
+    fn generate_loop_measure_obligation(
+        &mut self,
+        ctx: &FnMeasureContext,
+        condition: &Expr,
+        body: &ast::Block,
+        span: crate::util::span::Span,
+    ) {
+        use crate::frontend::core::types::const_data::ConstExpr;
+        use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+
+        // 体内对变量的赋值（按序，同一变量的后者覆盖前者）
+        let mut updates: Vec<(String, ConstExpr)> = Vec::new();
+        for stmt in &body.stmts {
+            let StmtKind::Assign {
+                target,
+                value: Some(v),
+                ..
+            } = &stmt.kind
+            else {
+                continue;
+            };
+            let Expr::Var(name, _) = target.as_ref() else {
+                continue;
+            };
+            let Some(rhs) = convert_expr_to_const_expr(v) else {
+                continue;
+            };
+            updates.retain(|(n, _)| n != name);
+            updates.push((name.clone(), rhs));
+        }
+        // (1) 无赋值
+        if updates.is_empty() {
+            return;
+        }
+
+        let names: Vec<String> = updates.iter().map(|(n, _)| n.clone()).collect();
+
+        // (2) 赋值间相互引用 → 同时代入语义不明
+        for (name, rhs) in &updates {
+            if names
+                .iter()
+                .any(|other| other != name && const_expr_refs(rhs, other))
+            {
+                return;
+            }
+        }
+
+        // (3) 测度须真的取到某个被赋值变量，否则义务退化为 `m < m`（恒假）
+        if !names.iter().any(|n| const_expr_refs(&ctx.measure, n)) {
+            return;
+        }
+
+        let call_args: Vec<ConstExpr> = updates.into_iter().map(|(_, rhs)| rhs).collect();
+        let mut guards = self.path_guards.clone();
+        if let Some(g) = convert_expr_to_const_expr(condition) {
+            guards.push(g);
+        }
+        self.measure_obligations.push(MeasureObligation {
+            fn_name: ctx.name.clone(),
+            params: names,
+            measure: ctx.measure.clone(),
+            call_args,
+            span,
+            guards,
+        });
+    }
+
     // ==================== 诊断输出 ====================
 
     fn emit_terminates(
@@ -1632,6 +1750,35 @@ struct LoopAssignment {
 /// 判断函数类型签名的返回类型是否为 Never
 ///
 /// `(P1, P2, ...) -> Never` → true
+/// 该常量表达式是否引用名字 `name`（RFC-027a §义务生成）。
+///
+/// 用于循环回边义务的两个放弃条件：赋值间相互引用、测度未取到被赋值变量。
+fn const_expr_refs(
+    expr: &crate::frontend::core::types::const_data::ConstExpr,
+    name: &str,
+) -> bool {
+    use crate::frontend::core::types::const_data::ConstExpr as CE;
+    match expr {
+        CE::NamedVar(n) => n == name,
+        CE::BinOp { left, right, .. } => {
+            const_expr_refs(left, name) || const_expr_refs(right, name)
+        }
+        CE::UnOp { expr, .. } => const_expr_refs(expr, name),
+        CE::Call { args, .. } => args.iter().any(|a| const_expr_refs(a, name)),
+        CE::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            const_expr_refs(condition, name)
+                || const_expr_refs(then_branch, name)
+                || const_expr_refs(else_branch, name)
+        }
+        CE::Range { start, end } => const_expr_refs(start, name) || const_expr_refs(end, name),
+        _ => false,
+    }
+}
+
 fn is_never_return_type(ty: Option<&Type>) -> bool {
     match ty {
         // `name: () -> Never` — type_annotation 是 Fn 类型，取 return_type
