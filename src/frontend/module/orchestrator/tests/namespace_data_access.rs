@@ -1,9 +1,15 @@
-//! namespace 数据访问测试 — #396（`use lib;` 后 `lib.member` 表达式位置取值）
+//! namespace 数据访问测试 — #396/#397（`use lib;` 后 `lib.member` 表达式位置取值）
+//!
+//! 规范来源：语言参考 modules.md §3.1（顶层绑定一律可导入——整体导入经模块名
+//! 访问；成员缺失报 E1043）+ RFC-029 模块语义（名字解析归 Resolver / 导出面
+//! 语义）+ RFC-013 码表（E1043 module_has_no_export）。
 //!
 //! 覆盖:
-//! - 有标注常量的 namespace 数据访问在 typecheck 全链干净（IR 降级见集成测试）
+//! - 有标注/无标注常量的 namespace 数据访问在 typecheck 全链干净（取值执行见
+//!   multifile 集成测试）
 //! - 访问模块未导出的成员报 E1043（模块语义 + 可用导出清单），不再借道 E1042
 //! - 函数成员作一等值（`f = lib.greet`）typecheck 干净
+//! - 无标注绑定进导出面（#397 收割）：前向引用与跨模块初始化式均不退化
 
 use std::fs;
 
@@ -39,8 +45,10 @@ fn test_namespace_typed_member_access_is_clean() {
         "typed_v: Int = 42\ngreet: () -> Int = () => { 5 }\n",
         "use lib;\n\nmain = () => {\n  print(lib.typed_v)\n  print(lib.greet())\n}\n",
     );
+
     // Act
     let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+
     // Assert：typecheck 侧不应有任何诊断（IR 降级由集成测试真跑验证）
     assert!(
         all_codes(&files).is_empty(),
@@ -56,8 +64,10 @@ fn test_namespace_missing_member_reports_e1043() {
         "typed_v: Int = 42\n",
         "use lib;\n\nmain = () => {\n  print(lib.nope)\n}\n",
     );
+
     // Act
     let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+
     // Assert：模块语义报 E1043（不再报 struct 语义的 E1042）
     let codes = all_codes(&files);
     assert!(
@@ -77,8 +87,10 @@ fn test_namespace_function_as_value_is_clean() {
         "greet: () -> Int = () => { 5 }\n",
         "use lib;\n\nmain = () => {\n  f = lib.greet\n  print(f())\n}\n",
     );
+
     // Act
     let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+
     // Assert
     assert!(
         all_codes(&files).is_empty(),
@@ -94,8 +106,10 @@ fn test_std_submodule_missing_member_reports_e1043() {
         "typed_v: Int = 42\n",
         "use std.io;\n\nmain = () => {\n  print(io.nope)\n}\n",
     );
+
     // Act
     let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+
     // Assert：std 子模块同样是模块语义
     let codes = all_codes(&files);
     assert!(
@@ -113,8 +127,10 @@ fn test_namespace_unannotated_member_access_is_clean() {
         "untyped_v = 7\n",
         "use lib;\n\nmain = () => {\n  print(lib.untyped_v)\n}\n",
     );
+
     // Act
     let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+
     // Assert：typecheck 全链无诊断（取值执行由集成测试真跑验证）
     assert!(
         all_codes(&files).is_empty(),
@@ -131,8 +147,10 @@ fn test_unannotated_forward_reference_still_exported() {
         "b = a + 1\na: Int = 2\n",
         "use lib;\n\nmain = () => {\n  print(lib.b)\n}\n",
     );
+
     // Act
     let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+
     // Assert
     assert!(
         all_codes(&files).is_empty(),
@@ -154,8 +172,10 @@ fn test_unannotated_cross_module_initializer_exported() {
         "greet: () -> Int = () => { 5 }\n",
     )
     .expect("write other.yx");
+
     // Act
     let files = check_project(&tmp.path().join("main.yx")).expect("check project");
+
     // Assert：lib 自身与导入方全链无诊断（执行级验证见 multifile 集成测试）
     assert!(
         all_codes(&files).is_empty(),

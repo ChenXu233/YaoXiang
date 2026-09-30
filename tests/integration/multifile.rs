@@ -571,7 +571,10 @@ main = () => {
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
 }
 
-// === #396：namespace 数据访问（`use lib;` 后 `lib.member` 表达式位置取值）===
+// === #396/#397：namespace 数据访问（`use lib;` 后 `lib.member` 表达式位置取值）===
+//
+// 规范来源：语言参考 modules.md §3.1（顶层绑定一律可导入，整体导入经模块名
+// 访问）+ RFC-029 模块语义（导出面 / 名字解析归 Resolver）。
 //
 // 此前只有调用位置有 namespace 降级，`lib.v` 落到「普通字段访问」→ 对 `lib`
 // 的变量读取 → E3006 内部错误。修复后与 `use lib.{v}` 花括号导入同一数据面
@@ -592,8 +595,11 @@ main = () => {
     assert.assert(lib.typed_v == 42, "lib.typed_v should be 42")
 }
 "#;
-    // Act + Assert：编译到 IR 并执行，断言失败即 run_project 报错
+
+    // Act：run_project 编译到 IR 并执行入口
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert：yx 侧 assert.assert(lib.typed_v == 42) 已在执行中验证
 }
 
 /// `lib.untyped_v`：无标注常量（修复 #397 后进入导出面）。
@@ -611,8 +617,11 @@ main = () => {
     assert.assert(lib.untyped_v == 7, "lib.untyped_v should be 7")
 }
 "#;
-    // Act + Assert
+
+    // Act：run_project 编译到 IR 并执行入口
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert：yx 侧 assert.assert(lib.untyped_v == 7) 已在执行中验证
 }
 
 /// `lib.greet` 作一等值：函数成员物化为闭包后仍可调用。
@@ -631,8 +640,11 @@ main = () => {
     assert.assert(f() == 5, "lib.greet as value should be callable")
 }
 "#;
-    // Act + Assert
+
+    // Act：run_project 编译到 IR 并执行入口
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert：yx 侧 assert.assert(f() == 5) 已在执行中验证
 }
 
 /// `lib.Point(1, 2)`：类型构造经整体导入仍然可用（回归防线）。
@@ -651,8 +663,11 @@ main = () => {
     assert.assert(p.x == 1, "lib.Point ctor should work")
 }
 "#;
-    // Act + Assert
+
+    // Act：run_project 编译到 IR 并执行入口
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert：yx 侧 assert.assert(p.x == 1) 已在执行中验证
 }
 
 /// 无标注绑定初始化式引用**其他模块**（`use other;` 后 `v = other.greet()`）：
@@ -676,11 +691,14 @@ main = () => {
     assert.assert(lib.v == 5, "lib.v should be 5 (cross-module initializer)")
 }
 "#;
-    // Act + Assert
+
+    // Act：run_project 编译到 IR 并执行入口
     run_project_ok(
         &[("other.yx", other), ("lib.yx", lib), ("main.yx", main)],
         "main.yx",
     );
+
+    // Assert：yx 侧 assert.assert(lib.v == 5) 已在执行中验证
 }
 
 /// 前向引用：无标注绑定引用**后置**绑定（`b = a + 1` 中 a 在后），
@@ -700,6 +718,9 @@ main = () => {
     assert.assert(lib.b == 3, "lib.b should be 3 (forward reference)")
 }
 "#;
-    // Act + Assert
+
+    // Act：run_project 编译到 IR 并执行入口
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert：yx 侧 assert.assert(lib.b == 3) 已在执行中验证
 }
