@@ -1429,6 +1429,10 @@ fn extract_module_info(
 ) -> ModuleInfo {
     let mut checker = TypeChecker::new(module_key);
     checker.collect_signatures(ast);
+    // #397：无标注顶层绑定也要进导出面——收割推断出的具体类型。
+    // 此前这类绑定既不在签名表也无标注可读，导出面直接丢弃，
+    // 导入方访问时报误导性的「成员未找到」。
+    checker.harvest_untyped_value_bindings(ast);
 
     // TypeEnvironment 不实现 Clone，只克隆需要的几张表。
     let vars = checker.env().vars.clone();

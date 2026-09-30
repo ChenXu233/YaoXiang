@@ -148,6 +148,7 @@ pub fn infer_expression(
     let overload_candidates_clone = env.overload_candidates.clone();
     let native_signatures_clone = env.native_signatures.clone();
     let generic_type_defs_clone = env.generic_type_defs.clone();
+    let module_aliases_clone = env.module_aliases.clone();
     let mut inferrer = inference::ExpressionInferrer::with_native_signatures(
         &mut scope,
         env.solver(),
@@ -155,6 +156,8 @@ pub fn infer_expression(
         &native_signatures_clone,
     );
     inferrer.set_generic_type_defs(&generic_type_defs_clone);
+    // #396：模块别名集合随委托传入（E1043 判定）
+    inferrer.set_module_aliases(&module_aliases_clone);
     inferrer.infer_expr(expr).map_err(|diag| vec![diag])
 }
 
