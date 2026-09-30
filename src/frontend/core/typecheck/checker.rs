@@ -4358,6 +4358,10 @@ impl TypeChecker {
                         self.refined_walk_fn_body(body, ctx);
                     }
                 }
+                // RFC-027 §3.4：绑定初始值若为调用，校验其实参
+                if let Some(v) = value.as_deref() {
+                    self.check_call_arg_refinements(v, unit, ctx);
+                }
                 registered
             }
             // 无注解赋值/绑定 `x = v`：更新值环境 + 重验证依赖者
@@ -4394,6 +4398,10 @@ impl TypeChecker {
                     // 无注解的块值在当前作用域顺序执行：同单元走查
                     Expr::Block(block) => {
                         self.refined_walk_stmts(&block.stmts, unit, ctx);
+                    }
+                    // RFC-027 §3.4：调用点的形参精化义务
+                    Expr::Call { .. } => {
+                        self.check_call_arg_refinements(rhs, unit, ctx);
                     }
                     _ => {}
                 }
@@ -4436,6 +4444,10 @@ impl TypeChecker {
                     }
                     Expr::For { var, body, .. } | Expr::SpawnFor { var, body, .. } => {
                         self.refined_walk_loop_body(Some(var), body, unit, ctx);
+                    }
+                    // RFC-027 §3.4：调用点的形参精化义务
+                    Expr::Call { .. } => {
+                        self.check_call_arg_refinements(expr, unit, ctx);
                     }
                     _ => {}
                 }
@@ -4617,6 +4629,102 @@ impl TypeChecker {
                     );
                 } else {
                     ctx.proof_calls.extend(calls.clone());
+                }
+            }
+        }
+    }
+
+    /// RFC-027 §3.3/§3.4：调用点实参对**形参精化**的验证。
+    ///
+    /// 被调函数签名里的精化形参（`b: IsPositive(b)`）是调用方义务：实参值
+    /// 编译期可知且使约束为假时报 E4018。与绑定位共用同一检查器
+    /// （`check_predicate`），故两处判定一致。
+    ///
+    /// **本版只做证伪**：实参不可折叠、约束自由变量不为单个、或结果非
+    /// `Disproved` 时一律放行。§3.4 要求的「无静态证据即拒绝」是更强的半场
+    /// ——它会把 `divide(x, y)`（实参无界、无标注）一并拒掉，需单独决策后
+    /// 另行落地，故此处不默认启用。
+    ///
+    /// 局限：只在调用点两种形态触发（裸调用语句、赋值 RHS 为调用）；嵌套在
+    /// 更复杂表达式里的调用不查（无通用表达式遍历器）。
+    fn check_call_arg_refinements(
+        &self,
+        expr: &Expr,
+        unit: &RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        let Expr::Call {
+            func, args, span, ..
+        } = expr
+        else {
+            return;
+        };
+        let Expr::Var(fn_name, _) = func.as_ref() else {
+            return;
+        };
+        // 签名取自 env：形参位已由 `resolve_type_annotation` 规范化为 Refined
+        let Some(sig) = self.env.vars.get(fn_name) else {
+            return;
+        };
+        let MonoType::Fn { params, .. } = &sig.body else {
+            return;
+        };
+        for (i, param_ty) in params.iter().enumerate() {
+            if !matches!(param_ty, MonoType::Refined { .. }) || constraint_is_terminates(param_ty) {
+                continue;
+            }
+            let Some(arg) = args.get(i) else { continue };
+            // 实参值编译期可知才判：不可知即无证据，本版放行
+            let Some(value) = Self::fold_value(&*ctx.shared_ctx, arg, &unit.values) else {
+                continue;
+            };
+            // 约束的自由变量按**位置**绑定到实参值（形参名即约束里的变量名）
+            let free = refined_free_vars(param_ty);
+            if free.len() != 1 {
+                continue;
+            }
+            let mut bindings = HashMap::new();
+            bindings.insert(free[0].clone(), value);
+            match crate::frontend::core::typecheck::layers::predicate::check_predicate(
+                ctx.shared_ctx,
+                param_ty,
+                &bindings,
+            ) {
+                ProofResult::Proved => {}
+                ProofResult::Disproved(model) => {
+                    let counterexample = model
+                        .assignments
+                        .iter()
+                        .map(|(k, v)| format!("  {k} = {v}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    ctx.diags.push(
+                        ErrorCodeDefinition::refinement_violated(&model.constraint)
+                            .param("counterexample", &counterexample)
+                            .at(*span)
+                            .build(),
+                    );
+                }
+                // 具名证明函数形态的约束（`IsPositive(b)`）当下判不出真假：
+                // 交由 pipeline 编译并执行证明函数，返回 false 即 E4018。
+                // 与绑定位（`revalidate_refined`）同一通道，故两处判定一致。
+                ProofResult::Unproven {
+                    proof_calls: calls, ..
+                } => {
+                    if calls.is_empty() {
+                        // 无证法可执行且证不出：报错，不静默放行（§3.4）
+                        ctx.diags.push(
+                            ErrorCodeDefinition::refined_unproven(
+                                fn_name,
+                                &free[0],
+                                &param_ty.to_string(),
+                            )
+                            .at(*span)
+                            .build(),
+                        );
+                    } else {
+                        ctx.proof_calls.extend(calls);
+                    }
                 }
             }
         }

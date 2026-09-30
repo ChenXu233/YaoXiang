@@ -14,6 +14,7 @@
 //! 在 `check_module` **之后**执行，故精化**违反**的用例在 `.yx` 层，见
 //! `tests/yaoxiang/06-compile-errors/refined_annotation_literal_violates_err.yx`。
 
+use crate::frontend::core::types::const_data::ConstValue;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::types::TypeCheckResult;
 use crate::frontend::core::lexer::tokenize;
@@ -146,17 +147,13 @@ fn test_refined_fn_accepts_base_type_argument() {
     );
 }
 
-/// **Tripwire** —— 形参精化在**调用点**尚未被语义校验（RFC-027 待办）。
+/// 调用点实参对形参精化的义务：`check_module` 生成证明调用（RFC-027 §3.4）。
 ///
-/// 透明化之前，`b: NonNegative(b)` 在调用点按**名义**匹配，报
-/// 「期望 `NonNegative(b)`，实得 `int64`」——那不是谓词校验，而是拒绝
-/// **所有**调用方（连合法的 `f(5)` 都被拒）。故修前「全拒」、修后「全收」，
-/// 两态都不是校验。
-///
-/// 本用例把「全收」钉住，使缺口可见而非静默：谁实现了调用点谓词校验，
-/// 本用例就会变红，提醒他把断言改成「诊断含 E4018」而非直接删掉。
+/// `check_module` 不执行证明函数（由 `pipeline` 在其后跑），故此处断言
+/// **义务已生成**且带着实参值。执行后谓词返回 false 即 E4018，端到端见
+/// `tests/yaoxiang/06-compile-errors/refined_param_arg_violates_err.yx`。
 #[test]
-fn test_param_refinement_not_enforced_at_call_site_currently() {
+fn test_call_arg_refinement_generates_proof_obligation() {
     // Arrange — f(-5) 违反 b >= 0
     let source = {
         let f = "f: (b: NonNegative(b)) -> Int = { 0 }";
@@ -167,11 +164,45 @@ fn test_param_refinement_not_enforced_at_call_site_currently() {
     // Act
     let result = check_source(&source);
 
-    // Assert — 当前全收（无诊断）；实现调用点校验后应改为断言 E4018
+    // Assert
     assert!(
-        result.diagnostics.is_empty(),
-        "形参精化调用点校验尚未实现，本用例预期「无诊断」；若此处变红说明校验已落地，\
-         请把断言改为「诊断含 E4018」。实际: {:#?}",
-        result.diagnostics
+        result
+            .proof_calls
+            .iter()
+            .any(|c| c.func_name == "NonNegative"
+                && c.args.iter().any(|v| matches!(v, ConstValue::Int(-5)))),
+        "调用点应生成形参精化的证明义务并携带实参值 Int(-5)；实际: {:?}",
+        result.proof_calls
+    );
+}
+
+/// **Tripwire** —— 实参**无静态值**时不生成义务（RFC-027 §3.4 的强半场未启用）。
+///
+/// §3.4 要求「无静态证据即拒绝」：`divide(x, y)`（实参无界、无精化标注）也应
+/// 报错。本版只做证伪（实参可折叠时才判），故此类调用放过——它会连带拒掉
+/// 大量合法代码，需单独决策后另行落地。本用例把「放过」钉住：谁启用强半场，
+/// 它会变红，提醒把断言改成「报错」。
+#[test]
+fn test_call_arg_without_static_value_generates_no_obligation() {
+    // Arrange — 实参是形参（无静态值）
+    let source = {
+        let g = "g: (x: Int) -> Int = { x }";
+        let f = "f: (b: NonNegative(b)) -> Int = { 0 }";
+        let m = "main: () -> Void = {\n    z: Int = f(g(1))\n}";
+        format!("{NON_NEGATIVE}{g}\n{f}\n{m}")
+    };
+
+    // Act
+    let result = check_source(&source);
+
+    // Assert — 当前无义务；强半场启用后应改为断言报错
+    assert!(
+        !result
+            .proof_calls
+            .iter()
+            .any(|c| c.func_name == "NonNegative"),
+        "实参非编译期常量时本版不生成义务；若此处变红说明已落地静态证据要求，\
+         请把断言改为「报错」。实际: {:?}",
+        result.proof_calls
     );
 }
