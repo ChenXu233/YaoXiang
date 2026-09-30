@@ -39,6 +39,18 @@ pub fn compute_bytes_checksum(data: &[u8]) -> String {
 /// 递归遍历所有文件，按排序后的路径计算组合哈希。
 /// 忽略 `.git` 目录。
 pub fn compute_directory_checksum(dir: &Path) -> PackageResult<String> {
+    compute_directory_checksum_excluding(dir, &[])
+}
+
+/// 同 [`compute_directory_checksum`]，但按目录名排除子树（任意深度）
+///
+/// vendor 完整性语义 = 源码树完整性：`build/` 是派生产物（本地构建输出或
+/// 已独立做整包 SHA-256 的预编译解包），不入校验和——否则 cargo 的
+/// 非确定性产物会让每次安装都误判"被改动"而重装重建。
+pub fn compute_directory_checksum_excluding(
+    dir: &Path,
+    skip_dirs: &[&str],
+) -> PackageResult<String> {
     if !dir.exists() {
         return Err(PackageError::DependencyNotFound(format!(
             "目录不存在: {}",
@@ -52,7 +64,7 @@ pub fn compute_directory_checksum(dir: &Path) -> PackageResult<String> {
 
     // 收集所有文件路径（排序以确保确定性）
     let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-    collect_files(dir, dir, &mut files)?;
+    collect_files_excluding(dir, dir, &mut files, skip_dirs)?;
 
     // 计算组合哈希
     let mut hasher = Sha256::new();
@@ -66,11 +78,11 @@ pub fn compute_directory_checksum(dir: &Path) -> PackageResult<String> {
     Ok(hex(&hasher.finalize()))
 }
 
-/// 递归收集目录中的所有文件
-fn collect_files(
+fn collect_files_excluding(
     base: &Path,
     dir: &Path,
     files: &mut BTreeMap<String, Vec<u8>>,
+    skip_dirs: &[&str],
 ) -> PackageResult<()> {
     if !dir.is_dir() {
         return Ok(());
@@ -87,7 +99,10 @@ fn collect_files(
         }
 
         if path.is_dir() {
-            collect_files(base, &path, files)?;
+            if skip_dirs.contains(&file_name.as_str()) {
+                continue;
+            }
+            collect_files_excluding(base, &path, files, skip_dirs)?;
         } else {
             let rel_path = path
                 .strip_prefix(base)

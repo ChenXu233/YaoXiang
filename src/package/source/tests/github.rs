@@ -4,9 +4,6 @@
 //! 覆盖：版本解析（releases → tags 回退）、304 条件请求、5xx 退避重试、
 //! 403 速率限制不重试、Release `.yxpkg` 资产下载安装、URL 路由。
 
-use std::io::{Read, Write};
-use std::net::TcpListener;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::package::cache::GlobalCache;
@@ -16,22 +13,13 @@ use crate::package::source::{select_source, Source, SourceKind};
 use crate::package::yxpkg;
 use crate::package::runtime;
 
-/// 一条预编排的 mock 响应
-struct MockResp {
-    status: u16,
-    headers: Vec<(String, String)>,
-    body: Vec<u8>,
-}
+use crate::package::tests::mock_http::{MockApi, MockResp};
 
 fn json_resp(
     status: u16,
     body: &str,
 ) -> MockResp {
-    MockResp {
-        status,
-        headers: Vec::new(),
-        body: body.as_bytes().to_vec(),
-    }
+    MockResp::json(status, body)
 }
 
 fn releases_json(tags: &[&str]) -> String {
@@ -40,100 +28,6 @@ fn releases_json(tags: &[&str]) -> String {
         .map(|t| format!(r#"{{"tag_name":"{t}","draft":false,"prerelease":false,"assets":[]}}"#))
         .collect();
     format!("[{}]", items.join(","))
-}
-
-#[derive(Debug, Clone)]
-struct RecordedReq {
-    path: String,
-    if_none_match: Option<String>,
-}
-
-struct MockApi {
-    url: String,
-    requests: Arc<Mutex<Vec<RecordedReq>>>,
-    handle: std::thread::JoinHandle<()>,
-}
-
-impl MockApi {
-    /// 起本地 mock：每个响应服务一个连接（Connection: close 保证逐请求对齐）
-    fn spawn(responses: Vec<MockResp>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let requests = Arc::new(Mutex::new(Vec::new()));
-        let recorded = requests.clone();
-        let handle = std::thread::spawn(move || {
-            for resp in responses {
-                let (mut stream, _) = match listener.accept() {
-                    Ok(x) => x,
-                    Err(_) => return,
-                };
-                let req_text = read_request(&mut stream);
-                let path = req_text
-                    .split_whitespace()
-                    .nth(1)
-                    .unwrap_or_default()
-                    .to_string();
-                let if_none_match = req_text.lines().find_map(|l| {
-                    let (k, v) = l.split_once(':')?;
-                    k.eq_ignore_ascii_case("if-none-match")
-                        .then(|| v.trim().to_string())
-                });
-                recorded.lock().unwrap().push(RecordedReq {
-                    path,
-                    if_none_match,
-                });
-
-                let reason = match resp.status {
-                    200 => "OK",
-                    304 => "Not Modified",
-                    403 => "Forbidden",
-                    404 => "Not Found",
-                    500 => "Internal Server Error",
-                    _ => "Status",
-                };
-                let mut head = format!(
-                    "HTTP/1.1 {} {}\r\nContent-Length: {}\r\nConnection: close\r\n",
-                    resp.status,
-                    reason,
-                    resp.body.len()
-                );
-                for (k, v) in &resp.headers {
-                    head.push_str(&format!("{k}: {v}\r\n"));
-                }
-                head.push_str("\r\n");
-                let _ = stream.write_all(head.as_bytes());
-                let _ = stream.write_all(&resp.body);
-                let _ = stream.flush();
-                // drop 关闭连接
-            }
-        });
-        MockApi {
-            url: format!("http://127.0.0.1:{port}"),
-            requests,
-            handle,
-        }
-    }
-
-    fn recorded(&self) -> Vec<RecordedReq> {
-        self.requests.lock().unwrap().clone()
-    }
-}
-
-/// 读取一个 HTTP 请求（读到头部结束即可）
-fn read_request(stream: &mut std::net::TcpStream) -> String {
-    let mut buf = Vec::new();
-    let mut chunk = [0u8; 1024];
-    loop {
-        let n = stream.read(&mut chunk).unwrap_or(0);
-        if n == 0 {
-            break;
-        }
-        buf.extend_from_slice(&chunk[..n]);
-        if buf.windows(4).any(|w| w == b"\r\n\r\n") {
-            break;
-        }
-    }
-    String::from_utf8_lossy(&buf).to_string()
 }
 
 fn gh_source(api: &MockApi) -> GitHubSource {
@@ -390,11 +284,13 @@ fn publish_github_flow_creates_release_and_uploads() {
     ))
     .unwrap();
     assert_eq!(url, "https://github.com/owner/demo/releases/tag/v1.0.0");
-    assert_eq!(
-        api.recorded().len(),
-        4,
-        "release 查重/tag 校验/创建/上传共 4 次请求"
-    );
+    let reqs = api.recorded();
+    assert_eq!(reqs.len(), 4, "release 查重/tag 校验/创建/上传共 4 次请求");
+    // 查重与 tag 校验是 GET，创建与上传是非幂等 POST（重试策略差异的依据）
+    assert_eq!(reqs[0].method, "GET");
+    assert_eq!(reqs[1].method, "GET");
+    assert_eq!(reqs[2].method, "POST");
+    assert_eq!(reqs[3].method, "POST");
     api.handle.join().unwrap();
 }
 

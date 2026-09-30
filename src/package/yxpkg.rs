@@ -242,6 +242,20 @@ pub fn unpack(
     archive: &Path,
     dest: &Path,
 ) -> PackageResult<()> {
+    extract_archive(archive, dest, MAX_PACKAGE_BYTES)?;
+    verify(dest)
+}
+
+/// 安全解包 tar.gz 到 `dest`（无清单校验）
+///
+/// `[binaries]` 预编译产物是外部 tarball，没有 SHA256SUMS 清单——完整性由
+/// 下载层的整包 SHA-256 负责（`manifest.binaries.<triple>.sha256`），这里只
+/// 提供路径逃逸防护与解压总量封顶（与 `.yxpkg` 同一防护线）。
+pub(crate) fn extract_archive(
+    archive: &Path,
+    dest: &Path,
+    max_total_bytes: u64,
+) -> PackageResult<()> {
     let file = std::fs::File::open(archive)?;
     let gz = GzDecoder::new(file);
     let mut archive = tar::Archive::new(gz);
@@ -270,10 +284,10 @@ pub fn unpack(
         }
 
         total += entry.header().size().unwrap_or(0);
-        if total > MAX_PACKAGE_BYTES {
+        if total > max_total_bytes {
             return Err(PackageError::PackageTooLarge(format!(
                 "decompressed content exceeds {} bytes",
-                MAX_PACKAGE_BYTES
+                max_total_bytes
             )));
         }
 
@@ -282,11 +296,10 @@ pub fn unpack(
         }
         let mut out = std::fs::File::create(&target)?;
         // 声明 size 之上再对实际读取封顶：声明值可以被伪造
-        let mut limited = (&mut entry).take(MAX_PACKAGE_BYTES);
+        let mut limited = (&mut entry).take(max_total_bytes);
         std::io::copy(&mut limited, &mut out)?;
     }
-
-    verify(dest)
+    Ok(())
 }
 
 /// 归档条目路径 → 包内相对路径（`/` 分隔）；拒绝绝对路径与 `..` 逃逸

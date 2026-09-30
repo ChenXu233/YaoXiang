@@ -8,6 +8,7 @@
 //! 执行顺序（2026-09-15 决议 2）：`5a → 5b → 5c → 5d → 5f → 5e`——声明式先行，
 //! 任意代码执行殿后。
 
+pub mod binaries;
 pub mod cargo;
 pub mod requirements;
 
@@ -110,12 +111,14 @@ pub struct TrustDecision {
 /// 执行安装决策树（在依赖包源码落位 `pkg_dir` 后调用）
 ///
 /// `scratch_root` 是项目构建 scratch（`.yaoxiang/build/`），cargo target/
-/// 隔离于此（见 [`cargo`] 模块文档）。无 `[build]` 且无 `[binaries]` 的包
+/// 隔离于此（见 [`cargo`] 模块文档）；`source_base` 是包仓库地址（相对形式
+/// 的 `[binaries]` URL 相对它解析）。无 `[build]` 且无 `[binaries]` 的包
 /// 零构建直过——绝大多数纯 .yx 包的成本是一次字段查找。
-pub fn run_install_build(
+pub async fn run_install_build(
     pkg_dir: &Path,
     manifest: &crate::package::manifest::PackageManifest,
     scratch_root: &Path,
+    source_base: Option<&str>,
     _trust: &TrustDecision,
 ) -> PackageResult<BuildOutcome> {
     let build = match &manifest.build {
@@ -129,11 +132,15 @@ pub fn run_install_build(
         None => &BuildConfig::default(),
     };
 
-    // 1. 预编译优先（5d 落地）
+    // 1. 预编译优先（5d）：当前平台条目「下载 + SHA-256 校验」全过才命中；
+    //    任一条件不满足回退源码构建（RFC），继续走 headers/strategy
     if !manifest.binaries.is_empty() {
-        return Err(PackageError::InvalidManifest(
-            "[binaries] 预编译分发尚未实现（RFC-014b Phase 5d）".to_string(),
-        ));
+        if let Some(native) = binaries::try_prebuilt(pkg_dir, manifest, source_base).await? {
+            return Ok(BuildOutcome {
+                native_dir: Some(native),
+                via: "prebuilt",
+            });
+        }
     }
 
     // 2. headers → yx-bindgen（5f；RFC-026b 落地前明确报错）

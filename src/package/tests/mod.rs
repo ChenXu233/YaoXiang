@@ -6,5 +6,6 @@ mod dependency;
 mod error;
 mod lock;
 mod manifest;
+pub(crate) mod mock_http;
 mod workspace;
 mod yxpkg;

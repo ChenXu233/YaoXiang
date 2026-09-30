@@ -1,10 +1,14 @@
-//! 构建系统测试（RFC-014b Phase 5a/5b：[build] 解析、策略枚举、平台三元组、依赖预检）
+//! 构建系统测试（RFC-014b：[build] 解析、策略枚举、平台三元组、依赖预检、
+//! cargo 策略、[binaries] 预编译路径）
 
 use std::collections::BTreeMap;
 
 use crate::package::build::{self, requirements, BuildStrategy, TrustDecision};
 use crate::package::error::PackageError;
 use crate::package::manifest::PackageManifest;
+use crate::package::runtime;
+use crate::package::tests::mock_http::{MockApi, MockResp};
+use crate::package::vendor::checksum::compute_file_checksum;
 
 fn write(
     path: &std::path::Path,
@@ -188,12 +192,13 @@ fn install_build_skips_plain_packages() {
         "[package]\nname = \"pure\"\nversion = \"0.1.0\"\n",
     );
     let manifest = PackageManifest::load(tmp.path()).unwrap();
-    let outcome = build::run_install_build(
+    let outcome = crate::package::runtime::drive(build::run_install_build(
         tmp.path(),
         &manifest,
         &tmp.path().join("scratch"),
+        None,
         &TrustDecision::default(),
-    )
+    ))
     .unwrap();
     assert_eq!(outcome.via, "no-build");
     assert!(outcome.native_dir.is_none());
@@ -208,12 +213,13 @@ fn pending_phases_report_clear_errors() {
         "[package]\nname = \"x\"\nversion = \"0.1.0\"\n\n[build]\nheaders = [\"a.h\"]\n",
     );
     let manifest = PackageManifest::load(tmp.path()).unwrap();
-    let err = build::run_install_build(
+    let err = crate::package::runtime::drive(build::run_install_build(
         tmp.path(),
         &manifest,
         &tmp.path().join("scratch"),
+        None,
         &TrustDecision::default(),
-    )
+    ))
     .unwrap_err();
     assert!(
         matches!(err, PackageError::InvalidManifest(ref m) if m.contains("yx-bindgen")),
@@ -241,8 +247,14 @@ fn cargo_strategy_builds_real_crate_and_copies_artifacts() {
 
     let manifest = PackageManifest::load(&pkg).unwrap();
     let scratch = tmp.path().join(".yaoxiang").join("build");
-    let outcome =
-        build::run_install_build(&pkg, &manifest, &scratch, &TrustDecision::default()).unwrap();
+    let outcome = crate::package::runtime::drive(build::run_install_build(
+        &pkg,
+        &manifest,
+        &scratch,
+        None,
+        &TrustDecision::default(),
+    ))
+    .unwrap();
     assert_eq!(outcome.via, "cargo");
     let native = outcome.native_dir.expect("应有产物目录");
     assert!(native.ends_with(format!("build/native/{}", build::current_triple()).as_str()));
@@ -291,15 +303,193 @@ fn cargo_target_validation() {
         "[package]\nname = \"p\"\nversion = \"0.1.0\"\n\n[build]\nstrategy = \"cargo\"\n\n[build.cargo]\ntarget = \"nightly\"\n",
     );
     let manifest = PackageManifest::load(&pkg).unwrap();
-    let err = build::run_install_build(
+    let err = crate::package::runtime::drive(build::run_install_build(
         &pkg,
         &manifest,
         &tmp.path().join("scratch"),
+        None,
         &TrustDecision::default(),
-    )
+    ))
     .unwrap_err();
     assert!(
         matches!(err, PackageError::InvalidManifest(ref m) if m.contains("release")),
         "got: {err}"
     );
+}
+
+/// [binaries] 预编译路径端到端：当前平台条目 → 下载 → SHA-256 校验 → 解包
+#[test]
+fn binaries_prebuilt_downloads_verifies_and_extracts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let triple = build::current_triple();
+
+    // 构造"外部"产物 tarball
+    let artifact_src = tmp.path().join("artifact");
+    std::fs::create_dir_all(&artifact_src).unwrap();
+    std::fs::write(artifact_src.join("native_demo.dll"), b"BINARY").unwrap();
+    let tarball = tmp.path().join("foo-pkg.tar.gz");
+    let gz = flate2::write::GzEncoder::new(
+        std::fs::File::create(&tarball).unwrap(),
+        flate2::Compression::default(),
+    );
+    let mut builder = tar::Builder::new(gz);
+    builder
+        .append_path_with_name(artifact_src.join("native_demo.dll"), "native_demo.dll")
+        .unwrap();
+    builder.into_inner().unwrap().finish().unwrap();
+    let tarball_bytes = std::fs::read(&tarball).unwrap();
+    let sha = compute_file_checksum(&tarball).unwrap();
+
+    let api = MockApi::spawn(vec![MockResp::bytes(200, tarball_bytes)]);
+    let pkg = tmp.path().join("native-demo-1.0.0");
+    write(
+        &pkg.join("yaoxiang.toml"),
+        &format!(
+            "[package]
+name = \"native-demo\"
+version = \"1.0.0\"
+
+[binaries]
+\"{triple}\" = {{ url = \"{}/artifact.tar.gz\", sha256 = \"{sha}\" }}
+",
+            api.url
+        ),
+    );
+    let manifest = PackageManifest::load(&pkg).unwrap();
+    let outcome = runtime::drive(build::run_install_build(
+        &pkg,
+        &manifest,
+        &tmp.path().join("scratch"),
+        None,
+        &TrustDecision::default(),
+    ))
+    .unwrap();
+    assert_eq!(outcome.via, "prebuilt");
+    let native = outcome.native_dir.expect("应有产物目录");
+    assert_eq!(
+        std::fs::read(native.join("native_demo.dll")).unwrap(),
+        b"BINARY"
+    );
+    assert_eq!(api.recorded().len(), 1);
+    api.handle.join().unwrap();
+}
+
+/// sha256 不匹配 → 回退源码构建（决策树"否则 fallback"语义），不硬失败
+#[test]
+fn binaries_checksum_mismatch_falls_back_to_source_build() {
+    let tmp = tempfile::tempdir().unwrap();
+    let triple = build::current_triple();
+    let api = MockApi::spawn(vec![MockResp::bytes(200, b"TAMPERED".to_vec())]);
+    let pkg = tmp.path().join("demo-1.0.0");
+    write(
+        &pkg.join("yaoxiang.toml"),
+        &format!(
+            "[package]
+name = \"demo\"
+version = \"1.0.0\"
+
+[binaries]
+\"{triple}\" = {{ url = \"{}/a.tar.gz\", sha256 = \"{}\" }}
+",
+            api.url,
+            "0".repeat(64)
+        ),
+    );
+    let manifest = PackageManifest::load(&pkg).unwrap();
+    let outcome = runtime::drive(build::run_install_build(
+        &pkg,
+        &manifest,
+        &tmp.path().join("scratch"),
+        None,
+        &TrustDecision::default(),
+    ))
+    .unwrap();
+    // 回退到源码构建：无 [build] → 策略 none
+    assert_eq!(outcome.via, "strategy-none");
+    // 半成品已被清理，不与源码构建产物混装
+    assert!(!pkg.join("build").exists());
+    api.handle.join().unwrap();
+}
+
+/// 相对 URL 相对包仓库基址解析；缺基址回退源码构建
+#[test]
+fn binaries_relative_url_uses_source_base() {
+    let tmp = tempfile::tempdir().unwrap();
+    let triple = build::current_triple();
+
+    // 真实 tarball（内容无所谓，结构必须合法）
+    let payload = tmp.path().join("payload.bin");
+    std::fs::write(&payload, b"x").unwrap();
+    let tarball = tmp.path().join("demo.tar.gz");
+    let gz = flate2::write::GzEncoder::new(
+        std::fs::File::create(&tarball).unwrap(),
+        flate2::Compression::default(),
+    );
+    let mut builder = tar::Builder::new(gz);
+    builder
+        .append_path_with_name(&payload, "payload.bin")
+        .unwrap();
+    builder.into_inner().unwrap().finish().unwrap();
+    let tarball_bytes = std::fs::read(&tarball).unwrap();
+    let sha = compute_file_checksum(&tarball).unwrap();
+
+    let api = MockApi::spawn(vec![MockResp::bytes(200, tarball_bytes)]);
+    let pkg = tmp.path().join("demo-1.0.0");
+    write(
+        &pkg.join("yaoxiang.toml"),
+        &format!(
+            "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\n[binaries]\n\"{triple}\" = {{ url = \"releases/v1/demo.tar.gz\", sha256 = \"{sha}\" }}\n"
+        ),
+    );
+    let manifest = PackageManifest::load(&pkg).unwrap();
+    let outcome = runtime::drive(build::run_install_build(
+        &pkg,
+        &manifest,
+        &tmp.path().join("scratch"),
+        Some(&api.url),
+        &TrustDecision::default(),
+    ))
+    .unwrap();
+    assert_eq!(outcome.via, "prebuilt");
+    assert_eq!(
+        api.recorded()[0].path,
+        "/releases/v1/demo.tar.gz",
+        "相对 URL 应拼到仓库基址后"
+    );
+    api.handle.join().unwrap();
+}
+
+/// 非当前平台条目 → 直接回退源码构建（不发请求）
+#[test]
+fn binaries_other_platform_falls_back() {
+    let tmp = tempfile::tempdir().unwrap();
+    let other = if build::current_triple().contains("windows") {
+        "x86_64-unknown-linux-gnu"
+    } else {
+        "x86_64-pc-windows-msvc"
+    };
+    let pkg = tmp.path().join("demo-1.0.0");
+    write(
+        &pkg.join("yaoxiang.toml"),
+        &format!(
+            "[package]
+name = \"demo\"
+version = \"1.0.0\"
+
+[binaries]
+\"{other}\" = {{ url = \"https://example.com/a.tar.gz\", sha256 = \"{}\" }}
+",
+            "0".repeat(64)
+        ),
+    );
+    let manifest = PackageManifest::load(&pkg).unwrap();
+    let outcome = runtime::drive(build::run_install_build(
+        &pkg,
+        &manifest,
+        &tmp.path().join("scratch"),
+        None,
+        &TrustDecision::default(),
+    ))
+    .unwrap();
+    assert_eq!(outcome.via, "strategy-none");
 }

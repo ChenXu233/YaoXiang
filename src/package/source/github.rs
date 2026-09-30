@@ -23,9 +23,6 @@ use crate::package::yxpkg;
 /// GitHub REST API 版本头（014a 决议 5 的平台侧对应物）
 const API_VERSION: &str = "2022-11-28";
 
-/// 429/5xx 的最大重试次数（退避基数递增，Retry-After 优先）
-const MAX_RETRIES: u32 = 3;
-
 /// 默认退避基数：1s, 2s, 4s
 const DEFAULT_BACKOFF: Duration = Duration::from_secs(1);
 
@@ -87,7 +84,7 @@ impl GitHubClient {
         let api_base = "https://api.github.com".to_string();
         let upload_base = derive_upload_base(&api_base);
         GitHubClient {
-            http: build_http(false),
+            http: crate::package::http::client(false),
             api_base,
             upload_base,
             token: std::env::var("YX_GITHUB_TOKEN")
@@ -107,7 +104,7 @@ impl GitHubClient {
     ) -> Self {
         let upload_base = derive_upload_base(&api_base);
         GitHubClient {
-            http: build_http(true),
+            http: crate::package::http::client(true),
             api_base,
             upload_base,
             token: None,
@@ -301,7 +298,9 @@ impl GitHubClient {
             }
 
             // 瞬时故障退避：Retry-After 优先，否则 1s/2s/4s 指数
-            if attempt < MAX_RETRIES && (status.as_u16() == 429 || status.is_server_error()) {
+            if attempt < crate::package::http::MAX_RETRIES
+                && (status.as_u16() == 429 || status.is_server_error())
+            {
                 let delay = resp
                     .headers()
                     .get(reqwest::header::RETRY_AFTER)
@@ -347,38 +346,15 @@ impl GitHubClient {
         url: &str,
         dest: &Path,
     ) -> PackageResult<()> {
-        let mut attempt = 0u32;
-        loop {
-            let mut req = self.http.get(url);
-            if let Some(token) = &self.token {
-                req = req.bearer_auth(token);
-            }
-            let resp = req
-                .timeout(ASSET_TIMEOUT)
-                .send()
-                .await
-                .map_err(|e| PackageError::Network(e.to_string()))?;
-            let status = resp.status();
-
-            if status.is_success() {
-                let bytes = resp
-                    .bytes()
-                    .await
-                    .map_err(|e| PackageError::Network(e.to_string()))?;
-                std::fs::write(dest, &bytes)?;
-                return Ok(());
-            }
-
-            if attempt < MAX_RETRIES && (status.as_u16() == 429 || status.is_server_error()) {
-                tokio::time::sleep(self.backoff_base * 2u32.pow(attempt)).await;
-                attempt += 1;
-                continue;
-            }
-
-            return Err(PackageError::Network(format!(
-                "GitHub asset download failed: {status} ({url})"
-            )));
-        }
+        crate::package::http::download_file(
+            &self.http,
+            url,
+            self.token.as_deref(),
+            dest,
+            ASSET_TIMEOUT,
+            self.backoff_base,
+        )
+        .await
     }
 }
 
@@ -659,18 +635,6 @@ pub(crate) fn parse_owner_repo(url: &str) -> Option<(String, String)> {
         return None;
     }
     Some((owner.to_string(), repo.to_string()))
-}
-
-/// 构造 reqwest 客户端；`no_proxy` 供测试绕过系统代理直连本地 mock
-fn build_http(no_proxy: bool) -> reqwest::Client {
-    let mut builder = reqwest::Client::builder()
-        .user_agent(format!("yaoxiang-pm/{}", env!("CARGO_PKG_VERSION")))
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(60));
-    if no_proxy {
-        builder = builder.no_proxy();
-    }
-    builder.build().expect("build reqwest client")
 }
 
 /// 资产上传基址：官方 api.github.com → uploads.github.com；自建/测试同源

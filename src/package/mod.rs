@@ -8,6 +8,7 @@ pub mod cache;
 pub mod commands;
 pub mod dependency;
 pub mod error;
+pub mod http;
 pub mod lock;
 pub mod manifest;
 mod runtime;
@@ -18,7 +19,7 @@ pub mod workspace;
 pub mod yxpkg;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub use error::{PackageError, PackageResult};
 pub use manifest::PackageManifest;
