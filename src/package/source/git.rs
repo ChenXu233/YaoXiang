@@ -5,6 +5,7 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::package::cache::GlobalCache;
 use crate::package::dependency::DependencySpec;
 use crate::package::error::{PackageError, PackageResult};
 use crate::package::source::{ResolvedPackage, Source, SourceKind};
@@ -26,13 +27,30 @@ pub enum GitRef {
 ///
 /// 从 Git 仓库克隆并下载依赖。
 /// 支持 `?tag=`, `?branch=`, `?rev=` 参数。
-#[derive(Debug)]
-pub struct GitSource;
+/// 下载经由全局缓存（RFC-014 Phase 3），vendor 目录从缓存复制。
+#[derive(Debug, Clone)]
+pub struct GitSource {
+    /// 注入的缓存（测试用）；None 时按用户配置惰性定位
+    cache: Option<GlobalCache>,
+}
 
 impl GitSource {
     /// 创建新的 Git 来源
     pub fn new() -> Self {
-        GitSource
+        GitSource { cache: None }
+    }
+
+    /// 以指定缓存创建 Git 来源（测试与程序化使用）
+    pub fn with_cache(cache: GlobalCache) -> Self {
+        GitSource { cache: Some(cache) }
+    }
+
+    /// 获取本次下载使用的缓存实例
+    fn effective_cache(&self) -> PackageResult<GlobalCache> {
+        match &self.cache {
+            Some(c) => Ok(c.clone()),
+            None => GlobalCache::from_config(),
+        }
     }
 
     /// 从 Git URL 解析引用信息
@@ -138,7 +156,7 @@ impl GitSource {
     }
 
     /// 获取 Git 仓库中的标签列表
-    fn list_tags(
+    pub fn list_tags(
         &self,
         url: &str,
     ) -> PackageResult<Vec<String>> {
@@ -169,26 +187,7 @@ impl GitSource {
         tags: &[String],
         version_req: &str,
     ) -> PackageResult<Option<String>> {
-        use crate::package::source::resolver::VersionReq;
-
-        let req = VersionReq::parse(version_req)?;
-
-        let mut matching_versions: Vec<(String, crate::package::source::resolver::SemVer)> =
-            Vec::new();
-
-        for tag in tags {
-            // 去掉 "v" 前缀
-            let version_str = tag.strip_prefix('v').unwrap_or(tag);
-            if let Ok(version) = crate::package::source::resolver::SemVer::parse(version_str) {
-                if req.matches(&version) {
-                    matching_versions.push((tag.clone(), version));
-                }
-            }
-        }
-
-        // 选择最高匹配版本
-        matching_versions.sort_by(|a, b| b.1.cmp(&a.1));
-        Ok(matching_versions.into_iter().next().map(|(tag, _)| tag))
+        super::resolver::select_best_tag(tags, version_req)
     }
 
     /// 获取克隆目录中的版本信息
@@ -247,7 +246,7 @@ impl Source for GitSource {
         SourceKind::Git
     }
 
-    fn resolve(
+    async fn resolve(
         &self,
         spec: &DependencySpec,
     ) -> PackageResult<String> {
@@ -279,7 +278,7 @@ impl Source for GitSource {
         }
     }
 
-    fn download(
+    async fn download(
         &self,
         spec: &DependencySpec,
         dest: &Path,
@@ -302,15 +301,22 @@ impl Source for GitSource {
             git_ref
         };
 
-        // 计算目标目录
-        let version = self.resolve(spec)?;
-        let target_dir = dest.join(format!("{}-{}", spec.name, version));
+        // 全局缓存优先（RFC-014 Phase 3）：条目键不可变（tag/rev/commit）
+        let cache = self.effective_cache()?;
+        let entry_key = self.cache_entry_key(&cache, &base_url, &effective_ref)?;
+        let entry = cache.git_entry(&base_url, &entry_key);
+        if !entry.exists() {
+            self.clone_repo(&base_url, &effective_ref, &entry)?;
+        }
 
-        // 克隆仓库
-        self.clone_repo(&base_url, &effective_ref, &target_dir)?;
+        // 版本探测在缓存条目上进行（条目保留 .git，git describe 兜底可用）
+        let resolved_version = self.detect_version(&entry);
 
-        // 检测实际版本
-        let resolved_version = self.detect_version(&target_dir);
+        // vendor 目录以探测到的真实版本命名（lock/清理/完整性校验同源）
+        let target_dir = dest.join(format!("{}-{}", spec.name, resolved_version));
+
+        // vendor 副本不含 .git（缓存条目才是 git 实体）
+        cache.copy_into(&entry, &target_dir)?;
 
         Ok(ResolvedPackage {
             name: spec.name.clone(),
@@ -320,5 +326,75 @@ impl Source for GitSource {
             local_path: target_dir,
             checksum: None, // 将在 Step 4 中计算
         })
+    }
+}
+
+impl GitSource {
+    /// 计算全局缓存条目键（RFC-014 Phase 3）
+    ///
+    /// tag/rev 直接作键（不可变）；分支与默认分支经 `git ls-remote` 解析到
+    /// commit 后以 commit 作键（分支引用可移动，commit 不可变），并写指针
+    /// 文件；`ls-remote` 失败（离线）时回退到上次成功解析的指针。
+    pub(crate) fn cache_entry_key(
+        &self,
+        cache: &GlobalCache,
+        base_url: &str,
+        git_ref: &GitRef,
+    ) -> PackageResult<String> {
+        match git_ref {
+            GitRef::Tag(tag) => Ok(tag.clone()),
+            GitRef::Rev(rev) => Ok(rev.clone()),
+            GitRef::Branch(branch) => {
+                let pattern = format!("refs/heads/{}", branch);
+                match Self::remote_head(base_url, &pattern) {
+                    Ok(commit) => {
+                        cache.write_pointer(base_url, branch, &commit)?;
+                        Ok(commit)
+                    }
+                    Err(e) => cache.read_pointer(base_url, branch)?.ok_or(e),
+                }
+            }
+            GitRef::DefaultBranch => match Self::remote_head(base_url, "HEAD") {
+                Ok(commit) => {
+                    cache.write_pointer(base_url, "HEAD", &commit)?;
+                    Ok(commit)
+                }
+                Err(e) => cache.read_pointer(base_url, "HEAD")?.ok_or(e),
+            },
+        }
+    }
+
+    /// `git ls-remote` 查询远程引用指向的 commit
+    fn remote_head(
+        url: &str,
+        pattern: &str,
+    ) -> PackageResult<String> {
+        let output = Command::new("git")
+            .arg("ls-remote")
+            .arg(url)
+            .arg(pattern)
+            .output()
+            .map_err(|e| PackageError::InvalidManifest(format!("无法执行 git ls-remote: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(PackageError::InvalidManifest(format!(
+                "git ls-remote 失败: {}",
+                stderr.trim()
+            )));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        stdout
+            .lines()
+            .next()
+            .and_then(|line| line.split_whitespace().next())
+            .map(|commit| commit.to_string())
+            .ok_or_else(|| {
+                PackageError::InvalidManifest(format!(
+                    "git ls-remote 未返回引用: {} {}",
+                    url, pattern
+                ))
+            })
     }
 }

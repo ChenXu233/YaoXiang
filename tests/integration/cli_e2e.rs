@@ -414,6 +414,33 @@ fn test_e2e_init_binary_project_creates_expected_files() {
     );
 }
 
+/// init 模板的 `main = () => { ... }` 必须能直接 run——Bin 模式入口要求函数
+/// 形态，值块形态（`main = { ... }`，初始化期求值）会被 E3021 拒绝。
+/// 模板曾生成值块形态，开箱即坏（E3021），此测试防回归。
+#[test]
+fn test_e2e_init_template_main_runs_out_of_box() {
+    // Arrange - init 默认（binary）项目
+    let tmp = TempDir::new().unwrap();
+    let project_dir = tmp.path().join("boot_app");
+    let (code, _stdout, _stderr) = run_yx(&["init", "boot_app"], tmp.path());
+    assert_eq!(code, 0, "init should succeed");
+
+    let main_yx = project_dir.join("src/main.yx");
+
+    // Act - 模板原样 run
+    let (code, stdout, stderr) = run_yx(&["run", main_yx.to_str().unwrap()], tmp.path());
+
+    // Assert - 零修改可运行且打印问候（问候文本随项目名变化）
+    assert_eq!(
+        code, 0,
+        "template main should run out of box, stderr: {stderr:?}"
+    );
+    assert!(
+        stdout.contains("boot_app"),
+        "should print greeting, stdout: {stdout:?}"
+    );
+}
+
 #[test]
 fn test_e2e_init_library_project_creates_lib_yx() {
     // Arrange
@@ -1257,4 +1284,292 @@ fn test_e2e_yaoxiang_lang_env_selects_every_shipped_language() {
             "YAOXIANG_LANG={lang} 应命中专属译文而非回落 en（与 en 基线全等）；combined: {combined:?}"
         );
     }
+}
+
+// Lib 角色非 pub 死代码判定（029f「宁漏报」补遗，RFC-014 项目模式盘出）：
+// 被 use 的文件推断为 Lib，其消费者在文件外——非 pub 定义必须看包内引用池，
+// 否则跨文件引用判死（W1001 误报）。pub 维持绝对豁免不受影响。
+
+#[test]
+fn test_e2e_lib_non_pub_fn_used_cross_file_not_flagged() {
+    // Arrange: main 使用 util.g —— util 是 Lib 角色，g 非 pub 但有跨文件引用
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    std::fs::create_dir_all(tmp.path().join("src/util")).unwrap();
+    write_yx(tmp.path(), "src/util/mod.yx", "g = () => 2\n");
+    write_yx(
+        tmp.path(),
+        "src/main.yx",
+        "use util;\n\nmain = () => { print(util.g()) }\n",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", "src/main.yx"], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "check should pass, stderr: {stderr:?}");
+    assert!(
+        !stderr.contains("W1001"),
+        "cross-file used non-pub fn must not be flagged, stderr: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_lib_truly_dead_non_pub_fn_still_flagged() {
+    // Arrange: util 里两个函数，g 被跨文件引用，dead_g 无人引用
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    std::fs::create_dir_all(tmp.path().join("src/util")).unwrap();
+    write_yx(
+        tmp.path(),
+        "src/util/mod.yx",
+        "g = () => 2\ndead_g = () => 3\n",
+    );
+    write_yx(
+        tmp.path(),
+        "src/main.yx",
+        "use util;\n\nmain = () => { print(util.g()) }\n",
+    );
+
+    // Act
+    let (_code, _stdout, stderr) = run_yx(&["check", "src/main.yx"], tmp.path());
+
+    // Assert - 引用池只豁免 g；真死的 dead_g 仍报
+    assert!(
+        stderr.contains("W1001") && stderr.contains("dead_g"),
+        "truly dead non-pub fn should still be flagged, stderr: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("'g'"),
+        "referenced g must not be flagged, stderr: {stderr:?}"
+    );
+}
+
+#[test]
+fn test_e2e_lib_unused_pub_fn_still_exempt() {
+    // Arrange: Lib 文件的 pub 无人引用 —— 分发边界语义维持绝对豁免（宁漏报）
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "app", "");
+    std::fs::create_dir_all(tmp.path().join("src/util")).unwrap();
+    write_yx(tmp.path(), "src/util/mod.yx", "pub api = () => 9\n");
+    write_yx(
+        tmp.path(),
+        "src/main.yx",
+        "use util;\n\nmain = () => { print(1) }\n",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", "src/main.yx"], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0);
+    assert!(
+        !stderr.contains("W1001"),
+        "pub in Lib must stay unconditionally exempt, stderr: {stderr:?}"
+    );
+}
+
+// workspace list（RFC-014c Phase 6a）
+
+#[test]
+fn test_e2e_workspace_list_from_member_dir() {
+    // Arrange - 两成员工作空间
+    let tmp = TempDir::new().unwrap();
+    let ws = tmp.path().join("ws");
+    std::fs::create_dir_all(ws.join("packages/core")).unwrap();
+    std::fs::create_dir_all(ws.join("packages/utils")).unwrap();
+    std::fs::write(
+        ws.join("yaoxiang.toml"),
+        "[workspace.members]\ncore = \"packages/core/yaoxiang.toml\"\nutils = \"packages/utils/yaoxiang.toml\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("packages/core/yaoxiang.toml"),
+        "[package]\nname = \"core\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("packages/utils/yaoxiang.toml"),
+        "[package]\nname = \"utils\"\nversion = \"0.2.0\"\n",
+    )
+    .unwrap();
+
+    // Act - 从成员目录执行（向上探测）
+    let (code, stdout, stderr) = run_yx(&["workspace", "list"], &ws.join("packages/core"));
+
+    // Assert
+    assert_eq!(code, 0, "workspace list should succeed, stderr: {stderr:?}");
+    assert!(stdout.contains("core"), "should list core: {stdout:?}");
+    assert!(stdout.contains("utils"), "should list utils: {stdout:?}");
+    assert!(
+        stdout.contains("0.2.0"),
+        "should show member version: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_e2e_workspace_list_outside_workspace_fails() {
+    // Arrange - 普通项目（无 [workspace]）
+    let tmp = TempDir::new().unwrap();
+    write_manifest(tmp.path(), "plain", "");
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["workspace", "list"], tmp.path());
+
+    // Assert
+    assert_ne!(code, 0, "plain project is not a workspace");
+    assert!(
+        stderr.contains("not a YaoXiang workspace"),
+        "stderr: {stderr:?}"
+    );
+}
+
+// workspace 成员管理（RFC-014c：init 自动注册 + workspace add/remove）
+
+#[test]
+fn test_e2e_init_inside_workspace_auto_registers() {
+    // Arrange - 单成员工作空间
+    let tmp = TempDir::new().unwrap();
+    let ws = tmp.path().join("ws");
+    std::fs::create_dir_all(ws.join("packages/seed")).unwrap();
+    std::fs::write(
+        ws.join("yaoxiang.toml"),
+        "[workspace.members]\nseed = \"packages/seed/yaoxiang.toml\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("packages/seed/yaoxiang.toml"),
+        "[package]\nname = \"seed\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+
+    // Act - 在工作空间内 init
+    let (code, _stdout, stderr) = run_yx(&["init", "newapp"], &ws);
+    assert_eq!(code, 0, "init should succeed, stderr: {stderr:?}");
+
+    // Assert - 根 toml 自动登记（存 toml 文件路径而非目录）
+    let root_toml = std::fs::read_to_string(ws.join("yaoxiang.toml")).unwrap();
+    assert!(
+        root_toml.contains("newapp = \"newapp/yaoxiang.toml\""),
+        "root toml should register member with toml file path: {root_toml:?}"
+    );
+
+    // workspace list 能看到（登记格式合法的旁证）
+    let (code, stdout, stderr) = run_yx(&["workspace", "list"], &ws);
+    assert_eq!(
+        code, 0,
+        "list should work after auto-registration, stderr: {stderr:?}"
+    );
+    assert!(
+        stdout.contains("newapp"),
+        "list should show new member: {stdout:?}"
+    );
+}
+
+#[test]
+fn test_e2e_workspace_add_remove_roundtrip() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    let ws = tmp.path().join("ws");
+    std::fs::create_dir_all(ws.join("packages/extra")).unwrap();
+    std::fs::write(ws.join("yaoxiang.toml"), "[workspace.members]\n").unwrap();
+    std::fs::write(
+        ws.join("packages/extra/yaoxiang.toml"),
+        "[package]\nname = \"extra\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+
+    // Act - add（默认 key = [package].name）
+    let (code, _stdout, stderr) = run_yx(&["workspace", "add", "packages/extra"], &ws);
+    assert_eq!(code, 0, "add should succeed, stderr: {stderr:?}");
+    let root_toml = std::fs::read_to_string(ws.join("yaoxiang.toml")).unwrap();
+    assert!(
+        root_toml.contains("extra = \"packages/extra/yaoxiang.toml\""),
+        "{root_toml:?}"
+    );
+
+    // add 重复 key 失败
+    let (code, _stdout, _stderr) = run_yx(&["workspace", "add", "packages/extra"], &ws);
+    assert_ne!(code, 0, "duplicate key should fail");
+
+    // remove
+    let (code, _stdout, stderr) = run_yx(&["workspace", "remove", "extra"], &ws);
+    assert_eq!(code, 0, "remove should succeed, stderr: {stderr:?}");
+    let root_toml = std::fs::read_to_string(ws.join("yaoxiang.toml")).unwrap();
+    assert!(
+        !root_toml.contains("extra"),
+        "member should be gone: {root_toml:?}"
+    );
+}
+
+// publish — 发布前测试（RFC-014a 校验 3）：真二进制跑 runner 路径
+// （单测形态下 current_exe 是 libtest harness，不能触发 run_test_command）
+
+fn write_publish_project(
+    dir: &std::path::Path,
+    test_content: &str,
+) {
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join("tests")).unwrap();
+    std::fs::write(
+        dir.join("yaoxiang.toml"),
+        "[package]
+name = \"demo\"
+version = \"1.0.0\"
+description = \"demo pkg\"
+",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/main.yx"), "main = () => { print(1) }").unwrap();
+    std::fs::write(dir.join("tests/it.yx"), test_content).unwrap();
+}
+
+#[test]
+fn test_e2e_publish_dry_run_with_passing_tests() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    write_publish_project(tmp.path(), "main = () => { print(\"ok\") }");
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["publish", "--dry-run"], tmp.path());
+
+    // Assert
+    assert_eq!(
+        code, 0,
+        "stdout: {stdout}
+stderr: {stderr}"
+    );
+    assert!(stdout.contains("running pre-publish tests"), "{stdout}");
+    assert!(
+        tmp.path().join("target/yxpkg/demo-1.0.0.yxpkg").is_file(),
+        "产物应写入 target/yxpkg/"
+    );
+}
+
+#[test]
+fn test_e2e_publish_aborts_on_failing_tests() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    write_publish_project(tmp.path(), "let ??? broken");
+
+    // Act
+    let (code, _stdout, _stderr) = run_yx(&["publish", "--dry-run"], tmp.path());
+
+    // Assert：测试失败 → 非零退出，不产生产物
+    assert_ne!(code, 0, "failing tests must abort publish");
+    assert!(!tmp.path().join("target/yxpkg").exists());
+}
+
+#[test]
+fn test_e2e_publish_no_test_skips_failing_tests() {
+    // Arrange
+    let tmp = TempDir::new().unwrap();
+    write_publish_project(tmp.path(), "let ??? broken");
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["publish", "--dry-run", "--no-test"], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "--no-test should skip, stderr: {stderr}");
+    assert!(tmp.path().join("target/yxpkg/demo-1.0.0.yxpkg").is_file());
 }

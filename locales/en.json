@@ -799,8 +799,7 @@
   "E3021": {
     "title": "Entry is not a function",
     "template": "Program entry '{name}' must be a function, but it is a value binding",
-    "help": "The entry must be callable: write it as main = { ... } or main: () -> Void = { ... }; value bindings (such as main: Int = 5) will not be executed."
-  },
+    "help": "Entry must be a function: write as main = () => { ... } or annotate it main: () -> Void = ... . A plain block binding main = { ... } is a value (evaluated during module init), not an entry point."  },
   "E4010": {
     "title": "Constant division by zero",
     "template": "Constant expression divides by zero",
@@ -1088,5 +1087,35 @@
     "message": "The measure at this recursive call site does not strictly decrease, so recursion termination cannot be proven (counterexample attached)",
     "template": "Measure does not hold: this call site cannot prove that the measure strictly decreases\n\nCounterexample:\n{counterexample}",
     "help": "This is a termination obligation of a refinement type assertion: for a recursive function with a `Terminates` measure, every recursive call site must prove that the measure strictly decreases. The counterexample provides a set of values for which the decrease does not hold. Please check whether the measure is chosen appropriately, or add branch guards to ensure the decrease holds along recursive paths. See RFC-027a."
-  }
-}
+  },
+"package_outdated_none": "All dependencies are up to date.",
+  "package_outdated_found": "{0} outdated dependencies:",
+  "package_outdated_row": "  {0}: {1} -> {2}",
+  "package_outdated_pinned": "  {0} ({1}) [pinned]",
+  "package_outdated_failed": "  {0} ({1}) [check failed: {2}]",
+  "package_clean_removed": "  Removed {0}",
+  "package_clean_nothing": "Nothing to clean.",
+  "package_cache_cleaned": "Cache cleaned ({0} freed)",
+  "package_cache_empty": "Cache is already empty.",
+  "W1006": {
+    "title": "local module shadows dependency",
+    "message": "a local module takes precedence over a vendored dependency of the same name",
+    "template": "local module '{module}' shadows dependency '{dependency}'",
+    "help": "local modules have the highest resolution priority (RFC-014): './src/{module}' overrides the vendored package '{dependency}' in .yaoxiang/vendor/. Rename the local module if this shadowing is unintended, or run with --deny-shadowing to treat it as an error",
+    "example": "// ./src/data.yx exists while 'data' is also a vendored dependency\nuse data.json; // resolves to ./src/data.yx, not the dependency",
+    "error_output": "warning[W1006]: local module 'data' shadows dependency 'data'\n --> example.yx:1:1\n  |\n1 | use data.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: a local module takes precedence over a vendored dependency of the same name"
+  },
+  "workspace_list_header": "workspace at {0} ({1} members)",
+  "workspace_list_member_row": "  {0} {1}  ({2})",
+  "workspace_member_added": "✓ Added workspace member '{0}' ({1})",
+  "workspace_member_removed": "✓ Removed workspace member '{0}'",
+  "workspace_member_referenced": "⚠ member {0} is still referenced by: {1}",
+  "workspace_auto_registered": "✓ Registered to workspace {0} as '{1}'",
+  "package_publish_packed": "✓ packed {0} (SHA-256 {1})",
+  "package_publish_registry_deferred": "official registry is deferred (RFC-014a decision 1): use --github to publish a GitHub Release, or --dry-run to pack locally only",
+  "package_publish_github_done": "✓ published GitHub Release: {0}",
+  "package_publish_version_exists": "release {0} already exists; version numbers cannot be reused",
+  "package_publish_tag_missing": "tag {0} not found: create and push it first (git tag {0} && git push origin {0})",
+  "package_publish_token_missing": "missing GitHub credentials: set $YX_GITHUB_TOKEN (RFC-014a auth table)",
+  "package_publish_testing": "running pre-publish tests…",
+  "package_publish_repo_unresolved": "cannot resolve the GitHub repository: set [package] repository to a GitHub URL, or configure git remote origin"}

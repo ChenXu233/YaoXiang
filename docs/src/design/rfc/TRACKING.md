@@ -10,12 +10,16 @@
 | 009a-borrow-proof-pipeline.md | RFC-009a: 令牌生命期分析——基于霍尔证明管道 | 已接受 | accepted\009a-borrow-proof-pipeline.md | #129 | -- | -- | -- |
 | 010-unified-type-syntax.md | RFC-010: 统一类型语法 - name: type = value 模型 | 已接受 | accepted\010-unified-type-syntax.md | #127 | -- | -- | -- |
 | 010a-tail-expression-and-return.md | RFC-010a: 尾表达式求值与 return 语义 | 已接受 | accepted\010a-tail-expression-and-return.md | #342 | -- | -- | -- |
+| 010b-pattern-matching-completeness.md | RFC-010b: 模式匹配完备化（变体解构与穷尽性） | 已接受 | accepted\010b-pattern-matching-completeness.md | #330 | -- | -- | -- |
 | 011-generic-type-system.md | RFC-011: 泛型系统设计 - 零成本抽象与宏替代 | 已接受 | accepted\011-generic-type-system.md | #128 | #45, #46, #73, #90, #96, #40, #151 | #122 | -- |
 | 011a-interface-implementation.md | RFC-011a: 接口实现与动态分发 | 已接受 | accepted\011a-interface-implementation.md | -- | -- | -- | -- |
 | 011b-operator-overloading.md | RFC-011b: 运算符重载与接口驱动运算符 | 已接受 | accepted\011b-operator-overloading.md | #341 | -- | -- | -- |
 | 012-f-string-template-strings.md | RFC 012: F-String 模板字符串 | 已接受 | accepted\012-f-string-template-strings.md | #124 | -- | -- | -- |
 | 013-error-code-specification.md | RFC 013: 错误代码规范 | 已接受 | accepted\013-error-code-specification.md | #125 | #125 | #7, #9, #29, #66 | -- |
 | 014-package-manager.md | RFC-014: 包管理系统设计 | 已接受 | accepted\014-package-manager.md | #88 | -- | -- | -- |
+| 014a-registry-protocol.md | RFC-014a: Registry 协议规范 | 已接受 | accepted\014a-registry-protocol.md | -- | -- | -- | -- |
+| 014b-build-system.md | RFC-014b: 构建系统与二进制分发 | 已接受 | accepted\014b-build-system.md | #91 | -- | -- | -- |
+| 014c-workspace.md | RFC-014c: 工作空间支持 | 已接受 | accepted\014c-workspace.md | #113 | -- | -- | -- |
 | 015-configuration-system.md | RFC-015: YaoXiang 配置系统设计 | 已接受 | accepted\015-configuration-system.md | #133 | -- | -- | -- |
 | 017-lsp-support.md | RFC-017: 语言服务器协议（LSP）支持设计 | 已接受 | accepted\017-lsp-support.md | #11 | -- | -- | -- |
 | 018-llvm-aot-compiler.md | RFC-018：LLVM AOT 编译器设计 | 已接受 | accepted\018-llvm-aot-compiler.md | #14 | -- | -- | -- |
@@ -34,7 +38,6 @@
 | 022-hoare-logic-static-verification.md | RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型） | 已废弃 | deprecated\022-hoare-logic-static-verification.md | -- | -- | -- | -- |
 | 023-closure-capture-model.md | RFC-023: 闭包捕获模型 | 已废弃 | deprecated\023-closure-capture-model.md | -- | -- | -- | -- |
 | 002-cross-platform-io-libuv.md | RFC-002：基于 libuv 的资源类型 IO 实现层 | 草案 | draft\002-cross-platform-io-libuv.md | #102 | -- | -- | -- |
-| 010b-pattern-matching-completeness.md | RFC-010b: 模式匹配完备化（变体解构与穷尽性） | 已接受 | accepted\010b-pattern-matching-completeness.md | #330 | -- | -- | -- |
 | 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 草案 | draft\019-typed-homoiconicity.md | -- | -- | -- | -- |
 | 026b-yx-bindgen.md | RFC-026b: yx-bindgen 工具链 | 草案 | draft\026b-yx-bindgen.md | -- | -- | -- | -- |
 | 028-jit-compiler.md | RFC-028：JIT 编译器 — VM 内多级执行引擎 | 草案 | draft\028-jit-compiler.md | #101 | -- | -- | -- |
@@ -47,9 +50,6 @@
 | 005-automated-cve-scanning.md | RFC-005: 自动化CVE安全检查系统 | 已拒绝 | rejected\005-automated-cve-scanning.md | -- | -- | -- | -- |
 | 016-quantum-native-support.md | RFC 016: 量子原生支持与多重后端集成 | 已拒绝 | rejected\016-quantum-native-support.md | -- | -- | -- | -- |
 | 025-primitive-extension.md | RFC-025: 可扩展原语类型机制 | 已拒绝 | rejected\025-primitive-extension.md | -- | -- | -- | -- |
-| 014a-registry-protocol.md | RFC-014a: Registry 协议规范 | 审核中 | review\014a-registry-protocol.md | -- | -- | -- | -- |
-| 014b-build-system.md | RFC-014b: 构建系统与二进制分发 | 审核中 | review\014b-build-system.md | #91 | -- | -- | -- |
-| 014c-workspace.md | RFC-014c: 工作空间支持 | 审核中 | review\014c-workspace.md | #113 | -- | -- | -- |
 | 026a-extensible-ffi-system.md | RFC-026a: 可扩展 FFI 机制体系 | 审核中 | review\026a-extensible-ffi-system.md | #135 | -- | -- | -- |
 | 027a-termination-explicit-measure.md | RFC-027a: 终止检查的显式测度 | 审核中 | review\027a-termination-explicit-measure.md | #318 | -- | -- | -- |
 | 032-spawn-unified-expression.md | RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况 | 审核中 | review\032-spawn-unified-expression.md | #98 | -- | -- | -- |

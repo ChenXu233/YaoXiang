@@ -23,7 +23,7 @@ fn setup_project() -> (TempDir, std::path::PathBuf) {
 #[test]
 fn test_update_empty() {
     let (_tmp, project_dir) = setup_project();
-    exec_in(&project_dir).unwrap();
+    exec_in(&project_dir, &Default::default()).unwrap();
 
     let lock = LockFile::load(&project_dir).unwrap();
     assert!(lock.package.is_empty());
@@ -35,7 +35,7 @@ fn test_update_with_deps() {
     add_path_dep(&project_dir, "foo", "1.0.0", false);
     add_path_dep(&project_dir, "bar", "2.0.0", false);
 
-    exec_in(&project_dir).unwrap();
+    exec_in(&project_dir, &Default::default()).unwrap();
 
     let lock = LockFile::load(&project_dir).unwrap();
     assert_eq!(lock.package.len(), 2);
@@ -51,7 +51,7 @@ fn test_update_refreshes_versions() {
     // 重写依赖表模拟版本升级（保持 path 来源）
     add_path_dep(&project_dir, "foo", "2.0.0", false);
 
-    exec_in(&project_dir).unwrap();
+    exec_in(&project_dir, &Default::default()).unwrap();
 
     let lock = LockFile::load(&project_dir).unwrap();
     assert_eq!(lock.package["foo"].version, "2.0.0");
@@ -64,13 +64,13 @@ fn test_update_single_dependency() {
     add_path_dep(&project_dir, "bar", "2.0.0", false);
 
     // 先安装
-    crate::package::commands::install::exec_in(&project_dir).unwrap();
+    crate::package::commands::install::exec_in(&project_dir, &Default::default()).unwrap();
 
     // 修改 foo 的版本（保持 path 来源）
     add_path_dep(&project_dir, "foo", "1.1.0", false);
 
     // 只更新 foo
-    exec_single_in(&project_dir, "foo").unwrap();
+    exec_single_in(&project_dir, "foo", &Default::default()).unwrap();
 
     let lock = LockFile::load(&project_dir).unwrap();
     assert_eq!(lock.package["foo"].version, "1.1.0");

@@ -40,6 +40,9 @@ pub struct TypeChecker {
     declared_fn_type_params: HashMap<String, Vec<String>>,
     /// 语句检查器
     body_checker: Option<inference::StatementChecker>,
+    /// RFC-014 §项目模式：vendor 根目录（`<project>/.yaoxiang/vendor`）。
+    /// 有值时转发给 body_checker——`use` 缺依赖包的 E5001 追加 install 提示。
+    vendor_root: Option<std::path::PathBuf>,
     /// 语义信息收集（typecheck 阶段同时产出）
     semantic_db: semantic_db::SemanticDB,
     /// 依赖类型环境（类型族注册与查找）
@@ -180,6 +183,7 @@ impl TypeChecker {
             env,
             declared_fn_type_params: HashMap::new(),
             body_checker: None,
+            vendor_root: None,
             semantic_db: semantic_db::SemanticDB::new(),
             dependent_type_env,
             module_namespaces: HashMap::new(),
@@ -328,6 +332,17 @@ impl TypeChecker {
 
     pub fn env(&mut self) -> &mut TypeEnvironment {
         &mut self.env
+    }
+
+    /// 注入 vendor 根目录（RFC-014 §项目模式）。
+    ///
+    /// 须在 `check_module` 前调用；`check_module` 初始化 body_checker 时
+    /// 转发，`use` 缺依赖包的 E5001 据此追加 `yaoxiang install` 提示。
+    pub fn set_vendor_root(
+        &mut self,
+        root: std::path::PathBuf,
+    ) {
+        self.vendor_root = Some(root);
     }
 
     /// 获取模块名称
@@ -1004,6 +1019,10 @@ impl TypeChecker {
         body_checker.set_native_arities(self.env.native_arity.clone());
         // 设置模块注册表，支持函数体/块作用域 use
         body_checker.set_module_registry(self.env.module_registry.clone());
+        // RFC-014：vendor 根注入——缺依赖包的 E5001 追加 install 提示
+        if let Some(vendor_root) = self.vendor_root.clone() {
+            body_checker.set_vendor_root(vendor_root);
+        }
         // 设置泛型类型定义模板表
         body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
         // 设置方法绑定表

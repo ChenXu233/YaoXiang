@@ -1,13 +1,13 @@
 ---
 title: 'RFC-014b: 构建系统与二进制分发'
-status: '审核中'
+status: '已接受'
 author: '晨煦'
 created: '2026-06-11'
-updated: '2026-09-15'
+updated: '2026-09-30'
 group: 'rfc-014'
 issue: '#91'
-impl: '0%'
-impl_status: 'not-started'
+impl: '90%'
+impl_status: 'in-progress'
 ---
 
 # RFC-014b: 构建系统与二进制分发
@@ -330,16 +330,25 @@ build/
 
 ### 阶段划分
 
-| 阶段     | 内容                                        |
-| -------- | ------------------------------------------- |
-| Phase 5a | `[build]` 配置解析 + `BuildStrategy` 枚举   |
-| Phase 5b | 系统依赖检查                                |
-| Phase 5c | Cargo 构建集成（读 `[build.cargo]` 拼命令） |
-| Phase 5d | 预编译二进制下载 + 校验                     |
-| Phase 5f | yx-bindgen 集成（`headers` 字段，依赖 RFC-026b） |
-| Phase 5e | build.yx 脚本执行（**最后实施**，带信任门） |
+| 阶段     | 内容                                        | 状态 |
+| -------- | ------------------------------------------- | ---- |
+| Phase 5a | `[build]` 配置解析 + `BuildStrategy` 枚举（含 `[binaries]` 声明、平台三元组） | ✅ 已完成 |
+| Phase 5b | 系统依赖检查（`<tool> --version` 探测 + 比较器操作数补齐 + 安装指引） | ✅ 已完成 |
+| Phase 5c | Cargo 构建集成（读 `[build.cargo]` 拼命令 + 平台覆盖合并 + scratch 隔离） | ✅ 已完成 |
+| Phase 5d | 预编译二进制下载 + 校验（整包 SHA-256 + 安全解包 + 回退语义） | ✅ 已完成 |
+| Phase 5f | yx-bindgen 集成（`headers` 字段配置管道；RFC-026b 尚为草案，执行时明确报错） | ✅ 配置管道完成（生成器随 026b） |
+| Phase 5e | build.yx 脚本执行（**最后实施**，带信任门） | ✅ 已完成 |
 
 执行顺序（2026-09-15 决议 2）：`5a → 5b → 5c → 5d → 5f → 5e`。声明式构建先行，任意代码执行殿后。
+
+**落地说明（2026-09-30，提交见 feat/rfc014）**：
+
+- **产物两层分离**：cargo scratch（target/）经 `CARGO_TARGET_DIR` 指到项目 `.yaoxiang/build/cargo/<pkg>/`——不落 vendor 包目录，否则目录完整性校验和被增量构建产物撑爆；FFI 可消费的库文件（.so/.dll/.dylib/.a）复制到 vendor 包目录 `build/native/<triple>/`。vendor 完整性校验语义随之明确为**源码树完整性**（`build/` 派生产物不入校验和）。
+- **`[binaries]` 回退语义**：当前平台有条目但「sha256 未声明 / 下载失败 / 校验不匹配」任一 → stderr 提示 + 回退源码构建（RFC「否则 fallback」），回退前清理半成品。整包校验通过后走安全解包（路径逃逸防护 + 解压总量护栏 512 MiB，产物大小不设硬上限——决议 5）。
+- **信任门（决议 1）落地**：信任记录随用户配置体系（`~/.config/yaoxiang/config.toml` 的 `[trust] build-scripts`；RFC 草拟时的 `~/.yaoxiang/config.toml` 未曾存在，与 `[cache] dir` 同款并入）。三条放行路径：已记录 / 本次 `--trust`（**放行即持久化**，兑现「add/install --trust 把信任记录持久化」）/ 交互确认（确认即持久化）。非交互环境（stdin 非终端）默认拒绝，仅 `--trust` 可过。
+- **build.yx 执行模型**：普通 .yx 脚本、**顶层语句即构建逻辑**（Script/eval 语义；上方 `fn main()` 示例是草案期伪码），进程内执行，工作目录临时切到包根（全局锁串行化翻转窗口）。当前 std 无 exec/exit API——脚本可写生成/文件类逻辑，`os.exec` 式调用外部工具随 std 演进。
+- **cmake 策略**：枚举与配置解析就绪，执行尚未实现（明确报错）——RFC 阶段表未单列 cmake 阶段，待有真实需求包再排期。
+- **publish 发布前测试**（014a 校验 3）已随本 Phase 接线：默认运行 `[tool.test]` 发现的测试（RFC-036 机制），失败中止发布，`--no-test` 跳过。
 
 ### 依赖关系
 

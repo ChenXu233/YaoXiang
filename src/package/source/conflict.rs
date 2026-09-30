@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use crate::package::dependency::DependencySpec;
 use crate::package::error::{PackageError, PackageResult};
-use crate::package::source::resolver::VersionReq;
+use crate::package::source::resolver::{is_compatible, parse_version_req};
 
 /// 冲突信息
 #[derive(Debug, Clone)]
@@ -37,11 +37,11 @@ pub fn detect_conflicts(
     deps: &[DependencySpec],
     _dev_deps: &[DependencySpec],
 ) -> PackageResult<Vec<ConflictInfo>> {
-    let mut version_reqs: BTreeMap<String, Vec<(String, VersionReq)>> = BTreeMap::new();
+    let mut version_reqs: BTreeMap<String, Vec<(String, semver::VersionReq)>> = BTreeMap::new();
 
     // 收集所有版本要求
     for spec in deps.iter() {
-        let req = VersionReq::parse(&spec.version)?;
+        let req = parse_version_req(&spec.version)?;
         version_reqs
             .entry(spec.name.clone())
             .or_default()
@@ -50,7 +50,7 @@ pub fn detect_conflicts(
 
     // dev-dependencies 中的要求
     for spec in _dev_deps.iter() {
-        let req = VersionReq::parse(&spec.version)?;
+        let req = parse_version_req(&spec.version)?;
         version_reqs
             .entry(spec.name.clone())
             .or_default()
@@ -69,7 +69,7 @@ pub fn detect_conflicts(
         let mut has_conflict = false;
         for i in 0..reqs.len() {
             for j in (i + 1)..reqs.len() {
-                if !reqs[i].1.is_compatible(&reqs[j].1) {
+                if !is_compatible(&reqs[i].1, &reqs[j].1) {
                     has_conflict = true;
                     break;
                 }

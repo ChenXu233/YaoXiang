@@ -12,21 +12,30 @@ use tempfile::TempDir;
 
 #[test]
 fn test_fetch_empty_deps() {
+    // Arrange
     let tmp = TempDir::new().unwrap();
     let deps = BTreeMap::new();
     let mut lock = LockFile::new();
 
-    let result = fetch_all(tmp.path(), &deps, &mut lock).unwrap();
-    assert!(result.installed.is_empty());
-    assert!(result.skipped.is_empty());
-    assert!(result.failed.is_empty());
+    // Act
+    let result = crate::package::runtime::drive(fetch_all(
+        tmp.path(),
+        &deps,
+        &mut lock,
+        &Default::default(),
+    ))
+    .unwrap();
+
+    // Assert：空依赖 → 三个结果桶全空
+    assert!(result.installed.is_empty(), "不应有安装项");
+    assert!(result.skipped.is_empty(), "不应有跳过项");
+    assert!(result.failed.is_empty(), "不应有失败项");
 }
 
 #[test]
 fn test_fetch_local_dep() {
+    // Arrange：本地路径依赖（不需要下载）
     let tmp = TempDir::new().unwrap();
-
-    // 创建本地依赖目录
     let local_dep = tmp.path().join("local-dep");
     std::fs::create_dir_all(&local_dep).unwrap();
     std::fs::write(local_dep.join("lib.yx"), "export x = 42").unwrap();
@@ -42,9 +51,18 @@ fn test_fetch_local_dep() {
         toml::Value::String(local_dep.to_string_lossy().to_string()),
     );
     deps.insert("local-dep".to_string(), toml::Value::Table(dep_table));
-
     let mut lock = LockFile::new();
-    let result = fetch_all(tmp.path(), &deps, &mut lock).unwrap();
+
+    // Act
+    let result = crate::package::runtime::drive(fetch_all(
+        tmp.path(),
+        &deps,
+        &mut lock,
+        &Default::default(),
+    ))
+    .unwrap();
+
+    // Assert：本地依赖登记为 skipped，不进 installed
     assert_eq!(result.skipped.len(), 1);
     assert_eq!(result.skipped[0].0, "local-dep");
 }

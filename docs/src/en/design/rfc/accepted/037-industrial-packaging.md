@@ -11,7 +11,7 @@ status: 'Accepted'
 # RFC-037: Industrial Distribution Plan — Compiler/Toolchain Packaging Based on cargo-dist
 
 > This RFC is complementary to
-> [RFC-014b: Build System and Binary Distribution](../review/014b-build-system.md). RFC-014b defines
+> [RFC-014b: Build System and Binary Distribution](../accepted/014b-build-system.md). RFC-014b defines
 > how the **YaoXiang package manager** builds and distributes third-party packages; this RFC defines
 > how the **YaoXiang compiler/toolchain itself** is packaged and distributed.
 
@@ -706,6 +706,6 @@ The following questions were resolved during design discussion:
 
 - [cargo-dist Official Documentation](https://axodotdev.github.io/cargo-dist/)
 - [cargo-dist GitHub](https://github.com/axodotdev/cargo-dist)
-- [RFC-014b: Build System and Binary Distribution](../review/014b-build-system.md)
+- [RFC-014b: Build System and Binary Distribution](../accepted/014b-build-system.md)
 - [cargo-dist nightly feature request](https://github.com/axodotdev/cargo-dist/issues/1143)
 - [Z3 Build Configuration — CMakeLists.txt](https://github.com/Z3Prover/z3/blob/master/src/CMakeLists.txt)

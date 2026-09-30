@@ -1,9 +1,7 @@
-//! 测试依赖缓存和完整性校验（SHA-256）
+//! 测试依赖完整性校验（SHA-256）
 //!
 //! 覆盖:
-//! - SHA-256 空输入哈希
-//! - SHA-256 "hello" 哈希
-//! - SHA-256 增量计算一致性
+//! - 标准向量（空输入 / "hello"）
 //! - 单文件校验和计算
 //! - 目录校验和的确定性
 //! - 目录修改后校验和变化
@@ -13,43 +11,9 @@
 
 use std::path::Path;
 
-use crate::package::vendor::cache::{Sha256, compute_directory_checksum, compute_file_checksum, verify_checksum};
-
-#[test]
-fn test_sha256_empty() {
-    let mut hasher = Sha256::new();
-    hasher.update(b"");
-    let hash = hasher.finalize_hex();
-    assert_eq!(
-        hash,
-        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    );
-}
-
-#[test]
-fn test_sha256_hello() {
-    let mut hasher = Sha256::new();
-    hasher.update(b"hello");
-    let hash = hasher.finalize_hex();
-    assert_eq!(
-        hash,
-        "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-    );
-}
-
-#[test]
-fn test_sha256_incremental() {
-    let mut h1 = Sha256::new();
-    h1.update(b"hello world");
-    let hash1 = h1.finalize_hex();
-
-    let mut h2 = Sha256::new();
-    h2.update(b"hello ");
-    h2.update(b"world");
-    let hash2 = h2.finalize_hex();
-
-    assert_eq!(hash1, hash2);
-}
+use crate::package::vendor::checksum::{
+    compute_directory_checksum, compute_file_checksum, verify_checksum,
+};
 
 #[test]
 fn test_compute_file_checksum() {
@@ -61,6 +25,19 @@ fn test_compute_file_checksum() {
     assert_eq!(
         checksum,
         "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    );
+}
+
+#[test]
+fn test_compute_file_checksum_empty() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let file_path = tmp.path().join("empty.txt");
+    std::fs::write(&file_path, "").unwrap();
+
+    let checksum = compute_file_checksum(&file_path).unwrap();
+    assert_eq!(
+        checksum,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     );
 }
 
@@ -117,15 +94,21 @@ fn test_verify_checksum() {
     std::fs::write(dir.join("lib.yx"), "main = { 42 }").unwrap();
 
     let checksum = compute_directory_checksum(&dir).unwrap();
-    assert!(verify_checksum(&dir, &checksum).unwrap());
+    assert!(
+        verify_checksum(&dir, &checksum).unwrap(),
+        "内容未变时校验应通过"
+    );
 
     // 篡改后校验失败
     std::fs::write(dir.join("lib.yx"), "main = { 0 }").unwrap();
-    assert!(!verify_checksum(&dir, &checksum).unwrap());
+    assert!(
+        !verify_checksum(&dir, &checksum).unwrap(),
+        "内容被篡改后校验应失败"
+    );
 }
 
 #[test]
 fn test_directory_checksum_not_found() {
     let result = compute_directory_checksum(Path::new("/nonexistent/path"));
-    assert!(result.is_err());
+    assert!(result.is_err(), "校验不存在的目录应报错");
 }

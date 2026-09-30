@@ -1,9 +1,9 @@
 ---
 title: 'RFC-014c: 工作空间支持'
-status: '审核中'
+status: '已接受'
 author: '晨煦'
 created: '2026-06-11'
-updated: '2026-09-15'
+updated: '2026-09-29'
 group: 'rfc-014'
 issue: '#113'
 ---
@@ -55,15 +55,26 @@ workspace 的集成。
 core = "packages/core/yaoxiang.toml"
 utils = "packages/utils/yaoxiang.toml"
 app = "packages/app/yaoxiang.toml"
+
+[workspace.dependencies]        # 2026-09-29 修订：共享依赖权威版本
+regex = "^1.0"
+json = "^2.0"
 ```
 
-**根 toml 只做三件事：**
+**根 toml 只做四件事：**
 
 1. 声明成员列表（字典形式，key 为成员名，value 为 toml 路径）
 2. 提供共享 lockfile（`yaoxiang.lock`）
 3. 提供共享 vendor 目录（`.yaoxiang/vendor/`）
+4. （2026-09-29 修订）声明共享依赖版本（`[workspace.dependencies]`）
 
-**根 toml 不定义 dependencies。** 每个成员的依赖写在自己的 `yaoxiang.toml` 里。
+> **2026-09-29 修订：新增 `[workspace.dependencies]` 继承（原「根 toml 不定义
+> dependencies」放宽）。** 严格统一版本规则下，多成员各自声明同名包的摩擦可
+> 预见；吸收 Cargo/uv 先例，根声明共享依赖的权威版本，成员以
+> `{ workspace = true }` 逐条继承（升共享版本只改根一处）。成员引用仍是
+> `{ workspace = "<key>" }`（字符串）——同键不同型，与 Cargo 同构。
+> 合并解析：全部成员 deps + dev-deps 并入共享 lockfile；同名包要求求交集，
+> 空交集报冲突并列出来源成员；git 依赖 base URL 不一致视为冲突。
 
 ### 成员 yaoxiang.toml
 
@@ -200,8 +211,8 @@ my-workspace/
 | 命令                               | 功能                           |
 | ---------------------------------- | ------------------------------ |
 | `yaoxiang workspace list`          | 列出工作空间成员               |
-| `yaoxiang workspace add <path>`    | 添加成员                       |
-| `yaoxiang workspace remove <name>` | 移除成员                       |
+| `yaoxiang workspace add <path>`    | 添加成员（key 取 [package].name，`--as` 可覆盖；✅ 已实现） |
+| `yaoxiang workspace remove <name>` | 移除成员（仅摘登记不删目录；仍被引用时提示；✅ 已实现） |
 | `yaoxiang build`                   | 构建所有成员（按依赖拓扑排序） |
 | `yaoxiang build core`              | 构建指定成员                   |
 | `yaoxiang test`                    | 运行所有成员的测试             |
@@ -250,6 +261,17 @@ struct WorkspaceMember {
 - 发布时替换为 Registry 版本
 - 成员名必须在 `[workspace.members]` 中存在
 
+### 成员可见性（2026-09-29 落章：pnpm 式严格）
+
+成员代码的 `use` 只从**自己声明的依赖**（版本类 + path 依赖 + workspace 引用）
+解析——共享 vendor 里其他成员声明的包对本成员**不可见**。未声明即未安装，
+误用直接报「模块未找到」提示补声明：幽灵依赖（npm hoisting 的著名坑）在
+编译期暴露，而不是在包发布后成为消费者的炸弹。
+
+成员引用与 path 依赖按路径解析到目标包根的 `src/` 布局（同 vendor 条目
+结构，无版本后缀），并应用目标的导入面（RFC-029f）。一致性检查同样以
+工作空间根为锚：合并依赖 vs 根 lockfile vs 根 vendor。
+
 ### lockfile 共享
 
 - 工作空间只有一个 `yaoxiang.lock`（在根目录）
@@ -283,13 +305,13 @@ struct WorkspaceMember {
 
 ### 阶段划分
 
-| 阶段     | 内容                                           |
-| -------- | ---------------------------------------------- |
-| Phase 6a | `[workspace.members]` 解析 + WorkspaceManifest |
-| Phase 6b | 共享 lockfile + 依赖合并解析                   |
-| Phase 6c | `{ workspace = "name" }` 路径依赖引用          |
-| Phase 6d | 发布时路径依赖自动替换                         |
-| Phase 6e | Cargo workspace 集成                           |
+| 阶段     | 内容                                           | 状态 |
+| -------- | ---------------------------------------------- | ---- |
+| Phase 6a | `[workspace.members]` 解析 + WorkspaceManifest | ✅ 已完成 |
+| Phase 6b | 共享 lockfile + 依赖合并解析（`[workspace.dependencies]` 继承，2026-09-29 修订） | ✅ 已完成 |
+| Phase 6c | `{ workspace = "name" }` 路径依赖引用（pnpm 式严格可见性，2026-09-29 修订） | ✅ 已完成 |
+| Phase 6d | 发布时路径依赖自动替换                         | ✅ 已完成（随 publish：替换在**打包时**物化进归档内 manifest，磁盘 manifest 保持工作空间形态；`workspace = true` 继承同样物化为根声明） |
+| Phase 6e | Cargo workspace 集成                           | 后置 |
 
 ### 依赖关系
 

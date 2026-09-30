@@ -1,9 +1,9 @@
 ---
 title: 'RFC-014a: Registry 协议规范'
-status: '审核中'
+status: '已接受'
 author: '晨煦'
 created: '2026-06-11'
-updated: '2026-09-15'
+updated: '2026-09-29'
 group: 'rfc-014'
 ---
 
@@ -319,7 +319,7 @@ impl Source for RegistrySource {
 | `reqwest`        | HTTP 客户端      |
 | `sha2`           | SHA-256 校验     |
 | `flate2` + `tar` | 包格式处理       |
-| `async-trait`    | async trait 支持 |
+| ~~`async-trait`~~ | 弃置——决议 4 采用 enum 分发 + 原生 async fn in trait，无此依赖 |
 
 ### 错误类型
 
@@ -376,13 +376,20 @@ pub enum RegistryError {
 
 ### 阶段划分
 
-| 阶段      | 内容                                               |
-| --------- | -------------------------------------------------- |
-| Phase 3.5 | Source trait 改 async + async-trait + 所有实现迁移 |
-| Phase 4a  | Registry trait + reqwest 集成 + 本地 Registry mock |
-| Phase 4b  | GitHub Release 适配                                |
-| Phase 4c  | publish 命令 + 包格式打包                          |
-| Phase 4d  | 认证 + yank                                        |
+| 阶段      | 内容                                               | 状态 |
+| --------- | -------------------------------------------------- | ---- |
+| Phase 3.5 | Source 分发 enum 化（决议 4）+ 原生 async fn in trait + 所有实现迁移 | ✅ 已完成 |
+| Phase 4a  | GitHub 适配层（原「Registry trait + reqwest + 本地 mock」按决议 1 缩减：github.com 的 git 依赖路由 `GitHubSource`，API 解析 + `.yxpkg` 资产下载 + git 回退；指数退避 + ETag 条件缓存落地决议 6） | ✅ 已完成 |
+| Phase 4b  | `.yxpkg` 包格式（tar.gz + SHA256SUMS + 20 MiB 上限，决议 3/7；打包确定性、解包强制校验） | ✅ 已完成 |
+| Phase 4c  | publish 命令（`--dry-run` 本地全链；`--github` 查重 → tag 校验 → Release → 资产上传；6d workspace 引用替换在打包时物化） | ✅ 已完成 |
+| Phase 4d  | 认证（login/logout/credentials.toml）+ yank        | 无限期后置（随官方 Registry，决议 1） |
+
+**落地说明（2026-09-29）**：
+
+- HTTP 栈：reqwest（rustls，免 OpenSSL 交叉编译）+ 包管理自有 tokio current_thread 运行时（`package::runtime::drive`）；POST 类请求（创建 Release/上传资产）不做自动重试——非幂等，5xx 后重发可能重复创建。
+- publish 的目标仓库解析：`[package].repository` 优先，回退 `git remote origin`；要求 tag 已存在（Cargo 同款语义：publish 不代打 tag）。
+- 发布前测试运行（上方校验清单第 3 步）已接线（2026-09-30，随 RFC-014b）：默认运行 `[tool.test]` 发现的测试，失败中止发布，`--no-test` 跳过。
+- `credentials.toml` 与 `login`/`logout`/`yank` 命令随官方 Registry 后置；当前认证仅 `$YX_GITHUB_TOKEN` 环境变量（优先级规则不变：环境变量 > 配置文件）。
 
 ### 依赖关系
 

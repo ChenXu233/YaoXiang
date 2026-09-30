@@ -85,12 +85,19 @@ pub enum OrchestratorError {
         first: String,
         second: String,
     },
+    /// RFC-014 §项目模式：vendor 与 yaoxiang.lock 不一致（Node 语义：
+    /// 不静默自动安装，须显式 `yaoxiang install`）
+    #[error("vendor 目录与 yaoxiang.lock 不一致：\n{}\n运行 `yaoxiang install` 同步", report.describe())]
+    VendorLockInconsistent {
+        report: super::consistency::ConsistencyReport,
+    },
 }
 
 /// 编排一个项目：发现源文件 → 构建 Registry → 逐文件 typecheck → 整体编译。
 ///
 /// 返回合并后的 `ModuleIR`，可直接交给 codegen。入口文件的 `main` 函数即程序入口。
 pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
+    let vendor_root = ensure_vendor_consistency(entry)?;
     let files = discover(entry)?;
     let registry = build_registry_from(&files)?;
 
@@ -110,6 +117,10 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
         let mut checker = TypeChecker::new("<module>");
         checker.env().module_registry = registry.clone();
         checker.env().method_bindings = method_bindings.clone();
+        // RFC-014：vendor 根注入（缺依赖包的 E5001 追加 install 提示）
+        if let Some(ref vendor_root) = vendor_root {
+            checker.set_vendor_root(vendor_root.clone());
+        }
         let result = checker.check_module(ast);
         if !result.diagnostics.is_empty() {
             let msg = result
@@ -260,7 +271,8 @@ fn entry_span(_entry: &Path) -> crate::util::span::Span {
 ///
 /// 警告为 Warning severity，不阻断、不计入错误数。
 pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, OrchestratorError> {
-    let (files, used_by) = discover_with_used(entry)?;
+    let vendor_root = ensure_vendor_consistency(entry)?;
+    let (files, used_by, shadow_events) = discover_with_used(entry)?;
     let registry = build_registry_from(&files)?;
     let method_bindings = registry.all_method_bindings();
 
@@ -299,7 +311,8 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
 
     let mut out = Vec::new();
     for (file, ast) in &parsed {
-        let result = typecheck_with_registry(ast, &registry, &method_bindings);
+        let result =
+            typecheck_with_registry_in(ast, &registry, &method_bindings, vendor_root.as_deref());
 
         let file_canon = file
             .path
@@ -318,6 +331,21 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
         // 警告属于其所属包，不混入消费方的 check 输出
         let mut diagnostics = result.diagnostics;
         if in_project(&file_canon) {
+            // RFC-014 §项目模式：W1006 本地模块遮蔽依赖包（发现期事件，
+            // 附着在做遮蔽 use 的文件上；Warning severity 不阻断）
+            for (shadow_path, use_path, span, pkg) in &shadow_events {
+                if shadow_path == &file.path {
+                    // use 路径在模板里显示为文件式路径（data/json）
+                    diagnostics.push(
+                        ErrorCodeDefinition::module_shadows_dependency(
+                            &use_path.replace('.', "/"),
+                            pkg,
+                        )
+                        .at(*span)
+                        .build(),
+                    );
+                }
+            }
             // W1003 未使用导入随 W 码通道流出（Warning severity，不阻断编译）
             diagnostics.extend(result.warnings);
             // 角色感知死代码（RFC-029f）：
@@ -335,6 +363,12 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
                     FileRole::Internal => {
                         analyzer.set_exempt_pub(true);
                         analyzer.set_project_refs(project_refs.clone());
+                    }
+                    // Lib（被包内 use 的文件，029f 推断规则）：pub 维持绝对豁免
+                    //（分发边界，宁漏报），非 pub 按包内引用池判定——跨文件
+                    // 消费者不可见曾是 W1001 误报根因
+                    FileRole::Lib => {
+                        analyzer.set_cross_file_refs(project_refs.clone());
                     }
                     _ => {}
                 }
@@ -421,13 +455,19 @@ pub fn check_source_in_project(
     let registry = build_registry_from(&files)?;
     let method_bindings = registry.all_method_bindings();
 
+    let vendor_root = ensure_vendor_consistency(path)?;
     let tokens = tokenize(source).map_err(|e| OrchestratorError::Parse {
         path: path.display().to_string(),
         message: format!("{:?}", e),
     })?;
     let parse_result = parser::parse(&tokens);
     let mut diagnostics: Vec<Diagnostic> = parse_result.errors.to_vec();
-    let result = typecheck_with_registry(&parse_result.module, &registry, &method_bindings);
+    let result = typecheck_with_registry_in(
+        &parse_result.module,
+        &registry,
+        &method_bindings,
+        vendor_root.as_deref(),
+    );
     // 错误 + 警告（W1003 等 Warning 级，LSP 侧以 severity 区分呈现）
     diagnostics.extend(result.diagnostics);
     diagnostics.extend(result.warnings);
@@ -436,15 +476,82 @@ pub fn check_source_in_project(
 
 /// 用预构建注册表检查单个模块（collect_all 模式，不早退）。
 /// 返回完整结果——调用方取 `diagnostics`（错误）与 `warnings`（W 码警告）。
-fn typecheck_with_registry(
+/// `vendor_root` 非 None 时（RFC-014 §项目模式）缺依赖包的 E5001
+/// 追加 `yaoxiang install` 提示。
+fn typecheck_with_registry_in(
     ast: &Module,
     registry: &ModuleRegistry,
     method_bindings: &HashMap<String, MonoType>,
+    vendor_root: Option<&Path>,
 ) -> TypeCheckResult {
     let mut checker = TypeChecker::new("<module>");
     checker.env().module_registry = registry.clone();
     checker.env().method_bindings = method_bindings.clone();
+    if let Some(vendor_root) = vendor_root {
+        checker.set_vendor_root(vendor_root.to_path_buf());
+    }
     checker.check_module_collect_all(ast)
+}
+
+/// RFC-014 §项目模式前置检查（2026-09-15 决议）。
+///
+/// 项目处于 vendor 核心包源模式（`.yaoxiang/vendor/` 存在）时：
+/// 1. 校验 vendor 与 `yaoxiang.lock` 一致，不一致报错并提示
+///    `yaoxiang install`（Node 语义：不静默自动安装）；
+/// 2. 返回 vendor 根路径供 typecheck 注入（缺依赖包的 E5001 追加 install
+///    提示）。
+///
+/// 无 vendor（单文件/未 install 项目）返回 `Ok(None)`——零配置可用，
+/// 「manifest 有依赖但从未 install」由 E5001 的 install 提示负责。
+fn ensure_vendor_consistency(entry: &Path) -> Result<Option<PathBuf>, OrchestratorError> {
+    // wasm32 下 package 模块不编译（与角色上下文同一降级策略）
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = entry;
+        Ok(None)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let Some(project_root) = find_project_root(entry) else {
+            return Ok(None);
+        };
+
+        // RFC-014c：目录处于工作空间内 → 一致性针对 ws 根（合并后的依赖 vs
+        // 根 lock vs 根 vendor），vendor_root 也指向根共享 vendor
+        if let Some(ws_root) = crate::package::workspace::find_workspace_root(&project_root) {
+            if ws_root != project_root {
+                let report =
+                    super::consistency::check_workspace_consistency(&ws_root).map_err(|e| {
+                        OrchestratorError::Io {
+                            path: ws_root.display().to_string(),
+                            reason: e.to_string(),
+                        }
+                    })?;
+                if !report.is_consistent() {
+                    return Err(OrchestratorError::VendorLockInconsistent { report });
+                }
+                return Ok(Some(ws_root.join(".yaoxiang").join("vendor")));
+            }
+            // 工作空间根自身（[workspace]，无包依赖语义）：跳过
+            return Ok(None);
+        }
+
+        let vendor_root = project_root.join(".yaoxiang").join("vendor");
+        if !vendor_root.is_dir() {
+            return Ok(None);
+        }
+        let report =
+            super::consistency::check_vendor_lock_consistency(&project_root).map_err(|e| {
+                OrchestratorError::Io {
+                    path: project_root.display().to_string(),
+                    reason: e.to_string(),
+                }
+            })?;
+        if !report.is_consistent() {
+            return Err(OrchestratorError::VendorLockInconsistent { report });
+        }
+        Ok(Some(vendor_root))
+    }
 }
 
 /// 顶层是否存在 `main` 绑定（角色推断的 Bin 信号，RFC-029f）
@@ -690,15 +797,34 @@ fn is_vendor_path(path: &Path) -> bool {
 /// 解析双根：`use a.b` 先按**导入者所在目录**解析，未命中再按**项目根**
 /// （最近的 yaoxiang.toml 祖先）解析。模块键 = use 路径，与解析自哪个根无关。
 fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
-    discover_with_used(entry).map(|(files, _)| files)
+    discover_with_used(entry).map(|(files, _, _)| files)
 }
 
+/// 遮蔽事件：文件路径、use 路径、use 的 span、被遮蔽的包名
+type ShadowEvent = (PathBuf, String, crate::util::span::Span, String);
+
+/// 发现产物：可达文件、use 边集合、遮蔽事件
+type Discovery = (Vec<DiscoveredFile>, HashSet<PathBuf>, Vec<ShadowEvent>);
+
 /// 同 [`discover`]，附带 use 边信息：被 ≥1 个文件 `use` 的文件路径集合
-/// （canonical 化，与发现文件路径同口径比对）——角色推断的 Lib 信号（RFC-029f）。
-fn discover_with_used(
-    entry: &Path
-) -> Result<(Vec<DiscoveredFile>, HashSet<PathBuf>), OrchestratorError> {
+/// （canonical 化，与发现文件路径同口径比对）——角色推断的 Lib 信号（RFC-029f）；
+/// 以及本地模块遮蔽依赖包事件（RFC-014 §项目模式，W1006）。
+fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
     let project_root = find_project_root(entry);
+    // RFC-014c 6c：工作空间成员上下文——严格可见性（成员只见自己声明的依赖）
+    // 与成员引用/path 依赖的路径解析都从这里出发
+    let member_ctx = project_root.as_deref().and_then(member_context);
+    // RFC-014 §项目模式：lock 优先的 vendor 解析——lock 有条目的依赖只解析
+    // 锁定版本目录（读取失败降级为无 lock，回退最高版本）。
+    // 成员的 lock/vendor 都在工作空间根（决议 3：根 lockfile 唯一）
+    let lock_base: Option<PathBuf> = member_ctx
+        .as_ref()
+        .map(|c| c.ws_root.clone())
+        .or_else(|| project_root.clone());
+    let lock_versions: HashMap<String, String> = lock_base
+        .as_deref()
+        .and_then(|root| super::consistency::lock_versions(root).ok())
+        .unwrap_or_default();
     let mut files: Vec<DiscoveredFile> = Vec::new();
     let mut used_by: HashSet<PathBuf> = HashSet::new();
     let mut visited: HashSet<PathBuf> = HashSet::new();
@@ -706,6 +832,8 @@ fn discover_with_used(
     // (路径, 模块键, 嵌入源)——嵌入 std 模块（std.test）的路径是虚拟的，源随身带
     let mut queue: VecDeque<(PathBuf, String, Option<&'static str>)> = VecDeque::new();
     queue.push_back((entry.to_path_buf(), entry_module_key(entry), None));
+    // RFC-014 §项目模式：本地模块遮蔽依赖包事件（文件路径, use 路径, span, 包名）
+    let mut shadow_events: Vec<ShadowEvent> = Vec::new();
 
     while let Some((path, key, embedded)) = queue.pop_front() {
         let canon = path.canonicalize().unwrap_or_else(|_| path.clone());
@@ -730,7 +858,8 @@ fn discover_with_used(
         key_to_path.insert(key.clone(), path.clone());
 
         let importer_dir = path.parent().map(|p| p.to_path_buf());
-        for use_path in scan_use_paths(&source) {
+        for use_ref in scan_use_refs(&source) {
+            let use_path = use_ref.path;
             // std 整体或 native std 模块不走文件解析
             if use_path == "std" {
                 continue;
@@ -744,9 +873,19 @@ fn discover_with_used(
                 continue;
             }
             // 未命中留给 typecheck 报「模块未找到」，发现阶段不判死
-            if let Some(resolved) =
-                resolve_module_path(&use_path, importer_dir.as_deref(), project_root.as_deref())
-            {
+            if let Some((resolved, shadows_dep)) = resolve_module_path(
+                &use_path,
+                importer_dir.as_deref(),
+                project_root.as_deref(),
+                &lock_versions,
+                member_ctx.as_ref(),
+            ) {
+                if shadows_dep {
+                    // RFC-014 §项目模式：本地模块遮蔽依赖包（W1006，
+                    // span 指向 use 路径）
+                    let pkg = use_path.split('.').next().unwrap_or(&use_path).to_string();
+                    shadow_events.push((path.clone(), use_path.clone(), use_ref.span, pkg));
+                }
                 // use 边：被引用文件记入 used_by（角色推断 Lib 信号）
                 used_by.insert(resolved.canonicalize().unwrap_or_else(|_| resolved.clone()));
                 queue.push_back((resolved, use_path, None));
@@ -761,7 +900,7 @@ fn discover_with_used(
 
     // 稳定顺序，保证编译/合并可复现
     files.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok((files, used_by))
+    Ok((files, used_by, shadow_events))
 }
 
 /// 从 entry 向上找最近的含 yaoxiang.toml 的目录（项目根）。
@@ -777,17 +916,31 @@ pub(crate) fn find_project_root(entry: &Path) -> Option<PathBuf> {
 }
 
 /// 解析模块路径为文件：`a.b` → `<base>/a/b.yx` 或 `<base>/a/b/mod.yx`。
-/// 顺序：vendor 依赖（RFC-014 §模块解析顺序 priority 2）→ 导入者目录 → 项目根。
+/// 顺序（RFC-014 §模块解析顺序）：导入者目录 → 项目根（本地，最高优先级）
+/// → 工作空间成员引用 / path 依赖（6c，成员上下文）→ vendor 依赖（lock 优先）。
+///
+/// 返回 `(路径, 是否遮蔽依赖包)`：本地命中且 vendor 中存在同名首段的包
+/// 目录时为 true（RFC-014 §项目模式：遮蔽发 W1006）。
 fn resolve_module_path(
     use_path: &str,
     importer_dir: Option<&Path>,
     project_root: Option<&Path>,
-) -> Option<PathBuf> {
-    if let Some(root) = project_root {
-        if let Some(path) = resolve_in_vendor(use_path, root) {
-            return Some(path);
+    lock_versions: &HashMap<String, String>,
+    member: Option<&MemberCtx>,
+) -> Option<(PathBuf, bool)> {
+    let pkg = use_path.split('.').next().unwrap_or(use_path);
+
+    // RFC-014c 6c：成员引用与 path 依赖按路径解析（总纲：path 依赖视同
+    // 本地模块的延伸，不经核心包源）
+    if let Some(ctx) = member {
+        if let Some(ref_root) = ctx.refs.get(pkg) {
+            return resolve_in_package_root(use_path, ref_root).map(|p| (p, false));
+        }
+        if let Some(dep_root) = ctx.path_deps.get(pkg) {
+            return resolve_in_package_root(use_path, dep_root).map(|p| (p, false));
         }
     }
+
     let rel: PathBuf = use_path.split('.').collect();
     for base in [importer_dir, project_root].into_iter().flatten() {
         for cand in [
@@ -795,11 +948,179 @@ fn resolve_module_path(
             base.join(&rel).join("mod.yx"),
         ] {
             if cand.is_file() {
-                return Some(cand);
+                // 遮蔽判定：vendor 中存在同首段包目录（本地已优先胜出）。
+                // 成员的 vendor 在工作空间根，且只对可见依赖有意义
+                let vendor_base = member.as_ref().map(|c| c.ws_root.as_path());
+                let shadowed = match vendor_base {
+                    Some(root) => {
+                        vendor_has_package(root, use_path)
+                            && member.map(|c| c.visible.contains(pkg)).unwrap_or(true)
+                    }
+                    None => project_root
+                        .map(|root| vendor_has_package(root, use_path))
+                        .unwrap_or(false),
+                };
+                return Some((cand, shadowed));
             }
         }
     }
+
+    // vendor：成员 → 工作空间根（严格可见性：只解析自己声明的依赖）；
+    // 非成员 → 项目根全量
+    let (vendor_base, visible): (&Path, Option<&HashSet<String>>) = match member {
+        Some(ctx) => (ctx.ws_root.as_path(), Some(&ctx.visible)),
+        None => (project_root?, None),
+    };
+    if let Some(path) = resolve_in_vendor_with_lock(
+        use_path,
+        vendor_base,
+        lock_versions.get(pkg).map(|v| v.as_str()),
+        visible,
+    ) {
+        return Some((path, false));
+    }
     None
+}
+
+/// RFC-014c 6c：工作空间成员的解析上下文（严格可见性）
+struct MemberCtx {
+    /// 工作空间根（共享 vendor 与共享 lock 所在，2026-09-15 决议 3）
+    ws_root: PathBuf,
+    /// 成员引用：依赖名 → 被引用成员的包根
+    refs: HashMap<String, PathBuf>,
+    /// path 依赖：依赖名 → 依赖包根（相对成员根展开）
+    path_deps: HashMap<String, PathBuf>,
+    /// 严格可见集：成员声明的版本类依赖（git/裸版本）包名——
+    /// 共享 vendor 只解析这些（防幽灵依赖，pnpm 纪律）
+    visible: HashSet<String>,
+}
+
+/// 计算入口文件所属工作空间成员的解析上下文；非成员（独立项目/工作空间根
+/// 自身）返回 None
+fn member_context(project_root: &Path) -> Option<MemberCtx> {
+    let ws_root = crate::package::workspace::find_workspace_root(project_root)?;
+    if ws_root == project_root {
+        return None; // 工作空间根自身不是成员（根 toml 无 [package]）
+    }
+    let ws = crate::package::workspace::load_workspace(&ws_root).ok()?;
+    let member = ws.members.iter().find(|m| m.root == project_root)?;
+
+    let mut refs = HashMap::new();
+    let mut path_deps = HashMap::new();
+    let mut visible = HashSet::new();
+    for (name, value) in member
+        .manifest
+        .dependencies
+        .iter()
+        .chain(member.manifest.dev_dependencies.iter())
+    {
+        match value {
+            toml::Value::Table(t) => match t.get("workspace") {
+                Some(toml::Value::String(key)) => {
+                    if let Some(target) = ws.members.iter().find(|m| m.name == *key) {
+                        refs.insert(name.clone(), target.root.clone());
+                    }
+                }
+                _ => {
+                    if let Some(p) = t.get("path").and_then(|v| v.as_str()) {
+                        path_deps.insert(name.clone(), member.root.join(p));
+                    } else {
+                        visible.insert(name.clone());
+                    }
+                }
+            },
+            // 裸版本 → 版本类依赖，vendor 可见
+            _ => {
+                visible.insert(name.clone());
+            }
+        }
+    }
+
+    Some(MemberCtx {
+        ws_root,
+        refs,
+        path_deps,
+        visible,
+    })
+}
+
+/// 在包根的 `src/` 布局中解析 `use <pkg>[.<rest>]`（成员引用与 path 依赖；
+/// 布局与 vendor 条目同构，无版本后缀），应用该包的导入面（RFC-029f）
+fn resolve_in_package_root(
+    use_path: &str,
+    pkg_root: &Path,
+) -> Option<PathBuf> {
+    let (pkg, rest) = match use_path.split_once('.') {
+        Some((pkg, rest)) => (pkg, Some(rest)),
+        None => (use_path, None),
+    };
+    let surface = dep_import_surface(pkg_root);
+    let src = pkg_root.join("src");
+
+    // 裸名时同时尝试 key 与 [package].name 形态的目录（014c：两者可不同）
+    let mut pkg_names = vec![pkg.to_string()];
+    if let Ok(manifest) = PackageManifest::load(pkg_root) {
+        let pn = manifest.package.name;
+        if pn != *pkg && !pkg_names.contains(&pn) {
+            pkg_names.push(pn);
+        }
+    }
+
+    let mut tries: Vec<PathBuf> = Vec::new();
+    match rest {
+        Some(rest) => {
+            let rel: PathBuf = rest.split('.').collect();
+            for name in &pkg_names {
+                tries.push(src.join(name).join(&rel).with_extension("yx"));
+                tries.push(src.join(name).join(&rel).join("mod.yx"));
+            }
+            tries.push(src.join(&rel).with_extension("yx"));
+            tries.push(src.join(&rel).join("mod.yx"));
+        }
+        None => {
+            for name in &pkg_names {
+                tries.push(src.join(name).with_extension("yx"));
+                tries.push(src.join(name).join("mod.yx"));
+            }
+            tries.push(src.join("lib.yx"));
+            tries.push(src.join("main.yx"));
+            tries.push(pkg_root.join("mod.yx"));
+        }
+    }
+
+    for cand in tries {
+        if cand.is_file() {
+            if let Some(allowed) = &surface {
+                let cand_canon = cand.canonicalize().unwrap_or_else(|_| cand.clone());
+                if !allowed.contains(&cand_canon) {
+                    continue; // 不在导出面：跨包不可见
+                }
+            }
+            return Some(cand);
+        }
+    }
+    None
+}
+
+/// vendor 中是否存在该 use 路径首段对应的包目录（`<pkg>-*`）
+fn vendor_has_package(
+    project_root: &Path,
+    use_path: &str,
+) -> bool {
+    let vendor_dir = project_root.join(".yaoxiang").join("vendor");
+    if !vendor_dir.is_dir() {
+        return false;
+    }
+    let pkg = use_path.split('.').next().unwrap_or(use_path);
+    let prefix = format!("{pkg}-");
+    std::fs::read_dir(&vendor_dir)
+        .ok()
+        .map(|entries| {
+            entries
+                .flatten()
+                .any(|e| e.file_name().to_string_lossy().starts_with(&prefix) && e.path().is_dir())
+        })
+        .unwrap_or(false)
 }
 
 /// 依赖包的导入面（RFC-029f）：`[exports]` 值集合优先，`[lib].path` 次之；
@@ -818,14 +1139,22 @@ fn dep_import_surface(_dep_root: &Path) -> Option<std::collections::HashSet<Path
     None
 }
 
-/// 在 `<project_root>/.yaoxiang/vendor/` 中解析 `use <pkg>[.<rest>]`。///
+/// 在 `<project_root>/.yaoxiang/vendor/` 中解析 `use <pkg>[.<rest>]`。
+///
 /// 布局（RFC-014 §模块解析顺序）：`<pkg>-<ver>/src/<pkg>/<rest>.yx`；
 /// 裸包名回退 `<pkg>-<ver>/src/<pkg>.yx`、`src/lib.yx`、`src/main.yx`、`mod.yx`。
-/// ponytail: 多版本取版本号最大者（预发布后于正式版）；按 lock 精确选择留给
-/// RFC-014 Phase 3。
-pub(crate) fn resolve_in_vendor(
+/// 版本选择：lock 锁定的版本优先（RFC-014 §项目模式， vendor/lock 一致性由
+/// `consistency` 前置把关）；lock 无条目时取最高版本（旧语义，未 install 的
+/// 项目仍可解析手放的 vendor 目录）。
+/// `locked_version` 为 `Some(v)` 时仅尝试 `<pkg>-v` 目录（精确命中 lock）；
+/// 为 `None` 时回退最高版本（供 LSP 与单文件等无 lock 上下文的调用方）。
+/// `visible`（RFC-014c 6c 严格可见性）为 Some 时，包名不在集合内一律不解析
+/// ——工作空间成员只见自己声明的依赖，共享 vendor 里别人声明的包不可见。
+pub(crate) fn resolve_in_vendor_with_lock(
     use_path: &str,
     project_root: &Path,
+    locked_version: Option<&str>,
+    visible: Option<&HashSet<String>>,
 ) -> Option<PathBuf> {
     let vendor_dir = project_root.join(".yaoxiang").join("vendor");
     if !vendor_dir.is_dir() {
@@ -835,6 +1164,12 @@ pub(crate) fn resolve_in_vendor(
         Some((pkg, rest)) => (pkg, Some(rest)),
         None => (use_path, None),
     };
+    // 严格可见性：未声明即未安装（pnpm 纪律，防幽灵依赖）
+    if let Some(vis) = visible {
+        if !vis.contains(pkg) {
+            return None;
+        }
+    }
     let prefix = format!("{pkg}-");
 
     let mut candidates: Vec<(String, PathBuf)> = Vec::new();
@@ -843,6 +1178,12 @@ pub(crate) fn resolve_in_vendor(
         let Some(version) = dir_name.strip_prefix(&prefix) else {
             continue;
         };
+        // lock 精确选择：只收锁定版本（其余候选不进入解析）
+        if let Some(locked) = locked_version {
+            if version != locked {
+                continue;
+            }
+        }
         let path = entry.path();
         if path.is_dir() {
             candidates.push((version.to_string(), path));
@@ -921,24 +1262,38 @@ pub(crate) fn compare_version(
 #[cfg(test)]
 mod tests;
 
+/// use 路径及其源码位置（`use` 关键字到路径末段）
+pub(crate) struct UsePathRef {
+    pub path: String,
+    pub span: crate::util::span::Span,
+}
+
 /// 只读 use 行：词法级扫描源码中的模块路径（不解析函数体——RFC-029 发现协议）。
 /// 词法失败的文件返回空，真正的错误由后续 parse 阶段报告。
 pub(crate) fn scan_use_paths(source: &str) -> Vec<String> {
+    scan_use_refs(source).into_iter().map(|u| u.path).collect()
+}
+
+/// 同 [`scan_use_paths`]，附带各 use 路径的 span（W1006 遮蔽诊断定位用）
+pub(crate) fn scan_use_refs(source: &str) -> Vec<UsePathRef> {
     use crate::frontend::core::lexer::TokenKind;
     let Ok(tokens) = tokenize(source) else {
         return Vec::new();
     };
-    let mut paths = Vec::new();
+    let mut paths: Vec<UsePathRef> = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
         if !matches!(tokens[i].kind, TokenKind::KwUse) {
             i += 1;
             continue;
         }
+        let use_start = tokens[i].span.start;
         i += 1;
         let mut segments: Vec<String> = Vec::new();
+        let mut last_end = use_start;
         while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
             segments.push(name.clone());
+            last_end = tokens[i].span.end;
             i += 1;
             match tokens.get(i).map(|t| &t.kind) {
                 // `use lib.{x}`：模块路径到 { 为止
@@ -957,6 +1312,7 @@ pub(crate) fn scan_use_paths(source: &str) -> Vec<String> {
             continue;
         }
         let prefix = segments.join(".");
+        let prefix_span = crate::util::span::Span::new(use_start, last_end);
         // `use std.{io, list}`：花括号里的每个名字都是**同一前缀下的子模块**，
         // 需展开成 `std.io` / `std.list`。此前只收集到前缀 `std`，
         // 于是纯 yx 子模块（std.list）永远不被纳入编译单元——`use std.list`
@@ -972,7 +1328,10 @@ pub(crate) fn scan_use_paths(source: &str) -> Vec<String> {
         {
             i += 2; // 跳过 `.{`
             while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
-                paths.push(format!("{prefix}.{name}"));
+                paths.push(UsePathRef {
+                    path: format!("{prefix}.{name}"),
+                    span: tokens[i].span,
+                });
                 expanded = true;
                 i += 1;
                 match tokens.get(i).map(|t| &t.kind) {
@@ -984,7 +1343,10 @@ pub(crate) fn scan_use_paths(source: &str) -> Vec<String> {
             }
         }
         if !expanded {
-            paths.push(prefix);
+            paths.push(UsePathRef {
+                path: prefix,
+                span: prefix_span,
+            });
         }
     }
     paths

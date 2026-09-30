@@ -137,6 +137,12 @@ pub struct StatementChecker {
     last_expr_stmt_ty: Option<MonoType>,
     /// 当前函数**返回类型注解**的位置（#353：尾表达式不符时指向注解而非表达式）。
     tail_annotation_span: Option<crate::util::span::Span>,
+    /// RFC-014 §项目模式：vendor 根目录（`<project>/.yaoxiang/vendor`）。
+    ///
+    /// 存在即表示项目处于 vendor 核心包源模式——`use <pkg>...` 解析失败
+    /// （E5001）且缺的是依赖包时，help 追加「运行 `yaoxiang install`」。
+    /// 由 orchestrator 注入（单文件模式为 None，不加提示）。
+    vendor_root: Option<std::path::PathBuf>,
 }
 
 impl StatementChecker {
@@ -197,6 +203,7 @@ impl StatementChecker {
             body_imports: Vec::new(),
             last_expr_stmt_ty: None,
             tail_annotation_span: None,
+            vendor_root: None,
         }
     }
 
@@ -438,6 +445,17 @@ impl StatementChecker {
         self.module_registry = registry;
     }
 
+    /// 注入 vendor 根目录（RFC-014 §项目模式）。
+    ///
+    /// 存在即开启「缺依赖包 → help 提示 `yaoxiang install`」语义；
+    /// orchestrator 在项目模式且 vendor 目录存在时调用。
+    pub fn set_vendor_root(
+        &mut self,
+        root: std::path::PathBuf,
+    ) {
+        self.vendor_root = Some(root);
+    }
+
     fn default_callable_type(&mut self) -> MonoType {
         MonoType::Fn {
             params: vec![self.solver.new_var()],
@@ -530,12 +548,20 @@ impl StatementChecker {
         item_aliases: &Option<Vec<Option<String>>>,
     ) -> Result<(), Box<Diagnostic>> {
         let Some(module) = self.module_registry.get(path).cloned() else {
-            // E5001：模块未找到（此前静默 return，错误延后成"unknown variable"）
-            return Err(Box::new(
-                ErrorCodeDefinition::module_not_found(path)
-                    .at(path_span)
-                    .build(),
-            ));
+            // E5001：模块未找到（此前静默 return，错误延后成"unknown variable"）。
+            // RFC-014 §项目模式：vendor 核心包源下缺依赖包时，
+            // help 提示 `yaoxiang install`（Node 语义：不静默自动安装）。
+            let mut builder = ErrorCodeDefinition::module_not_found(path).at(path_span);
+            if let Some(vendor_root) = &self.vendor_root {
+                // use 首段 = 包名；该包在 vendor 中无目录 → 视为缺依赖
+                let pkg = path.split('.').next().unwrap_or(path);
+                if !vendor_root.join(format!("{pkg}-")).exists() {
+                    builder = builder.with_help(format!(
+                        "依赖包 '{pkg}' 未安装到 .yaoxiang/vendor/，运行 `yaoxiang install`"
+                    ));
+                }
+            }
+            return Err(Box::new(builder.build()));
         };
 
         let selected_exports: Vec<Export> = match items {

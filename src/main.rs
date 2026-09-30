@@ -143,6 +143,10 @@ enum Commands {
         /// Treat warnings as errors (non-zero exit if any warning, #321 M2)
         #[arg(long)]
         deny_warnings: bool,
+
+        /// Fail when a local module shadows a vendored dependency (RFC-014, W1006)
+        #[arg(long)]
+        deny_shadowing: bool,
     },
 
     /// Run project tests (RFC-036)
@@ -282,9 +286,21 @@ enum Commands {
         #[arg(short, long)]
         version: Option<String>,
 
+        /// Git repository URL (explicit source; required before registry launch — RFC-014a)
+        #[arg(long, conflicts_with = "path")]
+        git: Option<String>,
+
+        /// Local path (explicit source)
+        #[arg(long)]
+        path: Option<String>,
+
         /// Add as dev-dependency
         #[arg(short = 'D', long)]
         dev: bool,
+
+        /// Trust this package's build.yx (record persisted to user config)
+        #[arg(long)]
+        trust: bool,
     },
 
     /// Remove a dependency from the current project
@@ -303,13 +319,54 @@ enum Commands {
         /// Optional: specific package to update
         #[arg(value_name = "PKG")]
         pkg: Option<String>,
+
+        /// Trust build.yx scripts encountered this run (CI override)
+        #[arg(long)]
+        trust: bool,
     },
 
     /// Install all dependencies
-    Install,
+    Install {
+        /// Trust build.yx scripts encountered this run (CI override)
+        #[arg(long)]
+        trust: bool,
+    },
 
     /// List all dependencies
     List,
+
+    /// Check for outdated dependencies (RFC-014)
+    Outdated,
+
+    /// Clean build artifacts and stale vendor packages (RFC-014)
+    Clean,
+
+    /// Manage the global package cache (RFC-014)
+    Cache {
+        #[command(subcommand)]
+        command: CacheCommand,
+    },
+
+    /// Workspace operations (RFC-014c)
+    Workspace {
+        #[command(subcommand)]
+        command: WorkspaceCommand,
+    },
+
+    /// Publish the package (RFC-014a; official registry deferred)
+    Publish {
+        /// Validate and build the .yxpkg locally, without publishing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Publish as a GitHub Release with the .yxpkg as asset
+        #[arg(long)]
+        github: bool,
+
+        /// Skip the pre-publish test run (RFC-014a publish validation)
+        #[arg(long)]
+        no_test: bool,
+    },
 
     /// Start the Language Server Protocol (LSP) server
     Lsp {
@@ -317,6 +374,46 @@ enum Commands {
         #[arg(long)]
         debug: bool,
     },
+}
+
+/// `yaoxiang cache` 子命令
+#[derive(Subcommand, Debug)]
+enum CacheCommand {
+    /// Remove all cached packages
+    Clean,
+}
+
+/// `yaoxiang workspace` 子命令（RFC-014c）
+#[derive(Subcommand, Debug)]
+enum WorkspaceCommand {
+    /// List workspace members
+    List,
+    /// Register an existing package directory as a member
+    Add {
+        /// Path to the member package directory
+        #[arg(value_name = "PATH")]
+        path: String,
+
+        /// Override the member key (defaults to [package].name)
+        #[arg(long = "as")]
+        as_key: Option<String>,
+    },
+    /// Remove a member registration (directory is kept)
+    Remove {
+        /// Member key in [workspace.members]
+        #[arg(value_name = "KEY")]
+        key: String,
+    },
+}
+
+/// 命令行信任决策（RFC-014b 5e）：`--trust` 标志 + 交互性检测
+fn build_trust_decision(flag: bool) -> yaoxiang::package::build::TrustDecision {
+    use std::io::IsTerminal;
+    yaoxiang::package::build::TrustDecision {
+        flag,
+        interactive: std::io::stdin().is_terminal(),
+        store: None,
+    }
 }
 
 fn main() -> Result<()> {
@@ -451,6 +548,7 @@ fn main() -> Result<()> {
             color,
             no_progress,
             deny_warnings,
+            deny_shadowing,
         } => {
             let use_colors = match color {
                 ColorChoice::Always => true,
@@ -458,7 +556,14 @@ fn main() -> Result<()> {
                 ColorChoice::Auto => std::io::stderr().is_terminal(),
             };
 
-            match run_check_command_once(&paths, &exclude, json, use_colors, no_progress) {
+            match run_check_command_once(
+                &paths,
+                &exclude,
+                json,
+                use_colors,
+                no_progress,
+                deny_shadowing,
+            ) {
                 Ok((error_count, warning_count)) => {
                     if error_count > 0 || (deny_warnings && warning_count > 0) {
                         ::std::process::exit(1);
@@ -595,29 +700,86 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Add { dep, version, dev } => {
-            package::commands::add::exec(&dep, version.as_deref(), dev)
-                .context("Failed to add dependency")?;
+        Commands::Add {
+            dep,
+            version,
+            git,
+            path,
+            dev,
+            trust,
+        } => {
+            package::commands::add::exec(
+                &dep,
+                version.as_deref(),
+                git.as_deref(),
+                path.as_deref(),
+                dev,
+                trust,
+            )
+            .context("Failed to add dependency")?;
         }
         Commands::Rm { dep, dev } => {
             package::commands::rm::exec(&dep, dev).context("Failed to remove dependency")?;
         }
-        Commands::Update { pkg } => {
+        Commands::Update { pkg, trust } => {
+            let trust = build_trust_decision(trust);
             if let Some(name) = pkg {
                 package::commands::update::exec_single_in(
                     &std::env::current_dir().context("Failed to get current directory")?,
                     &name,
+                    &trust,
                 )
                 .context("Failed to update dependency")?;
             } else {
-                package::commands::update::exec().context("Failed to update dependencies")?;
+                package::commands::update::exec(&trust).context("Failed to update dependencies")?;
             }
         }
-        Commands::Install => {
-            package::commands::install::exec().context("Failed to install dependencies")?;
+        Commands::Install { trust } => {
+            let trust = build_trust_decision(trust);
+            package::commands::install::exec(&trust).context("Failed to install dependencies")?;
         }
         Commands::List => {
             package::commands::list::exec().context("Failed to list dependencies")?;
+        }
+        Commands::Outdated => {
+            package::commands::outdated::exec().context("Failed to check outdated dependencies")?;
+        }
+        Commands::Clean => {
+            package::commands::clean::exec().context("Failed to clean project")?;
+        }
+        Commands::Cache {
+            command: CacheCommand::Clean,
+        } => {
+            package::commands::cache::clean().context("Failed to clean package cache")?;
+        }
+        Commands::Workspace {
+            command: WorkspaceCommand::List,
+        } => {
+            package::commands::workspace::list().context("Failed to list workspace")?;
+        }
+        Commands::Workspace {
+            command: WorkspaceCommand::Add { path, as_key },
+        } => {
+            package::commands::workspace::add(&path, as_key.as_deref())
+                .context("Failed to add workspace member")?;
+        }
+        Commands::Workspace {
+            command: WorkspaceCommand::Remove { key },
+        } => {
+            package::commands::workspace::remove(&key)
+                .context("Failed to remove workspace member")?;
+        }
+        Commands::Publish {
+            dry_run,
+            github,
+            no_test,
+        } => {
+            package::commands::publish::exec(package::commands::publish::PublishArgs {
+                dry_run,
+                github,
+                no_test,
+            })
+            .context("Failed to publish package")?;
         }
         Commands::Lsp { .. } => {
             // LSP 服务器使用 stderr 记录日志（stdout 用于 JSON-RPC 通信）

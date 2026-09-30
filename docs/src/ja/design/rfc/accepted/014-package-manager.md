@@ -14,9 +14,9 @@ impl_status: '部分的'
 
 > **サブ RFC：**
 >
-> - [RFC-014a: Registry プロトコル仕様](../review/014a-registry-protocol.md)
-> - [RFC-014b: ビルドシステムとバイナリ配布](../review/014b-build-system.md)
-> - [RFC-014c: ワークスペースサポート](../review/014c-workspace.md)
+> - [RFC-014a: Registry プロトコル仕様](../accepted/014a-registry-protocol.md)
+> - [RFC-014b: ビルドシステムとバイナリ配布](../accepted/014b-build-system.md)
+> - [RFC-014c: ワークスペースサポート](../accepted/014c-workspace.md)
 
 ## 概要
 
@@ -436,21 +436,21 @@ token = "xxx"
 
 ### Registry プロトコル
 
-詳細は [RFC-014a: Registry プロトコル仕様](../review/014a-registry-protocol.md) を参照。
+詳細は [RFC-014a: Registry プロトコル仕様](../accepted/014a-registry-protocol.md) を参照。
 
 中核設計：オープンプロトコル + アダプタ層。公式 Registry を主とし、GitHub
 Release/main ブランチを補助とし、カスタム Registry をサポートする。
 
 ### ビルドシステム
 
-詳細は [RFC-014b: ビルドシステムとバイナリ配布](../review/014b-build-system.md) を参照。
+詳細は [RFC-014b: ビルドシステムとバイナリ配布](../accepted/014b-build-system.md) を参照。
 
 中核設計：宣言的 `[build]`
 設定、プリコンパイル優先/ソースコードフォールバック、cargo/cmake/custom ストラテジをサポート。
 
 ### ワークスペース
 
-詳細は [RFC-014c: ワークスペースサポート](../review/014c-workspace.md) を参照。
+詳細は [RFC-014c: ワークスペースサポート](../accepted/014c-workspace.md) を参照。
 
 中核設計：辞書形式の members 宣言、共有 lockfile、パス依存関係、Cargo workspace 統合。
 

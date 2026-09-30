@@ -71,9 +71,9 @@ title: 'RFC Index'
 | RFC-012    | [RFC 012: F-String Template Strings](./accepted/012-f-string-template-strings.md)                                                      | Chen Xu     | 2025-01-27 | Accepted           |
 | RFC-013    | [RFC 013: Error Code Specification](./accepted/013-error-code-specification.md)                                                        | Chen Xu     | 2026-02-02 | Accepted           |
 | RFC-014    | [RFC-014: Package Management System Design](./accepted/014-package-manager.md)                                                         | Chen Xu     | 2026-02-12 | Accepted           |
-| ↳ RFC-014a | [RFC-014a: Registry Protocol Specification](./review/014a-registry-protocol.md)                                                        | Chen Xu     | 2026-06-11 | Under Review       |
-| ↳ RFC-014b | [RFC-014b: Build System and Binary Distribution](./review/014b-build-system.md)                                                        | Chen Xu     | 2026-06-11 | Under Review       |
-| ↳ RFC-014c | [RFC-014c: Workspace Support](./review/014c-workspace.md)                                                                              | Chen Xu     | 2026-06-11 | Under Review       |
+| ↳ RFC-014a | [RFC-014a: Registry Protocol Specification](./accepted/014a-registry-protocol.md)                                                        | Chen Xu     | 2026-06-11 | Accepted       |
+| ↳ RFC-014b | [RFC-014b: Build System and Binary Distribution](./accepted/014b-build-system.md)                                                        | Chen Xu     | 2026-06-11 | Accepted       |
+| ↳ RFC-014c | [RFC-014c: Workspace Support](./accepted/014c-workspace.md)                                                                              | Chen Xu     | 2026-06-11 | Accepted       |
 | RFC-015    | [RFC-015: YaoXiang Configuration System Design](./accepted/015-configuration-system.md)                                                | Chen Xu     | 2026-02-12 | Accepted           |
 | RFC-017    | [RFC-017: Language Server Protocol (LSP) Support Design](./accepted/017-lsp-support.md)                                                | Chen Xu     | 2026-02-15 | Implemented        |
 | RFC-018    | [RFC-018: LLVM AOT Compiler Design](./accepted/018-llvm-aot-compiler.md)                                                               | Chen Xu     | 2026-02-15 | Accepted           |

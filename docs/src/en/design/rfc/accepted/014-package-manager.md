@@ -14,9 +14,9 @@ impl_status: 'partial'
 
 > **Sub-RFCs:**
 >
-> - [RFC-014a: Registry Protocol Specification](../review/014a-registry-protocol.md)
-> - [RFC-014b: Build System and Binary Distribution](../review/014b-build-system.md)
-> - [RFC-014c: Workspace Support](../review/014c-workspace.md)
+> - [RFC-014a: Registry Protocol Specification](../accepted/014a-registry-protocol.md)
+> - [RFC-014b: Build System and Binary Distribution](../accepted/014b-build-system.md)
+> - [RFC-014c: Workspace Support](../accepted/014c-workspace.md)
 
 ## Summary
 
@@ -447,21 +447,21 @@ token = "xxx"
 
 ### Registry Protocol
 
-See [RFC-014a: Registry Protocol Specification](../review/014a-registry-protocol.md) for details.
+See [RFC-014a: Registry Protocol Specification](../accepted/014a-registry-protocol.md) for details.
 
 Core design: open protocol + adapter layer. The official Registry is primary, GitHub Release/main
 branch is auxiliary, custom Registries are supported.
 
 ### Build System
 
-See [RFC-014b: Build System and Binary Distribution](../review/014b-build-system.md) for details.
+See [RFC-014b: Build System and Binary Distribution](../accepted/014b-build-system.md) for details.
 
 Core design: declarative `[build]` configuration, precompiled-first/source-fallback, supporting
 cargo/cmake/custom strategies.
 
 ### Workspace
 
-See [RFC-014c: Workspace Support](../review/014c-workspace.md) for details.
+See [RFC-014c: Workspace Support](../accepted/014c-workspace.md) for details.
 
 Core design: dictionary-form members declaration, shared lockfile, path dependencies, Cargo
 workspace integration.

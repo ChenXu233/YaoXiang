@@ -13,6 +13,9 @@ define_codes!(W1XXX, {
     ("W1004", Warning, false, unused_variable(name: &str) => .param("name", name)),
     // W1005 未使用的私有方法
     ("W1005", Warning, false, unused_method(name: &str) => .param("name", name)),
+    // W1006 本地模块遮蔽依赖包（RFC-014 §项目模式：本地最高优先级，
+    // 覆盖 vendor 中同名依赖时提示；--deny-shadowing 可升级为错误）
+    ("W1006", Warning, false, module_shadows_dependency(module: &str, dependency: &str) => .param("module", module) .param("dependency", dependency)),
     // W1063
     ("W1063", Warning, false, const_generic_unevaluable(constraint: &str) => .param("constraint", constraint)),
     // W1080 编译期无法证明约束，已降级为运行时检查

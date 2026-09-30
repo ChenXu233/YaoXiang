@@ -68,6 +68,22 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.150"
 toml = "1.1.2"
 
+# 语义化版本（RFC-014 Phase 3：替换手写解析器）
+semver = "1"
+
+# SHA-256 完整性校验（RFC-014 依赖表；替换内联手写实现）
+sha2 = "0.10"
+
+# .yxpkg 包格式（RFC-014a 决议 3：tar.gz 源码包 + SHA256SUMS）
+flate2 = "1"
+tar = "0.4"
+
+# HTTP 客户端（RFC-014a Phase 4：GitHub 适配层；rustls 免 OpenSSL 交叉编译）
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "system-proxy"] }
+
+# tokio 运行时（仅包管理命令层 drive()；current_thread + IO/时间驱动）
+tokio = { version = "1", default-features = false, features = ["rt", "net", "time"] }
+
 # 错误处理
 anyhow = "1"
 thiserror = "2.0.18"
