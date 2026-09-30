@@ -3233,8 +3233,11 @@ impl<'a> ExpressionInferrer<'a> {
 
                 self.loop_depth -= 1;
 
-                result?;
-                Ok(MonoType::Void)
+                // spec §2.15 / RFC-010a 规则①：所有 `{}` 块的值由**尾表达式**给出，无例外。
+                // 循环体也是 `{}` 块，故 `while` 的值 = 循环体块的值（尾为赋值语句时为 Void）。
+                // 此前硬返回 `Void` 丢掉块类型，与 `for`（已取 `infer_block` 结果）不一致，
+                // 使 RFC-027 §6.9 的 `acc: Terminates(n - i) = while …` 形态无法承载值类型。
+                result
             }
 
             // For 循环
