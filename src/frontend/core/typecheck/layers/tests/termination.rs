@@ -735,6 +735,23 @@ fn measure_verdicts_of(
     measures: &[(&str, crate::frontend::core::types::const_data::ConstExpr)],
     solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
 ) -> Vec<MeasureVerdict> {
+    measure_verdicts_with_assumptions_of(source, measures, &[], solver)
+}
+
+/// 同 [`measure_verdicts_of`]，但注入函数前置条件（形参精化）。
+///
+/// 递减判定需要它：`a % b < b` 仅在 `b > 0` 时成立，而 `b > 0` 来自
+/// 前置条件 `b >= 0` 与路径守卫 `b != 0` 两者。只给守卫不给前置条件时，
+/// b 可取负（`mod` 取负号）→ 判不出。
+fn measure_verdicts_with_assumptions_of(
+    source: &str,
+    measures: &[(&str, crate::frontend::core::types::const_data::ConstExpr)],
+    param_assumptions: &[(
+        &str,
+        Vec<crate::frontend::core::types::const_data::ConstExpr>,
+    )],
+    solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
+) -> Vec<MeasureVerdict> {
     use crate::frontend::core::lexer::tokenize;
     use crate::frontend::core::parser::parse;
     use crate::frontend::core::typecheck::environment::TypeEnvironment;
@@ -746,7 +763,13 @@ fn measure_verdicts_of(
         .iter()
         .map(|(k, v)| (k.to_string(), v.clone()))
         .collect();
-    let mut checker = TerminationChecker::new().set_measures(table);
+    let assumptions = param_assumptions
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect();
+    let mut checker = TerminationChecker::new()
+        .set_measures(table)
+        .set_param_assumptions(assumptions);
     if let Some(s) = solver {
         checker = checker.with_solver_owned(s);
     }
@@ -927,21 +950,21 @@ fn test_real_solver_rejects_increasing_measure() {
     );
 }
 
-/// **tripwire（T4 已知边界）** —— gcd 的递减义务当前被判为**不成立**。
+/// **残余义务形态** —— 测度无下界精化时，递减义务判不出（RFC-027a:223）。
 ///
-/// 原因：义务判定只代入实参，**不采集路径守卫**，也不加良基性假设。
-/// RFC-027a §示例要求：
-/// 1. 路径守卫 `b != 0`（来自 `if b == 0 { return a }` 之后）
-/// 2. 良基性 `b >= 0`（来自形参精化 `NonNegative(b)`）
+/// 与 `test_gcd_measure_decrease_proved_with_guard_and_precondition` 成对：
+/// **同一源码、同一守卫、同一求解器，只差形参下界**。此处的 `b: Int` 无精化，
+/// 下界无从导出，于是 `b` 可取负（`mod` 取负号）→ `a % b < b` 不成立 →
+/// `NotProved`。
 ///
-/// 二者齐备才能断言 `b > 0`，进而 `a % b < b` 成立。当前两者都缺，Z3 会给出
-/// 反例（`b` 取负）→ `NotProved`。
+/// RFC-027a:223 对此的规定是「参数精化若已给出下界则自动导出；推不出时才进
+/// 残余义务，**且只给方向不拒绝**」——故 T5 发射 E4022 时不得把这条当成乱码。
 ///
-/// **T5 必须先把守卫与良基性接上再发射 E4022**——否则 gcd 这个正例会报错。
-/// 修好之后本用例会失败：届时应更新本断言与注释，而不是删掉它。
+/// 历史：本用例的前身锁定「守卫与良基性未接线」的边界。守卫已在路径守卫累积中
+/// 落地，边界因此移到下界（前置条件）一侧。
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn test_gcd_measure_decrease_unprovable_until_guards_wired() {
+fn test_gcd_measure_decrease_unprovable_without_lower_bound() {
     use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
     use crate::frontend::core::types::const_data::ConstExpr;
 
@@ -959,8 +982,7 @@ fn test_gcd_measure_decrease_unprovable_until_guards_wired() {
     assert_eq!(
         verdicts,
         vec![MeasureVerdict::NotProved],
-        "守卫与良基性未接线前，gcd 的 a % b < b 判不出（b 可取负）——本断言锁定该边界，\
-         提醒 T5 不得在此之前发射 E4022；实际: {verdicts:?}"
+        "无下界精化时 b 可取负，a % b < b 不成立，不得被判为递减；实际: {verdicts:?}"
     );
 }
 
@@ -1107,5 +1129,84 @@ fn test_well_founded_unjudged_without_solver() {
         verdicts,
         vec![("gcd".to_string(), MeasureVerdict::Unjudged)],
         "无求解器时不得宣称良基性；实际: {verdicts:?}"
+    );
+}
+
+/// 前置条件 `b >= 0`（形参精化 `NonNegative(b)` 代入后的形态）。
+#[cfg(not(target_arch = "wasm32"))]
+fn nonnegative_b() -> Vec<crate::frontend::core::types::const_data::ConstExpr> {
+    use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+    vec![ConstExpr::BinOp {
+        op: BinOp::Ge,
+        left: Box::new(ConstExpr::NamedVar("b".to_string())),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
+    }]
+}
+
+/// RFC-027a §路径守卫（**真实 Z3**）—— gcd 的递减义务在守卫 + 前置条件下成立。
+///
+/// `if b == 0 { return a }` 的早返回使唯一递归调用点带上守卫 `b != 0`；配合
+/// 前置条件 `b >= 0` 得 `b > 0`，于是 `a % b < b` 在 ℤ 上为真 → Unsat → 成立。
+/// 这是 RFC-027a 的门面正例，也是「路径守卫累积」整套改动的验收点。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_gcd_measure_decrease_proved_with_guard_and_precondition() {
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange
+    let source = "NonNegative: (x: Int) -> Type = { x >= 0 }\n\
+                  gcd: (a: Int, b: NonNegative(b)) -> Terminates(b) = { \
+                  if b == 0 { return a } \
+                  return gcd(b, a % b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+    let solver = default_solver().expect("本用例需要 Z3（default_solver）");
+
+    // Act
+    let verdicts = measure_verdicts_with_assumptions_of(
+        source,
+        &measures,
+        &[("gcd", nonnegative_b())],
+        Some(solver),
+    );
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![MeasureVerdict::Proved],
+        "守卫 b != 0 加以前置条件 b >= 0 得 b > 0，a % b < b 应被判成立；实际: {verdicts:?}"
+    );
+}
+
+/// 同一源码、同一求解器，但早返回的 then 分支**落回** → 无 `b != 0` 守卫。
+///
+/// 与上一个用例成对：两者一起才证明「守卫确实在做功」，而非判定恒真。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_gcd_measure_decrease_needs_guard() {
+    use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+    use crate::frontend::core::types::const_data::ConstExpr;
+
+    // Arrange —— `if b == 0 { }` 不 return，后续语句不获 `b != 0`
+    let source = "NonNegative: (x: Int) -> Type = { x >= 0 }\n\
+                  gcd: (a: Int, b: NonNegative(b)) -> Terminates(b) = { \
+                  if b == 0 { } \
+                  return gcd(b, a % b) }";
+    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+    let solver = default_solver().expect("本用例需要 Z3（default_solver）");
+
+    // Act
+    let verdicts = measure_verdicts_with_assumptions_of(
+        source,
+        &measures,
+        &[("gcd", nonnegative_b())],
+        Some(solver),
+    );
+
+    // Assert
+    assert_eq!(
+        verdicts,
+        vec![MeasureVerdict::NotProved],
+        "无 `b != 0` 守卫时 b 可取 0，`a % b < b` 不成立，不得被判为递减；实际: {verdicts:?}"
     );
 }

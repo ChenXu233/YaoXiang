@@ -155,6 +155,11 @@ pub struct MeasureObligation {
     pub call_args: Vec<crate::frontend::core::types::const_data::ConstExpr>,
     /// 自递归调用点位置
     pub span: crate::util::span::Span,
+    /// 调用点处已累积的路径守卫（RFC-027a §路径守卫）。
+    ///
+    /// 如 gcd 的 `b != 0`（来自 `if b == 0 { return a }` 的早返回）。
+    /// 判定递减时作为背景假设——缺它则 `a % b < b` 不成立（b 为负时 `mod` 取负号）。
+    pub guards: Vec<crate::frontend::core::types::const_data::ConstExpr>,
 }
 
 /// 单条义务的判定结果（RFC-027a §判定管线）
@@ -239,6 +244,14 @@ pub struct TerminationChecker {
     /// 与 `measure_verdicts`（逐调用点的递减判定）分开：良基性是**测度自身**
     /// 的性质（每函数一条），递减是**每个递归调用点**的性质。
     well_founded: std::collections::HashMap<String, MeasureVerdict>,
+    /// 当前路径已累积的守卫（RFC-027a §路径守卫 / RFC-027 §3.3 假设栈）。
+    ///
+    /// 顺序语句的路径条件：`if C { return ... }` 之后，后续语句在 `!C` 下成立。
+    /// gcd 的 `a % b < b` 正需守卫 `b != 0`。分支内另压正向/反向条件。
+    ///
+    /// 只**加**假设、绝不减：判不出时就不压（少假设只会让证明更难，不会
+    /// 造出不成立的假设）。
+    path_guards: Vec<crate::frontend::core::types::const_data::ConstExpr>,
 }
 
 impl Default for TerminationChecker {
@@ -261,6 +274,7 @@ impl TerminationChecker {
             measure_verdicts: Vec::new(),
             param_assumptions: std::collections::HashMap::new(),
             well_founded: std::collections::HashMap::new(),
+            path_guards: Vec::new(),
         }
     }
 
@@ -471,11 +485,20 @@ impl TerminationChecker {
                         &decreasing,
                         &std::collections::HashMap::new(),
                     );
-                // translate_constraint 断言目标取反：Unsat = 递减在所有取值下成立
+                // translate_constraint 断言目标取反：Unsat = 递减在所有取值下成立。
+                // 背景假设 = 函数前置条件（良基性下界，如 `b >= 0`）+ 该调用点
+                // 的路径守卫（如 `b != 0`）——两者缺一不可：仅守卫时 b 可取负，
+                // `a % b < b` 因 mod 取负号而不成立。
+                let mut assumptions = self
+                    .param_assumptions
+                    .get(&ob.fn_name)
+                    .cloned()
+                    .unwrap_or_default();
+                assumptions.extend(ob.guards.iter().cloned());
                 let commands =
                     crate::frontend::core::typecheck::proof::smt::translate::translate_constraint(
                         &decreasing,
-                        &[],
+                        &assumptions,
                         &var_sorts,
                     );
                 match solver.solve(&commands, 100) {
@@ -516,13 +539,9 @@ impl TerminationChecker {
                 // 类型（`[Int, Int]`），名字在签名参数里。
                 let saved_ctx = self.enter_measured_fn(target, signature_params);
                 if let Expr::Lambda { body, .. } = v.as_ref() {
-                    for s in &body.stmts {
-                        self.check_stmt(s, child_never);
-                    }
+                    self.check_stmts(&body.stmts, child_never);
                 } else if let Expr::Block(block) = v.as_ref() {
-                    for s in &block.stmts {
-                        self.check_stmt(s, child_never);
-                    }
+                    self.check_stmts(&block.stmts, child_never);
                 } else {
                     self.check_expr(v, child_never);
                 }
@@ -536,24 +555,78 @@ impl TerminationChecker {
                 ..
             } => {
                 self.check_expr(condition, is_never);
-                for s in &then_branch.stmts {
-                    self.check_stmt(s, is_never);
+                // 各分支各压自己的路径条件（RFC-027 §3.3 假设栈）：
+                // then 压条件本身，else 压其否定。出分支即弹回。
+                let mark = self.path_guards.len();
+                if let Some(g) =
+                    crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(
+                        condition,
+                    )
+                {
+                    self.path_guards.push(g);
                 }
+                self.check_stmts(&then_branch.stmts, is_never);
+                self.path_guards.truncate(mark);
                 for (cond, body) in else_if_branches {
                     self.check_expr(cond, is_never);
-                    for s in &body.stmts {
-                        self.check_stmt(s, is_never);
+                    let mark = self.path_guards.len();
+                    if let Some(g) =
+                        crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(
+                            cond,
+                        )
+                    {
+                        self.path_guards.push(g);
                     }
+                    self.check_stmts(&body.stmts, is_never);
+                    self.path_guards.truncate(mark);
                 }
                 if let Some(else_body) = else_branch {
-                    for s in &else_body.stmts {
-                        self.check_stmt(s, is_never);
+                    let mark = self.path_guards.len();
+                    if let Some(g) = negate_guard(condition) {
+                        self.path_guards.push(g);
                     }
+                    self.check_stmts(&else_body.stmts, is_never);
+                    self.path_guards.truncate(mark);
                 }
             }
             // 其他语句类型不包含需要检查的子结构
             _ => {}
         }
+    }
+
+    /// 顺序走查一个语句块，维护路径守卫（RFC-027a §路径守卫）。
+    ///
+    /// 早返回惯用法 `if C { return ... }` 之后，后续语句在 `!C` 下成立——
+    /// gcd 的 `a % b < b` 正需这条 `b != 0`。出块即 `truncate` 弹回，
+    /// 守卫不泄漏到兄弟作用域。
+    fn check_stmts(
+        &mut self,
+        stmts: &[Stmt],
+        is_never: bool,
+    ) {
+        let mark = self.path_guards.len();
+        for stmt in stmts {
+            self.check_stmt(stmt, is_never);
+            // 只有「then 必不落回且无 else/else-if」时，后续语句才确定在 `!C` 下
+            if let StmtKind::If {
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } = &stmt.kind
+            {
+                if else_branch.is_none()
+                    && else_if_branches.is_empty()
+                    && block_diverges(&then_branch.stmts)
+                {
+                    if let Some(g) = negate_guard(condition) {
+                        self.path_guards.push(g);
+                    }
+                }
+            }
+        }
+        self.path_guards.truncate(mark);
     }
 
     // ==================== 表达式遍历 ====================
@@ -1423,6 +1496,7 @@ impl TerminationChecker {
             measure: ctx.measure,
             call_args,
             span: *span,
+            guards: self.path_guards.clone(),
         });
     }
 
@@ -1572,5 +1646,65 @@ fn substitute_const_expr(
         },
         // Lit / Var(ConstVar)：不引用程序变量，原样
         other => other.clone(),
+    }
+}
+
+/// 条件取反（RFC-027 §3.3 假设栈）。
+///
+/// 早返回惯用法 `if C { return ... }` 之后，后续语句在 `!C` 下成立。
+/// 不在比较上做 De Morgan 规约——SMT 侧 `not (= b 0)` 与 `b != 0` 等价，
+/// 少一层变换就少一处可能出错的地方。
+fn negate_guard(
+    condition: &crate::frontend::core::parser::ast::Expr
+) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
+    use crate::frontend::core::types::const_data::{ConstExpr, UnOp};
+    use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+
+    let inner = convert_expr_to_const_expr(condition)?;
+    // 双重否定直接消去（`!C` 作为条件时）
+    if let ConstExpr::UnOp {
+        op: UnOp::Not,
+        expr,
+    } = inner
+    {
+        return Some(*expr);
+    }
+    Some(ConstExpr::UnOp {
+        op: UnOp::Not,
+        expr: Box::new(inner),
+    })
+}
+
+/// 语句块是否**必不回落**（控制流不会走到块后）。
+///
+/// 只识别两条形态——早返回惯用法（`return` 收尾）与两分支皆不落回的 `if`：
+///
+/// - `return` 的表示是 `StmtKind::Expr(Expr::Return)`（解析器如此产出，
+///   与 `check_stmt` 的观测一致）
+/// - 早期 `StmtKind::Return` 变体一并认（解析器不再产出，但零成本）
+///
+/// 判错的方向是安全的：漏认 → 少压一条守卫 → 证明更难、不会造出假假设。
+fn block_diverges(stmts: &[Stmt]) -> bool {
+    use crate::frontend::core::parser::ast::{Expr, StmtKind};
+
+    let Some(last) = stmts.last() else {
+        return false;
+    };
+    match &last.kind {
+        StmtKind::Return(_) => true,
+        StmtKind::Expr(e) => matches!(e.as_ref(), Expr::Return(Some(_), _)),
+        StmtKind::If {
+            then_branch,
+            else_if_branches,
+            else_branch: Some(else_body),
+            ..
+        } => {
+            block_diverges(&then_branch.stmts)
+                && block_diverges(&else_body.stmts)
+                && else_if_branches
+                    .iter()
+                    .all(|(_, body)| block_diverges(&body.stmts))
+        }
+        _ => false,
     }
 }
