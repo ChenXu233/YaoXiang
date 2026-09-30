@@ -19,6 +19,8 @@ pub mod assert;
 pub mod concurrent;
 pub mod convert;
 pub mod dict;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod fs;
 pub mod gen_docs;
 pub mod gen_interfaces;
 pub mod io;
@@ -415,6 +417,8 @@ pub fn register_all(
     concurrent::ConcurrentModule.register_ffi(registry);
     convert::ConvertModule.register_ffi(registry);
     dict::DictModule.register_ffi(registry);
+    #[cfg(not(target_arch = "wasm32"))]
+    fs::FsModule.register_ffi(registry);
     io::IoModule.register_ffi(registry);
     math::MathModule.register_ffi(registry);
     #[cfg(not(target_arch = "wasm32"))]
@@ -459,6 +463,8 @@ pub fn all_module_infos() -> Vec<ModuleInfo> {
         concurrent::ConcurrentModule.to_module_info(),
         convert::ConvertModule.to_module_info(),
         dict::DictModule.to_module_info(),
+        #[cfg(not(target_arch = "wasm32"))]
+        fs::FsModule.to_module_info(),
         io::IoModule.to_module_info(),
         math::MathModule.to_module_info(),
         #[cfg(not(target_arch = "wasm32"))]

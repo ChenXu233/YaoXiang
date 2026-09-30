@@ -1892,6 +1892,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "ureq",
  "urlencoding",
  "web-time",
 ]

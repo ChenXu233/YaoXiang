@@ -1,0 +1,19 @@
+// src/std/tests/net_http_error.yx
+// 覆盖: std.net 真实 HTTP 实现的错误路径（#56）
+// 验证: 传输层故障抛出 E6007；http_get 三参调用（可选参数 arity 上界）
+//       与 `?headers`/`?timeout_secs` 形参全链路行使
+// 状态: ✅
+// 注: 用非法 URL（"not a url"）触发 BadUrl——ureq 在发起网络前即失败，
+//     不依赖网络与代理环境（规则 9.2）；响应成功路径在 Rust 单测
+//     （本地监听器，net.rs tests）覆盖。
+
+// expect: runtime-error E6007
+
+use std.net
+use std.dict
+
+main: () -> Void = {
+    net.http_get("not a url", dict.new(), 5)
+}
+
+main()

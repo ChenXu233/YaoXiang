@@ -210,12 +210,12 @@ fn test_check_std_whole_module_qualified_call_rejected() {
 
 #[test]
 fn test_check_std_call_correct_args_accepted() {
-    // Arrange - 参数类型正确的 write_file 调用
+    // Arrange - 参数类型正确的 write_file 调用（#104 后 write_file 在 std.fs）
     let dir = temp_dir();
     let file = create_yx_file(
         &dir,
         "std_correct.yx",
-        "use std.io.{write_file}\nmain = () => {\n    write_file(\"a.txt\", \"hello\")\n}\n",
+        "use std.fs.{write_file}\nmain = () => {\n    write_file(\"a.txt\", \"hello\")\n}\n",
     );
 
     // Act

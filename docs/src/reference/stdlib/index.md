@@ -16,7 +16,8 @@ YaoXiang 标准库（`std`）以模块为组织单位，每个模块通过 `use`
 | ---- | ------ | ---- |
 | [`std.convert`](./convert) | 11 | 任意值到 String 的转换 |
 | [`std.dict`](./dict) | 11 | 字典读写、键值视图与合并 |
-| [`std.io`](./io) | 7 | 标准输出、标准输入与文件整体读写 |
+| [`std.fs`](./fs) | 22 | 文件、目录与路径操作 |
+| [`std.io`](./io) | 4 | 标准输出、标准输入与格式化 |
 | [`std.math`](./math) | 18 | 整数、浮点与三角函数，含 PI/E/TAU 常量 |
 | [`std.string`](./string) | 21 | 字符串查找、切分、格式化与解析 |
 | [`std.time`](./time) | 14 | 时间戳、格式化与 DateTime 字段访问 |
@@ -25,7 +26,7 @@ YaoXiang 标准库（`std`）以模块为组织单位，每个模块通过 `use`
 | [`std.assert`](./assert) | 1 | 断言 |
 | [`std.net`](./net) | 4 | HTTP 请求与 URL 百分号编解码 |
 | [`std.concurrent`](./concurrent) | 3 | 休眠、让出调度与线程标识 |
-| [`std.os`](./os) | 22 | 文件句柄、目录、环境变量与工作目录 |
+| [`std.os`](./os) | 12 | 文件句柄、环境变量与工作目录 |
 | [`std.weak`](./weak) | 2 | Arc / Weak 弱引用 |
 
 <!-- stdlib:index:modules end -->

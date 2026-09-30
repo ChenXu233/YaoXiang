@@ -40,7 +40,11 @@ fn test_io_interface_content() {
     assert!(content.contains("print:"), "io 接口应包含 print");
     assert!(content.contains("println:"), "io 接口应包含 println");
     assert!(content.contains("read_line:"), "io 接口应包含 read_line");
-    assert!(content.contains("read_file:"), "io 接口应包含 read_file");
+    // #104：整文件读写迁往 std.fs，io 接口不再包含 read_file
+    assert!(
+        !content.contains("read_file:"),
+        "io 接口不应再包含 read_file"
+    );
     assert!(content.contains("..."), "接口函数体应包含 ...");
 }
 

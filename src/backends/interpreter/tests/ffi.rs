@@ -39,9 +39,12 @@ fn test_with_std_has_io_functions() {
     assert!(registry.has("std.io.print"));
     assert!(registry.has("std.io.println"));
     assert!(registry.has("std.io.read_line"));
-    assert!(registry.has("std.io.read_file"));
-    assert!(registry.has("std.io.write_file"));
-    assert!(registry.has("std.io.append_file"));
+    // #104：整文件读写迁往 std.fs
+    assert!(registry.has("std.fs.read_file"));
+    assert!(registry.has("std.fs.write_file"));
+    assert!(registry.has("std.fs.append_file"));
+    assert!(registry.has("std.fs.stat"));
+    assert!(registry.has("std.fs.walk"));
     // Short names are NOT registered - users must use `use std.io` to bring them into scope
     assert!(!registry.has("print"));
     assert!(!registry.has("println"));
@@ -205,7 +208,7 @@ fn test_write_and_read_file() {
     // Write file
     let write_result = registry
         .call(
-            "std.io.write_file",
+            "std.fs.write_file",
             &[
                 RuntimeValue::String(path_str.clone().into()),
                 RuntimeValue::String("FFI test content".into()),
@@ -218,7 +221,7 @@ fn test_write_and_read_file() {
     // Read file
     let read_result = registry
         .call(
-            "std.io.read_file",
+            "std.fs.read_file",
             &[RuntimeValue::String(path_str.clone().into())],
             &mut ctx,
         )
@@ -228,7 +231,7 @@ fn test_write_and_read_file() {
     // Append file
     let append_result = registry
         .call(
-            "std.io.append_file",
+            "std.fs.append_file",
             &[
                 RuntimeValue::String(path_str.clone().into()),
                 RuntimeValue::String(" appended".into()),
@@ -241,7 +244,7 @@ fn test_write_and_read_file() {
     // Read again to verify append
     let read_result2 = registry
         .call(
-            "std.io.read_file",
+            "std.fs.read_file",
             &[RuntimeValue::String(path_str.clone().into())],
             &mut ctx,
         )
@@ -260,7 +263,7 @@ fn test_read_file_missing_args() {
     let registry = FfiRegistry::with_std();
     let mut heap = Heap::new();
     let mut ctx = test_ctx(&mut heap);
-    let result = registry.call("std.io.read_file", &[], &mut ctx);
+    let result = registry.call("std.fs.read_file", &[], &mut ctx);
     assert!(result.is_err());
 }
 
@@ -270,7 +273,7 @@ fn test_write_file_missing_args() {
     let mut heap = Heap::new();
     let mut ctx = test_ctx(&mut heap);
     let result = registry.call(
-        "std.io.write_file",
+        "std.fs.write_file",
         &[RuntimeValue::String("path".into())],
         &mut ctx,
     );
