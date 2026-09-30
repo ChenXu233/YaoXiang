@@ -357,3 +357,33 @@ fn test_into_result_unclassified_unproven_still_reports_ice() {
         err.code
     );
 }
+
+/// 测度判伪必须走 E4022，**不得**降级为 E8001 ICE。
+///
+/// 对照 `test_into_result_loop_termination_unproven_is_user_domain_code`：
+/// 那条走 `UnprovenReason`（未证明），这条走 `DisproofKind`（判伪）。两者是
+/// 不同的证明结果分支，各自不得落到 ICE 兜底。
+#[test]
+fn test_into_result_measure_not_decreasing_is_user_domain_code() {
+    use crate::frontend::core::typecheck::proof::verdict::{DisproofKind, DisproofModel};
+
+    // Arrange —— 递减义务被判伪，反例 b = 0
+    let result = ProofResult::Disproved(DisproofModel {
+        kind: DisproofKind::MeasureNotDecreasing,
+        assignments: vec![("b".to_string(), "0".to_string())],
+        constraint: "b".to_string(),
+        span: Some(crate::util::span::Span::default()),
+        predicate_span: None,
+    });
+
+    // Act
+    let outcome = result.into_result();
+
+    // Assert —— 必须是用户域码 E4022，而非 ICE E8001
+    let err = outcome.expect_err("Disproved 必须转成 Err(Diagnostic)");
+    assert_eq!(
+        err.code, "E4022",
+        "测度判伪须映射到 E4022（用户域），不得为 E8001 ICE。实际: '{}'",
+        err.code
+    );
+}
