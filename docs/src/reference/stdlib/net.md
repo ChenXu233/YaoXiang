@@ -14,7 +14,7 @@ use std.net
 > 本模块依赖操作系统网络能力，在 `wasm32` 目标上**不导出**。
 
 HTTP 函数基于同步阻塞客户端实现（rustls TLS），重定向默认跟随（最多 5 次）。
-阻塞只作用于调用所在的执行线程，与 [`spawn`](../../language-spec/concurrency) 的
+阻塞只作用于调用所在的执行线程，与 [`spawn`](../language-spec/concurrency) 的
 显式并发模型自洽。
 
 ## 函数一览
