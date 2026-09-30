@@ -1,13 +1,13 @@
 # Error Code Reference
 
-YaoXiang compiler uses error codes to identify different types of diagnostic information. Error
-codes are grouped by number range, with each error code corresponding to a specific error scenario.
+The YaoXiang compiler uses error codes to identify different types of diagnostic information. Error
+codes are grouped by number range, and each error code corresponds to a specific error scenario.
 
 ---
 
 ## E0xxx -- Lexical and Syntax Analysis
 
-Errors produced during the Lexer and Parser phases.
+Errors produced by the Lexer and Parser phases.
 
 | Error Code | Template                                                                               | Description               |
 | ---------- | -------------------------------------------------------------------------------------- | ------------------------- |
@@ -23,7 +23,7 @@ Errors produced during the Lexer and Parser phases.
 
 ## E1xxx -- Type Checking
 
-Errors produced during the type checking phase, covering variable types, function calls, pattern
+Errors produced by the type checking phase, covering variable types, function calls, pattern
 matching, generic instantiation, concurrency semantics, and error propagation.
 
 | Error Code | Template                                                                                              | Description                                                       |
@@ -32,7 +32,7 @@ matching, generic instantiation, concurrency semantics, and error propagation.
 | E1002      | `Expected type '{expected}', found type '{found}'`                                                    | Type mismatch                                                     |
 | E1003      | `Unknown type: '{type}'`                                                                              | Unknown type                                                      |
 | E1010      | `Function '{func}' expects {expected} arguments, found {found}`                                       | Argument count mismatch                                           |
-| E1011      | `Parameter type mismatch: expected '{expected}', found '{found}'`                                     | Parameter type mismatch                                           |
+| E1011      | `Parameter type mismatch: expected '{expected}', found '{found}'`                                     | Argument type mismatch                                            |
 | E1012      | `Return type mismatch: expected '{expected}', found '{found}'`                                        | Return type mismatch                                              |
 | E1013      | `Function not found: '{func}'`                                                                        | Function not found                                                |
 | E1020      | `Cannot infer type for '{expr}'`                                                                      | Cannot infer type                                                 |
@@ -42,33 +42,33 @@ matching, generic instantiation, concurrency semantics, and error propagation.
 | E1040      | `Operation '{op}' is not supported for type '{type}'`                                                 | Operation not supported                                           |
 | E1041      | `Index out of bounds: valid range is 0..{max}, found {index}`                                         | Index out of bounds                                               |
 | E1042      | `Field '{field}' not found in struct '{struct}'`                                                      | Field not found                                                   |
-| E1050      | `Logical operation requires boolean operands, found '{left}' and '{right}'`                           | Boolean operand required                                          |
+| E1050      | `Logical operation requires boolean operands, found '{left}' and '{right}'`                           | Requires boolean operands                                         |
 | E1051      | `Logical NOT requires boolean operand, found '{type}'`                                                | Logical NOT requires boolean operand                              |
 | E1052      | `Cannot dereference type '{type}', expected pointer type`                                             | Invalid dereference                                               |
-| E1053      | `Cannot access field on non-struct type '{type}'`                                                     | Non-struct field access                                           |
+| E1053      | `Cannot access field on non-struct type '{type}'`                                                     | Field access on non-struct type                                   |
 | E1054      | `Condition must be boolean, found '{type}'`                                                           | Condition type mismatch                                           |
 | E1055      | `Constraint type '{type}' can only be used in generic context`                                        | Constraint in non-generic context                                 |
 | E1060      | `Expected {expected} type argument(s), found {found}`                                                 | Type argument count mismatch                                      |
 | E1061      | `Cannot instantiate generic type with given arguments`                                                | Cannot instantiate generic                                        |
-| E1081      | `` `?` is only allowed inside functions returning Result ``                                           | `?` is only allowed inside functions returning Result             |
-| E1082      | `` `?` requires a Result expression, found '{type}' ``                                                | `?` requires a Result expression                                  |
-| E1083      | ``Result error type mismatch for `?`: expected '{expected}', found '{found}'``                        | `?` error type mismatch                                           |
+| E1081      | `` `?` is only allowed inside functions returning Result ``                                           | `?` is only allowed in functions returning Result                 |
+| E1082      | `` `?` requires a Result expression, found '{type}' ``                                                | `?` can only be used on Result expressions                        |
+| E1083      | ``Result error type mismatch for `?`: expected '{expected}', found '{found}'``                        | Error type mismatch for `?`                                       |
 | E1090      | `Type: Type = Type`                                                                                   | Unspeakable (Easter egg)                                          |
 | E1091      | `Generic meta-type self-reference is not allowed: '{decl}'`                                           | Invalid generic meta-type                                         |
-| E1062      | `Const generic constraint violation: {reason}`                                                        | const generic constraint violation                                |
-| E1064      | `Invalid binding position(s) {positions} for function with {total} parameter(s)`                      | Invalid binding position index (RFC-004)                          |
+| E1062      | `Const generic constraint violation: {reason}`                                                        | Const generic constraint violation                                |
+| E1064      | `Invalid binding position(s) {positions} for function with {total} parameter(s)`                      | Invalid binding position indices (RFC-004)                        |
 | E1095      | `Unknown interface: '{name}'`                                                                         | Unknown interface (RFC-011a)                                      |
 | E1096      | `Interface '{name}' expects {expected} type argument(s), found {found}`                               | Interface instantiation argument count mismatch                   |
 | E1097      | `Interface member '{member}' conflicts with field of type '{type}'`                                   | Interface member conflicts with field name                        |
 | E1098      | `Type '{type}' does not implement '{interface}.{method}'`                                             | Interface method not implemented                                  |
 | E1099      | `Signature mismatch for '{type}.{method}': expected '{expected}', found '{found}'`                    | Interface method signature mismatch                               |
-| E1100      | `Duplicate implementation of '{type}.{method}' (override is not allowed)`                             | Duplicate method implementation (override forbidden)              |
+| E1100      | `Duplicate implementation of '{type}.{method}' (override is not allowed)`                             | Duplicate implementation with same signature (override forbidden) |
 | E1101      | `Type '{type}' does not implement interface '{interface}' and cannot enter this existential position` | Type does not implement interface (existential type member check) |
 
 ## E2xxx -- Semantic Analysis
 
-Errors produced during the semantic analysis phase, covering scope, variable lifetime, ownership,
-and function signature resolution.
+Errors produced by the semantic analysis phase, covering scope, variable lifetime, ownership, and
+function signature resolution.
 
 | Error Code | Template                                                                 | Description                    |
 | ---------- | ------------------------------------------------------------------------ | ------------------------------ |
@@ -81,8 +81,8 @@ and function signature resolution.
 | E2013      | `Cannot shadow existing variable '{name}'`                               | Variable shadowing             |
 | E2014      | `'{name}' has been moved and cannot be used`                             | Use of moved variable          |
 | E2090      | `Invalid signature: {reason}`                                            | Invalid signature              |
-| E2091      | `Invalid signature: unknown type '{type_name}'`                          | Signature unknown type         |
-| E2092      | `Invalid signature: missing '->'`                                        | Signature missing arrow        |
+| E2091      | `Invalid signature: unknown type '{type_name}'`                          | Unknown type in signature      |
+| E2092      | `Invalid signature: missing '->'`                                        | Missing '->' in signature      |
 | E2093      | `Invalid signature: duplicate parameter '{name}'`                        | Duplicate parameter name       |
 | E2094      | `Invalid signature: generic '{name}' shadows outer generic`              | Generic parameter shadowing    |
 | E2095      | `Invalid signature: parameter '{name}' shadows generic`                  | Parameter name shadows generic |
@@ -115,7 +115,7 @@ Errors related to the module system and imports.
 
 ## E6xxx -- Runtime
 
-Errors produced during the runtime phase.
+Errors produced at the runtime phase.
 
 | Error Code | Template                                                            | Description                  |
 | ---------- | ------------------------------------------------------------------- | ---------------------------- |
@@ -137,10 +137,10 @@ I/O operations and system-level errors.
 | E7003      | `I/O error: {reason}`         | I/O error         |
 | E7004      | `Network error: {reason}`     | Network error     |
 
-## E8xxx -- Internal Compiler Errors
+## E8xxx -- Internal Compiler Error
 
-Internal compiler errors, typically indicating a bug in the compiler itself. If you encounter such
-errors, please report them at [GitHub Issues](https://github.com/yaoxiang/yaoxiang/issues).
+Internal compiler errors, usually indicating bugs in the compiler itself. If you encounter such an
+error, please report it at [GitHub Issues](https://github.com/yaoxiang/yaoxiang/issues).
 
 | Error Code | Template                                    | Description             |
 | ---------- | ------------------------------------------- | ----------------------- |
@@ -150,7 +150,7 @@ errors, please report them at [GitHub Issues](https://github.com/yaoxiang/yaoxia
 
 ## W1xxx -- Warnings
 
-Warnings related to dead code detection. Warnings do not prevent compilation but indicate potential
+Warnings related to dead code detection. Warnings do not prevent compilation, but indicate possible
 issues in the code.
 
 | Error Code | Template                                                                           | Description                                  |
@@ -160,12 +160,12 @@ issues in the code.
 | W1003      | `Unused import: '{name}'`                                                          | Unused import                                |
 | W1004      | `Unused exported variable: '{name}'`                                               | Unused exported variable                     |
 | W1005      | `Unused exported method: '{name}'`                                                 | Unused exported method                       |
-| W1006  | `local module '{module}' shadows dependency '{dependency}'`                            | Local module shadows dependency |
-| W1063      | ``const generic constraint cannot be evaluated: `{constraint}` ({var} = {value})`` | const generic constraint cannot be evaluated |
-| W1080      | `Constraint cannot be proven at compile-time, degraded to runtime check`           | Compile-time proof degradation               |
+| W1006      | `local module '{module}' shadows dependency '{dependency}'`                        | Local module shadows dependency              |
+| W1063      | ``const generic constraint cannot be evaluated: `{constraint}` ({var} = {value})`` | Const generic constraint cannot be evaluated |
+| W1080      | `Constraint cannot be proven at compile-time, degraded to runtime check`           | Compile-time proof degraded                  |
 
 ---
 
 A total of **119** diagnostic codes (111 error codes + 8 warning codes), with the `define_codes!`
 registry (`src/util/diagnostic/codes/`) as the authoritative source; the complete registration list
-for each code follows the registry, and this page lists common codes by family.
+for each code is governed by the registry, and this page lists common codes by family.

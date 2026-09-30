@@ -1,72 +1,69 @@
 ---
-title:
-  'RFC-037: 産業化ディストリビューション方案 — cargo-dist
-  ベースのコンパイラ/ツールチェーンパッケージング'
+title: 'RFC-037: 工業的配布方案 — cargo-dist に基づくコンパイラ/ツールチェーンのパッケージング'
 author: 'ChenXu233'
 created: '2026-07-26'
 updated: '2026-09-10'
 accepted: '2026-09-09'
 issue: '#230'
-status: '承認済み'
+status: '受領'
 ---
 
-# RFC-037: 産業化ディストリビューション方案 — cargo-dist ベースのコンパイラ/ツールチェーンパッケージング
+# RFC-037: 工業的配布方案 — cargo-dist に基づくコンパイラ/ツールチェーンのパッケージング
 
-> 本 RFC は [RFC-014b: ビルドシステムとバイナリ配布](../review/014b-build-system.md)
+> 本 RFC は [RFC-014b: ビルドシステムとバイナリ配布](../accepted/014b-build-system.md)
 > を補完する。RFC-014b は
-> **YaoXiang パッケージマネージャ**がサードパーティパッケージをビルド・配布する方法を定義する；本 RFC は
-> **YaoXiang コンパイラ/ツールチェーン自体**のパッケージングと配布方法を定義する。
+> **YaoXiang パッケージマネージャ**が第三者パッケージをどのようにビルド・配布するかを定義する一方、本 RFC は
+> **YaoXiang コンパイラ/ツールチェーン自体**をどのようにパッケージング・配布するかを定義する。
 
-## 概要
+## 要旨
 
-`cargo-dist`（Rust エコシステムのバイナリ配布ツール）にクロスプラットフォームビルドのオーケストレーションを担わせ、自社スクリプトでディストリビューションの構造を担う。中心となる約束は 2 つ：ディストリビューションは**物理的に標準ライブラリのソースコードディレクトリを同梱**し（ユーザは Python の
+`cargo-dist`（Rust エコシステムのバイナリ配布ツール）にクロスプラットフォームのビルドオーケストレーションを担当させ、自前のスクリプトが配布パッケージの構造を担う。中核となる約束は2つ：配布パッケージは**物理的に標準ライブラリのソースコードディレクトリを携带**し（ユーザは Python の
 `Lib/`
-を読むように直接読める）、全プラットフォームで動的リンクする Z3 共有ライブラリをパッケージに同梱する。コマンドモデルは**フロントドア/エンジン分離**：常用コマンド
-`yx`（小さなフロントドア、組込みバージョン管理 — rustup/Go GOTOOLCHAIN 相当）、エンジン
+を読むように直接読める）、全プラットフォーム動的リンクの Z3 共有ライブラリがパッケージに同梱される。コマンドモデルは**フロントドア/エンジン分離**：常用コマンドは
+`yx`（小型フロントドア、rustup/Go GOTOOLCHAIN 相当のバージョン管理を内蔵）、エンジンは
 `yaoxiang-rs`（現 `yaoxiang`
-モノリスの改名）で、Python/Node が事後的に nvm/pdm で補講する生態系の分裂を避ける。インストール方式は二重：標準チャネルは Go/Zig に合わせて**ディストリビューションがそのままプロダクト**、展開 +
-PATH；お手軽チャネルはワンライナーインストール（Linux `apt` / `curl | sh`、Windows `irm | iex` /
+モノリスの改名）。Python/Node が事後的に nvm/pdm で補講する生態分裂を避ける。インストール方式は二層：標準チャネルは Go/Zig 方式——**配布パッケージ即プロダクト**、展開 +
+PATH；お手軽チャネルは一行コマンドインストール（Linux `apt` / `curl | sh`、Windows `irm | iex` /
 Inno exe ウィザード）。`libz3.dll`
-の欠落、標準ライブラリのユーザ非可視、CI スクリプトの重複保守といった問題を解決する。
+欠如、標準ライブラリのユーザ不可視、CI スクリプトの重複保守などの問題を解決する。
 
 ## 動機
 
-### なぜこの機能が必要か
+### なぜこの機能が必要か？
 
-YaoXiang をダウンロードしたユーザは**箱から出してすぐ使える**べきで、追加手順は一切不要；標準ライブラリは**ユーザが直接読める**べきで、バイナリ内のブラックボックスに隠されているべきではない。
+YaoXiang をダウンロードするユーザは、**追加手順なしで即座に使い始められる**べきである。標準ライブラリは**ユーザが直接読める**べきであり、バイナリ内のブラックボックスに隠されているべきではない。
 
 ### 現状の問題
 
-#### 問題 1：Windows ユーザがダウンロードしても動かない
+#### 問題 1：Windows ユーザがダウンロード後に実行できない
 
-現在の Release には `yaoxiang.exe` しかアップロードされておらず、`libz3.dll`
-がパッケージに含まれていない。Windows でダブルクリックするとエラーになる：
+現状の Release では `yaoxiang.exe` しかアップロードされておらず、`libz3.dll`
+がパッケージに含まれていない。Windows 上でユーザがダブルクリックすると以下のエラーが出る：
 
 ```
 The code execution cannot proceed because libz3.dll was not found.
 ```
 
-これは **ブロッキングバグ** — ユーザは最初のステップにも進めない。
+これは**中断バグ**であり、ユーザは最初の一歩さえ踏み出せない。
 
-#### 問題 2：Release 成果物が単一 exe のみで、標準ライブラリがユーザに不可視
+#### 問題 2：Release アーティファクトが単一 exe のみで、標準ライブラリがユーザ不可視
 
-現状は三重の断絶：
+現状は三重の断絶である：
 
-- Release 成果物は生バイナリのみで、標準ライブラリはディストリビューションに同梱されない
-- LSP のインタフェースファイル検索チェーンはほぼ壊れている：`find_std_interface_file`
-  を呼ぶ際にプロジェクトディレクトリを渡さず（グローバルな `~/.yaoxiang/std/`
-  のみ調べ、それを埋めるフローがない）；`package init` が書き込むのは `.yaoxiang/std`
-  で、検索チェーン上にない
+- Release アーティファクトは生バイナリのみで、標準ライブラリが配布物に同梱されない
+- LSP のインターフェースファイル検索チェーンがほぼ切断されている：`find_std_interface_file`
+  呼び出し時にプロジェクトディレクトリを伝えない（グローバルな `~/.yaoxiang/std/`
+  のみ検索し、それを埋めるフローが存在しない）；`package init` が書き込むのは `.yaoxiang/std`
+  であり、検索チェーンにない
 - 標準ライブラリのソースコード（`.yx`
-  層）とインタフェースビュー（native 層）はユーザにとって完全にブラックボックス
+  レイヤ）とインターフェースビュー（native レイヤ）がユーザにとって完全にブラックボックス
 
-産業化されたやり方：ユーザは Python の `Lib/`
-を直接開くように標準ライブラリディレクトリを読んでソースを直接読める —
-**ディストリビューションが物理的に std ディレクトリを同梱することは本方案の必須要件**（既裁定）。
+工業的なアプローチ：ユーザは Python の `Lib/`
+を読むように標準ライブラリディレクトリを直接開いてソースを読める——**配布パッケージが物理的に std ディレクトリを携带することは本方案の必須要件**（既決）。
 
-#### 問題 3：CI の手書きスクリプトの重複保守
+#### 問題 3：CI の手書きスクリプトが重複保守されている
 
-現在、複数のビルドパイプラインを保守している：
+現在、複数のビルドパイプラインを維持している：
 
 | ファイル                  | 役割                         | 行数        |
 | ------------------------- | ---------------------------- | ----------- |
@@ -76,63 +73,61 @@ The code execution cannot proceed because libz3.dll was not found.
 | `scripts/build/setup.iss` | Inno Setup インストーラ      | ~250 行     |
 | **合計**                  |                              | **~870 行** |
 
-大部分は重複しており（Rust インストール → キャッシュ → ビルド → リネーム → アップロード）、各プラットフォームごとに書き直す必要がある。
+大半は重複しており（Rust のインストール → キャッシュ → ビルド → リネーム → アップロード）、各プラットフォームごとに一度ずつ書く必要がある。
 
-#### 問題 4：Inno Setup のバージョン番号のハードコード
+#### 問題 4：Inno Setup のバージョン番号がハードコード
 
-`setup.iss` 内の `MyAppVersion` が `0.7.0` とハードコードされており、ビルド時に `sed`
-で置換している。迟早必ず失敗する。
+`setup.iss` の `MyAppVersion` に `0.7.0` がハードコードされており、ビルド時に `sed`
+で置換している。遅かれ早かれ失敗する。
 
 #### 問題 5：RFC-014b との境界が曖昧
 
-RFC-014b は「YaoXiang パッケージのビルドと配布機構」（すなわち `yaoxiang.toml` の `[build]` と
+RFC-014b は「YaoXiang パッケージのビルドと配布機構」（即ち `yaoxiang.toml` の `[build]` と
 `[binaries]`
-設定）を定義しているが、**「YaoXiang コンパイラ自体をどうリリースするか」をカバーしていない**。本 RFC はこの空白を埋める。
+設定）を定義しているが、**「YaoXiang コンパイラ自体をどうリリースするか」はカバーしていない**。本 RFC はこの空白を埋める。
 
 ## 提案
 
 ### 中核設計
 
-cargo-dist が担うのは**ビルドオーケストレーション層**のみ；パッケージ構造とインストーラはすべて自社。責務分割：
+cargo-dist は**ビルドオーケストレーション層**のみを担い、パッケージ構造とインストーラはすべて自前。責任分担：
 
 ```
-cargo-dist の責務（ビルドオーケストレーション層）:
-  ├── クロスプラットフォームコンパイル（5 ターゲット）
+cargo-dist の責任（ビルドオーケストレーション層）:
+  ├── クロスプラットフォームコンパイル（5 つの target）
   └── 圧縮パッケージとチェックサムの生成
-  （ネイティブインストーラと npm wrapper は廃止 — フラットバイナリという仮定が bin/+lib/ 構造と衝突する）
+  （ネイティブインストーラと npm wrapper は廃止——そのフラットバイナリ仮定は bin/+lib/ 構造と衝突する）
 
-build.rs の継続する責務:
+build.rs は引き続き担当:
   └── Z3 ダウンロード/リンク（全プラットフォーム動的 + rpath）
 
-YaoXiang 自社スクリプト:
-  ├── package-dist.sh — パッケージ構造の再構成（bin/ + lib/）、共有ライブラリの同梱、
-  │   std ディレクトリの充填（リポジトリの事前生成インタフェースビュー + .yx 層ソース）、チェックサム再計算
-  └── Inno Setup — Windows インストールウィザード（既存資産；完全なディレクトリ構造を敷設）
+YaoXiang 自前スクリプト:
+  ├── package-dist.sh — パッケージ構造の組み換え（bin/ + lib/）、共有ライブラリの同梱、
+  │   std ディレクトリの充填（リポジトリで事前生成されたインターフェースビュー + .yx レイヤソース）、チェックサム再計算
+  └── Inno Setup — Windows インストールウィザード（既存資産；完全なディレクトリ構造を展開）
 
 コマンドモデル（フロントドア/エンジン分離）:
-  ├── yx — フロントドア（新規小型 crate）：バージョン解決 + ディスパッチ；toolchain/self 動詞のみ保持、他は透過
+  ├── yx — フロントドア（新小型 crate）：バージョン解析 + ディスパッチ；toolchain/self 動詞のみ保持、他は透過転送
   └── yaoxiang-rs — エンジン（現 yaoxiang モノリスの改名）：コンパイル/実行/パッケージ管理/fmt/lsp サブコマンド
 
-インストール方式（二重）:
-  ├── 標準チャネル（Go/Zig 方式）: ディストリビューションがそのままプロダクト、展開 + PATH
-  └── お手軽チャネル（Rust 方式）: ワンライナーインストール + バージョン管理（yx フロントドアに内蔵）
-      ├── Linux: apt（自社 deb リポジトリ、システムレベル並列配置）/ curl … | sh（パッケージ一括インストール）
-      ├── Windows: irm … | iex（パッケージ一括インストール）/ Inno Setup ウィザード（既存資産、システムレベル並列配置）
-      └── macOS: curl … | sh（brew は homebrew-core コミュニティに委ねる）
+インストール方式（二層）:
+  ├── 標準チャネル（Go/Zig 方式）: 配布パッケージ即プロダクト、展開 + PATH
+  └── お手軽チャネル（Rust 方式）: 一行コマンドインストール + バージョン管理（yx フロントドア内蔵）
+      ├── Linux: apt（自前 deb リポジトリ、システムレベルフラットインストール）/ curl … | sh（一括インストール）
+      ├── Windows: irm … | iex（一括インストール）/ Inno Setup ウィザード（既存資産、システムレベルフラットインストール）
+      └── macOS: curl … | sh（brew は homebrew-core コミュニティに委任）
 ```
 
-### リリースディレクトリ構造（既裁定：物理的に標準ライブラリソースを同梱）
+### 配布ディレクトリ構造（既決：標準ライブラリソースを物理的に携带）
 
 ユーザは Python の `Lib/`
-を直接読むように標準ライブラリを読めるべきで、ディストリビューションが同棲の std ディレクトリを持つことは必須要件であり、パッケージングの詳細ではない。Z3 も同様：外部システムとして、ディレクトリ型の共有ライブラリ配布は自然な形態 —
-`.so`
-を exe に詰め込むのも外に置いて動的リンクするのも「どちらもディストリビューションに同梱する必要がある」点では同等で、後者の方が交換可能性を保つ。
+を読むように標準ライブラリを直接読めなければならない——配布パッケージが std ディレクトリを自带することは必須要件であり、パッケージングの詳細ではない。Z3 も同様：外部システムとして、ディレクトリ式の共有ライブラリ配布は自然な形態である。`.so`
+を exe に埋め込むことと外部に置いて動的リンクすることは「どちらもパッケージに同梱する必要がある」点では同等で、後者には交換可能性が保たれる。
 
-各プラットフォームのディストリビューションは、`package-dist.sh`
-が cargo-dist のビルド後に再構成する：
+各プラットフォームの配布パッケージは、`package-dist.sh` が cargo-dist ビルド後に再構成する：
 
 ```
-yaoxiang-{version}-{target}.tar.gz / .zip     （ポータブル：展開後 bin/ 内から直接実行可能）
+yaoxiang-{version}-{target}.tar.gz / .zip     （ポータブル即利用：展開後 bin/ 内直接実行）
 ├── bin/
 │   ├── yx                            # フロントドア（または yx.exe）
 │   ├── yaoxiang-rs                   # エンジン（または yaoxiang-rs.exe）
@@ -140,9 +135,9 @@ yaoxiang-{version}-{target}.tar.gz / .zip     （ポータブル：展開後 bin
 ├── lib/
 │   └── yaoxiang/
 │       └── std/                      # ユーザが直接読める（Python Lib/ 方式）
-│           ├── io.yx                 # native モジュール：リポジトリで事前生成されたインタフェースビュー
+│           ├── io.yx                 # native モジュール：リポジトリで事前生成されたインターフェースビュー
 │           ├── math.yx
-│           ├── test.yx               # .yx 層：リポジトリ内の実ソースをそのままコピー
+│           ├── test.yx               # .yx レイヤ：リポジトリ内の実ソースをそのままコピー
 │           └── ...
 ├── README.md
 └── LICENSE
@@ -151,8 +146,8 @@ yaoxiang-{version}-{target}.tar.gz / .zip     （ポータブル：展開後 bin
 インストール = 任意のディレクトリに展開 + `bin/` を PATH に追加（Go の `/usr/local/go/bin`
 方式；`~/.yaoxiang/` への展開が一般的選択）。Windows では Inno
 Setup ウィザードが同じことを行う（デフォルト Program Files）。ポータブル展開時、`yx` フロントドアは
-`~/.yaoxiang` 状態を持たず、隣接の `yaoxiang-rs`
-にフォールバック — マネージドインストールと同じ動作；エンジンの rpath と exe 相対 std 検索はフロントドアの存在によって変わらない。
+`~/.yaoxiang` 状態を持たず、隣接する `yaoxiang-rs`
+にフォールバックする——マネージドインストールと同じ挙動。エンジンの rpath と exe 相対 std 検索はフロントドアの存在に影響されない。
 
 ### プラットフォームサポート
 
@@ -164,45 +159,45 @@ Setup ウィザードが同じことを行う（デフォルト Program Files）
 | macOS ARM64      | `aarch64-apple-darwin`      | Apple Silicon           |
 | Windows x86_64   | `x86_64-pc-windows-msvc`    | メインプラットフォーム  |
 
-合計 5 ターゲット。Windows
-ARM64 は当面サポートしない（Z3 公式のプレコンパイル ARM64 パッケージがない）。
+計 5 つの target。Windows
+ARM64 は当面サポートしない（Z3 公式にプレコンパイル ARM64 パッケージがないため）。
 
 ### Z3 配布戦略
 
-**全プラットフォーム動的リンク**（既確認維持）：
+**全プラットフォーム動的リンク**（再確認の上維持）：
 
 | プラットフォーム | 変更                   | 成果物        |
 | ---------------- | ---------------------- | ------------- |
-| Linux            | **静的→動的に変更**    | `libz3.so`    |
-| macOS            | **静的→動的に変更**    | `libz3.dylib` |
+| Linux            | **元静的→動的に変更**  | `libz3.so`    |
+| macOS            | **元静的→動的に変更**  | `libz3.dylib` |
 | Windows          | 変更なし               | `libz3.dll`   |
 | wasm32           | 変更なし（静的リンク） | 内蔵 `.a`     |
 
 理由：
 
-- **一貫性** — 3 プラットフォームの挙動が統一され、例外がなくなる
-- **外部ライブラリは共有ライブラリで配布すべき**。Python（`python3.dll`+`DLLs/lib*.dll`）、Node（`node`+`lib/`）もそうしている
-- **ユーザの Z3 アップグレードはコンパイラのバージョンに依存しない** — `.so`/`.dylib`/`.dll`
+- **一貫性** — 3 プラットフォームの挙動が統一され、特例がなくなる
+- **これは外部ライブラリであり、共有ライブラリで配布すべき**。Python（`python3.dll`+`DLLs/lib*.dll`）、Node（`node`+`lib/`）もそうしている
+- **ユーザの Z3 アップグレードはコンパイラのリリースを待たなくてよい** — `.so`/`.dylib`/`.dll`
   を差し替えるだけ
-- **バイナリサイズが小さい** — Z3 は小さくなく、静的リンクだと exe が数 MB 膨れる
+- **バイナリサイズが小さい** — Z3 は小さくないため、静的リンクは exe を数 MB 膨らませる
 
-動的リンクには**必要な付帯事項**がある：Linux/macOS の動的リンカはデフォルトでバイナリの所在ディレクトリを検索しないため、rpath を注入しなければ「展開してすぐ使う」が成立しない（Windows はデフォルトで exe ディレクトリを検索する、処理不要）。対応する
-`build.rs` の変更：
+動的リンクには**必要な付帯事項**が一つある：Linux/macOS の動的リンカはデフォルトでバイナリのディレクトリを検索しないため、rpath を注入しなければ「展開即利用」が成立しない（Windows はデフォルトで exe ディレクトリを検索するため対処不要）。対応する
+`build.rs` 修正：
 
 ```rust
 // 統一動的リンク + rpath
 fn link_z3(z3_dir: &Path) {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
-    // Z3 配布パッケージのレイアウトが統一されていない、lib/bin 両ディレクトリを探索
+    // Z3 配布パッケージのレイアウトは統一されていないため、lib/bin 両ディレクトリを探索
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
-    // RFC-037：全プラットフォーム動的リンク。共有ライブラリは bin/ に同梱して配布、ユーザは Z3 を一括交換・アップグレード可能
+    // RFC-037：全プラットフォーム動的リンク。共有ライブラリは bin/ に同梱して配布、ユーザは Z3 を全体交換・アップグレード可能
     if target_os == "windows" {
         // MSVC import lib の名前は libz3.lib
         println!("cargo:rustc-link-lib=libz3");
     } else {
         println!("cargo:rustc-link-lib=z3");
-        // 動的リンカはデフォルトでバイナリ所在ディレクトリを検索しない、rpath を注入しなければ「展開してすぐ使う」が成立しない
-        // （ディストリビューション内の exe と libz3 は同じ bin/ にある；Windows はデフォルトで exe ディレクトリを検索する、処理不要）
+        // 動的リンカはデフォルトでバイナリディレクトリを検索しないため、rpath を注入しなければ「展開即利用」が成立しない
+        // （配布パッケージ内 exe と libz3 は同じ bin/ に配置；Windows はデフォルトで exe ディレクトリを検索するため対処不要）
         match target_os.as_str() {
             "linux" => println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN"),
             "macos" => println!("cargo:rustc-link-arg=-Wl,-rpath,@loader_path"),
@@ -218,57 +213,54 @@ fn link_z3(z3_dir: &Path) {
 }
 ```
 
-**「全プラットフォーム静的リンク」は目標としない。**これは特殊ケースの除去ではなく、合理的なケースを誤った方法で除去するもの。共有ライブラリは外部ライブラリの正常な配布方式である。
+**「全プラットフォーム静的リンク」は目標としない。**これは特例の除去ではなく、合理的な状況を間違った方法で除去するものである。共有ライブラリは外部ライブラリの通常の配布方式である。
 
 ### インストーラサポート
 
-主要言語ツールチェーンの配布方式との対照（2026-09 調査）：
+主要言語ツールチェーンの配布方式との比較（2026-09 時点の調査）：
 
-| 言語     | 公式ディストリビューション   | 公式インストール方法                                     | インストーラ保守主体               |
-| -------- | ---------------------------- | -------------------------------------------------------- | ---------------------------------- |
-| Go       | `go/{bin,src,pkg}` tarball   | 公式ドキュメントがそのまま「ダウンロード → 展開 → PATH」 | なし（brew/apt はコミュニティ）    |
-| Zig      | `zig/{bin,lib/std}` tarball  | 同上、公式インストールスクリプトなし                     | なし（homebrew-core コミュニティ） |
-| Node     | `{bin,lib,include}` tarball  | tar + 公式 pkg/msi                                       | チームが自作                       |
-| Rust     | 複数コンポーネント tarball   | rustup                                                   | チームが自作                       |
-| Crystal  | `{bin,src,embedded}` tarball | deb/rpm/tar                                              | チーム + brew コミュニティ         |
-| Deno/Bun | 単一バイナリ zip             | 公式 curl スクリプト                                     | チームが自作（スクリプト極小）     |
-| Gleam    | cargo-dist 単一バイナリ      | cargo-dist 生成スクリプト                                | cargo-dist                         |
+| 言語     | 公式配布物                   | 公式インストール方式                             | インストーラ保守者                 |
+| -------- | ---------------------------- | ------------------------------------------------ | ---------------------------------- |
+| Go       | `go/{bin,src,pkg}` tarball   | 公式ドキュメント =「ダウンロード → 展開 → PATH」 | なし（brew/apt はコミュニティ）    |
+| Zig      | `zig/{bin,lib/std}` tarball  | 同上、公式インストールスクリプトなし             | なし（homebrew-core コミュニティ） |
+| Node     | `{bin,lib,include}` tarball  | tar + 公式 pkg/msi                               | チームが自前                       |
+| Rust     | マルチコンポーネント tarball | rustup                                           | チームが自前                       |
+| Crystal  | `{bin,src,embedded}` tarball | deb/rpm/tar                                      | チーム + brew コミュニティ         |
+| Deno/Bun | 単一バイナリ zip             | 公式 curl スクリプト                             | チームが自前（スクリプト極小）     |
+| Gleam    | cargo-dist 単一バイナリ      | cargo-dist 生成スクリプト                        | cargo-dist                         |
 
 3 つの法則：
 
-- **複数ファイルのツールチェーンで、サードパーティ生成器を使ってインストーラを作る例はない** —
-  cargo-dist のインストーラは単一バイナリシナリオにのみ対応する（Gleam で使えるのはまさに外部依存なしの単一 Rust バイナリだから）
-- 最もシンプルなモデルは
-  **Go/Zig の「ディストリビューションがそのままプロダクト」**：公式インストールガイドは展開 +
-  PATH のみ、インストーラコードゼロ；ディストリビューションに可読 std ソースが同梱されるのは常態（Go の
-  `src/`、Zig の `lib/std/`、Crystal の `src/`）
-- curl ワンライナーを提供するのは（Deno/Bun/rustup）すべて**自作スクリプト**でほぼ進化しない；brew
-  formula は一律コミュニティが homebrew-core で保守し、言語チームは自作 tap を作らない（Crystal チームが明確に「formula はコミュニティのもの」と述べている）
+- **複数ファイルツールチェーンでサードパーティ製インストーラジェネレータを使う例はない**——cargo-dist のインストーラは単一バイナリシナリオにのみ対応する（Gleam が利用可能なのは外部依存なしの単一 Rust バイナリであるため）
+- 最も簡素なモデルは **Go/Zig の「配布パッケージ即プロダクト」**：公式インストールガイダンスは展開 +
+  PATH のみ、インストーラコードゼロ；配布パッケージに可読 std ソースが同梱される（Go の
+  `src/`、Zig の `lib/std/`、Crystal の `src/`）のは常態
+- curl 一発インストールを望む（Deno/Bun/rustup）はいずれも**自前スクリプト**で、ほぼ進化しない；brew フォーミュラはすべて homebrew-core にコミュニティ保守されており、言語チームは自前 tap を作らない（Crystal チームは formula はコミュニティと明言）
 
-YaoXiang は二重モデルを採用：
+YaoXiang は二層モデルを採用する：
 
-| チャネル                                                | 層     | 状態 | 説明                                                                                                                                        |
-| ------------------------------------------------------- | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| zip / tar.gz                                            | 標準   | ✅   | 展開してすぐ使える（rpath + 同ディレクトリ共有ライブラリ）、extract + PATH が公式ガイド                                                     |
-| `yx`（フロントドア、内蔵バージョン管理）                | お手軽 | ✅   | rustup/Go GOTOOLCHAIN 相当：複数バージョンインストール/切替/更新 + プロジェクト pin                                                         |
-| `curl ... \| sh`（install.sh）                          | お手軽 | ✅   | Linux / macOS：再構成パッケージをダウンロードして `versions/` に展開、`bin/yx` をインストールルートに配置し、デフォルトバージョンを書き込む |
-| `irm ... \| iex`（install.ps1）                         | お手軽 | ✅   | Windows：同ロジック                                                                                                                         |
-| `apt install yaoxiang`                                  | お手軽 | ✅   | `.deb`（amd64/arm64）+ GitHub Pages 静的 apt リポジトリ；システムレベル並列配置、`apt upgrade` でバージョン追従                             |
-| Inno Setup exe                                          | お手軽 | ✅   | Windows ウィザード（既存資産）、システムレベル並列配置、完全な bin/+lib/ 構造を敷設                                                         |
-| winget / `.rpm` / homebrew-core / npm                   | —      | ⏸    | オプションフォローアップ：winget と brew-core はどちらもコミュニティ保守、rpm と deb は同型                                                 |
-| MSI / cargo-dist ネイティブインストーラ / 自作 brew tap | —      | ❌   | 「代替案」を参照                                                                                                                            |
+| チャネル                                                | レイヤ | 状態 | 説明                                                                                                                                      |
+| ------------------------------------------------------- | ------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| zip / tar.gz                                            | 標準   | ✅   | 展開即利用（rpath + 同ディレクトリ共有ライブラリ）、extract + PATH が公式ガイダンス                                                       |
+| `yx`（フロントドア、バージョン管理内蔵）                | お手軽 | ✅   | rustup/Go GOTOOLCHAIN 相当：複数バージョンインストール/切替/更新 + プロジェクト pin                                                       |
+| `curl ... \| sh`（install.sh）                          | お手軽 | ✅   | Linux / macOS：ダウンロード・再構成パッケージを `versions/` に展開、`bin/yx` をインストールルートに配置し、デフォルトバージョンを書き込み |
+| `irm ... \| iex`（install.ps1）                         | お手軽 | ✅   | Windows：同ロジック                                                                                                                       |
+| `apt install yaoxiang`                                  | お手軽 | ✅   | `.deb`（amd64/arm64）+ GitHub Pages 静的 apt リポジトリ；システムレベルフラットインストール、`apt upgrade` でバージョン追従               |
+| Inno Setup exe                                          | お手軽 | ✅   | Windows ウィザード（既存資産）、システムレベルフラットインストール、完全な bin/+lib/ 構造を展開                                           |
+| winget / `.rpm` / homebrew-core / npm                   | —      | ⏸    | オプションフォローアップ：winget と brew-core はいずれもコミュニティ保守、rpm は deb と同形                                               |
+| MSI / cargo-dist ネイティブインストーラ / 自前 brew tap | —      | ❌   | 「代替案」参照                                                                                                                            |
 
-**お手軽チャネルは Rust を参照、バージョン管理をフロントドアに内蔵。**Rust の分解は「ブートストラップスクリプト（sh.rustup.rs）→
+**お手軽チャネルは Rust を参照、バージョン管理はフロントドアに内蔵。**Rust の分解は「ブートストラップスクリプト（sh.rustup.rs）→
 rustup
-→ ツールチェーンパッケージ」、rustup は最初から複数バージョン、切替、更新を管理する；Python/Node の公式インストーラはこの層を作らず、生態系が事後的に pyenv/nvm/pdm をそれぞれ分立して生み出した。YaoXiang は**フロントドア/エンジン分離**を採用する（Go の
-`go` フロントドア + GOTOOLCHAIN、rustup のプロキシディスパッチ、両者の同型形態）：常用コマンドは
+→ ツールチェーンパッケージ」であり、rustup は最初から複数バージョン、切替、更新を管理する。Python/Node の公式インストーラはこの層を作らず、生態系が事後的に pyenv/nvm/pdm を別個に生み出した。YaoXiang は**フロントドア/エンジン分離**を採用する（Go の
+`go` フロントドア + GOTOOLCHAIN、rustup のプロキシディスパッチ、両者の同形構造）：常用コマンドは
 `yx`、エンジンは `yaoxiang-rs`——
 
 ```
 ~/.yaoxiang/
-├── bin/yx                  # フロントドア：小型バイナリ、バージョン解決 + ディスパッチ（プロジェクト pin > デフォルト > 隣接エンジン）
+├── bin/yx                  # フロントドア：小型バイナリ、バージョン解析 + ディスパッチ（プロジェクト pin > デフォルト > 隣接エンジン）
 ├── settings.toml           # デフォルトバージョン、ミラーソース
-└── versions/               # バージョンが第一級の概念；<ver>/ がそのバージョンディストリビューションの展開ルート
+└── versions/               # バージョンは第一級の概念；<ver>/ がそのバージョンの配布パッケージの展開ルートディレクトリ
     └── 0.7.14/
         ├── bin/
         │   ├── yaoxiang-rs      # エンジン：コンパイル/実行/パッケージ管理/fmt/lsp サブコマンド
@@ -276,134 +268,132 @@ rustup
         └── lib/yaoxiang/std/
 ```
 
-- インストールルート `~/.yaoxiang/` は業界慣例に合わせる（pyenv `~/.pyenv`、nvm `~/.nvm`、deno
+- インストールルート `~/.yaoxiang/` は業界慣行に揃える（pyenv `~/.pyenv`、nvm `~/.nvm`、deno
   `~/.deno`、bun `~/.bun`、volta `~/.volta` いずれも単一ルート；rustup の `~/.cargo`+`~/.rustup`
-  二重ルートは cargo が rustup より先に存在した歴史的経緯で、模倣しない）、さらに `~/.yaoxiang`
-  は既にコードベースの既存ネームスペース（std グローバルフォールバックスロット）；環境変数
-  `YAOXIANG_HOME` での上書きをサポート（先例 RUSTUP_HOME /
-  DENO_INSTALL、CI とコンテナシナリオに対応）；Windows は `%USERPROFILE%\.yaoxiang`
-- **バージョンディレクトリ = ディストリビューション展開ルート**：`versions/<ver>/`
-  はポータブル展開、deb インストールツリーと完全に同型、1 バージョンのインストールは 1 ディストリビューションの展開そのもの —
-  3 チャネル間の構造的分岐ゼロ
+  二重ルートは cargo が rustup より先に存在した歴史的負債であり、模倣しない）、かつ `~/.yaoxiang`
+  は既にコードベースの既存名前空間（std グローバルフォールバックスロット）；`YAOXIANG_HOME`
+  環境変数での上書きをサポート（先例 RUSTUP_HOME /
+  DENO_INSTALL、CI とコンテナシナリオに対応）；Windows では `%USERPROFILE%\.yaoxiang`
+- **バージョンディレクトリ = 配布パッケージ展開ルートディレクトリ**：`versions/<ver>/`
+  はポータブル展開、deb インストールツリーと完全同形で、1 バージョンのインストールは 1 配布パッケージの展開——3 チャネル間で構造的分岐なし
 - コマンド面（rustup 相当）：`yx toolchain install / default / update / list / uninstall`、`yx self update`
-  を含む；他の動詞はそのままエンジンに透過
-- **バージョンロックは構造的保証**：fmt などのツールは構文と同期して進化する（古い fmt は新構文を認識しない）、バージョン解決はフロントドアで一度完了し、組全体が切り替わる — 「新エンジンに旧 fmt」の組み合わせ空間は存在しない；将来 fmt/LSP を独立バイナリに分割する場合も同じバージョンの
-  `bin/` 内に配置される
-- プロジェクトレベル pin：`yx-toolchain.toml`（先例 rust-toolchain.toml、コマンド名に準拠；`yaoxiang.toml`
-  には入れない — パッケージマニフェストはツールチェーンバージョンをライブラリ利用者に強制すべきでない）
+  を含む；その他の動詞はそのままエンジンに透過転送
+- **バージョンロックは構造的保証**：fmt などのツールは構文と同期して進化する（古い fmt は新構文を認識しない）、バージョン解析はフロントドアで一度完了し、グループ全体で切替——「新エンジンに旧 fmt」の組合せ空間は存在しない；将来 fmt/LSP を独立バイナリに分割する場合も同じバージョンの
+  `bin/` 内に配置
+- プロジェクトレベル pin：`yx-toolchain.toml`（先例 rust-toolchain.toml、コマンド名に追随；`yaoxiang.toml`
+  には入れない——パッケージマニフェストはツールチェーンバージョンをライブラリの使用者に強制すべきでない）
 - ブートストラップエントリ（`curl | sh` /
-  `irm | iex`）で最新の stable パッケージ一括インストール：`versions/` に展開、`bin/yx`
+  `irm | iex`）は最新 stable パッケージを一括インストール：展開で `versions/` に配置、`bin/yx`
   をインストールルートに配置、`settings.toml`
-  にデフォルトバージョンを書き込み（rustup 「ブートストラップでマネージャをインストール」分解の等価収束 — フロントドアとエンジンが同パッケージ、二段階不要）
-- ミラーソース設定可能（settings.toml）、国内ユーザへの配慮を継続（Z3 ダウンロードと同じネットワーク問題）
-- **バージョン管理は自己完結不変量を壊さない**：各バージョンは完全なディストリビューションツリー、rpath と exe 相対 std 検索はツリー内で自己完結し、フロントドアは構造を変更せずディスパッチのみ
+  にデフォルトバージョンを書き込み（rustup 「ブートストラップでマネージャをインストール」分解の等価収斂——フロントドアとエンジンが同包で、二段階不要）
+- ミラーソース設定可能（settings.toml）、中国国内ユーザの考慮を継続（Z3 ダウンロードと同様のネットワーク問題）
+- **バージョン管理は自己完結不変量を破壊しない**：各バージョンは完全な配布ツリーであり、ツリー内で rpath と exe 相対 std 検索が自己完結し、フロントドアはディスパッチのみを行い構造を変更しない
 
-`.deb` と Inno は**システムレベル並列配置**チャネル（root / Program
-Files の単一バージョン、`apt upgrade`
-/ コントロールパネルで更新）、サーバ、CI、純粋初心者向けシナリオ向け；マネージャとの共存は PATH 順序に依存（先例：apt の rustc と rustup の共存）。全チャネルが同一の成果物ツリーを共有する。
+`.deb` と Inno は**システムレベルフラットインストール**チャネル（root / Program
+Files 単一バージョン、`apt upgrade`
+/ コントロールパネルで更新）、サーバ、CI、純粋初心者向けシナリオに対応；マネージャとの共存は PATH 順序に依存（先例：apt の rustc と rustup は並存）。全チャネルで同一の成果物ツリーを共有する。
 
 `.deb`
-レイアウトは同じディレクトリツリーを再利用：`/usr/lib/yaoxiang/`（ディストリビューション全体：`bin/{yx,yaoxiang-rs,libz3.so}` +
-`lib/yaoxiang/std/`）+ `/usr/bin/yx` のシンボリックリンクは `/usr/lib/yaoxiang/bin/yx` を指す —
-`$ORIGIN` は**実パス**で計算されるため、リンク後も同じディレクトリの `libz3.so`
-を解決し、展開パッケージ構造と同型。ブランドフルネームはパッケージ名と製品名に残し（`apt install yaoxiang`、Inno 製品名 YaoXiang）、コマンド面は統一
-`yx` — Go と同じ：パッケージ名 `golang-go`、コマンド `go`。apt リポジトリは GitHub
-Pages で静的ホスティング（Packages/Release/InRelease メタデータは GPG 署名、release
-CI から発行）；将来的に Debian/Ubuntu 公式収録を申請可能（期間が長く、バージョン遅延、主経路ではない）。
+レイアウトは同じディレクトリツリーを再利用：`/usr/lib/yaoxiang/`（配布ツリー全体：`bin/{yx,yaoxiang-rs,libz3.so}` +
+`lib/yaoxiang/std/`）+ `/usr/bin/yx` シンボリックリンクは `/usr/lib/yaoxiang/bin/yx`
+を指す——`$ORIGIN` は解決後の**実際のパス**で計算され、リンク後も同ディレクトリの `libz3.so`
+をヒットし、展開パッケージ構造と同形。ブランド全名はパッケージ名と製品名に残し（`apt install yaoxiang`、Inno 製品名 YaoXiang）、コマンド面は統一
+`yx`——Go と同じ：パッケージ名 `golang-go`、コマンド `go`。apt リポジトリは GitHub
+Pages に静的ホスティング（Packages/Release/InRelease メタデータは GPG 署名、release
+CI で公開）；将来的に Debian/Ubuntu 公式収録を申請可能（周期が長く、バージョン遅延、主経路ではない）。
 
 ### 標準ライブラリディレクトリ
 
 `lib/yaoxiang/std/`
-の内容はすべてリポジトリの静的ファイルから来ており、パッケージングは**純粋コピー**で、ランタイム生成エントリはない：
+の内容はすべてリポジトリの静的ファイルから取得され、パッケージングは**純粋コピー**であり、ランタイム生成エントリは設けない：
 
-| 層                                | ソース                                                                    | 性質                                               |
-| --------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------- |
-| native モジュール（io/math/…）    | リポジトリ `src/std/interfaces/*.yx` で事前生成されたインタフェースビュー | インタフェースシグネチャビュー（実装はバイナリ内） |
-| .yx 層モジュール（test/… 増加中） | リポジトリ `src/std/*.yx` をそのままコピー                                | 実ソース                                           |
+| レイヤ                               | 出所                                                                        | 性質                                           |
+| ------------------------------------ | --------------------------------------------------------------------------- | ---------------------------------------------- |
+| native モジュール（io/math/…）       | リポジトリ `src/std/interfaces/*.yx` で事前生成されたインターフェースビュー | インターフェース署名ビュー（実装はバイナリ内） |
+| .yx レイヤモジュール（test/…増加中） | リポジトリ `src/std/*.yx` をそのままコピー                                  | 実ソース                                       |
 
 事前生成ビューは `StdModule::exports()` から派生（`src/std/gen_interfaces.rs` の
-`generate_all_interfaces()`）、**ランタイム生成サブコマンドは設けない**（2026-09-10 裁定：パッケージング完成後、サブコマンドは余分なインタフェース面）。同期は「生成物の入库 + テストゲート」パターンを採用（RFC-013 コード表と同じ）：`test_committed_interface_files_match_generation`
-で事前生成ファイルと現在の生成結果をバイト単位で比較、ドリフトで赤；治癒は bless エントリ
+`generate_all_interfaces()`）、**ランタイム生成サブコマンドは設けない**（2026-09-10 既決：パッケージング成形後、サブコマンドは余分なインターフェース面）。同期は「生成物をリポジトリに登録 + テストゲート」方式を採用（RFC-013 コード表と同じ）：`test_committed_interface_files_match_generation`
+が事前生成ファイルと現在の生成をバイト単位で比較し、ズレがあれば赤；修復は bless エントリ
 `cargo test update_committed_interface_files -- --ignored`。生成ロジックは crate 内部の `StdModule`
-実装に依存し、build.rs に下ろせないため、ゲートは構築時ではなくテスト時に置く。
+実装に依存し、build.rs に下ろせないため、ゲートはビルド時ではなくテスト時に行う。
 
-**ランタイム検索チェーン** — `find_std_interface_file` に exe 相対検索を追加：
+**ランタイム検索チェーン**——`find_std_interface_file` に exe 相対検索を追加：
 
 1. プロジェクト `.yaoxiang/vendor/std/<name>.yx`（プロジェクトオーバーライド、現状）
-2. **exe の所在ディレクトリの
-   `../lib/yaoxiang/std/<name>.yx`（新規）**：ポータブル展開、マネージドインストール（`versions/<ver>/`）、deb 並列配置で統一ヒット
+2. **exe のディレクトリ
+   `../lib/yaoxiang/std/<name>.yx`（新規）**：ポータブル展開、マネージドインストール（`versions/<ver>/`）、deb フラットインストールで統一ヒット
 3. `~/.yaoxiang/std/<name>.yx`（グローバルフォールバック、手動オーバーライド用として保持）
 
-現状このチェーンはほぼ壊れている（LSP 呼び出しがプロジェクトディレクトリを渡さない、`package init`
-が書き込む `.yaoxiang/std` がチェーンにない）、今回は付随的に修正し、`package init` の出力を
-`.yaoxiang/vendor/std` に統一する（パッケージマネージャ vendor ディレクトリと一致）。
+現状このチェーンはほぼ切断されている（LSP 呼び出しがプロジェクトディレクトリを伝えない、`package init`
+が書き込む `.yaoxiang/std` がチェーンにない）、今回はついでに修正し、`package init` の出力を
+`.yaoxiang/vendor/std` に統一（パッケージマネージャの vendor ディレクトリと一致）。
 
-**コンパイル権威は変わらない**：`.yx` 層は引き続き `include_str!`
-でインライン展開（RFC-036 の「std バージョンとバイナリの厳密バインド」不変量を維持）。ディストリビューションディレクトリの位置付けは**可読ビュー +
-LSP 解決ソース**で、コンパイル入力ではない — ユーザがディストリビューションディレクトリ内の `.yx`
-を手作業で変更してもコンパイラは採用しない（「`Lib/`
-を変更すれば即時有効」の Python 風セマンティクスを开放するかは、開放問題を参照）。
+**コンパイル権威は変更なし**：`.yx` レイヤは引き続き `include_str!`
+で内蔵（RFC-036 の「std バージョンとバイナリの厳格なバインド」不変量を保持）。配布ディレクトリの位置づけは**可読ビュー +
+LSP 解析ソース**であり、コンパイル入力ではない——配布ディレクトリ内の `.yx`
+を手動で変更してもコンパイラに採用されない（「`Lib/`
+変更で即時反映」セマンティクスの開放については、開放問題を参照）。
 
 ### Wasm ビルド
 
-**独立を維持、cargo-dist に統合しない。**
+**独立を維持、cargo-dist には移行しない。**
 
-cargo-dist が管理するのは「コンパイラをユーザに配布する」こと、wasm は「オンライン playground をドキュメントサイトに埋め込む」 —
-2 つは完全に異なるデリバラブル。
+cargo-dist が管轄するのは「コンパイラをユーザに配布する」ことであり、wasm は「オンライン playground をドキュメントサイトに埋め込む」——完全に異なる二つの成果物。
 
-| 側面             | やり方                                      |
-| ---------------- | ------------------------------------------- |
-| ビルドツール     | `wasm-pack build` を維持                    |
-| CI workflow      | `_build-wasm.yml` 独立ジョブを維持          |
-| トリガタイミング | 同じ release タグプッシュで並列の独立ジョブ |
-| 公開ターゲット   | `docs/public/wasm/` → GitHub Pages          |
+| 側面           | やり方                                   |
+| -------------- | ---------------------------------------- |
+| ビルドツール   | `wasm-pack build` を維持                 |
+| CI workflow    | `_build-wasm.yml` の独立 job を保持      |
+| 起動タイミング | リリースと同じ tag push で並列の独立 job |
+| 公開先         | `docs/public/wasm/` → GitHub Pages       |
 
 ### npm 公開
 
-| パッケージ             | 内容                                       | 状態                                                                                                                                                                                                             |
-| ---------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@yaoxiang/cli`        | ディストリビューションダウンロード wrapper | 延期：cargo-dist の npm wrapper も同様にフラット成果物仮定に基づくため、インストーラとともに廃止；npm チャネルが必要なら、wrapper を自作（再構成パッケージをダウンロードして展開、展開インストールと同ロジック） |
-| `@yaoxiang/playground` | wasm ライブラリ（JS + .wasm）              | オプション、現状 docs のみ公開                                                                                                                                                                                   |
+| パッケージ             | 内容                                 | 状態                                                                                                                                                                                                                         |
+| ---------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@yaoxiang/cli`        | 配布パッケージダウンロードのラッパー | 延期：cargo-dist の npm ラッパーも同様にフラットアーティファクト仮定に基づくため、インストーラと共に廃止；npm チャネルが必要な場合は自前ラッパーを書く（再構成パッケージをダウンロード・展開、展開インストールと同ロジック） |
+| `@yaoxiang/playground` | wasm ライブラリ（JS + .wasm）        | オプション、現状は docs のみに公開                                                                                                                                                                                           |
 
-2 つは競合せず、名前も競合しない。
+両者は競合せず、名前も競合しない。
 
 ### 既存リリースフローとの統合
 
-現状の `release.yml`：main プッシュ → check-version（`v{version}` タグが存在しない場合のみ通過）→
-build / build-wasm / security / test 4 系統 → release ジョブ（タグプッシュ +
-`generate-commit-list.ts` で @mentions を含む body 生成 + 成果物アップロード）。
+現状の `release.yml`：push main → check-version（`v{version}` tag が存在しない場合のみ通過）→ build
+/ build-wasm / security / test の 4 経路 → release job（tag プッシュ + `generate-commit-list.ts`
+で @mentions を含む body を生成 + アーティファクトをアップロード）。
 
-cargo-dist 生成のパイプラインはタグ駆動で announce/publish を内蔵し、fmt/clippy/test/audit ゲートを含まず、release
-notes 形式も merge commit changelog を担えない。**全体を一括置換すると既存リリース儀式を壊す**（PR →
-CI 全グリーン → バージョン上げ → merge commit が changelog）。
+cargo-dist が生成するパイプラインは tag 駆動で announce/publish を内蔵し、fmt/clippy/test/audit ゲートを含まず、リリースノート形式も merge
+commit changelog を承载できない。**直接全体置換すると既存リリース式典を破壊する**（PR → CI 全部緑 →
+bump → merge commit = changelog）。
 
-統合原則：**トリガとゲートは現状維持、ビルドは `cargo dist build` に委ねる、公開は現状維持。**
+統合原則：**トリガーとゲートは現状維持、ビルドは `cargo dist build` に委譲、公開は現状維持。**
 
-1. check-version / security / test とタグ作成を `dist-release.yml` の `gate` / `security` / `test` /
-   `tag` ジョブに統合、トリガは main プッシュを維持（**タグ駆動は不可**：workflow は `GITHUB_TOKEN`
-   でプッシュしたタグでは他の workflow がトリガされない；旧 `release.yml`
-   はこのためフラットバイナリを自作する必要があり、`_build-platforms.yml`
-   と共に削除済み、本ファイルがリリースの単一エントリ）
-2. タグ生成後にビルド：`plan` ジョブで dist がランナー/システム依存マトリクスを計算 →
-   `cargo dist build`（5 ターゲット）→ `package-dist.sh` でターゲットごとに再構成 → Inno
-   Setup ジョブ（Windows 再構成パッケージを入力にウィザードをビルド、`/DMyAppVersion=`
-   でバージョンを注入、二度目のコンパイル不要）→ `_build-wasm.yml`（並列ジョブ）
-3. publish ジョブ：`generate-commit-list.ts`
-   で body 生成（既存スクリプト再利用）→ 再構成パッケージ + `.sha256` + `.deb` + wasm + Setup
-   exe をアップロード、`action-gh-release` で自作 Release；独立 `publish-apt` ジョブで GitHub Pages
-   apt リポジトリメタデータを発行（`secrets.APT_GPG_KEY`
+1. check-version / security / test と tag 打ちを `dist-release.yml` の `gate` / `security` / `test`
+   / `tag` job に統合、トリガーは push main を維持（**tag 駆動は不可**：workflow が `GITHUB_TOKEN`
+   でプッシュした tag は他の workflow をトリガーしない；旧 `release.yml`
+   はそのためフラットバイナリを自前で公開するしかなく、既に `_build-platforms.yml`
+   と共に削除済み、本ファイルがリリース単一点）
+2. tag 生成後にのみビルド：`plan` job が dist でランナー/システム依存マトリクスを計算 →
+   `cargo dist build`（5 target）→ `package-dist.sh` で target ごとに再構成 → Inno Setup
+   job（Windows 再構成パッケージをウィザードビルドに投入、`/DMyAppVersion=`
+   でバージョン注入、二次コンパイル不要）→ `_build-wasm.yml`（並列 job）
+3. publish job：`generate-commit-list.ts` で body を生成（既存スクリプト再利用）→ 再構成パッケージ +
+   `.sha256` + `.deb` + wasm + Setup exe をアップロード、`action-gh-release` で自前 Release；独立
+   `publish-apt` job で GitHub Pages apt リポジトリメタデータ公開（`secrets.APT_GPG_KEY`
    未設定時は自動スキップ、他チャネルに影響なし）
-4. 再公開/再ビルド：`workflow_dispatch` で既存タグを指定（`gate` はタグ作成ステップをスキップ）
+4. 再発行/再ビルド：`workflow_dispatch` で既存 tag を指定（`gate`
+   がそれに基づき tag 打ちステップをスキップ）
 
-### Nightly 公開
+### Nightly リリース
 
-cargo-dist はネイティブ nightly サポートなし（[axodotdev#1143](https://github.com/axodotdev/cargo-dist/issues/1143)、依然 open
-feature request）。
+cargo-dist はネイティブ nightly サポートがない（[axodotdev#1143](https://github.com/axodotdev/cargo-dist/issues/1143)、open
+feature request のまま）。
 
-既存の cron + タグ上書き方式を維持、ビルド部分を `_build-platforms.yml` から `cargo dist build`
-に変更 — 本質的に cargo コマンドなので、nightly.yml で直接呼び出せる。workflow 再利用は行わない（想定の
-`uses: ./release.yml` は不可：再利用側は `workflow_call`
-トリガが必要、かつ cargo-dist ワークフローはタグ駆動でビルドと公開が結合）：
+既存の cron + tag 上書き方式を維持し、ビルド部分を `_build-platforms.yml` から `cargo dist build`
+に変更——これは本質的に cargo コマンドなので、nightly.yml で直接呼び出せる。workflow 再利用は行わない（想定される
+`uses: ./release.yml` は不可：被利用側に `workflow_call` トリガーが必要、かつ cargo-dist
+workflow は tag 駆動でビルドと公開が結合）：
 
 ```yaml
 # nightly.yml（移行後）
@@ -411,11 +401,11 @@ on:
   schedule:
     - cron: '17 22 * * *'
 jobs:
-  build: # cargo dist build + package-dist.sh（正式版と同じ仕組み）
-  publish: # 現状維持：nightly タグを作成/移動 → GitHub Pre-release を上書き
+  build: # cargo dist build + package-dist.sh（正式版と同一セット）
+  publish: # 現状維持：nightly tag を打つ/移動 → GitHub Pre-release を上書き
 ```
 
-### cargo-dist 設定（既実装 dist-workspace.toml）
+### cargo-dist 設定（dist-workspace.toml に反映済み）
 
 ```toml
 [workspace]
@@ -423,241 +413,240 @@ members = ["cargo:.", "cargo:tools/yx"]
 
 # Config for 'dist'
 [dist]
-# dist バージョンを固定（Cargo.toml SemVer 構文）
+# dist バージョンをロック（Cargo.toml SemVer 構文）
 cargo-dist-version = "0.32.0"
 ci = "github"
-# インストーラはすべて自社、cargo-dist はビルド + 圧縮パッケージ + チェックサムのみ
+# インストーラはすべて自前、cargo-dist はビルド + 圧縮パッケージ + チェックサムのみ
 installers = []
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
-# 生成されたワークフローは意図的に改変されている（package-dist.sh 再構成 + 自社公開段、RFC-037）、
-# generate テンプレートからのドリフトを理由にビルドを拒否しない
+# 生成された workflow は意図的に改造されている（package-dist.sh 再構成 + 自前公開段、RFC-037）、
+# generate テンプレートからのズレによりビルドが拒否されない
 allow-dirty = ["ci"]
 ```
 
 上記はリポジトリ vendor の実設定（`cargo dist init`
 で生成後、必要に応じて修正）；`cargo-dist-version`
-は 0.32.0 に固定、生成されたワークフローは vendor してリポジトリに入れ review を受け、実行時に取得しない。ビルドプロファイルは init がルートの Cargo.toml の
+を 0.32.0 にロック、生成された workflow を vendor してリポジトリに格納し review を受け、ランタイムには取得しない。ビルド profile は init がルート Cargo.toml の
 `[profile.dist]` に注入（inherits release、lto=thin）、2 バイナリは `target/<triple>/dist/`
-に配置されて再構成スクリプトが取得。
+に配置されて再構成スクリプトが利用する。
 
-### package-dist.sh（既実装）
+### package-dist.sh（反映済み）
 
-リポジトリの `scripts/release/package-dist.sh` を基準とする、要点：
+リポジトリ `scripts/release/package-dist.sh` を基準とし、要点：
 
-- 2 バイナリは `cargo dist build` のビルド出力ディレクトリ `target/<triple>/dist/`
-  から直接取得（profile=dist）—
-  cargo-dist 自体のフラット単一バイナリアーカイブはデリバラブルではなく、同名再構成パッケージを
-  `target/distrib/` で直接上書き
-- Z3 共有ライブラリもビルド出力ディレクトリから取得 —
-  build.rs リンク時に該当プラットフォームの共有ライブラリを選択してコピー（`copy_shared_lib`）、**単一ソース**：パッケージングスクリプトは Z3 バージョンとプラットフォームディレクトリ名を知る必要がないし、知る必要もない；Z3 ライセンステキストはライブラリとともに配置され、パッケージングで同梱（MIT 配布義務）、macOS 側ではパッケージング時に dylib の install_name を
-  `@rpath` に統一し、バイナリを ad-hoc 再署名
-- std ディレクトリは純粋コピー：`src/std/interfaces/*.yx`（事前生成インタフェースビュー）+
-  `src/std/*.yx`（.yx 層の実ソース）
-- README/LICENSE を同梱；再パッケージング（Windows zip / その他 tar.gz；Git
-  Bash に zip がない場合は zip → System32 bsdtar → PowerShell の三段フォールバック）し、`.sha256`
+- 2 バイナリは `cargo dist build` のビルド出力ディレクトリ
+  `target/<triple>/dist/`（profile=dist）から直接取得——cargo-dist 自身のフラット単一バイナリアーカイブは成果物ではなく、同名再構成パッケージを
+  `target/distrib/` に直接上書き
+- Z3 共有ライブラリもビルド出力ディレクトリから取得——build.rs のリンク時に該当プラットフォームの共有ライブラリが選択・コピー済み（`copy_shared_lib`）、**単一ソース**：パッケージングスクリプトは Z3 バージョンとプラットフォームディレクトリ名を知る必要がない；Z3 ライセンス文書はライブラリ配置時に同梱され、パッケージングに持ち込まれる（MIT 配布義務）、macOS 側のパッケージング時に dylib の install_name を
+  `@rpath` に統一し、バイナリに ad-hoc 再署名
+- std ディレクトリは純粋コピー：`src/std/interfaces/*.yx`（事前生成インターフェースビュー）+
+  `src/std/*.yx`（.yx レイヤ実ソース）
+- README/LICENSE を添付；再パッケージング（Windows zip / その他 tar.gz；Git
+  Bash に zip がない場合は zip → System32 bsdtar → PowerShell の三段フォールバック）し `.sha256`
   を再計算
-- Linux かつ `dpkg-deb` 利用可能時は `build-deb.sh` を呼び `.deb` を生成（`/usr/lib/yaoxiang`
-  並列配置ツリー + `/usr/bin/yx` シンボリックリンク）
+- Linux かつ `dpkg-deb` 利用可能時は `build-deb.sh` を呼び出して `.deb` を生成（`/usr/lib/yaoxiang`
+  フラットインストールツリー + `/usr/bin/yx` シンボリックリンク）
 
-### 廃止された手書き CI
+### 廃止する手書き CI
 
 移行完了後に調整されるファイル：
 
-| ファイル                                 | 行数        | 処理                                                                     |
-| ---------------------------------------- | ----------- | ------------------------------------------------------------------------ |
-| `.github/workflows/_build-platforms.yml` | 254         | 削除（cargo-dist ビルドマトリクスで置換）                                |
-| `.github/workflows/release.yml`          | 189         | 削除（ゲートとタグ作成を dist-release.yml に統合、リリース単一エントリ） |
-| `.github/workflows/nightly.yml`          | 173         | ビルド段を `cargo dist build` に変更、公開ロジックは保持                 |
-| `scripts/build/setup.iss`                | ~250        | **保持し正式採用**（Windows ウィザード）                                 |
-| **合計削除**                             | **~600 行** |                                                                          |
+| ファイル                                 | 行数        | 処理                                                                |
+| ---------------------------------------- | ----------- | ------------------------------------------------------------------- |
+| `.github/workflows/_build-platforms.yml` | 254         | 削除（cargo-dist ビルドマトリクスで代替）                           |
+| `.github/workflows/release.yml`          | 189         | 削除（ゲートと tag 打ちは dist-release.yml に統合、リリース単一点） |
+| `.github/workflows/nightly.yml`          | 173         | ビルド段を `cargo dist build` に変更、公開ロジックは保持            |
+| `scripts/build/setup.iss`                | ~250        | **保持して正式採用**（Windows ウィザード）                          |
+| **合計削減**                             | **~600 行** |                                                                     |
 
-保持される：
+保持：
 
-- `ci.yml`（日次 fmt + clippy + test + MSRV、公開フローに属さない）
-- `_build-wasm.yml`（独立ビルドフロー、dist-release.yml の並列ジョブに紐付け）
+- `ci.yml`（日常 fmt + clippy + test + MSRV、公開フローには属さない）
+- `_build-wasm.yml`（独立ビルドフロー、dist-release.yml の並列 job に組み込む）
 - `_build-z3-wasm.yml`（wasm 専用 Z3）
 - `docs-deploy.yml`（ドキュメントデプロイ）
 
 ### 受け入れ基準
 
-「箱から出してすぐ使える」はテスト可能で、移行完了の判定は「新旧成果物が一致」ではなく、以下すべてが通過すること：
+「即利用」はテスト可能であり、移行完了の判定は「新旧成果物一致」ではなく、以下すべて通過すること：
 
 - クリーンなマシン（Rust / Z3 / `~/.yaoxiang`
-  なし）でいずれかのプラットフォームの圧縮パッケージを展開し、直接 `bin/yaoxiang-rs --version`
-  が成功する — `LD_LIBRARY_PATH` 設定不要（rpath 有効）
-- 展開ディレクトリ内の `lib/yaoxiang/std/*.yx`
-  すべてが読める：native モジュールはシグネチャインタフェースビュー、`.yx` 層は実ソース
-- 展開ディレクトリ下のサンプルプロジェクトで LSP を起動し、std メンバー補完 / ジャンプ定義が使える（exe 相対検索有効）
-- 公式ガイド通りに `/usr/local`（または
-  `~/.yaoxiang`）に展開して PATH に追加した後、任意のディレクトリで `yx --version` が成功する
-- `apt install yaoxiang`（自社リポジトリ）後に実行可能、`apt upgrade`
-  でバージョン追従可能；`/usr/bin/yx` シンボリックリンク下のエンジンの `$ORIGIN`（実パスで解決）が
-  `bin/libz3.so` を解決する
-- クリーン環境で `curl ... | sh` と `irm ... | iex` 実行後に `yx` が実行可能、PATH が配置される
+  なし）で任意プラットフォームの圧縮パッケージを展開し、`bin/yaoxiang-rs --version`
+  を直接実行成功——`LD_LIBRARY_PATH` 設定不要（rpath 生效）
+- 展開ディレクトリ内 `lib/yaoxiang/std/*.yx`
+  がすべて可読：native モジュールは署名インターフェースビュー、`.yx` レイヤは実ソース
+- 展開ディレクトリ下のサンプルプロジェクトで LSP を起動し、std メンバの補完 / 定義ジャンプが利用可能（exe 相対検索が生效）
+- 公式ガイダンス通り `/usr/local`（または `~/.yaoxiang`）に展開し PATH 追加後、任意のディレクトリで
+  `yx --version` 成功
+- `apt install yaoxiang`（自前リポジトリ）後実行可能、`apt upgrade`
+  でバージョン追従可能；`/usr/bin/yx` シンボリックリンク下でエンジンの
+  `$ORIGIN`（実際のパスで解決）が `bin/libz3.so` をヒット
+- `curl ... | sh` と `irm ... | iex` をクリーン環境で実行後、`yx` 実行可能、PATH 設定済み
 - `yx toolchain install <ver>` / `default` / `update`
-  が有効：複数バージョン共存、`yx-toolchain.toml`
-  プロジェクト pin がデフォルトバージョンより優先、フロントドアが正しいバージョンにディスパッチ（バージョンツリー内の rpath と std 検索が自己完結、「新エンジンに旧 fmt」組み合わせなし）
-- ポータブル展開後 `yx` が隣接 `yaoxiang-rs` にフォールバック、マネージドインストールと同じ動作
-- Inno Setup インストール後ディレクトリ構造が完全、PATH 有効、アンインストール可能
-- Release 資産完備：5 プラットフォームの再構成パッケージ + `.sha256` が実際の内容と一致
-- Release body は `generate-commit-list.ts` の出力（merge commit changelog が完全）
-- nightly 成果物は Pre-release、最新の正式タグに影響しない
+  が生效：複数バージョン共存、`yx-toolchain.toml`
+  のプロジェクト pin がデフォルトバージョンより優先、フロントドアが正しいバージョンにディスパッチ（バージョンツリー内で rpath と std 検索が自己完結、「新エンジンに旧 fmt」組合せなし）
+- ポータブル展開後、`yx` が隣接する `yaoxiang-rs`
+  にフォールバック、マネージドインストールと一致した挙動
+- Inno Setup インストール後、ディレクトリ構造が完全、PATH 生效、アンインストール可能
+- Release アセット完備：5 プラットフォームの再構成パッケージ + `.sha256` が実内容と一致
+- Release body は `generate-commit-list.ts` の出力（merge commit changelog 完全）
+- nightly 成果物は Pre-release、最新正式 tag に影響しない
 
 ## トレードオフ
 
 ### 利点
 
-- **箱から出してすぐ使える**
-  — ポータブル展開ですぐ使える（rpath + 同ディレクトリ共有ライブラリ）、インストーラが完全なディレクトリを敷設
-- **標準ライブラリが読める** — ユーザは Python `Lib/` を読むように直接 std を読める（必須要件達成）
-- **保守コスト削減** — 手書きビルド YAML 約 600 行を cargo-dist + 自社スクリプト約 80 行に置換
+- **即利用**
+  — ポータブル展開即利用（rpath + 同ディレクトリ共有ライブラリ）、インストーラが完全なディレクトリを展開
+- **標準ライブラリ可読** — ユーザは Python の `Lib/` を読むように直接 std を読める（必須要件達成）
+- **保守コスト削減** — ~600 行の手書きビルド YAML を cargo-dist + ~80 行の自前スクリプトに置換
 - **クロスプラットフォーム一貫性**
-  — 全プラットフォーム動的リンク + 同ディレクトリ共有ライブラリ、例外なし
-- **二重インストール**
+  — 全プラットフォーム動的リンク + 同ディレクトリ共有ライブラリ、特例なし
+- **二層インストール**
   — 標準チャネルは新規コードゼロ（Go/Zig 方式）；お手軽チャネルは Rust を参照、apt / curl / iex /
-  exe 4 エントリが同じ成果物構造を共有
-- **バージョン管理内蔵** — フロントドア `yx` が rustup/Go
-  GOTOOLCHAIN 相当、Python/Node が事後的に pyenv/nvm/pdm で補講する生態系分裂を回避；ツールのバージョンロックは構造的保証であり規約ではない
+  exe の 4 入口で同一の成果物構造を共有
+- **バージョン管理内蔵** — フロントドア `yx` は rustup/Go
+  GOTOOLCHAIN 相当、Python/Node が事後的に pyenv/nvm/pdm で補講する生態分裂を回避；ツールのバージョンロックは規約ではなく構造保証
 
 ### 欠点とリスク
 
-- **お手軽チャネルの保守面** — install.sh / install.ps1（ワンラインスクリプト、ほぼ進化しない）+
-  `.deb` と apt リポジトリメタデータ公開（release CI 自動化）+ `yx` フロントドア crate
-- **エンジン改名の波及範囲** — `yaoxiang` → `yaoxiang-rs`
-  は CI 成果物名、Inno、テスト、ドキュメントの一括移行が必要（フェーズ 5 内で完了）
-- **学習コスト** — チームが cargo-dist 設定を学ぶ必要がある
+- **お手軽チャネルの保守面** — install.sh / install.ps1（一括スクリプト、ほぼ進化しない）+ `.deb`
+  と apt リポジトリメタデータ公開（release CI 自動化）+ `yx` フロントドア crate
+- **エンジン改名の影響範囲** — `yaoxiang` → `yaoxiang-rs`
+  は CI アーティファクト名、Inno、テスト、ドキュメントを一度に一括移行する必要あり（フェーズ 5 内で完了）
+- **学習コスト** — チームが cargo-dist 設定を学ぶ必要あり
 - **cargo-dist 上流リスク** —
-  2025 年中頃に Axo 停止に遭遇、同年 9 月に原作者が復活し継続リリース（0.29 →
-  0.32+）；`dist-version` 固定 + 生成物 vendor してリポジトリで review で軽減
-- **cargo-dist ネイティブ nightly なし** — nightly 公開部分は依然手書きが必要
+  2025 年中頃に Axo 停止に伴い停止、同年 9 月に原作者が復活し継続的にリリース（0.29 →
+  0.32+）；`dist-version` ロック + 生成物 vendor でリポジトリ review で緩和
+- **cargo-dist はネイティブ nightly なし** — nightly リリース部分は引き続き手書きが必要
 
 ### RFC-014b との関係
 
-|              | RFC-014b                                  | RFC-037                                      |
-| ------------ | ----------------------------------------- | -------------------------------------------- |
-| **範囲**     | サードパーティパッケージのビルドと配布    | コンパイラ自体のパッケージングと配布         |
-| **ツール**   | `yaoxiang build` / `yaoxiang publish`     | `cargo-dist` + 自社スクリプト                |
-| **成果物**   | サードパーティパッケージの FFI ライブラリ | コンパイラ + 標準ライブラリ + ツールチェーン |
-| **相互排他** | いいえ、補完                              | いいえ、補完                                 |
+|            | RFC-014b                              | RFC-037                                      |
+| ---------- | ------------------------------------- | -------------------------------------------- |
+| **範囲**   | 第三者パッケージのビルドと配布        | コンパイラ自体のパッケージングと配布         |
+| **ツール** | `yaoxiang build` / `yaoxiang publish` | `cargo-dist` + 自前スクリプト                |
+| **成果物** | 第三者パッケージの FFI ライブラリ     | コンパイラ + 標準ライブラリ + ツールチェーン |
+| **競合**   | いいえ、補完的                        | いいえ、補完的                               |
 
 ## 代替案
 
-| 方案                                     | なぜ不採用                                                                                                                                                                                          |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **手書き CI を継続**                     | 既に約 870 行手書き、重複作業、DLL 漏れを起こしやすい                                                                                                                                               |
-| **自社パッケージングツールを作成**       | 車輪の再発明はしない、cargo-dist は既に成熟                                                                                                                                                         |
-| **tar.gz のみでインストーラなし**        | 唯一公式チャネルは展開 + PATH；Inno は Windows ウィザード慣行のためだけ（国内ユーザは既裁定で保持）                                                                                                 |
-| **Docker 配布**                          | コンパイラと言語ツールチェーンはネイティブバイナリが必要、コンテナシナリオではない                                                                                                                  |
-| **自社 Homebrew tap 作成**               | tap は一律コミュニティ保守（homebrew-core）、自作は時期尚早の要件；お手軽チャネルの macOS エントリは curl スクリプト                                                                                |
-| **独立 `yaoxiangup` マネージャバイナリ** | rustup の先例通りで可能；しかし 2 つ目のユーザ動詞を生み、「パッケージマネージャ/fmt も独立すべきか」の対称性問題を引き起こす — フロントドア/エンジン分離で同時に解消（2026-09-09 討議で否決）      |
-| **自己更新のみ、複数バージョンなし**     | 単一バージョン自己更新では複数プロジェクトの異なる pin バージョン需要を解決できない；Python/Node は公式バージョン管理が欠如、生態系が pyenv/nvm/pdm を強制的に生んだ — 既裁定で内蔵（2026-09-09）   |
-| **Z3 全静的リンク**                      | 既裁定で否決 — 外部システムのディレクトリ型共有ライブラリ配布は自然な形態；exe に詰め込むのも外に置くのも「どちらもディストリビューションに同梱する必要がある」点では同等で、後者は交換可能性も失う |
-| **Inno Setup 廃止**                      | 既裁定で否決 — Windows ウィザードとして保持（追加チャネル）                                                                                                                                         |
-| **cargo-dist ネイティブインストーラ**    | フラットバイナリ仮定が bin/+lib/ 構造と衝突、インストール直後にライブラリ欠落                                                                                                                       |
-| **自社保守 WiX/MSI**                     | cargo-dist ジェネレータを失うコストは Inno が既にカバーする価値を上回る                                                                                                                             |
+| 案                                       | 採用しない理由                                                                                                                                                                                     |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **手書き CI を継続**                     | 既に ~870 行を手書き、重複作業、DLL 漏れのリスク                                                                                                                                                   |
+| **自前のパッケージングツールを書く**     | 車輪の再発明をしない、cargo-dist は既に成熟                                                                                                                                                        |
+| **tar.gz のみでインストーラなし**        | 唯一の公式チャネルは展開 + PATH；Inno は Windows ウィザード慣行（中国国内ユーザ既決で保持）への対応のみ                                                                                            |
+| **Docker 配布**                          | コンパイラと言語ツールチェーンはコンテナシナリオではなくネイティブバイナリが必要                                                                                                                   |
+| **自前 Homebrew tap**                    | tap は一律コミュニティ保守（homebrew-core）、自前は時期尚早；お手軽チャネルの macOS 入口は curl スクリプト                                                                                         |
+| **独立 `yaoxiangup` マネージャバイナリ** | rustup の原典先例として可行；しかし 2 番目のユーザ動詞を生み、「パッケージマネージャ/fmt も独立すべきか」の対称性問題を呼ぶ——フロントドア/エンジン分離で一挙に解消（2026-09-09 議論で否決）        |
+| **自動更新のみ、複数バージョンなし**     | 単一バージョン自動更新では複数プロジェクトの pin 異バージョン需要に応えられない；Python/Node には公式バージョン管理がなく、生態系が pyenv/nvm/pdm を生むことを強いられた——既決で内蔵（2026-09-09） |
+| **Z3 全静的リンク**                      | 既決で否決——外部システムのディレクトリ式共有ライブラリ配布は自然な形態；exe に埋め込むことと外部に置くことは「どちらもパッケージに同梱する」点で同等で、交換可能性も失われる                       |
+| **Inno Setup 廃止**                      | 既決で否決——Windows ウィザードとして保持（追加チャネル）                                                                                                                                           |
+| **cargo-dist ネイティブインストーラ**    | フラットバイナリ仮定が bin/+lib/ 構造と衝突、インストール直後にライブラリ不足                                                                                                                      |
+| **WiX/MSI 自前保守**                     | Inno の既存価値を超えて cargo-dist ジェネレータを失うコストが高い                                                                                                                                  |
 
 ## 実装戦略
 
-### フェーズ 1：言語側の変更（P0）
+### フェーズ 1：言語側変更（P0）
 
 1. `build.rs`：全プラットフォーム統一動的リンク + rpath link-arg；`copy_dll()` を
-   `copy_shared_lib()` に拡張（so/dylib/dll）
-2. リポジトリで native インタフェースビューを事前生成（`src/std/interfaces/`）、テストゲートで
-   `StdModule::exports()` との同期を強制（gen-std サブコマンドは既裁定で取消）
+   `copy_shared_lib()`（so/dylib/dll）に拡張
+2. リポジトリで native インターフェースビューを事前生成（`src/std/interfaces/`）、テストゲートで
+   `StdModule::exports()` との同期を強制（gen-std サブコマンドは既決でキャンセル）
 3. `find_std_interface_file` に exe 相対検索分岐を追加；`package init` の出力パスを
    `.yaoxiang/vendor/std` に統一
 
-### フェーズ 2：cargo-dist 統合（P0）
+### フェーズ 2：cargo-dist 導入（P0）
 
-1. `cargo dist init` を実行して初期設定を生成（`installers = []`、dist-version 固定）
-2. `package-dist.sh` を記述（再構成 + .yx ソースコピー + チェックサム再計算）
-3. `dist-release.yml` がすべてを承载：main プッシュトリガ → バージョンドアゲート → ゲート（audit /
-   fmt / clippy / test）→ タグ作成 → dist build → 再構成 → wasm 並列 → 自社 publish +
+1. `cargo dist init` を実行して初期設定生成（`installers = []`、dist-version ロック）
+2. `package-dist.sh` 作成（再構成 + .yx ソースコピー + チェックサム再計算）
+3. `dist-release.yml` にすべてを承载：push main トリガー → gate バージョンゲート → ゲート（audit /
+   fmt / clippy / test）→ tag 打ち → dist build → 再構成 → wasm 並列 → 自前 publish +
    apt；`release.yml` と `_build-platforms.yml` を削除
-4. 新旧パイプラインを並走、受け入れ基準で逐次検証
+4. 新旧パイプラインを並走、受け入れ基準に基づき逐次検証
 
-### フェーズ 3：旧 CI 停止（P1）
+### フェーズ 3：旧 CI 廃止（P1）
 
-1. `_build-platforms.yml` と `release.yml` を一括削除（リリース単一エントリ：`dist-release.yml`）
-2. `nightly.yml` ビルド段を `cargo dist build` に変更
+1. `_build-platforms.yml` と `release.yml` を一括削除（リリース単一点：`dist-release.yml`）
+2. `nightly.yml` のビルド段を `cargo dist build` に変更
 3. `setup.iss`
-   を新成果物構造に統合（Inno を正式採用；バージョン番号は Cargo.toml から注入、sed 置換を撤廃）
+   を新成果物構造に統合（Inno を正式採用；バージョン番号を Cargo.toml から注入、sed 置換を廃止）
 
 ### フェーズ 4：お手軽チャネル（P2）
 
 1. `install.sh` / `install.ps1`（プラットフォーム検出 → 最新再構成パッケージダウンロード →
    `versions/` に展開 → `bin/yx` をインストールルートに配置 → `settings.toml`
-   にデフォルトバージョン書き込み →
-   PATH 通知/書き込み；フェーズ 5 と同じサイクルで着地、最終形へ一歩で到達）
-2. `.deb` パッケージング（`package-dist.sh` と同じディレクトリツリー + `/usr/bin`
+   にデフォルトバージョンを書き込み →
+   PATH 通知/書き込み；フェーズ 5 と同ラウンドで最終形態として着地）
+2. `.deb` パッケージング（`package-dist.sh` の同一ディレクトリツリー + `/usr/bin`
    シンボリックリンクを再利用）+ GitHub Pages 静的 apt リポジトリ（メタデータ GPG 署名、release
-   CI から公開）
+   CI で公開）
 
 ### フェーズ 5：フロントドア yx とエンジン改名（P2）
 
 1. 現モノリスを `yaoxiang-rs`
-   に改名（CI 成果物名、Inno、テスト、ドキュメントを全て一括スキャン、一回で移行完了）
-2. フロントドア小型 crate `yx`
-   を新設（workspace メンバー）：バージョン解決、release 成果物ダウンロード、tar/zip 解凍、settings.toml、ディスパッチ（toolchain/self 動詞のみ保持、他は透過、clap を使わず手書きディスパッチで引数逐語転送を保証）；バージョンインデックスは GitHub
+   に改名（CI アーティファクト名、Inno、テスト、ドキュメントをすべて一度に一括移行）
+2. フロントドア小型 crate
+   `yx`（workspace メンバー）を新規追加：バージョン解析、release アーティファクトダウンロード、tar/zip 展開、settings.toml、ディスパッチ（toolchain/self 動詞のみ保持、他は透過転送、clap を使わず手書きディスパッチで引数逐語転送を保証）；バージョンインデックスは GitHub
    Releases latest API から取得（ミラーソースは ghproxy 風プレフィックス連結）；`yx`
-   コマンド名は重複チェック済み（主流ディストリビューション/Homebrew に同名の常用コマンドなし、ある小規模ツールが yx を別名として使用）
+   コマンド名は衝突チェック済み（主要ディストリビューション/Homebrew に同名の常用コマンドなし、僅かに小規模ツールが yx をエイリアスとして使用）
 3. `yx toolchain install/default/update/list/uninstall` + `yx-toolchain.toml`
    プロジェクト pin + ミラーソース + `yx self update`
 4. ブートストラップスクリプト：`curl | sh` / `irm | iex`
-   → 再構成パッケージをダウンロードしてフロントドアとデフォルト stable を一括インストール（フェーズ 4 と同じサイクルで最終形に着地）
+   → 再構成パッケージをダウンロードし、フロントドアとデフォルト stable を一括インストール（フェーズ 4 と同ラウンドで最終形態として着地）
 
-### フェーズ 6：オプションフォローアップ（いずれもブロックしない）
+### フェーズ 6：オプションフォローアップ（いずれも非ブロッキング）
 
-1. winget 送信（Inno exe を指す、コミュニティ保守、対称 homebrew-core モデル）
-2. `.rpm`（dnf ユーザ、`.deb` と同型）
-3. Homebrew：知名度が homebrew-core 参入基準に達したらコミュニティが提出
-4. npm `@yaoxiang/cli` 自作 wrapper（名称は現在未登録）
+1. winget 申請（Inno exe を指す、コミュニティ保守、homebrew-core 方式と対称）
+2. `.rpm`（dnf ユーザ、`.deb` と同形）
+3. Homebrew：知名度が homebrew-core 参入基準に達した後、コミュニティが提出
+4. npm `@yaoxiang/cli` 自前ラッパー（名称は現在未登録）
 
 ## 開放問題
 
 ### 未決
 
-- **.yx 層に「ディストリビューションディレクトリを手で変更すればコンパイルで採用される」Python 式セマンティクスを提供するか？**
-  デフォルトは否 — コンパイル権威は RFC-036 のインライン展開を維持（std バージョンとバイナリの厳密バインド）、ディストリビューションディレクトリは可読ビュー +
-  LSP 解決ソースに位置付け。将来开放する場合、バージョンバインド不変量を再検討する必要あり。
+- **.yx レイヤは「配布ディレクトリを手動変更すればコンパイル採用される」Python 方式セマンティクスを提供するか？**
+  デフォルトは否——コンパイル権威は RFC-036 内嵌を維持（std バージョンとバイナリの厳格なバインド）、配布ディレクトリの位置づけは可読ビュー +
+  LSP 解析ソース。将来開放する場合、バージョン绑定不変量を再検討する必要あり。
 
-### クローズ済み
+### 解決済み
 
-以下の問題は設計討議で解決済み：
+以下の問題は設計議論で解決済み：
 
-- ~~Windows での Z3 静的リンクの実現性？~~ →
-  **静的リンクしない、全プラットフォーム動的**（2026-09-09 確認維持）
+- ~~Windows で Z3 静的リンクは可行か？~~ →
+  **静的リンクは行わない、全プラットフォーム動的**（2026-09-09 再確認の上維持）
 - ~~gen-std-interfaces サブコマンド命名？~~ →
-  **サブコマンドを設けない**（2026-09-10 裁定：通常のパッケージング完成後、サブコマンド面は余分；native インタフェースビューはリポジトリ事前生成
+  **サブコマンドは設けない**（2026-09-10 既決：通常のパッケージング成形後、サブコマンド面は余分；native インターフェースビューをリポジトリ事前生成
   `src/std/interfaces/` + テストゲート同期に変更、パッケージングは純粋コピー）
 - ~~Inno Setup を保持するか？~~ → **Windows ウィザードとして保持（追加チャネル）**
-- ~~ディストリビューション構造は物理的に標準ライブラリソースを同梱するか？~~ →
-  **必須**（ユーザ可読性は Python `Lib/` に合わせる、2026-09-09 裁定）
+- ~~配布パッケージ構造は標準ライブラリソースを物理的に携带するか？~~ →
+  **必須**（ユーザ可読性は Python `Lib/` に揃え、2026-09-09 既決）
 - ~~cargo-dist ネイティブインストーラ（shell/powershell/homebrew/msi/npm）？~~ →
-  **すべて廃止**、インストーラは自社（フラット仮定が bin/+lib/ と衝突）
+  **すべて廃止**、インストーラは自前（フラット仮定が bin/+lib/ と衝突）
 - ~~インストーラ戦略？~~ →
-  **二重**（2026-09-09 終裁）：標準チャネル = ディストリビューションがそのままプロダクト（Go/Zig 方式、展開 +
-  PATH）；お手軽チャネルは Rust を参照しワンライナーインストール — Linux
-  `apt`（自社 deb リポジトリ）/ `curl | sh`、Windows `irm | iex` / Inno
-  exe。不採用：MSI、cargo-dist ネイティブインストーラ、自社 brew tap
+  **二層**（2026-09-09 終裁）：標準チャネル = 配布パッケージ即プロダクト（Go/Zig 方式、展開 +
+  PATH）；お手軽チャネルは Rust 参照で一行コマンドインストール——Linux `apt`（自前 deb リポジトリ）/
+  `curl | sh`、Windows `irm | iex` / Inno
+  exe。行わない：MSI、cargo-dist ネイティブインストーラ、自前 brew tap
 - ~~バージョン管理を含めるか？~~ →
-  **必須、インストーラ体系に属する**（2026-09-09 裁定、同日早朝の「遠期独立 RFC」境界を推翻）：動機は Python/Node が公式バージョン管理を欠くため pyenv/nvm/pdm の補講という生態系分裂
-- ~~バージョン管理形態：独立バイナリ or サブコマンド？~~ →
-  **フロントドア/エンジン分離**（2026-09-09 終裁、三ラウンド収束 A→C→命名反転）：常用コマンド `yx`
+  **必須、インストーラ体系に属する**（2026-09-09 既決、同日早朝「遠期に独立 RFC」の境界を翻す）：動機は Python/Node に公式バージョン管理がなく pyenv/nvm/pdm 補講の生態分裂に至ったこと
+- ~~バージョン管理形態：独立バイナリかサブコマンドか？~~ →
+  **フロントドア/エンジン分離**（2026-09-09 終裁、三ラウンド収斂 A→C→命名反転）：常用コマンド `yx`
   = フロントドア（小型バイナリ、toolchain/self 動詞内蔵）、エンジン `yaoxiang-rs` = 現 `yaoxiang`
-  モノリスの改名；ディレクトリ構造 `versions/<ver>/`
-  — バージョンが第一級概念、バージョンディレクトリはディストリビューション展開ルートそのもの、ツールはバージョン全体でロック（旧 fmt は新構文を認識しない；かつて想定した内層
+  モノリスの改名；ディレクトリ構造
+  `versions/<ver>/`——バージョンは第一級概念、バージョンディレクトリは配布パッケージ展開ルートディレクトリ、ツールはバージョン全体でロック（旧 fmt は新構文非対応；かつて想定した内層
   `toolchains/` は冗長で取消）。先例：Go `go` フロントドア +
   GOTOOLCHAIN、rustup プロキシディスパッチ
-- ~~cargo-dist extra-artifacts 条件実行？~~ → **`package-dist.sh` スクリプトで処理、shell
-  case 分岐で**
-- ~~標準ライブラリインタフェースのバージョン互換性？~~ →
-  **コンパイラバージョンと同じディストリビューションで発行、同一圧縮パッケージ内**
+- ~~cargo-dist extra-artifacts 条件付き実行？~~ → **`package-dist.sh` スクリプトで処理、shell
+  case 分岐で進める**
+- ~~標準ライブラリインターフェースバージョン互換性？~~ →
+  **コンパイラバージョンと共にリリース、同一圧縮パッケージ内**
 
 ## 参考文献
 
 - [cargo-dist 公式ドキュメント](https://axodotdev.github.io/cargo-dist/)
 - [cargo-dist GitHub](https://github.com/axodotdev/cargo-dist)
-- [RFC-014b: ビルドシステムとバイナリ配布](../review/014b-build-system.md)
+- [RFC-014b: ビルドシステムとバイナリ配布](../accepted/014b-build-system.md)
 - [cargo-dist nightly feature request](https://github.com/axodotdev/cargo-dist/issues/1143)
 - [Z3 ビルド設定 — CMakeLists.txt](https://github.com/Z3Prover/z3/blob/master/src/CMakeLists.txt)
