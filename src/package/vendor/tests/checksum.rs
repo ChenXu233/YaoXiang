@@ -94,15 +94,21 @@ fn test_verify_checksum() {
     std::fs::write(dir.join("lib.yx"), "main = { 42 }").unwrap();
 
     let checksum = compute_directory_checksum(&dir).unwrap();
-    assert!(verify_checksum(&dir, &checksum).unwrap());
+    assert!(
+        verify_checksum(&dir, &checksum).unwrap(),
+        "内容未变时校验应通过"
+    );
 
     // 篡改后校验失败
     std::fs::write(dir.join("lib.yx"), "main = { 0 }").unwrap();
-    assert!(!verify_checksum(&dir, &checksum).unwrap());
+    assert!(
+        !verify_checksum(&dir, &checksum).unwrap(),
+        "内容被篡改后校验应失败"
+    );
 }
 
 #[test]
 fn test_directory_checksum_not_found() {
     let result = compute_directory_checksum(Path::new("/nonexistent/path"));
-    assert!(result.is_err());
+    assert!(result.is_err(), "校验不存在的目录应报错");
 }

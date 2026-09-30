@@ -1,4 +1,9 @@
-//! `.yxpkg` 打包/解包测试（RFC-014a 决议 3/7）
+//! `.yxpkg` 打包/解包测试 — 基于 RFC-014a §包格式（.yxpkg）+ 决议 3/7
+//!
+//! 决议 3：仅含源码（SHA256SUMS 清单），`build/native/` 预编译产物目录删除；
+//! 决议 7：源码包内容总量 20 MiB 上限。覆盖：round-trip、排除项、打包确定性
+//! （mtime/uid/gid 归零——publish 与 Release digest 的依赖）、篡改/夹带/路径
+//! 逃逸/超限的拒绝路径。
 
 use std::io::Write as _;
 use std::path::Path;
@@ -11,9 +16,10 @@ fn write(
     content: &str,
 ) {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).unwrap();
+        std::fs::create_dir_all(parent).expect("create parent dirs for fixture");
     }
-    std::fs::write(path, content).unwrap();
+    std::fs::write(path, content)
+        .unwrap_or_else(|e| panic!("write fixture {}: {e}", path.display()));
 }
 
 fn sample_project(root: &Path) {
@@ -27,19 +33,21 @@ fn sample_project(root: &Path) {
 }
 
 #[test]
-fn round_trip_preserves_content() {
+fn test_round_trip_preserves_content() {
+    // Arrange
     let tmp = tempfile::tempdir().unwrap();
     let project = tmp.path().join("proj");
     sample_project(&project);
-
     let artifact = tmp.path().join("demo-1.0.0.yxpkg");
-    let total = yxpkg::pack(&project, &artifact).unwrap();
-    assert!(artifact.is_file());
-    assert!(total > 0);
 
+    // Act：打包 → 解包
+    let total = yxpkg::pack(&project, &artifact).unwrap();
     let dest = tmp.path().join("out");
     yxpkg::unpack(&artifact, &dest).unwrap();
 
+    // Assert：内容逐文件一致，清单为 coreutils 双空格格式（/ 分隔路径）
+    assert!(artifact.is_file(), "产物应存在");
+    assert!(total > 0, "源码内容字节数应大于 0");
     assert_eq!(
         std::fs::read_to_string(dest.join("yaoxiang.toml")).unwrap(),
         "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n"
@@ -56,16 +64,16 @@ fn round_trip_preserves_content() {
         std::fs::read_to_string(dest.join("build.yx")).unwrap(),
         "// build script\n"
     );
-
     let sums = std::fs::read_to_string(dest.join(yxpkg::SUMS_FILE)).unwrap();
     assert!(
         sums.contains("  src/lib.yx\n"),
-        "coreutils 风格双空格 + / 分隔路径"
+        "清单应为「双空格 + / 分隔路径」格式: {sums:?}"
     );
 }
 
 #[test]
-fn pack_excludes_vcs_build_and_artifacts() {
+fn test_pack_omits_excluded_entries() {
+    // Arrange：各类排除项（VCS/缓存/构建产物/旧归档/系统文件）+ 正常源码
     let tmp = tempfile::tempdir().unwrap();
     let project = tmp.path().join("proj");
     sample_project(&project);
@@ -75,34 +83,53 @@ fn pack_excludes_vcs_build_and_artifacts() {
     write(&project.join("node_modules/m.js"), "junk\n");
     write(&project.join("junk.yxpkg"), "old artifact\n");
     write(&project.join(".DS_Store"), "junk\n");
-
     let artifact = tmp.path().join("demo.yxpkg");
-    yxpkg::pack(&project, &artifact).unwrap();
 
+    // Act
+    yxpkg::pack(&project, &artifact).unwrap();
     let dest = tmp.path().join("out");
     yxpkg::unpack(&artifact, &dest).unwrap();
-    assert!(!dest.join(".git").exists());
-    assert!(!dest.join(".yaoxiang").exists());
-    assert!(!dest.join("target").exists());
-    assert!(!dest.join("node_modules").exists());
-    assert!(!dest.join("junk.yxpkg").exists());
-    assert!(!dest.join(".DS_Store").exists());
-    assert!(dest.join("src/lib.yx").exists());
+
+    // Assert：排除项全部不出现，正常源码保留
+    assert!(!dest.join(".git").exists(), "VCS 目录应被排除");
+    assert!(!dest.join(".yaoxiang").exists(), "缓存目录应被排除");
+    assert!(!dest.join("target").exists(), "构建产物目录应被排除");
+    assert!(!dest.join("node_modules").exists(), "node_modules 应被排除");
+    assert!(!dest.join("junk.yxpkg").exists(), "旧归档应被排除");
+    assert!(!dest.join(".DS_Store").exists(), "系统文件应被排除");
+    assert!(dest.join("src/lib.yx").exists(), "正常源码应保留");
 }
 
 #[test]
-fn pack_is_deterministic() {
+fn test_pack_is_deterministic() {
+    // Arrange
     let tmp = tempfile::tempdir().unwrap();
     let project = tmp.path().join("proj");
     sample_project(&project);
-
     let a = tmp.path().join("a.yxpkg");
     let b = tmp.path().join("b.yxpkg");
+
+    // Act：先按真实 mtime 打包一次；再用显式 mtime 覆盖后重打
+    // （规范反模式禁 thread::sleep——用 set_modified 确定性改变 mtime）
     yxpkg::pack(&project, &a).unwrap();
-    // 同一目录再打一次（mtime 变化也不影响）
-    std::thread::sleep(std::time::Duration::from_millis(20));
+    let fixed = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(42);
+    let mut set_any = false;
+    for entry in std::fs::read_dir(&project).expect("read project dir") {
+        let path = entry.expect("read dir entry").path();
+        if path.is_file() {
+            let file = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&path)
+                .expect("open fixture file for mtime change");
+            file.set_modified(fixed)
+                .unwrap_or_else(|e| panic!("set mtime on {}: {e}", path.display()));
+            set_any = true;
+        }
+    }
+    assert!(set_any, "至少应改动一个文件的 mtime");
     yxpkg::pack(&project, &b).unwrap();
 
+    // Assert：mtime 不同，两次打包逐字节一致
     assert_eq!(
         std::fs::read(&a).unwrap(),
         std::fs::read(&b).unwrap(),
@@ -111,40 +138,46 @@ fn pack_is_deterministic() {
 }
 
 #[test]
-fn tampered_file_rejected() {
+fn test_tampered_file_rejected() {
+    // Arrange：打包 → 解包 → 篡改一个已登记文件
     let tmp = tempfile::tempdir().unwrap();
     let project = tmp.path().join("proj");
     sample_project(&project);
-
     let artifact = tmp.path().join("demo.yxpkg");
     yxpkg::pack(&project, &artifact).unwrap();
-
     let dest = tmp.path().join("out");
     yxpkg::unpack(&artifact, &dest).unwrap();
     write(&dest.join("src/lib.yx"), "pub x = 999 // tampered\n");
 
-    match yxpkg::verify(&dest) {
+    // Act
+    let result = yxpkg::verify(&dest);
+
+    // Assert：校验和不匹配（报错携带实际哈希）
+    match result {
         Err(PackageError::ChecksumMismatch { actual, .. }) => {
-            assert!(!actual.is_empty());
+            assert!(!actual.is_empty(), "报错应携带实际校验和");
         }
         other => panic!("expected ChecksumMismatch, got {:?}", other.map(|_| ())),
     }
 }
 
 #[test]
-fn unlisted_file_rejected() {
+fn test_unlisted_file_rejected() {
+    // Arrange：打包 → 解包 → 夹带清单外文件
     let tmp = tempfile::tempdir().unwrap();
     let project = tmp.path().join("proj");
     sample_project(&project);
-
     let artifact = tmp.path().join("demo.yxpkg");
     yxpkg::pack(&project, &artifact).unwrap();
-
     let dest = tmp.path().join("out");
     yxpkg::unpack(&artifact, &dest).unwrap();
     write(&dest.join("src/evil.yx"), "smuggled\n");
 
-    match yxpkg::verify(&dest) {
+    // Act
+    let result = yxpkg::verify(&dest);
+
+    // Assert：报错指出未登记文件
+    match result {
         Err(PackageError::InvalidPackage(msg)) => {
             assert!(msg.contains("src/evil.yx"), "报错应指出未登记文件: {msg}");
         }
@@ -152,9 +185,8 @@ fn unlisted_file_rejected() {
     }
 }
 
-/// 手工构造归档（测试路径逃逸 / 缺清单等恶意或畸形包）
-///
-/// tar::Builder 在打包侧就拒绝 `..` 条目，恶意包的字节须手工拼装。
+/// 手工构造归档（缺清单等畸形包；tar::Builder 在打包侧就拒绝 `..`，
+/// 恶意包的字节须手工拼装）
 fn build_raw_archive(entries: &[(&str, &str)]) -> Vec<u8> {
     let buf = std::io::Cursor::new(Vec::new());
     let gz = flate2::write::GzEncoder::new(buf, flate2::Compression::default());
@@ -167,9 +199,14 @@ fn build_raw_archive(entries: &[(&str, &str)]) -> Vec<u8> {
         header.set_entry_type(tar::EntryType::Regular);
         builder
             .append_data(&mut header, name, content.as_bytes())
-            .unwrap();
+            .expect("append raw archive entry");
     }
-    builder.into_inner().unwrap().finish().unwrap().into_inner()
+    builder
+        .into_inner()
+        .expect("finish raw archive builder")
+        .finish()
+        .expect("finish raw archive")
+        .into_inner()
 }
 
 /// 手工拼装单个 ustar 条目（512B 头 + 内容 + 补齐）
@@ -199,51 +236,69 @@ fn raw_ustar_entry(
 }
 
 #[test]
-fn missing_sums_rejected() {
+fn test_missing_sums_rejected() {
+    // Arrange：无 SHA256SUMS 清单的归档
     let tmp = tempfile::tempdir().unwrap();
     let raw = build_raw_archive(&[("src/lib.yx", "pub x = 1\n")]);
     let archive = tmp.path().join("no-sums.yxpkg");
-    std::fs::write(&archive, &raw).unwrap();
+    std::fs::write(&archive, &raw).expect("write raw archive");
 
+    // Act
     let err = yxpkg::unpack(&archive, &tmp.path().join("out")).unwrap_err();
-    assert!(matches!(err, PackageError::InvalidPackage(_)), "got: {err}");
+
+    // Assert
+    assert!(
+        matches!(err, PackageError::InvalidPackage(_)),
+        "缺清单应报 InvalidPackage: {err}"
+    );
 }
 
 #[test]
-fn path_escape_rejected() {
+fn test_path_escape_rejected() {
+    // Arrange：手工拼装含 `../` 逃逸条目的恶意归档
     let tmp = tempfile::tempdir().unwrap();
     let sums = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  ../evil.txt\n";
     let mut raw = raw_ustar_entry("../evil.txt", b"escape\n");
     raw.extend(raw_ustar_entry(yxpkg::SUMS_FILE, sums.as_bytes()));
     raw.extend(vec![0u8; 1024]); // 归档结束块
     let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    gz.write_all(&raw).unwrap();
+    gz.write_all(&raw).expect("gzip raw archive");
     let archive = tmp.path().join("escape.yxpkg");
-    std::fs::write(&archive, gz.finish().unwrap()).unwrap();
+    std::fs::write(&archive, gz.finish().expect("finish gzip")).expect("write archive");
 
+    // Act
     let out = tmp.path().join("out");
     let err = yxpkg::unpack(&archive, &out).unwrap_err();
-    assert!(matches!(err, PackageError::InvalidPackage(_)), "got: {err}");
-    // 逃逸目标绝不能被创建
-    assert!(!tmp.path().join("evil.txt").exists());
+
+    // Assert：报 InvalidPackage 且逃逸目标绝不能被创建
+    assert!(
+        matches!(err, PackageError::InvalidPackage(_)),
+        "路径逃逸应报 InvalidPackage: {err}"
+    );
+    assert!(!tmp.path().join("evil.txt").exists(), "逃逸目标不得被创建");
 }
 
 #[test]
-fn size_limit_enforced() {
+fn test_size_limit_enforced() {
+    // Arrange：内容总量超过 20 MiB（决议 7）
     let tmp = tempfile::tempdir().unwrap();
     let project = tmp.path().join("proj");
     sample_project(&project);
     let big = vec![0u8; yxpkg::MAX_PACKAGE_BYTES as usize + 1];
-    std::fs::write(project.join("big.bin"), &big).unwrap();
+    std::fs::write(project.join("big.bin"), &big).expect("write oversized fixture");
 
+    // Act
     let err = yxpkg::pack(&project, &tmp.path().join("big.yxpkg")).unwrap_err();
+
+    // Assert
     assert!(
         matches!(err, PackageError::PackageTooLarge(_)),
-        "got: {err}"
+        "超限应报 PackageTooLarge: {err}"
     );
 }
 
 #[test]
-fn artifact_name_format() {
+fn test_artifact_name_format() {
+    // Act / Assert：RFC 包格式 `{name}-{version}.yxpkg`
     assert_eq!(yxpkg::artifact_name("demo", "1.2.3"), "demo-1.2.3.yxpkg");
 }

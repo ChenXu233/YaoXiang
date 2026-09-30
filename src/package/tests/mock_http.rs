@@ -54,8 +54,11 @@ pub(crate) struct MockApi {
 impl MockApi {
     /// 起本地 mock：每个响应服务一个连接
     pub fn spawn(responses: Vec<MockResp>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock listener");
+        let port = listener
+            .local_addr()
+            .expect("mock listener local addr")
+            .port();
         let requests = Arc::new(Mutex::new(Vec::new()));
         let recorded = requests.clone();
         let handle = std::thread::spawn(move || {
@@ -75,11 +78,14 @@ impl MockApi {
                     k.eq_ignore_ascii_case("if-none-match")
                         .then(|| v.trim().to_string())
                 });
-                recorded.lock().unwrap().push(RecordedReq {
-                    method,
-                    path,
-                    if_none_match,
-                });
+                recorded
+                    .lock()
+                    .expect("lock mock request log")
+                    .push(RecordedReq {
+                        method,
+                        path,
+                        if_none_match,
+                    });
 
                 let reason = match resp.status {
                     200 => "OK",
@@ -114,7 +120,7 @@ impl MockApi {
     }
 
     pub fn recorded(&self) -> Vec<RecordedReq> {
-        self.requests.lock().unwrap().clone()
+        self.requests.lock().expect("lock mock request log").clone()
     }
 }
 

@@ -78,7 +78,7 @@ fn test_missing_in_lock_detected() {
 
     let report = check_vendor_lock_consistency(&root).unwrap();
     assert_eq!(report.missing_in_lock, vec!["foo".to_string()]);
-    assert!(!report.is_consistent());
+    assert!(!report.is_consistent(), "缺 lock 条目时报告应判不一致");
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn test_no_vendor_dir_is_consistent() {
     let (_tmp, root) = setup_project("[dependencies]\nfoo = \"^1.0\"\n");
 
     let report = check_vendor_lock_consistency(&root).unwrap();
-    assert!(report.is_consistent());
+    assert!(report.is_consistent(), "lock/vendor 对齐时报告应判一致");
 }
 
 // === lock 优先解析 ===
@@ -152,7 +152,11 @@ fn test_resolve_falls_back_to_highest_without_lock() {
     write_vendor_pkg(tmp.path(), "foo", "2.0.0");
 
     let resolved = resolve_in_vendor_with_lock("foo", tmp.path(), None, None).unwrap();
-    assert!(resolved.to_string_lossy().contains("foo-2.0.0"));
+    assert!(
+        resolved.to_string_lossy().contains("foo-2.0.0"),
+        "应按 lock 精确选择 2.0.0: {:?}",
+        resolved
+    );
 }
 
 #[test]
@@ -161,7 +165,10 @@ fn test_resolve_fails_when_locked_version_absent() {
     write_vendor_pkg(tmp.path(), "foo", "1.0.0");
 
     // lock 指向缺失版本：解析失败（一致性检查会先报出 missing_in_vendor）
-    assert!(resolve_in_vendor_with_lock("foo", tmp.path(), Some("9.9.9"), None).is_none());
+    assert!(
+        resolve_in_vendor_with_lock("foo", tmp.path(), Some("9.9.9"), None).is_none(),
+        "vendor 中不存在 9.9.9 时应解析失败"
+    );
 }
 
 #[test]
@@ -172,7 +179,10 @@ fn test_lock_versions_bulk_read() {
     let versions = lock_versions(&root).unwrap();
     assert_eq!(versions.get("foo").map(|s| s.as_str()), Some("1.2.0"));
     assert_eq!(versions.get("bar").map(|s| s.as_str()), Some("0.3.0"));
-    assert!(!versions.contains_key("ghost"));
+    assert!(
+        !versions.contains_key("ghost"),
+        "幽灵包不应出现在 lock 版本表中"
+    );
 }
 
 // === 端到端：E5001 install 提示与一致性预检 ===

@@ -26,6 +26,9 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::fs;
 
+#[cfg(test)]
+mod tests;
+
 /// User-level configuration for YaoXiang
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct UserConfig {

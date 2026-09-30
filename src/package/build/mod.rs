@@ -13,6 +13,9 @@ pub mod cargo;
 pub mod custom;
 pub mod requirements;
 
+#[cfg(test)]
+mod tests;
+
 use std::path::{Path, PathBuf};
 
 use crate::package::error::{PackageError, PackageResult};
