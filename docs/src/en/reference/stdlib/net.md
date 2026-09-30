@@ -1,6 +1,6 @@
 ---
 title: 'std.net'
-description: 'HTTP requests and URL percent encoding/decoding'
+description: 'HTTP Requests and URL Percent-Encoding'
 ---
 
 # std.net
@@ -14,11 +14,11 @@ use std.net
 > This module depends on the operating system's networking capabilities and is **not exported** for
 > the `wasm32` target.
 
-The HTTP functions are implemented on top of a synchronous blocking client (rustls TLS); redirects
-are followed by default (up to 5). Blocking only affects the execution thread that issues the call,
-and aligns with the explicit concurrency model of [`spawn`](../../language-spec/concurrency).
+The HTTP functions are based on a synchronous blocking client (rustls TLS) and follow redirects by
+default (up to 5 times). Blocking only affects the execution thread where the call is made, which is
+consistent with the explicit concurrency model of [`spawn`](../language-spec/concurrency).
 
-## Function overview
+## Function Overview
 
 <!-- stdlib:table:net start -->
 
@@ -43,16 +43,16 @@ http_get: (url: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) ->
 
 <!-- stdlib:sig:net.http_get end -->
 
-Issues an HTTP GET request and returns a structured response dictionary:
+Initiates an HTTP GET request and returns a structured response dictionary:
 
-| Key       | Type                   | Meaning                                                                                                        |
-| --------- | ---------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `status`  | `Int`                  | HTTP status code (e.g. `200`, `404`)                                                                           |
-| `headers` | `Dict(String, String)` | Response headers, with keys normalized to lowercase; multiple values with the same name are joined with `", "` |
-| `body`    | `String`               | Response body (decoded as UTF-8)                                                                               |
+| Key       | Type                   | Meaning                                                                                          |
+| --------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `status`  | `Int`                  | HTTP status code (e.g., `200`, `404`)                                                            |
+| `headers` | `Dict(String, String)` | Response headers with keys lowercased; multiple values with the same name are joined with `", "` |
+| `body`    | `String`               | Response body (decoded as UTF-8)                                                                 |
 
 - `url` — Request URL (read-only borrow)
-- `headers` — Optional request header dictionary; sends `{}` if omitted
+- `headers` — Optional request header dictionary; sends `{}` when omitted
 - `timeout_secs` — Optional overall timeout in seconds; defaults to `30`
 
 **4xx/5xx are normal responses** (the `status` field carries the status code), not errors; only
@@ -64,7 +64,7 @@ use std.net
 // Response shape illustration (requires network, not a runnable example):
 // resp = net.http_get("https://httpbin.org/get")
 // status = resp["status"]        // 200
-// body   = resp["body"]          // response body text
+// body   = resp["body"]          // Response body text
 // ctype  = resp["headers"]["content-type"]
 ```
 
@@ -90,12 +90,12 @@ http_post: (url: &String, body: &String, ?headers: &Dict(String, String), ?timeo
 
 <!-- stdlib:sig:net.http_post end -->
 
-Issues an HTTP POST request. The request body is sent as UTF-8, and `Content-Length` is set
-automatically. The response dictionary has the same structure as [`http_get`](#http_get).
+Initiates an HTTP POST request; the request body is sent as UTF-8 encoded, and `Content-Length` is
+set automatically. The response dictionary structure is the same as [`http_get`](#http_get).
 
 - `url` — Request URL (read-only borrow)
 - `body` — Request body (read-only borrow)
-- `headers` — Optional request header dictionary; sends `{}` if omitted
+- `headers` — Optional request header dictionary; sends `{}` when omitted
 - `timeout_secs` — Optional overall timeout in seconds; defaults to `30`
 
 ```yaoxiang
@@ -122,8 +122,8 @@ Percent-encoding.
 
 - `s` — String to encode (read-only borrow)
 
-Returns the encoded string. Spaces are encoded as `%20` (not `+`); reserved characters are escaped
-per RFC 3986; unreserved characters are kept as-is.
+Returns: the encoded string. Spaces are encoded as `%20` (not `+`); reserved characters are escaped
+per RFC 3986; unreserved characters are left as-is.
 
 Errors: throws `E6007` if the argument is missing; throws a type error if the argument is not a
 `String`.
@@ -148,11 +148,11 @@ url_decode: (s: &String) -> String
 
 <!-- stdlib:sig:net.url_decode end -->
 
-Percent-decoding; inverse of `url_encode`.
+Percent-decoding; the inverse of `url_encode`.
 
-- `s` — Encoded string (read-only borrow)
+- `s` — Already-encoded string (read-only borrow)
 
-Returns the decoded string. Invalid escape sequences are kept as-is.
+Returns: the decoded string. Illegal escape sequences are left as-is.
 
 Errors: throws `E6007` if the argument is missing; throws a type error if the argument is not a
 `String`.
@@ -172,4 +172,4 @@ main: () -> Void = {
 
 ## Related
 
-- [Error code reference](../error-code/) — `E6007` generic runtime error
+- [Error Code Reference](../error-code/) — `E6007` General Runtime Error
