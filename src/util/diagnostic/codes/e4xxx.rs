@@ -32,4 +32,9 @@ define_codes!(E4XXX, {
     // 从终止检查层透传，诊断指向具体循环。
     // 无 param：文案全部由 locales 提供，避免在 Rust 侧写死中文而污染其他语言输出。
     ("E4021", Generic, false, loop_termination_unproven() => ),
+    // E4022 测度不成立（RFC-027a §义务生成）
+    // span_exempt=false：位置是具体递归调用点（`MeasureObligation::span`），
+    // 诊断须指向它而非豁免——与 E4021 同族（证明未成立类），但 E4021 的
+    // span 由 `UnprovenReason` 透传，本码由发射处直接 `.at()`。
+    ("E4022", Generic, false, measure_not_decreasing(counterexample: &str) => .param("counterexample", counterexample)),
 });

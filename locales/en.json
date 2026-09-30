@@ -1082,5 +1082,11 @@
     "message": "json.parse failed to parse JSON text",
     "template": "JSON parsing failed: {detail}",
     "help": "Check whether the JSON syntax is valid (RFC 8259); the error message contains line:column position and reason"
+  },
+  "E4022": {
+    "title": "Measure does not decrease",
+    "message": "The measure at this recursive call site is not strictly decreasing, so termination cannot be proved (counterexample attached)",
+    "template": "Measure not decreasing: cannot prove the measure strictly decreases at this call site\n\nCounterexample:\n{counterexample}",
+    "help": "This is the termination obligation implied by the refinement type: every recursive call site of a function carrying a `Terminates` measure must prove the measure strictly decreases. The counterexample shows an assignment for which the decrease fails. Reconsider the measure, or add branch guards so the decrease holds on each recursive path. See RFC-027a."
   }
 }
