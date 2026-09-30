@@ -16,6 +16,7 @@ use crate::util::i18n::{t, current_lang, MSG};
 ///   上线前添加依赖须显式来源)
 /// - `path`: local path (explicit source; 与 `git` 互斥)
 /// - `dev`: if true, add as dev-dependency
+/// - `trust`: 记录信任该包的 build.yx（RFC-014b 5e；信任记录持久化到用户配置）
 pub fn exec_in(
     project_dir: &Path,
     name: &str,
@@ -23,6 +24,7 @@ pub fn exec_in(
     git: Option<&str>,
     path: Option<&str>,
     dev: bool,
+    trust: bool,
 ) -> PackageResult<()> {
     let mut manifest = PackageManifest::load(project_dir)?;
 
@@ -86,6 +88,20 @@ pub fn exec_in(
 
     super::save_manifest_and_update_lock(&manifest, project_dir)?;
 
+    // add --trust：信任记录即刻持久化（RFC-014b 决议 1：`add --trust <pkg>`
+    // 把信任写入用户配置，后续 install 的信任门直接放行）
+    if trust {
+        let version = manifest
+            .dependencies
+            .get(name)
+            .or_else(|| manifest.dev_dependencies.get(name))
+            .and_then(|v| v.get("version"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(version);
+        crate::util::config::add_trusted_build_script(&format!("{name}@{version}"))
+            .map_err(|e| PackageError::InvalidManifest(format!("信任记录写入失败: {e}")))?;
+    }
+
     Ok(())
 }
 
@@ -96,6 +112,15 @@ pub fn exec(
     git: Option<&str>,
     path: Option<&str>,
     dev: bool,
+    trust: bool,
 ) -> PackageResult<()> {
-    exec_in(&std::env::current_dir()?, name, version, git, path, dev)
+    exec_in(
+        &std::env::current_dir()?,
+        name,
+        version,
+        git,
+        path,
+        dev,
+        trust,
+    )
 }

@@ -41,6 +41,21 @@ pub struct UserConfig {
     /// Global package cache settings (RFC-014 Phase 3)
     #[serde(default)]
     pub cache: CacheConfig,
+    /// 构建信任记录（RFC-014b 5e 信任门）
+    #[serde(default)]
+    pub trust: TrustConfig,
+}
+
+/// 构建信任记录（RFC-014b 2026-09-15 决议 1）
+///
+/// 记录用户已确认信任的 build.yx（`name@version` 键）。持久化位置随用户
+/// 配置体系（`~/.config/yaoxiang/config.toml`；RFC 草拟时的
+/// `~/.yaoxiang/config.toml` 未曾存在，与 `[cache] dir` 同款并入）。
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TrustConfig {
+    /// 已信任的构建脚本（`name@version`）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub build_scripts: Vec<String>,
 }
 
 /// Global package cache configuration (RFC-014 Phase 3)
@@ -217,7 +232,26 @@ impl Default for RuntimeConfig {
 /// Load user-level configuration
 /// Returns default config if file doesn't exist
 pub fn load_user_config() -> Result<UserConfig, ConfigError> {
-    let path = std::env::var("XDG_CONFIG_HOME")
+    let path = user_config_path();
+    let path = match path {
+        Some(p) => p,
+        None => return Ok(UserConfig::default()),
+    };
+    load_user_config_from(&path)
+}
+
+/// 从指定路径加载用户配置（信任门测试注入用）
+pub fn load_user_config_from(path: &std::path::Path) -> Result<UserConfig, ConfigError> {
+    if !path.exists() {
+        return Ok(UserConfig::default());
+    }
+    let content = fs::read_to_string(path).map_err(ConfigError::IoError)?;
+    toml::from_str(&content).map_err(ConfigError::ParseError)
+}
+
+/// 用户配置文件路径（XDG → HOME → APPDATA；都不可用则 None）
+pub fn user_config_path() -> Option<std::path::PathBuf> {
+    std::env::var("XDG_CONFIG_HOME")
         .map(|xdg| {
             std::path::PathBuf::from(xdg)
                 .join("yaoxiang")
@@ -238,16 +272,46 @@ pub fn load_user_config() -> Result<UserConfig, ConfigError> {
                     .join("config.toml")
             })
         })
-        .ok();
-    let path = match path {
-        Some(p) => p,
-        None => return Ok(UserConfig::default()),
-    };
-    if !path.exists() {
-        return Ok(UserConfig::default());
+        .ok()
+}
+
+/// 保存用户配置（目录不存在则创建）
+pub fn save_user_config(config: &UserConfig) -> Result<(), ConfigError> {
+    let path = user_config_path().ok_or(ConfigError::IoError(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "无法定位用户配置目录（HOME / APPDATA 均未设置）",
+    )))?;
+    save_user_config_to(&path, config)
+}
+
+/// 保存用户配置到指定路径（信任门测试注入用）
+pub fn save_user_config_to(
+    path: &std::path::Path,
+    config: &UserConfig,
+) -> Result<(), ConfigError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(ConfigError::IoError)?;
     }
-    let content = fs::read_to_string(&path).map_err(ConfigError::IoError)?;
-    toml::from_str(&content).map_err(ConfigError::ParseError)
+    let content = toml::to_string_pretty(config).map_err(|e| {
+        ConfigError::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    })?;
+    fs::write(path, content).map_err(ConfigError::IoError)
+}
+
+/// 该构建脚本（`name@version`）是否已被用户信任
+pub fn is_trusted_build_script(key: &str) -> bool {
+    load_user_config()
+        .map(|c| c.trust.build_scripts.iter().any(|s| s == key))
+        .unwrap_or(false)
+}
+
+/// 记录信任（幂等；落盘用户配置）
+pub fn add_trusted_build_script(key: &str) -> Result<(), ConfigError> {
+    let mut config = load_user_config()?;
+    if !config.trust.build_scripts.iter().any(|s| s == key) {
+        config.trust.build_scripts.push(key.to_string());
+    }
+    save_user_config(&config)
 }
 
 /// Configuration errors

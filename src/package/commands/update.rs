@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use crate::package::build::TrustDecision;
 use crate::package::error::PackageResult;
 use crate::package::lock::LockFile;
 use crate::package::manifest::PackageManifest;
@@ -13,7 +14,10 @@ use crate::util::i18n::{t, t_simple, current_lang, MSG};
 ///
 /// Re-resolves all dependency versions, downloads updated packages,
 /// and refreshes the lock file.
-pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
+pub fn exec_in(
+    project_dir: &Path,
+    trust: &TrustDecision,
+) -> PackageResult<()> {
     let manifest = PackageManifest::load(project_dir)?;
 
     let mut lock = LockFile::new(); // 清空锁文件，强制重新解析所有依赖
@@ -36,8 +40,12 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
     }
 
     // 使用 fetcher 重新下载所有依赖
-    let result =
-        crate::package::runtime::drive(fetcher::fetch_all(project_dir, &all_deps, &mut lock))?;
+    let result = crate::package::runtime::drive(fetcher::fetch_all(
+        project_dir,
+        &all_deps,
+        &mut lock,
+        trust,
+    ))?;
 
     // 保存更新后的锁文件
     lock.save(project_dir)?;
@@ -85,6 +93,19 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
 pub fn exec_single_in(
     project_dir: &Path,
     name: &str,
+    trust: &TrustDecision,
+) -> PackageResult<()> {
+    exec_single_in_with(
+        project_dir,
+        name,
+        VendorManager::new(project_dir).with_trust(trust.clone()),
+    )
+}
+
+fn exec_single_in_with(
+    project_dir: &Path,
+    name: &str,
+    manager: VendorManager,
 ) -> PackageResult<()> {
     let manifest = PackageManifest::load(project_dir)?;
     let mut lock = LockFile::load(project_dir)?;
@@ -98,7 +119,6 @@ pub fn exec_single_in(
 
     // 删除旧版本
     if let Some(locked) = lock.package.get(name) {
-        let manager = VendorManager::new(project_dir);
         let _ = manager.uninstall_dependency(name, &locked.version);
     }
 
@@ -114,7 +134,6 @@ pub fn exec_single_in(
     // 根据来源类型处理
     let lang = current_lang();
     if spec.git.is_some() {
-        let manager = VendorManager::new(project_dir);
         match crate::package::runtime::drive(manager.install_dependency(&spec)) {
             Ok(resolved) => {
                 lock.lock_dependency_full(
@@ -167,6 +186,6 @@ pub fn exec_single_in(
 }
 
 /// Update all dependencies in the current project
-pub fn exec() -> PackageResult<()> {
-    exec_in(&std::env::current_dir()?)
+pub fn exec(trust: &TrustDecision) -> PackageResult<()> {
+    exec_in(&std::env::current_dir()?, trust)
 }

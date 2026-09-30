@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use crate::package::build::TrustDecision;
 use crate::package::dependency::DependencySpec;
 use crate::package::error::PackageResult;
 use crate::package::lock::LockFile;
@@ -29,8 +30,9 @@ pub async fn fetch_all(
     project_dir: &Path,
     deps: &BTreeMap<String, toml::Value>,
     lock: &mut LockFile,
+    trust: &TrustDecision,
 ) -> PackageResult<FetchResult> {
-    let manager = VendorManager::new(project_dir);
+    let manager = VendorManager::new(project_dir).with_trust(trust.clone());
     manager.ensure_vendor_dir()?;
 
     let specs = DependencySpec::parse_all(deps);

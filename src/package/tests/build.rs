@@ -493,3 +493,188 @@ version = \"1.0.0\"
     .unwrap();
     assert_eq!(outcome.via, "strategy-none");
 }
+
+// ---- 5e：custom/build.yx + 信任门 ----
+
+fn custom_pkg(
+    root: &std::path::Path,
+    script: &str,
+) -> std::path::PathBuf {
+    let pkg = root.join("evil-corp-1.0.0");
+    write(
+        &pkg.join("yaoxiang.toml"),
+        "[package]
+name = \"evil-corp\"
+version = \"1.0.0\"
+
+[build]
+strategy = \"custom\"
+",
+    );
+    write(&pkg.join("build.yx"), script);
+    pkg
+}
+
+fn temp_store() -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.toml");
+    (dir, path)
+}
+
+#[test]
+fn custom_non_interactive_denies_by_default() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = custom_pkg(
+        tmp.path(),
+        "x = 1
+",
+    );
+    let (_store_dir, store) = temp_store();
+    let trust = TrustDecision {
+        flag: false,
+        interactive: false,
+        store: Some(store.clone()),
+    };
+    let err = build::custom::build(&pkg, &trust, &|_| true).unwrap_err();
+    assert!(
+        matches!(err, PackageError::AuthFailed(ref m) if m.contains("非交互")),
+        "got: {err}"
+    );
+    // 拒绝路径不得留下信任记录
+    let cfg = crate::util::config::load_user_config_from(&store).unwrap();
+    assert!(cfg.trust.build_scripts.is_empty());
+}
+
+#[test]
+fn custom_trust_flag_executes_and_persists() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = custom_pkg(tmp.path(), "x = 1\n");
+    let (_dir, store) = temp_store();
+    let trust = TrustDecision {
+        flag: true,
+        interactive: false,
+        store: Some(store.clone()),
+    };
+    // confirm 永不该被问：返回 false 以证明没走到交互路径
+    let outcome = build::custom::build(&pkg, &trust, &|_| false).unwrap();
+    assert_eq!(outcome.via, "custom");
+    // RFC：「--trust 把信任记录持久化」——flag 放行也要落记录
+    let cfg = crate::util::config::load_user_config_from(&store).unwrap();
+    assert_eq!(cfg.trust.build_scripts, vec!["evil-corp@1.0.0".to_string()]);
+}
+
+#[test]
+fn custom_interactive_confirm_persists_and_repasses() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = custom_pkg(
+        tmp.path(),
+        "x = 1
+",
+    );
+    let (_dir, store) = temp_store();
+    let trust = TrustDecision {
+        flag: false,
+        interactive: true,
+        store: Some(store.clone()),
+    };
+    let asked = std::cell::Cell::new(0);
+    let outcome = build::custom::build(&pkg, &trust, &|q| {
+        assert!(q.contains("evil-corp@1.0.0"), "确认文案应含包名版本: {q}");
+        asked.set(asked.get() + 1);
+        true
+    })
+    .unwrap();
+    assert_eq!(outcome.via, "custom");
+    assert_eq!(asked.get(), 1, "应询问一次");
+    // 确认即持久化
+    let cfg = crate::util::config::load_user_config_from(&store).unwrap();
+    assert_eq!(cfg.trust.build_scripts, vec!["evil-corp@1.0.0".to_string()]);
+
+    // 第二次：已记录，不再询问
+    let outcome =
+        build::custom::build(&pkg, &trust, &|_| panic!("已信任的包不应再次询问")).unwrap();
+    assert_eq!(outcome.via, "custom");
+}
+
+#[test]
+fn custom_interactive_reject_does_not_persist() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = custom_pkg(
+        tmp.path(),
+        "x = 1
+",
+    );
+    let (_dir, store) = temp_store();
+    let trust = TrustDecision {
+        flag: false,
+        interactive: true,
+        store: Some(store.clone()),
+    };
+    let err = build::custom::build(&pkg, &trust, &|_| false).unwrap_err();
+    assert!(
+        matches!(err, PackageError::AuthFailed(ref m) if m.contains("拒绝")),
+        "got: {err}"
+    );
+    let cfg = crate::util::config::load_user_config_from(&store).unwrap();
+    assert!(cfg.trust.build_scripts.is_empty());
+}
+
+#[test]
+fn custom_script_failure_is_build_failure() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = custom_pkg(
+        tmp.path(),
+        "let ??? broken
+",
+    );
+    let trust = TrustDecision {
+        flag: true,
+        interactive: false,
+        store: None,
+    };
+    let err = build::custom::build(&pkg, &trust, &|_| false).unwrap_err();
+    assert!(
+        matches!(err, PackageError::InvalidManifest(ref m) if m.contains("build.yx 执行失败")),
+        "got: {err}"
+    );
+}
+
+#[test]
+fn custom_requires_build_script_present() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = tmp.path().join("evil-corp-1.0.0");
+    write(
+        &pkg.join("yaoxiang.toml"),
+        "[package]
+name = \"evil-corp\"
+version = \"1.0.0\"
+
+[build]
+strategy = \"custom\"
+",
+    );
+    let (_dir, store) = temp_store();
+    let trust = TrustDecision {
+        flag: true,
+        interactive: false,
+        store: Some(store),
+    };
+    let err = build::custom::build(&pkg, &trust, &|_| false).unwrap_err();
+    assert!(
+        matches!(err, PackageError::InvalidManifest(ref m) if m.contains("build.yx")),
+        "got: {err}"
+    );
+}
+
+#[test]
+fn trust_store_round_trip() {
+    let (_dir, store) = temp_store();
+    let cfg = crate::util::config::UserConfig::default();
+    crate::util::config::save_user_config_to(&store, &cfg).unwrap();
+    let mut cfg = crate::util::config::load_user_config_from(&store).unwrap();
+    assert!(cfg.trust.build_scripts.is_empty());
+    cfg.trust.build_scripts.push("a@1.0.0".to_string());
+    crate::util::config::save_user_config_to(&store, &cfg).unwrap();
+    let cfg = crate::util::config::load_user_config_from(&store).unwrap();
+    assert_eq!(cfg.trust.build_scripts, vec!["a@1.0.0".to_string()]);
+}

@@ -25,7 +25,7 @@ fn setup_project() -> (TempDir, std::path::PathBuf) {
 #[test]
 fn test_install_empty() {
     let (_tmp, project_dir) = setup_project();
-    exec_in(&project_dir).unwrap();
+    exec_in(&project_dir, &Default::default()).unwrap();
 
     let lock = LockFile::load(&project_dir).unwrap();
     assert!(lock.package.is_empty());
@@ -37,7 +37,7 @@ fn test_install_with_deps() {
     add_path_dep(&project_dir, "foo", "1.0.0", false);
     add_path_dep(&project_dir, "bar", "2.0.0", true);
 
-    exec_in(&project_dir).unwrap();
+    exec_in(&project_dir, &Default::default()).unwrap();
 
     let lock = LockFile::load(&project_dir).unwrap();
     assert!(lock.package.contains_key("foo"));
@@ -49,7 +49,7 @@ fn test_install_updates_lock_correctly() {
     let (_tmp, project_dir) = setup_project();
     add_path_dep(&project_dir, "foo", "1.0.0", false);
 
-    exec_in(&project_dir).unwrap();
+    exec_in(&project_dir, &Default::default()).unwrap();
 
     let lock = LockFile::load(&project_dir).unwrap();
     assert_eq!(lock.package["foo"].version, "1.0.0");
@@ -60,9 +60,9 @@ fn test_install_registry_dependency_fails() {
     // 注册表来源（无 git/path）尚未实现（RFC-014a）——必须明确失败，
     // 不再打印"已安装"并返回 Ok（旧行为：静默跳过 + 锁文件记账）
     let (_tmp, project_dir) = setup_project();
-    add::exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false).unwrap();
+    add::exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false, false).unwrap();
 
-    let result = exec_in(&project_dir);
+    let result = exec_in(&project_dir, &Default::default());
 
     assert!(
         result.is_err(),
@@ -95,7 +95,7 @@ fn test_install_local_dependency() {
         .insert("local-dep".to_string(), toml::Value::Table(dep_table));
     manifest.save(&project_dir).unwrap();
 
-    exec_in(&project_dir).unwrap();
+    exec_in(&project_dir, &Default::default()).unwrap();
 
     let lock = LockFile::load(&project_dir).unwrap();
     assert!(lock.package.contains_key("local-dep"));

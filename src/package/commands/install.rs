@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use crate::package::build::TrustDecision;
 use crate::package::dependency::DependencySpec;
 use crate::package::error::PackageResult;
 use crate::package::lock::LockFile;
@@ -18,10 +19,13 @@ use crate::util::i18n::{t, t_simple, current_lang, MSG};
 /// RFC-014c：目录处于工作空间内（含成员目录）时，安装对象是**整个工作空间**
 /// ——合并全部成员依赖到共享 lockfile、下载到根 vendor（2026-09-15 决议 3：
 /// 根 lockfile 唯一）。
-pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
+pub fn exec_in(
+    project_dir: &Path,
+    trust: &TrustDecision,
+) -> PackageResult<()> {
     // 工作空间优先：成员/根目录内的 install 都落到根
     if let Some(ws_root) = crate::package::workspace::find_workspace_root(project_dir) {
-        return exec_workspace(&ws_root);
+        return exec_workspace(&ws_root, trust);
     }
 
     let manifest = PackageManifest::load(project_dir)?;
@@ -45,8 +49,12 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
     // 使用 fetcher 下载所有依赖
     // Phase 3.5：Source 层 async 化，命令层 block_on 驱动（无运行时，
     // Phase 4 接 reqwest 时此处换真执行器即可）
-    let result =
-        crate::package::runtime::drive(fetcher::fetch_all(project_dir, &all_deps, &mut lock))?;
+    let result = crate::package::runtime::drive(fetcher::fetch_all(
+        project_dir,
+        &all_deps,
+        &mut lock,
+        trust,
+    ))?;
 
     // 保存更新后的锁文件
     lock.save(project_dir)?;
@@ -111,7 +119,10 @@ pub fn exec_in(project_dir: &Path) -> PackageResult<()> {
 /// 合并全部成员依赖（含继承展开与交集合成）→ 下载到根 vendor → 登记根
 /// lockfile；成员引用（`{ workspace = "<key>" }`）不下载，直接以
 /// `source = "workspace"` 登记根 lock（模块解析由 6c 接管）。
-fn exec_workspace(ws_root: &Path) -> PackageResult<()> {
+fn exec_workspace(
+    ws_root: &Path,
+    trust: &TrustDecision,
+) -> PackageResult<()> {
     let ws = crate::package::workspace::load_workspace(ws_root)?;
     let merged = crate::package::workspace::merged_dependencies(&ws)?;
 
@@ -121,8 +132,12 @@ fn exec_workspace(ws_root: &Path) -> PackageResult<()> {
     }
 
     let mut lock = ws.lock;
-    let result =
-        crate::package::runtime::drive(fetcher::fetch_all(ws_root, &merged.fetch, &mut lock))?;
+    let result = crate::package::runtime::drive(fetcher::fetch_all(
+        ws_root,
+        &merged.fetch,
+        &mut lock,
+        trust,
+    ))?;
 
     // 成员引用：校验通过的 key 直接登记（不进 vendor）
     for (name, key) in &merged.member_refs {
@@ -195,6 +210,6 @@ fn exec_workspace(ws_root: &Path) -> PackageResult<()> {
 }
 
 /// Install all dependencies in the current project
-pub fn exec() -> PackageResult<()> {
-    exec_in(&std::env::current_dir()?)
+pub fn exec(trust: &TrustDecision) -> PackageResult<()> {
+    exec_in(&std::env::current_dir()?, trust)
 }

@@ -27,8 +27,8 @@ fn test_list_empty() {
 #[test]
 fn test_list_with_deps() {
     let (_tmp, project_dir) = setup_project();
-    add::exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false).unwrap();
-    add::exec_in(&project_dir, "bar", Some("2.0.0"), None, None, true).unwrap();
+    add::exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false, false).unwrap();
+    add::exec_in(&project_dir, "bar", Some("2.0.0"), None, None, true, false).unwrap();
     exec_in(&project_dir).unwrap(); // Should not error
 }
 

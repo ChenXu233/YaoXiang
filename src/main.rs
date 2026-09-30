@@ -297,6 +297,10 @@ enum Commands {
         /// Add as dev-dependency
         #[arg(short = 'D', long)]
         dev: bool,
+
+        /// Trust this package's build.yx (record persisted to user config)
+        #[arg(long)]
+        trust: bool,
     },
 
     /// Remove a dependency from the current project
@@ -315,10 +319,18 @@ enum Commands {
         /// Optional: specific package to update
         #[arg(value_name = "PKG")]
         pkg: Option<String>,
+
+        /// Trust build.yx scripts encountered this run (CI override)
+        #[arg(long)]
+        trust: bool,
     },
 
     /// Install all dependencies
-    Install,
+    Install {
+        /// Trust build.yx scripts encountered this run (CI override)
+        #[arg(long)]
+        trust: bool,
+    },
 
     /// List all dependencies
     List,
@@ -388,6 +400,16 @@ enum WorkspaceCommand {
         #[arg(value_name = "KEY")]
         key: String,
     },
+}
+
+/// 命令行信任决策（RFC-014b 5e）：`--trust` 标志 + 交互性检测
+fn build_trust_decision(flag: bool) -> yaoxiang::package::build::TrustDecision {
+    use std::io::IsTerminal;
+    yaoxiang::package::build::TrustDecision {
+        flag,
+        interactive: std::io::stdin().is_terminal(),
+        store: None,
+    }
 }
 
 fn main() -> Result<()> {
@@ -680,6 +702,7 @@ fn main() -> Result<()> {
             git,
             path,
             dev,
+            trust,
         } => {
             package::commands::add::exec(
                 &dep,
@@ -687,25 +710,29 @@ fn main() -> Result<()> {
                 git.as_deref(),
                 path.as_deref(),
                 dev,
+                trust,
             )
             .context("Failed to add dependency")?;
         }
         Commands::Rm { dep, dev } => {
             package::commands::rm::exec(&dep, dev).context("Failed to remove dependency")?;
         }
-        Commands::Update { pkg } => {
+        Commands::Update { pkg, trust } => {
+            let trust = build_trust_decision(trust);
             if let Some(name) = pkg {
                 package::commands::update::exec_single_in(
                     &std::env::current_dir().context("Failed to get current directory")?,
                     &name,
+                    &trust,
                 )
                 .context("Failed to update dependency")?;
             } else {
-                package::commands::update::exec().context("Failed to update dependencies")?;
+                package::commands::update::exec(&trust).context("Failed to update dependencies")?;
             }
         }
-        Commands::Install => {
-            package::commands::install::exec().context("Failed to install dependencies")?;
+        Commands::Install { trust } => {
+            let trust = build_trust_decision(trust);
+            package::commands::install::exec(&trust).context("Failed to install dependencies")?;
         }
         Commands::List => {
             package::commands::list::exec().context("Failed to list dependencies")?;

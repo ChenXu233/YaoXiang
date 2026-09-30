@@ -24,7 +24,7 @@ fn setup_project() -> (TempDir, std::path::PathBuf) {
 #[test]
 fn test_add_dependency() {
     let (_tmp, project_dir) = setup_project();
-    exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false).unwrap();
+    exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false, false).unwrap();
 
     let manifest = PackageManifest::load(&project_dir).unwrap();
     assert!(manifest.dependencies.contains_key("foo"));
@@ -33,7 +33,7 @@ fn test_add_dependency() {
 #[test]
 fn test_add_dev_dependency() {
     let (_tmp, project_dir) = setup_project();
-    exec_in(&project_dir, "bar", Some("2.0.0"), None, None, true).unwrap();
+    exec_in(&project_dir, "bar", Some("2.0.0"), None, None, true, false).unwrap();
 
     let manifest = PackageManifest::load(&project_dir).unwrap();
     assert!(manifest.dev_dependencies.contains_key("bar"));
@@ -42,7 +42,7 @@ fn test_add_dev_dependency() {
 #[test]
 fn test_add_updates_lock() {
     let (_tmp, project_dir) = setup_project();
-    exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false).unwrap();
+    exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false, false).unwrap();
 
     let lock = LockFile::load(&project_dir).unwrap();
     assert!(lock.package.contains_key("foo"));
@@ -52,9 +52,9 @@ fn test_add_updates_lock() {
 #[test]
 fn test_add_duplicate_fails() {
     let (_tmp, project_dir) = setup_project();
-    exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false).unwrap();
+    exec_in(&project_dir, "foo", Some("1.0.0"), None, None, false, false).unwrap();
 
-    let result = exec_in(&project_dir, "foo", Some("2.0.0"), None, None, false);
+    let result = exec_in(&project_dir, "foo", Some("2.0.0"), None, None, false, false);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
@@ -65,7 +65,7 @@ fn test_add_duplicate_fails() {
 #[test]
 fn test_add_default_version() {
     let (_tmp, project_dir) = setup_project();
-    exec_in(&project_dir, "foo", None, None, None, false).unwrap();
+    exec_in(&project_dir, "foo", None, None, None, false, false).unwrap();
 
     let manifest = PackageManifest::load(&project_dir).unwrap();
     assert_eq!(
@@ -83,6 +83,7 @@ fn test_add_git_source() {
         Some("^0.3"),
         Some("https://github.com/u/demo"),
         None,
+        false,
         false,
     )
     .unwrap();
@@ -110,6 +111,7 @@ fn test_add_path_source() {
         None,
         Some("./local-src"),
         false,
+        false,
     )
     .unwrap();
 
@@ -130,6 +132,7 @@ fn test_add_git_and_path_conflict() {
         None,
         Some("https://github.com/u/x"),
         Some("./x"),
+        false,
         false,
     );
     assert!(result.is_err());

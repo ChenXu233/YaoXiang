@@ -10,6 +10,7 @@
 
 pub mod binaries;
 pub mod cargo;
+pub mod custom;
 pub mod requirements;
 
 use std::path::{Path, PathBuf};
@@ -99,13 +100,15 @@ pub struct BuildOutcome {
     pub via: &'static str,
 }
 
-/// build.yx 信任决策输入（5e 信任门落地时启用）
+/// build.yx 信任决策输入（RFC-014b 5e 信任门）
 #[derive(Debug, Clone, Default)]
 pub struct TrustDecision {
-    /// 命令行 `--trust` 显式信任
+    /// 命令行 `--trust` 显式信任（CI 与交互同义放行）
     pub flag: bool,
     /// 非交互环境（CI 默认拒绝 custom，除非 flag）
     pub interactive: bool,
+    /// 信任记录文件（None = 用户配置体系；测试注入临时文件）
+    pub store: Option<std::path::PathBuf>,
 }
 
 /// 执行安装决策树（在依赖包源码落位 `pkg_dir` 后调用）
@@ -119,7 +122,7 @@ pub async fn run_install_build(
     manifest: &crate::package::manifest::PackageManifest,
     scratch_root: &Path,
     source_base: Option<&str>,
-    _trust: &TrustDecision,
+    trust: &TrustDecision,
 ) -> PackageResult<BuildOutcome> {
     let build = match &manifest.build {
         Some(b) => b,
@@ -166,8 +169,6 @@ pub async fn run_install_build(
         BuildStrategy::Cmake => Err(PackageError::InvalidManifest(
             "cmake 构建策略尚未实现（RFC-014b Phase 5c 之后评估）".to_string(),
         )),
-        BuildStrategy::Custom => Err(PackageError::InvalidManifest(
-            "custom 构建策略尚未实现（RFC-014b Phase 5e，带信任门）".to_string(),
-        )),
+        BuildStrategy::Custom => custom::build(pkg_dir, trust, &custom::confirm_via_stdin),
     }
 }

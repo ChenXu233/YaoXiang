@@ -66,7 +66,7 @@ fn test_install_from_member_dir_installs_whole_workspace() {
     .unwrap();
 
     // Act - 从成员目录 install
-    exec_in(&root.join("packages/core")).unwrap();
+    exec_in(&root.join("packages/core"), &Default::default()).unwrap();
 
     // Assert - 根 lock 覆盖两个成员的依赖；成员目录无 lock
     let lock = LockFile::load(&root).unwrap();
