@@ -29,42 +29,6 @@ flush: (file: &File) -> Void = {
     ...
 }
 
-mkdir: (path: &String) -> Bool = {
-    ...
-}
-
-rmdir: (path: &String) -> Bool = {
-    ...
-}
-
-read_dir: (path: &String) -> String = {
-    ...
-}
-
-remove: (path: &String) -> Bool = {
-    ...
-}
-
-exists: (path: &String) -> Bool = {
-    ...
-}
-
-is_file: (path: &String) -> Bool = {
-    ...
-}
-
-is_dir: (path: &String) -> Bool = {
-    ...
-}
-
-copy: (src: &String, dst: &String) -> Bool = {
-    ...
-}
-
-rename: (old: &String, new: &String) -> Bool = {
-    ...
-}
-
 get_env: (name: &String) -> String = {
     ...
 }
@@ -82,10 +46,6 @@ chdir: (path: &String) -> Bool = {
 }
 
 getcwd: () -> String = {
-    ...
-}
-
-append_file: (path: &String, content: &String) -> Bool = {
     ...
 }
 
