@@ -61,7 +61,7 @@ fn write_lock(
             "\n[package.{name}]\nversion = \"{version}\"\nsource = \"git\"\n"
         ));
     }
-    fs::write(root.join("yaoxiang.lock"), body).unwrap();
+    fs::write(root.join("yaoxiang.lock"), body).expect("write fixture lock");
 }
 
 fn entry_src(
@@ -76,7 +76,7 @@ fn entry_src(
             .join("main.yx"),
         code,
     )
-    .unwrap();
+    .unwrap_or_else(|e| panic!("write member {member} entry: {e}"));
 }
 
 fn has_e5001(files: &[(std::path::PathBuf, Vec<crate::util::diagnostic::Diagnostic>)]) -> bool {
@@ -107,6 +107,7 @@ fn test_member_ref_resolves_to_member_root() {
 
 #[test]
 fn test_strict_visibility_undeclared_vendor_pkg_not_resolvable() {
+    // Arrange：vendor 有 regex 1.5.0，core 未声明
     let (_tmp, root) = setup_ws();
     plant_vendor(&root, "regex", "1.5.0");
     write_lock(&root, &[("regex", "1.5.0")]);
@@ -136,7 +137,8 @@ fn test_strict_visibility_undeclared_vendor_pkg_not_resolvable() {
 
 #[test]
 fn test_other_members_vendor_deps_not_visible_by_default() {
-    // utils 声明 regex；core 没声明——utils 的依赖对 core 不可见（幽灵依赖防线）
+    // Arrange：utils 声明 regex；core 没声明——utils 的依赖对 core 不可见
+    // （pnpm 式严格可见性，2026-09-29 修订）
     let (_tmp, root) = setup_ws();
     plant_vendor(&root, "regex", "1.5.0");
     write_lock(&root, &[("regex", "1.5.0")]);
@@ -159,8 +161,8 @@ fn test_other_members_vendor_deps_not_visible_by_default() {
 
 #[test]
 fn test_path_dep_resolves_by_path() {
+    // Arrange：path 依赖在成员外（相对成员根展开）
     let (_tmp, root) = setup_ws();
-    // path 依赖在成员外（相对成员根展开）
     let dep_root = root.join("libs/bar");
     fs::create_dir_all(dep_root.join("src")).unwrap();
     fs::write(dep_root.join("src/lib.yx"), "one: Int = 1\n").unwrap();
