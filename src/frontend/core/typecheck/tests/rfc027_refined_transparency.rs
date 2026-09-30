@@ -8,7 +8,7 @@
 //! `tests/yaoxiang/02-type-system/refined_variable_uses_base_type.yx`），但
 //! **形参位不成立**：`b: NonNegative(b)` 在体内是名义类型，于是
 //! 1) 体内 `b` 当值用报 E1012/E1002，2) 任何调用方传入基类型报 E1002
-//! （连合法的 `f(5)` 都被拒——不是谓词校验，是个坏类型）。
+//!    （连合法的 `f(5)` 都被拒——不是谓词校验，是个坏类型）。
 //!
 //! 本文件只断言 `check_module` 能看到的东西。证明调用（E4018）由 `pipeline.rs`
 //! 在 `check_module` **之后**执行，故精化**违反**的用例在 `.yx` 层，见

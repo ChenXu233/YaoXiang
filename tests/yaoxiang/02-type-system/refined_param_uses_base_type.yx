@@ -8,11 +8,7 @@
 //       对照绑定位同类修复：refined_variable_uses_base_type.yx。
 // 状态: ✅ 可运行
 //
-// 注 1：带实参形态 `(b: IsPositive(b))` 在**解析器**层尚不可用——谓词应用的
-//       实参位被判成类型引用，值形参 `b` 因此被当 const 泛型剔除，函数体引用
-//       报 E3006。解析器不持有类型环境，只硬编码了内置谓词 `Terminates`
-//       （见 parser/statements/declarations.rs 的 is_predicate_app）。
-//       本文件故用零参形态。
+// 注 1：带实参形态 `(b: IsPositive(b))` 见 refined_param_arg_form.yx。
 // 注 2：形参精化在**调用点**尚未被语义校验（传违反值不报 E4018），
 //       见 src/frontend/core/typecheck/tests/rfc027_refined_transparency.rs
 //       的 tripwire 用例。

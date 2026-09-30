@@ -3,6 +3,7 @@
 use crate::frontend::core::lexer::tokens::*;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
+use std::collections::HashSet;
 
 /// Temporary: wrap string as E0012 diagnostic（#324：挂当前 token 位置）
 pub fn parse_msg(
@@ -22,6 +23,12 @@ pub struct ParserState<'a> {
     /// 表达式循环消费——守卫表达式 `n if n > 3 => ...` 要完整解析 `n > 3`
     /// 并停在 `=>`。save/restore 语义，嵌套（守卫里再写 match）安全。
     pub(crate) no_fat_arrow: bool,
+    /// RFC-027：本模块已解析的**谓词名**（返回 `Type` 的声明）。
+    ///
+    /// 用于判定类型标注里的类型应用是「编译期谓词应用」（实参位是**值**）
+    /// 还是「const 泛型应用」（实参位是类型引用）。parser 不持有类型环境，
+    /// 只能靠本遍已解析的声明累积——**谓词须先声明后使用**。
+    predicate_names: HashSet<String>,
 }
 
 impl<'a> ParserState<'a> {
@@ -31,7 +38,24 @@ impl<'a> ParserState<'a> {
             pos: 0,
             errors: Vec::new(),
             no_fat_arrow: false,
+            predicate_names: HashSet::new(),
         }
+    }
+
+    /// RFC-027：登记一个谓词名（返回 `Type` 的声明）。
+    pub(crate) fn declare_predicate(
+        &mut self,
+        name: &str,
+    ) {
+        self.predicate_names.insert(name.to_string());
+    }
+
+    /// RFC-027：本条声明是否引用已登记的谓词名。
+    pub(crate) fn is_predicate_name(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.predicate_names.contains(name)
     }
     pub fn at_end(&self) -> bool {
         self.pos >= self.tokens.len()

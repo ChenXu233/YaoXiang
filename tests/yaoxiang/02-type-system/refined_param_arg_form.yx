@@ -1,0 +1,28 @@
+// 02-type-system/refined_param_arg_form.yx
+// 覆盖: RFC-027 §6 —— 带实参的精化形参 `b: IsPositive(b)` 可用
+// 验证: `IsPositive(b)` 里的 `b` 是**值引用**（谓词应用的实参位是值），
+//       不是类型引用，故形参 `b` 必须保留在 lambda 参数表中。修复前解析器
+//       把它判成 const 泛型参数并剔除，函数体引用 `b` 报 E3006
+//       （内部一致性错误：变量无法解析）。
+// 状态: ✅ 可运行
+//
+// 注：对照零参形态（refined_param_uses_base_type.yx）。
+//     根因曾是解析器 `is_predicate_app` 只硬编码内置谓词 `Terminates`，
+//     认不出本模块用户定义的证明函数；现由 `ParserState` 累积本遍解析到的
+//     「返回 Type 的声明名」共同判定。局限：谓词须**先声明后使用**
+//     （parser 单遍，无类型环境）。
+
+use std.assert
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+// 带实参形式的精化形参（修复前：E3006）
+identity: (b: IsPositive(b)) -> Int = { b }
+
+// 带实参形式参与算术
+succ: (b: IsPositive(b)) -> Int = { b + 1 }
+
+main: () -> Void = {
+    assert.assert(identity(7) == 7, "带实参的精化形参应原样返回")
+    assert.assert(succ(7) == 8, "带实参的精化形参应可参与 Int 算术")
+}
