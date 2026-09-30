@@ -922,6 +922,11 @@ impl TypeChecker {
         module: &Module,
         collect_all: bool,
     ) -> TypeCheckResult {
+        // 第零遍：登记编译期谓词定义（#377-3）。
+        // 必须先于 pass1/pass2（签名与类型定义的精化标注要能解析到谓词体），
+        // 且独立成遍，使谓词的定义与使用不受声明序约束。
+        self.collect_predicate_defs(module);
+
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
@@ -4112,6 +4117,106 @@ impl TypeChecker {
     /// - 变量绑定位 `acc: Terminates(n - i) = ...` → 键 `acc`
     ///
     /// 无 `Terminates` 标注时返回空表。
+    /// 登记编译期谓词定义（#377-3）。
+    ///
+    /// 谓词 = 返回 `Type` 的**单参数**声明，其体表达式即约束模板：
+    ///
+    /// ```text
+    /// IsPositive: (x: Int) -> Type = { x > 0 }
+    /// ```
+    ///
+    /// 登记后 `IsPositive(-5)` 解析为 `Refined { constraint: -5 > 0 }` 而非
+    /// 不透明应用 `IsPositive(-5)`。这是精化约束第一次**可符号推理**的前提
+    /// （SMT 与假设合证；终止检查良基性 `b >= 0` 就依赖它）。
+    ///
+    /// 两种声明形态都收（与 pipeline 执行证明函数的取法同源）：
+    /// - `TypeDefinition`：`= { x > 0 }` 被解析成类型体，约束在
+    ///   `Type::Struct` 的 `TypeBodyItem::Expr(Type::ConstExpr)` 里（主形态）
+    /// - `Assign`：函数体形态
+    ///
+    /// 只登记单参数形态：`PredicateResolver::try_resolve` 的阶段 1 模型即单参数，
+    /// 登记多参数谓词会使其调用一律撞 ArityMismatch（E1093）——保持其走证明
+    /// 函数路径（现行为）。约束体不可转为常量表达式的声明不登记也不报错
+    /// （它只是普通函数）。
+    fn collect_predicate_defs(
+        &mut self,
+        module: &Module,
+    ) {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind, Type, TypeBodyItem};
+        for stmt in &module.items {
+            let (name, signature_params, constraint) = match &stmt.kind {
+                StmtKind::TypeDefinition {
+                    name,
+                    signature_params,
+                    definition,
+                    ..
+                } => {
+                    let Type::Struct { body } = definition else {
+                        continue;
+                    };
+                    let Some(expr) = body.iter().find_map(|item| match item {
+                        TypeBodyItem::Expr(Type::ConstExpr(e)) => Some(e.as_ref()),
+                        _ => None,
+                    }) else {
+                        continue;
+                    };
+                    let Some(c) = convert_expr_to_const_expr(expr) else {
+                        continue;
+                    };
+                    (name, signature_params, c)
+                }
+                StmtKind::Assign {
+                    target,
+                    type_annotation: Some(Type::Fn { return_type, .. }),
+                    signature_params,
+                    value: Some(v),
+                    ..
+                } => {
+                    let Expr::Var(name, _) = target.as_ref() else {
+                        continue;
+                    };
+                    // 返回 Type 才是谓词（`MetaType` 与 `Name{Type}` 两形态同义）
+                    let returns_type = matches!(return_type.as_ref(), Type::MetaType { .. })
+                        || matches!(return_type.as_ref(), Type::Name { name: n, .. } if n == "Type");
+                    if !returns_type {
+                        continue;
+                    }
+                    let Some(body) = extract_fn_body(Some(v.as_ref())) else {
+                        continue;
+                    };
+                    let Some(expr) = body.stmts.iter().find_map(|s| match &s.kind {
+                        StmtKind::Expr(e) => Some(e.as_ref()),
+                        StmtKind::Return(Some(e)) => Some(e.as_ref()),
+                        _ => None,
+                    }) else {
+                        continue;
+                    };
+                    let Some(c) = convert_expr_to_const_expr(expr) else {
+                        continue;
+                    };
+                    (name, signature_params, c)
+                }
+                _ => continue,
+            };
+            // 参数名在 signature_params（`Type::Fn::params` 只有类型没有名）
+            let [param] = signature_params.as_slice() else {
+                continue;
+            };
+            let param_type = param
+                .ty
+                .as_ref()
+                .map(|t| MonoType::from(t.clone()))
+                .unwrap_or(MonoType::Int(64));
+            self.env.predicate_defs.insert(
+                name.clone(),
+                crate::frontend::core::typecheck::predicate_resolver::PredicateDef {
+                    param_name: param.name.clone(),
+                    param_type,
+                    constraint,
+                },
+            );
+        }
+    }
     pub(crate) fn collect_termination_measures(
         &self,
         module: &Module,
@@ -4590,23 +4695,35 @@ impl TypeChecker {
         ) {
             ProofResult::Proved => {}
             ProofResult::Disproved(model) => {
-                // 证伪即编译错误：反例进诊断
-                let counterexample = model
-                    .assignments
-                    .iter()
-                    .map(|(k, v)| format!("{k}={v}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
                 if let MonoType::Refined { constraint, .. } = refined {
-                    ctx.diags.push(
-                        ErrorCodeDefinition::refined_constraint_violated(
-                            trigger,
-                            dependant,
-                            &constraint.to_string(),
-                            &counterexample,
-                        )
-                        .build(),
-                    );
+                    // 闭合约束（无自由变量）为假 ⇒ **注解自身不成立**，与传给它
+                    // 的值无关（`IsPositive(-5)`：`-5 > 0` 恒假）。这一支报 E4018
+                    // 且**不**展示反例：bindings 里那个变量与闭合约束无关，展示
+                    // 它（实测 `y=Int(5)`）会把人引向 RHS。
+                    if refined_free_vars(refined).is_empty() {
+                        ctx.diags.push(
+                            ErrorCodeDefinition::refinement_violated(&constraint.to_string())
+                                .param("counterexample", "（约束不含自由变量，注解自身不成立）")
+                                .build(),
+                        );
+                    } else {
+                        // 开约束：依赖变量的当前取值使其为假 ⇒ 重验证失败
+                        let counterexample = model
+                            .assignments
+                            .iter()
+                            .map(|(k, v)| format!("{k}={v}"))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        ctx.diags.push(
+                            ErrorCodeDefinition::refined_constraint_violated(
+                                trigger,
+                                dependant,
+                                &constraint.to_string(),
+                                &counterexample,
+                            )
+                            .build(),
+                        );
+                    }
                 }
             }
             ProofResult::Unproven {
@@ -4615,10 +4732,9 @@ impl TypeChecker {
                 if calls.is_empty() {
                     // RFC-027 §4/§9：Unproven → 编译错误，无降级、无 silent pass。
                     // 此分支 = 绑定完备仍证不出（约束形态超出证明内核：If/Range
-                    // 形约束、SMT unknown、超预算）。当前注解语法只产 Call 形
-                    // 约束（实参 Lit/NamedVar），本分支实际不可达——防线是前瞻性
-                    // 的：predicate_defs（#377-3）或内联精化落地后，约束形态
-                    // 扩展，不得让 silent pass 复活。
+                    // 形约束、SMT unknown、超预算）。谓词定义注册后（#377-3）
+                    // 约束已可以是谓词体的任意形态（不再是清一色 Call），本分支
+                    // 因此成为真防线而非前瞻兑底：不得让 silent pass 复活。
                     ctx.diags.push(
                         ErrorCodeDefinition::refined_unproven(
                             trigger,

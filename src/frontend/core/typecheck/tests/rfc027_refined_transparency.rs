@@ -14,7 +14,6 @@
 //! 在 `check_module` **之后**执行，故精化**违反**的用例在 `.yx` 层，见
 //! `tests/yaoxiang/06-compile-errors/refined_annotation_literal_violates_err.yx`。
 
-use crate::frontend::core::types::const_data::ConstValue;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::types::TypeCheckResult;
 use crate::frontend::core::lexer::tokenize;
@@ -147,13 +146,14 @@ fn test_refined_fn_accepts_base_type_argument() {
     );
 }
 
-/// 调用点实参对形参精化的义务：`check_module` 生成证明调用（RFC-027 §3.4）。
+/// 调用点实参对形参精化的义务：违反时直接判伪并报 E4018（RFC-027 §3.4）。
 ///
-/// `check_module` 不执行证明函数（由 `pipeline` 在其后跑），故此处断言
-/// **义务已生成**且带着实参值。执行后谓词返回 false 即 E4018，端到端见
+/// 谓词定义注册（#377-3）后，形参约束是**谓词体**（`b >= 0` 而非不透明应用），
+/// 常量实参可直接折叠判伪，故诊断在 `check_module` 内即产生（不必等 pipeline
+/// 执行证明函数）。端到端见
 /// `tests/yaoxiang/06-compile-errors/refined_param_arg_violates_err.yx`。
 #[test]
-fn test_call_arg_refinement_generates_proof_obligation() {
+fn test_call_arg_refinement_violation_judged_directly() {
     // Arrange — f(-5) 违反 b >= 0
     let source = {
         let f = "f: (b: NonNegative(b)) -> Int = { 0 }";
@@ -166,13 +166,9 @@ fn test_call_arg_refinement_generates_proof_obligation() {
 
     // Assert
     assert!(
-        result
-            .proof_calls
-            .iter()
-            .any(|c| c.func_name == "NonNegative"
-                && c.args.iter().any(|v| matches!(v, ConstValue::Int(-5)))),
-        "调用点应生成形参精化的证明义务并携带实参值 Int(-5)；实际: {:?}",
-        result.proof_calls
+        result.diagnostics.iter().any(|d| d.code == "E4018"),
+        "调用点传入违反形参精化的常量应报 E4018；实际: {:#?}",
+        result.diagnostics
     );
 }
 
