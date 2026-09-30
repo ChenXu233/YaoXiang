@@ -1,144 +1,161 @@
 ---
 title: 'RFC-027a: Explicit Measures for Termination Checking'
 status: 'Under Review'
-author: 'Chen Xu'
+author: 'Chenxu'
 created: '2026-09-14'
-updated: '2026-09-22'
+updated: '2026-09-30'
 issue: '#318'
-impl_status: 'not-started'
+impl_status: 'partial'
 ---
 
 # RFC-027a: Explicit Measures for Termination Checking
 
 ## Summary
 
-RFC-027 §7 establishes the criterion for termination checking as **refinement types** (refinement
-being the verification mode), and §6.9 defines the language form for explicit measures (the builtin
-predicate `Terminates`, belonging to core primitives alongside `Int` and `Never`). Both are language
-design decisions, belonging to the host RFC, which has been finalized.
+RFC-027 §7 establishes the termination-checking criterion as **refinement types** (refinement types
+enter verification mode), and §6.9 gives the linguistic form of explicit measures (the builtin
+predicate `Terminates`, a core primitive alongside `Int` and `Never`). Both are language design
+decisions, belong to the host RFC, and are finalized.
 
-This sub-RFC addresses the implementation mechanism: how obligations are generated from
-computational structures, how the judgment pipeline is orchestrated, how diagnostics provide
-direction when derivation fails, how measures are shared across mutually recursive functions (SCC
-optimization), and how error codes are registered. **No repetition of language semantics**; only
-mechanisms are defined here.
+This sub-RFC tackles the implementation mechanism: how obligations are generated from computational
+structure, how the judgment pipeline is orchestrated, how diagnostics provide direction when the
+prover fails, how mutual-recursion measures are shared (SCC optimization), and how error codes are
+registered. **It does not re-state language semantics**; it only fixes the mechanism.
 
 ## Motivation
 
-### Why This Sub-RFC Is Needed
+### Why a Sub-RFC Is Needed
 
-The criterion (refinement types in verification mode) and form (`Terminates` written in type
-position) have been decided in RFC-027, at language-level granularity. The remaining questions are
-too fine-grained; including them in the host RFC would bloat the main text:
+The criterion (refinement types entering verification mode) and the form (`Terminates` written in
+the type position) were already settled in RFC-027, at language-level granularity. The remaining
+questions are too fine-grained; folding them into the host RFC would bloat its body:
 
-- Where do obligations come from (recursive call sites, loop back edges, path guards)
-- How are tuple-returning measures compared (lexicographic expansion)
-- Are well-foundedness and strict decrease two independent obligations or unified
-- How do auto-exploration and explicit measures coexist in the same pipeline
-- How do mutually recursive functions avoid repeated measure writing and repeated verification
-- How to give **direction** instead of outright rejection when derivation fails
+- Where do obligations come from (recursive call sites, loop back-edges, path guards)
+- How to compare when the measure returns a tuple (lexicographic expansion)
+- Whether well-foundedness and strict decrease are two independent obligations or one
+- How automatic exploration and explicit measures coexist in the same pipeline
+- For mutual recursion, how to avoid duplicating the same measure and re-verifying it
+- How to provide **direction** when proving fails rather than flatly rejecting
 
 ### Trigger
 
-Triggered by #318: non-structural recursion (gcd-class non-direct decrease, mutual recursion, merge
-partitioning) exceeds the template sequence for measure exploration (the four strategies in RFC-027
-§6.2–6.5 all take "variables of bounded type" or "target type + swap operation" as input), and
-cannot be rewritten into analyzable iterative patterns without destroying readability. The
-re-discussion clause in RFC-027's "Open Issues" section is activated here.
+The direction is triggered by #318: non-structural recursion (gcd-style non-directly- decreasing,
+mutual recursion, merge partitioning) exceeds the template sequences of measure exploration (all
+four strategies in RFC-027 §6.2–6.5 take "variable of a bounded type" or "target type + swap
+operation" as input), and cannot be rewritten into an analyzable iterative pattern without
+destroying readability. The re-discussion clause in RFC-027's "Open Questions" section activates
+here.
 
 ## Proposal
 
-### Relationship with Auto-Exploration
+### Relationship with Automatic Exploration
 
-Explicit measures **are not another pipeline**, but input after exploration failure. After providing
-a measure, the same SMT still runs to verify the same set of obligations; if not satisfied, it
-reports an error with a counterexample. Full automation priority remains unchanged: exploration
-always runs first, user intervention only occurs after exploration fails.
+An explicit measure is **not a separate pipeline**, but the input after exploration fails. Once the
+measure is given, the same SMT runs the same set of obligations; if they fail, an error is reported
+with a counterexample. Full automation takes priority as before: exploration always runs first, and
+user intervention happens only after exploration fails.
 
-This determines that both paths share all downstream mechanisms—obligation generation, SMT judgment,
-lexicographic expansion, and diagnostic format have only one implementation each.
+This means the two paths share all downstream mechanisms — obligation generation, SMT judgment,
+lexicographic expansion, diagnostic format all have one implementation.
 
 ### Obligation Generation
 
-For a function `f` and measure `m`, generate two **independent** obligations, expanded at each
-recursive call site (including cross-function calls within SCC):
+For a function `f` and a measure `m`, two **independent** obligations are generated and expanded at
+each recursive call site (including cross-function calls within an SCC):
 
-1. **Well-foundedness**: `m(args) >= 0`—the measure lands on natural numbers; when the measure
-   returns a non-natural type, take the lower bound of a suitable ordering on that type. Derived
-   from parameter refinement; when derivation fails, enters residual obligation.
-2. **Strict decrease**: at each call site `m(callee_args) < m(caller_args)`, judged under **path
-   guards**—guards come from branch conditions at that call site, reusing RFC-009a path condition
-   collection.
+1. **Well-foundedness**: `m(args) >= 0` — the measure must land on the natural numbers; when the
+   measure returns a non-natural-number type, take the lower bound under the appropriate order on
+   that type. Derived from parameter refinements; if it cannot be derived, it enters a residual
+   obligation.
+2. **Strict decrease**: at every call site, `m(callee_args) < m(caller_args)`, judged **under path
+   guards** — guards come from the branch conditions of the call site, reusing the path-condition
+   collection from RFC-009a.
 
-The two are independent rather than unified because the failure directions differ: well-foundedness
-failure indicates the measure's value domain is incorrect (e.g., `Int` may be negative), while
-decrease failure indicates the recursive parameters aren't moving in that direction. Diagnostics
-need to distinguish these to give the correct checking direction (see "Diagnostics" section).
+The two are independent rather than unified, because the failure directions differ: a
+well-foundedness failure means the measure's range is wrong (e.g. `Int` may be negative); a decrease
+failure means the recursive parameter is not moving in the intended direction. The diagnostics need
+to distinguish them to give the right checking direction (see the "Diagnostics" section).
 
-**Loops follow the same pattern**, replacing "call site" with "back edge": on each execution path
-through the loop body, `m(next_round_state) < m(this_round_state)`, with guards from loop conditions
-and in-body branches.
+**Loops are analogous**: replace "call site" with "back-edge" — on every execution path through the
+loop body, `m(next_state) < m(current_state)`, with guards coming from loop conditions and in-body
+branches.
 
-**Lexicographic expansion**: when `m` returns a tuple `(m₁, …, mₖ)`, the obligation expands into a
-disjunction chain according to lexicographic comparison—`(m₁' < m₁) ∨ (m₁' == m₁ ∧ m₂' < m₂) ∨ …`.
-Expansion is completed on the **obligation generation side**, keeping the SMT side as linear
-fragments without relying on the solver's native lexicographic support.
+**Lexicographic expansion**: when `m` returns a tuple `(m₁, …, mₖ)`, the obligation is expanded into
+a disjunction chain under lexicographic comparison — `(m₁' < m₁) ∨ (m₁' == m₁ ∧ m₂' < m₂) ∨ …`. The
+expansion is done on the **obligation-generation side**, keeping the SMT side as a linear fragment,
+not relying on native support for lexicographic orders in the solver.
 
-**The measure itself must be compile-time evaluable**: `m` must be a function provable by constant
-folding or structural recursion—prohibiting recursive deferral of the termination problem to another
-unproven function (preventing infinite regress). Pathological measures are blocked by existing E4012
-(constant recursion too deep) and structural checks.
+**The measure itself must be compile-time evaluable**: `m` must be a function provable via constant
+folding or structural recursion — it is forbidden to recurse the termination problem back onto
+another unproven function (preventing infinite regress). Pathological measures are caught by the
+existing E4012 (constant recursion too deep) and structural checks.
 
 ### Judgment Pipeline
 
 ```
-1. Formal parameter decrease (structural recursion, strongest path, tried first)
-2. Measure exploration: four-strategy template sequence (RFC-027 §6.2–6.5), stops at first match
-3. Exploration success → Generate obligations → SMT judgment → Proved
-4. Exploration failure → Check if type position provides explicit measure (Terminates)
-     Has → Take that measure to generate obligations → SMT judgment
-     No → E4021 (termination unprovable, with suggested checking direction)
+1. Parameter decrease (structural recursion, strongest path, try first)
+2. Measure exploration: the four-strategy template sequence (RFC-027 §6.2–6.5), stop on first hit
+3. Exploration succeeds → generate obligations → SMT judge → Proved
+4. Exploration fails → check whether an explicit measure is given in the type position (Terminates)
+     Yes → take that measure, generate obligations → SMT judge
+     No  → E4021 (termination unprovable, with suggested checking direction)
 5. Obligations judged false by SMT → E4022 (measure does not hold, with counterexample)
 ```
 
-Steps 1–3 are the established path from RFC-027; this RFC adds step 4 and two error codes. The
-entire pipeline only runs when refinement types are triggered (RFC-027 §7)—ordinary types without
-refinement generate no obligations.
+Steps 1–3 are the existing RFC-027 path; this RFC adds step 4 and two error codes. The whole
+pipeline runs only when refinement types trigger it (RFC-027 §7) — plain types without refinement
+generate no obligations.
 
-### Anchor Points: Unary and Binary Forms
+### Arity: Unary and Binary Forms
 
-RFC-027 §6.9 defines two arities; this RFC explains their respective landing points:
+RFC-027 §6.9 fixes two arities; this RFC explains the landing point of each:
 
-| Form                    | Anchor Point     | Landing Point                                                                                                                                               |
-| ----------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Terminates(m)`         | Name of binding  | Default form at definition site—self-recursive functions, loops                                                                                             |
-| `Terminates(FnType, m)` | Explicit fn type | When explicit specification of which function type the measure belongs to is needed (measure defined elsewhere, same measure serving multiple computations) |
+| Form                    | Anchor                   | Landing point                                                                                                                                                |
+| ----------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Terminates(m)`         | Name of the host binding | Default form at definition sites — self-recursive functions, loops                                                                                           |
+| `Terminates(FnType, m)` | Explicit function type   | When the measure must be explicitly assigned to a particular function type (the measure is defined elsewhere, the same measure serves multiple computations) |
 
-The two are not two different constructs, but two arities of the same predicate: termination
-obligations always land on "the computation annotated by the type position where the refinement
-resides". Mutually recursive functions **do not need** the binary form—each function can write its
-own unary form, with the sharing relationship recognized by SCC (see next section).
+The two are not two different constructs but two arities of the same predicate: the termination
+obligation always lands on "the computation annotated at the type position where the refinement
+sits." Mutual recursion does **not** need the binary form — each of two functions writes its own
+unary form, and the shared relation is recognized by SCC (see the next section).
 
-### SCC: Measure Sharing Optimization
+**Implementation status (2026-09-30)**:
 
-For a set of mutually recursive functions (strongly connected component in call graph) sharing the
-same measure, cross-function edge obligations are `m_callee(callee_args) < m_caller(caller_args)`,
-which degrade to same-measure decrease when members share the measure.
+- **The unary form has landed**, with two measured landing points: the function **return-type
+  position** (`gcd: (a: Int, b: Int) -> Terminates(b)` → key `gcd`) and the variable **binding
+  position** (`acc: Terminates(n - i) = ...` → key `acc`).
+- **The binary form `Terminates(FnType, m)` is parked**. Reason: the implementation surface is unary
+  — when `Terminates` enters the type parser it is treated as a unary predicate (the first argument
+  is the measure expression), whereas the binary form's first argument is a **function type**,
+  requiring an independent parsing path for "which function type does the measure belong to." There
+  is no consumer right now: mutual recursion is fully expressible via each function's unary form
+  plus SCC sharing, and SCC is not yet landed, so doing the binary form first has no comparable
+  consumer. Unpark condition: after SCC lands, if there is still a need for "one measure serving
+  multiple computations," add the binary parser. The gcd example in §Examples of this document
+  (binary) is the form to rewrite.
+
+### SCC: Measure-Sharing Optimization
+
+For a group of mutually recursive functions (a strongly connected component in the call graph)
+sharing the same measure, the cross-function edge obligation is
+`m_callee(callee_args) < m_caller(caller_args)`, which collapses to "same-measure decrease" when
+members share the measure.
 
 **This is an optimization, not a correctness prerequisite**: without sharing, each function writes
-its own measure and closes individually, which still passes. SCC's value is recognizing "this group
-uses the same measure", eliminating repeated writing and repeated verification.
+its own measure and closes its own loop, and the check still passes. SCC's value is recognizing
+"this group uses the same measure," eliminating duplicate writing and duplicate verification.
 
-Requires new **function-level call graph and SCC collection**—existing `TypeDepGraph` records type
-annotation dependencies between variables (the VC trigger from RFC-027 §6.1), which is a
+A **function-level call graph and SCC collection** must be built — the existing `TypeDepGraph`
+records variable-level type-annotation dependencies (the VC trigger from RFC-027 §6.1); it is a
 variable-level graph and cannot be reused.
 
 ### Examples
 
-#### gcd: Non-Structural Recursion
+#### gcd: Non-structural Recursion
 
 ```yaoxiang
-// Measure: ordinary function, can be unit-tested, can be reused
+// Measure: a normal function, unit-testable, reusable
 gcd_measure: (a: Int, b: Int) -> Int = { b }
 
 gcd: Terminates((a: Int, b: Int) -> Int, gcd_measure) = {
@@ -149,14 +166,14 @@ gcd: Terminates((a: Int, b: Int) -> Int, gcd_measure) = {
 
 Obligation generation:
 
-1. **Well-foundedness**: `gcd_measure(a, b) >= 0` i.e. `b >= 0`—directly derived from formal
-   parameter refinement `NonNegative(b)`
-2. **Strict decrease**: single recursive call site `gcd(b, a % b)`, path guard `b != 0`, obligation
-   `gcd_measure(b, a % b) < gcd_measure(a, b)`; expanding by substituting measure body gives
-   `a % b < b`
-3. **SMT**: verifies that negation `b != 0 ∧ a % b >= b` is unsatisfiable → Proved
+1. **Well-foundedness**: `gcd_measure(a, b) >= 0`, i.e. `b >= 0` — derived directly from the
+   parameter refinement `NonNegative(b)`.
+2. **Strict decrease**: the sole recursive call site `gcd(b, a % b)`, with path guard `b != 0`; the
+   obligation `gcd_measure(b, a % b) < gcd_measure(a, b)`, expanded by inlining the measure body to
+   `a % b < b`.
+3. **SMT**: verify that the negation `b != 0 ∧ a % b >= b` is unsatisfiable → Proved.
 
-#### Loop: Anonymous Construct Gains Denotation
+#### Loops: Anonymous Constructs Gain a Denotation
 
 ```yaoxiang
 loop: (n: Int) -> Int = {
@@ -168,16 +185,24 @@ loop: (n: Int) -> Int = {
 }
 ```
 
-`Terminates(m)` refines the value type of the loop body's tail expression, with anchor point
-provided by binding name `acc`—the loop is therefore **denotable**, eliminating the "anonymous
-construct has no way to refer" dead end. This also explains the unity of the two arities:
-obligations always land on "the computation annotated by the type position where the refinement
-resides"; functions and loops are no different.
+The `Terminates(m)` refinement annotates the value type of the loop body's tail expression, and the
+anchor is provided by the binding name `acc` — so the loop **becomes denotable**, and the "anonymous
+construct has no denotation" blind spot is closed. This also explains the unity of the two arities:
+the obligation always falls on the computation annotated at the type position where the refinement
+sits; there is no distinction between functions and loops.
 
-Obligation: on back edge `(n - i') < (n - i)`, guard `i < n`, substituting `i' = i + 1` gives
-`1 > 0`, always true → Proved.
+Obligation: on the back-edge `(n - i') < (n - i)`, with guard `i < n`, substituting `i' = i + 1`
+gives `1 > 0`, which is tautologically true → Proved.
 
-#### Mutually Recursive: SCC Shared Measure
+**Implementation status (2026-09-30): this loop form is blocked (D5)**. Currently `while`
+expressions are typed as `Void`; there is no value type to carry a refinement — so `Terminates` in
+`acc: Terminates(n - i) = while ...` cannot attach to any computation. This form is pushed to Open
+Questions, to be re-evaluated once `while` gains a value semantics (or loops switch to a
+value-bearing form). What has landed is the **function form** (return-type-position unary measure),
+see the gcd example in §Examples. Termination checking on the loop side goes through the existing
+refinement-variable gate + E4021 (§Stages and Acceptance).
+
+#### Mutual Recursion: SCC-Shared Measure
 
 ```yaoxiang
 nat: (n: Int) -> Int = { n }
@@ -192,161 +217,197 @@ is_odd: Terminates(nat) = {
 }
 ```
 
-Both functions carry unary form `Terminates(nat)`. After SCC collection, they are recognized as
-sharing the same measure; cross-function edge obligation `nat(n - 1) < nat(n)` is always true under
-guard `n != 0`, and both functions are verified closed in one pass.
+Both functions carry the unary `Terminates(nat)`. After SCC collection, the shared measure is
+recognized; the cross-function edge obligation `nat(n - 1) < nat(n)` is tautologically true under
+guard `n != 0`, and both functions close their loop in one verification pass.
 
-If SCC recognition is not performed, verifying each function against the same obligation still
-passes—just one repetition. This confirms SCC's position as an optimization.
+Without SCC recognition, both functions still pass verifying the same obligation individually — just
+with one duplicate pass. This confirms SCC's role as an optimization.
 
 ### Diagnostics
 
-**When well-foundedness cannot be derived, do not reject outright; instead, suggest checking
-direction.** This must be distinguished from diagnostics for decreasing obligation failure: the
-former points to measure value domain, the latter to recursive parameters. Suggested directions for
-each of the three failure types:
+**When well-foundedness cannot be derived, do not reject outright — suggest a checking direction.**
+This must be distinguished from the diagnostic for a failed decrease obligation: the former points
+at the measure's range, the latter at the recursive parameter. The three failure categories and
+their suggestions:
 
-| Failure                           | Suggested Direction                                                                                        |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Well-foundedness undeducible      | Whether measure has a valid lower bound on possible values (e.g., if `Int` measure needs `>= 0`)           |
-| Strict decrease judged false      | Whether recursive parameters actually move in the direction of measure decrease; attach SMT counterexample |
-| No measure and exploration failed | Hint that a name can be bound for that computation and a measure provided in type position (RFC-027 §6.9)  |
+| Failure                        | Suggested direction                                                                                       |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Well-foundedness undetermined  | Does the measure attain its lower bound (e.g. does an `Int` measure need `>= 0`)?                         |
+| Strict decrease disproven      | Is the recursive parameter really moving in the measure's decreasing direction; attach SMT counterexample |
+| No measure, exploration failed | Suggest binding a name to the computation and supplying a measure in the type position (RFC-027 §6.9)     |
 
-Counterexample presentation follows RFC-013 diagnostic message specification. Under non-linear path
-guards, Sat counterexamples may not be intuitive—recorded as known limitation, iterated with
-RFC-013.
+Counterexample rendering follows the RFC-013 diagnostic-message convention. Under non-linear path
+guards, the Sat counterexample may be unintuitive — this is recorded as a known limitation, to be
+iterated along with RFC-013.
 
 ### Error Codes
 
-Aligned with E4xxx proof failure family (E4018 refinement predicate violation, E4020 proof function
-required):
+Aligned with the E4xxx proof-failure family (E4018 refinement-predicate violation, E4020 proof
+function required):
 
-| Proposed Code | Name                   | Trigger                                                                                            |
-| ------------- | ---------------------- | -------------------------------------------------------------------------------------------------- |
-| E4021         | Termination unprovable | Exploration failed and no explicit measure in type position (hint to provide `Terminates` measure) |
-| E4022         | Measure does not hold  | Measure obligation judged false by SMT (with counterexample)                                       |
+| Proposed code | Name                   | Trigger                                                                                                     |
+| ------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| E4021         | Termination unprovable | Exploration failed and the type position has no explicit measure (suggest providing a `Terminates` measure) |
+| E4022         | Measure does not hold  | Measure obligation disproven by SMT (attach counterexample)                                                 |
 
-Final numbering subject to RFC-013 registry reality at implementation time (segment legality
-guaranteed by build.rs gate).
+The final numbers follow the RFC-013 registry at implementation time (segment legality is guaranteed
+by the build.rs threshold).
 
-### Existing Diagnostic Layer Defects
+### Existing Diagnostic-Layer Defect
 
-In current implementation, in-scope termination failure is reported as **E8001 "Internal Compiler
-Error"** (`Unproven` is formatted as ICE)—termination checking is not an ICE; occupying this code
-misleads users and masks real faults. This RFC corrects this: in-scope termination failure follows
-E4021/E4022, ICE code position returned to genuine internal errors.
+In the current implementation, in-scope termination failures are reported as **E8001 "Internal
+Compiler Error"** (`Unproven` is formatted as an ICE) — termination checking is not an ICE, and
+occupying that code slot both misleads users and masks real faults. This RFC fixes this in passing:
+in-scope termination failures go to E4021/E4022, and the ICE code slot is returned to genuine
+internal errors.
 
 ### Compiler Changes
 
-| Component                           | Changes                                                                                                                                                                                                     |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `typecheck/layers/termination.rs`   | Interface unification (exploration path and explicit measure path share obligation generation and judgment); integrate Z3 (inject into production pipeline, `with_z3` currently only in unit tests)         |
-| Function call graph + SCC (**NEW**) | No cross-function call graph in entire codebase—`TypeDepGraph` is variable-level type dependency, cannot be reused. New function-level call graph and SCC collection for mutually recursive measure sharing |
-| Obligation generation               | New: well-foundedness / strict decrease obligations, path guard injection, lexicographic expansion                                                                                                          |
-| Proof pipeline (RFC-009a / #292)    | Reuse `ConstExpr → SMTLib` chain and `Mod` etc. operator mappings; no backend changes                                                                                                                       |
-| `util/diagnostic/codes/e4xxx.rs`    | Add E4021/E4022 registration (via RFC-013 registry, build.rs gate in effect)                                                                                                                                |
-| Locales ×6                          | Six-language templates for two new codes                                                                                                                                                                    |
-| Diagnostic layer                    | Migrate in-scope termination failure from E8001, switch to proof failure family                                                                                                                             |
+| Component                           | Change                                                                                                                                                                                                               |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `typecheck/layers/termination.rs`   | Interface unification (exploration path and explicit-measure path share obligation generation and judgment); wire in Z3 (production pipeline injection; `with_z3` currently only exists in unit tests)               |
+| Function call graph + SCC (**new**) | No cross-function call graph anywhere in the repo — `TypeDepGraph` is variable-level type dependency, not reusable. Build a function-level call graph and SCC collection to support mutual-recursion measure sharing |
+| Obligation generation               | New: well-foundedness / strict-decrease obligations, path-guard injection, lexicographic expansion                                                                                                                   |
+| Proof pipeline (RFC-009a / #292)    | Reuse the `ConstExpr → SMTLib` chain and `Mod` etc. operator mappings, no backend changes                                                                                                                            |
+| `util/diagnostic/codes/e4xxx.rs`    | Register E4021/E4022 (via RFC-013 registry, build.rs threshold takes effect)                                                                                                                                         |
+| locales ×6                          | Six-language templates for the two new codes                                                                                                                                                                         |
+| Diagnostic layer                    | In-scope termination failures move out of E8001 into the proof-failure family                                                                                                                                        |
 
 ### Backward Compatibility
 
 - Programs previously rejected by termination checking but **without refinement annotations**: under
-  new criterion, they don't enter verification mode and compile through directly—intentional
-  relaxation, only loosening, not tightening.
-- Programs previously rejected by termination checking **with refinement annotations**: can pass
-  after supplementing measure.
-- Structural recursion positive examples, existing termination tests: expected output unchanged.
+  the new criterion they do not enter verification mode and compile directly — an intentional
+  relaxation, only loosening, never tightening.
+- Programs previously rejected by termination checking **with** refinement annotations: passing
+  after supplying a measure.
+- Structural-recursion positive cases and existing termination tests: expected output unchanged.
 
 ## Trade-offs
 
-### Advantages
+### Pros
 
-- **Zero new syntax**: measure written in type position, reusing refinement predicate application
-  mechanism; no `decreases` syntax slot.
-- **Aligned with proof domain behavior**: termination domain supplements the same fallback channel
-  as correctness domain, but landing point differs—correctness domain propositions that can't be
-  proven are written in **body** as proof functions, termination domain measures that can't be
-  explored are declared in **type position**. Both mechanisms are identical (refinement type
-  applications).
-- **Infrastructure reuse**: obligations are linear arithmetic plus path guards, routing through
-  #292's already-connected pipeline; no new backend.
-- **Loops gain denotation**: binding name is the anchor point; loops and functions are completely
-  homogeneous in obligation generation; no special case design needed for loops.
+- **Zero new syntax**: the measure sits in the type position, reusing the refinement-predicate
+  application mechanism; no `decreases`-style syntactic slot.
+- **Aligned behavior with the proof domain**: the termination domain gains a fallback channel
+  consistent with the correctness domain, but with a different landing point — propositions the
+  correctness domain cannot prove get a proof function written **in the body**; measures the
+  termination domain cannot explore get declared **in the type position**. Both share the same
+  mechanism (both are refinement-type applications).
+- **Reuse of infrastructure**: obligations are linear arithmetic plus path guards, flowing through
+  the already-wired #292 pipeline, no new backend.
+- **Loops gain a denotation**: the binding name is the anchor, and loops are fully isomorphic to
+  functions in obligation generation — no special case for loops.
 
-### Disadvantages and Risks
+### Cons and Risks
 
-- **Nontrivial infrastructure prerequisite**: function-level call graph and SCC collection need to
-  be built from scratch; Z3 is also not in production pipeline. SCC portion can be deferred (it's an
-  optimization), but call graph portion shares origin with SCC—deferring means mutually recursive
-  functions must each write their own measures—still passes, just repeated verification.
-- **Explicit measures are writing overhead for low-frequency paths**: two-piece setup (measure
-  function + type position declaration) is more verbose than inline annotation. Accepted—fallback is
-  low-frequency path, and换来 measures become reusable and unit-testable.
-- **Well-foundedness obligation noise**: when measure returns `Int`, need to prove `>= 0` every
-  time. Mitigation: if parameter refinement already gives lower bound, automatically derived; only
-  enters residual obligation when derivation fails, and only gives direction without rejecting.
-- **Counterexample quality**: Sat counterexamples under non-linear guards are not intuitive. Known
+- **Prerequisite infrastructure is no less than the "wiring" itself**: a function- level call graph
+  and SCC collection must be built, and Z3 is not yet injected into the production pipeline. The SCC
+  portion can be deferred (it is an optimization); the call graph shares the same source as SCC, so
+  deferring it means mutual recursion can only write per-function measures — still passes, just with
+  duplicate verification.
+- **Explicit measures impose writing overhead on a low-frequency path**: the two-part setup (a
+  measure function + a type-position declaration) is more verbose than an inline annotation.
+  Accepted — the fallback is a low-frequency path, and in return the measure is reusable and
+  unit-testable.
+- **Well-foundedness-obligation noise**: when the measure returns `Int`, every case must prove
+  `>= 0`. Mitigation: if parameter refinements already supply the lower bound, it is derived
+  automatically; only when undetermined does it enter a residual obligation, and then only direction
+  is given, not rejection.
+- **Counterexample quality**: under non-linear guards, the Sat counterexample is unintuitive. Known
   limitation.
-- **`Terminates` is the only predicate with compiler-generated body**: deviates from "all predicate
-  bodies can be user-written" purity. Reason: its assertion (measure decrease at each call site/back
-  edge) is embedded in the computational structure; user-written predicates cannot reference
-  function bodies or loop bodies. Builtin surface converges to a name; mechanism has zero additions.
+- **`Terminates` is the only predicate whose body the compiler writes**: this departs from the
+  purity of "all predicate bodies are user-writable." Reason: its assertion (measure decrease at
+  every call site / back-edge) lives inside the computational structure; a user-written predicate
+  has no way to reference a function body or loop body. The builtin surface collapses to a single
+  name; the mechanism adds nothing.
 
-## Alternative Approaches
+## Alternatives
 
-- **`with decreases (b)` inline annotation syntax**: early proposal in this issue, withdrawn. "No
-  annotation syntax opening for termination checking" is RFC-027's decided policy; inline annotation
-  would turn unsupported termination patterns into syntax slots rather than type slots, which
-  contradicts the worldview of "everything is YaoXiang functions, everything verified by type
-  checker".
-- **Separate proof function (`gcd_proof` returns `Terminates(f, m)`, discovered by return type
-  scanning)**: early design. Rejected—it introduced four categories of complexity ("discovery
-  mechanism", "naming convention", "pick first among multiple candidates", "name resolution in proof
-  function body"), all because proof was moved outside the body. After changing to type position,
-  all four complexity categories disappear.
-- **Only measure in type (`Terminates(m)`), cancel binary form**: shorter, but loses the expression
-  slot for "explicitly specifying measure attribution" (nowhere to place when measure defined
-  elsewhere, same measure serving multiple computations). Two arities are two arities of the same
-  predicate; retaining costs nearly zero.
-- **No fallback, require user to rewrite into analyzable iterative patterns**: current status. gcd /
-  merge partitioning / mutual recursion cannot be rewritten without destroying readability—this is
-  exactly the trigger condition for the re-discussion clause.
+- **`with decreases (b)` inline-annotation syntax**: an early proposal in this issue, withdrawn. "No
+  **annotation-syntax** slot for termination checking" is a settled decision from RFC-027; inline
+  annotations would turn unsupported termination modes into syntactic slots rather than
+  type-position ones, conflicting with the worldview "everything is a YaoXiang function, everything
+  is verified by the type checker."
+- **Standalone proof function (`gcd_proof` returning `Terminates(f, m)`, discovered by scanning
+  return types)**: an early design. Abandoned — it introduces four kinds of complexity: "discovery
+  mechanism," "naming convention," "pick the first of multiple candidates," and "how names inside a
+  proof function are resolved," all of which stem from putting the proof outside the type. Moving it
+  to the type position makes all four go away.
+- **Only let the measure enter the type (`Terminates(m)`), drop the binary form**: shorter, but
+  loses the expressiveness of "explicitly assigning the measure to a specific function type" (when
+  the measure is defined elsewhere, or the same measure serves multiple computations, there is
+  nowhere to put it). The two arities are two arities of the same predicate; keeping them costs
+  nearly nothing.
+- **No fallback, require the user to rewrite into an analyzable iterative pattern**: i.e. the status
+  quo. gcd / merge partitioning / mutual recursion cannot be rewritten without destroying
+  readability — that is precisely the trigger condition for the re-discussion clause.
 
 ## Non-Goals
 
-- No new syntax/keywords/annotation slots.
-- No generalization extension for automatic measure synthesis (four strategies maintain RFC-027's
-  established plan; beyond that, go explicit measure). Generic measure inference belongs to the
-  undecidable side of "discovery"; can only约定 template boundaries, cannot commit to completeness.
-- No joint solving with RFC-009a borrowing propositions (each judged independently, share backend).
-- No totality verification at dependent type level.
-- No enforcement that measure returns natural number type (not pursuing Lean's `WellFoundedRelation`
-  typeclass mechanism)—measure return type unrestricted; well-foundedness as independent obligation
-  delegated to refinement derivation or SMT.
+- No new syntax / keywords / annotation slots.
+- No generalization of automatic measure synthesis (the four strategies stay on the RFC-027 plan;
+  anything outside goes through explicit measures). Generic measure inference lives on the
+  undecidable side of "discovery"; only template boundaries can be agreed on, completeness cannot be
+  promised.
+- No joint solving with RFC-009a borrowed propositions (each side judges independently, sharing the
+  backend).
+- No totality checking at the dependent-type level.
+- The measure is not forced to return a natural-number type (no aspiration to Lean's
+  `WellFoundedRelation` typeclass mechanism) — the measure's return type is unconstrained, and
+  well-foundedness is delegated as an independent obligation to refinement inference or SMT.
 
-## Phases and Acceptance
+## Stages and Acceptance
 
-- [ ] Obligation generation (well-foundedness / strict decrease, path guard injection, lexicographic
-      expansion)
-- [ ] Explicit measure wiring (anchor resolution for `Terminates` unary and binary forms, type
-      position measure extraction)
-- [ ] SMT judgment wiring (reuse #292 pipeline, Z3 production pipeline injection)
-- [ ] Function-level call graph + SCC collection (measure sharing optimization)
-- [ ] E4021/E4022 registration + six-language locales
-- [ ] Diagnostic layer correction: in-scope termination failure migrated from E8001, switched to
-      proof failure family
-- [ ] E2E: positive examples (gcd / loop `Terminates(n - i)` / `is_even`-`is_odd` mutual recursion)
-      / negative examples (measure does not hold → E4022; no measure → E4021) / structural recursion
-      zero regression
-- [ ] Criterion regression: recursion and loops without refinement annotations no longer rejected by
-      termination checking; obligations still trigger with refinement annotations
-- [ ] Acceptance demo: write a measure declaration that doesn't hold → compile fails with readable
-      counterexample; after fixing, passes
+- [x] Obligation generation: well-foundedness / strict decrease, path-guard injection
+- [x] Explicit-measure wiring: unary-form anchor resolution (return-type position / binding
+      position) + type-position measure extraction
+- [x] SMT-judgment wiring (reuse the #292 pipeline, inject Z3 into the production pipeline — the
+      injection point had never been called before)
+- [ ] Function-level call graph + SCC collection (measure-sharing optimization)
+- [ ] Lexicographic expansion (when the measure returns a tuple)
+- [x] E4021/E4022 registration + six-language locales (three-party consistency: codes ↔ locales ↔
+      RFC-013 code table)
+- [x] Diagnostic-layer fix: in-scope termination failures moved out of E8001, into the proof-failure
+      family. E4021 exists; E4022 goes through `DisproofKind::MeasureNotDecreasing` to the user
+      domain, with a test case pinned to prevent it being downgraded to an ICE
+- [x] E2E positive: gcd (including the "residual obligation, not rejected" form), zero regression
+      for structural recursion
+- [x] E2E negative: measure does not hold → E4022 (with counterexample); no measure → E4021
+- [ ] E2E pending: loop `Terminates(n - i)` (D5: `while` has no value type); `is_even`-`is_odd`
+      mutual recursion (waiting for SCC)
+- [x] Criterion regression: recursion and loops without refinement annotations are no longer
+      rejected by termination checking; with refinement annotations, obligations are triggered as
+      before
+- [x] Acceptance demo: write a measure-not-holding declaration → compile fails and the
+      counterexample is readable (`measure_not_decreasing_err.yx`); fix it and it passes
+      (`measure_decreasing.yx`)
+
+### Implementation Landing Log (2026-09-30)
+
+Landing surface: unary `Terminates` enters the type parser → extract the measure from the AST
+(**not** via the lossy `MonoType` conversion, which would drop the measure to `Int(64)`) →
+obligation generation at recursive call sites (with path guards) → well-foundedness and
+strict-decrease dual SMT judgment → diagnostic emission.
+
+The **two gates** for emitting E4022 (both under-report-only, never misreport):
+
+1. **Disproven, not merely undisprovable** — the solver must return a counterexample (`Sat`) before
+   reporting; `Unknown` is "cannot judge" and is handled per the "give direction, do not reject"
+   principle from §Trade-offs.
+2. **Measure well-foundedness is already proven** — `<` on integers is **not** well founded, so "the
+   measure does not decrease" does **not** equal "does not terminate" (gcd terminates even when `b`
+   is negative). When well-foundedness has not been proven, even a disproven decrease does not
+   trigger a report; it enters a residual obligation.
+
+The existence of these two gates resolves the apparent contradiction in §Trade-offs between "give
+direction, do not reject" and "disproven means report": well-foundedness is precisely that "no
+decrease = no termination" license.
 
 ## Related
 
-- #318 (this RFC's triggering issue), #251 (parent milestone P1)
-- RFC-027 (host: §7 refinement type criterion, §6.1–6.5 measure exploration four strategies, §6.9
-  explicit measures, §Open Issues re-discussion clause)
-- RFC-009a / #292 (shared SMT pipeline and path condition collection—infrastructure prerequisite)
-- RFC-013 (error code registry and proof failure semantic family)
+- #318 (this RFC's originating issue), #251 (parent milestone P1)
+- RFC-027 (host: §7 refinement-type criterion, §6.1–6.5 the four measure-exploration strategies,
+  §6.9 explicit measures, §Open Questions re-discussion clause)
+- RFC-009a / #292 (shared SMT pipeline and path-condition collection — infrastructure prerequisite)
+- RFC-013 (error-code registry and proof-failure semantic family)
