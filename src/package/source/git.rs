@@ -2,7 +2,7 @@
 //!
 //! 从 Git 仓库（GitHub 等）下载依赖。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::package::cache::GlobalCache;
@@ -21,6 +21,16 @@ pub enum GitRef {
     Rev(String),
     /// 默认分支
     DefaultBranch,
+}
+
+/// git 子进程的稳定工作目录。
+///
+/// 进程级 cwd 可能被并行的 chdir 测试（如 init 的 CwdGuard）移进随后
+/// 被删除的临时目录：子进程 spawn 时 getcwd 失败，报 "Unable to read
+/// current working directory"。显式钉到系统临时根（生命周期覆盖进程）
+/// 免疫该竞态；git 命令的路径参数均为绝对/显式路径，cwd 无业务含义。
+fn stable_cwd() -> PathBuf {
+    std::env::temp_dir()
 }
 
 /// Git 来源
@@ -103,6 +113,7 @@ impl GitSource {
         // 会忽略 --depth，且 git 2.55 下 checkout 间歇性失败
         //（"fatal: this operation must be run in a work tree"）
         let mut cmd = Command::new("git");
+        cmd.current_dir(stable_cwd());
         cmd.arg("clone").arg("--no-local").arg("--depth").arg("1");
 
         match git_ref {
@@ -163,6 +174,7 @@ impl GitSource {
         url: &str,
     ) -> PackageResult<Vec<String>> {
         let output = Command::new("git")
+            .current_dir(stable_cwd())
             .arg("ls-remote")
             .arg("--tags")
             .arg("--refs")
@@ -378,6 +390,7 @@ impl GitSource {
         pattern: &str,
     ) -> PackageResult<String> {
         let output = Command::new("git")
+            .current_dir(stable_cwd())
             .arg("ls-remote")
             .arg(url)
             .arg(pattern)
