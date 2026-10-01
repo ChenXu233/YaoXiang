@@ -343,6 +343,27 @@ fn test_e2e_check_unused_import_warns_but_exits_zero() {
 }
 
 #[test]
+fn test_e2e_check_unused_private_method_warns_but_exits_zero() {
+    // Arrange: 私有方法绑定无任何引用 → W1005（接收者已算类型引用，不连带 W1002）
+    let tmp = TempDir::new().unwrap();
+    let src = write_yx(
+        tmp.path(),
+        "dead_method.yx",
+        "Widget: Type = { name: String }\nWidget.render: (self: &Widget) -> Void = {}\nmain = () => { x = 1 }",
+    );
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["check", src.to_str().unwrap()], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "存在警告不构成错误，check 应 exit 0");
+    assert!(
+        stderr.contains("warning [W1005]"),
+        "stderr 应含 warning[W1005] 前缀渲染，实际: {stderr:?}"
+    );
+}
+
+#[test]
 fn test_e2e_check_deny_warnings_exits_one() {
     // Arrange: 同一警告文件，--deny-warnings 升级为失败（CI 严格模式）
     let tmp = TempDir::new().unwrap();
