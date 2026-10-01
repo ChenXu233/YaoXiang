@@ -734,7 +734,7 @@
   "E3014": {
     "title": "レジスタオーバーフロー",
     "template": "レジスタオーバーフロー：{id} が制限 {limit} を超えています",
-    "help": "ローカル変数の数を減らすか、式を簡略化してください。"
+    "help": "ローカル変数の数を減らす、式を簡素化する、または大きな関数を複数の小さな関数に分割してください。"
   },
   "E3017": {
     "title": "無効なオペランド（コード生成）",
@@ -1122,5 +1122,21 @@
   "package_publish_tag_missing": "tag {0} が存在しません：先に tag を作成してプッシュしてください（git tag {0} && git push origin {0}）",
   "package_publish_token_missing": "GitHub 認証情報がありません：$YX_GITHUB_TOKEN を設定してください（014a 認証テーブル）",
   "package_publish_testing": "公開前のテストを実行しています…",
-  "package_publish_repo_unresolved": "GitHub リポジトリを解析できません：[package] repository に GitHub URL を記入するか、git remote origin を設定してください"
+  "package_publish_repo_unresolved": "GitHub リポジトリを解析できません：[package] repository に GitHub URL を記入するか、git remote origin を設定してください",
+  "E2096": {
+    "title": "シグネチャのベアコンテナ型",
+    "message": "シグネチャのコンテナ型に型引数がありません",
+    "template": "無効なシグネチャ：コンテナ型 '{name}' に型引数がありません",
+    "help": "コンテナ型はジェネリック型コンストラクタです（SPEC type-system §4.1.1）。ベア名は有効な型式ではありません。パラメータ化された形式で記述してください：List(T)、Dict(K, V)、Vec(T)、Array(T, N)、Set(T)、Tuple(T, ...)",
+    "example": "\"(path: &String) -> List\"",
+    "error_output": "error[E2096]: シグネチャのベアコンテナ型\n --> std/module.rs:1:1\n  |\n1 | \"(path: &String) -> List\"\n  |                      ^^^^ コンテナ型 'List' に型引数がありません"
+  },
+  "E1108": {
+    "title": "空ブロックがコンテナ期待位置に存在します",
+    "message": "`{}` は空ブロック（値 Void）であり、コンテナリテラルではありません",
+    "template": "ここではコンテナ型が期待されますが、`{}` は空ブロック（値 Void）です",
+    "help": "B 方式のセマンティクス（SPEC syntax §1.6.4）：`{}` は空ブロックであり、空辞書ではありません。空辞書は `dict.new()`、空リストは `[]` を使用してください",
+    "example": "net.http_get(url, {}, 5)",
+    "error_output": "error[E1108]: 空ブロックがコンテナ期待位置に存在します\n --> main.yx:2:33\n  |\n2 |     net.http_get(url, {}, 5)\n  |                            ^ ここではコンテナ型が期待されますが、`{}` は空ブロック（値 Void）です"
+  }
 }

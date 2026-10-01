@@ -694,7 +694,7 @@
   "E3014": {
     "title": "寄存器溢",
     "template": "寄存器溢：{id} 逾限 {limit}",
-    "help": "减局部变量之数，或简其表达式。"
+    "help": "减局部变量之数，简化表达式，或析大函数为数小函数。"
   },
   "E3017": {
     "title": "无效操作数（代码生成）",
@@ -1128,5 +1128,21 @@
   "package_publish_tag_missing": "tag {0}未存：先建而推之（git tag {0} && git push origin {0}）",
   "package_publish_token_missing": "缺GitHub凭据：当设$YX_GITHUB_TOKEN（014a认证表）",
   "package_publish_testing": "发布前测试方行…",
-  "package_publish_repo_unresolved": "GitHub仓库不可解析：于[package] repository填GitHub URL，或配置git remote origin"
+  "package_publish_repo_unresolved": "GitHub仓库不可解析：于[package] repository填GitHub URL，或配置git remote origin",
+  "E2096": {
+    "title": "签名裸容器之类型",
+    "message": "签名内容器类型缺类型实参",
+    "template": "签名无效：容器类型'{name}'缺类型实参",
+    "help": "容器类型者，泛型类型构造器也（SPEC type-system §4.1.1），裸名非合法之类型表达式。当书为参数化之形态：List(T)、Dict(K, V)、Vec(T)、Array(T, N)、Set(T)、Tuple(T, ...)",
+    "example": "\"(path: &String) -> List\"",
+    "error_output": "error[E2096]: 签名裸容器之类型\n --> std/module.rs:1:1\n  |\n1 | \"(path: &String) -> List\"\n  |                      ^^^^ 容器类型'List'缺类型实参"
+  },
+  "E1108": {
+    "title": "空块落入容器所期之位",
+    "message": "`{}`者，空块也（值Void），非容器字面量",
+    "template": "此处期容器类型，然`{}`乃空块（值Void）",
+    "help": "B方案语义（SPEC syntax §1.6.4）：`{}`者空块也，非空字典。空字典用`dict.new()`，空列表用`[]`",
+    "example": "net.http_get(url, {}, 5)",
+    "error_output": "error[E1108]: 空块落入容器所期之位\n --> main.yx:2:33\n  |\n2 |     net.http_get(url, {}, 5)\n  |                            ^ 此处期容器类型，然`{}`乃空块（值Void）"
+  }
 }

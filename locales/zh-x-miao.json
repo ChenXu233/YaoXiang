@@ -715,7 +715,7 @@
   "E3014": {
     "title": "寄存器溢出喵~",
     "template": "寄存器溢出喵~：{id} 超过限制 {limit} nya~",
-    "help": "减少局部变量的数量，或者简化表达式喵~"
+    "help": "减少局部变量数量、简化表达式，或者把大函数拆成小函数nya～这样代码才会变得苗条可爱喵～"
   },
   "E3017": {
     "title": "无效操作数（代码生成）喵~",
@@ -1119,5 +1119,21 @@
   "package_publish_tag_missing": "tag {0} 不见啦喵~：要先创建再推上去呀（git tag {0} && git push origin {0}）nya~",
   "package_publish_token_missing": "缺少 GitHub 凭据喵~：要设置 $YX_GITHUB_TOKEN 哦（014a 认证表）nya~",
   "package_publish_testing": "正在跑发布前的测试喵~…",
-  "package_publish_repo_unresolved": "找不到 GitHub 仓库喵~：要在 [package] repository 填上 GitHub URL，或者把 git remote origin 配置好才行 nya~"
+  "package_publish_repo_unresolved": "找不到 GitHub 仓库喵~：要在 [package] repository 填上 GitHub URL，或者把 git remote origin 配置好才行 nya~",
+  "E2096": {
+    "title": "签名里出现裸裸的容器类型喵～",
+    "message": "签名里的容器类型忘记带类型实参了nya～",
+    "template": "无效签名喵：容器类型 '{name}' 忘记带上类型实参了喵～",
+    "help": "容器类型是泛型类型构造器喵～（SPEC type-system §4.1.1），光秃秃的名字不是合法类型表达式nya。要写成参数化形态：List(T)、Dict(K, V)、Vec(T)、Array(T, N)、Set(T)、Tuple(T, ...) 这样才乖哦～",
+    "example": "\"(path: &String) -> List\"",
+    "error_output": "error[E2096]: 签名裸容器类型nya～\n --> std/module.rs:1:1\n  |\n1 | \"(path: &String) -> List\"\n  |                      ^^^^ 容器类型 'List' 忘记带类型实参喵～"
+  },
+  "E1108": {
+    "title": "空块不小心掉进容器位置了喵～",
+    "message": "`{}` 是空块（值 Void）喵，才不是容器字面量nya～",
+    "template": "这里想要的是容器类型喵，但 `{}` 是不乖的空块（值 Void）nya～",
+    "help": "B 方案语义喵～（SPEC syntax §1.6.4）：`{}` 是空块，才不是空字典nya！空字典要用 `dict.new()`，空列表要用 `[]`，这样才对味哦～",
+    "example": "net.http_get(url, {}, 5)",
+    "error_output": "error[E1108]: 空块落入容器期望位nya～\n --> main.yx:2:33\n  |\n2 |     net.http_get(url, {}, 5)\n  |                            ^ 这里想要容器类型喵，但 `{}` 是不乖的空块（值 Void）nya～"
+  }
 }
