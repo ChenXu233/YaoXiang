@@ -775,9 +775,9 @@ Clone = copy data, copy is independent (modifications do not affect each other)
 | `ref T`                  | ✅      | Rc/Arc copy = reference count +1, share heap data                     |
 | String, Bytes            | ✅      | Internal reference counting, copy handle shares underlying buffer     |
 | `&mut T` (mutable token) | ❌      | Linear exclusive, cannot copy                                         |
-| struct                   | Derived | All fields Dup → struct Dup                                           |
-| enum                     | Derived | All fields of all variants Dup → enum Dup                             |
-| tuple                    | Derived | All elements Dup → tuple Dup                                          |
+| struct                   | Derived | All fields ∈ (primitive value types ∪ Dup) → Dup, otherwise Move (RFC-009 derivation rule, #398) |
+| enum                     | Derived | All fields of all variants copyable → enum Dup (design state, not implemented yet)    |
+| tuple                    | Derived | Judged element by element, same rule as struct (#398)                 |
 | Fn (closure)             | ❌      | Captured environment may not be Dup                                   |
 | `*T` (raw pointer)       | ❌      | unsafe, does not participate in ownership system                      |
 

@@ -633,11 +633,22 @@ independent copy. A type can support both Dup and Clone, or only one of them.
 | String, Bytes | ✅ (internal ref count, copy handle shares underlying buffer) | ✅    | String / bytes                              |
 | `&mut T`      | ❌ (linear, exclusive)                                        | ❌    | Mutable token                               |
 | `*T`          | ❌                                                            | ❌    | Raw pointer                                 |
-| struct        | Derived (auto-derived when all fields are Dup)                | ✅    | Struct                                      |
+| struct        | Derived (see the derivation rule below, #398)                 | ✅    | Struct                                      |
+| tuple         | Derived (element by element, same rule as struct, #398)       | ✅    | Tuple                                       |
 
 **Primitive value types** (Int, Float, Bool, Char) use the compiler's built-in value-copy semantics
 on assignment — the two values are fully independent, not shallow copies. They do not fall under the
 Dup type attribute, but are handled natively by the compiler.
+
+#### Derivation rule (settled in #398)
+
+"Auto-derived when all fields are Dup" cannot be executed literally — primitive fields (Int etc.) are not Dup themselves, so `{ x: Int, y: Int }` would be misjudged as Move. The executable form:
+
+1. **Copyable field set** = ValueCopy (Int / Float / Bool / Char / Range) ∪ Dup (`&T`, `ref T`, String / Bytes, function values (#352), composite types that already derive Dup);
+2. **struct**: all fields inside the copyable field set → derives Dup; **any** field that is Linear (`&mut T`) or Move (nested Move struct / containers such as Vec, Dict / resources) → the whole struct stays Move (no "partially copyable" middle state — in copy terms it must be transferred);
+3. **tuple**: same rule as struct, judged element by element; the empty tuple (unit) is `Void`;
+4. **Derivation is recursive**: a field that is a named type (e.g. `target: Point`) has its definition expanded before judging — `A = { b: B }` follows B's derivation result; cyclic aliases fall back to Move conservatively at the depth limit;
+5. **Out of scope of this row** (still Move, tracked separately): containers (Vec / Dict / Set / Option / Result / Array) and enum.
 
 ---
 

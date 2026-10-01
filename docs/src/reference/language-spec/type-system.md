@@ -801,8 +801,10 @@ YaoXiang 只有一种类型属性需要区分：线性 vs 可复制。由编译�
 所有类型默认遵循 Move 语义。赋值、传参、返回 = 所有权转移。
 
 ```yaoxiang
-p: Point = Point(1.0, 2.0)
-q = p           // Move，p 不可再读
+// 含堆缓冲字段的 struct 不派生 Dup（字段落 Move）→ 默认 Move
+Buf: Type = { data: Vec(Float) }
+b: Buf = Buf([1.0, 2.0])
+q = b           // Move，b 不可再读
 ```
 
 ### 11.2 Dup（浅拷贝：复制句柄，共享数据）
@@ -815,10 +817,21 @@ q = p           // Move，p 不可再读
 | `ref T`      | Dup    | Rc/Arc 复制 = 引用计数+1，共享堆数据            |
 | String, Bytes | Dup   | 内部引用计数，赋值复制句柄共享底层 buffer       |
 | `&mut T`     | Linear | 零大小写入令牌，独占，不可复制                  |
-| 其他所有类型 | Move   | 默认所有权转移                                  |
+| struct        | 派生   | 所有字段可复制（原语值类型 ∪ Dup）→ Dup，否则 Move（#398） |
+| tuple         | 派生   | 逐元素判定，同 struct 规则（#398）              |
+| 其他所有类型  | Move   | 默认所有权转移                                  |
 
 **原语值类型**（Int, Float, Bool,
 Char）是编译器内置的特殊处理：赋值时自动值复制，两个值完全独立。这是编译器的原生行为，不属于 Dup 类型属性。
+
+**派生规则**（#398 定案）——「所有字段均为 Dup 时自动派生」无法字面执行：
+原语字段（Int 等）本身不属于 Dup，`{ x: Int, y: Int }` 会被误判为 Move。可执行形式：
+
+1. **可复制字段集** = 原语值类型（Int / Float / Bool / Char / Range）∪ Dup（`&T`、`ref T`、String / Bytes、函数值（#352）、已达 Dup 的组合类型）；
+2. **struct**：所有字段都在可复制字段集内 → 派生 Dup；**任一**字段落 Linear（`&mut T`）或 Move（嵌套 Move struct / Vec、Dict 等容器 / 资源）→ 整体保持 Move（不引入「部分可复制」的中间态）；
+3. **tuple**：与 struct 同规则，逐元素判定；空元组（单位）即 `Void`；
+4. **派生是递归的**：字段为具名类型（如 `target: Point`）时展开其定义再判定，`A = { b: B }` 随 B 的派生结果走；循环别名按深度上限保守落 Move；
+5. **不在派生范围**（仍 Move，另案）：容器（Vec / Dict / Set / Option / Result / Array）与 enum。
 
 ```yaoxiang
 // &T: Dup，可自由别名
@@ -875,7 +888,10 @@ print(x)            // 可用
 // Clone：显式深拷贝，创建独立副本
 p: Point = Point(1.0, 2.0)
 q = p.clone()       // Clone：深复制，p 仍然可用
-r = p               // Move：所有权转移，因为 Point 不是 Dup 也不是原语值类型
+
+// 非 Dup 类型（字段落 Move，不派生）：Move 转移所有权
+buf: Buf = Buf([1.0, 2.0])
+buf2 = buf          // Move：Buf 含 Vec 字段，不派生 Dup（见 §11.2 派生规则）
 ```
 
 **设计意图**：
@@ -883,7 +899,7 @@ r = p               // Move：所有权转移，因为 Point 不是 Dup 也不�
 - Dup 用于令牌/引用类型，解决"多个视角看同一份数据"的问题
 - Clone 用于需要独立副本的场景，显式调用让成本可见
 - 原语值类型（Int/Float/Bool/Char）的复制是编译器内置行为，不属于 Dup
-- 大多数自定义类型默认 Move，零拷贝高性能
+- 自定义类型默认 Move（零拷贝高性能）；字段全可复制时自动派生 Dup（§11.2 派生规则）
 
 ## 第十二章：借用令牌类型
 
@@ -1151,6 +1167,11 @@ Bool, Char      // 不是 Dup，是编译器对原语的内置处理
 // === Dup（浅拷贝：复制句柄，共享底层数据） ===
 &T              // 零大小读取令牌，复制令牌 = 多个视角指向同一数据
 ref T           // Rc/Arc 复制 = 引用计数+1，共享堆数据
+String, Bytes   // 内部引用计数，复制句柄共享底层 buffer
+struct / tuple  // 派生：所有字段 ∈（原语值类型 ∪ Dup）→ Dup（#398）
+
+// === 不派生（保持 Move） ===
+Vec/Dict/Set    // 容器与 enum 不在派生范围（#398）
 
 // === Linear ===
 &mut T          // 零大小写入令牌，Linear（独占，不可复制）

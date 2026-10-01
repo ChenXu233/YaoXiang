@@ -1,14 +1,20 @@
-// 错误检测: Move 后使用原变量
+// 06-compile-errors/move_after_use_err.yx
 // Move 后使用原变量（E2014）
 // expect: compile-error E2014
+// 覆盖: RFC-009 Dup 表 / SPEC type-system §11.2 — 含 &mut 字段（Linear）的 struct 不派生 Dup（#398）
+// 验证: struct 赋值整体 Move 后读源变量被编译期拦截
+// 状态: ❌ 应编译失败
 
 use std.io
 
-Point: Type = { x: Float, y: Float }
+// 负例必须用**真**非 Dup 类型：#398 落地后 { x: Int, y: Int } 一类全可复制
+// struct 已派生 Dup（赋值即复制），无法再承担 Move 语料的角色。&mut T 是
+// Linear 字段，使 Holder 留在非 Dup 一侧（整体按 Move 消费）。
+Holder: Type = { r: &mut Int }
 
 main: () -> Void = {
-    p = Point(1.0, 2.0)
-    p2 = p
-    io.println(p)
-    io.println("ALL TESTS PASSED")
+    mut x = 1
+    h = Holder(&mut x)
+    h2 = h            // Move：h 的所有权转移到 h2
+    io.println(h)     // ❌ E2014：h 已被 move
 }
