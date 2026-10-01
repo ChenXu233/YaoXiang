@@ -24,6 +24,10 @@ fn make_git_repo(dir: &Path) -> std::path::PathBuf {
     let git = |args: &[&str]| {
         let mut cmd = Command::new("git");
         cmd.arg("-C").arg(dir);
+        // 测试 git 环境隔离：config 写路径与开发仓库彻底断开
+        cmd.env("GIT_CONFIG_GLOBAL", dir.join("test-global-gitconfig"));
+        cmd.env("GIT_CONFIG_SYSTEM", dir.join("test-system-gitconfig"));
+        cmd.env("GIT_CONFIG_NOSYSTEM", "1");
         cmd.arg("-c")
             .arg("user.name=test")
             .arg("-c")

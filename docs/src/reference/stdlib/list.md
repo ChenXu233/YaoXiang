@@ -20,7 +20,7 @@ use std.list
 | 类别               | 函数                                                                                                                    | 行为                       |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------- |
 | **消耗源列表** | `push` `append` `prepend` `set` `pop` `remove_at` | 源列表被移动，之后不可再用 |
-| 只读借用       | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | 源列表可反复使用 |
+| 只读借用       | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | 源列表可反复使用；`contains`/`find_index` 的 `item` 亦按借用 |
 | 迭代协议       | `iter`（消耗源列表，返回迭代器）`has_next` `next`（借用 / 可变借用迭代器） | 见下方说明 |
 
 ```yaoxiang
@@ -430,12 +430,13 @@ main: () -> Void = {
 <!-- stdlib:sig:list.contains start -->
 
 ```yaoxiang
-contains: (A: Type) -> (list: &Vec(A), item: A) -> Bool
+contains: (A: Type) -> (list: &Vec(A), item: &A) -> Bool
 ```
 
 <!-- stdlib:sig:list.contains end -->
 
-`item` 是否在列表中（按值相等比较；元素类型须支持 `==`——基础类型原生支持，记录类型由 RFC-011b 的 `Equal` 自动派生或显式实例化提供）。
+`item` 是否在列表中（按值相等比较；元素类型须支持 `==`——基础类型原生支持，记录类型由 RFC-011b 的 `Equal` 自动派生或显式实例化提供）。`item`
+按只读借用传入（调用端自动创建 `&A` 令牌），调用后实参仍可用。
 
 返回：存在为 `true`；参数不是列表时返回 `false`。
 
@@ -455,12 +456,12 @@ main: () -> Void = {
 <!-- stdlib:sig:list.find_index start -->
 
 ```yaoxiang
-find_index: (A: Type) -> (list: &Vec(A), item: A) -> Int
+find_index: (A: Type) -> (list: &Vec(A), item: &A) -> Int
 ```
 
 <!-- stdlib:sig:list.find_index end -->
 
-`item` 首次出现的下标。
+`item` 首次出现的下标。`item` 按只读借用传入（调用端自动创建 `&A` 令牌），调用后实参仍可用。
 
 返回：找到返回下标；未找到返回 `-1`。
 

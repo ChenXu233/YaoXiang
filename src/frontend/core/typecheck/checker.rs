@@ -162,7 +162,11 @@ impl TypeChecker {
         super::operator_interfaces::register_native_entries(&mut env);
         // RFC-011b 阶段 2: `?` 传播接口（四方法）
         super::operator_interfaces::register_try_interface_def(&mut env);
-        add_native_function_types(&mut env);
+        // #391：std 签名是编译器静态资产，注册期对畸形签名硬失败——
+        // 签名静态编译进二进制，坏签名等价于编译器自身 invariant 被破坏，
+        // 任何测试/运行路径都必须立即大声失败，绝不静默退化。
+        add_native_function_types(&mut env)
+            .unwrap_or_else(|d| panic!("std native 签名注册失败: {} {}", d.code, d.message));
         Self::register_builtin_container_defs(&mut env);
 
         // std 注册表的方法绑定注入（与 orchestrator 逐文件注入同一规则）：

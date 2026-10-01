@@ -1,0 +1,27 @@
+// src/std/tests/list_item_borrow.yx
+// 覆盖: std.list 查询函数的 item 借用语义（#392）
+// 验证: contains/find_index 的 item: &A——调用端自动借 token，
+//       String 实参调用后仍可用（此前 item: A 按值消费，撞 E2014）
+// 状态: ✅
+// 注: 独立成文件——同函数体内混用 Int 泛型调用会触发字面量绑定元素
+//     类型污染的既有缺口（新旧二进制同炸，另行立案），此处保持纯 String。
+
+use std.assert
+use std.list
+
+main: () -> Void = {
+    xs = ["a", "b", "c"]
+    s = "b"
+
+    assert.assert(list.contains(xs, s), "contains str item")
+    assert.assert(s == "b", "str item survives contains")
+
+    assert.assert(list.find_index(xs, s) == 1, "find_index str item")
+    assert.assert(s == "b", "str item survives find_index")
+
+    // 列表本体同样可复用（只读借用语义既有行为）
+    assert.assert(list.contains(xs, s), "xs reusable across calls")
+    assert.assert(list.len(xs) == 3, "xs len intact")
+}
+
+main()

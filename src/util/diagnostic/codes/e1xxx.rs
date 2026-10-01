@@ -114,4 +114,7 @@ define_codes!(E1XXX, {
     ("E1106", TypeCheck, false, constraint_unsatisfied(type_: &str, param: &str, interface: &str) => .param("type", type_) .param("param", param) .param("interface", interface)),
     // E1107 方法重载歧义（RFC-011a §3：多候选且无期望类型可区分）
     ("E1107", TypeCheck, false, ambiguous_method_overload(key: &str, count: usize) => .param("key", key) .param("count", count.to_string())),
+    // E1108 空块 `{}` 落入容器期望位（#394：B 方案定案的 `{}` = 空块 Void，
+    // SPEC syntax §1.6.4；诊断必须把钦定写法传递给用户而非裸报 found void）
+    ("E1108", TypeCheck, true, empty_block_as_container() => ),
 });

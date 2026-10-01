@@ -3,6 +3,7 @@
 //! §3.5: 函数类型
 //! §4.1: 泛型参数语法
 //! RFC-010: 统一类型语法
+//! #391: 畸形签名（结构错误/裸容器/垃圾 token）一律 Err 硬拒绝，不再降级
 
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::signature::parse_signature;
@@ -16,7 +17,7 @@ fn test_parse_signature_simple_function() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("() -> Void", &mut env);
+    let result = parse_signature("() -> Void", &mut env).expect("合法签名应解析成功");
 
     // Assert - 应该返回零参数的函数类型
     match result {
@@ -41,7 +42,7 @@ fn test_parse_signature_with_params() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(Int, Float) -> String", &mut env);
+    let result = parse_signature("(Int, Float) -> String", &mut env).expect("合法签名应解析成功");
 
     // Assert - 应该解析为包含两个参数的函数类型
     match result {
@@ -70,54 +71,121 @@ fn test_parse_signature_with_params() {
     }
 }
 
-// Error path 测试
+// Error path 测试（#391：硬拒绝，不再降级）
 
 #[test]
-fn test_parse_signature_invalid_syntax() {
-    // Arrange - 不以 '(' 开头的非法签名，解析为常量类型名（TypeRef）
+fn test_parse_signature_invalid_syntax_rejected() {
+    // #324：单测直调需模拟 walk 上下文（builder 在 debug 下强制 span）
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
+    // Arrange - 含 '->' 与空白的残余不是合法类型表达式
     let mut env = TypeEnvironment::new();
 
     // Act
     let result = parse_signature("invalid -> syntax", &mut env);
 
-    // Assert - 非法签名不应该是 Fn 类型，而是降级为 TypeRef
-    assert!(
-        !matches!(result, MonoType::Fn { .. }),
-        "非法签名不应解析为 Fn 类型，实际: {:?}",
-        result
-    );
-    assert!(
-        matches!(result, MonoType::TypeRef(_)),
-        "非法签名应降级为 TypeRef，实际: {:?}",
-        result
+    // Assert - 畸形签名报 Err（invalid_signature），不再静默降级 TypeRef
+    let diag = result.expect_err("畸形签名应硬拒绝");
+    assert_eq!(
+        diag.code, "E2090",
+        "应报 invalid_signature，实际: {}",
+        diag.code
     );
 }
 
 #[test]
-fn test_parse_signature_unmatched_paren() {
+fn test_parse_signature_unmatched_paren_rejected() {
     // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
-    // Arrange - 缺少右括号的签名，触发 unmatched '(' 错误路径
+    // Arrange - 缺少右括号的签名
     let mut env = TypeEnvironment::new();
 
     // Act
     let result = parse_signature("(Int", &mut env);
 
-    // Assert - 错误路径返回带类型变量的降级 Fn
+    // Assert - 报 Err（unmatched '('），不再返回降级 Fn
+    let diag = result.expect_err("unmatched '(' 应硬拒绝");
+    assert_eq!(
+        diag.code, "E2090",
+        "应报 invalid_signature，实际: {}",
+        diag.code
+    );
+}
+
+// #391：裸容器类型构造期拒绝
+
+#[test]
+fn test_parse_signature_bare_container_in_return_rejected() {
+    // #324：单测直调需模拟 walk 上下文（builder 在 debug 下强制 span）
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
+    // Arrange - 旧 std.os.read_dir 的真实事故形态：`-> List`
+    let mut env = TypeEnvironment::new();
+
+    // Act
+    let result = parse_signature("(path: &String) -> List", &mut env);
+
+    // Assert - 专用码 E2096，不再落成垃圾 TypeRef 让用户代码报 E1002
+    let diag = result.expect_err("裸容器返回类型应硬拒绝");
+    assert_eq!(diag.code, "E2096", "应报 invalid_signature_bare_container");
+    assert!(
+        diag.message.contains("List"),
+        "诊断应点名裸容器名，实际: {}",
+        diag.message
+    );
+}
+
+#[test]
+fn test_parse_signature_bare_container_in_param_rejected() {
+    let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
+    let mut env = TypeEnvironment::new();
+
+    for name in ["List", "Dict", "Vec", "Array", "Set", "Tuple"] {
+        let sig = format!("(x: {name}) -> Int");
+        let diag =
+            parse_signature(&sig, &mut env).expect_err(&format!("裸容器参数 {name} 应硬拒绝"));
+        assert_eq!(diag.code, "E2096", "容器名 {name} 应报 E2096");
+    }
+}
+
+#[test]
+fn test_parse_signature_parameterized_container_accepted() {
+    // Arrange - 参数化容器是合法形态（SPEC §4.1.1 泛型构造器）
+    let mut env = TypeEnvironment::new();
+
+    // Act
+    let result = parse_signature("(xs: &Vec(String)) -> Dict(String, Int)", &mut env)
+        .expect("参数化容器签名应解析成功");
+
+    // Assert
     match result {
-        MonoType::Fn {
-            params,
-            return_type,
-            ..
-        } => {
-            assert_eq!(params.len(), 1, "降级 Fn 应有 1 个类型变量参数");
+        MonoType::Fn { return_type, .. } => {
             assert!(
-                matches!(*return_type, MonoType::Void),
-                "降级 Fn 返回类型应为 Void，实际: {:?}",
+                matches!(*return_type, MonoType::Generic { ref name, .. } if name == "Dict"),
+                "返回类型应为 Dict(Generic)，实际: {:?}",
                 return_type
             );
         }
-        other => panic!("期望降级 Fn 类型，实际得到: {:?}", other),
+        other => panic!("期望 Fn 类型，实际得到: {:?}", other),
+    }
+}
+
+#[test]
+fn test_parse_signature_unknown_single_token_type_still_typeref() {
+    // Arrange - 单 token 未知名是自定义类型的合法通道（File/DateTime/Error）
+    let mut env = TypeEnvironment::new();
+
+    // Act
+    let result = parse_signature("(f: File) -> DateTime", &mut env).expect("未知名应走 TypeRef");
+
+    // Assert
+    match result {
+        MonoType::Fn { return_type, .. } => {
+            assert!(
+                matches!(*return_type, MonoType::TypeRef(ref n) if n == "DateTime"),
+                "返回应为 TypeRef(DateTime)，实际: {:?}",
+                return_type
+            );
+        }
+        other => panic!("期望 Fn 类型，实际得到: {:?}", other),
     }
 }
 
@@ -129,7 +197,7 @@ fn test_parse_signature_empty_params() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("() -> Int", &mut env);
+    let result = parse_signature("() -> Int", &mut env).expect("合法签名应解析成功");
 
     // Assert - 空参数列表应该有效
     match result {
@@ -155,7 +223,8 @@ fn test_parse_signature_many_params() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(Int, Int, Int, Int, Int) -> Int", &mut env);
+    let result =
+        parse_signature("(Int, Int, Int, Int, Int) -> Int", &mut env).expect("合法签名应解析成功");
 
     // Assert - 多参数应该有效
     match result {
@@ -189,7 +258,8 @@ fn test_parse_signature_nested_function_type() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(Int) -> (Float) -> String", &mut env);
+    let result =
+        parse_signature("(Int) -> (Float) -> String", &mut env).expect("合法签名应解析成功");
 
     // Assert - 外层应为 Fn(Int) -> Fn(Float)->String
     match result {
@@ -248,7 +318,8 @@ fn test_parse_signature_generic_prefix_binds_shared_var() {
     let result = parse_signature(
         "(T: Type)(list: List(T), fn: (item: T) -> Bool) -> List(T)",
         &mut env,
-    );
+    )
+    .expect("合法签名应解析成功");
 
     // Assert - T 应绑定为共享类型变量：参数、函数参数与返回值同源
     match result {
@@ -302,7 +373,8 @@ fn test_parse_signature_nested_option_arc() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(T: Type)(weak: Weak(T)) -> Option(Arc(T))", &mut env);
+    let result = parse_signature("(T: Type)(weak: Weak(T)) -> Option(Arc(T))", &mut env)
+        .expect("合法签名应解析成功");
 
     // Assert - 返回 Option(Arc(T))
     match result {
@@ -331,7 +403,8 @@ fn test_parse_signature_paren_result_with_concrete_args() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(s: String) -> Result(Int, Error)", &mut env);
+    let result =
+        parse_signature("(s: String) -> Result(Int, Error)", &mut env).expect("合法签名应解析成功");
 
     // Assert - Result(Int64, TypeRef("Error"))
     match result {
@@ -360,7 +433,7 @@ fn test_parse_signature_variadic_returns_void() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(...args) -> Void", &mut env);
+    let result = parse_signature("(...args) -> Void", &mut env).expect("合法签名应解析成功");
 
     // Assert - 变参为 Any 占位，Void 返回
     match result {
@@ -395,7 +468,8 @@ fn test_parse_signature_format_with_variadic() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(format: String, ...args) -> String", &mut env);
+    let result = parse_signature("(format: String, ...args) -> String", &mut env)
+        .expect("合法签名应解析成功");
 
     // Assert - [String, Any] -> String
     match result {
@@ -429,7 +503,8 @@ fn test_parse_signature_optional_param_marker() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(cond: Bool, ?msg: String) -> Void", &mut env);
+    let result = parse_signature("(cond: Bool, ?msg: String) -> Void", &mut env)
+        .expect("合法签名应解析成功");
 
     // Assert - 两个精确参数（1 参调用走宽容路径，2 参精确检查）
     match result {
@@ -455,7 +530,8 @@ fn test_parse_signature_untyped_param() {
     let mut env = TypeEnvironment::new();
 
     // Act
-    let result = parse_signature("(value, type_name: String) -> String", &mut env);
+    let result = parse_signature("(value, type_name: String) -> String", &mut env)
+        .expect("合法签名应解析成功");
 
     // Assert - 无标注参数降级为 TypeRef 占位，有标注参数精确
     match result {

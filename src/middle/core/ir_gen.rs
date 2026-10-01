@@ -109,6 +109,12 @@ pub struct AstToIrGenerator {
     type_result: Option<Box<TypeCheckResult>>,
     /// 下一个临时寄存器编号
     next_temp: usize,
+    /// 本函数临时寄存器高水位（#393：语句级回收会回滚 next_temp，
+    /// total_locals 必须取真高水位，否则最后一条语句的临时槽位被裁掉）
+    temp_high_water: usize,
+    /// 循环态临时地板（#393：for 的 iterator/iterable 等临时跨语句存活，
+    /// 语句级回收回滚不得低于此值；enter/exit_loop_targets 维护）
+    temp_floor: usize,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     local_var_types: HashMap<String, String>,
     /// FFI 库绑定
@@ -284,6 +290,8 @@ struct LoopTargets {
     continue_target: usize,
     /// break 占位 Jmp 的指令下标，循环出口确定后回填
     break_fixups: Vec<usize>,
+    /// 进入循环时的 temp_floor（#393：出口恢复外层地板）
+    saved_temp_floor: usize,
 }
 
 /// 一层 curry 签名
@@ -308,6 +316,8 @@ impl AstToIrGenerator {
             symbols: vec![HashMap::new()],
             type_result: Some(Box::new(type_result.clone())),
             next_temp: 0,
+            temp_high_water: 0,
+            temp_floor: 0,
             local_var_types: HashMap::new(),
             ffi_libs: Vec::new(),
             ffi_bindings: Vec::new(),
@@ -850,6 +860,9 @@ impl AstToIrGenerator {
     fn next_temp_reg(&mut self) -> usize {
         let reg = self.next_temp;
         self.next_temp += 1;
+        // #393：真高水位——语句级回收会回滚 next_temp，槽位总数以历史
+        // 最高占用为准（少一都会让尾部语句的临时落进未分配槽位）。
+        self.temp_high_water = self.temp_high_water.max(reg + 1);
         reg
     }
 
@@ -1706,6 +1719,9 @@ impl AstToIrGenerator {
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
         self.next_temp = local_var_start;
+        // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
+        self.temp_high_water = local_var_start;
+        self.temp_floor = 0;
 
         // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
@@ -1845,6 +1861,9 @@ impl AstToIrGenerator {
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
         self.next_temp = local_var_start;
+        // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
+        self.temp_high_water = local_var_start;
+        self.temp_floor = 0;
 
         // 检查函数体是否为 FFI ExternRef 绑定
         if let Some(ConstValue::ExternRef {
@@ -1906,6 +1925,14 @@ impl AstToIrGenerator {
                     }
                 }
             }
+            // #393：语句级临时寄存器回收（同 generate_block_ir——临时不跨
+            // 语句存活，回滚到具名水位与循环态地板的较大者）
+            let named_watermark = self
+                .cur_locals
+                .iter()
+                .rposition(|slot| slot.name.is_some())
+                .map_or(0, |i| i + 1);
+            self.next_temp = named_watermark.max(self.temp_floor);
             tlog!(
                 debug,
                 MSG::IrGenAfterProcessStmt,
@@ -1938,7 +1965,7 @@ impl AstToIrGenerator {
         // 几百个局部变量会落进 OperandResolver 的溢出分支——该分支构造
         // E3014（requires_span 码）时无 span 可挂，debug 构建直接 panic。
         // 现在在 IR 层就拦住并带上函数 span（#271 静默/崩溃同类：宁可报错不崩）。
-        let total_locals = self.next_temp;
+        let total_locals = self.temp_high_water;
         const MAX_REGISTERS: usize = 255;
         if total_locals > MAX_REGISTERS {
             return Err(ErrorCodeDefinition::register_overflow(
@@ -2001,6 +2028,7 @@ impl AstToIrGenerator {
         let param_count = layer.params.len();
         let full_env: Vec<Operand> = (0..env_count + param_count).map(Operand::Local).collect();
         self.next_temp = env_count + param_count;
+        self.temp_high_water = env_count + param_count;
         let closure_dst = self.next_temp_reg();
         instructions.push(Instruction::MakeClosure {
             dst: Operand::Local(closure_dst),
@@ -2024,7 +2052,7 @@ impl AstToIrGenerator {
             .map(MonoType::from)
             .collect();
         let return_type: MonoType = layer.return_type.clone().into();
-        let total_locals = self.next_temp;
+        let total_locals = self.temp_high_water;
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         Ok(FunctionIR {
@@ -2080,6 +2108,8 @@ impl AstToIrGenerator {
 
         // next_temp 起始 = 参数总数
         self.next_temp = env_count + layer.params.len();
+        self.temp_high_water = env_count + layer.params.len();
+        self.temp_floor = 0;
 
         let return_type: MonoType = layer.return_type.clone().into();
 
@@ -2119,7 +2149,7 @@ impl AstToIrGenerator {
             .filter_map(|p| p.ty.clone())
             .map(MonoType::from)
             .collect();
-        let total_locals = self.next_temp;
+        let total_locals = self.temp_high_water;
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // #311：恢复父函数的循环上下文
@@ -2168,6 +2198,8 @@ impl AstToIrGenerator {
 
         // 保存外层状态，避免污染
         let saved_next_temp = self.next_temp;
+        let saved_temp_high_water = self.temp_high_water;
+        let saved_temp_floor = self.temp_floor;
         let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
@@ -2192,6 +2224,8 @@ impl AstToIrGenerator {
             self.enter_scope();
             // 重置本层的临时寄存器（每层独立计数）
             self.next_temp = 0;
+            self.temp_high_water = 0;
+            self.temp_floor = 0;
 
             let func = if is_innermost {
                 self.generate_curry_innermost_func(
@@ -2224,6 +2258,8 @@ impl AstToIrGenerator {
 
         // 恢复外层状态
         self.next_temp = saved_next_temp;
+        self.temp_high_water = saved_temp_high_water;
+        self.temp_floor = saved_temp_floor;
         self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
@@ -2706,6 +2742,8 @@ impl AstToIrGenerator {
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 保存父函数状态
         let saved_next_temp = self.next_temp;
+        let saved_temp_high_water = self.temp_high_water;
+        let saved_temp_floor = self.temp_floor;
         let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
@@ -2735,6 +2773,9 @@ impl AstToIrGenerator {
         // 记录局部变量起始位置
         let local_var_start = params.len();
         self.next_temp = local_var_start;
+        // #393：独立寄存器空间——高水位与循环态地板随之清零
+        self.temp_high_water = local_var_start;
+        self.temp_floor = 0;
 
         // 生成表达式体的 IR，并返回结果
         let result_reg = self.next_temp_reg();
@@ -2748,11 +2789,13 @@ impl AstToIrGenerator {
         self.exit_scope();
 
         // 计算局部变量总数
-        let total_locals = self.next_temp;
+        let total_locals = self.temp_high_water;
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // 恢复父函数状态
         self.next_temp = saved_next_temp;
+        self.temp_high_water = saved_temp_high_water;
+        self.temp_floor = saved_temp_floor;
         self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
@@ -3556,6 +3599,20 @@ impl AstToIrGenerator {
             }
             // 其他情况正常生成语句
             self.generate_local_stmt_ir(stmt, instructions, constants)?;
+            // #393：语句级临时寄存器回收——临时不跨语句存活，语句生成完
+            // 回滚到「具名局部水位 ⋈ 循环态地板」。具名水位取 cur_locals
+            // 最后一个具名槽（参数与全部具名绑定，含已退出作用域者，保守
+            // 不复用）；temp_floor 保住 for 迭代器等循环态临时。仅语句语境
+            // 块回收：result_reg=Some 的块处于表达式操作数位，外层可能持有
+            // 跨块存活的兄弟实参临时，回滚会踩坏它们。
+            if result_reg.is_none() {
+                let named_watermark = self
+                    .cur_locals
+                    .iter()
+                    .rposition(|slot| slot.name.is_some())
+                    .map_or(0, |i| i + 1);
+                self.next_temp = named_watermark.max(self.temp_floor);
+            }
             self.set_cur_span(stmt.span);
         }
 
@@ -3570,9 +3627,16 @@ impl AstToIrGenerator {
         &mut self,
         loop_start_idx: usize,
     ) {
+        // #393：循环态临时地板 = 进入时的 next_temp——for 的 iterator/iterable
+        // 等临时在进入前分配、体内每轮读取，语句级回收不得回滚到它们之下。
+        // while 的 cond 在进入后分配、读点都在体内语句之前，地板盖不住它
+        // 也无害（每轮循环开头重写）。
+        let saved_temp_floor = self.temp_floor;
+        self.temp_floor = self.next_temp;
         self.loop_stack.push(LoopTargets {
             continue_target: loop_start_idx,
             break_fixups: Vec::new(),
+            saved_temp_floor,
         });
     }
 
@@ -3583,6 +3647,8 @@ impl AstToIrGenerator {
         instructions: &mut [Instruction],
     ) {
         if let Some(targets) = self.loop_stack.pop() {
+            // #393：恢复外层地板（嵌套循环各保各的）
+            self.temp_floor = targets.saved_temp_floor;
             for fixup in targets.break_fixups {
                 if let Instruction::Jmp {
                     ref mut target,
@@ -4594,6 +4660,8 @@ impl AstToIrGenerator {
     ) -> Result<LambdaBodyIR, Diagnostic> {
         // 保存父函数的临时寄存器计数
         let saved_next_temp = self.next_temp;
+        let saved_temp_high_water = self.temp_high_water;
+        let saved_temp_floor = self.temp_floor;
         let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
@@ -4641,6 +4709,13 @@ impl AstToIrGenerator {
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // #393：语句级临时寄存器回收（同 generate_block_ir）
+            let named_watermark = self
+                .cur_locals
+                .iter()
+                .rposition(|slot| slot.name.is_some())
+                .map_or(0, |i| i + 1);
+            self.next_temp = named_watermark.max(self.temp_floor);
             self.set_cur_span(stmt.span);
         }
 
@@ -4661,11 +4736,13 @@ impl AstToIrGenerator {
         self.exit_scope();
 
         // 计算局部变量总数
-        let total_locals = self.next_temp;
+        let total_locals = self.temp_high_water;
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // 恢复父函数的临时寄存器计数
         self.next_temp = saved_next_temp;
+        self.temp_high_water = saved_temp_high_water;
+        self.temp_floor = saved_temp_floor;
         self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 

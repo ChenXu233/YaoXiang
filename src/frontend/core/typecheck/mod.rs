@@ -190,7 +190,13 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
 ///
 /// 这些签名用于类型检查 `native("...")` 表达式，确保调用签名匹配。
 /// 通过 ModuleRegistry 自动发现所有 std 模块的 native 函数。
-pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
+///
+/// #391：std 签名是编译器静态资产，畸形签名在此处硬拒绝（`Err` 传播），
+/// 不再打印后降级——退化签名会以短名注册进 native_signatures 劫持消费者
+/// 调用点，或让签名错误在用户代码处以无关错误码暴露。
+pub fn add_native_function_types(
+    env: &mut environment::TypeEnvironment
+) -> Result<(), crate::util::diagnostic::Diagnostic> {
     use crate::frontend::module::registry::ModuleRegistry;
     use crate::frontend::module::ExportKind;
 
@@ -210,7 +216,7 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
                             // 注册进 native_signatures，劫持消费者调用点（std.test 首次行使暴露）
                             continue;
                         }
-                        signature::parse_signature(&export.signature, env)
+                        signature::parse_signature(&export.signature, env)?
                     }
                     _ => continue,
                 };
@@ -299,6 +305,8 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
     for (name, sig) in &env.native_signatures.clone() {
         env.add_var(name.clone(), PolyType::mono(sig.clone()));
     }
+
+    Ok(())
 }
 
 /// 添加标准库 traits 到环境

@@ -1,0 +1,28 @@
+// 05-ownership/string_dup.yx
+// 覆盖: SPEC type-system §11.2 Dup 表 / RFC-009 §类型系统约束 — String 复制句柄（#390）
+// 验证: String 赋值与按值传参后源值仍可用（Dup：引用计数句柄复制，非 Move）
+// 状态: ✅ 可运行
+
+use std.assert
+use std.string
+
+absorb: (s: String) -> Int = {
+    return string.len(s)
+}
+
+main: () -> Void = {
+    a = "hello"
+    b = a
+    assert.assert(b == "hello", "copy holds the value")
+    assert.assert(a == "hello", "source alive after assign (Dup, not Move)")
+
+    n = absorb(a)
+    assert.assert(n == 5, "by-value param received the string")
+    assert.assert(a == "hello", "source alive after by-value param (Dup, not Move)")
+
+    c = a
+    d = a
+    assert.assert(c == d and c == "hello", "multiple copies coexist")
+}
+
+main()

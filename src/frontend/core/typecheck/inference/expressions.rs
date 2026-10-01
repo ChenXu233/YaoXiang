@@ -3233,11 +3233,8 @@ impl<'a> ExpressionInferrer<'a> {
 
                 self.loop_depth -= 1;
 
-                // spec §2.15 / RFC-010a 规则①：所有 `{}` 块的值由**尾表达式**给出，无例外。
-                // 循环体也是 `{}` 块，故 `while` 的值 = 循环体块的值（尾为赋值语句时为 Void）。
-                // 此前硬返回 `Void` 丢掉块类型，与 `for`（已取 `infer_block` 结果）不一致，
-                // 使 RFC-027 §6.9 的 `acc: Terminates(n - i) = while …` 形态无法承载值类型。
-                result
+                result?;
+                Ok(MonoType::Void)
             }
 
             // For 循环
@@ -3322,6 +3319,19 @@ impl<'a> ExpressionInferrer<'a> {
 
             // Block 表达式
             crate::frontend::core::parser::ast::Expr::Block(block) => {
+                // #394：空块 `{}` 落入容器期望位——B 方案定案 `{}` = 空块（值
+                // Void），空字典钦定写法是 `dict.new()`（SPEC syntax §1.6.4）。
+                // 期望类型可得不匹配时直接给出引导，不让用户在
+                // E1002 "found void" 上空转（期望非容器时不干预）。
+                if block.stmts.is_empty() {
+                    if let Some(expected) = &self.current_expected {
+                        if Self::is_container_family(&self.solver.resolve_type(expected)) {
+                            return Err(ErrorCodeDefinition::empty_block_as_container()
+                                .at(block.span)
+                                .build());
+                        }
+                    }
+                }
                 self.infer_block(block, true, None)
             }
 
@@ -3690,6 +3700,29 @@ impl<'a> ExpressionInferrer<'a> {
     ///
     /// 覆盖面：变体构造拦截、内置容器构造、显式类型实参、闭包形参期望传播、
     /// 重载解析、方法调用糖、`Any` 多态槽位等。
+    /// #394：空块表达式判定——`{}`（B 方案定案：空块值 Void，非空字典）
+    fn is_empty_block_expr(expr: &crate::frontend::core::parser::ast::Expr) -> bool {
+        matches!(
+            expr,
+            crate::frontend::core::parser::ast::Expr::Block(b) if b.stmts.is_empty()
+        )
+    }
+
+    /// #394：容器族判定——泛型容器构造器及其借用形态（`&Dict(K, V)` 等）。
+    /// 期望为 Fn 的块作值形态（`main = { ... }`）天然排除在外。
+    fn is_container_family(ty: &MonoType) -> bool {
+        match ty {
+            MonoType::Generic { name, .. } => {
+                matches!(
+                    name.as_str(),
+                    "Dict" | "List" | "Vec" | "Array" | "Set" | "Tuple"
+                )
+            }
+            MonoType::Ref { inner, .. } => Self::is_container_family(inner),
+            _ => false,
+        }
+    }
+
     fn infer_call_expr(
         &mut self,
         func: &crate::frontend::core::parser::ast::Expr,
@@ -4032,6 +4065,29 @@ impl<'a> ExpressionInferrer<'a> {
             _ => None,
         };
         let mono_func_ty = self.monomorphize(func_ty.clone(), &value_arg_types, fn_name_for_mono);
+
+        // #394：`{}` 空块落入容器参数位——调用实参位没有 current_expected
+        // 可用，但签名形参在 mono 后已知，按位预扫：空块实参 × 容器形参
+        // 直接报引导诊断（其余形态不受影响；期望为 Fn 的块实参是合法的
+        // 块作值形态，容器判定天然排除）。
+        if let MonoType::Fn {
+            params: sig_params, ..
+        } = self.solver.resolve_type(&mono_func_ty)
+        {
+            for (idx, arg) in args.iter().enumerate() {
+                let Some(param_ty) = sig_params.get(idx) else {
+                    break;
+                };
+                if Self::is_empty_block_expr(arg)
+                    && Self::is_container_family(&self.solver.resolve_type(param_ty))
+                {
+                    return Err(ErrorCodeDefinition::empty_block_as_container()
+                        .at(arg.span())
+                        .build());
+                }
+            }
+        }
+
         // D6.3：显式类型实参应用（`mk(Int)` 的内层）。
         //
         // 语义：`mk: (A: Type) -> (x: A) -> A` 里 `A` 是**类型参数**；

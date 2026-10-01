@@ -64,7 +64,6 @@ dirs: () -> Void = {
 
     bfile = fs.path_join(nested, "leaf.txt")
     fs.write_file(bfile, "leaf")
-    leaf = string.concat(bfile, "")
 
     // 遍历：read_dir 返回排序 List，walk 深度优先全路径
     names = fs.read_dir(d)
@@ -85,7 +84,7 @@ dirs: () -> Void = {
     // 清理
     assert.assert(fs.remove(inner), "remove inner file")
     assert.assert(fs.rmdir(d), "rmdir empty dir")
-    assert.assert(fs.remove(leaf), "remove leaf")
+    assert.assert(fs.remove(bfile), "remove leaf")
     assert.assert(fs.rmdir(nested), "rmdir nested b")
     assert.assert(fs.rmdir("__yx_fs_ops_nested/a"), "rmdir nested a")
     assert.assert(fs.rmdir("__yx_fs_ops_nested"), "rmdir nested root")

@@ -503,6 +503,22 @@
     "example": "\"[T](T: Int) -> T\"",
     "error_output": "error[E2095]: 参数名遮蔽泛型\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
   },
+  "E2096": {
+    "title": "签名裸容器类型",
+    "message": "签名中的容器类型缺少类型实参",
+    "template": "无效签名：容器类型 '{name}' 缺少类型实参",
+    "help": "容器类型是泛型类型构造器（SPEC type-system §4.1.1），裸名不是合法类型表达式。写成参数化形态：List(T)、Dict(K, V)、Vec(T)、Array(T, N)、Set(T)、Tuple(T, ...)",
+    "example": "\"(path: &String) -> List\"",
+    "error_output": "error[E2096]: 签名裸容器类型\n --> std/module.rs:1:1\n  |\n1 | \"(path: &String) -> List\"\n  |                      ^^^^ 容器类型 'List' 缺少类型实参"
+  },
+  "E1108": {
+    "title": "空块落入容器期望位",
+    "message": "`{}` 是空块（值 Void），不是容器字面量",
+    "template": "此处期望容器类型，但 `{}` 是空块（值 Void）",
+    "help": "B 方案语义（SPEC syntax §1.6.4）：`{}` 是空块，不是空字典。空字典用 `dict.new()`，空列表用 `[]`",
+    "example": "net.http_get(url, {}, 5)",
+    "error_output": "error[E1108]: 空块落入容器期望位\n --> main.yx:2:33\n  |\n2 |     net.http_get(url, {}, 5)\n  |                            ^ 此处期望容器类型，但 `{}` 是空块（值 Void）"
+  },
   "E4001": {
     "title": "泛型约束违反",
     "message": "类型不满足泛型约束",
@@ -788,7 +804,7 @@
   "E3014": {
     "title": "寄存器溢出",
     "template": "寄存器溢出：{id} 超过限制 {limit}",
-    "help": "减少局部变量数量或简化表达式。"
+    "help": "减少局部变量数量、简化表达式，或将大函数拆分为多个小函数。"
   },
   "E3017": {
     "title": "无效操作数（代码生成）",

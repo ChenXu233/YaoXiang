@@ -1317,6 +1317,10 @@ impl OwnershipChecker {
             MonoType::Ref { mutable: false, .. } => CopySemantics::Dup,
             MonoType::Ref { mutable: true, .. } => CopySemantics::Linear,
             m if m.is_arc() => CopySemantics::Dup,
+            // #390：RFC-009 Dup 表 String/Bytes 行——运行时 String=Arc<str>、
+            // Bytes=Arc<[u8]>，clone 即引用计数 +1（复制句柄共享底层 buffer）；
+            // 解释器槽位不因 move 真销毁值，Dup 分类纯静态放行即可。
+            m if m.is_string() || m.is_bytes() => CopySemantics::Dup,
             MonoType::Int(_) | MonoType::Float(_) | MonoType::Bool | MonoType::Char => {
                 CopySemantics::ValueCopy
             }

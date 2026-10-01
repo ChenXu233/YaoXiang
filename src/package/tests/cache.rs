@@ -167,6 +167,9 @@ fn make_git_repo(dir: &Path) -> std::path::PathBuf {
             .arg("-c")
             .arg("user.email=t@t.local");
         cmd.args(args);
+        cmd.env("GIT_CONFIG_GLOBAL", dir.join("test-global-gitconfig"));
+        cmd.env("GIT_CONFIG_SYSTEM", dir.join("test-system-gitconfig"));
+        cmd.env("GIT_CONFIG_NOSYSTEM", "1");
         let out = cmd.output().expect("git 可用");
         assert!(
             out.status.success(),
