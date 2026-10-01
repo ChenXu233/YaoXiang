@@ -81,8 +81,10 @@ tar = "0.4"
 # HTTP 客户端（RFC-014a Phase 4：GitHub 适配层；rustls 免 OpenSSL 交叉编译）
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "system-proxy"] }
 
-# tokio 运行时（仅包管理命令层 drive()；current_thread + IO/时间驱动）
-tokio = { version = "1", default-features = false, features = ["rt", "net", "time"] }
+# tokio 运行时（仅包管理命令层 drive()；current_thread + IO/时间驱动）。
+# net 特性在下方非 wasm 目标段启用：mio 不支持 wasm32，无条件启用会
+# 炸掉 wasm-pack 构建（Deploy Docs 的 Build Wasm）
+tokio = { version = "1", default-features = false, features = ["rt", "time"] }
 
 # 错误处理
 anyhow = "1"
@@ -121,6 +123,8 @@ lto = "thin"
 default-target = "x86_64-unknown-linux-gnu"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# tokio net 特性（reqwest/GitHub 适配层）：mio 仅支持原生目标
+tokio = { version = "1", default-features = false, features = ["net"] }
 # HTTP 客户端（std.net #56）——同步阻塞 + rustls，不引入 tokio 运行时树
 ureq = { version = "2", default-features = false, features = ["tls"] }
 # 临时文件/目录创建（std.fs #104；安全唯一名语义，std 无对位）
