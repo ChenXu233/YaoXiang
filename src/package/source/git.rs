@@ -99,9 +99,11 @@ impl GitSource {
             std::fs::remove_dir_all(dest)?;
         }
 
-        // 克隆仓库
+        // 克隆仓库。--no-local 强制本地路径也走传输路径：本地硬链接克隆
+        // 会忽略 --depth，且 git 2.55 下 checkout 间歇性失败
+        //（"fatal: this operation must be run in a work tree"）
         let mut cmd = Command::new("git");
-        cmd.arg("clone").arg("--depth").arg("1");
+        cmd.arg("clone").arg("--no-local").arg("--depth").arg("1");
 
         match git_ref {
             GitRef::Tag(tag) => {
@@ -169,7 +171,13 @@ impl GitSource {
             .map_err(|e| PackageError::InvalidManifest(format!("无法执行 git ls-remote: {}", e)))?;
 
         if !output.status.success() {
-            return Ok(Vec::new());
+            // 不得静默降级为空列表：空列表会让 semver 择优落空、回退到
+            // 默认分支，把"请求 1.0.0"静默解析成 HEAD 的内容
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(PackageError::InvalidManifest(format!(
+                "git ls-remote 失败: {}",
+                stderr.trim()
+            )));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);

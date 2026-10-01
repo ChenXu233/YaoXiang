@@ -6,6 +6,7 @@
 //! - 带 branch 参数的 URL 解析
 //! - 带 rev 参数的 URL 解析
 //! - GitSource 的 name 和 kind
+//! - ls-remote 失败的显式报错语义（RFC-014 Phase 3：不得静默降级）
 
 use crate::package::source::git::{GitRef, GitSource};
 use crate::package::source::{Source, SourceKind};
@@ -43,4 +44,21 @@ fn test_git_source_name() {
     let source = GitSource::new();
     assert_eq!(source.name(), "git");
     assert_eq!(source.kind(), SourceKind::Git);
+}
+
+#[test]
+fn test_list_tags_unreachable_url_errors_loudly() {
+    // Arrange：不存在的本地仓库路径——git ls-remote 必然失败
+    let source = GitSource::new();
+
+    // Act
+    let result = source.list_tags("/nonexistent/yx-probe/repo");
+
+    // Assert：失败必须显式报错。静默返回空列表会让 semver 择优落空、
+    // 回退到默认分支，把钉住的版本请求静默解析成 HEAD 的内容
+    //（CI 上曾因此把 "1.0.0" 解析成 v1.1.0 的 manifest）
+    assert!(
+        result.is_err(),
+        "ls-remote 失败应显式报错，实际: {result:?}"
+    );
 }
