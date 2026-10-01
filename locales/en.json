@@ -779,7 +779,7 @@
   "E3014": {
     "title": "Register overflow",
     "template": "Register overflow: {id} exceeds limit {limit}",
-    "help": "Reduce the number of local variables or simplify expressions."
+    "help": "Reduce the number of local variables, simplify expressions, or split large functions into multiple smaller functions."
   },
   "E3017": {
     "title": "Invalid operand (code generation)",
@@ -1119,5 +1119,21 @@
   "package_publish_tag_missing": "tag {0} does not exist: create and push it first (git tag {0} && git push origin {0})",
   "package_publish_token_missing": "Missing GitHub credentials: set $YX_GITHUB_TOKEN (014a authentication table)",
   "package_publish_testing": "Running pre-publish tests…",
-  "package_publish_repo_unresolved": "Unable to resolve GitHub repository: fill in GitHub URL under [package] repository, or configure git remote origin"
+  "package_publish_repo_unresolved": "Unable to resolve GitHub repository: fill in GitHub URL under [package] repository, or configure git remote origin",
+  "E2096": {
+    "title": "Bare container type in signature",
+    "message": "Container type in signature is missing type arguments",
+    "template": "Invalid signature: container type '{name}' is missing type arguments",
+    "help": "Container types are generic type constructors (SPEC type-system §4.1.1); a bare name is not a valid type expression. Write them in parameterized form: List(T), Dict(K, V), Vec(T), Array(T, N), Set(T), Tuple(T, ...)",
+    "example": "\"(path: &String) -> List\"",
+    "error_output": "error[E2096]: Bare container type in signature\n --> std/module.rs:1:1\n  |\n1 | \"(path: &String) -> List\"\n  |                      ^^^^ container type 'List' is missing type arguments"
+  },
+  "E1108": {
+    "title": "Empty block in container expected position",
+    "message": "`{}` is an empty block (value Void), not a container literal",
+    "template": "Container type expected here, but `{}` is an empty block (value Void)",
+    "help": "B-scheme semantics (SPEC syntax §1.6.4): `{}` is an empty block, not an empty dictionary. Use `dict.new()` for an empty dictionary, and `[]` for an empty list",
+    "example": "net.http_get(url, {}, 5)",
+    "error_output": "error[E1108]: Empty block in container expected position\n --> main.yx:2:33\n  |\n2 |     net.http_get(url, {}, 5)\n  |                            ^ Container type expected here, but `{}` is an empty block (value Void)"
+  }
 }
