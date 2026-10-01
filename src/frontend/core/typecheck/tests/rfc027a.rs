@@ -96,9 +96,14 @@ gcd: (a: Int, b: Int) -> Terminates(b) = {
 #[test]
 fn test_predicate_arg_referencing_param_is_clean() {
     // Arrange — `n` 是形参名，同时也是精化谓词的实参（求值到 n，非常量）
+    //
+    // 形参位带 `IsPositive(n)`：返回位精化现已按 RFC-027 §3 在 `return` 点验证
+    //（后置条件），断言 `n > 0` 靠这条前置条件得证。若去掉它，`n = 0` 时返回
+    // 类型为空，E4018 会（正确地）报出——本用例要钉的是 const 泛型误分类，
+    // 不是后置条件，故源码必须良构。
     let src = r#"
 IsPositive: (x: Int) -> Type = { x > 0 }
-f: (n: Int) -> IsPositive(n) = {
+f: (n: IsPositive(n)) -> IsPositive(n) = {
     return n
 }
 "#;

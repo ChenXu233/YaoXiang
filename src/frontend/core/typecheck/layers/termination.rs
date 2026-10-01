@@ -1804,7 +1804,7 @@ fn is_type_never(ty: &Type) -> bool {
 ///
 /// 递归覆盖全部复合形态（`BinOp`/`UnOp`/`Call`/`If`/`Range`）：测度可以写成
 /// `n - i`、`if c { a } else { b }` 等；只替换顶层会让内层测度悄悄不代入。
-fn substitute_const_expr(
+pub(crate) fn substitute_const_expr(
     expr: &crate::frontend::core::types::const_data::ConstExpr,
     params: &[String],
     args: &[crate::frontend::core::types::const_data::ConstExpr],

@@ -4440,6 +4440,8 @@ impl TypeChecker {
                 shared_ctx: &mut shared_ctx,
                 proof_calls,
                 diags: &mut refined_diags,
+                fn_return_refined: None,
+                fn_name: None,
             };
             let mut module_unit = RefinedScopeUnit::new();
             self.refined_walk_stmts(&module.items, &mut module_unit, &mut ctx);
@@ -4488,9 +4490,12 @@ impl TypeChecker {
                 ..
             } => {
                 let mut registered = Vec::new();
+                // 已解析的绑定类型：注册与函数体走查（后置条件）共用，不重复解析
+                let mut resolved_binding_ty: Option<MonoType> = None;
                 if let Expr::Var(name, _) = target.as_ref() {
                     let mono_ty = MonoType::from(type_ann.clone());
                     let resolved_ty = self.resolve_type_annotation(&mono_ty, ctx.diags);
+                    resolved_binding_ty = Some(resolved_ty.clone());
                     // 初始值常量折叠（对前置值环境求值）——初始校验与值追踪共用
                     let init_value = value
                         .as_deref()
@@ -4519,7 +4524,11 @@ impl TypeChecker {
                     value.as_deref(),
                 ) {
                     if let Some(body) = extract_fn_body(value.as_deref()) {
-                        self.refined_walk_fn_body(body, ctx);
+                        let fn_name = match target.as_ref() {
+                            Expr::Var(n, _) => Some(n.as_str()),
+                            _ => None,
+                        };
+                        self.refined_walk_fn_body(body, fn_name, resolved_binding_ty.as_ref(), ctx);
                     }
                 }
                 // RFC-027 §3.4：绑定初始值若为调用，校验其实参
@@ -4557,7 +4566,8 @@ impl TypeChecker {
                 // RHS 内嵌函数体：`f = () => {...}` 同样独立单元
                 match rhs.as_ref() {
                     Expr::Lambda { body, .. } => {
-                        self.refined_walk_fn_body(body, ctx);
+                        // 无注解绑定：无签名可依，后置条件与形参前置条件皆空
+                        self.refined_walk_fn_body(body, None, None, ctx);
                     }
                     // 无注解的块值在当前作用域顺序执行：同单元走查
                     Expr::Block(block) => {
@@ -4612,6 +4622,10 @@ impl TypeChecker {
                     // RFC-027 §3.4：调用点的形参精化义务
                     Expr::Call { .. } => {
                         self.check_call_arg_refinements(expr, unit, ctx);
+                    }
+                    // RFC-027：返回位精化在 `return` 点验证（后置条件）
+                    Expr::Return(Some(v), return_span) => {
+                        self.check_return_refinement(v, *return_span, unit, ctx);
                     }
                     _ => {}
                 }
@@ -4711,10 +4725,57 @@ impl TypeChecker {
     fn refined_walk_fn_body(
         &self,
         body: &crate::frontend::core::parser::ast::Block,
+        fn_name: Option<&str>,
+        fn_ty: Option<&MonoType>,
         ctx: &mut RefinedWalkCtx<'_, '_>,
     ) {
+        // RFC-027 §3.3：当前函数的**形参精化**进假设集 Γ——同函数的每个 `return`
+        // 都在它的前置条件下成立，缺它则 `succ` 这类后置条件恒推不出。
+        // 只注入本函数自己的： 跨函数同名不能互相作证。
+        let assumptions: Vec<crate::frontend::core::types::const_data::ConstExpr> = fn_name
+            .and_then(|n| self.collect_param_refinements().get(n).cloned())
+            .unwrap_or_default();
+        let saved_ret = ctx.fn_return_refined.take();
+        let saved_name = ctx.fn_name.take();
+        ctx.fn_return_refined = fn_ty.cloned().and_then(|t| match t {
+            MonoType::Fn { return_type, .. } => {
+                // 返回位精化需**在此解析**：`resolve_type_annotation` 只处理顶层
+                // 形态，函数注解的形参由注册路径逐个解析，返回位没有对应步骤，
+                // 于是 `-> (r: IsPositive(r))` 至此仍是未解析的谓词应用
+                //（`Generic { IsPositive, [TypeRef r] }`）。解析只发生一次（本步），
+                // 故不会与注册路径重复报诊断。
+                Some(self.resolve_type_annotation(&return_type, ctx.diags))
+            }
+            _ => None,
+        });
+        ctx.fn_name = fn_name.map(str::to_string);
+
+        ctx.shared_ctx.assumptions.enter_scope();
+        for a in assumptions {
+            ctx.shared_ctx.assumptions.inject(a);
+        }
+
         let mut fn_unit = RefinedScopeUnit::new();
         self.refined_walk_stmts(&body.stmts, &mut fn_unit, ctx);
+
+        // RFC-010a 规则①：块的值 = 尾表达式；而函数体的值即返回值。
+        // 故**尾表达式是隐式 `return`**，后置条件同样要在它上面验证
+        //（`bad: (b: IsPositive(b)) -> (r: IsPositive(r)) = { b - 1 }` 无 `return` 关键字）。
+        // 显式 `return` 已在 `refined_walk_stmt` 里查过，不重复。
+        if let Some(last) = body.stmts.last() {
+            if let crate::frontend::core::parser::ast::StmtKind::Expr(e) = &last.kind {
+                if !matches!(
+                    e.as_ref(),
+                    crate::frontend::core::parser::ast::Expr::Return(..)
+                ) {
+                    self.check_return_refinement(e, last.span, &fn_unit, ctx);
+                }
+            }
+        }
+
+        ctx.shared_ctx.assumptions.exit_scope();
+        ctx.fn_return_refined = saved_ret;
+        ctx.fn_name = saved_name;
     }
 
     /// 重验证 dependant 的精化约束（VC 生成 → 证明管道）
@@ -4904,6 +4965,115 @@ impl TypeChecker {
             }
         }
     }
+    /// RFC-027 §3：返回位精化在 `return` 点验证（后置条件）。
+    ///
+    /// 形参位与返回位是**同一个规则**的两侧（§3「统一性」）：`形参名:
+    /// 谓词调用(形参名)`，区别仅在于值由调用方提供还是由 `return` 提供。
+    /// 故两处判定走同一管道，仅**绑定来源**不同：
+    ///
+    /// - 形参位 → 调用点义务（`check_call_arg_refinements`）：自由变量绑到实参
+    /// - 返回位 → 返回点义务（本函数）：自由变量按下列规则绑定
+    ///
+    /// **返回值形参的识别**：§3 规定它「仅存在于类型签名中、仅被谓词引用，
+    /// **不进入函数体作用域**」。故约束的自由变量里**不在作用域**的那个即
+    /// 返回值形参，绑到 `return` 表达式的值；在作用域者（含形参）用自己的值。
+    /// 于是两个形态归一条规则：`-> (r: Sorted(r))`（r 不在作用域）与
+    /// `-> IsPositive(b - 1)`（b 是形参）同路径。
+    ///
+    /// 保守方向：返回表达式不可折叠时**不判**（无静态证据即不报）——强半场
+    /// （§3.4「无静态证据则编译错误」）是单独的开关，见 #395。
+    fn check_return_refinement(
+        &self,
+        value: &Expr,
+        span: crate::util::span::Span,
+        unit: &RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        let Some(ret_ty) = ctx.fn_return_refined.clone() else {
+            return;
+        };
+        let MonoType::Refined { base, constraint } = ret_ty.clone() else {
+            return;
+        };
+        if constraint_is_terminates(&ret_ty) {
+            return;
+        }
+        let free = refined_free_vars(&ret_ty);
+        // 无自由变量的闭合约束与返回表达式无关（它只是一个退化的精化类型，
+        // 成立性由注解自身决定）——不在本义务范围内。
+        if free.is_empty() {
+            return;
+        }
+        // 约束里**符号代入**返回值形参（§3「值由 `return` 提供」）。
+        //
+        // 用符号代入而非折常量：后置条件的价值正在于形参未知时也能判——
+        // `r > 0` 代入 `b - 1` 得 `b - 1 > 0`，在 Γ={b>0} 下可判伪（b = 1）。
+        // 折常量会把这类全漏掉（`b - 1` 含未知形参，折不出值）。
+        let mut constraint = constraint;
+        for name in &free {
+            // 作用域内的变量（含形参）用自己的值/符号，不代入
+            if self.env.vars.contains_key(name) {
+                continue;
+            }
+            let Some(returned) =
+                crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(value)
+            else {
+                // 返回表达式转不出常量表达式（如含调用）：无静态证据即不判
+                return;
+            };
+            constraint =
+                crate::frontend::core::typecheck::layers::termination::substitute_const_expr(
+                    &constraint,
+                    std::slice::from_ref(name),
+                    &[returned],
+                );
+        }
+        // 作用域内变量的当前值环境进 bindings；形参不在其中，留给 SMT 作符号
+        let bindings = unit.values.clone();
+        let substituted = MonoType::Refined { base, constraint };
+        match crate::frontend::core::typecheck::layers::predicate::check_predicate(
+            ctx.shared_ctx,
+            &substituted,
+            &bindings,
+        ) {
+            ProofResult::Proved => {}
+            ProofResult::Disproved(model) => {
+                let counterexample = model
+                    .assignments
+                    .iter()
+                    .map(|(k, v)| format!("  {k} = {v}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                ctx.diags.push(
+                    ErrorCodeDefinition::refinement_violated(&model.constraint)
+                        .param("counterexample", &counterexample)
+                        .at(span)
+                        .build(),
+                );
+            }
+            ProofResult::Unproven {
+                proof_calls: calls, ..
+            } => {
+                if calls.is_empty() {
+                    let fn_name = ctx
+                        .fn_name
+                        .clone()
+                        .unwrap_or_else(|| "<anonymous>".to_string());
+                    ctx.diags.push(
+                        ErrorCodeDefinition::refined_unproven(
+                            &fn_name,
+                            &free[0],
+                            &ret_ty.to_string(),
+                        )
+                        .at(span)
+                        .build(),
+                    );
+                } else {
+                    ctx.proof_calls.extend(calls);
+                }
+            }
+        }
+    }
 }
 
 /// 精化走查的共享管道三件套：证明上下文 / 证明调用收集 / 诊断汇。
@@ -4913,6 +5083,13 @@ struct RefinedWalkCtx<'a, 'env> {
     shared_ctx: &'a mut crate::frontend::core::typecheck::proof::context::ProofContext<'env>,
     proof_calls: &'a mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
     diags: &'a mut Vec<Diagnostic>,
+    /// 当前函数的**返回位精化类型**（RFC-027 后置条件）。
+    ///
+    /// 函数体边界保存/恢复（lambda 可嵌套）——外层函数的后置条件不得
+    /// 泄漏到内层函数体的 `return` 上。`None` = 无后置条件或无函数上下文。
+    fn_return_refined: Option<MonoType>,
+    /// 当前函数名（进 E4018 的未证明文案）。
+    fn_name: Option<String>,
 }
 
 /// 提取绑定值的函数体（判定已由调用方完成，这里只取形态）：

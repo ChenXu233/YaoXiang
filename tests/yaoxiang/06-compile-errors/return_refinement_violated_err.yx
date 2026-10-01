@@ -1,0 +1,23 @@
+// 06-compile-errors/return_refinement_violated_err.yx
+// 覆盖: RFC-027 §3 —— 返回位精化（后置条件）被违反时必须拒绝
+// 验证: `-> (r: IsPositive(r))` 的约束 `r > 0` 在 Γ={b>0} 下代入返回值 `b - 1`
+//       得 `b - 1 > 0`，有反例（b = 1 ⇒ 返回 0）⇒ E4018。
+// 状态: ❌ 应被编译期拒绝
+//
+// 这是此前最大的静默漏洞：返回位精化**完全未被校验**，违反后置条件的函数
+// 零诊断通过。修法见 02-type-system/return_refinement.yx 的对照正例。
+//
+// 形态是**裸精化返回位**（约束只涉及形参 b，不涉及返回值）也行：那表示
+// 「返回类型在 b ≤ -1 时为空」，而 b 无下界，故同样不成立。
+
+// expect: compile-error E4018
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+bad: (b: IsPositive(b)) -> (r: IsPositive(r)) = {
+    b - 1
+}
+
+main: () -> Void = {
+    print(bad(1))
+}

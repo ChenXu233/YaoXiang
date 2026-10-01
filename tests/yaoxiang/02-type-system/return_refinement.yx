@@ -1,0 +1,41 @@
+// 02-type-system/return_refinement.yx
+// 覆盖: RFC-027 §3 —— 返回位精化是**后置条件**，在每个 `return` 点验证
+// 验证: `-> (r: IsPositive(r))` 的后置条件 `r > 0` 由形参前置条件 `b > 0` 得证，
+//       零诊断；且函数运行正确（后置条件只是编译期约束，不改变运行时行为）。
+// 状态: ✅ 可运行
+//
+// §3 的原文把返回位形参和形参位定义为同一个概念：「`形参名: 谓词调用(形参名)`，
+// 区别仅在于值由调用方提供还是由 `return` 提供」。故返回值形参 `r`
+// 「仅存在于类型签名中、仅被谓词引用，**不进入函数体作用域**」——本文件用 `r`
+// 之外的形参名 `b` 作对照，说明识别的确是「不在作用域」而非按名字特判。
+//
+// 负例见 06-compile-errors/return_refinement_violated_err.yx。
+
+use std.assert
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+// 后置条件：返回值恒为正。b > 0 ⇒ b + 1 > 0，由前置条件可证。
+succ: (b: IsPositive(b)) -> (r: IsPositive(r)) = {
+    b + 1
+}
+
+// 裸精化返回位（约束只涉及形参）：b > 0 ⇒ b * 2 > 0，同样可证。
+double: (b: IsPositive(b)) -> IsPositive(b) = {
+    b * 2
+}
+
+// 显式 return 与尾表达式是两条出口，都要在后置条件下成立。
+pick: (b: IsPositive(b)) -> (r: IsPositive(r)) = {
+    if b > 100 {
+        return b
+    }
+    return b + 1
+}
+
+main: () -> Void = {
+    assert.assert(succ(4) == 5, "succ(4) == 5")
+    assert.assert(double(3) == 6, "double(3) == 6")
+    assert.assert(pick(200) == 200, "pick(200) 走首条出口，返回 b")
+    assert.assert(pick(5) == 6, "pick(5) 走次条出口，返回 b + 1")
+}

@@ -202,3 +202,122 @@ fn test_call_arg_without_static_value_generates_no_obligation() {
         result.proof_calls
     );
 }
+
+// ==================== RFC-027 §3：返回点精化义务（后置条件） ====================
+
+/// §3 的谓词定义：`IsPositive: (x: Int) -> Type = { x > 0 }`
+const IS_POSITIVE: &str = "IsPositive: (x: Int) -> Type = { x > 0 }\n";
+
+/// RFC-027 §3 —— 违反后置条件必须报 E4018，并给出反例。
+///
+/// `bad: (b: IsPositive(b)) -> (r: IsPositive(r)) = { b - 1 }`：
+/// 约束 `r > 0` 代入返回值 `b - 1` 得 `b - 1 > 0`，在 Γ={b>0} 下**有反例**（b = 1）。
+///
+/// 这是此前最大的静默漏洞：返回位精化**完全未被校验**，违反后置条件的函数零诊断。
+#[test]
+fn test_return_postcondition_violation_reported() {
+    // Arrange
+    let source =
+        format!("{IS_POSITIVE}bad: (b: IsPositive(b)) -> (r: IsPositive(r)) = {{ b - 1 }}");
+
+    // Act
+    let result = check_source(&source);
+
+    // Assert
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E4018"),
+        "违反后置条件 `r > 0` 应报 E4018；实际: {:#?}",
+        result.diagnostics
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("b = 1") || d.message.contains("b = (1)")),
+        "反例应给出使约束为假的形参取值（b = 1，此时返回值为 0）；实际: {:#?}",
+        result.diagnostics
+    );
+}
+
+/// RFC-027 §3 —— 后置条件由**形参前置条件**得证时零诊断。
+///
+/// 与上一条成对：同一谓词、同一返回位形态，只差函数体。
+/// `b + 1 > 0` 在 Γ={b>0} 下恒真，故成立。缺 Γ 注入则本用例会（误）报错——
+/// 两条一起才钉死「假设集真的进了判定」。
+#[test]
+fn test_return_postcondition_proved_from_param_refinement_is_clean() {
+    // Arrange
+    let source =
+        format!("{IS_POSITIVE}succ: (b: IsPositive(b)) -> (r: IsPositive(r)) = {{ b + 1 }}");
+
+    // Assert
+    assert_clean(
+        &source,
+        "Γ 含形参精化 `b > 0` 时，`b + 1 > 0` 成立，后置条件应零诊断",
+    );
+}
+
+/// RFC-027 §3 —— 裸精化返回位（约束只涉及形参）同样在返回点验证。
+///
+/// `f: (b: Int) -> IsPositive(b + 1) = { b + 1 }`：约束 `b + 1 > 0` 与返回值无关，
+/// 它是「返回类型在 b ≤ -1 时为空」的断言；b 无下界故有反例 ⇒ 拒绝。
+///
+/// 这正是 §3「统一性」的体现：两个形态同一条规则，只是自由变量来源不同
+///（`r` 不在作用域 ⇒ 绑返回值；`b` 是形参 ⇒ 用它自己）。
+#[test]
+fn test_bare_return_refinement_checked_over_params() {
+    // Arrange
+    let source = format!("{IS_POSITIVE}f: (b: Int) -> IsPositive(b + 1) = {{ b + 1 }}");
+
+    // Act
+    let result = check_source(&source);
+
+    // Assert
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E4018"),
+        "`b + 1 > 0` 在 b 无下界时有反例（b = -1），应报 E4018；实际: {:#?}",
+        result.diagnostics
+    );
+}
+
+/// RFC-027 §3 —— 显式 `return`（非尾表达式）同样在返回点验证。
+///
+/// RFC-010a：块的值 = 尾表达式，故尾表达式是**隐式** `return`；显式 `return`
+/// 是另一条出口。两条出口都要查——只查其一即漏。
+#[test]
+fn test_explicit_return_postcondition_is_checked() {
+    // Arrange —— 走显式 return 这条出口
+    let source = format!(
+        "{IS_POSITIVE}f: (b: IsPositive(b)) -> (r: IsPositive(r)) = {{\n    return b - 1\n}}"
+    );
+
+    // Act
+    let result = check_source(&source);
+
+    // Assert
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E4018"),
+        "显式 return 违反后置条件应同样报 E4018；实际: {:#?}",
+        result.diagnostics
+    );
+}
+
+/// **Tripwire** —— 返回表达式转不出常量表达式时**不判**（保守：不误报）。
+///
+/// 后置条件的验证走符号代入：把返回值形参在约束里代入返回表达式的常量形式。
+/// 返回表达式含调用（`g(b)`）时转不出，此时无从构造代入式，**放过**而非猜。
+/// 谁让它开始判（如补上调用的内联/证明函数），本用例会变红，提醒把断言改为报错。
+#[test]
+fn test_return_refinement_not_checked_when_expression_unconvertible() {
+    // Arrange —— 返回表达式是调用，转不出常量表达式
+    let source = format!(
+        "{IS_POSITIVE}g: (x: Int) -> Int = {{ x }}\n\
+         f: (b: IsPositive(b)) -> (r: IsPositive(r)) = {{ g(b - 1) }}"
+    );
+
+    // Assert
+    assert_clean(
+        &source,
+        "返回表达式转不出常量表达式时无从代入，本版保守放过",
+    );
+}
