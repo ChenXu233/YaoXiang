@@ -871,8 +871,10 @@ All types follow Move semantics by default. Assignment, parameter passing, and r
 transfer.
 
 ```yaoxiang
-p: Point = Point(1.0, 2.0)
-q = p           // Move, p can no longer be read
+// A struct with a heap-buffer field does not derive Dup (the field is Move) → default Move
+Buf: Type = { data: Vec(Float) }
+b: Buf = Buf([1.0, 2.0])
+q = b           // Move, b can no longer be read
 ```
 
 ### 11.2 Dup (shallow copy: copy handle, share data)
@@ -887,11 +889,23 @@ shared. Multiple holders point to the same block of data.
 | `ref T`         | Dup      | Rc/Arc copy = reference count+1, share heap data                                       |
 | String, Bytes   | Dup      | Internal reference counting, assignment copies handle and shares the underlying buffer |
 | `&mut T`        | Linear   | Zero-size write token, exclusive, cannot be copied                                     |
+| struct          | Derived  | All fields copyable (primitive value types ∪ Dup) → Dup, otherwise Move (#398)          |
+| tuple           | Derived  | Judged element by element, same rule as struct (#398)                                   |
 | All other types | Move     | Default ownership transfer                                                             |
 
 **Primitive value types** (Int, Float, Bool, Char) are special-cased by the compiler: they are
 automatically value-copied on assignment, and the two values are completely independent. This is the
 compiler's native behavior, not a Dup type property.
+
+**Derivation rule** (settled in #398) — "auto-derived when all fields are Dup" cannot be executed
+literally: primitive fields (Int etc.) are not Dup themselves, so `{ x: Int, y: Int }` would be
+misjudged as Move. The executable form:
+
+1. **Copyable field set** = primitive value types (Int / Float / Bool / Char / Range) ∪ Dup (`&T`, `ref T`, String / Bytes, function values (#352), composite types that already derive Dup);
+2. **struct**: all fields inside the copyable set → derives Dup; **any** field that is Linear (`&mut T`) or Move (nested Move struct / containers such as Vec, Dict / resources) → the whole struct stays Move (no "partially copyable" middle state);
+3. **tuple**: same rule as struct, judged element by element; the empty tuple (unit) is `Void`;
+4. **Derivation is recursive**: a field that is a named type (e.g. `target: Point`) has its definition expanded before judging — `A = { b: B }` follows B's derivation result; cyclic aliases fall back to Move conservatively at the depth limit;
+5. **Out of scope** (still Move, tracked separately): containers (Vec / Dict / Set / Option / Result / Array) and enum.
 
 ```yaoxiang
 // &T: Dup, freely aliasable
@@ -949,7 +963,10 @@ print(x)            // usable
 // Clone: explicit deep copy, create an independent copy
 p: Point = Point(1.0, 2.0)
 q = p.clone()       // Clone: deep copy, p is still usable
-r = p               // Move: ownership transfer, because Point is neither Dup nor a primitive value type
+
+// Non-Dup type (the field is Move, no derivation): Move transfers ownership
+buf: Buf = Buf([1.0, 2.0])
+buf2 = buf          // Move: Buf has a Vec field, so it does not derive Dup (see the §11.2 rule)
 ```
 
 **Design intent**:
@@ -958,7 +975,7 @@ r = p               // Move: ownership transfer, because Point is neither Dup no
 - Clone is used in scenarios requiring independent copies, the explicit call makes the cost visible
 - The copying of primitive value types (Int/Float/Bool/Char) is a compiler built-in behavior, not
   Dup
-- Most user-defined types default to Move, zero-copy and high-performance
+- User-defined types default to Move (zero-copy, high performance); a struct whose fields are all copyable derives Dup automatically (the §11.2 derivation rule)
 
 ## Chapter 12: Borrow Token Types
 
@@ -1243,6 +1260,11 @@ Bool, Char      // not Dup, but the compiler's built-in handling of primitives
 // === Dup (shallow copy: copy handle, share underlying data) ===
 &T              // zero-size read token, copy token = multiple views point to the same data
 ref T           // Rc/Arc copy = reference count+1, share heap data
+String, Bytes   // internal reference counting, copying the handle shares the underlying buffer
+struct / tuple  // derived: all fields ∈ (primitive value types ∪ Dup) → Dup (#398)
+
+// === Not derived (stays Move) ===
+Vec/Dict/Set    // containers and enum are out of derivation scope (#398)
 
 // === Linear ===
 &mut T          // zero-size write token, Linear (exclusive, cannot be copied)

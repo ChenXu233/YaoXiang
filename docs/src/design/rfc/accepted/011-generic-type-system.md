@@ -708,9 +708,9 @@ Clone = 复制数据，副本独立（修改互不影响）
 | `ref T`              | ✅   | Rc/Arc 复制 = 引用计数+1，共享堆数据        |
 | String, Bytes        | ✅   | 内部引用计数，复制句柄共享底层 buffer       |
 | `&mut T`（可变令牌） | ❌   | 线性独占，不能复制                          |
-| struct               | 派生 | 所有字段 Dup → struct Dup                   |
-| enum                 | 派生 | 所有 variant 的所有字段 Dup → enum Dup      |
-| tuple                | 派生 | 所有元素 Dup → tuple Dup                    |
+| struct               | 派生 | 所有字段 ∈（原语值类型 ∪ Dup）→ Dup，否则 Move（RFC-009 §派生规则，#398） |
+| enum                 | 派生 | 所有 variant 的所有字段可复制 → enum Dup（设计态，尚未落地） |
+| tuple                | 派生 | 逐元素判定，同 struct 规则（#398）           |
 | Fn（闭包）           | ❌   | 捕获环境可能非 Dup                          |
 | `*T`（裸指针）       | ❌   | unsafe，不参与所有权系统                    |
 
