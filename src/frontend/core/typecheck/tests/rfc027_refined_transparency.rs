@@ -172,14 +172,15 @@ fn test_call_arg_refinement_violation_judged_directly() {
     );
 }
 
-/// **Tripwire** —— 实参**无静态值**时不生成义务（RFC-027 §3.4 的强半场未启用）。
+/// **Tripwire** —— 实参**转不出常量表达式**时不生成义务（与上一条的边界）。
 ///
-/// §3.4 要求「无静态证据即拒绝」：`divide(x, y)`（实参无界、无精化标注）也应
-/// 报错。本版只做证伪（实参可折叠时才判），故此类调用放过——它会连带拒掉
-/// 大量合法代码，需单独决策后另行落地。本用例把「放过」钉住：谁启用强半场，
-/// 它会变红，提醒把断言改成「报错」。
+/// 上一条（裸变量实参）已按 §3.4 强半场拒绝；本条是**剩余边界**：实参是调用
+///（`g(1)`）时构造不出代入式，无从判定，故仍放过。它不等于强半场未启用，
+/// 而是「可形式化的实参都已要求证据；不可形式化的尚未」。
+///
+/// 谁让调用实参也开始判（如内联/证明函数），本用例会变红，提醒把断言改为「报错」。
 #[test]
-fn test_call_arg_without_static_value_generates_no_obligation() {
+fn test_call_arg_unconvertible_still_generates_no_obligation() {
     // Arrange — 实参是形参（无静态值）
     let source = {
         let g = "g: (x: Int) -> Int = { x }";
@@ -200,6 +201,115 @@ fn test_call_arg_without_static_value_generates_no_obligation() {
         "实参非编译期常量时本版不生成义务；若此处变红说明已落地静态证据要求，\
          请把断言改为「报错」。实际: {:?}",
         result.proof_calls
+    );
+}
+
+// ==================== RFC-027 §3.4：强半场的两条证据来源 ====================
+
+/// §3.4 —— 实参**无任何静态证据**时必须拒绝（强半场）。
+///
+/// `divide_user_input: (x: Int, y: Int) -> Int = divide(x, y)`：`y` 无界、也
+/// 无精化标注，验证条件 `{} ⇒ { y > 0 }` 有反例（y = 0）⇒ E4018。
+/// 这是 §3.4「YaoXiang 不接受运行时值直接进入精化类型参数而不提供静态证据」
+/// 的直接落地（#395 第二行）。
+#[test]
+fn test_call_arg_without_evidence_is_rejected() {
+    // Arrange
+    let source = format!(
+        "{IS_POSITIVE}divide: (a: Int, b: IsPositive(b)) -> Int = {{ a }}\n\
+         u: (x: Int, y: Int) -> Int = divide(x, y)"
+    );
+
+    // Act
+    let result = check_source(&source);
+
+    // Assert
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E4018"),
+        "实参无静态证据应报 E4018（§3.4 强半场）；实际: {:#?}",
+        result.diagnostics
+    );
+}
+
+/// §3.4 —— 实参**自身的精化标注**是证据（#395 第三行）。
+///
+/// `via_param: (n: IsPositive(n)) -> Int = divide(0, n)`：证据来自形参前置条件。
+/// 与上一条成对——同一调用形态，只差 `n` 是否带精化标注。
+#[test]
+fn test_call_arg_evidenced_by_own_param_refinement() {
+    // Arrange
+    let source = format!(
+        "{IS_POSITIVE}divide: (a: Int, b: IsPositive(b)) -> Int = {{ a }}\n\
+         via_param: (n: IsPositive(n)) -> Int = divide(0, n)"
+    );
+
+    // Assert
+    assert_clean(
+        &source,
+        "实参 n 自身带 IsPositive 标注，即 §3.3 的静态证据，应零诊断",
+    );
+}
+
+/// §3.4 —— 局部变量的精化标注是证据（#395 第三行的局部形态）。
+///
+/// 与上一条的区别：证据不在形参前置条件里，而在**实参变量自己的声明**上。
+/// 判定时把该约束注入局部作用域作假设，查完即弹。
+#[test]
+fn test_call_arg_evidenced_by_local_var_refinement() {
+    // Arrange —— 初值是指针未定的调用，故只能靠变量精化标注而非字面量值；
+    // 调用写成**赋值右侧**：嵌套在 `print(...)` 里的调用不进检查
+    //（#395 另注：检查位置仅语句层两种形态），写成嵌套形式会让本用例丧失判别力。
+    let source = format!(
+        "{IS_POSITIVE}g: (x: Int) -> Int = {{ x }}\n\
+         divide: (a: Int, b: IsPositive(b)) -> Int = {{ a }}\n\
+         main: () -> Void = {{\n    n: IsPositive(n) = g(1)\n    z: Int = divide(0, n)\n    print(z)\n}}"
+    );
+
+    // Assert
+    assert_clean(
+        &source,
+        "实参 n 的声明带精化标注，应作为证据；否则会误报（值未知时折不出常量）",
+    );
+}
+
+/// §3.4 —— `if` 守卫是证据（§3.4 帮助文案自己举的例子）。
+///
+/// `if y > 0 { divide(x, y) }`：守卫 `y > 0` 正是精化实参所需的证据。
+#[test]
+fn test_call_arg_evidenced_by_if_guard() {
+    // Arrange
+    let source = format!(
+        "{IS_POSITIVE}divide: (a: Int, b: IsPositive(b)) -> Int = {{ a }}\n\
+         guarded: (x: Int, y: Int) -> Int = {{\n\
+         \x20   if y > 0 {{\n        z: Int = divide(x, y)\n        return z\n    }}\n    0\n}}"
+    );
+
+    // Assert
+    assert_clean(
+        &source,
+        "`if y > 0` 分支内 y 有界，守卫应作证据；不注入守卫即误报",
+    );
+}
+
+/// §3.4 —— 无守卫时同一调用仍须拒绝（守卫要有、不能白送）。
+///
+/// 与上一条成对：同一调用、同一函数，只差 `if` 守卫。
+#[test]
+fn test_call_arg_without_guard_is_rejected() {
+    // Arrange —— 无守卫
+    let source = format!(
+        "{IS_POSITIVE}divide: (a: Int, b: IsPositive(b)) -> Int = {{ a }}\n\
+         unguarded: (x: Int, y: Int) -> Int = {{\n    z: Int = divide(x, y)\n    z\n}}"
+    );
+
+    // Act
+    let result = check_source(&source);
+
+    // Assert
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "E4018"),
+        "无守卫时 y 无界，应报 E4018；实际: {:#?}",
+        result.diagnostics
     );
 }
 

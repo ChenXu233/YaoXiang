@@ -1857,7 +1857,7 @@ pub(crate) fn substitute_const_expr(
 /// 早返回惯用法 `if C { return ... }` 之后，后续语句在 `!C` 下成立。
 /// 不在比较上做 De Morgan 规约——SMT 侧 `not (= b 0)` 与 `b != 0` 等价，
 /// 少一层变换就少一处可能出错的地方。
-fn negate_guard(
+pub(crate) fn negate_guard(
     condition: &crate::frontend::core::parser::ast::Expr
 ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
     use crate::frontend::core::types::const_data::{ConstExpr, UnOp};

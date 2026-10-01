@@ -4561,6 +4561,8 @@ impl TypeChecker {
                         }
                     }
                     unit.track(name, new_value);
+                    // 变量重赋值 ⇒ 依赖它的假设作废（否则用旧值判新值）
+                    ctx.shared_ctx.assumptions.kill(name);
                 }
                 // 复杂赋值目标（索引/解构）：v1 不建模对依赖者的影响（与旧实现一致）
                 // RHS 内嵌函数体：`f = () => {...}` 同样独立单元
@@ -4635,6 +4637,28 @@ impl TypeChecker {
         }
     }
 
+    /// 在**守卫成立**的假设下走查一个分支（RFC-027 §3.4）。
+    ///
+    /// §3.4 的帮助文案自己举的例子就是这条路径：
+    /// `if y > 0 { divide(x, y) }`——守卫 `y > 0` 正是精化实参所需的静态证据。
+    /// 不注入守卫会把这类**合法**代码判伪（y 无约束时可取 0），是误报。
+    ///
+    /// 作用域配对保证守卫不泄漏到分支之外（`else` 不该看到 `then` 的条件）。
+    fn refined_walk_branch_with_guard(
+        &self,
+        guard: Option<crate::frontend::core::types::const_data::ConstExpr>,
+        stmts: &[crate::frontend::core::parser::ast::Stmt],
+        unit: &mut RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        ctx.shared_ctx.assumptions.enter_scope();
+        if let Some(g) = guard {
+            ctx.shared_ctx.assumptions.inject(g);
+        }
+        self.refined_walk_stmts(stmts, unit, ctx);
+        ctx.shared_ctx.assumptions.exit_scope();
+    }
+
     /// 走查 if 链：返回所有**可达**路径的出口值环境（进入态不被污染）。
     ///
     /// 守卫裁剪：条件以当前值环境折叠可判定（`Some(true/false)`）时，只走
@@ -4654,7 +4678,7 @@ impl TypeChecker {
     ) -> Vec<HashMap<String, crate::frontend::core::types::ConstValue>> {
         match Self::fold_bool(&*ctx.shared_ctx, condition, &unit.values) {
             Some(true) => {
-                self.refined_walk_stmts(then_stmts, unit, ctx);
+                self.refined_walk_branch_with_guard(None, then_stmts, unit, ctx);
                 vec![unit.values.clone()]
             }
             Some(false) => match else_ifs.split_first() {
@@ -4663,16 +4687,20 @@ impl TypeChecker {
                 }
                 None => match else_branch {
                     Some(eb) => {
-                        self.refined_walk_stmts(&eb.stmts, unit, ctx);
+                        self.refined_walk_branch_with_guard(None, &eb.stmts, unit, ctx);
                         vec![unit.values.clone()]
                     }
                     None => vec![unit.values.clone()],
                 },
             },
             None => {
-                // then 臂是一条候选路径：从进入态走查后恢复
+                // then 臂：条件成立是一条假设（§3.4 的守卫证据）
+                let then_guard =
+                    crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(
+                        condition,
+                    );
                 let pre = unit.values.clone();
-                self.refined_walk_stmts(then_stmts, unit, ctx);
+                self.refined_walk_branch_with_guard(then_guard, then_stmts, unit, ctx);
                 let mut paths = vec![std::mem::replace(&mut unit.values, pre)];
                 // 余下链递归（后续条件同样剪枝）；无 else-if 时
                 // 「全部条件都不中」的路径 = else 臂（有 else）或进入态原样
@@ -4687,7 +4715,15 @@ impl TypeChecker {
                     )),
                     None => match else_branch {
                         Some(eb) => {
-                            self.refined_walk_stmts(&eb.stmts, unit, ctx);
+                            // else 臂：条件不成立
+                            self.refined_walk_branch_with_guard(
+                                crate::frontend::core::typecheck::layers::termination::negate_guard(
+                                    condition,
+                                ),
+                                &eb.stmts,
+                                unit,
+                                ctx,
+                            );
                             paths.push(unit.values.clone());
                         }
                         None => paths.push(unit.values.clone()),
@@ -4910,22 +4946,66 @@ impl TypeChecker {
                 continue;
             }
             let Some(arg) = args.get(i) else { continue };
-            // 实参值编译期可知才判：不可知即无证据，本版放行
-            let Some(value) = Self::fold_value(&*ctx.shared_ctx, arg, &unit.values) else {
+            let MonoType::Refined { base, constraint } = param_ty.clone() else {
                 continue;
             };
-            // 约束的自由变量按**位置**绑定到实参值（形参名即约束里的变量名）
             let free = refined_free_vars(param_ty);
             if free.len() != 1 {
                 continue;
             }
-            let mut bindings = HashMap::new();
-            bindings.insert(free[0].clone(), value);
-            match crate::frontend::core::typecheck::layers::predicate::check_predicate(
+            // 实参**符号代入**约束（RFC-027 §3.3）：不要求实参可折成常量。
+            //
+            // 折常量版只能查 `f(-5)` 这类字面量，而 §3.4 要的是「运行时值进入
+            // 精化类型参数必须提供静态证据」——`f(y)`（y 无界）与 `f(n)`（n 带
+            // 精化标注）正是它的两行范例。符号代入把 `y > 0` / `n > 0` 形式化后
+            // 交判定管道：Γ 里有证据则成立，无则判伪/判不出。
+            let Some(arg_expr) =
+                crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(arg)
+            else {
+                continue;
+            };
+            let substituted = MonoType::Refined {
+                base: base.clone(),
+                constraint:
+                    crate::frontend::core::typecheck::layers::termination::substitute_const_expr(
+                        &constraint,
+                        std::slice::from_ref(&free[0]),
+                        &[arg_expr],
+                    ),
+            };
+            // RFC-027 §3.3：实参**自身的精化标注**是证据（#395 第三行）。
+            //
+            // 在**本检查局部**注入实参变量已注册的精化约束，查完即弹：不放进
+            // 声明处的全局 Γ。原因是重验证路径会自命中——它验的正是同一条约束，
+            // 若该约束已在 Γ，判定会在 level 2（精确匹配）平凡通过，**掩盖真违反**
+            //（实测：4 个「依赖变量重赋值」负例语料会被静默放过）。
+            let arg_refined: Option<crate::frontend::core::types::const_data::ConstExpr> = match arg
+            {
+                Expr::Var(name, _) => unit.deps.constraint_of(name).and_then(|ty| match ty {
+                    MonoType::Refined { constraint, .. } if !constraint_is_terminates(ty) => {
+                        Some(constraint.clone())
+                    }
+                    _ => None,
+                }),
+                _ => None,
+            };
+            let scoped = arg_refined.is_some();
+            if scoped {
+                ctx.shared_ctx.assumptions.enter_scope();
+                if let Some(c) = arg_refined {
+                    ctx.shared_ctx.assumptions.inject(c);
+                }
+            }
+            let bindings = unit.values.clone();
+            let outcome = crate::frontend::core::typecheck::layers::predicate::check_predicate(
                 ctx.shared_ctx,
-                param_ty,
+                &substituted,
                 &bindings,
-            ) {
+            );
+            if scoped {
+                ctx.shared_ctx.assumptions.exit_scope();
+            }
+            match outcome {
                 ProofResult::Proved => {}
                 ProofResult::Disproved(model) => {
                     let counterexample = model

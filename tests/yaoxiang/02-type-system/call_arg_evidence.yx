@@ -1,0 +1,49 @@
+// 02-type-system/call_arg_evidence.yx
+// 覆盖: RFC-027 §3.4 —— 强半场下被接受的**两类证据**（外加形参前置条件一类）
+// 验证: 运行时值进入精化类型参数时，提供静态证据即通过：
+//       (1) 实参自身的精化标注（形参形态、局部变量形态）
+//       (2) `if` 守卫（§3.4 帮助文案自己举的例子：`if y > 0 { divide(x, y) }`）
+// 状态: ✅ 可运行
+//
+// 与 06-compile-errors/call_arg_no_evidence_err.yx 成对：无证据即拒绝。
+// 强半场（§3.4「凡编译器无法静态证明的代码，不得通过编译」）不是「一律拒绝」，
+// 而是「要么有证据，要么拒」——本文件钉住前一半，那个文件钉住后一半。
+
+use std.assert
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+divide: (a: Int, b: IsPositive(b)) -> Int = { a }
+
+// 证据来自形参自身的精化标注
+via_param: (n: IsPositive(n)) -> Int = divide(7, n)
+
+// 证据来自 if 守卫
+guarded: (x: Int, y: Int) -> Int = {
+    if y > 0 {
+        z: Int = divide(x, y)
+        return z
+    }
+    -1
+}
+
+main: () -> Void = {
+    // 调用写成**赋值右侧**：嵌套在 `assert.assert(...)` 里的调用不进检查
+    //（#395 另注：检查位置仅语句层两种形态），写成嵌套形式等于没验。
+
+    // 证据来自形参自身的精化标注
+    a: Int = via_param(5)
+    assert.assert(a == 7, "形参精化 n > 0 即证据，调用应通过")
+
+    // 证据来自局部变量自身的精化标注（初值折不出常量，只能靠标注）
+    n: IsPositive(n) = 3
+    b: Int = divide(9, n)
+    assert.assert(b == 9, "局部精化变量作证据")
+
+    // 证据来自 if 守卫
+    c: Int = guarded(7, 3)
+    assert.assert(c == 7, "守卫成立分支内的调用应通过")
+
+    // 守卫不成立时不调用（此调用不带精化实参，不受强半场约束）
+    assert.assert(guarded(7, -3) == -1, "守卫不成立时不调用，返回 -1")
+}
