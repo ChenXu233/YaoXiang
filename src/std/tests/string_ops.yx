@@ -67,6 +67,23 @@ main: () -> Void = {
     assert.assert(result.is_err(string.from_char_code(-1)), "negative codepoint err")
     assert.assert(result.is_err(string.from_char_code(0xD800)), "surrogate half err")
     assert.assert(result.is_err(string.from_char_code(0x110000)), "beyond max err")
+
+    // format：占位符 + {{/}} 字面花括号转义（#402，与 Python 一致）
+    assert.assert(string.format("Hello {}", "world") == "Hello world", "format basic")
+    assert.assert(string.format("{0}+{1}={0}", 1, 2) == "1+2=1", "format indexed reuse")
+    assert.assert(string.format("{{}}") == "{}", "format brace escape")
+    assert.assert(string.format("a}}b") == "a}b", "format lone close brace literal")
+
+    // format：Python 风格格式说明符（RFC-012 BNF）
+    assert.assert(string.format("{0:.2f}", 3.14159) == "3.14", "format .2f")
+    assert.assert(string.format("[{0:5d}]", -5) == "[   -5]", "format width align")
+    assert.assert(string.format("{0:05d}", -5) == "-0005", "format zero flag")
+    assert.assert(string.format("{0:x}|{0:#x}|{0:b}|{0:o}", 255) == "ff|0xff|11111111|377",
+        "format radix presentations")
+    assert.assert(string.format("{0:e}", 3.14159) == "3.141590e+00", "format scientific")
+    assert.assert(string.format("{0:%}", 0.25) == "25.000000%", "format percent")
+    assert.assert(string.format("{0:.3}", "hello") == "hel", "format string precision")
+    assert.assert(string.format("{0:^7}", "hi") == "  hi   ", "format center align")
 }
 
 main()
