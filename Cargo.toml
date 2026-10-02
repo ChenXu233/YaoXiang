@@ -72,7 +72,7 @@ toml = "1.1.2"
 semver = "1"
 
 # SHA-256 完整性校验（RFC-014 依赖表；替换内联手写实现）
-sha2 = "0.10"
+sha2 = "0.11"
 
 # .yxpkg 包格式（RFC-014a 决议 3：tar.gz 源码包 + SHA256SUMS）
 flate2 = "1"
