@@ -114,10 +114,20 @@ FFI 函数的参数类型直接使用 YaoXiang 类型，编译器自动处理 C 
 | `char`               | `Char`            |
 | `char*`              | `String`          |
 | `bool`               | `Bool`            |
-| `size_t`             | `Uint`            |
+| `size_t`             | **无直接映射**（见下） |
 | `void*`              | `*Void`           |
 | `struct T*`          | `T`（透明类型）   |
 | `typedef struct T T` | `T`（不透明类型） |
+
+> **`size_t` 没有对应的 YaoXiang 类型**：类型系统只有**有符号**整数族
+> （`src/frontend/core/types/mono.rs:618-632`：`Int` / `Int8` / `Int16` / `Int32` /
+> `Int64` 与 `Float` / `Float32` / `Float64`），**没有 `Uint` 或任何无符号类型**。
+> 尺寸 / 长度类参数请用 `Int64` 并在你自己的一侧处理上界（`size_t` 的实际取值不会
+> 超过 `i64::MAX`，但回传负数的上游约定需要你自己防守）。
+>
+> （`Uint` 这个名字确实出现在仓库里，但只在两处**非类型**语境：
+> `src/lsp/world.rs:176` 的补全候选表，与 `src/frontend/core/types/eval/const_eval.rs:503`
+> 的 `sizeof` 兜底分支。它不是可用的类型名。）
 
 ### 3.3 返回类型
 
@@ -230,26 +240,38 @@ SqliteDb.exec = sqlite3_exec[0]
 
 ---
 
-## 第六章：yx-bindgen 工具链
+## 第六章：yx-bindgen 工具链（计划中，未实现）
 
-### 6.1 生成内容
+> **状态：未实现。** 从 C 头文件自动生成绑定是
+> [RFC-026b](../../design/rfc/accepted/026-ffi-core-mechanism.md)（本章的自动化子提案，
+> 仓库里尚无独立文档）的目标，当前**没有任何可执行入口**：
+>
+> - `Cargo.toml` 只声明了一个二进制 `[[bin]] yaoxiang-rs`，没有 `yx-bindgen`；
+> - 包清单里写 `[build].headers` 会**直接报错**——
+>   `[build].headers 需要 yx-bindgen（RFC-026b，尚未实现）；移除 headers 或改用
+>   [binaries] 预编译分发`（`src/package/build/mod.rs:152-159`）。
 
-yx-bindgen 生成以下内容：
+因此本节只记录**设计意图**（RFC-026b 落地后应当生成的形态），不是当前可用的 CLI。
+今天要做同样的事，手写第二至第四章的内容即可——那三章描述的 `unsafe {}` 类型定义、
+`native("symbol")` 声明与 `[0]` 方法绑定都是已实现的。
+
+### 6.1 计划生成的内容
 
 - FFI 类型定义（unsafe 块 + return）
 - FFI 函数声明（native 语法）
 - 方法绑定（[0] 语法）
 
-### 6.2 生成示例
+### 6.2 计划中的调用形态与手写等价物
 
 ```bash
-yx-bindgen --header /usr/include/sqlite3.h --output sqlite3_bindings.yx
+# 计划中，尚未实现：
+# yx-bindgen --header /usr/include/sqlite3.h --output sqlite3_bindings.yx
 ```
 
-生成结果：
+生成物等价于手写：
 
-```yaoxiang
-// sqlite3_bindings.yx
+```
+// sqlite3_bindings.yx（当前需手写）
 // 自动生成，不要手动编辑
 
 // ============================================================================

@@ -20,6 +20,7 @@ if Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 
 最简单的形式——只有 `if`：
 
+<!-- docs-example: skip -->
 ```yaoxiang
 if temperature > 30 {
     print("天热了，开空调吧")
@@ -28,6 +29,7 @@ if temperature > 30 {
 
 加上 `else`：
 
+<!-- docs-example: skip -->
 ```yaoxiang
 if is_raining {
     print("带伞")
@@ -58,6 +60,8 @@ if score >= 90 {
 
 ```yaoxiang
 // if 表达式：各分支的值会赋给 result
+x = 42
+
 result = if x > 0 {
     "正数"
 } else if x < 0 {
@@ -90,11 +94,13 @@ print(grade)  // "B"
 显式返回，但在分支中通常直接写表达式就够了。
 
 ```yaoxiang
+age = 15
+
 // 直接写表达式——推荐
 category = if age < 18 { "未成年" } else { "成年" }
 
 // 也可以显式 return——效果相同
-category = if age < 18 {
+category2 = if age < 18 {
     return "未成年"
 } else {
     return "成年"
@@ -127,11 +133,16 @@ if age >= 18 {
 
 ## 使用布尔运算符组合条件
 
-在条件中可以使用 `and`、`or`、`not` 组合多个判断：
+在条件中可以用 `and`、`or` 组合多个判断，用一元前缀 `!` 取反。⚠️ YaoXiang **没有 `not`
+关键字**（保留字里只有 `and` / `or`），写 `not is_banned` 解析报 `E0010`，必须写 `!is_banned`。
 
 ```yaoxiang
 username = "admin"
 password = "123456"
+role = "admin"
+is_banned = false
+is_vip = true
+age = 25
 
 // and：两个条件都成立
 if username == "admin" and password == "123456" {
@@ -143,8 +154,8 @@ if role == "admin" or role == "moderator" {
     print("有管理权限")
 }
 
-// not：取反
-if not is_banned {
+// !：取反
+if !is_banned {
     print("允许发言")
 }
 
@@ -154,7 +165,7 @@ if (age >= 18 and age <= 60) or is_vip {
 }
 ```
 
-运算符优先级上，`not` 高于 `and`，`and` 高于 `or`。不放心时加括号，让意图更清晰。
+运算符优先级上，`!` 高于 `and`，`and` 高于 `or`。不放心时加括号，让意图更清晰。
 
 ## 小结
 
@@ -165,6 +176,6 @@ if (age >= 18 and age <= 60) or is_vip {
 | 表达式     | `if` 可以返回值，所有分支类型必须一致               |
 | 分支返回值 | 分支块中最后一个表达式的值即为返回值                |
 | 嵌套       | `if` 内可以再写 `if`，没有悬空 else 歧义            |
-| 布尔运算   | `and`、`or`、`not` 组合条件                         |
+| 布尔运算   | `and`、`or` 组合条件，`!` 取反                  |
 
 下一章你将学习 `for` 循环——遍历集合和范围的标准方式。

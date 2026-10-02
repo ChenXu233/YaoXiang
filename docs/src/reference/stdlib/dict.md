@@ -16,6 +16,7 @@ use std.dict
 | 类别           | 函数                                                           | 行为                       |
 | -------------- | -------------------------------------------------------------- | -------------------------- |
 | 只读借用       | `get` `has` `values` `keys` `entries` `len` `is_empty` `merge` | 源字典可反复使用           |
+| 无实参         | `new`                                                          | 构造空字典                 |
 | **消耗源字典** | `set` `delete`                                                 | 源字典被移动，之后不可再用 |
 
 ```yaoxiang
@@ -51,6 +52,36 @@ main: () -> Void = {
 | `new` | `(K: Type, V: Type)() -> Dict(K, V)` |
 
 <!-- stdlib:table:dict end -->## 函数
+
+### new
+
+<!-- stdlib:sig:dict.new start -->
+
+```yaoxiang
+new: (K: Type, V: Type)() -> Dict(K, V)
+```
+
+<!-- stdlib:sig:dict.new end -->
+
+创建空字典。`K` / `V` 由上下文推断。
+
+> **必须用它，不要用 `{}`**：`{}` 是**空块**（值为 `Void`），不是空字典
+> （`src/std/dict.rs:97-100`）。空字典的唯一构造通道是 `dict.new()`。
+> 字典字面量 `{ "k": v, … }` 仍可用，见[语法规范 §1.6.4](../language-spec/syntax.md)。
+
+```yaoxiang
+use std.assert
+use std.dict
+
+main: () -> Void = {
+    d = dict.new()
+    assert(dict.is_empty(d))
+    assert(dict.len(d) == 0)
+
+    d2 = dict.set(d, "a", 1)
+    assert(!dict.is_empty(d2))
+}
+```
 
 ### set
 

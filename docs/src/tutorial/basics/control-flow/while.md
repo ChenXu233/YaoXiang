@@ -66,7 +66,8 @@ while index < 5 {
     index = index + 1
 }
 
-print("找到了吗？" + found.to_string())  // "找到了吗？true"
+// Bool 不能隐式转 String——用 f-string 插值
+print(f"找到了吗？{found}")  // "找到了吗？true"
 ```
 
 `break` 让程序立刻跳出当前循环，继续执行循环后面的代码。

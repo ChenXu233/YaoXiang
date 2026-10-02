@@ -3,7 +3,7 @@ title: '包管理器'
 description: 'YaoXiang 官方包管理器使用教程'
 ---
 
-# 包管理器
+# 包管理器使用指南
 
 YaoXiang 内置的包管理器，提供完整的依赖管理功能。
 
@@ -39,7 +39,7 @@ yx run src/main.yx
 my-project/
 ├── yaoxiang.toml      # 项目清单
 ├── yaoxiang.lock      # 依赖锁定文件
-├── vendor/            # 依赖存储
+├── .yaoxiang/.yaoxiang/vendor/            # 依赖存储
 └── src/
     └── main.yx
 ```
@@ -96,7 +96,7 @@ yx init my-project
 ### 用法
 
 ```bash
-yx add <name> [version]
+yx add <name> --version <version>
 yx add <name> --dev
 ```
 
@@ -133,7 +133,7 @@ yx add <name> --dev
 
 ```bash
 yx add http
-yx add http 1.0.0
+yx add http --version 1.0.0
 ```
 
 #### Git 仓库
@@ -160,7 +160,7 @@ yx add http
 yx add http 1.0.0
 
 # 添加版本范围
-yx add json ">=2.0.0"
+yx add json --version ">=2.0.0"
 
 # 添加开发依赖
 yx add test-utils --dev

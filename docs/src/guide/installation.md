@@ -57,8 +57,8 @@ apt 安装为系统级平装（`/usr/lib/yaoxiang/`，命令入口 `/usr/bin/yx`
 
 ```sh
 yx toolchain install stable    # 安装最新稳定版
-yx toolchain install 0.7.14    # 安装指定版本
-yx toolchain default 0.7.14    # 设置默认版本
+yx toolchain install 0.8.2    # 安装指定版本
+yx toolchain default 0.8.2    # 设置默认版本
 yx toolchain list              # 列出已安装版本
 yx toolchain update            # 升级到最新稳定版
 yx self update                 # 更新 yx 本体
@@ -71,7 +71,7 @@ yx self update                 # 更新 yx 本体
 在项目根目录放一个 `yx-toolchain.toml`（先例 `rust-toolchain.toml`）：
 
 ```toml
-toolchain = "0.7.14"
+toolchain = "0.8.2"
 ```
 
 在该目录下执行任何 `yx` 命令都会使用 pin 指定的版本——不同项目可以用不同版本工作。

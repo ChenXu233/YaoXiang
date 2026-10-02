@@ -13,12 +13,17 @@ use std.time
 
 > **实现缺口已修复（#338 / #340，2026-09-19）**。
 >
-> `DateTime` 现为**时间戳的别名**（即 `Int`）——运行时本就是
-> `RuntimeValue::Int`，此前只是一个没实体的名字，使 `now()` 的返回值传不进
-> `format_time` 与访问器。访问器导出名也从 `DateTime::year` 改为
+> `DateTime` 是**时间戳的别名**（即 `Int`，见
+> `src/frontend/core/types/mono.rs:621-627`）——运行时本就是
+> `RuntimeValue::Int`（`src/std/time.rs:243`），此前只是一个没实体的名字，使 `now()` 的
+> 返回值传不进 `format_time` 与访问器。访问器导出名也从 `DateTime::year` 改为
 > **`datetime_year`**（`::` 是词法保留记号，不能出现在字段访问位置）。
 >
 > 现在 `now()` / `parse_time()` 的返回值可直接用于算术、格式化与全部访问器。
+>
+> **时区**：`format_time` 与 8 个 `datetime_*` 访问器都走 `timestamp_to_datetime`
+> （`src/std/time.rs:123-178`），那是**纯 UTC 算术**——不读本地时区偏移，也没有
+> `Local` / `Utc` 之分。`datetime_to_string` 输出的 ISO 8601 串因此也是 UTC。
 
 ## 函数一览
 
@@ -55,21 +60,27 @@ now: () -> DateTime
 
 返回当前时间。
 
-返回：`DateTime` 值，打印形如 `DateTime(1789471990)`。**它不是
-`Int`**，因此不能直接参与算术或比较，也无法作为 `Int` 形参传给其它函数（见
-[`format_time`](#format_time)）。
+返回：`Int` 时间戳（**秒**），即 Unix epoch 起的秒数（`src/std/time.rs:238-244` 直接
+`RuntimeValue::Int`）。签名里写作 `DateTime`，但 `DateTime` 是 `Int` 的别名
+（`src/frontend/core/types/mono.rs:627`），因此返回值**就是** `Int`——可直接参与算术与
+比较，也可直接传给 [`format_time`](#format_time) 与全部 `datetime_*` 访问器。
+
+需要毫秒精度用 [`timestamp_ms`](#timestamp_ms)。
 
 ```yaoxiang
+use std.assert
 use std.time
 
 main: () -> Void = {
     t = time.now()
-    println(t)          // DateTime(1789471990)
+    assert(time.datetime_year(t) > 2020)     // Int，可直接传入访问器
+    assert(t > 0)                             // Int，可直接参与比较
+    println(time.format_time(t, "%Y-%m-%dT%H:%M:%SZ"))
 }
 ```
 
-> 需要参与计算时用 [`timestamp`](#timestamp) 或 [`timestamp_ms`](#timestamp_ms)，它们直接返回
-> `Int`。
+> [`now`](#now) 与 [`timestamp`](#timestamp) 返回同一个东西（都是 Unix 秒时间戳），
+> 区别只在可读性：前者的返回类型标注为 `DateTime`，后者标注为 `Int`。
 
 ### timestamp
 
@@ -158,10 +169,8 @@ format_time: (dt: Int, fmt: String) -> String
 - `dt` —— Unix 时间戳（**秒**），必须是 `Int`
 - `fmt` —— 格式串
 
-> **类型注意**：`dt` 必须是 `Int`。传入 [`now`](#now) 或 [`parse_time`](#parse_time) 的返回值会报
-> `E1002` （`expected type 'int64', found type 'DateTime'`），因为它们都是 `DateTime`。目前没有
-> `DateTime` → `Int` 的转换手段，所以**实际只能传 `Int` 字面量或 [`timestamp`](#timestamp)
-> 的结果**。
+> `DateTime` 是 `Int` 的别名，所以传 [`now`](#now) 或 [`parse_time`](#parse_time) 的
+> 返回值**不会**报 `E1002`——双方都是 `Int`，可直接传入。
 
 支持的占位符：
 
@@ -177,9 +186,10 @@ format_time: (dt: Int, fmt: String) -> String
 | `%F`   | 等价于 `%Y-%m-%d`     | `2024-01-15` |
 | `%T`   | 等价于 `%H:%M:%S`     | `10:30:00`   |
 
-按**本地时间**拆解。不认识的占位符原样保留。
+按 **UTC** 拆解（`src/std/time.rs:123-178` 是纯算术，不含本地时区偏移）。
+不认识的占位符原样保留。
 
-错误：`dt` 非 `Int`、`fmt` 非 `String`，或参数不足时抛出 `E6007`。
+错误：参数不足时抛出 `E6007`。
 
 ```yaoxiang
 use std.assert
@@ -187,9 +197,10 @@ use std.string
 use std.time
 
 main: () -> Void = {
-    // 0 = Unix epoch
+    // 0 = Unix epoch（UTC）
     assert(time.format_time(0, "%Y") == "1970")
     assert(time.format_time(0, "%m") == "01")
+    assert(time.format_time(0, "%F %T") == "1970-01-01 00:00:00")
 
     // 当前时间戳（Int）也可直接使用
     s = time.format_time(time.timestamp(), "%Y")
@@ -207,30 +218,38 @@ parse_time: (fmt: String, s: String) -> DateTime
 
 <!-- stdlib:sig:time.parse_time end -->
 
-把时间字符串解析为时间。
+按 `fmt` 把时间字符串解析为 Unix 时间戳（**秒**）。
 
-- `fmt` —— **目前被忽略**（见下）
+- `fmt` —— 格式串，**参与解析**（`src/std/time.rs:382` 调 `parse_by_format(&fmt, &s)`）
 - `s` —— 待解析字符串
 
-返回：`DateTime` 值。
+返回：`Int` 时间戳（签名写作 `DateTime`，实为 `Int` 别名，见 [`now`](#now)），
+可直接用于算术、[`format_time`](#format_time) 与全部 `datetime_*` 访问器。
 
-> **两个实现限制（#340）**：
->
-> 1. `fmt` 参数**不参与解析**。函数只识别 ISO 8601 形态的 `YYYY-MM-DDTHH:MM:SS` 或
->    `YYYY-MM-DD HH:MM:SS`（日期与时间之间用 `T` 或空格分隔），传入其它形态一律失败，无论 `fmt`
->    写什么。
-> 2. 返回的 `DateTime` **目前无法继续使用**——它既不是 `Int`（不能传给 `format_time` /
->    `DateTime::*`），也没有可调用的访问器（见下节）。
+`fmt` 认得的指示符与 [`format_time`](#format_time) 一一对应：`%Y` `%m` `%d` `%H` `%M`
+`%S`，以及组合形 `%F`（`%Y-%m-%d`）与 `%T`（`%H:%M:%S`）。**未出现的字段默认
+1 月 1 日 0 时 0 分 0 秒**——`parse_time("%Y", "2024")` 得到的是 `2024-01-01T00:00:00Z`。
 
-错误：格式不匹配时抛出 `E6007`。
+错误：字符串与 `fmt` 不匹配时抛出 `E6007`，消息形如
+`Invalid time format: '…' does not match '…'`。这意味着 `fmt` 是**契约**而非提示：
+`parse_time("%d/%m/%Y", "15/01/2024")` 能过，而
+`parse_time("totally-bogus", "2024-01-15T10:30:00")` 报错。
 
 ```yaoxiang
+use std.assert
 use std.time
 
 main: () -> Void = {
-    // 解析本身可以成功
-    ts = time.parse_time("", "2024-01-15 10:30:00")
-    println(ts)
+    // fmt 决定解析形态
+    ts = time.parse_time("%d/%m/%Y", "15/01/2024")
+    assert(time.datetime_year(ts) == 2024)
+    assert(time.datetime_month(ts) == 1)
+    assert(time.datetime_day(ts) == 15)
+
+    // 组合指示符也认
+    full = time.parse_time("%Y-%m-%d %H:%M:%S", "2024-01-15 10:30:00")
+    assert(time.datetime_hour(full) == 10)
+    assert(time.datetime_minute(full) == 30)
 }
 ```
 
@@ -250,7 +269,8 @@ main: () -> Void = {
 | `datetime_to_string`    | `(dt: Int) -> String` | ISO 8601 形态字符串 |
 
 `DateTime` 是**时间戳的别名**（即 `Int`）——`now()` / `parse_time()` 的返回值
-可直接传入这些访问器，也可直接用于 [`format_time`](#format_time)：
+可直接传入这些访问器，也可直接用于 [`format_time`](#format_time)。拆解按 **UTC**
+（`src/std/time.rs:123-178` 纯算术，不含本地时区偏移）：
 
 ```yaoxiang
 use std.assert
@@ -264,6 +284,10 @@ main: () -> Void = {
 
     // 与 format_time 等价
     assert(time.format_time(ts, "%Y-%m-%d") == "2024-01-15")
+
+    // 0 = Unix epoch（UTC 星期四）
+    assert(time.datetime_weekday(0) == 4)
+    assert(time.datetime_to_string(0) == "1970-01-01T00:00:00")
 }
 ```
 

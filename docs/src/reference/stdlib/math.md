@@ -149,8 +149,10 @@ clamp: (value: Int, min: Int, max: Int) -> Int
 
 返回：区间内的值。低于下界返回 `min`，高于上界返回 `max`。
 
-> **`min > max` 会使解释器 panic（#339）**（底层 `i64::clamp` 的前置条件），不会返回错误值。请保证
-> `min <= max`。
+> **`min > max` 返回运行时错误 `E6007`**（#339 已修复），消息为
+> `math.clamp: min must be <= max, got min = …, max = …`。底层 `i64::clamp` 在这情况会
+> **panic 掉整个解释器进程**（`src/std/math.rs:117-130` 显式先判再调），对一门语言而言
+> 不可接受——改为返回诊断，让调用链正常传播错误。请仍尽量保证 `min <= max`。
 
 ```yaoxiang
 use std.assert
