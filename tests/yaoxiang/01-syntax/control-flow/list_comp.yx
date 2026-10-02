@@ -1,5 +1,5 @@
 // 01-syntax/control-flow/list_comp.yx
-// 覆盖: 规范 §2.6.5 列表推导式
+// 覆盖: 规范 §1.6.5 列表推导式（旧编号 §2.6.5）
 // 验证: [expr for var in iterable (if cond)?] 基本形式 + if 过滤 + 多生成器（#401）
 // 状态: ✅ 可运行
 

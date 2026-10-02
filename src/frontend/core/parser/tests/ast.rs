@@ -763,6 +763,7 @@ fn test_expr_for() {
 
 #[test]
 fn test_expr_listcomp() {
+    // Arrange + Act：按规范 §1.6.5 形态构造单生成器、带过滤条件的 ListComp 节点
     let expr = Expr::ListComp {
         element: Box::new(Expr::BinOp {
             op: BinOp::Mul,
@@ -783,10 +784,15 @@ fn test_expr_listcomp() {
         }],
         span: Span::dummy(),
     };
-    if let Expr::ListComp { generators, .. } = &expr {
-        assert_eq!(generators.len(), 1);
-        assert_eq!(generators[0].var, "x");
-        assert!(generators[0].condition.is_some(), "if 子句应有过滤条件");
+
+    // Assert
+    match &expr {
+        Expr::ListComp { generators, .. } => {
+            assert_eq!(generators.len(), 1, "单 for 子句应构造出 1 个生成器");
+            assert_eq!(generators[0].var, "x", "迭代变量应为 x");
+            assert!(generators[0].condition.is_some(), "if 子句应有过滤条件");
+        }
+        other => panic!("构造的节点应保持 ListComp 形态，实际为 {:?}", other),
     }
 }
 

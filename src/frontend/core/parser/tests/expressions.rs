@@ -228,7 +228,7 @@ fn test_tuple() {
     assert!(matches!(expr, Expr::Tuple(..)));
 }
 
-// 列表推导式 (Spec §2.6.5, #401)
+// 列表推导式 (Spec §1.6.5，旧编号 §2.6.5，#401)
 
 #[test]
 fn test_list_comp() {
@@ -238,8 +238,11 @@ fn test_list_comp() {
 
 #[test]
 fn test_list_comp_with_filter_yields_condition() {
-    // Arrange & Act
-    let expr = parse_expr("[x for x in items if x > 0]");
+    // Arrange
+    let source = "[x for x in items if x > 0]";
+
+    // Act
+    let expr = parse_expr(source);
 
     // Assert
     match expr {
@@ -254,8 +257,11 @@ fn test_list_comp_with_filter_yields_condition() {
 
 #[test]
 fn test_list_comp_multi_generator_expands_clauses() {
-    // Arrange & Act
-    let expr = parse_expr("[x * y for x in xs for y in ys]");
+    // Arrange
+    let source = "[x * y for x in xs for y in ys]";
+
+    // Act
+    let expr = parse_expr(source);
 
     // Assert
     match expr {
@@ -274,8 +280,11 @@ fn test_list_comp_multi_generator_expands_clauses() {
 
 #[test]
 fn test_list_comp_multi_generator_with_per_clause_filters() {
-    // Arrange & Act
-    let expr = parse_expr("[x * y for x in xs if x > 0 for y in ys if y < 9]");
+    // Arrange
+    let source = "[x * y for x in xs if x > 0 for y in ys if y < 9]";
+
+    // Act
+    let expr = parse_expr(source);
 
     // Assert
     match expr {
