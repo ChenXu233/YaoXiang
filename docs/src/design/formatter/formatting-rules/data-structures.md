@@ -79,8 +79,8 @@ let x = {"a":1, "b":2};
 // ✅ 正确
 let x = [i * 2 for i in range(10)];
 
-// 带条件
-let x = [i for i in range(10) if i > 5];
+// 带过滤：0.8.2 的列表推导式不支持 if 过滤（实测 E0010），过滤请改用 std.list.filter
+let evens = list.filter(range(10), (i) => i > 5);
 ```
 
 ---
