@@ -268,7 +268,7 @@ native 函数的特殊处理推迟到 IR gen / codegen 层。
 | `frontend/core/parser/statements/imports.rs` | 不改（`use` 解析已实现） |
 | `package/source/module_resolver.rs` | **删除**，逻辑迁移到 `frontend/module/resolver.rs` |
 | `frontend/core/typecheck/` | `use` 处理改为查 Registry（当前只查 std） |
-| AST `is_pub: bool` | **不动**。本 RFC 不涉及可见性 |
+| AST `is_pub: bool` | ~~不动~~（029g 已裁定推翻：随 `pub` 关键字删除一并移除，2026-10-02，待实施） |
 
 ### 不存在的文件（RFC 旧版声称"已实现"但实际不存在）
 
@@ -317,6 +317,7 @@ native 函数的特殊处理推迟到 IR gen / codegen 层。
 | 029d | CLI `--entry` 覆盖入口 | 编排器可用 |
 | 029e | 多文件诊断 `--json` 输出 | 诊断聚合 |
 | 029f | 编译目标角色与导入面语义（已接受 2026-09-13，#334） | 编排器稳定 |
+| 029g | 移除 `pub` 关键字与自动绑定（可见性机制最终裁定；已接受 2026-10-02） | 无 |
 
 已删除：~~029c（重导出）~~ — 不需要。`use` 就是重导出，没有 "pub use" 概念。
 

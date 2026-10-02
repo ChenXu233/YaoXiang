@@ -28,6 +28,7 @@
 | 027-compile-time-evaluation-types.md | RFC-027：编译期谓词与统一静态验证 | 已接受 | accepted\027-compile-time-evaluation-types.md | #90 | -- | -- | -- |
 | 029-module-semantics.md | RFC-029: 模块语义系统 | 已接受 | accepted\029-module-semantics.md | #232 | -- | -- | -- |
 | 029f-target-semantics.md | RFC-029f: 编译目标角色与导入面语义 | 已接受 | accepted\029f-target-semantics.md | #334 | -- | -- | -- |
+| 029g-remove-pub-and-auto-bind.md | RFC-029g: 移除 pub 关键字与自动绑定 | 已接受 | accepted\029g-remove-pub-and-auto-bind.md | #399 | -- | -- | -- |
 | 030-assert-mechanism.md | RFC-030: assert 断言机制 | 已接受 | accepted\030-assert-mechanism.md | #97 | #155, #157, #158, #159, #160, #161, #162, #169 | -- | -- |
 | 036-test-framework.md | RFC-036: std.test 测试框架与 yaoxiang test 命令 | 已接受 | accepted\036-test-framework.md | #94, #95, #221, #319 | -- | -- | -- |
 | 037-industrial-packaging.md | RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包 | 已接受 | accepted\037-industrial-packaging.md | #230 | -- | -- | -- |

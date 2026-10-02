@@ -87,6 +87,7 @@ title: 'RFC 索引'
 | RFC-037 | [RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包](./accepted/037-industrial-packaging.md) | ChenXu233 | 2026-07-26 | 已接受 |
 | RFC-038 | [RFC-038: 语句终止与换行规则（Statement Termination & Newline Rules）](./accepted/038-statement-termination.md) | ChenXu233 | 2026-08-05 | 已接受 |
 | RFC-029f | [RFC-029f: 编译目标角色与导入面语义](./accepted/029f-target-semantics.md) | 晨煦 | 2026-09-12 | 已接受 |
+| RFC-029g | [RFC-029g: 移除 pub 关键字与自动绑定](./accepted/029g-remove-pub-and-auto-bind.md) | 晨煦 | 2026-10-02 | 已接受 |
 
 ---
 
