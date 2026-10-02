@@ -36,8 +36,7 @@ YaoXiang 的诞生，正是为了填补这一空白。我们相信：**编程语
 
 **问题三：异步编程的认知负担**
 
-现代应用离不开网络和并发，而异步编程一直是程序员的噩梦。回调函数嵌套、Promise 链式调用、async/await 语法——每一种方案都增加了代码的复杂性。YaoXiang 重新设计了异步模型：只需在函数签名后添加
-`spawn` 标记，编译器自动处理所有异步细节，让并发编程如同同步代码一样自然。
+现代应用离不开网络和并发，而异步编程一直是程序员的噩梦。回调函数嵌套、Promise 链式调用、async/await 语法——每一种方案都增加了代码的复杂性。YaoXiang 重新设计了异步模型：用 `spawn` 显式标出并行点，编译器在该表达式内构建依赖图并行执行，调用方同步阻塞等待结果（RFC-024）。没有回调，没有 `await`，没有函数着色。
 
 **问题四：AI 辅助编程的瓶颈**
 
@@ -286,8 +285,8 @@ d3 = dist_from_p1(p2)       # 2.828
 | **并作函数**   | `spawn (params) => body`    | 定义可参与并作执行的计算单元             |
 | **并作块**     | `spawn { a(), b() }`        | 显式声明的并发疆域，块内任务并作执行     |
 | **并作循环**   | `spawn for x in xs { ... }` | 数据并行，循环体在所有元素上并作执行     |
-| **并作值**     | `Async(T)`                  | 正在并作中的未来值，使用时自动等待       |
-| **并作图**     | 惰性计算图(DAG)             | 并作发生的舞台，描述依赖与并行关系       |
+| **并作值**     | 无独立句柄（RFC-024）       | 无 `Async(T)`/future 句柄；调用方同步阻塞等待结果     |
+| **并作图**     | 表达式内 DAG（RFC-024）    | 并作发生的舞台；**仅在 spawn 表达式内**构建依赖图，无全程序分析     |
 | **并作调度器** | 运行时任务调度器            | 协调万物，让它们在正确时机并作的智能中枢 |
 
 > **详见**：[RFC-024 基于 spawn 的并发运行时语义](./rfc/accepted/024-concurrency-model.md)（语法正交部分见 [RFC-032](./rfc/review/032-spawn-unified-expression.md)）
@@ -310,14 +309,16 @@ compute_all: () -> (Int, Int, Int) spawn = {
     return (a, b, c)
 }
 
-# === 自动等待 ===
+# === 显式 spawn + 同步等待 ===
 main: () -> Void = {
-    # 两个独立请求自动并行执行
-    users = fetch_data("https://api.example.com/users")
-    posts = fetch_data("https://api.example.com/posts")
+    # 并行点必须显式标记：RFC-024 没有全程序自动并行
+    (users, posts) = spawn {
+        fetch_data("https://api.example.com/users"),
+        fetch_data("https://api.example.com/posts")
+    }
 
-    # 等待点在需要结果时自动插入
-    print(users.length + posts.length)  # 自动等待 users 和 posts
+    # spawn 表达式求值时同步阻塞，直接拿到结果（无 future 句柄）
+    print(users.length + posts.length)
 }
 ```
 
@@ -555,7 +556,7 @@ process_all: () -> (JSON, JSON, JSON) spawn = {
 | **关键字**     | 18个核心关键字            | 不含 `type`/`fn`/`struct`/`enum`/`trait`/`impl`     |
 | **函数语法**   | 签名 + 表达式             | `name: (params) -> ReturnType = body`               |
 | **方法绑定**   | RFC-004 柯里化绑定        | `Type.method = function[position]`                  |
-| **异步模型**   | 并作模型                  | `spawn` 标记，惰性求值，自动并行                    |
+| **异步模型**   | 并作模型                  | `spawn` 显式标记并行点；普通代码顺序执行，DAG 分析仅限 spawn 表达式内（RFC-024） |
 | **内存管理**   | 所有权模型（RFC-009 v9）  | Move + &T/&mut T 令牌 + ref + clone + unsafe，无 GC |
 | **文件即模块** | 模块系统                  | 每个 `.yx` 文件是一个模块                           |
 | **主函数**     | `main: () -> Void`        | 程序入口点                                          |
