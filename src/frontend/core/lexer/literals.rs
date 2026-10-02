@@ -1221,10 +1221,34 @@ pub fn hex_digit_value(c: char) -> u128 {
 /// The raw content is stored as a single string with `{` and `}` markers preserved.
 /// The parser will later split it into segments.
 ///
-/// Escape sequences are handled the same as regular strings.
-/// `{{` and `}}` are escape sequences for literal `{` and `}`.
+/// Raw protocol (#402): brace sequences are preserved **verbatim** — `{{` and
+/// `}}` stay as two characters so the parser can distinguish escaped braces
+/// from interpolation markers when splitting segments. Backslash escape
+/// sequences (\n, \t, \u{...}, ...) are processed here, same as regular strings.
+///
+/// `f"""` opens a multi-line f-string (RFC-012), terminated by `"""`.
 pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
     let start_pos = lexer.position();
+
+    // Check for multi-line f-string (f""")
+
+    // The first '"' was already consumed by scan_identifier; check for two more
+
+    let c0 = lexer.peek_public().copied();
+
+    let chars_copy = lexer.chars_clone();
+
+    let chars_vec: Vec<char> = chars_copy.collect();
+
+    let has_three_quotes = c0 == Some('"') && chars_vec.get(1) == Some(&'"');
+
+    if has_three_quotes {
+        let _ = lexer.advance(); // Skip second quote
+
+        let _ = lexer.advance(); // Skip third quote
+
+        return scan_fstring_multi_line(lexer);
+    }
 
     let mut value = String::new();
 
@@ -1254,10 +1278,14 @@ pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
             '{' => {
                 lexer.advance();
 
-                // Check for escape {{ → literal {
+                // `{{` at text level is a brace escape (RFC-012): preserved
+                // raw and NOT counted as interpolation open — otherwise the
+                // closing `"` would be swallowed by a phantom depth (#402)
 
                 if brace_depth == 0 && lexer.peek() == Some(&'{') {
                     lexer.advance();
+
+                    value.push('{');
 
                     value.push('{');
 
@@ -1272,155 +1300,18 @@ pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
             '}' => {
                 lexer.advance();
 
-                if brace_depth == 0 {
-                    // Check for escape }} → literal }
-
-                    if lexer.peek() == Some(&'}') {
-                        lexer.advance();
-
-                        value.push('}');
-
-                        continue;
-                    }
-
-                    // Unmatched }, treat as literal
-
-                    value.push('}');
-                } else {
+                if brace_depth > 0 {
                     brace_depth -= 1;
-
-                    value.push('}');
                 }
+
+                value.push('}');
             }
 
             '\\' if brace_depth == 0 => {
                 lexer.advance();
 
                 if let Some(escaped) = lexer.advance() {
-                    match escaped {
-                        'n' => value.push('\n'),
-
-                        't' => value.push('\t'),
-
-                        'r' => value.push('\r'),
-
-                        '\\' => value.push('\\'),
-
-                        '"' => value.push('"'),
-
-                        '\'' => value.push('\''),
-
-                        '0' => value.push('\0'),
-
-                        'x' => {
-                            let mut hex = String::new();
-
-                            for _ in 0..2 {
-                                if let Some(&hc) = lexer.peek() {
-                                    if is_hex_digit(hc) {
-                                        hex.push(hc);
-
-                                        lexer.advance();
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if hex.len() == 2 {
-                                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                                    value.push(byte as char);
-                                } else {
-                                    lexer.error = Some(
-                                        crate::frontend::core::lexer::LexError::InvalidEscape {
-                                            sequence: format!("\\x{}", hex),
-
-                                            span: point(lexer),
-                                        },
-                                    );
-                                }
-                            } else {
-                                lexer.error =
-                                    Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                                        sequence: format!("\\x{}", hex),
-
-                                        span: point(lexer),
-                                    });
-                            }
-                        }
-
-                        'u' => {
-                            if lexer.peek() == Some(&'{') {
-                                lexer.advance();
-
-                                let mut hex = String::new();
-
-                                while let Some(&hc) = lexer.peek() {
-                                    if is_hex_digit(hc) {
-                                        hex.push(hc);
-
-                                        lexer.advance();
-                                    } else {
-                                        break;
-                                    }
-                                }
-
-                                if lexer.peek() == Some(&'}') && !hex.is_empty() {
-                                    lexer.advance();
-
-                                    if let Ok(codepoint) = u32::from_str_radix(&hex, 16) {
-                                        if let Some(ch) = char::from_u32(codepoint) {
-                                            value.push(ch);
-                                        } else {
-                                            lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-
-
-
-                                                sequence: format!("\\u{{{}}}", hex),
-
-                                                span: point(lexer),
-
-
-
-                                            });
-                                        }
-                                    } else {
-                                        lexer.error = Some(
-                                            crate::frontend::core::lexer::LexError::InvalidEscape {
-                                                sequence: format!("\\u{{{}}}", hex),
-
-                                                span: point(lexer),
-                                            },
-                                        );
-                                    }
-                                } else {
-                                    lexer.error = Some(
-                                        crate::frontend::core::lexer::LexError::InvalidEscape {
-                                            sequence: "\\u{".to_string(),
-
-                                            span: point(lexer),
-                                        },
-                                    );
-                                }
-                            } else {
-                                lexer.error =
-                                    Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                                        sequence: "\\u".to_string(),
-
-                                        span: point(lexer),
-                                    });
-                            }
-                        }
-
-                        c => {
-                            lexer.error =
-                                Some(crate::frontend::core::lexer::LexError::InvalidEscape {
-                                    sequence: c.to_string(),
-
-                                    span: point(lexer),
-                                });
-                        }
-                    }
+                    push_fstring_escape(lexer, &mut value, escaped);
                 }
             }
 
@@ -1468,6 +1359,207 @@ pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
 
     Some(Token {
         kind: TokenKind::Error("Unterminated f-string".to_string()),
+
+        span: lexer.span(),
+
+        literal: None,
+    })
+}
+
+/// Process one backslash escape inside an f-string (#402, shared by
+/// single-line and multi-line f-string scanning).
+///
+/// `value` receives the decoded character; invalid sequences raise
+/// LexError::InvalidEscape on the lexer and leave `value` untouched.
+fn push_fstring_escape(
+    lexer: &mut super::tokenizer::Lexer<'_>,
+    value: &mut String,
+    escaped: char,
+) {
+    match escaped {
+        'n' => value.push('\n'),
+
+        't' => value.push('\t'),
+
+        'r' => value.push('\r'),
+
+        '\\' => value.push('\\'),
+
+        '"' => value.push('"'),
+
+        '\'' => value.push('\''),
+
+        '0' => value.push('\0'),
+
+        'x' => {
+            let mut hex = String::new();
+
+            for _ in 0..2 {
+                if let Some(&hc) = lexer.peek() {
+                    if is_hex_digit(hc) {
+                        hex.push(hc);
+
+                        lexer.advance();
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            if hex.len() == 2 {
+                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                    value.push(byte as char);
+                } else {
+                    lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                        sequence: format!("\\x{}", hex),
+
+                        span: point(lexer),
+                    });
+                }
+            } else {
+                lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                    sequence: format!("\\x{}", hex),
+
+                    span: point(lexer),
+                });
+            }
+        }
+
+        'u' => {
+            if lexer.peek() == Some(&'{') {
+                lexer.advance();
+
+                let mut hex = String::new();
+
+                while let Some(&hc) = lexer.peek() {
+                    if is_hex_digit(hc) {
+                        hex.push(hc);
+
+                        lexer.advance();
+                    } else {
+                        break;
+                    }
+                }
+
+                if lexer.peek() == Some(&'}') && !hex.is_empty() {
+                    lexer.advance();
+
+                    if let Ok(codepoint) = u32::from_str_radix(&hex, 16) {
+                        if let Some(ch) = char::from_u32(codepoint) {
+                            value.push(ch);
+                        } else {
+                            lexer.error =
+                                Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                                    sequence: format!("\\u{{{}}}", hex),
+
+                                    span: point(lexer),
+                                });
+                        }
+                    } else {
+                        lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                            sequence: format!("\\u{{{}}}", hex),
+
+                            span: point(lexer),
+                        });
+                    }
+                } else {
+                    lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                        sequence: "\\u{".to_string(),
+
+                        span: point(lexer),
+                    });
+                }
+            } else {
+                lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                    sequence: "\\u".to_string(),
+
+                    span: point(lexer),
+                });
+            }
+        }
+
+        c => {
+            lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidEscape {
+                sequence: c.to_string(),
+
+                span: point(lexer),
+            });
+        }
+    }
+}
+
+/// RFC-012: Scan multi-line f-string literal (f"""...""")
+///
+/// Same raw protocol as `scan_fstring`: backslash escapes are processed,
+/// brace sequences are preserved verbatim for the parser. Newlines are
+/// content. Terminated by the first `"""` (an interpolation may not contain
+/// an unescaped `"""`, matching plain multi-line strings).
+fn scan_fstring_multi_line(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
+    let start_pos = lexer.position();
+
+    let mut value = String::new();
+
+    // The opening """ has already been consumed by scan_fstring
+
+    while let Some(c) = lexer.advance() {
+        // Check for closing """
+
+        if c == '"' {
+            let actual_peek1 = lexer.peek_public().copied();
+
+            let mut temp_clone = lexer.chars_clone();
+
+            let actual_peek2 = temp_clone.nth(1);
+
+            if actual_peek1 == Some('"') && actual_peek2 == Some('"') {
+                // Found closing """
+
+                // Clear any previous error and consume the remaining two quotes
+
+                lexer.error = None;
+
+                lexer.advance(); // consume second quote
+
+                lexer.advance(); // consume third quote
+
+                return Some(Token {
+                    kind: TokenKind::FStringLiteral(value.clone()),
+
+                    span: Span::new(
+                        Position::with_offset(
+                            lexer.start_line(),
+                            lexer.start_column(),
+                            lexer.start_offset(),
+                        ),
+                        lexer.position(),
+                    ),
+
+                    literal: None,
+                });
+            } else {
+                // This is just a single quote inside the string
+
+                value.push(c);
+            }
+        } else if c == '\\' {
+            // Handle escape sequences
+
+            if let Some(escaped) = lexer.advance() {
+                push_fstring_escape(lexer, &mut value, escaped);
+            }
+        } else {
+            value.push(c);
+        }
+    }
+
+    lexer.error = Some(crate::frontend::core::lexer::LexError::UnterminatedString {
+        position: format!("{}:{}", start_pos.line, start_pos.column),
+
+        span: since(lexer, start_pos),
+    });
+
+    Some(Token {
+        kind: TokenKind::Error("Unterminated multi-line f-string".to_string()),
 
         span: lexer.span(),
 

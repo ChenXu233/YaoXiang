@@ -3,7 +3,7 @@ title: 'RFC 012: F-String 模板字符串'
 status: '已接受'
 author: 'Chen Xu'
 created: '2025-01-27'
-updated: '2026-07-05'
+updated: '2026-10-02'
 issue: '#124'
 ---
 
@@ -88,14 +88,40 @@ bio = f"Name: {user.name}, age: {user.get_age()}"
 ### 语法规范
 
 ```
-FStringLiteral ::= 'f' '"' FStringContent* '"'
-FStringContent ::= FStringChar | EscapeSequence | FStringInterpolation
+FStringLiteral       ::= 'f' '"' FStringContent* '"'
+                       | 'f' '"""' FStringContent* '"""'
+FStringContent       ::= FStringChar | EscapeSequence | BraceEscape | FStringInterpolation
 FStringInterpolation ::= '{' Expression (':' FormatSpec)? '}'
-FormatSpec      ::= [width] ['.' precision] type
-width           ::= digit+
-precision       ::= digit+
-type            ::= 'b' | 'c' | 'd' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G' | 'n' | 'o' | 's' | 'x' | 'X' | '%'
+BraceEscape          ::= '{{' | '}}'
+FormatSpec           ::= [[fill] align] [sign] ['#'] ['0'] [width] ['.' precision] [type]
+fill                 ::= <任意非 '}' 字符>
+align                ::= '<' | '>' | '^'
+sign                 ::= '+' | '-' | ' '
+width                ::= digit+
+precision            ::= digit+
+type                 ::= 'b' | 'c' | 'd' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G' | 'n' | 'o' | 's' | 'x' | 'X' | '%'
 ```
+
+- **转义协议**：反斜杠转义（`\n`、`\u{...}` 等）在 lexer 解码；花括号转义
+  `{{` / `}}` 在 raw 内容中逐字保留，由 parser 切段时还原为字面 `{` / `}`。
+  两者分层处理，避免「转义后的 `{` 被再次当作插值起始」。
+- **多行**：`f"""..."""` 与普通 `"""` 多行字符串同构，换行是内容，
+  以首个 `"""` 结束。插值内的 `"""` 不被支持（与普通多行字符串一致，
+  需求请拆分表达式）。
+- **格式说明符**：完整规范见 [Python 格式规格迷你语言](https://docs.python.org/3/library/string.html#format-specification-mini-language)，
+  本 RFC 的 BNF 是其子集。`n` 为 locale 感知数字展示，当前 locale 中立
+  （与 `d` / 缺省同义）。
+
+### 能力支持矩阵
+
+| 能力 | 状态 | 说明 |
+| ---- | ---- | ---- |
+| 变量 / 表达式插值 | ✅ 已实现 | 编译期转 `std.string.format` 调用或常量折叠 |
+| `{{` / `}}` 字面花括号 | ✅ 已实现 | #402：lexer 保留 raw，parser 切段还原 |
+| `f"""` 多行模板 | ✅ 已实现 | #402：换行为内容，`"""` 结束 |
+| 格式说明符（宽度 / 精度 / type） | ✅ 已实现 | #402：`std.string.format` 按类型化值格式化，非法说明符运行期报错 |
+| 插值内同类三引号嵌套 | ❌ 不支持 | 与普通 `"""` 字符串一致，`"""` 恒为结束符 |
+| 插值表达式的编译期格式校验 | ❌ 未实现 | 非法 type 当前在运行期报错，编译期检查留待后续 |
 
 ## 详细设计
 
@@ -205,20 +231,20 @@ f"Hello {name}, you are {age} years old"
 
 ### 阶段划分
 
-1. **阶段 1 (v0.9)**:
+1. **阶段 1 (v0.9) — ✅ 已交付**:
    - 基础 f-string 语法支持
    - 变量和简单表达式插值
    - 基础类型转换
 
-2. **阶段 2 (v1.0)**:
-   - 格式化说明符支持
+2. **阶段 2 (v1.0) — ✅ 已交付（#402）**:
+   - 格式化说明符支持（宽度 / 精度 / type，非法说明符运行期报错）
    - 复杂表达式插值
-   - 性能优化
+   - `{{` / `}}` 转义与 `f"""` 多行模板
 
 3. **阶段 3 (v1.1)**:
    - 调试信息增强
    - 错误信息改进
-   - 更多格式化选项
+   - 插值表达式的编译期格式校验
 
 ### 依赖关系
 

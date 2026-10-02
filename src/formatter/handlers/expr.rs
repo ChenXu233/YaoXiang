@@ -777,7 +777,26 @@ fn format_fstring(
     let mut result = "f\"".to_string();
     for seg in segments {
         match seg {
-            FStringSegment::Text(text) => result.push_str(text),
+            FStringSegment::Text(text) => {
+                // Text 段持有解码后的字面内容（#402）：重转义为合法的
+                // f-string 源码——控制字符回到 \n 等形式（与字符串字面量
+                // 输出一致），花括号翻倍避免被重新解析为插值
+                for c in text.chars() {
+                    match c {
+                        '{' | '}' => {
+                            result.push(c);
+                            result.push(c);
+                        }
+                        '\n' => result.push_str("\\n"),
+                        '\r' => result.push_str("\\r"),
+                        '\t' => result.push_str("\\t"),
+                        '\0' => result.push_str("\\0"),
+                        '\\' => result.push_str("\\\\"),
+                        '"' => result.push_str("\\\""),
+                        c => result.push(c),
+                    }
+                }
+            }
             FStringSegment::Interpolation { expr, format_spec } => {
                 result.push('{');
                 result.push_str(&format_expr(expr, ctx, source_map));

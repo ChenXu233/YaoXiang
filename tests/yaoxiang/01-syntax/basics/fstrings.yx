@@ -1,6 +1,6 @@
 // 01-syntax/basics/fstrings.yx
-// 覆盖: 规范 RFC-012 F-String 模板字符串
-// 验证: f"hello {name}" 插值
+// 覆盖: 规范 RFC-012 F-String 模板字符串（#402：转义/多行/格式说明符）
+// 验证: f"hello {name}" 插值、{{/}} 字面花括号转义、f""" 多行模板、格式说明符
 // 状态: ✅ 可运行
 
 use std.assert
@@ -13,6 +13,55 @@ main: () -> Void = {
     x = 42
     val = f"value: {x}"
     assert.assert(val == "value: 42", "f-string x == 42")
+
+    // {{ / }} 转义为字面花括号（#402，RFC-012 与 Python 一致）
+    esc = f"{{literal}}"
+    assert.assert(esc == "{literal}", "{{literal}} renders literal braces")
+
+    mixed = f"a{{b}}c"
+    assert.assert(mixed == "a{b}c", "a{{b}}c == a{b}c")
+
+    // `{{` 与插值相邻：f"{{{x}}}" → 文本 { + 插值 + 文本 }
+    adj = f"{{{x}}}"
+    assert.assert(adj == "{42}", "f\"{{{x}}}\" == {42}")
+
+    // 转义与插值混合
+    combo = f"[{x}] [{{y}}]"
+    assert.assert(combo == "[42] [{y}]", "escaped braces survive next to interpolation")
+
+    // f""" 多行模板字符串（#402）
+    multi = f"""line1
+line2"""
+    assert.assert(multi == "line1\nline2", "multiline f-string keeps newline")
+
+    multi_esc = f"""{{literal}}
+{x}"""
+    assert.assert(multi_esc == "{literal}\n42", "multiline f-string brace escape")
+
+    // 格式说明符（RFC-012 BNF）
+    pi = 3.14159
+    fixed = f"Pi: {pi:.2f}"
+    assert.assert(fixed == "Pi: 3.14", "format spec .2f")
+
+    n = -5
+    padded = f"|{n:5d}|"
+    assert.assert(padded == "|   -5|", "width 5 right-align")
+
+    zeroed = f"{n:05d}"
+    assert.assert(zeroed == "-0005", "zero flag keeps sign left")
+
+    big = 255
+    assert.assert(f"{big:x}" == "ff", "hex presentation")
+    assert.assert(f"{big:#x}" == "0xff", "alt form hex prefix")
+    assert.assert(f"{big:b}" == "11111111", "binary presentation")
+    assert.assert(f"{big:o}" == "377", "octal presentation")
+
+    pct = 0.25
+    assert.assert(f"{pct:%}" == "25.000000%", "percent presentation")
+
+    s = "hello"
+    assert.assert(f"{s:.3}" == "hel", "string precision truncates")
+    assert.assert(f"{s:^7}" == " hello ", "center align width 7")
 }
 
 main()

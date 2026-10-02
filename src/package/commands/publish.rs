@@ -248,7 +248,7 @@ fn resolve_repo(
             return Ok(owner_repo);
         }
     }
-    if let Ok(output) = std::process::Command::new("git")
+    if let Ok(output) = crate::package::source::git::git_command()
         .arg("-C")
         .arg(project_dir)
         .args(["remote", "get-url", "origin"])

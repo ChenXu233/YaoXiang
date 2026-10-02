@@ -372,6 +372,11 @@ impl<'a> ParserState<'a> {
     ///
     /// Splits "Hello {name}, pi is {pi:.2f}" into:
     /// [Text("Hello "), Interpolation(name, None), Text(", pi is "), Interpolation(pi, Some(".2f"))]
+    ///
+    /// Brace escapes (#402, Python-consistent per RFC-012): the lexer keeps
+    /// brace sequences verbatim, so the text side resolves `{{` → `{` and
+    /// `}}` → `}` here; a lone `}` is kept literal. Escapes never apply
+    /// inside interpolation.
     fn parse_fstring_segments(
         raw: &str,
         span: Span,
@@ -383,6 +388,17 @@ impl<'a> ParserState<'a> {
         while let Some(&c) = chars.peek() {
             if c == '{' {
                 chars.next();
+
+                // Escaped `{{` → literal `{`
+
+                if chars.peek() == Some(&'{') {
+                    chars.next();
+
+                    text_buf.push('{');
+
+                    continue;
+                }
+
                 // Flush text buffer
                 if !text_buf.is_empty() {
                     segments.push(FStringSegment::Text(text_buf.clone()));
@@ -443,6 +459,16 @@ impl<'a> ParserState<'a> {
                         segments.push(FStringSegment::Text(format!("{{{}}}", expr_buf)));
                     }
                 }
+            } else if c == '}' {
+                chars.next();
+
+                // Escaped `}}` → literal `}`; a lone `}` is kept literal too
+
+                if chars.peek() == Some(&'}') {
+                    chars.next();
+                }
+
+                text_buf.push('}');
             } else {
                 text_buf.push(c);
                 chars.next();

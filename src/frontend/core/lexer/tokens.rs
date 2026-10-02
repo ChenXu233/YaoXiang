@@ -108,7 +108,10 @@ pub enum TokenKind {
     CharLiteral(char),
     StringLiteral(String),
     /// RFC-012: F-string template literal
-    /// Stores the raw content of f"..." including interpolation markers
+    /// Stores the raw content of f"..." / f"""...""" with interpolation
+    /// markers and brace escape sequences (`{{` / `}}`) preserved verbatim;
+    /// backslash escapes are already decoded. The parser splits segments and
+    /// resolves `{{` / `}}` (#402).
     FStringLiteral(String),
     VoidLiteral,
 

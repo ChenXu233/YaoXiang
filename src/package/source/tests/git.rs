@@ -7,8 +7,9 @@
 //! - 带 rev 参数的 URL 解析
 //! - GitSource 的 name 和 kind
 //! - ls-remote 失败的显式报错语义（RFC-014 Phase 3：不得静默降级）
+//! - git 子进程剥离仓库定位环境变量
 
-use crate::package::source::git::{GitRef, GitSource};
+use crate::package::source::git::{GitRef, GitSource, git_command};
 use crate::package::source::{Source, SourceKind};
 
 #[test]
@@ -61,4 +62,30 @@ fn test_list_tags_unreachable_url_errors_loudly() {
         result.is_err(),
         "ls-remote 失败应显式报错，实际: {result:?}"
     );
+}
+
+#[test]
+fn test_git_command_scrubs_repo_location_env() {
+    // Arrange：模拟 `git commit` 钩子环境注入的仓库定位变量——
+    // 子 git 继承后会把 fixture 的 init/clone 重定向到宿主仓库
+    let repo_location_vars = [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_NAMESPACE",
+        "GIT_CONFIG_PARAMETERS",
+    ];
+
+    // Act
+    let cmd = git_command();
+
+    // Assert：定位类变量全部被显式移除（get_envs 以 (key, None) 呈现）
+    for key in repo_location_vars {
+        let target = std::ffi::OsStr::new(key);
+        let scrubbed = cmd.get_envs().any(|(k, v)| k == target && v.is_none());
+        assert!(scrubbed, "{key} 应被 git_command 剥离");
+    }
 }
