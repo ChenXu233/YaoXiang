@@ -145,8 +145,15 @@ Array       ::= '[' Expr (',' Expr)* ']'   // 目标类型注解为 Array(T, N) 
 #### 1.6.5 列表推导式
 
 ```
-ListComp    ::= '[' Expr 'for' Identifier 'in' Expr (',' Expr)* ('if' Expr)? ']'
+ListComp    ::= '[' Expr ( 'for' Identifier 'in' Expr ( 'if' Expr )? )+ ']'
 ```
+
+> **#401（实现补全）**：`if` 过滤与多生成器子句自本版起落地——此前文法写作
+> `(',' Expr)* ('if' Expr)?`，既无实现对应（逗号附加表达式与多生成器均不支持），
+> `if` 过滤也被 parser 整体漏掉（解析完 iterable 直接期待 `']'`，报
+> `E0010 Expected RBracket, found KwIf`）。现按业界通行语义定案：生成器子句一至多个，
+> 按嵌套循环展开；每个子句可携带至多一个 `if` 过滤，条件强制 `Bool`（非 Bool 报
+> `E1054`）；后续子句的 iterable/condition 可引用先前子句绑定的迭代变量。
 
 > **行为收紧（迁移记录）**：迭代变量文法本就是
 > `'for' Identifier 'in'`，但旧实现中 pattern 走完整 pratt 解析——`'in'` 注册为中缀运算符后， `x`
