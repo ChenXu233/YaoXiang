@@ -50,6 +50,8 @@ docs/.env
 .codegraph
 .crush
 .worktrees
+# DSH AgentTeams 运行时状态（mailbox / team.json），非源码
+.agent-teams
 .z3/
 pkg/
 # 本地安装的 cargo-dist 二进制（仓库只 vendor 其生成的配置，RFC-037）
