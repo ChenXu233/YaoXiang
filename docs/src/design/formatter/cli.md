@@ -1,4 +1,6 @@
-title: "yaoxiang format 命令行用法" description: 格式化工具的命令行参数和使用方法
+---
+title: "yaoxiang format 命令行用法"
+description: "格式化工具的命令行参数和使用方法"
 ---
 
 # 命令行用法

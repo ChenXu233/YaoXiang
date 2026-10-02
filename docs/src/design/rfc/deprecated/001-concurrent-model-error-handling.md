@@ -1,6 +1,6 @@
 ---
 title: 'RFC-001：并作模型与错误处理系统'
-status: '已废弃（被 RFC-024 取代）'
+status: '已废弃'
 author: '晨煦'
 created: '2025-01-05'
 updated: '2026-05-11（修剪：移除 @auto、L1 回退启发式，精简讨论记录）'

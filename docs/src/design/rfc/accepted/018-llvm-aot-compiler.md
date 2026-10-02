@@ -10,6 +10,10 @@ tracking_issue: 'https://github.com/ChenXu233/YaoXiang/issues/134'
 
 # RFC-018：LLVM AOT 编译器设计
 
+> **⚠️ 实现现状（2026-10-02 核查）**：本 RFC 状态仍为「已接受」，但**实现尚未启动**——
+> 仓库 `Cargo.toml` 中无 `inkwell` / `llvm` / `cranelift` 依赖，`src/backends/` 仅有
+> `common` / `interpreter` / `runtime`，正文「实现策略」条目均未勾选。排期待定。
+>
 > **参考**:
 >
 > - [RFC-024：基于 spawn 块的并发模型](../accepted/024-concurrency-model.md)

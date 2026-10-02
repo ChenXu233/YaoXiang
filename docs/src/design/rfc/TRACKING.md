@@ -31,14 +31,14 @@
 | 030-assert-mechanism.md | RFC-030: assert 断言机制 | 已接受 | accepted\030-assert-mechanism.md | #97 | #155, #157, #158, #159, #160, #161, #162, #169 | -- | -- |
 | 036-test-framework.md | RFC-036: std.test 测试框架与 yaoxiang test 命令 | 已接受 | accepted\036-test-framework.md | #94, #95, #221, #319 | -- | -- | -- |
 | 037-industrial-packaging.md | RFC-037: 工业化分发方案 — 基于 cargo-dist 的编译器/工具链打包 | 已接受 | accepted\037-industrial-packaging.md | #230 | -- | -- | -- |
-| 038-statement-termination.md | RFC-038: 语句终止与换行规则（Statement Termination & Newline Rules） | 已接受 | accepted\038-statement-termination.md | #258 | #, 2, 5, 8 | -- | -- |
+| 038-statement-termination.md | RFC-038: 语句终止与换行规则（Statement Termination & Newline Rules） | 已接受 | accepted\038-statement-termination.md | #258 | #258 | -- | -- |
 | 001-concurrent-model-error-handling.md | RFC-001：并作模型与错误处理系统 | 已废弃 | deprecated\001-concurrent-model-error-handling.md | -- | -- | -- | -- |
+| 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 已废弃 | deprecated\019-typed-homoiconicity.md | -- | -- | -- | -- |
 | 020-dynamic-modules-ffi.md | RFC-020：动态模块与 FFI 集成 | 已废弃 | deprecated\020-dynamic-modules-ffi.md | -- | -- | -- | -- |
 | 021-library-driven-ffi-extension.md | RFC-021: 库驱动 FFI 扩展与跨语言调用支持 | 已废弃 | deprecated\021-library-driven-ffi-extension.md | -- | -- | -- | -- |
 | 022-hoare-logic-static-verification.md | RFC 022: 霍尔逻辑静态验证支持（规约注释与规约类型） | 已废弃 | deprecated\022-hoare-logic-static-verification.md | -- | -- | -- | -- |
 | 023-closure-capture-model.md | RFC-023: 闭包捕获模型 | 已废弃 | deprecated\023-closure-capture-model.md | -- | -- | -- | -- |
 | 002-cross-platform-io-libuv.md | RFC-002：基于 libuv 的资源类型 IO 实现层 | 草案 | draft\002-cross-platform-io-libuv.md | #102 | -- | -- | -- |
-| 019-typed-homoiconicity.md | RFC-019: 类型级同像性 (Typed Homoiconicity) - 语法即类型 | 草案 | draft\019-typed-homoiconicity.md | -- | -- | -- | -- |
 | 026b-yx-bindgen.md | RFC-026b: yx-bindgen 工具链 | 草案 | draft\026b-yx-bindgen.md | -- | -- | -- | -- |
 | 028-jit-compiler.md | RFC-028：JIT 编译器 — VM 内多级执行引擎 | 草案 | draft\028-jit-compiler.md | #101 | -- | -- | -- |
 | 029a-module-cache-incremental.md | RFC-029a: 模块缓存与增量重编译 | 草案 | draft\029a-module-cache-incremental.md | #293 | -- | -- | -- |

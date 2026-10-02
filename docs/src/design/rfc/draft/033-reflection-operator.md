@@ -1,9 +1,9 @@
 ---
 title: 'RFC-033: `^^` 反射运算符'
-status: '审核中'
+status: '草案'
 author: '晨煦'
 created: '2026-06-16'
-updated: '2026-07-05'
+updated: '2026-10-02'
 issue: '#136'
 ---
 
