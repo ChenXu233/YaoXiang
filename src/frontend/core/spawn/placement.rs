@@ -168,14 +168,15 @@ impl SpawnPlacementChecker {
             }
             Expr::ListComp {
                 element,
-                iterable,
-                condition,
+                generators,
                 ..
             } => {
                 self.check_expr(element);
-                self.check_expr(iterable);
-                if let Some(cond) = condition {
-                    self.check_expr(cond);
+                for gen in generators {
+                    self.check_expr(&gen.iterable);
+                    if let Some(cond) = &gen.condition {
+                        self.check_expr(cond);
+                    }
                 }
             }
             Expr::Dict(pairs, ..) => {

@@ -315,17 +315,17 @@ impl DeadCodeAnalyzer {
                 }
                 Expr::ListComp {
                     element,
-                    var,
-                    iterable,
-                    condition,
+                    generators,
                     ..
                 } => {
-                    referenced.insert(var.clone());
-                    collect_from_expr(element, referenced);
-                    collect_from_expr(iterable, referenced);
-                    if let Some(cond) = condition {
-                        collect_from_expr(cond, referenced);
+                    for gen in generators {
+                        referenced.insert(gen.var.clone());
+                        collect_from_expr(&gen.iterable, referenced);
+                        if let Some(cond) = &gen.condition {
+                            collect_from_expr(cond, referenced);
+                        }
                     }
+                    collect_from_expr(element, referenced);
                 }
                 Expr::FString { segments, .. } => {
                     for seg in segments {

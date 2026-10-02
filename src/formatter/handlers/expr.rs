@@ -109,22 +109,26 @@ pub fn format_expr(
         Expr::List(exprs, _span) => format_list(exprs, ctx, source_map),
         Expr::ListComp {
             element,
-            var,
-            iterable,
-            condition,
+            generators,
             span: _,
         } => {
-            let base = format!(
-                "[{} for {} in {}",
-                format_expr(element, ctx, source_map),
-                var,
-                format_expr(iterable, ctx, source_map)
-            );
-            if let Some(cond) = condition {
-                format!("{} if {}]", base, format_expr(cond, ctx, source_map))
-            } else {
-                format!("{}]", base)
-            }
+            let clauses = generators
+                .iter()
+                .map(|gen| {
+                    let base = format!(
+                        "for {} in {}",
+                        gen.var,
+                        format_expr(&gen.iterable, ctx, source_map)
+                    );
+                    if let Some(cond) = &gen.condition {
+                        format!("{} if {}", base, format_expr(cond, ctx, source_map))
+                    } else {
+                        base
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("[{} {}]", format_expr(element, ctx, source_map), clauses)
         }
         Expr::Dict(pairs, _span) => format_dict(pairs, ctx, source_map),
         Expr::Index {
