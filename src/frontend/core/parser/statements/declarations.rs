@@ -387,10 +387,15 @@ fn parse_assign_after_target(
                     // 不是本函数的参数列表。故本函数只取第一组签名参数，
                     // body 为“返回这个 lambda”。
                     // 不加此判会让 `a` 被合并进外层，`f` 变成接受 `a` 而非返回闭包。
+                    // RFC-027 §3：具名括号（`-> (r: P(r))`）与 `Paren` 同款——
+                    // 括号同样声明「这是完整类型（值）」，链条到此终止。
                     let paren_return = matches!(
                         type_annotation.as_ref(),
                         Some(Type::Fn { return_type, .. })
-                            if matches!(return_type.as_ref(), Type::Paren(_))
+                            if matches!(
+                                return_type.as_ref(),
+                                Type::Paren(_) | Type::NamedParen { .. }
+                            )
                     );
                     if paren_return {
                         // 本函数自己的**值**参数个数 = 第一组签名参数中非类型参数的个数

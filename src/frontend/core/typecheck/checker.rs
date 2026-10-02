@@ -4441,6 +4441,7 @@ impl TypeChecker {
                 proof_calls,
                 diags: &mut refined_diags,
                 fn_return_refined: None,
+                fn_return_binder: None,
                 fn_name: None,
             };
             let mut module_unit = RefinedScopeUnit::new();
@@ -4486,16 +4487,14 @@ impl TypeChecker {
             StmtKind::Assign {
                 target,
                 type_annotation: Some(type_ann),
+                signature_params,
                 value,
                 ..
             } => {
                 let mut registered = Vec::new();
-                // 已解析的绑定类型：注册与函数体走查（后置条件）共用，不重复解析
-                let mut resolved_binding_ty: Option<MonoType> = None;
                 if let Expr::Var(name, _) = target.as_ref() {
                     let mono_ty = MonoType::from(type_ann.clone());
                     let resolved_ty = self.resolve_type_annotation(&mono_ty, ctx.diags);
-                    resolved_binding_ty = Some(resolved_ty.clone());
                     // 初始值常量折叠（对前置值环境求值）——初始校验与值追踪共用
                     let init_value = value
                         .as_deref()
@@ -4528,7 +4527,12 @@ impl TypeChecker {
                             Expr::Var(n, _) => Some(n.as_str()),
                             _ => None,
                         };
-                        self.refined_walk_fn_body(body, fn_name, resolved_binding_ty.as_ref(), ctx);
+                        // RFC-027 §3：返回位精化的 binder 名与谓词实参只在 **AST** 里
+                        // 无损（`MonoType` 已把符号实参降级成占位），故在此按声明解析，
+                        // 走查只消费结果。
+                        let ret_refinement =
+                            self.resolve_return_refinement(type_ann, signature_params, ctx.diags);
+                        self.refined_walk_fn_body(body, fn_name, ret_refinement, ctx);
                     }
                 }
                 // RFC-027 §3.4：绑定初始值若为调用，校验其实参
@@ -4756,13 +4760,152 @@ impl TypeChecker {
         }
     }
 
+    /// RFC-027 §3：从函数注解 **AST** 解析返回位精化（后置条件）。
+    ///
+    /// 与 `resolve_type_annotation` 承担同一义务，区别只在**来源**：那里拿到的
+    /// 是已降级的 `MonoType`，而 `MonoType::from` 会把不可折叠的谓词实参
+    ///（`r + 100`）压成占位 `TypeRef("<const-expr>")`。实参一旦丢失，
+    /// `-> (r: P(任意实参))` 就退化成 `-> (r: P(<const-expr>))`，再被旧的
+    ///「不在作用域的自由变量即返回值形参」启发式代入返回值——实测 d1
+    ///（`-> (r: IsPositive(r + 100))` 返 `-5`）报出的约束因此是 `-5 > 0`。
+    ///
+    /// 返回形式参数严格按**声明的名字**识别：有声明（`(r: ...)`）时该名字绑定
+    /// `return` 的值；**其余不在作用域的自由变量不再被当成 binder**，而是报
+    /// 未定义标识符（`(r: Eq2(m, r))` 的 `m` 此前被静默代入返回值，约束退化成
+    /// `7 == 7` 恒真）。
+    ///
+    /// 失败路径（非谓词应用、实参不可转换、元数不符）一律静默返回 `None`：
+    /// 那几条诊断归注册路径（`resolve_type_annotation`），此处不重复报。
+    /// 唯独「有未声明的自由变量」是本函数新增的义务，必须报、不得静默放行。
+    ///
+    /// 作用域名单 = 本函数签名形参（`signature_params`，含 curry 各组与类型/
+    /// const 参数）+ 模块级绑定（`env.vars`）。嵌套函数体引用**外层**函数的
+    /// 形参时不在名单内——那类约束没有静态证据可判，报未定义标识符比静默
+    /// 代入返回值安全。
+    fn resolve_return_refinement(
+        &self,
+        type_ann: &crate::frontend::core::parser::ast::Type,
+        params: &[Param],
+        diags: &mut Vec<Diagnostic>,
+    ) -> Option<ReturnRefinement> {
+        use crate::frontend::core::parser::ast::Type as AstType;
+
+        let AstType::Fn { return_type, .. } = type_ann else {
+            return None;
+        };
+        let (binder, annotated) = match return_type.as_ref() {
+            AstType::NamedParen { param, inner, .. } => (Some(param.clone()), inner.as_ref()),
+            other => (None, other),
+        };
+        let AstType::Generic { name, args, .. } = strip_type_parens(annotated) else {
+            return None;
+        };
+        // `Terminates(m)` 是终止测度而非值约束（RFC-027 §6.9）
+        if name == "Terminates" {
+            return None;
+        }
+        let refined = self.refine_predicate_from_ast_args(name, args)?;
+
+        // RFC-027 §3：除声明名之外，不在作用域（形参/模块级绑定）的自由变量是
+        // 未定义标识符。旧启发式把它们一并代入返回值，使约束退化成恒真。
+        let mut undeclared: Vec<String> = Vec::new();
+        for free in refined_free_vars(&refined) {
+            if binder.as_deref() == Some(free.as_str()) {
+                continue;
+            }
+            if params.iter().any(|p| p.name == free) || self.env.vars.contains_key(&free) {
+                continue;
+            }
+            if !undeclared.contains(&free) {
+                undeclared.push(free);
+            }
+        }
+        if !undeclared.is_empty() {
+            for name in &undeclared {
+                diags.push(ErrorCodeDefinition::unknown_variable(name).build());
+            }
+            // 注解已被拒：不再生成返回点义务（避免连环诊断）
+            return None;
+        }
+        Some(ReturnRefinement { binder, refined })
+    }
+
+    /// 把谓词应用正格化为 `Refined`，实参取自 **AST**。
+    ///
+    /// 与 `resolve_type_annotation` 的 `Generic` 分支同源：编译期谓词代入谓词体、
+    /// 证明函数留作不透明 `Call`。唯一区别是实参来源——这里直接读 AST，
+    /// `r + 100` 这类符号实参不再被降级成占位。
+    ///
+    /// 取不出实参（不是谓词、形态不可转换、元数不符）时返回 `None` 且**不报诊断**：
+    /// 那几条路径的诊断归属注册路径，此处只负责「按 AST 无损代入」。
+    fn refine_predicate_from_ast_args(
+        &self,
+        name: &str,
+        args: &[crate::frontend::core::parser::ast::Type],
+    ) -> Option<MonoType> {
+        // 1. 编译期谓词定义（单参数）：实参代入谓词体模板
+        if let Some(def) = self.env.predicate_defs.get(name) {
+            if args.len() != 1 {
+                return None;
+            }
+            let arg_expr = self.ast_type_to_const_expr(&args[0])?;
+            let constraint =
+                crate::frontend::core::typecheck::layers::termination::substitute_const_expr(
+                    &def.constraint,
+                    std::slice::from_ref(&def.param_name),
+                    std::slice::from_ref(&arg_expr),
+                );
+            return Some(MonoType::Refined {
+                base: Box::new(def.param_type.clone()),
+                constraint,
+            });
+        }
+        // 2. 证明函数（源码定义、返回 `Type`）：约束是不透明应用
+        let mono_args: Vec<MonoType> = args.iter().map(|a| MonoType::from(a.clone())).collect();
+        let base = match self.lookup_proof_fn_base_type(name, &mono_args) {
+            Some(Ok(base)) => base,
+            _ => return None,
+        };
+        let const_args: Option<Vec<ConstExpr>> = args
+            .iter()
+            .map(|a| self.ast_type_to_const_expr(a))
+            .collect();
+        Some(MonoType::Refined {
+            base: Box::new(base),
+            constraint: ConstExpr::Call {
+                func: name.to_string(),
+                args: const_args?,
+            },
+        })
+    }
+
+    /// 谓词实参（AST 形态）→ `ConstExpr`。
+    ///
+    /// **先取 AST**：`r + 100` 在 AST 里是原样的编译期表达式，降级成 `MonoType`
+    /// 后才变成占位 `"<const-expr>"`。取不出时退回 `MonoType` 形态（与
+    /// `mono_type_to_const_expr` 同源：裸名 → `NamedVar`、字面量 → `Lit`），
+    /// 使实参覆盖面与既有路径一致。
+    fn ast_type_to_const_expr(
+        &self,
+        ty: &crate::frontend::core::parser::ast::Type,
+    ) -> Option<ConstExpr> {
+        use crate::frontend::core::parser::ast::Type as AstType;
+        match ty {
+            AstType::ConstExpr(expr) => convert_expr_to_const_expr(expr),
+            AstType::Paren(inner) | AstType::NamedParen { inner, .. } => {
+                self.ast_type_to_const_expr(inner)
+            }
+            other => self.mono_type_to_const_expr(&MonoType::from(other.clone())),
+        }
+    }
+
     /// 走查函数体：独立单元——依赖与值环境以函数体为边界，
     /// 不与外层或兄弟函数互通（跨函数同名不互相触发重验证）
     fn refined_walk_fn_body(
         &self,
         body: &crate::frontend::core::parser::ast::Block,
         fn_name: Option<&str>,
-        fn_ty: Option<&MonoType>,
+        ret_refinement: Option<ReturnRefinement>,
         ctx: &mut RefinedWalkCtx<'_, '_>,
     ) {
         // RFC-027 §3.3：当前函数的**形参精化**进假设集 Γ——同函数的每个 `return`
@@ -4772,18 +4915,17 @@ impl TypeChecker {
             .and_then(|n| self.collect_param_refinements().get(n).cloned())
             .unwrap_or_default();
         let saved_ret = ctx.fn_return_refined.take();
+        let saved_binder = ctx.fn_return_binder.take();
         let saved_name = ctx.fn_name.take();
-        ctx.fn_return_refined = fn_ty.cloned().and_then(|t| match t {
-            MonoType::Fn { return_type, .. } => {
-                // 返回位精化需**在此解析**：`resolve_type_annotation` 只处理顶层
-                // 形态，函数注解的形参由注册路径逐个解析，返回位没有对应步骤，
-                // 于是 `-> (r: IsPositive(r))` 至此仍是未解析的谓词应用
-                //（`Generic { IsPositive, [TypeRef r] }`）。解析只发生一次（本步），
-                // 故不会与注册路径重复报诊断。
-                Some(self.resolve_type_annotation(&return_type, ctx.diags))
-            }
-            _ => None,
-        });
+        // RFC-027 §3：后置条件在**声明处**由 AST 解析（见 `resolve_return_refinement`）。
+        // 走查只消费结果——注册路径那份 `MonoType` 已把不可折叠的谓词实参
+        //（`r + 100`）压成 `"<const-expr>"` 占位，据此判定会把实参丢掉。
+        let (refined, binder) = match ret_refinement {
+            Some(r) => (Some(r.refined), r.binder),
+            None => (None, None),
+        };
+        ctx.fn_return_refined = refined;
+        ctx.fn_return_binder = binder;
         ctx.fn_name = fn_name.map(str::to_string);
 
         ctx.shared_ctx.assumptions.enter_scope();
@@ -4811,6 +4953,7 @@ impl TypeChecker {
 
         ctx.shared_ctx.assumptions.exit_scope();
         ctx.fn_return_refined = saved_ret;
+        ctx.fn_return_binder = saved_binder;
         ctx.fn_name = saved_name;
     }
 
@@ -5054,11 +5197,13 @@ impl TypeChecker {
     /// - 形参位 → 调用点义务（`check_call_arg_refinements`）：自由变量绑到实参
     /// - 返回位 → 返回点义务（本函数）：自由变量按下列规则绑定
     ///
-    /// **返回值形参的识别**：§3 规定它「仅存在于类型签名中、仅被谓词引用，
-    /// **不进入函数体作用域**」。故约束的自由变量里**不在作用域**的那个即
-    /// 返回值形参，绑到 `return` 表达式的值；在作用域者（含形参）用自己的值。
-    /// 于是两个形态归一条规则：`-> (r: Sorted(r))`（r 不在作用域）与
-    /// `-> IsPositive(b - 1)`（b 是形参）同路径。
+    /// **返回值形参的识别**：严格按**声明的名字**——`resolve_return_refinement`
+    /// 从 `-> (r: P(...))` 取出 binder（§3：它「仅存在于类型签名中、仅被谓词
+    /// 引用，**不进入函数体作用域**」），只有它绑到 `return` 表达式的值。
+    /// 作用域内的自由变量（形参/模块级绑定）用自己的值或符号；既非声明名、
+    /// 又不在作用域的自由变量在声明处已报未定义标识符，不再被代入返回值。
+    /// 裸形态（`-> P(b - 1)`，约束只涉及形参）无声明名，约束与返回值无关地
+    /// 成立/不成立——两个形态因此归一条规则。
     ///
     /// 保守方向：返回表达式不可折叠时**不判**（无静态证据即不报）——强半场
     /// （§3.4「无静态证据则编译错误」）是单独的开关，见 #395。
@@ -5084,32 +5229,37 @@ impl TypeChecker {
         if free.is_empty() {
             return;
         }
-        // 约束里**符号代入**返回值形参（§3「值由 `return` 提供」）。
+        // 约束里**符号代入**声明的返回形式参数（§3「值由 `return` 提供」）。
         //
         // 用符号代入而非折常量：后置条件的价值正在于形参未知时也能判——
         // `r > 0` 代入 `b - 1` 得 `b - 1 > 0`，在 Γ={b>0} 下可判伪（b = 1）。
         // 折常量会把这类全漏掉（`b - 1` 含未知形参，折不出值）。
         let mut constraint = constraint;
-        for name in &free {
-            // 作用域内的变量（含形参）用自己的值/符号，不代入
-            if self.env.vars.contains_key(name) {
-                continue;
+        if let Some(binder) = ctx.fn_return_binder.clone() {
+            // 只有声明名由 `return` 供给；约束未引用它时（如 `-> (r: P(5))`）
+            // 无需代入，照常判定。
+            if free.iter().any(|name| name == &binder) {
+                let Some(returned) =
+                    crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(
+                        value,
+                    )
+                else {
+                    // 返回表达式转不出常量表达式（如含调用）：无从代入，保守不判
+                    return;
+                };
+                constraint =
+                    crate::frontend::core::typecheck::layers::termination::substitute_const_expr(
+                        &constraint,
+                        std::slice::from_ref(&binder),
+                        &[returned],
+                    );
             }
-            let Some(returned) =
-                crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(value)
-            else {
-                // 返回表达式转不出常量表达式（如含调用）：无静态证据即不判
-                return;
-            };
-            constraint =
-                crate::frontend::core::typecheck::layers::termination::substitute_const_expr(
-                    &constraint,
-                    std::slice::from_ref(name),
-                    &[returned],
-                );
         }
         // 作用域内变量的当前值环境进 bindings；形参不在其中，留给 SMT 作符号
         let bindings = unit.values.clone();
+        // 代入后的约束文本（含 `return` 值的符号形态），进诊断比未代入形态更可读。
+        // 它是**约束表达式**（不是自然语言句子），故与 locale 无关。
+        let constraint_text = constraint.to_string();
         let substituted = MonoType::Refined { base, constraint };
         match crate::frontend::core::typecheck::layers::predicate::check_predicate(
             ctx.shared_ctx,
@@ -5139,20 +5289,67 @@ impl TypeChecker {
                         .fn_name
                         .clone()
                         .unwrap_or_else(|| "<anonymous>".to_string());
+                    // RFC-027 §3：返回点义务的对象是**返回位**，不是签名形参——
+                    // 此前这里用 `free[0]`（多参数谓词时那是形参名），文案把约束
+                    // 挂到了错误对象上（实测：`SumUpTo(b, r)` 报成 "'b' 的精化
+                    // 类型约束"）。
+                    //
+                    // 本槽只传 **标识符**：声明了 binder 就传它的名字（`r`——它是
+                    // 返回形式参数，不是签名形参）；裸形态没有声明名，按 RFC-027 §2
+                    // 取返回值形参的规范名 `result`（见 `DEFAULT_RETURN_BINDER`）。
+                    // 任何自然语言措辞都由 locale 模板负责，code 侧不得写某语言的词。
+                    //
+                    // 这里**不覆盖 help**：E2031 的本地化 help 已完整给出可操作的
+                    // 替代写法（实参可静态取值 / 提供返回 Type 的证明函数），
+                    // 位置化文案要走 locales，不在 code 里拼。
+                    let subject = match &ctx.fn_return_binder {
+                        Some(binder) => binder.clone(),
+                        None => DEFAULT_RETURN_BINDER.to_string(),
+                    };
                     ctx.diags.push(
-                        ErrorCodeDefinition::refined_unproven(
-                            &fn_name,
-                            &free[0],
-                            &ret_ty.to_string(),
-                        )
-                        .at(span)
-                        .build(),
+                        ErrorCodeDefinition::refined_unproven(&fn_name, &subject, &constraint_text)
+                            .at(span)
+                            .build(),
                     );
                 } else {
                     ctx.proof_calls.extend(calls);
                 }
             }
         }
+    }
+}
+
+/// 裸形态返回值形参的**规范名**：`-> P(...)` 在语义上就是 `-> (result: P(...))`
+/// 的简写（RFC-027 §2：spec 的 `max` 例子即 `-> (result: IsMax(T, arr, result))`，
+/// 「`result` 是返回值形参，值由 `return` 提供」）。
+///
+/// 用途：裸形态没有声明名，E2031 的 `{var}` 槽取它作标识——与「按声明名识别」
+/// 同一口径、是合法标识符（无任何语言的散文），跨 6 语言模板都自然：
+/// en 渲染 `the refinement type constraint of 'result'`，zh 渲染 `'result' 的精化类型约束`。
+const DEFAULT_RETURN_BINDER: &str = "result";
+
+/// RFC-027 §3：返回位精化（后置条件）的解析结果。
+///
+/// `binder` 是**声明的**返回形式参数名（`-> (r: P(r))` 的 `r`）：只有它由
+/// `return` 的值供给；`refined` 的约束已按 AST 实参代入——`r + 100` 保持符号
+/// 形态，而不是被降级成占位 `<const-expr>`。
+struct ReturnRefinement {
+    /// `-> (r: P(...))` 声明的返回形式参数名；裸精化形态（`-> P(b - 1)`）为 `None`
+    binder: Option<String>,
+    /// 精化类型（`Refined { base, constraint }`）
+    refined: MonoType,
+}
+
+/// 剥离类型外侧的括号：精化解析里 `Paren`（RFC-004）与 `NamedParen`
+///（RFC-027 §3 具名形态）同为透明，只递归内层。
+fn strip_type_parens(
+    ty: &crate::frontend::core::parser::ast::Type
+) -> &crate::frontend::core::parser::ast::Type {
+    use crate::frontend::core::parser::ast::Type as AstType;
+    match ty {
+        AstType::Paren(inner) => strip_type_parens(inner),
+        AstType::NamedParen { inner, .. } => strip_type_parens(inner),
+        other => other,
     }
 }
 
@@ -5168,6 +5365,12 @@ struct RefinedWalkCtx<'a, 'env> {
     /// 函数体边界保存/恢复（lambda 可嵌套）——外层函数的后置条件不得
     /// 泄漏到内层函数体的 `return` 上。`None` = 无后置条件或无函数上下文。
     fn_return_refined: Option<MonoType>,
+    /// 当前函数**声明的返回形式参数名**（`-> (r: P(r))` 的 `r`）。
+    ///
+    /// RFC-027 §3：只有这个名字由 `return` 的值供给；其余自由变量必须在
+    /// 作用域内（形参/模块级绑定），否则在解析处报未定义标识符。
+    /// 裸形态（`-> P(b - 1)`，约束只涉及形参）无声明名 ⇒ `None`。
+    fn_return_binder: Option<String>,
     /// 当前函数名（进 E4018 的未证明文案）。
     fn_name: Option<String>,
 }

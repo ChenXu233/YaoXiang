@@ -35,6 +35,7 @@ mod rfc027_phase3_e2e;
 mod rfc027_phase4_e2e;
 mod rfc027_predicate_defs;
 mod rfc027_refined_transparency;
+mod rfc027_return_refinement;
 mod rfc027a;
 mod signature;
 mod types;

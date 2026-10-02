@@ -185,32 +185,37 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
                 };
 
             let mut param_types = Vec::new();
+            // RFC-027 §3：具名参数的**名字**不再无条件丢弃——单具名形态
+            // （`(r: IsPositive(r + 1))`，括号后不跟 `->`）声明的正是**返回形式参数名**，
+            // 类型检查器据此按名识别返回点义务（见 `Type::NamedParen`）。
+            let mut named_params: Vec<(String, Span)> = Vec::new();
 
             if has_named_params {
                 // Parse named parameters: (name: Type, name: Type, ...) -> ReturnType
-                // For function type annotation, we only care about the types
                 while !state.at(&TokenKind::RParen) && !state.at_end() {
-                    // Skip parameter name
-                    if let Some(TokenKind::Identifier(_name)) = state.current().map(|t| &t.kind) {
-                        state.bump(); // consume name
+                    let Some(TokenKind::Identifier(param_name)) = state.current().map(|t| &t.kind)
+                    else {
+                        break;
+                    };
+                    let param_name = param_name.clone();
+                    let param_name_span = state.span();
+                    state.bump(); // consume name
 
-                        // Expect colon and type
-                        if !state.skip(&TokenKind::Colon) {
-                            break;
-                        }
+                    // Expect colon and type
+                    if !state.skip(&TokenKind::Colon) {
+                        break;
+                    }
 
-                        // Parse the type
-                        if let Some(ty) = parse_type_annotation(state) {
-                            param_types.push(ty);
-                        } else {
-                            break;
-                        }
-
-                        // Skip comma if present
-                        if !state.skip(&TokenKind::Comma) {
-                            break;
-                        }
+                    // Parse the type
+                    if let Some(ty) = parse_type_annotation(state) {
+                        named_params.push((param_name, param_name_span));
+                        param_types.push(ty);
                     } else {
+                        break;
+                    }
+
+                    // Skip comma if present
+                    if !state.skip(&TokenKind::Comma) {
                         break;
                     }
                 }
@@ -244,11 +249,21 @@ pub fn parse_type_annotation(state: &mut ParserState<'_>) -> Option<Type> {
 
             // Not a function type, just a tuple
             if param_types.len() == 1 {
-                // 单元素括号 = 完整类型（RFC-004 柯里化语义）：
-                // 保留为 `Paren`，让 split_curry 知道此处链条终止。
-                // 此前直接剥掉，导致 `() -> ((a:Int)->Int)` 与
-                // `() -> (a:Int)->Int` 解析成同一个 AST（括号无意义）。
-                Some(Type::Paren(Box::new(param_types.pop().unwrap())))
+                let inner = Box::new(param_types.pop().unwrap());
+                match named_params.first() {
+                    // 单具名参数（`(r: IsPositive(r + 1))`）= RFC-027 §3 的返回位
+                    // 具名精化：binder 名必须留存（其余语义与 `Paren` 同构）。
+                    Some((param, param_span)) => Some(Type::NamedParen {
+                        param: param.clone(),
+                        param_span: *param_span,
+                        inner,
+                    }),
+                    // 单元素括号 = 完整类型（RFC-004 柯里化语义）：
+                    // 保留为 `Paren`，让 split_curry 知道此处链条终止。
+                    // 此前直接剥掉，导致 `() -> ((a:Int)->Int)` 与
+                    // `() -> (a:Int)->Int` 解析成同一个 AST（括号无意义）。
+                    None => Some(Type::Paren(inner)),
+                }
             } else {
                 Some(Type::Tuple(param_types))
             }

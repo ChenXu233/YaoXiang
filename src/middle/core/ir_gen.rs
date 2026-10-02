@@ -508,7 +508,10 @@ impl AstToIrGenerator {
                     // parser 把签名拍平成 `signature_params`（内层名供 body 对齐类型），
                     // 故此处必须把游标退回，否则 `f: () -> ((a:Int)->Int)` 的 `a`
                     // 会被当成本层参数，`f` 变成接受 `a` 而非返回闭包。
-                    let next_is_paren = matches!(ret_type, ast::Type::Paren(_));
+                    // RFC-027 §3：具名括号（`(r: P(r))`）与 `Paren` 同款——
+                    // 括号声明“这是一个完整类型”，链条到此终止。
+                    let next_is_paren =
+                        matches!(ret_type, ast::Type::Paren(_) | ast::Type::NamedParen { .. });
                     if next_is_paren {
                         cursor = start;
                     }

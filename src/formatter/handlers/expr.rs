@@ -485,36 +485,17 @@ fn format_return_with_names(
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    if let Type::Paren(inner) = ty {
-        let inner_str = match inner.as_ref() {
-            Type::Fn {
-                params: inner_tys,
-                return_type,
-            } => {
-                let count = inner_tys.len();
-                let (group, rest) = split_params_at(params, count);
-                if !group.is_empty() && group.len() == count {
-                    let named: Vec<String> = inner_tys
-                        .iter()
-                        .zip(group.iter())
-                        .map(|(t, p)| {
-                            format!(
-                                "{}: {}",
-                                p.name,
-                                super::types::format_type(t, ctx, source_map)
-                            )
-                        })
-                        .collect();
-                    let ret = format_return_with_names(return_type, rest, ctx, source_map);
-                    format!("({}) -> {}", named.join(", "), ret)
-                } else {
-                    super::types::format_type(inner, ctx, source_map)
-                }
-            }
-            other => super::types::format_type(other, ctx, source_map),
-        };
-        return format!("({})", inner_str);
+    // RFC-027 §3：具名括号（`-> (r: P(r))`）与 `Paren` 同款终止链条，
+    // 只是多一层声明的 binder 名——同样不得把括号内的参数名往外层拍平。
+    if let Type::NamedParen { param, inner, .. } = ty {
+        let inner_str = format_paren_inner_with_names(inner, params, ctx, source_map);
+        return format!("({param}: {inner_str})");
     }
+    if let Type::Paren(inner) = ty {
+        let inner_str = format_paren_inner_with_names(inner, params, ctx, source_map);
+        return format!("({inner_str})");
+    }
+
     if let Type::Fn {
         params: inner_tys,
         return_type,
@@ -539,6 +520,43 @@ fn format_return_with_names(
         }
     }
     super::types::format_type(ty, ctx, source_map)
+}
+
+/// 括号内层的返回类型格式化：`Fn` 内层要按签名参数名补全（`Paren` 与 RFC-027 §3
+/// 的 `NamedParen` 共用——两者都声明「括号内是完整类型（值）」，参数名不得外拍）。
+fn format_paren_inner_with_names(
+    inner: &Type,
+    params: &[Param],
+    ctx: &FormatContext,
+    source_map: &SourceMap,
+) -> String {
+    match inner {
+        Type::Fn {
+            params: inner_tys,
+            return_type,
+        } => {
+            let count = inner_tys.len();
+            let (group, rest) = split_params_at(params, count);
+            if !group.is_empty() && group.len() == count {
+                let named: Vec<String> = inner_tys
+                    .iter()
+                    .zip(group.iter())
+                    .map(|(t, p)| {
+                        format!(
+                            "{}: {}",
+                            p.name,
+                            super::types::format_type(t, ctx, source_map)
+                        )
+                    })
+                    .collect();
+                let ret = format_return_with_names(return_type, rest, ctx, source_map);
+                format!("({}) -> {}", named.join(", "), ret)
+            } else {
+                super::types::format_type(inner, ctx, source_map)
+            }
+        }
+        other => super::types::format_type(other, ctx, source_map),
+    }
 }
 
 /// 按 count 切分参数切片

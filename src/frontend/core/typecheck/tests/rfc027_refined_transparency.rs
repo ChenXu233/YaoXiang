@@ -372,8 +372,9 @@ fn test_return_postcondition_proved_from_param_refinement_is_clean() {
 /// `f: (b: Int) -> IsPositive(b + 1) = { b + 1 }`：约束 `b + 1 > 0` 与返回值无关，
 /// 它是「返回类型在 b ≤ -1 时为空」的断言；b 无下界故有反例 ⇒ 拒绝。
 ///
-/// 这正是 §3「统一性」的体现：两个形态同一条规则，只是自由变量来源不同
-///（`r` 不在作用域 ⇒ 绑返回值；`b` 是形参 ⇒ 用它自己）。
+/// 这正是 §3「统一性」的体现：两个形态同一条规则，只是绑定来源不同——
+/// 具名形态（`-> (r: P(...))`）的声明名绑 `return` 的值，裸形态没有声明名，
+/// 约束里的 `b` 是形参 ⇒ 用自己的符号（见 rfc027_return_refinement.rs）。
 #[test]
 fn test_bare_return_refinement_checked_over_params() {
     // Arrange

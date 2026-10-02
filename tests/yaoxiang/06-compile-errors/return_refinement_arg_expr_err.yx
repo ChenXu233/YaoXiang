@@ -1,0 +1,20 @@
+// 06-compile-errors/return_refinement_arg_expr_err.yx
+// 覆盖: RFC-027 §3 —— 谓词实参代入后的约束为假时必须拒绝
+// 验证: `-> (r: IsPositive(r - 100))` 的约束是 `r - 100 > 0`；代入返回值 `5`
+//       得 `5 - 100 > 0`（-95 > 0）为假 ⇒ E4018。
+// 状态: ❌ 应被编译期拒绝
+//
+// 修复前的静默漏洞：谓词实参退化成占位并被当成 `IsPositive(r)`，约束变成
+// `5 > 0` 而通过。正例见 02-type-system/return_refinement_arg_expr.yx。
+
+// expect: compile-error E4018
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+bad: () -> (r: IsPositive(r - 100)) = {
+    return 5
+}
+
+main: () -> Void = {
+    print(bad())
+}

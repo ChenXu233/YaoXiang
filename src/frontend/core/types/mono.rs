@@ -690,6 +690,9 @@ impl From<ast::Type> for MonoType {
             // RFC-004 括号语义：`Paren` 在类型检查/单态化/解释器层视为**透明**，
             // 只递归内层（唯一“看见”它的是 split_curry 与 formatter）。
             ast::Type::Paren(inner) => MonoType::from(*inner),
+            // RFC-027 §3：具名括号 `(r: P(...))` 的 binder 是**编译期**概念
+            //（返回值形式参数名，只被谓词引用），运行时类型就是内层——同样透明。
+            ast::Type::NamedParen { inner, .. } => MonoType::from(*inner),
             ast::Type::Name { name, .. } => {
                 Self::from_builtin_name(&name).unwrap_or(MonoType::TypeRef(name))
             }

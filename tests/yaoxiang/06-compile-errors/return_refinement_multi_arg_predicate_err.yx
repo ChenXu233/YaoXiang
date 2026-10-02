@@ -1,0 +1,22 @@
+// 06-compile-errors/return_refinement_multi_arg_predicate_err.yx
+// 覆盖: RFC-027 §2 —— 返回位的**多参数谓词**（证明函数形态）实参含变量
+// 验证: `-> (r: SumUpTo(b, r))` 的实参含形参 b（无界、不可静态取值），证明内核执行不了
+//       该证明函数 ⇒ E2031；诊断对象是**返回位**——{var} 槽取声明的 binder 名 `r`
+//       （不再误挂到形参 b），替代写法由 E2031 的本地化 help 给出（实参可静态取值 /
+//       提供返回 Type 的证明函数）。
+// 状态: ❌ 应被编译期拒绝
+//
+// 该程序语义上是对的（r = b * 2 确实满足 s == n * 2），本版按「证不出即拒绝」处理——
+// 真支持另开 issue。字面量实参路径见 return_refinement_multi_arg_literal_err.yx。
+
+// expect: compile-error E2031
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+f: (b: Int) -> (r: SumUpTo(b, r)) = {
+    return b * 2
+}
+
+main: () -> Void = {
+    print(f(3))
+}
