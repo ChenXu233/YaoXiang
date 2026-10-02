@@ -32,9 +32,21 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 默认同时扫中英两侧。
+#
+# 背景（2026-10-02）：英文侧 docs/src/en/** 是 auto-translate 的产物，而翻译
+# prompt 明确要求「Keep code blocks unchanged」——中文源码块改了，英文副本
+# 不会跟着变。实测就出现过：中文侧 124 块修到 0 失败后，英文侧仍留着
+# yaoxiang 二进制名、0.7.14、裸 ok/err、list.append 等全部旧写法，
+# 因为门禁只扫中文侧而完全看不见。
+#
+# 两侧都扫之后，「中文修了英文没修」会直接让 CI 变红。
+# 差异输出按 locale 分组，便于定位是哪一侧的锅。
 SCAN_DIRS = [
     os.path.join(ROOT, 'docs', 'src', 'tutorial'),
     os.path.join(ROOT, 'docs', 'src', 'guide'),
+    os.path.join(ROOT, 'docs', 'src', 'en', 'tutorial'),
+    os.path.join(ROOT, 'docs', 'src', 'en', 'guide'),
 ]
 # 明确标记为「故意展示错误」或伪代码的块，跳过
 SKIP_MARKERS = ('should-fail', '预期错误', '故意错误', 'pseudo', '伪代码',
@@ -308,7 +320,10 @@ def main():
         if not os.path.isdir(base):
             continue
         for r, dirs, files in os.walk(base):
-            dirs[:] = [d for d in dirs if d not in ('en', 'node_modules')]
+            # 只排构建期与依赖目录。**不能排 'en'** —— SCAN_DIRS 里已经显式
+            # 列了 en 侧根目录，排掉就等于又回到「只扫中文侧」。
+            dirs[:] = [d for d in dirs
+                       if d not in ('node_modules', '.vitepress', 'dist')]
             for fn in sorted(files):
                 if not fn.endswith('.md'):
                     continue
@@ -334,11 +349,24 @@ def main():
                             continue
                     failures.append((rel, lineno, first, err[:600], mode))
 
-    lines = [f'扫描 {len(SCAN_DIRS)} 个目录，抽取并校验 {total} 个代码块',
-             f'失败 {len(failures)} 个', '']
-    for rel, lineno, msg, full, mode in failures:
-        lines.append(f'{rel}:{lineno}  [{mode}]  {msg}')
-    lines.append('')
+    # 按 locale 分组：英文侧失败几乎总是「中文侧修了、en 没跟上」
+    def _loc(r):
+        # rel 形如 docs/src/en/... 或 docs/src/...
+        return 'en' if '/en/' in r.replace('\\', '/') else 'zh'
+
+    zh_fail = [f for f in failures if _loc(f[0]) == 'zh']
+    en_fail = [f for f in failures if _loc(f[0]) == 'en']
+
+    lines = [f'扫描 {len(SCAN_DIRS)} 个目录（zh {len(SCAN_DIRS) - 2} 个 + en 2 个），'
+             f'抽取并校验 {total} 个代码块',
+             f'失败 {len(failures)} 个（zh {len(zh_fail)} / en {len(en_fail)}）', '']
+    for tag, group in (('ZH', zh_fail), ('EN', en_fail)):
+        if not group:
+            continue
+        lines.append(f'--- {tag} 侧 {len(group)} 个 ---')
+        for rel, lineno, msg, full, mode in group:
+            lines.append(f'  {rel}:{lineno}  [{mode}]  {msg}')
+        lines.append('')
     lines.append('=' * 60)
     for rel, lineno, msg, full, mode in failures:
         lines.append(f'--- {rel}:{lineno}  ({mode}) ---')

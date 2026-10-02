@@ -72,10 +72,8 @@ Point(x=1.0)                   // OK: x=1.0, y=0
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 // 注意：标准库已内置 std.option（Option + Try），不建议自行定义
-// // 注意：标准库已内置 std.option（Option + Try），不建议自行定义
 // Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 // 注意：裸构造器 ok/err 当前报 E1001（实测），标准库见 std.result
-// // 注意：裸构造器 ok/err 当前报 E1001（实测），标准库见 std.result
 // Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 接口（字段全为函数类型的记录类型）

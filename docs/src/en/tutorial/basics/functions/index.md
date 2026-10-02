@@ -223,6 +223,7 @@ msg = send(
 Misspelling a parameter name or specifying it twice will result in a compile-time error, not
 silently treating it as positional:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // ❌ add has no parameter named c → E1014
 result = add(b = 5, c = 1)

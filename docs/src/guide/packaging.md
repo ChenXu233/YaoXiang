@@ -39,7 +39,7 @@ yx run src/main.yx
 my-project/
 ├── yaoxiang.toml      # 项目清单
 ├── yaoxiang.lock      # 依赖锁定文件
-├── .yaoxiang/.yaoxiang/vendor/            # 依赖存储
+├── .yaoxiang/vendor/       # 依赖存储（实测 yx init 生成 .yaoxiang/vendor/std/）
 └── src/
     └── main.yx
 ```

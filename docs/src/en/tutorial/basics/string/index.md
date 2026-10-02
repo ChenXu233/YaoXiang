@@ -79,6 +79,7 @@ print(f"Length: {name.len()}")        // Length: 5
 
 If you need to output a literal `{` or `}`, simply **double them**:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 print(f"{{literal braces}}")     // {literal braces}
 print(f"Set: {{1, 2, 3}}")       // Set: {1, 2, 3}
