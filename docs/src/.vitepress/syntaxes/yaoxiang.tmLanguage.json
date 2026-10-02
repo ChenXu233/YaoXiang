@@ -78,30 +78,66 @@
       ]
     },
     "fstrings": {
-      "name": "string.quoted.fstring.yaoxiang",
-      "begin": "f\"",
-      "end": "\"",
       "patterns": [
         {
-          "name": "constant.character.escape.yaoxiang",
-          "match": "\\\\([\"\\\\nrt])"
+          "name": "string.quoted.double.multiline.fstring.yaoxiang",
+          "begin": "f\"\"\"",
+          "end": "\"\"\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.yaoxiang",
+              "match": "\\\\([\"\\\\nrt])"
+            },
+            {
+              "name": "meta.embedded.expression.yaoxiang",
+              "begin": "\\{",
+              "end": "\\}",
+              "patterns": [{ "include": "$self" }]
+            }
+          ]
         },
         {
-          "name": "meta.embedded.expression.yaoxiang",
-          "begin": "\\{",
-          "end": "\\}",
-          "patterns": [{ "include": "$self" }]
+          "name": "string.quoted.fstring.yaoxiang",
+          "begin": "f\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.yaoxiang",
+              "match": "\\\\([\"\\\\nrt])"
+            },
+            {
+              "name": "meta.embedded.expression.yaoxiang",
+              "begin": "\\{",
+              "end": "\\}",
+              "patterns": [{ "include": "$self" }]
+            }
+          ]
         }
       ]
     },
     "strings": {
-      "begin": "\"",
-      "end": "\"",
-      "name": "string.quoted.yaoxiang",
       "patterns": [
         {
-          "name": "constant.character.escape.yaoxiang",
-          "match": "\\\\([\"\\\\nrt])"
+          "name": "string.quoted.double.multiline.yaoxiang",
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.yaoxiang",
+              "match": "\\\\([\"\\\\nrt])"
+            }
+          ]
+        },
+        {
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.yaoxiang",
+          "patterns": [
+            {
+              "name": "constant.character.escape.yaoxiang",
+              "match": "\\\\([\"\\\\nrt])"
+            }
+          ]
         }
       ]
     },
