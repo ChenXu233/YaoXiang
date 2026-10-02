@@ -9,13 +9,21 @@
 //! - manifest 要求与 lock 版本不满足（add 后 lock 未刷新等）
 //!
 //! `std` 接口目录（RFC-037，非包布局）不在核对范围。
+//!
+//! wasm32 下 `crate::package` 不编译：依赖它的核对函数整体门控，
+//! 仅保留不依赖包层的 `ConsistencyReport`（orchestrator 错误枚举引用其类型）。
 
 use std::path::Path;
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::package::dependency::DependencySpec;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::package::error::PackageResult;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::package::lock::LockFile;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::package::manifest::PackageManifest;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::package::source::resolver::parse_version_req;
 
 /// 一致性检查结果
@@ -59,6 +67,7 @@ impl ConsistencyReport {
 /// std 的单文件/未 install 项目）直接返回一致——「manifest 有依赖但从未
 /// install」由 Gap2 的 E5001 install 提示负责，不在此处判死（保持单文件
 /// 与新项目的零配置可用）。
+#[cfg(not(target_arch = "wasm32"))]
 pub fn check_vendor_lock_consistency(project_root: &Path) -> PackageResult<ConsistencyReport> {
     let vendor_dir = project_root.join(".yaoxiang").join("vendor");
     if !vendor_dir.is_dir() {
@@ -132,6 +141,7 @@ pub fn check_vendor_lock_consistency(project_root: &Path) -> PackageResult<Consi
 ///
 /// 与 [`check_vendor_lock_consistency`] 同构，但依赖来源是**合并解析**产物
 /// （成员引用不计——它们不经 vendor），清单是根（成员无自有 lock，决议 3）。
+#[cfg(not(target_arch = "wasm32"))]
 pub fn check_workspace_consistency(ws_root: &Path) -> PackageResult<ConsistencyReport> {
     let vendor_dir = ws_root.join(".yaoxiang").join("vendor");
     if !vendor_dir.is_dir() {
@@ -192,6 +202,7 @@ pub fn check_workspace_consistency(ws_root: &Path) -> PackageResult<ConsistencyR
 }
 
 /// 在 lock 中查依赖的锁定版本；不存在返回 None
+#[cfg(not(target_arch = "wasm32"))]
 pub fn locked_version(
     project_root: &Path,
     name: &str,
@@ -204,6 +215,7 @@ pub fn locked_version(
 ///
 /// 供发现阶段逐条 `use` 查询（vendor lock 优先解析）；一致性判定走
 /// [`check_vendor_lock_consistency`]，不共用此接口。
+#[cfg(not(target_arch = "wasm32"))]
 pub fn lock_versions(
     project_root: &Path
 ) -> PackageResult<std::collections::HashMap<String, String>> {

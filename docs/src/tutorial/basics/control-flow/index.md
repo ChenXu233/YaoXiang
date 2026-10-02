@@ -19,8 +19,12 @@ YaoXiang 提供了五种控制流结构，各司其职：
 快速感受一下：
 
 ```yaoxiang
+score = 72
+number = 3
+
 // if 是表达式，可以返回值
 status = if score >= 60 { "及格" } else { "不及格" }
+print(status)
 
 // for 遍历范围
 for i in 0..5 {
@@ -40,8 +44,16 @@ description = match number {
     1 => "一",
     _ => "其他",
 }
+print(description)
 ```
 
 这些控制流结构都可以作为**表达式**使用——它们能计算出一个值。这是 YaoXiang 和许多传统语言的一个重要区别。
 
 接下来的章节会逐一深入讲解每种控制流。建议按顺序阅读，因为它们之间存在自然的递进关系。
+
+## 章节
+
+- [条件分支 if-elif-else](./if-elif-else.md) — 条件判断与分支选择
+- [for 循环](./for.md) — 遍历范围与集合
+- [while 循环](./while.md) — 条件循环与累加
+- [match 模式匹配](./match.md) — 按值的结构分支

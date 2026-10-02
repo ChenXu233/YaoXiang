@@ -1,25 +1,25 @@
 ---
-title: 'Installing YaoXiang'
+title: 'Install YaoXiang'
 description:
-  'Two-tier installation channels — the standard channel is extract-and-use (Go/Zig style), the
-  friendly channel is a one-line command plus version management (Rust/rustup style)'
+  'Two-tier installation channel — Standard channel: extract and use (Go/Zig mode); Easy channel:
+  one-line command + version management (Rust/rustup mode)'
 ---
 
-# Installing YaoXiang
+# Install YaoXiang
 
-YaoXiang's command surface follows a **front door / engine separation** (RFC-037):
+YaoXiang's command surface is **front-end / engine separated** (RFC-037):
 
-- **`yx`** — the front door, the daily entry point. It has built-in version management
-  (`yx toolchain` / `yx self update`); all other commands are transparently forwarded to the engine
-- **`yaoxiang-rs`** — the engine, responsible for compilation / execution / package management /
-  formatting / LSP; generally not invoked directly
+- **`yx`** — the front-end, the daily entry point. It has built-in version management
+  (`yx toolchain` / `yx self update`); all other commands are passed through to the engine.
+- **`yaoxiang-rs`** — the engine, responsible for compile/run/package management/format/LSP; not
+  normally invoked directly.
 
-Installation is split into two channels, and all channels share the same product structure (`bin/` +
+Installation is split into two tiers; all channels share the same artifact structure (`bin/` +
 `lib/yaoxiang/std/`).
 
-## Standard Channel: Extract-and-Use (Go/Zig style)
+## Standard channel: extract and use (Go/Zig mode)
 
-Download the platform-appropriate archive from
+Download the platform-specific archive from
 [GitHub Releases](https://github.com/ChenXu233/YaoXiang/releases), extract it to any directory, and
 add `bin/` to your PATH:
 
@@ -28,11 +28,11 @@ tar xzf yaoxiang-<version>-<platform>.tar.gz
 export PATH="$PWD/yaoxiang-<version>-<platform>/bin:$PATH"
 ```
 
-After extraction, you can use it directly: `yx --version`. The archive ships with all dependencies
-(including the Z3 shared library) and the readable standard library source `lib/yaoxiang/std/`; no
-additional steps are required.
+After extraction you can use it directly: `yx --version`. The archive contains all dependencies
+(including the Z3 shared library) and the readable standard library source under `lib/yaoxiang/std/`
+— no extra steps required.
 
-## Friendly Channel: One-Line Command (Rust/rustup style)
+## Easy channel: one-line command (Rust/rustup mode)
 
 ### Linux / macOS
 
@@ -46,8 +46,8 @@ curl -fsSL https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/ins
 irm https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/install/install.ps1 | iex
 ```
 
-The script installs the toolchain into `~/.yaoxiang/` (on Windows: `%USERPROFILE%\.yaoxiang`) and
-puts `yx` onto your PATH.
+The script installs the toolchain into `~/.yaoxiang/` (or `%USERPROFILE%\.yaoxiang` on Windows) and
+adds `yx` to your PATH.
 
 ### Linux: apt repository
 
@@ -57,73 +57,73 @@ echo "deb [signed-by=/usr/share/keyrings/yaoxiang.gpg] <apt-repo-url> stable mai
 sudo apt update && sudo apt install yaoxiang
 ```
 
-apt installs a system-wide flat layout (`/usr/lib/yaoxiang/`, command entry at `/usr/bin/yx`), and
-`apt upgrade` follows the versions. Repository metadata is automatically signed and published by the
+apt install is a system-level flat install (`/usr/lib/yaoxiang/`, command entry `/usr/bin/yx`);
+`apt upgrade` follows the version. Repository metadata is automatically signed and published by the
 release CI.
 
 ### Windows: Inno Setup wizard
 
 Download `YaoXiang-Setup-<version>.exe` from
-[Releases](https://github.com/ChenXu233/YaoXiang/releases) and follow the wizard (optionally adds
-itself to PATH). Like apt, this is a system-wide flat installation.
+[Releases](https://github.com/ChenXu233/YaoXiang/releases) and follow the wizard to install
+(optionally auto-added to PATH). Same as apt, this is a system-level flat install.
 
-## Version Management (built into the yx front door)
+## Version management (built into the yx front-end)
 
 ```sh
-yx toolchain install stable    # Install the latest stable version
-yx toolchain install 0.7.14    # Install a specific version
-yx toolchain default 0.7.14    # Set the default version
-yx toolchain list              # List installed versions
-yx toolchain update            # Upgrade to the latest stable version
-yx self update                 # Update the yx binary itself
+yx toolchain install stable    # install the latest stable version
+yx toolchain install 0.8.2    # install the specified version
+yx toolchain default 0.8.2    # set the default version
+yx toolchain list              # list installed versions
+yx toolchain update            # upgrade to the latest stable version
+yx self update                 # update the yx binary itself
 ```
 
-Multiple versions coexist under `~/.yaoxiang/versions/<version>/`, where each version is a fully
+Multiple versions coexist under `~/.yaoxiang/versions/<version>/`; each version is a complete,
 self-contained toolchain tree (engine, Z3, and standard library are version-locked together).
 
-### Project-level Version Pinning
+### Project-level version pinning
 
 Place a `yx-toolchain.toml` at the project root (precedent: `rust-toolchain.toml`):
 
 ```toml
-toolchain = "0.7.14"
+toolchain = "0.8.2"
 ```
 
-Any `yx` command run within that directory will use the pinned version — different projects can work
-with different versions.
+Running any `yx` command in that directory will use the version specified by the pin — different
+projects can work with different versions.
 
-## Environment Variables
+## Environment variables
 
-| Variable           | Description                                                                            |
-| ------------------ | -------------------------------------------------------------------------------------- |
-| `YAOXIANG_HOME`    | Overrides the install root; defaults to `~/.yaoxiang` (for CI and container scenarios) |
-| `YAOXIANG_VERSION` | The install script installs the specified version rather than the latest               |
+| Variable           | Description                                                                   |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `YAOXIANG_HOME`    | Override the install root; default `~/.yaoxiang` (CI and container scenarios) |
+| `YAOXIANG_VERSION` | The install script installs the specified version instead of the latest       |
 
-## Network and Mirrors (restricted networks)
+## Network and mirrors (restricted networks)
 
-When the current network cannot reach GitHub directly, `yx` supports download mirrors. Configure a
+When the current network cannot reach GitHub directly, `yx` supports a download mirror: configure a
 ghproxy-style URL prefix in `<install-root>/settings.toml` (default `~/.yaoxiang/settings.toml`):
 
 ```toml
 mirror = "https://ghproxy.example.com"
 ```
 
-Scope of effect (`yx` appends the full GitHub URL to the end of this prefix):
+Effective scope (`yx` will concatenate the full GitHub URL after this prefix):
 
-- `yx toolchain install` / `yx toolchain update` — release archives, `.sha256` sidecar files, and
-  the version query API
+- `yx toolchain install` / `yx toolchain update` — release packages, `.sha256` sidecar checksums,
+  and the version query API
 - `yx self update` — same as above
 
 Notes:
 
-- The one-line install scripts (`install.sh` / `install.ps1`) do not read the mirror configuration
-  and connect directly to GitHub
-- When a download fails, `yx` will suggest configuring a mirror in the error message; if the mirror
-  itself is unreachable, it is reported as a network error
+- The one-line install scripts (`install.sh` / `install.ps1`) do not read the mirror config and
+  connect to GitHub directly.
+- On download failure, `yx` will suggest configuring a mirror in the error message; if the mirror
+  itself is unreachable, it is reported as a network error.
 
-## Verifying the Installation
+## Verify installation
 
 ```sh
-yx --version        # Front door version
-yx run main.yx      # Any YaoXiang program
+yx --version        # front-end version
+yx run main.yx      # any YaoXiang program
 ```

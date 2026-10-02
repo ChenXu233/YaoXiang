@@ -11,6 +11,7 @@
     "docs:build": "node build.js",
     "docs:preview": "vitepress preview src",
     "lint:md": "markdownlint \"src/**/*.md\" --config .markdownlint.jsonc",
+    "gen:error-docs": "python ../scripts/docs/gen-error-code-docs.py",
     "format:md": "prettier --write \"src/**/*.md\" --config .prettierrc.json",
     "format:md:check": "prettier --check \"src/**/*.md\" --config .prettierrc.json",
     "info": "vuepress info",

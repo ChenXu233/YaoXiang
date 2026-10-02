@@ -97,3 +97,14 @@ locales/.i18n-cache.json
 .zcode
 
 .dsh
+
+# 文档示例回归门禁（scripts/ci/check-docs-examples.py）的临时产物。
+# 目录名不能含 target/.git/.yaoxiang，否则 yaoxiang check 会静默跳过其中的文件。
+.docs-examples-tmp/
+
+# 多会话 agent 协作工作区（rfc027-followups 等）
+.agent-teams/
+
+# 文档门禁（scripts/ci/check-docs-*.py）的运行产物。
+# 报告在 CI 里作为 artifact 上传，不入库。
+scripts/ci/_docs-*.txt

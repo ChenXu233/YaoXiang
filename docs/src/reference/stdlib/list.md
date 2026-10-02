@@ -19,9 +19,9 @@ use std.list
 
 | 类别               | 函数                                                                                                                    | 行为                       |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| **消耗源列表** | `push` `append` `prepend` `set` `pop` `remove_at` | 源列表被移动，之后不可再用 |
-| 只读借用       | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | 源列表可反复使用；`contains`/`find_index` 的 `item` 亦按借用 |
-| 迭代协议       | `iter`（消耗源列表，返回迭代器）`has_next` `next`（借用 / 可变借用迭代器） | 见下方说明 |
+| **消耗源列表** | `push` `append` `prepend` `set` `pop` `remove_at` `iter` | 源列表被移动，之后不可再用 |
+| 只读借用       | `len` `is_empty` `get` `first` `last` `slice` `reverse` `concat` `contains` `find_index` `map` `filter` `reduce` | 源列表可反复使用；`contains`/`find_index` 的 `item` 亦按借用（`&A`） |
+| 迭代协议       | `has_next`（`&Iter(T)`）`next`（`&mut Iter(T)`） | 两者都**借用**迭代器，不消耗 |
 
 ```yaoxiang
 use std.assert
@@ -65,8 +65,9 @@ main: () -> Void = {
 | `first`      | `(A: Type) -> (list: &Vec(A)) -> A`                                                        |
 | `last`       | `(A: Type) -> (list: &Vec(A)) -> A`                                                        |
 | `slice`      | `(A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A)`                             |
-| `contains`   | `(A: Type) -> (list: &Vec(A), item: A) -> Bool`                                            |
-| `find_index` | `(A: Type) -> (list: &Vec(A), item: A) -> Int`                                             |
+| `contains`   | `(A: Type) -> (list: &Vec(A), item: &A) -> Bool`                                            |
+| `find_index` | `(A: Type) -> (list: &Vec(A), item: &A) -> Int`                                             |
+| `Iter`       | `(T: Type) -> Type`                                                                         |
 | `iter`       | `(T: Type) -> (list: Vec(T)) -> Iter(T)`                                                   |
 | `next`       | `(T: Type) -> (it: &mut Iter(T)) -> T`                                                     |
 | `has_next`   | `(T: Type) -> (it: &Iter(T)) -> Bool`                                                      |
@@ -192,7 +193,11 @@ remove_at: (A: Type) -> (list: Vec(A), index: Int) -> Vec(A)
 
 - `index` —— 元素下标
 
-返回：去掉该元素的新列表。错误：下标为负或 ≥ 长度时抛出 `E6003`（索引越界）。
+返回：去掉该元素的新列表。错误：下标为**负**时抛出 `E6003`（`src/std/list.yx:156-158`
+的 `list[i + 1]` 越界）。
+
+> **越界不报错**：下标 ≥ 长度时搬运循环一次都不进，只把 `length` 减 1，静默截断——
+> `list.remove_at([1, 2, 3], 5)` 返回两元素列表且**不报错**。调用前请自行判界。
 
 ```yaoxiang
 use std.assert
@@ -219,8 +224,8 @@ set: (A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A)
 
 返回把下标 `index` 改写为 `value` 的新列表。`list` 按值传入，调用后即被**移动**。
 
-- `index` —— 下标；缺省 `0`
-- `value` —— 新值；缺省 `Void`
+- `index` —— 下标
+- `value` —— 新值
 
 错误：下标为负或 ≥ 长度时抛出 `E6003`（越界写不再静默丢弃）。
 
@@ -246,9 +251,12 @@ get: (A: Type) -> (list: &Vec(A), index: Int) -> A
 
 读下标 `index` 处的元素（只读借用，`list` 可复用）。
 
-- `index` —— 下标；缺省 `0`
+- `index` —— 下标
 
-返回：元素值；**越界返回 `Void`**（不抛错）。错误：下标为负时抛出 `E6007`。
+返回：元素值。
+
+错误：下标为负或 ≥ 长度时抛出 `E6003`（`src/std/list.yx:78` 直接用 `list[index]`，
+越界由 `[]` 的边界检查兜住，**不返回 `Void`**）。
 
 ```yaoxiang
 use std.assert
@@ -270,7 +278,10 @@ first: (A: Type) -> (list: &Vec(A)) -> A
 
 <!-- stdlib:sig:list.first end -->
 
-返回首元素；空列表返回 `Void`。
+返回首元素。
+
+错误：**空列表会抛出 `E6003`**——`src/std/list.yx:82-89` 的兜底分支读 `zero[0]`，
+空 `Vec` 的下标 0 越界。请先判 [`is_empty`](#is_empty)。
 
 ```yaoxiang
 use std.assert
@@ -291,7 +302,9 @@ last: (A: Type) -> (list: &Vec(A)) -> A
 
 <!-- stdlib:sig:list.last end -->
 
-返回末元素；空列表返回 `Void`。
+返回末元素。
+
+错误：**空列表会抛出 `E6003`**（同 [`first`](#first)，`src/std/list.yx:92-99`）。
 
 ```yaoxiang
 use std.assert
@@ -314,10 +327,14 @@ slice: (A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A)
 
 取 `[start, end)` 区间的子列表。
 
-- `start` —— 起始下标；缺省 `0`
-- `end` —— 结束下标（不含）；缺省为列表末尾
+- `start` —— 起始下标
+- `end` —— 结束下标（不含）
 
-返回：新列表。边界被**钳制**到合法范围，不报错。错误：`start` 或 `end` 为负时抛出 `E6007`。
+返回：新列表。`start >= end` 时返回空列表。
+
+错误：**边界不做钳制**——`src/std/list.yx:196-205` 逐个读 `list[i]`，下标越界（含
+`start` / `end` 为负）直接抛 `E6003`。`list.slice([1, 2, 3], 1, 99)` 会报错而不是
+返回两元素列表。
 
 ```yaoxiang
 use std.assert
@@ -364,7 +381,8 @@ concat: (A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A)
 
 拼接两个列表，返回新列表。两个源列表都不变。
 
-错误：第二个参数不是列表时抛出 `E6007`。
+类型检查在编译期完成：`concat` 是静态泛型（`src/std/list.yx:179`），第二个参数不是
+列表时报类型错误，**不存在运行时的 `E6007` 路径**。
 
 ```yaoxiang
 use std.assert
@@ -388,7 +406,7 @@ len: (A: Type) -> (list: &Vec(A)) -> Int
 
 元素个数。只读借用，`list` 可反复使用。
 
-错误：参数不是列表时抛出 `E6007`。
+`len` 是静态泛型（`src/std/list.yx:67`），非列表实参是编译期类型错误，不是运行时异常。
 
 ```yaoxiang
 use std.assert
@@ -413,7 +431,7 @@ is_empty: (A: Type) -> (list: &Vec(A)) -> Bool
 
 是否为空列表。
 
-错误：参数不是列表时抛出 `E6007`。
+同 `len`，静态泛型（`src/std/list.yx:72`），非列表实参是编译期类型错误。
 
 ```yaoxiang
 use std.assert
@@ -438,7 +456,7 @@ contains: (A: Type) -> (list: &Vec(A), item: &A) -> Bool
 `item` 是否在列表中（按值相等比较；元素类型须支持 `==`——基础类型原生支持，记录类型由 RFC-011b 的 `Equal` 自动派生或显式实例化提供）。`item`
 按只读借用传入（调用端自动创建 `&A` 令牌），调用后实参仍可用。
 
-返回：存在为 `true`；参数不是列表时返回 `false`。
+返回：存在为 `true`；不存在为 `false`（线性扫描，不抛错）。
 
 ```yaoxiang
 use std.assert
@@ -488,7 +506,7 @@ map: (T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R)
 对每个元素调用 `fn`，返回结果组成的新列表。传函数值是**柯里化**形态：
 `list.map(nums, x => x * 2)`。源列表不变。
 
-错误：第二个参数不是函数时抛出 `E6007`。
+`map` 是静态泛型（`src/std/list.yx:210`），第二个参数不是函数时报编译期类型错误。
 
 ```yaoxiang
 use std.assert
@@ -512,7 +530,7 @@ filter: (T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T)
 
 保留使 `fn` 为真的元素。源列表不变。
 
-错误：第二个参数不是函数时抛出 `E6007`。
+`filter` 是静态泛型（`src/std/list.yx:222`），第二个参数不是函数时报编译期类型错误。
 
 ```yaoxiang
 use std.assert
@@ -541,7 +559,8 @@ reduce: (T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, i
 
 返回：最终累加值。列表为空时返回 `init`。
 
-错误：第二个参数不是函数时抛出 `E6007`。
+`reduce` 是静态泛型（`src/std/list.yx:241`），第二个参数不是函数时报编译期类型错误。
+注意 `f` 按值接收累加器与元素——每轮把当前累加器交给 `f`，用返回值作为下一轮的累加器。
 
 ```yaoxiang
 use std.assert
@@ -563,10 +582,19 @@ iter: (T: Type) -> (list: Vec(T)) -> Iter(T)
 
 <!-- stdlib:sig:list.iter end -->
 
-创建迭代器。迭代器是一个 `(列表, 下标)` 元组状态载体，创建后在 `next` 中
-**顺序消费**。源列表为只读借用，迭代期间仍可使用。
+创建迭代器。迭代器是本模块导出的记录类型 `Iter(T)`，含两个具名字段——缓冲与游标
+（`src/std/list.yx:259-262`）：
 
-返回：迭代器元组，交给 `next` / `has_next` 使用。
+```
+Iter: (T: Type) -> Type = {
+    buf: Vec(T),
+    pos: Int,
+}
+```
+
+源列表按值传入，调用后即被**移动**。
+
+返回：`Iter(T)` 值，交给 [`next`](#next) / [`has_next`](#has_next) 使用。
 
 ```yaoxiang
 use std.assert
@@ -588,12 +616,17 @@ next: (T: Type) -> (it: &mut Iter(T)) -> T
 
 <!-- stdlib:sig:list.next end -->
 
-取出当前元素并把内部下标前移一位。
+取出当前元素并把内部游标 `pos` **原地**前移一位。
 
-返回：当前元素；迭代结束时返回 `Void`。
+返回：当前元素。
 
-> `next` 与 `has_next` 都**移动**迭代器（签名无 `&`），因此每次取用都需要重新创建迭代器，或直接用
-> `for ... in` 遍历。这与 [`std.range.next`](./range#next) 的借用形态不同。
+> **借用语义**：`next` 取 `&mut Iter(T)`、`has_next` 取 `&Iter(T)`，**都不移动**迭代器，
+> 因此同一个迭代器可以连续取元素。调用前请先判 [`has_next`](#has_next)：迭代结束后再取
+> 会由 `Vec` 的边界检查兜住并报 `E6003`，**不返回 `Void`**
+> （`src/std/list.yx:277-285`）。
+>
+> 这与 [`std.range.next`](./range#next) 相反——`range.has_next` 的签名无 `&`，
+> 会按值消耗迭代器。
 
 ```yaoxiang
 use std.assert
@@ -601,7 +634,11 @@ use std.list
 
 main: () -> Void = {
     it = list.iter([7, 8])
+
+    // 同一个迭代器连续取——因为 next 借用而不消耗
     assert(list.next(it) == 7)
+    assert(list.next(it) == 8)
+    assert(!list.has_next(it))
 }
 ```
 
@@ -615,7 +652,7 @@ has_next: (T: Type) -> (it: &Iter(T)) -> Bool
 
 <!-- stdlib:sig:list.has_next end -->
 
-是否还有未消费的元素。
+是否还有未消费的元素。只读借用 `&Iter(T)`，不消耗迭代器。
 
 ```yaoxiang
 use std.assert
@@ -624,6 +661,8 @@ use std.list
 main: () -> Void = {
     it = list.iter([1])
     assert(list.has_next(it))
+    assert(list.next(it) == 1)
+    assert(!list.has_next(it))
 }
 ```
 

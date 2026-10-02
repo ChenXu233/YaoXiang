@@ -745,7 +745,7 @@ Char）的赋值行为是编译器内置的值复制——两个值完全独立�
 
 - [语言规范](../../../reference/language-spec/index.md)
 - [设计宣言](../../manifesto.md)
-- [RFC-001 并作模型](../deprecated/001-concurrent-model-error-handling.md)
+- [RFC-009a: 令牌生命期分析——基于霍尔证明管道](./009a-borrow-proof-pipeline.md)
 - [RFC-010 统一类型语法](./010-unified-type-syntax.md)
 - [tutorial/ 教程](../../../tutorial/index.md)
 

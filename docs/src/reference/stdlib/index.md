@@ -31,6 +31,23 @@ YaoXiang 标准库（`std`）以模块为组织单位，每个模块通过 `use`
 
 <!-- stdlib:index:modules end -->
 
+### 纯 YaoXiang 实现的模块
+
+下列模块由 `.yx` 源码实现并随二进制嵌入（`src/std/yx_sources.rs`），**不是** native
+`StdModule`，因此不在上表的生成范围内（`src/std/gen_docs.rs:43` 的
+`modules_for_docs()` 显式不含它们）。它们的页面是手写页，签名逐字取自 `.yx` 源文件。
+
+| 模块               | 源码                 | 说明                                                 |
+| ------------------ | -------------------- | ---------------------------------------------------- |
+| [`std.list`](./list)   | `src/std/list.yx`   | 列表增删、切片、高阶函数与迭代器协议                 |
+| [`std.json`](./json)   | `src/std/json.yx`   | JSON 解析与序列化（RFC 8259）                        |
+| [`std.option`](./option) | `src/std/option.yx` | `Option(T)` 可选值与和类型                           |
+| [`std.test`](./test)   | `src/std/test.yx`   | 测试断言库（值语义，RFC-036 §3）                     |
+
+> `std.result` 是**双实现**模块：native 工具族（`src/std/result.rs`）与纯 yx 的
+> `Result` 类型（`src/std/result.yx`）合并为同一导出面——`Result` 变体构造走 yx，
+> `is_ok` / `unwrap` / `code` 等工具走 native。详见 [`std.result`](./result)。
+
 ## 导入约定
 
 模块整体导入：
@@ -89,10 +106,9 @@ main: () -> Void = {
 }
 ```
 
-各模块页的「语义分类」一节列出该模块哪些函数借用、哪些消耗、哪些原地改动。有一处需要特别注意：
-
-- [`list.pop`](./list#pop) / [`list.remove_at`](./list#remove_at) 签名标为
-  `&List(A)`，但会**原地改动**列表
+各模块页的「语义分类」一节列出该模块哪些函数借用、哪些消耗、哪些原地改动。要特别注意的是
+**取值与边界**：`list.get` / `list.first` / `list.last` / `list.slice` 越界或空列表都走
+`[]` 的边界检查报 `E6003`，**不返回哨兵值**。
 
 ## 错误模型
 
@@ -100,8 +116,12 @@ main: () -> Void = {
 
 | 形态           | 表现                              | 典型场景                                     |
 | -------------- | --------------------------------- | -------------------------------------------- |
-| 抛出运行时错误 | 以 `E6xxx` 码终止当前执行         | 字典缺键 `E6008`、索引越界 `E6003`、断言失败 |
-| 返回哨兵值     | 不中断，返回 `Void` / `-1` / `""` | 列表越界读、空列表取首元素、缺环境变量       |
+| 抛出运行时错误 | 以 `E6xxx` 码终止当前执行         | 字典缺键 `E6008`、索引越界 `E6003`、断言失败 `E6005` |
+| 返回哨兵值     | 不中断，返回 `Void` / `-1` / `""` | `list.find_index` 未命中、`string.index_of` 未命中、缺环境变量 |
+
+`list` 是**纯 YaoXiang 实现**（`src/std/list.yx`）：取值类函数直接用 `[]` 下标，不做
+边界钳制，越界即 `E6003`（`src/std/list.yx:77-79`），空列表取首末元素同理
+（`src/std/list.yx:82-99`）。
 
 常见的运行时错误码：
 
@@ -132,10 +152,17 @@ main: () -> Void = {
 
 ## 迭代协议
 
-`std.list` 与 `std.range` 提供同一套迭代器协议。迭代器本身是一个 `Tuple` 状态载体。
+`std.list` 与 `std.range` 都提供 `iter` / `has_next` / `next`，但**两侧的形参形态相反**，
+照搬任一侧的写法到另一侧都会不匹配：
 
-> **移动语义**：`next` 与 `has_next` 都**移动**迭代器（签名无
-> `&`），因此每次取用都需要重新创建，或直接用 `for ... in`。
+| 函数       | `std.list`（`src/std/list.yx`） | `std.range`（`src/std/range.rs`） |
+| ---------- | ------------------------------ | ------------------------------- |
+| `has_next` | `(it: &Iter(T)) -> Bool`       | `(it: Iterator(Any)) -> Bool`   |
+| `next`     | `(it: &mut Iter(T)) -> T`      | `(it: &Iterator(Any)) -> Any`   |
+
+也就是说：`list` 侧**借用**迭代器（`next` 取 `&mut`，`has_next` 取 `&`），同一个迭代器
+可以连续取元素；`range` 侧的 `has_next` **按值消耗**迭代器（签名无 `&`），每次判定都要
+重新创建，`next` 才借用。日常遍历直接用 `for ... in`，两种形态都不用管。
 
 ```yaoxiang
 use std.assert
@@ -145,9 +172,9 @@ main: () -> Void = {
     it = list.iter([1, 2, 3])
     assert(list.has_next(it))
 
-    // has_next 移动了 it，重新创建后再取元素
-    it2 = list.iter([1, 2, 3])
-    assert(list.next(it2) == 1)
+    // list 侧是借用：同一个迭代器可以连续取
+    assert(list.next(it) == 1)
+    assert(list.next(it) == 2)
 }
 ```
 
@@ -189,31 +216,32 @@ main: () -> Void = {
 | --------------------------------------------------------------- | --------- |
 | `std.os` 全部、`std.net` 全部、`std.weak` 全部                  | 文件/网络 |
 | `std.concurrent` 全部                                           | 线程      |
-| `std.io.read_line` / `read_file` / `write_file` / `append_file` | 标准 I/O  |
+| `std.io.read_line`                                              | 标准 I/O  |
+| `std.fs` 全部                                                   | 文件系统  |
 | `std.time.sleep`                                                | 线程休眠  |
 
-`std.string` / `std.list` / `std.dict` / `std.math` / `std.convert` / `std.result` / `std.range` /
-`std.assert` 以及 `std.io.print` / `println` / `format_fallback` 在所有目标上可用。
+`std.string` / `std.dict` / `std.math` / `std.convert` / `std.result` / `std.range` /
+`std.assert`，纯 yx 的 `std.list` / `std.json` / `std.option` / `std.test`，以及
+`std.io.print` / `println` / `format_fallback` 在所有目标上可用。
 
-## 已实现的缺口
+## 已知缺口
 
-以下问题在撰写文档时逐个真跑示例实测确认，均已开 issue 追踪。
+以下条目在撰写文档时逐个真跑示例实测确认：
 
-**已修复（2026-09-19）**：#337 / #338 / #339 / #340 四项已全部修复，
-对应页面正文已同步改写为正常用法说明：
-
-| 位置 | 原问题 | 修复 |
+| 位置 | 原问题 | 现状 |
 | ---- | ------ | ---- |
 | [`os.open`](./os#open) | 句柄一次性，`open`→`write`→`close` 无法编译 | 句柄改按引用传递 ✅ |
 | [`time.datetime_*`](./time#datetime-字段访问) | 8 个访问器无从源码调用（导出名含 `::`）| 改扁平名 `datetime_year` 等 ✅ |
-| [`time.parse_time`](./time#parse_time) | `fmt` 参数被忽略；返回值无法继续使用 | 按 fmt 步进解析 ✅ |
+| [`time.parse_time`](./time#parse_time) | `fmt` 参数被忽略；返回值无法继续使用 | 按 fmt 步进解析，返回 `Int` ✅ |
 | [`math.clamp`](./math#clamp) | `min > max` 会 panic 解释器而非返回错误 | 返回 `E6007` ✅ |
+| [`net.http_get`](./net#http_get) / [`http_post`](./net#http_post) | 曾是占位实现，不发请求 | 已改为真实实现（`ureq` 同步阻塞 + rustls TLS，issue #56）✅ |
 
-**仍开放**：
+仍开放的问题：
 
 | 位置 | 问题 | 追踪 |
 | ---- | ---- | ---- |
-| [`net.http_get`](./net#http_get) / `http_post` | 占位实现，不发请求，返回描述字符串 | #56 |
+| [`std.option`](./option#已知缺口) | `Try(Option(T), T, Void)` 实例化未被类型检查器承认，`?` 报 `E1081`；`from_error` 运行时报 `E6006` | 见该页「已知缺口」 |
+| [`list.slice`](./list#slice) | 越界下标不做钳制，直接 `E6003` | 见该页条目 |
 
 ## 文档维护
 
@@ -231,6 +259,10 @@ main: () -> Void = {
 | 孤儿检测   | `test_stdlib_docs_has_no_orphan_module_pages` | 模块页不得多于生成器产出        |
 | 覆盖面     | `test_stdlib_docs_covers_interface_modules`   | 文档模块集须覆盖接口视图        |
 | 示例可运行 | `test_stdlib_docs_examples_run`               | 每个 ```yaoxiang 示例必须真能跑 |
+
+> 生成器只覆盖 native `StdModule`；纯 yx 模块（`list` / `json` / `option` / `test`）的页
+> 不含生成区，其合法性由示例可运行门禁与孤儿检测（页名在
+> `src/std/yx_sources.rs` 的白名单内）共同保证。
 
 `exports()` 变更后，用治愈工具重写生成区：
 

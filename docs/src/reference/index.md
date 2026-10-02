@@ -1,8 +1,16 @@
 # YaoXiang 参考文档
 
-> 本文档正在建设中...
+> YaoXiang 目前处于 **实验验证阶段**（当前版本见
+> [语言规范概览](./language-spec/index.md)），标准库和 API 正在逐步完善。
+>
+> 标准库的**逐模块权威参考**在 [标准库参考](./stdlib/index.md)，本页只做入口索引。
 
-YaoXiang 目前处于 **实验验证阶段**，标准库和 API 正在逐步完善。
+## 参考入口
+
+- [错误码参考](./error-code/index.md) - 诊断码总览与分类查询
+- [警告码](./warning-code/warning-codes.md)
+- [包管理](./package/index.md) - 清单、锁文件与命令
+- [工具命令](./check-command.md) / [format](./format-command.md) / [test](./test-command.md)
 
 ## 语言规范
 
@@ -11,20 +19,30 @@ YaoXiang 目前处于 **实验验证阶段**，标准库和 API 正在逐步完�
 - [类型系统](./language-spec/type-system.md) - 基本类型、复合类型、泛型、trait
 - [模块系统](./language-spec/modules.md) - 模块定义、导入导出、作用域
 - [并发模型](./language-spec/concurrency.md) - 异步编程、并发原语、内存模型
-- [标准库](./language-spec/stdlib.md) - 核心库、IO库、数学库
+- [FFI](./language-spec/ffi.md) - 外部函数接口
+- [标准库](./language-spec/stdlib.md) - 标准库总览
 
 ## 当前状态
 
-| 模块             | 状态      | 描述       |
-| ---------------- | --------- | ---------- |
-| `std.io`         | 🔨 施工中 | 输入输出   |
-| `std.string`     | 🔨 施工中 | 字符串操作 |
-| `std.list`       | 🔨 施工中 | 列表操作   |
-| `std.dict`       | ✅ 已实现 | 字典操作   |
-| `std.range`      | ✅ 已实现 | 区间与迭代器（#302） |
-| `std.math`       | 🔨 施工中 | 数学函数   |
-| `std.net`        | 📋 计划中 | 网络操作   |
-| `std.concurrent` | 📋 计划中 | 并发原语   |
+| 模块             | 状态      | 描述       | 参考 |
+| ---------------- | --------- | ---------- | ---- |
+| `std.io`         | ✅ 已实现 | 输入输出   | [io](./stdlib/io.md) |
+| `std.string`     | ✅ 已实现 | 字符串操作 | [string](./stdlib/string.md) |
+| `std.list`       | ✅ 已实现 | 列表操作   | [list](./stdlib/list.md) |
+| `std.dict`       | ✅ 已实现 | 字典操作   | [dict](./stdlib/dict.md) |
+| `std.range`      | ✅ 已实现 | 区间与迭代器（#302） | [range](./stdlib/range.md) |
+| `std.math`       | ✅ 已实现 | 数学函数   | [math](./stdlib/math.md) |
+| `std.net`        | ✅ 已实现 | 网络操作（ureq + rustls） | [net](./stdlib/net.md) |
+| `std.concurrent` | ✅ 已实现 | 并发原语   | [concurrent](./stdlib/concurrent.md) |
+| `std.os`         | ✅ 已实现 | 操作系统接口 | [os](./stdlib/os.md) |
+| `std.fs`         | ✅ 已实现 | 文件系统   | [fs](./stdlib/fs.md) |
+| `std.time`       | ✅ 已实现 | 时间与日期 | [time](./stdlib/time.md) |
+| `std.convert`    | ✅ 已实现 | 类型转换   | [convert](./stdlib/convert.md) |
+| `std.result`     | ✅ 已实现 | 结果类型   | [result](./stdlib/result.md) |
+| `std.assert`     | ✅ 已实现 | 断言       | [assert](./stdlib/assert.md) |
+| `std.weak`       | ✅ 已实现 | 弱引用     | [weak](./stdlib/weak.md) |
+
+> `std.net` 早期是「占位实现、不发请求」，现已改为真实实现（#56）。
 
 ## 内置类型
 

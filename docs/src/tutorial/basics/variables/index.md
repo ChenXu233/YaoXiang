@@ -70,13 +70,18 @@ counter = 100           // 也可以
 
 **规则一**：`mut` 是显式新声明，编译器不会去外层作用域查找同名变量。
 
+<!-- docs-example: skip -->
 ```yaoxiang
 mut x = 10      // 在当前作用域创建新的可变变量 x
 mut x = 20      // 编译错误！同作用域内 x 已经声明过
 ```
 
+> 上面两行**故意不通过检查**——`E2002 duplicate definition: 'x' is already defined in the
+> current scope`。
+
 **规则二**：`mut` 声明的变量不能与外层作用域的变量同名（禁止遮蔽）。
 
+<!-- docs-example: skip -->
 ```yaoxiang
 x = 10
 {
@@ -84,12 +89,17 @@ x = 10
 }
 ```
 
+> 上面这段**故意不通过检查**——`E2013 Cannot shadow existing variable 'x'`。
+
 **规则三**：同一作用域内，每个名字只能声明一次——无论用 `=` 还是 `mut`。
 
+<!-- docs-example: skip -->
 ```yaoxiang
 x = 10
 mut x = 20   // 编译错误！x 已经声明过
 ```
+
+> 上面这段**故意不通过检查**——同样是 `E2002`。
 
 这些规则确保每个变量名在当前作用域内是唯一的，你永远不会遇到同名变量到底指向谁的困惑。
 

@@ -9,7 +9,6 @@
 //! - exec_in 冒烟（不报错）
 
 use std::path::Path;
-use std::process::Command;
 
 use tempfile::TempDir;
 
@@ -22,7 +21,7 @@ use crate::package::lock::LockFile;
 fn make_git_repo(dir: &Path) -> std::path::PathBuf {
     std::fs::create_dir_all(dir).unwrap();
     let git = |args: &[&str]| {
-        let mut cmd = Command::new("git");
+        let mut cmd = crate::package::source::git::git_command();
         cmd.arg("-C").arg(dir);
         // 测试 git 环境隔离：config 写路径与开发仓库彻底断开
         cmd.env("GIT_CONFIG_GLOBAL", dir.join("test-global-gitconfig"));
@@ -148,7 +147,7 @@ fn test_outdated_no_tags_fails() {
     let dir = tmp.path().join("plain");
     std::fs::create_dir_all(&dir).unwrap();
     let git = |args: &[&str]| {
-        Command::new("git")
+        crate::package::source::git::git_command()
             .arg("-C")
             .arg(&dir)
             .args(args)
@@ -158,7 +157,7 @@ fn test_outdated_no_tags_fails() {
     assert!(git(&["init", "-b", "main"]).status.success());
     std::fs::write(dir.join("lib.yx"), "x").unwrap();
     assert!(git(&["add", "-A"]).status.success());
-    assert!(Command::new("git")
+    assert!(crate::package::source::git::git_command()
         .arg("-C")
         .arg(&dir)
         .arg("-c")

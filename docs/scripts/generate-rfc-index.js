@@ -346,7 +346,7 @@ function generateIndex(allRfcs) {
   lines.push('1. 阅读 [RFC_TEMPLATE.md](RFC_TEMPLATE.md) 了解格式要求')
   lines.push('2. 参考 [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) 学习写法')
   lines.push('3. 创建新文件，命名为 `序号-描述性标题.md`')
-  lines.push('4. 将文件放入 `docs/reference/rfc/draft/` 目录')
+  lines.push('4. 将文件放入 `docs/src/design/rfc/draft/` 目录')
   lines.push('5. 更新本索引文件，添加新RFC条目')
   lines.push('6. 提交PR进入审核流程')
   lines.push('')
@@ -356,7 +356,10 @@ function generateIndex(allRfcs) {
   // 贡献指南
   lines.push('## 贡献指南')
   lines.push('')
-  lines.push('请参阅 [CONTRIBUTING.md](../../../../CONTRIBUTING.md) 了解贡献指南。')
+  // 注意：不能写 `../../../../CONTRIBUTING.md` 这类跨出 docs/src 的相对链接 ——
+  // VitePress 的 ignoreDeadLinks: false 会在构建期判为死链（站点根是 docs/src，
+  // 仓库根不在可解析范围内）。指到站内页面。
+  lines.push('请参阅站内的[贡献指南](/dev/contributing)与[提交规范](/dev/commit-convention)。')
 
   return lines.join('\n')
 }

@@ -821,10 +821,14 @@ fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
         .as_ref()
         .map(|c| c.ws_root.clone())
         .or_else(|| project_root.clone());
+    // lock 读取依赖 package 模块（wasm32 下不编译），降级为无 lock
+    #[cfg(not(target_arch = "wasm32"))]
     let lock_versions: HashMap<String, String> = lock_base
         .as_deref()
         .and_then(|root| super::consistency::lock_versions(root).ok())
         .unwrap_or_default();
+    #[cfg(target_arch = "wasm32")]
+    let lock_versions: HashMap<String, String> = HashMap::new();
     let mut files: Vec<DiscoveredFile> = Vec::new();
     let mut used_by: HashSet<PathBuf> = HashSet::new();
     let mut visited: HashSet<PathBuf> = HashSet::new();
@@ -997,6 +1001,7 @@ struct MemberCtx {
 
 /// 计算入口文件所属工作空间成员的解析上下文；非成员（独立项目/工作空间根
 /// 自身）返回 None
+#[cfg(not(target_arch = "wasm32"))]
 fn member_context(project_root: &Path) -> Option<MemberCtx> {
     let ws_root = crate::package::workspace::find_workspace_root(project_root)?;
     if ws_root == project_root {
@@ -1044,6 +1049,12 @@ fn member_context(project_root: &Path) -> Option<MemberCtx> {
     })
 }
 
+#[cfg(target_arch = "wasm32")]
+fn member_context(_project_root: &Path) -> Option<MemberCtx> {
+    // package 模块（工作空间解析）在 wasm32 下不编译，降级为非成员
+    None
+}
+
 /// 在包根的 `src/` 布局中解析 `use <pkg>[.<rest>]`（成员引用与 path 依赖；
 /// 布局与 vendor 条目同构，无版本后缀），应用该包的导入面（RFC-029f）
 fn resolve_in_package_root(
@@ -1058,7 +1069,9 @@ fn resolve_in_package_root(
     let src = pkg_root.join("src");
 
     // 裸名时同时尝试 key 与 [package].name 形态的目录（014c：两者可不同）
+    // manifest 读取依赖 package 模块（wasm32 下不编译），降级为只尝试 key
     let mut pkg_names = vec![pkg.to_string()];
+    #[cfg(not(target_arch = "wasm32"))]
     if let Ok(manifest) = PackageManifest::load(pkg_root) {
         let pn = manifest.package.name;
         if pn != *pkg && !pkg_names.contains(&pn) {

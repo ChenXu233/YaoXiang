@@ -36,9 +36,10 @@ main: () -> Void = {
 }
 ```
 
-> **移动语义**：`has_next` 与 `next` 的签名都不带 `&`，会把迭代器**移动**
-> 掉。因此每次取用都要重新创建迭代器，或直接用 `for ... in` 遍历。这与 [`std.list`](./list)
-> 的迭代器一致。
+> **两侧形态相反**：`has_next` 的签名**无 `&`**（`src/std/range.rs:40`），按值消耗迭代器，
+> 每次判定都要重新 `iter`；`next` 的签名**有 `&`**（`src/std/range.rs:46`），借用。
+> [`std.list`](./list) 恰好相反——它两个方法都借用（`&Iter(T)` / `&mut Iter(T)`），
+> 同一个迭代器可以连续取。照搬任一侧的写法到另一侧都会不匹配。
 
 ```yaoxiang
 use std.assert
@@ -46,7 +47,7 @@ use std.range
 use std.result
 
 main: () -> Void = {
-    // 逐个新建迭代器
+    // has_next 无 &：逐个新建迭代器
     a = result.unwrap(range.iter(1..3))
     assert(range.has_next(a))
 
@@ -129,7 +130,8 @@ has_next: (it: Iterator(Any)) -> Bool
 
 是否还有未消费的元素。
 
-> 会**移动**迭代器。
+> **按值消耗**迭代器（签名无 `&`）——判定一次后原迭代器即失效，下次要重新
+> [`iter`](#iter)。
 
 ```yaoxiang
 use std.assert
@@ -156,7 +158,9 @@ next: (it: &Iterator(Any)) -> Any
 
 返回：当前元素；迭代结束时返回 `Void`。
 
-> 会**移动**迭代器。
+> **借用**迭代器（签名有 `&`，`src/std/range.rs:46`），不消耗它。
+> 这与 [`has_next`](#has_next) 相反，也与 [`std.list`](./list) 侧的
+> 「两个方法都借用」相反。
 
 ```yaoxiang
 use std.assert

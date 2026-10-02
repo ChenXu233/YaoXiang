@@ -82,13 +82,19 @@ TypeExpr    ::= PrimitiveType
 | `Void`   | ⊤（真/Unit）   | 有默认 void 值，零字段积类型。`x: Void = <默认>` 合法。               | 0 字节   |
 | `Bool`   | —              | 布尔值：`true` / `false`                                              | 1 字节   |
 | `Int`    | —              | 有符号整数                                                            | 8 字节   |
-| `Uint`   | —              | 无符号整数                                                            | 8 字节   |
 | `Float`  | —              | 浮点数                                                                | 8 字节   |
 | `String` | —              | UTF-8 字符串                                                          | 可变     |
 | `Char`   | —              | Unicode 字符                                                          | 4 字节   |
 | `Bytes`  | —              | 原始字节                                                              | 可变     |
 
-带位宽的整数：`Int8`, `Int16`, `Int32`, `Int64`, `Int128` 带位宽的浮点：`Float32`, `Float64`
+带位宽的整数：`Int8`, `Int16`, `Int32`, `Int64`；带位宽的浮点：`Float32`, `Float64`。
+完整的内建类型名表见 `src/frontend/core/types/mono.rs:618-640` 的
+`MonoType::from_builtin_name`。
+
+> **没有无符号整数类型**。`Uint`（以及 `Int128`）不是可用类型名——`Uint` 只出现在
+> `src/lsp/world.rs:176` 的 LSP 补全候选表与
+> `src/frontend/core/types/eval/const_eval.rs:503` 的 `sizeof` 兜底分支里，两者都不是
+> 类型注册。需要无符号语义时自己用 `Int` 加上下界约定。
 
 ### 2.2 Never 与 Void：⊥ 与 ⊤
 

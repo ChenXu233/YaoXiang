@@ -128,7 +128,7 @@ impl TypeChecker {
                 .iter()
                 .map(|p| {
                     p.ty.as_ref()
-                        .map(&type_name_of)
+                        .map(type_name_of)
                         .unwrap_or_else(|| "_".to_string())
                 })
                 .collect::<Vec<_>>()
@@ -136,7 +136,7 @@ impl TypeChecker {
         } else {
             type_annotation
                 .as_ref()
-                .map(&type_name_of)
+                .map(type_name_of)
                 .unwrap_or_default()
         };
         Some((name.clone(), sig))

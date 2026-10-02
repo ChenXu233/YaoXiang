@@ -2,7 +2,7 @@
 //!
 //! 从 Git 仓库（GitHub 等）下载依赖。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::package::cache::GlobalCache;
@@ -21,6 +21,42 @@ pub enum GitRef {
     Rev(String),
     /// 默认分支
     DefaultBranch,
+}
+
+/// git 子进程的稳定工作目录。
+///
+/// 进程级 cwd 可能被并行的 chdir 测试（如 init 的 CwdGuard）移进随后
+/// 被删除的临时目录：子进程 spawn 时 getcwd 失败，报 "Unable to read
+/// current working directory"。显式钉到系统临时根（生命周期覆盖进程）
+/// 免疫该竞态；git 命令的路径参数均为绝对/显式路径，cwd 无业务含义。
+fn stable_cwd() -> PathBuf {
+    std::env::temp_dir()
+}
+
+/// 构造剥离仓库定位环境变量的 git 子进程 Command。
+///
+/// `git commit` 会向钩子环境注入 GIT_DIR/GIT_WORK_TREE 等变量并被子进程
+/// 继承：钩子链里 spawn 的 git（测试夹具的 init、下载链路的 clone）会把
+/// 仓库定位重定向到继承的仓库——`git init <dir>` 实际 reinit 的是
+/// GIT_DIR 指向的仓库（cache 测试在钩子链下误报连挂的根因）。仓库定位
+/// 一律走显式参数（`-C` / URL / 目标路径），定位类环境变量在此统一剥离。
+pub(crate) fn git_command() -> Command {
+    let mut cmd = Command::new("git");
+
+    for key in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_NAMESPACE",
+        "GIT_CONFIG_PARAMETERS",
+    ] {
+        cmd.env_remove(key);
+    }
+
+    cmd
 }
 
 /// Git 来源
@@ -99,9 +135,12 @@ impl GitSource {
             std::fs::remove_dir_all(dest)?;
         }
 
-        // 克隆仓库
-        let mut cmd = Command::new("git");
-        cmd.arg("clone").arg("--depth").arg("1");
+        // 克隆仓库。--no-local 强制本地路径也走传输路径：本地硬链接克隆
+        // 会忽略 --depth，且 git 2.55 下 checkout 间歇性失败
+        //（"fatal: this operation must be run in a work tree"）
+        let mut cmd = git_command();
+        cmd.current_dir(stable_cwd());
+        cmd.arg("clone").arg("--no-local").arg("--depth").arg("1");
 
         match git_ref {
             GitRef::Tag(tag) => {
@@ -133,7 +172,7 @@ impl GitSource {
 
         // 如果是 rev，需要 checkout 到指定 commit
         if let GitRef::Rev(rev) = git_ref {
-            let checkout_output = Command::new("git")
+            let checkout_output = git_command()
                 .arg("-C")
                 .arg(dest)
                 .arg("checkout")
@@ -160,7 +199,8 @@ impl GitSource {
         &self,
         url: &str,
     ) -> PackageResult<Vec<String>> {
-        let output = Command::new("git")
+        let output = git_command()
+            .current_dir(stable_cwd())
             .arg("ls-remote")
             .arg("--tags")
             .arg("--refs")
@@ -169,7 +209,13 @@ impl GitSource {
             .map_err(|e| PackageError::InvalidManifest(format!("无法执行 git ls-remote: {}", e)))?;
 
         if !output.status.success() {
-            return Ok(Vec::new());
+            // 不得静默降级为空列表：空列表会让 semver 择优落空、回退到
+            // 默认分支，把"请求 1.0.0"静默解析成 HEAD 的内容
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(PackageError::InvalidManifest(format!(
+                "git ls-remote 失败: {}",
+                stderr.trim()
+            )));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -212,7 +258,7 @@ impl GitSource {
         }
 
         // 尝试获取 git 最新 tag
-        let output = Command::new("git")
+        let output = git_command()
             .arg("-C")
             .arg(dest)
             .arg("describe")
@@ -369,7 +415,8 @@ impl GitSource {
         url: &str,
         pattern: &str,
     ) -> PackageResult<String> {
-        let output = Command::new("git")
+        let output = git_command()
+            .current_dir(stable_cwd())
             .arg("ls-remote")
             .arg(url)
             .arg(pattern)

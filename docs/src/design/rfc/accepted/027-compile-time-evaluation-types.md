@@ -4,7 +4,7 @@ status: '已接受'
 author: '晨煦'
 created: '2026-06-07'
 updated: '2026-10-02'
-impl_status: 'in_progress'
+impl_status: 'in-progress'
 impl_detail:
   'Phase 1-2 完成，Phase 3 部分完成，Phase 4 部分完成。assert/Assert 统一方案 6 Phase
   全部实现（#157-#162 已关闭）：Never 类型、IsTrue 桥接、流敏感 Γ + kill

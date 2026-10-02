@@ -74,7 +74,22 @@ description: '系统学习 YaoXiang 核心概念'
 
 - [什么是「一切皆类型」？](./basics/variables/)
 - [为什么不需要写 await？](./getting-started#并作编程并发)
-- [所有权是什么？](./advanced/type-system/)
+- [所有权是什么？](./advanced/ownership/)
+
+### 零基础入门全部章节
+
+- [变量与字面量](./basics/variables/index.md)
+- [字符串](./basics/string/index.md)
+- [函数](./basics/functions/index.md)
+- [Lambda 与闭包](./basics/lambda/index.md)
+- [数据结构](./basics/data-structures/index.md)
+- [模式匹配](./basics/pattern-matching/index.md)
+- [控制流](./basics/control-flow/index.md)
+
+### 进阶
+
+- [类型系统](./advanced/type-system/index.md) - 泛型、接口、运算符重载
+- [所有权](./advanced/ownership/index.md) - 借用、引用与所有权模型
 
 推荐从 [快速开始](./getting-started) 开始系统学习。
 ---

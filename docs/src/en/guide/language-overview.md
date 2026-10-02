@@ -4,48 +4,50 @@ title: 'Syntax Cheat Sheet'
 
 # Syntax Cheat Sheet
 
-Understand YaoXiang's core syntax in 5 minutes. For deeper learning, visit the
+Understand the core syntax of YaoXiang in 5 minutes. For in-depth learning, visit
 [Tutorial](../tutorial/index.md).
 
 ## Variables
 
 ```yaoxiang
-x = 42                    // 不可变（默认）
-mut y = 0                 // 可变
+x = 42                    // Immutable (default)
+mut y = 0                 // Mutable
 
-name: String = "hello"    // 显式类型
-count: Int = 100          // 类型注解
+name: String = "hello"    // Explicit type
+count: Int = 100          // Type annotation
 
-pub version = "1.0"       // 公开导出
+pub version = "1.0"       // Public export
 ```
 
 ## Functions
 
-Everything is `name: type = value`. Functions are values too.
+Everything is `name: type = value`. Functions are also values.
 
 ```yaoxiang
-// 表达式形式（直接返回值）
+use std.io
+
+// Expression form (returns value directly)
 add: (a: Int, b: Int) -> Int = a + b
 
-// 代码块形式（显式 return）
+// Block form (explicit return)
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
 }
 
-// Lambda（签名完整时可省略参数名）
+// Lambda (parameter names can be omitted when the signature is complete)
 double = (x) => x * 2
 add = (a, b) => a + b
-inc = x => x + 1            // 单参数可省略括号
+inc = x => x + 1            // Single parameter can omit parentheses
 
-// 代码块内需要 return
+// Use return inside a code block
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
     return b
 }
 
-// Void 函数不需要 return
+// Void functions do not need return
 greet: (name: String) -> Void = {
     io.println("Hello, " + name)
 }
@@ -55,37 +57,41 @@ greet: (name: String) -> Void = {
 
 No `type`, `struct`, `trait`, or `impl` keywords. A single unified declaration handles everything.
 
-```yaoxiang
-// 记录类型
-Point: Type = { x: Float, y: Float }
-p = Point(1.0, 2.0)            // 位置参数
-p = Point(x=1.0, y=2.0)        // 命名参数
+<!-- docs-example: skip -->
 
-// 带默认值的字段
+```yaoxiang
+// Record type
+Point: Type = { x: Float, y: Float }
+p = Point(1.0, 2.0)            // Positional parameters
+p = Point(x=1.0, y=2.0)        // Named parameters
+
+// Fields with default values
 Point: Type = { x: Float = 0, y: Float = 0 }
 Point()                        // OK: x=0, y=0
 Point(x=1.0)                   // OK: x=1.0, y=0
 
-// 变体类型（枚举）
+// Variant type (enum)
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
-Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
+// Note: The standard library already provides std.option (Option + Try); defining your own is not recommended
+// Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
+// Note: The bare constructors ok/err currently report E1001 (verified); see std.result in the standard library
+// Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// 接口（字段全为函数类型的记录类型）
+// Interface (a record type whose fields are all function types)
 Drawable: Type = { draw: (Surface) -> Void }
 
-// 接口组合
+// Interface composition
 DrawableSerializable: Type = Drawable & Serializable
 
-// 类型内声明接口实现
+// Declare interface implementation inside a type
 Circle: Type = {
     radius: Float,
-    Drawable,              // 实现 Drawable 接口
-    Serializable,          // 实现 Serializable 接口
+    Drawable,              // Implement Drawable interface
+    Serializable,          // Implement Serializable interface
 }
 
-// 泛型类型
+// Generic type
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -93,26 +99,32 @@ List: (T: Type) -> Type = {
     map: (R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
 }
 
-// 泛型约束
-clone: (T: Clone)(value: T) -> T = value.clone()
-sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
+// Generic constraint
+// Generic constraint signatures are not yet supported by the current parser; verified to report E0011
+clone: (value: T) -> T = value
+// Generic constraint signatures are not yet supported by the current parser; verified to report E0011
+sort: (list: List(T)) -> List(T)
 ```
 
 ## Methods
 
+<!-- docs-example: skip -->
+
 ```yaoxiang
-// 命名空间函数（Type.method 只是归属标记，不是绑定）
+// Namespace function (Type.method is only an attribution marker, not a binding)
 Point.distance: (a: &Point, b: &Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
-    return (dx * dx + dy * dy).sqrt()
+    // Note: Parenthesized expressions cannot directly attach methods (verified E1053); bind to a variable first
+    d2 = dx * dx + dy * dy
+    return d2.sqrt()
 }
 
-// 显式绑定后才有 . 调用语法
+// The dot-call syntax is only available after explicit binding
 Point.distance = distance[0]
-// 此后 p1.distance(p2) → distance(p1, p2)
+// Afterward p1.distance(p2) → distance(p1, p2)
 
-// 快速定义 + 绑定
+// Quick definition + binding
 Point.draw: (self: &Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -121,8 +133,12 @@ Point.draw: (self: &Point, surface: Surface) -> Void = {
 ## Control Flow
 
 ```yaoxiang
-// if 是表达式
-grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }
+use std.result
+
+// if is an expression
+score = 72
+value: Result(Int, String) = Result(Int, String).ok(1)
+grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }   // "B"
 
 // match
 result = match value {
@@ -131,7 +147,7 @@ result = match value {
     _ => "unknown",
 }
 
-// 循环
+// Loops
 for i in 0..5 { io.println(i) }
 for item in items { io.println(item) }
 
@@ -142,20 +158,30 @@ while n < 5 { io.println(n); n = n + 1 }
 ## Data Structures
 
 ```yaoxiang
-// 列表
+use std.dict
+use std.list
+
+// List
 nums = [1, 2, 3, 4, 5]
 first = nums[0]           // 1
 
-// 字典
+// Dictionary
 scores = {"Alice": 90, "Bob": 85}
 a = scores["Alice"]       // 90
 
-// 列表推导式
-evens = [x for x in nums if x % 2 == 0]
+// List comprehension
+// Note: List comprehensions in 0.8.2 do not support if filters (verified E0010); use list.filter instead
+evens = list.filter(nums, (x) => x % 2 == 0)
 doubled = [x * 2 for x in nums]
 ```
 
 ## Pattern Matching
+
+> **Note**: 0.8.2 has **not yet implemented record/struct destructuring patterns** (verified
+> `match s { circle(r) => ... }` reports E0010); the following is target syntax and is not yet
+> runnable.
+
+<!-- docs-example: skip -->
 
 ```yaoxiang
 match shape {
@@ -164,7 +190,7 @@ match shape {
     point => 0,
 }
 
-// 结构体/元组模式
+// Struct/tuple patterns
 match p {
     { x: 0, y: 0 } => "origin",
     { x, y } => "({x}, {y})",
@@ -174,10 +200,10 @@ match t {
     (x, y) => "({x}, {y})",
 }
 
-// 解构赋值
+// Destructuring assignment
 a, b = (1, 2)              // a=1, b=2
 
-// 卫表达式
+// Guard expression
 match age {
     n if n >= 18 => true,
     _ => false,
@@ -192,13 +218,13 @@ use std.math.{sqrt, sin, cos}
 use std.{io, list}
 
 io.println("hello")
-result = sqrt(16)         // 4.0
+result = sqrt(16.0)       // 4.0 (Note: An Int argument will return 0.0; you must pass a Float)
 
-// 别名
+// Alias
 use std.math as math
 use std.{io as print}
 
-// 公开导出
+// Public export
 pub add: (a: Int, b: Int) -> Int = a + b
 pub Point: Type = { x: Float, y: Float }
 ```
@@ -206,42 +232,44 @@ pub Point: Type = { x: Float, y: Float }
 ## Ownership
 
 ```yaoxiang
-// Move：默认所有权转移
+// Move: default ownership transfer
 p1 = Point(1.0, 2.0)
-p2 = p1                   // p1 被移走
+p2 = p1                   // p1 is moved away
 
-// 借用 &：自动创建令牌（无需手动 &）
+// Borrow &: automatically create a token (no manual & needed)
 distance: (a: &Point, b: &Point) -> Float = ...
-d = distance(p1, p2)      // 编译器自动创建借用令牌
+d = distance(p1, p2)      // The compiler automatically creates a borrow token
 
-// 可变借用 &mut
+// Mutable borrow &mut
 update: (p: &mut Point, x: Float) -> Void = { p.x = x }
 
-// ref：共享持有（编译器自动选 Rc/Arc）
+// ref: shared ownership (compiler automatically chooses Rc/Arc)
 shared = ref data
 
-// clone：显式深拷贝
+// clone: explicit deep copy
 backup = data.clone()
 ```
 
 ## Concurrency
 
-`spawn` is the only parallelism primitive. No async/await, no Send/Sync.
+spawn is the only parallel primitive. No async/await, no Send/Sync.
+
+<!-- docs-example: skip -->
 
 ```yaoxiang
-// spawn 块：子表达式自动并行
+// spawn block: sub-expressions run in parallel automatically
 result = spawn {
     user = fetch_user(1)
     posts = fetch_posts()
     return (user, posts)
 }
 
-// spawn for：数据并行
+// spawn for: data parallelism
 results = spawn for item in items {
     return process(item)
 }
 
-// spawn + ref：跨任务共享
+// spawn + ref: share across tasks
 main: () -> Void = {
     shared = ref data
     result = spawn {
@@ -254,8 +282,9 @@ main: () -> Void = {
 ## F-string
 
 ```yaoxiang
+pi = 3.14159
 name = "YaoXiang"
-io.println(f"Hello {name}")          // Hello YaoXiang
-io.println(f"Sum: {10 + 20}")        // Sum: 30
-io.println(f"Pi: {pi:.2f}")          // Pi: 3.14
+print(f"Hello {name}")               // Hello YaoXiang
+print(f"Sum: {10 + 20}")             // Sum: 30
+print(f"Pi: {pi}")                    // Verified: format specifiers are not yet implemented; outputs 3.14159
 ```

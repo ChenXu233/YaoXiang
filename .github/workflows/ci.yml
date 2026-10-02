@@ -75,6 +75,41 @@ jobs:
       - name: Run i18n tests
         run: npm test --prefix scripts/i18n
 
+  docs-truth:
+    name: Docs Truth (事实对账)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # 原有两道文档门禁都判「时间」而非「事实」，因此对最严重的一类问题
+      # （文档与源码矛盾）完全无感：
+      #   - check-docs-freshness.sh 用 git mtime 判定，2026-09-25 一次批量格式化
+      #     就把 20+ 篇过期文档的 mtime 全部刷新，STALE 归零；
+      #   - check_tracking.py 的 RFC 状态由目录反查，frontmatter 与目录不一致
+      #     永远查不出。
+      # 下面两个脚本改为对账事实。详见
+      # docs/plans/2026-10-02-docs-audit-and-structure-proposal.md
+      - name: Check docs against source of truth
+        run: python3 scripts/ci/check-docs-truth.py
+
+      - name: Check docs structure (orphan / frontmatter / dead link)
+        run: python3 scripts/ci/check-docs-orphan.py
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-truth-reports
+          path: |
+            scripts/ci/_docs-truth-report.txt
+            scripts/ci/_docs-orphan-report.txt
+          if-no-files-found: ignore
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -109,6 +144,21 @@ jobs:
 
       - name: Build CLI
         run: cargo build --all-features --bin yaoxiang-rs
+
+      # 教程/指南里的代码块直接被读者复制粘贴，必须真能编译。
+      # 2026-10-02 审计实测发现 20 个示例用 0.8.2 编译器直接失败，
+      # 而当时没有任何门禁覆盖这件事（stdlib 侧有，教程侧空白）。
+      # 依赖上面已构建的 CLI，无需重复编译。
+      - name: Check tutorial/guide code examples compile
+        run: python3 scripts/ci/check-docs-examples.py
+
+      - name: Upload example report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-examples-report
+          path: scripts/ci/_docs-examples-report.txt
+          if-no-files-found: ignore
 
       - name: YaoXiang test suites (JSON summary)
         run: |

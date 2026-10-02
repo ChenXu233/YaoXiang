@@ -1,7 +1,7 @@
 # Syntax Specification
 
-This document defines the syntax specification of the YaoXiang programming language, including
-lexical structure, grammar rules, and operator precedence.
+This file defines the syntax specification of the YaoXiang programming language, including lexical
+structure, grammar rules, and operator precedence.
 
 ---
 
@@ -9,91 +9,114 @@ lexical structure, grammar rules, and operator precedence.
 
 ### 1.1 Source Files
 
-YaoXiang source files must use UTF-8 encoding. Source files usually have the extension `.yx`.
+YaoXiang source files must be encoded in UTF-8. Source files typically use the `.yx` extension.
 
 ### 1.2 Lexical Token Categories
 
-| Category   | Description                     | Example                   |
-| ---------- | ------------------------------- | ------------------------- |
-| Identifier | Begins with a letter or `_`     | `x`, `_private`, `my_var` |
-| Keyword    | Language-defined reserved words | `Type`, `pub`, `use`      |
-| Literal    | Fixed values                    | `42`, `"hello"`, `true`   |
-| Operator   | Operation symbols               | `+`, `-`, `*`, `/`        |
-| Separator  | Syntactic delimiters            | `(`, `)`, `{`, `}`, `,`   |
+| Category   | Description                        | Example                   |
+| ---------- | ---------------------------------- | ------------------------- |
+| Identifier | Starts with a letter or underscore | `x`, `_private`, `my_var` |
+| Keyword    | Language predefined reserved words | `use`, `mut`, `and`       |
+| Literal    | Fixed values                       | `42`, `"hello"`, `true`   |
+| Operator   | Operation symbols                  | `+`, `-`, `*`, `/`        |
+| Delimiter  | Syntax separators                  | `(`, `)`, `{`, `}`, `,`   |
 
 ### 1.3 Keywords
 
-YaoXiang defines a very small set of keywords:
+YaoXiang has **18 keywords** (the `keyword_from_str` in `src/frontend/core/lexer/state.rs:25-55`,
+each corresponding to a `TokenKind`):
 
 ```
-pub    use    spawn
-ref    mut    if     else
-else   match  while  for    return
-break  continue as     in     unsafe
+pub     use     spawn  ref     mut
+if      else    match  while   for
+in      return  break  continue
+as      unsafe  and    or
 ```
 
-These keywords have special meaning in all contexts and cannot be used as identifiers.
+`and` / `or` are **keywords** for logical AND / OR (Zig-style; see precedence in §2.2 level 10);
+unary NOT is the symbol `!`, orthogonal to them.
+
+These keywords have special meaning in any context and cannot be used as identifiers.
+
+> **`type` is no longer a keyword** (RFC-010): write type definitions using the
+> `Name: Type = { ... }` notation. `src/frontend/core/lexer/state.rs:27` explicitly comments on
+> this, and the `TokenKind` enum header (`src/frontend/core/lexer/tokens.rs:82`) also states "16
+> total - RFC-010: 'type' keyword removed" — **that "16" is an outdated comment**, and 18 are
+> actually listed (including `and` / `or`, while the `Kw*`-prefixed batch remains 16).
+>
+> **`pub` does not produce visibility effects**: `pub` is still lexed as `KwPub`
+> (`src/frontend/core/lexer/state.rs:28`), and the parser skips it at declarations and imports
+> (`src/frontend/core/parser/statements/declarations.rs:666-671,726`, `.../imports.rs:57-59`), but
+> the **module system does not perform any visibility judgment based on it** — the accepted
+> [RFC-029](../../design/rfc/accepted/029-module-semantics.md) explicitly states "no `pub`, no
+> `private`, no `export`, no visibility mechanism" (line 17 of that file). Whether you write `pub`
+> or not makes no difference to visibility.
 
 ### 1.4 Reserved Words
 
-YaoXiang's "reserved words" are organized into three layers, identified at different stages by the
-parser and the type checker:
+YaoXiang's "reserved words" are split into three layers, recognized at different stages by the
+parser and type checker:
 
 #### 1.4.1 Literal Reserved Words
 
-Literal identifiers that the parser treats as independent tokens; they cannot be used as ordinary
+The parser has independent tokens for these literal identifiers and cannot use them as ordinary
 identifiers:
 
-| Identifier | Owning Type | Description                                                                                                   |
-| ---------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
-| `Type`     | —           | Meta type keyword                                                                                             |
-| `true`     | Bool        | Boolean true                                                                                                  |
-| `false`    | Bool        | Boolean false                                                                                                 |
-| `void`     | Void        | Void literal (Unit value). Lowercase `void` is a value literal; uppercase `Void` is a type name (see §1.4.3). |
+| Identifier | Belongs to Type | Description                                                                                                   |
+| ---------- | --------------- | ------------------------------------------------------------------------------------------------------------- |
+| `true`     | Bool            | Boolean truth value                                                                                           |
+| `false`    | Bool            | Boolean false value                                                                                           |
+| `void`     | Void            | Void literal (Unit value). Lowercase `void` is a value literal; uppercase `Void` is a type name (see §1.4.3). |
+
+> **`Type` is not in this layer**: it has **no** independent `TokenKind` (it is not in the
+> `TokenKind` enum in `src/frontend/core/lexer/tokens.rs`, and there is no corresponding branch in
+> `keyword_from_str`). The parser treats it as an ordinary identifier, and the type checker
+> recognizes it as a meta type in type positions. Therefore `Type` can be shadowed by a local
+> binding in expression positions. It is a **meta type name**, not a keyword.
 
 #### 1.4.2 Variant Names
 
-Variant names are recognized by the parser in **pattern** contexts (a bare name is decided by the
-scrutinee's variant set, see §2.8); constructing a variant in an **expression** context requires
-type qualification — `Result(Int, String).ok(5)`, `Option(T).some(v)`, `Color.green()` (RFC-010
-record types: variant constructors are function-typed fields in a type definition; a bare name like
-`ok(5)` is not a constructor call).
+Variant names are recognized by the parser in **pattern** contexts (bare names are adjudicated by
+the scrutinee type's variant set, see §2.8); in **expression** contexts, constructing variants
+requires type qualification — `Result(Int, String).ok(5)`, `Option(T).some(v)`, `Color.green()`
+(RFC-010 record types: variant constructors are function-type fields in type definitions; a bare
+name `ok(5)` is not a constructor call).
 
-| Variant Name | Owning Type | Description                       |
-| ------------ | ----------- | --------------------------------- |
-| `some(T)`    | Option      | Option value variant construction |
-| `ok(T)`      | Result      | Result success variant            |
-| `err(E)`     | Result      | Result error variant              |
+| Variant Name | Belongs to Type | Description                      |
+| ------------ | --------------- | -------------------------------- |
+| `some(T)`    | Option          | Option value variant constructor |
+| `ok(T)`      | Result          | Result success variant           |
+| `err(E)`     | Result          | Result error variant             |
 
 #### 1.4.3 Built-in Type Names
 
 The following type names are pre-registered by the type checker and can be used in type positions
-without import. The parser treats them as ordinary identifiers — **they are not reserved words and
-can be shadowed by local bindings (not recommended)**.
+without imports. The parser treats them as ordinary identifiers — **not reserved words, and can be
+shadowed by local bindings (not recommended)**.
 
 | Type Name | Logical Correspondence | Description                                                                                                                                        |
 | --------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Void`    | ⊤ (true / Unit)        | A zero-field product type with exactly one inhabitant (the `void` literal, see §1.4.1)                                                             |
 | `Never`   | ⊥ (false / empty type) | A zero-variant sum type with zero inhabitants. No expression can produce a `Never` value. `Never <: T` holds for all `T` (principle of explosion). |
 | `Int`     | —                      | Signed integer                                                                                                                                     |
-| `Float`   | —                      | Floating-point number                                                                                                                              |
+| `Float`   | —                      | Float                                                                                                                                              |
 | `Bool`    | —                      | Boolean value: `true` / `false`                                                                                                                    |
 | `Char`    | —                      | Unicode character                                                                                                                                  |
 | `String`  | —                      | String                                                                                                                                             |
 
 ### 1.5 Identifiers
 
-An identifier begins with a letter or underscore, followed by letters, digits, or underscores.
-Identifiers are case-sensitive.
+Identifiers start with a letter or underscore, and subsequent characters can be letters, digits, or
+underscores. Identifiers are case-sensitive.
 
 Special identifiers:
 
-- `_` is used as a placeholder to indicate an ignored value
-- Identifiers beginning with an underscore represent private members
+- `_` is used as a placeholder, indicating that a value is ignored
+- Identifiers starting with an underscore represent private members
 
 ### 1.6 Literals
 
-#### 1.6.1 Integers
+#### 1.6.1 Integer
 
 ```
 Decimal     ::= [0-9][0-9_]*
@@ -102,13 +125,13 @@ Hex         ::= 0x[0-9a-fA-F][0-9a-fA-F_]*
 Binary      ::= 0b[01][01_]*
 ```
 
-#### 1.6.2 Floats
+#### 1.6.2 Float
 
 ```
 Float       ::= [0-9][0-9_]* '.' [0-9][0-9_]* ([eE][+-]?[0-9][0-9_]*)?
 ```
 
-#### 1.6.3 Strings
+#### 1.6.3 String
 
 ```
 String      ::= '"' ([^"\\] | EscapeSequence)* '"'
@@ -121,58 +144,56 @@ Unicode     ::= 'u' '{' HexDigit+ '}'
 ```
 List        ::= '[' Expr (',' Expr)* ']'
 Dict        ::= '{' String ':' Expr (',' String ':' Expr)* '}'
-Array       ::= '[' Expr (',' Expr)* ']'   // when the target type annotation is Array(T, N), the literal resolves to a fixed-length array
+Array       ::= '[' Expr (',' Expr)* ']'   // when the target type annotation is Array(T, N), the literal lands as a fixed-length array
 ```
 
-> **Dict literal requires at least one key-value pair**: `{}` is **not** an empty dict — it is an
-> empty block (value `Void`, see [§2.9](#_2-9-块表达式)). Use the constructor `dict.new()` for an
-> empty dict:
+> **Dict literals require at least one key-value pair**: `{}` is **not** an empty dict — it is an
+> empty block (value `Void`, see [§2.9](#_2-9-block-expressions)). For an empty dict, use the
+> constructor `dict.new()`:
 >
 > ```yaoxiang
 > empty = dict.new()                  // ✅ empty dict
 > d = { "a": 1 }                       // ✅ dict literal
-> wrong = {}                           // ❌ this is not a dict, it is an empty block (Void)
+> wrong = {}                           // ❌ this is not a dict, it's an empty block (Void)
 > ```
 >
-> **The criterion is content**: the `Dict` grammar requires at least one `String ':' Expr`; `{}` has
-> no content to base on, so it takes the zero form of block structure. Non-empty forms are
-> self-describing by content (`{ "k": v }` has a key-value pair → dict) — this is the same source as
+> **The criterion is content**: the `Dict` grammar requires at least one `String ':' Expr`, and `{}`
+> has no content to rely on, so it takes the zero form of the block structure. Non-empty forms are
+> self-describing by content (`{ "k": v }` has key-value pairs → dict) — this is the same source as
 > `f = { 5 }` being an `Int` value rather than a function: **the type is determined by content**.
 
-> Set has no literal grammar and no runtime representation — the collection type is in the planning
-> stage; when the need arises, complete it following the Dict pattern (`std.set` +
-> `HeapValue::Set`). The resolution of List/Dict literals is determined by the context type
-> annotation: a bare literal and a `List(T)` annotation resolve to a growable list; an `Array(T, N)`
-> annotation applied directly to a literal resolves to a fixed-length array. Implicit List→Array
-> conversion is prohibited.
+> Set has no literal grammar and no runtime representation — set types are in planning and will be
+> filled in following the Dict pattern when the need arises (std.set + HeapValue::Set). The landing
+> of List/Dict literals is determined by the context type annotation: a bare literal and a `List(T)`
+> annotation land as a growable list; an `Array(T, N)` annotation acting directly on a literal lands
+> as a fixed-length array. Implicit List→Array conversion is prohibited.
 >
 > Array literal semantics:
 >
-> - Element count must equal N; otherwise compile-time E1002. Empty literal with non-zero N is
->   likewise rejected.
-> - Each element's type must be compatible with T; otherwise compile-time E1002.
-> - Grammar form of N: integer literal only (may be negative) or constant name; compound expressions
->   (e.g., `2+1`) are rejected at parse time.
-> - When N is a symbolic constant (function `const` parameter, e.g., `Array(Int, n)`), the count
->   check is deferred to the refinement type stage.
-> - v1 nested array literals (`Array(Array(Int,2),2) = [[1,2],[3,4]]`) are rejected at compile time;
->   explicit construction layer by layer is required. Recursive resolution is left for a later
->   version.
+> - The number of elements must equal N; otherwise E1002 at compile-time; an empty literal paired
+>   with a non-zero N is likewise rejected
+> - Each element's type must be compatible with T; otherwise E1002 at compile-time
+> - N's grammar form: only integer literals (possibly negative) or constant names; compound
+>   expressions (e.g., `2+1`) are rejected at parse time
+> - When N is a symbolic constant (function const parameter, e.g., `Array(Int, n)`), the count check
+>   is deferred to the refined type stage
+> - Nested array literals in v1 (e.g., `Array(Array(Int,2),2) = [[1,2],[3,4]]`) are rejected at
+>   compile-time and must be constructed layer by layer; recursive landing is reserved for a later
+>   version
 
-#### 1.6.5 List Comprehensions
+#### 1.6.5 List Comprehension
 
 ```
 ListComp    ::= '[' Expr 'for' Identifier 'in' Expr (',' Expr)* ('if' Expr)? ']'
 ```
 
-> **Behavior tightening (migration record)**: The iteration variable grammar has always been
-> `'for' Identifier 'in'`, but in the old implementation the pattern went through the full pratt
-> parser — once `'in'` was registered as an infix operator, `x` would swallow `in items` as a
-> membership expression. After the fix, non-identifier patterns fail to parse directly, instead of
-> falling back to `_` like the old implementation did (silently swallowing the error). Impact:
-> previously parseable forms like `[x for (a, b) in pairs]` now report an error — that form never
-> had defined behavior (the variable was always `_`), so the tightening direction is correct with no
-> semantic migration cost.
+> **Behavior tightening (migration record)**: the iteration variable grammar is already
+> `'for' Identifier 'in'`, but the old implementation parsed pattern via full pratt — after `in` was
+> registered as an infix operator, `x` would swallow `in items` into a membership expression. After
+> the fix, a non-identifier pattern directly fails to parse and no longer falls back to `_` like the
+> old implementation (silently swallowing errors). Impact: previously parseable forms like
+> `[x for (a, b) in pairs]` now error — this form never had defined behavior (the variable was
+> always `_`), the tightening direction is correct, and there is no semantic migration cost.
 
 #### 1.6.6 Membership Test
 
@@ -180,13 +201,13 @@ ListComp    ::= '[' Expr 'for' Identifier 'in' Expr (',' Expr)* ('if' Expr)? ']'
 Membership  ::= Expr 'in' Expr
 ```
 
-> `in` is a binary relational operator that returns `Bool` — hit returns `true`, miss returns
-> `false`, no error. Semantic split: `[]` asserts existence and retrieves a value (failure reports
-> an error), while `in` asks whether something exists (a miss is a normal `false`). Right-operand
-> coverage: List / Array / Dict (key set) / Tuple / String (substring) / Range (interval). `in` is a
-> first-class Hoare predicate, serving as the base of compile-time-provable propositions in the
-> refinement type stage. (Set is removed from the right-operand list — Set has no runtime
-> representation, see §1.6.4.)
+> `in` is a binary relational operator that returns `Bool` — hit is `true`, miss is `false`, no
+> error. Semantic split: `[]` asserts existence and takes a value (fails with error), while `in`
+> asks whether something exists (a miss is a normal `false`). Right operand coverage: List / Array /
+> Dict (key set) / Tuple / String (substring) / Range (interval). `in` is a first-class Hoare
+> predicate, and at the refined type stage it serves as the basis for compile-time provable
+> propositions. (Set is removed from the right operand list — Set has no runtime representation, see
+> §1.6.4)
 
 ### 1.7 Comments
 
@@ -199,7 +220,8 @@ Membership  ::= Expr 'in' Expr
 
 ### 1.8 Indentation Rules
 
-Code must use 4-space indentation; Tab characters are forbidden. This is a mandatory syntactic rule.
+Code must use 4 spaces for indentation; Tab characters are prohibited. This is a mandatory syntax
+rule.
 
 ---
 
@@ -229,41 +251,40 @@ Expr        ::= Literal
 
 | Precedence | Operators                   | Associativity |
 | ---------- | --------------------------- | ------------- |
-| 1          | `()` `[]` `.` `?`           | left-to-right |
-| 2          | `as`                        | left-to-right |
-| 3          | Unary prefix `!` `-` `+`    | right-to-left |
-| 4          | `*` `/` `%`                 | left-to-right |
-| 5          | `+` `-`                     | left-to-right |
-| 6          | `..`                        | left-to-right |
-| 7          | `<<` `>>`                   | left-to-right |
-| 8          | `&` `\|` `^`                | left-to-right |
-| 9          | `==` `!=` `<` `>` `<=` `>=` | left-to-right |
-| 10         | `and` `or`                  | left-to-right |
-| 11         | `if...else`                 | right-to-left |
-| 12         | `=` `+=` `-=` `*=` `/=`     | right-to-left |
+| 1          | `()` `[]` `.` `?`           | Left-to-right |
+| 2          | `as`                        | Left-to-right |
+| 3          | Unary prefix `!` `-` `+`    | Right-to-left |
+| 4          | `*` `/` `%`                 | Left-to-right |
+| 5          | `+` `-`                     | Left-to-right |
+| 6          | `..`                        | Left-to-right |
+| 7          | `<<` `>>`                   | Left-to-right |
+| 8          | `&` `\|` `^`                | Left-to-right |
+| 9          | `==` `!=` `<` `>` `<=` `>=` | Left-to-right |
+| 10         | `and` `or`                  | Left-to-right |
+| 11         | `if...else`                 | Right-to-left |
+| 12         | `=` `+=` `-=` `*=` `/=`     | Right-to-left |
 
-> **Unary prefix operators** (`!` `-` `+`) bind tightly: only lower than call and member access,
-> higher than all binary operators. Therefore `!a == b` ≡ `(!a) == b` (Zig-style semantics); `!` is
-> a pure unary operator and does not participate in short-circuit control flow — it is orthogonal to
-> the `and`/`or` keywords (short-circuit) (authoritative definition in RFC-010).
-
-> **Range binding strength**: `..` has binding strength (6, 7) — the left precedence (6) is lower
-> than addition (7), and the right precedence (7) swallows addition but not the same-level `..`.
-> Before/after comparison:
+> **Unary prefix operators** (`!` `-` `+`) bind tightly: only below call and member access, above
+> all binary operators. Therefore `!a == b` ≡ `(!a) == b` (Zig-style semantics); `!` is a pure unary
+> operation, does not participate in short-circuit control flow, and is orthogonal to the `and` /
+> `or` keywords (short-circuit) (authoritative definition in RFC-010).
 >
-> | Expression   | Before (level 1, right-associative)                                                           | After ((6,7), left-associative)                                                  |
-> | ------------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-> | `x in 1..10` | `x in 1..10` (right-operand level of `in` is 4; level-1 `..` cannot swallow it — unparseable) | `x in (1..10)` — the range as a whole is the right operand of `in`               |
-> | `0..n+2`     | `(0..n)+2` (right-associative trap: upper bound eaten; `for` loop gets E3004 directly)        | `0..(n+2)` — upper bound is an arithmetic expression                             |
-> | `a == b..c`  | `a == (b..c)` (level-1 `..` < level-3 `==`; naturally whole)                                  | `a == (b..c)` — **semantics unchanged**, `..` still higher than comparison level |
-> | `1..2*3`     | `(1..2)*3`                                                                                    | `1..(2*3)` — upper bound is an arithmetic expression                             |
-> | `a..b..c`    | `a..(b..c)` (right-associative chain, meaningless Range in Range)                             | `(a..b)..c` — **step form** (`c` is the step)                                    |
+> **Range binding strength**: `..` has binding strength (6, 7) — left 6 is below addition (7), right
+> 7 swallows addition but not the same-level `..`. Before/after comparison:
 >
-> Net effect: the compound upper bound `for i in 0..n+2` goes from "parses successfully but E3004"
-> to "directly usable"; `x in 1..10` goes from "unparseable" to "range check"; `a..b..c` goes from
+> | Expression   | Before change (level 1, right-assoc)                                                            | After change ((6,7), left-assoc)                                           |
+> | ------------ | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+> | `x in 1..10` | `x in 1..10` (`in` right operand level 4, `..` level 1 cannot swallow, unparseable in practice) | `x in (1..10)` — the interval as a whole serves as the `in` right operand  |
+> | `0..n+2`     | `(0..n)+2` (right-assoc trap: upper bound swallowed, `for` loop directly E3004)                 | `0..(n+2)` — upper bound is an arithmetic expression                       |
+> | `a == b..c`  | `a == (b..c)` (`..` level 1 < `==` level 3, naturally the whole)                                | `a == (b..c)` — **semantics unchanged**, `..` still above comparison level |
+> | `1..2*3`     | `(1..2)*3`                                                                                      | `1..(2*3)` — upper bound is an arithmetic expression                       |
+> | `a..b..c`    | `a..(b..c)` (right-assoc chained, meaningless Range inside Range)                               | `(a..b)..c` — **step form** (`c` is the step)                              |
+>
+> Net effect: composite upper bound `for i in 0..n+2` goes from "parses successfully but E3004" to
+> "directly usable"; `x in 1..10` goes from "unparseable" to "interval check"; `a..b..c` goes from
 > "meaningless nesting" to "step component". Level 6 falls between `+` (level 5) and `<<` (level 7),
-> following mathematical convention: a range is a tightly-binding construct, so the upper bound is
-> naturally a complete arithmetic expression.
+> a mathematical convention: intervals are tightly binding constructs, and the upper bound is
+> naturally a full arithmetic expression.
 
 ### 2.3 Function Calls
 
@@ -274,21 +295,20 @@ NamedArg    ::= Identifier '=' Expr
 ```
 
 Named arguments use `name = value` (RFC-010 §Function Definitions, RFC-011 §Construction Forms).
-Positional arguments must come before named arguments; the order of parameters specified
-positionally can be arranged arbitrarily among the named arguments:
+Positional arguments must come before named arguments; order-specified parameters can be arranged in
+any order among named arguments:
 
 ```yaoxiang
 add: (a: Int, b: Int) -> Int = a + b
 
 add(3, 5)          // positional
 add(a = 3, b = 5)  // named
-add(b = 5, a = 3)  // order is free
+add(b = 5, a = 3)  // arbitrary order
 add(3, b = 5)      // mixed, positional first
 ```
 
-A wrong name in a named argument produces **E1014**; specifying the same formal parameter
-positionally and by name at the same time produces **E1015**; a count mismatch produces **E1010**
-(RFC-013).
+A wrong name in a named argument reports **E1014**; the same parameter being specified both
+positionally and by name reports **E1015**; a count mismatch reports **E1010** (RFC-013).
 
 ### 2.4 Member Access
 
@@ -302,21 +322,21 @@ MemberAccess::= Expr '.' Identifier
 IndexAccess ::= Expr '[' Expr ']'
 ```
 
-> **Three layers of semantics (RFC-011b)**: `a[i]` is dispatched by the type of `a` — ① built-in
-> containers (List/Vec/Array/Dict/Tuple) use native indexing instructions (fast path); ② user types
-> that implement the `Index` interface dispatch to their `index` method (instantiation of
-> `Index(Grid, Int, Float)` in the type body + the `Grid.index` method); ③ RFC-004's `f[0]`
-> positional binding exists only in binding declarations and does not go through this grammar. The
-> key for multi-dimensional indexing `a[0, 1]` is packed as a tuple. Other types that do not
-> implement `Index` are rejected at the type level.
+> **Three-layer semantics (RFC-011b)**: `a[i]` dispatches by `a`'s type — ① built-in containers
+> (List/Vec/Array/Dict/Tuple) go through the native index instruction (fast path); ② user types
+> implementing the `Index` interface dispatch to their `index` method (an `Index(Grid, Int, Float)`
+> instantiation inside the type body + the `Grid.index` method); ③ RFC-004's `f[0]` positional
+> binding only exists in binding declarations, not via this grammar. Multi-dimensional index
+> `a[0, 1]` packs the keys as a tuple. Other types that have not implemented `Index` are rejected at
+> the type level.
 
-### 2.6 Type Casting
+### 2.6 Type Cast
 
 ```
 TypeCast    ::= Expr 'as' TypeExpr
 ```
 
-### 2.7 Conditional Expressions
+### 2.7 Conditional Expression
 
 ```
 IfExpr      ::= 'if' Expr Block ('else' 'if' Expr Block)* ('else' Block)?
@@ -336,100 +356,100 @@ Pattern     ::= Literal
               | OrPattern
 ```
 
-> **Variant destructuring requires a variant set** (RFC-010b): `EnumPattern` (variant names like
-> `ok(v)`, `some(x)` decided by the scrutinee) requires the scrutinee's type to be a **sum type
-> whose variant set is in scope**. The variant set enters the checker only through type definitions
-> or `use` imports — `Result`/`Option` are defined in `std.result`/`std.option`, so they must be
-> imported with `use std.result` / `use std.option` before use (the whole-module form and grouped
-> form `use std.{...}` are equally valid); otherwise variant destructuring reports E1002.
-> Exhaustiveness checking follows the same source: a fallback arm exempts the match from
-> exhaustiveness; without a fallback arm, the entire variant set is checked.
+> **Variant destructuring's variant set requirement** (RFC-010b): `EnumPattern` (variant names such
+> as `ok(v)`, `some(x)` adjudicated by the scrutinee) requires the scrutinee's type to be a **sum
+> type whose variant set is present**. The variant set only enters the checker through type
+> definitions or `use` imports — `Result` / `Option` are defined by `std.result` / `std.option`, and
+> `use std.result` / `use std.option` must appear before use (whole-module and grouped
+> `use std.{...}` forms have equal weight); otherwise variant destructuring reports E1002.
+> Exhaustiveness adjudication is the same source: a catch-all arm is exempt from exhaustiveness;
+> without a catch-all arm, the full variant set is checked.
 
-### 2.9 Block Expressions
+### 2.9 Block Expression
 
 ```
 Block       ::= '{' Stmt* Expr? '}'
 ```
 
-> **Statement termination rules**: the separation between Stmts and the behavior of newlines
-> (explicit `;` separation, newline termination, line-continuation exceptions, leading `(`/`[` that
-> never merges) are defined by [RFC-038](../../design/rfc/accepted/038-statement-termination.md).
+> **Statement termination rules**: the separation between Stmts and newline behavior (explicit `;`
+> separation, newline termination, line-continuation exceptions, leading `(` / `[` never merging)
+> are defined by [RFC-038](../../design/rfc/accepted/038-statement-termination.md).
 
-#### 2.9.1 The Three Forms of `{`
+#### 2.9.1 Three Forms of `{`
 
-`{` in an expression position has exactly three interpretations, determined by **content** in a
-single pass:
+`{` has exactly three interpretations in expression position, determined in one pass by **content**:
 
 | Form             | Notation          | Type                 | Example          |
 | ---------------- | ----------------- | -------------------- | ---------------- |
 | **Empty block**  | `{}`              | `Void`               | `x: Void = {}`   |
 | **Dict literal** | `{ "k": v, ... }` | `Dict(K, V)`         | `d = { "a": 1 }` |
-| **Block**        | `{ Stmt* Expr? }` | tail-expression type | `y = { 1 + 1 }`  |
+| **Block**        | `{ Stmt* Expr? }` | Tail expression type | `y = { 1 + 1 }`  |
 
-**Determination order**:
+**Adjudication order**:
 
 1. `{}` (no content) → **empty block**, value `Void`
-2. First element is a `String ':' Expr` key-value pair → **dict literal**
+2. The first element is a `String ':' Expr` key-value pair → **dict literal**
 3. Otherwise → **block**, value given by the tail expression
 
-> **Why `{}` is not an empty dict**: the "empty" of an empty dict cannot be self-describing (it
-> could be either `Dict(K, V)` or an empty block), while the dict grammar ([§1.6.4](#_1-6-4-集合))
-> requires at least one key-value pair. When there is no content to base on, take the zero form of
-> block structure — this is consistent with `unsafe {}` / `spawn {}`, without introducing a special
-> case. Use `dict.new()` for an empty dict.
+> **Why `{}` is not an empty dict**: the "empty" of an empty dict cannot be self-describing (it can
+> be either `Dict(K, V)` or an empty block), and the dict grammar [§1.6.4](#_1-6-4-collections)
+> requires at least one key-value pair. When there is no content to rely on, the zero form of the
+> block structure is taken: this is consistent with `unsafe {}` / `spawn {}`, with no special cases
+> introduced. Use `dict.new()` for an empty dict.
 >
-> **Why functions need an annotation**: `f = { stmt }` is a **value** (tail-expression type), not a
-> function. To define a function, write the Fn annotation explicitly: `f: () -> Int = { 5 }`. This
-> follows the same principle as dicts: **the type is determined by content**, not by whether an
-> annotation exists. (See [RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md)
-> Appendix D.)
+> **Why functions need annotations**: `f = { stmt }` is a **value** (the tail expression's type),
+> not a function. To define a function, write the Fn annotation explicitly: `f: () -> Int = { 5 }`.
+> This is the same principle as dicts: **the type is determined by content**, not by the presence or
+> absence of an annotation. (This rule is in
+> [RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md) Appendix D.)
 
-**Uniform semantics**: the value of every `{}` block is given by the **tail expression**; `return`
-is a non-local exit of type `Never`.
+**Unified semantics**: the value of all `{}` blocks is given by the **tail expression**; `return` is
+a non-local exit of type `Never`.
 
-| Block Type  | Value Exit      | Empty Block `{}` |
-| ----------- | --------------- | ---------------- |
-| Plain `{}`  | tail expression | `Void`           |
-| `unsafe {}` | tail expression | `Void`           |
-| `spawn {}`  | tail expression | `Void`           |
+| Block Type   | Value Outlet    | Empty Block `{}` |
+| ------------ | --------------- | ---------------- |
+| Regular `{}` | Tail expression | `Void`           |
+| `unsafe {}`  | Tail expression | `Void`           |
+| `spawn {}`   | Tail expression | `Void`           |
 
 **Core principles** (see [RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md)
 for details):
 
-- **Block value = tail expression** (the last expression), the only exit, no exceptions
-- When the last item is an **assignment statement**, the block value is `Void`; if you want `Void`,
-  write `Void` explicitly
-- **`return` exits the nearest function boundary** (passes through all blocks, does not "return to
-  the block"), type `Never`; `Never <: T'` holds for any `T'` (principle of explosion), so `return`
-  can appear in any return-type position without additional rules
+- **The block's value = the tail expression** (the last expression), the only outlet, with no
+  exceptions
+- When the last position is an **assignment statement**, the block's value is `Void`; if you want
+  `Void`, write `Void` explicitly
+- **`return` exits the nearest function boundary** (pierces through all blocks — it does not "return
+  to the block"), of type `Never`; `Never <: T` holds for any type (principle of explosion), so it
+  can appear at any return type position
 - The expression form `= expr` directly gives the value
 
 ```yaoxiang
-// Plain {} block: tail expression gives the value
+// Regular {} block: the tail expression gives the value
 result = {
     x = compute()
-    x                // block value
+    x                // the block's value
 }
 
-// unsafe {} block: tail expression gives the type definition
+// unsafe {} block: the tail expression gives the type definition
 SqliteDb = unsafe {
     SqliteDb: Type = {
         handle: *Void
     }
-    SqliteDb         // block value
+    SqliteDb         // the block's value
 }
 
-// spawn {} block: tail expression gives the result
+// spawn {} block: the tail expression gives the result
 (a, b) = spawn {
     result1 = fetch("url1"),
     result2 = fetch("url2")
-    (result1, result2)   // block value
+    (result1, result2)   // the block's value
 }
 
-// return: passes through the block, exits the function
+// return: pierces through the block and exits the function
 f: (n: Int) -> Int = {
     if n < 0 {
-        return 0     // passes out of if and the function body, exits the function
+        return 0     // pierces out of if and the function body, exits the function
     }
     n * 2            // tail expression
 }
@@ -437,21 +457,21 @@ f: (n: Int) -> Int = {
 
 #### Is `name = { ... }` a Function or a Block Value?
 
-`name = { ... }` could be either a function definition (RFC-007 "no-arg simplest form") or a
-block-value binding. The rule is **annotation takes precedence, default to function** (RFC-010a
-Appendix D):
+`name = { ... }` may be either a function definition (RFC-007 "zero-argument simplest form") or a
+block-value binding. Adjudicated by **annotation priority, function by default** (RFC-010a Appendix
+D):
 
 | Case                              | Result          | Example                            |
 | --------------------------------- | --------------- | ---------------------------------- |
-| Value is a Lambda (`=>`)          | function        | `f = () => 5` → `f()` = 5          |
-| Annotation is a function type     | function        | `f: () -> Int = { 5 }` → `f()` = 5 |
-| Annotation is a non-function type | **block value** | `x: Int = { 5 }` → `x` = 5         |
-| No annotation                     | function        | `f = { 5 }` → `f()` = 5            |
+| Value is a Lambda (`=>`)          | Function        | `f = () => 5` → `f()` = 5          |
+| Annotation is a function type     | Function        | `f: () -> Int = { 5 }` → `f()` = 5 |
+| Annotation is a non-function type | **Block value** | `x: Int = { 5 }` → `x` = 5         |
+| No annotation                     | Function        | `f = { 5 }` → `f()` = 5            |
 
-**Annotation is the type**: `x: Int = ...` declares that `x` is `Int`, so `{ ... }` evaluates to
-`Int`; `f: () -> Int = ...` declares that `f` is a function, so `{ ... }` is a function body.
+**Annotation is the type**: `x: Int = ...` declares `x` to be `Int`, so `{ ... }` evaluates to
+`Int`; `f: () -> Int = ...` declares `f` to be a function, so `{ ... }` is the function body.
 
-To make `{ ... }` evaluate immediately, **just write the target type** (no new syntax needed):
+To make `{ ... }` evaluate on the spot, **just write the target type** (no new syntax needed):
 
 ```yaoxiang
 // Block value: evaluated immediately
@@ -460,46 +480,45 @@ x: Int = {
     y            // x = 5
 }
 
-// Function: default when no annotation
+// Function: no annotation, default
 f = { 5 }        // f() = 5
 ```
 
-#### Nested Function Types: Curried or Function-Returning?
+#### Nested Function Types: Currying or Returning a Function?
 
-A nested function type on the right of `->` has two readings, distinguished by **parentheses**
+A nested function type on the right side of `->` has two readings, distinguished by **parentheses**
 (RFC-004):
 
-| Notation                        | Meaning                | Call                      |
-| ------------------------------- | ---------------------- | ------------------------- |
-| `(a: Int) -> (b: Int) -> Int`   | **curried**            | `f(1)(2)`                 |
-| `(a: Int) -> ((b: Int) -> Int)` | **function-returning** | `g(1)` returns a function |
+| Notation                        | Meaning                  | Call                    |
+| ------------------------------- | ------------------------ | ----------------------- |
+| `(a: Int) -> (b: Int) -> Int`   | **Currying**             | `f(1)(2)`               |
+| `(a: Int) -> ((b: Int) -> Int)` | **Returning a function** | `g(1)` gives a function |
 
-The principle: **annotation is the type**. `g: (a: Int) -> ((b: Int) -> Int)` declares that
-`g(1) : (b: Int) -> Int`, so `g(1)` must **be** that function, not "the next argument segment".
+Basis: **annotation is the type**. `g: (a: Int) -> ((b: Int) -> Int)` declares
+`g(1) : (b: Int) -> Int`, so `g(1)` must **be** that function, not the "next segment of parameters".
 
 ```yaoxiang
-// Curried: two argument segments given layer by layer
+// Currying: two parameter segments given layer by layer
 add: (a: Int) -> (b: Int) -> Int = { a + b }
 add(1)(2)        // → 3
 
-// Function-returning: one outer argument, what is returned is a function
+// Returning a function: outer one parameter segment, the returned value is the function
 adder: (n: Int) -> ((x: Int) -> Int) = (x) => x + n
 adder(10)(5)     // → 15
 h = adder(10)    // the returned function can be stored in a variable, passed around
 ```
 
-Unparenthesized nested `Fn` is always curried (including the type-parameter form in RFC-011):
+Nested `Fn` without parentheses is always currying (including the type-parameter form from RFC-011):
 
 ```yaoxiang
-identity: (T: Type) -> (x: T) -> T = (x) => x   // curried
+identity: (T: Type) -> (x: T) -> T = (x) => x   // currying
 identity(5)      // → 5
 ```
 
-**Type checking**: parentheses declare the return type, so the body must produce that type.
-`f: () -> (() -> Int) = { 7 }` is an error — it expects `() -> Int`, but actually gets `Int`
-(E1002).
+**Type check**: the parentheses declare the return type, and the body must produce that type.
+`f: () -> (() -> Int) = { 7 }` is an error — `() -> Int` is expected, but `Int` is given (E1002).
 
-### 2.10 Lambda Expressions
+### 2.10 Lambda Expression
 
 ```
 Lambda      ::= '(' ParamList? ')' '=>' Expr
@@ -512,19 +531,19 @@ Lambda      ::= '(' ParamList? ')' '=>' Expr
 ErrorPropagate ::= Expr '?'
 ```
 
-The `?` operator is a postfix operator, with the same precedence as `.`. For `Result(T, E)`:
+The `?` operator is a postfix operator with the same precedence as `.`. For a `Result(T, E)` type:
 
-- `Ok(v)` extracts the value `v` and continues execution
-- `Err(e)` propagates the error upward (`return Err(e)`)
+- On `Ok(v)`, extract the value `v` and continue execution
+- On `Err(e)`, propagate the error upward (`return Err(e)`)
 
 ```yaoxiang
 process: (data: Data) -> Result(Data, Error) = {
-    validated = validate(data)?     // extract on success, propagate on failure
+    validated = validate(data)?     // on success, extract the value; on failure, propagate upward
     transform(validated)
 }
 ```
 
-### 2.12 Range Expressions
+### 2.12 Range Expression
 
 ```
 RangeExpr   ::= Expr '..' Expr ('..' Expr)?
@@ -546,37 +565,37 @@ for i in 0..10..2 { print(i) }  // 0, 2, 4, 6, 8
 for i in 10..0..(-2) { print(i) }  // 10, 8, 6, 4, 2
 ```
 
-> **Step semantics**: in `a..b..c`, `c` is the step. The literal `c = 0` is rejected at compile
-> time; a dynamic `c` is checked at runtime (E6001 family; promoted to `Result` after the error
-> system is landed). `c < 0` is valid, and the range direction reverses with the sign (`10..0..(-2)`
-> is descending).
+> **Step semantics**: in `a..b..c`, `c` is the step. The literal `c = 0` is rejected at
+> compile-time; a dynamic `c` is zero-checked at runtime (E6001 family; after the error system
+> lands, it is upgraded to Result). `c < 0` is legal, and the interval direction reverses with the
+> sign (`10..0..(-2)` is decreasing).
 
-### 2.13 ref Expressions
+### 2.13 ref Expression
 
 ```
 RefExpr     ::= 'ref' Expr
 ```
 
-`ref` creates shared ownership. The compiler automatically selects Rc (single-task) or Arc
-(cross-task); users don't need to worry about the implementation details.
+`ref` creates shared ownership. The compiler automatically chooses Rc (single-task) or Arc
+(cross-task), and the user does not need to care about the implementation details.
 
 ```yaoxiang
 data = ref heavy_data
-spawn { use(data) }   // cross-task: the compiler automatically selects Arc
+spawn { use(data) }   // cross-task: the compiler automatically chooses Arc
 ```
 
-### 2.14 unsafe Expressions
+### 2.14 unsafe Expression
 
 ```
 UnsafeExpr  ::= 'unsafe' Block
 ```
 
-The `unsafe` block is used to define opaque types and manipulate raw pointers. Use `return` to
-return the type definition to the enclosing scope.
+The `unsafe` block is used to define opaque types and operate on raw pointers. Use `return` to
+return the type definition to the outer scope.
 
 **Semantics**:
 
-- `unsafe {}` can define types and manipulate raw pointers
+- Inside `unsafe {}` you can define types and operate on raw pointers
 - The returned type is usable outside `unsafe {}`
 - Field access on the type requires `unsafe` permission
 
@@ -597,16 +616,16 @@ db = sqlite3_open("test.db")
 
 **Basic rules**:
 
-- Every `{}` block creates a scope
-- Inner scopes can access variables from outer scopes
-- Outer scopes cannot access variables from inner scopes
-- Variable declaration follows the "assignment-first" principle
+- Each `{}` block creates a scope
+- An inner scope can access variables in an outer scope
+- An outer scope cannot access variables in an inner scope
+- Variable declarations follow the "assignment first" principle
 
 ```yaoxiang
 // Block scope
 {
     x = 10
-    // x is visible within this scope
+    // x is visible inside this scope
 }
 // x is not visible outside this scope
 
@@ -620,14 +639,13 @@ add: (a: Int, b: Int) -> Int = {
 
 **Variable declaration and shadowing**:
 
-- `x = value`: search outward along the scope chain for `x`; if found, assign; if not found, declare
+- `x = value`: search for `x` outward along the scope chain; if found, assign; if not found, declare
   a new one
-- `mut x = value`: an explicit new mutable declaration; sharing the name with an outer binding is
-  forbidden
-- Any name can be declared at most once within the same scope
+- `mut x = value`: explicit new mutable declaration, disallows the same name as the outer scope
+- Any name can only be declared once in the same scope
 
-> **Detailed definition**: the complete rules of scope, variable declaration, and shadowing are
-> detailed in [Module System Specification](./modules.md#第四章作用域).
+> **Detailed definition**: the complete rules of scopes, variable declaration, and shadowing
+> mechanism are detailed in [Module System Specification](./modules.md#chapter-4-scope).
 
 ---
 
@@ -660,28 +678,29 @@ LetStmt     ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr
 ReturnStmt  ::= 'return' Expr?
 ```
 
-**Semantics**: `return` is a **non-local exit** that exits the nearest **function boundary** (passes
+**Semantics**: `return` is a **non-local exit**, exiting the nearest **function boundary** (pierces
 through all blocks — including `if` / `while` / `for` / `match` / bare blocks / `spawn` / `unsafe`),
 handing the value to the caller. It does **not "return to the block"**.
 
-**Type**: `return e : Never` (where `e : T`). `Never <: T'` holds for any `T'` (principle of
-explosion, see [Type System §2.2](./type-system.md)), so `return` can appear in any return-type
-position without additional constraints.
+**Type**: `return e : Never` (`e : T`). `Never <: T'` holds for any `T'` (principle of explosion,
+see [Type System §2.2](./type-system.md)), so `return` can appear at any return type position with
+no extra rules.
 
 **Relationship with block evaluation**: a block's value is always the **tail expression** (see
-§2.9). `{ return n }` as a block has value `n` of type `Never`; meanwhile, the effect of `return` is
-to exit the function. **Both hold simultaneously**, coexisting through the principle of explosion.
+§2.9). `{ return n }` as a block has the value `n`, of type `Never`; at the same time, the effect of
+`return` is to exit the function. **Both hold simultaneously**, coexisting via the principle of
+explosion.
 
-`return` and the tail expression together make "early return" possible, with no special rules
-designating `return` as function-specific — see
+`return` together with the tail expression makes "early return" possible, with no extra rule that
+`return` specifically targets a function — see
 [RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md).
 
 ```yaoxiang
 factorial: (n: Int) -> Int = {
     if n <= 1 {
-        return 1          // passes out of if, exits the function (type Never)
+        return 1          // pierces out of if and exits the function (type Never)
     }
-    n * factorial(n - 1)  // tail expression = block value
+    n * factorial(n - 1)  // tail expression = block's value
 }
 ```
 
@@ -691,40 +710,40 @@ factorial: (n: Int) -> Int = {
 BreakStmt   ::= 'break'
 ```
 
-**Semantics**: immediately terminates the innermost enclosing `while`/`for` loop, and control flows
-to the statement after that loop body.
+**Semantics**: immediately terminates the innermost `while` / `for` loop containing it; control flow
+moves to after the loop body.
 
-- **Exits only the innermost level**: `break` always targets the innermost loop containing it. When
-  a nested loop needs to break out of multiple levels, extract the inner loop into a function and
-  use `return`, or use a flag. (`break`/`continue` carry no label; if loop labels are introduced in
-  the future, the syntax will follow the loop declaration side per the RFC process, decided together
-  with the multi-exit design in the proof pipeline.)
-- **Only valid inside a loop body**: `break` may only appear inside a `while`/`for` loop body
-  (including blocks/if/match nested within); appearing outside a loop is a compile error (E1102
-  `'break' outside of a loop`).
+- **Only exits the nearest layer**: `break` always acts on the innermost loop containing it. In
+  nested loops, when you need to jump out of multiple layers in one go, extract the inner loop into
+  a function and use `return` to return, or use a flag (break / continue do not carry labels; if
+  loop labels are introduced in the future, they will follow the loop declaration-side syntax
+  through the RFC process, adjudicated together with the proof pipeline's multi-exit design)
+- **Restricted to the loop body**: `break` can only appear inside a `while` / `for` loop body
+  (including blocks / if / match nested within the body); appearing outside a loop is a compile-time
+  error (E1102 `'break' outside of a loop`)
 - **Does not affect termination proofs**: `break` does not participate in termination arguments — it
   neither provides a measure nor constitutes a decreasing step of a measure; the loop's termination
-  obligation is independent of `break` and is triggered by refinement types (see
-  [type-system §8.4](./type-system.md#84-terminates终止测度谓词)).
-- **Borrow semantics**: the control-flow edge of `break` participates in the structural cut of the
-  reverse BFS liveness analysis in RFC-009a (exited iterations are not part of back-edge liveness
-  derivation).
+  obligation has nothing to do with `break`, and is triggered by refined types (see
+  [type-system §8.4](./type-system.md#84-terminates-termination-measure-predicate))
+- **Borrowing semantics**: the control-flow edge of `break` participates in the structural cut of
+  the RFC-009a reverse BFS liveness analysis (skipped iterations do not participate in back-edge
+  liveness derivation)
 
 ```yaoxiang
 mut i = 0
 while i < 10 {
     i = i + 1
     if i == 3 {
-        break              // control flows to after the loop, i == 3
+        break              // control flow moves to after the loop, i == 3
     }
 }
 
-// Nested loop: break exits only the inner loop
+// Nested loop: break only exits the inner one
 while j < 3 {
     while k < 10 {
         if k == 2 { break }    // only terminates the inner loop
     }
-    j = j + 1                  // each outer iteration reaches here
+    j = j + 1                  // every outer iteration reaches here
 }
 ```
 
@@ -734,12 +753,12 @@ while j < 3 {
 ContinueStmt::= 'continue'
 ```
 
-**Semantics**: skips the remaining statements in the current iteration and proceeds directly to the
-next iteration of the innermost enclosing loop — `while` returns to the condition check, `for` takes
-the next element.
+**Semantics**: skips the remaining statements in the current iteration and directly enters the next
+round of the innermost loop containing it — `while` goes back to re-evaluating the condition, `for`
+takes the next element.
 
-- **Targets only the innermost level**: same as `break`; carries no label
-- **Only valid inside a loop body**: appearing outside a loop is a compile error (E1102)
+- **Only acts on the nearest layer**: same as `break`, carries no label
+- **Restricted to the loop body**: appearing outside a loop is a compile-time error (E1102)
 
 ```yaoxiang
 mut sum = 0
@@ -747,7 +766,7 @@ mut n = 0
 while n < 5 {
     n = n + 1
     if n == 3 {
-        continue           // skips the accumulation below, n == 3 is not counted
+        continue           // skip the accumulation below, n == 3 is not counted
     }
     sum = sum + n
 }
@@ -778,10 +797,10 @@ WhileStmt   ::= 'while' Expr Block
 ForStmt     ::= 'for' 'mut'? Identifier 'in' Expr Block
 ```
 
-#### 3.9.1 Semantics: Each Iteration is a New Binding
+#### 3.9.1 Semantics: Each Iteration Binds a New Value
 
-YaoXiang's `for` loop semantics differ from traditional languages: **each iteration is a new
-binding, not a modification of the same variable**.
+YaoXiang's `for` loop semantics differ from traditional languages: **each iteration binds a new
+value, rather than modifying the same variable**.
 
 ```yaoxiang
 // Example: for i in 1..5
@@ -792,27 +811,26 @@ for i in 1..5 {
 
 **Execution process**:
 
-| Iteration | Behavior of the loop variable                                                              |
-| --------- | ------------------------------------------------------------------------------------------ |
-| 1st       | Creates a new binding `i = 1`, the loop body executes, prints 1                            |
-| 2nd       | Creates a new binding `i = 2` (the previous binding is destroyed), body executes, prints 2 |
-| 3rd       | Creates a new binding `i = 3`, the loop body executes, prints 3                            |
-| 4th       | Creates a new binding `i = 4`, the loop body executes, prints 4                            |
-| End       | The loop body ends, the binding is destroyed                                               |
+| Iteration | Behavior of the loop variable                                                                   |
+| --------- | ----------------------------------------------------------------------------------------------- |
+| 1st       | Create a new binding `i = 1`, the loop body executes, prints 1                                  |
+| 2nd       | Create a new binding `i = 2` (the previous binding has been destroyed), body executes, prints 2 |
+| 3rd       | Create a new binding `i = 3`, the loop body executes, prints 3                                  |
+| 4th       | Create a new binding `i = 4`, the loop body executes, prints 4                                  |
+| End       | Loop body ends, bindings are destroyed                                                          |
 
 **Key point**: after each iteration ends, the binding created in that iteration is destroyed. The
-next iteration is a completely new binding, with no relationship to the previous iteration's
-binding.
+next iteration is an entirely new binding, with no relation to the previous iteration's binding.
 
-#### 3.9.2 Difference Between `for` and `for mut`
+#### 3.9.2 The Difference Between `for` and `for mut`
 
-| Syntax              | Loop variable mutability | Description                                         |
-| ------------------- | ------------------------ | --------------------------------------------------- |
-| `for i in 1..5`     | immutable                | The binding cannot be modified inside the loop body |
-| `for mut i in 1..5` | mutable                  | The binding can be modified inside the loop body    |
+| Syntax              | Loop variable mutability | Description                                     |
+| ------------------- | ------------------------ | ----------------------------------------------- |
+| `for i in 1..5`     | Immutable                | The binding cannot be modified in the loop body |
+| `for mut i in 1..5` | Mutable                  | The binding can be modified in the loop body    |
 
 ```yaoxiang
-// Valid: each iteration binds a new value, no modification needed
+// Legal: each iteration binds a new value; no modification needed
 for i in 1..5 {
     print(i)  // read the value of i
 }
@@ -822,7 +840,7 @@ for i in 1..5 {
     i = i + 1  // error: cannot modify an immutable binding
 }
 
-// Valid: use `for mut` to allow modifying the binding
+// Legal: use `for mut` to allow modifying the binding
 for mut i in 1..5 {
     i = i + 1  // modification allowed
 }
@@ -830,8 +848,8 @@ for mut i in 1..5 {
 
 #### 3.9.3 Shadowing Check
 
-YaoXiang prohibits variable shadowing. A `for` loop variable cannot share a name with a variable in
-an outer scope:
+YaoXiang prohibits variable shadowing. The `for` loop variable cannot have the same name as a
+variable in the outer scope:
 
 ```yaoxiang
 // Error: i is already declared in the outer scope
@@ -847,32 +865,31 @@ for j in 1..5 {
 }
 ```
 
-This rule applies to all code blocks; see [4.3 Shadowing Rules](./modules.md#43-遮蔽规则).
+This rule applies to all code blocks; see [4.3 Shadowing Rules](./modules.md#43-shadowing-rules).
 
 #### 3.9.4 Comparison with Other Languages
 
-| Language | For loop variable semantics                                |
-| -------- | ---------------------------------------------------------- |
-| YaoXiang | binds a new value each iteration                           |
-| Rust     | modifies the same variable (requires `mut`)                |
-| Python   | modifies the same variable (no `mut` needed)               |
-| C/C++    | modifies the same variable (requires pointer or reference) |
+| Language | for loop variable semantics                             |
+| -------- | ------------------------------------------------------- |
+| YaoXiang | Each iteration binds a new value                        |
+| Rust     | Modifies the same variable (needs `mut`)                |
+| Python   | Modifies the same variable (no `mut` needed)            |
+| C/C++    | Modifies the same variable (needs pointer or reference) |
 
 **Design rationale**: YaoXiang adopts binding semantics because:
 
-1. **More aligned with natural semantics** In natural language, "for each element x in the
-   collection" means each x is an independent individual. YaoXiang's `for i in 1..5` reads as "for
-   each i from 1 to 5", where the i in each iteration is a brand-new binding — this matches human
-   intuition.
+1. **Closer to natural semantics** In natural language, "for each element x in the collection" means
+   each x is an independent individual. YaoXiang's `for i in 1..5` reads as "for each i in 1 through
+   5", and each iteration's i is an entirely new binding, consistent with human intuition.
 
-2. **Avoids accidental modification** The default immutable binding semantics means the loop
-   variable cannot be accidentally modified inside the loop body. No need to worry about an
-   `i = ...` somewhere in a complex loop body causing hard-to-track bugs.
+2. **Avoids accidental modification** The default-immutable binding semantics mean the loop variable
+   cannot be accidentally modified inside the loop body. No need to worry about some complex part of
+   the loop body accidentally writing `i = ...` causing a hard-to-trace bug.
 
-3. **High-performance solutions within reach** When the same variable really does need to be reused
-   across iterations (e.g., an accumulator or cache), use `for mut` to switch to mutable binding
-   mode. This is clearer than implicit shared state — intent is expressed explicitly in syntax, not
-   hidden in runtime behavior.
+3. **High-performance solutions within reach** When you really need to reuse a variable across
+   iterations (e.g., accumulators, caches), use `for mut` to switch to mutable binding mode. This is
+   clearer than implicit shared state — intent is expressed explicitly through syntax, not hidden in
+   runtime behavior.
 
 ### 3.10 spawn Statement
 
@@ -882,7 +899,7 @@ SpawnFor    ::= Identifier '=' 'spawn' 'for' 'mut'? Identifier 'in' Expr '{' Exp
 SpawnStmt   ::= SpawnBlock | SpawnFor
 ```
 
-**spawn block**: explicitly declares a concurrent region; expressions inside the block execute
+**spawn block**: explicitly declares a concurrent region; the expressions inside the block run
 concurrently.
 
 ```yaoxiang
@@ -892,7 +909,7 @@ concurrently.
 }
 ```
 
-**spawn loop**: a data-parallel loop.
+**spawn loop**: data-parallel loop.
 
 ```yaoxiang
 results = spawn for item in items {
@@ -900,23 +917,24 @@ results = spawn for item in items {
 }
 ```
 
-**spawn blocks capture outer variables** (RFC-024 §2.3, value-capture semantics):
+**spawn block captures outer variables** (RFC-024 §2.3, value-capture semantics):
 
-- References to outer variables in the block body = **Move value capture**: the value is snapshotted
-  into the closure environment at the spawn creation point; the block body reads through the env
-  (LoadUpvalue)
-- **Primitives** (Int/Float/Bool/Char) are copied by value; outer variables are unaffected
-- **Handle types** (Struct/String/List, etc.) are snapshotted = handle copy, sharing the underlying
-  object; under the Embedded runtime (default), the same thread and heap make the handle valid
-- Sharing between multiple tasks requires explicit `ref` (§2.13, the compiler automatically selects
-  Rc/Arc)
-- `return` inside the block also captures referenced outer variables
+- When the block body references an outer variable = **Move value capture**: the value is
+  snapshotted into the closure environment at the spawn creation point, and the block body reads it
+  via env (LoadUpvalue)
+- **Primitives** (Int / Float / Bool / Char) are value-copied; the outer variable is unaffected
+- **Handle types** (Struct / String / List, etc.) snapshot = handle copy, sharing the underlying
+  object; the Embedded runtime (default) uses a single thread and single heap, so the handle is
+  valid
+- Sharing across multiple tasks requires explicit `ref` (§2.13, compiler automatically chooses Rc /
+  Arc)
+- The outer variable referenced by `return` inside the block is captured the same way
 
 ```yaoxiang
 t1 = 1 + 1
 t2 = 2 + 2
 result = spawn {
-    return t1 + t2    // t1/t2 are captured by value, result == 6
+    return t1 + t2    // t1 / t2 are value-captured, result == 6
 }
 ```
 
@@ -924,48 +942,48 @@ result = spawn {
 
 ### 3.11 Program Entry and Top-level Statements
 
-A source file plays one of two roles in the compiler's view, **determined by the presence of
-`yaoxiang.toml`**:
+A source file has two roles in the compiler's eyes, **determined by whether a `yaoxiang.toml`
+exists**:
 
-| Role       | Determination                              | Program body                                                                       |
-| ---------- | ------------------------------------------ | ---------------------------------------------------------------------------------- |
-| **Script** | Single-file direct run, no `yaoxiang.toml` | **top-level statements** (executed in source order); `main` is an ordinary binding |
-| **Bin**    | A `yaoxiang.toml` exists                   | **`main` function**; no executable statements allowed at the top level             |
+| Role       | Adjudication                                 | Program Body                                                                    |
+| ---------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Script** | Single file run directly, no `yaoxiang.toml` | **Top-level statements** (executed in source order); `main` is a normal binding |
+| **Bin**    | A `yaoxiang.toml` exists                     | **`main` function**; top-level may not have executable statements               |
 
-#### Script: Top-level Statements Are the Program
+#### Script: Top-level Statements are the Program
 
-Without a manifest, the file is a "script" — **top-level statements execute in source order**:
+Without a manifest, the file is a "script", and **top-level statements execute in source order**:
 
 ```yaoxiang
 use std.io
-io.println("hello")          // executes directly
-x: Int = { 42 }              // top-level binding: initialized at runtime
+io.println("hello")          // executed directly
+x: Int = { 42 }              // top-level binding: runtime initialization
 io.println(x)                // 42
 ```
 
-`main` is **not special** in this mode — it is just an ordinary binding. To make `main` run, you
-must explicitly call it:
+In this mode, `main` is **not special** — it is just a normal binding. To make `main` run, you must
+call it explicitly:
 
 ```yaoxiang
 use std.io
 main: () -> Void = { io.println("only runs if called") }
 
-main()                       // ← this line is required
+main()                       // ← this line must be written
 ```
 
 > **Why not auto-call `main`?** The top-level statements are already the program body. If `main`
-> were also called implicitly, scripts that explicitly wrote `main()` would execute twice. The two
-> rules cannot coexist, so in Script mode there is only one execution entry: "top-level statements".
+> were also implicitly called, a script with an explicit `main()` would execute twice. The two rules
+> cannot coexist, so in Script mode there is only one execution entry: "top-level statements".
 
 #### Bin: `main` is the Entry
 
-With a manifest, the file is an "executable target". In this case:
+When a manifest exists, the file is an "executable target", and at this point:
 
-- A **binding** named `main` must be defined; value or function, either is acceptable (finalized in
-  #388: entry is determined by the binding's existence — a function is already a value, the two only
-  differ in evaluation strategy): a function `main` is called with zero arguments at entry; a value
-  `main` is evaluated at initialization, which is execution
-- Executable statements are not allowed at the top level — the program body is exactly `main`
+- A binding named `main` must be defined; a value or function are both acceptable (#388
+  finalization: the entry is adjudicated by the existence of the binding — a function is already a
+  value, the two differ only in evaluation strategy): a function `main` is zero-arg called at the
+  entry stage; a value `main` is evaluated at the initialization stage, which is itself execution
+- Executable statements are not allowed at the top level — the program body is `main`
 
 ```yaoxiang
 main: () -> Void = {
@@ -973,9 +991,9 @@ main: () -> Void = {
 }
 ```
 
-A value `main` is equally valid — it is evaluated at initialization, which is execution. Evaluation
-occurs within the initialization sequence (topological order over global bindings; independent
-bindings follow source order):
+A value `main` is also legal — evaluation at the initialization stage is itself execution, and
+evaluation happens in the initialization sequence (in topological order of global bindings;
+independent bindings are in source order):
 
 ```yaoxiang
 main = {
@@ -983,16 +1001,16 @@ main = {
 }
 ```
 
-Missing `main` is a compile error (when `main` is missing, all functions are unreachable). An
-uncallable value `main` (e.g., `main: Int = 5`) is valid but has no observable effect — matching
-Rust's empty `fn main() {}`.
+A missing `main` is a compile error (when there is no `main`, all functions are unreachable). A
+non-callable value `main` (e.g., `main: Int = 5`) is legal but has no observable effect — analogous
+to Rust's empty `fn main() {}`.
 
-> **Library files**: a file that is `use`d by other files, or pointed to by `[lib].path` /
-> `[exports]`, does not require `main` — it is not a program entry.
+> **Library files**: files used by other files via `use`, or files pointed to by `[lib].path` /
+> `[exports]`, do not require `main` — they are not program entries.
 
 #### Initialization of Top-level Bindings
 
-The initialization value of a top-level binding is **evaluated at runtime** and is not required to
+The initialization value of a top-level binding **is evaluated at runtime**; it is not required to
 be a compile-time constant:
 
 ```yaoxiang
@@ -1001,25 +1019,39 @@ inc: (Int) -> Int = (x) => x + 1
 computed: Int = inc(41)           // function call
 ```
 
-Initialization executes in **dependency order**, independent of source order:
+Initialization executes in **dependency order**, regardless of source order:
 
 ```yaoxiang
 derived: Int = base * 3           // references base declared later
 base: Int = 7                     // initialized first (topological sort)
 ```
 
-Circular dependencies are a compile error (the names on the cycle will be listed):
+Cyclic dependencies are a compile error (the names in the cycle are listed):
 
 ```yaoxiang
 a: Int = b + 1
 b: Int = a + 1                    // error: a → b → a
 ```
 
-> **Design basis**: RFC-029f (file role model), RFC-010a Appendix D (block-binding arbitration).
+> **Design basis**: RFC-029f (file role model), RFC-010a Appendix D (block binding adjudication).
 
 ---
 
 ## Appendix: Syntax Quick Reference
+
+### A.0 Keywords (18)
+
+```
+pub     use     spawn  ref     mut
+if      else    match  while   for
+in      return  break  continue
+as      unsafe  and    or
+```
+
+`type` is no longer a keyword (RFC-010; use `Name: Type = { ... }` instead); `pub` produces no
+visibility effect (RFC-029). Literal reserved words `true` / `false` / `void` are in §1.4.1, meta
+type name `Type` and built-in type names `Void` / `Never` / `Int` / `Float` / `Bool` / `Char` /
+`String` are in §1.4.3.
 
 ### A.1 Control Flow
 
@@ -1028,13 +1060,13 @@ if Expr Block (else if Expr Block)* (else Block)?
 match Expr { MatchArm+ }
 while Expr Block
 for 'mut'? Identifier 'in' Expr Block
-break | continue          // only inside a loop body (§3.4 / §3.5)
+break | continue          // only inside loop bodies (§3.4 / §3.5)
 ```
 
 ### A.2 Error Handling
 
 ```
-Expr '?'              // error propagation (Result types)
+Expr '?'              // error propagation (Result type)
 ```
 
 ### A.3 match Syntax

@@ -1,9 +1,10 @@
 ---
 title: 'RFC-017: 语言服务器协议（LSP）支持设计'
-status: '已实现'
+status: '已接受'
 author: '晨煦'
 created: '2026-02-15'
 updated: '2026-07-05'
+impl_status: 'complete'
 
 issue: '#11'
 ---

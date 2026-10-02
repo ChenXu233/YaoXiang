@@ -51,9 +51,10 @@ result = {
 add: (a: Int, b: Int) -> Int = a + b
 
 // 有花括号：必须用 return
-process: (data: Data) -> Result = {
+process: (data: Data) -> Result(Data, Error) = {
     validated = validate(data)?
-    return ok(transform(validated))
+    // 变体构造必须类型限定——裸 ok(...) 报 E1001 Unknown variable: 'ok'
+    return Result(Data, Error).ok(transform(validated))
 }
 
 // 有花括号但无 return：返回 Void
@@ -288,8 +289,16 @@ result = spawn {
 }
 ```
 
-`spawn while` 禁止捕获 `&mut` 类型外部变量（RFC-024 2026-07-04 决议，编译期报错，
-避免数据竞争且不引入 Sync）。
+**没有 `spawn while` 这个构造**：`spawn` 后只能跟 `for` 或 `{`
+（`src/frontend/core/parser/pratt/nud.rs:117-136` 的 `parse_spawn` 只分派
+`KwFor` → `parse_spawn_for` 与 `LBrace` → `parse_spawn_block`），AST 里也只有
+`Expr::Spawn`（块）与 `Expr::SpawnFor`（数据并行循环，
+`src/frontend/core/parser/ast.rs:68-72`）两个变体。要在并发语境里做「按条件反复」
+请写普通 `while` 循环。
+
+`spawn for` 的迭代变量默认可变；写成 `spawn for mut x in items` 时才允许在循环体内
+改写该绑定（`src/frontend/core/parser/ast.rs:71` 的 `var_mut` 字段，
+`src/frontend/core/typecheck/layers/ownership.rs:1660-1671` 据此登记可变性）。
 
 ---
 
@@ -334,21 +343,28 @@ read_file: (path: FilePath) -> Result(String, IoError) = {
 }
 ```
 
-**手动覆盖**：用户可手动定义统一错误类型。
+**手动覆盖**：用户可手动定义统一错误类型。注意 `Result` **没有 `map_err`**
+（`src/std/result.rs:71-126` 的 8 个导出里没有它，`result.map_err(...)` 报
+`E1042`），所以在 `?` 之前得自己把上游错误搬进 `AppError` 变体：
 
-```yaoxiang
+```
 AppError: Type = {
     Http: (http_error: HttpError) -> AppError,
     Io: (io_error: IoError) -> AppError,
     Parse: (parse_error: ParseError) -> AppError
 }
 
+// 概念形态（map_err 不可用，改用 match 显式搬运）
 process: (url: String, path: FilePath) -> Result(Data, AppError) = {
-    (a, b) = spawn {
-        fetch(url).map_err(AppError.Http)?,
-        read_file(path).map_err(AppError.Io)?
+    fetched = match fetch(url) {
+        ok(v) => v
+        err(e) => return AppError.Http(e)
     }
-    return parse(a + b).map_err(AppError.Parse)?
+    content = match read_file(path) {
+        ok(v) => v
+        err(e) => return AppError.Io(e)
+    }
+    return parse(fetched + content)
 }
 ```
 

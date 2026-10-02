@@ -1,7 +1,28 @@
 # Standard Library Specification
 
-This file defines the standard library specification for the YaoXiang programming language,
-including the core library, IO library, and math library.
+This document defines the standard library specification for the YaoXiang programming language.
+
+> **This chapter is a language-level specification** (design conventions and semantic models). The
+> **signatures and runnable examples** for each module are in the
+> [Standard Library Reference](../stdlib/index.md)—that part is derived from `StdModule::exports()`
+> and guarded by a gate. Every signature in this document is taken verbatim from the implementation
+> under `src/std/` (`*.rs` / `*.yx`).
+
+---
+
+## Chapter 0: Module Overview
+
+There are **18 module paths** under `std`, composed of two implementation forms:
+
+| Implementation form          | Modules                                                                                                    | Registration source                                                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| native `StdModule`           | `assert` `concurrent` `convert` `dict` `fs` `io` `math` `net` `os` `range` `result` `string` `time` `weak` | `src/std/mod.rs:17-39` (module declarations) + `:460-482` (`all_module_infos()`)                                                      |
+| Pure yx (`.yx` embedded)     | `list` `test` `option` `json`                                                                              | `src/std/yx_sources.rs:12-18`                                                                                                         |
+| Dual implementation (merged) | `result`                                                                                                   | `src/std/result.rs` (utility family) + `src/std/result.yx` (`Result` type), with merging in `src/frontend/module/registry.rs:315-334` |
+
+**Platform availability**: `concurrent` / `fs` / `net` / `os` / `weak` and `io.read_line` /
+`time.sleep` depend on operating system capabilities and are **not exported** on the `wasm32` target
+(`#[cfg(not(target_arch = "wasm32"))]` on each module declaration in `src/std/mod.rs`).
 
 ---
 
@@ -9,116 +30,110 @@ including the core library, IO library, and math library.
 
 ### 1.1 Basic Types
 
-The standard library provides implementations for the following basic types:
+| Type           | Module         | Description                                                              |
+| -------------- | -------------- | ------------------------------------------------------------------------ |
+| `Option(T)`    | `std.option`   | Optional value (sum type)                                                |
+| `Result(T, E)` | `std.result`   | Error handling (sum type)                                                |
+| `Vec(T)`       | Core primitive | Runtime-length raw buffer; `std.list` is implemented on top of it        |
+| `Dict(K, V)`   | Core primitive | Dictionary; `std.dict` provides module-level read/write functions        |
+| `String`       | `std.string`   | String; `std.string` provides operation functions                        |
+| `Array(T, N)`  | Core primitive | Fixed-size array (syntax see [Syntax Specification §1.6.4](./syntax.md)) |
 
-| Type           | Module           | Description         |
-| -------------- | ---------------- | ------------------- |
-| `Option(T)`    | `std.option`     | Optional value type |
-| `Result(T, E)` | `std.result`     | Error handling type |
-| `List(T)`      | `std.collection` | Dynamic array       |
-| `Map(K, V)`    | `std.collection` | Hash map            |
-| `String`       | `std.string`     | String type         |
-| `Array(T, N)`  | `std.array`      | Fixed-size array    |
+> **`List(T)` / `Map(K, V)` are NOT standard library types**. `std.list` is a **module-level
+> function collection**, built on the core primitive `Vec(T)` (`src/std/list.yx:1-21`); `std.dict`
+> is likewise a set of module-level functions operating on `Dict(K, V)` (`src/std/dict.rs`). Writing
+> `List(T)` / `Map(K, V)` as types will fail at the type checking stage.
 
 ### 1.2 Option Type
 
-```
-Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
-```
-
-**Variant Construction**:
-
-| Variant       | Syntax               | Description |
-| ------------- | -------------------- | ----------- |
-| `Option.some` | `Option.some(value)` | Has a value |
-| `Option.none` | `Option.none()`      | No value    |
-
-**Common Methods**:
-
-```yaoxiang
-// Check whether there is a value
-is_some: (self: Option(T)) -> Bool
-is_none: (self: Option(T)) -> Bool
-
-// Get value (may panic)
-unwrap: (self: Option(T)) -> T
-
-// Get value or default value
-unwrap_or: (self: Option(T), default: T) -> T
-
-// Map value
-map: (R: Type) -> ((self: Option(T), f: (T) -> R) -> Option(R))
-```
-
-### 1.3 Result Type
+`src/std/option.yx` in full:
 
 ```
-Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
-```
-
-**Variant Construction**:
-
-| Variant      | Syntax              | Description   |
-| ------------ | ------------------- | ------------- |
-| `Result.ok`  | `Result.ok(value)`  | Success value |
-| `Result.err` | `Result.err(error)` | Error value   |
-
-**Common Methods**:
-
-```yaoxiang
-// Check whether successful
-is_ok: (self: Result(T, E)) -> Bool
-is_err: (self: Result(T, E)) -> Bool
-
-// Get value (may panic)
-unwrap: (self: Result(T, E)) -> T
-
-// Get value or default value
-unwrap_or: (self: Result(T, E), default: T) -> T
-
-// Map success value
-map: (R: Type) -> ((self: Result(T, E), f: (T) -> R) -> Result(R, E))
-
-// Map error value
-map_err: (F: Type) -> ((self: Result(T, E), f: (E) -> F) -> Result(T, F))
-```
-
-**Error Carriers and Error Codes (#323 M4)**:
-
-The `Error` Err carrier of each std module carries normalized error codes, reusing the E6xxx/E7xxx
-segments from RFC-013 (e.g., E6009 = Range step invalid), serving as a stable contract across
-versions—programs can branch programmatically by code, and `yx explain E6009` retrieves
-documentation. See the code index in RFC-013's "Runtime Error Values and Code Integration" section.
-
-```yaoxiang
-// Error value shape: { code: String, message: String }
-
-// Extract Err carrier (raises runtime error when Ok)
-unwrap_err: (T, E) -> ((self: Result(T, E)) -> E)
-
-// Read error code / message
-code: (self: Error) -> String
-message: (self: Error) -> String
-```
-
-**Example of Branching by Code**:
-
-```yaoxiang
-use std.range
-use std.result
-
-r = range.iter(1..10..0)      // step=0 → Err(Error)
-if result.is_err(r) {
-    e = result.unwrap_err(r)
-    if result.code(e) == "E6009" {
-        // Handle the Range invalid step branch
-        io.println(result.message(e))
-    }
+pub Option: (T: Type) -> Type = {
+    some: (T) -> Option(T),
+    none: () -> Option(T),
+    Try(Option(T), T, Void),
 }
 ```
 
-User-defined error modeling uses the E generics parameter of `Result(T, E)` (custom variant set);
-std `Error` is a convenient fallback carrier, and its code system does not constrain user E types.
+**Variant construction** (must be type-qualified in expression position, see
+[Syntax Specification §1.4.2](./syntax.md)):
+
+| Variant       | Syntax                | Description |
+| ------------- | --------------------- | ----------- |
+| `Option.some` | `Option(Int).some(5)` | Has value   |
+| `Option.none` | `Option(Int).none()`  | No value    |
+
+**Methods** (declared in the type body, **NOT module-level exports**—`option.is_failure(...)`
+reports `E1042`):
+
+| Method       | Signature                             | `some` arm              | `none` arm              |
+| ------------ | ------------------------------------- | ----------------------- | ----------------------- |
+| `is_failure` | `(T: Type)(self: &Option(T)) -> Bool` | `false`                 | `true`                  |
+| `success`    | `(T: Type)(self: &Option(T)) -> T`    | Returns payload         | `assert(false)`         |
+| `residual`   | `(T: Type)(self: &Option(T)) -> Void` | `assert(false)`         | Returns `void`          |
+| `from_error` | `(T: Type)(v: Void) -> Option(T)`     | Always returns `none()` | Always returns `none()` |
+
+The `assert(false)` branch is a dead end of type `Never` (`Never <: T`, see
+[Type System §2.2](./type-system.md)); the runtime reports `E6005`.
+
+> **There is no `is_some` / `is_none` / `unwrap` / `unwrap_or` / `map`**—these names have 0 hits in
+> the entire `src/` repository. To test for failure use `is_failure()`, to extract the payload use
+> `success()`.
+>
+> **`?` propagation on `Option` is currently unavailable**: although the type body instantiates
+> `Try(Option(T), T, Void)`, the type checker only recognizes `Result` (`o?` reports `E1081`).
+> `from_error` is the internal bridge for `?`, so there is also no reachable call site
+> (`o.from_error()` reports `E6006` at runtime).
+
+### 1.3 Result Type
+
+The `Result` type body (`src/std/result.yx:19-23`):
+
+```
+pub Result: (T: Type, E: Type) -> Type = {
+    ok: (T) -> Result(T, E),
+    err: (E) -> Result(T, E),
+    Try(Result(T, E), T, E),
+}
+```
+
+**Variant construction** (must be type-qualified—bare `ok(5)` reports
+`E1001 Unknown variable: 'ok'`):
+
+| Variant      | Syntax                         | Description   |
+| ------------ | ------------------------------ | ------------- |
+| `Result.ok`  | `Result(Int, String).ok(5)`    | Success value |
+| `Result.err` | `Result(Int, String).err("e")` | Error value   |
+
+**Methods**: the four `Try` methods from the type body (`is_failure` / `success` / `residual` /
+`from_error`, only callable using method syntax) + 8 native utility exports
+(`src/std/result.rs:71-126`):
+
+```
+is_ok:      (T: Type, E: Type)(self: &Result(T, E)) -> Bool
+is_err:     (T: Type, E: Type)(self: &Result(T, E)) -> Bool
+unwrap:     (T: Type, E: Type)(self: &Result(T, E)) -> T
+unwrap_or:  (T: Type, E: Type)(self: &Result(T, E), default: T) -> T
+unwrap_err: (T: Type, E: Type)(self: &Result(T, E)) -> E
+code:       (self: &Error) -> String
+message:    (self: &Error) -> String
+error:      (code: &String, message: &String) -> Error
+```
+
+> **There is no `map` / `map_err`**. `?` propagation on `Result` IS **available** (unlike `Option`).
+
+**Error carrier and error codes (#323 M4)**:
+
+The `Error` carrier used by the Err side of std modules carries normalized error codes. The codes
+reuse the E6xxx/E7xxx range from RFC-013, providing a stable contract across versions—programs can
+program against codes, and `yx explain E6009` looks up documentation. The runtime representation is
+`Struct { code: String, message: String }` (`src/std/result.rs:52-68`). The registered codes are in
+`RUNTIME_ERROR_CODES` at `src/std/result.rs:26-32`: `E6009` (range step invalid), `E6010` (parse_int
+failure), `E6011` (parse_float failure), `E6012` (invalid code point), `E6013` (JSON parse failure).
+
+`Error` values can only be constructed via `result.error(code, message)`—the type family only
+registers type identity, with no value-space constructors.
 
 ### 1.4 Error Propagation
 
@@ -126,12 +141,12 @@ std `Error` is a convenient fallback carrier, and its code system does not const
 ErrorPropagate ::= Expr '?'
 ```
 
-The `?` operator automatically propagates errors of the Result type (after `use std.result`, match
+The `?` operator automatically propagates errors of `Result` type (after `use std.result`, match
 variant destructuring is the explicit equivalent form of `?`—the variant set is imported via `use`,
-see §2.8 match):
+see [Syntax Specification §2.8](./syntax.md)):
 
 ```
-// Return the value on success, return err upward on failure
+// Returns the value on success, returns err upward on failure
 data = fetch_data()?
 
 // Conceptually equivalent form
@@ -141,34 +156,45 @@ data = match fetch_data() {
 }
 ```
 
+Constraint: `?` may only appear inside a function whose return type implements `Try`, with the outer
+return being `Result(T, E)`; otherwise `E1081` is reported. The `Try` instantiation for `Option` is
+not yet recognized by the checker (see §1.2).
+
 ### 1.5 Assertions (std.assert)
 
-The `std.assert` module provides a unified assertion mechanism—runtime `assert` and compile-time
-refinement type `Assert` are two sides of the same primitive.
+`std.assert` has only one native export (`src/std/assert.rs:23-30`):
 
-```yaoxiang
-// IsTrue: bridge function from value to type
+```
+assert: (cond: Bool, ?msg: String) -> Never
+```
+
+Two type families are also registered (`src/std/assert.rs:32-51`):
+
+```
 IsTrue: (b: Bool) -> Type = match b {
     true => Void,      // ⊤, program continues
     false => Never,    // ⊥, diverges
 }
 
-// Assert: compile-time refinement type primitive
 Assert: (cond: Bool) -> Type = IsTrue(cond)
-
-// assert: runtime assertion (value introducer of Assert)
-assert: (cond: Bool, ?msg: String | Error) -> Assert(IsTrue(cond))
-
-// Result overload
-assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 ```
+
+**Current status**:
+
+- The runtime `assert` is available—`E6005` is reported when the condition is false; when the
+  condition is true the implementation returns `Void` (`src/std/assert.rs:82-83`), which is
+  consistent with the declared `Never` (`Never <: T`)
+- **There is NO overload with `Assert(IsTrue(cond))` as the return type**, nor any overload
+  accepting `Result`
+- The two type families **cannot be written at type position** (`Assert(true)` reports `E0010`,
+  `assert.Assert(true)` reports `E0012`)—the compile-time refinement primitive is not yet connected
 
 **dispatch**:
 
-| Condition                                         | Behavior                                                     |
-| ------------------------------------------------- | ------------------------------------------------------------ |
-| All free variables of cond are compile-time known | Compiler evaluates, true → erased, false → compile error     |
-| Runtime free variables exist                      | Insert runtime check, inject flow-sensitive assumption set Γ |
+| Condition                                              | Behavior                                                     |
+| ------------------------------------------------------ | ------------------------------------------------------------ |
+| All free variables of `cond` are known at compile time | Compiler evaluates; true → erased, false → compile error     |
+| Runtime free variables exist                           | Insert runtime check, inject flow-sensitive assumption set Γ |
 
 `assert(false, "msg")` is equivalent to raise—no separate throw/raise keyword is needed.
 
@@ -178,49 +204,51 @@ assert: (result: Result) -> Assert(IsTrue(is_ok(result)))
 
 ### 2.1 Standard Input/Output
 
-```yaoxiang
-// Standard output
-print: (msg: String) -> Void
-println: (msg: String) -> Void
+`std.io` has 4 exports total (`src/std/io.rs:53-77`):
 
-// Standard input
-read_line: () -> String
-read_char: () -> Char
+```
+print: (...args) -> Void
+println: (...args) -> ()
+read_line: () -> String            // not exported on wasm32
+format_fallback: (value, type_name: &String) -> String
 ```
 
-### 2.2 File Operations
+> **There is no `read_char`**. Whole-file read/write (`read_file` / `write_file` / `append_file`)
+> has been moved to `std.fs` (noted as #104 at `src/std/io.rs:69`).
 
-```yaoxiang
-// File type
-File: Type = {
-    path: String,
-    read: (self: File) -> Result(String, Error),
-    write: (self: File, content: String) -> Result(Void, Error),
-    append: (self: File, content: String) -> Result(Void, Error),
-    close: (self: File) -> Void
-}
+### 2.2 Files and Directories
 
-// File operations
-open: (path: String) -> Result(File, Error)
-create: (path: String) -> Result(File, Error)
-delete: (path: String) -> Result(Void, Error)
+Path-level operations are all in `std.fs` (22 exports, `src/std/fs.rs:36-169`); handle-level
+incremental I/O is in `std.os` (12 exports, `src/std/os.rs:26-89`). **There is no `File` / `Dir`
+record type, nor `create` / `delete` / `create_dir` / `delete_dir`.**
+
+`std.os` (handle model, parameters uniformly `&File`—handles can be reused):
+
+```
+open:  (path: &String, mode: &String) -> File
+close: (file: &File) -> Void
+read:  (file: &File, n: Int) -> String
+write: (file: &File, content: String) -> Int
+seek:  (file: &File, offset: Int) -> Bool
+tell:  (file: &File) -> Int
+flush: (file: &File) -> Void
+get_env:  (name: &String) -> String
+set_env:  (name: &String, value: &String) -> Void
+args:     () -> String
+chdir:    (path: &String) -> Bool
+getcwd:   () -> String
 ```
 
-### 2.3 Directory Operations
+`std.fs` (path model):
 
-```yaoxiang
-// Directory type
-Dir: Type = {
-    path: String,
-    entries: (self: Dir) -> Result(List(String), Error),
-    create: (self: Dir) -> Result(Void, Error),
-    delete: (self: Dir) -> Result(Void, Error)
-}
-
-// Directory operations
-read_dir: (path: String) -> Result(Dir, Error)
-create_dir: (path: String) -> Result(Void, Error)
-delete_dir: (path: String) -> Result(Void, Error)
+```
+read_file / write_file / append_file      // whole-file read/write
+exists / is_file / is_dir / stat           // metadata checks
+mkdir / mkdir_all / rmdir / remove          // directories and deletion
+copy / rename                              // transport
+read_dir / walk                            // directory enumeration
+temp_dir / mkdtemp / tmpfile               // temp paths
+path_join / path_basename / path_dirname / path_extension   // pure path operations
 ```
 
 ---
@@ -229,49 +257,54 @@ delete_dir: (path: String) -> Result(Void, Error)
 
 ### 3.1 Basic Math Functions
 
-```yaoxiang
-// Absolute value
-abs: (x: Int) -> Int
-abs: (x: Float) -> Float
+`std.math` has 18 exports total (`src/std/math.rs:20-75`). **The integer family and the float family
+are two independent names, with no implicit conversion or overloading**:
 
-// Maximum and minimum
-max: (a: Int, b: Int) -> Int
-min: (a: Int, b: Int) -> Int
-max: (a: Float, b: Float) -> Float
-min: (a: Float, b: Float) -> Float
-
-// Power operations
-pow: (base: Float, exp: Float) -> Float
-sqrt: (x: Float) -> Float
-
-// Logarithm
-log: (x: Float) -> Float
-log2: (x: Float) -> Float
-log10: (x: Float) -> Float
 ```
+abs:   (n: Int) -> Int          // integer absolute value
+max:   (a: Int, b: Int) -> Int
+min:   (a: Int, b: Int) -> Int
+clamp: (value: Int, min: Int, max: Int) -> Int
+
+fabs:  (n: Float) -> Float      // float absolute value
+fmax:  (a: Float, b: Float) -> Float
+fmin:  (a: Float, b: Float) -> Float
+pow:   (base: Float, exp: Float) -> Float
+sqrt:  (n: Float) -> Float
+floor: (n: Float) -> Float
+ceil:  (n: Float) -> Float
+round: (n: Float) -> Float
+```
+
+> **`abs` / `max` / `min` only accept `Int`**—there is no `abs: (x: Float) -> Float` overload; for
+> floats use `fabs` / `fmax` / `fmin`.
+>
+> **`clamp` returns `E6007` when `min > max`** (`src/std/math.rs:117-130`), no longer panicking the
+> interpreter process.
+>
+> **No logarithm family**: `log` / `log2` / `log10` have 0 hits in the entire repo.
 
 ### 3.2 Trigonometric Functions
 
-```yaoxiang
-// Trigonometric functions
-sin: (x: Float) -> Float
-cos: (x: Float) -> Float
-tan: (x: Float) -> Float
-
-// Inverse trigonometric functions
-asin: (x: Float) -> Float
-acos: (x: Float) -> Float
-atan: (x: Float) -> Float
-atan2: (y: Float, x: Float) -> Float
 ```
+sin: (n: Float) -> Float
+cos: (n: Float) -> Float
+tan: (n: Float) -> Float
+```
+
+Parameters are in **radians**. **There are no inverse trig functions**—`asin` / `acos` / `atan` /
+`atan2` have 0 hits in the entire repo.
 
 ### 3.3 Constants
 
-```yaoxiang
-// Math constants
-pi: Float = 3.141592653589793
-e: Float = 2.718281828459045
 ```
+PI:  Float = 3.141592653589793
+E:   Float = 2.718281828459045
+TAU: Float = 6.283185307179586
+```
+
+The export names are **uppercase** `PI` / `E` / `TAU` (`src/std/math.rs:71-73`); no lowercase `pi` /
+`e` exist. Use via name import: `use std.math.{PI, E, TAU}`.
 
 ---
 
@@ -279,94 +312,132 @@ e: Float = 2.718281828459045
 
 ### 4.1 String Operations
 
-```yaoxiang
-// String length
-length: (s: String) -> Int
+`std.string` has 21 exports total (`src/std/string.rs:22-146`). Except for `format`, all only take
+read-only borrow `&String`:
 
-// String concatenation
-concat: (a: String, b: String) -> String
-
-// String splitting
-split: (s: String, delimiter: String) -> List(String)
-
-// String searching
-find: (s: String, pattern: String) -> Option(Int)
-contains: (s: String, pattern: String) -> Bool
-
-// String replacement
-replace: (s: String, old: String, new: String) -> String
-
-// String trimming
-trim: (s: String) -> String
-trim_left: (s: String) -> String
-trim_right: (s: String) -> String
+```
+split:      (s: &String, sep: &String) -> Vec(String)
+trim:       (s: &String) -> String
+upper:      (s: &String) -> String
+lower:      (s: &String) -> String
+replace:    (s: &String, old: &String, new: &String) -> String
+contains:   (s: &String, sub: &String) -> Bool
+starts_with: (s: &String, prefix: &String) -> Bool
+ends_with:  (s: &String, suffix: &String) -> Bool
+index_of:   (s: &String, sub: &String) -> Int
+substring:  (s: &String, start: Int, end: Int) -> String
+is_empty:   (s: &String) -> Bool
+len:        (s: &String) -> Int
+chars:      (s: &String) -> Vec(String)
+concat:     (s1: &String, s2: &String) -> String
+repeat:     (s: &String, n: Int) -> String
+reverse:    (s: &String) -> String
+format:     (format: &String, ...args) -> String
 ```
 
-### 4.2 String Conversion
+> **There is no `length`**—the length function is called `len`, and returns the **UTF-8 byte
+> length**.
+>
+> **There is no `find`**—the index lookup function is called `index_of`, returning a **byte**
+> offset, or `-1` if not found.
+>
+> **There is only `trim`**—no `trim_left` / `trim_right` exist.
 
-```yaoxiang
-// Type conversion
-to_string: (x: Int) -> String
-to_string: (x: Float) -> String
-to_string: (x: Bool) -> String
+### 4.2 String Conversion and Code Points
 
-// Parsing
-parse_int: (s: String) -> Result(Int, Error)
-parse_float: (s: String) -> Result(Float, Error)
 ```
+parse_int:      (s: &String) -> Result(Int, Error)      // failure code E6010
+parse_float:    (s: &String) -> Result(Float, Error)    // failure code E6011
+char_code:      (s: &String, i: Int) -> Int            // returns -1 if out of bounds
+from_char_code: (n: Int) -> Result(String, Error)      // invalid code point, code E6012
+```
+
+Value-to-string conversion goes through `std.convert` (11 exports including `to_string`, etc.).
 
 ---
 
-## Chapter 5: Collection Library
+## Chapter 5: Collections Library
 
-### 5.1 List Type
+### 5.1 List (std.list)
 
-```yaoxiang
-// List type
-List: (T: Type) -> Type = {
-    data: Array(T),
-    length: Int,
-    push: (T: Type) -> ((self: List(T), item: T) -> Void),
-    pop: (T: Type) -> ((self: List(T)) -> Option(T)),
-    get: (T: Type) -> ((self: List(T), index: Int) -> Option(T)),
-    set: (T: Type) -> ((self: List(T), index: Int, value: T) -> Void),
-    insert: (T: Type) -> ((self: List(T), index: Int, item: T) -> Void),
-    remove: (T: Type) -> ((self: List(T), index: Int) -> Option(T)),
-    clear: (T: Type) -> ((self: List(T)) -> Void),
-    contains: (T: Type) -> ((self: List(T), item: T) -> Bool),
-    sort: (T: Type) -> ((self: List(T)) -> List(T)),
-    reverse: (T: Type) -> ((self: List(T)) -> List(T)),
-    map: (T: Type, R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
-    filter: (T: Type) -> ((self: List(T), predicate: (T) -> Bool) -> List(T)),
-    reduce: (T: Type, R: Type) -> ((self: List(T), initial: R, f: (R, T) -> R) -> R)
-}
+`std.list` is a **module-level function collection defined on `Vec(T)`** (`src/std/list.yx`),
+**NOT** a record type. 25 exports (24 functions + 1 `Iter` record type):
+
+```
+empty:      (T: Type) -> Vec(T)
+of:         (T: Type) -> (data: Vec(T)) -> Vec(T)
+
+// Consume the source list, return a new list
+push:       (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
+append:     (A: Type) -> (list: Vec(A), item: A) -> Vec(A)     // alias for push
+prepend:    (A: Type) -> (list: Vec(A), item: A) -> Vec(A)
+set:        (A: Type) -> (list: Vec(A), index: Int, value: A) -> Vec(A)
+pop:        (A: Type) -> (list: Vec(A)) -> Vec(A)
+remove_at:  (A: Type) -> (list: Vec(A), index: Int) -> Vec(A)
+
+// Read-only borrow, returns new list / scalar
+len:        (A: Type) -> (list: &Vec(A)) -> Int
+is_empty:   (A: Type) -> (list: &Vec(A)) -> Bool
+get:        (A: Type) -> (list: &Vec(A), index: Int) -> A
+first:      (A: Type) -> (list: &Vec(A)) -> A
+last:       (A: Type) -> (list: &Vec(A)) -> A
+contains:   (A: Type) -> (list: &Vec(A), item: &A) -> Bool
+find_index: (A: Type) -> (list: &Vec(A), item: &A) -> Int
+slice:      (A: Type) -> (list: &Vec(A), start: Int, end: Int) -> Vec(A)
+reverse:    (A: Type) -> (list: &Vec(A)) -> Vec(A)
+concat:     (A: Type) -> (a: &Vec(A), b: &Vec(A)) -> Vec(A)
+map:        (T: Type, R: Type) -> (list: &Vec(T), f: (item: T) -> R) -> Vec(R)
+filter:     (T: Type) -> (list: &Vec(T), keep: (item: T) -> Bool) -> Vec(T)
+reduce:     (T: Type, Acc: Type) -> (list: &Vec(T), f: (acc: Acc, item: T) -> Acc, init: Acc) -> Acc
+
+// Iterator
+Iter:       (T: Type) -> Type                 // { buf: Vec(T), pos: Int }
+iter:       (T: Type) -> (list: Vec(T)) -> Iter(T)
+has_next:   (T: Type) -> (it: &Iter(T)) -> Bool
+next:       (T: Type) -> (it: &mut Iter(T)) -> T
 ```
 
-### 5.2 Map Type
+**Boundary semantics** (`src/std/list.yx:76-205`): indexing and slicing use `[]` directly,
+**out-of-bounds yields `E6003`**, returning neither a sentinel value nor clamping. `first` / `last`
+on an empty list likewise report `E6003`. `remove_at` with a **negative** index reports `E6003`, but
+**silently truncates** when the index is `≥ length` (just subtracts 1 from `length`).
 
-```yaoxiang
-// Map type
-Map: (K: Type, V: Type) -> Type = {
-    data: Array((K, V)),
-    length: Int,
-    insert: (K: Type, V: Type) -> ((self: Map(K, V), key: K, value: V) -> Void),
-    get: (K: Type, V: Type) -> ((self: Map(K, V), key: K) -> Option(V)),
-    remove: (K: Type, V: Type) -> ((self: Map(K, V), key: K) -> Option(V)),
-    contains_key: (K: Type, V: Type) -> ((self: Map(K, V), key: K) -> Bool),
-    keys: (K: Type, V: Type) -> ((self: Map(K, V)) -> List(K)),
-    values: (K: Type, V: Type) -> ((self: Map(K, V)) -> List(V)),
-    clear: (K: Type, V: Type) -> ((self: Map(K, V)) -> Void)
-}
+**There is no** `insert` / `clear` / `sort`, nor in-place mutating forms of methods—`pop` /
+`remove_at` take by value and **return a shortened new list** (value semantics, the source list is
+consumed).
+
+### 5.2 Dictionary (std.dict)
+
+`std.dict` is a **module-level function collection operating on `Dict(K, V)`** (`src/std/dict.rs`),
+**NOT** a record type. 11 exports:
+
 ```
+new:     (K: Type, V: Type)() -> Dict(K, V)
+get:     (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Any    // missing key reports E6008
+set:     (K: Type, V: Type)(dict: Dict(K, V), key: Any, value: Any) -> Dict(K, V)
+has:     (K: Type, V: Type)(dict: &Dict(K, V), key: Any) -> Bool
+delete:  (K: Type, V: Type)(dict: Dict(K, V), key: Any) -> Dict(K, V)
+keys:    (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
+values:  (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
+entries: (A: Type, B: Type, C: Type)(dict: &Dict(A, B)) -> Vec(C)
+len:     (K: Type, V: Type)(dict: &Dict(K, V)) -> Int
+is_empty:(K: Type, V: Type)(dict: &Dict(K, V)) -> Bool
+merge:   (A: Type, B: Type)(a: &Dict(A, B), b: &Dict(A, B)) -> Dict(A, B)
+```
+
+> **There is no** `insert` / `clear` (`Dict` is a core primitive, the capacity strategy is not
+> exposed). An empty dictionary is created with `dict.new()`—`{}` is an **empty block** (value
+> `Void`), not an empty dictionary.
 
 ---
 
 ## Chapter 6: Iterator Library
 
-### 6.1 Iterator trait
+### 6.1 Iterator Interface
 
-```yaoxiang
-// Iterator trait
+`Iterator` is a **language interface** (RFC-011a), not a standard library module:
+
+```
 Iterator: (T: Type) -> Type = {
     Item: T,
     next: () -> Option(T),
@@ -379,84 +450,95 @@ Iterator: (T: Type) -> Type = {
 }
 ```
 
+The **runtime implementation** of the protocol surface is provided by `std.range`
+(`src/std/range.rs:29-90`), while `std.list` has its own separate `Iter` record. The **parameter
+shapes on the two sides are opposite**: `range.has_next` has no `&` (consumes the iterator by value)
+while `range.next` has `&`; `list.has_next` / `list.next` both have `&` / `&mut`. For everyday
+traversal just use `for ... in`.
+
+> **The `Iterator` protocol has NO corresponding independent module**—there is no module path named
+> `iterator` under `std` (that name has 0 hits in the entire `src/` repo).
+
 ### 6.2 Iterator Adapters
 
-```yaoxiang
-// Range iterator (Range is a formal type; its runtime identity is a three-scalar immutable record,
-// no longer borrowing a Tuple shell; printing `1..10` / `1..10..2`, structural equality, named fields)
+```
 Range: Type = {
     start: Int,
     end: Int,
     step: Int,
     Iterator(Int)
 }
+```
 
-// Usage (iterator protocol: std.range.iter/has_next/next, for dispatches via static typing)
+```
+// Usage (iterator protocol: std.range.iter/has_next/next, for dispatches via static types)
 for i in 0..10 {
     print(i)
 }
 
-// step form (double dot, no new keyword)
+// Stepped form (double dot, no new keyword)
 for i in 0..10..2 {
     print(i)
 }
 ```
 
-> **`Range(Int)` has been formally landed**—named fields `r.start`/`r.end`/`r.step` are accessible;
-> `x in r` at runtime goes through `std.range.contains` (boundary check + step alignment), and the
-> proof pipeline recognizes it as the range proposition
-> `x >= r.start && x < r.end && (x - r.start) % r.step == 0` (range stays as a range, not
-> materialized). step=0 literals are rejected at compile time; dynamic step=0 has been Result-ized:
-> `std.range.iter` → `Result(Iterator, Error)`, `std.range.contains` → `Result(Bool, Error)`,
-> consumption points use `?` to propagate up the call stack or `result.unwrap` to explicitly branch;
-> `for`/`in` sugar desugars at ir_gen time to unpack, and the Err branch (dynamic step=0) explicitly
-> fails (`abort_invalid_step`), never silently looping forever. Interface instantiation (the
-> `Iterator(Int)` declaration in the type body) and its type syntax and static dispatch have landed
-> with RFC-011a phases 1–2: the type body application item `Iterator(Int)` triggers `Self ↦ Range`
-> substitution expansion and completeness check, and on success generates an implementation proof.
-> Dynamic dispatch has landed with phase 3: an interface name that hasn't been instantiated still
-> exists as a type (`List(Animal)`), and concrete values entering an existential type position are
-> automatically wrapped as variant values, with element method calls dispatched by their actual type
-> (§6). The runtime protocol surface of the std.range module is still provided by native methods for
-> now; migration to interface dispatch is future work.
+> **`Range(Int)` has officially landed**—the named fields `r.start`/`r.end`/`r.step` are accessible;
+> `x in r` at runtime goes through `std.range.contains` (boundary check + step alignment), proving
+> that the pipeline recognizes the interval proposition
+> `x >= r.start && x < r.end && (x - r.start) % r.step == 0` (intervals stay as intervals, not
+> materialized). Literal step=0 is rejected at compile time; dynamic step=0 has been Result-ized:
+> `std.range.iter` → `Result(Iterator, Error)` (code `E6009`), `std.range.contains` →
+> `Result(Bool, Error)`, with consumption points using `?` to propagate along the call stack or
+> `result.unwrap` for explicit branching; `for`/`in` sugar desugars via ir_gen, the Err branch
+> (dynamic step=0) explicitly fails (`abort_invalid_step`), never silently infinite-looping.
 
 ---
 
-## Appendix: Standard Library Module Index
+## Appendix A: Standard Library Module Index
 
-| Module           | Description                                                                                    |
-| ---------------- | ---------------------------------------------------------------------------------------------- |
-| `std.assert`     | Assertion mechanism—runtime assert + compile-time Assert refinement type                       |
-| `std.option`     | Option type                                                                                    |
-| `std.result`     | Result type                                                                                    |
-| `std.collection` | List, Map and other collection types                                                           |
-| `std.string`     | String operations                                                                              |
-| `std.array`      | Array operations                                                                               |
-| `std.iterator`   | Iterator (protocol surface currently provided by `std.range`)                                  |
-| `std.range`      | Range iterator and range predicates, adapters                                                  |
-| `std.test`       | Test assertion library (value semantics, RFC-036 §3)—the first pure-YaoXiang dogfooding module |
+The following table lists **only actually existing** module paths (corresponding to the two tables
+in the [Standard Library Reference](../stdlib/index.md)).
 
-### A.2 IO Modules
+| Module        | Implementation | Description                                                                               |
+| ------------- | -------------- | ----------------------------------------------------------------------------------------- |
+| `std.assert`  | native         | Runtime `assert` (+ two not-yet-usable type families `IsTrue` / `Assert`)                 |
+| `std.option`  | yx             | `Option(T)` optional value and sum type                                                   |
+| `std.result`  | dual           | `Result(T, E)` and `Error`; the only currently available site for `?` propagation         |
+| `std.list`    | yx             | List operations on `Vec(T)` and the `Iter` iterator                                       |
+| `std.dict`    | native         | `Dict(K, V)` read/write, key-value views and merging                                      |
+| `std.string`  | native         | String lookup, splitting, formatting, parsing and code points                             |
+| `std.math`    | native         | Integer family, float family, trig functions and `PI` / `E` / `TAU`                       |
+| `std.time`    | native         | Unix timestamp, UTC formatting and parsing, `datetime_*` accessors                        |
+| `std.range`   | native         | `Range` iterator protocol, interval predicates and lazy adapters                          |
+| `std.json`    | yx             | JSON parsing and serialization (RFC 8259)                                                 |
+| `std.convert` | native         | Conversion of any value to `String`                                                       |
+| `std.test`    | yx             | Test assertion library (value semantics, RFC-036 §3), the first pure yx dogfooding module |
 
-| Module     | Description           |
-| ---------- | --------------------- |
-| `std.io`   | Standard input/output |
-| `std.file` | File operations       |
-| `std.dir`  | Directory operations  |
+### A.2 Platform-Dependent Modules
 
-### A.3 Math Modules
+| Module           | Implementation | Dependency                                      | wasm32                        |
+| ---------------- | -------------- | ----------------------------------------------- | ----------------------------- |
+| `std.io`         | native         | Standard I/O                                    | only `read_line` not exported |
+| `std.fs`         | native         | Filesystem                                      | not exported                  |
+| `std.os`         | native         | File/process                                    | not exported                  |
+| `std.net`        | native         | Networking (`ureq` + rustls TLS, sync blocking) | not exported                  |
+| `std.concurrent` | native         | Threads                                         | not exported                  |
+| `std.weak`       | native         | Atomic reference counting                       | not exported                  |
 
-| Module          | Description             |
-| --------------- | ----------------------- |
-| `std.math`      | Math functions          |
-| `std.math.trig` | Trigonometric functions |
-| `std.math.log`  | Logarithm functions     |
+### A.3 Removed Module Names
 
-### A.4 Utility Modules
+The following names were once module names under `std`, but have **0 hits in the entire `src/`
+repo** and must not be used (verification: full-text search of these identifiers against the `src/`
+directory):
 
-| Module       | Description                                                             |
-| ------------ | ----------------------------------------------------------------------- |
-| `std.random` | Random number generation                                                |
-| `std.time`   | Time and date                                                           |
-| `std.assert` | Compile-time `Assert(C)` unified with runtime `assert(x > 0)` (RFC-030) |
-| `std.regex`  | Regular expressions                                                     |
+| Old name     | Now handled by                                    |
+| ------------ | ------------------------------------------------- |
+| `collection` | `std.list` (`Vec(T)`) + `std.dict` (`Dict(K, V)`) |
+| `array`      | Core primitive `Array(T, N)`                      |
+| `iterator`   | Protocol surface of `std.range` / `std.list`      |
+| `file`       | `std.fs`                                          |
+| `dir`        | `std.fs`                                          |
+| `math.trig`  | `std.math` (`sin` / `cos` / `tan`)                |
+| `math.log`   | No logarithm family                               |
+| `random`     | None                                              |
+| `regex`      | None                                              |

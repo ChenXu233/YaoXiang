@@ -34,15 +34,16 @@ use std.os
 > os.close(r)
 > ```
 >
-> 修复前签名无 `&`，句柄按值传入 → 线性所有权 → 用一次即失效，
+> 修复前的签名无 `&`，句柄按值传入 → 线性所有权 → 用一次即失效，
 > `open → write → close` 会报 `E2014`。
->
-> 若想避免手工管理句柄，仍可用不开句柄的便捷函数：
-> [`std.io.read_file`](./io#read_file) / [`write_file`](./io#write_file) /
-> [`append_file`](./io#append_file)，或本模块的 [`append_file`](#append_file)。
 
-`open` 返回的是一个 **`Int` 类型的文件描述符**（引擎内部维护句柄表），因此签名中的 `File` 实为
-`Int`。
+若想避免手工管理句柄，可用不开句柄的便捷函数——它们在
+[`std.fs`](./fs)（**不在** `std.io`）：`fs.read_file` / `fs.write_file` /
+`fs.append_file`。本模块（`std.os`）只有句柄级增量读写，没有 `append_file`
+（`os.append_file` 报 `E1042`）。
+
+`open` 返回的类型标注是 `File`——引擎内部维护一张句柄表（`src/std/os.rs:98`），
+底层是 `std::fs::File`，对用户是**不透明的句柄值**。
 
 写入后内容立即落盘，无需显式 `close`：
 
@@ -102,18 +103,16 @@ open: (path: &String, mode: &String) -> File
 
 <!-- stdlib:sig:os.open end -->
 
-打开文件并返回文件描述符。
+打开文件并返回句柄。
 
 - `path` —— 文件路径（只读借用）
 - `mode` —— 打开模式，见上表
 
-返回：内部句柄表分配的 `Int`
-描述符。**该句柄只能使用一次**——任一下游调用都会移动它（见[文件句柄模型](#文件句柄模型)），因此通常把
-`open` 内联进单次调用。
+返回：`File` 句柄值。**句柄按引用传递**——`write` / `seek` / `read` / `tell` / `flush` /
+`close` 的形参都是 `&File`（`src/std/os.rs:35-65`），所以同一个句柄可以反复使用，
+直到显式 [`close`](#close)。通常把 `open` 内联进单次调用以省去收尾。
 
 错误：模式非法、文件不存在或无权限时抛出 `E6007`。
-
-> 句柄只能使用一次（#337），因此该返回值通常直接内联进下游调用。
 
 ```yaoxiang
 use std.assert
@@ -124,6 +123,7 @@ main: () -> Void = {
     p = "__yx_doc_open_only.txt"
     f = os.open(p, "w")
     assert(fs.exists(p))
+    os.close(f)
     fs.remove(p)
 }
 ```
@@ -140,10 +140,11 @@ close: (file: &File) -> Void
 
 关闭文件句柄并释放表项。
 
-因为句柄只能使用一次，`close` 只在“打开后不作他用”的场景有意义；写入内容在 [`write`](#write)
-返回时已落盘，通常无需显式关闭。
+形参是 `&File`，所以 `close` 可以放在一串读写的末尾，把句柄用完再释放。写入内容在
+[`write`](#write) 返回时已落盘（`os.open(…, "w")` 走 `OpenOptions::create(true)`），
+通常无需显式关闭——但长时间持有大量句柄时应当收尾。
 
-错误：描述符无效（未打开或已关闭）时抛出 `E6007`。
+错误：句柄无效（未打开或已关闭）时抛出 `E6007`。
 
 ```yaoxiang
 use std.fs
@@ -152,6 +153,7 @@ use std.os
 main: () -> Void = {
     p = "__yx_doc_close.txt"
     f = os.open(p, "w")
+    os.write(f, "data")
     os.close(f)
     fs.remove(p)
 }
@@ -169,11 +171,11 @@ read: (file: &File, n: Int) -> String
 
 从当前读写位置读取**最多** `n` 字节。
 
-- `file` —— 文件描述符
+- `file` —— 文件句柄
 - `n` —— 期望读取的字节数
 
 返回：实际读到的内容（可能短于
-`n`，到达文件末尾时为空串）。非法 UTF-8 字节以替换字符形式返回，不报错。错误：描述符无效或读取失败时抛出
+`n`，到达文件末尾时为空串）。非法 UTF-8 字节以替换字符形式返回，不报错。错误：句柄无效或读取失败时抛出
 `E6007`。
 
 ```yaoxiang
@@ -205,7 +207,7 @@ write: (file: &File, content: String) -> Int
 
 - `content` —— 按值传入
 
-返回：写入的**字节数**。错误：描述符无效或写入失败时抛出 `E6007`。
+返回：写入的**字节数**。错误：句柄无效或写入失败时抛出 `E6007`。
 
 ```yaoxiang
 use std.assert
@@ -234,7 +236,7 @@ seek: (file: &File, offset: Int) -> Bool
 
 - `offset` —— 目标字节偏移，须非负
 
-返回：成功返回 `true`。错误：描述符无效或偏移非法时抛出 `E6007`。
+返回：成功返回 `true`。错误：句柄无效或偏移非法时抛出 `E6007`。
 
 ```yaoxiang
 use std.assert
@@ -263,7 +265,7 @@ tell: (file: &File) -> Int
 
 返回当前读写位置的字节偏移。
 
-错误：描述符无效时抛出 `E6007`。
+错误：句柄无效时抛出 `E6007`。
 
 ```yaoxiang
 use std.assert
@@ -290,7 +292,7 @@ flush: (file: &File) -> Void
 
 把缓冲内容刷入磁盘。
 
-错误：描述符无效或刷新失败时抛出 `E6007`。
+错误：句柄无效或刷新失败时抛出 `E6007`。
 
 ```yaoxiang
 use std.assert

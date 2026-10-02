@@ -24,7 +24,7 @@ description: '了解如何为 YaoXiang 项目贡献代码'
 ## 提交规范
 
 ```
-feat: 新功能
+:sparkles: feat: 新功能
 fix: 修复 bug
 docs: 文档更新
 refactor: 重构
@@ -34,5 +34,5 @@ chore: 构建/工具更新
 
 ## 相关资源
 
-- [GitHub](https://github.com/yaoxiang-lang/yaoxiang)
-- [Issue 反馈](https://github.com/yaoxiang-lang/yaoxiang/issues)
+- [GitHub](https://github.com/ChenXu233/YaoXiang)
+- [Issue 反馈](https://github.com/ChenXu233/YaoXiang/issues)

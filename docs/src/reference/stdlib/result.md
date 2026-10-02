@@ -16,6 +16,14 @@ r = Result(Int, String).ok(5)
 e = Result(Int, String).err("boom")
 ```
 
+> **本模块是「双实现」合并面**：`Result` 类型与 `Try` 四方法来自纯 yx 的
+> `src/std/result.yx`，`is_ok` / `is_err` / `unwrap` / `unwrap_or` / `unwrap_err` /
+> `code` / `message` / `error` 这 8 个工具来自 native 的 `src/std/result.rs`。
+> 两者注册到同一导出面（`src/frontend/module/registry.rs:315-334` 显式做并集合并，
+> 同名冲突以 yx 为准），所以 `use std.result` 一次即可拿到全部 9 个绑定。
+> 但**模块级 `Try` 方法不可见**——`result.is_failure(...)` 报 `E1042`；`Try` 四方法
+> 只能以方法调用语法 `r.is_failure()` 访问。
+
 ## 运行时表示
 
 | 值                            | 表示                             |
@@ -29,9 +37,37 @@ e = Result(Int, String).err("boom")
 
 ## Try 接口（`?` 传播）
 
-`Result` 在类型体里实例化了 `Try(Result(T, E), T, E)` 四方法接口，`?` 运算符
-据此驱动：`is_failure` 判定失败、`success` 取成功载荷、`residual` 取失败载荷、
-`from_error` 从错误值重建 `Result`。这些方法也可显式调用。
+`Result` 在类型体里实例化了 `Try(Result(T, E), T, E)` 四方法接口（`src/std/result.yx:22`），
+`?` 运算符据此驱动。这些方法也可显式调用，但**只能走方法语法**（模块级
+`result.is_failure(...)` 报 `E1042`）：
+
+| 方法                       | 签名                                       |
+| -------------------------- | ------------------------------------------ |
+| `r.is_failure()`           | `(T: Type, E: Type)(self: &Result(T, E)) -> Bool` |
+| `r.success()`              | `(T: Type, E: Type)(self: &Result(T, E)) -> T`     |
+| `r.residual()`             | `(T: Type, E: Type)(self: &Result(T, E)) -> E`     |
+| `Result(T, E).from_error(e)` | `(T: Type, E: Type)(e: E) -> Result(T, E)`   |
+
+与 [`std.option`](./option) 不同，`Result` 上的 `?` 传播是**可用**的：
+
+```yaoxiang
+use std.result
+use std.string
+
+parse_then_add_one: (String) -> Result(Int, Error) = (s) => {
+    n = string.parse_int(s)?      // Err 原样上抛
+    return Result(Int, Error).ok(n + 1)
+}
+
+main: () -> Void = {
+    println(result.unwrap(parse_then_add_one("41")))   // 42
+}
+```
+
+> **没有 `map` / `map_err`**：本模块的 8 个 native 导出
+> （`src/std/result.rs:71-126`）不含这两个名字，`result.map(...)` 报
+> `E1042 field 'map' not found in struct 'result'`。需要变换成功值请用
+> `match` 变体解构。
 
 ## 函数一览
 
@@ -229,7 +265,50 @@ main: () -> Void = {
 }
 ```
 
+## 构造
+
+### error
+
+<!-- stdlib:sig:result.error start -->
+
+```yaoxiang
+error: (code: &String, message: &String) -> Error
+```
+
+<!-- stdlib:sig:result.error end -->
+
+构造一个 `Error` 值。这是纯 yx 层构造 `Error` 的**唯一通道**——`Error` 类型族只注册
+类型身份、没有值空间构造子，所以 yx 里写 `Error("E…", msg)` 会在 IR 层报 `E3006`
+（`src/std/result.rs:117-124`）。
+
+- `code` —— 错误码字符串（RFC-013 的 `E6xxx` / `E7xxx` 段注册码）
+- `message` —— 人类可读描述
+
+返回：新造的 `Error` 值，可直接交给 [`code`](#code) / [`message`](#message) 读取，
+或作为 `Result.err(...)` 的载荷。
+
+> **码表是注册制**：`src/std/result.rs:26-32` 的 `RUNTIME_ERROR_CODES` 只列出 5 个已注册码
+> （`E6009` / `E6010` / `E6011` / `E6012` / `E6013`）。自造码（如 `"E9999"`）在程序内
+> 可以流通，但 `yx explain` 查不到文档——只在自己约定的子域内用。
+
+```yaoxiang
+use std.assert
+use std.result
+
+main: () -> Void = {
+    e = result.error("E6010", "parse_int failed")
+    assert(result.code(e) == "E6010")
+    assert(result.message(e) == "parse_int failed")
+
+    r = Result(Int, Error).err(e)
+    assert(result.is_err(r))
+    assert(result.code(result.unwrap_err(r)) == "E6010")
+}
+```
+
 ## 相关
 
 - [`std.string`](./string#parse_int) —— 产生 `Result` 的解析函数
+- [`std.range`](./range#iter) —— `step=0` 时返回带 `E6009` 的 `Err`
+- [`std.option`](./option) —— `Option(T)`；其 `?` 传播当前**不可用**，见该页「已知缺口」
 - [错误码参考](../error-code/) —— `E6010` / `E6011` 等运行时错误值码

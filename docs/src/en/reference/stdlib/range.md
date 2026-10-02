@@ -1,6 +1,6 @@
 ---
 title: 'std.range'
-description: 'Range iteration, predicates and lazy adapters'
+description: 'Range iteration, predicates, and lazy adapters'
 ---
 
 # std.range
@@ -11,20 +11,20 @@ Range (`Range`) iteration and adapters.
 use std.range
 ```
 
-## Range literals
+## Range Literals
 
 | Syntax    | Meaning                   |
 | --------- | ------------------------- |
 | `a..b`    | From `a` to `b`, step `1` |
 | `a..b..s` | From `a` to `b`, step `s` |
 
-A range is **exclusive of the end value** (half-open, left-closed right-open). The step can be
-negative to indicate a decreasing range.
+The range **excludes the end value** (half-open interval). The step may be negative, indicating a
+descending sequence.
 
-## Iterator protocol
+## Iterator Protocol
 
-[`iter`](#iter) returns a `Result`—when the step is `0` it is the error path (`E6009`), so you must
-`unwrap` or handle it explicitly:
+[`iter`](#iter) returns a `Result`—when the step is `0`, it takes the error path (`E6009`), so you
+must `unwrap` or handle it explicitly:
 
 ```yaoxiang
 use std.assert
@@ -38,9 +38,11 @@ main: () -> Void = {
 }
 ```
 
-> **Move semantics**: The signatures of `has_next` and `next` do not take `&`, so they **move** the
-> iterator. Therefore, you must create a new iterator on every access, or just iterate with
-> `for ... in`. This matches the iterator in [`std.list`](./list).
+> **The two sides have opposite shapes**: `has_next`'s signature **lacks `&`**
+> (`src/std/range.rs:40`); it consumes the iterator by value, so each check requires calling `iter`
+> again; `next`'s signature **has `&`** (`src/std/range.rs:46`); it borrows. [`std.list`](./list) is
+> exactly the opposite—both of its methods borrow (`&Iter(T)` / `&mut Iter(T)`), so the same
+> iterator can be used repeatedly. Copying the pattern from either side to the other will not match.
 
 ```yaoxiang
 use std.assert
@@ -48,7 +50,7 @@ use std.range
 use std.result
 
 main: () -> Void = {
-    // create a new iterator each time
+    // has_next has no &: create a new iterator each time
     a = result.unwrap(range.iter(1..3))
     assert(range.has_next(a))
 
@@ -57,7 +59,7 @@ main: () -> Void = {
 }
 ```
 
-For everyday iteration, just use `for ... in` directly:
+For everyday traversal, just use `for ... in`:
 
 ```yaoxiang
 use std.assert
@@ -73,7 +75,7 @@ main: () -> Void = {
 }
 ```
 
-## Function overview
+## Function Overview
 
 <!-- stdlib:table:range start -->
 
@@ -90,9 +92,7 @@ main: () -> Void = {
 | `reduce`             | `(it: Iterator(Any), init: Any, f: (Any, Any) -> Any) -> Any` |
 | `for_each`           | `(it: Iterator(Any), f: (Any) -> Void) -> Void`               |
 
-<!-- stdlib:table:range end -->
-
-## Iterator protocol
+<!-- stdlib:table:range end -->## Iterator Protocol
 
 ### iter
 
@@ -104,11 +104,11 @@ iter: (r: Range(Int)) -> Result(Iterator(Any), Error)
 
 <!-- stdlib:sig:range.iter end -->
 
-Creates an iterator from a range.
+Create an iterator from a range.
 
-- `r` — the range, e.g. `1..6` or `3..0..-1`
+- `r` — a range, e.g. `1..6` or `3..0..-1`
 
-Returns: `Result.ok(iterator)` on success; `Result.err` with `code` `E6009` when the step is `0`.
+Returns: on success, `Result.ok(iterator)`; when the step is `0`, `Result.err` with `code` `E6009`.
 
 ```yaoxiang
 use std.assert
@@ -131,9 +131,10 @@ has_next: (it: Iterator(Any)) -> Bool
 
 <!-- stdlib:sig:range.has_next end -->
 
-Whether there are still unconsumed elements.
+Whether there are any unconsumed elements.
 
-> **Moves** the iterator.
+> **Consumes the iterator by value** (signature has no `&`)—after one check the original iterator is
+> invalidated; call [`iter`](#iter) again next time.
 
 ```yaoxiang
 use std.assert
@@ -156,11 +157,13 @@ next: (it: &Iterator(Any)) -> Any
 
 <!-- stdlib:sig:range.next end -->
 
-Takes the current element and advances the internal cursor by one position.
+Take the current element and advance the internal cursor by one.
 
-Returns: the current element; `Void` when iteration ends.
+Returns: the current element; returns `Void` when iteration ends.
 
-> **Moves** the iterator.
+> **Borrows** the iterator (signature has `&`, `src/std/range.rs:46`); it does not consume it. This
+> is the opposite of [`has_next`](#has_next), and also the opposite of the "both methods borrow"
+> pattern on the [`std.list`](./list) side.
 
 ```yaoxiang
 use std.assert
@@ -173,7 +176,7 @@ main: () -> Void = {
 }
 ```
 
-Decreasing ranges are supported as well:
+Descending ranges are supported as well:
 
 ```yaoxiang
 use std.assert
@@ -196,13 +199,13 @@ contains: (r: Range(Int), x: Int) -> Result(Bool, Error)
 
 <!-- stdlib:sig:range.contains end -->
 
-Checks whether `x` falls within the range.
+Check whether `x` falls within the range.
 
-- `r` — the range
+- `r` — a range
 - `x` — the value to test
 
-Returns: `Result.ok(Bool)`. The end value is **excluded** (open); when a step is given, only
-elements aligned with the step are matched.
+Returns: `Result.ok(Bool)`. The end value is **exclusive** (open interval); with a step, only
+elements aligned with the step match.
 
 ```yaoxiang
 use std.assert
@@ -228,25 +231,25 @@ abort_invalid_step: (r: Range(Int)) -> Any
 
 <!-- stdlib:sig:range.abort_invalid_step end -->
 
-The abort hook for an invalid step, invoked when `for ... in` consumes a range whose step is `0`.
+The abort hook for an invalid step, called when `for ... in` consumes a range with a step of `0`.
 
-**Always** raises `E6007` with the message `Range step must be non-zero (for/in consumption)`.
-Normal code does not need to call this directly.
+**Always** throws `E6007` with the message `Range step must be non-zero (for/in consumption)`.
+Normal code does not need to call it directly.
 
 ```yaoxiang
 use std.range
 
 main: () -> Void = {
-    // using iter directly gives you an Err, so you do not need this hook
+    // using iter directly gives Err, no need to go through this hook
     r = range.iter(1..3)
 }
 ```
 
 ## Adapters
 
-`map` and `filter` return **lazy** adapters—they do not compute immediately, and only produce
-results once consumed by [`collect`](#collect) / [`reduce`](#reduce) / [`for_each`](#for_each) /
-`for ... in`.
+`map` and `filter` return **lazy** adapters—they do not compute immediately; they only produce
+results after being consumed by [`collect`](#collect) / [`reduce`](#reduce) /
+[`for_each`](#for_each) / `for ... in`.
 
 ### map
 
@@ -258,7 +261,7 @@ map: (it: Iterator(Any), f: (Any) -> Any) -> Iterator(Any)
 
 <!-- stdlib:sig:range.map end -->
 
-Maps `f` over every element and returns a new lazy iterator.
+Apply `f` to every element, returning a new lazy iterator.
 
 ```yaoxiang
 use std.assert
@@ -283,7 +286,7 @@ filter: (it: Iterator(Any), p: (Any) -> Bool) -> Iterator(Any)
 
 <!-- stdlib:sig:range.filter end -->
 
-Keeps the elements for which `p` is true, and returns a new lazy iterator.
+Keep the elements for which `p` is true, returning a new lazy iterator.
 
 ```yaoxiang
 use std.assert
@@ -309,7 +312,7 @@ use std.result
 main: () -> Void = {
     r = 1..6
     chained = range.collect(range.map(range.filter(result.unwrap(range.iter(r)), x => x % 2 == 0), x => x * 10))
-    // value semantics: `chained` is consumed by indexed reads, so bind each value to a local
+    // value semantics: chained is consumed by index reads, bind to locals one at a time
     first = chained[0]
     second = chained[1]
     assert(first == 20)
@@ -327,7 +330,7 @@ collect: (it: Iterator(Any)) -> Vec(Any)
 
 <!-- stdlib:sig:range.collect end -->
 
-Consumes the iterator and collects all elements into a `List`.
+Consume the iterator, collecting all elements into a `List`.
 
 ```yaoxiang
 use std.assert
@@ -351,14 +354,14 @@ reduce: (it: Iterator(Any), init: Any, f: (Any, Any) -> Any) -> Any
 
 <!-- stdlib:sig:range.reduce end -->
 
-Consumes the iterator and folds it.
+Consume the iterator and fold.
 
-- `it` — the iterator
-- `init` — the initial accumulator value
-- `f` — the reduction function `(accumulator, element) -> new accumulator`
+- `it` — iterator
+- `init` — initial accumulator
+- `f` — reduction function `(accumulator, element) -> new accumulator`
 
-> Note that the argument order differs from [`std.list.reduce`](./list#reduce): in this module it is
-> `(iterator, init, function)`, while `std.list` is `(list, function, init)`.
+> Note the argument order differs from [`std.list.reduce`](./list#reduce): this module is
+> `(iterator, initial, function)`, while `std.list` is `(list, function, initial)`.
 
 ```yaoxiang
 use std.assert
@@ -381,7 +384,7 @@ for_each: (it: Iterator(Any), f: (Any) -> Void) -> Void
 
 <!-- stdlib:sig:range.for_each end -->
 
-Runs `f` on every element, intended for side effects.
+Run `f` on every element, used for side effects.
 
 ```yaoxiang
 use std.assert
@@ -395,11 +398,11 @@ main: () -> Void = {
 }
 ```
 
-> Closures currently **cannot capture and mutate** an outer `mut` variable, so accumulating with
-> `for_each` is not possible (it raises `E1001`)—use [`reduce`](#reduce) for accumulation.
+> Closures currently **cannot capture and mutate** outer `mut` variables, so using `for_each` for
+> accumulation won't work (it reports `E1001`)—use [`reduce`](#reduce) for accumulation.
 
 ## Related
 
-- [`std.list`](./list) — lists and their iterators
-- [`std.result`](./result) — unwrapping the return value of `iter` / `contains`
+- [`std.list`](./list) — list and its iterator
+- [`std.result`](./result) — unpack the return value of `iter` / `contains`
 - [Error code reference](../error-code/) — `E6009` invalid step
