@@ -23,6 +23,13 @@ jobs:
           echo "发现 ${{ env.STALE_COUNT }} 个过时文档（≥90 天未更新）："
           echo "${{ env.STALE_FILES }}"
 
+      # 时效检查只能发现「很久没人碰」的文档，发现不了「内容已经与源码矛盾
+      # 但刚被批量格式化刷新过 mtime」的文档。事实对账由 ci.yml 的
+      # docs-truth job 负责，两者互补。
+      - name: Run fact reconciliation (docs vs source)
+        continue-on-error: true
+        run: python3 scripts/ci/check-docs-truth.py || true
+
       - name: Create issue for stale docs (Phase 3 preparation)
         if: env.STALE_COUNT > 0
         env:

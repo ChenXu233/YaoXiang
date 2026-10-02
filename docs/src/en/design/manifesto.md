@@ -349,8 +349,8 @@ that can be freely passed and composed.
 | **Spawn Function**  | `spawn (params) => body`    | Defines a computational unit that can participate in spawn execution                          |
 | **Spawn Block**     | `spawn { a(), b() }`        | An explicitly declared concurrent region; tasks within execute as spawn                       |
 | **Spawn Loop**      | `spawn for x in xs { ... }` | Data parallelism; the loop body executes as spawn over all elements                           |
-| **Spawn Value**     | `Async(T)`                  | A future value that is currently spawning; automatically awaited on use                       |
-| **Spawn Graph**     | Lazy computation DAG        | The stage on which spawning occurs; describes dependencies and parallelism                    |
+| **Spawn Value**     | No separate handle (RFC-024) | No `Async(T)`/future handle; the caller blocks synchronously for the result   |
+| **Spawn Graph**     | Expression-local DAG (RFC-024) | The stage on which spawning occurs; built **only inside a spawn expression**, no whole-program analysis |
 | **Spawn Scheduler** | Runtime task scheduler      | The intelligent hub that coordinates the myriad things, making them spawn at the right moment |
 
 > **See**: [RFC-001 Spawn Model](./rfc/deprecated/001-concurrent-model-error-handling.md)
@@ -373,14 +373,16 @@ compute_all: () -> (Int, Int, Int) spawn = {
     return (a, b, c)
 }
 
-# === 自动等待 ===
+# === 显式 spawn + 同步等待 ===
 main: () -> Void = {
-    # 两个独立请求自动并行执行
-    users = fetch_data("https://api.example.com/users")
-    posts = fetch_data("https://api.example.com/posts")
+    # 并行点必须显式标记：RFC-024 没有全程序自动并行
+    (users, posts) = spawn {
+        fetch_data("https://api.example.com/users"),
+        fetch_data("https://api.example.com/posts")
+    }
 
-    # 等待点在需要结果时自动插入
-    print(users.length + posts.length)  # 自动等待 users 和 posts
+    # spawn 表达式求值时同步阻塞，直接拿到结果（无 future 句柄）
+    print(users.length + posts.length)
 }
 ```
 
@@ -618,7 +620,7 @@ changes**:
 | **Keywords**          | 17 core keywords             | Excludes `type`/`fn`/`struct`/`enum`/`trait`/`impl`                         |
 | **Function Syntax**   | Signature + expression       | `name: (params) -> ReturnType = body`                                       |
 | **Method Binding**    | RFC-004 Curried Binding      | `Type.method = function[position]`                                          |
-| **Async Model**       | Spawn Model                  | `spawn` marker, lazy evaluation, automatic parallelism                      |
+| **Async Model**       | Spawn Model                  | `spawn` marks parallel points explicitly; plain code runs sequentially, DAG analysis stays inside the spawn expression (RFC-024) |
 | **Memory Management** | Ownership Model (RFC-009 v9) | Move + &T/&mut T tokens + ref + clone + unsafe, no GC                       |
 | **File as Module**    | Module system                | Each `.yx` file is a module                                                 |
 | **Main Function**     | `main: () -> Void`           | Program entry point                                                         |

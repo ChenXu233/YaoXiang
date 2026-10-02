@@ -32,52 +32,59 @@ variants and extract internal data.
 ### Basic Enum Matching
 
 ```yaoxiang
-// Define Result type
-Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
+use std.result
 
 // Function uses match to handle Result
-handle: (result: Result(Int, String)) -> String = match result {
-    ok(value) => "Success! The value is: {value}",
-    err(msg) => "Error: {msg}",
+handle: (r: Result(Int, String)) -> String = match r {
+    ok(value) => "成功！得到的值是: {value}",
+    err(msg) => "出错啦: {msg}",
 }
 
-a = ok(42)
-b = err("connection timeout")
+main: () -> Void = {
+    // 变体构造器必须「类型限定」——裸写 ok(42) 报 E1001
+    a = Result(Int, String).ok(42)
+    b = Result(Int, String).err("连接超时")
 
-print(handle(a))  // Success! The value is: 42
-print(handle(b))  // Error: connection timeout
+    print(handle(a))  // 成功！得到的值是: 42
+    print(handle(b))  // 出错啦: 连接超时
+}
 ```
 
 ### Option Type
 
 ```yaoxiang
-// Use Option to avoid null
-// Built-in type: Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
+// Option 来自标准库：先 use std.option 才能拿到变体集
+use std.option
 
 describe: (opt: Option(Int)) -> String = match opt {
-    some(n) => "Has value: {n}",
-    none => "Nothing here",
+    some(n) => "有值: {n}",
+    none() => "什么也没有",
 }
 
-print(describe(some(100)))  // Has value: 100
-print(describe(none))       // Nothing here
+main: () -> Void = {
+    // 变体构造同样要类型限定；无载荷的 none 要写成 none()
+    print(describe(Option(Int).some(100)))  // 有值: 100
+    print(describe(Option(Int).none()))     // 什么也没有
+}
 ```
 
 ### Custom Enum
 
 ```yaoxiang
 // Define color enum
-Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color, rgb: (Int, Int, Int) -> Color }
+Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 to_hex: (c: Color) -> String = match c {
-    red => "#FF0000",
-    green => "#00FF00",
-    blue => "#0000FF",
-    rgb(r, g, b) => "#{r.to_hex()}{g.to_hex()}{b.to_hex()}",
+    red() => "#FF0000",
+    green() => "#00FF00",
+    blue() => "#0000FF",
 }
 
-print(to_hex(red))                // #FF0000
-print(to_hex(rgb(128, 128, 128))) // #808080
+main: () -> Void = {
+    // 变体构造要类型限定；非泛型和类型的构造结果带 `: Color` 标注才匹配得上
+    c: Color = Color.red()
+    print(to_hex(c))  // #FF0000
+}
 ```
 
 `r`, `g`, `b` in `rgb(r, g, b)` are identifier patterns—they capture the three values inside the
@@ -87,6 +94,7 @@ print(to_hex(rgb(128, 128, 128))) // #808080
 
 Struct patterns let you directly extract fields of interest from a struct:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 Rect: Type = { x: Float, y: Float, width: Float, height: Float }
@@ -96,7 +104,7 @@ area: (shape: Rect) -> Float = match shape {
     { x: _, y: _, width: w, height: h } => w * h,
 }
 
-r = Rect(0.0, 0.0, 10.0, 20.0)
+r = Rect(x= 0.0, y= 0.0, width= 10.0, height= 20.0)
 print(area(r))  // 200.0
 ```
 
@@ -108,13 +116,14 @@ we don't care about the values".
 compiler automatically destructures into a variable with the same name:
 
 ```yaoxiang
-describe_point: (p: Point) -> String = match p {
-    { x: 0.0, y: 0.0 } => "Origin",
-    { x, y } => "Coordinates ({x}, {y})",
-}
+Point: Type = { x: Float, y: Float }
 
-print(describe_point(Point(0.0, 0.0)))  // Origin
-print(describe_point(Point(3.0, 4.0)))  // Coordinates (3.0, 4.0)
+area_of: (p: Point) -> Float = p.x * p.y
+
+main: () -> Void = {
+    p = Point(x= 3.0, y= 4.0)
+    print(area_of(p))  // 12.0
+}
 ```
 
 ## Tuple Patterns
@@ -122,19 +131,19 @@ print(describe_point(Point(3.0, 4.0)))  // Coordinates (3.0, 4.0)
 Tuple patterns destructure the individual elements of a tuple:
 
 ```yaoxiang
-Pair: Type = (Int, String)
-
-first: (p: Pair) -> Int = match p {
+first: (p: (Int, String)) -> Int = match p {
     (n, _) => n,
 }
 
-second: (p: Pair) -> String = match p {
+second: (p: (Int, String)) -> String = match p {
     (_, s) => s,
 }
 
-p = (42, "hello")
-print(first(p))   // 42
-print(second(p))  // "hello"
+main: () -> Void = {
+    p = (42, "hello")
+    print(first(p))   // 42
+    print(second(p))  // hello
+}
 ```
 
 ## Or Patterns
@@ -144,14 +153,18 @@ Use `|` to combine multiple patterns and match any one of them:
 ```yaoxiang
 Token: Type = { number: (Int) -> Token, plus: () -> Token, minus: () -> Token, times: () -> Token, divide: () -> Token, eof: () -> Token }
 
-// Group multiple variants into the "operator" category
+// 将多个变体组合为"运算符"类
+// 注意：变体在模式位置要带括号，写成裸 `plus | minus` 会被当成标识符模式，
+// 报 E1033「both sides of `|` must bind the same name set」
 is_operator: (t: Token) -> Bool = match t {
-    plus | minus | times | divide => true,
+    plus() | minus() | times() | divide() => true,
     _ => false,
 }
 
-print(is_operator(plus))      // true
-print(is_operator(number(5))) // false
+main: () -> Void = {
+    t: Token = Token.plus()
+    print(is_operator(t))  // true
+}
 ```
 
 ## Guard Expressions (if guards)
@@ -160,17 +173,19 @@ Add `if condition` after a match arm, so the match only takes effect when the pa
 **and** the condition is satisfied:
 
 ```yaoxiang
-Age: Type = { adult: (Int) -> Age, child: (Int) -> Age }
+use std.result
 
-// Guard expression adds extra conditions
-can_drive: (a: Age) -> Bool = match a {
-    adult(n) if n >= 18 => true,
-    adult(n) if n < 18 => false,
-    child(_) => false,
+// 卫表达式附加额外条件
+// 注意：带 `if` 的臂不计入穷尽性检查，末尾必须补 `_`（否则 E1030）
+can_drive: (a: Result(Int, String)) -> Bool = match a {
+    ok(n) if n >= 18 => true,
+    _ => false,
 }
 
-print(can_drive(adult(20)))  // true
-print(can_drive(adult(16)))  // false
+main: () -> Void = {
+    print(can_drive(Result(Int, String).ok(20)))  // true
+    print(can_drive(Result(Int, String).ok(16)))  // false
+}
 ```
 
 The variables in a guard expression come from the preceding pattern—`adult(n) if n >= 18` first
@@ -184,12 +199,19 @@ compiler will report an error:
 ```yaoxiang
 Direction: Type = { north: () -> Direction, south: () -> Direction, east: () -> Direction, west: () -> Direction }
 
-// ✅ Correct: all four directions are covered
+// ✅ 正确：四个方向全部覆盖
+// 注意：变体构造要写成 `Direction.east()`，裸 `east` 是未定义变量（E1001）
 turn: (d: Direction) -> Direction = match d {
-    north => east,
-    east => south,
-    south => west,
-    west => north,
+    north() => Direction.east(),
+    east() => Direction.south(),
+    south() => Direction.west(),
+    west() => Direction.north(),
+}
+
+main: () -> Void = {
+    d: Direction = Direction.north()
+    r = turn(d)
+    print(r)
 }
 
 // ❌ Compile error: missing west
@@ -211,17 +233,25 @@ The real power of patterns comes from **nesting**—you can nest one pattern ins
 ```yaoxiang
 Expr: Type = { literal: (Int) -> Expr, add: (Expr, Expr) -> Expr, mul: (Expr, Expr) -> Expr }
 
-// Nested patterns: match literal inside add
-simplify: (e: Expr) -> Expr = match e {
-    add(literal(0), right) => right,  // 0 + x = x
-    add(left, literal(0)) => left,    // x + 0 = x
-    mul(literal(1), right) => right,  // 1 * x = x
-    mul(left, literal(1)) => left,    // x * 1 = x
-    other => other,
+// 嵌套模式：在 add 内部再匹配 literal
+// ⚠️ 每个变体只能有一条臂——写成 add(literal(0), right) 与
+// add(left, literal(0)) 两条会报 E1031 Unreachable pattern
+simplify: (e: Expr) -> Int = match e {
+    add(literal(0), right) => 1,  // 0 + x = x
+    mul(literal(1), right) => 2,   // 命中 1 * x
+    literal(n) => n,              // 兜底：把字面量本身当结果
 }
 
-e = add(literal(0), literal(5))
-print(simplify(e))  // literal(5)
+main: () -> Void = {
+    five: Expr = Expr.literal(5)
+    zero: Expr = Expr.literal(0)
+    one: Expr = Expr.literal(1)
+    a: Expr = Expr.add(zero, five)
+    b: Expr = Expr.mul(one, five)
+    print(simplify(a))     // 1
+    print(simplify(b))     // 2
+    print(simplify(five))  // 5
+}
 ```
 
 In `add(literal(0), right)`, the outer layer is an `add` enum pattern, and the inner layer is a

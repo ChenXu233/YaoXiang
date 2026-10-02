@@ -15,23 +15,41 @@ YaoXiang 源文件必须使用 UTF-8 编码。源文件通常以 `.yx` 为扩展
 | 类别   | 说明               | 示例                      |
 | ------ | ------------------ | ------------------------- |
 | 标识符 | 以字母或下划线开头 | `x`, `_private`, `my_var` |
-| 关键字 | 语言预定义保留词   | `Type`, `pub`, `use`      |
+| 关键字 | 语言预定义保留词   | `use`, `mut`, `and`       |
 | 字面量 | 固定值             | `42`, `"hello"`, `true`   |
 | 运算符 | 运算符号           | `+`, `-`, `*`, `/`        |
 | 分隔符 | 语法分隔符         | `(`, `)`, `{`, `}`, `,`   |
 
 ### 1.3 关键字
 
-YaoXiang 定义了极少量的关键字：
+YaoXiang 共有 **18 个关键字**（`src/frontend/core/lexer/state.rs:25-55` 的
+`keyword_from_str`，逐个对应一个 `TokenKind`）：
 
 ```
-pub    use    spawn
-ref    mut    if     else
-else   match  while  for    return
-break  continue as     in     unsafe
+pub     use     spawn  ref     mut
+if      else    match  while   for
+in      return  break  continue
+as      unsafe  and    or
 ```
+
+`and` / `or` 是逻辑与 / 或的**关键字**（Zig 式，优先级见 §2.2 第 10 级）；
+一元非是符号 `!`，与它们正交。
 
 这些关键字在任何上下文中都具有特殊含义，不能用作标识符。
+
+> **`type` 已经不是关键字**（RFC-010）：写类型定义用 `Name: Type = { ... }` 记法。
+> `src/frontend/core/lexer/state.rs:27` 明确注释了这一点，`TokenKind` 枚举头
+> （`src/frontend/core/lexer/tokens.rs:82`）也写着 “16 total - RFC-010: 'type' keyword
+> removed”——**那个 16 是过期注释**，实际已列 18 个（含 `and` / `or`，而 `Kw*` 前缀
+> 那批仍是 16 个）。
+>
+> **`pub` 不产生可见性效果**：`pub` 仍被词法层识别为 `KwPub`
+> （`src/frontend/core/lexer/state.rs:28`），解析器在声明与导入项处跳过它
+> （`src/frontend/core/parser/statements/declarations.rs:666-671,726`、
+> `.../imports.rs:57-59`），但模块系统**不据此做任何可见性判定**——已接受的
+> [RFC-029](../../design/rfc/accepted/029-module-semantics.md) 明确
+> “没有 `pub`、没有 `private`、没有 `export`，没有可见性机制”（该文件第 17 行）。
+> 写不写 `pub` 对可见性没有区别。
 
 ### 1.4 保留字
 
@@ -43,10 +61,14 @@ YaoXiang 的"保留字"分三层，分别由解析器（parser）和类型检查
 
 | 标识符  | 所属类型 | 说明                                                                                |
 | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `Type`  | —        | 元类型关键字                                                                        |
 | `true`  | Bool     | 布尔真值                                                                            |
 | `false` | Bool     | 布尔假值                                                                            |
 | `void`  | Void     | Void 字面量（Unit 值）。小写 `void` 是值字面量；大写 `Void` 是类型名（见 §1.4.3）。 |
+
+> **`Type` 不在这一层**：它**没有**独立的 `TokenKind`（`src/frontend/core/lexer/tokens.rs`
+> 的 `TokenKind` 枚举里没有它，`keyword_from_str` 也没有对应分支），
+> 解析器把它当普通标识符，由类型检查器在类型位置识别为元类型。因此在表达式位置
+> `Type` 可以被局部绑定遮蔽。它是**元类型名**，不是关键字。
 
 #### 1.4.2 变体名
 
@@ -936,6 +958,19 @@ b: Int = a + 1                    // 错误：a → b → a
 ---
 
 ## 附录：语法速查
+
+### A.0 关键字（18 个）
+
+```
+pub     use     spawn  ref     mut
+if      else    match  while   for
+in      return  break  continue
+as      unsafe  and    or
+```
+
+`type` 已不是关键字（RFC-010，改用 `Name: Type = { ... }`）；`pub` 不产生可见性效果
+（RFC-029）。字面量保留字 `true` / `false` / `void` 见 §1.4.1，元类型名 `Type` 与内建
+类型名 `Void` / `Never` / `Int` / `Float` / `Bool` / `Char` / `String` 见 §1.4.3。
 
 ### A.1 控制流
 

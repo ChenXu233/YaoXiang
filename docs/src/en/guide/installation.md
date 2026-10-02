@@ -71,8 +71,8 @@ itself to PATH). Like apt, this is a system-wide flat installation.
 
 ```sh
 yx toolchain install stable    # Install the latest stable version
-yx toolchain install 0.7.14    # Install a specific version
-yx toolchain default 0.7.14    # Set the default version
+yx toolchain install 0.8.2    # Install a specific version
+yx toolchain default 0.8.2    # Set the default version
 yx toolchain list              # List installed versions
 yx toolchain update            # Upgrade to the latest stable version
 yx self update                 # Update the yx binary itself
@@ -86,7 +86,7 @@ self-contained toolchain tree (engine, Z3, and standard library are version-lock
 Place a `yx-toolchain.toml` at the project root (precedent: `rust-toolchain.toml`):
 
 ```toml
-toolchain = "0.7.14"
+toolchain = "0.8.2"
 ```
 
 Any `yx` command run within that directory will use the pinned version — different projects can work

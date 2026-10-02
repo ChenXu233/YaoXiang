@@ -49,23 +49,27 @@ Lambda 最适合两个场景：
 ### 1. 高阶函数——把函数作为参数传递
 
 ```yaoxiang
+use std.list
+
 // 对列表的每个元素应用一个操作
-apply_to_all: (list: List(Int), op: (Int) -> Int) -> List(Int) = {
+// 注意：形参不要命名为 list（会遮蔽 std.list 模块），
+// 类型写 Vec(Int)——`List(T)` 标注的值当前不被 for 接受（E1002）
+apply_to_all: (xs: Vec(Int), op: (Int) -> Int) -> Vec(Int) = {
     mut result = []
-    for item in list {
-        result.append(op(item))
+    for item in xs {
+        result = list.push(result, op(item))
     }
     return result
 }
 
-numbers = [1, 2, 3, 4, 5]
+main = () => {
+    // 传入 Lambda
+    doubled = apply_to_all([1, 2, 3, 4, 5], (x) => x * 2)
+    squared = apply_to_all([1, 2, 3, 4, 5], (x) => x * x)
 
-// 传入 Lambda
-doubled = apply_to_all(numbers, (x) => x * 2)
-squared = apply_to_all(numbers, (x) => x * x)
-
-print(doubled)  // [2, 4, 6, 8, 10]
-print(squared)  // [1, 4, 9, 16, 25]
+    print(doubled)  // [2, 4, 6, 8, 10]
+    print(squared)  // [4, 16, 36, 64, 100]
+}
 ```
 
 ### 2. 临时的一次性操作
@@ -73,14 +77,19 @@ print(squared)  // [1, 4, 9, 16, 25]
 不需要为只用一次的逻辑专门定义函数：
 
 ```yaoxiang
-// 排序——临时定义排序规则
-students = [
-    {"name": "Alice", "score": 90},
-    {"name": "Bob", "score": 85},
-    {"name": "Charlie", "score": 92},
-]
+use std.list
 
-sorted_students = students.sort_by((a, b) => a["score"].compare(b["score"]))
+// 注意：0.8.2 的 std.list 没有 sort / sort_by（实测 E1042），
+// 排序得自己写；这里演示同样「临时定义规则」的 map / filter
+main = () => {
+    scores = [90, 85, 92, 78]
+
+    passed = list.filter(scores, (s) => s >= 85)   // [90, 85, 92]
+    boosted = list.map(scores, (s) => s + 5)       // [95, 90, 97, 83]
+
+    print(passed)
+    print(boosted)
+}
 ```
 
 ## 代码块形式的 Lambda
@@ -88,15 +97,20 @@ sorted_students = students.sort_by((a, b) => a["score"].compare(b["score"]))
 当 Lambda 需要多行逻辑时，用代码块形式：
 
 ```yaoxiang
+use std.string
+
 // 代码块 Lambda：可以包含多条语句
-process = (data) => {
-    cleaned = data.trim()
-    lower = cleaned.lowercase()
+// 注意：String 没有实例方法——`data.trim()` 报 E1053，用 std.string 的函数形式
+process = (data: String) => {
+    cleaned = string.trim(data)
+    lower = string.lower(cleaned)
     return lower
 }
 
-result = process("  Hello World  ")
-print(result)  // "hello world"
+main = () => {
+    result = process("  Hello World  ")
+    print(result)  // "hello world"
+}
 ```
 
 注意代码块形式需要用 `return` 来返回值，这一点和函数完全一致。

@@ -2,6 +2,7 @@
 title: 'RFC-011: 泛型系统设计 - 零成本抽象与宏替代'
 status: '已接受'
 author: '晨煦'
+created: '2026-02-14'
 updated: '2026-07-15（类型体代码块 + 编译期规约 + 效应种子已实现）'
 issue: '#128'
 issues_impl:
@@ -1853,7 +1854,7 @@ generic_type ::= identifier ':' type '=' type_expression
 
 - [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
 - [RFC-009: 所有权模型](./009-ownership-model.md)
-- [RFC-001: 并作模型](../deprecated/001-concurrent-model-error-handling.md)
+- [RFC-024: 基于 spawn 的并发运行时语义](./024-concurrency-model.md)
 - [RFC-008: 运行时模型](./008-runtime-concurrency-model.md)
 - [tutorial/ 教程](../../../tutorial/index.md)
 

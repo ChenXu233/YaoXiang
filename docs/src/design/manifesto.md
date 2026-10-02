@@ -36,8 +36,7 @@ YaoXiang 的诞生，正是为了填补这一空白。我们相信：**编程语
 
 **问题三：异步编程的认知负担**
 
-现代应用离不开网络和并发，而异步编程一直是程序员的噩梦。回调函数嵌套、Promise 链式调用、async/await 语法——每一种方案都增加了代码的复杂性。YaoXiang 重新设计了异步模型：只需在函数签名后添加
-`spawn` 标记，编译器自动处理所有异步细节，让并发编程如同同步代码一样自然。
+现代应用离不开网络和并发，而异步编程一直是程序员的噩梦。回调函数嵌套、Promise 链式调用、async/await 语法——每一种方案都增加了代码的复杂性。YaoXiang 重新设计了异步模型：用 `spawn` 显式标出并行点，编译器在该表达式内构建依赖图并行执行，调用方同步阻塞等待结果（RFC-024）。没有回调，没有 `await`，没有函数着色。
 
 **问题四：AI 辅助编程的瓶颈**
 
@@ -83,7 +82,7 @@ YaoXiang 的语法设计追求「无歧义、可预测、易解析」。
 - **强制 4 空格缩进**：禁止使用 Tab 字符，代码块边界一目了然
 - **括号不可省略**：函数参数必须有括号，列表元素必须有逗号
 - **代码块必须有花括号**：`if`、`while`、`for` 等控制流必须使用 `{ }` 包裹
-- **关键字数量精简**：仅保留 17 个核心关键字，拒绝语法糖泛滥
+- **关键字数量精简**：仅保留 18 个核心关键字，拒绝语法糖泛滥
 
 **不可妥协的理由**：严格结构化带来三个关键优势——（1）IDE 语法高亮和代码折叠更准确；（2）AI 代码生成和修改的准确率大幅提升；（3）新学习者能够快速理解代码结构。
 
@@ -286,11 +285,11 @@ d3 = dist_from_p1(p2)       # 2.828
 | **并作函数**   | `spawn (params) => body`    | 定义可参与并作执行的计算单元             |
 | **并作块**     | `spawn { a(), b() }`        | 显式声明的并发疆域，块内任务并作执行     |
 | **并作循环**   | `spawn for x in xs { ... }` | 数据并行，循环体在所有元素上并作执行     |
-| **并作值**     | `Async(T)`                  | 正在并作中的未来值，使用时自动等待       |
-| **并作图**     | 惰性计算图(DAG)             | 并作发生的舞台，描述依赖与并行关系       |
+| **并作值**     | 无独立句柄（RFC-024）       | 无 `Async(T)`/future 句柄；调用方同步阻塞等待结果     |
+| **并作图**     | 表达式内 DAG（RFC-024）    | 并作发生的舞台；**仅在 spawn 表达式内**构建依赖图，无全程序分析     |
 | **并作调度器** | 运行时任务调度器            | 协调万物，让它们在正确时机并作的智能中枢 |
 
-> **详见**：[RFC-001 并作模型](./rfc/deprecated/001-concurrent-model-error-handling.md)
+> **详见**：[RFC-024 基于 spawn 的并发运行时语义](./rfc/accepted/024-concurrency-model.md)（语法正交部分见 [RFC-032](./rfc/review/032-spawn-unified-expression.md)）
 
 ```yaoxiang
 # === 并作函数 ===
@@ -310,14 +309,16 @@ compute_all: () -> (Int, Int, Int) spawn = {
     return (a, b, c)
 }
 
-# === 自动等待 ===
+# === 显式 spawn + 同步等待 ===
 main: () -> Void = {
-    # 两个独立请求自动并行执行
-    users = fetch_data("https://api.example.com/users")
-    posts = fetch_data("https://api.example.com/posts")
+    # 并行点必须显式标记：RFC-024 没有全程序自动并行
+    (users, posts) = spawn {
+        fetch_data("https://api.example.com/users"),
+        fetch_data("https://api.example.com/posts")
+    }
 
-    # 等待点在需要结果时自动插入
-    print(users.length + posts.length)  # 自动等待 users 和 posts
+    # spawn 表达式求值时同步阻塞，直接拿到结果（无 future 句柄）
+    print(users.length + posts.length)
 }
 ```
 
@@ -340,7 +341,7 @@ main: () -> Void = {
 
 **技术文档**：
 
-- 详见 [RFC-001 并作模型](./rfc/deprecated/001-concurrent-model-error-handling.md)
+- 详见 [RFC-024 基于 spawn 的并发运行时语义](./rfc/accepted/024-concurrency-model.md)
 
 **创新价值**：异步编程的认知负担降为零，代码可读性与同步代码完全相同，同时获得高性能并行的执行效率。
 
@@ -368,22 +369,27 @@ identity_3x3: Matrix(Float, 3, 3) = identity(Float, 3)(3)
 
 ### 3.6 创新六：极简关键字设计
 
-YaoXiang 仅定义 17 个核心关键字，数量远少于主流语言：
+YaoXiang 仅定义 18 个核心关键字，数量远少于主流语言：
 
 ```
 pub    use    spawn
 ref    mut    if     else
-else   match  while  for    return
+match  while  for    return
 break  continue as     in     unsafe
+and    or
 ```
 
 | 对比语言   | 关键字数量 |
 | ---------- | ---------- |
-| YaoXiang   | **17**     |
+| YaoXiang   | **18**     |
 | Rust       | 51+        |
 | Python     | 35         |
 | TypeScript | 64+        |
 | Go         | 25         |
+
+> **关于 `pub`**：lexer 仍会把它识别为关键字（`src/frontend/core/lexer/state.rs`），但按
+> [RFC-029 模块语义](./rfc/accepted/029-module-semantics.md)，语言**不引入任何可见性机制**——
+> 没有 `pub`，没有 `private`，没有 `export`。`pub` 不产生任何可见性效果。
 
 **创新价值**：更低的记忆负担，更一致的语法风格，更易解析的语法结构。
 
@@ -547,10 +553,10 @@ process_all: () -> (JSON, JSON, JSON) spawn = {
 | -------------- | ------------------------- | --------------------------------------------------- |
 | **类型系统**   | 一切皆类型                | 值、函数、模块、泛型都是类型                        |
 | **类型语法**   | 统一 `name: type = value` | 一种声明形式覆盖所有情况，`Type` 是唯一元类型关键字 |
-| **关键字**     | 17个核心关键字            | 不含 `type`/`fn`/`struct`/`enum`/`trait`/`impl`     |
+| **关键字**     | 18个核心关键字            | 不含 `type`/`fn`/`struct`/`enum`/`trait`/`impl`     |
 | **函数语法**   | 签名 + 表达式             | `name: (params) -> ReturnType = body`               |
 | **方法绑定**   | RFC-004 柯里化绑定        | `Type.method = function[position]`                  |
-| **异步模型**   | 并作模型                  | `spawn` 标记，惰性求值，自动并行                    |
+| **异步模型**   | 并作模型                  | `spawn` 显式标记并行点；普通代码顺序执行，DAG 分析仅限 spawn 表达式内（RFC-024） |
 | **内存管理**   | 所有权模型（RFC-009 v9）  | Move + &T/&mut T 令牌 + ref + clone + unsafe，无 GC |
 | **文件即模块** | 模块系统                  | 每个 `.yx` 文件是一个模块                           |
 | **主函数**     | `main: () -> Void`        | 程序入口点                                          |
@@ -774,7 +780,7 @@ docs(readme): update installation instructions
 
 | 关键字                  | 作用                            |
 | ----------------------- | ------------------------------- |
-| `pub`                   | 公共导出                        |
+| `pub`                   | 保留关键字，不产生可见性效果（RFC-029） |
 | `use`                   | 导入模块                        |
 | `spawn`                 | 并作标记                        |
 | `ref`                   | 共享持有（编译器自动选 Rc/Arc） |
@@ -786,6 +792,8 @@ docs(readme): update installation instructions
 | `as`                    | 类型转换                        |
 | `in`                    | 成员检测/列表推导               |
 | `unsafe`                | unsafe 代码块（裸指针）         |
+| `and`                   | 逻辑与                          |
+| `or`                    | 逻辑或                          |
 
 > **注意**：`Type`、`true`、`false`、`void` 等是保留字，不是关键字。`type`
 > 关键字已在 RFC-010 中移除，统一使用 `name: Type = value` 语法。
@@ -864,7 +872,7 @@ A:
 
 **Q: 什么时候会发布 1.0 版本？**
 
-A: v1.0 目标：生产可用。发布时间取决于实现进度，详见 [版本规划 RFC](./rfc/rejected/003-version-planning.md)。
+A: v1.0 目标：生产可用。发布时间取决于实现进度；当前版本号以仓库根目录的 `Cargo.toml` 为准。
 
 **Q: 如何联系核心团队？**
 
@@ -872,7 +880,7 @@ A: 通过 GitHub Discussions 或 Discord 社区频道。核心团队成员会定
 
 ---
 
-> **最后更新**：2026-05-31
+> **最后更新**：2026-10-02
 >
 > **文档版本**：v2.0.0
 >

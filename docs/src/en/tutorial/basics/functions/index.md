@@ -44,9 +44,20 @@ greet: (name: String) -> String = "Hello, " + name
 Calling them:
 
 ```yaoxiang
-sum = add(3, 5)          // sum = 8
-sq = square(4)           // sq = 16
-msg = greet("World")     // msg = "Hello, World"
+main = () => {
+    // The three functions defined in the previous section, rebound here so
+    // this block runs standalone
+    add = (a: Int, b: Int) => a + b
+    square = (x: Int) => x * x
+    greet = (name: String) => "Hello, " + name
+
+    sum = add(3, 5)          // sum = 8
+    sq = square(4)           // sq = 16
+    msg = greet("World")     // msg = "Hello, World"
+    print(sum)
+    print(sq)
+    print(msg)
+}
 ```
 
 This is called the **expression form**. When the function body is an expression (not a `{ }` code
@@ -125,13 +136,21 @@ compiler.
 ```yaoxiang
 // Method 1: Parameter types in signature (omit lambda head)
 add: (a: Int, b: Int) -> Int = a + b
+```
 
+```yaoxiang
 // Method 2: Parameter types in lambda head (omit signature)
 add = (a: Int, b: Int) => a + b
+```
 
+```yaoxiang
 // Method 3: Full form (both signature and lambda head)
 add: (a: Int, b: Int) -> Int = (a, b) => a + b
+```
 
+In all three forms, the parameter types appear at least once:
+
+```yaoxiang
 // Wrong: no type on either side
 // add = (a, b) => a + b   // ❌ compiler cannot infer parameter types
 ```
@@ -147,11 +166,15 @@ The return value type of a function is written after `->`. `->` is the function 
 cannot be omitted (if omitted, it will be parsed as other types).
 
 ```yaoxiang
+use std.string
+
 // Return Int
 add_one: (x: Int) -> Int = x + 1
 
 // Return String
-to_string: (n: Int) -> String = n.to_string()
+// Note: Int has no to_string() method (`n.to_string()` raises E1053);
+// use std.string.format or an f-string instead
+to_str: (n: Int) -> String = string.format("{0}", n)
 
 // Return Void (no return value)
 log: (msg: String) -> Void = {
@@ -198,12 +221,19 @@ In addition to positional arguments, YaoXiang also supports **named arguments**�
 parameter name, order doesn't matter:
 
 ```yaoxiang
-// Named arguments—parameter name followed by equals, then value
-result = add(a = 3, b = 5)     // result = 8
-result = add(b = 5, a = 3)     // any order, same result
+main = () => {
+    add = (a: Int, b: Int) => a + b
 
-// Can mix with positional, but positional must come first
-result = add(3, b = 5)        // OK
+    // Named arguments—parameter name followed by equals, then value
+    result = add(a = 3, b = 5)     // result = 8
+    result2 = add(b = 5, a = 3)    // any order, same result
+
+    // Can mix with positional, but positional must come first
+    result3 = add(3, b = 5)        // OK
+    print(result)
+    print(result2)
+    print(result3)
+}
 ```
 
 Named arguments make calls more readable, especially useful when there are many parameters:
@@ -223,6 +253,7 @@ msg = send(
 Misspelling a parameter name or specifying it twice will result in a compile-time error, not
 silently treating it as positional:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // ❌ add has no parameter named c → E1014
 result = add(b = 5, c = 1)
@@ -258,15 +289,16 @@ hello()
 The `main` function is the most common no-parameter function:
 
 ```yaoxiang
-// Different ways to write main function
-
-// Full form
+// Full form: explicitly declare empty parameters and return type
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
+```
 
-// Simplest form (recommended)
-main: () -> Void = {
+The simplest form (recommended)—omit the signature, the compiler automatically infers `() -> Void`:
+
+```yaoxiang
+main = {
     print("Hello, YaoXiang!")
 }
 ```
@@ -280,7 +312,9 @@ for indentation:
 
 ```yaoxiang
 // Multi-step calculation
-calculate_stats: (numbers: List(Int)) -> Float = {
+// Note: the parameter type is Vec(Int), not List(Int)—values annotated `List(T)`
+// are currently not accepted by for / indexing (E1002)
+calculate_stats: (numbers: Vec(Int)) -> Float = {
     // Declare local variables
     mut total = 0
     mut count = 0
@@ -296,8 +330,12 @@ calculate_stats: (numbers: List(Int)) -> Float = {
         return 0.0
     }
 
-    // Return average
-    return total:as(Float) / count:as(Float)
+    // Return the average (note: `:as(Float)` raises E0011, use a Float conversion)
+    return Float(total) / Float(count)
+}
+
+main: () -> Void = {
+    print(calculate_stats([1, 2, 3, 4]))
 }
 ```
 
@@ -315,22 +353,31 @@ allowing OOP-style calls.
 ```yaoxiang
 // point.yx
 
+use std.math
+
 // Define type
 Point: Type = { x: Float, y: Float }
 
 // pub function: compiler automatically binds it as Point.distance
+// Note: an expression cannot carry a method directly—`(dx*dx+dy*dy).sqrt()`
+// raises E1053, use math.sqrt instead
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    return (dx * dx + dy * dy).sqrt()
+    d = dx * dx + dy * dy
+    return math.sqrt(d)
 }
 
-// Both calling styles work
-p1 = Point(3.0, 4.0)
-p2 = Point(1.0, 2.0)
+main: () -> Void = {
+    // Both calling styles work
+    p1 = Point(x=3.0, y=4.0)
+    p2 = Point(x=1.0, y=2.0)
 
-d1 = distance(p1, p2)       // Functional call
-d2 = p1.distance(p2)        // OOP style call (syntactic sugar)
+    d1 = distance(p1, p2)       // Functional call
+    d2 = p1.distance(p2)        // OOP style call (syntactic sugar)
+    print(d1)
+    print(d2)
+}
 ```
 
 When the compiler sees `pub distance(p1: Point, p2: Point)`, it finds that `Point` is defined in the
@@ -363,7 +410,7 @@ double = (x: Int) => x * 2
 triple: (x: Int) -> Int = x * 3
 
 // pub export + auto binding
-pub add: (a: Int, b: Int) -> Int = a + b
+pub negate: (x: Int) -> Int = 0 - x
 
 // ── Calling Syntax ──
 

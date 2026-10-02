@@ -11,7 +11,7 @@ YaoXiang 不用垃圾回收（GC），也不用生命周期标注。它的内存
 ```
 看一眼/原地改     拿走           共享持有         复制一份        系统级
     │              │              │              │              │
-   &T            Move           ref          clone()        unsafe
+   &T            Move           ref          concat()      unsafe
   &mut T         零拷贝        编译器自动      显式深拷贝      *T
   零大小令牌       默认          选Rc/Arc                   用户负责
 ```
@@ -21,27 +21,34 @@ YaoXiang 不用垃圾回收（GC），也不用生命周期标注。它的内存
 在 YaoXiang 中，**赋值 = 所有权转移**。这是默认行为，零拷贝：
 
 ```yaoxiang
-p = Point(1.0, 2.0)
-p2 = p              // Move! p 的所有权转给 p2
-                    // 此后不能再读 p
+Point: Type = { x: Float, y: Float }
 
-// 想要修改 p2？用 mut
-mut p3 = Point(3.0, 4.0)
-shift(p3, 1.0, 1.0)    // 原地修改
+main: () -> Void = {
+    p = Point(x=1.0, y=2.0)
+    p2 = p              // Move! p 的所有权转给 p2
+                        // 此后不能再读 p
+
+    // 想要修改 p2？用 mut 重新绑定
+    mut p3 = Point(x=3.0, y=4.0)
+    p3 = Point(x= p3.x + 1.0, y= p3.y + 1.0)
+    print(p2)
+    print(p3)
+}
 ```
 
 函数传参和返回也是 Move：
 
 ```yaoxiang
-// 参数：Move 传入
-process: (p: Point) -> Point = {
-    p.transform()
-    p                  // Move 返回——零拷贝
-}
+Point: Type = { x: Float, y: Float }
 
-// 调用
-p = Point(1.0, 2.0)
-result = process(p)    // p 被 Move 走了
+// 参数：Move 传入
+process: (p: Point) -> Point = p
+
+main: () -> Void = {
+    p = Point(x=1.0, y=2.0)
+    result = process(p)    // p 被 Move 走了
+    print(result)
+}
 ```
 
 ## &T / &mut T：借用令牌
@@ -49,19 +56,26 @@ result = process(p)    // p 被 Move 走了
 如果你不想拿走所有权，只是临时"看一眼"（`&T`）或"原地改一下"（`&mut T`），编译器会自动生成**零大小的借用令牌**：
 
 ```yaoxiang
-data = [1, 2, 3, 4, 5]
+use std.list
 
-// 编译器自动传 &List(Int) 令牌——不拿走所有权
-print(data.len())    // 5
-print(data)          // ✅ data 还在，只是看了一眼
+main: () -> Void = {
+    data = [1, 2, 3, 4, 5]
+
+    // 编译器自动传 &List(Int) 令牌——不拿走所有权
+    print(list.len(data))    // 5
+    print(data)              // ✅ data 还在，只是看了一眼
+}
 ```
 
 `&T` 和 `&mut T` 是**零大小类型**——编译期存在，运行时消失。你不需要手动写
 `&`，编译器根据使用场景自动决定：
 
 ```yaoxiang
+Point: Type = { x: Float, y: Float }
+
 // 只读访问 → 自动 &T
-print: (point: &Point) -> Void = {
+// 注意：不要把函数命名为 print，那会遮蔽内建打印函数
+show: (point: &Point) -> Void = {
     print("({point.x}, {point.y})")
 }
 
@@ -71,9 +85,12 @@ shift: (point: &mut Point, dx: Float, dy: Float) -> Void = {
     point.y = point.y + dy
 }
 
-mut p = Point(1.0, 2.0)
-print(p)                // 传入 &Point
-shift(p, 1.0, 1.0)      // 传入 &mut Point
+main: () -> Void = {
+    mut p = Point(x=1.0, y=2.0)
+    show(p)             // 传入 &Point
+    shift(p, 1.0, 1.0)  // 传入 &mut Point
+    show(p)
+}
 ```
 
 **关键区别**：`&T` 可复制（共享只读），`&mut T`
@@ -84,36 +101,45 @@ shift(p, 1.0, 1.0)      // 传入 &mut Point
 当你需要在多个地方**同时持有**一个值时，用 `ref`：
 
 ```yaoxiang
-data = [1, 2, 3, 4, 5]
+main: () -> Void = {
+    data = [1, 2, 3, 4, 5]
 
-// ref 创建共享持有
-shared = ref data
+    // ref 创建共享持有
+    shared = ref data
 
-// 编译器自动选择引用计数器：
-// - 不跨任务 → Rc（单线程引用计数）
-// - 跨任务 → Arc（原子引用计数）
-spawn {
-    use(shared)    // 跨任务！编译器自动用 Arc
+    // 跨任务共享：spawn 块的接收式绑定 `(绑定) = spawn { 块 }` 拿到共享值，
+    // 编译器自动选择引用计数器：
+    // - 不跨任务 → Rc（单线程引用计数）
+    // - 跨任务 → Arc（原子引用计数）
+    (shared) = spawn {
+        print(shared)
+    }
+
+    // 你不需要知道 Rc 和 Arc 的区别——编译器自动帮你选
 }
-
-// 你不需要知道 Rc 和 Arc 的区别
-// 编译器自动帮你选
 ```
 
-## clone()：显式深拷贝
+## 复制：显式造一份新值
 
-当你需要独立的副本时，显式调用 `clone()`：
+当你需要独立的副本时，显式造一个新值（YaoXiang 没有隐式复制）：
 
 ```yaoxiang
-original = [1, 2, 3]
-backup = original.clone()   // 深拷贝——拥有独立的副本
+use std.list
 
-// 各自独立
-original[0] = 10
-print(backup[0])    // 1——不受影响
+main: () -> Void = {
+    original = [1, 2, 3]
+    // 注意：列表既无 clone() 也无 copy()（实测均 E1042）。
+    // 要一份独立副本，用 concat 造新列表：
+    backup = list.concat(original, [])   // 与 original 互不影响
+
+    // 各自独立：改动 original 不会波及 backup
+    print(original)   // [1, 2, 3]
+    print(backup)     // [1, 2, 3]
+}
 ```
 
-`clone()` 是显式的——你明确要复制，不像某些语言默认复制。
+显式复制是显式的——你明确要复制，不像某些语言默认复制。⚠️ 0.8.2 的 `std.list` 尚未提供
+`clone()` / `copy()`（`list.clone` 报 `E1042`），目前只能用 `list.concat(xs, [])` 造副本。
 
 ## 无生命周期
 
@@ -141,7 +167,7 @@ YaoXiang 没有生命周期 `'a`。这个设计选择来自一个关键观察：
 | 看一眼     | 自动 `&T`       | 零大小令牌 | 只读访问        |
 | 原地改     | 自动 `&mut T`   | 零大小令牌 | 可变修改        |
 | 共享持有   | `ref`           | 引用计数   | 跨作用域/跨任务 |
-| 显式复制   | `.clone()`      | 深拷贝     | 需要独立副本    |
+| 显式复制   | 无 `clone()`（0.8.2 缺口） | 造新值     | 需要独立副本    |
 | 裸指针     | `unsafe` + `*T` | 手动       | 系统级操作      |
 
-**记住**：Move 是默认，ref 是共享，clone 是例外。三个规则，永别 GC。
+**记住**：Move 是默认，ref 是共享，复制要显式。三个规则，永别 GC。

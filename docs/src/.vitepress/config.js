@@ -37,7 +37,17 @@ export default defineConfig({
   description: "一门面向未来的编程语言",
 
   // 排除有问题文件的目录
-  srcExclude: ["archive/**", "old/**", "**/*.backup.md"],
+  // 注意：srcExclude 的 glob 相对于 src/ 解析，"archive/**" 只能匹配中文侧。
+  // 英文侧位于 src/en/archive/，必须显式列出，否则归档文档会绕过排除规则被
+  // 公开发布（2026-10-02 修复：dist/en/archive/*.html 长期对外可达，其中包含
+  // 已归档的 v1.8 语言规范，而站点首页正在宣传「语言规范 v1.8」）。
+  srcExclude: [
+    "archive/**",
+    "en/archive/**",
+    "old/**",
+    "en/old/**",
+    "**/*.backup.md",
+  ],
 
   // 最后更新时间
   lastUpdated: true,
@@ -113,8 +123,6 @@ export default defineConfig({
               { text: "设计", link: "/design/" },
               { text: "开发", link: "/dev/" },
               { text: "码场", link: "/playground/" },
-              { text: "工具", link: "/tools/" },
-              { text: "社区", link: "/community/" },
               { text: "博客", link: "/blog/" },
             ],
           },

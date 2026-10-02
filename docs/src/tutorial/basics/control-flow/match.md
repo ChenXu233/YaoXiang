@@ -44,17 +44,20 @@ print(text)  // "二"
 ```yaoxiang
 score = 85
 
+// 注意：0.8.2 的模式解析器不支持范围模式——`80..89 => "B"` 报
+// 「Expected FatArrow, found DotDot」(E0010)。用卫表达式（`n if 条件`）写等价逻辑。
 grade = match score {
-    90..100 => "A",    // 范围模式（进阶内容）
-    80..89 => "B",
-    70..79 => "C",
-    60..69 => "D",
+    n if n >= 90 => "A",
+    n if n >= 80 => "B",
+    n if n >= 70 => "C",
+    n if n >= 60 => "D",
     _ => "F",          // 通配符：匹配所有剩余情况
 }
 print(grade)  // "B"
 ```
 
-> **注意**：范围模式 `90..100` 等属于进阶内容，将在 [模式匹配进阶](../pattern-matching/index.md)
+> **注意**：范围模式 `80..89` 在 0.8.2 尚不可用，请用上面的卫表达式写法。
+> 卫表达式（`pattern if 条件`）会在 [模式匹配进阶](../pattern-matching/index.md)
 > 中深入讲解。本章先聚焦于基础模式。
 
 ## 基础模式
@@ -81,11 +84,14 @@ print(message)  // "Not Found"
 用变量名来捕获匹配到的值：
 
 ```yaoxiang
-result: Result(Int, String) = ok(42)
+// Result 变体构造器必须「类型限定」：裸写 ok(42) 报 E1001
+use std.result
 
-description = match result {
-    ok(value) => "成功，值是: " + value.to_string(),
-    err(error) => "失败，原因: " + error,
+r: Result(Int, String) = Result(Int, String).ok(42)
+
+description = match r {
+    ok(value) => "成功，值是: {value}",
+    err(e) => "失败，原因: " + e,
 }
 print(description)  // "成功，值是: 42"
 ```
@@ -151,6 +157,7 @@ print(type)  // "休息日"
 
 `match` 从第一个臂开始尝试匹配，**第一个匹配成功的分支会生效**，后面的不会被执行：
 
+<!-- docs-example: skip -->
 ```yaoxiang
 number = 5
 
@@ -160,6 +167,9 @@ result = match number {
 }
 print(result)  // "其他"
 ```
+
+> 上面这段**故意不通过检查**——编译器会报 `E1031 Unreachable pattern`。它用真实诊断演示
+> 「第一个匹配的臂生效」这条规则。
 
 这个特性意味着**把通配符 `_` 放在最后**是一个好习惯。
 

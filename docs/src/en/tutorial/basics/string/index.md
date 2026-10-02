@@ -22,11 +22,18 @@ print(greeting)  // Hello Alice, you are 25 years old
 Compared with traditional concatenation, the differences with f-string are immediately clear:
 
 ```yaoxiang
+use std.string
+
+name = "Alice"
+age = 25
+
 // ❌ Traditional concatenation: verbose and error-prone
-message = "Hello ".concat(name).concat(", age: ").concat(age.to_string())
+// Note: String has no .concat() instance method, and Int has no to_string()
+//—both raise E1053
+message = "Hello, age: " + string.format("{0}", age)
 
 // ✅ f-string: intuitive and concise
-message = f"Hello {name}, age: {age}"
+message2 = f"Hello {name}, age: {age}"
 ```
 
 ## Expression Interpolation
@@ -69,39 +76,55 @@ Common format specifiers:
 You can call methods inside `{}`:
 
 ```yaoxiang
+use std.string
+
 name = "alice"
 
-print(f"Upper: {name.uppercase()}")   // Upper: ALICE
-print(f"Length: {name.len()}")        // Length: 5
+print(f"Upper: {string.upper(name)}")   // Upper: ALICE
+print(f"Length: {string.len(name)}")    // Length: 5
 ```
 
 ## Escaping Braces
 
-If you need to output a literal `{` or `}`, simply **double them**:
+⚠️ 0.8.2 **does not implement brace escaping**. Out of Rust / Python habit you would write
+a literal `{` as two of them — YaoXiang does not support that, and parses whatever sits
+between the two braces as a variable name:
+
+<!-- docs-example: skip -->
+```yaoxiang
+print(f"{{literal braces}}")     // expect {literal braces}
+print(f"Set: {{1, 2, 3}}")       // expect Set: {1, 2, 3}
+```
+
+> The two lines above **intentionally fail the check** — they report
+> `E1001 Unknown variable: 'literal'`.
+
+To output a literal brace today, stay out of f-strings and concatenate instead:
 
 ```yaoxiang
-print(f"{{literal braces}}")     // {literal braces}
-print(f"Set: {{1, 2, 3}}")       // Set: {1, 2, 3}
+main = () => {
+    name = "YaoXiang"
 
-// Mixed: doubled outputs a literal {, single denotes interpolation
-name = "YaoXiang"
-print(f"{{name}} is {name}")     // {name} is YaoXiang
+    // A single brace denotes interpolation
+    print(f"{name} is {name}")
+
+    // For a literal brace, concatenate plain strings
+    print("Set: " + "{" + "1, 2, 3" + "}")
+}
 ```
 
 ## Multi-line f-string
 
-f-string can span multiple lines:
+⚠️ 0.8.2 **does not support triple-quoted `f"""..."""`** — the lexer has no multi-line
+string literal, so a multi-line f-string reports `E0012 unterminated string`. To build one,
+concatenate several f-strings:
 
 ```yaoxiang
 name = "Alice"
 age = 25
 city = "Beijing"
 
-info = f"""
-Name: {name}
-Age: {age}
-City: {city}
-"""
+info = f"Name: {name}" + "\n" + f"Age: {age}" + "\n" + f"City: {city}"
 
 print(info)
 // Name: Alice
@@ -114,11 +137,14 @@ print(info)
 When the compiler sees an f-string, it converts it into efficient string concatenation:
 
 ```yaoxiang
+use std.string
+
 // What you write
 f"Hello {name}, age: {age}"
 
-// What the compiler produces
-"Hello ".concat(name.to_string()).concat(", age: ").concat(age.to_string())
+// The equivalent hand-written form (note: there is no .concat() /
+// to_string() instance method, and no implicit Int→String conversion)
+"Hello " + string.format("{0}", name) + ", age: " + string.format("{0}", age)
 ```
 
 This means f-string is not only more concise to write, but its runtime performance is comparable to
@@ -128,10 +154,10 @@ hand-written concatenation — **zero overhead**.
 
 :::: v-pre
 
-| Key Point           | Syntax                     |
-| ------------------- | -------------------------- |
-| Basic interpolation | `f"text {var}"`            |
-| Expression          | `f"result: {x + y}"`       |
-| Formatting          | `f"value: {pi:.2f}"`       |
-| Escaping braces     | `f"{{not interpolation}}"` |
-| Multi-line          | `f"""..."""`               |
+| Key Point           | Syntax                                            |
+| ------------------- | ------------------------------------------------- |
+| Basic interpolation | `f"text {var}"`                                   |
+| Expression          | `f"result: {x + y}"`                              |
+| Formatting          | ⚠️ not implemented: `{pi:.2f}` is emitted verbatim |
+| Escaping braces     | ⚠️ not implemented: a doubled brace is read as a variable name (E1001) |
+| Multi-line          | ⚠️ not implemented: `f"""..."""` reports E0012     |

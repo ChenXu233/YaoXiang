@@ -19,7 +19,8 @@ A list is an **ordered** sequence of values, where all elements share the same t
 // 创建列表
 numbers = [1, 2, 3, 4, 5]
 names = ["Alice", "Bob", "Charlie"]
-empty: List(Int) = []       // 空列表需要类型注解
+// 注意：`empty: List(Int) = []` 报 E1002——空列表的 `List(T)` 标注与
+// 字面量推断出的 `Vec` 不兼容。空列表请交给 list.push 之类的函数构造。
 ```
 
 ### Index Access
@@ -37,16 +38,25 @@ last = scores[3]     // 91
 ### Common Operations
 
 ```yaoxiang
-mut items = [1, 2, 3]
+use std.list
 
-// 添加元素
-items.append(4)       // [1, 2, 3, 4]
+main = () => {
+    mut items = [1, 2, 3]
 
-// 长度
-count = items.len()   // 4
+    // Add an element
+    items = list.push(items, 4)   // [1, 2, 3, 4]
 
-// 切片
-slice = items[0..2]   // [1, 2]
+    // Length
+    count = list.len(items)   // 4
+
+    // Slicing
+    // Note: range slicing items[0..2] currently raises E6007 at runtime
+    // (measured); use std.list.slice instead
+    sl = list.slice(items, 0, 2)   // [1, 2]
+    print(items)
+    print(count)
+    print(sl)
+}
 ```
 
 ### List Comprehensions
@@ -54,18 +64,20 @@ slice = items[0..2]   // [1, 2]
 List comprehensions are a powerful tool for creating lists—generate a new list from an existing one:
 
 ```yaoxiang
-// 基本推导式
-squares = [x * x for x in [1, 2, 3, 4, 5]]
-print(squares)  // [1, 4, 9, 16, 25]
+use std.string
 
-// 带过滤条件的推导式
-evens = [x for x in [1, 2, 3, 4, 5, 6] if x % 2 == 0]
-print(evens)  // [2, 4, 6]
+main = () => {
+    // Basic comprehension
+    squares = [x * x for x in [1, 2, 3, 4, 5]]
+    print(squares)  // [1, 4, 9, 16, 25]
 
-// 转换类型
-names = ["Alice", "Bob", "Charlie"]
-lengths = [n.len() for n in names]
-print(lengths)  // [5, 3, 7]
+    // Type conversion
+    names = ["Alice", "Bob", "Charlie"]
+    // Note: comprehensions currently depend on std.list.iter and may raise
+    // E6006 at runtime
+    lengths = [string.len(n) for n in names]
+    print(lengths)  // [5, 3, 7]
+}
 ```
 
 Syntax: `[expression for variable in list if condition]`—the `if condition` part is optional.
@@ -76,9 +88,17 @@ A dictionary is a collection of **key-value pairs**, where keys are strings and 
 type. Create one with `{}`:
 
 ```yaoxiang
-// 创建字典
-scores = {"Alice": 90, "Bob": 85, "Charlie": 92}
-empty: Dict(Int) = {}          // 空字典需要类型注解
+use std.dict
+
+main = () => {
+    // Create a dictionary
+    scores = {"Alice": 90, "Bob": 85, "Charlie": 92}
+    // Note: `{}` is parsed as an empty block (E1108); an empty dictionary
+    // must be built with dict.new()
+    empty = dict.new()
+    print(scores)
+    print(empty)
+}
 ```
 
 ### Key Access

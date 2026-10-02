@@ -4,7 +4,8 @@ author: 'ChenXu233'
 created: '2026-08-05'
 updated: '2026-08-05'
 issue: '#258'
-issues_impl: '#258'
+issues_impl:
+  - '#258'
 status: '已接受'
 ---
 
