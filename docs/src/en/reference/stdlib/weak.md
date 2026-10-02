@@ -1,17 +1,17 @@
 ---
 title: 'std.weak'
-description: 'Arc / Weak reference'
+description: 'Arc / Weak weak reference'
 ---
 
 # std.weak
 
-The weak reference module, used together with `Arc` to break reference cycles.
+A weak reference module, used together with `Arc` to break reference cycles.
 
 ```yaoxiang
 use std.weak
 ```
 
-> This module depends on atomic reference counting and is **not exported** on the `wasm32` target.
+> This module depends on atomic reference counting and is **not exported** for the `wasm32` target.
 
 ## Function Overview
 
@@ -36,12 +36,25 @@ new: (T: Type)(arc: Arc(T)) -> Weak(T)
 
 <!-- stdlib:sig:weak.new end -->
 
-Creates the corresponding weak reference from an `Arc`.
+Creates the corresponding weak reference from `Arc`.
 
-- `arc` —— strong reference value; passed by value, **moved** after the call
+- `arc` — strong reference value; passed by value, **moved** after the call
 
-Returns: a `Weak` handle pointing to the same allocation block, **without incrementing** the strong
-reference count.
+Returns: a weak reference handle.
+
+> **Known gap**: The current implementation of `weak.new` is
+> `RuntimeValue::Weak(Arc::downgrade(&Arc::new(arc.clone())))` (`src/std/weak.rs:33-39`) — it first
+> clones the **value** of the argument `Arc` into a **newly created** `Arc`, then takes `downgrade`
+> on this temporary `Arc`. Therefore:
+>
+> 1. The weak reference does **not point** to the original `Arc`'s allocation, but to a brand-new
+>    allocation with the same content;
+> 2. The temporary `Arc` is destructed when the function returns, the strong reference count goes to
+>    zero → empirically `weak.upgrade(weak.new(p))` is always `Option.none()`, immediately invalid.
+>
+> In other words, "does not increase the strong reference count" holds true, but "can be upgraded
+> back to the original value" is currently **not** valid. For cross-scope sharing use
+> [`ref`](../language-spec/concurrency.md), do not rely on `Weak`'s upgrade-back.
 
 ```yaoxiang
 use std.assert
@@ -69,10 +82,14 @@ upgrade: (T: Type)(weak: Weak(T)) -> Option(Arc(T))
 
 Attempts to upgrade a weak reference to a strong reference.
 
-- `weak` —— weak reference handle
+- `weak` — weak reference handle
 
 Returns: `Option.some(Arc)` when the allocation block is still alive, `Option.none()` when it has
-been released. **Does not error** — uses `Option` to express whether the target still exists.
+been released. **Does not error** — use `Option` to express "whether the target is still present."
+
+> Per the current implementation of `weak.new` (see "Known gap" in the previous section), a freshly
+> created weak reference **always** returns `none()`. The example below demonstrates the
+> destructuring syntax; it actually goes through the `none` branch.
 
 ```yaoxiang
 use std.weak
@@ -82,7 +99,7 @@ main: () -> Void = {
     p = ref 42
     w = weak.new(p)
 
-    // upgrade: returns some(v) if target is alive, none() if released
+    // upgrade: target alive returns some(v), released returns none()
     u = weak.upgrade(w)
     match u {
         some(v) => println("alive"),
@@ -91,18 +108,21 @@ main: () -> Void = {
 }
 ```
 
-> **Prerequisite for variant destructuring**: Destructuring `Option` variants requires the variant
-> set to be in scope — after `use std.option`, you can `match some(v)` / `none()` (see language spec
-> §2.8 match).
+> **Variant destructuring prerequisite**: Destructuring `Option` variants requires the variant set
+> to be present — after `use std.option`, you can `match some(v)` / `none()` (see Language
+> Specification §2.8 match).
 
-## Semantic Notes
+## Semantics
 
-Weak references **do not hold** ownership: the existence of a `Weak` does not prevent the target
-from being released. A typical use is to break cyclic references — a parent node holds an `Arc`
-pointing to a child node, and the child node only holds a `Weak` pointing back to the parent,
-breaking the cycle.
+A weak reference **does not hold** ownership: the presence of `Weak` does not prevent the target
+from being released. A typical use is to break circular references — the parent node holds an `Arc`
+pointing to child nodes, and child nodes only hold `Weak` pointing back to the parent; the cycle is
+thus broken.
+
+> The above is the **design intent**. Per the current implementation (see "Known gap" in
+> [`new`](#new)), `Weak` cannot truly fulfill this role in this version yet.
 
 ## Related
 
-- [Language Spec: Type System](../language-spec/type-system.md) —— ownership semantics of `Arc` /
-  `Weak`
+- [Language Specification: Type System](../language-spec/type-system.md) — Ownership semantics of
+  `Arc` / `Weak`

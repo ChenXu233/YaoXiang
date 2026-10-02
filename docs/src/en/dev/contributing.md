@@ -1,9 +1,9 @@
 ---
-title: 'Contribution Guide'
+title: 'Contributing Guidelines'
 description: 'Learn how to contribute code to the YaoXiang project'
 ---
 
-# Contribution Guide
+# Contributing Guidelines
 
 Welcome to contribute code and documentation to the YaoXiang project!
 
@@ -21,18 +21,18 @@ Welcome to contribute code and documentation to the YaoXiang project!
 - Ensure tests pass
 - Update relevant documentation
 
-## Commit Convention
+## Commit Conventions
 
 ```
-feat: New feature
-fix: Fix bug
-docs: Documentation update
-refactor: Refactor
-test: Test related
-chore: Build/tooling update
+:sparkles: feat: new feature
+fix: bug fix
+docs: documentation update
+refactor: refactor
+test: test related
+chore: build/tools update
 ```
 
 ## Related Resources
 
-- [GitHub](https://github.com/yaoxiang-lang/yaoxiang)
-- [Issue Feedback](https://github.com/yaoxiang-lang/yaoxiang/issues)
+- [GitHub](https://github.com/ChenXu233/YaoXiang)
+- [Issue Feedback](https://github.com/ChenXu233/YaoXiang/issues)
