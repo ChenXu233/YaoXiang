@@ -22,11 +22,18 @@ print(greeting)  // Hello Alice, you are 25 years old
 Compared with traditional concatenation, the differences with f-string are immediately clear:
 
 ```yaoxiang
+use std.string
+
+name = "Alice"
+age = 25
+
 // ❌ Traditional concatenation: verbose and error-prone
-message = "Hello ".concat(name).concat(", age: ").concat(age.to_string())
+// Note: String has no .concat() instance method, and Int has no to_string()
+//—both raise E1053
+message = "Hello, age: " + string.format("{0}", age)
 
 // ✅ f-string: intuitive and concise
-message = f"Hello {name}, age: {age}"
+message2 = f"Hello {name}, age: {age}"
 ```
 
 ## Expression Interpolation
@@ -69,10 +76,12 @@ Common format specifiers:
 You can call methods inside `{}`:
 
 ```yaoxiang
+use std.string
+
 name = "alice"
 
-print(f"Upper: {name.uppercase()}")   // Upper: ALICE
-print(f"Length: {name.len()}")        // Length: 5
+print(f"Upper: {string.upper(name)}")   // Upper: ALICE
+print(f"Length: {string.len(name)}")    // Length: 5
 ```
 
 ## Escaping Braces
@@ -98,11 +107,7 @@ name = "Alice"
 age = 25
 city = "Beijing"
 
-info = f"""
-Name: {name}
-Age: {age}
-City: {city}
-"""
+info = f"Name: {name}" + "\n" + f"Age: {age}" + "\n" + f"City: {city}"
 
 print(info)
 // Name: Alice
@@ -115,11 +120,14 @@ print(info)
 When the compiler sees an f-string, it converts it into efficient string concatenation:
 
 ```yaoxiang
+use std.string
+
 // What you write
 f"Hello {name}, age: {age}"
 
-// What the compiler produces
-"Hello ".concat(name.to_string()).concat(", age: ").concat(age.to_string())
+// The equivalent hand-written form (note: there is no .concat() /
+// to_string() instance method, and no implicit Int→String conversion)
+"Hello " + string.format("{0}", name) + ", age: " + string.format("{0}", age)
 ```
 
 This means f-string is not only more concise to write, but its runtime performance is comparable to

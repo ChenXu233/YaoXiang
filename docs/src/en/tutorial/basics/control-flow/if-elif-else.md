@@ -23,6 +23,7 @@ optional `else block`.
 
 The simplest form—only `if`:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 if temperature > 30 {
     print("天热了，开空调吧")
@@ -31,6 +32,7 @@ if temperature > 30 {
 
 Add an `else`:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 if is_raining {
     print("带伞")

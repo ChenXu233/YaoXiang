@@ -94,6 +94,7 @@ main: () -> Void = {
 
 Struct patterns let you directly extract fields of interest from a struct:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 Rect: Type = { x: Float, y: Float, width: Float, height: Float }

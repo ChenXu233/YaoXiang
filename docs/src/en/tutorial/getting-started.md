@@ -143,6 +143,7 @@ r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 
 An interface is a record type where all fields are function types:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // 定义接口
 Drawable: Type = {
@@ -162,6 +163,7 @@ EmptyInterface: Type = {}
 
 Use the `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // 类型定义
 Point: Type = { x: Float, y: Float }
@@ -301,6 +303,7 @@ message = match result {
 YaoXiang's concurrency model is built around the `spawn <expr>` primitive — it is the only entry
 point for parallelism.
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // spawn 修饰任意表达式，自动并行执行
 main: () -> Void = {

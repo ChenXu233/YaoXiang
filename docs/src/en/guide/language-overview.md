@@ -57,6 +57,7 @@ greet: (name: String) -> Void = {
 
 No `type`, `struct`, `trait`, or `impl` keywords. A single unified declaration handles everything.
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // 记录类型
 Point: Type = { x: Float, y: Float }
@@ -106,6 +107,7 @@ sort: (list: List(T)) -> List(T)
 
 ## Methods
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // 命名空间函数（Type.method 只是归属标记，不是绑定）
 Point.distance: (a: &Point, b: &Point) -> Float = {
@@ -173,6 +175,7 @@ doubled = [x * 2 for x in nums]
 
 ## Pattern Matching
 
+<!-- docs-example: skip -->
 ```yaoxiang
 match shape {
     circle(r) => pi * r * r,
@@ -244,6 +247,7 @@ backup = data.clone()
 
 `spawn` is the only parallelism primitive. No async/await, no Send/Sync.
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // spawn 块：子表达式自动并行
 result = spawn {

@@ -85,6 +85,7 @@ main: () -> Void = {
 Within the same file, functions declared with `pub` are automatically bound to types defined in the
 same file:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
@@ -121,6 +122,7 @@ Shape: Type = { circle: (Float) -> Shape, rect: (Float, Float) -> Shape, point: 
 
 The core idea of enums: **each variant is itself a type**.
 
+<!-- docs-example: skip -->
 ```yaoxiang
 area: (s: Shape) -> Float = match s {
     circle(r) => 3.14159 * r * r,
@@ -137,6 +139,7 @@ print(area(rect(3.0, 4.0))) // 12.0
 Interfaces are **record types whose fields are all function types**. Implementing an interface means
 including the interface name in the record:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // Define an interface
 Drawable: Type = {

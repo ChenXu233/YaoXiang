@@ -79,6 +79,7 @@ There are several important rules for `mut`:
 **Rule one**: `mut` is an explicit new declaration—the compiler will not search outer scopes for
 variables with the same name.
 
+<!-- docs-example: skip -->
 ```yaoxiang
 mut x = 10      // Creates a new mutable variable x in current scope
 mut x = 20      // Compile error! x has already been declared in this scope
@@ -87,6 +88,7 @@ mut x = 20      // Compile error! x has already been declared in this scope
 **Rule two**: Variables declared with `mut` cannot have the same name as variables in outer scopes
 (shadowing is prohibited).
 
+<!-- docs-example: skip -->
 ```yaoxiang
 x = 10
 {
@@ -97,6 +99,7 @@ x = 10
 **Rule three**: Within the same scope, each name can only be declared once—whether using `=` or
 `mut`.
 
+<!-- docs-example: skip -->
 ```yaoxiang
 x = 10
 mut x = 20   // Compile error! x has already been declared

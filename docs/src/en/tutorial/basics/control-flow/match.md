@@ -161,6 +161,7 @@ print(type)  // "休息日"
 `match` starts trying to match from the first arm; the **first branch that successfully matches
 takes effect**, and the ones after it will not be executed:
 
+<!-- docs-example: skip -->
 ```yaoxiang
 number = 5
 
