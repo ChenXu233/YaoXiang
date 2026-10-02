@@ -1,10 +1,10 @@
 // 01-syntax/control-flow/list_comp.yx
 // 覆盖: 规范 §2.6.5 列表推导式
-// 验证: [expr for var in iterable] 基本形式
+// 验证: [expr for var in iterable (if cond)?] 基本形式 + if 过滤 + 多生成器（#401）
 // 状态: ✅ 可运行
-// TODO: 带条件的 [expr for var in iterable if cond] 需修复 parser
 
 use std.assert
+use std.list
 
 main: () -> Void = {
     mut items = [1, 2, 3, 4, 5]
@@ -30,6 +30,34 @@ main: () -> Void = {
     assert.assert(tens[2] == 10, "tens[2] == 10")
     assert.assert(tens[3] == 10, "tens[3] == 10")
     assert.assert(tens[4] == 10, "tens[4] == 10")
+
+    // if 过滤（#401）
+    evens = [x for x in items if x % 2 == 0]
+    assert.assert(list.len(evens) == 2, "len(evens) == 2")
+    assert.assert(evens[0] == 2, "evens[0] == 2")
+    assert.assert(evens[1] == 4, "evens[1] == 4")
+
+    // 多生成器：嵌套循环展开，[1,2]×[3,4] 共 4 组
+    pairs = [x * 10 + y for x in [1, 2] for y in [3, 4]]
+    assert.assert(list.len(pairs) == 4, "len(pairs) == 4")
+    assert.assert(pairs[0] == 13, "pairs[0] == 13")
+    assert.assert(pairs[1] == 14, "pairs[1] == 14")
+    assert.assert(pairs[2] == 23, "pairs[2] == 23")
+    assert.assert(pairs[3] == 24, "pairs[3] == 24")
+
+    // 每层生成器各带过滤：x ∈ {2,3} 且 y == 20 → [40, 60]
+    filtered = [x * y for x in [1, 2, 3] if x > 1 for y in [10, 20] if y == 20]
+    assert.assert(list.len(filtered) == 2, "len(filtered) == 2")
+    assert.assert(filtered[0] == 40, "filtered[0] == 40")
+    assert.assert(filtered[1] == 60, "filtered[1] == 60")
+
+    // 后层生成器引用前层迭代变量：扁平化
+    flat = [y for x in [[1, 2], [3, 4]] for y in x]
+    assert.assert(list.len(flat) == 4, "len(flat) == 4")
+    assert.assert(flat[0] == 1, "flat[0] == 1")
+    assert.assert(flat[1] == 2, "flat[1] == 2")
+    assert.assert(flat[2] == 3, "flat[2] == 3")
+    assert.assert(flat[3] == 4, "flat[3] == 4")
 }
 
 main()
