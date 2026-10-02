@@ -29,7 +29,7 @@
   "src/tutorial/index.md:en": "ee9bfa33ae46fc0c9714790ab0114dcc",
   "src/design/architecture/index.md:en": "3faa8ffeb4324f934a9b89ff185b8ca0",
   "src/design/rfc/EXAMPLE_full_feature_proposal.md:en": "8afd58aa5b6ddc02cbfc7d698c252b2c",
-  "src/design/rfc/index.md:en": "4d0a969a476d44c75116efbae1bb1554",
+  "src/design/rfc/index.md:en": "9458e45aceaf77e67ab1b6deed9e3c7b",
   "src/design/rfc/RFC_TEMPLATE.md:en": "78c60abc3890d0595e80303c42564d43",
   "src/reference/language-spec/concurrency.md:en": "d48c62b8094d280032af033859bd15a8",
   "src/reference/language-spec/index.md:en": "4601c9a0850f7d2abf146b2c78e15bf3",
@@ -157,12 +157,12 @@
   "src/design/rfc/review/026a-extensible-ffi-system.md:en": "7bd77d77ffc7122bec967cc720a0c9bc",
   "src/design/rfc/rejected/025-primitive-extension.md:en": "35425e7b3a2da74e7f565d78c09ac0a2",
   "src/design/rfc/review/032-spawn-unified-expression.md:en": "11d59c5896aa1607bbde0e7f5d536507",
-  "src/design/rfc/TRACKING.md:en": "96750d21ca777c29353490eeeeed98c6",
+  "src/design/rfc/TRACKING.md:en": "61feebe377fd5ca1ede05b4c24a621d2",
   "src/design/rfc/draft/034-debug-toolchain.md:en": "96c1598e6b8c39b4705f46406b6cf0f1",
   "src/design/rfc/draft/035-mcp-server.md:en": "0ee1dd336e0807899d6dafbe94a33273",
   "src/blog/assert-unification-discussion.md:en": "5b371a0cfe3825b91c0f89c753e9ced0",
   "src/design/rfc/accepted/030-assert-mechanism.md:en": "d40e615be5a386b01320094dda310804",
-  "src/design/rfc/accepted/029-module-semantics.md:en": "b6af109d57295963a4c2b2562cad2d9b",
+  "src/design/rfc/accepted/029-module-semantics.md:en": "e3915e3e51a3d808eb53c83da3812627",
   "src/design/rfc/accepted/036-test-framework.md:en": "4013eecfa5171d5b9fcc8f03e8cd5aeb",
   "src/design/rfc/accepted/038-statement-termination.md:en": "6a8c9e1b2d56433c049cca48ad169138",
   "src/design/rfc/accepted/011a-interface-implementation.md:en": "2ba68f2b1a52dde73aa0058bb6a3163a",
@@ -194,5 +194,6 @@
   "src/reference/stdlib/fs.md:en": "eba3a6b6acc3fc66a9cd3a0c5220240c",
   "src/design/rfc/accepted/014c-workspace.md:en": "a0679ee99084a5ee8e56eb0365e0322a",
   "src/design/rfc/accepted/014b-build-system.md:en": "01d50e1fc5d895318775b39c91f78333",
-  "src/design/rfc/accepted/014a-registry-protocol.md:en": "15e97c8c577f6b83905fcc3412d08289"
+  "src/design/rfc/accepted/014a-registry-protocol.md:en": "15e97c8c577f6b83905fcc3412d08289",
+  "src/design/rfc/accepted/029g-remove-pub-and-auto-bind.md:en": "1045a842335d24bfed059b0fb2a9e730"
 }
