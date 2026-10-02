@@ -2,7 +2,7 @@
 //!
 //! 规范来源：
 //! - RFC-027《编译期谓词与统一静态验证》§7「循环终止性证明」
-//!   - §7.2 策略 1：线性秩函数自动合成（SMT 验证）—— 见文末 tripwire
+//!   - §7.2 策略 1：线性秩函数自动合成（SMT 验证）—— 双变量形状与健全性边界
 //!   - §7.3 策略 2：谓词违反计数（框架占位）
 //!   - §7.5 策略 4：乘法缩放度量
 //! - 语言规范 §控制流「while 循环」
@@ -437,74 +437,444 @@ fn test_nested_while_inner_fails() {
     );
 }
 
-// ==================== 策略 1 可用性 tripwire（#377）====================
+// ==================== 策略 1：线性秩函数自动合成（RFC-027 §7.2）====================
 
-/// 策略 1 当前不产出任何可用度量，故 `i < j { i += 1; j -= 1 }` 无法被证明
+/// 策略 1：`i < j { i += 1; j -= 1 }` 由「边界自己也在动」的线性秩函数拿下
 ///
-/// RFC-027 §7 把「四种策略都无法自动拿下」的循环交给策略 1（线性秩函数自动
-/// 合成），其典型例子正是本用例的形状。但实测策略 1 恒空手，两处独立缺陷：
+/// 该形状此前被两处缺陷挡住（#377），修法即本用例钉住的契约：
 ///
-/// - **(a) 输入为空**：`check_while_loop` 的 `bound_is_loop_invariant` 过滤会
-///   剔除「在循环体内被赋值的边界变量」，而这类循环的边界按定义就在体内被改
-///   → `bounds` 为空 → 零候选。
-/// - **(b) 判定符号相反**：`generate_rank_candidates` 产出的 `delta` 恒为 `+1`，
-///   而 `verify_rank_candidate` 构造 `m' = m + delta` 后断言 `not (m' < m)`；
-///   `m + 1 < m` 恒假 → 求解器返回 Sat → 验证恒失败。
+/// - **(a) 输入曾被清空**：`bound_is_loop_invariant` 过滤会剔除「在循环体内被赋值
+///   的边界变量」，而需要秩函数的形状，其边界按定义就在体内被改 ⇒ 候选恒零。
+///   修法：策略 1 改吃**未过滤**的边界集合，健全性改由逐赋值验证承担。
+/// - **(b) 判定符号曾相反**：旧 `verify_rank_candidate` 把 `m'` 写成 `v + delta`
+///   （`delta` 恒 `+1`）再断言 `not (m' < m)` ⇒ 恒可满足 ⇒ 恒验证失败。修法：
+///   按 Direction 推导测度变化——`m = bound - v` ⇒ `Δm = δbound - δv`
+///   （本例 `δi = +1`、`δj = -1` ⇒ `Δm = -1 - 1 = -2 < 0`）。
 ///
-/// 本用例**端到端**锁定「该形状当前不被证明」这一事实，并用恒返回 `Unsat`
-/// （即无条件判定「严格递减成立」）的桩求解器，使之不依赖本机 Z3、CI 上稳定。
-/// 桩都救不回来，正说明缺陷在度量合成侧而非求解器侧。
-///
-/// 修好 (a)（或 (a)+(b)）后此处会失败——届时请把断言翻转成「该循环被证明」
-/// 并更新用例名，不要删除用例。
+/// 用恒返回 `Unsat`（无条件认可「候选严格递减」）的桩求解器，使本用例不依赖
+/// 本机 Z3、CI 上稳定。
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn test_strategy1_cannot_prove_dual_variable_loop_currently() {
+fn test_strategy1_proves_dual_variable_loop() {
     // Arrange — i < j { i += 1; j -= 1 }：边界 j 在循环体内被赋值
     let while_expr = make_while(
         make_lt_condition("i", "j"),
         vec![make_increment("i", 1), make_decrement("j", 1)],
     );
 
-    // Act — 注入恒 Unsat（「候选严格递减」）的桩求解器。
-    // 声明 i/j 已精化，使该循环进 §7 验证模式——否则测的是门控而非策略 1。
+    // Act — 声明 i/j 已精化，使该循环进 §7 验证模式（否则测的是门控而非策略 1）
     let results = run_check_with_stub_solver_refined(&while_expr, &["i", "j"]);
 
-    // Assert — 即便求解器无条件认可任何候选，该循环仍未被证明
+    // Assert
     let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
     assert!(
-        !unproven.is_empty(),
-        "策略 1 当前恒空手（#377 缺陷 a：边界过滤清空输入；缺陷 b：delta 符号相反），
-         故恒 Unsat 桩求解器下该循环仍不应被证明。
-         若此处开始通过，说明策略 1 已可用——请翻转断言并更新用例名。results={:?}",
-        results
+        unproven.is_empty(),
+        "`i < j {{ i += 1; j -= 1 }}` 的秩函数 `j - i` 每轮减 2，应被证明终止；
+         仍有未证明：{unproven:?}（results={results:?}）"
     );
 }
 
-/// 终止策略 2（谓词违反计数）是框架占位，恒不产出度量（RFC-027 §7.3）
+/// 策略 1 **不得**为「朝边界反方向走」的循环给出证明（合成侧健全性闸门）
 ///
-/// 实现注释标注「框架占位」：完整实现需 parser 支持 forall 量词语法，而语言
-/// 层面尚无该语法。本用例与上一条同形——两者合起来说明「策略 1 空手 + 策略 2
-/// 占位」时该形状无任何自动证明路径。
+/// `while i > 0 { i = i + 1 }`：候选按 `Gt` 取 Decreasing（测度 `i - 0`），
+/// 但 `δi = +1` ⇒ `Δm = δv - δbound = +1 - 0 = +1 ≥ 0` ⇒ 合成侧直接否掉，
+/// 不交给求解器。即便注入「恒 Unsat」的桩（无条件认可任何候选）也必须 Unproven——
+/// 这是 tests/yaoxiang/06-compile-errors/termination_unproven_err.yx 的单元级对照。
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn test_strategy2_violation_count_is_placeholder_not_usable() {
-    // Arrange
-    let while_expr = make_while(
-        make_lt_condition("i", "j"),
-        vec![make_increment("i", 1), make_decrement("j", 1)],
-    );
+fn test_strategy1_rejects_increment_toward_lower_bound() {
+    // Arrange — while i > 0 { i = i + 1 }
+    let while_expr = make_while(make_gt_condition("i", 0), vec![make_increment("i", 1)]);
 
-    // Act — 声明 i/j 精化以进 §7 验证模式（否则门控直接放行，测不到策略 2）
-    let results = run_check_with_stub_solver_refined(&while_expr, &["i", "j"]);
+    // Act
+    let results = run_check_with_stub_solver_refined(&while_expr, &["i"]);
 
-    // Assert — 无任何策略成立
+    // Assert
     let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
     assert!(
         !unproven.is_empty(),
-        "策略 2 当前为框架占位（需 forall 量词），不应产出度量。
-         若此处开始通过，说明策略 2 已实装——请更新断言与用例名。results={:?}",
-        results
+        "i 朝下界反方向走 ⇒ 任何递减测度都不成立 ⇒ 必须 Unproven；results={results:?}"
+    );
+}
+
+/// 策略 1 取边界位移的**最不利一端**：守卫内可能反向移动边界时不接受
+///
+/// `while i < j { if c { j = j + 1 }; i = i + 1 }`：若 `c` 恒真，`i`、`j` 同时
+/// 递增（`j` 追着 `i` 跑），循环永不终止。合成侧对边界位移取 max（`db_max = +1`），
+/// `Δm = db_max - δv = +1 - 1 = 0 ≥ 0` ⇒ 拒绝——**不能**只看 `i` 的无条件自增就
+/// 认定 `j - i` 递减。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_strategy1_rejects_bound_moving_away_under_guard() {
+    // Arrange — if c { j = j + 1 }（守卫内反向移动）+ i = i + 1（无条件自增）
+    let guard_cond = Expr::Var("c".to_string(), dummy_span());
+    let guarded_increment = Stmt {
+        kind: StmtKind::If {
+            condition: Box::new(guard_cond),
+            then_branch: Box::new(Block {
+                stmts: vec![make_increment("j", 1)],
+                span: dummy_span(),
+            }),
+            else_if_branches: Vec::new(),
+            else_branch: None,
+            span: dummy_span(),
+        },
+        span: dummy_span(),
+    };
+    let while_expr = make_while(
+        make_lt_condition("i", "j"),
+        vec![guarded_increment, make_increment("i", 1)],
+    );
+
+    // Act
+    let results = run_check_with_stub_solver_refined(&while_expr, &["i", "j"]);
+
+    // Assert
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        !unproven.is_empty(),
+        "边界 j 可能在守卫内反向移动 ⇒ `j - i` 未必递减 ⇒ 必须 Unproven；results={results:?}"
+    );
+}
+
+/// 测度变量的推进必须**无条件**（体顶层）：两个变量的位移都在守卫内 ⇒ 不证明
+///
+/// `while i < j { if c { i = i + 1; j = j - 1 } }`：两个方向候选（`i` 朝上界、`j` 朝
+/// 下界）的推进都在同一个守卫内 ⇒ 没有一条无条件位移，无法论证「每轮都朝边界走」
+/// ⇒ Unproven（该循环在 `c` 恒假时确实不终止）。
+///
+/// 边界一侧可以条件移动——但取的是**最不利一端**（见紧邻的另一条用例）。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_strategy1_needs_unconditional_movement_of_measure_var() {
+    // Arrange — if c { i = i + 1; j = j - 1 }：两个变量都只在守卫内动
+    let guarded_step = Stmt {
+        kind: StmtKind::If {
+            condition: Box::new(Expr::Var("c".to_string(), dummy_span())),
+            then_branch: Box::new(Block {
+                stmts: vec![make_increment("i", 1), make_decrement("j", 1)],
+                span: dummy_span(),
+            }),
+            else_if_branches: Vec::new(),
+            else_branch: None,
+            span: dummy_span(),
+        },
+        span: dummy_span(),
+    };
+    let while_expr = make_while(make_lt_condition("i", "j"), vec![guarded_step]);
+
+    // Act
+    let results = run_check_with_stub_solver_refined(&while_expr, &["i", "j"]);
+
+    // Assert
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        !unproven.is_empty(),
+        "两个变量的位移都在守卫内 ⇒ 无无条件推进 ⇒ 不能论证每轮递减 ⇒ Unproven；results={results:?}"
+    );
+}
+
+/// 边界在守卫内移动**且只朝有利方向**时仍可证明：取最不利一端即可
+///
+/// `while i < j { i = i + 1; if c { j = j - 1 } }`：`i` 每轮无条件 +1；`j` 只在
+/// 守卫内 -1（也可能不动）。测度 `j - i` 的每轮变化 ∈ {-2, -1} ⇒ 恒递减 ⇒ 终止。
+/// 合成侧对边界位移取 max（`db_max = -1`）、对测度变量取 min（`dv_min = +1`）即为
+/// 此结论：`Δm = -1 - 1 = -2 < 0` ✅。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_strategy1_accepts_guarded_bound_moving_in_favourable_direction() {
+    // Arrange — i = i + 1（无条件）+ if c { j = j - 1 }（守卫内）
+    let guarded_decrement = Stmt {
+        kind: StmtKind::If {
+            condition: Box::new(Expr::Var("c".to_string(), dummy_span())),
+            then_branch: Box::new(Block {
+                stmts: vec![make_decrement("j", 1)],
+                span: dummy_span(),
+            }),
+            else_if_branches: Vec::new(),
+            else_branch: None,
+            span: dummy_span(),
+        },
+        span: dummy_span(),
+    };
+    let while_expr = make_while(
+        make_lt_condition("i", "j"),
+        vec![make_increment("i", 1), guarded_decrement],
+    );
+
+    // Act
+    let results = run_check_with_stub_solver_refined(&while_expr, &["i", "j"]);
+
+    // Assert
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        unproven.is_empty(),
+        "`j - i` 每轮至少减 1，应被证明终止；仍未证明：{unproven:?}（results={results:?}）"
+    );
+}
+
+/// 终止策略 2（谓词违反计数）仍是框架占位：其目标形状依旧 Unproven（RFC-027 §7.3）
+///
+/// 实现注释标注「框架占位」：完整实现需 parser 支持 forall 量词语法，语言层面
+/// 尚无该语法。故「策略 1/3/4 都拿不出度量、只有策略 2 能救」的形状仍应 Unproven——
+/// 本用例钉住这条边界。策略 2 实装时它会失败，届时换成「该形状被证明」的断言。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_shapes_beyond_strategies_1_3_4_stay_unproven_placeholder() {
+    // Arrange — `while i < n { i = i + step }`：位移 `step` 未知 ⇒ 递减与否不可判
+    let unknown_step_increment = Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::BinOp {
+            op: BinOp::Assign,
+            left: Box::new(Expr::Var("i".to_string(), dummy_span())),
+            right: Box::new(Expr::BinOp {
+                op: BinOp::Add,
+                left: Box::new(Expr::Var("i".to_string(), dummy_span())),
+                right: Box::new(Expr::Var("step".to_string(), dummy_span())),
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        })),
+        span: dummy_span(),
+    };
+    let while_expr = make_while(make_lt_condition("i", "n"), vec![unknown_step_increment]);
+
+    // Act — 声明 i 精化以进 §7 验证模式（否则门控直接放行，测不到策略侧）
+    let results = run_check_with_stub_solver_refined(&while_expr, &["i"]);
+
+    // Assert
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        !unproven.is_empty(),
+        "位移未知（`i + step`）⇒ 策略 1/3/4 都拿不出度量 ⇒ 应 Unproven；results={results:?}"
+    );
+}
+
+// ==================== 策略 1b：标志循环（guarded exit）====================
+
+/// 构造 `while flag { ... }`（裸布尔标志条件）
+fn make_flag_while(body_stmts: Vec<Stmt>) -> Box<Expr> {
+    make_while(
+        Box::new(Expr::Var("flag".to_string(), dummy_span())),
+        body_stmts,
+    )
+}
+
+/// 构造 `if i <= 0 { flag = false }` 形式的出口语句（阈值守卫内清零标志）
+fn make_guarded_flag_exit(threshold_op: BinOp) -> Stmt {
+    Stmt {
+        kind: StmtKind::If {
+            condition: Box::new(Expr::BinOp {
+                op: threshold_op,
+                left: Box::new(Expr::Var("i".to_string(), dummy_span())),
+                right: Box::new(Expr::Lit(Literal::Int(0), dummy_span())),
+                span: dummy_span(),
+            }),
+            then_branch: Box::new(Block {
+                stmts: vec![Stmt {
+                    kind: StmtKind::Expr(Box::new(Expr::BinOp {
+                        op: BinOp::Assign,
+                        left: Box::new(Expr::Var("flag".to_string(), dummy_span())),
+                        right: Box::new(Expr::Lit(Literal::Bool(false), dummy_span())),
+                        span: dummy_span(),
+                    })),
+                    span: dummy_span(),
+                }],
+                span: dummy_span(),
+            }),
+            else_if_branches: Vec::new(),
+            else_branch: None,
+            span: dummy_span(),
+        },
+        span: dummy_span(),
+    }
+}
+
+/// 策略 1b：标志循环由「到阈值的距离」秩函数拿下（RFC-027 §7.2）
+///
+/// `while flag { i = i - 1; if i <= 0 { flag = false } }`：循环条件不是比较式，
+/// 边界提取拿不到任何东西（旧实现下该形状直接 E4021）。修法：识别「阈值守卫内
+/// 清零标志」的出口 + 「每轮无条件朝阈值移动」的变量，测度取 `i - 0`。
+/// 位移是已知常量 ⇒ 不需要求解器（本用例不注入桩求解器）。
+#[test]
+fn test_strategy1_flag_loop_with_guarded_exit_terminates() {
+    // Arrange
+    let while_expr = make_flag_while(vec![
+        make_decrement("i", 1),
+        make_guarded_flag_exit(BinOp::Le),
+    ]);
+
+    // Act — 精化 i 使其进 §7 验证模式（flag 是 Bool，不精化）
+    let results = run_check_with_refined(&while_expr, &["i"]);
+
+    // Assert
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        unproven.is_empty(),
+        "测度 `i` 每轮减 1、守卫 `i <= 0` 命中即清零标志 ⇒ 应被证明终止；
+         仍有未证明：{unproven:?}（results={results:?}）"
+    );
+}
+
+/// 策略 1b 健全性：标志可能被**置回 true** ⇒ 出口前提被破坏 ⇒ 不证明
+///
+/// `while flag { i = i - 1; if i <= 0 { flag = false }; flag = true }`：清零后立刻
+/// 又置回 true，循环永不退出（该程序确实不终止）⇒ 必须 Unproven。
+#[test]
+fn test_strategy1_flag_loop_rejected_when_flag_is_set_true_again() {
+    // Arrange — 体末尾再 `flag = true`
+    let set_flag_true = Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::BinOp {
+            op: BinOp::Assign,
+            left: Box::new(Expr::Var("flag".to_string(), dummy_span())),
+            right: Box::new(Expr::Lit(Literal::Bool(true), dummy_span())),
+            span: dummy_span(),
+        })),
+        span: dummy_span(),
+    };
+    let while_expr = make_flag_while(vec![
+        make_decrement("i", 1),
+        make_guarded_flag_exit(BinOp::Le),
+        set_flag_true,
+    ]);
+
+    // Act
+    let results = run_check_with_refined(&while_expr, &["i"]);
+
+    // Assert
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        !unproven.is_empty(),
+        "标志被置回 true ⇒ 出口前提破坏 ⇒ 必须 Unproven；results={results:?}"
+    );
+}
+
+/// 策略 1b 健全性：变量朝阈值**反方向**走 ⇒ 测度不递减 ⇒ 不证明
+///
+/// `while flag { i = i + 1; if i <= 0 { flag = false } }`：`i` 递增远离 `0`，
+/// 守卫几乎不可能命中（该程序确实可能不终止）⇒ 必须 Unproven。
+#[test]
+fn test_strategy1_flag_loop_rejected_when_variable_moves_away_from_threshold() {
+    // Arrange
+    let while_expr = make_flag_while(vec![
+        make_increment("i", 1),
+        make_guarded_flag_exit(BinOp::Le),
+    ]);
+
+    // Act
+    let results = run_check_with_refined(&while_expr, &["i"]);
+
+    // Assert
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        !unproven.is_empty(),
+        "`i` 远离阈值 `0` ⇒ 到阈值的距离不递减 ⇒ 必须 Unproven；results={results:?}"
+    );
+}
+
+// ==================== 策略 1b 健全性：守卫块重绑 / 未知重绑定 ====================
+
+/// 构造 `if i <op> 0 { <extra>; flag = false }`（守卫块内可插入额外语句）
+fn make_guarded_flag_exit_with(
+    threshold_op: BinOp,
+    extra_stmts: Vec<Stmt>,
+) -> Stmt {
+    let mut stmts = extra_stmts;
+    stmts.push(Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::BinOp {
+            op: BinOp::Assign,
+            left: Box::new(Expr::Var("flag".to_string(), dummy_span())),
+            right: Box::new(Expr::Lit(Literal::Bool(false), dummy_span())),
+            span: dummy_span(),
+        })),
+        span: dummy_span(),
+    });
+    Stmt {
+        kind: StmtKind::If {
+            condition: Box::new(Expr::BinOp {
+                op: threshold_op,
+                left: Box::new(Expr::Var("i".to_string(), dummy_span())),
+                right: Box::new(Expr::Lit(Literal::Int(0), dummy_span())),
+                span: dummy_span(),
+            }),
+            then_branch: Box::new(Block {
+                stmts,
+                span: dummy_span(),
+            }),
+            else_if_branches: Vec::new(),
+            else_branch: None,
+            span: dummy_span(),
+        },
+        span: dummy_span(),
+    }
+}
+
+/// 策略 1b 健全性：**守卫块内重绑测度变量** ⇒ 「每轮朝阈值走」前提不成立 ⇒ 不证明
+///
+/// `while flag { i = i - 1; if i <= 0 { { i = i + 20 }; flag = false } }`：守卫块里
+/// 通过嵌套块把 `i` 改大。该重绑定藏在块表达式里，`collect_assignments` 收不到
+///（它只看语句位与直接赋值表达式），故必须由「守卫块内不得重绑该变量」这条**独立**
+/// 检查拦下——`flag_write_summary_block` 会下钻块表达式 ⇒ 写次数非 0 ⇒ 拒绝。
+#[test]
+fn test_strategy1_flag_loop_rejected_when_guard_block_rewrites_measure_var() {
+    // Arrange — 守卫块 = { { i = i + 20 }; flag = false }
+    let nested_rewrite = Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::Block(Block {
+            stmts: vec![make_increment("i", 20)],
+            span: dummy_span(),
+        }))),
+        span: dummy_span(),
+    };
+    let while_expr = make_flag_while(vec![
+        make_decrement("i", 1),
+        make_guarded_flag_exit_with(BinOp::Le, vec![nested_rewrite]),
+    ]);
+
+    // Act — 精化 i 使其进 §7 验证模式
+    let results = run_check_with_refined(&while_expr, &["i"]);
+
+    // Assert
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        !unproven.is_empty(),
+        "守卫块内重绑测度变量 ⇒ 方向判定不再代表整轮 ⇒ 必须 Unproven；results={results:?}"
+    );
+}
+
+/// 策略 1/1b 健全性：**位移未知的重绑定**不得被整条跳过（`StmtKind::Assign` 形态）
+///
+/// `while flag { i: Int = step; i = i - 1; if i <= 0 { flag = false } }`：第一句是
+/// 「注解式重绑定」形态（`StmtKind::Assign`），位移未知。此前 `collect_assignments`
+/// 会把它**整条跳过** ⇒ 下游只看到 `-1` ⇒ 误判「i 每轮减 1」⇒ 错误接受
+///（该循环在 `step` 恒为较大值时确实不终止）。
+#[test]
+fn test_strategy1_flag_loop_rejected_when_counter_has_unknown_rebinding() {
+    // Arrange — `i = step`（未知位移，注解式重绑定形态）+ `i = i - 1` + 守卫清零
+    let unknown_rebinding = Stmt {
+        kind: StmtKind::Assign {
+            target: Box::new(Expr::Var("i".to_string(), dummy_span())),
+            type_annotation: None,
+            signature_params: Vec::new(),
+            value: Some(Box::new(Expr::Var("step".to_string(), dummy_span()))),
+            is_pub: false,
+            is_mut: false,
+            span: dummy_span(),
+        },
+        span: dummy_span(),
+    };
+    let while_expr = make_flag_while(vec![
+        unknown_rebinding,
+        make_decrement("i", 1),
+        make_guarded_flag_exit(BinOp::Le),
+    ]);
+
+    // Act
+    let results = run_check_with_refined(&while_expr, &["i"]);
+
+    // Assert
+    let unproven: Vec<_> = results.iter().filter(|r| !r.is_proved()).collect();
+    assert!(
+        !unproven.is_empty(),
+        "位移未知的重绑定 ⇒ 不能论证每轮递减 ⇒ 必须 Unproven；results={results:?}"
     );
 }
 

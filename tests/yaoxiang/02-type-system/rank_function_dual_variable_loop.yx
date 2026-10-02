@@ -1,0 +1,29 @@
+// 02-type-system/rank_function_dual_variable_loop.yx
+// 覆盖: RFC-027 §7.2 —— 策略 1（线性秩函数自动合成）：边界变量自身也在动
+// 验证: `while a < b { a = a + 1; b = b - 1 }` 带精化标注进验证模式；测度 `b - a`
+//       每轮减 2，且由循环条件 `a < b` 保证 `b - a >= 1` ⇒ 循环终止，零诊断。
+// 状态: ✅ 可运行
+//
+// 修复前：`bound_is_loop_invariant` 过滤把「在循环体内被赋值的边界变量」全部剔除，
+// 而秩函数形状的边界按定义就在体内被改 ⇒ 候选恒空 ⇒ 误报 E4021（#377）。
+
+use std.assert
+
+NonNegative: (x: Int) -> Type = { x >= 0 }
+
+AtMost: (n: Int, x: Int) -> Type = { x <= n }
+
+main: () -> Void = {
+    // 精化标注只是让循环进 §7 验证模式；两处赋值都保持各自约束
+    mut a: NonNegative(a) = 0
+    mut b: AtMost(10, b) = 10
+    while a < b {
+        a = a + 1
+        b = b - 1
+    }
+    assert.assert(a == 5, "两侧各走 5 步后相等：a == 5")
+    assert.assert(b == 5, "两侧各走 5 步后相等：b == 5")
+}
+
+// T4 入口语义：Script 模式的 main **不会**隐式执行——必须显式调用，运行期断言才生效。
+main()

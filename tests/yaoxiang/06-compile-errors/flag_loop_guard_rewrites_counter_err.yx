@@ -1,0 +1,26 @@
+// 06-compile-errors/flag_loop_guard_rewrites_counter_err.yx
+// 覆盖: RFC-027 §7.2 —— 策略 1b 的健全性前提：守卫块内不得重绑测度变量
+// 验证: `while flag { i = i - 1; if i <= 0 { i = i + 20; flag = false } }`：守卫块把
+//       测度变量 `i` 改大，「该变量每轮朝阈值走」的前提不成立 ⇒ 1b 的方向判定不再
+//       代表整轮 ⇒ 本版保守拒绝 E4021（能力边界，非程序错误）。
+// 状态: ❌ 应被编译期拒绝
+//
+// 该形状此前被**错误接受**：守卫块内的重绑定没有进入 1b 的方向判定。修法是「守卫块内
+// 对该变量无任何赋值」这条独立检查（含写路径不可静态判定的形态）。对照正例见
+// 02-type-system/flag_loop_guarded_exit.yx（守卫块只清零标志）。
+
+// expect: compile-error E4021
+
+UpTo: (n: Int, x: Int) -> Type = { x <= n }
+
+main: () -> Void = {
+    mut flag: Bool = true
+    mut i: UpTo(10, i) = 10
+    while flag {
+        i = i - 1
+        if i <= 0 {
+            i = i + 20
+            flag = false
+        }
+    }
+}

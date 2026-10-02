@@ -2,15 +2,16 @@
 //!
 //! 实现 RFC-027 Section 7：编译器全自动证明循环终止和递归函数终止。
 //!
-//! **当前实现（Phase 1）**：
-//! - 策略 3：有界递增/递减模式 (`i += const` with `i < bound`)
+//! **当前实现**：
+//! - 策略 1：线性秩函数自动合成（`v < b → b - v`；`v > b → v - b`，SMT 验证递减）
+//! - 策略 1b：标志循环（`while flag { v = v ∓ k; if v ⋛ c { flag = false } }`）
+//! - 策略 3：有界递增/递减模式 (`i += const` with `i < bound`，边界须循环不变量)
+//! - 策略 4：乘法缩放度量模板 (`v *= const` with `v < const`)
 //! - 递归参数递减检查 (`factorial(n-1)`)
 //! - `for` 循环自动通过（范围迭代天然终止）
 //!
 //! **后续扩展**：
-//! - 策略 1：线性秩函数自动合成
-//! - 策略 2：谓词违反计数
-//! - 策略 4：乘法缩放度量模板
+//! - 策略 2：谓词违反计数（框架占位，需 forall 量词语法）
 
 // ==================== 度量分析器 ====================
 //
@@ -876,13 +877,24 @@ impl TerminationChecker {
             }
             return;
         }
-        // 1. 从条件中提取边界信息（仅保留循环不变量——上界在循环体内被赋值时
-        //    度量合成不成立：`while i < n { n = n - 1; i = i + 1 }` 度量恒为 0）
-        let bounds: Vec<(String, (BoundOp, BoundExpr))> = self
-            .extract_bounds_from_condition(condition)
-            .into_iter()
+        // 1. 从条件中提取边界信息。**原始集合**留给策略 1（秩函数）——它逐赋值
+        //    验证候选，不依赖边界在迭代间不变（见 `try_linear_rank_function`）。
+        let all_bounds: Vec<(String, (BoundOp, BoundExpr))> =
+            self.extract_bounds_from_condition(condition);
+
+        // 策略 3/4 的度量形如 `bound - var`，其**边界必须循环不变量**：上界自身
+        // 在体内被赋值时该度量不成立（`while i < n { n = n - 1; i = i + 1 }` 的
+        // `n - i` 恒为 0，循环并不终止）。故这两条策略只吃过滤后的子集；
+        // 策略 1 吃 `all_bounds`。
+        let bounds: Vec<(String, (BoundOp, BoundExpr))> = all_bounds
+            .iter()
             .filter(|(_, (_, b))| Self::bound_is_loop_invariant(b, condition, body))
+            .cloned()
             .collect();
+
+        // 每次迭代**必执行**的赋值位移表（策略 1 的递减论证前提：只有无条件赋值
+        // 才能保证「每次迭代都朝边界走」）
+        let unconditional = self.collect_unconditional_deltas(body);
 
         // 2. 从循环体中收集赋值操作
         let assignments = self.collect_assignments(body);
@@ -912,24 +924,36 @@ impl TerminationChecker {
 
         // 策略 1：线性秩函数自动合成（SMT 验证）
         //
-        // ⚠ 当前**恒不生效**，见 #377。注入求解器也无法救回任何循环：
-        //   (a) 上游 bound_is_loop_invariant 过滤把「在循环体内被赋值的边界变量」
-        //       全部剔除，而需要秩函数的形状（i<j { i+=1; j-=1 }、while flag）
-        //       边界必定在体内被改 → bounds 恒为空 → 零候选
-        //   (b) generate_rank_candidates 产出的 delta 恒为 +1，而
-        //       verify_rank_candidate 构造 m' = m + delta 后断言 not(m' < m)，
-        //       m+1 < m 恒假 → not(false) 恒真 → Sat 而非 Unsat → 恒返回 false
-        // 实测：注入 default_solver() 后与原版逐字节相同（12 种循环形状）
-        // 下面的 tripwire 测试锁定该事实；修好 (a)(b) 后它会失败，届时请
-        // 连同本注释与 #377 一起更新，而不是删掉断言
+        // 输入用**未过滤**的 `all_bounds`：需要秩函数的形状（`i < j { i += 1;
+        // j -= 1 }`、`while flag`）其边界按定义就在体内被改，被不变性过滤清空后
+        // 零候选。健全性改由逐赋值验证承担：候选的测度变化按**实际位移**算
+        //（`δv` 来自无条件赋值、`δbound` 取守卫内赋值的保守极值），边界是不是
+        // 不变量不再重要——边界自己动，测度只会减得更快。
+        //
+        // 旧缺陷 (b)：delta 恒 +1 且对 v 直接加，导致 m' = m + 1 恒不小于 m。
+        // 现按 Direction 推导：Increasing（m = bound - v）用 Δm = δbound - δv，
+        // Decreasing（m = v - bound）用 Δm = δv - δbound（见 verify_rank_candidate）。
         #[cfg(not(target_arch = "wasm32"))]
         if self.solver.is_some() {
-            if let Some(measure) =
-                self.try_linear_rank_function(&bounds, &assignments, condition, span)
-            {
+            if let Some(measure) = self.try_linear_rank_function(
+                &all_bounds,
+                &assignments,
+                &unconditional,
+                condition,
+                span,
+            ) {
                 self.emit_terminates(span, &measure);
                 return;
             }
+        }
+
+        // 策略 1b：**标志循环**（guarded exit）——条件不是比较式，边界提取无从下手，
+        // 走「阈值守卫 + 无条件位移」的专门模式。位移是已知常量，故不需要求解器。
+        if let Some(measure) =
+            self.try_flag_loop_measure(condition, body, &assignments, &unconditional)
+        {
+            self.emit_terminates(span, &measure);
+            return;
         }
 
         // 策略 2：谓词违反计数（框架占位）
@@ -1028,8 +1052,15 @@ impl TerminationChecker {
 
     /// 上界是否为循环不变量：该边界引用的名字（或其前缀根）不得在循环体内被赋值。
     ///
-    /// 没有这一步，`while i < n { n = n - 1; i = i + 1 }` 会被误判为终止
-    /// （上界 n 自身在递减，度量 `n - i` 恒为 0，循环不终止）。
+    /// **为什么需要这一步**：策略 3/4 的度量是 `bound - var`（或 `ceil(log(bound/var))`）
+    /// 这类**假设边界固定**的量。没有过滤，`while i < n { n = n - 1; i = i + 1 }`
+    /// 会被误判为终止（上界 n 自身在递减，`n - i` 恒为 0，循环其实不终止）。
+    ///
+    /// **适用范围**：只过滤策略 3/4 的输入。策略 1（线性秩函数）**必须**吃未过滤
+    /// 的边界：需要秩函数的形状（`i < j { i += 1; j -= 1 }`）其边界按定义就在
+    /// 体内被改，过滤后候选恒空（这正是 #377 缺陷 a：策略 1 在生产中恒不生效）。
+    /// 策略 1 的健全性不靠边界不变，而靠**逐赋值验证**——它按实际位移算测度变化
+    /// （见 `verify_rank_candidate`：边界自己动时测度只会减得更快）。
     fn bound_is_loop_invariant(
         bound: &BoundExpr,
         condition: &Expr,
@@ -1120,6 +1151,12 @@ impl TerminationChecker {
     }
 
     /// 从循环体中收集所有赋值操作
+    ///
+    /// ⚠ 已知边界（本轮未改，供后续收口）：本函数把**守卫内**的赋值也一并收进来，
+    /// 不记录其条件。策略 3/4 据此把「有条件执行」当作「每轮执行」，例如
+    /// `while i < n { if c { i = i + 1 } }` 在 `c` 恒假时并不终止，却会被策略 3
+    /// 判为终止。策略 1 不依赖这一步：它另用 `collect_unconditional_deltas`（只收
+    /// 体顶层语句）保证「每轮都动」，并把守卫内位移计入最坏情况极值。
     fn collect_assignments(
         &self,
         body: &ast::Block,
@@ -1164,12 +1201,13 @@ impl TerminationChecker {
                 use crate::frontend::core::parser::ast::Expr;
                 if let Expr::Var(name, _) = target.as_ref() {
                     let delta_info = self.analyze_delta(v, name);
-                    if !matches!(delta_info, DeltaInfo::Unknown) {
-                        assignments.push(LoopAssignment {
-                            var: name.clone(),
-                            delta_info,
-                        });
-                    }
+                    // 位移**未知**的赋值同样要收进来：整条丢弃会让下游以为该变量
+                    // 只有已知位移，于是「未知重绑定可能把变量改到反方向」时错误地
+                    // 接受（策略 1/1b 的 delta_bounds 会把未知位移当作不可判并拒绝）。
+                    assignments.push(LoopAssignment {
+                        var: name.clone(),
+                        delta_info,
+                    });
                 }
                 // 递归处理 Lambda/Block 函数体
                 if let Expr::Lambda { body, .. } = v.as_ref() {
@@ -1204,6 +1242,76 @@ impl TerminationChecker {
             }
             _ => {}
         }
+    }
+
+    /// 位移值：`DeltaInfo` → 带符号整数（`Add(c)` = `+c`、`Sub(c)` = `-c`）。
+    ///
+    /// `Mul` 不是线性位移、`Unknown` 不可判 ⇒ `None`（调用方据此拒绝论证）。
+    fn signed_delta(info: &DeltaInfo) -> Option<i128> {
+        match info {
+            DeltaInfo::Add(c) => Some(*c),
+            DeltaInfo::Sub(c) => Some(-*c),
+            DeltaInfo::Mul(_) | DeltaInfo::Unknown => None,
+        }
+    }
+
+    /// 每次迭代**必执行**的赋值位移表（变量 → 带符号位移）。
+    ///
+    /// 只收循环体**顶层**语句：`if`/`while`/`for` 体内的赋值是**有条件**执行的，
+    /// 不能用来论证「每次迭代都朝边界走」——那正是 `verify_rank_candidate` 的
+    /// 健全性前提（守卫内的位移另有其用途：只参与最坏情况极值）。
+    /// 位移未知或非线性的目标不入表。
+    fn collect_unconditional_deltas(
+        &self,
+        block: &ast::Block,
+    ) -> std::collections::HashMap<String, i128> {
+        let mut out = std::collections::HashMap::new();
+        for stmt in &block.stmts {
+            // `i = i + 1` 的两种 AST 形态都要收：
+            // `StmtKind::Expr(BinOp::Assign)` 与 `StmtKind::Assign { value }`
+            let (target, value) = match &stmt.kind {
+                StmtKind::Expr(expr) => match expr.as_ref() {
+                    Expr::BinOp {
+                        op: BinOp::Assign,
+                        left,
+                        right,
+                        ..
+                    } => (left.as_ref(), right.as_ref()),
+                    _ => continue,
+                },
+                StmtKind::Assign {
+                    target,
+                    value: Some(v),
+                    ..
+                } => (target.as_ref(), v.as_ref()),
+                _ => continue,
+            };
+            let Expr::Var(name, _) = target else {
+                continue;
+            };
+            if let Some(delta) = Self::signed_delta(&self.analyze_delta(value, name)) {
+                out.insert(name.clone(), delta);
+            }
+        }
+        out
+    }
+
+    /// 变量在循环体内**全部**赋值（含守卫内）的位移极值 `(min, max)`。
+    ///
+    /// 未出现在任何赋值里 ⇒ `(0, 0)`（循环不变量）。任一赋值位移未知/非线性
+    /// ⇒ `None`：说不准就拒绝论证（宁可报「无法证明」，不可误判终止）。
+    fn delta_bounds(
+        assignments: &[LoopAssignment],
+        var: &str,
+    ) -> Option<(i128, i128)> {
+        let mut min: Option<i128> = None;
+        let mut max: Option<i128> = None;
+        for assign in assignments.iter().filter(|a| a.var == var) {
+            let delta = Self::signed_delta(&assign.delta_info)?;
+            min = Some(min.map_or(delta, |m: i128| m.min(delta)));
+            max = Some(max.map_or(delta, |m: i128| m.max(delta)));
+        }
+        Some((min.unwrap_or(0), max.unwrap_or(0)))
     }
 
     /// 分析赋值右侧的 delta 模式
@@ -1368,30 +1476,29 @@ impl TerminationChecker {
         None
     }
 
-    /// 策略 1：线性秩函数自动合成
+    /// 策略 1：线性秩函数自动合成（RFC-027 §7.2）
     ///
-    /// 枚举候选线性度量，SMT 验证每条执行路径上严格递减。
-    /// - ≤3 个有界变量 → 全组合枚举
-    /// - >3 个 → 只单变量，失败报编译错误
+    /// 从循环条件的每个边界生成一条候选线性测度（方向由算子定，见
+    /// `generate_rank_candidates`），逐条交 SMT 验证「每次迭代严格递减」。
+    ///
+    /// `bounds` 是**未过滤**的边界集合（调用点传 `all_bounds`）：秩函数形状的
+    /// 边界本来就在循环体内被改，不能按「循环不变量」剔除。健全性来自逐赋值
+    /// 验证，而不是来自边界不变。
     #[cfg(not(target_arch = "wasm32"))]
     fn try_linear_rank_function(
         &self,
         bounds: &[(String, (BoundOp, BoundExpr))],
         assignments: &[LoopAssignment],
+        unconditional: &std::collections::HashMap<String, i128>,
         _condition: &Expr,
         _span: crate::util::span::Span,
     ) -> Option<LinearMeasure> {
-        // ⚠ 本函数当前对任何输入都返回 None，见 #377（终止策略 1 不可用）。
-        // 调用点见 check_while_loop 的同名注释。两处缺陷：
-        //   (a) `bounds` 进到这里时已被 bound_is_loop_invariant 清空；
-        //   (b) 即使非空，verify_rank_candidate 的 delta 符号也是错的。
         let solver = self.solver.as_deref()?;
 
-        let bounded_vars: Vec<&str> = bounds.iter().map(|(v, _)| v.as_str()).collect();
-        let candidates = self.generate_rank_candidates(&bounded_vars, bounds);
+        let candidates = self.generate_rank_candidates(bounds);
 
         for candidate in &candidates {
-            if self.verify_rank_candidate(candidate, bounds, assignments, solver) {
+            if self.verify_rank_candidate(candidate, unconditional, assignments, solver) {
                 return Some(candidate.clone());
             }
         }
@@ -1399,101 +1506,511 @@ impl TerminationChecker {
         None
     }
 
-    /// 生成秩函数候选列表
+    /// 生成秩函数候选：**每个边界一条，方向由边界算子决定**
     ///
-    /// ⚠ 缺陷 (b) 在本函数：所有候选的 `delta` 入口恒为 `1`（见下方
-    /// `increasing(v, .., 1)`）。而 `verify_rank_candidate` 构造
-    /// `m' = var + delta` 后断言 `not (m' < m)`——`m' = m + 1` 使 `m' < m`
-    /// 恒假，`not(false)` 恒真 → 求解器返回 Sat → 验证恒失败。
-    /// 需按 `Direction` 决定 delta 符号（Increasing 度量应是 `bound - v`，其
-    /// 每次迭代减 1；而非直接对 `v` 加 delta）。见 #377。
+    /// - `v < b` / `v <= b`：v 朝**上界** b 走 ⇒ 测度 `b - v`（direction = Increasing）
+    /// - `v > b` / `v >= b`：v 朝**下界** b 走 ⇒ 测度 `v - b`（direction = Decreasing）
+    ///
+    /// 方向必须由算子给出——旧实现一律 `increasing(v, .., 1)` 是**不健全**的：
+    /// 对 `while i > 0 { i = i + 1 }` 它会给出「测度 0 - i 递减」的假证明。
+    /// `delta` 字段只是描述性默认值：策略 1 的实际位移从循环体赋值读取
+    ///（`δv`、`δbound`），测度变化按 Direction 组合（见 `verify_rank_candidate`），
+    /// 不再对 `v` 直接加一个恒为 +1 的 delta。
     fn generate_rank_candidates(
         &self,
-        bounded_vars: &[&str],
         bounds: &[(String, (BoundOp, BoundExpr))],
     ) -> Vec<LinearMeasure> {
         let mut candidates = Vec::new();
 
-        if bounded_vars.len() > 3 {
-            // 只尝试单变量度量
-            for &v in bounded_vars {
-                candidates.push(LinearMeasure::increasing(v, None, None, 1));
-                if let Some((_, (_, BoundExpr::Const(upper)))) =
-                    bounds.iter().find(|(bv, _)| bv == v)
-                {
-                    candidates.push(LinearMeasure::increasing(v, None, Some(*upper), 1));
-                }
-            }
-            return candidates;
-        }
-
-        // ≤3 个变量：全组合
-        for &v in bounded_vars {
-            candidates.push(LinearMeasure::increasing(v, None, None, 1));
-            if let Some((_, (_, BoundExpr::Const(u)))) = bounds.iter().find(|(bv, _)| bv == v) {
-                candidates.push(LinearMeasure::increasing(v, None, Some(*u), 1));
-            }
-        }
-
-        // 两变量组合：v_i - v_j
-        for i in 0..bounded_vars.len() {
-            for j in 0..bounded_vars.len() {
-                if i != j {
-                    candidates.push(LinearMeasure::increasing(
-                        bounded_vars[i],
-                        Some(bounded_vars[j]),
-                        None,
-                        1,
-                    ));
-                }
+        for (var, (op, bound)) in bounds {
+            let (bound_val, bound_var) = match bound {
+                BoundExpr::Const(c) => (Some(*c), None),
+                BoundExpr::Var(n) => (None, Some(n.clone())),
+            };
+            match op {
+                // 上界 + 递增 ⇒ 测度 bound - var
+                BoundOp::Lt | BoundOp::Le => candidates.push(LinearMeasure::increasing(
+                    var,
+                    bound_var.as_deref(),
+                    bound_val,
+                    1,
+                )),
+                // 下界 + 递减 ⇒ 测度 var - bound
+                BoundOp::Gt | BoundOp::Ge => candidates.push(LinearMeasure::decreasing(
+                    var,
+                    bound_var.as_deref(),
+                    bound_val,
+                    1,
+                )),
             }
         }
 
         candidates
     }
 
-    /// SMT 验证秩函数候选是否在所有路径上严格递减
+    /// SMT 验证秩函数候选：**每次迭代测度严格递减**（RFC-027 §7.2）
+    ///
+    /// 测度与位移（按 Direction 推导，这是缺陷 (b) 的修法）：
+    ///
+    /// | direction | 测度 m | 迭代后 m' | 测度变化 Δm |
+    /// |---|---|---|---|
+    /// | Increasing | `bound - v` | `bound' - v'` | `δbound - δv` |
+    /// | Decreasing | `v - bound` | `v' - bound'` | `δv - δbound` |
+    ///
+    /// 旧实现把 m' 写成 `v + delta`（delta 恒 +1）并断言 `not (m' < m)`：
+    /// `v + 1 < v` 恒假 ⇒ `not(false)` 恒真 ⇒ 求解器给 Sat ⇒ 恒验证失败。
+    /// 现在断言的是 `not (m + Δm < m)`：Δm < 0 时 unsat（严格递减成立）。
+    ///
+    /// 位移来源（健全性关键）：
+    /// - `δv` 必须来自**无条件**赋值——只有每次迭代都执行才保证「每轮都动」；
+    /// - 该变量的取值取全部赋值（含守卫内）的**最不利一端**（δv 最小 / 最大）；
+    /// - `δbound`：常量边界为 0；变量边界取全部赋值的最不利一端（含守卫内），
+    ///   任一赋值位移未知则拒绝论证；未被赋值即循环不变量（δbound = 0）。
     #[cfg(not(target_arch = "wasm32"))]
     fn verify_rank_candidate(
         &self,
         candidate: &LinearMeasure,
-        _bounds: &[(String, (BoundOp, BoundExpr))],
-        _assignments: &[LoopAssignment],
+        unconditional: &std::collections::HashMap<String, i128>,
+        assignments: &[LoopAssignment],
         solver: &dyn Solver,
     ) -> bool {
-        let mut commands = Vec::new();
+        // 测度变量：必须每次迭代都动（无条件赋值），否则测度可能原地不动
+        let Some(&dv_unconditional) = unconditional.get(&candidate.var) else {
+            return false;
+        };
+        if dv_unconditional == 0 {
+            return false;
+        }
+        // 该变量全部赋值的极值（含守卫内）——保守一侧参差
+        let Some((dv_min, dv_max)) = Self::delta_bounds(assignments, &candidate.var) else {
+            return false; // 有未知/乘法赋值：位移说不准
+        };
+        // 边界位移：常量边界恒 0；变量边界取保守极值
+        let (db_min, db_max) = match &candidate.bound_var {
+            None => (0, 0),
+            Some(bv) => match Self::delta_bounds(assignments, bv) {
+                Some(range) => range,
+                None => return false,
+            },
+        };
+        // 测度变化的最不利一端（越小越有利于「严格递减」）
+        let delta_m = match candidate.direction {
+            // m = bound - v：边界涨得最多、v 涨得最少
+            Direction::Increasing => db_max - dv_min,
+            // m = v - bound：v 涨得最多、边界跌得最少
+            Direction::Decreasing => dv_max - db_min,
+        };
 
-        // 声明秩函数变量
-        commands.push(SMTCommand::DeclareConst(
-            candidate.var.clone(),
-            SMTSort::Int,
-        ));
-        if let Some(ref bv) = candidate.bound_var {
-            commands.push(SMTCommand::DeclareConst(bv.clone(), SMTSort::Int));
+        // 合成侧健全性闸门：Δm ≥ 0 的候选**明显不严格递减**（`m + Δm < m` 可满足），
+        // 不交给求解器——否则「恒 Unsat」的桩求解器会把方向配错的候选也放过去。
+        // 求解器仍是递减义务的判定通道（下方断言），只是候选得先指对方向。
+        if delta_m >= 0 {
+            return false;
         }
 
-        // 构造 m_prime = var + delta（被赋值后的值）
-        let m_var = SMTExpr::Atom(candidate.var.clone());
+        let mut commands = Vec::new();
+        commands.push(SMTCommand::DeclareConst("m".into(), SMTSort::Int));
+        let m = SMTExpr::Atom("m".into());
+        // `m + Δm`：Δm < 0 时写成减法，避免把负数字面量塞进 `+` 的参数位
         let m_prime = SMTExpr::App(
-            "+".into(),
-            vec![
-                SMTExpr::Atom(candidate.var.clone()),
-                SMTExpr::Atom(candidate.delta.to_string()),
-            ],
+            "-".into(),
+            vec![m.clone(), SMTExpr::Atom((-delta_m).to_string())],
         );
-
-        // assert (not (< m_prime m_var))
-        let decreasing = SMTExpr::App("<".into(), vec![m_prime, m_var]);
-        let not_decreasing = SMTExpr::App("not".into(), vec![decreasing]);
+        // assert (not (< m' m))：m' = m + Δm
+        let not_decreasing = SMTExpr::App(
+            "not".into(),
+            vec![SMTExpr::App("<".into(), vec![m_prime, m])],
+        );
         commands.push(SMTCommand::Assert(not_decreasing));
-
         commands.push(SMTCommand::CheckSat);
 
-        // unsat = m' < m 在所有情况下成立 → 严格递减
+        // unsat = m + Δm < m 在所有情况下成立 → 严格递减
         matches!(
             solver.solve(&commands, 50),
             crate::frontend::core::typecheck::proof::smt::ast::SMTResult::Unsat
         )
+    }
+
+    /// 策略 1b：**标志循环**（guarded exit）的秩函数
+    ///
+    /// 形状：`while flag { v = v ∓ k; if v ⋛ c { flag = false } }`
+    ///
+    /// 1. 循环条件是**裸标志变量**（不是比较式，故边界提取拿不到东西）；
+    /// 2. 体内**直接**在阈值守卫内把标志置 `false`（循环出口）；
+    /// 3. 标志在体内**只被写这一次**，且那次就是清零（否则标志可能被置回 true，
+    ///    出口前提被破坏）；
+    /// 4. `v` 每轮**无条件**动，且所有位移都在阈值方向（含守卫内也不反向）。
+    ///
+    /// 测度取到阈值的距离：`v ≤ c` / `v < c` 型用 `v - c`（Decreasing），
+    /// `v ≥ c` / `v > c` 型用 `c - v`（Increasing）。标志未清零 ⇒ 该轮守卫未命中
+    /// ⇒ 测度 ≥ 1 且每轮至少减 1 ⇒ 有限轮内命中 ⇒ 标志清零 ⇒ 下一轮条件为假 ⇒ 退出。
+    ///
+    /// 四条前置任一不满足即返回 `None`（宁可报「无法证明」E4021，不可误判终止）。
+    fn try_flag_loop_measure(
+        &self,
+        condition: &Expr,
+        body: &ast::Block,
+        assignments: &[LoopAssignment],
+        unconditional: &std::collections::HashMap<String, i128>,
+    ) -> Option<LinearMeasure> {
+        // 1) 条件是裸标志变量
+        let Expr::Var(flag, _) = condition else {
+            return None;
+        };
+        // 2) 标志只被写一次，且那次是字面量 false
+        let (writes, has_non_false_write) = Self::flag_write_summary_block(body, flag)?;
+        if writes != 1 || has_non_false_write {
+            return None;
+        }
+        // 3) 找「阈值守卫内直接清零标志」的出口
+        let (var, op, threshold) = self.find_guarded_flag_exit(body, flag)?;
+        // 4) v 每轮必动（无条件），且全部位移都不朝反方向
+        if !unconditional.contains_key(&var) {
+            return None;
+        }
+        let (dv_min, dv_max) = Self::delta_bounds(assignments, &var)?;
+        match op {
+            // `v ≤ c` / `v < c`：v 必须递减（守卫未命中 ⇒ v - c ≥ 0）
+            BoundOp::Le | BoundOp::Lt => {
+                if dv_max >= 0 {
+                    return None;
+                }
+                Some(LinearMeasure::decreasing(
+                    &var,
+                    None,
+                    Some(threshold),
+                    -dv_min,
+                ))
+            }
+            // `v ≥ c` / `v > c`：v 必须递增（守卫未命中 ⇒ c - v ≥ 0）
+            BoundOp::Gt | BoundOp::Ge => {
+                if dv_min <= 0 {
+                    return None;
+                }
+                Some(LinearMeasure::increasing(
+                    &var,
+                    None,
+                    Some(threshold),
+                    dv_max,
+                ))
+            }
+        }
+    }
+
+    /// 在循环体里找「阈值守卫内**直接**清零标志」的出口。
+    ///
+    /// 两条健全性要求：
+    /// 1. 只认直接写在 `if` 分支里的 `flag = false`：藏在更内层守卫里的清零只代表
+    ///    「更弱的条件也会清零」，用它当出口会高估触发范围（不健全）；
+    /// 2. **守卫块内不得重绑测度变量**（含写路径不可静态判定者）：1b 的测度论证
+    ///    前提是「该变量每轮都朝阈值走」，守卫块里再动它就让方向判定看到的位移
+    ///    不再代表整轮。
+    ///
+    /// 只认**常量阈值**的比较守卫（变量阈值留待后续）。
+    fn find_guarded_flag_exit(
+        &self,
+        body: &ast::Block,
+        flag: &str,
+    ) -> Option<(String, BoundOp, i128)> {
+        for stmt in &body.stmts {
+            let (guard, branches): (&Expr, Vec<&ast::Block>) = match &stmt.kind {
+                StmtKind::If {
+                    condition,
+                    then_branch,
+                    else_if_branches,
+                    ..
+                } => (
+                    condition.as_ref(),
+                    std::iter::once(then_branch.as_ref())
+                        .chain(else_if_branches.iter().map(|(_, b)| b.as_ref()))
+                        .collect(),
+                ),
+                StmtKind::Expr(expr) => match expr.as_ref() {
+                    Expr::If {
+                        condition,
+                        then_branch,
+                        else_if_branches,
+                        ..
+                    } => (
+                        condition.as_ref(),
+                        std::iter::once(then_branch.as_ref())
+                            .chain(else_if_branches.iter().map(|(_, b)| b.as_ref()))
+                            .collect(),
+                    ),
+                    _ => continue,
+                },
+                _ => continue,
+            };
+            if !branches.iter().any(|b| Self::directly_clears_flag(b, flag)) {
+                continue;
+            }
+            // 守卫必须是「变量 ⋛ 常量」，且**守卫块内不得再动这个变量**：1b 的
+            // 测度论证前提是「该变量每轮朝阈值走」，守卫块里的重绑定会破坏它
+            //（如 `if i <= 0 { i = i + 20; flag = false }`：方向判定看到的位移不再
+            // 代表整轮）。保守取「守卫块内对该变量无任何赋值」，含写路径不可静态
+            // 判定的形态（`flag_write_summary_*` 返回 None）也一并拒绝。
+            for (var, (op, bound)) in self.extract_bounds_from_condition(guard) {
+                let BoundExpr::Const(c) = bound else {
+                    continue;
+                };
+                let guard_rewrites_var = branches
+                    .iter()
+                    .any(|b| !matches!(Self::flag_write_summary_block(b, &var), Some((0, _))));
+                if guard_rewrites_var {
+                    continue;
+                }
+                return Some((var, op, c));
+            }
+        }
+        None
+    }
+
+    /// 该分支的**直接**语句里是否有 `flag = false`（两种赋值 AST 形态都认）。
+    fn directly_clears_flag(
+        block: &ast::Block,
+        flag: &str,
+    ) -> bool {
+        block.stmts.iter().any(|stmt| {
+            let (target, value) = match &stmt.kind {
+                StmtKind::Assign {
+                    target,
+                    value: Some(v),
+                    ..
+                } => (target.as_ref(), Some(v.as_ref())),
+                StmtKind::Expr(expr) => match expr.as_ref() {
+                    Expr::BinOp {
+                        op: BinOp::Assign,
+                        left,
+                        right,
+                        ..
+                    } => (left.as_ref(), Some(right.as_ref())),
+                    _ => return false,
+                },
+                _ => return false,
+            };
+            matches!(
+                (target, value),
+                (Expr::Var(name, _), Some(Expr::Lit(ast::Literal::Bool(false), _))) if name == flag
+            )
+        })
+    }
+
+    /// 递归统计对**指定名字**的写：`(写次数, 是否含写路径不可静态判定者)`。
+    ///
+    /// 名字参数是通用的：1b 既用它统计标志（要求「只被清零这一条写路径」），
+    /// 也用它判定**守卫块是否重绑测度变量**（要求「守卫块内不动该变量」）。
+    ///
+    /// `None` = 遇到本函数不建模的形态（解构赋值、字典/区间等表达式）⇒ 结论不可用，
+    /// 调用方必须保守拒绝（把「说不准」当「有写」处理）。
+    fn flag_write_summary_block(
+        block: &ast::Block,
+        flag: &str,
+    ) -> Option<(usize, bool)> {
+        let mut total = (0usize, false);
+        for stmt in &block.stmts {
+            total = Self::merge_write_summary(total, Self::flag_write_summary_stmt(stmt, flag)?);
+        }
+        Some(total)
+    }
+
+    fn merge_write_summary(
+        a: (usize, bool),
+        b: (usize, bool),
+    ) -> (usize, bool) {
+        (a.0 + b.0, a.1 || b.1)
+    }
+
+    fn flag_write_summary_stmt(
+        stmt: &Stmt,
+        flag: &str,
+    ) -> Option<(usize, bool)> {
+        match &stmt.kind {
+            StmtKind::Assign { target, value, .. } => {
+                let mut total = Self::flag_write_summary_target(target, flag, value.as_deref());
+                if let Some(v) = value.as_deref() {
+                    total =
+                        Self::merge_write_summary(total, Self::flag_write_summary_expr(v, flag)?);
+                }
+                Some(total)
+            }
+            StmtKind::Expr(expr) => Self::flag_write_summary_expr(expr, flag),
+            StmtKind::If {
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                let mut total = Self::flag_write_summary_expr(condition, flag)?;
+                total = Self::merge_write_summary(
+                    total,
+                    Self::flag_write_summary_block(then_branch, flag)?,
+                );
+                for (cond, branch) in else_if_branches {
+                    total = Self::merge_write_summary(
+                        total,
+                        Self::flag_write_summary_expr(cond, flag)?,
+                    );
+                    total = Self::merge_write_summary(
+                        total,
+                        Self::flag_write_summary_block(branch, flag)?,
+                    );
+                }
+                if let Some(branch) = else_branch {
+                    total = Self::merge_write_summary(
+                        total,
+                        Self::flag_write_summary_block(branch, flag)?,
+                    );
+                }
+                Some(total)
+            }
+            StmtKind::For { iterable, body, .. } => {
+                let total = Self::flag_write_summary_expr(iterable, flag)?;
+                Some(Self::merge_write_summary(
+                    total,
+                    Self::flag_write_summary_block(body, flag)?,
+                ))
+            }
+            StmtKind::Return(Some(expr)) => Self::flag_write_summary_expr(expr, flag),
+            // 声明类语句不含赋值
+            StmtKind::TypeDefinition { .. } | StmtKind::Use { .. } | StmtKind::Return(None) => {
+                Some((0, false))
+            }
+            // 解构赋值等未建模形态：保守不可判
+            _ => None,
+        }
+    }
+
+    /// 单个赋值目标对 `flag` 的写摘要（`value` 为右值，用于判定是否字面量 false）。
+    fn flag_write_summary_target(
+        target: &Expr,
+        flag: &str,
+        value: Option<&Expr>,
+    ) -> (usize, bool) {
+        if matches!(target, Expr::Var(name, _) if name == flag) {
+            let is_literal_false = matches!(value, Some(Expr::Lit(ast::Literal::Bool(false), _)));
+            return (1, !is_literal_false);
+        }
+        (0, false)
+    }
+
+    fn flag_write_summary_expr(
+        expr: &Expr,
+        flag: &str,
+    ) -> Option<(usize, bool)> {
+        match expr {
+            Expr::BinOp {
+                op: BinOp::Assign,
+                left,
+                right,
+                ..
+            } => {
+                let mut total = Self::flag_write_summary_target(left, flag, Some(right));
+                total =
+                    Self::merge_write_summary(total, Self::flag_write_summary_expr(left, flag)?);
+                Some(Self::merge_write_summary(
+                    total,
+                    Self::flag_write_summary_expr(right, flag)?,
+                ))
+            }
+            Expr::BinOp { left, right, .. } => {
+                let total = Self::flag_write_summary_expr(left, flag)?;
+                Some(Self::merge_write_summary(
+                    total,
+                    Self::flag_write_summary_expr(right, flag)?,
+                ))
+            }
+            Expr::UnOp { expr, .. }
+            | Expr::Cast { expr, .. }
+            | Expr::Try { expr, .. }
+            | Expr::Ref { expr, .. }
+            | Expr::Borrow { expr, .. }
+            | Expr::FieldAccess { expr, .. } => Self::flag_write_summary_expr(expr, flag),
+            Expr::Call { func, args, .. } => {
+                let mut total = Self::flag_write_summary_expr(func, flag)?;
+                for arg in args {
+                    total =
+                        Self::merge_write_summary(total, Self::flag_write_summary_expr(arg, flag)?);
+                }
+                Some(total)
+            }
+            Expr::Index { expr, index, .. } => {
+                let total = Self::flag_write_summary_expr(expr, flag)?;
+                Some(Self::merge_write_summary(
+                    total,
+                    Self::flag_write_summary_expr(index, flag)?,
+                ))
+            }
+            Expr::Tuple(items, _) | Expr::List(items, _) => {
+                let mut total = (0usize, false);
+                for item in items {
+                    total = Self::merge_write_summary(
+                        total,
+                        Self::flag_write_summary_expr(item, flag)?,
+                    );
+                }
+                Some(total)
+            }
+            Expr::If {
+                condition,
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                let mut total = Self::flag_write_summary_expr(condition, flag)?;
+                total = Self::merge_write_summary(
+                    total,
+                    Self::flag_write_summary_block(then_branch, flag)?,
+                );
+                for (cond, branch) in else_if_branches {
+                    total = Self::merge_write_summary(
+                        total,
+                        Self::flag_write_summary_expr(cond, flag)?,
+                    );
+                    total = Self::merge_write_summary(
+                        total,
+                        Self::flag_write_summary_block(branch, flag)?,
+                    );
+                }
+                if let Some(branch) = else_branch {
+                    total = Self::merge_write_summary(
+                        total,
+                        Self::flag_write_summary_block(branch, flag)?,
+                    );
+                }
+                Some(total)
+            }
+            Expr::While {
+                condition, body, ..
+            } => {
+                let total = Self::flag_write_summary_expr(condition, flag)?;
+                Some(Self::merge_write_summary(
+                    total,
+                    Self::flag_write_summary_block(body, flag)?,
+                ))
+            }
+            Expr::For { iterable, body, .. } | Expr::SpawnFor { iterable, body, .. } => {
+                let total = Self::flag_write_summary_expr(iterable, flag)?;
+                Some(Self::merge_write_summary(
+                    total,
+                    Self::flag_write_summary_block(body, flag)?,
+                ))
+            }
+            Expr::Block(block) => Self::flag_write_summary_block(block, flag),
+            Expr::Lambda { body, .. } | Expr::Unsafe { body, .. } => {
+                Self::flag_write_summary_block(body, flag)
+            }
+            Expr::Return(Some(inner), _) => Self::flag_write_summary_expr(inner, flag),
+            // 无写路径的叶子
+            Expr::Lit(..)
+            | Expr::Var(..)
+            | Expr::Return(None, _)
+            | Expr::Break(_)
+            | Expr::Continue(_) => Some((0, false)),
+            // 其余形态（Dict/In/Spawn/FString/ListComp/Error…）：保守不可判
+            _ => None,
+        }
     }
 
     /// 策略 2：谓词违反计数（RFC-027 §7.3，实验性，框架占位）

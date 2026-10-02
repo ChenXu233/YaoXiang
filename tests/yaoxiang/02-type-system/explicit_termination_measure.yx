@@ -23,3 +23,6 @@ main: () -> Void = {
     assert.assert(gcd(1071, 462) == 21, "gcd(1071,462) == 21")
     assert.assert(gcd(7, 0) == 7, "gcd(7,0) == 7（零边界不递归）")
 }
+
+// T4 入口语义：Script 模式的 main **不会**隐式执行——必须显式调用，运行期断言才生效。
+main()

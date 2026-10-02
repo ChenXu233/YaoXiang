@@ -1,0 +1,29 @@
+// 06-compile-errors/flag_loop_unknown_counter_rebinding_err.yx
+// 覆盖: RFC-027 §7.2 —— 位移未知的重绑定必须让秩函数论证失效
+// 验证: `while flag { i: Int = next(i); i = i - 1; if i <= 0 { flag = false } }`：
+//       `i = next(i)` 的位移未知（`next` 恒返回 100）⇒ `i` 每轮被重置回 100，守卫
+//       `i <= 0` 永不命中、标志永不清零 ⇒ 该循环**确实不终止** ⇒ E4021。
+// 状态: ❌ 应被编译期拒绝
+//
+// 该形状此前被**错误接受**：注解式重绑定（`StmtKind::Assign`）在位移未知时被
+// `collect_assignments` 整条跳过，下游只看到 `i = i - 1` 的 -1，误判「每轮减 1」。
+// 修法：未知位移的赋值同样收进赋值表，`delta_bounds` 视之为「不可判」并拒绝论证。
+// 对照正例见 02-type-system/flag_loop_guarded_exit.yx。
+
+// expect: compile-error E4021
+
+UpTo: (n: Int, x: Int) -> Type = { x <= n }
+
+next: (x: Int) -> Int = { 100 }
+
+main: () -> Void = {
+    mut flag: Bool = true
+    mut i: UpTo(10, i) = 10
+    while flag {
+        i: Int = next(i)
+        i = i - 1
+        if i <= 0 {
+            flag = false
+        }
+    }
+}
