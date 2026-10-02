@@ -70,7 +70,8 @@ while index < 5 {
     index = index + 1
 }
 
-print("找到了吗？" + found.to_string())  // "找到了吗？true"
+// Bool 不能隐式转 String——用 f-string 插值
+print(f"找到了吗？{found}")  // "找到了吗？true"
 ```
 
 `break` makes the program immediately jump out of the current loop and continue executing the code

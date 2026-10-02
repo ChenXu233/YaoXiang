@@ -25,15 +25,15 @@ cargo build --release
 cargo test
 
 # 查看版本
-./target/debug/yaoxiang --version
+./target/debug/yaoxiang-rs --version
 # 或
-./target/release/yaoxiang --version
+./target/release/yaoxiang-rs --version
 ```
 
 **Verify successful installation**:
 
 ```bash
-./target/debug/yaoxiang --version
+./target/debug/yaoxiang-rs --version
 # 应输出类似: yaoxiang x.y.z
 ```
 
@@ -55,9 +55,9 @@ main: () -> Void = {
 Run it:
 
 ```bash
-./target/debug/yaoxiang hello.yx
+./target/debug/yaoxiang-rs run hello.yx
 # 或使用 release 版本
-./target/release/yaoxiang hello.yx
+./target/release/yaoxiang-rs run hello.yx
 ```
 
 Output:
@@ -215,9 +215,10 @@ Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 // 带数据的枚举
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// 使用泛型
-success: Result(Int, String) = ok(42)
-failure: Result(Int, String) = err("not found")
+// 使用泛型——变体构造器必须用「类型.变体」限定
+// 裸写 ok(42) / err("not found") 报 E1001
+success: Result(Int, String) = Result(Int, String).ok(42)
+failure: Result(Int, String) = Result(Int, String).err("not found")
 ```
 
 #### Generic Type
@@ -239,6 +240,8 @@ StringList: Type = List(String)
 
 ```yaoxiang
 // 条件表达式
+x = 42
+
 if x > 0 {
     "positive"
 } else if x == 0 {
@@ -263,6 +266,8 @@ while n < 5 {
 ### Lists and Dictionaries
 
 ```yaoxiang
+use std.list
+
 // 列表
 numbers = [1, 2, 3, 4, 5]
 first = numbers[0]  // 1
@@ -271,16 +276,19 @@ first = numbers[0]  // 1
 scores = {"Alice": 90, "Bob": 85}
 alice_score = scores["Alice"]  // 90
 
-// 添加元素
-mut list = [1, 2, 3]
-list.append(4)
+// 添加元素：列表没有实例方法，调用 std.list 的函数形式
+// 注意：不要把变量命名为 list —— 那会遮蔽模块
+mut items = [1, 2, 3]
+items = list.push(items, 4)  // [1, 2, 3, 4]
 ```
 
 ### Pattern Matching
 
 ```yaoxiang
 // match 表达式
-result: Result(Int, String) = ok(42)
+// 注意：Result 构造器需先 use std.result；裸写 ok(42) 报 E1001
+use std.result
+result: Result(Int, String) = Result(Int, String).ok(42)
 
 message = match result {
     ok(value) => "Success: " + value.to_string()
@@ -317,7 +325,7 @@ use std.io
 use std.math
 
 // 使用导入的函数
-result = math.sqrt(16)  // 4.0
+result = math.sqrt(16.0)  // 4.0
 print("Hello!")
 ```
 
@@ -344,14 +352,17 @@ add = (a, b) => a + b
 ### Q: How do I handle errors?
 
 ```yaoxiang
-// 使用 Result 类型
-Result: (T: Type, E: Type) -> Type = { ok(T) | err(E) }
+// 记录式和类型的变体写成「字段名: (载荷) -> 类型」
+// 注意：类型体里不能用 `|`——`{ ok(T) | err(E) }` 解析报 E0010
+// 工程里直接用标准库内置的 Result
+use std.result
+
+r = Result(Int, String).ok(42)
 
 // 模式匹配处理
-result = risky_operation()
-match result {
-    ok(value) => print("Success: " + value)
-    err(error) => print("Error: " + error)
+match r {
+    ok(value) => print("Success: {value}")
+    err(e) => print("Error: " + e)
 }
 ```
 

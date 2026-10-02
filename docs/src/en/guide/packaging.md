@@ -96,7 +96,7 @@ Add a dependency to the project.
 ### Usage
 
 ```bash
-yx add <name> [version]
+yx add <name> --version <version>
 yx add <name> --dev
 ```
 
@@ -133,7 +133,7 @@ Add the dependency to the project's `yaoxiang.toml` file, and update `yaoxiang.l
 
 ```bash
 yx add http
-yx add http 1.0.0
+yx add http --version 1.0.0
 ```
 
 #### Git Repository
@@ -160,7 +160,7 @@ yx add http
 yx add http 1.0.0
 
 # Add a version range
-yx add json ">=2.0.0"
+yx add json --version ">=2.0.0"
 
 # Add a development dependency
 yx add test-utils --dev

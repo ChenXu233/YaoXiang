@@ -25,7 +25,7 @@ download:
   github_actions: 'Go to GitHub Actions'
 
 versions:
-  - version: 0.7.14
+  - version: 0.8.2
     latest: true
     # One-line installation (RFC-037 easy channel); takes effect from 0.8.0 with the restructured package format
     install_command:
@@ -37,35 +37,35 @@ versions:
         features: ['Command-line binary (legacy format, without libz3)', 'No installation required']
         links:
           - name: 'Windows x64 (.exe)'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-x86_64-pc-windows-gnu.exe'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.8.2/yaoxiang-x86_64-pc-windows-gnu.exe'
       - os: Windows
         arch: ARM64
         features: ['Command-line binary (legacy format, without libz3)', 'No installation required']
         links:
           - name: 'Windows ARM64 (.exe)'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-aarch64-pc-windows-gnullvm.exe'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.8.2/yaoxiang-aarch64-pc-windows-gnullvm.exe'
       - os: Linux
         arch: x64
         features:
           ['Command-line binary (legacy format, statically linked Z3)', 'No installation required']
         links:
           - name: 'Linux x64'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-x86_64-unknown-linux-gnu'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.8.2/yaoxiang-x86_64-unknown-linux-gnu'
       - os: Linux
         arch: ARM64
         features:
           ['Command-line binary (legacy format, statically linked Z3)', 'No installation required']
         links:
           - name: 'Linux ARM64'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-aarch64-unknown-linux-gnu'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.8.2/yaoxiang-aarch64-unknown-linux-gnu'
       - os: macOS
         arch: Intel / Apple Silicon
         features:
           ['Command-line binary (legacy format, statically linked Z3)', 'No installation required']
         links:
           - name: 'macOS Intel'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-x86_64-apple-darwin'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.8.2/yaoxiang-x86_64-apple-darwin'
           - name: 'macOS Apple Silicon'
-            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.7.14/yaoxiang-aarch64-apple-darwin'
+            url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.8.2/yaoxiang-aarch64-apple-darwin'
 sidebar: false
 ---

@@ -20,10 +20,14 @@ YaoXiang provides five control flow structures, each with its own role:
 A quick taste:
 
 ```yaoxiang
-// if is an expression and can return a value
-status = if score >= 60 { "pass" } else { "fail" }
+score = 72
+number = 3
 
-// for iterates over a range
+// if 是表达式，可以返回值
+status = if score >= 60 { "及格" } else { "不及格" }
+print(status)
+
+// for 遍历范围
 for i in 0..5 {
     print(i)
 }
@@ -37,10 +41,11 @@ while n > 0 {
 
 // match pattern matching
 description = match number {
-    0 => "zero",
-    1 => "one",
-    _ => "other",
+    0 => "零",
+    1 => "一",
+    _ => "其他",
 }
+print(description)
 ```
 
 All of these control flow structures can be used as **expressions**—they can compute a value. This

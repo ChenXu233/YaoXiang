@@ -19,7 +19,8 @@ A list is an **ordered** sequence of values, where all elements share the same t
 // 创建列表
 numbers = [1, 2, 3, 4, 5]
 names = ["Alice", "Bob", "Charlie"]
-empty: List(Int) = []       // 空列表需要类型注解
+// 注意：`empty: List(Int) = []` 报 E1002——空列表的 `List(T)` 标注与
+// 字面量推断出的 `Vec` 不兼容。空列表请交给 list.push 之类的函数构造。
 ```
 
 ### Index Access
@@ -40,10 +41,10 @@ last = scores[3]     // 91
 mut items = [1, 2, 3]
 
 // 添加元素
-items.append(4)       // [1, 2, 3, 4]
+items = list.push(items, 4)   // [1, 2, 3, 4]（需 use std.list）
 
 // 长度
-count = items.len()   // 4
+count = list.len(items)   // 4（需 use std.list）
 
 // 切片
 slice = items[0..2]   // [1, 2]
@@ -64,7 +65,7 @@ print(evens)  // [2, 4, 6]
 
 // 转换类型
 names = ["Alice", "Bob", "Charlie"]
-lengths = [n.len() for n in names]
+lengths = [list.len(n) for n in names]   // 需 use std.list
 print(lengths)  // [5, 3, 7]
 ```
 
@@ -78,7 +79,7 @@ type. Create one with `{}`:
 ```yaoxiang
 // 创建字典
 scores = {"Alice": 90, "Bob": 85, "Charlie": 92}
-empty: Dict(Int) = {}          // 空字典需要类型注解
+empty: Dict(Int) = dict.new()    // 注意：{} 会被解析为空块（E1108）
 ```
 
 ### Key Access

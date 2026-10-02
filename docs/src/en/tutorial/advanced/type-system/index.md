@@ -32,8 +32,8 @@ YaoXiang:
 Point: Type = { x: Float, y: Float }
 
 // Create instances
-origin = Point(x: 0.0, y: 0.0)
-p = Point(x: 3.0, y: 4.0)
+origin = Point(x= 0.0, y= 0.0)
+p = Point(x= 3.0, y= 4.0)
 
 // Access fields
 print(p.x)  // 3.0
@@ -51,9 +51,9 @@ User: Type = {
     active: Bool = true,
 }
 
-alice = User(name: "Alice", age: 25)        // active takes the default true
-bob = User(name: "Bob")                      // age=0, active=true
-anonymous = User(name: "guest", active: false)  // age=0
+alice = User(name= "Alice", age= 25)        // active takes the default true
+bob = User(name= "Bob")                      // age=0, active=true
+anonymous = User(name= "guest", active= false)  // age=0
 ```
 
 ### Method Definition
@@ -61,18 +61,23 @@ anonymous = User(name: "guest", active: false)  // age=0
 Use the `Type.method` syntax to define methods on a type:
 
 ```yaoxiang
+use std.math
+
 Point: Type = { x: Float, y: Float }
 
-// Define a method: Point.method syntax
+// 定义方法：Point.method 语法
+// 注意：self 必须显式写在签名里；写成 `() -> Float` 时函数体里的 self 报 E1001
 Point.length: (self: Point) -> Float = {
-    return (self.x * self.x + self.y * self.y).sqrt()
+    d = self.x * self.x + self.y * self.y
+    return math.sqrt(d)
 }
 
-p = Point(x: 3.0, y: 4.0)
+main: () -> Void = {
+    p = Point(x= 3.0, y= 4.0)
 
-// Both call forms are equivalent
-print(Point.length(p))  // 5.0 — functional call
-print(p.length())       // 5.0 — dot-call syntax
+    // 只能用 . 调用语法——写成 Point.length(p) 报 E1010
+    print(p.length())  // 5.0
+}
 ```
 
 ### `pub` Auto-Binding
@@ -87,11 +92,12 @@ Point: Type = { x: Float, y: Float }
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    return (dx * dx + dy * dy).sqrt()
+    d = dx * dx + dy * dy
+    return math.sqrt(d)
 }
 
-p1 = Point(x: 0.0, y: 0.0)
-p2 = Point(x: 3.0, y: 4.0)
+p1 = Point(x= 0.0, y= 0.0)
+p2 = Point(x= 3.0, y= 4.0)
 
 // Auto-bound methods are called with .
 print(p1.distance(p2))  // 5.0
@@ -173,25 +179,32 @@ Generics let you write type definitions that are **not tied to a specific type**
 Pair: (T: Type, U: Type) -> Type = { first: T, second: U }
 
 // Usage
-string_pair = Pair(Int, String)(first: 1, second: "hello")
-float_pair = Pair(Float, Float)(first: 3.14, second: 2.71)
+string_pair = Pair(Int, String)(first= 1, second= "hello")
+float_pair = Pair(Float, Float)(first= 3.14, second= 2.71)
 ```
 
 Generic functions:
 
 ```yaoxiang
-// Generic map: apply a function to each element of a list
-map: (T: Type, R: Type) -> ((list: List(T), f: (T) -> R) -> List(R)) = {
-    mut result: List(R) = []
-    for item in list {
-        result.append(f(item))
+use std.list
+
+// 对列表的每个元素应用一个函数
+// 注意：0.8.2 的类型参数化函数还无法实例化——写成
+// `(T: Type, R: Type) -> (函数类型)` 再 `map2(Int, Int)(numbers, f)` 报 E1002，
+// 因此这里用等价的单态签名演示同一件事。
+map: (numbers: Vec(Int), f: (Int) -> Int) -> Vec(Int) = {
+    mut result = []
+    for item in numbers {
+        result = list.push(result, f(item))
     }
     return result
 }
 
-numbers = [1, 2, 3, 4]
-doubled = map(Int, Int)(numbers, (x) => x * 2)
-print(doubled)  // [2, 4, 6, 8]
+main: () -> Void = {
+    numbers = [1, 2, 3, 4]
+    doubled = map(numbers, (x) => x * 2)
+    print(doubled)  // [2, 4, 6, 8]
+}
 ```
 
 ## Summary

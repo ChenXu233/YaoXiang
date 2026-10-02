@@ -62,6 +62,8 @@ expression, computing a value**.
 
 ```yaoxiang
 // if expression: the values from each branch are assigned to result
+x = 42
+
 result = if x > 0 {
     "正数"
 } else if x < 0 {
@@ -95,11 +97,13 @@ branch**. You can also use `return` to explicitly return, but in branches you us
 expression directly.
 
 ```yaoxiang
+age = 15
+
 // Directly write the expression—recommended
 category = if age < 18 { "未成年" } else { "成年" }
 
 // You can also use explicit return—same effect
-category = if age < 18 {
+category2 = if age < 18 {
     return "未成年"
 } else {
     return "成年"
@@ -138,6 +142,10 @@ You can use `and`, `or`, and `not` in conditions to combine multiple checks:
 ```yaoxiang
 username = "admin"
 password = "123456"
+role = "admin"
+is_banned = false
+is_vip = true
+age = 25
 
 // and: both conditions hold
 if username == "admin" and password == "123456" {
@@ -150,7 +158,7 @@ if role == "admin" or role == "moderator" {
 }
 
 // not: negation
-if not is_banned {
+if !is_banned {
     print("允许发言")
 }
 

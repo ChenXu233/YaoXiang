@@ -10,11 +10,11 @@ memory safety is built on **five concepts and one gradient**.
 ## Five Concepts, One Gradient
 
 ```
-Take a look / Modify in place   Take away   Shared holding   Clone a copy   System-level
-        │                          │              │              │              │
-       &T                        Move           ref          clone()        unsafe
-      &mut T                     zero-copy    compiler auto   explicit deep copy   *T
-    zero-sized token             default      choose Rc/Arc               user responsible
+看一眼/原地改     拿走           共享持有         复制一份        系统级
+    │              │              │              │              │
+   &T            Move           ref          concat()      unsafe
+  &mut T         零拷贝        编译器自动      显式深拷贝      *T
+  零大小令牌       默认          选Rc/Arc                   用户负责
 ```
 
 ## Move: Default Ownership Transfer
@@ -22,27 +22,34 @@ Take a look / Modify in place   Take away   Shared holding   Clone a copy   Syst
 In YaoXiang, **assignment = ownership transfer**. This is the default behavior, zero-copy:
 
 ```yaoxiang
-p = Point(1.0, 2.0)
-p2 = p              // Move! p's ownership is transferred to p2
-                    // After this, p can no longer be read
+Point: Type = { x: Float, y: Float }
 
-// Want to modify p2? Use mut
-mut p3 = Point(3.0, 4.0)
-shift(p3, 1.0, 1.0)    // Modify in place
+main: () -> Void = {
+    p = Point(x=1.0, y=2.0)
+    p2 = p              // Move! p 的所有权转给 p2
+                        // 此后不能再读 p
+
+    // 想要修改 p2？用 mut 重新绑定
+    mut p3 = Point(x=3.0, y=4.0)
+    p3 = Point(x= p3.x + 1.0, y= p3.y + 1.0)
+    print(p2)
+    print(p3)
+}
 ```
 
 Function parameters and returns are also Move:
 
 ```yaoxiang
-// Parameter: passed in by Move
-process: (p: Point) -> Point = {
-    p.transform()
-    p                  // Returned by Move — zero-copy
-}
+Point: Type = { x: Float, y: Float }
 
-// Call
-p = Point(1.0, 2.0)
-result = process(p)    // p is moved away
+// 参数：Move 传入
+process: (p: Point) -> Point = p
+
+main: () -> Void = {
+    p = Point(x=1.0, y=2.0)
+    result = process(p)    // p 被 Move 走了
+    print(result)
+}
 ```
 
 ## &T / &mut T: Borrow Tokens
@@ -51,19 +58,26 @@ If you don't want to take ownership, just temporarily "take a look" (`&T`) or "m
 (`&mut T`), the compiler automatically generates **zero-sized borrow tokens**:
 
 ```yaoxiang
-data = [1, 2, 3, 4, 5]
+use std.list
 
-// Compiler automatically passes a &List(Int) token — doesn't take ownership
-print(data.len())    // 5
-print(data)          // ✅ data is still here, we just took a look
+main: () -> Void = {
+    data = [1, 2, 3, 4, 5]
+
+    // 编译器自动传 &List(Int) 令牌——不拿走所有权
+    print(list.len(data))    // 5
+    print(data)              // ✅ data 还在，只是看了一眼
+}
 ```
 
 `&T` and `&mut T` are **zero-sized types** — they exist at compile-time and disappear at runtime.
 You don't need to write `&` manually; the compiler decides automatically based on the usage context:
 
 ```yaoxiang
-// Read-only access → automatic &T
-print: (point: &Point) -> Void = {
+Point: Type = { x: Float, y: Float }
+
+// 只读访问 → 自动 &T
+// 注意：不要把函数命名为 print，那会遮蔽内建打印函数
+show: (point: &Point) -> Void = {
     print("({point.x}, {point.y})")
 }
 
@@ -73,9 +87,12 @@ shift: (point: &mut Point, dx: Float, dy: Float) -> Void = {
     point.y = point.y + dy
 }
 
-mut p = Point(1.0, 2.0)
-print(p)                // Pass in &Point
-shift(p, 1.0, 1.0)      // Pass in &mut Point
+main: () -> Void = {
+    mut p = Point(x=1.0, y=2.0)
+    show(p)             // 传入 &Point
+    shift(p, 1.0, 1.0)  // 传入 &mut Point
+    show(p)
+}
 ```
 
 **Key difference**: `&T` is copyable (shared, read-only), `&mut T` is not copyable (exclusive,
@@ -86,20 +103,22 @@ mutable). This isn't a special rule — it's just two type properties.
 When you need to **hold** a value in multiple places simultaneously, use `ref`:
 
 ```yaoxiang
-data = [1, 2, 3, 4, 5]
+main: () -> Void = {
+    data = [1, 2, 3, 4, 5]
 
-// ref creates shared holding
-shared = ref data
+    // ref 创建共享持有
+    shared = ref data
 
-// Compiler automatically chooses the reference counter:
-// - Doesn't cross tasks → Rc (single-threaded reference counting)
-// - Crosses tasks → Arc (atomic reference counting)
-spawn {
-    use(shared)    // Crosses tasks! Compiler automatically uses Arc
+    // 跨任务共享：spawn 块的接收式绑定 `(绑定) = spawn { 块 }` 拿到共享值，
+    // 编译器自动选择引用计数器：
+    // - 不跨任务 → Rc（单线程引用计数）
+    // - 跨任务 → Arc（原子引用计数）
+    (shared) = spawn {
+        print(shared)
+    }
+
+    // 你不需要知道 Rc 和 Arc 的区别——编译器自动帮你选
 }
-
-// You don't need to know the difference between Rc and Arc
-// The compiler chooses for you automatically
 ```
 
 ## clone(): Explicit Deep Copy
@@ -107,12 +126,18 @@ spawn {
 When you need an independent copy, explicitly call `clone()`:
 
 ```yaoxiang
-original = [1, 2, 3]
-backup = original.clone()   // Deep copy — owns an independent copy
+use std.list
 
-// Each is independent
-original[0] = 10
-print(backup[0])    // 1 — unaffected
+main: () -> Void = {
+    original = [1, 2, 3]
+    // 注意：列表既无 clone() 也无 copy()（实测均 E1042）。
+    // 要一份独立副本，用 concat 造新列表：
+    backup = list.concat(original, [])   // 与 original 互不影响
+
+    // 各自独立：改动 original 不会波及 backup
+    print(original)   // [1, 2, 3]
+    print(backup)     // [1, 2, 3]
+}
 ```
 
 `clone()` is explicit — you make it clear you want to copy, unlike some languages that copy by
