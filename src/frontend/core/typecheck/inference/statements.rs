@@ -1020,7 +1020,7 @@ impl StatementChecker {
     ///
     /// `None` = 该尾语句未经 walk（或为错误占位符），无可声明类型。
     ///
-    /// 循环体也是 `{}` 块，故 `while` / `for` 的值同此规则（spec §2.15「所有 `{}`
+    /// 循环体也是 `{}` 块，故 `while` / `for` 的值同此规则（spec §2.9「所有 `{}`
     /// 块的值由尾表达式给出，无例外」）。
     fn block_value_ty(
         &self,
@@ -2753,7 +2753,7 @@ impl StatementChecker {
                 self.scope.exit_block();
                 match first_err {
                     Some(e) => Err(e),
-                    // 循环体也是 `{}` 块 ⇒ 循环的值 = 体块的值（RFC-010a 规则① / spec §2.15）。
+                    // 循环体也是 `{}` 块 ⇒ 循环的值 = 体块的值（RFC-010a 规则① / spec §2.9）。
                     //
                     // 此前硬返回 `Void` 丢掉体块类型，与 `for`（已取体块值）不一致，
                     // 也使 RFC-027 §6.9 的 `acc: Terminates(n - i) = while …` 无从承载值类型。

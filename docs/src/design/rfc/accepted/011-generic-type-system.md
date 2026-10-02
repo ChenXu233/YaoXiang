@@ -339,7 +339,9 @@ sum: (arr: Array(Int, n)) -> Int = {
 ```yaoxiang
 loop: (n: Int) -> Int = {
     mut i = 0
-    acc: Terminates(n - i) = while i < n { i = i + 1 }
+    // 循环体是 `{}` 块，值由尾表达式给出（spec §2.9）：体尾写了赋值语句后还要写出 `i`，
+    // 否则块值为 `Void`，`return acc` 从 `-> Int` 返回 `Void` 不成立。
+    acc: Terminates(n - i) = while i < n { i = i + 1; i }
     return acc
 }
 ```

@@ -120,7 +120,7 @@ f: (n: IsPositive(n)) -> IsPositive(n) = {
 /// 本用例只验证 `Terminates` 标注位本身可解析、测度可保留，用普通值绑定。
 ///
 /// 循环形态（`acc: Terminates(n - i) = while i < n { … }`）的**值类型**已通：
-/// `while` 现按 spec §2.15「所有 `{}` 块的值由尾表达式给出」取循环体块类型，
+/// `while` 现按 spec §2.9「所有 `{}` 块的值由尾表达式给出」取循环体块类型，
 /// 不再恒为 `Void`。但循环的**回边测度义务**尚未生成，故循环形态仍非端到端。
 #[test]
 fn test_terminates_in_binding_position_is_clean() {

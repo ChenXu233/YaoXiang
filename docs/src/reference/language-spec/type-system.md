@@ -687,10 +687,12 @@ gcd: Terminates((a: Int, b: Int) -> Int, gcd_measure) = {
 }
 
 // 一元形态：锚点即绑定名，测度是作用域内的表达式
+// 循环体是 `{}` 块，其值由尾表达式给出（spec §2.9）：体尾写了表达式才不是 `Void`
 loop: (n: Int) -> Int = {
     mut i = 0
     acc: Terminates(n - i) = while i < n {
         i = i + 1
+        i
     }
     return acc
 }
@@ -1111,9 +1113,10 @@ Adder: Type = (Int, Int) -> Int
 // === 终止测度（内置谓词，见 §8.4） ===
 
 // 一元：锚点即绑定名（自递归函数、循环）
+// 体尾须给出值——`while` 的值 = 循环体块的值 = 尾表达式（spec §2.9）
 loop: (n: Int) -> Int = {
     mut i = 0
-    acc: Terminates(n - i) = while i < n { i = i + 1 }
+    acc: Terminates(n - i) = while i < n { i = i + 1; i }
     return acc
 }
 
