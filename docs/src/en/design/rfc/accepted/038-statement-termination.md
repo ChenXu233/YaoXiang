@@ -4,7 +4,8 @@ author: 'ChenXu233'
 created: '2026-08-05'
 updated: '2026-08-05'
 issue: '#258'
-issues_impl: '#258'
+issues_impl:
+  - '#258'
 status: 'Accepted'
 ---
 
@@ -12,83 +13,83 @@ status: 'Accepted'
 
 ## Summary
 
-Defines YaoXiang's **statement termination rules**: **newlines as the primary boundary**, with
-**unclosed brackets, trailing binary operators, and leading `.` (chain continuation)** as explicit
-continuation exceptions; leading `(` and `[` **never merge into the previous statement**. `;` is
-preserved as an explicit separator (multiple statements on one line).
+Defines YaoXiang's **statement termination rules**: **newline as the primary boundary**, with
+**unclosed brackets, binary operators at end of line, and leading `.` (chained continuation)** as
+explicit continuation exceptions; **leading `(` and `[` NEVER merge into the previous statement**.
+`;` is retained as an explicit separator (multiple statements on a single line).
 
-This RFC simultaneously fills the specification gap in `syntax.md`, which has never defined a
-statement terminator, and fixes the known parser defect of absorbing leading `(` `[` `.` on a new
-line as suffixes to the previous statement.
+This RFC also fills the spec gap in `syntax.md` where the statement terminator was never defined,
+and fixes the known parser defect where leading `(` `[` `.` are swallowed as suffixes of the
+previous statement.
 
 ## Motivation
 
 ### Why is this feature needed?
 
-YaoXiang makes `;` fully optional (14 `skip(Semicolon)` calls in the parser), but **newlines have
+YaoXiang's `;` is fully optional (the parser has 14 `skip(Semicolon)` calls), but **newline has
 never been defined as a statement boundary**: the lexer discards newlines, and the parser's only
-statement boundary check is "the expression Pratt loop naturally stops"—i.e., "whether the next
-token can continue the expression." This results in:
+statement boundary determination is "the expression Pratt loop naturally stopping" — i.e., "whether
+the next token can continue the expression". This causes:
 
-1. **Self-contradictory behavior**: a newline followed by an identifier/literal → normal
-   termination; a newline followed by `(` `[` `.` → absorbed as a suffix of the previous expression
-   (call/index/field access).
-2. **Legal statements silently broken**: `(c, d) = (3, 4)` destructuring becomes `1(c, d) = (3, 4)`,
-   raising the misleading E1001; `f()(2)`, `1[99]` don't even report an error—the statement simply
-   evaporates.
-3. **Specification gap**: `syntax.md` §2.9 `Block ::= '{' Stmt* Expr? '}'` does not define a
-   separator between Stmts; §1.2's separator table only lists `( ) { } ,`.
+1. **Self-contradictory behavior**: a newline followed by an identifier/literal → terminates
+   normally; a newline followed by `(` `[` `.` → swallowed as a suffix of the previous expression
+   (call/index/field access)
+2. **Valid statements silently corrupted**: `(c, d) = (3, 4)` destructuring becomes
+   `1(c, d) = (3, 4)`, producing the misleading E1001; `f()(2)`, `1[99]` don't even report an error,
+   the statement simply evaporates
+3. **Spec gap**: `syntax.md` §2.9 `Block ::= '{' Stmt* Expr? '}'` does not define the separator
+   between Stmts; §1.2's separator table only has `( ) { } ,`
 
-### The Current Problem
+### Current problems
 
-| Code inside a block         | Current AST                                      | Result                             |
-| --------------------------- | ------------------------------------------------ | ---------------------------------- |
-| `x = 1` ⏎ `(c, d) = (3, 4)` | `Assign x = BinOp(Assign, Call(1,[c,d]), Tuple)` | E1001 pointing at the innocent `c` |
-| `x = f()` ⏎ `(2)`           | `Call(Call(f),[2])`                              | **Silent** (statement evaporates)  |
-| `x = 1` ⏎ `[99]`            | `Index(1,99)`                                    | **Silent**                         |
-| `x = 1` ⏎ `.println("hi")`  | `Call(Field(1),["hi"])`                          | E1053                              |
-| `x = 1 +` ⏎ `2`             | `BinOp(Add)`                                     | ✅ Legal (but no spec basis)       |
-| `x = (1,` ⏎ `2)`            | `Tuple`                                          | ✅ Legal (but no spec basis)       |
+| Code in block               | Current AST                                      | Result                            |
+| --------------------------- | ------------------------------------------------ | --------------------------------- |
+| `x = 1` ⏎ `(c, d) = (3, 4)` | `Assign x = BinOp(Assign, Call(1,[c,d]), Tuple)` | E1001 pointing at innocent `c`    |
+| `x = f()` ⏎ `(2)`           | `Call(Call(f),[2])`                              | **silent** (statement evaporates) |
+| `x = 1` ⏎ `[99]`            | `Index(1,99)`                                    | **silent**                        |
+| `x = 1` ⏎ `.println("hi")`  | `Call(Field(1),["hi"])`                          | E1053                             |
+| `x = 1 +` ⏎ `2`             | `BinOp(Add)`                                     | ✅ legal (but no spec basis)      |
+| `x = (1,` ⏎ `2)`            | `Tuple`                                          | ✅ legal (but no spec basis)      |
 
 ## Proposal
 
-### Core Design
+### Core design
 
-**Main rule: a newline terminates a statement.**
+**Primary rule: newline terminates a statement.**
 
 **Continuation exceptions (three groups, all with mainstream language precedent):**
 
-| #   | Exception                          | Rule                                                                                    | Precedent    |
-| --- | ---------------------------------- | --------------------------------------------------------------------------------------- | ------------ |
-| 1   | **Unclosed brackets**              | When the depth of `(` `[` `{` > 0, a newline does not terminate (implicit continuation) | Python/Scala |
-| 2   | **Trailing binary operator**       | A line ending in a binary operator → continuation                                       | Swift/Scala  |
-| 3   | **Leading `.` chain continuation** | Leading `.` and the previous line ends in an identifier/`)`/`]` → continuation          | Swift        |
+| #   | Exception                            | Rule                                                                             | Precedent    |
+| --- | ------------------------------------ | -------------------------------------------------------------------------------- | ------------ |
+| 1   | **Unclosed brackets**                | When `(` `[` `{` depth > 0, newline does NOT terminate (implicit continuation)   | Python/Scala |
+| 2   | **Binary operator at end of line**   | A line ending with a binary operator → continuation                              | Swift/Scala  |
+| 3   | **Leading `.` chained continuation** | Leading `.` and the previous line ends with an Identifier/`)`/`]` → continuation | Swift        |
 
-**Never merge (absorbed JavaScript's biggest lesson):**
+**NEVER merge (lesson from JS's biggest pitfall):**
 
-- Leading `(` and `[` → **always start a new statement**. JavaScript's notorious pitfall (`a\n(b)` →
-  `a(b)` as a call) is especially dangerous in YaoXiang: tuple destructuring `(a, b) = ...`, spawn,
-  and tuple literals are all bracket-leading statements.
-- Leading binary/unary operators (`+` `-` `*` etc.) → start a new statement. Trailing-operator
-  continuation already covers the common line-break style; leading-operator continuation (Scala 3's
-  leading operator) introduces unary/infix ambiguity, so it's not adopted. If a line break is
-  needed, wrap in parentheses.
+- Leading `(` and `[` → **ALWAYS start a new statement**. JS's notorious pitfall (`a\n(b)` → `a(b)`
+  call) is especially dangerous in YaoXiang: tuple destructuring `(a, b) = ...`, spawn, tuple
+  literals are all bracket-leading statements.
+- Leading binary/unary operators (`+` `-` `*` etc.) → start a new statement. End-of-line operator
+  continuation already covers common line-break styles; leading-operator continuation (Scala 3
+  leading operators) would introduce unary/infix ambiguity, so we do NOT adopt it. If a line break
+  is needed, wrap in parentheses.
 
-**`;` is preserved**: an explicit separator, used for multiple statements on a single line (same as
+**`;` is retained**: explicit separator, used for multiple statements on a single line (same as
 Kotlin/Swift).
 
 ### Examples
 
 ```yaoxiang
-// Newline terminates a statement (the vast majority of code)
+// Newline terminates statement (vast majority of code)
 a = 1
 b = 2
 
-// Continuation: trailing binary operator
+// Continuation: binary operator at end of line
 total = a +
     b + c
 
-// Continuation: unclosed brackets
+// Continuation: unclosed bracket
 t = (1,
      2)
 io.println(
@@ -99,11 +100,11 @@ result = list.map(x => x * 2)
     .filter(x => x > 10)
     .sum()
 
-// Never merge: leading ( is an independent destructuring statement
+// NEVER merge: leading ( is an independent destructuring statement
 x = f()
 (c, d) = (3, 4)      // ✅ destructuring, not f()(c, d)
 
-// Never merge: leading [ is an independent list
+// NEVER merge: leading [ is an independent list
 x = 1
 [1, 2, 3]            // ✅ independent expression statement
 
@@ -111,138 +112,139 @@ x = 1
 a = 1; b = 2
 ```
 
-### Syntax Changes
+### Syntax changes
 
-Added after `syntax.md` §2.9:
+Add after `syntax.md` §2.9:
 
 ```
 StatementTerminator ::= ';' | Newline        (unless the following continuation exceptions apply)
 Continuation exceptions (newline does not terminate):
   - '(' '[' '{' depth > 0
-  - line ends in a binary operator
-  - line starts with '.' and the previous line ends with Identifier | ')' | ']'
-Never merge: leading '(' '[' always start a new statement
+  - Line ending with a binary operator
+  - Line starts with '.' and previous line ends with Identifier | ')' | ']'
+NEVER merge: leading '(' '[' always starts a new statement
 ```
 
-| Before                                                  | After                                                                                |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `Block ::= '{' Stmt* Expr? '}'` (no separator defined)  | `Block ::= '{' (Stmt StatementTerminator)* Expr? '}'`                                |
-| Newline has no status; leading `(` `[` `.` are absorbed | Newline terminates; leading `(` `[` never merge; leading `.` explicitly continues    |
-| `;` optional but semantically ambiguous                 | `;` = explicit separator (multiple statements on one line); a newline may follow `;` |
+| Before                                                 | After                                                                              |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `Block ::= '{' Stmt* Expr? '}'` (no separator defined) | `Block ::= '{' (Stmt StatementTerminator)* Expr? '}'`                              |
+| Newline has no status; leading `(` `[` `.` swallowed   | Newline terminates; leading `(` `[` never merge; leading `.` explicit continuation |
+| `;` optional but semantically ambiguous                | `;` = explicit separator (multiple statements per line), newline may follow `;`    |
 
-## Detailed Design
+## Detailed design
 
-### Statement Termination Check (Parser Rule)
+### Statement termination determination (parser rule)
 
-Within the expression Pratt loop, before applying a postfix operator (call `(` index `[` field
-access `.`), check:
+In the expression Pratt loop, before applying a postfix operator (`(` call, `[` index, `.` field
+access), check:
 
 ```
 continuation(prev_expr, op_token) =
-    prev_expr ending line == op_token starting line              // same line: normal suffix
-    || (op_token == '.' and prev_expr ends in Identifier/')'/']') // leading . chain
-    || bracket depth > 0                                          // inside unclosed brackets
+    prev_expr end-line == op_token start-line        // Same line: normal suffix
+    || (op_token == '.' and prev_expr ends with Identifier/')'/']')  // Leading . chained
+    || bracket-depth > 0                              // Inside unclosed brackets
 ```
 
-If unsatisfied → expression ends, start a new statement. Infix binary operators do not participate
-in line checks (trailing operator = continuation, naturally correct).
+If not satisfied → expression ends, new statement begins. Infix binary operators do not participate
+in line check (line-ending operator = continuation, naturally correct).
 
-### Scope of Syntax Impact
+### Syntax impact surface
 
-- The `parse_expression` postfix branch adds a line-number check (Span carries line numbers, no
-  lexer token-stream change needed)
-- Statement parsing consumes `;` and newline boundaries (`skip(Semicolon)` semantics preserved)
-- Block-ending `}` and end-of-file EOF naturally terminate statements; no extra handling needed
-- **No NEWLINE token introduced** (Plan B, see Alternatives)—Span line numbers are sufficient, with
-  minimal change
+- `parse_expression`'s postfix branch adds line-number check (Span already has line number, no lexer
+  token stream changes needed)
+- Statement parsing consumes `;` and newline boundary (`skip(Semicolon)` semantics retained)
+- Block-ending `}` and file-end EOF naturally terminate statements, no extra handling needed
+- **No NEWLINE token introduced** (Plan B, see alternatives) — Span line numbers are sufficient,
+  minimal changes
 
-### Compiler Changes
+### Compiler changes
 
-| Component                                    | Change                                                                                                                               |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/frontend/core/parser/parser_state.rs`   | Line-number check in `parse_expression` postfix operators                                                                            |
-| `src/frontend/core/parser/statements/*.rs`   | Minor adjustment to statement boundary consumption logic                                                                             |
-| `docs/src/reference/language-spec/syntax.md` | Add a "Statement Termination Rules" subsection after §2.9                                                                            |
-| Tests                                        | Add newline/continuation cases under `tests/yaoxiang/01-syntax/`; add leading-absorption regression cases under `06-compile-errors/` |
+| Component                                    | Change                                                                                                                |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `src/frontend/core/parser/parser_state.rs`   | `parse_expression` postfix operator line check                                                                        |
+| `src/frontend/core/parser/statements/*.rs`   | Minor adjustments to statement boundary consumption                                                                   |
+| `docs/src/reference/language-spec/syntax.md` | Add "Statement Termination Rules" subsection after §2.9                                                               |
+| Tests                                        | Add newline/continuation cases in `tests/yaoxiang/01-syntax/`; add leading-swallow regression in `06-compile-errors/` |
 
-### Backward Compatibility
+### Backward compatibility
 
-- **Vast majority of existing code requires no changes**: identifier/literal-leading lines,
-  trailing-operator line breaks, and line breaks inside brackets all behave the same as before
+- **Vast majority of existing code needs zero changes**: identifier/literal-leading lines,
+  end-of-line operator line breaks, line breaks inside brackets are all consistent with current
+  behavior
 - **Behavior changes** (all in the bug-fix direction):
-  - Cross-line absorption of `f()(2)` / `1[99]` / `1.println()` changes from "silent/error" to "two
-    independent statements"—the correct semantics
-  - Leading `.` changes from "absorbed (error)" to "explicit chain continuation"—a new feature
-- Risk: if any code legitimately depends on cross-line absorption (e.g., `f()\n(2)` intended to call
+  - `f()(2)` / `1[99]` / `1.println()` cross-line swallowing changes from "silent/error" to "two
+    independent statements" — correct semantics
+  - Leading `.` changes from "swallowed (error)" to "explicit chained continuation" — new feature
+- Risk: if any legitimate code depends on "cross-line swallowing" (e.g., `f()\n(2)` intended to call
   a returned function), it will become `f()` + `(2)` as two statements. Such code is already
-  semantically wrong or extremely rare; confirm during RFC review
+  semantically wrong or extremely rare; must be confirmed during RFC review
 
 ## Trade-offs
 
 ### Advantages
 
-- **Few rules and intuitive**: two main rules + three exception groups, all validated by mainstream
+- **Few rules, intuitive**: two main rules + three exception groups, all validated by mainstream
   language practice
-- **Eliminates silent errors**: `f()(2)`, `1[99]` etc. are no longer silently absorbed; statement
-  boundaries become predictable
-- **Chain-call friendly**: leading `.` continuation aligns with Swift / industry standard style
-- **Zero lexer changes**: the Span line-number approach is minimally invasive
+- **Eliminates silent errors**: `f()(2)`, `1[99]` etc. no longer silently swallowed, statement
+  boundaries are predictable
+- **Chained call friendly**: leading `.` continuation aligns with Swift/industry standard style
+- **Zero lexer changes**: Span line-number approach is minimally invasive
 
 ### Disadvantages
 
-- Leading binary-operator continuation is not supported (Scala 3 style)—line breaks require
-  parentheses, restricting a few styles
-- The leading `.` continuation check depends on "previous line ends in an identifier/`)`/`]`", which
-  needs to be documented
+- Leading binary operator continuation is NOT supported (Scala 3 style) — requires wrapping in
+  parentheses for line breaks, a few style limitations
+- Leading `.` continuation determination depends on "previous line ends with Identifier/`)`/`]`",
+  rule must be documented
 
 ## Alternatives
 
-| Plan                                          | Description                                                               | Why not chosen                                                                                                              |
-| --------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **A. Span line-number aware (this proposal)** | Parser checks line numbers for postfix operators                          | ✅ Adopted: minimal change, clear rules                                                                                     |
-| **B. Go-style automatic semicolon insertion** | Lexer nlsemi state machine, inserts `;` after specific tokens at line end | Forces `{` at line end, forbids leading `.`/operators, sacrifices chain style; incompatible with YaoXiang's free-form style |
-| **C. Mandatory semicolons**                   | Every statement requires `;`                                              | Violates the existing semicolon-optional ecosystem and test-file status quo                                                 |
-| **D. Status quo**                             | No rules, token-driven                                                    | Known defects persist; silent statement evaporation continues                                                               |
+| Plan                                              | Description                                                                  | Why not chosen                                                                                                                |
+| ------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **A. Span line-number awareness (this proposal)** | Parser postfix operators check line number                                   | ✅ Adopted: minimal changes, clear rules                                                                                      |
+| **B. Go-style automatic semicolon insertion**     | Lexer nlsemi state machine, inserts `;` after specific tokens at end of line | Forces `{` at end of line, prohibits leading `.`/operators, sacrifices chained style; inconsistent with YaoXiang's free style |
+| **C. Mandatory semicolons**                       | Every statement requires `;`                                                 | Violates the existing semicolon-optional ecosystem and test file reality                                                      |
+| **D. Status quo**                                 | No rules, token-driven                                                       | Known defects persist, silent statement evaporation                                                                           |
 
-## Implementation Strategy
+## Implementation strategy
 
 ### Dependencies
 
 - No external dependencies
-- Orthogonal to RFC-010 (Unified Type Syntax): statement termination is a parser-layer rule and does
-  not involve type grammar
+- Orthogonal to RFC-010 (Unified Type Syntax): statement termination is a parser-layer rule, doesn't
+  involve type grammar
 
 ### Risks
 
-- Boundary between leading `.` chain continuation and "leading `.` as an independent statement":
-  `.foo()` cannot form an independent statement (`.` is not a legal statement starter), so the
-  continuation check is unambiguous
-- Existing tests that depend on absorption behavior need to be checked one by one (none
-  expected—absorption scenarios are all bug cases)
+- Boundary between leading `.` chained and "leading `.` as independent statement": `.foo()` cannot
+  be an independent statement (`.` is not a valid statement start), so continuation determination is
+  unambiguous
+- Existing tests that depend on swallow behavior must be checked case by case (expected none —
+  swallow scenarios are all bug scenarios)
 
-## Open Questions
+## Open questions
 
-- [ ] Is it worth supporting leading binary-operator continuation (Scala 3 style)? (@ChenXu233:
-      leans toward no, parentheses suffice)
-- [ ] Does a newline after `;` equate to an empty statement? The existing parser's `skip(Semicolon)`
+- [ ] Is leading binary operator continuation (Scala 3 style) worth supporting? (@ChenXu233: leans
+      toward not, parentheses are sufficient)
+- [ ] Is a newline after `;` equivalent to an empty statement? Current parser's `skip(Semicolon)`
       followed by a newline naturally continues, no special handling needed
-- [ ] Should a "unused expression result" warning (Swift style) be introduced as further
-      belt-and-suspenders against absorption? Discuss in a separate RFC
+- [ ] Should we introduce an "unused expression result warning" (Swift style) as further safety net
+      for swallowing? Discuss in a separate RFC
 
 ---
 
-## Appendix A: Multi-language Survey Comparison
+## Appendix A: Cross-language survey comparison
 
-| Language   | Approach                                              | Leading `(`              | Chain `.`            | Leading operator             | Evaluation                                      |
+| Language   | Approach                                              | Leading `(`              | Chained `.`          | Leading operator             | Evaluation                                      |
 | ---------- | ----------------------------------------------------- | ------------------------ | -------------------- | ---------------------------- | ----------------------------------------------- |
-| Go         | Lexer automatic semicolon insertion (2 rules)         | ✅ Safe                  | ❌ Forbidden         | ❌ Forbidden                 | Most deterministic, sacrifices chain style      |
+| Go         | Lexer automatic semicolon insertion (2 rules)         | ✅ Safe                  | ❌ Prohibited        | ❌ Prohibited                | Most deterministic, sacrifices chained style    |
 | JavaScript | ASI 3 rules + restricted productions                  | ❌ **Notorious pitfall** | Allowed              | ⚠️ Pitfall                   | **Cautionary tale** (`a\n(b)` → call)           |
 | Python     | NEWLINE hard boundary + bracket implicit continuation | ✅ Safe                  | ❌ Requires brackets | ❌ Requires brackets         | Most predictable, weakest continuation          |
-| Kotlin     | SEMI = semicolon or newline                           | ✅ Safe                  | ✅                   | ❌ (trailing lambda pitfall) | Good, rules hidden deep                         |
-| Swift      | Newline terminates + space rules                      | ✅ Safe                  | ✅                   | ✅ Space protection          | **Closest to this proposal**                    |
+| Kotlin     | SEMI = semicolon or newline                           | ✅ Safe                  | ✅                   | ❌ (trailing lambda pitfall) | Good, rules are hidden deep                     |
+| Swift      | Newline terminates + whitespace rules                 | ✅ Safe                  | ✅                   | ✅ Whitespace guard          | **Closest to this proposal**                    |
 | Scala 3    | nl token + region rules + leading operators           | ✅                       | ✅                   | ✅                           | Most complete but most complex, over-engineered |
 
-**This proposal = Go's determinism × Python's bracket continuation × Swift's leading `.` chain**.
-Swift is the closest to the ideal; Scala 3 is the most complete but its rules are too heavy—being
-human-friendly is not about having the most rules, but about **having few rules that each match
-intuition**.
+**This proposal = Go's determinism × Python's bracket continuation × Swift's leading `.` chained
+style**. Swift is closest to ideal; Scala 3 is most complete but rules are too heavy — being
+human-friendly is not about having the most rules, but about **having few rules and each being
+intuitive**.

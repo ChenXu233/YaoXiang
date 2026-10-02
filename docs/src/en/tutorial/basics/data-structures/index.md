@@ -4,28 +4,29 @@ title: 'Lists and Dictionaries'
 
 # Lists and Dictionaries
 
-Data structures are the skeleton of programs. YaoXiang's collection types are layered: `Vec(T)` is
-the runtime-length raw buffer, `List(T)` is a standard library type
-(`{ data: Vec(T), length: Int }`), and dictionaries are built on the same layering. Users can also
-define their own container types—after implementing the `Index` interface (RFC-011b), subscript
-access with `[]` is also supported.
+Data structures are the backbone of a program. YaoXiang's collection types are built in layers:
+`Vec(T)` is a primitive buffer with a runtime length, `List(T)` is a standard-library type
+(`{ data: Vec(T), length: Int }`), and dictionaries are built on the same layered mechanism. Users
+can also define their own container types — once they implement the `Index` interface (RFC-011b),
+they likewise support `[]` subscript access.
 
 ## Lists
 
-A list is an **ordered** sequence of values, where all elements share the same type. Create one with
+A list is an **ordered** sequence of values where all elements share the same type. Create one with
 `[]`:
 
 ```yaoxiang
-// 创建列表
+// Create lists
 numbers = [1, 2, 3, 4, 5]
 names = ["Alice", "Bob", "Charlie"]
-// 注意：`empty: List(Int) = []` 报 E1002——空列表的 `List(T)` 标注与
-// 字面量推断出的 `Vec` 不兼容。空列表请交给 list.push 之类的函数构造。
+
+// Note: `empty: List(Int) = []` reports E1002 — the `List(T)` annotation on an empty list is
+// incompatible with the `Vec` inferred from the literal. Construct empty lists via functions like list.push.
 ```
 
-### Index Access
+### Index access
 
-Use `[]` to access elements by position, with 0-based indexing:
+Use `[]` to access elements by position; indices start at 0:
 
 ```yaoxiang
 scores = [95, 87, 73, 91]
@@ -35,7 +36,7 @@ second = scores[1]   // 87
 last = scores[3]     // 91
 ```
 
-### Common Operations
+### Common operations
 
 ```yaoxiang
 use std.list
@@ -43,15 +44,14 @@ use std.list
 main = () => {
     mut items = [1, 2, 3]
 
-    // Add an element
+    // Add element
     items = list.push(items, 4)   // [1, 2, 3, 4]
 
     // Length
     count = list.len(items)   // 4
 
-    // Slicing
-    // Note: range slicing items[0..2] currently raises E6007 at runtime
-    // (measured); use std.list.slice instead
+    // Slice
+    // Note: range slice items[0..2] currently reports E6007 at runtime (tested); use std.list.slice instead
     sl = list.slice(items, 0, 2)   // [1, 2]
     print(items)
     print(count)
@@ -59,9 +59,9 @@ main = () => {
 }
 ```
 
-### List Comprehensions
+### List comprehensions
 
-List comprehensions are a powerful tool for creating lists—generate a new list from an existing one:
+List comprehensions are a powerful way to build lists — generating a new list from an existing one:
 
 ```yaoxiang
 use std.string
@@ -71,39 +71,50 @@ main = () => {
     squares = [x * x for x in [1, 2, 3, 4, 5]]
     print(squares)  // [1, 4, 9, 16, 25]
 
-    // Type conversion
+    // Transform types
     names = ["Alice", "Bob", "Charlie"]
-    // Note: comprehensions currently depend on std.list.iter and may raise
-    // E6006 at runtime
+    // Note: list comprehension currently depends on std.list.iter, and may report E6006 at runtime
     lengths = [string.len(n) for n in names]
     print(lengths)  // [5, 3, 7]
 }
 ```
 
-Syntax: `[expression for variable in list if condition]`—the `if condition` part is optional.
+Syntax: `[expression for variable in list]`.
+
+⚠️ The 0.8.2 comprehension **does not support an `if condition` suffix** —
+`[x for x in xs if x % 2 == 0]` reports the parse error「Expected RBracket, found KwIf」(`E0010`).
+For filtering, use `std.list.filter` instead:
+
+```yaoxiang
+use std.list
+
+main = () => {
+    evens = list.filter([1, 2, 3, 4, 5, 6], (x) => x % 2 == 0)
+    print(evens)  // [2, 4, 6]
+}
+```
 
 ## Dictionaries
 
-A dictionary is a collection of **key-value pairs**, where keys are strings and values may be of any
+A dictionary is a collection of **key-value pairs**; keys are strings, and values may be of any
 type. Create one with `{}`:
 
 ```yaoxiang
 use std.dict
 
 main = () => {
-    // Create a dictionary
+    // Create dictionary
     scores = {"Alice": 90, "Bob": 85, "Charlie": 92}
-    // Note: `{}` is parsed as an empty block (E1108); an empty dictionary
-    // must be built with dict.new()
+    // Note: `{}` is parsed as an empty block (E1108); empty dictionaries must be created with dict.new()
     empty = dict.new()
     print(scores)
     print(empty)
 }
 ```
 
-### Key Access
+### Key access
 
-Use `[]` to access values by key:
+Use `[]` to access a value by key:
 
 ```yaoxiang
 scores = {"Alice": 90, "Bob": 85}
@@ -112,19 +123,23 @@ alice = scores["Alice"]   // 90
 bob = scores["Bob"]       // 85
 ```
 
-### Modifying Dictionaries
+### Modifying a dictionary
 
 ```yaoxiang
-mut data = {"name": "Alice"}
+use std.dict
 
-// 添加/更新键值
-data["age"] = 25
-data["name"] = "Bob"
+main = () => {
+    // Add/update key-value
+    // Dictionary subscript assignment works (tested on 0.8.2: `data["k"] = v` reads back correctly),
+    // but please use dict.set — it returns a new dictionary, so rebinding is required.
+    data = dict.set({"name": "Alice"}, "age", 25)
 
-print(data)  // {"name": "Bob", "age": 25}
+    print(data["name"])  // Alice
+    print(data["age"])   // 25
+}
 ```
 
-### Membership Check
+### Membership test
 
 Use `in` to check whether a key exists:
 
@@ -137,9 +152,9 @@ has_user = "user" in config    // false
 
 ## Summary
 
-| Type | Syntax      | Ordered? | Duplicates?       | Key Type      |
-| ---- | ----------- | -------- | ----------------- | ------------- |
-| List | `[1, 2, 3]` | ✅       | ✅                | Integer Index |
-| Dict | `{"a": 1}`  | ✅       | No duplicate keys | String        |
+| Type | Syntax      | Ordered? | Duplicates? | Key type  |
+| ---- | ----------- | -------- | ----------- | --------- |
+| List | `[1, 2, 3]` | ✅       | ✅          | Int index |
+| Dict | `{"a": 1}`  | ✅       | Keys unique | String    |
 
-Lists are your workhorse container; dictionaries are best for key-value lookups.
+Lists are your workhorse container; dictionaries fit key-value lookup.

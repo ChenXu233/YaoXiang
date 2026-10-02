@@ -3,7 +3,7 @@ layout: page
 is_download: true
 
 title: 'TYPE THE UNIVERSE'
-description: 'Choose your platform and start building the world.'
+description: 'Choose your platform and start building worlds.'
 
 download:
   latest_stable: 'Latest stable v{version}'
@@ -12,22 +12,22 @@ download:
   copied: 'Copied!'
   supported: 'Supported platforms: Windows (PowerShell), macOS, Linux (x64/ARM64)'
   download_btn: 'Download'
-  coming_soon: 'Coming Soon'
+  coming_soon: 'Coming soon'
   checksum: 'Checksum / Signature'
   build_from_source:
-    title: 'Build from Source'
+    title: 'Build from source'
     description: 'Build YaoXiang from source using Cargo. Make sure Rust is installed.'
   nightly_builds:
-    title: 'Nightly Builds'
+    title: 'Nightly builds'
     description:
-      'The latest cutting-edge version is available. Recommended for testing; use with caution in
-      production.'
+      'The latest cutting-edge builds are now available. Recommended for testing; use with caution
+      in production environments.'
   github_actions: 'Go to GitHub Actions'
 
 versions:
   - version: 0.8.2
     latest: true
-    # One-line installation (RFC-037 easy channel); takes effect from 0.8.0 with the restructured package format
+    # 一行命令安装（RFC-037 傻瓜渠道）；0.8.0 起随重组包格式生效
     install_command:
       'curl -fsSL
       https://raw.githubusercontent.com/ChenXu233/YaoXiang/main/scripts/install/install.sh | sh'
@@ -47,21 +47,30 @@ versions:
       - os: Linux
         arch: x64
         features:
-          ['Command-line binary (legacy format, statically linked Z3)', 'No installation required']
+          [
+            'Command-line binary (legacy format, statically linked with Z3)',
+            'No installation required',
+          ]
         links:
           - name: 'Linux x64'
             url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.8.2/yaoxiang-x86_64-unknown-linux-gnu'
       - os: Linux
         arch: ARM64
         features:
-          ['Command-line binary (legacy format, statically linked Z3)', 'No installation required']
+          [
+            'Command-line binary (legacy format, statically linked with Z3)',
+            'No installation required',
+          ]
         links:
           - name: 'Linux ARM64'
             url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.8.2/yaoxiang-aarch64-unknown-linux-gnu'
       - os: macOS
         arch: Intel / Apple Silicon
         features:
-          ['Command-line binary (legacy format, statically linked Z3)', 'No installation required']
+          [
+            'Command-line binary (legacy format, statically linked with Z3)',
+            'No installation required',
+          ]
         links:
           - name: 'macOS Intel'
             url: 'https://github.com/ChenXu233/YaoXiang/releases/download/v0.8.2/yaoxiang-x86_64-apple-darwin'

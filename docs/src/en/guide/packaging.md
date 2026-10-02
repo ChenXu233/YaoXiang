@@ -1,18 +1,18 @@
 ---
 title: 'Package Manager'
-description: 'Tutorial for the official YaoXiang package manager'
+description: 'YaoXiang Official Package Manager Tutorial'
 ---
 
-# Package Manager
+# Package Manager Usage Guide
 
-YaoXiang's built-in package manager provides complete dependency management features.
+YaoXiang's built-in package manager, providing complete dependency management functionality.
 
 ## Overview
 
-YaoXiang Package Manager (YPM) adopts declarative dependency management:
+The YaoXiang Package Manager (YPM) uses declarative dependency management:
 
 - Declare project dependencies in `yaoxiang.toml`
-- `yaoxiang.lock` locks precise versions to ensure reproducible builds
+- `yaoxiang.lock` locks exact versions to ensure reproducible builds
 - Dependencies are downloaded to the `vendor` directory
 
 ## Quick Start
@@ -39,7 +39,7 @@ yx run src/main.yx
 my-project/
 ├── yaoxiang.toml      # Project manifest
 ├── yaoxiang.lock      # Dependency lock file
-├── vendor/            # Dependency storage
+├── .yaoxiang/vendor/       # Dependency storage (actual test: yx init generates .yaoxiang/vendor/std/)
 └── src/
     └── main.yx
 ```
@@ -66,7 +66,7 @@ yx init <name>
 
 Create a new YaoXiang project in the current directory or at the specified path.
 
-### Created Files
+### Files Created
 
 - `yaoxiang.toml` - Project manifest
 - `yaoxiang.lock` - Dependency lock file
@@ -76,7 +76,7 @@ Create a new YaoXiang project in the current directory or at the specified path.
 ### Example
 
 ```bash
-# Create project in current directory
+# Create a project in the current directory
 yx init my-project
 
 # Output
@@ -91,7 +91,7 @@ yx init my-project
 
 ## add
 
-Add a dependency to the project.
+Add dependencies to the project.
 
 ### Usage
 
@@ -115,21 +115,21 @@ yx add <name> --dev
 
 ### Description
 
-Add the dependency to the project's `yaoxiang.toml` file, and update `yaoxiang.lock`.
+Add dependencies to the project's `yaoxiang.toml` file, and update `yaoxiang.lock`.
 
-### Version Specification
+### Version Specifications
 
-| Specification | Description        | Example            |
-| ------------- | ------------------ | ------------------ |
-| `*`           | Any version        | `http = "*"`       |
-| `1.0.0`       | Exact version      | `http = "1.0.0"`   |
-| `>=1.0.0`     | Minimum version    | `http = ">=1.0.0"` |
-| `~1.0.0`      | Compatible version | `http = "~1.0.0"`  |
-| `^1.0.0`      | Caret version      | `http = "^1.0.0"`  |
+| Specification | Description        | Example           |
+| ------------- | ------------------ | ----------------- |
+| `*`           | Any version        | `http = "*"`      |
+| `1.0.0`       | Exact version      | `http = "1.0.0"`  |
+| `>=1.0.0`     | Minimum version    | `http = ">1.0.0"` |
+| `~1.0.0`      | Compatible version | `http = "~1.0.0"` |
+| `^1.0.0`      | caret version      | `http = "^1.0.0"` |
 
 ### Dependency Sources
 
-#### Registry (Default)
+#### Registry (default)
 
 ```bash
 yx add http
@@ -171,7 +171,7 @@ yx add benchmark -D
 
 ## rm
 
-Remove a dependency from the project.
+Remove dependencies from the project.
 
 ### Usage
 
@@ -199,10 +199,10 @@ Remove the specified dependency from the project's `yaoxiang.toml`, and update `
 ### Example
 
 ```bash
-# Remove a runtime dependency
+# Remove runtime dependency
 yx rm http
 
-# Remove a development dependency
+# Remove development dependency
 yx rm test-utils --dev
 ```
 
@@ -220,7 +220,7 @@ yx install
 
 ### Description
 
-Read the dependency declarations in `yaoxiang.toml` and perform the following operations:
+Read dependency declarations from `yaoxiang.toml` and perform the following operations:
 
 1. Resolve dependency versions
 2. Detect version conflicts
@@ -229,9 +229,9 @@ Read the dependency declarations in `yaoxiang.toml` and perform the following op
 
 ### Behavior
 
-- If there are no dependencies, display a hint message and exit
+- If there are no dependencies, display a prompt message and exit
 - If the `vendor` directory already exists, check and reuse the cache
-- If version conflicts are detected, display an error message and exit
+- If a version conflict is detected, display an error message and exit
 
 ### Example
 
@@ -241,8 +241,8 @@ yx install
 
 # Output
 # 📦 Resolving dependencies...
-#   http (1.0.0) [installed]
-#   json (2.0.0) [cached]
+#   http (1.0.0) [Installed]
+#   json (2.0.0) [Cached]
 # ✅ Dependencies installed, lock file updated
 ```
 
@@ -287,7 +287,7 @@ yx update <name>
 
 ### Full Update
 
-When called without arguments, update all dependencies:
+Without arguments, update all dependencies:
 
 1. Clear currently locked versions
 2. Clean up old versions in the `vendor` directory
@@ -296,9 +296,9 @@ When called without arguments, update all dependencies:
 
 ### Single Update
 
-When called with an argument, update only the specified dependency:
+With arguments, update only the specified dependency:
 
-1. Remove the old version from `vendor`
+1. Delete the old version from `vendor`
 2. Re-download the new version
 3. Update the corresponding entry in `yaoxiang.lock`
 4. Other dependencies are not affected
@@ -340,7 +340,7 @@ Display all dependencies in the project, including:
 
 - Runtime dependencies (from `[dependencies]`)
 - Development dependencies (from `[dev-dependencies]`)
-- The version and source of each dependency
+- Each dependency's version and source
 
 ### Example
 
@@ -350,11 +350,11 @@ yx list
 # Output
 # 📦 Project Dependencies
 #
-# Runtime dependencies:
+# Runtime Dependencies:
 #   http        1.0.0    registry
 #   json        2.0.0    registry
 #
-# Development dependencies:
+# Development Dependencies:
 #   test-utils  0.5.0    registry
 ```
 
@@ -364,14 +364,14 @@ yx list
 
 ### yaoxiang.toml
 
-The project manifest file, declaring project metadata and dependencies.
+Project manifest file, declares project metadata and dependencies.
 
 ```toml
 [package]
 name = "my-project"
 version = "0.1.0"
-description = "Project description"
-authors = ["Author <email@example.com>"]
+description = "项目描述"
+authors = ["作者 <email@example.com>"]
 license = "MIT"
 
 [dependencies]
@@ -384,10 +384,10 @@ test-utils = "0.5.0"
 
 ### yaoxiang.lock
 
-The dependency lock file, automatically generated by the package manager.
+Dependency lock file, automatically generated by the package manager.
 
 ```toml
-# Automatically generated by the YaoXiang package manager
+# Auto-generated by YaoXiang Package Manager
 
 [package]
 version = 1
@@ -403,50 +403,50 @@ source = "registry"
 
 ### Runtime Dependencies vs Development Dependencies
 
-- **Runtime dependencies** (`[dependencies]`): Packages required at project runtime
-- **Development dependencies** (`[dev-dependencies]`): Packages needed only for development and
+- **Runtime dependencies** (`[dependencies]`): Packages required when the project runs
+- **Development dependencies** (`[dev-dependencies]`): Packages required only for development and
   testing
 
 ### Dependency Sources
 
-| Type     | Configuration Example                        | Description                     |
-| -------- | -------------------------------------------- | ------------------------------- |
-| Registry | `http = "1.0.0"`                             | Obtained from a remote registry |
-| Git      | `{ version = "1.0.0", git = "https://..." }` | Obtained from a Git repository  |
-| Path     | `{ version = "0.1.0", path = "./lib" }`      | Obtained from a local path      |
+| Type     | Configuration Example                        | Description                        |
+| -------- | -------------------------------------------- | ---------------------------------- |
+| Registry | `http = "1.0.0"`                             | Fetch from remote package registry |
+| Git      | `{ version = "1.0.0", git = "https://..." }` | Fetch from Git repository          |
+| Path     | `{ version = "0.1.0", path = "./lib" }`      | Fetch from local path              |
 
 ### Lock File
 
-`yaoxiang.lock` is automatically generated by the package manager. Be sure to **commit it to version
-control**:
+`yaoxiang.lock` is automatically generated by the package manager, please **be sure to commit it to
+version control**:
 
 - Ensure team members use exactly the same dependency versions
-- Ensure reproducible CI builds
+- Ensure CI builds are reproducible
 - Avoid the "works on my machine" problem
 
 ### vendor Directory
 
-Dependencies are stored in the `vendor` directory after download:
+Dependencies are stored in the `vendor` directory after downloading:
 
 - Automatically managed by `yx install` and `yx update`
-- Can be deleted and rebuilt by running `install` again
-- Recommended to add to `.gitignore`, so each team member manages it independently
+- Can be deleted and then re-run `install` to rebuild
+- Recommended to add to `.gitignore`, managed independently by different team members
 
 ---
 
-## FAQ
+## Frequently Asked Questions
 
-### Q: What should I do when dependency version conflicts occur?
+### Q: What if there is a dependency version conflict?
 
-YPM detects dependency version conflicts and reports an error. Solutions:
+YPM will detect dependency version conflicts and report an error. Solutions:
 
 1. Adjust dependency version requirements
 2. Wait for the dependency author to fix it
 3. Consider removing the conflicting dependency
 
-### Q: How do I use private packages?
+### Q: How to use private packages?
 
-For private packages, you can use a Git source:
+For private packages, you can use Git source:
 
 ```bash
 # Add via Git URL
@@ -459,6 +459,6 @@ private-pkg = { version = "1.0.0", git = "https://github.com/org/private-pkg" }
 
 Yes. After deletion, run `yx install` to re-download all dependencies.
 
-### Q: How do I view information about a specific package?
+### Q: How to view information about a package?
 
 Use `yx list` to view all dependencies, or check `yaoxiang.toml`.

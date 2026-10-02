@@ -4,20 +4,21 @@ title: 'Variable Declaration'
 
 # Variable Declaration
 
-This chapter introduces the core syntax for variable declaration in YaoXiang. If you have experience
-with other programming languages, you'll find YaoXiang's variable system very simple—all
-declarations share the same syntax model.
+This chapter introduces the core syntax of variable declarations in YaoXiang. If you have experience
+with other programming languages, you will find that YaoXiang's variable system is very concise—all
+declarations share the same syntactic model.
 
-## Unified Syntax Model
+## Unified Syntactic Model
 
-YaoXiang's design philosophy is "everything is unified." Whether declaring an integer, defining a
-function, or creating a type, they all use the same syntax:
+YaoXiang's design philosophy is "everything is unified." Whether you are declaring an integer,
+defining a function, or creating a type, they all use the same syntax:
 
 ```
 name: type = value
 ```
 
-This is YaoXiang's most fundamental design concept. A few examples will show you this consistency:
+This is YaoXiang's most core design principle. A few examples will give you a feel for this
+consistency:
 
 ```yaoxiang
 // Variable declaration
@@ -31,97 +32,108 @@ add: (a: Int, b: Int) -> Int = a + b
 Point: Type = { x: Float, y: Float }
 ```
 
-In formal syntax specification, variable declaration is defined as:
+The formal definition of variable declaration in the syntax specification is:
 
 ```
 ('mut')? Identifier (':' TypeExpr)? '=' Expr
 ```
 
-Translated into plain language: an optional `mut` keyword, then the variable name, followed by an
-optional `: Type`, and finally `= value`. This structure runs throughout the entire language—learn
+In plain terms: there can be an optional `mut` keyword, followed by a variable name, then an
+optional `: type`, and finally `= value`. This structure runs throughout the entire language—learn
 it once and you're done.
 
 ## Immutable Variables (Default Behavior)
 
 In YaoXiang, all variables are **immutable by default**. Once assigned, they cannot be changed. This
-is a deliberate safety feature of the language.
+is a safety design of the language.
 
 ```yaoxiang
 x = 10
 // x = 20   // Compile error! x is immutable
 ```
 
-Variables declared with `=` search outward through the scope chain for a variable with the same
-name. If found, it assigns to that variable; if not found, it creates a new immutable variable in
-the current scope.
+When a variable is declared with `=`, the compiler looks up the scope chain outward for a variable
+with the same name. If found, it tries to assign to it; if not found, it creates a new immutable
+variable in the current scope.
 
 ```yaoxiang
-x = 1       // No x in outer scope, so declares a new variable
-x = 2       // Found x in outer scope, attempts assignment → Compile error! x is immutable
+x = 1       // No x in outer scope, so declare as new variable
+x = 2       // Found outer x, try to assign → Compile error! x is immutable
 ```
 
-This might seem counter-intuitive—if you can find it, why can't you assign to it? This is because
-YaoXiang prioritizes safety: immutable by default means you don't need to worry about a variable
-being accidentally modified somewhere in your code.
+This may seem a bit counter-intuitive—if you've learned other languages, you might think "if it can
+be found, why can't I assign to it?" This is because YaoXiang puts safety first: immutability by
+default means you don't have to worry about a variable being accidentally modified in some corner of
+the code.
 
-## mut Mutable Variables
+## `mut` Mutable Variables
 
-When you genuinely need to modify a variable, use the `mut` keyword to explicitly declare it:
+When you really need to modify a variable, use the `mut` keyword to declare it explicitly:
 
 ```yaoxiang
 mut counter = 0
-counter = counter + 1   // Can be modified
-counter = 100           // Also works
+counter = counter + 1   // Can modify
+counter = 100           // Also can
 ```
 
-There are several important rules for `mut`:
+`mut` has several important rules:
 
-**Rule one**: `mut` is an explicit new declaration—the compiler will not search outer scopes for
-variables with the same name.
+**Rule One**: `mut` is an explicit new declaration; the compiler will not look up a variable with
+the same name in the outer scope.
 
 <!-- docs-example: skip -->
+
 ```yaoxiang
-mut x = 10      // Creates a new mutable variable x in current scope
-mut x = 20      // Compile error! x has already been declared in this scope
+mut x = 10      // Create new mutable variable x in current scope
+mut x = 20      // Compile error! x is already declared in same scope
 ```
 
-**Rule two**: Variables declared with `mut` cannot have the same name as variables in outer scopes
-(shadowing is prohibited).
+> The two lines above **deliberately fail the
+> check**—`E2002 duplicate definition: 'x' is already defined in the current scope`.
+
+**Rule Two**: A variable declared with `mut` cannot have the same name as a variable in the outer
+scope (shadowing is prohibited).
 
 <!-- docs-example: skip -->
+
 ```yaoxiang
 x = 10
 {
-    mut x = 20   // Compile error! x is already declared in outer scope, shadowing is not allowed
+    mut x = 20   // Compile error! x is already declared in outer scope, shadowing not allowed
 }
 ```
 
-**Rule three**: Within the same scope, each name can only be declared once—whether using `=` or
+> The above code **deliberately fails the check**—`E2013 Cannot shadow existing variable 'x'`.
+
+**Rule Three**: Within the same scope, each name can only be declared once—whether using `=` or
 `mut`.
 
 <!-- docs-example: skip -->
+
 ```yaoxiang
 x = 10
-mut x = 20   // Compile error! x has already been declared
+mut x = 20   // Compile error! x is already declared
 ```
 
-These rules ensure that each variable name is unique within the current scope, so you'll never
-encounter confusion about which variable a name refers to.
+> The above code **deliberately fails the check**—also `E2002`.
+
+These rules ensure that each variable name is unique in the current scope, so you'll never be
+confused about which variable a name refers to.
 
 ## Type Inference vs. Explicit Type Annotations
 
 YaoXiang uses the Hindley-Milner (HM) type inference algorithm. The compiler can automatically infer
-types from the values you write, so in most cases you don't need to write types manually.
+types from the values you write, so in most cases you don't need to manually write types.
 
 ```yaoxiang
-x = 42              // Compiler infers Int
-name = "YaoXiang"   // Inferred as String
-pi = 3.14159        // Inferred as Float
-is_valid = true     // Inferred as Bool
+x = 42              // Compiler infers as Int
+name = "YaoXiang"   // Infers as String
+pi = 3.14159        // Infers as Float
+is_valid = true     // Infers as Bool
 ```
 
-When you want to explicitly annotate a type (for readability, or when the compiler can't infer it),
-use the `: Type` syntax:
+When you want to explicitly annotate a type (for example, to improve code readability, or when the
+compiler cannot infer), use the `: Type` syntax:
 
 ```yaoxiang
 count: Int = 100
@@ -129,13 +141,13 @@ greeting: String = "Hello"
 ratio: Float = 0.618
 ```
 
-Both styles are completely equivalent. You can start writing code without types and add type
-annotations when needed. This makes prototyping very fast while still maintaining type safety in the
-final code.
+The two notations are completely equivalent. You can start by omitting types when writing code, and
+add type annotations later when needed. This makes prototyping very fast, without sacrificing type
+safety in the final code.
 
 ## Overview of Basic Types
 
-YaoXiang has several built-in primitive types that cover the vast majority of everyday programming
+YaoXiang has several built-in basic types that cover the vast majority of everyday programming
 scenarios.
 
 ### Int (Integer)
@@ -145,10 +157,10 @@ a = 42              // Decimal
 b = 0o52            // Octal (0o prefix)
 c = 0x2A            // Hexadecimal (0x prefix)
 d = 0b101010        // Binary (0b prefix)
-e = 1_000_000       // Underscores can separate digits for readability
+e = 1_000_000       // Underscores can be used to separate digits for readability
 ```
 
-### Float (Floating-point)
+### Float (Floating-Point)
 
 ```yaoxiang
 pi = 3.14159
@@ -161,7 +173,7 @@ tiny = 1.6e-19
 ```yaoxiang
 name = "YaoXiang"
 empty = ""              // Empty string
-escape = "Hello\nWorld" // Escape sequences: \n newline, \t tab, \\ backslash, \" double quote
+escape = "Hello\nWorld" // Supports escape: \n newline, \t tab, \\ backslash, \" double quote
 unicode = "\u{4F60}\u{597D}"  // Unicode escape
 ```
 
@@ -172,36 +184,36 @@ is_ready = true
 is_done = false
 ```
 
-Boolean values are typically used in conditional statements:
+Boolean values are typically used in conditional judgments:
 
 ```yaoxiang
 if is_ready {
-    print("Starting processing")
+    print("开始处理")
 }
 ```
 
 ## Variable Scope
 
-Scope determines the visibility range of variables. YaoXiang's scope rules are very simple: **every
-`{}` block creates a new scope**.
+Scope determines the visibility of a variable. YaoXiang's scope rules are very simple: **each `{}`
+block creates a new scope**.
 
 ### Basic Rules
 
 ```yaoxiang
 {
     x = 10
-    print(x)   // Can access: x is within current scope
+    print(x)   // Can access: x is in current scope
 }
 // print(x)    // Error: x is not visible outside scope
 ```
 
-Inner scopes can access variables from outer scopes:
+An inner scope can access variables from the outer scope:
 
 ```yaoxiang
-outer = "I'm outside"
+outer = "我在外面"
 {
-    print(outer)   // Can access outer's outer variable
-    inner = "I'm inside"
+    print(outer)   // Can access outer outer
+    inner = "我在里面"
 }
 // print(inner)    // Error: inner is not visible outside scope
 ```
@@ -210,42 +222,43 @@ outer = "I'm outside"
 
 ```yaoxiang
 greet: (name: String) -> Void = {
-    print("Hello, " + name)
-    // 'name' is visible inside this function body
+    print("你好, " + name)
+    // name is visible inside this function body
 }
-// 'name' is not visible outside the function
+// name is not visible outside the function
 ```
 
 ### Block Expressions
 
-In YaoXiang, `{}` blocks are also expressions and can return values:
+A `{}` block in YaoXiang is also an expression and can return a value:
 
 ```yaoxiang
 result = {
     x = 10
     y = 20
-    return x + y   // Returns 30 to the outer scope
+    return x + y   // Returns 30 to the enclosing scope
 }
-// The value of 'result' is 30
-// 'x' and 'y' are not visible outside the block
+// result's value is 30
+// x and y are not visible outside the block
 ```
 
-For detailed explanation of block return values, please refer to the functions chapter later. For
-now, just remember: **curly braces create scope, inner can see outer, outer cannot see inner**.
+For a detailed explanation of block return values, please refer to the subsequent function chapter.
+All you need to remember here is: **braces create scope, the inner can see the outer, the outer
+cannot see the inner**.
 
 ## Summary
 
-You've now mastered the core concepts of YaoXiang's variable system:
+You have now mastered the core concepts of YaoXiang's variable system:
 
-| Concept              | Key Points                                                                   |
-| -------------------- | ---------------------------------------------------------------------------- |
-| Unified syntax       | `name: type = value`, used for variables, functions, and types               |
-| Immutable by default | `x = 10` means `x` cannot be changed afterward                               |
-| Mutable variables    | Use `mut` to explicitly declare `mut x = 10`                                 |
-| No shadowing         | Each name can only be declared once per scope                                |
-| Type inference       | HM algorithm infers automatically, or write `: Type` for explicit annotation |
-| Scope                | Every `{}` creates a scope; inner sees outer, outer doesn't see inner        |
+| Concept                 | Key Points                                                                 |
+| ----------------------- | -------------------------------------------------------------------------- |
+| Unified syntactic model | `name: type = value`, used for variables, functions, and types             |
+| Immutable by default    | `x` cannot change after `x = 10`                                           |
+| Mutable variables       | Use `mut` to explicitly declare `mut x = 10`                               |
+| No shadowing            | Same name can only be declared once in the same scope                      |
+| Type inference          | HM algorithm infers automatically, or use `: Type` for explicit annotation |
+| Scope                   | Each `{}` creates a scope, inner can see outer, outer cannot see inner     |
 
-Next, you can continue learning more details about
-[Primitive Types](../../../design/formatter/formatting-rules/types.md), or proceed directly to the
-[Control Flow](../../../design/formatter/formatting-rules/control-flow.md) chapter.
+You can continue to learn more details about
+[basic types](../../../design/formatter/formatting-rules/types.md), or jump straight into the
+[control flow](../../../design/formatter/formatting-rules/control-flow.md) chapter.

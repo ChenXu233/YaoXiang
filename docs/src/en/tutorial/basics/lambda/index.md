@@ -40,8 +40,8 @@ add = (a, b) => a + b
 add: (a: Int, b: Int) -> Int = a + b
 ```
 
-The first line is "assigning a Lambda to the variable `add`", and the second is "defining a function
-named `add`". The compiler handles them in almost the same way.
+The first line is 'assigning a Lambda to the variable `add`', and the second line is 'defining a
+function named `add`'. The compiler handles them in almost the same way.
 
 ## When to Use Lambda
 
@@ -52,9 +52,10 @@ Lambda is best suited for two scenarios:
 ```yaoxiang
 use std.list
 
-// 对列表的每个元素应用一个操作
-// 注意：形参不要命名为 list（会遮蔽 std.list 模块），
-// 类型写 Vec(Int)——`List(T)` 标注的值当前不被 for 接受（E1002）
+// Apply an operation to every element of the list
+// Note: do not name the parameter `list` (it would shadow the std.list module);
+// write the type as `Vec(Int)` — values annotated as `List(T)` are currently
+// not accepted by `for` (E1002)
 apply_to_all: (xs: Vec(Int), op: (Int) -> Int) -> Vec(Int) = {
     mut result = []
     for item in xs {
@@ -64,7 +65,7 @@ apply_to_all: (xs: Vec(Int), op: (Int) -> Int) -> Vec(Int) = {
 }
 
 main = () => {
-// Pass in a Lambda
+    // Pass in a Lambda
     doubled = apply_to_all([1, 2, 3, 4, 5], (x) => x * 2)
     squared = apply_to_all([1, 2, 3, 4, 5], (x) => x * x)
 
@@ -73,15 +74,16 @@ main = () => {
 }
 ```
 
-### 2. Temporary One-Off Operations
+### 2. Ad-Hoc One-Off Operations
 
-No need to define a separate function for logic used only once:
+No need to define a dedicated function for logic that is only used once:
 
 ```yaoxiang
 use std.list
 
-// 注意：0.8.2 的 std.list 没有 sort / sort_by（实测 E1042），
-// 排序得自己写；这里演示同样「临时定义规则」的 map / filter
+// Note: std.list in 0.8.2 has no sort / sort_by (verified to produce E1042),
+// so sorting has to be hand-written; here we demonstrate the same
+// "define rules on the fly" pattern with map / filter
 main = () => {
     scores = [90, 85, 92, 78]
 
@@ -95,13 +97,14 @@ main = () => {
 
 ## Block-Form Lambda
 
-When a Lambda requires multi-line logic, use the block form:
+When a Lambda needs multi-line logic, use the block form:
 
 ```yaoxiang
 use std.string
 
-// 代码块 Lambda：可以包含多条语句
-// 注意：String 没有实例方法——`data.trim()` 报 E1053，用 std.string 的函数形式
+// Block-form Lambda: can contain multiple statements
+// Note: String has no instance methods — `data.trim()` reports E1053;
+// use std.string's function form
 process = (data: String) => {
     cleaned = string.trim(data)
     lower = string.lower(cleaned)
@@ -114,8 +117,8 @@ main = () => {
 }
 ```
 
-Note that the block form requires `return` to return a value, which is exactly the same as
-functions.
+Note that the block form requires `return` to return a value, which is exactly the same as a regular
+function.
 
 ## Multi-Parameter Lambda
 
@@ -124,39 +127,39 @@ functions.
 add_three = (x, y, z) => x + y + z
 print(add_three(1, 2, 3))  // 6
 
-// No-parameter Lambda
+// Zero-argument Lambda
 greet = () => "Hello, YaoXiang!"
 print(greet())  // "Hello, YaoXiang!"
 ```
 
 ## Type Inference
 
-Lambda's parameter types can be inferred from context:
+The parameter types of a Lambda can be inferred from context:
 
 ```yaoxiang
-// Types are inferred from usage — no need to write `(x: Int) => x * 2`
+// Type inferred from the call site — no need to write (x: Int) => x * 2
 apply: (op: (Int) -> Int, value: Int) -> Int = op(value)
 
 result = apply((x) => x + 10, 5)
 print(result)  // 15
 ```
 
-The compiler knows `op`'s type is `(Int) -> Int`, so `x` in the Lambda `(x) => x + 10` is
+The compiler knows that `op`'s type is `(Int) -> Int`, so `x` in the Lambda `(x) => x + 10` is
 automatically inferred as `Int`.
 
-> **Note**: According to the rules of function definition, parameter types must be annotated in at
-> least one place: the signature or the Lambda header. When a Lambda is passed as an argument, the
-> type is usually provided by the receiver's signature.
+> **Note**: According to the rules of function definitions, parameter types must be annotated in at
+> least one of either the signature or the Lambda header. When a Lambda is passed as an argument,
+> the type is usually provided by the receiver's signature.
 
 ## Summary
 
-| Key Point              | Description                                             |
-| ---------------------- | ------------------------------------------------------- |
-| Syntax                 | `(params) => expr` or `(params) => { return ... }`      |
-| Essence                | Function = Named Lambda                                 |
-| Higher-Order Functions | Lambdas can be passed as arguments                      |
-| Block Form             | Multi-line logic uses `{}` + `return`                   |
-| Type Inference         | Parameter types are automatically inferred from context |
+| Point              | Description                                             |
+| ------------------ | ------------------------------------------------------- |
+| Syntax             | `(params) => expr` or `(params) => { return ... }`      |
+| Essence            | Function = named Lambda                                 |
+| Higher-Order Funcs | Lambdas can be passed as arguments                      |
+| Block Form         | Use `{}` + `return` for multi-line logic                |
+| Type Inference     | Parameter types are automatically inferred from context |
 
-Lambda is the most concise way to express "temporary logic" in YaoXiang. Master it, and your code
-will be more flexible and compact.
+Lambda is the most concise way to express "ad-hoc logic" in YaoXiang. Master it, and your code will
+become more flexible and compact.

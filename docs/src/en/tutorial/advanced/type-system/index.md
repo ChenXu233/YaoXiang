@@ -4,25 +4,25 @@ title: 'Type System'
 
 # Type System
 
-In the beginner tutorial you learned to use built-in types like `Int`, `String`, and `Bool`. This
-chapter dives deeper into YaoXiang's type system and teaches you to **define your own types**.
+In the basic tutorial you learned to use builtin types like `Int`, `String`, and `Bool`. This
+chapter dives deep into YaoXiang's type system, teaching you to **define your own types**.
 
 ## Unified Syntax Model
 
-YaoXiang's type system is built on the unified syntax defined in RFC-010: **everything is
+YaoXiang's type system is built on the unified syntax defined by RFC-010: **everything is
 `name: type = value`**.
 
 | Concept      | Syntax                                         |
 | ------------ | ---------------------------------------------- |
 | Variable     | `x: Int = 42`                                  |
 | Function     | `add: (a: Int, b: Int) -> Int = a + b`         |
-| Record Type  | `Point: Type = { x: Float, y: Float }`         |
+| Record type  | `Point: Type = { x: Float, y: Float }`         |
 | Interface    | `Drawable: Type = { draw: (Surface) -> Void }` |
-| Generic Type | `List: (T: Type) -> Type = { ... }`            |
+| Generic type | `List: (T: Type) -> Type = { ... }`            |
 
-Note: **type definitions themselves are also `name: Type = value`**.
+Note: **the type definition itself is also `name: Type = value`**.
 
-## Record Types
+## Record Type
 
 Record types (called "structs" in other languages) are the most basic way to organize data in
 YaoXiang:
@@ -31,7 +31,7 @@ YaoXiang:
 // Define a record type
 Point: Type = { x: Float, y: Float }
 
-// Create instances
+// Create an instance
 origin = Point(x= 0.0, y= 0.0)
 p = Point(x= 3.0, y= 4.0)
 
@@ -42,7 +42,7 @@ print(p.y)  // 4.0
 
 ### Field Default Values
 
-Fields can have default values, and may be optionally provided when constructing:
+Fields can be given default values and are optional at construction:
 
 ```yaoxiang
 User: Type = {
@@ -51,7 +51,7 @@ User: Type = {
     active: Bool = true,
 }
 
-alice = User(name= "Alice", age= 25)        // active takes the default true
+alice = User(name= "Alice", age= 25)        // active takes default value true
 bob = User(name= "Bob")                      // age=0, active=true
 anonymous = User(name= "guest", active= false)  // age=0
 ```
@@ -65,8 +65,8 @@ use std.math
 
 Point: Type = { x: Float, y: Float }
 
-// 定义方法：Point.method 语法
-// 注意：self 必须显式写在签名里；写成 `() -> Float` 时函数体里的 self 报 E1001
+// Define a method: the Point.method syntax
+// Note: self must be written explicitly in the signature; when written as `() -> Float`, self in the body reports E1001
 Point.length: (self: Point) -> Float = {
     d = self.x * self.x + self.y * self.y
     return math.sqrt(d)
@@ -75,21 +75,22 @@ Point.length: (self: Point) -> Float = {
 main: () -> Void = {
     p = Point(x= 3.0, y= 4.0)
 
-    // 只能用 . 调用语法——写成 Point.length(p) 报 E1010
+    // Only the . call syntax can be used—writing Point.length(p) reports E1010
     print(p.length())  // 5.0
 }
 ```
 
-### `pub` Auto-Binding
+### pub Auto-Binding
 
-Within the same file, functions declared with `pub` are automatically bound to types defined in the
+Within the same file, functions declared `pub` are automatically bound to the types defined in the
 same file:
 
 <!-- docs-example: skip -->
+
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-// pub function is auto-bound to Point
+// pub functions are automatically bound to Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -100,14 +101,16 @@ pub distance: (p1: Point, p2: Point) -> Float = {
 p1 = Point(x= 0.0, y= 0.0)
 p2 = Point(x= 3.0, y= 4.0)
 
-// Auto-bound methods are called with .
+// The auto-bound method is called with .
 print(p1.distance(p2))  // 5.0
 ```
 
-## Enum Types
+## Enum Type
 
-Enums define a set of mutually exclusive variants. Variants without data use lowercase, and variants
-with data use functional syntax:
+An enum defines a set of mutually exclusive variants. Variants without data use lowercase, variants
+with data use function-like syntax:
+
+<!-- docs-example: skip -->
 
 ```yaoxiang
 // Simple enum
@@ -123,6 +126,7 @@ Shape: Type = { circle: (Float) -> Shape, rect: (Float, Float) -> Shape, point: 
 The core idea of enums: **each variant is itself a type**.
 
 <!-- docs-example: skip -->
+
 ```yaoxiang
 area: (s: Shape) -> Float = match s {
     circle(r) => 3.14159 * r * r,
@@ -134,12 +138,13 @@ print(area(circle(5.0)))    // 78.53975
 print(area(rect(3.0, 4.0))) // 12.0
 ```
 
-## Interfaces
+## Interface
 
-Interfaces are **record types whose fields are all function types**. Implementing an interface means
-including the interface name in the record:
+An interface is **a record type whose fields are all function types**. To implement an interface,
+include the interface name in the record:
 
 <!-- docs-example: skip -->
+
 ```yaoxiang
 // Define an interface
 Drawable: Type = {
@@ -152,7 +157,7 @@ Circle: Type = {
     x: Float,
     y: Float,
     radius: Float,
-    Drawable,       // implements the Drawable interface
+    Drawable,       // Implement the Drawable interface
 }
 
 // Provide the methods required by the interface
@@ -170,12 +175,12 @@ Circle.bounding_box: (self: Circle) -> Rect = {
 }
 ```
 
-Interfaces enable polymorphism — any type that implements `Drawable` can be passed to a function
-that accepts `Drawable`.
+Interfaces enable polymorphism—any type that implements `Drawable` can be passed to a function that
+accepts `Drawable`.
 
-## Generic Types
+## Generic Type
 
-Generics let you write type definitions that are **not tied to a specific type**:
+Generics let you write **type definitions that are not tied to specific types**:
 
 ```yaoxiang
 // Generic Pair
@@ -186,15 +191,15 @@ string_pair = Pair(Int, String)(first= 1, second= "hello")
 float_pair = Pair(Float, Float)(first= 3.14, second= 2.71)
 ```
 
-Generic functions:
+Generic function:
 
 ```yaoxiang
 use std.list
 
-// 对列表的每个元素应用一个函数
-// 注意：0.8.2 的类型参数化函数还无法实例化——写成
-// `(T: Type, R: Type) -> (函数类型)` 再 `map2(Int, Int)(numbers, f)` 报 E1002，
-// 因此这里用等价的单态签名演示同一件事。
+// Apply a function to every element of a list
+// Note: parameterized functions over type parameters in 0.8.2 cannot yet be instantiated—writing
+// `(T: Type, R: Type) -> (function type)` and then `map2(Int, Int)(numbers, f)` reports E1002,
+// so an equivalent monomorphic signature is used here to demonstrate the same thing.
 map: (numbers: Vec(Int), f: (Int) -> Int) -> Vec(Int) = {
     mut result = []
     for item in numbers {
@@ -212,11 +217,11 @@ main: () -> Void = {
 
 ## Summary
 
-| Concept     | Syntax                                                                      | Purpose                              |
-| ----------- | --------------------------------------------------------------------------- | ------------------------------------ |
-| Record Type | `Point: Type = { x: Float, y: Float }`                                      | Organize related data                |
-| Enum        | `Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }` | One-of choices                       |
-| Interface   | `Drawable: Type = { draw: ... }`                                            | Polymorphic abstraction              |
-| Generic     | `List: (T: Type) -> Type = { ... }`                                         | Type parameterization                |
-| Never       | `Never` is the built-in bottom type                                         | Diverging/never-returning code paths |
-| Method      | `Type.method: (self: Type, ...) -> ...`                                     | Behavior attachment                  |
+| Concept     | Syntax                                                                      | Purpose                           |
+| ----------- | --------------------------------------------------------------------------- | --------------------------------- |
+| Record type | `Point: Type = { x: Float, y: Float }`                                      | Organize related data             |
+| Enum        | `Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }` | Choose one of several             |
+| Interface   | `Drawable: Type = { draw: ... }`                                            | Polymorphic abstraction           |
+| Generic     | `List: (T: Type) -> Type = { ... }`                                         | Type parameterization             |
+| Never       | `Never` is a builtin bottom type                                            | Diverging / never-returning paths |
+| Method      | `Type.method: (self: Type, ...) -> ...`                                     | Attaching behavior                |

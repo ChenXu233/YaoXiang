@@ -5,21 +5,21 @@ description: 'File handles, environment variables, and working directory'
 
 # std.os
 
-Operating-system interface module: file-handle read/write, environment variables, and working
-directory. For path-level file operations (whole-file read/write, directories, metadata, path
-manipulation), see [`std.fs`](./fs).
+Operating system interface module: file handle read/write, environment variables, and working
+directory. Path-level file operations (whole-file read/write, directory, metadata, path
+manipulation) are documented in [`std.fs`](./fs).
 
 ```yaoxiang
 use std.os
 ```
 
-> All functions in this module rely on OS capabilities and are **not exported** on the `wasm32`
-> target.
+> All functions in this module rely on operating system capabilities and are **not exported** on the
+> `wasm32` target.
 
-## File-handle model
+## File Handle Model
 
-> **Handles are passed by reference (issue #337 fixed)**: the signatures of `read` / `write` /
-> `seek` / `tell` / `flush` / `close` are all `(file: &File, ...)`, so handles can be reused:
+> **File handles are passed by reference (#337 fixed)**: The signatures of `read` / `write` / `seek`
+> / `tell` / `flush` / `close` are all `(file: &File, ...)`, so handles can be reused:
 >
 > ```yaoxiang
 > f = os.open(p, "w")
@@ -27,7 +27,7 @@ use std.os
 > os.close(f)
 > ```
 >
-> Read/write after positioning (the reason `seek` exists) is now also available:
+> Positioned read/write (the reason `seek` exists) is also available:
 >
 > ```yaoxiang
 > r = os.open(p, "r")
@@ -36,17 +36,19 @@ use std.os
 > os.close(r)
 > ```
 >
-> Before the fix, the signatures had no `&`, so handles were passed by value → linear ownership →
-> invalidated after one use, and `open → write → close` would report `E2014`.
->
-> If you want to avoid manual handle management, you can still use the handle-free convenience
-> functions: [`std.io.read_file`](./io#read_file) / [`write_file`](./io#write_file) /
-> [`append_file`](./io#append_file), or this module's [`append_file`](#append_file).
+> Before the fix, the signatures had no `&`, handles were passed by value → linear ownership →
+> became invalid after one use. `open → write → close` would report `E2014`.
 
-`open` returns a file descriptor of type **`Int`** (the engine internally maintains a handle table),
-so the `File` in the signature is effectively an `Int`.
+If you want to avoid manually managing handles, you can use the no-handle convenience functions —
+they live in [`std.fs`](./fs) (**not** in `std.io`): `fs.read_file` / `fs.write_file` /
+`fs.append_file`. This module (`std.os`) only has handle-level incremental read/write, and has no
+`append_file` (`os.append_file` reports `E1042`).
 
-Content is persisted to disk immediately after writing; explicit `close` is not required:
+The return type annotation of `open` is `File` — the engine internally maintains a handle table
+(`src/std/os.rs:98`), the underlying type is `std::fs::File`, and it is an **opaque handle value**
+to the user.
+
+Content is flushed to disk immediately after writing, no explicit `close` is needed:
 
 ```yaoxiang
 use std.assert
@@ -62,18 +64,18 @@ main: () -> Void = {
 }
 ```
 
-Modes supported by `open`:
+Supported modes for `open`:
 
 | Mode | Meaning                         |
 | ---- | ------------------------------- |
-| `r`  | Read-only; file must exist      |
-| `w`  | Write-only; create or truncate  |
-| `a`  | Append; create or append to end |
-| `r+` | Read/write; file must exist     |
-| `w+` | Read/write; create or truncate  |
-| `a+` | Read/write; create or append    |
+| `r`  | Read-only, file must exist      |
+| `w`  | Write-only, create or truncate  |
+| `a`  | Append, create or append to end |
+| `r+` | Read-write, file must exist     |
+| `w+` | Read-write, create or truncate  |
+| `a+` | Read-write, create or append    |
 
-## Function reference
+## Function List
 
 <!-- stdlib:table:os start -->
 
@@ -92,7 +94,9 @@ Modes supported by `open`:
 | `chdir`   | `(path: &String) -> Bool`                 |
 | `getcwd`  | `() -> String`                            |
 
-<!-- stdlib:table:os end -->## File operations
+<!-- stdlib:table:os end -->
+
+## File Operations
 
 ### open
 
@@ -104,19 +108,17 @@ open: (path: &String, mode: &String) -> File
 
 <!-- stdlib:sig:os.open end -->
 
-Open a file and return a file descriptor.
+Open a file and return a handle.
 
 - `path` — file path (read-only borrow)
-- `mode` — open mode; see table above
+- `mode` — open mode, see the table above
 
-Returns: an `Int` descriptor allocated from the internal handle table. **The handle can only be used
-once** — any downstream call will move it (see [File-handle model](#file-handle-model)), so `open`
-is usually inlined into a single call.
+Returns: a `File` handle value. **Handles are passed by reference** — the parameters of `write` /
+`seek` / `read` / `tell` / `flush` / `close` are all `&File` (`src/std/os.rs:35-65`), so the same
+handle can be reused until explicitly [`close`](#close)d. Usually `open` is inlined into a single
+call to avoid cleanup.
 
-Errors: throws `E6007` if the mode is invalid, the file does not exist, or permission is denied.
-
-> Since a handle can only be used once (issue #337), the return value is usually inlined directly
-> into a downstream call.
+Errors: throws `E6007` when the mode is invalid, the file does not exist, or permission is denied.
 
 ```yaoxiang
 use std.assert
@@ -127,6 +129,7 @@ main: () -> Void = {
     p = "__yx_doc_open_only.txt"
     f = os.open(p, "w")
     assert(fs.exists(p))
+    os.close(f)
     fs.remove(p)
 }
 ```
@@ -141,13 +144,14 @@ close: (file: &File) -> Void
 
 <!-- stdlib:sig:os.close end -->
 
-Close a file handle and release the table entry.
+Close the file handle and release its table entry.
 
-Because a handle can only be used once, `close` is only meaningful in scenarios where the handle is
-"opened and not used for anything else"; the written content is already persisted to disk when
-[`write`](#write) returns, so an explicit close is usually unnecessary.
+The parameter is `&File`, so `close` can be placed at the end of a sequence of read/write
+operations, releasing the handle after it has been used up. Written content is flushed to disk when
+[`write`](#write) returns (`os.open(…, "w")` goes through `OpenOptions::create(true)`), so explicit
+close is usually unnecessary — but cleanup should be done when holding many handles for a long time.
 
-Errors: throws `E6007` if the descriptor is invalid (not opened or already closed).
+Errors: throws `E6007` when the handle is invalid (not opened or already closed).
 
 ```yaoxiang
 use std.fs
@@ -156,6 +160,7 @@ use std.os
 main: () -> Void = {
     p = "__yx_doc_close.txt"
     f = os.open(p, "w")
+    os.write(f, "data")
     os.close(f)
     fs.remove(p)
 }
@@ -173,12 +178,13 @@ read: (file: &File, n: Int) -> String
 
 Read **at most** `n` bytes from the current read/write position.
 
-- `file` — file descriptor
+- `file` — file handle
 - `n` — expected number of bytes to read
 
-Returns: the content actually read (may be shorter than `n`; returns an empty string at end of
-file). Invalid UTF-8 bytes are returned as replacement characters, without raising an error. Errors:
-throws `E6007` if the descriptor is invalid or the read fails.
+Returns: the actual content read (may be shorter than `n`; returns an empty string when reaching end
+of file). Invalid UTF-8 bytes are returned as replacement characters, no error is raised.
+
+Errors: throws `E6007` when the handle is invalid or the read fails.
 
 ```yaoxiang
 use std.assert
@@ -209,8 +215,9 @@ Write all of `content` at the current read/write position.
 
 - `content` — passed by value
 
-Returns: the **number of bytes** written. Errors: throws `E6007` if the descriptor is invalid or the
-write fails.
+Returns: the number of **bytes written**.
+
+Errors: throws `E6007` when the handle is invalid or the write fails.
 
 ```yaoxiang
 use std.assert
@@ -235,13 +242,14 @@ seek: (file: &File, offset: Int) -> Bool
 
 <!-- stdlib:sig:os.seek end -->
 
-Move the read/write position to the **absolute** offset `offset` (relative to the start of the
+Move the read/write position to an **absolute** offset `offset` (relative to the beginning of the
 file).
 
-- `offset` — target byte offset; must be non-negative
+- `offset` — target byte offset, must be non-negative
 
-Returns: `true` on success. Errors: throws `E6007` if the descriptor is invalid or the offset is
-illegal.
+Returns: `true` on success.
+
+Errors: throws `E6007` when the handle is invalid or the offset is invalid.
 
 ```yaoxiang
 use std.assert
@@ -268,9 +276,9 @@ tell: (file: &File) -> Int
 
 <!-- stdlib:sig:os.tell end -->
 
-Return the byte offset of the current read/write position.
+Returns the byte offset of the current read/write position.
 
-Errors: throws `E6007` if the descriptor is invalid.
+Errors: throws `E6007` when the handle is invalid.
 
 ```yaoxiang
 use std.assert
@@ -297,7 +305,7 @@ flush: (file: &File) -> Void
 
 Flush buffered content to disk.
 
-Errors: throws `E6007` if the descriptor is invalid or flushing fails.
+Errors: throws `E6007` when the handle is invalid or the flush fails.
 
 ```yaoxiang
 use std.assert
@@ -312,7 +320,7 @@ main: () -> Void = {
 }
 ```
 
-## Environment variables
+## Environment Variables
 
 ### get_env
 
@@ -326,8 +334,9 @@ get_env: (name: &String) -> String
 
 Read an environment variable.
 
-Returns: the variable's value; **returns an empty string if the variable does not exist** (no
-error). Thus "not set" cannot be distinguished from "set to empty string".
+Returns: the variable value; **returns an empty string when the variable does not exist** (no error
+is raised). As a result, it is impossible to distinguish between "not set" and "set to empty
+string".
 
 ```yaoxiang
 use std.assert
@@ -335,7 +344,7 @@ use std.os
 use std.string
 
 main: () -> Void = {
-    // PATH is guaranteed to exist on mainstream platforms
+    // PATH must exist on mainstream platforms
     path = os.get_env("PATH")
     assert(string.len(path) > 0)
 
@@ -366,7 +375,7 @@ main: () -> Void = {
 }
 ```
 
-## Process and working directory
+## Process and Working Directory
 
 ### args
 
@@ -378,10 +387,10 @@ args: () -> String
 
 <!-- stdlib:sig:os.args end -->
 
-Return the command-line arguments.
+Returns command line arguments.
 
-Returns: a single string with all argv values **joined by `\n`** (not a `List`). The first element
-is the path to the program itself.
+Returns: a single string with all argv **joined by `\n`** (not a `List`). The first item is the
+program path itself.
 
 ```yaoxiang
 use std.assert
@@ -404,9 +413,11 @@ chdir: (path: &String) -> Bool
 
 <!-- stdlib:sig:os.chdir end -->
 
-Change the current working directory.
+Switch the current working directory.
 
-Returns: `true` on success. Errors: throws `E6007` if the directory does not exist.
+Returns: `true` on success.
+
+Errors: throws `E6007` when the directory does not exist.
 
 ```yaoxiang
 use std.assert
@@ -415,7 +426,7 @@ use std.os
 main: () -> Void = {
     before = os.getcwd()
     assert(os.chdir(".."))
-    assert(os.chdir(before))     // switch back
+    assert(os.chdir(before))     // Switch back
     assert(os.getcwd() == before)
 }
 ```
@@ -430,9 +441,9 @@ getcwd: () -> String
 
 <!-- stdlib:sig:os.getcwd end -->
 
-Return the absolute path of the current working directory.
+Returns the absolute path of the current working directory.
 
-Errors: throws `E6007` if it cannot be obtained.
+Errors: throws `E6007` when it cannot be obtained.
 
 ```yaoxiang
 use std.assert
@@ -447,5 +458,5 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.fs`](./fs) — path-level file and directory operations
+- [`std.fs`](./fs) — Path-level file and directory operations
 - [Error code reference](../error-code/) — `E6007` generic runtime error

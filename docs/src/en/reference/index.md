@@ -1,66 +1,87 @@
 # YaoXiang Reference Documentation
 
-> This document is under construction...
+> YaoXiang is currently in the **experimental validation stage** (for the current version, see
+> [Language Specification Overview](./language-spec/index.md)); the standard library and APIs are
+> being progressively improved.
+>
+> The **authoritative per-module reference** for the standard library is in
+> [Standard Library Reference](./stdlib/index.md); this page only serves as an entry index.
 
-YaoXiang is currently in the **experimental validation stage**, with its standard library and API
-being progressively refined.
+## Reference Entries
+
+- [Error Code Reference](./error-code/index.md) - Overview of diagnostic codes and categorized
+  lookup
+- [Warning Codes](./warning-code/warning-codes.md)
+- [Package Management](./package/index.md) - Manifest, lock file, and commands
+- [Tool Commands](./check-command.md) / [format](./format-command.md) / [test](./test-command.md)
 
 ## Language Specification
 
 - [Language Specification Overview](./language-spec/index.md)
 - [Syntax Specification](./language-spec/syntax.md) - Lexical structure, grammar rules, operator
   precedence
-- [Type System](./language-spec/type-system.md) - Basic types, compound types, generics, trait
+- [Type System](./language-spec/type-system.md) - Primitive types, composite types, generics, trait
 - [Module System](./language-spec/modules.md) - Module definitions, imports/exports, scope
 - [Concurrency Model](./language-spec/concurrency.md) - Asynchronous programming, concurrency
   primitives, memory model
-- [Standard Library](./language-spec/stdlib.md) - Core library, IO library, math library
+- [FFI](./language-spec/ffi.md) - Foreign function interface
+- [Standard Library](./language-spec/stdlib.md) - Standard library overview
 
 ## Current Status
 
-| Module           | Status         | Description                 |
-| ---------------- | -------------- | --------------------------- |
-| `std.io`         | 🔨 In Progress | Input/Output                |
-| `std.string`     | 🔨 In Progress | String operations           |
-| `std.list`       | 🔨 In Progress | List operations             |
-| `std.dict`       | ✅ Implemented | Dictionary operations       |
-| `std.range`      | ✅ Implemented | Ranges and iterators (#302) |
-| `std.math`       | 🔨 In Progress | Math functions              |
-| `std.net`        | 📋 Planned     | Network operations          |
-| `std.concurrent` | 📋 Planned     | Concurrency primitives      |
+| Module           | Status         | Description                 | Reference                            |
+| ---------------- | -------------- | --------------------------- | ------------------------------------ |
+| `std.io`         | ✅ Implemented | Input/output                | [io](./stdlib/io.md)                 |
+| `std.string`     | ✅ Implemented | String operations           | [string](./stdlib/string.md)         |
+| `std.list`       | ✅ Implemented | List operations             | [list](./stdlib/list.md)             |
+| `std.dict`       | ✅ Implemented | Dictionary operations       | [dict](./stdlib/dict.md)             |
+| `std.range`      | ✅ Implemented | Ranges and iterators (#302) | [range](./stdlib/range.md)           |
+| `std.math`       | ✅ Implemented | Math functions              | [math](./stdlib/math.md)             |
+| `std.net`        | ✅ Implemented | Networking (ureq + rustls)  | [net](./stdlib/net.md)               |
+| `std.concurrent` | ✅ Implemented | Concurrency primitives      | [concurrent](./stdlib/concurrent.md) |
+| `std.os`         | ✅ Implemented | Operating system interface  | [os](./stdlib/os.md)                 |
+| `std.fs`         | ✅ Implemented | File system                 | [fs](./stdlib/fs.md)                 |
+| `std.time`       | ✅ Implemented | Time and date               | [time](./stdlib/time.md)             |
+| `std.convert`    | ✅ Implemented | Type conversion             | [convert](./stdlib/convert.md)       |
+| `std.result`     | ✅ Implemented | Result type                 | [result](./stdlib/result.md)         |
+| `std.assert`     | ✅ Implemented | Assertions                  | [assert](./stdlib/assert.md)         |
+| `std.weak`       | ✅ Implemented | Weak references             | [weak](./stdlib/weak.md)             |
+
+> `std.net` was originally a "placeholder implementation that did not send requests"; it has now
+> been replaced with a real implementation (#56).
 
 ## Built-in Types
 
 ### Primitive Types
 
-| Type     | Description             | Examples        |
-| -------- | ----------------------- | --------------- |
-| `Void`   | Empty value / no return | `()`            |
-| `Bool`   | Boolean                 | `true`, `false` |
-| `Int`    | Integer                 | `42`, `-10`     |
-| `Float`  | Floating-point number   | `3.14`, `-0.5`  |
-| `Char`   | Character               | `'a'`, `'中'`   |
-| `String` | String                  | `"hello"`       |
+| Type     | Description      | Example         |
+| -------- | ---------------- | --------------- |
+| `Void`   | Void / no return | `()`            |
+| `Bool`   | Boolean value    | `true`, `false` |
+| `Int`    | Integer          | `42`, `-10`     |
+| `Float`  | Floating-point   | `3.14`, `-0.5`  |
+| `Char`   | Character        | `'a'`, `'中'`   |
+| `String` | String           | `"hello"`       |
 
-### Compound Types
+### Composite Types
 
-| Type                 | Description         | Examples       |
+| Type                 | Description         | Example        |
 | -------------------- | ------------------- | -------------- |
 | `Tuple(T1, T2, ...)` | Heterogeneous tuple | `(1, "hello")` |
 | `(Args) -> Ret`      | Function type       | `(Int) -> Int` |
 
 > #299: Container types (`List(T)` / `Vec(T)` / `Array(T, N)` / `Dict(K, V)`) are not built-in
-> primitives — they are generic type constructors, treated the same as user-defined generics,
-> processed through the unified generic instantiation path. Literal syntax (`[...]` / `{...}`) is
-> retained in the core, with the landing point determined by context annotations. Set has been
-> removed (#300); see [Language Specification](language-spec/syntax.md) for details.
+> primitives — they are generic type constructors, treated the same as user-defined generics, and
+> handled through a unified generic instantiation path. Literal syntax (`[...]` / `{...}`) remains
+> in the core, and the resolution is determined by context annotations. `Set` has been removed
+> (#300); see [Language Specification](language-spec/syntax.md) for details.
 >
-> The three container concepts are distinguished by where length information resides: `Array(T, N)`
-> carries length in the type (fixed-length), `Vec(T)` carries length as a runtime value (primitive
-> buffer), and `List(T)` is a standard library type (`{ data: Vec(T), length: Int }`, with all
-> policies in the library).
+> The three container concepts are distinguished by where the length information lives:
+> `Array(T, N)` has the length in the type (fixed-size), `Vec(T)` has the length as a runtime value
+> (raw buffer primitive), and `List(T)` is a standard library type (`{ data: Vec(T), length: Int }`,
+> with the strategy fully in the library).
 
-### User-Defined Types
+### User-defined Types
 
 ```yaoxiang
 // Record type (struct)
@@ -78,55 +99,55 @@ Callable: Type = { call: (String) -> Void }
 ### Output
 
 ```yaoxiang
-print(value)           // Print, no newline
-println(value)         // Print, with newline
+print(value)           // print, no newline
+println(value)         // print, with newline
 ```
 
 ### Conversion
 
 ```yaoxiang
-to_string(value)       // Convert to string
-to_int(value)          // Convert to integer
-to_float(value)        // Convert to float
+to_string(value)       // convert to string
+to_int(value)          // convert to integer
+to_float(value)        // convert to float
 ```
 
 ### Type Checking
 
 ```yaoxiang
-typeof(value)         // Return type name
-is_type(value, type)  // Check type
+typeof(value)         // returns the type name
+is_type(value, type)  // checks the type
 ```
 
 ## Keywords
 
-| Keyword                   | Description           |
-| ------------------------- | --------------------- |
-| `Type`                    | Meta type             |
-| `spawn`                   | Mark spawn function   |
-| `spawn for`               | Parallel loop         |
-| `spawn {}`                | Spawn block           |
-| `if` / `else if` / `else` | Conditional branching |
-| `match`                   | Pattern matching      |
-| `while` / `for`           | Loops                 |
-| `return`                  | Return value          |
-| `ref`                     | Create reference      |
-| `mut`                     | Mutable marker        |
+| Keyword                   | Description            |
+| ------------------------- | ---------------------- |
+| `Type`                    | Meta type              |
+| `spawn`                   | Marks a spawn function |
+| `spawn for`               | Parallel loop          |
+| `spawn {}`                | Spawn block            |
+| `if` / `else if` / `else` | Conditional branches   |
+| `match`                   | Pattern matching       |
+| `while` / `for`           | Loops                  |
+| `return`                  | Return value           |
+| `ref`                     | Create a reference     |
+| `mut`                     | Mutable marker         |
 
-## Syntax Cheatsheet
+## Syntax Quick Reference
 
-### Variable Declaration
+### Variable Declarations
 
 ```yaoxiang
 // Immutable variable (default)
 x: Int = 42
-y = 42                 // Type inference
+y = 42                 // type inference
 
 // Mutable variable
 mut count: Int = 0
 count = count + 1
 ```
 
-### Function Definition
+### Function Definitions
 
 ```yaoxiang
 // Regular function
@@ -142,7 +163,7 @@ identity: [T](x: T) -> T = x
 ### Control Flow
 
 ```yaoxiang
-// Conditional
+// Conditionals
 if x > 0 {
     print("positive")
 } else if x < 0 {
@@ -157,7 +178,7 @@ match result {
     err(error) => print("error: " + error),
 }
 
-// Loop
+// Loops
 for i in 0..10 {
     print(i)
 }
@@ -172,18 +193,18 @@ data = fetch_file(path)?
 
 ## Operator Precedence
 
-| Precedence | Operators                                                                                                                                                                             |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Highest    | `( )` function call                                                                                                                                                                   |
-|            | `.` field access                                                                                                                                                                      |
-|            | `[ ]` index                                                                                                                                                                           |
-|            | `unary -` unary negation                                                                                                                                                              |
-|            | `* / %` multiply/divide/modulo                                                                                                                                                        |
-|            | (Operator precedence and associativity are language-fixed; the semantics of `+ - * / %` `== !=` `[]` can be overloaded by types implementing the corresponding interfaces (RFC-011b)) |
-|            | `+ -` addition/subtraction                                                                                                                                                            |
-|            | `== != < > <= >=` comparison                                                                                                                                                          |
-|            | `and or` logical operations                                                                                                                                                           |
-| Lowest     | `=` assignment                                                                                                                                                                        |
+| Precedence | Operators                                                                                                                                                                                     |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Highest    | `( )` function call                                                                                                                                                                           |
+|            | `.` field access                                                                                                                                                                              |
+|            | `[ ]` indexing                                                                                                                                                                                |
+|            | `unary -` unary negation                                                                                                                                                                      |
+|            | `* / %` multiplication, division, modulus                                                                                                                                                     |
+|            | (Operator precedence and associativity are fixed by the language; the semantics of `+ - * / %` `== !=` `[]` can be overloaded by types that implement the corresponding interface (RFC-011b)) |
+|            | `+ -` addition, subtraction                                                                                                                                                                   |
+|            | `== != < > <= >=` comparison                                                                                                                                                                  |
+|            | `and or` logical operators                                                                                                                                                                    |
+| Lowest     | `=` assignment                                                                                                                                                                                |
 
 ## Standard Library Usage Examples
 
@@ -202,7 +223,7 @@ println("Hello, YaoXiang!")
 result = sqrt(16.0)  // 4.0
 ```
 
-## Command-line Tool
+## Command-line Tools
 
 ```bash
 # Run a script
@@ -211,7 +232,7 @@ yx run hello.yx
 # Build bytecode
 yx build hello.yx -o hello.42
 
-# Interpret execution
+# Interpret and execute
 yx eval 'println("Hello")'
 
 # View help
@@ -224,7 +245,7 @@ yaoxiang --help
 use std.convert
 use std.io
 
-// Compute Fibonacci sequence
+// Compute the Fibonacci sequence
 fib: (n: Int) -> Int = if n <= 1 {
     n
 } else {
@@ -239,7 +260,7 @@ main: () -> Void = {
 
 ## Related Resources
 
-- [Tutorial](../tutorial/) - Learn YaoXiang
+- [Tutorials](../tutorial/) - Learn YaoXiang
 - [Design Documents](../design/) - Language design decisions
 - [GitHub](https://github.com/ChenXu233/YaoXiang)
 
@@ -247,7 +268,7 @@ main: () -> Void = {
 
 The standard library is under construction — contributions are welcome!
 
-1. Choose a module (e.g., `std.io`, `std.net`)
-2. Implement functions in `src/std/`
+1. Pick a module (e.g. `std.io`, `std.net`)
+2. Implement the functions in `src/std/`
 3. Add documentation comments
 4. Submit a PR
