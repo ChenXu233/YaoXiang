@@ -33,6 +33,32 @@ fn stable_cwd() -> PathBuf {
     std::env::temp_dir()
 }
 
+/// 构造剥离仓库定位环境变量的 git 子进程 Command。
+///
+/// `git commit` 会向钩子环境注入 GIT_DIR/GIT_WORK_TREE 等变量并被子进程
+/// 继承：钩子链里 spawn 的 git（测试夹具的 init、下载链路的 clone）会把
+/// 仓库定位重定向到继承的仓库——`git init <dir>` 实际 reinit 的是
+/// GIT_DIR 指向的仓库（cache 测试在钩子链下误报连挂的根因）。仓库定位
+/// 一律走显式参数（`-C` / URL / 目标路径），定位类环境变量在此统一剥离。
+pub(crate) fn git_command() -> Command {
+    let mut cmd = Command::new("git");
+
+    for key in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_NAMESPACE",
+        "GIT_CONFIG_PARAMETERS",
+    ] {
+        cmd.env_remove(key);
+    }
+
+    cmd
+}
+
 /// Git 来源
 ///
 /// 从 Git 仓库克隆并下载依赖。
@@ -112,7 +138,7 @@ impl GitSource {
         // 克隆仓库。--no-local 强制本地路径也走传输路径：本地硬链接克隆
         // 会忽略 --depth，且 git 2.55 下 checkout 间歇性失败
         //（"fatal: this operation must be run in a work tree"）
-        let mut cmd = Command::new("git");
+        let mut cmd = git_command();
         cmd.current_dir(stable_cwd());
         cmd.arg("clone").arg("--no-local").arg("--depth").arg("1");
 
@@ -146,7 +172,7 @@ impl GitSource {
 
         // 如果是 rev，需要 checkout 到指定 commit
         if let GitRef::Rev(rev) = git_ref {
-            let checkout_output = Command::new("git")
+            let checkout_output = git_command()
                 .arg("-C")
                 .arg(dest)
                 .arg("checkout")
@@ -173,7 +199,7 @@ impl GitSource {
         &self,
         url: &str,
     ) -> PackageResult<Vec<String>> {
-        let output = Command::new("git")
+        let output = git_command()
             .current_dir(stable_cwd())
             .arg("ls-remote")
             .arg("--tags")
@@ -232,7 +258,7 @@ impl GitSource {
         }
 
         // 尝试获取 git 最新 tag
-        let output = Command::new("git")
+        let output = git_command()
             .arg("-C")
             .arg(dest)
             .arg("describe")
@@ -389,7 +415,7 @@ impl GitSource {
         url: &str,
         pattern: &str,
     ) -> PackageResult<String> {
-        let output = Command::new("git")
+        let output = git_command()
             .current_dir(stable_cwd())
             .arg("ls-remote")
             .arg(url)

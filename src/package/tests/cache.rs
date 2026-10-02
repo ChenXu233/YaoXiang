@@ -8,13 +8,12 @@
 //! - 本地 git 仓库端到端：下载入缓存 → vendor 副本无 `.git` → 缓存复用
 
 use std::path::Path;
-use std::process::Command;
 
 use tempfile::TempDir;
 
 use crate::package::cache::{GlobalCache, sanitize_key};
 use crate::package::dependency::DependencySpec;
-use crate::package::source::git::{GitRef, GitSource};
+use crate::package::source::git::{GitRef, GitSource, git_command};
 use crate::package::source::Source;
 
 // === sanitize_key 测试 ===
@@ -161,7 +160,7 @@ fn test_from_config_default_has_root() {
 fn make_git_repo(dir: &Path) -> std::path::PathBuf {
     std::fs::create_dir_all(dir).unwrap();
     let git = |args: &[&str]| {
-        let mut cmd = Command::new("git");
+        let mut cmd = git_command();
         cmd.arg("-c")
             .arg("user.name=test")
             .arg("-c")
