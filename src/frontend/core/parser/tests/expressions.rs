@@ -228,12 +228,64 @@ fn test_tuple() {
     assert!(matches!(expr, Expr::Tuple(..)));
 }
 
-// 列表推导式 (Spec §2.6.5)
+// 列表推导式 (Spec §2.6.5, #401)
 
 #[test]
 fn test_list_comp() {
     let expr = parse_expr("[x * x for x in items]");
     assert!(matches!(expr, Expr::ListComp { .. }));
+}
+
+#[test]
+fn test_list_comp_with_filter_yields_condition() {
+    // Arrange & Act
+    let expr = parse_expr("[x for x in items if x > 0]");
+
+    // Assert
+    match expr {
+        Expr::ListComp { generators, .. } => {
+            assert_eq!(generators.len(), 1, "单 for 子句应解析为 1 个生成器");
+            assert_eq!(generators[0].var, "x", "迭代变量应为 x");
+            assert!(generators[0].condition.is_some(), "if 过滤应解析出过滤条件");
+        }
+        other => panic!("期望 ListComp，实际为 {:?}", other),
+    }
+}
+
+#[test]
+fn test_list_comp_multi_generator_expands_clauses() {
+    // Arrange & Act
+    let expr = parse_expr("[x * y for x in xs for y in ys]");
+
+    // Assert
+    match expr {
+        Expr::ListComp { generators, .. } => {
+            assert_eq!(generators.len(), 2, "两个 for 子句应解析为 2 个生成器");
+            assert_eq!(generators[0].var, "x", "第一个迭代变量应为 x");
+            assert_eq!(generators[1].var, "y", "第二个迭代变量应为 y");
+            assert!(
+                generators[0].condition.is_none() && generators[1].condition.is_none(),
+                "无 if 子句时过滤条件应为空"
+            );
+        }
+        other => panic!("期望 ListComp，实际为 {:?}", other),
+    }
+}
+
+#[test]
+fn test_list_comp_multi_generator_with_per_clause_filters() {
+    // Arrange & Act
+    let expr = parse_expr("[x * y for x in xs if x > 0 for y in ys if y < 9]");
+
+    // Assert
+    match expr {
+        Expr::ListComp { generators, .. } => {
+            assert_eq!(generators.len(), 2, "两个 for 子句应解析为 2 个生成器");
+            assert!(generators[0].condition.is_some(), "第一个子句应带 if 过滤");
+            assert!(generators[1].condition.is_some(), "第二个子句应带 if 过滤");
+        }
+        other => panic!("期望 ListComp，实际为 {:?}", other),
+    }
 }
 
 // Lambda (Spec §4.10)

@@ -770,19 +770,23 @@ fn test_expr_listcomp() {
             right: Box::new(Expr::Var("x".into(), Span::dummy())),
             span: Span::dummy(),
         }),
-        var: "x".into(),
-        iterable: Box::new(Expr::Var("items".into(), Span::dummy())),
-        condition: Some(Box::new(Expr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(Expr::Var("x".into(), Span::dummy())),
-            right: Box::new(Expr::Lit(Literal::Int(0), Span::dummy())),
+        generators: vec![ast::ListCompGenerator {
+            var: "x".into(),
+            iterable: Box::new(Expr::Var("items".into(), Span::dummy())),
+            condition: Some(Box::new(Expr::BinOp {
+                op: BinOp::Gt,
+                left: Box::new(Expr::Var("x".into(), Span::dummy())),
+                right: Box::new(Expr::Lit(Literal::Int(0), Span::dummy())),
+                span: Span::dummy(),
+            })),
             span: Span::dummy(),
-        })),
+        }],
         span: Span::dummy(),
     };
-    if let Expr::ListComp { var, condition, .. } = &expr {
-        assert_eq!(var, "x");
-        assert!(condition.is_some(), "if 语句应有条件");
+    if let Expr::ListComp { generators, .. } = &expr {
+        assert_eq!(generators.len(), 1);
+        assert_eq!(generators[0].var, "x");
+        assert!(generators[0].condition.is_some(), "if 子句应有过滤条件");
     }
 }
 
