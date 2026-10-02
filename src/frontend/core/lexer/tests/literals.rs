@@ -182,9 +182,9 @@ fn test_fstring_interpolation() {
 
 #[test]
 fn test_fstring_escape_brace() {
-    // {{ → literal {
-    let tokens = tokenize(r#"f"hello{{"#).unwrap();
-    assert!(matches!(&tokens[0].kind, TokenKind::FStringLiteral(s) if s == "hello{"));
+    // #402：`{{` 在 raw 中逐字保留，解转义发生在 parser 切段
+    let tokens = tokenize(r#"f"hello{{""#).unwrap();
+    assert!(matches!(&tokens[0].kind, TokenKind::FStringLiteral(s) if s == "hello{{"));
 }
 
 // 布尔字面量

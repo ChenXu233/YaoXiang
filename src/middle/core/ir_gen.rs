@@ -6194,7 +6194,15 @@ impl AstToIrGenerator {
         for segment in segments {
             match segment {
                 ast::FStringSegment::Text(text) => {
-                    format_str.push_str(text);
+                    // Text 段是解码后的字面内容（#402），可能含 `{`/`}`；
+                    // std.string.format 以 `{{`/`}}` 为字面花括号转义，
+                    // 这里翻倍以免被当成占位符
+                    for c in text.chars() {
+                        if c == '{' || c == '}' {
+                            format_str.push(c);
+                        }
+                        format_str.push(c);
+                    }
                 }
                 ast::FStringSegment::Interpolation {
                     expr: interp_expr,
