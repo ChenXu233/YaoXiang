@@ -30,150 +30,198 @@ impl StdModule for FsModule {
         "std.fs"
     }
 
+    /// 按职责分段的导出表：分段顺序即导出顺序（见各 `exports_*` 的文档注释）。
     fn exports(&self) -> Vec<NativeExport> {
-        vec![
-            // ---- 文件整体读写（自 std.io 迁入，#104）----
-            export!(
-                "read_file",
-                "std.fs.read_file",
-                "(path: &String) -> String",
-                native_read_file
-            ),
-            export!(
-                "write_file",
-                "std.fs.write_file",
-                "(path: &String, content: &String) -> Bool",
-                native_write_file
-            ),
-            export!(
-                "append_file",
-                "std.fs.append_file",
-                "(path: &String, content: &String) -> Bool",
-                native_append_file
-            ),
-            // ---- 目录与文件管理（自 std.os 迁入，#104）----
-            export!(
-                "exists",
-                "std.fs.exists",
-                "(path: &String) -> Bool",
-                native_exists
-            ),
-            export!(
-                "is_file",
-                "std.fs.is_file",
-                "(path: &String) -> Bool",
-                native_is_file
-            ),
-            export!(
-                "is_dir",
-                "std.fs.is_dir",
-                "(path: &String) -> Bool",
-                native_is_dir
-            ),
-            export!(
-                "mkdir",
-                "std.fs.mkdir",
-                "(path: &String) -> Bool",
-                native_mkdir
-            ),
-            export!(
-                "mkdir_all",
-                "std.fs.mkdir_all",
-                "(path: &String) -> Bool",
-                native_mkdir_all
-            ),
-            export!(
-                "rmdir",
-                "std.fs.rmdir",
-                "(path: &String) -> Bool",
-                native_rmdir
-            ),
-            export!(
-                "remove",
-                "std.fs.remove",
-                "(path: &String) -> Bool",
-                native_remove
-            ),
-            export!(
-                "copy",
-                "std.fs.copy",
-                "(src: &String, dst: &String) -> Bool",
-                native_copy
-            ),
-            export!(
-                "rename",
-                "std.fs.rename",
-                "(src: &String, dst: &String) -> Bool",
-                native_rename
-            ),
-            // ---- 遍历与元数据（#104 新增）----
-            export!(
-                "read_dir",
-                "std.fs.read_dir",
-                "(path: &String) -> Vec(String)",
-                native_read_dir
-            ),
-            export!(
-                "walk",
-                "std.fs.walk",
-                "(path: &String) -> Vec(String)",
-                native_walk
-            ),
-            export!(
-                "stat",
-                "std.fs.stat",
-                "(path: &String) -> Dict(String, Any)",
-                native_stat
-            ),
-            // ---- 临时文件与目录（#104 新增；tempfile 仅原生目标编译）----
-            #[cfg(not(target_arch = "wasm32"))]
-            export!(
-                "temp_dir",
-                "std.fs.temp_dir",
-                "() -> String",
-                native_temp_dir
-            ),
-            #[cfg(not(target_arch = "wasm32"))]
-            export!(
-                "mkdtemp",
-                "std.fs.mkdtemp",
-                "(prefix: &String) -> String",
-                native_mkdtemp
-            ),
-            #[cfg(not(target_arch = "wasm32"))]
-            export!(
-                "tmpfile",
-                "std.fs.tmpfile",
-                "(prefix: &String) -> String",
-                native_tmpfile
-            ),
-            // ---- 路径操作（#104 新增）----
-            export!(
-                "path_join",
-                "std.fs.path_join",
-                "(base: &String, rel: &String) -> String",
-                native_path_join
-            ),
-            export!(
-                "path_basename",
-                "std.fs.path_basename",
-                "(path: &String) -> String",
-                native_path_basename
-            ),
-            export!(
-                "path_dirname",
-                "std.fs.path_dirname",
-                "(path: &String) -> String",
-                native_path_dirname
-            ),
-            export!(
-                "path_extension",
-                "std.fs.path_extension",
-                "(path: &String) -> String",
-                native_path_extension
-            ),
-        ]
+        let mut all = exports_file_io();
+        all.extend(exports_path_predicates());
+        all.extend(exports_dir_ops());
+        all.extend(exports_file_entry_ops());
+        all.extend(exports_traversal());
+        all.extend(exports_temp_ops());
+        // `// ---- 路径操作` 段首项：单项不值得单独成组，就地入表。
+        all.push(export!(
+            "path_join",
+            "std.fs.path_join",
+            "(base: &String, rel: &String) -> String",
+            native_path_join
+        ));
+        all.extend(exports_path_parts());
+        all
     }
+}
+
+// `std.fs` 导出表按职责分段（原 `exports()` 内 5 条 `// ----` 分段；
+// 单段过长者按成员语义再细分，顺序不变）。
+
+/// `std.fs` 导出：文件整体读写（自 `std.io` 迁入，#104）。
+fn exports_file_io() -> Vec<NativeExport> {
+    vec![
+        export!(
+            "read_file",
+            "std.fs.read_file",
+            "(path: &String) -> String",
+            native_read_file
+        ),
+        export!(
+            "write_file",
+            "std.fs.write_file",
+            "(path: &String, content: &String) -> Bool",
+            native_write_file
+        ),
+        export!(
+            "append_file",
+            "std.fs.append_file",
+            "(path: &String, content: &String) -> Bool",
+            native_append_file
+        ),
+    ]
+}
+
+/// `std.fs` 导出：存在性与类型查询（`// ---- 目录与文件管理` 段之一）。
+fn exports_path_predicates() -> Vec<NativeExport> {
+    vec![
+        export!(
+            "exists",
+            "std.fs.exists",
+            "(path: &String) -> Bool",
+            native_exists
+        ),
+        export!(
+            "is_file",
+            "std.fs.is_file",
+            "(path: &String) -> Bool",
+            native_is_file
+        ),
+        export!(
+            "is_dir",
+            "std.fs.is_dir",
+            "(path: &String) -> Bool",
+            native_is_dir
+        ),
+    ]
+}
+
+/// `std.fs` 导出：目录的创建与删除（`// ---- 目录与文件管理` 段之二）。
+fn exports_dir_ops() -> Vec<NativeExport> {
+    vec![
+        export!(
+            "mkdir",
+            "std.fs.mkdir",
+            "(path: &String) -> Bool",
+            native_mkdir
+        ),
+        export!(
+            "mkdir_all",
+            "std.fs.mkdir_all",
+            "(path: &String) -> Bool",
+            native_mkdir_all
+        ),
+        export!(
+            "rmdir",
+            "std.fs.rmdir",
+            "(path: &String) -> Bool",
+            native_rmdir
+        ),
+    ]
+}
+
+/// `std.fs` 导出：条目的删除、复制与改名（`// ---- 目录与文件管理` 段之三）。
+fn exports_file_entry_ops() -> Vec<NativeExport> {
+    vec![
+        export!(
+            "remove",
+            "std.fs.remove",
+            "(path: &String) -> Bool",
+            native_remove
+        ),
+        export!(
+            "copy",
+            "std.fs.copy",
+            "(src: &String, dst: &String) -> Bool",
+            native_copy
+        ),
+        export!(
+            "rename",
+            "std.fs.rename",
+            "(src: &String, dst: &String) -> Bool",
+            native_rename
+        ),
+    ]
+}
+
+/// `std.fs` 导出：遍历与元数据（#104 新增）。
+fn exports_traversal() -> Vec<NativeExport> {
+    vec![
+        export!(
+            "read_dir",
+            "std.fs.read_dir",
+            "(path: &String) -> Vec(String)",
+            native_read_dir
+        ),
+        export!(
+            "walk",
+            "std.fs.walk",
+            "(path: &String) -> Vec(String)",
+            native_walk
+        ),
+        export!(
+            "stat",
+            "std.fs.stat",
+            "(path: &String) -> Dict(String, Any)",
+            native_stat
+        ),
+    ]
+}
+
+/// `std.fs` 导出：临时文件与目录（#104 新增；`tempfile` 仅原生目标编译）。
+fn exports_temp_ops() -> Vec<NativeExport> {
+    vec![
+        #[cfg(not(target_arch = "wasm32"))]
+        export!(
+            "temp_dir",
+            "std.fs.temp_dir",
+            "() -> String",
+            native_temp_dir
+        ),
+        #[cfg(not(target_arch = "wasm32"))]
+        export!(
+            "mkdtemp",
+            "std.fs.mkdtemp",
+            "(prefix: &String) -> String",
+            native_mkdtemp
+        ),
+        #[cfg(not(target_arch = "wasm32"))]
+        export!(
+            "tmpfile",
+            "std.fs.tmpfile",
+            "(prefix: &String) -> String",
+            native_tmpfile
+        ),
+    ]
+}
+
+/// `std.fs` 导出：路径分量拆解（`// ---- 路径操作` 段；段首项 `path_join` 在 `exports()` 内就地入表）。
+fn exports_path_parts() -> Vec<NativeExport> {
+    vec![
+        export!(
+            "path_basename",
+            "std.fs.path_basename",
+            "(path: &String) -> String",
+            native_path_basename
+        ),
+        export!(
+            "path_dirname",
+            "std.fs.path_dirname",
+            "(path: &String) -> String",
+            native_path_dirname
+        ),
+        export!(
+            "path_extension",
+            "std.fs.path_extension",
+            "(path: &String) -> String",
+            native_path_extension
+        ),
+    ]
 }
 
 /// Singleton instance for std.fs module.
@@ -473,35 +521,7 @@ pub(crate) fn native_stat(
     let path = expect_path(args, 0, "stat", "path")?;
     match fs::metadata(&path) {
         Ok(meta) => {
-            let mtime = meta
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0);
-
-            let mut map: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
-            map.insert(
-                RuntimeValue::String("size".into()),
-                RuntimeValue::Int(meta.len() as i64),
-            );
-            map.insert(
-                RuntimeValue::String("is_dir".into()),
-                RuntimeValue::Bool(meta.is_dir()),
-            );
-            map.insert(
-                RuntimeValue::String("is_file".into()),
-                RuntimeValue::Bool(meta.is_file()),
-            );
-            map.insert(
-                RuntimeValue::String("readonly".into()),
-                RuntimeValue::Bool(meta.permissions().readonly()),
-            );
-            map.insert(
-                RuntimeValue::String("mtime".into()),
-                RuntimeValue::Int(mtime),
-            );
-
+            let map = metadata_to_dict(&meta);
             Ok(RuntimeValue::Dict(ctx.heap.allocate(HeapValue::Dict(map))))
         }
         Err(e) => Err(ExecutorError::runtime_only(format!(
@@ -509,6 +529,41 @@ pub(crate) fn native_stat(
             path, e
         ))),
     }
+}
+
+/// `stat` 的 `mtime` 取值：Unix 秒；早于纪元或不可得时为 0。
+fn metadata_mtime_secs(meta: &fs::Metadata) -> i64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// 把 `fs::Metadata` 映射为 `stat` 的键值字典（键集合见 `native_stat` 文档注释）。
+fn metadata_to_dict(meta: &fs::Metadata) -> HashMap<RuntimeValue, RuntimeValue> {
+    let mut map: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
+    map.insert(
+        RuntimeValue::String("size".into()),
+        RuntimeValue::Int(meta.len() as i64),
+    );
+    map.insert(
+        RuntimeValue::String("is_dir".into()),
+        RuntimeValue::Bool(meta.is_dir()),
+    );
+    map.insert(
+        RuntimeValue::String("is_file".into()),
+        RuntimeValue::Bool(meta.is_file()),
+    );
+    map.insert(
+        RuntimeValue::String("readonly".into()),
+        RuntimeValue::Bool(meta.permissions().readonly()),
+    );
+    map.insert(
+        RuntimeValue::String("mtime".into()),
+        RuntimeValue::Int(metadata_mtime_secs(meta)),
+    );
+    map
 }
 
 // Temporary Files & Directories (#104, native targets only)

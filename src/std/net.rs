@@ -141,25 +141,9 @@ fn response_to_value(
     url: &str,
 ) -> Result<RuntimeValue, ExecutorError> {
     let status = RuntimeValue::Int(resp.status() as i64);
-
-    let mut headers: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
-    for name in resp.headers_names() {
-        let joined = resp.all(&name).join(", ");
-        headers.insert(
-            RuntimeValue::String(name.into()),
-            RuntimeValue::String(joined.into()),
-        );
-    }
-
-    let body = match resp.into_string() {
-        Ok(text) => RuntimeValue::String(text.into()),
-        Err(e) => {
-            return Err(ExecutorError::runtime_only(format!(
-                "{}: failed reading response body of '{}': {}",
-                fname, url, e
-            )))
-        }
-    };
+    // 先取头再读体：`into_string` 会消耗 `Response`。
+    let headers = response_headers_to_map(&resp);
+    let body = read_response_body(resp, fname, url)?;
 
     let mut map: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
     map.insert(RuntimeValue::String("status".into()), status);
@@ -172,6 +156,36 @@ fn response_to_value(
     Ok(RuntimeValue::Dict(ctx.heap.allocate(HeapValue::Dict(map))))
 }
 
+/// 把响应头收集为 `{头名: 值}` 映射：头名按 HTTP/1.1 语义统一小写，同名多值以 `", "` 合并。
+#[cfg(not(target_arch = "wasm32"))]
+fn response_headers_to_map(resp: &ureq::Response) -> HashMap<RuntimeValue, RuntimeValue> {
+    let mut headers: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
+    for name in resp.headers_names() {
+        let joined = resp.all(&name).join(", ");
+        headers.insert(
+            RuntimeValue::String(name.into()),
+            RuntimeValue::String(joined.into()),
+        );
+    }
+    headers
+}
+
+/// 读取响应体并包成 String 值；失败时报带 `fname`/`url` 上下文的运行时错误。
+#[cfg(not(target_arch = "wasm32"))]
+fn read_response_body(
+    resp: ureq::Response,
+    fname: &str,
+    url: &str,
+) -> Result<RuntimeValue, ExecutorError> {
+    match resp.into_string() {
+        Ok(text) => Ok(RuntimeValue::String(text.into())),
+        Err(e) => Err(ExecutorError::runtime_only(format!(
+            "{}: failed reading response body of '{}': {}",
+            fname, url, e
+        ))),
+    }
+}
+
 /// 提取可选的请求头字典（Dict<String, String>）。
 /// 缺省位置（None）与显式 Void 都视为空；其他非字典类型报类型错误。
 #[cfg(not(target_arch = "wasm32"))]
@@ -182,10 +196,52 @@ fn extract_request_headers(
     let Some(value) = arg else {
         return Ok(Vec::new());
     };
+    if matches!(value, RuntimeValue::Void) {
+        return Ok(Vec::new());
+    }
+    headers_from_dict(value, fname)
+}
+
+/// 请求头名的取值：非 String 报类型错误（错误措辞含 `fname`）。
+#[cfg(not(target_arch = "wasm32"))]
+fn header_name(
+    key: &RuntimeValue,
+    fname: &str,
+) -> Result<String, ExecutorError> {
+    match key {
+        RuntimeValue::String(s) => Ok(s.to_string()),
+        other => Err(ExecutorError::type_only(format!(
+            "{} expects header names as String, got {:?}",
+            fname,
+            other.value_type(None)
+        ))),
+    }
+}
+
+/// 请求头值的取值：非 String 报类型错误（错误措辞含 `fname`）。
+#[cfg(not(target_arch = "wasm32"))]
+fn header_value(
+    val: &RuntimeValue,
+    fname: &str,
+) -> Result<String, ExecutorError> {
+    match val {
+        RuntimeValue::String(s) => Ok(s.to_string()),
+        other => Err(ExecutorError::type_only(format!(
+            "{} expects header values as String, got {:?}",
+            fname,
+            other.value_type(None)
+        ))),
+    }
+}
+
+/// 把 headers 字典展开为 `(名, 值)` 列表；任一项非 String 报类型错误，
+/// 句柄悬垂报内部运行时错误。
+#[cfg(not(target_arch = "wasm32"))]
+fn headers_from_dict(
+    value: &RuntimeValue,
+    fname: &str,
+) -> Result<Vec<(String, String)>, ExecutorError> {
     let RuntimeValue::Dict(handle) = value else {
-        if matches!(value, RuntimeValue::Void) {
-            return Ok(Vec::new());
-        }
         return Err(ExecutorError::type_only(format!(
             "{} expects headers as Dict<String, String>, got {:?}",
             fname,
@@ -206,27 +262,7 @@ fn extract_request_headers(
 
     let mut out = Vec::with_capacity(map.len());
     for (key, val) in map {
-        let name = match key {
-            RuntimeValue::String(s) => s.to_string(),
-            other => {
-                return Err(ExecutorError::type_only(format!(
-                    "{} expects header names as String, got {:?}",
-                    fname,
-                    other.value_type(None)
-                )))
-            }
-        };
-        let value = match val {
-            RuntimeValue::String(s) => s.to_string(),
-            other => {
-                return Err(ExecutorError::type_only(format!(
-                    "{} expects header values as String, got {:?}",
-                    fname,
-                    other.value_type(None)
-                )))
-            }
-        };
-        out.push((name, value));
+        out.push((header_name(key, fname)?, header_value(val, fname)?));
     }
     Ok(out)
 }
