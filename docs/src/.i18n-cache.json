@@ -60,7 +60,7 @@
   "src/design/rfc/accepted/009-ownership-model.md:en": "94a02f4212ebcb62e4669861e9e9133c",
   "src/design/rfc/accepted/010-unified-type-syntax.md:en": "59fc5bb699c2e5d09d6b7a4445697715",
   "src/design/rfc/accepted/011-generic-type-system.md:en": "cb80a98b6807ba7a2d3d4963a1116dfc",
-  "src/design/rfc/accepted/012-f-string-template-strings.md:en": "57129b10b439c01eae4d297277b82b5b",
+  "src/design/rfc/accepted/012-f-string-template-strings.md:en": "0f11867cd6690bcdd88a2badb627f1d9",
   "src/design/rfc/accepted/013-error-code-specification.md:en": "319e7baeec22db1af5f1c12b6c99f25d",
   "src/design/rfc/accepted/014-package-manager.md:en": "ebdad19cf9905751919dfbc8c2498f7a",
   "src/design/rfc/accepted/015-configuration-system.md:en": "711b00ccf606053bf87c39a0d31790a1",

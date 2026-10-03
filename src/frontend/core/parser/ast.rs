@@ -87,10 +87,8 @@ pub enum Expr {
     Tuple(Vec<Expr>, Span),
     List(Vec<Expr>, Span),
     ListComp {
-        element: Box<Expr>,           // 元素表达式 x * x
-        var: String,                  // 迭代变量名 x
-        iterable: Box<Expr>,          // 可迭代对象
-        condition: Option<Box<Expr>>, // 过滤条件 if x > 0
+        element: Box<Expr>,                 // 元素表达式 x * x
+        generators: Vec<ListCompGenerator>, // 生成器子句，至少一个（parser 保证）
         span: Span,
     },
     Dict(Vec<(Expr, Expr)>, Span),
@@ -162,6 +160,18 @@ pub enum Expr {
     /// 类型检查器遇到此节点时应报告错误但不 panic。
     /// 用于 LSP 错误恢复场景。
     Error(Span),
+}
+
+/// 列表推导式的生成器子句：`for <var> in <iterable> ('if' <condition>)?`
+///
+/// #401：单个推导式可携带多个子句（`[e for x in a for y in b if c]`），
+/// 后续子句的 iterable/condition 可引用先前子句绑定的变量。
+#[derive(Debug, Clone)]
+pub struct ListCompGenerator {
+    pub var: String,                  // 迭代变量名 x
+    pub iterable: Box<Expr>,          // 可迭代对象
+    pub condition: Option<Box<Expr>>, // 过滤条件 if x > 0
+    pub span: Span,
 }
 
 /// RFC-012: F-string segment

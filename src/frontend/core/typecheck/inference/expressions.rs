@@ -3499,42 +3499,51 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // ListComp 表达式
+            // #401：按生成器子句顺序绑定——第 i 个子句的 iterable/condition
+            // 可引用先前子句的迭代变量；过滤条件强制 Bool（同 if 推断）
             crate::frontend::core::parser::ast::Expr::ListComp {
                 element,
-                var,
-                iterable,
-                condition,
+                generators,
                 ..
             } => {
-                let iter_ty = self.infer_expr(iterable)?;
-                // 循环变量类型从可迭代对象取（此前硬编码 Char，靠
-                // 算术 fresh-var 兜底蒙混；硬化后按 check_for_stmt 同款分发）
-                let loop_var_ty = match &iter_ty {
-                    m if m.is_list() || m.is_vec() || m.is_array() => {
-                        m.generic_args().unwrap()[0].clone()
-                    }
-                    m if m.is_string() => MonoType::Char,
-                    m if m.is_dict() => {
-                        let args = m.generic_args().unwrap();
-                        MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
-                    }
-                    _ => self.solver.resolve_type(&iter_ty),
-                };
-
                 self.scope.enter_block();
-                self.scope.add_var(
-                    var.clone(),
-                    PolyType::mono(loop_var_ty),
-                    false,
-                    crate::util::span::Span::default(),
-                );
 
-                let elem_ty = if let Some(cond) = condition {
-                    let _cond_ty = self.infer_expr(cond)?;
-                    self.infer_expr(element)?
-                } else {
-                    self.infer_expr(element)?
-                };
+                for gen in generators {
+                    let iter_ty = self.infer_expr(&gen.iterable)?;
+                    // 循环变量类型从可迭代对象取（此前硬编码 Char，靠
+                    // 算术 fresh-var 兜底蒙混；硬化后按 check_for_stmt 同款分发）
+                    let loop_var_ty = match &iter_ty {
+                        m if m.is_list() || m.is_vec() || m.is_array() => {
+                            m.generic_args().unwrap()[0].clone()
+                        }
+                        m if m.is_string() => MonoType::Char,
+                        m if m.is_dict() => {
+                            let args = m.generic_args().unwrap();
+                            MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
+                        }
+                        _ => self.solver.resolve_type(&iter_ty),
+                    };
+
+                    self.scope.add_var(
+                        gen.var.clone(),
+                        PolyType::mono(loop_var_ty),
+                        false,
+                        gen.span,
+                    );
+
+                    if let Some(cond) = &gen.condition {
+                        let cond_ty = self.infer_expr(cond)?;
+                        if cond_ty != MonoType::Bool {
+                            return Err(ErrorCodeDefinition::condition_type_mismatch(&format!(
+                                "{}",
+                                cond_ty
+                            ))
+                            .build());
+                        }
+                    }
+                }
+
+                let elem_ty = self.infer_expr(element)?;
 
                 self.scope.exit_block();
 

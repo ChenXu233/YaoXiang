@@ -648,8 +648,7 @@ impl<'a> ParserState<'a> {
 
         // Check for list comprehension
         if self.skip(&TokenKind::KwFor) {
-            let elements = vec![first_expr];
-            self.parse_list_comp(span, elements)
+            self.parse_list_comp(span, first_expr)
         } else {
             // This is a list literal: [expr, expr, ...]
             let mut elements = vec![first_expr];
@@ -670,43 +669,58 @@ impl<'a> ParserState<'a> {
         }
     }
 
-    /// Parse list comprehension
+    /// Parse list comprehension: `[expr for x in y (if c)? (for v in w (if d)?)*]`
+    ///
+    /// #401：文法承诺的 `if` 过滤在此消费；多生成器子句按嵌套循环语义展开，
+    /// 后续子句的 iterable/condition 可引用先前子句绑定的迭代变量。
     fn parse_list_comp(
         &mut self,
         span: Span,
-        elements: Vec<Expr>,
+        element: Expr,
     ) -> Option<Expr> {
-        // Parse pattern: `x`
-        // #299 §3: 'in' 已注册为中缀运算符，pattern 不能走完整 pratt
-        // （否则 `x` 会把 `in items` 吃成 membership 表达式）；迭代变量只可能是裸标识符
-        let pattern = {
-            let tok = self.current()?;
-            if let TokenKind::Identifier(name) = tok.kind.clone() {
-                let s = self.span();
-                self.bump();
-                Expr::Var(name, s)
+        let mut generators = Vec::new();
+
+        loop {
+            // 迭代变量：只可能是裸标识符。'in' 已注册为中缀运算符（#299 §3），
+            // pattern 不能走完整 pratt，否则会把 `in items` 吃成 membership 表达式
+            let var_span = self.span();
+            let var = {
+                let tok = self.current()?;
+                if let TokenKind::Identifier(name) = tok.kind.clone() {
+                    self.bump();
+                    name
+                } else {
+                    return None;
+                }
+            };
+
+            self.expect(&TokenKind::KwIn);
+
+            let iterable = self.parse_expression(BP_LOWEST)?;
+
+            let condition = if self.skip(&TokenKind::KwIf) {
+                Some(Box::new(self.parse_expression(BP_LOWEST)?))
             } else {
-                return None;
+                None
+            };
+
+            generators.push(ListCompGenerator {
+                var,
+                iterable: Box::new(iterable),
+                condition,
+                span: var_span,
+            });
+
+            if !self.skip(&TokenKind::KwFor) {
+                break;
             }
-        };
-
-        self.expect(&TokenKind::KwIn);
-
-        // Parse iterable: `expr`
-        let iterable = self.parse_expression(BP_LOWEST)?;
+        }
 
         self.expect(&TokenKind::RBracket);
 
         Some(Expr::ListComp {
-            element: Box::new(elements[0].clone()),
-            var: if let Expr::Var(name, _) = pattern {
-                name
-            } else {
-                // Fallback: use a default variable name if pattern is not a simple identifier
-                "_".to_string()
-            },
-            iterable: Box::new(iterable),
-            condition: None,
+            element: Box::new(element),
+            generators,
             span,
         })
     }

@@ -671,8 +671,7 @@ fn collect_reads_writes(
         // 列表推导
         Expr::ListComp {
             element,
-            iterable,
-            condition,
+            generators,
             ..
         } => {
             collect_reads_writes(
@@ -683,23 +682,25 @@ fn collect_reads_writes(
                 trait_table,
                 local_var_types,
             );
-            collect_reads_writes(
-                iterable,
-                reads,
-                writes,
-                resource_vars,
-                trait_table,
-                local_var_types,
-            );
-            if let Some(cond) = condition {
+            for gen in generators {
                 collect_reads_writes(
-                    cond,
+                    &gen.iterable,
                     reads,
                     writes,
                     resource_vars,
                     trait_table,
                     local_var_types,
                 );
+                if let Some(cond) = &gen.condition {
+                    collect_reads_writes(
+                        cond,
+                        reads,
+                        writes,
+                        resource_vars,
+                        trait_table,
+                        local_var_types,
+                    );
+                }
             }
         }
 

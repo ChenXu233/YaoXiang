@@ -6714,20 +6714,18 @@ impl AstToIrGenerator {
     fn generate_list_comp_expr_ir(
         &mut self,
         element: &Expr,
-        var: &str,
-        iterable: &Expr,
-        condition: &Option<Box<Expr>>,
+        generators: &[ast::ListCompGenerator],
         span: &Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
-        // 列表推导式 IR 生成
-        // [x * x for x in items] 等价于:
+        // 列表推导式 IR 生成（#401：多生成器嵌套循环，每层可带 if 过滤）
+        // [e for x in a (if c)? for y in b (if d)?] 等价于:
         //   1. 创建空结果列表
-        //   2. 通过迭代器遍历 iterable
-        //   3. 对每个元素: 绑定到 var, 检查 condition(可选), 计算 element, push 到结果列表
-        //   4. 返回结果列表
+        //   2. 逐层嵌套 for 循环：绑定期迭代变量 → has_next/next 取元素 →
+        //      过滤条件(可选)不满足则 continue → 最内层计算 element 并 push
+        //   3. 返回结果列表
 
         // 1. 创建空结果列表
         instructions.push(Instruction::AllocArray {
@@ -6737,11 +6735,38 @@ impl AstToIrGenerator {
             span: self.cur_span,
         });
 
-        // 2. 计算可迭代对象
-        let iterable_reg = self.next_temp_reg();
-        self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+        self.generate_comp_generators_ir(
+            element,
+            generators,
+            0,
+            span,
+            result_reg,
+            instructions,
+            constants,
+        )
+    }
 
-        // 3. 创建迭代器
+    /// 递归展开第 `idx` 层生成器子句：非最内层时循环体是下一层子句，
+    /// 最内层循环体是元素计算 + push。过滤条件失败直接跳回本层循环头
+    /// （has_next 检查），即 continue 语义。
+    #[allow(clippy::too_many_arguments)]
+    fn generate_comp_generators_ir(
+        &mut self,
+        element: &Expr,
+        generators: &[ast::ListCompGenerator],
+        idx: usize,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let gen = &generators[idx];
+
+        // 计算可迭代对象
+        let iterable_reg = self.next_temp_reg();
+        self.generate_expr_ir(&gen.iterable, iterable_reg, instructions, constants)?;
+
+        // 创建迭代器
         let iterator_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(iterator_reg)),
@@ -6753,14 +6778,14 @@ impl AstToIrGenerator {
             def: None,
         });
 
-        // 4. 注册循环变量
+        // 注册循环变量
         let var_reg = self.next_temp_reg();
-        self.register_local(var, var_reg);
+        self.register_local(&gen.var, var_reg);
 
-        // 5. 循环开始
+        // 循环开始
         let loop_start_idx = instructions.len();
 
-        // 6. has_next?
+        // has_next?
         let has_next_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(has_next_reg)),
@@ -6777,7 +6802,7 @@ impl AstToIrGenerator {
             span: self.cur_span,
         });
 
-        // 7. next element
+        // next element
         let element_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(element_reg)),
@@ -6787,54 +6812,43 @@ impl AstToIrGenerator {
             def: None,
         });
 
-        // 8. 存储到循环变量
+        // 存储到循环变量
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
             src: Operand::Local(element_reg),
             span: *span,
         });
 
-        // 9. 如果有条件，检查条件
-        if let Some(cond_expr) = condition {
+        // 过滤条件（可选）：不满足则跳回循环头
+        let mut cond_jump_idx = None;
+        if let Some(cond_expr) = &gen.condition {
             let cond_reg = self.next_temp_reg();
             self.generate_expr_ir(cond_expr, cond_reg, instructions, constants)?;
 
-            let skip_push_idx = instructions.len();
+            let j = instructions.len();
             instructions.push(Instruction::JmpIfNot {
                 cond: Operand::Local(cond_reg),
                 target: 0, // 占位符
                 span: self.cur_span,
             });
+            cond_jump_idx = Some(j);
+        }
 
-            // 10. 计算元素表达式
-            let comp_reg = self.next_temp_reg();
-            self.generate_expr_ir(element, comp_reg, instructions, constants)?;
-
-            // 11. push 到结果列表
-            instructions.push(Instruction::Call {
-                dst: Some(Operand::Local(result_reg)),
-                func: Operand::Const(ConstValue::String("std.list.push".to_string())),
-                args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
-                span: *span,
-                def: None,
-            });
-
-            // 修复条件跳转
-            let after_push = instructions.len();
-            if let Instruction::JmpIfNot {
-                cond: _,
-                ref mut target,
-                span: _,
-            } = instructions[skip_push_idx]
-            {
-                *target = after_push;
-            }
+        // 循环体：内层生成器循环，或最内层的元素计算 + push
+        if idx + 1 < generators.len() {
+            self.generate_comp_generators_ir(
+                element,
+                generators,
+                idx + 1,
+                span,
+                result_reg,
+                instructions,
+                constants,
+            )?;
         } else {
-            // 10. 计算元素表达式
             let comp_reg = self.next_temp_reg();
             self.generate_expr_ir(element, comp_reg, instructions, constants)?;
 
-            // 11. push 到结果列表
             instructions.push(Instruction::Call {
                 dst: Some(Operand::Local(result_reg)),
                 func: Operand::Const(ConstValue::String("std.list.push".to_string())),
@@ -6844,13 +6858,25 @@ impl AstToIrGenerator {
             });
         }
 
-        // 12. 跳回循环开始
+        // 修复条件跳转：失败 → 跳回本层循环头
+        if let Some(j) = cond_jump_idx {
+            if let Instruction::JmpIfNot {
+                cond: _,
+                ref mut target,
+                span: _,
+            } = instructions[j]
+            {
+                *target = loop_start_idx;
+            }
+        }
+
+        // 跳回循环开始
         instructions.push(Instruction::Jmp {
             target: loop_start_idx,
             span: self.cur_span,
         });
 
-        // 13. 修复跳出循环的跳转目标
+        // 修复跳出循环的跳转目标
         let end_pos = instructions.len();
         if let Instruction::JmpIfNot {
             cond: _,
@@ -7982,17 +8008,13 @@ impl AstToIrGenerator {
             }
             Expr::ListComp {
                 element,
-                var,
-                iterable,
-                condition,
+                generators,
                 span,
                 ..
             } => {
                 self.generate_list_comp_expr_ir(
                     element,
-                    var,
-                    iterable,
-                    condition,
+                    generators,
                     span,
                     result_reg,
                     instructions,
