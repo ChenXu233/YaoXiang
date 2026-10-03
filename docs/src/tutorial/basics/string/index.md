@@ -53,10 +53,13 @@ print(f"Is positive? {x > 0}") // Is positive? true
 
 ```yaoxiang
 pi = 3.14159265
+name = "hello"
 
 print(f"Pi: {pi}")       // Pi: 3.14159265
-print(f"Pi: {pi}")      // 实测：格式说明符暂未实现，输出 3.14159
-print(f"Pi: {pi}")      // 如需四舍五入，请自行处理
+print(f"Pi: {pi:.2f}")   // Pi: 3.14（保留 2 位小数）
+print(f"{255:x}")        // ff（十六进制）
+print(f"{1000:e}")       // 1.000000e+03（科学计数法）
+print(f"{name:s}")       // hello（字符串展示）
 ```
 
 常用格式化说明符：
@@ -85,48 +88,41 @@ print(f"Length: {string.len(name)}")   // Length: 5
 
 ## 转义大括号
 
-⚠️ 0.8.2 **没有实现花括号转义**。按 Rust / Python 的习惯，想输出字面的左花括号就把
-它写成两个——YaoXiang 不支持这种写法，会把两个花括号之间的内容当成变量名去解析：
+想输出字面的 `{` 或 `}`，**双写**即可（与 Python 一致）：
 
-<!-- docs-example: skip -->
 ```yaoxiang
-print(f"{{literal braces}}")     // 期望 {literal braces}
-print(f"Set: {{1, 2, 3}}")       // 期望 Set: {1, 2, 3}
+print(f"{{literal braces}}")     // {literal braces}
+print(f"Set: {{1, 2, 3}}")       // Set: {1, 2, 3}
 ```
 
-> 上面两行**故意不通过检查**——报 `E1001 Unknown variable: 'literal'`。
-
-今天要输出字面花括号，只能绕开 f-string，用普通字符串拼接：
+混合使用：双写输出字面量 `{`，单写是插值：
 
 ```yaoxiang
-main = () => {
-    name = "YaoXiang"
+name = "YaoXiang"
 
-    // 单写是插值
-    print(f"{name} is {name}")
-
-    // 需要字面花括号时用普通字符串拼接
-    print("Set: " + "{" + "1, 2, 3" + "}")
-}
+print(f"{{name}} is {name}")     // {name} is YaoXiang
 ```
 
 ## 多行 f-string
 
-⚠️ 0.8.2 **不支持三引号 `f"""..."""`**——词法器不认多行字符串字面量，跨行的 f-string
-报 `E0012 unterminated string`。跨行请拼多个 f-string：
+三引号 `f"""..."""` 支持跨行模板，换行是内容的一部分（与普通 `"""` 多行字符串一致）：
 
 ```yaoxiang
 name = "Alice"
 age = 25
 city = "Beijing"
 
-info = f"Name: {name}" + "\n" + f"Age: {age}" + "\n" + f"City: {city}"
+info = f"""Name: {name}
+Age: {age}
+City: {city}"""
 
 print(info)
 // Name: Alice
 // Age: 25
 // City: Beijing
 ```
+
+插值与转义大括号在多行模板里照常工作，字符串转义（`\n` 等）亦然。
 
 ## f-string 的工作原理
 
@@ -153,6 +149,6 @@ f"Hello {name}, age: {age}"
 | -------- | -------------------------- |
 | 基本插值 | `f"text {var}"`            |
 | 表达式   | `f"result: {x + y}"`       |
-| 格式化   | ⚠️ 暂未实现：`{pi:.2f}` 会原样输出 |
-| 转义括号 | ⚠️ 未实现：双写左花括号会被当变量名（E1001） |
-| 多行     | ⚠️ 未实现：`f"""..."""` 报 E0012        |
+| 格式化   | `f"value: {pi:.2f}"`       |
+| 转义括号 | `f"{{not interpolation}}"` |
+| 多行     | `f"""..."""`               |
