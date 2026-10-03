@@ -127,6 +127,10 @@ pub struct StatementChecker {
     imported_used: HashSet<String>,
     /// #321 W1003：函数体级 use 登记的导入（本地名, use 语句 span）
     body_imports: Vec<(String, crate::util::span::Span)>,
+    /// #414：显式导入登记（本地名 → 来源路径），导入冲突判定用（E5006/E5008）。
+    /// 只收 process_use_stmt 的显式导入——prelude 短名（add_imported_var 注入）
+    /// 不经此表，`use std.io.{print}` 不会撞 prelude 误报。
+    import_sources: HashMap<String, String>,
     /// 最近一条表达式语句的类型（由 `check_stmt` 的 `StmtKind::Expr` 臂写入）。
     ///
     /// 用途：尾表达式返回类型校验。`check_stmt` 走体时**已经算过**每个表达式的
@@ -201,6 +205,7 @@ impl StatementChecker {
             import_watch: HashMap::new(),
             imported_used: HashSet::new(),
             body_imports: Vec::new(),
+            import_sources: HashMap::new(),
             last_expr_stmt_ty: None,
             tail_annotation_span: None,
             vendor_root: None,
@@ -257,6 +262,42 @@ impl StatementChecker {
         for name in module.exports.keys() {
             self.import_watch.insert(name.clone(), alias.to_string());
         }
+    }
+
+    /// #414：导入名冲突判定（RFC-029 §导入冲突「同名绑定直接报错」）。
+    ///
+    /// 两类冲突分流：
+    /// - 撞先前的**显式导入** → E5006（重复导入）：同名本地名导两次，无论同模块
+    ///   还是跨模块（含一条 use 语句内重复别名 `as m, m`——逐别名判定自然命中）；
+    /// - 撞**本文件的现有绑定**（顶层值/函数，非前向占位、非导入名）→ E5008
+    ///   （导入名冲突）。prelude 短名与先前导入都是 `imported=true`，不触发。
+    ///
+    /// 判定通过后把 (本地名 → 来源) 记入 import_sources。
+    fn ensure_import_name_free(
+        &mut self,
+        name: &str,
+        source: &str,
+        span: crate::util::span::Span,
+    ) -> Result<(), Box<Diagnostic>> {
+        if self.import_sources.contains_key(name) {
+            return Err(Box::new(
+                ErrorCodeDefinition::duplicate_import(name).at(span).build(),
+            ));
+        }
+        let collides = self
+            .scope
+            .get_var_info(name)
+            .is_some_and(|info| !info.forward_declared && !info.imported);
+        if collides {
+            return Err(Box::new(
+                ErrorCodeDefinition::import_name_conflict(name, source)
+                    .at(span)
+                    .build(),
+            ));
+        }
+        self.import_sources
+            .insert(name.to_string(), source.to_string());
+        Ok(())
     }
 
     /// 设置类型定义表
@@ -564,18 +605,12 @@ impl StatementChecker {
             return Err(Box::new(builder.build()));
         };
 
-        let selected_exports: Vec<Export> = match items {
-            Some(item_names) => item_names
-                .iter()
-                .filter_map(|item| module.exports.get(item).cloned())
-                .collect(),
-            None => module.exports.values().cloned().collect(),
-        };
-
         match (items.as_ref(), alias.as_ref()) {
             // use path
             (None, None) => {
                 let module_alias = path.split('.').next_back().unwrap_or(path);
+                // #414：同名绑定直接报错（RFC-029 §导入冲突）
+                self.ensure_import_name_free(module_alias, path, path_span)?;
                 // #321 W1003：登记导入本地名与导出成员监视
                 self.note_body_import_members(module_alias, &module, path_span);
                 let module_ty = self.module_as_struct_type(&module, module_alias);
@@ -586,18 +621,20 @@ impl StatementChecker {
                     crate::util::span::Span::default(),
                 );
             }
-            // use path as alias
-            (None, Some(aliases)) if aliases.len() == 1 => {
-                let module_alias = &aliases[0];
-                // #321 W1003：登记导入本地名与导出成员监视
-                self.note_body_import_members(module_alias, &module, path_span);
-                let module_ty = self.module_as_struct_type(&module, module_alias);
-                self.scope.add_var(
-                    module_alias.to_string(),
-                    PolyType::mono(module_ty),
-                    false,
-                    crate::util::span::Span::default(),
-                );
+            // use path as alias（#414：单/多别名统一——每个别名各绑一份模块 record）
+            (None, Some(aliases)) => {
+                for module_alias in aliases {
+                    self.ensure_import_name_free(module_alias, path, path_span)?;
+                    // #321 W1003：登记导入本地名与导出成员监视
+                    self.note_body_import_members(module_alias, &module, path_span);
+                    let module_ty = self.module_as_struct_type(&module, module_alias);
+                    self.scope.add_var(
+                        module_alias.to_string(),
+                        PolyType::mono(module_ty),
+                        false,
+                        crate::util::span::Span::default(),
+                    );
+                }
             }
             // use path.{a, b} / use path.{a as x}（#245：仅内联别名）
             (Some(item_names), _) => {
@@ -615,16 +652,15 @@ impl StatementChecker {
                                 .build(),
                         ));
                     };
+                    // #414：同名字项导入两次直接报错（RFC-029 §导入冲突）
+                    self.ensure_import_name_free(
+                        local_name,
+                        &format!("{path}.{item_name}"),
+                        path_span,
+                    )?;
                     // #321 W1003：登记导入本地名（内联别名优先）
                     self.note_body_import(local_name, path_span);
                     self.import_binding(local_name, &export);
-                }
-            }
-            _ => {
-                for export in selected_exports {
-                    // #321 W1003：登记导入本地名
-                    self.note_body_import(&export.name, path_span);
-                    self.import_binding(&export.name, &export);
                 }
             }
         }

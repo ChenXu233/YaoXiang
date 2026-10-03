@@ -1,0 +1,15 @@
+// 06-compile-errors/import_conflict_local_err.yx
+// 覆盖: RFC-029 §2 导入冲突「同名绑定直接报错」；#414（E5008 新码）
+// 验证: 导入名撞本文件已有顶层绑定（绑定在前、use 在后）→ E5008 导入名冲突
+// expect: compile-error E5008
+// 状态: ❌ 应被编译期拒绝
+
+helper = () => {
+    return 1
+}
+
+use std.io as helper
+
+main = {
+    print(helper())
+}

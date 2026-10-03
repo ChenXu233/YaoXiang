@@ -1,0 +1,18 @@
+// 03-modules/alias_std_module.yx
+// 覆盖: RFC-029 §2 use 形态表 `use path as alias`；#410（std 模块别名曾在 codegen 触发 E8001 ICE）
+// 验证: std 子模块别名全链路可用——typecheck、IR 命名空间解析到 codegen 调用，并验证返回值
+// 状态: ✅ 可运行
+
+use std.math as m
+use std.io as out
+use std.assert
+
+main = {
+    r = m.sqrt(16.0)
+    assert.assert(r == 4.0, "m.sqrt(16.0) should be 4.0 via std module alias")
+
+    r2 = m.sqrt(9.0)
+    assert.assert(r2 == 3.0, "m.sqrt(9.0) should be 3.0 via aliased module")
+
+    out.print("std module alias ok")
+}
