@@ -3,11 +3,11 @@ title: 'RFC-014b: 构建系统与二进制分发'
 status: '已接受'
 author: '晨煦'
 created: '2026-06-11'
-updated: '2026-09-30'
+updated: '2026-10-03'
 group: 'rfc-014'
-issue: '#91'
-impl: '90%'
-impl_status: 'in-progress'
+issue: '#113'
+impl: '100%'
+impl_status: 'complete'
 ---
 
 # RFC-014b: 构建系统与二进制分发

@@ -3,11 +3,11 @@ title: 'RFC-014: 包管理系统设计'
 status: '已接受'
 author: '晨煦'
 created: '2026-02-12'
-updated: '2026-09-29'
+updated: '2026-10-03'
 group: 'rfc-014' # 本 RFC 是包管理系统的总纲，子 RFC：014a/014b/014c
 issue: '#88'
-impl: '48%'
-impl_status: 'partial'
+impl: '100%'
+impl_status: 'complete'
 ---
 
 # RFC-014: 包管理系统设计（总纲）
