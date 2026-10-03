@@ -20,8 +20,9 @@ description: '模块系统与导入解析相关的错误。'
 | `E5003` | 导出未找到 | `Module` | 否 | `在模块 '{module}' 中找不到导出 '{export}'` | ✅ 1 处 |
 | `E5004` | 循环依赖 | `Module` | 否 | `检测到循环依赖：{path}` | ⚠ 暂未发射 |
 | `E5005` | 无效的模块路径 | `Module` | 否 | `无效的模块路径：'{path}'` | ⚠ 暂未发射 |
-| `E5006` | 重复导入 | `Module` | 否 | `重复导入：'{name}' 已被导入` | ⚠ 暂未发射 |
+| `E5006` | 重复导入 | `Module` | 否 | `重复导入：'{name}' 已被导入` | `statements.rs` `ensure_import_name_free` |
 | `E5007` | 模块导出 | `Module` | 否 | `模块 '{module}' 的导出：{available}` | ⚠ 暂未发射 |
+| `E5008` | 导入名冲突 | `Module` | 否 | `导入名 '{name}' 与现有绑定冲突（导入自 '{module}'）` | `statements.rs` `ensure_import_name_free` |
 
 ## 逐码说明
 
@@ -80,8 +81,8 @@ description: '模块系统与导入解析相关的错误。'
 - **span 豁免**：否
 - **构造函数**：`ErrorCodeDefinition::duplicate_import(name)`
 - **模板**：`重复导入：'{name}' 已被导入`
-- **帮助**：移除重复的导入语句
-- **发射点**：⚠ 暂未发射（注册表中保留该码，但非测试代码里没有调用处，用户无法触发）
+- **帮助**：请移除重复的导入，或使用不同名字/模块别名
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:284`（`ensure_import_name_free`：同名本地名导两次——跨模块同名别名、同语句重复别名 `as m, m`、同名字项两次导入）
 
 ### E5007：模块导出
 
@@ -92,3 +93,12 @@ description: '模块系统与导入解析相关的错误。'
 - **帮助**：可用的导出列在错误消息中
 - **发射点**：⚠ 暂未发射（注册表中保留该码，但非测试代码里没有调用处，用户无法触发）
 - **源码注释名**：模块导出提示（用于辅助错误消息）
+
+### E5008：导入名冲突
+
+- **类别**：`Module`
+- **span 豁免**：否
+- **构造函数**：`ErrorCodeDefinition::import_name_conflict(name, module)`
+- **模板**：`导入名 '{name}' 与现有绑定冲突（导入自 '{module}'）`
+- **帮助**：请使用不同名字或模块别名
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:293`（`ensure_import_name_free`：导入名撞本文件已有的顶层绑定。RFC-029 §导入冲突「同名绑定直接报错」；导入在前、定义在后的同型冲突由 E2002 重复定义承接）

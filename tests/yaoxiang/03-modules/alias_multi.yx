@@ -1,0 +1,15 @@
+// 03-modules/alias_multi.yx
+// 覆盖: 规范 §7.2 ImportSpec 文法 AliasList（复数别名）；#414（多别名曾静默退化为导入全部）
+// 验证: `use path as a, b` 两个别名各自持有同一模块的绑定，互不干扰，且不再向作用域倾倒裸名
+// 状态: ✅ 可运行
+
+use std.math as m, n
+use std.assert
+
+main = {
+    a = m.sqrt(9.0)
+    assert.assert(a == 3.0, "m.sqrt(9.0) should be 3.0 via first alias")
+
+    b = n.sqrt(4.0)
+    assert.assert(b == 2.0, "n.sqrt(4.0) should be 2.0 via second alias")
+}

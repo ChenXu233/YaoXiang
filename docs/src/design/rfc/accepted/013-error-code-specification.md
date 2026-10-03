@@ -436,6 +436,7 @@ E1001::unknown_variable(&var_name)
 | E5005 | 无效的模块路径 |
 | E5006 | 重复导入    |
 | E5007 | 模块导出    |
+| E5008 | 导入名冲突   |
 <!-- code-table:E5xxx end -->
 
 #### E6xxx：运行时错误
