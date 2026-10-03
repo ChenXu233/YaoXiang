@@ -35,11 +35,18 @@ fn stable_cwd() -> PathBuf {
 
 /// 构造剥离仓库定位环境变量的 git 子进程 Command。
 ///
-/// `git commit` 会向钩子环境注入 GIT_DIR/GIT_WORK_TREE 等变量并被子进程
-/// 继承：钩子链里 spawn 的 git（测试夹具的 init、下载链路的 clone）会把
-/// 仓库定位重定向到继承的仓库——`git init <dir>` 实际 reinit 的是
-/// GIT_DIR 指向的仓库（cache 测试在钩子链下误报连挂的根因）。仓库定位
-/// 一律走显式参数（`-C` / URL / 目标路径），定位类环境变量在此统一剥离。
+/// 实测（git 2.55）：`git commit` **只在 linked worktree 中**向钩子环境导出
+/// 仓库定位变量（`GIT_DIR` + `GIT_INDEX_FILE`；主检出里 `GIT_DIR` 为空，
+/// `GIT_WORK_TREE` 不出现）。钩子链里 spawn 的 git（本仓 pre-commit 会跑
+/// `cargo test`，夹具的建仓首当其冲）会继承它们，于是 `git init <dir>` 实际
+/// reinit 的是被指向的真实仓库——又因 cwd 不是该仓库的工作区，git 判定它
+/// bare，把 `core.bare = true` 写进**所有 worktree 共享的** `.git/config`，
+/// 整个检出随即 `git status` 报 "must be run in a work tree"。这正是
+/// 「一开 worktree 就中招、主检出单独提交却没事」的原因。
+///
+/// 仓库定位一律走显式参数（`-C` / URL / 目标路径），定位类环境变量在此统一
+/// 剥离；配合 [`stable_cwd`] 的中性 cwd，即使漏清某个变量，git 也无法按 cwd
+/// 发现调用者的仓库。
 pub(crate) fn git_command() -> Command {
     let mut cmd = Command::new("git");
 
@@ -57,6 +64,61 @@ pub(crate) fn git_command() -> Command {
     }
 
     cmd
+}
+
+/// 夹具建仓前置守卫：`dir` 已是 git 仓库时报错，`force` 才放行。
+///
+/// git 对已有仓库是**静默 reinit**（只打印 "Reinitialized existing Git
+/// repository"）：仓库定位一旦被环境变量重定向，破坏就发生在别处且没有任何
+/// 提示。夹具一律先用本函数把这种静默 reinit 变成显式失败——`force=false`
+/// 是默认，`true` 只留给确需原地重建的场景（对应命令行的 `-f` 出口）。
+///
+/// # Errors
+///
+/// `dir` 下已存在 `.git` 且 `force == false` 时返回
+/// [`std::io::ErrorKind::AlreadyExists`]。
+#[cfg(test)]
+pub(crate) fn guard_repo_absent(
+    dir: &Path,
+    force: bool,
+) -> std::io::Result<()> {
+    if force {
+        return Ok(());
+    }
+    let git_dir = dir.join(".git");
+    if git_dir.exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!(
+                "{} 已是 git 仓库，拒绝 reinit（确需重建请传 force=true）",
+                git_dir.display()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// 夹具建仓后置守卫：`dir` 必须真的出现 `.git` 目录。
+///
+/// 仓库定位被重定向时，建仓命令不报错却什么都没建在 `dir` 里。本断言把这种
+/// 「建到别处」立刻变成失败，而不是等到后续 add/commit 莫名报错才暴露。
+///
+/// # Errors
+///
+/// `dir/.git` 不是目录时返回 [`std::io::ErrorKind::NotFound`]。
+#[cfg(test)]
+pub(crate) fn guard_repo_created(dir: &Path) -> std::io::Result<()> {
+    let git_dir = dir.join(".git");
+    if !git_dir.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!(
+                "git init 未在 {} 建出仓库（仓库定位可能被环境变量重定向）",
+                dir.display()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Git 来源

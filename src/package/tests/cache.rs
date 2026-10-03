@@ -178,6 +178,8 @@ fn make_git_repo(dir: &Path) -> std::path::PathBuf {
         );
     };
 
+    // 建仓前置守卫：拒绝在已有仓库上静默 reinit（默认 force=false）
+    crate::package::source::git::guard_repo_absent(dir, false).expect("夹具目录不应已是 git 仓库");
     git(&[
         "-C",
         dir.to_str().expect("utf8 repo path"),
@@ -185,6 +187,8 @@ fn make_git_repo(dir: &Path) -> std::path::PathBuf {
         "-b",
         "main",
     ]);
+    // 建仓后置守卫：仓库必须建在夹具目录里，而不是被定位变量引到别处
+    crate::package::source::git::guard_repo_created(dir).expect("git init 应在本目录建出仓库");
     git(&[
         "-C",
         dir.to_str().expect("utf8 repo path"),

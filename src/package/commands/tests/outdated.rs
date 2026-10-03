@@ -41,7 +41,10 @@ fn make_git_repo(dir: &Path) -> std::path::PathBuf {
         );
     };
 
+    // 建仓前置/后置守卫：已有仓库拒绝 reinit；仓库必须落在本目录
+    crate::package::source::git::guard_repo_absent(dir, false).expect("夹具目录不应已是 git 仓库");
     git(&["init", "-b", "main"]);
+    crate::package::source::git::guard_repo_created(dir).expect("git init 应在本目录建出仓库");
     git(&["config", "commit.gpgsign", "false"]);
     std::fs::write(dir.join("lib.yx"), "pub fn one() { 1 }").unwrap();
     git(&["add", "-A"]);
@@ -154,7 +157,9 @@ fn test_outdated_no_tags_fails() {
             .output()
             .unwrap()
     };
+    crate::package::source::git::guard_repo_absent(&dir, false).expect("夹具目录不应已是 git 仓库");
     assert!(git(&["init", "-b", "main"]).status.success());
+    crate::package::source::git::guard_repo_created(&dir).expect("git init 应在本目录建出仓库");
     std::fs::write(dir.join("lib.yx"), "x").unwrap();
     assert!(git(&["add", "-A"]).status.success());
     assert!(crate::package::source::git::git_command()
