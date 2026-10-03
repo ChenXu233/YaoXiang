@@ -257,12 +257,12 @@
     "error_output": "error[E1042]: 字段没找到喵~\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 在结构体 'Point' 中找不到字段 'z' nya~"
   },
   "E1043": {
-    "title": "模块成员没有找到喵～",
-    "message": "访问了模块没有导出的成员的说",
-    "template": "模块 '{module}' 没有导出 '{name}' 喵～",
-    "help": "这个模块可用的导出有：{available} 喔",
+    "title": "モジュールメンバーが見つからないにゃ～",
+    "message": "モジュールがエクスポートしてないメンバーにアクセスしちゃったのにゃ～",
+    "template": "モジュール '{module}' は '{name}' をエクスポートしてないにゃ～",
+    "help": "このモジュールの利用可能なエクスポートだよ：{available} にゃ～",
     "example": "lib.nope;",
-    "error_output": "error[E1043]: 模块成员未找到喵～\n --> example.yx:1:5\n  |\n1 | lib.nope;\n  |     ^^^^ 模块 'lib' 没有导出 'nope' nya～"
+    "error_output": "error[E1043]: モジュールメンバーが見つからないにゃ～\n --> example.yx:1:5\n  |\n1 | lib.nope;\n  |     ^^^^ モジュール 'lib' は 'nope' をエクスポートしてないにゃ～"
   },
   "E1050": {
     "title": "需要布尔操作数喵~",
