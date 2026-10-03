@@ -110,59 +110,68 @@ const DECOY_DIR_ENV: &str = "YX_GIT_DIR_DECOY";
 /// 探针环境变量：诱饵仓库的建仓指纹清单文件。
 const DECOY_MANIFEST_ENV: &str = "YX_GIT_DIR_DECOY_MANIFEST";
 
-#[test]
-fn test_git_command_immunizes_child_against_inherited_git_dir() {
-    // Arrange：本用例要求**自身进程**真的继承 GIT_DIR。进程内 set_var 会污染
-    // 同进程并行运行的其它测试，因此重新拉起本测试可执行文件，只在它的环境里
-    // 注入诱饵 GIT_DIR / GIT_INDEX_FILE。
-    if std::env::var_os(GIT_DIR_PROBE_ENV).is_none() {
-        let tmp = tempfile::TempDir::new().expect("临时目录");
-        let decoy = tmp.path().join("decoy");
-        make_probe_repo(&decoy);
-        let manifest = tmp.path().join("manifest.txt");
-        std::fs::write(&manifest, repo_manifest(&decoy)).expect("写入诱饵指纹");
+/// Fixture: 建「诱饵」仓库并把它的文件指纹写成清单。返回 (诱饵目录, 指纹清单路径)。
+fn decoy_repo_with_manifest(tmp: &Path) -> (PathBuf, PathBuf) {
+    let decoy = tmp.join("decoy");
+    make_probe_repo(&decoy);
+    let manifest = tmp.join("manifest.txt");
+    std::fs::write(&manifest, repo_manifest(&decoy)).expect("写入诱饵指纹");
+    (decoy, manifest)
+}
 
-        // Act：重新拉起自身，把诱饵仓库放进子进程的仓库定位变量
-        let exe = std::env::current_exe().expect("测试可执行文件路径");
-        let output = Command::new(exe)
-            .arg("--exact")
-            .arg("package::source::tests::git::test_git_command_immunizes_child_against_inherited_git_dir")
-            .env(GIT_DIR_PROBE_ENV, "1")
-            .env(DECOY_DIR_ENV, &decoy)
-            .env(DECOY_MANIFEST_ENV, &manifest)
-            .env("GIT_DIR", decoy.join(".git"))
-            .env("GIT_INDEX_FILE", decoy.join(".git").join("index"))
-            .output()
-            .expect("重新拉起测试进程");
+/// Act: 重新拉起本测试可执行文件（只跑本用例），把诱饵仓库放进子进程的仓库定位变量。
+fn relaunch_self_with_git_dir_env(
+    decoy: &Path,
+    manifest: &Path,
+) -> std::process::Output {
+    let exe = std::env::current_exe().expect("测试可执行文件路径");
+    Command::new(exe)
+        .arg("--exact")
+        .arg("package::source::tests::git::test_git_command_immunizes_child_against_inherited_git_dir")
+        .env(GIT_DIR_PROBE_ENV, "1")
+        .env(DECOY_DIR_ENV, decoy)
+        .env(DECOY_MANIFEST_ENV, manifest)
+        .env("GIT_DIR", decoy.join(".git"))
+        .env("GIT_INDEX_FILE", decoy.join(".git").join("index"))
+        .output()
+        .expect("重新拉起测试进程")
+}
 
-        // Assert：探针必须真的跑到了本用例，否则这条测试形同虚设
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(
-            output.status.success() && stdout.contains("1 passed"),
-            "探针进程应通过其 1 个用例；stdout={stdout} stderr={}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        return;
-    }
+/// Assert: 探针必须真的跑到了本用例，否则这条测试形同虚设。
+fn assert_probe_child_passed(output: &std::process::Output) {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("1 passed"),
+        "探针进程应通过其 1 个用例；stdout={stdout} stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
 
-    // Act：在已经继承 GIT_DIR 的本进程里，用 git_command() 在另一个目录建仓
-    let fresh = tempfile::TempDir::new().expect("临时目录");
-    let fresh_dir = fresh.path().join("fresh");
-    std::fs::create_dir_all(&fresh_dir).expect("创建目标目录");
-    let status = git_command()
+/// Act: 在已继承 GIT_DIR 的进程里，用 `git_command()` 在 `dir` 建仓。
+fn init_repo_via_git_command(dir: &Path) -> std::process::ExitStatus {
+    git_command()
         .arg("-C")
-        .arg(&fresh_dir)
+        .arg(dir)
         .args(["init", "-b", "main"])
         .status()
-        .expect("git 可用");
+        .expect("git 可用")
+}
 
-    // Assert：仓库必须建在目标目录；GIT_DIR 指向的诱饵仓库必须原封不动
+/// Assert: 仓库必须建在目标目录，而不是 GIT_DIR 指向处。
+fn assert_repo_created_in_target(
+    status: &std::process::ExitStatus,
+    dir: &Path,
+) {
     assert!(status.success(), "git init 应成功");
     assert!(
-        fresh_dir.join(".git").is_dir(),
+        dir.join(".git").is_dir(),
         "仓库应建在目标目录 {}，而不是 GIT_DIR 指向处",
-        fresh_dir.display()
+        dir.display()
     );
+}
+
+/// Assert: 继承进来的 GIT_DIR 指向的诱饵仓库必须原封不动。
+fn assert_decoy_repo_untouched() {
     let decoy = PathBuf::from(std::env::var_os(DECOY_DIR_ENV).expect("探针缺少诱饵目录"));
     let manifest = std::fs::read_to_string(
         std::env::var_os(DECOY_MANIFEST_ENV).expect("探针缺少诱饵指纹文件"),
@@ -173,6 +182,33 @@ fn test_git_command_immunizes_child_against_inherited_git_dir() {
         manifest,
         "继承的 GIT_DIR 指向的仓库不得被改写（core.bare 与全部文件应保持不变）"
     );
+}
+#[test]
+fn test_git_command_immunizes_child_against_inherited_git_dir() {
+    // Arrange：本用例要求**自身进程**真的继承 GIT_DIR。进程内 set_var 会污染
+    // 同进程并行运行的其它测试，因此重新拉起本测试可执行文件，只在它的环境里
+    // 注入诱饵 GIT_DIR / GIT_INDEX_FILE。
+    if std::env::var_os(GIT_DIR_PROBE_ENV).is_none() {
+        let tmp = tempfile::TempDir::new().expect("临时目录");
+        let (decoy, manifest) = decoy_repo_with_manifest(tmp.path());
+
+        // Act：重新拉起自身，把诱饵仓库放进子进程的仓库定位变量
+        let output = relaunch_self_with_git_dir_env(&decoy, &manifest);
+
+        // Assert：探针必须真的跑到了本用例，否则这条测试形同虚设
+        assert_probe_child_passed(&output);
+        return;
+    }
+
+    // Act：在已经继承 GIT_DIR 的本进程里，用 git_command() 在另一个目录建仓
+    let fresh = tempfile::TempDir::new().expect("临时目录");
+    let fresh_dir = fresh.path().join("fresh");
+    std::fs::create_dir_all(&fresh_dir).expect("创建目标目录");
+    let status = init_repo_via_git_command(&fresh_dir);
+
+    // Assert：仓库必须建在目标目录；GIT_DIR 指向的诱饵仓库必须原封不动
+    assert_repo_created_in_target(&status, &fresh_dir);
+    assert_decoy_repo_untouched();
 }
 
 #[test]
