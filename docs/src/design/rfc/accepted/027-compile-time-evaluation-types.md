@@ -3,13 +3,16 @@ title: 'RFC-027：编译期谓词与统一静态验证'
 status: '已接受'
 author: '晨煦'
 created: '2026-06-07'
-updated: '2026-10-02'
+updated: '2026-10-03'
 impl_status: 'in-progress'
 impl_detail:
   'Phase 1-2 完成，Phase 3 部分完成，Phase 4 部分完成。assert/Assert 统一方案 6 Phase
   全部实现（#157-#162 已关闭）：Never 类型、IsTrue 桥接、流敏感 Γ + kill
-  set、类型级递归、宇宙分层弱检查、dispatch 分派管道。'
-impl_percent: 85
+  set、类型级递归、宇宙分层弱检查。§11 的 dispatch 分派**语义**已由调用点义务实现
+  （`checker.rs` 三处直接调 `check_predicate`：绑定位 / 调用点实参 / 返回位），但**独立的
+  `layers/dispatch.rs` 模块已删除**——它零生产调用点，且对 `Unproven` 的处置（降级为 W1080
+  警告）与生产实做（一律报错）相冲突（#377-2）。'
+impl_percent: 82
 issue_number: 90
 issue_url: 'https://github.com/ChenXu233/YaoXiang/issues/90'
 
@@ -842,6 +845,16 @@ sum: (arr: Array(Int)) -> Int = {
 ```
 
 ### 11. dispatch 分派管道：编译期与运行时的统一分派
+
+> **落地注记（2026-10-03，#377-2）**：本节的**语义**成立且已接入生产，但**结构**不是独立的
+> `layers/dispatch.rs` 模块。生产的分派由 `checker.rs` 三处**调用点义务**直接实现（直接调
+> `layers::predicate::check_predicate`）：绑定位重验证（`revalidate_refined`）、调用点实参
+> （`check_call_arg_refinements`）、返回位后置条件（`check_return_refinement`）。原
+> `layers/dispatch.rs` 零生产调用点，且其对 `Unproven { ProofFunctionRequired }` 的处置是
+> 「降级为 W1080 警告并注入 Γ」，与生产实做（`Unproven` 一律报错，见 `refined_unproven`）
+> 相冲突，故已整体删除。另需注意：本节表中 Runtime 行的「插入运行时 check」在生产**尚无**
+> 发射点（`RuntimeOutcome::InsertCheck` 无消费方），Γ 注入则由 `ownership.rs` 的分支守卫与
+> `inference/expressions.rs` 独立完成。
 
 `assert` 和 `Assert` 是同一个精化类型原语的两面。分派管道 `dispatch`
 按**谓词的自由变量在编译期是否可及**自动决定走编译期证明还是运行时检查：

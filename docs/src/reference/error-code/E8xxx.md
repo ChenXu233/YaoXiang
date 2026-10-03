@@ -29,7 +29,8 @@ description: '编译器内部错误，通常表示编译器自身的缺陷。遇
 - **模板**：`内部编译器错误：{message}`
 - **消息**：编译器发生内部错误
 - **帮助**：请在 https://github.com/ChenXu233/YaoXiang/issues/new 报告此错误
-- **发射点**：`src/frontend/pipeline.rs:427`、`src/frontend/core/typecheck/layers/dispatch.rs:151`、`src/frontend/core/typecheck/proof/verdict.rs:289` 等 27 处
+- **发射点**：`src/frontend/pipeline.rs:427`、`src/frontend/core/typecheck/proof/verdict.rs:289` 等 26 处
+- **历史**：原列出的 `src/frontend/core/typecheck/layers/dispatch.rs:151` 随该模块在 #377-2 删除而消失（原计数 27 处，现为 26 处）
 
 ### E8002：意外 Panic
 

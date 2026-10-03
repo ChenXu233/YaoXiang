@@ -37,8 +37,9 @@ This family contains **3** codes, all registered in the `define_codes!` registry
 - **Message**: An internal compiler error occurred
 - **Help**: Please report this error at https://github.com/ChenXu233/YaoXiang/issues/new
 - **Emission Points**: `src/frontend/pipeline.rs:427`,
-  `src/frontend/core/typecheck/layers/dispatch.rs:151`,
-  `src/frontend/core/typecheck/proof/verdict.rs:289`, and 24 other sites (27 total)
+  `src/frontend/core/typecheck/proof/verdict.rs:289`, and 23 other sites (26 total)
+- **History**: the previously listed `src/frontend/core/typecheck/layers/dispatch.rs:151` disappeared
+  with that module's deletion in #377-2 (the count was 27 sites, now 26)
 
 ### E8002: Unexpected Panic
 

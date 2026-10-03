@@ -163,8 +163,10 @@ This family contains **14** codes, all registered in the `define_codes!` registr
 - **Template**: `A proof function is required to verify the constraint`
 - **Message**: The constraint cannot be proven at compile-time; a proof function must be provided
 - **Help**: Add a proof function or provide runtime checks
-- **Emission point**: `src/frontend/core/typecheck/layers/dispatch.rs:145`,
-  `src/frontend/core/typecheck/proof/verdict.rs:288`
+- **Emission point**: `src/frontend/core/typecheck/proof/verdict.rs:288`
+- **History**: the previously listed `src/frontend/core/typecheck/layers/dispatch.rs:145` disappeared
+  with that module's deletion in #377-2 (it had zero production call sites and had diverged from the
+  dispatch logic production actually uses)
 - **Source comment name**: A proof function is required to verify the constraint
 
 ### E4021: Loop termination cannot be automatically proven

@@ -148,7 +148,8 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`需要证明函数来验证约束`
 - **消息**：约束无法在编译期证明，需要提供证明函数
 - **帮助**：添加证明函数或提供运行时检查
-- **发射点**：`src/frontend/core/typecheck/layers/dispatch.rs:145`、`src/frontend/core/typecheck/proof/verdict.rs:288`
+- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:288`
+- **历史**：原列出的 `src/frontend/core/typecheck/layers/dispatch.rs:145` 随该模块在 #377-2 删除而消失（零生产调用点，与生产实做的分派分叉）
 - **源码注释名**：需要证明函数来验证约束
 
 ### E4021：循环终止性无法自动证明

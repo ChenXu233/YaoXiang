@@ -3,14 +3,18 @@ title: 'RFC-027: Compile-time Predicates and Unified Static Verification'
 status: 'Accepted'
 author: 'Chenxu'
 created: '2026-06-07'
-updated: '2026-10-02'
+updated: '2026-10-03'
 impl_status: 'in-progress'
 impl_detail:
   'Phases 1–2 complete, Phase 3 partially complete, Phase 4 partially complete. The unified
   assert/Assert scheme across 6 phases is fully implemented (issues #157–#162 closed): Never type,
   IsTrue bridging, flow-sensitive Γ + kill set, type-level recursion, universe stratification weak
-  check, dispatch pipeline.'
-impl_percent: 85
+  check. The dispatch **semantics** of §11 are implemented by the call-site obligations (three
+  places in `checker.rs` call `check_predicate` directly: binding position / call argument / return
+  position), but the **standalone `layers/dispatch.rs` module has been deleted** — it had zero
+  production call sites, and its handling of `Unproven` (degrade to warning W1080) conflicted with
+  what production does (always error) (#377-2).'
+impl_percent: 82
 issue_number: 90
 issue_url: 'https://github.com/ChenXu233/YaoXiang/issues/90'
 
@@ -1006,6 +1010,19 @@ sum: (arr: Array(Int)) -> Int = {
 ```
 
 ### 11. Dispatch Pipeline: Unified Dispatch for Compile-time and Runtime
+
+> **Landing note (2026-10-03, #377-2)**: the **semantics** of this section hold and are wired into
+> production, but the **structure** is not a standalone `layers/dispatch.rs` module. Production
+> dispatch is implemented by three **call-site obligations** in `checker.rs` (each calling
+> `layers::predicate::check_predicate` directly): binding-position revalidation
+> (`revalidate_refined`), call-argument checking (`check_call_arg_refinements`), and return-position
+> postconditions (`check_return_refinement`). The former `layers/dispatch.rs` had zero production
+> call sites, and its handling of `Unproven { ProofFunctionRequired }` — "degrade to warning W1080 and
+> inject into Γ" — conflicted with what production does (`Unproven` always errors, see
+> `refined_unproven`), so the module was deleted wholesale. Note also that the Runtime row's "insert
+> a runtime check" has **no** emission point in production yet (`RuntimeOutcome::InsertCheck` has no
+> consumer); Γ injection is instead done independently by the branch guards in `ownership.rs` and by
+> `inference/expressions.rs`.
 
 `assert` and `Assert` are two sides of the same refinement-type primitive. The dispatch pipeline
 `dispatch` automatically decides between compile-time proving and runtime checking based on

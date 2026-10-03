@@ -39,7 +39,7 @@ dead-code = "warn"
 | `W1005` | Unused private method                        | No          | `Unused method: '{name}'`                                                          | ✅ 1 site         |
 | `W1006` | Local module shadows dependency package      | No          | `Local module '{module}' shadows dependency package '{dependency}'`                | ✅ 2 sites        |
 | `W1063` | Const generic constraint cannot be evaluated | No          | `const generic constraint cannot be evaluated: \`{constraint}\` ({var} = {value})` | ⚠ Not yet emitted |
-| `W1080` | Compile-time proof degraded                  | No          | `Constraint cannot be proven at compile time, degraded to runtime check`           | ✅ 1 site         |
+| `W1080` | Compile-time proof degraded                  | No          | `Constraint cannot be proven at compile time, degraded to runtime check`           | ⚠ Not yet emitted |
 
 ## Per-Code Details
 
@@ -111,7 +111,13 @@ dead-code = "warn"
 - **Span Exempt**: No
 - **Template**: `Constraint cannot be proven at compile time, degraded to runtime check`
 - **Help**: Consider adding a proof function to improve safety
-- **Emission Site**: `src/frontend/core/typecheck/layers/dispatch.rs:232`
+- **Emission Site**: ⚠ Not yet emitted (reserved in the registry, but no call site in non-test code)
+- **History**: the only construction site used to be
+  `src/frontend/core/typecheck/layers/dispatch.rs:232`. That module had diverged from the dispatch
+  logic production actually uses (production calls `check_predicate` directly from `checker.rs`
+  and turns `Unproven` into an error rather than a degrading warning), had zero production call
+  sites, and was deleted wholesale in #377-2; the code is therefore unreachable in the user flow.
+  The registration and the translations are kept so the code slot is not reused by later features.
 
 ## Warning Levels
 

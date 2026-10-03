@@ -211,7 +211,7 @@ non-test code.
 | `W1005` | Unused private method                                       | `Warning`   | No          | `Unused method: '{name}'`                                                                                                                                     | ✅ 1 site         |
 | `W1006` | Local module shadows dependency package                     | `Warning`   | No          | `Local module '{module}' shadows the dependency package '{dependency}'`                                                                                       | ✅ 2 sites        |
 | `W1063` | const generic constraint cannot be evaluated                | `Warning`   | No          | `const generic constraint cannot be evaluated: \`{constraint}\` ({var} = {value})`                                                                            | ⚠ Not yet emitted |
-| `W1080` | Compile-time proof downgraded                               | `Warning`   | No          | `Constraint could not be proved at compile time; downgraded to a runtime check`                                                                               | ✅ 1 site         |
+| `W1080` | Compile-time proof downgraded                               | `Warning`   | No          | `Constraint could not be proved at compile time; downgraded to a runtime check`                                                                               | ⚠ Not yet emitted |
 
 ## std-Layer Runtime Codes
 
