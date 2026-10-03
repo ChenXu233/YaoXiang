@@ -167,8 +167,7 @@ scores = {"Alice": 90, "Bob": 85}
 a = scores["Alice"]       // 90
 
 // 列表推导式
-// 注意：0.8.2 的列表推导式不支持 if 过滤（实测 E0010），改用 list.filter
-evens = list.filter(nums, (x) => x % 2 == 0)
+evens = [x for x in nums if x % 2 == 0]
 doubled = [x * 2 for x in nums]
 ```
 
