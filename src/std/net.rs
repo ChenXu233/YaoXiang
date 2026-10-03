@@ -445,6 +445,17 @@ mod tests {
         }
     }
 
+    /// 用 args 调 http_get，并**要求**它被拒绝；返回错误以便断言具体变体。
+    fn get_rejected(
+        args: &[RuntimeValue],
+        ctx: &mut NativeContext<'_>,
+    ) -> ExecutorError {
+        match native_http_get(args, ctx) {
+            Ok(v) => panic!("http_get should reject the given arguments, got {v:?}"),
+            Err(e) => e,
+        }
+    }
+
     fn alloc_dict(entries: Vec<(&str, &str)>) -> RuntimeValue {
         let mut heap = Heap::new();
         let mut map: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
@@ -544,32 +555,18 @@ mod tests {
     fn http_get_rejects_bad_argument_types() {
         let mut heap = Heap::new();
         let mut ctx = NativeContext::new(&mut heap);
+        let url = RuntimeValue::String("http://127.0.0.1:1/".into());
 
-        let err = native_http_get(&[RuntimeValue::Int(1)], &mut ctx).unwrap_err();
+        let err = get_rejected(&[RuntimeValue::Int(1)], &mut ctx);
         assert!(matches!(err, ExecutorError::Type(_, _)), "url type error");
 
-        let err = native_http_get(
-            &[
-                RuntimeValue::String("http://127.0.0.1:1/".into()),
-                RuntimeValue::Int(5),
-            ],
-            &mut ctx,
-        )
-        .unwrap_err();
+        let err = get_rejected(&[url.clone(), RuntimeValue::Int(5)], &mut ctx);
         assert!(
             matches!(err, ExecutorError::Type(_, _)),
             "headers type error"
         );
 
-        let err = native_http_get(
-            &[
-                RuntimeValue::String("http://127.0.0.1:1/".into()),
-                RuntimeValue::Void,
-                RuntimeValue::Int(0),
-            ],
-            &mut ctx,
-        )
-        .unwrap_err();
+        let err = get_rejected(&[url, RuntimeValue::Void, RuntimeValue::Int(0)], &mut ctx);
         assert!(
             matches!(err, ExecutorError::Runtime(_, _)),
             "timeout > 0 guard"

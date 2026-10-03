@@ -14,11 +14,9 @@ fn load(pkg: &std::path::Path) -> PackageManifest {
     PackageManifest::load(pkg).expect("load fixture manifest")
 }
 
-#[test]
-fn test_cargo_strategy_builds_real_crate_and_copies_artifacts() {
-    // Arrange：最小 cdylib crate（真实编译）
-    let tmp = tempfile::tempdir().unwrap();
-    let pkg = tmp.path().join("native-demo-1.0.0");
+/// Fixture: 最小 cdylib crate（真实编译）——返回包目录与 cargo scratch 目录。
+fn native_cargo_scratch(tmp: &std::path::Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    let pkg = tmp.join("native-demo-1.0.0");
     write(
         &pkg.join("yaoxiang.toml"),
         "[package]\nname = \"native-demo\"\nversion = \"1.0.0\"\n\n[build]\nstrategy = \"cargo\"\n\n[build.cargo]\ntarget = \"release\"\n",
@@ -31,7 +29,28 @@ fn test_cargo_strategy_builds_real_crate_and_copies_artifacts() {
         &pkg.join("src/lib.rs"),
         "#[no_mangle]\npub extern \"C\" fn yx_demo_add(a: i32, b: i32) -> i32 { a + b }\n",
     );
-    let scratch = tmp.path().join(".yaoxiang").join("build");
+    let scratch = tmp.join(".yaoxiang").join("build");
+
+    (pkg, scratch)
+}
+
+/// Act: 读取包内产物目录里是否存在 cdylib（.dll/.so/.dylib）。
+fn native_lib_present(native: &std::path::Path) -> bool {
+    let has_lib = std::fs::read_dir(native)
+        .expect("let has_lib = std::fs::read_dir(&native) 应成功")
+        .flatten()
+        .any(|e| {
+            let n = e.file_name().to_string_lossy().to_string();
+            n.ends_with(".dll") || n.ends_with(".so") || n.ends_with(".dylib")
+        });
+    has_lib
+}
+
+#[test]
+fn test_cargo_strategy_builds_real_crate_and_copies_artifacts() {
+    // Arrange：最小 cdylib crate（真实编译）
+    let tmp = tempfile::tempdir().expect("create temp dir 应成功");
+    let (pkg, scratch) = native_cargo_scratch(tmp.path());
 
     // Act
     let outcome = crate::package::runtime::drive(build::run_install_build(
@@ -41,7 +60,7 @@ fn test_cargo_strategy_builds_real_crate_and_copies_artifacts() {
         None,
         &TrustDecision::default(),
     ))
-    .unwrap();
+    .expect("install build 应成功");
 
     // Assert：产物落 build/native/<triple>/，scratch 不污染包目录
     assert_eq!(outcome.via, "cargo");
@@ -51,11 +70,11 @@ fn test_cargo_strategy_builds_real_crate_and_copies_artifacts() {
         "产物目录应为 build/native/<triple>: {:?}",
         native
     );
-    let has_lib = std::fs::read_dir(&native).unwrap().flatten().any(|e| {
-        let n = e.file_name().to_string_lossy().to_string();
-        n.ends_with(".dll") || n.ends_with(".so") || n.ends_with(".dylib")
-    });
-    assert!(has_lib, "cdylib 产物应复制进 {:?}", native);
+    assert!(
+        native_lib_present(&native),
+        "cdylib 产物应复制进 {:?}",
+        native
+    );
     assert!(!pkg.join("target").exists(), "cargo scratch 不得污染包目录");
     assert!(
         scratch.join("cargo").join("native-demo-1.0.0").exists(),

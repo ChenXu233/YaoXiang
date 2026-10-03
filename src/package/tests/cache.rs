@@ -18,6 +18,143 @@ use crate::package::source::Source;
 
 // === sanitize_key 测试 ===
 
+/// Helper: test_cache_entry_key_resolves_branch_to_commit 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: 本地 git 仓库 + 缓存根（返回 TempDir 保活）。
+fn git_branch_fixture() -> (TempDir, std::path::PathBuf, GlobalCache) {
+    // Arrange：本地仓库 + 分支引用
+    let tmp = TempDir::new().expect("create temp dir 应成功");
+    let repo = make_git_repo(&tmp.path().join("repo"));
+    let cache = GlobalCache::with_root(tmp.path().join("cache"));
+
+    (tmp, repo, cache)
+}
+
+/// Fixture: 不可达仓库路径（`name` 目录不存在）。
+fn unreachable_repo_path(
+    tmp: &std::path::Path,
+    name: &str,
+) -> String {
+    tmp.join(name)
+        .to_str()
+        .expect("路径应可转字符串")
+        .to_string()
+}
+
+/// Act: 解析分支引用 → 缓存条目键（失败时打印路径与错误）。
+fn cache_key_for(
+    source: &GitSource,
+    cache: &GlobalCache,
+    repo: &str,
+    branch: &str,
+) -> String {
+    source
+        .cache_entry_key(cache, repo, &GitRef::Branch(branch.to_string()))
+        .unwrap_or_else(|e| panic!("解析 {repo}#{branch} 的缓存键应成功: {e}"))
+}
+
+/// Assert: commit 键形态（40 位十六进制）与分支指针写入。
+fn assert_commit_key_and_pointer(
+    key: &String,
+    cache: &GlobalCache,
+    repo: &str,
+) {
+    assert_eq!(key.len(), 40, "commit 键应为 40 位 sha");
+    assert!(
+        key.chars().all(|c| c.is_ascii_hexdigit()),
+        "commit 键应为十六进制: {key}"
+    );
+    assert_eq!(
+        cache.read_pointer(repo, "main").expect("路径应可转字符串"),
+        Some(key.clone()),
+        "解析时应写分支指针"
+    );
+}
+
+/// Assert: 不可达且无指针时应报错。
+fn assert_unreachable_without_pointer_errors(
+    source: &GitSource,
+    cache: &GlobalCache,
+    bogus: &str,
+) {
+    assert!(
+        source
+            .cache_entry_key(cache, bogus, &GitRef::Branch("main".to_string()))
+            .is_err(),
+        "不可达且无指针应报错"
+    );
+}
+/// Fixture: 本地 git 仓库（v1.0.0 / v1.1.0 两个 tag）+ 缓存根 + 两个空 vendor。
+fn git_cache_fixture() -> (
+    TempDir,
+    std::path::PathBuf,
+    GlobalCache,
+    std::path::PathBuf,
+    std::path::PathBuf,
+) {
+    // Arrange：本地 git 仓库（v1.0.0 / v1.1.0 两个 tag）+ 两个空 vendor
+    let tmp = TempDir::new().expect("create temp dir 应成功");
+    let repo = make_git_repo(&tmp.path().join("repo"));
+    let cache = GlobalCache::with_root(tmp.path().join("cache"));
+    let vendor = tmp.path().join("vendor");
+    std::fs::create_dir_all(&vendor).expect("std::fs::create_dir_all(&vendor) 应成功");
+    let vendor2 = tmp.path().join("vendor2");
+    std::fs::create_dir_all(&vendor2).expect("std::fs::create_dir_all(&vendor2) 应成功");
+
+    (tmp, repo, cache, vendor, vendor2)
+}
+
+/// Act: 下载 `spec` 到 `vendor`（失败时打印错误）。
+fn download_ok(
+    source: &GitSource,
+    spec: &DependencySpec,
+    vendor: &std::path::Path,
+) -> crate::package::source::ResolvedPackage {
+    crate::package::runtime::drive(source.download(spec, vendor))
+        .unwrap_or_else(|e| panic!("下载 {spec:?} 应成功: {e}"))
+}
+
+/// Assert: 首次下载的版本抉择、vendor 副本与缓存条目。
+fn assert_first_download(
+    resolved: &crate::package::source::ResolvedPackage,
+    repo: &std::path::Path,
+    cache: &GlobalCache,
+    vendor: &std::path::Path,
+) {
+    assert_eq!(resolved.version, "1.0.0");
+    let dep_dir = vendor.join("fixture-1.0.0");
+    assert!(dep_dir.exists(), "vendor 目录应以探测版本命名");
+    assert!(dep_dir.join("yaoxiang.toml").exists());
+    assert!(dep_dir.join("lib.yx").exists());
+    assert_eq!(
+        std::fs::read_to_string(dep_dir.join("lib.yx")).expect("读取 fixture 文件应成功"),
+        "pub fn one() { 1 }"
+    );
+    assert!(!dep_dir.join(".git").exists(), "vendor 副本无 .git");
+    let entry = cache.git_entry(repo.to_str().expect("路径应可转字符串"), "v1.0.0");
+    assert!(entry.exists(), "缓存条目应建立（req 1.0.0 → tag 键）");
+    assert!(entry.join(".git").exists(), "缓存条目保留 .git");
+}
+
+/// Assert: tilde 范围（~1.1）择优到 v1.1.0 且副本就位。
+fn assert_tilde_prefers_v1_1(
+    source: &GitSource,
+    repo: &std::path::Path,
+    vendor: &std::path::Path,
+) {
+    let spec_1_1 = git_spec("fixture", repo, "~1.1");
+    let resolved_1_1 = download_ok(source, &spec_1_1, vendor);
+    assert_eq!(resolved_1_1.version, "1.1.0");
+    assert!(
+        vendor.join("fixture-1.1.0").join("lib.yx").exists(),
+        "v1.1.0 副本应就位"
+    );
+    assert_eq!(
+        std::fs::read_to_string(vendor.join("fixture-1.1.0").join("lib.yx"))
+            .expect("读取 fixture 文件应成功"),
+        "pub fn two() { 2 }"
+    );
+}
+
 #[test]
 fn test_sanitize_key_strips_scheme() {
     // Act / Assert：scheme 与 `git@` 前缀、结尾 `.git` 被剥除
@@ -158,7 +295,7 @@ fn test_from_config_default_has_root() {
 
 /// 在目录中创建带两个 tag 的本地 git 仓库，返回仓库路径
 fn make_git_repo(dir: &Path) -> std::path::PathBuf {
-    std::fs::create_dir_all(dir).unwrap();
+    std::fs::create_dir_all(dir).expect("std::fs::create_dir_all(dir) 应成功");
     let git = |args: &[&str]| {
         let mut cmd = git_command();
         cmd.arg("-c")
@@ -193,12 +330,12 @@ fn make_git_repo(dir: &Path) -> std::path::PathBuf {
         "false",
     ]);
 
-    std::fs::write(dir.join("lib.yx"), "pub fn one() { 1 }").unwrap();
+    std::fs::write(dir.join("lib.yx"), "pub fn one() { 1 }").expect("写 fixture 文件应成功");
     std::fs::write(
         dir.join("yaoxiang.toml"),
         "[package]\nname = \"fixture\"\nversion = \"1.0.0\"\n",
     )
-    .unwrap();
+    .expect("git 命令应成功执行");
     git(&["-C", dir.to_str().expect("utf8 repo path"), "add", "-A"]);
     git(&[
         "-C",
@@ -209,12 +346,12 @@ fn make_git_repo(dir: &Path) -> std::path::PathBuf {
     ]);
     git(&["-C", dir.to_str().expect("utf8 repo path"), "tag", "v1.0.0"]);
 
-    std::fs::write(dir.join("lib.yx"), "pub fn two() { 2 }").unwrap();
+    std::fs::write(dir.join("lib.yx"), "pub fn two() { 2 }").expect("写 fixture 文件应成功");
     std::fs::write(
         dir.join("yaoxiang.toml"),
         "[package]\nname = \"fixture\"\nversion = \"1.1.0\"\n",
     )
-    .unwrap();
+    .expect("git 命令应成功执行");
     git(&["-C", dir.to_str().expect("utf8 repo path"), "add", "-A"]);
     git(&[
         "-C",
@@ -244,56 +381,26 @@ fn git_spec(
 #[test]
 fn test_git_download_uses_global_cache() {
     // Arrange：本地 git 仓库（v1.0.0 / v1.1.0 两个 tag）+ 空 vendor
-    let tmp = TempDir::new().unwrap();
-    let repo = make_git_repo(&tmp.path().join("repo"));
-    let cache = GlobalCache::with_root(tmp.path().join("cache"));
-    let vendor = tmp.path().join("vendor");
-    std::fs::create_dir_all(&vendor).unwrap();
-
+    let (_tmp, repo, cache, vendor, vendor2) = git_cache_fixture();
     let source = GitSource::with_cache(cache.clone());
     let spec = git_spec("fixture", &repo, "1.0.0");
 
     // Act：首次下载（条目缺失 → 克隆入缓存 → 复制到 vendor）
-    let resolved = crate::package::runtime::drive(source.download(&spec, &vendor)).unwrap();
+    let resolved = download_ok(&source, &spec, &vendor);
 
     // Assert：semver 择优命中 v1.0.0；vendor 副本无 .git；缓存条目建立
-    assert_eq!(resolved.version, "1.0.0");
-    let dep_dir = vendor.join("fixture-1.0.0");
-    assert!(dep_dir.exists(), "vendor 目录应以探测版本命名");
-    assert!(dep_dir.join("yaoxiang.toml").exists());
-    assert!(dep_dir.join("lib.yx").exists());
-    assert_eq!(
-        std::fs::read_to_string(dep_dir.join("lib.yx")).unwrap(),
-        "pub fn one() { 1 }"
-    );
-    assert!(!dep_dir.join(".git").exists(), "vendor 副本无 .git");
+    assert_first_download(&resolved, &repo, &cache, &vendor);
 
-    let entry = cache.git_entry(repo.to_str().unwrap(), "v1.0.0");
-    assert!(entry.exists(), "缓存条目应建立（req 1.0.0 → tag 键）");
-    assert!(entry.join(".git").exists(), "缓存条目保留 .git");
-
-    // 缓存复用：第二次下载到全新 vendor 命中缓存
-    let vendor2 = tmp.path().join("vendor2");
-    std::fs::create_dir_all(&vendor2).unwrap();
-    let resolved2 = crate::package::runtime::drive(source.download(&spec, &vendor2)).unwrap();
+    // Act & Assert：第二次下载到全新 vendor 命中缓存复用
+    let resolved2 = download_ok(&source, &spec, &vendor2);
     assert_eq!(resolved2.version, "1.0.0");
     assert!(
         vendor2.join("fixture-1.0.0").join("lib.yx").exists(),
         "第二次下载应命中缓存复用"
     );
 
-    // tilde 择优（~1.1 → tag v1.1.0）→ 版本探测走 v1.1.0 处 manifest
-    let spec_1_1 = git_spec("fixture", &repo, "~1.1");
-    let resolved_1_1 = crate::package::runtime::drive(source.download(&spec_1_1, &vendor)).unwrap();
-    assert_eq!(resolved_1_1.version, "1.1.0");
-    assert!(
-        vendor.join("fixture-1.1.0").join("lib.yx").exists(),
-        "v1.1.0 副本应就位"
-    );
-    assert_eq!(
-        std::fs::read_to_string(vendor.join("fixture-1.1.0").join("lib.yx")).unwrap(),
-        "pub fn two() { 2 }"
-    );
+    // Act & Assert：tilde 择优（~1.1 → tag v1.1.0）
+    assert_tilde_prefers_v1_1(&source, &repo, &vendor);
 }
 
 #[test]
@@ -324,56 +431,25 @@ fn test_git_download_tag_pinned() {
 #[test]
 fn test_cache_entry_key_resolves_branch_to_commit() {
     // Arrange：本地仓库 + 分支引用
-    let tmp = TempDir::new().unwrap();
-    let repo = make_git_repo(&tmp.path().join("repo"));
-    let cache = GlobalCache::with_root(tmp.path().join("cache"));
+    let (tmp, repo, cache) = git_branch_fixture();
     let source = GitSource::new();
+    let repo_str = repo.to_str().expect("路径应可转字符串").to_string();
 
     // Act：分支 → commit 键解析
-    let key = source
-        .cache_entry_key(
-            &cache,
-            repo.to_str().unwrap(),
-            &GitRef::Branch("main".to_string()),
-        )
-        .unwrap();
+    let key = cache_key_for(&source, &cache, &repo_str, "main");
 
     // Assert：键是完整 commit sha（40 位十六进制），指针已写入供离线回退
-    assert_eq!(key.len(), 40, "commit 键应为 40 位 sha");
-    assert!(
-        key.chars().all(|c| c.is_ascii_hexdigit()),
-        "commit 键应为十六进制: {key}"
-    );
-    assert_eq!(
-        cache.read_pointer(repo.to_str().unwrap(), "main").unwrap(),
-        Some(key.clone()),
-        "解析时应写分支指针"
-    );
+    assert_commit_key_and_pointer(&key, &cache, &repo_str);
 
     // 离线回退：不可达 URL + 已有指针 → 返回指针值
-    let bogus = tmp
-        .path()
-        .join("nonexistent-repo")
-        .to_str()
-        .unwrap()
-        .to_string();
-    cache.write_pointer(&bogus, "main", "deadbeef").unwrap();
-    let key = source
-        .cache_entry_key(&cache, &bogus, &GitRef::Branch("main".to_string()))
-        .unwrap();
+    let bogus = unreachable_repo_path(tmp.path(), "nonexistent-repo");
+    cache
+        .write_pointer(&bogus, "main", "deadbeef")
+        .expect("cache.write_pointer(&bogus, \"main\", \"deadbeef\") 应成功");
+    let key = cache_key_for(&source, &cache, &bogus, "main");
     assert_eq!(key, "deadbeef", "离线时应回退到指针值");
 
     // 无指针且不可达 → 报错
-    let bogus2 = tmp
-        .path()
-        .join("no-pointer-repo")
-        .to_str()
-        .unwrap()
-        .to_string();
-    assert!(
-        source
-            .cache_entry_key(&cache, &bogus2, &GitRef::Branch("main".to_string()))
-            .is_err(),
-        "不可达且无指针应报错"
-    );
+    let bogus2 = unreachable_repo_path(tmp.path(), "no-pointer-repo");
+    assert_unreachable_without_pointer_errors(&source, &cache, &bogus2);
 }

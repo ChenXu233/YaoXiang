@@ -24,6 +24,50 @@ fn test_ctx(heap: &mut Heap) -> NativeContext<'_> {
     NativeContext::new(heap)
 }
 
+/// Fixture: `String` 实参（FFI 按值接收）。
+fn str_arg(s: &str) -> RuntimeValue {
+    RuntimeValue::String(s.into())
+}
+
+/// Act: 写入 `path`（失败时打印路径与底层错误）。
+fn write_file_ok(
+    registry: &FfiRegistry,
+    path: &str,
+    content: &str,
+    ctx: &mut NativeContext<'_>,
+) -> RuntimeValue {
+    registry
+        .call("std.fs.write_file", &[str_arg(path), str_arg(content)], ctx)
+        .unwrap_or_else(|e| panic!("std.fs.write_file({path}) 应成功: {e}"))
+}
+
+/// Act: 读取 `path`。
+fn read_file_ok(
+    registry: &FfiRegistry,
+    path: &str,
+    ctx: &mut NativeContext<'_>,
+) -> RuntimeValue {
+    registry
+        .call("std.fs.read_file", &[str_arg(path)], ctx)
+        .unwrap_or_else(|e| panic!("std.fs.read_file({path}) 应成功: {e}"))
+}
+
+/// Act: 追加 `content` 到 `path`。
+fn append_file_ok(
+    registry: &FfiRegistry,
+    path: &str,
+    content: &str,
+    ctx: &mut NativeContext<'_>,
+) -> RuntimeValue {
+    registry
+        .call(
+            "std.fs.append_file",
+            &[str_arg(path), str_arg(content)],
+            ctx,
+        )
+        .unwrap_or_else(|e| panic!("std.fs.append_file({path}) 应成功: {e}"))
+}
+
 #[test]
 fn test_new_registry_is_empty() {
     let registry = FfiRegistry::new();
@@ -196,65 +240,28 @@ fn test_registered_functions_list() {
 
 #[test]
 fn test_write_and_read_file() {
+    // Arrange — 标准库 FFI 注册表 + 本地堆上下文；先清理上次运行的残留文件
     let registry = FfiRegistry::with_std();
     let mut heap = Heap::new();
     let mut ctx = test_ctx(&mut heap);
     let test_path = std::env::temp_dir().join("yx_ffi_test.txt");
     let path_str = test_path.to_string_lossy().to_string();
-
-    // Cleanup before test
     let _ = std::fs::remove_file(&test_path);
 
-    // Write file
-    let write_result = registry
-        .call(
-            "std.fs.write_file",
-            &[
-                RuntimeValue::String(path_str.clone().into()),
-                RuntimeValue::String("FFI test content".into()),
-            ],
-            &mut ctx,
-        )
-        .unwrap();
+    // Act — 写入 → 读取 → 追加 → 再读取，每次经 std.fs 注册项
+    let write_result = write_file_ok(&registry, &path_str, "FFI test content", &mut ctx);
+    let read_result = read_file_ok(&registry, &path_str, &mut ctx);
+    let append_result = append_file_ok(&registry, &path_str, " appended", &mut ctx);
+    let read_result2 = read_file_ok(&registry, &path_str, &mut ctx);
+
+    // Assert — 各次调用的返回值；末尾清理临时文件
     assert_eq!(write_result, RuntimeValue::Bool(true));
-
-    // Read file
-    let read_result = registry
-        .call(
-            "std.fs.read_file",
-            &[RuntimeValue::String(path_str.clone().into())],
-            &mut ctx,
-        )
-        .unwrap();
     assert_eq!(read_result, RuntimeValue::String("FFI test content".into()));
-
-    // Append file
-    let append_result = registry
-        .call(
-            "std.fs.append_file",
-            &[
-                RuntimeValue::String(path_str.clone().into()),
-                RuntimeValue::String(" appended".into()),
-            ],
-            &mut ctx,
-        )
-        .unwrap();
     assert_eq!(append_result, RuntimeValue::Bool(true));
-
-    // Read again to verify append
-    let read_result2 = registry
-        .call(
-            "std.fs.read_file",
-            &[RuntimeValue::String(path_str.clone().into())],
-            &mut ctx,
-        )
-        .unwrap();
     assert_eq!(
         read_result2,
         RuntimeValue::String("FFI test content appended".into())
     );
-
-    // Cleanup
     let _ = std::fs::remove_file(&test_path);
 }
 
@@ -442,8 +449,10 @@ fn test_parse_int_parses_negative_number_with_whitespace() {
 fn test_parse_float_returns_ok_for_valid_float() {
     let mut heap = Heap::new();
     let mut ctx = test_ctx(&mut heap);
-    let result = native_parse_float(&[RuntimeValue::String("3.14".into())], &mut ctx).unwrap();
-    let val = native_result_unwrap(&[result], &mut ctx).unwrap();
+    let result = native_parse_float(&[RuntimeValue::String("3.14".into())], &mut ctx)
+        .expect("native_parse_float(\"3.14\") 应成功");
+    let val = native_result_unwrap(&[result], &mut ctx)
+        .expect("let val = native_result_unwrap(&[result], &mut ctx) 应成功");
     assert_eq!(
         val,
         RuntimeValue::Float(3.14),

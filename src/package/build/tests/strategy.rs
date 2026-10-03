@@ -28,10 +28,9 @@ fn run_build(pkg: &std::path::Path) -> Result<build::BuildOutcome, PackageError>
     ))
 }
 
-#[test]
-fn test_parses_full_build_declaration() {
-    // Arrange
-    let tmp = tempfile::tempdir().unwrap();
+/// Fixture: 写满 `[build]` 各段的清单（cargo 策略 / headers / requirements / platforms / binaries）。
+fn full_build_manifest_dir() -> tempfile::TempDir {
+    let tmp = tempfile::tempdir().expect("create temp dir 应成功");
     write(
         &tmp.path().join("yaoxiang.toml"),
         r#"[package]
@@ -59,30 +58,64 @@ cargo = ">= 1.70"
 "#,
     );
 
-    // Act
-    let manifest = load(tmp.path());
-    let build = manifest.build.as_ref().expect("[build] 段应被解析");
-
-    // Assert
-    assert_eq!(build.parsed_strategy().unwrap(), BuildStrategy::Cargo);
-    assert_eq!(build.headers, vec!["include/sqlite3.h"]);
-    let cargo = build.cargo.as_ref().unwrap();
-    assert_eq!(cargo.features, vec!["ffi"]);
-    assert_eq!(cargo.target.as_deref(), Some("release"));
-    assert_eq!(build.requirements.get("cargo").unwrap(), ">= 1.70");
+    tmp
+}
+/// Assert: `[build.requirements]` 与 `[build.platforms]` 的平台特化 cargo-features。
+fn assert_requirements_and_platforms(build: &crate::package::manifest::BuildConfig) {
+    assert_eq!(
+        build
+            .requirements
+            .get("cargo")
+            .expect("build.requirements.get(\"cargo\") 应成功"),
+        ">= 1.70"
+    );
     assert_eq!(
         build
             .platforms
             .get("x86_64-pc-windows-msvc")
-            .unwrap()
+            .expect("build.platforms.get(\"x86_64-pc-windows-msvc\") 应成功")
             .cargo_features,
         vec!["win-ffi"]
     );
+}
+
+/// Assert: `[binaries]` 的平台条目（Windows 带 sha256、macOS 缺省 sha256）。
+fn assert_declared_binaries(manifest: &crate::package::manifest::PackageManifest) {
     assert_eq!(manifest.binaries.len(), 2);
-    let win = manifest.binaries.get("x86_64-pc-windows-msvc").unwrap();
+    let win = manifest
+        .binaries
+        .get("x86_64-pc-windows-msvc")
+        .expect("manifest.binaries 应含 x86_64-pc-windows-msvc");
     assert_eq!(win.sha256.as_deref(), Some("abc123"));
-    let mac = manifest.binaries.get("aarch64-apple-darwin").unwrap();
+    let mac = manifest
+        .binaries
+        .get("aarch64-apple-darwin")
+        .expect("manifest.binaries 应含 aarch64-apple-darwin");
     assert_eq!(mac.sha256, None, "sha256 可缺省（该平台预编译路径不可用）");
+}
+
+#[test]
+fn test_parses_full_build_declaration() {
+    // Arrange — 写满 [build] 各段的清单
+    let tmp = full_build_manifest_dir();
+
+    // Act
+    let manifest = load(tmp.path());
+    let build = manifest.build.as_ref().expect("[build] 段应被解析");
+
+    // Assert — 策略 / headers / cargo 选项 / requirements / platforms / binaries
+    assert_eq!(
+        build
+            .parsed_strategy()
+            .expect("build.parsed_strategy() 应成功"),
+        BuildStrategy::Cargo
+    );
+    assert_eq!(build.headers, vec!["include/sqlite3.h"]);
+    let cargo = build.cargo.as_ref().expect("build.cargo 应存在");
+    assert_eq!(cargo.features, vec!["ffi"]);
+    assert_eq!(cargo.target.as_deref(), Some("release"));
+    assert_requirements_and_platforms(build);
+    assert_declared_binaries(&manifest);
 }
 
 #[test]

@@ -7,6 +7,25 @@ use crate::middle::passes::codegen::flow::{
     FlowManager, LabelGenerator, RegisterAllocator, Storage, Symbol, SymbolScopeManager,
 };
 
+// ── 辅助函数（规则 5.3：集中在文件顶部）──────────────
+
+/// Helper: 构造作用域内的符号记录。
+fn symbol(
+    name: &str,
+    ty: MonoType,
+    storage: Storage,
+    is_mut: bool,
+    scope_level: usize,
+) -> Symbol {
+    Symbol {
+        name: name.to_string(),
+        ty,
+        storage,
+        is_mut,
+        scope_level,
+    }
+}
+
 #[test]
 fn test_label_generator() {
     let mut gen = LabelGenerator::new();
@@ -59,25 +78,13 @@ fn test_scope_nesting() {
     let mut manager = SymbolScopeManager::new();
     manager.insert(
         "a".to_string(),
-        Symbol {
-            name: "a".to_string(),
-            ty: MonoType::Int(64),
-            storage: Storage::Local(0),
-            is_mut: false,
-            scope_level: 0,
-        },
+        symbol("a", MonoType::Int(64), Storage::Local(0), false, 0),
     );
     manager.push_scope();
     assert_eq!(manager.scope_level(), 1);
     manager.insert(
         "b".to_string(),
-        Symbol {
-            name: "b".to_string(),
-            ty: MonoType::make_string(),
-            storage: Storage::Local(1),
-            is_mut: true,
-            scope_level: 1,
-        },
+        symbol("b", MonoType::make_string(), Storage::Local(1), true, 1),
     );
     assert!(manager.lookup("a").is_some());
     assert!(manager.lookup("b").is_some());

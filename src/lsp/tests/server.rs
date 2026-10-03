@@ -35,6 +35,119 @@ fn test_connection() -> (Connection, crossbeam_channel::Receiver<Message>) {
     (conn, to_client_rx)
 }
 
+/// Helper: 创建已打开 `file:///test/main.yx`（内容 `text`）的运行态会话。
+fn running_session_with_main(text: &str) -> Session {
+    let mut session = Session::new();
+    session.set_state(SessionState::Running);
+    session
+        .document_store_mut()
+        .open("file:///test/main.yx".to_string(), text.to_string(), 1);
+    session
+}
+
+/// Helper: 指向 `file:///test/main.yx` (0,0) 位置的文档位置参数。
+fn main_text_document_position() -> lsp_types::TextDocumentPositionParams {
+    lsp_types::TextDocumentPositionParams {
+        text_document: lsp_types::TextDocumentIdentifier {
+            uri: lsp_types::Uri::from_str("file:///test/main.yx").expect("测试 URI 应可解析"),
+        },
+        position: lsp_types::Position {
+            line: 0,
+            character: 0,
+        },
+    }
+}
+
+/// Helper: 向 `world` 的语义数据库注册符号 `x`（Variable / Int）。
+fn register_x_definition(world: &mut World) {
+    use crate::util::span::Span;
+    world.semantic_db_mut().add_definition(
+        "file:///test/main.yx",
+        crate::frontend::core::typecheck::semantic_db::DefinitionInfo {
+            def_id: crate::frontend::core::typecheck::semantic_db::DefId {
+                file_path: "file:///test/main.yx".to_string(),
+                span: Span::dummy(),
+            },
+            name: "x".to_string(),
+            kind: crate::frontend::core::typecheck::semantic_db::DefinitionKind::Variable,
+            span: Span::dummy(),
+            file_path: "file:///test/main.yx".to_string(),
+            type_info: Some("Int".to_string()),
+            signature: None,
+        },
+    );
+}
+
+/// Helper: 构造 `uri` 的 didOpen 通知（内容 `text`）。
+fn did_open_notification(
+    uri: &str,
+    text: &str,
+) -> Notification {
+    let params = lsp_types::DidOpenTextDocumentParams {
+        text_document: lsp_types::TextDocumentItem {
+            uri: lsp_types::Uri::from_str(uri).expect("测试 URI 应可解析"),
+            language_id: "yaoxiang".to_string(),
+            version: 1,
+            text: text.to_string(),
+        },
+    };
+    Notification {
+        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
+        params: serde_json::to_value(params).expect("didOpen 通知参数应可序列化"),
+    }
+}
+
+/// Helper: 构造 `uri` 的 didClose 通知。
+fn did_close_notification(uri: &str) -> Notification {
+    let params = lsp_types::DidCloseTextDocumentParams {
+        text_document: lsp_types::TextDocumentIdentifier {
+            uri: lsp_types::Uri::from_str(uri).expect("测试 URI 应可解析"),
+        },
+    };
+    Notification {
+        method: <DidCloseTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
+        params: serde_json::to_value(params).expect("didClose 通知参数应可序列化"),
+    }
+}
+
+/// Helper: 语义数据库中 `uri` 的 token 数量（无记录为 0）。
+fn semantic_token_count(
+    world: &World,
+    uri: &str,
+) -> usize {
+    world
+        .semantic_db()
+        .get_tokens(uri)
+        .map(|t| t.len())
+        .unwrap_or(0)
+}
+
+/// Helper: 断言 `uri` 的语义信息已从数据库中移除。
+fn assert_semantic_index_removed(
+    world: &World,
+    uri: &str,
+) {
+    assert!(
+        world.semantic_db().get_tokens(uri).is_none(),
+        "关闭文档后语义信息应被移除"
+    );
+}
+
+/// Helper: 以 `params` 发出 `method` 请求（id 为 `id`）。
+fn send_request(
+    session: &mut Session,
+    world: &mut World,
+    id: i32,
+    method: &str,
+    params: serde_json::Value,
+) -> Option<lsp_server::Response> {
+    let req = Request {
+        id: id.into(),
+        method: method.to_string(),
+        params,
+    };
+    handle_request(session, world, req)
+}
 #[test]
 fn test_handle_request_initialize() {
     let mut session = Session::new();
@@ -132,20 +245,7 @@ fn test_handle_notification_did_open() {
     session.set_state(SessionState::Running);
     let mut world = World::new();
 
-    let params = lsp_types::DidOpenTextDocumentParams {
-        text_document: lsp_types::TextDocumentItem {
-            uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
-            language_id: "yaoxiang".to_string(),
-            version: 1,
-            text: "x = 42".to_string(),
-        },
-    };
-
-    let not = Notification {
-        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
-        params: serde_json::to_value(params).unwrap(),
-    };
-
+    let not = did_open_notification("file:///test/main.yx", "x = 42");
     let should_exit = handle_notification(&conn, &mut session, &mut world, not).unwrap();
     assert!(!should_exit);
     assert!(session.document_store().is_open("file:///test/main.yx"));
@@ -168,20 +268,8 @@ fn test_handle_notification_did_open_with_errors() {
     session.set_state(SessionState::Running);
     let mut world = World::new();
 
-    let params = lsp_types::DidOpenTextDocumentParams {
-        text_document: lsp_types::TextDocumentItem {
-            uri: lsp_types::Uri::from_str("file:///test/bad.yx").unwrap(),
-            language_id: "yaoxiang".to_string(),
-            version: 1,
-            text: "@ @ @\n".to_string(), // 语法错误
-        },
-    };
-
-    let not = Notification {
-        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
-        params: serde_json::to_value(params).unwrap(),
-    };
-
+    // 语法错误
+    let not = did_open_notification("file:///test/bad.yx", "@ @ @\n");
     handle_notification(&conn, &mut session, &mut world, not).unwrap();
 
     // 应该收到带有诊断的 publishDiagnostics 通知
@@ -205,17 +293,7 @@ fn test_handle_notification_did_close_clears_diagnostics() {
         .document_store_mut()
         .open("file:///test/main.yx".to_string(), "x = 42".to_string(), 1);
 
-    let params = lsp_types::DidCloseTextDocumentParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
-        },
-    };
-
-    let not = Notification {
-        method: <DidCloseTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
-        params: serde_json::to_value(params).unwrap(),
-    };
-
+    let not = did_close_notification("file:///test/main.yx");
     handle_notification(&conn, &mut session, &mut world, not).unwrap();
     assert!(!session.document_store().is_open("file:///test/main.yx"));
 
@@ -256,37 +334,23 @@ fn test_publish_diagnostics_for_uri() {
 
 #[test]
 fn test_handle_request_completion() {
-    let mut session = Session::new();
-    session.set_state(SessionState::Running);
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        "x = 42\n".to_string(),
-        1,
-    );
+    let mut session = running_session_with_main("x = 42\n");
     let mut world = World::new();
 
     let params = lsp_types::CompletionParams {
-        text_document_position: lsp_types::TextDocumentPositionParams {
-            text_document: lsp_types::TextDocumentIdentifier {
-                uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
-            },
-            position: lsp_types::Position {
-                line: 0,
-                character: 0,
-            },
-        },
+        text_document_position: main_text_document_position(),
         work_done_progress_params: Default::default(),
         partial_result_params: Default::default(),
         context: None,
     };
 
-    let req = Request {
-        id: 10.into(),
-        method: <Completion as lsp_types::request::Request>::METHOD.to_string(),
-        params: serde_json::to_value(params).unwrap(),
-    };
-
-    let resp = handle_request(&mut session, &mut world, req);
+    let resp = send_request(
+        &mut session,
+        &mut world,
+        10,
+        <Completion as lsp_types::request::Request>::METHOD,
+        serde_json::to_value(params).unwrap(),
+    );
     assert!(resp.is_some());
     let resp = resp.unwrap();
     assert!(resp.response_result.is_ok(), "补全请求不应返回错误");
@@ -300,20 +364,7 @@ fn test_did_open_updates_symbol_index() {
     session.set_state(SessionState::Running);
     let mut world = World::new();
 
-    let params = lsp_types::DidOpenTextDocumentParams {
-        text_document: lsp_types::TextDocumentItem {
-            uri: lsp_types::Uri::from_str("file:///test/indexed.yx").unwrap(),
-            language_id: "yaoxiang".to_string(),
-            version: 1,
-            text: "x = 42\nadd = (a, b) => a + b\n".to_string(),
-        },
-    };
-
-    let not = Notification {
-        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
-        params: serde_json::to_value(params).unwrap(),
-    };
-
+    let not = did_open_notification("file:///test/indexed.yx", "x = 42\nadd = (a, b) => a + b\n");
     handle_notification(&conn, &mut session, &mut world, not).unwrap();
 
     // 语义数据库应包含符号
@@ -333,102 +384,40 @@ fn test_did_close_removes_symbol_index() {
     let mut world = World::new();
 
     // 先打开
-    let open_params = lsp_types::DidOpenTextDocumentParams {
-        text_document: lsp_types::TextDocumentItem {
-            uri: lsp_types::Uri::from_str("file:///test/closing.yx").unwrap(),
-            language_id: "yaoxiang".to_string(),
-            version: 1,
-            text: "y = 99\n".to_string(),
-        },
-    };
-
-    let not = Notification {
-        method: <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
-        params: serde_json::to_value(open_params).unwrap(),
-    };
+    let not = did_open_notification("file:///test/closing.yx", "y = 99\n");
     handle_notification(&conn, &mut session, &mut world, not).unwrap();
 
     // 检查语义数据库中有 tokens（表示文件被处理了）
-    let tokens_before = world
-        .semantic_db()
-        .get_tokens("file:///test/closing.yx")
-        .map(|t| t.len())
-        .unwrap_or(0);
+    let tokens_before = semantic_token_count(&world, "file:///test/closing.yx");
     assert!(tokens_before > 0, "打开文件后应有语义 tokens");
 
     // 关闭
-    let close_params = lsp_types::DidCloseTextDocumentParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str("file:///test/closing.yx").unwrap(),
-        },
-    };
-
-    let not = Notification {
-        method: <DidCloseTextDocument as lsp_types::notification::Notification>::METHOD.to_string(),
-        params: serde_json::to_value(close_params).unwrap(),
-    };
+    let not = did_close_notification("file:///test/closing.yx");
     handle_notification(&conn, &mut session, &mut world, not).unwrap();
 
     // 关闭后语义信息应被移除
-    assert!(
-        world
-            .semantic_db()
-            .get_tokens("file:///test/closing.yx")
-            .is_none(),
-        "关闭文档后语义信息应被移除"
-    );
+    assert_semantic_index_removed(&world, "file:///test/closing.yx");
 }
 
 #[test]
 fn test_handle_request_definition() {
-    let mut session = Session::new();
-    session.set_state(SessionState::Running);
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        "x = 42\n".to_string(),
-        1,
-    );
+    let mut session = running_session_with_main("x = 42\n");
     let mut world = World::new();
-
-    // 注册符号到语义数据库
-    use crate::util::span::Span;
-    world.semantic_db_mut().add_definition(
-        "file:///test/main.yx",
-        crate::frontend::core::typecheck::semantic_db::DefinitionInfo {
-            def_id: crate::frontend::core::typecheck::semantic_db::DefId {
-                file_path: "file:///test/main.yx".to_string(),
-                span: Span::dummy(),
-            },
-            name: "x".to_string(),
-            kind: crate::frontend::core::typecheck::semantic_db::DefinitionKind::Variable,
-            span: Span::dummy(),
-            file_path: "file:///test/main.yx".to_string(),
-            type_info: Some("Int".to_string()),
-            signature: None,
-        },
-    );
+    register_x_definition(&mut world);
 
     let params = lsp_types::GotoDefinitionParams {
-        text_document_position_params: lsp_types::TextDocumentPositionParams {
-            text_document: lsp_types::TextDocumentIdentifier {
-                uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
-            },
-            position: lsp_types::Position {
-                line: 0,
-                character: 0,
-            },
-        },
+        text_document_position_params: main_text_document_position(),
         work_done_progress_params: Default::default(),
         partial_result_params: Default::default(),
     };
 
-    let req = Request {
-        id: 20.into(),
-        method: <GotoDefinition as lsp_types::request::Request>::METHOD.to_string(),
-        params: serde_json::to_value(params).unwrap(),
-    };
-
-    let resp = handle_request(&mut session, &mut world, req);
+    let resp = send_request(
+        &mut session,
+        &mut world,
+        20,
+        <GotoDefinition as lsp_types::request::Request>::METHOD,
+        serde_json::to_value(params).unwrap(),
+    );
     assert!(resp.is_some());
     let resp = resp.unwrap();
     assert!(resp.response_result.is_ok(), "跳转定义请求不应返回错误");
@@ -437,25 +426,11 @@ fn test_handle_request_definition() {
 
 #[test]
 fn test_handle_request_references() {
-    let mut session = Session::new();
-    session.set_state(SessionState::Running);
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        "x = 1\ny = x\n".to_string(),
-        1,
-    );
+    let mut session = running_session_with_main("x = 1\ny = x\n");
     let mut world = World::new();
 
     let params = lsp_types::ReferenceParams {
-        text_document_position: lsp_types::TextDocumentPositionParams {
-            text_document: lsp_types::TextDocumentIdentifier {
-                uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
-            },
-            position: lsp_types::Position {
-                line: 0,
-                character: 0,
-            },
-        },
+        text_document_position: main_text_document_position(),
         work_done_progress_params: Default::default(),
         partial_result_params: Default::default(),
         context: lsp_types::ReferenceContext {
@@ -463,13 +438,13 @@ fn test_handle_request_references() {
         },
     };
 
-    let req = Request {
-        id: 21.into(),
-        method: <References as lsp_types::request::Request>::METHOD.to_string(),
-        params: serde_json::to_value(params).unwrap(),
-    };
-
-    let resp = handle_request(&mut session, &mut world, req);
+    let resp = send_request(
+        &mut session,
+        &mut world,
+        21,
+        <References as lsp_types::request::Request>::METHOD,
+        serde_json::to_value(params).unwrap(),
+    );
     assert!(resp.is_some());
     let resp = resp.unwrap();
     assert!(resp.response_result.is_ok(), "查找引用请求不应返回错误");
@@ -477,53 +452,22 @@ fn test_handle_request_references() {
 
 #[test]
 fn test_handle_request_hover() {
-    let mut session = Session::new();
-    session.set_state(SessionState::Running);
-    session.document_store_mut().open(
-        "file:///test/main.yx".to_string(),
-        "x = 42\n".to_string(),
-        1,
-    );
+    let mut session = running_session_with_main("x = 42\n");
     let mut world = World::new();
-
-    // 注册符号到语义数据库
-    use crate::util::span::Span;
-    world.semantic_db_mut().add_definition(
-        "file:///test/main.yx",
-        crate::frontend::core::typecheck::semantic_db::DefinitionInfo {
-            def_id: crate::frontend::core::typecheck::semantic_db::DefId {
-                file_path: "file:///test/main.yx".to_string(),
-                span: Span::dummy(),
-            },
-            name: "x".to_string(),
-            kind: crate::frontend::core::typecheck::semantic_db::DefinitionKind::Variable,
-            span: Span::dummy(),
-            file_path: "file:///test/main.yx".to_string(),
-            type_info: Some("Int".to_string()),
-            signature: None,
-        },
-    );
+    register_x_definition(&mut world);
 
     let params = lsp_types::HoverParams {
-        text_document_position_params: lsp_types::TextDocumentPositionParams {
-            text_document: lsp_types::TextDocumentIdentifier {
-                uri: lsp_types::Uri::from_str("file:///test/main.yx").unwrap(),
-            },
-            position: lsp_types::Position {
-                line: 0,
-                character: 0,
-            },
-        },
+        text_document_position_params: main_text_document_position(),
         work_done_progress_params: Default::default(),
     };
 
-    let req = Request {
-        id: 22.into(),
-        method: <HoverRequest as lsp_types::request::Request>::METHOD.to_string(),
-        params: serde_json::to_value(params).unwrap(),
-    };
-
-    let resp = handle_request(&mut session, &mut world, req);
+    let resp = send_request(
+        &mut session,
+        &mut world,
+        22,
+        <HoverRequest as lsp_types::request::Request>::METHOD,
+        serde_json::to_value(params).unwrap(),
+    );
     assert!(resp.is_some());
     let resp = resp.unwrap();
     assert!(resp.response_result.is_ok(), "悬停提示请求不应返回错误");

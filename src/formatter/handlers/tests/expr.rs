@@ -20,6 +20,91 @@ fn default_source_map() -> SourceMap {
     SourceMap::build("")
 }
 
+/// Helper: test_format_fn_signature_curried_grouping 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: curried 签名的 `signature_params = [T: Type, x: Int]`。
+fn curried_signature_params() -> Vec<Param> {
+    let signature_params = vec![
+        Param {
+            name: "T".to_string(),
+            ty: Some(Type::MetaType {
+                name_span: Span::dummy(),
+                args: vec![],
+            }),
+            is_mut: false,
+            span: Span::dummy(),
+        },
+        Param {
+            name: "x".to_string(),
+            ty: Some(Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }),
+            is_mut: false,
+            span: Span::dummy(),
+        },
+    ];
+    signature_params
+}
+
+/// Fixture: curried 函数类型 `(Type) -> ((Int) -> Int)`。
+fn curried_fn_type() -> Type {
+    Type::Fn {
+        params: vec![Type::MetaType {
+            name_span: Span::dummy(),
+            args: vec![],
+        }],
+        return_type: Box::new(Type::Fn {
+            params: vec![Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }],
+            return_type: Box::new(Type::Name {
+                name: "Int".to_string(),
+                span: Span::dummy(),
+            }),
+        }),
+    }
+}
+
+/// Helper: test_format_match_basic 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: `match x { 1 => "one", _ => "other" }` 表达式。
+fn match_literal_expr() -> Expr {
+    Expr::Match {
+        expr: Box::new(Expr::Var("x".to_string(), Span::dummy())),
+        arms: vec![
+            MatchArm {
+                pattern: Pattern::Literal(Literal::Int(1)),
+                body: Block {
+                    stmts: vec![Stmt {
+                        kind: StmtKind::Expr(Box::new(Expr::Lit(
+                            Literal::String("one".to_string()),
+                            Span::dummy(),
+                        ))),
+                        span: Span::dummy(),
+                    }],
+                    span: Span::dummy(),
+                },
+                span: Span::dummy(),
+            },
+            MatchArm {
+                pattern: Pattern::Wildcard,
+                body: Block {
+                    stmts: vec![Stmt {
+                        kind: StmtKind::Expr(Box::new(Expr::Lit(
+                            Literal::String("other".to_string()),
+                            Span::dummy(),
+                        ))),
+                        span: Span::dummy(),
+                    }],
+                    span: Span::dummy(),
+                },
+                span: Span::dummy(),
+            },
+        ],
+        span: Span::dummy(),
+    }
+}
+
 #[test]
 fn test_format_literal_int() {
     let lit = Literal::Int(42);
@@ -313,41 +398,13 @@ fn test_format_params_long_wraps() {
 
 #[test]
 fn test_format_match_basic() {
-    let match_expr = Expr::Match {
-        expr: Box::new(Expr::Var("x".to_string(), Span::dummy())),
-        arms: vec![
-            MatchArm {
-                pattern: Pattern::Literal(Literal::Int(1)),
-                body: Block {
-                    stmts: vec![Stmt {
-                        kind: StmtKind::Expr(Box::new(Expr::Lit(
-                            Literal::String("one".to_string()),
-                            Span::dummy(),
-                        ))),
-                        span: Span::dummy(),
-                    }],
-                    span: Span::dummy(),
-                },
-                span: Span::dummy(),
-            },
-            MatchArm {
-                pattern: Pattern::Wildcard,
-                body: Block {
-                    stmts: vec![Stmt {
-                        kind: StmtKind::Expr(Box::new(Expr::Lit(
-                            Literal::String("other".to_string()),
-                            Span::dummy(),
-                        ))),
-                        span: Span::dummy(),
-                    }],
-                    span: Span::dummy(),
-                },
-                span: Span::dummy(),
-            },
-        ],
-        span: Span::dummy(),
-    };
+    // Arrange — match x { 1 => "one", _ => "other" }
+    let match_expr = match_literal_expr();
+
+    // Act
     let result = format_expr(&match_expr, &default_ctx(), &default_source_map());
+
+    // Assert — 关键字 / 字面量臂 / 通配臂均在输出中
     assert!(
         result.contains("match x {"),
         "Expected match format: {}",
@@ -644,49 +701,13 @@ fn test_format_error_placeholder() {
 
 #[test]
 fn test_format_fn_signature_curried_grouping() {
-    // Arrange — 构造 curried 泛型函数签名：
-    //   signature_params = [T: Type, x: Int]  (第一组 T + 第二组 x，按嵌套 Fn 切分)
-    //   fn_type = (Type) -> ((Int) -> Int)
-    //   value_params = []  (不再使用 value_params 回退)
+    // Arrange — curried 泛型函数签名（signature_params 按嵌套 Fn 切分，value_params 不参与回退）
     let ctx = default_ctx();
-    let signature_params = vec![
-        Param {
-            name: "T".to_string(),
-            ty: Some(Type::MetaType {
-                name_span: Span::dummy(),
-                args: vec![],
-            }),
-            is_mut: false,
-            span: Span::dummy(),
-        },
-        Param {
-            name: "x".to_string(),
-            ty: Some(Type::Name {
-                name: "Int".to_string(),
-                span: Span::dummy(),
-            }),
-            is_mut: false,
-            span: Span::dummy(),
-        },
-    ];
-    let fn_type = Type::Fn {
-        params: vec![Type::MetaType {
-            name_span: Span::dummy(),
-            args: vec![],
-        }],
-        return_type: Box::new(Type::Fn {
-            params: vec![Type::Name {
-                name: "Int".to_string(),
-                span: Span::dummy(),
-            }],
-            return_type: Box::new(Type::Name {
-                name: "Int".to_string(),
-                span: Span::dummy(),
-            }),
-        }),
-    };
+    let signature_params = curried_signature_params();
+    let fn_type = curried_fn_type();
     let value_params: Vec<Param> = vec![];
 
+    // Act — 按嵌套 Fn 结构切分 signature_params
     // Act — 按嵌套 Fn 结构切分 signature_params
     let result = format_fn_signature(
         &signature_params,

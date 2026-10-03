@@ -28,17 +28,21 @@ const ANIMAL_DOG_CAT: &str = r#"
     }
 "#;
 
-#[test]
-fn test_rfc011a_dispatch_coercions_collected() {
-    let source = format!(
+/// `ANIMAL_DOG_CAT` + 两处 Animal 包装点（字面量元素 + 标量赋值）的源码。
+fn coercions_source() -> String {
+    format!(
         "{}\n
     main = () => {{
         animals: Vec(Animal) = [Dog(\"Rex\"), Cat(9)]
         x: Animal = Dog(\"Bella\")
     }}",
         ANIMAL_DOG_CAT
-    );
-    let (result, _checker) = check_source_with_checker(&source);
+    )
+}
+
+#[test]
+fn test_rfc011a_dispatch_coercions_collected() {
+    let (result, _checker) = check_source_with_checker(&coercions_source());
     assert!(
         result.diagnostics.is_empty(),
         "expect no diagnostics, got: {:?}",

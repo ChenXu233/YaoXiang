@@ -73,35 +73,73 @@ fn create_struct(
     )
 }
 
+/// 字段表 `{ x: Float, y: Float }`（Point 用例共同形态）。
+fn point_fields() -> Vec<(&'static str, MonoType)> {
+    vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))]
+}
+
+/// 字段表 `{ value: Int }`（Data 用例共同形态）。
+fn data_fields() -> Vec<(&'static str, MonoType)> {
+    vec![("value", MonoType::Int(64))]
+}
+
+/// 接口侧 `draw: (Surface) -> Void` 签名。
+fn surface_draw_sig() -> MonoType {
+    fn_type(
+        vec![MonoType::TypeRef("Surface".to_string())],
+        MonoType::Void,
+    )
+}
+
+/// 方法签名 `(self_type) -> ret`（仅 self 参数）。
+fn self_method(
+    self_type: &str,
+    ret: MonoType,
+) -> MonoType {
+    fn_type(vec![MonoType::TypeRef(self_type.to_string())], ret)
+}
+
+/// 方法签名 `(self_type, arg) -> ret`。
+fn self_and(
+    self_type: &str,
+    arg: MonoType,
+    ret: MonoType,
+) -> MonoType {
+    fn_type(vec![MonoType::TypeRef(self_type.to_string()), arg], ret)
+}
+
+/// 结构体侧 `draw: (self_type, Surface) -> ret` 签名。
+fn draw_method(
+    self_type: &str,
+    ret: MonoType,
+) -> MonoType {
+    self_and(self_type, MonoType::TypeRef("Surface".to_string()), ret)
+}
+
+/// `Drawable: { draw: (Surface) -> Void }` 接口。
+fn drawable_interface() -> MonoType {
+    create_interface("Drawable", vec![("draw", surface_draw_sig())])
+}
+
+/// `Serializable: { serialize: () -> String }` 接口。
+fn serializable_interface() -> MonoType {
+    create_interface(
+        "Serializable",
+        vec![("serialize", fn_type(vec![], MonoType::make_string()))],
+    )
+}
+
 // Happy path 测试
 
 /// §3.5.1: 结构子类型 — 类型满足接口约束应通过
 #[test]
 fn test_duck_type_basic() {
     // Arrange
-    let drawable = create_interface(
-        "Drawable",
-        vec![(
-            "draw",
-            fn_type(
-                vec![MonoType::TypeRef("Surface".to_string())],
-                MonoType::Void,
-            ),
-        )],
-    );
+    let drawable = drawable_interface();
     let (point, env) = create_struct(
         "Point",
-        vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
-        vec![(
-            "draw",
-            fn_type(
-                vec![
-                    MonoType::TypeRef("Point".to_string()),
-                    MonoType::TypeRef("Surface".to_string()),
-                ],
-                MonoType::Void,
-            ),
-        )],
+        point_fields(),
+        vec![("draw", draw_method("Point", MonoType::Void))],
     );
 
     // Act
@@ -123,13 +161,7 @@ fn test_duck_type_missing_method() {
     let drawable = create_interface(
         "Drawable",
         vec![
-            (
-                "draw",
-                fn_type(
-                    vec![MonoType::TypeRef("Surface".to_string())],
-                    MonoType::Void,
-                ),
-            ),
+            ("draw", surface_draw_sig()),
             (
                 "bounding_box",
                 fn_type(vec![], MonoType::TypeRef("Rect".to_string())),
@@ -138,17 +170,8 @@ fn test_duck_type_missing_method() {
     );
     let (point, env) = create_struct(
         "Point",
-        vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
-        vec![(
-            "draw",
-            fn_type(
-                vec![
-                    MonoType::TypeRef("Point".to_string()),
-                    MonoType::TypeRef("Surface".to_string()),
-                ],
-                MonoType::Void,
-            ),
-        )],
+        point_fields(),
+        vec![("draw", draw_method("Point", MonoType::Void))],
     );
 
     // Act
@@ -166,29 +189,11 @@ fn test_duck_type_missing_method() {
 #[test]
 fn test_duck_type_signature_mismatch() {
     // Arrange
-    let drawable = create_interface(
-        "Drawable",
-        vec![(
-            "draw",
-            fn_type(
-                vec![MonoType::TypeRef("Surface".to_string())],
-                MonoType::Void,
-            ),
-        )],
-    );
+    let drawable = drawable_interface();
     let (point, env) = create_struct(
         "Point",
-        vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
-        vec![(
-            "draw",
-            fn_type(
-                vec![
-                    MonoType::TypeRef("Point".to_string()),
-                    MonoType::TypeRef("Surface".to_string()),
-                ],
-                MonoType::Bool,
-            ),
-        )],
+        point_fields(),
+        vec![("draw", draw_method("Point", MonoType::Bool))],
     );
 
     // Act
@@ -207,11 +212,7 @@ fn test_duck_type_signature_mismatch() {
 fn test_duck_type_empty_interface() {
     // Arrange
     let empty = create_interface("Empty", vec![]);
-    let (point, env) = create_struct(
-        "Point",
-        vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
-        vec![],
-    );
+    let (point, env) = create_struct("Point", point_fields(), vec![]);
 
     // Act
     let checker = BoundsChecker::new();
@@ -241,24 +242,12 @@ fn test_duck_type_multiple_methods() {
     );
     let (data, env) = create_struct(
         "Data",
-        vec![("value", MonoType::Int(64))],
+        data_fields(),
         vec![
-            (
-                "serialize",
-                fn_type(
-                    vec![MonoType::TypeRef("Data".to_string())],
-                    MonoType::make_string(),
-                ),
-            ),
+            ("serialize", self_method("Data", MonoType::make_string())),
             (
                 "deserialize",
-                fn_type(
-                    vec![
-                        MonoType::TypeRef("Data".to_string()),
-                        MonoType::make_string(),
-                    ],
-                    MonoType::Bool,
-                ),
+                self_and("Data", MonoType::make_string(), MonoType::Bool),
             ),
         ],
     );
@@ -353,42 +342,15 @@ fn test_duck_type_no_env() {
 #[test]
 fn test_interface_intersection_satisfied() {
     // Arrange
-    let drawable = create_interface(
-        "Drawable",
-        vec![(
-            "draw",
-            fn_type(
-                vec![MonoType::TypeRef("Surface".to_string())],
-                MonoType::Void,
-            ),
-        )],
-    );
-    let serializable = create_interface(
-        "Serializable",
-        vec![("serialize", fn_type(vec![], MonoType::make_string()))],
-    );
+    let drawable = drawable_interface();
+    let serializable = serializable_interface();
     let intersection = MonoType::Intersection(vec![drawable, serializable]);
     let (point, env) = create_struct(
         "Point",
-        vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
+        point_fields(),
         vec![
-            (
-                "draw",
-                fn_type(
-                    vec![
-                        MonoType::TypeRef("Point".to_string()),
-                        MonoType::TypeRef("Surface".to_string()),
-                    ],
-                    MonoType::Void,
-                ),
-            ),
-            (
-                "serialize",
-                fn_type(
-                    vec![MonoType::TypeRef("Point".to_string())],
-                    MonoType::make_string(),
-                ),
-            ),
+            ("draw", draw_method("Point", MonoType::Void)),
+            ("serialize", self_method("Point", MonoType::make_string())),
         ],
     );
 
@@ -408,34 +370,13 @@ fn test_interface_intersection_satisfied() {
 #[test]
 fn test_interface_intersection_missing_one() {
     // Arrange
-    let drawable = create_interface(
-        "Drawable",
-        vec![(
-            "draw",
-            fn_type(
-                vec![MonoType::TypeRef("Surface".to_string())],
-                MonoType::Void,
-            ),
-        )],
-    );
-    let serializable = create_interface(
-        "Serializable",
-        vec![("serialize", fn_type(vec![], MonoType::make_string()))],
-    );
+    let drawable = drawable_interface();
+    let serializable = serializable_interface();
     let intersection = MonoType::Intersection(vec![drawable, serializable]);
     let (point, env) = create_struct(
         "Point",
-        vec![("x", MonoType::Float(64)), ("y", MonoType::Float(64))],
-        vec![(
-            "draw",
-            fn_type(
-                vec![
-                    MonoType::TypeRef("Point".to_string()),
-                    MonoType::TypeRef("Surface".to_string()),
-                ],
-                MonoType::Void,
-            ),
-        )],
+        point_fields(),
+        vec![("draw", draw_method("Point", MonoType::Void))],
     );
 
     // Act
@@ -461,22 +402,10 @@ fn test_duck_typing_with_multiple_matching_methods() {
     );
     let (data, env) = create_struct(
         "Data",
-        vec![("value", MonoType::Int(64))],
+        data_fields(),
         vec![
-            (
-                "fmt",
-                fn_type(
-                    vec![MonoType::TypeRef("Data".to_string())],
-                    MonoType::make_string(),
-                ),
-            ),
-            (
-                "debug",
-                fn_type(
-                    vec![MonoType::TypeRef("Data".to_string())],
-                    MonoType::make_string(),
-                ),
-            ),
+            ("fmt", self_method("Data", MonoType::make_string())),
+            ("debug", self_method("Data", MonoType::make_string())),
         ],
     );
 
@@ -508,20 +437,8 @@ fn test_duck_typing_with_partial_match() {
         "Partial",
         vec![],
         vec![
-            (
-                "a",
-                fn_type(
-                    vec![MonoType::TypeRef("Partial".to_string())],
-                    MonoType::Void,
-                ),
-            ),
-            (
-                "b",
-                fn_type(
-                    vec![MonoType::TypeRef("Partial".to_string())],
-                    MonoType::Void,
-                ),
-            ),
+            ("a", self_method("Partial", MonoType::Void)),
+            ("b", self_method("Partial", MonoType::Void)),
         ],
     );
 

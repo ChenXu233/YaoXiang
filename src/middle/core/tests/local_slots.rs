@@ -5,12 +5,35 @@
 //! 名字会静默退回全 None——本测试即是防静默回退的哨兵。
 
 use crate::frontend::compiler::Compiler;
-use crate::middle::core::ir::FunctionBody;
+use crate::middle::core::ir::{FunctionBody, LocalSlot, ModuleIR};
+
+/// 编译 `src` 并取回模块 IR；失败时带上错误原因。
+fn compile(src: &str) -> ModuleIR {
+    Compiler::new()
+        .compile("test", src)
+        .unwrap_or_else(|e| panic!("compile should succeed, but failed with: {e:?}"))
+}
+
+/// 取 `fn_name` 的代码体局部槽位表；函数缺失或不是代码体都直接失败。
+fn code_locals<'a>(
+    ir: &'a ModuleIR,
+    fn_name: &str,
+) -> &'a [LocalSlot] {
+    let func = ir
+        .functions
+        .iter()
+        .find(|f| f.name == fn_name)
+        .unwrap_or_else(|| panic!("{fn_name} should be emitted"));
+    let FunctionBody::Code { locals, .. } = &func.body else {
+        panic!("{fn_name} should have a code body")
+    };
+    locals
+}
 
 fn locals_of<'a>(
-    ir: &'a crate::middle::core::ir::ModuleIR,
+    ir: &'a ModuleIR,
     fn_name: &str,
-) -> &'a [crate::middle::core::ir::LocalSlot] {
+) -> &'a [LocalSlot] {
     ir.functions
         .iter()
         .find(|f| f.name == fn_name)
@@ -26,10 +49,7 @@ main = () => {
     beta = alpha + 2
 }
 "#;
-    let mut compiler = Compiler::new();
-    let ir = compiler
-        .compile("test", src)
-        .expect("compile should succeed");
+    let ir = compile(src);
 
     let names: Vec<&str> = locals_of(&ir, "main")
         .iter()
@@ -54,10 +74,7 @@ main = () => {
     r = double(21)
 }
 "#;
-    let mut compiler = Compiler::new();
-    let ir = compiler
-        .compile("test", src)
-        .expect("compile should succeed");
+    let ir = compile(src);
 
     let func = ir
         .functions
@@ -84,10 +101,7 @@ main = () => {
     c = a + b
 }
 "#;
-    let mut compiler = Compiler::new();
-    let ir = compiler
-        .compile("test", src)
-        .expect("compile should succeed");
+    let ir = compile(src);
 
     let locals = locals_of(&ir, "main");
     // 表达式求值会产生临时寄存器；它们必须保持无名，
@@ -113,10 +127,7 @@ outer = () => {
     outer_only
 }
 "#;
-    let mut compiler = Compiler::new();
-    let ir = compiler
-        .compile("test", src)
-        .expect("compile should succeed");
+    let ir = compile(src);
 
     let outer_names: Vec<&str> = locals_of(&ir, "outer")
         .iter()
@@ -143,19 +154,9 @@ main = () => {
     x + y
 }
 "#;
-    let mut compiler = Compiler::new();
-    let ir = compiler
-        .compile("test", src)
-        .expect("compile should succeed");
+    let ir = compile(src);
+    let locals = code_locals(&ir, "main");
 
-    let main = ir
-        .functions
-        .iter()
-        .find(|f| f.name == "main")
-        .expect("main should be emitted");
-    let FunctionBody::Code { locals, .. } = &main.body else {
-        panic!("main should have a code body")
-    };
     // 每个槽位下标都必须落在 0..locals.len()
     assert!(
         !locals.is_empty(),

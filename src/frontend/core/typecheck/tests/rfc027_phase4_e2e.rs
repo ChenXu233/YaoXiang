@@ -21,6 +21,36 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
 use crate::util::span::{Position, Span};
 
+/// 单变量约束 `var <op> n` 的精化类型 + 反例绑定 `var = bound`。
+fn constrained(
+    var: &str,
+    op: BinOp,
+    n: i128,
+    bound: i128,
+) -> (MonoType, HashMap<String, ConstValue>) {
+    let constraint = binop(
+        op,
+        ConstExpr::NamedVar(var.into()),
+        ConstExpr::Lit(ConstValue::Int(n)),
+    );
+    let mut bindings = HashMap::new();
+    bindings.insert(var.into(), ConstValue::Int(bound));
+    (refined_int(constraint), bindings)
+}
+
+/// 多变量约束 `x + y > 0` 的精化类型（无假设 → SMT 可找反例）。
+fn multivariable_refined() -> MonoType {
+    refined_int(binop(
+        BinOp::Gt,
+        binop(
+            BinOp::Add,
+            ConstExpr::NamedVar("x".into()),
+            ConstExpr::NamedVar("y".into()),
+        ),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    ))
+}
+
 // RFC-027 §4 & Phase 4.1: PredicateViolation E2E
 
 /// E2E: Level 1 Disproved → DisproofModel.kind = PredicateViolation
@@ -127,14 +157,7 @@ fn test_e2e_phase4_into_diagnostic_predicate_violation_e4018() {
     // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
-    let constraint = binop(
-        BinOp::Gt,
-        ConstExpr::NamedVar("x".into()),
-        ConstExpr::Lit(ConstValue::Int(0)),
-    );
-    let refined = refined_int(constraint);
-    let mut bindings = HashMap::new();
-    bindings.insert("x".into(), ConstValue::Int(0));
+    let (refined, bindings) = constrained("x", BinOp::Gt, 0, 0);
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
 
@@ -313,16 +336,7 @@ fn test_e2e_phase4_multivariable_constraint_disproved() {
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     // 约束: x + y > 0，无假设 → SMT 可找 x=-1, y=0
-    let constraint = ConstExpr::BinOp {
-        op: BinOp::Gt,
-        left: Box::new(binop(
-            BinOp::Add,
-            ConstExpr::NamedVar("x".into()),
-            ConstExpr::NamedVar("y".into()),
-        )),
-        right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-    };
-    let refined = refined_int(constraint);
+    let refined = multivariable_refined();
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
 
@@ -355,29 +369,8 @@ fn test_e2e_phase4_multiple_disproved_models_independent() {
     // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange — 两个独立的约束
-    let constraint1 = binop(
-        BinOp::Gt,
-        ConstExpr::NamedVar("a".into()),
-        ConstExpr::Lit(ConstValue::Int(0)),
-    );
-    let refined1 = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint: constraint1,
-    };
-    let mut bindings1 = HashMap::new();
-    bindings1.insert("a".into(), ConstValue::Int(0));
-
-    let constraint2 = binop(
-        BinOp::Lt,
-        ConstExpr::NamedVar("b".into()),
-        ConstExpr::Lit(ConstValue::Int(10)),
-    );
-    let refined2 = MonoType::Refined {
-        base: Box::new(MonoType::Int(64)),
-        constraint: constraint2,
-    };
-    let mut bindings2 = HashMap::new();
-    bindings2.insert("b".into(), ConstValue::Int(20));
+    let (refined1, bindings1) = constrained("a", BinOp::Gt, 0, 0);
+    let (refined2, bindings2) = constrained("b", BinOp::Lt, 10, 20);
 
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);

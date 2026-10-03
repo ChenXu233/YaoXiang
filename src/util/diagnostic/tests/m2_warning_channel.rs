@@ -9,6 +9,17 @@ use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::util::diagnostic::{ErrorCollector, ErrorCodeDefinition, Severity};
 
+/// RFC-011：#具名导入 use std.io.{print} 但 print 未引用 → W1003。
+const UNUSED_NAMED_IMPORT_SRC: &str = r#"
+use std.io.{print}
+main = () => {
+    x = 1
+    x
+}
+"#;
+
+/// Helper: test_unused_named_import_reports_w1003_via_warnings_channel 的完整夹具与断言（逐条断言见函数体）。
+
 #[test]
 fn test_w_prefix_codes_default_to_warning_severity() {
     // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
@@ -90,16 +101,11 @@ fn check_source(source: &str) -> crate::frontend::core::typecheck::types::TypeCh
 #[test]
 fn test_unused_named_import_reports_w1003_via_warnings_channel() {
     // Arrange: 具名导入（use std.io.{print}）且 print 未被引用 → W1003
-    let source = r#"
-use std.io.{print}
-main = () => {
-    x = 1
-    x
-}
-"#;
 
     // Act
-    let result = check_source(source);
+    let result = check_source(UNUSED_NAMED_IMPORT_SRC);
+
+    // Assert: 警告在 warnings 通道（Warning severity），错误通道保持干净
 
     // Assert: 警告在 warnings 通道（Warning severity），错误通道保持干净
     let w1003 = result
@@ -197,6 +203,7 @@ fn test_import_used_via_method_binding_no_warning() {
     // pass2 外部绑定解析路径，不经 Var 推断臂，不得误报（#321 自查）
     let source = r#"
 use std.io.{println}
+
 Widget: Type = { x: Int }
 Widget.show = println
 main = () => {

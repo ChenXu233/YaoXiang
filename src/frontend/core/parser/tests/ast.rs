@@ -11,6 +11,35 @@ use crate::util::span::Span;
 
 // Expr variants
 
+/// Helper: test_type_definition_variant 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: `Point` 记录类型定义语句（字段 x/y 均 Float）。
+fn point_type_definition_stmt() -> Stmt {
+    Stmt {
+        kind: StmtKind::TypeDefinition {
+            name: "Point".into(),
+            signature_params: vec![],
+            definition: Type::Struct {
+                body: vec![
+                    ast::TypeBodyItem::Field(StructField {
+                        name: "x".into(),
+                        ty: Type::Float(64),
+                        is_mut: false,
+                        default: None,
+                    }),
+                    ast::TypeBodyItem::Field(StructField {
+                        name: "y".into(),
+                        ty: Type::Float(64),
+                        is_mut: false,
+                        default: None,
+                    }),
+                ],
+            },
+            is_pub: false,
+        },
+        span: Span::dummy(),
+    }
+}
+
 #[test]
 fn test_expr_lit() {
     let span = Span::dummy();
@@ -550,30 +579,10 @@ fn test_unop_all_variants() {
 
 #[test]
 fn test_type_definition_variant() {
-    let stmt = Stmt {
-        kind: StmtKind::TypeDefinition {
-            name: "Point".into(),
-            signature_params: vec![],
-            definition: Type::Struct {
-                body: vec![
-                    ast::TypeBodyItem::Field(StructField {
-                        name: "x".into(),
-                        ty: Type::Float(64),
-                        is_mut: false,
-                        default: None,
-                    }),
-                    ast::TypeBodyItem::Field(StructField {
-                        name: "y".into(),
-                        ty: Type::Float(64),
-                        is_mut: false,
-                        default: None,
-                    }),
-                ],
-            },
-            is_pub: false,
-        },
-        span: Span::dummy(),
-    };
+    // Arrange — Point 记录类型定义语句
+    let stmt = point_type_definition_stmt();
+
+    // Act & Assert — 语句种类与类型体结构
     if let StmtKind::TypeDefinition {
         name, definition, ..
     } = &stmt.kind

@@ -9,6 +9,53 @@ use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::signature::parse_signature;
 use crate::frontend::core::types::MonoType;
 
+/// 取出函数类型的 `(params, return_type)`；非函数类型按 `msg` panic。
+///
+/// `msg` 沿用调用点原有文案，`: {:?}` 由本函数补上——失败输出与内联 match 一致。
+fn expect_fn<'a>(
+    ty: &'a MonoType,
+    msg: &str,
+) -> (&'a Vec<MonoType>, &'a MonoType) {
+    match ty {
+        MonoType::Fn {
+            params,
+            return_type,
+            ..
+        } => (params, return_type),
+        other => panic!("{} {:?}", msg, other),
+    }
+}
+
+/// `List(T)` 的类型实参表；非 `List` 按 `msg` panic。
+fn list_args(
+    ty: &MonoType,
+    msg: &str,
+) -> Vec<MonoType> {
+    match ty {
+        MonoType::Generic { name, args } if name == "List" => args.clone(),
+        other => panic!("{} {:?}", msg, other),
+    }
+}
+
+/// `List(T)` 的元素类型；非 `List` 按 `msg` panic。
+fn list_element(
+    ty: &MonoType,
+    msg: &str,
+) -> MonoType {
+    list_args(ty, msg)[0].clone()
+}
+
+/// 绑定后类型变量的下标；非类型变量按 `msg` panic。
+fn type_var_index(
+    ty: &MonoType,
+    msg: &str,
+) -> usize {
+    match ty {
+        MonoType::TypeVar(tv) => tv.index(),
+        other => panic!("{} {:?}", msg, other),
+    }
+}
+
 // Happy path 测试
 
 #[test]
@@ -262,49 +309,32 @@ fn test_parse_signature_nested_function_type() {
         parse_signature("(Int) -> (Float) -> String", &mut env).expect("合法签名应解析成功");
 
     // Assert - 外层应为 Fn(Int) -> Fn(Float)->String
-    match result {
-        MonoType::Fn {
-            params,
-            return_type,
-            ..
-        } => {
-            // 外层参数
-            assert_eq!(params.len(), 1, "外层应有 1 个参数，实际: {}", params.len());
-            assert!(
-                matches!(params[0], MonoType::Int(64)),
-                "外层参数应为 Int(64)，实际: {:?}",
-                params[0]
-            );
+    let (params, return_type) = expect_fn(&result, "期望 Fn 类型，实际得到:");
+    assert_eq!(params.len(), 1, "外层应有 1 个参数，实际: {}", params.len());
+    assert!(
+        matches!(params[0], MonoType::Int(64)),
+        "外层参数应为 Int(64)，实际: {:?}",
+        params[0]
+    );
 
-            // 内层返回类型应为 Fn(Float) -> String
-            match *return_type {
-                MonoType::Fn {
-                    params: ref inner_params,
-                    return_type: ref inner_return,
-                    ..
-                } => {
-                    assert_eq!(
-                        inner_params.len(),
-                        1,
-                        "内层应有 1 个参数，实际: {}",
-                        inner_params.len()
-                    );
-                    assert!(
-                        matches!(inner_params[0], MonoType::Float(64)),
-                        "内层参数应为 Float(64)，实际: {:?}",
-                        inner_params[0]
-                    );
-                    assert!(
-                        matches!(**inner_return, MonoType::Generic { ref name, .. } if name == "String"),
-                        "内层返回类型应为 String，实际: {:?}",
-                        inner_return
-                    );
-                }
-                ref other => panic!("返回类型应为嵌套 Fn，实际: {:?}", other),
-            }
-        }
-        other => panic!("期望 Fn 类型，实际得到: {:?}", other),
-    }
+    // 内层返回类型应为 Fn(Float) -> String
+    let (inner_params, inner_return) = expect_fn(return_type, "返回类型应为嵌套 Fn，实际:");
+    assert_eq!(
+        inner_params.len(),
+        1,
+        "内层应有 1 个参数，实际: {}",
+        inner_params.len()
+    );
+    assert!(
+        matches!(inner_params[0], MonoType::Float(64)),
+        "内层参数应为 Float(64)，实际: {:?}",
+        inner_params[0]
+    );
+    assert!(
+        matches!(*inner_return, MonoType::Generic { ref name, .. } if name == "String"),
+        "内层返回类型应为 String，实际: {:?}",
+        inner_return
+    );
 }
 
 // issue #242：std 签名的真实模式覆盖
@@ -322,49 +352,27 @@ fn test_parse_signature_generic_prefix_binds_shared_var() {
     .expect("合法签名应解析成功");
 
     // Assert - T 应绑定为共享类型变量：参数、函数参数与返回值同源
-    match result {
-        MonoType::Fn {
-            params,
-            return_type,
-        } => {
-            assert_eq!(params.len(), 2, "应有 2 个参数，实际: {}", params.len());
-            let list_elem = match &params[0] {
-                MonoType::Generic { name, args } if name == "List" => args[0].clone(),
-                other => panic!("第 1 个参数应为 List(Generic)，实际: {:?}", other),
-            };
-            let var_index = match list_elem {
-                MonoType::TypeVar(tv) => tv.index(),
-                other => panic!("List 元素应为绑定后的类型变量，实际: {:?}", other),
-            };
-            match &params[1] {
-                MonoType::Fn {
-                    params: fn_params,
-                    return_type: fn_ret,
-                } => {
-                    assert!(
-                        matches!(&fn_params[0], MonoType::TypeVar(tv) if tv.index() == var_index),
-                        "高阶参数应共享同一类型变量，实际: {:?}",
-                        fn_params[0]
-                    );
-                    assert!(
-                        matches!(fn_ret.as_ref(), MonoType::Bool),
-                        "高阶返回应为 Bool，实际: {:?}",
-                        fn_ret
-                    );
-                }
-                other => panic!("第 2 个参数应为 Fn，实际: {:?}", other),
-            }
-            match return_type.as_ref() {
-                MonoType::Generic { name, args } if name == "List" => assert!(
-                    matches!(&args[0], MonoType::TypeVar(tv) if tv.index() == var_index),
-                    "返回 List 元素应与参数共享类型变量，实际: {:?}",
-                    args[0]
-                ),
-                other => panic!("返回类型应为 List(Generic)，实际: {:?}", other),
-            }
-        }
-        other => panic!("期望 Fn 类型，实际得到: {:?}", other),
-    }
+    let (params, return_type) = expect_fn(&result, "期望 Fn 类型，实际得到:");
+    assert_eq!(params.len(), 2, "应有 2 个参数，实际: {}", params.len());
+    let list_elem = list_element(&params[0], "第 1 个参数应为 List(Generic)，实际:");
+    let var_index = type_var_index(&list_elem, "List 元素应为绑定后的类型变量，实际:");
+    let (fn_params, fn_ret) = expect_fn(&params[1], "第 2 个参数应为 Fn，实际:");
+    assert!(
+        matches!(&fn_params[0], MonoType::TypeVar(tv) if tv.index() == var_index),
+        "高阶参数应共享同一类型变量，实际: {:?}",
+        fn_params[0]
+    );
+    assert!(
+        matches!(fn_ret, MonoType::Bool),
+        "高阶返回应为 Bool，实际: {:?}",
+        fn_ret
+    );
+    let ret_args = list_args(return_type, "返回类型应为 List(Generic)，实际:");
+    assert!(
+        matches!(&ret_args[0], MonoType::TypeVar(tv) if tv.index() == var_index),
+        "返回 List 元素应与参数共享类型变量，实际: {:?}",
+        ret_args[0]
+    );
 }
 
 #[test]

@@ -12,6 +12,7 @@ use crate::frontend::core::typecheck::layers::termination::{
 };
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
 use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, Stmt, StmtKind};
+use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstExpr};
 use crate::util::span::Span;
 
 // ==================== 测试辅助函数 ====================
@@ -173,21 +174,6 @@ fn run_check_with_stub_solver_refined(
     expr: &Expr,
     refined: &[&str],
 ) -> Vec<ProofResult> {
-    use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTResult};
-    use crate::frontend::core::typecheck::proof::smt::backend::Solver;
-
-    #[derive(Debug)]
-    struct AlwaysUnsat;
-    impl Solver for AlwaysUnsat {
-        fn solve(
-            &self,
-            _commands: &[SMTCommand],
-            _timeout_ms: u64,
-        ) -> SMTResult {
-            SMTResult::Unsat
-        }
-    }
-
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(expr.clone())),
         span: dummy_span(),
@@ -198,10 +184,79 @@ fn run_check_with_stub_solver_refined(
     };
     let env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
     let vars: std::collections::HashSet<String> = refined.iter().map(|s| s.to_string()).collect();
+    // 桩求解器与 always_unsat() 是同一个：复用，而不是在这里再定义一遍。
     let mut checker = TerminationChecker::new()
-        .with_solver_owned(Box::new(AlwaysUnsat))
+        .with_solver_owned(always_unsat())
         .set_refined_vars(vars);
     checker.check_module(&module, &env)
+}
+
+/// `ConstExpr` 命名变量的构造捷径——测度夹具里反复出现 `NamedVar(名字.to_string())`。
+fn named_var(name: &str) -> ConstExpr {
+    ConstExpr::NamedVar(name.to_string())
+}
+
+/// 该 `ConstExpr` 是否为给定二元运算的 `BinOp`（结构未被压扁成单变量/字面量）。
+fn is_const_binop(
+    expr: &ConstExpr,
+    op: ConstBinOp,
+) -> bool {
+    matches!(expr, ConstExpr::BinOp { op: actual, .. } if *actual == op)
+}
+
+/// 把 `&[(&str, V)]` 夹具表转成 checker 需要的拥有型 `HashMap<String, V>`。
+///
+/// 测度表（RFC-027a §2）与形参假设表（§良基性）共用这一形状。
+fn owned_table<V: Clone>(entries: &[(&str, V)]) -> std::collections::HashMap<String, V> {
+    entries
+        .iter()
+        .map(|(name, value)| (name.to_string(), value.clone()))
+        .collect()
+}
+
+/// gcd 形态源码（RFC-027a §五 风险 4：函数形态的非结构递归）。
+fn gcd_source() -> &'static str {
+    "gcd: (a: Int, b: Int) -> Terminates(b) = { \
+     if b == 0 { return a } \
+     return gcd(b, a % b) }"
+}
+
+/// 循环回边赋值右侧 `i + 1`（`i = i + 1` 的取值）。
+fn i_plus_one() -> ConstExpr {
+    use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstValue};
+
+    ConstExpr::BinOp {
+        op: ConstBinOp::Add,
+        left: Box::new(named_var("i")),
+        right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
+    }
+}
+
+/// 构造注入了测度表、形参假设与（可选）求解器的终止检查器。
+#[cfg(not(target_arch = "wasm32"))]
+fn checker_with_measures(
+    measures: &[(&str, ConstExpr)],
+    param_assumptions: &[(&str, Vec<ConstExpr>)],
+    solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
+) -> TerminationChecker {
+    let mut checker = TerminationChecker::new()
+        .set_measures(owned_table(measures))
+        .set_param_assumptions(owned_table(param_assumptions));
+    if let Some(solver) = solver {
+        checker = checker.with_solver_owned(solver);
+    }
+    checker
+}
+
+/// 解析源码 → 断言解析无错 → 返回模块；词法与语法失败都带上下文 panic。
+fn checked_module(source: &str) -> crate::frontend::core::parser::ast::Module {
+    use crate::frontend::core::lexer::tokenize;
+    use crate::frontend::core::parser::parse;
+
+    let tokens = tokenize(source).unwrap_or_else(|e| panic!("词法分析应成功: {e:?}"));
+    let parsed = parse(&tokens);
+    assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
+    parsed.module
 }
 
 // ==================== 测试：循环终止 ====================
@@ -659,8 +714,24 @@ fn make_flag_while(body_stmts: Vec<Stmt>) -> Box<Expr> {
     )
 }
 
-/// 构造 `if i <= 0 { flag = false }` 形式的出口语句（阈值守卫内清零标志）
-fn make_guarded_flag_exit(threshold_op: BinOp) -> Stmt {
+/// 构造 `flag = false` 语句（阈值守卫里清零标志）。
+fn make_flag_clear() -> Stmt {
+    Stmt {
+        kind: StmtKind::Expr(Box::new(Expr::BinOp {
+            op: BinOp::Assign,
+            left: Box::new(Expr::Var("flag".to_string(), dummy_span())),
+            right: Box::new(Expr::Lit(Literal::Bool(false), dummy_span())),
+            span: dummy_span(),
+        })),
+        span: dummy_span(),
+    }
+}
+
+/// 构造以 `i <op> 0` 为条件、体为 `body_stmts` 的 if 语句。
+fn make_if_i_threshold(
+    threshold_op: BinOp,
+    body_stmts: Vec<Stmt>,
+) -> Stmt {
     Stmt {
         kind: StmtKind::If {
             condition: Box::new(Expr::BinOp {
@@ -670,15 +741,7 @@ fn make_guarded_flag_exit(threshold_op: BinOp) -> Stmt {
                 span: dummy_span(),
             }),
             then_branch: Box::new(Block {
-                stmts: vec![Stmt {
-                    kind: StmtKind::Expr(Box::new(Expr::BinOp {
-                        op: BinOp::Assign,
-                        left: Box::new(Expr::Var("flag".to_string(), dummy_span())),
-                        right: Box::new(Expr::Lit(Literal::Bool(false), dummy_span())),
-                        span: dummy_span(),
-                    })),
-                    span: dummy_span(),
-                }],
+                stmts: body_stmts,
                 span: dummy_span(),
             }),
             else_if_branches: Vec::new(),
@@ -687,6 +750,11 @@ fn make_guarded_flag_exit(threshold_op: BinOp) -> Stmt {
         },
         span: dummy_span(),
     }
+}
+
+/// 构造 `if i <= 0 { flag = false }` 形式的出口语句（阈值守卫内清零标志）
+fn make_guarded_flag_exit(threshold_op: BinOp) -> Stmt {
+    make_if_i_threshold(threshold_op, vec![make_flag_clear()])
 }
 
 /// 策略 1b：标志循环由「到阈值的距离」秩函数拿下（RFC-027 §7.2）
@@ -779,33 +847,8 @@ fn make_guarded_flag_exit_with(
     extra_stmts: Vec<Stmt>,
 ) -> Stmt {
     let mut stmts = extra_stmts;
-    stmts.push(Stmt {
-        kind: StmtKind::Expr(Box::new(Expr::BinOp {
-            op: BinOp::Assign,
-            left: Box::new(Expr::Var("flag".to_string(), dummy_span())),
-            right: Box::new(Expr::Lit(Literal::Bool(false), dummy_span())),
-            span: dummy_span(),
-        })),
-        span: dummy_span(),
-    });
-    Stmt {
-        kind: StmtKind::If {
-            condition: Box::new(Expr::BinOp {
-                op: threshold_op,
-                left: Box::new(Expr::Var("i".to_string(), dummy_span())),
-                right: Box::new(Expr::Lit(Literal::Int(0), dummy_span())),
-                span: dummy_span(),
-            }),
-            then_branch: Box::new(Block {
-                stmts,
-                span: dummy_span(),
-            }),
-            else_if_branches: Vec::new(),
-            else_branch: None,
-            span: dummy_span(),
-        },
-        span: dummy_span(),
-    }
+    stmts.push(make_flag_clear());
+    make_if_i_threshold(threshold_op, stmts)
 }
 
 /// 策略 1b 健全性：**守卫块内重绑测度变量** ⇒ 「每轮朝阈值走」前提不成立 ⇒ 不证明
@@ -887,27 +930,16 @@ fn test_strategy1_flag_loop_rejected_when_counter_has_unknown_rebinding() {
 /// 压扁后 SMT 会拿到错误的测度（`n - i` 变成 `n`），义务生成随之错误。
 #[test]
 fn test_injected_explicit_measures_are_retrievable() {
-    use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstExpr};
-
-    // Arrange
-    let mut measures = std::collections::HashMap::new();
-    measures.insert("gcd".to_string(), ConstExpr::NamedVar("b".to_string()));
-    measures.insert(
-        "acc".to_string(),
-        ConstExpr::BinOp {
-            op: ConstBinOp::Sub,
-            left: Box::new(ConstExpr::NamedVar("n".to_string())),
-            right: Box::new(ConstExpr::NamedVar("i".to_string())),
-        },
-    );
+    // Arrange —— 测度表：单变量 `b` 与复合 `n - i`
+    let measures = [("gcd", named_var("b")), ("acc", measure_n_minus_i())];
 
     // Act
-    let checker = TerminationChecker::new().set_measures(measures);
+    let checker = TerminationChecker::new().set_measures(owned_table(&measures));
 
     // Assert
     assert_eq!(
         checker.measures().get("gcd"),
-        Some(&ConstExpr::NamedVar("b".to_string())),
+        Some(&named_var("b")),
         "函数名键应取回其返回类型位的测度"
     );
     let compound = checker.measures().get("acc").expect("acc 的测度应可取回");
@@ -949,26 +981,13 @@ fn test_no_measures_injected_means_empty_table() {
 /// 解析源码 → 注入测度表 → 跑终止检查 → 取生成的测度义务
 fn measure_obligations_of(
     source: &str,
-    measures: &[(&str, crate::frontend::core::types::const_data::ConstExpr)],
+    measures: &[(&str, ConstExpr)],
 ) -> Vec<MeasureObligation> {
-    use crate::frontend::core::lexer::tokenize;
-    use crate::frontend::core::parser::parse;
     use crate::frontend::core::typecheck::environment::TypeEnvironment;
 
-    let tokens = tokenize(source).expect("词法分析应成功");
-    let parsed = parse(&tokens);
-    assert!(
-        !parsed.has_errors,
-        "解析应无错误，实际: {:?}",
-        parsed.errors
-    );
-    let table = measures
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.clone()))
-        .collect();
-    let env = TypeEnvironment::new();
-    let mut checker = TerminationChecker::new().set_measures(table);
-    checker.check_module(&parsed.module, &env);
+    let module = checked_module(source);
+    let mut checker = TerminationChecker::new().set_measures(owned_table(measures));
+    checker.check_module(&module, &TypeEnvironment::new());
     checker.measure_obligations().to_vec()
 }
 
@@ -978,16 +997,11 @@ fn measure_obligations_of(
 /// 测度 + 调用实参——三者齐备，T4 才能构造 `m[形参:=实参] < m` 并送 SMT。
 #[test]
 fn test_recursive_self_call_generates_measure_obligation() {
-    use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstExpr};
-
     // Arrange — gcd 形态：测度 b，自调用 gcd(b, a % b)
-    let source = "gcd: (a: Int, b: Int) -> Terminates(b) = { \
-                  if b == 0 { return a } \
-                  return gcd(b, a % b) }";
-    let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+    let measures = [("gcd", named_var("b"))];
 
     // Act
-    let obligations = measure_obligations_of(source, &measures);
+    let obligations = measure_obligations_of(gcd_source(), &measures);
 
     // Assert
     assert_eq!(
@@ -999,33 +1013,19 @@ fn test_recursive_self_call_generates_measure_obligation() {
     assert_eq!(ob.fn_name, "gcd", "义务应归属发起递归的函数");
     assert_eq!(
         ob.params,
-        vec!["a".to_string(), "b".to_string()],
+        ["a", "b"],
         "义务须带上形参表，T4 才能做「形参 := 实参」替换"
     );
-    assert_eq!(
-        ob.measure,
-        ConstExpr::NamedVar("b".to_string()),
-        "义务须带显式测度原式"
-    );
+    assert_eq!(ob.measure, named_var("b"), "义务须带显式测度原式");
     assert_eq!(
         ob.call_args.len(),
         2,
         "调用实参 gcd(b, a % b) 应有两个，实际: {:?}",
         ob.call_args
     );
-    assert_eq!(
-        ob.call_args[0],
-        ConstExpr::NamedVar("b".to_string()),
-        "首个实参应为 NamedVar(b)"
-    );
+    assert_eq!(ob.call_args[0], named_var("b"), "首个实参应为 NamedVar(b)");
     assert!(
-        matches!(
-            ob.call_args[1],
-            ConstExpr::BinOp {
-                op: ConstBinOp::Mod,
-                ..
-            }
-        ),
+        is_const_binop(&ob.call_args[1], ConstBinOp::Mod),
         "次个实参应为 a % b 的 BinOp(Mod) 结构（不得丢表达式），实际: {:?}",
         ob.call_args[1]
     );
@@ -1102,10 +1102,29 @@ fn test_measured_function_without_self_call_generates_no_obligation() {
 #[cfg(not(target_arch = "wasm32"))]
 fn measure_verdicts_of(
     source: &str,
-    measures: &[(&str, crate::frontend::core::types::const_data::ConstExpr)],
+    measures: &[(&str, ConstExpr)],
     solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
 ) -> Vec<MeasureVerdict> {
     measure_verdicts_with_assumptions_of(source, measures, &[], solver)
+}
+
+/// 解析源码 → 装配（测度表 + 前置条件 + 可选求解器）→ 跑一遍终止检查。
+///
+/// 「递减判定」与「良基性判定」只差最后读哪张结果表，装配过程完全一致。
+#[cfg(not(target_arch = "wasm32"))]
+fn run_measure_checker(
+    source: &str,
+    measures: &[(&str, ConstExpr)],
+    param_assumptions: &[(&str, Vec<ConstExpr>)],
+    solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
+) -> TerminationChecker {
+    use crate::frontend::core::typecheck::environment::TypeEnvironment;
+
+    let module = checked_module(source);
+    // 装配这一步与 checker_with_measures 是同一件事：复用，不另写一份。
+    let mut checker = checker_with_measures(measures, param_assumptions, solver);
+    checker.check_module(&module, &TypeEnvironment::new());
+    checker
 }
 
 /// 同 [`measure_verdicts_of`]，但注入函数前置条件（形参精化）。
@@ -1113,39 +1132,16 @@ fn measure_verdicts_of(
 /// 递减判定需要它：`a % b < b` 仅在 `b > 0` 时成立，而 `b > 0` 来自
 /// 前置条件 `b >= 0` 与路径守卫 `b != 0` 两者。只给守卫不给前置条件时，
 /// b 可取负（`mod` 取负号）→ 判不出。
+#[cfg(not(target_arch = "wasm32"))]
 fn measure_verdicts_with_assumptions_of(
     source: &str,
-    measures: &[(&str, crate::frontend::core::types::const_data::ConstExpr)],
-    param_assumptions: &[(
-        &str,
-        Vec<crate::frontend::core::types::const_data::ConstExpr>,
-    )],
+    measures: &[(&str, ConstExpr)],
+    param_assumptions: &[(&str, Vec<ConstExpr>)],
     solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
 ) -> Vec<MeasureVerdict> {
-    use crate::frontend::core::lexer::tokenize;
-    use crate::frontend::core::parser::parse;
-    use crate::frontend::core::typecheck::environment::TypeEnvironment;
-
-    let tokens = tokenize(source).expect("词法分析应成功");
-    let parsed = parse(&tokens);
-    assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
-    let table = measures
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.clone()))
-        .collect();
-    let assumptions = param_assumptions
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.clone()))
-        .collect();
-    let mut checker = TerminationChecker::new()
-        .set_measures(table)
-        .set_param_assumptions(assumptions);
-    if let Some(s) = solver {
-        checker = checker.with_solver_owned(s);
-    }
-    let env = TypeEnvironment::new();
-    checker.check_module(&parsed.module, &env);
-    checker.measure_verdicts().to_vec()
+    run_measure_checker(source, measures, param_assumptions, solver)
+        .measure_verdicts()
+        .to_vec()
 }
 
 /// 恒返回 `Unsat` 的桩（语义：所有取值下测度都严格递减）
@@ -1360,38 +1356,18 @@ fn test_gcd_measure_decrease_disproved_without_lower_bound() {
 /// 与 [`measure_verdicts_of`] 并列：那条判「递减」，这条判「测度落在自然数上」
 /// （`m >= 0`）。参数假设即函数前置条件（`b: NonNegative(b)` → `b >= 0`）。
 #[cfg(not(target_arch = "wasm32"))]
+/// 良基性判定的 harness（RFC-027a §良基性）。
+///
+/// 与 [`measure_verdicts_of`] 并列：那条判「递减」，这条判「测度落在自然数上」
+/// （`m >= 0`）。参数假设即函数前置条件（`b: NonNegative(b)` → `b >= 0`）。
+#[cfg(not(target_arch = "wasm32"))]
 fn well_founded_verdict_of(
     source: &str,
-    measures: &[(&str, crate::frontend::core::types::const_data::ConstExpr)],
-    param_assumptions: &[(
-        &str,
-        Vec<crate::frontend::core::types::const_data::ConstExpr>,
-    )],
+    measures: &[(&str, ConstExpr)],
+    param_assumptions: &[(&str, Vec<ConstExpr>)],
     solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
 ) -> Vec<(String, MeasureVerdict)> {
-    use crate::frontend::core::lexer::tokenize;
-    use crate::frontend::core::parser::parse;
-    use crate::frontend::core::typecheck::environment::TypeEnvironment;
-
-    let tokens = tokenize(source).expect("词法分析应成功");
-    let parsed = parse(&tokens);
-    assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
-    let table = measures
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.clone()))
-        .collect();
-    let assumptions = param_assumptions
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.clone()))
-        .collect();
-    let mut checker = TerminationChecker::new()
-        .set_measures(table)
-        .set_param_assumptions(assumptions);
-    if let Some(s) = solver {
-        checker = checker.with_solver_owned(s);
-    }
-    let env = TypeEnvironment::new();
-    checker.check_module(&parsed.module, &env);
+    let checker = run_measure_checker(source, measures, param_assumptions, solver);
     let mut out: Vec<(String, MeasureVerdict)> = checker
         .well_founded_verdicts()
         .iter()
@@ -1634,47 +1610,23 @@ fn test_measure_obligation_not_proved_when_solver_reports_unknown() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test_measure_disproof_emits_e4022_when_well_founded() {
-    use crate::frontend::core::lexer::tokenize;
-    use crate::frontend::core::parser::parse;
     use crate::frontend::core::typecheck::environment::TypeEnvironment;
     use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
-    use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 
-    // Arrange —— 测度 b：有下界精化（良基性可证），但递归实参不下降（b - 1 取代 b？）
-    // 用递增实参 `b + 1` 使 `b + 1 < b` 判伪
+    // Arrange —— 测度 b：有下界精化（良基性可证），但递增实参 `b + 1` 使 `b + 1 < b` 判伪
     let source = "NonNegative: (x: Int) -> Type = { x >= 0 }\n\
                   f: (n: Int, b: NonNegative(b)) -> Terminates(b) = { \
                   if b == 0 { return n } \
                   return f(n, b + 1) }";
-    let measures = [("f", ConstExpr::NamedVar("b".to_string()))];
-    let assumptions = [(
-        "f",
-        vec![ConstExpr::BinOp {
-            op: BinOp::Ge,
-            left: Box::new(ConstExpr::NamedVar("b".to_string())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(0))),
-        }],
-    )]
-    .iter()
-    .map(|(k, v)| (k.to_string(), v.clone()))
-    .collect();
-    let tokens = tokenize(source).expect("词法分析应成功");
-    let parsed = parse(&tokens);
-    assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
-
-    let mut checker = TerminationChecker::new()
-        .set_measures(
-            measures
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.clone()))
-                .collect(),
-        )
-        .set_param_assumptions(assumptions)
-        .with_solver_owned(default_solver().expect("本用例需要 Z3"));
-    let env = TypeEnvironment::new();
+    let mut checker = checker_with_measures(
+        &[("f", named_var("b"))],
+        &[("f", nonnegative_b())],
+        Some(default_solver().expect("本用例需要 Z3")),
+    );
+    let module = checked_module(source);
 
     // Act
-    let results = checker.check_module(&parsed.module, &env);
+    let results = checker.check_module(&module, &TypeEnvironment::new());
 
     // Assert
     let codes: Vec<String> = results
@@ -1696,33 +1648,22 @@ fn test_measure_disproof_emits_e4022_when_well_founded() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test_measure_disproof_silent_without_well_foundedness() {
-    use crate::frontend::core::lexer::tokenize;
-    use crate::frontend::core::parser::parse;
     use crate::frontend::core::typecheck::environment::TypeEnvironment;
     use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
-    use crate::frontend::core::types::const_data::ConstExpr;
 
     // Arrange —— 同源码，但 b 无下界精化
     let source = "f: (n: Int, b: Int) -> Terminates(b) = { \
                   if b == 0 { return n } \
                   return f(n, b + 1) }";
-    let measures = [("f", ConstExpr::NamedVar("b".to_string()))];
-    let tokens = tokenize(source).expect("词法分析应成功");
-    let parsed = parse(&tokens);
-    assert!(!parsed.has_errors, "解析应无错误: {:?}", parsed.errors);
-
-    let mut checker = TerminationChecker::new()
-        .set_measures(
-            measures
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.clone()))
-                .collect(),
-        )
-        .with_solver_owned(default_solver().expect("本用例需要 Z3"));
-    let env = TypeEnvironment::new();
+    let mut checker = checker_with_measures(
+        &[("f", named_var("b"))],
+        &[],
+        Some(default_solver().expect("本用例需要 Z3")),
+    );
+    let module = checked_module(source);
 
     // Act
-    let results = checker.check_module(&parsed.module, &env);
+    let results = checker.check_module(&module, &TypeEnvironment::new());
 
     // Assert
     assert!(
@@ -1755,7 +1696,7 @@ fn measure_n_minus_i() -> crate::frontend::core::types::const_data::ConstExpr {
 ///（`i < n` ⇒ `n - i > 0`）。缺它则循环测度的良基性恒推不出。
 #[test]
 fn test_loop_measure_generates_backedge_obligation() {
-    use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
+    use crate::frontend::core::types::const_data::BinOp;
 
     // Arrange —— mut i 未带精化，故走的不是探索路径，只能是显式测度义务
     let source = "loop: (n: Int) -> Int = { \
@@ -1773,19 +1714,10 @@ fn test_loop_measure_generates_backedge_obligation() {
         "循环回边应产生恰一条测度义务；实际: {obligations:?}"
     );
     let ob = &obligations[0];
-    assert_eq!(
-        ob.params,
-        vec!["i".to_string()],
-        "回边被推进的变量应作 params；实际: {:?}",
-        ob.params
-    );
+    assert_eq!(ob.params, ["i"], "回边被推进的变量应作 params");
     assert_eq!(
         ob.call_args,
-        vec![ConstExpr::BinOp {
-            op: BinOp::Add,
-            left: Box::new(ConstExpr::NamedVar("i".to_string())),
-            right: Box::new(ConstExpr::Lit(ConstValue::Int(1))),
-        }],
+        vec![i_plus_one()],
         "回边取值应为赋值右侧 `i + 1`，由此得 `m[params:=call_args]`；实际: {:?}",
         ob.call_args
     );

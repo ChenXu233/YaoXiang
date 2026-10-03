@@ -13,6 +13,26 @@ use crate::frontend::core::typecheck::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::mono::MonoType;
 
+/// 注册了 `Positive` 谓词的环境。
+fn env_with_positive() -> TypeEnvironment {
+    let mut env = TypeEnvironment::new();
+    env.predicate_defs
+        .insert("Positive".into(), make_positive_def());
+    env
+}
+
+/// 字面量实参 `name: Int(64) = v`。
+fn int_literal_arg(
+    name: &str,
+    v: i128,
+) -> MonoType {
+    MonoType::Literal {
+        name: name.into(),
+        base_type: Box::new(MonoType::Int(64)),
+        value: ConstValue::Int(v),
+    }
+}
+
 fn make_positive_def() -> PredicateDef {
     PredicateDef {
         param_name: "x".into(),
@@ -28,20 +48,10 @@ fn make_positive_def() -> PredicateDef {
 #[test]
 fn test_resolve_positive_with_literal() {
     // Arrange: 注册 Positive 谓词，实参为字面量 5
-    let mut env = TypeEnvironment::new();
-    env.predicate_defs
-        .insert("Positive".into(), make_positive_def());
+    let env = env_with_positive();
 
     // Act
-    let result = PredicateResolver::try_resolve(
-        &env,
-        "Positive",
-        &[MonoType::Literal {
-            name: "5".into(),
-            base_type: Box::new(MonoType::Int(64)),
-            value: ConstValue::Int(5),
-        }],
-    );
+    let result = PredicateResolver::try_resolve(&env, "Positive", &[int_literal_arg("5", 5)]);
 
     // Assert: 解析成功，约束应是 5 > 0
     match result.expect("已注册谓词应被识别（#263 三值语义）") {

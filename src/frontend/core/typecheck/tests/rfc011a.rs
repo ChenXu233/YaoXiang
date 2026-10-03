@@ -17,6 +17,27 @@ use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 
+/// RFC-011a §1：接口继承 `Pet(Self)` 内嵌 `Animal(Self)`，`Dog` 需递归展开。
+const INHERITANCE_EXPANDS_FULL: &str = r#"
+        Animal: (Self: Type) -> Type = {
+            speak: (self: Self) -> String,
+        }
+        Pet: (Self: Type) -> Type = {
+            Animal(Self),
+            fetch: (self: Self) -> String,
+        }
+        Dog: Type = {
+            name: String,
+            Pet(Dog),
+        }
+        Dog.speak: (self: Dog) -> String = {
+            return "Woof"
+        }
+        Dog.fetch: (self: Dog) -> String = {
+            return self.name + " fetches"
+        }
+    "#;
+
 /// 辅助函数：解析源代码并类型检查，同时返回 checker 以检查实现证明
 pub(crate) fn check_source_with_checker(
     source: &str
@@ -205,26 +226,7 @@ fn test_rfc011a_overload_different_signature_allowed() {
 /// - 实现证明登记为 {Dog, Pet}
 #[test]
 fn test_rfc011a_inheritance_expands_recursively() {
-    let source = r#"
-        Animal: (Self: Type) -> Type = {
-            speak: (self: Self) -> String,
-        }
-        Pet: (Self: Type) -> Type = {
-            Animal(Self),
-            fetch: (self: Self) -> String,
-        }
-        Dog: Type = {
-            name: String,
-            Pet(Dog),
-        }
-        Dog.speak: (self: Dog) -> String = {
-            return "Woof"
-        }
-        Dog.fetch: (self: Dog) -> String = {
-            return self.name + " fetches"
-        }
-    "#;
-    let (result, checker) = check_source_with_checker(source);
+    let (result, checker) = check_source_with_checker(INHERITANCE_EXPANDS_FULL);
     assert!(
         result.diagnostics.is_empty(),
         "inherited contract should pass: {:?}",

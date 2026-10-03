@@ -12,6 +12,20 @@ use crate::frontend::core::typecheck::proof::verdict::{
 use crate::util::diagnostic::Severity;
 use crate::util::span::{Position, Span};
 
+/// TypeMismatch 反例模型夹具：`Int == Float`。
+fn type_mismatch_model() -> DisproofModel {
+    DisproofModel {
+        kind: DisproofKind::TypeMismatch,
+        assignments: vec![
+            ("expected".into(), "Int".into()),
+            ("found".into(), "Float".into()),
+        ],
+        constraint: "Int == Float".into(),
+        span: None,
+        predicate_span: None,
+    }
+}
+
 // ProofResult 基本行为
 
 #[test]
@@ -167,16 +181,7 @@ fn test_into_diagnostic_type_mismatch_basic() {
     // #324：这些 API 生产上运行于类型检查 walk 内（guard 覆盖），单测直调需模拟 walk 上下文
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
-    let model = DisproofModel {
-        kind: DisproofKind::TypeMismatch,
-        assignments: vec![
-            ("expected".into(), "Int".into()),
-            ("found".into(), "Float".into()),
-        ],
-        constraint: "Int == Float".into(),
-        span: None,
-        predicate_span: None,
-    };
+    let model = type_mismatch_model();
 
     // Act
     let diag = model.into_diagnostic();

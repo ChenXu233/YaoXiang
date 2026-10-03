@@ -24,6 +24,36 @@ fn with_type<F>(
     f(t);
 }
 
+/// 取出记录类型的类型体——`Struct` 以外即用例所断言的失败，故 panic 里带原类型。
+fn struct_body(ty: &Type) -> &[TypeBodyItem] {
+    let Type::Struct { body } = ty else {
+        panic!("Expected Type::Struct, got: {ty:?}");
+    };
+    body
+}
+
+/// 记录类型里声明为字段的条目（忽略接口等其它类型体条目）。
+fn struct_fields(ty: &Type) -> Vec<&StructField> {
+    struct_body(ty)
+        .iter()
+        .filter_map(|it| match it {
+            TypeBodyItem::Field(f) => Some(f),
+            _ => None,
+        })
+        .collect()
+}
+
+/// 记录类型里声明的接口名（RFC-010：和类型用「字段 + 接口」的旧记录语法表达）。
+fn struct_interfaces(ty: &Type) -> Vec<String> {
+    struct_body(ty)
+        .iter()
+        .filter_map(|it| match it {
+            TypeBodyItem::Interface(name) => Some(name.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 /// 解析单条 `f: (…) -> … = { … }` 绑定，返回注解里的函数类型 `(params, return_type)`。
 ///
 /// 签名带解析错误、或首个语句不是带函数类型注解的绑定时，带上原始 AST 上下文 panic——
@@ -149,78 +179,39 @@ fn test_struct_type_empty() {
 #[test]
 fn test_struct_type_fields() {
     with_type("{ x: Float, y: Float }", |t| {
-        if let Type::Struct { body } = &t {
-            let fields: Vec<&StructField> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Field(f) = it {
-                        Some(f)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            assert_eq!(fields.len(), 2);
-            assert_eq!(fields[0].name, "x");
-            assert_eq!(fields[1].name, "y");
-        } else {
-            panic!("Expected Type::Struct");
-        }
+        // Arrange & Act
+        let fields = struct_fields(&t);
+
+        // Assert
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[0].name, "x");
+        assert_eq!(fields[1].name, "y");
     });
 }
 
 #[test]
 fn test_struct_type_with_interface() {
     with_type("{ x: Float, Drawable, Serializable }", |t| {
-        if let Type::Struct { body } = &t {
-            let fields: Vec<&StructField> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Field(f) = it {
-                        Some(f)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            let interfaces: Vec<String> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Interface(s) = it {
-                        Some(s.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            assert_eq!(fields.len(), 1);
-            assert!(interfaces.contains(&"Drawable".to_string()));
-            assert!(interfaces.contains(&"Serializable".to_string()));
-        } else {
-            panic!("Expected Type::Struct");
-        }
+        // Arrange & Act —— 类型体：1 个字段 + 2 个接口
+        let fields = struct_fields(&t);
+        let interfaces = struct_interfaces(&t);
+
+        // Assert
+        assert_eq!(fields.len(), 1);
+        assert!(interfaces.contains(&"Drawable".to_string()));
+        assert!(interfaces.contains(&"Serializable".to_string()));
     });
 }
 
 #[test]
 fn test_struct_type_with_default() {
     with_type("{ x: Float = 0, y: Float = 0 }", |t| {
-        if let Type::Struct { body } = &t {
-            let fields: Vec<&StructField> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Field(f) = it {
-                        Some(f)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            assert_eq!(fields.len(), 2);
-            assert!(fields[0].default.is_some());
-        } else {
-            panic!("Expected Type::Struct");
-        }
+        // Arrange & Act
+        let fields = struct_fields(&t);
+
+        // Assert
+        assert_eq!(fields.len(), 2);
+        assert!(fields[0].default.is_some());
     });
 }
 
@@ -327,21 +318,11 @@ fn test_reject_old_curried_fn_syntax() {
 fn test_struct_mut_field() {
     // Note: "mut" in struct fields may not be fully supported
     with_type("{ x: Int, y: Float }", |t| {
-        if let Type::Struct { body } = &t {
-            let fields: Vec<&StructField> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Field(f) = it {
-                        Some(f)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            assert!(!fields.is_empty(), "Should parse at least one field");
-        } else {
-            panic!("Expected Type::Struct");
-        }
+        // Arrange & Act
+        let fields = struct_fields(&t);
+
+        // Assert
+        assert!(!fields.is_empty(), "Should parse at least one field");
     });
 }
 // const 泛型约束比较运算符 (RFC-011 §4.3) — issue #173

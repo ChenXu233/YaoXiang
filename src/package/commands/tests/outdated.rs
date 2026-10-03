@@ -19,7 +19,7 @@ use crate::package::lock::LockFile;
 
 /// 在目录中创建带两个 tag 的本地 git 仓库
 fn make_git_repo(dir: &Path) -> std::path::PathBuf {
-    std::fs::create_dir_all(dir).unwrap();
+    std::fs::create_dir_all(dir).expect("std::fs::create_dir_all(dir) 应成功");
     let git = |args: &[&str]| {
         let mut cmd = crate::package::source::git::git_command();
         cmd.arg("-C").arg(dir);
@@ -43,11 +43,11 @@ fn make_git_repo(dir: &Path) -> std::path::PathBuf {
 
     git(&["init", "-b", "main"]);
     git(&["config", "commit.gpgsign", "false"]);
-    std::fs::write(dir.join("lib.yx"), "pub fn one() { 1 }").unwrap();
+    std::fs::write(dir.join("lib.yx"), "pub fn one() { 1 }").expect("写 fixture 文件应成功");
     git(&["add", "-A"]);
     git(&["commit", "-m", "one"]);
     git(&["tag", "v1.0.0"]);
-    std::fs::write(dir.join("lib.yx"), "pub fn two() { 2 }").unwrap();
+    std::fs::write(dir.join("lib.yx"), "pub fn two() { 2 }").expect("写 fixture 文件应成功");
     git(&["add", "-A"]);
     git(&["commit", "-m", "two"]);
     git(&["tag", "v1.1.0"]);
@@ -69,10 +69,44 @@ fn spec(
 }
 
 fn setup_project() -> (TempDir, std::path::PathBuf) {
-    let tmp = TempDir::new().unwrap();
-    init::exec_in(tmp.path(), &init::InitOptions { lib: false }, "test-proj").unwrap();
+    let tmp = TempDir::new().expect("create temp dir 应成功");
+    init::exec_in(tmp.path(), &init::InitOptions { lib: false }, "test-proj")
+        .expect("(tmp.path(), &init::InitOptions { lib: false }, \"test-proj\") 应成功");
     let project_dir = tmp.path().join("test-proj");
     (tmp, project_dir)
+}
+
+/// Helper: test_outdated_no_tags_fails 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: 含 1 次提交但**无 tag** 的 git 仓库（返回 TempDir 保活 + 仓库路径）。
+fn git_repo_without_tags() -> (TempDir, std::path::PathBuf) {
+    let tmp = TempDir::new().expect("create temp dir 应成功");
+    let dir = tmp.path().join("plain");
+    std::fs::create_dir_all(&dir).expect("std::fs::create_dir_all(&dir) 应成功");
+    let git = |args: &[&str]| {
+        crate::package::source::git::git_command()
+            .arg("-C")
+            .arg(&dir)
+            .args(args)
+            .output()
+            .expect("git 命令应成功执行")
+    };
+    assert!(git(&["init", "-b", "main"]).status.success());
+    std::fs::write(dir.join("lib.yx"), "x").expect("写 fixture 文件应成功");
+    assert!(git(&["add", "-A"]).status.success());
+    assert!(crate::package::source::git::git_command()
+        .arg("-C")
+        .arg(&dir)
+        .arg("-c")
+        .arg("user.name=t")
+        .arg("-c")
+        .arg("user.email=t@t")
+        .args(["commit", "-m", "x"])
+        .output()
+        .expect("git 命令应成功执行")
+        .status
+        .success());
+
+    (tmp, dir)
 }
 
 #[test]
@@ -143,38 +177,18 @@ fn test_outdated_tag_pinned() {
 
 #[test]
 fn test_outdated_no_tags_fails() {
-    let tmp = TempDir::new().unwrap();
-    let dir = tmp.path().join("plain");
-    std::fs::create_dir_all(&dir).unwrap();
-    let git = |args: &[&str]| {
-        crate::package::source::git::git_command()
-            .arg("-C")
-            .arg(&dir)
-            .args(args)
-            .output()
-            .unwrap()
-    };
-    assert!(git(&["init", "-b", "main"]).status.success());
-    std::fs::write(dir.join("lib.yx"), "x").unwrap();
-    assert!(git(&["add", "-A"]).status.success());
-    assert!(crate::package::source::git::git_command()
-        .arg("-C")
-        .arg(&dir)
-        .arg("-c")
-        .arg("user.name=t")
-        .arg("-c")
-        .arg("user.email=t@t")
-        .args(["commit", "-m", "x"])
-        .output()
-        .unwrap()
-        .status
-        .success());
-
-    let specs = vec![spec("plain", "*", Some(dir.to_str().unwrap()))];
+    // Arrange — 无 tag 的 git 仓库（含一次提交）
+    let (_tmp, dir) = git_repo_without_tags();
+    let specs = vec![spec(
+        "plain",
+        "*",
+        Some(dir.to_str().expect("路径应可转字符串")),
+    )];
     let mut lock = LockFile::new();
     lock.lock_dependency_full("plain", "0.0.0", "git", None);
 
-    let entries = check_entries(&specs, &lock).unwrap();
+    let entries =
+        check_entries(&specs, &lock).expect("let entries = check_entries(&specs, &lock) 应成功");
     assert!(matches!(
         entries[0].status,
         crate::package::commands::outdated::OutdatedStatus::Failed(_)

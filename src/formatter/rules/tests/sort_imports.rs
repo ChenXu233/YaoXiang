@@ -25,6 +25,36 @@ fn make_use_stmt(path: &str) -> Stmt {
     }
 }
 
+/// Helper: test_sort_imports 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: 8 个乱序 import 语句（标准库 / 外部 crate / 相对路径）。
+fn unsorted_import_stmts() -> Vec<Stmt> {
+    vec![
+        make_use_stmt("b"),
+        make_use_stmt("a"),
+        make_use_stmt("std"),
+        make_use_stmt("c"),
+        make_use_stmt("z"),
+        make_use_stmt("std::collections"),
+        make_use_stmt("./foo"),
+        make_use_stmt("../bar"),
+    ]
+}
+
+/// Act: 排序并提取全部导入路径。
+fn sorted_import_paths(stmts: &mut Vec<Stmt>) -> Vec<String> {
+    sort_imports(stmts, &mut default_source_map());
+    stmts
+        .iter()
+        .filter_map(|s| {
+            if let StmtKind::Use { path, .. } = &s.kind {
+                Some(path.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 #[test]
 fn test_classify_import() {
     assert_eq!(classify_import("std"), ImportKind::Std);
@@ -44,32 +74,13 @@ fn test_classify_import() {
 
 #[test]
 fn test_sort_imports() {
-    let mut stmts = vec![
-        make_use_stmt("b"),
-        make_use_stmt("a"),
-        make_use_stmt("std"),
-        make_use_stmt("c"),
-        make_use_stmt("z"),
-        make_use_stmt("std::collections"),
-        make_use_stmt("./foo"),
-        make_use_stmt("../bar"),
-    ];
+    // Arrange — 8 个乱序 import（标准库 / 外部 / 相对路径）
+    let mut stmts = unsorted_import_stmts();
 
-    sort_imports(&mut stmts, &mut default_source_map());
+    // Act — 排序后提取导入路径
+    let paths = sorted_import_paths(&mut stmts);
 
-    // 提取所有导入路径，验证精确顺序
-    let paths: Vec<String> = stmts
-        .iter()
-        .filter_map(|s| {
-            if let StmtKind::Use { path, .. } = &s.kind {
-                Some(path.clone())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    // 验证精确顺序：标准库 -> 外部 -> 相对路径
+    // Assert — 验证精确顺序：标准库 -> 外部 -> 相对路径
     assert_eq!(paths.len(), 8);
     assert_eq!(paths[0], "std");
     assert_eq!(paths[1], "std::collections");

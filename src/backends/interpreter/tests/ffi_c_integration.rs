@@ -15,41 +15,31 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::std::NativeContext;
 
-#[test]
-fn test_c_ffi_call_getpid() {
-    // Arrange: 创建运行时上下文 + 加载系统库
-    let mut registry = FfiRegistry::new();
-    let mut heap = Heap::new();
-    let mut ctx = NativeContext::new(&mut heap);
-
-    let lib_name = if cfg!(target_os = "windows") {
-        "kernel32.dll"
+/// Helper: test_c_ffi_call_getpid 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: 当前平台可测的系统库与符号名；不支持的平台返回 `None`。
+fn pid_lib_and_symbol() -> Option<(&'static str, &'static str)> {
+    if cfg!(target_os = "windows") {
+        Some(("kernel32.dll", "GetCurrentProcessId"))
     } else if cfg!(target_os = "linux") {
-        "libc.so.6"
+        Some(("libc.so.6", "getpid"))
     } else if cfg!(target_os = "macos") {
-        "libc.dylib"
+        Some(("libc.dylib", "getpid"))
     } else {
-        // 无法测试——不 panic，直接返回
-        return;
-    };
-
-    let sym_name = if cfg!(target_os = "windows") {
-        "GetCurrentProcessId"
-    } else {
-        "getpid"
-    };
-
-    registry.load_library(lib_name).unwrap();
-
-    // Act: 调用 C 函数 — RFC-026 §3.1 无参签名直接寄存器传递
-    let result = registry.call_with_mechanism("c", lib_name, sym_name, "", &[], &mut ctx);
-
-    // Assert: 返回值是正数 PID
+        // 无法测试——不 panic，返回 None 由调用方跳过
+        None
+    }
+}
+/// Assert: 返回值是正数 PID（非 Int 或非正数即失败）。
+fn assert_positive_pid(
+    result: Result<RuntimeValue, crate::backends::ExecutorError>,
+    lib_name: &str,
+    sym_name: &str,
+) {
     assert!(
         result.is_ok(),
         "C ABI call to {lib_name}::{sym_name} should succeed"
     );
-    let pid = match result.unwrap() {
+    let pid = match result.expect("C ABI 调用结果应可取回 RuntimeValue") {
         RuntimeValue::Int(pid) => pid,
         other => panic!("Expected RuntimeValue::Int, got {other:?} for PID call"),
     };
@@ -57,6 +47,26 @@ fn test_c_ffi_call_getpid() {
         pid > 0,
         "PID from {lib_name}::{sym_name} should be positive, got {pid}"
     );
+}
+
+#[test]
+fn test_c_ffi_call_getpid() {
+    // Arrange: 运行时上下文 + 加载系统库（不支持的平台直接跳过）
+    let mut registry = FfiRegistry::new();
+    let mut heap = Heap::new();
+    let mut ctx = NativeContext::new(&mut heap);
+    let Some((lib_name, sym_name)) = pid_lib_and_symbol() else {
+        return;
+    };
+    registry
+        .load_library(lib_name)
+        .expect("registry.load_library(lib_name) 应成功");
+
+    // Act: 调用 C 函数 — RFC-026 §3.1 无参签名直接寄存器传递
+    let result = registry.call_with_mechanism("c", lib_name, sym_name, "", &[], &mut ctx);
+
+    // Assert: 返回值是正数 PID
+    assert_positive_pid(result, lib_name, sym_name);
 }
 
 #[test]

@@ -19,6 +19,26 @@ use crate::lsp::world::World;
 
 use std::str::FromStr;
 
+// ── 辅助函数（规则 5.3：集中在文件顶部）──────────────
+
+/// Helper: 构造 `file:///test.yx` 上 (0,0) 位置的补全请求参数。
+fn completion_params_at_origin() -> CompletionParams {
+    CompletionParams {
+        text_document_position: lsp_types::TextDocumentPositionParams {
+            text_document: lsp_types::TextDocumentIdentifier {
+                uri: lsp_types::Uri::from_str("file:///test.yx").expect("测试 URI 应可解析"),
+            },
+            position: lsp_types::Position {
+                line: 0,
+                character: 0,
+            },
+        },
+        work_done_progress_params: Default::default(),
+        partial_result_params: Default::default(),
+        context: None,
+    }
+}
+
 #[test]
 fn test_keyword_items_count() {
     let items = keyword_items();
@@ -91,21 +111,7 @@ fn test_document_symbol_items_invalid_code() {
 fn test_handle_completion_basic() {
     let session = Session::new();
     let world = World::new();
-
-    let params = CompletionParams {
-        text_document_position: lsp_types::TextDocumentPositionParams {
-            text_document: lsp_types::TextDocumentIdentifier {
-                uri: lsp_types::Uri::from_str("file:///test.yx").unwrap(),
-            },
-            position: lsp_types::Position {
-                line: 0,
-                character: 0,
-            },
-        },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-        context: None,
-    };
+    let params = completion_params_at_origin();
 
     let response = handle_completion(&session, &world, params);
     if let CompletionResponse::Array(items) = response {

@@ -32,43 +32,57 @@ fn sample_project(root: &Path) {
     write(&root.join("build.yx"), "// build script\n");
 }
 
-#[test]
-fn test_round_trip_preserves_content() {
-    // Arrange
-    let tmp = tempfile::tempdir().unwrap();
-    let project = tmp.path().join("proj");
-    sample_project(&project);
-    let artifact = tmp.path().join("demo-1.0.0.yxpkg");
-
-    // Act：打包 → 解包
-    let total = yxpkg::pack(&project, &artifact).unwrap();
-    let dest = tmp.path().join("out");
-    yxpkg::unpack(&artifact, &dest).unwrap();
-
-    // Assert：内容逐文件一致，清单为 coreutils 双空格格式（/ 分隔路径）
-    assert!(artifact.is_file(), "产物应存在");
-    assert!(total > 0, "源码内容字节数应大于 0");
+/// Helper: test_round_trip_preserves_content 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: 样例项目（yaoxiang.toml + src/lib.yx + src/deep/util.yx + build.yx）与产物路径。
+/// Assert: 解包目录内 4 个文件内容一致，且清单为 coreutils 双空格 + `/` 分隔格式。
+fn assert_unpacked_contents(dest: &std::path::Path) {
     assert_eq!(
-        std::fs::read_to_string(dest.join("yaoxiang.toml")).unwrap(),
+        std::fs::read_to_string(dest.join("yaoxiang.toml")).expect("读取 fixture 文件应成功"),
         "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n"
     );
     assert_eq!(
-        std::fs::read_to_string(dest.join("src/lib.yx")).unwrap(),
+        std::fs::read_to_string(dest.join("src/lib.yx")).expect("读取 fixture 文件应成功"),
         "pub x = 1\n"
     );
     assert_eq!(
-        std::fs::read_to_string(dest.join("src/deep/util.yx")).unwrap(),
+        std::fs::read_to_string(dest.join("src/deep/util.yx")).expect("读取 fixture 文件应成功"),
         "pub y = 2\n"
     );
     assert_eq!(
-        std::fs::read_to_string(dest.join("build.yx")).unwrap(),
+        std::fs::read_to_string(dest.join("build.yx")).expect("读取 fixture 文件应成功"),
         "// build script\n"
     );
-    let sums = std::fs::read_to_string(dest.join(yxpkg::SUMS_FILE)).unwrap();
+    let sums =
+        std::fs::read_to_string(dest.join(yxpkg::SUMS_FILE)).expect("读取 fixture 文件应成功");
     assert!(
         sums.contains("  src/lib.yx\n"),
         "清单应为「双空格 + / 分隔路径」格式: {sums:?}"
     );
+}
+
+fn sample_project_fixture() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
+    let tmp = tempfile::tempdir().expect("create temp dir 应成功");
+    let project = tmp.path().join("proj");
+    sample_project(&project);
+    let artifact = tmp.path().join("demo-1.0.0.yxpkg");
+
+    (tmp, project, artifact)
+}
+
+#[test]
+fn test_round_trip_preserves_content() {
+    // Arrange — 样例项目 + 产物路径（tmp 保活到用例结束）
+    let (tmp, project, artifact) = sample_project_fixture();
+
+    // Act：打包 → 解包
+    let total = yxpkg::pack(&project, &artifact).expect("yxpkg::pack 应成功");
+    let dest = tmp.path().join("out");
+    yxpkg::unpack(&artifact, &dest).expect("yxpkg::unpack 应成功");
+
+    // Assert：产物存在、字节数 > 0，解包内容逐文件一致
+    assert!(artifact.is_file(), "产物应存在");
+    assert!(total > 0, "源码内容字节数应大于 0");
+    assert_unpacked_contents(&dest);
 }
 
 #[test]

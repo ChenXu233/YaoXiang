@@ -132,6 +132,299 @@ fn make_pair_type_ir(fields: &[&str]) -> FunctionIR {
     }
 }
 
+/// 创建单基本块的函数 IR——`main`/`wrapper` 等测试夹具的公共骨架。
+fn make_fn_ir(
+    name: &str,
+    params: Vec<MonoType>,
+    return_type: MonoType,
+    generic_params: Option<Vec<String>>,
+    instructions: Vec<Instruction>,
+    locals: Vec<LocalSlot>,
+) -> FunctionIR {
+    FunctionIR {
+        def: None,
+        name: name.to_string(),
+        params,
+        return_type,
+        generic_params,
+        body: FunctionBody::Code {
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions,
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            locals,
+        },
+    }
+}
+
+/// 创建 `main` 函数 IR（无参数、非泛型）。
+fn make_main_ir(
+    return_type: MonoType,
+    instructions: Vec<Instruction>,
+    locals: Vec<LocalSlot>,
+) -> FunctionIR {
+    make_fn_ir("main", vec![], return_type, None, instructions, locals)
+}
+
+/// 创建只含给定函数的模块 IR。
+fn module_with(functions: Vec<FunctionIR>) -> ModuleIR {
+    ModuleIR {
+        functions,
+        ..Default::default()
+    }
+}
+
+/// 创建默认源码位置的 `Call` 指令（func 为常量函数名）。
+fn call_instr(
+    dst: Option<Operand>,
+    func_name: &str,
+    args: Vec<Operand>,
+) -> Instruction {
+    call_instr_at(dst, func_name, args, Span::default())
+}
+
+/// 创建带指定源码位置的 `Call` 指令（func 为常量函数名）。
+fn call_instr_at(
+    dst: Option<Operand>,
+    func_name: &str,
+    args: Vec<Operand>,
+    span: Span,
+) -> Instruction {
+    Instruction::Call {
+        dst,
+        func: Operand::Const(ConstValue::String(func_name.to_string())),
+        args,
+        span,
+        def: None,
+    }
+}
+
+/// 创建对 `identity` 的调用指令（结果写入 Local(0)，源码位置默认）。
+fn identity_call(arg: Operand) -> Instruction {
+    call_instr(Some(Operand::Local(0)), "identity", vec![arg])
+}
+
+/// 创建 `Ret` 指令（`value` 为 None 时无返回值）。
+fn ret_instr(value: Option<Operand>) -> Instruction {
+    Instruction::Ret {
+        value,
+        span: Span::dummy(),
+    }
+}
+
+/// 创建单类型参数的实例化请求（`params` 为泛型参数名）。
+fn request(
+    name: &str,
+    params: &[&str],
+    arg: MonoType,
+    span: Span,
+) -> InstantiationRequest {
+    let params: Vec<String> = params.iter().map(|p| p.to_string()).collect();
+    InstantiationRequest::new(
+        GenericFunctionId::new(name.to_string(), params),
+        vec![arg],
+        span,
+    )
+}
+
+/// 创建对 `identity` 的单类型参数实例化请求（源码位置为默认值）。
+fn identity_request(arg: MonoType) -> InstantiationRequest {
+    request("identity", &["T"], arg, Span::default())
+}
+
+/// `instr` 是否为「调用名为 `expected` 的函数」的 `Call` 指令。
+fn is_call_to(
+    instr: &Instruction,
+    expected: &str,
+) -> bool {
+    matches!(
+        instr,
+        Instruction::Call { func: callee, .. }
+        if *callee == Operand::Const(ConstValue::String(expected.to_string()))
+    )
+}
+
+/// 从模块中按名字取出函数。
+fn find_fn<'a>(
+    module: &'a ModuleIR,
+    name: &str,
+    msg: &str,
+) -> &'a FunctionIR {
+    module
+        .functions
+        .iter()
+        .find(|f| f.name == name)
+        .unwrap_or_else(|| panic!("{msg}"))
+}
+
+/// 创建 `line` 行上 `start_col`~`end_col` 的源码区间。
+fn span_at(
+    line: usize,
+    start_col: usize,
+    start_offset: usize,
+    end_col: usize,
+    end_offset: usize,
+) -> Span {
+    Span::new(
+        crate::util::span::Position {
+            line,
+            column: start_col,
+            offset: start_offset,
+        },
+        crate::util::span::Position {
+            line,
+            column: end_col,
+            offset: end_offset,
+        },
+    )
+}
+
+/// `List<inner>` 泛型类型。
+fn list_of(inner: MonoType) -> MonoType {
+    MonoType::Generic {
+        name: "List".to_string(),
+        args: vec![inner],
+    }
+}
+
+/// `TypeRef(name)`——泛型体内引用参数名时的占位类型。
+fn type_ref(name: &str) -> MonoType {
+    MonoType::TypeRef(name.to_string())
+}
+
+/// 把请求登记到 `container` 名下的占位（deferred）桶。
+fn defer_request(
+    mono: &mut Monomorphizer,
+    container: &str,
+    req: InstantiationRequest,
+) {
+    mono.deferred
+        .entry(container.to_string())
+        .or_default()
+        .push(req);
+}
+
+/// 创建 `grow<T>` 函数 IR：单基本块内以 `List(T)` 局部变量递归调用自身。
+fn make_grow_ir() -> FunctionIR {
+    let t = MonoType::TypeVar(TypeVar::new(0));
+    make_fn_ir(
+        "grow",
+        vec![t.clone()],
+        t.clone(),
+        Some(vec!["T".to_string()]),
+        vec![
+            call_instr(Some(Operand::Local(1)), "grow", vec![Operand::Local(0)]),
+            ret_instr(Some(Operand::Local(1))),
+        ],
+        vec![LocalSlot::temp(list_of(t))],
+    )
+}
+
+/// 创建 `main` 函数 IR：两处 `identity` 调用（span 各异）+ 无值 `Ret`。
+fn main_with_two_identity_calls(
+    span_int: Span,
+    span_str: Span,
+) -> FunctionIR {
+    let calls = vec![
+        (span_int, Operand::Const(ConstValue::Int(42)), 0),
+        (
+            span_str,
+            Operand::Const(ConstValue::String("hello".to_string())),
+            1,
+        ),
+    ];
+    let locals = vec![
+        LocalSlot::temp(MonoType::Int(64)),
+        LocalSlot::temp(MonoType::make_string()),
+    ];
+    let instructions: Vec<Instruction> = calls
+        .into_iter()
+        .map(|(span, arg, dst)| {
+            call_instr_at(Some(Operand::Local(dst)), "identity", vec![arg], span)
+        })
+        .chain(std::iter::once(ret_instr(None)))
+        .collect();
+    make_main_ir(MonoType::Void, instructions, locals)
+}
+
+/// 创建 `double_identity(int64)` 特化函数 IR：体内按 `inner_span` 嵌套调用 `identity`。
+fn make_double_identity_ir(inner_span: Span) -> FunctionIR {
+    make_fn_ir(
+        "double_identity(int64)",
+        vec![MonoType::Int(64)],
+        MonoType::Int(64),
+        None,
+        vec![
+            call_instr_at(
+                Some(Operand::Local(1)),
+                "identity",
+                vec![Operand::Arg(0)],
+                inner_span,
+            ),
+            ret_instr(Some(Operand::Local(1))),
+        ],
+        vec![LocalSlot::temp(MonoType::Int(64))],
+    )
+}
+
+/// 创建泛型类型定义 IR：`TypeName: (param: Type) -> Type = { fields...: param }`。
+fn make_generic_type_decl_ir(
+    type_name: &str,
+    param: &str,
+    fields: &[&str],
+) -> FunctionIR {
+    let body_items: Vec<TypeBodyItem> = fields
+        .iter()
+        .map(|name| {
+            TypeBodyItem::Field(StructField {
+                name: (*name).to_string(),
+                ty: AstType::Name {
+                    name: param.to_string(),
+                    span: Span::dummy(),
+                },
+                default: None,
+                is_mut: false,
+            })
+        })
+        .collect();
+
+    FunctionIR {
+        def: None,
+        name: type_name.to_string(),
+        params: vec![MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        }],
+        return_type: MonoType::MetaType {
+            universe_level: UniverseLevel::type1(),
+            type_params: Vec::new(),
+        },
+        generic_params: Some(vec![param.to_string()]),
+        body: FunctionBody::TypeDecl {
+            definition: AstType::Struct { body: body_items },
+        },
+    }
+}
+
+/// 取出 `FunctionBody::TypeDecl` 中 `Struct` 的字段列表。
+fn type_decl_fields(body: &FunctionBody) -> Vec<&StructField> {
+    let FunctionBody::TypeDecl { definition } = body else {
+        panic!("body 应是 TypeDecl");
+    };
+    let AstType::Struct { body } = definition else {
+        panic!("definition 应是 Struct");
+    };
+    body.iter()
+        .enumerate()
+        .map(|(idx, item)| match item {
+            TypeBodyItem::Field(f) => f,
+            _ => panic!("body[{idx}] 应是 Field"),
+        })
+        .collect()
+}
+
 // ==================== specialize_function 测试 ====================
 
 #[test]
@@ -301,38 +594,19 @@ fn test_specialize_non_generic_function_returns_none() {
 fn test_specialize_with_generic_type_args_replaces_inner_types() {
     // Arrange
     let t = MonoType::TypeVar(TypeVar::new(0));
-    let list_t = MonoType::make_list(t.clone());
-
-    let generic = FunctionIR {
-        def: None,
-        name: "first".to_string(),
-        params: vec![list_t],
-        return_type: t,
-        generic_params: Some(vec!["T".to_string()]),
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![Instruction::Ret {
-                    value: None,
-                    span: Span::dummy(),
-                }],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![LocalSlot::temp(MonoType::make_list(MonoType::TypeVar(
-                TypeVar::new(0),
-            )))],
-        },
-    };
-
+    let generic = make_fn_ir(
+        "first",
+        vec![MonoType::make_list(t.clone())],
+        t,
+        Some(vec!["T".to_string()]),
+        vec![ret_instr(None)],
+        vec![LocalSlot::temp(MonoType::make_list(MonoType::TypeVar(
+            TypeVar::new(0),
+        )))],
+    );
     let mut mono = Monomorphizer::new();
     mono.generic_functions.insert("first".to_string(), generic);
-
-    let req = InstantiationRequest::new(
-        GenericFunctionId::new("first".to_string(), vec!["T".to_string()]),
-        vec![MonoType::make_string()],
-        Span::default(),
-    );
+    let req = request("first", &["T"], MonoType::make_string(), Span::default());
 
     // Act
     let result = mono.specialize_function(&req);
@@ -406,58 +680,24 @@ fn test_replace_call_sites_replaces_generic_call_in_main() {
     mono.generic_functions
         .insert("identity".to_string(), make_identity_ir());
 
-    let main_func = FunctionIR {
-        def: None,
-        name: "main".to_string(),
-        params: vec![],
-        return_type: MonoType::Void,
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Const(ConstValue::Int(42))],
-                        span: Span::default(),
-                        def: None,
-                    },
-                    Instruction::Ret {
-                        value: Some(Operand::Local(0)),
-                        span: Span::dummy(),
-                    },
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![LocalSlot::temp(MonoType::Int(64))],
-        },
-    };
-
-    let mut module = ModuleIR {
-        functions: vec![main_func],
-        ..Default::default()
-    };
-
-    let requests = vec![InstantiationRequest::new(
-        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
-        Span::default(),
-    )];
+    let main_func = make_main_ir(
+        MonoType::Void,
+        vec![
+            identity_call(Operand::Const(ConstValue::Int(42))),
+            ret_instr(Some(Operand::Local(0))),
+        ],
+        vec![LocalSlot::temp(MonoType::Int(64))],
+    );
+    let mut module = module_with(vec![main_func]);
+    mono.site_requests = vec![identity_request(MonoType::Int(64))];
 
     // Act
-    mono.site_requests = requests.clone();
     mono.replace_call_sites(&mut module);
 
     // Assert
     let main_func = &module.functions[0];
     assert!(
-        matches!(
-            &main_func.blocks()[0].instructions[0],
-            Instruction::Call { func: callee, .. }
-            if *callee == Operand::Const(ConstValue::String("identity(int64)".to_string()))
-        ),
+        is_call_to(&main_func.blocks()[0].instructions[0], "identity(int64)"),
         "Call 指令的 func 应该被替换为特化函数名 identity(int64)"
     );
 }
@@ -467,58 +707,27 @@ fn test_replace_call_sites_skips_generic_functions() {
     // Arrange
     let mut mono = Monomorphizer::new();
 
-    let wrapper_func = FunctionIR {
-        def: None,
-        name: "wrapper".to_string(),
-        params: vec![MonoType::TypeVar(TypeVar::new(0))],
-        return_type: MonoType::TypeVar(TypeVar::new(0)),
-        generic_params: Some(vec!["T".to_string()]),
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Arg(0)],
-                        span: Span::default(),
-                        def: None,
-                    },
-                    Instruction::Ret {
-                        value: Some(Operand::Local(0)),
-                        span: Span::dummy(),
-                    },
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![LocalSlot::temp(MonoType::TypeVar(TypeVar::new(0)))],
-        },
-    };
-
-    let mut module = ModuleIR {
-        functions: vec![wrapper_func],
-        ..Default::default()
-    };
-
-    let requests = vec![InstantiationRequest::new(
-        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
-        Span::default(),
-    )];
+    let wrapper_func = make_fn_ir(
+        "wrapper",
+        vec![MonoType::TypeVar(TypeVar::new(0))],
+        MonoType::TypeVar(TypeVar::new(0)),
+        Some(vec!["T".to_string()]),
+        vec![
+            call_instr(Some(Operand::Local(0)), "identity", vec![Operand::Arg(0)]),
+            ret_instr(Some(Operand::Local(0))),
+        ],
+        vec![LocalSlot::temp(MonoType::TypeVar(TypeVar::new(0)))],
+    );
+    let mut module = module_with(vec![wrapper_func]);
+    mono.site_requests = vec![identity_request(MonoType::Int(64))];
 
     // Act
-    mono.site_requests = requests.clone();
     mono.replace_call_sites(&mut module);
 
     // Assert
     let wrapper = &module.functions[0];
     assert!(
-        matches!(
-            &wrapper.blocks()[0].instructions[0],
-            Instruction::Call { func: callee, .. }
-            if *callee == Operand::Const(ConstValue::String("identity".to_string()))
-        ),
+        is_call_to(&wrapper.blocks()[0].instructions[0], "identity"),
         "泛型函数内的调用不应被替换"
     );
 }
@@ -528,52 +737,21 @@ fn test_replace_call_sites_no_matching_request_does_not_replace() {
     // Arrange
     let mut mono = Monomorphizer::new();
 
-    let main_func = FunctionIR {
-        def: None,
-        name: "main".to_string(),
-        params: vec![],
-        return_type: MonoType::Void,
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![Instruction::Call {
-                    dst: None,
-                    func: Operand::Const(ConstValue::String("foo".to_string())),
-                    args: vec![],
-                    span: Span::default(),
-                    def: None,
-                }],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![],
-        },
-    };
-
-    let mut module = ModuleIR {
-        functions: vec![main_func],
-        ..Default::default()
-    };
-
-    let requests = vec![InstantiationRequest::new(
-        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
-        Span::default(),
-    )];
+    let main_func = make_main_ir(
+        MonoType::Void,
+        vec![call_instr(None, "foo", vec![])],
+        vec![],
+    );
+    let mut module = module_with(vec![main_func]);
+    mono.site_requests = vec![identity_request(MonoType::Int(64))];
 
     // Act
-    mono.site_requests = requests.clone();
     mono.replace_call_sites(&mut module);
 
     // Assert
     let main_func = &module.functions[0];
     assert!(
-        matches!(
-            &main_func.blocks()[0].instructions[0],
-            Instruction::Call { func: callee, .. }
-            if *callee == Operand::Const(ConstValue::String("foo".to_string()))
-        ),
+        is_call_to(&main_func.blocks()[0].instructions[0], "foo"),
         "不匹配的调用不应被替换"
     );
 }
@@ -584,47 +762,17 @@ fn test_replace_call_sites_no_matching_request_does_not_replace() {
 fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
     // Arrange
     let identity = make_identity_ir();
-
-    let main_func = FunctionIR {
-        def: None,
-        name: "main".to_string(),
-        params: vec![],
-        return_type: MonoType::Int(64),
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Const(ConstValue::Int(42))],
-                        span: Span::default(),
-                        def: None,
-                    },
-                    Instruction::Ret {
-                        value: Some(Operand::Local(0)),
-                        span: Span::dummy(),
-                    },
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![LocalSlot::temp(MonoType::Int(64))],
-        },
-    };
-
-    let module = ModuleIR {
-        functions: vec![identity, main_func],
-        ..Default::default()
-    };
-
+    let main_func = make_main_ir(
+        MonoType::Int(64),
+        vec![
+            identity_call(Operand::Const(ConstValue::Int(42))),
+            ret_instr(Some(Operand::Local(0))),
+        ],
+        vec![LocalSlot::temp(MonoType::Int(64))],
+    );
+    let module = module_with(vec![identity, main_func]);
     let mut mono = Monomorphizer::new();
-    let requests = vec![InstantiationRequest::new(
-        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
-        Span::default(),
-    )];
+    let requests = [identity_request(MonoType::Int(64))];
 
     // Act
     let result = mono.monomorphize(&module, &requests).unwrap();
@@ -633,27 +781,22 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
     assert_eq!(result.functions.len(), 2);
 
     // Assert: main 中的调用应被替换为 identity(int64)
-    let main_out = result.functions.iter().find(|f| f.name == "main").unwrap();
+    let main_out = find_fn(&result, "main", "模块中应存在 main 函数");
     assert!(
-        matches!(
-            &main_out.blocks()[0].instructions[0],
-            Instruction::Call { func: callee, .. }
-            if *callee == Operand::Const(ConstValue::String("identity(int64)".to_string()))
-        ),
+        is_call_to(&main_out.blocks()[0].instructions[0], "identity(int64)"),
         "main 中的调用应被替换为 identity(int64)"
     );
 
     // Assert: 特化函数存在且泛型标记已清除
-    let specialized = result
-        .functions
-        .iter()
-        .find(|f| f.name == "identity(int64)")
-        .expect("应该存在 identity(int64) 特化函数");
+    let specialized = find_fn(&result, "identity(int64)", MISSING_SPECIALIZED);
     assert!(
         specialized.generic_params.is_none(),
         "特化函数的泛型标记应已清除"
     );
 }
+
+/// 「identity(int64) 特化函数应存在」的失败文案。
+const MISSING_SPECIALIZED: &str = "应该存在 identity(int64) 特化函数";
 
 // ==================== specialize_type 测试 (Issue #197 类型单态化) ====================
 
@@ -663,12 +806,7 @@ fn test_specialize_generic_struct_substitutes_type_params() {
     let mut mono = Monomorphizer::new();
     mono.generic_types
         .insert("Pair".to_string(), make_pair_type_ir(&["first", "second"]));
-
-    let req = InstantiationRequest::new(
-        GenericFunctionId::new("Pair".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
-        Span::default(),
-    );
+    let req = request("Pair", &["T"], MonoType::Int(64), Span::default());
 
     // Act
     let result = mono.specialize_type(&req).expect("特化 Pair(Int) 应该成功");
@@ -685,34 +823,19 @@ fn test_specialize_generic_struct_substitutes_type_params() {
     );
 
     // Assert: 类型体中两个字段的 T 都已被替换为 Int(64)
-    let FunctionBody::TypeDecl { definition } = &result.body else {
-        panic!("body 应是 TypeDecl");
-    };
-    let AstType::Struct { body } = definition else {
-        panic!("definition 应是 Struct");
-    };
-    assert_eq!(body.len(), 2, "Pair 应有两个字段");
-
-    let first = match &body[0] {
-        TypeBodyItem::Field(f) => f,
-        _ => panic!("body[0] 应是 Field"),
-    };
-    assert_eq!(first.name, "first", "第一个字段名应为 first");
+    let fields = type_decl_fields(&result.body);
+    assert_eq!(fields.len(), 2, "Pair 应有两个字段");
+    assert_eq!(fields[0].name, "first", "第一个字段名应为 first");
     assert!(
-        matches!(&first.ty, AstType::Int(64)),
+        matches!(&fields[0].ty, AstType::Int(64)),
         "first 字段类型应为 Int(64)，实际为 {:?}",
-        first.ty
+        fields[0].ty
     );
-
-    let second = match &body[1] {
-        TypeBodyItem::Field(f) => f,
-        _ => panic!("body[1] 应是 Field"),
-    };
-    assert_eq!(second.name, "second", "第二个字段名应为 second");
+    assert_eq!(fields[1].name, "second", "第二个字段名应为 second");
     assert!(
-        matches!(&second.ty, AstType::Int(64)),
+        matches!(&fields[1].ty, AstType::Int(64)),
         "second 字段类型应为 Int(64)，实际为 {:?}",
-        second.ty
+        fields[1].ty
     );
 }
 
@@ -770,41 +893,13 @@ fn test_type_specialization_arg_count_mismatch_returns_none() {
 fn test_collect_generic_type_refs_nested_specialization() {
     // Arrange: List<T> 类型定义，模拟 List(List(Int)) 的嵌套泛型引用
     let mut mono = Monomorphizer::new();
-    let body_items = vec![TypeBodyItem::Field(StructField {
-        name: "data".to_string(),
-        ty: AstType::Name {
-            name: "T".to_string(),
-            span: Span::dummy(),
-        },
-        default: None,
-        is_mut: false,
-    })];
-    let type_def = FunctionIR {
-        def: None,
-        name: "List".to_string(),
-        params: vec![MonoType::MetaType {
-            universe_level: UniverseLevel::type1(),
-            type_params: Vec::new(),
-        }],
-        return_type: MonoType::MetaType {
-            universe_level: UniverseLevel::type1(),
-            type_params: Vec::new(),
-        },
-        generic_params: Some(vec!["T".to_string()]),
-        body: FunctionBody::TypeDecl {
-            definition: AstType::Struct { body: body_items },
-        },
-    };
-    mono.generic_types.insert("List".to_string(), type_def);
+    mono.generic_types.insert(
+        "List".to_string(),
+        make_generic_type_decl_ir("List", "T", &["data"]),
+    );
 
     // 构造嵌套泛型引用：List(List(Int))
-    let nested_ty = MonoType::Generic {
-        name: "List".to_string(),
-        args: vec![MonoType::Generic {
-            name: "List".to_string(),
-            args: vec![MonoType::Int(64)],
-        }],
-    };
+    let nested_ty = list_of(list_of(MonoType::Int(64)));
 
     // Act: 从嵌套类型收集引用
     mono.collect_generic_type_refs(&nested_ty, 0);
@@ -831,43 +926,13 @@ fn test_collect_generic_type_refs_nested_specialization() {
 
 #[test]
 fn test_specialize_type_lowercase_param_name() {
-    // Arrange: 小写参数名 `t: Type` 不应靠大写启发式识别
+    // Arrange: 小写参数名 t: Type 不应靠大写启发式识别
     let mut mono = Monomorphizer::new();
-
-    let body = vec![TypeBodyItem::Field(StructField {
-        name: "value".to_string(),
-        ty: AstType::Name {
-            name: "t".to_string(),
-            span: Span::dummy(),
-        },
-        default: None,
-        is_mut: false,
-    })];
-
-    let type_def = FunctionIR {
-        def: None,
-        name: "Small".to_string(),
-        params: vec![MonoType::MetaType {
-            universe_level: UniverseLevel::type1(),
-            type_params: Vec::new(),
-        }],
-        return_type: MonoType::MetaType {
-            universe_level: UniverseLevel::type1(),
-            type_params: Vec::new(),
-        },
-        generic_params: Some(vec!["t".to_string()]),
-        body: FunctionBody::TypeDecl {
-            definition: AstType::Struct { body },
-        },
-    };
-
-    mono.generic_types.insert("Small".to_string(), type_def);
-
-    let req = InstantiationRequest::new(
-        GenericFunctionId::new("Small".to_string(), vec!["t".to_string()]),
-        vec![MonoType::make_string()],
-        Span::default(),
+    mono.generic_types.insert(
+        "Small".to_string(),
+        make_generic_type_decl_ir("Small", "t", &["value"]),
     );
+    let req = request("Small", &["t"], MonoType::make_string(), Span::default());
 
     // Act
     let result = mono.specialize_type(&req).expect("小写参数名特化应成功");
@@ -903,109 +968,28 @@ fn test_replace_call_sites_multi_instantiation_dispatches_per_site() {
         .insert("identity".to_string(), make_identity_ir());
 
     // 两个调用点：不同源码位置（span 不同）
-    let span_int = Span::new(
-        crate::util::span::Position {
-            line: 3,
-            column: 9,
-            offset: 40,
-        },
-        crate::util::span::Position {
-            line: 3,
-            column: 22,
-            offset: 53,
-        },
-    );
-    let span_str = Span::new(
-        crate::util::span::Position {
-            line: 4,
-            column: 9,
-            offset: 60,
-        },
-        crate::util::span::Position {
-            line: 4,
-            column: 25,
-            offset: 76,
-        },
-    );
-
-    let main_func = FunctionIR {
-        def: None,
-        name: "main".to_string(),
-        params: vec![],
-        return_type: MonoType::Void,
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Const(ConstValue::Int(42))],
-                        span: span_int,
-                        def: None,
-                    },
-                    Instruction::Call {
-                        dst: Some(Operand::Local(1)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Const(ConstValue::String("hello".to_string()))],
-                        span: span_str,
-                        def: None,
-                    },
-                    Instruction::Ret {
-                        value: None,
-                        span: Span::dummy(),
-                    },
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![
-                LocalSlot::temp(MonoType::Int(64)),
-                LocalSlot::temp(MonoType::make_string()),
-            ],
-        },
-    };
-
-    let mut module = ModuleIR {
-        functions: vec![main_func],
-        ..Default::default()
-    };
+    let span_int = span_at(3, 9, 40, 22, 53);
+    let span_str = span_at(4, 9, 60, 25, 76);
+    let main_func = main_with_two_identity_calls(span_int, span_str);
+    let mut module = module_with(vec![main_func]);
 
     // 两个实例化请求：各来自不同调用点（span 对应）
-    let requests = vec![
-        InstantiationRequest::new(
-            GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-            vec![MonoType::Int(64)],
-            span_int,
-        ),
-        InstantiationRequest::new(
-            GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-            vec![MonoType::make_string()],
-            span_str,
-        ),
+    mono.site_requests = vec![
+        request("identity", &["T"], MonoType::Int(64), span_int),
+        request("identity", &["T"], MonoType::make_string(), span_str),
     ];
 
     // Act
-    mono.site_requests = requests.clone();
     mono.replace_call_sites(&mut module);
 
     // Assert：每个调用点改写到各自的特化，不再互相覆盖
     let instrs = &module.functions[0].blocks()[0].instructions;
     assert!(
-        matches!(
-            &instrs[0],
-            Instruction::Call { func: callee, .. }
-            if *callee == Operand::Const(ConstValue::String("identity(int64)".to_string()))
-        ),
+        is_call_to(&instrs[0], "identity(int64)"),
         "第一处调用应特化为 identity(int64)"
     );
     assert!(
-        matches!(
-            &instrs[1],
-            Instruction::Call { func: callee, .. }
-            if *callee == Operand::Const(ConstValue::String("identity(string)".to_string()))
-        ),
+        is_call_to(&instrs[1], "identity(string)"),
         "第二处调用应特化为 identity(string)，不得被第一处覆盖"
     );
 }
@@ -1020,70 +1004,18 @@ fn test_replace_call_sites_rewrites_nested_calls_in_specialized_body() {
 
     // 特化函数（generic_params 已清除）体内对 identity 的嵌套调用，
     // span 与嵌套请求的 source_location 同源
-    let inner_span = Span::new(
-        crate::util::span::Position {
-            line: 2,
-            column: 30,
-            offset: 31,
-        },
-        crate::util::span::Position {
-            line: 2,
-            column: 42,
-            offset: 43,
-        },
-    );
-    let wrapper = FunctionIR {
-        def: None,
-        name: "double_identity(int64)".to_string(),
-        params: vec![MonoType::Int(64)],
-        return_type: MonoType::Int(64),
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(1)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Arg(0)],
-                        span: inner_span,
-                        def: None,
-                    },
-                    Instruction::Ret {
-                        value: Some(Operand::Local(1)),
-                        span: Span::dummy(),
-                    },
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![LocalSlot::temp(MonoType::Int(64))],
-        },
-    };
-
-    let mut module = ModuleIR {
-        functions: vec![wrapper],
-        ..Default::default()
-    };
-
-    let requests = vec![InstantiationRequest::new(
-        GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
-        inner_span,
-    )];
+    let inner_span = span_at(2, 30, 31, 42, 43);
+    let wrapper = make_double_identity_ir(inner_span);
+    let mut module = module_with(vec![wrapper]);
+    mono.site_requests = vec![request("identity", &["T"], MonoType::Int(64), inner_span)];
 
     // Act
-    mono.site_requests = requests.clone();
     mono.replace_call_sites(&mut module);
 
     // Assert
     let instrs = &module.functions[0].blocks()[0].instructions;
     assert!(
-        matches!(
-            &instrs[0],
-            Instruction::Call { func: callee, .. }
-            if *callee == Operand::Const(ConstValue::String("identity(int64)".to_string()))
-        ),
+        is_call_to(&instrs[0], "identity(int64)"),
         "特化体内嵌套调用应按 (泛型名, span) 命中改写"
     );
 }
@@ -1100,48 +1032,19 @@ fn test_scale_over_hundred_instantiations_compiles() {
     mono.generic_functions
         .insert("identity".to_string(), make_identity_ir());
 
-    let main_func = FunctionIR {
-        def: None,
-        name: "main".to_string(),
-        params: vec![],
-        return_type: MonoType::Void,
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: vec![
-                    Instruction::Call {
-                        dst: Some(Operand::Local(0)),
-                        func: Operand::Const(ConstValue::String("identity".to_string())),
-                        args: vec![Operand::Const(ConstValue::Int(1))],
-                        span: Span::default(),
-                        def: None,
-                    },
-                    Instruction::Ret {
-                        value: None,
-                        span: Span::dummy(),
-                    },
-                ],
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals: vec![LocalSlot::temp(MonoType::Int(64))],
-        },
-    };
-    let module = ModuleIR {
-        functions: vec![main_func],
-        ..Default::default()
-    };
+    let main_func = make_main_ir(
+        MonoType::Void,
+        vec![
+            identity_call(Operand::Const(ConstValue::Int(1))),
+            ret_instr(None),
+        ],
+        vec![LocalSlot::temp(MonoType::Int(64))],
+    );
+    let module = module_with(vec![main_func]);
 
     // 150 个互不相同的实例化请求（Int(1)..Int(150) 宽度作区分维度）
     let requests: Vec<InstantiationRequest> = (1..=150)
-        .map(|n| {
-            InstantiationRequest::new(
-                GenericFunctionId::new("identity".to_string(), vec!["T".to_string()]),
-                vec![MonoType::Int(n)],
-                Span::default(),
-            )
-        })
+        .map(|n| identity_request(MonoType::Int(n)))
         .collect();
 
     // Act
@@ -1164,68 +1067,18 @@ fn test_scale_over_hundred_instantiations_compiles() {
 #[test]
 fn test_type_growing_recursion_still_blocked_by_depth() {
     // Arrange
-    let t = MonoType::TypeVar(TypeVar::new(0));
     let mut mono = Monomorphizer::with_max_depth(5);
-    mono.generic_functions.insert(
-        "grow".to_string(),
-        FunctionIR {
-            def: None,
-            name: "grow".to_string(),
-            params: vec![t.clone()],
-            return_type: t.clone(),
-            generic_params: Some(vec!["T".to_string()]),
-            body: FunctionBody::Code {
-                blocks: vec![BasicBlock {
-                    label: 0,
-                    instructions: vec![
-                        // grow(y)，y 的类型为 List(T)——特化后逐层增长
-                        Instruction::Call {
-                            dst: Some(Operand::Local(1)),
-                            func: Operand::Const(ConstValue::String("grow".to_string())),
-                            args: vec![Operand::Local(0)],
-                            span: Span::default(),
-                            def: None,
-                        },
-                        Instruction::Ret {
-                            value: Some(Operand::Local(1)),
-                            span: Span::dummy(),
-                        },
-                    ],
-                    successors: Vec::new(),
-                }],
-                entry: 0,
-                locals: vec![LocalSlot::temp(MonoType::Generic {
-                    name: "List".to_string(),
-                    args: vec![t.clone()],
-                })],
-            },
-        },
-    );
+    mono.generic_functions
+        .insert("grow".to_string(), make_grow_ir());
 
-    let mut requests = vec![InstantiationRequest::new(
-        GenericFunctionId::new("grow".to_string(), vec!["T".to_string()]),
-        vec![MonoType::Int(64)],
-        Span::default(),
-    )];
+    let mut requests = vec![request("grow", &["T"], MonoType::Int(64), Span::default())];
     // 路径 A：grow 体内对自身（实参 List(T)）的调用由 typecheck 记录为
     // 占位请求（实参含 TypeRef("T")），挂在 grow 名下随每次特化求值
     requests[0].containing_fn = Some("grow".to_string());
-    mono.deferred
-        .entry("grow".to_string())
-        .or_default()
-        .push(InstantiationRequest::new(
-            GenericFunctionId::new("grow".to_string(), vec!["T".to_string()]),
-            vec![MonoType::Generic {
-                name: "List".to_string(),
-                args: vec![MonoType::TypeRef("T".to_string())],
-            }],
-            Span::default(),
-        ));
+    let placeholder = request("grow", &["T"], list_of(type_ref("T")), Span::default());
+    defer_request(&mut mono, "grow", placeholder);
 
-    let module = ModuleIR {
-        functions: Vec::new(),
-        ..Default::default()
-    };
+    let module = module_with(Vec::new());
 
     // Act
     let result = mono.monomorphize(&module, &requests);

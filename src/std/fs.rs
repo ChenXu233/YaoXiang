@@ -692,6 +692,35 @@ mod tests {
         }
     }
 
+    /// 建一棵固定的目录树：a.txt、b.txt、sub/c.txt，返回根路径字符串。
+    ///
+    /// 写入顺序刻意与排序结果不同，用例才能分辨「原样列出」与「按名字排序」。
+    fn listing_tree(tmp: &tempfile::TempDir) -> String {
+        for name in ["b.txt", "a.txt"] {
+            std::fs::write(tmp.path().join(name), name)
+                .unwrap_or_else(|e| panic!("write {name} failed: {e:?}"));
+        }
+        let sub = tmp.path().join("sub");
+        std::fs::create_dir(&sub).unwrap_or_else(|e| panic!("create_dir sub failed: {e:?}"));
+        std::fs::write(sub.join("c.txt"), "c")
+            .unwrap_or_else(|e| panic!("write sub/c.txt failed: {e:?}"));
+        tmp.path().to_string_lossy().to_string()
+    }
+
+    /// root 下 DFS 遍历期望得到的绝对路径（每层按名字排序）。
+    ///
+    /// 逐段 join：`Path::join("sub/c.txt")` 会把 `/` 原样留在字符串里，
+    /// 与被测实现产出的平台分隔符不一致。
+    fn expected_walk_paths(root: &Path) -> Vec<String> {
+        let sub = root.join("sub");
+        vec![
+            root.join("a.txt").to_string_lossy().to_string(),
+            root.join("b.txt").to_string_lossy().to_string(),
+            sub.to_string_lossy().to_string(),
+            sub.join("c.txt").to_string_lossy().to_string(),
+        ]
+    }
+
     #[test]
     // 本测试拿 `Path::join` 当**语义 oracle**（断言 native 实现与 std 一致），
     // 而 clippy 的 join_absolute_paths 建议会把 `base.join("/abs")` 换成
@@ -733,12 +762,7 @@ mod tests {
     #[test]
     fn read_dir_and_walk_are_sorted_lists() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let root = tmp.path().to_string_lossy().to_string();
-        for name in ["b.txt", "a.txt"] {
-            std::fs::write(tmp.path().join(name), name).unwrap();
-        }
-        std::fs::create_dir(tmp.path().join("sub")).unwrap();
-        std::fs::write(tmp.path().join("sub").join("c.txt"), "c").unwrap();
+        let root = listing_tree(&tmp);
 
         let names = list_of(call(native_read_dir, &[&root]).unwrap());
         assert_eq!(
@@ -748,24 +772,14 @@ mod tests {
         );
 
         let walked = list_of(call(native_walk, &[&root]).unwrap());
-        let root_path = tmp.path();
         assert_eq!(
             walked,
-            vec![
-                root_path.join("a.txt").to_string_lossy().to_string(),
-                root_path.join("b.txt").to_string_lossy().to_string(),
-                root_path.join("sub").to_string_lossy().to_string(),
-                root_path
-                    .join("sub")
-                    .join("c.txt")
-                    .to_string_lossy()
-                    .to_string(),
-            ],
+            expected_walk_paths(tmp.path()),
             "walk DFS with per-level sort"
         );
 
         // walk 拒绝非目录
-        assert!(call(native_walk, &[&root_path.join("a.txt").to_string_lossy()]).is_err());
+        assert!(call(native_walk, &[&tmp.path().join("a.txt").to_string_lossy()]).is_err());
     }
 
     #[test]

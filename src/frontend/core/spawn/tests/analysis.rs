@@ -95,6 +95,51 @@ fn spawn_body(stmts: Vec<Stmt>) -> Block {
 
 // is_direct_child
 
+/// Helper: test_spawn_for_reads_outer_variable 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: spawn for 循环体 —— `combine(item, prefix)` 单条表达式语句。
+fn combining_spawn_for_body() -> Block {
+    // Arrange
+    Block {
+        stmts: vec![Stmt {
+            kind: StmtKind::Expr(Box::new(call_expr(
+                "combine",
+                vec![var_expr("item"), var_expr("prefix")],
+            ))),
+            span: dummy_span(),
+        }],
+        span: dummy_span(),
+    }
+}
+
+/// Helper: test_spawn_body_mixed_children_and_non_children 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: spawn 块 —— var 声明（非直接子表达式）+ 赋值（直接子表达式）。
+fn mixed_children_spawn_body() -> Block {
+    // Arrange
+    Block {
+        stmts: vec![
+            // 非直接子表达式：var 声明
+            Stmt {
+                kind: StmtKind::Assign {
+                    target: Box::new(Expr::Var("local_var".to_string(), dummy_span())),
+                    type_annotation: None,
+                    signature_params: vec![],
+                    value: Some(Box::new(Expr::Lit(
+                        crate::frontend::core::lexer::tokens::Literal::Int(0),
+                        dummy_span(),
+                    ))),
+                    is_pub: false,
+                    is_mut: false,
+                    span: dummy_span(),
+                },
+                span: dummy_span(),
+            },
+            // 直接子表达式：赋值
+            assign_stmt("t1", call_expr("f", vec![])),
+        ],
+        span: dummy_span(),
+    }
+}
+
 #[test]
 fn test_is_direct_child_with_expr_stmt() {
     // RFC-024 §2.1: 直接子表达式是顶层 StmtKind::Expr
@@ -619,35 +664,13 @@ fn test_spawn_for_reads_writes() {
 #[test]
 fn test_spawn_body_mixed_children_and_non_children() {
     // RFC-024 §2.1: spawn 块内 var 声明不是直接子表达式，应被跳过
-    // Arrange
-    let body = Block {
-        stmts: vec![
-            // 非直接子表达式：var 声明
-            Stmt {
-                kind: StmtKind::Assign {
-                    target: Box::new(Expr::Var("local_var".to_string(), dummy_span())),
-                    type_annotation: None,
-                    signature_params: vec![],
-                    value: Some(Box::new(Expr::Lit(
-                        crate::frontend::core::lexer::tokens::Literal::Int(0),
-                        dummy_span(),
-                    ))),
-                    is_pub: false,
-                    is_mut: false,
-                    span: dummy_span(),
-                },
-                span: dummy_span(),
-            },
-            // 直接子表达式：赋值
-            assign_stmt("t1", call_expr("f", vec![])),
-        ],
-        span: dummy_span(),
-    };
+    // Arrange — local_var 声明（非子表达式）+ t1 = f()（子表达式）
+    let body = mixed_children_spawn_body();
 
-    // Act
+    // Act — 分析 spawn 块的任务集合
     let analysis = analyze_spawn_body(&body, &empty_trait_table(), &empty_var_types());
 
-    // Assert
+    // Assert — 只识别出 1 个任务且目标为 t1
     assert_eq!(
         analysis.tasks.len(),
         1,
@@ -737,20 +760,11 @@ fn test_spawn_body_assignment_target_is_resource_type() {
 #[test]
 fn test_spawn_for_reads_outer_variable() {
     // RFC-024 §2.4: spawn for 循环体引用外部变量
-    // Arrange
-    let body = Block {
-        stmts: vec![Stmt {
-            kind: StmtKind::Expr(Box::new(call_expr(
-                "combine",
-                vec![var_expr("item"), var_expr("prefix")],
-            ))),
-            span: dummy_span(),
-        }],
-        span: dummy_span(),
-    };
+    // Arrange — 循环体 combine(item, prefix)，迭代变量 item
+    let body = combining_spawn_for_body();
     let iterable = var_expr("items");
 
-    // Act
+    // Act — 分析 spawn for 的读取集合
     let analysis = analyze_spawn_for(
         "item",
         &iterable,
@@ -759,7 +773,7 @@ fn test_spawn_for_reads_outer_variable() {
         &empty_var_types(),
     );
 
-    // Assert
+    // Assert — reads 应覆盖外部变量、迭代变量与函数名
     assert!(
         analysis.reads.contains("prefix"),
         "循环体 reads 应包含外部变量 prefix"

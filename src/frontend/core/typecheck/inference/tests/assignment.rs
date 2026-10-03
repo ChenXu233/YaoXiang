@@ -19,6 +19,19 @@ fn dummy_span() -> Span {
     Span::dummy()
 }
 
+/// 环境夹具：`SomeShape.draw` 绑定为 `(Surface) -> Void`。
+fn env_with_some_shape_draw() -> TypeEnvironment {
+    let mut env = TypeEnvironment::default();
+    env.method_bindings.insert(
+        "SomeShape.draw".to_string(),
+        MonoType::Fn {
+            params: vec![MonoType::TypeRef("Surface".to_string())],
+            return_type: Box::new(MonoType::Void),
+        },
+    );
+    env
+}
+
 /// 创建空的 StructType（无字段、无方法）
 fn empty_struct(name: &str) -> MonoType {
     MonoType::Struct(StructType {
@@ -156,14 +169,7 @@ fn test_assignment_constraint_dynamic() {
     let span = dummy_span();
 
     // 构造环境：SomeShape.draw 绑定为 (Surface) -> Void
-    let mut env = TypeEnvironment::default();
-    env.method_bindings.insert(
-        "SomeShape.draw".to_string(),
-        MonoType::Fn {
-            params: vec![MonoType::TypeRef("Surface".to_string())],
-            return_type: Box::new(MonoType::Void),
-        },
-    );
+    let env = env_with_some_shape_draw();
 
     // Act
     let result = checker.check_assignment(&constraint, &rhs, span, Some(&env));

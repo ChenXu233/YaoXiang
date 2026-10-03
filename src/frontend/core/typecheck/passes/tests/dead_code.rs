@@ -8,6 +8,63 @@ use crate::frontend::core::typecheck::passes::dead_code::{DeadCodeAnalyzer, Dead
 use crate::frontend::core::parser::ast::{Block, Module, Stmt, StmtKind, Expr, Type};
 use crate::util::span::Span;
 
+/// 私有类型 `Outer { inner: Inner }`——字段类型引用私有类型 Inner。
+fn outer_with_inner_field() -> Stmt {
+    use crate::frontend::core::parser::ast::{StructField, TypeBodyItem};
+    Stmt {
+        kind: StmtKind::TypeDefinition {
+            name: "Outer".to_string(),
+            signature_params: vec![],
+            definition: Type::Struct {
+                body: vec![TypeBodyItem::Field(StructField::new(
+                    "inner".to_string(),
+                    false,
+                    Type::Name {
+                        name: "Inner".to_string(),
+                        span: Span::dummy(),
+                    },
+                ))],
+            },
+            is_pub: false,
+        },
+        span: Span::dummy(),
+    }
+}
+
+/// `main = (p: Point) => {}`——Point 仅出现在参数类型注解位置。
+fn module_with_point_param_annotation() -> Module {
+    Module {
+        items: vec![Stmt {
+            kind: StmtKind::Assign {
+                target: Box::new(Expr::Var("main".to_string(), Span::dummy())),
+                type_annotation: None,
+                signature_params: vec![],
+                value: Some(Box::new(Expr::Lambda {
+                    params: vec![crate::frontend::core::parser::ast::Param {
+                        name: "p".to_string(),
+                        ty: Some(Type::Name {
+                            name: "Point".to_string(),
+                            span: Span::dummy(),
+                        }),
+                        is_mut: false,
+                        span: Span::dummy(),
+                    }],
+                    body: Box::new(Block {
+                        stmts: vec![],
+                        span: Span::dummy(),
+                    }),
+                    span: Span::dummy(),
+                })),
+                is_pub: false,
+                is_mut: false,
+                span: Span::dummy(),
+            },
+            span: Span::dummy(),
+        }],
+        span: Span::dummy(),
+    }
+}
+
 // Helpers
 
 /// 构造一个空模块
@@ -765,30 +822,11 @@ fn test_no_entry_point_all_unused_private_defs_dead() {
 #[test]
 fn test_private_type_used_in_type_body_is_alive() {
     // Arrange: 私有类型 Inner 仅在私有类型 Outer 的结构体字段类型中被引用
-    use crate::frontend::core::parser::ast::{StructField, TypeBodyItem};
-    let outer = Stmt {
-        kind: StmtKind::TypeDefinition {
-            name: "Outer".to_string(),
-            signature_params: vec![],
-            definition: Type::Struct {
-                body: vec![TypeBodyItem::Field(StructField::new(
-                    "inner".to_string(),
-                    false,
-                    Type::Name {
-                        name: "Inner".to_string(),
-                        span: Span::dummy(),
-                    },
-                ))],
-            },
-            is_pub: false,
-        },
-        span: Span::dummy(),
-    };
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
             make_type_def("Inner", false),
-            outer,
+            outer_with_inner_field(),
             make_binding("main", false, None, vec![make_call_stmt("Outer")]),
         ],
         span: Span::dummy(),
@@ -810,36 +848,7 @@ fn test_collect_ident_refs_covers_param_type_annotations() {
     // Arrange: `main = (p: Point) => p`——Point 出现在参数类型注解位置，
     // 普通 Var 走查不可见，collect_ident_refs 必须覆盖
     //（W1003 依赖此兜底：导入类型仅用于注解时不误报）
-    let ast = Module {
-        items: vec![Stmt {
-            kind: StmtKind::Assign {
-                target: Box::new(Expr::Var("main".to_string(), Span::dummy())),
-                type_annotation: None,
-                signature_params: vec![],
-                value: Some(Box::new(Expr::Lambda {
-                    params: vec![crate::frontend::core::parser::ast::Param {
-                        name: "p".to_string(),
-                        ty: Some(Type::Name {
-                            name: "Point".to_string(),
-                            span: Span::dummy(),
-                        }),
-                        is_mut: false,
-                        span: Span::dummy(),
-                    }],
-                    body: Box::new(Block {
-                        stmts: vec![],
-                        span: Span::dummy(),
-                    }),
-                    span: Span::dummy(),
-                })),
-                is_pub: false,
-                is_mut: false,
-                span: Span::dummy(),
-            },
-            span: Span::dummy(),
-        }],
-        span: Span::dummy(),
-    };
+    let ast = module_with_point_param_annotation();
 
     // Act
     let refs = DeadCodeAnalyzer::collect_ident_refs(&ast);

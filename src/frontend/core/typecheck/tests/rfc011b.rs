@@ -15,6 +15,54 @@ use crate::frontend::core::parser::parse;
 
 use super::rfc011a::check_source_with_checker;
 
+/// RFC-011b：`Vec3` 显式 Equal 实现 + `==`/`!=` 两处派发点。
+const VEC3_EQUAL_FULL: &str = r#"
+        Vec3: Type = {
+            x: Float,
+            y: Float,
+            z: Float,
+            Equal(Vec3, Vec3),
+        }
+        Vec3.equal: (self: &Vec3, other: &Vec3) -> Bool = {
+            return self.x == other.x
+        }
+        main: () -> Void = {
+            v1 = Vec3(1.0, 2.0, 3.0)
+            v2 = Vec3(1.0, 9.9, 3.0)
+            eq = v1 == v2
+            ne = v1 != v2
+            return
+        }
+    "#;
+
+/// RFC-011b：用户容器 `Grid` 的 Index 实现 + `g[1]` 索引取类型。
+const GRID_INDEX_FULL: &str = r#"
+        Grid: Type = {
+            cells: List(Float),
+            Index(Grid, Int, Float),
+        }
+        Grid.index: (self: &Grid, key: &Int) -> Float = {
+            return self.cells[key]
+        }
+        main: () -> Void = {
+            g = Grid([7.0, 8.0, 9.0])
+            v = g[1]
+            return
+        }
+    "#;
+
+/// RFC-010：变体构造 `Result(Int, String).ok(5)` 的类型推断源码。
+const RESULT_VARIANT_FULL: &str = r#"
+        Result: (T: Type, E: Type) -> Type = {
+            ok: (T) -> Result(T, E),
+            err: (E) -> Result(T, E),
+        }
+        main: () -> Void = {
+            r = Result(Int, String).ok(5)
+            return
+        }
+    "#;
+
 const POINT_ADD_FULL: &str = r#"
     Point: Type = {
         x: Float,
@@ -253,25 +301,7 @@ fn test_rfc011b_equal_auto_derived_without_instantiation() {
 /// 产生 OperatorDispatch（ir_gen 派发方法调用），`!=` 记 negate
 #[test]
 fn test_rfc011b_equal_explicit_overrides_with_dispatch() {
-    let source = r#"
-        Vec3: Type = {
-            x: Float,
-            y: Float,
-            z: Float,
-            Equal(Vec3, Vec3),
-        }
-        Vec3.equal: (self: &Vec3, other: &Vec3) -> Bool = {
-            return self.x == other.x
-        }
-        main: () -> Void = {
-            v1 = Vec3(1.0, 2.0, 3.0)
-            v2 = Vec3(1.0, 9.9, 3.0)
-            eq = v1 == v2
-            ne = v1 != v2
-            return
-        }
-    "#;
-    let (result, _checker) = check_source_with_checker(source);
+    let (result, _checker) = check_source_with_checker(VEC3_EQUAL_FULL);
     assert!(
         result.diagnostics.is_empty(),
         "explicit Equal implementation should pass: {:?}",
@@ -461,21 +491,7 @@ fn test_rfc011b_unregistered_add_reports_e1002() {
 /// 结果类型来自登记条目的 Value 位
 #[test]
 fn test_rfc011b_user_index_typecheck() {
-    let source = r#"
-        Grid: Type = {
-            cells: List(Float),
-            Index(Grid, Int, Float),
-        }
-        Grid.index: (self: &Grid, key: &Int) -> Float = {
-            return self.cells[key]
-        }
-        main: () -> Void = {
-            g = Grid([7.0, 8.0, 9.0])
-            v = g[1]
-            return
-        }
-    "#;
-    let (result, _checker) = check_source_with_checker(source);
+    let (result, _checker) = check_source_with_checker(GRID_INDEX_FULL);
     assert!(
         result.diagnostics.is_empty(),
         "user container index should pass: {:?}",
@@ -624,17 +640,7 @@ fn test_rfc010_not_sum_type_with_binding() {
 /// 并记录 VariantCtorCall（span 键控，ir_gen 生成 CreateVariant）
 #[test]
 fn test_rfc010_variant_ctor_type_inferred() {
-    let source = r#"
-        Result: (T: Type, E: Type) -> Type = {
-            ok: (T) -> Result(T, E),
-            err: (E) -> Result(T, E),
-        }
-        main: () -> Void = {
-            r = Result(Int, String).ok(5)
-            return
-        }
-    "#;
-    let (result, _checker) = check_source_with_checker(source);
+    let (result, _checker) = check_source_with_checker(RESULT_VARIANT_FULL);
     assert!(
         result.diagnostics.is_empty(),
         "variant construction should pass: {:?}",
