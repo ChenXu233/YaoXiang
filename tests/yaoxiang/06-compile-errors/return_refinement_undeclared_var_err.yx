@@ -15,6 +15,4 @@ bad: () -> (r: Eq2(m, r)) = {
     return 7
 }
 
-main: () -> Void = {
-    print(bad())
-}
+main: () -> Void = {}

@@ -15,6 +15,4 @@ f: () -> (r: SumUpTo(3, r)) = {
     return 7
 }
 
-main: () -> Void = {
-    print(f())
-}
+main: () -> Void = {}

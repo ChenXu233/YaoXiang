@@ -24,6 +24,34 @@ fn with_type<F>(
     f(t);
 }
 
+/// 解析单条 `f: (…) -> … = { … }` 绑定，返回注解里的函数类型 `(params, return_type)`。
+///
+/// 签名带解析错误、或首个语句不是带函数类型注解的绑定时，带上原始 AST 上下文 panic——
+/// 定位失败本身就是用例要报的失败，调用方不必重复判空。
+fn parse_fn_type_annotation(source: &str) -> (Vec<Type>, Type) {
+    let tokens = tokenize(source).expect("tokenize 签名源码失败");
+    let result = parse(&tokens);
+    assert!(
+        !result.has_errors,
+        "签名不应有解析错误: {:?}",
+        result.errors
+    );
+    let Some(StmtKind::Assign {
+        type_annotation: Some(Type::Fn {
+            params,
+            return_type,
+        }),
+        ..
+    }) = result.module.items.first().map(|s| &s.kind)
+    else {
+        panic!(
+            "应解析为带函数类型注解的绑定，got: {:?}",
+            result.module.items
+        );
+    };
+    (params.to_vec(), return_type.as_ref().clone())
+}
+
 // 基元类型 (Spec §3.2)
 
 #[test]
@@ -579,31 +607,10 @@ fn test_multi_named_paren_stays_tuple() {
 /// `parse_fn_type_with_names` 承载，类型位只有类型。
 #[test]
 fn test_named_function_type_params_stay_anonymous_types() {
-    // Arrange
-    let tokens = tokenize("f: (a: Int, b: Int) -> Int = { 1 }").unwrap();
+    // Arrange & Act：解析带函数类型注解的绑定，取出注解里的函数类型
+    let (params, return_type) = parse_fn_type_annotation("f: (a: Int, b: Int) -> Int = { 1 }");
 
-    // Act
-    let result = parse(&tokens);
-    assert!(
-        !result.has_errors,
-        "签名不应有解析错误: {:?}",
-        result.errors
-    );
-
-    // Assert
-    let Some(StmtKind::Assign {
-        type_annotation: Some(Type::Fn {
-            params,
-            return_type,
-        }),
-        ..
-    }) = result.module.items.first().map(|s| &s.kind)
-    else {
-        panic!(
-            "应解析为带函数类型注解的绑定，got: {:?}",
-            result.module.items
-        );
-    };
+    // Assert：参数位只有类型（名字丢弃），返回类型是 Int
     assert_eq!(params.len(), 2, "参数位只有类型，不含名字");
     assert!(
         params
@@ -612,7 +619,7 @@ fn test_named_function_type_params_stay_anonymous_types() {
         "参数类型应为 Int，got: {params:?}"
     );
     assert!(
-        matches!(return_type.as_ref(), Type::Name { name, .. } if name == "Int"),
+        matches!(&return_type, Type::Name { name, .. } if name == "Int"),
         "返回类型应为 Int，got: {return_type:?}"
     );
 }

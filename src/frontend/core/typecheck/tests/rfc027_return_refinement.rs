@@ -102,6 +102,19 @@ fn assert_has_code(
     );
 }
 
+/// 取第一条指定 code 的诊断；不存在即 panic，并带上全部诊断供定位。
+///
+/// 「按码取诊断」的判空样板在本文件多处重复，统一收到这里，用例侧只留断言本身。
+fn expect_diagnostic_with_code<'a>(
+    diagnostics: &'a [Diagnostic],
+    code: &str,
+) -> &'a Diagnostic {
+    diagnostics
+        .iter()
+        .find(|d| d.code == code)
+        .unwrap_or_else(|| panic!("应报 {code}；实际诊断: {diagnostics:#?}"))
+}
+
 /// 文本是否含 CJK（中日韩文字与全角标点）。
 ///
 /// 用来钉住「诊断文案里的自然语言只能来自 locales」：code 侧只传标识符
@@ -256,16 +269,7 @@ fn test_multi_arg_predicate_with_variable_arg_points_at_return_position() {
     let result = check_source(&source);
 
     // Assert
-    let diag = result
-        .diagnostics
-        .iter()
-        .find(|d| d.code == "E2031")
-        .unwrap_or_else(|| {
-            panic!(
-                "返回位含变量的多参数谓词应报 E2031（无法证明）；实际: {:#?}",
-                result.diagnostics
-            )
-        });
+    let diag = expect_diagnostic_with_code(&result.diagnostics, "E2031");
     assert!(
         diag.message.contains("'r'"),
         "{{var}} 槽应是声明的 binder 名 `r`（此前误挂到形参 b 上）；实际: {:#?}",

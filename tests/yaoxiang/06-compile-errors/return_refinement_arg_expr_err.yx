@@ -15,6 +15,4 @@ bad: () -> (r: IsPositive(r - 100)) = {
     return 5
 }
 
-main: () -> Void = {
-    print(bad())
-}
+main: () -> Void = {}

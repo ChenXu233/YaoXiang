@@ -17,6 +17,4 @@ f: (b: Int) -> (r: SumUpTo(b, r)) = {
     return b * 2
 }
 
-main: () -> Void = {
-    print(f(3))
-}
+main: () -> Void = {}
