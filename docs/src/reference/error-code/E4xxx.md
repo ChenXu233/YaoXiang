@@ -26,7 +26,7 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 | `E4014` | 常量求值失败 | `Generic` | 是 | `无法求值常量表达式：{reason}` | ✅ 10 处 |
 | `E4018` | 精化谓词违反 | `Generic` | 是 | `精化谓词违反：{constraint}  反例： {counterexample}` | ✅ 6 处 |
 | `E4019` | 类型等式不成立 | `Generic` | 否 | `类型等式不成立：期望 {expected}，实际 {found}` | ✅ 1 处 |
-| `E4020` | 需要证明函数 | `Generic` | 否 | `需要证明函数来验证约束` | ✅ 2 处 |
+| `E4020` | 需要证明函数 | `Generic` | 否 | `需要证明函数来验证约束` | ⚠ 暂未发射 |
 | `E4021` | 循环终止性无法自动证明 | `Generic` | 否 | `无法自动证明循环终止：未找到有效的递减度量` | ✅ 1 处 |
 | `E4022` | 测度不成立 | `Generic` | 否 | `测度不成立：此调用点无法证明测度严格递减  反例： {counterexample}` | ✅ 1 处 |
 
@@ -148,8 +148,16 @@ description: '泛型约束、特质系统与常量求值相关的错误。'
 - **模板**：`需要证明函数来验证约束`
 - **消息**：约束无法在编译期证明，需要提供证明函数
 - **帮助**：添加证明函数或提供运行时检查
-- **发射点**：`src/frontend/core/typecheck/proof/verdict.rs:288`
-- **历史**：原列出的 `src/frontend/core/typecheck/layers/dispatch.rs:145` 随该模块在 #377-2 删除而消失（零生产调用点，与生产实做的分派分叉）
+- **发射点**：⚠ 暂未发射（注册表中保留该码，但非测试代码里没有调用处，用户无法触发）
+- **完整构造路径**（自下而上）：
+  1. `src/frontend/core/typecheck/proof/verdict.rs:288` 是唯一的**诊断构造点**——`UnprovenReason::to_diagnostic()`（`verdict.rs:281-291`，**私有** `fn`）的 `ProofFunctionRequired` 分支调用 `proof_function_required().build()`；
+  2. 该私有函数的**唯一调用方**是 `ProofResult::into_result()`（`verdict.rs:260-266`），具体在 `:264` 的 `Self::Unproven { reason, .. } => Err(reason.to_diagnostic())`（全仓 `to_diagnostic` 只此一处调用，其余同名命中属 `LexError`/`dead_code` 的别的方法）；
+  3. `into_result()` 的**生产调用只有一处**：`checker.rs:1272` 的 `match result.into_result()`，它消费的是 `term_results`——即 `TerminationChecker::check_module()`（`layers/termination.rs:391-401`）对**终止检查**的结果集；
+  4. 而 `termination.rs` 只产出三种结果：`ProofResult::Proved`（`:2202`）、`ProofResult::Unproven { reason: LoopTerminationUnproven { .. }, .. }`（`:2213-2221`）与 `ProofResult::Disproved`（`:427`）。即经此路径到达 `to_diagnostic()` 的 `Unproven` **恒为 `LoopTerminationUnproven` → E4021**，永不落入 `:288` 的分支。
+  5. 另需说明：`checker.rs:1311` 处的 `into_diagnostic()` 生产调用转的是 `DisproofModel`（即 `Disproved` 分支），同样不覆盖本码。
+  ⇒ 结论：`ProofFunctionRequired` 只由 `layers/predicate.rs:233` 生成，而它经 `into_result()` 的路径在生产是死的（见下条判据）。
+- **不可达判据**：生产链上 `Unproven{ProofFunctionRequired}` 的 `proof_calls` **恒非空**——`src/frontend/core/typecheck/layers/predicate.rs:232-239` 构造该结果时同时塞入一个 `ProofFunctionCall`；而三处生产调用点（`checker.rs:5161-5181` / `5303-5320` / `5417+`）在 `Unproven` 分支只对 `proof_calls.is_empty()` 报 `refined_unproven`，非空则 `extend` 后继续，不构造 E4020。故本码在用户流程不可达。
+- **历史**：原列出的第二个发射点 `src/frontend/core/typecheck/layers/dispatch.rs:145`（`CompileTimeOutcome::RequiresProof` → E4020）随该模块在 #377-2 整体删除而消失（零生产调用点，与生产实做的分派分叉）；删除前它同样不可达。
 - **源码注释名**：需要证明函数来验证约束
 
 ### E4021：循环终止性无法自动证明

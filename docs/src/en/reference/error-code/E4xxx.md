@@ -30,7 +30,7 @@ This family contains **14** codes, all registered in the `define_codes!` registr
 | `E4014` | Constant evaluation failed                      | `Generic` | Yes            | `Cannot evaluate constant expression: {reason}`                                                                          | ✅ 10             |
 | `E4018` | Refinement predicate violated                   | `Generic` | Yes            | `Refinement predicate violated: {constraint}  Counterexample: {counterexample}`                                          | ✅ 6              |
 | `E4019` | Type equality does not hold                     | `Generic` | No             | `Type equality does not hold: expected {expected}, found {found}`                                                        | ✅ 1              |
-| `E4020` | Proof function required                         | `Generic` | No             | `A proof function is required to verify the constraint`                                                                  | ✅ 2              |
+| `E4020` | Proof function required                         | `Generic` | No             | `A proof function is required to verify the constraint`                                                                  | ⚠ Not yet emitted |
 | `E4021` | Loop termination cannot be automatically proven | `Generic` | No             | `Cannot automatically prove loop termination: no valid decreasing measure found`                                         | ✅ 1              |
 | `E4022` | Measure does not hold                           | `Generic` | No             | `Measure does not hold: cannot prove the measure strictly decreases at this call site  Counterexample: {counterexample}` | ✅ 1              |
 
@@ -163,10 +163,36 @@ This family contains **14** codes, all registered in the `define_codes!` registr
 - **Template**: `A proof function is required to verify the constraint`
 - **Message**: The constraint cannot be proven at compile-time; a proof function must be provided
 - **Help**: Add a proof function or provide runtime checks
-- **Emission point**: `src/frontend/core/typecheck/proof/verdict.rs:288`
-- **History**: the previously listed `src/frontend/core/typecheck/layers/dispatch.rs:145` disappeared
-  with that module's deletion in #377-2 (it had zero production call sites and had diverged from the
-  dispatch logic production actually uses)
+- **Emission point**: ⚠ Not yet emitted (reserved in the registry, but no call site in non-test code; unreachable for users)
+- **Full construction path** (bottom-up):
+  1. `src/frontend/core/typecheck/proof/verdict.rs:288` is the only **diagnostic construction site**: the
+     `ProofFunctionRequired` arm of `UnprovenReason::to_diagnostic()` (`verdict.rs:281-291`, a **private**
+     `fn`) calls `proof_function_required().build()`;
+  2. the **only caller** of that private function is `ProofResult::into_result()` (`verdict.rs:260-266`),
+     specifically `:264` — `Self::Unproven { reason, .. } => Err(reason.to_diagnostic())` (this is the sole
+     `to_diagnostic` call in the whole repo; the other hits are unrelated same-named methods on
+     `LexError`/`dead_code`);
+  3. `into_result()` has exactly **one production call**: `checker.rs:1272` (`match result.into_result()`),
+     which consumes `term_results` — the result set of `TerminationChecker::check_module()`
+     (`layers/termination.rs:391-401`), i.e. the **termination check**;
+  4. and `termination.rs` produces only three results: `ProofResult::Proved` (`:2202`),
+     `ProofResult::Unproven { reason: LoopTerminationUnproven { .. }, .. }` (`:2213-2221`) and
+     `ProofResult::Disproved` (`:427`). So any `Unproven` reaching `to_diagnostic()` along this path is
+     **always `LoopTerminationUnproven` → E4021** and never falls into the `:288` arm;
+  5. separately, the `into_diagnostic()` production call at `checker.rs:1311` converts a `DisproofModel`
+     (the `Disproved` branch) and likewise does not cover this code.
+  ⇒ `ProofFunctionRequired` is produced only by `layers/predicate.rs:233`, and its `into_result()` route is
+  dead in production (see the criterion below).
+- **Unreachability criterion**: on the production chain the `proof_calls` of
+  `Unproven{ProofFunctionRequired}` are **never empty** — `src/frontend/core/typecheck/layers/predicate.rs:232-239`
+  fills in one `ProofFunctionCall` when constructing that result; and all three production call sites
+  (`checker.rs:5161-5181` / `5303-5320` / `5417+`) only report `refined_unproven` when `proof_calls.is_empty()`,
+  otherwise they `extend` and continue without constructing E4020. The code is therefore unreachable in the
+  user flow.
+- **History**: the second emission point previously listed
+  (`src/frontend/core/typecheck/layers/dispatch.rs:145`, `CompileTimeOutcome::RequiresProof` → E4020) disappeared
+  with that module's deletion in #377-2 (zero production call sites, diverged from the dispatch logic production
+  actually uses); it was equally unreachable before the deletion.
 - **Source comment name**: A proof function is required to verify the constraint
 
 ### E4021: Loop termination cannot be automatically proven
