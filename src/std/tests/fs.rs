@@ -1,7 +1,7 @@
 //! `std.fs` 模块的单元测试
 //!
 //! 覆盖范围与依据：
-//! - 路径语义以 Rust `std::path::Path` 为**等价 oracle**（`path_ops_match_path_semantics`
+//! - 路径语义以 Rust `std::path::Path` 为**等价 oracle**（`test_path_ops_match_path_semantics`
 //!   逐条对照 `join` / `file_name` / `parent` / `extension` 的语义，含「绝对实参替换 base」特权）；
 //! - `read_dir` / `walk` 的**确定性顺序**（每层按名字排序、DFS）与「walk 拒绝非目录」；
 //! - `stat` 的键集合 `{size, is_dir, is_file, readonly, mtime}` 与 `mtime`「早于纪元/不可得时为 0」；
@@ -116,7 +116,9 @@ fn expected_walk_paths(root: &Path) -> Vec<String> {
 // `PathBuf::from("/abs")`——碰巧同结果却抹掉被测的那条语义（绝对实参替换
 // base）。故保留原写法。
 #[allow(clippy::join_absolute_paths)]
-fn path_ops_match_path_semantics() {
+fn test_path_ops_match_path_semantics() {
+    // Arrange + Act + Assert：逐条对照 `Path::join` / `file_name` / `parent` /
+    // `extension` 的语义——每条断言内即完成一次 native 调用与期望值比较，无独立准备段。
     assert_eq!(string_of(call(native_path_join, &["a", "b"]).unwrap()), {
         Path::new("a").join("b").to_string_lossy().to_string()
     });
@@ -149,10 +151,12 @@ fn path_ops_match_path_semantics() {
 }
 
 #[test]
-fn read_dir_and_walk_are_sorted_lists() {
+fn test_read_dir_and_walk_are_sorted_lists() {
+    // Arrange：临时目录内建固定树（写入顺序刻意与排序结果不同）
     let tmp = tempfile::tempdir().expect("tempdir");
     let root = listing_tree(&tmp);
 
+    // Act + Assert：read_dir 按名字排序
     let names = list_of(call(native_read_dir, &[&root]).unwrap());
     assert_eq!(
         names,
@@ -160,6 +164,7 @@ fn read_dir_and_walk_are_sorted_lists() {
         "read_dir sorted names"
     );
 
+    // Act + Assert：walk 为「每层按名字排序」的 DFS
     let walked = list_of(call(native_walk, &[&root]).unwrap());
     assert_eq!(
         walked,
@@ -167,18 +172,20 @@ fn read_dir_and_walk_are_sorted_lists() {
         "walk DFS with per-level sort"
     );
 
-    // walk 拒绝非目录
+    // Assert：walk 拒绝非目录
     assert!(call(native_walk, &[&tmp.path().join("a.txt").to_string_lossy()]).is_err());
 }
 
 #[test]
-fn stat_reports_size_and_kinds() {
+fn test_stat_reports_size_and_kinds() {
+    // Arrange：一个 5 字节文件 + 一个目录
     let tmp = tempfile::tempdir().expect("tempdir");
     let file = tmp.path().join("f.txt");
     std::fs::write(&file, "12345").unwrap();
     let dir = tmp.path().join("d");
     std::fs::create_dir(&dir).unwrap();
 
+    // Act + Assert：文件 stat 的键集合与取值
     let file_path = file.to_string_lossy().to_string();
     let st = call(native_stat, &[&file_path]).unwrap();
     assert_eq!(dict_entry(&st, "size"), RuntimeValue::Int(5));
@@ -186,10 +193,12 @@ fn stat_reports_size_and_kinds() {
     assert_eq!(dict_entry(&st, "is_dir"), RuntimeValue::Bool(false));
     assert!(matches!(dict_entry(&st, "mtime"), RuntimeValue::Int(_)));
 
+    // Act + Assert：目录 stat 只断言 is_dir
     let dir_path = dir.to_string_lossy().to_string();
     let st = call(native_stat, &[&dir_path]).unwrap();
     assert_eq!(dict_entry(&st, "is_dir"), RuntimeValue::Bool(true));
 
+    // Assert：缺失路径必须报错
     assert!(call(
         native_stat,
         &[&tmp.path().join("missing").to_string_lossy()]
@@ -198,12 +207,17 @@ fn stat_reports_size_and_kinds() {
 }
 
 #[test]
-fn mkdtemp_and_tmpfile_create_and_persist() {
+fn test_mkdtemp_and_tmpfile_create_and_persist() {
+    // Arrange + Act + Assert：三条 native 用例各为「字面量实参 → 调用 → 断言 → 清理」，
+    // 无独立准备段，故按组标注。
+
+    // Act + Assert：mkdtemp 目录真实存在且前缀生效
     let dir = string_of(call(native_mkdtemp, &["yxfstest-"]).unwrap());
     assert!(Path::new(&dir).is_dir(), "mkdtemp directory exists");
     assert!(dir.contains("yxfstest-"), "prefix respected");
     std::fs::remove_dir(&dir).unwrap();
 
+    // Act + Assert：tmpfile 文件真实存在且初始为空
     let file = string_of(call(native_tmpfile, &["yxfstest-"]).unwrap());
     assert!(Path::new(&file).is_file(), "tmpfile exists");
     assert!(
@@ -212,6 +226,7 @@ fn mkdtemp_and_tmpfile_create_and_persist() {
     );
     std::fs::remove_file(&file).unwrap();
 
+    // Act + Assert：temp_dir 等于 std::env::temp_dir()
     assert_eq!(
         string_of(call(native_temp_dir, &[]).unwrap()),
         std::env::temp_dir().to_string_lossy().to_string()

@@ -158,12 +158,17 @@ fn alloc_dict(entries: Vec<(&str, &str)>) -> RuntimeValue {
 }
 
 #[test]
-fn http_get_returns_status_headers_body() {
+fn test_http_get_returns_status_headers_body() {
+    // Arrange：本地单次请求服务器返回 200 + 自定义头 + 5 字节体
     let (url, server) = serve_once(
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nX-Tag: hello\r\nContent-Length: 5\r\n\r\nhello"
             .to_string(),
     );
+
+    // Act：GET 该 URL
     let resp = call_get(&url, None).expect("http_get should succeed");
+
+    // Assert：状态码 / 响应体 / 响应头（名字大小写不敏感）
     assert_eq!(int_of(dict_entry(&resp, "status")), 200);
     assert_eq!(string_of(dict_entry(&resp, "body")), "hello");
     assert_eq!(read_header(&resp, "content-type"), "text/plain");
@@ -172,11 +177,16 @@ fn http_get_returns_status_headers_body() {
 }
 
 #[test]
-fn http_get_sends_request_headers() {
+fn test_http_get_sends_request_headers() {
+    // Arrange：本地服务器 + 一个自定义请求头字典
     let (url, server) = serve_once("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".to_string());
     let headers = alloc_dict(vec![("Authorization", "Bearer token123")]);
+
+    // Act：带请求头调用 GET，并取回服务器捕获的原始请求文本
     call_get(&url, Some(headers)).expect("http_get with headers");
     let request = server.join().expect("server thread");
+
+    // Assert：请求行与请求头按传入原样发送
     assert!(
         request.starts_with("GET /data HTTP/1.1"),
         "request line: {request}"
@@ -188,7 +198,8 @@ fn http_get_sends_request_headers() {
 }
 
 #[test]
-fn http_post_sends_body() {
+fn test_http_post_sends_body() {
+    // Arrange：本地服务器 + 独立 Heap/NativeContext 与实参表
     let (url, server) = serve_once("HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n".to_string());
     let mut heap = Heap::new();
     let mut ctx = NativeContext::new(&mut heap);
@@ -196,8 +207,14 @@ fn http_post_sends_body() {
         RuntimeValue::String(url.into()),
         RuntimeValue::String("payload=1".into()),
     ];
+
+    // Act：POST 带体请求
     let resp = native_http_post(&args, &mut ctx).expect("http_post should succeed");
+
+    // Assert：201 是合法响应
     assert_eq!(int_of(dict_entry(&resp, "status")), 201);
+
+    // Act + Assert：服务器收到的原始请求文本（请求行 + 请求体）
     let request = server.join().expect("server thread");
     assert!(
         request.starts_with("POST /data HTTP/1.1"),
@@ -207,19 +224,25 @@ fn http_post_sends_body() {
 }
 
 #[test]
-fn http_error_status_is_a_response_not_an_error() {
+fn test_http_error_status_is_a_response_not_an_error() {
+    // Arrange：本地服务器返回 404 + 4 字节体
     let (url, server) = serve_once(
         "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nnope"
             .to_string(),
     );
+
+    // Act：GET 该 URL（必须成功返回响应而不是 Err）
     let resp = call_get(&url, None).expect("404 must return a response, not an error");
+
+    // Assert：状态码与响应体照常可取
     assert_eq!(int_of(dict_entry(&resp, "status")), 404);
     assert_eq!(string_of(dict_entry(&resp, "body")), "nope");
     server.join().expect("server thread");
 }
 
 #[test]
-fn http_get_timeout_errors() {
+fn test_http_get_timeout_errors() {
+    // Arrange：服务器故意 3 秒后才响应，客户端超时设为 1 秒
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = std::thread::spawn(move || {
@@ -234,26 +257,34 @@ fn http_get_timeout_errors() {
         RuntimeValue::Void,
         RuntimeValue::Int(1),
     ];
+
+    // Act：带 1 秒超时调用 GET
     let result = native_http_get(&args, &mut ctx);
+
+    // Assert：超时必须报错而不是挂死
     assert!(result.is_err(), "timeout must produce an error");
     server.join().expect("server thread");
 }
 
 #[test]
-fn http_get_rejects_bad_argument_types() {
+fn test_http_get_rejects_bad_argument_types() {
+    // Arrange：独立上下文 + 一个合法 url 值
     let mut heap = Heap::new();
     let mut ctx = NativeContext::new(&mut heap);
     let url = RuntimeValue::String("http://127.0.0.1:1/".into());
 
+    // Act + Assert：url 类型不符 → Type
     let err = get_rejected(&[RuntimeValue::Int(1)], &mut ctx);
     assert!(matches!(err, ExecutorError::Type(_, _)), "url type error");
 
+    // Act + Assert：headers 类型不符 → Type
     let err = get_rejected(&[url.clone(), RuntimeValue::Int(5)], &mut ctx);
     assert!(
         matches!(err, ExecutorError::Type(_, _)),
         "headers type error"
     );
 
+    // Act + Assert：timeout 非正数 → Runtime
     let err = get_rejected(&[url, RuntimeValue::Void, RuntimeValue::Int(0)], &mut ctx);
     assert!(
         matches!(err, ExecutorError::Runtime(_, _)),
