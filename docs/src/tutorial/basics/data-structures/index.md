@@ -66,27 +66,18 @@ main = () => {
     squares = [x * x for x in [1, 2, 3, 4, 5]]
     print(squares)  // [1, 4, 9, 16, 25]
 
+    // 带过滤条件的推导式
+    evens = [x for x in [1, 2, 3, 4, 5, 6] if x % 2 == 0]
+    print(evens)  // [2, 4, 6]
+
     // 转换类型
     names = ["Alice", "Bob", "Charlie"]
-    // 注意：列表推导式当前依赖 std.list.iter，运行时可能报 E6006
     lengths = [string.len(n) for n in names]
     print(lengths)  // [5, 3, 7]
 }
 ```
 
-语法：`[表达式 for 变量 in 列表]`。
-
-⚠️ 0.8.2 的推导式**不支持 `if 条件` 后缀**——`[x for x in xs if x % 2 == 0]` 解析报
-「Expected RBracket, found KwIf」(`E0010`)。带过滤请改用 `std.list.filter`：
-
-```yaoxiang
-use std.list
-
-main = () => {
-    evens = list.filter([1, 2, 3, 4, 5, 6], (x) => x % 2 == 0)
-    print(evens)  // [2, 4, 6]
-}
-```
+语法：`[表达式 for 变量 in 列表 if 条件]`——`if 条件` 部分是可选的。
 
 ## 字典
 

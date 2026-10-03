@@ -150,7 +150,9 @@ def _eligible(block):
         return False
     if _is_repl_transcript(code):
         return False
-    if any(mk in code for mk in SKIP_MARKERS):
+    # 大小写不敏感：bot 翻译会改注释大小写（如「伪代码」→「Pseudocode」），
+    # 小写子串匹配会漏判，译文块被当真代码跑出假失败
+    if any(mk in code.lower() for mk in SKIP_MARKERS):
         return False
     if not code.strip():
         return False
