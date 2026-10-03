@@ -288,6 +288,14 @@
     "example": "point.z;",
     "error_output": "error[E1042]: 字段未找到\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 在结构体 'Point' 中找不到字段 'z'"
   },
+  "E1043": {
+    "title": "模块成员未找到",
+    "message": "访问了模块未导出的成员",
+    "template": "模块 '{module}' 没有导出 '{name}'",
+    "help": "该模块的可用导出：{available}",
+    "example": "lib.nope;",
+    "error_output": "error[E1043]: 模块成员未找到\n --> example.yx:1:5\n  |\n1 | lib.nope;\n  |     ^^^^ 模块 'lib' 没有导出 'nope'"
+  },
   "E1050": {
     "title": "需要布尔操作数",
     "message": "逻辑运算需要布尔操作数",

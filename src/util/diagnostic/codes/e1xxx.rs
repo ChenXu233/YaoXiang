@@ -41,6 +41,9 @@ define_codes!(E1XXX, {
     ("E1041", TypeCheck, false, index_out_of_bounds(max: usize, index: i64) => .param("max", max.to_string()) .param("index", index.to_string())),
     // E1042 字段未找到
     ("E1042", TypeCheck, false, field_not_found(field: &str, struct_: &str) => .param("field", field).param("struct", struct_)),
+    // E1043 模块成员未找到（#396：模块别名上取成员失败。模块不是 struct，
+    // 不得借道 E1042 的 field/struct 语义——#289 口径：码义精确）
+    ("E1043", TypeCheck, false, module_has_no_export(module: &str, name: &str, available: &str) => .param("module", module).param("name", name).param("available", available)),
     // E1050 逻辑运算需要布尔操作数
     ("E1050", TypeCheck, false, logical_operand_type_mismatch(left: &str, right: &str) => .param("left", left).param("right", right)),
     // E1051 逻辑 NOT 需要布尔操作数

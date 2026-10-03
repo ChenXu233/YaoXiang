@@ -46,6 +46,9 @@ pub struct StatementChecker {
     native_arity: HashMap<String, (usize, Option<usize>)>,
     /// 模块注册表（用于在函数体/块作用域中处理 use 语句）
     module_registry: ModuleRegistry,
+    /// 模块别名集合（#396）：区分「模块别名 Struct」与真 struct，
+    /// 成员缺失时分别报 E1043 / E1042。
+    module_aliases: std::collections::HashSet<String>,
     /// 是否在顶层作用域（模块级，非函数内部）
     is_top_level: bool,
     /// 当前嵌套的 `unsafe {}` 深度（RFC-010：unsafe 块内允许类型定义）
@@ -171,6 +174,7 @@ impl StatementChecker {
             native_signatures: HashMap::new(),
             native_arity: HashMap::new(),
             module_registry: ModuleRegistry::with_std(),
+            module_aliases: std::collections::HashSet::new(),
             is_top_level: true,
             unsafe_depth: 0,
             collected_errors: Vec::new(),
@@ -486,6 +490,15 @@ impl StatementChecker {
         self.module_registry = registry;
     }
 
+    /// 注入模块别名集合（#396）：FieldAccess 在模块别名上取成员失败时按模块
+    /// 语义报 E1043，而非 struct 语义的 E1042。
+    pub fn set_module_aliases(
+        &mut self,
+        aliases: std::collections::HashSet<String>,
+    ) {
+        self.module_aliases = aliases;
+    }
+
     /// 注入 vendor 根目录（RFC-014 §项目模式）。
     ///
     /// 存在即开启「缺依赖包 → help 提示 `yaoxiang install`」语义；
@@ -580,7 +593,7 @@ impl StatementChecker {
         );
     }
 
-    fn process_use_stmt(
+    pub(in crate::frontend::core::typecheck) fn process_use_stmt(
         &mut self,
         path: &str,
         path_span: crate::util::span::Span,
@@ -2729,6 +2742,8 @@ impl StatementChecker {
                         inferrer.set_loop_depth(self.loop_depth);
                         // #321 W1003：导入名监视集随委托传入
                         inferrer.set_import_watch(&self.import_watch);
+                        // #396：模块别名集合随委托传入（E1043 判定）
+                        inferrer.set_module_aliases(&self.module_aliases);
                         if let Some(gamma) = &mut self.gamma {
                             inferrer.set_gamma(gamma);
                         }
@@ -2826,6 +2841,8 @@ impl StatementChecker {
                 inferrer.set_loop_depth(self.loop_depth);
                 // #321 W1003：导入名监视集随委托传入
                 inferrer.set_import_watch(&self.import_watch);
+                // #396：模块别名集合随委托传入（E1043 判定）
+                inferrer.set_module_aliases(&self.module_aliases);
                 if let Some(gamma) = &mut self.gamma {
                     inferrer.set_gamma(gamma);
                 }

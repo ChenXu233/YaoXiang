@@ -935,81 +935,16 @@ impl TypeChecker {
         self.flush_pending_body_bindings();
     }
 
-    /// 检查整个模块的内部实现
-    fn check_module_impl(
+    /// 构建并安装函数体检查器（check_module_impl 与 #397 导出面收割共用）。
+    ///
+    /// 除检查器本体的各张表注入外，同步三样东西：
+    /// ① `env.vars`（native 短名标注为「导入」，避免 E2010 误报）；
+    /// ② T3 顶层值绑定占位（前向引用名字可见，pass3/收割执行到时覆盖）；
+    /// ③ W1003 模块级导入名监视集。
+    fn init_body_checker(
         &mut self,
-        module: &Module,
         collect_all: bool,
-    ) -> TypeCheckResult {
-        // 第零遍：登记编译期谓词定义（#377-3）。
-        // 必须先于 pass1/pass2（签名与类型定义的精化标注要能解析到谓词体），
-        // 且独立成遍，使谓词的定义与使用不受声明序约束。
-        self.collect_predicate_defs(module);
-
-        // 第一遍：收集所有类型定义
-        for stmt in &module.items {
-            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
-            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
-                name,
-                signature_params,
-                definition,
-                ..
-            } = &stmt.kind
-            {
-                self.add_type_definition(name, definition, signature_params, stmt.span);
-            }
-            // RFC-010：`unsafe {}` 内的类型定义提升到本作用域（块外可用）
-            let mut hoisted = Vec::new();
-            self.collect_unsafe_type_defs(stmt, &mut hoisted);
-            for (name, definition, sig, span) in hoisted {
-                self.add_type_definition(&name, &definition, &sig, span);
-            }
-        }
-
-        // 第二遍：收集所有函数签名（使其可被前向引用）
-        for stmt in &module.items {
-            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
-            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            self.collect_function_signature(stmt);
-        }
-
-        // 第二遍（补）：收集顶层值绑定的类型（T3 前向引用）。
-        // 必须在函数签名之后（避免把函数当值绑定），且在函数体检查之前
-        // （使函数体内的引用能解析到后置绑定）。
-        for stmt in &module.items {
-            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            self.collect_value_binding_signature(stmt);
-        }
-
-        // RFC-004: 函数签名就位后登记类型体绑定
-        self.flush_pending_body_bindings();
-
-        // RFC-011a 阶段2: 接口实例化完整性检查（Self 替换 + 签名匹配 + 实现证明）
-        self.finalize_interface_instantiations();
-
-        // 收集所有导出项
-        self.collect_exports(module);
-
-        // #371/#372：注解里的类型名校验。
-        //
-        // 放在此处（而非签名收集时）是因为 `use` 导入的类型、接口、泛型构造器、
-        // std 导出都在前面各步才陆续进 env——提前校验会把 `Vec`/`Iterator`/
-        // `Error` 这类合法名误判为未知（实测踩过）。
-        //
-        // 递归进函数体（B6）：此前只扫 module.items，函数体内同样的错拼
-        // （`main = { g: (a: BogusType) -> Int = ... }`）完全逃逸校验。
-        for stmt in &module.items {
-            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            self.check_annotation_type_names(stmt);
-        }
-
-        // RFC-024: spawn 位置检查
-        for err in spawn::placement::check_spawn_placement(module) {
-            self.add_error(err);
-        }
-
-        // 初始化函数体检查器
+    ) {
         let trait_table = self.env.trait_table.clone();
         let mut body_checker = inference::StatementChecker::new(
             self.env.solver(),
@@ -1023,6 +958,8 @@ impl TypeChecker {
         body_checker.set_native_arities(self.env.native_arity.clone());
         // 设置模块注册表，支持函数体/块作用域 use
         body_checker.set_module_registry(self.env.module_registry.clone());
+        // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
+        body_checker.set_module_aliases(self.env.module_aliases.clone());
         // RFC-014：vendor 根注入——缺依赖包的 E5001 追加 install 提示
         if let Some(vendor_root) = self.vendor_root.clone() {
             body_checker.set_vendor_root(vendor_root);
@@ -1105,6 +1042,183 @@ impl TypeChecker {
         let module_import_watch = self.import_watch.clone();
         self.body_checker_mut()
             .set_import_watch(module_import_watch);
+    }
+
+    /// #397：导出面收割——对无标注的顶层值绑定跑与 pass3 相同的语句检查，
+    /// 使推断出的具体类型落进 `env.vars`。此前这类绑定既不在签名表（函数
+    /// 专属）也无标注可读，`extract_module_info` 的导出面直接丢弃它们，
+    /// 导入方只能得到误导性报错。
+    ///
+    /// 收割前先在 body_checker 作用域里加工 `use`（块级 use 同一入口），
+    /// 使初始化式引用其他模块名字的绑定（`use other;` 后 `v = other.greet()`）
+    /// 也能推断。收割期间的诊断一律丢弃：这里只取类型，错误报告属于模块
+    /// 自身的完整检查。
+    pub fn harvest_untyped_value_bindings(
+        &mut self,
+        module: &crate::frontend::core::parser::ast::Module,
+    ) {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+        // T3 占位先行：前向引用（`b = a + 1` 中 a 在后）名字可见，
+        // 且 init_body_checker 的占位同步依赖这一步
+        for stmt in &module.items {
+            self.collect_value_binding_signature(stmt);
+        }
+        self.init_body_checker(false);
+
+        // use 加工先行：块级 use 同一入口，模块别名进 body_checker 作用域
+        for stmt in &module.items {
+            if let StmtKind::Use {
+                path,
+                path_span,
+                items,
+                alias,
+                item_aliases,
+                ..
+            } = &stmt.kind
+            {
+                let _ = self.body_checker_mut().process_use_stmt(
+                    path,
+                    *path_span,
+                    items,
+                    alias,
+                    item_aliases,
+                );
+            }
+        }
+
+        // 收割目标：裸名、无标注、非函数、签名表里没有的顶层绑定
+        let targets: Vec<&crate::frontend::core::parser::ast::Stmt> = module
+            .items
+            .iter()
+            .filter(|stmt| match &stmt.kind {
+                StmtKind::Assign {
+                    target,
+                    type_annotation,
+                    value,
+                    ..
+                } => {
+                    let Expr::Var(name, _) = target.as_ref() else {
+                        return false;
+                    };
+                    if type_annotation.is_some() || self.env.vars.contains_key(name) {
+                        return false;
+                    }
+                    let is_fn = value.as_ref().is_some_and(|v| {
+                        matches!(v.as_ref(), Expr::Lambda { .. })
+                            || Expr::block_binding_is_function(
+                                type_annotation.as_ref(),
+                                Some(v.as_ref()),
+                            )
+                    });
+                    !is_fn
+                }
+                _ => false,
+            })
+            .collect();
+
+        for stmt in targets {
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            // 诊断丢弃：收割只取类型；错误由模块自身编译时的完整检查报告
+            let _ = self.body_checker_mut().check_stmt(stmt);
+            if let StmtKind::Assign { target, .. } = &stmt.kind {
+                let Expr::Var(name, _) = target.as_ref() else {
+                    continue;
+                };
+                // 推断类型落在 body_checker 的 global 链（#295：模块级绑定）
+                if let Some(poly) = self.body_checker_global_type(name) {
+                    self.env.vars.entry(name.clone()).or_insert(poly);
+                }
+            }
+        }
+    }
+
+    /// body_checker global 链上某绑定的类型（收割读回用）。
+    fn body_checker_global_type(
+        &self,
+        name: &str,
+    ) -> Option<PolyType> {
+        self.body_checker
+            .as_ref()
+            .and_then(|bc| bc.scope_globals().get(name))
+            .map(|info| info.poly.clone())
+    }
+
+    /// 检查整个模块的内部实现
+    fn check_module_impl(
+        &mut self,
+        module: &Module,
+        collect_all: bool,
+    ) -> TypeCheckResult {
+        // 第零遍：登记编译期谓词定义（#377-3）。
+        // 必须先于 pass1/pass2（签名与类型定义的精化标注要能解析到谓词体），
+        // 且独立成遍，使谓词的定义与使用不受声明序约束。
+        self.collect_predicate_defs(module);
+
+        // 第一遍：收集所有类型定义
+        for stmt in &module.items {
+            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            if let crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+                name,
+                signature_params,
+                definition,
+                ..
+            } = &stmt.kind
+            {
+                self.add_type_definition(name, definition, signature_params, stmt.span);
+            }
+            // RFC-010：`unsafe {}` 内的类型定义提升到本作用域（块外可用）
+            let mut hoisted = Vec::new();
+            self.collect_unsafe_type_defs(stmt, &mut hoisted);
+            for (name, definition, sig, span) in hoisted {
+                self.add_type_definition(&name, &definition, &sig, span);
+            }
+        }
+
+        // 第二遍：收集所有函数签名（使其可被前向引用）
+        for stmt in &module.items {
+            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            self.collect_function_signature(stmt);
+        }
+
+        // 第二遍（补）：收集顶层值绑定的类型（T3 前向引用）。
+        // 必须在函数签名之后（避免把函数当值绑定），且在函数体检查之前
+        // （使函数体内的引用能解析到后置绑定）。
+        for stmt in &module.items {
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            self.collect_value_binding_signature(stmt);
+        }
+
+        // RFC-004: 函数签名就位后登记类型体绑定
+        self.flush_pending_body_bindings();
+
+        // RFC-011a 阶段2: 接口实例化完整性检查（Self 替换 + 签名匹配 + 实现证明）
+        self.finalize_interface_instantiations();
+
+        // 收集所有导出项
+        self.collect_exports(module);
+
+        // #371/#372：注解里的类型名校验。
+        //
+        // 放在此处（而非签名收集时）是因为 `use` 导入的类型、接口、泛型构造器、
+        // std 导出都在前面各步才陆续进 env——提前校验会把 `Vec`/`Iterator`/
+        // `Error` 这类合法名误判为未知（实测踩过）。
+        //
+        // 递归进函数体（B6）：此前只扫 module.items，函数体内同样的错拼
+        // （`main = { g: (a: BogusType) -> Int = ... }`）完全逃逸校验。
+        for stmt in &module.items {
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            self.check_annotation_type_names(stmt);
+        }
+
+        // RFC-024: spawn 位置检查
+        for err in spawn::placement::check_spawn_placement(module) {
+            self.add_error(err);
+        }
+
+        // 初始化函数体检查器（构建 + 三张表同步，与导出面收割共用）
+        self.init_body_checker(collect_all);
 
         // 第三遍：检查所有语句（包括函数体）
         for stmt in &module.items {
@@ -1368,6 +1482,8 @@ impl TypeChecker {
             body_checker.set_native_arities(self.env.native_arity.clone());
             // 设置模块注册表，支持函数体/块作用域 use
             body_checker.set_module_registry(self.env.module_registry.clone());
+            // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
+            body_checker.set_module_aliases(self.env.module_aliases.clone());
             self.body_checker = Some(body_checker);
         }
         self.body_checker.as_mut().unwrap()
@@ -2841,6 +2957,7 @@ impl TypeChecker {
             field_has_default: Vec::new(),
             interfaces: vec![],
         });
+        self.env.module_aliases.insert(module_alias.to_string());
         self.env
             .add_var(module_alias.to_string(), PolyType::mono(module_ty));
     }
@@ -2888,6 +3005,9 @@ impl TypeChecker {
                     field_has_default: Vec::new(),
                     interfaces: vec![],
                 });
+                // 分组导入的子模块命名空间（`use std.{result}` 后 `result.nope`）
+                // 同样按模块语义报 E1043。
+                self.env.module_aliases.insert(register_name.clone());
                 self.env.add_var(register_name, PolyType::mono(module_ty));
                 for sub_export in &payload_type_exports {
                     self.register_use_export(&sub_export.name, sub_export, false);

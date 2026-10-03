@@ -67,6 +67,9 @@ pub struct ExpressionInferrer<'a> {
     overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Native 函数签名引用
     native_signatures: &'a HashMap<String, MonoType>,
+    /// 模块别名集合（#396）：Some 时，模块别名 Struct 上取成员失败报
+    /// E1043（模块语义）而非 E1042（struct 语义）。测试等直构场景为 None。
+    module_aliases: Option<&'a std::collections::HashSet<String>>,
     /// 当前函数的 Result 错误类型（若为 None，则不允许使用 `?`）
     result_err: Option<MonoType>,
     /// 当前函数的预期返回类型（用于 return 语句的类型检查）
@@ -147,6 +150,7 @@ impl<'a> ExpressionInferrer<'a> {
             loop_depth: 0,
             overload_candidates,
             native_signatures: &EMPTY_SIGNATURES,
+            module_aliases: None,
             result_err: None,
             expected_return_type: None,
             unsafe_depth: 0,
@@ -191,6 +195,7 @@ impl<'a> ExpressionInferrer<'a> {
             loop_depth: 0,
             overload_candidates,
             native_signatures,
+            module_aliases: None,
             result_err: None,
             expected_return_type: None,
             unsafe_depth: 0,
@@ -236,6 +241,7 @@ impl<'a> ExpressionInferrer<'a> {
             loop_depth: 0,
             overload_candidates,
             native_signatures,
+            module_aliases: None,
             result_err,
             expected_return_type: None,
             unsafe_depth: 0,
@@ -283,6 +289,7 @@ impl<'a> ExpressionInferrer<'a> {
             loop_depth: 0,
             overload_candidates,
             native_signatures,
+            module_aliases: None,
             result_err,
             expected_return_type,
             unsafe_depth: 0,
@@ -331,6 +338,15 @@ impl<'a> ExpressionInferrer<'a> {
     /// #321 W1003：取走已使用名集合（委托方回收合并）
     pub fn take_import_used(&mut self) -> HashSet<String> {
         std::mem::take(&mut self.imported_used)
+    }
+
+    /// 注入模块别名集合（#396）：FieldAccess 在模块别名上取成员失败时按
+    /// 模块语义报 E1043，而非 struct 语义的 E1042。
+    pub fn set_module_aliases(
+        &mut self,
+        aliases: &'a std::collections::HashSet<String>,
+    ) {
+        self.module_aliases = Some(aliases);
     }
 
     /// #321 W1003：变量成功解析时调用——命中监视集的名字记为已使用
@@ -3145,6 +3161,25 @@ impl<'a> ExpressionInferrer<'a> {
                         let method_key = format!("{}.{}", struct_type.name, field);
                         if let Some(method_ty) = self.method_bindings.get(&method_key) {
                             return Ok(method_ty.clone());
+                        }
+                        // #396/#289：模块别名上取成员失败——模块不是 struct，
+                        // 报 E1043（模块语义 + 可用导出清单），不得借道 E1042。
+                        if self
+                            .module_aliases
+                            .is_some_and(|aliases| aliases.contains(&struct_type.name))
+                        {
+                            let available = struct_type
+                                .fields
+                                .iter()
+                                .map(|(name, _)| name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            return Err(ErrorCodeDefinition::module_has_no_export(
+                                &struct_type.name,
+                                field,
+                                &available,
+                            )
+                            .build());
                         }
                         Err(ErrorCodeDefinition::field_not_found(field, &struct_type.name).build())
                     }

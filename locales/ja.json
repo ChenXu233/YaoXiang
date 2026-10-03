@@ -275,6 +275,14 @@
     "example": "point.z;",
     "error_output": "error[E1042]: フィールドが見つかりません\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 構造体 'Point' にフィールド 'z' が見つかりません"
   },
+  "E1043": {
+    "title": "モジュールメンバーが見つかりません",
+    "message": "モジュールがエクスポートしていないメンバーにアクセスしました",
+    "template": "モジュール '{module}' は '{name}' をエクスポートしていません",
+    "help": "利用可能なエクスポート: {available}",
+    "example": "lib.nope;",
+    "error_output": "error[E1043]: モジュールメンバーが見つかりません\n --> example.yx:1:5\n  |\n1 | lib.nope;\n  |     ^^^^ モジュール 'lib' は 'nope' をエクスポートしていません"
+  },
   "E1050": {
     "title": "ブール被演算子が必要です",
     "message": "論理演算にはブール型のオペランドが必要です",

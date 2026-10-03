@@ -272,6 +272,14 @@
     "example": "point.z;",
     "error_output": "error[E1042]: field not found\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ field 'z' not found in struct 'Point'"
   },
+  "E1043": {
+    "title": "module member not found",
+    "message": "accessed a member the module does not export",
+    "template": "module '{module}' does not export '{name}'",
+    "help": "available exports: {available}",
+    "example": "lib.nope;",
+    "error_output": "error[E1043]: module member not found\n --> example.yx:1:5\n  |\n1 | lib.nope;\n  |     ^^^^ module 'lib' does not export 'nope'"
+  },
   "E1050": {
     "title": "boolean operand required",
     "message": "Logical operations require boolean operands",
