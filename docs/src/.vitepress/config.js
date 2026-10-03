@@ -76,6 +76,26 @@ export default defineConfig({
       md.use(tabsMarkdownPlugin)
       md.use(groupIconMdPlugin)
       md.use(GitChangelogMarkdownSection)
+
+      // YaoXiang 的 f-string 用 `{{` / `}}` 做字面花括号转义（RFC-012），
+      // 而 VitePress 把每个 .md 当 Vue 模板编译：行内代码 <code>里的 `{{`
+      // 会被当成插值起始，构建期直接报 "Interpolation end sign was not found"。
+      // 凡是讲到 f-string 转义的文档都会踩，因此在这里统一兜底：
+      // 内容含 `{{` 的行内代码加 v-pre，跳过 Vue 编译。
+      // （`}}` 单独出现不构成插值，无需处理。）
+      const codeInline =
+        md.renderer.rules.code_inline ||
+        function (tokens, idx, options, env, slf) {
+          const token = tokens[idx]
+          return `<code>${md.utils.escapeHtml(token.content)}</code>`
+        }
+      md.renderer.rules.code_inline = (tokens, idx, options, env, slf) => {
+        const token = tokens[idx]
+        if (token.content.includes("{{")) {
+          return `<code v-pre>${md.utils.escapeHtml(token.content)}</code>`
+        }
+        return codeInline(tokens, idx, options, env, slf)
+      }
     },
   },
 
