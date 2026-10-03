@@ -2029,12 +2029,12 @@ impl TypeChecker {
                             // #321 W1003：登记导入本地名与导出成员监视
                             self.record_import_name(alias_name, stmt.span);
                             self.watch_import_members(alias_name, &module);
-                            // 登记用户模块命名空间别名（std 走 is_std_submodule 机制，不入此表）
-                            if !(path == "std" || path.starts_with("std.")) {
-                                self.module_namespaces
-                                    .insert(alias_name.clone(), path.clone());
-                            }
-                            for export in exports_to_import {
+                            // 命名空间别名登记。#410：std 路径不再豁免——裸子模块名由
+                            // is_std_submodule 兜住，别名只有这张表能救；漏登记则
+                            // ir_gen 把 `m.sqrt` 当闭包值调用 → E8001 ICE
+                            self.module_namespaces
+                                .insert(alias_name.clone(), path.clone());
+                            for export in &exports_to_import {
                                 if matches!(export.kind, crate::frontend::module::ExportKind::Type)
                                     && export.type_payload.is_some()
                                 {
@@ -2054,6 +2054,18 @@ impl TypeChecker {
                                     .as_ref()
                                     .and_then(|v| v.get(i))
                                     .and_then(|a| a.as_ref());
+                                // #415：子模块导出经内联别名绑定时（`use std.{io as printer}`），
+                                // is_std_submodule 只认裸子模块名，别名必须入 namespace 表，
+                                // 否则 ir_gen 解析 `printer.print` → E3006。非别名条目入表与
+                                // 既有机制重合（io → std.io），无害。
+                                if matches!(
+                                    export.kind,
+                                    crate::frontend::module::ExportKind::SubModule
+                                ) {
+                                    let ns_name = local_name.unwrap_or(item_name);
+                                    self.module_namespaces
+                                        .insert(ns_name.to_string(), export.full_path.clone());
+                                }
                                 // #321 W1003：登记导入本地名（内联别名优先）
                                 match local_name {
                                     Some(local) => self.record_import_name(local, stmt.span),
@@ -2067,7 +2079,7 @@ impl TypeChecker {
                         }
                         // 其他情况：报错或回退
                         _ => {
-                            for export in exports_to_import {
+                            for export in &exports_to_import {
                                 // #321 W1003：登记导入本地名
                                 self.record_import_name(&export.name, stmt.span);
                                 self.register_use_export(path, export, false);
