@@ -199,8 +199,10 @@ fn test_render_runtime_function_not_found_with_span() {
 
     // Assert — 错误码 / 消息 / 源码定位 / 调用点 / 栈帧；#327：不暴露字节码 ip
     assert!(clean_output.contains("error [E6006]"), "{}", clean_output);
+    // 大小写不敏感：en.json 的 E6006 模板大小写会被 i18n 自动管线改写（见 9a1ccdbd），
+    // 本断言的语义是「报了这个错」，不是「文案逐字不变」
     assert!(
-        clean_output.contains("Function not found"),
+        clean_output.to_lowercase().contains("function not found"),
         "{}",
         clean_output
     );
