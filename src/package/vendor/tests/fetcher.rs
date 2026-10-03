@@ -1,10 +1,13 @@
 //! 测试依赖下载器
 //!
+//! 规范来源：RFC-014 §依赖下载（vendor 落盘与 lock 记账、目录名 = 探测版本）；
+//! #411 定案——path 依赖复制进 vendor（此前只登记 lock 不下载）
+//!
 //! 覆盖:
 //! - 空依赖列表下载
-//! - 本地路径依赖落盘 vendor（#411：复制进 vendor，目录名 = 清单真实版本）
+//! - 本地路径依赖落盘 vendor（目录名 = 清单真实版本）
 //! - 本地依赖新鲜度（改源重装即生效）与派生/状态目录排除
-//! - 本地依赖缺清单明确失败
+//! - 无清单回退 spec 版本；`*` + 无清单明确失败
 
 use std::collections::BTreeMap;
 
@@ -127,23 +130,40 @@ fn test_fetch_local_dep_refreshes_on_reinstall() {
         .join("local-dep-0.1.0")
         .join("lib.yx");
 
-    // Act / Assert：两次 install，第二次重做复制拿到新内容（新鲜度语义）
-    for (source, expected) in [("x = 1\n", "x = 1\n"), ("x = 2\n", "x = 2\n")] {
-        std::fs::write(local_dep.join("lib.yx"), source).unwrap();
-        let result = crate::package::runtime::drive(fetch_all(
-            tmp.path(),
-            &deps,
-            &mut lock,
-            &Default::default(),
-        ))
-        .unwrap();
-        assert_eq!(result.installed.len(), 1, "path 依赖每次 install 都应重装");
-        assert_eq!(
-            std::fs::read_to_string(&vendored_lib).unwrap(),
-            expected,
-            "vendor 副本应反映工作副本的最新内容"
-        );
-    }
+    // Act：首次安装
+    let first = crate::package::runtime::drive(fetch_all(
+        tmp.path(),
+        &deps,
+        &mut lock,
+        &Default::default(),
+    ))
+    .unwrap();
+
+    // Assert：vendor 副本反映当前工作副本
+    assert_eq!(first.installed.len(), 1, "首次安装应进 installed");
+    assert_eq!(
+        std::fs::read_to_string(&vendored_lib).unwrap(),
+        "x = 1\n",
+        "首次安装的副本应为 v1 内容"
+    );
+
+    // Act：修改依赖源后再次 install（新鲜度语义：每次重做复制）
+    std::fs::write(local_dep.join("lib.yx"), "x = 2\n").unwrap();
+    let second = crate::package::runtime::drive(fetch_all(
+        tmp.path(),
+        &deps,
+        &mut lock,
+        &Default::default(),
+    ))
+    .unwrap();
+
+    // Assert：副本更新为最新内容，不残留 v1
+    assert_eq!(second.installed.len(), 1, "path 依赖每次 install 都应重装");
+    assert_eq!(
+        std::fs::read_to_string(&vendored_lib).unwrap(),
+        "x = 2\n",
+        "vendor 副本应反映工作副本的最新内容"
+    );
 }
 
 #[test]
