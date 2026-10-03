@@ -84,11 +84,8 @@ pub fn check_vendor_lock_consistency(project_root: &Path) -> PackageResult<Consi
     for (name, value) in &deps {
         let spec = DependencySpec::parse(name, value);
 
-        // path 依赖不经核心包源（RFC-014：视同本地模块延伸），跳过
-        if spec.path.is_some() {
-            continue;
-        }
-
+        // path 依赖自 #411 起与 git 来源同构落盘 vendor（每次 install 重做
+        // 复制），与 lock 同一账本核对，不再「视同本地模块延伸」跳过
         let Some(locked) = lock.package.get(name) else {
             report.missing_in_lock.push(name.clone());
             continue;
