@@ -102,6 +102,17 @@ pub fn load_workspace(root_dir: &Path) -> PackageResult<Workspace> {
 
     for (key, toml_path) in &manifest.workspace.members {
         let member_manifest_path = root_dir.join(toml_path);
+        // #412：members 值必须是成员清单**文件**。目录也存在（exists 通过），
+        // 但 parent() 会退回工作空间根、根有 [workspace] 就误报 nested
+        // workspace——在入口处给出与真实原因相符的报错。
+        if member_manifest_path.is_dir() {
+            return Err(PackageError::MemberInvalid {
+                key: key.clone(),
+                reason: format!(
+                    "成员路径 '{toml_path}' 是目录：[workspace.members] 应指向成员的清单文件（如 '{toml_path}/yaoxiang.toml'）"
+                ),
+            });
+        }
         if !member_manifest_path.exists() {
             return Err(PackageError::MemberMissing {
                 key: key.clone(),
