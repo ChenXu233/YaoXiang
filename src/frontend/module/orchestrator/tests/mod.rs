@@ -2,6 +2,7 @@
 //!
 //! 覆盖 vendor 依赖多版本目录的解析选择语义与 vendor/lock 一致性。
 
+mod namespace_data_access;
 mod vendor_lock_consistency;
 mod vendor_version_resolution;
 mod workspace_resolution;

@@ -5,4 +5,5 @@
 
 mod m2_warning_channel;
 mod mod_tests;
+mod script_main_hint;
 mod suggest;

@@ -36,6 +36,20 @@ pub async fn fetch_all(
     manager.ensure_vendor_dir()?;
 
     let specs = DependencySpec::parse_all(deps);
+    // 相对 path 以项目根为基准解析成绝对路径：工作空间模式 project_dir 是
+    // ws 根（成员的 `./foo-src` 相对根成立），普通项目 project_dir 即项目
+    // 目录。此前相对路径按进程 CWD 解析，依赖 exec_in 的调用巧合才正确。
+    let specs: Vec<DependencySpec> = specs
+        .into_iter()
+        .map(|mut s| {
+            if let Some(p) = &s.path {
+                if Path::new(p).is_relative() {
+                    s.path = Some(project_dir.join(p).to_string_lossy().into_owned());
+                }
+            }
+            s
+        })
+        .collect();
     let mut result = FetchResult {
         installed: Vec::new(),
         skipped: Vec::new(),
@@ -43,16 +57,6 @@ pub async fn fetch_all(
     };
 
     for spec in &specs {
-        // 跳过本地依赖（不需要下载）
-        if spec.path.is_some() && spec.git.is_none() {
-            // 本地依赖只需解析，不下载
-            lock.lock_dependency_full(&spec.name, &spec.version, "path", None);
-            result
-                .skipped
-                .push((spec.name.clone(), spec.version.clone()));
-            continue;
-        }
-
         // 注册表依赖（无 git/path）：RFC-014a 尚未实现——明确失败，
         // 不再写锁文件、不再打印"已安装"（旧行为：静默跳过 + 锁文件记账）
         if spec.git.is_none() && spec.path.is_none() {
@@ -65,17 +69,21 @@ pub async fn fetch_all(
             continue;
         }
 
-        // 检查锁文件中是否已有此依赖且完整性校验通过
-        if let Some(locked) = lock.package.get(&spec.name) {
-            if let Some(ref checksum) = locked.checksum {
-                if manager
-                    .verify_integrity(&spec.name, &locked.version, checksum)
-                    .unwrap_or(false)
-                {
-                    result
-                        .skipped
-                        .push((spec.name.clone(), locked.version.clone()));
-                    continue;
+        // git/github 依赖：lock 完整性校验通过 → 跳过。path 依赖不走此
+        // 快路径：来源在本机随时可改，每次 install 重做落盘复制，保证
+        // vendor 与工作副本一致（#411：复制进 vendor 的定案语义）。
+        if spec.path.is_none() {
+            if let Some(locked) = lock.package.get(&spec.name) {
+                if let Some(ref checksum) = locked.checksum {
+                    if manager
+                        .verify_integrity(&spec.name, &locked.version, checksum)
+                        .unwrap_or(false)
+                    {
+                        result
+                            .skipped
+                            .push((spec.name.clone(), locked.version.clone()));
+                        continue;
+                    }
                 }
             }
         }

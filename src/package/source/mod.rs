@@ -131,7 +131,7 @@ impl Source for LocalSource {
     async fn download(
         &self,
         spec: &DependencySpec,
-        _dest: &Path,
+        dest: &Path,
     ) -> PackageResult<ResolvedPackage> {
         let path = spec.path.as_ref().ok_or_else(|| {
             crate::package::error::PackageError::InvalidManifest(format!(
@@ -147,15 +147,78 @@ impl Source for LocalSource {
             ));
         }
 
+        // 版本探测：vendor 目录名以依赖包清单的真实版本为准（与 GitSource
+        // 「目录名 = 探测版本」同源）。无清单的纯源码 path 源回退 spec 版本
+        // （既有工作空间/安装夹具形态）；清单缺失且声明 `*` 时无法命名
+        // vendor 目录（`<name>-*` 不被 parse_vendor_dir_name 识别），明确失败。
+        let manifest = crate::package::manifest::PackageManifest::load(&local_path);
+        let resolved_version = match manifest {
+            Ok(m) => m.package.version,
+            Err(_) if spec.version != "*" => spec.version.clone(),
+            Err(e) => {
+                return Err(crate::package::error::PackageError::InvalidManifest(
+                    format!(
+                        "本地依赖 '{}'（{}）无法确定版本：清单无效（{e}）且声明版本为 '*'",
+                        spec.name, path
+                    ),
+                ))
+            }
+        };
+
+        // 复制进 vendor（#411 定案：path 依赖与 git 来源同构落盘，只登记
+        // lock 会让 install 报成功而 use 必然 E5001）
+        let target = dest.join(format!("{}-{}", spec.name, resolved_version));
+        copy_package_dir(&local_path, &target)?;
+
         Ok(ResolvedPackage {
             name: spec.name.clone(),
-            version: spec.version.clone(),
+            version: resolved_version,
             source_kind: SourceKind::Local,
             source_url: path.clone(),
-            local_path,
+            local_path: target,
             checksum: None,
         })
     }
+}
+
+/// 把本地包目录复制到 vendor 目标（path 依赖落盘）
+///
+/// 排除 `.git`/`.yaoxiang`/`target`/`build`：`.yaoxiang` 是 vendor 自身
+/// （依赖指向消费项目自身/父目录时防自我递归），`target`/`build` 是派生
+/// 产物（与 checksum 模块「build 不入校验」同一语义），`.git` 与
+/// cache::copy_dir_recursive 的排除规则对齐。
+fn copy_package_dir(
+    src: &Path,
+    dst: &Path,
+) -> PackageResult<()> {
+    fn excluded(name: &str) -> bool {
+        matches!(name, ".git" | ".yaoxiang" | "target" | "build")
+    }
+    fn rec(
+        src: &Path,
+        dst: &Path,
+    ) -> PackageResult<()> {
+        std::fs::create_dir_all(dst)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            let file_name = entry.file_name();
+            if excluded(&file_name.to_string_lossy()) {
+                continue;
+            }
+            let from = entry.path();
+            let to = dst.join(&file_name);
+            if from.is_dir() {
+                rec(&from, &to)?;
+            } else {
+                std::fs::copy(&from, &to)?;
+            }
+        }
+        Ok(())
+    }
+    if dst.exists() {
+        std::fs::remove_dir_all(dst)?;
+    }
+    rec(src, dst)
 }
 
 /// 内置依赖来源（RFC-014a 决议 4：封闭集合 enum 分发）

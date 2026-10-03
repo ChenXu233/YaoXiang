@@ -18,7 +18,7 @@
 | 013-error-code-specification.md | RFC 013: 错误代码规范 | 已接受 | accepted\013-error-code-specification.md | #125 | #125 | #7, #9, #29, #66 | -- |
 | 014-package-manager.md | RFC-014: 包管理系统设计 | 已接受 | accepted\014-package-manager.md | #88 | -- | -- | -- |
 | 014a-registry-protocol.md | RFC-014a: Registry 协议规范 | 已接受 | accepted\014a-registry-protocol.md | -- | -- | -- | -- |
-| 014b-build-system.md | RFC-014b: 构建系统与二进制分发 | 已接受 | accepted\014b-build-system.md | #91 | -- | -- | -- |
+| 014b-build-system.md | RFC-014b: 构建系统与二进制分发 | 已接受 | accepted\014b-build-system.md | #113 | -- | -- | -- |
 | 014c-workspace.md | RFC-014c: 工作空间支持 | 已接受 | accepted\014c-workspace.md | #113 | -- | -- | -- |
 | 015-configuration-system.md | RFC-015: YaoXiang 配置系统设计 | 已接受 | accepted\015-configuration-system.md | #133 | -- | -- | -- |
 | 017-lsp-support.md | RFC-017: 语言服务器协议（LSP）支持设计 | 已接受 | accepted\017-lsp-support.md | #11 | -- | -- | -- |

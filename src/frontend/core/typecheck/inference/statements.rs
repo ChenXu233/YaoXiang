@@ -46,6 +46,9 @@ pub struct StatementChecker {
     native_arity: HashMap<String, (usize, Option<usize>)>,
     /// 模块注册表（用于在函数体/块作用域中处理 use 语句）
     module_registry: ModuleRegistry,
+    /// 模块别名集合（#396）：区分「模块别名 Struct」与真 struct，
+    /// 成员缺失时分别报 E1043 / E1042。
+    module_aliases: std::collections::HashSet<String>,
     /// 是否在顶层作用域（模块级，非函数内部）
     is_top_level: bool,
     /// 当前嵌套的 `unsafe {}` 深度（RFC-010：unsafe 块内允许类型定义）
@@ -127,6 +130,10 @@ pub struct StatementChecker {
     imported_used: HashSet<String>,
     /// #321 W1003：函数体级 use 登记的导入（本地名, use 语句 span）
     body_imports: Vec<(String, crate::util::span::Span)>,
+    /// #414：显式导入登记（本地名 → 来源路径），导入冲突判定用（E5006/E5008）。
+    /// 只收 process_use_stmt 的显式导入——prelude 短名（add_imported_var 注入）
+    /// 不经此表，`use std.io.{print}` 不会撞 prelude 误报。
+    import_sources: HashMap<String, String>,
     /// 最近一条表达式语句的类型（由 `check_stmt` 的 `StmtKind::Expr` 臂写入）。
     ///
     /// 用途：尾表达式返回类型校验。`check_stmt` 走体时**已经算过**每个表达式的
@@ -167,6 +174,7 @@ impl StatementChecker {
             native_signatures: HashMap::new(),
             native_arity: HashMap::new(),
             module_registry: ModuleRegistry::with_std(),
+            module_aliases: std::collections::HashSet::new(),
             is_top_level: true,
             unsafe_depth: 0,
             collected_errors: Vec::new(),
@@ -201,6 +209,7 @@ impl StatementChecker {
             import_watch: HashMap::new(),
             imported_used: HashSet::new(),
             body_imports: Vec::new(),
+            import_sources: HashMap::new(),
             last_expr_stmt_ty: None,
             tail_annotation_span: None,
             vendor_root: None,
@@ -257,6 +266,42 @@ impl StatementChecker {
         for name in module.exports.keys() {
             self.import_watch.insert(name.clone(), alias.to_string());
         }
+    }
+
+    /// #414：导入名冲突判定（RFC-029 §导入冲突「同名绑定直接报错」）。
+    ///
+    /// 两类冲突分流：
+    /// - 撞先前的**显式导入** → E5006（重复导入）：同名本地名导两次，无论同模块
+    ///   还是跨模块（含一条 use 语句内重复别名 `as m, m`——逐别名判定自然命中）；
+    /// - 撞**本文件的现有绑定**（顶层值/函数，非前向占位、非导入名）→ E5008
+    ///   （导入名冲突）。prelude 短名与先前导入都是 `imported=true`，不触发。
+    ///
+    /// 判定通过后把 (本地名 → 来源) 记入 import_sources。
+    fn ensure_import_name_free(
+        &mut self,
+        name: &str,
+        source: &str,
+        span: crate::util::span::Span,
+    ) -> Result<(), Box<Diagnostic>> {
+        if self.import_sources.contains_key(name) {
+            return Err(Box::new(
+                ErrorCodeDefinition::duplicate_import(name).at(span).build(),
+            ));
+        }
+        let collides = self
+            .scope
+            .get_var_info(name)
+            .is_some_and(|info| !info.forward_declared && !info.imported);
+        if collides {
+            return Err(Box::new(
+                ErrorCodeDefinition::import_name_conflict(name, source)
+                    .at(span)
+                    .build(),
+            ));
+        }
+        self.import_sources
+            .insert(name.to_string(), source.to_string());
+        Ok(())
     }
 
     /// 设置类型定义表
@@ -445,6 +490,15 @@ impl StatementChecker {
         self.module_registry = registry;
     }
 
+    /// 注入模块别名集合（#396）：FieldAccess 在模块别名上取成员失败时按模块
+    /// 语义报 E1043，而非 struct 语义的 E1042。
+    pub fn set_module_aliases(
+        &mut self,
+        aliases: std::collections::HashSet<String>,
+    ) {
+        self.module_aliases = aliases;
+    }
+
     /// 注入 vendor 根目录（RFC-014 §项目模式）。
     ///
     /// 存在即开启「缺依赖包 → help 提示 `yaoxiang install`」语义；
@@ -539,7 +593,7 @@ impl StatementChecker {
         );
     }
 
-    fn process_use_stmt(
+    pub(in crate::frontend::core::typecheck) fn process_use_stmt(
         &mut self,
         path: &str,
         path_span: crate::util::span::Span,
@@ -564,18 +618,12 @@ impl StatementChecker {
             return Err(Box::new(builder.build()));
         };
 
-        let selected_exports: Vec<Export> = match items {
-            Some(item_names) => item_names
-                .iter()
-                .filter_map(|item| module.exports.get(item).cloned())
-                .collect(),
-            None => module.exports.values().cloned().collect(),
-        };
-
         match (items.as_ref(), alias.as_ref()) {
             // use path
             (None, None) => {
                 let module_alias = path.split('.').next_back().unwrap_or(path);
+                // #414：同名绑定直接报错（RFC-029 §导入冲突）
+                self.ensure_import_name_free(module_alias, path, path_span)?;
                 // #321 W1003：登记导入本地名与导出成员监视
                 self.note_body_import_members(module_alias, &module, path_span);
                 let module_ty = self.module_as_struct_type(&module, module_alias);
@@ -586,18 +634,20 @@ impl StatementChecker {
                     crate::util::span::Span::default(),
                 );
             }
-            // use path as alias
-            (None, Some(aliases)) if aliases.len() == 1 => {
-                let module_alias = &aliases[0];
-                // #321 W1003：登记导入本地名与导出成员监视
-                self.note_body_import_members(module_alias, &module, path_span);
-                let module_ty = self.module_as_struct_type(&module, module_alias);
-                self.scope.add_var(
-                    module_alias.to_string(),
-                    PolyType::mono(module_ty),
-                    false,
-                    crate::util::span::Span::default(),
-                );
+            // use path as alias（#414：单/多别名统一——每个别名各绑一份模块 record）
+            (None, Some(aliases)) => {
+                for module_alias in aliases {
+                    self.ensure_import_name_free(module_alias, path, path_span)?;
+                    // #321 W1003：登记导入本地名与导出成员监视
+                    self.note_body_import_members(module_alias, &module, path_span);
+                    let module_ty = self.module_as_struct_type(&module, module_alias);
+                    self.scope.add_var(
+                        module_alias.to_string(),
+                        PolyType::mono(module_ty),
+                        false,
+                        crate::util::span::Span::default(),
+                    );
+                }
             }
             // use path.{a, b} / use path.{a as x}（#245：仅内联别名）
             (Some(item_names), _) => {
@@ -615,16 +665,15 @@ impl StatementChecker {
                                 .build(),
                         ));
                     };
+                    // #414：同名字项导入两次直接报错（RFC-029 §导入冲突）
+                    self.ensure_import_name_free(
+                        local_name,
+                        &format!("{path}.{item_name}"),
+                        path_span,
+                    )?;
                     // #321 W1003：登记导入本地名（内联别名优先）
                     self.note_body_import(local_name, path_span);
                     self.import_binding(local_name, &export);
-                }
-            }
-            _ => {
-                for export in selected_exports {
-                    // #321 W1003：登记导入本地名
-                    self.note_body_import(&export.name, path_span);
-                    self.import_binding(&export.name, &export);
                 }
             }
         }
@@ -2693,6 +2742,8 @@ impl StatementChecker {
                         inferrer.set_loop_depth(self.loop_depth);
                         // #321 W1003：导入名监视集随委托传入
                         inferrer.set_import_watch(&self.import_watch);
+                        // #396：模块别名集合随委托传入（E1043 判定）
+                        inferrer.set_module_aliases(&self.module_aliases);
                         if let Some(gamma) = &mut self.gamma {
                             inferrer.set_gamma(gamma);
                         }
@@ -2790,6 +2841,8 @@ impl StatementChecker {
                 inferrer.set_loop_depth(self.loop_depth);
                 // #321 W1003：导入名监视集随委托传入
                 inferrer.set_import_watch(&self.import_watch);
+                // #396：模块别名集合随委托传入（E1043 判定）
+                inferrer.set_module_aliases(&self.module_aliases);
                 if let Some(gamma) = &mut self.gamma {
                     inferrer.set_gamma(gamma);
                 }

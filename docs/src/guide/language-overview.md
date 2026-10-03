@@ -207,21 +207,26 @@ match age {
 ## 模块和导入
 
 ```yaoxiang
+// 导入整个模块，用命名空间访问
 use std.io
+
+// 只导入指定条目，直接裸用
 use std.math.{sqrt, sin, cos}
 use std.{io, list}
 
+// 条目内联别名
+use std.io.{print as say}
+
 io.println("hello")
 result = sqrt(16.0)       // 4.0（注意：Int 入参会返回 0.0，必须传 Float）
+say("aliased")
 
-// 别名
-use std.math as math
-use std.{io as print}
-
-// 公开导出
-pub add: (a: Int, b: Int) -> Int = a + b
-pub Point: Type = { x: Float, y: Float }
+// 模块的所有顶层绑定默认可被外部导入，无需 pub
+add: (a: Int, b: Int) -> Int = a + b
+Point: Type = { x: Float, y: Float }
 ```
+
+模块路径、目录入口约定与 `use` 的完整形态见[模块系统](./modules)。
 
 ## 所有权
 

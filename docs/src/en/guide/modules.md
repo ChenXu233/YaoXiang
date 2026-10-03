@@ -1,0 +1,261 @@
+---
+title: 'Module System'
+description: 'use imports, module definitions, and directory organization'
+---
+
+# Module System
+
+YaoXiang has no `import` keyword, nor a "declare-then-export" module declaration. **A `.yx` file is
+a module**, and `use` brings bindings from another module into scope.
+
+This page covers how to use them. For design decisions, see the
+[Module System Specification](../reference/language-spec/modules).
+
+## 60-Second Quick Start
+
+```yaoxiang
+use std.io
+use std.math.{sqrt}
+
+// Whole module import → access via namespace
+io.println("hello")
+
+// Specific item import → use directly without prefix
+result = sqrt(16.0)
+```
+
+## Four Ways to Write Imports
+
+### 1. Import the Whole Module
+
+```yaoxiang
+use std.io
+
+main = () => {
+    io.println("用 io. 前缀访问")
+    io.print("print 和 println 都在 std.io 里")
+}
+```
+
+`use std.io` introduces a **namespace**; members are accessed with the `io.` prefix.
+
+### 2. Import Only Specific Items
+
+Names listed in curly braces are bound directly to the current scope, **without a prefix**:
+
+```yaoxiang
+use std.math.{sqrt, sin, cos}
+
+main = () => {
+    print(sqrt(16.0))
+    print(sin(0.0))
+}
+```
+
+This form is useful when you only need a few functions from a module — it avoids both repeatedly
+writing the prefix and dragging in the entire namespace.
+
+### 3. Inline Item Alias
+
+The rename is written **inside** the curly braces:
+
+```yaoxiang
+use std.io.{print as say}
+
+main = () => {
+    say("用 say 代替 print")
+}
+```
+
+::: warning Aliases Must Be Written Inside Curly Braces This form is supported:
+
+```yaoxiang
+use std.io.{print as say}   // ✅
+```
+
+The form below will be rejected; the compiler will suggest you switch to the inline form:
+
+<!-- docs-example: skip -->
+
+```yaoxiang
+use std.io.{print} as say   // ❌ Positional alias, not supported
+```
+
+:::
+
+### 4. Module Alias
+
+<!-- docs-example: skip -->
+
+```yaoxiang
+use helper as h
+
+main = () => {
+    h.shout("通过 h 访问 helper")
+}
+```
+
+::: danger Known Issue: Aliasing Standard Library Modules Crashes
+`use <project-local module> as <alias>` works, but `use <standard library module> as <alias>`
+currently triggers a compiler internal error (`E8001` closure function not registered in the
+function name mapping table):
+
+```yaoxiang
+use std.math as m   // ❌ Calling m.sqrt(...) reports E8001
+```
+
+**Workaround**: Switch to inline item aliases, which work fine for standard library modules:
+
+```yaoxiang
+use std.math.{sqrt, sin, cos}   // ✅
+```
+
+This issue is tracked separately and does not affect the three other forms above. :::
+
+## Module Directory Organization
+
+### mod.yx Is the Directory Entry Point
+
+For a directory to become a module, its entry file must be named `mod.yx`:
+
+```
+src/
+├── main.yx
+├── math/
+│   ├── mod.yx       ← directory entry, module math
+│   └── vector.yx    ← module math.vector
+└── utils/
+    ├── mod.yx       ← directory entry, module utils
+    └── string.yx    ← module utils.string
+```
+
+<!-- docs-example: skip -->
+
+```yaoxiang
+// src/helper/mod.yx
+use std.io
+
+shout: (msg: string) -> Void = {
+    io.print(msg)
+}
+
+label: () -> string = "src/helper/mod.yx"
+```
+
+<!-- docs-example: skip -->
+
+```yaoxiang
+// src/main.yx
+use std.io
+use helper
+
+main = () => {
+    io.print(helper.label())
+    helper.shout("跨模块调用成功")
+}
+```
+
+### index.yx Is Not Recognized
+
+This is the most common pitfall for those coming from Rust. Writing `index.yx` cannot be resolved:
+
+<!-- docs-example: skip -->
+
+```yaoxiang
+// src/helper/index.yx
+label: () => string = "这样写会失败"
+```
+
+<!-- docs-example: skip -->
+
+```yaoxiang
+use helper   // ❌ E5001: module 'helper' not found
+```
+
+**Reason**: path mapping only recognizes the two forms `name.yx` and `name/mod.yx`; `index.yx` is
+not among them. `mod.yx` is a convention, not a requirement — `helper.yx` can serve equally well as
+the module `helper`.
+
+## Exports: No `pub` Needed
+
+**This language has no visibility mechanism.** No `pub`, no `private`, no `export`.
+
+Every top-level binding in a module is visible to any code that can write the module's path:
+
+<!-- docs-example: skip -->
+
+```yaoxiang
+// src/helper/mod.yx
+// plain has no modifier before it
+plain: () => string = "没有 pub 也能被导入"
+```
+
+<!-- docs-example: skip -->
+
+```yaoxiang
+use helper
+// helper.plain() can be called directly, no pub needed
+```
+
+If you want to "restrict" a binding from being used externally, the only way is to not place it at
+the top level of a module.
+
+> **`pub` history**: Earlier specifications taught "use `pub` to declare exported items, with
+> private as the default". That design was overturned by RFC-029, and RFC-029g ruled to remove the
+> `pub` keyword. `pub` never participates in export determination — whether you write it or not does
+> not affect whether an item can be imported. See
+> [Specification §3](../reference/language-spec/modules#第三章导出面) for details.
+
+## Methods Must Be Bound Explicitly
+
+Methods are not auto-generated by `pub`; they are written explicitly on the type:
+
+<!-- docs-example: skip -->
+
+```yaoxiang
+Point: Type = { x: Float, y: Float }
+
+// Explicit method: the first parameter is self
+Point.distance: (self: &Point, other: &Point) -> Float = {
+    dx = self.x - other.x
+    dy = self.y - other.y
+    (dx * dx + dy * dy).sqrt()
+}
+```
+
+## Troubleshooting
+
+### E5001: module not found
+
+Troubleshoot in order of likelihood:
+
+1. **Directory entry was written as `index.yx`** — change it to `mod.yx`; this is the most common
+   cause
+2. **Path spelling or level is wrong** — `use math.vector` corresponds to `src/math/vector.yx`
+3. **Dependencies not installed** — the error message will suggest running `yx install`
+4. **File is outside the project** — there are only two search starting points: "the importer's
+   directory" and "the project root"
+
+### E5003: export not found
+
+The module was found, but it does not contain the name you want. Often this is a spelling
+difference; for example, `std.io` has `read_line` rather than `read`:
+
+<!-- docs-example: skip -->
+
+```yaoxiang
+use std.io.{read_line}   // ✅
+use std.io.{read}        // ❌ E5003
+```
+
+## Quick Reference
+
+| Form                        | Effect                                                         |
+| --------------------------- | -------------------------------------------------------------- |
+| `use std.io`                | Namespace `io`, access via `io.x`                              |
+| `use std.math.{sqrt}`       | Use `sqrt` directly                                            |
+| `use std.io.{print as say}` | Use `say` directly                                             |
+| `use helper as h`           | Namespace `h`, access via `h.x`                                |
+| `use std.io.{print} as say` | Syntax error, use the inline form                              |
+| `use .relative`             | Syntax error, paths must be written fully from the module root |
+| `pub fn foo`                | Semantically invalid, no visibility exists                     |

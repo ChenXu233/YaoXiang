@@ -935,6 +935,214 @@ impl TypeChecker {
         self.flush_pending_body_bindings();
     }
 
+    /// 构建并安装函数体检查器（check_module_impl 与 #397 导出面收割共用）。
+    ///
+    /// 除检查器本体的各张表注入外，同步三样东西：
+    /// ① `env.vars`（native 短名标注为「导入」，避免 E2010 误报）；
+    /// ② T3 顶层值绑定占位（前向引用名字可见，pass3/收割执行到时覆盖）；
+    /// ③ W1003 模块级导入名监视集。
+    fn init_body_checker(
+        &mut self,
+        collect_all: bool,
+    ) {
+        let trait_table = self.env.trait_table.clone();
+        let mut body_checker = inference::StatementChecker::new(
+            self.env.solver(),
+            None,
+            self.dependent_type_env.clone(),
+            trait_table,
+        );
+        // 设置 native 函数签名表
+        body_checker.set_native_signatures(self.env.native_signatures.clone());
+        // #387：native arity 区间表随签名表同源传递
+        body_checker.set_native_arities(self.env.native_arity.clone());
+        // 设置模块注册表，支持函数体/块作用域 use
+        body_checker.set_module_registry(self.env.module_registry.clone());
+        // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
+        body_checker.set_module_aliases(self.env.module_aliases.clone());
+        // RFC-014：vendor 根注入——缺依赖包的 E5001 追加 install 提示
+        if let Some(vendor_root) = self.vendor_root.clone() {
+            body_checker.set_vendor_root(vendor_root);
+        }
+        // 设置泛型类型定义模板表
+        body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
+        // 设置方法绑定表
+        body_checker.set_method_bindings(self.env.method_bindings.clone());
+        body_checker.method_overloads = self.env.method_overloads.clone();
+        body_checker.method_overload_ir_names = self.env.method_overload_ir_names.clone();
+        // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
+        body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
+        body_checker.set_sum_types(self.env.sum_types.clone());
+        // 设置类型定义表（用于 TypeRef → Struct 解析）
+        let type_defs: HashMap<String, MonoType> = self
+            .env
+            .types
+            .iter()
+            .map(|(name, poly)| (name.clone(), poly.body.clone()))
+            .collect();
+        body_checker.set_type_defs(type_defs);
+        // RFC-027 Phase 2.5: 构建证明函数基类型表
+        let proof_fn_bases: HashMap<String, MonoType> = self
+            .env
+            .vars
+            .iter()
+            .filter_map(|(name, poly)| {
+                if let MonoType::Fn {
+                    params,
+                    return_type,
+                } = &poly.body
+                {
+                    if matches!(return_type.as_ref(), MonoType::MetaType { .. }) {
+                        return params.first().map(|base| (name.clone(), base.clone()));
+                    }
+                }
+                None
+            })
+            .collect();
+        body_checker.set_proof_fn_bases(proof_fn_bases);
+        // 如果启用收集模式，设置收集所有错误
+        if collect_all {
+            body_checker.set_collect_all_errors(true);
+        }
+        *self.body_checker_mut() = body_checker;
+
+        // 将环境中的变量同步到 body_checker。
+        //
+        // 标注为「导入」：`env.vars` 里既有本文件的声明，也有
+        // `add_native_function_types` 注入的 std native 短名（如 `ok`/`err`）。
+        // 后者不是本文件的绑定——若不区分，用户写 `ok = ...` 会被 spec §4.3
+        // 判定看成「重赋值不可变变量」→ 误报 E2010。
+        // #414：use 登记的本地名（imported_names）同样按导入注入——pass3 的
+        // 导入冲突判定（E5006/E5008）靠 `imported` 旗标区分「本文件绑定」与
+        // 「本 use 语句的 pass2 预登记」，否则首条 use 就会撞上自己的同步产物。
+        let use_local_names: Vec<String> =
+            self.imported_names.iter().map(|(n, _)| n.clone()).collect();
+        for (name, poly) in self.env.vars.clone() {
+            let is_native = self.env.native_signatures.contains_key(&name);
+            if is_native || use_local_names.iter().any(|n| n == &name) {
+                self.body_checker_mut().add_imported_var(name, poly);
+            } else {
+                self.body_checker_mut().add_var(
+                    name,
+                    poly,
+                    false,
+                    crate::util::span::Span::default(),
+                );
+            }
+        }
+
+        // T3：把 pass2 收集的顶层值绑定占位也注入 body_checker，
+        // 使函数体内对后置绑定的引用（前向引用）能解析到名字。
+        // pass3 执行到该语句时会重新推断并覆盖占位类型。
+        for (name, poly) in self.early_value_bindings.clone() {
+            self.body_checker_mut().add_forward_declared_var(name, poly);
+        }
+
+        // #321 W1003：模块级导入名监视集注入（函数体级 use 由 process_use_stmt 自行登记）
+        let module_import_watch = self.import_watch.clone();
+        self.body_checker_mut()
+            .set_import_watch(module_import_watch);
+    }
+
+    /// #397：导出面收割——对无标注的顶层值绑定跑与 pass3 相同的语句检查，
+    /// 使推断出的具体类型落进 `env.vars`。此前这类绑定既不在签名表（函数
+    /// 专属）也无标注可读，`extract_module_info` 的导出面直接丢弃它们，
+    /// 导入方只能得到误导性报错。
+    ///
+    /// 收割前先在 body_checker 作用域里加工 `use`（块级 use 同一入口），
+    /// 使初始化式引用其他模块名字的绑定（`use other;` 后 `v = other.greet()`）
+    /// 也能推断。收割期间的诊断一律丢弃：这里只取类型，错误报告属于模块
+    /// 自身的完整检查。
+    pub fn harvest_untyped_value_bindings(
+        &mut self,
+        module: &crate::frontend::core::parser::ast::Module,
+    ) {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+        // T3 占位先行：前向引用（`b = a + 1` 中 a 在后）名字可见，
+        // 且 init_body_checker 的占位同步依赖这一步
+        for stmt in &module.items {
+            self.collect_value_binding_signature(stmt);
+        }
+        self.init_body_checker(false);
+
+        // use 加工先行：块级 use 同一入口，模块别名进 body_checker 作用域
+        for stmt in &module.items {
+            if let StmtKind::Use {
+                path,
+                path_span,
+                items,
+                alias,
+                item_aliases,
+                ..
+            } = &stmt.kind
+            {
+                let _ = self.body_checker_mut().process_use_stmt(
+                    path,
+                    *path_span,
+                    items,
+                    alias,
+                    item_aliases,
+                );
+            }
+        }
+
+        // 收割目标：裸名、无标注、非函数、签名表里没有的顶层绑定
+        let targets: Vec<&crate::frontend::core::parser::ast::Stmt> = module
+            .items
+            .iter()
+            .filter(|stmt| match &stmt.kind {
+                StmtKind::Assign {
+                    target,
+                    type_annotation,
+                    value,
+                    ..
+                } => {
+                    let Expr::Var(name, _) = target.as_ref() else {
+                        return false;
+                    };
+                    if type_annotation.is_some() || self.env.vars.contains_key(name) {
+                        return false;
+                    }
+                    let is_fn = value.as_ref().is_some_and(|v| {
+                        matches!(v.as_ref(), Expr::Lambda { .. })
+                            || Expr::block_binding_is_function(
+                                type_annotation.as_ref(),
+                                Some(v.as_ref()),
+                            )
+                    });
+                    !is_fn
+                }
+                _ => false,
+            })
+            .collect();
+
+        for stmt in targets {
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            // 诊断丢弃：收割只取类型；错误由模块自身编译时的完整检查报告
+            let _ = self.body_checker_mut().check_stmt(stmt);
+            if let StmtKind::Assign { target, .. } = &stmt.kind {
+                let Expr::Var(name, _) = target.as_ref() else {
+                    continue;
+                };
+                // 推断类型落在 body_checker 的 global 链（#295：模块级绑定）
+                if let Some(poly) = self.body_checker_global_type(name) {
+                    self.env.vars.entry(name.clone()).or_insert(poly);
+                }
+            }
+        }
+    }
+
+    /// body_checker global 链上某绑定的类型（收割读回用）。
+    fn body_checker_global_type(
+        &self,
+        name: &str,
+    ) -> Option<PolyType> {
+        self.body_checker
+            .as_ref()
+            .and_then(|bc| bc.scope_globals().get(name))
+            .map(|info| info.poly.clone())
+    }
+
     /// 检查整个模块的内部实现
     fn check_module_impl(
         &mut self,
@@ -1009,97 +1217,8 @@ impl TypeChecker {
             self.add_error(err);
         }
 
-        // 初始化函数体检查器
-        let trait_table = self.env.trait_table.clone();
-        let mut body_checker = inference::StatementChecker::new(
-            self.env.solver(),
-            None,
-            self.dependent_type_env.clone(),
-            trait_table,
-        );
-        // 设置 native 函数签名表
-        body_checker.set_native_signatures(self.env.native_signatures.clone());
-        // #387：native arity 区间表随签名表同源传递
-        body_checker.set_native_arities(self.env.native_arity.clone());
-        // 设置模块注册表，支持函数体/块作用域 use
-        body_checker.set_module_registry(self.env.module_registry.clone());
-        // RFC-014：vendor 根注入——缺依赖包的 E5001 追加 install 提示
-        if let Some(vendor_root) = self.vendor_root.clone() {
-            body_checker.set_vendor_root(vendor_root);
-        }
-        // 设置泛型类型定义模板表
-        body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
-        // 设置方法绑定表
-        body_checker.set_method_bindings(self.env.method_bindings.clone());
-        body_checker.method_overloads = self.env.method_overloads.clone();
-        body_checker.method_overload_ir_names = self.env.method_overload_ir_names.clone();
-        // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
-        body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
-        body_checker.set_sum_types(self.env.sum_types.clone());
-        // 设置类型定义表（用于 TypeRef → Struct 解析）
-        let type_defs: HashMap<String, MonoType> = self
-            .env
-            .types
-            .iter()
-            .map(|(name, poly)| (name.clone(), poly.body.clone()))
-            .collect();
-        body_checker.set_type_defs(type_defs);
-        // RFC-027 Phase 2.5: 构建证明函数基类型表
-        let proof_fn_bases: HashMap<String, MonoType> = self
-            .env
-            .vars
-            .iter()
-            .filter_map(|(name, poly)| {
-                if let MonoType::Fn {
-                    params,
-                    return_type,
-                } = &poly.body
-                {
-                    if matches!(return_type.as_ref(), MonoType::MetaType { .. }) {
-                        return params.first().map(|base| (name.clone(), base.clone()));
-                    }
-                }
-                None
-            })
-            .collect();
-        body_checker.set_proof_fn_bases(proof_fn_bases);
-        // 如果启用收集模式，设置收集所有错误
-        if collect_all {
-            body_checker.set_collect_all_errors(true);
-        }
-        *self.body_checker_mut() = body_checker;
-
-        // 将环境中的变量同步到 body_checker。
-        //
-        // 标注为「导入」：`env.vars` 里既有本文件的声明，也有
-        // `add_native_function_types` 注入的 std native 短名（如 `ok`/`err`）。
-        // 后者不是本文件的绑定——若不区分，用户写 `ok = ...` 会被 spec §4.3
-        // 判定看成「重赋值不可变变量」→ 误报 E2010。
-        for (name, poly) in self.env.vars.clone() {
-            let is_native = self.env.native_signatures.contains_key(&name);
-            if is_native {
-                self.body_checker_mut().add_imported_var(name, poly);
-            } else {
-                self.body_checker_mut().add_var(
-                    name,
-                    poly,
-                    false,
-                    crate::util::span::Span::default(),
-                );
-            }
-        }
-
-        // T3：把 pass2 收集的顶层值绑定占位也注入 body_checker，
-        // 使函数体内对后置绑定的引用（前向引用）能解析到名字。
-        // pass3 执行到该语句时会重新推断并覆盖占位类型。
-        for (name, poly) in self.early_value_bindings.clone() {
-            self.body_checker_mut().add_forward_declared_var(name, poly);
-        }
-
-        // #321 W1003：模块级导入名监视集注入（函数体级 use 由 process_use_stmt 自行登记）
-        let module_import_watch = self.import_watch.clone();
-        self.body_checker_mut()
-            .set_import_watch(module_import_watch);
+        // 初始化函数体检查器（构建 + 三张表同步，与导出面收割共用）
+        self.init_body_checker(collect_all);
 
         // 第三遍：检查所有语句（包括函数体）
         for stmt in &module.items {
@@ -1363,6 +1482,8 @@ impl TypeChecker {
             body_checker.set_native_arities(self.env.native_arity.clone());
             // 设置模块注册表，支持函数体/块作用域 use
             body_checker.set_module_registry(self.env.module_registry.clone());
+            // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
+            body_checker.set_module_aliases(self.env.module_aliases.clone());
             self.body_checker = Some(body_checker);
         }
         self.body_checker.as_mut().unwrap()
@@ -2024,23 +2145,27 @@ impl TypeChecker {
                             }
                         }
                         // use path as alias → 整个模块用别名注册
-                        (None, Some(aliases)) if aliases.len() == 1 => {
-                            let alias_name = &aliases[0];
-                            // #321 W1003：登记导入本地名与导出成员监视
-                            self.record_import_name(alias_name, stmt.span);
-                            self.watch_import_members(alias_name, &module);
-                            // 登记用户模块命名空间别名（std 走 is_std_submodule 机制，不入此表）
-                            if !(path == "std" || path.starts_with("std.")) {
+                        // #414：单/多别名统一走此臂——每个别名各绑一份模块 record
+                        (None, Some(aliases)) => {
+                            for alias_name in aliases {
+                                // #321 W1003：登记导入本地名与导出成员监视
+                                self.record_import_name(alias_name, stmt.span);
+                                self.watch_import_members(alias_name, &module);
+                                // 命名空间别名登记。#410：std 路径不再豁免——裸子模块名由
+                                // is_std_submodule 兜住，别名只有这张表能救；漏登记则
+                                // ir_gen 把 `m.sqrt` 当闭包值调用 → E8001 ICE
                                 self.module_namespaces
                                     .insert(alias_name.clone(), path.clone());
-                            }
-                            for export in exports_to_import {
-                                if matches!(export.kind, crate::frontend::module::ExportKind::Type)
-                                    && export.type_payload.is_some()
-                                {
-                                    self.register_use_export(&export.name, export, false);
+                                for export in &exports_to_import {
+                                    if matches!(
+                                        export.kind,
+                                        crate::frontend::module::ExportKind::Type
+                                    ) && export.type_payload.is_some()
+                                    {
+                                        self.register_use_export(&export.name, export, false);
+                                    }
+                                    self.register_use_export(alias_name, export, true);
                                 }
-                                self.register_use_export(alias_name, export, true);
                             }
                         }
                         // use path.{a, b} / use path.{a as x}（#245：仅内联别名）。
@@ -2054,6 +2179,18 @@ impl TypeChecker {
                                     .as_ref()
                                     .and_then(|v| v.get(i))
                                     .and_then(|a| a.as_ref());
+                                // #415：子模块导出经内联别名绑定时（`use std.{io as printer}`），
+                                // is_std_submodule 只认裸子模块名，别名必须入 namespace 表，
+                                // 否则 ir_gen 解析 `printer.print` → E3006。非别名条目入表与
+                                // 既有机制重合（io → std.io），无害。
+                                if matches!(
+                                    export.kind,
+                                    crate::frontend::module::ExportKind::SubModule
+                                ) {
+                                    let ns_name = local_name.unwrap_or(item_name);
+                                    self.module_namespaces
+                                        .insert(ns_name.to_string(), export.full_path.clone());
+                                }
                                 // #321 W1003：登记导入本地名（内联别名优先）
                                 match local_name {
                                     Some(local) => self.record_import_name(local, stmt.span),
@@ -2063,14 +2200,6 @@ impl TypeChecker {
                                     Some(local) => self.register_use_export(local, export, true),
                                     None => self.register_use_export(item_name, export, false),
                                 }
-                            }
-                        }
-                        // 其他情况：报错或回退
-                        _ => {
-                            for export in exports_to_import {
-                                // #321 W1003：登记导入本地名
-                                self.record_import_name(&export.name, stmt.span);
-                                self.register_use_export(path, export, false);
                             }
                         }
                     }
@@ -2828,6 +2957,7 @@ impl TypeChecker {
             field_has_default: Vec::new(),
             interfaces: vec![],
         });
+        self.env.module_aliases.insert(module_alias.to_string());
         self.env
             .add_var(module_alias.to_string(), PolyType::mono(module_ty));
     }
@@ -2875,6 +3005,9 @@ impl TypeChecker {
                     field_has_default: Vec::new(),
                     interfaces: vec![],
                 });
+                // 分组导入的子模块命名空间（`use std.{result}` 后 `result.nope`）
+                // 同样按模块语义报 E1043。
+                self.env.module_aliases.insert(register_name.clone());
                 self.env.add_var(register_name, PolyType::mono(module_ty));
                 for sub_export in &payload_type_exports {
                     self.register_use_export(&sub_export.name, sub_export, false);

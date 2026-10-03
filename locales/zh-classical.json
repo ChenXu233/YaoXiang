@@ -235,6 +235,14 @@
     "example": "point.z;",
     "error_output": "error[E1042]: 字段未得\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 于结构体 'Point' 中未得字段 'z'"
   },
+  "E1043": {
+    "title": "模块成员未得",
+    "message": "访问模块未导出之成员",
+    "template": "模块 '{module}' 未导出 '{name}'",
+    "help": "可用之导出：{available}",
+    "example": "lib.nope;",
+    "error_output": "error[E1043]: 模块成员未得\n --> example.yx:1:5\n  |\n1 | lib.nope;\n  |     ^^^^ 模块 'lib' 未导出 'nope'"
+  },
   "E1050": {
     "title": "需布尔操作数",
     "message": "逻辑运算须以布尔为操作数",

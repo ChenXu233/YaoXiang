@@ -13,7 +13,7 @@ use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::resolver::Resolver;
-use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{
@@ -443,6 +443,27 @@ impl AstToIrGenerator {
             }
             None => field.to_string(),
         }
+    }
+
+    /// #396：表达式位置命名空间数据访问的判定——接收者链（Var/FieldAccess 链）
+    /// 扁平化后头为命名空间，且头未被本文件局部绑定/闭包捕获遮蔽时，返回全链
+    /// 限定名（`lib.v` → `lib.v`，`io.println` → `std.io.println`）。
+    /// 语义归 [`Resolver`]（is_namespace / resolve_namespace），与调用位置同判据。
+    fn resolve_namespace_data_access(
+        &self,
+        expr: &ast::Expr,
+        field: &str,
+    ) -> Option<String> {
+        let (head, fields) = flatten_namespace(expr)?;
+        if self.closure_captures.contains_key(head) || self.lookup_local(head).is_some() {
+            return None;
+        }
+        if !self.resolver().is_namespace(head) {
+            return None;
+        }
+        let mut segs = fields;
+        segs.push(field);
+        Some(self.resolver().resolve_namespace(head, &segs))
     }
 
     /// 查一个函数的**声明期形参名**（按声明序），供命名参数重排。
@@ -6343,6 +6364,53 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
+        // #396：命名空间数据访问（`use lib;` 后 `lib.v` / `lib.sub.v`，以及
+        // `io.println` 这类 std 子模块成员作值）。此前只有**调用位置**有
+        // namespace 降级，表达式位置落到「普通字段访问」→ 生成对 `lib` 的
+        // 变量读取 → E3006 内部错误。
+        // 降级与 generate_var_expr_ir 的 T5 分支（use lib.{v} 别名）同一数据面：
+        // ① 跨文件全局槽位（顶层值绑定，键为限定名）→ Load Global；
+        // ② native 命名空间常量（std.math.PI）→ 零参调用；
+        // ③ 函数值（`lib.greet` 作一等值）→ MakeClosure（#348 的跨模块镜像）。
+        // 头被本文件局部绑定/闭包捕获遮蔽时不进此分支（与变量解析的局部优先序
+        // 一致）；①②③全未命中则落回下方既有逻辑——成员存在性已由 typecheck
+        // 保证（E1043），落到这里属 typecheck 漏网，按原逻辑响亮失败。
+        if let Some(qualified) = self.resolve_namespace_data_access(expr, field) {
+            if let Some(&slot) = self.global_slot_layout.get(&qualified) {
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Global(slot),
+                    span: *span,
+                });
+                return Ok(());
+            }
+            if self.registry.is_native_name(&qualified) {
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(qualified.clone())),
+                    args: vec![],
+                    span: *span,
+                    def: None,
+                });
+                return Ok(());
+            }
+            if let Some(def) = self.registry.symbols().def(&qualified) {
+                if matches!(
+                    self.registry.symbols().kind(def),
+                    DefKind::Function | DefKind::Method
+                ) {
+                    instructions.push(Instruction::MakeClosure {
+                        dst: Operand::Local(result_reg),
+                        func: qualified,
+                        env: vec![],
+                        def: None,
+                        span: *span,
+                    });
+                    return Ok(());
+                }
+            }
+        }
+
         // 首先检查是否是模块变量的字段访问（如 io.println）
         // io 是通过 use std.{io} 导入的模块变量
         if let Expr::Var(module_name, _) = expr {

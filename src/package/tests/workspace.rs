@@ -217,6 +217,38 @@ fn test_load_workspace_rejects_nested_workspace() {
 }
 
 #[test]
+fn test_load_workspace_rejects_directory_member() {
+    // Arrange：members 值写成目录而非清单文件（#412）——目录也存在，
+    // 此前会经 parent() 退回工作空间根而误报 nested workspace
+    let tmp = TempDir::new().expect("create tempdir");
+    let root = tmp.path().to_path_buf();
+    fs::write(
+        root.join("yaoxiang.toml"),
+        "[workspace.members]\ncore = \"packages/core\"\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("packages/core")).unwrap();
+    fs::write(
+        root.join("packages/core/yaoxiang.toml"),
+        "[package]\nname = \"core\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+
+    // Act
+    let result = load_workspace(&root);
+
+    // Assert：报 MemberInvalid 且文案指向「应指向清单文件」
+    match result {
+        Err(PackageError::MemberInvalid { key, reason }) => {
+            assert_eq!(key, "core");
+            assert!(reason.contains("是目录"), "unexpected reason: {reason}");
+            assert!(reason.contains("清单文件"), "unexpected reason: {reason}");
+        }
+        other => panic!("expected MemberInvalid, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_find_workspace_root_from_member_dir() {
     // Arrange
     let (_tmp, root) = setup_workspace();

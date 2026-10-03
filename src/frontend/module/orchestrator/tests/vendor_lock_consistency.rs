@@ -2,7 +2,7 @@
 //!
 //! 覆盖:
 //! - 一致性三查：lock 缺条目 / vendor 缺目录 / 版本要求不满足
-//! - path 依赖与 std 接口目录跳过；无 vendor（未 install）不判死
+//! - path 依赖与 git 来源同账本核对（#411）；std 接口目录跳过；无 vendor（未 install）不判死
 //! - resolve_in_vendor_with_lock：lock 优先 / lock 无条目回退最高版本 /
 //!   lock 指向缺失版本时解析失败（留给一致性检查报错）
 //! - ensure 级语义经由 consistency::check_vendor_lock_consistency 纯函数验证
@@ -110,12 +110,42 @@ fn test_requirement_mismatch_detected() {
 }
 
 #[test]
-fn test_path_deps_skipped() {
+fn test_path_dep_missing_in_lock_detected() {
+    // Arrange：#411——path 依赖与 git 来源同账本核对（复制进 vendor），不再跳过。
+    // vendor 目录存在（vendor 模式）：检查器对无 vendor 项目不判死
     let (_tmp, root) =
-        setup_project("[dependencies]\nlocal = { version = \"1.0.0\", path = \"./local-src\" }\n");
-    write_lock(&root, &[]); // path 依赖不进 lock 也不判缺
+        setup_project("[dependencies]\nlocal = { version = \"*\", path = \"./local-src\" }\n");
+    fs::create_dir_all(root.join(".yaoxiang").join("vendor")).unwrap();
+    write_lock(&root, &[]); // lock 无条目 → 缺失应被检出
 
+    // Act
     let report = check_vendor_lock_consistency(&root).unwrap();
+
+    // Assert
+    assert_eq!(
+        report.missing_in_lock,
+        vec!["local".to_string()],
+        "path 依赖缺 lock 条目应被检出"
+    );
+    assert!(!report.is_consistent(), "path 依赖缺 lock 条目应判不一致");
+}
+
+#[test]
+fn test_path_dep_with_lock_and_vendor_is_consistent() {
+    // Arrange：path 依赖已登记 lock 且 vendor 有对应目录
+    let (_tmp, root) =
+        setup_project("[dependencies]\nlocal = { version = \"*\", path = \"./local-src\" }\n");
+    write_vendor_pkg(&root, "local", "0.3.0");
+    fs::write(
+        root.join("yaoxiang.lock"),
+        "version = 1\n\n[package.local]\nversion = \"0.3.0\"\nsource = \"path\"\n",
+    )
+    .unwrap();
+
+    // Act
+    let report = check_vendor_lock_consistency(&root).unwrap();
+
+    // Assert
     assert!(report.is_consistent(), "{:?}", report.describe());
 }
 

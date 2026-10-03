@@ -288,6 +288,14 @@
     "example": "point.z;",
     "error_output": "error[E1042]: 字段未找到\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 在结构体 'Point' 中找不到字段 'z'"
   },
+  "E1043": {
+    "title": "模块成员未找到",
+    "message": "访问了模块未导出的成员",
+    "template": "模块 '{module}' 没有导出 '{name}'",
+    "help": "该模块的可用导出：{available}",
+    "example": "lib.nope;",
+    "error_output": "error[E1043]: 模块成员未找到\n --> example.yx:1:5\n  |\n1 | lib.nope;\n  |     ^^^^ 模块 'lib' 没有导出 'nope'"
+  },
   "E1050": {
     "title": "需要布尔操作数",
     "message": "逻辑运算需要布尔操作数",
@@ -866,12 +874,17 @@
   "E5006": {
     "title": "重复导入",
     "template": "重复导入：'{name}' 已被导入",
-    "help": "移除重复的导入语句"
+    "help": "请移除重复的导入，或使用不同名字/模块别名"
   },
   "E5007": {
     "title": "模块导出",
     "template": "模块 '{module}' 的导出：{available}",
     "help": "可用的导出列在错误消息中"
+  },
+  "E5008": {
+    "title": "导入名冲突",
+    "template": "导入名 '{name}' 与现有绑定冲突（导入自 '{module}'）",
+    "help": "请使用不同名字或模块别名"
   },
   "E6006": {
     "title": "函数未找到（运行时）",
