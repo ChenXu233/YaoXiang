@@ -3694,6 +3694,28 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
+        // #409（while/for 同款）：先给值寄存器写 Void（等价于 block_value_ty 的「空块 ⇒ Void」
+        // 分支），此后凡体尾产出值即覆写它。该初值同时覆盖两种情形：
+        //   1. 条件首次即为假（零迭代）；
+        //   2. 每次完整迭代的体尾都不产出值（如体尾是赋值语句）——continue
+        //      直接回跳条件重判点、不经过体尾，故保留上一轮的值。
+        //
+        // 零迭代取 Void 的依据（有意为之，非遗留）：循环体一次都没求值 ⇒ 没有
+        // 「末次迭代的体值」（`for` 同理：源集合为空时没有体值）⇒ 「未产出值」只能用 Void 表达。要给它一个按值类型
+        // 定制的默认值，需要在 IR 层知道该值寄存器的**静态类型**；但 ir_gen 拿不到
+        // 这个信息——LocalSlot.ty 由 register_local 置为 Int(64)（本文件 619 行），
+        // 注解类型不写回槽位，TypeCheckResult 也没有按节点索引的类型表。故按类型
+        // 定制默认值不是本层能做的事（ir_gen 内对 resolve_type 的调用数为 0）。
+        // 后果：零迭代时值寄存器是 Void，把它当非 Void 类型用会在运行期以
+        // 类型不匹配显式失败——是「响亮失败」而非静默错值。类型侧
+        // block_value_ty 给的是体尾表达式的类型（静态近似），它对「循环是否至少
+        // 执行一次」无判定能力（需要数据流/可证性分析），故本层不擅自改动它。
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Const(ConstValue::Void),
+            span: self.cur_span,
+        });
+
         // Label: condition_check
         let loop_start_idx = instructions.len();
         // #311：压入循环上下文——continue 跳回条件重判点，break 占位待出口回填
@@ -3711,8 +3733,10 @@ impl AstToIrGenerator {
             span: self.cur_span,
         }); // Placeholder
 
-        // Body
-        self.generate_block_ir(body, None, instructions, constants)?;
+        // Body：尾表达式直接写入值寄存器（RFC-010a 规则① / spec §2.9：所有块的
+        // 值由尾表达式给出）。#409 之前此处传 None 丢掉体值，并在出口无条件覆写
+        // 成 Void，与类型侧 block_value_ty 的判据分叉。
+        self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
 
         // Jump back to start
         instructions.push(Instruction::Jmp {
@@ -3732,13 +3756,6 @@ impl AstToIrGenerator {
         }
         // #311：回填循环体内 break 的占位跳转到出口
         self.exit_loop_targets(end_idx, instructions);
-
-        // While loop returns void
-        instructions.push(Instruction::Load {
-            dst: Operand::Local(result_reg),
-            src: Operand::Const(ConstValue::Void),
-            span: self.cur_span,
-        });
 
         Ok(())
     }
@@ -4000,6 +4017,17 @@ impl AstToIrGenerator {
     ) -> Result<(), Diagnostic> {
         self.enter_scope();
 
+        // #409：零迭代兜底——先给值寄存器写 Void（等价于 block_value_ty 的
+        // 「空块 ⇒ Void」分支），随后每轮由体尾表达式覆写。与 while 同款语义
+        //（零迭代取 Void 的依据见 generate_while_expr_ir 的注释）。
+        if let Some(reg) = result_reg {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(reg),
+                src: Operand::Const(ConstValue::Void),
+                span: self.cur_span,
+            });
+        }
+
         // 1. 计算可迭代对象
         let iterable_reg = self.next_temp_reg();
         self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
@@ -4091,7 +4119,9 @@ impl AstToIrGenerator {
         });
 
         // 8. 执行循环体
-        self.generate_block_ir(body, None, instructions, constants)?;
+        // #409：尾表达式直接写入值寄存器（RFC-010a 规则①；与 while 同款）。
+        // 此前此处传 None 并在出口把值覆写成 Void，故 for 作值在运行期恒 void。
+        self.generate_block_ir(body, result_reg, instructions, constants)?;
 
         // 9. 跳转回循环开始
         instructions.push(Instruction::Jmp {
@@ -4113,15 +4143,6 @@ impl AstToIrGenerator {
         self.exit_loop_targets(end_idx, instructions);
 
         self.exit_scope();
-
-        if let Some(reg) = result_reg {
-            // For loop returns void
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(reg),
-                src: Operand::Const(ConstValue::Void),
-                span: self.cur_span,
-            });
-        }
 
         Ok(())
     }

@@ -702,10 +702,20 @@ loop: (n: Int) -> Int = {
 > `-> Int` 返回 `Void`，类型不成立。故本示例的体尾显式写出 `i`。这不改变测度的
 > 语义——测度 `n - i` 是**状态表达式**，与循环的值类型无关。
 
-> **落地注记（2026-10-02）**：本节的循环示例**类型侧**成立（`check` 0 error、回边义务 Proved），
-> 但 `while` 作值的**运行期**取值仍有缺陷：绑定拿到的值是 `Void`，使用该值报
-> `E6007 Runtime error: type mismatch in comparison Eq: Void vs Int(4)`，零迭代（`loop(0)`）同样中招；
-> 影响面为「`while` 作值即中招」，不限于 `Terminates` 形态。最小复现、影响面与解除条件见
+> **落地注记（2026-10-02 登记；2026-10-04 更新）**：本节的循环示例**类型侧**成立
+> （`check` 0 error、回边义务 Proved）。**运行期取值缺陷（#409）已修复**：`while` 作值现在
+> 取循环体末次迭代的体块尾表达式的值，与类型侧 `block_value_ty` 同口径——
+> `loop(4) == 4`、`countdown(3) == 30` 实跑成立（`for` 同款修复）。
+>
+> **已知残留（零迭代）**：循环体一次都没求值时，没有「末次迭代的体值」，循环值仍取
+> `Void`——绑定到非 `Void` 类型位并在运行期使用即报
+> `E6007 Runtime error: type mismatch in comparison Eq: Void vs Int(0)`（响亮的类型不匹配，
+> 不是静默错值）。这是**静态近似边界**：`block_value_ty` 判据给的是体尾表达式的类型，
+> 对「循环是否至少执行一次」没有判定能力（需要数据流/可证性分析），故类型侧不擅自降级
+> （降级会破坏本节 `Terminates` 循环绑定所依赖的值类型）。
+> 该残留的契约由语料 `tests/yaoxiang/02-type-system/while_zero_iteration_void_err.yx`
+> （`// expect: runtime-error E6007`）钉住；残留清理由 issue
+> [#409](https://github.com/ChenXu233/YaoXiang/issues/409) 跟踪。最小复现与影响面的历史记录见
 > [RFC-027a](../review/027a-termination-explicit-measure.md) §示例 循环节「已知缺陷 D6」。
 > 另：终止策略 1（线性秩函数）本轮恢复生效，故本节「自动探索不出才写显式测度」的顺序不变——
 > 显式测度仍是探索失败后的兜底。
