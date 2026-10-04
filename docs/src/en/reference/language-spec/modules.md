@@ -1,8 +1,10 @@
 # Module System Specification
 
-This file defines the module system specification of YaoXiang: how modules are defined, how `use` imports them, what the export surface is, and how scopes are partitioned.
+This file defines the module system specification of YaoXiang: how modules are defined, how `use`
+imports them, what the export surface is, and how scopes are partitioned.
 
-Design basis: [RFC-029 Module Semantics](../../design/rfc/accepted/029-module-semantics.md), [RFC-029g Remove `pub` keyword and auto-binding](../../design/rfc/accepted/029g-remove-pub-and-auto-bind.md).
+Design basis: [RFC-029 Module Semantics](../../design/rfc/accepted/029-module-semantics.md),
+[RFC-029g Remove `pub` keyword and auto-binding](../../design/rfc/accepted/029g-remove-pub-and-auto-bind.md).
 
 A user-facing operational guide is available in [Module System](../../guide/modules).
 
