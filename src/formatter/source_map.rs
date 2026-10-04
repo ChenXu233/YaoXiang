@@ -47,6 +47,14 @@ pub struct SourceMap {
     /// 导入排序后记录的原始导入行范围 (first_start_line, last_end_line)
     /// format_module 用此边界确定真正的头部注释，而非排序后语句的 stale span
     pub import_line_range: Option<(usize, usize)>,
+    /// 已输出的注释（键 = 注释 span 的 `(start.offset, end.offset)`）。
+    ///
+    /// 各注释输出点共享本账本，保证**一份源注释最多输出一次**：嵌套结构里同一条行末注释
+    /// 可能同时被内层语句与外层语句认领（外层 binding 的 `span.end.line` 有时落在内层语句
+    /// 所在行上），重复输出会让每次格式化都多出一份副本——即「行数无界增长」的幂等性缺陷。
+    /// 采用 `Arc<Mutex<..>>` 以保持 `SourceMap: Clone + Send + Sync`（LSP 侧要求）。
+    pub emitted_comments:
+        std::sync::Arc<std::sync::Mutex<std::collections::HashSet<(usize, usize)>>>,
 }
 
 impl SourceMap {
@@ -63,6 +71,9 @@ impl SourceMap {
             blank_lines,
             import_comment_groups: Vec::new(),
             import_line_range: None,
+            emitted_comments: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::HashSet::new(),
+            )),
         }
     }
 
@@ -298,6 +309,142 @@ impl SourceMap {
             .collect()
     }
 
+    /// 获取**严格位于 `before_offset` 之前**、且起始行不早于 `start_line` 的注释。
+    ///
+    /// 与 [`Self::comments_between_lines`] 的差别在**上界口径**：那个函数用行号闭区间
+    /// `c.span.end.line <= end_line` 判定，于是「与语句同一行、但位于语句之后」的行末注释
+    /// 也算作前导注释；它随后又被 `append_trailing_comment` 当作行末注释输出一次，
+    /// 结果每格式化一次就多出一份副本（不幂等的最小触发形态：单行语句 + 同行行末注释）。
+    /// 这里改用**字节偏移**判定上界：注释必须整体结束于语句起点之前，才算前导注释。
+    pub fn comments_before_offset(
+        &self,
+        start_line: usize,
+        before_offset: usize,
+    ) -> Vec<&Comment> {
+        self.comments
+            .iter()
+            .filter(|c| c.span.start.line >= start_line && c.span.end.offset <= before_offset)
+            .collect()
+    }
+
+    /// 行末注释是否落在所在块**内部**。
+    ///
+    /// 判据：语句结束偏移到注释起始偏移之间的源码片段里是否已经出现 `}`。
+    /// - `{ x * 2 } // c` → 片段含 `}`，注释在块**外**（属于外层语句），块可折叠成单行；
+    /// - `{ x * 2 // c`（`}` 在后续行） → 片段无 `}`，注释在块**内**，折叠会挪动注释位置。
+    pub fn comment_is_inside_block(
+        &self,
+        stmt_end_offset: usize,
+        comment_start_offset: usize,
+    ) -> bool {
+        if comment_start_offset <= stmt_end_offset {
+            return false;
+        }
+        match self.source.get(stmt_end_offset..comment_start_offset) {
+            Some(slice) => !slice.contains('}'),
+            None => false,
+        }
+    }
+
+    /// `line` 的**下一行**首字符（跳过前导空白）是否为 `}`。
+    ///
+    /// 用于判定块的闭合 `}` 是否独占一行：独占时「块结束行」= 块内最后一条语句的行号 + 1；
+    /// 与最后一条语句同行时（`name: T = (x) => { return x }`）再 +1 会越过紧随其后的
+    /// 那一行，把该行上的注释与空行吃掉（注释丢失 / 空行侵蚀）。
+    pub fn next_line_starts_with_block_close(
+        &self,
+        line: usize,
+    ) -> bool {
+        self.source
+            .split('\n')
+            .nth(line)
+            .map(|l| l.trim_start().starts_with('}'))
+            .unwrap_or(false)
+    }
+
+    /// 从 `{` 的字节偏移出发做括号配对，返回配对 `}` 的字节偏移；配对失败返回 `None`。
+    ///
+    /// 跳过字符串字面量与注释，避免把出现在其中的 `{` / `}` 计入深度。
+    pub fn block_close_offset(
+        &self,
+        open_offset: usize,
+    ) -> Option<usize> {
+        let bytes = self.source.as_bytes();
+        if bytes.get(open_offset) != Some(&b'{') {
+            return None;
+        }
+        let mut depth = 0usize;
+        let mut i = open_offset;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'"' => {
+                    i += 1;
+                    while i < bytes.len() && bytes[i] != b'"' {
+                        if bytes[i] == b'\\' {
+                            i += 1;
+                        }
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                b'/' if bytes.get(i + 1) == Some(&b'/') => {
+                    while i < bytes.len() && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                }
+                b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                    i += 2;
+                    while i < bytes.len() && !(bytes[i] == b'*' && bytes.get(i + 1) == Some(&b'/'))
+                    {
+                        i += 1;
+                    }
+                    i += 2;
+                }
+                b'{' => {
+                    depth += 1;
+                    i += 1;
+                }
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(i);
+                    }
+                    i += 1;
+                }
+                _ => i += 1,
+            }
+        }
+        None
+    }
+
+    /// 标记一条注释「已输出」；返回 `true` 表示本次是第一次输出（调用方应输出它），
+    /// 返回 `false` 表示此前已被其它输出点输出过（调用方必须跳过，否则会重复）。
+    pub fn mark_comment_emitted(
+        &self,
+        comment: &Comment,
+    ) -> bool {
+        let key = (comment.span.start.offset, comment.span.end.offset);
+        let mut guard = match self.emitted_comments.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        guard.insert(key)
+    }
+
+    /// 过滤掉已输出的注释，并把通过过滤的注释标记为已输出。
+    ///
+    /// 所有「前导注释 / 头部注释 / 导入注释」输出点都应经过本函数，
+    /// 与 [`Self::append_trailing_comment`] 共用同一账本。
+    pub fn claim_unemitted<'a>(
+        &self,
+        comments: Vec<&'a Comment>,
+    ) -> Vec<&'a Comment> {
+        comments
+            .into_iter()
+            .filter(|c| self.mark_comment_emitted(c))
+            .collect()
+    }
+
     /// 把行末注释追加到已渲染语句后（截断到行尾，注释接在语句后面）
     pub fn append_trailing_comment(
         &self,
@@ -306,7 +453,7 @@ impl SourceMap {
         end_offset: usize,
     ) {
         if let Some(trailing) = self.trailing_comment_on_line(end_line) {
-            if trailing.span.start.offset > end_offset {
+            if trailing.span.start.offset > end_offset && self.mark_comment_emitted(trailing) {
                 let last_newline = result.rfind('\n').unwrap_or(0);
                 result.truncate(last_newline);
                 result.push_str(&format!(" {}\n", trailing.content));
