@@ -279,7 +279,7 @@
     "title": "モジュールメンバーが見つかりません",
     "message": "モジュールがエクスポートしていないメンバーにアクセスしました",
     "template": "モジュール '{module}' は '{name}' をエクスポートしていません",
-    "help": "利用可能なエクスポート: {available}",
+    "help": "このモジュールの利用可能なエクスポート：{available}",
     "example": "lib.nope;",
     "error_output": "error[E1043]: モジュールメンバーが見つかりません\n --> example.yx:1:5\n  |\n1 | lib.nope;\n  |     ^^^^ モジュール 'lib' は 'nope' をエクスポートしていません"
   },

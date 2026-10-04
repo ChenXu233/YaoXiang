@@ -16,40 +16,39 @@ pr_impl:
 
 # RFC 013: Error Code Specification
 
-## Summary
+## Abstract
 
-This RFC proposes an error code classification specification for the YaoXiang compiler, adopting a
-single-layer numbering system similar to Rust, combined with JSON resource files to provide
-multilingual support, and offering error explanation functionality through the `yaoxiang explain`
-command.
+This RFC proposes the error code classification specification for the YaoXiang compiler. It adopts a
+single-level numbering system similar to Rust, paired with JSON resource files to support multiple
+languages, and provides error explanation functionality through the `yaoxiang explain` command.
 
 ## Motivation
 
-### Why do we need standardized error codes?
+### Why Standardized Error Codes?
 
-1. **User Experience**: Users can quickly determine the type and severity of an error by seeing the
-   error code
-2. **Documentation Organization**: Grouping by category makes it easier to write and maintain error
+1. **User experience**: Users can quickly determine the type and severity of an error when they see
+   an error code
+2. **Documentation organization**: Grouping by category makes it easier to write and maintain error
    reference documentation
-3. **Tool Integration**: IDEs/LSPs can provide quick-fix suggestions and documentation links based
-   on error codes
-4. **Internationalization Support**: Error messages are separated from codes, facilitating
-   multilingual translation
+3. **Tool integration**: IDE/LSP can provide quick-fix suggestions and documentation links based on
+   error codes
+4. **Internationalization support**: Error messages are separated from codes, facilitating
+   multi-language translation
 
 ### Design Goals
 
-- **Concise**: Single-layer numbering; users don't need to memorize complex classification rules
+- **Concise**: Single-level numbering; users don't need to remember complex classification rules
 - **Friendly**: Error message format similar to Rust, with help information and examples
-- **Extensible**: Resource-file driven, easy to add new errors and new languages
-- **Tool-Friendly**: explain command + JSON output, supporting IDE/LSP integration
+- **Extensible**: Resource-file-driven, easy to add new errors and new languages
+- **Tool-friendly**: `explain` command + JSON output, supports IDE/LSP integration
 
 ---
 
 ## Proposal
 
-### Core Design: Single-Layer Numbering System
+### Core Design: Single-Level Numbering System
 
-A four-digit numbering system, grouped by compilation phase:
+A four-digit number is adopted, grouped by compilation phase:
 
 ```
 Exxxx
@@ -61,30 +60,30 @@ Exxxx
 
 ### Phase Division
 
-| Phase | Range | Description                    |
-| ----- | ----- | ------------------------------ |
-| **0** | E0xxx | Lexical and Syntactic Analysis |
-| **1** | E1xxx | Type Checking                  |
-| **2** | E2xxx | Semantic Analysis              |
-| **3** | E3xxx | Code Generation                |
-| **4** | E4xxx | Generics and Traits            |
-| **5** | E5xxx | Modules and Imports            |
-| **6** | E6xxx | Runtime Errors                 |
-| **7** | E7xxx | I/O and System Errors          |
-| **8** | E8xxx | Internal Compiler Errors       |
-| **9** | E9xxx | Reserved/Experimental          |
+| Phase | Range | Description                 |
+| ----- | ----- | --------------------------- |
+| **0** | E0xxx | Lexical and syntax analysis |
+| **1** | E1xxx | Type checking               |
+| **2** | E2xxx | Semantic analysis           |
+| **3** | E3xxx | Code generation             |
+| **4** | E4xxx | Generics and trait          |
+| **5** | E5xxx | Modules and imports         |
+| **6** | E6xxx | Runtime errors              |
+| **7** | E7xxx | I/O and system errors       |
+| **8** | E8xxx | Internal compiler errors    |
+| **9** | E9xxx | Reserved/experimental       |
 
-### Error Category Enumeration
+### Error Category Enum
 
 ```rust
 /// Error category
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCategory {
-    Lexer,      // E0xxx: Lexical and syntactic analysis
+    Lexer,      // E0xxx: Lexical and syntax analysis
     Parser,     // E0xxx: Parser errors
     TypeCheck,  // E1xxx: Type checking
     Semantic,   // E2xxx: Semantic analysis
-    Generic,    // E4xxx: Generics and traits
+    Generic,    // E4xxx: Generics and trait
     Module,     // E5xxx: Modules and imports
     Runtime,    // E6xxx: Runtime errors
     Io,         // E7xxx: I/O and system errors
@@ -94,12 +93,12 @@ pub enum ErrorCategory {
 
 ### Error Code Definition and Common Builder
 
-**Core Principle**: Error code definition is separated from display text
+**Core principle**: Error code definition is separated from display text
 
 - `ErrorCodeDefinition`: Error code metadata (code, category, template), without display text
-- `locales/*.json`: Display text in each language (title, message, help, with error codes as nested
-  objects)
-- `DiagnosticBuilder`: A common builder, replacing the trait-per-error design
+- `locales/*.json`: Display text for each language (title, message, help; error code as nested
+  object)
+- `DiagnosticBuilder`: Common builder, replacing the trait-per-error design
 
 #### Error Code Definition
 
@@ -109,7 +108,7 @@ pub enum ErrorCategory {
 use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, Severity};
 
-/// Error code definition (metadata only; display text is in i18n files)
+/// Error code definition (only metadata, display text in i18n files)
 #[derive(Debug, Clone, Copy)]
 pub struct ErrorCodeDefinition {
     pub code: &'static str,
@@ -117,7 +116,7 @@ pub struct ErrorCodeDefinition {
     pub message_template: &'static str,  // Message template, supports {param} placeholders
 }
 
-/// Generic diagnostic builder
+/// Common diagnostic builder
 pub struct DiagnosticBuilder {
     code: &'static str,
     message_template: &'static str,
@@ -141,15 +140,15 @@ impl DiagnosticBuilder {
         self
     }
 
-    /// Set position
+    /// Set location
     pub fn at(mut self, span: Span) -> Self {
         self.span = Some(span);
         self
     }
 
-    /// Build Diagnostic (template rendering completed at compile time)
+    /// Build Diagnostic (template rendering completed at compile-time)
     pub fn build(&self, i18n: &I18nRegistry) -> Diagnostic {
-        // Check that all {key} in template have corresponding parameters
+        // Check that all {key} in the template have corresponding parameters
         self.validate_params();
 
         let message = i18n.render(self.message_template, &self.params);
@@ -190,7 +189,7 @@ impl ErrorCodeDefinition {
 }
 ```
 
-#### Usage Examples
+#### Usage Example
 
 ```rust
 // checking/mod.rs
@@ -232,22 +231,22 @@ pub static E1XXX: &[ErrorCodeDefinition] = &[
 
 #### Design Advantages
 
-| Feature                   | Description                                           |
-| ------------------------- | ----------------------------------------------------- |
-| **Single Builder**        | One `DiagnosticBuilder` for all error codes           |
-| **Type Safety**           | Shortcut methods ensure parameter correctness         |
-| **Self-Documenting**      | `E1001::unknown_variable(name)` is self-explanatory   |
-| **Template Separation**   | Message templates separated from code, easy for i18n  |
-| **Zero Runtime Overhead** | Compile-time rendering, no lookup table in AOT binary |
+| Feature                   | Description                                            |
+| ------------------------- | ------------------------------------------------------ |
+| **Single Builder**        | One `DiagnosticBuilder` common to all error codes      |
+| **Type safety**           | Shortcut methods ensure parameter correctness          |
+| **Self-documenting**      | `E1001::unknown_variable(name)` is self-explanatory    |
+| **Template separation**   | Message template is separated from code, easy for i18n |
+| **Zero runtime overhead** | Compile-time rendering, no table lookup in AOT binary  |
 
 ---
 
 ### Error Macro Simplification
 
-#### error! macro (auto-injects context)
+#### error! Macro (Auto-Inject Context)
 
 ```rust
-/// Macro that automatically obtains span and i18n configuration at compile time
+/// Macro that automatically retrieves span and i18n config at compile-time
 macro_rules! error {
     ($code:ident, $($key:ident = $value:expr),* $(,)?) => {
         $code()
@@ -257,12 +256,12 @@ macro_rules! error {
     };
 }
 
-/// Usage: only pass parameters; span and i18n are auto-injected
+/// Usage: only need to pass parameters, span and i18n are auto-injected
 return Err(error!(E1001, name = var_name));
 return Err(error!(E1002, expected = "bool", found = cond_ty));
 ```
 
-#### Manually Using the Builder
+#### Manual Builder Usage
 
 ```rust
 // When manual control is needed
@@ -277,23 +276,23 @@ E1001::unknown_variable(&var_name)
 
 ### Error Code List
 
-#### E0xxx: Lexical and Syntactic Analysis
+#### E0xxx: Lexical and Syntax Analysis
 
 <!-- code-table:E0xxx start -->
 
 | Code  | Description               |
 | ----- | ------------------------- |
 | E0001 | Invalid character         |
-| E0002 | Invalid numeric literal   |
+| E0002 | Invalid number literal    |
 | E0003 | Unterminated string       |
 | E0004 | Invalid character literal |
 | E0010 | Expected token            |
 | E0011 | Unexpected token          |
 | E0012 | Invalid syntax            |
-| E0013 | Mismatched brackets       |
+| E0013 | Unmatched parentheses     |
 | E0014 | Missing semicolon         |
 | E0016 | Expected expression       |
-| E0018 | Keyword used as name      |
+| E0018 | Keyword as name           |
 
 <!-- code-table:E0xxx end -->
 
@@ -301,137 +300,138 @@ E1001::unknown_variable(&var_name)
 
 <!-- code-table:E1xxx start -->
 
-| Code  | Description                                                 |
-| ----- | ----------------------------------------------------------- |
-| E1001 | Unknown variable                                            |
-| E1002 | Type mismatch                                               |
-| E1003 | Unknown type                                                |
-| E1010 | Argument count mismatch                                     |
-| E1011 | Argument type mismatch                                      |
-| E1012 | Return type mismatch                                        |
-| E1013 | Function not found                                          |
-| E1014 | Unknown named argument                                      |
-| E1015 | Duplicate argument specification                            |
-| E1020 | Cannot infer type                                           |
-| E1021 | Type inference conflict                                     |
-| E1030 | Incomplete pattern                                          |
-| E1031 | Unreachable pattern                                         |
-| E1032 | Duplicate pattern binding                                   |
-| E1033 | Inconsistent binding in or-pattern                          |
-| E1034 | Struct pattern missing field                                |
-| E1040 | Operation not supported                                     |
-| E1041 | Index out of bounds                                         |
-| E1042 | Field not found                                             |
-| E1050 | Boolean operand required                                    |
-| E1051 | Logical NOT requires a boolean operand                      |
-| E1052 | Invalid dereference                                         |
-| E1053 | Non-struct field access                                     |
-| E1054 | Conditional type mismatch                                   |
-| E1055 | Constraint in non-generic context                           |
-| E1060 | Type argument count mismatch                                |
-| E1061 | Cannot instantiate generic                                  |
-| E1062 | const generic constraint failed                             |
-| E1064 | Invalid binding position index                              |
-| E1065 | Calling a non-function value                                |
-| E1071 | Type definition only allowed at module level                |
-| E1081 | `?` only allowed in functions returning a propagatable type |
-| E1082 | `?` can only be used on types implementing Try              |
-| E1083 | `?` error type mismatch                                     |
-| E1090 | ✨ Unspeakable ✨                                           |
-| E1091 | Invalid generic meta-type                                   |
-| E1092 | Invalid refinement type argument form                       |
-| E1093 | Refinement argument count mismatch                          |
-| E1094 | Unused compile-time value parameter                         |
-| E1095 | Unknown interface                                           |
-| E1096 | Interface argument count mismatch                           |
-| E1097 | Interface member name conflict                              |
-| E1098 | Interface method not implemented                            |
-| E1099 | Interface method signature mismatch                         |
-| E1100 | Duplicate interface method implementation                   |
-| E1101 | Type does not implement interface                           |
-| E1102 | Loop control statement outside of loop                      |
-| E1103 | Brackets not allowed in type position                       |
-| E1104 | Interface implementation not in the type's defining module  |
-| E1105 | Variant constructor cannot be accessed as a field           |
-| E1106 | Constraint not satisfied                                    |
-| E1107 | Ambiguous method overload                                   |
-| E1108 | Empty block in container expected position                  |
+| Code  | Description                                                    |
+| ----- | -------------------------------------------------------------- |
+| E1001 | Unknown variable                                               |
+| E1002 | Type mismatch                                                  |
+| E1003 | Unknown type                                                   |
+| E1010 | Argument count mismatch                                        |
+| E1011 | Argument type mismatch                                         |
+| E1012 | Return type mismatch                                           |
+| E1013 | Function not found                                             |
+| E1014 | Unknown named parameter name                                   |
+| E1015 | Duplicate argument specification                               |
+| E1020 | Cannot infer type                                              |
+| E1021 | Type inference conflict                                        |
+| E1030 | Incomplete pattern                                             |
+| E1031 | Unreachable pattern                                            |
+| E1032 | Duplicate pattern binding                                      |
+| E1033 | Inconsistent or-pattern bindings                               |
+| E1034 | Struct pattern missing field                                   |
+| E1040 | Operation not supported                                        |
+| E1041 | Index out of bounds                                            |
+| E1042 | Field not found                                                |
+| E1043 | Module member not found                                        |
+| E1050 | Boolean operand required                                       |
+| E1051 | Logical NOT requires boolean operand                           |
+| E1052 | Invalid dereference                                            |
+| E1053 | Non-struct field access                                        |
+| E1054 | Conditional type mismatch                                      |
+| E1055 | Constraint in non-generic context                              |
+| E1060 | Type parameter count mismatch                                  |
+| E1061 | Cannot instantiate generics                                    |
+| E1062 | const generic constraint failure                               |
+| E1064 | Invalid binding position index                                 |
+| E1065 | Calling non-function value                                     |
+| E1071 | Type definition only at module level                           |
+| E1081 | `?` is only allowed in functions returning a propagatable type |
+| E1082 | `?` can only be used on types implementing Try                 |
+| E1083 | `?` error type mismatch                                        |
+| E1090 | ✨ Unspeakable ✨                                              |
+| E1091 | Invalid generic meta type                                      |
+| E1092 | Refinement type argument form illegal                          |
+| E1093 | Refinement argument count mismatch                             |
+| E1094 | Unused compile-time value parameter                            |
+| E1095 | Unknown interface                                              |
+| E1096 | Interface parameter count mismatch                             |
+| E1097 | Interface member name conflict                                 |
+| E1098 | Interface method not implemented                               |
+| E1099 | Interface method signature mismatch                            |
+| E1100 | Interface method duplicate implementation                      |
+| E1101 | Type does not implement interface                              |
+| E1102 | Loop control statement outside loop                            |
+| E1103 | Square brackets cannot be used at type position                |
+| E1104 | Interface implementation not in type's defining module         |
+| E1105 | Variant constructor cannot be accessed as field                |
+| E1106 | Constraint not satisfied                                       |
+| E1107 | Method overloading ambiguous                                   |
+| E1108 | Empty block falls into container expected position             |
 
 <!-- code-table:E1xxx end -->
 
-> **RFC-011b Reference (2026-09-22 note)**:
-> [RFC-011b: Operator Overloading](./011b-operator-overloading.md) When implemented, it will affect
-> three places in this section: ① The text of `E1081` / `E1082` will drop the "Result" wording (`?`
-> will be judged by the `Try` interface, no longer bound to a specific type name), to be
-> synchronized in Phase 2 following the "three-way consistency" process in this document (codes/*.rs
-> ↔ locales ↔ code tables); ② When the `Equal` precondition (linear token) is not met, the rejection
-> diagnostic reuses the `E1101` (Type does not implement interface) family; ③ After Phase 1 wiring,
-> `Struct == Struct` shifts from `E6007` runtime error to compile-time judgment, narrowing the
-> `E6007` trigger surface. The registered text in the table remains as is until implementation
-> lands.
+> **RFC-011b Relation (2026-09-22 note)**:
+> [RFC-011b: Operator Overloading](./011b-operator-overloading.md) When implemented, it will involve
+> three places in this section — ① `E1081` / `E1082` text remove the "Result" wording (`?` is
+> changed to be judged by the `Try` interface, no longer bound to a specific type name),
+> synchronized in phase 2 according to the "three-party consistency" process in this document
+> (codes/*.rs ↔ locales ↔ code table); ② The `Equal` pre-constraint (linear token) rejection
+> diagnostic when not satisfied reuses the `E1101` (type does not implement interface) family; ③
+> After phase 1 wiring, `Struct == Struct` changes from `E6007` runtime error to compile-time
+> determination, and the `E6007` trigger surface shrinks. The registered text in the table remains
+> as is before implementation.
 
 #### E2xxx: Semantic Analysis
 
 <!-- code-table:E2xxx start -->
 
-| Code  | Description                          |
-| ----- | ------------------------------------ |
-| E2001 | Scope error                          |
-| E2002 | Duplicate definition                 |
-| E2003 | Ownership error                      |
-| E2010 | Immutable assignment                 |
-| E2011 | Use of uninitialized variable        |
-| E2012 | Mutability conflict                  |
-| E2013 | Variable shadowing                   |
-| E2014 | Use of moved value                   |
-| E2016 | Immutable assignment                 |
-| E2018 | Mutable/immutable borrow conflict    |
-| E2019 | Double free                          |
-| E2020 | Use after free                       |
-| E2027 | unsafe dereference                   |
-| E2029 | Reference cycle in spawn             |
-| E2030 | Refinement type constraint violation |
-| E2031 | Refinement constraint not provable   |
-| E2090 | Invalid signature                    |
-| E2091 | Unknown type in signature            |
-| E2092 | Signature missing arrow              |
-| E2093 | Duplicate parameter name             |
-| E2094 | Generic parameter shadowing          |
-| E2095 | Parameter name shadows generic       |
-| E2096 | Signature bare container type        |
+| Code  | Description                            |
+| ----- | -------------------------------------- |
+| E2001 | Scope error                            |
+| E2002 | Duplicate definition                   |
+| E2003 | Ownership error                        |
+| E2010 | Immutable assignment                   |
+| E2011 | Using uninitialized variable           |
+| E2012 | Mutability conflict                    |
+| E2013 | Variable shadowing                     |
+| E2014 | Using moved value                      |
+| E2016 | Immutable assignment                   |
+| E2018 | Mutable/immutable borrow conflict      |
+| E2019 | Double free                            |
+| E2020 | Use after free                         |
+| E2027 | unsafe dereference                     |
+| E2029 | Reference loop inside spawn            |
+| E2030 | Refinement type constraint violation   |
+| E2031 | Refinement constraint cannot be proven |
+| E2090 | Invalid signature                      |
+| E2091 | Unknown signature type                 |
+| E2092 | Signature missing arrow                |
+| E2093 | Duplicate parameter name               |
+| E2094 | Generic parameter shadowing            |
+| E2095 | Parameter name shadows generic         |
+| E2096 | Signature bare container type          |
 
 <!-- code-table:E2xxx end -->
 
-> Reserved code notes (2026-09-14 inventory, #251 release scope): E2019 (Double free), E2020 (Use
-> after free), E2027 (unsafe dereference), E2029 (ref cycle in spawn) are registered and anchored by
-> unit tests, but there are no reachable yx source code surfaces (explicit drop statements, Ptr
-> dereference syntax, spawn ref cycle construction paths) — the claim of fully correct semantics
-> does not cover these four codes; they are treated as "reserved" until the implementation is
-> completed.
+> Reserved code description (2026-09-14 inventory, #251 release specification): E2019 (double free),
+> E2020 (use after free), E2027 (unsafe dereference), E2029 (ref loop inside spawn) have completed
+> registration and are anchored by unit tests, but there are no reachable yx source code surfaces
+> yet (explicit drop statements, Ptr dereference grammar, spawn ref loop construction path) — the
+> claim of complete semantic correctness does not cover these four codes, and they are treated as
+> "reserved" before implementation completion.
 
 #### E3xxx: Code Generation
 
 <!-- code-table:E3xxx start -->
 
-| Code  | Description                                      |
-| ----- | ------------------------------------------------ |
-| E3004 | Unsupported iterator                             |
-| E3005 | IR generation error                              |
-| E3006 | Unresolved variable                              |
-| E3007 | Top-level binding initializer must be a constant |
-| E3008 | Unsupported match pattern                        |
-| E3014 | Register overflow                                |
-| E3017 | Invalid operand (code generation)                |
-| E3018 | Monomorphization instantiation failed            |
-| E3019 | Top-level binding circular dependency            |
-| E3020 | Missing program entry                            |
-| E3021 | Entry is not a function                          |
-| E3022 | Entry main signature mismatch                    |
-| E3023 | Top-level does not allow executable statements   |
+| Code  | Description                                       |
+| ----- | ------------------------------------------------- |
+| E3004 | Unsupported iterator                              |
+| E3005 | IR generation error                               |
+| E3006 | Unresolved variable                               |
+| E3007 | Top-level binding initialization must be constant |
+| E3008 | Unsupported match pattern                         |
+| E3014 | Register overflow                                 |
+| E3017 | Invalid operand (code generation)                 |
+| E3018 | Monomorphization instantiation failure            |
+| E3019 | Top-level binding circular dependency             |
+| E3020 | Missing program entry point                       |
+| E3021 | Entry point is not a function                     |
+| E3022 | Entry point main signature mismatch               |
+| E3023 | Executable statements not allowed at top level    |
 
 <!-- code-table:E3xxx end -->
 
-#### E4xxx: Generics and Traits
+#### E4xxx: Generics and Trait
 
 <!-- code-table:E4xxx start -->
 
@@ -454,9 +454,9 @@ E1001::unknown_variable(&var_name)
 
 <!-- code-table:E4xxx end -->
 
-> E4006/E8004 currently have no emission points (reserved codes): Sized constraint and optimization
-> error paths are pending implementation; they will be wired according to the actual trigger surface
-> when implemented.
+> E4006/E8004 currently have no emission points (reserved codes): the Sized constraint and
+> optimization error path are pending implementation, and will be wired according to the real
+> trigger surface when implemented.
 
 #### E5xxx: Modules and Imports
 
@@ -481,35 +481,35 @@ E1001::unknown_variable(&var_name)
 
 | Code  | Description                  |
 | ----- | ---------------------------- |
-| E6001 | Division by zero             |
+| E6001 | Division by zero error       |
 | E6003 | Array index out of bounds    |
 | E6004 | Stack overflow               |
-| E6005 | Assertion failed             |
+| E6005 | Assertion failure            |
 | E6006 | Function not found (runtime) |
 | E6007 | Runtime error                |
-| E6008 | Key does not exist           |
-| E6009 | Invalid range step           |
-| E6010 | Integer parse failure        |
-| E6011 | Float parse failure          |
+| E6008 | Key not found                |
+| E6009 | Range step illegal           |
+| E6010 | Integer parsing failed       |
+| E6011 | Float parsing failed         |
 | E6012 | Invalid code point           |
-| E6013 | JSON parse failure           |
+| E6013 | JSON parsing failed          |
 
 <!-- code-table:E6xxx end -->
 
-> **Code Table Revision (2026-08-09)**: The code table was originally defined per the Rust semantic
-> draft (Assertion failed/Arithmetic overflow/Heap allocation failed/Type cast failed), which does
-> not match the actual implementation needs. YaoXiang has no null pointer/heap allocation
-> failure/type cast concepts (value semantics + Rust memory safety), and runtime overflow paths are
-> not yet detected. After calibration:
+> **Code Table Revision (2026-08-09)**: The code table was originally defined according to a Rust
+> semantic draft (Assertion failed/Arithmetic overflow/Heap allocation failed/Type cast failed),
+> which does not match the actual implementation needs. YaoXiang has no concept of null pointer/heap
+> allocation failure/type conversion (value semantics + Rust memory safety), and the runtime
+> overflow path does not implement detection. After calibration:
 >
-> - E6002 deleted (original Assertion failed moved to E6005; original null pointer semantics are not
->   a language concept)
-> - E6003 changed from Arithmetic overflow to Runtime index out of bounds (actual trigger surface)
-> - E6005 changed from Heap allocation failed to Assertion failed (std.assert actual path)
-> - E6006 changed from Runtime index out of bounds to Function not found (implementation was already
->   like this)
-> - E6007 changed from Type cast failed to generic Runtime error (uniform landing point for unmapped
->   variants of ExecutorError)
+> - E6002 deleted (original Assertion failed moved to E6005; the original null pointer semantics has
+>   no language concept)
+> - E6003 changed from Arithmetic overflow to Runtime index out of bounds (real trigger surface)
+> - E6005 changed from Heap allocation failed to Assertion failed (the real path for std.assert)
+> - E6006 changed from Runtime index out of bounds to Function not found (the implementation has
+>   been like this for a long time)
+> - E6007 changed from Type cast failed to the generic Runtime error (unified landing point for
+>   unmapped variants of ExecutorError)
 
 #### E7xxx: I/O and System Errors
 
@@ -531,7 +531,7 @@ E1001::unknown_variable(&var_name)
 | Code  | Description             |
 | ----- | ----------------------- |
 | E8001 | Internal compiler error |
-| E8002 | Unexpected panic        |
+| E8002 | Unexpected Panic        |
 | E8003 | Compiler phase error    |
 
 <!-- code-table:E8xxx end -->
@@ -540,119 +540,121 @@ E1001::unknown_variable(&var_name)
 
 <!-- code-table:W1xxx start -->
 
-| Code  | Description                             |
-| ----- | --------------------------------------- |
-| W1001 | Unused private function                 |
-| W1002 | Unused private type                     |
-| W1003 | Unused import                           |
-| W1004 | Unused private variable                 |
-| W1005 | Unused private method                   |
-| W1006 | Local module shadows dependency package |
-| W1063 | const generic constraint not evaluable  |
-| W1080 | Compile-time proof degraded             |
+| Code  | Description                                  |
+| ----- | -------------------------------------------- |
+| W1001 | Unused private function                      |
+| W1002 | Unused private type                          |
+| W1003 | Unused import                                |
+| W1004 | Unused private variable                      |
+| W1005 | Unused private method                        |
+| W1006 | Local module shadows dependency package      |
+| W1063 | const generic constraint cannot be evaluated |
+| W1080 | Compile-time proof downgrade                 |
 
 <!-- code-table:W1xxx end -->
 
-> W code position rule: isomorphically grouped by phase with E codes (W + phase thousands digit
-> segment); W1xxx = type checking phase warning.
+> W code position rule: Isomorphic to E codes by phase grouping (W+phase thousands segment); W1xxx =
+> type checking phase warnings.
 >
-> **Dead code semantics (#321 Finalized Plan B)**: `pub` definitions are external interfaces and are
-> never reported — whether external consumers use them is beyond single-file analysis boundary;
-> better to be silent than to false-positive. W1001/W1002/W1004/W1005 only target **private
-> (non-pub) definitions**: never referenced in the reachability analysis starting from `main` and
-> `pub` definitions, they are reported. Methods (W1005) match by short name at call site. bin/lib
-> target semantics (reporting unused pub in bin) is a future extension (#289 Plan A) requiring
-> project model support.
+> **Dead code semantics (#321 finalization B)**: A `pub` definition is an external interface, and is
+> never reported — whether external consumers use it exceeds single-file analysis boundaries, so it
+> is better to stay silent than to misreport. W1001/W1002/W1004/W1005 only target **private
+> (non-pub) definitions**: starting from `main` and `pub` definitions, any reference that is never
+> reached in the reachability analysis is reported. Methods (W1005) are matched by call-site short
+> name. bin/lib target semantics (warning for unused pub in a bin) is a future extension (#289 plan
+> A), which requires project model support.
 >
-> **Unused import (W1003)**: Detected by typecheck's use elaboration (pass2 registers the imported
-> local name; considered used if hit by expression resolution or type annotation position), covering
-> both whole-module imports (`use std.io` → module alias) and named imports (`use std.io.{print}`).
+> **Unused import (W1003)**: Detected by typecheck's use elaboration (pass2 records the imported
+> local name; a hit in expression parsing or type annotation position is treated as used), covering
+> both the overall import (`use std.io` → module alias) and named imports (`use std.io.{print}`).
 >
-> **Emission channel**: W code diagnostics are tagged `Severity::Warning` by default by the builder
-> according to the W prefix (explicit specification takes precedence); collection and rendering
-> share the same track as errors (rendered with `warning[W####]` prefix), but do not block
-> compilation nor affect the successful exit code. `yaoxiang check --deny-warnings` upgrades
-> warnings to failures (exits with non-zero code when warnings exist), used for strict CI mode.
-> per-code suppression (allow attributes, etc.) is a future extension item.
+> **Emission channel**: W-code diagnostics are labeled `Severity::Warning` by the builder by default
+> with the W prefix (explicit specification takes priority), and collection and presentation share
+> the same track as errors (`warning[W####]` prefix rendering), but they do not block compilation
+> and do not affect the success exit code. `yaoxiang check --deny-warnings` upgrades warnings to
+> failures (exits with a non-zero code when warnings exist), for CI strict mode. per-code
+> suppression (allow attributes, etc.) is a future extension.
 
 ### Message Quality Specification
 
-> This section is introduced by the message single-track and quality revision (2026-09-03). Enforced
-> in CI by `scripts/audit_diagnostics.py`.
+> This section is introduced by the message single-track and quality revision (2026-09-03). It is
+> enforced in CI by `scripts/audit_diagnostics.py`.
 
-1. **Message Single Track**: All user-visible diagnostic messages must go through the authoritative
+1. **Message single-track**: All user-visible diagnostic messages must go through authoritative
    registry shortcut methods + locales template rendering; the code only passes structured
-   parameters. It is forbidden to bypass the registry and directly construct native values like
-   `Diagnostic::error(...)` — this path bypasses code validation and i18n.
-2. **Code Validity**: Using unregistered codes and pseudo-codes (such as `E_INTERNAL`) is forbidden;
-   the code literal at the use site must already be defined in the registry. Internal errors always
-   land on E8001 (`internal_error`).
-3. **Type Display**: Type Display must distinguish the form before and after instantiation (the bare
-   names `Expected 'Container', found 'Container'` cannot be distinguished).
-4. **Solver Internal State Isolation**: Solver intermediate state TypeVar (Display form `t<N>`) must
-   not enter user-visible messages. Test anchor: `test_type_error_message_no_solver_typevar_leak`.
-5. **E8xxx Boundary**: E8xxx is only used for internal compiler consistency issues (ICE). Errors
-   fixable by users are forbidden to use E8001 as a catch-all; ICE messages must include minimal
-   reproduction instructions.
+   parameters. It is prohibited to bypass the registry to directly construct native values like
+   `Diagnostic::error(...)` — that path bypasses code validation and i18n.
+2. **Code validity**: It is prohibited to use unregistered codes and pseudo codes (such as
+   `E_INTERNAL`); the point code literal used must already be defined in the registry. Internal
+   errors all fall to E8001 (`internal_error`).
+3. **Type display**: Type Display must distinguish between pre-instantiation and post-instantiation
+   forms (`Expected 'Container', found 'Container'` bare names cannot be distinguished).
+4. **Solver internal state isolation**: The solver's intermediate state TypeVar (Display form
+   `t<N>`) must not enter user-visible messages. Test anchor:
+   `test_type_error_message_no_solver_typevar_leak`.
+5. **E8xxx boundary**: E8xxx is only used for compiler internal consistency issues (ICE). Errors
+   that users can fix are prohibited from using E8001 as a fallback; ICE messages must be
+   accompanied by minimum reproduction guidelines.
 
 ---
 
-### Runtime Error Values and Code Mapping
+### Runtime Error Values and Code Connection
 
 > This section is introduced by the runtime Error value with code revision (2026-09-03). The
-> E6xxx/E7xxx semantic space simultaneously carries two channels; the code space is the same, but
-> the presentation channels differ.
+> E6xxx/E7xxx semantic space carries two channels at the same time; the code space is the same, and
+> the presentation channel is different.
 
 #### Two Channels
 
-| Channel                         | Carrier                                                     | Presentation                                             |
-| ------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------- |
-| Compiler/CLI Diagnostic Channel | Host-level hard errors like `ExecutorError`                 | stderr `error[E####]:` (already wired E6003/E6005/E6007) |
-| In-Program Error Value Channel  | The Err carrier `Error` of std library's `Result(T, Error)` | Language value, consumed by program's match/comparison   |
+| Channel                         | Carrier                                                      | Presentation                                             |
+| ------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| Compiler/CLI diagnostic channel | Host-level hard errors like `ExecutorError`                  | stderr `error[E####]:` (already wired E6003/E6005/E6007) |
+| In-program error value channel  | Err carrier `Error` of `Result(T, Error)` in the std library | Language value, consumed by program match/compare        |
 
-#### Error Structure (since v0.8, breaking change)
+#### Error Structure (from v0.8, breaking change)
 
 ```
 Error { code: String, message: String }
 ```
 
-- `code` reuses this specification's E6xxx/E7xxx numbers, in string form (e.g., `"E6008"`).
-- **Stability Contract**: The semantics of allocated codes are stable across versions; the same
-  semantics will not reuse deleted codes (E6002 precedent).
-- **Consumption Surface**: In-program `e.code == "E6xxx"` comparison is the only programmable
-  judgment contract; `yaoxiang explain E6xxx` is consistent with the documentation; the toolchain
-  (LSP / DAP, see RFC-034) uses the code as exceptionId.
-- **Accessors**: `std.result.code(e)` / `std.result.message(e)`.
-- **User-Defined Errors**: The E of `Result(T, E)` is a generic parameter; serious modeling goes
-  through user-defined types; std `Error` is only a convenient fallback carrier, and its code system
+- `code` reuses the E6xxx/E7xxx numbers of this specification, in string form (such as `"E6008"`).
+- **Stable contract**: Allocated codes have unchanged semantics across versions; the same semantics
+  do not reuse deleted codes (E6002 is a precedent).
+- **Consumption surface**: In-program `e.code == "E6xxx"` comparison is the only programmable
+  judgment contract; `yaoxiang explain E6xxx` documentation is connected; the toolchain (LSP / DAP,
+  see RFC-034) uses the code as exceptionId.
+- **Accessor**: `std.result.code(e)` / `std.result.message(e)`.
+- **User-defined errors**: The E of `Result(T, E)` is a generic parameter; serious modeling takes
+  user-defined types; the std `Error` is only a convenient fallback carrier, and its code system
   does not constrain user E types.
 
 #### Code Allocation Rules
 
-1. Runtime error value codes and compiler diagnostic codes share the E6xxx/E7xxx space; new codes
-   are allocated according to the **actual trigger surface**, not reserved for imagined scenarios.
-2. Register before use: new codes can only be emitted after entering the authoritative registry and
-   passing the three-way consistency check (codes/*.rs ↔ locales ↔ this document's code table). The
-   registration source for runtime error value codes is the `RUNTIME_ERROR_CODES` table in
-   `src/std/result.rs` (subject to the same `build.rs` build-time gate + `tools/code-tables`
-   validation as diagnostic codes).
-3. E7xxx is the reserved segment for std.io / std.net error values (currently empty, activated when
-   io/net becomes Result-typed).
-4. Emission points: std modules construct Error values via `error_new(code, message)`; the
-   consumption side uses `std.result.unwrap_err` to retrieve the Err carrier, and
-   `std.result.code/message` to read fields.
+1. Runtime error value codes and compiler diagnostic codes share the E6xxx/E7xxx space, and new
+   codes are allocated according to the **real trigger surface**, not reserved for imagined
+   scenarios.
+2. Register before use: New codes enter the authoritative registry and pass the three-party
+   consistency verification (codes/*.rs ↔ locales ↔ this document's code table) before they can be
+   emitted. The registration source for runtime error value codes is the `RUNTIME_ERROR_CODES` table
+   in `src/std/result.rs` (subject to the same `build.rs` build-time threshold + `tools/code-tables`
+   verification as diagnostic codes).
+3. E7xxx is the reserved segment for std.io / std.net error values (currently empty; to be enabled
+   when io/net is turned into Result).
+4. Emission point: Each std module constructs the Error value via `error_new(code, message)`; on the
+   consumer side, `std.result.unwrap_err` extracts the Err carrier, and `std.result.code/message`
+   reads the fields.
 
-#### Evolution Path (Track C, Not Implemented)
+#### Evolution Path (Line C, not implemented)
 
-After pattern matching completion (RFC-010b) lands, `Error` can be upgraded to
-`{ kind: ErrorKind, message: String }`, with `code` becoming a property derived from kind (the
-variant definition site is the code registry). During evolution, the code stability contract in this
-section remains unchanged; this upgrade is an independent decision and does not constitute a
+After pattern matching completeness (RFC-010b) lands, `Error` can be upgraded to
+`{ kind: ErrorKind, message: String }`, and `code` becomes a property derived from `kind` (the
+variant definition is the code registry). During the evolution period, the code stable contract in
+this section remains unchanged; this upgrade is an independent decision and does not constitute a
 commitment of this section.
 
 ---
 
-### Multilingual Resource Files
+### Multi-language Resource Files
 
 #### Resource File Format
 
@@ -705,7 +707,7 @@ commitment of this section.
 ```rust
 // locales/*.json (error code object)
 
-/// i18n display text registry (loaded from JSON at compile time, zero lookup at runtime)
+/// i18n display text registry (loaded from JSON at compile-time, zero table lookup at runtime)
 pub struct I18nRegistry {
     /// Title
     titles: HashMap<&'static str, &'static str>,
@@ -730,7 +732,7 @@ pub struct ErrorInfo<'a> {
 }
 
 impl I18nRegistry {
-    /// Get registry by language code
+    /// Get the registry based on the language code
     pub fn new(lang: &str) -> Self {
         match lang {
             "zh" => Self::zh(),
@@ -749,7 +751,7 @@ impl I18nRegistry {
         })
     }
 
-    /// Render template (done at compile time, zero overhead at runtime)
+    /// Render template (completed at compile-time, zero overhead at runtime)
     pub fn render(&self, template: &'static str, params: &[(&str, String)]) -> String {
         let mut result = String::with_capacity(template.len() + 64);
         let mut chars = template.chars().peekable();
@@ -796,10 +798,10 @@ impl I18nRegistry {
 
 ##### Arbitrary Key Support
 
-**params supports any key, not limited to predefined**. The caller can pass any `key`:
+**`params` supports arbitrary keys, not limited to predefined ones**. The caller can pass any `key`:
 
 ```rust
-// Use any key
+// Use arbitrary keys
 E1001::unknown_variable(&var_name)
     .param("location", "global scope")
     .param("hint", "try declaring it first")
@@ -810,7 +812,7 @@ E1001::unknown_variable(&var_name)
 "Unknown variable: '{name}' at {location}. {hint}"
 ```
 
-> **Note**: Not all error codes use placeholders. Some error codes (such as E0001) have static
+> **Note**: Not all error codes use placeholders. Some error codes (such as E0001) are static
 > messages and require no parameters.
 
 #### Language Priority
@@ -847,46 +849,46 @@ default = "zh"
 #### Compile-Time Language Selection
 
 ```
-1. Read language.default from project-level yaoxiang.toml
-2. If not configured, read from user-level ~/.yaoxiang/yaoxiang.toml
+1. Read project-level yaoxiang.toml's language.default
+2. If not configured, read user-level ~/.yaoxiang/yaoxiang.toml
 3. If neither is configured, default to "en"
 4. The compiler creates an I18nRegistry based on the selected language (once)
-5. All errors are rendered using that I18nRegistry
+5. All errors use that I18nRegistry to render messages
 ```
 
-#### The Key to Zero Lookup Overhead
+#### Key to Zero Table Lookup Overhead
 
-**Rendering happens at the time of compiling the user's project, not at runtime.**
+**Rendering happens when compiling the user project, not at runtime.**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Phase 1: Rust compiles the YaoXiang compiler                          │
+│  Phase 1: Rust compiles the YaoXiang compiler                                      │
 │                                                                           │
-│  JSON packaged into the compiler binary                                 │
-│  Purpose: the explain command can directly read i18n data              │
+│  JSON packed into the compiler binary                                                 │
+│  Purpose: the explain command can directly read i18n data                                  │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Phase 2: YaoXiang compiles the user project (rendering happens here)   │
+│  Phase 2: YaoXiang compiles the user project (rendering happens here)                          │
 │                                                                           │
-│  When the error! macro is called:                                       │
-│  1. Read yaoxiang.toml to get language preference                       │
-│  2. Load the corresponding language's i18n JSON from the compiler binary│
-│  3. Template + parameters → render() → "Unknown variable: 'x'"          │
-│  4. Diagnostic.message = rendered string                                │
+│  When the error! macro is called:                                                       │
+│  1. Read yaoxiang.toml to get the language preference                                      │
+│  2. Load the i18n JSON for the corresponding language from the compiler binary                                │
+│  3. Template + parameters → render() → "Unknown variable: 'x'"                    │
+│  4. Diagnostic.message = the rendered string                                   │
 │                                                                           │
-│  The AOT binary stores the final string directly, no template, no lookup │
+│  The AOT binary directly stores the final string, with no template and no table lookup                            │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  Phase 3: User program runtime                                          │
+│  Phase 3: User program runtime                                                  │
 │                                                                           │
 │  println!("{}", diagnostic.message)                                      │
-│  // Output the final string directly, no lookup                         │
+│  // Output the final string directly, with no table lookup at all                                        │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Component                    | Responsibility                       | Render Timing                   |
+| Component                    | Responsibility                       | Rendering timing                |
 | ---------------------------- | ------------------------------------ | ------------------------------- |
 | `I18nRegistry`               | Provide templates and display text   | When compiling the user project |
 | `DiagnosticBuilder.render()` | Template + parameters → final string | When compiling the user project |
@@ -900,7 +902,7 @@ default = "zh"
 Error messages use the following format:
 
 ```
-error[E####]: <short description>
+error[E####]: <Short description>
   --> <file>:<line>:<col>
    <line> | <code snippet>
           ^^^<highlight>
@@ -920,12 +922,12 @@ error[E1001]: Unknown variable: x
 
 ### Severity Levels
 
-Error severity is managed through the `DiagnosticLevel` enum, decoupled from the error code number:
+Error severity is managed through the `DiagnosticLevel` enum, decoupled from error code numbering:
 
 ```rust
 pub enum DiagnosticLevel {
     Error,    // Causes compilation to fail
-    Warning,  // Does not affect compilation, but fix is recommended
+    Warning,  // Does not affect compilation, but is recommended to fix
     Note,     // Supplementary information
     Help,     // Fix suggestion
 }
@@ -953,7 +955,7 @@ yaoxiang explain <ERROR_CODE> [OPTIONS]
 | Option          | Description                                    |
 | --------------- | ---------------------------------------------- |
 | `--lang <code>` | Specify language (en-US, zh-CN, default en-US) |
-| `--json`        | JSON format output (for IDE/LSP use)           |
+| `--json`        | JSON format output (for IDE/LSP)               |
 | `--json-pretty` | Formatted JSON output                          |
 | `--examples`    | Show only example code                         |
 | `--help`        | Show help information                          |
@@ -1010,10 +1012,10 @@ $ yaoxiang explain E1001 --json
 
 Since this RFC designs the error code system from scratch, there is no backward compatibility issue.
 
-**Future Migration Strategy** (for reference in future versions):
+**Future Migration Strategy** (for reference in subsequent versions):
 
-1. Maintain a mapping from old error codes to new error codes
-2. Show both old and new codes during migration
+1. Maintain mapping from old error codes to new error codes
+2. Display both old and new codes during migration
 3. Provide a deprecation timeline
 
 ---
@@ -1045,8 +1047,8 @@ Since this RFC designs the error code system from scratch, there is no backward 
 
 1. LSP server integration of explain JSON output
 2. Display error code links in the IDE
-3. Show error explanations on hover
-4. Quick-fix suggestions
+3. Show error explanation on hover
+4. Quick fix suggestions
 
 ---
 
@@ -1054,18 +1056,18 @@ Since this RFC designs the error code system from scratch, there is no backward 
 
 ### Complete Error Code Quick Reference
 
-| Range | Category                       |
-| ----- | ------------------------------ |
-| E0xxx | Lexical and Syntactic Analysis |
-| E1xxx | Type Checking                  |
-| E2xxx | Semantic Analysis              |
-| E3xxx | Code Generation                |
-| E4xxx | Generics and Traits            |
-| E5xxx | Modules and Imports            |
-| E6xxx | Runtime Errors                 |
-| E7xxx | I/O and System Errors          |
-| E8xxx | Internal Compiler Errors       |
-| E9xxx | Reserved                       |
+| Range | Category                    |
+| ----- | --------------------------- |
+| E0xxx | Lexical and Syntax Analysis |
+| E1xxx | Type Checking               |
+| E2xxx | Semantic Analysis           |
+| E3xxx | Code Generation             |
+| E4xxx | Generics and Trait          |
+| E5xxx | Modules and Imports         |
+| E6xxx | Runtime Errors              |
+| E7xxx | I/O and System Errors       |
+| E8xxx | Internal Compiler Errors    |
+| E9xxx | Reserved                    |
 
 ### Supported Languages
 
