@@ -150,9 +150,9 @@ not export this member"; if you only want to bring in some names, use the `use h
 curly-brace form to selectively import.
 
 > Regarding the history of the `pub` keyword: Before the 029g ruling to remove it, `pub` only
-> affected dead-code exemptions (the W1001 family), and **never participated in export
-> decisions**—writing `pub` does not affect whether something can be imported. The description in
-> old documentation that "all items are private by default" is the opposite of the implementation.
+> affected dead-code exemptions (the W1001 family), and **never participated in export decisions**—writing
+> `pub` does not affect whether something can be imported. The description in old documentation that
+> "all items are private by default" is the opposite of the implementation.
 > =======
 
 ### 3.1 Export Rules
