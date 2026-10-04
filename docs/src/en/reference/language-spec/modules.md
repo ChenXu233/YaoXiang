@@ -1,21 +1,20 @@
+---
 # Module System Specification
 
-This document defines YaoXiang's module system specification: how modules are defined, how `use`
-imports them, what the export surface is, and how scopes are partitioned.
+This file defines the module system specification of YaoXiang: how modules are defined, how `use` imports them, what the export surface is, and how scopes are partitioned.
 
-Design basis: [RFC-029 Module Semantics](../../design/rfc/accepted/029-module-semantics.md),
-[RFC-029g Removing the `pub` Keyword and Auto-Binding](../../design/rfc/accepted/029g-remove-pub-and-auto-bind.md).
+Design basis: [RFC-029 Module Semantics](../../design/rfc/accepted/029-module-semantics.md), [RFC-029g Remove `pub` keyword and auto-binding](../../design/rfc/accepted/029g-remove-pub-and-auto-bind.md).
 
-For the user-facing operation guide, see [Module System](../../guide/modules).
+A user-facing operational guide is available in [Module System](../../guide/modules).
 
 ---
 
 ## Chapter 1: Module Definition
 
-### 1.1 A Module is a File
+### 1.1 Modules Are Files
 
-Modules use files as boundaries. Every `.yx` file is a module; there are no `module` / `mod`
-declaration keywords.
+Modules use files as their boundary. Every `.yx` file is a module, with no `module` / `mod`
+declaration keyword.
 
 ```yaoxiang
 // math/geometry.yx
@@ -24,49 +23,48 @@ Point: Type = { x: Float, y: Float }
 distance: (a: Point, b: Point) -> Float = { ... }
 ```
 
-### 1.2 A Module = a Set of Top-Level Bindings
+### 1.2 Module = A Set of Top-Level Bindings
 
-A module's "content" is its set of top-level bindings. In the example above, the `math.geometry`
-module's content is equivalent to:
+The "content" of a module is the set of its top-level bindings. In the example above, the content of
+module `math.geometry` is equivalent to:
 
 ```
 { Point: Type, distance: (Point, Point) -> Float }
 ```
 
-A module is therefore an **open record**—there is no export list to declare one by one; the module
-is all of its top-level bindings.
+A module is therefore an **open record**—there is no export list to declare item by item; the module
+is exactly all of its top-level bindings.
 
 ### 1.3 Path Mapping
 
-Module paths are mapped segment-by-segment to files, **file first, then directory**:
+Module paths are mapped segment-by-segment to files, **file first, directory second**:
 
-| Module path | Lookup order                                        |
-| ----------- | --------------------------------------------------- |
-| `a.b`       | `<base>/a/b.yx` → if not found, `<base>/a/b/mod.yx` |
-| `a`         | `<base>/a.yx` → if not found, `<base>/a/mod.yx`     |
+| Module path | Lookup order                                   |
+| ----------- | ---------------------------------------------- |
+| `a.b`       | `<base>/a/b.yx` → fallback `<base>/a/b/mod.yx` |
+| `a`         | `<base>/a.yx` → fallback `<base>/a/mod.yx`     |
 
-`mod.yx` is a **convention** (house number) for a directory entry file, not the sole entry
+`mod.yx` is a **convention** (door number) for a directory entry file, not the sole entry
 (lock)—both `a.yx` and `a/mod.yx` can host module `a`.
 
-::: danger Do Not Use index.yx The Rust convention of `index.yx` is **not recognized** in YaoXiang.
-Writing `src/helper/index.yx` and then `use helper` will trigger E5001. Directory entries must be
+::: danger Do not use index.yx The Rust habit of `index.yx` is **not recognized** in YaoXiang. If
+you write `src/helper/index.yx`, then `use helper` will report E5001. The directory entry must be
 named `mod.yx`. :::
 
-If both forms exist simultaneously, a module path ambiguity is triggered and an error is reported
-(RFC-029 §4).
+Having both forms present at the same time will trigger a module path ambiguity error (RFC-029 §4).
 
 ### 1.4 Lookup Starting Point
 
 `<base>` is tried in the following order:
 
-1. The directory of the importer
+1. The importer's own directory
 2. The project root
 
 ---
 
-## Chapter 2: Module Import
+## Chapter 2: Module Importing
 
-`use` is record destructuring: it brings the target module's bindings into the current scope.
+`use` is record destructuring: it brings the bindings of the target module into the current scope.
 
 ### 2.1 Grammar
 
@@ -84,33 +82,33 @@ ModuleRef    ::= Identifier ('.' Identifier)*
 | Syntax              | Semantics                                          | Example                                  |
 | ------------------- | -------------------------------------------------- | ---------------------------------------- |
 | `use path`          | Bring in the `path` namespace; access via `path.x` | `use std.io` → `io.print(...)`           |
-| `use path.{x, y}`   | Bind `x` and `y` directly into the current scope   | `use std.math.{sqrt}` → `sqrt(...)`      |
+| `use path.{x, y}`   | Bind `x`, `y` directly into the current scope      | `use std.math.{sqrt}` → `sqrt(...)`      |
 | `use path.{x as y}` | Bind `x` as `y`                                    | `use std.io.{print as say}` → `say(...)` |
 | `use path as alias` | Bring in the `path` namespace and rename it        | `use helper as h` → `h.label(...)`       |
 
-`use path.{a, b}` binds **two paths to the same batch of top-level bindings**, so `use a.{Point}`
-and `use a.geometry.{Point}` point to the same binding.
+`use path.{a, b}` binds **two paths to the same set of top-level bindings**, so `use a.{Point}` and
+`use a.geometry.{Point}` point to the same binding.
 
 ### 2.3 Explicitly Rejected Syntax
 
-The following writings were explicitly rejected in RFC-029, and the implementation rejects them as
+The following constructs are explicitly rejected in RFC-029, and the implementation rejects them as
 well:
 
-| Syntax                     | Disposition                                 | Actual behavior                                                      |
-| -------------------------- | ------------------------------------------- | -------------------------------------------------------------------- |
-| `use path.*`               | Wildcard import, not adopted                | Parse failure                                                        |
-| `from path use item`       | Python-style, not adopted                   | Parse failure                                                        |
-| `use path.{item} as alias` | Positional alias, not adopted               | Parse failure, suggesting the inline form `use path.{item as alias}` |
-| `use .relative`            | Relative import, not included in the design | Parse failure (E0011)                                                |
+| Syntax                     | Disposition                    | Actual behavior                                                   |
+| -------------------------- | ------------------------------ | ----------------------------------------------------------------- |
+| `use path.*`               | Wildcard import, rejected      | Parse failure                                                     |
+| `from path use item`       | Python-style, rejected         | Parse failure                                                     |
+| `use path.{item} as alias` | Positional alias, rejected     | Parse failure, hint to use inline form `use path.{item as alias}` |
+| `use .relative`            | Relative import, not in design | Parse failure (E0011)                                             |
 
-::: warning Positional Aliases and Inline Aliases Are Not the Same Thing `use std.io.{print} as p`
-(alias after the curly braces) is explicitly rejected; `use std.io.{print as p}` (inside the curly
-braces) is a supported form. The compiler's error message will point this out. :::
+::: warning Positional alias and inline alias are not the same `use std.io.{print} as p` (alias
+**after** the curly braces) is explicitly rejected; `use std.io.{print as p}` (alias **inside** the
+curly braces) is the supported form. The compiler's error message will point this out. :::
 
-### 2.4 Name Conflicts
+### 2.4 Name Conflict
 
-When two module paths point to bindings with the same name, the import fails; you must use inline
-aliases to disambiguate.
+When two module paths point to bindings with the same name, the import will fail; use an inline
+alias to disambiguate.
 
 ---
 
@@ -118,21 +116,22 @@ aliases to disambiguate.
 
 ### 3.1 No Visibility Mechanism
 
-**This language introduces no visibility mechanism.** No `pub`, no `private`, no `export`.
+**This language introduces no visibility mechanism whatsoever.** No `pub`, no `private`, no
+`export`.
 
-RFC-029 made this ruling, and RFC-029g went further to remove the `pub` keyword entirely from the
-lexer, AST, type checker, dead-code exemptions, formatter, and LSP.
+RFC-029 made this ruling, and RFC-029g further removed the `pub` keyword entirely from the lexer,
+AST, type checker, dead-code exemptions, formatter, and LSP.
 
-### 3.2 All Top-Level Bindings are Importable by Default
+### 3.2 All Top-Level Bindings Are Importable by Default
 
-Every top-level binding of a module—functions, types, constants, with or without type annotations—is
-visible to any code that can write that module path.
+Every top-level binding in a module—functions, types, constants, whether or not they have type
+annotations—is visible to any code that can write that module path.
 
 ```yaoxiang
-// helper/mod.yx — note that plain has no modifier at all
+// helper/mod.yx — note that plain has no modifier
 plain: () -> string = "no pub keyword at all"
 
-// another module can import it directly
+// Another module can import it directly
 use helper
 
 main = () => {
@@ -140,21 +139,21 @@ main = () => {
 }
 ```
 
-Therefore **there is no such thing as "private by default"**. Arguing about the visibility of a
-binding in YaoXiang is an invalid question.
+So **there is no such thing as "private by default."** Debating whether a binding should be visible
+for export is a moot question in YaoXiang.
 
-Accessing a name that does not exist (or is not top-level) on a module reports E1043 "Module does
-not export this member"; if you only want to bring in some names, use the `use helper.{plain}`
-curly-brace form to selectively import.
+Accessing a name that does not exist on the module (or is not a top-level name) reports E1043
+"Module does not export this member"; to introduce only a subset of names, use selective import with
+curly braces like `use helper.{plain}`.
 
-> Regarding the history of the `pub` keyword: Before the 029g ruling to remove it, `pub` only
-> affected dead-code exemptions (the W1001 family), and **never participated in export decisions**—writing
-> `pub` does not affect whether something can be imported. The description in old documentation that
-> "all items are private by default" is the opposite of the implementation.
+> History of the `pub` keyword: before the 029g ruling to delete it, `pub` only took effect for
+> dead-code exemptions (the W1001 family), and **never participated in export decisions**—writing
+> `pub` did not affect whether something could be imported. The old documentation's claim that "all
+> items are private by default" is the opposite of what the implementation did.
 
-### 3.3 Method Binding is Explicit
+### 3.3 Method Bindings Are Explicit
 
-Methods are not auto-bound via `pub`. The method form is **explicit composition**:
+Methods are not auto-bound via `pub`. Method form is **explicit composition**:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
@@ -167,104 +166,104 @@ Point.distance: (self: &Point, other: &Point) -> Float = {
 }
 ```
 
-The explicit form is strictly more expressive (supports multiple positional bindings, unit bindings)
-and is the only method form.
+The explicit form is strictly more expressive (it supports multi-positional bindings and unit
+bindings) and is the only method form.
 
 ---
 
-## Chapter 4: Scopes
+## Chapter 4: Scope
 
-### 4.1 Scope Layers
+### 4.1 Scope Hierarchy
 
-- **Module scope**: bindings at the top level of a file
-- **Block scope**: each `{}` establishes a layer; declarations in inner layers do not leak to outer
+- **Module scope**: the bindings at the top of a file
+- **Block scope**: every `{}` establishes a layer; declarations in inner layers do not leak to outer
   layers
-- **Function scope**: within a function body
+- **Function scope**: inside a function body
 
 ### 4.2 Declaration and Shadowing
 
 YaoXiang has no `let` keyword. Is `x = value` a declaration or an assignment? Follow one principle:
 
-**Assignment first.** A declaration happens only once, but an assignment happens a hundred times.
-Let the high-frequency operation take the shortest path.
+**Assignment wins.** A declaration happens once; an assignment happens a hundred times. Let the
+high-frequency operation take the shortest path.
 
 ```
 x = value:
-    Search outward along the scope chain for x
-      → found mut x          : assignment, OK (via &mut token)
-      → found x (immutable, alive): E2010 cannot reassign
-      → not found            : declare in current scope (the only declaration path)
+    walk the scope chain outward looking for x
+      → find mut x          : assignment, OK (via &mut token)
+      → find x (immutable, alive) : E2010 cannot reassign
+      → not found           : new declaration in the current scope (the only declaration path)
 
 mut x = value:
     → x already exists in current scope : E2002 duplicate definition
-    → x exists in outer scope           : E2013 shadowing forbidden (explicit new declaration cannot share a name with an outer one)
-    → no conflict                       : new mutable declaration
+    → x exists in outer scope           : E2013 shadowing forbidden (explicit new declaration cannot share the name)
+    → no conflict                        : new mutable declaration
 ```
 
 - **Same scope**: any name can be declared only once (E2002)
-- **No `mut` in inner layer**: first look in the outer layer, then assign or error
-- **`mut` in inner layer**: explicit new declaration, no name sharing with the outer layer (E2013)
+- **No `mut` in inner layer**: prefer to look up the outer layer; assign or report an error
+- **`mut` in inner layer**: explicit new declaration, must not share a name with the outer layer
+  (E2013)
 
-> **Blocks are real scopes**: the prerequisite for "search along the scope chain" is that each `{}`
-> block actually establishes a layer—names newly declared in inner layers **do not leak to outer
-> layers**.
+> **Blocks are real scopes**: the prerequisite for "walking the scope chain" is that every `{}`
+> block does establish a layer—a name newly declared in the inner layer **does not leak to the outer
+> layer**.
 
 #### Same Scope
 
 ```yaoxiang
 x = 10
-x = 20              // E2010: 'x' is immutable, cannot be reassigned
+x = 20              // E2010: 'x' is immutable, cannot reassign
 
 mut y = 10
-y = 20              // OK: same binding, reassigned
+y = 20              // OK: same binding, reassign
 mut y = 30          // E2002: 'y' is already defined in this scope (explicit new declaration collides)
 
 z = 10
-mut z = 20          // E2002: 'z' is already defined in this scope (mut cannot overwrite an existing declaration)
+mut z = 20          // E2002: 'z' is already defined in this scope (mut cannot override an existing declaration)
 ```
 
 Note that `x = 20` reports **E2010** (cannot reassign) rather than E2002 (duplicate definition):
-`x = value` without `mut` is semantically an **assignment** (searches along the scope chain), not
-"declaring another x". Only `mut x = value` is an explicit new declaration, and name collision is
-reported as E2002.
+`x = value` without `mut` is semantically an **assignment** (walking the scope chain), not
+"declaring another x." Only `mut x = value` is an explicit new declaration, and name collisions
+there report E2002.
 
-#### Re-binding After Move
+#### Rebinding After Move
 
-If an immutable variable owns a value, once its value is moved (consumed), the original binding
-enters a **moved** state—the name still occupies a scope slot, but the value is no longer
+If an immutable variable owns the value, once its value is moved (consumed), the original binding
+enters the **moved** state—the name still occupies a slot in scope, but the value is no longer
 accessible.
 
-**Moved is not input to "declaration judgment."** The way to reclaim that name is an **explicit
-redeclaration**:
+**moved is not an input to "declaration" decisions.** The way to reclaim the name is an **explicit
+re-declaration**:
 
 ```yaoxiang
-// Pipeline-style data flow: each step consumes the old value, producing a new one
-mut data = fetch()           // Explicit mutable declaration
-mut data = transform(data)   // E2002: 'data' already exists in this scope
+// Pipeline-style data flow: each step consumes the old value and produces a new one
+mut data = fetch()           // explicit mutable declaration
+mut data = transform(data)   // E2002: data already exists in this scope
 ```
 
 > **Why not "already moved → can redeclare"**:
 >
-> Move is a **path-dependent** data-flow property—after `if c { move p }`, `p` is moved on one path
-> and not yet on the other, i.e. "may have been moved" rather than a boolean. A binding-level flag
-> structurally cannot express branch confluence; treating it as a switch for "the name can be
-> redeclared" would yield incorrect diagnostics (a single-branch move would be treated as already
-> moved).
+> move is a **path-sensitive** data-flow property—after `if c { move p }`, `p` is moved on one path
+> and not on the other; it is "possibly moved" rather than a Boolean. A binding-level flag
+> structurally cannot express branch confluence, and treating it as a switch for "can this name be
+> re-declared" would give wrong diagnostics (a single-branch move treated as already moved).
 >
-> The real move analysis lives in `layers/ownership.rs`: it builds a function-body CFG, performs
-> data flow over a `Alive < Moved < Dropped` lattice, and **takes the max (conservative) at branch
-> confluence**, reporting E2014/E2018 at read checkpoints. It answers "can we read here," whereas
-> "can this name be declared again" is answered independently by the assignment-first rule in 4.2.
+> The real move analysis lives in `layers/ownership.rs`: it builds the function body's CFG and runs
+> a data flow on the `Alive < Moved < Dropped` lattice, taking the **max at branch confluence**
+> (conservative), and reports E2014/E2018 at read checkpoints. It answers "can I read here?", while
+> "can this name be re-declared" is answered independently by the assignment-wins rule in §4.2.
 >
-> The two responsibilities differ and should not be coupled. This is also why the old "already-moved
-> branch" was never reachable: it depended on a flag that is never written.
+> The two responsibilities are different and should not be coupled. This is also why the old
+> "already-moved branch" was never reachable: it relied on a flag that was never written.
 
-**Re-binding relies on an explicit `mut` declaration:**
+**Rebinding relies on explicit `mut` declaration:**
 
 ```yaoxiang
-// Equivalent explicit form
+// The equivalent explicit form
 mut data1 = fetch()
-data2 = transform(data1)  // data1 is moved, cannot be used again
+data2 = transform(data1)  // data1 is moved, can no longer be used
 mut data3 = filter(data2)
 ```
 
@@ -272,59 +271,58 @@ mut data3 = filter(data2)
 
 | Operation                 | Meaning                                   | Mechanism              | Syntax                             |
 | ------------------------- | ----------------------------------------- | ---------------------- | ---------------------------------- |
-| **Re-binding**            | Old value disappears, new value is born   | move + new declaration | `mut x = f(x)` (new name or `mut`) |
+| **Rebinding**             | Old value disappears, new value is born   | move + new declaration | `mut x = f(x)` (new name or `mut`) |
 | **In-place modification** | Value at the same memory location changes | mut assignment         | `mut x = v`; `x = w`               |
 
 **Constraints:**
 
-- Only values that own ownership can be moved. References (`&T`, `&mut T`) are copied rather than
-  moved
-- Move checking is done at compile-time (CFG + data flow); a variable in the moved state being read
-  in any expression reports E2014
-- Declarations must have an initial value:
-  `LetStmt ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr`—a pure-annotation declaration like
-  `x: Int` is not grammatical and reports E0012
+- Only values that own their value can be moved. References (`&T`, `&mut T`) are copied, not moved.
+- Move checking is done at compile-time (CFG + data flow); reading a variable in the moved state in
+  any expression reports E2014.
+- Declarations must come with an initial value:
+  `LetStmt ::= ('mut')? Identifier (':' TypeExpr)? '=' Expr`—a pure annotation declaration like
+  `x: Int` is not grammatical and reports E0012.
 
 ```yaoxiang
-// Read after move → error
+// Reading after move → error
 data = fetch()
 result = process(data)   // data is moved
-print(data)              // E2014: 'data' has been moved and cannot be used
+print(data)              // E2014: 'data' has been moved, cannot be used
 
 // References do not trigger move
 ref_data = &value
-copy1 = ref_data         // Copy the reference, ref_data is still usable
+copy1 = ref_data         // copy the reference, ref_data is still usable
 copy2 = ref_data         // OK
 
 // Across scopes: the moved state penetrates
 data = fetch()
 {
-    data = transform(data)  // move outer data → re-bind (new declaration in inner scope)
-    print(data)             // OK: uses the inner data
+    data = transform(data)  // move outer data → rebind (new inner declaration)
+    print(data)             // OK: uses inner data
 }
 print(data)                 // E2014: outer data has been moved
 ```
 
-#### Cross-Scope
+#### Across Scopes
 
 ```yaoxiang
 // Outer immutable, inner assignment → immutable variable cannot be reassigned
 x = 10
 {
-    x = 20          // E2010: 'x' is immutable, cannot be reassigned
+    x = 20          // E2010: 'x' is immutable, cannot reassign
 }
 {
-    mut x = 20      // E2013: cannot shadow existing variable 'x' (explicit declaration of a new binding)
+    mut x = 20      // E2013: cannot shadow existing variable 'x' (explicit new binding)
 }
 
-// Outer mut, inner assignment → modifies the same binding
+// Outer mut, inner assignment → modify the same binding
 mut y = 10
 {
     y = 20          // OK: same binding, modified via &mut token
 }
 print(y)            // 20
 
-// Outer mut, inner cannot declare a same-named binding
+// Outer mut, inner cannot declare the same name
 mut z = 10
 {
     z = 30          // OK: same binding
@@ -342,44 +340,44 @@ mut a = 0
 }
 print(a)            // 10
 
-// Immutable penetration across all levels also cannot be reassigned
+// Immutable penetration of all levels also cannot be reassigned
 b = 0
 {
     {
-        b = 10      // E2010: 'b' is immutable, cannot be reassigned
+        b = 10      // E2010: 'b' is immutable, cannot reassign
     }
 }
 ```
 
-#### for Loop
+#### `for` Loop
 
 ```yaoxiang
-// The loop variable is a fresh binding each iteration, not a modification
+// Loop variable is a fresh binding each iteration, not a modification
 for i in 1..5 {
-    print(i)        // OK: each iteration binds a new value
-    i = 10          // E2010: immutable loop variable, cannot be reassigned
+    print(i)        // OK: new value bound each iteration
+    i = 10          // E2010: immutable loop variable, cannot reassign
 }
 
 for mut i in 1..5 {
     i = 10          // OK: mutable loop variable
 }
 
-// Loop variables cannot shadow the outer scope
+// Loop variable cannot shadow an outer one
 i = 0
 for i in 1..5 {     // E2013: cannot shadow existing variable 'i'
 }
 
-// A mutable outer accumulator can be modified inside the loop body
+// Mutable outer accumulator can be modified inside the loop body
 mut sum = 0
 for i in 1..5 {
     sum = sum + i   // OK: same binding, modified via &mut token
 }
 print(sum)          // 15
 
-// An immutable outer cannot be modified inside the loop body
+// Immutable outer accumulator cannot be modified inside the loop body
 sum2 = 0
 for i in 1..5 {
-    sum2 = sum2 + i // E2010: 'sum2' is immutable, cannot be reassigned
+    sum2 = sum2 + i // E2010: 'sum2' is immutable, cannot reassign
 }
 ```
 
@@ -387,9 +385,9 @@ for i in 1..5 {
 
 | Error code | Message                                        | Trigger scenario                                                                           |
 | ---------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| E2002      | `'{name}' is already defined in this scope`    | Duplicate declaration in the same scope (mut or not)                                       |
-| E2010      | `Cannot assign to immutable variable '{name}'` | When the inner layer assigns without `mut`, the outer variable is immutable and not moved  |
-| E2013      | `Cannot shadow existing variable '{name}'`     | Inner layer explicit declaration (`mut x` or `x: Type`) shares a name with the outer layer |
+| E2002      | `'{name}' is already defined in this scope`    | Duplicate declaration in the same scope (with or without mut)                              |
+| E2010      | `Cannot assign to immutable variable '{name}'` | Inner scope assigns without `mut`, outer variable is immutable and not moved               |
+| E2013      | `Cannot shadow existing variable '{name}'`     | Inner scope explicit declaration (`mut x` or `x: Type`) shares a name with the outer scope |
 | E2014      | `'{name}' has been moved and cannot be used`   | Reading a variable that has been moved                                                     |
 
 ---
@@ -423,17 +421,16 @@ Vector = vector.Vector
 Matrix = matrix.Matrix
 ```
 
-Note the **absence of `pub`** here—`Vector` and `Matrix` are ordinary top-level bindings, directly
+Note that there is **no `pub` here**—`Vector` and `Matrix` are ordinary top-level bindings, directly
 visible to importers (see §3.2).
 
 ---
 
 ## Chapter 6: Diagnostics
 
-| Error code | Meaning                              | Typical trigger                                                            |
-| ---------- | ------------------------------------ | -------------------------------------------------------------------------- |
-| E5001      | Module not found                     | Path typo; using `index.yx` as a directory entry; dependency not installed |
-| E5003      | The module does not export this item | Imported name typo (e.g. `read` instead of `read_line`)                    |
+| Error code | Meaning                                 | Typical trigger                                                          |
+| ---------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| E5001      | Module not found                        | Wrong path; used `index.yx` as directory entry; dependency not installed |
+| E5003      | The export does not exist in the module | Typo in the import name (e.g. `read` instead of `read_line`)             |
 
-E5001 in project mode comes with a hint: when a dependency is missing, it suggests running
-`yx install`.
+E5001 in project mode comes with a hint: if a dependency is missing, suggest running `yx install`.
