@@ -4,10 +4,10 @@ title: 'F-string'
 
 # F-string
 
-f-string is YaoXiang's **template string**—you can embed variables and expressions directly in the
-string, and the compiler automatically handles type conversion and concatenation.
+f-string is a **template string** in YaoXiang—you can embed variables and expressions directly
+inside the string, and the compiler automatically performs type conversion and concatenation.
 
-## Basic usage
+## Basic Usage
 
 Prefix the string with `f`, and use `{expression}` to insert values:
 
@@ -19,7 +19,7 @@ greeting = f"Hello {name}, you are {age} years old"
 print(greeting)  // Hello Alice, you are 25 years old
 ```
 
-Compared to traditional concatenation, the difference with f-strings is clear at a glance:
+Compared to traditional concatenation, the differences of f-string are clear at a glance:
 
 ```yaoxiang
 use std.string
@@ -31,13 +31,13 @@ age = 25
 // Note: String has no .concat() instance method, nor Int.to_string()—both report E1053
 message = "Hello, age: " + string.format("{0}", age)
 
-// ✅ f-string: intuitive, concise
+// ✅ f-string: intuitive and concise
 message2 = f"Hello {name}, age: {age}"
 ```
 
-## Expression interpolation
+## Expression Interpolation
 
-Inside `{}` you can put more than variables—any expression works:
+`{}` is not limited to variables—you can put any expression inside:
 
 ```yaoxiang
 x = 10
@@ -48,7 +48,7 @@ print(f"Product: {x * y}")     // Product: 200
 print(f"Is positive? {x > 0}") // Is positive? true
 ```
 
-## Format specifiers
+## Format Specifiers
 
 Add `:` and a format specifier after the expression to control the output format:
 
@@ -65,38 +65,38 @@ print(f"{name:s}")       // hello (string display)
 
 Common format specifiers:
 
-| Specifier | Meaning                 | Example            | Output         |
-| --------- | ----------------------- | ------------------ | -------------- |
-| `:.2f`    | Float, 2 decimal places | `f"{3.14159:.2f}"` | `3.14`         |
-| `:d`      | Decimal integer         | `f"{42:d}"`        | `42`           |
-| `:x`      | Hexadecimal             | `f"{255:x}"`       | `ff`           |
-| `:e`      | Scientific notation     | `f"{1000:e}"`      | `1.000000e+03` |
-| `:s`      | String                  | `f"{name:s}"`      | `hello`        |
+| Specifier | Meaning             | Example            | Output         |
+| --------- | ------------------- | ------------------ | -------------- |
+| `:.2f`    | Float, 2 decimals   | `f"{3.14159:.2f}"` | `3.14`         |
+| `:d`      | Decimal integer     | `f"{42:d}"`        | `42`           |
+| `:x`      | Hexadecimal         | `f"{255:x}"`       | `ff`           |
+| `:e`      | Scientific notation | `f"{1000:e}"`      | `1.000000e+03` |
+| `:s`      | String              | `f"{name:s}"`      | `hello`        |
 
-## Calling methods
+## Method Calls
 
 You can call methods inside `{}`:
 
 ```yaoxiang
 use std.string
 
-// Note: conversion goes through std.string's function form—`name.uppercase()` / `name.len()` reports E1053
+// Note: conversion goes through std.string's function form—`name.uppercase()` / `name.len()` report E1053
 name = "alice"
 
 print(f"Upper: {string.upper(name)}")  // Upper: ALICE
 print(f"Length: {string.len(name)}")   // Length: 5
 ```
 
-## Escaping braces
+## Escaping Braces
 
-To output a literal `{` or `}`, **double it** (consistent with Python):
+To output a literal `{` or `}`, just **double them** (consistent with Python):
 
 ```yaoxiang
 print(f"{{literal braces}}")     // {literal braces}
 print(f"Set: {{1, 2, 3}}")       // Set: {1, 2, 3}
 ```
 
-Mix and match: double it to output a literal `{`, single it for interpolation:
+Mixed use: double braces output a literal `{`, while a single brace is interpolation:
 
 ```yaoxiang
 name = "YaoXiang"
@@ -106,8 +106,8 @@ print(f"{{name}} is {name}")     // {name} is YaoXiang
 
 ## Multi-line f-string
 
-Triple quotes `f"""..."""` support multi-line templates, where newlines are part of the content
-(consistent with ordinary `"""` multi-line strings):
+Triple quotes `f"""..."""` support cross-line templates, and line breaks are part of the content
+(consistent with regular `"""` multi-line strings):
 
 ```yaoxiang
 name = "Alice"
@@ -124,13 +124,13 @@ print(info)
 // City: Beijing
 ```
 
-Interpolation and escaped braces work as usual in multi-line templates, as do string escapes (`\n`
-etc.).
+Interpolation and escaped braces work as usual in multi-line templates, and string escapes (such as
+`\n`) also work.
 
-## How f-strings work
+## How f-string Works
 
-When the compiler sees an f-string, it converts it to string concatenation. Semantically equivalent
-to:
+When the compiler sees an f-string, it converts it into string concatenation. Semantically
+equivalent to:
 
 ```yaoxiang
 use std.string
@@ -141,13 +141,13 @@ age = 25
 // What you write
 f"Hello {name}, age: {age}"
 
-// Equivalent hand-written form (note: no .concat() / .to_string() instance method,
+// Equivalent handwritten form (note: no .concat() / .to_string() instance methods,
 // nor implicit Int→String conversion)
 "Hello " + string.format("{0}", name) + ", age: " + string.format("{0}", age)
 ```
 
-This means f-strings are not only more concise to write, but their runtime performance is on par
-with hand-written concatenation—**zero extra overhead**.
+This means f-string is not only more concise to write, but its runtime performance is on par with
+handwritten concatenation—**zero extra overhead**.
 
 ## Summary
 

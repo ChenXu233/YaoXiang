@@ -1,10 +1,10 @@
 ---
-title: 'Syntax Cheatsheet'
+title: 'Syntax Quick Reference'
 ---
 
-# Syntax Cheatsheet
+# Syntax Quick Reference
 
-Grasp the core syntax of YaoXiang in 5 minutes. For deeper learning, see the
+Understand YaoXiang's core syntax in 5 minutes. For in-depth learning, visit
 [Tutorial](../tutorial/index.md).
 
 ## Variables
@@ -26,10 +26,10 @@ Everything is `name: type = value`. Functions are values too.
 ```yaoxiang
 use std.io
 
-// expression form (returns the value directly)
+// Expression form (returns the value directly)
 add: (a: Int, b: Int) -> Int = a + b
 
-// block form (explicit return)
+// Block form (explicit return)
 factorial: (n: Int) -> Int = {
     if n <= 1 { return 1 }
     return n * factorial(n - 1)
@@ -40,14 +40,14 @@ double = (x) => x * 2
 add = (a, b) => a + b
 inc = x => x + 1            // parentheses can be omitted for a single parameter
 
-// a block body requires return
+// return is required inside a block
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
     return b
 }
 
-// Void function does not require return
+// Void functions don't need return
 greet: (name: String) -> Void = {
     io.println("Hello, " + name)
 }
@@ -55,44 +55,44 @@ greet: (name: String) -> Void = {
 
 ## Types
 
-There are no `type`, `struct`, `trait`, or `impl` keywords. A single unified declaration handles
+There is no `type`, `struct`, `trait`, or `impl` keyword. A single unified declaration handles
 everything.
 
 <!-- docs-example: skip -->
 
 ```yaoxiang
-// record type
+// Record type
 Point: Type = { x: Float, y: Float }
-p = Point(1.0, 2.0)            // positional argument
-p = Point(x=1.0, y=2.0)        // named argument
+p = Point(1.0, 2.0)            // positional arguments
+p = Point(x=1.0, y=2.0)        // named arguments
 
-// fields with default values
+// Fields with default values
 Point: Type = { x: Float = 0, y: Float = 0 }
 Point()                        // OK: x=0, y=0
 Point(x=1.0)                   // OK: x=1.0, y=0
 
-// variant type (enum)
+// Variant type (enum)
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-// Note: std.option (Option + Try) is already built into the standard library; defining your own is not recommended
+// Note: std.option (Option + Try) is built into the standard library; defining your own is not recommended
 // Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
 // Note: bare constructors ok/err currently report E1001 (verified); see std.result in the standard library
 // Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// interface (a record type whose fields are all function types)
+// Interface (a record type whose fields are all function types)
 Drawable: Type = { draw: (Surface) -> Void }
 
-// interface composition
+// Interface composition
 DrawableSerializable: Type = Drawable & Serializable
 
-// declaring interface implementations within a type
+// Implement interfaces inside a type declaration
 Circle: Type = {
     radius: Float,
     Drawable,              // implements the Drawable interface
     Serializable,          // implements the Serializable interface
 }
 
-// generic type
+// Generic type
 List: (T: Type) -> Type = {
     data: Array(T),
     length: Int,
@@ -100,10 +100,10 @@ List: (T: Type) -> Type = {
     map: (R: Type) -> ((self: List(T), f: (T) -> R) -> List(R)),
 }
 
-// generic constraint
-// Generic constraint signatures are not yet supported by the current parser; verified E0011
+// Generic constraints
+// Generic constraint signatures are not yet supported by the current parser (verified: E0011)
 clone: (value: T) -> T = value
-// Generic constraint signatures are not yet supported by the current parser; verified E0011
+// Generic constraint signatures are not yet supported by the current parser (verified: E0011)
 sort: (list: List(T)) -> List(T)
 ```
 
@@ -112,20 +112,20 @@ sort: (list: List(T)) -> List(T)
 <!-- docs-example: skip -->
 
 ```yaoxiang
-// namespace function (Type.method is just an attribution marker, not a binding)
+// Namespace function (Type.method is only an attribution marker, not a binding)
 Point.distance: (a: &Point, b: &Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
-    // Note: parenthesized expressions cannot attach methods directly (verified E1053); bind to a variable first
+    // Note: parenthesized expressions cannot directly attach methods (verified E1053); bind to a variable first
     d2 = dx * dx + dy * dy
     return d2.sqrt()
 }
 
-// the . call syntax is only available after explicit binding
+// The . call syntax only works after explicit binding
 Point.distance = distance[0]
-// afterwards p1.distance(p2) → distance(p1, p2)
+// After this, p1.distance(p2) → distance(p1, p2)
 
-// quick definition + binding
+// Quick define + bind
 Point.draw: (self: &Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -148,7 +148,7 @@ result = match value {
     _ => "unknown",
 }
 
-// loop
+// Loops
 for i in 0..5 { io.println(i) }
 for item in items { io.println(item) }
 
@@ -162,24 +162,24 @@ while n < 5 { io.println(n); n = n + 1 }
 use std.dict
 use std.list
 
-// list
+// List
 nums = [1, 2, 3, 4, 5]
 first = nums[0]           // 1
 
-// dictionary
+// Dictionary
 scores = {"Alice": 90, "Bob": 85}
 a = scores["Alice"]       // 90
 
-// list comprehension
+// List comprehension
 evens = [x for x in nums if x % 2 == 0]
 doubled = [x * 2 for x in nums]
 ```
 
 ## Pattern Matching
 
-> **Note**: 0.8.2 **has not yet implemented record/struct destructuring patterns** (verified
-> `match s { circle(r) => ... }` reports E0010). The following is target syntax and is not yet
-> runnable.
+> **Note**: 0.8.2 **does not yet implement record/struct destructuring patterns** (verified:
+> `match s { circle(r) => ... }` reports E0010). The syntax below is the target syntax and is not
+> yet runnable.
 
 <!-- docs-example: skip -->
 
@@ -190,7 +190,7 @@ match shape {
     point => 0,
 }
 
-// struct/tuple pattern
+// Struct/tuple patterns
 match p {
     { x: 0, y: 0 } => "origin",
     { x, y } => "({x}, {y})",
@@ -200,10 +200,10 @@ match t {
     (x, y) => "({x}, {y})",
 }
 
-// destructuring assignment
+// Destructuring assignment
 a, b = (1, 2)              // a=1, b=2
 
-// guard expression
+// Guard expressions
 match age {
     n if n >= 18 => true,
     _ => false,
@@ -213,40 +213,40 @@ match age {
 ## Modules and Imports
 
 ```yaoxiang
-// import the whole module, access via namespace
+// Import the entire module and access it via the namespace
 use std.io
 
-// import only specific entries, used as bare names
+// Import only specified entries for direct bare use
 use std.math.{sqrt, sin, cos}
 use std.{list, string}
 
-// inline alias for an entry
+// Inline alias for an entry
 use std.io.{print as say}
 
 io.println("hello")
-result = sqrt(16.0)       // 4.0 (note: an Int argument returns 0.0; you must pass a Float)
+result = sqrt(16.0)       // 4.0 (note: an Int argument returns 0.0; you must pass Float)
 say("aliased")
 
-// All top-level bindings of a module are importable from outside by default; no pub is needed
+// All top-level bindings of a module are importable by default; no pub required
 add: (a: Int, b: Int) -> Int = a + b
 Point: Type = { x: Float, y: Float }
 ```
 
-For module paths, directory entry conventions, and the complete form of `use`, see
+For module paths, directory entry conventions, and the full form of `use`, see
 [Module System](./modules).
 
 ## Ownership
 
 ```yaoxiang
-// Move: default ownership transfer
+// Move: ownership is transferred by default
 p1 = Point(1.0, 2.0)
 p2 = p1                   // p1 is moved
 
-// Borrow &: automatically creates a token (no manual & needed)
+// Borrow &: a token is created automatically (no manual & needed)
 distance: (a: &Point, b: &Point) -> Float = ...
-d = distance(p1, p2)      // the compiler automatically creates a borrow token
+d = distance(p1, p2)      // the compiler creates borrow tokens automatically
 
-// mutable borrow &mut
+// Mutable borrow &mut
 update: (p: &mut Point, x: Float) -> Void = { p.x = x }
 
 // ref: shared ownership (the compiler automatically picks Rc/Arc)
@@ -275,7 +275,7 @@ results = spawn for item in items {
     return process(item)
 }
 
-// spawn + ref: share across tasks
+// spawn + ref: sharing across tasks
 main: () -> Void = {
     shared = ref data
     result = spawn {
@@ -292,5 +292,5 @@ pi = 3.14159
 name = "YaoXiang"
 print(f"Hello {name}")               // Hello YaoXiang
 print(f"Sum: {10 + 20}")             // Sum: 30
-print(f"Pi: {pi}")                    // Verified: format specifiers are not yet implemented; outputs 3.14159
+print(f"Pi: {pi}")                    // verified: format specifiers are not yet implemented; output is 3.14159
 ```
