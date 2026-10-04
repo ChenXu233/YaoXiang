@@ -156,7 +156,7 @@
   "src/design/rfc/review/026a-extensible-ffi-system.md:en": "7bd77d77ffc7122bec967cc720a0c9bc",
   "src/design/rfc/rejected/025-primitive-extension.md:en": "35425e7b3a2da74e7f565d78c09ac0a2",
   "src/design/rfc/review/032-spawn-unified-expression.md:en": "9730f70da25442b31dad395f1c0c40c6",
-  "src/design/rfc/TRACKING.md:en": "76c2a8c84e95e950d74ee792a744e49e",
+  "src/design/rfc/TRACKING.md:en": "a4e4ebab11b6522226757cd213a9627d",
   "src/design/rfc/draft/034-debug-toolchain.md:en": "98db5251dc3e7897ac523759898251eb",
   "src/design/rfc/draft/035-mcp-server.md:en": "0ee1dd336e0807899d6dafbe94a33273",
   "src/blog/assert-unification-discussion.md:en": "5b371a0cfe3825b91c0f89c753e9ced0",
@@ -199,5 +199,16 @@
   "src/reference/stdlib/option.md:en": "21df6aa658eed85429b86dc066a72e48",
   "src/reference/stdlib/test.md:en": "5260461f2c4b2e997a4200fd384cb0c2",
   "src/design/rfc/deprecated/019-typed-homoiconicity.md:en": "d0fa663d2ac2892b81ab8823f49ac53c",
-  "src/guide/modules.md:en": "f27a1ea241e76c012d26301af353e2bd"
+  "src/guide/modules.md:en": "f27a1ea241e76c012d26301af353e2bd",
+  "src/design/compiler-architecture/01-routing.md:en": "647f2f6a9a55c22d2d042681278d2c0d",
+  "src/design/compiler-architecture/02-stage-contract.md:en": "5c4740677171f8b0c451ece68225e65a",
+  "src/design/compiler-architecture/06-cleanup-inventory.md:en": "622fc5f9b1b8deca625b37ca473053bc",
+  "src/design/compiler-architecture/04-ssa.md:en": "27d511c6226e99e73c91f6eaac24173e",
+  "src/design/compiler-architecture/05-frontend-paradigm.md:en": "807bd346a7591bd89b5e786717781f95",
+  "src/design/compiler-architecture/07-equivalence-oracle.md:en": "e7b74cbaa35776e87da7a0042374a809",
+  "src/design/compiler-architecture/03-type-unification.md:en": "dcfeab45877c64d037183ba1bb516ae2",
+  "src/design/compiler-architecture/08-maintenance-mechanism.md:en": "c179c043db805075aa4ef8ec209dbced",
+  "src/design/compiler-architecture/index.md:en": "886744b15aac2a0815d9161982d115e2",
+  "src/design/compiler-architecture/09-execution-wbs.md:en": "7289d34fee93fff04c888aac00748f65",
+  "src/design/rfc/draft/039-compiler-architecture.md:en": "4291b1fc4e296c976600c1a8489724c7"
 }
