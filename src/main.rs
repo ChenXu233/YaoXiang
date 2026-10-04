@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use tracing::info;
 use yaoxiang::repl::Repl;
 use yaoxiang::formatter::run_format_command;
-use yaoxiang::{dump_bytecode, NAME, VERSION};
+use yaoxiang::{dump_bytecode, ABOUT, VERSION};
 use yaoxiang::util::diagnostic::{
     render_explain_output, run_check_command_once, run_file_with_diagnostics,
 };
@@ -76,7 +76,7 @@ enum ColorChoice {
 #[command(name = "yaoxiang-rs")]
 #[command(author = "YaoXiang Team")]
 #[command(version = VERSION)]
-#[command(about = NAME, long_about = None)]
+#[command(about = ABOUT, long_about = None)]
 struct Args {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -675,6 +675,9 @@ fn main() -> Result<()> {
                 .with_context(|| format!("Failed to build: {}", file.display()))?;
         }
         Commands::Explain { code, json, lang } => {
+            // 语言优先级：explain 自己的 --lang > 顶层 -L/--lang > YAOXIANG_LANG
+            // > 默认。顶层 -L 已在 main 开头写进 YAOXIANG_LANG，故子命令未显式
+            // 给 --lang 时传 None，交由 render_explain_output 走 error_lang()。
             let lang_code = lang.map(Into::<String>::into);
             if let Some(output) = render_explain_output(&code, json, lang_code.as_deref())? {
                 println!("{}", output);

@@ -54,7 +54,18 @@ use tracing::debug;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Language name
+///
+/// 语言的正式名称（含中文名）。**不要**直接把它交给 clap 的 `about`：
+/// `about` 是编译期常量、无法按 `-L` 本地化，会让任意语言下的
+/// `--help` 首行都混进中文。CLI 简介请用 `ABOUT`。
 pub const NAME: &str = "YaoXiang (爻象)";
+
+/// CLI 简介（`--help` 首行 / `about`）
+///
+/// 与 `NAME` 分开是为了让 `--help` 在任何 `-L` 下都是同一条 ASCII 文案
+/// （clap 的 about 不能按语言切换；本地化体检 B2 记录）。
+pub const ABOUT: &str =
+    "A high-performance programming language with \"everything is type\" philosophy";
 
 /// Run the interpreter on source code
 ///
@@ -140,8 +151,13 @@ use ::std::path::Path;
 pub fn run_file(path: &Path) -> Result<()> {
     let path_str = path.display().to_string();
     debug!("{}", t_cur(MSG::RunFile, Some(&[&path_str])));
-    let source = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read file: {}", path.display()))?;
+    let source = fs::read_to_string(path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read file {}: {}",
+            path.display(),
+            crate::util::diagnostic::io_error_reason(&e)
+        )
+    })?;
     debug!("{}", t_cur(MSG::ReadingFile, Some(&[&path_str])));
     run_with_source_name(&path_str, &source)
 }
@@ -188,8 +204,13 @@ pub fn build_bytecode_with_options(
     let output_path_str = output_path.display().to_string();
 
     debug!("{}", t_cur_simple(MSG::BuildBytecode));
-    let source = fs::read_to_string(source_path)
-        .with_context(|| format!("Failed to read source: {}", source_path.display()))?;
+    let source = fs::read_to_string(source_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read source {}: {}",
+            source_path.display(),
+            crate::util::diagnostic::io_error_reason(&e)
+        )
+    })?;
     debug!("{}", t_cur(MSG::ReadingFile, Some(&[&source_path_str])));
 
     // Compile
@@ -224,12 +245,21 @@ pub fn build_bytecode_with_options(
     }
 
     // Write to file
-    let mut file = fs::File::create(output_path)
-        .with_context(|| format!("Failed to create output: {}", output_path.display()))?;
+    let mut file = fs::File::create(output_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to create output {}: {}",
+            output_path.display(),
+            crate::util::diagnostic::io_error_reason(&e)
+        )
+    })?;
     debug!("{}", t_cur(MSG::WritingBytecode, Some(&[&output_path_str])));
-    bytecode_file
-        .write_to(&mut file)
-        .with_context(|| format!("Failed to write bytecode: {}", output_path.display()))?;
+    bytecode_file.write_to(&mut file).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to write bytecode {}: {}",
+            output_path.display(),
+            crate::util::diagnostic::io_error_reason(&e)
+        )
+    })?;
 
     Ok(())
 }
@@ -246,15 +276,25 @@ pub fn dump_bytecode(path: &Path) -> Result<()> {
 
     // 内容即身份：字节码文件直接加载 dump，源码文件编译后 dump（与 run 的分流一致）
     if BytecodeFile::probe(path).unwrap_or(false) {
-        let bytecode_file = BytecodeFile::load(path)
-            .with_context(|| format!("Failed to load bytecode file: {}", path.display()))?;
+        let bytecode_file = BytecodeFile::load(path).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to load bytecode file {}: {}",
+                path.display(),
+                crate::util::diagnostic::io_error_reason(&e)
+            )
+        })?;
         dump_bytecode_file(&bytecode_file);
         return Ok(());
     }
 
     // Read source file
-    let source = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read file: {}", path.display()))?;
+    let source = fs::read_to_string(path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read file {}: {}",
+            path.display(),
+            crate::util::diagnostic::io_error_reason(&e)
+        )
+    })?;
 
     // Compile
     let mut compiler = frontend::Compiler::new();

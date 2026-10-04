@@ -96,7 +96,19 @@ pub fn render_explain_output(
         return Ok(None);
     };
 
-    let lang_code = lang_code.unwrap_or("zh");
+    // 语言解析：显式传入的 --lang 优先；未传时用 i18n 解析出的**诊断语言**
+    // （env YAOXIANG_LANG > 配置 error-lang > lang > fallback）。
+    //
+    // 顶层 `-L/--lang` 在 main() 开头经 `set_lang_from_string` 写入
+    // YAOXIANG_LANG，而这里此前硬编码 `unwrap_or("zh")`，于是 explain
+    // 子命令把顶层 -L 与 YAOXIANG_LANG 一起丢弃：`-L en explain <码>`
+    // 实测 145/150 个码输出中文。
+    // RFC-013「yaoxiang explain Command」规定 `--lang` 默认 en-US，
+    // 且不带 --lang 的 `yaoxiang explain E1001` 示例即为英文输出。
+    let lang_code: &str = match lang_code {
+        Some(explicit) => explicit,
+        None => crate::util::i18n::error_lang(),
+    };
     let i18n = I18nRegistry::new(lang_code);
     let info = i18n.get_info(code).unwrap_or(ErrorInfo {
         title: "",

@@ -293,6 +293,30 @@ fn in_yaoxiang_project(file: &std::path::Path) -> bool {
     false
 }
 
+/// 把 `io::Error` 渲染成**与运行环境语言无关**的固定描述。
+///
+/// `io::Error` 的 `Display` 由操作系统本地化——中文 Windows 上是
+/// 「系统找不到指定的文件。」「拒绝访问。」——它不是 `locales/*.json`
+/// 的一部分，直接拼进用户可见消息会让 `-L` / `YAOXIANG_LANG` 选定的
+/// 语言在这些错误上失效（本地化体检 B2）。
+///
+/// 这里按 `ErrorKind` 归一为固定短语，并保留平台错误码用于排查
+/// （`os error 2` / `os error 5` 与语言无关）。真正的多语言化需要把每个
+/// kind 映射到一个 locale 键，属另一批次。
+pub fn io_error_reason(e: &std::io::Error) -> String {
+    let reason = match e.kind() {
+        std::io::ErrorKind::NotFound => "file not found",
+        std::io::ErrorKind::PermissionDenied => "permission denied",
+        std::io::ErrorKind::AlreadyExists => "already exists",
+        std::io::ErrorKind::InvalidData => "invalid data (not valid UTF-8 text)",
+        _ => "I/O error",
+    };
+    match e.raw_os_error() {
+        Some(code) => format!("{reason} (os error {code})"),
+        None => reason.to_string(),
+    }
+}
+
 pub fn run_file_with_diagnostics(
     file: &std::path::PathBuf,
     runtime_mode: &str,
@@ -321,7 +345,7 @@ pub fn run_file_with_diagnostics(
             return Err(anyhow::anyhow!(
                 "Failed to read file {}: {}",
                 file.display(),
-                e
+                io_error_reason(&e)
             ));
         }
     };
