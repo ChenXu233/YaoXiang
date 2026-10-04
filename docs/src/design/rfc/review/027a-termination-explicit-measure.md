@@ -217,7 +217,7 @@ error [E6007] Runtime error: type mismatch in comparison Eq: Void vs Int(4)
 - **已落地修复（2026-10-04，issue #409）**：`src/middle/core/ir_gen.rs` 的 `generate_while_expr_ir` / `generate_iterator_for_loop_ir`——循环前先给值寄存器写 `Void` 初值，循环体生成的尾表达式直接写入该寄存器，并删除出口处无条件覆写 `Void` 的指令。实测 `loop(4) == 4`、`countdown(3) == 30`、`x: Int = while i < 3 { i = i + 1; i }`（`x == 3`）、零迭代用例的**主形态全绿**。
 - **已知残留（零迭代）**：循环体一次都没求值（如 `loop(0)`）时没有「末次迭代的体值」，值寄存器保持初值 `Void`——绑定到非 `Void` 类型位并在运行期使用即报 `E6007` 类型不匹配（响亮失败，非静默错值）。这是静态近似边界：类型侧 `block_value_ty` 给的是体尾表达式的类型，对「循环是否至少执行一次」无判定能力；把它降级为 `Void` 会破坏本节 `Terminates` 循环绑定所依赖的值类型，故**不**降级。残留契约由 `tests/yaoxiang/02-type-system/while_zero_iteration_void_err.yx`（`// expect: runtime-error E6007`）钉住。
 - **解除条件（历史，已完成）**：运行期把 `while` 表达式的值产出为循环体块尾表达式的值，并让 `tests/yaoxiang/02-type-system/explicit_termination_measure_loop.yx` 与 `while_block_value.yx` 补上 `main()` 调用后能通过。两个语料现已补 `main()` 并实跑通过（`explicit_termination_measure_loop.yx` 的零迭代断言改为非零迭代 `loop(1) == 1`，零迭代情形移交上一条的新用例）。
-- **追踪**：issue [#409](https://github.com/ChenXu233/YaoXiang/issues/409)（运行期 `while` 取值）——主形态已修，零迭代残留随该 issue 跟踪；本节保留最小复现、修复记录与残留边界（en 镜像由自动翻译 bot 负责，不做手改）。
+- **追踪**：issue [#409](https://github.com/ChenXu233/YaoXiang/issues/409)（运行期 `while` 取值）——主形态已修并**已关闭**；零迭代残留为**有意保留的设计边界**（2026-10-04 裁定，暂不修复），由契约用例 `tests/yaoxiang/02-type-system/while_zero_iteration_void_err.yx` 钉住，不再单开跟踪项。本节保留最小复现、修复记录与残留边界（en 镜像由自动翻译 bot 负责，不做手改）。
 
 #### 互递归：SCC 共享测度
 

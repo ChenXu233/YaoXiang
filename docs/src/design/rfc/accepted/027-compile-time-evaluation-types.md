@@ -714,8 +714,10 @@ loop: (n: Int) -> Int = {
 > 对「循环是否至少执行一次」没有判定能力（需要数据流/可证性分析），故类型侧不擅自降级
 > （降级会破坏本节 `Terminates` 循环绑定所依赖的值类型）。
 > 该残留的契约由语料 `tests/yaoxiang/02-type-system/while_zero_iteration_void_err.yx`
-> （`// expect: runtime-error E6007`）钉住；残留清理由 issue
-> [#409](https://github.com/ChenXu233/YaoXiang/issues/409) 跟踪。最小复现与影响面的历史记录见
+> （`// expect: runtime-error E6007`）钉住。**该残留已被确认为有意保留的设计边界**
+> （2026-10-04 裁定，暂不修复），故 issue
+> [#409](https://github.com/ChenXu233/YaoXiang/issues/409) 已随主形态修复关闭，不再单开跟踪项。
+> 最小复现与影响面的历史记录见
 > [RFC-027a](../review/027a-termination-explicit-measure.md) §示例 循环节「已知缺陷 D6」。
 > 另：终止策略 1（线性秩函数）本轮恢复生效，故本节「自动探索不出才写显式测度」的顺序不变——
 > 显式测度仍是探索失败后的兜底。
