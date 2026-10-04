@@ -116,8 +116,6 @@ aliases to disambiguate.
 
 ## Chapter 3: Export Surface
 
-<<<<<<< HEAD
-
 ### 3.1 No Visibility Mechanism
 
 **This language introduces no visibility mechanism.** No `pub`, no `private`, no `export`.
@@ -153,41 +151,6 @@ curly-brace form to selectively import.
 > affected dead-code exemptions (the W1001 family), and **never participated in export decisions**—writing
 > `pub` does not affect whether something can be imported. The description in old documentation that
 > "all items are private by default" is the opposite of the implementation.
-> =======
-
-### 3.1 Export Rules
-
-Modules are bounded by files, and **all top-level bindings can be imported by other modules**—no
-visibility mechanism is set (RFC-029 ruling of 2026-07-30: "If you don't want others to use it,
-don't put it at the top level / don't publish that package"). There are two access forms:
-
-```yaoxiang
-// Math.yx
-pi: Float = 3.14159
-sqrt: (x: Float) -> Float = (x) => { ... }
-
-// main.yx — after whole-module import, access via the module name (functions/constants both work)
-use Math
-Math.sqrt(4.0)
-Math.pi
-```
-
-- Top-level bindings (functions, types, constants, with or without type annotations) all enter the
-  export surface
-- Accessing a name not exported by the module (non-existent or non-top-level) reports E1043 "Module
-  does not export this member"
-- If you only want to export some names, use the `use Math.{pi}` curly-brace form to selectively
-  bring them in
-
-### 3.2 The `pub` Keyword
-
-`pub` currently only affects two things, and **does not affect export visibility** (top-level
-bindings without `pub` can still be imported):
-
-- Triggers automatic method binding (see 3.3)
-- Dead-code check exemption: `pub` bindings do not participate in "defined but unused" warnings
-
-> > > > > > > origin/fix/namespace-data-access
 
 ### 3.3 Method Binding is Explicit
 
