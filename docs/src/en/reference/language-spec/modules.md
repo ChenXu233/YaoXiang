@@ -1,4 +1,3 @@
----
 # Module System Specification
 
 This file defines the module system specification of YaoXiang: how modules are defined, how `use` imports them, what the export surface is, and how scopes are partitioned.
