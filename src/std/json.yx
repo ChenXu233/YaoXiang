@@ -1,0 +1,624 @@
+// std/json.yx — 纯 YaoXiang 标准库：JSON 解析与序列化（RFC 8259，issue #55）
+//
+// `Json` 是本模块导出的记录式和类型（RFC-010），与用户自定义和类型同一套
+// 机制：变体构造（`Json.num(1.5)` / `Json.arr([...])`）、match 变体解构、
+// 穷尽性检查。使用前 `use std.json`。
+//
+// 数字统一经 Float 承载：JSON 数字不分整型/浮点型（`1` 与 `1.0` 同值），
+// 序列化经 Float 最短表示输出。解析失败返回 `Result(Json, Error)`（E6013），
+// 错误消息带 行:列 定位。
+//
+// 字符串处理只用 Unicode 标量值口径原语（`chars` / `substring` /
+// `char_code` / `from_char_code`，见 #385 口径定案）；`\uXXXX` 转义含代理对
+// 组合（高代理必须紧跟低代理），码点合法性由 `from_char_code` 校验
+// （char::from_u32，与词法层同规）。
+//
+// 构建时经 include_str! 嵌入二进制（见 src/std/yx_sources.rs），
+// 运行时以虚拟路径作种子模块注入 orchestrator。
+
+use std.assert
+use std.string
+use std.dict
+use std.result
+use std.convert
+use std.list
+
+// ── 和类型：JSON 值 ───────────────────────────────────────
+
+/// JSON 值。六变体对齐 RFC 8259 §3：null / boolean / number / string /
+/// array / object。
+pub Json: Type = {
+    null: () -> Json,
+    bool: (Bool) -> Json,
+    num: (Float) -> Json,
+    str: (String) -> Json,
+    arr: (Vec(Json)) -> Json,
+    obj: (Dict(String, Json)) -> Json,
+}
+
+/// 解析中间态：值 + 消耗的字符数（尾后下标）。记录而非元组——
+/// 元组作和类型实参的类型实参收集尚未打通（暂避）。
+Spanned: Type = {
+    value: Json,
+    end: Int,
+}
+
+/// 字符串扫描中间态：字符串内容 + 尾后下标。
+StrSpanned: Type = {
+    text: String,
+    end: Int,
+}
+
+// ── 解析 ─────────────────────────────────────────────────
+
+/// 解析 JSON 文本。失败返回 E6013，消息含 行:列 与原因。
+/// 语法按 RFC 8259：不接受尾随逗号、尾随内容、单引号、注释。
+pub parse: (s: &String) -> Result(Json, Error) = {
+    cs = string.chars(s)
+    i = skip_ws(cs, 0)
+    rv = parse_value(cs, s, i)
+    if result.is_err(rv) {
+        e = result.unwrap_err(rv)
+        return Result(Json, Error).err(e)
+    }
+    r = result.unwrap(rv)
+    end = skip_ws(cs, r.end)
+    if end < cs.length {
+        return Result(Json, Error).err(err_at(cs, end, "unexpected trailing characters"))
+    }
+    return Result(Json, Error).ok(r.value)
+}
+
+/// 解析入口分派：按首字符路由到六种值形态。
+parse_value: (cs: &Vec(String), src: &String, i: Int) -> Result(Spanned, Error) = {
+    if i >= cs.length {
+        return Result(Spanned, Error).err(err_at(cs, i, "unexpected end of input"))
+    }
+    c = cs[i]
+    if c == "{" {
+        return parse_object(cs, src, i)
+    }
+    if c == "[" {
+        return parse_array(cs, src, i)
+    }
+    if c == "\"" {
+        srr = parse_string(cs, src, i)
+        if result.is_err(srr) {
+            e = result.unwrap_err(srr)
+            return Result(Spanned, Error).err(e)
+        }
+        sr = result.unwrap(srr)
+        return Result(Spanned, Error).ok(Spanned(Json.str(sr.text), sr.end))
+    }
+    if c == "t" {
+        j = expect_lit(cs, i, "true")?
+        return Result(Spanned, Error).ok(Spanned(Json.bool(true), j))
+    }
+    if c == "f" {
+        j = expect_lit(cs, i, "false")?
+        return Result(Spanned, Error).ok(Spanned(Json.bool(false), j))
+    }
+    if c == "n" {
+        j = expect_lit(cs, i, "null")?
+        return Result(Spanned, Error).ok(Spanned(Json.null(), j))
+    }
+    return parse_number(cs, src, i)
+}
+
+/// 跳过空白（空格 / 制表 / 换行 / 回车），返回首个非空白下标。
+skip_ws: (cs: &Vec(String), i: Int) -> Int = {
+    mut j = i
+    mut scanning = true
+    while j < cs.length and scanning {
+        c = cs[j]
+        if c == " " or c == "\t" or c == "\n" or c == "\r" {
+            j = j + 1
+        } else {
+            scanning = false
+        }
+    }
+    return j
+}
+
+/// 字面量匹配（true / false / null）：逐字符比对，成功返回尾后下标。
+expect_lit: (cs: &Vec(String), i: Int, lit: &String) -> Result(Int, Error) = {
+    want = string.chars(lit)
+    mut j = i
+    mut k = 0
+    while k < want.length {
+        if j >= cs.length {
+            return Result(Int, Error).err(err_at(cs, j, "unexpected end of input"))
+        }
+        if cs[j] != want[k] {
+            return Result(Int, Error).err(err_at(cs, i, "invalid literal"))
+        }
+        j = j + 1
+        k = k + 1
+    }
+    return Result(Int, Error).ok(j)
+}
+
+/// 字符串字面量：前置 `cs[i] == '"'`，处理转义与 `\uXXXX`（含代理对组合）。
+/// 旗标式单出口：循环内不 return（循环内 move `out` 会污染出口处的
+/// loop-carried 状态，#387），失败经 errmsg/errpos 穿出后统一报错。
+parse_string: (cs: &Vec(String), src: &String, i: Int) -> Result(StrSpanned, Error) = {
+    mut out = ""
+    mut j = i + 1
+    mut done = false
+    mut errmsg = ""
+    mut errpos = 0
+    while j < cs.length and !done and errmsg == "" {
+        c = cs[j]
+        if c == "\"" {
+            done = true
+        }
+        if !done {
+            if c != "\\" {
+                if string.char_code(c, 0) < 0x20 {
+                    errmsg = "unescaped control character in string"
+                    errpos = j
+                }
+                if errmsg == "" {
+                    out = string.concat(out, c)
+                    j = j + 1
+                }
+            }
+            if c == "\\" {
+                if j + 1 >= cs.length {
+                    errmsg = "unterminated escape"
+                    errpos = j
+                }
+                if errmsg == "" {
+                    e = cs[j + 1]
+                    mut adv = 0
+                    if e == "\"" {
+                        out = string.concat(out, "\"")
+                        adv = 2
+                    }
+                    if e == "\\" {
+                        out = string.concat(out, "\\")
+                        adv = 2
+                    }
+                    if e == "/" {
+                        out = string.concat(out, "/")
+                        adv = 2
+                    }
+                    if e == "b" {
+                        out = string.concat(out, "\u{0008}")
+                        adv = 2
+                    }
+                    if e == "f" {
+                        out = string.concat(out, "\u{000C}")
+                        adv = 2
+                    }
+                    if e == "n" {
+                        out = string.concat(out, "\n")
+                        adv = 2
+                    }
+                    if e == "r" {
+                        out = string.concat(out, "\r")
+                        adv = 2
+                    }
+                    if e == "t" {
+                        out = string.concat(out, "\t")
+                        adv = 2
+                    }
+                    if e == "u" {
+                        u = parse_uchar(cs, j)
+                        if result.is_err(u) {
+                            errmsg = "invalid \\u escape"
+                            errpos = j
+                        }
+                        if errmsg == "" {
+                            uv = result.unwrap(u)
+                            out = string.concat(out, uv.text)
+                            adv = uv.end - j
+                        }
+                    }
+                    if adv == 0 and errmsg == "" {
+                        errmsg = "invalid escape character"
+                        errpos = j + 1
+                    }
+                    j = j + adv
+                }
+            }
+        }
+    }
+    if errmsg != "" {
+        return Result(StrSpanned, Error).err(err_at(cs, errpos, errmsg))
+    }
+    if !done {
+        return Result(StrSpanned, Error).err(err_at(cs, i, "unterminated string"))
+    }
+    return Result(StrSpanned, Error).ok(StrSpanned(out, j + 1))
+}
+
+parse_uchar: (cs: &Vec(String), i: Int) -> Result(StrSpanned, Error) = {
+    hi = hex4(cs, i)?
+    mut code = hi[0]
+    mut pos = hi[1]
+    if code >= 0xD800 and code <= 0xDBFF {
+        if pos + 1 >= cs.length {
+            return Result(StrSpanned, Error).err(err_at(cs, pos, "truncated surrogate pair"))
+        }
+        if cs[pos] != "\\" {
+            return Result(StrSpanned, Error).err(err_at(cs, pos, "expected low surrogate"))
+        }
+        if cs[pos + 1] != "u" {
+            return Result(StrSpanned, Error).err(err_at(cs, pos, "expected low surrogate"))
+        }
+        lo = hex4(cs, pos + 1)?
+        if lo[0] < 0xDC00 or lo[0] > 0xDFFF {
+            return Result(StrSpanned, Error).err(err_at(cs, pos, "invalid low surrogate"))
+        }
+        code = 0x10000 + (code - 0xD800) * 0x400 + (lo[0] - 0xDC00)
+        pos = lo[1]
+    } else {
+        if code >= 0xDC00 and code <= 0xDFFF {
+            return Result(StrSpanned, Error).err(err_at(cs, i, "unexpected low surrogate"))
+        }
+    }
+    chr = string.from_char_code(code)?
+    return Result(StrSpanned, Error).ok(StrSpanned(chr, pos))
+}
+
+/// 解析 4 位十六进制（前置 `cs[i] == 'u'`），返回（码点, 尾后下标）。
+hex4: (cs: &Vec(String), i: Int) -> Result((Int, Int), Error) = {
+    mut v = 0
+    mut k = i + 1
+    mut n = 0
+    while n < 4 {
+        if k >= cs.length {
+            return Result((Int, Int), Error).err(err_at(cs, k, "truncated \\u escape"))
+        }
+        d = hex_val(cs[k])
+        if d < 0 {
+            return Result((Int, Int), Error).err(err_at(cs, k, "invalid hex digit in \\u escape"))
+        }
+        v = v * 16 + d
+        k = k + 1
+        n = n + 1
+    }
+    return Result((Int, Int), Error).ok((v, k))
+}
+
+/// 单字符十六进制值：0..15，非法返回 -1。
+hex_val: (c: &String) -> Int = {
+    code = string.char_code(c, 0)
+    if code >= 48 and code <= 57 {
+        return code - 48
+    }
+    if code >= 65 and code <= 70 {
+        return code - 55
+    }
+    if code >= 97 and code <= 102 {
+        return code - 87
+    }
+    return -1
+}
+
+/// ASCII 数字判定（按码点，与字符串比较解耦）。
+is_digit: (c: &String) -> Bool = {
+    code = string.char_code(c, 0)
+    return code >= 48 and code <= 57
+}
+
+/// 数字字面量：RFC 8259 §6 文法 `-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?`。
+/// 前导零、孤立小数点、空指数均非法；扫描子串交 `parse_float` 收口。
+parse_number: (cs: &Vec(String), src: &String, i: Int) -> Result(Spanned, Error) = {
+    mut j = i
+    if j < cs.length {
+        if cs[j] == "-" {
+            j = j + 1
+        }
+    }
+    if j >= cs.length {
+        return Result(Spanned, Error).err(err_at(cs, i, "invalid number"))
+    }
+    if !is_digit(cs[j]) {
+        return Result(Spanned, Error).err(err_at(cs, j, "invalid number"))
+    }
+    if cs[j] == "0" {
+        j = j + 1
+    } else {
+        while j < cs.length {
+            if is_digit(cs[j]) {
+                j = j + 1
+            } else {
+                break
+            }
+        }
+    }
+    if j < cs.length {
+        if cs[j] == "." {
+            j = j + 1
+            mut digits = 0
+            while j < cs.length {
+                if is_digit(cs[j]) {
+                    j = j + 1
+                    digits = digits + 1
+                } else {
+                    break
+                }
+            }
+            if digits == 0 {
+                return Result(Spanned, Error).err(err_at(cs, j, "expected digit after '.'"))
+            }
+        }
+    }
+    if j < cs.length {
+        if cs[j] == "e" or cs[j] == "E" {
+            j = j + 1
+            if j < cs.length {
+                if cs[j] == "+" or cs[j] == "-" {
+                    j = j + 1
+                }
+            }
+            mut edigits = 0
+            while j < cs.length {
+                if is_digit(cs[j]) {
+                    j = j + 1
+                    edigits = edigits + 1
+                } else {
+                    break
+                }
+            }
+            if edigits == 0 {
+                return Result(Spanned, Error).err(err_at(cs, j, "expected digit in exponent"))
+            }
+        }
+    }
+    text = string.substring(src, i, j)
+    f = string.parse_float(text)?
+    return Result(Spanned, Error).ok(Spanned(Json.num(f), j))
+}
+
+/// 数组：前置 `cs[i] == '['`。尾随逗号非法（`,` 后直接 `]` 时下一元素
+/// 解析即报错）。
+parse_array: (cs: &Vec(String), src: &String, i: Int) -> Result(Spanned, Error) = {
+    mut out: Vec(Json) = []
+    mut j = skip_ws(cs, i + 1)
+    if j < cs.length {
+        if cs[j] == "]" {
+            return Result(Spanned, Error).ok(Spanned(Json.arr(out), j + 1))
+        }
+    }
+    while true {
+        rr = parse_value(cs, src, j)
+        if result.is_err(rr) {
+            e = result.unwrap_err(rr)
+            return Result(Spanned, Error).err(e)
+        }
+        r = result.unwrap(rr)
+        out = list.push(out, r.value)
+        j = skip_ws(cs, r.end)
+        if j >= cs.length {
+            return Result(Spanned, Error).err(err_at(cs, j, "unterminated array"))
+        }
+        if cs[j] != "," {
+            if cs[j] == "]" {
+                return Result(Spanned, Error).ok(Spanned(Json.arr(out), j + 1))
+            }
+            return Result(Spanned, Error).err(err_at(cs, j, "expected ',' or ']'"))
+        }
+        j = skip_ws(cs, j + 1)
+    }
+    assert.assert(false, "array loop always returns")
+}
+
+/// 对象：前置 `cs[i] == '{'`。键必须是字符串；尾随逗号非法。
+parse_object: (cs: &Vec(String), src: &String, i: Int) -> Result(Spanned, Error) = {
+    mut d: Dict(String, Json) = dict.new()
+    mut j = skip_ws(cs, i + 1)
+    if j < cs.length {
+        if cs[j] == "}" {
+            return Result(Spanned, Error).ok(Spanned(Json.obj(d), j + 1))
+        }
+    }
+    while true {
+        if j >= cs.length {
+            return Result(Spanned, Error).err(err_at(cs, j, "unterminated object"))
+        }
+        if cs[j] != "\"" {
+            return Result(Spanned, Error).err(err_at(cs, j, "expected string key"))
+        }
+        krr = parse_string(cs, src, j)
+        if result.is_err(krr) {
+            e = result.unwrap_err(krr)
+            return Result(Spanned, Error).err(e)
+        }
+        kr = result.unwrap(krr)
+        key = kr.text
+        j = skip_ws(cs, kr.end)
+        if j >= cs.length {
+            return Result(Spanned, Error).err(err_at(cs, j, "unterminated object"))
+        }
+        if cs[j] != ":" {
+            return Result(Spanned, Error).err(err_at(cs, j, "expected ':'"))
+        }
+        j = skip_ws(cs, j + 1)
+        vrr = parse_value(cs, src, j)
+        if result.is_err(vrr) {
+            e = result.unwrap_err(vrr)
+            return Result(Spanned, Error).err(e)
+        }
+        vr = result.unwrap(vrr)
+        d = dict.set(d, key, vr.value)
+        j = skip_ws(cs, vr.end)
+        if j >= cs.length {
+            return Result(Spanned, Error).err(err_at(cs, j, "unterminated object"))
+        }
+        if cs[j] != "," {
+            if cs[j] == "}" {
+                return Result(Spanned, Error).ok(Spanned(Json.obj(d), j + 1))
+            }
+            return Result(Spanned, Error).err(err_at(cs, j, "expected ',' or '}'"))
+        }
+        j = skip_ws(cs, j + 1)
+    }
+    assert.assert(false, "object loop always returns")
+}
+
+/// 行列反推：从字符偏移统计换行（错误只发生一次，O(i) 可接受）。
+err_at: (cs: &Vec(String), i: Int, msg: &String) -> Error = {
+    mut line = 1
+    mut col = 1
+    mut k = 0
+    while k < i and k < cs.length {
+        if cs[k] == "\n" {
+            line = line + 1
+            col = 1
+        } else {
+            col = col + 1
+        }
+        k = k + 1
+    }
+    where_ = string.concat(
+        string.concat(msg, " at line "),
+        string.concat(
+            convert.to_string(line),
+            string.concat(", column ", convert.to_string(col)),
+        ),
+    )
+    return result.error("E6013", where_)
+}
+
+// ── 序列化 ───────────────────────────────────────────────
+
+/// 紧凑序列化（无空白）。字符串转义对齐 RFC 8259 §7：
+/// `"` `\` 与 U+0000..U+001F（\b \t \n \f \r 用短形态，其余 \u00xx），
+/// 非 ASCII 原样输出（合法 UTF-8）。
+pub stringify: (v: &Json) -> String = {
+    return write_value(v, false, 0)
+}
+
+/// 格式化序列化：2 空格缩进，数组/对象展开，空容器紧凑。
+pub pretty: (v: &Json) -> String = {
+    return write_value(v, true, 0)
+}
+
+write_value: (v: &Json, pretty_mode: Bool, depth: Int) -> String = {
+    match v {
+        null() => return "null",
+        bool(b) => {
+            if b {
+                return "true"
+            }
+            return "false"
+        }
+        num(f) => return convert.to_string(f),
+        str(sv) => return escape_string(sv),
+        arr(items) => {
+            if items.length == 0 {
+                return "[]"
+            }
+            return write_array(items, pretty_mode, depth)
+        }
+        obj(d) => {
+            if dict.len(d) == 0 {
+                return "{}"
+            }
+            return write_object(d, pretty_mode, depth)
+        }
+    }
+}
+
+write_array: (items: &Vec(Json), pretty_mode: Bool, depth: Int) -> String = {
+    mut out = "["
+    mut i = 0
+    while i < items.length {
+        if pretty_mode {
+            out = string.concat(out, "\n")
+            out = string.concat(out, indent(depth + 1))
+        }
+        out = string.concat(out, write_value(items[i], pretty_mode, depth + 1))
+        if i + 1 < items.length {
+            out = string.concat(out, ",")
+        }
+        i = i + 1
+    }
+    if pretty_mode {
+        out = string.concat(out, "\n")
+        out = string.concat(out, indent(depth))
+    }
+    return string.concat(out, "]")
+}
+
+write_object: (d: &Dict(String, Json), pretty_mode: Bool, depth: Int) -> String = {
+    mut out = "{"
+    keys = dict.keys(d)
+    mut i = 0
+    while i < keys.length {
+        if pretty_mode {
+            out = string.concat(out, "\n")
+            out = string.concat(out, indent(depth + 1))
+        }
+        out = string.concat(out, escape_string(keys[i]))
+        out = string.concat(out, ":")
+        if pretty_mode {
+            out = string.concat(out, " ")
+        }
+        out = string.concat(out, write_value(dict.get(d, keys[i]), pretty_mode, depth + 1))
+        if i + 1 < keys.length {
+            out = string.concat(out, ",")
+        }
+        i = i + 1
+    }
+    if pretty_mode {
+        out = string.concat(out, "\n")
+        out = string.concat(out, indent(depth))
+    }
+    return string.concat(out, "}")
+}
+
+indent: (depth: Int) -> String = {
+    return string.repeat(" ", depth * 2)
+}
+
+/// 字符串值转义（含首尾引号）。
+escape_string: (s: &String) -> String = {
+    mut out = "\""
+    cs = string.chars(s)
+    mut i = 0
+    while i < cs.length {
+        out = string.concat(out, escape_char(cs[i]))
+        i = i + 1
+    }
+    return string.concat(out, "\"")
+}
+
+escape_char: (c: String) -> String = {
+    if c == "\"" {
+        return "\\\""
+    }
+    if c == "\\" {
+        return "\\\\"
+    }
+    if c == "\n" {
+        return "\\n"
+    }
+    if c == "\r" {
+        return "\\r"
+    }
+    if c == "\t" {
+        return "\\t"
+    }
+    if c == "\u{0008}" {
+        return "\\b"
+    }
+    if c == "\u{000C}" {
+        return "\\f"
+    }
+    code = string.char_code(c, 0)
+    if code >= 0 and code < 0x20 {
+        hi = code / 16
+        lo = code - hi * 16
+        return string.concat("\\u00", string.concat(hex_digit(hi), hex_digit(lo)))
+    }
+    return c
+}
+
+/// 0..15 → 十六进制小写字符。
+hex_digit: (n: Int) -> String = {
+    return string.substring("0123456789abcdef", n, n + 1)
+}

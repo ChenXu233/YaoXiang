@@ -14,6 +14,58 @@ use crate::frontend::core::types::eval::TypeLevelResult;
 
 // §5.1: TypeCondition — 所有条件变体
 
+/// Helper: test_condition_and_or_not 的完整夹具与断言（逐条断言见函数体）。
+/// Assert: And 真值表（t&t=true、t&f=false、f&t=false）。
+fn assert_and_truth_table(
+    t: &TypeCondition,
+    f: &TypeCondition,
+) {
+    assert_eq!(
+        TypeCondition::And(Box::new(t.clone()), Box::new(t.clone())).eval(),
+        Some(true)
+    );
+    assert_eq!(
+        TypeCondition::And(Box::new(t.clone()), Box::new(f.clone())).eval(),
+        Some(false)
+    );
+    assert_eq!(
+        TypeCondition::And(Box::new(f.clone()), Box::new(t.clone())).eval(),
+        Some(false)
+    );
+}
+
+/// Assert: Or 真值表（t|f=true、f|f=false、t|t=true）。
+fn assert_or_truth_table(
+    t: &TypeCondition,
+    f: &TypeCondition,
+) {
+    assert_eq!(
+        TypeCondition::Or(Box::new(t.clone()), Box::new(f.clone())).eval(),
+        Some(true)
+    );
+    assert_eq!(
+        TypeCondition::Or(Box::new(f.clone()), Box::new(f.clone())).eval(),
+        Some(false)
+    );
+    assert_eq!(
+        TypeCondition::Or(Box::new(t.clone()), Box::new(t.clone())).eval(),
+        Some(true)
+    );
+}
+
+/// Assert: Not 真值表（!t=false、!f=true、!!t=true）。
+fn assert_not_truth_table(
+    t: &TypeCondition,
+    f: &TypeCondition,
+) {
+    assert_eq!(TypeCondition::Not(Box::new(t.clone())).eval(), Some(false));
+    assert_eq!(TypeCondition::Not(Box::new(f.clone())).eval(), Some(true));
+    assert_eq!(
+        TypeCondition::Not(Box::new(TypeCondition::Not(Box::new(t.clone())))).eval(),
+        Some(true)
+    );
+}
+
 #[test]
 fn test_condition_bool() {
     assert_eq!(TypeCondition::Bool(true).eval(), Some(true));
@@ -82,44 +134,14 @@ fn test_condition_is_type() {
 
 #[test]
 fn test_condition_and_or_not() {
+    // Arrange — 布尔真值对
     let t = TypeCondition::Bool(true);
     let f = TypeCondition::Bool(false);
 
-    // And
-    assert_eq!(
-        TypeCondition::And(Box::new(t.clone()), Box::new(t.clone())).eval(),
-        Some(true)
-    );
-    assert_eq!(
-        TypeCondition::And(Box::new(t.clone()), Box::new(f.clone())).eval(),
-        Some(false)
-    );
-    assert_eq!(
-        TypeCondition::And(Box::new(f.clone()), Box::new(t.clone())).eval(),
-        Some(false)
-    );
-
-    // Or
-    assert_eq!(
-        TypeCondition::Or(Box::new(t.clone()), Box::new(f.clone())).eval(),
-        Some(true)
-    );
-    assert_eq!(
-        TypeCondition::Or(Box::new(f.clone()), Box::new(f.clone())).eval(),
-        Some(false)
-    );
-    assert_eq!(
-        TypeCondition::Or(Box::new(t.clone()), Box::new(t.clone())).eval(),
-        Some(true)
-    );
-
-    // Not
-    assert_eq!(TypeCondition::Not(Box::new(t.clone())).eval(), Some(false));
-    assert_eq!(TypeCondition::Not(Box::new(f.clone())).eval(), Some(true));
-    assert_eq!(
-        TypeCondition::Not(Box::new(TypeCondition::Not(Box::new(t.clone())))).eval(),
-        Some(true)
-    );
+    // Act & Assert — And / Or / Not 各自的真值表
+    assert_and_truth_table(&t, &f);
+    assert_or_truth_table(&t, &f);
+    assert_not_truth_table(&t, &f);
 }
 
 #[test]

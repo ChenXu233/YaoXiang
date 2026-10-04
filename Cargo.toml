@@ -5,7 +5,7 @@ resolver = "2"
 
 # RFC-037：工具链单一版本源（引擎 yaoxiang-rs 与前门 yx 同版本发布）
 [workspace.package]
-version = "0.8.2"
+version = "0.8.3"
 
 [package]
 name = "yaoxiang"
@@ -37,7 +37,6 @@ path = "src/main.rs"
 [dev-dependencies]
 criterion = "0.8.1"
 proptest = "1.11"
-tempfile = "3.27.0"
 
 [[bench]]
 name = "lib"
@@ -68,6 +67,24 @@ urlencoding = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.150"
 toml = "1.1.2"
+
+# 语义化版本（RFC-014 Phase 3：替换手写解析器）
+semver = "1"
+
+# SHA-256 完整性校验（RFC-014 依赖表；替换内联手写实现）
+sha2 = "0.11"
+
+# .yxpkg 包格式（RFC-014a 决议 3：tar.gz 源码包 + SHA256SUMS）
+flate2 = "1"
+tar = "0.4"
+
+# HTTP 客户端（RFC-014a Phase 4：GitHub 适配层；rustls 免 OpenSSL 交叉编译）
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "system-proxy"] }
+
+# tokio 运行时（仅包管理命令层 drive()；current_thread + IO/时间驱动）。
+# net 特性在下方非 wasm 目标段启用：mio 不支持 wasm32，无条件启用会
+# 炸掉 wasm-pack 构建（Deploy Docs 的 Build Wasm）
+tokio = { version = "1", default-features = false, features = ["rt", "time"] }
 
 # 错误处理
 anyhow = "1"
@@ -104,6 +121,14 @@ lto = "thin"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# tokio net 特性（reqwest/GitHub 适配层）：mio 仅支持原生目标
+tokio = { version = "1", default-features = false, features = ["net"] }
+# HTTP 客户端（std.net #56）——同步阻塞 + rustls，不引入 tokio 运行时树
+ureq = { version = "2", default-features = false, features = ["tls"] }
+# 临时文件/目录创建（std.fs #104；安全唯一名语义，std 无对位）
+tempfile = "3.27.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-time = "1"

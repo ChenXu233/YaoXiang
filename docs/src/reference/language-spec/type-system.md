@@ -82,13 +82,19 @@ TypeExpr    ::= PrimitiveType
 | `Void`   | ⊤（真/Unit）   | 有默认 void 值，零字段积类型。`x: Void = <默认>` 合法。               | 0 字节   |
 | `Bool`   | —              | 布尔值：`true` / `false`                                              | 1 字节   |
 | `Int`    | —              | 有符号整数                                                            | 8 字节   |
-| `Uint`   | —              | 无符号整数                                                            | 8 字节   |
 | `Float`  | —              | 浮点数                                                                | 8 字节   |
 | `String` | —              | UTF-8 字符串                                                          | 可变     |
 | `Char`   | —              | Unicode 字符                                                          | 4 字节   |
 | `Bytes`  | —              | 原始字节                                                              | 可变     |
 
-带位宽的整数：`Int8`, `Int16`, `Int32`, `Int64`, `Int128` 带位宽的浮点：`Float32`, `Float64`
+带位宽的整数：`Int8`, `Int16`, `Int32`, `Int64`；带位宽的浮点：`Float32`, `Float64`。
+完整的内建类型名表见 `src/frontend/core/types/mono.rs:618-640` 的
+`MonoType::from_builtin_name`。
+
+> **没有无符号整数类型**。`Uint`（以及 `Int128`）不是可用类型名——`Uint` 只出现在
+> `src/lsp/world.rs:176` 的 LSP 补全候选表与
+> `src/frontend/core/types/eval/const_eval.rs:503` 的 `sizeof` 兜底分支里，两者都不是
+> 类型注册。需要无符号语义时自己用 `Int` 加上下界约定。
 
 ### 2.2 Never 与 Void：⊥ 与 ⊤
 
@@ -378,6 +384,12 @@ List: (T: Type) -> Type = {
 `std.result` / `std.option` 提供 `Try` 实现（`Option` 的失败残余类型为
 `Void`）；用户自定义和类型在类型体内写 `Try(自身, T, E)` 即可接入 `?`。
 `?` 的 lowering 不区分内建与用户类型——同一接口，同一路径。
+
+和类型的**变体集随定义或 `use` 导入进入检查器**：`Result`/`Option` 用前须
+`use std.result` / `use std.option`（整模块与分组 `use std.{...}` 同权），
+变体构造（类型限定形态）、match 变体解构与穷尽性判定都以这份注册为唯一判据；
+native 函数签名返回的 `Result(Float, Error)` 铸出同名 `Generic`，与
+`std.result` 的和类型按名同身份，`use` 后即可 match 解构。
 
 ### 4.3 泛型构造调用与类型推导
 
@@ -681,10 +693,12 @@ gcd: Terminates((a: Int, b: Int) -> Int, gcd_measure) = {
 }
 
 // 一元形态：锚点即绑定名，测度是作用域内的表达式
+// 循环体是 `{}` 块，其值由尾表达式给出（spec §2.9）：体尾写了表达式才不是 `Void`
 loop: (n: Int) -> Int = {
     mut i = 0
     acc: Terminates(n - i) = while i < n {
         i = i + 1
+        i
     }
     return acc
 }
@@ -795,23 +809,37 @@ YaoXiang 只有一种类型属性需要区分：线性 vs 可复制。由编译�
 所有类型默认遵循 Move 语义。赋值、传参、返回 = 所有权转移。
 
 ```yaoxiang
-p: Point = Point(1.0, 2.0)
-q = p           // Move，p 不可再读
+// 含堆缓冲字段的 struct 不派生 Dup（字段落 Move）→ 默认 Move
+Buf: Type = { data: Vec(Float) }
+b: Buf = Buf([1.0, 2.0])
+q = b           // Move，b 不可再读
 ```
 
 ### 11.2 Dup（浅拷贝：复制句柄，共享数据）
 
-**Dup 属性用于引用/令牌类型**。Dup 类型的赋值 = 浅拷贝——复制句柄/令牌，底层数据共享。多个持有者指向同一块数据。
+**Dup 属性用于引用/令牌类型与内部引用计数的句柄值类型**。Dup 类型的赋值 = 浅拷贝——复制句柄/令牌，底层数据共享。多个持有者指向同一块数据。
 
 | 类型         | 属性   | 说明                                            |
 | ------------ | ------ | ----------------------------------------------- |
 | `&T`         | Dup    | 零大小读取令牌，复制令牌 = 多个视角指向同一数据 |
 | `ref T`      | Dup    | Rc/Arc 复制 = 引用计数+1，共享堆数据            |
+| String, Bytes | Dup   | 内部引用计数，赋值复制句柄共享底层 buffer       |
 | `&mut T`     | Linear | 零大小写入令牌，独占，不可复制                  |
-| 其他所有类型 | Move   | 默认所有权转移                                  |
+| struct        | 派生   | 所有字段可复制（原语值类型 ∪ Dup）→ Dup，否则 Move（#398） |
+| tuple         | 派生   | 逐元素判定，同 struct 规则（#398）              |
+| 其他所有类型  | Move   | 默认所有权转移                                  |
 
 **原语值类型**（Int, Float, Bool,
 Char）是编译器内置的特殊处理：赋值时自动值复制，两个值完全独立。这是编译器的原生行为，不属于 Dup 类型属性。
+
+**派生规则**（#398 定案）——「所有字段均为 Dup 时自动派生」无法字面执行：
+原语字段（Int 等）本身不属于 Dup，`{ x: Int, y: Int }` 会被误判为 Move。可执行形式：
+
+1. **可复制字段集** = 原语值类型（Int / Float / Bool / Char / Range）∪ Dup（`&T`、`ref T`、String / Bytes、函数值（#352）、已达 Dup 的组合类型）；
+2. **struct**：所有字段都在可复制字段集内 → 派生 Dup；**任一**字段落 Linear（`&mut T`）或 Move（嵌套 Move struct / Vec、Dict 等容器 / 资源）→ 整体保持 Move（不引入「部分可复制」的中间态）；
+3. **tuple**：与 struct 同规则，逐元素判定；空元组（单位）即 `Void`；
+4. **派生是递归的**：字段为具名类型（如 `target: Point`）时展开其定义再判定，`A = { b: B }` 随 B 的派生结果走；循环别名按深度上限保守落 Move；
+5. **不在派生范围**（仍 Move，另案）：容器（Vec / Dict / Set / Option / Result / Array）与 enum。
 
 ```yaoxiang
 // &T: Dup，可自由别名
@@ -868,7 +896,10 @@ print(x)            // 可用
 // Clone：显式深拷贝，创建独立副本
 p: Point = Point(1.0, 2.0)
 q = p.clone()       // Clone：深复制，p 仍然可用
-r = p               // Move：所有权转移，因为 Point 不是 Dup 也不是原语值类型
+
+// 非 Dup 类型（字段落 Move，不派生）：Move 转移所有权
+buf: Buf = Buf([1.0, 2.0])
+buf2 = buf          // Move：Buf 含 Vec 字段，不派生 Dup（见 §11.2 派生规则）
 ```
 
 **设计意图**：
@@ -876,7 +907,7 @@ r = p               // Move：所有权转移，因为 Point 不是 Dup 也不�
 - Dup 用于令牌/引用类型，解决"多个视角看同一份数据"的问题
 - Clone 用于需要独立副本的场景，显式调用让成本可见
 - 原语值类型（Int/Float/Bool/Char）的复制是编译器内置行为，不属于 Dup
-- 大多数自定义类型默认 Move，零拷贝高性能
+- 自定义类型默认 Move（零拷贝高性能）；字段全可复制时自动派生 Dup（§11.2 派生规则）
 
 ## 第十二章：借用令牌类型
 
@@ -1088,9 +1119,10 @@ Adder: Type = (Int, Int) -> Int
 // === 终止测度（内置谓词，见 §8.4） ===
 
 // 一元：锚点即绑定名（自递归函数、循环）
+// 体尾须给出值——`while` 的值 = 循环体块的值 = 尾表达式（spec §2.9）
 loop: (n: Int) -> Int = {
     mut i = 0
-    acc: Terminates(n - i) = while i < n { i = i + 1 }
+    acc: Terminates(n - i) = while i < n { i = i + 1; i }
     return acc
 }
 
@@ -1144,6 +1176,11 @@ Bool, Char      // 不是 Dup，是编译器对原语的内置处理
 // === Dup（浅拷贝：复制句柄，共享底层数据） ===
 &T              // 零大小读取令牌，复制令牌 = 多个视角指向同一数据
 ref T           // Rc/Arc 复制 = 引用计数+1，共享堆数据
+String, Bytes   // 内部引用计数，复制句柄共享底层 buffer
+struct / tuple  // 派生：所有字段 ∈（原语值类型 ∪ Dup）→ Dup（#398）
+
+// === 不派生（保持 Move） ===
+Vec/Dict/Set    // 容器与 enum 不在派生范围（#398）
 
 // === Linear ===
 &mut T          // 零大小写入令牌，Linear（独占，不可复制）

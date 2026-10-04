@@ -11,6 +11,35 @@ use crate::util::span::Span;
 
 // Expr variants
 
+/// Helper: test_type_definition_variant 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: `Point` 记录类型定义语句（字段 x/y 均 Float）。
+fn point_type_definition_stmt() -> Stmt {
+    Stmt {
+        kind: StmtKind::TypeDefinition {
+            name: "Point".into(),
+            signature_params: vec![],
+            definition: Type::Struct {
+                body: vec![
+                    ast::TypeBodyItem::Field(StructField {
+                        name: "x".into(),
+                        ty: Type::Float(64),
+                        is_mut: false,
+                        default: None,
+                    }),
+                    ast::TypeBodyItem::Field(StructField {
+                        name: "y".into(),
+                        ty: Type::Float(64),
+                        is_mut: false,
+                        default: None,
+                    }),
+                ],
+            },
+            is_pub: false,
+        },
+        span: Span::dummy(),
+    }
+}
+
 #[test]
 fn test_expr_lit() {
     let span = Span::dummy();
@@ -550,30 +579,10 @@ fn test_unop_all_variants() {
 
 #[test]
 fn test_type_definition_variant() {
-    let stmt = Stmt {
-        kind: StmtKind::TypeDefinition {
-            name: "Point".into(),
-            signature_params: vec![],
-            definition: Type::Struct {
-                body: vec![
-                    ast::TypeBodyItem::Field(StructField {
-                        name: "x".into(),
-                        ty: Type::Float(64),
-                        is_mut: false,
-                        default: None,
-                    }),
-                    ast::TypeBodyItem::Field(StructField {
-                        name: "y".into(),
-                        ty: Type::Float(64),
-                        is_mut: false,
-                        default: None,
-                    }),
-                ],
-            },
-            is_pub: false,
-        },
-        span: Span::dummy(),
-    };
+    // Arrange — Point 记录类型定义语句
+    let stmt = point_type_definition_stmt();
+
+    // Act & Assert — 语句种类与类型体结构
     if let StmtKind::TypeDefinition {
         name, definition, ..
     } = &stmt.kind
@@ -763,6 +772,7 @@ fn test_expr_for() {
 
 #[test]
 fn test_expr_listcomp() {
+    // Arrange + Act：按规范 §1.6.5 形态构造单生成器、带过滤条件的 ListComp 节点
     let expr = Expr::ListComp {
         element: Box::new(Expr::BinOp {
             op: BinOp::Mul,
@@ -770,19 +780,28 @@ fn test_expr_listcomp() {
             right: Box::new(Expr::Var("x".into(), Span::dummy())),
             span: Span::dummy(),
         }),
-        var: "x".into(),
-        iterable: Box::new(Expr::Var("items".into(), Span::dummy())),
-        condition: Some(Box::new(Expr::BinOp {
-            op: BinOp::Gt,
-            left: Box::new(Expr::Var("x".into(), Span::dummy())),
-            right: Box::new(Expr::Lit(Literal::Int(0), Span::dummy())),
+        generators: vec![ast::ListCompGenerator {
+            var: "x".into(),
+            iterable: Box::new(Expr::Var("items".into(), Span::dummy())),
+            condition: Some(Box::new(Expr::BinOp {
+                op: BinOp::Gt,
+                left: Box::new(Expr::Var("x".into(), Span::dummy())),
+                right: Box::new(Expr::Lit(Literal::Int(0), Span::dummy())),
+                span: Span::dummy(),
+            })),
             span: Span::dummy(),
-        })),
+        }],
         span: Span::dummy(),
     };
-    if let Expr::ListComp { var, condition, .. } = &expr {
-        assert_eq!(var, "x");
-        assert!(condition.is_some(), "if 语句应有条件");
+
+    // Assert
+    match &expr {
+        Expr::ListComp { generators, .. } => {
+            assert_eq!(generators.len(), 1, "单 for 子句应构造出 1 个生成器");
+            assert_eq!(generators[0].var, "x", "迭代变量应为 x");
+            assert!(generators[0].condition.is_some(), "if 子句应有过滤条件");
+        }
+        other => panic!("构造的节点应保持 ListComp 形态，实际为 {:?}", other),
     }
 }
 

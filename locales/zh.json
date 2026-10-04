@@ -288,6 +288,14 @@
     "example": "point.z;",
     "error_output": "error[E1042]: 字段未找到\n --> example.yx:1:7\n  |\n1 | point.z;\n  |       ^ 在结构体 'Point' 中找不到字段 'z'"
   },
+  "E1043": {
+    "title": "模块成员未找到",
+    "message": "访问了模块未导出的成员",
+    "template": "模块 '{module}' 没有导出 '{name}'",
+    "help": "该模块的可用导出：{available}",
+    "example": "lib.nope;",
+    "error_output": "error[E1043]: 模块成员未找到\n --> example.yx:1:5\n  |\n1 | lib.nope;\n  |     ^^^^ 模块 'lib' 没有导出 'nope'"
+  },
   "E1050": {
     "title": "需要布尔操作数",
     "message": "逻辑运算需要布尔操作数",
@@ -502,6 +510,22 @@
     "help": "参数名不能与泛型参数同名",
     "example": "\"[T](T: Int) -> T\"",
     "error_output": "error[E2095]: 参数名遮蔽泛型\n --> std/list.yx:1:1\n  |\n1 | \"[T](T: Int) -> T\"\n  | ^^^^^^^^^^^^^^^^^^"
+  },
+  "E2096": {
+    "title": "签名裸容器类型",
+    "message": "签名中的容器类型缺少类型实参",
+    "template": "无效签名：容器类型 '{name}' 缺少类型实参",
+    "help": "容器类型是泛型类型构造器（SPEC type-system §4.1.1），裸名不是合法类型表达式。写成参数化形态：List(T)、Dict(K, V)、Vec(T)、Array(T, N)、Set(T)、Tuple(T, ...)",
+    "example": "\"(path: &String) -> List\"",
+    "error_output": "error[E2096]: 签名裸容器类型\n --> std/module.rs:1:1\n  |\n1 | \"(path: &String) -> List\"\n  |                      ^^^^ 容器类型 'List' 缺少类型实参"
+  },
+  "E1108": {
+    "title": "空块落入容器期望位",
+    "message": "`{}` 是空块（值 Void），不是容器字面量",
+    "template": "此处期望容器类型，但 `{}` 是空块（值 Void）",
+    "help": "B 方案语义（SPEC syntax §1.6.4）：`{}` 是空块，不是空字典。空字典用 `dict.new()`，空列表用 `[]`",
+    "example": "net.http_get(url, {}, 5)",
+    "error_output": "error[E1108]: 空块落入容器期望位\n --> main.yx:2:33\n  |\n2 |     net.http_get(url, {}, 5)\n  |                            ^ 此处期望容器类型，但 `{}` 是空块（值 Void）"
   },
   "E4001": {
     "title": "泛型约束违反",
@@ -778,7 +802,7 @@
   "E3008": {
     "title": "不支持的 match 模式",
     "template": "match 模式 '{pattern}' 尚未实现：当前仅支持字面量与通配符（_）模式",
-    "help": "变体解构（ok(v)/err(e)/some(x)）、结构体、元组、或模式与守卫尚未落地（RFC-010b 规划中），此前实现会静默错译，现改为编译期拒绝。处理 Result 请改用 `?` 运算符。"
+    "help": "IR 层无法确定被匹配值的和类型（变体解构需要精确类型信息）：先把 scrutinee 绑定到变量再 match。若该形态应当支持，请附最小复现报告。"
   },
   "E3018": {
     "title": "单态化实例化失败",
@@ -788,7 +812,7 @@
   "E3014": {
     "title": "寄存器溢出",
     "template": "寄存器溢出：{id} 超过限制 {limit}",
-    "help": "减少局部变量数量或简化表达式。"
+    "help": "减少局部变量数量、简化表达式，或将大函数拆分为多个小函数。"
   },
   "E3017": {
     "title": "无效操作数（代码生成）",
@@ -802,13 +826,13 @@
   },
   "E3020": {
     "title": "缺少程序入口",
-    "template": "可执行文件缺少 main 函数（{path}）",
+    "template": "可执行文件缺少 main 绑定（{path}）",
     "help": "定义入口：main = { ... }。Bin 角色下没有 main 时全部函数都不可达。"
   },
   "E3021": {
     "title": "入口不是函数",
     "template": "程序入口 '{name}' 必须是函数，但它是值绑定",
-    "help": "入口要可调用：写成 main = { ... } 或 main: () -> Void = { ... }；值绑定（如 main: Int = 5）不会被执行。"
+    "help": "入口必须是函数：写成 main = () => { ... } 或加函数注解 main: () -> Void = ...。裸块绑定 main = { ... } 是值绑定（在模块初始化期求值），不会作为入口执行。"
   },
   "E4010": {
     "title": "常量除零",
@@ -850,12 +874,17 @@
   "E5006": {
     "title": "重复导入",
     "template": "重复导入：'{name}' 已被导入",
-    "help": "移除重复的导入语句"
+    "help": "请移除重复的导入，或使用不同名字/模块别名"
   },
   "E5007": {
     "title": "模块导出",
     "template": "模块 '{module}' 的导出：{available}",
     "help": "可用的导出列在错误消息中"
+  },
+  "E5008": {
+    "title": "导入名冲突",
+    "template": "导入名 '{name}' 与现有绑定冲突（导入自 '{module}'）",
+    "help": "请使用不同名字或模块别名"
   },
   "E6006": {
     "title": "函数未找到（运行时）",
@@ -1070,5 +1099,54 @@
     "message": "'{key}' 有 {count} 个候选匹配，无法决议",
     "template": "方法重载歧义：'{key}' 有 {count} 个候选匹配且无法区分",
     "help": "为调用结果添加类型注解（如 `x: T = obj.m()`），或让重载候选的参数类型可区分"
-  }
+  },
+  "E6012": {
+    "title": "码点非法",
+    "message": "from_char_code 收到非法码点（负数、代理区或超出 U+10FFFF）",
+    "template": "码点非法：{input}",
+    "help": "检查码点是否在 U+0000..U+10FFFF 内且不在代理区（U+D800..U+DFFF）"
+  },
+  "E6013": {
+    "title": "JSON 解析失败",
+    "message": "json.parse 解析 JSON 文本失败",
+    "template": "JSON 解析失败：{detail}",
+    "help": "检查 JSON 语法是否合法（RFC 8259）；错误消息含 行:列 定位与原因"
+  },
+  "E4022": {
+    "title": "测度不成立",
+    "message": "该递归调用点的测度未能严格递减，无法证明递归终止（已附反例）",
+    "template": "测度不成立：此调用点无法证明测度严格递减\n\n反例：\n{counterexample}",
+    "help": "这是精化类型主张的终止性义务：带 `Terminates` 测度的递归函数，每个递归调用点都必须证明测度严格递减。反例给出了一组使递减不成立的取值。请检查测度选择是否恰当，或补充分支守卫使递归路径上的下降成立。参考 RFC-027a。"
+  },
+"package_outdated_none": "所有依赖均为最新。",
+  "package_outdated_found": "发现 {0} 个过时依赖:",
+  "package_outdated_row": "  {0}: {1} -> {2}",
+  "package_outdated_pinned": "  {0} ({1}) [已固定]",
+  "package_outdated_failed": "  {0} ({1}) [检查失败: {2}]",
+  "package_clean_removed": "  已移除 {0}",
+  "package_clean_nothing": "没有需要清理的内容。",
+  "package_cache_cleaned": "缓存已清理（释放 {0}）",
+  "package_cache_empty": "缓存已是空的。",
+  "W1006": {
+    "title": "本地模块遮蔽依赖包",
+    "message": "本地模块优先级高于 vendor 中的同名依赖",
+    "template": "本地模块 '{module}' 遮蔽了依赖包 '{dependency}'",
+    "help": "本地模块解析优先级最高（RFC-014）：'./src/{module}' 覆盖 .yaoxiang/vendor/ 中的依赖包 '{dependency}'。若遮蔽非本意请重命名本地模块；可用 --deny-shadowing 将其升级为错误",
+    "example": "// ./src/data.yx 存在，同时 'data' 也是已安装的依赖\nuse data.json; // 解析到 ./src/data.yx 而非依赖包",
+    "error_output": "warning[W1006]: 本地模块 'data' 遮蔽了依赖包 'data'\n --> example.yx:1:1\n  |\n1 | use data.json;\n  | ^^^^^^^^^^^^\n  |\n  = note: 本地模块优先级高于 vendor 中的同名依赖"
+  },
+  "workspace_list_header": "工作空间 {0}（{1} 个成员）",
+  "workspace_list_member_row": "  {0} {1}  （{2}）",
+  "workspace_member_added": "✓ 已登记工作空间成员 '{0}'（{1}）",
+  "workspace_member_removed": "✓ 已移除工作空间成员 '{0}'",
+  "workspace_member_referenced": "⚠ 成员 {0} 仍被以下成员引用：{1}",
+  "workspace_auto_registered": "✓ 已登记到工作空间 {0}（key '{1}'）",
+  "package_publish_packed": "✓ 已打包 {0}（SHA-256 {1}）",
+  "package_publish_registry_deferred": "官方 Registry 无限期后置（RFC-014a 决议 1）：使用 --github 发布到 GitHub Release，或 --dry-run 仅本地打包",
+  "package_publish_github_done": "✓ 已发布 GitHub Release：{0}",
+  "package_publish_version_exists": "Release {0} 已存在，版本号不可复用",
+  "package_publish_tag_missing": "tag {0} 不存在：先创建并推送 tag（git tag {0} && git push origin {0}）",
+  "package_publish_token_missing": "缺少 GitHub 凭据：设置 $YX_GITHUB_TOKEN（014a 认证表）",
+  "package_publish_testing": "运行发布前测试…",
+  "package_publish_repo_unresolved": "无法解析 GitHub 仓库：在 [package] repository 填 GitHub URL，或配置 git remote origin"
 }

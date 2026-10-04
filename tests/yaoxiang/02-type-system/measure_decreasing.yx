@@ -1,0 +1,26 @@
+// 02-type-system/measure_decreasing.yx
+// 覆盖: RFC-027a §义务生成 —— 测度严格递减且良基时**不得**报 E4022
+// 验证: 与 measure_not_decreasing_err.yx 成对。同一函数骨架，只把递归实参从
+//       `b + 1`（递增）换成 `b - 1`（递减）：
+//         守卫 `b != 0`（来自早返回） + 下界精化 `b >= 0` ⇒ `b > 0`
+//         ⇒ `b - 1 < b` 成立 ⇒ 递减义务判成立 ⇒ 无诊断
+//       本文件是 E4022 的**过度拒绝守卫**：发射条件过宽（如漏掉良基性门、
+//       或把 unknown 当判伪）时它会变红。
+// 状态: ✅ 可运行
+
+use std.assert
+
+NonNegative: (x: Int) -> Type = { x >= 0 }
+
+countdown: (n: Int, b: NonNegative(b)) -> Terminates(b) = {
+    if b == 0 { return n }
+    return countdown(n, b - 1)
+}
+
+main: () -> Void = {
+    // 递归到 b == 0 即返回 n：三步步进后值为 7
+    assert.assert(countdown(7, 3) == 7, "countdown(7, 3) == 7（零边界返回 n）")
+}
+
+// T4 入口语义：Script 模式的 main **不会**隐式执行——必须显式调用，运行期断言才生效。
+main()

@@ -148,6 +148,7 @@ pub fn infer_expression(
     let overload_candidates_clone = env.overload_candidates.clone();
     let native_signatures_clone = env.native_signatures.clone();
     let generic_type_defs_clone = env.generic_type_defs.clone();
+    let module_aliases_clone = env.module_aliases.clone();
     let mut inferrer = inference::ExpressionInferrer::with_native_signatures(
         &mut scope,
         env.solver(),
@@ -155,6 +156,8 @@ pub fn infer_expression(
         &native_signatures_clone,
     );
     inferrer.set_generic_type_defs(&generic_type_defs_clone);
+    // #396：模块别名集合随委托传入（E1043 判定）
+    inferrer.set_module_aliases(&module_aliases_clone);
     inferrer.infer_expr(expr).map_err(|diag| vec![diag])
 }
 
@@ -190,7 +193,13 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
 ///
 /// 这些签名用于类型检查 `native("...")` 表达式，确保调用签名匹配。
 /// 通过 ModuleRegistry 自动发现所有 std 模块的 native 函数。
-pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
+///
+/// #391：std 签名是编译器静态资产，畸形签名在此处硬拒绝（`Err` 传播），
+/// 不再打印后降级——退化签名会以短名注册进 native_signatures 劫持消费者
+/// 调用点，或让签名错误在用户代码处以无关错误码暴露。
+pub fn add_native_function_types(
+    env: &mut environment::TypeEnvironment
+) -> Result<(), crate::util::diagnostic::Diagnostic> {
     use crate::frontend::module::registry::ModuleRegistry;
     use crate::frontend::module::ExportKind;
 
@@ -210,7 +219,7 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
                             // 注册进 native_signatures，劫持消费者调用点（std.test 首次行使暴露）
                             continue;
                         }
-                        signature::parse_signature(&export.signature, env)
+                        signature::parse_signature(&export.signature, env)?
                     }
                     _ => continue,
                 };
@@ -221,6 +230,11 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
 
                 // 注册短名称
                 env.native_signatures.insert(export.name.clone(), fn_ty);
+
+                // #387：同源灌装 arity 区间（? 可选 / ... 变参），键与签名表对齐
+                let arity = signature::parse_signature_arity(&export.signature);
+                env.native_arity.insert(export.full_path.clone(), arity);
+                env.native_arity.insert(export.name.clone(), arity);
             }
         }
     }
@@ -294,6 +308,8 @@ pub fn add_native_function_types(env: &mut environment::TypeEnvironment) {
     for (name, sig) in &env.native_signatures.clone() {
         env.add_var(name.clone(), PolyType::mono(sig.clone()));
     }
+
+    Ok(())
 }
 
 /// 添加标准库 traits 到环境

@@ -3,6 +3,7 @@
 //! 验证跨文件 `use` 导入：本地模块的类型与函数能被另一个文件导入、构造、调用并正确执行。
 //! 正确性用语言内 `assert` 验证——断言失败会使 `run_project` 返回 Err。
 //! 发现语义（#247）：沿 use 追踪 + 双根解析（导入者目录优先，项目根兑底）。
+//! 入口语义：RFC-029f（Bin 入口按绑定存在性判定、值 main 初始化期求值，#388 定案）。
 
 /// 在临时目录写入多文件项目并运行入口文件，返回运行结果（错误为调试文本）。
 fn run_project(
@@ -451,6 +452,32 @@ helper: (x: Int) -> Int = (x) => {
 
 // T5：跨文件顶层绑定（全局槽位）
 
+/// 入口 main 是**无注解块值绑定**的多文件项目（#388 定案：入口按绑定存在性）。
+///
+/// 该形态在 B 方案（33f2ebbe）后落全局槽位而非函数表，T4 原始入口检查曾
+/// 报 E3021「入口不是函数」。定案后值 main 在初始化期求值即执行——这是
+/// 「Script 顶层语句包进 main 迁入 Bin」的自然迁移形态。
+#[test]
+fn test_multifile_entry_value_main_block_binding() {
+    // Arrange - lib 导出函数，入口文件以无注解块 main 调用它
+    let lib = r#"
+answer: () -> Int = () => {
+    return 42
+}
+"#;
+    let main = r#"
+use std.assert
+use lib.{answer}
+
+main = {
+    assert.assert(answer() == 42, "answer should be 42")
+}
+"#;
+
+    // Act & Assert - 值 main 合法入口，断言在初始化期真实执行
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
+
 /// 跨文件块值绑定：`x: Int = { 5 }` 在 lib 中定义，入口文件读取。
 ///
 /// 覆盖 T2（块值运行时初始化）+ T5（跨文件槽位布局）。内容决定类型下
@@ -542,4 +569,158 @@ main = () => {
 }
 "#;
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+// === #396/#397：namespace 数据访问（`use lib;` 后 `lib.member` 表达式位置取值）===
+//
+// 规范来源：语言参考 modules.md §3.1（顶层绑定一律可导入，整体导入经模块名
+// 访问）+ RFC-029 模块语义（导出面 / 名字解析归 Resolver）。
+//
+// 此前只有调用位置有 namespace 降级，`lib.v` 落到「普通字段访问」→ 对 `lib`
+// 的变量读取 → E3006 内部错误。修复后与 `use lib.{v}` 花括号导入同一数据面
+// （跨文件全局布局按限定名登记 → Load Global；函数值物化为 MakeClosure）。
+
+/// `lib.typed_v`：有标注常量的整体导入数据访问，真跑取值。
+#[test]
+fn test_namespace_data_typed_constant() {
+    // Arrange：lib 导出有标注常量，main 整体导入后表达式位置访问
+    let lib = r#"
+typed_v: Int = 42
+"#;
+    let main = r#"
+use std.assert
+use lib
+
+main = () => {
+    assert.assert(lib.typed_v == 42, "lib.typed_v should be 42")
+}
+"#;
+
+    // Act：run_project 编译到 IR 并执行入口
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert：yx 侧 assert.assert(lib.typed_v == 42) 已在执行中验证
+}
+
+/// `lib.untyped_v`：无标注常量（修复 #397 后进入导出面）。
+#[test]
+fn test_namespace_data_unannotated_constant() {
+    // Arrange：lib 导出无标注常量
+    let lib = r#"
+untyped_v = 7
+"#;
+    let main = r#"
+use std.assert
+use lib
+
+main = () => {
+    assert.assert(lib.untyped_v == 7, "lib.untyped_v should be 7")
+}
+"#;
+
+    // Act：run_project 编译到 IR 并执行入口
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert：yx 侧 assert.assert(lib.untyped_v == 7) 已在执行中验证
+}
+
+/// `lib.greet` 作一等值：函数成员物化为闭包后仍可调用。
+#[test]
+fn test_namespace_data_function_as_value() {
+    // Arrange：lib 导出函数，main 把它绑给局部名再调用
+    let lib = r#"
+greet: () -> Int = () => { 5 }
+"#;
+    let main = r#"
+use std.assert
+use lib
+
+main = () => {
+    f = lib.greet
+    assert.assert(f() == 5, "lib.greet as value should be callable")
+}
+"#;
+
+    // Act：run_project 编译到 IR 并执行入口
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert：yx 侧 assert.assert(f() == 5) 已在执行中验证
+}
+
+/// `lib.Point(1, 2)`：类型构造经整体导入仍然可用（回归防线）。
+#[test]
+fn test_namespace_data_constructor_still_works() {
+    // Arrange：lib 导出类型，main 整体导入后限定构造
+    let lib = r#"
+Point: Type = { x: Int, y: Int }
+"#;
+    let main = r#"
+use std.assert
+use lib
+
+main = () => {
+    p = lib.Point(1, 2)
+    assert.assert(p.x == 1, "lib.Point ctor should work")
+}
+"#;
+
+    // Act：run_project 编译到 IR 并执行入口
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert：yx 侧 assert.assert(p.x == 1) 已在执行中验证
+}
+
+/// 无标注绑定初始化式引用**其他模块**（`use other;` 后 `v = other.greet()`）：
+/// 收割路径加工 use 后照常进导出面（#397 闭环）。
+#[test]
+fn test_namespace_data_cross_module_initializer() {
+    // Arrange：other 导出函数，lib 无标注绑定其返回值，main 整体导入 lib
+    let other = r#"
+greet: () -> Int = () => { 5 }
+"#;
+    let lib = r#"
+use other
+
+v = other.greet()
+"#;
+    let main = r#"
+use std.assert
+use lib
+
+main = () => {
+    assert.assert(lib.v == 5, "lib.v should be 5 (cross-module initializer)")
+}
+"#;
+
+    // Act：run_project 编译到 IR 并执行入口
+    run_project_ok(
+        &[("other.yx", other), ("lib.yx", lib), ("main.yx", main)],
+        "main.yx",
+    );
+
+    // Assert：yx 侧 assert.assert(lib.v == 5) 已在执行中验证
+}
+
+/// 前向引用：无标注绑定引用**后置**绑定（`b = a + 1` 中 a 在后），
+/// 收割按 pass3 同款 T3 占位机制解析，不因声明序退化。
+#[test]
+fn test_namespace_data_forward_reference() {
+    // Arrange：b 引用后置的 a
+    let lib = r#"
+b = a + 1
+a: Int = 2
+"#;
+    let main = r#"
+use std.assert
+use lib
+
+main = () => {
+    assert.assert(lib.b == 3, "lib.b should be 3 (forward reference)")
+}
+"#;
+
+    // Act：run_project 编译到 IR 并执行入口
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert：yx 侧 assert.assert(lib.b == 3) 已在执行中验证
 }

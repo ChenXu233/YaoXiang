@@ -56,21 +56,21 @@ fn load_module_for_stepping(module: &BytecodeModule) -> Interpreter {
 
     // 加载常量
     std::sync::Arc::get_mut(&mut interp.image)
-        .unwrap()
+        .expect(" 应成功")
         .constants
         .extend(module.constants.clone());
 
     // 加载函数
     for func in &module.functions {
         std::sync::Arc::get_mut(&mut interp.image)
-            .unwrap()
+            .expect(" 应成功")
             .functions_by_id
             .push(func.clone());
     }
 
     // 加载类型
     std::sync::Arc::get_mut(&mut interp.image)
-        .unwrap()
+        .expect(" 应成功")
         .type_table
         .extend(module.type_table.clone());
 
@@ -80,7 +80,9 @@ fn load_module_for_stepping(module: &BytecodeModule) -> Interpreter {
             let entry_func = &module.functions[entry_idx];
             use crate::backends::interpreter::Frame;
             let frame = Frame::with_args(entry_idx as u32, entry_func.local_count, &[]);
-            interp.push_frame(frame).unwrap();
+            interp
+                .push_frame(frame)
+                .expect("interp.push_frame(frame) 应成功");
         }
     }
 
@@ -89,6 +91,73 @@ fn load_module_for_stepping(module: &BytecodeModule) -> Interpreter {
 
 // ── step 测试 ─────────────────────────────────────────────────
 
+/// Fixture: main 调用 callee 的模块（两者指令由调用方给出），entry_point 指向 main。
+fn module_with_callee(
+    callee_instrs: Vec<BytecodeInstr>,
+    main_instrs: Vec<BytecodeInstr>,
+) -> BytecodeModule {
+    let callee = BytecodeFunction {
+        name: "callee".to_string(),
+        params: vec![],
+        return_type: crate::middle::core::ir::Type::Void,
+        local_count: 1,
+        local_names: HashMap::new(),
+        upvalue_count: 0,
+        instructions: callee_instrs,
+        labels: HashMap::new(),
+        exception_handlers: vec![],
+        debug_map: HashMap::new(),
+    };
+
+    let mut module = BytecodeModule::new("test".to_string());
+    module.add_function(callee);
+    let main_idx = module.add_function(BytecodeFunction {
+        name: "main".to_string(),
+        params: vec![],
+        return_type: crate::middle::core::ir::Type::Void,
+        local_count: 1,
+        local_names: HashMap::new(),
+        upvalue_count: 0,
+        instructions: main_instrs,
+        labels: HashMap::new(),
+        exception_handlers: vec![],
+        debug_map: HashMap::new(),
+    });
+    module.entry_point = Some(main_idx);
+    module
+}
+
+/// Fixture: 两条 Nop + ReturnValue 的简单模块（step_out 用）。
+fn module_two_nops_then_return() -> BytecodeModule {
+    make_module(
+        vec![
+            BytecodeInstr::Nop,
+            BytecodeInstr::Nop,
+            BytecodeInstr::ReturnValue { value: Reg(0) },
+        ],
+        vec![],
+    )
+}
+
+/// Fixture: 把 module 的内容塞进 embedded 解释器镜像（模拟已加载状态）。
+fn embedded_interpreter_with(module: &BytecodeModule) -> Interpreter {
+    let mut interp = embedded_interpreter();
+    std::sync::Arc::get_mut(&mut interp.image)
+        .expect("embedded 解释器镜像应独占（Arc 无其它引用）")
+        .constants
+        .extend(module.constants.clone());
+    for func in &module.functions {
+        std::sync::Arc::get_mut(&mut interp.image)
+            .expect("embedded 解释器镜像应独占（Arc 无其它引用）")
+            .functions_by_id
+            .push(func.clone());
+    }
+    std::sync::Arc::get_mut(&mut interp.image)
+        .expect("embedded 解释器镜像应独占（Arc 无其它引用）")
+        .type_table
+        .extend(module.type_table.clone());
+    interp
+}
 #[test]
 fn test_step_executes_single_instruction() {
     // Arrange: LoadConst + ReturnValue
@@ -150,32 +219,12 @@ fn test_step_on_empty_stack_returns_ok() {
 #[test]
 fn test_step_over_advances_past_call() {
     // Arrange: 调用一个子函数，step_over 应跳过它
-    let callee = BytecodeFunction {
-        name: "callee".to_string(),
-        params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
-        local_count: 1,
-        local_names: HashMap::new(),
-        upvalue_count: 0,
-        instructions: vec![
+    let module = module_with_callee(
+        vec![
             BytecodeInstr::Nop,
             BytecodeInstr::ReturnValue { value: Reg(0) },
         ],
-        labels: HashMap::new(),
-        exception_handlers: vec![],
-        debug_map: HashMap::new(),
-    };
-
-    let mut module = BytecodeModule::new("test".to_string());
-    module.add_function(callee);
-    let main_idx = module.add_function(BytecodeFunction {
-        name: "main".to_string(),
-        params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
-        local_count: 1,
-        local_names: HashMap::new(),
-        upvalue_count: 0,
-        instructions: vec![
+        vec![
             BytecodeInstr::CallStatic {
                 dst: None,
                 func: 0,
@@ -183,11 +232,7 @@ fn test_step_over_advances_past_call() {
             },
             BytecodeInstr::ReturnValue { value: Reg(0) },
         ],
-        labels: HashMap::new(),
-        exception_handlers: vec![],
-        debug_map: HashMap::new(),
-    });
-    module.entry_point = Some(main_idx);
+    );
     let mut interp = load_module_for_stepping(&module);
 
     // Act: step_over 跳过 CallStatic
@@ -228,33 +273,13 @@ fn test_step_over_on_non_call_behaves_like_step() {
 fn test_step_out_returns_to_caller() {
     // Arrange: main 调用 callee，callee 有多条指令
     // 测试 step_out 从 callee 中途跳出，回到 main
-    let callee = BytecodeFunction {
-        name: "callee".to_string(),
-        params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
-        local_count: 1,
-        local_names: HashMap::new(),
-        upvalue_count: 0,
-        instructions: vec![
+    let module = module_with_callee(
+        vec![
             BytecodeInstr::Nop,
             BytecodeInstr::Nop,
             BytecodeInstr::ReturnValue { value: Reg(0) },
         ],
-        labels: HashMap::new(),
-        exception_handlers: vec![],
-        debug_map: HashMap::new(),
-    };
-
-    let mut module = BytecodeModule::new("test".to_string());
-    module.add_function(callee);
-    let main_idx = module.add_function(BytecodeFunction {
-        name: "main".to_string(),
-        params: vec![],
-        return_type: crate::middle::core::ir::Type::Void,
-        local_count: 1,
-        local_names: HashMap::new(),
-        upvalue_count: 0,
-        instructions: vec![
+        vec![
             BytecodeInstr::CallStatic {
                 dst: None,
                 func: 0,
@@ -263,43 +288,16 @@ fn test_step_out_returns_to_caller() {
             BytecodeInstr::Nop,
             BytecodeInstr::ReturnValue { value: Reg(0) },
         ],
-        labels: HashMap::new(),
-        exception_handlers: vec![],
-        debug_map: HashMap::new(),
-    });
-    module.entry_point = Some(main_idx);
-
-    // 手动加载模块并创建 frame，模拟停在 callee 中途的状态
-    let mut interp = embedded_interpreter();
-    std::sync::Arc::get_mut(&mut interp.image)
-        .unwrap()
-        .constants
-        .extend(module.constants.clone());
-    for func in &module.functions {
-        std::sync::Arc::get_mut(&mut interp.image)
-            .unwrap()
-            .functions_by_id
-            .push(func.clone());
-    }
-    std::sync::Arc::get_mut(&mut interp.image)
-        .unwrap()
-        .type_table
-        .extend(module.type_table.clone());
+    );
+    let _loaded_interp = embedded_interpreter_with(&module);
 
     // 手动执行 CallStatic 但不执行 callee 的 body
     // 这里我们直接测试 step_out 的语义：从当前帧跳出
     // 由于 execute_module 会完整执行，我们改用更简单的方式验证
-    let module2 = make_module(
-        vec![
-            BytecodeInstr::Nop,
-            BytecodeInstr::Nop,
-            BytecodeInstr::ReturnValue { value: Reg(0) },
-        ],
-        vec![],
-    );
-    let mut interp2 = load_module_for_stepping(&module2);
+    let module2 = module_two_nops_then_return();
 
     // Act: step_out 从 main 中跳出
+    let mut interp2 = load_module_for_stepping(&module2);
     let result = interp2.step_out();
 
     // Assert: step_out 成功，栈为空

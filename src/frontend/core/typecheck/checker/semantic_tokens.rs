@@ -117,6 +117,11 @@ impl TypeChecker {
             Type::Paren(inner) => {
                 self.collect_type_tokens(file_path, inner);
             }
+            // RFC-027 §3：具名括号的 binder 名不是类型引用（它是返回值形式
+            // 参数），故只下钻内层——与 `Paren` 同款透明。
+            Type::NamedParen { inner, .. } => {
+                self.collect_type_tokens(file_path, inner);
+            }
             Type::Name { name, span } => {
                 self.semantic_db.add_token(
                     file_path,
@@ -1453,24 +1458,37 @@ impl TypeChecker {
                     );
                 }
             }
-            Expr::ListComp {
-                element,
-                iterable,
-                condition,
-                var,
-                span,
-                ..
-            } => {
-                declared.entry(scope_idx).or_default().insert(var.clone());
-                self.semantic_db.add_token(
-                    file_path,
-                    semantic_db::SemanticToken {
-                        name: var.clone(),
-                        token_type: semantic_db::SemanticTokenType::Variable,
-                        modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
-                        span: *span,
-                    },
-                );
+            Expr::ListComp { element, generators, .. } => {
+                for gen in generators {
+                    declared.entry(scope_idx).or_default().insert(gen.var.clone());
+                    self.semantic_db.add_token(
+                        file_path,
+                        semantic_db::SemanticToken {
+                            name: gen.var.clone(),
+                            token_type: semantic_db::SemanticTokenType::Variable,
+                            modifiers: vec![semantic_db::SemanticTokenModifier::Declaration],
+                            span: gen.span,
+                        },
+                    );
+                    self.collect_expr_tokens(
+                        file_path,
+                        &gen.iterable,
+                        scope_idx,
+                        declared,
+                        constructor_names,
+                        imported_module_roots,
+                    );
+                    if let Some(cond) = &gen.condition {
+                        self.collect_expr_tokens(
+                            file_path,
+                            cond,
+                            scope_idx,
+                            declared,
+                            constructor_names,
+                            imported_module_roots,
+                        );
+                    }
+                }
                 self.collect_expr_tokens(
                     file_path,
                     element,
@@ -1479,24 +1497,6 @@ impl TypeChecker {
                     constructor_names,
                     imported_module_roots,
                 );
-                self.collect_expr_tokens(
-                    file_path,
-                    iterable,
-                    scope_idx,
-                    declared,
-                    constructor_names,
-                    imported_module_roots,
-                );
-                if let Some(cond) = condition {
-                    self.collect_expr_tokens(
-                        file_path,
-                        cond,
-                        scope_idx,
-                        declared,
-                        constructor_names,
-                        imported_module_roots,
-                    );
-                }
             }
             Expr::FString { segments, .. } => {
                 for seg in segments {

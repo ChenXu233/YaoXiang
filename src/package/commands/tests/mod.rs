@@ -1,11 +1,15 @@
 //! Package commands 测试模块
 
 mod add;
+mod clean;
 mod init;
 mod install;
 mod list;
+mod outdated;
+mod publish;
 mod rm;
 mod update;
+mod workspace_install;
 
 use crate::package::manifest::PackageManifest;
 use std::path::Path;

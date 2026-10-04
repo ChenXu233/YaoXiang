@@ -77,3 +77,11 @@ parse_float: (s: &String) -> Result(Float, Error) = {
     ...
 }
 
+char_code: (s: &String, i: Int) -> Int = {
+    ...
+}
+
+from_char_code: (n: Int) -> Result(String, Error) = {
+    ...
+}
+

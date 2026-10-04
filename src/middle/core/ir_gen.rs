@@ -13,7 +13,7 @@ use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::resolver::Resolver;
-use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{
@@ -109,6 +109,12 @@ pub struct AstToIrGenerator {
     type_result: Option<Box<TypeCheckResult>>,
     /// 下一个临时寄存器编号
     next_temp: usize,
+    /// 本函数临时寄存器高水位（#393：语句级回收会回滚 next_temp，
+    /// total_locals 必须取真高水位，否则最后一条语句的临时槽位被裁掉）
+    temp_high_water: usize,
+    /// 循环态临时地板（#393：for 的 iterator/iterable 等临时跨语句存活，
+    /// 语句级回收回滚不得低于此值；enter/exit_loop_targets 维护）
+    temp_floor: usize,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     local_var_types: HashMap<String, String>,
     /// FFI 库绑定
@@ -284,6 +290,8 @@ struct LoopTargets {
     continue_target: usize,
     /// break 占位 Jmp 的指令下标，循环出口确定后回填
     break_fixups: Vec<usize>,
+    /// 进入循环时的 temp_floor（#393：出口恢复外层地板）
+    saved_temp_floor: usize,
 }
 
 /// 一层 curry 签名
@@ -308,6 +316,8 @@ impl AstToIrGenerator {
             symbols: vec![HashMap::new()],
             type_result: Some(Box::new(type_result.clone())),
             next_temp: 0,
+            temp_high_water: 0,
+            temp_floor: 0,
             local_var_types: HashMap::new(),
             ffi_libs: Vec::new(),
             ffi_bindings: Vec::new(),
@@ -435,6 +445,27 @@ impl AstToIrGenerator {
         }
     }
 
+    /// #396：表达式位置命名空间数据访问的判定——接收者链（Var/FieldAccess 链）
+    /// 扁平化后头为命名空间，且头未被本文件局部绑定/闭包捕获遮蔽时，返回全链
+    /// 限定名（`lib.v` → `lib.v`，`io.println` → `std.io.println`）。
+    /// 语义归 [`Resolver`]（is_namespace / resolve_namespace），与调用位置同判据。
+    fn resolve_namespace_data_access(
+        &self,
+        expr: &ast::Expr,
+        field: &str,
+    ) -> Option<String> {
+        let (head, fields) = flatten_namespace(expr)?;
+        if self.closure_captures.contains_key(head) || self.lookup_local(head).is_some() {
+            return None;
+        }
+        if !self.resolver().is_namespace(head) {
+            return None;
+        }
+        let mut segs = fields;
+        segs.push(field);
+        Some(self.resolver().resolve_namespace(head, &segs))
+    }
+
     /// 查一个函数的**声明期形参名**（按声明序），供命名参数重排。
     ///
     /// 两个来源，按就近优先：
@@ -498,7 +529,10 @@ impl AstToIrGenerator {
                     // parser 把签名拍平成 `signature_params`（内层名供 body 对齐类型），
                     // 故此处必须把游标退回，否则 `f: () -> ((a:Int)->Int)` 的 `a`
                     // 会被当成本层参数，`f` 变成接受 `a` 而非返回闭包。
-                    let next_is_paren = matches!(ret_type, ast::Type::Paren(_));
+                    // RFC-027 §3：具名括号（`(r: P(r))`）与 `Paren` 同款——
+                    // 括号声明“这是一个完整类型”，链条到此终止。
+                    let next_is_paren =
+                        matches!(ret_type, ast::Type::Paren(_) | ast::Type::NamedParen { .. });
                     if next_is_paren {
                         cursor = start;
                     }
@@ -850,6 +884,9 @@ impl AstToIrGenerator {
     fn next_temp_reg(&mut self) -> usize {
         let reg = self.next_temp;
         self.next_temp += 1;
+        // #393：真高水位——语句级回收会回滚 next_temp，槽位总数以历史
+        // 最高占用为准（少一都会让尾部语句的临时落进未分配槽位）。
+        self.temp_high_water = self.temp_high_water.max(reg + 1);
         reg
     }
 
@@ -1706,6 +1743,9 @@ impl AstToIrGenerator {
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
         self.next_temp = local_var_start;
+        // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
+        self.temp_high_water = local_var_start;
+        self.temp_floor = 0;
 
         // #311：嵌套函数体是独立指令流，循环栈属父函数——保存并清空
         //（typecheck 已用 E1102 拦截函数体内的 break/continue，此处为层间失联防御）
@@ -1845,6 +1885,9 @@ impl AstToIrGenerator {
         // 记录局部变量起始位置（在参数之后）
         let local_var_start = params.len();
         self.next_temp = local_var_start;
+        // #393：本函数是独立寄存器空间——高水位与循环态地板随之清零
+        self.temp_high_water = local_var_start;
+        self.temp_floor = 0;
 
         // 检查函数体是否为 FFI ExternRef 绑定
         if let Some(ConstValue::ExternRef {
@@ -1906,6 +1949,14 @@ impl AstToIrGenerator {
                     }
                 }
             }
+            // #393：语句级临时寄存器回收（同 generate_block_ir——临时不跨
+            // 语句存活，回滚到具名水位与循环态地板的较大者）
+            let named_watermark = self
+                .cur_locals
+                .iter()
+                .rposition(|slot| slot.name.is_some())
+                .map_or(0, |i| i + 1);
+            self.next_temp = named_watermark.max(self.temp_floor);
             tlog!(
                 debug,
                 MSG::IrGenAfterProcessStmt,
@@ -1938,7 +1989,7 @@ impl AstToIrGenerator {
         // 几百个局部变量会落进 OperandResolver 的溢出分支——该分支构造
         // E3014（requires_span 码）时无 span 可挂，debug 构建直接 panic。
         // 现在在 IR 层就拦住并带上函数 span（#271 静默/崩溃同类：宁可报错不崩）。
-        let total_locals = self.next_temp;
+        let total_locals = self.temp_high_water;
         const MAX_REGISTERS: usize = 255;
         if total_locals > MAX_REGISTERS {
             return Err(ErrorCodeDefinition::register_overflow(
@@ -2001,6 +2052,7 @@ impl AstToIrGenerator {
         let param_count = layer.params.len();
         let full_env: Vec<Operand> = (0..env_count + param_count).map(Operand::Local).collect();
         self.next_temp = env_count + param_count;
+        self.temp_high_water = env_count + param_count;
         let closure_dst = self.next_temp_reg();
         instructions.push(Instruction::MakeClosure {
             dst: Operand::Local(closure_dst),
@@ -2024,7 +2076,7 @@ impl AstToIrGenerator {
             .map(MonoType::from)
             .collect();
         let return_type: MonoType = layer.return_type.clone().into();
-        let total_locals = self.next_temp;
+        let total_locals = self.temp_high_water;
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         Ok(FunctionIR {
@@ -2080,6 +2132,8 @@ impl AstToIrGenerator {
 
         // next_temp 起始 = 参数总数
         self.next_temp = env_count + layer.params.len();
+        self.temp_high_water = env_count + layer.params.len();
+        self.temp_floor = 0;
 
         let return_type: MonoType = layer.return_type.clone().into();
 
@@ -2119,7 +2173,7 @@ impl AstToIrGenerator {
             .filter_map(|p| p.ty.clone())
             .map(MonoType::from)
             .collect();
-        let total_locals = self.next_temp;
+        let total_locals = self.temp_high_water;
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // #311：恢复父函数的循环上下文
@@ -2168,6 +2222,8 @@ impl AstToIrGenerator {
 
         // 保存外层状态，避免污染
         let saved_next_temp = self.next_temp;
+        let saved_temp_high_water = self.temp_high_water;
+        let saved_temp_floor = self.temp_floor;
         let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
@@ -2192,6 +2248,8 @@ impl AstToIrGenerator {
             self.enter_scope();
             // 重置本层的临时寄存器（每层独立计数）
             self.next_temp = 0;
+            self.temp_high_water = 0;
+            self.temp_floor = 0;
 
             let func = if is_innermost {
                 self.generate_curry_innermost_func(
@@ -2224,6 +2282,8 @@ impl AstToIrGenerator {
 
         // 恢复外层状态
         self.next_temp = saved_next_temp;
+        self.temp_high_water = saved_temp_high_water;
+        self.temp_floor = saved_temp_floor;
         self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
@@ -2706,6 +2766,8 @@ impl AstToIrGenerator {
     ) -> Result<Option<FunctionIR>, Diagnostic> {
         // 保存父函数状态
         let saved_next_temp = self.next_temp;
+        let saved_temp_high_water = self.temp_high_water;
+        let saved_temp_floor = self.temp_floor;
         let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
@@ -2735,6 +2797,9 @@ impl AstToIrGenerator {
         // 记录局部变量起始位置
         let local_var_start = params.len();
         self.next_temp = local_var_start;
+        // #393：独立寄存器空间——高水位与循环态地板随之清零
+        self.temp_high_water = local_var_start;
+        self.temp_floor = 0;
 
         // 生成表达式体的 IR，并返回结果
         let result_reg = self.next_temp_reg();
@@ -2748,11 +2813,13 @@ impl AstToIrGenerator {
         self.exit_scope();
 
         // 计算局部变量总数
-        let total_locals = self.next_temp;
+        let total_locals = self.temp_high_water;
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // 恢复父函数状态
         self.next_temp = saved_next_temp;
+        self.temp_high_water = saved_temp_high_water;
+        self.temp_floor = saved_temp_floor;
         self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
@@ -3556,6 +3623,20 @@ impl AstToIrGenerator {
             }
             // 其他情况正常生成语句
             self.generate_local_stmt_ir(stmt, instructions, constants)?;
+            // #393：语句级临时寄存器回收——临时不跨语句存活，语句生成完
+            // 回滚到「具名局部水位 ⋈ 循环态地板」。具名水位取 cur_locals
+            // 最后一个具名槽（参数与全部具名绑定，含已退出作用域者，保守
+            // 不复用）；temp_floor 保住 for 迭代器等循环态临时。仅语句语境
+            // 块回收：result_reg=Some 的块处于表达式操作数位，外层可能持有
+            // 跨块存活的兄弟实参临时，回滚会踩坏它们。
+            if result_reg.is_none() {
+                let named_watermark = self
+                    .cur_locals
+                    .iter()
+                    .rposition(|slot| slot.name.is_some())
+                    .map_or(0, |i| i + 1);
+                self.next_temp = named_watermark.max(self.temp_floor);
+            }
             self.set_cur_span(stmt.span);
         }
 
@@ -3570,9 +3651,16 @@ impl AstToIrGenerator {
         &mut self,
         loop_start_idx: usize,
     ) {
+        // #393：循环态临时地板 = 进入时的 next_temp——for 的 iterator/iterable
+        // 等临时在进入前分配、体内每轮读取，语句级回收不得回滚到它们之下。
+        // while 的 cond 在进入后分配、读点都在体内语句之前，地板盖不住它
+        // 也无害（每轮循环开头重写）。
+        let saved_temp_floor = self.temp_floor;
+        self.temp_floor = self.next_temp;
         self.loop_stack.push(LoopTargets {
             continue_target: loop_start_idx,
             break_fixups: Vec::new(),
+            saved_temp_floor,
         });
     }
 
@@ -3583,6 +3671,8 @@ impl AstToIrGenerator {
         instructions: &mut [Instruction],
     ) {
         if let Some(targets) = self.loop_stack.pop() {
+            // #393：恢复外层地板（嵌套循环各保各的）
+            self.temp_floor = targets.saved_temp_floor;
             for fixup in targets.break_fixups {
                 if let Instruction::Jmp {
                     ref mut target,
@@ -3604,6 +3694,28 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
+        // #409（while/for 同款）：先给值寄存器写 Void（等价于 block_value_ty 的「空块 ⇒ Void」
+        // 分支），此后凡体尾产出值即覆写它。该初值同时覆盖两种情形：
+        //   1. 条件首次即为假（零迭代）；
+        //   2. 每次完整迭代的体尾都不产出值（如体尾是赋值语句）——continue
+        //      直接回跳条件重判点、不经过体尾，故保留上一轮的值。
+        //
+        // 零迭代取 Void 的依据（有意为之，非遗留）：循环体一次都没求值 ⇒ 没有
+        // 「末次迭代的体值」（`for` 同理：源集合为空时没有体值）⇒ 「未产出值」只能用 Void 表达。要给它一个按值类型
+        // 定制的默认值，需要在 IR 层知道该值寄存器的**静态类型**；但 ir_gen 拿不到
+        // 这个信息——LocalSlot.ty 由 register_local 置为 Int(64)（本文件 619 行），
+        // 注解类型不写回槽位，TypeCheckResult 也没有按节点索引的类型表。故按类型
+        // 定制默认值不是本层能做的事（ir_gen 内对 resolve_type 的调用数为 0）。
+        // 后果：零迭代时值寄存器是 Void，把它当非 Void 类型用会在运行期以
+        // 类型不匹配显式失败——是「响亮失败」而非静默错值。类型侧
+        // block_value_ty 给的是体尾表达式的类型（静态近似），它对「循环是否至少
+        // 执行一次」无判定能力（需要数据流/可证性分析），故本层不擅自改动它。
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Const(ConstValue::Void),
+            span: self.cur_span,
+        });
+
         // Label: condition_check
         let loop_start_idx = instructions.len();
         // #311：压入循环上下文——continue 跳回条件重判点，break 占位待出口回填
@@ -3621,8 +3733,10 @@ impl AstToIrGenerator {
             span: self.cur_span,
         }); // Placeholder
 
-        // Body
-        self.generate_block_ir(body, None, instructions, constants)?;
+        // Body：尾表达式直接写入值寄存器（RFC-010a 规则① / spec §2.9：所有块的
+        // 值由尾表达式给出）。#409 之前此处传 None 丢掉体值，并在出口无条件覆写
+        // 成 Void，与类型侧 block_value_ty 的判据分叉。
+        self.generate_block_ir(body, Some(result_reg), instructions, constants)?;
 
         // Jump back to start
         instructions.push(Instruction::Jmp {
@@ -3642,13 +3756,6 @@ impl AstToIrGenerator {
         }
         // #311：回填循环体内 break 的占位跳转到出口
         self.exit_loop_targets(end_idx, instructions);
-
-        // While loop returns void
-        instructions.push(Instruction::Load {
-            dst: Operand::Local(result_reg),
-            src: Operand::Const(ConstValue::Void),
-            span: self.cur_span,
-        });
 
         Ok(())
     }
@@ -3910,6 +4017,17 @@ impl AstToIrGenerator {
     ) -> Result<(), Diagnostic> {
         self.enter_scope();
 
+        // #409：零迭代兜底——先给值寄存器写 Void（等价于 block_value_ty 的
+        // 「空块 ⇒ Void」分支），随后每轮由体尾表达式覆写。与 while 同款语义
+        //（零迭代取 Void 的依据见 generate_while_expr_ir 的注释）。
+        if let Some(reg) = result_reg {
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(reg),
+                src: Operand::Const(ConstValue::Void),
+                span: self.cur_span,
+            });
+        }
+
         // 1. 计算可迭代对象
         let iterable_reg = self.next_temp_reg();
         self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
@@ -4001,7 +4119,9 @@ impl AstToIrGenerator {
         });
 
         // 8. 执行循环体
-        self.generate_block_ir(body, None, instructions, constants)?;
+        // #409：尾表达式直接写入值寄存器（RFC-010a 规则①；与 while 同款）。
+        // 此前此处传 None 并在出口把值覆写成 Void，故 for 作值在运行期恒 void。
+        self.generate_block_ir(body, result_reg, instructions, constants)?;
 
         // 9. 跳转回循环开始
         instructions.push(Instruction::Jmp {
@@ -4023,15 +4143,6 @@ impl AstToIrGenerator {
         self.exit_loop_targets(end_idx, instructions);
 
         self.exit_scope();
-
-        if let Some(reg) = result_reg {
-            // For loop returns void
-            instructions.push(Instruction::Load {
-                dst: Operand::Local(reg),
-                src: Operand::Const(ConstValue::Void),
-                span: self.cur_span,
-            });
-        }
 
         Ok(())
     }
@@ -4594,6 +4705,8 @@ impl AstToIrGenerator {
     ) -> Result<LambdaBodyIR, Diagnostic> {
         // 保存父函数的临时寄存器计数
         let saved_next_temp = self.next_temp;
+        let saved_temp_high_water = self.temp_high_water;
+        let saved_temp_floor = self.temp_floor;
         let saved_cur_locals = std::mem::take(&mut self.cur_locals);
         // cur_span 与 next_temp 同款：嵌套函数体是独立源码单元
         let saved_cur_span = self.cur_span;
@@ -4641,6 +4754,13 @@ impl AstToIrGenerator {
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // #393：语句级临时寄存器回收（同 generate_block_ir）
+            let named_watermark = self
+                .cur_locals
+                .iter()
+                .rposition(|slot| slot.name.is_some())
+                .map_or(0, |i| i + 1);
+            self.next_temp = named_watermark.max(self.temp_floor);
             self.set_cur_span(stmt.span);
         }
 
@@ -4661,11 +4781,13 @@ impl AstToIrGenerator {
         self.exit_scope();
 
         // 计算局部变量总数
-        let total_locals = self.next_temp;
+        let total_locals = self.temp_high_water;
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
 
         // 恢复父函数的临时寄存器计数
         self.next_temp = saved_next_temp;
+        self.temp_high_water = saved_temp_high_water;
+        self.temp_floor = saved_temp_floor;
         self.cur_locals = saved_cur_locals;
         self.cur_span = saved_cur_span;
 
@@ -5119,6 +5241,7 @@ impl AstToIrGenerator {
         &mut self,
         match_expr: &Expr,
         arms: &Vec<ast::MatchArm>,
+        match_span: crate::util::span::Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -5133,7 +5256,15 @@ impl AstToIrGenerator {
         // 1. 评估 scrutinee（类型信息驱动嵌套模式的载荷/字段/元组类型解析）
         let scrutinee_reg = self.next_temp_reg();
         self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
-        let scrutinee_ty = self.get_expr_mono_type(match_expr);
+        // #389：scrutinee 类型优先回查 checker 落的 span 表（推断权威），
+        // miss（无 type_result 的路径）回退 AST 猜测器。猜测器对调用/内联
+        // 构造/字段访问形态返回 None，Union 模式会被 #330 安全网误拦。
+        let scrutinee_ty = self
+            .type_result
+            .as_ref()
+            .and_then(|tr| tr.match_scrutinee_types.get(&match_span))
+            .cloned()
+            .or_else(|| self.get_expr_mono_type(match_expr));
 
         let mut jumps_to_end: Vec<usize> = Vec::new();
 
@@ -6108,7 +6239,15 @@ impl AstToIrGenerator {
         for segment in segments {
             match segment {
                 ast::FStringSegment::Text(text) => {
-                    format_str.push_str(text);
+                    // Text 段是解码后的字面内容（#402），可能含 `{`/`}`；
+                    // std.string.format 以 `{{`/`}}` 为字面花括号转义，
+                    // 这里翻倍以免被当成占位符
+                    for c in text.chars() {
+                        if c == '{' || c == '}' {
+                            format_str.push(c);
+                        }
+                        format_str.push(c);
+                    }
                 }
                 ast::FStringSegment::Interpolation {
                     expr: interp_expr,
@@ -6246,6 +6385,53 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
+        // #396：命名空间数据访问（`use lib;` 后 `lib.v` / `lib.sub.v`，以及
+        // `io.println` 这类 std 子模块成员作值）。此前只有**调用位置**有
+        // namespace 降级，表达式位置落到「普通字段访问」→ 生成对 `lib` 的
+        // 变量读取 → E3006 内部错误。
+        // 降级与 generate_var_expr_ir 的 T5 分支（use lib.{v} 别名）同一数据面：
+        // ① 跨文件全局槽位（顶层值绑定，键为限定名）→ Load Global；
+        // ② native 命名空间常量（std.math.PI）→ 零参调用；
+        // ③ 函数值（`lib.greet` 作一等值）→ MakeClosure（#348 的跨模块镜像）。
+        // 头被本文件局部绑定/闭包捕获遮蔽时不进此分支（与变量解析的局部优先序
+        // 一致）；①②③全未命中则落回下方既有逻辑——成员存在性已由 typecheck
+        // 保证（E1043），落到这里属 typecheck 漏网，按原逻辑响亮失败。
+        if let Some(qualified) = self.resolve_namespace_data_access(expr, field) {
+            if let Some(&slot) = self.global_slot_layout.get(&qualified) {
+                instructions.push(Instruction::Load {
+                    dst: Operand::Local(result_reg),
+                    src: Operand::Global(slot),
+                    span: *span,
+                });
+                return Ok(());
+            }
+            if self.registry.is_native_name(&qualified) {
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(qualified.clone())),
+                    args: vec![],
+                    span: *span,
+                    def: None,
+                });
+                return Ok(());
+            }
+            if let Some(def) = self.registry.symbols().def(&qualified) {
+                if matches!(
+                    self.registry.symbols().kind(def),
+                    DefKind::Function | DefKind::Method
+                ) {
+                    instructions.push(Instruction::MakeClosure {
+                        dst: Operand::Local(result_reg),
+                        func: qualified,
+                        env: vec![],
+                        def: None,
+                        span: *span,
+                    });
+                    return Ok(());
+                }
+            }
+        }
+
         // 首先检查是否是模块变量的字段访问（如 io.println）
         // io 是通过 use std.{io} 导入的模块变量
         if let Expr::Var(module_name, _) = expr {
@@ -6617,20 +6803,18 @@ impl AstToIrGenerator {
     fn generate_list_comp_expr_ir(
         &mut self,
         element: &Expr,
-        var: &str,
-        iterable: &Expr,
-        condition: &Option<Box<Expr>>,
+        generators: &[ast::ListCompGenerator],
         span: &Span,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
-        // 列表推导式 IR 生成
-        // [x * x for x in items] 等价于:
+        // 列表推导式 IR 生成（#401：多生成器嵌套循环，每层可带 if 过滤）
+        // [e for x in a (if c)? for y in b (if d)?] 等价于:
         //   1. 创建空结果列表
-        //   2. 通过迭代器遍历 iterable
-        //   3. 对每个元素: 绑定到 var, 检查 condition(可选), 计算 element, push 到结果列表
-        //   4. 返回结果列表
+        //   2. 逐层嵌套 for 循环：绑定期迭代变量 → has_next/next 取元素 →
+        //      过滤条件(可选)不满足则 continue → 最内层计算 element 并 push
+        //   3. 返回结果列表
 
         // 1. 创建空结果列表
         instructions.push(Instruction::AllocArray {
@@ -6640,11 +6824,38 @@ impl AstToIrGenerator {
             span: self.cur_span,
         });
 
-        // 2. 计算可迭代对象
-        let iterable_reg = self.next_temp_reg();
-        self.generate_expr_ir(iterable, iterable_reg, instructions, constants)?;
+        self.generate_comp_generators_ir(
+            element,
+            generators,
+            0,
+            span,
+            result_reg,
+            instructions,
+            constants,
+        )
+    }
 
-        // 3. 创建迭代器
+    /// 递归展开第 `idx` 层生成器子句：非最内层时循环体是下一层子句，
+    /// 最内层循环体是元素计算 + push。过滤条件失败直接跳回本层循环头
+    /// （has_next 检查），即 continue 语义。
+    #[allow(clippy::too_many_arguments)]
+    fn generate_comp_generators_ir(
+        &mut self,
+        element: &Expr,
+        generators: &[ast::ListCompGenerator],
+        idx: usize,
+        span: &Span,
+        result_reg: usize,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        let gen = &generators[idx];
+
+        // 计算可迭代对象
+        let iterable_reg = self.next_temp_reg();
+        self.generate_expr_ir(&gen.iterable, iterable_reg, instructions, constants)?;
+
+        // 创建迭代器
         let iterator_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(iterator_reg)),
@@ -6656,14 +6867,14 @@ impl AstToIrGenerator {
             def: None,
         });
 
-        // 4. 注册循环变量
+        // 注册循环变量
         let var_reg = self.next_temp_reg();
-        self.register_local(var, var_reg);
+        self.register_local(&gen.var, var_reg);
 
-        // 5. 循环开始
+        // 循环开始
         let loop_start_idx = instructions.len();
 
-        // 6. has_next?
+        // has_next?
         let has_next_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(has_next_reg)),
@@ -6680,7 +6891,7 @@ impl AstToIrGenerator {
             span: self.cur_span,
         });
 
-        // 7. next element
+        // next element
         let element_reg = self.next_temp_reg();
         instructions.push(Instruction::Call {
             dst: Some(Operand::Local(element_reg)),
@@ -6690,54 +6901,43 @@ impl AstToIrGenerator {
             def: None,
         });
 
-        // 8. 存储到循环变量
+        // 存储到循环变量
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
             src: Operand::Local(element_reg),
             span: *span,
         });
 
-        // 9. 如果有条件，检查条件
-        if let Some(cond_expr) = condition {
+        // 过滤条件（可选）：不满足则跳回循环头
+        let mut cond_jump_idx = None;
+        if let Some(cond_expr) = &gen.condition {
             let cond_reg = self.next_temp_reg();
             self.generate_expr_ir(cond_expr, cond_reg, instructions, constants)?;
 
-            let skip_push_idx = instructions.len();
+            let j = instructions.len();
             instructions.push(Instruction::JmpIfNot {
                 cond: Operand::Local(cond_reg),
                 target: 0, // 占位符
                 span: self.cur_span,
             });
+            cond_jump_idx = Some(j);
+        }
 
-            // 10. 计算元素表达式
-            let comp_reg = self.next_temp_reg();
-            self.generate_expr_ir(element, comp_reg, instructions, constants)?;
-
-            // 11. push 到结果列表
-            instructions.push(Instruction::Call {
-                dst: Some(Operand::Local(result_reg)),
-                func: Operand::Const(ConstValue::String("std.list.push".to_string())),
-                args: vec![Operand::Local(result_reg), Operand::Local(comp_reg)],
-                span: *span,
-                def: None,
-            });
-
-            // 修复条件跳转
-            let after_push = instructions.len();
-            if let Instruction::JmpIfNot {
-                cond: _,
-                ref mut target,
-                span: _,
-            } = instructions[skip_push_idx]
-            {
-                *target = after_push;
-            }
+        // 循环体：内层生成器循环，或最内层的元素计算 + push
+        if idx + 1 < generators.len() {
+            self.generate_comp_generators_ir(
+                element,
+                generators,
+                idx + 1,
+                span,
+                result_reg,
+                instructions,
+                constants,
+            )?;
         } else {
-            // 10. 计算元素表达式
             let comp_reg = self.next_temp_reg();
             self.generate_expr_ir(element, comp_reg, instructions, constants)?;
 
-            // 11. push 到结果列表
             instructions.push(Instruction::Call {
                 dst: Some(Operand::Local(result_reg)),
                 func: Operand::Const(ConstValue::String("std.list.push".to_string())),
@@ -6747,13 +6947,25 @@ impl AstToIrGenerator {
             });
         }
 
-        // 12. 跳回循环开始
+        // 修复条件跳转：失败 → 跳回本层循环头
+        if let Some(j) = cond_jump_idx {
+            if let Instruction::JmpIfNot {
+                cond: _,
+                ref mut target,
+                span: _,
+            } = instructions[j]
+            {
+                *target = loop_start_idx;
+            }
+        }
+
+        // 跳回循环开始
         instructions.push(Instruction::Jmp {
             target: loop_start_idx,
             span: self.cur_span,
         });
 
-        // 13. 修复跳出循环的跳转目标
+        // 修复跳出循环的跳转目标
         let end_pos = instructions.len();
         if let Instruction::JmpIfNot {
             cond: _,
@@ -7885,17 +8097,13 @@ impl AstToIrGenerator {
             }
             Expr::ListComp {
                 element,
-                var,
-                iterable,
-                condition,
+                generators,
                 span,
                 ..
             } => {
                 self.generate_list_comp_expr_ir(
                     element,
-                    var,
-                    iterable,
-                    condition,
+                    generators,
                     span,
                     result_reg,
                     instructions,
@@ -8027,9 +8235,16 @@ impl AstToIrGenerator {
             Expr::Match {
                 expr: match_expr,
                 arms,
-                ..
+                span,
             } => {
-                self.generate_match_expr_ir(match_expr, arms, result_reg, instructions, constants)?;
+                self.generate_match_expr_ir(
+                    match_expr,
+                    arms,
+                    *span,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
             // RFC-012: F-string 代码生成
             Expr::FString { segments, span, .. } => {

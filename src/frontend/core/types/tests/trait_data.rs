@@ -10,6 +10,40 @@ use std::collections::HashMap;
 
 // ===== TraitTable 基础操作 =====
 
+/// Fixture: 不携带方法的 `Clone` 特质定义（首次登记）。
+fn clone_trait_def() -> TraitDefinition {
+    TraitDefinition {
+        name: "Clone".to_string(),
+        methods: HashMap::new(),
+        parent_traits: vec![],
+        generic_params: vec![],
+        span: None,
+        is_marker: false,
+    }
+}
+
+/// Fixture: 带 `clone` 方法的 `Clone` 特质定义（覆盖登记）。
+fn clone_trait_def_with_method() -> TraitDefinition {
+    let mut methods = HashMap::new();
+    methods.insert(
+        "clone".to_string(),
+        TraitMethodSignature {
+            name: "clone".to_string(),
+            params: vec![],
+            return_type: MonoType::TypeRef("Self".to_string()),
+            is_static: false,
+        },
+    );
+    TraitDefinition {
+        name: "Clone".to_string(),
+        methods,
+        parent_traits: vec![],
+        generic_params: vec![],
+        span: None,
+        is_marker: false,
+    }
+}
+
 #[test]
 fn test_trait_table_new() {
     assert!(TraitTable::new().trait_names().next().is_none());
@@ -229,34 +263,17 @@ fn test_trait_table_trait_names() {
 
 #[test]
 fn test_trait_table_overwrite_trait() {
+    // Arrange — 先登记无方法的 Clone，再用带 clone 方法的定义覆盖
     let mut table = TraitTable::new();
-    table.add_trait(TraitDefinition {
-        name: "Clone".to_string(),
-        methods: HashMap::new(),
-        parent_traits: vec![],
-        generic_params: vec![],
-        span: None,
-        is_marker: false,
-    });
-    let mut methods = HashMap::new();
-    methods.insert(
-        "clone".to_string(),
-        TraitMethodSignature {
-            name: "clone".to_string(),
-            params: vec![],
-            return_type: MonoType::TypeRef("Self".to_string()),
-            is_static: false,
-        },
-    );
-    table.add_trait(TraitDefinition {
-        name: "Clone".to_string(),
-        methods,
-        parent_traits: vec![],
-        generic_params: vec![],
-        span: None,
-        is_marker: false,
-    });
-    let def = table.get_trait("Clone").unwrap();
+    table.add_trait(clone_trait_def());
+    table.add_trait(clone_trait_def_with_method());
+
+    // Act — 取回覆盖后的定义
+    let def = table
+        .get_trait("Clone")
+        .expect("table.get_trait(\"Clone\") 应成功");
+
+    // Assert — 覆盖后的定义包含 clone 方法
     assert!(
         def.methods.contains_key("clone"),
         "overwritten trait should have clone method"

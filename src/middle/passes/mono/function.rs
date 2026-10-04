@@ -411,6 +411,17 @@ impl FunctionMonomorphizer for super::Monomorphizer {
                 AstType::Paren(Box::new(self.substitute_type_ast(inner, type_map)))
             }
 
+            // RFC-027 §3：具名括号同款保留（binder 名不是类型参数，不参与替换）
+            AstType::NamedParen {
+                param,
+                param_span,
+                inner,
+            } => AstType::NamedParen {
+                param: param.clone(),
+                param_span: *param_span,
+                inner: Box::new(self.substitute_type_ast(inner, type_map)),
+            },
+
             // Option：替换内部类型
             AstType::Option(inner) => {
                 AstType::Option(Box::new(self.substitute_type_ast(inner, type_map)))

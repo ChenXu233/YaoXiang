@@ -1,0 +1,52 @@
+// 02-type-system/explicit_termination_measure_loop.yx
+// 覆盖: RFC-027 §6.9 —— 循环形态的显式测度（`acc: Terminates(n - i) = while …`）
+// 验证: 测度绑在循环上时，回边义务 `m[变量:=回边取值] < m` 判成立，且循环值正确。
+//
+//       回边义务与递归回边同构；循环条件同时是良基性下界的来源（`i < n` ⇒ `n - i > 0`）。
+//       本形态一度受阻于 D5（`while` 恒定为 `Void`，无值类型可承载精化），
+//       该缺陷已按 spec §2.9「所有 `{}` 块的值由尾表达式给出，无例外」修掉。
+// 状态: ✅ 可运行
+//
+// 注意**体尾须给出值**：块的值 = 尾表达式，体尾若是赋值语句则块值为 `Void`，
+// `return acc` 便会从 `-> Int` 返回 `Void`。测度 `n - i` 是状态表达式，
+// 与循环的值类型无关——两者互不牵制。
+//
+// #409 同步：主形态（while/for 作值 = 末次迭代的体块尾表达式的值）已在 #409 修复，
+//   故本文件补上显式 `main()` 调用后**类型侧与运行期侧同时**为绿；
+//   零迭代仍取 `Void` 为**已知残留**（表现为 `E6007` 类型不匹配），
+//   其契约由 02-type-system/while_zero_iteration_void_err.yx 承担——
+//   本文件的断言一律使用**非零迭代**入参（`loop(4)` / `loop(1)` / `countdown(3)`）。
+//
+// 脚本模式下 `main` 不会隐式执行，故文件末尾显式调用 `main()`。
+
+use std.assert
+
+// RFC-027 §示例 的循环形态（体尾显式写出 `i`）
+loop: (n: Int) -> Int = {
+    mut i = 0
+    acc: Terminates(n - i) = while i < n {
+        i = i + 1
+        i
+    }
+    return acc
+}
+
+// 测度不必等于循环值：体尾算出的是别的量，测度照样只看状态。
+countdown: (n: Int) -> Int = {
+    mut i = 0
+    acc: Terminates(n - i) = while i < n {
+        i = i + 1
+        i * 10
+    }
+    return acc
+}
+
+main: () -> Void = {
+    assert.assert(loop(4) == 4, "循环值应为末次迭代的尾表达式值 4")
+    // 零迭代（`loop(0)`）现在报 E6007（零迭代取 Void 的已知残留），不在本文件断言；
+    // 这里取最小非零迭代，保留「回边刚好成立」的边界覆盖。
+    assert.assert(loop(1) == 1, "单次迭代：循环值应为末次迭代的尾表达式值 1")
+    assert.assert(countdown(3) == 30, "测度与循环值各自独立，值为 3 * 10")
+}
+
+main()

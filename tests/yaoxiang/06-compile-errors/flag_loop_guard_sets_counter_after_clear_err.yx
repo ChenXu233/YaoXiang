@@ -1,0 +1,26 @@
+// 06-compile-errors/flag_loop_guard_sets_counter_after_clear_err.yx
+// 覆盖: RFC-027 §7.2 —— 策略 1b 健全性：守卫块内不得重绑测度变量（reviewer 反例形状）
+// 验证: 守卫块内把测度变量 `i` 重绑为**字面量**（位移未知）——「该变量每轮朝阈值走」
+//       的前提不成立 ⇒ 本版保守拒绝 E4021（能力边界，非程序错误）。
+// 状态: ❌ 应被编译期拒绝
+//
+// 该形状此前被**错误接受**（reviewer 实测 check exit 0）：守卫块内的重绑定既不在体
+// 顶层无条件位移表里，又因位移未知被 collect_assignments 整条跳过，方向判定双向不可见。
+// 修法：① 守卫块内对该变量无任何赋值（含写路径不可静态判定者）；② 未知位移的赋值不再
+// 被整条跳过。对照正例见 02-type-system/flag_loop_guarded_exit.yx。
+
+// expect: compile-error E4021
+
+UpTo: (n: Int, x: Int) -> Type = { x <= n }
+
+main: () -> Void = {
+    mut flag: Bool = true
+    mut i: UpTo(10, i) = 10
+    while flag {
+        i = i - 1
+        if i <= 0 {
+            flag = false
+            i = 100
+        }
+    }
+}

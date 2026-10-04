@@ -14,6 +14,59 @@ use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 
+/// RFC-010 §3.2: 构造函数实参个数矩阵——(调用表达式, 是否期望报错, 说明)。
+const CTOR_ARG_CASES: &[(&str, bool, &str)] = &[
+    (
+        "Point(5)",
+        true,
+        "缺参应报错：Point(5) 少传 y（无默认值，原静默填 0）",
+    ),
+    (
+        "Point(5, 6, 7)",
+        true,
+        "超参应报错：Point(5,6,7) 多传第 3 个参数（原静默丢弃）",
+    ),
+    ("Point(5, 6)", false, "正常构造应通过：Point(5, 6)"),
+    (
+        "Point(x=6)",
+        true,
+        "命名参数缺必需字段应报错：Point(x=6) 缺 y",
+    ),
+    (
+        "Point(x=6, y=2)",
+        false,
+        "命名参数完整应通过：Point(x=6, y=2)",
+    ),
+    (
+        "Config(\"localhost\")",
+        false,
+        "默认值字段可省略应通过：Config(\"localhost\") 缺 port 但有默认值",
+    ),
+];
+
+/// 在 `Point`/`Config` 记录类型上下文里构造 `call` 的源码。
+fn ctor_call_source(call: &str) -> String {
+    format!(
+        "Point: Type = {{ x: Int, y: Int }}\nConfig: Type = {{ host: String, port: Int = 8080 }}\nmain = {{\n    p = {}\n}}",
+        call
+    )
+}
+
+/// RFC-010：类型 base 的 `Point.get_x = get_x` 源码（方法登记走类型空间）。
+const TYPE_BASE_SRC: &str = r#"
+        Point: Type = { x: Float, y: Float }
+        get_x: (p: Point) -> Float = { return 1.0 }
+        Point.get_x = get_x
+    "#;
+
+/// RFC-010：值 base 的 `p.get_x = get_x` 源码（走 pass3 schema 校验）。
+const VALUE_BASE_SRC: &str = r#"
+        Point: Type = { x: Float, y: Float }
+        get_x: (p: Point) -> Float = { return 1.0 }
+        p: Point = Point(1.0, 2.0)
+        p.get_x = get_x
+    "#;
+
 /// 辅助函数：解析源代码并类型检查
 ///
 /// 解析失败也视为错误（返回 Err），不会 panic。
@@ -656,12 +709,7 @@ fn test_rfc010_multi_position_binding() {
 #[test]
 fn test_semantic_dispatch_type_vs_value_base() {
     // 类型 base：Point.get_x = get_x → 登记类型空间方法
-    let src_type = r#"
-        Point: Type = { x: Float, y: Float }
-        get_x: (p: Point) -> Float = { return 1.0 }
-        Point.get_x = get_x
-    "#;
-    let tokens = tokenize(src_type).expect("tokenize failed");
+    let tokens = tokenize(TYPE_BASE_SRC).expect("tokenize failed");
     let r = parse(&tokens);
     assert!(!r.has_errors, "parse failed: {:?}", r.errors);
     let mut checker = TypeChecker::new("test");
@@ -672,13 +720,7 @@ fn test_semantic_dispatch_type_vs_value_base() {
     );
 
     // 值 base：p.get_x = get_x → pass2 不当方法登记（走 pass3 schema 校验）
-    let src_val = r#"
-        Point: Type = { x: Float, y: Float }
-        get_x: (p: Point) -> Float = { return 1.0 }
-        p: Point = Point(1.0, 2.0)
-        p.get_x = get_x
-    "#;
-    let tokens = tokenize(src_val).expect("tokenize failed");
+    let tokens = tokenize(VALUE_BASE_SRC).expect("tokenize failed");
     let r = parse(&tokens);
     assert!(!r.has_errors, "parse failed: {:?}", r.errors);
     let mut checker = TypeChecker::new("test");
@@ -804,40 +846,8 @@ fn test_rfc010_without_type_annotation_not_type_constructor() {
 #[test]
 fn test_rfc010_ctor_argument_count_check() {
     // Arrange - 6 个用例矩阵（缺参/超参/正常/命名缺字段/命名完整/默认值省略）
-    let cases = [
-        (
-            "Point(5)",
-            true,
-            "缺参应报错：Point(5) 少传 y（无默认值，原静默填 0）",
-        ),
-        (
-            "Point(5, 6, 7)",
-            true,
-            "超参应报错：Point(5,6,7) 多传第 3 个参数（原静默丢弃）",
-        ),
-        ("Point(5, 6)", false, "正常构造应通过：Point(5, 6)"),
-        (
-            "Point(x=6)",
-            true,
-            "命名参数缺必需字段应报错：Point(x=6) 缺 y",
-        ),
-        (
-            "Point(x=6, y=2)",
-            false,
-            "命名参数完整应通过：Point(x=6, y=2)",
-        ),
-        (
-            "Config(\"localhost\")",
-            false,
-            "默认值字段可省略应通过：Config(\"localhost\") 缺 port 但有默认值",
-        ),
-    ];
-
-    for (call, expect_error, msg) in cases {
-        let source = format!(
-            "Point: Type = {{ x: Int, y: Int }}\nConfig: Type = {{ host: String, port: Int = 8080 }}\nmain = {{\n    p = {}\n}}",
-            call
-        );
+    for &(call, expect_error, msg) in CTOR_ARG_CASES {
+        let source = ctor_call_source(call);
 
         // Act
         let result = check_source(&source);

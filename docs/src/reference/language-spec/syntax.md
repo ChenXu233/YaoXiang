@@ -15,23 +15,41 @@ YaoXiang 源文件必须使用 UTF-8 编码。源文件通常以 `.yx` 为扩展
 | 类别   | 说明               | 示例                      |
 | ------ | ------------------ | ------------------------- |
 | 标识符 | 以字母或下划线开头 | `x`, `_private`, `my_var` |
-| 关键字 | 语言预定义保留词   | `Type`, `pub`, `use`      |
+| 关键字 | 语言预定义保留词   | `use`, `mut`, `and`       |
 | 字面量 | 固定值             | `42`, `"hello"`, `true`   |
 | 运算符 | 运算符号           | `+`, `-`, `*`, `/`        |
 | 分隔符 | 语法分隔符         | `(`, `)`, `{`, `}`, `,`   |
 
 ### 1.3 关键字
 
-YaoXiang 定义了极少量的关键字：
+YaoXiang 共有 **18 个关键字**（`src/frontend/core/lexer/state.rs:25-55` 的
+`keyword_from_str`，逐个对应一个 `TokenKind`）：
 
 ```
-pub    use    spawn
-ref    mut    if     else
-else   match  while  for    return
-break  continue as     in     unsafe
+pub     use     spawn  ref     mut
+if      else    match  while   for
+in      return  break  continue
+as      unsafe  and    or
 ```
+
+`and` / `or` 是逻辑与 / 或的**关键字**（Zig 式，优先级见 §2.2 第 10 级）；
+一元非是符号 `!`，与它们正交。
 
 这些关键字在任何上下文中都具有特殊含义，不能用作标识符。
+
+> **`type` 已经不是关键字**（RFC-010）：写类型定义用 `Name: Type = { ... }` 记法。
+> `src/frontend/core/lexer/state.rs:27` 明确注释了这一点，`TokenKind` 枚举头
+> （`src/frontend/core/lexer/tokens.rs:82`）也写着 “16 total - RFC-010: 'type' keyword
+> removed”——**那个 16 是过期注释**，实际已列 18 个（含 `and` / `or`，而 `Kw*` 前缀
+> 那批仍是 16 个）。
+>
+> **`pub` 不产生可见性效果**：`pub` 仍被词法层识别为 `KwPub`
+> （`src/frontend/core/lexer/state.rs:28`），解析器在声明与导入项处跳过它
+> （`src/frontend/core/parser/statements/declarations.rs:666-671,726`、
+> `.../imports.rs:57-59`），但模块系统**不据此做任何可见性判定**——已接受的
+> [RFC-029](../../design/rfc/accepted/029-module-semantics.md) 明确
+> “没有 `pub`、没有 `private`、没有 `export`，没有可见性机制”（该文件第 17 行）。
+> 写不写 `pub` 对可见性没有区别。
 
 ### 1.4 保留字
 
@@ -43,16 +61,23 @@ YaoXiang 的"保留字"分三层，分别由解析器（parser）和类型检查
 
 | 标识符  | 所属类型 | 说明                                                                                |
 | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `Type`  | —        | 元类型关键字                                                                        |
 | `true`  | Bool     | 布尔真值                                                                            |
 | `false` | Bool     | 布尔假值                                                                            |
 | `void`  | Void     | Void 字面量（Unit 值）。小写 `void` 是值字面量；大写 `Void` 是类型名（见 §1.4.3）。 |
 
-#### 1.4.2 构造子表达式
+> **`Type` 不在这一层**：它**没有**独立的 `TokenKind`（`src/frontend/core/lexer/tokens.rs`
+> 的 `TokenKind` 枚举里没有它，`keyword_from_str` 也没有对应分支），
+> 解析器把它当普通标识符，由类型检查器在类型位置识别为元类型。因此在表达式位置
+> `Type` 可以被局部绑定遮蔽。它是**元类型名**，不是关键字。
 
-以下构造子在模式匹配和表达式上下文中由解析器识别：
+#### 1.4.2 变体名
 
-| 构造子    | 所属类型 | 说明              |
+变体名在**模式**上下文中由解析器识别（裸名按 scrutinee 类型的变体集裁决，
+见 §2.8）；在**表达式**上下文中构造变体必须类型限定——`Result(Int, String).ok(5)`、
+`Option(T).some(v)`、`Color.green()`（RFC-010 记录式和类型：变体构造子是类型
+定义里的函数型字段，裸名 `ok(5)` 不是构造器调用）。
+
+| 变体名    | 所属类型 | 说明              |
 | --------- | -------- | ----------------- |
 | `some(T)` | Option   | Option 值变体构造 |
 | `ok(T)`   | Result   | Result 成功变体   |
@@ -142,8 +167,15 @@ Array       ::= '[' Expr (',' Expr)* ']'   // 目标类型注解为 Array(T, N) 
 #### 1.6.5 列表推导式
 
 ```
-ListComp    ::= '[' Expr 'for' Identifier 'in' Expr (',' Expr)* ('if' Expr)? ']'
+ListComp    ::= '[' Expr ( 'for' Identifier 'in' Expr ( 'if' Expr )? )+ ']'
 ```
+
+> **#401（实现补全）**：`if` 过滤与多生成器子句自本版起落地——此前文法写作
+> `(',' Expr)* ('if' Expr)?`，既无实现对应（逗号附加表达式与多生成器均不支持），
+> `if` 过滤也被 parser 整体漏掉（解析完 iterable 直接期待 `']'`，报
+> `E0010 Expected RBracket, found KwIf`）。现按业界通行语义定案：生成器子句一至多个，
+> 按嵌套循环展开；每个子句可携带至多一个 `if` 过滤，条件强制 `Bool`（非 Bool 报
+> `E1054`）；后续子句的 iterable/condition 可引用先前子句绑定的迭代变量。
 
 > **行为收紧（迁移记录）**：迭代变量文法本就是
 > `'for' Identifier 'in'`，但旧实现中 pattern 走完整 pratt 解析——`'in'` 注册为中缀运算符后， `x`
@@ -302,6 +334,13 @@ Pattern     ::= Literal
               | EnumPattern
               | OrPattern
 ```
+
+> **变体解构的变体集要求**（RFC-010b）：`EnumPattern`（`ok(v)`、`some(x)` 等
+> 变体名按 scrutinee 裁决）要求 scrutinee 的类型是**变体集在场的和类型**。
+> 变体集只随类型定义或 `use` 导入进入检查器——`Result`/`Option` 由
+> `std.result`/`std.option` 定义，使用前须 `use std.result` / `use std.option`
+> （整模块与分组 `use std.{...}` 两种形态同权）；否则变体解构报 E1002。
+> 穷尽性判定同源：兜底臂豁免穷尽性，无兜底臂时按变体集全查。
 
 ### 2.9 块表达式
 
@@ -875,7 +914,7 @@ main()                       // ← 必须写这一行
 
 有 manifest 时文件是「可执行目标」，此时：
 
-- 必须定义 `main`，且它必须是函数（签名须可零参调用）
+- 必须定义名为 `main` 的**绑定**，值或函数皆可（#388 定案：入口按绑定存在性判定——函数已是值，两者只是求值策略不同）：函数 main 在入口期零参调用；值 main 在初始化期求值即执行
 - 顶层不允许可执行语句——程序主体就是 `main`
 
 ```yaoxiang
@@ -884,7 +923,15 @@ main: () -> Void = {
 }
 ```
 
-缺 `main` 或 `main` 非函数均为编译错误（前者：无 `main` 时全部函数不可达；后者：值绑定不会被调用）。
+值 main 同样合法——初始化期求值即执行，求值发生在初始化序列中（按全局绑定拓扑序，独立绑定按源序）：
+
+```yaoxiang
+main = {
+    print("hello")
+}
+```
+
+缺 `main` 为编译错误（无 `main` 时全部函数不可达）。不可调用的值 main（如 `main: Int = 5`）合法但无观察效果——对标 Rust 空 `fn main() {}`。
 
 > **库文件**：被其他文件 `use` 的文件、或 `[lib].path` / `[exports]` 指向的文件不要求
 > `main`——它们不是程序入口。
@@ -918,6 +965,19 @@ b: Int = a + 1                    // 错误：a → b → a
 ---
 
 ## 附录：语法速查
+
+### A.0 关键字（18 个）
+
+```
+pub     use     spawn  ref     mut
+if      else    match  while   for
+in      return  break  continue
+as      unsafe  and    or
+```
+
+`type` 已不是关键字（RFC-010，改用 `Name: Type = { ... }`）；`pub` 不产生可见性效果
+（RFC-029）。字面量保留字 `true` / `false` / `void` 见 §1.4.1，元类型名 `Type` 与内建
+类型名 `Void` / `Never` / `Int` / `Float` / `Bool` / `Char` / `String` 见 §1.4.3。
 
 ### A.1 控制流
 

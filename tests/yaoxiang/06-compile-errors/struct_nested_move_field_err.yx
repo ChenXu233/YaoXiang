@@ -1,0 +1,20 @@
+// 06-compile-errors/struct_nested_move_field_err.yx
+// 含 Move 字段的 struct 不派生 Dup（E2014）
+// expect: compile-error E2014
+// 覆盖: RFC-009 Dup 表 struct 派生行 / SPEC type-system §11.2（#398）
+// 验证: 派生是递归的——嵌套 struct 的字段落 Move（Vec 缓冲）时，外层 struct
+//       同样不派生，赋值消费源值（派生只对「所有字段可复制」成立）
+// 状态: ❌ 应编译失败
+
+use std.io
+
+// Vec 是运行时长度的堆缓冲（Move），使 Buf 不派生；Wrapper 的字段是具名
+// struct Buf，递归判定同样落 Move——派生不是「一层」判定。
+Buf: Type = { data: Vec(Int) }
+Wrapper: Type = { inner: Buf }
+
+main: () -> Void = {
+    w = Wrapper(Buf([1, 2, 3]))
+    w2 = w           // Move：Wrapper 未派生 Dup
+    io.println(w)    // ❌ E2014：w 已被 move
+}

@@ -1,0 +1,10 @@
+// 06-compile-errors/list_comp_cond_not_bool_err.yx
+// 覆盖: 规范 §1.6.5 列表推导式——过滤条件强制 Bool（#401）
+// 验证: 过滤条件为 Int 字面量 42 时，check 必须 E1054 拒绝
+// expect: compile-error E1054
+// （过滤条件 42 为 Int，不是 Bool）
+// 状态: ❌ 应编译失败
+
+main: () -> Void = {
+    evens = [x for x in [1, 2, 3] if 42]
+}

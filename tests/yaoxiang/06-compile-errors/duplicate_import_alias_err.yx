@@ -1,0 +1,12 @@
+// 06-compile-errors/duplicate_import_alias_err.yx
+// 覆盖: RFC-029 §2 导入冲突「同名绑定直接报错」；#414（重名冲突从静默覆盖改为显式报错）
+// 验证: 同一本地名导两次（跨模块同名别名）→ E5006 重复导入
+// expect: compile-error E5006
+// 状态: ❌ 应被编译期拒绝
+
+use std.math as m
+use std.io as m
+
+main = {
+    m.print("x")
+}

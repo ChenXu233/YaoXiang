@@ -21,11 +21,17 @@ print(greeting)  // Hello Alice, you are 25 years old
 对比传统拼接方式，f-string 的差异一目了然：
 
 ```yaoxiang
+use std.string
+
+name = "Alice"
+age = 25
+
 // ❌ 传统拼接：冗长且容易出错
-message = "Hello ".concat(name).concat(", age: ").concat(age.to_string())
+// 注意：String 没有 .concat() 实例方法，也没有 Int.to_string()——两者都报 E1053
+message = "Hello, age: " + string.format("{0}", age)
 
 // ✅ f-string：直观、简洁
-message = f"Hello {name}, age: {age}"
+message2 = f"Hello {name}, age: {age}"
 ```
 
 ## 表达式插值
@@ -47,10 +53,13 @@ print(f"Is positive? {x > 0}") // Is positive? true
 
 ```yaoxiang
 pi = 3.14159265
+name = "hello"
 
 print(f"Pi: {pi}")       // Pi: 3.14159265
-print(f"Pi: {pi:.2f}")   // Pi: 3.14（保留2位小数）
-print(f"Pi: {pi:.4f}")   // Pi: 3.1416（保留4位小数）
+print(f"Pi: {pi:.2f}")   // Pi: 3.14（保留 2 位小数）
+print(f"{255:x}")        // ff（十六进制）
+print(f"{1000:e}")       // 1.000000e+03（科学计数法）
+print(f"{name:s}")       // hello（字符串展示）
 ```
 
 常用格式化说明符：
@@ -68,39 +77,44 @@ print(f"Pi: {pi:.4f}")   // Pi: 3.1416（保留4位小数）
 可以在 `{}` 里调用方法：
 
 ```yaoxiang
+use std.string
+
+// 注意：转换走 std.string 的函数形式——`name.uppercase()` / `name.len()` 报 E1053
 name = "alice"
 
-print(f"Upper: {name.uppercase()}")   // Upper: ALICE
-print(f"Length: {name.len()}")        // Length: 5
+print(f"Upper: {string.upper(name)}")  // Upper: ALICE
+print(f"Length: {string.len(name)}")   // Length: 5
 ```
 
 ## 转义大括号
 
-如果需要输出字面的 `{` 或 `}`，**双写**即可：
+想输出字面的 `{` 或 `}`，**双写**即可（与 Python 一致）：
 
 ```yaoxiang
 print(f"{{literal braces}}")     // {literal braces}
 print(f"Set: {{1, 2, 3}}")       // Set: {1, 2, 3}
+```
 
-// 混合：双写输出字面量 {，单写是插值
+混合使用：双写输出字面量 `{`，单写是插值：
+
+```yaoxiang
 name = "YaoXiang"
+
 print(f"{{name}} is {name}")     // {name} is YaoXiang
 ```
 
 ## 多行 f-string
 
-f-string 可以跨多行：
+三引号 `f"""..."""` 支持跨行模板，换行是内容的一部分（与普通 `"""` 多行字符串一致）：
 
 ```yaoxiang
 name = "Alice"
 age = 25
 city = "Beijing"
 
-info = f"""
-Name: {name}
+info = f"""Name: {name}
 Age: {age}
-City: {city}
-"""
+City: {city}"""
 
 print(info)
 // Name: Alice
@@ -108,16 +122,24 @@ print(info)
 // City: Beijing
 ```
 
+插值与转义大括号在多行模板里照常工作，字符串转义（`\n` 等）亦然。
+
 ## f-string 的工作原理
 
-编译器看到 f-string 时，会把它转换为高效的字符串拼接：
+编译器看到 f-string 时，会把它转换为字符串拼接。语义上相当于：
 
 ```yaoxiang
+use std.string
+
+name = "Alice"
+age = 25
+
 // 你写的
 f"Hello {name}, age: {age}"
 
-// 编译器转换结果
-"Hello ".concat(name.to_string()).concat(", age: ").concat(age.to_string())
+// 等价的手写形式（注意：没有 .concat() / .to_string() 实例方法，
+// 也没有隐式 Int→String 转换）
+"Hello " + string.format("{0}", name) + ", age: " + string.format("{0}", age)
 ```
 
 这意味 f-string 不仅写起来更简洁，运行时性能也和手写拼接相当——**零额外开销**。

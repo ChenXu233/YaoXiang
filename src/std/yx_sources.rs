@@ -14,6 +14,7 @@ pub const STD_YX_FILES: &[(&str, &str)] = &[
     ("std/test.yx", include_str!("test.yx")),
     ("std/result.yx", include_str!("result.yx")),
     ("std/option.yx", include_str!("option.yx")),
+    ("std/json.yx", include_str!("json.yx")),
 ];
 
 /// use 路径（`std.test`）查嵌入源；未命中（native 模块或用户模块）返回 None。

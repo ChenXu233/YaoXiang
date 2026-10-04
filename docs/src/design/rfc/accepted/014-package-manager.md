@@ -3,20 +3,20 @@ title: 'RFC-014: 包管理系统设计'
 status: '已接受'
 author: '晨煦'
 created: '2026-02-12'
-updated: '2026-09-15'
+updated: '2026-10-03'
 group: 'rfc-014' # 本 RFC 是包管理系统的总纲，子 RFC：014a/014b/014c
 issue: '#88'
-impl: '48%'
-impl_status: 'partial'
+impl: '100%'
+impl_status: 'complete'
 ---
 
 # RFC-014: 包管理系统设计（总纲）
 
 > **子 RFC：**
 >
-> - [RFC-014a: Registry 协议规范](../review/014a-registry-protocol.md)
-> - [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md)
-> - [RFC-014c: 工作空间支持](../review/014c-workspace.md)
+> - [RFC-014a: Registry 协议规范](../accepted/014a-registry-protocol.md)
+> - [RFC-014b: 构建系统与二进制分发](../accepted/014b-build-system.md)
+> - [RFC-014c: 工作空间支持](../accepted/014c-workspace.md)
 
 ## 摘要
 
@@ -179,18 +179,27 @@ use foo.bar.baz;
 查找顺序:
 1. ./src/foo/bar/baz.yx     本地模块 —— 最高优先级，可覆盖核心源中的同名模块
 2. <核心包源>/foo/bar/baz.yx
-   · vendor 模式: .yaoxiang/vendor/<pkg>-<ver>/src/foo/bar/baz.yx（std 也在 vendor 内）
+   · vendor 模式: .yaoxiang/vendor/<pkg>-<ver>/src/foo/bar/baz.yx（2026-09-28 修订：std 不在 vendor 内，见项目模式规则）
    · 全局模式:   <install-dir>/yx/<ver>/std/foo/bar/baz.yx + ~/.yaoxiang/cache/...
-3. std.* 专属兜底: 嵌入二进制（仅 std.* 命名空间；文件系统 std 落地前的过渡层，版本绑定编译器）
+3. std.* 专属兜底: 嵌入二进制（仅 std.* 命名空间；2026-09-28 修订：正式机制，见项目模式规则）
 4. 报错（模块不存在）；vendor 模式下缺包提示 `yaoxiang install`
 ```
 
 **项目模式规则**：
 
-- `yaoxiang add std@1.0.1` 把 std 作为普通依赖装入 vendor、锁定版本；此时嵌入二进制 std 不再生效（vendor 内 std 优先）
 - vendor 存在但与 `yaoxiang.lock` 不一致时，`run`/`build` 报错并提示 `yaoxiang install`（Node 语义：不静默自动安装）
-- 本地模块覆盖核心源同名模块时，默认发射 W 级诊断提示遮蔽（`--deny-shadowing` 可升级为错误）；覆盖 `std.*` 时诊断文案显式警告
+- 本地模块覆盖核心源同名模块时，默认发射 W 级诊断提示遮蔽（`--deny-shadowing` 可升级为错误）
 - `path` 依赖视同本地模块的延伸，直接按路径解析，不经核心包源
+
+> **2026-09-28 修订：std 不包化（推翻 2026-09-15 决议中的 std 包化部分）。**
+> 嵌入二进制 std 从「过渡兜底」转正为**正式机制**：std 与编译器 ABI 级耦合
+> （native 层/runtime 内建须匹配 VM 布局），按包锁 std 版本会制造「std-1.0.1 +
+> 编译器 1.0.2」式的隐晦错乱；std 漂移的正解是项目级工具链锁定（如需，另议），
+> 而非 std 包。Go/Rust/Python 先例一致——语言自带的 std 跟工具链走。
+> `yaoxiang add std@<ver>` 不可用；`std.*` 为保留命名空间，本地模块不可遮蔽
+> （嵌入 std 无文件形态，遮蔽无从谈起）；RFC-037 的 `.yaoxiang/vendor/std/`
+> 接口文件目录（LSP 查找链第一级）保留，继续承担「查看源码」职责。
+> 顺带修正：本地模块遮蔽的诊断范围即依赖包，不再含 std.* 特例文案。
 
 #### 单文件模式（无 yaoxiang.toml）
 
@@ -231,7 +240,8 @@ use foo.bar.baz;
 
 #### 项目级标准库
 
-> **2026-09-15 决议：不再设独立 `.yaoxiang/std/` 目录。** std 是核心包源中的普通包：`yaoxiang add std@1.0.1` 后落入 `.yaoxiang/vendor/std-<version>/`，与其它依赖同规则管理。原「项目级 std 存在则全局 std 失效」不再需要专门规则——核心包源互斥天然保证。
+> **2026-09-15 决议：不再设独立 `.yaoxiang/std/` 目录。**
+> **2026-09-28 修订：std 不包化**（推理见「项目模式规则」末尾）——std 保持嵌入二进制 + RFC-037 接口文件目录，`add std@<ver>` 不可用，`std.*` 保留不可遮蔽。目录互斥结论（无独立 `.yaoxiang/std/`）维持有效。
 
 ```
 my-project/
@@ -250,7 +260,7 @@ my-project/
 - 嵌入二进制作为兼容层：在文件系统标准库完全落地前，先通过嵌入二进制提供 std 模块
 - 版本目录隔离：`yx/<version>/std/` 使不同版本的标准库共存，不会互相影响
 - std 与普通依赖同机制（add/lock/vendor），无特殊目录、无特殊查找层
-- 单文件模式退回全局 std；vendor 存在时 std 必须来自 vendor（或经显式 `add std@` 锁定）
+- 单文件模式退回全局 std；vendor 存在时 std 同样来自嵌入二进制/接口目录（2026-09-28 修订：std 不包化，不随 vendor）
 
 ### 核心数据结构
 
@@ -335,12 +345,13 @@ enum BuildStrategy {
 | `yaoxiang check`                   | 类型检查                   | `yaoxiang check`                                     |
 | `yaoxiang clean`                   | 清理构建产物               | `yaoxiang clean`                                     |
 | `yaoxiang task <name>`             | 运行自定义任务             | `yaoxiang task lint`                                 |
-| `yaoxiang publish`                 | 发布包到 Registry          | `yaoxiang publish`                                   |
-| `yaoxiang publish --github`        | 发布并创建 GitHub Release  | `yaoxiang publish --github`                          |
-| `yaoxiang yank <pkg>@<ver>`        | 删除已发布版本（不可恢复） | `yaoxiang yank foo@1.2.3`                            |
-| `yaoxiang login --registry <url>`  | Registry 认证              | `yaoxiang login --registry https://reg.example.com`  |
-| `yaoxiang login --github`          | GitHub 认证                | `yaoxiang login --github`                            |
-| `yaoxiang logout --registry <url>` | 登出                       | `yaoxiang logout --registry https://reg.example.com` |
+| `yaoxiang publish`                 | 发布包到 Registry          | 后置：官方 Registry 无限期后置，裸 publish 报错指路   |
+| `yaoxiang publish --dry-run`       | 校验 + 打包 `.yxpkg` 到 `target/yxpkg/` | `yaoxiang publish --dry-run`             |
+| `yaoxiang publish --github`        | 发布为 GitHub Release（`.yxpkg` 资产；要求 tag 已存在） | `yaoxiang publish --github` |
+| `yaoxiang yank <pkg>@<ver>`        | 删除已发布版本（不可恢复） | 后置：随官方 Registry                                 |
+| `yaoxiang login --registry <url>`  | Registry 认证              | 后置：随官方 Registry（GitHub 侧当前用 `$YX_GITHUB_TOKEN`） |
+| `yaoxiang login --github`          | GitHub 认证                | 后置：同上                                            |
+| `yaoxiang logout --registry <url>` | 登出                       | 后置：同上                                            |
 | `yaoxiang cache clean`             | 清理全局缓存               | `yaoxiang cache clean`                               |
 | `yaoxiang workspace <cmd>`         | 工作空间操作               | `yaoxiang workspace list`                            |
 
@@ -422,19 +433,19 @@ token = "xxx"
 
 ### Registry 协议
 
-详见 [RFC-014a: Registry 协议规范](../review/014a-registry-protocol.md)。
+详见 [RFC-014a: Registry 协议规范](../accepted/014a-registry-protocol.md)。
 
 核心设计：开放协议 + 适配层。官方 Registry 为主，GitHub Release/main 分支为辅，支持自定义 Registry。
 
 ### 构建系统
 
-详见 [RFC-014b: 构建系统与二进制分发](../review/014b-build-system.md)。
+详见 [RFC-014b: 构建系统与二进制分发](../accepted/014b-build-system.md)。
 
 核心设计：声明式 `[build]` 配置，预编译优先/源码兜底，支持 cargo/cmake/custom 策略。
 
 ### 工作空间
 
-详见 [RFC-014c: 工作空间支持](../review/014c-workspace.md)。
+详见 [RFC-014c: 工作空间支持](../accepted/014c-workspace.md)。
 
 核心设计：字典形式 members 声明，共享 lockfile，路径依赖，Cargo workspace 集成。
 
@@ -468,17 +479,37 @@ token = "xxx"
 | ------------- | -------------------------------------------- | --------- |
 | **Phase 1**   | toml 解析、本地依赖、lock 生成、基础算法     | ✅ 已完成 |
 | **Phase 2**   | GitHub 支持、.yaoxiang/vendor 管理、下载工具 | ✅ 已完成 |
-| **Phase 3**   | 全局缓存、semver crate 替换、CLI 完善        | 待开始    |
-| **Phase 3.5** | Source trait 改 async、async-trait 集成      | 待开始    |
-| **Phase 4**   | GitHub 适配层、.yxpkg 打包、publish --github（RFC-014a 缩减后范围；官方 Registry/auth/yank 后置） | 待开始    |
-| **Phase 5**   | 构建系统、预编译二进制（RFC-014b）           | 待开始    |
-| **Phase 6**   | 工作空间支持（RFC-014c）                     | 待开始    |
+| **Phase 3**   | 全局缓存、semver crate 替换、CLI 完善        | ✅ 已完成 |
+| **Phase 3.5** | Source 分发 enum 化 + 原生 async（014a 决议 4，不引 async-trait） | ✅ 已完成 |
+| **Phase 4**   | GitHub 适配层、.yxpkg 打包、publish --github（RFC-014a 缩减后范围；官方 Registry/auth/yank 后置） | ✅ 已完成 |
+| **Phase 5**   | 构建系统、预编译二进制（RFC-014b）           | ✅ 已完成 |
+| **Phase 6**   | 工作空间支持（RFC-014c）                     | ✅ 6a-c + 成员管理 + 6d 完成（6e 后置） |
 
 **执行顺序调整（2026-09-15）**：`3 → 3.5 → 6 → 4 → 5`。
 
 - 工作空间（Phase 6）提前至构建系统之前——它不依赖网络与构建系统（纯本地路径解析 + 共享 lockfile），对多包开发收益最直接。
 - Phase 4 范围缩减：**官方 Registry 服务器与 auth/yank 无限期后置**，先交付 GitHub Release/Git 适配层 + `.yxpkg` 打包 + `publish --github`。生态冷启动只需 git/GitHub 渠道（Go 早期同型），Registry 服务器的运维与治理成本在无第三方包阶段是纯负债。
 - 随之约束：官方 Registry 上线前 `yaoxiang add <裸包名>` 不可用，添加依赖须显式来源（`--git` / `--path`）。
+
+**Phase 3 落地说明（2026-09-28）**：
+
+- Phase 3.5 落地说明（2026-09-29）：Source 分发按决议 4 采用 `AnySource` 四源封闭集合（Local/Git/Registry/GitHub，后两者为 Phase 4 占位）；`Source` trait 的 resolve/download 为原生 async fn in trait，命令层以 `futures::executor::block_on` 驱动（无运行时，Git 子进程保持 std::process；Phase 4 接 reqwest 时换真执行器即可）；新增 `futures` 依赖（wasm32 兼容）。install 并行下载推迟到引入真运行时时一并做。
+- Phase 4 落地说明（2026-09-29，提交 234dfea5/e1873133/5ffee636）：
+  - **GitHub 适配层**（4a）：github.com 的 git 依赖路由到 `GitHubSource`——版本解析走 REST API（releases 端点，空则回退 tags），下载优先 Release 的 `.yxpkg` 资产（解包校验后入 `cache/github/` 再复制 vendor），无资产回退 git 克隆（SourceKind 如实报 `Git`）。API 访问带指数退避（1s/2s/4s，Retry-After 优先）+ **ETag 条件请求缓存**（`cache/github/*.etag|body`，304 不计 GitHub 速率配额）；403+`x-ratelimit-remaining: 0` 识别为主速率限制、不重试。
+  - **`.yxpkg` 包格式**（4b）：tar.gz + `SHA256SUMS` 清单（coreutils 双空格格式），打包确定性（条目排序、mtime/uid/gid 归零）；解包强制校验（清单缺失/篡改/清单外文件/路径逃逸/解压总量超限一律报错）；内容总量 20 MiB 上限（决议 7）。排除项取黑名单（`.git`/`.yaoxiang`/`target`/`node_modules`/`*.yxpkg` 等）而非白名单——`[exports]` 允许把 src/ 外的文件纳入导出面，白名单会静默漏掉。
+  - **`publish`**（4c）：裸 `publish` 报错指路（Registry 后置）；`--dry-run` 完成「校验（description 必填）→ 打包 → SHA-256」；`--github` 继而查重 Release → 校验 tag 已存在（Cargo 同款语义：打 tag 是用户的事）→ 创建 Release → 上传资产。目标仓库取 `[package].repository`，回退 `git remote origin`；认证读 `$YX_GITHUB_TOKEN`（credentials.toml 随官方 Registry 落地）。HTTP 栈为 reqwest（rustls）+ 包管理自有 tokio current_thread 运行时（`package::runtime::drive`），`futures` 依赖随之移除。
+  - 发布前测试运行（014a 校验清单第 3 步）随 Phase 5 接线（03929ffa）。
+- Phase 5 落地说明（2026-09-30，feat/rfc014）：
+  - **安装决策树接线**（b6a5b98f 前后多个提交）：`install/update` 下载依赖后对有 `[build]`/`[binaries]` 的包走 `build::run_install_build`——预编译优先（整包 SHA-256 + 安全解包）→ headers（026b 前明确报错）→ 策略执行（cargo 真实现 / cmake 待实现 / custom 信任门）。无构建声明的包零成本直过。
+  - **cargo 策略**：`[build.cargo]` 拼命令 + 平台覆盖合并；scratch 经 `CARGO_TARGET_DIR` 隔离到 `.yaoxiang/build/`，FFI 产物复制进 vendor `build/native/<triple>/`；vendor 完整性语义明确为源码树完整性（`build/` 不入校验和）。
+  - **信任门**（014b 决议 1）：信任记录在用户配置 `[trust] build-scripts`；`--trust` 放行即持久化；非交互环境默认拒绝。
+  - publish 发布前测试默认运行（RFC-036 发现机制），`--no-test` 跳过。
+  - cmake 执行与 yx-bindgen 生成器（RFC-026b）待后续；其余详见 014b 落地说明。
+
+- 全局缓存先覆盖 **git 渠道**（`cache/git/<url>-<tag|rev|commit>/`，分支经 `ls-remote` 解析 commit 入缓存并写指针文件供离线回退）；`cache/registry/`、`cache/binaries/` 为目录预留。vendor 副本剔除 `.git`，目录名以依赖 manifest 探测到的真实版本命名（vendor/lock/清理三者同源）。
+- `semver` 与 `sha2` crate 按依赖表替换手写实现；`is_compatible` 由 10 万次枚举改为区间交集判定。
+- CLI 新增 `outdated` / `clean` / `cache clean`，并给 `add` 加上 `--git` / `--path` 显式来源（即上述约束的落地）。`clean` 除 `.yaoxiang/build/` 外同时裁剪 vendor 中不被 lock 引用的残留包。
+- 缓存 `[cache] dir` 配置并入既有 `~/.config/yaoxiang/config.toml` 用户配置体系（RFC 草拟时的 `~/.yaoxiang/config.toml` 未曾存在），缓存数据默认位置仍为 `~/.yaoxiang/cache`。
 
 ### 依赖关系
 
@@ -508,7 +539,7 @@ token = "xxx"
 | 用途        | crate            | 说明           |
 | ----------- | ---------------- | -------------- |
 | 语义化版本  | `semver`         | 替换手写解析器 |
-| HTTP 客户端 | `reqwest`        | Registry 通信  |
+| HTTP 客户端 | `reqwest`        | Registry 通信（Phase 4） |
 | SHA-256     | `sha2`           | 完整性校验     |
 | 压缩        | `flate2` + `tar` | 包格式处理     |
 

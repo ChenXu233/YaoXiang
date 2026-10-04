@@ -2,7 +2,7 @@
 //!
 //! This module provides string manipulation functions for YaoXiang programs.
 
-use crate::backends::common::RuntimeValue;
+use crate::backends::common::{Heap, RuntimeValue};
 use crate::backends::ExecutorError;
 use crate::std::io::format_value_with_prefix;
 use crate::std::{NativeContext, NativeExport, StdModule};
@@ -130,6 +130,18 @@ impl StdModule for StringModule {
                 "(s: &String) -> Result(Float, Error)",
                 native_parse_float
             ),
+            export!(
+                "char_code",
+                "std.string.char_code",
+                "(s: &String, i: Int) -> Int",
+                native_char_code
+            ),
+            export!(
+                "from_char_code",
+                "std.string.from_char_code",
+                "(n: Int) -> Result(String, Error)",
+                native_from_char_code
+            ),
         ]
     }
 }
@@ -140,7 +152,7 @@ pub const STRING_MODULE: StringModule = StringModule;
 // Helper functions
 
 /// Extract String from RuntimeValue
-fn extract_string(arg: &RuntimeValue) -> String {
+pub(crate) fn extract_string(arg: &RuntimeValue) -> String {
     match arg {
         RuntimeValue::String(s) => s.to_string(),
         _ => String::new(),
@@ -361,161 +373,557 @@ fn native_reverse(
     Ok(RuntimeValue::String(reversed.into()))
 }
 
-/// Native implementation: format - Python-style string formatting
-/// Supports {0}, {1}, {2}... placeholders and {:03}, {:>3}, {:<3} format specifiers
+/// Native implementation: format - Python-style string formatting (RFC-012)
+///
+/// Placeholders `{0}`, `{1}`, ... with optional format spec `{0:.2f}`;
+/// `{{` / `}}` are literal-brace escapes. Arguments stay typed (#402) so
+/// numeric format specs see the underlying value instead of a pre-stringified
+/// one.
 fn native_format(
     args: &[RuntimeValue],
     ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let format_str = args.first().map(extract_string).unwrap_or_default();
-    let format_args = &args[1..];
 
-    // Convert all args to strings upfront
-    let arg_strings: Vec<String> = format_args
-        .iter()
-        .map(|arg| format_value_with_prefix(arg, ctx.heap, ""))
-        .collect();
+    let format_args = args.get(1..).unwrap_or(&[]);
 
-    // Parse and replace placeholders
-    let result = parse_format(&format_str, &arg_strings);
+    let result = parse_format(&format_str, format_args, ctx.heap)?;
 
     Ok(RuntimeValue::String(result.into()))
 }
 
-/// Parse format string and replace placeholders with argument values
+/// Parse format string and replace placeholders with argument values.
+///
+/// `{{` / `}}` are literal-brace escapes (Python-consistent, #402);
+/// `{index}` / `{index:spec}` are placeholders. An unmatched `{` / `}` stays
+/// literal. Missing indices render as empty.
 fn parse_format(
     format_str: &str,
-    args: &[String],
-) -> String {
+    args: &[RuntimeValue],
+    heap: &Heap,
+) -> Result<String, ExecutorError> {
     let mut result = String::new();
     let mut chars = format_str.chars().peekable();
 
     while let Some(c) = chars.next() {
-        if c == '{' {
-            // Parse placeholder
-            let mut placeholder = String::new();
-
-            // Collect characters until closing brace
-            while let Some(&next) = chars.peek() {
-                if next == '}' {
+        match c {
+            '{' => {
+                // Escaped {{ → literal {
+                if chars.peek() == Some(&'{') {
                     chars.next();
-                    break;
-                }
-                placeholder.push(chars.next().unwrap());
-            }
 
-            // Parse placeholder: {index} or {index:format}
-            if let Some((index_str, format_spec)) = placeholder.split_once(':') {
-                // Has format specifier: {0:03}
+                    result.push('{');
+
+                    continue;
+                }
+
+                // Collect placeholder until closing brace
+                let mut placeholder = String::new();
+
+                let mut closed = false;
+
+                while let Some(&next) = chars.peek() {
+                    if next == '}' {
+                        chars.next();
+
+                        closed = true;
+
+                        break;
+                    }
+                    placeholder.push(chars.next().unwrap());
+                }
+
+                if !closed {
+                    // Unterminated `{`: keep literal
+                    result.push('{');
+
+                    result.push_str(&placeholder);
+
+                    continue;
+                }
+
+                // {index} or {index:spec}
+                let (index_str, spec) = match placeholder.split_once(':') {
+                    Some((idx, s)) => (idx, Some(s)),
+
+                    None => (placeholder.as_str(), None),
+                };
+
                 let index: usize = index_str.parse().unwrap_or(0);
-                let formatted = apply_format_spec(
-                    args.get(index).map(|s| s.as_str()).unwrap_or(""),
-                    format_spec,
-                );
+
+                let formatted = match (args.get(index), spec) {
+                    (Some(value), Some(s)) => apply_format_spec(value, s, heap)?,
+
+                    (Some(value), None) => format_value_with_prefix(value, heap, ""),
+
+                    (None, _) => String::new(),
+                };
+
                 result.push_str(&formatted);
-            } else {
-                // Simple placeholder: {0}
-                let index: usize = placeholder.parse().unwrap_or(0);
-                result.push_str(args.get(index).map(|s| s.as_str()).unwrap_or(""));
             }
-        } else if c == '}' {
-            // Escape }} as }
-            if let Some(&next) = chars.peek() {
-                if next == '}' {
+            '}' => {
+                // Escaped }} → literal }; a lone } stays literal
+                if chars.peek() == Some(&'}') {
                     chars.next();
-                    result.push('}');
-                } else {
-                    // Unmatched }, treat as literal
-                    result.push('}');
                 }
-            } else {
+
                 result.push('}');
             }
-        } else {
-            result.push(c);
+            c => result.push(c),
         }
     }
 
-    result
+    Ok(result)
 }
 
-/// Apply format specifier to a value
-/// Supported: {:03} (zero-pad), {:>3} (right-align), {:<3} (left-align), {:^3} (center)
+/// Python-style format specifier (RFC-012, #402):
+/// `[[fill]align][sign][#][0][width][.precision][type]`
+///
+/// type ∈ {b c d e E f F g G o s x X %}; omitted type uses the default
+/// display of the value's type. Invalid specifiers raise a runtime error
+/// instead of being silently ignored.
 fn apply_format_spec(
-    value: &str,
+    value: &RuntimeValue,
     spec: &str,
-) -> String {
-    // Parse format spec: [align][width]
-    // align: <, >, ^
-    // width: number
-    // fill (optional): character before align
+    heap: &Heap,
+) -> Result<String, ExecutorError> {
+    let chars: Vec<char> = spec.chars().collect();
 
-    if spec.is_empty() {
-        return value.to_string();
+    let mut i = 0usize;
+
+    // [[fill]align]
+    let mut fill: Option<char> = None;
+
+    let mut align: Option<char> = None;
+
+    if chars.len() >= 2 && matches!(chars[1], '<' | '>' | '^') {
+        fill = Some(chars[0]);
+
+        align = Some(chars[1]);
+
+        i = 2;
+    } else if !chars.is_empty() && matches!(chars[0], '<' | '>' | '^') {
+        align = Some(chars[0]);
+
+        i = 1;
     }
 
-    let mut fill_char = ' ';
-    let mut align = '>'; // Default right-align for numbers
+    // [sign]
+    let mut sign = '-';
 
-    let spec_chars: Vec<char> = spec.chars().collect();
+    if i < chars.len() && matches!(chars[i], '+' | '-' | ' ') {
+        sign = chars[i];
 
-    // Check for fill character (before align)
-    let width_str = if spec_chars.len() >= 2 {
-        match spec_chars[0] {
-            '<' | '>' | '^' => {
-                align = spec_chars[0];
-                &spec[1..]
-            }
-            _ if spec_chars[0].is_ascii_digit() => {
-                fill_char = spec_chars[0];
-                if spec_chars.len() >= 2 {
-                    match spec_chars[1] {
-                        '<' | '>' | '^' => {
-                            align = spec_chars[1];
-                            &spec[2..]
-                        }
-                        _ => spec,
-                    }
-                } else {
-                    spec
-                }
-            }
-            _ => spec,
+        i += 1;
+    }
+
+    // [#] alternate form (0b/0o/0x prefix)
+    let mut alt = false;
+
+    if i < chars.len() && chars[i] == '#' {
+        alt = true;
+
+        i += 1;
+    }
+
+    // [0] zero flag (fill '0', '=' alignment for numbers)
+    let mut zero_pad = false;
+
+    if i < chars.len() && chars[i] == '0' {
+        zero_pad = true;
+
+        i += 1;
+    }
+
+    // [width]
+    let width_start = i;
+
+    while i < chars.len() && chars[i].is_ascii_digit() {
+        i += 1;
+    }
+
+    let width: usize = chars[width_start..i]
+        .iter()
+        .collect::<String>()
+        .parse()
+        .unwrap_or(0);
+
+    // [.precision]
+    let mut precision: Option<usize> = None;
+
+    if i < chars.len() && chars[i] == '.' {
+        i += 1;
+
+        let p_start = i;
+
+        while i < chars.len() && chars[i].is_ascii_digit() {
+            i += 1;
         }
+
+        precision = Some(
+            chars[p_start..i]
+                .iter()
+                .collect::<String>()
+                .parse()
+                .unwrap_or(0),
+        );
+    }
+
+    // [type]
+    let type_char = if i < chars.len() {
+        Some(chars[i])
     } else {
-        spec
+        None
     };
 
-    // Parse width
-    let width: usize = width_str.parse().unwrap_or(0);
-
-    if width == 0 {
-        return value.to_string();
+    if i + 1 < chars.len() {
+        return Err(ExecutorError::runtime_only(format!(
+            "Invalid format specifier '{spec}'"
+        )));
     }
 
-    let len = value.len();
+    // (head, tail, numeric): head carries sign + alternate prefix so that
+    // '=' alignment can pad between head and tail (Python style)
+    let (head, tail, numeric) = match value {
+        RuntimeValue::Int(n) => int_parts(*n, type_char, sign, alt, precision, spec)?,
 
-    if len >= width {
-        return value.to_string();
+        RuntimeValue::Float(f) => float_parts(*f, type_char, sign, precision, spec)?,
+
+        RuntimeValue::Bool(b) => match type_char {
+            None | Some('s') => (String::new(), b.to_string(), false),
+
+            Some(t) => return Err(unknown_code_err(t, "bool", spec)),
+        },
+
+        RuntimeValue::Char(c) => match type_char {
+            None | Some('s') | Some('c') => (
+                String::new(),
+                char::from_u32(*c)
+                    .map(|ch| ch.to_string())
+                    .unwrap_or_default(),
+                false,
+            ),
+
+            Some(t) => return Err(unknown_code_err(t, "char", spec)),
+        },
+
+        RuntimeValue::String(s) => match type_char {
+            None | Some('s') => {
+                let mut text: String = s.to_string();
+
+                if let Some(p) = precision {
+                    text = text.chars().take(p).collect();
+                }
+
+                (String::new(), text, false)
+            }
+
+            Some(t) => return Err(unknown_code_err(t, "str", spec)),
+        },
+
+        other => match type_char {
+            None | Some('s') => (
+                String::new(),
+                format_value_with_prefix(other, heap, ""),
+                false,
+            ),
+
+            Some(t) => return Err(unknown_code_err(t, "value", spec)),
+        },
+    };
+
+    // Default alignment: numbers right ('=' under the zero flag), text left
+    let align = align.unwrap_or(match (numeric, zero_pad) {
+        (true, true) => '=',
+
+        (true, false) => '>',
+
+        (false, _) => '<',
+    });
+
+    let fill = fill.unwrap_or(if zero_pad { '0' } else { ' ' });
+
+    let body_len = head.chars().count() + tail.chars().count();
+
+    if width <= body_len {
+        return Ok(format!("{head}{tail}"));
     }
 
-    let padding_len = width - len;
-    let padding: String = fill_char.to_string().repeat(padding_len);
+    let pad = width - body_len;
 
-    match align {
-        '<' => format!("{}{}", value, padding), // Left align
+    let padding = fill.to_string().repeat(pad);
+
+    Ok(match align {
+        '<' => format!("{head}{tail}{padding}"),
+
         '^' => {
-            // Center align
-            let left_pad = padding_len / 2;
-            let right_pad = padding_len - left_pad;
+            let left = pad / 2;
+
             format!(
-                "{}{}{}",
-                padding.repeat(left_pad),
-                value,
-                padding.repeat(right_pad)
+                "{}{head}{tail}{}",
+                fill.to_string().repeat(left),
+                fill.to_string().repeat(pad - left)
             )
         }
-        _ => format!("{}{}", padding, value), // Right align (default)
+
+        '=' => format!("{head}{padding}{tail}"),
+
+        _ => format!("{padding}{head}{tail}"),
+    })
+}
+
+fn unknown_code_err(
+    code: char,
+    type_name: &str,
+    spec: &str,
+) -> ExecutorError {
+    ExecutorError::runtime_only(format!(
+        "Unknown format code '{code}' for {type_name} in format specifier '{spec}'"
+    ))
+}
+
+fn sign_char(
+    negative: bool,
+    sign: char,
+) -> &'static str {
+    if negative {
+        "-"
+    } else {
+        match sign {
+            '+' => "+",
+
+            ' ' => " ",
+
+            _ => "",
+        }
+    }
+}
+
+/// Integer body per Python rules; returns (sign+prefix head, digits tail).
+/// Integers accept the float presentations (e/E/f/F/g/G/%) like Python does.
+fn int_parts(
+    n: i64,
+    type_char: Option<char>,
+    sign: char,
+    alt: bool,
+    precision: Option<usize>,
+    spec: &str,
+) -> Result<(String, String, bool), ExecutorError> {
+    let negative = n < 0;
+
+    let mag = n.unsigned_abs();
+
+    let (digits, prefix) = match type_char {
+        None | Some('d') | Some('n') => (mag.to_string(), ""),
+
+        Some('b') => (format!("{mag:b}"), if alt { "0b" } else { "" }),
+
+        Some('o') => (format!("{mag:o}"), if alt { "0o" } else { "" }),
+
+        Some('x') => (format!("{mag:x}"), if alt { "0x" } else { "" }),
+
+        Some('X') => (format!("{mag:X}"), if alt { "0X" } else { "" }),
+
+        Some('e') | Some('E') | Some('f') | Some('F') | Some('g') | Some('G') | Some('%') => {
+            return float_parts(n as f64, type_char, sign, precision, spec);
+        }
+
+        Some('c') => {
+            // 负数没有对应字符，不能用绝对值顶替
+            if negative {
+                return Err(ExecutorError::runtime_only(format!(
+                    "Invalid codepoint {n} in format specifier '{spec}'"
+                )));
+            }
+
+            return match u32::try_from(mag).ok().and_then(char::from_u32) {
+                Some(ch) => Ok((String::new(), ch.to_string(), false)),
+
+                None => Err(ExecutorError::runtime_only(format!(
+                    "Invalid codepoint {mag} in format specifier '{spec}'"
+                ))),
+            };
+        }
+
+        Some(t) => return Err(unknown_code_err(t, "int", spec)),
+    };
+
+    // Python: precision on integers = minimum digit count (zero-fill)
+    let digits = match precision {
+        Some(p) if digits.chars().count() < p => {
+            format!("{}{digits}", "0".repeat(p - digits.chars().count()))
+        }
+
+        _ => digits,
+    };
+
+    Ok((
+        format!("{}{prefix}", sign_char(negative, sign)),
+        digits,
+        true,
+    ))
+}
+
+/// Float body; returns (sign head, magnitude tail).
+fn float_parts(
+    f: f64,
+    type_char: Option<char>,
+    sign: char,
+    precision: Option<usize>,
+    spec: &str,
+) -> Result<(String, String, bool), ExecutorError> {
+    let negative = f.is_sign_negative() && !f.is_nan();
+
+    let mag = f.abs();
+
+    let head = sign_char(negative, sign).to_string();
+
+    let tail = match type_char {
+        // 'n'：locale 感知数字的本地化占位（当前 locale 中立，同缺省）
+        None | Some('n') => match precision {
+            // Python: precision without type = significant digits (g)
+            Some(p) => format_g(mag, p.max(1), false),
+
+            None => {
+                // 与 format_value_with_prefix 的 Float 展示一致：整数值带一位小数
+                if mag.is_finite() && mag.fract() == 0.0 {
+                    format!("{mag:.1}")
+                } else {
+                    format!("{mag}")
+                }
+            }
+        },
+
+        Some('f') => format_f(mag, precision.unwrap_or(6), false),
+
+        Some('F') => format_f(mag, precision.unwrap_or(6), true),
+
+        Some('e') => format_e(mag, precision.unwrap_or(6), false),
+
+        Some('E') => format_e(mag, precision.unwrap_or(6), true),
+
+        Some('g') => format_g(mag, precision.unwrap_or(6).max(1), false),
+
+        Some('G') => format_g(mag, precision.unwrap_or(6).max(1), true),
+
+        Some('%') => format_percent(mag, precision.unwrap_or(6)),
+
+        Some(t) => return Err(unknown_code_err(t, "float", spec)),
+    };
+
+    Ok((head, tail, true))
+}
+
+fn format_f(
+    mag: f64,
+    precision: usize,
+    upper: bool,
+) -> String {
+    if mag.is_infinite() {
+        return if upper { "INF" } else { "inf" }.to_string();
+    }
+
+    if mag.is_nan() {
+        return if upper { "NAN" } else { "nan" }.to_string();
+    }
+
+    format!("{mag:.precision$}")
+}
+
+/// Fixed precision, exponent normalized to Python style: `e+00` (min 2 digits)
+fn format_e(
+    mag: f64,
+    precision: usize,
+    upper: bool,
+) -> String {
+    if mag.is_infinite() {
+        return if upper { "INF" } else { "inf" }.to_string();
+    }
+
+    if mag.is_nan() {
+        return if upper { "NAN" } else { "nan" }.to_string();
+    }
+
+    let s = format!("{mag:.precision$e}");
+
+    let (mantissa, exp_str) = s.split_once('e').unwrap_or((s.as_str(), "0"));
+
+    let exp: i32 = exp_str.parse().unwrap_or(0);
+
+    let sep = if upper { 'E' } else { 'e' };
+
+    let sign = if exp < 0 { '-' } else { '+' };
+
+    format!("{mantissa}{sep}{sign}{:02}", exp.abs())
+}
+
+/// Python `g`: significant digits, e-style when exp < -4 or exp >= precision,
+/// trailing zeros stripped
+fn format_g(
+    mag: f64,
+    precision: usize,
+    upper: bool,
+) -> String {
+    if mag.is_infinite() {
+        return if upper { "INF" } else { "inf" }.to_string();
+    }
+
+    if mag.is_nan() {
+        return if upper { "NAN" } else { "nan" }.to_string();
+    }
+
+    if mag == 0.0 {
+        return "0".to_string();
+    }
+
+    let e = format!("{:.*e}", precision - 1, mag);
+
+    let (_, exp_str) = e.split_once('e').unwrap_or((e.as_str(), "0"));
+
+    let exp: i32 = exp_str.parse().unwrap_or(0);
+
+    if exp < -4 || exp >= precision as i32 {
+        let mantissa = format!("{:.*e}", precision - 1, mag);
+
+        let (mantissa, _) = mantissa.split_once('e').unwrap_or((mantissa.as_str(), "0"));
+
+        let sep = if upper { 'E' } else { 'e' };
+
+        let sign = if exp < 0 { '-' } else { '+' };
+
+        format!("{}{sep}{sign}{:02}", trim_numeric(mantissa), exp.abs())
+    } else {
+        let frac_digits = (precision as i32 - 1 - exp).max(0) as usize;
+
+        trim_numeric(&format!("{mag:.frac_digits$}"))
+    }
+}
+
+fn format_percent(
+    mag: f64,
+    precision: usize,
+) -> String {
+    if mag.is_infinite() {
+        return "inf%".to_string();
+    }
+
+    if mag.is_nan() {
+        return "nan%".to_string();
+    }
+
+    format!("{:.precision$}%", mag * 100.0)
+}
+
+/// Strip trailing zeros (and a trailing dot) from a fixed-notation number
+fn trim_numeric(s: &str) -> String {
+    if s.contains('.') {
+        let t = s.trim_end_matches('0');
+
+        let t = t.strip_suffix('.').unwrap_or(t);
+
+        t.to_string()
+    } else {
+        s.to_string()
     }
 }
 
@@ -570,6 +978,44 @@ pub(crate) fn native_parse_float(
         Err(e) => Ok(result_err(error_new(
             "E6011",
             &format!("parse_float: {}", e),
+            ctx,
+        ))),
+    }
+}
+
+// Native implementations: char_code / from_char_code
+
+/// Native implementation: char_code - 取第 i 个字符的码点（Unicode 标量值口径，
+/// 与 substring/chars 同域）。越界返回 -1（与 index_of 未命中同一惯例；
+/// 码点非负，-1 无歧义）。
+fn native_char_code(
+    args: &[RuntimeValue],
+    _ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let s = args.first().map(extract_string).unwrap_or_default();
+    let i = args.get(1).map(extract_int).unwrap_or(0);
+    let code = s
+        .chars()
+        .nth(i.max(0) as usize)
+        .map(|c| c as u32 as i64)
+        .unwrap_or(-1);
+    Ok(RuntimeValue::Int(code))
+}
+
+/// Native implementation: from_char_code - 码点转单字符字符串。
+/// 非法码点（负数 / 代理区 / > U+10FFFF）返回 E6012；校验用 `char::from_u32`，
+/// 与词法层 `\u{...}` 转义同一套判定。0x10000..=0x10FFFF 直接产出合法
+/// UTF-8（4 字节），UTF-16 代理对组合留给 yx 层。
+fn native_from_char_code(
+    args: &[RuntimeValue],
+    ctx: &mut NativeContext<'_>,
+) -> Result<RuntimeValue, ExecutorError> {
+    let n = args.first().map(extract_int).unwrap_or(0);
+    match u32::try_from(n).ok().and_then(char::from_u32) {
+        Some(c) => Ok(result_ok(RuntimeValue::String(c.to_string().into()))),
+        None => Ok(result_err(error_new(
+            "E6012",
+            &format!("from_char_code: invalid codepoint {}", n),
             ctx,
         ))),
     }

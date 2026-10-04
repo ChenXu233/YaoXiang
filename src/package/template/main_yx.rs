@@ -6,7 +6,7 @@ pub fn generate_main_yx(project_name: &str) -> String {
         r#"// {project_name} - YaoXiang 项目
 // 由 yaoxiang init 自动生成
 
-main = {{
+main = () => {{
     print("你好，{project_name}！")
 }}
 "#,

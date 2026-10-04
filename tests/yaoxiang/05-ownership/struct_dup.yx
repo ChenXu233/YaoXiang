@@ -1,0 +1,71 @@
+// 05-ownership/struct_dup.yx
+// 覆盖: RFC-009 §类型系统约束 Dup 表 struct 派生行 / SPEC type-system §11.2（#398）
+// 验证: 全可复制字段的 struct 自动派生 Dup——赋值 / 按值传参 / 返回后源值仍可用；
+//       派生是递归的（具名 struct 字段、&T 令牌字段、String 字段）；元组同规则
+// 状态: ✅ 可运行
+
+use std.assert
+
+Point: Type = { x: Int, y: Int }
+
+// 派生递归：字段是具名 struct（AST 转换落 TypeRef("Point")），随 Point 一起 Dup
+Segment: Type = { from: Point, to: Point }
+
+// String 是 Dup（引用计数句柄，复制句柄共享 buffer）→ 含 String 字段的 struct 同样派生
+Named: Type = { name: String, id: Int }
+
+// &T 是 Dup 令牌 → 含只读令牌字段的 struct 同样派生
+Window: Type = { view: &Point }
+
+sum_of: (p: Point) -> Int = p.x + p.y
+
+passthrough: (p: Point) -> Point = {
+    q = p
+    return q
+}
+
+main: () -> Void = {
+    // 1. 赋值派生：q = p 是复制，源仍可读（派生落地前此处报 E2014）
+    p = Point(1, 2)
+    q = p
+    assert.assert(p.x == 1, "struct assign is Dup: source still readable")
+    assert.assert(q.y == 2, "copied struct holds the value")
+
+    // 2. 按值传参：Dup 实参是复制，源仍可读
+    s = sum_of(p)
+    assert.assert(s == 3, "by-value param received the struct")
+    assert.assert(p.y == 2, "source alive after by-value param")
+
+    // 3. 返回路径：返回 Dup 值不消费局部
+    r = passthrough(p)
+    assert.assert(r.x == 1, "returned struct holds the value")
+    assert.assert(p.x == 1, "source alive after passing and returning")
+
+    // 4. 派生递归：具名 struct 字段（Point → Segment）
+    a = Point(1, 2)
+    b = Point(3, 4)
+    seg = Segment(a, b)
+    seg2 = seg
+    assert.assert(seg2.from.x == 1, "nested struct field copied")
+    assert.assert(seg.to.y == 4, "nested struct source alive")
+    assert.assert(a.y == 2, "nested struct argument not consumed")
+
+    // 5. String 字段（Dup）与 &T 令牌字段（Dup）同样参与派生
+    n = Named("hi", 7)
+    n2 = n
+    assert.assert(n2.name == "hi", "String field struct copied")
+    assert.assert(n.id == 7, "String field source alive")
+
+    w = Window(&p)
+    w2 = w
+    assert.assert(w2.view.x == 1, "token field struct copied")
+    assert.assert(w.view.y == 2, "token field source alive")
+
+    // 6. 元组同规则：全元素可复制 → Dup
+    t = (1, 2)
+    t2 = t
+    assert.assert(t2.0 == 1, "tuple of copyables copied")
+    assert.assert(t.1 == 2, "tuple source alive")
+}
+
+main()

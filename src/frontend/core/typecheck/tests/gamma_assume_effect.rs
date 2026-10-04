@@ -51,9 +51,23 @@ fn assert_fn_type() -> MonoType {
     }
 }
 
-#[test]
-fn test_assert_call_injects_predicate_into_gamma() {
-    // Arrange — scope 内注册 assert 和 x
+/// 装配 `assert`/`x` 作用域、求解器、assert 效应环境与空 Γ（Γ 用例的共同前置）。
+fn assert_infer_fixture() -> (
+    crate::frontend::core::typecheck::inference::scope::ScopeManager,
+    TypeConstraintSolver,
+    DependentTypeEnv,
+    FlowSensitiveGamma,
+) {
+    (
+        assert_scope(),
+        TypeConstraintSolver::default(),
+        assert_effect_dep_env(),
+        FlowSensitiveGamma::new(),
+    )
+}
+
+/// `assert` 与 `x` 已注册的作用域（`assert: (Bool) -> Void`、`x: Int(64)`）。
+fn assert_scope() -> crate::frontend::core::typecheck::inference::scope::ScopeManager {
     let mut scope = crate::frontend::core::typecheck::inference::scope::ScopeManager::new();
     scope.add_var(
         "assert".to_string(),
@@ -67,33 +81,63 @@ fn test_assert_call_injects_predicate_into_gamma() {
         false,
         Span::default(),
     );
+    scope
+}
 
-    let mut solver = TypeConstraintSolver::default();
-    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
-    let native_signatures: HashMap<String, MonoType> = HashMap::new();
-
+/// 注册 `GammaAssume { predicate_arg: 0 }` 效应的依赖类型环境。
+fn assert_effect_dep_env() -> DependentTypeEnv {
     let mut dep_env = DependentTypeEnv::new();
     dep_env.register_effect_spec(EffectSpec::new(
         "assert",
         vec![Effect::GammaAssume { predicate_arg: 0 }],
         true,
     ));
+    dep_env
+}
 
-    let mut gamma = FlowSensitiveGamma::new();
-    assert!(gamma.is_empty(), "Γ 初始应为空");
-
+/// 在 `scope`/`solver` 上推断 `assert(x > 0)`。
+///
+/// `dep_env`/`gamma` 为 `None` 时**不**挂对应环境（沿用「无 Γ」用例的既有形态）。
+fn infer_assert_call(
+    scope: &mut crate::frontend::core::typecheck::inference::scope::ScopeManager,
+    solver: &mut TypeConstraintSolver,
+    gamma: Option<&mut FlowSensitiveGamma>,
+    dep_env: Option<&DependentTypeEnv>,
+) -> crate::util::diagnostic::Result<MonoType> {
+    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
+    let native_signatures: HashMap<String, MonoType> = HashMap::new();
     let mut inferrer = ExpressionInferrer::with_native_signatures(
-        &mut scope,
-        &mut solver,
+        scope,
+        solver,
         &overload_candidates,
         &native_signatures,
     );
-    inferrer.set_dep_env(&dep_env);
-    inferrer.set_gamma(&mut gamma);
+    if let Some(dep_env) = dep_env {
+        inferrer.set_dep_env(dep_env);
+    }
+    if let Some(gamma) = gamma {
+        inferrer.set_gamma(gamma);
+    }
+    inferrer.infer_expr(&make_assert_call())
+}
+
+/// Γ 注入断言的目标谓词 `x > 0`。
+fn x_gt_zero() -> ConstExpr {
+    binop(
+        BinOp::Gt,
+        ConstExpr::NamedVar("x".to_string()),
+        ConstExpr::Lit(ConstValue::Int(0)),
+    )
+}
+
+#[test]
+fn test_assert_call_injects_predicate_into_gamma() {
+    // Arrange — scope 内注册 assert 和 x
+    let (mut scope, mut solver, dep_env, mut gamma) = assert_infer_fixture();
+    assert!(gamma.is_empty(), "Γ 初始应为空");
 
     // Act — 推断 assert(x > 0)
-    let call_expr = make_assert_call();
-    let result = inferrer.infer_expr(&call_expr);
+    let result = infer_assert_call(&mut scope, &mut solver, Some(&mut gamma), Some(&dep_env));
 
     // Assert — 调用应成功返回 Void
     assert!(
@@ -117,11 +161,7 @@ fn test_assert_call_injects_predicate_into_gamma() {
         "Γ 应恰好包含 1 条假设，实际: {:?}",
         current
     );
-    let expected = binop(
-        BinOp::Gt,
-        ConstExpr::NamedVar("x".to_string()),
-        ConstExpr::Lit(ConstValue::Int(0)),
-    );
+    let expected = x_gt_zero();
     assert!(
         current.contains(&expected),
         "Γ 应包含完整谓词 (x > 0)，实际: {:?}",
@@ -133,35 +173,10 @@ fn test_assert_call_injects_predicate_into_gamma() {
 #[test]
 fn test_assert_call_without_gamma_does_not_inject() {
     // Arrange — scope 注册 assert 与 x，但不设置 dep_env / gamma
-    let mut scope = crate::frontend::core::typecheck::inference::scope::ScopeManager::new();
-    scope.add_var(
-        "assert".to_string(),
-        PolyType::mono(assert_fn_type()),
-        false,
-        Span::default(),
-    );
-    scope.add_var(
-        "x".to_string(),
-        PolyType::mono(MonoType::Int(64)),
-        false,
-        Span::default(),
-    );
-
-    let mut solver = TypeConstraintSolver::default();
-    let overload_candidates: HashMap<String, Vec<overload::OverloadCandidate>> = HashMap::new();
-    let native_signatures: HashMap<String, MonoType> = HashMap::new();
-
-    let mut inferrer = ExpressionInferrer::with_native_signatures(
-        &mut scope,
-        &mut solver,
-        &overload_candidates,
-        &native_signatures,
-    );
-    // 不设置 dep_env / gamma
+    let (mut scope, mut solver, _, _) = assert_infer_fixture();
 
     // Act — 推断 assert(x > 0)
-    let call_expr = make_assert_call();
-    let result = inferrer.infer_expr(&call_expr);
+    let result = infer_assert_call(&mut scope, &mut solver, None, None);
 
     // Assert — 无 Γ 时调用仍应成功返回（不崩溃即合规）
     assert!(

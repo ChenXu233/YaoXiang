@@ -1,413 +1,315 @@
-//! 语义化版本解析器
+//! 语义化版本解析入口（RFC-014 Phase 3：`semver` crate 替换手写解析器）
 //!
-//! 支持以下版本要求格式:
-//! - `^1.0.0` — 兼容版本 (>=1.0.0, <2.0.0)
-//! - `~1.0.0` — 补丁版本 (>=1.0.0, <1.1.0)
-//! - `1.0.0`  — 精确版本
-//! - `*`      — 任意版本
-//! - `>=1.0.0` — 大于等于
-//! - `>1.0.0`  — 大于
-//! - `<=1.0.0` — 小于等于
-//! - `<1.0.0`  — 小于
+//! 类型直接复用 [`semver::Version`] / [`semver::VersionReq`]；本模块只保留
+//! 三类自有逻辑：
+//! - 入口宽容化：manifest/tag 中的两段（`1.2`）与单段（`1`）版本补齐为三段
+//! - 裸版本语义：`"1.2.3"` 作为**精确**要求（`=1.2.3`），不采用 Cargo 的
+//!   caret 默认——这是 `add <pkg> <ver>` 文档化行为
+//! - 兼容性判定：`is_compatible` 用区间交集替代旧实现的 10 万次枚举
+//!   （旧实现对 `>=100.0.0` 一侧必然误判冲突）
+//!
+//! 支持的要求格式（经 [`semver::VersionReq`]）：
+//! - `*`、`1.*`、`1.2.*` — 通配
+//! - `^1.2.3` / `~1.2.3` — caret / tilde
+//! - `>=1.0.0` `>1.0.0` `<=1.0.0` `<1.0.0` `=1.0.0` — 比较器
+//! - 逗号分隔的组合（如 `>=1.2.3, <2.0.0`）
 
-use std::cmp::Ordering;
-use std::fmt;
+use semver::{Comparator, Op, Version, VersionReq};
 
 use crate::package::error::{PackageError, PackageResult};
 
-/// 语义化版本号
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SemVer {
-    /// 主版本号
-    pub major: u64,
-    /// 次版本号
-    pub minor: u64,
-    /// 补丁版本号
-    pub patch: u64,
-    /// 预发布标签 (如 alpha, beta, rc.1)
-    pub pre: Option<String>,
-}
-
-impl SemVer {
-    /// 创建新的版本号
-    pub fn new(
-        major: u64,
-        minor: u64,
-        patch: u64,
-    ) -> Self {
-        SemVer {
-            major,
-            minor,
-            patch,
-            pre: None,
-        }
-    }
-
-    /// 创建带预发布标签的版本号
-    pub fn with_pre(
-        major: u64,
-        minor: u64,
-        patch: u64,
-        pre: &str,
-    ) -> Self {
-        SemVer {
-            major,
-            minor,
-            patch,
-            pre: Some(pre.to_string()),
-        }
-    }
-
-    /// 解析版本字符串
-    ///
-    /// 支持格式: `1.2.3`, `1.2.3-alpha`, `1.2`, `1`
-    pub fn parse(s: &str) -> PackageResult<Self> {
-        let s = s.trim();
-
-        // 分离预发布标签
-        let (version_part, pre) = if let Some(idx) = s.find('-') {
-            (&s[..idx], Some(s[idx + 1..].to_string()))
-        } else {
-            (s, None)
-        };
-
-        let parts: Vec<&str> = version_part.split('.').collect();
-        if parts.is_empty() || parts.len() > 3 {
-            return Err(PackageError::InvalidManifest(format!(
-                "无效的版本号: '{}'",
-                s
-            )));
-        }
-
-        let major = parts[0].parse::<u64>().map_err(|_| {
-            PackageError::InvalidManifest(format!("无效的主版本号: '{}'", parts[0]))
-        })?;
-
-        let minor = if parts.len() > 1 {
-            parts[1].parse::<u64>().map_err(|_| {
-                PackageError::InvalidManifest(format!("无效的次版本号: '{}'", parts[1]))
-            })?
-        } else {
-            0
-        };
-
-        let patch = if parts.len() > 2 {
-            parts[2].parse::<u64>().map_err(|_| {
-                PackageError::InvalidManifest(format!("无效的补丁版本号: '{}'", parts[2]))
-            })?
-        } else {
-            0
-        };
-
-        Ok(SemVer {
-            major,
-            minor,
-            patch,
-            pre,
-        })
-    }
-}
-
-impl Ord for SemVer {
-    fn cmp(
-        &self,
-        other: &Self,
-    ) -> Ordering {
-        match self.major.cmp(&other.major) {
-            Ordering::Equal => {}
-            ord => return ord,
-        }
-        match self.minor.cmp(&other.minor) {
-            Ordering::Equal => {}
-            ord => return ord,
-        }
-        match self.patch.cmp(&other.patch) {
-            Ordering::Equal => {}
-            ord => return ord,
-        }
-        // 预发布版本比正式版本低
-        match (&self.pre, &other.pre) {
-            (None, None) => Ordering::Equal,
-            (None, Some(_)) => Ordering::Greater,
-            (Some(_), None) => Ordering::Less,
-            (Some(a), Some(b)) => a.cmp(b),
-        }
-    }
-}
-
-impl PartialOrd for SemVer {
-    fn partial_cmp(
-        &self,
-        other: &Self,
-    ) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl fmt::Display for SemVer {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-    ) -> fmt::Result {
-        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)?;
-        if let Some(ref pre) = self.pre {
-            write!(f, "-{}", pre)?;
-        }
-        Ok(())
-    }
-}
-
-/// 版本比较运算符
-#[derive(Debug, Clone, PartialEq)]
-enum VersionOp {
-    /// 精确匹配
-    Exact,
-    /// 大于等于
-    Gte,
-    /// 大于
-    Gt,
-    /// 小于等于
-    Lte,
-    /// 小于
-    Lt,
-}
-
-/// 单个版本约束
-#[derive(Debug, Clone)]
-struct VersionConstraint {
-    op: VersionOp,
-    version: SemVer,
-}
-
-impl VersionConstraint {
-    fn matches(
-        &self,
-        version: &SemVer,
-    ) -> bool {
-        match self.op {
-            VersionOp::Exact => version == &self.version,
-            VersionOp::Gte => version >= &self.version,
-            VersionOp::Gt => version > &self.version,
-            VersionOp::Lte => version <= &self.version,
-            VersionOp::Lt => version < &self.version,
-        }
-    }
-}
-
-/// 版本要求
+/// 解析单个版本号（tag / lock 中的 `version` 字段等）
 ///
-/// 表示一组版本约束的组合，所有约束必须同时满足。
+/// 宽容化：`1.2` → `1.2.0`，`1` → `1.0.0`（预发布/构建段原样保留）。
+pub fn parse_version(s: &str) -> PackageResult<Version> {
+    let s = s.trim();
+    Version::parse(&pad_version(s)?)
+        .map_err(|e| PackageError::InvalidManifest(format!("无效的版本号 '{}': {}", s, e)))
+}
+
+/// 解析版本要求字符串
+///
+/// 裸版本（`1.2.3`、`1.2`）按精确匹配处理；其余格式透传给
+/// [`semver::VersionReq`]（caret/tilde/比较器/通配/组合）。
+pub fn parse_version_req(s: &str) -> PackageResult<VersionReq> {
+    let s = s.trim();
+
+    if s == "*" || s.is_empty() {
+        return VersionReq::parse("*").map_err(req_error(s));
+    }
+
+    // 裸版本（数字开头、无通配与组合符）→ 精确匹配，保留 `add` 的既有语义
+    let first = s.chars().next().unwrap_or('*');
+    if first.is_ascii_digit() && !s.contains('*') && !s.contains(',') {
+        let padded = pad_version(s)?;
+        return VersionReq::parse(&format!("={}", padded)).map_err(req_error(s));
+    }
+
+    VersionReq::parse(s).map_err(req_error(s))
+}
+
+fn req_error(input: &str) -> impl Fn(semver::Error) -> PackageError + '_ {
+    move |e| PackageError::InvalidManifest(format!("无效的版本要求 '{}': {}", input, e))
+}
+
+/// 把不足三段的数字版本补齐为三段（预发布/构建段原样保留）
+fn pad_version(s: &str) -> PackageResult<String> {
+    // 预发布段从第一个 '-' 起（预发布标识内部的 '-' 不影响主段切分）；
+    // 构建元数据从 '+' 起
+    let core_end = s.find(['-', '+']).unwrap_or(s.len());
+    let (core, suffix) = s.split_at(core_end);
+
+    let core_len = core.split('.').count();
+    if core_len > 3 || core.is_empty() {
+        return Ok(s.to_string()); // 交由 semver crate 报错
+    }
+    let missing = 3usize.saturating_sub(core_len);
+    let pad = ".0".repeat(missing);
+    Ok(format!("{}{}{}", core, pad, suffix))
+}
+
+/// 从候选版本中选出满足要求的最高版本
+pub fn select_best<'a>(
+    req: &VersionReq,
+    versions: &'a [Version],
+) -> Option<&'a Version> {
+    let mut candidates: Vec<&Version> = versions.iter().filter(|v| req.matches(v)).collect();
+    candidates.sort_by(|a, b| b.cmp(a));
+    candidates.into_iter().next()
+}
+
+/// 从 git 标签列表中选出满足版本要求的最佳标签（Git/GitHub 来源共用）
+///
+/// 标签允许 `v` 前缀（`v1.2.0` ≡ `1.2.0`）；无匹配返回 None（不报错）。
+pub fn select_best_tag(
+    tags: &[String],
+    version_req: &str,
+) -> PackageResult<Option<String>> {
+    let req = parse_version_req(version_req)?;
+
+    let mut matching: Vec<(String, Version)> = Vec::new();
+    for tag in tags {
+        let version_str = tag.strip_prefix('v').unwrap_or(tag);
+        if let Ok(version) = parse_version(version_str) {
+            if req.matches(&version) {
+                matching.push((tag.clone(), version));
+            }
+        }
+    }
+
+    matching.sort_by(|a, b| b.1.cmp(&a.1));
+    Ok(matching.into_iter().next().map(|(tag, _)| tag))
+}
+
+/// 两个版本要求是否兼容（存在同时满足两者的版本）
+///
+/// 将每个要求折算为半开区间后取交集。预发布版本存在 crate 级匹配限制
+/// （无预发布段的比较器不匹配预发布版本），此处按纯数值序判定，对预发布
+/// 边界可能给出宽松结论——冲突检测是建议性的，可接受。
+pub fn is_compatible(
+    a: &VersionReq,
+    b: &VersionReq,
+) -> bool {
+    intersect(&req_interval(a), &req_interval(b)).is_some()
+}
+
+/// 求一组版本要求的交集；空集返回 None（供工作空间合并解析使用，RFC-014c）。
+///
+/// 返回值是**合成要求**：`>=lo, <hi`（闭区间点则 `=lo`），与输入的书写形式
+/// （caret/tilde）无关——合并只关心数域。
+pub fn intersect_reqs(reqs: &[VersionReq]) -> Option<VersionReq> {
+    if reqs.is_empty() {
+        return VersionReq::parse("*").ok();
+    }
+    let mut acc = req_interval(&reqs[0]);
+    for req in &reqs[1..] {
+        acc = intersect(&acc, &req_interval(req))?;
+    }
+    interval_to_req(&acc)
+}
+
+/// 区间 → 等价要求串（供 intersect_reqs）
+fn interval_to_req(interval: &Interval) -> Option<VersionReq> {
+    let comparator = |op: Op, v: &Version| Comparator {
+        op,
+        major: v.major,
+        minor: Some(v.minor),
+        patch: Some(v.patch),
+        pre: semver::Prerelease::EMPTY,
+    };
+    let mut comparators = Vec::new();
+    match (&interval.lo, &interval.hi) {
+        (Some((lv, true)), Some((hv, true))) if lv == hv => {
+            comparators.push(comparator(Op::Exact, lv));
+        }
+        (lo, hi) => {
+            if let Some((lv, _)) = lo {
+                comparators.push(comparator(Op::GreaterEq, lv));
+            }
+            if let Some((hv, _)) = hi {
+                comparators.push(comparator(Op::Less, hv));
+            }
+        }
+    }
+    if comparators.is_empty() {
+        return VersionReq::parse("*").ok();
+    }
+    Some(VersionReq { comparators })
+}
+
+/// 闭/开边界标注的版本区间
 #[derive(Debug, Clone)]
-pub struct VersionReq {
-    constraints: Vec<VersionConstraint>,
-    /// 是否匹配任意版本
-    any: bool,
+struct Interval {
+    lo: Option<(Version, bool)>,
+    hi: Option<(Version, bool)>,
 }
 
-impl VersionReq {
-    /// 解析版本要求字符串
-    ///
-    /// # 支持的格式
-    /// - `*` → 任意版本
-    /// - `1.0.0` → 精确版本
-    /// - `^1.0.0` → 兼容版本 (>=1.0.0, <2.0.0)
-    /// - `~1.0.0` → 补丁版本 (>=1.0.0, <1.1.0)
-    /// - `>=1.0.0` → 大于等于
-    /// - `>1.0.0` → 大于
-    /// - `<=1.0.0` → 小于等于
-    /// - `<1.0.0` → 小于
-    pub fn parse(s: &str) -> PackageResult<Self> {
-        let s = s.trim();
+const INCLUSIVE: bool = true;
+const EXCLUSIVE: bool = false;
 
-        if s == "*" || s.is_empty() {
-            return Ok(VersionReq {
-                constraints: Vec::new(),
-                any: true,
-            });
-        }
+const FULL_RANGE: Interval = Interval { lo: None, hi: None };
 
-        // 处理逗号分隔的多个约束
-        if s.contains(',') {
-            let mut constraints = Vec::new();
-            for part in s.split(',') {
-                let part_req = Self::parse_single(part.trim())?;
-                constraints.extend(part_req.constraints);
-            }
-            return Ok(VersionReq {
-                constraints,
-                any: false,
-            });
-        }
-
-        Self::parse_single(s)
+/// 把一个版本要求折算为区间（各比较器区间的交）
+fn req_interval(req: &VersionReq) -> Interval {
+    if req.comparators.is_empty() {
+        return FULL_RANGE; // `*`
     }
 
-    fn parse_single(s: &str) -> PackageResult<Self> {
-        let s = s.trim();
-
-        if let Some(stripped) = s.strip_prefix('^') {
-            // 兼容版本: ^1.2.3 → >=1.2.3, <2.0.0
-            let version = SemVer::parse(stripped)?;
-            let upper = if version.major > 0 {
-                SemVer::new(version.major + 1, 0, 0)
-            } else if version.minor > 0 {
-                SemVer::new(0, version.minor + 1, 0)
-            } else {
-                SemVer::new(0, 0, version.patch + 1)
+    let mut acc = FULL_RANGE;
+    for cmp in &req.comparators {
+        let Some(next) = intersect(&acc, &comparator_interval(cmp)) else {
+            return Interval {
+                lo: Some((Version::new(1, 0, 0), INCLUSIVE)),
+                hi: Some((Version::new(0, 0, 0), INCLUSIVE)), // 恒空区间
             };
-
-            Ok(VersionReq {
-                constraints: vec![
-                    VersionConstraint {
-                        op: VersionOp::Gte,
-                        version,
-                    },
-                    VersionConstraint {
-                        op: VersionOp::Lt,
-                        version: upper,
-                    },
-                ],
-                any: false,
-            })
-        } else if let Some(stripped) = s.strip_prefix('~') {
-            // 补丁版本: ~1.2.3 → >=1.2.3, <1.3.0
-            let version = SemVer::parse(stripped)?;
-            let upper = SemVer::new(version.major, version.minor + 1, 0);
-
-            Ok(VersionReq {
-                constraints: vec![
-                    VersionConstraint {
-                        op: VersionOp::Gte,
-                        version,
-                    },
-                    VersionConstraint {
-                        op: VersionOp::Lt,
-                        version: upper,
-                    },
-                ],
-                any: false,
-            })
-        } else if let Some(stripped) = s.strip_prefix(">=") {
-            let version = SemVer::parse(stripped)?;
-            Ok(VersionReq {
-                constraints: vec![VersionConstraint {
-                    op: VersionOp::Gte,
-                    version,
-                }],
-                any: false,
-            })
-        } else if let Some(stripped) = s.strip_prefix('>') {
-            let version = SemVer::parse(stripped)?;
-            Ok(VersionReq {
-                constraints: vec![VersionConstraint {
-                    op: VersionOp::Gt,
-                    version,
-                }],
-                any: false,
-            })
-        } else if let Some(stripped) = s.strip_prefix("<=") {
-            let version = SemVer::parse(stripped)?;
-            Ok(VersionReq {
-                constraints: vec![VersionConstraint {
-                    op: VersionOp::Lte,
-                    version,
-                }],
-                any: false,
-            })
-        } else if let Some(stripped) = s.strip_prefix('<') {
-            let version = SemVer::parse(stripped)?;
-            Ok(VersionReq {
-                constraints: vec![VersionConstraint {
-                    op: VersionOp::Lt,
-                    version,
-                }],
-                any: false,
-            })
-        } else {
-            // 精确版本
-            let version = SemVer::parse(s)?;
-            Ok(VersionReq {
-                constraints: vec![VersionConstraint {
-                    op: VersionOp::Exact,
-                    version,
-                }],
-                any: false,
-            })
-        }
+        };
+        acc = next;
     }
+    acc
+}
 
-    /// 检查版本是否满足要求
-    pub fn matches(
-        &self,
-        version: &SemVer,
-    ) -> bool {
-        if self.any {
-            return true;
-        }
-        self.constraints.iter().all(|c| c.matches(version))
-    }
+/// 单个比较器 → 区间
+fn comparator_interval(cmp: &Comparator) -> Interval {
+    let version = |minor: Option<u64>, patch: Option<u64>| {
+        Version::new(cmp.major, minor.unwrap_or(0), patch.unwrap_or(0))
+    };
 
-    /// 从候选版本列表中选择最佳匹配
-    ///
-    /// 返回满足要求的最高版本。
-    pub fn select_best<'a>(
-        &self,
-        versions: &'a [SemVer],
-    ) -> Option<&'a SemVer> {
-        let mut candidates: Vec<&SemVer> = versions.iter().filter(|v| self.matches(v)).collect();
-        candidates.sort_by(|a, b| b.cmp(a));
-        candidates.into_iter().next()
-    }
-
-    /// 检查两个版本要求是否兼容（是否存在共同满足的版本范围）
-    pub fn is_compatible(
-        &self,
-        other: &VersionReq,
-    ) -> bool {
-        if self.any || other.any {
-            return true;
-        }
-
-        // 简单的兼容性检查：尝试一些常见版本
-        // 更完整的实现需要区间交集分析
-        for major in 0..100 {
-            for minor in 0..50 {
-                for patch in 0..20 {
-                    let v = SemVer::new(major, minor, patch);
-                    if self.matches(&v) && other.matches(&v) {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
+    match cmp.op {
+        Op::Exact => Interval {
+            lo: Some((
+                Version::new(cmp.major, cmp.minor.unwrap_or(0), cmp.patch.unwrap_or(0)),
+                INCLUSIVE,
+            )),
+            hi: Some((
+                Version::new(cmp.major, cmp.minor.unwrap_or(0), cmp.patch.unwrap_or(0)),
+                INCLUSIVE,
+            )),
+        },
+        Op::Greater => Interval {
+            lo: Some((version(cmp.minor, cmp.patch), EXCLUSIVE)),
+            hi: None,
+        },
+        Op::GreaterEq => Interval {
+            lo: Some((version(cmp.minor, cmp.patch), INCLUSIVE)),
+            hi: None,
+        },
+        Op::Less => Interval {
+            lo: None,
+            hi: Some((version(cmp.minor, cmp.patch), EXCLUSIVE)),
+        },
+        Op::LessEq => Interval {
+            lo: None,
+            hi: Some((version(cmp.minor, cmp.patch), INCLUSIVE)),
+        },
+        Op::Tilde => Interval {
+            lo: Some((version(cmp.minor, cmp.patch), INCLUSIVE)),
+            hi: Some((tilde_upper(cmp), EXCLUSIVE)),
+        },
+        Op::Caret => Interval {
+            lo: Some((version(cmp.minor, cmp.patch), INCLUSIVE)),
+            hi: Some((caret_upper(cmp), EXCLUSIVE)),
+        },
+        Op::Wildcard => Interval {
+            lo: Some((version(cmp.minor, cmp.patch), INCLUSIVE)),
+            hi: Some((
+                match cmp.minor {
+                    None => Version::new(cmp.major + 1, 0, 0),
+                    Some(minor) => Version::new(cmp.major, minor + 1, 0),
+                },
+                EXCLUSIVE,
+            )),
+        },
+        _ => FULL_RANGE, // 未识别的比较器按全区间宽松处理
     }
 }
 
-impl fmt::Display for VersionReq {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-    ) -> fmt::Result {
-        if self.any {
-            return write!(f, "*");
+/// `~x.y.z` 的排他上界：`~1.2` → `1.3.0`，`~1` → `2.0.0`
+fn tilde_upper(cmp: &Comparator) -> Version {
+    match cmp.minor {
+        None => Version::new(cmp.major + 1, 0, 0),
+        Some(minor) => Version::new(cmp.major, minor + 1, 0),
+    }
+}
+
+/// `^x.y.z` 的排他上界：major>0 进主版本，major=0 进次版本，major=minor=0 进补丁
+fn caret_upper(cmp: &Comparator) -> Version {
+    match cmp.minor {
+        None => Version::new(cmp.major + 1, 0, 0), // ^1 → <2.0.0
+        Some(minor) => match (cmp.major, minor, cmp.patch) {
+            (0, 0, Some(patch)) => Version::new(0, 0, patch + 1), // ^0.0.3 → <0.0.4
+            (0, 0, None) => Version::new(0, 1, 0),                // ^0.0 → <0.1.0
+            (0, m, _) => Version::new(0, m + 1, 0),               // ^0.2.3 → <0.3.0
+            (major, _, _) => Version::new(major + 1, 0, 0),       // ^1.2.3 → <2.0.0
+        },
+    }
+}
+
+/// 区间交集；空则返回 None
+fn intersect(
+    a: &Interval,
+    b: &Interval,
+) -> Option<Interval> {
+    let lo = max_bound(&a.lo, &b.lo);
+    let hi = min_bound(&a.hi, &b.hi);
+
+    if let (Some((lv, li)), Some((hv, hi_inc))) = (&lo, &hi) {
+        match lv.cmp(hv) {
+            std::cmp::Ordering::Less => {}
+            std::cmp::Ordering::Equal if *li && *hi_inc => {}
+            // lo > hi，或 lo == hi 但任一端排他 → 空区间
+            _ => return None,
         }
+    }
 
-        let parts: Vec<String> = self
-            .constraints
-            .iter()
-            .map(|c| {
-                let op = match c.op {
-                    VersionOp::Exact => "=",
-                    VersionOp::Gte => ">=",
-                    VersionOp::Gt => ">",
-                    VersionOp::Lte => "<=",
-                    VersionOp::Lt => "<",
-                };
-                format!("{}{}", op, c.version)
-            })
-            .collect();
+    Some(Interval { lo, hi })
+}
 
-        write!(f, "{}", parts.join(", "))
+/// 取更严格（更大）的下界；相等时排他端优先
+fn max_bound(
+    a: &Option<(Version, bool)>,
+    b: &Option<(Version, bool)>,
+) -> Option<(Version, bool)> {
+    match (a, b) {
+        (None, other) | (other, None) => other.clone(),
+        (Some((va, ia)), Some((vb, ib))) => match va.cmp(vb) {
+            std::cmp::Ordering::Greater => Some((va.clone(), *ia)),
+            std::cmp::Ordering::Less => Some((vb.clone(), *ib)),
+            std::cmp::Ordering::Equal => Some((va.clone(), *ia && *ib)),
+        },
+    }
+}
+
+/// 取更严格（更小）的上界；相等时排他端优先
+fn min_bound(
+    a: &Option<(Version, bool)>,
+    b: &Option<(Version, bool)>,
+) -> Option<(Version, bool)> {
+    match (a, b) {
+        (None, other) | (other, None) => other.clone(),
+        (Some((va, ia)), Some((vb, ib))) => match va.cmp(vb) {
+            std::cmp::Ordering::Less => Some((va.clone(), *ia)),
+            std::cmp::Ordering::Greater => Some((vb.clone(), *ib)),
+            std::cmp::Ordering::Equal => Some((va.clone(), *ia && *ib)),
+        },
     }
 }

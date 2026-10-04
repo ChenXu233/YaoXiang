@@ -19,6 +19,10 @@ use super::call_ownership::{CallOwnership, CallOwnershipTable, ParamOwnership};
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
     std::sync::LazyLock::new(HashMap::new);
 
+/// #387：native arity 区间表空缺省
+static EMPTY_ARITY: std::sync::LazyLock<HashMap<String, (usize, Option<usize>)>> =
+    std::sync::LazyLock::new(HashMap::new);
+
 /// RFC-009 读视图：剥离借用层，算术/比较按 inner 类型判定（读穿透）
 pub(super) fn read_view(ty: &MonoType) -> MonoType {
     let mut cur = ty;
@@ -63,6 +67,9 @@ pub struct ExpressionInferrer<'a> {
     overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Native 函数签名引用
     native_signatures: &'a HashMap<String, MonoType>,
+    /// 模块别名集合（#396）：Some 时，模块别名 Struct 上取成员失败报
+    /// E1043（模块语义）而非 E1042（struct 语义）。测试等直构场景为 None。
+    module_aliases: Option<&'a std::collections::HashSet<String>>,
     /// 当前函数的 Result 错误类型（若为 None，则不允许使用 `?`）
     result_err: Option<MonoType>,
     /// 当前函数的预期返回类型（用于 return 语句的类型检查）
@@ -123,6 +130,11 @@ pub struct ExpressionInferrer<'a> {
     imported_used: HashSet<String>,
     /// #335 G3 类型信息流接口：调用点所有权解析表（按调用 span 键控）
     pub call_ownership: CallOwnershipTable,
+    /// #387：native arity 区间表（随签名表同源注入，缺省空表=无区间）
+    native_arity: &'a HashMap<String, (usize, Option<usize>)>,
+    /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
+    /// generate_match_expr_ir 按 span 回查，替代对复合 scrutinee 的 AST 猜测
+    pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -138,6 +150,7 @@ impl<'a> ExpressionInferrer<'a> {
             loop_depth: 0,
             overload_candidates,
             native_signatures: &EMPTY_SIGNATURES,
+            module_aliases: None,
             result_err: None,
             expected_return_type: None,
             unsafe_depth: 0,
@@ -160,6 +173,8 @@ impl<'a> ExpressionInferrer<'a> {
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
+            native_arity: &EMPTY_ARITY,
+            match_scrutinee_types: HashMap::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -180,6 +195,7 @@ impl<'a> ExpressionInferrer<'a> {
             loop_depth: 0,
             overload_candidates,
             native_signatures,
+            module_aliases: None,
             result_err: None,
             expected_return_type: None,
             unsafe_depth: 0,
@@ -202,6 +218,8 @@ impl<'a> ExpressionInferrer<'a> {
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
+            native_arity: &EMPTY_ARITY,
+            match_scrutinee_types: HashMap::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -223,6 +241,7 @@ impl<'a> ExpressionInferrer<'a> {
             loop_depth: 0,
             overload_candidates,
             native_signatures,
+            module_aliases: None,
             result_err,
             expected_return_type: None,
             unsafe_depth: 0,
@@ -245,6 +264,8 @@ impl<'a> ExpressionInferrer<'a> {
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
+            native_arity: &EMPTY_ARITY,
+            match_scrutinee_types: HashMap::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -268,6 +289,7 @@ impl<'a> ExpressionInferrer<'a> {
             loop_depth: 0,
             overload_candidates,
             native_signatures,
+            module_aliases: None,
             result_err,
             expected_return_type,
             unsafe_depth: 0,
@@ -290,6 +312,8 @@ impl<'a> ExpressionInferrer<'a> {
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
+            native_arity: &EMPTY_ARITY,
+            match_scrutinee_types: HashMap::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -314,6 +338,15 @@ impl<'a> ExpressionInferrer<'a> {
     /// #321 W1003：取走已使用名集合（委托方回收合并）
     pub fn take_import_used(&mut self) -> HashSet<String> {
         std::mem::take(&mut self.imported_used)
+    }
+
+    /// 注入模块别名集合（#396）：FieldAccess 在模块别名上取成员失败时按
+    /// 模块语义报 E1043，而非 struct 语义的 E1042。
+    pub fn set_module_aliases(
+        &mut self,
+        aliases: &'a std::collections::HashSet<String>,
+    ) {
+        self.module_aliases = Some(aliases);
     }
 
     /// #321 W1003：变量成功解析时调用——命中监视集的名字记为已使用
@@ -393,6 +426,14 @@ impl<'a> ExpressionInferrer<'a> {
         defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     ) {
         self.generic_type_defs = defs;
+    }
+
+    /// 设置 native arity 区间表（#387）
+    pub fn set_native_arities(
+        &mut self,
+        arities: &'a HashMap<String, (usize, Option<usize>)>,
+    ) {
+        self.native_arity = arities;
     }
 
     /// RFC-011 §5.2：当前函数的约束形参（定义体延迟派发）
@@ -846,6 +887,7 @@ impl<'a> ExpressionInferrer<'a> {
         &mut self,
         scrutinee: &crate::frontend::core::parser::ast::Expr,
         arms: &[crate::frontend::core::parser::ast::MatchArm],
+        match_span: crate::util::span::Span,
     ) -> Result<MonoType> {
         use crate::frontend::core::parser::ast::Pattern;
         let scrutinee_ty = self.infer_expr(scrutinee)?;
@@ -855,6 +897,13 @@ impl<'a> ExpressionInferrer<'a> {
             resolved = *inner;
         }
         let resolved = self.solver.resolve_type(&resolved);
+
+        // #389：scrutinee 推断类型按 match 节点 span 落表——IR 生成期
+        // generate_match_expr_ir 的 AST 猜测器（get_expr_mono_type）对
+        // 调用/内联构造/字段访问形态返回 None，Union 模式解析随之失败
+        // 被 #330 安全网误拦（E3008）；checker 的推断结果是唯一权威。
+        self.match_scrutinee_types
+            .insert(match_span, resolved.clone());
 
         // 和类型判定（Generic 形态 / scope 镜像 Struct 形态）
         let sum_name: Option<String> = match &resolved {
@@ -3113,6 +3162,25 @@ impl<'a> ExpressionInferrer<'a> {
                         if let Some(method_ty) = self.method_bindings.get(&method_key) {
                             return Ok(method_ty.clone());
                         }
+                        // #396/#289：模块别名上取成员失败——模块不是 struct，
+                        // 报 E1043（模块语义 + 可用导出清单），不得借道 E1042。
+                        if self
+                            .module_aliases
+                            .is_some_and(|aliases| aliases.contains(&struct_type.name))
+                        {
+                            let available = struct_type
+                                .fields
+                                .iter()
+                                .map(|(name, _)| name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            return Err(ErrorCodeDefinition::module_has_no_export(
+                                &struct_type.name,
+                                field,
+                                &available,
+                            )
+                            .build());
+                        }
                         Err(ErrorCodeDefinition::field_not_found(field, &struct_type.name).build())
                     }
                     MonoType::TypeRef(ref type_name) => {
@@ -3286,6 +3354,19 @@ impl<'a> ExpressionInferrer<'a> {
 
             // Block 表达式
             crate::frontend::core::parser::ast::Expr::Block(block) => {
+                // #394：空块 `{}` 落入容器期望位——B 方案定案 `{}` = 空块（值
+                // Void），空字典钦定写法是 `dict.new()`（SPEC syntax §1.6.4）。
+                // 期望类型可得不匹配时直接给出引导，不让用户在
+                // E1002 "found void" 上空转（期望非容器时不干预）。
+                if block.stmts.is_empty() {
+                    if let Some(expected) = &self.current_expected {
+                        if Self::is_container_family(&self.solver.resolve_type(expected)) {
+                            return Err(ErrorCodeDefinition::empty_block_as_container()
+                                .at(block.span)
+                                .build());
+                        }
+                    }
+                }
                 self.infer_block(block, true, None)
             }
 
@@ -3393,8 +3474,8 @@ impl<'a> ExpressionInferrer<'a> {
             } => self.infer_lambda(params, body, None),
 
             // Match 表达式
-            crate::frontend::core::parser::ast::Expr::Match { expr, arms, .. } => {
-                self.check_match_expr(expr, arms)
+            crate::frontend::core::parser::ast::Expr::Match { expr, arms, span } => {
+                self.check_match_expr(expr, arms, *span)
             }
 
             // Try 表达式: expr?（RFC-011b 阶段 2 定案：接口驱动，不硬绑 Result）
@@ -3453,42 +3534,51 @@ impl<'a> ExpressionInferrer<'a> {
             }
 
             // ListComp 表达式
+            // #401：按生成器子句顺序绑定——第 i 个子句的 iterable/condition
+            // 可引用先前子句的迭代变量；过滤条件强制 Bool（同 if 推断）
             crate::frontend::core::parser::ast::Expr::ListComp {
                 element,
-                var,
-                iterable,
-                condition,
+                generators,
                 ..
             } => {
-                let iter_ty = self.infer_expr(iterable)?;
-                // 循环变量类型从可迭代对象取（此前硬编码 Char，靠
-                // 算术 fresh-var 兜底蒙混；硬化后按 check_for_stmt 同款分发）
-                let loop_var_ty = match &iter_ty {
-                    m if m.is_list() || m.is_vec() || m.is_array() => {
-                        m.generic_args().unwrap()[0].clone()
-                    }
-                    m if m.is_string() => MonoType::Char,
-                    m if m.is_dict() => {
-                        let args = m.generic_args().unwrap();
-                        MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
-                    }
-                    _ => self.solver.resolve_type(&iter_ty),
-                };
-
                 self.scope.enter_block();
-                self.scope.add_var(
-                    var.clone(),
-                    PolyType::mono(loop_var_ty),
-                    false,
-                    crate::util::span::Span::default(),
-                );
 
-                let elem_ty = if let Some(cond) = condition {
-                    let _cond_ty = self.infer_expr(cond)?;
-                    self.infer_expr(element)?
-                } else {
-                    self.infer_expr(element)?
-                };
+                for gen in generators {
+                    let iter_ty = self.infer_expr(&gen.iterable)?;
+                    // 循环变量类型从可迭代对象取（此前硬编码 Char，靠
+                    // 算术 fresh-var 兜底蒙混；硬化后按 check_for_stmt 同款分发）
+                    let loop_var_ty = match &iter_ty {
+                        m if m.is_list() || m.is_vec() || m.is_array() => {
+                            m.generic_args().unwrap()[0].clone()
+                        }
+                        m if m.is_string() => MonoType::Char,
+                        m if m.is_dict() => {
+                            let args = m.generic_args().unwrap();
+                            MonoType::make_tuple(vec![args[0].clone(), args[1].clone()])
+                        }
+                        _ => self.solver.resolve_type(&iter_ty),
+                    };
+
+                    self.scope.add_var(
+                        gen.var.clone(),
+                        PolyType::mono(loop_var_ty),
+                        false,
+                        gen.span,
+                    );
+
+                    if let Some(cond) = &gen.condition {
+                        let cond_ty = self.infer_expr(cond)?;
+                        if cond_ty != MonoType::Bool {
+                            return Err(ErrorCodeDefinition::condition_type_mismatch(&format!(
+                                "{}",
+                                cond_ty
+                            ))
+                            .build());
+                        }
+                    }
+                }
+
+                let elem_ty = self.infer_expr(element)?;
 
                 self.scope.exit_block();
 
@@ -3654,6 +3744,29 @@ impl<'a> ExpressionInferrer<'a> {
     ///
     /// 覆盖面：变体构造拦截、内置容器构造、显式类型实参、闭包形参期望传播、
     /// 重载解析、方法调用糖、`Any` 多态槽位等。
+    /// #394：空块表达式判定——`{}`（B 方案定案：空块值 Void，非空字典）
+    fn is_empty_block_expr(expr: &crate::frontend::core::parser::ast::Expr) -> bool {
+        matches!(
+            expr,
+            crate::frontend::core::parser::ast::Expr::Block(b) if b.stmts.is_empty()
+        )
+    }
+
+    /// #394：容器族判定——泛型容器构造器及其借用形态（`&Dict(K, V)` 等）。
+    /// 期望为 Fn 的块作值形态（`main = { ... }`）天然排除在外。
+    fn is_container_family(ty: &MonoType) -> bool {
+        match ty {
+            MonoType::Generic { name, .. } => {
+                matches!(
+                    name.as_str(),
+                    "Dict" | "List" | "Vec" | "Array" | "Set" | "Tuple"
+                )
+            }
+            MonoType::Ref { inner, .. } => Self::is_container_family(inner),
+            _ => false,
+        }
+    }
+
     fn infer_call_expr(
         &mut self,
         func: &crate::frontend::core::parser::ast::Expr,
@@ -3887,6 +4000,75 @@ impl<'a> ExpressionInferrer<'a> {
                             return Some(ty.clone());
                         }
                         if !matches!(ty, MonoType::MetaType { .. }) {
+                            // 用户自定义类型名作实参（`Result(J, Error)` 的 J）：
+                            // 类型声明的 scope 镜像先命中 Var 臂，ty 是 Struct
+                            // 而非 MetaType。零类型参数的和类型收成与变体构造
+                            // 输出一致的 `Generic{名, []}`（TypeRef 与之不 unify）；
+                            // 其余按名收名义引用
+                            if let crate::frontend::core::parser::ast::Expr::Var(n, _) = a {
+                                if self.sum_types.contains_key(n) {
+                                    let has_params = self
+                                        .generic_type_defs
+                                        .get(n)
+                                        .map(|d| !d.type_param_names.is_empty())
+                                        .unwrap_or(false);
+                                    if has_params {
+                                        return Some(MonoType::TypeRef(n.clone()));
+                                    }
+                                    return Some(MonoType::Generic {
+                                        name: n.clone(),
+                                        args: vec![],
+                                    });
+                                }
+                                if self.generic_type_defs.contains_key(n)
+                                    || self.type_defs.contains_key(n)
+                                {
+                                    return Some(MonoType::TypeRef(n.clone()));
+                                }
+                            }
+                            // 元组类型实参（`Result((Json, Int), Error)`）：语法
+                            // 位置的元组即类型元组，元素按类型名收集
+                            if let crate::frontend::core::parser::ast::Expr::Tuple(items, _) = a {
+                                let parts: Option<Vec<MonoType>> =
+                                    items
+                                        .iter()
+                                        .map(|e| match e {
+                                            crate::frontend::core::parser::ast::Expr::Var(n, _) => {
+                                                concrete_type_from_expr_arg(
+                                                    e,
+                                                    self.type_defs,
+                                                    self.generic_type_defs,
+                                                )
+                                                .or_else(|| {
+                                                    if self.sum_types.contains_key(n) {
+                                                        let has_params = self
+                                                            .generic_type_defs
+                                                            .get(n)
+                                                            .map(|d| !d.type_param_names.is_empty())
+                                                            .unwrap_or(false);
+                                                        if has_params {
+                                                            return Some(MonoType::TypeRef(
+                                                                n.clone(),
+                                                            ));
+                                                        }
+                                                        return Some(MonoType::Generic {
+                                                            name: n.clone(),
+                                                            args: vec![],
+                                                        });
+                                                    }
+                                                    None
+                                                })
+                                            }
+                                            _ => None,
+                                        })
+                                        .collect();
+                                if let Some(ps) = parts {
+                                    return Some(MonoType::Generic {
+                                        name: "Tuple".to_string(),
+                                        args: ps,
+                                    });
+                                }
+                            }
                             return None;
                         }
                         // 具名类型解包失败（Any 等非注册名）时保留
@@ -3927,6 +4109,29 @@ impl<'a> ExpressionInferrer<'a> {
             _ => None,
         };
         let mono_func_ty = self.monomorphize(func_ty.clone(), &value_arg_types, fn_name_for_mono);
+
+        // #394：`{}` 空块落入容器参数位——调用实参位没有 current_expected
+        // 可用，但签名形参在 mono 后已知，按位预扫：空块实参 × 容器形参
+        // 直接报引导诊断（其余形态不受影响；期望为 Fn 的块实参是合法的
+        // 块作值形态，容器判定天然排除）。
+        if let MonoType::Fn {
+            params: sig_params, ..
+        } = self.solver.resolve_type(&mono_func_ty)
+        {
+            for (idx, arg) in args.iter().enumerate() {
+                let Some(param_ty) = sig_params.get(idx) else {
+                    break;
+                };
+                if Self::is_empty_block_expr(arg)
+                    && Self::is_container_family(&self.solver.resolve_type(param_ty))
+                {
+                    return Err(ErrorCodeDefinition::empty_block_as_container()
+                        .at(arg.span())
+                        .build());
+                }
+            }
+        }
+
         // D6.3：显式类型实参应用（`mk(Int)` 的内层）。
         //
         // 语义：`mk: (A: Type) -> (x: A) -> A` 里 `A` 是**类型参数**；
@@ -4505,81 +4710,99 @@ impl<'a> ExpressionInferrer<'a> {
         // 泛型类型构造器（List(1,2,3) 值构造）豁免——其参数语义是类型参数+值参数，
         // 不适用字段计数（RFC-011），在 match 前拦下。
         if let crate::frontend::core::parser::ast::Expr::Var(ref fn_name, _) = *func {
-            // 豁免：泛型类型构造器（List(1,2,3) 值构造是 RFC-011 语义，非字段计数）；
-            // native 函数（std 可选参数 ?msg / 变参 ...args，签名 params.len() 不可靠，
-            // assert(1>0) 合法但 params 有 2 项——原 Fn 分支对数量不等静默跳过，
-            // 正是这种宽容路径）。
-            if !self.generic_type_defs.contains_key(fn_name)
-                && !self.native_signatures.contains_key(fn_name)
-            {
+            // 豁免：泛型类型构造器（List(1,2,3) 值构造是 RFC-011 语义，非字段计数）。
+            if !self.generic_type_defs.contains_key(fn_name) {
                 let provided = arg_types.len();
+                // #387：native arity 从整族豁免收紧为按签名 `?`/`...` 解析的
+                // [min, max] 区间。表区间与签名参数数矛盾视为用户同名遮蔽，
+                // 回退严格计数；无表项的 native（手注 FFI 签名路径）维持旧宽容。
+                let native_range = self
+                    .native_arity
+                    .get(fn_name)
+                    .copied()
+                    .filter(|(min, max)| {
+                        matches!(&mono_func_ty, MonoType::Fn { params, .. } if {
+                            let n = params.len();
+                            *min <= n && max.is_none_or(|m| n <= m)
+                        })
+                    });
                 match &mono_func_ty {
-                        MonoType::Struct(st) => {
-                            // 普通 struct 构造器：Point(1.0, 2.0)。
-                            // 有默认值的字段可省略 → 必需参数数 = 无默认值字段数。
-                            let total = st.fields.len();
-                            let required = st.field_has_default.iter().filter(|&&d| !d).count();
-                            if named_args.is_empty() {
-                                // 位置参数：Point(5) 缺参 / Point(5,6,7) 超参
-                                if provided < required || provided > total {
-                                    return Err(ErrorCodeDefinition::argument_count_mismatch(
-                                        &st.name, total, provided,
-                                    )
-                                    .at(span)
-                                    .build());
-                                }
-                            } else {
-                                // 命名参数：Point(x=6) 缺必需字段 → 静默 0（#271#1）。
-                                // 检查必需字段（无默认值）是否全部提供。
-                                let provided_names: std::collections::HashSet<&str> =
-                                    named_args.iter().map(|(n, _)| n.as_str()).collect();
-                                let missing: Vec<&str> = st
-                                    .fields
-                                    .iter()
-                                    .enumerate()
-                                    .filter(|(i, _)| !st.field_has_default[*i])
-                                    .map(|(_, (n, _))| n.as_str())
-                                    .filter(|n| !provided_names.contains(n))
-                                    .collect();
-                                if !missing.is_empty() {
-                                    let msg = format!(
-                                        "{} constructor missing required field(s): {}",
-                                        st.name,
-                                        missing.join(", ")
-                                    );
-                                    return Err(ErrorCodeDefinition::type_mismatch(
-                                        &msg,
-                                        &format!("provided {}", provided_names.len()),
-                                    )
-                                    .at(span)
-                                    .build());
-                                }
-                            }
-                        }
-                        MonoType::Fn { params, .. }
-                            // 普通函数调用：add(5) 缺参 → E6007 运行时错（晚且误导）；
-                            // add(1,2,3) 超参静默丢弃。拦为编译期 E1010。
-                            // 仅当 params 非空时检查：lambda/块函数绑定（mk: (Int,Int)->Int
-                            // = (x,y)=>x+y）在 scope 里参数类型丢失（params 为空），
-                            // 计数不可靠，跳过避免误伤（#271 记 lambda 绑定参数丢失）。
-                            //
-                            // 命名参数也计入总数：`add(a = 1, b = 2)` 传了 2 个。
-                            // 此前 `named_args.is_empty()` 门槛把命名实参整体豁免，
-                            // `add(a = 1)`（少传一个）就没人拦——IR 层补 0 凑数，
-                            // 静默算出 1 而不报错。现在按实际传参总数校验。
-                            if !params.is_empty()
-                                && provided + named_args.len() != params.len()
-                            => {
+                    MonoType::Struct(st) => {
+                        // 普通 struct 构造器：Point(1.0, 2.0)。
+                        // 有默认值的字段可省略 → 必需参数数 = 无默认值字段数。
+                        let total = st.fields.len();
+                        let required = st.field_has_default.iter().filter(|&&d| !d).count();
+                        if named_args.is_empty() {
+                            // 位置参数：Point(5) 缺参 / Point(5,6,7) 超参
+                            if provided < required || provided > total {
                                 return Err(ErrorCodeDefinition::argument_count_mismatch(
-                                    fn_name,
-                                    params.len(),
-                                    provided + named_args.len(),
+                                    &st.name, total, provided,
                                 )
                                 .at(span)
                                 .build());
                             }
-                        _ => {}
+                        } else {
+                            // 命名参数：Point(x=6) 缺必需字段 → 静默 0（#271#1）。
+                            // 检查必需字段（无默认值）是否全部提供。
+                            let provided_names: std::collections::HashSet<&str> =
+                                named_args.iter().map(|(n, _)| n.as_str()).collect();
+                            let missing: Vec<&str> = st
+                                .fields
+                                .iter()
+                                .enumerate()
+                                .filter(|(i, _)| !st.field_has_default[*i])
+                                .map(|(_, (n, _))| n.as_str())
+                                .filter(|n| !provided_names.contains(n))
+                                .collect();
+                            if !missing.is_empty() {
+                                let msg = format!(
+                                    "{} constructor missing required field(s): {}",
+                                    st.name,
+                                    missing.join(", ")
+                                );
+                                return Err(ErrorCodeDefinition::type_mismatch(
+                                    &msg,
+                                    &format!("provided {}", provided_names.len()),
+                                )
+                                .at(span)
+                                .build());
+                            }
+                        }
                     }
+                    MonoType::Fn { params, .. } => {
+                        // 普通函数调用：add(5) 缺参 → E6007 运行时错（晚且误导）；
+                        // add(1,2,3) 超参静默丢弃。拦为编译期 E1010。
+                        // 命名参数也计入总数：`add(a = 1, b = 2)` 传了 2 个。
+                        let range = native_range.or_else(|| {
+                            if self.native_signatures.contains_key(fn_name) {
+                                None // 无表项 native：维持旧宽容
+                            } else if params.is_empty() {
+                                // lambda/块函数绑定（mk: (Int,Int)->Int = (x,y)=>x+y）
+                                // 在 scope 里参数类型丢失（params 为空），计数不可靠，
+                                // 跳过避免误伤（#271 记 lambda 绑定参数丢失）
+                                None
+                            } else {
+                                Some((params.len(), Some(params.len())))
+                            }
+                        });
+                        if let Some((min_arity, max_arity)) = range {
+                            let total = provided + named_args.len();
+                            if total < min_arity || max_arity.is_some_and(|m| total > m) {
+                                let expected = if total < min_arity {
+                                    min_arity
+                                } else {
+                                    max_arity.unwrap_or(min_arity)
+                                };
+                                return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                    fn_name, expected, total,
+                                )
+                                .at(span)
+                                .build());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
         // #317：方法调用 arity 检查——#271#1 的 Var 门槛覆盖不到 FieldAccess
@@ -4597,6 +4820,72 @@ impl<'a> ExpressionInferrer<'a> {
                         )
                         .at(span)
                         .build());
+                    }
+                }
+            }
+        }
+        // #387：命名空间限定调用 arity 同规。RFC-029 §1/§6——模块 = record of
+        // bindings，对 typecheck 而言 `use std.io.{println}` 与用户模块操作完全
+        // 一样，native 特殊处理只属于 IR gen / codegen；此前 FieldAccess 形态
+        // 绕过 #271#1（Var 臂）与 #317（method_key 臂），超签实参静默接受、
+        // 落 ownership 层按 Move 兜底、运行时丢弃。判别两态：
+        // - 命中 native arity 表（直接或 `std.` 前缀回退）→ 命名空间 native，
+        //   区间严格，无接收者豁免（表区间与签名参数数矛盾视为同名遮蔽，回退
+        //   严格计数）；
+        // - 未命中表 → 按接收者形态判别：显式实参数+1==形参数（接收者占
+        //   params[0]，接口派发/impl 方法/Try 方法同族，#317 同款约定）放行，
+        //   否则按签名严格计数。params 为空（计数不可靠）维持跳过。
+        if method_key.is_none() {
+            if let crate::frontend::core::parser::ast::Expr::FieldAccess {
+                expr: obj, field, ..
+            } = func
+            {
+                if let MonoType::Fn { params, .. } = &mono_func_ty {
+                    let ns_key = extract_namespace_path(obj).map(|p| format!("{p}.{field}"));
+                    let table_range = ns_key
+                        .as_deref()
+                        .and_then(|k| self.native_arity.get(k).copied())
+                        .or_else(|| {
+                            ns_key
+                                .as_deref()
+                                .map(|k| format!("std.{k}"))
+                                .and_then(|k| self.native_arity.get(k.as_str()).copied())
+                        });
+                    let total = arg_types.len() + named_args.len();
+                    let range = match table_range {
+                        Some((min, max)) => {
+                            if min <= params.len() && max.is_none_or(|m| params.len() <= m) {
+                                Some((min, max))
+                            } else if params.is_empty() {
+                                None
+                            } else {
+                                // 用户同名遮蔽：按遮蔽者签名严格计数
+                                Some((params.len(), Some(params.len())))
+                            }
+                        }
+                        None => {
+                            if params.is_empty() || total + 1 == params.len() {
+                                // 接收者形态（或计数不可靠）：放行
+                                None
+                            } else {
+                                Some((params.len(), Some(params.len())))
+                            }
+                        }
+                    };
+                    if let Some((min_arity, max_arity)) = range {
+                        if total < min_arity || max_arity.is_some_and(|m| total > m) {
+                            let name = ns_key.unwrap_or_else(|| field.clone());
+                            let expected = if total < min_arity {
+                                min_arity
+                            } else {
+                                max_arity.unwrap_or(min_arity)
+                            };
+                            return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                &name, expected, total,
+                            )
+                            .at(span)
+                            .build());
+                        }
                     }
                 }
             }

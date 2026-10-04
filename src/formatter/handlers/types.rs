@@ -13,6 +13,11 @@ pub fn format_type(
     match ty {
         // RFC-004：`Paren` 保留括号写法（括号有语义，不能丢）
         Type::Paren(inner) => format!("({})", format_type(inner, ctx, source_map)),
+        // RFC-027 §3：具名括号同时保留 **binder 名**——名字是返回形式参数的
+        // 声明，丢了它就改写了源码语义（`(r: P(r))` ≠ `P(r)`）。
+        Type::NamedParen { param, inner, .. } => {
+            format!("({}: {})", param, format_type(inner, ctx, source_map))
+        }
         Type::Name { name, .. } => name.clone(),
         Type::Int(size) => format!("i{}", size),
         Type::Float(size) => format!("f{}", size),

@@ -1,0 +1,28 @@
+// 02-type-system/flag_loop_guarded_exit.yx
+// 覆盖: RFC-027 §7.2 —— 策略 1b：标志循环（阈值守卫内清零标志）
+// 验证: `while flag { i = i - 1; if i <= 0 { flag = false } }` 带精化标注进验证模式；
+//       循环条件不是比较式（边界提取拿不到东西），由「到阈值的距离」测度 `i - 0`
+//       拿下：`i` 每轮无条件减 1，守卫 `i <= 0` 命中即清零标志 ⇒ 循环终止，零诊断。
+// 状态: ✅ 可运行
+//
+// 修复前：条件不是比较式 ⇒ 四条策略都拿不到度量 ⇒ 误报 E4021（#377）。
+
+use std.assert
+
+AtMost: (n: Int, x: Int) -> Type = { x <= n }
+
+main: () -> Void = {
+    mut flag: Bool = true
+    mut i: AtMost(10, i) = 10
+    while flag {
+        i = i - 1
+        if i <= 0 {
+            flag = false
+        }
+    }
+    assert.assert(flag == false, "标志已清零")
+    assert.assert(i == 0, "i 归零：i == 0")
+}
+
+// T4 入口语义：Script 模式的 main **不会**隐式执行——必须显式调用，运行期断言才生效。
+main()

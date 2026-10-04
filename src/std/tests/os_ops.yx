@@ -1,13 +1,14 @@
 // src/std/tests/os_ops.yx
-// 覆盖: std.os 模块（#117）— 进程信息 / 路径判定 / 文件句柄生命周期
-// 验证: getcwd/args/get_env 进程信息 + exists/is_file/is_dir 路径判定
+// 覆盖: std.os 模块（#117）— 进程信息 / 文件句柄生命周期
+// 验证: getcwd/args/get_env 进程信息 + open/write/close/seek/read 句柄操作
 // 状态: ✅
-// 注: 文件写操作使用 `__yx_` 前缀的当前目录临时文件，用完显式 remove（与
-// io_ops.yx 同惯例）。无 mkdtemp 等临时目录设施，故不以目录隔离。
+// 注: 路径判定与目录操作已随 #104 迁往 std.fs（见 fs_ops.yx）。文件清理走
+// fs.remove，句柄临时文件用 `__yx_` 前缀（与 io_ops.yx 同惯例）。
 
 use std.assert
-use std.string
+use std.fs
 use std.os
+use std.string
 
 main: () -> Void = {
     // 工作目录：非空
@@ -21,13 +22,6 @@ main: () -> Void = {
     // 环境变量：PATH 在主流平台必存在
     path = os.get_env("PATH")
     assert.assert(string.len(path) > 0, "PATH env var should exist")
-
-    // 路径判定（cwd 为仓库根，库层目录相对路径稳定存在）
-    assert.assert(os.exists("src/std/tests"), "exists: library tier dir")
-    assert.assert(os.is_dir("src/std/tests"), "is_dir: library tier dir")
-    assert.assert(os.is_file("src/std/tests/os_ops.yx"), "is_file: self")
-    assert.assert(!os.is_file("src/std/tests"), "is_file false on dir")
-    assert.assert(!os.is_dir("src/std/tests/os_ops.yx"), "is_dir false on file")
 
     // 文件句柄生命周期（#337）：句柄按**引用**传递给 read/write/seek/tell/flush，
     // 不得因一次使用就失效。此前签名是 `(file: File)`（按值）→ 线性所有权
@@ -45,9 +39,9 @@ main: () -> Void = {
     assert.assert(tail == "world", "seek then read: got " + tail)
     os.close(r)
 
-    // 清理（与 io_ops.yx 同惯例）
-    assert.assert(os.remove(hp), "os.remove handle tmp ok")
-    assert.assert(!os.exists(hp), "handle tmp gone after remove")
+    // 清理（#104 后文件删除在 std.fs）
+    assert.assert(fs.remove(hp), "fs.remove handle tmp ok")
+    assert.assert(!fs.exists(hp), "handle tmp gone after remove")
 }
 
 main()

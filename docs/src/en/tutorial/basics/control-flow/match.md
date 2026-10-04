@@ -4,13 +4,13 @@ title: 'match Basics'
 
 # match Basics
 
-`match` is YaoXiang's most powerful control flow construct. It lets you choose different handling
-paths based on the **shape** of a value. If you've used `switch` in other languages, you'll find
-that `match` is a comprehensive upgrade.
+`match` is the most powerful control flow structure in YaoXiang. It lets you choose different
+handling paths based on the **shape** of a value. If you've used `switch` in other languages, you'll
+find `match` to be a comprehensive upgrade.
 
 ## Basic Syntax
 
-The definition of the `match` expression in the syntax specification:
+The definition of a `match` expression in the language specification:
 
 ```
 match Expr { MatchArm+ }
@@ -19,12 +19,12 @@ MatchArm : Pattern ('|' Pattern)* ('if' Expr)? '=>' Expr ','
 
 Breaking it down:
 
-- `match` is followed by a value to match against
+- `match` is followed by the value to match on
 - `{}` contains one or more **match arms** (MatchArm)
-- Each match arm: **pattern** followed by `=>`, then a **result expression**
+- Each match arm: a **pattern** followed by `=>`, then the **result expression**
 - Each arm ends with a comma
 
-A simple example:
+A minimal example:
 
 ```yaoxiang
 number = 2
@@ -45,25 +45,28 @@ arms must be consistent:
 ```yaoxiang
 score = 85
 
+// Note: the 0.8.2 pattern parser does not support range patterns—`80..89 => "B"` reports
+// "Expected FatArrow, found DotDot" (E0010). Use a guard expression (`n if condition`) for equivalent logic.
 grade = match score {
-    90..100 => "A",    // range pattern (advanced topic)
-    80..89 => "B",
-    70..79 => "C",
-    60..69 => "D",
-    _ => "F",          // wildcard: matches all remaining cases
+    n if n >= 90 => "A",
+    n if n >= 80 => "B",
+    n if n >= 70 => "C",
+    n if n >= 60 => "D",
+    _ => "F",          // Wildcard: matches all remaining cases
 }
 print(grade)  // "B"
 ```
 
-> **Note**: Range patterns like `90..100` are advanced topics and will be covered in depth in
-> [Pattern Matching Advanced](../pattern-matching/index.md). This chapter focuses on basic patterns
-> first.
+> **Note**: The range pattern `80..89` is not yet available in 0.8.2; please use the guard
+> expression form shown above. Guard expressions (`pattern if condition`) are covered in detail in
+> [Pattern Matching Advanced](../pattern-matching/index.md). This chapter first focuses on basic
+> patterns.
 
 ## Basic Patterns
 
 ### Literal Patterns
 
-Match against a specific value:
+Match against specific values:
 
 ```yaoxiang
 response = 404
@@ -80,14 +83,17 @@ print(message)  // "Not Found"
 
 ### Identifier Patterns
 
-Use a variable name to capture the matched value:
+Capture the matched value into a variable name:
 
 ```yaoxiang
-result: Result(Int, String) = ok(42)
+// Result variant constructors must be "type-qualified": writing bare ok(42) reports E1001
+use std.result
 
-description = match result {
-    ok(value) => "成功，值是: " + value.to_string(),
-    err(error) => "失败，原因: " + error,
+r: Result(Int, String) = Result(Int, String).ok(42)
+
+description = match r {
+    ok(value) => "成功，值是: {value}",
+    err(e) => "失败，原因: " + e,
 }
 print(description)  // "成功，值是: 42"
 ```
@@ -97,7 +103,7 @@ and you can use it in the expression after `=>`.
 
 ### Wildcard Pattern
 
-`_` is the wildcard, matching **any value**. It's typically placed at the end as a fallback:
+`_` is the wildcard, matching **any value**. It's typically placed last as a fallback:
 
 ```yaoxiang
 command = "exit"
@@ -111,20 +117,20 @@ action = match command {
 print(action)  // "未知指令: exit"
 ```
 
-## Matches Must Be Exhaustive
+## Match Must Be Exhaustive
 
-YaoXiang's `match` requires covering all possible cases—if the compiler finds that you've missed
-certain possible values, it will report an error directly. This reflects the safety of `match`.
+YaoXiang's `match` requires you to cover every possible case—if the compiler finds that you've
+missed some possible values, it errors out directly. This reflects the safety guarantees of `match`.
 
 ```yaoxiang
 // This code will fail to compile
 // value = true
 // result = match value {
 //     true => "是",
-//     // Missing false branch—compile error!
+//     // Missing the false branch—compile error!
 // }
 
-// Correct—use _ as fallback
+// Correct—use _ as a fallback
 value = true
 result = match value {
     true => "是",
@@ -132,11 +138,11 @@ result = match value {
 }
 ```
 
-When you know there are only a limited number of cases (for example, matching an enum), the compiler
-will help you check whether every variant is covered. This is a powerful tool for preventing bugs
-from missing branches.
+When you know there are only a finite number of cases (e.g., when matching an enum), the compiler
+will check whether every variant is covered. This is a powerful tool for preventing bugs from
+missing branches.
 
-## Combining Multiple Patterns
+## Multiple Patterns
 
 A single match arm can match multiple patterns, separated by `|`:
 
@@ -153,34 +159,40 @@ print(type)  // "休息日"
 
 ## Match Arms Execute in Order
 
-`match` starts trying to match from the first arm; the **first branch that successfully matches
-takes effect**, and the ones after it will not be executed:
+`match` tries arms starting from the first one; **the first matching branch takes effect**, and the
+ones after it are not executed:
+
+<!-- docs-example: skip -->
 
 ```yaoxiang
 number = 5
 
 result = match number {
-    _ => "其他",     // wildcard matches everything, this will match
-    5 => "五",       // will never be executed—already matched above
+    _ => "其他",     // Wildcard matches everything; it will match here
+    5 => "五",       // Will never be executed—the one above already matched
 }
 print(result)  // "其他"
 ```
 
-This feature means that **placing the wildcard `_` at the end** is a good habit.
+> The code above is **intentionally failing the check**—the compiler will report
+> `E1031 Unreachable pattern`. It uses a real diagnostic to demonstrate the rule "the first matching
+> arm wins".
+
+This means that **placing the wildcard `_` last** is a good habit.
 
 ## Summary
 
-| Key Point          | Description                                             |
-| ------------------ | ------------------------------------------------------- |
-| Syntax             | `match value { pattern => expression, ... }`            |
-| Expression         | `match` evaluates to a value, all branches share a type |
-| Literal pattern    | Match an exact value: `200 => "OK"`                     |
-| Identifier pattern | Capture a value into a variable: `ok(value) => ...`     |
-| Wildcard `_`       | Match any value, used as a fallback                     |
-| Exhaustiveness     | Must cover all possibilities; the compiler will check   |
-| Multiple patterns  | `pattern1 \| pattern2 => expression`                    |
-| Order of execution | Top to bottom, the first matching branch takes effect   |
+| Key Point          | Description                                                   |
+| ------------------ | ------------------------------------------------------------- |
+| Syntax             | `match value { pattern => expr, ... }`                        |
+| Expression         | `match` evaluates to a value; all branches have the same type |
+| Literal pattern    | Matches a specific value: `200 => "OK"`                       |
+| Identifier pattern | Captures a value into a variable: `ok(value) => ...`          |
+| Wildcard `_`       | Matches any value, used as a fallback                         |
+| Exhaustive         | Must cover all possibilities; the compiler checks             |
+| Multiple patterns  | `pattern1 \| pattern2 => expr`                                |
+| Order of execution | From top to bottom, the first matching branch wins            |
 
-> **Next**: This article covers the basic usage of `match`. For more advanced patterns (nested
-> patterns, guard expressions, struct destructuring, etc.), please refer to
+> **Next**: This article covers the basics of `match`. For more advanced patterns (nested patterns,
+> guard expressions, struct destructuring, etc.), see
 > [Pattern Matching Advanced](../pattern-matching/index.md).

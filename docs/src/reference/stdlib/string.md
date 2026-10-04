@@ -41,6 +41,8 @@ use std.string
 | `format` | `(format: &String, ...args) -> String` |
 | `parse_int` | `(s: &String) -> Result(Int, Error)` |
 | `parse_float` | `(s: &String) -> Result(Float, Error)` |
+| `char_code` | `(s: &String, i: Int) -> Int` |
+| `from_char_code` | `(n: Int) -> Result(String, Error)` |
 
 <!-- stdlib:table:string end -->## 函数
 
@@ -505,7 +507,75 @@ main: () -> Void = {
 }
 ```
 
+### char_code
+
+<!-- stdlib:sig:string.char_code start -->
+
+```yaoxiang
+char_code: (s: &String, i: Int) -> Int
+```
+
+<!-- stdlib:sig:string.char_code end -->
+
+取第 `i` 个字符的 Unicode 码点（标量值口径，与 [`chars`](#chars) / [`substring`](#substring)
+同域）。
+
+- `s` —— 源字符串（只读借用）
+- `i` —— 字符下标（**字符**下标，不是字节偏移）
+
+返回：码点；**下标越界返回 `-1`**（与 [`index_of`](#index_of) 未命中同一惯例——码点非负，
+`-1` 无歧义）。**不抛错**。
+
+```yaoxiang
+use std.assert
+use std.string
+
+main: () -> Void = {
+    assert(string.char_code("A", 0) == 65)
+    assert(string.char_code("中", 0) == 0x4E2D)     // 字符下标，不是字节偏移
+    assert(string.char_code("A", 9) == -1)          // 越界返回 -1
+}
+```
+
+### from_char_code
+
+<!-- stdlib:sig:string.from_char_code start -->
+
+```yaoxiang
+from_char_code: (n: Int) -> Result(String, Error)
+```
+
+<!-- stdlib:sig:string.from_char_code end -->
+
+码点转单字符字符串。
+
+- `n` —— Unicode 码点
+
+返回：成功为 `Result.ok(String)`（单字符串）；非法码点为 `Result.err(Error)`，其 `code` 为
+`E6012`。**不抛错**。合法性判定用 `char::from_u32`（`src/std/string.rs:613-619`），
+与词法层 `\u{…}` 转义同一套规则：负数、代理区（U+D800–U+DFFF）、大于 `U+10FFFF` 一律非法。
+`U+10000..=U+10FFFF` 直接产出合法 4 字节 UTF-8，UTF-16 代理对组合留给 yx 层。
+
+```yaoxiang
+use std.assert
+use std.result
+use std.string
+
+main: () -> Void = {
+    assert(result.unwrap(string.from_char_code(65)) == "A")
+    assert(result.unwrap(string.from_char_code(0x4E2D)) == "中")
+
+    // 非法码点走 Err 分支
+    assert(result.is_err(string.from_char_code(-1)))
+    assert(result.code(result.unwrap_err(string.from_char_code(-1))) == "E6012")
+
+    // 与 char_code 互逆
+    assert(result.unwrap(string.from_char_code(string.char_code("A", 0))) == "A")
+}
+```
+
 ## 相关
 
 - [`std.convert`](./convert) —— 数值转字符串
-- [`std.result`](./result) —— 解包 `parse_*` 的结果
+- [`std.result`](./result) —— 解包 `parse_*` / `from_char_code` 的结果
+- [`std.json`](./json) —— 字符串转义的 Unicode 基元来自本模块

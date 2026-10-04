@@ -1,0 +1,18 @@
+// 06-compile-errors/return_refinement_multi_arg_literal_err.yx
+// 覆盖: RFC-027 §2/§3 —— 返回位多参数谓词的**字面量实参**路径（证明函数编译期执行）
+// 验证: `-> (r: SumUpTo(3, r))` 代入返回值 7 后实参全可取值 ⇒ 生成证明函数调用
+//       `SumUpTo(3, 7)`，编译期执行返回 false ⇒ E4018（参数: [Int(3), Int(7)]）。
+// 状态: ❌ 应被编译期拒绝
+//
+// 该路径**不得**被返回位的「证不出」诊断（E2031）吃掉：实参全可取值时证明函数真被
+// 调用（对照负例 return_refinement_multi_arg_predicate_err.yx）。
+
+// expect: compile-error E4018
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+f: () -> (r: SumUpTo(3, r)) = {
+    return 7
+}
+
+main: () -> Void = {}

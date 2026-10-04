@@ -12,6 +12,28 @@ use crate::util::span::Span;
 
 use std::collections::HashMap;
 
+/// 整数字面量表达式 `n`。
+fn int_expr(n: i128) -> Expr {
+    Expr::Lit(
+        crate::frontend::core::lexer::tokens::Literal::Int(n),
+        Span::dummy(),
+    )
+}
+
+/// `left <op> right` 二元表达式（dummy span）。
+fn binop_expr(
+    op: crate::frontend::core::parser::ast::BinOp,
+    left: Expr,
+    right: Expr,
+) -> Expr {
+    Expr::BinOp {
+        op,
+        left: Box::new(left),
+        right: Box::new(right),
+        span: Span::dummy(),
+    }
+}
+
 /// Test context that owns the dependencies borrowed by ExpressionInferrer.
 struct TestContext {
     scope: ScopeManager,
@@ -149,26 +171,15 @@ fn test_infer_nested_expressions() {
     let mut ctx = TestContext::new();
     let mut inferrer = ctx.inferrer();
     // 嵌套表达式：(1 + 2) * 3
-    let expr = Expr::BinOp {
-        op: crate::frontend::core::parser::ast::BinOp::Mul,
-        left: Box::new(Expr::BinOp {
-            op: crate::frontend::core::parser::ast::BinOp::Add,
-            left: Box::new(Expr::Lit(
-                crate::frontend::core::lexer::tokens::Literal::Int(1),
-                Span::dummy(),
-            )),
-            right: Box::new(Expr::Lit(
-                crate::frontend::core::lexer::tokens::Literal::Int(2),
-                Span::dummy(),
-            )),
-            span: Span::dummy(),
-        }),
-        right: Box::new(Expr::Lit(
-            crate::frontend::core::lexer::tokens::Literal::Int(3),
-            Span::dummy(),
-        )),
-        span: Span::dummy(),
-    };
+    let expr = binop_expr(
+        crate::frontend::core::parser::ast::BinOp::Mul,
+        binop_expr(
+            crate::frontend::core::parser::ast::BinOp::Add,
+            int_expr(1),
+            int_expr(2),
+        ),
+        int_expr(3),
+    );
 
     // Act
     let result = inferrer.infer_expr(&expr);

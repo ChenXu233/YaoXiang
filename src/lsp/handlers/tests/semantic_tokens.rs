@@ -54,35 +54,71 @@ fn make_db_token(
     }
 }
 
-#[test]
-fn test_empty_file() {
-    let db = SemanticDB::new();
-    let mut cache = SemanticTokensCache::new();
-    let params = SemanticTokensParams {
+// ── 辅助函数（规则 5.3：集中在文件顶部）──────────────
+
+/// Helper: 构造 `uri` 的全量语义 token 请求参数。
+fn full_params(uri: &str) -> SemanticTokensParams {
+    SemanticTokensParams {
         text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str("file:///empty.yx").unwrap(),
+            uri: lsp_types::Uri::from_str(uri).expect("测试 URI 应可解析"),
         },
         work_done_progress_params: Default::default(),
         partial_result_params: Default::default(),
-    };
-
-    let result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
-    // 文件不在 DB 中 → None
-    if let SemanticTokensResult::Tokens(tokens) = result {
-        assert!(tokens.data.is_empty());
-        assert!(tokens.result_id.is_some());
-    } else {
-        panic!("Expected SemanticTokensResult::Tokens");
     }
 }
 
-#[test]
-fn test_file_with_tokens() {
-    let mut db = SemanticDB::new();
-    let mut cache = SemanticTokensCache::new();
-    let uri = "file:///test.yx";
+/// Helper: 先发全量请求并取出 result_id（delta 请求的前置）。
+fn full_result_id(
+    db: &SemanticDB,
+    cache: &mut SemanticTokensCache,
+    uri: &str,
+) -> String {
+    let full_result = handle_semantic_tokens_full(db, cache, None, full_params(uri))
+        .expect("全量语义 token 请求应成功");
+    match &full_result {
+        SemanticTokensResult::Tokens(t) => t
+            .result_id
+            .clone()
+            .expect("全量语义 token 响应应带 result_id"),
+        _ => panic!("Expected Tokens"),
+    }
+}
 
-    // 添加一些 tokens: line/col 1-indexed
+/// Helper: 构造 `uri` 的增量语义 token 请求参数（沿用 `previous_result_id`）。
+fn delta_params(
+    uri: &str,
+    previous_result_id: String,
+) -> lsp_types::SemanticTokensDeltaParams {
+    lsp_types::SemanticTokensDeltaParams {
+        text_document: lsp_types::TextDocumentIdentifier {
+            uri: lsp_types::Uri::from_str(uri).expect("测试 URI 应可解析"),
+        },
+        previous_result_id,
+        work_done_progress_params: Default::default(),
+        partial_result_params: Default::default(),
+    }
+}
+
+/// Helper: 向 `db` 的 `uri` 追加 `foo`（Function/Declaration，1 行 1 列）。
+fn add_foo_token(
+    db: &mut SemanticDB,
+    uri: &str,
+) {
+    db.add_token(
+        uri,
+        make_db_token(
+            "foo",
+            SemanticTokenType::Function,
+            vec![SemanticTokenModifier::Declaration],
+            1,
+            1,
+        ),
+    );
+}
+
+/// Helper: 构造含 add（函数）、x（参数）、y（变量）三个 token 的语义数据库。
+fn db_with_three_tokens(uri: &str) -> SemanticDB {
+    let mut db = SemanticDB::new();
     db.add_token(
         uri,
         make_db_token(
@@ -107,69 +143,42 @@ fn test_file_with_tokens() {
             1,
         ),
     );
-
-    let params = SemanticTokensParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
-
-    let result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
-    if let SemanticTokensResult::Tokens(tokens) = result {
-        assert_eq!(tokens.data.len(), 3);
-        assert!(tokens.result_id.is_some(), "应返回 result_id");
-
-        // 第一个 token: "add" at (0,0) - delta line=0, delta start=0
-        assert_eq!(tokens.data[0].delta_line, 0);
-        assert_eq!(tokens.data[0].delta_start, 0);
-        assert_eq!(tokens.data[0].length, 3);
-        assert_eq!(
-            tokens.data[0].token_type,
-            SemanticTokenType::Function.index()
-        );
-        assert_eq!(
-            tokens.data[0].token_modifiers_bitset,
-            SemanticTokenModifier::Declaration.bit_flag()
-        );
-
-        // 第二个 token: "x" at (0,6) - same line, delta start=6
-        assert_eq!(tokens.data[1].delta_line, 0);
-        assert_eq!(tokens.data[1].delta_start, 6);
-        assert_eq!(tokens.data[1].length, 1);
-        assert_eq!(
-            tokens.data[1].token_type,
-            SemanticTokenType::Parameter.index()
-        );
-        assert_eq!(tokens.data[1].token_modifiers_bitset, 0);
-
-        // 第三个 token: "y" at (1,0) - new line
-        assert_eq!(tokens.data[2].delta_line, 1);
-        assert_eq!(tokens.data[2].delta_start, 0);
-        assert_eq!(tokens.data[2].length, 1);
-        assert_eq!(
-            tokens.data[2].token_type,
-            SemanticTokenType::Variable.index()
-        );
-        assert_eq!(
-            tokens.data[2].token_modifiers_bitset,
-            SemanticTokenModifier::Readonly.bit_flag()
-        );
-    } else {
-        panic!("Expected Tokens variant");
-    }
+    db
 }
 
-// ============ Delta 测试 ============
+/// Helper: 断言三个 token 的 delta 编码（见 test_file_with_tokens 的语义）。
+fn assert_three_token_encoding(data: &[SemanticToken]) {
+    assert_eq!(data.len(), 3);
+    assert_eq!(data[0].delta_line, 0);
+    assert_eq!(data[0].delta_start, 0);
+    assert_eq!(data[0].length, 3);
+    assert_eq!(data[0].token_type, SemanticTokenType::Function.index());
+    assert_eq!(
+        data[0].token_modifiers_bitset,
+        SemanticTokenModifier::Declaration.bit_flag()
+    );
 
-#[test]
-fn test_utf16_offsets_for_semantic_tokens() {
+    // 第二个 token: "x" at (0,6) - same line, delta start=6
+    assert_eq!(data[1].delta_line, 0);
+    assert_eq!(data[1].delta_start, 6);
+    assert_eq!(data[1].length, 1);
+    assert_eq!(data[1].token_type, SemanticTokenType::Parameter.index());
+    assert_eq!(data[1].token_modifiers_bitset, 0);
+
+    // 第三个 token: "y" at (1,0) - new line
+    assert_eq!(data[2].delta_line, 1);
+    assert_eq!(data[2].delta_start, 0);
+    assert_eq!(data[2].length, 1);
+    assert_eq!(data[2].token_type, SemanticTokenType::Variable.index());
+    assert_eq!(
+        data[2].token_modifiers_bitset,
+        SemanticTokenModifier::Readonly.bit_flag()
+    );
+}
+
+/// Helper: 构造含「变量」(1 行 1 列，2 列宽) 与「数字 1」(1 行 10 列) 的语义数据库。
+fn db_with_utf16_tokens(uri: &str) -> SemanticDB {
     let mut db = SemanticDB::new();
-    let mut cache = SemanticTokensCache::new();
-    let uri = "file:///utf16.yx";
-    let document_text = "变量 = 1\n";
-
     db.add_token(
         uri,
         DbToken {
@@ -190,7 +199,6 @@ fn test_utf16_offsets_for_semantic_tokens() {
             },
         },
     );
-
     db.add_token(
         uri,
         DbToken {
@@ -211,16 +219,68 @@ fn test_utf16_offsets_for_semantic_tokens() {
             },
         },
     );
+    db
+}
 
-    let params = SemanticTokensParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
+/// Helper: 构造一条 LSP 语义 token（delta_line / delta_start / length / 类型 / 修饰位）。
+fn lsp_token(
+    delta_line: u32,
+    delta_start: u32,
+    length: u32,
+    token_type: u32,
+    token_modifiers_bitset: u32,
+) -> SemanticToken {
+    SemanticToken {
+        delta_line,
+        delta_start,
+        length,
+        token_type,
+        token_modifiers_bitset,
+    }
+}
+#[test]
+fn test_empty_file() {
+    let db = SemanticDB::new();
+    let mut cache = SemanticTokensCache::new();
+    let params = full_params("file:///empty.yx");
 
-    let result = handle_semantic_tokens_full(&db, &mut cache, Some(document_text), params).unwrap();
+    let result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
+    // 文件不在 DB 中 → None
+    if let SemanticTokensResult::Tokens(tokens) = result {
+        assert!(tokens.data.is_empty());
+        assert!(tokens.result_id.is_some());
+    } else {
+        panic!("Expected SemanticTokensResult::Tokens");
+    }
+}
+
+#[test]
+fn test_file_with_tokens() {
+    let uri = "file:///test.yx";
+    let db = db_with_three_tokens(uri);
+    let mut cache = SemanticTokensCache::new();
+
+    let result = handle_semantic_tokens_full(&db, &mut cache, None, full_params(uri)).unwrap();
+    if let SemanticTokensResult::Tokens(tokens) = result {
+        assert!(tokens.result_id.is_some(), "应返回 result_id");
+        assert_three_token_encoding(&tokens.data);
+    } else {
+        panic!("Expected Tokens variant");
+    }
+}
+
+// ============ Delta 测试 ============
+
+#[test]
+fn test_utf16_offsets_for_semantic_tokens() {
+    let uri = "file:///utf16.yx";
+    let document_text = "变量 = 1\n";
+    let db = db_with_utf16_tokens(uri);
+    let mut cache = SemanticTokensCache::new();
+
+    let result =
+        handle_semantic_tokens_full(&db, &mut cache, Some(document_text), full_params(uri))
+            .unwrap();
 
     let SemanticTokensResult::Tokens(tokens) = result else {
         panic!("Expected Tokens variant");
@@ -239,46 +299,16 @@ fn test_utf16_offsets_for_semantic_tokens() {
 
 #[test]
 fn test_delta_no_change() {
+    let uri = "file:///delta_test.yx";
     let mut db = SemanticDB::new();
     let mut cache = SemanticTokensCache::new();
-    let uri = "file:///delta_test.yx";
+    add_foo_token(&mut db, uri);
 
-    db.add_token(
-        uri,
-        make_db_token(
-            "foo",
-            SemanticTokenType::Function,
-            vec![SemanticTokenModifier::Declaration],
-            1,
-            1,
-        ),
-    );
-
-    // 先执行一次 full 请求获取 result_id
-    let params = SemanticTokensParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
-    let full_result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
-    let result_id = match &full_result {
-        SemanticTokensResult::Tokens(t) => t.result_id.clone().unwrap(),
-        _ => panic!("Expected Tokens"),
-    };
-
-    // 无变更，请求 delta
-    let delta_params = lsp_types::SemanticTokensDeltaParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        previous_result_id: result_id,
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
+    // 先执行一次 full 请求获取 result_id，再无变更地请求 delta
+    let result_id = full_result_id(&db, &mut cache, uri);
     let delta_result =
-        handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params).unwrap();
+        handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params(uri, result_id))
+            .unwrap();
 
     match delta_result {
         SemanticTokensFullDeltaResult::TokensDelta(delta) => {
@@ -291,52 +321,22 @@ fn test_delta_no_change() {
 
 #[test]
 fn test_delta_add_token() {
+    let uri = "file:///delta_add.yx";
     let mut db = SemanticDB::new();
     let mut cache = SemanticTokensCache::new();
-    let uri = "file:///delta_add.yx";
+    add_foo_token(&mut db, uri);
 
-    db.add_token(
-        uri,
-        make_db_token(
-            "foo",
-            SemanticTokenType::Function,
-            vec![SemanticTokenModifier::Declaration],
-            1,
-            1,
-        ),
-    );
-
-    // Full 请求
-    let params = SemanticTokensParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
-    let full_result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
-    let result_id = match &full_result {
-        SemanticTokensResult::Tokens(t) => t.result_id.clone().unwrap(),
-        _ => panic!("Expected Tokens"),
-    };
-
-    // 添加新 token
+    // 先执行一次 full 请求获取 result_id，再添加新 token
+    let result_id = full_result_id(&db, &mut cache, uri);
     db.add_token(
         uri,
         make_db_token("bar", SemanticTokenType::Variable, vec![], 2, 1),
     );
 
     // Delta 请求
-    let delta_params = lsp_types::SemanticTokensDeltaParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        previous_result_id: result_id,
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
     let delta_result =
-        handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params).unwrap();
+        handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params(uri, result_id))
+            .unwrap();
 
     match delta_result {
         SemanticTokensFullDeltaResult::TokensDelta(delta) => {
@@ -348,63 +348,26 @@ fn test_delta_add_token() {
 
 #[test]
 fn test_delta_delete_token() {
+    let uri = "file:///delta_del.yx";
     let mut db = SemanticDB::new();
     let mut cache = SemanticTokensCache::new();
-    let uri = "file:///delta_del.yx";
-
-    db.add_token(
-        uri,
-        make_db_token(
-            "foo",
-            SemanticTokenType::Function,
-            vec![SemanticTokenModifier::Declaration],
-            1,
-            1,
-        ),
-    );
+    add_foo_token(&mut db, uri);
     db.add_token(
         uri,
         make_db_token("bar", SemanticTokenType::Variable, vec![], 2, 1),
     );
 
-    // Full 请求
-    let params = SemanticTokensParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
-    let full_result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
-    let result_id = match &full_result {
-        SemanticTokensResult::Tokens(t) => t.result_id.clone().unwrap(),
-        _ => panic!("Expected Tokens"),
-    };
+    // 先执行一次 full 请求获取 result_id
+    let result_id = full_result_id(&db, &mut cache, uri);
 
     // 删除文件并重新建立，只保留第一个 token
     db.remove_file(uri);
-    db.add_token(
-        uri,
-        make_db_token(
-            "foo",
-            SemanticTokenType::Function,
-            vec![SemanticTokenModifier::Declaration],
-            1,
-            1,
-        ),
-    );
+    add_foo_token(&mut db, uri);
 
     // Delta 请求
-    let delta_params = lsp_types::SemanticTokensDeltaParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        previous_result_id: result_id,
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
     let delta_result =
-        handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params).unwrap();
+        handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params(uri, result_id))
+            .unwrap();
 
     match delta_result {
         SemanticTokensFullDeltaResult::TokensDelta(delta) => {
@@ -419,34 +382,13 @@ fn test_delta_delete_token() {
 
 #[test]
 fn test_delta_modify_token() {
+    let uri = "file:///delta_mod.yx";
     let mut db = SemanticDB::new();
     let mut cache = SemanticTokensCache::new();
-    let uri = "file:///delta_mod.yx";
+    add_foo_token(&mut db, uri);
 
-    db.add_token(
-        uri,
-        make_db_token(
-            "foo",
-            SemanticTokenType::Function,
-            vec![SemanticTokenModifier::Declaration],
-            1,
-            1,
-        ),
-    );
-
-    // Full 请求
-    let params = SemanticTokensParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
-    let full_result = handle_semantic_tokens_full(&db, &mut cache, None, params).unwrap();
-    let result_id = match &full_result {
-        SemanticTokensResult::Tokens(t) => t.result_id.clone().unwrap(),
-        _ => panic!("Expected Tokens"),
-    };
+    // 先执行一次 full 请求获取 result_id
+    let result_id = full_result_id(&db, &mut cache, uri);
 
     // 修改 token（改名为 "foobar"，行数不变）
     db.remove_file(uri);
@@ -462,16 +404,9 @@ fn test_delta_modify_token() {
     );
 
     // Delta 请求
-    let delta_params = lsp_types::SemanticTokensDeltaParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        previous_result_id: result_id,
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
     let delta_result =
-        handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params).unwrap();
+        handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params(uri, result_id))
+            .unwrap();
 
     match delta_result {
         SemanticTokensFullDeltaResult::TokensDelta(delta) => {
@@ -483,32 +418,19 @@ fn test_delta_modify_token() {
 
 #[test]
 fn test_delta_fallback_on_invalid_result_id() {
+    let uri = "file:///delta_fallback.yx";
     let mut db = SemanticDB::new();
     let mut cache = SemanticTokensCache::new();
-    let uri = "file:///delta_fallback.yx";
-
-    db.add_token(
-        uri,
-        make_db_token(
-            "foo",
-            SemanticTokenType::Function,
-            vec![SemanticTokenModifier::Declaration],
-            1,
-            1,
-        ),
-    );
+    add_foo_token(&mut db, uri);
 
     // 使用无效 result_id 请求 delta
-    let delta_params = lsp_types::SemanticTokensDeltaParams {
-        text_document: lsp_types::TextDocumentIdentifier {
-            uri: lsp_types::Uri::from_str(uri).unwrap(),
-        },
-        previous_result_id: "invalid-id".to_string(),
-        work_done_progress_params: Default::default(),
-        partial_result_params: Default::default(),
-    };
-    let delta_result =
-        handle_semantic_tokens_full_delta(&db, &mut cache, None, delta_params).unwrap();
+    let delta_result = handle_semantic_tokens_full_delta(
+        &db,
+        &mut cache,
+        None,
+        delta_params(uri, "invalid-id".to_string()),
+    )
+    .unwrap();
 
     match delta_result {
         SemanticTokensFullDeltaResult::Tokens(tokens) => {
@@ -523,42 +445,15 @@ fn test_delta_fallback_on_invalid_result_id() {
 
 #[test]
 fn test_diff_identical() {
-    let tokens = vec![SemanticToken {
-        delta_line: 0,
-        delta_start: 0,
-        length: 3,
-        token_type: 0,
-        token_modifiers_bitset: 0,
-    }];
+    let tokens = vec![lsp_token(0, 0, 3, 0, 0)];
     let edits = diff_semantic_tokens(&tokens, &tokens);
     assert!(edits.is_empty());
 }
 
 #[test]
 fn test_diff_append() {
-    let old = vec![SemanticToken {
-        delta_line: 0,
-        delta_start: 0,
-        length: 3,
-        token_type: 0,
-        token_modifiers_bitset: 0,
-    }];
-    let new = vec![
-        SemanticToken {
-            delta_line: 0,
-            delta_start: 0,
-            length: 3,
-            token_type: 0,
-            token_modifiers_bitset: 0,
-        },
-        SemanticToken {
-            delta_line: 1,
-            delta_start: 0,
-            length: 3,
-            token_type: 2,
-            token_modifiers_bitset: 0,
-        },
-    ];
+    let old = vec![lsp_token(0, 0, 3, 0, 0)];
+    let new = vec![lsp_token(0, 0, 3, 0, 0), lsp_token(1, 0, 3, 2, 0)];
     let edits = diff_semantic_tokens(&old, &new);
     assert_eq!(edits.len(), 1);
     assert_eq!(edits[0].start, 5); // after 1 token * 5
@@ -569,29 +464,8 @@ fn test_diff_append() {
 
 #[test]
 fn test_diff_prepend() {
-    let old = vec![SemanticToken {
-        delta_line: 1,
-        delta_start: 0,
-        length: 3,
-        token_type: 2,
-        token_modifiers_bitset: 0,
-    }];
-    let new = vec![
-        SemanticToken {
-            delta_line: 0,
-            delta_start: 0,
-            length: 3,
-            token_type: 0,
-            token_modifiers_bitset: 0,
-        },
-        SemanticToken {
-            delta_line: 1,
-            delta_start: 0,
-            length: 3,
-            token_type: 2,
-            token_modifiers_bitset: 0,
-        },
-    ];
+    let old = vec![lsp_token(1, 0, 3, 2, 0)];
+    let new = vec![lsp_token(0, 0, 3, 0, 0), lsp_token(1, 0, 3, 2, 0)];
     let edits = diff_semantic_tokens(&old, &new);
     assert_eq!(edits.len(), 1);
     assert_eq!(edits[0].start, 0);
@@ -600,13 +474,7 @@ fn test_diff_prepend() {
 #[test]
 fn test_diff_empty_to_tokens() {
     let old: Vec<SemanticToken> = vec![];
-    let new = vec![SemanticToken {
-        delta_line: 0,
-        delta_start: 0,
-        length: 3,
-        token_type: 0,
-        token_modifiers_bitset: 0,
-    }];
+    let new = vec![lsp_token(0, 0, 3, 0, 0)];
     let edits = diff_semantic_tokens(&old, &new);
     assert_eq!(edits.len(), 1);
     assert_eq!(edits[0].start, 0);
@@ -616,13 +484,7 @@ fn test_diff_empty_to_tokens() {
 
 #[test]
 fn test_diff_tokens_to_empty() {
-    let old = vec![SemanticToken {
-        delta_line: 0,
-        delta_start: 0,
-        length: 3,
-        token_type: 0,
-        token_modifiers_bitset: 0,
-    }];
+    let old = vec![lsp_token(0, 0, 3, 0, 0)];
     let new: Vec<SemanticToken> = vec![];
     let edits = diff_semantic_tokens(&old, &new);
     assert_eq!(edits.len(), 1);
@@ -635,13 +497,7 @@ fn test_diff_tokens_to_empty() {
 #[test]
 fn test_cache_store_and_get() {
     let mut cache = SemanticTokensCache::new();
-    let tokens = vec![SemanticToken {
-        delta_line: 0,
-        delta_start: 0,
-        length: 3,
-        token_type: 0,
-        token_modifiers_bitset: 0,
-    }];
+    let tokens = vec![lsp_token(0, 0, 3, 0, 0)];
 
     let id = cache.store("file:///test.yx", tokens.clone());
     let cached = cache.get(&id);

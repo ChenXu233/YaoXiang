@@ -40,6 +40,9 @@ pub struct TypeChecker {
     declared_fn_type_params: HashMap<String, Vec<String>>,
     /// 语句检查器
     body_checker: Option<inference::StatementChecker>,
+    /// RFC-014 §项目模式：vendor 根目录（`<project>/.yaoxiang/vendor`）。
+    /// 有值时转发给 body_checker——`use` 缺依赖包的 E5001 追加 install 提示。
+    vendor_root: Option<std::path::PathBuf>,
     /// 语义信息收集（typecheck 阶段同时产出）
     semantic_db: semantic_db::SemanticDB,
     /// 依赖类型环境（类型族注册与查找）
@@ -125,7 +128,7 @@ impl TypeChecker {
                 .iter()
                 .map(|p| {
                     p.ty.as_ref()
-                        .map(&type_name_of)
+                        .map(type_name_of)
                         .unwrap_or_else(|| "_".to_string())
                 })
                 .collect::<Vec<_>>()
@@ -133,7 +136,7 @@ impl TypeChecker {
         } else {
             type_annotation
                 .as_ref()
-                .map(&type_name_of)
+                .map(type_name_of)
                 .unwrap_or_default()
         };
         Some((name.clone(), sig))
@@ -159,7 +162,11 @@ impl TypeChecker {
         super::operator_interfaces::register_native_entries(&mut env);
         // RFC-011b 阶段 2: `?` 传播接口（四方法）
         super::operator_interfaces::register_try_interface_def(&mut env);
-        add_native_function_types(&mut env);
+        // #391：std 签名是编译器静态资产，注册期对畸形签名硬失败——
+        // 签名静态编译进二进制，坏签名等价于编译器自身 invariant 被破坏，
+        // 任何测试/运行路径都必须立即大声失败，绝不静默退化。
+        add_native_function_types(&mut env)
+            .unwrap_or_else(|d| panic!("std native 签名注册失败: {} {}", d.code, d.message));
         Self::register_builtin_container_defs(&mut env);
 
         // std 注册表的方法绑定注入（与 orchestrator 逐文件注入同一规则）：
@@ -180,6 +187,7 @@ impl TypeChecker {
             env,
             declared_fn_type_params: HashMap::new(),
             body_checker: None,
+            vendor_root: None,
             semantic_db: semantic_db::SemanticDB::new(),
             dependent_type_env,
             module_namespaces: HashMap::new(),
@@ -328,6 +336,17 @@ impl TypeChecker {
 
     pub fn env(&mut self) -> &mut TypeEnvironment {
         &mut self.env
+    }
+
+    /// 注入 vendor 根目录（RFC-014 §项目模式）。
+    ///
+    /// 须在 `check_module` 前调用；`check_module` 初始化 body_checker 时
+    /// 转发，`use` 缺依赖包的 E5001 据此追加 `yaoxiang install` 提示。
+    pub fn set_vendor_root(
+        &mut self,
+        root: std::path::PathBuf,
+    ) {
+        self.vendor_root = Some(root);
     }
 
     /// 获取模块名称
@@ -916,12 +935,225 @@ impl TypeChecker {
         self.flush_pending_body_bindings();
     }
 
+    /// 构建并安装函数体检查器（check_module_impl 与 #397 导出面收割共用）。
+    ///
+    /// 除检查器本体的各张表注入外，同步三样东西：
+    /// ① `env.vars`（native 短名标注为「导入」，避免 E2010 误报）；
+    /// ② T3 顶层值绑定占位（前向引用名字可见，pass3/收割执行到时覆盖）；
+    /// ③ W1003 模块级导入名监视集。
+    fn init_body_checker(
+        &mut self,
+        collect_all: bool,
+    ) {
+        let trait_table = self.env.trait_table.clone();
+        let mut body_checker = inference::StatementChecker::new(
+            self.env.solver(),
+            None,
+            self.dependent_type_env.clone(),
+            trait_table,
+        );
+        // 设置 native 函数签名表
+        body_checker.set_native_signatures(self.env.native_signatures.clone());
+        // #387：native arity 区间表随签名表同源传递
+        body_checker.set_native_arities(self.env.native_arity.clone());
+        // 设置模块注册表，支持函数体/块作用域 use
+        body_checker.set_module_registry(self.env.module_registry.clone());
+        // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
+        body_checker.set_module_aliases(self.env.module_aliases.clone());
+        // RFC-014：vendor 根注入——缺依赖包的 E5001 追加 install 提示
+        if let Some(vendor_root) = self.vendor_root.clone() {
+            body_checker.set_vendor_root(vendor_root);
+        }
+        // 设置泛型类型定义模板表
+        body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
+        // 设置方法绑定表
+        body_checker.set_method_bindings(self.env.method_bindings.clone());
+        body_checker.method_overloads = self.env.method_overloads.clone();
+        body_checker.method_overload_ir_names = self.env.method_overload_ir_names.clone();
+        // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
+        body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
+        body_checker.set_sum_types(self.env.sum_types.clone());
+        // 设置类型定义表（用于 TypeRef → Struct 解析）
+        let type_defs: HashMap<String, MonoType> = self
+            .env
+            .types
+            .iter()
+            .map(|(name, poly)| (name.clone(), poly.body.clone()))
+            .collect();
+        body_checker.set_type_defs(type_defs);
+        // RFC-027 Phase 2.5: 构建证明函数基类型表
+        let proof_fn_bases: HashMap<String, MonoType> = self
+            .env
+            .vars
+            .iter()
+            .filter_map(|(name, poly)| {
+                if let MonoType::Fn {
+                    params,
+                    return_type,
+                } = &poly.body
+                {
+                    if matches!(return_type.as_ref(), MonoType::MetaType { .. }) {
+                        return params.first().map(|base| (name.clone(), base.clone()));
+                    }
+                }
+                None
+            })
+            .collect();
+        body_checker.set_proof_fn_bases(proof_fn_bases);
+        // 如果启用收集模式，设置收集所有错误
+        if collect_all {
+            body_checker.set_collect_all_errors(true);
+        }
+        *self.body_checker_mut() = body_checker;
+
+        // 将环境中的变量同步到 body_checker。
+        //
+        // 标注为「导入」：`env.vars` 里既有本文件的声明，也有
+        // `add_native_function_types` 注入的 std native 短名（如 `ok`/`err`）。
+        // 后者不是本文件的绑定——若不区分，用户写 `ok = ...` 会被 spec §4.3
+        // 判定看成「重赋值不可变变量」→ 误报 E2010。
+        // #414：use 登记的本地名（imported_names）同样按导入注入——pass3 的
+        // 导入冲突判定（E5006/E5008）靠 `imported` 旗标区分「本文件绑定」与
+        // 「本 use 语句的 pass2 预登记」，否则首条 use 就会撞上自己的同步产物。
+        let use_local_names: Vec<String> =
+            self.imported_names.iter().map(|(n, _)| n.clone()).collect();
+        for (name, poly) in self.env.vars.clone() {
+            let is_native = self.env.native_signatures.contains_key(&name);
+            if is_native || use_local_names.iter().any(|n| n == &name) {
+                self.body_checker_mut().add_imported_var(name, poly);
+            } else {
+                self.body_checker_mut().add_var(
+                    name,
+                    poly,
+                    false,
+                    crate::util::span::Span::default(),
+                );
+            }
+        }
+
+        // T3：把 pass2 收集的顶层值绑定占位也注入 body_checker，
+        // 使函数体内对后置绑定的引用（前向引用）能解析到名字。
+        // pass3 执行到该语句时会重新推断并覆盖占位类型。
+        for (name, poly) in self.early_value_bindings.clone() {
+            self.body_checker_mut().add_forward_declared_var(name, poly);
+        }
+
+        // #321 W1003：模块级导入名监视集注入（函数体级 use 由 process_use_stmt 自行登记）
+        let module_import_watch = self.import_watch.clone();
+        self.body_checker_mut()
+            .set_import_watch(module_import_watch);
+    }
+
+    /// #397：导出面收割——对无标注的顶层值绑定跑与 pass3 相同的语句检查，
+    /// 使推断出的具体类型落进 `env.vars`。此前这类绑定既不在签名表（函数
+    /// 专属）也无标注可读，`extract_module_info` 的导出面直接丢弃它们，
+    /// 导入方只能得到误导性报错。
+    ///
+    /// 收割前先在 body_checker 作用域里加工 `use`（块级 use 同一入口），
+    /// 使初始化式引用其他模块名字的绑定（`use other;` 后 `v = other.greet()`）
+    /// 也能推断。收割期间的诊断一律丢弃：这里只取类型，错误报告属于模块
+    /// 自身的完整检查。
+    pub fn harvest_untyped_value_bindings(
+        &mut self,
+        module: &crate::frontend::core::parser::ast::Module,
+    ) {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind};
+        // T3 占位先行：前向引用（`b = a + 1` 中 a 在后）名字可见，
+        // 且 init_body_checker 的占位同步依赖这一步
+        for stmt in &module.items {
+            self.collect_value_binding_signature(stmt);
+        }
+        self.init_body_checker(false);
+
+        // use 加工先行：块级 use 同一入口，模块别名进 body_checker 作用域
+        for stmt in &module.items {
+            if let StmtKind::Use {
+                path,
+                path_span,
+                items,
+                alias,
+                item_aliases,
+                ..
+            } = &stmt.kind
+            {
+                let _ = self.body_checker_mut().process_use_stmt(
+                    path,
+                    *path_span,
+                    items,
+                    alias,
+                    item_aliases,
+                );
+            }
+        }
+
+        // 收割目标：裸名、无标注、非函数、签名表里没有的顶层绑定
+        let targets: Vec<&crate::frontend::core::parser::ast::Stmt> = module
+            .items
+            .iter()
+            .filter(|stmt| match &stmt.kind {
+                StmtKind::Assign {
+                    target,
+                    type_annotation,
+                    value,
+                    ..
+                } => {
+                    let Expr::Var(name, _) = target.as_ref() else {
+                        return false;
+                    };
+                    if type_annotation.is_some() || self.env.vars.contains_key(name) {
+                        return false;
+                    }
+                    let is_fn = value.as_ref().is_some_and(|v| {
+                        matches!(v.as_ref(), Expr::Lambda { .. })
+                            || Expr::block_binding_is_function(
+                                type_annotation.as_ref(),
+                                Some(v.as_ref()),
+                            )
+                    });
+                    !is_fn
+                }
+                _ => false,
+            })
+            .collect();
+
+        for stmt in targets {
+            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
+            // 诊断丢弃：收割只取类型；错误由模块自身编译时的完整检查报告
+            let _ = self.body_checker_mut().check_stmt(stmt);
+            if let StmtKind::Assign { target, .. } = &stmt.kind {
+                let Expr::Var(name, _) = target.as_ref() else {
+                    continue;
+                };
+                // 推断类型落在 body_checker 的 global 链（#295：模块级绑定）
+                if let Some(poly) = self.body_checker_global_type(name) {
+                    self.env.vars.entry(name.clone()).or_insert(poly);
+                }
+            }
+        }
+    }
+
+    /// body_checker global 链上某绑定的类型（收割读回用）。
+    fn body_checker_global_type(
+        &self,
+        name: &str,
+    ) -> Option<PolyType> {
+        self.body_checker
+            .as_ref()
+            .and_then(|bc| bc.scope_globals().get(name))
+            .map(|info| info.poly.clone())
+    }
+
     /// 检查整个模块的内部实现
     fn check_module_impl(
         &mut self,
         module: &Module,
         collect_all: bool,
     ) -> TypeCheckResult {
+        // 第零遍：登记编译期谓词定义（#377-3）。
+        // 必须先于 pass1/pass2（签名与类型定义的精化标注要能解析到谓词体），
+        // 且独立成遍，使谓词的定义与使用不受声明序约束。
+        self.collect_predicate_defs(module);
+
         // 第一遍：收集所有类型定义
         for stmt in &module.items {
             // #324：模块级阶段挂当前语句 span，诊断自动获得位置
@@ -985,91 +1217,8 @@ impl TypeChecker {
             self.add_error(err);
         }
 
-        // 初始化函数体检查器
-        let trait_table = self.env.trait_table.clone();
-        let mut body_checker = inference::StatementChecker::new(
-            self.env.solver(),
-            None,
-            self.dependent_type_env.clone(),
-            trait_table,
-        );
-        // 设置 native 函数签名表
-        body_checker.set_native_signatures(self.env.native_signatures.clone());
-        // 设置模块注册表，支持函数体/块作用域 use
-        body_checker.set_module_registry(self.env.module_registry.clone());
-        // 设置泛型类型定义模板表
-        body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
-        // 设置方法绑定表
-        body_checker.set_method_bindings(self.env.method_bindings.clone());
-        body_checker.method_overloads = self.env.method_overloads.clone();
-        body_checker.method_overload_ir_names = self.env.method_overload_ir_names.clone();
-        // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
-        body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
-        body_checker.set_sum_types(self.env.sum_types.clone());
-        // 设置类型定义表（用于 TypeRef → Struct 解析）
-        let type_defs: HashMap<String, MonoType> = self
-            .env
-            .types
-            .iter()
-            .map(|(name, poly)| (name.clone(), poly.body.clone()))
-            .collect();
-        body_checker.set_type_defs(type_defs);
-        // RFC-027 Phase 2.5: 构建证明函数基类型表
-        let proof_fn_bases: HashMap<String, MonoType> = self
-            .env
-            .vars
-            .iter()
-            .filter_map(|(name, poly)| {
-                if let MonoType::Fn {
-                    params,
-                    return_type,
-                } = &poly.body
-                {
-                    if matches!(return_type.as_ref(), MonoType::MetaType { .. }) {
-                        return params.first().map(|base| (name.clone(), base.clone()));
-                    }
-                }
-                None
-            })
-            .collect();
-        body_checker.set_proof_fn_bases(proof_fn_bases);
-        // 如果启用收集模式，设置收集所有错误
-        if collect_all {
-            body_checker.set_collect_all_errors(true);
-        }
-        *self.body_checker_mut() = body_checker;
-
-        // 将环境中的变量同步到 body_checker。
-        //
-        // 标注为「导入」：`env.vars` 里既有本文件的声明，也有
-        // `add_native_function_types` 注入的 std native 短名（如 `ok`/`err`）。
-        // 后者不是本文件的绑定——若不区分，用户写 `ok = ...` 会被 spec §4.3
-        // 判定看成「重赋值不可变变量」→ 误报 E2010。
-        for (name, poly) in self.env.vars.clone() {
-            let is_native = self.env.native_signatures.contains_key(&name);
-            if is_native {
-                self.body_checker_mut().add_imported_var(name, poly);
-            } else {
-                self.body_checker_mut().add_var(
-                    name,
-                    poly,
-                    false,
-                    crate::util::span::Span::default(),
-                );
-            }
-        }
-
-        // T3：把 pass2 收集的顶层值绑定占位也注入 body_checker，
-        // 使函数体内对后置绑定的引用（前向引用）能解析到名字。
-        // pass3 执行到该语句时会重新推断并覆盖占位类型。
-        for (name, poly) in self.early_value_bindings.clone() {
-            self.body_checker_mut().add_forward_declared_var(name, poly);
-        }
-
-        // #321 W1003：模块级导入名监视集注入（函数体级 use 由 process_use_stmt 自行登记）
-        let module_import_watch = self.import_watch.clone();
-        self.body_checker_mut()
-            .set_import_watch(module_import_watch);
+        // 初始化函数体检查器（构建 + 三张表同步，与导出面收割共用）
+        self.init_body_checker(collect_all);
 
         // 第三遍：检查所有语句（包括函数体）
         for stmt in &module.items {
@@ -1098,9 +1247,25 @@ impl TypeChecker {
         // §7 验证模式门控：只有带精化标注的变量参与「度量变量」判定，裸 `while`
         // 不进验证模式。此处先收集精化变量名，再注入检查器。
         let refined_vars = self.collect_refined_var_names(module);
+        // RFC-027a §2：显式测度（`Terminates(m)`）从 AST 提取后注入，供义务
+        // 生成按被标注名查测度。与 `refined_vars` 同源（同一遍 AST 遍历）。
+        let measures = self.collect_termination_measures(module);
+        // RFC-027a §良基性：函数前置条件（形参精化代入后的约束）——良基性
+        // `m >= 0` 的证据只能来自它（ℤ 上 `<` 不良基）。
+        let param_assumptions = self.collect_param_refinements();
         let term_results = {
+            #[allow(unused_mut)]
             let mut term_checker = super::layers::termination::TerminationChecker::new()
-                .set_refined_vars(refined_vars);
+                .set_refined_vars(refined_vars)
+                .set_measures(measures)
+                .set_param_assumptions(param_assumptions);
+            // RFC-027a T4（即 #377-1）：生产在此注入求解器后端。此前从不调用
+            // 注入点，`self.solver` 恒为 `None`，SMT 相关路径在任何平台都不执行。
+            // wasm 下无 Z3（#376），`default_solver()` 返回 `None` 时保持不注入。
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(solver) = super::proof::smt::backend::default_solver() {
+                term_checker = term_checker.with_solver_owned(solver);
+            }
             term_checker.check_module(module, self.env())
         };
         for result in term_results {
@@ -1254,6 +1419,12 @@ impl TypeChecker {
         } else {
             Vec::new()
         };
+        // #389：match scrutinee 推断类型（ir_gen 按 span 回查）
+        let match_scrutinee_types = if let Some(ref bc) = self.body_checker {
+            bc.match_scrutinee_types.clone()
+        } else {
+            HashMap::new()
+        };
 
         // #321 W1003：未使用导入警告（Warning 级，不阻断编译，经 warnings 通道流出）
         let import_warnings = self.collect_unused_import_warnings(module);
@@ -1271,6 +1442,7 @@ impl TypeChecker {
             instantiation_requests,
             existential_coercions,
             try_expr_impls,
+            match_scrutinee_types,
             method_overload_ir_names: self.env.method_overload_ir_names.clone(),
             overload_resolutions: if let Some(ref bc) = self.body_checker {
                 bc.overload_resolutions.clone()
@@ -1306,8 +1478,12 @@ impl TypeChecker {
             );
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
+            // #387：native arity 区间表随签名表同源传递
+            body_checker.set_native_arities(self.env.native_arity.clone());
             // 设置模块注册表，支持函数体/块作用域 use
             body_checker.set_module_registry(self.env.module_registry.clone());
+            // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
+            body_checker.set_module_aliases(self.env.module_aliases.clone());
             self.body_checker = Some(body_checker);
         }
         self.body_checker.as_mut().unwrap()
@@ -1969,23 +2145,27 @@ impl TypeChecker {
                             }
                         }
                         // use path as alias → 整个模块用别名注册
-                        (None, Some(aliases)) if aliases.len() == 1 => {
-                            let alias_name = &aliases[0];
-                            // #321 W1003：登记导入本地名与导出成员监视
-                            self.record_import_name(alias_name, stmt.span);
-                            self.watch_import_members(alias_name, &module);
-                            // 登记用户模块命名空间别名（std 走 is_std_submodule 机制，不入此表）
-                            if !(path == "std" || path.starts_with("std.")) {
+                        // #414：单/多别名统一走此臂——每个别名各绑一份模块 record
+                        (None, Some(aliases)) => {
+                            for alias_name in aliases {
+                                // #321 W1003：登记导入本地名与导出成员监视
+                                self.record_import_name(alias_name, stmt.span);
+                                self.watch_import_members(alias_name, &module);
+                                // 命名空间别名登记。#410：std 路径不再豁免——裸子模块名由
+                                // is_std_submodule 兜住，别名只有这张表能救；漏登记则
+                                // ir_gen 把 `m.sqrt` 当闭包值调用 → E8001 ICE
                                 self.module_namespaces
                                     .insert(alias_name.clone(), path.clone());
-                            }
-                            for export in exports_to_import {
-                                if matches!(export.kind, crate::frontend::module::ExportKind::Type)
-                                    && export.type_payload.is_some()
-                                {
-                                    self.register_use_export(&export.name, export, false);
+                                for export in &exports_to_import {
+                                    if matches!(
+                                        export.kind,
+                                        crate::frontend::module::ExportKind::Type
+                                    ) && export.type_payload.is_some()
+                                    {
+                                        self.register_use_export(&export.name, export, false);
+                                    }
+                                    self.register_use_export(alias_name, export, true);
                                 }
-                                self.register_use_export(alias_name, export, true);
                             }
                         }
                         // use path.{a, b} / use path.{a as x}（#245：仅内联别名）。
@@ -1999,6 +2179,18 @@ impl TypeChecker {
                                     .as_ref()
                                     .and_then(|v| v.get(i))
                                     .and_then(|a| a.as_ref());
+                                // #415：子模块导出经内联别名绑定时（`use std.{io as printer}`），
+                                // is_std_submodule 只认裸子模块名，别名必须入 namespace 表，
+                                // 否则 ir_gen 解析 `printer.print` → E3006。非别名条目入表与
+                                // 既有机制重合（io → std.io），无害。
+                                if matches!(
+                                    export.kind,
+                                    crate::frontend::module::ExportKind::SubModule
+                                ) {
+                                    let ns_name = local_name.unwrap_or(item_name);
+                                    self.module_namespaces
+                                        .insert(ns_name.to_string(), export.full_path.clone());
+                                }
                                 // #321 W1003：登记导入本地名（内联别名优先）
                                 match local_name {
                                     Some(local) => self.record_import_name(local, stmt.span),
@@ -2008,14 +2200,6 @@ impl TypeChecker {
                                     Some(local) => self.register_use_export(local, export, true),
                                     None => self.register_use_export(item_name, export, false),
                                 }
-                            }
-                        }
-                        // 其他情况：报错或回退
-                        _ => {
-                            for export in exports_to_import {
-                                // #321 W1003：登记导入本地名
-                                self.record_import_name(&export.name, stmt.span);
-                                self.register_use_export(path, export, false);
                             }
                         }
                     }
@@ -2773,6 +2957,7 @@ impl TypeChecker {
             field_has_default: Vec::new(),
             interfaces: vec![],
         });
+        self.env.module_aliases.insert(module_alias.to_string());
         self.env
             .add_var(module_alias.to_string(), PolyType::mono(module_ty));
     }
@@ -2796,10 +2981,20 @@ impl TypeChecker {
                 // 子模块作为命名空间
                 let sub_module_path = export.full_path.clone();
                 let mut fields = Vec::new();
+                let mut payload_type_exports = Vec::new();
                 if let Some(sub_module) = self.env.module_registry.get(&sub_module_path).cloned() {
                     for sub_export in sub_module.exports.values() {
                         let field_ty = self.export_register_type(sub_export);
                         fields.push((sub_export.name.clone(), field_ty));
+                        // 分组 use（`use std.{result}`）与整模块 use 同权：子模块内
+                        // 带载荷的 Type 导出按裸名补镜像——裸名构造
+                        // （`Result(Int, String)`）与 match 变体解构的变体集
+                        // （sum_types）都依赖这份注册，与整模块导入臂同一规则。
+                        if matches!(sub_export.kind, crate::frontend::module::ExportKind::Type)
+                            && sub_export.type_payload.is_some()
+                        {
+                            payload_type_exports.push(sub_export.clone());
+                        }
                     }
                 }
                 let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
@@ -2810,7 +3005,13 @@ impl TypeChecker {
                     field_has_default: Vec::new(),
                     interfaces: vec![],
                 });
+                // 分组导入的子模块命名空间（`use std.{result}` 后 `result.nope`）
+                // 同样按模块语义报 E1043。
+                self.env.module_aliases.insert(register_name.clone());
                 self.env.add_var(register_name, PolyType::mono(module_ty));
+                for sub_export in &payload_type_exports {
+                    self.register_use_export(&sub_export.name, sub_export, false);
+                }
             }
             crate::frontend::module::ExportKind::Type => {
                 // 类型导出：镜像本地类型定义，同时注册到类型空间与值空间，
@@ -4065,6 +4266,281 @@ impl TypeChecker {
         }
     }
 
+    /// 收集全模块的**显式测度**表：被标注的绑定/函数名 → 测度表达式（RFC-027a §2）。
+    ///
+    /// 从 **AST** 提取而不从已解析的 `MonoType` 取：`MonoType::from` 是有损
+    /// 转换，T1 调查中它把 `Terminates(b)` 的测度解析成 `Int(64)`，测度表达式
+    /// 在到达消费端前就丢了。AST 是测度的无损来源。
+    ///
+    /// 两种标注位都收（RFC-027a §2.1）：
+    /// - 函数返回类型位 `gcd: (a: Int, b: Int) -> Terminates(b)` → 键 `gcd`
+    /// - 变量绑定位 `acc: Terminates(n - i) = ...` → 键 `acc`
+    ///
+    /// 无 `Terminates` 标注时返回空表。
+    /// 收集函数**前置条件**：各函数带精化的形参约束（RFC-027a §良基性）。
+    ///
+    /// 源是 env 里已解析的函数类型——形参位已由 `resolve_type_annotation` 规范化
+    /// 为 `Refined`，且谓词定义注册后约束是**谓词体**（`b: NonNegative(b)` →
+    /// `b >= 0`）。故这里取的与判定同一份形态，不必再从 AST 提取。
+    ///
+    /// 键 = 函数名，值 = 其精化形参的约束；`Terminates` 除外（那是终止测度，
+    /// 不是值约束）。
+    pub(crate) fn collect_param_refinements(
+        &self
+    ) -> std::collections::HashMap<String, Vec<crate::frontend::core::types::const_data::ConstExpr>>
+    {
+        let mut out: std::collections::HashMap<String, Vec<_>> = std::collections::HashMap::new();
+        for (name, poly) in &self.env.vars {
+            let MonoType::Fn { params, .. } = &poly.body else {
+                continue;
+            };
+            let constraints: Vec<_> = params
+                .iter()
+                .filter(|p| matches!(p, MonoType::Refined { .. }) && !constraint_is_terminates(p))
+                .filter_map(|p| match p {
+                    MonoType::Refined { constraint, .. } => Some(constraint.clone()),
+                    _ => None,
+                })
+                .collect();
+            if !constraints.is_empty() {
+                out.insert(name.clone(), constraints);
+            }
+        }
+        out
+    }
+
+    /// 登记编译期谓词定义（#377-3）。
+    ///
+    /// 谓词 = 返回 `Type` 的**单参数**声明，其体表达式即约束模板：
+    ///
+    /// ```text
+    /// IsPositive: (x: Int) -> Type = { x > 0 }
+    /// ```
+    ///
+    /// 登记后 `IsPositive(-5)` 解析为 `Refined { constraint: -5 > 0 }` 而非
+    /// 不透明应用 `IsPositive(-5)`。这是精化约束第一次**可符号推理**的前提
+    /// （SMT 与假设合证；终止检查良基性 `b >= 0` 就依赖它）。
+    ///
+    /// 两种声明形态都收（与 pipeline 执行证明函数的取法同源）：
+    /// - `TypeDefinition`：`= { x > 0 }` 被解析成类型体，约束在
+    ///   `Type::Struct` 的 `TypeBodyItem::Expr(Type::ConstExpr)` 里（主形态）
+    /// - `Assign`：函数体形态
+    ///
+    /// 只登记单参数形态：`PredicateResolver::try_resolve` 的阶段 1 模型即单参数，
+    /// 登记多参数谓词会使其调用一律撞 ArityMismatch（E1093）——保持其走证明
+    /// 函数路径（现行为）。约束体不可转为常量表达式的声明不登记也不报错
+    /// （它只是普通函数）。
+    fn collect_predicate_defs(
+        &mut self,
+        module: &Module,
+    ) {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind, Type, TypeBodyItem};
+        for stmt in &module.items {
+            let (name, signature_params, constraint) = match &stmt.kind {
+                StmtKind::TypeDefinition {
+                    name,
+                    signature_params,
+                    definition,
+                    ..
+                } => {
+                    let Type::Struct { body } = definition else {
+                        continue;
+                    };
+                    let Some(expr) = body.iter().find_map(|item| match item {
+                        TypeBodyItem::Expr(Type::ConstExpr(e)) => Some(e.as_ref()),
+                        _ => None,
+                    }) else {
+                        continue;
+                    };
+                    let Some(c) = convert_expr_to_const_expr(expr) else {
+                        continue;
+                    };
+                    (name, signature_params, c)
+                }
+                StmtKind::Assign {
+                    target,
+                    type_annotation: Some(Type::Fn { return_type, .. }),
+                    signature_params,
+                    value: Some(v),
+                    ..
+                } => {
+                    let Expr::Var(name, _) = target.as_ref() else {
+                        continue;
+                    };
+                    // 返回 Type 才是谓词（`MetaType` 与 `Name{Type}` 两形态同义）
+                    let returns_type = matches!(return_type.as_ref(), Type::MetaType { .. })
+                        || matches!(return_type.as_ref(), Type::Name { name: n, .. } if n == "Type");
+                    if !returns_type {
+                        continue;
+                    }
+                    let Some(body) = extract_fn_body(Some(v.as_ref())) else {
+                        continue;
+                    };
+                    let Some(expr) = body.stmts.iter().find_map(|s| match &s.kind {
+                        StmtKind::Expr(e) => Some(e.as_ref()),
+                        StmtKind::Return(Some(e)) => Some(e.as_ref()),
+                        _ => None,
+                    }) else {
+                        continue;
+                    };
+                    let Some(c) = convert_expr_to_const_expr(expr) else {
+                        continue;
+                    };
+                    (name, signature_params, c)
+                }
+                _ => continue,
+            };
+            // 参数名在 signature_params（`Type::Fn::params` 只有类型没有名）
+            let [param] = signature_params.as_slice() else {
+                continue;
+            };
+            let param_type = param
+                .ty
+                .as_ref()
+                .map(|t| MonoType::from(t.clone()))
+                .unwrap_or(MonoType::Int(64));
+            self.env.predicate_defs.insert(
+                name.clone(),
+                crate::frontend::core::typecheck::predicate_resolver::PredicateDef {
+                    param_name: param.name.clone(),
+                    param_type,
+                    constraint,
+                },
+            );
+        }
+    }
+    pub(crate) fn collect_termination_measures(
+        &self,
+        module: &Module,
+    ) -> std::collections::HashMap<String, crate::frontend::core::types::const_data::ConstExpr>
+    {
+        let mut measures = std::collections::HashMap::new();
+        for stmt in &module.items {
+            self.collect_termination_measures_in_stmt(stmt, &mut measures);
+        }
+        measures
+    }
+
+    /// 递归收集单条语句中的显式测度（含函数体内的嵌套绑定）
+    fn collect_termination_measures_in_stmt(
+        &self,
+        stmt: &crate::frontend::core::parser::ast::Stmt,
+        measures: &mut std::collections::HashMap<
+            String,
+            crate::frontend::core::types::const_data::ConstExpr,
+        >,
+    ) {
+        use crate::frontend::core::parser::ast::{Expr, StmtKind, Type};
+
+        match &stmt.kind {
+            StmtKind::Assign {
+                target,
+                type_annotation: Some(type_ann),
+                value,
+                ..
+            } => {
+                if let Expr::Var(name, _) = target.as_ref() {
+                    // 函数签名形态：测度在返回类型位
+                    let annotated = match type_ann {
+                        Type::Fn { return_type, .. } => return_type.as_ref(),
+                        other => other,
+                    };
+                    if let Some(measure) = Self::terminates_measure(annotated) {
+                        measures.insert(name.clone(), measure);
+                    }
+                }
+                // 函数体内的嵌套绑定同样计入
+                if let Some(expr) = value.as_deref() {
+                    self.collect_termination_measures_in_expr(expr, measures);
+                }
+            }
+            StmtKind::Expr(expr) => self.collect_termination_measures_in_expr(expr, measures),
+            StmtKind::If {
+                then_branch,
+                else_if_branches,
+                else_branch,
+                ..
+            } => {
+                for s in &then_branch.stmts {
+                    self.collect_termination_measures_in_stmt(s, measures);
+                }
+                for (_, body) in else_if_branches {
+                    for s in &body.stmts {
+                        self.collect_termination_measures_in_stmt(s, measures);
+                    }
+                }
+                if let Some(eb) = else_branch {
+                    for s in &eb.stmts {
+                        self.collect_termination_measures_in_stmt(s, measures);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 递归收集表达式内的显式测度（块/循环体/函数体）
+    fn collect_termination_measures_in_expr(
+        &self,
+        expr: &crate::frontend::core::parser::ast::Expr,
+        measures: &mut std::collections::HashMap<
+            String,
+            crate::frontend::core::types::const_data::ConstExpr,
+        >,
+    ) {
+        use crate::frontend::core::parser::ast::Expr;
+
+        match expr {
+            Expr::Block(block) => {
+                for s in &block.stmts {
+                    self.collect_termination_measures_in_stmt(s, measures);
+                }
+            }
+            Expr::While { body, .. } | Expr::For { body, .. } => {
+                for s in &body.stmts {
+                    self.collect_termination_measures_in_stmt(s, measures);
+                }
+            }
+            Expr::Lambda { body, .. } => {
+                for s in &body.stmts {
+                    self.collect_termination_measures_in_stmt(s, measures);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// 从类型注解中取出 `Terminates(m)` 的测度表达式 `m`（RFC-027a §2）。
+    ///
+    /// 只认一元形态；非 `Terminates` 或元数不符返回 `None`（元数错误由
+    /// `resolve_type_annotation` 报 E1093，此处不重复报）。
+    ///
+    /// 测度实参在 AST 里两种形态（探针实测）：
+    /// - `Type::Name` —— 单变量测度（`Terminates(b)`）
+    /// - `Type::ConstExpr` —— 表达式测度（`Terminates(n - i)`）
+    ///
+    /// `Type::Generic` 形态（`Terminates(f(n))`，解析器读作类型应用）不是测度
+    /// 表达式，需要 const fn 求值才能定值，暂不支持——返回 `None` 而非猜一个值。
+    fn terminates_measure(
+        ty: &crate::frontend::core::parser::ast::Type
+    ) -> Option<crate::frontend::core::types::const_data::ConstExpr> {
+        use crate::frontend::core::parser::ast::Type;
+        use crate::frontend::core::types::const_data::ConstExpr;
+        use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+
+        let Type::Generic { name, args, .. } = ty else {
+            return None;
+        };
+        if name != "Terminates" || args.len() != 1 {
+            return None;
+        }
+        match &args[0] {
+            Type::Name { name, .. } => Some(ConstExpr::NamedVar(name.clone())),
+            Type::ConstExpr(expr) => convert_expr_to_const_expr(expr),
+            _ => None,
+        }
+    }
+
     /// Phase 2.5：精化类型绑定与依赖重验证（RFC-027 §6.1，#379 微重构）
     ///
     /// 单遍顺序走查，按 [`RefinedScopeUnit`] 切分作用域（模块层一个单元，
@@ -4097,6 +4573,9 @@ impl TypeChecker {
                 shared_ctx: &mut shared_ctx,
                 proof_calls,
                 diags: &mut refined_diags,
+                fn_return_refined: None,
+                fn_return_binder: None,
+                fn_name: None,
             };
             let mut module_unit = RefinedScopeUnit::new();
             self.refined_walk_stmts(&module.items, &mut module_unit, &mut ctx);
@@ -4141,6 +4620,7 @@ impl TypeChecker {
             StmtKind::Assign {
                 target,
                 type_annotation: Some(type_ann),
+                signature_params,
                 value,
                 ..
             } => {
@@ -4176,8 +4656,21 @@ impl TypeChecker {
                     value.as_deref(),
                 ) {
                     if let Some(body) = extract_fn_body(value.as_deref()) {
-                        self.refined_walk_fn_body(body, ctx);
+                        let fn_name = match target.as_ref() {
+                            Expr::Var(n, _) => Some(n.as_str()),
+                            _ => None,
+                        };
+                        // RFC-027 §3：返回位精化的 binder 名与谓词实参只在 **AST** 里
+                        // 无损（`MonoType` 已把符号实参降级成占位），故在此按声明解析，
+                        // 走查只消费结果。
+                        let ret_refinement =
+                            self.resolve_return_refinement(type_ann, signature_params, ctx.diags);
+                        self.refined_walk_fn_body(body, fn_name, ret_refinement, ctx);
                     }
+                }
+                // RFC-027 §3.4：绑定初始值若为调用，校验其实参
+                if let Some(v) = value.as_deref() {
+                    self.check_call_arg_refinements(v, unit, ctx);
                 }
                 registered
             }
@@ -4205,16 +4698,23 @@ impl TypeChecker {
                         }
                     }
                     unit.track(name, new_value);
+                    // 变量重赋值 ⇒ 依赖它的假设作废（否则用旧值判新值）
+                    ctx.shared_ctx.assumptions.kill(name);
                 }
                 // 复杂赋值目标（索引/解构）：v1 不建模对依赖者的影响（与旧实现一致）
                 // RHS 内嵌函数体：`f = () => {...}` 同样独立单元
                 match rhs.as_ref() {
                     Expr::Lambda { body, .. } => {
-                        self.refined_walk_fn_body(body, ctx);
+                        // 无注解绑定：无签名可依，后置条件与形参前置条件皆空
+                        self.refined_walk_fn_body(body, None, None, ctx);
                     }
                     // 无注解的块值在当前作用域顺序执行：同单元走查
                     Expr::Block(block) => {
                         self.refined_walk_stmts(&block.stmts, unit, ctx);
+                    }
+                    // RFC-027 §3.4：调用点的形参精化义务
+                    Expr::Call { .. } => {
+                        self.check_call_arg_refinements(rhs, unit, ctx);
                     }
                     _ => {}
                 }
@@ -4258,12 +4758,42 @@ impl TypeChecker {
                     Expr::For { var, body, .. } | Expr::SpawnFor { var, body, .. } => {
                         self.refined_walk_loop_body(Some(var), body, unit, ctx);
                     }
+                    // RFC-027 §3.4：调用点的形参精化义务
+                    Expr::Call { .. } => {
+                        self.check_call_arg_refinements(expr, unit, ctx);
+                    }
+                    // RFC-027：返回位精化在 `return` 点验证（后置条件）
+                    Expr::Return(Some(v), return_span) => {
+                        self.check_return_refinement(v, *return_span, unit, ctx);
+                    }
                     _ => {}
                 }
                 Vec::new()
             }
             _ => Vec::new(),
         }
+    }
+
+    /// 在**守卫成立**的假设下走查一个分支（RFC-027 §3.4）。
+    ///
+    /// §3.4 的帮助文案自己举的例子就是这条路径：
+    /// `if y > 0 { divide(x, y) }`——守卫 `y > 0` 正是精化实参所需的静态证据。
+    /// 不注入守卫会把这类**合法**代码判伪（y 无约束时可取 0），是误报。
+    ///
+    /// 作用域配对保证守卫不泄漏到分支之外（`else` 不该看到 `then` 的条件）。
+    fn refined_walk_branch_with_guard(
+        &self,
+        guard: Option<crate::frontend::core::types::const_data::ConstExpr>,
+        stmts: &[crate::frontend::core::parser::ast::Stmt],
+        unit: &mut RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        ctx.shared_ctx.assumptions.enter_scope();
+        if let Some(g) = guard {
+            ctx.shared_ctx.assumptions.inject(g);
+        }
+        self.refined_walk_stmts(stmts, unit, ctx);
+        ctx.shared_ctx.assumptions.exit_scope();
     }
 
     /// 走查 if 链：返回所有**可达**路径的出口值环境（进入态不被污染）。
@@ -4285,7 +4815,7 @@ impl TypeChecker {
     ) -> Vec<HashMap<String, crate::frontend::core::types::ConstValue>> {
         match Self::fold_bool(&*ctx.shared_ctx, condition, &unit.values) {
             Some(true) => {
-                self.refined_walk_stmts(then_stmts, unit, ctx);
+                self.refined_walk_branch_with_guard(None, then_stmts, unit, ctx);
                 vec![unit.values.clone()]
             }
             Some(false) => match else_ifs.split_first() {
@@ -4294,16 +4824,20 @@ impl TypeChecker {
                 }
                 None => match else_branch {
                     Some(eb) => {
-                        self.refined_walk_stmts(&eb.stmts, unit, ctx);
+                        self.refined_walk_branch_with_guard(None, &eb.stmts, unit, ctx);
                         vec![unit.values.clone()]
                     }
                     None => vec![unit.values.clone()],
                 },
             },
             None => {
-                // then 臂是一条候选路径：从进入态走查后恢复
+                // then 臂：条件成立是一条假设（§3.4 的守卫证据）
+                let then_guard =
+                    crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(
+                        condition,
+                    );
                 let pre = unit.values.clone();
-                self.refined_walk_stmts(then_stmts, unit, ctx);
+                self.refined_walk_branch_with_guard(then_guard, then_stmts, unit, ctx);
                 let mut paths = vec![std::mem::replace(&mut unit.values, pre)];
                 // 余下链递归（后续条件同样剪枝）；无 else-if 时
                 // 「全部条件都不中」的路径 = else 臂（有 else）或进入态原样
@@ -4318,7 +4852,15 @@ impl TypeChecker {
                     )),
                     None => match else_branch {
                         Some(eb) => {
-                            self.refined_walk_stmts(&eb.stmts, unit, ctx);
+                            // else 臂：条件不成立
+                            self.refined_walk_branch_with_guard(
+                                crate::frontend::core::typecheck::layers::termination::negate_guard(
+                                    condition,
+                                ),
+                                &eb.stmts,
+                                unit,
+                                ctx,
+                            );
                             paths.push(unit.values.clone());
                         }
                         None => paths.push(unit.values.clone()),
@@ -4351,15 +4893,201 @@ impl TypeChecker {
         }
     }
 
+    /// RFC-027 §3：从函数注解 **AST** 解析返回位精化（后置条件）。
+    ///
+    /// 与 `resolve_type_annotation` 承担同一义务，区别只在**来源**：那里拿到的
+    /// 是已降级的 `MonoType`，而 `MonoType::from` 会把不可折叠的谓词实参
+    ///（`r + 100`）压成占位 `TypeRef("<const-expr>")`。实参一旦丢失，
+    /// `-> (r: P(任意实参))` 就退化成 `-> (r: P(<const-expr>))`，再被旧的
+    ///「不在作用域的自由变量即返回值形参」启发式代入返回值——实测 d1
+    ///（`-> (r: IsPositive(r + 100))` 返 `-5`）报出的约束因此是 `-5 > 0`。
+    ///
+    /// 返回形式参数严格按**声明的名字**识别：有声明（`(r: ...)`）时该名字绑定
+    /// `return` 的值；**其余不在作用域的自由变量不再被当成 binder**，而是报
+    /// 未定义标识符（`(r: Eq2(m, r))` 的 `m` 此前被静默代入返回值，约束退化成
+    /// `7 == 7` 恒真）。
+    ///
+    /// 失败路径（非谓词应用、实参不可转换、元数不符）一律静默返回 `None`：
+    /// 那几条诊断归注册路径（`resolve_type_annotation`），此处不重复报。
+    /// 唯独「有未声明的自由变量」是本函数新增的义务，必须报、不得静默放行。
+    ///
+    /// 作用域名单 = 本函数签名形参（`signature_params`，含 curry 各组与类型/
+    /// const 参数）+ 模块级绑定（`env.vars`）。嵌套函数体引用**外层**函数的
+    /// 形参时不在名单内——那类约束没有静态证据可判，报未定义标识符比静默
+    /// 代入返回值安全。
+    fn resolve_return_refinement(
+        &self,
+        type_ann: &crate::frontend::core::parser::ast::Type,
+        params: &[Param],
+        diags: &mut Vec<Diagnostic>,
+    ) -> Option<ReturnRefinement> {
+        use crate::frontend::core::parser::ast::Type as AstType;
+
+        let AstType::Fn { return_type, .. } = type_ann else {
+            return None;
+        };
+        let (binder, annotated) = match return_type.as_ref() {
+            AstType::NamedParen { param, inner, .. } => (Some(param.clone()), inner.as_ref()),
+            other => (None, other),
+        };
+        let AstType::Generic { name, args, .. } = strip_type_parens(annotated) else {
+            return None;
+        };
+        // `Terminates(m)` 是终止测度而非值约束（RFC-027 §6.9）
+        if name == "Terminates" {
+            return None;
+        }
+        let refined = self.refine_predicate_from_ast_args(name, args)?;
+
+        // RFC-027 §3：除声明名之外，不在作用域（形参/模块级绑定）的自由变量是
+        // 未定义标识符。旧启发式把它们一并代入返回值，使约束退化成恒真。
+        let mut undeclared: Vec<String> = Vec::new();
+        for free in refined_free_vars(&refined) {
+            if binder.as_deref() == Some(free.as_str()) {
+                continue;
+            }
+            if params.iter().any(|p| p.name == free) || self.env.vars.contains_key(&free) {
+                continue;
+            }
+            if !undeclared.contains(&free) {
+                undeclared.push(free);
+            }
+        }
+        if !undeclared.is_empty() {
+            for name in &undeclared {
+                diags.push(ErrorCodeDefinition::unknown_variable(name).build());
+            }
+            // 注解已被拒：不再生成返回点义务（避免连环诊断）
+            return None;
+        }
+        Some(ReturnRefinement { binder, refined })
+    }
+
+    /// 把谓词应用正格化为 `Refined`，实参取自 **AST**。
+    ///
+    /// 与 `resolve_type_annotation` 的 `Generic` 分支同源：编译期谓词代入谓词体、
+    /// 证明函数留作不透明 `Call`。唯一区别是实参来源——这里直接读 AST，
+    /// `r + 100` 这类符号实参不再被降级成占位。
+    ///
+    /// 取不出实参（不是谓词、形态不可转换、元数不符）时返回 `None` 且**不报诊断**：
+    /// 那几条路径的诊断归属注册路径，此处只负责「按 AST 无损代入」。
+    fn refine_predicate_from_ast_args(
+        &self,
+        name: &str,
+        args: &[crate::frontend::core::parser::ast::Type],
+    ) -> Option<MonoType> {
+        // 1. 编译期谓词定义（单参数）：实参代入谓词体模板
+        if let Some(def) = self.env.predicate_defs.get(name) {
+            if args.len() != 1 {
+                return None;
+            }
+            let arg_expr = self.ast_type_to_const_expr(&args[0])?;
+            let constraint =
+                crate::frontend::core::typecheck::layers::termination::substitute_const_expr(
+                    &def.constraint,
+                    std::slice::from_ref(&def.param_name),
+                    std::slice::from_ref(&arg_expr),
+                );
+            return Some(MonoType::Refined {
+                base: Box::new(def.param_type.clone()),
+                constraint,
+            });
+        }
+        // 2. 证明函数（源码定义、返回 `Type`）：约束是不透明应用
+        let mono_args: Vec<MonoType> = args.iter().map(|a| MonoType::from(a.clone())).collect();
+        let base = match self.lookup_proof_fn_base_type(name, &mono_args) {
+            Some(Ok(base)) => base,
+            _ => return None,
+        };
+        let const_args: Option<Vec<ConstExpr>> = args
+            .iter()
+            .map(|a| self.ast_type_to_const_expr(a))
+            .collect();
+        Some(MonoType::Refined {
+            base: Box::new(base),
+            constraint: ConstExpr::Call {
+                func: name.to_string(),
+                args: const_args?,
+            },
+        })
+    }
+
+    /// 谓词实参（AST 形态）→ `ConstExpr`。
+    ///
+    /// **先取 AST**：`r + 100` 在 AST 里是原样的编译期表达式，降级成 `MonoType`
+    /// 后才变成占位 `"<const-expr>"`。取不出时退回 `MonoType` 形态（与
+    /// `mono_type_to_const_expr` 同源：裸名 → `NamedVar`、字面量 → `Lit`），
+    /// 使实参覆盖面与既有路径一致。
+    fn ast_type_to_const_expr(
+        &self,
+        ty: &crate::frontend::core::parser::ast::Type,
+    ) -> Option<ConstExpr> {
+        use crate::frontend::core::parser::ast::Type as AstType;
+        match ty {
+            AstType::ConstExpr(expr) => convert_expr_to_const_expr(expr),
+            AstType::Paren(inner) | AstType::NamedParen { inner, .. } => {
+                self.ast_type_to_const_expr(inner)
+            }
+            other => self.mono_type_to_const_expr(&MonoType::from(other.clone())),
+        }
+    }
+
     /// 走查函数体：独立单元——依赖与值环境以函数体为边界，
     /// 不与外层或兄弟函数互通（跨函数同名不互相触发重验证）
     fn refined_walk_fn_body(
         &self,
         body: &crate::frontend::core::parser::ast::Block,
+        fn_name: Option<&str>,
+        ret_refinement: Option<ReturnRefinement>,
         ctx: &mut RefinedWalkCtx<'_, '_>,
     ) {
+        // RFC-027 §3.3：当前函数的**形参精化**进假设集 Γ——同函数的每个 `return`
+        // 都在它的前置条件下成立，缺它则 `succ` 这类后置条件恒推不出。
+        // 只注入本函数自己的： 跨函数同名不能互相作证。
+        let assumptions: Vec<crate::frontend::core::types::const_data::ConstExpr> = fn_name
+            .and_then(|n| self.collect_param_refinements().get(n).cloned())
+            .unwrap_or_default();
+        let saved_ret = ctx.fn_return_refined.take();
+        let saved_binder = ctx.fn_return_binder.take();
+        let saved_name = ctx.fn_name.take();
+        // RFC-027 §3：后置条件在**声明处**由 AST 解析（见 `resolve_return_refinement`）。
+        // 走查只消费结果——注册路径那份 `MonoType` 已把不可折叠的谓词实参
+        //（`r + 100`）压成 `"<const-expr>"` 占位，据此判定会把实参丢掉。
+        let (refined, binder) = match ret_refinement {
+            Some(r) => (Some(r.refined), r.binder),
+            None => (None, None),
+        };
+        ctx.fn_return_refined = refined;
+        ctx.fn_return_binder = binder;
+        ctx.fn_name = fn_name.map(str::to_string);
+
+        ctx.shared_ctx.assumptions.enter_scope();
+        for a in assumptions {
+            ctx.shared_ctx.assumptions.inject(a);
+        }
+
         let mut fn_unit = RefinedScopeUnit::new();
         self.refined_walk_stmts(&body.stmts, &mut fn_unit, ctx);
+
+        // RFC-010a 规则①：块的值 = 尾表达式；而函数体的值即返回值。
+        // 故**尾表达式是隐式 `return`**，后置条件同样要在它上面验证
+        //（`bad: (b: IsPositive(b)) -> (r: IsPositive(r)) = { b - 1 }` 无 `return` 关键字）。
+        // 显式 `return` 已在 `refined_walk_stmt` 里查过，不重复。
+        if let Some(last) = body.stmts.last() {
+            if let crate::frontend::core::parser::ast::StmtKind::Expr(e) = &last.kind {
+                if !matches!(
+                    e.as_ref(),
+                    crate::frontend::core::parser::ast::Expr::Return(..)
+                ) {
+                    self.check_return_refinement(e, last.span, &fn_unit, ctx);
+                }
+            }
+        }
+
+        ctx.shared_ctx.assumptions.exit_scope();
+        ctx.fn_return_refined = saved_ret;
+        ctx.fn_return_binder = saved_binder;
+        ctx.fn_name = saved_name;
     }
 
     /// 重验证 dependant 的精化约束（VC 生成 → 证明管道）
@@ -4399,23 +5127,35 @@ impl TypeChecker {
         ) {
             ProofResult::Proved => {}
             ProofResult::Disproved(model) => {
-                // 证伪即编译错误：反例进诊断
-                let counterexample = model
-                    .assignments
-                    .iter()
-                    .map(|(k, v)| format!("{k}={v}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
                 if let MonoType::Refined { constraint, .. } = refined {
-                    ctx.diags.push(
-                        ErrorCodeDefinition::refined_constraint_violated(
-                            trigger,
-                            dependant,
-                            &constraint.to_string(),
-                            &counterexample,
-                        )
-                        .build(),
-                    );
+                    // 闭合约束（无自由变量）为假 ⇒ **注解自身不成立**，与传给它
+                    // 的值无关（`IsPositive(-5)`：`-5 > 0` 恒假）。这一支报 E4018
+                    // 且**不**展示反例：bindings 里那个变量与闭合约束无关，展示
+                    // 它（实测 `y=Int(5)`）会把人引向 RHS。
+                    if refined_free_vars(refined).is_empty() {
+                        ctx.diags.push(
+                            ErrorCodeDefinition::refinement_violated(&constraint.to_string())
+                                .param("counterexample", "（约束不含自由变量，注解自身不成立）")
+                                .build(),
+                        );
+                    } else {
+                        // 开约束：依赖变量的当前取值使其为假 ⇒ 重验证失败
+                        let counterexample = model
+                            .assignments
+                            .iter()
+                            .map(|(k, v)| format!("{k}={v}"))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        ctx.diags.push(
+                            ErrorCodeDefinition::refined_constraint_violated(
+                                trigger,
+                                dependant,
+                                &constraint.to_string(),
+                                &counterexample,
+                            )
+                            .build(),
+                        );
+                    }
                 }
             }
             ProofResult::Unproven {
@@ -4424,10 +5164,9 @@ impl TypeChecker {
                 if calls.is_empty() {
                     // RFC-027 §4/§9：Unproven → 编译错误，无降级、无 silent pass。
                     // 此分支 = 绑定完备仍证不出（约束形态超出证明内核：If/Range
-                    // 形约束、SMT unknown、超预算）。当前注解语法只产 Call 形
-                    // 约束（实参 Lit/NamedVar），本分支实际不可达——防线是前瞻性
-                    // 的：predicate_defs（#377-3）或内联精化落地后，约束形态
-                    // 扩展，不得让 silent pass 复活。
+                    // 形约束、SMT unknown、超预算）。谓词定义注册后（#377-3）
+                    // 约束已可以是谓词体的任意形态（不再是清一色 Call），本分支
+                    // 因此成为真防线而非前瞻兑底：不得让 silent pass 复活。
                     ctx.diags.push(
                         ErrorCodeDefinition::refined_unproven(
                             trigger,
@@ -4442,6 +5181,309 @@ impl TypeChecker {
             }
         }
     }
+
+    /// RFC-027 §3.3/§3.4：调用点实参对**形参精化**的验证。
+    ///
+    /// 被调函数签名里的精化形参（`b: IsPositive(b)`）是调用方义务：实参值
+    /// 编译期可知且使约束为假时报 E4018。与绑定位共用同一检查器
+    /// （`check_predicate`），故两处判定一致。
+    ///
+    /// **本版只做证伪**：实参不可折叠、约束自由变量不为单个、或结果非
+    /// `Disproved` 时一律放行。§3.4 要求的「无静态证据即拒绝」是更强的半场
+    /// ——它会把 `divide(x, y)`（实参无界、无标注）一并拒掉，需单独决策后
+    /// 另行落地，故此处不默认启用。
+    ///
+    /// 局限：只在调用点两种形态触发（裸调用语句、赋值 RHS 为调用）；嵌套在
+    /// 更复杂表达式里的调用不查（无通用表达式遍历器）。
+    fn check_call_arg_refinements(
+        &self,
+        expr: &Expr,
+        unit: &RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        let Expr::Call {
+            func, args, span, ..
+        } = expr
+        else {
+            return;
+        };
+        let Expr::Var(fn_name, _) = func.as_ref() else {
+            return;
+        };
+        // 签名取自 env：形参位已由 `resolve_type_annotation` 规范化为 Refined
+        let Some(sig) = self.env.vars.get(fn_name) else {
+            return;
+        };
+        let MonoType::Fn { params, .. } = &sig.body else {
+            return;
+        };
+        for (i, param_ty) in params.iter().enumerate() {
+            if !matches!(param_ty, MonoType::Refined { .. }) || constraint_is_terminates(param_ty) {
+                continue;
+            }
+            let Some(arg) = args.get(i) else { continue };
+            let MonoType::Refined { base, constraint } = param_ty.clone() else {
+                continue;
+            };
+            let free = refined_free_vars(param_ty);
+            if free.len() != 1 {
+                continue;
+            }
+            // 实参**符号代入**约束（RFC-027 §3.3）：不要求实参可折成常量。
+            //
+            // 折常量版只能查 `f(-5)` 这类字面量，而 §3.4 要的是「运行时值进入
+            // 精化类型参数必须提供静态证据」——`f(y)`（y 无界）与 `f(n)`（n 带
+            // 精化标注）正是它的两行范例。符号代入把 `y > 0` / `n > 0` 形式化后
+            // 交判定管道：Γ 里有证据则成立，无则判伪/判不出。
+            let Some(arg_expr) =
+                crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(arg)
+            else {
+                continue;
+            };
+            let substituted = MonoType::Refined {
+                base: base.clone(),
+                constraint:
+                    crate::frontend::core::typecheck::layers::termination::substitute_const_expr(
+                        &constraint,
+                        std::slice::from_ref(&free[0]),
+                        &[arg_expr],
+                    ),
+            };
+            // RFC-027 §3.3：实参**自身的精化标注**是证据（#395 第三行）。
+            //
+            // 在**本检查局部**注入实参变量已注册的精化约束，查完即弹：不放进
+            // 声明处的全局 Γ。原因是重验证路径会自命中——它验的正是同一条约束，
+            // 若该约束已在 Γ，判定会在 level 2（精确匹配）平凡通过，**掩盖真违反**
+            //（实测：4 个「依赖变量重赋值」负例语料会被静默放过）。
+            let arg_refined: Option<crate::frontend::core::types::const_data::ConstExpr> = match arg
+            {
+                Expr::Var(name, _) => unit.deps.constraint_of(name).and_then(|ty| match ty {
+                    MonoType::Refined { constraint, .. } if !constraint_is_terminates(ty) => {
+                        Some(constraint.clone())
+                    }
+                    _ => None,
+                }),
+                _ => None,
+            };
+            let scoped = arg_refined.is_some();
+            if scoped {
+                ctx.shared_ctx.assumptions.enter_scope();
+                if let Some(c) = arg_refined {
+                    ctx.shared_ctx.assumptions.inject(c);
+                }
+            }
+            let bindings = unit.values.clone();
+            let outcome = crate::frontend::core::typecheck::layers::predicate::check_predicate(
+                ctx.shared_ctx,
+                &substituted,
+                &bindings,
+            );
+            if scoped {
+                ctx.shared_ctx.assumptions.exit_scope();
+            }
+            match outcome {
+                ProofResult::Proved => {}
+                ProofResult::Disproved(model) => {
+                    let counterexample = model
+                        .assignments
+                        .iter()
+                        .map(|(k, v)| format!("  {k} = {v}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    ctx.diags.push(
+                        ErrorCodeDefinition::refinement_violated(&model.constraint)
+                            .param("counterexample", &counterexample)
+                            .at(*span)
+                            .build(),
+                    );
+                }
+                // 具名证明函数形态的约束（`IsPositive(b)`）当下判不出真假：
+                // 交由 pipeline 编译并执行证明函数，返回 false 即 E4018。
+                // 与绑定位（`revalidate_refined`）同一通道，故两处判定一致。
+                ProofResult::Unproven {
+                    proof_calls: calls, ..
+                } => {
+                    if calls.is_empty() {
+                        // 无证法可执行且证不出：报错，不静默放行（§3.4）
+                        ctx.diags.push(
+                            ErrorCodeDefinition::refined_unproven(
+                                fn_name,
+                                &free[0],
+                                &param_ty.to_string(),
+                            )
+                            .at(*span)
+                            .build(),
+                        );
+                    } else {
+                        ctx.proof_calls.extend(calls);
+                    }
+                }
+            }
+        }
+    }
+    /// RFC-027 §3：返回位精化在 `return` 点验证（后置条件）。
+    ///
+    /// 形参位与返回位是**同一个规则**的两侧（§3「统一性」）：`形参名:
+    /// 谓词调用(形参名)`，区别仅在于值由调用方提供还是由 `return` 提供。
+    /// 故两处判定走同一管道，仅**绑定来源**不同：
+    ///
+    /// - 形参位 → 调用点义务（`check_call_arg_refinements`）：自由变量绑到实参
+    /// - 返回位 → 返回点义务（本函数）：自由变量按下列规则绑定
+    ///
+    /// **返回值形参的识别**：严格按**声明的名字**——`resolve_return_refinement`
+    /// 从 `-> (r: P(...))` 取出 binder（§3：它「仅存在于类型签名中、仅被谓词
+    /// 引用，**不进入函数体作用域**」），只有它绑到 `return` 表达式的值。
+    /// 作用域内的自由变量（形参/模块级绑定）用自己的值或符号；既非声明名、
+    /// 又不在作用域的自由变量在声明处已报未定义标识符，不再被代入返回值。
+    /// 裸形态（`-> P(b - 1)`，约束只涉及形参）无声明名，约束与返回值无关地
+    /// 成立/不成立——两个形态因此归一条规则。
+    ///
+    /// 保守方向：返回表达式不可折叠时**不判**（无静态证据即不报）——强半场
+    /// （§3.4「无静态证据则编译错误」）是单独的开关，见 #395。
+    fn check_return_refinement(
+        &self,
+        value: &Expr,
+        span: crate::util::span::Span,
+        unit: &RefinedScopeUnit,
+        ctx: &mut RefinedWalkCtx<'_, '_>,
+    ) {
+        let Some(ret_ty) = ctx.fn_return_refined.clone() else {
+            return;
+        };
+        let MonoType::Refined { base, constraint } = ret_ty.clone() else {
+            return;
+        };
+        if constraint_is_terminates(&ret_ty) {
+            return;
+        }
+        let free = refined_free_vars(&ret_ty);
+        // 无自由变量的闭合约束与返回表达式无关（它只是一个退化的精化类型，
+        // 成立性由注解自身决定）——不在本义务范围内。
+        if free.is_empty() {
+            return;
+        }
+        // 约束里**符号代入**声明的返回形式参数（§3「值由 `return` 提供」）。
+        //
+        // 用符号代入而非折常量：后置条件的价值正在于形参未知时也能判——
+        // `r > 0` 代入 `b - 1` 得 `b - 1 > 0`，在 Γ={b>0} 下可判伪（b = 1）。
+        // 折常量会把这类全漏掉（`b - 1` 含未知形参，折不出值）。
+        let mut constraint = constraint;
+        if let Some(binder) = ctx.fn_return_binder.clone() {
+            // 只有声明名由 `return` 供给；约束未引用它时（如 `-> (r: P(5))`）
+            // 无需代入，照常判定。
+            if free.iter().any(|name| name == &binder) {
+                let Some(returned) =
+                    crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr(
+                        value,
+                    )
+                else {
+                    // 返回表达式转不出常量表达式（如含调用）：无从代入，保守不判
+                    return;
+                };
+                constraint =
+                    crate::frontend::core::typecheck::layers::termination::substitute_const_expr(
+                        &constraint,
+                        std::slice::from_ref(&binder),
+                        &[returned],
+                    );
+            }
+        }
+        // 作用域内变量的当前值环境进 bindings；形参不在其中，留给 SMT 作符号
+        let bindings = unit.values.clone();
+        // 代入后的约束文本（含 `return` 值的符号形态），进诊断比未代入形态更可读。
+        // 它是**约束表达式**（不是自然语言句子），故与 locale 无关。
+        let constraint_text = constraint.to_string();
+        let substituted = MonoType::Refined { base, constraint };
+        match crate::frontend::core::typecheck::layers::predicate::check_predicate(
+            ctx.shared_ctx,
+            &substituted,
+            &bindings,
+        ) {
+            ProofResult::Proved => {}
+            ProofResult::Disproved(model) => {
+                let counterexample = model
+                    .assignments
+                    .iter()
+                    .map(|(k, v)| format!("  {k} = {v}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                ctx.diags.push(
+                    ErrorCodeDefinition::refinement_violated(&model.constraint)
+                        .param("counterexample", &counterexample)
+                        .at(span)
+                        .build(),
+                );
+            }
+            ProofResult::Unproven {
+                proof_calls: calls, ..
+            } => {
+                if calls.is_empty() {
+                    let fn_name = ctx
+                        .fn_name
+                        .clone()
+                        .unwrap_or_else(|| "<anonymous>".to_string());
+                    // RFC-027 §3：返回点义务的对象是**返回位**，不是签名形参——
+                    // 此前这里用 `free[0]`（多参数谓词时那是形参名），文案把约束
+                    // 挂到了错误对象上（实测：`SumUpTo(b, r)` 报成 "'b' 的精化
+                    // 类型约束"）。
+                    //
+                    // 本槽只传 **标识符**：声明了 binder 就传它的名字（`r`——它是
+                    // 返回形式参数，不是签名形参）；裸形态没有声明名，按 RFC-027 §2
+                    // 取返回值形参的规范名 `result`（见 `DEFAULT_RETURN_BINDER`）。
+                    // 任何自然语言措辞都由 locale 模板负责，code 侧不得写某语言的词。
+                    //
+                    // 这里**不覆盖 help**：E2031 的本地化 help 已完整给出可操作的
+                    // 替代写法（实参可静态取值 / 提供返回 Type 的证明函数），
+                    // 位置化文案要走 locales，不在 code 里拼。
+                    let subject = match &ctx.fn_return_binder {
+                        Some(binder) => binder.clone(),
+                        None => DEFAULT_RETURN_BINDER.to_string(),
+                    };
+                    ctx.diags.push(
+                        ErrorCodeDefinition::refined_unproven(&fn_name, &subject, &constraint_text)
+                            .at(span)
+                            .build(),
+                    );
+                } else {
+                    ctx.proof_calls.extend(calls);
+                }
+            }
+        }
+    }
+}
+
+/// 裸形态返回值形参的**规范名**：`-> P(...)` 在语义上就是 `-> (result: P(...))`
+/// 的简写（RFC-027 §2：spec 的 `max` 例子即 `-> (result: IsMax(T, arr, result))`，
+/// 「`result` 是返回值形参，值由 `return` 提供」）。
+///
+/// 用途：裸形态没有声明名，E2031 的 `{var}` 槽取它作标识——与「按声明名识别」
+/// 同一口径、是合法标识符（无任何语言的散文），跨 6 语言模板都自然：
+/// en 渲染 `the refinement type constraint of 'result'`，zh 渲染 `'result' 的精化类型约束`。
+const DEFAULT_RETURN_BINDER: &str = "result";
+
+/// RFC-027 §3：返回位精化（后置条件）的解析结果。
+///
+/// `binder` 是**声明的**返回形式参数名（`-> (r: P(r))` 的 `r`）：只有它由
+/// `return` 的值供给；`refined` 的约束已按 AST 实参代入——`r + 100` 保持符号
+/// 形态，而不是被降级成占位 `<const-expr>`。
+struct ReturnRefinement {
+    /// `-> (r: P(...))` 声明的返回形式参数名；裸精化形态（`-> P(b - 1)`）为 `None`
+    binder: Option<String>,
+    /// 精化类型（`Refined { base, constraint }`）
+    refined: MonoType,
+}
+
+/// 剥离类型外侧的括号：精化解析里 `Paren`（RFC-004）与 `NamedParen`
+///（RFC-027 §3 具名形态）同为透明，只递归内层。
+fn strip_type_parens(
+    ty: &crate::frontend::core::parser::ast::Type
+) -> &crate::frontend::core::parser::ast::Type {
+    use crate::frontend::core::parser::ast::Type as AstType;
+    match ty {
+        AstType::Paren(inner) => strip_type_parens(inner),
+        AstType::NamedParen { inner, .. } => strip_type_parens(inner),
+        other => other,
+    }
 }
 
 /// 精化走查的共享管道三件套：证明上下文 / 证明调用收集 / 诊断汇。
@@ -4451,6 +5493,19 @@ struct RefinedWalkCtx<'a, 'env> {
     shared_ctx: &'a mut crate::frontend::core::typecheck::proof::context::ProofContext<'env>,
     proof_calls: &'a mut Vec<crate::frontend::core::typecheck::proof::verdict::ProofFunctionCall>,
     diags: &'a mut Vec<Diagnostic>,
+    /// 当前函数的**返回位精化类型**（RFC-027 后置条件）。
+    ///
+    /// 函数体边界保存/恢复（lambda 可嵌套）——外层函数的后置条件不得
+    /// 泄漏到内层函数体的 `return` 上。`None` = 无后置条件或无函数上下文。
+    fn_return_refined: Option<MonoType>,
+    /// 当前函数**声明的返回形式参数名**（`-> (r: P(r))` 的 `r`）。
+    ///
+    /// RFC-027 §3：只有这个名字由 `return` 的值供给；其余自由变量必须在
+    /// 作用域内（形参/模块级绑定），否则在解析处报未定义标识符。
+    /// 裸形态（`-> P(b - 1)`，约束只涉及形参）无声明名 ⇒ `None`。
+    fn_return_binder: Option<String>,
+    /// 当前函数名（进 E4018 的未证明文案）。
+    fn_name: Option<String>,
 }
 
 /// 提取绑定值的函数体（判定已由调用方完成，这里只取形态）：

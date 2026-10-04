@@ -48,6 +48,8 @@ pub fn generate_all_interfaces() -> Vec<(String, String)> {
     let modules: Vec<Box<dyn StdModule>> = vec![
         Box::new(crate::std::convert::ConvertModule),
         Box::new(crate::std::dict::DictModule),
+        #[cfg(not(target_arch = "wasm32"))]
+        Box::new(crate::std::fs::FsModule),
         Box::new(crate::std::io::IoModule),
         // D5 硬切换：std.list 已由纯 yx 实现接管（src/std/list.yx），
         // 不再有 native `ListModule`；其接口面由 .yx 源码自身提供。

@@ -18,6 +18,17 @@ use crate::frontend::core::typecheck::proof::context::ProofContext;
 use crate::frontend::core::typecheck::proof::verdict::{ProofFunctionCall, ProofResult, UnprovenReason};
 use crate::frontend::core::typecheck::TypeEnvironment;
 
+/// `Sorted(42)` 调用的精化布尔类型——Phase 1/2 无法处理，期望 Unproven + proof_calls。
+fn sorted_call_refined() -> MonoType {
+    MonoType::Refined {
+        base: Box::new(MonoType::Bool),
+        constraint: ConstExpr::Call {
+            func: "Sorted".into(),
+            args: vec![ConstExpr::Lit(ConstValue::Int(42))],
+        },
+    }
+}
+
 // --- Section 1: 函数调用识别（第四级） ---
 // 规范来源: RFC-027 §4.2 Phase 2.5 — 证明函数调用识别
 
@@ -25,14 +36,7 @@ use crate::frontend::core::typecheck::TypeEnvironment;
 #[test]
 fn test_call_constraint_produces_proof_fn_call() {
     // Arrange: ConstExpr::Call — Phase 1-2 无法处理
-    let call_expr = ConstExpr::Call {
-        func: "Sorted".into(),
-        args: vec![ConstExpr::Lit(ConstValue::Int(42))],
-    };
-    let refined = MonoType::Refined {
-        base: Box::new(MonoType::Bool),
-        constraint: call_expr,
-    };
+    let refined = sorted_call_refined();
     let env = TypeEnvironment::new();
     let ctx = ProofContext::new(&env);
 

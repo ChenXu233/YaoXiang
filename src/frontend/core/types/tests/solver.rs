@@ -38,6 +38,246 @@ fn struct_ty(
 
 // §3.2: 原类型统一
 
+/// Helper: test_contains_var_in_containers 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: 求解器 + 两个互不相同的类型变量（`v` 与 `_v2`）。
+fn solver_with_two_type_vars() -> (
+    TypeConstraintSolver,
+    crate::frontend::core::types::TypeVar,
+    crate::frontend::core::types::TypeVar,
+) {
+    let mut solver = s();
+    let v = solver.new_var().type_var().expect("新建类型变量应成功");
+    let _v2 = solver.new_var().type_var().expect("新建类型变量应成功");
+
+    (solver, v, _v2)
+}
+
+/// Assert: 含 `v` 的容器（Struct/Union/Intersection/AssocType/泛型/Lst）均被识别。
+fn assert_contains_var_positive(
+    solver: &TypeConstraintSolver,
+    v: crate::frontend::core::types::TypeVar,
+) {
+    // Struct field
+    let s = MonoType::Struct(StructType {
+        name: "W".to_string(),
+        fields: vec![("v".to_string(), MonoType::TypeVar(v))],
+        methods: std::collections::HashMap::new(),
+        field_mutability: vec![false],
+        field_has_default: vec![false],
+        interfaces: vec![],
+    });
+    assert!(solver.contains_var(&s, v));
+    // Union
+    let u = MonoType::Union(vec![MonoType::TypeVar(v)]);
+    assert!(solver.contains_var(&u, v));
+    // Intersection
+    let i = MonoType::Intersection(vec![MonoType::TypeVar(v)]);
+    assert!(solver.contains_var(&i, v));
+    // AssocType args
+    let a = MonoType::AssocType {
+        host_type: Box::new(MonoType::Int(32)),
+        assoc_name: "Item".to_string(),
+        assoc_args: vec![MonoType::TypeVar(v)],
+    };
+    assert!(solver.contains_var(&a, v));
+    // Note: contains_var may not handle Weak - checking what's implemented
+    assert!(solver.contains_var(
+        &MonoType::Generic {
+            name: "Arc".into(),
+            args: vec![MonoType::TypeVar(v)]
+        },
+        v
+    ));
+    assert!(solver.contains_var(
+        &MonoType::Generic {
+            name: "Range".into(),
+            args: vec![MonoType::TypeVar(v)]
+        },
+        v
+    ));
+    assert!(solver.contains_var(&MonoType::make_list(MonoType::TypeVar(v)), v));
+}
+
+/// Assert: 不含 `v` 的类型（Int32、空枚举）返回 false。
+fn assert_contains_var_negative(
+    solver: &TypeConstraintSolver,
+    v: crate::frontend::core::types::TypeVar,
+) {
+    assert!(!solver.contains_var(&MonoType::Int(32), v));
+    assert!(!solver.contains_var(
+        &MonoType::Enum(crate::frontend::core::types::EnumType {
+            name: "E".to_string(),
+            variants: vec![],
+        }),
+        v
+    ));
+}
+
+/// Helper: test_expand_type_through_all_containers 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: 求解器 + 一个已绑定为 `String` 的类型变量。
+fn solver_with_bound_string_var() -> (TypeConstraintSolver, crate::frontend::core::types::TypeVar) {
+    // Bind a var, then resolve a container that uses that var
+    let mut solver = s();
+    let v = solver.new_var().type_var().expect("新建类型变量应成功");
+    let _ = solver.bind(v, &MonoType::make_string());
+
+    (solver, v)
+}
+
+/// Assert: 容器（Dict/Set/Range/Arc/Weak/Option）内变量展开为 String。
+fn assert_var_containers_resolved(
+    solver: &TypeConstraintSolver,
+    v: crate::frontend::core::types::TypeVar,
+) {
+    // Dict with var key/value
+    let dict = MonoType::make_dict(MonoType::TypeVar(v), MonoType::TypeVar(v));
+    let resolved = solver.resolve_type(&dict);
+    assert_eq!(
+        resolved,
+        MonoType::make_dict(MonoType::make_string(), MonoType::make_string())
+    );
+    // Set with var element
+    let set = MonoType::Generic {
+        name: "Set".into(),
+        args: vec![MonoType::TypeVar(v)],
+    };
+    assert_eq!(
+        solver.resolve_type(&set),
+        MonoType::Generic {
+            name: "Set".into(),
+            args: vec![MonoType::make_string()]
+        }
+    );
+    // Range with var elem_type
+    let range = MonoType::Generic {
+        name: "Range".into(),
+        args: vec![MonoType::TypeVar(v)],
+    };
+    assert_eq!(
+        solver.resolve_type(&range),
+        MonoType::Generic {
+            name: "Range".into(),
+            args: vec![MonoType::make_string()]
+        }
+    );
+    // Arc/Weak with var inner
+    assert_eq!(
+        solver.resolve_type(&MonoType::Generic {
+            name: "Arc".into(),
+            args: vec![MonoType::TypeVar(v)]
+        }),
+        MonoType::Generic {
+            name: "Arc".into(),
+            args: vec![MonoType::make_string()]
+        }
+    );
+    assert_eq!(
+        solver.resolve_type(&MonoType::Generic {
+            name: "Weak".into(),
+            args: vec![MonoType::TypeVar(v)]
+        }),
+        MonoType::Generic {
+            name: "Weak".into(),
+            args: vec![MonoType::make_string()]
+        }
+    );
+    // Option with var inner
+    let opt = MonoType::make_option(MonoType::TypeVar(v));
+    assert_eq!(
+        solver.resolve_type(&opt),
+        MonoType::make_option(MonoType::make_string())
+    );
+}
+
+/// Assert: 复合类型（Result/Fn/Union/Intersection/AssocType/MetaType）保持各自形态。
+fn assert_composite_types_preserved(
+    solver: &TypeConstraintSolver,
+    v: crate::frontend::core::types::TypeVar,
+) {
+    // Result with var
+    let res = MonoType::make_result(MonoType::TypeVar(v), MonoType::Int(32));
+    let r = solver.resolve_type(&res);
+    assert!(matches!(r, MonoType::Generic { name, .. } if name == "Result"));
+    // Fn with var
+    let fn_t = MonoType::Fn {
+        params: vec![MonoType::TypeVar(v)],
+        return_type: Box::new(MonoType::TypeVar(v)),
+    };
+    let f = solver.resolve_type(&fn_t);
+    assert!(matches!(f, MonoType::Fn { .. }));
+    // Union with var
+    let union = MonoType::Union(vec![MonoType::TypeVar(v), MonoType::Int(32)]);
+    let u = solver.resolve_type(&union);
+    assert!(matches!(u, MonoType::Union(_)));
+    // Intersection with var
+    let inter = MonoType::Intersection(vec![MonoType::TypeVar(v), MonoType::make_string()]);
+    let i = solver.resolve_type(&inter);
+    assert!(matches!(i, MonoType::Intersection(_)));
+    // AssocType with var host
+    let assoc = MonoType::AssocType {
+        host_type: Box::new(MonoType::TypeVar(v)),
+        assoc_name: "Item".to_string(),
+        assoc_args: vec![MonoType::Int(32)],
+    };
+    let a = solver.resolve_type(&assoc);
+    assert!(matches!(a, MonoType::AssocType { .. }));
+    // MetaType with var param
+    let meta = MonoType::MetaType {
+        universe_level: crate::frontend::core::types::UniverseLevel::type0(),
+        type_params: vec![MonoType::TypeVar(v)],
+    };
+    let m = solver.resolve_type(&meta);
+    assert!(matches!(m, MonoType::MetaType { .. }));
+}
+
+/// Helper: test_resolve_builtin_types 的完整夹具与断言（逐条断言见函数体）。
+/// Assert: 内建类型名（Int/Int32/Int8/Float/Float32/Bool/String/Bytes/Void/Char）的解析结果。
+fn assert_builtin_resolutions(solver: &TypeConstraintSolver) {
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Int".to_string())),
+        MonoType::Int(64)
+    );
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Int32".to_string())),
+        MonoType::Int(32)
+    );
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Int8".to_string())),
+        MonoType::Int(8)
+    );
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Float".to_string())),
+        MonoType::Float(64)
+    );
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Float32".to_string())),
+        MonoType::Float(32)
+    );
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Bool".to_string())),
+        MonoType::Bool
+    );
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("String".to_string())),
+        MonoType::make_string()
+    );
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Bytes".to_string())),
+        MonoType::Generic {
+            name: "Bytes".into(),
+            args: vec![]
+        }
+    );
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Void".to_string())),
+        MonoType::Void
+    );
+    assert_eq!(
+        solver.resolve_type(&MonoType::TypeRef("Char".to_string())),
+        MonoType::Char
+    );
+}
+
 #[test]
 fn test_unify_primitives() {
     let mut solver = s();
@@ -525,50 +765,12 @@ fn test_get_binding_and_get_binding_mut() {
 
 #[test]
 fn test_resolve_builtin_types() {
+    // Arrange
     let solver = s();
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Int".to_string())),
-        MonoType::Int(64)
-    );
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Int32".to_string())),
-        MonoType::Int(32)
-    );
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Int8".to_string())),
-        MonoType::Int(8)
-    );
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Float".to_string())),
-        MonoType::Float(64)
-    );
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Float32".to_string())),
-        MonoType::Float(32)
-    );
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Bool".to_string())),
-        MonoType::Bool
-    );
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("String".to_string())),
-        MonoType::make_string()
-    );
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Bytes".to_string())),
-        MonoType::Generic {
-            name: "Bytes".into(),
-            args: vec![]
-        }
-    );
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Void".to_string())),
-        MonoType::Void
-    );
-    assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Char".to_string())),
-        MonoType::Char
-    );
+
+    // Act & Assert — 内建类型名解析为目标类型
+    assert_builtin_resolutions(&solver);
+
     // Unknown type ref stays as-is
     let unknown = MonoType::TypeRef("Custom".to_string());
     assert_eq!(solver.resolve_type(&unknown), unknown);
@@ -579,113 +781,14 @@ fn test_resolve_builtin_types() {
 
 #[test]
 fn test_expand_type_through_all_containers() {
-    // Bind a var, then resolve a container that uses that var
-    let mut solver = s();
-    let v = solver.new_var().type_var().unwrap();
-    let _ = solver.bind(v, &MonoType::make_string());
+    // Arrange — 绑定一个 String 类型变量，再解析使用该变量的容器
+    let (solver, v) = solver_with_bound_string_var();
 
-    // Dict with var key/value
-    let dict = MonoType::make_dict(MonoType::TypeVar(v), MonoType::TypeVar(v));
-    let resolved = solver.resolve_type(&dict);
-    assert_eq!(
-        resolved,
-        MonoType::make_dict(MonoType::make_string(), MonoType::make_string())
-    );
+    // Act & Assert — 容器内变量展开为 String
+    assert_var_containers_resolved(&solver, v);
 
-    // Set with var element
-    let set = MonoType::Generic {
-        name: "Set".into(),
-        args: vec![MonoType::TypeVar(v)],
-    };
-    assert_eq!(
-        solver.resolve_type(&set),
-        MonoType::Generic {
-            name: "Set".into(),
-            args: vec![MonoType::make_string()]
-        }
-    );
-
-    // Range with var elem_type
-    let range = MonoType::Generic {
-        name: "Range".into(),
-        args: vec![MonoType::TypeVar(v)],
-    };
-    assert_eq!(
-        solver.resolve_type(&range),
-        MonoType::Generic {
-            name: "Range".into(),
-            args: vec![MonoType::make_string()]
-        }
-    );
-
-    // Arc/Weak with var inner
-    assert_eq!(
-        solver.resolve_type(&MonoType::Generic {
-            name: "Arc".into(),
-            args: vec![MonoType::TypeVar(v)]
-        }),
-        MonoType::Generic {
-            name: "Arc".into(),
-            args: vec![MonoType::make_string()]
-        }
-    );
-    assert_eq!(
-        solver.resolve_type(&MonoType::Generic {
-            name: "Weak".into(),
-            args: vec![MonoType::TypeVar(v)]
-        }),
-        MonoType::Generic {
-            name: "Weak".into(),
-            args: vec![MonoType::make_string()]
-        }
-    );
-
-    // Option with var inner
-    let opt = MonoType::make_option(MonoType::TypeVar(v));
-    assert_eq!(
-        solver.resolve_type(&opt),
-        MonoType::make_option(MonoType::make_string())
-    );
-
-    // Result with var
-    let res = MonoType::make_result(MonoType::TypeVar(v), MonoType::Int(32));
-    let r = solver.resolve_type(&res);
-    assert!(matches!(r, MonoType::Generic { name, .. } if name == "Result"));
-
-    // Fn with var
-    let fn_t = MonoType::Fn {
-        params: vec![MonoType::TypeVar(v)],
-        return_type: Box::new(MonoType::TypeVar(v)),
-    };
-    let f = solver.resolve_type(&fn_t);
-    assert!(matches!(f, MonoType::Fn { .. }));
-
-    // Union with var
-    let union = MonoType::Union(vec![MonoType::TypeVar(v), MonoType::Int(32)]);
-    let u = solver.resolve_type(&union);
-    assert!(matches!(u, MonoType::Union(_)));
-
-    // Intersection with var
-    let inter = MonoType::Intersection(vec![MonoType::TypeVar(v), MonoType::make_string()]);
-    let i = solver.resolve_type(&inter);
-    assert!(matches!(i, MonoType::Intersection(_)));
-
-    // AssocType with var host
-    let assoc = MonoType::AssocType {
-        host_type: Box::new(MonoType::TypeVar(v)),
-        assoc_name: "Item".to_string(),
-        assoc_args: vec![MonoType::Int(32)],
-    };
-    let a = solver.resolve_type(&assoc);
-    assert!(matches!(a, MonoType::AssocType { .. }));
-
-    // MetaType with var param
-    let meta = MonoType::MetaType {
-        universe_level: crate::frontend::core::types::UniverseLevel::type0(),
-        type_params: vec![MonoType::TypeVar(v)],
-    };
-    let m = solver.resolve_type(&meta);
-    assert!(matches!(m, MonoType::MetaType { .. }));
+    // Act & Assert — 复合类型保持各自形态（不被错误展开）
+    assert_composite_types_preserved(&solver, v);
 }
 
 // expand_type_mut — 通过 resolve (mut) 展开
@@ -729,63 +832,14 @@ fn test_expand_mut_through_all_containers() {
 
 #[test]
 fn test_contains_var_in_containers() {
-    let mut solver = s();
-    let v = solver.new_var().type_var().unwrap();
-    let _v2 = solver.new_var().type_var().unwrap();
+    // Arrange — 两个互不相同的类型变量
+    let (solver, v, _v2) = solver_with_two_type_vars();
 
-    // Struct field
-    let s = MonoType::Struct(StructType {
-        name: "W".to_string(),
-        fields: vec![("v".to_string(), MonoType::TypeVar(v))],
-        methods: std::collections::HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
-    assert!(solver.contains_var(&s, v));
+    // Act & Assert — 含 v 的容器应被识别为「包含该变量」
+    assert_contains_var_positive(&solver, v);
 
-    // Union
-    let u = MonoType::Union(vec![MonoType::TypeVar(v)]);
-    assert!(solver.contains_var(&u, v));
-
-    // Intersection
-    let i = MonoType::Intersection(vec![MonoType::TypeVar(v)]);
-    assert!(solver.contains_var(&i, v));
-
-    // AssocType args
-    let a = MonoType::AssocType {
-        host_type: Box::new(MonoType::Int(32)),
-        assoc_name: "Item".to_string(),
-        assoc_args: vec![MonoType::TypeVar(v)],
-    };
-    assert!(solver.contains_var(&a, v));
-
-    // Note: contains_var may not handle Weak - checking what's implemented
-    assert!(solver.contains_var(
-        &MonoType::Generic {
-            name: "Arc".into(),
-            args: vec![MonoType::TypeVar(v)]
-        },
-        v
-    ));
-    assert!(solver.contains_var(
-        &MonoType::Generic {
-            name: "Range".into(),
-            args: vec![MonoType::TypeVar(v)]
-        },
-        v
-    ));
-    assert!(solver.contains_var(&MonoType::make_list(MonoType::TypeVar(v)), v));
-
-    // Negative cases
-    assert!(!solver.contains_var(&MonoType::Int(32), v));
-    assert!(!solver.contains_var(
-        &MonoType::Enum(crate::frontend::core::types::EnumType {
-            name: "E".to_string(),
-            variants: vec![],
-        }),
-        v
-    ));
+    // Act & Assert — 不含 v 的类型应返回 false
+    assert_contains_var_negative(&solver, v);
 }
 
 // §3.7: Fn 参数数量不匹配

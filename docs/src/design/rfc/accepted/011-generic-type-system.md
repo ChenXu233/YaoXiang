@@ -2,6 +2,7 @@
 title: 'RFC-011: 泛型系统设计 - 零成本抽象与宏替代'
 status: '已接受'
 author: '晨煦'
+created: '2026-02-14'
 updated: '2026-07-15（类型体代码块 + 编译期规约 + 效应种子已实现）'
 issue: '#128'
 issues_impl:
@@ -339,7 +340,9 @@ sum: (arr: Array(Int, n)) -> Int = {
 ```yaoxiang
 loop: (n: Int) -> Int = {
     mut i = 0
-    acc: Terminates(n - i) = while i < n { i = i + 1 }
+    // 循环体是 `{}` 块，值由尾表达式给出（spec §2.9）：体尾写了赋值语句后还要写出 `i`，
+    // 否则块值为 `Void`，`return acc` 从 `-> Int` 返回 `Void` 不成立。
+    acc: Terminates(n - i) = while i < n { i = i + 1; i }
     return acc
 }
 ```
@@ -708,9 +711,9 @@ Clone = 复制数据，副本独立（修改互不影响）
 | `ref T`              | ✅   | Rc/Arc 复制 = 引用计数+1，共享堆数据        |
 | String, Bytes        | ✅   | 内部引用计数，复制句柄共享底层 buffer       |
 | `&mut T`（可变令牌） | ❌   | 线性独占，不能复制                          |
-| struct               | 派生 | 所有字段 Dup → struct Dup                   |
-| enum                 | 派生 | 所有 variant 的所有字段 Dup → enum Dup      |
-| tuple                | 派生 | 所有元素 Dup → tuple Dup                    |
+| struct               | 派生 | 所有字段 ∈（原语值类型 ∪ Dup）→ Dup，否则 Move（RFC-009 §派生规则，#398） |
+| enum                 | 派生 | 所有 variant 的所有字段可复制 → enum Dup（设计态，尚未落地） |
+| tuple                | 派生 | 逐元素判定，同 struct 规则（#398）           |
 | Fn（闭包）           | ❌   | 捕获环境可能非 Dup                          |
 | `*T`（裸指针）       | ❌   | unsafe，不参与所有权系统                    |
 
@@ -1853,7 +1856,7 @@ generic_type ::= identifier ':' type '=' type_expression
 
 - [RFC-010: 统一类型语法](./010-unified-type-syntax.md)
 - [RFC-009: 所有权模型](./009-ownership-model.md)
-- [RFC-001: 并作模型](../deprecated/001-concurrent-model-error-handling.md)
+- [RFC-024: 基于 spawn 的并发运行时语义](./024-concurrency-model.md)
 - [RFC-008: 运行时模型](./008-runtime-concurrency-model.md)
 - [tutorial/ 教程](../../../tutorial/index.md)
 

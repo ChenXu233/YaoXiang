@@ -1,0 +1,15 @@
+// 03-modules/alias_group_module.yx
+// 覆盖: RFC-029 §2 `use path.{item as alias}`（#245 内联别名）；#415（模块级组别名曾在 IR 报 E3006）
+// 验证: 模块级组别名（use std.{io as printer}）把子模块绑定到别名，项级内联别名验证返回值
+// 状态: ✅ 可运行
+
+use std.{io as printer}
+use std.math.{sqrt as sq}
+use std.assert
+
+main = {
+    printer.print("group alias ok")
+
+    r = sq(16.0)
+    assert.assert(r == 4.0, "sq(16.0) should be 4.0 via inline item alias")
+}

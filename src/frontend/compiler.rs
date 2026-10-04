@@ -212,11 +212,15 @@ impl Compiler {
 #[derive(Debug, Error)]
 pub enum CompileError {
     /// 词法分析错误
-    #[error("Lexical error: {0:?}")]
+    ///
+    /// 用 `{0}`（`Diagnostic` 的 `Display`：`<severity>[<code>]: <message>`）
+    /// 而不是 `{0:?}`——后者会把整条 `Diagnostic` 的 Debug 结构
+    /// （`code`/`span`/`related` 字段名与偏移）原样写进用户可见的错误链。
+    #[error("Lexical error: {0}")]
     Lex(Diagnostic),
 
     /// 语法分析错误
-    #[error("Parse error: {0:?}")]
+    #[error("Parse error: {0}")]
     Parse(Diagnostic),
 
     /// 类型错误

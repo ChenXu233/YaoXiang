@@ -276,6 +276,16 @@ fn parse_assign_after_target(
         }
     }
 
+    // RFC-027：登记「返回 Type」的声明为**谓词**，供后续标注里的谓词应用判定。
+    // 判据与下方类型体解析同源（`Type::Fn` 返回 `MetaType`/`Type`）。
+    if let (Some(Type::Fn { return_type, .. }), Expr::Var(name, _)) = (&type_annotation, &target) {
+        let returns_type = matches!(return_type.as_ref(), Type::MetaType { .. })
+            || matches!(return_type.as_ref(), Type::Name { name: n, .. } if n == "Type");
+        if returns_type {
+            state.declare_predicate(name);
+        }
+    }
+
     // ── 可选初始化 ──
     if state.skip(&TokenKind::Eq) {
         // RFC-010: 返回 Type 时，先尝试类型体解析（字段/枚举）
@@ -377,10 +387,15 @@ fn parse_assign_after_target(
                     // 不是本函数的参数列表。故本函数只取第一组签名参数，
                     // body 为“返回这个 lambda”。
                     // 不加此判会让 `a` 被合并进外层，`f` 变成接受 `a` 而非返回闭包。
+                    // RFC-027 §3：具名括号（`-> (r: P(r))`）与 `Paren` 同款——
+                    // 括号同样声明「这是完整类型（值）」，链条到此终止。
                     let paren_return = matches!(
                         type_annotation.as_ref(),
                         Some(Type::Fn { return_type, .. })
-                            if matches!(return_type.as_ref(), Type::Paren(_))
+                            if matches!(
+                                return_type.as_ref(),
+                                Type::Paren(_) | Type::NamedParen { .. }
+                            )
                     );
                     if paren_return {
                         // 本函数自己的**值**参数个数 = 第一组签名参数中非类型参数的个数
@@ -478,7 +493,10 @@ fn parse_assign_after_target(
                     // 逐个内置谓词硬编码。目前只有 `Terminates`（RFC-027 §6.9）；
                     // 随后续内置谓词增加而扩展（未来的开集方案：把谓词名下传给
                     // parser，或改成语法层可判定的形态）。
-                    let is_predicate_app = |n: &str| n == "Terminates";
+                    // parser 不持有类型环境，故看两处：内置谓词硬编码，
+                    // 外加本遍已解析的声明累积（`declare_predicate`）。
+                    let is_predicate_app =
+                        |n: &str| n == "Terminates" || state.is_predicate_name(n);
                     let value_params: Vec<Param> = extracted_params
                         .iter()
                         .filter(|p| {

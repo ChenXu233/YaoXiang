@@ -1,34 +1,33 @@
 ---
 title: 'std.net'
-description: 'HTTP requests and URL percent-encoding/decoding'
+description: 'HTTP Requests and URL Percent-Encoding'
 ---
 
 # std.net
 
-The networking module.
+Networking module.
 
 ```yaoxiang
 use std.net
 ```
 
-> This module depends on the operating system's networking capabilities and is **not exported** on
+> This module depends on the operating system's networking capabilities and is **not exported** for
 > the `wasm32` target.
 
-> **Implementation status warning (#56)**: Of the 4 functions in this module, only `url_encode` /
-> `url_decode` are real implementations. `http_get` / `http_post` are **placeholder
-> implementations—they do not send any network requests**; they only concatenate the arguments into
-> a string and return it. See each section below for details.
+The HTTP functions are based on a synchronous blocking client (rustls TLS) and follow redirects by
+default (up to 5 times). Blocking only affects the execution thread where the call is made, which is
+consistent with the explicit concurrency model of [`spawn`](../language-spec/concurrency).
 
-## Function overview
+## Function Overview
 
 <!-- stdlib:table:net start -->
 
-| Function     | Signature                                 |
-| ------------ | ----------------------------------------- |
-| `http_get`   | `(url: &String) -> String`                |
-| `http_post`  | `(url: &String, body: &String) -> String` |
-| `url_encode` | `(s: &String) -> String`                  |
-| `url_decode` | `(s: &String) -> String`                  |
+| Function     | Signature                                                                                                 |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| `http_get`   | `(url: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) -> Dict(String, Any)`                |
+| `http_post`  | `(url: &String, body: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) -> Dict(String, Any)` |
+| `url_encode` | `(s: &String) -> String`                                                                                  |
+| `url_decode` | `(s: &String) -> String`                                                                                  |
 
 <!-- stdlib:table:net end -->
 
@@ -39,30 +38,46 @@ use std.net
 <!-- stdlib:sig:net.http_get start -->
 
 ```yaoxiang
-http_get: (url: &String) -> String
+http_get: (url: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) -> Dict(String, Any)
 ```
 
 <!-- stdlib:sig:net.http_get end -->
 
-> **Placeholder implementation, not wired to an HTTP client (#56).** The current behavior is to
-> concatenate the argument into the string `"GET: {url}"` and return it, **without initiating any
-> network request** or returning a response body. Relying on it for real HTTP calls will silently
-> fail—you will get a descriptive string rather than the response content.
+Initiates an HTTP GET request and returns a structured response dictionary:
+
+| Key       | Type                   | Meaning                                                                                          |
+| --------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `status`  | `Int`                  | HTTP status code (e.g., `200`, `404`)                                                            |
+| `headers` | `Dict(String, String)` | Response headers with keys lowercased; multiple values with the same name are joined with `", "` |
+| `body`    | `String`               | Response body (decoded as UTF-8)                                                                 |
 
 - `url` — Request URL (read-only borrow)
+- `headers` — Optional request header dictionary; sends `{}` when omitted
+- `timeout_secs` — Optional overall timeout in seconds; defaults to `30`
 
-Returns: a string of the form `"GET: http://example.com"`. Errors: throws `E6007` when the argument
-is missing; throws a type error when the argument is not a `String`.
+**4xx/5xx are normal responses** (the `status` field carries the status code), not errors; only
+transport-layer failures (DNS resolution failure, connection refused, timeout, etc.) throw `E6007`.
 
 ```yaoxiang
-use std.assert
 use std.net
 
-main: () -> Void = {
-    // The current implementation returns a descriptive string, not the response body
-    r = net.http_get("http://example.com")
-    assert(r == "GET: http://example.com")
-}
+// Response shape illustration (requires network, not a runnable example):
+// resp = net.http_get("https://httpbin.org/get")
+// status = resp["status"]        // 200
+// body   = resp["body"]          // Response body text
+// ctype  = resp["headers"]["content-type"]
+```
+
+With request headers and a custom timeout:
+
+```yaoxiang
+use std.net
+
+// net.http_get(
+//     "https://api.example.com/v1/data",
+//     { "Authorization": "Bearer token123" },
+//     10,
+// )
 ```
 
 ### http_post
@@ -70,29 +85,27 @@ main: () -> Void = {
 <!-- stdlib:sig:net.http_post start -->
 
 ```yaoxiang
-http_post: (url: &String, body: &String) -> String
+http_post: (url: &String, body: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) -> Dict(String, Any)
 ```
 
 <!-- stdlib:sig:net.http_post end -->
 
-> **Placeholder implementation, not wired to an HTTP client (#56).** The current behavior is to
-> concatenate the string `"POST {url}: {body}"` and return it, **without initiating any network
-> request**.
+Initiates an HTTP POST request; the request body is sent as UTF-8 encoded, and `Content-Length` is
+set automatically. The response dictionary structure is the same as [`http_get`](#http_get).
 
 - `url` — Request URL (read-only borrow)
 - `body` — Request body (read-only borrow)
-
-Returns: a string of the form `"POST http://example.com: hello"`. Errors: throws `E6007` when
-arguments are insufficient; throws a type error when argument types do not match.
+- `headers` — Optional request header dictionary; sends `{}` when omitted
+- `timeout_secs` — Optional overall timeout in seconds; defaults to `30`
 
 ```yaoxiang
-use std.assert
 use std.net
 
-main: () -> Void = {
-    r = net.http_post("http://example.com", "hello")
-    assert(r == "POST http://example.com: hello")
-}
+// net.http_post(
+//     "https://httpbin.org/post",
+//     "payload=1&name=yx",
+//     { "Content-Type": "application/x-www-form-urlencoded" },
+// )
 ```
 
 ### url_encode
@@ -107,12 +120,12 @@ url_encode: (s: &String) -> String
 
 Percent-encoding.
 
-- `s` — The string to be encoded (read-only borrow)
+- `s` — String to encode (read-only borrow)
 
 Returns: the encoded string. Spaces are encoded as `%20` (not `+`); reserved characters are escaped
-per RFC 3986; unreserved characters are passed through unchanged.
+per RFC 3986; unreserved characters are left as-is.
 
-Errors: throws `E6007` when the argument is missing; throws a type error when the argument is not a
+Errors: throws `E6007` if the argument is missing; throws a type error if the argument is not a
 `String`.
 
 ```yaoxiang
@@ -137,11 +150,11 @@ url_decode: (s: &String) -> String
 
 Percent-decoding; the inverse of `url_encode`.
 
-- `s` — The encoded string (read-only borrow)
+- `s` — Already-encoded string (read-only borrow)
 
-Returns: the decoded string. Illegal escape sequences are preserved as-is.
+Returns: the decoded string. Illegal escape sequences are left as-is.
 
-Errors: throws `E6007` when the argument is missing; throws a type error when the argument is not a
+Errors: throws `E6007` if the argument is missing; throws a type error if the argument is not a
 `String`.
 
 ```yaoxiang
@@ -159,4 +172,4 @@ main: () -> Void = {
 
 ## Related
 
-- [Error code reference](../error-code/) — `E6007` generic runtime error
+- [Error Code Reference](../error-code/) — `E6007` General Runtime Error

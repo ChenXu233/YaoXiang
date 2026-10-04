@@ -606,10 +606,21 @@ unsafe {
 | String, Bytes | ✅（内部引用计数，复制句柄共享底层 buffer） | ✅    | 字符串/字节                     |
 | `&mut T`      | ❌（线性，独占）                            | ❌    | 可变令牌                        |
 | `*T`          | ❌                                          | ❌    | 裸指针                          |
-| struct        | 派生（所有字段均为 Dup 时自动派生）         | ✅    | 结构体                          |
+| struct        | 派生（见下「派生规则」，#398）              | ✅    | 结构体                          |
+| tuple         | 派生（逐元素，同 struct 规则，#398）        | ✅    | 元组                            |
 
 **原语值类型**（Int, Float, Bool,
 Char）的赋值行为是编译器内置的值复制——两个值完全独立，不是浅拷贝。它们不属于 Dup 类型属性，而是编译器的原生处理。
+
+#### 派生规则（#398 定案）
+
+「所有字段均为 Dup 时自动派生」无法字面执行——原语字段（Int 等）本身不属于 Dup，`{ x: Int, y: Int }` 会被误判为 Move。可执行形式：
+
+1. **可复制字段集** = ValueCopy（Int / Float / Bool / Char / Range）∪ Dup（`&T`、`ref T`、String / Bytes、函数值（#352）、已达 Dup 的组合类型）；
+2. **struct**：所有字段都在可复制字段集内 → 派生 Dup；**任一**字段为 Linear（`&mut T`）或 Move（嵌套 Move struct / Vec、Dict 等容器 / 资源）→ 整体保持 Move（不引入「部分可复制」的中间态——复制语义上它必须被转移）；
+3. **tuple**：与 struct 同规则，逐元素判定；空元组（单位）即 `Void`；
+4. **派生是递归的**：字段为具名类型（如 `target: Point`）时展开其定义再判定，`A = { b: B }` 随 B 的派生结果走；循环别名按深度上限保守落 Move；
+5. **不在本行范围内**（仍 Move，另案）：容器（Vec / Dict / Set / Option / Result / Array）与 enum。
 
 ---
 
@@ -734,7 +745,7 @@ Char）的赋值行为是编译器内置的值复制——两个值完全独立�
 
 - [语言规范](../../../reference/language-spec/index.md)
 - [设计宣言](../../manifesto.md)
-- [RFC-001 并作模型](../deprecated/001-concurrent-model-error-handling.md)
+- [RFC-009a: 令牌生命期分析——基于霍尔证明管道](./009a-borrow-proof-pipeline.md)
 - [RFC-010 统一类型语法](./010-unified-type-syntax.md)
 - [tutorial/ 教程](../../../tutorial/index.md)
 

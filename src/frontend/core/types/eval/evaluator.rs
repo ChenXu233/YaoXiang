@@ -458,15 +458,22 @@ fn eval_binop(
 }
 
 /// 一元运算求值
+///
+/// 与 `const_eval.rs` 的同名实现必须语义一致——两处曾不一致（本处缺
+/// Neg/Pos/BitNot），导致 `-5` 这类负字面量在所有走本求值器的路径上
+/// 静默折不出常量（实测：调用点实参 `-5` 折不出，义务被跳过）。
 fn eval_unop(
     op: UnOp,
     val: &ConstValue,
 ) -> Result<ConstValue, EvalError> {
-    match op {
-        UnOp::Not => Ok(ConstValue::Bool(!val.as_bool()?)),
+    match (op, val) {
+        (UnOp::Not, ConstValue::Bool(b)) => Ok(ConstValue::Bool(!*b)),
+        (UnOp::Neg, ConstValue::Int(n)) => Ok(ConstValue::Int(-*n)),
+        (UnOp::Pos, ConstValue::Int(n)) => Ok(ConstValue::Int(*n)),
+        (UnOp::BitNot, ConstValue::Int(n)) => Ok(ConstValue::Int(!*n)),
         _ => Err(EvalError::TypeMismatch(format!(
-            "不支持的一元运算: {:?}",
-            op
+            "不支持的一元运算: {:?} for {:?}",
+            op, val
         ))),
     }
 }

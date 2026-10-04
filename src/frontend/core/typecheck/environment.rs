@@ -145,8 +145,17 @@ pub struct TypeEnvironment {
     /// Native 函数签名表：存储已注册的 native 函数类型签名
     /// Key: 函数名（如 "std.io.println"），Value: 函数类型
     pub native_signatures: HashMap<String, MonoType>,
+    /// Native 函数 arity 区间表（#387）：按签名 `?`（可选）/`...`（变参）标记
+    /// 解析出的 [min, max]。Key 与 native_signatures 同（全限定名 + 短名）；
+    /// max=None 表示变参不设上限。手注 FFI 签名（add_native_signature 路径）
+    /// 无表项——检查层对无表项的 native 维持旧宽容。
+    pub native_arity: HashMap<String, (usize, Option<usize>)>,
     /// 模块注册表 - 提供统一的模块查询接口
     pub module_registry: crate::frontend::module::registry::ModuleRegistry,
+    /// 已注册为「模块 Struct」的别名集合（#396：register_module_as_struct 与
+    /// 分组导入的子模块命名空间登记）。FieldAccess 在这些别名上取成员失败时报
+    /// E1043（模块语义）而非 E1042（struct 语义）——模块不是 struct，码义不得借道。
+    pub module_aliases: std::collections::HashSet<String>,
     /// Const 函数表 - 存储编译期常量函数
     /// 用于值依赖类型的编译期求值
     pub const_functions: HashMap<String, ConstFunction>,

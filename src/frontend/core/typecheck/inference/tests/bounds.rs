@@ -14,6 +14,84 @@ use crate::frontend::core::types::const_data::ConstVarDef;
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use std::collections::HashMap;
 
+/// 记录类型夹具：`methods`/`interfaces` 为空，两个元数据向量原样传入（沿用各用例既有形态）。
+fn record(
+    name: &str,
+    fields: Vec<(&str, MonoType)>,
+    field_mutability: Vec<bool>,
+    field_has_default: Vec<bool>,
+) -> MonoType {
+    MonoType::Struct(StructType {
+        name: name.to_string(),
+        fields: fields
+            .into_iter()
+            .map(|(n, t)| (n.to_string(), t))
+            .collect(),
+        methods: HashMap::new(),
+        field_mutability,
+        field_has_default,
+        interfaces: vec![],
+    })
+}
+
+/// 函数类型 `(params) -> ret`。
+fn mono_fn(
+    params: Vec<MonoType>,
+    ret: MonoType,
+) -> MonoType {
+    MonoType::Fn {
+        params,
+        return_type: Box::new(ret),
+    }
+}
+
+/// `(Surface) -> ret` 函数类型。
+fn surface_fn(ret: MonoType) -> MonoType {
+    mono_fn(vec![MonoType::TypeRef("Surface".to_string())], ret)
+}
+
+/// 约束侧接口 `Drawable { draw: (Surface) -> Void }`。
+fn drawable_constraint() -> MonoType {
+    record(
+        "Drawable",
+        vec![("draw", surface_fn(MonoType::Void))],
+        vec![],
+        vec![],
+    )
+}
+
+/// `View { name: String, ref_field: &Int }`（所有字段均 Dup）。
+fn view_type() -> MonoType {
+    record(
+        "View",
+        vec![
+            ("name", MonoType::make_string()),
+            (
+                "ref_field",
+                MonoType::Ref {
+                    mutable: false,
+                    inner: Box::new(MonoType::Int(64)),
+                },
+            ),
+        ],
+        vec![false, false],
+        vec![false, false],
+    )
+}
+
+/// `Buffer { data: List(Int), len: Int }`（含非 Dup 的 List 字段）。
+fn buffer_type() -> MonoType {
+    record(
+        "Buffer",
+        vec![
+            ("data", MonoType::make_list(MonoType::Int(64))),
+            ("len", MonoType::Int(64)),
+        ],
+        vec![false, false],
+        vec![false, false],
+    )
+}
+
 // Happy path 测试
 
 #[test]
@@ -88,14 +166,7 @@ fn test_check_constraint_empty_constraint() {
     // Arrange
     let checker = BoundsChecker::new();
     let ty = MonoType::Int(32);
-    let constraint = MonoType::Struct(StructType {
-        name: "Empty".to_string(),
-        fields: vec![],
-        methods: HashMap::new(),
-        field_mutability: vec![],
-        field_has_default: vec![],
-        interfaces: vec![],
-    });
+    let constraint = record("Empty", vec![], vec![], vec![]);
 
     // Act
     let result = checker.check_constraint(&ty, &constraint, None);
@@ -131,28 +202,13 @@ fn test_check_trait_bounds_not_satisfied() {
 fn test_check_constraint_missing_method() {
     // Arrange
     let checker = BoundsChecker::new();
-    let ty = MonoType::Struct(StructType {
-        name: "Point".to_string(),
-        fields: vec![("x".to_string(), MonoType::Float(64))],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
-    let constraint = MonoType::Struct(StructType {
-        name: "Drawable".to_string(),
-        fields: vec![(
-            "draw".to_string(),
-            MonoType::Fn {
-                params: vec![MonoType::TypeRef("Surface".to_string())],
-                return_type: Box::new(MonoType::Void),
-            },
-        )],
-        methods: HashMap::new(),
-        field_mutability: vec![],
-        field_has_default: vec![],
-        interfaces: vec![],
-    });
+    let ty = record(
+        "Point",
+        vec![("x", MonoType::Float(64))],
+        vec![false],
+        vec![false],
+    );
+    let constraint = drawable_constraint();
 
     // Act
     let result = checker.check_constraint(&ty, &constraint, None);
@@ -166,34 +222,13 @@ fn test_check_constraint_missing_method() {
 fn test_check_constraint_signature_mismatch() {
     // Arrange
     let checker = BoundsChecker::new();
-    let ty = MonoType::Struct(StructType {
-        name: "Point".to_string(),
-        fields: vec![(
-            "draw".to_string(),
-            MonoType::Fn {
-                params: vec![MonoType::Int(32)],
-                return_type: Box::new(MonoType::Void),
-            },
-        )],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
-    let constraint = MonoType::Struct(StructType {
-        name: "Drawable".to_string(),
-        fields: vec![(
-            "draw".to_string(),
-            MonoType::Fn {
-                params: vec![MonoType::TypeRef("Surface".to_string())],
-                return_type: Box::new(MonoType::Void),
-            },
-        )],
-        methods: HashMap::new(),
-        field_mutability: vec![],
-        field_has_default: vec![],
-        interfaces: vec![],
-    });
+    let ty = record(
+        "Point",
+        vec![("draw", mono_fn(vec![MonoType::Int(32)], MonoType::Void))],
+        vec![false],
+        vec![false],
+    );
+    let constraint = drawable_constraint();
 
     // Act
     let result = checker.check_constraint(&ty, &constraint, None);
@@ -214,37 +249,22 @@ fn test_check_constraint_with_method_binding() {
     // 添加方法绑定：Point.draw
     env.method_bindings.insert(
         "Point.draw".to_string(),
-        MonoType::Fn {
-            params: vec![
+        mono_fn(
+            vec![
                 MonoType::TypeRef("Point".to_string()),
                 MonoType::TypeRef("Surface".to_string()),
             ],
-            return_type: Box::new(MonoType::Void),
-        },
+            MonoType::Void,
+        ),
     );
 
-    let ty = MonoType::Struct(StructType {
-        name: "Point".to_string(),
-        fields: vec![("x".to_string(), MonoType::Float(64))],
-        methods: HashMap::new(),
-        field_mutability: vec![false],
-        field_has_default: vec![false],
-        interfaces: vec![],
-    });
-    let constraint = MonoType::Struct(StructType {
-        name: "Drawable".to_string(),
-        fields: vec![(
-            "draw".to_string(),
-            MonoType::Fn {
-                params: vec![MonoType::TypeRef("Surface".to_string())],
-                return_type: Box::new(MonoType::Void),
-            },
-        )],
-        methods: HashMap::new(),
-        field_mutability: vec![],
-        field_has_default: vec![],
-        interfaces: vec![],
-    });
+    let ty = record(
+        "Point",
+        vec![("x", MonoType::Float(64))],
+        vec![false],
+        vec![false],
+    );
+    let constraint = drawable_constraint();
 
     // Act
     let result = checker.check_constraint(&ty, &constraint, Some(&env));
@@ -264,23 +284,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive() {
     // Arrange - View { name: String, ref_field: &Int } 所有字段均为 Dup
     let trait_table = TraitTable::with_std();
 
-    let struct_type = MonoType::Struct(StructType {
-        name: "View".to_string(),
-        fields: vec![
-            ("name".to_string(), MonoType::make_string()),
-            (
-                "ref_field".to_string(),
-                MonoType::Ref {
-                    mutable: false,
-                    inner: Box::new(MonoType::Int(64)),
-                },
-            ),
-        ],
-        methods: HashMap::new(),
-        field_mutability: vec![false, false],
-        field_has_default: vec![false, false],
-        interfaces: vec![],
-    });
+    let struct_type = view_type();
 
     // Act & Assert
     assert!(
@@ -295,17 +299,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive_fails() {
     // Arrange - Buffer { data: List(Int(64)), len: Int(64) } 包含非 Dup 的 List 字段
     let trait_table = TraitTable::with_std();
 
-    let struct_type = MonoType::Struct(StructType {
-        name: "Buffer".to_string(),
-        fields: vec![
-            ("data".to_string(), MonoType::make_list(MonoType::Int(64))),
-            ("len".to_string(), MonoType::Int(64)),
-        ],
-        methods: HashMap::new(),
-        field_mutability: vec![false, false],
-        field_has_default: vec![false, false],
-        interfaces: vec![],
-    });
+    let struct_type = buffer_type();
 
     // Act & Assert
     assert!(
@@ -320,23 +314,7 @@ fn test_check_trait_bounds_dup_struct_auto_derive_fails() {
 fn test_bounds_checker_dup_struct_passes() {
     // Arrange
     let checker = BoundsChecker::new();
-    let struct_type = MonoType::Struct(StructType {
-        name: "View".to_string(),
-        fields: vec![
-            ("name".to_string(), MonoType::make_string()),
-            (
-                "ref_field".to_string(),
-                MonoType::Ref {
-                    mutable: false,
-                    inner: Box::new(MonoType::Int(64)),
-                },
-            ),
-        ],
-        methods: HashMap::new(),
-        field_mutability: vec![false, false],
-        field_has_default: vec![false, false],
-        interfaces: vec![],
-    });
+    let struct_type = view_type();
     let bounds = vec!["Dup".to_string()];
 
     // Act
@@ -357,17 +335,7 @@ fn test_bounds_checker_dup_struct_fails() {
     let _walk_guard = crate::util::diagnostic::push_current_span(crate::util::span::Span::dummy());
     // Arrange
     let checker = BoundsChecker::new();
-    let struct_type = MonoType::Struct(StructType {
-        name: "Buffer".to_string(),
-        fields: vec![
-            ("data".to_string(), MonoType::make_list(MonoType::Int(64))),
-            ("len".to_string(), MonoType::Int(64)),
-        ],
-        methods: HashMap::new(),
-        field_mutability: vec![false, false],
-        field_has_default: vec![false, false],
-        interfaces: vec![],
-    });
+    let struct_type = buffer_type();
     let bounds = vec!["Dup".to_string()];
 
     // Act
@@ -386,35 +354,13 @@ fn test_bounds_checker_dup_nested_struct_passes() {
     // Arrange - Connection { from: View, to: View } 嵌套 Dup 结构体
     let checker = BoundsChecker::new();
 
-    let view_type = MonoType::Struct(StructType {
-        name: "View".to_string(),
-        fields: vec![
-            ("name".to_string(), MonoType::make_string()),
-            (
-                "ref_field".to_string(),
-                MonoType::Ref {
-                    mutable: false,
-                    inner: Box::new(MonoType::Int(64)),
-                },
-            ),
-        ],
-        methods: HashMap::new(),
-        field_mutability: vec![false, false],
-        field_has_default: vec![false, false],
-        interfaces: vec![],
-    });
-
-    let conn_type = MonoType::Struct(StructType {
-        name: "Connection".to_string(),
-        fields: vec![
-            ("from".to_string(), view_type.clone()),
-            ("to".to_string(), view_type),
-        ],
-        methods: HashMap::new(),
-        field_mutability: vec![false, false],
-        field_has_default: vec![false, false],
-        interfaces: vec![],
-    });
+    let view_type = view_type();
+    let conn_type = record(
+        "Connection",
+        vec![("from", view_type.clone()), ("to", view_type)],
+        vec![false, false],
+        vec![false, false],
+    );
     let bounds = vec!["Dup".to_string()];
 
     // Act

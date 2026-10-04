@@ -2,8 +2,6 @@ import { defineConfig } from 'vitepress'
 import { generateSidebar as _generateSidebar } from 'vitepress-sidebar'
 import yaoxiangGrammar from './syntaxes/yaoxiang.tmLanguage.json'
 import enI18n from './i18n/en.json'
-import jaI18n from './i18n/ja.json'
-import ruI18n from './i18n/ru.json'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import { groupIconMdPlugin, groupIconVitePlugin } from 'vitepress-plugin-group-icons'
 import { GitChangelog, GitChangelogMarkdownSection } from '@nolebase/vitepress-plugin-git-changelog'
@@ -39,7 +37,17 @@ export default defineConfig({
   description: "一门面向未来的编程语言",
 
   // 排除有问题文件的目录
-  srcExclude: ["archive/**", "old/**", "**/*.backup.md"],
+  // 注意：srcExclude 的 glob 相对于 src/ 解析，"archive/**" 只能匹配中文侧。
+  // 英文侧位于 src/en/archive/，必须显式列出，否则归档文档会绕过排除规则被
+  // 公开发布（2026-10-02 修复：dist/en/archive/*.html 长期对外可达，其中包含
+  // 已归档的 v1.8 语言规范，而站点首页正在宣传「语言规范 v1.8」）。
+  srcExclude: [
+    "archive/**",
+    "en/archive/**",
+    "old/**",
+    "en/old/**",
+    "**/*.backup.md",
+  ],
 
   // 最后更新时间
   lastUpdated: true,
@@ -68,6 +76,26 @@ export default defineConfig({
       md.use(tabsMarkdownPlugin)
       md.use(groupIconMdPlugin)
       md.use(GitChangelogMarkdownSection)
+
+      // YaoXiang 的 f-string 用 `{{` / `}}` 做字面花括号转义（RFC-012），
+      // 而 VitePress 把每个 .md 当 Vue 模板编译：行内代码 <code>里的 `{{`
+      // 会被当成插值起始，构建期直接报 "Interpolation end sign was not found"。
+      // 凡是讲到 f-string 转义的文档都会踩，因此在这里统一兜底：
+      // 内容含 `{{` 的行内代码加 v-pre，跳过 Vue 编译。
+      // （`}}` 单独出现不构成插值，无需处理。）
+      const codeInline =
+        md.renderer.rules.code_inline ||
+        function (tokens, idx, options, env, slf) {
+          const token = tokens[idx]
+          return `<code>${md.utils.escapeHtml(token.content)}</code>`
+        }
+      md.renderer.rules.code_inline = (tokens, idx, options, env, slf) => {
+        const token = tokens[idx]
+        if (token.content.includes("{{")) {
+          return `<code v-pre>${md.utils.escapeHtml(token.content)}</code>`
+        }
+        return codeInline(tokens, idx, options, env, slf)
+      }
     },
   },
 
@@ -115,8 +143,6 @@ export default defineConfig({
               { text: "设计", link: "/design/" },
               { text: "开发", link: "/dev/" },
               { text: "码场", link: "/playground/" },
-              { text: "工具", link: "/tools/" },
-              { text: "社区", link: "/community/" },
               { text: "博客", link: "/blog/" },
             ],
           },
@@ -393,6 +419,7 @@ export default defineConfig({
                 { text: "指南目录", link: "/guide/" },
                 { text: "安装 YaoXiang", link: "/guide/installation" },
                 { text: "语法速查", link: "/guide/language-overview" },
+                { text: "模块系统", link: "/guide/modules" },
                 { text: "包管理系统", link: "/guide/packaging" },
                 { text: "CI 集成", link: "/guide/ci-integration" },
                 { text: "REPL 交互环境", link: "/guide/repl" },
@@ -416,7 +443,5 @@ export default defineConfig({
     },
 
     en: makeLocale(enI18n, "en", "en", "English"),
-    ja: makeLocale(jaI18n, "ja", "ja", "日本語"),
-    ru: makeLocale(ruI18n, "ru", "ru", "Русский"),
   },
 });

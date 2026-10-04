@@ -30,6 +30,67 @@ pub enum PackageError {
     #[error("Invalid yaoxiang.toml format: {0}")]
     InvalidManifest(String),
 
+    /// Global package cache error (RFC-014 Phase 3)
+    #[error("cache error: {0}")]
+    Cache(String),
+
+    /// Not inside a YaoXiang workspace (no [workspace] in any yaoxiang.toml, RFC-014c)
+    #[error("not a YaoXiang workspace: [workspace] section not found")]
+    NotWorkspace,
+
+    /// Workspace member manifest missing (RFC-014c)
+    #[error("workspace member '{key}' not found: {path}")]
+    MemberMissing { key: String, path: String },
+
+    /// Workspace member manifest invalid (RFC-014c)
+    #[error("workspace member '{key}' invalid: {reason}")]
+    MemberInvalid { key: String, reason: String },
+
+    /// Nested workspace (forbidden, RFC-014c 2026-09-15 decision 4)
+    #[error("nested workspace is not supported: member '{key}' at {path} has its own [workspace] section")]
+    NestedWorkspace { key: String, path: String },
+
+    /// Package content exceeds the source-package size limit
+    /// (RFC-014a 2026-09-15 decision 7: 20 MiB)
+    #[error("package too large: {0}")]
+    PackageTooLarge(String),
+
+    /// Checksum mismatch (RFC-014a)
+    #[error("checksum mismatch: expected {expected}, got {actual}")]
+    ChecksumMismatch { expected: String, actual: String },
+
+    /// Invalid package archive (missing manifest, path escape, bad entry type, ...)
+    #[error("invalid package: {0}")]
+    InvalidPackage(String),
+
+    /// Network request failed (GitHub adapter, RFC-014a Phase 4)
+    #[error("network error: {0}")]
+    Network(String),
+
+    /// API rate limit exhausted (RFC-014a decision 6)
+    #[error("rate limited: {0}")]
+    RateLimited(String),
+
+    /// Bare `publish` without a channel (official registry deferred, RFC-014a decision 1)
+    #[error("official registry is deferred (RFC-014a); use `publish --github` or `--dry-run`")]
+    RegistryDeferred,
+
+    /// Release for the version already exists (RFC-014a publish validation)
+    #[error("release already exists: {0}")]
+    VersionAlreadyExists(String),
+
+    /// Authentication failed (RFC-014a)
+    #[error("auth failed: {0}")]
+    AuthFailed(String),
+
+    /// Publish target repository could not be resolved
+    #[error("publish target unresolved: {0}")]
+    PublishTarget(String),
+
+    /// Pre-publish tests failed (RFC-014a publish validation step 3)
+    #[error("tests failed: {0}")]
+    TestsFailed(String),
+
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

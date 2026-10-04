@@ -2,7 +2,7 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse_expression;
-use crate::frontend::core::parser::ast::{BinOp, Expr, UnOp};
+use crate::frontend::core::parser::ast::{BinOp, Expr, FStringSegment, UnOp};
 use crate::frontend::core::lexer::tokens::Literal;
 
 fn parse_expr(source: &str) -> Expr {
@@ -228,12 +228,73 @@ fn test_tuple() {
     assert!(matches!(expr, Expr::Tuple(..)));
 }
 
-// 列表推导式 (Spec §2.6.5)
+// 列表推导式 (Spec §1.6.5，旧编号 §2.6.5，#401)
 
 #[test]
 fn test_list_comp() {
     let expr = parse_expr("[x * x for x in items]");
     assert!(matches!(expr, Expr::ListComp { .. }));
+}
+
+#[test]
+fn test_list_comp_with_filter_yields_condition() {
+    // Arrange
+    let source = "[x for x in items if x > 0]";
+
+    // Act
+    let expr = parse_expr(source);
+
+    // Assert
+    match expr {
+        Expr::ListComp { generators, .. } => {
+            assert_eq!(generators.len(), 1, "单 for 子句应解析为 1 个生成器");
+            assert_eq!(generators[0].var, "x", "迭代变量应为 x");
+            assert!(generators[0].condition.is_some(), "if 过滤应解析出过滤条件");
+        }
+        other => panic!("期望 ListComp，实际为 {:?}", other),
+    }
+}
+
+#[test]
+fn test_list_comp_multi_generator_expands_clauses() {
+    // Arrange
+    let source = "[x * y for x in xs for y in ys]";
+
+    // Act
+    let expr = parse_expr(source);
+
+    // Assert
+    match expr {
+        Expr::ListComp { generators, .. } => {
+            assert_eq!(generators.len(), 2, "两个 for 子句应解析为 2 个生成器");
+            assert_eq!(generators[0].var, "x", "第一个迭代变量应为 x");
+            assert_eq!(generators[1].var, "y", "第二个迭代变量应为 y");
+            assert!(
+                generators[0].condition.is_none() && generators[1].condition.is_none(),
+                "无 if 子句时过滤条件应为空"
+            );
+        }
+        other => panic!("期望 ListComp，实际为 {:?}", other),
+    }
+}
+
+#[test]
+fn test_list_comp_multi_generator_with_per_clause_filters() {
+    // Arrange
+    let source = "[x * y for x in xs if x > 0 for y in ys if y < 9]";
+
+    // Act
+    let expr = parse_expr(source);
+
+    // Assert
+    match expr {
+        Expr::ListComp { generators, .. } => {
+            assert_eq!(generators.len(), 2, "两个 for 子句应解析为 2 个生成器");
+            assert!(generators[0].condition.is_some(), "第一个子句应带 if 过滤");
+            assert!(generators[1].condition.is_some(), "第二个子句应带 if 过滤");
+        }
+        other => panic!("期望 ListComp，实际为 {:?}", other),
+    }
 }
 
 // Lambda (Spec §4.10)
@@ -311,4 +372,86 @@ fn test_ref_expr() {
     // Spec §8.3: ref 关键字创建 Arc
     let expr = parse_expr("ref x");
     assert!(matches!(expr, Expr::Ref { .. }));
+}
+
+// f-string 段切分（RFC-012, #402）
+
+fn fstring_segments(source: &str) -> Vec<FStringSegment> {
+    match parse_expr(source) {
+        Expr::FString { segments, .. } => segments,
+        other => panic!("Expected FString, got {other:?}: {source:?}"),
+    }
+}
+
+fn assert_text(
+    seg: &FStringSegment,
+    expected: &str,
+) {
+    match seg {
+        FStringSegment::Text(text) => {
+            assert_eq!(text, expected, "Text 段内容不符")
+        }
+        other => panic!("Expected Text({expected:?}), got {other:?}"),
+    }
+}
+
+fn assert_interpolation(
+    seg: &FStringSegment,
+    format_spec: Option<&str>,
+) {
+    match seg {
+        FStringSegment::Interpolation {
+            format_spec: spec, ..
+        } => {
+            assert_eq!(spec.as_deref(), format_spec, "format_spec 不符");
+        }
+        other => panic!("Expected Interpolation, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_fstring_segments_text_only() {
+    let segments = fstring_segments(r#"f"hello""#);
+    assert_eq!(segments.len(), 1, "纯文本应只有一段");
+    assert_text(&segments[0], "hello");
+}
+
+#[test]
+fn test_fstring_segments_interpolation() {
+    let segments = fstring_segments(r#"f"hello {name}""#);
+    assert_eq!(segments.len(), 2, "应为 Text + Interpolation 两段");
+    assert_text(&segments[0], "hello ");
+    assert_interpolation(&segments[1], None);
+}
+
+#[test]
+fn test_fstring_segments_brace_escape() {
+    // #402：`{{literal}}` 是纯文本 `{literal}`，不再成为插值
+    let segments = fstring_segments(r#"f"{{literal}}""#);
+    assert_eq!(segments.len(), 1, "转义后应折叠为单段文本");
+    assert_text(&segments[0], "{literal}");
+}
+
+#[test]
+fn test_fstring_segments_escape_adjacent_interpolation() {
+    // Python 语义：f"{{{x}}}" → 文本 `{` + 插值 x + 文本 `}`
+    let segments = fstring_segments(r#"f"{{{x}}}""#);
+    assert_eq!(segments.len(), 3, "应为 左花括号 + 插值 + 右花括号 三段");
+    assert_text(&segments[0], "{");
+    assert_interpolation(&segments[1], None);
+    assert_text(&segments[2], "}");
+}
+
+#[test]
+fn test_fstring_segments_close_brace_escape() {
+    let segments = fstring_segments(r#"f"a}}b""#);
+    assert_eq!(segments.len(), 1, "`}}` 解转义后并入单段文本");
+    assert_text(&segments[0], "a}b");
+}
+
+#[test]
+fn test_fstring_segments_format_spec() {
+    let segments = fstring_segments(r#"f"{pi:.2f}""#);
+    assert_eq!(segments.len(), 1, "仅一个插值段");
+    assert_interpolation(&segments[0], Some(".2f"));
 }

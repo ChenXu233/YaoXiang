@@ -1,0 +1,19 @@
+// 06-compile-errors/refined_param_arg_violates_err.yx
+// 覆盖: RFC-027 §3.3/§3.4 —— 调用点实参须满足形参精化
+// 验证: 实参值编译期可知且使形参约束为假时必须报错。`b: IsPositive(b)`
+//       的约束是 `b > 0`，传入 -5 使该命题为假 → E4018。
+// 状态: ❌ 应被编译期拒绝
+//
+// 注：本文件是**编译期拒绝测试**，判定契约为「check 非 0 且输出含预期码」，
+// 不执行任何运行期语句。调用点验证由 check_module 内的精化走查完成，
+// 与注解处证明（E4018）共用同一检查器。
+
+// expect: compile-error E4018
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+identity: (b: IsPositive(b)) -> Int = { b }
+
+main: () -> Int = {
+    identity(-5)
+}

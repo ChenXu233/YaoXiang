@@ -1,0 +1,28 @@
+// 02-type-system/explicit_termination_measure.yx
+// 覆盖: RFC-027a §示例 —— 显式测度兜底路径（非结构递归）
+// 验证: 自动探索失败时，返回类型位给出的显式测度使终止义务成立，且 gcd 计算正确。
+//
+//       本文件**特意不带**形参下界精化（`b: Int` 而非 `b: NonNegative(b)`）：
+//       此时良基性推不出（ℤ 上 `<` 不良基），递减义务虽被判伪也**不得报 E4022**
+//       ——RFC-027a:223「参数精化若已给出下界则自动导出；推不出时才进残余义务，
+//       且只给方向不拒绝」。故本文件同时是「残余义务不拒绝」的守卫。
+//       对照需要下界才能真正判成立/判伪的两个文件：
+//         - 02-type-system/measure_decreasing.yx（有下界，递减成立）
+//         - 06-compile-errors/measure_not_decreasing_err.yx（有下界且递增 → E4022）
+// 状态: ✅ 可运行
+
+use std.assert
+
+gcd: (a: Int, b: Int) -> Terminates(b) = {
+    if b == 0 { return a }
+    return gcd(b, a % b)
+}
+
+main: () -> Void = {
+    assert.assert(gcd(12, 8) == 4, "gcd(12,8) == 4")
+    assert.assert(gcd(1071, 462) == 21, "gcd(1071,462) == 21")
+    assert.assert(gcd(7, 0) == 7, "gcd(7,0) == 7（零边界不递归）")
+}
+
+// T4 入口语义：Script 模式的 main **不会**隐式执行——必须显式调用，运行期断言才生效。
+main()

@@ -319,7 +319,8 @@ fn test_add_and_remove_dependency_persists_manifest_changes() {
     let tmp = temp_dir();
     let dir = init_project(&tmp, "pkg_test", false);
     // Act: add
-    add::exec_in(&dir, "std", Some("1.0.0"), false).expect("adding a dependency should succeed");
+    add::exec_in(&dir, "std", Some("1.0.0"), None, None, false, false)
+        .expect("adding a dependency should succeed");
     // Assert: add
     let manifest = PackageManifest::load(&dir).expect("manifest should be readable");
     assert!(
@@ -342,7 +343,7 @@ fn test_add_dev_dependency_is_listed_in_dev_section() {
     let tmp = temp_dir();
     let dir = init_project(&tmp, "dev_test", false);
     // Act
-    add::exec_in(&dir, "test_utils", Some("0.1.0"), true)
+    add::exec_in(&dir, "test_utils", Some("0.1.0"), None, None, true, false)
         .expect("adding a dev-dependency should succeed");
     // Assert
     let manifest = PackageManifest::load(&dir).expect("manifest should be readable");
@@ -360,9 +361,10 @@ fn test_add_duplicate_dependency_returns_already_exists_error() {
     // Arrange
     let tmp = temp_dir();
     let dir = init_project(&tmp, "dup_dep_test", false);
-    add::exec_in(&dir, "std", None, false).expect("first addition should succeed");
+    add::exec_in(&dir, "std", None, None, None, false, false)
+        .expect("first addition should succeed");
     // Act
-    let result = add::exec_in(&dir, "std", None, false);
+    let result = add::exec_in(&dir, "std", None, None, None, false, false);
     // Assert
     let err = result.expect_err("adding a duplicate dependency should fail");
     assert!(
@@ -396,7 +398,7 @@ fn test_update_on_project_with_no_dependencies_is_noop() {
     let tmp = temp_dir();
     let dir = init_project(&tmp, "empty_update", false);
     // Act
-    let result = update::exec_in(&dir);
+    let result = update::exec_in(&dir, &Default::default());
     // Assert
     assert!(
         result.is_ok(),
@@ -411,7 +413,7 @@ fn test_update_nonexistent_package_returns_not_found_error() {
     let tmp = temp_dir();
     let dir = init_project(&tmp, "update_missing", false);
     // Act
-    let result = update::exec_single_in(&dir, "no_such_pkg");
+    let result = update::exec_single_in(&dir, "no_such_pkg", &Default::default());
     // Assert
     let err = result.expect_err("updating nonexistent dependency should fail");
     assert!(
@@ -429,7 +431,7 @@ fn test_install_on_project_with_no_dependencies_is_noop() {
     let tmp = temp_dir();
     let dir = init_project(&tmp, "empty_install", false);
     // Act
-    let result = install::exec_in(&dir);
+    let result = install::exec_in(&dir, &Default::default());
     // Assert
     assert!(
         result.is_ok(),
@@ -458,7 +460,8 @@ fn test_list_after_adding_dependency_succeeds() {
     // Arrange
     let tmp = temp_dir();
     let dir = init_project(&tmp, "list_deps", false);
-    add::exec_in(&dir, "foo", None, false).expect("adding dependency should succeed");
+    add::exec_in(&dir, "foo", None, None, None, false, false)
+        .expect("adding dependency should succeed");
     // Act
     let result = list::exec_in(&dir);
     // Assert

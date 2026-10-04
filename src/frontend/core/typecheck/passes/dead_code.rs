@@ -23,6 +23,12 @@ pub struct DeadCodeAnalyzer {
     exempt_pub: bool,
     /// 包内引用池（Phase 2）：Some 时 Internal 的 pub 由池判定生死
     project_refs: Option<HashSet<String>>,
+    /// 跨文件引用豁免（029f Lib 角色非 pub 补遗，RFC-014 项目模式盘出）：
+    /// Lib（被包内 use 的文件）的消费者在文件外，非 pub 定义只按文件内
+    /// 可达性判定会把跨文件引用判成死代码——误报方向，违背 029f「宁漏报」。
+    /// 与 `project_refs` 分开：后者同时改写 pub 政策（Internal Phase 2 收紧），
+    /// 本字段只豁免非 pub，pub 维持「绝对豁免」不动。
+    cross_file_refs: Option<HashSet<String>>,
 }
 
 /// 符号定义
@@ -76,6 +82,7 @@ impl DeadCodeAnalyzer {
             all_defs: HashMap::new(),
             exempt_pub: true,
             project_refs: None,
+            cross_file_refs: None,
         }
     }
 
@@ -96,6 +103,14 @@ impl DeadCodeAnalyzer {
         refs: HashSet<String>,
     ) {
         self.project_refs = Some(refs);
+    }
+
+    /// 设置跨文件引用池（仅豁免非 pub，见字段注释）。
+    pub fn set_cross_file_refs(
+        &mut self,
+        refs: HashSet<String>,
+    ) {
+        self.cross_file_refs = Some(refs);
     }
 
     /// 收集入口点和符号定义（合并处理以减少代码重复）
@@ -300,17 +315,17 @@ impl DeadCodeAnalyzer {
                 }
                 Expr::ListComp {
                     element,
-                    var,
-                    iterable,
-                    condition,
+                    generators,
                     ..
                 } => {
-                    referenced.insert(var.clone());
-                    collect_from_expr(element, referenced);
-                    collect_from_expr(iterable, referenced);
-                    if let Some(cond) = condition {
-                        collect_from_expr(cond, referenced);
+                    for gen in generators {
+                        referenced.insert(gen.var.clone());
+                        collect_from_expr(&gen.iterable, referenced);
+                        if let Some(cond) = &gen.condition {
+                            collect_from_expr(cond, referenced);
+                        }
                     }
+                    collect_from_expr(element, referenced);
                 }
                 Expr::FString { segments, .. } => {
                     for seg in segments {
@@ -575,6 +590,14 @@ impl DeadCodeAnalyzer {
             }
             if def.is_exported && !self.pub_should_warn(name) {
                 continue;
+            }
+            // 非 pub：包内任一文件（含测试）引用即活——跨文件消费者不可见
+            // 曾是 Lib 非 pub 误报的根因
+            if let Some(refs) = &self.cross_file_refs {
+                let short_name = name.rsplit('.').next().unwrap_or(name);
+                if refs.contains(short_name) {
+                    continue;
+                }
             }
             let (code, message) = match def.kind {
                 SymbolKind::Function => ("W1001", format!("Unused function: '{}'", name)),

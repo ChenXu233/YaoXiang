@@ -293,6 +293,30 @@ fn in_yaoxiang_project(file: &std::path::Path) -> bool {
     false
 }
 
+/// 把 `io::Error` 渲染成**与运行环境语言无关**的固定描述。
+///
+/// `io::Error` 的 `Display` 由操作系统本地化——中文 Windows 上是
+/// 「系统找不到指定的文件。」「拒绝访问。」——它不是 `locales/*.json`
+/// 的一部分，直接拼进用户可见消息会让 `-L` / `YAOXIANG_LANG` 选定的
+/// 语言在这些错误上失效（本地化体检 B2）。
+///
+/// 这里按 `ErrorKind` 归一为固定短语，并保留平台错误码用于排查
+/// （`os error 2` / `os error 5` 与语言无关）。真正的多语言化需要把每个
+/// kind 映射到一个 locale 键，属另一批次。
+pub fn io_error_reason(e: &std::io::Error) -> String {
+    let reason = match e.kind() {
+        std::io::ErrorKind::NotFound => "file not found",
+        std::io::ErrorKind::PermissionDenied => "permission denied",
+        std::io::ErrorKind::AlreadyExists => "already exists",
+        std::io::ErrorKind::InvalidData => "invalid data (not valid UTF-8 text)",
+        _ => "I/O error",
+    };
+    match e.raw_os_error() {
+        Some(code) => format!("{reason} (os error {code})"),
+        None => reason.to_string(),
+    }
+}
+
 pub fn run_file_with_diagnostics(
     file: &std::path::PathBuf,
     runtime_mode: &str,
@@ -321,7 +345,7 @@ pub fn run_file_with_diagnostics(
             return Err(anyhow::anyhow!(
                 "Failed to read file {}: {}",
                 file.display(),
-                e
+                io_error_reason(&e)
             ));
         }
     };
@@ -352,6 +376,18 @@ pub fn run_file_with_diagnostics(
 
     match module_result {
         Ok(module) => {
+            // #413：Script 模式（项目外单文件）不自动执行 main——T4 决议
+            // （codegen find_entry_point）：无 manifest 就没有入口概念，顶层
+            // 语句即程序主体，自动执行会与显式 main() 双跑（#356）。但静默
+            // 成功有欺骗性：文件定义了 main 而顶层从未调用时给出显式提示。
+            if module.source_files.is_empty() && script_main_never_called(&module) {
+                eprintln!(
+                    "提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。"
+                );
+                eprintln!(
+                    "提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"
+                );
+            }
             // 多文件模式（#252）：按 orchestrator 发现顺序重建 SourceMap，
             // 使索引与 debug span 的 file_id 对齐。读不到文件也要占位，保持索引稳定。
             if !module.source_files.is_empty() {
@@ -394,6 +430,33 @@ pub fn run_file_with_diagnostics(
     }
 
     Ok(())
+}
+
+/// #413：Script 模式提示判定——文件绑定了 `main` 且模块初始化序列没有对它的
+/// 直接调用。
+///
+/// 顶层 `main()` 调用在 init 中是 `Call { func: Const(String("main")), .. }`
+/// （调用目标以名字常量编码，见 ir_gen 的 Call 生成）；定义本身
+/// （`main = () => {...}`）不产生对 main 的 Call。经别名中转的间接调用
+/// （`f = main; f()`）识别不出——提示是尽力而为的辅导信息，不是诊断。
+fn script_main_never_called(module: &crate::middle::ModuleIR) -> bool {
+    use crate::middle::core::ir::{ConstValue, Instruction, Operand};
+
+    let defines_main = module.functions.iter().any(|f| f.name == "main")
+        || module.globals.iter().any(|g| g.name == "main");
+    if !defines_main {
+        return false;
+    }
+    let top_level_call = module.init.iter().any(|inst| match inst {
+        Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
+            matches!(
+                func,
+                Operand::Const(ConstValue::String(name)) if name == "main"
+            )
+        }
+        _ => false,
+    });
+    defines_main && !top_level_call
 }
 
 /// 解析运行时模式字符串（"full" 历史别名等价 Standard，work-stealing 从未实现）

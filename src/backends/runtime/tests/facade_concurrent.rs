@@ -8,13 +8,34 @@ use std::time::{Duration, Instant};
 use crate::backends::runtime::engine::{sv, TaskMeta};
 use crate::backends::runtime::facade::{Runtime, RuntimeConfig, RuntimeMode, SpawnHandle, TaskFn};
 
+/// 标准模式运行时夹具（workers 个 worker 线程）。
+fn standard_runtime(workers: usize) -> Runtime {
+    Runtime::new(RuntimeConfig {
+        mode: RuntimeMode::Standard,
+        workers,
+    })
+    .unwrap_or_else(|e| panic!("standard runtime with {workers} workers should build: {e}"))
+}
+
+/// 「睡 50ms 后把 tag 记入 results，再返回 value」的内层任务体。
+fn recording_task(
+    results: Arc<Mutex<Vec<&'static str>>>,
+    tag: &'static str,
+    value: &'static str,
+) -> TaskFn {
+    Box::new(move |_h| {
+        std::thread::sleep(Duration::from_millis(50));
+        results
+            .lock()
+            .unwrap_or_else(|e| panic!("results lock poisoned: {e}"))
+            .push(tag);
+        Ok(sv(value))
+    })
+}
+
 #[test]
 fn standard_runtime_concurrent_execution() {
-    let mut rt = Runtime::new(RuntimeConfig {
-        mode: RuntimeMode::Standard,
-        workers: 4,
-    })
-    .unwrap();
+    let mut rt = standard_runtime(4);
 
     let order = Arc::new(Mutex::new(Vec::new()));
     let mut task_ids = Vec::new();
@@ -47,11 +68,7 @@ fn standard_runtime_concurrent_execution() {
 
 #[test]
 fn standard_runtime_dependency_ordering() {
-    let mut rt = Runtime::new(RuntimeConfig {
-        mode: RuntimeMode::Standard,
-        workers: 2,
-    })
-    .unwrap();
+    let mut rt = standard_runtime(2);
 
     let order = Arc::new(Mutex::new(Vec::new()));
 
@@ -82,34 +99,25 @@ fn standard_runtime_dependency_ordering() {
 
 #[test]
 fn standard_runtime_nested_spawn() {
-    let mut rt = Runtime::new(RuntimeConfig {
-        mode: RuntimeMode::Standard,
-        workers: 4,
-    })
-    .unwrap();
-
+    let mut rt = standard_runtime(4);
     let results = Arc::new(Mutex::new(Vec::new()));
 
-    let results_clone = results.clone();
+    let outer_results = results.clone();
     let outer_task: TaskFn = Box::new(move |handle: &SpawnHandle| {
-        let r1 = results_clone.clone();
-        let inner_a: TaskFn = Box::new(move |_h| {
-            std::thread::sleep(Duration::from_millis(50));
-            r1.lock().unwrap().push("inner_a");
-            Ok(sv("a"))
-        });
+        let _id_a = handle
+            .spawn(
+                TaskMeta::default(),
+                recording_task(outer_results.clone(), "inner_a", "a"),
+            )
+            .unwrap();
+        let _id_b = handle
+            .spawn(
+                TaskMeta::default(),
+                recording_task(outer_results.clone(), "inner_b", "b"),
+            )
+            .unwrap();
 
-        let r2 = results_clone.clone();
-        let inner_b: TaskFn = Box::new(move |_h| {
-            std::thread::sleep(Duration::from_millis(50));
-            r2.lock().unwrap().push("inner_b");
-            Ok(sv("b"))
-        });
-
-        let _id_a = handle.spawn(TaskMeta::default(), inner_a).unwrap();
-        let _id_b = handle.spawn(TaskMeta::default(), inner_b).unwrap();
-
-        results_clone.lock().unwrap().push("outer");
+        outer_results.lock().unwrap().push("outer");
         Ok(sv("outer_done"))
     });
 

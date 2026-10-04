@@ -109,22 +109,26 @@ pub fn format_expr(
         Expr::List(exprs, _span) => format_list(exprs, ctx, source_map),
         Expr::ListComp {
             element,
-            var,
-            iterable,
-            condition,
+            generators,
             span: _,
         } => {
-            let base = format!(
-                "[{} for {} in {}",
-                format_expr(element, ctx, source_map),
-                var,
-                format_expr(iterable, ctx, source_map)
-            );
-            if let Some(cond) = condition {
-                format!("{} if {}]", base, format_expr(cond, ctx, source_map))
-            } else {
-                format!("{}]", base)
-            }
+            let clauses = generators
+                .iter()
+                .map(|gen| {
+                    let base = format!(
+                        "for {} in {}",
+                        gen.var,
+                        format_expr(&gen.iterable, ctx, source_map)
+                    );
+                    if let Some(cond) = &gen.condition {
+                        format!("{} if {}", base, format_expr(cond, ctx, source_map))
+                    } else {
+                        base
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("[{} {}]", format_expr(element, ctx, source_map), clauses)
         }
         Expr::Dict(pairs, _span) => format_dict(pairs, ctx, source_map),
         Expr::Index {
@@ -485,36 +489,17 @@ fn format_return_with_names(
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    if let Type::Paren(inner) = ty {
-        let inner_str = match inner.as_ref() {
-            Type::Fn {
-                params: inner_tys,
-                return_type,
-            } => {
-                let count = inner_tys.len();
-                let (group, rest) = split_params_at(params, count);
-                if !group.is_empty() && group.len() == count {
-                    let named: Vec<String> = inner_tys
-                        .iter()
-                        .zip(group.iter())
-                        .map(|(t, p)| {
-                            format!(
-                                "{}: {}",
-                                p.name,
-                                super::types::format_type(t, ctx, source_map)
-                            )
-                        })
-                        .collect();
-                    let ret = format_return_with_names(return_type, rest, ctx, source_map);
-                    format!("({}) -> {}", named.join(", "), ret)
-                } else {
-                    super::types::format_type(inner, ctx, source_map)
-                }
-            }
-            other => super::types::format_type(other, ctx, source_map),
-        };
-        return format!("({})", inner_str);
+    // RFC-027 §3：具名括号（`-> (r: P(r))`）与 `Paren` 同款终止链条，
+    // 只是多一层声明的 binder 名——同样不得把括号内的参数名往外层拍平。
+    if let Type::NamedParen { param, inner, .. } = ty {
+        let inner_str = format_paren_inner_with_names(inner, params, ctx, source_map);
+        return format!("({param}: {inner_str})");
     }
+    if let Type::Paren(inner) = ty {
+        let inner_str = format_paren_inner_with_names(inner, params, ctx, source_map);
+        return format!("({inner_str})");
+    }
+
     if let Type::Fn {
         params: inner_tys,
         return_type,
@@ -539,6 +524,43 @@ fn format_return_with_names(
         }
     }
     super::types::format_type(ty, ctx, source_map)
+}
+
+/// 括号内层的返回类型格式化：`Fn` 内层要按签名参数名补全（`Paren` 与 RFC-027 §3
+/// 的 `NamedParen` 共用——两者都声明「括号内是完整类型（值）」，参数名不得外拍）。
+fn format_paren_inner_with_names(
+    inner: &Type,
+    params: &[Param],
+    ctx: &FormatContext,
+    source_map: &SourceMap,
+) -> String {
+    match inner {
+        Type::Fn {
+            params: inner_tys,
+            return_type,
+        } => {
+            let count = inner_tys.len();
+            let (group, rest) = split_params_at(params, count);
+            if !group.is_empty() && group.len() == count {
+                let named: Vec<String> = inner_tys
+                    .iter()
+                    .zip(group.iter())
+                    .map(|(t, p)| {
+                        format!(
+                            "{}: {}",
+                            p.name,
+                            super::types::format_type(t, ctx, source_map)
+                        )
+                    })
+                    .collect();
+                let ret = format_return_with_names(return_type, rest, ctx, source_map);
+                format!("({}) -> {}", named.join(", "), ret)
+            } else {
+                super::types::format_type(inner, ctx, source_map)
+            }
+        }
+        other => super::types::format_type(other, ctx, source_map),
+    }
 }
 
 /// 按 count 切分参数切片
@@ -681,16 +703,34 @@ pub fn format_block(
     }
 
     // §6.2 单行代码块：检查是否可以使用单行格式
-    // 条件：只有一个语句，没有注释
+    // 条件：只有一个语句，且块内没有注释
     if block.stmts.len() == 1 {
         let stmt = &block.stmts[0];
-        // 检查是否有前导注释
+        // 检查是否有前导注释（上界用语句起点偏移：与语句同行的行末注释不算前导注释）
         let leading_comments =
-            source_map.comments_between_lines(block.span.start.line, stmt.span.start.line);
-        // 检查是否有行末注释
-        let trailing_comment = source_map.trailing_comment_on_line(stmt.span.end.line);
+            source_map.comments_before_offset(block.span.start.line, stmt.span.start.offset);
+        // 检查块内是否夹着注释——只要有，折叠就会把注释挪位或丢掉，必须撑开。
+        //
+        // 判据用 `{`/`}` 配对（偏移口径），而不是只看「语句行末那一条注释」：
+        // 语句自身的 span 可能不覆盖它的 body（Binding 的 span 只到声明头），
+        // 用语句结束偏移切片会把 body 里的 `}` 误判成「块外」，于是
+        // `{ f = (x) => { x * 2 } // c }` 这种块会被折叠、注释随之丢失。
+        // `{ x * 2 } // c` 的注释在配对 `}` 之外，故仍允许折叠（注释由外层输出）。
+        //
+        // 配对失败时（解析器合成的块，如单表达式 lambda 体）退化为原行号判据。
+        let comment_inside = match source_map.block_close_offset(block.span.start.offset) {
+            Some(close) => source_map.comments.iter().any(|c| {
+                c.span.start.offset > block.span.start.offset && c.span.end.offset <= close
+            }),
+            None => source_map
+                .trailing_comment_on_line(stmt.span.end.line)
+                .map(|c| {
+                    source_map.comment_is_inside_block(stmt.span.end.offset, c.span.start.offset)
+                })
+                .unwrap_or(false),
+        };
 
-        if leading_comments.is_empty() && trailing_comment.is_none() {
+        if leading_comments.is_empty() && !comment_inside {
             let stmt_str = super::stmt::format_stmt(&stmt.kind, &inner_ctx, source_map);
             let single_line = format!("{{ {} }}", stmt_str);
 
@@ -707,16 +747,22 @@ pub fn format_block(
         // 输出语句前的注释
         if i == 0 {
             // 第一个语句：输出块开始到第一个语句之间的注释
-            let comments =
-                source_map.comments_between_lines(block.span.start.line, stmt.span.start.line);
+            // （上界用语句起点偏移，避免把语句自身的行末注释当作前导注释重复输出）
+            let comments = source_map.claim_unemitted(
+                source_map.comments_before_offset(block.span.start.line, stmt.span.start.offset),
+            );
             for comment in &comments {
                 result.push_str(&inner_indent);
                 result.push_str(&comment.content);
                 result.push('\n');
             }
         } else {
-            let prev_end = block.stmts[i - 1].span.end.line;
-            let comments = source_map.comments_between_lines(prev_end + 1, stmt.span.start.line);
+            // 下界用上一条语句的**起始行**：与 module.rs 同理，lambda 单表达式体的
+            // 合成语句 span 不可靠，用它算下界会跳过其后的注释；重复由账本兜底。
+            let prev_start = block.stmts[i - 1].span.start.line;
+            let comments = source_map.claim_unemitted(
+                source_map.comments_before_offset(prev_start, stmt.span.start.offset),
+            );
             for comment in &comments {
                 result.push_str(&inner_indent);
                 result.push_str(&comment.content);
@@ -777,7 +823,26 @@ fn format_fstring(
     let mut result = "f\"".to_string();
     for seg in segments {
         match seg {
-            FStringSegment::Text(text) => result.push_str(text),
+            FStringSegment::Text(text) => {
+                // Text 段持有解码后的字面内容（#402）：重转义为合法的
+                // f-string 源码——控制字符回到 \n 等形式（与字符串字面量
+                // 输出一致），花括号翻倍避免被重新解析为插值
+                for c in text.chars() {
+                    match c {
+                        '{' | '}' => {
+                            result.push(c);
+                            result.push(c);
+                        }
+                        '\n' => result.push_str("\\n"),
+                        '\r' => result.push_str("\\r"),
+                        '\t' => result.push_str("\\t"),
+                        '\0' => result.push_str("\\0"),
+                        '\\' => result.push_str("\\\\"),
+                        '"' => result.push_str("\\\""),
+                        c => result.push(c),
+                    }
+                }
+            }
             FStringSegment::Interpolation { expr, format_spec } => {
                 result.push('{');
                 result.push_str(&format_expr(expr, ctx, source_map));

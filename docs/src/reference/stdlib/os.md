@@ -1,11 +1,12 @@
 ---
 title: 'std.os'
-description: '文件句柄、目录、环境变量与工作目录'
+description: '文件句柄、环境变量与工作目录'
 ---
 
 # std.os
 
-操作系统接口模块：文件句柄读写、目录操作、环境变量与工作目录。
+操作系统接口模块：文件句柄读写、环境变量与工作目录。路径级文件操作（整文件读写、
+目录、元数据、路径运算）见 [`std.fs`](./fs)。
 
 ```yaoxiang
 use std.os
@@ -33,29 +34,30 @@ use std.os
 > os.close(r)
 > ```
 >
-> 修复前签名无 `&`，句柄按值传入 → 线性所有权 → 用一次即失效，
+> 修复前的签名无 `&`，句柄按值传入 → 线性所有权 → 用一次即失效，
 > `open → write → close` 会报 `E2014`。
->
-> 若想避免手工管理句柄，仍可用不开句柄的便捷函数：
-> [`std.io.read_file`](./io#read_file) / [`write_file`](./io#write_file) /
-> [`append_file`](./io#append_file)，或本模块的 [`append_file`](#append_file)。
 
-`open` 返回的是一个 **`Int` 类型的文件描述符**（引擎内部维护句柄表），因此签名中的 `File` 实为
-`Int`。
+若想避免手工管理句柄，可用不开句柄的便捷函数——它们在
+[`std.fs`](./fs)（**不在** `std.io`）：`fs.read_file` / `fs.write_file` /
+`fs.append_file`。本模块（`std.os`）只有句柄级增量读写，没有 `append_file`
+（`os.append_file` 报 `E1042`）。
+
+`open` 返回的类型标注是 `File`——引擎内部维护一张句柄表（`src/std/os.rs:98`），
+底层是 `std::fs::File`，对用户是**不透明的句柄值**。
 
 写入后内容立即落盘，无需显式 `close`：
 
 ```yaoxiang
 use std.assert
-use std.io
+use std.fs
 use std.os
 
 main: () -> Void = {
     p = "__yx_doc_open.txt"
     n = os.write(os.open(p, "w"), "hello")
     assert(n == 5)
-    assert(io.read_file(p) == "hello")
-    os.remove(p)
+    assert(fs.read_file(p) == "hello")
+    fs.remove(p)
 }
 ```
 
@@ -83,21 +85,11 @@ main: () -> Void = {
 | `seek` | `(file: &File, offset: Int) -> Bool` |
 | `tell` | `(file: &File) -> Int` |
 | `flush` | `(file: &File) -> Void` |
-| `mkdir` | `(path: &String) -> Bool` |
-| `rmdir` | `(path: &String) -> Bool` |
-| `read_dir` | `(path: &String) -> String` |
-| `remove` | `(path: &String) -> Bool` |
-| `exists` | `(path: &String) -> Bool` |
-| `is_file` | `(path: &String) -> Bool` |
-| `is_dir` | `(path: &String) -> Bool` |
-| `copy` | `(src: &String, dst: &String) -> Bool` |
-| `rename` | `(old: &String, new: &String) -> Bool` |
 | `get_env` | `(name: &String) -> String` |
 | `set_env` | `(name: &String, value: &String) -> Void` |
 | `args` | `() -> String` |
 | `chdir` | `(path: &String) -> Bool` |
 | `getcwd` | `() -> String` |
-| `append_file` | `(path: &String, content: &String) -> Bool` |
 
 <!-- stdlib:table:os end -->## 文件操作
 
@@ -111,28 +103,28 @@ open: (path: &String, mode: &String) -> File
 
 <!-- stdlib:sig:os.open end -->
 
-打开文件并返回文件描述符。
+打开文件并返回句柄。
 
 - `path` —— 文件路径（只读借用）
 - `mode` —— 打开模式，见上表
 
-返回：内部句柄表分配的 `Int`
-描述符。**该句柄只能使用一次**——任一下游调用都会移动它（见[文件句柄模型](#文件句柄模型)），因此通常把
-`open` 内联进单次调用。
+返回：`File` 句柄值。**句柄按引用传递**——`write` / `seek` / `read` / `tell` / `flush` /
+`close` 的形参都是 `&File`（`src/std/os.rs:35-65`），所以同一个句柄可以反复使用，
+直到显式 [`close`](#close)。通常把 `open` 内联进单次调用以省去收尾。
 
 错误：模式非法、文件不存在或无权限时抛出 `E6007`。
 
-> 句柄只能使用一次（#337），因此该返回值通常直接内联进下游调用。
-
 ```yaoxiang
 use std.assert
+use std.fs
 use std.os
 
 main: () -> Void = {
     p = "__yx_doc_open_only.txt"
     f = os.open(p, "w")
-    assert(os.exists(p))
-    os.remove(p)
+    assert(fs.exists(p))
+    os.close(f)
+    fs.remove(p)
 }
 ```
 
@@ -148,19 +140,22 @@ close: (file: &File) -> Void
 
 关闭文件句柄并释放表项。
 
-因为句柄只能使用一次，`close` 只在“打开后不作他用”的场景有意义；写入内容在 [`write`](#write)
-返回时已落盘，通常无需显式关闭。
+形参是 `&File`，所以 `close` 可以放在一串读写的末尾，把句柄用完再释放。写入内容在
+[`write`](#write) 返回时已落盘（`os.open(…, "w")` 走 `OpenOptions::create(true)`），
+通常无需显式关闭——但长时间持有大量句柄时应当收尾。
 
-错误：描述符无效（未打开或已关闭）时抛出 `E6007`。
+错误：句柄无效（未打开或已关闭）时抛出 `E6007`。
 
 ```yaoxiang
+use std.fs
 use std.os
 
 main: () -> Void = {
     p = "__yx_doc_close.txt"
     f = os.open(p, "w")
+    os.write(f, "data")
     os.close(f)
-    os.remove(p)
+    fs.remove(p)
 }
 ```
 
@@ -176,25 +171,25 @@ read: (file: &File, n: Int) -> String
 
 从当前读写位置读取**最多** `n` 字节。
 
-- `file` —— 文件描述符
+- `file` —— 文件句柄
 - `n` —— 期望读取的字节数
 
 返回：实际读到的内容（可能短于
-`n`，到达文件末尾时为空串）。非法 UTF-8 字节以替换字符形式返回，不报错。错误：描述符无效或读取失败时抛出
+`n`，到达文件末尾时为空串）。非法 UTF-8 字节以替换字符形式返回，不报错。错误：句柄无效或读取失败时抛出
 `E6007`。
 
 ```yaoxiang
 use std.assert
-use std.io
+use std.fs
 use std.os
 
 main: () -> Void = {
     p = "__yx_doc_read.txt"
-    io.write_file(p, "abcdef")
+    fs.write_file(p, "abcdef")
 
     part = os.read(os.open(p, "r"), 3)
     assert(part == "abc")
-    os.remove(p)
+    fs.remove(p)
 }
 ```
 
@@ -212,17 +207,18 @@ write: (file: &File, content: String) -> Int
 
 - `content` —— 按值传入
 
-返回：写入的**字节数**。错误：描述符无效或写入失败时抛出 `E6007`。
+返回：写入的**字节数**。错误：句柄无效或写入失败时抛出 `E6007`。
 
 ```yaoxiang
 use std.assert
+use std.fs
 use std.os
 
 main: () -> Void = {
     p = "__yx_doc_write.txt"
     n = os.write(os.open(p, "w"), "hello")
     assert(n == 5)
-    os.remove(p)
+    fs.remove(p)
 }
 ```
 
@@ -240,20 +236,20 @@ seek: (file: &File, offset: Int) -> Bool
 
 - `offset` —— 目标字节偏移，须非负
 
-返回：成功返回 `true`。错误：描述符无效或偏移非法时抛出 `E6007`。
+返回：成功返回 `true`。错误：句柄无效或偏移非法时抛出 `E6007`。
 
 ```yaoxiang
 use std.assert
-use std.io
+use std.fs
 use std.os
 
 main: () -> Void = {
     p = "__yx_doc_seek.txt"
-    io.write_file(p, "abcdef")
+    fs.write_file(p, "abcdef")
 
     ok = os.seek(os.open(p, "r"), 2)
     assert(ok)
-    os.remove(p)
+    fs.remove(p)
 }
 ```
 
@@ -269,17 +265,18 @@ tell: (file: &File) -> Int
 
 返回当前读写位置的字节偏移。
 
-错误：描述符无效时抛出 `E6007`。
+错误：句柄无效时抛出 `E6007`。
 
 ```yaoxiang
 use std.assert
+use std.fs
 use std.os
 
 main: () -> Void = {
     p = "__yx_doc_tell.txt"
     pos = os.tell(os.open(p, "w"))
     assert(pos == 0)
-    os.remove(p)
+    fs.remove(p)
 }
 ```
 
@@ -295,282 +292,18 @@ flush: (file: &File) -> Void
 
 把缓冲内容刷入磁盘。
 
-错误：描述符无效或刷新失败时抛出 `E6007`。
+错误：句柄无效或刷新失败时抛出 `E6007`。
 
 ```yaoxiang
 use std.assert
+use std.fs
 use std.os
 
 main: () -> Void = {
     p = "__yx_doc_flush.txt"
     os.flush(os.open(p, "w"))
-    assert(os.exists(p))
-    os.remove(p)
-}
-```
-
-## 目录操作
-
-### mkdir
-
-<!-- stdlib:sig:os.mkdir start -->
-
-```yaoxiang
-mkdir: (path: &String) -> Bool
-```
-
-<!-- stdlib:sig:os.mkdir end -->
-
-创建**单层**目录（不递归创建父目录）。
-
-返回：成功返回 `true`。错误：父目录不存在或目录已存在时抛出 `E6007`。
-
-```yaoxiang
-use std.assert
-use std.os
-
-main: () -> Void = {
-    d = "__yx_doc_mkdir"
-    assert(os.mkdir(d))
-    assert(os.is_dir(d))
-    os.rmdir(d)
-}
-```
-
-### rmdir
-
-<!-- stdlib:sig:os.rmdir start -->
-
-```yaoxiang
-rmdir: (path: &String) -> Bool
-```
-
-<!-- stdlib:sig:os.rmdir end -->
-
-删除**空**目录。
-
-返回：成功返回 `true`。错误：目录不存在或非空时抛出 `E6007`。
-
-```yaoxiang
-use std.assert
-use std.os
-
-main: () -> Void = {
-    d = "__yx_doc_rmdir"
-    os.mkdir(d)
-    assert(os.rmdir(d))
-    assert(!os.exists(d))
-}
-```
-
-### read_dir
-
-<!-- stdlib:sig:os.read_dir start -->
-
-```yaoxiang
-read_dir: (path: &String) -> String
-```
-
-<!-- stdlib:sig:os.read_dir end -->
-
-列出目录下的条目名。
-
-返回：入口名称以 **`\n` 连接**的单个字符串（不是 `List`）。错误：目录不存在或无权限时抛出 `E6007`。
-
-```yaoxiang
-use std.assert
-use std.os
-use std.string
-
-main: () -> Void = {
-    d = "__yx_doc_read_dir"
-    os.mkdir(d)
-    names = os.read_dir(d)
-    // 空目录返回空串
-    assert(string.is_empty(names))
-    os.rmdir(d)
-}
-```
-
-## 路径与文件工具
-
-### remove
-
-<!-- stdlib:sig:os.remove start -->
-
-```yaoxiang
-remove: (path: &String) -> Bool
-```
-
-<!-- stdlib:sig:os.remove end -->
-
-删除文件，语义等同 `remove_file`（**不能删目录**，删目录用 [`rmdir`](#rmdir)）。
-
-返回：成功返回 `true`。错误：文件不存在或路径是目录时抛出 `E6007`。
-
-```yaoxiang
-use std.assert
-use std.io
-use std.os
-
-main: () -> Void = {
-    p = "__yx_doc_remove.txt"
-    io.write_file(p, "x")
-    assert(os.remove(p))
-    assert(!os.exists(p))
-}
-```
-
-### exists
-
-<!-- stdlib:sig:os.exists start -->
-
-```yaoxiang
-exists: (path: &String) -> Bool
-```
-
-<!-- stdlib:sig:os.exists end -->
-
-路径是否存在（文件或目录皆可）。**不报错**，不存在返回 `false`。
-
-```yaoxiang
-use std.assert
-use std.os
-
-main: () -> Void = {
-    assert(os.exists("."))
-    assert(!os.exists("__yx_definitely_missing_path__"))
-}
-```
-
-### is_file
-
-<!-- stdlib:sig:os.is_file start -->
-
-```yaoxiang
-is_file: (path: &String) -> Bool
-```
-
-<!-- stdlib:sig:os.is_file end -->
-
-路径是否为**普通文件**。目录返回 `false`，不存在返回 `false`。
-
-```yaoxiang
-use std.assert
-use std.os
-
-main: () -> Void = {
-    assert(!os.is_file("."))
-}
-```
-
-### is_dir
-
-<!-- stdlib:sig:os.is_dir start -->
-
-```yaoxiang
-is_dir: (path: &String) -> Bool
-```
-
-<!-- stdlib:sig:os.is_dir end -->
-
-路径是否为**目录**。文件返回 `false`，不存在返回 `false`。
-
-```yaoxiang
-use std.assert
-use std.os
-
-main: () -> Void = {
-    assert(os.is_dir("."))
-}
-```
-
-### copy
-
-<!-- stdlib:sig:os.copy start -->
-
-```yaoxiang
-copy: (src: &String, dst: &String) -> Bool
-```
-
-<!-- stdlib:sig:os.copy end -->
-
-复制文件。目标已存在时**覆盖**。
-
-返回：成功返回 `true`。错误：源文件不存在或无权限时抛出 `E6007`。
-
-```yaoxiang
-use std.assert
-use std.io
-use std.os
-
-main: () -> Void = {
-    a = "__yx_doc_copy_a.txt"
-    b = "__yx_doc_copy_b.txt"
-    io.write_file(a, "data")
-    assert(os.copy(a, b))
-    assert(io.read_file(b) == "data")
-    os.remove(a)
-    os.remove(b)
-}
-```
-
-### rename
-
-<!-- stdlib:sig:os.rename start -->
-
-```yaoxiang
-rename: (old: &String, new: &String) -> Bool
-```
-
-<!-- stdlib:sig:os.rename end -->
-
-重命名或移动文件。
-
-返回：成功返回 `true`。错误：源文件不存在或目标已存在时抛出 `E6007`。
-
-```yaoxiang
-use std.assert
-use std.io
-use std.os
-
-main: () -> Void = {
-    a = "__yx_doc_rename_a.txt"
-    b = "__yx_doc_rename_b.txt"
-    io.write_file(a, "data")
-    assert(os.rename(a, b))
-    assert(os.exists(b))
-    os.remove(b)
-}
-```
-
-### append_file
-
-<!-- stdlib:sig:os.append_file start -->
-
-```yaoxiang
-append_file: (path: &String, content: &String) -> Bool
-```
-
-<!-- stdlib:sig:os.append_file end -->
-
-追加写入（不开句柄的便捷函数）。文件不存在时创建。
-
-返回：成功返回 `true`。错误：无权限时抛出 `E6007`。
-
-> 这是 [`std.io.append_file`](./io#append_file) 的同名同类接口，两个模块都提供，行为一致。
-
-```yaoxiang
-use std.assert
-use std.io
-use std.os
-
-main: () -> Void = {
-    p = "__yx_doc_os_append.txt"
-    io.write_file(p, "a")
-    os.append_file(p, "b")
-    assert(io.read_file(p) == "ab")
-    os.remove(p)
+    assert(fs.exists(p))
+    fs.remove(p)
 }
 ```
 
@@ -707,5 +440,5 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.io`](./io) —— 整文件读写便捷函数
+- [`std.fs`](./fs) —— 路径级文件与目录操作
 - [错误码参考](../error-code/) —— `E6007` 通用运行时错误

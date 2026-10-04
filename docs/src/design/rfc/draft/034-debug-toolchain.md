@@ -3,7 +3,7 @@ title: 'RFC-034: 统一调试工具链'
 status: '草案'
 author: '晨煦'
 created: '2026-07-06'
-updated: '2026-07-06'
+updated: '2026-09-18'
 issue: '#164'
 ---
 

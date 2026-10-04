@@ -15,17 +15,13 @@ use crate::util::span::{DebugSpan, Position, SourceMap, Span};
 use std::collections::HashMap;
 use std::io;
 
-#[test]
-fn test_debug_section_round_trip() {
-    let mut sources = SourceMap::new();
-    let file_id = sources.add_file("main.yx".to_string(), "main = () => { 1 / 0 }".to_string());
+// ── 辅助函数（规则 5.3：集中在文件顶部）──────────────
 
-    let span = Span::new(
-        Position::with_offset(1, 1, 0),
-        Position::with_offset(1, 5, 4),
-    );
-    let debug_span = DebugSpan::new(file_id, span);
-
+/// Helper: 构造含单个 main 函数的字节码文件，其 ip→span 调试映射为 `debug_span`。
+fn bytecode_file_with_debug_map(
+    sources: SourceMap,
+    debug_span: DebugSpan,
+) -> BytecodeFile {
     let function = FunctionCode {
         name: "main".to_string(),
         params: Vec::new(),
@@ -40,24 +36,43 @@ fn test_debug_section_round_trip() {
         functions: vec![function],
     };
 
-    let debug_section =
-        DebugSection::from_sources_and_functions(sources.clone(), &code_section.functions);
-    let file = BytecodeFile {
+    let debug_section = DebugSection::from_sources_and_functions(sources, &code_section.functions);
+
+    BytecodeFile {
         header: FileHeader::default(),
         type_table: Vec::new(),
         const_pool: Vec::new(),
         code_section,
         vtables: Vec::new(),
         debug_section: Some(debug_section),
-    };
+    }
+}
 
+/// Helper: 序列化字节码文件后从尾部读回调试段。
+fn roundtrip_debug_section(file: &BytecodeFile) -> DebugSection {
     let mut bytes = Vec::new();
     file.write_to(&mut bytes).expect("write bytecode");
 
     let mut cursor = io::Cursor::new(bytes);
-    let decoded = DebugSection::read_from_end(&mut cursor)
+    DebugSection::read_from_end(&mut cursor)
         .expect("read debug section")
-        .expect("debug section should exist");
+        .expect("debug section should exist")
+}
+#[test]
+fn test_debug_section_round_trip() {
+    // Arrange
+    let mut sources = SourceMap::new();
+    let file_id = sources.add_file("main.yx".to_string(), "main = () => { 1 / 0 }".to_string());
+
+    let span = Span::new(
+        Position::with_offset(1, 1, 0),
+        Position::with_offset(1, 5, 4),
+    );
+    let debug_span = DebugSpan::new(file_id, span);
+    let file = bytecode_file_with_debug_map(sources.clone(), debug_span);
+
+    // Act
+    let decoded = roundtrip_debug_section(&file);
 
     assert_eq!(decoded.sources.files().len(), 1);
     assert_eq!(decoded.sources.files()[0].name, "main.yx");

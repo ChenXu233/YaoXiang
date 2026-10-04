@@ -1,0 +1,165 @@
+// src/std/tests/fs_ops.yx
+// 覆盖: std.fs 模块（#104）— 路径级文件系统操作
+// 验证: 整文件读写往返（自 std.io 迁入）+ 目录/判定/删除（自 std.os 迁入）
+//       + 遍历/元数据/临时文件/路径操作（新增）
+// 状态: ✅
+// 注: 文件写操作使用 `__yx_` 前缀的当前目录临时文件，用完显式 remove（与
+// io_ops.yx 同惯例）。mkdtemp/tmpfile 落在系统临时目录，同样显式清理。
+// 分段函数组织（单 main 超出寄存器上限 E3014）。
+
+use std.assert
+use std.fs
+use std.list
+use std.string
+
+roundtrip: () -> Void = {
+    p = "__yx_fs_ops_tmp.txt"
+    ok = fs.write_file(p, "hello")
+    assert.assert(ok, "write_file ok")
+    assert.assert(fs.exists(p), "file exists after write")
+    assert.assert(fs.read_file(p) == "hello", "read_file roundtrip")
+
+    fs.append_file(p, " world")
+    assert.assert(fs.read_file(p) == "hello world", "append_file roundtrip")
+
+    assert.assert(fs.remove(p), "remove roundtrip file")
+    assert.assert(!fs.exists(p), "roundtrip file gone")
+}
+
+predicates: () -> Void = {
+    p = "__yx_fs_ops_pred.txt"
+    fs.write_file(p, "x")
+    assert.assert(fs.is_file(p), "is_file on file")
+    assert.assert(!fs.is_dir(p), "is_dir false on file")
+    assert.assert(!fs.exists("__yx_fs_ops_missing.xyz"), "exists false when absent")
+    assert.assert(fs.remove(p), "pred cleanup")
+}
+
+dirs: () -> Void = {
+    // 防御性预清理：上次异常中断可能残留（mkdir 对已存在目录报错）
+    if fs.exists("__yx_fs_ops_dir/sep.txt") {
+        fs.remove("__yx_fs_ops_dir/sep.txt")
+    }
+    if fs.exists("__yx_fs_ops_dir") {
+        fs.rmdir("__yx_fs_ops_dir")
+    }
+    if fs.exists("__yx_fs_ops_nested/a/b/leaf.txt") {
+        fs.remove("__yx_fs_ops_nested/a/b/leaf.txt")
+    }
+    if fs.exists("__yx_fs_ops_nested/a/b") {
+        fs.rmdir("__yx_fs_ops_nested/a/b")
+    }
+    if fs.exists("__yx_fs_ops_nested/a") {
+        fs.rmdir("__yx_fs_ops_nested/a")
+    }
+    if fs.exists("__yx_fs_ops_nested") {
+        fs.rmdir("__yx_fs_ops_nested")
+    }
+
+    d = "__yx_fs_ops_dir"
+    nested = "__yx_fs_ops_nested/a/b"
+    assert.assert(fs.mkdir(d), "mkdir single level")
+    assert.assert(fs.mkdir_all(nested), "mkdir_all recursive")
+    assert.assert(fs.is_dir(nested), "nested dir exists")
+
+    bfile = fs.path_join(nested, "leaf.txt")
+    fs.write_file(bfile, "leaf")
+
+    // 遍历：read_dir 返回排序 List，walk 深度优先全路径
+    names = fs.read_dir(d)
+    assert.assert(list.len(names) == 0, "read_dir on empty dir")
+    inner = d + "/sep.txt"
+    fs.write_file(inner, "s")
+    names2 = fs.read_dir(d)
+    assert.assert(list.len(names2) == 1, "read_dir sees one entry")
+    assert.assert(list.get(names2, 0) == "sep.txt", "entry name only")
+
+    walked = fs.walk("__yx_fs_ops_nested")
+    // a、a/b、a/b/leaf.txt 三个条目，完整路径
+    assert.assert(list.len(walked) == 3, "walk: two dirs + one leaf")
+    // 按最终分量断言（路径分隔符平台相关，不做全路径比对）
+    basenames = list.map(walked, (p: String) => fs.path_basename(p))
+    assert.assert(list.contains(basenames, "leaf.txt"), "walk lists leaf")
+
+    // 清理
+    assert.assert(fs.remove(inner), "remove inner file")
+    assert.assert(fs.rmdir(d), "rmdir empty dir")
+    assert.assert(fs.remove(bfile), "remove leaf")
+    assert.assert(fs.rmdir(nested), "rmdir nested b")
+    assert.assert(fs.rmdir("__yx_fs_ops_nested/a"), "rmdir nested a")
+    assert.assert(fs.rmdir("__yx_fs_ops_nested"), "rmdir nested root")
+}
+
+copy_move: () -> Void = {
+    src = "__yx_fs_ops_copy_src.txt"
+    cp = "__yx_fs_ops_copy.txt"
+    fs.write_file(src, "hello world")
+    assert.assert(fs.copy(src, cp), "copy ok")
+    assert.assert(fs.read_file(cp) == "hello world", "copy preserves content")
+    mv = "__yx_fs_ops_moved.txt"
+    assert.assert(fs.rename(cp, mv), "rename ok")
+    assert.assert(fs.exists(mv), "rename target exists")
+    assert.assert(!fs.exists(cp), "rename source gone")
+    assert.assert(fs.remove(src), "copy_move cleanup src")
+    assert.assert(fs.remove(mv), "copy_move cleanup moved")
+}
+
+meta: () -> Void = {
+    p = "__yx_fs_ops_meta.txt"
+    d = "__yx_fs_ops_meta_dir"
+    fs.write_file(p, "12345")
+    fs.mkdir(d)
+
+    st = fs.stat(p)
+    size = st["size"]
+    is_file: Bool = st["is_file"]
+    is_dir: Bool = st["is_dir"]
+    assert.assert(size == 5, "stat size == 5")
+    assert.assert(is_file, "stat is_file")
+    assert.assert(!is_dir, "stat not is_dir")
+
+    dst = fs.stat(d)
+    dir_flag: Bool = dst["is_dir"]
+    assert.assert(dir_flag, "stat dir is_dir")
+
+    assert.assert(fs.remove(p), "meta cleanup file")
+    assert.assert(fs.rmdir(d), "meta cleanup dir")
+}
+
+temp: () -> Void = {
+    td = fs.mkdtemp("yx_fs_ops_")
+    assert.assert(fs.is_dir(td), "mkdtemp creates dir")
+    tf = fs.tmpfile("yx_fs_ops_")
+    assert.assert(fs.is_file(tf), "tmpfile creates file")
+    fs.write_file(tf, "scratch")
+    assert.assert(fs.read_file(tf) == "scratch", "tmpfile writable")
+    sys_tmp = fs.temp_dir()
+    assert.assert(string.len(sys_tmp) > 0, "temp_dir non-empty")
+
+    assert.assert(fs.remove(tf), "remove temp file")
+    assert.assert(fs.rmdir(td), "rmdir temp dir")
+}
+
+pathops: () -> Void = {
+    assert.assert(fs.path_basename("dir/file.txt") == "file.txt", "path_basename")
+    assert.assert(fs.path_basename("/") == "", "path_basename no component")
+    assert.assert(fs.path_dirname("dir/file.txt") == "dir", "path_dirname")
+    assert.assert(fs.path_dirname("a.txt") == "", "path_dirname bare name")
+    assert.assert(fs.path_extension("a.tar.gz") == "gz", "path_extension last")
+    assert.assert(fs.path_extension("noext") == "", "path_extension none")
+    j = fs.path_join("dir", "name.txt")
+    assert.assert(string.ends_with(j, "name.txt"), "path_join keeps rel")
+    assert.assert(string.starts_with(j, "dir"), "path_join keeps base")
+}
+
+main: () -> Void = {
+    roundtrip()
+    predicates()
+    dirs()
+    copy_move()
+    meta()
+    temp()
+    pathops()
+}
+
+main()

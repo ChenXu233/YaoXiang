@@ -40,9 +40,19 @@ greet: (name: String) -> String = "你好, " + name
 调用它们：
 
 ```yaoxiang
-sum = add(3, 5)          // sum = 8
-sq = square(4)           // sq = 16
-msg = greet("世界")       // msg = "你好, 世界"
+main = () => {
+    // 前一节定义的三个函数，本块内重新绑定一次以便独立运行
+    add = (a: Int, b: Int) => a + b
+    square = (x: Int) => x * x
+    greet = (name: String) => "你好, " + name
+
+    sum = add(3, 5)          // sum = 8
+    sq = square(4)           // sq = 16
+    msg = greet("世界")       // msg = "你好, 世界"
+    print(sum)
+    print(sq)
+    print(msg)
+}
 ```
 
 这叫做**表达式形式**。当函数体是一个表达式（不是 `{ }`
@@ -117,13 +127,21 @@ YaoXiang 的规则是：**有输入参数时，参数类型必须在签名或 La
 ```yaoxiang
 // 方式一：参数类型写在签名中（省略 Lambda 头）
 add: (a: Int, b: Int) -> Int = a + b
+```
 
+```yaoxiang
 // 方式二：参数类型写在 Lambda 头中（省略签名）
 add = (a: Int, b: Int) => a + b
+```
 
+```yaoxiang
 // 方式三：完整形式（签名 + Lambda 头都有）
 add: (a: Int, b: Int) -> Int = (a, b) => a + b
+```
 
+三种写法里参数类型都至少出现一次：
+
+```yaoxiang
 // 错误：两边都不写类型
 // add = (a, b) => a + b   // ❌ 编译器无法推断参数类型
 ```
@@ -137,11 +155,15 @@ add: (a: Int, b: Int) -> Int = (a, b) => a + b
 函数的返回值类型写在 `->` 后面。`->` 是函数类型的标志，不能省略（省略后会被解析为其他类型）。
 
 ```yaoxiang
+use std.string
+
 // 返回 Int
 add_one: (x: Int) -> Int = x + 1
 
 // 返回 String
-to_string: (n: Int) -> String = n.to_string()
+// 注意：Int 没有 to_string() 方法（`n.to_string()` 报 E1053），
+// 用 std.string.format 或 f-string 转换
+to_str: (n: Int) -> String = string.format("{0}", n)
 
 // 返回 Void（无返回值）
 log: (msg: String) -> Void = {
@@ -186,40 +208,54 @@ Expr '(' ArgList? ')'
 除了按位置传参，YaoXiang 还支持**命名参数**——用参数名指定值，顺序不限：
 
 ```yaoxiang
-// 命名参数——参数名后面跟等号，然后是值
-result = add(a = 3, b = 5)     // result = 8
-result = add(b = 5, a = 3)     // 顺序任意，结果相同
+main = () => {
+    add = (a: Int, b: Int) => a + b
 
-// 可以和位置参数混用，但位置参数必须在前面
-result = add(3, b = 5)        // OK
+    // 命名参数——参数名后面跟等号，然后是值
+    result = add(a = 3, b = 5)     // result = 8
+    result2 = add(b = 5, a = 3)    // 顺序任意，结果相同
+
+    // 可以和位置参数混用，但位置参数必须在前面
+    result3 = add(3, b = 5)        // OK
+    print(result)
+    print(result2)
+    print(result3)
+}
 ```
 
 命名参数让调用更可读，在参数较多时特别有用：
 
 ```yaoxiang
-// 函数签名
-send: (to: String, title: String, body: String) -> String = to + "|" + title + "|" + body
+main = () => {
+    // 函数签名
+    send = (to: String, title: String, body: String) => to + "|" + title + "|" + body
 
-// 命名参数让调用意图一目了然
-msg = send(
-    to = "alice@example.com",
-    title = "会议通知",
-    body = "明天下午 3 点开会"
-)
+    // 命名参数让调用意图一目了然
+    msg = send(
+        to = "alice@example.com",
+        title = "会议通知",
+        body = "明天下午 3 点开会"
+    )
+    print(msg)
+}
 ```
 
 参数名写错或重复指定会在编译期报错，不会静默按位置取用：
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // ❌ add 没有名为 c 的形参 → E1014
+add: (a: Int, b: Int) -> Int = a + b
 result = add(b = 5, c = 1)
 
 // ❌ a 既由位置传入又由命名传入 → E1015
-result = add(1, a = 2)
+result2 = add(1, a = 2)
 
 // ❌ 少传一个参数 → E1010
-result = add(a = 1)
+result3 = add(a = 1)
 ```
+
+> 上面三行**故意不通过检查**——它们用真实编译错误演示命名参数的边界。
 
 ---
 
@@ -245,15 +281,16 @@ hello()
 `main` 函数就是最常见的无参函数：
 
 ```yaoxiang
-// main 函数的几种写法
-
-// 完整形式
+// main 的完整形式：显式声明空参数与返回类型
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
+```
 
-// 最简形式（推荐）
-main: () -> Void = {
+最简形式（推荐）——省略签名，编译器自动推断为 `() -> Void`：
+
+```yaoxiang
+main = {
     print("Hello, YaoXiang!")
 }
 ```
@@ -266,7 +303,9 @@ main: () -> Void = {
 
 ```yaoxiang
 // 多步计算
-calculate_stats: (numbers: List(Int)) -> Float = {
+// 注意：形参类型写 Vec(Int) 而不是 List(Int)——`List(T)` 标注的值
+// 当前不被 for / 下标接受（E1002）
+calculate_stats: (numbers: Vec(Int)) -> Float = {
     // 声明局部变量
     mut total = 0
     mut count = 0
@@ -282,8 +321,12 @@ calculate_stats: (numbers: List(Int)) -> Float = {
         return 0.0
     }
 
-    // 返回平均值
-    return total:as(Float) / count:as(Float)
+    // 返回平均值（注意：`:as(Float)` 解析报 E0011，用 Float 转换）
+    return Float(total) / Float(count)
+}
+
+main: () -> Void = {
+    print(calculate_stats([1, 2, 3, 4]))
 }
 ```
 
@@ -299,22 +342,30 @@ calculate_stats: (numbers: List(Int)) -> Float = {
 ```yaoxiang
 // point.yx
 
+use std.math
+
 // 定义类型
 Point: Type = { x: Float, y: Float }
 
 // pub 函数：编译器自动将其绑定为 Point.distance
+// 注意：表达式不能直接挂方法——`(dx*dx+dy*dy).sqrt()` 报 E1053，用 math.sqrt
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
-    return (dx * dx + dy * dy).sqrt()
+    d = dx * dx + dy * dy
+    return math.sqrt(d)
 }
 
-// 两种调用方式都可以
-p1 = Point(3.0, 4.0)
-p2 = Point(1.0, 2.0)
+main: () -> Void = {
+    // 两种调用方式都可以
+    p1 = Point(x=3.0, y=4.0)
+    p2 = Point(x=1.0, y=2.0)
 
-d1 = distance(p1, p2)       // 函数式调用
-d2 = p1.distance(p2)        // OOP 风格调用（语法糖）
+    d1 = distance(p1, p2)       // 函数式调用
+    d2 = p1.distance(p2)        // OOP 风格调用（语法糖）
+    print(d1)
+    print(d2)
+}
 ```
 
 编译器看到 `pub distance(p1: Point, p2: Point)`，发现 `Point` 在同一个文件中定义，就自动创建了
@@ -346,7 +397,7 @@ double = (x: Int) => x * 2
 triple: (x: Int) -> Int = x * 3
 
 // pub 导出 + 自动绑定
-pub add: (a: Int, b: Int) -> Int = a + b
+pub negate: (x: Int) -> Int = 0 - x
 
 // ── 调用语法 ──
 

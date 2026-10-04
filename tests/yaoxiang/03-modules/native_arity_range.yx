@@ -1,0 +1,45 @@
+// 03-modules/native_arity_range.yx
+// 覆盖: RFC-029 §6 std 模块与用户模块同质 + #387 native arity 区间
+// （`?` 可选 / `...` 变参按签名解析出 [min, max]，替换整族豁免）
+// 验证: 命名空间限定调用在合法区间内放行——concat 严格 [2,2]、assert 可选参
+//       [1,2]、println 变参不设上限、和类型变体构造（FieldAccess 形态）不误伤
+// 状态: ✅ 可运行
+
+use std.assert
+use std.string
+use std.io
+use std.result
+use std.option
+
+pick: (empty: Bool) -> Option(Int) = {
+    if empty {
+        return Option(Int).none()
+    }
+    return Option(Int).some(7)
+}
+
+main: () -> Void = {
+    // 严格区间 [2,2]：concat 两端合法
+    ab = string.concat("a", "b")
+    assert.assert(ab == "ab", "concat with exactly two args")
+
+    // 可选区间 [1,2]：assert 单参与双参皆合法
+    assert.assert(1 > 0)
+    assert.assert(1 > 0, "with optional message")
+
+    // 变参不设上限
+    io.println("variadic", "args", "ok")
+
+    // 和类型变体构造（FieldAccess 形态）：单载荷
+    r = Result(Int, String).ok(5)
+    n = match r {
+        ok(v) => v,
+        err(_) => 0,
+    }
+    assert.assert(n == 5, "variant ctor with payload passes arity check")
+
+    // 零载荷构造（`none: ()`，合法区间 [0,0]）：编译运行不误伤
+    none_opt = pick(true)
+    io.println("none_opt built", none_opt)
+    assert.assert(true, "zero/one-payload variant ctors compile and run")
+}

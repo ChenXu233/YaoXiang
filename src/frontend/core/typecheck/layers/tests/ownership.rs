@@ -12,8 +12,9 @@
 //! - spawn 循环检测:  docs/superpowers/specs/2026-06-15-lifetime-migration-design.md §新增 2
 
 use crate::frontend::core::typecheck::layers::ownership::{
-    BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult, emit_move_predicate,
-    emit_drop_predicate, emit_double_drop_predicate, emit_mut_predicate, fast_path_check, smt_cut,
+    BrandId, BrandTree, ControlFlowGraph, EdgeKind, FastPathResult, ReleasePlan,
+    emit_move_predicate, emit_drop_predicate, emit_double_drop_predicate, emit_mut_predicate,
+    fast_path_check, smt_cut,
 };
 use crate::frontend::core::types::const_data::{BinOp as CEBinOp, ConstExpr as CE, ConstValue};
 use crate::frontend::core::typecheck::proof::verdict::{DisproofKind, ProofResult};
@@ -583,28 +584,196 @@ fn make_field_access(
     }
 }
 
+// ── E2E 辅助：跑检查 / 造夹具 ────────────────────────────
+
+/// 在全新 checker 上检查一个已构造的模块（返回值同 `check_module`）。
+fn run_module(
+    module: &Module
+) -> (
+    Vec<ProofResult>,
+    ReleasePlan,
+    std::collections::HashSet<String>,
+) {
+    OwnershipChecker::new().check_module(
+        module,
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    )
+}
+
+/// 解析源码后跑一次所有权检查（unsafe / spawn 用例）。
+fn run_source(
+    source: &str
+) -> (
+    Vec<ProofResult>,
+    ReleasePlan,
+    std::collections::HashSet<String>,
+) {
+    run_module(&parse_module(source))
+}
+
+/// 在 `checker` 上跑一次单函数模块 `name(params) { stmts }` 的所有权检查。
+///
+/// 返回值与 `OwnershipChecker::check_module` 一致：(证明结果, 释放计划, 逃逸 ref 集合)。
+fn run_check_on(
+    checker: &mut OwnershipChecker,
+    name: &str,
+    params: Vec<String>,
+    stmts: Vec<Stmt>,
+) -> (
+    Vec<ProofResult>,
+    ReleasePlan,
+    std::collections::HashSet<String>,
+) {
+    checker.check_module(
+        &make_module(vec![make_binding(name, params, stmts)]),
+        &make_test_env(),
+        &std::collections::HashMap::new(),
+        &Default::default(),
+    )
+}
+
+/// 跑一次 `main`（无参）函数体的所有权检查。
+fn run_main(
+    stmts: Vec<Stmt>
+) -> (
+    Vec<ProofResult>,
+    ReleasePlan,
+    std::collections::HashSet<String>,
+) {
+    run_check_on(&mut OwnershipChecker::new(), "main", vec![], stmts)
+}
+
+/// 跑一次具名函数 `name(params) { stmts }` 的所有权检查。
+fn run_fn(
+    name: &str,
+    params: Vec<String>,
+    stmts: Vec<Stmt>,
+) -> (
+    Vec<ProofResult>,
+    ReleasePlan,
+    std::collections::HashSet<String>,
+) {
+    run_check_on(&mut OwnershipChecker::new(), name, params, stmts)
+}
+
+/// 结果里所有证伪项（不限反例类型）。
+fn disproved(results: &[ProofResult]) -> Vec<&ProofResult> {
+    results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
+        .collect()
+}
+
+/// 结果里反例类型为 `kind` 的证伪项。
+fn disproved_of_kind(
+    results: &[ProofResult],
+    kind: DisproofKind,
+) -> Vec<&ProofResult> {
+    results
+        .iter()
+        .filter(|r| matches!(r, ProofResult::Disproved(model) if model.kind == kind))
+        .collect()
+}
+
+/// 释放计划里全部被释放的变量名。
+fn released_vars(plan: &ReleasePlan) -> Vec<&String> {
+    plan.drops.values().flatten().collect()
+}
+
+/// `&name` / `&mut name` 借用表达式。
+fn borrow_expr(
+    name: &str,
+    is_mut: bool,
+) -> Expr {
+    Expr::Borrow {
+        mutable: is_mut,
+        expr: Box::new(make_var(name)),
+        span: Span::default(),
+    }
+}
+
+/// `target = &source`（`is_mut` 决定 `&` 还是 `&mut`）语句。
+fn borrow_stmt(
+    target: &str,
+    source: &str,
+    is_mut: bool,
+) -> Stmt {
+    make_var_stmt(target, borrow_expr(source, is_mut))
+}
+
+/// `target = ref source` 语句（RFC-009 §ref）。
+fn ref_stmt(
+    target: &str,
+    source: &str,
+) -> Stmt {
+    make_var_stmt(
+        target,
+        Expr::Ref {
+            expr: Box::new(make_var(source)),
+            span: Span::default(),
+        },
+    )
+}
+
+/// `target = value` 赋值语句（`BinOp::Assign`）。
+fn assign_stmt(
+    target: &str,
+    value: Expr,
+) -> Stmt {
+    make_expr_stmt(Expr::BinOp {
+        op: BinOp::Assign,
+        left: Box::new(make_var(target)),
+        right: Box::new(value),
+        span: Span::default(),
+    })
+}
+
+/// `left <op> right` 二元运算表达式。
+fn bin_expr(
+    op: BinOp,
+    left: Expr,
+    right: Expr,
+) -> Expr {
+    Expr::BinOp {
+        op,
+        left: Box::new(left),
+        right: Box::new(right),
+        span: Span::default(),
+    }
+}
+
+/// `spawn { stmts }` 语句。
+fn spawn_stmt(stmts: Vec<Stmt>) -> Stmt {
+    make_expr_stmt(Expr::Spawn {
+        body: Box::new(make_block(stmts)),
+        span: Span::default(),
+    })
+}
+
+/// `target = receiver.field = value` 语句（ref 间字段赋值，如 `ra.field = rb`）。
+fn field_write_stmt(
+    target: &str,
+    receiver: &str,
+    field: &str,
+    value: Expr,
+) -> Stmt {
+    make_var_stmt(
+        target,
+        bin_expr(BinOp::Assign, make_field_access(receiver, field), value),
+    )
+}
+
 #[test]
 fn test_e2e_use_after_move_detected() {
     // Arrange: { x = 42; y = x; use(x) }
     // x 被 move 给 y 后再次使用 → 应报 Disproved
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt("y", make_var("x")),
-            make_expr_stmt(make_var("x")),
-        ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_var_stmt("y", make_var("x")),
+        make_expr_stmt(make_var("x")),
+    ]);
 
     // Assert
     let errors: Vec<_> = results
@@ -618,23 +787,10 @@ fn test_e2e_use_after_move_detected() {
 fn test_e2e_valid_move_no_error() {
     // Arrange: { x = 42; y = x }
     // x 被 move 给 y 后不再使用 → 不应有错误
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt("y", make_var("x")),
-        ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_var_stmt("y", make_var("x")),
+    ]);
 
     // Assert
     let errors: Vec<_> = results
@@ -648,29 +804,16 @@ fn test_e2e_valid_move_no_error() {
 fn test_e2e_argument_passed_to_function_is_moved() {
     // Arrange: { x = 42; f(x); use(x) }
     // x 作为参数传给 f 后不能再使用
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_expr_stmt(Expr::Call {
-                func: Box::new(make_var("f")),
-                args: vec![make_var("x")],
-                named_args: vec![],
-                span: Span::default(),
-            }),
-            make_expr_stmt(make_var("x")),
-        ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_expr_stmt(Expr::Call {
+            func: Box::new(make_var("f")),
+            args: vec![make_var("x")],
+            named_args: vec![],
+            span: Span::default(),
+        }),
+        make_expr_stmt(make_var("x")),
+    ]);
 
     // Assert
     let errors: Vec<_> = results
@@ -687,48 +830,17 @@ fn test_e2e_borrow_conflict_detected() {
     // Arrange: { mut x = 42; y = &x; z = &mut x }
     // &x 创建 ReadToken(x)，&mut x 创建 WriteToken(x)
     // add_consumer_for_var("x") 在 &mut x 时为 ReadToken 添加消费者 → 反向 BFS 可达
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_mut_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "y",
-                Expr::Borrow {
-                    mutable: false,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_var_stmt(
-                "z",
-                Expr::Borrow {
-                    mutable: true,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_expr_stmt(make_call("print", vec![make_var("y")])),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_mut_var_stmt("x", make_lit(42)),
+        borrow_stmt("y", "x", false),
+        borrow_stmt("z", "x", true),
+        make_expr_stmt(make_call("print", vec![make_var("y")])),
+    ]);
 
     // Assert
-    let borrow_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::BorrowConflict))
-        })
-        .collect();
+    let borrow_errors = disproved_of_kind(&results, DisproofKind::BorrowConflict);
     assert!(
         !borrow_errors.is_empty(),
         "应该检测到 &x 和 &mut x 的借用冲突，但结果为空"
@@ -740,47 +852,16 @@ fn test_e2e_unused_read_then_write_no_conflict() {
     // Arrange: { mut x = 42; a = &x; b = &mut x } —— a 创建后从未使用。
     // #290 F2 语义（D5，RFC-009a 区间 [created_at, last_use]）：last_use 停在
     // 创建点，令牌已死 → NLL 语义不冲突。此前靠借用点自我播种误判为冲突。
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_mut_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "a",
-                Expr::Borrow {
-                    mutable: false,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_var_stmt(
-                "b",
-                Expr::Borrow {
-                    mutable: true,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_mut_var_stmt("x", make_lit(42)),
+        borrow_stmt("a", "x", false),
+        borrow_stmt("b", "x", true),
+    ]);
 
     // Assert
-    let borrow_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::BorrowConflict))
-        })
-        .collect();
+    let borrow_errors = disproved_of_kind(&results, DisproofKind::BorrowConflict);
     assert!(
         borrow_errors.is_empty(),
         "未使用的读令牌已死亡（区间语义），&mut 不应报冲突，得: {:?}",
@@ -791,47 +872,16 @@ fn test_e2e_unused_read_then_write_no_conflict() {
 #[test]
 fn test_e2e_write_write_conflict_detected() {
     // Arrange: { mut x = 42; a = &mut x; b = &mut x }
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_mut_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "a",
-                Expr::Borrow {
-                    mutable: true,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_var_stmt(
-                "b",
-                Expr::Borrow {
-                    mutable: true,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_mut_var_stmt("x", make_lit(42)),
+        borrow_stmt("a", "x", true),
+        borrow_stmt("b", "x", true),
+    ]);
 
     // Assert
-    let borrow_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::BorrowConflict))
-        })
-        .collect();
+    let borrow_errors = disproved_of_kind(&results, DisproofKind::BorrowConflict);
     assert!(
         !borrow_errors.is_empty(),
         "应该检测到 &mut x 和 &mut x 的借用冲突"
@@ -842,44 +892,32 @@ fn test_e2e_write_write_conflict_detected() {
 fn test_e2e_read_read_no_conflict() {
     // Arrange: { x = 42; a = &x; b = &x }
     // 两个 ReadToken 不冲突
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "a",
-                Expr::Borrow {
-                    mutable: false,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_var_stmt(
-                "b",
-                Expr::Borrow {
-                    mutable: false,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
+    let (results, plan, escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        borrow_stmt("a", "x", false),
+        borrow_stmt("b", "x", false),
+    ]);
+
+    // Assert — 先证「遍历确实发生」：三条语句都应进释放计划
+    // （results 在干净用例下本就为空，只断言它为空等于空断言——B1 评审发现）
+    let released = released_vars(&plan);
+    for expected in ["a", "x", "b"] {
+        assert!(
+            released.iter().any(|v| v.as_str() == expected),
+            "{expected} 应进入释放计划（证明三条语句被遍历），实际 plan: {:?}",
+            plan
+        );
+    }
+    assert!(
+        escaped.is_empty(),
+        "本例无 spawn，不应有 ref 逃逸，实际: {:?}",
+        escaped
     );
 
-    // Assert
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    // Assert — 两个 ReadToken 不冲突：不得产出证伪结果
+    let errors = disproved(&results);
     assert!(
         errors.is_empty(),
         "两个 &x 不应冲突，但检测到错误: {:?}",
@@ -893,39 +931,15 @@ fn test_e2e_read_read_no_conflict() {
 fn test_e2e_mut_borrow_on_non_mut_var() {
     // Arrange: { x = 42; y = &mut x }
     // x 未声明 mut → &mut 应报 mut_violation
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "y",
-                Expr::Borrow {
-                    mutable: true,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        borrow_stmt("y", "x", true),
+    ]);
 
     // Assert
-    let mut_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::MutViolation))
-        })
-        .collect();
+    let mut_errors = disproved_of_kind(&results, DisproofKind::MutViolation);
     assert!(
         !mut_errors.is_empty(),
         "应该检测到 &mut x 的可变性违规，但结果为空"
@@ -936,36 +950,15 @@ fn test_e2e_mut_borrow_on_non_mut_var() {
 fn test_e2e_mut_borrow_on_mut_var() {
     // Arrange: { mut x = 42; y = &mut x }
     // x 声明为 mut → &mut 不应报错
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_mut_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "y",
-                Expr::Borrow {
-                    mutable: true,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_mut_var_stmt("x", make_lit(42)),
+        borrow_stmt("y", "x", true),
+    ]);
 
     // Assert
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    let errors = disproved(&results);
     assert!(
         errors.is_empty(),
         "mut x 的 &mut 不应报错，但检测到: {:?}",
@@ -977,37 +970,15 @@ fn test_e2e_mut_borrow_on_mut_var() {
 fn test_e2e_assign_to_non_mut_var() {
     // Arrange: { x = 42; x = 43 }
     // x 未声明 mut → 赋值应报 mut_violation
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_expr_stmt(Expr::BinOp {
-                op: BinOp::Assign,
-                left: Box::new(make_var("x")),
-                right: Box::new(make_lit(43)),
-                span: Span::default(),
-            }),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        assign_stmt("x", make_lit(43)),
+    ]);
 
     // Assert
-    let mut_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::MutViolation))
-        })
-        .collect();
+    let mut_errors = disproved_of_kind(&results, DisproofKind::MutViolation);
     assert!(
         !mut_errors.is_empty(),
         "应该检测到 x = 43 的可变性违规（x 非 mut），但结果为空"
@@ -1018,34 +989,15 @@ fn test_e2e_assign_to_non_mut_var() {
 fn test_e2e_assign_to_mut_var() {
     // Arrange: { mut x = 42; x = 43 }
     // x 声明为 mut → 赋值不应报错
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_mut_var_stmt("x", make_lit(42)),
-            make_expr_stmt(Expr::BinOp {
-                op: BinOp::Assign,
-                left: Box::new(make_var("x")),
-                right: Box::new(make_lit(43)),
-                span: Span::default(),
-            }),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_mut_var_stmt("x", make_lit(42)),
+        assign_stmt("x", make_lit(43)),
+    ]);
 
     // Assert
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    let errors = disproved(&results);
     assert!(
         errors.is_empty(),
         "mut x 的赋值不应报错，但检测到: {:?}",
@@ -1057,36 +1009,13 @@ fn test_e2e_assign_to_mut_var() {
 fn test_e2e_non_mut_param_borrow_mut() {
     // Arrange: fn f(x: i32) { &mut x }
     // x 参数未声明 mut → &mut 应报 mut_violation
-    let module = make_module(vec![make_binding(
-        "f",
-        vec!["x".into()],
-        vec![make_var_stmt(
-            "y",
-            Expr::Borrow {
-                mutable: true,
-                expr: Box::new(make_var("x")),
-                span: Span::default(),
-            },
-        )],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) =
+        run_fn("f", vec!["x".into()], vec![borrow_stmt("y", "x", true)]);
 
     // Assert
-    let mut_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::MutViolation))
-        })
-        .collect();
+    let mut_errors = disproved_of_kind(&results, DisproofKind::MutViolation);
     assert!(
         !mut_errors.is_empty(),
         "应该检测到对非 mut 参数 x 的 &mut，但结果为空"
@@ -1099,23 +1028,10 @@ fn test_e2e_non_mut_param_borrow_mut() {
 fn test_drop_at_scope_exit_via_release_plan() {
     // Arrange: { x = 42; use(x); }
     // x 应在作用域结束时被 Drop
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_expr_stmt(make_var("x")),
-        ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_expr_stmt(make_var("x")),
+    ]);
 
     // Assert
     let errors: Vec<_> = results
@@ -1136,38 +1052,21 @@ fn test_drop_at_scope_exit_via_release_plan() {
 fn test_drop_in_nested_block() {
     // Arrange: { { let x = 42; use(x); } let y = 1; use(y); }
     // x 在内层作用域 Drop，y 在外层作用域 Drop
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_expr_stmt(Expr::Block(Block {
-                stmts: vec![
-                    make_var_stmt("x", make_lit(42)),
-                    make_expr_stmt(make_var("x")),
-                ],
-                span: Span::default(),
-            })),
-            make_var_stmt("y", make_lit(1)),
-            make_expr_stmt(make_var("y")),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, plan, _escaped) = run_main(vec![
+        make_expr_stmt(Expr::Block(make_block(vec![
+            make_var_stmt("x", make_lit(42)),
+            make_expr_stmt(make_var("x")),
+        ]))),
+        make_var_stmt("y", make_lit(1)),
+        make_expr_stmt(make_var("y")),
+    ]);
 
     // Assert
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    let errors = disproved(&results);
     assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
-    let dropped_vars: Vec<&String> = plan.drops.values().flatten().collect();
+    let dropped_vars = released_vars(&plan);
     assert!(
         dropped_vars.iter().any(|v| v.as_str() == "x"),
         "内层 x 应该被释放，plan: {:?}",
@@ -1186,40 +1085,16 @@ fn test_drop_in_nested_block() {
 fn test_e2e_move_then_borrow_rejected() {
     // Arrange: { x = 42; y = x; z = &x }
     // x 被 move 给 y 后，不能再被借用
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt("y", make_var("x")),
-            make_var_stmt(
-                "z",
-                Expr::Borrow {
-                    mutable: false,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_var_stmt("y", make_var("x")),
+        borrow_stmt("z", "x", false),
+    ]);
 
     // Assert: x 已被 move，再借用应报 use after move
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::UseAfterMove))
-        })
-        .collect();
+    let errors = disproved_of_kind(&results, DisproofKind::UseAfterMove);
     assert!(!errors.is_empty(), "应该检测到 move 后 borrow x 的错误");
 }
 
@@ -1230,54 +1105,23 @@ fn test_e2e_borrow_in_if_both_branches() {
     // Arrange: { mut x = 42; if cond { &mut x } else { &mut x }; use(x) }
     // 注：条件用运行时变量 cond（非字面量）——#264 后字面量条件分支会裁剪，
     // `if true` 的 else 不可达不再报冲突（更正确）；此处保留双分支可达的保守场景。
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_mut_var_stmt("x", make_lit(42)),
-            make_var_stmt("cond", make_bool_lit(true)),
-            make_expr_stmt(Expr::If {
-                condition: Box::new(make_var("cond")),
-                then_branch: Box::new(make_block(vec![make_var_stmt(
-                    "y",
-                    Expr::Borrow {
-                        mutable: true,
-                        expr: Box::new(make_var("x")),
-                        span: Span::default(),
-                    },
-                )])),
-                else_if_branches: vec![],
-                else_branch: Some(Box::new(make_block(vec![make_var_stmt(
-                    "z",
-                    Expr::Borrow {
-                        mutable: true,
-                        expr: Box::new(make_var("x")),
-                        span: Span::default(),
-                    },
-                )]))),
-                span: Span::default(),
-            }),
-            make_expr_stmt(make_var("x")),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_mut_var_stmt("x", make_lit(42)),
+        make_var_stmt("cond", make_bool_lit(true)),
+        make_expr_stmt(Expr::If {
+            condition: Box::new(make_var("cond")),
+            then_branch: Box::new(make_block(vec![borrow_stmt("y", "x", true)])),
+            else_if_branches: vec![],
+            else_branch: Some(Box::new(make_block(vec![borrow_stmt("z", "x", true)]))),
+            span: Span::default(),
+        }),
+        make_expr_stmt(make_var("x")),
+    ]);
 
     // Assert: 保守检测到冲突（已知限制）
-    let borrow_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::BorrowConflict))
-        })
-        .collect();
+    let borrow_errors = disproved_of_kind(&results, DisproofKind::BorrowConflict);
     assert!(
         !borrow_errors.is_empty(),
         "保守策略应检测到 if/else 双分支 &mut x 的潜在冲突"
@@ -1288,60 +1132,24 @@ fn test_e2e_borrow_in_if_both_branches() {
 fn test_e2e_borrow_in_while_body() {
     // Arrange: while 体内借用，每次迭代新作用域
     // { mut x = 42; mut i = 0; while i < 3 { let y = &mut x; use(y); i = i + 1 } }
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_mut_var_stmt("x", make_lit(42)),
-            make_mut_var_stmt("i", make_lit(0)),
-            make_expr_stmt(Expr::While {
-                condition: Box::new(Expr::BinOp {
-                    op: BinOp::Lt,
-                    left: Box::new(make_var("i")),
-                    right: Box::new(make_lit(3)),
-                    span: Span::default(),
-                }),
-                body: Box::new(make_block(vec![
-                    make_var_stmt(
-                        "y",
-                        Expr::Borrow {
-                            mutable: true,
-                            expr: Box::new(make_var("x")),
-                            span: Span::default(),
-                        },
-                    ),
-                    make_expr_stmt(make_var("y")),
-                    make_expr_stmt(Expr::BinOp {
-                        op: BinOp::Assign,
-                        left: Box::new(make_var("i")),
-                        right: Box::new(Expr::BinOp {
-                            op: BinOp::Add,
-                            left: Box::new(make_var("i")),
-                            right: Box::new(make_lit(1)),
-                            span: Span::default(),
-                        }),
-                        span: Span::default(),
-                    }),
-                ])),
-                span: Span::default(),
-            }),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_mut_var_stmt("x", make_lit(42)),
+        make_mut_var_stmt("i", make_lit(0)),
+        make_expr_stmt(Expr::While {
+            condition: Box::new(bin_expr(BinOp::Lt, make_var("i"), make_lit(3))),
+            body: Box::new(make_block(vec![
+                borrow_stmt("y", "x", true),
+                make_expr_stmt(make_var("y")),
+                assign_stmt("i", bin_expr(BinOp::Add, make_var("i"), make_lit(1))),
+            ])),
+            span: Span::default(),
+        }),
+    ]);
 
     // Assert: 每次迭代新作用域，借用不应冲突
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    let errors = disproved(&results);
     assert!(
         errors.is_empty(),
         "while 循环体内 &mut x 不应冲突（每次新作用域），但检测到: {:?}",
@@ -1355,33 +1163,19 @@ fn test_e2e_borrow_in_while_body() {
 fn test_e2e_drop_release_plan_multiple_vars() {
     // Arrange: { x = 1; y = 2; use(x); use(y) }
     // x 和 y 都应在同一个 span 释放
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(1)),
-            make_var_stmt("y", make_lit(2)),
-            make_expr_stmt(make_var("x")),
-            make_expr_stmt(make_var("y")),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(1)),
+        make_var_stmt("y", make_lit(2)),
+        make_expr_stmt(make_var("x")),
+        make_expr_stmt(make_var("y")),
+    ]);
 
     // Assert
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    let errors = disproved(&results);
     assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
-    let dropped_vars: Vec<&String> = plan.drops.values().flatten().collect();
+    let dropped_vars = released_vars(&plan);
     assert!(
         dropped_vars.iter().any(|v| v.as_str() == "x"),
         "x 应该被释放"
@@ -1398,7 +1192,7 @@ fn test_e2e_drop_release_plan_multiple_vars() {
 fn test_e2e_return_moved_value() {
     // Arrange: fn f() { x = 42; return x }
     // x 被 return 移出，不应报错
-    let module = make_module(vec![make_binding(
+    let (results, _plan, _escaped) = run_fn(
         "f",
         vec![],
         vec![
@@ -1408,15 +1202,6 @@ fn test_e2e_return_moved_value() {
                 span: Span::default(),
             },
         ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
     );
 
     // Assert
@@ -1435,7 +1220,7 @@ fn test_e2e_return_moved_value() {
 fn test_e2e_use_after_return_rejected() {
     // Arrange: fn f() { x = 42; return x; use(x) }
     // x 被 return 移走后不能再使用
-    let module = make_module(vec![make_binding(
+    let (results, _plan, _escaped) = run_fn(
         "f",
         vec![],
         vec![
@@ -1446,15 +1231,6 @@ fn test_e2e_use_after_return_rejected() {
             },
             make_expr_stmt(make_var("x")),
         ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
     );
 
     // Assert
@@ -1474,52 +1250,17 @@ fn test_e2e_use_after_return_rejected() {
 fn test_e2e_three_read_borrows_no_conflict() {
     // Arrange: { x = 42; a = &x; b = &x; c = &x }
     // 三个 ReadToken 不冲突
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "a",
-                Expr::Borrow {
-                    mutable: false,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_var_stmt(
-                "b",
-                Expr::Borrow {
-                    mutable: false,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_var_stmt(
-                "c",
-                Expr::Borrow {
-                    mutable: false,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        borrow_stmt("a", "x", false),
+        borrow_stmt("b", "x", false),
+        borrow_stmt("c", "x", false),
+    ]);
 
     // Assert
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    let errors = disproved(&results);
     assert!(
         errors.is_empty(),
         "三个 &x 不应冲突，但检测到: {:?}",
@@ -1532,48 +1273,17 @@ fn test_e2e_read_then_write_conflict() {
     // Arrange: { mut x = 42; a = &x; b = &mut x; print(a) }
     // #290 F2 语义（D5）：读令牌 a 在 &mut 之后仍被使用 → 活跃期覆盖写点 → 冲突。
     //（a 若在 &mut 前已用完或从未使用 → NLL 语义不冲突，见下条测试）
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_mut_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "a",
-                Expr::Borrow {
-                    mutable: false,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_var_stmt(
-                "b",
-                Expr::Borrow {
-                    mutable: true,
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_expr_stmt(make_call("print", vec![make_var("a")])),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_mut_var_stmt("x", make_lit(42)),
+        borrow_stmt("a", "x", false),
+        borrow_stmt("b", "x", true),
+        make_expr_stmt(make_call("print", vec![make_var("a")])),
+    ]);
 
     // Assert
-    let borrow_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::BorrowConflict))
-        })
-        .collect();
+    let borrow_errors = disproved_of_kind(&results, DisproofKind::BorrowConflict);
     assert!(
         !borrow_errors.is_empty(),
         "应该检测到 &x 和 &mut x 的借用冲突"
@@ -1586,27 +1296,14 @@ fn test_e2e_read_then_write_conflict() {
 fn test_e2e_block_expression_variable_scope() {
     // Arrange: { { let x = 1; use(x); }; let y = 2; use(y); }
     // x 在内层块释放，y 在外层释放
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_expr_stmt(Expr::Block(make_block(vec![
-                make_var_stmt("x", make_lit(1)),
-                make_expr_stmt(make_var("x")),
-            ]))),
-            make_var_stmt("y", make_lit(2)),
-            make_expr_stmt(make_var("y")),
-        ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, plan, _escaped) = run_main(vec![
+        make_expr_stmt(Expr::Block(make_block(vec![
+            make_var_stmt("x", make_lit(1)),
+            make_expr_stmt(make_var("x")),
+        ]))),
+        make_var_stmt("y", make_lit(2)),
+        make_expr_stmt(make_var("y")),
+    ]);
 
     // Assert
     let errors: Vec<_> = results
@@ -1625,24 +1322,11 @@ fn test_e2e_block_expression_variable_scope() {
 fn test_e2e_sequential_moves() {
     // Arrange: { x = 42; y = x; z = y }
     // x → y, y → z，连续 Move，最终只有 z 可用
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt("y", make_var("x")),
-            make_var_stmt("z", make_var("y")),
-        ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_var_stmt("y", make_var("x")),
+        make_var_stmt("z", make_var("y")),
+    ]);
 
     // Assert: 无错误（x→y→z，每次都是正常 Move）
     let errors: Vec<_> = results
@@ -1660,24 +1344,11 @@ fn test_e2e_sequential_moves() {
 fn test_e2e_double_move_rejected() {
     // Arrange: { x = 42; y = x; z = x }
     // x 被 move 给 y 后，不能再 move 给 z
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt("y", make_var("x")),
-            make_var_stmt("z", make_var("x")),
-        ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_var_stmt("y", make_var("x")),
+        make_var_stmt("z", make_var("x")),
+    ]);
 
     // Assert
     let errors: Vec<_> = results
@@ -1699,22 +1370,13 @@ fn test_e2e_double_move_rejected() {
 fn test_e2e_param_move_and_use_rejected() {
     // Arrange: fn f(x: i32) { y = x; use(x) }
     // x 是参数，被 move 给 y 后不能使用
-    let module = make_module(vec![make_binding(
+    let (results, _plan, _escaped) = run_fn(
         "f",
         vec!["x".into()],
         vec![
             make_var_stmt("y", make_var("x")),
             make_expr_stmt(make_var("x")),
         ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
     );
 
     // Assert
@@ -1732,20 +1394,8 @@ fn test_e2e_param_move_and_use_rejected() {
 fn test_e2e_param_not_in_release_plan() {
     // Arrange: fn f(x: i32) { use(x) }
     // 参数不应出现在 ReleasePlan 中（由调用方负责释放）
-    let module = make_module(vec![make_binding(
-        "f",
-        vec!["x".into()],
-        vec![make_expr_stmt(make_var("x"))],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, plan, _escaped) =
+        run_fn("f", vec!["x".into()], vec![make_expr_stmt(make_var("x"))]);
 
     // Assert
     let errors: Vec<_> = results
@@ -1767,23 +1417,11 @@ fn test_e2e_param_not_in_release_plan() {
 fn test_e2e_call_unknown_function_moves_args() {
     // { x = 42; unknown(x); use(x) }
     // 未知函数 → 回退 Move
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_expr_stmt(make_call("unknown", vec![make_var("x")])),
-            make_expr_stmt(make_var("x")),
-        ],
-    )]);
-
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_expr_stmt(make_call("unknown", vec![make_var("x")])),
+        make_expr_stmt(make_var("x")),
+    ]);
 
     let errors: Vec<_> = results
         .iter()
@@ -1802,23 +1440,11 @@ fn test_e2e_call_ref_param_does_not_move() {
     // 注：print 需要被注册到 TypeEnvironment 中才有效。
     // 此测试验证：如果函数签名不可用，回退到 Move（保守行为）。
     // 当 TypeEnvironment 正确注册 print 后，此测试应改为验证 x 仍可用。
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_expr_stmt(make_call("print", vec![make_var("x")])),
-            make_expr_stmt(make_var("x")),
-        ],
-    )]);
-
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_expr_stmt(make_call("print", vec![make_var("x")])),
+        make_expr_stmt(make_var("x")),
+    ]);
 
     // 当前：print 未在 test TypeEnvironment 中注册 → 回退 Move → use after move
     // 当 TypeEnvironment 配备函数签名后更新此断言
@@ -1836,36 +1462,17 @@ fn test_e2e_call_ref_param_does_not_move() {
 
 #[test]
 fn test_e2e_ref_no_spawn_no_escape() {
-    // { x = 42; shared = ref x; use(shared) }
-    // ref 不在 spawn 内使用 → escaped_refs 为空
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "shared",
-                Expr::Ref {
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_expr_stmt(make_var("shared")),
-        ],
-    )]);
+    // Arrange: { x = 42; shared = ref x; use(shared) }——ref 不在 spawn 内使用
 
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    // Act
+    let (results, _plan, escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        ref_stmt("shared", "x"),
+        make_expr_stmt(make_var("shared")),
+    ]);
 
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    // Assert
+    let errors = disproved(&results);
     assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
     assert!(
         !escaped.contains("shared"),
@@ -1876,38 +1483,17 @@ fn test_e2e_ref_no_spawn_no_escape() {
 
 #[test]
 fn test_e2e_ref_in_spawn_escapes() {
-    // { x = 42; shared = ref x; spawn { use(shared) } }
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "shared",
-                Expr::Ref {
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_expr_stmt(Expr::Spawn {
-                body: Box::new(make_block(vec![make_expr_stmt(make_var("shared"))])),
-                span: Span::default(),
-            }),
-        ],
-    )]);
+    // Arrange: { x = 42; shared = ref x; spawn { use(shared) } }
 
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    // Act
+    let (results, _plan, escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        ref_stmt("shared", "x"),
+        spawn_stmt(vec![make_expr_stmt(make_var("shared"))]),
+    ]);
 
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    // Assert
+    let errors = disproved(&results);
     assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
     assert!(
         escaped.contains("shared"),
@@ -1920,25 +1506,13 @@ fn test_e2e_ref_in_spawn_escapes() {
 fn test_e2e_non_ref_in_spawn_not_escaped() {
     // { x = 42; spawn { use(x) } }
     // x 不是 ref——不标记逃逸
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_expr_stmt(Expr::Spawn {
-                body: Box::new(make_block(vec![make_expr_stmt(make_var("x"))])),
-                span: Span::default(),
-            }),
-        ],
-    )]);
-
-    let mut checker = OwnershipChecker::new();
-    let (_results, _plan, escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (_results, _plan, escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_expr_stmt(Expr::Spawn {
+            body: Box::new(make_block(vec![make_expr_stmt(make_var("x"))])),
+            span: Span::default(),
+        }),
+    ]);
 
     assert!(
         !escaped.contains("x"),
@@ -1949,37 +1523,16 @@ fn test_e2e_non_ref_in_spawn_not_escaped() {
 
 #[test]
 fn test_e2e_ref_in_nested_spawn_escapes() {
-    // { x = 42; shared = ref x; spawn { spawn { use(shared) } } }
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "shared",
-                Expr::Ref {
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_expr_stmt(Expr::Spawn {
-                body: Box::new(make_block(vec![make_expr_stmt(Expr::Spawn {
-                    body: Box::new(make_block(vec![make_expr_stmt(make_var("shared"))])),
-                    span: Span::default(),
-                })])),
-                span: Span::default(),
-            }),
-        ],
-    )]);
+    // Arrange: { x = 42; shared = ref x; spawn { spawn { use(shared) } } }
 
-    let mut checker = OwnershipChecker::new();
-    let (_results, _plan, escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    // Act
+    let (_results, _plan, escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        ref_stmt("shared", "x"),
+        spawn_stmt(vec![spawn_stmt(vec![make_expr_stmt(make_var("shared"))])]),
+    ]);
 
+    // Assert
     assert!(
         escaped.contains("shared"),
         "嵌套 spawn 内使用 shared，应标记逃逸"
@@ -1990,71 +1543,23 @@ fn test_e2e_ref_in_nested_spawn_escapes() {
 fn test_e2e_ref_holds_ref_through_field_assignment() {
     // 测试 ref_holds_ref 功能：ref_a.field = ref_b 应被记录
     // { a = 42; b = 43; ra = ref a; rb = ref b; spawn { ra.field = rb; use(ra); use(rb) } }
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("a", make_lit(42)),
-            make_var_stmt("b", make_lit(43)),
-            make_var_stmt(
-                "ra",
-                Expr::Ref {
-                    expr: Box::new(make_var("a")),
-                    span: Span::default(),
-                },
-            ),
-            make_var_stmt(
-                "rb",
-                Expr::Ref {
-                    expr: Box::new(make_var("b")),
-                    span: Span::default(),
-                },
-            ),
-            make_expr_stmt(Expr::Spawn {
-                body: Box::new(make_block(vec![
-                    // ra.field = rb（字段赋值）
-                    Stmt {
-                        kind: StmtKind::Assign {
-                            target: Box::new(make_var("temp")),
-                            type_annotation: None,
-                            signature_params: Vec::new(),
-                            value: Some(Box::new(Expr::BinOp {
-                                op: crate::frontend::core::parser::ast::BinOp::Assign,
-                                left: Box::new(Expr::FieldAccess {
-                                    expr: Box::new(make_var("ra")),
-                                    field: "field".to_string(),
-                                    span: Span::default(),
-                                }),
-                                right: Box::new(make_var("rb")),
-                                span: Span::default(),
-                            })),
-                            is_pub: false,
-                            is_mut: false,
-                            span: Span::default(),
-                        },
-                        span: Span::default(),
-                    },
-                    make_expr_stmt(make_var("ra")),
-                    make_expr_stmt(make_var("rb")),
-                ])),
-                span: Span::default(),
-            }),
-        ],
-    )]);
 
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    // Act
+    let (results, _plan, escaped) = run_main(vec![
+        make_var_stmt("a", make_lit(42)),
+        make_var_stmt("b", make_lit(43)),
+        ref_stmt("ra", "a"),
+        ref_stmt("rb", "b"),
+        spawn_stmt(vec![
+            // ra.field = rb（字段赋值）
+            field_write_stmt("temp", "ra", "field", make_var("rb")),
+            make_expr_stmt(make_var("ra")),
+            make_expr_stmt(make_var("rb")),
+        ]),
+    ]);
 
-    // 不应有所有权错误
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    // Assert: 不应有所有权错误
+    let errors = disproved(&results);
     assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
 
     // ra 和 rb 都应在 spawn 内逃逸
@@ -2077,7 +1582,8 @@ fn parse_module(source: &str) -> crate::frontend::core::parser::ast::Module {
     use crate::frontend::core::lexer::tokenize;
     use crate::frontend::core::parser::parse;
 
-    let tokens = tokenize(source).unwrap();
+    let tokens =
+        tokenize(source).unwrap_or_else(|e| panic!("源码应可词法分析: {e}\n源码:\n{source}"));
     let result = parse(&tokens);
     assert!(!result.has_errors, "parse failed: {:?}", result.errors);
     result.module
@@ -2089,14 +1595,8 @@ fn parse_module(source: &str) -> crate::frontend::core::parser::ast::Module {
 fn test_deref_in_unsafe_allowed() {
     // unsafe { *ptr } → 应该通过（deref 在 unsafe 内允许）
     // 注：unsafe 不能作为语句开头，需赋值给变量
-    let module = parse_module("test = () => { x = 42; ptr = ref x; result = unsafe { *ptr } }");
-    let mut checker = OwnershipChecker::new();
-    let (results, _, _) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _, _) =
+        run_source("test = () => { x = 42; ptr = ref x; result = unsafe { *ptr } }");
     // unsafe 内的 deref 不应产生 UnsafeViolation
     assert!(
         !results.iter().any(|r| {
@@ -2113,14 +1613,7 @@ fn test_deref_in_unsafe_allowed() {
 #[test]
 fn test_deref_outside_unsafe_error() {
     // *ptr → 应该报错（deref 在 unsafe 外不允许）
-    let module = parse_module("test = () => { x = 42; ptr = ref x; *ptr }");
-    let mut checker = OwnershipChecker::new();
-    let (results, _, _) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _, _) = run_source("test = () => { x = 42; ptr = ref x; *ptr }");
     // 应该检测到 UnsafeViolation
     assert!(
         results.iter().any(|r| {
@@ -2140,16 +1633,7 @@ fn test_deref_outside_unsafe_error() {
 fn test_spawn_ref_cycle_detected() {
     // spawn 内形成 ref 循环 → 应该报错
     // ra.field = rb; rb.field = ra → 循环
-    let module = parse_module(
-        "test = () => { a = 42; b = 43; ra = ref a; rb = ref b; spawn { temp1 = ra.field = rb; temp2 = rb.field = ra } }",
-    );
-    let mut checker = OwnershipChecker::new();
-    let (results, _, _) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _, _) = run_source("test = () => { a = 42; b = 43; ra = ref a; rb = ref b; spawn { temp1 = ra.field = rb; temp2 = rb.field = ra } }",);
     // 应该检测到 SpawnCycleViolation
     assert!(
         results.iter().any(|r| {
@@ -2167,15 +1651,8 @@ fn test_spawn_ref_cycle_detected() {
 fn test_spawn_no_cycle_allowed() {
     // spawn 内无 ref 循环 → 应该通过
     // 只有 ra.field = rb，没有 rb.field = ra → 无循环
-    let module = parse_module(
+    let (results, _, _) = run_source(
         "test = () => { a = 42; b = 43; ra = ref a; rb = ref b; spawn { temp = ra.field = rb } }",
-    );
-    let mut checker = OwnershipChecker::new();
-    let (results, _, _) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
     );
     // 不应检测到 SpawnCycleViolation
     assert!(
@@ -2197,38 +1674,17 @@ fn test_e2e_ref_alias_propagates_to_spawn() {
     // ref 别名传播：alias = shared，shared 是 ref → alias 也是 ref
     // spawn 内使用 alias → 逃逸检测
     // 规范: docs/superpowers/specs/2026-06-15-ref-escape-analysis-design.md
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "shared",
-                Expr::Ref {
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_var_stmt("alias", make_var("shared")),
-            make_expr_stmt(Expr::Spawn {
-                body: Box::new(make_block(vec![make_expr_stmt(make_var("alias"))])),
-                span: Span::default(),
-            }),
-        ],
-    )]);
 
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    // Act
+    let (results, _plan, escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        ref_stmt("shared", "x"),
+        make_var_stmt("alias", make_var("shared")),
+        spawn_stmt(vec![make_expr_stmt(make_var("alias"))]),
+    ]);
 
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    // Assert
+    let errors = disproved(&results);
     assert!(errors.is_empty(), "不应有错误，得: {:?}", errors);
     assert!(
         escaped.contains("alias") || escaped.contains("shared"),
@@ -2241,38 +1697,17 @@ fn test_e2e_ref_alias_propagates_to_spawn() {
 fn test_e2e_ref_dup_copyable() {
     // ref 是 Dup 类型，可多次复制使用
     // 规范: RFC-009 §ref
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_var_stmt(
-                "shared",
-                Expr::Ref {
-                    expr: Box::new(make_var("x")),
-                    span: Span::default(),
-                },
-            ),
-            make_var_stmt("a", make_var("shared")),
-            make_var_stmt("b", make_var("shared")),
-        ],
-    )]);
 
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    // Act
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        ref_stmt("shared", "x"),
+        make_var_stmt("a", make_var("shared")),
+        make_var_stmt("b", make_var("shared")),
+    ]);
 
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::UseAfterMove))
-        })
-        .collect();
+    // Assert
+    let errors = disproved_of_kind(&results, DisproofKind::UseAfterMove);
     assert!(
         errors.is_empty(),
         "ref 是 Dup，可多次使用，不应报 use after move: {:?}",
@@ -2282,43 +1717,26 @@ fn test_e2e_ref_dup_copyable() {
 
 #[test]
 fn test_e2e_lambda_explicit_param_no_capture() {
-    // { x = 42; f = (x) => { x + 1 }; f(x) }
+    // Arrange: { x = 42; f = (x) => { x + 1 }; f(x) }
     // Lambda 接收显式参数，不捕获外层
 
-    // Arrange
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_binding(
-                "f",
-                vec!["x".into()],
-                vec![make_expr_stmt(Expr::BinOp {
-                    op: BinOp::Add,
-                    left: Box::new(make_var("x")),
-                    right: Box::new(make_lit(1)),
-                    span: Span::default(),
-                })],
-            ),
-            make_expr_stmt(make_call("f", vec![make_var("x")])),
-        ],
-    )]);
-
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_binding(
+            "f",
+            vec!["x".into()],
+            vec![make_expr_stmt(bin_expr(
+                BinOp::Add,
+                make_var("x"),
+                make_lit(1),
+            ))],
+        ),
+        make_expr_stmt(make_call("f", vec![make_var("x")])),
+    ]);
 
     // Assert
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    let errors = disproved(&results);
     assert!(
         errors.is_empty(),
         "Lambda 显式参数不应有捕获错误，但检测到: {:?}",
@@ -2328,42 +1746,25 @@ fn test_e2e_lambda_explicit_param_no_capture() {
 
 #[test]
 fn test_e2e_lambda_cannot_access_outer() {
-    // { x = 42; f = () => { x + 1 } }
+    // Arrange: { x = 42; f = () => { x + 1 } }
     // Lambda 无参数，x 不在作用域内——是类型错误，所有权层不应报错
 
-    // Arrange
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_binding(
-                "f",
-                vec![],
-                vec![make_expr_stmt(Expr::BinOp {
-                    op: BinOp::Add,
-                    left: Box::new(make_var("x")),
-                    right: Box::new(make_lit(1)),
-                    span: Span::default(),
-                })],
-            ),
-        ],
-    )]);
-
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_binding(
+            "f",
+            vec![],
+            vec![make_expr_stmt(bin_expr(
+                BinOp::Add,
+                make_var("x"),
+                make_lit(1),
+            ))],
+        ),
+    ]);
 
     // Assert
-    let errors: Vec<_> = results
-        .iter()
-        .filter(|r| matches!(r, ProofResult::Disproved { .. }))
-        .collect();
+    let errors = disproved(&results);
     assert!(
         errors.is_empty(),
         "所有权检查不应报错（x 不存在是类型错误），但检测到: {:?}",
@@ -2377,26 +1778,13 @@ fn test_e2e_spawn_accesses_outer() {
     // spawn 同帧，可访问外层 x
 
     // Arrange
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("x", make_lit(42)),
-            make_expr_stmt(Expr::Spawn {
-                body: Box::new(make_block(vec![make_expr_stmt(make_var("x"))])),
-                span: Span::default(),
-            }),
-        ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("x", make_lit(42)),
+        make_expr_stmt(Expr::Spawn {
+            body: Box::new(make_block(vec![make_expr_stmt(make_var("x"))])),
+            span: Span::default(),
+        }),
+    ]);
 
     // Assert
     let errors: Vec<_> = results
@@ -2436,7 +1824,9 @@ fn make_if_stmt(
 fn test_branch_guard_scope_balanced() {
     // Arrange: if c { x = 1 } else { x = 2 }——分支守卫应注入并在退出时移除
     let cond = Expr::Var("c".into(), Span::default());
-    let module = make_module(vec![make_binding(
+    let mut checker = OwnershipChecker::new();
+    let _ = run_check_on(
+        &mut checker,
         "main",
         vec![],
         vec![make_if_stmt(
@@ -2444,15 +1834,6 @@ fn test_branch_guard_scope_balanced() {
             vec![make_var_stmt("x", make_lit(1))],
             Some(vec![make_var_stmt("x", make_lit(2))]),
         )],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let _ = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
     );
 
     // Assert: 守卫 enter/inject 与 exit_scope 配对——walk 完后假设栈为空
@@ -2466,32 +1847,19 @@ fn test_branch_guard_scope_balanced() {
 #[test]
 fn test_while_guard_scope_balanced() {
     // Arrange: while i < 3 { ... }——循环守卫应注入并在退出时移除
-    let cond = Expr::BinOp {
-        op: BinOp::Lt,
-        left: Box::new(make_var("i")),
-        right: Box::new(make_lit(3)),
-        span: Span::default(),
-    };
-    let module = make_module(vec![make_binding(
+    let mut checker = OwnershipChecker::new();
+    let _ = run_check_on(
+        &mut checker,
         "main",
         vec![],
         vec![
             make_mut_var_stmt("i", make_lit(0)),
             make_expr_stmt(Expr::While {
-                condition: Box::new(cond),
+                condition: Box::new(bin_expr(BinOp::Lt, make_var("i"), make_lit(3))),
                 body: Box::new(make_block(vec![])),
                 span: Span::default(),
             }),
         ],
-    )]);
-
-    // Act
-    let mut checker = OwnershipChecker::new();
-    let _ = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
     );
 
     // Assert: 循环守卫进出配对——walk 完后假设栈为空
@@ -2578,39 +1946,22 @@ fn test_check_ownership_entry_shares_guards_cleared() {
 fn test_e2e_move_not_leak_from_unreachable_branch() {
     // Arrange: { p = Point(1,2); if false { q = p }; use(p.y) }
     // #264：`if false` 分支不可达 → then 内 move 不污染 p → use(p) 合法
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("p", make_call("Point", vec![make_lit(1), make_lit(2)])),
-            make_expr_stmt(Expr::If {
-                condition: Box::new(make_bool_lit(false)),
-                then_branch: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
-                else_if_branches: vec![],
-                else_branch: None,
-                span: Span::default(),
-            }),
-            make_expr_stmt(make_field_access("p", "y")),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("p", make_call("Point", vec![make_lit(1), make_lit(2)])),
+        make_expr_stmt(Expr::If {
+            condition: Box::new(make_bool_lit(false)),
+            then_branch: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
+            else_if_branches: vec![],
+            else_branch: None,
+            span: Span::default(),
+        }),
+        make_expr_stmt(make_field_access("p", "y")),
+    ]);
 
     // Assert: 不可达分支的 move 不泄漏，无 UseAfterMove
-    let move_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::UseAfterMove))
-        })
-        .collect();
+    let move_errors = disproved_of_kind(&results, DisproofKind::UseAfterMove);
     assert!(
         move_errors.is_empty(),
         "if false 分支的 move 不应泄漏，得: {:?}",
@@ -2622,43 +1973,26 @@ fn test_e2e_move_not_leak_from_unreachable_branch() {
 fn test_e2e_move_conservative_at_merge() {
     // Arrange: { p = Point(1,2); if cond { q = p } else { r = p }; use(p.y) }
     // #264：两分支都 move p → 汇合 meet = Moved → use(p) 报 UseAfterMove（保守正确）
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("p", make_call("Point", vec![make_lit(1), make_lit(2)])),
-            make_var_stmt("cond", make_bool_lit(true)),
-            make_expr_stmt(Expr::If {
-                condition: Box::new(make_var("cond")),
-                then_branch: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
-                else_if_branches: vec![],
-                else_branch: Some(Box::new(make_block(vec![make_var_stmt(
-                    "r",
-                    make_var("p"),
-                )]))),
-                span: Span::default(),
-            }),
-            make_expr_stmt(make_field_access("p", "y")),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("p", make_call("Point", vec![make_lit(1), make_lit(2)])),
+        make_var_stmt("cond", make_bool_lit(true)),
+        make_expr_stmt(Expr::If {
+            condition: Box::new(make_var("cond")),
+            then_branch: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
+            else_if_branches: vec![],
+            else_branch: Some(Box::new(make_block(vec![make_var_stmt(
+                "r",
+                make_var("p"),
+            )]))),
+            span: Span::default(),
+        }),
+        make_expr_stmt(make_field_access("p", "y")),
+    ]);
 
     // Assert: 任意分支可达的 move → 汇合后 p 仍视为 Moved
-    let move_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::UseAfterMove))
-        })
-        .collect();
+    let move_errors = disproved_of_kind(&results, DisproofKind::UseAfterMove);
     assert!(
         !move_errors.is_empty(),
         "双分支 move 后汇合使用应报 UseAfterMove，得: {:?}",
@@ -2670,38 +2004,21 @@ fn test_e2e_move_conservative_at_merge() {
 fn test_e2e_move_in_loop_body_persists() {
     // Arrange: { p = Point(1,2); while cond { q = p }; use(p.y) }
     // #264：循环体 move p → 不动点收敛后 p = Moved（循环可能执行）→ 报 UseAfterMove
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("p", make_call("Point", vec![make_lit(1), make_lit(2)])),
-            make_var_stmt("cond", make_bool_lit(true)),
-            make_expr_stmt(Expr::While {
-                condition: Box::new(make_var("cond")),
-                body: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
-                span: Span::default(),
-            }),
-            make_expr_stmt(make_field_access("p", "y")),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("p", make_call("Point", vec![make_lit(1), make_lit(2)])),
+        make_var_stmt("cond", make_bool_lit(true)),
+        make_expr_stmt(Expr::While {
+            condition: Box::new(make_var("cond")),
+            body: Box::new(make_block(vec![make_var_stmt("q", make_var("p"))])),
+            span: Span::default(),
+        }),
+        make_expr_stmt(make_field_access("p", "y")),
+    ]);
 
     // Assert: 循环体 move 影响循环后使用
-    let move_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::UseAfterMove))
-        })
-        .collect();
+    let move_errors = disproved_of_kind(&results, DisproofKind::UseAfterMove);
     assert!(
         !move_errors.is_empty(),
         "循环体 move 后循环外使用应报 UseAfterMove，得: {:?}",
@@ -2713,39 +2030,22 @@ fn test_e2e_move_in_loop_body_persists() {
 fn test_e2e_branch_local_var_dropped_at_merge() {
     // Arrange: { if cond { q = 1 } else { q = 2 }; use(q) }
     // #264：分支内新声明 q 汇合后保持 Dropped（作用域外不可见）→ 读 q 报 UseAfterDrop
-    let module = make_module(vec![make_binding(
-        "main",
-        vec![],
-        vec![
-            make_var_stmt("cond", make_bool_lit(true)),
-            make_expr_stmt(Expr::If {
-                condition: Box::new(make_var("cond")),
-                then_branch: Box::new(make_block(vec![make_var_stmt("q", make_lit(1))])),
-                else_if_branches: vec![],
-                else_branch: Some(Box::new(make_block(vec![make_var_stmt("q", make_lit(2))]))),
-                span: Span::default(),
-            }),
-            make_expr_stmt(make_var("q")),
-        ],
-    )]);
 
     // Act
-    let mut checker = OwnershipChecker::new();
-    let (results, _plan, _escaped) = checker.check_module(
-        &module,
-        &make_test_env(),
-        &std::collections::HashMap::new(),
-        &Default::default(),
-    );
+    let (results, _plan, _escaped) = run_main(vec![
+        make_var_stmt("cond", make_bool_lit(true)),
+        make_expr_stmt(Expr::If {
+            condition: Box::new(make_var("cond")),
+            then_branch: Box::new(make_block(vec![make_var_stmt("q", make_lit(1))])),
+            else_if_branches: vec![],
+            else_branch: Some(Box::new(make_block(vec![make_var_stmt("q", make_lit(2))]))),
+            span: Span::default(),
+        }),
+        make_expr_stmt(make_var("q")),
+    ]);
 
     // Assert: 分支内声明 q 在汇合后 Dropped → 使用报 UseAfterDrop
-    let drop_errors: Vec<_> = results
-        .iter()
-        .filter(|r| {
-            matches!(r, ProofResult::Disproved(model)
-                if matches!(model.kind, DisproofKind::UseAfterDrop))
-        })
-        .collect();
+    let drop_errors = disproved_of_kind(&results, DisproofKind::UseAfterDrop);
     assert!(
         !drop_errors.is_empty(),
         "分支内声明变量汇合后使用应报 UseAfterDrop，得: {:?}",

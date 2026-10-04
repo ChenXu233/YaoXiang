@@ -1,0 +1,11 @@
+// 06-compile-errors/duplicate_import_same_stmt_err.yx
+// 覆盖: RFC-029 §2 导入冲突「同名绑定直接报错」；#414
+// 验证: 同一条 use 语句内重复别名（as m, m）→ E5006 重复导入
+// expect: compile-error E5006
+// 状态: ❌ 应被编译期拒绝
+
+use std.io as m, m
+
+main = {
+    m.print("x")
+}

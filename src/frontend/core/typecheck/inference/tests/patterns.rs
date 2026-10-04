@@ -13,6 +13,34 @@ fn new_inferrer() -> PatternInferrer {
     PatternInferrer::new()
 }
 
+/// 整数字面量模式 `n`。
+fn int_pattern(n: i128) -> Pattern {
+    Pattern::Literal(Literal::Int(n))
+}
+
+/// 结构体模式字段 `name: <整数字面量>`（非 ref 绑定）。
+fn int_field(
+    name: &str,
+    n: i128,
+) -> (String, bool, Box<Pattern>) {
+    (name.to_string(), false, Box::new(int_pattern(n)))
+}
+
+/// `Point { x: Int(64), y: Int(64) }`（字段不可变、无默认值）。
+fn point_int_struct() -> MonoType {
+    MonoType::Struct(StructType {
+        name: "Point".to_string(),
+        fields: vec![
+            ("x".to_string(), MonoType::Int(64)),
+            ("y".to_string(), MonoType::Int(64)),
+        ],
+        methods: HashMap::new(),
+        field_mutability: vec![false, false],
+        field_has_default: vec![],
+        interfaces: vec![],
+    })
+}
+
 // Happy path 测试
 
 #[test]
@@ -37,9 +65,7 @@ fn test_pattern_infer_int_literal() {
     let mut inferrer = new_inferrer();
 
     // Act
-    let result = inferrer
-        .infer_pattern(&Pattern::Literal(Literal::Int(42)))
-        .unwrap();
+    let result = inferrer.infer_pattern(&int_pattern(42)).unwrap();
 
     // Assert
     assert_eq!(result, MonoType::Int(64), "Int 字面量模式应返回 Int(64)");
@@ -132,7 +158,7 @@ fn test_pattern_infer_tuple() {
     // Arrange
     let mut inferrer = new_inferrer();
     let tuple_pattern = Pattern::Tuple(vec![
-        Pattern::Literal(Literal::Int(1)),
+        int_pattern(1),
         Pattern::Literal(Literal::String("hello".to_string())),
     ]);
 
@@ -153,35 +179,14 @@ fn test_pattern_infer_struct() {
     let mut inferrer = new_inferrer();
     let struct_pattern = Pattern::Struct {
         name: "Point".to_string(),
-        fields: vec![
-            (
-                "x".to_string(),
-                false,
-                Box::new(Pattern::Literal(Literal::Int(1))),
-            ),
-            (
-                "y".to_string(),
-                false,
-                Box::new(Pattern::Literal(Literal::Int(2))),
-            ),
-        ],
+        fields: vec![int_field("x", 1), int_field("y", 2)],
     };
 
     // Act
     let result = inferrer.infer_pattern(&struct_pattern).unwrap();
 
     // Assert
-    let expected = MonoType::Struct(StructType {
-        name: "Point".to_string(),
-        fields: vec![
-            ("x".to_string(), MonoType::Int(64)),
-            ("y".to_string(), MonoType::Int(64)),
-        ],
-        methods: HashMap::new(),
-        field_mutability: vec![false, false],
-        field_has_default: vec![],
-        interfaces: vec![],
-    });
+    let expected = point_int_struct();
     assert_eq!(result, expected, "Struct 模式应正确推断各字段类型");
 }
 
@@ -189,10 +194,7 @@ fn test_pattern_infer_struct() {
 fn test_pattern_infer_or() {
     // Arrange
     let mut inferrer = new_inferrer();
-    let or_pattern = Pattern::Or(vec![
-        Pattern::Literal(Literal::Int(1)),
-        Pattern::Literal(Literal::Int(2)),
-    ]);
+    let or_pattern = Pattern::Or(vec![int_pattern(1), int_pattern(2)]);
 
     // Act
     let result = inferrer.infer_pattern(&or_pattern).unwrap();
@@ -224,9 +226,7 @@ fn test_pattern_infer_empty_or() {
 fn test_pattern_infer_nested_tuple() {
     // Arrange
     let mut inferrer = new_inferrer();
-    let nested = Pattern::Tuple(vec![Pattern::Tuple(vec![Pattern::Literal(Literal::Int(
-        1,
-    ))])]);
+    let nested = Pattern::Tuple(vec![Pattern::Tuple(vec![int_pattern(1)])]);
 
     // Act
     let result = inferrer.infer_pattern(&nested).unwrap();

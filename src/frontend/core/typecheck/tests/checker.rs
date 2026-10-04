@@ -12,6 +12,218 @@ use crate::frontend::core::types::{MonoType, PolyType};
 use crate::frontend::core::parser::ast::{Block, Module, Stmt, Expr, Type as AstType};
 use crate::util::span::Span;
 
+// ── 辅助：AST 夹具 ──────────────────────────────────────
+
+/// 以 dummy span 组装模块。
+fn module(items: Vec<Stmt>) -> Module {
+    Module {
+        items,
+        span: Span::dummy(),
+    }
+}
+
+/// 变量表达式 `name`。
+fn var(
+    name: &str,
+    span: Span,
+) -> Expr {
+    Expr::Var(name.to_string(), span)
+}
+
+/// 表达式语句。
+fn expr_stmt(
+    expr: Expr,
+    span: Span,
+) -> Stmt {
+    Stmt {
+        kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(expr)),
+        span,
+    }
+}
+
+/// 声明语句 `target: ty = value`（`ty` 为 `None` 时不写类型标注）。
+fn assign_stmt(
+    target: &str,
+    ty: Option<AstType>,
+    value: Expr,
+    span: Span,
+) -> Stmt {
+    Stmt {
+        kind: crate::frontend::core::parser::ast::StmtKind::Assign {
+            target: Box::new(var(target, span)),
+            type_annotation: ty,
+            signature_params: vec![],
+            value: Some(Box::new(value)),
+            is_pub: false,
+            is_mut: false,
+            span,
+        },
+        span,
+    }
+}
+
+/// 整数字面量表达式。
+fn int_lit(
+    n: i128,
+    span: Span,
+) -> Expr {
+    Expr::Lit(crate::frontend::core::lexer::tokens::Literal::Int(n), span)
+}
+
+/// 单参函数类型 `(Int32) -> Int32`。
+fn int_fn_type() -> AstType {
+    AstType::Fn {
+        params: vec![AstType::Int(32)],
+        return_type: Box::new(AstType::Int(32)),
+    }
+}
+
+/// `name: Int32` 形参。
+fn param(name: &str) -> crate::frontend::core::parser::ast::Param {
+    crate::frontend::core::parser::ast::Param {
+        name: name.to_string(),
+        ty: Some(AstType::Int(32)),
+        is_mut: false,
+        span: Span::dummy(),
+    }
+}
+
+/// `name: (Int32) -> Int32 = (x) => { x }`——同形函数绑定夹具。
+fn int_identity_fn(name: &str) -> Stmt {
+    assign_stmt(
+        name,
+        Some(int_fn_type()),
+        Expr::Lambda {
+            params: vec![param("x")],
+            body: Box::new(Block {
+                stmts: vec![expr_stmt(var("x", Span::dummy()), Span::dummy())],
+                span: Span::dummy(),
+            }),
+            span: Span::dummy(),
+        },
+        Span::dummy(),
+    )
+}
+
+/// 嵌套函数定义夹具：`outer: (Int32) -> Int32 = (x) => { inner(x); x }`，
+/// 其中 `inner` 为体内 `FnDef`（`(y: Int32) -> Int32 = { y }`）。
+fn nested_fn_module() -> Module {
+    let inner_fn = Expr::FnDef {
+        name: "inner".to_string(),
+        params: vec![crate::frontend::core::parser::ast::Param {
+            name: "y".to_string(),
+            ty: Some(AstType::Int(32)),
+            is_mut: false,
+            span: Span::dummy(),
+        }],
+        return_type: Some(AstType::Int(32)),
+        body: Box::new(Block {
+            stmts: vec![expr_stmt(var("y", Span::dummy()), Span::dummy())],
+            span: Span::dummy(),
+        }),
+        span: Span::dummy(),
+    };
+    module(vec![assign_stmt(
+        "outer",
+        Some(int_fn_type()),
+        Expr::Lambda {
+            params: vec![param("x")],
+            body: Box::new(Block {
+                stmts: vec![
+                    expr_stmt(inner_fn, Span::dummy()),
+                    expr_stmt(var("x", Span::dummy()), Span::dummy()),
+                ],
+                span: Span::dummy(),
+            }),
+            span: Span::dummy(),
+        },
+        Span::dummy(),
+    )])
+}
+
+/// 泛型夹具：`Wrapper: (T: Type) -> Type = { value: T }` 与 `w: Wrapper<Int> = Wrapper(1)`。
+fn generic_wrapper_module() -> Module {
+    module(vec![
+        // Wrapper: Type = { value: T }  (泛型类型定义)
+        Stmt {
+            kind: crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
+                name: "Wrapper".to_string(),
+                signature_params: vec![crate::frontend::core::parser::ast::Param {
+                    name: "T".to_string(),
+                    ty: Some(AstType::MetaType {
+                        name_span: Span::dummy(),
+                        args: vec![],
+                    }),
+                    is_mut: false,
+                    span: Span::dummy(),
+                }],
+                definition: AstType::Struct {
+                    body: vec![crate::frontend::core::parser::ast::TypeBodyItem::Field(
+                        crate::frontend::core::parser::ast::StructField {
+                            name: "value".to_string(),
+                            is_mut: false,
+                            ty: AstType::Name {
+                                name: "T".to_string(),
+                                span: Span::dummy(),
+                            },
+                            default: None,
+                        },
+                    )],
+                },
+                is_pub: false,
+            },
+            span: Span::dummy(),
+        },
+        // w: Wrapper<Int> = Wrapper(1)  (使用泛型类型)
+        assign_stmt(
+            "w",
+            Some(AstType::Generic {
+                name: "Wrapper".to_string(),
+                name_span: Span::dummy(),
+                args: vec![AstType::Name {
+                    name: "Int".to_string(),
+                    span: Span::dummy(),
+                }],
+            }),
+            Expr::Call {
+                func: Box::new(var("Wrapper", Span::dummy())),
+                args: vec![int_lit(1, Span::dummy())],
+                named_args: vec![],
+                span: Span::dummy(),
+            },
+            Span::dummy(),
+        ),
+    ])
+}
+
+/// 检查器诊断中携带非 dummy span 的 E1002 数量。
+fn e1002_with_span(checker: &TypeChecker) -> usize {
+    checker
+        .errors()
+        .iter()
+        .filter(|d| d.code == "E1002")
+        .filter(|d| d.span.is_some_and(|s| !s.is_dummy()))
+        .count()
+}
+
+/// 首个 E1002 诊断的 span。
+fn e1002_span(checker: &TypeChecker) -> Option<Span> {
+    checker
+        .errors()
+        .iter()
+        .find(|d| d.code == "E1002")
+        .and_then(|d| d.span)
+}
+
+/// 全部诊断的 (错误码, span)——断言失败时的定位信息。
+fn error_spans(checker: &TypeChecker) -> Vec<(&str, Option<Span>)> {
+    checker
+        .errors()
+        .iter()
+        .map(|d| (d.code.as_str(), d.span))
+        .collect()
+}
+
 // Happy path 测试
 
 #[test]
@@ -67,10 +279,7 @@ fn test_type_checker_has_no_errors_initially() {
 fn test_type_checker_check_empty_module() {
     // Arrange
     let mut checker = TypeChecker::new("test");
-    let module = Module {
-        items: vec![],
-        span: Span::dummy(),
-    };
+    let module = module(vec![]);
 
     // Act
     let result = checker.check_module(&module);
@@ -90,24 +299,12 @@ fn test_type_checker_reports_type_mismatch() {
     let mut checker = TypeChecker::new("test");
 
     // 构造一个类型不匹配的 AST：将 Int 赋值给 String 变量
-    let module = Module {
-        items: vec![Stmt {
-            kind: crate::frontend::core::parser::ast::StmtKind::Assign {
-                target: Box::new(Expr::Var("x".to_string(), Span::dummy())),
-                type_annotation: Some(AstType::String),
-                signature_params: vec![],
-                value: Some(Box::new(Expr::Lit(
-                    crate::frontend::core::lexer::tokens::Literal::Int(42),
-                    Span::dummy(),
-                ))),
-                is_pub: false,
-                is_mut: false,
-                span: Span::dummy(),
-            },
-            span: Span::dummy(),
-        }],
-        span: Span::dummy(),
-    };
+    let module = module(vec![assign_stmt(
+        "x",
+        Some(AstType::String),
+        int_lit(42, Span::dummy()),
+        Span::dummy(),
+    )]);
 
     // Act
     let result = checker.check_module(&module);
@@ -134,67 +331,39 @@ fn test_type_mismatch_diagnostic_carries_source_span() {
         crate::util::span::Position::new(3, 5),
         crate::util::span::Position::new(3, 20),
     );
-    let module = Module {
-        items: vec![Stmt {
-            kind: crate::frontend::core::parser::ast::StmtKind::Assign {
-                target: Box::new(Expr::Var("x".to_string(), real_span)),
-                type_annotation: Some(AstType::String),
-                signature_params: vec![],
-                value: Some(Box::new(Expr::Lit(
-                    crate::frontend::core::lexer::tokens::Literal::Int(42),
-                    real_span,
-                ))),
-                is_pub: false,
-                is_mut: false,
-                span: real_span,
-            },
-            span: real_span,
-        }],
-        span: Span::dummy(),
-    };
+    let module = module(vec![assign_stmt(
+        "x",
+        Some(AstType::String),
+        int_lit(42, real_span),
+        real_span,
+    )]);
 
     // Act
     let _ = checker.check_module(&module);
 
     // Assert: 诊断应携带非 dummy 的源码定位（E1002 不再丢 span）
-    let with_span = checker
-        .errors()
-        .iter()
-        .filter(|d| d.code == "E1002")
-        .filter(|d| d.span.is_some() && !d.span.unwrap().is_dummy())
-        .count();
+    let with_span = e1002_with_span(&checker);
     assert!(
         with_span > 0,
         "E1002 诊断应携带源码定位 span，实际 errors: {:?}",
-        checker
-            .errors()
-            .iter()
-            .map(|d| (&d.code, d.span))
-            .collect::<Vec<_>>()
+        error_spans(&checker)
     );
-    let span = checker
-        .errors()
-        .iter()
-        .find(|d| d.code == "E1002")
-        .and_then(|d| d.span)
-        .expect("E1002 诊断存在且带 span");
-    assert_eq!(span.start.line, 3, "E1002 span 应指向语句所在行 3");
+    let span = e1002_span(&checker);
+    assert_eq!(
+        span.expect("E1002 诊断存在且带 span").start.line,
+        3,
+        "E1002 span 应指向语句所在行 3"
+    );
 }
 
 #[test]
 fn test_type_checker_reports_undefined_variable() {
     // Arrange
     let mut checker = TypeChecker::new("test");
-    let module = Module {
-        items: vec![Stmt {
-            kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(Expr::Var(
-                "undefined_var".to_string(),
-                Span::dummy(),
-            ))),
-            span: Span::dummy(),
-        }],
-        span: Span::dummy(),
-    };
+    let module = module(vec![expr_stmt(
+        var("undefined_var", Span::dummy()),
+        Span::dummy(),
+    )]);
 
     // Act
     let result = checker.check_module(&module);
@@ -210,57 +379,23 @@ fn test_type_checker_reports_undefined_variable() {
 fn test_type_checker_reports_fn_param_type_mismatch() {
     // Arrange: 定义 add: (x: Int) -> Int = x，然后调用 add("hello")
     let mut checker = TypeChecker::new("test");
-    let module = Module {
-        items: vec![
-            // fn add(x: Int) -> Int { x }
-            Stmt {
-                kind: crate::frontend::core::parser::ast::StmtKind::Assign {
-                    target: Box::new(Expr::Var("add".to_string(), Span::dummy())),
-                    type_annotation: Some(AstType::Fn {
-                        params: vec![AstType::Int(32)],
-                        return_type: Box::new(AstType::Int(32)),
-                    }),
-                    signature_params: vec![],
-                    value: Some(Box::new(Expr::Lambda {
-                        params: vec![crate::frontend::core::parser::ast::Param {
-                            name: "x".to_string(),
-                            ty: Some(AstType::Int(32)),
-                            is_mut: false,
-                            span: Span::dummy(),
-                        }],
-                        body: Box::new(Block {
-                            stmts: vec![Stmt {
-                                kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
-                                    Expr::Var("x".to_string(), Span::dummy()),
-                                )),
-                                span: Span::dummy(),
-                            }],
-                            span: Span::dummy(),
-                        }),
-                        span: Span::dummy(),
-                    })),
-                    is_pub: false,
-                    is_mut: false,
-                    span: Span::dummy(),
-                },
+    let module = module(vec![
+        // fn add(x: Int) -> Int { x }
+        int_identity_fn("add"),
+        // add("hello") — 传入 String 但参数期望 Int
+        expr_stmt(
+            Expr::Call {
+                func: Box::new(var("add", Span::dummy())),
+                args: vec![Expr::Lit(
+                    crate::frontend::core::lexer::tokens::Literal::String("hello".to_string()),
+                    Span::dummy(),
+                )],
+                named_args: vec![],
                 span: Span::dummy(),
             },
-            // add("hello") — 传入 String 但参数期望 Int
-            Stmt {
-                kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(Expr::Call {
-                    func: Box::new(Expr::Var("add".to_string(), Span::dummy())),
-                    args: vec![Expr::Lit(
-                        crate::frontend::core::lexer::tokens::Literal::String("hello".to_string()),
-                        Span::dummy(),
-                    )],
-                    named_args: vec![],
-                    span: Span::dummy(),
-                })),
-                span: Span::dummy(),
-            },
-        ],
-        span: Span::dummy(),
-    };
+            Span::dummy(),
+        ),
+    ]);
 
     // Act
     let result = checker.check_module(&module);
@@ -281,18 +416,12 @@ fn test_type_checker_with_large_module() {
     let mut items = vec![];
     for i in 0..100 {
         // 添加大量语句
-        items.push(Stmt {
-            kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(Expr::Var(
-                format!("var_{}", i),
-                Span::dummy(),
-            ))),
-            span: Span::dummy(),
-        });
+        items.push(expr_stmt(
+            var(&format!("var_{}", i), Span::dummy()),
+            Span::dummy(),
+        ));
     }
-    let module = Module {
-        items,
-        span: Span::dummy(),
-    };
+    let module = module(items);
 
     // Act
     let result = checker.check_module(&module);
@@ -308,48 +437,11 @@ fn test_type_checker_with_large_module() {
 fn test_type_checker_with_multiple_function_definitions() {
     // Arrange: 定义三个函数
     let mut checker = TypeChecker::new("test");
-    let make_fn_binding = |name: &str| -> Stmt {
-        Stmt {
-            kind: crate::frontend::core::parser::ast::StmtKind::Assign {
-                target: Box::new(Expr::Var(name.to_string(), Span::dummy())),
-                type_annotation: Some(AstType::Fn {
-                    params: vec![AstType::Int(32)],
-                    return_type: Box::new(AstType::Int(32)),
-                }),
-                signature_params: vec![],
-                value: Some(Box::new(Expr::Lambda {
-                    params: vec![crate::frontend::core::parser::ast::Param {
-                        name: "x".to_string(),
-                        ty: Some(AstType::Int(32)),
-                        is_mut: false,
-                        span: Span::dummy(),
-                    }],
-                    body: Box::new(Block {
-                        stmts: vec![Stmt {
-                            kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
-                                Expr::Var("x".to_string(), Span::dummy()),
-                            )),
-                            span: Span::dummy(),
-                        }],
-                        span: Span::dummy(),
-                    }),
-                    span: Span::dummy(),
-                })),
-                is_pub: false,
-                is_mut: false,
-                span: Span::dummy(),
-            },
-            span: Span::dummy(),
-        }
-    };
-    let module = Module {
-        items: vec![
-            make_fn_binding("add"),
-            make_fn_binding("sub"),
-            make_fn_binding("mul"),
-        ],
-        span: Span::dummy(),
-    };
+    let module = module(vec![
+        int_identity_fn("add"),
+        int_identity_fn("sub"),
+        int_identity_fn("mul"),
+    ]);
 
     // Act
     let result = checker.check_module(&module);
@@ -365,70 +457,7 @@ fn test_type_checker_with_multiple_function_definitions() {
 fn test_type_checker_with_nested_function_definition() {
     // Arrange: 外层函数内部定义一个 FnDef 表达式
     let mut checker = TypeChecker::new("test");
-    let inner_fn = Expr::FnDef {
-        name: "inner".to_string(),
-        params: vec![crate::frontend::core::parser::ast::Param {
-            name: "y".to_string(),
-            ty: Some(AstType::Int(32)),
-            is_mut: false,
-            span: Span::dummy(),
-        }],
-        return_type: Some(AstType::Int(32)),
-        body: Box::new(crate::frontend::core::parser::ast::Block {
-            stmts: vec![Stmt {
-                kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(Expr::Var(
-                    "y".to_string(),
-                    Span::dummy(),
-                ))),
-                span: Span::dummy(),
-            }],
-            span: Span::dummy(),
-        }),
-        span: Span::dummy(),
-    };
-    let module = Module {
-        items: vec![Stmt {
-            kind: crate::frontend::core::parser::ast::StmtKind::Assign {
-                target: Box::new(Expr::Var("outer".to_string(), Span::dummy())),
-                type_annotation: Some(AstType::Fn {
-                    params: vec![AstType::Int(32)],
-                    return_type: Box::new(AstType::Int(32)),
-                }),
-                signature_params: vec![],
-                value: Some(Box::new(Expr::Lambda {
-                    params: vec![crate::frontend::core::parser::ast::Param {
-                        name: "x".to_string(),
-                        ty: Some(AstType::Int(32)),
-                        is_mut: false,
-                        span: Span::dummy(),
-                    }],
-                    body: Box::new(Block {
-                        stmts: vec![
-                            Stmt {
-                                kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
-                                    inner_fn,
-                                )),
-                                span: Span::dummy(),
-                            },
-                            Stmt {
-                                kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(
-                                    Expr::Var("x".to_string(), Span::dummy()),
-                                )),
-                                span: Span::dummy(),
-                            },
-                        ],
-                        span: Span::dummy(),
-                    }),
-                    span: Span::dummy(),
-                })),
-                is_pub: false,
-                is_mut: false,
-                span: Span::dummy(),
-            },
-            span: Span::dummy(),
-        }],
-        span: Span::dummy(),
-    };
+    let module = nested_fn_module();
 
     // Act
     let result = checker.check_module(&module);
@@ -444,76 +473,7 @@ fn test_type_checker_with_nested_function_definition() {
 fn test_type_checker_with_generic_type_binding() {
     // Arrange: 定义泛型类型 Wrapper[T] = { value: T }，然后使用 Wrapper<Int>
     let mut checker = TypeChecker::new("test");
-    let module = Module {
-        items: vec![
-            // Wrapper: Type = { value: T }  (泛型类型定义)
-            Stmt {
-                kind: crate::frontend::core::parser::ast::StmtKind::TypeDefinition {
-                    name: "Wrapper".to_string(),
-                    signature_params: vec![crate::frontend::core::parser::ast::Param {
-                        name: "T".to_string(),
-                        ty: Some(crate::frontend::core::parser::ast::Type::MetaType {
-                            name_span: crate::util::span::Span::dummy(),
-                            args: vec![],
-                        }),
-                        is_mut: false,
-                        span: crate::util::span::Span::dummy(),
-                    }],
-                    definition: AstType::Struct {
-                        body: vec![crate::frontend::core::parser::ast::TypeBodyItem::Field(
-                            crate::frontend::core::parser::ast::StructField {
-                                name: "value".to_string(),
-                                is_mut: false,
-                                ty: AstType::Name {
-                                    name: "T".to_string(),
-                                    span: Span::dummy(),
-                                },
-                                default: None,
-                            },
-                        )],
-                    },
-                    is_pub: false,
-                },
-                span: Span::dummy(),
-            },
-            // let w: Wrapper<Int> = Wrapper(1)  (使用泛型类型)
-            Stmt {
-                kind: crate::frontend::core::parser::ast::StmtKind::Assign {
-                    target: Box::new(crate::frontend::core::parser::ast::Expr::Var(
-                        "w".to_string(),
-                        Span::dummy(),
-                    )),
-                    type_annotation: Some(AstType::Generic {
-                        name: "Wrapper".to_string(),
-                        name_span: Span::dummy(),
-                        args: vec![AstType::Name {
-                            name: "Int".to_string(),
-                            span: Span::dummy(),
-                        }],
-                    }),
-                    signature_params: Vec::new(),
-                    // 声明必须带初值（spec §3.2 文法要求 `= Expr`）
-                    value: Some(Box::new(crate::frontend::core::parser::ast::Expr::Call {
-                        func: Box::new(crate::frontend::core::parser::ast::Expr::Var(
-                            "Wrapper".to_string(),
-                            Span::dummy(),
-                        )),
-                        args: vec![crate::frontend::core::parser::ast::Expr::Lit(
-                            crate::frontend::core::parser::ast::Literal::Int(1),
-                            Span::dummy(),
-                        )],
-                        named_args: vec![],
-                        span: Span::dummy(),
-                    })),
-                    is_pub: false,
-                    is_mut: false,
-                    span: Span::dummy(),
-                },
-                span: Span::dummy(),
-            },
-        ],
-        span: Span::dummy(),
-    };
+    let module = generic_wrapper_module();
 
     // Act
     let result = checker.check_module(&module);

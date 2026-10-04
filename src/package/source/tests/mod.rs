@@ -2,4 +2,6 @@
 
 mod conflict;
 mod git;
+mod github;
+mod local;
 mod resolver;

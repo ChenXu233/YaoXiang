@@ -14,6 +14,55 @@ use crate::frontend::core::types::eval::type_families::Nat;
 use std::collections::HashMap;
 use crate::std::StdModule;
 
+/// Helper: test_istrue_type_family_instantiate 的完整夹具与断言（逐条断言见函数体）。
+/// Assert: `IsTrue(true)` 可实例化并归约为 Void（spec §1.3）。
+fn assert_istrue_true_reduces_to_void(env: &DependentTypeEnv) {
+    let istrue = env
+        .get_type_family("IsTrue")
+        .expect("IsTrue should be registered after AssertModule.register_type_families");
+    let result = istrue.instantiate(&[MonoType::TypeRef("true".into())]);
+    assert!(
+        result.is_some(),
+        "IsTrue(true) should instantiate successfully"
+    );
+    assert_eq!(
+        result.expect("IsTrue(true) 实例化结果应可取回").into_type(),
+        MonoType::Void,
+        "IsTrue(true) must reduce to Void"
+    );
+}
+
+/// Assert: `IsTrue(false)` 可实例化并归约为 Never（spec §1.3）。
+fn assert_istrue_false_reduces_to_never(env: &DependentTypeEnv) {
+    let istrue = env
+        .get_type_family("IsTrue")
+        .expect("IsTrue should be registered after AssertModule.register_type_families");
+    let result = istrue.instantiate(&[MonoType::TypeRef("false".into())]);
+    assert!(
+        result.is_some(),
+        "IsTrue(false) should instantiate successfully"
+    );
+    assert_eq!(
+        result
+            .expect("IsTrue(false) 实例化结果应可取回")
+            .into_type(),
+        MonoType::Never,
+        "IsTrue(false) must reduce to Never"
+    );
+}
+
+/// Assert: `IsTrue(String)` 无匹配 arm，保留不归约（None）。
+fn assert_istrue_string_arg_returns_none(env: &DependentTypeEnv) {
+    let istrue = env
+        .get_type_family("IsTrue")
+        .expect("IsTrue should be registered after AssertModule.register_type_families");
+    let result = istrue.instantiate(&[MonoType::make_string()]);
+    assert!(
+        result.is_none(),
+        "IsTrue(String) should not match any arm and return None"
+    );
+}
+
 #[test]
 fn test_associated_type() {
     let at = AssociatedType::new(
@@ -307,36 +356,10 @@ fn test_istrue_type_family_instantiate() {
         "IsTrue should have one type param 'b'"
     );
 
-    // Act & Assert — IsTrue(true) => Void（spec §1.3）
-    let result = istrue.instantiate(&[MonoType::TypeRef("true".into())]);
-    assert!(
-        result.is_some(),
-        "IsTrue(true) should instantiate successfully"
-    );
-    assert_eq!(
-        result.unwrap().into_type(),
-        MonoType::Void,
-        "IsTrue(true) must reduce to Void"
-    );
-
-    // Act & Assert — IsTrue(false) => Never（spec §1.3）
-    let result = istrue.instantiate(&[MonoType::TypeRef("false".into())]);
-    assert!(
-        result.is_some(),
-        "IsTrue(false) should instantiate successfully"
-    );
-    assert_eq!(
-        result.unwrap().into_type(),
-        MonoType::Never,
-        "IsTrue(false) must reduce to Never"
-    );
-
-    // Act & Assert — IsTrue(unknown) => None（无匹配 arm，保留不归约）
-    let result = istrue.instantiate(&[MonoType::make_string()]);
-    assert!(
-        result.is_none(),
-        "IsTrue(String) should not match any arm and return None"
-    );
+    // Act & Assert — 三种实参各自的归约结果（true→Void、false→Never、String→None）
+    assert_istrue_true_reduces_to_void(&env);
+    assert_istrue_false_reduces_to_never(&env);
+    assert_istrue_string_arg_returns_none(&env);
 }
 
 #[test]

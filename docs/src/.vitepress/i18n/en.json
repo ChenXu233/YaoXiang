@@ -406,6 +406,10 @@
             "link": "/guide/language-overview"
           },
           {
+            "text": "Module System",
+            "link": "/guide/modules"
+          },
+          {
             "text": "Package Management System",
             "link": "/guide/packaging"
           },

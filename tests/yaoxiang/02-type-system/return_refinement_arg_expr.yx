@@ -1,0 +1,32 @@
+// 02-type-system/return_refinement_arg_expr.yx
+// 覆盖: RFC-027 §3 —— 谓词应用的**实参**真正代入返回位精化约束
+// 验证: `-> (r: IsPositive(r + 100))` 的约束是 `r + 100 > 0`；代入返回值 `-5`
+//       得 `-5 + 100 > 0`（95 > 0）成立，编译通过且运行值正确。
+// 状态: ✅ 可运行
+//
+// 修复前的偏差：谓词实参在 `MonoType` 层被降级成占位，约束退化成 `-5 > 0`，
+// 于是这条**合法**代码被误报（见 src/frontend/core/typecheck/tests/rfc027_return_refinement.rs）。
+// 负例对照：06-compile-errors/return_refinement_arg_expr_err.yx。
+
+use std.assert
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+// 后置条件只涉及返回值：「值 + 100」为正。返回 -5 ⇒ 95 > 0，成立。
+shifted: () -> (r: IsPositive(r + 100)) = {
+    return -5
+}
+
+// 同一条规则的形参侧：声明名之外的自由变量（形参 b）用自己的符号——
+// 约束 `r + b > 0` 代入返回值 `b + 1` 得 `(b + 1) + b > 0`，Γ={b > 0} 下成立。
+grown: (b: IsPositive(b)) -> (r: IsPositive(r + b)) = {
+    b + 1
+}
+
+main: () -> Void = {
+    assert.assert(shifted() == -5, "shifted() == -5")
+    assert.assert(grown(3) == 4, "grown(3) == 4")
+}
+
+// T4 入口语义：Script 模式的 main **不会**隐式执行——必须显式调用，运行期断言才生效。
+main()

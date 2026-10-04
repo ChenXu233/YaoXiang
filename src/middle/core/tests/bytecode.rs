@@ -7,159 +7,14 @@
 //! - Borrow/Release round-trip encode-decode via `build_and_decode`
 //! - MonoType::Ref -> IrType::Void conversion
 
-use crate::middle::core::bytecode::{BytecodeInstr, BytecodeModule, Label, Reg};
+use crate::middle::core::bytecode::{BinaryOp, BytecodeInstr, BytecodeModule, CompareOp, Label, Reg};
 use std::collections::HashMap;
 use crate::middle::core::ir::Type as IrType;
 use crate::backends::common::opcode;
 use crate::frontend::core::typecheck::MonoType;
 use crate::middle::passes::codegen::bytecode::BytecodeInstruction;
 
-// Instruction Size
-
-#[test]
-fn test_nop_size_is_one_byte() {
-    // Arrange
-    let nop = BytecodeInstr::Nop;
-    // Act
-    let size = nop.size();
-    // Assert
-    assert_eq!(
-        size, 1,
-        "Nop instruction should occupy exactly 1 byte (opcode only)"
-    );
-}
-
-#[test]
-fn test_mov_size_is_five_bytes() {
-    // Arrange
-    let mov = BytecodeInstr::Mov {
-        dst: Reg(0),
-        src: Reg(1),
-    };
-    // Act
-    let size = mov.size();
-    // Assert
-    assert_eq!(
-        size, 5,
-        "Mov instruction should occupy 5 bytes: opcode(1) + dst(2) + src(2)"
-    );
-}
-
-// Display Formatting
-
-#[test]
-fn test_reg_display_format() {
-    // Arrange / Act / Assert
-    assert_eq!(
-        format!("{}", Reg(0)),
-        "r0",
-        "Reg(0) should display as \"r0\""
-    );
-    assert_eq!(
-        format!("{}", Reg(15)),
-        "r15",
-        "Reg(15) should display as \"r15\""
-    );
-}
-
-#[test]
-fn test_label_display_format() {
-    // Arrange / Act / Assert
-    assert_eq!(
-        format!("{}", Label(0)),
-        "L0",
-        "Label(0) should display as \"L0\""
-    );
-    assert_eq!(
-        format!("{}", Label(10)),
-        "L10",
-        "Label(10) should display as \"L10\""
-    );
-}
-
-// Borrow/Release Opcode Mapping
-
-#[test]
-fn test_borrow_immutable_opcode_is_borrow() {
-    // Arrange
-    let instr = BytecodeInstr::Borrow {
-        dst: Reg(1),
-        src: Reg(2),
-        mutable: false,
-    };
-    // Act
-    let opcode = instr.opcode();
-    // Assert
-    assert_eq!(
-        opcode,
-        opcode::BORROW,
-        "Immutable Borrow should map to opcode::BORROW"
-    );
-}
-
-#[test]
-fn test_borrow_mutable_opcode_is_borrow() {
-    // Arrange
-    let instr = BytecodeInstr::Borrow {
-        dst: Reg(1),
-        src: Reg(2),
-        mutable: true,
-    };
-    // Act
-    let opcode = instr.opcode();
-    // Assert
-    assert_eq!(
-        opcode,
-        opcode::BORROW,
-        "Mutable Borrow should map to opcode::BORROW"
-    );
-}
-
-#[test]
-fn test_borrow_size_is_six_bytes() {
-    // Arrange
-    let instr = BytecodeInstr::Borrow {
-        dst: Reg(1),
-        src: Reg(2),
-        mutable: true,
-    };
-    // Act
-    let size = instr.size();
-    // Assert: opcode(1) + dst(2) + src(2) + mutable(1) = 6
-    assert_eq!(
-        size, 6,
-        "Borrow instruction should occupy 6 bytes: opcode(1)+dst(2)+src(2)+mutable(1)"
-    );
-}
-
-#[test]
-fn test_release_opcode_is_release() {
-    // Arrange
-    let instr = BytecodeInstr::Release { src: Reg(3) };
-    // Act
-    let opcode = instr.opcode();
-    // Assert
-    assert_eq!(
-        opcode,
-        opcode::RELEASE,
-        "Release should map to opcode::RELEASE"
-    );
-}
-
-#[test]
-fn test_release_size_is_three_bytes() {
-    // Arrange
-    let instr = BytecodeInstr::Release { src: Reg(3) };
-    // Act
-    let size = instr.size();
-    // Assert: opcode(1) + src(2) = 3
-    assert_eq!(
-        size, 3,
-        "Release instruction should occupy 3 bytes: opcode(1)+src(2)"
-    );
-}
-
-// Borrow/Release Round-trip Tests
+// -- 辅助函数与测试数据表（规则 5.3：辅助函数集中在文件顶部）--
 
 /// Helper: build a minimal BytecodeFile with one function containing
 /// the given raw BytecodeInstructions, then decode via `From<BytecodeFile>`.
@@ -235,141 +90,355 @@ fn assert_release_instr(
     }
 }
 
-#[test]
-fn test_borrow_roundtrip_immutable() {
-    // Arrange: encode Borrow dst=1, src=2, mutable=false
-    let encoded = BytecodeInstruction::new(
-        opcode::BORROW,
-        vec![1, 0, 2, 0, 0], // dst=1 LE, src=2 LE, mutable=false
-    );
-    // Act
-    let module = build_and_decode(vec![encoded]);
-    let instrs = &module.functions[0].instructions;
-    // Assert
-    assert_eq!(
-        module.functions.len(),
-        1,
-        "Module should contain exactly 1 function"
-    );
-    assert_eq!(
-        instrs.len(),
-        1,
-        "Function should contain exactly 1 instruction"
-    );
-    assert_borrow_instr(&instrs[0], Reg(1), Reg(2), false);
+/// Helper: build_and_decode 的单指令便捷封装——解码出唯一一条指令。
+fn decode_one(
+    op: u8,
+    operands: Vec<u8>,
+) -> BytecodeInstr {
+    let module = build_and_decode(vec![BytecodeInstruction::new(op, operands)]);
+    let func = module
+        .functions
+        .first()
+        .expect("build_and_decode 解码应产出 1 个函数");
+    func.instructions
+        .first()
+        .expect("build_and_decode 解码应产出 1 条指令")
+        .clone()
 }
 
-#[test]
-fn test_borrow_roundtrip_mutable() {
-    // Arrange: encode Borrow dst=1, src=2, mutable=true
-    let encoded = BytecodeInstruction::new(
-        opcode::BORROW,
-        vec![1, 0, 2, 0, 1], // dst=1 LE, src=2 LE, mutable=true
-    );
-    // Act
-    let module = build_and_decode(vec![encoded]);
-    let instrs = &module.functions[0].instructions;
-    // Assert
-    assert_eq!(
-        instrs.len(),
-        1,
-        "Function should contain exactly 1 instruction"
-    );
-    assert_borrow_instr(&instrs[0], Reg(1), Reg(2), true);
+/// Helper: u16 的小端字节序列。
+fn u16le(v: u16) -> [u8; 2] {
+    v.to_le_bytes()
 }
 
-#[test]
-fn test_release_roundtrip() {
-    // Arrange: encode Release src=3
-    let encoded = BytecodeInstruction::new(
-        opcode::RELEASE,
-        vec![3, 0], // src=3 LE
-    );
-    // Act
-    let module = build_and_decode(vec![encoded]);
-    let instrs = &module.functions[0].instructions;
-    // Assert
-    assert_eq!(
-        instrs.len(),
-        1,
-        "Function should contain exactly 1 instruction"
-    );
-    assert_release_instr(&instrs[0], Reg(3));
+/// Helper: u32 的小端字节序列。
+fn u32le(v: u32) -> [u8; 4] {
+    v.to_le_bytes()
 }
 
-#[test]
-fn test_borrow_release_combined_roundtrip() {
-    // Arrange: Borrow(dst=5, src=10, mutable=true) followed by Release(src=5)
-    let borrow_instr = BytecodeInstruction::new(
-        opcode::BORROW,
-        vec![5, 0, 10, 0, 1], // dst=5, src=10, mutable=true
-    );
-    let release_instr = BytecodeInstruction::new(
-        opcode::RELEASE,
-        vec![5, 0], // src=5
-    );
-    // Act
-    let module = build_and_decode(vec![borrow_instr, release_instr]);
-    let instrs = &module.functions[0].instructions;
-    // Assert
-    assert_eq!(
-        instrs.len(),
-        2,
-        "Function should contain exactly 2 instructions"
-    );
-    assert_borrow_instr(&instrs[0], Reg(5), Reg(10), true);
-    assert_release_instr(&instrs[1], Reg(5));
+/// Helper: rc_new_field_positions。
+fn assert_rc_new_field_positions() {
+    // RcNew: dst(1) + src(1)——两值不同，dst/src 写反即被抓
+    match decode_one(opcode::RC_NEW, vec![0x11, 0x22]) {
+        BytecodeInstr::RcNew { dst, src } => {
+            assert_eq!(dst, Reg(0x11), "RcNew.dst 位置错误（可能 dst/src 写反）");
+            assert_eq!(src, Reg(0x22), "RcNew.src 位置错误");
+        }
+        other => panic!("应为 RcNew，实际 {other:?}"),
+    }
 }
 
-// MonoType::Ref -> IrType Conversion
-
-#[test]
-fn test_ref_type_maps_to_void_ir_type() {
-    // Arrange
-    let ref_ty = MonoType::Ref {
-        mutable: false,
-        inner: Box::new(MonoType::Int(64)),
-    };
-    // Act
-    let ir_type: IrType = ref_ty.into();
-    // Assert: Ref is ZST, should map to Void
-    assert!(
-        matches!(ir_type, IrType::Void),
-        "Immutable Ref<i64> should map to IrType::Void (ZST has no runtime repr)"
-    );
+/// Helper: arc_drop_field_position。
+fn assert_arc_drop_field_position() {
+    // ArcDrop: 单字段 src（1 字节）
+    match decode_one(opcode::ARC_DROP, vec![0xCD]) {
+        BytecodeInstr::ArcDrop { src } => {
+            assert_eq!(src, Reg(0xCD), "ArcDrop.src 位置错误")
+        }
+        other => panic!("应为 ArcDrop，实际 {other:?}"),
+    }
 }
 
-#[test]
-fn test_ref_type_mutable_maps_to_void_ir_type() {
-    // Arrange
-    let ref_ty = MonoType::Ref {
-        mutable: true,
-        inner: Box::new(MonoType::make_string()),
-    };
-    // Act
-    let ir_type: IrType = ref_ty.into();
-    // Assert: Ref is ZST regardless of mutability
-    assert!(
-        matches!(ir_type, IrType::Void),
-        "Mutable Ref<String> should map to IrType::Void (ZST has no runtime repr)"
-    );
+/// Helper: arc_new_field_positions。
+fn assert_arc_new_field_positions() {
+    // ArcNew: dst(1) + src(1)
+    match decode_one(opcode::ARC_NEW, vec![0x05, 0x06]) {
+        BytecodeInstr::ArcNew { dst, src } => {
+            assert_eq!(dst, Reg(5), "ArcNew.dst 位置错误");
+            assert_eq!(src, Reg(6), "ArcNew.src 位置错误");
+        }
+        other => panic!("应为 ArcNew，实际 {other:?}"),
+    }
 }
 
-// ── 编解码漂移护栏 ────────────────────────────────────────────
+/// Helper: weak_upgrade_field_positions。
+fn assert_weak_upgrade_field_positions() {
+    // WeakUpgrade: dst(1) + src(1)
+    match decode_one(opcode::WEAK_UPGRADE, vec![0x07, 0x08]) {
+        BytecodeInstr::WeakUpgrade { dst, src } => {
+            assert_eq!(dst, Reg(7), "WeakUpgrade.dst 位置错误");
+            assert_eq!(src, Reg(8), "WeakUpgrade.src 位置错误");
+        }
+        other => panic!("应为 WeakUpgrade，实际 {other:?}"),
+    }
+}
 
-/// 断言「编码器能产出的每个 opcode，解码器都有对应分支」。
+/// Helper: drop_field_position。
+fn assert_drop_field_position() {
+    // Drop: value(1)
+    match decode_one(opcode::DROP, vec![0x0A]) {
+        BytecodeInstr::Drop { value } => {
+            assert_eq!(value, Reg(10), "Drop.value 位置错误")
+        }
+        other => panic!("应为 Drop，实际 {other:?}"),
+    }
+}
+
+/// Helper: cast_field_positions。
+fn assert_cast_field_positions() {
+    // Cast: dst(1) + src(1) + target_type_id(2, 小端)
+    match decode_one(opcode::CAST, vec![0x01, 0x02, 0x34, 0x12]) {
+        BytecodeInstr::Cast {
+            dst,
+            src,
+            target_type_id,
+        } => {
+            assert_eq!(dst, Reg(1), "Cast.dst 位置错误");
+            assert_eq!(src, Reg(2), "Cast.src 位置错误");
+            assert_eq!(target_type_id, 0x1234, "Cast.target_type_id 位置错误");
+        }
+        other => panic!("应为 Cast，实际 {other:?}"),
+    }
+}
+
+/// Helper: heap_alloc_field_positions。
+fn assert_heap_alloc_field_positions() {
+    // HeapAlloc: dst(1) + type_id(2, 小端)
+    match decode_one(opcode::HEAP_ALLOC, vec![0x03, 0x78, 0x56]) {
+        BytecodeInstr::HeapAlloc { dst, type_id } => {
+            assert_eq!(dst, Reg(3), "HeapAlloc.dst 位置错误");
+            assert_eq!(type_id, 0x5678, "HeapAlloc.type_id 位置错误");
+        }
+        other => panic!("应为 HeapAlloc，实际 {other:?}"),
+    }
+}
+
+/// Helper: bounds_check_field_positions。
+fn assert_bounds_check_field_positions() {
+    // BoundsCheck: array(1) + index(1)
+    match decode_one(opcode::BOUNDS_CHECK, vec![0x07, 0x09]) {
+        BytecodeInstr::BoundsCheck { array, index } => {
+            assert_eq!(array, Reg(7), "BoundsCheck.array 位置错误");
+            assert_eq!(index, Reg(9), "BoundsCheck.index 位置错误");
+        }
+        other => panic!("应为 BoundsCheck，实际 {other:?}"),
+    }
+}
+
+/// Helper: string_concat_field_positions。
+fn assert_string_concat_field_positions() {
+    // StringConcat: dst(1) + str1(1) + str2(1)
+    match decode_one(opcode::STRING_CONCAT, vec![0x01, 0x02, 0x03]) {
+        BytecodeInstr::StringConcat { dst, str1, str2 } => {
+            assert_eq!(dst, Reg(1), "StringConcat.dst 位置错误");
+            assert_eq!(str1, Reg(2), "StringConcat.str1 位置错误");
+            assert_eq!(str2, Reg(3), "StringConcat.str2 位置错误");
+        }
+        other => panic!("应为 StringConcat，实际 {other:?}"),
+    }
+}
+
+/// Helper: new_dict_roundtrip_fields。
+fn assert_new_dict_roundtrip_fields() {
+    // ── NewDict: dst(2) + pair_count(4) + keys(2*count) + values(2*count) ──
+    // dst=3, 1 对: key=5, val=7
+    let mut ops = Vec::new();
+    ops.extend_from_slice(&u16le(3));
+    ops.extend_from_slice(&u32le(1));
+    ops.extend_from_slice(&u16le(5));
+    ops.extend_from_slice(&u16le(7));
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::NEW_DICT, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::NewDict { dst, keys, values } => {
+            assert_eq!(dst.0, 3, "NewDict.dst 位置错误");
+            assert_eq!(keys.len(), 1, "NewDict.keys 数量错误");
+            assert_eq!(values.len(), 1, "NewDict.values 数量错误");
+            assert_eq!(keys[0].0, 5, "NewDict.keys[0] 位置错误");
+            assert_eq!(values[0].0, 7, "NewDict.values[0] 位置错误");
+        }
+        other => panic!("NewDict 解码为 {other:?}（疑静默 Nop 或字段错位）"),
+    }
+}
+
+/// Helper: new_tuple_roundtrip_fields。
+fn assert_new_tuple_roundtrip_fields() {
+    // ── NewTuple: dst(2) + item_count(4) + items(2*count) ──
+    let mut ops = Vec::new();
+    ops.extend_from_slice(&u16le(4));
+    ops.extend_from_slice(&u32le(2));
+    ops.extend_from_slice(&u16le(9));
+    ops.extend_from_slice(&u16le(11));
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::NEW_TUPLE, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::NewTuple { dst, items } => {
+            assert_eq!(dst.0, 4, "NewTuple.dst 位置错误");
+            assert_eq!(items.len(), 2, "NewTuple.items 数量错误");
+            assert_eq!(items[0].0, 9, "NewTuple.items[0] 位置错误");
+            assert_eq!(items[1].0, 11, "NewTuple.items[1] 位置错误");
+        }
+        other => panic!("NewTuple 解码为 {other:?}"),
+    }
+}
+
+/// Helper: new_range_roundtrip_fields。
+fn assert_new_range_roundtrip_fields() {
+    // ── NewRange: dst(2) + start(2) + end(2) + step(2) ──
+    let mut ops = Vec::new();
+    for r in [6u16, 8, 10, 12] {
+        ops.extend_from_slice(&u16le(r));
+    }
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::NEW_RANGE, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::NewRange {
+            dst,
+            start,
+            end,
+            step,
+        } => {
+            assert_eq!(dst.0, 6, "NewRange.dst 位置错误");
+            assert_eq!(start.0, 8, "NewRange.start 位置错误");
+            assert_eq!(end.0, 10, "NewRange.end 位置错误");
+            assert_eq!(step.0, 12, "NewRange.step 位置错误");
+        }
+        other => panic!("NewRange 解码为 {other:?}"),
+    }
+}
+
+/// Helper: create_variant_roundtrip_fields。
+fn assert_create_variant_roundtrip_fields() {
+    // ── CreateVariant: dst(2) + group_idx(2) + variant(4) + payload(2) ──
+    // 注意 group_idx 是 **2 字节**（编码器 `as u16`），variant 才是 4 字节
+    let mut ops = Vec::new();
+    ops.extend_from_slice(&u16le(13));
+    ops.extend_from_slice(&u16le(2));
+    ops.extend_from_slice(&u32le(1));
+    ops.extend_from_slice(&u16le(14));
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::CREATE_VARIANT, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::CreateVariant {
+            dst,
+            group_idx,
+            variant,
+            payload,
+        } => {
+            assert_eq!(dst.0, 13, "CreateVariant.dst 位置错误");
+            assert_eq!(*group_idx, 2, "CreateVariant.group_idx 位置错误");
+            assert_eq!(*variant, 1, "CreateVariant.variant 位置错误");
+            assert_eq!(payload.0, 14, "CreateVariant.payload 位置错误");
+        }
+        other => panic!("CreateVariant 解码为 {other:?}"),
+    }
+}
+
+/// Helper: create_struct_roundtrip_fields。
+fn assert_create_struct_roundtrip_fields() {
+    // ── CreateStruct: dst(1) + type_name_idx(4) + field_count(1) + fields(2*count) ──
+    // 注意 dst 是 **1 字节**，type_name_idx 是 4 字节，field_count 是 1 字节
+    let mut ops = vec![4u8];
+    ops.extend_from_slice(&0u32.to_le_bytes()); // type_name_idx（常量池 0，空池→回退名）
+    ops.push(2u8); // field_count
+    ops.extend_from_slice(&21u16.to_le_bytes());
+    ops.extend_from_slice(&22u16.to_le_bytes());
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::CREATE_STRUCT, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::CreateStruct { dst, fields, .. } => {
+            assert_eq!(dst.0, 4, "CreateStruct.dst 位置错误");
+            assert_eq!(fields.len(), 2, "CreateStruct.fields 数量错误");
+            assert_eq!(fields[0].0, 21, "CreateStruct.fields[0] 位置错误");
+            assert_eq!(fields[1].0, 22, "CreateStruct.fields[1] 位置错误");
+        }
+        other => panic!("CreateStruct 解码为 {other:?}"),
+    }
+}
+
+/// Helper: make_closure_roundtrip_fields。
+fn assert_make_closure_roundtrip_fields() {
+    // ── MakeClosure: dst(1) + func_id(4) + env_count(1) + env(2*count) ──
+    let mut ops = vec![5u8];
+    ops.extend_from_slice(&9u32.to_le_bytes()); // func_id
+    ops.push(1u8); // env_count
+    ops.extend_from_slice(&31u16.to_le_bytes());
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::MAKE_CLOSURE, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::MakeClosure { dst, func, env } => {
+            assert_eq!(dst.0, 5, "MakeClosure.dst 位置错误");
+            assert_eq!(*func, 9, "MakeClosure.func 位置错误");
+            assert_eq!(env.len(), 1, "MakeClosure.env 数量错误");
+            assert_eq!(env[0].0, 31, "MakeClosure.env[0] 位置错误");
+        }
+        other => panic!("MakeClosure 解码为 {other:?}"),
+    }
+}
+
+/// Helper: set_field_roundtrip_fields。
+fn assert_set_field_roundtrip_fields() {
+    // ── SetField: src(1) + field_idx(2 LE) + value(1) ──
+    // 与 GET_FIELD 同构（dst(1) + src(1) + field(2 LE)）；**不是**全 u16。
+    // 编码器 translate_store_field 的写法即此（低字节在前）。
+    let ops = vec![41u8, 7u8, 0u8, 42u8]; // src=41, field_idx=7 (LE), value=42
+    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::SET_FIELD, ops)]);
+    match &m.functions[0].instructions[0] {
+        BytecodeInstr::SetField {
+            src,
+            field_idx,
+            value,
+        } => {
+            assert_eq!(src.0, 41, "SetField.src 位置错误");
+            assert_eq!(*field_idx, 7, "SetField.field_idx 位置错误");
+            assert_eq!(value.0, 42, "SetField.value 位置错误");
+        }
+        other => panic!("SetField 解码为 {other:?}"),
+    }
+}
+
+/// Helper: 从 opcode.rs 源码取出全部 pub const opcode 名。
+fn defined_opcode_names(opcode_src: &str) -> std::collections::BTreeSet<String> {
+    opcode_src
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("pub const "))
+        .filter_map(|rest| rest.split_once(':'))
+        .map(|(name, _)| name.trim().to_string())
+        .collect()
+}
+
+/// Helper: 取出解码器源码中「匹配臂」上出现的 opcode::NAME（后随 => 才算匹配臂）。
+fn decoder_match_arm_opcodes(decoder_src: &str) -> std::collections::BTreeSet<String> {
+    decoder_src
+        .match_indices("opcode::")
+        .filter_map(|(i, _)| {
+            let rest = &decoder_src[i + "opcode::".len()..];
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect();
+            // 只认「匹配臂」：后随 =>
+            if rest[name.len()..].trim_start().starts_with("=>") {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// 快照：**无 translator 编码器**的 opcode 全集。
 ///
-/// 背景：解码器曾只覆盖 57/83 个 opcode，其余落到静默兜底变 `Nop`——
-/// `RC_NEW`(0x89) 即因此让弱引用功能静默失效。该兜底现已改为 panic，
-/// 本测试把「漂移」提前到编译/测试期暴露，而非运行到某个用例才炸。
-///
-/// 做法：遍历 `BytecodeInstr::opcode()` 的映射（编码方向），对每个 opcode
-/// 构造一条最小指令再解码，断言解出的**指令种类与编码前一致**（不是 Nop）。
-#[test]
-fn test_every_opcode_roundtrips_not_silently_nop() {
-    use crate::backends::common::opcode;
-    use crate::middle::bytecode::{BinaryOp, BytecodeInstr, CompareOp, Label, Reg};
+/// 每个条目都经核查确认「解码/执行已实现、前端未接通」，详见 plan 文档 D8。
+const EXPECTED_UNENCODED: &[&str] = &[
+    // 借用令牌（RFC-009 v9）：解码器 + 执行器 + 往返测试齐备
+    "BORROW",
+    "RELEASE",
+    // 越界检查：有解码 + 执行，ir_gen 不产出
+    "BOUNDS_CHECK",
+    // 异常族（throw/try）：有解码 + 执行，ir_gen 不产出
+    "THROW",
+    "TRY_BEGIN",
+    "TRY_END",
+    // 弱引用：有解码 + 执行
+    "WEAK_NEW",
+    "WEAK_UPGRADE",
+    // 字符串相等：有解码 + 执行，当前走别处
+    "STRING_EQUAL",
+    // 运行时类型查询：有解码 + 执行
+    "TYPE_OF",
+    // 多路分支：**无解码器**（唯一一个），已在解码哨兵白名单
+    "SWITCH",
+    // 占位 opcode：仅在显示名表出现，非真实指令
+    "LABEL",
+];
 
+/// Helper: 解码器现支持的全部指令种类及其期望 opcode（编码方向）。
+fn opcode_roundtrip_cases() -> Vec<(BytecodeInstr, u8)> {
     // (指令, 期望的 opcode) —— 覆盖解码器现支持的全部指令种类
     let cases: Vec<(BytecodeInstr, u8)> = vec![
         (BytecodeInstr::Nop, opcode::NOP),
@@ -605,8 +674,289 @@ fn test_every_opcode_roundtrips_not_silently_nop() {
         (BytecodeInstr::TryEnd, opcode::TRY_END),
         (BytecodeInstr::Throw { error: Reg(0) }, opcode::THROW),
     ];
+    cases
+}
 
-    for (instr, expected_opcode) in cases {
+// Instruction Size
+
+#[test]
+fn test_nop_size_is_one_byte() {
+    // Arrange
+    let nop = BytecodeInstr::Nop;
+    // Act
+    let size = nop.size();
+    // Assert
+    assert_eq!(
+        size, 1,
+        "Nop instruction should occupy exactly 1 byte (opcode only)"
+    );
+}
+
+#[test]
+fn test_mov_size_is_five_bytes() {
+    // Arrange
+    let mov = BytecodeInstr::Mov {
+        dst: Reg(0),
+        src: Reg(1),
+    };
+    // Act
+    let size = mov.size();
+    // Assert
+    assert_eq!(
+        size, 5,
+        "Mov instruction should occupy 5 bytes: opcode(1) + dst(2) + src(2)"
+    );
+}
+
+// Display Formatting
+
+#[test]
+fn test_reg_display_format() {
+    // Arrange / Act / Assert
+    assert_eq!(
+        format!("{}", Reg(0)),
+        "r0",
+        "Reg(0) should display as \"r0\""
+    );
+    assert_eq!(
+        format!("{}", Reg(15)),
+        "r15",
+        "Reg(15) should display as \"r15\""
+    );
+}
+
+#[test]
+fn test_label_display_format() {
+    // Arrange / Act / Assert
+    assert_eq!(
+        format!("{}", Label(0)),
+        "L0",
+        "Label(0) should display as \"L0\""
+    );
+    assert_eq!(
+        format!("{}", Label(10)),
+        "L10",
+        "Label(10) should display as \"L10\""
+    );
+}
+
+// Borrow/Release Opcode Mapping
+
+#[test]
+fn test_borrow_immutable_opcode_is_borrow() {
+    // Arrange
+    let instr = BytecodeInstr::Borrow {
+        dst: Reg(1),
+        src: Reg(2),
+        mutable: false,
+    };
+    // Act
+    let opcode = instr.opcode();
+    // Assert
+    assert_eq!(
+        opcode,
+        opcode::BORROW,
+        "Immutable Borrow should map to opcode::BORROW"
+    );
+}
+
+#[test]
+fn test_borrow_mutable_opcode_is_borrow() {
+    // Arrange
+    let instr = BytecodeInstr::Borrow {
+        dst: Reg(1),
+        src: Reg(2),
+        mutable: true,
+    };
+    // Act
+    let opcode = instr.opcode();
+    // Assert
+    assert_eq!(
+        opcode,
+        opcode::BORROW,
+        "Mutable Borrow should map to opcode::BORROW"
+    );
+}
+
+#[test]
+fn test_borrow_size_is_six_bytes() {
+    // Arrange
+    let instr = BytecodeInstr::Borrow {
+        dst: Reg(1),
+        src: Reg(2),
+        mutable: true,
+    };
+    // Act
+    let size = instr.size();
+    // Assert: opcode(1) + dst(2) + src(2) + mutable(1) = 6
+    assert_eq!(
+        size, 6,
+        "Borrow instruction should occupy 6 bytes: opcode(1)+dst(2)+src(2)+mutable(1)"
+    );
+}
+
+#[test]
+fn test_release_opcode_is_release() {
+    // Arrange
+    let instr = BytecodeInstr::Release { src: Reg(3) };
+    // Act
+    let opcode = instr.opcode();
+    // Assert
+    assert_eq!(
+        opcode,
+        opcode::RELEASE,
+        "Release should map to opcode::RELEASE"
+    );
+}
+
+#[test]
+fn test_release_size_is_three_bytes() {
+    // Arrange
+    let instr = BytecodeInstr::Release { src: Reg(3) };
+    // Act
+    let size = instr.size();
+    // Assert: opcode(1) + src(2) = 3
+    assert_eq!(
+        size, 3,
+        "Release instruction should occupy 3 bytes: opcode(1)+src(2)"
+    );
+}
+
+// Borrow/Release Round-trip Tests
+
+#[test]
+fn test_borrow_roundtrip_immutable() {
+    // Arrange: encode Borrow dst=1, src=2, mutable=false
+    let encoded = BytecodeInstruction::new(
+        opcode::BORROW,
+        vec![1, 0, 2, 0, 0], // dst=1 LE, src=2 LE, mutable=false
+    );
+    // Act
+    let module = build_and_decode(vec![encoded]);
+    let instrs = &module.functions[0].instructions;
+    // Assert
+    assert_eq!(
+        module.functions.len(),
+        1,
+        "Module should contain exactly 1 function"
+    );
+    assert_eq!(
+        instrs.len(),
+        1,
+        "Function should contain exactly 1 instruction"
+    );
+    assert_borrow_instr(&instrs[0], Reg(1), Reg(2), false);
+}
+
+#[test]
+fn test_borrow_roundtrip_mutable() {
+    // Arrange: encode Borrow dst=1, src=2, mutable=true
+    let encoded = BytecodeInstruction::new(
+        opcode::BORROW,
+        vec![1, 0, 2, 0, 1], // dst=1 LE, src=2 LE, mutable=true
+    );
+    // Act
+    let module = build_and_decode(vec![encoded]);
+    let instrs = &module.functions[0].instructions;
+    // Assert
+    assert_eq!(
+        instrs.len(),
+        1,
+        "Function should contain exactly 1 instruction"
+    );
+    assert_borrow_instr(&instrs[0], Reg(1), Reg(2), true);
+}
+
+#[test]
+fn test_release_roundtrip() {
+    // Arrange: encode Release src=3
+    let encoded = BytecodeInstruction::new(
+        opcode::RELEASE,
+        vec![3, 0], // src=3 LE
+    );
+    // Act
+    let module = build_and_decode(vec![encoded]);
+    let instrs = &module.functions[0].instructions;
+    // Assert
+    assert_eq!(
+        instrs.len(),
+        1,
+        "Function should contain exactly 1 instruction"
+    );
+    assert_release_instr(&instrs[0], Reg(3));
+}
+
+#[test]
+fn test_borrow_release_combined_roundtrip() {
+    // Arrange: Borrow(dst=5, src=10, mutable=true) followed by Release(src=5)
+    let borrow_instr = BytecodeInstruction::new(
+        opcode::BORROW,
+        vec![5, 0, 10, 0, 1], // dst=5, src=10, mutable=true
+    );
+    let release_instr = BytecodeInstruction::new(
+        opcode::RELEASE,
+        vec![5, 0], // src=5
+    );
+    // Act
+    let module = build_and_decode(vec![borrow_instr, release_instr]);
+    let instrs = &module.functions[0].instructions;
+    // Assert
+    assert_eq!(
+        instrs.len(),
+        2,
+        "Function should contain exactly 2 instructions"
+    );
+    assert_borrow_instr(&instrs[0], Reg(5), Reg(10), true);
+    assert_release_instr(&instrs[1], Reg(5));
+}
+
+// MonoType::Ref -> IrType Conversion
+
+#[test]
+fn test_ref_type_maps_to_void_ir_type() {
+    // Arrange
+    let ref_ty = MonoType::Ref {
+        mutable: false,
+        inner: Box::new(MonoType::Int(64)),
+    };
+    // Act
+    let ir_type: IrType = ref_ty.into();
+    // Assert: Ref is ZST, should map to Void
+    assert!(
+        matches!(ir_type, IrType::Void),
+        "Immutable Ref<i64> should map to IrType::Void (ZST has no runtime repr)"
+    );
+}
+
+#[test]
+fn test_ref_type_mutable_maps_to_void_ir_type() {
+    // Arrange
+    let ref_ty = MonoType::Ref {
+        mutable: true,
+        inner: Box::new(MonoType::make_string()),
+    };
+    // Act
+    let ir_type: IrType = ref_ty.into();
+    // Assert: Ref is ZST regardless of mutability
+    assert!(
+        matches!(ir_type, IrType::Void),
+        "Mutable Ref<String> should map to IrType::Void (ZST has no runtime repr)"
+    );
+}
+
+// ── 编解码漂移护栏 ────────────────────────────────────────────
+
+/// 断言「编码器能产出的每个 opcode，解码器都有对应分支」。
+///
+/// 背景：解码器曾只覆盖 57/83 个 opcode，其余落到静默兜底变 `Nop`——
+/// `RC_NEW`(0x89) 即因此让弱引用功能静默失效。该兜底现已改为 panic，
+/// 本测试把「漂移」提前到编译/测试期暴露，而非运行到某个用例才炸。
+///
+/// 做法：遍历 `BytecodeInstr::opcode()` 的映射（编码方向），对每个 opcode
+/// 构造一条最小指令再解码，断言解出的**指令种类与编码前一致**（不是 Nop）。
+#[test]
+fn test_every_opcode_roundtrips_not_silently_nop() {
+    for (instr, expected_opcode) in opcode_roundtrip_cases() {
         // Arrange: 按 operand_len 表填充合法长度的操作数
         let opcode_val = instr.opcode();
         assert_eq!(
@@ -657,102 +1007,16 @@ fn test_every_opcode_roundtrips_not_silently_nop() {
 /// **不可**作为字节布局依据——曾据此实现导致全部字段错位。
 #[test]
 fn test_decode_places_fields_in_correct_positions() {
-    use crate::backends::common::opcode;
-    use crate::middle::bytecode::{BytecodeInstr, Reg};
-
-    // 辅助：按字节向量解码出单条指令
-    fn decode_one(
-        op: u8,
-        operands: Vec<u8>,
-    ) -> BytecodeInstr {
-        let module = build_and_decode(vec![BytecodeInstruction::new(op, operands)]);
-        module.functions[0].instructions[0].clone()
-    }
-
-    // RcNew: dst(1) + src(1)——两值不同，dst/src 写反即被抓
-    match decode_one(opcode::RC_NEW, vec![0x11, 0x22]) {
-        BytecodeInstr::RcNew { dst, src } => {
-            assert_eq!(dst, Reg(0x11), "RcNew.dst 位置错误（可能 dst/src 写反）");
-            assert_eq!(src, Reg(0x22), "RcNew.src 位置错误");
-        }
-        other => panic!("应为 RcNew，实际 {other:?}"),
-    }
-
-    // ArcDrop: 单字段 src（1 字节）
-    match decode_one(opcode::ARC_DROP, vec![0xCD]) {
-        BytecodeInstr::ArcDrop { src } => {
-            assert_eq!(src, Reg(0xCD), "ArcDrop.src 位置错误")
-        }
-        other => panic!("应为 ArcDrop，实际 {other:?}"),
-    }
-
-    // ArcNew: dst(1) + src(1)
-    match decode_one(opcode::ARC_NEW, vec![0x05, 0x06]) {
-        BytecodeInstr::ArcNew { dst, src } => {
-            assert_eq!(dst, Reg(5), "ArcNew.dst 位置错误");
-            assert_eq!(src, Reg(6), "ArcNew.src 位置错误");
-        }
-        other => panic!("应为 ArcNew，实际 {other:?}"),
-    }
-
-    // WeakUpgrade: dst(1) + src(1)
-    match decode_one(opcode::WEAK_UPGRADE, vec![0x07, 0x08]) {
-        BytecodeInstr::WeakUpgrade { dst, src } => {
-            assert_eq!(dst, Reg(7), "WeakUpgrade.dst 位置错误");
-            assert_eq!(src, Reg(8), "WeakUpgrade.src 位置错误");
-        }
-        other => panic!("应为 WeakUpgrade，实际 {other:?}"),
-    }
-
-    // Drop: value(1)
-    match decode_one(opcode::DROP, vec![0x0A]) {
-        BytecodeInstr::Drop { value } => {
-            assert_eq!(value, Reg(10), "Drop.value 位置错误")
-        }
-        other => panic!("应为 Drop，实际 {other:?}"),
-    }
-
-    // Cast: dst(1) + src(1) + target_type_id(2, 小端)
-    match decode_one(opcode::CAST, vec![0x01, 0x02, 0x34, 0x12]) {
-        BytecodeInstr::Cast {
-            dst,
-            src,
-            target_type_id,
-        } => {
-            assert_eq!(dst, Reg(1), "Cast.dst 位置错误");
-            assert_eq!(src, Reg(2), "Cast.src 位置错误");
-            assert_eq!(target_type_id, 0x1234, "Cast.target_type_id 位置错误");
-        }
-        other => panic!("应为 Cast，实际 {other:?}"),
-    }
-
-    // HeapAlloc: dst(1) + type_id(2, 小端)
-    match decode_one(opcode::HEAP_ALLOC, vec![0x03, 0x78, 0x56]) {
-        BytecodeInstr::HeapAlloc { dst, type_id } => {
-            assert_eq!(dst, Reg(3), "HeapAlloc.dst 位置错误");
-            assert_eq!(type_id, 0x5678, "HeapAlloc.type_id 位置错误");
-        }
-        other => panic!("应为 HeapAlloc，实际 {other:?}"),
-    }
-
-    // BoundsCheck: array(1) + index(1)
-    match decode_one(opcode::BOUNDS_CHECK, vec![0x07, 0x09]) {
-        BytecodeInstr::BoundsCheck { array, index } => {
-            assert_eq!(array, Reg(7), "BoundsCheck.array 位置错误");
-            assert_eq!(index, Reg(9), "BoundsCheck.index 位置错误");
-        }
-        other => panic!("应为 BoundsCheck，实际 {other:?}"),
-    }
-
-    // StringConcat: dst(1) + str1(1) + str2(1)
-    match decode_one(opcode::STRING_CONCAT, vec![0x01, 0x02, 0x03]) {
-        BytecodeInstr::StringConcat { dst, str1, str2 } => {
-            assert_eq!(dst, Reg(1), "StringConcat.dst 位置错误");
-            assert_eq!(str1, Reg(2), "StringConcat.str1 位置错误");
-            assert_eq!(str2, Reg(3), "StringConcat.str2 位置错误");
-        }
-        other => panic!("应为 StringConcat，实际 {other:?}"),
-    }
+    // Arrange / Act / Assert：各指令的「解码 + 字段位置断言」见辅助函数
+    assert_rc_new_field_positions();
+    assert_arc_drop_field_position();
+    assert_arc_new_field_positions();
+    assert_weak_upgrade_field_positions();
+    assert_drop_field_position();
+    assert_cast_field_positions();
+    assert_heap_alloc_field_positions();
+    assert_bounds_check_field_positions();
+    assert_string_concat_field_positions();
 }
 
 /// 解码覆盖面哨兵：`opcode.rs` 定义的每个 opcode 都应有解码分支。
@@ -767,43 +1031,22 @@ fn test_decode_places_fields_in_correct_positions() {
 /// 白名单外的任何遗漏都会让本测试失败。
 #[test]
 fn test_all_opcodes_have_decode_branch() {
-    // 从源码读取 opcode.rs 的定义与 bytecode.rs 的解码分支，
-    // 断言前者是后者的子集（白名单除外）。
+    // Arrange: 从源码读取 opcode 定义与 bytecode.rs 的解码分支
     let opcode_src = include_str!("../../../backends/common/opcode.rs");
     let decoder_src = include_str!("../bytecode.rs");
-
-    let defined: std::collections::BTreeSet<String> = opcode_src
-        .lines()
-        .filter_map(|l| l.trim().strip_prefix("pub const "))
-        .filter_map(|rest| rest.split_once(':'))
-        .map(|(name, _)| name.trim().to_string())
-        .collect();
-
-    let decoded: std::collections::BTreeSet<String> = decoder_src
-        .match_indices("opcode::")
-        .filter_map(|(i, _)| {
-            let rest = &decoder_src[i + "opcode::".len()..];
-            let name: String = rest
-                .chars()
-                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                .collect();
-            // 只认「匹配臂」：后随 ` =>`
-            if rest[name.len()..].trim_start().starts_with("=>") {
-                Some(name)
-            } else {
-                None
-            }
-        })
-        .collect();
+    let defined = defined_opcode_names(opcode_src);
+    let decoded = decoder_match_arm_opcodes(decoder_src);
 
     // 已知死路径：无编码器亦无 IR 产出
     const WHITELIST: &[&str] = &["SWITCH"];
 
+    // Act: 断言前者是后者的子集（白名单除外）。
     let missing: Vec<&String> = defined
         .iter()
         .filter(|op| !decoded.contains(*op) && !WHITELIST.contains(&op.as_str()))
         .collect();
 
+    // Assert
     assert!(
         missing.is_empty(),
         "以下 opcode 已定义但无解码分支（会落到 panic 兜底，应在 bytecode.rs 补分支或加入白名单）：{missing:?}\n\
@@ -837,96 +1080,11 @@ fn test_all_opcodes_have_decode_branch() {
 /// 「解码器与编码器约定不一致」，也能捕获字段位置错乱。
 #[test]
 fn test_untested_decode_layouts_roundtrip() {
-    use crate::backends::common::opcode;
-    use crate::middle::bytecode::BytecodeInstr;
-
-    // 辅助：以小端序拼出操作数
-    fn u16le(v: u16) -> [u8; 2] {
-        v.to_le_bytes()
-    }
-    fn u32le(v: u32) -> [u8; 4] {
-        v.to_le_bytes()
-    }
-
-    // ── NewDict: dst(2) + pair_count(4) + keys(2*count) + values(2*count) ──
-    // dst=3, 1 对: key=5, val=7
-    let mut ops = Vec::new();
-    ops.extend_from_slice(&u16le(3));
-    ops.extend_from_slice(&u32le(1));
-    ops.extend_from_slice(&u16le(5));
-    ops.extend_from_slice(&u16le(7));
-    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::NEW_DICT, ops)]);
-    match &m.functions[0].instructions[0] {
-        BytecodeInstr::NewDict { dst, keys, values } => {
-            assert_eq!(dst.0, 3, "NewDict.dst 位置错误");
-            assert_eq!(keys.len(), 1, "NewDict.keys 数量错误");
-            assert_eq!(values.len(), 1, "NewDict.values 数量错误");
-            assert_eq!(keys[0].0, 5, "NewDict.keys[0] 位置错误");
-            assert_eq!(values[0].0, 7, "NewDict.values[0] 位置错误");
-        }
-        other => panic!("NewDict 解码为 {other:?}（疑静默 Nop 或字段错位）"),
-    }
-
-    // ── NewTuple: dst(2) + item_count(4) + items(2*count) ──
-    let mut ops = Vec::new();
-    ops.extend_from_slice(&u16le(4));
-    ops.extend_from_slice(&u32le(2));
-    ops.extend_from_slice(&u16le(9));
-    ops.extend_from_slice(&u16le(11));
-    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::NEW_TUPLE, ops)]);
-    match &m.functions[0].instructions[0] {
-        BytecodeInstr::NewTuple { dst, items } => {
-            assert_eq!(dst.0, 4, "NewTuple.dst 位置错误");
-            assert_eq!(items.len(), 2, "NewTuple.items 数量错误");
-            assert_eq!(items[0].0, 9, "NewTuple.items[0] 位置错误");
-            assert_eq!(items[1].0, 11, "NewTuple.items[1] 位置错误");
-        }
-        other => panic!("NewTuple 解码为 {other:?}"),
-    }
-
-    // ── NewRange: dst(2) + start(2) + end(2) + step(2) ──
-    let mut ops = Vec::new();
-    for r in [6u16, 8, 10, 12] {
-        ops.extend_from_slice(&u16le(r));
-    }
-    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::NEW_RANGE, ops)]);
-    match &m.functions[0].instructions[0] {
-        BytecodeInstr::NewRange {
-            dst,
-            start,
-            end,
-            step,
-        } => {
-            assert_eq!(dst.0, 6, "NewRange.dst 位置错误");
-            assert_eq!(start.0, 8, "NewRange.start 位置错误");
-            assert_eq!(end.0, 10, "NewRange.end 位置错误");
-            assert_eq!(step.0, 12, "NewRange.step 位置错误");
-        }
-        other => panic!("NewRange 解码为 {other:?}"),
-    }
-
-    // ── CreateVariant: dst(2) + group_idx(2) + variant(4) + payload(2) ──
-    // 注意 group_idx 是 **2 字节**（编码器 `as u16`），variant 才是 4 字节
-    let mut ops = Vec::new();
-    ops.extend_from_slice(&u16le(13));
-    ops.extend_from_slice(&u16le(2));
-    ops.extend_from_slice(&u32le(1));
-    ops.extend_from_slice(&u16le(14));
-    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::CREATE_VARIANT, ops)]);
-    match &m.functions[0].instructions[0] {
-        BytecodeInstr::CreateVariant {
-            dst,
-            group_idx,
-            variant,
-            payload,
-        } => {
-            assert_eq!(dst.0, 13, "CreateVariant.dst 位置错误");
-            assert_eq!(*group_idx, 2, "CreateVariant.group_idx 位置错误");
-            assert_eq!(*variant, 1, "CreateVariant.variant 位置错误");
-            assert_eq!(payload.0, 14, "CreateVariant.payload 位置错误");
-        }
-        other => panic!("CreateVariant 解码为 {other:?}"),
-    }
+    // Arrange / Act / Assert：4 组布局各自「手工写字节 -> 解码 -> 逐字段断言」
+    assert_new_dict_roundtrip_fields();
+    assert_new_tuple_roundtrip_fields();
+    assert_new_range_roundtrip_fields();
+    assert_create_variant_roundtrip_fields();
 }
 
 /// 其余 3 种未被覆盖的解码布局补测（2026-09-19）。
@@ -934,60 +1092,10 @@ fn test_untested_decode_layouts_roundtrip() {
 /// 覆盖 `[0,1,5]`（`CREATE_STRUCT` / `MAKE_CLOSURE`）与 `[0,1,3]`（`SET_FIELD`）。
 #[test]
 fn test_remaining_untested_layouts_roundtrip() {
-    use crate::backends::common::opcode;
-    use crate::middle::bytecode::BytecodeInstr;
-
-    // ── CreateStruct: dst(1) + type_name_idx(4) + field_count(1) + fields(2*count) ──
-    // 注意 dst 是 **1 字节**，type_name_idx 是 4 字节，field_count 是 1 字节
-    let mut ops = vec![4u8];
-    ops.extend_from_slice(&0u32.to_le_bytes()); // type_name_idx（常量池 0，空池→回退名）
-    ops.push(2u8); // field_count
-    ops.extend_from_slice(&21u16.to_le_bytes());
-    ops.extend_from_slice(&22u16.to_le_bytes());
-    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::CREATE_STRUCT, ops)]);
-    match &m.functions[0].instructions[0] {
-        BytecodeInstr::CreateStruct { dst, fields, .. } => {
-            assert_eq!(dst.0, 4, "CreateStruct.dst 位置错误");
-            assert_eq!(fields.len(), 2, "CreateStruct.fields 数量错误");
-            assert_eq!(fields[0].0, 21, "CreateStruct.fields[0] 位置错误");
-            assert_eq!(fields[1].0, 22, "CreateStruct.fields[1] 位置错误");
-        }
-        other => panic!("CreateStruct 解码为 {other:?}"),
-    }
-
-    // ── MakeClosure: dst(1) + func_id(4) + env_count(1) + env(2*count) ──
-    let mut ops = vec![5u8];
-    ops.extend_from_slice(&9u32.to_le_bytes()); // func_id
-    ops.push(1u8); // env_count
-    ops.extend_from_slice(&31u16.to_le_bytes());
-    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::MAKE_CLOSURE, ops)]);
-    match &m.functions[0].instructions[0] {
-        BytecodeInstr::MakeClosure { dst, func, env } => {
-            assert_eq!(dst.0, 5, "MakeClosure.dst 位置错误");
-            assert_eq!(*func, 9, "MakeClosure.func 位置错误");
-            assert_eq!(env.len(), 1, "MakeClosure.env 数量错误");
-            assert_eq!(env[0].0, 31, "MakeClosure.env[0] 位置错误");
-        }
-        other => panic!("MakeClosure 解码为 {other:?}"),
-    }
-
-    // ── SetField: src(1) + field_idx(2 LE) + value(1) ──
-    // 与 GET_FIELD 同构（dst(1) + src(1) + field(2 LE)）；**不是**全 u16。
-    // 编码器 translate_store_field 的写法即此（低字节在前）。
-    let ops = vec![41u8, 7u8, 0u8, 42u8]; // src=41, field_idx=7 (LE), value=42
-    let m = build_and_decode(vec![BytecodeInstruction::new(opcode::SET_FIELD, ops)]);
-    match &m.functions[0].instructions[0] {
-        BytecodeInstr::SetField {
-            src,
-            field_idx,
-            value,
-        } => {
-            assert_eq!(src.0, 41, "SetField.src 位置错误");
-            assert_eq!(*field_idx, 7, "SetField.field_idx 位置错误");
-            assert_eq!(value.0, 42, "SetField.value 位置错误");
-        }
-        other => panic!("SetField 解码为 {other:?}"),
-    }
+    // Arrange / Act / Assert：3 组布局各自「手工写字节 -> 解码 -> 逐字段断言」
+    assert_create_struct_roundtrip_fields();
+    assert_make_closure_roundtrip_fields();
+    assert_set_field_roundtrip_fields();
 }
 
 /// `CallStatic` 往返（布局 `[0,1,5,6]` 的唯一成员，故单独测）。
@@ -1074,13 +1182,7 @@ fn test_opcodes_without_encoder_are_documented() {
     // Arrange: 读取 opcode 定义与编码器源码
     let opcode_src = include_str!("../../../backends/common/opcode.rs");
     let translator_src = include_str!("../../passes/codegen/translator.rs");
-
-    let defined: std::collections::BTreeSet<String> = opcode_src
-        .lines()
-        .filter_map(|l| l.trim().strip_prefix("pub const "))
-        .filter_map(|rest| rest.split_once(':'))
-        .map(|(name, _)| name.trim().to_string())
-        .collect();
+    let defined = defined_opcode_names(opcode_src);
 
     // Act: 找出 translator.rs 中未出现的 opcode
     let unencoded: std::collections::BTreeSet<String> = defined
@@ -1089,31 +1191,7 @@ fn test_opcodes_without_encoder_are_documented() {
         .cloned()
         .collect();
 
-    // Assert: 与下方快照完全一致。
-    // 每个条目都经核查确认「解码/执行已实现、前端未接通」，详见 plan 文档 D8。
-    const EXPECTED_UNENCODED: &[&str] = &[
-        // 借用令牌（RFC-009 v9）：解码器 + 执行器 + 往返测试齐备
-        "BORROW",
-        "RELEASE",
-        // 越界检查：有解码 + 执行，ir_gen 不产出
-        "BOUNDS_CHECK",
-        // 异常族（throw/try）：有解码 + 执行，ir_gen 不产出
-        "THROW",
-        "TRY_BEGIN",
-        "TRY_END",
-        // 弱引用：有解码 + 执行
-        "WEAK_NEW",
-        "WEAK_UPGRADE",
-        // 字符串相等：有解码 + 执行，当前走别处
-        "STRING_EQUAL",
-        // 运行时类型查询：有解码 + 执行
-        "TYPE_OF",
-        // 多路分支：**无解码器**（唯一一个），已在解码哨兵白名单
-        "SWITCH",
-        // 占位 opcode：仅在显示名表出现，非真实指令
-        "LABEL",
-    ];
-
+    // Assert: 与 EXPECTED_UNENCODED 快照完全一致
     let expected: std::collections::BTreeSet<String> =
         EXPECTED_UNENCODED.iter().map(|s| s.to_string()).collect();
 

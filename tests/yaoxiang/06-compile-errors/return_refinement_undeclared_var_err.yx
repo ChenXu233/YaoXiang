@@ -1,0 +1,18 @@
+// 06-compile-errors/return_refinement_undeclared_var_err.yx
+// 覆盖: RFC-027 §3 —— 返回位精化里未声明的自由变量必须报未定义标识符
+// 验证: `-> (r: Eq2(m, r))` 声明的返回形式参数只有 `r`；`m` 既不在签名里、
+//       也不在作用域里 ⇒ E1001，不得被静默当成返回值形参代入 `return` 的值。
+// 状态: ❌ 应被编译期拒绝
+//
+// 修复前的静默漏洞：`m` 与 `r` 都被当成返回值形参代入 7，约束退化成 `7 == 7`
+// 恒真而通过（见 src/frontend/core/typecheck/tests/rfc027_return_refinement.rs）。
+
+// expect: compile-error E1001
+
+Eq2: (a: Int, b: Int) -> Type = { a == b }
+
+bad: () -> (r: Eq2(m, r)) = {
+    return 7
+}
+
+main: () -> Void = {}

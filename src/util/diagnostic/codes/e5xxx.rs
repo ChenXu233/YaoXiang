@@ -17,4 +17,6 @@ define_codes!(E5XXX, {
     ("E5006", Module, false, duplicate_import(name: &str) => .param("name", name)),
     // E5007 模块导出提示（用于辅助错误消息）
     ("E5007", Module, false, module_exports_hint(module: &str, available: &str) => .param("module", module) .param("available", available)),
+    // E5008 导入名与现有绑定冲突（#414，RFC-029 §导入冲突）
+    ("E5008", Module, false, import_name_conflict(name: &str, module: &str) => .param("name", name) .param("module", module)),
 });

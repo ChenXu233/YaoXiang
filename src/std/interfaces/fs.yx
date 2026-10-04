@@ -1,0 +1,91 @@
+// fs.yx - 标准库 std.fs 模块接口
+// 仅供 LSP 跳转和类型查看，不参与实际执行
+
+read_file: (path: &String) -> String = {
+    ...
+}
+
+write_file: (path: &String, content: &String) -> Bool = {
+    ...
+}
+
+append_file: (path: &String, content: &String) -> Bool = {
+    ...
+}
+
+exists: (path: &String) -> Bool = {
+    ...
+}
+
+is_file: (path: &String) -> Bool = {
+    ...
+}
+
+is_dir: (path: &String) -> Bool = {
+    ...
+}
+
+mkdir: (path: &String) -> Bool = {
+    ...
+}
+
+mkdir_all: (path: &String) -> Bool = {
+    ...
+}
+
+rmdir: (path: &String) -> Bool = {
+    ...
+}
+
+remove: (path: &String) -> Bool = {
+    ...
+}
+
+copy: (src: &String, dst: &String) -> Bool = {
+    ...
+}
+
+rename: (src: &String, dst: &String) -> Bool = {
+    ...
+}
+
+read_dir: (path: &String) -> Vec(String) = {
+    ...
+}
+
+walk: (path: &String) -> Vec(String) = {
+    ...
+}
+
+stat: (path: &String) -> Dict(String, Any) = {
+    ...
+}
+
+temp_dir: () -> String = {
+    ...
+}
+
+mkdtemp: (prefix: &String) -> String = {
+    ...
+}
+
+tmpfile: (prefix: &String) -> String = {
+    ...
+}
+
+path_join: (base: &String, rel: &String) -> String = {
+    ...
+}
+
+path_basename: (path: &String) -> String = {
+    ...
+}
+
+path_dirname: (path: &String) -> String = {
+    ...
+}
+
+path_extension: (path: &String) -> String = {
+    ...
+}
+

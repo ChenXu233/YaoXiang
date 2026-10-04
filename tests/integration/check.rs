@@ -2,6 +2,11 @@
 //!
 //! 测试 `check` 子命令对 .yx 文件的类型检查功能。
 //! 覆盖正常文件、错误文件和无文件输入三种场景。
+//!
+//! 规范来源：
+//! - RFC-029f: 编译目标角色语义（声明面入口存在性检查，#388 定案）
+//! - RFC-029 / RFC-015: 模块发现与导入解析（E5001/E5003）
+//! - RFC-014: 包管理系统（vendor 依赖布局）
 
 #![cfg(feature = "cli")]
 
@@ -36,6 +41,7 @@ fn check_file(path: &PathBuf) -> Result<usize, anyhow::Error> {
         false, // json
         false, // use_colors
         true,  // no_progress — 抑制进度输出
+        false, // deny_shadowing
     )
     .map(|(errors, _warnings)| errors)
 }
@@ -205,12 +211,12 @@ fn test_check_std_whole_module_qualified_call_rejected() {
 
 #[test]
 fn test_check_std_call_correct_args_accepted() {
-    // Arrange - 参数类型正确的 write_file 调用
+    // Arrange - 参数类型正确的 write_file 调用（#104 后 write_file 在 std.fs）
     let dir = temp_dir();
     let file = create_yx_file(
         &dir,
         "std_correct.yx",
-        "use std.io.{write_file}\nmain = () => {\n    write_file(\"a.txt\", \"hello\")\n}\n",
+        "use std.fs.{write_file}\nmain = () => {\n    write_file(\"a.txt\", \"hello\")\n}\n",
     );
 
     // Act
@@ -357,6 +363,60 @@ fn test_check_multifile_project_matches_run() {
         "check must agree with run: valid project has 0 errors"
     );
     yaoxiang::run_project(&main).expect("run should succeed on the same project");
+}
+
+/// 值绑定 main 是合法入口（#388 定案）：check 必须与 run 同判 0 错误。
+///
+/// 此前 check_project 不做入口检查，入口语义只活在 run 路径——check 对
+/// 入口问题永远沉默，与「check 与 run 走同一条编译路径」的目标相悖。
+#[test]
+fn test_check_bin_value_main_agrees_with_run() {
+    // Arrange - Bin 项目，入口为无注解块值 main（初始化期求值即执行）
+    let dir = create_project(&[("main.yx", "main = { }\n")]);
+    let main = dir.path().join("main.yx");
+
+    // Act
+    let checked = check_file(&main);
+
+    // Assert - check 0 错误，run 同项目亦成功
+    assert!(
+        checked.is_ok(),
+        "check on value-main project should not fail: {checked:?}"
+    );
+    assert_eq!(
+        checked.unwrap(),
+        0,
+        "value main is a legal entry: check must report 0 errors"
+    );
+    yaoxiang::run_project(&main).expect("run should succeed on the same project");
+}
+
+/// Bin 项目缺 main：check 必须与 run 同报 E3020。
+///
+/// 此前 run 报 E3020 而 check 报 0 错——入口检查只活在 compile_project。
+/// 判据是 manifest 声明面（`[[bin]].path` / `[run].main`，#388），故夹具
+/// 显式声明 bin。
+#[test]
+fn test_check_missing_main_reports_e3020() {
+    // Arrange - 声明面入口文件只有函数定义、无 main
+    let dir = create_project(&[
+        (
+            "yaoxiang.toml",
+            "[package]\nname = \"proj\"\nversion = \"0.1.0\"\n\n[[bin]]\nname = \"app\"\npath = \"main.yx\"\n",
+        ),
+        ("main.yx", "helper: () -> Void = { }\n"),
+    ]);
+    let main = dir.path().join("main.yx");
+
+    // Act
+    let result = check_result(&main);
+
+    // Assert
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E3020".to_string()),
+        "check must agree with run: missing main should report E3020, got {codes:?}"
+    );
 }
 
 #[test]

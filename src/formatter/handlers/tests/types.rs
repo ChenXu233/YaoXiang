@@ -18,6 +18,45 @@ fn default_source_map() -> SourceMap {
     SourceMap::build("")
 }
 
+/// Helper: test_format_type_body_binding_default_and_anonymous 的完整夹具与断言（逐条断言见函数体）。
+/// Fixture: `{ get = array_get }`——DefaultExternal 绑定形态。
+fn default_external_binding_type() -> Type {
+    Type::Struct {
+        body: vec![TypeBodyItem::Binding(TypeBodyBinding {
+            name: "get".to_string(),
+            kind: BindingKind::DefaultExternal {
+                function: "array_get".to_string(),
+            },
+        })],
+    }
+}
+
+/// Fixture: `{ get: ((i: Int) -> T)[0] = ((i: Int) => item) }`——Anonymous 绑定形态。
+fn anonymous_binding_type() -> Type {
+    Type::Struct {
+        body: vec![TypeBodyItem::Binding(TypeBodyBinding {
+            name: "get".to_string(),
+            kind: BindingKind::Anonymous {
+                params: vec![Param {
+                    name: "i".to_string(),
+                    ty: Some(Type::Name {
+                        name: "Int".to_string(),
+                        span: Span::dummy(),
+                    }),
+                    is_mut: false,
+                    span: Span::dummy(),
+                }],
+                return_type: Box::new(Type::Name {
+                    name: "T".to_string(),
+                    span: Span::dummy(),
+                }),
+                positions: vec![0],
+                body: Box::new(Expr::Var("item".to_string(), Span::dummy())),
+            },
+        })],
+    }
+}
+
 #[test]
 fn test_format_type_int() {
     assert_eq!(
@@ -296,38 +335,11 @@ fn test_format_type_body_binding_external() {
 #[test]
 fn test_format_type_body_binding_default_and_anonymous() {
     // 覆盖: formatter 规范 §9 — 类型体绑定 DefaultExternal 与 Anonymous 形态
-    // 验证: DefaultExternal 输出 name = function；Anonymous 输出完整签名与 lambda
-    let default_binding = Type::Struct {
-        body: vec![TypeBodyItem::Binding(TypeBodyBinding {
-            name: "get".to_string(),
-            kind: BindingKind::DefaultExternal {
-                function: "array_get".to_string(),
-            },
-        })],
-    };
-    let anonymous = Type::Struct {
-        body: vec![TypeBodyItem::Binding(TypeBodyBinding {
-            name: "get".to_string(),
-            kind: BindingKind::Anonymous {
-                params: vec![Param {
-                    name: "i".to_string(),
-                    ty: Some(Type::Name {
-                        name: "Int".to_string(),
-                        span: Span::dummy(),
-                    }),
-                    is_mut: false,
-                    span: Span::dummy(),
-                }],
-                return_type: Box::new(Type::Name {
-                    name: "T".to_string(),
-                    span: Span::dummy(),
-                }),
-                positions: vec![0],
-                body: Box::new(Expr::Var("item".to_string(), Span::dummy())),
-            },
-        })],
-    };
+    // Arrange
+    let default_binding = default_external_binding_type();
+    let anonymous = anonymous_binding_type();
 
+    // Act & Assert: DefaultExternal 输出 name = function；Anonymous 输出完整签名与 lambda
     assert_eq!(
         format_type(&default_binding, &default_ctx(), &default_source_map()),
         "{ get = array_get }",

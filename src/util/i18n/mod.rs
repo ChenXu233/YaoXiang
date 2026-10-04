@@ -206,17 +206,15 @@ pub fn t(
     lang: &str,
     args: Option<&[&dyn std::fmt::Display]>,
 ) -> String {
-    // Try the requested language first
-    let translations = TRANSLATIONS
-        .get(lang)
-        .cloned()
-        .or_else(|| TRANSLATIONS.get("zh").cloned()) // Fallback to zh
-        .or_else(|| TRANSLATIONS.get("en").cloned()) // Fallback to en
-        .unwrap_or_default();
-
     let key = id.key();
-    let template = translations
-        .get(key)
+
+    // 请求语言优先；该语言缺此键时按键级回退 zh → en（bot 异步补齐期间的
+    // 过渡，避免用户看到裸键名），最终回落键名本身
+    let template = TRANSLATIONS
+        .get(lang)
+        .and_then(|m| m.get(key))
+        .or_else(|| TRANSLATIONS.get("zh").and_then(|m| m.get(key)))
+        .or_else(|| TRANSLATIONS.get("en").and_then(|m| m.get(key)))
         .cloned()
         .unwrap_or_else(|| key.to_string());
 
@@ -497,6 +495,35 @@ pub enum MSG {
 
     // Package manager - update messages
     PackageUpdateFailed,
+
+    // Package manager - outdated / clean / cache (RFC-014 Phase 3)
+    PackageOutdatedNone,
+    PackageOutdatedFound,
+    PackageOutdatedRow,
+    PackageOutdatedPinned,
+    PackageOutdatedFailed,
+    PackageCleanRemoved,
+    PackageCleanNothing,
+    PackageCacheCleaned,
+    PackageCacheEmpty,
+
+    // Workspace (RFC-014c Phase 6a/6b)
+    WorkspaceListHeader,
+    WorkspaceListMemberRow,
+    WorkspaceMemberAdded,
+    WorkspaceMemberRemoved,
+    WorkspaceMemberReferenced,
+    WorkspaceAutoRegistered,
+
+    // Package manager - publish (RFC-014a Phase 4)
+    PackagePublishPacked,
+    PackagePublishRegistryDeferred,
+    PackagePublishGitHubDone,
+    PackagePublishVersionExists,
+    PackagePublishTagMissing,
+    PackagePublishTokenMissing,
+    PackagePublishRepoUnresolved,
+    PackagePublishTesting,
 }
 
 impl MSG {
@@ -603,6 +630,33 @@ impl MSG {
 
             // Package manager - update messages
             MSG::PackageUpdateFailed => "package_update_failed",
+
+            // Package manager - outdated / clean / cache (RFC-014 Phase 3)
+            MSG::PackageOutdatedNone => "package_outdated_none",
+            MSG::PackageOutdatedFound => "package_outdated_found",
+            MSG::PackageOutdatedRow => "package_outdated_row",
+            MSG::PackageOutdatedPinned => "package_outdated_pinned",
+            MSG::PackageOutdatedFailed => "package_outdated_failed",
+            MSG::PackageCleanRemoved => "package_clean_removed",
+            MSG::PackageCleanNothing => "package_clean_nothing",
+            MSG::PackageCacheCleaned => "package_cache_cleaned",
+            MSG::PackageCacheEmpty => "package_cache_empty",
+
+            // Workspace (RFC-014c Phase 6a)
+            MSG::WorkspaceListHeader => "workspace_list_header",
+            MSG::WorkspaceListMemberRow => "workspace_list_member_row",
+            MSG::WorkspaceMemberAdded => "workspace_member_added",
+            MSG::WorkspaceMemberRemoved => "workspace_member_removed",
+            MSG::WorkspaceMemberReferenced => "workspace_member_referenced",
+            MSG::WorkspaceAutoRegistered => "workspace_auto_registered",
+            MSG::PackagePublishPacked => "package_publish_packed",
+            MSG::PackagePublishRegistryDeferred => "package_publish_registry_deferred",
+            MSG::PackagePublishGitHubDone => "package_publish_github_done",
+            MSG::PackagePublishVersionExists => "package_publish_version_exists",
+            MSG::PackagePublishTagMissing => "package_publish_tag_missing",
+            MSG::PackagePublishTokenMissing => "package_publish_token_missing",
+            MSG::PackagePublishRepoUnresolved => "package_publish_repo_unresolved",
+            MSG::PackagePublishTesting => "package_publish_testing",
 
             _ => "unknown_message",
         }

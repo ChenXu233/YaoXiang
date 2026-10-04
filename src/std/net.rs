@@ -1,8 +1,14 @@
 //! Standard Network library (YaoXiang)
 //!
 //! This module provides network-related functionality for YaoXiang programs.
+//!
+//! HTTP 请求为真实实现（#56）：基于 `ureq`（同步阻塞、rustls TLS），与运行时的
+//! 显式并发模型（RFC-008/024 worker 线程池）自洽——阻塞调用只阻塞当前 worker。
+//! 响应为结构化字典 `{status: Int, headers: Dict<String, String>, body: String}`。
 
-use crate::backends::common::RuntimeValue;
+use std::collections::HashMap;
+
+use crate::backends::common::{RuntimeValue, HeapValue};
 use crate::backends::ExecutorError;
 use crate::std::{NativeContext, NativeExport, StdModule};
 
@@ -19,16 +25,18 @@ impl StdModule for NetModule {
 
     fn exports(&self) -> Vec<NativeExport> {
         vec![
+            #[cfg(not(target_arch = "wasm32"))]
             export!(
                 "http_get",
                 "std.net.http_get",
-                "(url: &String) -> String",
+                "(url: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) -> Dict(String, Any)",
                 native_http_get
             ),
+            #[cfg(not(target_arch = "wasm32"))]
             export!(
                 "http_post",
                 "std.net.http_post",
-                "(url: &String, body: &String) -> String",
+                "(url: &String, body: &String, ?headers: &Dict(String, String), ?timeout_secs: Int) -> Dict(String, Any)",
                 native_http_post
             ),
             export!(
@@ -50,67 +58,257 @@ impl StdModule for NetModule {
 /// Singleton instance for std.net module.
 pub const NET_MODULE: NetModule = NetModule;
 
-// Network Functions
+// HTTP Functions
+
+/// 默认整体请求超时（秒）。未传 `timeout_secs` 时生效。
+#[cfg(not(target_arch = "wasm32"))]
+const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
 /// Native implementation: http_get
-fn native_http_get(
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn native_http_get(
     args: &[RuntimeValue],
-    _ctx: &mut NativeContext<'_>,
+    ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.is_empty() {
         return Err(ExecutorError::runtime_only(
-            "http_get expects 1 argument (url: String)".to_string(),
+            "http_get expects 1..3 arguments (url: String, headers: Dict = {}, timeout_secs: Int = 30)"
+                .to_string(),
         ));
     }
 
-    let url = match &args[0] {
-        RuntimeValue::String(s) => s.to_string(),
-        other => {
-            return Err(ExecutorError::type_only(format!(
-                "http_get expects String argument, got {:?}",
-                other
-            )))
-        }
-    };
+    let url = expect_string(&args[0], "http_get", "url")?;
+    let headers = extract_request_headers(args.get(1), "http_get")?;
+    let timeout_secs = extract_timeout_secs(args.get(2), "http_get")?;
 
-    Ok(RuntimeValue::String(format!("GET: {}", url).into()))
+    let mut request = ureq::get(&url).timeout(std::time::Duration::from_secs(timeout_secs));
+    for (name, value) in &headers {
+        request = request.set(name, value);
+    }
+
+    match request.call() {
+        Ok(resp) => response_to_value(resp, ctx, "http_get", &url),
+        // 4xx/5xx 是合法响应（携带状态码与响应体），不是传输错误
+        Err(ureq::Error::Status(_, resp)) => response_to_value(resp, ctx, "http_get", &url),
+        Err(e) => Err(ExecutorError::runtime_only(format!(
+            "http_get failed for '{}': {}",
+            url, e
+        ))),
+    }
 }
 
 /// Native implementation: http_post
-fn native_http_post(
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn native_http_post(
     args: &[RuntimeValue],
-    _ctx: &mut NativeContext<'_>,
+    ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     if args.len() < 2 {
         return Err(ExecutorError::runtime_only(
-            "http_post expects 2 arguments (url: String, body: String)".to_string(),
+            "http_post expects 2..4 arguments (url: String, body: String, headers: Dict = {}, timeout_secs: Int = 30)"
+                .to_string(),
         ));
     }
 
-    let url = match &args[0] {
-        RuntimeValue::String(s) => s.to_string(),
-        other => {
-            return Err(ExecutorError::type_only(format!(
-                "http_post expects String argument for url, got {:?}",
-                other
-            )))
-        }
-    };
+    let url = expect_string(&args[0], "http_post", "url")?;
+    let body = expect_string(&args[1], "http_post", "body")?;
+    let headers = extract_request_headers(args.get(2), "http_post")?;
+    let timeout_secs = extract_timeout_secs(args.get(3), "http_post")?;
 
-    let body = match &args[1] {
-        RuntimeValue::String(s) => s.to_string(),
-        other => {
-            return Err(ExecutorError::type_only(format!(
-                "http_post expects String argument for body, got {:?}",
-                other
-            )))
-        }
-    };
+    let mut request = ureq::post(&url).timeout(std::time::Duration::from_secs(timeout_secs));
+    for (name, value) in &headers {
+        request = request.set(name, value);
+    }
 
-    Ok(RuntimeValue::String(
-        format!("POST {}: {}", url, body).into(),
-    ))
+    match request.send_string(&body) {
+        Ok(resp) => response_to_value(resp, ctx, "http_post", &url),
+        Err(ureq::Error::Status(_, resp)) => response_to_value(resp, ctx, "http_post", &url),
+        Err(e) => Err(ExecutorError::runtime_only(format!(
+            "http_post failed for '{}': {}",
+            url, e
+        ))),
+    }
 }
+
+/// 把 ureq 响应转成 yx 字典：`{status: Int, headers: Dict, body: String}`。
+///
+/// 响应头键统一小写（HTTP/1.1 语义本就不区分大小写）；同名多值以 ", " 合并。
+#[cfg(not(target_arch = "wasm32"))]
+fn response_to_value(
+    resp: ureq::Response,
+    ctx: &mut NativeContext<'_>,
+    fname: &str,
+    url: &str,
+) -> Result<RuntimeValue, ExecutorError> {
+    let status = RuntimeValue::Int(resp.status() as i64);
+    // 先取头再读体：`into_string` 会消耗 `Response`。
+    let headers = response_headers_to_map(&resp);
+    let body = read_response_body(resp, fname, url)?;
+
+    let mut map: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
+    map.insert(RuntimeValue::String("status".into()), status);
+    map.insert(
+        RuntimeValue::String("headers".into()),
+        RuntimeValue::Dict(ctx.heap.allocate(HeapValue::Dict(headers))),
+    );
+    map.insert(RuntimeValue::String("body".into()), body);
+
+    Ok(RuntimeValue::Dict(ctx.heap.allocate(HeapValue::Dict(map))))
+}
+
+/// 把响应头收集为 `{头名: 值}` 映射：头名按 HTTP/1.1 语义统一小写，同名多值以 `", "` 合并。
+#[cfg(not(target_arch = "wasm32"))]
+fn response_headers_to_map(resp: &ureq::Response) -> HashMap<RuntimeValue, RuntimeValue> {
+    let mut headers: HashMap<RuntimeValue, RuntimeValue> = HashMap::new();
+    for name in resp.headers_names() {
+        let joined = resp.all(&name).join(", ");
+        headers.insert(
+            RuntimeValue::String(name.into()),
+            RuntimeValue::String(joined.into()),
+        );
+    }
+    headers
+}
+
+/// 读取响应体并包成 String 值；失败时报带 `fname`/`url` 上下文的运行时错误。
+#[cfg(not(target_arch = "wasm32"))]
+fn read_response_body(
+    resp: ureq::Response,
+    fname: &str,
+    url: &str,
+) -> Result<RuntimeValue, ExecutorError> {
+    match resp.into_string() {
+        Ok(text) => Ok(RuntimeValue::String(text.into())),
+        Err(e) => Err(ExecutorError::runtime_only(format!(
+            "{}: failed reading response body of '{}': {}",
+            fname, url, e
+        ))),
+    }
+}
+
+/// 提取可选的请求头字典（Dict<String, String>）。
+/// 缺省位置（None）与显式 Void 都视为空；其他非字典类型报类型错误。
+#[cfg(not(target_arch = "wasm32"))]
+fn extract_request_headers(
+    arg: Option<&RuntimeValue>,
+    fname: &str,
+) -> Result<Vec<(String, String)>, ExecutorError> {
+    let Some(value) = arg else {
+        return Ok(Vec::new());
+    };
+    if matches!(value, RuntimeValue::Void) {
+        return Ok(Vec::new());
+    }
+    headers_from_dict(value, fname)
+}
+
+/// 请求头名的取值：非 String 报类型错误（错误措辞含 `fname`）。
+#[cfg(not(target_arch = "wasm32"))]
+fn header_name(
+    key: &RuntimeValue,
+    fname: &str,
+) -> Result<String, ExecutorError> {
+    match key {
+        RuntimeValue::String(s) => Ok(s.to_string()),
+        other => Err(ExecutorError::type_only(format!(
+            "{} expects header names as String, got {:?}",
+            fname,
+            other.value_type(None)
+        ))),
+    }
+}
+
+/// 请求头值的取值：非 String 报类型错误（错误措辞含 `fname`）。
+#[cfg(not(target_arch = "wasm32"))]
+fn header_value(
+    val: &RuntimeValue,
+    fname: &str,
+) -> Result<String, ExecutorError> {
+    match val {
+        RuntimeValue::String(s) => Ok(s.to_string()),
+        other => Err(ExecutorError::type_only(format!(
+            "{} expects header values as String, got {:?}",
+            fname,
+            other.value_type(None)
+        ))),
+    }
+}
+
+/// 把 headers 字典展开为 `(名, 值)` 列表；任一项非 String 报类型错误，
+/// 句柄悬垂报内部运行时错误。
+#[cfg(not(target_arch = "wasm32"))]
+fn headers_from_dict(
+    value: &RuntimeValue,
+    fname: &str,
+) -> Result<Vec<(String, String)>, ExecutorError> {
+    let RuntimeValue::Dict(handle) = value else {
+        return Err(ExecutorError::type_only(format!(
+            "{} expects headers as Dict<String, String>, got {:?}",
+            fname,
+            value.value_type(None)
+        )));
+    };
+
+    let guard = handle.lock();
+    let map = match &*guard {
+        HeapValue::Dict(map) => map,
+        _ => {
+            return Err(ExecutorError::runtime_only(format!(
+                "internal: dangling dict handle in {}.headers",
+                fname
+            )))
+        }
+    };
+
+    let mut out = Vec::with_capacity(map.len());
+    for (key, val) in map {
+        out.push((header_name(key, fname)?, header_value(val, fname)?));
+    }
+    Ok(out)
+}
+
+/// 提取可选的整秒超时；缺省/显式 Void 用默认值，非正数报运行时错误。
+#[cfg(not(target_arch = "wasm32"))]
+fn extract_timeout_secs(
+    arg: Option<&RuntimeValue>,
+    fname: &str,
+) -> Result<u64, ExecutorError> {
+    let Some(value) = arg else {
+        return Ok(DEFAULT_TIMEOUT_SECS);
+    };
+    match value {
+        RuntimeValue::Void => Ok(DEFAULT_TIMEOUT_SECS),
+        RuntimeValue::Int(secs) if *secs > 0 => Ok(*secs as u64),
+        RuntimeValue::Int(secs) => Err(ExecutorError::runtime_only(format!(
+            "{} expects timeout_secs > 0, got {}",
+            fname, secs
+        ))),
+        other => Err(ExecutorError::type_only(format!(
+            "{} expects timeout_secs as Int, got {:?}",
+            fname,
+            other.value_type(None)
+        ))),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn expect_string(
+    value: &RuntimeValue,
+    fname: &str,
+    param: &str,
+) -> Result<String, ExecutorError> {
+    match value {
+        RuntimeValue::String(s) => Ok(s.to_string()),
+        other => Err(ExecutorError::type_only(format!(
+            "{} expects {} as String, got {:?}",
+            fname,
+            param,
+            other.value_type(None)
+        ))),
+    }
+}
+
+// URL Functions
 
 /// Native implementation: url_encode
 fn native_url_encode(

@@ -66,7 +66,8 @@ while index < 5 {
     index = index + 1
 }
 
-print("找到了吗？" + found.to_string())  // "找到了吗？true"
+// Bool 不能隐式转 String——用 f-string 插值
+print(f"找到了吗？{found}")  // "找到了吗？true"
 ```
 
 `break` 让程序立刻跳出当前循环，继续执行循环后面的代码。
@@ -112,6 +113,7 @@ while x <= 5 {
 
 `while` 一个经典场景是处理不确定长度的输入——你不知道用户会输入多少次，只知道"输入为空时停止"：
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // 伪代码示例——展示 while 的典型用法
 // read_line 在读到空行时返回空字符串

@@ -40,7 +40,19 @@ new: (T: Type)(arc: Arc(T)) -> Weak(T)
 
 - `arc` —— 强引用值；按值传入，调用后即被**移动**
 
-返回：指向同一分配块的 `Weak` 句柄，**不增加**强引用计数。
+返回：弱引用句柄。
+
+> **已知缺口**：`weak.new` 目前的实现是
+> `RuntimeValue::Weak(Arc::downgrade(&Arc::new(arc.clone())))`
+> （`src/std/weak.rs:33-39`）——它先把实参 `Arc` 的**值**克隆进一个**新建**的
+> `Arc`，再对这个临时 `Arc` 取 `downgrade`。因此：
+>
+> 1. 弱引用**不指向**原 `Arc` 的那块分配，而是指向一块全新的、内容相同的新分配；
+> 2. 临时 `Arc` 在函数返回时即析构，强引用计数归零 → 实测
+>    `weak.upgrade(weak.new(p))` 恒为 `Option.none()`，立即失效。
+>
+> 换言之，「不增加强引用计数」成立，「可升级回原值」当前**不成立**。需要跨作用域
+> 共享时用 [`ref`](../language-spec/concurrency.md) 表达，不要依赖 `Weak` 的回升级。
 
 ```yaoxiang
 use std.assert
@@ -70,31 +82,39 @@ upgrade: (T: Type)(weak: Weak(T)) -> Option(Arc(T))
 
 - `weak` —— 弱引用句柄
 
-返回：分配块仍存活时为 `Option.some(Arc)`，已释放时为 `Option.none()`。 **不报错**——用 `Option`
+返回：分配块仍存活时为 `Option.some(Arc)`，已释放时为 `Option.none()`。**不报错**——用 `Option`
 表达“目标是否还在”。
 
+> 按当前 `weak.new` 的实现（见上节「已知缺口」），刚建好的弱引用**总是**返回
+> `none()`。下面的示例演示解构写法，实际走的是 `none` 分支。
+
 ```yaoxiang
-use std.assert
 use std.weak
+use std.option
 
 main: () -> Void = {
     p = ref 42
     w = weak.new(p)
 
-    // 目标存活：得到 some 变体
+    // upgrade：目标存活返回 some(v)，已释放返回 none()
     u = weak.upgrade(w)
-    assert(true)
+    match u {
+        some(v) => println("alive"),
+        none() => println("dropped"),
+    }
 }
 ```
 
-> **语法限制**：`Option`
-> 的变体解构（`match some(v)`）语法尚未落地，因此目前只能验证调用成功，无法在源码里分支处理 `some` /
-> `none`。参见 `src/std/tests/weak_ops.yx` 的说明。
+> **变体解构前置**：`Option` 的变体解构要求变体集在场——`use std.option`
+> 导入后即可 `match some(v)` / `none()`（见语言规范 §2.8 match）。
 
 ## 语义说明
 
 弱引用**不持有**所有权：`Weak` 存在不阻止目标被释放。典型用途是打破循环引用——父节点持 `Arc`
 指向子节点，子节点只持 `Weak` 指回父节点，环即断开。
+
+> 上述是**设计意图**。按当前实现（见 [`new`](#new) 的「已知缺口」），`Weak` 在本版本
+> 还不能真正承担这个角色。
 
 ## 相关
 

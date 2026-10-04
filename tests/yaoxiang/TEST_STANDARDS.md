@@ -215,25 +215,35 @@ main = {
 
 ## 五、单元测试规范
 
+单元测试的完整硬规范是 `docs/src/dev/test-specification.md`，本节摘录最常违反的
+条款；两者不一致时以 test-specification.md 为准。
+
 ### 5.1 测试位置
 
-每个模块下的 `tests/` 子目录，保持与源码相同的层级结构。
+模块级 `tests/` 子目录，由该模块的 `mod.rs` 以文件形式声明
+（`#[cfg(test)] mod tests;`），测试代码放 `tests/` 下的独立文件——禁止 inline
+`mod tests { ... }`（test-specification.md 规则 1.4）。目录模块的测试放该目录
+自己的 `tests/`，单文件模块的测试放父级 `tests/`，禁止向上聚合（规则 1.1）。
 
 ### 5.2 命名规范
 
 ```
-测试模块：mod_<描述>_tests
+测试模块：tests/mod.rs 按被测源文件声明 `mod <文件名>;`
 测试函数：test_<特性>_<场景>
 ```
 
-示例：
+示例（与仓库既有实践一致）：
 
-```rust
-mod mod_parser_fn_def_tests {
-    fn test_parse_fn_def_with_params() { ... }
-    fn test_parse_fn_def_block_body() { ... }
-}
+```text
+src/frontend/core/parser/
+├── mod.rs              # #[cfg(test)] mod tests;
+└── tests/
+    ├── mod.rs          # mod ast; mod parser_state; …（只声明，不放测试函数）
+    └── ast.rs          # //! 文件头引用规范章节；fn test_parse_int_literal_overflow() { … }
 ```
+
+> 历史：本节旧版示例为 `mod mod_parser_fn_def_tests { … }` 内联形式，与
+> test-specification.md 规则 1.4（禁止 inline）冲突，2026-10-03 按仓库实践拨正。
 
 ### 5.3 断言要求
 

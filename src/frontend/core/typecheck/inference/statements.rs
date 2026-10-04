@@ -42,8 +42,13 @@ pub struct StatementChecker {
         HashMap<String, Vec<crate::frontend::core::typecheck::passes::overload::OverloadCandidate>>,
     /// Native 函数签名表
     native_signatures: HashMap<String, MonoType>,
+    /// Native 函数 arity 区间表（#387，随签名表同源灌装）
+    native_arity: HashMap<String, (usize, Option<usize>)>,
     /// 模块注册表（用于在函数体/块作用域中处理 use 语句）
     module_registry: ModuleRegistry,
+    /// 模块别名集合（#396）：区分「模块别名 Struct」与真 struct，
+    /// 成员缺失时分别报 E1043 / E1042。
+    module_aliases: std::collections::HashSet<String>,
     /// 是否在顶层作用域（模块级，非函数内部）
     is_top_level: bool,
     /// 当前嵌套的 `unsafe {}` 深度（RFC-010：unsafe 块内允许类型定义）
@@ -104,6 +109,8 @@ pub struct StatementChecker {
     pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
     pub operator_dispatches:
         Vec<crate::frontend::core::typecheck::operator_interfaces::OperatorDispatch>,
+    /// #389：match scrutinee 推断类型（match 节点 span 键控，ir_gen 回查）
+    pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
     gamma: Option<crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma>,
     /// 依赖类型环境（类型族注册与查找）
@@ -123,6 +130,10 @@ pub struct StatementChecker {
     imported_used: HashSet<String>,
     /// #321 W1003：函数体级 use 登记的导入（本地名, use 语句 span）
     body_imports: Vec<(String, crate::util::span::Span)>,
+    /// #414：显式导入登记（本地名 → 来源路径），导入冲突判定用（E5006/E5008）。
+    /// 只收 process_use_stmt 的显式导入——prelude 短名（add_imported_var 注入）
+    /// 不经此表，`use std.io.{print}` 不会撞 prelude 误报。
+    import_sources: HashMap<String, String>,
     /// 最近一条表达式语句的类型（由 `check_stmt` 的 `StmtKind::Expr` 臂写入）。
     ///
     /// 用途：尾表达式返回类型校验。`check_stmt` 走体时**已经算过**每个表达式的
@@ -133,6 +144,12 @@ pub struct StatementChecker {
     last_expr_stmt_ty: Option<MonoType>,
     /// 当前函数**返回类型注解**的位置（#353：尾表达式不符时指向注解而非表达式）。
     tail_annotation_span: Option<crate::util::span::Span>,
+    /// RFC-014 §项目模式：vendor 根目录（`<project>/.yaoxiang/vendor`）。
+    ///
+    /// 存在即表示项目处于 vendor 核心包源模式——`use <pkg>...` 解析失败
+    /// （E5001）且缺的是依赖包时，help 追加「运行 `yaoxiang install`」。
+    /// 由 orchestrator 注入（单文件模式为 None，不加提示）。
+    vendor_root: Option<std::path::PathBuf>,
 }
 
 impl StatementChecker {
@@ -155,7 +172,9 @@ impl StatementChecker {
             checked_functions: HashMap::new(),
             overload_candidates: HashMap::new(),
             native_signatures: HashMap::new(),
+            native_arity: HashMap::new(),
             module_registry: ModuleRegistry::with_std(),
+            module_aliases: std::collections::HashSet::new(),
             is_top_level: true,
             unsafe_depth: 0,
             collected_errors: Vec::new(),
@@ -181,6 +200,7 @@ impl StatementChecker {
             variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
+            match_scrutinee_types: HashMap::new(),
             gamma,
             dep_env,
             trait_table,
@@ -189,8 +209,10 @@ impl StatementChecker {
             import_watch: HashMap::new(),
             imported_used: HashSet::new(),
             body_imports: Vec::new(),
+            import_sources: HashMap::new(),
             last_expr_stmt_ty: None,
             tail_annotation_span: None,
+            vendor_root: None,
         }
     }
 
@@ -244,6 +266,42 @@ impl StatementChecker {
         for name in module.exports.keys() {
             self.import_watch.insert(name.clone(), alias.to_string());
         }
+    }
+
+    /// #414：导入名冲突判定（RFC-029 §导入冲突「同名绑定直接报错」）。
+    ///
+    /// 两类冲突分流：
+    /// - 撞先前的**显式导入** → E5006（重复导入）：同名本地名导两次，无论同模块
+    ///   还是跨模块（含一条 use 语句内重复别名 `as m, m`——逐别名判定自然命中）；
+    /// - 撞**本文件的现有绑定**（顶层值/函数，非前向占位、非导入名）→ E5008
+    ///   （导入名冲突）。prelude 短名与先前导入都是 `imported=true`，不触发。
+    ///
+    /// 判定通过后把 (本地名 → 来源) 记入 import_sources。
+    fn ensure_import_name_free(
+        &mut self,
+        name: &str,
+        source: &str,
+        span: crate::util::span::Span,
+    ) -> Result<(), Box<Diagnostic>> {
+        if self.import_sources.contains_key(name) {
+            return Err(Box::new(
+                ErrorCodeDefinition::duplicate_import(name).at(span).build(),
+            ));
+        }
+        let collides = self
+            .scope
+            .get_var_info(name)
+            .is_some_and(|info| !info.forward_declared && !info.imported);
+        if collides {
+            return Err(Box::new(
+                ErrorCodeDefinition::import_name_conflict(name, source)
+                    .at(span)
+                    .build(),
+            ));
+        }
+        self.import_sources
+            .insert(name.to_string(), source.to_string());
+        Ok(())
     }
 
     /// 设置类型定义表
@@ -416,12 +474,40 @@ impl StatementChecker {
         self.native_signatures = signatures;
     }
 
+    /// 设置 native 函数 arity 区间表（#387）
+    pub fn set_native_arities(
+        &mut self,
+        arities: HashMap<String, (usize, Option<usize>)>,
+    ) {
+        self.native_arity = arities;
+    }
+
     /// 设置模块注册表
     pub fn set_module_registry(
         &mut self,
         registry: ModuleRegistry,
     ) {
         self.module_registry = registry;
+    }
+
+    /// 注入模块别名集合（#396）：FieldAccess 在模块别名上取成员失败时按模块
+    /// 语义报 E1043，而非 struct 语义的 E1042。
+    pub fn set_module_aliases(
+        &mut self,
+        aliases: std::collections::HashSet<String>,
+    ) {
+        self.module_aliases = aliases;
+    }
+
+    /// 注入 vendor 根目录（RFC-014 §项目模式）。
+    ///
+    /// 存在即开启「缺依赖包 → help 提示 `yaoxiang install`」语义；
+    /// orchestrator 在项目模式且 vendor 目录存在时调用。
+    pub fn set_vendor_root(
+        &mut self,
+        root: std::path::PathBuf,
+    ) {
+        self.vendor_root = Some(root);
     }
 
     fn default_callable_type(&mut self) -> MonoType {
@@ -507,7 +593,7 @@ impl StatementChecker {
         );
     }
 
-    fn process_use_stmt(
+    pub(in crate::frontend::core::typecheck) fn process_use_stmt(
         &mut self,
         path: &str,
         path_span: crate::util::span::Span,
@@ -516,26 +602,28 @@ impl StatementChecker {
         item_aliases: &Option<Vec<Option<String>>>,
     ) -> Result<(), Box<Diagnostic>> {
         let Some(module) = self.module_registry.get(path).cloned() else {
-            // E5001：模块未找到（此前静默 return，错误延后成"unknown variable"）
-            return Err(Box::new(
-                ErrorCodeDefinition::module_not_found(path)
-                    .at(path_span)
-                    .build(),
-            ));
-        };
-
-        let selected_exports: Vec<Export> = match items {
-            Some(item_names) => item_names
-                .iter()
-                .filter_map(|item| module.exports.get(item).cloned())
-                .collect(),
-            None => module.exports.values().cloned().collect(),
+            // E5001：模块未找到（此前静默 return，错误延后成"unknown variable"）。
+            // RFC-014 §项目模式：vendor 核心包源下缺依赖包时，
+            // help 提示 `yaoxiang install`（Node 语义：不静默自动安装）。
+            let mut builder = ErrorCodeDefinition::module_not_found(path).at(path_span);
+            if let Some(vendor_root) = &self.vendor_root {
+                // use 首段 = 包名；该包在 vendor 中无目录 → 视为缺依赖
+                let pkg = path.split('.').next().unwrap_or(path);
+                if !vendor_root.join(format!("{pkg}-")).exists() {
+                    builder = builder.with_help(format!(
+                        "依赖包 '{pkg}' 未安装到 .yaoxiang/vendor/，运行 `yaoxiang install`"
+                    ));
+                }
+            }
+            return Err(Box::new(builder.build()));
         };
 
         match (items.as_ref(), alias.as_ref()) {
             // use path
             (None, None) => {
                 let module_alias = path.split('.').next_back().unwrap_or(path);
+                // #414：同名绑定直接报错（RFC-029 §导入冲突）
+                self.ensure_import_name_free(module_alias, path, path_span)?;
                 // #321 W1003：登记导入本地名与导出成员监视
                 self.note_body_import_members(module_alias, &module, path_span);
                 let module_ty = self.module_as_struct_type(&module, module_alias);
@@ -546,18 +634,20 @@ impl StatementChecker {
                     crate::util::span::Span::default(),
                 );
             }
-            // use path as alias
-            (None, Some(aliases)) if aliases.len() == 1 => {
-                let module_alias = &aliases[0];
-                // #321 W1003：登记导入本地名与导出成员监视
-                self.note_body_import_members(module_alias, &module, path_span);
-                let module_ty = self.module_as_struct_type(&module, module_alias);
-                self.scope.add_var(
-                    module_alias.to_string(),
-                    PolyType::mono(module_ty),
-                    false,
-                    crate::util::span::Span::default(),
-                );
+            // use path as alias（#414：单/多别名统一——每个别名各绑一份模块 record）
+            (None, Some(aliases)) => {
+                for module_alias in aliases {
+                    self.ensure_import_name_free(module_alias, path, path_span)?;
+                    // #321 W1003：登记导入本地名与导出成员监视
+                    self.note_body_import_members(module_alias, &module, path_span);
+                    let module_ty = self.module_as_struct_type(&module, module_alias);
+                    self.scope.add_var(
+                        module_alias.to_string(),
+                        PolyType::mono(module_ty),
+                        false,
+                        crate::util::span::Span::default(),
+                    );
+                }
             }
             // use path.{a, b} / use path.{a as x}（#245：仅内联别名）
             (Some(item_names), _) => {
@@ -575,16 +665,15 @@ impl StatementChecker {
                                 .build(),
                         ));
                     };
+                    // #414：同名字项导入两次直接报错（RFC-029 §导入冲突）
+                    self.ensure_import_name_free(
+                        local_name,
+                        &format!("{path}.{item_name}"),
+                        path_span,
+                    )?;
                     // #321 W1003：登记导入本地名（内联别名优先）
                     self.note_body_import(local_name, path_span);
                     self.import_binding(local_name, &export);
-                }
-            }
-            _ => {
-                for export in selected_exports {
-                    // #321 W1003：登记导入本地名
-                    self.note_body_import(&export.name, path_span);
-                    self.import_binding(&export.name, &export);
                 }
             }
         }
@@ -838,10 +927,15 @@ impl StatementChecker {
         for (i, param) in params.iter().enumerate() {
             let param_ty = match positional_types {
                 Some(vp) if param.ty.is_none() => vp[i].clone(),
+                // RFC-027 §6.1：形参**自带标注**时走的是注解（保留 TypeRef 声明名，
+                // 单态化依赖它），但精化标注必须剥成基类型——否则 `b: NonNegative(b)`
+                // 在体内是名义类型 `NonNegative(b)`，当值用报 E1012/E1002。
+                // 只剥证明函数名与 `Terminates`，普通类型名不受影响。
                 _ => param
                     .ty
                     .as_ref()
                     .map(|t| MonoType::from(t.clone()))
+                    .map(|t| self.strip_refined_value_type(t))
                     .unwrap_or_else(|| self.solver.new_var()),
             };
             let param_ty = param_ty.substitute(const_subst);
@@ -966,6 +1060,33 @@ impl StatementChecker {
     /// 故 `Void` 必须参与统一而非被跳过。
     ///
     /// `Never`（`return` 作尾表达式）按爆炸原理 `Never <: T` 一律放行。
+    /// 块值类型（RFC-010a 规则①）——**单一口径**，尾校验与循环取块值共用。
+    ///
+    /// - 空块 `{}` → `Void`
+    /// - 末位为表达式 / `if` → walk 时 `check_stmt` 记下的类型
+    /// - 末位为 `return` → `Never`（爆炸原理放行）
+    /// - 末位为其余语句（赋值、`for`、`use`、类型定义…）→ `Void`
+    ///
+    /// `None` = 该尾语句未经 walk（或为错误占位符），无可声明类型。
+    ///
+    /// 循环体也是 `{}` 块，故 `while` / `for` 的值同此规则（spec §2.9「所有 `{}`
+    /// 块的值由尾表达式给出，无例外」）。
+    fn block_value_ty(
+        &self,
+        body: &Block,
+    ) -> Option<MonoType> {
+        use crate::frontend::core::parser::ast::StmtKind;
+        let Some(last) = body.stmts.last() else {
+            return Some(MonoType::Void);
+        };
+        match &last.kind {
+            StmtKind::Expr(_) | StmtKind::If { .. } => self.last_expr_stmt_ty.clone(),
+            StmtKind::Return(_) => Some(MonoType::Never),
+            StmtKind::Error(_) => None,
+            _ => Some(MonoType::Void),
+        }
+    }
+
     fn check_body_tail_type(
         &mut self,
         body: &Block,
@@ -983,30 +1104,16 @@ impl StatementChecker {
         if matches!(expected, MonoType::MetaType { .. }) {
             return Ok(());
         }
-        use crate::frontend::core::parser::ast::StmtKind;
-        // 尾语句贡献的块值类型。
+        // 尾语句贡献的块值类型（单一口径见 `block_value_ty`）。
         //
         // 表达式语句与 `if` 的类型由 walk 时 `check_stmt` 顺手记下——
         // 不重走 `check_expr`（那会重复声明体内局部变量，E2002），
         // 也不事后重建（旧 `peek_expr_type` 只识字面量/变量，其余返回 None 便
         // 静默跳过，#354——`if` / `match` / 调用等全部逃逸）。
-        let tail_ty: MonoType = match body.stmts.last() {
-            // 空块 `{}` → Void
-            None => MonoType::Void,
-            Some(last) => match &last.kind {
-                StmtKind::Expr(_) | StmtKind::If { .. } => match self.last_expr_stmt_ty.clone() {
-                    Some(t) => t,
-                    // 未经 walk（被短路跳过）：无可校验的类型
-                    None => return Ok(()),
-                },
-                // `return` 作尾表达式：类型 Never，爆炸原理放行
-                StmtKind::Return(_) => MonoType::Never,
-                // 解析错误占位符：语法错误已单独报出，不叠加尾类型诊断
-                StmtKind::Error(_) => return Ok(()),
-                // RFC-010a 规则①：赋值语句的值为 Void；`for` / `use` / 类型定义
-                // 等语句同样不产生值。两者都与任何非 Void 返回类型不符。
-                _ => MonoType::Void,
-            },
+        let tail_ty: MonoType = match self.block_value_ty(body) {
+            Some(t) => t,
+            // 未经 walk（被短路跳过）：无可校验的类型
+            None => return Ok(()),
         };
         // `return` 作尾表达式：类型 Never，爆炸原理放行
         if tail_ty == MonoType::Never {
@@ -1423,6 +1530,13 @@ impl StatementChecker {
             MonoType::Generic { ref name, .. } if self.proof_fn_bases.contains_key(name) => {
                 self.proof_fn_bases.get(name).cloned().unwrap_or(ty)
             }
+            // 无参形态 `b: NonNegative`：`MonoType::from` 给出 `TypeRef("NonNegative")`。
+            // 不剥则它作为名义类型参与统一，拒绝一切基类型实参。
+            // 只剥「返回 Type 的证明函数」名——普通类型名（`Int`/自定义类型）
+            // 不在 `proof_fn_bases` 里，不受影响。
+            MonoType::TypeRef(ref name) if self.proof_fn_bases.contains_key(name) => {
+                self.proof_fn_bases.get(name).cloned().unwrap_or(ty)
+            }
             other => other,
         }
     }
@@ -1595,6 +1709,12 @@ impl StatementChecker {
                 let fn_param_types: Vec<MonoType> = param_types
                     .iter()
                     .map(|t| MonoType::from(t.clone()))
+                    // RFC-027 §6.1：形参上的精化标注同样是**透明**的——`b` 的值就是
+                    // 它的基类型。此前这里用裸 `MonoType::from`，精化形参停在名义形态
+                    // `NonNegative(b)`，于是 1) 体内 `b` 当值用报 E1012/E1002，
+                    // 2) 任何调用方传入基类型都报 E1002（**连 `f(5)` 都被拒**，
+                    // 不是谓词校验，是个坏类型）。故与返回位同规剥除。
+                    .map(|t| self.strip_refined_value_type(t))
                     .collect();
                 let fn_return_type = MonoType::from(*return_type.clone());
                 // RFC-027：值级返回位的精化剥除（`IsPositive(5)` → `Int`；
@@ -2600,6 +2720,7 @@ impl StatementChecker {
                                 &self.native_signatures,
                                 current_result_err,
                             );
+                        inferrer.set_native_arities(&self.native_arity);
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                         inferrer.set_sum_types(&self.sum_types);
@@ -2621,6 +2742,8 @@ impl StatementChecker {
                         inferrer.set_loop_depth(self.loop_depth);
                         // #321 W1003：导入名监视集随委托传入
                         inferrer.set_import_watch(&self.import_watch);
+                        // #396：模块别名集合随委托传入（E1043 判定）
+                        inferrer.set_module_aliases(&self.module_aliases);
                         if let Some(gamma) = &mut self.gamma {
                             inferrer.set_gamma(gamma);
                         }
@@ -2637,6 +2760,9 @@ impl StatementChecker {
                         self.operator_dispatches
                             .extend(inferrer.operator_dispatches);
                         self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
+                        // #389：match scrutinee 类型表随委托回流
+                        self.match_scrutinee_types
+                            .extend(inferrer.match_scrutinee_types);
                         result
                     }
                 }
@@ -2678,7 +2804,12 @@ impl StatementChecker {
                 self.scope.exit_block();
                 match first_err {
                     Some(e) => Err(e),
-                    None => Ok(MonoType::Void),
+                    // 循环体也是 `{}` 块 ⇒ 循环的值 = 体块的值（RFC-010a 规则① / spec §2.9）。
+                    //
+                    // 此前硬返回 `Void` 丢掉体块类型，与 `for`（已取体块值）不一致，
+                    // 也使 RFC-027 §6.9 的 `acc: Terminates(n - i) = while …` 无从承载值类型。
+                    // 取自 `block_value_ty` 单一口径，与尾校验不会分叉。
+                    None => Ok(self.block_value_ty(body).unwrap_or(MonoType::Void)),
                 }
             }
             // 其他表达式：委托给 ExpressionInferrer
@@ -2693,6 +2824,7 @@ impl StatementChecker {
                     self.expected_return_type.clone(),
                     &self.method_bindings,
                 );
+                inferrer.set_native_arities(&self.native_arity);
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                 inferrer.set_sum_types(&self.sum_types);
@@ -2709,6 +2841,8 @@ impl StatementChecker {
                 inferrer.set_loop_depth(self.loop_depth);
                 // #321 W1003：导入名监视集随委托传入
                 inferrer.set_import_watch(&self.import_watch);
+                // #396：模块别名集合随委托传入（E1043 判定）
+                inferrer.set_module_aliases(&self.module_aliases);
                 if let Some(gamma) = &mut self.gamma {
                     inferrer.set_gamma(gamma);
                 }
@@ -2725,6 +2859,9 @@ impl StatementChecker {
                 self.operator_dispatches
                     .extend(inferrer.operator_dispatches);
                 self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
+                // #389：match scrutinee 类型表随委托回流
+                self.match_scrutinee_types
+                    .extend(inferrer.match_scrutinee_types);
                 result
             }
         }

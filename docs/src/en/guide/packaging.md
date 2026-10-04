@@ -1,464 +1,446 @@
 ---
-title: 'Package Manager'
-description: 'Tutorial for the official YaoXiang package manager'
+title: 'Package Management System'
+description:
+  'YaoXiang package manager user guide: dependency management, workspaces, and publishing'
 ---
 
-# Package Manager
+# Package Management System
 
-YaoXiang's built-in package manager provides complete dependency management features.
+YaoXiang ships with a built-in package manager that provides declarative dependency management,
+version locking, and workspace support.
 
-## Overview
+## Current Capabilities
 
-YaoXiang Package Manager (YPM) adopts declarative dependency management:
+Availability of dependency sources is not uniform — **check this table before you start**:
 
-- Declare project dependencies in `yaoxiang.toml`
-- `yaoxiang.lock` locks precise versions to ensure reproducible builds
-- Dependencies are downloaded to the `vendor` directory
+| Source               | Declaration             | Status                                                             |
+| -------------------- | ----------------------- | ------------------------------------------------------------------ |
+| **Workspace member** | `{ workspace = "key" }` | ✅ Available, the preferred way for local multi-package            |
+| **Git repository**   | `{ git = "<url>" }`     | ✅ Available, the only current channel for cross-repo distribution |
+| Official registry    | `name = "1.0.0"`        | ⛔ **Not yet implemented**, see below                              |
+| Local path           | `{ path = "../lib" }`   | ⚠️ Known issue: installed but unusable with `use`, see below       |
 
-## Quick Start
+::: danger The official registry is not yet open RFC-014a has decided that the official registry
+server, authentication, and yank are **indefinitely postponed**. Therefore:
 
-```bash
-# Create a new project
-yx init my-project
-cd my-project
-
-# Add dependencies
-yx add http
-yx add json
-
-# Install dependencies
-yx install
-
-# Run the project
-yx run src/main.yx
-```
-
-## Project Structure
-
-```
-my-project/
-├── yaoxiang.toml      # Project manifest
-├── yaoxiang.lock      # Dependency lock file
-├── vendor/            # Dependency storage
-└── src/
-    └── main.yx
-```
-
----
-
-## init
-
-Initialize a new project.
-
-### Usage
+- `yx publish` without arguments fails immediately
+- `yx add <bare-package-name>` will write to the manifest, but the subsequent `yx install` will
+  necessarily fail:
 
 ```bash
-yx init <name>
+$ yx add http
+✓ Added dependency 'http' (*)
+
+$ yx install
+⚠ 1 dependencies failed to install:
+  http - registry source not implemented (RFC-014a); use a git or path dependency
+Error: Failed to install dependencies
 ```
 
-### Arguments
+**Always use `--git` for external dependencies.** For publishing, use `yx publish --github`; see
+[Publishing](#publishing). :::
 
-| Argument | Type   | Description  |
-| -------- | ------ | ------------ |
-| `name`   | string | Project name |
+::: warning Local path dependencies are currently unusable `yx add --path` will write the dependency
+into `yaoxiang.toml` and `yaoxiang.lock`, but it will not place the package in the vendor directory.
+Afterwards, `use <package-name>` reports E5001.
 
-### Description
+**Use [workspaces](#workspaces) for local multi-package setups** — they are designed for this
+scenario and are fully functional. This issue is tracked separately. :::
 
-Create a new YaoXiang project in the current directory or at the specified path.
+## From Scratch: Local Multi-Package
 
-### Created Files
+The workflow below is **verified to run end-to-end** and can be copied as-is.
 
-- `yaoxiang.toml` - Project manifest
-- `yaoxiang.lock` - Dependency lock file
-- `src/main.yx` - Entry file
-- `.gitignore` - Git ignore configuration
+### 1. Create the workspace root
 
-### Example
+The workspace root needs a `yaoxiang.toml`:
 
 ```bash
-# Create project in current directory
-yx init my-project
-
-# Output
-# ✨ Project created: my-project
-#   my-project/yaoxiang.toml
-#   my-project/yaoxiang.lock
-#   my-project/src/main.yx
-#   my-project/.gitignore
+mkdir my-project && cd my-project
 ```
-
----
-
-## add
-
-Add a dependency to the project.
-
-### Usage
-
-```bash
-yx add <name> [version]
-yx add <name> --dev
-```
-
-### Arguments
-
-| Argument  | Type   | Description                            |
-| --------- | ------ | -------------------------------------- |
-| `name`    | string | Package name                           |
-| `version` | string | Version number (optional, default `*`) |
-
-### Options
-
-| Option        | Description                     |
-| ------------- | ------------------------------- |
-| `--dev`, `-D` | Add as a development dependency |
-
-### Description
-
-Add the dependency to the project's `yaoxiang.toml` file, and update `yaoxiang.lock`.
-
-### Version Specification
-
-| Specification | Description        | Example            |
-| ------------- | ------------------ | ------------------ |
-| `*`           | Any version        | `http = "*"`       |
-| `1.0.0`       | Exact version      | `http = "1.0.0"`   |
-| `>=1.0.0`     | Minimum version    | `http = ">=1.0.0"` |
-| `~1.0.0`      | Compatible version | `http = "~1.0.0"`  |
-| `^1.0.0`      | Caret version      | `http = "^1.0.0"`  |
-
-### Dependency Sources
-
-#### Registry (Default)
-
-```bash
-yx add http
-yx add http 1.0.0
-```
-
-#### Git Repository
-
-```bash
-# The following configuration will be generated in the manifest
-# http = { version = "1.0.0", git = "https://github.com/example/http" }
-```
-
-#### Local Path
-
-```bash
-# The following configuration will be generated in the manifest
-# mylib = { version = "0.1.0", path = "./mylib" }
-```
-
-### Example
-
-```bash
-# Add the latest version
-yx add http
-
-# Add a specific version
-yx add http 1.0.0
-
-# Add a version range
-yx add json ">=2.0.0"
-
-# Add a development dependency
-yx add test-utils --dev
-yx add benchmark -D
-```
-
----
-
-## rm
-
-Remove a dependency from the project.
-
-### Usage
-
-```bash
-yx rm <name>
-yx rm <name> --dev
-```
-
-### Arguments
-
-| Argument | Type   | Description  |
-| -------- | ------ | ------------ |
-| `name`   | string | Package name |
-
-### Options
-
-| Option        | Description                     |
-| ------------- | ------------------------------- |
-| `--dev`, `-D` | Remove a development dependency |
-
-### Description
-
-Remove the specified dependency from the project's `yaoxiang.toml`, and update `yaoxiang.lock`.
-
-### Example
-
-```bash
-# Remove a runtime dependency
-yx rm http
-
-# Remove a development dependency
-yx rm test-utils --dev
-```
-
----
-
-## install
-
-Install project dependencies.
-
-### Usage
-
-```bash
-yx install
-```
-
-### Description
-
-Read the dependency declarations in `yaoxiang.toml` and perform the following operations:
-
-1. Resolve dependency versions
-2. Detect version conflicts
-3. Download dependencies to the `vendor` directory
-4. Generate/update `yaoxiang.lock`
-
-### Behavior
-
-- If there are no dependencies, display a hint message and exit
-- If the `vendor` directory already exists, check and reuse the cache
-- If version conflicts are detected, display an error message and exit
-
-### Example
-
-```bash
-# Install all dependencies
-yx install
-
-# Output
-# 📦 Resolving dependencies...
-#   http (1.0.0) [installed]
-#   json (2.0.0) [cached]
-# ✅ Dependencies installed, lock file updated
-```
-
-### Lock File Update
-
-The `install` command updates `yaoxiang.lock`:
 
 ```toml
-# yaoxiang.lock
+# my-project/yaoxiang.toml
+[workspace]
+members = { }
+```
+
+An empty `members` is allowed — the `init` below will register into it automatically.
+
+### 2. Create members under the root
+
+```bash
+yx init mylib --lib
+yx init app
+```
+
+When `init` detects a workspace above, it **automatically registers** the member; no manual editing
+of the root manifest is needed:
+
+```bash
+✓ Registered to workspace (key 'mylib')
+✓ Created library project 'mylib'
+```
+
+After registration, the root manifest becomes:
+
+```toml
+# my-project/yaoxiang.toml
+[workspace.members]
+app = "app/yaoxiang.toml"
+mylib = "mylib/yaoxiang.toml"
+
+[workspace.dependencies]
+```
+
+::: warning The value of `members` is a manifest file path The value of `members` must point to a
+`yaoxiang.toml` **file**, not a directory. Writing `"app"` will produce a misleading
+`nested workspace is not supported` error. :::
+
+Confirm the registration:
+
+```bash
+$ yx workspace list
+Workspace my-project (2 members)
+  app 0.1.0    (app/yaoxiang.toml)
+  mylib 0.1.0  (mylib/yaoxiang.toml)
+```
+
+### 3. Write the library implementation
+
+The `src/lib.yx` generated by `yx init --lib` **contains only comments and no code**; you need to
+fill it in yourself:
+
+```yaoxiang
+// mylib/src/lib.yx
+greet: () -> string = "hello from mylib"
+```
+
+All top-level bindings are visible by default; no `pub` is needed — see
+[Module System](./modules#export-doesnt-need-pub).
+
+### 4. App declares the dependency
+
+A member references a sibling member using `{ workspace = "<key>" }`; the key is the name used at
+registration:
+
+```toml
+# my-project/app/yaoxiang.toml
 [package]
-version = 1
+name = "app"
+version = "0.1.0"
+description = "demo app"
 
-[package.http]
-version = "1.0.0"
-source = "registry"
-
-[package.json]
-version = "2.0.0"
-source = "registry"
+[dependencies]
+mylib = { workspace = "mylib" }
 ```
 
----
-
-## update
-
-Update project dependencies.
-
-### Usage
+### 5. Install and run
 
 ```bash
-yx update
-yx update <name>
+# Run in the workspace root
+yx install
+
+$ yx install
+✓ Resolved 0 dependencies:
+  mylib (workspace:mylib)
+
+Updated yaoxiang.lock
 ```
 
-### Arguments
+<!-- docs-example: skip -->
 
-| Argument | Type   | Description             |
-| -------- | ------ | ----------------------- |
-| `name`   | string | Package name (optional) |
+```yaoxiang
+// my-project/app/src/main.yx
+use std.io
+use mylib
 
-### Description
-
-### Full Update
-
-When called without arguments, update all dependencies:
-
-1. Clear currently locked versions
-2. Clean up old versions in the `vendor` directory
-3. Re-download all dependencies
-4. Update `yaoxiang.lock`
-
-### Single Update
-
-When called with an argument, update only the specified dependency:
-
-1. Remove the old version from `vendor`
-2. Re-download the new version
-3. Update the corresponding entry in `yaoxiang.lock`
-4. Other dependencies are not affected
-
-### Example
+main = () => {
+    io.print(mylib.greet())
+}
+```
 
 ```bash
-# Update all dependencies
-yx update
-
-# Output
-# 📦 Updating dependencies...
-#   http (1.0.0 → 1.1.0)
-#   json (2.0.0 → 2.1.0)
-# ✅ Updated 2 dependencies, lock file updated
-
-# Update a single dependency
-yx update http
-
-# Output
-# ✅ Updated http (1.0.0 → 1.1.0)
+$ yx run app/src/main.yx
+hello from mylib
 ```
 
----
+> `run` must be executed inside a project directory. Running `run` on a single `.yx` file outside a
+> project silently produces no output.
 
-## list
+## From Scratch: Depending on an External Repository
 
-List project dependencies.
-
-### Usage
+Use `--git` for cross-repo or any Git source:
 
 ```bash
-yx list
+yx init app
+cd app
+
+# Add the dependency
+yx add some-lib --git https://github.com/example/some-lib
+
+# Install
+yx install
+
+$ yx install
+✓ Resolved 1 dependencies:
+  some-lib (0.1.0) [Installed]
 ```
 
-### Description
+After installation the package lands in `.yaoxiang/vendor/<package-name>-<version>/`, ready to be
+`use`d:
 
-Display all dependencies in the project, including:
+<!-- docs-example: skip -->
 
-- Runtime dependencies (from `[dependencies]`)
-- Development dependencies (from `[dev-dependencies]`)
-- The version and source of each dependency
+```yaoxiang
+use some_lib
+```
 
-### Example
+### Pinning a version
+
+The version is set with `-v` / `--version`, **not as a positional argument**:
 
 ```bash
-yx list
-
-# Output
-# 📦 Project Dependencies
-#
-# Runtime dependencies:
-#   http        1.0.0    registry
-#   json        2.0.0    registry
-#
-# Development dependencies:
-#   test-utils  0.5.0    registry
+yx add some-lib --git https://github.com/example/some-lib --version "^0.1.0"
 ```
 
----
+Writing `yx add some-lib 0.1.0` will report `unexpected argument`.
 
-## Configuration Files
+### Pinning a branch or tag
+
+The ref goes in the **git URL's query string**, not as a `branch` field in the manifest:
+
+```bash
+yx add some-lib --git "https://github.com/example/some-lib?branch=dev"
+yx add some-lib --git "https://github.com/example/some-lib?tag=v1.0.0"
+yx add some-lib --git "https://github.com/example/some-lib?rev=abc1234"
+```
+
+Dependencies pinned this way are reported as `pinned` by `yx outdated` and do not participate in
+version comparison.
+
+::: warning The `branch` field in the manifest is ineffective Writing
+`some-lib = { git = "...", branch = "dev" }` neither errors out nor takes effect — the dependency is
+still resolved against the default branch. The ref must go in the URL query string. :::
+
+Supported version specifiers:
+
+| Syntax              | Meaning                      |
+| ------------------- | ---------------------------- |
+| `1.0.0`             | Exact match (**not** caret)  |
+| `*`                 | Any version                  |
+| `^1.0.0`            | Caret, allows minor upgrades |
+| `~1.0.0`            | Allows patch upgrades        |
+| `>=1.0.0`, `<2.0.0` | Lower/upper bound            |
+| `1.*`               | Segment wildcard             |
+| `>=1.2.3, <2.0.0`   | Comma combination            |
+
+`1.2` and `1` are auto-completed to `1.2.0` and `1.0.0`.
+
+## Manifest Files
 
 ### yaoxiang.toml
 
-The project manifest file, declaring project metadata and dependencies.
-
 ```toml
 [package]
-name = "my-project"
-version = "0.1.0"
-description = "Project description"
-authors = ["Author <email@example.com>"]
+name = "my-project"          # Required
+version = "0.1.0"           # Required
+description = "Project description"  # Required for publish
+authors = ["Author <a@b.c>"]
 license = "MIT"
+repository = "https://github.com/org/repo"   # Required for --github publish
 
 [dependencies]
-http = "1.0.0"
-json = "*"
+some-lib = { git = "https://github.com/example/some-lib", version = "^0.1.0" }
 
 [dev-dependencies]
-test-utils = "0.5.0"
+test-utils = { git = "https://github.com/example/test-utils" }
+```
+
+The workspace root uses a `[workspace]` section instead:
+
+```toml
+[workspace.members]
+app = "app/yaoxiang.toml"
+mylib = "mylib/yaoxiang.toml"
+
+[workspace.dependencies]
+# Pin versions uniformly here; members inherit via { workspace = true }
 ```
 
 ### yaoxiang.lock
 
-The dependency lock file, automatically generated by the package manager.
+Auto-generated by the package manager — **commit it to version control**:
 
 ```toml
-# Automatically generated by the YaoXiang package manager
+# Auto-generated by the YaoXiang package manager
 
-[package]
 version = 1
 
-[package.http]
-version = "1.0.0"
-source = "registry"
+[package.mylib]
+version = "0.1.0"
+source = "workspace"
 ```
 
----
+### vendor directory
 
-## Core Concepts
+Dependencies land under the project's `.yaoxiang/vendor/`:
 
-### Runtime Dependencies vs Development Dependencies
+```
+.yaoxiang/
+└── vendor/
+    ├── std/                  # Standard library interface files
+    └── some-lib-0.1.0/       # Third-party dependency; dir name = <package-name>-<version>
+```
 
-- **Runtime dependencies** (`[dependencies]`): Packages required at project runtime
-- **Development dependencies** (`[dev-dependencies]`): Packages needed only for development and
-  testing
+The `.gitignore` generated by `init` already includes `.yaoxiang/`, so no manual addition is needed.
+Delete the entire `.yaoxiang/` and rerun `yx install` to rebuild it.
 
-### Dependency Sources
+## Command Reference
 
-| Type     | Configuration Example                        | Description                     |
-| -------- | -------------------------------------------- | ------------------------------- |
-| Registry | `http = "1.0.0"`                             | Obtained from a remote registry |
-| Git      | `{ version = "1.0.0", git = "https://..." }` | Obtained from a Git repository  |
-| Path     | `{ version = "0.1.0", path = "./lib" }`      | Obtained from a local path      |
-
-### Lock File
-
-`yaoxiang.lock` is automatically generated by the package manager. Be sure to **commit it to version
-control**:
-
-- Ensure team members use exactly the same dependency versions
-- Ensure reproducible CI builds
-- Avoid the "works on my machine" problem
-
-### vendor Directory
-
-Dependencies are stored in the `vendor` directory after download:
-
-- Automatically managed by `yx install` and `yx update`
-- Can be deleted and rebuilt by running `install` again
-- Recommended to add to `.gitignore`, so each team member manages it independently
-
----
-
-## FAQ
-
-### Q: What should I do when dependency version conflicts occur?
-
-YPM detects dependency version conflicts and reports an error. Solutions:
-
-1. Adjust dependency version requirements
-2. Wait for the dependency author to fix it
-3. Consider removing the conflicting dependency
-
-### Q: How do I use private packages?
-
-For private packages, you can use a Git source:
+### yx init
 
 ```bash
-# Add via Git URL
-# Manually edit yaoxiang.toml
-[dependencies]
-private-pkg = { version = "1.0.0", git = "https://github.com/org/private-pkg" }
+yx init [NAME] [--lib]
 ```
 
-### Q: Can the vendor directory be deleted?
+When `NAME` is omitted, the current directory name is used. `--lib` creates a library project
+(`src/lib.yx`, **with empty content**); otherwise `src/main.yx` is created.
 
-Yes. After deletion, run `yx install` to re-download all dependencies.
+Outputs: `yaoxiang.toml`, `yaoxiang.lock`, `.gitignore`, `tests/`, `.yaoxiang/vendor/std/`.
 
-### Q: How do I view information about a specific package?
+### yx add
 
-Use `yx list` to view all dependencies, or check `yaoxiang.toml`.
+```bash
+yx add <DEP> [--git <GIT> | --path <PATH>] [-v <VERSION>] [-D]
+```
+
+| Option          | Description                                                              |
+| --------------- | ------------------------------------------------------------------------ |
+| `--git <URL>`   | Git source; **must be specified explicitly for cross-repo dependencies** |
+| `--path <P>`    | Local path (see known issue above)                                       |
+| `-v, --version` | Version specifier                                                        |
+| `-D, --dev`     | Record under `dev-dependencies`                                          |
+| `--trust`       | Trust this package's `build.yx`                                          |
+
+Without `--git` / `--path`, it falls back to the not-yet-implemented registry source.
+
+### yx install / update / rm / list
+
+```bash
+yx install              # Resolve per manifest, download, write lock file
+yx update [PKG]         # No argument updates all; with a package name updates only that package
+yx rm <DEP> [-D]        # Remove a dependency
+yx list                 # List dependencies and their sources
+```
+
+### yx outdated
+
+```bash
+yx outdated
+```
+
+Check whether dependencies have new versions. Currently works against the default branch of Git
+sources; path / workspace sources are skipped, and dependencies pinned to a tag / branch / rev are
+reported as pinned.
+
+### yx clean / yx cache clean
+
+```bash
+yx clean         # Clean build artifacts and packages in vendor not referenced by the lock file
+yx cache clean   # Clear the global package cache
+```
+
+### yx workspace
+
+```bash
+yx workspace list                  # List members
+yx workspace add <PATH> [--as KEY] # Register an existing package as a member
+yx workspace remove <KEY>          # Unregister (directory is preserved)
+```
+
+::: warning Command differences between root and member directories The manifest at the workspace
+**root** has no `[package]` section, so `list`, `outdated`, `update` in the root directory will
+report `missing field package`. Run these commands inside a **member directory**; `install`,
+`workspace`, `publish`, `cache`, `clean` are available at the root. :::
+
+## Publishing
+
+### Local validation and packaging
+
+```bash
+cd mylib
+yx publish --dry-run
+```
+
+Prerequisite: `[package].description` is required, otherwise it reports
+`publish requires [package] to provide description`.
+
+```bash
+$ yx publish --dry-run
+Running pre-publish tests…
+No tests found.
+✓ Packed mylib/target/yxpkg/mylib-0.1.0.yxpkg (SHA-256 47a2c83…)
+```
+
+Workflow: run `[tool.test]` tests (use `--no-test` to skip) → materialize workspace references as
+`^version` → pack into `.yxpkg` → compute SHA-256. **Zero network requests throughout.**
+
+### Publishing to a GitHub Release
+
+This is the only currently available distribution channel:
+
+```bash
+# 1. Tag and push first — publish will not tag for you
+git tag v0.1.0
+git push origin v0.1.0
+
+# 2. Configure the repository URL
+#    Set [package].repository in yaoxiang.toml, or ensure a git remote origin exists
+
+# 3. Provide a token
+export YX_GITHUB_TOKEN=<your-token>
+
+# 4. Publish
+yx publish --github
+```
+
+The target repository is taken from `[package].repository` first, falling back to
+`git remote origin`. If a Release of the same name already exists, it is rejected; **the tag must
+already exist**.
+
+Consumers reference it via a Git source:
+
+```bash
+yx add mylib --git https://github.com/org/repo --version "^0.1.0"
+```
+
+### Not Yet Available
+
+The following capabilities belong to the not-yet-implemented official registry — **do not write them
+into dependency declarations**: `yx publish` (bare), `yx login` / `logout`, `yank`, third-party
+registries, `--registry <url>`.
+
+## Troubleshooting
+
+### `registry source not implemented`
+
+The dependency is a bare package name. Use `--git` to specify a Git source; see
+[Depending on an External Repository](#from-scratch-depending-on-an-external-repository).
+
+### E5001: module not found
+
+1. Dependency is not installed — run `yx install` in the workspace root or member directory
+2. A local path dependency is being used — switch to a workspace
+3. It's a module-path issue rather than a dependency issue — see
+   [Module System Troubleshooting](./modules#troubleshooting)
+
+### `missing field package`
+
+`list` / `outdated` / `update` was run in the workspace root directory. Move into a member directory
+and rerun.
+
+### `nested workspace is not supported`
+
+The value of `[workspace.members]` is written as a directory. Change it to a manifest file path,
+e.g. `"app/yaoxiang.toml"`.

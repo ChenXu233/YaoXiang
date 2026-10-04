@@ -10,6 +10,33 @@
 use crate::package::error::PackageError;
 use crate::package::manifest::PackageManifest;
 
+/// Fixture: 含 [lib] / [[bin]] / [exports] / [run] 的清单 TOML。
+const TARGET_SECTIONS_TOML: &str = r#"
+[package]
+name = "test"
+version = "0.1.0"
+
+[lib]
+path = "src/lib.yx"
+
+[[bin]]
+name = "my-cli"
+path = "src/cli.yx"
+
+[exports]
+"." = "src/lib.yx"
+"./foo" = "src/foo.yx"
+
+[run]
+main = "src/main.yx"
+args = ["--quiet"]
+"#;
+
+/// Fixture/Act: 解析清单 TOML（失败即 panic，带底层错误）。
+fn parse_manifest(toml_str: &str) -> PackageManifest {
+    toml::from_str(toml_str).expect("清单 TOML 应可解析")
+}
+
 #[test]
 fn test_new_manifest() {
     let manifest = PackageManifest::new("test-project");
@@ -126,28 +153,17 @@ version = "0.1.0"
 
 #[test]
 fn test_parse_target_sections() {
-    let toml_str = r#"
-[package]
-name = "test"
-version = "0.1.0"
+    // Arrange — 覆盖 [lib] / [[bin]] / [exports] / [run] 四个目标段
+    let toml_str = TARGET_SECTIONS_TOML;
 
-[lib]
-path = "src/lib.yx"
+    // Act
+    let manifest: PackageManifest = parse_manifest(toml_str);
 
-[[bin]]
-name = "my-cli"
-path = "src/cli.yx"
-
-[exports]
-"." = "src/lib.yx"
-"./foo" = "src/foo.yx"
-
-[run]
-main = "src/main.yx"
-args = ["--quiet"]
-"#;
-    let manifest: PackageManifest = toml::from_str(toml_str).unwrap();
-    assert_eq!(manifest.lib.as_ref().unwrap().path, "src/lib.yx");
+    // Assert — 各段字段逐项解析正确
+    assert_eq!(
+        manifest.lib.as_ref().expect("manifest.lib 应存在").path,
+        "src/lib.yx"
+    );
     assert_eq!(manifest.bin.len(), 1);
     assert_eq!(manifest.bin[0].name, "my-cli");
     assert_eq!(manifest.bin[0].path, "src/cli.yx");
@@ -159,7 +175,7 @@ args = ["--quiet"]
         manifest.exports.get("./foo").map(String::as_str),
         Some("src/foo.yx")
     );
-    let run = manifest.run.unwrap();
+    let run = manifest.run.expect("manifest.run 应存在");
     assert_eq!(run.main.as_deref(), Some("src/main.yx"));
     assert_eq!(run.args, vec!["--quiet"]);
 }

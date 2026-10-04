@@ -3,13 +3,16 @@ title: 'RFC-027：编译期谓词与统一静态验证'
 status: '已接受'
 author: '晨煦'
 created: '2026-06-07'
-updated: '2026-09-14'
-impl_status: 'in_progress'
+updated: '2026-10-03'
+impl_status: 'in-progress'
 impl_detail:
   'Phase 1-2 完成，Phase 3 部分完成，Phase 4 部分完成。assert/Assert 统一方案 6 Phase
   全部实现（#157-#162 已关闭）：Never 类型、IsTrue 桥接、流敏感 Γ + kill
-  set、类型级递归、宇宙分层弱检查、dispatch 分派管道。'
-impl_percent: 85
+  set、类型级递归、宇宙分层弱检查。§11 的 dispatch 分派**语义**已由调用点义务实现
+  （`checker.rs` 三处直接调 `check_predicate`：绑定位 / 调用点实参 / 返回位），但**独立的
+  `layers/dispatch.rs` 模块已删除**——它零生产调用点，且对 `Unproven` 的处置（降级为 W1080
+  警告）与生产实做（一律报错）相冲突（#377-2）。'
+impl_percent: 82
 issue_number: 90
 issue_url: 'https://github.com/ChenXu233/YaoXiang/issues/90'
 
@@ -165,8 +168,21 @@ max: (T: Ord) -> ((arr: NonEmpty(arr))) -> (result: IsMax(T, arr, result)) = {
 - **返回侧**：`-> (result: IsMax(T, arr, result))` —— `result` 是返回值形参，值由 `return`
   语句提供。`result` 仅存在于类型签名中、仅被谓词引用，不进入函数体作用域、不出现在调用方。
 - **返回值形参可选**：无后置条件时不写，签名和普通函数完全一致（`-> Int`）。
-- **统一性**：参数和返回值形参是同一个概念——`形参名: 谓词调用(形参名)`，区别仅在于值由调用方提供还是由
+- **统一性**：参数和返回值形参是同一个概念——`形参名: 谓词调用(实参)`，区别仅在于值由调用方提供还是由
   `return` 提供。
+
+> **落地注记（2026-10-02）**：返回位形式参数的识别**严格按声明的名字**——`-> (r: P(...))` 里的
+> `r` 是唯一的返回值形参。约束里其余**不在作用域**的自由变量不再被代入返回值，而是报未定义
+> 标识符（实测：`g: () -> (r: Eq2(m, r)) = { return 7 }`（`m` 未定义）→
+> `error [E1001] Unknown variable: 'm'`）。谓词调用的实参按**实参**真正代入约束：
+> `P(r + 100)` 代入后是「返回值 + 100」，而不是「返回值」。
+>
+> **已知缺口（2026-10-02）**：**返回位的多参数谓词 + 符号实参暂不支持**。触发形态：
+> `f: (b: Int) -> (r: SumUpTo(b, r)) = { return b * 2 }`（`SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }`）
+> → `error [E2031] … the refinement type constraint of 'r': SumUpTo(b, (b * 2)) cannot be statically proven`。
+> 替代写法：把实参改成编译期可折叠的字面量（如 `SumUpTo(3, r)`），或为该谓词提供返回 `Type`
+> 的证明函数；解除条件：证明内核支持「多参数谓词 + 符号实参」的实参代入。详见
+> [RFC-027a](../review/027a-termination-explicit-measure.md) §实现落地记录（2026-10-02，本轮硬化）。
 
 ### 3. 路径条件传播：运行时值的编译期验证
 
@@ -672,6 +688,7 @@ loop: (n: Int) -> Int = {
     mut i = 0
     acc: Terminates(n - i) = while i < n {
         i = i + 1
+        i
     }
     return acc
 }
@@ -679,6 +696,31 @@ loop: (n: Int) -> Int = {
 
 循环这里的理由：`Terminates(m)` 精化的就是循环体尾表达式的值类型，锚点由绑定名 `acc`
 提供——循环因此可被指称，不再有「匿名构造无从指称」的死角。
+
+> **体尾须给出值**：循环的值 = 循环体块的值（§2.9），而块的值 = 尾表达式。
+> 体尾若是赋值语句（如 `{ i = i + 1 }`），块值为 `Void`，`return acc` 便是从
+> `-> Int` 返回 `Void`，类型不成立。故本示例的体尾显式写出 `i`。这不改变测度的
+> 语义——测度 `n - i` 是**状态表达式**，与循环的值类型无关。
+
+> **落地注记（2026-10-02 登记；2026-10-04 更新）**：本节的循环示例**类型侧**成立
+> （`check` 0 error、回边义务 Proved）。**运行期取值缺陷（#409）已修复**：`while` 作值现在
+> 取循环体末次迭代的体块尾表达式的值，与类型侧 `block_value_ty` 同口径——
+> `loop(4) == 4`、`countdown(3) == 30` 实跑成立（`for` 同款修复）。
+>
+> **已知残留（零迭代）**：循环体一次都没求值时，没有「末次迭代的体值」，循环值仍取
+> `Void`——绑定到非 `Void` 类型位并在运行期使用即报
+> `E6007 Runtime error: type mismatch in comparison Eq: Void vs Int(0)`（响亮的类型不匹配，
+> 不是静默错值）。这是**静态近似边界**：`block_value_ty` 判据给的是体尾表达式的类型，
+> 对「循环是否至少执行一次」没有判定能力（需要数据流/可证性分析），故类型侧不擅自降级
+> （降级会破坏本节 `Terminates` 循环绑定所依赖的值类型）。
+> 该残留的契约由语料 `tests/yaoxiang/02-type-system/while_zero_iteration_void_err.yx`
+> （`// expect: runtime-error E6007`）钉住。**该残留已被确认为有意保留的设计边界**
+> （2026-10-04 裁定，暂不修复），故 issue
+> [#409](https://github.com/ChenXu233/YaoXiang/issues/409) 已随主形态修复关闭，不再单开跟踪项。
+> 最小复现与影响面的历史记录见
+> [RFC-027a](../review/027a-termination-explicit-measure.md) §示例 循环节「已知缺陷 D6」。
+> 另：终止策略 1（线性秩函数）本轮恢复生效，故本节「自动探索不出才写显式测度」的顺序不变——
+> 显式测度仍是探索失败后的兜底。
 
 **`Terminates` 是内置谓词**，与 `Int`、`Never`
 同属核心原语。它是唯一**由编译器代写函数体**的谓词——它的断言（「每个递归调用点/循环回边的测度严格递减」）长在计算结构里，用户写的谓词引用不到函数体或循环体，因此无法用「语法」节的谓词定义语法表达。内置面收敛为这一个名字。
@@ -815,6 +857,16 @@ sum: (arr: Array(Int)) -> Int = {
 ```
 
 ### 11. dispatch 分派管道：编译期与运行时的统一分派
+
+> **落地注记（2026-10-03，#377-2）**：本节的**语义**成立且已接入生产，但**结构**不是独立的
+> `layers/dispatch.rs` 模块。生产的分派由 `checker.rs` 三处**调用点义务**直接实现（直接调
+> `layers::predicate::check_predicate`）：绑定位重验证（`revalidate_refined`）、调用点实参
+> （`check_call_arg_refinements`）、返回位后置条件（`check_return_refinement`）。原
+> `layers/dispatch.rs` 零生产调用点，且其对 `Unproven { ProofFunctionRequired }` 的处置是
+> 「降级为 W1080 警告并注入 Γ」，与生产实做（`Unproven` 一律报错，见 `refined_unproven`）
+> 相冲突，故已整体删除。另需注意：本节表中 Runtime 行的「插入运行时 check」在生产**尚无**
+> 发射点（`RuntimeOutcome::InsertCheck` 无消费方），Γ 注入则由 `ownership.rs` 的分支守卫与
+> `inference/expressions.rs` 独立完成。
 
 `assert` 和 `Assert` 是同一个精化类型原语的两面。分派管道 `dispatch`
 按**谓词的自由变量在编译期是否可及**自动决定走编译期证明还是运行时检查：
@@ -1001,16 +1053,25 @@ predicate ::= identifier ':' params '->' 'Type' '=' '{' assertions '}'
       影响范围与降级方向：
       - `ownership.rs` `smt_cut` 恒返回 `false` → 回边穿越 → **保守拒绝**（sound 方向，只是少收窄）
       - 终止检查策略 1、谓词第 2b/3 级整体跳过
-      当前**不可达**：`TypeEnvironment::predicate_defs` 在生产从无填充（仅测试），`parser`
-      不产生 `MonoType::Refined`，故精化谓词路径在生产不存在；终止策略 1 的注入点
-      （`TerminationChecker::with_solver`）生产从不调用，native 同样不执行。
-      因此 wasm 与 native 的**实际行为差异仅在于 `smt_cut` 的精度**，不影响 soundness。
-      后续若要在 wasm 启用 Z3，方案与代价见 issue #376（结论：优先 JS 侧 Z3 实例，
-      而非把 Z3 链进主 wasm——后者需换 emcc 构建体系且产物从 3 MB 涨到 ~20 MB）。
+
+  **修正（2026-10-01）**：原文称这些路径「当前**不可达**」（理由是 `predicate_defs`
+  生产从无填充、`parser` 不产生 `MonoType::Refined`、`with_solver` 生产从不调用），
+  已不成立——三处都已落地（谓词定义注册 #377-3；精化类型正格化；生产管线注入
+  求解器）。故 wasm 与 native 的差异不再仅限于 `smt_cut` 的精度：
+
+  | 路径 | native | wasm | 降级方向 |
+  | --- | --- | --- | --- |
+  | 终止检查显式测度判定 | 判定 | `Unjudged` | 不报 E4022（少报） |
+  | 良基性判定 | 判定 | `Unjudged` | 不报 E4022（少报） |
+  | 精化谓词的 SMT 蕴含级 | 执行 | 跳过 | 落到 `Unproven` |
+
+  均为**保守**方向（少收窄、少报），不影响 soundness。若要精度一致，
+  方案与代价见 issue #376（结论：优先 JS 侧 Z3 实例，而非把 Z3 链进主 wasm——
+  后者需换 emcc 构建体系且产物从 3 MB 涨到 ~20 MB）。
 - [x] **SMT 求解器选择**：默认 Z3（MIT 协议，最广泛验证）。CVC5 作为 SMT-LIB 兼容备选，编译器标志切换。编译器内部翻译目标为 SMT-LIB
-      2.6 标准格式——SMT-LIB 就是抽象层，不做自定义通用求解器接口。
+  2.6 标准格式——SMT-LIB 就是抽象层，不做自定义通用求解器接口。
 - [x] **求解预算的具体数值**：步数 10,000 / 时间 100ms
-      / 量词实例化深度 3。编译器内部固定，不给 knob。实际使用中如有真实用例证明不够（非"用户写错了"），再调整。
+  / 量词实例化深度 3。编译器内部固定，不给 knob。实际使用中如有真实用例证明不够（非"用户写错了"），再调整。
 - [x] **量词支持范围**：语言层面不限制量词阶数。编译期谓词接受 Type 参数——Type 包括函数类型——因此高阶量词是类型系统的自然推论，不需要特殊语法。SMT 求解器可自动判定一阶量词（forall/exists，支持交错嵌套，由预算深度 3 限制）。高阶量词：SMT 返回 Unproven，编译器提示"此谓词超出自动证明范围，请提供证明函数"。程序员写一个返回类型等于该命题的 YaoXiang 函数——类型检查器验证该函数。不需要外部导出，不需要 AI，不需要交互式证明模式。一切都是 YaoXiang 代码，一切由类型检查器验证。
 - [x] **反例格式化**：源码变量名直接用作 SMT 变量名（加上模块前缀避免冲突）。Z3 模型返回时按变量名反查。输出格式：变量名 = 具体值 + 源码位置 + 谓词定义位置。不做复杂映射层。
 - [x] ~~**与 `ref` 智能指针的编译期谓词交互？**~~

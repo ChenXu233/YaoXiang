@@ -1,0 +1,24 @@
+// 06-compile-errors/call_arg_no_evidence_err.yx
+// 覆盖: RFC-027 §3.4 —— 无静态证据的运行时值不得进入精化类型参数（强半场）
+// 验证: `u: (x: Int, y: Int) -> Int = divide(x, y)` 中 `y` 无界、也无精化标注，
+//       验证条件 `{} ⇒ { y > 0 }` 有反例（y = 0）⇒ E4018。
+// 状态: ❌ 应被编译期拒绝
+//
+// §3.4 原文：「YaoXiang 不接受运行时值直接进入精化类型参数而不提供静态证据。
+// 这不是限制——这是硬安全哲学的核心。凡编译器无法静态证明的代码，不得通过编译。」
+//
+// 证据来源见 02-type-system/call_arg_evidence.yx（形参/变量精化标注、if 守卫）。
+// 本文件修复前会**静默通过**：调用点义务只做证伪，实参可折成常量时才判，
+// `y` 折不出值即无人过问（#395 第二行）。
+
+// expect: compile-error E4018
+
+IsPositive: (x: Int) -> Type = { x > 0 }
+
+divide: (a: Int, b: IsPositive(b)) -> Int = { a }
+
+u: (x: Int, y: Int) -> Int = divide(x, y)
+
+main: () -> Void = {
+    print(u(1, 2))
+}

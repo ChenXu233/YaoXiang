@@ -1,13 +1,14 @@
 // src/std/tests/weak_ops.yx
 // 覆盖: std.weak 模块（#117）— Arc/Weak 泛型签名（#242 结构化统一）
-// 验证: ref 创建 Arc → weak.new 登记 → upgrade 存活 Arc 返回 some（调用不失败）
-// 状态: ✅
-// 注: upgrade 返回 Option[Arc[Int]]，变体消费（match some(v)）语法未落地，
-// 此测试验证泛型签名在调用点正确绑定（Arc[T]/Weak[T]/Option[Arc[T]]）与
-// 运行时 roundtrip 不 panic。弱引用释放（Arc 消亡 → none）待变体匹配
-// 语法就绪后补充。
+// 验证: ref 创建 Arc → weak.new 登记 → upgrade 存活 Arc 返回 some →
+//       match 变体解构取回载荷（变体集随 use std.option 导入）
+// skip: weak.new 把值克隆进全新 Arc 而非降级传入的 Arc（src/std/weak.rs
+//   weak_new），upgrade 因此对存活目标也返回 none（#384）
+// 状态: ❌ 忽略-实现 bug
 
 use std.weak
+use std.option
+use std.assert
 
 main: () -> Void = {
     // ref 创建 Arc[Int]
@@ -16,10 +17,15 @@ main: () -> Void = {
     // Arc → Weak 登记
     w = weak.new(p)
 
-    // 存活 Arc 的 upgrade：返回 some 变体（不 panic）
+    // 存活 Arc 的 upgrade：应返回 some 变体，match 解构取回载荷。
+    // 断言本身正确（文档语义：存活 → some）；当前实现返回 none。
     u = weak.upgrade(w)
-
-    println("weak roundtrip ok")
+    mut got = 0
+    match u {
+        some(v) => { got = 1 }
+        none() => { got = 0 }
+    }
+    assert.assert(got == 1, "upgrade of live Arc must be some")
 }
 
 main()

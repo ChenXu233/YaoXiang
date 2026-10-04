@@ -222,7 +222,7 @@ version = "0.7.2"
 
 ## CI 发版流程
 
-发版由 GitHub Actions (`release.yml`) 自动完成，流程如下：
+发版由 GitHub Actions (`dist-release.yml`) 自动完成，流程如下：
 
 ```
 1. 在 dev 分支上更新 Cargo.toml 的 version 字段
@@ -231,21 +231,23 @@ version = "0.7.2"
    - commit message 必须包含自上次发版以来的所有变更（即 PR 的完整内容）
 4. 从 dev 创建 PR 到 main
 5. 合并 PR 到 main
-6. CI 自动检测：
+6. gate job 自动检测：
    - 读取 Cargo.toml 版本号 → "v{version}"
    - 检查该 tag 是否已存在
    - 不存在 → 触发完整 release 流程
    - 已存在 → 跳过（不会重复发布）
-7. CI 自动执行：
-   - 并行：跨平台构建 (Linux/Windows/macOS) + 安全审计 + 测试
-   - 全部通过后：创建 tag、打包产物、发布 GitHub Release
+7. 门禁：安全审计 + fmt/clippy/单测/doc test 全过
+8. 全过之后：创建并推送 tag
+9. tag 后构建与发布：
+   - cargo-dist 跨平台构建（Linux/Windows/macOS 五平台）+ 重组包（bin/ + lib/）+ wasm + Inno 向导
+   - 发布 GitHub Release（body 由 generate-commit-list.ts 生成）；apt 仓库另发 GitHub Pages
 ```
 
 ### 关键规则
 
 | 规则                               | 说明                                                                |
 | ---------------------------------- | ------------------------------------------------------------------- |
-| **不要手动推 tag**                 | CI 根据 tag 是否存在决定是否发布，手动推 tag 会导致 CI 跳过         |
+| **不要手动推 tag**                 | 发版只认 push main 的 gate 判断；手动推的 tag 不会触发发版（重发请用 `dist-release.yml` 的 workflow_dispatch 指定 tag） |
 | **版本在 dev 上 bump**             | 发版 commit 在 dev 上完成，通过 PR 合并到 main                      |
 | **发版 commit 包含完整 changelog** | commit message 需包含本次发版的所有变更内容，因为它是 PR 的描述来源 |
 | **不要合并 main 回 dev**           | PR 合并后 dev 会自动同步，无需反向合并                              |

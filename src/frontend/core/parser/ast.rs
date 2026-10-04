@@ -87,10 +87,8 @@ pub enum Expr {
     Tuple(Vec<Expr>, Span),
     List(Vec<Expr>, Span),
     ListComp {
-        element: Box<Expr>,           // 元素表达式 x * x
-        var: String,                  // 迭代变量名 x
-        iterable: Box<Expr>,          // 可迭代对象
-        condition: Option<Box<Expr>>, // 过滤条件 if x > 0
+        element: Box<Expr>,                 // 元素表达式 x * x
+        generators: Vec<ListCompGenerator>, // 生成器子句，至少一个（parser 保证）
         span: Span,
     },
     Dict(Vec<(Expr, Expr)>, Span),
@@ -162,6 +160,18 @@ pub enum Expr {
     /// 类型检查器遇到此节点时应报告错误但不 panic。
     /// 用于 LSP 错误恢复场景。
     Error(Span),
+}
+
+/// 列表推导式的生成器子句：`for <var> in <iterable> ('if' <condition>)?`
+///
+/// #401：单个推导式可携带多个子句（`[e for x in a for y in b if c]`），
+/// 后续子句的 iterable/condition 可引用先前子句绑定的变量。
+#[derive(Debug, Clone)]
+pub struct ListCompGenerator {
+    pub var: String,                  // 迭代变量名 x
+    pub iterable: Box<Expr>,          // 可迭代对象
+    pub condition: Option<Box<Expr>>, // 过滤条件 if x > 0
+    pub span: Span,
 }
 
 /// RFC-012: F-string segment
@@ -506,6 +516,28 @@ pub enum Type {
     ///
     /// 其余环节（类型检查 / 单态化 / 解释器）视 `Paren` 为透明，递归内层即可。
     Paren(Box<Type>),
+    /// **具名括号**：`(r: P(...))` —— 只有一个具名参数、且括号后不跟 `->`。
+    ///
+    /// RFC-027 §3 的返回位精化靠它声明**返回形式参数名**（这里叫 binder）：
+    ///
+    /// - `f: (b: Int) -> (r: IsPositive(r + 1))` 的 `r` 就是 binder——
+    ///   它「仅存在于类型签名中、仅被谓词引用，**不进入函数体作用域**」，
+    ///   由 `return` 的值供给。故解析层必须留下这个名字：丢掉它，类型检查器
+    ///   只能猜「约束里不在作用域的自由变量即返回值形参」，于是
+    ///   `(r: P(m))` 会把未声明的 `m` 也当成 binder 静默代入（实测缺陷）。
+    /// - 语义与 `Paren` 同构：`MonoType` 层透明（只递归内层）、
+    ///   `split_curry` 到此终止（括号声明“这是一个完整类型”），只多携带 binder 名。
+    ///
+    /// 参数位的形参名仍照旧丢弃（由 `parse_fn_type_with_names` 的 `Param` 承载），
+    /// 本节点只用于类型位置的单具名括号形态。
+    NamedParen {
+        /// 声明的具名（返回形式参数名）
+        param: String,
+        /// 名字的源码位置
+        param_span: Span,
+        /// 内层类型（谓词应用）
+        inner: Box<Type>,
+    },
 }
 
 impl Type {

@@ -9,8 +9,8 @@
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::statements::types::parse_type_annotation;
-use crate::frontend::core::parser::ast::{BinOp, Expr, StructField, Type, TypeBodyItem};
-use crate::frontend::core::parser::ParserState;
+use crate::frontend::core::parser::ast::{BinOp, Expr, StmtKind, StructField, Type, TypeBodyItem};
+use crate::frontend::core::parser::{parse, ParserState};
 
 fn with_type<F>(
     source: &str,
@@ -22,6 +22,64 @@ fn with_type<F>(
     let mut state = ParserState::new(&tokens);
     let t = parse_type_annotation(&mut state).expect("parse_type_annotation failed");
     f(t);
+}
+
+/// 取出记录类型的类型体——`Struct` 以外即用例所断言的失败，故 panic 里带原类型。
+fn struct_body(ty: &Type) -> &[TypeBodyItem] {
+    let Type::Struct { body } = ty else {
+        panic!("Expected Type::Struct, got: {ty:?}");
+    };
+    body
+}
+
+/// 记录类型里声明为字段的条目（忽略接口等其它类型体条目）。
+fn struct_fields(ty: &Type) -> Vec<&StructField> {
+    struct_body(ty)
+        .iter()
+        .filter_map(|it| match it {
+            TypeBodyItem::Field(f) => Some(f),
+            _ => None,
+        })
+        .collect()
+}
+
+/// 记录类型里声明的接口名（RFC-010：和类型用「字段 + 接口」的旧记录语法表达）。
+fn struct_interfaces(ty: &Type) -> Vec<String> {
+    struct_body(ty)
+        .iter()
+        .filter_map(|it| match it {
+            TypeBodyItem::Interface(name) => Some(name.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// 解析单条 `f: (…) -> … = { … }` 绑定，返回注解里的函数类型 `(params, return_type)`。
+///
+/// 签名带解析错误、或首个语句不是带函数类型注解的绑定时，带上原始 AST 上下文 panic——
+/// 定位失败本身就是用例要报的失败，调用方不必重复判空。
+fn parse_fn_type_annotation(source: &str) -> (Vec<Type>, Type) {
+    let tokens = tokenize(source).expect("tokenize 签名源码失败");
+    let result = parse(&tokens);
+    assert!(
+        !result.has_errors,
+        "签名不应有解析错误: {:?}",
+        result.errors
+    );
+    let Some(StmtKind::Assign {
+        type_annotation: Some(Type::Fn {
+            params,
+            return_type,
+        }),
+        ..
+    }) = result.module.items.first().map(|s| &s.kind)
+    else {
+        panic!(
+            "应解析为带函数类型注解的绑定，got: {:?}",
+            result.module.items
+        );
+    };
+    (params.to_vec(), return_type.as_ref().clone())
 }
 
 // 基元类型 (Spec §3.2)
@@ -121,78 +179,39 @@ fn test_struct_type_empty() {
 #[test]
 fn test_struct_type_fields() {
     with_type("{ x: Float, y: Float }", |t| {
-        if let Type::Struct { body } = &t {
-            let fields: Vec<&StructField> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Field(f) = it {
-                        Some(f)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            assert_eq!(fields.len(), 2);
-            assert_eq!(fields[0].name, "x");
-            assert_eq!(fields[1].name, "y");
-        } else {
-            panic!("Expected Type::Struct");
-        }
+        // Arrange & Act
+        let fields = struct_fields(&t);
+
+        // Assert
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[0].name, "x");
+        assert_eq!(fields[1].name, "y");
     });
 }
 
 #[test]
 fn test_struct_type_with_interface() {
     with_type("{ x: Float, Drawable, Serializable }", |t| {
-        if let Type::Struct { body } = &t {
-            let fields: Vec<&StructField> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Field(f) = it {
-                        Some(f)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            let interfaces: Vec<String> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Interface(s) = it {
-                        Some(s.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            assert_eq!(fields.len(), 1);
-            assert!(interfaces.contains(&"Drawable".to_string()));
-            assert!(interfaces.contains(&"Serializable".to_string()));
-        } else {
-            panic!("Expected Type::Struct");
-        }
+        // Arrange & Act —— 类型体：1 个字段 + 2 个接口
+        let fields = struct_fields(&t);
+        let interfaces = struct_interfaces(&t);
+
+        // Assert
+        assert_eq!(fields.len(), 1);
+        assert!(interfaces.contains(&"Drawable".to_string()));
+        assert!(interfaces.contains(&"Serializable".to_string()));
     });
 }
 
 #[test]
 fn test_struct_type_with_default() {
     with_type("{ x: Float = 0, y: Float = 0 }", |t| {
-        if let Type::Struct { body } = &t {
-            let fields: Vec<&StructField> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Field(f) = it {
-                        Some(f)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            assert_eq!(fields.len(), 2);
-            assert!(fields[0].default.is_some());
-        } else {
-            panic!("Expected Type::Struct");
-        }
+        // Arrange & Act
+        let fields = struct_fields(&t);
+
+        // Assert
+        assert_eq!(fields.len(), 2);
+        assert!(fields[0].default.is_some());
     });
 }
 
@@ -299,21 +318,11 @@ fn test_reject_old_curried_fn_syntax() {
 fn test_struct_mut_field() {
     // Note: "mut" in struct fields may not be fully supported
     with_type("{ x: Int, y: Float }", |t| {
-        if let Type::Struct { body } = &t {
-            let fields: Vec<&StructField> = body
-                .iter()
-                .filter_map(|it| {
-                    if let TypeBodyItem::Field(f) = it {
-                        Some(f)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            assert!(!fields.is_empty(), "Should parse at least one field");
-        } else {
-            panic!("Expected Type::Struct");
-        }
+        // Arrange & Act
+        let fields = struct_fields(&t);
+
+        // Assert
+        assert!(!fields.is_empty(), "Should parse at least one field");
     });
 }
 // const 泛型约束比较运算符 (RFC-011 §4.3) — issue #173
@@ -514,5 +523,84 @@ fn test_deprecated_pipe_syntax_not_parsed_as_variant() {
     assert!(
         !state.at_end(),
         "废弃 `|` 语法不应被整体吞掉为单个类型节点；parser 应停留在 `|` 附近"
+    );
+}
+
+// RFC-027 §3 返回位具名精化 `(r: P(...))` —— 解析层必须保留**声明的名字**
+
+/// 单具名括号（括号后不跟 `->`）= 返回形式参数的声明位：binder 名与谓词实参
+/// 都必须原样留在 AST 里（类型检查器据此按名识别返回点义务）。
+#[test]
+fn test_named_paren_return_refinement_keeps_declared_binder_name() {
+    // Arrange & Act
+    with_type("(r: IsPositive(r + 100))", |t| {
+        // Assert
+        let Type::NamedParen { param, inner, .. } = &t else {
+            panic!("单具名括号应解析为 Type::NamedParen，got: {t:?}");
+        };
+        assert_eq!(param, "r", "声明的返回形式参数名必须保留");
+        let Type::Generic { name, args, .. } = inner.as_ref() else {
+            panic!("内层应是谓词应用，got: {inner:?}");
+        };
+        assert_eq!(name, "IsPositive", "内层谓词名原样保留");
+        assert_eq!(args.len(), 1, "IsPositive 只接受一个实参");
+        assert!(
+            matches!(&args[0], Type::ConstExpr(e) if matches!(e.as_ref(), Expr::BinOp { op: BinOp::Add, .. })),
+            "谓词实参 `r + 100` 应保留为表达式，got: {:?}",
+            args[0]
+        );
+    });
+}
+
+/// 无具名的单元素括号仍是 `Paren`（RFC-004 括号语义不因本次改动改变）。
+#[test]
+fn test_unnamed_single_paren_stays_paren() {
+    // Arrange & Act
+    with_type("(Int)", |t| {
+        // Assert
+        assert!(
+            matches!(&t, Type::Paren(inner) if matches!(inner.as_ref(), Type::Name { name, .. } if name == "Int")),
+            "无具名的 `(Int)` 应仍是 Type::Paren，got: {t:?}"
+        );
+    });
+}
+
+/// 多个具名参数且无 `->` 仍按元组处理——形参名照旧丢弃（参数位语义不变）。
+#[test]
+fn test_multi_named_paren_stays_tuple() {
+    // Arrange & Act
+    with_type("(a: Int, b: Int)", |t| {
+        // Assert
+        let Type::Tuple(items) = &t else {
+            panic!("多具名参数的无箭头括号应解析为 Type::Tuple，got: {t:?}");
+        };
+        assert_eq!(items.len(), 2, "两项类型原样保留（名字丢弃）");
+        assert!(
+            items
+                .iter()
+                .all(|it| matches!(it, Type::Name { name, .. } if name == "Int")),
+            "元组元素应是参数类型，got: {items:?}"
+        );
+    });
+}
+
+/// 普通函数类型 `(a: Int, b: Int) -> Int` 不受影响：参数位的形参名仍由
+/// `parse_fn_type_with_names` 承载，类型位只有类型。
+#[test]
+fn test_named_function_type_params_stay_anonymous_types() {
+    // Arrange & Act：解析带函数类型注解的绑定，取出注解里的函数类型
+    let (params, return_type) = parse_fn_type_annotation("f: (a: Int, b: Int) -> Int = { 1 }");
+
+    // Assert：参数位只有类型（名字丢弃），返回类型是 Int
+    assert_eq!(params.len(), 2, "参数位只有类型，不含名字");
+    assert!(
+        params
+            .iter()
+            .all(|p| matches!(p, Type::Name { name, .. } if name == "Int")),
+        "参数类型应为 Int，got: {params:?}"
+    );
+    assert!(
+        matches!(&return_type, Type::Name { name, .. } if name == "Int"),
+        "返回类型应为 Int，got: {return_type:?}"
     );
 }

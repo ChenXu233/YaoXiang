@@ -1,0 +1,37 @@
+// 02-type-system/sum_type_native_match.yx
+// 覆盖: RFC-010b match 变体解构 + RFC-036 §4 两级 std（native 签名返回的和类型消费）
+// 验证: 单行 use std.result 后，match native 签名（parse_int/parse_float）返回的
+//       Result 变体解构——native 铸出的 Generic{"Result"} 与 std.result 和类型
+//       intern 同名同身份，变体集随 use 导入后 match 命中
+// 状态: ✅ 可运行
+
+use std.assert
+use std.string
+use std.result
+
+main: () -> Void = {
+    // native 返回 Ok 载荷
+    f = string.parse_float("125.0")
+    w = match f {
+        ok(x) => x,
+        err(_) => 0.0,
+    }
+    assert.assert(w == 125.0, "match native ok arm payload")
+
+    // native 返回 Err 载荷
+    n = string.parse_int("nope")
+    v = match n {
+        ok(x) => x,
+        err(_) => -1,
+    }
+    assert.assert(v == -1, "match native err arm payload")
+
+    // 穷尽性：两臂覆盖后结果类型一致
+    tag = match f {
+        ok(_) => "parsed",
+        err(_) => "failed",
+    }
+    assert.assert(tag == "parsed", "match native exhaustive arms")
+}
+
+main()

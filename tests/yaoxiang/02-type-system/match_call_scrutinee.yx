@@ -1,0 +1,72 @@
+// 02-type-system/match_call_scrutinee.yx
+// 覆盖: RFC-010b 变体解构 + #389——match scrutinee 为复合表达式（函数调用/
+//       内联构造/字段访问）时，checker 推断的 scrutinee 类型按 span 落表，
+//       IR 生成期回查替代 AST 猜测（猜测器对复合形态返回 None，曾误拦 E3008）
+// 验证: 调用/内联构造/字段访问三种 scrutinee 形态的变体解构编译运行皆正确，
+//       两臂载荷与穷尽性与变量 scrutinee 语义一致
+// 状态: ✅ 可运行
+
+use std.assert
+use std.option
+use std.result
+
+pick: (empty: Bool) -> Option(Int) = {
+    if empty {
+        return Option(Int).none()
+    }
+    return Option(Int).some(7)
+}
+
+mk: (ok: Bool) -> Result(Int, String) = {
+    if ok {
+        return Result(Int, String).ok(5)
+    }
+    return Result(Int, String).err("no")
+}
+
+Holder: Type = {
+    opt: Option(Int),
+}
+
+main: () -> Void = {
+    // 函数调用 scrutinee：some 臂载荷
+    v = match pick(false) {
+        some(x) => x,
+        none() => 0,
+    }
+    assert.assert(v == 7, "call scrutinee some arm payload")
+
+    // 函数调用 scrutinee：none 臂
+    w = match pick(true) {
+        some(x) => x,
+        none() => 0,
+    }
+    assert.assert(w == 0, "call scrutinee none arm")
+
+    // 内联构造 scrutinee（零载荷臂在前）
+    z = match Option(Int).none() {
+        none() => 0,
+        some(x) => x,
+    }
+    assert.assert(z == 0, "inline ctor scrutinee none arm")
+
+    // Result 调用 scrutinee：ok/err 两臂
+    r = match mk(true) {
+        ok(x) => x,
+        err(_) => -1,
+    }
+    assert.assert(r == 5, "result call scrutinee ok arm")
+    e = match mk(false) {
+        ok(x) => x,
+        err(_) => -1,
+    }
+    assert.assert(e == -1, "result call scrutinee err arm")
+
+    // 字段访问 scrutinee
+    h = Holder(Option(Int).some(9))
+    f = match h.opt {
+        some(x) => x,
+        none() => 0,
+    }
+    assert.assert(f == 9, "field access scrutinee payload")
+}

@@ -32,6 +32,97 @@ fn docs_dir() -> PathBuf {
     repo_root().join(STDLIB_DOCS_REL)
 }
 
+/// Fixture: 收集所有文档页里可运行的示例，返回 (标签, 源码)。
+///
+/// 可运行 = 带 Fn 注解入口（main: () -> Void = {）；生成区的签名块不算。
+fn runnable_doc_examples() -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    // 遍历**所有**有文档页的模块，含纯 yx 模块（list 等）——它们不进
+    // modules_for_docs()，但页里同样有可运行示例，漏掉等于无人守。
+    for page in documented_module_names() {
+        let name = page.trim_end_matches(".md").to_string();
+        let path = docs_dir().join(&page);
+        let Ok(doc) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+
+        for (i, code) in yaoxiang_examples(&doc).into_iter().enumerate() {
+            // 可运行示例 = 带 Fn 注解的入口（B 方案：无注解块是值，不是函数）
+            if !code.contains("main: () -> Void = {") {
+                continue;
+            }
+            // 生成区里的签名块不是可运行程序
+            if !code.contains('{') || code.trim().ends_with("= {") {
+                continue;
+            }
+            out.push((format!("{name}.md#{i}"), code));
+        }
+    }
+    out
+}
+
+/// Act: 跑一个文档示例（补一行 main() 调用），失败时返回带标签的诊断。
+///
+/// 块里只定义 main、没有调用——run 不会自动调它，于是断言即使全错也退出码 0。
+/// 必须补一行 main() 才真的执行（2026-09 修）。
+fn run_doc_example(
+    label: &str,
+    code: &str,
+) -> Result<(), String> {
+    let mut src = code.trim_end().to_string();
+    if !src.ends_with("main()") {
+        src.push_str(
+            "
+main()
+",
+        );
+    }
+
+    let file = std::env::temp_dir().join(format!(
+        "yx_doc_{}.yx",
+        label.replace(|c: char| !c.is_ascii_alphanumeric(), "_")
+    ));
+    if let Err(e) = std::fs::write(&file, &src) {
+        return Err(format!("{label}: 写临时文件失败: {e}"));
+    }
+
+    let out = std::process::Command::new(yaoxiang_binary())
+        .arg("run")
+        .arg(&file)
+        // 隔离 cwd：示例里的相对路径读写全部落在临时目录；
+        // 进程级 cwd 被其他测试污染（如残留进已删除的 TempDir）也免疫。
+        .current_dir(std::env::temp_dir())
+        .output();
+
+    match out {
+        Ok(o) => {
+            let stderr = String::from_utf8_lossy(&o.stderr);
+            if !o.status.success() || !stderr.trim().is_empty() {
+                Err(format!(
+                    "{label}: 示例执行失败\n--- 源码 ---\n{code}\n--- stderr ---\n{stderr}"
+                ))
+            } else {
+                Ok(())
+            }
+        }
+        Err(e) => Err(format!("{label}: 无法启动解释器: {e}")),
+    }
+}
+
+/// Assert: 示例至少命中一个，且一个失败都不允许。
+fn assert_doc_examples_all_run(
+    checked: usize,
+    failures: &[String],
+) {
+    assert!(checked > 0, "未找到任何可运行示例，语料选择器可能失效");
+    assert!(
+        failures.is_empty(),
+        "{} 个文档示例无法运行（共检查 {checked} 个）：\n{}",
+        failures.len(),
+        failures.join("\n\n")
+    );
+}
+
 /// 门禁一：生成区与 `StdModule::exports()` 一致
 #[test]
 fn test_stdlib_docs_match_generation() {
@@ -119,75 +210,17 @@ fn test_stdlib_docs_covers_interface_modules() {
 /// 诊断走 stderr；退出码非 0 或 stderr 非空都算失败。
 #[test]
 fn test_stdlib_docs_examples_run() {
-    let mut checked = 0usize;
-    let mut failures: Vec<String> = Vec::new();
+    // Arrange: 收集所有可运行示例（带入口注解的 yaoxiang 围栏块）
+    let examples = runnable_doc_examples();
 
-    // 遍历**所有**有文档页的模块，含纯 yx 模块（`list` 等）——它们不进
-    // `modules_for_docs()`，但页里同样有可运行示例，漏掉等于无人守。
-    for page in documented_module_names() {
-        let name = page.trim_end_matches(".md");
-        let path = docs_dir().join(&page);
-        let Ok(doc) = std::fs::read_to_string(&path) else {
-            continue;
-        };
+    // Act: 逐个补齐 main() 调用并真跑解释器
+    let failures: Vec<String> = examples
+        .iter()
+        .filter_map(|(label, code)| run_doc_example(label, code).err())
+        .collect();
 
-        for (i, code) in yaoxiang_examples(&doc).into_iter().enumerate() {
-            // 可运行示例 = 带 Fn 注解的入口（B 方案：无注解块是值，不是函数）
-            if !code.contains("main: () -> Void = {") {
-                continue;
-            }
-            // 生成区里的签名块不是可运行程序
-            if !code.contains('{') || code.trim().ends_with("= {") {
-                continue;
-            }
-            checked += 1;
-
-            // 块里只定义 `main`，没有调用——`run` 不会自动调它，于是断言
-            // 即使全错也退出码 0。必须补一行 `main()` 才真的执行。
-            let mut src = code.trim_end().to_string();
-            if !src.ends_with("main()") {
-                src.push_str(
-                    "
-main()
-",
-                );
-            }
-
-            let file = std::env::temp_dir().join(format!("yx_doc_{name}_{i}.yx"));
-            if let Err(e) = std::fs::write(&file, &src) {
-                failures.push(format!("{name}.md#{i}: 写临时文件失败: {e}"));
-                continue;
-            }
-
-            let out = std::process::Command::new(yaoxiang_binary())
-                .arg("run")
-                .arg(&file)
-                // 隔离 cwd：示例里的相对路径读写全部落在临时目录；
-                // 进程级 cwd 被其他测试污染（如残留进已删除的 TempDir）也免疫。
-                .current_dir(std::env::temp_dir())
-                .output();
-
-            match out {
-                Ok(o) => {
-                    let stderr = String::from_utf8_lossy(&o.stderr);
-                    if !o.status.success() || !stderr.trim().is_empty() {
-                        failures.push(format!(
-                            "{name}.md#{i}: 示例执行失败\n--- 源码 ---\n{code}\n--- stderr ---\n{stderr}"
-                        ));
-                    }
-                }
-                Err(e) => failures.push(format!("{name}.md#{i}: 无法启动解释器: {e}")),
-            }
-        }
-    }
-
-    assert!(checked > 0, "未找到任何可运行示例，语料选择器可能失效");
-    assert!(
-        failures.is_empty(),
-        "{} 个文档示例无法运行（共检查 {checked} 个）：\n{}",
-        failures.len(),
-        failures.join("\n\n")
-    );
+    // Assert: 至少检查了一个示例，且一个失败都不允许
+    assert_doc_examples_all_run(examples.len(), &failures);
 }
 
 /// 提取 markdown 中全部 ```yaoxiang 围栏代码块

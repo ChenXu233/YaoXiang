@@ -41,6 +41,8 @@ define_codes!(E2XXX, {
     ("E2094", Semantic, false, invalid_signature_generic_shadows(name: &str) => .param("name", name)),
     // E2095 参数名遮蔽泛型
     ("E2095", Semantic, false, invalid_signature_param_shadows_generic(name: &str) => .param("name", name)),
+    // E2096 签名裸容器类型（#391：容器是泛型构造器，SPEC §4.1.1，构造期拒绝）
+    ("E2096", Semantic, false, invalid_signature_bare_container(name: &str) => .param("name", name)),
     // E2029 spawn 内 ref 循环
     ("E2029", Semantic, false, spawn_ref_cycle(cycle: &str) => .param("cycle", cycle)),
     // E2030 精化类型约束违反（赋值后依赖变量 VC 被 SMT 证伪——

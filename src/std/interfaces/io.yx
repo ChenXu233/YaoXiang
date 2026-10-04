@@ -13,18 +13,6 @@ read_line: () -> String = {
     ...
 }
 
-read_file: (path: &String) -> String = {
-    ...
-}
-
-write_file: (path: &String, content: &String) -> Bool = {
-    ...
-}
-
-append_file: (path: &String, content: &String) -> Bool = {
-    ...
-}
-
 format_fallback: (value, type_name: &String) -> String = {
     ...
 }

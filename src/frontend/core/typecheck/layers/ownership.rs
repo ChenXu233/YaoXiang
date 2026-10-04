@@ -1094,7 +1094,9 @@ impl OwnershipChecker {
             return false;
         };
         let env = unsafe { &*env_ptr };
-        env.types.contains_key(name) || env.generic_type_defs.contains_key(name)
+        env.types.contains_key(name)
+            || env.generic_type_defs.contains_key(name)
+            || env.sum_types.contains_key(name)
     }
 
     /// 从 TypeEnvironment 查询函数参数的所有权语义
@@ -1315,6 +1317,10 @@ impl OwnershipChecker {
             MonoType::Ref { mutable: false, .. } => CopySemantics::Dup,
             MonoType::Ref { mutable: true, .. } => CopySemantics::Linear,
             m if m.is_arc() => CopySemantics::Dup,
+            // #390：RFC-009 Dup 表 String/Bytes 行——运行时 String=Arc<str>、
+            // Bytes=Arc<[u8]>，clone 即引用计数 +1（复制句柄共享底层 buffer）；
+            // 解释器槽位不因 move 真销毁值，Dup 分类纯静态放行即可。
+            m if m.is_string() || m.is_bytes() => CopySemantics::Dup,
             MonoType::Int(_) | MonoType::Float(_) | MonoType::Bool | MonoType::Char => {
                 CopySemantics::ValueCopy
             }
@@ -1327,8 +1333,101 @@ impl OwnershipChecker {
             // 之后 `double(6)` 报 E2014——把函数当成 Linear（一次性）类型，
             // 与「函数可任意次调用」的直觉和高阶编程直接冲突。
             MonoType::Fn { .. } => CopySemantics::Dup,
+            // #398：struct / tuple 的组合派生在 classify_mono_deep 里处理
+            //（需要 env 展开具名类型，本函数只认叶子）。
             _ => CopySemantics::Move,
         }
+    }
+
+    /// #398：struct 派生递归展开的深度上限（循环别名保护）。
+    ///
+    /// 字段类型可以是具名类型（`A = { b: B }` / `B = { a: A }`），展开没有
+    /// 结构上的终止保证；深度耗尽即保守落 Move——宁可多报一次 move，
+    /// 也不能让分类器无限展开。
+    const MAX_COPY_DERIVE_DEPTH: usize = 32;
+
+    /// #398：RFC-009 Dup 表 struct 派生行——「所有字段可复制时自动派生」的
+    /// 可执行形式。
+    ///
+    /// 与 [`Self::classify_mono`] 的分工：叶子类型（原语 / String / Bytes /
+    /// `&T` / `&mut T` / Fn）的判定完全沿用后者，本函数只额外处理**组合
+    /// 类型**：
+    ///
+    /// - **struct**：所有字段可复制（ValueCopy ∪ Dup）→ Dup；任一字段
+    ///   Linear（`&mut T`）或 Move（嵌套 Move struct / 容器 / 资源）→ 整体
+    ///   保持 Move（不引入「部分可复制」的中间态）；
+    /// - **tuple**：与 struct 同规则，逐元素判定（#398 定案）；
+    /// - **TypeRef**：字段类型位置的字面量名（`target: Point` 在 AST 转换时
+    ///   落到 `TypeRef("Point")`），经 `env.types` 展开定义体后递归——派生
+    ///   是**递归**的，不是一层。
+    ///
+    /// 容器（Vec / Dict / Set / Option / Result / Array）与枚举不在本行范围内，
+    /// 仍落 Move（RFC-009 表未列，另案）。
+    fn classify_mono_deep(
+        &self,
+        ty: &crate::frontend::core::types::MonoType,
+        depth: usize,
+    ) -> CopySemantics {
+        use crate::frontend::core::types::MonoType;
+        if depth == 0 {
+            return CopySemantics::Move;
+        }
+        match ty {
+            MonoType::Struct(st) => {
+                if st
+                    .fields
+                    .iter()
+                    .all(|(_, field_ty)| self.is_copyable_field(field_ty, depth - 1))
+                {
+                    CopySemantics::Dup
+                } else {
+                    CopySemantics::Move
+                }
+            }
+            // 元组与 struct 同规则（#398 定案）：全元素可复制才派生。
+            // 空元组（单位）在 AST 转换时就是 Void，不会走到这里。
+            MonoType::Generic { name, args } if name == "Tuple" && !args.is_empty() => {
+                if args
+                    .iter()
+                    .all(|elem_ty| self.is_copyable_field(elem_ty, depth - 1))
+                {
+                    CopySemantics::Dup
+                } else {
+                    CopySemantics::Move
+                }
+            }
+            MonoType::TypeRef(name) => match self.resolve_type_def(name) {
+                Some(body) => self.classify_mono_deep(&body, depth - 1),
+                None => CopySemantics::Move,
+            },
+            leaf => Self::classify_mono(leaf),
+        }
+    }
+
+    /// #398：字段 / 元素是否属于「可复制集合」（ValueCopy ∪ Dup）。
+    ///
+    /// 原语字段（Int 等）本身不属于 Dup 类型属性，但赋值即完整值复制——
+    /// 对 struct 派生而言与 Dup 字段同样安全，故并入判定集（RFC-009 表
+    /// 「所有字段均为 Dup」的字面执行会漏掉 `{ x: Int }`，见 #398 定案）。
+    fn is_copyable_field(
+        &self,
+        ty: &crate::frontend::core::types::MonoType,
+        depth: usize,
+    ) -> bool {
+        matches!(
+            self.classify_mono_deep(ty, depth),
+            CopySemantics::ValueCopy | CopySemantics::Dup
+        )
+    }
+
+    /// #398：具名类型定义展开——`T: Type = ...` 注册在 env.types 的定义体。
+    fn resolve_type_def(
+        &self,
+        name: &str,
+    ) -> Option<crate::frontend::core::types::MonoType> {
+        let env_ptr = self.env?;
+        let env = unsafe { &*env_ptr };
+        env.types.get(name).map(|poly| poly.body.clone())
     }
 
     /// #256：变量语义分类——先查账本（作用域内层优先），再查 env（顶层/函数绑定），
@@ -1340,14 +1439,14 @@ impl OwnershipChecker {
         for scope in self.scope_keys.iter().rev() {
             if let Some(key) = scope.get(name) {
                 if let Some(poly) = self.type_ledger.get(&(*key, name.to_string())) {
-                    return Self::classify_mono(&poly.body);
+                    return self.classify_mono_deep(&poly.body, Self::MAX_COPY_DERIVE_DEPTH);
                 }
             }
         }
         if let Some(env_ptr) = self.env {
             let env = unsafe { &*env_ptr };
             if let Some(poly) = env.get_var(name) {
-                return Self::classify_mono(&poly.body);
+                return self.classify_mono_deep(&poly.body, Self::MAX_COPY_DERIVE_DEPTH);
             }
         }
         // ref T（Arc/Rc）语法回退：账本/env 都查不到时保留 #251 的追踪结果
@@ -2015,8 +2114,18 @@ impl OwnershipChecker {
                             .unwrap_or_else(|| vec![ParamOwnership::Move; args.len()]),
                     },
                 };
+                // 和类型应用（`Result(Json, Error)`）：实参整体是类型实参，
+                // 同 #361 理由不参与 Move 分析——Error 类型族与 sum_types 里
+                // 的用户和类型不在 env.types/generic_type_defs，逐实参判定漏网
+                let sum_type_application = match func.as_ref() {
+                    Expr::Var(n, _) => env.sum_types.contains_key(n),
+                    _ => false,
+                };
                 // 处理显式参数
                 for (i, arg) in args.iter().enumerate() {
+                    if sum_type_application {
+                        continue;
+                    }
                     // 类型实参不是值：`M(Int, Int)` 里的 `Int` 是类型名而非变量引用，
                     // 不参与 Move/借用分析。若当值走，同一类型名出现两次即报
                     // E2014「'Int' has been moved」（#361）——泛型构造实参位

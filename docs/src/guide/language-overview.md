@@ -23,6 +23,8 @@ pub version = "1.0"       // 公开导出
 一切皆 `name: type = value`。函数也是值。
 
 ```yaoxiang
+use std.io
+
 // 表达式形式（直接返回值）
 add: (a: Int, b: Int) -> Int = a + b
 
@@ -54,6 +56,7 @@ greet: (name: String) -> Void = {
 
 没有 `type`、`struct`、`trait`、`impl` 关键字。一个统一声明搞定一切。
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // 记录类型
 Point: Type = { x: Float, y: Float }
@@ -68,8 +71,10 @@ Point(x=1.0)                   // OK: x=1.0, y=0
 // 变体类型（枚举）
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
-Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
+// 注意：标准库已内置 std.option（Option + Try），不建议自行定义
+// Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
+// 注意：裸构造器 ok/err 当前报 E1001（实测），标准库见 std.result
+// Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // 接口（字段全为函数类型的记录类型）
 Drawable: Type = { draw: (Surface) -> Void }
@@ -93,18 +98,23 @@ List: (T: Type) -> Type = {
 }
 
 // 泛型约束
-clone: (T: Clone)(value: T) -> T = value.clone()
-sort: (T: Clone + PartialOrd)(list: List(T)) -> List(T)
+// 泛型约束签名当前解析器尚不支持，实测报 E0011
+clone: (value: T) -> T = value
+// 泛型约束签名当前解析器尚不支持，实测报 E0011
+sort: (list: List(T)) -> List(T)
 ```
 
 ## 方法
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // 命名空间函数（Type.method 只是归属标记，不是绑定）
 Point.distance: (a: &Point, b: &Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
-    return (dx * dx + dy * dy).sqrt()
+    // 注意：括号表达式不能直接挂方法（实测 E1053），需先绑定到变量
+    d2 = dx * dx + dy * dy
+    return d2.sqrt()
 }
 
 // 显式绑定后才有 . 调用语法
@@ -120,8 +130,12 @@ Point.draw: (self: &Point, surface: Surface) -> Void = {
 ## 控制流
 
 ```yaoxiang
+use std.result
+
 // if 是表达式
-grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }
+score = 72
+value: Result(Int, String) = Result(Int, String).ok(1)
+grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }   // "B"
 
 // match
 result = match value {
@@ -141,6 +155,9 @@ while n < 5 { io.println(n); n = n + 1 }
 ## 数据结构
 
 ```yaoxiang
+use std.dict
+use std.list
+
 // 列表
 nums = [1, 2, 3, 4, 5]
 first = nums[0]           // 1
@@ -156,6 +173,10 @@ doubled = [x * 2 for x in nums]
 
 ## 模式匹配
 
+> **注意**：0.8.2 **尚未实现记录/结构体解构模式**（实测
+> `match s { circle(r) => ... }` 报 E0010），下面是目标语法，暂不可运行。
+
+<!-- docs-example: skip -->
 ```yaoxiang
 match shape {
     circle(r) => pi * r * r,
@@ -186,21 +207,26 @@ match age {
 ## 模块和导入
 
 ```yaoxiang
+// 导入整个模块，用命名空间访问
 use std.io
+
+// 只导入指定条目，直接裸用
 use std.math.{sqrt, sin, cos}
-use std.{io, list}
+use std.{list, string}
+
+// 条目内联别名
+use std.io.{print as say}
 
 io.println("hello")
-result = sqrt(16)         // 4.0
+result = sqrt(16.0)       // 4.0（注意：Int 入参会返回 0.0，必须传 Float）
+say("aliased")
 
-// 别名
-use std.math as math
-use std.{io as print}
-
-// 公开导出
-pub add: (a: Int, b: Int) -> Int = a + b
-pub Point: Type = { x: Float, y: Float }
+// 模块的所有顶层绑定默认可被外部导入，无需 pub
+add: (a: Int, b: Int) -> Int = a + b
+Point: Type = { x: Float, y: Float }
 ```
+
+模块路径、目录入口约定与 `use` 的完整形态见[模块系统](./modules)。
 
 ## 所有权
 
@@ -227,6 +253,7 @@ backup = data.clone()
 
 spawn 是唯一并行原语。无 async/await，无 Send/Sync。
 
+<!-- docs-example: skip -->
 ```yaoxiang
 // spawn 块：子表达式自动并行
 result = spawn {
@@ -253,8 +280,9 @@ main: () -> Void = {
 ## F-string
 
 ```yaoxiang
+pi = 3.14159
 name = "YaoXiang"
-io.println(f"Hello {name}")          // Hello YaoXiang
-io.println(f"Sum: {10 + 20}")        // Sum: 30
-io.println(f"Pi: {pi:.2f}")          // Pi: 3.14
+print(f"Hello {name}")               // Hello YaoXiang
+print(f"Sum: {10 + 20}")             // Sum: 30
+print(f"Pi: {pi}")                    // 实测：格式说明符暂未实现，输出 3.14159
 ```
