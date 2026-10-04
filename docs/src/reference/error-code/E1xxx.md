@@ -34,6 +34,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 | `E1040` | 操作不支持 | `TypeCheck` | 否 | `类型 '{type}' 不支持操作 '{op}'` | ⚠ 暂未发射 |
 | `E1041` | 索引越界 | `TypeCheck` | 否 | `索引越界：有效范围是 0..{max}，找到 {index}` | ✅ 5 处 |
 | `E1042` | 字段未找到 | `TypeCheck` | 否 | `在结构体 '{struct}' 中找不到字段 '{field}'` | ✅ 9 处 |
+| `E1043` | 模块成员未找到 | `TypeCheck` | 否 | `模块 '{module}' 没有导出 '{name}'` | ✅ 1 处 |
 | `E1050` | 需要布尔操作数 | `TypeCheck` | 否 | `逻辑运算需要布尔操作数，实际为 '{left}' 和 '{right}'` | ✅ 1 处 |
 | `E1051` | 逻辑 NOT 需要布尔操作数 | `TypeCheck` | 否 | `逻辑 NOT 需要布尔操作数，实际为 '{type}'` | ✅ 1 处 |
 | `E1052` | 无效解引用 | `TypeCheck` | 否 | `无法解引用类型 '{type}'，期望指针类型` | ✅ 1 处 |
@@ -268,6 +269,17 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **消息**：访问了不存在的结构体字段
 - **帮助**：检查结构体的可用字段
 - **发射点**：`src/backends/mod.rs:150`、`src/frontend/core/typecheck/inference/expressions.rs:1228`、`src/frontend/core/typecheck/inference/expressions.rs:1271` 等 9 处
+
+### E1043：模块成员未找到
+
+- **类别**：`TypeCheck`
+- **span 豁免**：否
+- **构造函数**：`ErrorCodeDefinition::module_has_no_export(module, name, available)`
+- **模板**：`模块 '{module}' 没有导出 '{name}'`
+- **消息**：访问了模块未导出的成员
+- **帮助**：该模块的可用导出：{available}
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3177`
+- **源码注释名**：模块成员未找到（模块不是 struct，不得借道 E1042 的 field/struct 语义）
 
 ### E1050：需要布尔操作数
 

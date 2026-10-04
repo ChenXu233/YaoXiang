@@ -41,6 +41,7 @@ This family has **53** codes in total, all registered in the `define_codes!` reg
 | `E1040` | Unsupported operation                                       | `TypeCheck` | No          | `Type '{type}' does not support operation '{op}'`                                                                                                         | ⚠ Not yet emitted |
 | `E1041` | Index out of bounds                                         | `TypeCheck` | No          | `Index out of bounds: valid range is 0..{max}, found {index}`                                                                                             | ✅ 5 locations    |
 | `E1042` | Field not found                                             | `TypeCheck` | No          | `Field '{field}' not found in struct '{struct}'`                                                                                                          | ✅ 9 locations    |
+| `E1043` | Module member not found                                     | `TypeCheck` | No          | `Module '{module}' did not export '{name}'`                                                                                                               | ✅ 1 location     |
 | `E1050` | Boolean operand required                                    | `TypeCheck` | No          | `Logical operation requires boolean operands, found '{left}' and '{right}'`                                                                               | ✅ 1 location     |
 | `E1051` | Logical NOT requires boolean operand                        | `TypeCheck` | No          | `Logical NOT requires a boolean operand, found '{type}'`                                                                                                  | ✅ 1 location     |
 | `E1052` | Invalid dereference                                         | `TypeCheck` | No          | `Cannot dereference type '{type}', expected a pointer type`                                                                                               | ✅ 1 location     |
@@ -305,6 +306,18 @@ This family has **53** codes in total, all registered in the `define_codes!` reg
 - **Emission points**: `src/backends/mod.rs:150`,
   `src/frontend/core/typecheck/inference/expressions.rs:1228`,
   `src/frontend/core/typecheck/inference/expressions.rs:1271`, etc. (9 total)
+
+### E1043: Module member not found
+
+- **Category**: `TypeCheck`
+- **Span exempt**: No
+- **Constructor**: `ErrorCodeDefinition::module_has_no_export(module, name, available)`
+- **Template**: `Module '{module}' did not export '{name}'`
+- **Message**: Accessed a member that the module did not export
+- **Help**: Available exports of this module: {available}
+- **Emission points**: `src/frontend/core/typecheck/inference/expressions.rs:3177`
+- **Source comment name**: Module member not found (a module is not a struct; the
+  field/struct semantics of E1042 must not be borrowed)
 
 ### E1050: Boolean operand required
 
