@@ -104,7 +104,7 @@ src/
 │       ├── predicate.rs
 │       └── equivalence.rs
 │
-├── proof/                         # L3：证明与验证支撑（从 typecheck/proof/ 提为一级）
+├── proof/                         # L3：证明与验证支撑（从 typecheck/proof/ 提为一级；driver 义务账本持有 proof_calls、sema 三个层共用 SMT 后端，跨层消费故提一级）
 │   ├── mod.rs                     #   ProofResult / ProofContext / ProofFunctionCall
 │   ├── context.rs
 │   ├── verdict.rs
@@ -175,7 +175,7 @@ src/
 │       └── facade.rs
 │
 ├── std/                           # L4 标准库（Rust 实现 + .yx 混合）
-├── util/                          # 跨层工具（诊断、span、缓存、i18n）
+├── util/                          # 跨层工具（诊断、span、缓存、i18n；保留既有名——08 引用的 Go "避免 util" 为中等适用，改名净 churn 无域收益，记为例外）
 ├── formatter/                     # 格式化
 ├── lsp/                           # 语言服务
 ├── repl/                          # REPL（若保留，见 06 的 D 节）
@@ -198,6 +198,7 @@ src/
 | `middle/bytecode/` | 字节码域：opcode 词表 + `.42` 容器 + 编解码 | **opcode 词表唯一归属**；`backends/` 只消费不定义；`sema` 不感知 opcode |
 | `backends/` | 执行 | **不得**反向引用 L1/L2；不感知 AST |
 | `middle/passes/mono/` | IR 上的 pass | 不得引用 `frontend` |
+| `formatter/`、`lsp/`、`repl/`、`package/` | 外围工具层（不在 L1-L4 模型内） | 只消费 L1-L4 的 `pub` API；不得触碰 `pub(crate)`（该泄漏计数同样约束它们） |
 
 ### 现状 → 目标映射
 

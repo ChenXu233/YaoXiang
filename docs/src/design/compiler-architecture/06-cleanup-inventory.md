@@ -100,6 +100,8 @@
 
 **特别注意 `precedence_inline.rs`**：它测的是 `precedence.rs` 里那套**生产零使用**的 `Precedence` 枚举 + `PrecedenceContext`（96 行死代码）。即使把它接上，它测的也是死路径。
 
+另一个隐藏在第 23 个孤儿里的是 `src/frontend/core/typecheck/tests/semantic_db.rs`（5 行，0 test）：`typecheck/tests/mod.rs` 声明了 23 个测试模块，唯独漏了它——文件只剩一行 `use`，是纯残骸。S1 复活时随接线一并删除或补断言。
+
 ## B. 已编译但零调用的死代码
 
 | # | 位置 | 规模 | 证据 |
