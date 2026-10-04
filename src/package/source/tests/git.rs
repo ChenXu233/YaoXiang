@@ -339,6 +339,8 @@ fn collect_git_spawns(
 }
 
 /// 目录清单：所有文件（含仓库元数据）的「相对路径 + 长度 + 内容散列」，按路径排序。
+/// 瞬时锁文件（`*.lock`）不参与清单——它们由 git 后台任务异步创建与清理，
+/// 存在与否不构成「仓库被改写」（改写必然留下 objects/refs/config 等内容变更）。
 ///
 /// 用自实现的 FNV-1a 而非 `DefaultHasher`：父子两个进程必须得到完全一致的
 /// 结果，跨进程可复现是这里的硬要求。
@@ -361,6 +363,15 @@ fn collect_manifest_rows(
         let path = entry.path();
         if path.is_dir() {
             collect_manifest_rows(root, &path, rows);
+            continue;
+        }
+        // maintenance.lock / index.lock 等瞬时锁由 git 后台任务异步落盘并
+        // 自行清理，快照前后可能恰好只撞见其中一侧（CI 实证）；豁免。
+        let is_transient_lock = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.ends_with(".lock"));
+        if is_transient_lock {
             continue;
         }
         let Ok(bytes) = std::fs::read(&path) else {
