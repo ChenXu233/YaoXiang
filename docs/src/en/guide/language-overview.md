@@ -218,7 +218,7 @@ use std.io
 
 // import only specific entries, used as bare names
 use std.math.{sqrt, sin, cos}
-use std.{io, list}
+use std.{list, string}
 
 // inline alias for an entry
 use std.io.{print as say}

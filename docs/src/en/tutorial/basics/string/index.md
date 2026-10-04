@@ -135,6 +135,9 @@ to:
 ```yaoxiang
 use std.string
 
+name = "Alice"
+age = 25
+
 // What you write
 f"Hello {name}, age: {age}"
 

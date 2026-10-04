@@ -131,6 +131,9 @@ print(info)
 ```yaoxiang
 use std.string
 
+name = "Alice"
+age = 25
+
 // 你写的
 f"Hello {name}, age: {age}"
 

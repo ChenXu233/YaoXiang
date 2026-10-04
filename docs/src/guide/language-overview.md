@@ -212,7 +212,7 @@ use std.io
 
 // 只导入指定条目，直接裸用
 use std.math.{sqrt, sin, cos}
-use std.{io, list}
+use std.{list, string}
 
 // 条目内联别名
 use std.io.{print as say}
