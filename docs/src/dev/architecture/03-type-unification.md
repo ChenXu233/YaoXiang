@@ -358,7 +358,7 @@ ir::Type 别名删除, BytecodeFunction.params / type_table 改用 MonoType
 | 11 | `Union(Vec<(String, Option<Type>)>)` | `ast.rs:448` | **删除** | 生产零构造（`mono.rs:743-746`） |
 | 12 | `Enum(Vec<String>)` | `ast.rs:449` | **删除** | 生产零构造（`mono.rs:747`）。枚举走 `Struct` + `TypeBodyItem`，与 `mono.rs:2378` 的 `MonoType::Enum(_) => IrType::Void` 无关 |
 | 13 | `Tuple(Vec<Type>)` | `ast.rs:450` | **保留** | `bytecode.rs:2374` 消费 |
-| 14 | `Fn { params, return_type }` | `ast.rs:451-454` | **保留** | `bytecode.rs:2366` 消费 |
+| 14 | `Fn { params, return_type }` | `ast.rs:451-454` | **保留** | `bytecode.rs:2366` 消费；**字段重塑 `params: Vec<Type>` → `Vec<Param>`（名字与类型同栖）随 6.8.1（D54）**——`Assign.signature_params` 的名字由此承接（见 6.5.2） |
 | 15 | `Option(Box<Type>)` | `ast.rs:455` | **删除** | 生产零构造（`mono.rs:770`）。`types.rs:392-396` 已说明走 `Generic` 路径 |
 | 16 | `Result(Box<Type>, Box<Type>)` | `ast.rs:456` | **删除** | 生产零构造（`mono.rs:771`）。同上 |
 | 17 | `Generic { name, name_span, args }` | `ast.rs:457-461` | **保留** | `Result` / `Option` / `String` / `Bytes` 的实际表示都走它（`types.rs:397-399`） |

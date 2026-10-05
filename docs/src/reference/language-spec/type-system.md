@@ -293,8 +293,30 @@ TypeList    ::= TypeExpr (',' TypeExpr)* ','?
 
 ```
 FnType      ::= '(' ParamList? ')' '->' TypeExpr
-ParamList   ::= TypeExpr (',' TypeExpr)*
+ParamList   ::= Param (',' Param)*
+Param       ::= Identifier ':' TypeExpr    // 带名参数
+              | TypeExpr                   // 未命名参数（裸类型）
 ```
+
+**两种参数形态，名字的归属不同**（RFC-007 简写规则的类型面）：
+
+- **带名**（`a: Int`）：名字进入契约——可被命名实参引用（`f(a = 3)`，见
+  [syntax §2.3](syntax.md#23-函数调用)），且签名已声明参数名与类型时可省略 lambda 头
+  （`add: (a: Int, b: Int) -> Int = a + b`，RFC-007 §简写规则）。
+- **未命名**（裸类型，如 `(Int, Int) -> Int`）：类型约束**按位置**生效，名字属于实现——
+  lambda 头必须自带参数名（`mk: (Int, Int) -> Int = (x, y) => x + y`，RFC-007：lambda 头
+  可省略当且仅当签名已声明参数名）；不可被命名实参引用，只能按位置调用。裸标识符按
+  类型命名空间解析，解析不到已声明的类型报错——参数位不存在"既非类型也非类型参数"
+  的裸标识符。
+
+**标注的绑定语义**：标注是声明，不是注释。绑定语句按标注检查实现——参数类型按位驱动
+lambda 头（实现自带显式类型时须与标注一致），函数体的出口（尾表达式与 `return`）统一
+对照标注的返回类型，绑定注册给调用方的类型就是标注形态。无标注的绑定按 HM 推断
+（RFC-007）。`x: Int = "hello"` 与 `f: () -> Int = () => "hello"` 在同一规则下被拒绝——
+绑定语义不因值的书写形态（lambda / 块 / 表达式）分叉。
+
+> **实现状态**：非 `Fn` 标注的绑定期对照已生效；`Fn` 标注的绑定期对照与裸标识符的类型
+> 解析随 [RFC-039](../../rfc/accepted/039-compiler-architecture.md) D53/D54 落地（P6/P8）。
 
 ---
 
