@@ -1,10 +1,11 @@
 ---
 title: 'RFC-039: 编译器架构重构（总纲）'
+status: '已接受'
 author: 'ChenXu233'
 created: '2026-10-03'
-updated: '2026-10-04'
-status: '草案'
-issue: 'TBD'
+updated: '2026-10-05'
+accepted: '2026-10-05'
+issue: '#430'
 ---
 
 # RFC-039: 编译器架构重构
@@ -412,7 +413,7 @@ P10 其余清理与状态修正          06 §S2-S6
 
 | # | 项 | 说明 |
 | --- | --- | --- |
-| — | RFC 的 `issue` 字段 | 现为 `TBD`。**提 PR 前必须补真实 Issue 号**，否则 `check_tracking.py` 虽能通过，但 `scripts/rfc/ai_agent.py` 的 `issue_rfc_link` 关联不到 |
+| — | RFC 的 `issue` 字段 | 已补齐：[#430](https://github.com/ChenXu233/YaoXiang/issues/430)（2026-10-05，接受当日建立追踪 issue） |
 
 ## 附录：术语表
 

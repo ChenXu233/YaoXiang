@@ -1,6 +1,6 @@
 # 类型表示单一化
 
-> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
+> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
 
 ## 定位与范围
 
@@ -732,13 +732,13 @@ declarations.rs:498-511 与 ast.rs:930 改为
 
 ### 未决问题
 
-> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/draft/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
+> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/accepted/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
 >
 ## 参见
 
 ### 上位与同批文档
 
-- [RFC-039 编译器功能路由目录设计（总纲）](../../rfc/draft/039-compiler-architecture.md) — 上位总纲；四层模型、判据分级、路由表 C（3 条类型表示相关条目归属本文）
+- [RFC-039 编译器功能路由目录设计（总纲）](../../rfc/accepted/039-compiler-architecture.md) — 上位总纲；四层模型、判据分级、路由表 C（3 条类型表示相关条目归属本文）
 - [01-routing.md](01-routing.md) — 功能路由表 A/B/C、依赖方向规范、目标目录结构
 - [04-ssa.md](04-ssa.md) — SSA 化；本文的前置与下游消费者
 - [05-frontend-paradigm.md](05-frontend-paradigm.md) — 前端范式；运算符改动面收敛

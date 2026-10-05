@@ -1,6 +1,6 @@
 # 前端范式：词法与语法
 
-> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
+> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
 
 ## 定位与范围
 
@@ -700,7 +700,7 @@ mod fstring_tests;
 
 ### 未决问题
 
-> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/draft/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
+> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/accepted/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
 >
 ## 核实记录
 
@@ -767,7 +767,7 @@ mod fstring_tests;
 
 ### RFC 正文与相关提案
 
-- [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) — 上位总纲；四层模型、术语表、功能路由表 A/B/C
+- [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) — 上位总纲；四层模型、术语表、功能路由表 A/B/C
 - [RFC-013 错误码规范](../../rfc/accepted/013-error-code-specification.md) — `build.rs` 生成期门禁，本文借鉴的门禁范例
 - [RFC-010 统一类型语法](../../rfc/accepted/010-unified-type-syntax.md) — `ast::Type` 的来源
 

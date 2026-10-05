@@ -1,6 +1,6 @@
 # 重构等价性判据
 
-> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
+> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
 
 ## 定位与范围
 
@@ -210,11 +210,11 @@ fn test_multifile_proof_obligation_not_dropped() {
 - **快照入库会带来维护成本**。IR 定义变更时快照要显式更新，需要 review 纪律。
 - **语料只覆盖单文件路径**。`tests/` 下无 `yaoxiang.toml`，293 个语料全走单文件路径——详见「现有测试资产」的限制说明。
 
-> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/draft/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
+> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/accepted/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
 >
 ## 参见
 
-- [RFC-039 编译器功能路由目录设计](../../rfc/draft/039-compiler-architecture.md) — 上位总纲
+- [RFC-039 编译器功能路由目录设计](../../rfc/accepted/039-compiler-architecture.md) — 上位总纲
 - `src/middle/core/tests/bytecode.rs:958` — `test_every_opcode_roundtrips_not_silently_nop`，本仓库现有的"逐项往返"判据范例
 - `src/middle/core/tests/bytecode.rs:769-814` — 用 `include_str!` 读源码做静态对拍的哨兵测试
 - `src/middle/core/tests/bytecode.rs:1073-1131` — 双向差集断言 + 快照表，强制新接入前端时更新

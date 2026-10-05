@@ -1,6 +1,6 @@
 # 死代码与空头设计清理
 
-> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
+> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
 
 ## 定位与范围
 
@@ -246,7 +246,7 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 - **`pub` 项在 Rust 中不触发 `dead_code` 警告**，因此零调用的 `pub` 类型（B2、B4）不会被编译器自动发现，只能靠搜索。
 - **删除 RFC-023 的半截残留**（B1）能兑现"闭包已从语言中删除"这个决策；**修正状态失真**（C4/C5/F3）能让 `TRACKING.md` 恢复参考价值。
 
-> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/draft/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
+> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/accepted/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
 >
 ## 参见
 
@@ -255,7 +255,7 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 - [RFC-018 LLVM AOT](../../rfc/accepted/018-llvm-aot-compiler.md) — C4
 - [RFC-028 JIT 编译器（草案）](../../rfc/draft/028-jit-compiler.md) — C5
 - [RFC-029a 模块缓存与增量重编译（草案）](../../rfc/draft/029a-module-cache-incremental.md) — C1/C6 的正式载体
-- [RFC-039 编译器功能路由目录设计](../../rfc/draft/039-compiler-architecture.md) — 上位总纲
+- [RFC-039 编译器功能路由目录设计](../../rfc/accepted/039-compiler-architecture.md) — 上位总纲
 - [重构等价性判据](07-equivalence-oracle.md) — C6 类别的判据要求
 - `src/frontend/core/typecheck/layers/README.md` — F4 层序声明失真
 - `build.rs:19-55` — 本仓库生成期门禁的范例

@@ -1,6 +1,6 @@
 # 中间表示 SSA 化
 
-> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
+> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
 
 ## 定位与范围
 
@@ -673,13 +673,13 @@ self.release_plan_total = type_result.release_plan.drops.len();
 - **`u8` / 255 的槽位上限**（`codegen/operand.rs:39-45`）在删除回滚后是否仍够用，**未核实**。`generate_function_ir` 的 E3014 检查（`1992-2000`）会捕获，但捕获即编译失败——可能暴露出一批此前被"回滚"掩盖的超大函数。
 - **优点须一并记录**：把"不能测的错误"变成"能测的不变量"；不改后端（`executor/` 与 `.42` 零改动）；不动 `Instruction` 的语义（76 → 77 变体全部保留，50 个 `translate_*` 全部保留）；可增量（每项独立可 revert）。
 
-> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/draft/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
+> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/accepted/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
 >
 ## 参见
 
 ### 文档
 
-- [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) — 上位总纲；四层模型、判据分级、P1-P10 执行顺序
+- [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) — 上位总纲；四层模型、判据分级、P1-P10 执行顺序
 - [07-equivalence-oracle.md](07-equivalence-oracle.md) — **硬前置**；C4 类别的判据定义、`verify_loose` / `verify_ssa`、三层判据、快照对 `arg_regs` 免疫的局限
 - [03-type-unification.md](03-type-unification.md) — **硬前置**；3 套平行类型表示的收敛
 - [02-stage-contract.md](02-stage-contract.md) — `Obligations` 账本；`ReleasePlan` 的 `PlanId` 改造归属

@@ -1,6 +1,6 @@
 # 多级施工任务表（WBS）
 
-> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) 的附属文档，把 RFC 的阶段序列展开为**可独立提交、可独立验证**的三级任务。
+> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) 的附属文档，把 RFC 的阶段序列展开为**可独立提交、可独立验证**的三级任务。
 >
 > 阶段顺序与验收门禁以 RFC-039 正文为唯一权威；本文只负责拆解到可执行粒度，并登记尚未裁决的冲突。
 
@@ -387,7 +387,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 ## 冲突登记：已全部裁决
 
-> **原「冲突登记」C1–C8 与各篇的开放问题已全部收敛到 [RFC-039 决议登记](../../rfc/draft/039-compiler-architecture.md)（D1–D50）。** 本文不留任何待定项。逐条对应：
+> **原「冲突登记」C1–C8 与各篇的开放问题已全部收敛到 [RFC-039 决议登记](../../rfc/accepted/039-compiler-architecture.md)（D1–D50）。** 本文不留任何待定项。逐条对应：
 
 | 原编号 | 议题 | 裁决 |
 | --- | --- | --- |
@@ -402,7 +402,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 ## 参见
 
-- [RFC-039 正文](../../rfc/draft/039-compiler-architecture.md) — 阶段序列、DoD、全局验收门禁 G1–G10 的唯一权威
+- [RFC-039 正文](../../rfc/accepted/039-compiler-architecture.md) — 阶段序列、DoD、全局验收门禁 G1–G10 的唯一权威
 - [07-equivalence-oracle.md](07-equivalence-oracle.md) — C1–C6 判据类别定义
 - [08-maintenance-mechanism.md](08-maintenance-mechanism.md) — P0 的详细设计与 D0–D4 决策程序
 - [01-routing.md](01-routing.md) — 目标目录结构（任务完成后的形态）

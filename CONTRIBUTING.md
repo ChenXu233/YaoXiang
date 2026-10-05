@@ -169,7 +169,7 @@ See [RFC Lifecycle](docs/src/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 
 ## 代码放置与变更规程 / Code Placement & Change Protocol
 
-> 本节是**强制规程**，适用于所有代码变更，尤其是编译器架构重构（[RFC-039](docs/src/rfc/draft/039-compiler-architecture.md)）期间。
+> 本节是**强制规程**，适用于所有代码变更，尤其是编译器架构重构（[RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md)）期间。
 > 动工前必读 [实现者手册 HOWTO.md](docs/src/dev/HOWTO.md)（自检表 + 补丁判定）；规则本体见 [coding-rules.md](docs/src/dev/coding-rules.md)。
 
 ### 三条禁令 / Three Prohibitions

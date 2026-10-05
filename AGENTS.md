@@ -1,6 +1,6 @@
 # YaoXiang 仓库指南（人类与 AI 实现者共用）
 
-YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 万行，正按 [RFC-039](docs/src/rfc/draft/039-compiler-architecture.md) 做架构重构（四层模型：编排/前端/语义与 IR/执行）。
+YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 万行，正按 [RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) 做架构重构（四层模型：编排/前端/语义与 IR/执行）。
 
 ## 改代码之前（强制）
 
@@ -36,4 +36,4 @@ python scripts/rfc/check_tracking.py   # RFC 状态一致性
 | [09](docs/src/dev/architecture/09-execution-wbs.md) | 施工任务表（P0–P10，三级 WBS） |
 | [01](docs/src/dev/architecture/01-routing.md) | 加一个特性该改哪里、目录职责表 |
 | [07](docs/src/dev/architecture/07-equivalence-oracle.md) | 等价性判据 C1–C6 |
-| [RFC-039](docs/src/rfc/draft/039-compiler-architecture.md) | 总纲、决议登记 D1–D52 |
+| [RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) | 总纲、决议登记 D1–D52 |

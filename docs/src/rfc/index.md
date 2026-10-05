@@ -87,6 +87,7 @@ title: "RFC 索引"
 | RFC-010b | [RFC-010b: 模式匹配完备化（变体解构与穷尽性）](accepted/010b-pattern-matching-completeness.md) | 晨煦 | 2026-09-03 | 已接受 |
 | RFC-029f | [RFC-029f: 编译目标角色与导入面语义](accepted/029f-target-semantics.md) | 晨煦 | 2026-09-12 | 已接受 |
 | RFC-029g | [RFC-029g: 移除 pub 关键字与自动绑定](accepted/029g-remove-pub-and-auto-bind.md) | 晨煦 | 2026-10-02 | 已接受 |
+| RFC-039 | [RFC-039: 编译器架构重构（总纲）](accepted/039-compiler-architecture.md) | ChenXu233 | 2026-10-03 | 已接受 |
 
 ---
 

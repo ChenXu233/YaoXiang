@@ -3,7 +3,7 @@
 > **本页是所有改动的统一入口，不是规则本体。** 规则的唯一权威：
 >
 > - 改代码 → [coding-rules.md](coding-rules.md)（三条禁令 + D0–D4，精确规则本体）与
->   [RFC-039 决议登记](../rfc/draft/039-compiler-architecture.md)（D1–D52）
+>   [RFC-039 决议登记](../rfc/accepted/039-compiler-architecture.md)（D1–D52）
 > - 改文档 → [docs-rules.md](docs-rules.md)（Diátaxis 分类规则 + 维基式语言风格）
 >
 > 本页只做两件事：**动工前强制自检**和**"补丁式修复"的判定**。若本页与规则本体冲突，以规则本体为准。
@@ -70,7 +70,7 @@
 | 情况               | 正确动作                                                                                    | 错误动作                       |
 | ------------------ | ------------------------------------------------------------------------------------------- | ------------------------------ |
 | 判据跑不绿         | 如实报告，修实现；怀疑判据错了就回到 [07](architecture/07-equivalence-oracle.md) 提案改判据 | 给判据加白名单/豁免            |
-| 发现设计前提不成立 | 回到 [RFC-039 决议登记](../rfc/draft/039-compiler-architecture.md) 改决定并说明原因         | 绕开决定悄悄做                 |
+| 发现设计前提不成立 | 回到 [RFC-039 决议登记](../rfc/accepted/039-compiler-architecture.md) 改决定并说明原因         | 绕开决定悄悄做                 |
 | 任务比预想大       | 在 [09](architecture/09-execution-wbs.md) 里把三级任务再拆细                                | 一个超大 commit 混多个验收判据 |
 | 发现文档与代码矛盾 | 先信代码，再修文档（先例：`layers/README.md` 层序反了，D7）                                 | 照着错的文档写代码             |
 
@@ -137,4 +137,4 @@ python ../scripts/rfc/check_tracking.py        # RFC 状态一致性
 - [09-execution-wbs.md](architecture/09-execution-wbs.md) — 三级任务表、依赖、并行分组
 - [07-equivalence-oracle.md](architecture/07-equivalence-oracle.md) — C1–C6 判据定义
 - [01-routing.md](architecture/01-routing.md) — 职责类别权威定义、目标目录结构
-- [RFC-039](../rfc/draft/039-compiler-architecture.md) — 总纲与决议登记 D1–D52
+- [RFC-039](../rfc/accepted/039-compiler-architecture.md) — 总纲与决议登记 D1–D52

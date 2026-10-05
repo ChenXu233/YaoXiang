@@ -1,6 +1,6 @@
 # 编译器架构重构 · 附属设计文档
 
-> 本目录是 [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) 的附属设计文档集合，与 `../check/`、`../formatter/` 同级。
+> 本目录是 [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) 的附属设计文档集合，与 `../check/`、`../formatter/` 同级。
 >
 > **审阅入口是 RFC-039 本身。** 本目录是立项后的施工图——每篇文档对应 RFC 正文中的一个层次或一个横切关注点。
 
@@ -8,7 +8,7 @@
 
 | 顺序 | 文档 | 读它来解决什么问题 |
 | --- | --- | --- |
-| 1 | [RFC-039 正文](../../rfc/draft/039-compiler-architecture.md) | 为什么重构、四层模型、判据分级、P0–P10 执行顺序 |
+| 1 | [RFC-039 正文](../../rfc/accepted/039-compiler-architecture.md) | 为什么重构、四层模型、判据分级、P0–P10 执行顺序 |
 | 2 | [HOWTO.md](../HOWTO.md) | **实现者手册**：动工前自检表 + "补丁式修复"判定（D3）。改代码前第一个打开的文档 |
 | 3 | [coding-rules.md](../coding-rules.md) + [08](08-maintenance-mechanism.md) | 规矩本体（coding-rules，长期有效）；08 为 2026-10 诊断记录 |
 | 4 | [09-execution-wbs.md](09-execution-wbs.md) | **施工清单**：11 个一级 / 45 个二级 / 122 个三级任务、依赖、冲突登记 |
@@ -33,7 +33,7 @@
 ## 交叉引用约定
 
 - 引用本文档集内部：`[05-frontend-paradigm.md](05-frontend-paradigm.md)`
-- 引用 RFC 正文：`[RFC-039](../../rfc/draft/039-compiler-architecture.md)`
+- 引用 RFC 正文：`[RFC-039](../../rfc/accepted/039-compiler-architecture.md)`
 - 引用其他 RFC：`[RFC-013](../../rfc/accepted/013-error-code-specification.md)`
 
 ## 关于编号

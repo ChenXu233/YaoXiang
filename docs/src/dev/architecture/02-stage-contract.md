@@ -1,6 +1,6 @@
 # 编译阶段契约与义务账本
 
-> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
+> **附属设计文档**。本文是 [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) 的附属文档。四层模型、验收判据分级与执行阶段顺序见 RFC-039 正文;各附属文档的定位见 [本目录索引](index.md)。
 
 ## 定位与范围
 
@@ -723,11 +723,11 @@ pub enum Aggregation {
 - **SMT 后端改单例后的线程安全未定**。`backend.rs:13-19` 已说明 `Solver` 只 `Send` 不 `Sync`，`Z3Backend` 的缓存是 `RefCell`；改成跨编译单元共享的单例后需确认访问路径全部经 `Mutex`。
 - **阶段并行化未评估**。多文件 typecheck 天然可并行，但并行会**掩盖顺序依赖缺陷**（如 termination 与 ownership 的实际顺序依赖）。应在等价性判据稳定后再开。
 
-> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/draft/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
+> **本节原列的开放问题已全部裁决。** 逐条决定见 [RFC-039 决议登记](../../rfc/accepted/039-compiler-architecture.md)（D1–D50）。**本文不留任何待定项。**
 >
 ## 参见
 
-- [RFC-039 编译器架构重构](../../rfc/draft/039-compiler-architecture.md) — 四层模型、路由表 A/B/C、G1-G10 验收门禁、P1-P10 执行顺序
+- [RFC-039 编译器架构重构](../../rfc/accepted/039-compiler-architecture.md) — 四层模型、路由表 A/B/C、G1-G10 验收门禁、P1-P10 执行顺序
 - [01-routing.md](01-routing.md) — 阶段表与依赖方向规范、`scripts/ci/check-module-boundary.py`
 - [03-type-unification.md](03-type-unification.md) — 三套平行类型表示的收敛（本文不引入第四套）
 - [06-cleanup-inventory.md](06-cleanup-inventory.md) — wasm 分支可达性清理；`checker/semantic_tokens.rs` 的 `include!` 改造（施工步骤归 [09](09-execution-wbs.md) §P5 5.1）
