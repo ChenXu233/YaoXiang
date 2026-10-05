@@ -1307,6 +1307,48 @@ fn test_e2e_yaoxiang_lang_env_selects_every_shipped_language() {
     }
 }
 
+/// `explain --json` 必须带 `language` 字段（RFC-013「JSON 输出格式」）。
+///
+/// 回归：`render_explain_output` 解析出最终语言后只用于取译文，JSON 里
+/// 没有回传——语言是运行期决定的（CLI > env > 配置 > 默认链），JSON
+/// 消费者无法得知各文本字段实际用的语言。
+#[test]
+fn test_e2e_explain_json_reports_resolved_language() {
+    // Arrange: `language` 是机器字段（非 bot 译文），可以精确断言。
+    // 显式设 YAOXIANG_LANG 压掉测试机上可能存在的用户级配置，保证链路确定。
+    let tmp = TempDir::new().unwrap();
+
+    // Act & Assert: 无 --lang 时回落 env 链的结果
+    let (code, stdout, stderr) = run_yx_env(
+        &["explain", "E1001", "--json"],
+        tmp.path(),
+        &[("YAOXIANG_LANG", "en")],
+    );
+    assert_eq!(code, 0, "explain 应成功；stderr: {stderr}");
+    let json: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("explain --json 应输出合法 JSON");
+    assert_eq!(
+        json["language"].as_str(),
+        Some("en"),
+        "无 --lang 时 language 应为 env 链解析结果；json: {json}"
+    );
+
+    // --lang 显式优先于 env（语言链最高位）
+    let (code, stdout, stderr) = run_yx_env(
+        &["explain", "E1001", "--json", "--lang", "zh"],
+        tmp.path(),
+        &[("YAOXIANG_LANG", "en")],
+    );
+    assert_eq!(code, 0, "explain 应成功；stderr: {stderr}");
+    let json: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("explain --json 应输出合法 JSON");
+    assert_eq!(
+        json["language"].as_str(),
+        Some("zh"),
+        "--lang 应压过 env；json: {json}"
+    );
+}
+
 // Lib 角色非 pub 死代码判定（029f「宁漏报」补遗，RFC-014 项目模式盘出）：
 // 被 use 的文件推断为 Lib，其消费者在文件外——非 pub 定义必须看包内引用池，
 // 否则跨文件引用判死（W1001 误报）。pub 维持绝对豁免不受影响。
