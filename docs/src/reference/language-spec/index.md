@@ -26,7 +26,7 @@ yaoxiang 语言的语法和语义规范文档。
 
 ### 版本信息
 
-- 编译器版本：与 `Cargo.toml` 的 `version` 同步，当前 **0.8.3**
+- 编译器版本：与 `Cargo.toml` 的 `version` 同步，当前 <!-- yx-version -->
 - 状态：规范
 - 作者：晨煦
 
