@@ -8,6 +8,10 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 2. 施工任务查 [09-execution-wbs.md](docs/src/dev/architecture/09-execution-wbs.md) 的三级任务表（带 `- [ ]` 看板）。
 3. 三条禁令（概要，全文见 [coding-rules.md](docs/src/dev/coding-rules.md)）：**不得生造**（新概念先证明与既有概念不重复）、**不得职责累积**（一个模块一类职责）、**该重构不补丁**（同一行为 ≥2 处复制 / 新增第 N 个入口 / 一次改 ≥3 处同义映射 → 停工走设计流程）。
 
+## 发现值得记录的规则时
+
+工作中若发现值得固化的规则（如被反复纠正的做法、新的红线、新的判定标准），**先向用户提出，经同意后**再更新 [coding-rules.md](docs/src/dev/coding-rules.md) 等文档（HOWTO、红线清单、对应 RFC 决议登记等按归属就近落位）。规则以文档为准，不要只留在对话记录里。
+
 ## 常用命令
 
 ```bash
