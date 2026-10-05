@@ -71,8 +71,41 @@ fn test_format_binop_short() {
 
 #[test]
 fn test_format_lambda_body() {
-    // RFC-010: Lambda 语法保持 => { expr }
-    assert_format_eq("f = (x) => x + 1", "f = (x) => { x + 1 }\n");
+    // §12.1: 单表达式 body 恒裸，不得物化源码之外的块（#424）
+    assert_format_eq("f = (x) => x + 1", "f = (x) => x + 1\n");
+}
+
+#[test]
+fn test_format_lambda_body_block_preserved() {
+    // §12.1: 块 body 保持花括号（parser 中块尾表达式是 Expr 语句，非 Return 糖）
+    assert_format_eq("f = (x) => { x * 2 }", "f = (x) => { x * 2 }\n");
+}
+
+#[test]
+fn test_format_lambda_zero_param_keeps_arrow() {
+    // 无标注零参 Lambda 恒保留 `() =>` 前缀：物化成 `= { 42 }` 会变成不可调用的
+    // 块值（#424 探针：f() 报 E1065）；有标注时走 `= { body }` 规范形，
+    // 由 test_format_function_no_args / test_format_empty_block 钉住。
+    assert_format_eq("f = () => 42", "f = () => 42\n");
+}
+
+#[test]
+fn test_format_fn_type_params_preserved() {
+    // 匿名 Fn 类型标注（参数类型 HM 推断）不得被 format --write 丢弃（#423）
+    assert_format_eq(
+        "add: (Int, Int) -> Int = (a, b) => a + b",
+        "add: (Int, Int) -> Int = (a, b) => a + b\n",
+    );
+}
+
+#[test]
+fn test_format_fn_type_named_params() {
+    // 带名 Fn 类型标注按名渲染；parser 会把签名类型合并进值 lambda 参数
+    // （declarations.rs 的 merged params），值侧渲染为 `(x: Int) => x`
+    assert_format_eq(
+        "f: (x: Int) -> Int = (x) => x",
+        "f: (x: Int) -> Int = (x: Int) => x\n",
+    );
 }
 
 #[test]

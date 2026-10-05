@@ -701,21 +701,13 @@ fn test_format_error_placeholder() {
 
 #[test]
 fn test_format_fn_signature_curried_grouping() {
-    // Arrange — curried 泛型函数签名（signature_params 按嵌套 Fn 切分，value_params 不参与回退）
+    // Arrange — curried 泛型函数签名（signature_params 按嵌套 Fn 切分）
     let ctx = default_ctx();
     let signature_params = curried_signature_params();
     let fn_type = curried_fn_type();
-    let value_params: Vec<Param> = vec![];
 
     // Act — 按嵌套 Fn 结构切分 signature_params
-    // Act — 按嵌套 Fn 结构切分 signature_params
-    let result = format_fn_signature(
-        &signature_params,
-        &fn_type,
-        &value_params,
-        &ctx,
-        &default_source_map(),
-    );
+    let result = format_fn_signature(&signature_params, &fn_type, &ctx, &default_source_map());
 
     // Assert — 第一组给外层，第二组给内层，单层括号保证幂等
     assert_eq!(
