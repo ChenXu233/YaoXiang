@@ -74,8 +74,8 @@ git checkout -b feature/your-feature-name
 
 ### 2. Commit Convention / 提交规范
 
-Follow the [commit convention](docs/guides/dev/commit-convention.md):
-遵循 [提交规范](docs/guides/dev/commit-convention.md)：
+Follow the [commit convention](docs/src/dev/commit-convention.md):
+遵循 [提交规范](docs/src/dev/commit-convention.md)：
 
 ```
 <type>(<scope>): <description>
@@ -164,6 +164,38 @@ See [RFC Lifecycle](docs/design/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 - 如果实现 PR 不包含文档更新，必须在 PR 描述中明确说明"不影响文档"并给出理由
 - `scripts/rfc/check_tracking.py` 会自动检查：RFC 的 accepted 状态 + 对应实现 PR 是否包含文档变更
 - 文档更新范围包括：tutorial（如果 RFC 引入新功能）、reference/language-spec（语言规范）、reference/error-code（新增错误码）等
+
+---
+
+## 代码放置与变更规程 / Code Placement & Change Protocol
+
+> 本节是**强制规程**，适用于所有代码变更，尤其是编译器架构重构（[RFC-039](docs/src/design/rfc/draft/039-compiler-architecture.md)）期间。
+> 动工前必读 [实现者手册 HOWTO.md](docs/src/design/compiler-architecture/HOWTO.md)（自检表 + 补丁判定）；规则本体见 [coding-rules.md](docs/src/dev/coding-rules.md)。
+
+### 三条禁令 / Three Prohibitions
+
+1. **不得生造** — 新增 `pub` 类型 / 枚举 / 常量表前，必须证明它与既有概念不重复（判据 A–D 见 coding-rules：职责重叠、调用点不足、需要消歧别名、靠同义词表弥合，任一命中即违规）
+2. **不得职责累积** — 一个模块只承担一类职责；要加新职责就新建模块或搬走既有职责。不设行数门禁，职责判定靠人工（这正是它不能被机器替代的原因）
+3. **该重构不补丁** — 命中以下任一条即停工走设计文档流程：同一行为需 ≥2 处复制；新增"第 N 个入口"而非登记进声明式阶段表；一次修改要同步改 ≥3 处同义映射
+
+### 决策程序 / Decision Procedure (D0–D4)
+
+每次改动按序过五道闸（每道是可判定的布尔条件，命中即止；全文见 coding-rules 第二部分）：
+
+| 闸 | 问题 | 命中即 |
+| --- | --- | --- |
+| D0 | 触碰任何已存在的表（错误码/opcode/类型/阶段）？权威源模块是哪个？ | 写不出权威源 → ⛔ 先建立权威源 |
+| D1 | 新概念能用「既有概念 + 参数」表达吗？ | 能 → ⛔ 禁止新增 |
+| D2 | 与既有概念同语义（变体名重合 ≥ 半数）？ | 无 From/TryFrom → ⛔ 合并为一份，禁止 import 别名弥合 |
+| D3 | ≥2 处复制 / 新增入口 / ≥3 处同义映射？ | 命中 → ⛔ 停工走设计流程；皆否 → 允许局部补丁 + 回归测试 |
+| D4 | 新增代码属于目标模块**已有的职责类别**吗？（职责表见 [01-routing.md](docs/src/design/compiler-architecture/01-routing.md)） | 第 2 类及以上 → ⛔ 新建模块 |
+
+### 红线 / Hard Rules (review 必打回)
+
+- 不看的代码不改：没打开文件、没 grep 过引用点，不许动
+- 核心功能不留 `todo!()` / "Not implemented yet" / 无限期"独立 issue"
+- 不删测试、不放宽判据换绿灯（不存在 C5′；做不到是实现缺陷，如实报告）
+- PR 模板的"职责归属与决策程序"块为**必填**；写不出 D0 权威源模块名 = 没查
 
 ---
 

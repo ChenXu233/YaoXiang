@@ -9,11 +9,12 @@
 | 顺序 | 文档 | 读它来解决什么问题 |
 | --- | --- | --- |
 | 1 | [RFC-039 正文](../rfc/draft/039-compiler-architecture.md) | 为什么重构、四层模型、判据分级、P0–P10 执行顺序 |
-| 2 | [08-maintenance-mechanism.md](08-maintenance-mechanism.md) | **改代码前必须先读的规矩**：三条禁令 + D0–D4 决策程序 |
-| 3 | [09-execution-wbs.md](09-execution-wbs.md) | **施工清单**：11 个一级 / 45 个二级 / 122 个三级任务、依赖、冲突登记 |
-| 4 | [01-routing.md](01-routing.md) | **加一个特性该改哪里**、施工完成后的目标目录结构（长期参考） |
-| 5 | [07-equivalence-oracle.md](07-equivalence-oracle.md) | 每一步靠什么证明没改坏 |
-| 6 | [02 ~ 05](02-stage-contract.md) | 各层次的具体设计 |
+| 2 | [HOWTO.md](HOWTO.md) | **实现者手册**：动工前自检表 + "补丁式修复"判定（D3）。改代码前第一个打开的文档 |
+| 3 | [coding-rules.md](../dev/coding-rules.md) + [08](08-maintenance-mechanism.md) | 规矩本体（coding-rules，长期有效）；08 为 2026-10 诊断记录 |
+| 4 | [09-execution-wbs.md](09-execution-wbs.md) | **施工清单**：11 个一级 / 45 个二级 / 122 个三级任务、依赖、冲突登记 |
+| 5 | [01-routing.md](01-routing.md) | **加一个特性该改哪里**、施工完成后的目标目录结构（长期参考） |
+| 6 | [07-equivalence-oracle.md](07-equivalence-oracle.md) | 每一步靠什么证明没改坏 |
+| 7 | [02 ~ 05](02-stage-contract.md) | 各层次的具体设计 |
 
 ## 文档清单
 
