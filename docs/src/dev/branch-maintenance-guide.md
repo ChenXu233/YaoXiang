@@ -10,6 +10,7 @@
 - [命名规则](#命名规则)
 - [分支生命周期](#分支生命周期)
 - [工作流程](#工作流程)
+- [Worktree 并行工作台](#worktree-并行工作台)
 - [分支保护策略](#分支保护策略)
 - [最佳实践](#最佳实践)
 - [常见问题](#常见问题)
@@ -189,6 +190,54 @@ graph TD
     H --> I[合并回 dev]
     J[清理 release 分支]
 ```
+
+---
+
+## 🗂️ Worktree 并行工作台
+
+> 适用场景：单人需要并行处理多件"必须开分支"的事，同时保持 `dev` 工作目录稳定。约定一个**长驻 worktree** 作为个人并行工作台——worktree 永久保留，任务分支随用随切、做完即删。
+
+### 约定
+
+| 项         | 值                     | 说明                                             |
+| ---------- | ---------------------- | ------------------------------------------------ |
+| 工作台路径 | `E:/git/YaoXiang-wt`   | 固定路径，不带任务后缀；改名用 `git worktree move` |
+| 常驻分支   | `scratch`              | 任务间的"停车位"，仅本地存在，不推送               |
+| 任务分支   | 遵循上文命名规则        | 每个任务在 worktree 里现切现用，做完删除           |
+
+### 一次任务的完整回路
+
+```bash
+# 0. 首次创建（一次性）
+git worktree add E:/git/YaoXiang-wt -b scratch dev
+
+# 1. 领任务：在 worktree 里从最新 dev 切任务分支
+cd E:/git/YaoXiang-wt
+git switch -c <task-branch> dev
+
+# 2. 开发、提交（钩子链在 worktree 里照常执行）
+
+# 3. 合并：在【主仓库】做，不在 worktree 里做
+cd E:/git/YaoXiang
+git merge <task-branch>   # 小步修复直接 fast-forward，保持 dev 首父历史线性
+
+# 4. 收尾：worktree 停回 scratch，再删已合并的任务分支
+cd E:/git/YaoXiang-wt
+git switch scratch
+cd E:/git/YaoXiang
+git branch -d <task-branch>
+```
+
+此回路面向个人快速修复；较大变更仍走上文的 PR 流程。
+
+### 硬性约束与坑
+
+1. **同一分支不能被两个 worktree 同时检出**。`dev` 常驻主仓库，worktree 里 `git switch dev` 会被拒绝，只能以 `dev` 为基点切新分支——这正是需要 `scratch` 停车位的原因。
+2. **合并一律在主仓库做**。主仓库持有 `dev`，是唯一合并点；worktree 只负责任务分支上的开发与提交。
+3. **`target/` 构建产物不共享**。每个 worktree 独立编译（本仓库约 16 万行 Rust，首次全量重编需数分钟）；反过来说，长驻 worktree 的构建缓存持续有效，是保留它的主要收益。
+4. **钩子共享且正常执行**。worktree 与主仓库共享同一套钩子配置，提交时完整钩子链照常跑（历史上 worktree 的 `GIT_DIR` 泄漏问题已修复）；不要在 worktree 里执行 `pre-commit install` / `autoupdate`。
+5. **路径一律写绝对路径**，Windows 下相对路径易踩坑。
+6. 常用管理命令：`git worktree list` / `git worktree move <旧路径> <新路径>` / `git worktree remove <路径>`。
 
 ---
 
