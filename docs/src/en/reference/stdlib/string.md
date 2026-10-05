@@ -585,6 +585,6 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.convert`](./convert) —— number to string
-- [`std.result`](./result) —— unwrap results of `parse_*` / `from_char_code`
-- [`std.json`](./json) —— Unicode primitives for string escaping come from this module
+- [`std.convert`](convert) —— number to string
+- [`std.result`](result) —— unwrap results of `parse_*` / `from_char_code`
+- [`std.json`](json) —— Unicode primitives for string escaping come from this module

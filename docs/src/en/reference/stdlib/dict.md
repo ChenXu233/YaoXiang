@@ -358,5 +358,5 @@ main: () -> Void = {
 
 ## See Also
 
-- [`std.list`](./list) — for processing the return values of `keys` / `values` / `entries`
+- [`std.list`](list) — for processing the return values of `keys` / `values` / `entries`
 - [Error Code Reference](../error-code/) — `E6008` missing key

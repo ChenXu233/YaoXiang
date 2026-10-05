@@ -576,6 +576,6 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.convert`](./convert) —— 数值转字符串
-- [`std.result`](./result) —— 解包 `parse_*` / `from_char_code` 的结果
-- [`std.json`](./json) —— 字符串转义的 Unicode 基元来自本模块
+- [`std.convert`](convert) —— 数值转字符串
+- [`std.result`](result) —— 解包 `parse_*` / `from_char_code` 的结果
+- [`std.json`](json) —— 字符串转义的 Unicode 基元来自本模块

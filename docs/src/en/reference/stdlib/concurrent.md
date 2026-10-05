@@ -41,7 +41,7 @@ Blocks the current thread for the specified number of **milliseconds**.
 
 - `millis` —— number of milliseconds to sleep; if not an `Int` or missing, treated as `0` (no error)
 
-> **Unit note**: [`std.time.sleep`](./time#sleep) takes **seconds** and accepts decimals, while this
+> **Unit note**: [`std.time.sleep`](time#sleep) takes **seconds** and accepts decimals, while this
 > function takes **milliseconds**. `concurrent.sleep(1)` sleeps for 1 millisecond, and
 > `time.sleep(1)` sleeps for 1 second.
 
@@ -102,5 +102,5 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.time.sleep`](./time#sleep) —— second-level sleep
+- [`std.time.sleep`](time#sleep) —— second-level sleep
 - [Language Spec: Concurrency Model](../language-spec/concurrency.md) —— `spawn` and spawn semantics

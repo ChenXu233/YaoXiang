@@ -233,7 +233,7 @@ Point: Type = { x: Float, y: Float }
 ```
 
 For module paths, directory entry conventions, and the full form of `use`, see
-[Module System](./modules).
+[Module System](modules).
 
 ## Ownership
 

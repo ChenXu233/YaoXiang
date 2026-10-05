@@ -12,7 +12,8 @@ const Z3_VERSION: &str = "4.16.0";
 fn main() {
     // 重建触发面显式化：build.rs 只在这些路径（及自身/Cargo.toml）变化时重跑
     println!("cargo:rerun-if-changed=locales/zh.json");
-    println!("cargo:rerun-if-changed=docs/src/design/rfc/accepted/013-error-code-specification.md");
+    // RFC-013 路径单一源在 code_tables::RFC013_REL，此处复用避免双份漂移
+    println!("cargo:rerun-if-changed={}", code_tables::RFC013_REL);
     println!("cargo:rerun-if-changed=src/util/diagnostic/codes");
     println!("cargo:rerun-if-changed=src/std/result.rs");
 

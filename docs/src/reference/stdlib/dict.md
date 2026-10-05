@@ -348,5 +348,5 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.list`](./list) —— 处理 `keys` / `values` / `entries` 的返回值
+- [`std.list`](list) —— 处理 `keys` / `values` / `entries` 的返回值
 - [错误码参考](../error-code/) —— `E6008` 键缺失

@@ -109,7 +109,7 @@ YaoXiang 只有一种声明形式：**`identifier : type = expression`**
 
 **没有 `fn`、`struct`、`trait`、`impl` 关键字。** `Type` 是语言中唯一的元类型关键字。
 
-详见 [RFC-010：统一类型语法](docs/src/design/rfc/accepted/010-unified-type-syntax.md)。
+详见 [RFC-010：统一类型语法](docs/src/rfc/accepted/010-unified-type-syntax.md)。
 
 ### 泛型与值依赖类型
 
@@ -128,7 +128,7 @@ vec: Vec(factorial(3)) = Vec(6)()
 # multiply(matrix_2x3, matrix_4x2)  # 编译错误：3 != 4
 ```
 
-详见 [RFC-011：泛型系统设计](docs/src/design/rfc/accepted/011-generic-type-system.md)。
+详见 [RFC-011：泛型系统设计](docs/src/rfc/accepted/011-generic-type-system.md)。
 
 
 ## 安装与构建
@@ -151,7 +151,7 @@ cargo test
 cargo run -- run hello.yx
 ```
 
-> Z3 是编译器的 SMT 求解模块，用于编译期谓词证明（RFC-027）。`tools/setup-z3` 自动从 GitHub Releases 下载对应平台的预编译包到 `.z3/`，写入 `.cargo/config.toml`。首次运行后 `cargo build` 即可直接构建。详见 [RFC-027](docs/src/design/rfc/accepted/027-compile-time-evaluation-types.md)。
+> Z3 是编译器的 SMT 求解模块，用于编译期谓词证明（RFC-027）。`tools/setup-z3` 自动从 GitHub Releases 下载对应平台的预编译包到 `.z3/`，写入 `.cargo/config.toml`。首次运行后 `cargo build` 即可直接构建。详见 [RFC-027](docs/src/rfc/accepted/027-compile-time-evaluation-types.md)。
 
 ### 开发环境配置
 
@@ -201,9 +201,9 @@ pre-commit run --all-files
 
 | RFC | 标题 | 描述 |
 |-----|------|------|
-| [RFC-009](docs/src/design/rfc/accepted/009-ownership-model.md) | 所有权模型 | Move + 借用令牌 + ref——无 GC，无生命周期 |
-| [RFC-010](docs/src/design/rfc/accepted/010-unified-type-syntax.md) | 统一类型语法 | 一切皆 `name: type = value` |
-| [RFC-011](docs/src/design/rfc/accepted/011-generic-type-system.md) | 泛型系统 | 值依赖类型，零成本抽象 |
+| [RFC-009](docs/src/rfc/accepted/009-ownership-model.md) | 所有权模型 | Move + 借用令牌 + ref——无 GC，无生命周期 |
+| [RFC-010](docs/src/rfc/accepted/010-unified-type-syntax.md) | 统一类型语法 | 一切皆 `name: type = value` |
+| [RFC-011](docs/src/rfc/accepted/011-generic-type-system.md) | 泛型系统 | 值依赖类型，零成本抽象 |
 
 ---
 
@@ -238,7 +238,7 @@ YaoXiang 的设计灵感来自以下项目和语言：
 
 想喷之前，可以先看看这个：
 
-- [爻象设计宣言 WTF 版](docs/src/design/manifesto-wtf.md) — DeepSeek 锐评
+- [爻象设计宣言 WTF 版](docs/src/explanation/manifesto-wtf.md) — DeepSeek 锐评
 
 > 「道生一，一生二，二生三，三生万物。」
 > ——《道德经》

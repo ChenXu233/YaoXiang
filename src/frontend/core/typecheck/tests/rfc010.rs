@@ -1,6 +1,6 @@
 //! 类型检查器测试 — 基于 RFC-010 统一类型语法
 //!
-//! RFC-010: https://github.com/YaoXiang/YaoXiang/docs/src/design/rfc/accepted/010-unified-type-syntax.md
+//! RFC-010: https://github.com/YaoXiang/YaoXiang/docs/src/rfc/accepted/010-unified-type-syntax.md
 //!
 //! 测试点：
 //! - §3.1: 变量声明 `x: Int = 42`

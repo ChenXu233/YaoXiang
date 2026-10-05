@@ -48,14 +48,14 @@ page; its codes are produced during IR generation and entry-point checking.
 
 | Family prefix | Category         | Meaning                               | Details                                     |
 | ------------- | ---------------- | ------------------------------------- | ------------------------------------------- |
-| `E0xxx`       | `Lexer / Parser` | Lexical and syntactic analysis errors | Per-family page: [`E0xxx`](./E0xxx.md)      |
-| `E1xxx`       | `TypeCheck`      | Type checking errors                  | Per-family page: [`E1xxx`](./E1xxx.md)      |
-| `E2xxx`       | `Semantic`       | Semantic analysis errors              | Per-family page: [`E2xxx`](./E2xxx.md)      |
-| `E4xxx`       | `Generic`        | Generic and trait errors              | Per-family page: [`E4xxx`](./E4xxx.md)      |
-| `E5xxx`       | `Module`         | Module and import errors              | Per-family page: [`E5xxx`](./E5xxx.md)      |
-| `E6xxx`       | `Runtime`        | Runtime errors                        | Per-family page: [`E6xxx`](./E6xxx.md)      |
-| `E7xxx`       | `Io`             | I/O and system errors                 | Per-family page: [`E7xxx`](./E7xxx.md)      |
-| `E8xxx`       | `Internal`       | Internal compiler errors              | Per-family page: [`E8xxx`](./E8xxx.md)      |
+| `E0xxx`       | `Lexer / Parser` | Lexical and syntactic analysis errors | Per-family page: [`E0xxx`](E0xxx.md)      |
+| `E1xxx`       | `TypeCheck`      | Type checking errors                  | Per-family page: [`E1xxx`](E1xxx.md)      |
+| `E2xxx`       | `Semantic`       | Semantic analysis errors              | Per-family page: [`E2xxx`](E2xxx.md)      |
+| `E4xxx`       | `Generic`        | Generic and trait errors              | Per-family page: [`E4xxx`](E4xxx.md)      |
+| `E5xxx`       | `Module`         | Module and import errors              | Per-family page: [`E5xxx`](E5xxx.md)      |
+| `E6xxx`       | `Runtime`        | Runtime errors                        | Per-family page: [`E6xxx`](E6xxx.md)      |
+| `E7xxx`       | `Io`             | I/O and system errors                 | Per-family page: [`E7xxx`](E7xxx.md)      |
+| `E8xxx`       | `Internal`       | Internal compiler errors              | Per-family page: [`E8xxx`](E8xxx.md)      |
 | `W1xxx`       | `Warning`        | Warnings                              | [`W1xxx`](../warning-code/warning-codes.md) |
 
 The `E3xxx` family currently has no dedicated per-family page; all its codes are listed in the full

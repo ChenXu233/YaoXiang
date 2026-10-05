@@ -122,11 +122,11 @@ actual testing with `yaoxiang-rs run`:
    unavailable, this bridge has no call sites.
 3. **No `is_some` / `is_none` / `unwrap` / `unwrap_or` / `map`.** These names have zero hits in the
    standard library; to check failure use `is_failure()`, to take the payload use `success()`. The
-   corresponding utilities on the `Result` side are in [`std.result`](./result).
+   corresponding utilities on the `Result` side are in [`std.result`](result).
 
 ## See Also
 
-- [`std.result`](./result) — `Result(T, E)`; `?` propagation is currently available **only** on it
-- [`std.assert`](./assert) — source of `assert(false)` in dead-end branches
+- [`std.result`](result) — `Result(T, E)`; `?` propagation is currently available **only** on it
+- [`std.assert`](assert) — source of `assert(false)` in dead-end branches
 - [Syntax Specification §2.8](../language-spec/syntax.md) — variant deconstruction and
   exhaustiveness checking

@@ -445,5 +445,5 @@ You've mastered the core knowledge of YaoXiang functions:
 - **Simplest parameterless**: `name = { ... }`, compiler infers `() -> Void` automatically
 
 Next, you can continue learning the
-[Control Flow](../../../design/formatter/formatting-rules/control-flow.md) chapter to understand how
+[Control Flow](../../../dev/design/formatter/formatting-rules/control-flow.md) chapter to understand how
 to use `if`, `for`, and `while` in functions.

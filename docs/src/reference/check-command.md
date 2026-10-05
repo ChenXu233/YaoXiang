@@ -108,8 +108,8 @@ yx check src/ --exclude tests/
 
 ## 另请参阅
 
-- [`yx format`](./format-command.md) -- 代码格式化
-- [`yx test`](./test-command.md) -- 运行测试
-- [错误码参考](./error-code/index.md) -- 完整错误码列表
+- [`yx format`](format-command.md) -- 代码格式化
+- [`yx test`](test-command.md) -- 运行测试
+- [错误码参考](error-code/index.md) -- 完整错误码列表
 - [CI 集成指南](../guide/ci-integration.md) -- CI/CD 集成
-- [诊断系统设计](../design/check/diagnostic-system.md) -- 架构设计文档
+- [诊断系统设计](../dev/design/check/diagnostic-system.md) -- 架构设计文档

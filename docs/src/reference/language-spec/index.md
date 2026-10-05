@@ -4,12 +4,12 @@ yaoxiang 语言的语法和语义规范文档。
 
 ## 目录
 
-- [语法规范](./syntax.md) - 词法结构、语法规则、运算符优先级
-- [类型系统](./type-system.md) - 基本类型、复合类型、泛型、trait
-- [模块系统](./modules.md) - 模块定义、导入导出、作用域
-- [FFI 规范](./ffi.md) - `native` 扩展、C ABI 类型映射与不透明类型
-- [并发模型](./concurrency.md) - 块语义、spawn 并发原语、错误处理、资源类型
-- [标准库](./stdlib.md) - 模块全景、核心库、IO库、数学库
+- [语法规范](syntax.md) - 词法结构、语法规则、运算符优先级
+- [类型系统](type-system.md) - 基本类型、复合类型、泛型、trait
+- [模块系统](modules.md) - 模块定义、导入导出、作用域
+- [FFI 规范](ffi.md) - `native` 扩展、C ABI 类型映射与不透明类型
+- [并发模型](concurrency.md) - 块语义、spawn 并发原语、错误处理、资源类型
+- [标准库](stdlib.md) - 模块全景、核心库、IO库、数学库
 
 ## 概述
 
@@ -38,5 +38,5 @@ yaoxiang 语言的语法和语义规范文档。
 ### 相关资源
 
 - [教程](../../tutorial/index.md) - 入门教程与示例代码
-- [设计文档](../../design/) - 语言设计文档
-- [RFC 文档](../../design/rfc/) - 语言变更提案
+- [设计文档](../../explanation/) - 语言设计文档
+- [RFC 文档](../../rfc/) - 语言变更提案

@@ -39,14 +39,14 @@ YaoXiang 标准库（`std`）以模块为组织单位，每个模块通过 `use`
 
 | 模块               | 源码                 | 说明                                                 |
 | ------------------ | -------------------- | ---------------------------------------------------- |
-| [`std.list`](./list)   | `src/std/list.yx`   | 列表增删、切片、高阶函数与迭代器协议                 |
-| [`std.json`](./json)   | `src/std/json.yx`   | JSON 解析与序列化（RFC 8259）                        |
-| [`std.option`](./option) | `src/std/option.yx` | `Option(T)` 可选值与和类型                           |
-| [`std.test`](./test)   | `src/std/test.yx`   | 测试断言库（值语义，RFC-036 §3）                     |
+| [`std.list`](list)   | `src/std/list.yx`   | 列表增删、切片、高阶函数与迭代器协议                 |
+| [`std.json`](json)   | `src/std/json.yx`   | JSON 解析与序列化（RFC 8259）                        |
+| [`std.option`](option) | `src/std/option.yx` | `Option(T)` 可选值与和类型                           |
+| [`std.test`](test)   | `src/std/test.yx`   | 测试断言库（值语义，RFC-036 §3）                     |
 
 > `std.result` 是**双实现**模块：native 工具族（`src/std/result.rs`）与纯 yx 的
 > `Result` 类型（`src/std/result.yx`）合并为同一导出面——`Result` 变体构造走 yx，
-> `is_ok` / `unwrap` / `code` 等工具走 native。详见 [`std.result`](./result)。
+> `is_ok` / `unwrap` / `code` 等工具走 native。详见 [`std.result`](result)。
 
 ## 导入约定
 
@@ -137,7 +137,7 @@ main: () -> Void = {
 错误码总表见[错误码参考](../error-code/)。
 
 `string.parse_int` / `string.parse_float` 属于第三种形态：**不抛错**，把失败包装成 `Result` 的 `Err`
-值返回，可以用 [`std.result`](./result) 拆包或 `?` 传播。
+值返回，可以用 [`std.result`](result) 拆包或 `?` 传播。
 
 ```yaoxiang
 use std.assert
@@ -192,7 +192,7 @@ main: () -> Void = {
 }
 ```
 
-[`range.map`](./range#map) / [`range.filter`](./range#filter) 返回**惰性** 适配器，需由 `collect` /
+[`range.map`](range#map) / [`range.filter`](range#filter) 返回**惰性** 适配器，需由 `collect` /
 `reduce` / `for_each` / `for ... in` 消费后才产生结果：
 
 ```yaoxiang
@@ -230,18 +230,18 @@ main: () -> Void = {
 
 | 位置 | 原问题 | 现状 |
 | ---- | ------ | ---- |
-| [`os.open`](./os#open) | 句柄一次性，`open`→`write`→`close` 无法编译 | 句柄改按引用传递 ✅ |
-| [`time.datetime_*`](./time#datetime-字段访问) | 8 个访问器无从源码调用（导出名含 `::`）| 改扁平名 `datetime_year` 等 ✅ |
-| [`time.parse_time`](./time#parse_time) | `fmt` 参数被忽略；返回值无法继续使用 | 按 fmt 步进解析，返回 `Int` ✅ |
-| [`math.clamp`](./math#clamp) | `min > max` 会 panic 解释器而非返回错误 | 返回 `E6007` ✅ |
-| [`net.http_get`](./net#http_get) / [`http_post`](./net#http_post) | 曾是占位实现，不发请求 | 已改为真实实现（`ureq` 同步阻塞 + rustls TLS，issue #56）✅ |
+| [`os.open`](os#open) | 句柄一次性，`open`→`write`→`close` 无法编译 | 句柄改按引用传递 ✅ |
+| [`time.datetime_*`](time#datetime-字段访问) | 8 个访问器无从源码调用（导出名含 `::`）| 改扁平名 `datetime_year` 等 ✅ |
+| [`time.parse_time`](time#parse_time) | `fmt` 参数被忽略；返回值无法继续使用 | 按 fmt 步进解析，返回 `Int` ✅ |
+| [`math.clamp`](math#clamp) | `min > max` 会 panic 解释器而非返回错误 | 返回 `E6007` ✅ |
+| [`net.http_get`](net#http_get) / [`http_post`](net#http_post) | 曾是占位实现，不发请求 | 已改为真实实现（`ureq` 同步阻塞 + rustls TLS，issue #56）✅ |
 
 仍开放的问题：
 
 | 位置 | 问题 | 追踪 |
 | ---- | ---- | ---- |
-| [`std.option`](./option#已知缺口) | `Try(Option(T), T, Void)` 实例化未被类型检查器承认，`?` 报 `E1081`；`from_error` 运行时报 `E6006` | 见该页「已知缺口」 |
-| [`list.slice`](./list#slice) | 越界下标不做钳制，直接 `E6003` | 见该页条目 |
+| [`std.option`](option#已知缺口) | `Try(Option(T), T, Void)` 实例化未被类型检查器承认，`?` 报 `E1081`；`from_error` 运行时报 `E6006` | 见该页「已知缺口」 |
+| [`list.slice`](list#slice) | 越界下标不做钳制，直接 `E6003` | 见该页条目 |
 
 ## 文档维护
 

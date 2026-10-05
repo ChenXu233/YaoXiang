@@ -3,7 +3,7 @@
 //! RFC-011 §3: 零成本抽象与单态化
 //! RFC-011 §4: 泛型函数特化
 //! RFC-011 §4.4: 泛型类型单态化（Issue #197）
-//! 规范: docs/src/design/rfc/accepted/011-generic-type-system.md
+//! 规范: docs/src/rfc/accepted/011-generic-type-system.md
 //!
 //! 覆盖:
 //! - `Monomorphizer::specialize_function` 单态化泛型函数

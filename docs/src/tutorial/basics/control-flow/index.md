@@ -53,7 +53,7 @@ print(description)
 
 ## 章节
 
-- [条件分支 if-elif-else](./if-elif-else.md) — 条件判断与分支选择
-- [for 循环](./for.md) — 遍历范围与集合
-- [while 循环](./while.md) — 条件循环与累加
-- [match 模式匹配](./match.md) — 按值的结构分支
+- [条件分支 if-elif-else](if-elif-else.md) — 条件判断与分支选择
+- [for 循环](for.md) — 遍历范围与集合
+- [while 循环](while.md) — 条件循环与累加
+- [match 模式匹配](match.md) — 按值的结构分支

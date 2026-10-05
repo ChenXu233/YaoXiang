@@ -235,7 +235,7 @@ graph TD
 
 ### 2. Commit Conventions
 
-Follow the [Commit Conventions](./commit-convention.md):
+Follow the [Commit Conventions](commit-convention.md):
 
 ```bash
 # Format
@@ -322,8 +322,8 @@ supports longer names, but overly long names affect readability.
 
 ## 📚 Related Documentation
 
-- [Commit Conventions](./commit-convention.md)
-- [Test Specifications](./test-specification.md)
+- [Commit Conventions](commit-convention.md)
+- [Test Specifications](test-specification.md)
 
 ---
 

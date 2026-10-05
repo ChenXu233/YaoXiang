@@ -5,7 +5,7 @@ programming language, including type definitions, function declarations, method 
 type handling.
 
 > **Detailed design**: The complete FFI design, motivations, and trade-offs are detailed in
-> [RFC-026: FFI Core Mechanism](../../design/rfc/accepted/026-ffi-core-mechanism.md).
+> [RFC-026: FFI Core Mechanism](../../rfc/accepted/026-ffi-core-mechanism.md).
 
 ---
 
@@ -248,7 +248,7 @@ If the FFI type is not a resource type, it can run in parallel within a spawn bl
 ## Chapter 6: yx-bindgen Toolchain (Planned, Not Implemented)
 
 > **Status: Not implemented.** Automatic binding generation from C headers is the goal of
-> [RFC-026b](../../design/rfc/accepted/026-ffi-core-mechanism.md) (an automation sub-proposal of
+> [RFC-026b](../../rfc/accepted/026-ffi-core-mechanism.md) (an automation sub-proposal of
 > this chapter, with no independent document in the repository yet); currently **there is no
 > executable entry point**:
 >

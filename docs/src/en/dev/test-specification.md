@@ -49,8 +49,8 @@ the code behavior does not match the specification, **fix the code, never fix th
 
 The specification files are located at:
 
-- `docs/src/design/language-spec.md` —— Language core specification
-- `docs/src/design/rfc/accepted/` —— Accepted RFC design documents
+- `docs/src/reference/language-spec/` —— Language core specification
+- `docs/src/rfc/accepted/` —— Accepted RFC design documents
 
 The top of every test file must declare the corresponding specification sections (see Rule 2.1). Any
 developer should be able to take the specification document and compare it against the tests to
@@ -175,7 +175,7 @@ indicates a fundamental problem with the test's design.
 ### Relation to Commit Standards
 
 All test-related commits must use the `:white_check_mark: test:` type, following the
-[Commit Standards](./commit-convention.md).
+[Commit Standards](commit-convention.md).
 
 ```
 :white_check_mark: test(parser): Add Pratt parser infix expression tests
@@ -1027,12 +1027,12 @@ tests/
 
 - [YaoXiang Language Specification](../reference/language-spec/index.md) —— **The authoritative
   source for tests**
-- [Accepted RFCs](../design/rfc/index.md) —— **The authoritative source for design decisions**
+- [Accepted RFCs](../rfc/index.md) —— **The authoritative source for design decisions**
 - [Rust Testing Documentation](https://doc.rust-lang.org/book/ch11-00-testing.html)
 - [Criterion.rs User Guide](https://bheisler.github.io/criterion.rs/book/)
 - [proptest Documentation](https://docs.rs/proptest/latest/proptest/)
-- [Project Commit Standards](./commit-convention.md)
-- [Project Contributing Guide](./contributing.md)
+- [Project Commit Standards](commit-convention.md)
+- [Project Contributing Guide](contributing.md)
 
 ---
 

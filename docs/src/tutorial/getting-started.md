@@ -370,8 +370,8 @@ match r {
 ## 下一步
 
 - 📚 查看 [语言规范](../reference/language-spec/index.md) 了解完整语法
-- 🏗️ 浏览 [设计文档](../design/) 了解实现细节
-- 💡 查看 [设计宣言](../design/manifesto.md) 了解核心理念
+- 🏗️ 浏览 [设计文档](../explanation/) 了解实现细节
+- 💡 查看 [设计宣言](../explanation/manifesto.md) 了解核心理念
 
 ## 相关资源
 

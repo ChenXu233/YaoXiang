@@ -16,7 +16,7 @@ Errors produced during the semantic analysis phase, covering scope, variable lif
 and function signature parsing, etc.
 
 This family contains a total of **23** codes, all in the `define_codes!` registry, in the `Semantic`
-category. For a complete index, see the [Error Codes Index](./index.md).
+category. For a complete index, see the [Error Codes Index](index.md).
 
 ## Code Overview
 

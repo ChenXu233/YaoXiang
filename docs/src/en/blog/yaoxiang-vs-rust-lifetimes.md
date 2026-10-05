@@ -52,7 +52,7 @@ references.**
 ## A different angle: a borrow isn't a pointer, it's a token
 
 YaoXiang's core design is documented in
-[RFC-009 (Ownership Model)](../design/rfc/accepted/009-ownership-model.md). It didn't change the
+[RFC-009 (Ownership Model)](../rfc/accepted/009-ownership-model.md). It didn't change the
 default semantics (still Move), but it changed **what a borrow fundamentally is**.
 
 In YaoXiang, `&T` and `&mut T` are **not pointers**. They are **zero-sized compile-time
@@ -193,7 +193,7 @@ isn't mature yet.
 
 Rust has a separate "borrow checker." YaoXiang's **design direction** is to unify borrow conflicts
 into the type-checker's proof pipeline
-([RFC-027 (Compile-time Predicates and Unified Static Verification)](../design/rfc/accepted/027-compile-time-evaluation-types.md)).
+([RFC-027 (Compile-time Predicates and Unified Static Verification)](../rfc/accepted/027-compile-time-evaluation-types.md)).
 
 A token conflict is a Hoare proposition:
 
@@ -347,6 +347,6 @@ In progress. Will write again when there's a result.
 ---
 
 _YaoXiang is a programming language under active development. The ownership model is in
-[RFC-009](../design/rfc/accepted/009-ownership-model.md), closure capture in
-[RFC-023](../design/rfc/deprecated/023-closure-capture-model.md), and the concurrency model in
-[RFC-024](../design/rfc/accepted/024-concurrency-model.md)._
+[RFC-009](../rfc/accepted/009-ownership-model.md), closure capture in
+[RFC-023](../rfc/deprecated/023-closure-capture-model.md), and the concurrency model in
+[RFC-024](../rfc/accepted/024-concurrency-model.md)._

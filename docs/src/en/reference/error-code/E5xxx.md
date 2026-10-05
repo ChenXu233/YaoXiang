@@ -13,7 +13,7 @@ edit `locales/*.json`; to change the code table, edit `define_codes!`, then re-r
 Errors related to the module system and import resolution.
 
 This family contains **7** codes in total, all in the `define_codes!` registry, with category
-`Module`. For the complete index, see [Error Codes Home](./index.md).
+`Module`. For the complete index, see [Error Codes Home](index.md).
 
 ## Code Index
 

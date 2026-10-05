@@ -16,7 +16,7 @@ Internal compiler error, usually indicating a defect in the compiler itself. If 
 error, please submit an issue.
 
 This family has **3** codes in total, all in the `define_codes!` registry, with the category
-`Internal`. For the complete index, see [Error Code Home](./index.md).
+`Internal`. For the complete index, see [Error Code Home](index.md).
 
 ## Code Index
 

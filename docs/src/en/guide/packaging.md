@@ -117,7 +117,7 @@ greet: () -> string = "hello from mylib"
 ```
 
 All top-level bindings are visible by default; no `pub` is needed — see
-[Module System](./modules#export-doesnt-need-pub).
+[Module System](modules#export-doesnt-need-pub).
 
 ### 4. App declares the dependency
 
@@ -433,7 +433,7 @@ The dependency is a bare package name. Use `--git` to specify a Git source; see
 1. Dependency is not installed — run `yx install` in the workspace root or member directory
 2. A local path dependency is being used — switch to a workspace
 3. It's a module-path issue rather than a dependency issue — see
-   [Module System Troubleshooting](./modules#troubleshooting)
+   [Module System Troubleshooting](modules#troubleshooting)
 
 ### `missing field package`
 

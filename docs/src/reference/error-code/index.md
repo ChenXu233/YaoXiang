@@ -39,14 +39,14 @@ YaoXiang 的每个诊断都带一个稳定码号（如 `E1001`），便于检索
 
 | 族前缀 | 类别 | 含义 | 详情 |
 | --- | --- | --- | --- |
-| `E0xxx` | `Lexer / Parser` | 词法与语法分析错误 | 分族页：[`E0xxx`](./E0xxx.md) |
-| `E1xxx` | `TypeCheck` | 类型检查错误 | 分族页：[`E1xxx`](./E1xxx.md) |
-| `E2xxx` | `Semantic` | 语义分析错误 | 分族页：[`E2xxx`](./E2xxx.md) |
-| `E4xxx` | `Generic` | 泛型与特质错误 | 分族页：[`E4xxx`](./E4xxx.md) |
-| `E5xxx` | `Module` | 模块与导入错误 | 分族页：[`E5xxx`](./E5xxx.md) |
-| `E6xxx` | `Runtime` | 运行时错误 | 分族页：[`E6xxx`](./E6xxx.md) |
-| `E7xxx` | `Io` | I/O 与系统错误 | 分族页：[`E7xxx`](./E7xxx.md) |
-| `E8xxx` | `Internal` | 内部编译器错误 | 分族页：[`E8xxx`](./E8xxx.md) |
+| `E0xxx` | `Lexer / Parser` | 词法与语法分析错误 | 分族页：[`E0xxx`](E0xxx.md) |
+| `E1xxx` | `TypeCheck` | 类型检查错误 | 分族页：[`E1xxx`](E1xxx.md) |
+| `E2xxx` | `Semantic` | 语义分析错误 | 分族页：[`E2xxx`](E2xxx.md) |
+| `E4xxx` | `Generic` | 泛型与特质错误 | 分族页：[`E4xxx`](E4xxx.md) |
+| `E5xxx` | `Module` | 模块与导入错误 | 分族页：[`E5xxx`](E5xxx.md) |
+| `E6xxx` | `Runtime` | 运行时错误 | 分族页：[`E6xxx`](E6xxx.md) |
+| `E7xxx` | `Io` | I/O 与系统错误 | 分族页：[`E7xxx`](E7xxx.md) |
+| `E8xxx` | `Internal` | 内部编译器错误 | 分族页：[`E8xxx`](E8xxx.md) |
 | `W1xxx` | `Warning` | 警告 | [`W1xxx`](../warning-code/warning-codes.md) |
 
 `E3xxx` 族暂无独立分族页，全部码列在下方全量清单中。

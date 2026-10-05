@@ -36,7 +36,7 @@ Formatting options take effect in the following priority order (highest first):
 3. User-level configuration file
 
 For configuration items and default values, see
-[Formatter Configuration Design](../design/formatter/configuration.md).
+[Formatter Configuration Design](../dev/design/formatter/configuration.md).
 
 ## Exit Codes
 
@@ -75,8 +75,8 @@ Exit code `2` indicates files that need formatting. For detailed CI configuratio
 
 ## See Also
 
-- [`yx check`](./check-command.md) -- Static check
-- [`yx test`](./test-command.md) -- Run tests
-- [Formatting Rules Overview](../design/formatter/formatting-rules/index.md) -- Individual
+- [`yx check`](check-command.md) -- Static check
+- [`yx test`](test-command.md) -- Run tests
+- [Formatting Rules Overview](../dev/design/formatter/formatting-rules/index.md) -- Individual
   formatting rules
 - [CI Integration Guide](../guide/ci-integration.md) -- CI/CD integration

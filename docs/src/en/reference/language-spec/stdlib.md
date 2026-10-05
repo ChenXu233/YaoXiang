@@ -37,7 +37,7 @@ There are **18 module paths** under `std`, composed of two implementation forms:
 | `Vec(T)`       | Core primitive | Runtime-length raw buffer; `std.list` is implemented on top of it        |
 | `Dict(K, V)`   | Core primitive | Dictionary; `std.dict` provides module-level read/write functions        |
 | `String`       | `std.string`   | String; `std.string` provides operation functions                        |
-| `Array(T, N)`  | Core primitive | Fixed-size array (syntax see [Syntax Specification §1.6.4](./syntax.md)) |
+| `Array(T, N)`  | Core primitive | Fixed-size array (syntax see [Syntax Specification §1.6.4](syntax.md)) |
 
 > **`List(T)` / `Map(K, V)` are NOT standard library types**. `std.list` is a **module-level
 > function collection**, built on the core primitive `Vec(T)` (`src/std/list.yx:1-21`); `std.dict`
@@ -57,7 +57,7 @@ pub Option: (T: Type) -> Type = {
 ```
 
 **Variant construction** (must be type-qualified in expression position, see
-[Syntax Specification §1.4.2](./syntax.md)):
+[Syntax Specification §1.4.2](syntax.md)):
 
 | Variant       | Syntax                | Description |
 | ------------- | --------------------- | ----------- |
@@ -75,7 +75,7 @@ reports `E1042`):
 | `from_error` | `(T: Type)(v: Void) -> Option(T)`     | Always returns `none()` | Always returns `none()` |
 
 The `assert(false)` branch is a dead end of type `Never` (`Never <: T`, see
-[Type System §2.2](./type-system.md)); the runtime reports `E6005`.
+[Type System §2.2](type-system.md)); the runtime reports `E6005`.
 
 > **There is no `is_some` / `is_none` / `unwrap` / `unwrap_or` / `map`**—these names have 0 hits in
 > the entire `src/` repository. To test for failure use `is_failure()`, to extract the payload use
@@ -143,7 +143,7 @@ ErrorPropagate ::= Expr '?'
 
 The `?` operator automatically propagates errors of `Result` type (after `use std.result`, match
 variant destructuring is the explicit equivalent form of `?`—the variant set is imported via `use`,
-see [Syntax Specification §2.8](./syntax.md)):
+see [Syntax Specification §2.8](syntax.md)):
 
 ```
 // Returns the value on success, returns err upward on failure

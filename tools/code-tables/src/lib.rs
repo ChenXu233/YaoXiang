@@ -11,7 +11,7 @@ use serde_json::Value;
 use std::path::Path;
 
 /// RFC-013 文档相对仓库根的路径
-pub const RFC013_REL: &str = "docs/src/design/rfc/accepted/013-error-code-specification.md";
+pub const RFC013_REL: &str = "docs/src/rfc/accepted/013-error-code-specification.md";
 /// 人工翻译源（build.rs 门槛强制）；其余语言由 i18n bot 异步补齐
 pub const HARD_LOCALES: &[&str] = &["zh"];
 /// bot 目标语言（缺失降为 warning）

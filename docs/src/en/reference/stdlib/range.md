@@ -40,7 +40,7 @@ main: () -> Void = {
 
 > **The two sides have opposite shapes**: `has_next`'s signature **lacks `&`**
 > (`src/std/range.rs:40`); it consumes the iterator by value, so each check requires calling `iter`
-> again; `next`'s signature **has `&`** (`src/std/range.rs:46`); it borrows. [`std.list`](./list) is
+> again; `next`'s signature **has `&`** (`src/std/range.rs:46`); it borrows. [`std.list`](list) is
 > exactly the opposite—both of its methods borrow (`&Iter(T)` / `&mut Iter(T)`), so the same
 > iterator can be used repeatedly. Copying the pattern from either side to the other will not match.
 
@@ -163,7 +163,7 @@ Returns: the current element; returns `Void` when iteration ends.
 
 > **Borrows** the iterator (signature has `&`, `src/std/range.rs:46`); it does not consume it. This
 > is the opposite of [`has_next`](#has_next), and also the opposite of the "both methods borrow"
-> pattern on the [`std.list`](./list) side.
+> pattern on the [`std.list`](list) side.
 
 ```yaoxiang
 use std.assert
@@ -360,7 +360,7 @@ Consume the iterator and fold.
 - `init` — initial accumulator
 - `f` — reduction function `(accumulator, element) -> new accumulator`
 
-> Note the argument order differs from [`std.list.reduce`](./list#reduce): this module is
+> Note the argument order differs from [`std.list.reduce`](list#reduce): this module is
 > `(iterator, initial, function)`, while `std.list` is `(list, function, initial)`.
 
 ```yaoxiang
@@ -403,6 +403,6 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.list`](./list) — list and its iterator
-- [`std.result`](./result) — unpack the return value of `iter` / `contains`
+- [`std.list`](list) — list and its iterator
+- [`std.result`](result) — unpack the return value of `iter` / `contains`
 - [Error code reference](../error-code/) — `E6009` invalid step

@@ -51,7 +51,7 @@ called explicitly, but **only via method syntax** (module-level `result.is_failu
 | `r.residual()`               | `(T: Type, E: Type)(self: &Result(T, E)) -> E`    |
 | `Result(T, E).from_error(e)` | `(T: Type, E: Type)(e: E) -> Result(T, E)`        |
 
-Unlike [`std.option`](./option), `?` propagation on `Result` **is available**:
+Unlike [`std.option`](option), `?` propagation on `Result` **is available**:
 
 ```yaoxiang
 use std.result
@@ -317,8 +317,8 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.string`](./string#parse_int) — parsing functions that produce `Result`
-- [`std.range`](./range#iter) — returns `Err` with `E6009` when `step=0`
-- [`std.option`](./option) — `Option(T)`; its `?` propagation is currently **unavailable**; see
+- [`std.string`](string#parse_int) — parsing functions that produce `Result`
+- [`std.range`](range#iter) — returns `Err` with `E6009` when `step=0`
+- [`std.option`](option) — `Option(T)`; its `?` propagation is currently **unavailable**; see
   'Known Gaps' on that page
 - [Error Code Reference](../error-code/) — runtime error value codes such as `E6010` / `E6011`

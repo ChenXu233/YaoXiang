@@ -48,7 +48,7 @@ These keywords have special meaning in any context and cannot be used as identif
 > (`src/frontend/core/lexer/state.rs:28`), and the parser skips it at declarations and import items
 > (`src/frontend/core/parser/statements/declarations.rs:666-671,726`, `.../imports.rs:57-59`), but
 > the module system **does not make any visibility judgment based on it**— the accepted
-> [RFC-029](../../design/rfc/accepted/029-module-semantics.md) explicitly states "no `pub`, no
+> [RFC-029](../../rfc/accepted/029-module-semantics.md) explicitly states "no `pub`, no
 > `private`, no `export`, no visibility mechanism" (line 17 of that file). Writing or omitting `pub`
 > makes no difference to visibility.
 
@@ -385,7 +385,7 @@ Block       ::= '{' Stmt* Expr? '}'
 > **Statement termination rules**: the rules for separator and line-break behavior between Stmts
 > (explicit `;` separation, line-break termination, line-continuation exceptions, leading `(` / `[`
 > that never merge) are defined by
-> [RFC-038](../../design/rfc/accepted/038-statement-termination.md).
+> [RFC-038](../../rfc/accepted/038-statement-termination.md).
 
 #### 2.9.1 The Three Forms of `{`
 
@@ -414,7 +414,7 @@ content**:
 > expression), not a function. To define a function, write an Fn annotation: `f: () -> Int = { 5 }`.
 > This is the same principle as the dictionary case: **the type is determined by the content**, not
 > by whether an annotation exists. (This rule is in
-> [RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md) Appendix D.)
+> [RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md) Appendix D.)
 
 **Unified semantics**: the value of every `{}` block is given by the **tail expression**; `return`
 is a non-local exit of type `Never`.
@@ -425,7 +425,7 @@ is a non-local exit of type `Never`.
 | `unsafe {}` | Tail expr  | `Void`           |
 | `spawn {}`  | Tail expr  | `Void`           |
 
-**Core principles** (see [RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md)
+**Core principles** (see [RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md)
 for details):
 
 - **A block's value = its tail expression** (the last expression); the sole exit, with no exceptions
@@ -658,7 +658,7 @@ add: (a: Int, b: Int) -> Int = {
 - Within the same scope, any name can be declared at most once
 
 > **Detailed definition**: the complete rules of scoping, variable declaration, and shadowing
-> mechanism are detailed in [Module System Specification](./modules.md#chapter-4-scope).
+> mechanism are detailed in [Module System Specification](modules.md#chapter-4-scope).
 
 ---
 
@@ -696,7 +696,7 @@ ReturnStmt  ::= 'return' Expr?
 `unsafe`) and hands the value to the caller. It does **not "return to a block"**.
 
 **Type**: `return e : Never` (where `e : T`). `Never <: T'` holds for any `T'` (principle of
-explosion; see [Type System §2.2](./type-system.md)), so `return` can appear at any return-type
+explosion; see [Type System §2.2](type-system.md)), so `return` can appear at any return-type
 position without needing extra rules to constrain it.
 
 **Relationship with block evaluation**: the value of a block is always the **tail expression** (see
@@ -706,7 +706,7 @@ explosion.
 
 `return` together with the tail expression makes "early return" work, with no extra rule that
 `return` specifically refers to a function—see
-[RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md).
+[RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md).
 
 ```yaoxiang
 factorial: (n: Int) -> Int = {
@@ -737,7 +737,7 @@ flows to after the loop body.
 - **Does not affect termination proofs**: `break` does not participate in termination arguments—it
   neither provides a measure nor constitutes a decreasing step of a measure; the termination
   obligation of a loop is independent of `break` and is triggered by refinement types (see
-  [type-system §8.4](./type-system.md#84-terminates-termination-measure-predicate)).
+  [type-system §8.4](type-system.md#84-terminates-termination-measure-predicate)).
 - **Borrowing semantics**: the control-flow edge of `break` participates in the structural cut of
   the RFC-009a reverse-BFS liveness analysis (iterations that are jumped out of do not participate
   in the liveness derivation of back-edges).
@@ -878,7 +878,7 @@ for j in 1..5 {
 }
 ```
 
-This rule applies to all code blocks; see [4.3 Shadowing Rules](./modules.md#43-shadowing-rules) for
+This rule applies to all code blocks; see [4.3 Shadowing Rules](modules.md#43-shadowing-rules) for
 details.
 
 #### 3.9.4 Comparison with Other Languages

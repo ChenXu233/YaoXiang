@@ -136,5 +136,5 @@ These bindings are used for runtime `Stringable` dispatch; for everyday code, si
 
 ## Related
 
-- [`std.io`](./io) —— `print` / `println`'s internal formatting follows the same set of rules
-- [`std.string`](./string) —— string operations
+- [`std.io`](io) —— `print` / `println`'s internal formatting follows the same set of rules
+- [`std.string`](string) —— string operations

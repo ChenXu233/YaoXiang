@@ -7,10 +7,10 @@
 //! - `stat` 的键集合 `{size, is_dir, is_file, readonly, mtime}` 与 `mtime`「早于纪元/不可得时为 0」；
 //! - `mkdtemp` / `tmpfile` 创建后**真实存在且可持久访问**（依赖 tempfile），`temp_dir` 等于 `std::env::temp_dir()`。
 //!
-//! 规范来源：`std.fs` 本身尚无独立 RFC（仓库 `docs/src/design/rfc/` 内无 std.fs 专章），
+//! 规范来源：`std.fs` 本身尚无独立 RFC（仓库 `docs/src/rfc/` 内无 std.fs 专章），
 //! 故本文件以「实现契约」为断言对象，并显式引用其注释化契约的出处 `src/std/fs.rs` 模块头
 //! （职责分界：`std.fs` = 路径级操作，`std.io` = 控制台，`std.os` = 句柄级）与 #104 迁移叙述；
-//! 错误码段位依据 RFC-013（`docs/src/design/rfc/accepted/013-error-code-specification.md:560`
+//! 错误码段位依据 RFC-013（`docs/src/rfc/accepted/013-error-code-specification.md:560`
 //! 「E7xxx 为 std.io / std.net 错误值预留段位」）。
 //!
 //! 迁移自 `src/std/fs.rs` 的内联 `mod tests`（违反 `docs/src/dev/test-specification.md` 规则 1.4），

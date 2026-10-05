@@ -47,7 +47,7 @@ as      unsafe  and    or
 > （`src/frontend/core/lexer/state.rs:28`），解析器在声明与导入项处跳过它
 > （`src/frontend/core/parser/statements/declarations.rs:666-671,726`、
 > `.../imports.rs:57-59`），但模块系统**不据此做任何可见性判定**——已接受的
-> [RFC-029](../../design/rfc/accepted/029-module-semantics.md) 明确
+> [RFC-029](../../rfc/accepted/029-module-semantics.md) 明确
 > “没有 `pub`、没有 `private`、没有 `export`，没有可见性机制”（该文件第 17 行）。
 > 写不写 `pub` 对可见性没有区别。
 
@@ -349,7 +349,7 @@ Block       ::= '{' Stmt* Expr? '}'
 ```
 
 > **语句终止规则**：Stmt 之间的分隔与换行行为（`;` 显式分隔、换行终止、续行例外、行首 `(`/`[`
-> 永不合并）由 [RFC-038](../../design/rfc/accepted/038-statement-termination.md) 定义。
+> 永不合并）由 [RFC-038](../../rfc/accepted/038-statement-termination.md) 定义。
 
 #### 2.9.1 `{` 的三种形态
 
@@ -374,7 +374,7 @@ Block       ::= '{' Stmt* Expr? '}'
 >
 > **为何函数需要注解**：`f = { stmt }`
 > 是**值**（尾表达式类型），不是函数。要定义函数就写明 Fn 注解：`f: () -> Int = { 5 }`。这与字典同一原则：**类型由内容决定**，不由注解存在与否决定。（此规则见
-> [RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md) 附录 D。）
+> [RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md) 附录 D。）
 
 **统一语义**：所有 `{}` 块的值均由**尾表达式**给出，`return` 是 `Never` 型的非局部退出。
 
@@ -384,7 +384,7 @@ Block       ::= '{' Stmt* Expr? '}'
 | `unsafe {}` | 尾表达式 | `Void`    |
 | `spawn {}`  | 尾表达式 | `Void`    |
 
-**核心原则**（详见 [RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md)）：
+**核心原则**（详见 [RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md)）：
 
 - **块的值 = 尾表达式**（最后一个表达式），唯一出口，无例外
 - 末位为**赋值语句**时块值为 `Void`；想要 `Void` 就显式写 `Void`
@@ -606,7 +606,7 @@ add: (a: Int, b: Int) -> Int = {
 - `mut x = value`：显式新可变声明，禁止与外层同名
 - 同作用域内任何名字只能声明一次
 
-> **详细定义**：作用域的完整规则、变量声明和遮蔽机制详见 [模块系统规范](./modules.md#第四章作用域)。
+> **详细定义**：作用域的完整规则、变量声明和遮蔽机制详见 [模块系统规范](modules.md#第四章作用域)。
 
 ---
 
@@ -643,13 +643,13 @@ ReturnStmt  ::= 'return' Expr?
 / `match` / 裸块 / `spawn` / `unsafe`），把值交给调用者。它**不「返回给块」**。
 
 **类型**：`return e : Never`（`e : T`）。`Never <: T'` 对任意 `T'` 成立（爆炸原理，见
-[类型系统 §2.2](./type-system.md)），故 `return` 可出现在任何返回类型的位置，无需额外规则约束。
+[类型系统 §2.2](type-system.md)），故 `return` 可出现在任何返回类型的位置，无需额外规则约束。
 
 **与块求值的关系**：块的值恒为**尾表达式**（见 §2.9）。`{ return n }` 作为块，其值是 `n`，类型
 `Never`；同时 `return` 的作用是退出函数。**两件事同时成立**，靠爆炸原理共存。
 
 `return` 与尾表达式共同使「提前返回」成立，无需 `return` 特指函数的额外规则——见
-[RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md)。
+[RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md)。
 
 ```yaoxiang
 factorial: (n: Int) -> Int = {
@@ -675,7 +675,7 @@ BreakStmt   ::= 'break'
   循环体内（含体内嵌套的块/if/match），出现在循环外编译报错（E1102 `'break' outside of a loop`）
 - **不影响终止性证明**：`break`
   不参与终止性论证——它既不提供测度，也不构成测度的递减步骤；循环的终止义务与 `break`
-  无关，由精化类型触发（见 [type-system §8.4](./type-system.md#84-terminates终止测度谓词)）。
+  无关，由精化类型触发（见 [type-system §8.4](type-system.md#84-terminates终止测度谓词)）。
 - **借用语义**：break 的控制流边参与 RFC-009a 反向 BFS 活性分析的结构性切断（跳出的迭代不参与回边活性推导）
 
 ```yaoxiang
@@ -810,7 +810,7 @@ for j in 1..5 {
 }
 ```
 
-此规则适用于所有代码块，详见 [4.3 遮蔽规则](./modules.md#43-遮蔽规则)。
+此规则适用于所有代码块，详见 [4.3 遮蔽规则](modules.md#43-遮蔽规则)。
 
 #### 3.9.4 与其他语言的对比
 

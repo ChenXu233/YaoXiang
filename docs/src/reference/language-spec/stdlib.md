@@ -35,7 +35,7 @@
 | `Vec(T)`             | 核心原语             | 运行时长度的原始缓冲；`std.list` 在其上实现 |
 | `Dict(K, V)`         | 核心原语             | 字典；`std.dict` 提供模块级读写函数      |
 | `String`             | `std.string`         | 字符串；`std.string` 提供操作函数        |
-| `Array(T, N)`        | 核心原语             | 固定大小数组（语法见 [语法规范 §1.6.4](./syntax.md)） |
+| `Array(T, N)`        | 核心原语             | 固定大小数组（语法见 [语法规范 §1.6.4](syntax.md)） |
 
 > **`List(T)` / `Map(K, V)` 不是标准库类型**。`std.list` 是**模块级函数集合**，
 > 底座是核心原语 `Vec(T)`（`src/std/list.yx:1-21`）；`std.dict` 同样是一组
@@ -54,7 +54,7 @@ pub Option: (T: Type) -> Type = {
 }
 ```
 
-**变体构造**（表达式位置必须类型限定，见 [语法规范 §1.4.2](./syntax.md)）：
+**变体构造**（表达式位置必须类型限定，见 [语法规范 §1.4.2](syntax.md)）：
 
 | 变体           | 语法                    | 说明 |
 | -------------- | ----------------------- | ---- |
@@ -71,7 +71,7 @@ pub Option: (T: Type) -> Type = {
 | `from_error`          | `(T: Type)(v: Void) -> Option(T)`              | 恒返回 `none()`  | 恒返回 `none()`   |
 
 `assert(false)` 分支是 `Never` 型的死路（`Never <: T`，见
-[类型系统 §2.2](./type-system.md)），运行时报 `E6005`。
+[类型系统 §2.2](type-system.md)），运行时报 `E6005`。
 
 > **没有 `is_some` / `is_none` / `unwrap` / `unwrap_or` / `map`**——这些名字在
 > `src/` 全仓 0 命中。判定失败用 `is_failure()`，取载荷用 `success()`。
@@ -135,7 +135,7 @@ ErrorPropagate ::= Expr '?'
 ```
 
 `?` 运算符自动传播 `Result` 类型的错误（`use std.result` 后，match 变体解构是
-`?` 的显式等价形式——变体集随 `use` 导入，见 [语法规范 §2.8](./syntax.md)）：
+`?` 的显式等价形式——变体集随 `use` 导入，见 [语法规范 §2.8](syntax.md)）：
 
 ```
 // 成功时返回值，失败时向上返回 err

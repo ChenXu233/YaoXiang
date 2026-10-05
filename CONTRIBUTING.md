@@ -135,12 +135,12 @@ Closes #123
 For new features or major changes, please submit an RFC first:
 对于新功能或重大变更，请先提交 RFC：
 
-1. Read the [RFC Template](docs/design/rfc/RFC_TEMPLATE.md)
-2. 阅读 [RFC 模板](docs/design/rfc/RFC_TEMPLATE.md)
-3. Reference the [Full Example](docs/design/rfc/EXAMPLE_full_feature_proposal.md)
-4. 参考 [完整示例](docs/design/rfc/EXAMPLE_full_feature_proposal.md)
-5. Create a new RFC file in `docs/design/rfc/`
-6. 在 `docs/design/rfc/` 目录创建新 RFC 文件
+1. Read the [RFC Template](docs/src/rfc/RFC_TEMPLATE.md)
+2. 阅读 [RFC 模板](docs/src/rfc/RFC_TEMPLATE.md)
+3. Reference the [Full Example](docs/src/rfc/EXAMPLE_full_feature_proposal.md)
+4. 参考 [完整示例](docs/src/rfc/EXAMPLE_full_feature_proposal.md)
+5. Create a new RFC file in `docs/src/rfc/`
+6. 在 `docs/src/rfc/` 目录创建新 RFC 文件
 7. Set status to "Draft" (草案) or "Review" (审核中)
 8. 状态设为 "草案" 或 "审核中"
 9. Submit a PR for discussion
@@ -153,8 +153,8 @@ Draft (草案) → Review (审核中) → Accepted (已接受) → accepted/
                                    → Rejected (已拒绝) → stays in rfc/
 ```
 
-See [RFC Lifecycle](docs/design/rfc/RFC_TEMPLATE.md#lifecycle) for details.
-详见 [RFC 生命周期](docs/design/rfc/RFC_TEMPLATE.md#生命周期与归宿)。
+See [RFC Lifecycle](docs/src/rfc/RFC_TEMPLATE.md#lifecycle) for details.
+详见 [RFC 生命周期](docs/src/rfc/RFC_TEMPLATE.md#生命周期与归宿)。
 
 ### RFC 实现与文档更新
 
@@ -169,8 +169,8 @@ See [RFC Lifecycle](docs/design/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 
 ## 代码放置与变更规程 / Code Placement & Change Protocol
 
-> 本节是**强制规程**，适用于所有代码变更，尤其是编译器架构重构（[RFC-039](docs/src/design/rfc/draft/039-compiler-architecture.md)）期间。
-> 动工前必读 [实现者手册 HOWTO.md](docs/src/design/compiler-architecture/HOWTO.md)（自检表 + 补丁判定）；规则本体见 [coding-rules.md](docs/src/dev/coding-rules.md)。
+> 本节是**强制规程**，适用于所有代码变更，尤其是编译器架构重构（[RFC-039](docs/src/rfc/draft/039-compiler-architecture.md)）期间。
+> 动工前必读 [实现者手册 HOWTO.md](docs/src/dev/HOWTO.md)（自检表 + 补丁判定）；规则本体见 [coding-rules.md](docs/src/dev/coding-rules.md)。
 
 ### 三条禁令 / Three Prohibitions
 
@@ -188,7 +188,7 @@ See [RFC Lifecycle](docs/design/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 | D1 | 新概念能用「既有概念 + 参数」表达吗？ | 能 → ⛔ 禁止新增 |
 | D2 | 与既有概念同语义（变体名重合 ≥ 半数）？ | 无 From/TryFrom → ⛔ 合并为一份，禁止 import 别名弥合 |
 | D3 | ≥2 处复制 / 新增入口 / ≥3 处同义映射？ | 命中 → ⛔ 停工走设计流程；皆否 → 允许局部补丁 + 回归测试 |
-| D4 | 新增代码属于目标模块**已有的职责类别**吗？（职责表见 [01-routing.md](docs/src/design/compiler-architecture/01-routing.md)） | 第 2 类及以上 → ⛔ 新建模块 |
+| D4 | 新增代码属于目标模块**已有的职责类别**吗？（职责表见 [01-routing.md](docs/src/dev/architecture/01-routing.md)） | 第 2 类及以上 → ⛔ 新建模块 |
 
 ### 红线 / Hard Rules (review 必打回)
 

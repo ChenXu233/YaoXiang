@@ -142,7 +142,7 @@ sleep: (seconds: Float) -> Void
 <!-- stdlib:sig:time.sleep end -->
 
 Sleeps for the given number of **seconds** (decimals allowed). The same-named
-[`std.concurrent.sleep`](./concurrent#sleep) uses **milliseconds**; please distinguish between the
+[`std.concurrent.sleep`](concurrent#sleep) uses **milliseconds**; please distinguish between the
 two.
 
 - `seconds` — number of seconds to sleep; accepts `Int` (interpreted as seconds) or `Float`
@@ -306,5 +306,5 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.concurrent`](./concurrent) — millisecond-level sleep
+- [`std.concurrent`](concurrent) — millisecond-level sleep
 - [Error code reference](../error-code/) — `E6007` generic runtime error

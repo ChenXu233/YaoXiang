@@ -16,7 +16,7 @@ Errors generated during the type checking phase, covering type matching, pattern
 instantiation, interface constraints, and `?` error propagation.
 
 This family contains **53** codes in total, all registered in the `define_codes!` registry, with
-category `TypeCheck`. For a complete index, see the [Error Code Index](./index.md).
+category `TypeCheck`. For a complete index, see the [Error Code Index](index.md).
 
 ## Code Overview
 

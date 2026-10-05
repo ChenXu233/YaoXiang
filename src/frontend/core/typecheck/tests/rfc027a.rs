@@ -1,6 +1,6 @@
 //! RFC-027a 终止显式测度 — 类型解析测试
 //!
-//! 规范来源: RFC-027a `docs/src/design/rfc/review/027a-termination-explicit-measure.md`
+//! 规范来源: RFC-027a `docs/src/rfc/review/027a-termination-explicit-measure.md`
 //! 宿主语义: RFC-027 §6.9（`Terminates` 内置谓词，与 `Int`/`Never` 同属核心原语）
 //!
 //! 本文件覆盖 **T1**（`Terminates` 进类型解析器）、**T2**（测度提取）。

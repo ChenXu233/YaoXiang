@@ -13,7 +13,7 @@ edit `locales/*.json`; to change the code table, edit `define_codes!`; then re-r
 Errors produced by the Lexer and Parser phases.
 
 This family contains **11** codes in total, all registered in the `define_codes!` registry, under
-the category `Lexer / Parser`. For the full index, see the [Error Codes Home](./index.md).
+the category `Lexer / Parser`. For the full index, see the [Error Codes Home](index.md).
 
 ## Code List
 

@@ -11,7 +11,7 @@ dogfooding module (RFC-036 §3).
 **Value semantics contract**: assertion failures are expressed as `Err(diagnostic message)`,
 **without aborting the process**. The return type of every assertion function is
 `Result(Void, String)`, so multiple assertions can run consecutively in one program, with the caller
-deciding pass or fail. Process-level abort semantics are retained in [`std.assert`](./assert)
+deciding pass or fail. Process-level abort semantics are retained in [`std.assert`](assert)
 (runtime guard), and do not enter the test assertion path.
 
 ```yaoxiang
@@ -104,7 +104,7 @@ main: () -> Void = {
 
 Further asserts that the **error code** in the `Err` carrier equals the expected value. `E` is
 pinned to `Error` — codes exist only on the standard library's `Error` carrier (`code` / `message`
-fields, see [`std.result`](./result)).
+fields, see [`std.result`](result)).
 
 The failure message is `Expected code {want}, got {c}`.
 
@@ -203,7 +203,7 @@ test.suite([("bad", () => test.assert_eq(1, 2))])
 
 ## Related
 
-- [`std.assert`](./assert) — process-level runtime guard (`E6005`), complements the value semantics
+- [`std.assert`](assert) — process-level runtime guard (`E6005`), complements the value semantics
   of this module
-- [`std.result`](./result) — `Result` unpacking tool family
+- [`std.result`](result) — `Result` unpacking tool family
 - [Error code reference](../error-code/) — error codes on `Err` carriers, such as `E6010` / `E6011`

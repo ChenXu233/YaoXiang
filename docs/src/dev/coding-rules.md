@@ -1,8 +1,8 @@
 # 代码编写规则（Coding Rules）
 
 > **本文是 YaoXiang 代码变更规则的唯一权威本体。** 精确描述规则，不含现状诊断与历史论证。
-> 历史事故证据与决策理由见 [08-maintenance-mechanism.md](../design/compiler-architecture/08-maintenance-mechanism.md)（2026-10 诊断记录，随 RFC-039 归档）；外部惯例参照（Go / rustc 等）同见该文档。
-> 执行入口：[HOWTO.md](../design/compiler-architecture/HOWTO.md)（动工自检）→ 本文（规则）→ PR 模板（提交时强制）。
+> 历史事故证据与决策理由见 [08-maintenance-mechanism.md](architecture/08-maintenance-mechanism.md)（2026-10 诊断记录，随 RFC-039 归档）；外部惯例参照（Go / rustc 等）同见该文档。
+> 执行入口：[HOWTO.md](HOWTO.md)（动工自检）→ 本文（规则）→ PR 模板（提交时强制）。
 
 ## 第一部分：三条禁令
 

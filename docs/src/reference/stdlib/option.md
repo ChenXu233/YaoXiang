@@ -113,10 +113,10 @@ main: () -> Void = {
    `E1042`。它是 `?` 传播的内部桥，既然 `?` 不可用，这座桥也就没有调用点。
 3. **没有 `is_some` / `is_none` / `unwrap` / `unwrap_or` / `map`。** 这些名字在标准库里
    0 命中；判定失败用 `is_failure()`，取载荷用 `success()`。`Result` 那侧的对应工具在
-   [`std.result`](./result)。
+   [`std.result`](result)。
 
 ## 相关
 
-- [`std.result`](./result) —— `Result(T, E)`；`?` 传播当前**只**在它上面可用
-- [`std.assert`](./assert) —— 死路分支的 `assert(false)` 来源
+- [`std.result`](result) —— `Result(T, E)`；`?` 传播当前**只**在它上面可用
+- [`std.assert`](assert) —— 死路分支的 `assert(false)` 来源
 - [语法规范 §2.8](../language-spec/syntax.md) —— 变体解构与穷尽性检查

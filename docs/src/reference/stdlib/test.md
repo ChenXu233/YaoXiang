@@ -10,7 +10,7 @@ description: '测试断言库（值语义）'
 
 **值语义契约**：断言失败以 `Err(诊断信息)` 表达，**不 abort 进程**。每个断言函数的返回
 类型都是 `Result(Void, String)`，因此可以在一个程序里连跑多条断言、由调用方决定成败。
-进程级 abort 语义保留在 [`std.assert`](./assert)（运行时守卫），不进入测试断言路径。
+进程级 abort 语义保留在 [`std.assert`](assert)（运行时守卫），不进入测试断言路径。
 
 ```yaoxiang
 use std.test
@@ -98,7 +98,7 @@ main: () -> Void = {
 ## assert_err_code
 
 进一步断言 `Err` 载体的**错误码**等于预期值。`E` 钉死为 `Error`——码只存在于标准库
-`Error` 载体上（`code` / `message` 两个字段，见 [`std.result`](./result)）。
+`Error` 载体上（`code` / `message` 两个字段，见 [`std.result`](result)）。
 
 失败消息为 `Expected code {want}, got {c}`。
 
@@ -194,6 +194,6 @@ test.suite([("bad", () => test.assert_eq(1, 2))])
 
 ## 相关
 
-- [`std.assert`](./assert) —— 进程级运行时守卫（`E6005`），与本模块的值语义互补
-- [`std.result`](./result) —— `Result` 的拆包工具族
+- [`std.assert`](assert) —— 进程级运行时守卫（`E6005`），与本模块的值语义互补
+- [`std.result`](result) —— `Result` 的拆包工具族
 - [错误码参考](../error-code/) —— `E6010` / `E6011` 等 `Err` 载体上的错误码

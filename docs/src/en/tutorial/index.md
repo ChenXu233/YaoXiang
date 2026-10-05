@@ -51,13 +51,13 @@ In the YaoXiang world, **everything is a type**:
 
 If you already have a programming background, we recommend starting with "Quick Start".
 
-[🚀 Quick Start →](./getting-started)
+[🚀 Quick Start →](getting-started)
 
 ### Users without a Programming Background
 
 If you don't have a programming background, we recommend starting with "Beginner Tutorial".
 
-[💡 Beginner Tutorial →](./basics/variables/index.md)
+[💡 Beginner Tutorial →](basics/variables/index.md)
 
 > **💡 Tip**: Not having a programming background is actually an advantage — with no baggage from
 > other languages, you can understand YaoXiang's design philosophy most directly.
@@ -76,30 +76,30 @@ If you don't have a programming background, we recommend starting with "Beginner
 
 ## Next Steps
 
-[🚀 Quick Start →](./getting-started)
+[🚀 Quick Start →](getting-started)
 
 Or, begin with the core concepts:
 
-- [What does "everything is a type" mean?](./basics/variables/)
-- [Why don't you need to write await?](./getting-started#并作编程并发)
-- [What is ownership?](./advanced/ownership/)
+- [What does "everything is a type" mean?](basics/variables/)
+- [Why don't you need to write await?](getting-started#并作编程并发)
+- [What is ownership?](advanced/ownership/)
 
 ### All Beginner Tutorial Chapters
 
-- [Variables and Literals](./basics/variables/index.md)
-- [Strings](./basics/string/index.md)
-- [Functions](./basics/functions/index.md)
-- [Lambda and Closures](./basics/lambda/index.md)
-- [Data Structures](./basics/data-structures/index.md)
-- [Pattern Matching](./basics/pattern-matching/index.md)
-- [Control Flow](./basics/control-flow/index.md)
+- [Variables and Literals](basics/variables/index.md)
+- [Strings](basics/string/index.md)
+- [Functions](basics/functions/index.md)
+- [Lambda and Closures](basics/lambda/index.md)
+- [Data Structures](basics/data-structures/index.md)
+- [Pattern Matching](basics/pattern-matching/index.md)
+- [Control Flow](basics/control-flow/index.md)
 
 ### Advanced
 
-- [Type System](./advanced/type-system/index.md) - Generics, Interfaces, Operator Overloading
-- [Ownership](./advanced/ownership/index.md) - Borrowing, References, and the Ownership Model
+- [Type System](advanced/type-system/index.md) - Generics, Interfaces, Operator Overloading
+- [Ownership](advanced/ownership/index.md) - Borrowing, References, and the Ownership Model
 
-We recommend starting with [Quick Start](./getting-started) for systematic learning.
+We recommend starting with [Quick Start](getting-started) for systematic learning.
 ---
 
 > "As heaven maintains vigor through movements, a gentleman should constantly strive for

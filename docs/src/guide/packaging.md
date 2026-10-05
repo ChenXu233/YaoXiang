@@ -110,7 +110,7 @@ Workspace my-project (2 members)
 greet: () -> string = "hello from mylib"
 ```
 
-所有顶层绑定默认对外可见，无需 `pub`——见[模块系统](./modules#导出不需要-pub)。
+所有顶层绑定默认对外可见，无需 `pub`——见[模块系统](modules#导出不需要-pub)。
 
 ### 4. 应用声明依赖
 
@@ -409,7 +409,7 @@ yx add mylib --git https://github.com/org/repo --version "^0.1.0"
 
 1. 依赖没装——在工作空间根或成员目录跑 `yx install`
 2. 用了本地路径依赖——改用工作空间
-3. 是模块路径问题而非依赖问题——见[模块系统排错](./modules#排错)
+3. 是模块路径问题而非依赖问题——见[模块系统排错](modules#排错)
 
 ### `missing field package`
 

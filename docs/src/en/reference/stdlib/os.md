@@ -7,7 +7,7 @@ description: 'File handles, environment variables, and working directory'
 
 Operating system interface module: file handle read/write, environment variables, and working
 directory. Path-level file operations (whole-file read/write, directory, metadata, path
-manipulation) are documented in [`std.fs`](./fs).
+manipulation) are documented in [`std.fs`](fs).
 
 ```yaoxiang
 use std.os
@@ -40,7 +40,7 @@ use std.os
 > became invalid after one use. `open → write → close` would report `E2014`.
 
 If you want to avoid manually managing handles, you can use the no-handle convenience functions —
-they live in [`std.fs`](./fs) (**not** in `std.io`): `fs.read_file` / `fs.write_file` /
+they live in [`std.fs`](fs) (**not** in `std.io`): `fs.read_file` / `fs.write_file` /
 `fs.append_file`. This module (`std.os`) only has handle-level incremental read/write, and has no
 `append_file` (`os.append_file` reports `E1042`).
 
@@ -458,5 +458,5 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.fs`](./fs) — Path-level file and directory operations
+- [`std.fs`](fs) — Path-level file and directory operations
 - [Error code reference](../error-code/) — `E6007` generic runtime error

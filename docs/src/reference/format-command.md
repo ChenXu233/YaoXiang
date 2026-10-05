@@ -35,7 +35,7 @@ yx format [OPTIONS] <PATH>
 2. 项目配置 `yaoxiang.toml` 的格式化配置
 3. 用户级配置文件
 
-配置项与默认值详见[格式化配置设计](../design/formatter/configuration.md)。
+配置项与默认值详见[格式化配置设计](../dev/design/formatter/configuration.md)。
 
 ## 退出码
 
@@ -73,7 +73,7 @@ yx format --indent 4 --line-width 100 main.yx
 
 ## 另请参阅
 
-- [`yx check`](./check-command.md) -- 静态检查
-- [`yx test`](./test-command.md) -- 运行测试
-- [格式化规则总览](../design/formatter/formatting-rules/index.md) -- 各项格式化规则
+- [`yx check`](check-command.md) -- 静态检查
+- [`yx test`](test-command.md) -- 运行测试
+- [格式化规则总览](../dev/design/formatter/formatting-rules/index.md) -- 各项格式化规则
 - [CI 集成指南](../guide/ci-integration.md) -- CI/CD 集成

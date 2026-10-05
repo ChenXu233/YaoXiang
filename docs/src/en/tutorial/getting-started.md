@@ -377,8 +377,8 @@ match r {
 ## Next steps
 
 - 📚 See the [language specification](../reference/language-spec/index.md) for the complete syntax
-- 🏗️ Browse the [design documents](../design/) for implementation details
-- 💡 Read the [design manifesto](../design/manifesto.md) for the core philosophy
+- 🏗️ Browse the [design documents](../explanation/) for implementation details
+- 💡 Read the [design manifesto](../explanation/manifesto.md) for the core philosophy
 
 ## Related resources
 

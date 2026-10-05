@@ -24,7 +24,6 @@
 | -------- | ---------------- | -------- | -------- |
 | `main`   | 生产环境代码     | 永久     | 严格保护 |
 | `dev`    | 主开发分支       | 永久     | 中等保护 |
-| `master` | 主干分支（兼容） | 永久     | 严格保护 |
 
 ### 功能分支（Feature Branches）
 
@@ -234,7 +233,7 @@ graph TD
 
 ### 2. 提交规范
 
-遵循 [提交规范](./commit-convention.md)：
+遵循 [提交规范](commit-convention.md)：
 
 ```bash
 # 格式
@@ -319,8 +318,8 @@ git checkout -b feature/new-feature
 
 ## 📚 相关文档
 
-- [提交规范](./commit-convention.md)
-- [测试规范](./test-specification.md)
+- [提交规范](commit-convention.md)
+- [测试规范](test-specification.md)
 
 ---
 

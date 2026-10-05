@@ -53,25 +53,25 @@ my-project/
 
 | Command                                       | Description                                         |
 | --------------------------------------------- | --------------------------------------------------- |
-| [`yx init`](./commands#yx-init)               | Initialize a project, supports `--lib`              |
-| [`yx add`](./commands#yx-add)                 | Add dependency                                      |
-| [`yx install`](./commands#yx-install)         | Install dependencies                                |
-| [`yx update`](./commands#yx-update)           | Update dependencies                                 |
-| [`yx list`](./commands#yx-list)               | List dependencies and sources                       |
-| [`yx rm`](./commands#yx-rm)                   | Remove dependency                                   |
-| [`yx outdated`](./commands#yx-outdated)       | Check upgradable dependencies                       |
-| [`yx clean`](./commands#yx-clean)             | Clean build artifacts and redundant vendor packages |
-| [`yx cache clean`](./commands#yx-cache-clean) | Clear global cache                                  |
-| [`yx workspace`](./commands#yx-workspace)     | Workspace member management                         |
-| [`yx publish`](./commands#yx-publish)         | Package and publish                                 |
+| [`yx init`](commands#yx-init)               | Initialize a project, supports `--lib`              |
+| [`yx add`](commands#yx-add)                 | Add dependency                                      |
+| [`yx install`](commands#yx-install)         | Install dependencies                                |
+| [`yx update`](commands#yx-update)           | Update dependencies                                 |
+| [`yx list`](commands#yx-list)               | List dependencies and sources                       |
+| [`yx rm`](commands#yx-rm)                   | Remove dependency                                   |
+| [`yx outdated`](commands#yx-outdated)       | Check upgradable dependencies                       |
+| [`yx clean`](commands#yx-clean)             | Clean build artifacts and redundant vendor packages |
+| [`yx cache clean`](commands#yx-cache-clean) | Clear global cache                                  |
+| [`yx workspace`](commands#yx-workspace)     | Workspace member management                         |
+| [`yx publish`](commands#yx-publish)         | Package and publish                                 |
 
 The remaining subcommands (`run`, `check`, `test`, `build`, `format`, `lsp`, `repl`, `eval`,
 `explain`, `dump`) are not related to package management.
 
 ## Documentation Index
 
-- [Command-Line Interface](./commands) - Detailed description of all package management commands
-- [yaoxiang.toml format](./manifest) - Project configuration file format
-- [yaoxiang.lock format](./lock) - Lock file format description
-- [Error Codes](./error-codes) - Package management related errors and how to handle them
+- [Command-Line Interface](commands) - Detailed description of all package management commands
+- [yaoxiang.toml format](manifest) - Project configuration file format
+- [yaoxiang.lock format](lock) - Lock file format description
+- [Error Codes](error-codes) - Package management related errors and how to handle them
 - [Package Management System Guide](../../guide/packaging) - Complete user-facing workflow

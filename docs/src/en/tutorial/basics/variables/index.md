@@ -260,5 +260,5 @@ You have now mastered the core concepts of YaoXiang's variable system:
 | Scope                   | Each `{}` creates a scope, inner can see outer, outer cannot see inner     |
 
 You can continue to learn more details about
-[basic types](../../../design/formatter/formatting-rules/types.md), or jump straight into the
-[control flow](../../../design/formatter/formatting-rules/control-flow.md) chapter.
+[basic types](../../../dev/design/formatter/formatting-rules/types.md), or jump straight into the
+[control flow](../../../dev/design/formatter/formatting-rules/control-flow.md) chapter.

@@ -30,7 +30,7 @@ stable, intended for CI consumption):
 | `invalid`       | The file declaration is invalid (e.g., expected codes contradict the category), neither counted as pass nor fail |
 
 The expectation declaration grammar is described in
-[RFC-036](../design/rfc/accepted/036-test-framework.md).
+[RFC-036](../rfc/accepted/036-test-framework.md).
 
 ## Options
 
@@ -121,8 +121,8 @@ For detailed CI configuration, see the [CI Integration Guide](../guide/ci-integr
 
 ## See Also
 
-- [`yx check`](./check-command.md) -- Static check
-- [`yx format`](./format-command.md) -- Code formatter
-- [RFC-036: std.test testing framework](../design/rfc/accepted/036-test-framework.md) -- Testing
+- [`yx check`](check-command.md) -- Static check
+- [`yx format`](format-command.md) -- Code formatter
+- [RFC-036: std.test testing framework](../rfc/accepted/036-test-framework.md) -- Testing
   framework design
 - [CI Integration Guide](../guide/ci-integration.md) -- CI/CD integration

@@ -144,7 +144,7 @@ main: () -> Void = {
 
 ## Constructing Json
 
-The `obj` variant takes a `Dict(String, Json)`, constructed key by key using [`std.dict`](./dict):
+The `obj` variant takes a `Dict(String, Json)`, constructed key by key using [`std.dict`](dict):
 
 ```yaoxiang
 use std.dict
@@ -168,8 +168,8 @@ main: () -> Void = {
 | Type mismatch (passing non-`&String`)        | Compile-time type error                      |
 
 Parse failure **does not interrupt execution**; propagate with `?` or branch explicitly with
-[`result.unwrap`](./result#unwrap). Note that `?` propagation requires the outer function to return
-`Result` (see the explanation of `Try` instantiation on the [Option page](./option#已知缺口)).
+[`result.unwrap`](result#unwrap). Note that `?` propagation requires the outer function to return
+`Result` (see the explanation of `Try` instantiation on the [Option page](option#已知缺口)).
 
 ## Known Gaps
 
@@ -180,7 +180,7 @@ Parse failure **does not interrupt execution**; propagate with `?` or branch exp
 
 ## Related
 
-- [`std.dict`](./dict) — Dictionary used to construct and read `Json.obj`
-- [`std.string`](./string) — `char_code` / `from_char_code` are this module's escaping primitives
-- [`std.result`](./result) — Unwraps the return value of `parse`
+- [`std.dict`](dict) — Dictionary used to construct and read `Json.obj`
+- [`std.string`](string) — `char_code` / `from_char_code` are this module's escaping primitives
+- [`std.result`](result) — Unwraps the return value of `parse`
 - [Error Code Reference](../error-code/) — `E6013` JSON parse failure

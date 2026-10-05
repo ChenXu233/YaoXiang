@@ -13,7 +13,7 @@ wording, edit `locales/*.json`; to change the code table, edit `define_codes!`; 
 Errors related to generic constraints, the trait system, and constant evaluation.
 
 This family contains **14** codes in total, all registered in the `define_codes!` registry under the
-`Generic` category. For a complete index, see the [Error Code Index](./index.md).
+`Generic` category. For a complete index, see the [Error Code Index](index.md).
 
 ## Code Overview
 

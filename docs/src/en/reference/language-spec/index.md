@@ -4,13 +4,13 @@ The syntax and semantic specification document for the yaoxiang language.
 
 ## Contents
 
-- [Syntax Specification](./syntax.md) - Lexical structure, grammar rules, operator precedence
-- [Type System](./type-system.md) - Basic types, compound types, generics, trait
-- [Module System](./modules.md) - Module definitions, import/export, scope
-- [FFI Specification](./ffi.md) - `native` extensions, C ABI type mapping and opaque types
-- [Concurrency Model](./concurrency.md) - Block semantics, spawn concurrency primitives, error
+- [Syntax Specification](syntax.md) - Lexical structure, grammar rules, operator precedence
+- [Type System](type-system.md) - Basic types, compound types, generics, trait
+- [Module System](modules.md) - Module definitions, import/export, scope
+- [FFI Specification](ffi.md) - `native` extensions, C ABI type mapping and opaque types
+- [Concurrency Model](concurrency.md) - Block semantics, spawn concurrency primitives, error
   handling, resource types
-- [Standard Library](./stdlib.md) - Module overview, core library, IO library, math library
+- [Standard Library](stdlib.md) - Module overview, core library, IO library, math library
 
 ## Overview
 
@@ -46,5 +46,5 @@ the authoritative reference for the language, aimed at compiler and tool impleme
 ### Related Resources
 
 - [Tutorial](../../tutorial/index.md) - Getting started tutorial and example code
-- [Design Documents](../../design/) - Language design documents
-- [RFC Documents](../../design/rfc/) - Language change proposals
+- [Design Documents](../../explanation/) - Language design documents
+- [RFC Documents](../../rfc/) - Language change proposals

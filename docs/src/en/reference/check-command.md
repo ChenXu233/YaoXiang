@@ -109,8 +109,8 @@ For detailed CI configuration, see the [CI Integration Guide](../guide/ci-integr
 
 ## See Also
 
-- [`yx format`](./format-command.md) -- Code formatting
-- [`yx test`](./test-command.md) -- Run tests
-- [Error Code Reference](./error-code/index.md) -- Complete list of error codes
+- [`yx format`](format-command.md) -- Code formatting
+- [`yx test`](test-command.md) -- Run tests
+- [Error Code Reference](error-code/index.md) -- Complete list of error codes
 - [CI Integration Guide](../guide/ci-integration.md) -- CI/CD integration
-- [Diagnostic System Design](../design/check/diagnostic-system.md) -- Architecture design document
+- [Diagnostic System Design](../dev/design/check/diagnostic-system.md) -- Architecture design document

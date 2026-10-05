@@ -406,4 +406,4 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.string.parse_float`](./string#parse_float) — parse a string into a `Float`
+- [`std.string.parse_float`](string#parse_float) — parse a string into a `Float`

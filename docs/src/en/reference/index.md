@@ -1,51 +1,51 @@
 # YaoXiang Reference Documentation
 
 > YaoXiang is currently in the **experimental validation stage** (for the current version, see
-> [Language Specification Overview](./language-spec/index.md)); the standard library and APIs are
+> [Language Specification Overview](language-spec/index.md)); the standard library and APIs are
 > being progressively improved.
 >
 > The **authoritative per-module reference** for the standard library is in
-> [Standard Library Reference](./stdlib/index.md); this page only serves as an entry index.
+> [Standard Library Reference](stdlib/index.md); this page only serves as an entry index.
 
 ## Reference Entries
 
-- [Error Code Reference](./error-code/index.md) - Overview of diagnostic codes and categorized
+- [Error Code Reference](error-code/index.md) - Overview of diagnostic codes and categorized
   lookup
-- [Warning Codes](./warning-code/warning-codes.md)
-- [Package Management](./package/index.md) - Manifest, lock file, and commands
-- [Tool Commands](./check-command.md) / [format](./format-command.md) / [test](./test-command.md)
+- [Warning Codes](warning-code/warning-codes.md)
+- [Package Management](package/index.md) - Manifest, lock file, and commands
+- [Tool Commands](check-command.md) / [format](format-command.md) / [test](test-command.md)
 
 ## Language Specification
 
-- [Language Specification Overview](./language-spec/index.md)
-- [Syntax Specification](./language-spec/syntax.md) - Lexical structure, grammar rules, operator
+- [Language Specification Overview](language-spec/index.md)
+- [Syntax Specification](language-spec/syntax.md) - Lexical structure, grammar rules, operator
   precedence
-- [Type System](./language-spec/type-system.md) - Primitive types, composite types, generics, trait
-- [Module System](./language-spec/modules.md) - Module definitions, imports/exports, scope
-- [Concurrency Model](./language-spec/concurrency.md) - Asynchronous programming, concurrency
+- [Type System](language-spec/type-system.md) - Primitive types, composite types, generics, trait
+- [Module System](language-spec/modules.md) - Module definitions, imports/exports, scope
+- [Concurrency Model](language-spec/concurrency.md) - Asynchronous programming, concurrency
   primitives, memory model
-- [FFI](./language-spec/ffi.md) - Foreign function interface
-- [Standard Library](./language-spec/stdlib.md) - Standard library overview
+- [FFI](language-spec/ffi.md) - Foreign function interface
+- [Standard Library](language-spec/stdlib.md) - Standard library overview
 
 ## Current Status
 
 | Module           | Status         | Description                 | Reference                            |
 | ---------------- | -------------- | --------------------------- | ------------------------------------ |
-| `std.io`         | ✅ Implemented | Input/output                | [io](./stdlib/io.md)                 |
-| `std.string`     | ✅ Implemented | String operations           | [string](./stdlib/string.md)         |
-| `std.list`       | ✅ Implemented | List operations             | [list](./stdlib/list.md)             |
-| `std.dict`       | ✅ Implemented | Dictionary operations       | [dict](./stdlib/dict.md)             |
-| `std.range`      | ✅ Implemented | Ranges and iterators (#302) | [range](./stdlib/range.md)           |
-| `std.math`       | ✅ Implemented | Math functions              | [math](./stdlib/math.md)             |
-| `std.net`        | ✅ Implemented | Networking (ureq + rustls)  | [net](./stdlib/net.md)               |
-| `std.concurrent` | ✅ Implemented | Concurrency primitives      | [concurrent](./stdlib/concurrent.md) |
-| `std.os`         | ✅ Implemented | Operating system interface  | [os](./stdlib/os.md)                 |
-| `std.fs`         | ✅ Implemented | File system                 | [fs](./stdlib/fs.md)                 |
-| `std.time`       | ✅ Implemented | Time and date               | [time](./stdlib/time.md)             |
-| `std.convert`    | ✅ Implemented | Type conversion             | [convert](./stdlib/convert.md)       |
-| `std.result`     | ✅ Implemented | Result type                 | [result](./stdlib/result.md)         |
-| `std.assert`     | ✅ Implemented | Assertions                  | [assert](./stdlib/assert.md)         |
-| `std.weak`       | ✅ Implemented | Weak references             | [weak](./stdlib/weak.md)             |
+| `std.io`         | ✅ Implemented | Input/output                | [io](stdlib/io.md)                 |
+| `std.string`     | ✅ Implemented | String operations           | [string](stdlib/string.md)         |
+| `std.list`       | ✅ Implemented | List operations             | [list](stdlib/list.md)             |
+| `std.dict`       | ✅ Implemented | Dictionary operations       | [dict](stdlib/dict.md)             |
+| `std.range`      | ✅ Implemented | Ranges and iterators (#302) | [range](stdlib/range.md)           |
+| `std.math`       | ✅ Implemented | Math functions              | [math](stdlib/math.md)             |
+| `std.net`        | ✅ Implemented | Networking (ureq + rustls)  | [net](stdlib/net.md)               |
+| `std.concurrent` | ✅ Implemented | Concurrency primitives      | [concurrent](stdlib/concurrent.md) |
+| `std.os`         | ✅ Implemented | Operating system interface  | [os](stdlib/os.md)                 |
+| `std.fs`         | ✅ Implemented | File system                 | [fs](stdlib/fs.md)                 |
+| `std.time`       | ✅ Implemented | Time and date               | [time](stdlib/time.md)             |
+| `std.convert`    | ✅ Implemented | Type conversion             | [convert](stdlib/convert.md)       |
+| `std.result`     | ✅ Implemented | Result type                 | [result](stdlib/result.md)         |
+| `std.assert`     | ✅ Implemented | Assertions                  | [assert](stdlib/assert.md)         |
+| `std.weak`       | ✅ Implemented | Weak references             | [weak](stdlib/weak.md)             |
 
 > `std.net` was originally a "placeholder implementation that did not send requests"; it has now
 > been replaced with a real implementation (#56).
@@ -261,7 +261,7 @@ main: () -> Void = {
 ## Related Resources
 
 - [Tutorials](../tutorial/) - Learn YaoXiang
-- [Design Documents](../design/) - Language design decisions
+- [Design Documents](../explanation/) - Language design decisions
 - [GitHub](https://github.com/ChenXu233/YaoXiang)
 
 ## Contribution Guide

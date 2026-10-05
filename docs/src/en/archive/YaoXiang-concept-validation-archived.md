@@ -9,7 +9,7 @@
 > has been superseded by the following official documentation:
 >
 > - [tutorial/](../tutorial/) - Tutorials
-> - [Design Manifesto](../design/manifesto.md) - Design Manifesto
+> - [Design Manifesto](../explanation/manifesto.md) - Design Manifesto
 >
 > Retained only for historical reference.
 

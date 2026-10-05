@@ -24,8 +24,12 @@
       "text": "More",
       "items": [
         {
-          "text": "Design",
-          "link": "/design/"
+          "text": "Explanation",
+          "link": "/explanation/"
+        },
+        {
+          "text": "RFC",
+          "link": "/rfc/"
         },
         {
           "text": "Development",
@@ -79,42 +83,48 @@
         "items": []
       }
     ],
-    "/design/": [
+    "/explanation/": [
       {
-        "text": "Design Documents",
+        "text": "Explanation",
         "items": [
           {
-            "text": "Design Index",
-            "link": "/design"
+            "text": "Explanation Index",
+            "link": "/explanation/"
           },
           {
             "text": "Manifesto",
-            "link": "/design/manifesto"
+            "link": "/explanation/manifesto"
           },
           {
             "text": "Manifesto WTF Version",
-            "link": "/design/manifesto-wtf"
+            "link": "/explanation/manifesto-wtf"
           },
           {
             "text": "Language Design Perspective from a 2006-born Developer",
-            "link": "/design/2006-born-language-design"
+            "link": "/explanation/2006-born-language-design"
           }
         ]
-      },
+      }
+    ],
+    "/rfc/": [
       {
         "text": "RFC Documents",
         "items": [
           {
             "text": "RFC Index",
-            "link": "/design/rfc"
+            "link": "/rfc/"
           },
           {
             "text": "RFC Template",
-            "link": "/design/rfc/RFC_TEMPLATE"
+            "link": "/rfc/RFC_TEMPLATE"
           },
           {
             "text": "Full RFC Template (Example)",
-            "link": "/design/rfc/EXAMPLE_full_feature_proposal"
+            "link": "/rfc/EXAMPLE_full_feature_proposal"
+          },
+          {
+            "text": "RFC Tracking",
+            "link": "/rfc/TRACKING"
           },
           {
             "text": "Accepted",
@@ -140,88 +150,6 @@
             "text": "Deprecated",
             "collapsed": true,
             "items": []
-          }
-        ]
-      },
-      {
-        "text": "Tool Design",
-        "collapsed": true,
-        "items": [
-          {
-            "text": "check Command",
-            "link": "/design/check/"
-          },
-          {
-            "text": "Diagnostic System",
-            "link": "/design/check/diagnostic-system"
-          },
-          {
-            "text": "Cross-file Analysis",
-            "link": "/design/check/cross-file-analysis"
-          },
-          {
-            "text": "Incremental Checking",
-            "link": "/design/check/incremental-checking"
-          }
-        ]
-      },
-      {
-        "text": "Formatting Specifications",
-        "collapsed": true,
-        "items": [
-          {
-            "text": "Specification Overview",
-            "link": "/design/formatter/"
-          },
-          {
-            "text": "Formatting Rules",
-            "collapsed": true,
-            "items": [
-              {
-                "text": "Rules Overview",
-                "link": "/design/formatter/formatting-rules/"
-              },
-              {
-                "text": "Basic Formatting",
-                "link": "/design/formatter/formatting-rules/basic"
-              },
-              {
-                "text": "Functions and Calls",
-                "link": "/design/formatter/formatting-rules/functions"
-              },
-              {
-                "text": "Type System",
-                "link": "/design/formatter/formatting-rules/types"
-              },
-              {
-                "text": "Data Structures",
-                "link": "/design/formatter/formatting-rules/data-structures"
-              },
-              {
-                "text": "Control Flow",
-                "link": "/design/formatter/formatting-rules/control-flow"
-              },
-              {
-                "text": "Special Syntax",
-                "link": "/design/formatter/formatting-rules/special-syntax"
-              }
-            ]
-          },
-          {
-            "text": "Configuration Specification",
-            "link": "/design/formatter/configuration"
-          },
-          {
-            "text": "Comment Specification",
-            "link": "/design/formatter/comments"
-          },
-          {
-            "text": "Error Handling",
-            "link": "/design/formatter/error-handling"
-          },
-          {
-            "text": "CLI Specification",
-            "link": "/design/formatter/cli"
           }
         ]
       }
@@ -364,12 +292,158 @@
     ],
     "/dev/": [
       {
-        "text": "Development Documentation",
+        "text": "Implementer Handbook",
         "items": [
           {
             "text": "Development Index",
             "link": "/dev/"
           },
+          {
+            "text": "Pre-work Self-check (HOWTO)",
+            "link": "/dev/HOWTO"
+          },
+          {
+            "text": "Coding Rules",
+            "link": "/dev/coding-rules"
+          },
+          {
+            "text": "Docs Rules",
+            "link": "/dev/docs-rules"
+          }
+        ]
+      },
+      {
+        "text": "Compiler Architecture (RFC-039 companion)",
+        "collapsed": true,
+        "items": [
+          {
+            "text": "Architecture Index",
+            "link": "/dev/architecture/"
+          },
+          {
+            "text": "01 Routing & Dependency Rules",
+            "link": "/dev/architecture/01-routing"
+          },
+          {
+            "text": "02 Stage Contracts",
+            "link": "/dev/architecture/02-stage-contract"
+          },
+          {
+            "text": "03 Type Representation Unification",
+            "link": "/dev/architecture/03-type-unification"
+          },
+          {
+            "text": "04 SSA Intermediate Representation",
+            "link": "/dev/architecture/04-ssa"
+          },
+          {
+            "text": "05 Frontend Paradigm",
+            "link": "/dev/architecture/05-frontend-paradigm"
+          },
+          {
+            "text": "06 Dead Code & Empty Design Cleanup",
+            "link": "/dev/architecture/06-cleanup-inventory"
+          },
+          {
+            "text": "07 Equivalence Oracle",
+            "link": "/dev/architecture/07-equivalence-oracle"
+          },
+          {
+            "text": "08 Maintenance Mechanism",
+            "link": "/dev/architecture/08-maintenance-mechanism"
+          },
+          {
+            "text": "09 Execution WBS",
+            "link": "/dev/architecture/09-execution-wbs"
+          }
+        ]
+      },
+      {
+        "text": "Tool Design",
+        "collapsed": true,
+        "items": [
+          {
+            "text": "check Command",
+            "link": "/dev/design/check/"
+          },
+          {
+            "text": "Diagnostic System",
+            "link": "/dev/design/check/diagnostic-system"
+          },
+          {
+            "text": "Cross-file Analysis",
+            "link": "/dev/design/check/cross-file-analysis"
+          },
+          {
+            "text": "Incremental Checking",
+            "link": "/dev/design/check/incremental-checking"
+          }
+        ]
+      },
+      {
+        "text": "Formatting Specifications",
+        "collapsed": true,
+        "items": [
+          {
+            "text": "Specification Overview",
+            "link": "/dev/design/formatter/"
+          },
+          {
+            "text": "Formatting Rules",
+            "collapsed": true,
+            "items": [
+              {
+                "text": "Rules Overview",
+                "link": "/dev/design/formatter/formatting-rules/"
+              },
+              {
+                "text": "Basic Formatting",
+                "link": "/dev/design/formatter/formatting-rules/basic"
+              },
+              {
+                "text": "Functions and Calls",
+                "link": "/dev/design/formatter/formatting-rules/functions"
+              },
+              {
+                "text": "Type System",
+                "link": "/dev/design/formatter/formatting-rules/types"
+              },
+              {
+                "text": "Data Structures",
+                "link": "/dev/design/formatter/formatting-rules/data-structures"
+              },
+              {
+                "text": "Control Flow",
+                "link": "/dev/design/formatter/formatting-rules/control-flow"
+              },
+              {
+                "text": "Special Syntax",
+                "link": "/dev/design/formatter/formatting-rules/special-syntax"
+              }
+            ]
+          },
+          {
+            "text": "Configuration Specification",
+            "link": "/dev/design/formatter/configuration"
+          },
+          {
+            "text": "Comment Specification",
+            "link": "/dev/design/formatter/comments"
+          },
+          {
+            "text": "Error Handling",
+            "link": "/dev/design/formatter/error-handling"
+          },
+          {
+            "text": "CLI Specification",
+            "link": "/dev/design/formatter/cli"
+          }
+        ]
+      },
+      {
+        "text": "Process & Conventions",
+        "collapsed": true,
+        "items": [
           {
             "text": "Contributing Guide",
             "link": "/dev/contributing"

@@ -625,7 +625,7 @@ next: (T: Type) -> (it: &mut Iter(T)) -> T
 > 会由 `Vec` 的边界检查兜住并报 `E6003`，**不返回 `Void`**
 > （`src/std/list.yx:277-285`）。
 >
-> 这与 [`std.range.next`](./range#next) 相反——`range.has_next` 的签名无 `&`，
+> 这与 [`std.range.next`](range#next) 相反——`range.has_next` 的签名无 `&`，
 > 会按值消耗迭代器。
 
 ```yaoxiang
@@ -684,5 +684,5 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.range`](./range) —— 区间迭代与惰性适配器
-- [`std.assert`](./assert) —— 示例中的断言工具
+- [`std.range`](range) —— 区间迭代与惰性适配器
+- [`std.assert`](assert) —— 示例中的断言工具

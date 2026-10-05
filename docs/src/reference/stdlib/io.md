@@ -6,7 +6,7 @@ description: '标准输出、标准输入与格式化'
 # std.io
 
 输入输出模块。提供标准输出与标准输入读取。整文件读写、目录与路径操作见
-[`std.fs`](./fs)；句柄级增量读写见 [`std.os`](./os)。
+[`std.fs`](fs)；句柄级增量读写见 [`std.os`](os)。
 
 ```yaoxiang
 use std.io
@@ -113,7 +113,7 @@ format_fallback: (value, type_name: &String) -> String
 按类型名格式化值，输出形如 `int(42)` / `list@3` 的带前缀表示。
 
 这是内部辅助函数，供运行时的通用格式化路径回调使用，日常代码应直接用
-[`std.convert.to_string`](./convert#to_string)。
+[`std.convert.to_string`](convert#to_string)。
 
 - `value` —— 任意值
 - `type_name` —— 类型名字符串
@@ -133,6 +133,6 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.fs`](./fs) —— 文件、目录与路径操作
-- [`std.os`](./os) —— 文件句柄与环境变量
-- [`std.convert`](./convert) —— 值转字符串
+- [`std.fs`](fs) —— 文件、目录与路径操作
+- [`std.os`](os) —— 文件句柄与环境变量
+- [`std.convert`](convert) —— 值转字符串

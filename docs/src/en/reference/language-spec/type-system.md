@@ -123,7 +123,7 @@ The complete list of built-in type names is in `MonoType::from_builtin_name` at
 **Void (⊤, true/Unit)** — exactly one inhabitant (the default void value). `Void` is the identity
 element of the zero-field product type. `x: Void = <default>` is valid. The value of a block is
 given by the **tail expression** (an empty block `{}` is `Void`); see
-[RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md) for details.
+[RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md) for details.
 
 ---
 
@@ -790,8 +790,8 @@ scaling); only when exploration fails must `Terminates` be given explicitly.
 runtime binary.
 
 > See the full design in
-> [RFC-027 §6.9](../../design/rfc/accepted/027-compile-time-evaluation-types.md) (semantics) and
-> [RFC-027a](../../design/rfc/review/027a-termination-explicit-measure.md) (implementation
+> [RFC-027 §6.9](../../rfc/accepted/027-compile-time-evaluation-types.md) (semantics) and
+> [RFC-027a](../../rfc/review/027a-termination-explicit-measure.md) (implementation
 > mechanism).
 
 ---

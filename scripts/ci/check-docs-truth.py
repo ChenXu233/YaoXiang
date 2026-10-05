@@ -238,9 +238,10 @@ def check_versions():
     known = {cur}
     for p in zh_docs():
         rel = os.path.relpath(p, DOCS).replace('\\', '/')
-        # archive/ 已排除发布；blog/ 是历史评论；design/ 是设计文档，
-        # 其中的版本号是有意记录的历史里程碑（如 RFC-010b 的「0.7.12 起」）。
-        if rel.startswith(('archive/', 'blog/', 'design/')):
+        # archive/ 已排除发布；blog/ 是历史评论；explanation//rfc//dev/ 是
+        # 理念、治理与贡献者文档，其中的版本号是有意记录的历史里程碑
+        # （如 RFC-010b 的「0.7.12 起」）。
+        if rel.startswith(('archive/', 'blog/', 'explanation/', 'rfc/', 'dev/')):
             continue
         t = read(p)
         for ln_no, line in enumerate(t.split('\n'), 1):
@@ -261,7 +262,7 @@ def check_versions():
     if os.path.exists(spec_index) and '<!-- yx-version -->' not in read(spec_index):
         problems.append('[版本] reference/language-spec/index.md 缺少 <!-- yx-version --> '
                         '占位——编译器版本行必须走构建期注入，不得写死版本串')
-    notes.append(f'版本对账：当前 {cur}（archive/blog/design 及依赖/历史语境不参与）')
+    notes.append(f'版本对账：当前 {cur}（archive/blog/explanation/rfc/dev 及依赖/历史语境不参与）')
 
 
 # ---------------------------------------------------------------- 4. 子命令

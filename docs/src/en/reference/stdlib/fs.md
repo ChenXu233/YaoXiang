@@ -8,8 +8,8 @@ description: 'File, directory, and path operations'
 Path-level file system operations: whole-file read/write, directory management and traversal, file
 metadata, temporary files, and path arithmetic.
 
-When you need incremental read/write by handle (open/read/seek), use [`std.os`](./os); for console
-input/output use [`std.io`](./io).
+When you need incremental read/write by handle (open/read/seek), use [`std.os`](os); for console
+input/output use [`std.io`](io).
 
 ```yaoxiang
 use std.fs
@@ -583,6 +583,6 @@ extension.
 
 ## Related
 
-- [`std.os`](./os) —— file-handle-level incremental read/write and environment variables
-- [`std.io`](./io) —— console input/output
+- [`std.os`](os) —— file-handle-level incremental read/write and environment variables
+- [`std.io`](io) —— console input/output
 - [Error code reference](../error-code/) —— `E6007` generic runtime error

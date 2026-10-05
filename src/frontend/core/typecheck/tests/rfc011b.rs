@@ -1,6 +1,6 @@
 //! 运算符接口测试 — 基于 RFC-011b 运算符重载与接口驱动运算符（#341）
 //!
-//! RFC-011b: docs/src/design/rfc/accepted/011b-operator-overloading.md
+//! RFC-011b: docs/src/rfc/accepted/011b-operator-overloading.md
 //!
 //! M1 覆盖（接口实现登记表地基）：
 //! - 七个运算符接口的编译器侧声明：类型体内 `Add(Point, Point, Point)`

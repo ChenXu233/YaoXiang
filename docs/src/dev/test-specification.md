@@ -46,8 +46,8 @@ Review 中被要求修改。
 
 规范文件位于：
 
-- `docs/src/design/language-spec.md` —— 语言核心规范
-- `docs/src/design/rfc/accepted/` —— 已接受的 RFC 设计文档
+- `docs/src/reference/language-spec/` —— 语言核心规范
+- `docs/src/rfc/accepted/` —— 已接受的 RFC 设计文档
 
 每个测试文件顶部必须声明对应的规范章节（见规则 2.1）。任何开发者应该能拿着规范文档对照测试，验证实现的正确性。反过来——如果一段代码没有对应的规范描述，它就不应该存在，更不应该被测试。
 
@@ -159,7 +159,7 @@ fn test_parser() {
 
 ### 与提交规范的关联
 
-所有测试相关提交必须使用 `:white_check_mark: test:` 类型，参照[提交规范](./commit-convention.md)。
+所有测试相关提交必须使用 `:white_check_mark: test:` 类型，参照[提交规范](commit-convention.md)。
 
 ```
 :white_check_mark: test(parser): 添加 Pratt 解析器中缀表达式测试
@@ -960,12 +960,12 @@ tests/
 ### D. 参考资料
 
 - [YaoXiang 语言规范](../reference/language-spec/index.md) —— **测试的权威来源**
-- [已接受的 RFC](../design/rfc/index.md) —— **设计决策的权威来源**
+- [已接受的 RFC](../rfc/index.md) —— **设计决策的权威来源**
 - [Rust 测试文档](https://doc.rust-lang.org/book/ch11-00-testing.html)
 - [Criterion.rs 用户指南](https://bheisler.github.io/criterion.rs/book/)
 - [proptest 文档](https://docs.rs/proptest/latest/proptest/)
-- [项目提交规范](./commit-convention.md)
-- [项目贡献指南](./contributing.md)
+- [项目提交规范](commit-convention.md)
+- [项目贡献指南](contributing.md)
 
 ---
 

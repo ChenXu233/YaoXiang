@@ -56,7 +56,7 @@ in order, since they follow a natural progression.
 
 ## Chapters
 
-- [Conditional Branching if-elif-else](./if-elif-else.md) — Conditional checks and branch selection
-- [for Loop](./for.md) — Iterating over ranges and collections
-- [while Loop](./while.md) — Conditional looping and accumulation
-- [match Pattern Matching](./match.md) — Branching by the structure of a value
+- [Conditional Branching if-elif-else](if-elif-else.md) — Conditional checks and branch selection
+- [for Loop](for.md) — Iterating over ranges and collections
+- [while Loop](while.md) — Conditional looping and accumulation
+- [match Pattern Matching](match.md) — Branching by the structure of a value

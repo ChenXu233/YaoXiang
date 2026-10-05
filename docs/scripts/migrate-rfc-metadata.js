@@ -14,7 +14,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const RFC_DIR = path.join(__dirname, '..', 'src', 'design', 'rfc')
+const RFC_DIR = path.join(__dirname, '..', 'src', 'rfc')
 
 // RFC 分类目录
 const CATEGORIES = ['draft', 'review', 'accepted', 'deprecated', 'rejected']

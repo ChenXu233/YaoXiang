@@ -15,20 +15,20 @@ broken down by module.
 
 | Module                           | Exports | Description                                                          |
 | -------------------------------- | ------- | -------------------------------------------------------------------- |
-| [`std.convert`](./convert)       | 11      | Conversion of any value to String                                    |
-| [`std.dict`](./dict)             | 11      | Dictionary read/write, key-value views, and merging                  |
-| [`std.fs`](./fs)                 | 22      | File, directory, and path operations                                 |
-| [`std.io`](./io)                 | 4       | Standard output, standard input, and formatting                      |
-| [`std.math`](./math)             | 18      | Integer, float, and trigonometric functions, with PI/E/TAU constants |
-| [`std.string`](./string)         | 21      | String search, splitting, formatting, and parsing                    |
-| [`std.time`](./time)             | 14      | Timestamps, formatting, and DateTime field access                    |
-| [`std.result`](./result)         | 8       | Construction and unwrapping of Result and Error                      |
-| [`std.range`](./range)           | 10      | Range iteration, predicates, and lazy adapters                       |
-| [`std.assert`](./assert)         | 1       | Assertion                                                            |
-| [`std.net`](./net)               | 4       | HTTP requests and URL percent-encoding/decoding                      |
-| [`std.concurrent`](./concurrent) | 3       | Sleep, yield scheduling, and thread identifier                       |
-| [`std.os`](./os)                 | 12      | File handles, environment variables, and working directory           |
-| [`std.weak`](./weak)             | 2       | Arc / Weak weak references                                           |
+| [`std.convert`](convert)       | 11      | Conversion of any value to String                                    |
+| [`std.dict`](dict)             | 11      | Dictionary read/write, key-value views, and merging                  |
+| [`std.fs`](fs)                 | 22      | File, directory, and path operations                                 |
+| [`std.io`](io)                 | 4       | Standard output, standard input, and formatting                      |
+| [`std.math`](math)             | 18      | Integer, float, and trigonometric functions, with PI/E/TAU constants |
+| [`std.string`](string)         | 21      | String search, splitting, formatting, and parsing                    |
+| [`std.time`](time)             | 14      | Timestamps, formatting, and DateTime field access                    |
+| [`std.result`](result)         | 8       | Construction and unwrapping of Result and Error                      |
+| [`std.range`](range)           | 10      | Range iteration, predicates, and lazy adapters                       |
+| [`std.assert`](assert)         | 1       | Assertion                                                            |
+| [`std.net`](net)               | 4       | HTTP requests and URL percent-encoding/decoding                      |
+| [`std.concurrent`](concurrent) | 3       | Sleep, yield scheduling, and thread identifier                       |
+| [`std.os`](os)                 | 12      | File handles, environment variables, and working directory           |
+| [`std.weak`](weak)             | 2       | Arc / Weak weak references                                           |
 
 <!-- stdlib:index:modules end -->
 
@@ -42,15 +42,15 @@ source files.
 
 | Module                   | Source              | Description                                                             |
 | ------------------------ | ------------------- | ----------------------------------------------------------------------- |
-| [`std.list`](./list)     | `src/std/list.yx`   | List add/remove, slicing, higher-order functions, and iterator protocol |
-| [`std.json`](./json)     | `src/std/json.yx`   | JSON parsing and serialization (RFC 8259)                               |
-| [`std.option`](./option) | `src/std/option.yx` | `Option(T)` optional value and sum type                                 |
-| [`std.test`](./test)     | `src/std/test.yx`   | Test assertion library (value semantics, RFC-036 §3)                    |
+| [`std.list`](list)     | `src/std/list.yx`   | List add/remove, slicing, higher-order functions, and iterator protocol |
+| [`std.json`](json)     | `src/std/json.yx`   | JSON parsing and serialization (RFC 8259)                               |
+| [`std.option`](option) | `src/std/option.yx` | `Option(T)` optional value and sum type                                 |
+| [`std.test`](test)     | `src/std/test.yx`   | Test assertion library (value semantics, RFC-036 §3)                    |
 
 > `std.result` is a **dual-implementation** module: the native utility family (`src/std/result.rs`)
 > and the pure yx `Result` type (`src/std/result.yx`) are merged into the same export surface —
 > `Result` variant construction goes through yx, while tools like `is_ok` / `unwrap` / `code` go
-> through native. See [`std.result`](./result) for details.
+> through native. See [`std.result`](result) for details.
 
 ## Import Conventions
 
@@ -148,7 +148,7 @@ See the [Error Code Reference](../error-code/) for the complete table of error c
 
 `string.parse_int` / `string.parse_float` belong to a third form: **they do not throw**, and instead
 wrap the failure as the `Err` value of a `Result`, which can be unwrapped via
-[`std.result`](./result) or propagated with `?`.
+[`std.result`](result) or propagated with `?`.
 
 ```yaoxiang
 use std.assert
@@ -205,7 +205,7 @@ main: () -> Void = {
 }
 ```
 
-[`range.map`](./range#map) / [`range.filter`](./range#filter) return **lazy** adapters, which only
+[`range.map`](range#map) / [`range.filter`](range#filter) return **lazy** adapters, which only
 produce a result when consumed by `collect` / `reduce` / `for_each` / `for ... in`:
 
 ```yaoxiang
@@ -245,18 +245,18 @@ documentation:
 
 | Location                                                          | Original issue                                                            | Current status                                                                            |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [`os.open`](./os#open)                                            | Handle was one-shot; `open`→`write`→`close` could not compile             | Handle changed to pass by reference ✅                                                    |
-| [`time.datetime_*`](./time#datetime-字段访问)                     | 8 accessors could not be called from source (export names contained `::`) | Changed to flat names like `datetime_year` ✅                                             |
-| [`time.parse_time`](./time#parse_time)                            | `fmt` parameter was ignored; the return value could not be used further   | Step-by-step parsing by fmt, returns `Int` ✅                                             |
-| [`math.clamp`](./math#clamp)                                      | `min > max` panicked the interpreter instead of returning an error        | Returns `E6007` ✅                                                                        |
-| [`net.http_get`](./net#http_get) / [`http_post`](./net#http_post) | Was a placeholder implementation, did not send requests                   | Changed to a real implementation (`ureq` synchronous blocking + rustls TLS, issue #56) ✅ |
+| [`os.open`](os#open)                                            | Handle was one-shot; `open`→`write`→`close` could not compile             | Handle changed to pass by reference ✅                                                    |
+| [`time.datetime_*`](time#datetime-字段访问)                     | 8 accessors could not be called from source (export names contained `::`) | Changed to flat names like `datetime_year` ✅                                             |
+| [`time.parse_time`](time#parse_time)                            | `fmt` parameter was ignored; the return value could not be used further   | Step-by-step parsing by fmt, returns `Int` ✅                                             |
+| [`math.clamp`](math#clamp)                                      | `min > max` panicked the interpreter instead of returning an error        | Returns `E6007` ✅                                                                        |
+| [`net.http_get`](net#http_get) / [`http_post`](net#http_post) | Was a placeholder implementation, did not send requests                   | Changed to a real implementation (`ureq` synchronous blocking + rustls TLS, issue #56) ✅ |
 
 Still open issues:
 
 | Location                          | Issue                                                                                                                                       | Tracking                      |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| [`std.option`](./option#已知缺口) | `Try(Option(T), T, Void)` instantiation is not recognized by the type checker, `?` reports `E1081`; `from_error` reports `E6006` at runtime | See "Known Gaps" on that page |
-| [`list.slice`](./list#slice)      | Out-of-bounds indices are not clamped, directly `E6003`                                                                                     | See entry on that page        |
+| [`std.option`](option#已知缺口) | `Try(Option(T), T, Void)` instantiation is not recognized by the type checker, `?` reports `E1081`; `from_error` reports `E6006` at runtime | See "Known Gaps" on that page |
+| [`list.slice`](list#slice)      | Out-of-bounds indices are not clamped, directly `E6003`                                                                                     | See entry on that page        |
 
 ## Documentation Maintenance
 

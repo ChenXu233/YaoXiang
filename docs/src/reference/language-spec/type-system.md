@@ -112,7 +112,7 @@ TypeExpr    ::= PrimitiveType
 
 **Void（⊤，真/Unit）** — 恰好一个居留者（默认 void 值）。`Void`
 是零字段积类型的幺元。`x: Void = <默认>` 合法。块的值由**尾表达式**给出（空块 `{}` 为 `Void`），详见
-[RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md)。
+[RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md)。
 
 ---
 
@@ -724,8 +724,8 @@ loop: (n: Int) -> Int = {
 **运行时表示**：纯编译期实体，随 witness 擦除，不进运行时二进制。
 
 > 完整设计见
-> [RFC-027 §6.9](../../design/rfc/accepted/027-compile-time-evaluation-types.md)（语义）与
-> [RFC-027a](../../design/rfc/review/027a-termination-explicit-measure.md)（落地机制）。
+> [RFC-027 §6.9](../../rfc/accepted/027-compile-time-evaluation-types.md)（语义）与
+> [RFC-027a](../../rfc/review/027a-termination-explicit-measure.md)（落地机制）。
 
 ---
 

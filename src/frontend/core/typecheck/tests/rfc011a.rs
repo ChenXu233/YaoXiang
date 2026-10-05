@@ -1,6 +1,6 @@
 //! 接口实现测试 — 基于 RFC-011a 接口实现与动态分发设计（#307）
 //!
-//! RFC-011a: docs/src/design/rfc/accepted/011a-interface-implementation.md
+//! RFC-011a: docs/src/rfc/accepted/011a-interface-implementation.md
 //!
 //! 测试点：
 //! - §1: 接口声明（参数化类型）与类型体实例化（Self 替换展开）

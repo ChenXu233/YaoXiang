@@ -48,7 +48,7 @@ e = Result(Int, String).err("boom")
 | `r.residual()`             | `(T: Type, E: Type)(self: &Result(T, E)) -> E`     |
 | `Result(T, E).from_error(e)` | `(T: Type, E: Type)(e: E) -> Result(T, E)`   |
 
-与 [`std.option`](./option) 不同，`Result` 上的 `?` 传播是**可用**的：
+与 [`std.option`](option) 不同，`Result` 上的 `?` 传播是**可用**的：
 
 ```yaoxiang
 use std.result
@@ -308,7 +308,7 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.string`](./string#parse_int) —— 产生 `Result` 的解析函数
-- [`std.range`](./range#iter) —— `step=0` 时返回带 `E6009` 的 `Err`
-- [`std.option`](./option) —— `Option(T)`；其 `?` 传播当前**不可用**，见该页「已知缺口」
+- [`std.string`](string#parse_int) —— 产生 `Result` 的解析函数
+- [`std.range`](range#iter) —— `step=0` 时返回带 `E6009` 的 `Err`
+- [`std.option`](option) —— `Option(T)`；其 `?` 传播当前**不可用**，见该页「已知缺口」
 - [错误码参考](../error-code/) —— `E6010` / `E6011` 等运行时错误值码

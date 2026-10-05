@@ -648,7 +648,7 @@ Returns: the current element.
 > be caught by `Vec`'s bounds check and reported as `E6003`, **not returning `Void`**
 > (`src/std/list.yx:277-285`).
 >
-> This is the opposite of [`std.range.next`](./range#next)——the signature of `range.has_next` has no
+> This is the opposite of [`std.range.next`](range#next)——the signature of `range.has_next` has no
 > `&`, and consumes the iterator by value.
 
 ```yaoxiang
@@ -708,5 +708,5 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.range`](./range) —— Range iteration and lazy adapters
-- [`std.assert`](./assert) —— Assertion utilities used in the examples
+- [`std.range`](range) —— Range iteration and lazy adapters
+- [`std.assert`](assert) —— Assertion utilities used in the examples
