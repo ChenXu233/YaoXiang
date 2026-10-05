@@ -252,6 +252,15 @@ def check_versions():
                     continue
                 problems.append(f'[版本] {rel}:{ln_no} 出现硬编码版本 {ver}，'
                                 f'当前 Cargo.toml 是 {cur}（请改为变量注入或更新）')
+
+    # 版本自述行占位门禁：语言规范索引页声明「与 Cargo.toml 的 version 同步」，
+    # 该行必须用 <!-- yx-version --> 占位（VitePress 构建期注入）。写死版本串
+    # 与当前一致时上面的扫描抓不到，下次 bump 必漂移——2026-10-05 实证：
+    # 0.8.2→0.8.3 bump 后全体进 main 的 PR 被判红。
+    spec_index = os.path.join(DOCS, 'reference', 'language-spec', 'index.md')
+    if os.path.exists(spec_index) and '<!-- yx-version -->' not in read(spec_index):
+        problems.append('[版本] reference/language-spec/index.md 缺少 <!-- yx-version --> '
+                        '占位——编译器版本行必须走构建期注入，不得写死版本串')
     notes.append(f'版本对账：当前 {cur}（archive/blog/design 及依赖/历史语境不参与）')
 
 

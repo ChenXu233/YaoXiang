@@ -5,6 +5,19 @@ import enI18n from './i18n/en.json'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import { groupIconMdPlugin, groupIconVitePlugin } from 'vitepress-plugin-group-icons'
 import { GitChangelog, GitChangelogMarkdownSection } from '@nolebase/vitepress-plugin-git-changelog'
+import { readFileSync } from 'node:fs'
+
+// 编译器版本单一来源：仓库根 Cargo.toml。文档里的 `<!-- yx-version -->`
+// 占位在渲染期替换为该值（见 markdown.config），版本 bump 后文档零漂移。
+// 读不到直接炸构建——版本注入失败不得静默渲染成占位符。
+const cargoVersion = (() => {
+  const cargo = readFileSync(new URL('../../../Cargo.toml', import.meta.url), 'utf-8')
+  const m = cargo.match(/^version\s*=\s*"([^"]+)"/m)
+  if (!m) {
+    throw new Error('无法从仓库根 Cargo.toml 解析 version 字段，文档版本注入中止')
+  }
+  return m[1]
+})()
 
 // VitePress 源文件在 src/ 目录下，vitepress-sidebar 从 process.cwd() 解析路径
 // 需要 documentRootPath: '/src' 让插件从 docs/src/ 开始扫描
@@ -95,6 +108,22 @@ export default defineConfig({
           return `<code v-pre>${md.utils.escapeHtml(token.content)}</code>`
         }
         return codeInline(tokens, idx, options, env, slf)
+      }
+
+      // `<!-- yx-version -->` 渲染为 Cargo.toml 的 version（见文件顶部
+      // cargoVersion）。占位选 HTML 注释是刻意的：翻译 bot 的 prompt 承诺
+      // 逐字保留注释（vpi18n.config.json），zh→en 重译不会碰坏它。
+      const htmlInline =
+        md.renderer.rules.html_inline ||
+        function (tokens, idx) {
+          return tokens[idx].content
+        }
+      md.renderer.rules.html_inline = (tokens, idx) => {
+        const content = tokens[idx].content
+        if (content.includes("<!-- yx-version -->")) {
+          return `<strong>${cargoVersion}</strong>`
+        }
+        return htmlInline(tokens, idx)
       }
     },
   },

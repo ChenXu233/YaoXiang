@@ -34,7 +34,7 @@ the authoritative reference for the language, aimed at compiler and tool impleme
 
 ### Version Information
 
-- Compiler version: Synchronized with the `version` in `Cargo.toml`, currently **0.8.3**
+- Compiler version: Synchronized with the `version` in `Cargo.toml`, currently <!-- yx-version -->
 - Status: Specification
 - Author: Chenxu
 
