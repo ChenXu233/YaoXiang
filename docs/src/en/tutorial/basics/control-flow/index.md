@@ -9,13 +9,13 @@ ability to "make decisions" and "repeat execution"—this is **control flow**.
 
 YaoXiang provides five control flow structures, each with its own purpose:
 
-| Control Flow         | Purpose           | One-line Description                              |
-| -------------------- | ----------------- | ------------------------------------------------- |
-| `if-else-if-else`    | Conditional check | Choose execution path based on the condition      |
-| `for`                | Iteration loop    | Process each element in a collection one by one   |
-| `while`              | Conditional loop  | Keep looping as long as the condition holds       |
-| `break` / `continue` | Loop control      | Break out of the loop early or skip the iteration |
-| `match`              | Pattern matching  | Branch based on the structure of a value          |
+| Control Flow         | Purpose            | One-sentence description                          |
+| -------------------- | ------------------ | ------------------------------------------------- |
+| `if-else-if-else`    | Conditional branch | Choose an execution path based on a condition     |
+| `for`                | Iteration loop     | Process each element of a collection one by one   |
+| `while`              | Conditional loop   | Keep looping as long as the condition holds       |
+| `break` / `continue` | Loop control       | Exit the loop early or skip the current iteration |
+| `match`              | Pattern matching   | Branch based on the structure of a value          |
 
 A quick taste:
 
@@ -23,7 +23,7 @@ A quick taste:
 score = 72
 number = 3
 
-// if is an expression, it can return a value
+// if is an expression and can return a value
 status = if score >= 60 { "及格" } else { "不及格" }
 print(status)
 
@@ -48,15 +48,15 @@ description = match number {
 print(description)
 ```
 
-All of these control flow structures can be used as **expressions**—they compute a value. This is an
-important difference between YaoXiang and many traditional languages.
+All of these control flow structures can be used as **expressions**—they can compute a value. This
+is an important difference between YaoXiang and many traditional languages.
 
-The following chapters will dive into each kind of control flow in depth. We recommend reading them
-in order, since they follow a natural progression.
+The following sections will dive into each control flow structure one by one. Reading them in order
+is recommended, as they form a natural progression.
 
-## Chapters
+## Sections
 
-- [Conditional Branching if-elif-else](if-elif-else.md) — Conditional checks and branch selection
-- [for Loop](for.md) — Iterating over ranges and collections
-- [while Loop](while.md) — Conditional looping and accumulation
-- [match Pattern Matching](match.md) — Branching by the structure of a value
+- [Conditional branch if-elif-else](if-elif-else.md) — Conditional checks and branch selection
+- [for loop](for.md) — Iterating over ranges and collections
+- [while loop](while.md) — Conditional looping and accumulation
+- [match pattern matching](match.md) — Branching by the structure of a value

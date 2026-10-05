@@ -5,11 +5,11 @@ description: 'File, directory, and path operations'
 
 # std.fs
 
-Path-level file system operations: whole-file read/write, directory management and traversal, file
+Path-level filesystem operations: whole-file read/write, directory management and traversal, file
 metadata, temporary files, and path arithmetic.
 
-When you need incremental read/write by handle (open/read/seek), use [`std.os`](os); for console
-input/output use [`std.io`](io).
+For incremental read/write by handle (open/read/seek), use [`std.os`](os); for console input/output,
+use [`std.io`](io).
 
 ```yaoxiang
 use std.fs
@@ -17,8 +17,8 @@ use std.fs
 
 ## Platform availability
 
-This module is **not exported** on the `wasm32` target (no file system semantics). `mkdtemp` /
-`tmpfile` / `temp_dir` depend on secure temporary file creation and are only available on native
+This module is **not exported** on the `wasm32` target (no filesystem semantics). `mkdtemp` /
+`tmpfile` / `temp_dir` depend on safe temporary file creation and are only available on native
 targets.
 
 ## Function overview
@@ -66,8 +66,8 @@ Reads the entire file content as a string in one shot.
 
 - `path` —— file path (read-only borrow)
 
-Returns: the full file content. Errors: throws `E6007` when the file does not exist or permission is
-denied. **Does not return an empty string.**
+Returns: the entire file content. Errors: throws `E6007` when the file does not exist or permission
+is denied. **Does not return an empty string**.
 
 ```yaoxiang
 use std.assert
@@ -94,14 +94,14 @@ write_file: (path: &String, content: &String) -> Bool
 
 <!-- stdlib:sig:fs.write_file end -->
 
-Writes `content` to `path`, **overwriting** any existing content; creates the file if it does not
+Writes `content` to `path`, **overwriting** the existing content; creates the file if it does not
 exist.
 
 - `path` —— file path (read-only borrow)
 - `content` —— content to write (read-only borrow)
 
-Returns: `true` on success. Errors: throws `E6007` (does not return `false`) when the directory does
-not exist or permission is denied.
+Returns: `true` on successful write. Errors: throws `E6007` when the directory does not exist or
+permission is denied (does not return `false`).
 
 ```yaoxiang
 use std.assert
@@ -128,7 +128,7 @@ append_file: (path: &String, content: &String) -> Bool
 
 **Appends** `content` to the end of `path`; creates the file if it does not exist.
 
-Returns: `true` on success. Errors: throws `E6007` when permission is denied.
+Returns: `true` on successful write. Errors: throws `E6007` when permission is denied.
 
 ```yaoxiang
 use std.assert
@@ -153,7 +153,7 @@ exists: (path: &String) -> Bool
 
 <!-- stdlib:sig:fs.exists end -->
 
-Whether the path exists (file or directory).
+Whether the path exists (either file or directory).
 
 ```yaoxiang
 use std.assert
@@ -178,8 +178,7 @@ is_file: (path: &String) -> Bool
 
 <!-- stdlib:sig:fs.is_file end -->
 
-Whether the path points to a regular file. Returns `false` (without error) when the path does not
-exist.
+Whether the path points to a regular file. Returns `false` (no error) when the path does not exist.
 
 ### is_dir
 
@@ -191,8 +190,7 @@ is_dir: (path: &String) -> Bool
 
 <!-- stdlib:sig:fs.is_dir end -->
 
-Whether the path points to a directory. Returns `false` (without error) when the path does not
-exist.
+Whether the path points to a directory. Returns `false` (no error) when the path does not exist.
 
 ### mkdir
 
@@ -204,8 +202,8 @@ mkdir: (path: &String) -> Bool
 
 <!-- stdlib:sig:fs.mkdir end -->
 
-Creates a **single-level** directory; the parent directory must already exist. Use
-[`mkdir_all`](#mkdir_all) for recursive creation.
+Creates a **single-level** directory; the parent directory must already exist. For recursive
+creation, use [`mkdir_all`](#mkdir_all).
 
 Returns: `true` on success. Errors: throws `E6007` when the parent directory is missing or the
 directory already exists.
@@ -220,8 +218,8 @@ mkdir_all: (path: &String) -> Bool
 
 <!-- stdlib:sig:fs.mkdir_all end -->
 
-Recursively creates directories, creating any missing parents along the way; treats an
-already-existing directory as success.
+Recursively creates directories; missing parent directories are created as well; an already-existing
+directory is treated as success.
 
 Returns: `true` on success. Errors: throws `E6007` when permission is denied.
 
@@ -250,7 +248,7 @@ rmdir: (path: &String) -> Bool
 
 <!-- stdlib:sig:fs.rmdir end -->
 
-Removes an **empty** directory. Removing a non-empty directory fails and throws `E6007`.
+Removes an **empty** directory. Deleting a non-empty directory fails and throws `E6007`.
 
 ### remove
 
@@ -262,7 +260,7 @@ remove: (path: &String) -> Bool
 
 <!-- stdlib:sig:fs.remove end -->
 
-Removes a file. Use [`rmdir`](#rmdir) to remove a directory (only if empty).
+Removes a file. To remove a directory, use [`rmdir`](#rmdir) (empty directories only).
 
 Returns: `true` on success. Errors: throws `E6007` when the file does not exist.
 
@@ -288,8 +286,8 @@ copy: (src: &String, dst: &String) -> Bool
 
 <!-- stdlib:sig:fs.copy end -->
 
-Copies the file content and permission bits to the destination path; overwrites the destination if
-it already exists (consistent with Rust's `fs::copy`; does not copy metadata timestamps).
+Copies file contents and permission bits to the destination path; overwrites the destination if it
+already exists (consistent with Rust's `fs::copy`; does not copy metadata timestamps).
 
 Returns: `true` on success. Errors: throws `E6007` when the source does not exist.
 
@@ -303,8 +301,8 @@ rename: (src: &String, dst: &String) -> Bool
 
 <!-- stdlib:sig:fs.rename end -->
 
-Renames/moves a file or directory. Throws `E6007` on cross-device moves (use copy then remove as a
-workaround).
+Renames/moves a file or directory. Throws `E6007` when moving across devices (use copy followed by
+remove instead).
 
 Returns: `true` on success.
 
@@ -333,12 +331,12 @@ read_dir: (path: &String) -> Vec(String)
 
 <!-- stdlib:sig:fs.read_dir end -->
 
-Lists the **names** of entries in the directory (without the path prefix), returns `List(String)`,
+Lists the **names** of entries in a directory (without path prefix), returning `List(String)`,
 sorted by name.
 
 > Unlike the original `std.os.read_dir` (which returned a string joined by `"\n"`), this function
-> returns a properly-typed List—this is a semantic upgrade made when file operations were migrated
-> from `std.os` into `std.fs`.
+> returns a properly typed List—this is a semantic upgrade made when the `std.os` file operations
+> were migrated into `std.fs`.
 
 ```yaoxiang
 use std.assert
@@ -372,9 +370,9 @@ walk: (path: &String) -> Vec(String)
 
 <!-- stdlib:sig:fs.walk end -->
 
-Recursively traverses the directory tree, returning the **full paths of all entries** as
-`List(String)`; each level is sorted by name, and directories appear before their contents
-(depth-first). Symbolic links are listed as entries but are not followed into.
+Recursively traverses a directory tree, returning the **full paths of all entries** as
+`List(String)`; each level is sorted by name, with directories appearing before their contents
+(depth-first). Symbolic links themselves are listed as entries but are not descended into.
 
 Errors: throws `E6007` when `path` is not a directory.
 
@@ -390,7 +388,7 @@ main: () -> Void = {
     fs.write_file(d + "/sub/b.txt", "b")
 
     paths = fs.walk(d)
-    // a.txt, the sub directory, and sub/b.txt — three entries
+    // three entries: a.txt, sub directory, sub/b.txt
     assert(list.len(paths) == 3, "2 files + 1 dir")
 
     fs.remove(d + "/a.txt")
@@ -412,13 +410,13 @@ stat: (path: &String) -> Dict(String, Any)
 
 Reads file/directory metadata, returning a dictionary:
 
-| Key        | Type   | Meaning                          |
-| ---------- | ------ | -------------------------------- |
-| `size`     | `Int`  | Size in bytes                    |
-| `is_dir`   | `Bool` | Whether it is a directory        |
-| `is_file`  | `Bool` | Whether it is a regular file     |
-| `readonly` | `Bool` | Whether it is read-only          |
-| `mtime`    | `Int`  | Modification time (Unix seconds) |
+| Key        | Type   | Meaning                             |
+| ---------- | ------ | ----------------------------------- |
+| `size`     | `Int`  | Number of bytes                     |
+| `is_dir`   | `Bool` | Whether it is a directory           |
+| `is_file`  | `Bool` | Whether it is a regular file        |
+| `readonly` | `Bool` | Whether it has read-only permission |
+| `mtime`    | `Int`  | Modification time (Unix seconds)    |
 
 Errors: throws `E6007` when the path does not exist.
 
@@ -460,11 +458,12 @@ mkdtemp: (prefix: &String) -> String
 
 <!-- stdlib:sig:fs.mkdtemp end -->
 
-Creates a **unique** temporary directory inside the system temp directory (with a name starting with
-`prefix`) and returns its full path.
+Creates a **unique** temporary directory (with a name starting with `prefix`) inside the system
+temporary directory, returning its full path.
 
-> The directory is **not** automatically cleaned up: the script must [`rmdir`](#rmdir) it when done.
-> This semantic is intentional—explicit lifecycle is more predictable than implicit drop hooks.
+> The directory is **not** automatically cleaned up: the script should call [`rmdir`](#rmdir) when
+> done. This semantic is intentional—an explicit lifecycle is more predictable than an implicit drop
+> hook.
 
 Returns: the new directory path. Errors: throws `E6007` on creation failure.
 
@@ -489,9 +488,9 @@ tmpfile: (prefix: &String) -> String
 
 <!-- stdlib:sig:fs.tmpfile end -->
 
-Creates a **unique** empty temporary file inside the system temp directory (with a name starting
-with `prefix`) and returns its full path. It is also **not** automatically cleaned up; the script
-must [`remove`](#remove) it when done.
+Creates a **unique** empty temporary file (with a name starting with `prefix`) inside the system
+temporary directory, returning its full path. Also **not** automatically cleaned up; call
+[`remove`](#remove) when done.
 
 ```yaoxiang
 use std.assert
@@ -516,8 +515,8 @@ path_join: (base: &String, rel: &String) -> String
 
 <!-- stdlib:sig:fs.path_join end -->
 
-Joins path components. When `rel` is an absolute path, it **replaces** `base` directly (consistent
-with Rust/Python). The separator is platform-specific (`\` on Windows).
+Joins path components. When `rel` is an absolute path, it **directly replaces** `base` (consistent
+with Rust/Python). The separator follows the platform (`\` on Windows).
 
 ```yaoxiang
 use std.assert
@@ -541,8 +540,8 @@ path_basename: (path: &String) -> String
 
 <!-- stdlib:sig:fs.path_basename end -->
 
-The final component of the path; returns an empty string when there is no final component (e.g.,
-`/`, `..`).
+The final component of the path; returns an empty string when there is no final component (e.g. `/`,
+`..`).
 
 ### path_dirname
 
@@ -554,7 +553,7 @@ path_dirname: (path: &String) -> String
 
 <!-- stdlib:sig:fs.path_dirname end -->
 
-The directory portion of the path; returns an empty string when there is no parent (e.g., `a.txt`).
+The directory portion of the path; returns an empty string when there is no parent (e.g. `a.txt`).
 
 ```yaoxiang
 use std.assert
@@ -585,4 +584,4 @@ extension.
 
 - [`std.os`](os) —— file-handle-level incremental read/write and environment variables
 - [`std.io`](io) —— console input/output
-- [Error code reference](../error-code/) —— `E6007` generic runtime error
+- [Error code reference](../error-code/) —— `E6007` general runtime error

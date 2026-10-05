@@ -1,50 +1,50 @@
 ---
 title: 'Development Documentation'
 description:
-  'Contributor and maintainer hub: code and docs handbooks, architecture, tool design specs, process
-  conventions'
+  'Entry point for contributors and maintainers: modify code, modify documentation, architecture
+  docs, tool design specs, process specs'
 ---
 
 # Development Documentation
 
-For contributors and maintainers. Every change enters through one handbook, then follows the
-rulebook that matches its type.
+For contributors and maintainers. All changes enter through the same handbook, and each type of
+change follows its own set of rules.
 
-## Before You Start (Required)
+## Before You Start (Required Reading)
 
-| You want to | Entry (unified self-check)             | Rulebook                                          |
-| ----------- | -------------------------------------- | ------------------------------------------------- |
-| Change code | [HOWTO.md](../../dev/HOWTO.md) §1 (zh) | [coding-rules.md](../../dev/coding-rules.md) (zh) |
-| Change docs | [HOWTO.md](../../dev/HOWTO.md) §2 (zh) | [docs-rules.md](../../dev/docs-rules.md) (zh)     |
+| What you want to do | Entry point (unified self-check) | Rules proper                         |
+| ------------------- | -------------------------------- | ------------------------------------ |
+| Modify code         | [HOWTO.md](./HOWTO.md) §1        | [coding-rules.md](./coding-rules.md) |
+| Modify docs         | [HOWTO.md](./HOWTO.md) §2        | [docs-rules.md](./docs-rules.md)     |
 
-> The handbook and rulebooks are not yet translated; the links above point to the Chinese originals
-> until the translation workflow catches up. If you are unsure which row you are, read step 0 of the
-> HOWTO — it decides for you.
+Not sure which category you fall into? Read step 0 of HOWTO first; it will determine for you.
 
 ## Compiler Architecture
 
-[architecture/](./architecture/) holds the companion design documents of the RFC-039 refactoring: 01
-routing, 02 stage contracts, 03 type representation, 04 SSA, 05 frontend paradigm, 06 cleanup
-inventory, 07 equivalence oracle, 08 maintenance mechanism, 09 execution WBS.
+[architecture/](./architecture/) contains the supporting design documents for the RFC-039
+refactoring: 01 Feature Routing, 02 Phase Contracts, 03 Type Representation, 04 SSA, 05 Frontend
+Paradigm, 06 Cleanup Checklist, 07 Equivalence Criteria, 08 Maintenance Mechanism, 09 Work Breakdown
+Structure (WBS).
 
 ## Tool Design Specifications
 
-- [design/check/](./design/check/): the design specification of yx check (zero false positives,
-  cross-file analysis, incremental checking)
-- [design/formatter/](./design/formatter/): the behavior specification of the yx format tool
+- [design/check/](./design/check/): Design specification for the `yx check` static analysis (zero
+  false-positive principle, cross-file analysis, incremental checking)
+- [design/formatter/](./design/formatter/): Behavior specification for the `yx format` formatter
 
-> The user-facing command references live under [reference/](../reference/): check, format, test.
+> User-facing command usage is in the reference directory: [check](../reference/check-command.md),
+> [format](../reference/format-command.md), [test](../reference/test-command.md).
 
-## Process & Conventions
+## Process and Specifications
 
-- [Contributing Guide](./contributing.md): how to participate
+- [Contributing Guide](./contributing.md): How to participate in development
 - [Commit Convention](./commit-convention.md): Git commit message format
-- [Branch Maintenance Guide](./branch-maintenance-guide.md): branch management strategy
-- [Release Process](./release.md): version release and artifact distribution
-- [Test Specification](./test-specification.md): test layering, corpus organization, CI gates
+- [Branch Maintenance Guide](./branch-maintenance-guide.md): Branch management strategy
+- [Release Process](./release.md): Version release and artifact distribution
+- [Testing Specification](./test-specification.md): Test layering, corpus organization, and gating
 
-## What Does Not Belong Here
+## What Is Not Included Here
 
 - Language feature proposals and decisions → [rfc/](../rfc/)
 - Language philosophy and manifestos → [explanation/](../explanation/)
-- User documentation of commands → [reference/](../reference/)
+- User documentation for commands → [reference/](../reference/)

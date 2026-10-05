@@ -1,11 +1,12 @@
 ---
 title: 'std.math'
-description: 'Integer, floating-point, and trigonometric functions, including PI/E/TAU constants'
+description:
+  'Integer, floating-point, and trigonometric functions, including the PI/E/TAU constants'
 ---
 
 # std.math
 
-The math module. All functions are **pure value functions**: parameters are passed by value (Copy
+Mathematics module. All are **pure value functions**: parameters are passed by value (Copy
 semantics), with no borrowing, no moving, and no side effects.
 
 ```yaoxiang
@@ -14,7 +15,7 @@ use std.math
 
 ## Constants
 
-Import by name to use:
+Import by name to use them:
 
 ```yaoxiang
 use std.math.{PI, E, TAU}
@@ -62,10 +63,11 @@ main: () -> Void = {
 | `E`      | `Float`                                   |
 | `TAU`    | `Float`                                   |
 
-<!-- stdlib:table:math end -->> Integer-family functions take `Int`, floating-point-family functions take `Float`. Mismatched types passed in are treated as `0`
+<!-- stdlib:table:math end -->
 
-> (when `to_int` / `to_float` conversion fails, it falls back to `0`) without raising an error — it
-> is recommended to rely on the type checker to catch this at compile time.
+> The integer family takes `Int`, the floating-point family takes `Float`. Types that don't match
+> are treated as `0` (when `to_int` / `to_float` conversion fails, it falls back to `0`), without
+> raising an error—it's recommended to rely on the type checker to catch this at compile-time.
 
 ## Integer Functions
 
@@ -149,14 +151,14 @@ Clamps `value` to the `[min, max]` range.
 - `min` — lower bound (inclusive)
 - `max` — upper bound (inclusive)
 
-Returns: a value within the range. Returns `min` if below the lower bound, `max` if above the upper
-bound.
+Returns: the value within the range. If below the lower bound, returns `min`; if above the upper
+bound, returns `max`.
 
-> **`min > max` returns a runtime error `E6007`** (fixed in #339), with the message
-> `math.clamp: min must be <= max, got min = …, max = …`. The underlying `i64::clamp` would in that
-> case **panic the entire interpreter process** (`src/std/math.rs:117-130` explicitly checks before
-> calling), which is unacceptable for a language — changed to return a diagnostic, allowing the call
-> chain to propagate errors normally. Please still try to ensure `min <= max`.
+> **`min > max` returns a runtime error `E6007`** (#339 fixed), with the message
+> `math.clamp: min must be <= max, got min = …, max = …`. The underlying `i64::clamp` in that case
+> would **panic the entire interpreter process** (`src/std/math.rs:117-130` explicitly checks before
+> calling), which is unacceptable for a language—changed to return a diagnostic, allowing the call
+> chain to propagate the error normally. Please still try to ensure `min <= max`.
 
 ```yaoxiang
 use std.assert
@@ -202,7 +204,7 @@ fmax: (a: Float, b: Float) -> Float
 
 <!-- stdlib:sig:math.fmax end -->
 
-The larger of two floating-point values.
+Floating-point larger value.
 
 ```yaoxiang
 use std.assert
@@ -223,7 +225,7 @@ fmin: (a: Float, b: Float) -> Float
 
 <!-- stdlib:sig:math.fmin end -->
 
-The smaller of two floating-point values.
+Floating-point smaller value.
 
 ```yaoxiang
 use std.assert
@@ -265,7 +267,7 @@ sqrt: (n: Float) -> Float
 
 <!-- stdlib:sig:math.sqrt end -->
 
-Square root. Returns `NaN` for negative numbers (no error raised).
+Square root. Negative numbers return `NaN` (no error).
 
 ```yaoxiang
 use std.assert
@@ -287,7 +289,7 @@ floor: (n: Float) -> Float
 
 <!-- stdlib:sig:math.floor end -->
 
-Rounds down, returns as `Float`.
+Rounds down; the return value is still `Float`.
 
 ```yaoxiang
 use std.assert
@@ -308,7 +310,7 @@ ceil: (n: Float) -> Float
 
 <!-- stdlib:sig:math.ceil end -->
 
-Rounds up, returns as `Float`.
+Rounds up; the return value is still `Float`.
 
 ```yaoxiang
 use std.assert
@@ -329,7 +331,7 @@ round: (n: Float) -> Float
 
 <!-- stdlib:sig:math.round end -->
 
-Rounds to nearest (half away from zero), returns as `Float`.
+Rounds (away from zero for halves); the return value is still `Float`.
 
 ```yaoxiang
 use std.assert
@@ -351,7 +353,7 @@ sin: (n: Float) -> Float
 
 <!-- stdlib:sig:math.sin end -->
 
-Sine, argument in **radians**.
+Sine; the argument is in **radians**.
 
 ```yaoxiang
 use std.assert
@@ -372,7 +374,7 @@ cos: (n: Float) -> Float
 
 <!-- stdlib:sig:math.cos end -->
 
-Cosine, argument in **radians**.
+Cosine; the argument is in **radians**.
 
 ```yaoxiang
 use std.assert
@@ -393,7 +395,7 @@ tan: (n: Float) -> Float
 
 <!-- stdlib:sig:math.tan end -->
 
-Tangent, argument in **radians**.
+Tangent; the argument is in **radians**.
 
 ```yaoxiang
 use std.assert
@@ -406,4 +408,4 @@ main: () -> Void = {
 
 ## Related
 
-- [`std.string.parse_float`](string#parse_float) — parse a string into a `Float`
+- [`std.string.parse_float`](string#parse_float) — parse a string as `Float`

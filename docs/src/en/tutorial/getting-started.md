@@ -1,21 +1,21 @@
 # YaoXiang Quick Start
 
-> This guide helps you get started with the YaoXiang programming language quickly.
+> This guide helps you get started quickly with the YaoXiang programming language.
 >
-> **Note**: The code examples in this document are based on the YaoXiang language specification. If
-> you encounter syntax differences when running them, please refer to
-> [the language specification](../reference/language-spec/index.md).
+> **Note**: The code examples in this document are written based on the YaoXiang language
+> specification. If you encounter syntax differences when actually running them, please refer to
+> [Language Specification](../reference/language-spec/index.md).
 
 ## Installation
 
-### Build from source (recommended)
+### Building from source (recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/ChenXu233/YaoXiang.git
 cd yaoxiang
 
-# Build (debug version, for development testing)
+# Build (debug version, for development and testing)
 cargo build
 
 # Build (release version, recommended for production)
@@ -30,14 +30,14 @@ cargo test
 ./target/release/yaoxiang-rs --version
 ```
 
-**Verify the installation succeeded**:
+**Verifying the installation succeeded**:
 
 ```bash
 ./target/debug/yaoxiang-rs --version
 # Should output something like: yaoxiang-rs 0.8.2
 ```
 
-## Your first program
+## Your First Program
 
 Create the file `hello.yx`:
 
@@ -45,18 +45,18 @@ Create the file `hello.yx`:
 // hello.yx
 use std.io
 
-// Function definition: name: (param: Type, ...) -> return_type = { return ... }  # Code block must explicitly use return
-// Expression form: name: (param: Type, ...) -> return_type = expr           # Expression returns the value directly
+// Function definition: name: (param: Type, ...) -> return_type = { return ... }  # Code blocks must use explicit return
+// Expression form:      name: (param: Type, ...) -> return_type = expr             # Expression returns its value directly
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
 ```
 
-Run:
+Run it:
 
 ```bash
 ./target/debug/yaoxiang-rs run hello.yx
-# Or use the release version
+# or use the release version
 ./target/release/yaoxiang-rs run hello.yx
 ```
 
@@ -66,16 +66,16 @@ Output:
 Hello, YaoXiang!
 ```
 
-## Basic concepts
+## Basic Concepts
 
-### Variables and types
+### Variables and Types
 
 ```yaoxiang
 // Automatic type inference
-x = 42  // Inferred as Int
-name = "YaoXiang"  // Inferred as String
-pi = 3.14159  // Inferred as Float
-is_valid = true  // Inferred as Bool
+x = 42  // inferred as Int
+name = "YaoXiang"  // inferred as String
+pi = 3.14159  // inferred as Float
+is_valid = true  // inferred as Bool
 
 // Explicit type annotation (recommended to use centralized type conventions)
 count: Int = 100
@@ -84,7 +84,7 @@ count: Int = 100
 x = 10
 x = 20  // ❌ Compile error! Immutable
 
-// Mutable variables (must be explicitly declared)
+// Mutable variables (require explicit declaration)
 mut counter = 0
 counter = counter + 1  // ✅ OK
 ```
@@ -93,10 +93,10 @@ counter = counter + 1  // ✅ OK
 
 ```yaoxiang
 // Function definition syntax
-// Expression form: returns the value directly, no need for return
+// Expression form: returns the value directly, no `return` needed
 add: (a: Int, b: Int) -> Int = a + b
 
-// Code block form: must use return to return a value
+// Block form: must use `return` to return a value
 // add: (a: Int, b: Int) -> Int = { return a + b }
 
 // Call
@@ -106,7 +106,7 @@ result = add(1, 2)  // result = 3
 inc: (x: Int) -> Int = x + 1
 ```
 
-### Type definitions
+### Type Definitions
 
 YaoXiang uses a unified `name: type = value` syntax model:
 
@@ -121,18 +121,18 @@ add: (a: Int, b: Int) -> Int = a + b
 // Type definition (using curly braces)
 Point: Type = { x: Float, y: Float }
 
-// Using the type
+// Using a type
 p: Point = Point(x=1.0, y=2.0)
 p.x  // 1.0
 p.y  // 2.0
 ```
 
-#### Record types
+#### Record Types
 
 <!-- docs-example: skip -->
 
 ```yaoxiang
-// Struct types
+// Struct type
 Point: Type = { x: Float, y: Float }
 Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
@@ -141,7 +141,7 @@ p = Point(x=3.0, y=4.0)
 r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 ```
 
-#### Interface definitions
+#### Interface Definitions
 
 An interface is a record type whose fields are all function types:
 
@@ -162,7 +162,7 @@ Serializable: Type = {
 EmptyInterface: Type = {}
 ```
 
-#### Type methods
+#### Type Methods
 
 Use the `Type.method: (Type, ...) -> Return = ...` syntax to define type methods:
 
@@ -187,14 +187,15 @@ p.draw(screen)  // → Point.draw(p, screen)
 str = p.serialize()  // → Point.serialize(p)
 ```
 
-#### Automatic binding
+#### Auto-Binding
 
-Functions declared with the `pub` keyword are automatically bound to types defined in the same file:
+Functions declared with the `pub` keyword are automatically bound to the type defined in the same
+file:
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-// pub declarations are automatically bound to Point
+// `pub` declaration is automatically bound to Point
 pub distance: (p1: Point, p2: Point) -> Float = {
     dx = p1.x - p2.x
     dy = p1.y - p2.y
@@ -212,7 +213,7 @@ d = distance(p1, p2)  // 3.606...
 d2 = p1.distance(p2)  // → distance(p1, p2)
 ```
 
-#### Enum types
+#### Enum Types
 
 ```yaoxiang
 // Simple enum
@@ -222,12 +223,12 @@ Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // Using generics — variant constructors must be qualified with "Type.variant"
-// Writing bare ok(42) / err("not found") reports E1001
+// Writing bare ok(42) / err("not found") raises E1001
 success: Result(Int, String) = Result(Int, String).ok(42)
 failure: Result(Int, String) = Result(Int, String).err("not found")
 ```
 
-#### Generic types
+#### Generic Types
 
 ```yaoxiang
 // Generic type definition
@@ -242,7 +243,7 @@ IntList: Type = List(Int)
 StringList: Type = List(String)
 ```
 
-### Control flow
+### Control Flow
 
 ```yaoxiang
 // Conditional expression
@@ -269,7 +270,7 @@ while n < 5 {
 }
 ```
 
-### Lists and dictionaries
+### Lists and Dictionaries
 
 ```yaoxiang
 use std.list
@@ -282,17 +283,17 @@ first = numbers[0]  // 1
 scores = {"Alice": 90, "Bob": 85}
 alice_score = scores["Alice"]  // 90
 
-// Adding elements: lists have no instance methods, call std.list as functions
+// Adding elements: lists have no instance methods; use the std.list function form
 // Note: do not name a variable `list` — that would shadow the module
 mut items = [1, 2, 3]
 items = list.push(items, 4)  // [1, 2, 3, 4]
 ```
 
-### Pattern matching
+### Pattern Matching
 
 ```yaoxiang
 // match expression
-// Note: Result constructors need `use std.result` first; writing bare `ok(42)` reports E1001
+// Note: the Result constructor requires `use std.result` first; writing bare ok(42) raises E1001
 use std.result
 result: Result(Int, String) = Result(Int, String).ok(42)
 
@@ -302,47 +303,47 @@ message = match result {
 }
 ```
 
-## Spawn programming (concurrency)
+## Spawn Programming (Concurrency)
 
-YaoXiang's concurrency model is built around the `spawn <expr>` primitive — it is the only entry
+YaoXiang's concurrency model is built around the `spawn <expr>` primitive — it is the sole entry
 point for parallelism.
 
 <!-- docs-example: skip -->
 
 ```yaoxiang
-// spawn modifies any expression, executing it in parallel automatically
+// `spawn` decorates any expression and runs it in parallel automatically
 main: () -> Void = {
-    user = spawn fetch_user(1)   // runs in the background
+    user = spawn fetch_user(1)   // executes in the background
     posts = spawn fetch_posts()  // another parallel step
 
-    // automatically blocks and waits when the result is needed
+    // Automatically blocks waiting for the result when it is needed
     print(user.name)
     print(posts.length)
 }
 ```
 
-**Core rule**: an expression modified by `spawn` runs in the background, while the outer scope
-synchronously blocks and waits for the result. Tasks with no dependencies run in parallel
-automatically, scheduled by the runtime GMP model.
+**Core rule**: An expression decorated with `spawn` runs in the background, and the outer code
+synchronously blocks waiting for the result. Tasks without dependencies run in parallel
+automatically, scheduled by the runtime's GMP model.
 
-## Module system
+## Module System
 
 ```yaoxiang
 // Import the standard library
 use std.io
 use std.math
 
-// Use the imported functions
+// Using imported functions
 result = math.sqrt(16.0)  // 4.0
 print("Hello!")
 ```
 
 ## FAQ
 
-### Q: Variables are immutable by default. How do I change a variable?
+### Q: Variables are immutable by default — how do I change one?
 
 ```yaoxiang
-// Use the mut keyword to declare a mutable variable
+// Use the `mut` keyword to declare a mutable variable
 mut x = 10
 x = 20  // ✅ OK
 ```
@@ -360,28 +361,28 @@ add = (a, b) => a + b
 ### Q: How do I handle errors?
 
 ```yaoxiang
-// Record-style and enum variants are written as "field_name: (payload) -> type"
+// Variants of record-like sum types are written as "field_name: (payload) -> Type"
 // Note: `|` cannot be used inside type bodies — `{ ok(T) | err(E) }` fails to parse with E0010
-// In real projects, use the built-in Result from the standard library directly
+// In real projects, just use the built-in Result from the standard library
 use std.result
 
 r = Result(Int, String).ok(42)
 
-// Handle with pattern matching
+// Handling with pattern matching
 match r {
     ok(value) => print("Success: {value}")
     err(e) => print("Error: " + e)
 }
 ```
 
-## Next steps
+## Next Steps
 
-- 📚 See the [language specification](../reference/language-spec/index.md) for the complete syntax
-- 🏗️ Browse the [design documents](../explanation/) for implementation details
-- 💡 Read the [design manifesto](../explanation/manifesto.md) for the core philosophy
+- 📚 See the [Language Specification](../reference/language-spec/index.md) for the complete syntax
+- 🏗️ Browse the [Design Documents](../explanation/) for implementation details
+- 💡 See the [Design Manifesto](../explanation/manifesto.md) for the core philosophy
 
-## Related resources
+## Related Resources
 
-- [GitHub repository](https://github.com/ChenXu233/YaoXiang)
-- [Issue feedback](https://github.com/ChenXu233/YaoXiang/issues)
-- [Contributing guide](../dev/contributing.md)
+- [GitHub Repository](https://github.com/ChenXu233/YaoXiang)
+- [Issue Tracker](https://github.com/ChenXu233/YaoXiang/issues)
+- [Contributing Guide](../dev/contributing.md)

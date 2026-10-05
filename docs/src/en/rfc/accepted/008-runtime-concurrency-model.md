@@ -1,9 +1,9 @@
 ---
 title: 'RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design'
 status: 'Accepted'
-author: 'Chenxu'
+author: '晨煦'
 created: '2025-01-05'
-updated: '2026-07-05 (Aligned with RFC-024, added Issue references)'
+updated: '2026-07-05 (aligned with RFC-024, added issue link)'
 issue: '#89'
 issues_impl:
   - '#50'
@@ -14,102 +14,108 @@ pr_impl:
 
 # RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design
 
-> **⚠️ Alignment Note**: This document has been aligned with
+> **⚠️ Alignment Notice**: This document has been aligned with
 > [RFC-024 New Concurrency Model](../../reference/language-spec/concurrency.md). The old
-> whole-program DAG analysis, `@block`/`@eager` annotations, and L1/L2/L3 hierarchy model have been
-> replaced by the `spawn {}` block parallel primitive. DAG analysis now applies only within
+> whole-program DAG analysis, `@block`/`@eager` annotations, and L1/L2/L3 layer model have been
+> replaced by the `spawn {}` block parallel primitive. DAG analysis now applies only inside
 > `spawn {}` blocks.
 
 > **References**:
 >
-> - [RFC-011: Generics System Design](011-generic-type-system.md)
-> - [Concurrency Model Specification (RFC-024)](../../reference/language-spec/concurrency.md)
+> - [RFC-011: Generic Type System Design](011-generic-type-system.md)
+> - [Concurrency Model Spec (RFC-024)](../../reference/language-spec/concurrency.md)
 
 ## Summary
 
 This document defines the key designs of the Runtime architecture:
 
-1. **Three-Tier Runtime Architecture**: Embedded (immediate execution) → Standard (spawn + DAG
+1. **Three-tier Runtime architecture**: Embedded (immediate execution) → Standard (spawn + DAG
    scheduling) → Full (work stealing)
-2. **Compile and Run Separation**: The compilation phase is identical; differences lie only in the
-   runtime execution
-3. **Dual Backend Model**: VM (development/debugging) and LLVM AOT (production release) with
+2. **Compile / runtime separation**: The compile phase is identical; differences lie only in how the
+   runtime executes
+3. **Dual backend model**: VM (development and debugging) and LLVM AOT (production release), with
    identical behavior
-4. **Scheduler = Static Library**: The scheduler is linked into the exe during AOT compilation,
-   ~200-500KB, no GC
-5. **Synchronization Is Just a Special Case of Scheduling**: num_workers=1 means synchronous mode
+4. **Scheduler = static library**: At AOT compile time the scheduler is linked into the exe, about
+   200–500 KB, no GC
+5. **Synchronization is just a special case of scheduling**: `num_workers=1` is the synchronous mode
 
 ### Key Clarification: This Is Not Java
 
 ```
-Java:   .java → .class → JVM (Interpret/JIT + GC)         ← Always needs a virtual machine
-YaoXiang Dev:     .yx → IR → VM execution (fast iteration, step debugging)
-YaoXiang Prod:    .yx → IR → LLVM → native exe (scheduler linked in)
+Java:           .java → .class → JVM (interpretation/JIT + GC)        ← Always needs a VM
+YaoXiang dev:   .yx → IR → VM execution (fast iteration, step debugging)
+YaoXiang prod:  .yx → IR → LLVM → native exe (scheduler linked in)
 
-VM is a development tool, not a runtime essence. Just like Go's go run vs go build.
-The final exe = your native code + scheduler static library + reflection metadata. No interpreter, no JIT, no GC.
+The VM is a development tool, not the essence of the runtime. Same as Go's `go run` vs `go build`.
+Final exe = your native code + scheduler static library + reflection metadata. No interpreter, no JIT, no GC.
 ```
 
 ## Motivation
 
 ### Core Contradictions
 
-| Contradiction                   | Description                                                                                                      |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Transparency vs Controllability | spawn blocks provide explicit concurrency control; regular code executes sequentially                            |
-| Core vs Optional                | spawn is a core parallel primitive; WorkStealing is an advanced feature when num_workers>1                       |
-| Single-threaded vs Concurrent   | In single-threaded mode concurrency behaves asynchronously; synchronization is just a special case of scheduling |
+| Contradiction                 | Description                                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Transparency vs control       | `spawn` blocks provide explicit concurrency control; ordinary code runs sequentially                              |
+| Core vs optional              | `spawn` is the core parallel primitive; WorkStealing is an advanced feature when `num_workers>1`                  |
+| Single-threaded vs concurrent | In single-threaded mode concurrency manifests as asynchrony; synchronization is just a special case of scheduling |
 
 ---
 
 ## Proposal
 
-### 1. Three-Tier Runtime Architecture
+### 1. Three-tier Runtime Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│              Compilation Phase (Same for All Modes)               │
+│                  Compile phase (identical for all modes)         │
 │                                                                  │
 │  Source Code → Lexer → Parser → TypeCheck → Codegen → IR        │
 │                                                                  │
-│  ⚠️ Same syntax parsing, type checking, code generation, IR output│
+│  ⚠️ Same syntax parsing, type checking, code generation, IR output │
 └──────────────────────────────────────────────────────────────────┘
                                │
           ┌────────────────────┼────────────────────┐
           ▼                    ▼                    ▼
 ┌──────────────────┐ ┌───────────────┐ ┌──────────────────┐
 │ 🟢 Embedded      │ │ 🔵 Standard   │ │ 🟣 Full          │
-│ Immediate Exec.  │ │ spawn + DAG   │ │ Full Scheduler   │
-│ Sync Execution   │ │ In-block Conc.│ │ Parallel Opt.    │
-│ No spawn support │ │ Auto-conc.    │ │ Work stealing    │
+│ Immediate        │ │ spawn + DAG   │ │ Full Scheduler   │
+│ executor         │ │               │ │                  │
+│ Synchronous      │ │ Concurrency   │ │ Parallel         │
+│ execution        │ │ inside spawn  │ │ optimization     │
+│ No spawn support │ │ block         │ │ Work stealing    │
+│                  │ │ Auto          │ │                  │
+│                  │ │ concurrency   │ │                  │
 └──────────────────┘ └───────────────┘ └──────────────────┘
 ```
 
-| Phase                  | Embedded | Standard                   | Full                           |
-| ---------------------- | -------- | -------------------------- | ------------------------------ |
-| Compilation            | Same     | Same                       | Same                           |
-| Execution Mode         | Sync     | In-spawn-block concurrency | Parallel                       |
-| Memory Usage           | Low      | Medium                     | High                           |
-| Concurrency Capability | None     | Within spawn blocks        | Within spawn blocks + Parallel |
-| spawn Support          | ❌       | ✅                         | ✅                             |
-| DAG Analysis           | None     | Within spawn blocks        | Within spawn blocks            |
-| WorkStealer            | None     | None                       | ✅                             |
+| Stage         | Embedded    | Standard                         | Full                            |
+| ------------- | ----------- | -------------------------------- | ------------------------------- |
+| Compile       | Same        | Same                             | Same                            |
+| Execution     | Synchronous | Concurrency inside `spawn` block | Parallel                        |
+| Memory        | Low         | Medium                           | High                            |
+| Concurrency   | None        | Inside `spawn` block             | Inside `spawn` block + parallel |
+| spawn support | ❌          | ✅                               | ✅                              |
+| DAG analysis  | None        | Inside `spawn` block             | Inside `spawn` block            |
+| WorkStealer   | None        | None                             | ✅                              |
 
-- **Embedded Runtime**: Targets WASM/game scripts/rule engines. Immediate executor, no spawn
-  support, high performance with low footprint.
-- **Standard Runtime**: Targets web services/data pipelines. Supports `spawn {}` blocks, performing
-  DAG analysis and automatic concurrency within spawn blocks. num_workers=1 means single-threaded
-  asynchronous.
-- **Full Runtime**: Targets scientific computing/massive parallelism. Standard + WorkStealer load
-  balancing.
+**Embedded Runtime**: Targets WASM, game scripts, and rule engines. Immediate executor, no `spawn`
+support, high performance and low footprint.
+
+**Standard Runtime**: Targets web services and data pipelines. Supports the `spawn {}` block,
+performs DAG analysis and automatic concurrency inside the `spawn` block. `num_workers=1` is
+single-threaded asynchrony.
+
+**Full Runtime**: Targets scientific computing and large-scale parallelism. Standard + WorkStealer
+load balancing.
 
 ### 2. Scheduler Decoupling: Generics + Injection
 
-Core principle: The VM does not directly depend on a concrete scheduler; it uses a generic parameter
-`[S]` for invocation.
+Core principle: The VM does not depend directly on a concrete scheduler, but calls through a generic
+parameter `[S]`.
 
 ```yaoxiang
-# 调度器接口定义
+# Scheduler interface definition
 Scheduler: Type = {
     spawn: (Task) -> TaskId,
     await: (TaskId) -> Result,
@@ -118,7 +124,7 @@ Scheduler: Type = {
     stats: () -> SchedulerStats,
 }
 
-# 单线程调度器
+# Single-threaded scheduler
 SingleThreadScheduler: Scheduler = {
     spawn: (task) => { task_queue.push(task); generate_task_id() },
     await: (task_id) => { ... },
@@ -127,7 +133,7 @@ SingleThreadScheduler: Scheduler = {
     stats: () => { queue_size: task_queue.len() },
 }
 
-# 多线程调度器
+# Multi-threaded scheduler
 MultiThreadScheduler: Scheduler = {
     spawn: (task) => { work_queue.push(task); generate_task_id() },
     await: (task_id) => { wait_for_completion(task_id) },
@@ -136,176 +142,186 @@ MultiThreadScheduler: Scheduler = {
     stats: () => { workers: get_worker_stats() },
 }
 
-# VM 通过泛型使用调度器
+# VM uses scheduler via generics
 create_vm: [S: Scheduler](scheduler: S) -> VM = (scheduler) => {
     VM(scheduler: scheduler, memory: create_memory(), dag: create_dag())
 }
 ```
 
-**Key Points**:
+**Key points**:
 
 - Compile-time polymorphism, zero runtime overhead
-- No Trait objects needed
-- Generic type constraint `[S: Scheduler]` is already defined in RFC-011
+- No trait objects required
+- The generic type constraint `[S: Scheduler]` is already defined in RFC-011
 
-### 3. Synchronization = Special Case of Scheduling
+### 3. Synchronization = A Special Case of Scheduling
 
 ```
-❌ Misconception: Disable the scheduler
-✅ Correct: Use a single-worker scheduler
+❌ Misconception: disable the scheduler
+✅ Correct: use a single-worker scheduler
 
-num_workers = 1 → Single-threaded asynchronous scheduling
-num_workers > 1 → Multi-threaded parallel scheduling
+num_workers = 1 → single-threaded asynchronous scheduling
+num_workers > 1 → multi-threaded parallel scheduling
 
-The same scheduler interface, just different configuration. Eliminate special cases.
+Same scheduler interface, just different configuration. Eliminate the special case.
 ```
 
-### 4. Role of DAG
+### 4. Position of the DAG
 
-> **Important Change**: DAG analysis no longer applies to the whole program; it occurs only within
-> `spawn {}` blocks. Regular code (outside spawn blocks) executes sequentially and does not require
+> **Important change**: DAG analysis no longer applies to the whole program; it is performed only
+> inside `spawn {}` blocks. Ordinary code (outside `spawn` blocks) runs sequentially and needs no
 > DAG analysis.
 
-| Tier             | spawn Support | DAG Analysis Scope  | Description                         |
-| ---------------- | ------------- | ------------------- | ----------------------------------- |
-| Core Runtime     | ✅            | Within spawn blocks | Concurrency core                    |
-| Standard Runtime | ✅            | Within spawn blocks | spawn + DAG scheduling              |
-| Embedded Runtime | ❌            | None                | Immediate execution, no concurrency |
+| Layer            | spawn support | DAG analysis scope   | Description                         |
+| ---------------- | ------------- | -------------------- | ----------------------------------- |
+| Core Runtime     | ✅            | Inside `spawn` block | Concurrency core                    |
+| Standard Runtime | ✅            | Inside `spawn` block | `spawn` + DAG scheduling            |
+| Embedded Runtime | ❌            | None                 | Immediate execution, no concurrency |
 
-### 5. Bottom-up Execution Model (Within spawn blocks)
+### 5. Bottom-up Execution Model (Inside `spawn` Blocks)
 
-> **Important Change**: Bottom-up DAG analysis is only performed within `spawn {}` blocks;
-> whole-program DAG analysis is no longer performed.
+> **Important change**: Bottom-up DAG analysis is performed only inside `spawn {}` blocks;
+> whole-program DAG analysis is no longer applied.
 
 ```
-User code (concurrency within spawn block):
+User code (concurrency inside spawn block):
     (a, b) = spawn {
         fetch(url0),
         fetch(url1)
     }
     print(a)
 
-Compile-time analysis (bottom-up within spawn block):
+Compile-time analysis (bottom-up inside spawn block):
     fetch(url0) and fetch(url1) have no mutual dependency → can run in parallel
-    print(a) outside spawn block → runs sequentially, waiting for spawn to complete
+    print(a) outside the spawn block → runs sequentially, waiting for spawn to complete
 
-Runtime scheduling (starts from leaves within spawn block):
+Runtime scheduling (starting from leaves inside spawn block):
     fetch(url0) ┐
                 ├→ run in parallel
     fetch(url1) ┘
-    print(a)                       ← outside spawn block, runs sequentially
+    print(a)                       ← outside the spawn block, runs sequentially
 ```
 
-**Key Points**:
+**Key points**:
 
-- Bottom-up dependency analysis is limited to within `spawn {}` blocks
-- Tasks without dependencies within a spawn block execute in parallel
-- Code outside spawn blocks executes sequentially, waiting for the spawn block to complete
+- Bottom-up dependency analysis is limited to inside `spawn {}` blocks
+- Tasks with no dependencies inside a `spawn` block run in parallel
+- Code outside a `spawn` block runs sequentially, waiting for the `spawn` block to complete
 
 ---
 
-### 6. Compilation Model: Dual Backend + Static-Linked Runtime
+### 6. Compile Model: Dual Backend + Statically Linked Runtime
 
 #### 6.1 Two Backends, One Behavior
 
 ```
                       ┌─────────────────────┐
-                      │   Compilation Front  │
-                      │      (Unified)       │
-                      │   Lexer → Parser     │
-                      │   → TypeCheck        │
-                      │   → In-spawn DAG An. │
-                      │   → Escape Analysis  │
-                      │   → Cycle Detection  │
+                      │   Compile front-end │
+                      │   (unified)         │
+                      │   Lexer → Parser    │
+                      │   → TypeCheck       │
+                      │   → DAG analysis    │
+                      │     inside spawn    │
+                      │     blocks          │
+                      │   → Escape analysis │
+                      │   → Cycle detection │
                       └──────────┬──────────┘
                                  │
                     ┌────────────┴────────────┐
                     ▼                         ▼
         ┌───────────────────┐     ┌───────────────────┐
-        │  VM Backend (Dev) │     │LLVM Backend (Prod)│
+        │  VM backend (dev) │     │ LLVM backend (prod)│
         │                   │     │                   │
-        │  Generates IR/BC  │     │ Generates native  │
-        │  VM Interprets    │     │ Links runtime lib │
-        │  Step Debugging   │     │ Outputs .exe      │
-        │  Fast Iteration   │     │ Zero interp. ovh. │
+        │  Emit IR/bytecode │     │  Emit native code │
+        │  VM interprets    │     │  Link runtime     │
+        │                   │     │  static library   │
+        │  Step debugging   │     │  Output .exe      │
+        │  Fast iteration   │     │  Zero interp.     │
+        │                   │     │  overhead         │
         └───────────────────┘     └───────────────────┘
                  │                         │
                  ▼                         ▼
-         Identical Behavior         Identical Behavior
+           Identical behavior         Identical behavior
 ```
 
-**VM Backend**: Used during development. Edit code → run immediately → step debug → fast iteration.
+**VM backend**: Used during development. Edit code → run immediately → step-debug → fast iteration.
 Behavior is completely identical to the final exe.
 
-**LLVM Backend**: Used for release. AOT compile to native code; the scheduler is linked in as a
+**LLVM backend**: Used for release. AOT compile to native code; the scheduler is linked in as a
 static library. No interpreter, no JIT.
 
-#### 6.2 Scheduler = Static Library, Not a VM
+#### 6.2 Scheduler = Static Library, Not a Virtual Machine
 
 ```
 Internal structure of the final exe:
 
 ┌────────────────────────────────────────────┐
-│  Your Code (Native Machine Code)            │
-│  ├── Compile-time determined DAG exec plan │
+│  Your code (native machine code)           │
+│  ├── Compile-time-determined DAG           │
+│  │   execution plan                        │
 │  ├── Inlined Move/ref/clone operations     │
 │  └── RAII release code                     │
 ├────────────────────────────────────────────┤
-│  Runtime Static Library (~200-500KB)        │
-│  ├── Thread pool (fixed size = num_workers) │
-│  ├── Event loop (libuv / io_uring)         │
-│  ├── Work-stealing queue (Full only)        │
-│  ├── Memory allocator (jemalloc / mimalloc)│
-│  └── Reflection metadata (lazy-loaded)     │
+│  Runtime static library (~200–500 KB)      │
+│  ├── Thread pool (fixed size = num_workers)│
+│  ├── Event loop (libuv / io_uring)        │
+│  ├── Work-stealing queues                  │
+│  │   (Full Runtime only)                   │
+│  ├── Memory allocator                      │
+│  │   (jemalloc / mimalloc)                │
+│  └── Reflection metadata                   │
+│       (loaded on demand, not always        │
+│        resident in memory)                 │
 ├────────────────────────────────────────────┤
-│  Not included:                              │
-│  ❌ Bytecode interpreter                    │
-│  ❌ JIT compiler                            │
-│  ❌ GC                                      │
-│  ❌ Virtual machine                         │
+│  There is no:                              │
+│  ❌ Bytecode interpreter                   │
+│  ❌ JIT compiler                           │
+│  ❌ GC                                     │
+│  ❌ Virtual machine                        │
 └────────────────────────────────────────────┘
 ```
 
 Comparison:
 
-| Language           | Java               | Go                 | YaoXiang                       |
-| ------------------ | ------------------ | ------------------ | ------------------------------ |
-| Compilation Output | Bytecode           | Native code        | Native code                    |
-| Execution          | JVM Interpret/JIT  | Direct             | Direct                         |
-| Runtime Size       | ~200MB (JVM)       | ~1-2MB (incl. GC)  | **~200-500KB (no GC)**         |
-| Memory Mgmt        | GC                 | GC                 | **RAII (Deterministic)**       |
-| Reflection         | Resident in memory | Resident in memory | **Stored in exe, lazy-loaded** |
+| Language       | Java              | Go                | YaoXiang                            |
+| -------------- | ----------------- | ----------------- | ----------------------------------- |
+| Compile output | Bytecode          | Native code       | Native code                         |
+| Execution      | JVM interpret/JIT | Direct execution  | Direct execution                    |
+| Runtime size   | ~200 MB (JVM)     | ~1–2 MB (with GC) | **~200–500 KB (no GC)**             |
+| Memory mgmt    | GC                | GC                | **RAII (deterministic)**            |
+| Reflection     | Always resident   | Always resident   | **Stored in exe, loaded on demand** |
 
 #### 6.3 Why Scheduler Performance Is Constant
 
-**Key Insight**: Most of the work is done at compile-time; the runtime only "executes".
+**Key insight**: Most work happens at compile time; the runtime only "executes".
 
 ```
-Compile-time (one-time, not in runtime):
-    ├── Analyze DAG within spawn blocks: who depends on whom
-    ├── Topological sort: determine exec order within spawn blocks
-    ├── Identify parallelizable tasks: dependency-free subtrees in spawn blocks
+Compile time (one-time, not part of runtime):
+    ├── Analyze DAG inside spawn blocks: who depends on whom
+    ├── Topological sort: determine execution order inside spawn blocks
+    ├── Identify parallelizable tasks: independent subtrees inside spawn blocks
     ├── Escape analysis: ref → Rc or Arc
-    ├── Cycle detection: auto-degrade to Weak or error
+    ├── Cycle detection: automatically downgrade to Weak or report an error
     └── Inlining: small functions expanded directly
 
-Runtime (per execution, fixed data structures):
-    ├── Dispatch tasks to thread pool per compile-time determined spawn block DAG order
+Runtime (each execution, fixed data structure):
+    ├── Dispatch tasks to thread pool following compile-time-determined
+    │   DAG order inside spawn blocks
     ├── Encounter I/O → suspend current task, event loop takes over
-    ├── Task ready → put back in ready queue
+    ├── Task ready → put back on ready queue
     └── That's it.
 ```
 
 **The scheduler itself is a fixed-size data structure**: thread pool, event loop, work queue. No
-dynamic growth, no adaptive re-optimization, no GC scanning. Behavior is completely predictable.
+dynamic growth, no adaptive re-optimization, no GC scanning. Behavior is fully predictable.
 
-The compile-time has already computed "what to schedule" within spawn blocks; the runtime only
-"executes". This differs from tokio—tokio dynamically builds Future chains at runtime. YaoXiang's
-DAG is static, and limited to within spawn blocks.
+The compile phase has already figured out "what to schedule" inside `spawn` blocks; the runtime only
+"executes". This is different from tokio — tokio builds its Future chain dynamically at runtime.
+YaoXiang's DAG is static, and limited to inside `spawn` blocks.
 
 #### 6.4 Reflection: Stored, Not Resident
 
-Reflection metadata is generated at compile-time and stored in a dedicated section of the exe. It is
+Reflection metadata is generated at compile time and stored in a dedicated section of the exe. It is
 not loaded at program startup. On the first reflection request, it is mmap'd into memory on demand.
 Similar to:
 
@@ -314,24 +330,24 @@ exe layout:
   .text     ← Your code
   .rodata   ← Constants
   .reflect  ← Reflection metadata (type info, function signatures, etc.)
-              mmap lazy-loaded; no memory if not accessed
+              mmap'd on demand, occupies no memory if never accessed
 ```
 
-**Trade-off**: exe size increases (contains reflection data), but there is zero memory overhead if
-not accessed at runtime. The first access has a loading delay (similar to JIT warmup), and zero
-overhead thereafter.
+**Trade-off**: The exe size grows (it contains reflection data), but if the runtime never accesses
+it, memory cost is zero. The first access incurs a load latency (similar to JIT warmup); subsequent
+access has zero overhead.
 
 ```
 src/
 ├── lib.rs
 ├── main.rs
-├── backends/                          # Runtime backend
+├── backends/                          # Runtime backends
 │   ├── common/                        # Shared by all backends (values, heap, opcodes)
 │   │   ├── allocator.rs
 │   │   ├── heap.rs
 │   │   ├── opcode.rs
 │   │   └── value.rs
-│   ├── dev/                           # REPL + Debugger
+│   ├── dev/                           # REPL + debugger
 │   │   ├── debugger.rs
 │   │   ├── shell.rs
 │   │   └── repl/
@@ -345,7 +361,7 @@ src/
 │       ├── engine.rs
 │       ├── facade.rs
 │       └── task.rs
-├── frontend/                          # Compilation frontend (shared by all backends)
+├── frontend/                          # Compile front-end (shared by all backends)
 │   ├── compiler.rs
 │   ├── config.rs
 │   ├── pipeline.rs
@@ -354,19 +370,19 @@ src/
 │   │   ├── parser/
 │   │   ├── typecheck/
 │   │   │   ├── checker.rs
-│   │   │   ├── spawn_placement.rs     # ★ In-spawn-block DAG/concurrency analysis (formerly frontend/dag/)
+│   │   │   ├── spawn_placement.rs     # ★ DAG/concurrency analysis inside spawn blocks (formerly frontend/dag/)
 │   │   │   ├── inference/
 │   │   │   └── traits/
 │   │   └── types/
 │   ├── events/
 │   ├── module/
 │   └── pipeline/
-├── middle/                            # Middle-end
-│   ├── core/                          # IR & Bytecode
+├── middle/                            # Middle end
+│   ├── core/                          # IR & bytecode
 │   │   ├── bytecode.rs
 │   │   ├── ir.rs                      #   IR definition (shared by VM and LLVM)
 │   │   └── ir_gen.rs
-│   └── passes/                        # Compilation passes
+│   └── passes/                        # Compile passes
 │       ├── codegen/                   # Code generation (formerly codegen/)
 │       ├── lifetime/                  # Lifetime/borrow analysis
 │       └── mono/                      # Monomorphization
@@ -389,16 +405,16 @@ src/
 
 **Directory mapping notes** (old → new):
 
-| Old Directory   | New Location                                 | Description                                                        |
-| --------------- | -------------------------------------------- | ------------------------------------------------------------------ |
-| `frontend/dag/` | `frontend/core/typecheck/spawn_placement.rs` | In-spawn-block DAG analysis has been integrated into type checking |
-| `codegen/`      | `middle/passes/codegen/`                     | Code generation moved into middle-end passes                       |
-| `embedded/`     | `backends/interpreter/`                      | Tree-walking interpreter                                           |
-| `runtime/`      | `backends/runtime/`                          | Compiled VM runtime                                                |
-| `vm/`           | `backends/interpreter/`                      | Merged with embedded                                               |
-| `full/`         | (Not implemented)                            | Full Runtime + work stealing, for future versions                  |
-| `reflect/`      | (Not implemented)                            | Reflection metadata, for future versions                           |
-| `core/`         | `backends/common/`                           | Shared values/heap/opcodes                                         |
+| Old directory   | New location                                 | Description                                                  |
+| --------------- | -------------------------------------------- | ------------------------------------------------------------ |
+| `frontend/dag/` | `frontend/core/typecheck/spawn_placement.rs` | DAG analysis inside `spawn` blocks integrated into typecheck |
+| `codegen/`      | `middle/passes/codegen/`                     | Code generation moved into middle-end passes                 |
+| `embedded/`     | `backends/interpreter/`                      | Tree-walking interpreter                                     |
+| `runtime/`      | `backends/runtime/`                          | Compiled VM runtime                                          |
+| `vm/`           | `backends/interpreter/`                      | Merged with embedded                                         |
+| `full/`         | (Not yet implemented)                        | Full Runtime + work stealing, in a later version             |
+| `reflect/`      | (Not yet implemented)                        | Reflection metadata, in a later version                      |
+| `core/`         | `backends/common/`                           | Shared values/heap/opcodes                                   |
 
 ---
 
@@ -406,55 +422,55 @@ src/
 
 ### Advantages
 
-- **Clear layering**: Three tiers Embedded / Standard / Full
-- **Compile reuse**: Frontend code is fully shared
+- **Clear layering**: Embedded / Standard / Full
+- **Compile reuse**: Front-end code is fully shared
 - **Generics decoupling**: Compile-time polymorphism, zero overhead
 - **Consistency**: Synchronization is just a special case of scheduling
 - **Embedded-friendly**: High performance + low memory + fast startup
 
 ### Disadvantages
 
-- **Initial complexity**: Need to define scheduler interface and multiple runtime variants
-- **Compile-time binding**: Scheduler type is determined at compile-time
+- **Initial complexity**: Need to define the scheduler interface and multiple runtime variants
+- **Compile-time binding**: Scheduler type is fixed at compile time
 
 ---
 
-## Design Decision Records
+## Design Decision Log
 
-| Decision                       | Determination                                                     | Date       |
-| ------------------------------ | ----------------------------------------------------------------- | ---------- |
-| Scheduler Decoupling Approach  | Generics + Injection                                              | 2025-01-05 |
-| Single-threaded Mode           | Synchronization is a special case of scheduling                   | 2025-01-05 |
-| Async Implementation           | DAG naturally supports it                                         | 2025-01-05 |
-| WorkStealer                    | Full Runtime advanced feature                                     | 2025-01-05 |
-| Embedded Design                | Immediate execution, no DAG scheduling                            | 2025-01-05 |
-| Compilation Phase              | All runtimes share the same frontend                              | 2025-01-05 |
-| Runtime Tiering                | Embedded / Standard / Full                                        | 2025-01-05 |
-| Type Constraints               | Already defined in RFC-011                                        | 2025-01-25 |
-| Dependency Graph Construction  | Static dependency graph, determined at compile-time               | 2025-01-05 |
-| Dual Backend Model             | VM (dev/debug) + LLVM AOT (prod), identical behavior              | 2026-05-11 |
-| Scheduler Form                 | Static library linked into exe, ~200-500KB, no GC                 | 2026-05-11 |
-| Reflection Metadata            | Compiled into a dedicated exe section, lazy-loaded via mmap       | 2026-05-11 |
-| Scheduler Performance          | DAG analysis done at compile-time; runtime only executes          | 2026-05-11 |
-| DAG Scope Alignment            | DAG analysis limited to within spawn blocks, aligned with RFC-024 | 2026-06-05 |
-| Three-Tier Architecture Update | Embedded without spawn, Standard supports spawn                   | 2026-06-05 |
+| Decision               | Decision                                                            | Date       |
+| ---------------------- | ------------------------------------------------------------------- | ---------- |
+| Scheduler decoupling   | Generics + injection                                                | 2025-01-05 |
+| Single-threaded mode   | Synchronization is a special case of scheduling                     | 2025-01-05 |
+| Asynchrony impl.       | DAG natively supports it                                            | 2025-01-05 |
+| WorkStealer            | Advanced feature of Full Runtime                                    | 2025-01-05 |
+| Embedded design        | Immediate execution, no DAG scheduling                              | 2025-01-05 |
+| Compile phase          | All runtimes share the same front-end                               | 2025-01-05 |
+| Runtime tiers          | Embedded / Standard / Full                                          | 2025-01-05 |
+| Type constraints       | Already defined in RFC-011                                          | 2025-01-25 |
+| Dependency graph build | Static dependency graph, determined at compile time                 | 2025-01-05 |
+| Dual backend model     | VM (dev/debug) + LLVM AOT (prod), identical behavior                | 2026-05-11 |
+| Scheduler form         | Static library linked into exe, ~200–500 KB, no GC                  | 2026-05-11 |
+| Reflection metadata    | Compiled into a dedicated exe section, mmap'd on demand             | 2026-05-11 |
+| Scheduler performance  | DAG analysis at compile time, runtime only executes                 | 2026-05-11 |
+| DAG scope alignment    | DAG analysis limited to inside `spawn` blocks, aligned with RFC-024 | 2026-06-05 |
+| Three-tier update      | Embedded has no `spawn`, Standard supports `spawn`                  | 2026-06-05 |
 
 ---
 
 ## References
 
-- [Concurrency Model Specification (RFC-024)](../../reference/language-spec/concurrency.md)
-- [RFC-011: Generics System Design](011-generic-type-system.md)
+- [Concurrency Model Spec (RFC-024)](../../reference/language-spec/concurrency.md)
+- [RFC-011: Generic Type System Design](011-generic-type-system.md)
 - [Rust async runtime design](https://tokio.rs/)
 - [Go scheduler design](https://golang.org/src/runtime/proc.go)
 
 ---
 
-## Lifecycle and Disposition
+## Lifecycle and Destination
 
-| Status           | Location                | Description               |
+| State            | Location                | Description               |
 | ---------------- | ----------------------- | ------------------------- |
 | **Draft**        | `docs/design/rfc/`      | Author's draft            |
-| **Under Review** | `docs/design/rfc/`      | Open community discussion |
+| **Under review** | `docs/design/rfc/`      | Open community discussion |
 | **Accepted**     | `docs/design/accepted/` | Official design document  |
-| **Rejected**     | `docs/design/rfc/`      | Retained in RFC directory |
+| **Rejected**     | `docs/design/rfc/`      | Kept in the RFC directory |

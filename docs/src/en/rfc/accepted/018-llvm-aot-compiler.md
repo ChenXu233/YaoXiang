@@ -1,19 +1,20 @@
 ---
 title: 'RFC-018: LLVM AOT Compiler Design'
 status: 'Accepted'
-author: 'ChenXu'
+author: 'Chenxu'
 created: '2026-02-15'
-updated: '2026-07-05 (synced with GitHub Issue #14, #134; added implementation status analysis)'
+updated: '2026-07-05 (synced with GitHub Issues #14, #134; added implementation status analysis)'
 issue: '#14'
 tracking_issue: 'https://github.com/ChenXu233/YaoXiang/issues/134'
 ---
 
 # RFC-018: LLVM AOT Compiler Design
 
-> **⚠️ Implementation Status (verified 2026-10-02)**: This RFC is still in "Accepted" status, but
-> **implementation has not yet started** — the repository `Cargo.toml` has no `inkwell` / `llvm` /
-> `cranelift` dependencies, and `src/backends/` only contains `common` / `interpreter` / `runtime`;
-> none of the "Implementation Strategy" items are checked. Schedule TBD.
+> **⚠️ Implementation Status (verified 2026-10-02)**: This RFC's status remains "Accepted", but
+> **implementation has not yet started**— The repository's `Cargo.toml` has no `inkwell` / `llvm` /
+> `cranelift` dependencies, `src/backends/` only contains `common` / `interpreter` / `runtime`, and
+> none of the "Implementation Strategy" items in the main text are checked. The schedule is yet to
+> be determined.
 >
 > **References**:
 >
@@ -23,40 +24,40 @@ tracking_issue: 'https://github.com/ChenXu233/YaoXiang/issues/134'
 > - [RFC-026: FFI Core Mechanism](026-ffi-core-mechanism.md)
 > - [RFC-010: Unified Type Syntax](010-unified-type-syntax.md)
 
-> **Deprecated**:
+> **Deprecations**:
 >
-> - The old "bottom-up automatic DAG analysis" model — replaced by the RFC-024 direct subexpression
->   model for spawn blocks
-> - `@IO`/`@Pure` implicit side-effect inference — replaced by the RFC-024 resource type mechanism
-> - `Arc(T)` type mapping — replaced by the RFC-009 v9 `ref` keyword
+> - The old "bottom-up automatic DAG analysis" model — replaced by RFC-024's spawn block direct
+>   sub-expression model
+> - `@IO`/`@Pure` implicit side-effect inference — replaced by RFC-024's resource type mechanism
+> - `Arc(T)` type mapping — replaced by RFC-009 v9's `ref` keyword
 
 ## Summary
 
 This document designs the LLVM AOT (Ahead-of-Time) compiler for the YaoXiang language. The LLVM
-backend and the VM backend (interpreter) share the same compilation front-end, forming the
-dual-backend architecture defined by [RFC-008](008-runtime-concurrency-model.md): the VM
-is used for development and debugging, while LLVM is used for production releases.
+backend and the VM backend (interpreter) share the same compilation frontend, forming the
+dual-backend architecture defined by [RFC-008](008-runtime-concurrency-model.md): VM for development
+and debugging, LLVM for production release.
 
-**Core Responsibilities**:
+**Core Responsibility**:
 
 ```
-Source Code → Front-End (shared) → IR → LLVM Codegen → .o → Link Scheduler Static Library → exe
+Source Code → Frontend (shared) → IR → LLVM Codegen → .o → Link scheduler static library → exe
 ```
 
 The compiler translates YaoXiang source code into native machine code, where:
 
-| Language Feature       | Compilation Strategy                                                                                                   |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Regular code           | Sequential machine code, zero scheduling overhead                                                                      |
-| `spawn { }` block      | Direct subexpression → task dispatch + synchronous wait (aligned with [RFC-024](024-concurrency-model.md)) |
-| `native("symbol")`     | LLVM `declare external` + argument marshalling (aligned with [RFC-026](026-ffi-core-mechanism.md))                   |
-| `.drop` destructor     | RAII cleanup code insertion (aligned with [RFC-009](009-ownership-model.md))                               |
-| `&T` / `&mut T` tokens | Zero-sized types, disappear after compilation                                                                          |
-| `ref T` shared         | `{ refcount_ptr, data_ptr }` fat pointer, compiler auto-selects Rc/Arc                                                 |
+| Language Feature       | Compilation Strategy                                                                                        |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Ordinary code          | Sequential machine code, zero scheduling overhead                                                           |
+| `spawn { }` block      | Direct sub-expression → task dispatch + synchronous wait (aligned with [RFC-024](024-concurrency-model.md)) |
+| `native("symbol")`     | LLVM `declare external` + argument marshalling (aligned with [RFC-026](026-ffi-core-mechanism.md))          |
+| `.drop` destructor     | RAII cleanup code insertion (aligned with [RFC-009](009-ownership-model.md))                                |
+| `&T` / `&mut T` tokens | Zero-sized types, eliminated after compilation                                                              |
+| `ref T` shared         | `{ refcount_ptr, data_ptr }` fat pointer, compiler automatically chooses Rc/Arc                             |
 
 **Relationship with RFC-024**: RFC-024 defines the **user semantics** of spawn blocks (direct
-subexpressions create tasks, synchronously block and wait). This document defines how these
-semantics **compile to machine code**.
+sub-expressions create tasks, synchronous blocking wait). This document defines how these semantics
+are **compiled to machine code**.
 
 **Relationship with RFC-026**: RFC-026 defines the **user syntax** for FFI (`native()`, `[0]` method
 binding, `.drop`). This document defines how FFI calls **generate LLVM IR**.
@@ -71,35 +72,35 @@ Currently, YaoXiang only has an interpreter as its execution backend:
 
 | Problem                | Impact                                                        |
 | ---------------------- | ------------------------------------------------------------- |
-| Performance bottleneck | Interpretation is 10-100x slower than machine code            |
-| Deployment complexity  | Needs to ship the interpreter and runtime                     |
+| Performance bottleneck | Interpreted execution is 10-100x slower than machine code     |
+| Complex deployment     | Requires carrying the interpreter and runtime                 |
 | Production environment | Interpreter is unsuitable for performance-sensitive scenarios |
 
-### LLVM in the Dual-Backend Model
+### The Role of LLVM in the Dual-Backend Model
 
 [RFC-008](008-runtime-concurrency-model.md) §6 defines the dual-backend architecture:
 
 ```
                     ┌─────────────────────┐
-                    │   Compilation Front-End (unified)│
+                    │   Compilation Frontend (unified)  │
                     │   Lexer → Parser     │
                     │   → TypeCheck        │
                     │   → spawn analysis   │
-                    │   → Escape analysis  │
+                    │   → escape analysis  │
                     └──────────┬──────────┘
                                │
                   ┌────────────┴────────────┐
                   ▼                         ▼
       ┌───────────────────┐     ┌───────────────────┐
-      │   VM Backend (Development) │     │  LLVM Backend (Production)  │
-      │   IR → Interpretation      │     │  IR → Native Code           │
-      │   Step Debugging           │     │  Link scheduler static lib  │
-      │   Rapid Iteration          │     │  Output .exe                │
+      │   VM Backend (Development)  │  LLVM Backend (Production)  │
+      │   IR → Interpreted execution │  IR → Native code  │
+      │   Step debugging    │     │ Link scheduler static lib  │
+      │   Rapid iteration   │     │ Output .exe        │
       └───────────────────┘     └───────────────────┘
 ```
 
-Both backends have **exactly the same behavior** — the difference is only in the execution method.
-The same source code, the same type checking, the same spawn analysis result.
+The two backends have **completely consistent behavior**—the only difference is the execution
+method. The same source code, the same type checking, the same spawn analysis result.
 
 ---
 
@@ -107,40 +108,40 @@ The same source code, the same type checking, the same spawn analysis result.
 
 ### 1. Compiler Architecture
 
-The LLVM backend sits at the final stage of the compilation pipeline, receiving IR from the
-front-end and generating native code:
+The LLVM backend is located at the final stage of the compilation pipeline, receiving IR from the
+frontend and generating native code:
 
 ```
-Source Code
+Source code
   → Lexer / Parser (frontend/core/)
   → TypeCheck + spawn analysis (frontend/core/typecheck/)
-  → IR Generation (middle/core/ir_gen.rs)
+  → IR generation (middle/core/ir_gen.rs)
   → LLVM Codegen (backends/llvm/)
       ├── Type mapping: YaoXiang types → LLVM IR types
       ├── Function translation: IR instructions → LLVM IR instructions
-      ├── spawn expansion: direct subexpressions → task functions + dispatch calls
-      ├── FFI expansion: native() calls → declare + marshalling
+      ├── spawn expansion: direct sub-expression → task function + dispatch call
+      ├── FFI expansion: native() call → declare + marshalling
       └── Destructor insertion: scope end → .drop() call
   → LLVM optimization + target code generation
-  → Link runtime static library → executable
+  → Link runtime static library → executable file
 ```
 
-### 2. Compilation Flow
+### 2. Compilation Process
 
 ```
-Phase 1: Front-End (shared with VM backend)
+Phase 1: Frontend (shared with VM backend)
   - Parsing, type checking, spawn block analysis, escape analysis
   - Output: type-annotated IR
 
-Phase 2: LLVM IR Generation
-  - Type mapping, function declarations, instruction translation
+Phase 2: LLVM IR generation
+  - Type mapping, function declaration, instruction translation
   - Output: LLVM Module
 
-Phase 3: LLVM Optimization
+Phase 3: LLVM optimization
   - Standard LLVM optimization pipeline (O0/O1/O2/O3)
   - Inlining, constant folding, dead code elimination
 
-Phase 4: Target Code Generation
+Phase 4: Target code generation
   - LLVM TargetMachine → .o file
   - Platforms: Linux (ELF), macOS (Mach-O), Windows (COFF)
 
@@ -153,109 +154,110 @@ Phase 5: Linking
 
 #### 3.1 YaoXiang → LLVM IR Type Mapping
 
-| YaoXiang Type      | LLVM IR Type                  | Notes                                                          |
-| ------------------ | ----------------------------- | -------------------------------------------------------------- |
-| `Int`              | `i64`                         | Default 64-bit signed integer                                  |
-| `Int32`            | `i32`                         | Explicit 32-bit integer (mainly for FFI)                       |
-| `Float`            | `f64`                         | Default 64-bit float                                           |
-| `Float32`          | `f32`                         | Explicit 32-bit float (mainly for FFI)                         |
-| `Bool`             | `i1`                          | Boolean                                                        |
-| `Char`             | `i32`                         | Unicode code point                                             |
-| `String`           | `{ i8*, i64 }`                | Pointer + byte length                                          |
-| `Void`             | `{}`                          | Zero-sized empty type                                          |
-| `&T`               | —                             | Zero-sized token, disappears after compilation, produces no IR |
-| `&mut T`           | —                             | Zero-sized token, disappears after compilation, produces no IR |
-| `ref T`            | `{ i64*, T* }`                | Fat pointer (refcount pointer + data pointer)                  |
-| `*T`               | `T*`                          | Raw pointer                                                    |
-| `[T; N]`           | `[N x T]`                     | Fixed-length array                                             |
-| `List(T)`          | `{ T*, i64, i64 }`            | Data pointer + length + capacity                               |
-| Struct             | Corresponding LLVM struct     | Fields laid out in definition order                            |
-| Discriminated enum | `{ i64, [max_payload_size] }` | Tag + union of max payload                                     |
-| `?T`               | `{ i1, T }`                   | Has-value flag + data (general representation)                 |
-| FFI opaque type    | `{ i8* }`                     | Wraps a C pointer                                              |
-| Function pointer   | `T (...)*`                    | Function pointer type                                          |
+| YaoXiang Type    | LLVM IR Type                  | Description                                                    |
+| ---------------- | ----------------------------- | -------------------------------------------------------------- |
+| `Int`            | `i64`                         | Default 64-bit signed integer                                  |
+| `Int32`          | `i32`                         | Explicit 32-bit integer (mainly for FFI)                       |
+| `Float`          | `f64`                         | Default 64-bit float                                           |
+| `Float32`        | `f32`                         | Explicit 32-bit float (mainly for FFI)                         |
+| `Bool`           | `i1`                          | Boolean value                                                  |
+| `Char`           | `i32`                         | Unicode code point                                             |
+| `String`         | `{ i8*, i64 }`                | Pointer + byte length                                          |
+| `Void`           | `{}`                          | Zero-sized empty type                                          |
+| `&T`             | —                             | Zero-sized token, eliminated after compilation, produces no IR |
+| `&mut T`         | —                             | Zero-sized token, eliminated after compilation, produces no IR |
+| `ref T`          | `{ i64*, T* }`                | Fat pointer (reference count pointer + data pointer)           |
+| `*T`             | `T*`                          | Raw pointer                                                    |
+| `[T; N]`         | `[N x T]`                     | Fixed-length array                                             |
+| `List(T)`        | `{ T*, i64, i64 }`            | Data pointer + length + capacity                               |
+| Struct           | Corresponding LLVM struct     | Fields laid out in definition order                            |
+| Record enum      | `{ i64, [max_payload_size] }` | Tag + union of max payload size                                |
+| `?T`             | `{ i1, T }`                   | Has-value tag + data (generic representation)                  |
+| FFI opaque type  | `{ i8* }`                     | Wraps C pointer                                                |
+| Function pointer | `T (...)*`                    | Function pointer type                                          |
 
-> **`&T` / `&mut T` Zero Runtime Overhead**: [RFC-009](009-ownership-model.md) §2.7
-> defines that the compiler internally assigns brand identifiers (compile-time unique integers) to
-> tokens. After monomorphization and inlining, the brands completely disappear — no token traces
-> exist in the generated machine code.
+> **`&T` / `&mut T` Zero Runtime Overhead**: [RFC-009](009-ownership-model.md) §2.7 defines that the
+> compiler internally assigns a brand identifier (compile-time unique integer) to tokens; after
+> monomorphization and inlining, the brand completely disappears—no token traces exist in the
+> generated machine code.
 
 #### 3.2 FFI Parameter Type Mapping
 
-Aligned with [RFC-026](026-ffi-core-mechanism.md) §2.2, with an added LLVM IR column:
+Aligned with [RFC-026](026-ffi-core-mechanism.md) §2.2, with an additional LLVM IR column:
 
-| C Type               | YaoXiang Type     | LLVM IR        | Notes                                       |
-| -------------------- | ----------------- | -------------- | ------------------------------------------- |
-| `int`                | `Int32`           | `i32`          |                                             |
-| `long`               | `Int64`           | `i64`          |                                             |
-| `float`              | `Float32`         | `f32`          |                                             |
-| `double`             | `Float64`         | `f64`          |                                             |
-| `char`               | `Char`            | `i32`          | C char → YaoXiang Char (Unicode compatible) |
-| `char*`              | `String`          | `{ i8*, i64 }` | marshalling: C string → YaoXiang String     |
-| `bool`               | `Bool`            | `i1`           |                                             |
-| `size_t`             | `Uint`            | `i64`          |                                             |
-| `void*`              | `*Void`           | `i8*`          |                                             |
-| `struct T*`          | `T` (transparent) | `T*`           | Pass pointer                                |
-| `typedef struct T T` | `T` (opaque)      | `{ i8* }`      | Wrap C pointer                              |
+| C Type               | YaoXiang Type          | LLVM IR        | Description                                 |
+| -------------------- | ---------------------- | -------------- | ------------------------------------------- |
+| `int`                | `Int32`                | `i32`          |                                             |
+| `long`               | `Int64`                | `i64`          |                                             |
+| `float`              | `Float32`              | `f32`          |                                             |
+| `double`             | `Float64`              | `f64`          |                                             |
+| `char`               | `Char`                 | `i32`          | C char → YaoXiang Char (Unicode compatible) |
+| `char*`              | `String`               | `{ i8*, i64 }` | marshalling: C string → YaoXiang String     |
+| `bool`               | `Bool`                 | `i1`           |                                             |
+| `size_t`             | `Uint`                 | `i64`          |                                             |
+| `void*`              | `*Void`                | `i8*`          |                                             |
+| `struct T*`          | `T` (transparent type) | `T*`           | Pass pointer                                |
+| `typedef struct T T` | `T` (opaque type)      | `{ i8* }`      | Wraps C pointer                             |
 
 ### 4. IR Normalization and Instruction Translation
 
 #### 4.0 IR Normalization (Stack → Registers)
 
-The current IR (`src/middle/core/ir.rs`) includes stack-manipulation instructions
+The current IR (`src/middle/core/ir.rs`) contains stack manipulation instructions
 (`Push`/`Pop`/`Dup`/`Swap`), which are designed for the bytecode VM. LLVM IR is in SSA form and does
 not accept stack operations.
 
-**Handling Strategy**: The LLVM path first goes through a lightweight normalization pass before
+**Handling Strategy**: The LLVM path first passes through a lightweight normalization pass before
 instruction translation:
 
-| Stack Instruction | Normalization Strategy                              |
-| ----------------- | --------------------------------------------------- |
-| `Push(r)`         | Record `stack.push(r)`, produce no IR               |
-| `Pop(r)`          | `r = stack.pop()`, produce `load` (from stack slot) |
-| `Dup`             | `stack.push(stack.top())`, produce no IR            |
-| `Swap`            | Swap top two stack elements, produce no IR          |
+| Stack Instruction | Normalization Strategy                               |
+| ----------------- | ---------------------------------------------------- |
+| `Push(r)`         | Record `stack.push(r)`, produces no IR               |
+| `Pop(r)`          | `r = stack.pop()`, produces `load` (from stack slot) |
+| `Dup`             | `stack.push(stack.top())`, produces no IR            |
+| `Swap`            | Swap top two stack elements, produces no IR          |
 
-After normalization, all operands become references to registers or local variables, and stack
-operations are completely eliminated. This pass runs as the first step of `translator.rs`.
+After normalization, all operands become register/local variable references, and stack operations
+are completely eliminated. This pass is executed as the first step of `translator.rs`.
 
 > **Why not eliminate stack instructions at the IR level?** Because the VM backend needs stack
-> semantics. Normalizing at the LLVM translation entry point keeps the IR shared between the two
-> backends — each backend consumes the same IR according to its own needs.
+> semantics. Normalizing at the entry of LLVM translation keeps the IR shared between the two
+> backends—each backend consumes the same IR according to its own needs.
 >
-> **Prerequisite**: The IR generation phase guarantees stack balance — at any program point, all
-> control flow paths reach the same stack depth (the VM bytecode backend depends on this same
-> prerequisite, otherwise bytecode execution will fail). The normalization pass does not verify this
-> prerequisite; violating it results in undefined behavior in the LLVM backend.
+> **Prerequisite**: The IR generation phase guarantees stack balance—all control flow paths have the
+> same stack depth when they reach the same program point (the VM bytecode backend depends on the
+> same prerequisite, otherwise bytecode execution will fail). The normalization pass does not check
+> this prerequisite; violations will cause the LLVM backend to produce undefined behavior.
 
 #### 4.1 Instruction Translation Table
 
-The LLVM IR translation strategy for each variant of the `Instruction` enum is listed below.
-Instruction names are identical to those in `src/middle/core/ir.rs`.
+The following lists the LLVM IR translation strategy for each variant in the `Instruction` enum.
+Instruction names are exactly the same as in `src/middle/core/ir.rs`.
 
 **Arithmetic Instructions**:
 
-| IR Instruction          | LLVM IR                                 | Notes                          |
-| ----------------------- | --------------------------------------- | ------------------------------ |
-| `Add { dst, lhs, rhs }` | `add` (integer) / `fadd` (float)        | Integer or float add by type   |
-| `Sub { dst, lhs, rhs }` | `sub` / `fsub`                          |                                |
-| `Mul { dst, lhs, rhs }` | `mul` / `fmul`                          |                                |
-| `Div { dst, lhs, rhs }` | `sdiv` / `udiv` / `fdiv`                | Signed/unsigned/float division |
-| `Mod { dst, lhs, rhs }` | `srem` / `urem`                         | Signed/unsigned remainder      |
-| `Neg { dst, src }`      | `sub 0, src` (integer) / `fneg` (float) |                                |
+| IR Instruction          | LLVM IR                                 | Description                              |
+| ----------------------- | --------------------------------------- | ---------------------------------------- |
+| `Add { dst, lhs, rhs }` | `add` (integer) / `fadd` (float)        | Choose integer or float addition by type |
+| `Sub { dst, lhs, rhs }` | `sub` / `fsub`                          |                                          |
+| `Mul { dst, lhs, rhs }` | `mul` / `fmul`                          |                                          |
+| `Div { dst, lhs, rhs }` | `sdiv` / `udiv` / `fdiv`                | Signed/unsigned/float division           |
+| `Mod { dst, lhs, rhs }` | `srem` / `urem`                         | Signed/unsigned remainder                |
+| `Neg { dst, src }`      | `sub 0, src` (integer) / `fneg` (float) |                                          |
 
-> **`Mod` row revision notice (noted 2026-09-22, along with RFC-011b)**: `srem` / `urem` are
-> **truncated remainders** (sign follows dividend); "remainder" in the description column of this
-> row is a term mix-up. [RFC-011b](011b-operator-overloading.md) has confirmed that the
-> established semantics of `%` is **mathematical modulo** (result sign follows divisor; the language
-> reference priority table "multiply/divide/modulo" is the first evidence). After that semantics is
-> landed, the mapping in this row needs to change to `srem` + sign correction sequence (or
-> `sdiv`+`mul`+`sub` synthesis); the implementation side (interpreter `checked_rem`, constant
-> folding, bytecode `I64_REM`) should be updated accordingly.
+> **Preview of Revision for `Mod` Row (note dated 2026-09-22, with RFC-011b)**: `srem` / `urem`
+> produce a **truncated remainder** (sign follows the dividend), and the term "modulus" in the
+> description column is a mix-up of terminology. [RFC-011b](011b-operator-overloading.md) has
+> confirmed that the established semantics of `%` is **mathematical modulus** (result sign follows
+> the divisor, with the language reference priority table "multiplication-division-modulus" having
+> the highest priority). After this semantics is implemented, the mapping in this row needs to be
+> changed to `srem` + sign correction sequence (or `sdiv`+`mul`+`sub` composition), with the
+> implementation side (interpreter `checked_rem`, constant folding, bytecode `I64_REM`) modified in
+> sync.
 
 **Bitwise Instructions**:
 
-| IR Instruction          | LLVM IR | Notes                  |
+| IR Instruction          | LLVM IR | Description            |
 | ----------------------- | ------- | ---------------------- |
 | `And { dst, lhs, rhs }` | `and`   |                        |
 | `Or { dst, lhs, rhs }`  | `or`    |                        |
@@ -266,48 +268,48 @@ Instruction names are identical to those in `src/middle/core/ir.rs`.
 
 **Comparison Instructions**:
 
-| IR Instruction         | LLVM IR                 | Notes |
-| ---------------------- | ----------------------- | ----- |
-| `Eq { dst, lhs, rhs }` | `icmp eq` / `fcmp oeq`  |       |
-| `Ne { dst, lhs, rhs }` | `icmp ne` / `fcmp one`  |       |
-| `Lt { dst, lhs, rhs }` | `icmp slt` / `fcmp olt` |       |
-| `Le { dst, lhs, rhs }` | `icmp sle` / `fcmp ole` |       |
-| `Gt { dst, lhs, rhs }` | `icmp sgt` / `fcmp ogt` |       |
-| `Ge { dst, lhs, rhs }` | `icmp sge` / `fcmp oge` |       |
+| IR Instruction         | LLVM IR                 | Description |
+| ---------------------- | ----------------------- | ----------- |
+| `Eq { dst, lhs, rhs }` | `icmp eq` / `fcmp oeq`  |             |
+| `Ne { dst, lhs, rhs }` | `icmp ne` / `fcmp one`  |             |
+| `Lt { dst, lhs, rhs }` | `icmp slt` / `fcmp olt` |             |
+| `Le { dst, lhs, rhs }` | `icmp sle` / `fcmp ole` |             |
+| `Gt { dst, lhs, rhs }` | `icmp sgt` / `fcmp ogt` |             |
+| `Ge { dst, lhs, rhs }` | `icmp sge` / `fcmp oge` |             |
 
 **Control Flow Instructions**:
 
-| IR Instruction          | LLVM IR                                     | Notes                |
+| IR Instruction          | LLVM IR                                     | Description          |
 | ----------------------- | ------------------------------------------- | -------------------- |
 | `Jmp(label)`            | `br label %L`                               | Unconditional jump   |
 | `JmpIf(cond, label)`    | `br i1 %cond, label %L, label %fallthrough` | Conditional jump     |
-| `JmpIfNot(cond, label)` | `br i1 %cond, label %fallthrough, label %L` | Conditional not-jump |
-| `Ret(Some(v))`          | `ret T %v`                                  | With return value    |
-| `Ret(None)`             | `ret void`                                  | No return value      |
+| `JmpIfNot(cond, label)` | `br i1 %cond, label %fallthrough, label %L` | Conditional non-jump |
+| `Ret(Some(v))`          | `ret T %v`                                  | Return with value    |
+| `Ret(None)`             | `ret void`                                  | Return without value |
 
 **Call Instructions**:
 
-| IR Instruction                             | LLVM IR                                | Notes                                   |
-| ------------------------------------------ | -------------------------------------- | --------------------------------------- |
-| `Call { dst, func, args }`                 | `%r = call T @func(...)`               | Static call                             |
-| `CallVirt { dst, obj, method_name, args }` | vtable GEP + `call` (function pointer) | Virtual call, looked up via vtable      |
-| `CallDyn { dst, func, args }`              | `%r = call T %func(...)`               | Dynamic call (closure/function pointer) |
-| `TailCall { func, args }`                  | `musttail call` / `tail call`          | Tail call optimization                  |
+| IR Instruction                             | LLVM IR                                | Description                                |
+| ------------------------------------------ | -------------------------------------- | ------------------------------------------ |
+| `Call { dst, func, args }`                 | `%r = call T @func(...)`               | Static call                                |
+| `CallVirt { dst, obj, method_name, args }` | vtable GEP + `call` (function pointer) | Virtual method call, lookup through vtable |
+| `CallDyn { dst, func, args }`              | `%r = call T %func(...)`               | Dynamic call (closure/function pointer)    |
+| `TailCall { func, args }`                  | `musttail call` / `tail call`          | Tail call optimization                     |
 
 **Memory Instructions**:
 
-| IR Instruction                        | LLVM IR                                                    | Notes                                                                           |
-| ------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `Move { dst, src }`                   | —                                                          | After normalization, becomes register copy; SSA construction can eliminate most |
-| `Load { dst, src }`                   | `%v = load T, T* %src`                                     |                                                                                 |
-| `Store { dst, src }`                  | `store T %src, T* %dst`                                    |                                                                                 |
-| `Alloc { dst, size }`                 | `%p = alloca T` (stack) / `call @malloc` (escapes to heap) | Escape analysis decides allocation location                                     |
-| `Free(ptr)`                           | `call @free(%ptr)` (heap) / — (stack, auto-reclaimed)      |                                                                                 |
-| `AllocArray { dst, size, elem_size }` | `%p = alloca [N x T]` (stack) / `call @malloc` (heap)      |                                                                                 |
+| IR Instruction                        | LLVM IR                                                 | Description                                                                    |
+| ------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `Move { dst, src }`                   | —                                                       | After normalization becomes register copy, most eliminated by SSA construction |
+| `Load { dst, src }`                   | `%v = load T, T* %src`                                  |                                                                                |
+| `Store { dst, src }`                  | `store T %src, T* %dst`                                 |                                                                                |
+| `Alloc { dst, size }`                 | `%p = alloca T` (stack) / `call @malloc` (heap-escaped) | Escape analysis determines allocation location                                 |
+| `Free(ptr)`                           | `call @free(%ptr)` (heap) / — (stack, auto-reclaimed)   |                                                                                |
+| `AllocArray { dst, size, elem_size }` | `%p = alloca [N x T]` (stack) / `call @malloc` (heap)   |                                                                                |
 
 **Struct/Array Access Instructions**:
 
-| IR Instruction                            | LLVM IR                                                | Notes                                |
+| IR Instruction                            | LLVM IR                                                | Description                          |
 | ----------------------------------------- | ------------------------------------------------------ | ------------------------------------ |
 | `LoadField { dst, src, field }`           | `%ptr = getelementptr T, T* %src, 0, field` + `load`   |                                      |
 | `StoreField { dst, field, src }`          | `%ptr = getelementptr T, T* %dst, 0, field` + `store`  |                                      |
@@ -317,34 +319,34 @@ Instruction names are identical to those in `src/middle/core/ir.rs`.
 
 **Type Conversion Instructions**:
 
-| IR Instruction                   | LLVM IR                                                                                                     | Notes                                                           |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `Cast { dst, src, target_type }` | `bitcast` / `trunc` / `zext` / `sext` / `fptrunc` / `fpext` / `sitofp` / `fptosi` / `inttoptr` / `ptrtoint` | Choose appropriate cast based on source/target type combination |
-| `TypeTest(val, type)`            | —                                                                                                           | Compile-time type test, generates `icmp eq` comparing type tags |
+| IR Instruction                   | LLVM IR                                                                                                     | Description                                                                     |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `Cast { dst, src, target_type }` | `bitcast` / `trunc` / `zext` / `sext` / `fptrunc` / `fpext` / `sitofp` / `fptosi` / `inttoptr` / `ptrtoint` | Choose the appropriate cast instruction based on source/target type combination |
+| `TypeTest(val, type)`            | —                                                                                                           | Compile-time type test, generates `icmp eq` to compare type tag                 |
 
-**Ownership and Borrow Instructions**:
+**Ownership and Borrowing Instructions**:
 
-| IR Instruction                 | LLVM IR                                              | Notes                                                                         |
+| IR Instruction                 | LLVM IR                                              | Description                                                                   |
 | ------------------------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `Borrow { dst, src, mutable }` | —                                                    | **Zero-sized token, completely disappears after compilation**, produces no IR |
 | `Release(val)`                 | —                                                    | **Zero-sized token, completely disappears after compilation**                 |
 | `Move { dst, src }`            | —                                                    | Ownership transfer, becomes register copy after normalization                 |
-| `Drop(val)`                    | `call void @T.drop(T* %val)`                         | Call type's destructor (see §7)                                               |
-| `ShareRef { dst, src }`        | `call %T* @Arc_new(%src)` / `call %T* @Rc_new(%src)` | Compiler auto-selects Arc/Rc based on cross-thread usage                      |
-| `ArcNew { dst, src }`          | `call %T* @Arc_new(%src)`                            | Atomic refcount = 1                                                           |
-| `ArcClone { dst, src }`        | `call %T* @Arc_clone(%src)`                          | Atomically increment refcount                                                 |
-| `ArcDrop(val)`                 | `call void @Arc_drop(%val)`                          | Atomically decrement + conditional release                                    |
+| `Drop(val)`                    | `call void @T.drop(T* %val)`                         | Call the type's destructor (see §7)                                           |
+| `ShareRef { dst, src }`        | `call %T* @Arc_new(%src)` / `call %T* @Rc_new(%src)` | Compiler automatically chooses Arc/Rc based on whether it crosses threads     |
+| `ArcNew { dst, src }`          | `call %T* @Arc_new(%src)`                            | Atomic reference count = 1                                                    |
+| `ArcClone { dst, src }`        | `call %T* @Arc_clone(%src)`                          | Atomic increment reference count                                              |
+| `ArcDrop(val)`                 | `call void @Arc_drop(%val)`                          | Atomic decrement + conditional release                                        |
 
 **Concurrency Instructions**:
 
-| IR Instruction                     | LLVM IR                           | Notes                                                                   |
-| ---------------------------------- | --------------------------------- | ----------------------------------------------------------------------- |
-| `Spawn { closures, plan, result }` | Expand to scheduler call sequence | See §5, runtime `task_spawn` + `task_wait_all`                          |
-| `Yield`                            | —                                 | AOT path uses synchronous wait in spawn block, no yield needed; ignored |
+| IR Instruction                     | LLVM IR                                    | Description                                                             |
+| ---------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
+| `Spawn { closures, plan, result }` | Expands into a sequence of scheduler calls | See §5, runtime `task_spawn` + `task_wait_all`                          |
+| `Yield`                            | —                                          | AOT path has synchronous wait in spawn blocks, no yield needed; ignored |
 
-**Unsafe Block and Raw Pointer Instructions**:
+**unsafe Block and Raw Pointer Instructions**:
 
-| IR Instruction            | LLVM IR                                                   | Notes                                   |
+| IR Instruction            | LLVM IR                                                   | Description                             |
 | ------------------------- | --------------------------------------------------------- | --------------------------------------- |
 | `UnsafeBlockStart`        | —                                                         | **Compile-time marker, produces no IR** |
 | `UnsafeBlockEnd`          | —                                                         | **Compile-time marker, produces no IR** |
@@ -355,76 +357,76 @@ Instruction names are identical to those in `src/middle/core/ir.rs`.
 
 **String Instructions**:
 
-| IR Instruction                      | LLVM IR                                     | Notes                                       |
-| ----------------------------------- | ------------------------------------------- | ------------------------------------------- |
-| `StringLength { dst, src }`         | `%len = extractvalue { i8*, i64 } %src, 1`  | String is `{ ptr, len }`, length is field 1 |
-| `StringConcat { dst, lhs, rhs }`    | `call String @yx_string_concat(%lhs, %rhs)` | Runtime helper function                     |
-| `StringGetChar { dst, src, index }` | `getelementptr` + `load i32`                | Includes bounds checking                    |
-| `StringFromInt { dst, src }`        | `call String @yx_string_from_int(%src)`     | Runtime helper function                     |
-| `StringFromFloat { dst, src }`      | `call String @yx_string_from_f64(%src)`     | Runtime helper function                     |
+| IR Instruction                      | LLVM IR                                     | Description                                    |
+| ----------------------------------- | ------------------------------------------- | ---------------------------------------------- |
+| `StringLength { dst, src }`         | `%len = extractvalue { i8*, i64 } %src, 1`  | String is `{ ptr, len }`, length is in field 1 |
+| `StringConcat { dst, lhs, rhs }`    | `call String @yx_string_concat(%lhs, %rhs)` | Runtime helper function                        |
+| `StringGetChar { dst, src, index }` | `getelementptr` + `load i32`                | Includes bounds checking                       |
+| `StringFromInt { dst, src }`        | `call String @yx_string_from_int(%src)`     | Runtime helper function                        |
+| `StringFromFloat { dst, src }`      | `call String @yx_string_from_f64(%src)`     | Runtime helper function                        |
 
 **Closure Instructions**:
 
-| IR Instruction                           | LLVM IR                                                                              | Notes                         |
-| ---------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------- |
-| `MakeClosure { dst, func: String, env }` | Allocate closure struct + fill function pointer (looked up by function name) and env | `{ fn_ptr, env_fields... }`   |
-| `LoadUpvalue { dst, upvalue_idx }`       | `%v = extractvalue %env, upvalue_idx`                                                | Read upvalue from closure env |
-| `StoreUpvalue { src, upvalue_idx }`      | `%env = insertvalue %env, %src, upvalue_idx`                                         | Write upvalue to closure env  |
-| `CloseUpvalue(val)`                      | Copy stack upvalue to heap                                                           |                               |
+| IR Instruction                           | LLVM IR                                                                                          | Description                           |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| `MakeClosure { dst, func: String, env }` | Allocate closure struct + populate function pointer (looked up by function name) and environment | `{ fn_ptr, env_fields... }`           |
+| `LoadUpvalue { dst, upvalue_idx }`       | `%v = extractvalue %env, upvalue_idx`                                                            | Read upvalue from closure environment |
+| `StoreUpvalue { src, upvalue_idx }`      | `%env = insertvalue %env, %src, upvalue_idx`                                                     | Write upvalue to closure environment  |
+| `CloseUpvalue(val)`                      | Copy stack upvalue to heap                                                                       |                                       |
 
 **Other Instructions**:
 
-| IR Instruction                  | LLVM IR                                       | Notes                       |
-| ------------------------------- | --------------------------------------------- | --------------------------- |
-| `HeapAlloc { dst, type_id }`    | `call i8* @malloc(i64 size)` + write type tag | Heap allocation + type info |
-| `NewDict { dst, keys, values }` | `call Dict @yx_dict_new(%keys, %values)`      | Runtime helper function     |
+| IR Instruction                  | LLVM IR                                       | Description                        |
+| ------------------------------- | --------------------------------------------- | ---------------------------------- |
+| `HeapAlloc { dst, type_id }`    | `call i8* @malloc(i64 size)` + type tag write | Heap allocation + type information |
+| `NewDict { dst, keys, values }` | `call Dict @yx_dict_new(%keys, %values)`      | Runtime helper function            |
 
-> **Note**: `Push`/`Pop`/`Dup`/`Swap` have already been eliminated during the §4.0 normalization
-> phase and do not appear in the translation table. `Borrow`/`Release` are zero-sized compile-time
-> tokens and produce no machine code.
+> **Note**: `Push`/`Pop`/`Dup`/`Swap` have been eliminated in the §4.0 normalization phase and do
+> not appear in the translation table. `Borrow`/`Release` are zero-sized compile-time tokens and
+> produce no machine code.
 
 ### 5. spawn Block Code Generation
 
-Aligned with [RFC-024](024-concurrency-model.md), the compilation of a spawn block
-proceeds in the following steps.
+Aligned with [RFC-024](024-concurrency-model.md), compilation of spawn blocks is divided into the
+following steps.
 
-#### 5.1 Semantics Review
+#### 5.1 Semantic Review
 
 ```yaoxiang
 (r1, r2) = spawn {
-    t1 = fetch("url1"),   // Direct subexpression → task 1
-    t2 = fetch("url2"),   // Direct subexpression → task 2
+    t1 = fetch("url1"),   // Direct sub-expression → task 1
+    t2 = fetch("url2"),   // Direct sub-expression → task 2
     return (t1, t2)       // Synchronous wait, assemble result
 }
 ```
 
 **Rules** (RFC-024 §2.1):
 
-- **Direct subexpressions** (top-level comma-separated statements) of the spawn block create
+- The **direct sub-expressions** of a spawn block (top-level comma-separated statements) create
   parallel tasks
-- Expressions inside nested `{}` are not direct subexpressions and do not become independent tasks
+- Expressions inside nested `{}` are not direct sub-expressions and do not become independent tasks
 - The entire spawn block synchronously blocks, waiting for all tasks to complete before returning
 
 #### 5.2 Compilation Steps
 
 ```
-Step 1: Identify direct subexpressions
-  Walk the spawn block body, collect top-level statements
+Step 1: Identify direct sub-expressions
+  Traverse spawn block body, collect top-level statements
 
 Step 2: Dependency analysis
-  For each direct subexpression, analyze which variables produced by previous tasks it references
-  No dependency → can be dispatched in parallel immediately
-  Has dependency → queue to wait for the dependent task to complete
+  For each direct sub-expression, analyze which variables produced by previous tasks it references
+  No dependency → can be scheduled in parallel immediately
+  Has dependency → queued waiting for dependency task to complete
 
 Step 3: Resource conflict detection (RFC-024 §2.5)
   Check whether the same resource type instance is used by multiple tasks
-  Same-instance conflict → mark for serial execution order
+  Same instance conflict → mark serial execution order
 
 Step 4: Generate task functions
-  Each direct subexpression generates a separate LLVM function (closure)
+  Each direct sub-expression generates an independent LLVM function (closure)
 
 Step 5: Generate dispatch code
-  Call runtime scheduler's task_spawn / task_wait
+  Call the runtime scheduler's task_spawn / task_wait
 
 Step 6: Result assembly
   Collect outputs from all tasks, assemble the return tuple
@@ -448,13 +450,13 @@ call @runtime_task_spawn(%tasks[1], %task2_fn, ...)
 ; Synchronously wait for all tasks
 call @runtime_task_wait_all(%tasks, %task_count)
 
-; Assemble return values
+; Assemble return value
 %r1 = call @runtime_task_result(%tasks[0])
 %r2 = call @runtime_task_result(%tasks[1])
 ret { %r1, %r2 }
 ```
 
-#### 5.4 Dependent Tasks
+#### 5.4 Dependency Tasks
 
 ```yaoxiang
 result = spawn {
@@ -465,19 +467,19 @@ result = spawn {
 ```
 
 The compiler detects that `parse(data)` references `data` produced by task 1, and marks the
-dependency when generating the dispatch code:
+dependency when generating dispatch code:
 
 ```llvm
 ; Task 2 is created with a dependency on task 1
 call @runtime_task_spawn_with_dep(%tasks[1], %task2_fn, %tasks[0])
 ;                                                              ↑
-;                                                 Dependent on task 0 (fetch) completing
+;                                                 Depends on task 0 (fetch) completing
 ```
 
-#### 5.5 Automatic Serialization on Resource Types
+#### 5.5 Resource Type Automatic Serialization
 
-The resource types ([RFC-024 §2.5](024-concurrency-model.md)) (`FilePath`, `HttpUrl`,
-`DBUrl`, `Console`, and user-defined resource types) are automatically serialized in spawn blocks:
+[RFC-024 §2.5](024-concurrency-model.md) Resource types (`FilePath`, `HttpUrl`, `DBUrl`, `Console`,
+and user-defined resource types) defined in are automatically serialized in spawn blocks:
 
 ```yaoxiang
 (a, b) = spawn {
@@ -486,11 +488,11 @@ The resource types ([RFC-024 §2.5](024-concurrency-model.md)) (`FilePath`, `Htt
 }
 ```
 
-The compiler detects that the same resource instance is used by two tasks and generates a serial
+The compiler detects that the same resource instance is used by two tasks, and generates a serial
 dependency:
 
 ```llvm
-; Task 2 depends on task 1 (same resource auto-serialized)
+; Task 2 depends on task 1 (same resource automatically serialized)
 call @runtime_task_spawn_with_dep(%tasks[1], %task2_fn, %tasks[0])
 ```
 
@@ -502,24 +504,23 @@ results = spawn for item in items {
 }
 ```
 
-The compiler expands this into N independent tasks (N = length of items), limited by the maximum
+The compiler expands into N independent tasks (N = items length), limited by the maximum
 concurrency.
 
 ### 6. FFI Code Generation
 
-> ⚠️ **Dependency Note**: The **architecture** of the FFI code generation defined in this section
-> (`native("x")` → `declare external @x` → marshalling wrapper function → call) is stable and does
+> ⚠️ **Dependency Note**: The FFI code generation **architecture** defined in this section
+> (`native("x")` → `declare external @x` → marshalling wrapper function → call) is stable and will
 > not change with RFC-026 syntax changes. The specific parameter marshalling rule table (§6.2) and
-> opaque type layout (§6.3) reference the definitions in RFC-026 — if the `native()` syntax or
-> marshalling rules in RFC-026 change, only the corresponding mapping tables in this document need
-> to be updated; the architecture layer is unaffected. RFC-026 current status: **Under Review**,
-> located alongside this document in the `review/` directory.
+> opaque type layout (§6.3) reference RFC-026's definition—if RFC-026's `native()` syntax or
+> marshalling rules change, only the corresponding mapping table in this document needs to be
+> updated; the architecture layer is unaffected. RFC-026's current status: **Under Review**, located
+> in the same `review/` directory as this document.
 >
-> **Acceptance Prerequisite**: Before this RFC is accepted, the portions of RFC-026 that relate to
-> §6 of this document (the `native()` declaration syntax, parameter marshalling rules, opaque type
-> `{ i8* }` layout, `.drop` binding convention) should be frozen first or accepted together with
-> RFC-026. Otherwise the mapping tables in §6.2/§6.3/§7 may become outdated before implementation
-> begins.
+> **Pre-acceptance Conditions**: Before this RFC is accepted, the parts of RFC-026 related to §6 in
+> this document (`native()` declaration syntax, parameter marshalling rules, opaque type `{ i8* }`
+> layout, `.drop` binding conventions) should be frozen first or accepted together with 026.
+> Otherwise, the mapping tables in §6.2/§6.3/§7 may become obsolete before implementation.
 
 Aligned with [RFC-026](026-ffi-core-mechanism.md), this section defines the LLVM IR generation
 strategy for FFI calls.
@@ -530,7 +531,7 @@ strategy for FFI calls.
 sqlite3_open: (filename: String) -> SqliteDb = native("sqlite3_open")
 ```
 
-Compiles to LLVM IR:
+Compiled to LLVM IR:
 
 ```llvm
 ; Declare external C function
@@ -551,22 +552,22 @@ define { i8* } @__yx_sqlite3_open({ i8*, i64 } %filename) {
 **Key Points**:
 
 - `native("sqlite3_open")` → `declare external @sqlite3_open`
-- The compiler automatically generates the marshalling wrapper function
-- The wrapper function's signature uses YaoXiang types, internally converting to C types
+- Compiler automatically generates marshalling wrapper function
+- Wrapper function signature uses YaoXiang types, internally converts to C types
 
 #### 6.2 Parameter Marshalling
 
-| Direction                                  | Conversion                              |
-| ------------------------------------------ | --------------------------------------- |
-| YaoXiang `String` → C `char*`              | Extract `.ptr` field to pass            |
-| YaoXiang `Int32` → C `int`                 | Direct pass (`i32`)                     |
-| YaoXiang `*Void` → C `void*`               | Direct pass (`i8*`)                     |
-| YaoXiang `T` (transparent) → C `struct T*` | Pass address                            |
-| YaoXiang `T` (opaque) → C `struct T*`      | Extract pointer from `{ i8* }` and pass |
+| Direction                                       | Conversion                             |
+| ----------------------------------------------- | -------------------------------------- |
+| YaoXiang `String` → C `char*`                   | Extract `.ptr` field to pass           |
+| YaoXiang `Int32` → C `int`                      | Direct pass (`i32`)                    |
+| YaoXiang `*Void` → C `void*`                    | Direct pass (`i8*`)                    |
+| YaoXiang `T` (transparent type) → C `struct T*` | Pass by address                        |
+| YaoXiang `T` (opaque type) → C `struct T*`      | Extract pointer from `{ i8* }` to pass |
 
-#### 6.3 LLVM Layout of Opaque Types
+#### 6.3 Opaque Type LLVM Layout
 
-The opaque type defined in [RFC-026](026-ffi-core-mechanism.md) §4.1:
+Opaque types defined in [RFC-026](026-ffi-core-mechanism.md) §4.1:
 
 ```yaoxiang
 SqliteDb = unsafe {
@@ -579,20 +580,20 @@ SqliteDb = unsafe {
 
 LLVM layout: `{ i8* }` — a struct containing a C pointer.
 
-**Layout Optimization**: When an opaque type has only a single `handle: *Void` field, it can be
-optimized to directly use `i8*` (omitting the outer struct). The optimized ABI is exactly identical
-to a C pointer, with zero marshalling overhead. This optimization is enabled by default and is
-transparent to the user.
+**Layout Optimization**: When the opaque type has only one `handle: *Void` field, it can be
+optimized to directly use `i8*` (omitting the outer struct). The optimized ABI is completely
+consistent with the C pointer, with zero marshalling overhead. This optimization is enabled by
+default in the compiler, and is transparent to the user.
 
 #### 6.4 LLVM Representation of ?T Nullable Return Values
 
-The FFI nullable return value defined in [RFC-026](026-ffi-core-mechanism.md) §7.6:
+FFI nullable return values defined in [RFC-026](026-ffi-core-mechanism.md) §7.6:
 
 ```yaoxiang
 sqlite3_open: (filename: String) -> ?SqliteDb = native("sqlite3_open")
 ```
 
-General LLVM representation: `{ i1, { i8* } }` — has-value flag + data.
+Generic LLVM representation: `{ i1, { i8* } }` — has-value tag + data.
 
 **Optimization for FFI null pointer**: If `T` in `?T` is an opaque type (internally a pointer), the
 compiler uses the **null pointer = None** optimization:
@@ -601,12 +602,12 @@ compiler uses the **null pointer = None** optimization:
 ; Optimized LLVM representation: directly use a nullable pointer
 define i8* @__yx_sqlite3_open(...) {
     %raw = call i8* @sqlite3_open(...)
-    ; null → None, non-null → Some (wrapped as opaque type)
+    ; null → None, non-null → Some(wrap as opaque type)
     ret i8* %raw
 }
 ```
 
-Caller:
+Caller side:
 
 ```llvm
 %raw = call i8* @__yx_sqlite3_open(...)
@@ -614,28 +615,28 @@ Caller:
 br i1 %is_null, label %none_branch, label %some_branch
 ```
 
-This optimization makes FFI calls of `?SqliteDb` **zero extra overhead** — completely equivalent to
-C's null check.
+This optimization makes FFI calls to `?SqliteDb` have **zero extra overhead**—completely equivalent
+to C's null check.
 
 #### 6.5 yx-bindgen Integration
 
-The auto-generated binding file from [yx-bindgen](026-ffi-core-mechanism.md) §6 is treated as
-regular YaoXiang source code at compile time. The compiler does not need to know the code comes from
-bindgen — the handling of `native()` declarations and `unsafe {}` type definitions is completely
-uniform.
+The binding file automatically generated by [yx-bindgen](026-ffi-core-mechanism.md) §6 is treated as
+ordinary YaoXiang source code during compilation. The compiler does not need to know that the code
+comes from bindgen—`native()` declarations and `unsafe {}` type definitions are handled exactly the
+same way.
 
 ### 7. Destructor Code Generation
 
-Aligned with the RAII semantics of [RFC-009](009-ownership-model.md) and the `.drop`
-convention from [RFC-026](026-ffi-core-mechanism.md) §7.
+Aligned with [RFC-009](009-ownership-model.md)'s RAII semantics and
+[RFC-026](026-ffi-core-mechanism.md) §7's `.drop` convention.
 
-#### 7.1 .drop Binding Recognition
+#### 7.1 .drop Binding Identification
 
 ```yaoxiang
 SqliteDb.drop = sqlite3_close[0]
 ```
 
-The compiler recognizes the `.drop` binding and marks the destructor function pointer in the type
+The compiler identifies the `.drop` binding and marks the destructor function pointer in the type
 metadata.
 
 #### 7.2 Cleanup Insertion at Scope End
@@ -646,12 +647,12 @@ User code:
     db = SqliteDb.open("test.db")
     stmt = db.prepare("SELECT ...")
     stmt.step()
-    // ← Scope end
+    // ← Scope ends
 }
 
-Cleanup inserted by the compiler (in reverse order):
+Cleanup inserted by compiler (reverse order):
     call @sqlite3_finalize(%stmt)    // stmt.drop()
-    call @sqlite3_close(%db)         // db.drop()
+    call @sqlite3_close(%db)          // db.drop()
 ```
 
 **Insertion Locations**:
@@ -659,19 +660,19 @@ Cleanup inserted by the compiler (in reverse order):
 - Normal scope end (`}`)
 - Early return (before `return`)
 - `?` error propagation path (before `?`)
-- End of spawn block (destructors of task-local variables)
+- spawn block end (destructors of variables within task)
 
-#### 7.3 Move and Destructors
+#### 7.3 Move and Destructor
 
 ```yaoxiang
 db = SqliteDb.open("test.db")
 db2 = db                // Move: ownership transfers to db2
-// db is no longer valid; no drop inserted for db here
-// ← Scope end: drop is only inserted for db2
+// db is invalid, no drop inserted for db here
+// ← Scope end: drop inserted only for db2
 ```
 
-The compiler tracks Move semantics ([RFC-009](009-ownership-model.md) §1) and only
-inserts destructor calls at the final holder of a variable.
+The compiler tracks Move semantics ([RFC-009](009-ownership-model.md) §1), and only inserts
+destructor calls at the final holder of the variable.
 
 #### 7.4 Destructor Failure Handling
 
@@ -691,60 +692,61 @@ call i32 @sqlite3_close(i8* %handle)
 ret void
 ```
 
-### 8. Compilation Artifact Structure
+### 8. Compilation Output Structure
 
-The compilation artifact contains the following components (specific struct definitions will be
+The compilation output consists of the following components (specific struct definitions are
 determined during the implementation phase):
 
-- **Machine Code**: LLVM-compiled object file (`.o`), containing all function translation results
-- **spawn Metadata**: Task function pointer for each spawn block, dependency relationships, resource
-  conflict serialization pairs
-- **FFI Symbol Table**: External C symbol references (symbol name + whether weakly referenced)
-- **Entry Point Table**: List of entry functions for the executable
-- **Type Information**: Reflection metadata, written to the `.reflect` section, mmap'd on demand by
-  the runtime
+- **Machine code**: Target files (`.o`) compiled by LLVM, containing all function translation
+  results
+- **spawn metadata**: Task function pointer, dependency relationships, resource conflict
+  serialization pairs for each spawn block
+- **FFI symbol table**: External C symbol references (symbol name + whether weakly referenced)
+- **Entry point table**: List of entry functions of the executable file
+- **Type information**: Reflection metadata, written to the `.reflect` section, mmap'd by runtime on
+  demand
 
 ### 9. Runtime Library
 
-Aligned with [RFC-008 §6.2](008-runtime-concurrency-model.md), the runtime is linked as
-a **static library** into the final exe.
+Aligned with [RFC-008 §6.2](008-runtime-concurrency-model.md), the runtime is linked into the final
+exe in the form of a **static library**.
 
 ```
-Internal structure of the final exe:
+Final exe internal structure:
 
 ┌────────────────────────────────────────────┐
-│  User code (native machine code)              │
-│  ├── Regular functions (sequential execution)  │
-│  ├── spawn block expansion (task funcs + dispatch calls) │
-│  ├── FFI marshalling wrapper functions         │
-│  └── RAII destructor code                      │
+│  User code (native machine code)             │
+│  ├── Ordinary functions (sequential execution) │
+│  ├── spawn block expansion (task functions + dispatch calls) │
+│  ├── FFI marshalling wrapper functions      │
+│  └── RAII destructor code                   │
 ├────────────────────────────────────────────┤
-│  Runtime static library (about 500KB-1MB, depending on platform and feature selection)  │
-│  ├── Thread pool (num_workers)                  │
-│  ├── Event loop (libuv / io_uring)              │
-│  ├── Work-stealing queue (Full Runtime only)    │
-│  ├── Memory allocator (jemalloc / mimalloc)     │
-│  └── Reflection metadata (.reflect section, on-demand mmap)    │
+│  Runtime static library (approximately 500KB-1MB, depending on platform and feature selection) │
+│  ├── Thread pool (num_workers)              │
+│  ├── Event loop (libuv / io_uring)          │
+│  ├── Work-stealing queue (Full Runtime only) │
+│  ├── Memory allocator (jemalloc / mimalloc) │
+│  └── Reflection metadata (.reflect section, mmap'd on demand) │
 │                                              │
-│  Not included:                                │
-│  ❌ Bytecode interpreter                       │
-│  ❌ JIT compiler                               │
-│  ❌ GC                                         │
-│  ❌ Virtual machine                            │
+│  Does not contain:                          │
+│  ❌ Bytecode interpreter                     │
+│  ❌ JIT compiler                             │
+│  ❌ GC                                       │
+│  ❌ Virtual machine                          │
 └────────────────────────────────────────────┘
 ```
 
-**Key Design**: The compile-time phase completes task identification and dependency analysis for
-spawn blocks; the runtime only does "create task → dispatch to thread pool → wait for completion" —
-fixed data structures, predictable behavior.
+**Key Design**: Task identification and dependency analysis of spawn blocks are completed at compile
+time; the runtime only does "create task → dispatch to thread pool → wait for completion"—the data
+structure is fixed and the behavior is predictable.
 
-> **Difference from the size estimate in RFC-008**: RFC-008 §4 estimates the scheduler at about
-> 200-500KB, containing only the task scheduling core. The 500KB-1MB estimate in this document
+> **Difference from RFC-008 size estimate**: RFC-008 §4 estimates the scheduler to be about
+> 200-500KB, only including the task scheduling core. The 500KB-1MB estimate in this document
 > additionally includes the memory allocator (jemalloc/mimalloc), event loop (libuv/io_uring), and
-> reflection metadata section. The actual size depends on the platform and feature selection;
-> precise numbers will be given during the implementation phase.
+> reflection metadata section. The actual size depends on the platform and feature selection, and
+> exact figures will be provided during the implementation phase.
 
-**Three-Layer Runtime and LLVM Relationship** (aligned with RFC-008 §1):
+**Relationship between Three-Layer Runtime and LLVM** (aligned with RFC-008 §1):
 
 | Runtime      | LLVM AOT Behavior                                                                                                |
 | ------------ | ---------------------------------------------------------------------------------------------------------------- |
@@ -758,18 +760,18 @@ fixed data structures, predictable behavior.
 
 ### Module Directory Structure
 
-Aligned with the directory layout in [RFC-008](008-runtime-concurrency-model.md) §6.
-`[! Planning]` markers indicate files/directories that have not yet been created and will be
+Aligned with the directory layout in [RFC-008](008-runtime-concurrency-model.md) §6. The
+`[! Planned]` marking indicates that the file/directory has not yet been created and will be
 introduced during the implementation phase of this RFC.
 
 ```
 src/
-├── frontend/                          # Compilation front-end (shared by all backends)
+├── frontend/                          # Compilation frontend (shared by all backends)
 │   ├── core/
 │   │   ├── spawn/                     # spawn module (concurrency analysis shared by VM and LLVM backends)
 │   │   │   ├── mod.rs                 # spawn module entry
-│   │   │   ├── placement.rs           # spawn occurrence legality check
-│   │   │   └── analysis.rs            # [! Planning] Task identification, dependency analysis, resource conflict detection
+│   │   │   ├── placement.rs           # spawn occurrence location legality check
+│   │   │   └── analysis.rs            # [! Planned] Task identification, dependency analysis, resource conflict detection
 │   │   └── typecheck/
 │   │       └── ...
 │
@@ -780,27 +782,27 @@ src/
 │   └── passes/
 │       ├── codegen/
 │       │   ├── mod.rs                 # Orchestration layer (currently outputs BytecodeFile)
-│       │   ├── translator.rs          # IR → bytecode translation (used by VM backend)
-│       │   ├── emitter.rs             # Bytecode emission + jump backpatching (used by VM backend)
-│       │   ├── buffer.rs              # Constant pool + bytecode buffer (used by VM backend)
-│       │   ├── bytecode.rs            # Bytecode format definition + serialization (used by VM backend)
-│       │   ├── flow.rs                # Register allocation + label generation + symbol table (used by VM backend)
-│       │   └── operand.rs             # Operand parsing (used by VM backend)
+│       │   ├── translator.rs          # IR → bytecode translation (VM backend)
+│       │   ├── emitter.rs             # Bytecode emission + jump backfill (VM backend)
+│       │   ├── buffer.rs              # Constant pool + bytecode buffer (VM backend)
+│       │   ├── bytecode.rs            # Bytecode format definition + serialization (VM backend)
+│       │   ├── flow.rs                # Register allocation + label generation + symbol table (VM backend)
+│       │   └── operand.rs             # Operand parsing (VM backend)
 │       ├── lifetime/                  # Lifetime/token liveness analysis
 │       └── mono/                      # Monomorphization
 │
 ├── backends/
-│   ├── common/                        # Shared values/heap/opcodes
+│   ├── common/                        # Shared value/heap/opcode
 │   ├── interpreter/                   # Tree-walking interpreter (VM backend)
-│   ├── llvm/                          # [! Planning] LLVM backend code generation (see file list below)
-│   │   ├── mod.rs                     # [! Planning] LLVM backend entry
-│   │   ├── context.rs                 # [! Planning] LLVM context management
-│   │   ├── types.rs                   # [! Planning] Type mapping (YaoXiang → LLVM IR)
-│   │   ├── values.rs                  # [! Planning] Value mapping
-│   │   ├── func.rs                    # [! Planning] Function translation
-│   │   ├── spawn.rs                   # [! Planning] spawn block expansion
-│   │   ├── ffi.rs                     # [! Planning] FFI call code generation
-│   │   └── drop.rs                    # [! Planning] Destructor insertion
+│   ├── llvm/                          # [! Planned] LLVM backend code generation (see file list below)
+│   │   ├── mod.rs                     # [! Planned] LLVM backend entry
+│   │   ├── context.rs                 # [! Planned] LLVM context management
+│   │   ├── types.rs                   # [! Planned] Type mapping (YaoXiang → LLVM IR)
+│   │   ├── values.rs                  # [! Planned] Value mapping
+│   │   ├── func.rs                    # [! Planned] Function translation
+│   │   ├── spawn.rs                   # [! Planned] spawn block expansion
+│   │   ├── ffi.rs                     # [! Planned] FFI call code generation
+│   │   └── drop.rs                    # [! Planned] Destructor function insertion
 │   └── runtime/                       # Compiled runtime (static library linked into exe)
 │       ├── engine.rs                  # Task scheduling engine
 │       ├── facade.rs                  # External interface
@@ -810,48 +812,48 @@ src/
     └── diagnostic/                    # Error diagnostics (shared)
 ```
 
-> **Key Change**: The spawn block analysis (task identification, dependency analysis, resource
-> conflict detection) will be implemented in `frontend/core/spawn/` (shared by the front-end). The
-> existing `frontend/core/typecheck/passes/spawn_placement.rs` (spawn occurrence check) will be
-> migrated to `frontend/core/spawn/placement.rs`. See RFC-024 for details. The LLVM backend only
-> consumes the analysis results and generates the corresponding dispatch code.
+> **Key Changes**: spawn block analysis (task identification, dependency analysis, resource conflict
+> detection) will be implemented in `frontend/core/spawn/` (shared by the frontend). The existing
+> `frontend/core/typecheck/passes/spawn_placement.rs` (spawn occurrence location check) will be
+> migrated to `frontend/core/spawn/placement.rs`, see RFC-024 for details. The LLVM backend only
+> consumes analysis results and generates the corresponding scheduling code.
 >
-> **Current State**: The current `middle/passes/codegen/` files `buffer.rs`, `emitter.rs`,
-> `bytecode.rs`, `flow.rs`, `operand.rs` serve the bytecode generation for the VM backend
+> **Current Status**: The current `buffer.rs`, `emitter.rs`, `bytecode.rs`, `flow.rs`, `operand.rs`
+> under `middle/passes/codegen/` serve the bytecode generation of the VM backend
 > (`CodegenContext::generate()` → `BytecodeFile`). The LLVM backend will be implemented in
-> `backends/llvm/`, at the same level as the interpreter backend and runtime — both share the same
-> `ModuleIR` input, but output different target formats (bytecode vs native code).
+> `backends/llvm/`, at the same level as the interpreter backend and runtime—both share the same
+> `ModuleIR` input and output different target formats (bytecode vs native code).
 
 ### Platform ABI Support
 
-| Platform       | Target Triple              | Output Format | Calling Convention (FFI default) |
+| Platform       | Target Triple              | Output Format | Calling Convention (FFI Default) |
 | -------------- | -------------------------- | ------------- | -------------------------------- |
 | Linux x86_64   | `x86_64-unknown-linux-gnu` | ELF           | System V AMD64                   |
 | macOS x86_64   | `x86_64-apple-darwin`      | Mach-O        | System V AMD64                   |
 | macOS ARM64    | `aarch64-apple-darwin`     | Mach-O        | ARM64 AAPCS                      |
 | Windows x86_64 | `x86_64-pc-windows-msvc`   | COFF          | Microsoft x64                    |
 
-FFI calls use the platform's C calling convention by default. Users can override this with options
-like `native("symbol", cc = "stdcall")` (aligned with future extensions in
+FFI calls use the platform's C calling convention by default. Users can override via
+`native("symbol", cc = "stdcall")` (aligned with future extensions of
 [RFC-026](026-ffi-core-mechanism.md)).
 
 ### Floating-Point Semantic Consistency (VM ↔ LLVM)
 
-The core promise of the dual-backend architecture is that the VM (development/debugging) and LLVM
+The core promise of the dual-backend architecture is that the VM (development debugging) and LLVM
 (production release) behave consistently. Floating-point operations have potential inconsistencies
 between the two execution modes:
 
 | Scenario         | Risk                                                           | Strategy                                                                                     |
 | ---------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| NaN propagation  | VM and LLVM may handle NaN sign bit and payload differently    | Compiler normalizes NaN representation at IR level; NaN comparisons uniformly use `fcmp uno` |
-| Rounding mode    | LLVM defaults to round-to-nearest-even; VM depends on host CPU | Do not expose non-default rounding modes; VM and LLVM uniformly use RTNE                     |
-| Division by zero | IEEE 754 defines ±Inf, but some platforms may trap             | Debug mode checks division by zero and reports diagnostic; release mode follows IEEE 754     |
+| NaN propagation  | VM and LLVM may handle NaN sign bit and payload differently    | Compiler normalizes NaN representation at IR level, NaN comparisons uniformly use `fcmp uno` |
+| Rounding mode    | LLVM defaults to round-to-nearest-even, VM depends on host CPU | Non-default rounding modes are not exposed, both VM and LLVM uniformly use RTNE              |
+| Division by zero | IEEE 754 defines ±Inf, but some platforms may trap             | Debug mode checks division by zero and reports diagnostics; release mode follows IEEE 754    |
 | `-0.0` vs `+0.0` | Comparison operations may not be equivalent                    | Uniformly use IEEE 754 rules: `+0.0 == -0.0`                                                 |
 | Denormal numbers | Some platforms flush-to-zero                                   | LLVM does not enable `denormal-fp-math` attribute, preserving full IEEE 754 semantics        |
 
-> **Testing Strategy**: Implement a cross-backend floating-point consistency test suite — the same
-> YaoXiang source code is executed on both VM and LLVM backends, with output compared value by
-> value. This test set is a mandatory CI gate.
+> **Test Strategy**: Implement a cross-backend floating-point consistency test suite—the same
+> YaoXiang source code is executed on VM and LLVM backends respectively, and outputs are compared
+> value by value. This test suite is a mandatory gate for CI.
 
 ---
 
@@ -859,55 +861,55 @@ between the two execution modes:
 
 ### Advantages
 
-1. **Performance**: AOT compilation is 10-100x faster than interpretation
-2. **Unified Front-End**: VM and LLVM share the same front-end, with completely consistent behavior
-3. **Zero Scheduling Overhead**: Regular code directly generates sequential machine code, with no
-   DAG overhead outside spawn blocks
-4. **Static Linking**: No external runtime dependencies, a single exe is enough to deploy
-5. **Zero GC**: RAII deterministic destructors, no pauses
-6. **Zero FFI Overhead**: `?T` null pointer optimization, opaque type layout optimization — FFI call
-   cost is equivalent to C
-7. **Compile-Time Analysis**: spawn block task identification and dependency analysis are done at
-   compile time; the runtime only executes
+1. **Performance**: AOT compilation is 10-100x faster than interpreted execution
+2. **Unified frontend**: VM and LLVM share the same frontend with completely consistent behavior
+3. **Zero scheduling overhead**: Ordinary code directly generates sequential machine code, no DAG
+   overhead outside spawn blocks
+4. **Static linking**: No external runtime dependencies, single exe for deployment
+5. **Zero GC**: RAII deterministic destructor, no pauses
+6. **Zero FFI overhead**: `?T` null pointer optimization, opaque type layout optimization, FFI call
+   cost equivalent to C
+7. **Compile-time analysis**: Task identification and dependency analysis of spawn blocks completed
+   at compile time, runtime only executes
 
 ### Disadvantages
 
-1. **LLVM Integration Complexity**: Requires deep understanding of inkwell API and LLVM IR
-2. **Compilation Time**: AOT compilation is slower than the interpreter (one-time cost)
-3. **Debugging Experience**: Native code debugging requires DWARF/PDB symbol support (compiler needs
-   to generate debug info)
-4. **Incremental Compilation**: Large projects require additional incremental compilation design
-5. **Floating-Point Semantic Consistency**: VM and LLVM may differ in edge-case behaviors such as
-   NaN propagation, rounding mode, and division by zero; normalization strategies are needed to
-   ensure consistent behavior across both backends (see §10)
+1. **LLVM integration complexity**: Requires deep understanding of inkwell API and LLVM IR
+2. **Compilation time**: AOT compilation is slower than the interpreter (a one-time cost)
+3. **Debugging experience**: Native code debugging requires DWARF/PDB symbol support (the compiler
+   needs to generate debug information)
+4. **Incremental compilation**: Incremental compilation of large projects requires additional design
+5. **Floating-point semantic consistency**: VM and LLVM may differ in NaN propagation, rounding
+   mode, division by zero, and other boundary behaviors; normalization strategies are needed to
+   ensure consistent behavior between the two backends (see §10)
 
 ### Consistency with Related RFCs
 
-| RFC                                   | Consistency                                                                |
-| ------------------------------------- | -------------------------------------------------------------------------- |
-| RFC-024 spawn block concurrency model | ✅ spawn block direct subexpressions → task dispatch                       |
-| RFC-008 Runtime Architecture          | ✅ Dual backend + scheduler static library + module directory structure    |
-| RFC-009 Ownership Model v9            | ✅ `&T`/`&mut T` tokens (zero-sized), `ref T` (fat pointer), `?T` (Option) |
-| RFC-026 FFI Core Mechanism            | ✅ `native()` → declare + marshalling, `.drop` → RAII cleanup              |
+| RFC                                   | Consistency                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------- |
+| RFC-024 spawn block concurrency model | ✅ spawn block direct sub-expression → task dispatch                      |
+| RFC-008 runtime architecture          | ✅ Dual backend + scheduler static library + module directory structure   |
+| RFC-009 ownership model v9            | ✅ `&T`/`&mut T` tokens (zero size), `ref T` (fat pointer), `?T` (Option) |
+| RFC-026 FFI core mechanism            | ✅ `native()` → declare + marshalling, `.drop` → RAII cleanup             |
 
 ---
 
 ## Alternatives
 
-| Option                               | Description                 | Why Not Chosen                                                              |
-| ------------------------------------ | --------------------------- | --------------------------------------------------------------------------- |
-| Interpreter only                     | No AOT needed               | Insufficient performance                                                    |
-| Pure static compilation (no runtime) | Do not link scheduler       | spawn blocks need runtime task scheduling                                   |
-| Cranelift backend                    | Faster compilation speed    | Runtime performance not as good as LLVM; could be a future optional backend |
-| Link external LLVM runtime           | Use LLVM's built-in runtime | Introduces unnecessary dependencies                                         |
+| Plan                                 | Description               | Why not chosen                                                     |
+| ------------------------------------ | ------------------------- | ------------------------------------------------------------------ |
+| Interpreter only                     | No AOT needed             | Insufficient performance                                           |
+| Pure static compilation (no runtime) | Don't link scheduler      | spawn blocks require runtime task scheduling                       |
+| Cranelift backend                    | Faster compilation speed  | Runtime performance inferior to LLVM, as a future optional backend |
+| Link external LLVM runtime           | Use LLVM built-in runtime | Introduces unnecessary dependencies                                |
 
 ---
 
 ## Implementation Strategy
 
-### Phase Breakdown
+### Phases
 
-#### Phase 1: Basic Framework
+#### Phase 1: Foundation Framework
 
 - [ ] Add inkwell dependency
 - [ ] Implement LLVM context initialization (`context.rs`)
@@ -921,17 +923,17 @@ between the two execution modes:
 
 #### Phase 3: Ownership Type Translation
 
-- [ ] Implement `&T`/`&mut T` tokens (zero-sized, disappear after compilation)
+- [ ] Implement `&T`/`&mut T` tokens (zero size, eliminated after compilation)
 - [ ] Implement `ref T` (fat pointer `{ i64*, T* }`)
 - [ ] Implement `?T` (`{ i1, T }` tagged union)
 - [ ] Implement `List(T)` (`{ T*, i64, i64 }`)
-- [ ] Implement Move semantics tracking (used for destructor insertion decision)
+- [ ] Implement Move semantics tracking (for destructor insertion judgment)
 
 #### Phase 4: spawn Block Code Generation
 
 - [ ] Consume analysis results from `spawn_placement.rs`
-- [ ] Direct subexpression → task function generation
-- [ ] Dependent task dispatch code generation
+- [ ] Direct sub-expression → task function generation
+- [ ] Dependency task scheduling code generation
 - [ ] Resource conflict serialization
 - [ ] spawn for expansion
 
@@ -944,9 +946,9 @@ between the two execution modes:
 
 #### Phase 6: Destructor Code Generation
 
-- [ ] `.drop` binding recognition
-- [ ] Scope-end cleanup insertion (reverse order) (`drop.rs`)
-- [ ] Early-return path cleanup
+- [ ] `.drop` binding identification
+- [ ] Scope end cleanup insertion (reverse order) (`drop.rs`)
+- [ ] Early return path cleanup
 - [ ] `?` error propagation path cleanup
 
 #### Phase 7: Runtime Library Linking
@@ -959,8 +961,8 @@ between the two execution modes:
 
 - RFC-024 (spawn block concurrency) → input for Phase 4
 - RFC-009 v9 (ownership) → input for Phases 3, 6
-- RFC-008 (Runtime Architecture) → input for Phase 7
-- RFC-026 (FFI Mechanism) → input for Phase 5
+- RFC-008 (runtime architecture) → input for Phase 7
+- RFC-026 (FFI mechanism) → input for Phase 5
 
 ---
 
@@ -968,64 +970,63 @@ between the two execution modes:
 
 ### Lazy Task Creation (1990)[^1]
 
-| Attribute       | Description                                                          |
-| --------------- | -------------------------------------------------------------------- |
-| Institution     | MIT                                                                  |
-| Authors         | James R. Larus, Robert H. Halstead Jr.                               |
-| Core Idea       | Defer creation of child tasks, create on demand                      |
-| Reference Value | Theoretical foundation for on-demand task scheduling in spawn blocks |
+| Attribute       | Description                                                         |
+| --------------- | ------------------------------------------------------------------- |
+| Institution     | MIT                                                                 |
+| Authors         | James R. Larus, Robert H. Halstead Jr.                              |
+| Core            | Lazy creation of subtasks, on-demand creation                       |
+| Reference Value | Theoretical basis for on-demand task scheduling within spawn blocks |
 
-**Core Idea**: Rather than creating tasks immediately, defer task creation. A child task is only
-created when the parent task needs its value. This addresses the performance overhead of
-fine-grained parallel tasks[^1]. YaoXiang's spawn block scheduling borrows this idea — tasks are
-identified at compile time, but dispatched on demand to the thread pool at runtime.
+**Core Idea**: Instead of creating tasks immediately, creation is delayed. When the parent task
+needs the value of a child task, the child task is created. This addresses the performance overhead
+of fine-grained parallel tasks[^1]. YaoXiang's spawn block scheduling draws on this idea—tasks are
+identified at compile time, but are dispatched to the thread pool on demand at runtime.
 
 ### Lazy Scheduling (2014)[^2]
 
-| Attribute       | Description                                              |
-| --------------- | -------------------------------------------------------- |
-| Institution     | University of Maryland                                   |
-| Authors         | Tzannes, Caragea                                         |
-| Core Idea       | Runtime adaptive scheduling, no extra state              |
-| Reference Value | Reference for Full Runtime WorkStealing scheduler design |
+| Attribute       | Description                                          |
+| --------------- | ---------------------------------------------------- |
+| Institution     | University of Maryland                               |
+| Authors         | Tzannes, Caragea                                     |
+| Core            | Runtime adaptive scheduling, no extra state          |
+| Reference Value | Full Runtime WorkStealing scheduler design reference |
 
 ### SISAL Language[^3]
 
 | Attribute       | Description                                                       |
 | --------------- | ----------------------------------------------------------------- |
 | Institution     | Lawrence Livermore National Laboratory (LLNL)                     |
-| Core Idea       | Single-assignment language, dataflow graph, implicit parallelism  |
-| Reference Value | Proof of feasibility of dataflow model in industrial applications |
+| Core            | Single assignment language, Dataflow graph, implicit parallelism  |
+| Reference Value | Proof of feasibility of Dataflow model in industrial applications |
 
-**Key Difference**: SISAL's parallelism is **implicit** — the language has single-assignment
-semantics, and the compiler automatically analyzes the whole program's data dependency graph to
-decide parallelism. YaoXiang's parallelism is **explicit** — users mark parallel regions with
+**Key Difference**: SISAL's parallelism is **implicit**—the language has single-assignment
+semantics, and the compiler automatically analyzes the entire program's data dependency graph to
+determine parallelism. YaoXiang's parallelism is **explicit**—users mark parallel regions with
 `spawn {}` blocks, and the compiler only analyzes dependencies within spawn blocks. This avoids the
-complexity of whole-program analysis as in SISAL, while preserving the user's control over parallel
-behavior.
+complexity of SISAL's whole-program analysis while preserving user control over parallel behavior.
 
 ### Mul-T Parallel Scheme[^4]
 
 | Attribute       | Description                                         |
 | --------------- | --------------------------------------------------- |
 | Institution     | MIT                                                 |
-| Core Idea       | Future construct, Lazy Task Creation implementation |
+| Core            | Future construct, Lazy Task Creation implementation |
 | Reference Value | Specific implementation reference                   |
 
 ### Comparison Summary
 
-| Technique              | Lazy Creation | Parallelism Marker           | Analysis Scope         | Ownership                    |
+| Technology             | Lazy Creation | Parallel Marking             | Analysis Scope         | Ownership                    |
 | ---------------------- | ------------- | ---------------------------- | ---------------------- | ---------------------------- |
 | Lazy Task Creation[^1] | ✅            | Implicit                     | Whole program          | N/A                          |
 | Lazy Scheduling[^2]    | ✅            | Implicit                     | Whole program          | N/A                          |
-| SISAL[^3]              | ✅            | Implicit (single-assignment) | Whole program          | N/A                          |
+| SISAL[^3]              | ✅            | Implicit (single assignment) | Whole program          | N/A                          |
 | Mul-T[^4]              | ✅            | Explicit (future)            | Call site              | N/A                          |
 | **YaoXiang**           | ✅            | **Explicit (spawn block)**   | **Within spawn block** | **✅ (Move + tokens + ref)** |
 
-**YaoXiang's Innovation**: Elevates the parallelism marker from "every function call" (future) to
-"structured block" (spawn). Users write ordinary code and place a spawn block where parallelism is
-needed. The analysis scope is constrained within the spawn block, making compilation efficient and
-behavior controllable.
+**YaoXiang's Innovation**: Promotes parallel marking from "per function call" (future) to
+"structured block" (spawn), where users write ordinary code and place spawn blocks at locations
+where parallelism is needed. The analysis scope is constrained within spawn blocks, making
+compilation efficient and behavior controllable.
 
 ---
 
@@ -1033,32 +1034,32 @@ behavior controllable.
 
 ### Appendix A: Comparison with Rust async
 
-| Feature             | Rust async                           | YaoXiang LLVM AOT                                                     |
-| ------------------- | ------------------------------------ | --------------------------------------------------------------------- |
-| Compilation product | State machine + machine code         | Machine code + spawn task metadata                                    |
-| Runtime             | tokio                                | Statically linked scheduler (about 500KB-1MB)                         |
-| Concurrency marker  | async/await keyword                  | `spawn { }` block                                                     |
-| Task creation       | Compile-time generated state machine | Compile-time identification of direct subexpressions → task functions |
-| Function coloring   | async contagion                      | **No function coloring**                                              |
-| Synchronous wait    | `.await`                             | spawn block auto-synchronous block                                    |
-| Memory management   | GC (runtime)                         | **RAII (deterministic)**                                              |
-| Sharing mechanism   | `Arc::new()` + manual Weak           | **`ref` keyword (compiler auto-selects Rc/Arc)**                      |
+| Feature             | Rust async                              | YaoXiang LLVM AOT                                                |
+| ------------------- | --------------------------------------- | ---------------------------------------------------------------- |
+| Compilation output  | State machine + machine code            | Machine code + spawn task metadata                               |
+| Runtime             | tokio                                   | Statically linked scheduler (approximately 500KB-1MB)            |
+| Concurrency marking | async/await keywords                    | `spawn { }` block                                                |
+| Task creation       | State machine generated at compile time | Direct sub-expression identified at compile time → task function |
+| Color functions     | async contagion                         | **No function coloring**                                         |
+| Synchronous wait    | `.await`                                | spawn block automatically synchronously blocks                   |
+| Memory management   | GC (runtime)                            | **RAII (deterministic)**                                         |
+| Sharing mechanism   | `Arc::new()` + manual Weak              | **`ref` keyword (compiler automatically chooses Rc/Arc)**        |
 
-### Appendix B: Design Decision Record
+### Appendix B: Design Decision Records
 
-| Decision                    | Decision                                                                                    | Date       |
-| --------------------------- | ------------------------------------------------------------------------------------------- | ---------- |
-| Adopt LLVM AOT              | Direct Codegen, no over-abstraction                                                         | 2026-02-15 |
-| Concurrency model alignment | Aligned with RFC-024 spawn block direct subexpression model                                 | 2026-06-10 |
-| DAG analysis scope          | Within spawn block, not across spawn blocks (aligned with RFC-024)                          | 2026-06-05 |
-| Ownership model alignment   | Aligned with RFC-009 v9: `&T`/`&mut T` tokens + `ref` keyword                               | 2026-06-10 |
-| Dual backend model          | VM (development) + LLVM (production), aligned with RFC-008                                  | 2026-05-11 |
-| Scheduler form              | Static library linked into exe, about 500KB-1MB (depending on platform and features), no GC | 2026-05-11 |
-| FFI code generation         | Integration with RFC-026: `native()` declare + marshalling                                  | 2026-06-10 |
-| Destructor                  | `.drop` → RAII cleanup insertion, aligned with RFC-026 §7                                   | 2026-06-10 |
-| Side effect handling        | Remove `@IO`/`@Pure` inference, use RFC-024 resource types instead                          | 2026-06-10 |
-| Reflection metadata         | Compiled into exe .reflect section, mmap'd on demand                                        | 2026-05-11 |
-| Paper citations             | Retain Lazy Task Creation and others, clearly state YaoXiang's differences                  | 2026-02-16 |
+| Decision                    | Determination                                                                                       | Date       |
+| --------------------------- | --------------------------------------------------------------------------------------------------- | ---------- |
+| Adopt LLVM AOT              | Direct Codegen, no over-abstraction                                                                 | 2026-02-15 |
+| Concurrency model alignment | Aligned with RFC-024 spawn block direct sub-expression model                                        | 2026-06-10 |
+| DAG analysis scope          | Within spawn block, not across spawn blocks (aligned with RFC-024)                                  | 2026-06-05 |
+| Ownership model alignment   | Aligned with RFC-009 v9: `&T`/`&mut T` tokens + `ref` keyword                                       | 2026-06-10 |
+| Dual-backend model          | VM (development) + LLVM (production), aligned with RFC-008                                          | 2026-05-11 |
+| Scheduler form              | Static library linked into exe, approximately 500KB-1MB (depending on platform and features), no GC | 2026-05-11 |
+| FFI code generation         | Integrate RFC-026: `native()` declare + marshalling                                                 | 2026-06-10 |
+| Destructor function         | `.drop` → RAII cleanup insertion, aligned with RFC-026 §7                                           | 2026-06-10 |
+| Side effect handling        | Remove `@IO`/`@Pure` inference, use RFC-024 resource types                                          | 2026-06-10 |
+| Reflection metadata         | Compiled into exe .reflect section, loaded via mmap on demand                                       | 2026-05-11 |
+| Paper citations             | Retain Lazy Task Creation etc., clarify YaoXiang's differences                                      | 2026-02-16 |
 
 ---
 
@@ -1088,12 +1089,12 @@ behavior controllable.
 
 ## Lifecycle and Destination
 
-| Status        | Location                    | Description                                |
-| ------------- | --------------------------- | ------------------------------------------ |
-| **Draft**     | `docs/design/rfc/`          | Author's draft, awaiting review submission |
-| **Reviewing** | `docs/design/rfc/review/`   | Open community discussion and feedback     |
-| **Accepted**  | `docs/design/rfc/accepted/` | Becomes a formal design document           |
-| **Rejected**  | `docs/design/rfc/`          | Retained in the RFC directory              |
+| Status           | Location                    | Description                                |
+| ---------------- | --------------------------- | ------------------------------------------ |
+| **Draft**        | `docs/design/rfc/`          | Author's draft, awaiting submission review |
+| **Under Review** | `docs/design/rfc/review/`   | Open community discussion and feedback     |
+| **Accepted**     | `docs/design/rfc/accepted/` | Becomes official design document           |
+| **Rejected**     | `docs/design/rfc/`          | Retained in the RFC directory              |
 
-> Current status: **Accepted** — Aligned with the RFC-024 spawn block concurrency model, RFC-009 v9
+> Current Status: **Accepted** — Aligned with RFC-024 spawn block concurrency model, RFC-009 v9
 > ownership model, and RFC-026 FFI mechanism

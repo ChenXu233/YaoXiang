@@ -1,6 +1,6 @@
 ---
 title: 'Package Manager'
-description: 'YaoXiang Package Manager Reference Documentation'
+description: 'YaoXiang Package Manager Reference'
 ---
 
 # Package Manager
@@ -8,26 +8,26 @@ description: 'YaoXiang Package Manager Reference Documentation'
 YaoXiang has a built-in package manager that provides project initialization, dependency management,
 version locking, and workspace support.
 
-For the complete user-facing workflow (including copy-pasteable repository creation steps), see the
-[Package Management System Guide](../../guide/packaging). This page is a reference index.
+See the [Package Management System Guide](../../guide/packaging) for the complete end-user workflow
+(including copy-pasteable repository setup steps). This page is a reference index.
 
 ## Design Principles
 
 - **Declarative dependencies**: declare required dependencies in `yaoxiang.toml`
-- **Deterministic builds**: lock versions via `yaoxiang.lock` to ensure reproducible builds
+- **Deterministic builds**: lock versions through `yaoxiang.lock` to ensure reproducible builds
 - **Local cache**: dependencies are downloaded to `.yaoxiang/vendor/`, supporting offline reuse
 
-## Dependency Source Status
+## Current Dependency Sources
 
 | Source            | Manifest syntax         | Status                                                   |
 | ----------------- | ----------------------- | -------------------------------------------------------- |
 | Workspace member  | `{ workspace = "key" }` | ✅ Available                                             |
 | Git repository    | `{ git = "<url>" }`     | ✅ Available                                             |
-| Official registry | `name = "1.0.0"`        | ⛔ Not yet implemented (RFC-014a indefinitely postponed) |
+| Official registry | `name = "1.0.0"`        | ⛔ Not yet implemented (RFC-014a postponed indefinitely) |
 | Local path        | `{ path = "../lib" }`   | ⚠️ Known issues, see the guide                           |
 
-`yx add` without `--git` / `--path` falls back to the not-yet-implemented registry source, and
-`yx install` will subsequently fail.
+`yx add` without `--git` / `--path` falls through to the not-yet-implemented registry source, and
+`yx install` subsequently fails.
 
 ## Project Structure
 
@@ -44,16 +44,16 @@ my-project/
 └── .yaoxiang/
     └── vendor/
         ├── std/              # Standard library interface files
-        └── <包名>-<版本>/    # Third-party dependencies
+        └── <package>-<version>/    # Third-party dependencies
 ```
 
 ## Command Overview
 
-`yx` provides 21 subcommands, of which 11 are related to package management:
+`yx` provides 21 subcommands, 11 of which are related to package management:
 
-| Command                                       | Description                                         |
-| --------------------------------------------- | --------------------------------------------------- |
-| [`yx init`](commands#yx-init)               | Initialize a project, supports `--lib`              |
+| Command                                     | Description                                         |
+| ------------------------------------------- | --------------------------------------------------- |
+| [`yx init`](commands#yx-init)               | Initialize project, supports `--lib`                |
 | [`yx add`](commands#yx-add)                 | Add dependency                                      |
 | [`yx install`](commands#yx-install)         | Install dependencies                                |
 | [`yx update`](commands#yx-update)           | Update dependencies                                 |
@@ -62,16 +62,16 @@ my-project/
 | [`yx outdated`](commands#yx-outdated)       | Check upgradable dependencies                       |
 | [`yx clean`](commands#yx-clean)             | Clean build artifacts and redundant vendor packages |
 | [`yx cache clean`](commands#yx-cache-clean) | Clear global cache                                  |
-| [`yx workspace`](commands#yx-workspace)     | Workspace member management                         |
+| [`yx workspace`](commands#yx-workspace)     | Manage workspace members                            |
 | [`yx publish`](commands#yx-publish)         | Package and publish                                 |
 
 The remaining subcommands (`run`, `check`, `test`, `build`, `format`, `lsp`, `repl`, `eval`,
-`explain`, `dump`) are not related to package management.
+`explain`, `dump`) are unrelated to package management.
 
 ## Documentation Index
 
 - [Command-Line Interface](commands) - Detailed description of all package management commands
-- [yaoxiang.toml format](manifest) - Project configuration file format
-- [yaoxiang.lock format](lock) - Lock file format description
+- [yaoxiang.toml Format](manifest) - Project configuration file format
+- [yaoxiang.lock Format](lock) - Lock file format description
 - [Error Codes](error-codes) - Package management related errors and how to handle them
-- [Package Management System Guide](../../guide/packaging) - Complete user-facing workflow
+- [Package Management System Guide](../../guide/packaging) - Complete end-user workflow

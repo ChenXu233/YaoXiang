@@ -1,28 +1,30 @@
 ---
 title: 'Explanation'
-description: 'Essays on the design philosophy of YaoXiang: not how-to, but why'
+description:
+  'Articles discussing the design philosophy of the YaoXiang language: not teaching you what to do,
+  but helping you understand why'
 ---
 
 # Explanation
 
-> Understanding-oriented documents. No instructions here — only answers to "why is YaoXiang designed
-> this way".
+> Understanding-oriented documentation. This isn't about operations; it only answers "why is
+> YaoXiang the way it is."
 
-This directory is the "explanation" quadrant of [Diátaxis](https://diataxis.fr/). See
-[docs-rules.md](../../dev/docs-rules.md) (zh) for the classification rules.
+This directory is the "Explanation" quadrant of the [Diátaxis](https://diataxis.fr/) framework. For
+classification rules, see [docs-rules.md](../dev/docs-rules.md).
 
-## Essays
+## Articles
 
-| Essay                                                                        | Content                                                                                                                      |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| [The YaoXiang Manifesto](./manifesto.md)                                     | The design philosophy: everything is a type, natural syntax, ownership model, the bingzuo concurrency model, AI-friendliness |
-| [Manifesto WTF Edition](./manifesto-wtf.md)                                  | A sharp-tongued review of the manifesto                                                                                      |
-| [Language Design from a 2006-born Developer](./2006-born-language-design.md) | The author's personal account of his design views                                                                            |
+| Article                                                                                   | Content                                                                                            |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| [YaoXiang Manifesto](./manifesto.md)                                                      | Design philosophy: everything is a type, natural syntax, ownership model, spawn model, AI-friendly |
+| [YaoXiang Manifesto WTF Edition](./manifesto-wtf.md)                                      | A sharp, snarky take on the manifesto                                                              |
+| [A Language Design Perspective from Someone Born in 2006](./2006-born-language-design.md) | The author's personal account of their design perspective                                          |
 
-## What Does Not Belong Here
+## What This Section Doesn't Cover
 
-- To **learn** the language → [Tutorial](../tutorial/)
-- To **get something done** → [Guide](../guide/)
-- To **look up** syntax and APIs → [Reference](../reference/)
-- To see **how features are decided** → [RFC](../rfc/)
-- To **hack on the compiler** → [Development](../dev/)
+- Want to **learn** the language → [Tutorial](../tutorial/)
+- Want to **accomplish** something → [Guide](../guide/)
+- Want to **look up** syntax and API → [Reference](../reference/)
+- Want to see **how features are decided** → [RFC](../rfc/)
+- Want to **modify the compiler** → [Development](../dev/)

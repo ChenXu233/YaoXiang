@@ -1,95 +1,97 @@
 ---
-title: 'RFC-028: JIT Compiler — Multi-Level Execution Engine in VM'
+title: 'RFC-028: JIT Compiler — Multi-level Execution Engine within VM'
 status: 'Draft'
-author: '晨煦'
+author: 'Chenxu'
 created: '2026-06-11'
 updated: '2026-07-05'
 issue: '#101'
 ---
 
-# RFC-028: JIT Compiler — Multi-Level Execution Engine in VM
+# RFC-028: JIT Compiler — Multi-level Execution Engine within VM
 
 > **References**:
 >
 > - [RFC-018: LLVM AOT Compiler Design](../accepted/018-llvm-aot-compiler.md)
-> - [RFC-024: Concurrency Model Based on Spawn Blocks](../accepted/024-concurrency-model.md)
+> - [RFC-024: Concurrency Model Based on spawn Blocks](../accepted/024-concurrency-model.md)
 > - [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](../accepted/008-runtime-concurrency-model.md)
 
-## Abstract
+## Summary
 
-This document proposes introducing a Cranelift JIT compiler for YaoXiang's VM backend, upgrading the
-VM from a pure interpreter to a **multi-level execution engine**: cold code executes via
-interpretation, hot functions are compiled to native code via Cranelift. The JIT path shares the IR
-normalization pass with RFC-018's LLVM AOT path; Cranelift handles fast JIT compilation while LLVM
-handles deep AOT optimization—each excels at its own use case.
+This document proposes introducing the Cranelift JIT compiler into the YaoXiang VM backend,
+upgrading the VM from a pure interpreter to a **multi-level execution engine**: cold code is
+interpreted, while hot functions are compiled by Cranelift into native code. The JIT path shares the
+IR normalization pass with the LLVM AOT path from RFC-018 — Cranelift handles fast JIT compilation,
+while LLVM handles deep AOT optimization. Each takes what it does best.
 
-**Core positioning: JIT serves the VM, not replaces it.**
+**Core positioning: JIT serves the VM, not replaces the VM.**
 
 ## Motivation
 
 ### Why do we need JIT?
 
-The current VM backend is a pure interpreter, executing 10-100x slower than native code. During
-development, tests, scripts, and local debugging are frequently run—these scenarios don't need AOT's
-extreme optimization, but require noticeably faster execution than an interpreter.
+The current VM backend is a pure interpreter, executing 10–100× slower than native code. During
+development, tests, scripts, and local debugging are run frequently — these scenarios don't need the
+extreme optimization of AOT, but they do need execution speeds noticeably faster than an
+interpreter.
 
-### Why not use only LLVM AOT?
+### Why not only LLVM AOT?
 
-LLVM AOT compilation takes a long time (seconds), unsuitable for development iteration. Development
-requires a "change and run" experience: modify one line of code → rerun → see results almost
-instantly. Cranelift JIT compiles a single function in just 1-5ms, imperceptible to users.
+LLVM AOT compilation takes a long time (seconds), which is unsuitable for development iteration.
+Development needs a "change and run" experience: change one line of code → re-run → see results
+almost immediately. Cranelift JIT compiles a single function in just 1–5ms, with no perceptible
+compilation delay for the user.
 
 ### Why Cranelift instead of LLVM ORC JIT?
 
-| Dimension         | Cranelift JIT                          | LLVM ORC JIT                                  |
-| ----------------- | -------------------------------------- | --------------------------------------------- |
-| Compilation speed | 1-5ms/function                         | 10-100ms/function                             |
-| Dependency size   | Small                                  | Large (requires full LLVM)                    |
-| Code quality      | 70-80% of LLVM -O2                     | Extremely high                                |
-| Use case          | Development debugging, rapid iteration | Not suitable (see tradeoffs in this document) |
+| Dimension       | Cranelift JIT             | LLVM ORC JIT                    |
+| --------------- | ------------------------- | ------------------------------- |
+| Compile speed   | 1–5ms/function            | 10–100ms/function               |
+| Dependency size | Small                     | Large (full LLVM required)      |
+| Code quality    | 70–80% of LLVM -O2        | Extremely high                  |
+| Use case        | Dev/debug, fast iteration | Not applicable (see trade-offs) |
 
-Cranelift compiles fast with sufficient code quality. LLVM is reserved for AOT's offline deep
-optimization. One tool, one job.
+Cranelift compiles fast and produces code of sufficient quality. LLVM is left to AOT for offline
+deep optimization. One tool, one job done well.
 
 ## Proposal
 
-### Core Architecture
+### Core architecture
 
 ```
-VM Execution Engine
-├── Interpreter Layer
+VM execution engine
+├── Interpreter layer
 │   ├── Execute bytecode instructions
-│   ├── Collect profiling data (invocation count + loop backedge count)
-│   └── When threshold reached → Submit compilation task
+│   ├── Collect hotness data (invocation count + loop backedge count)
+│   └── When threshold is reached → submit compilation task
 │
-├── JIT Compilation Layer (Cranelift Backend)
-│   ├── Compilation queue (background thread, doesn't block interpreter)
-│   ├── IR → Normalization → Cranelift IR → Native code
-│   └── Reuse IR normalization pass from RFC-018 §4.0 (stack→SSA)
+├── JIT compilation layer (Cranelift backend)
+│   ├── Compilation queue (background thread, non-blocking for interpreter)
+│   ├── IR → normalization → Cranelift IR → native code
+│   └── Reuse the IR normalization pass from RFC-018 §4.0 (stack → SSA)
 │
-├── Code Cache
+├── Code cache
 │   ├── Function table: function ID → {interpreter entry, JIT entry (optional)}
-│   ├── Atomic replacement of compiled function entry points
-│   └── Grouped by module (reserved hot-reload interface)
+│   ├── Atomic replacement of compiled function entry
+│   └── Grouped by module (reserving interface for hot-reloading)
 │
-└── Profiling Analysis
-    ├── Per-function invocation count + loop backedge count
-    ├── Periodic decay (avoid triggering compilation from one-time warmup)
-    └── Three-tier heat levels: Cold → Warm → Hot → Compiled
+└── Hotness analysis
+    ├── Per-function call count + loop backedge count
+    ├── Periodic decay (avoid one-shot warmup triggering compilation)
+    └── Three-level hotness: Cold → Warm → Hot → Compiled
 ```
 
-### Integration with Existing Architecture
+### Integration with existing architecture
 
 ```
-Source code → Frontend (shared) → IR → ┬→ Bytecode codegen → VM Interpreter → [hot functions] → Cranelift JIT
-                                         │
-                                         └→ LLVM AOT codegen → .o → link → exe (production)
+Source code → Frontend (shared) → IR → ┬→ Bytecode codegen → VM interpreter → [hot functions] → Cranelift JIT
+                                       │
+                                       └→ LLVM AOT codegen → .o → link → exe (production)
 ```
 
-JIT and AOT share the **IR normalization pass** (`middle/passes/ir_normalize.rs`), with the
-underlying codegen switching from LLVM to Cranelift.
+JIT and AOT share the **IR normalization pass** (`middle/passes/ir_normalize.rs`); the underlying
+codegen is swapped from LLVM to Cranelift.
 
-### Execution Flow
+### Execution flow
 
 ```
 Function call
@@ -99,25 +101,25 @@ Function call
   → Return
 ```
 
-## Detailed Design
+## Detailed design
 
-### 1. Directory Structure
+### 1. Directory structure
 
 ```
 src/
 ├── backends/
 │   ├── interpreter/              # Existing — VM interpreter
 │   │   └── executor/
-│   │       ├── engine.rs         # Modified — entry point changed from direct interpretation to FunctionEntry dispatch
+│   │       ├── engine.rs         # Modified — call entry changed from direct interpretation to FunctionEntry dispatch
 │   │       └── ...
 │   │
 │   ├── jit/                      # New — JIT compilation layer
 │   │   ├── mod.rs                # JIT module entry, initialize Cranelift context
-│   │   ├── profiler.rs           # Profiling counts + decay + threshold decisions
+│   │   ├── profiler.rs           # Hotness counting + decay + threshold decision
 │   │   ├── entry.rs              # FunctionEntry + AtomicPtr management
 │   │   ├── cache.rs              # Code cache (mmap executable page management)
 │   │   ├── compiler.rs           # IR → Cranelift IR → native code
-│   │   ├── types.rs              # YaoXiang type → Cranelift type mapping
+│   │   ├── types.rs              # YaoXiang types → Cranelift type mapping
 │   │   └── abi.rs                # Function calling convention (System V / Microsoft x64)
 │   │
 │   ├── llvm/                     # Planned — LLVM AOT (RFC-018)
@@ -126,47 +128,47 @@ src/
 │
 └── middle/
     └── passes/
-        └── ir_normalize.rs       # New — Shared IR normalization (stack→SSA)
-                                   #   Shared by JIT and LLVM AOT
+        └── ir_normalize.rs       # New — shared IR normalization (stack → SSA)
+                                  #   Shared between JIT and LLVM AOT
 ```
 
 **Key constraints**:
 
-- `backends/jit/` depends only on `middle/` (IR definitions, normalization passes), standard
-  library, and Cranelift crate
-- `backends/jit/` does not depend on `backends/llvm/`, they are peer backends
-- `backends/jit/` does not depend on `backends/interpreter/`, interacts through `FunctionEntry`
-  interface
+- `backends/jit/` only depends on `middle/` (IR definitions, normalization pass), standard library,
+  and the Cranelift crate
+- `backends/jit/` does not depend on `backends/llvm/`; the two are peer-level backends
+- `backends/jit/` does not depend on `backends/interpreter/`; it interacts through the
+  `FunctionEntry` interface
 
-### 2. Profiling Analysis and Tiered Triggering
+### 2. Hotness analysis and tiered triggering
 
-#### 2.1 Hotness State Machine
+#### 2.1 Hotness state machine
 
 ```
 Cold ──(invocation > 50 or backedge > 500)──→ Warm
 Warm ──(invocation > 200)────────────────────→ Hot
-Hot ──(submit compilation queue, compilation complete)──→ Compiled
+Hot ──(submitted to compilation queue, compilation complete)──→ Compiled
 ```
 
-> Thresholds are configurable; these are default values. Reference: actual threshold ranges from
-> LuaJIT, JVM C1, V8 Sparkplug (50-1000).
+> Thresholds are configurable; the above are defaults. Refer to the actual threshold ranges of
+> LuaJIT, JVM C1, and V8 Sparkplug (50–1000).
 
 #### 2.2 Counters
 
-Each function maintains two atomic counters in `FunctionEntry` (see §4.1 for details):
+Each function maintains two atomic counters in its `FunctionEntry` (see §4.1 for details):
 
 ```rust
-// Heat fields of FunctionEntry (full definition in §4.1)
-invocation_count: AtomicU32,   // Number of times the function was called
+// Hotness fields of FunctionEntry (full definition in §4.1)
+invocation_count: AtomicU32,   // Number of times the function has been called
 backedge_count: AtomicU32,     // Number of loop backedge jumps
 state: AtomicU8,              // Cold | Warm | Hot | Compiled
 ```
 
-#### 2.3 Decay Mechanism
+#### 2.3 Decay mechanism
 
-Every 5 seconds, all counters shift right by 1 bit (multiply by 0.5). Prevents code that runs at
-high frequency but only once during startup (such as initialization traversal) from triggering
-unnecessary JIT compilation.
+Every 5 seconds, all counters are right-shifted by 1 bit (multiplied by 0.5). This prevents code
+that runs frequently only at startup (such as initialization traversal) from triggering meaningless
+JIT compilation.
 
 ```rust
 fn decay(entry: &FunctionEntry) {
@@ -175,42 +177,42 @@ fn decay(entry: &FunctionEntry) {
 }
 ```
 
-Using bit operations, zero division overhead.
+Uses bitwise operations, with zero division overhead.
 
-#### 2.4 Compile Queue
+#### 2.4 Compilation queue
 
 ```
-Interpreter thread                          Background JIT thread
-    │                                            │
-    ├─ Heat reaches Hot                           │
-    ├─ Push compilation request ──────────────→  │
-    │  (doesn't block interpreter)                ├─ Take function IR
-    │                                            ├─ IR normalization (stack→SSA)
-    │                                            ├─ Cranelift compilation
-    │                                            ├─ Write to code cache
-    │                                            └─ Atomic update of function entry pointer
-    │  Next call to this function ←─────────────  │
-    │  Goes directly to native code              │
+Interpreter thread                    Background JIT thread
+    │                                         │
+    ├─ Hotness reaches Hot                    │
+    ├─ Push compilation request ──────────→   │
+    │  (non-blocking for interpreter)          ├─ Take out function IR
+    │                                         ├─ IR normalization (stack → SSA)
+    │                                         ├─ Cranelift compilation
+    │                                         ├─ Write to code cache
+    │                                         └─ Atomically update function entry pointer
+    │  Next call to this function ←──────────  │
+    │  Goes directly to native code            │
 ```
 
-During compilation, the function still executes via the interpreter. After compilation completes,
-the next call switches atomically to JIT code.
+During compilation, the function continues to be executed by the interpreter. After compilation
+completes, the next call atomically switches to the JIT code.
 
-### 3. IR → Cranelift Compilation Pipeline
+### 3. IR → Cranelift compilation pipeline
 
 #### 3.1 Pipeline
 
 ```
 YaoXiang IR (stack form)
-  → IR normalization pass (stack → register/SSA)    ← Reuses RFC-018 §4.0
+  → IR normalization pass (stack → register/SSA)    ← Reused from RFC-018 §4.0
   → Cranelift IR construction
   → Cranelift optimization + machine code generation
   → Write to code cache
 ```
 
-#### 3.2 YaoXiang Type → Cranelift Type
+#### 3.2 YaoXiang types → Cranelift types
 
-| YaoXiang Type | Cranelift Type           | Description                              |
+| YaoXiang Type | Cranelift Type           | Notes                                    |
 | ------------- | ------------------------ | ---------------------------------------- |
 | `Int`         | `i64`                    |                                          |
 | `Int32`       | `i32`                    |                                          |
@@ -219,20 +221,20 @@ YaoXiang IR (stack form)
 | `Bool`        | `i8`                     | Cranelift has no `i1`, use `i8`          |
 | `Char`        | `i32`                    | Unicode code point                       |
 | `String`      | `{ i64, i64 }`           | Pointer + length                         |
-| `Void`        | Empty tuple              |                                          |
+| `Void`        | empty tuple              |                                          |
 | `&T`          | —                        | Zero-sized, disappears after compilation |
 | `&mut T`      | —                        | Zero-sized, disappears after compilation |
-| `ref T`       | `{ i64, i64 }`           | Reference count pointer + data pointer   |
+| `ref T`       | `{ i64, i64 }`           | Reference-count pointer + data pointer   |
 | `*T`          | `i64`                    | Raw pointer                              |
 | `List(T)`     | `{ i64, i64, i64 }`      | Data pointer + length + capacity         |
 | Struct        | Cranelift struct         |                                          |
 | Record enum   | `{ i64, [max_payload] }` | Tag + union                              |
-| `?T`          | `{ i8, T }`              | Has-value flag + data                    |
+| `?T`          | `{ i8, T }`              | Has-value tag + data                     |
 
-> Compared with LLVM type table in RFC-018 §3: Cranelift doesn't distinguish pointer types and has
-> no `i1`, making it overall simpler.
+> Compared with the LLVM type table in RFC-018 §3: Cranelift does not distinguish pointer types and
+> has no `i1`; overall simpler.
 
-#### 3.3 Key Instruction Translation
+#### 3.3 Key instruction translation
 
 | IR Instruction             | Cranelift IR                                |
 | -------------------------- | ------------------------------------------- |
@@ -249,17 +251,17 @@ YaoXiang IR (stack form)
 | `Store { dst, src }`       | `store`                                     |
 | `Spawn { ... }`            | Call runtime `task_spawn` + `task_wait_all` |
 
-> See the main RFC body for the complete translation table. Core principle: Cranelift's instruction
-> set covers all YaoXiang IR operations, no semantic gaps.
+> See the full translation table in the RFC main text. Core principle: the Cranelift instruction set
+> covers all YaoXiang IR operations; there is no semantic gap.
 
-#### 3.4 Coexistence of Two Normalization Forms
+#### 3.4 Two normalizations coexist
 
 The VM interpreter needs stack semantics (`Push`/`Pop`/`Dup`/`Swap`), while Cranelift JIT and LLVM
-AOT need register/SSA. The IR normalization pass performs one conversion (RFC-018 §4.0), shared by
-JIT and AOT, without changing the IR representation itself. Each backend consumes the same IR
-according to its own requirements.
+AOT need register/SSA. The IR normalization pass performs one conversion (RFC-018 §4.0); JIT and AOT
+share it, without changing the IR's own representation. Each backend consumes the same IR according
+to its own needs.
 
-### 4. Function Entry Table and Atomic Replacement
+### 4. Function entry table and atomic replacement
 
 #### 4.1 FunctionEntry
 
@@ -269,29 +271,29 @@ struct FunctionEntry {
     code_ptr: AtomicPtr<u8>,
     /// Immutable metadata
     bytecode: &'static [u8],        // Interpreter fallback
-    ir: &'static FunctionIR,       // JIT compilation input
+    ir: &'static FunctionIR,        // Input for JIT compilation
     /// Runtime statistics
     invocation_count: AtomicU32,
     backedge_count: AtomicU32,
-    state: AtomicU8,               // Cold | Warm | Hot | Compiled
+    state: AtomicU8,                // Cold | Warm | Hot | Compiled
 }
 ```
 
-#### 4.2 Entry Dispatch
+#### 4.2 Entry dispatch
 
 ```
 Caller
   → fn_entry.code_ptr.load(Ordering::Acquire)
-  → ┬─ Interpreter stub address → Execute interpreter, interpret bytecode instruction by instruction
-    └─ JIT code address           → Jump directly to native code
+  → ┬─ Interpreter stub address → execute interpreter, interpret bytecode one by one
+    └─ JIT code address         → jump directly to native code
 ```
 
-One pointer dereference. Modern CPU branch predictors handle indirect jumps: first prediction is
-wrong, then all correct. Cost ~1 cycle.
+One pointer dereference. Modern CPU branch predictors' handling of indirect jumps: the first
+prediction is wrong, then all correct. Overhead is about 1 cycle.
 
-#### 4.3 Atomic Switch
+#### 4.3 Atomic switching
 
-After compilation completes, a single CAS:
+One CAS after compilation completes:
 
 ```rust
 fn install_jit_code(entry: &FunctionEntry, jit_code: *mut u8) -> bool {
@@ -304,10 +306,10 @@ fn install_jit_code(entry: &FunctionEntry, jit_code: *mut u8) -> bool {
 }
 ```
 
-No interpreter pause, no safepoint wait, no call site traversal. One atomic operation completes the
-switch.
+No pausing the interpreter, no safepoint waits, no call-site traversal. One atomic operation
+completes the switch.
 
-### 5. Code Cache
+### 5. Code cache
 
 #### 5.1 Structure
 
@@ -326,105 +328,104 @@ CodeCache:
       native_pages:   [ mmap'd executable memory pages ]
 ```
 
-#### 5.2 Executable Memory Management
+#### 5.2 Executable memory management
 
 ```rust
 struct NativePage {
     ptr: *mut u8,
     size: usize,
     used: AtomicUsize,     // Bytes used
-    remaining: usize,       // Remaining capacity
+    remaining: usize,      // Remaining capacity
 }
 
 impl CodeCache {
     fn allocate(&self, code_size: usize) -> *mut u8;
-    fn deallocate(&self, ptr: *mut u8, code_size: usize);  // Called only when module is invalidated
+    fn deallocate(&self, ptr: *mut u8, code_size: usize);  // Only called when a module is invalidated
 }
 ```
 
-Each module allocates contiguous mmap executable pages; all JIT functions within a module are
-allocated from the same page. When a module is invalidated, the entire page is reclaimed, no need to
-free function by function.
+Each module is allocated contiguous mmap executable pages; all JIT functions within a module are
+allocated from the same page. When a module is invalidated, the entire page is reclaimed — no
+per-function free required.
 
-### 6. Reserved Extension Points for Hot Reload
+### 6. Reserved extension points for hot-reloading
 
-The following interfaces compile but are not called before hot reload implementation. Interface
-design principle: **JIT implementation only needs `insert` and single-function `compare_exchange`;
-module-level operations are left for hot reload.**
+The following interfaces compile but are not invoked before hot-reloading is implemented. Interface
+design principle: **JIT implementation only needs `insert` and per-function `compare_exchange`;
+module-level operations are left to hot-reloading.**
 
 ```rust
 /// Code cache extension interface (reserved, not implemented)
 trait CodeCacheExt {
-    /// Invalidate all JIT code in an entire module, fall back to interpreter
+    /// Invalidate all JIT code for a module, fall back to the interpreter
     fn invalidate_module(&self, module_path: &str);
 
     /// Invalidate specific functions based on source location range
     fn invalidate_range(&self, file: &str, start: u32, end: u32);
 
-    /// Atomically replace the entire function table of a module
+    /// Atomically replace an entire module's function table
     fn swap_module(&self, module_path: &str, new_functions: HashMap<String, FunctionEntry>);
 }
 
-/// Compile queue extension interface (reserved, not implemented)
+/// Compilation queue extension interface (reserved, not implemented)
 trait CompileQueueExt {
-    /// Priority insertion (hot reload compilation takes precedence over normal JIT compilation)
+    /// Priority insertion (hot-reload compilation takes priority over normal JIT compilation)
     fn submit_priority(&self, task: CompileTask);
 }
 ```
 
-**Why group by module?** JIT itself only needs functions. Organizing by module is entirely for hot
-reload: after a module is recompiled, the entire function set can be atomically replaced instead of
-CAS per function—the latter would cause inconsistent state when there are circular dependencies
-between functions.
+**Why group by module?** JIT itself only needs functions. Organizing by module exists entirely to
+serve hot-reloading: after a module is recompiled, the entire module's function set can be replaced
+atomically, rather than per-function CAS — the latter would cause inconsistent state when there are
+cyclic dependencies between functions.
 
-## Tradeoffs
+## Trade-offs
 
 ### Advantages
 
-1. **Zero-perceptible compilation delay**: Cranelift 1-5ms/function, background thread compilation,
-   interpreter doesn't pause
+1. **Zero-perceived compilation delay**: Cranelift 1–5ms/function, background thread compilation,
+   interpreter never pauses
 2. **Shared infrastructure**: JIT and AOT share the IR normalization pass (RFC-018 §4.0), no
    reinventing the wheel
-3. **Non-disruptive**: Pure incremental feature. VM unchanged, interpreter unchanged, just one more
-   faster hot path
-4. **No LLVM dependency**: VM doesn't introduce LLVM, remains lightweight
-5. **Native multi-platform support**: Cranelift natively supports x86_64 and ARM64, covering all
-   target platforms
-6. **Hot reload reservation**: Code cache grouped by module + function entry indirect jump, laying
-   structural foundation for future hot reload
+3. **Non-breaking**: Pure incremental feature. VM unchanged, interpreter unchanged — just one faster
+   hot path added
+4. **No LLVM dependency**: VM doesn't introduce LLVM, stays lightweight
+5. **Naturally multi-platform**: Cranelift natively supports x86_64 and ARM64, covering all target
+   platforms
+6. **Hot-reloading reserved**: Code cache grouped by module + function entry indirect jumps lay the
+   structural foundation for future hot-reloading
 
 ### Disadvantages
 
-1. **Cranelift new dependency**: Introduces new external crate, requires familiarization with its
-   API
+1. **New Cranelift dependency**: Introduces a new external crate, requires familiarity with its API
 2. **Debugging complexity**: JIT-generated code stack frames need to be compatible with interpreter
-   stack frames, debug info mapping requires extra handling
-3. **Cold start heat delay**: First few seconds after program startup have no JIT acceleration, heat
-   needs to accumulate
-4. **Platform ABI**: mmap and calling conventions on different platforms (Linux/macOS/Windows) need
-   separate adaptation
+   stack frames; debug info mapping requires additional handling
+3. **Cold-start hotness delay**: No JIT acceleration in the first few seconds after program start;
+   hotness needs to accumulate
+4. **Platform ABI**: Different platforms (Linux/macOS/Windows) require separate adaptation for mmap
+   and calling conventions
 
-### Consistency with Related RFCs
+### Consistency with related RFCs
 
-| RFC                             | Consistency                                                     |
-| ------------------------------- | --------------------------------------------------------------- |
-| RFC-018 LLVM AOT                | ✅ Shares IR normalization pass, JIT and AOT are peer backends  |
-| RFC-024 spawn block concurrency | ✅ Spawn blocks compiled to runtime function calls              |
-| RFC-008 Runtime architecture    | ✅ All three runtime tiers (Embedded/Standard/Full) support JIT |
+| RFC                             | Consistency                                                         |
+| ------------------------------- | ------------------------------------------------------------------- |
+| RFC-018 LLVM AOT                | ✅ Share IR normalization pass; JIT and AOT are peer-level backends |
+| RFC-024 spawn block concurrency | ✅ spawn blocks compiled to runtime function calls                  |
+| RFC-008 Runtime architecture    | ✅ All three runtime tiers (Embedded/Standard/Full) support JIT     |
 
-## Alternative Solutions
+## Alternatives
 
-| Solution                           | Why not chosen                                                                           |
+| Option                             | Why not chosen                                                                           |
 | ---------------------------------- | ---------------------------------------------------------------------------------------- |
-| Only LLVM AOT, no JIT              | During development, need to recompile entire program, loses rapid iteration experience   |
-| LLVM ORC JIT                       | High compilation delay (10-100ms), large LLVM dependency, unsuitable for embedding in VM |
-| Custom lightweight JIT (dynasm)    | Hand-written backend has high maintenance cost, Cranelift is more mature                 |
-| Template JIT                       | Zero optimization, poor code quality, wastes JIT compilation time for nothing            |
-| Whole-program JIT (no interpreter) | Slow cold start, simple scripts don't deserve compilation                                |
+| Only use LLVM AOT, no JIT          | Development requires recompiling the whole program, losing the fast iteration experience |
+| LLVM ORC JIT                       | High compile latency (10–100ms), large LLVM dependency, unsuitable for embedding in VM   |
+| Custom lightweight JIT (dynasm)    | Hand-written backend has high maintenance cost, not as mature as Cranelift               |
+| Template JIT                       | Zero optimization, poor code quality, wastes JIT compilation time                        |
+| Whole-program JIT (no interpreter) | Slow cold start; simple scripts don't warrant compilation                                |
 
 ## Dependencies
 
-- RFC-018 (LLVM AOT) → Shares IR normalization pass
+- RFC-018 (LLVM AOT) → share IR normalization pass
 - RFC-024 (spawn block concurrency) → JIT compilation of spawn blocks
 - RFC-008 (runtime architecture) → three-tier runtime JIT support
 - Cranelift crate → JIT backend
@@ -433,17 +434,17 @@ between functions.
 
 - [Cranelift IR Documentation](https://github.com/bytecodealliance/wasmtools/tree/main/cranelift)
 - [RFC-018: LLVM AOT Compiler Design](../accepted/018-llvm-aot-compiler.md)
-- [RFC-024: Concurrency Model Based on Spawn Blocks](../accepted/024-concurrency-model.md)
+- [RFC-024: Concurrency Model Based on spawn Blocks](../accepted/024-concurrency-model.md)
 - [RFC-008: Runtime Concurrency Model and Scheduler Decoupling Design](../accepted/008-runtime-concurrency-model.md)
 - Hölzle, U. (1994). _Adaptive Optimization for Self: Reconciling High Performance with Exploratory
   Programming_. Stanford.
 
 ---
 
-## Lifecycle and Destination
+## Lifecycle and final destination
 
-| Status        | Location                        | Description                      |
-| ------------- | ------------------------------- | -------------------------------- |
-| **Draft**     | `docs/src/rfc/draft/`    | Author draft, awaiting review    |
-| **In Review** | `docs/src/rfc/review/`   | Open for community discussion    |
-| **Accepted**  | `docs/src/rfc/accepted/` | Becomes official design document |
+| Status        | Location                 | Notes                                      |
+| ------------- | ------------------------ | ------------------------------------------ |
+| **Draft**     | `docs/src/rfc/draft/`    | Author's draft, awaiting submission review |
+| **In review** | `docs/src/rfc/review/`   | Open community discussion and feedback     |
+| **Accepted**  | `docs/src/rfc/accepted/` | Becomes an official design document        |

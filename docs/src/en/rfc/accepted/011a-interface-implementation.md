@@ -9,21 +9,21 @@ group: 'rfc-011'
 
 # RFC-011a: Interface Implementation and Dynamic Dispatch
 
-> **Parent RFC**: [RFC-011: generics System Design](011-generic-type-system.md)
+> **Parent RFC**: [RFC-011: Generic System Design](011-generic-type-system.md)
 >
 > **This RFC supplements and replaces the interface constraint portion of RFC-011 §2.1-2.4.**
 
 ## Summary
 
-RFC-011 defines the generics system but does not detail the interface implementation mechanism. This
+RFC-011 defined the generics system but did not detail the interface implementation mechanism. This
 document supplements:
 
-1. **Interface declaration**: Interfaces are parameterized types—`(Self: Type) -> Type`, with
-   concrete types passed in at implementation time
-2. **Method implementation**: Both internal and external declarations are supported
-3. **Overloading rules**: Different signatures permit overloading; identical signatures report an
-   error (overriding prohibited)
-4. **Default values**: Write `= value` directly after the field
+1. **Interface declaration**: interfaces are parameterized types — `(Self: Type) -> Type`,
+   instantiated with concrete types
+2. **Method implementation**: both internal and external declarations are supported
+3. **Overload rules**: different signatures allow overloading, same signature errors (override
+   forbidden)
+4. **Default values**: write `= value` directly after a field
 5. **Dynamic dispatch**: compile-time type collection + interface matching, no vtable
 
 **Core design**:
@@ -49,78 +49,79 @@ animals: List(Animal) = [Dog.new(), Cat.new()]
 animals[0].speak()  # "Woof"
 ```
 
-**Receiver spelling convention** (coordinating with RFC-009 ownership semantics):
+**Receiver spelling convention** (cooperating with RFC-009 ownership semantics):
 
-- Method receivers follow signature semantics: `&Self` = borrow (interface default convention—method
-  calls do not consume the receiver), `&mut Self` = mutable borrow, value-type `Self` = consume the
-  receiver (Move, RFC-009).
-- The `Self` in the impl-side signature is an alias for the impl type: interface
-  `speak: (self: &Self)` matches both impl `(self: &Dog)` and `(self: &Self)` (after Self↦impl type
-  substitution, fully consistent, §3).
-- The value-receiver spelling in historical examples (`(self: Self)`) was meant to indicate borrow;
-  this document has uniformly migrated to explicit `&Self`. The value spelling now exclusively
-  retains "consume" semantics and is no longer mixed.
+- The method receiver follows the signature semantics: `&Self` = borrow (the default convention for
+  interfaces — method calls do not consume the receiver), `&mut Self` = mutable borrow, by-value
+  `Self` = consume the receiver (Move, RFC-009).
+- In the impl-side signature, `Self` is an alias for the impl type: the interface
+  `speak: (self: &Self)` matches both impl `(self: &Dog)` and `(self: &Self)` (after Self ↦
+  impl-type substitution they are exactly identical, §3).
+- The by-value receiver spelling in historical examples (`(self: Self)`) meant borrow, and this
+  document has uniformly migrated it to explicit `&Self`; by-value spelling now reserves the
+  "consume" semantics, no longer mixed.
 
 **Eliminated complexity**:
 
 - ❌ No `impl` keyword
 - ❌ No `Self` magic keyword (`Self` is an explicit type parameter, no different from `T`)
-- ❌ No `dyn Trait + 'a` annotation
+- ❌ No `dyn Trait + 'a` annotations
 - ❌ No vtable (compile-time type collection + enum wrapping)
-- ❌ No overriding (unified overloading rules)
+- ❌ No override (uniform overload rules)
 
 ---
 
 ## Motivation
 
-### Insufficiencies of RFC-011
+### RFC-011's Deficiencies
 
-RFC-011 defines the generics system but does not detail:
+RFC-011 defined the generics system but did not detail:
 
 | Problem                        | Description                                         |
 | ------------------------------ | --------------------------------------------------- |
 | Interface declaration syntax   | How to declare that a type implements an interface? |
-| Method implementation location | Internal or external declaration?                   |
-| Overloading rules              | How are same-named methods handled?                 |
-| Default value syntax           | How to set default values for fields?               |
-| Dynamic dispatch               | How are heterogeneous containers implemented?       |
+| Method implementation location | Internal declaration or external declaration?       |
+| Overload rules                 | How to handle same-named methods?                   |
+| Default value syntax           | How do fields set default values?                   |
+| Dynamic dispatch               | How to implement heterogeneous containers?          |
 
-### Design goals
+### Design Goals
 
-1. **Concise**: No `impl` keyword needed
-2. **Flexible**: Both internal and external method implementations are supported
-3. **Unified**: Consistent overloading rules
-4. **Convenient**: Concise default value syntax
-5. **Zero overhead**: No vtable, compile-time type collection
+1. **Concise**: no `impl` keyword needed
+2. **Flexible**: method implementation supports both internal and external declarations
+3. **Unified**: overload rules are consistent
+4. **Convenient**: default value syntax is concise
+5. **Zero overhead**: no vtable, compile-time type collection
 
 ### Comparison with Rust
 
-| Feature                  | Rust                                   | YaoXiang                            |
-| ------------------------ | -------------------------------------- | ----------------------------------- |
-| Interface declaration    | `impl Animal for Dog { ... }`          | `Dog: Type = { Animal(Dog), ... }`  |
-| Method implementation    | In `impl` blocks                       | Internal or external                |
-| Overloading              | Not supported                          | Supported (different signatures)    |
-| Default values           | Requires `#[default]`                  | Write `= value` directly            |
-| Heterogeneous containers | `Vec<Box<dyn Animal + 'a>>`            | `List(Animal)`                      |
-| Dynamic dispatch         | Vtable lookup                          | compile-time type collection        |
-| Self keyword             | Magic keyword, implicit quantification | Explicit type parameter, equal to T |
+| Feature                 | Rust                                   | YaoXiang                              |
+| ----------------------- | -------------------------------------- | ------------------------------------- |
+| Interface declaration   | `impl Animal for Dog { ... }`          | `Dog: Type = { Animal(Dog), ... }`    |
+| Method implementation   | in `impl` block                        | internal or external                  |
+| Overload                | not supported                          | supported (different signatures)      |
+| Default value           | requires `#[default]`                  | write `= value` directly              |
+| Heterogeneous container | `Vec<Box<dyn Animal + 'a>>`            | `List(Animal)`                        |
+| Dynamic dispatch        | vtable lookup                          | compile-time type collection          |
+| `Self` keyword          | magic keyword, implicit quantification | explicit type parameter, equal to `T` |
 
 ---
 
 ## Proposal
 
-### 1. Interface declaration
+### 1. Interface Declaration
 
-**Core rule**: An interface is a parameterized type `(Self: Type) -> Type`. `Self` is an explicit
-type parameter, not a magic keyword. Pass in the concrete type at implementation time.
+**Core rule**: an interface is a parameterized type `(Self: Type) -> Type`; `Self` is an explicit
+type parameter, not a magic keyword. When implementing, call the interface and pass in a concrete
+type.
 
 ```yaoxiang
-# Interface definition (fully consistent with RFC-011 generic types)
+# Interface definition (consistent with RFC-011 generic types)
 Animal: (Self: Type) -> Type = {
     speak: (self: &Self) -> String,
 }
 
-# Type declaration implements the interface
+# Type declaration implements interface
 Dog: Type = {
     x: Int,
     Animal(Dog),  # Instantiate interface, Self ↦ Dog
@@ -131,81 +132,81 @@ Dog: Type = {
 
 1. Recognize `Animal(Dog)` as an instantiation call of `(Self: Type) -> Type`
 2. Perform `Self ↦ Dog` substitution: expand `Animal(Dog)` → `{ speak: (self: &Dog) -> String }`
-3. Check whether `Dog` provides all required methods (signature matching)
+3. Check whether `Dog` provides all required methods (signature match)
 4. If passed → generate implementation proof
-5. If failed → compilation error
+5. If failed → compile error
 
 **Expansion equivalence**:
 
 ```yaoxiang
 Dog: Type = {
     x: Int,
-    Animal(Dog),  # Expand to Animal's methods, preserve source marker
+    Animal(Dog),  # Expand as Animal's methods, retain source marker
 }
 
-# Equivalent to (preserving source information)
+# Equivalent to (preserving source info)
 Dog: Type = {
     x: Int,
-    speak: (self: &Dog) -> String,  # From Animal, Self replaced by Dog
+    speak: (self: &Dog) -> String,  # from Animal, Self replaced by Dog
 }
 ```
 
 **Why source markers are needed**:
 
 - Direct expansion loses source information
-- Source markers are used to generate implementation proofs
-- The runtime uses the proof to locate the correct method
+- Source markers are used to generate implementation proof
+- Runtime uses the proof to find the correct method
 
-#### 1.1 Self type parameter and type checking timing
+#### 1.1 `Self` Type Parameter and Type-Checking Timing
 
-`Self` is the interface's explicit type parameter, not a magic keyword.
-`Animal: (Self: Type) -> Type` and `List: (T: Type) -> Type` are the same thing—`(Type) -> Type`
-type constructors.
+`Self` is an explicit type parameter of the interface, not a magic keyword.
+`Animal: (Self: Type) -> Type` and `List: (T: Type) -> Type` are the same thing — a `(Type) -> Type`
+type constructor.
 
-**Type checking timing**:
+**Type-checking timing**:
 
-- **At interface definition**: The `Self` in `{ speak: (self: &Self) -> String }` is an abstract
-  type parameter, with only syntactic checking performed.
-- **At instantiation point**: When `Animal(Dog)` is invoked, perform `Self ↦ Dog` and conduct full
-  type checking after expansion (signature matching, method existence).
+- **At interface definition**: `Self` in `{ speak: (self: &Self) -> String }` is an abstract type
+  parameter, only syntax-checked.
+- **At instantiation point**: when `Animal(Dog)` is called, perform `Self ↦ Dog`, then run a
+  complete type check after expansion (signature match, method existence).
 
-This avoids the problem in RFC-011 where `Self` is an implicit magic keyword—`Self` does not appear
+This avoids the problem of `Self` as an implicit magic keyword in RFC-011 — `Self` does not appear
 in type definitions; it only appears once in the interface parameter list, fully equal to `T`.
 
-#### 1.2 Field name and method name namespace
+#### 1.2 Field Name and Method Name Namespace
 
-The type's field names and method names share the same namespace. After interface expansion, if an
-interface method name conflicts with a type field name, **the compiler reports an error**:
+A type's field names and method names share the same namespace. After interface expansion, if the
+interface method name conflicts with a type field name, **compile error**:
 
 ```yaoxiang
 Drawable: (Self: Type) -> Type = {
-    x: (self: &Self) -> Int,    // Method named x
+    x: (self: &Self) -> Int,    // method named x
 }
 
 Point: Type = {
-    x: Int,                     // Field also named x
-    Drawable(Point),            // ❌ Compilation error: Drawable requires method x, conflicting with field x
+    x: Int,                     // field also named x
+    Drawable(Point),            // ❌ compile error: Drawable requires method x, conflicts with field x
 }
 ```
 
 Field access `point.x` and method call `point.x()` are syntactically indistinguishable. A unified
 namespace avoids ambiguity.
 
-### 2. Method implementation
+### 2. Method Implementation
 
-**Core rule**: Both internal and external method implementation declarations are supported.
+**Core rule**: method implementation supports both internal and external declarations.
 
-#### 2.1 Internal declaration
+#### 2.1 Internal Declaration
 
 ```yaoxiang
 Dog: Type = {
     x: Int = 10,
     Animal(Dog),
-    speak: (self: &Dog) -> String = "Woof",  # Method implementation internal
+    speak: (self: &Dog) -> String = "Woof",  # method implementation inside
 }
 ```
 
-#### 2.2 External declaration
+#### 2.2 External Declaration
 
 ```yaoxiang
 Dog: Type = {
@@ -213,20 +214,20 @@ Dog: Type = {
     Animal(Dog),
 }
 
-# Method implementation external
+# Method implementation outside
 Dog.speak: (self: &Dog) -> String = "Woof"
 ```
 
-#### 2.3 Mixed declaration
+#### 2.3 Mixed Declaration
 
 ```yaoxiang
 Dog: Type = {
     x: Int = 10,
     Animal(Dog),
-    speak: (self: &Dog) -> String = "Woof",  # Some methods internal
+    speak: (self: &Dog) -> String = "Woof",  # part of methods inside
 }
 
-# Some methods external
+# Part of methods outside
 Dog.play: (self: &Dog) -> Void = { ... }
 ```
 
@@ -234,37 +235,37 @@ Dog.play: (self: &Dog) -> Void = { ... }
 
 1. Collect all definitions (internal and external)
 2. Group by signature (overload)
-3. Check for overriding (report error)
+3. Check for override (error)
 4. Check interface completeness
 5. Generate implementation proof
 
-### 3. Overloading and overriding
+### 3. Overload and Override
 
 **Core rule**:
 
-- Different signatures → overloading → allowed
-- Identical signatures → overriding → report error
+- Different signatures → overload → allowed
+- Same signature → override → error
 
-#### 3.1 Overloading (allowed)
+#### 3.1 Overload (allowed)
 
 ```yaoxiang
-# Different parameter types, overloading allowed
+# Different parameter types, overload allowed
 Dog.speak: (self: &Dog) -> String = "Woof"
 Dog.speak: (self: &Dog, volume: Int) -> String = "WOOF"
 ```
 
-#### 3.2 Overriding (prohibited)
+#### 3.2 Override (forbidden)
 
 ```yaoxiang
-# Identical signatures, overriding prohibited
+# Identical signature, override forbidden
 Dog.speak: (self: &Dog) -> String = "Woof"
-Dog.speak: (self: &Dog) -> String = "Bark"  # ❌ Error: overriding not allowed
+Dog.speak: (self: &Dog) -> String = "Bark"  # ❌ error: override not allowed
 ```
 
 **Error message**:
 
 ```
-Error: Dog.speak(self: &Dog) -> String duplicate definition
+error: duplicate definition of Dog.speak(self: &Dog) -> String
   --> file2:5:1
   |
 5 | Dog.speak: (self: &Dog) -> String = "Bark"
@@ -276,9 +277,9 @@ Error: Dog.speak(self: &Dog) -> String duplicate definition
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ first definition
 ```
 
-#### 3.3 Unified rules
+#### 3.3 Unified Rules
 
-**Internal and external declarations follow the same overloading/overriding rules**:
+**Internal and external declarations follow the same overload/override rules**:
 
 ```yaoxiang
 # Internal declaration
@@ -291,23 +292,23 @@ Dog: Type = {
 # External declaration (overload, allowed)
 Dog.speak: (self: &Dog, volume: Int) -> String = "WOOF"
 
-# External declaration (overriding, prohibited)
-Dog.speak: (self: &Dog) -> String = "Bark"  # ❌ Error
+# External declaration (override, forbidden)
+Dog.speak: (self: &Dog) -> String = "Bark"  # ❌ error
 ```
 
-### 4. Default values
+### 4. Default Values
 
-**Core rule**: Write `= value` directly after the field, eliminating the need for constructors.
+**Core rule**: write `= value` directly after a field, eliminating the need for constructors.
 
 ```yaoxiang
 Dog: Type = {
-    x: Int = 10,  # Default value
-    y: Int = 20,  # Default value
+    x: Int = 10,  # default value
+    y: Int = 20,  # default value
     Animal(Dog),
 }
 ```
 
-**Compiler-generated constructors**:
+**Compiler generates constructors**:
 
 ```yaoxiang
 # All fields have default values → generate no-arg constructor
@@ -321,7 +322,7 @@ Dog.new: (y: Int) -> Dog = { x: 10, y: y }
 Dog.new: (x: Int, y: Int) -> Dog = { x: x, y: y }
 ```
 
-**External declaration of default values**:
+**External default declaration**:
 
 ```yaoxiang
 Dog: Type = {
@@ -330,16 +331,16 @@ Dog: Type = {
     Animal(Dog),
 }
 
-# External declaration of default values
+# External default declaration
 Dog.x: Int = 10
 Dog.y: Int = 20
 ```
 
 **Equivalent to internal declaration**.
 
-### 5. Compiler implementation
+### 5. Compiler Implementation
 
-#### 5.1 Interface descriptor
+#### 5.1 Interface Descriptor
 
 ```rust
 // Compiler internal: interface descriptor
@@ -350,7 +351,7 @@ struct InterfaceDescriptor {
 }
 ```
 
-#### 5.2 Type definition
+#### 5.2 Type Definition
 
 ```rust
 // Compiler internal: type definition
@@ -363,12 +364,12 @@ struct TypeDefinition {
 // Interface instantiation (Self ↦ ConcreteType)
 struct InterfaceInstantiation {
     interface: InterfaceId,
-    self_type: TypeId,          // Concrete type that Self is replaced with
+    self_type: TypeId,          // Concrete type Self is substituted with
     methods: HashMap<MethodId, FunctionBody>,
 }
 ```
 
-#### 5.3 Implementation proof
+#### 5.3 Implementation Proof
 
 ```rust
 // Compiler internal: implementation proof
@@ -379,28 +380,28 @@ struct ImplementationProof {
 }
 ```
 
-#### 5.4 Compilation flow
+#### 5.4 Compilation Flow
 
 ```
 1. Parse type definitions, collect interface instantiation declarations (Animal(Dog))
 2. For each interface instantiation, perform Self ↦ ConcreteType substitution
-3. Expand interface method signatures, check signature matching
+3. Expand interface method signatures, check signature match
 4. Collect all method definitions (internal and external)
 5. Group by signature (overload)
-6. Check overriding (report error)
+6. Check override (error)
 7. Check interface completeness
 8. Generate implementation proof
 ```
 
-### 6. Dynamic dispatch
+### 6. Dynamic Dispatch
 
 **Core design**: compile-time type collection + interface matching, no vtable.
 
-#### 6.1 Heterogeneous containers
+#### 6.1 Heterogeneous Container
 
 `Animal` is `(Self: Type) -> Type`. `List(Animal)` uses the uninstantiated interface type
-constructor as an **existential type**: `∃S. Animal(S)`—"there exists some type S such that S
-implements Animal(S)".
+constructor as an **existential type**: `∃S. Animal(S)` — "there exists some type S such that S
+implements `Animal(S)`".
 
 ```yaoxiang
 # Interface definition
@@ -427,82 +428,82 @@ animals[0].speak()  # "Woof"
 animals[1].speak()  # "Meow"
 ```
 
-**Ownership semantics**: Insertion into a heterogeneous container is Move semantics (RFC-009).
-`Dog.new()` is moved into the `AnimalGroup::Dog` enum variant, and the original variable is no
-longer available.
+**Ownership semantics**: putting into a heterogeneous container is Move semantics (RFC-009).
+`Dog.new()` is moved into the `AnimalGroup::Dog` enum variant; the original variable is no longer
+usable.
 
 ```yaoxiang
 dog = Dog.new()
 animals: List(Animal) = [dog]
-# dog.speak()  ← ❌ Compilation error: dog has been moved
+# dog.speak()  ← ❌ compile error: dog has been moved
 ```
 
-#### 6.2 compile-time type collection
+#### 6.2 Compile-time Type Collection
 
-**Core strategy: ownership tracking, incremental construction.** Not scanning the compile-time all
-types that implement the interface—rather, incrementally collecting at each `List(Animal)`
-**ownership operation point**:
+**Core strategy: ownership tracking, incremental construction.** Rather than scanning all types
+implementing the interface at compile time — at each **ownership operation point** of
+`List(Animal)`, collect incrementally:
 
 ```yaoxiang
 // Construction point
 animals: List(Animal) = [Dog.new()]       // AnimalGroup = { Dog(Dog) }
 
 // append point
-animals.append(Cat.new())                  // Compiler sees Cat at append → expands to { Dog, Cat }
-animals.append(Bird.new())                 // Expands further to { Dog, Cat, Bird }
+animals.append(Cat.new())                  // compiler sees Cat at append → extends to { Dog, Cat }
+animals.append(Bird.new())                 // extends again { Dog, Cat, Bird }
 ```
 
 **Compiler processing** (incremental):
 
-1. Encounter `List(Animal)` constructed for the first time → generate initial enum (all known
-   constructor types in the current compilation unit)
+1. Encounter the first construction of `List(Animal)` → generate the initial enum (all currently
+   known construction types within the compilation unit)
 2. Each `append` / `push` / index assignment → check whether the value type is already in the enum;
-   if not, expand the enum variant
+   if not, extend the enum variants
 3. Generate monomorphized `match` dispatch code for the final enum
-4. Cross-compilation-unit: rely on LTO (Link-Time Optimization) to merge enum variants. When
-   `Animal` as an existential type is passed across compilation unit boundaries, each unit generates
-   partial enum variants, which are merged into a complete enum at the linking stage.
+4. Cross-compilation-unit: rely on LTO (link-time optimization) to merge enum variants. When
+   `Animal` is passed across compilation unit boundaries as an existential type, each unit generates
+   partial enum variants, and the link phase merges them into a complete enum.
 
 **Auto-generated enum**:
 
 ```yaoxiang
-# Compiler auto-generated (invisible to user)
+# Compiler auto-generated (not visible to the user)
 AnimalGroup: Type = {
     Dog(Dog),
     Cat(Cat),
-    Bird(Bird),    # ← append(Bird.new()) triggers incremental expansion
+    Bird(Bird),    # ← append(Bird.new()) triggers incremental extension
 }
 
-# List(Animal) internally equivalent to List(AnimalGroup)
+# List(Animal) is internally equivalent to List(AnimalGroup)
 ```
 
-#### 6.3 Interface matching check
+#### 6.3 Interface Match Checking
 
-**Key insight**: Interface matching is a compile-time check, even if the type comes from a
+**Key insight**: interface matching is checked at compile time, even if the type comes from a
 dynamically loaded plugin.
 
 ```yaoxiang
 # Plugin system
 plugin = load_plugin("bird.so")
 
-# Compiler checks: plugin.create_bird() return type must implement Animal
+# Compiler checks: plugin.create_bird()'s return type must implement Animal
 bird: Animal = plugin.create_bird()  # compile-time check, existential type
 
-# Put into heterogeneous container — append point triggers enum expansion
+# Put into heterogeneous container — append point triggers enum extension
 animals: List(Animal) = [Dog.new(), Cat.new()]
-animals.append(bird)                 # Compiler: (1) verify bird implements Animal (2) expand enum
+animals.append(bird)                 // compiler: (1) verify bird implements Animal (2) extend enum
 ```
 
 **Compiler processing**:
 
 1. Check the return type of the `append` argument
-2. Verify whether the type implements the target interface
-3. If passed → expand enum, allow insertion
-4. If failed → compilation error
+2. Verify that the type implements the target interface
+3. If passed → extend the enum and allow placement
+4. If failed → compile error
 
-#### 6.4 Runtime dispatch
+#### 6.4 Runtime Dispatch
 
-**Call flow (compile-time enum match, ImplementationProof erased)**:
+**Call flow (compile-time enum match, `ImplementationProof` already erased):**
 
 ```
 animals[0].speak()
@@ -515,83 +516,84 @@ Compiler-generated match:
   }
 ```
 
-**Brand projection** (interaction with RFC-009a): The match pattern binding `AnimalGroup.Dog(d)`
-produces a `#animals[0].Dog` sub-brand in the brand tree, equivalent to field projection
+**Brand projection** (interaction with RFC-009a): the pattern binding `AnimalGroup.Dog(d)` in the
+`match` produces a `#animals[0].Dog` sub-brand in the brand tree, equivalent to field projection
 (`#42.field_x`). The `ReadToken(d)` brand chain created by `d.speak()` is
-`animals → animals[0] → d → ReadToken(d)`, which the borrow checker validates via brand tree prefix
-matching for conflicts.
+`animals → animals[0] → d → ReadToken(d)`; the borrow checker verifies conflicts via brand-tree
+prefix matching.
 
-**Subscript access type**: `animals[0]` returns `&AnimalGroup` (compiler-generated enum type); the
-user cannot directly obtain `&mut Animal`. Mutable access is achieved indirectly through interface
-methods (e.g., `animals[0].mutate()` internally expands to `AnimalGroup::Dog(d) => d.mutate()`).
+**Type of index access**: `animals[0]` returns `&AnimalGroup` (the compiler-generated enum type);
+the user cannot directly obtain `&mut Animal`. Mutable access is implemented indirectly through
+interface methods (e.g. `animals[0].mutate()` internally expands to
+`AnimalGroup::Dog(d) => d.mutate()`).
 
 **Comparison with vtable**:
 
-|                         | Vtable (Rust)                   | compile-time Enum (YaoXiang)                       |
-| ----------------------- | ------------------------------- | -------------------------------------------------- |
-| Lookup method           | Vtable pointer → method pointer | Enum match → direct call                           |
-| Runtime overhead        | One indirect addressing         | branch (can be optimized by CPU branch prediction) |
-| compile-time generation | Vtable                          | Enum + match                                       |
-| User annotation         | Requires `dyn Trait + 'a`       | Not required                                       |
-| ImplementationProof     | N/A                             | Erased at compile-time, nonexistent at runtime     |
+|                       | Vtable (Rust)                   | Compile-time enum (YaoXiang)              |
+| --------------------- | ------------------------------- | ----------------------------------------- |
+| Lookup method         | vtable pointer → method pointer | enum `match` → direct call                |
+| Runtime overhead      | one indirection                 | branch (CPU branch predictor friendly)    |
+| Compile-time artifact | vtable                          | enum + `match`                            |
+| User annotation       | requires `dyn Trait + 'a`       | none                                      |
+| `ImplementationProof` | N/A                             | compile-time erased, no runtime existence |
 
 **YaoXiang's advantages**:
 
-- No brand annotation required
-- compile-time type safety
+- No brand annotation needed
+- Compile-time type safety
 - User-transparent (no need to write `dyn Animal`)
-- ImplementationProof is a pure compile-time concept with zero runtime overhead
+- `ImplementationProof` is a pure compile-time concept, zero runtime overhead
 
-#### 6.5 Limitations and scope
+#### 6.5 Limitations and Scope
 
-**Within the current period (single compilation unit):** Full support. Ownership tracking covers all
-`append`/construction points, with incremental enum construction.
+**Within a single compilation unit:** fully supported. Ownership tracking covers all
+`append`/construction points, enum built incrementally.
 
-**Cross-compilation-unit:** Rely on LTO (Link-Time Optimization) to merge enum variants. `Animal` is
-passed across compilation unit boundaries as an existential type (`∃S. Animal(S)`). Each unit
-generates partial enum variants, which are merged at the linking stage.
+**Cross-compilation-unit:** Relies on LTO (link-time optimization) to merge enum variants. `Animal`
+as an existential type (`∃S. Animal(S)`) is passed across compilation unit boundaries. Each unit
+generates partial enum variants, and the link phase merges them.
 
-**Not supported:** Runtime dynamic types (full duck typing). The type set is fully known at compile
-time.
+**Not supported:** runtime dynamic types (full duck typing). The type set is completely known at
+compile time.
 
-#### 6.6 Implementation notes (Phase 3, landed in v1)
+#### 6.6 Implementation Notes (Phase 3, v1 already landed)
 
-The semantics of §6 (heterogeneous containers, compile-time membership check, dispatch by actual
-type, type set closed at compile time) have all landed. The implementation form has been concretized
-in the mechanism layer as follows:
+The semantics of §6 (heterogeneous container, compile-time membership check, dispatch by actual
+type, type set closed at compile time) have all been landed; the implementation has been concretized
+at the mechanism layer as follows:
 
-- **Type collection**: The implementation type set is collected in one go for the entire compilation
-  unit according to `ImplementationProof`, replacing §6.2's "incremental collection at each
-  ownership operation point". The semantics are equivalent within a single compilation unit (extra
-  dead variants are harmless); the value of incremental collection is in cross-unit scenarios,
-  attributed to v2 (see below).
-- **Representation**: The compiler synthesizes `Animal$Group` variant types, as pure
-  IR/bytecode/runtime artifacts (instructions `CreateVariant`/`VariantTag`/`VariantPayload`, runtime
-  value `RuntimeValue::Enum`), with MonoType unaware—the typecheck layer's user-visible type is
-  still the interface name. Each concrete value entering an existential type position is
+- **Type collection**: performs a one-shot collection of the implementation type set across the
+  entire compilation unit via `ImplementationProof`, replacing the §6.2 "incremental collection at
+  each ownership operation point". Within a single compilation unit the two are semantically
+  equivalent (extra dead variants are harmless); the value of incremental collection lies in the
+  cross-unit scenario, which falls into v2 (see below).
+- **Representation**: the compiler synthesizes an `Animal$Group` variant type, a pure
+  IR/bytecode/runtime artifact (instructions `CreateVariant`/`VariantTag`/`VariantPayload`, runtime
+  value `RuntimeValue::Enum`); `MonoType` is unaware — at the typecheck layer the user-visible type
+  is still the interface name. Every concrete value entering an existential-type position is
   automatically wrapped as a variant value (unified opaque representation, §6.4 semantics).
-- **Wrapping point**: typecheck performs targeted walks at positions of "concrete vs existential"
-  determination (annotated let/call argument/return/list literal element), producing span-keyed
-  enforcement tables; IR generation injects wrapping by span. Missed wrapping is loudly rejected by
-  runtime guards (`VariantTag`/`VariantPayload` validates that the value must be a named group
-  variant value), with the worst case being explicit runtime errors during testing—never silently
-  producing incorrect data.
-- **Dispatch**: Variant-number comparison jump chains; each arm unpacks the payload and then
-  statically calls the concrete method. RFC-004 rebinding form (`Type.method = fn[n]`) participates
-  in dispatch in the same way after rearrangement by binding position.
-- **Isolation**: Legacy trait constraints (`Drawable: Type = {..}` style, no generics parameters) do
-  not go through variant dispatch; behavior is unchanged.
+- **Wrapping points**: typecheck performs a targeted walkthrough at the "concrete vs. existential"
+  judgment positions (annotated `let` / call argument / `return` / list literal element) and
+  produces a span-keyed enforcement table; IR generation injects wrapping per span. Missing wrapping
+  is loudly rejected by the runtime guard (`VariantTag`/`VariantPayload` requires the value to be a
+  named group variant value); the worst case is an explicit runtime error during testing, never
+  silently wrong data.
+- **Dispatch**: variant-tag compare-and-jump chain; each arm statically calls the concrete method
+  after unpacking the payload. RFC-004 rebinding form (`Type.method = fn[n]`) participates in
+  dispatch as well after being reordered by binding position.
+- **Isolation**: legacy trait constraints (`Drawable: Type = {..}` style, no generic parameters) do
+  not pass through variant dispatch; behavior is unchanged.
 
-**v1 boundary (subsequent phases)**: Cross-unit LTO variant merging (§6.5); pattern matching on
-Group values (depends on IR support for variant patterns in match); reflection interaction;
-Move-into-container semantics; `Any`/type variable transit flow and inferred-typed lambda boundaries
+**v1 boundary (subsequent phases)**: cross-unit LTO variant merging (§6.5); pattern matching on
+Group values (depends on `match`'s IR support for variant patterns); reflection interaction;
+Move-into-container semantics; `Any`/type-variable transit flow and inferred-lambda boundaries
 (fallback = runtime guard).
 
 ---
 
-## Use case analysis
+## Use Case Analysis
 
-### Basic interface implementation
+### Basic Interface Implementation
 
 ```yaoxiang
 # Interface definition
@@ -611,7 +613,7 @@ dog = Dog.new()
 dog.speak()  # "Woof"
 ```
 
-### Multiple interface implementations
+### Multiple Interface Implementation
 
 ```yaoxiang
 # Multiple interfaces
@@ -623,7 +625,7 @@ Pet: (Self: Type) -> Type = {
     name: (self: &Self) -> String,
 }
 
-# Type implements multiple interfaces
+# Type implementing multiple interfaces
 Dog: Type = {
     x: Int = 10,
     Animal(Dog),
@@ -638,7 +640,7 @@ dog.speak()  # "Woof"
 dog.name()   # "Buddy"
 ```
 
-### Generic interfaces
+### Generic Interface
 
 ```yaoxiang
 # Generic interface
@@ -656,7 +658,7 @@ IntList: Type = {
 }
 ```
 
-### Heterogeneous containers
+### Heterogeneous Container
 
 ```yaoxiang
 # Interface definition
@@ -689,7 +691,7 @@ for animal in animals {
 # Meow
 ```
 
-### Plugin system
+### Plugin System
 
 ```yaoxiang
 # Interface definition
@@ -704,7 +706,7 @@ main: () -> Void = {
     plugin1 = load_plugin("plugin1.so")
     plugin2 = load_plugin("plugin2.so")
 
-    # Compiler checks: plugin1 and plugin2 must implement Plugin interface
+    # Compiler checks: plugin1 and plugin2 must implement the Plugin interface
     plugins: List(Plugin) = [plugin1, plugin2]
 
     # Execute all plugins
@@ -721,69 +723,68 @@ main: () -> Void = {
 
 ### Advantages
 
-1. **Concise**: No `impl` keyword needed
-2. **Flexible**: Both internal and external method implementations supported
-3. **Unified**: Consistent overloading rules
-4. **Convenient**: Concise default value syntax
-5. **Zero overhead**: No vtable, compile-time type collection
-6. **Type safe**: Interface matching is a compile-time check
-7. **User-transparent**: No need to write `dyn Animal + 'a`
+1. **Concise**: no `impl` keyword needed
+2. **Flexible**: method implementation supports both internal and external declarations
+3. **Unified**: overload rules are consistent
+4. **Convenient**: default value syntax is concise
+5. **Zero overhead**: no vtable, compile-time type collection
+6. **Type-safe**: interface matching is checked at compile time
+7. **User-transparent**: no need to write `dyn Animal + 'a`
 
-### Disadvantages
+### Drawbacks
 
-1. **Limitation**: No runtime dynamic types (full duck typing) supported
-2. **compile-time overhead**: Need to generate enum variants and match dispatch code for each
-   interface
-3. **Type set**: Must be fully known at compile time (within a single compilation unit)
+1. **Limitation**: no runtime dynamic types (full duck typing)
+2. **Compile-time overhead**: must generate enum variants and `match` dispatch for each interface
+3. **Type set**: must be completely known at compile time (within a single compilation unit)
 
 ### Mitigations
 
-1. **Plugin system**: Supported via compile-time interface matching check
-2. **Type set**: Ownership tracking, incremental construction—collected at each
+1. **Plugin system**: supported through compile-time interface match checking
+2. **Type set**: ownership tracking, incremental construction — collect at each
    `append`/construction point, not a global scan
-3. **Cross-compilation-unit**: Link-time merging of enum variant sets, sharing mechanisms with
+3. **Cross-compilation-unit**: link-time merging of enum variant sets, sharing mechanism with
    link-time monomorphization
 
 ---
 
 ## Alternatives
 
-| Plan                   | Why not chosen                   |
-| ---------------------- | -------------------------------- |
-| `impl` keyword         | Increases syntactic complexity   |
-| Vtable (`dyn Trait`)   | Requires brand annotation (`'a`) |
-| Full duck typing       | Runtime overhead, type unsafe    |
-| Enum wrapping (manual) | Heavy user burden                |
+| Alternative            | Why not chosen                    |
+| ---------------------- | --------------------------------- |
+| `impl` keyword         | adds syntax complexity            |
+| Vtable (`dyn Trait`)   | requires brand annotations (`'a`) |
+| Full duck typing       | runtime overhead, not type-safe   |
+| Enum wrapping (manual) | heavy burden on the user          |
 
 ---
 
 ## Relationship with RFC-009
 
-**Brand and interface implementation**:
+**Brands and interface implementation**:
 
-- Interface implementation is at the type layer, not involving brand
-- Brand is at the borrow proof layer (RFC-009a)
-- The two are orthogonal, mutually unaffected
+- Interface implementation lives at the type layer and does not involve brands
+- Brands live at the borrow-proof layer (RFC-009a)
+- The two are orthogonal and do not affect each other
 
-**Dynamic dispatch and brand**:
+**Dynamic dispatch and brands**:
 
 - Dynamic dispatch uses implementation proof, no brand annotation needed
-- Implementation proof is generated at compile time, zero runtime lookup
+- Implementation proof is generated at compile time, with zero runtime lookup
 - Avoids the complexity of `dyn Trait + 'a`
 
-**Ownership of heterogeneous containers**:
+**Heterogeneous-container ownership**:
 
-- Putting into `List(Animal)` is Move semantics (RFC-009); the original variable cannot be accessed
-  again
-- Subscript access `animals[0]` returns `&AnimalGroup` (compiler-generated enum), the brand
-  projection chain is `animals → animals[0] → enum_variant → field`
-- Mutable access is achieved indirectly through interface methods, not exposing `&mut AnimalGroup`
-  to the user
+- Putting into `List(Animal)` is Move semantics (RFC-009); the original variable is no longer
+  accessible
+- Index access `animals[0]` returns `&AnimalGroup` (compiler-generated enum); the brand projection
+  chain is `animals → animals[0] → enum_variant → field`
+- Mutable access is implemented indirectly through interface methods, not exposing
+  `&mut AnimalGroup` to users
 
-## Interface inheritance
+## Interface Inheritance
 
-Interfaces can include other interfaces. **No new syntax introduced**—uses exactly the same syntax
-position as type declaration of interfaces:
+Interfaces can include other interfaces. **No new syntax is introduced** — uses the exact same
+syntax position as type declarations of interfaces:
 
 ```yaoxiang
 Animal: (Self: Type) -> Type = {
@@ -799,48 +800,48 @@ Pet: (Self: Type) -> Type = {
 Dog: Type = {
     x: Int,
     Pet(Dog),
-    speak: (self: &Dog) -> String = "Woof",  # From Animal
-    name: (self: &Dog) -> String = "Buddy",  # From Pet
+    speak: (self: &Dog) -> String = "Woof",  # from Animal
+    name: (self: &Dog) -> String = "Buddy",  # from Pet
 }
 ```
 
-**Design principle:** Inheritance exists but is not encouraged to overuse. The main composition
+**Design principle:** Inheritance exists but is not encouraged to be abused. The main composition
 approach is through multiple interface instantiations
 (`Dog: Type = { Animal(Dog), Pet(Dog), ... }`). A type can directly declare all interfaces it
-satisfies, without needing an inheritance tree to express this. Interface inheritance is used only
-when there is a clear "is-a" hierarchy.
+satisfies, without needing to express that through an inheritance tree. Interface inheritance is
+used only when there is a clear "is-a" hierarchy.
 
-**Compiler processing:** Expand the inheritance chain. `Pet(Self)` expands to
-`{ all methods of Animal(Self), name: ... }`. When `Dog` declares `Pet(Dog)`, `Self ↦ Dog`, and the
+**Compiler processing:** expand the inheritance chain. `Pet(Self)` expands to
+`{ all methods of Animal(Self), name: ... }`. When `Dog` declares `Pet(Dog)`, `Self ↦ Dog`; the
 compiler verifies that `Dog` satisfies all methods of both `Animal(Dog)` and `Pet(Dog)`.
 
-**Self substitution in interface inheritance**: In
-`Pet: (Self: Type) -> Type = { Animal(Self), ... }`, the `Self` in `Animal(Self)` is the `Self`
-parameter of `Pet`—it will be lazily substituted. When `Dog` implements `Pet(Dog)`, `Self ↦ Dog`,
-and `Animal(Self)` becomes `Animal(Dog)`. This is fully consistent with the parameter passing
-semantics of generic functions.
+**`Self` substitution in interface inheritance**: in
+`Pet: (Self: Type) -> Type = { Animal(Self), ... }`, the `Self` in `Animal(Self)` is `Pet`'s `Self`
+parameter — it is substituted deferred. When `Dog` implements `Pet(Dog)`, `Self ↦ Dog`, and
+`Animal(Self)` becomes `Animal(Dog)`. This is fully consistent with the parameter-passing semantics
+of generic functions.
 
-## Default method implementations
+## Default Method Implementation
 
-Interfaces can provide default implementations for methods. The implementing type can choose to
-override or inherit the default implementation:
+Interfaces can provide default method implementations. Implementing types may choose to override or
+inherit the default implementation:
 
 ```yaoxiang
 fmt: (Self: Type) -> Type = {
-    display: (self: &Self) -> String,                      # Must implement
-    debug: (self: &Self) -> String = self.display(),       # ✅ References same-interface method
-    summary: (self: &Self) -> String = f"<{self.name}>",  # ❌ Compilation error: self.name not in fmt
+    display: (self: &Self) -> String,                      # must implement
+    debug: (self: &Self) -> String = self.display(),       # ✅ references a same-interface method
+    summary: (self: &Self) -> String = f"<{self.name}>",  # ❌ compile error: self.name is not in fmt
 }
 ```
 
-**Core constraint: interfaces cannot assume supertype implementation.** Default methods can only
-reference methods already declared in the same interface. The concrete type's fields or other
-interfaces' methods are invisible to default methods—an interface is a closed contract, and cannot
-reach into the implementing type's pocket. Violating this constraint reports an error directly **at
-interface definition time**.
+**Core constraint: interfaces cannot assume supertype implementations.** Default methods may only
+reference methods already declared in the same interface. Concrete-type fields or other-interface
+methods are not visible to default methods — an interface is a closed contract that cannot reach
+into the implementer's pocket. Violating this constraint is **reported as an error at
+interface-definition time**.
 
-**Inheritance can assume subtype implementation:** When interface `Pet(Self)` inherits
-`Animal(Self)`, default methods of `Pet` can use methods declared in `Animal`—because of
+**Inheritance can assume subtype implementations:** when interface `Pet(Self)` inherits
+`Animal(Self)`, `Pet`'s default methods may use the methods declared in `Animal` — because of
 inheritance, they are guaranteed to exist.
 
 ```yaoxiang
@@ -849,89 +850,90 @@ Animal: (Self: Type) -> Type = {
 }
 
 Pet: (Self: Type) -> Type = {
-    Animal(Self),                                              # Inheritance
+    Animal(Self),                                              # inheritance
     name: (self: &Self) -> String,
     introduce: (self: &Self) -> String = self.name() + " says " + self.speak(),  # ✅ speak comes from inherited Animal
 }
 ```
 
-**compile-time behavior:** When a type implements an interface, for each method:
+**Compile-time behavior:** when a type implements an interface, for each method:
 
-1. Type provides → use the type's method
-2. Type does not provide, interface has default → compiler inlines default implementation onto the
-   type (zero vtable overhead)
-3. Type does not provide, interface has no default → compilation error
+1. The type provides it → use the type's method
+2. The type does not provide it, the interface has a default → the compiler inlines the default
+   implementation into the type (zero vtable overhead)
+3. The type does not provide it, the interface has no default → compile error
 
-**Design principle:** Default methods are similar to the auto-derive mechanism of `Copy`/`Clone`—the
-compiler auto-generates when needed, and the user can override. No `virtual`/`override`/`super`
+**Design principle:** default methods resemble the auto-derive mechanism of `Copy`/`Clone` — the
+compiler auto-generates when needed, and the user may override. No `virtual` / `override` / `super`
 keywords are introduced.
----
-
-## Implementation phases
-
-| Phase    | Content                                                                     | Depends on |
-| -------- | --------------------------------------------------------------------------- | ---------- |
-| Phase 1  | Interface declaration syntax (`(Self: Type) -> Type`) + Self type parameter | RFC-011    |
-| Phase 2  | Interface instantiation (`Animal(Dog)`) + Self ↦ ConcreteType substitution  | Phase 1    |
-| Phase 3  | Internal/external declaration of method implementation                      | Phase 2    |
-| Phase 4  | Overloading and overriding rules                                            | Phase 3    |
-| Phase 5  | Default value syntax                                                        | Phase 3    |
-| Phase 6  | Interface inheritance                                                       | Phase 4    |
-| Phase 7  | Default method implementations                                              | Phase 6    |
-| Phase 8  | Implementation proof generation                                             | Phase 7    |
-| Phase 9  | compile-time type collection                                                | Phase 8    |
-| Phase 10 | Dynamic dispatch implementation                                             | Phase 9    |
 
 ---
 
-## Design decision record
+## Implementation Phases
 
-| Decision                          | Decision                                                                                                          | Reason                                                                                                                                             | Date       |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| Interface declaration syntax      | Interfaces are parameterized types `(Self: Type) -> Type`, instantiated at implementation                         | Eliminate `Self` magic keyword, fully consistent with the RFC-011 generics system                                                                  | 2026-06-14 |
-| Self type parameter               | Explicit type parameter; only syntactic check at interface definition, full check at instantiation point          | Avoid free type variables in HM inference                                                                                                          | 2026-06-14 |
-| Dynamic dispatch                  | compile-time type collection + auto-generated enum                                                                | No vtable, zero runtime lookup, user-transparent                                                                                                   | 2026-06-14 |
-| External method declaration       | Supported                                                                                                         | Flexibility equivalent to internal declaration; compiler responsible for cross-file collection                                                     | 2026-06-14 |
-| Overriding                        | Prohibited (same signature reports error)                                                                         | Overriding causes unpredictable behavior; overloading covers all cases                                                                             | 2026-06-14 |
-| Interface inheritance             | Supported, no new syntax                                                                                          | Same syntax position as type declaration of interfaces. Encourages composition (multi-interface instantiation); discourages deep inheritance trees | 2026-07-03 |
-| Default method implementations    | Supported, similar to Copy/Clone auto-derive                                                                      | Interface provides default body; compiler inlines onto implementing type; user can override. No virtual/override introduced                        | 2026-07-03 |
-| Default method constraints        | Verify at interface definition: can only reference same-interface methods, cannot assume supertype implementation | Interface is a closed contract. Inheritance can assume subtype implementation, but interfaces cannot assume the implementing type's fields/methods | 2026-07-03 |
-| Type collection strategy          | Ownership tracking, incremental construction—collected at each append/construction point                          | Not a global scan of all implementers, but incremental enum expansion by ownership operation point                                                 | 2026-07-03 |
-| ImplementationProof               | Pure compile-time concept, erased at runtime                                                                      | runtime takes enum match dispatch; proof only used for compile-time verification                                                                   | 2026-07-03 |
-| Cross-compilation-unit            | LTO merges enum variants                                                                                          | Existential types passed across compilation unit boundaries; each unit generates partial enum; LTO stage merges                                    | 2026-07-03 |
-| Field/method namespace            | Unified namespace, conflict reports error                                                                         | Field access `point.x` and method call `point.x()` are syntactically indistinguishable; unification avoids ambiguity                               | 2026-07-03 |
-| Heterogeneous container ownership | Move semantics; original variable unusable after insertion                                                        | Consistent with RFC-009 ownership model                                                                                                            | 2026-07-03 |
-| Brand projection                  | match pattern binding produces sub-brand, equivalent to field projection                                          | Consistent with RFC-009a brand tree mechanism; enum variant projection is a valid path in the brand tree                                           | 2026-07-03 |
-| Receiver spelling convention      | `&Self` borrow / `&mut Self` mutable borrow / value = Move                                                        | Receivers follow signature semantics (RFC-009); interface default is borrow; historical value spelling migrated to &Self                           | 2026-08-30 |
+| Phase    | Content                                                                       | Dependency |
+| -------- | ----------------------------------------------------------------------------- | ---------- |
+| Phase 1  | Interface declaration syntax (`(Self: Type) -> Type`) + `Self` type parameter | RFC-011    |
+| Phase 2  | Interface instantiation (`Animal(Dog)`) + `Self ↦ ConcreteType` substitution  | Phase 1    |
+| Phase 3  | Internal / external method declarations                                       | Phase 2    |
+| Phase 4  | Overload and override rules                                                   | Phase 3    |
+| Phase 5  | Default value syntax                                                          | Phase 3    |
+| Phase 6  | Interface inheritance                                                         | Phase 4    |
+| Phase 7  | Default method implementation                                                 | Phase 6    |
+| Phase 8  | Implementation proof generation                                               | Phase 7    |
+| Phase 9  | Compile-time type collection                                                  | Phase 8    |
+| Phase 10 | Dynamic dispatch implementation                                               | Phase 9    |
 
-## Open questions
+---
 
-- [x] ~~Interface inheritance (interfaces can inherit other interfaces)~~ → Supported, no new
+## Design Decision Records
+
+| Decision                          | Decision                                                                                                                     | Reason                                                                                                                                          | Date       |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| Interface declaration syntax      | interface is a parameterized type `(Self: Type) -> Type`, instantiated on implementation                                     | Eliminates the `Self` magic keyword; fully consistent with the RFC-011 generics system                                                          | 2026-06-14 |
+| `Self` type parameter             | explicit type parameter; syntax-checked at interface definition, fully checked at instantiation point                        | Avoids free type variables in HM inference                                                                                                      | 2026-06-14 |
+| Dynamic dispatch                  | compile-time type collection + auto enum generation                                                                          | No vtable, zero runtime lookup, user-transparent                                                                                                | 2026-06-14 |
+| External method declaration       | supported                                                                                                                    | Flexibility equivalent to internal declaration; compiler handles cross-file collection                                                          | 2026-06-14 |
+| Override                          | forbidden (same signature errors)                                                                                            | Override causes unpredictable behavior; overload covers all cases                                                                               | 2026-06-14 |
+| Interface inheritance             | supported, no new syntax                                                                                                     | Same syntax position as type-declared interfaces. Encourages composition (multiple interface instantiation), discourages deep inheritance trees | 2026-07-03 |
+| Default method implementation     | supported, similar to `Copy`/`Clone` auto-derive                                                                             | Interface provides default body, compiler inlines on the implementing type; user may override. No `virtual`/`override` introduced               | 2026-07-03 |
+| Default method constraint         | verified at interface-definition time: only same-interface methods may be referenced; cannot assume supertype implementation | Interface is a closed contract. Inheritance can assume subtype implementation, but interfaces cannot assume implementer-type fields/methods     | 2026-07-03 |
+| Type collection strategy          | ownership tracking, incremental construction — collect at each `append`/construction point                                   | Not a global scan of all implementers, but incremental enum extension at each ownership operation point                                         | 2026-07-03 |
+| `ImplementationProof`             | pure compile-time concept, erased at runtime                                                                                 | Runtime dispatches via enum `match`; the proof serves only for compile-time validation                                                          | 2026-07-03 |
+| Cross-compilation-unit            | LTO merges enum variants                                                                                                     | Existential type is passed across compilation-unit boundaries; each unit generates partial enum, LTO phase merges                               | 2026-07-03 |
+| Field / method namespace          | unified namespace, conflicts reported as errors                                                                              | Field access `point.x` and method call `point.x()` are syntactically indistinguishable; unification avoids ambiguity                            | 2026-07-03 |
+| Heterogeneous-container ownership | Move semantics; original variable unusable after being placed into the container                                             | Consistent with the RFC-009 ownership model                                                                                                     | 2026-07-03 |
+| Brand projection                  | `match` pattern binding produces sub-brands, equivalent to field projection                                                  | Consistent with the RFC-009a brand-tree mechanism; enum-variant projection is a legal path in the brand tree                                    | 2026-07-03 |
+| Receiver spelling convention      | `&Self` borrow / `&mut Self` mutable borrow / by-value = Move                                                                | Receiver follows signature semantics (RFC-009); interface defaults to borrow; historical by-value spelling migrated to `&Self`                  | 2026-08-30 |
+
+## Open Questions
+
+- [x] ~~Interface inheritance (interfaces can inherit other interfaces)~~ → supported, no new
       syntax. `Pet: (Self: Type) -> Type = { Animal(Self), ... }`
-- [x] ~~Default method implementations (interfaces can provide default implementations)~~ →
-      Supported, similar to Copy auto-derive. Interface provides body; compiler inlines on demand
-- [x] ~~Self as implicit magic keyword~~ → Eliminated. `Self` is an explicit type parameter; the
-      interface is `(Self: Type) -> Type`
-- [ ] Advanced uses of interface constraints (associated types, GAT)—associated types implemented
+- [x] ~~Default method implementation (interfaces can provide default implementations)~~ →
+      supported, similar to `Copy` auto-derive. Interface provides body, compiler inlines on demand
+- [x] ~~`Self` as an implicit magic keyword~~ → eliminated. `Self` is an explicit type parameter;
+      the interface is `(Self: Type) -> Type`
+- [ ] Advanced usage of interface constraints (associated types, GAT) — associated types realized
       via generic interface parameters (`Container: (Self: Type, T: Type) -> Type`); GAT requires
       further design
-- [ ] Interaction with closures (closures implementing interfaces)—initial strategy: closures do not
-      support directly implementing interfaces; a wrapper type is required. Interface
-      implementations of anonymous types deferred to subsequent RFCs
+- [ ] Interaction with closures (closures implementing interfaces) — initial strategy: closures do
+      not directly support implementing interfaces, a wrapper type is needed. Anonymous-type
+      interface implementation deferred to a subsequent RFC
 
 ---
 
 ## References
 
-- [RFC-011: generics System Design](011-generic-type-system.md) — Parent RFC
-- [RFC-009: Ownership Model Design](009-ownership-model.md) — Ownership system
-- [RFC-009a: Borrow Proof Pipeline](009a-borrow-proof-pipeline.md) — Brand mechanism
-- [RFC-010: Unified Type Syntax](010-unified-type-syntax.md) — Unified syntax
+- [RFC-011: Generic System Design](011-generic-type-system.md) — parent RFC
+- [RFC-009: Ownership Model Design](009-ownership-model.md) — ownership system
+- [RFC-009a: Borrow Proof Pipeline](009a-borrow-proof-pipeline.md) — brand mechanism
+- [RFC-010: Unified Type Syntax](010-unified-type-syntax.md) — unified syntax
 
 ---
 
-## Lifecycle and destination
+## Lifecycle and Destination
 
 | Status       | Location                    | Description            |
 | ------------ | --------------------------- | ---------------------- |
-| **Accepted** | `docs/design/rfc/accepted/` | Formal design document |
+| **Accepted** | `docs/design/rfc/accepted/` | formal design document |

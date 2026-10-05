@@ -1,6 +1,6 @@
 # yx format
 
-Format YaoXiang source code, unifying code style.
+Format YaoXiang source code and unify code style.
 
 ## Usage
 
@@ -16,23 +16,23 @@ yx format [OPTIONS] <PATH>
 
 ## Options
 
-| Option             | Description                                                      | Default      |
-| ------------------ | ---------------------------------------------------------------- | ------------ |
-| `-n`, `--dry-run`  | Dry run: show formatting diff, do not write back                 | No           |
-| `-w`, `--write`    | Write formatting result in place                                 | No           |
-| `--stdout`         | Output to standard output (default when `-n`/`-w` not specified) | --           |
-| `--no-verify`      | Skip verification after formatting (performance optimization)    | No           |
-| `--indent <N>`     | Override indent width                                            | Config value |
-| `--line-width <N>` | Override max line width                                          | Config value |
-| `--use-tabs`       | Use Tab indentation                                              | Config value |
-| `--single-quote`   | Use single quotes for strings                                    | Config value |
+| Option             | Description                                                                  | Default      |
+| ------------------ | ---------------------------------------------------------------------------- | ------------ |
+| `-n`, `--dry-run`  | Dry run: show formatting diffs without writing back                          | No           |
+| `-w`, `--write`    | Write formatting result back in place                                        | No           |
+| `--stdout`         | Output to standard output (default behavior when `-n`/`-w` is not specified) | --           |
+| `--no-verify`      | Skip post-format verification (performance optimization)                     | No           |
+| `--indent <N>`     | Override indent width                                                        | Config value |
+| `--line-width <N>` | Override maximum line width                                                  | Config value |
+| `--use-tabs`       | Use Tab for indentation                                                      | Config value |
+| `--single-quote`   | Use single quotes for strings                                                | Config value |
 
 ## Configuration Priority
 
-Formatting options take effect in the following priority order (highest first):
+Formatting options take effect in the following priority (higher takes precedence):
 
-1. Command line flags
-2. Formatting configuration in project config `yaoxiang.toml`
+1. Command-line flags
+2. Formatting configuration in the project `yaoxiang.toml`
 3. User-level configuration file
 
 For configuration items and default values, see
@@ -40,11 +40,11 @@ For configuration items and default values, see
 
 ## Exit Codes
 
-| Exit code | Description                                                               |
-| --------- | ------------------------------------------------------------------------- |
-| `0`       | Success (including cases where no formatting is needed)                   |
-| `2`       | Files needing formatting found under `--dry-run`, or no `.yx` files found |
-| `1`       | Other errors                                                              |
+| Code | Description                                                               |
+| ---- | ------------------------------------------------------------------------- |
+| `0`  | Success (including when no formatting is needed)                          |
+| `2`  | Files needing formatting found under `--dry-run`, or no `.yx` files found |
+| `1`  | Other errors                                                              |
 
 ## Examples
 
@@ -52,7 +52,7 @@ For configuration items and default values, see
 # Format and output to standard output (default)
 yx format src/main.yx
 
-# Write in place
+# Write back in place
 yx format -w src/
 
 # CI check: fail with exit code 2 when files need formatting
@@ -70,7 +70,7 @@ yx format --indent 4 --line-width 100 main.yx
   run: yx format --dry-run .
 ```
 
-Exit code `2` indicates files that need formatting. For detailed CI configuration, see the
+Exit code `2` indicates files that need formatting. For detailed CI configuration, see
 [CI Integration Guide](../guide/ci-integration.md).
 
 ## See Also

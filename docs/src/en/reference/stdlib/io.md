@@ -5,9 +5,9 @@ description: 'Standard output, standard input, and formatting'
 
 # std.io
 
-Input/output module. Provides standard output and standard input reading. Whole-file
-reading/writing, directory, and path operations see [`std.fs`](fs); handle-level incremental
-reading/writing see [`std.os`](os).
+Input/output module. Provides standard output and standard input reading. For whole-file read/write,
+directory, and path operations, see [`std.fs`](fs); for handle-level incremental read/write, see
+[`std.os`](os).
 
 ```yaoxiang
 use std.io
@@ -41,11 +41,11 @@ print: (...args) -> Void
 
 <!-- stdlib:sig:io.print end -->
 
-Outputs all arguments in order, **without appending a newline**. Multiple arguments are separated by
-a single space.
+Outputs all arguments in order, **without adding a newline**. Multiple arguments are separated by a
+single space.
 
 Arguments are formatted: `String` outputs its content directly; `List` / `Dict` / `Tuple` are
-recursively expanded; other values are output as literals.
+recursively expanded; other values are output as their literals.
 
 ```yaoxiang
 
@@ -69,7 +69,7 @@ println: (...args) -> ()
 
 Same as [`print`](#print), but appends a newline at the end of the output.
 
-`println()` outputs an empty line when called without arguments:
+`println()` outputs an empty line when called with no arguments:
 
 ```yaoxiang
 main: () -> Void = {
@@ -89,10 +89,10 @@ read_line: () -> String
 
 Reads a line from standard input.
 
-Returns: the entire line read, **with the trailing newline stripped** (`\n` or `\r\n`). Errors:
+Returns: the entire line read, **with the trailing newline removed** (`\n` or `\r\n`). Errors:
 throws `E6007` on read failure.
 
-> Interactive examples cannot be run automatically in the documentation; the following code is for
+> Interactive examples cannot be run automatically in the documentation; the following is for
 > reference only.
 
 ```yaoxiang
@@ -115,13 +115,13 @@ format_fallback: (value, type_name: &String) -> String
 
 <!-- stdlib:sig:io.format_fallback end -->
 
-Formats a value by its type name, outputting a prefixed representation like `int(42)` / `list@3`.
+Formats a value by its type name, producing a prefixed representation such as `int(42)` / `list@3`.
 
-This is an internal helper function, used by the runtime's generic formatting path as a callback;
-regular code should directly use [`std.convert.to_string`](convert#to_string).
+This is an internal helper function used by the runtime's general formatting path; everyday code
+should use [`std.convert.to_string`](convert#to_string) directly.
 
 - `value` — any value
-- `type_name` — the type name string
+- `type_name` — type name string
 
 Returns: a string representation with a type prefix.
 
@@ -140,4 +140,4 @@ main: () -> Void = {
 
 - [`std.fs`](fs) — File, directory, and path operations
 - [`std.os`](os) — File handles and environment variables
-- [`std.convert`](convert) — Convert value to string
+- [`std.convert`](convert) — Value to string
