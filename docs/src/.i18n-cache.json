@@ -202,13 +202,15 @@
   "src/guide/modules.md:en": "f27a1ea241e76c012d26301af353e2bd",
   "src/design/compiler-architecture/01-routing.md:en": "647f2f6a9a55c22d2d042681278d2c0d",
   "src/design/compiler-architecture/02-stage-contract.md:en": "5c4740677171f8b0c451ece68225e65a",
-  "src/design/compiler-architecture/06-cleanup-inventory.md:en": "622fc5f9b1b8deca625b37ca473053bc",
-  "src/design/compiler-architecture/04-ssa.md:en": "27d511c6226e99e73c91f6eaac24173e",
+  "src/design/compiler-architecture/06-cleanup-inventory.md:en": "dfd8d071ab8fa8e8bdc9999f06c5afbe",
+  "src/design/compiler-architecture/04-ssa.md:en": "28bd6de99a34fbd884c8145116e48592",
   "src/design/compiler-architecture/05-frontend-paradigm.md:en": "807bd346a7591bd89b5e786717781f95",
   "src/design/compiler-architecture/07-equivalence-oracle.md:en": "e7b74cbaa35776e87da7a0042374a809",
   "src/design/compiler-architecture/03-type-unification.md:en": "dcfeab45877c64d037183ba1bb516ae2",
-  "src/design/compiler-architecture/08-maintenance-mechanism.md:en": "c179c043db805075aa4ef8ec209dbced",
-  "src/design/compiler-architecture/index.md:en": "886744b15aac2a0815d9161982d115e2",
-  "src/design/compiler-architecture/09-execution-wbs.md:en": "7289d34fee93fff04c888aac00748f65",
-  "src/design/rfc/draft/039-compiler-architecture.md:en": "4291b1fc4e296c976600c1a8489724c7"
+  "src/design/compiler-architecture/08-maintenance-mechanism.md:en": "f94229bcf77c9868ad001767b4a75ce8",
+  "src/design/compiler-architecture/index.md:en": "4210c662b339a68d13c6d1c4c252b2cc",
+  "src/design/compiler-architecture/09-execution-wbs.md:en": "d75558b6d35be044606a3dbb02169a89",
+  "src/design/rfc/draft/039-compiler-architecture.md:en": "b7d7d80f93ef1f4f4c38ae059b732d54",
+  "src/dev/coding-rules.md:en": "758616704f38513688d9456dadd3321e",
+  "src/design/compiler-architecture/HOWTO.md:en": "77d6780e087f5225a2e358c43dd4ae32"
 }
