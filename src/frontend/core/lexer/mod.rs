@@ -102,5 +102,4 @@ fn log_token(token: &Token) {
 }
 
 #[cfg(test)]
-#[path = "tests/fstring.rs"]
-mod fstring_tests;
+mod tests;

@@ -4,3 +4,4 @@
 
 mod dead_code;
 mod overload;
+mod overload_inline;

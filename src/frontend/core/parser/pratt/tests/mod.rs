@@ -4,3 +4,4 @@
 mod led;
 mod nud;
 mod precedence;
+mod precedence_inline;

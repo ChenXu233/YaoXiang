@@ -1,4 +1,5 @@
 //! Precedence 模块测试
+//! 规范来源：pratt/precedence.rs（生产零引用的死阶梯，P8 随 05 删除，见 06-cleanup-inventory B6）
 //!
 //! 测试优先级相关功能，包括：
 //! - 优先级枚举转换
@@ -6,8 +7,8 @@
 //! - 优先级上下文操作
 
 use crate::frontend::core::parser::pratt::precedence::{
-    Precedence, PrecedenceContext, BP_ASSIGN, BP_COMPARISON, BP_EQUALITY, BP_FACTOR,
-    BP_HIGHEST, BP_LOGICAL_AND, BP_LOGICAL_OR, BP_LOWEST, BP_TERM, BP_UNARY, BP_CALL,
+    Precedence, PrecedenceContext, BP_ASSIGN, BP_COMPARISON, BP_EQUALITY, BP_FACTOR, BP_HIGHEST,
+    BP_LOGICAL_AND, BP_LOGICAL_OR, BP_LOWEST, BP_TERM, BP_UNARY, BP_CALL,
 };
 
 #[test]
