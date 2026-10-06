@@ -144,6 +144,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 - [ ] **4.3 义务账本**（2 个三级任务）
 - [ ] **4.4 证明层与 wasm 收尾**（3 个三级任务）
 - [ ] **4.5 跨层契约 PlanId 化（D20）**（2 个三级任务）
+- [ ] **4.6 LSP 语义数据管线统一（D55）**（1 个三级任务）
 
 | 二级 | 三级 | 前置 | 验收 |
 | --- | --- | --- | --- |
@@ -167,6 +168,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 4.4.3 降级路径加 warning（`checker.rs:1283-1293`） | — | — |
 | 4.5 跨层契约 PlanId 化（D20） | 4.5.1 `ReleasePlan` 键 `Span` → `PlanId`（`layers/ownership.rs:31` 产出侧分配 + `ir_gen.rs:1942` 消费侧匹配） | 4.3.1 | `test_release_plan_spans_consumed` 差集为空（D41） |
 | | 4.5.2 `overload_resolutions` 键 `Span` → `PlanId` | 4.5.1 | C2；span 失配类静默失效归零 |
+| 4.6 LSP 语义数据管线统一 | 4.6.1 项目内文件的语义数据（SemanticDB）走 orchestrator 同管线，与诊断同源；跨文件引用带 `resolves_to` | 4.2.1 | 项目内跨文件跳转命中定义；语义数据与诊断出自同一次编译 |
 
 ### P5 checker 文件内拆分 —— 本文档补齐（原缺口 G1）
 

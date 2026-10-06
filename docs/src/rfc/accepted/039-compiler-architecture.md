@@ -350,6 +350,7 @@ P10 其余清理与状态修正          06 §S2-S6
 | D14 | 293 语料中非规范类型名统计 | **同上是任务**（6.1.1），不是开放问题 | 同上 |
 | D15 | 阶段 2「不改行为」与「行为变化」的归类 | **按 C3 判据归类：设计变更走独立 commit，措辞变化不计入** | 已在 07 定义 |
 | D54 | Fn 标注与函数体的对照缺失（check 绿、运行期类型错） | **声明驱动的检查模式。** 绑定期参数类型按位驱动 lambda 头、出口（尾表达式与 return）统一对照标注返回类型、注册类型=标注形态；parser 名字合并、#295 append、`value_params` 按位填充的个数前置条件退役。表示前提 `Type::Fn.params: Vec<Param>`（名字与类型同栖），随 P6 新增 6.8 落地 | 对照机制现为三个互不衔接的碎片（parser 合并 / 注册标注形态 / 体检查按语法形态分叉），不变量「声明=实现」无人拥有——`f: () -> Int = () => "hello"` 通过而 `f: () -> Int = { "hello" }` 报错（同一语义不同语法），check 绿、运行期 E6007；这是 proof_calls 静默通道（§1.1）在标注子系统的同型发病。对照启用批为行为修复：新诊断、基线更新，不适用 C3 |
+| D55 | LSP 语义索引（SemanticDB definitions/references）生产端缺失：跳转、hover、查找引用、重命名全线静默失败，多文件语义染色互踩 | **生产端归 checker。** definitions/references/imports 由 checker/inference 在名字解析收敛点登记（定义侧 `add_var`/`add_param` 及模块级签名收集处，引用侧 `get_var_info` 解析点，携带 `resolves_to`），LSP 只消费、禁止自建第二套名字解析；World 会话库按文件 upsert（std 与内置类型常驻），不随单文件 check 结果整体替换；跳转 precise-only，数据缺失返回空，不设按名兜底。单文件内部实现走独立 issue；项目内文件与诊断同管线（orchestrator）随 P4 新增 4.6 落地，前置 4.2.1 | 消费端 6 个 handler 全部就位、测试全绿（手工构造数据），生产端零写入点——`add_reference` 自结构引入即无生产调用点；跳转重写提交删除按名兜底与 SymbolIndex 而未建精确解析的数据源，重写当天跳转即死（`resolve_reference` 读的 references 表无人写入）。静默通道（§1.1）第三例（proof_calls、D54 标注对照之后）；World 整体替换还使会话初载的 std/内置符号在首次 didOpen 即蒸发。D11 的 probe 复用判据沿用 |
 
 ### 中间表示（04）
 
@@ -453,6 +454,7 @@ P10 其余清理与状态修正          06 §S2-S6
 | `.42` 数据丢失三处 | **全部收编 P7（7e），不留独立 issue**（D52） | 2026-10-05 | ChenXu233 |
 | 参数位裸标识符 | **未命名带型参数**（D53），构造期拒绝落在"解析不到类型"；随 P8 | 2026-10-05 | ChenXu233 |
 | Fn 标注对照 | **声明驱动检查模式**（D54），表示前提 `Type::Fn.params: Vec<Param>`；随 P6 | 2026-10-05 | ChenXu233 |
+| LSP 语义索引生产端 | **checker 收敛点登记 + LSP 只消费 + World 按文件 upsert + precise-only**（D55）；单文件内部实现走独立 issue，项目管线统一随 P4 新增 4.6 | 2026-10-06 | ChenXu233 |
 
 ## 参考文献
 
