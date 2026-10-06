@@ -117,6 +117,7 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/return_refinement.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/return_refinement_arg_expr.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/std_name_shadowing.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/string_index.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/struct_equality.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/structs.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum_type.yx","run":{"exit":0,"stderr":[],"stdout":["EQ_OK","NE_OK","ZERO_PAYLOAD_EQ_OK"]}}
@@ -286,6 +287,7 @@
 {"check":{"diagnostics":[["E2013","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/shadowing_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/shadowing_err.yx"}
 {"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/spawn_body_type_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/spawn_body_type_err.yx"}
 {"check":{"diagnostics":[["E2018","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/std_mut_during_borrow_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/std_mut_during_borrow_err.yx"}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/string_neg_index_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] Array index out of bounds: valid range is 0..5, found -1","     │                 ^","  13 │     io.println(s[-1])","  at __yx_module_init (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\string_neg_index_err.yx:16:5)","  at main (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\string_neg_index_err.yx:13:17)"," --> E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\string_neg_index_err.yx:13:17","Runtime error","help: Ensure the index is within the array bounds","stack trace:"],"stdout":[]}}
 {"check":{"diagnostics":[["E2014","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/struct_nested_move_field_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/struct_nested_move_field_err.yx"}
 {"check":{"diagnostics":[["E1105","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/sum_type_field_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/sum_type_field_err.yx"}
 {"check":{"diagnostics":[["E1012","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/tail_expr_mismatch_with_stmts_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/tail_expr_mismatch_with_stmts_err.yx"}
