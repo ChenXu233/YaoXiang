@@ -1,0 +1,8 @@
+// lib.yx —— 被导入模块：类型 + 函数
+Point: Type = { x: Float, y: Float }
+
+distance: (a: Point, b: Point) -> Float = (a, b) => {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    return dx * dx + dy * dy
+}

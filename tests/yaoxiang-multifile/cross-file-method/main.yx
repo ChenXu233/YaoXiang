@@ -1,0 +1,15 @@
+// cross-file-method/main.yx
+// 覆盖: RFC-029 多文件模块编排 —— 跨文件方法调用
+// 验证: 导入类型的方法可跨文件调用（方法绑定预注册到 IR 生成上下文）
+// 状态: ✅ 可运行
+
+use std.assert
+use lib.{Point}
+
+main = () => {
+    p = Point(3.0, 4.0)
+    x = p.get_x()
+    n = p.norm_sq()
+    assert.assert(x == 3.0, "cross-file get_x should return 3.0")
+    assert.assert(n == 25.0, "cross-file norm_sq should return 25.0")
+}

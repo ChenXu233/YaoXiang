@@ -1,0 +1,11 @@
+// subdirectory-module/main.yx
+// 覆盖: RFC-029 多文件模块编排 —— 子目录模块解析（#247 沿 use 追踪）
+// 验证: util/math.yx 以限定路径 util.math 被导入，函数调用求值正确
+// 状态: ✅ 可运行
+
+use std.assert
+use util.math.{double}
+
+main = () => {
+    assert.assert(double(21) == 42, "double(21) should be 42")
+}
