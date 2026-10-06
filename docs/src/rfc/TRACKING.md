@@ -26,6 +26,7 @@
 | 024-concurrency-model.md | RFC-024：基于 spawn 的并发运行时语义 | 已接受 | accepted\024-concurrency-model.md | #89 | -- | -- | -- |
 | 026-ffi-core-mechanism.md | RFC-026：FFI 核心机制 | 已接受 | accepted\026-ffi-core-mechanism.md | #93 | -- | -- | -- |
 | 027-compile-time-evaluation-types.md | RFC-027：编译期谓词与统一静态验证 | 已接受 | accepted\027-compile-time-evaluation-types.md | #90 | -- | -- | -- |
+| 027a-termination-explicit-measure.md | RFC-027a: 终止检查的显式测度 | 已接受 | accepted\027a-termination-explicit-measure.md | #318 | -- | -- | -- |
 | 029-module-semantics.md | RFC-029: 模块语义系统 | 已接受 | accepted\029-module-semantics.md | #232 | -- | -- | -- |
 | 029f-target-semantics.md | RFC-029f: 编译目标角色与导入面语义 | 已接受 | accepted\029f-target-semantics.md | #334 | -- | -- | -- |
 | 029g-remove-pub-and-auto-bind.md | RFC-029g: 移除 pub 关键字与自动绑定 | 已接受 | accepted\029g-remove-pub-and-auto-bind.md | #399 | -- | -- | -- |
@@ -53,7 +54,6 @@
 | 016-quantum-native-support.md | RFC 016: 量子原生支持与多重后端集成 | 已拒绝 | rejected\016-quantum-native-support.md | -- | -- | -- | -- |
 | 025-primitive-extension.md | RFC-025: 可扩展原语类型机制 | 已拒绝 | rejected\025-primitive-extension.md | -- | -- | -- | -- |
 | 026a-extensible-ffi-system.md | RFC-026a: 可扩展 FFI 机制体系 | 审核中 | review\026a-extensible-ffi-system.md | #135 | -- | -- | -- |
-| 027a-termination-explicit-measure.md | RFC-027a: 终止检查的显式测度 | 审核中 | review\027a-termination-explicit-measure.md | #318 | -- | -- | -- |
 | 032-spawn-unified-expression.md | RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况 | 审核中 | review\032-spawn-unified-expression.md | #98 | -- | -- | -- |
 
 > 此文件由 check-rfc-tracking.py 自动生成，请勿手动修改。

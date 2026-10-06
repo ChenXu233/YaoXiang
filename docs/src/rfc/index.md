@@ -46,7 +46,6 @@ title: "RFC 索引"
 | 编号 | 标题 | 作者 | 创建日期 | 状态 |
 |------|------|------|----------|------|
 | RFC-032 | [RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况](review/032-spawn-unified-expression.md) | 晨煦 | 2026-06-16 | 审核中 |
-| RFC-027a | [RFC-027a: 终止检查的显式测度](review/027a-termination-explicit-measure.md) | 晨煦 | 2026-09-14 | 审核中 |
 
 ---
 
@@ -79,6 +78,7 @@ title: "RFC 索引"
 | ↳ RFC-026a | [RFC-026a: 可扩展 FFI 机制体系](review/026a-extensible-ffi-system.md) | 晨煦 | 2026-06-05 | 审核中RFC |
 | ↳ RFC-026b | [RFC-026b: yx-bindgen 工具链](draft/026b-yx-bindgen.md) | 晨煦 | 2026-06-05 | 草案RFC |
 | RFC-027 | [RFC-027：编译期谓词与统一静态验证](accepted/027-compile-time-evaluation-types.md) | 晨煦 | 2026-06-07 | 已接受 |
+| ↳ RFC-027a | [RFC-027a: 终止检查的显式测度](accepted/027a-termination-explicit-measure.md) | 晨煦 | 2026-09-14 | 已接受 |
 | RFC-029 | [RFC-029: 模块语义系统](accepted/029-module-semantics.md) | 晨煦 | 2026-06-13 | 已接受 |
 | RFC-030 | [RFC-030: assert 断言机制](accepted/030-assert-mechanism.md) | 晨煦 | 2026-06-15 | 已接受 |
 | RFC-036 | [RFC-036: std.test 测试框架与 yaoxiang test 命令](accepted/036-test-framework.md) | 晨煦 | 2026-07-26 | 已接受 |
