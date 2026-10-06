@@ -167,6 +167,10 @@ jobs:
       - name: Build CLI
         run: cargo build --all-features --bin yaoxiang-rs
 
+      # P2 引入（09-execution-wbs 9.5）：规范化 IR 快照零漂移（C1 zero-diff）。
+      - name: IR snapshot drift
+        run: bash scripts/ci/check-snapshot-drift.sh
+
       # P2 引入（09-execution-wbs 9.6）：全语料 verify_loose 跑绿（P7 批 a 准入
       # 硬门槛），校验面非空断言内置于判据测试。
       - name: IR verifier on corpus
