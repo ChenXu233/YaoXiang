@@ -136,7 +136,7 @@
 
 ## 作用域
 
-作用域基于项目 `src/` 目录结构，**必须使用以下已定义的 scope**：
+作用域基于仓库目录结构，**必须使用以下已定义的 scope**：
 
 ### 顶层模块
 
@@ -150,6 +150,7 @@
 | `lsp`       | `src/lsp/`       | 语言服务器协议                     |
 | `package`   | `src/package/`   | 包管理器                           |
 | `util`      | `src/util/`      | 工具库：诊断、缓存、i18n           |
+| `proof`     | `src/frontend/core/typecheck/proof/` | 证明与验证支撑（RFC-039 终态提为顶层域） |
 
 ### 前端子模块
 
@@ -165,34 +166,38 @@
 | 作用域         | 对应目录                          | 说明               |
 | -------------- | --------------------------------- | ------------------ |
 | `codegen`      | `src/middle/passes/codegen/`      | 代码生成（字节码） |
-| `monomorphize` | `src/middle/passes/monomorphize/` | 单态化处理         |
+| `monomorphize` | `src/middle/passes/mono/` | 单态化处理（目录更名随 RFC-039 P6 裁决） |
 | `lifetime`     | `src/middle/passes/lifetime/`     | 生命周期分析       |
 
 ### 后端子模块
 
 | 作用域    | 对应目录                    | 说明              |
 | --------- | --------------------------- | ----------------- |
-| `repl`    | `src/backends/dev/repl/`    | REPL 交互式命令行 |
-| `shell`   | `src/backends/dev/shell.rs` | Shell 命令处理    |
+| `repl`    | `src/repl/`                 | REPL 交互式命令行 |
 | `runtime` | `src/backends/runtime/`     | 运行时执行引擎    |
 
 ### 文档作用域
 
-| 作用域   | 说明                |
-| -------- | ------------------- |
-| `docs`   | 通用文档更新        |
-| `design` | 语言设计规范（RFC） |
-| `plan`   | 实现计划文档        |
+| 作用域   | 说明                                 |
+| -------- | ------------------------------------ |
+| `docs`   | 通用文档更新                         |
+| `design` | 语言设计规范（docs/src/dev/design/） |
+| `plan`   | 实现计划文档                         |
+| `rfc`    | RFC 文档（docs/src/rfc/）            |
 
 ### 其他作用域
 
-| 作用域    | 说明                                 |
-| --------- | ------------------------------------ |
-| `build`   | 构建系统、Cargo 配置                 |
-| `ci`      | CI/CD 配置（GitHub Actions）         |
-| `test`    | 测试相关                             |
-| `release` | 发版相关                             |
-| `meta`    | 项目元配置（.claude, .gitignore 等） |
+| 作用域     | 说明                                 |
+| ---------- | ------------------------------------ |
+| `build`    | 构建系统、Cargo 配置                 |
+| `ci`       | CI/CD 配置（GitHub Actions）         |
+| `test`     | 测试相关                             |
+| `release`  | 发版相关                             |
+| `meta`     | 项目元配置（.claude, .gitignore 等） |
+| `deps`     | 依赖升级（dependabot 同名约定）      |
+| `examples` | 示例目录 `examples/`                 |
+| `vscode`   | VS Code 扩展 `vscode-extension/`     |
+| `benches`  | 基准测试 `benches/`                  |
 
 ---
 
@@ -507,9 +512,9 @@ git config commit.template .gitmessage.txt
 #
 # Types: ✨feat, 🐛fix, 📝docs, 💄style, ♻️refactor, ⚡️perf, ✅test, 🔧chore, 🚀ci, 🔖release
 # Scopes: frontend, parser, lexer, typecheck, types, middle, codegen,
-#         monomorphize, lifetime, backends, repl, shell, runtime,
-#         std, formatter, lsp, package, util, docs, design, plan,
-#         build, ci, test, release, meta
+#         monomorphize, lifetime, backends, repl, runtime, proof,
+#         std, formatter, lsp, package, util, docs, design, plan, rfc,
+#         build, ci, test, release, meta, deps, examples, vscode, benches
 #
 # 示例:
 # ✨ feat(db): 添加批量删除待办功能

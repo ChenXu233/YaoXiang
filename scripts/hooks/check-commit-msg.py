@@ -37,17 +37,18 @@ VALID_EMOJIS = {
 VALID_SCOPES = {
     # 顶层模块
     "frontend", "middle", "backends", "std", "formatter",
-    "lsp", "package", "util",
+    "lsp", "package", "util", "proof",
     # 前端子模块
     "parser", "lexer", "typecheck", "types",
     # 中间层子模块
     "codegen", "monomorphize", "lifetime",
     # 后端子模块
-    "repl", "shell", "runtime",
+    "repl", "runtime",
     # 文档作用域
     "docs", "design", "plan", "rfc",
-    # 其他作用域
+    # 仓库级与其他
     "build", "ci", "test", "release", "meta",
+    "deps", "examples", "vscode", "benches",
 }
 
 EMOJI_PATTERN = "|".join(VALID_EMOJIS)
@@ -80,11 +81,11 @@ GUIDANCE = """
 
   :emoji:  必须，GitHub 风格 shortcode，必须是合法的 gitmoji 代码
   type     必须: feat fix docs style refactor perf test chore ci build
-  scope    必须（基于 src/ 目录结构）:
+  scope    必须（基于仓库目录结构）:
            frontend parser lexer typecheck types middle codegen
-           monomorphize lifetime backends repl shell runtime
-           std formatter lsp package util docs design plan
-           build ci test release meta
+           monomorphize lifetime backends repl runtime proof
+           std formatter lsp package util docs design plan rfc
+           build ci test release meta deps examples vscode benches
   subject  中文，不超过 50 字符
 
 常用 emoji 示例:
