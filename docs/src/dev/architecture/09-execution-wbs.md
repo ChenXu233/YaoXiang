@@ -52,8 +52,8 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 来源：[08-maintenance-mechanism.md](08-maintenance-mechanism.md)
 
-- [ ] **0.1 规程成文**（3 个三级任务；0.1.2 触点 + 0.1.3 规则抽取已于 2026-10-05 提前落地，剩 0.1.1 CONTRIBUTING 正文 review）
-- [ ] **0.2 门禁实现**（3 个三级任务）
+- [x] **0.1 规程成文**（3 个三级任务；0.1.2/0.1.3 于 2026-10-05 提前落地；0.1.1 于 2026-10-06 review 通过：内容核对 + CONTRIBUTING.md 全中文化，英文版迁 docs/gh/CONTRIBUTING.en.md）
+- [x] **0.2 门禁实现**（3 个三级任务，2026-10-06 完成：check-concepts / check-fanout / check-boundary 均以 report-only 接入 CI（concepts job），验收负向探针全过（新增入口接线红 / L2→L3 反向 use 红 / 未改动代码报出 3 套运算符枚举 + 2 套平行类型表示含 ir::Type 别名），pub(crate) 基线 137，P9 统一转硬）
 - [ ] **0.3 表门禁推广**（1 个三级任务）
 
 | 二级 | 三级 | 前置 | 验收 |
@@ -73,9 +73,9 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 来源：[06](06-cleanup-inventory.md) §实施要点 S1 + [05](05-frontend-paradigm.md) §测试重建
 
-- [ ] **1.1 复活 `lexer/tests/`**（4 个三级任务）
-- [ ] **1.2 复活活目录中的 4 处**（1 个三级任务）
-- [ ] **1.3 修复暴露的缺陷**（2 个三级任务）
+- [x] **1.1 复活 `lexer/tests/`**（4 个三级任务，2026-10-06 完成：55 个词法测试上线；删 7 空壳；`#[path]` 旁路并入正接线避免重复运行）
+- [x] **1.2 复活活目录中的 4 处**（2026-10-06 完成：precedence_inline 6 + overload_inline 7 + json 3 + template 7；另删 typecheck/tests/semantic_db.rs 残骸 5 行）
+- [x] **1.3 修复暴露的缺陷**（2026-10-06 完成，**实测与预判不同**：溢出路径与 \x/\u 转义当前代码无恙，20 个探针测试补上从未有的覆盖；真正暴露的缺陷是「基数字面量后非法字母数字邻接被静默拆分」——`0b102` 编译通过且运行得错误值 2、`0o128` 得 10、`0x1FG`/`123abc` 报误导性 E1001。修复：`literals.rs` 新增共享助手 `reject_trailing_alnum`（禁令三合规：一处实现五处调用），5 个先红后绿测试全绿）
 
 | 二级 | 三级 | 文件:行 | 前置 | 验收 |
 | --- | --- | --- | --- | --- |
@@ -107,13 +107,20 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | 2.2 规范化快照 | 2.2.1 规范化工具（剥 Span / 临时值重命名 / 槽位相对化 / 前驱排序） | — | C1/C3/C5 |
 | | 2.2.2 快照入库 + 人工 review 流程（`src/middle/core/tests/snapshots/`） | 2.2.1 | C1/C3/C5 |
 | 2.3 语料差分 | 2.3.1 差分框架 + 293 语料基线 | — | 诊断/退出码/stdout 逐项 |
-| | 2.3.2 **多文件语料层**（新建 `tests/yaoxiang-multifile/`，带 `yaoxiang.toml` 的项目夹具——决议 D48） | — | **无条件必做（D40），是 P4 唯一可执行的行为判据来源** |
+| | 2.3.2 **多文件语料层**（新建 `tests/yaoxiang-multifile/`，带 `yaoxiang.toml` 的项目夹具——决议 D48）（**2026-10-06 已完成**） | — | **无条件必做（D40），是 P4 唯一可执行的行为判据来源** |
 | | 2.3.3 C4 行为差分必覆盖清单（10 类语义）+ 性能基线（criterion 冒烟基准） | — | C2/C4/C5；性能基线供 P4/P7/P8 对比 |
-| 2.4 漏洞专门判据 | 2.4.1 `test_multifile_proof_obligation_not_dropped` | 2.3.2 | **必须先为红** |
-| | 2.4.3 `test_no_silent_pass_on_unproven` | — | 拦 `checker.rs:5179/5318/5448` |
+| 2.4 漏洞专门判据 | 2.4.1 `test_multifile_proof_obligation_not_dropped`（**2026-10-06 已完成：红态就位**，实测单文件 ["E4018"] vs compile_project []） | 2.3.2 | **必须先为红** |
+| | 2.4.3 `test_no_silent_pass_on_unproven`（**2026-10-06 已完成：红态就位**，触发源在 compile_project 下实测静默） | — | 拦 `checker.rs:5179/5318/5448` |
 | | 2.4.4 `test_release_plan_spans_consumed` | — | **无白名单，差集必须为空（D41）** |
 | 2.5 回归门禁 | 2.5.1–2.5.4 见 P9 统一清单 | 2.1–2.3 | 见 P9 |
 
+> **P2 收窄部分落地（2026-10-06）**：2.3.2 + 2.4.1 + 2.4.3 全部就位，**P3 止血通道前置已解锁**。
+>
+> - 2.3.2：`tests/yaoxiang-multifile/` 5 夹具（行为 ×4 + compile-error ×1）+ 运行器 `tests/yx_multifile_runner.rs`；判定契约与单文件语料同一套 `TestFileSpec`（库侧单点），二进制定位/子进程拉起抽至 `tests/common/` 且 yx_runner 同步迁移（禁令三）。
+> - 2.4.1/2.4.3：`tests/integration/proof_obligations.rs`。触发源采用 rfc027 测试钉死的 `SumUpTo(3, r)` 形态（返回位/调用点/绑定位）——02 的 `Sorted(3)` 注解示例在当前代码会被代入求值直接 Disproved，不呈现 Unproven 静默，07 伪码的 Sorted(3) 仅作示意。红态实测数据见测试文件头。
+> - 两个红判据按 2.4.5 红骨架先例挂 `#[ignore]` 常驻：默认套件全绿，`-- --ignored` 复现红态；**P3 修复落地时移除属性即转绿**。
+> - 比对规范化对 07 (code, file, line) 表的有意偏离（剔除 file/line、只比 error 码集）的理由写在 2.4.1 测试注释。
+>
 > 原 2.4.2（`test_program_stage_coverage`）与 2.4.5（`test_obligations_drained` 骨架）**移出 P2**：两者引用的 `Program` / `Obligations` 类型在 P4 才存在，P2 无法编译。前者即 P4 的 4.1.4（勿双重登记），后者的 `#[ignore]` 红骨架并入 4.3.1。
 
 ### P3 修正确性漏洞（最小方案）
