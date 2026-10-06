@@ -53,14 +53,12 @@ fn test_definition_resolves_reference_to_binding() {
     let result = handle_definition(&session, &world, params);
     // Assert：跳回第一行 x 定义
     let response = result.expect("x 引用点必须跳转到定义（#433 数据链闭合）");
-    match response {
-        GotoDefinitionResponse::Scalar(loc) => {
-            assert_eq!(loc.uri.to_string(), SAMPLE_URI, "定义在同一文件");
-            assert_eq!(loc.range.start.line, 0, "x 定义在第一行（0-indexed）");
-            assert_eq!(loc.range.start.character, 0, "x 定义在第 1 列");
-        }
-        _ => panic!("单一定义应返回 Scalar"),
-    }
+    let GotoDefinitionResponse::Scalar(loc) = response else {
+        panic!("单一定义应返回 Scalar");
+    };
+    assert_eq!(loc.uri.to_string(), SAMPLE_URI, "定义在同一文件");
+    assert_eq!(loc.range.start.line, 0, "x 定义在第一行（0-indexed）");
+    assert_eq!(loc.range.start.character, 0, "x 定义在第 1 列");
 }
 
 #[test]
@@ -72,12 +70,10 @@ fn test_definition_resolves_callee_to_function_binding() {
     let result = handle_definition(&session, &world, params);
     // Assert：跳回第一行 add 绑定
     let response = result.expect("add 调用名必须跳转到其绑定");
-    match response {
-        GotoDefinitionResponse::Scalar(loc) => {
-            assert_eq!(loc.range.start.line, 0, "add 绑定在第一行（0-indexed）");
-        }
-        _ => panic!("单一定义应返回 Scalar"),
-    }
+    let GotoDefinitionResponse::Scalar(loc) = response else {
+        panic!("单一定义应返回 Scalar");
+    };
+    assert_eq!(loc.range.start.line, 0, "add 绑定在第一行（0-indexed）");
 }
 
 #[test]

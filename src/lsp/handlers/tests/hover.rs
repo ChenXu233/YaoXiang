@@ -48,16 +48,14 @@ fn test_hover_on_reference_shows_binding_type() {
     // Act：光标在第二行 x 引用上（0-indexed line=1, character=4）
     let params = make_params(SAMPLE_URI, 1, 4);
     let result = handle_hover(&session, &world, params);
-    // Assert：悬停内容包含变量名与推断出的 Int 类型
+    // Assert：悬停内容包含变量名与绑定类型
     let hover = result.expect("x 引用点必须给出悬停");
-    match &hover.contents {
-        HoverContents::Markup(markup) => {
-            assert!(markup.value.contains("x"), "应包含变量名");
-            // 类型文本取诊断层 MonoType Display 的既定形态（int64）
-            assert!(markup.value.contains("int64"), "应显示 x 绑定的类型 int64");
-        }
-        _ => panic!("应返回 Markup 内容"),
-    }
+    let HoverContents::Markup(markup) = &hover.contents else {
+        panic!("应返回 Markup 内容");
+    };
+    assert!(markup.value.contains("x"), "应包含变量名");
+    // 类型文本取诊断层 MonoType Display 的既定形态（int64）
+    assert!(markup.value.contains("int64"), "应显示 x 绑定的类型 int64");
 }
 
 #[test]
@@ -81,12 +79,10 @@ fn test_hover_shows_definition_source_file() {
     let result = handle_hover(&session, &world, params);
     // Assert
     let hover = result.expect("引用点应给出悬停");
-    match &hover.contents {
-        HoverContents::Markup(markup) => {
-            assert!(markup.value.contains("定义于"), "应包含文件来源信息");
-        }
-        _ => panic!("应返回 Markup 内容"),
-    }
+    let HoverContents::Markup(markup) = &hover.contents else {
+        panic!("应返回 Markup 内容");
+    };
+    assert!(markup.value.contains("定义于"), "应包含文件来源信息");
 }
 
 #[test]

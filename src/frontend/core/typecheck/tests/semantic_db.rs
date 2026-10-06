@@ -12,7 +12,7 @@
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::TypeChecker;
-use crate::frontend::core::typecheck::semantic_db::SemanticDB;
+use crate::frontend::core::typecheck::semantic_db::{DefinitionInfo, SemanticDB};
 use crate::util::span::Span;
 
 /// 以生产管线检查源码，返回文件键为 `uri` 的 SemanticDB
@@ -98,20 +98,32 @@ fn test_lambda_params_produce_definitions_and_body_references() {
 }
 
 #[test]
-fn test_use_statement_registers_import_and_skips_dummy_definitions() {
-    // Arrange：模块整体导入（导入名 definition_span 为 dummy，不得入定义表）
+fn test_use_statement_registers_import_event() {
+    // Arrange：模块整体导入
     let uri = "file:///t.yx";
     let source = "use std.list\nmain = () => ()\n";
 
     // Act
     let db = check_to_semantic_db(uri, source);
 
-    // Assert：use 语句产出导入事件；导入名不产生本文件定义事件
+    // Assert：use 语句产出导入事件
     let imports = db.get_imports(uri);
     assert!(
         imports.iter().any(|i| i.module_path == "std.list"),
         "use 语句必须产出导入事件（module_path=std.list）"
     );
+}
+
+#[test]
+fn test_imported_names_produce_no_definition_events() {
+    // Arrange：模块整体导入——导入名 definition_span 为 dummy
+    let uri = "file:///t.yx";
+    let source = "use std.list\nmain = () => ()\n";
+
+    // Act
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：dummy 定义不入定义表，precise-only
     let defs = db.get_definitions(uri);
     assert!(
         defs.iter().all(|d| d.name != "list"),
@@ -119,13 +131,12 @@ fn test_use_statement_registers_import_and_skips_dummy_definitions() {
     );
 }
 
-#[test]
-fn test_upsert_from_replaces_only_target_file_and_keeps_session_data() {
-    // Arrange：会话库带一个 std 虚拟定义（World 启动加载的形态），随后
-    // 依次 upsert 文件 A 与文件 B
-    use crate::frontend::core::typecheck::semantic_db::{DefId, DefinitionInfo, DefinitionKind};
-    let mut db = SemanticDB::new();
-    let std_def = DefinitionInfo {
+/// 构造一个 std 会话级虚拟定义（World 启动时 `load_std_symbols_to_semantic_db`
+/// 的形态：dummy span + `std://` 虚拟路径）
+fn session_std_definition() -> DefinitionInfo {
+    use crate::frontend::core::typecheck::semantic_db::DefId;
+    use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
+    DefinitionInfo {
         def_id: DefId {
             file_path: "std://std.list".to_string(),
             span: Span::default(),
@@ -136,8 +147,14 @@ fn test_upsert_from_replaces_only_target_file_and_keeps_session_data() {
         file_path: "std://std.list".to_string(),
         type_info: None,
         signature: None,
-    };
-    db.add_definition("std://std.list", std_def);
+    }
+}
+
+#[test]
+fn test_upsert_from_replaces_only_target_file_and_keeps_session_data() {
+    // Arrange：会话库带一个 std 虚拟定义，随后依次 upsert 文件 A 与文件 B
+    let mut db = SemanticDB::new();
+    db.add_definition("std://std.list", session_std_definition());
 
     // Act：先 upsert 文件 A，再 upsert 文件 B（模拟用户先后编辑两个文件）
     db.upsert_from(check_to_semantic_db("file:///a.yx", "x = 1\n"));
