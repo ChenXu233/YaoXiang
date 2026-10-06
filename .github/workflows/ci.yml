@@ -167,6 +167,11 @@ jobs:
       - name: Build CLI
         run: cargo build --all-features --bin yaoxiang-rs
 
+      # P2 引入（09-execution-wbs 9.6）：全语料 verify_loose 跑绿（P7 批 a 准入
+      # 硬门槛），校验面非空断言内置于判据测试。
+      - name: IR verifier on corpus
+        run: bash scripts/ci/check-ir-verifier.sh
+
       # P2 引入（09-execution-wbs 9.7）：语料行为差分 vs 入库基线，无任何分组放宽。
       # 差分非空 = 回归（修代码）或有意变更（同一 PR 重生成基线）。
       - name: Corpus parity vs baseline

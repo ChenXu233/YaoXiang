@@ -182,7 +182,7 @@ max: (T: Ord) -> ((arr: NonEmpty(arr))) -> (result: IsMax(T, arr, result)) = {
 > → `error [E2031] … the refinement type constraint of 'r': SumUpTo(b, (b * 2)) cannot be statically proven`。
 > 替代写法：把实参改成编译期可折叠的字面量（如 `SumUpTo(3, r)`），或为该谓词提供返回 `Type`
 > 的证明函数；解除条件：证明内核支持「多参数谓词 + 符号实参」的实参代入。详见
-> [RFC-027a](../review/027a-termination-explicit-measure.md) §实现落地记录（2026-10-02，本轮硬化）。
+> [RFC-027a](../accepted/027a-termination-explicit-measure.md) §实现落地记录（2026-10-02，本轮硬化）。
 
 ### 3. 路径条件传播：运行时值的编译期验证
 
@@ -718,7 +718,7 @@ loop: (n: Int) -> Int = {
 > （2026-10-04 裁定，暂不修复），故 issue
 > [#409](https://github.com/ChenXu233/YaoXiang/issues/409) 已随主形态修复关闭，不再单开跟踪项。
 > 最小复现与影响面的历史记录见
-> [RFC-027a](../review/027a-termination-explicit-measure.md) §示例 循环节「已知缺陷 D6」。
+> [RFC-027a](../accepted/027a-termination-explicit-measure.md) §示例 循环节「已知缺陷 D6」。
 > 另：终止策略 1（线性秩函数）本轮恢复生效，故本节「自动探索不出才写显式测度」的顺序不变——
 > 显式测度仍是探索失败后的兜底。
 
@@ -742,7 +742,7 @@ loop: (n: Int) -> Int = {
 **与自动探索的关系**：显式测度不是另一条管线，而是探索失败后的输入。给出测度后仍走同一台 SMT 验证递减与良基性；不成立则报错并附反例。
 
 义务生成、判定管线、诊断方向、互递归的测度共享（SCC）等落地机制见
-[RFC-027a: 终止检查的显式测度](../review/027a-termination-explicit-measure.md)。
+[RFC-027a: 终止检查的显式测度](../accepted/027a-termination-explicit-measure.md)。
 
 ### 8. SMT 求解器：类型检查器的加速模块
 

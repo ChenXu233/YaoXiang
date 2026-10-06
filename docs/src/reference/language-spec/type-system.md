@@ -747,7 +747,7 @@ loop: (n: Int) -> Int = {
 
 > 完整设计见
 > [RFC-027 §6.9](../../rfc/accepted/027-compile-time-evaluation-types.md)（语义）与
-> [RFC-027a](../../rfc/review/027a-termination-explicit-measure.md)（落地机制）。
+> [RFC-027a](../../rfc/accepted/027a-termination-explicit-measure.md)（落地机制）。
 
 ---
 
