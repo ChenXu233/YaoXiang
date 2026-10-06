@@ -69,7 +69,6 @@ fn produced_vs_consumed(path: &Path) -> Option<(HashSet<Span>, HashSet<Span>)> {
     Some((produced, consumed))
 }
 
-// Arrange & Act & Assert
 #[test]
 #[ignore = "red-by-design（WBS 2.4.4/D41）：ReleasePlan span 键失配 373 处实测；修契约归 P4/D20（PlanId）"]
 fn test_release_plan_spans_consumed() {

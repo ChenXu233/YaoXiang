@@ -7,6 +7,7 @@
 //! 人工 review 流程（07 §128「输出必须入库，随 IR 定义变更显式更新，更新时
 //! 人工 review diff」）：
 //!   1. 更新：UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored 重写全部快照
+//!      （测试名 test_update_ir_snapshots_via_env_guard）
 //!   2. review：git diff 逐文件审阅（drift 即 IR 行为面变化，须能说清来源）
 //!   3. 提交：快照与引发 drift 的代码改动同一 PR 入库
 //!
@@ -116,7 +117,7 @@ fn test_ir_snapshots_stable() {
 /// 快照更新模式：显式人工动作（07 §128 流程第 1 步），不参与常态套件。
 #[test]
 #[ignore = "快照更新是显式人工动作：UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored"]
-fn update_ir_snapshots() {
+fn test_update_ir_snapshots_via_env_guard() {
     assert!(
         std::env::var_os("UPDATE_SNAPSHOTS").is_some(),
         "更新快照必须显式设 UPDATE_SNAPSHOTS=1（防误触）"
@@ -132,10 +133,11 @@ fn update_ir_snapshots() {
 
 use super::ir_build::{func, int_const, module_with, move_instr, ret_void, temp_slot};
 
-/// 剥 Span：仅 span 不同的两个模块，规范化文本必须全等。
+/// 剥 Span 规则：仅 span 不同的两个模块，规范化文本必须全等。
 #[test]
-fn span_stripped_makes_identical_output() {
-    let mk = |line: u32| {
+fn test_span_stripped_makes_identical_output() {
+    // Arrange：同一函数、两条仅 span 不同的 Ret 指令
+    let mk = |line: usize| {
         let mut f = func(
             "f",
             vec![],
@@ -147,19 +149,26 @@ fn span_stripped_makes_identical_output() {
             blocks[0].instructions[0] = Instruction::Ret {
                 value: None,
                 span: Span::new(
-                    crate::util::span::Position::with_offset(line as usize, 1, 0),
-                    crate::util::span::Position::with_offset(line as usize, 2, 1),
+                    crate::util::span::Position::with_offset(line, 1, 0),
+                    crate::util::span::Position::with_offset(line, 2, 1),
                 ),
             };
         }
         module_with(vec![f])
     };
-    assert_eq!(normalize_module(&mk(1)), normalize_module(&mk(99)));
+
+    // Act
+    let a = normalize_module(&mk(1));
+    let b = normalize_module(&mk(99));
+
+    // Assert
+    assert_eq!(a, b, "span 差异不得出现在规范化输出中：\nA={a}\nB={b}");
 }
 
-/// 临时值重命名：按首次出现顺序 %0 %1（与原始槽号无关）。
+/// 临时值重命名规则：按首次出现顺序 %0 %1（与原始槽号无关，保留定义-使用拓扑）。
 #[test]
-fn locals_renamed_by_first_use_order() {
+fn test_locals_renamed_by_first_use_order() {
+    // Arrange：Local(7) 先于 Local(3) 出现
     let f = func(
         "f",
         vec![],
@@ -171,14 +180,26 @@ fn locals_renamed_by_first_use_order() {
             ret_void(),
         ],
     );
-    let text = normalize_module(&module_with(vec![f]));
-    assert!(text.contains("Move %0 <- int(1)"), "{text}");
-    assert!(text.contains("Move %1 <- %0"), "{text}");
+    let m = module_with(vec![f]);
+
+    // Act
+    let text = normalize_module(&m);
+
+    // Assert：槽 7 → %0，槽 3 → %1
+    assert!(
+        text.contains("Move %0 <- int(1)"),
+        "首次出现应得 %0：\n{text}"
+    );
+    assert!(
+        text.contains("Move %1 <- %0"),
+        "二次出现应得 %1 且引用一致：\n{text}"
+    );
 }
 
-/// 全局槽位相对化：Global(7) 首次出现即 @0。
+/// 全局槽位相对化规则：Global(7) 首次出现即 @0（模块内使用序）。
 #[test]
-fn globals_relativized_by_first_use() {
+fn test_globals_relativized_by_first_use() {
+    // Arrange：globals 表一项（绝对槽号 7），指令引用之
     let mut m = module_with(vec![func(
         "f",
         vec![],
@@ -198,13 +219,21 @@ fn globals_relativized_by_first_use() {
         ty: MonoType::Int(64),
         index: 7,
     });
+
+    // Act
     let text = normalize_module(&m);
-    assert!(text.contains("Load %0 <- @0"), "{text}");
+
+    // Assert
+    assert!(
+        text.contains("Load %0 <- @0"),
+        "Global(7) 应相对化为 @0：\n{text}"
+    );
 }
 
-/// 确定性：HashMap 元数据（function_files）排序后两次输出全等。
+/// 确定性规则：HashMap 元数据（function_files）必须排序输出，两次规范化全等。
 #[test]
-fn deterministic_across_hashmap_iteration() {
+fn test_deterministic_across_hashmap_iteration() {
+    // Arrange：function_files 两条目（HashMap 迭代序不定）
     let mut m = module_with(vec![func(
         "f",
         vec![],
@@ -214,17 +243,22 @@ fn deterministic_across_hashmap_iteration() {
     )]);
     m.function_files.insert("b_fn".to_string(), 1);
     m.function_files.insert("a_fn".to_string(), 0);
+
+    // Act
     let first = normalize_module(&m);
     let second = normalize_module(&m);
-    assert_eq!(first, second);
+
+    // Assert：全等且按名排序
+    assert_eq!(first, second, "同一模块两次规范化必须全等");
     let a_pos = first.find("a_fn").unwrap();
     let b_pos = first.find("b_fn").unwrap();
-    assert!(a_pos < b_pos, "function_files 必须按名排序：{first}");
+    assert!(a_pos < b_pos, "function_files 必须按名排序：\n{first}");
 }
 
-/// 结构体字段不排序：构造顺序是语义（07 原文），字段序保留即 drift 可见。
+/// 字段序保留规则：CreateStruct 的 fields 构造顺序是语义（07 原文），不得排序。
 #[test]
-fn struct_field_order_preserved() {
+fn test_struct_field_order_preserved() {
+    // Arrange：fields = [Local(1), Local(2)]（序即语义）
     let f = func(
         "f",
         vec![],
@@ -240,6 +274,14 @@ fn struct_field_order_preserved() {
             ret_void(),
         ],
     );
-    let text = normalize_module(&module_with(vec![f]));
-    assert!(text.contains("CreateStruct %0 <- P[%1, %2]"), "{text}");
+    let m = module_with(vec![f]);
+
+    // Act
+    let text = normalize_module(&m);
+
+    // Assert：字段序 [%1, %2] 原样保留
+    assert!(
+        text.contains("CreateStruct %0 <- P[%1, %2]"),
+        "构造字段序必须保留（不得排序）：\n{text}"
+    );
 }
