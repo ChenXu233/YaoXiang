@@ -1,6 +1,6 @@
 //! 表达式格式化处理器测试
 //!
-//! 对应 formatter 规范 §3, §7, §8, §10, §11, §12, §13, §17, §18
+//! 对应 formatter 规范 §3, §4, §7, §8, §10, §11, §12, §13, §17, §18
 
 use crate::formatter::handlers::expr::{
     format_binop, format_block, format_call, format_dict, format_expr, format_fn_signature,

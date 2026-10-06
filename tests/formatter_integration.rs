@@ -8,6 +8,9 @@
 //!   §C3  空行保留 — 原始空行用于分隔逻辑块
 //!   §14  导入语句 — 排序(§14.1)/组内排序(§14.2)/注释跟随
 //!   §6   代码块  — 空块(§6.1)/单行(§6.2)/多行(§6.3)
+//!   §4   函数定义 — 签名形态(§4.1)、标注保真
+//!   §12  Lambda 表达式 — 单表达式 body 恒裸(§12.1)
+//!  RFC-007 — 函数语法简写规则（签名/lambda 头参数形态、完整形式）
 
 use yaoxiang::formatter::{format_source, FormatError, FormatOptions};
 
@@ -83,15 +86,15 @@ fn test_format_lambda_body_block_preserved() {
 
 #[test]
 fn test_format_lambda_zero_param_keeps_arrow() {
-    // 无标注零参 Lambda 恒保留 `() =>` 前缀：物化成 `= { 42 }` 会变成不可调用的
-    // 块值（#424 探针：f() 报 E1065）；有标注时走 `= { body }` 规范形，
+    // §12.1 + #424: 无标注零参 Lambda 恒保留 `() =>` 前缀——物化成 `= { 42 }`
+    // 会变成不可调用的块值（f() 报 E1065）；有标注时走 `= { body }` 规范形，
     // 由 test_format_function_no_args / test_format_empty_block 钉住。
     assert_format_eq("f = () => 42", "f = () => 42\n");
 }
 
 #[test]
 fn test_format_fn_type_params_preserved() {
-    // 匿名 Fn 类型标注（参数类型 HM 推断）不得被 format --write 丢弃（#423）
+    // §4.1 + #423: Fn 类型标注按源码保真——参数类型 HM 推断的匿名标注不得被丢弃
     assert_format_eq(
         "add: (Int, Int) -> Int = (a, b) => a + b",
         "add: (Int, Int) -> Int = (a, b) => a + b\n",
@@ -100,7 +103,7 @@ fn test_format_fn_type_params_preserved() {
 
 #[test]
 fn test_format_fn_type_named_params() {
-    // 带名 Fn 类型标注按名渲染；parser 会把签名类型合并进值 lambda 参数
+    // §4.1 + RFC-007 完整形式: 带名 Fn 类型标注按名渲染；parser 会把签名类型合并进值 lambda 参数
     // （declarations.rs 的 merged params），值侧渲染为 `(x: Int) => x`
     assert_format_eq(
         "f: (x: Int) -> Int = (x) => x",
