@@ -1808,7 +1808,13 @@ impl AstToIrGenerator {
         // 退出作用域
         self.exit_scope();
 
-        let locals_types: Vec<LocalSlot> = self.take_cur_locals(param_types.len());
+        // WBS 2.1.2 实测缺陷修复：此前传 param_types.len()，locals 表被截断到
+        // 参数数，方法体的临时槽（高水位之内）全部丢失——local_count 低估，
+        // 运行时靠 Frame::set_slot 越界 resize（frames.rs:103-105）静默容错。
+        // 与 generate_function_ir / generate_lambda_body_ir 对齐：以高水位为准。
+        // 行为等价论证：Frame 预分配槽位初值同为 Void，set_slot 容错路径不再
+        // 触发但结果相同；调试信息 local_names 只取具名槽，不受空槽扩展影响。
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(self.temp_high_water);
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -2023,10 +2029,11 @@ impl AstToIrGenerator {
         let func_ir = FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: name.to_string(),
+            // WBS 2.1.2：无注解参数填 Int(64) 占位，对齐 method 1749 惯例——
+            // filter_map 丢弃会让 params 长度与帧布局错位（verify 实测）
             params: params
                 .iter()
-                .filter_map(|p| p.ty.clone())
-                .map(|t| t.into())
+                .map(|p| p.ty.clone().map(|t| t.into()).unwrap_or(MonoType::Int(64)))
                 .collect(),
             return_type,
             generic_params,
@@ -2088,11 +2095,15 @@ impl AstToIrGenerator {
         });
 
         // 5. 构建 FunctionIR
+        // WBS 2.1.2：同上——无注解参数占位而非丢弃
         let param_types: Vec<MonoType> = layer
             .params
             .iter()
-            .filter_map(|p| p.ty.clone())
-            .map(MonoType::from)
+            .map(|p| {
+                p.ty.clone()
+                    .map(MonoType::from)
+                    .unwrap_or(MonoType::Int(64))
+            })
             .collect();
         let return_type: MonoType = layer.return_type.clone().into();
         let total_locals = self.temp_high_water;
@@ -2186,11 +2197,15 @@ impl AstToIrGenerator {
             });
         }
 
+        // WBS 2.1.2：同上——无注解参数占位而非丢弃
         let param_types: Vec<MonoType> = layer
             .params
             .iter()
-            .filter_map(|p| p.ty.clone())
-            .map(MonoType::from)
+            .map(|p| {
+                p.ty.clone()
+                    .map(MonoType::from)
+                    .unwrap_or(MonoType::Int(64))
+            })
             .collect();
         let total_locals = self.temp_high_water;
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
@@ -5272,6 +5287,19 @@ impl AstToIrGenerator {
         // 绑定进臂专属 scope（遮蔽外层，出臂恢复外层槽位映射——否则后续
         // match 以该名为 scrutinee 会读到从未写入的载荷槽 → 运行时 Void）。
         //
+        // WBS 2.1.2 实测缺陷修复：结果槽先显式预置 Void——末臂守卫失败的
+        // 容错落点（fail_jumps 全跳到 end）此前依赖帧 Void 预初始化（隐式，
+        // frames.rs:55），汇合点读在 CFG 上存在无定义路径（verify_loose 支配性
+        // 判定无法覆盖隐式语义）。显式预置使定义显式化。行为等价：容错路径
+        // 读到的值同为 Void，非容错路径被臂内 Move 覆盖。
+        // （Load 而非 Move：translate_move 的 src 走寄存器解析，Const 会触发
+        // E3017；translate_load 的 Const 臂走 LOAD_CONST 常量表）
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Const(ConstValue::Void),
+            span: match_span,
+        });
+        //
         // 1. 评估 scrutinee（类型信息驱动嵌套模式的载荷/字段/元组类型解析）
         let scrutinee_reg = self.next_temp_reg();
         self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
@@ -6640,10 +6668,12 @@ impl AstToIrGenerator {
         self.closure_captures.clear();
 
         // 6. 创建闭包函数 IR
+        // WBS 2.1.2 实测缺陷修复：无注解参数此前被 filter_map 丢弃，
+        // params 长度与帧布局错位（参数槽仍在 env_count+i 占位，元数据却空）。
+        // 对齐 generate_method_ir:1749 惯例：无注解参数填 Int(64) 占位。
         let param_types: Vec<MonoType> = params
             .iter()
-            .filter_map(|p| p.ty.clone())
-            .map(|t| t.into())
+            .map(|p| p.ty.clone().map(|t| t.into()).unwrap_or(MonoType::Int(64)))
             .collect();
 
         let closure_func = FunctionIR {
