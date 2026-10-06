@@ -28,6 +28,7 @@ python scripts/rfc/check_tracking.py   # RFC 状态一致性
 - 不看代码就改：没打开文件、没 grep 过引用点，不许动
 - 核心功能留 `todo!()` / “Not implemented yet” / 无限期“独立 issue”
 - 删测试或放宽判据换绿灯（不存在 C5′；做不到是实现缺陷，如实报告）
+- 写/改测试不读 [test-specification.md](docs/src/dev/test-specification.md)——命名必须 `test_<what>_<scenario>` 前缀、超 5 行必须 AAA 三段注释、断言必须带自定义消息、枚举匹配用 `assert!(matches!(...))`；判据红态常驻属设计形态（如 2.4.4），不是「永久 ignore」违规
 - 用 import 别名弥合同语义概念（`as AstBinOp` 这类）
 - 新增 `include!`、新增跨层反向依赖（L2→L3 等）、`pub(crate)` 跨层泄漏增加
 
@@ -40,4 +41,5 @@ python scripts/rfc/check_tracking.py   # RFC 状态一致性
 | [09](docs/src/dev/architecture/09-execution-wbs.md) | 施工任务表（P0–P10，三级 WBS） |
 | [01](docs/src/dev/architecture/01-routing.md) | 加一个特性该改哪里、目录职责表 |
 | [07](docs/src/dev/architecture/07-equivalence-oracle.md) | 等价性判据 C1–C6 |
+| [test-specification](docs/src/dev/test-specification.md) | 测试怎么写（命名/AAA/断言消息——写测试前必读） |
 | [RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) | 总纲、决议登记 D1–D52 |
