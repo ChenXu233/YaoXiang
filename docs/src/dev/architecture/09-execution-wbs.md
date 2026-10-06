@@ -106,7 +106,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 2.1.3 实现 7 项不变量（支配性/唯一定义/Phi一致/jump目标/全局越界/类型一致/内层隔离） | 2.1.1 | C4 |
 | 2.2 规范化快照 | 2.2.1 规范化工具（剥 Span / 临时值重命名 / 槽位相对化 / 前驱排序） | — | C1/C3/C5 |
 | | 2.2.2 快照入库 + 人工 review 流程（`src/middle/core/tests/snapshots/`） | 2.2.1 | C1/C3/C5 |
-| 2.3 语料差分 | 2.3.1 差分框架 + 293 语料基线 | — | 诊断/退出码/stdout 逐项 |
+| 2.3 语料差分 | 2.3.1 差分框架 + 293 语料基线（**2026-10-06 已完成**：探针 `examples/corpus_probe.rs` + 基线 `tests/baselines/corpus-parity.jsonl`（322 条）+ 门禁 `check-corpus-parity.py` 入 CI（硬门禁）；归一化含指针形态 scrub，两次全量运行门禁自比零差分） | — | 诊断/退出码/stdout 逐项 |
 | | 2.3.2 **多文件语料层**（新建 `tests/yaoxiang-multifile/`，带 `yaoxiang.toml` 的项目夹具——决议 D48）（**2026-10-06 已完成**） | — | **无条件必做（D40），是 P4 唯一可执行的行为判据来源** |
 | | 2.3.3 C4 行为差分必覆盖清单（10 类语义）+ 性能基线（criterion 冒烟基准） | — | C2/C4/C5；性能基线供 P4/P7/P8 对比 |
 | 2.4 漏洞专门判据 | 2.4.1 `test_multifile_proof_obligation_not_dropped`（**2026-10-06 已完成：红态就位**，实测单文件 ["E4018"] vs compile_project []） | 2.3.2 | **必须先为红** |
