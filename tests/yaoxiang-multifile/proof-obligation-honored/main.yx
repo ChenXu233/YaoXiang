@@ -1,0 +1,19 @@
+// proof-obligation-honored/main.yx
+// 覆盖: RFC-027 §4.2 Phase 2.5 + 02-stage-contract §正确性漏洞（证明义务静默丢弃）
+// 验证: 返回位证明义务 SumUpTo(3, 7) 在**多文件项目路径**同样被执行——
+//       证明函数返回 false 必须报 E4018（P3 修复前多文件路径静默通过，漏洞实锤）
+// 状态: ❌ 应被编译期拒绝
+//
+// 本夹具是 tests/integration/proof_obligations.rs 红判据的语料层对应物
+//（tests/yaoxiang-multifile/README.md 计划扩展项，P3 落地后补上）。
+// 编译期拒绝测试：判定契约是「check 非 0 且输出含预期码」，无 assert.assert。
+
+// expect: compile-error E4018
+
+SumUpTo: (n: Int, s: Int) -> Type = { s == n * 2 }
+
+f: () -> (r: SumUpTo(3, r)) = {
+    return 7
+}
+
+main: () -> Void = {}

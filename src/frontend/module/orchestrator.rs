@@ -135,6 +135,26 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
                 diagnostics: result.diagnostics,
             });
         }
+        // RFC-027 Phase 2.5 消费端（P3 止血）：多文件路径同样执行证明函数——
+        // 此前 proof_calls 在此被静默丢弃（02-stage-contract §漏洞证据链第 5 步）。
+        // 共享实现见 frontend/proof_execution.rs（与单文件 pipeline 同一函数）。
+        let proof_errors = crate::frontend::proof_execution::execute_proof_calls(
+            result.proof_calls(),
+            ast,
+            &result,
+        );
+        if !proof_errors.is_empty() {
+            let msg = proof_errors
+                .iter()
+                .map(|d| d.to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            return Err(OrchestratorError::TypeCheck {
+                path: path.display().to_string(),
+                message: msg,
+                diagnostics: proof_errors,
+            });
+        }
         type_results.push(result);
     }
 
@@ -314,6 +334,18 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
         let result =
             typecheck_with_registry_in(ast, &registry, &method_bindings, vendor_root.as_deref());
 
+        // RFC-027 Phase 2.5 消费端（P3 止血）：本文件无类型错误时才执行证明函数
+        //（与 pipeline 门控一致），诊断并入 collect-all 输出。
+        let proof_errors = if result.diagnostics.is_empty() {
+            crate::frontend::proof_execution::execute_proof_calls(
+                result.proof_calls(),
+                ast,
+                &result,
+            )
+        } else {
+            Vec::new()
+        };
+
         let file_canon = file
             .path
             .canonicalize()
@@ -330,6 +362,7 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
         // 警告仅对本项目文件呈现（RFC-029f）：vendor 依赖与嵌入 std 的内部
         // 警告属于其所属包，不混入消费方的 check 输出
         let mut diagnostics = result.diagnostics;
+        diagnostics.extend(proof_errors);
         if in_project(&file_canon) {
             // RFC-014 §项目模式：W1006 本地模块遮蔽依赖包（发现期事件，
             // 附着在做遮蔽 use 的文件上；Warning severity 不阻断）
@@ -468,8 +501,20 @@ pub fn check_source_in_project(
         &method_bindings,
         vendor_root.as_deref(),
     );
+    // RFC-027 Phase 2.5 消费端（P3 止血）：LSP 项目内路径同样执行证明函数——
+    // 无类型错误时才执行（与 pipeline 门控一致），诊断并入收集输出。
+    let proof_errors = if result.diagnostics.is_empty() {
+        crate::frontend::proof_execution::execute_proof_calls(
+            result.proof_calls(),
+            &parse_result.module,
+            &result,
+        )
+    } else {
+        Vec::new()
+    };
     // 错误 + 警告（W1003 等 Warning 级，LSP 侧以 severity 区分呈现）
     diagnostics.extend(result.diagnostics);
+    diagnostics.extend(proof_errors);
     diagnostics.extend(result.warnings);
     Ok(diagnostics)
 }
@@ -1395,6 +1440,22 @@ pub fn compile_embedded_module(
             path: format!("<{key}> (embedded std)"),
             message: msg,
             diagnostics: result.diagnostics,
+        });
+    }
+    // RFC-027 Phase 2.5 消费端（P3 止血）：嵌入 std 模块自身的证明义务同样
+    // 执行（02-stage-contract §漏洞证据链第 6 步——丢弃路径曾覆盖 std 自身）。
+    let proof_errors =
+        crate::frontend::proof_execution::execute_proof_calls(result.proof_calls(), &ast, &result);
+    if !proof_errors.is_empty() {
+        let msg = proof_errors
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Err(OrchestratorError::TypeCheck {
+            path: format!("<{key}> (embedded std)"),
+            message: msg,
+            diagnostics: proof_errors,
         });
     }
     crate::middle::generate_ir_with_context(&ast, &result, &[], &[], 0, registry, key).map_err(

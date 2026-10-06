@@ -48,12 +48,13 @@ P4「统一 Driver」是全计划最大风险点，本层是 P4 唯一可执行�
 | cross-file-method | 跨文件方法调用（type_bindings 预注册） | 行为 |
 | subdirectory-module | 子目录模块解析（`use util.math.{double}`） | 行为 |
 | type-error-in-lib | 被引用模块内的错误沿 use 图传导（E1001） | compile-error |
+| proof-obligation-honored | 多文件路径证明义务被执行（RFC-027 §4.2，P3 漏洞修复） | compile-error |
 
 ## 计划扩展（登记用，落地时勾掉）
 
-- [ ] P3（proof_calls 消费端修复）落地后：补 `proof-obligation-honored` 夹具
-      （`SumUpTo(3, 7)` 触发源，`expect: compile-error E4018`）——漏洞判据
-      `test_multifile_proof_obligation_not_dropped`（tests/integration/proof_obligations.rs）
-      的语料层对应物，修复前加入只会恒红，故等 P3。
+- [x] ~~P3（proof_calls 消费端修复）落地后：补 `proof-obligation-honored` 夹具~~
+      （2026-10-06 已补：`SumUpTo(3, 7)` 触发源，`expect: compile-error E4018`）——
+      漏洞判据 `test_multifile_proof_obligation_not_dropped`
+      （tests/integration/proof_obligations.rs）的语料层对应物。
 - [ ] P4 前按 07「C4 行为差分必覆盖清单」扩充：闭包捕获跨文件、spawn/迭代器、
       和类型 pattern、`?` 传播、方法重载、精化 Drop 序列等多文件形态。

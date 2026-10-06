@@ -26,7 +26,12 @@ pub struct TypeCheckResult {
     /// Trait 表（用于 IR 生成阶段查询类型是否实现特定 trait）
     pub trait_table: TraitTable,
     /// 证明函数调用（RFC-027 Phase 2.5: 需要在编译期执行的证明函数）
-    pub proof_calls: Vec<ProofFunctionCall>,
+    ///
+    /// 读取必须经 [`Self::proof_calls`] getter——消费端盘点与 P4 Obligations
+    /// 迁移的收口点（02-stage-contract §义务字段，WBS 3.1.1）。字段保留
+    /// pub(crate) 是因为全仓 11 处构造字面量（10 处在测试辅助函数）依赖
+    /// 可见性；全私有留待 Obligations 迁移时一并收口。
+    pub(crate) proof_calls: Vec<ProofFunctionCall>,
     /// NLL 精确释放计划（所有权检查阶段产出 → IR 生成阶段消费）
     pub release_plan: crate::frontend::core::typecheck::layers::ownership::ReleasePlan,
     /// ref 逃逸分析结果（跨 spawn 使用的 ref 变量 → 选 Arc）
@@ -67,6 +72,16 @@ pub struct TypeCheckResult {
     /// 警告诊断（#321：未使用导入 W1003 等，Warning 级、不阻断编译）。
     /// 与 diagnostics 分离——混入会被管线按错误计数，破坏非阻断契约。
     pub warnings: Vec<crate::util::diagnostic::Diagnostic>,
+}
+
+impl TypeCheckResult {
+    /// 读取待执行的证明函数义务（RFC-027 Phase 2.5）。
+    ///
+    /// 唯一对外读取路径：pipeline.rs 与 orchestrator 各入口的消费端经此取得
+    /// 义务并执行（02-stage-contract §正确性漏洞——义务产出后必须有人消费）。
+    pub fn proof_calls(&self) -> &[ProofFunctionCall] {
+        &self.proof_calls
+    }
 }
 
 /// 导入信息

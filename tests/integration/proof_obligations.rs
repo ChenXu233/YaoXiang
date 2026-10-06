@@ -26,6 +26,10 @@
 //! 红态经 `cargo test --test integration proof_obligations -- --ignored` 复现；
 //! P3 修复落地时**移除此属性**即为转绿（WBS P3 验收）。
 //!
+//! 转绿记录（2026-10-06，P3 修复）：types.rs 字段收 pub(crate) + 唯一 getter；
+//! 执行机制抽至 frontend/proof_execution.rs（禁令三单点）；orchestrator 四入口
+//! 补齐消费点；checker.rs:1313 空臂改记账+诊断。两测试移除 ignore 转正常绿。
+//!
 //! 与 tests/yaoxiang-multifile/ 的分工：语料层是 P4 的行为差分基线（全绿夹具），
 //! 本文件是漏洞专门判据（库级、红→绿），两者不混（D48）。
 
@@ -136,7 +140,6 @@ fn check_project_error_codes(entry: &Path) -> Vec<String> {
 ///   其统一属 P4 阶段契约范畴（4.1.4 判据）——混入会让 P3 止血修复无法单独转绿
 ///   本测试（止血通道裁决：漏洞判据随 P3 转绿）。
 #[test]
-#[ignore = "red-by-design（WBS 2.4.1）：多文件 proof_calls 无消费端；P3（02 §S3）修复后移除此属性"]
 fn test_multifile_proof_obligation_not_dropped() {
     // Arrange
     let source = format!("{SUM_UP_TO}\n{RETURN_POSITION}");
@@ -175,7 +178,6 @@ fn test_multifile_proof_obligation_not_dropped() {
 /// 本判据名，但 layers/ownership.rs 当前不构造 Unproven（全仓 grep 零命中），
 /// 该臂暂不可从源码触发；3.2.1 修复时若确认可触发形态应在此补用例。
 #[test]
-#[ignore = "red-by-design（WBS 2.4.3）：三处 extend 分支在无消费端路径静默；P3 修复后移除此属性"]
 fn test_no_silent_pass_on_unproven() {
     for (name, trigger) in [
         ("返回位", RETURN_POSITION),

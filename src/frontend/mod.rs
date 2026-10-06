@@ -61,6 +61,9 @@ pub mod config;
 // 编译流水线
 pub mod pipeline;
 
+// 编译期证明函数执行（RFC-027 Phase 2.5）——编排层共享原语
+pub(crate) mod proof_execution;
+
 // 诊断系统
 pub use crate::util::diagnostic;
 

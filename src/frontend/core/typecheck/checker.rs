@@ -1310,7 +1310,23 @@ impl TypeChecker {
                         let _model_guard = crate::util::diagnostic::push_current_span(module.span);
                         self.add_error(model.into_diagnostic());
                     }
-                    ProofResult::Unproven { .. } => {}
+                    // 02-stage-contract §漏洞证据链第 8 步（WBS 3.2.1）：所有权层
+                    // Unproven 不得被空臂吞掉——记账（proof_calls 上抛，与
+                    // 5179/5318/5448 三处精化分支同一契约）+ 诊断（into_result
+                    // 既定转换路径，不新造第二个 Unproven→Diagnostic 实现）。
+                    result @ ProofResult::Unproven { .. } => {
+                        if let ProofResult::Unproven {
+                            proof_calls: calls, ..
+                        } = &result
+                        {
+                            proof_calls.extend(calls.iter().cloned());
+                        }
+                        // 同 Disproved 臂：spanless 构造前挂模块 span 兜底（#324）
+                        let _model_guard = crate::util::diagnostic::push_current_span(module.span);
+                        if let Err(diag) = result.into_result() {
+                            self.add_error(diag);
+                        }
+                    }
                 }
             }
             (plan, escaped_refs)

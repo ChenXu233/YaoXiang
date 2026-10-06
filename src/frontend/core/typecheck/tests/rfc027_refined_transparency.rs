@@ -195,12 +195,12 @@ fn test_call_arg_unconvertible_still_generates_no_obligation() {
     // Assert — 当前无义务；强半场启用后应改为断言报错
     assert!(
         !result
-            .proof_calls
+            .proof_calls()
             .iter()
             .any(|c| c.func_name == "NonNegative"),
         "实参非编译期常量时本版不生成义务；若此处变红说明已落地静态证据要求，\
          请把断言改为「报错」。实际: {:?}",
-        result.proof_calls
+        result.proof_calls()
     );
 }
 

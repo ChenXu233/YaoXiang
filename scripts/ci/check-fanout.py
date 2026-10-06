@@ -58,13 +58,16 @@ KNOWN_WIRING_SITES = {
     ('frontend/pipeline.rs', 'run'): {'LEX', 'PARSE', 'TC', 'PROOF', 'IRGEN'},
     ('frontend/pipeline.rs', 'run_typecheck'): {'TC', 'DEADCODE'},
     ('frontend/pipeline.rs', 'run_ir_generation'): {'IRGEN', 'MONO'},
-    ('frontend/pipeline.rs', 'execute_single_proof_fn'): {'CODEGEN', 'EXEC', 'IRGEN'},
+    # 2026-10-06 P3：证明执行机制共享化，从 pipeline.rs 移入 proof_execution.rs
+    #（orchestrator 四入口同调，02 §漏洞修复——库存随之迁移而非新增）
+    ('frontend/proof_execution.rs', 'execute_single_proof_fn'): {'CODEGEN', 'EXEC', 'IRGEN'},
     ('frontend/validate.rs', 'validate_source'): {'LEX', 'PARSE', 'TC'},
-    ('frontend/module/orchestrator.rs', 'compile_project'): {'PARSE', 'TC', 'IRGEN'},
-    ('frontend/module/orchestrator.rs', 'check_project'): {'PARSE', 'TC', 'DEADCODE'},
-    ('frontend/module/orchestrator.rs', 'check_source_in_project'): {'LEX', 'PARSE', 'TC'},
+    # 2026-10-06 P3：四入口补齐 proof_execution 消费点（PROOF 阶段入列）
+    ('frontend/module/orchestrator.rs', 'compile_project'): {'PARSE', 'TC', 'PROOF', 'IRGEN'},
+    ('frontend/module/orchestrator.rs', 'check_project'): {'PARSE', 'TC', 'DEADCODE', 'PROOF'},
+    ('frontend/module/orchestrator.rs', 'check_source_in_project'): {'LEX', 'PARSE', 'TC', 'PROOF'},
     ('frontend/module/orchestrator.rs', 'collect_project_refs'): {'LEX', 'PARSE', 'DEADCODE'},
-    ('frontend/module/orchestrator.rs', 'compile_embedded_module'): {'PARSE', 'TC', 'IRGEN'},
+    ('frontend/module/orchestrator.rs', 'compile_embedded_module'): {'PARSE', 'TC', 'PROOF', 'IRGEN'},
     ('frontend/module/orchestrator.rs', 'parse_file'): {'LEX', 'PARSE'},
     # LSP 手工阶段序列（P4 的 4.2.6 消除）
     ('lsp/server.rs', 'update_semantic_db'): {'LEX', 'PARSE', 'TC'},
