@@ -1,0 +1,323 @@
+module
+  fn main() -> Void
+    slot[0] s : Int(64) @depth1
+    slot[1] parts : Int(64) @depth1
+    slot[2] parts2 : Int(64) @depth1
+    slot[3] cs : Int(64) @depth1
+    slot[4] ok_r : Int(64) @depth1
+    slot[5] err_r : Int(64) @depth1
+    slot[6] err_f : Int(64) @depth1
+    slot[7] ok_c : Int(64) @depth1
+    slot[8] ok_e : Int(64) @depth1
+    locals_total=17
+    Load %0 <- string("  Hello World  ")
+    Load %1 <- %0
+    Call %2 <- string("std.string.trim") [%1] (def=d0)
+    Load %3 <- string("Hello World")
+    Eq %4 <- %2, %3
+    Load %5 <- string("trim")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %1 <- string("abc")
+    Call %2 <- string("std.string.upper") [%1] (def=d2)
+    Load %3 <- string("ABC")
+    Eq %4 <- %2, %3
+    Load %5 <- string("upper")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %1 <- string("ABC")
+    Call %2 <- string("std.string.lower") [%1] (def=d3)
+    Load %3 <- string("abc")
+    Eq %4 <- %2, %3
+    Load %5 <- string("lower")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %1 <- string("a-b-c")
+    Load %5 <- string("-")
+    Load %7 <- string("+")
+    Call %2 <- string("std.string.replace") [%1, %5, %7] (def=d4)
+    Load %3 <- string("a+b+c")
+    Eq %4 <- %2, %3
+    Load %8 <- string("replace")
+    Call %6 <- string("std.assert.assert") [%4, %8] (def=d1)
+    Load %2 <- string("hello")
+    Load %3 <- string("ell")
+    Call %4 <- string("std.string.contains") [%2, %3] (def=d5)
+    Load %1 <- string("contains")
+    Call %6 <- string("std.assert.assert") [%4, %1] (def=d1)
+    Load %2 <- string("hello")
+    Load %3 <- string("he")
+    Call %4 <- string("std.string.starts_with") [%2, %3] (def=d6)
+    Load %1 <- string("starts_with")
+    Call %6 <- string("std.assert.assert") [%4, %1] (def=d1)
+    Load %2 <- string("hello")
+    Load %3 <- string("lo")
+    Call %4 <- string("std.string.ends_with") [%2, %3] (def=d7)
+    Load %1 <- string("ends_with")
+    Call %6 <- string("std.assert.assert") [%4, %1] (def=d1)
+    Load %1 <- string("hello")
+    Load %5 <- string("ll")
+    Call %2 <- string("std.string.index_of") [%1, %5] (def=d8)
+    Load %3 <- int(2)
+    Eq %4 <- %2, %3
+    Load %7 <- string("index_of")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %1 <- string("hello")
+    Load %5 <- int(1)
+    Load %7 <- int(4)
+    Call %2 <- string("std.string.substring") [%1, %5, %7] (def=d9)
+    Load %3 <- string("ell")
+    Eq %4 <- %2, %3
+    Load %8 <- string("substring")
+    Call %6 <- string("std.assert.assert") [%4, %8] (def=d1)
+    Load %1 <- string("hello")
+    Call %2 <- string("std.string.len") [%1] (def=d10)
+    Load %3 <- int(5)
+    Eq %4 <- %2, %3
+    Load %5 <- string("len")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %3 <- string("x")
+    Call %2 <- string("std.string.is_empty") [%3] (def=d11)
+    Not %4 <- %2
+    Load %1 <- string("not is_empty")
+    Call %6 <- string("std.assert.assert") [%4, %1] (def=d1)
+    Load %2 <- string("")
+    Call %4 <- string("std.string.is_empty") [%2] (def=d11)
+    Load %3 <- string("is_empty")
+    Call %6 <- string("std.assert.assert") [%4, %3] (def=d1)
+    Load %1 <- string("a")
+    Load %5 <- string("b")
+    Call %2 <- string("std.string.concat") [%1, %5] (def=d12)
+    Load %3 <- string("ab")
+    Eq %4 <- %2, %3
+    Load %7 <- string("concat")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %1 <- string("ab")
+    Load %5 <- int(3)
+    Call %2 <- string("std.string.repeat") [%1, %5] (def=d13)
+    Load %3 <- string("ababab")
+    Eq %4 <- %2, %3
+    Load %7 <- string("repeat")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %1 <- string("abc")
+    Call %2 <- string("std.string.reverse") [%1] (def=d14)
+    Load %3 <- string("cba")
+    Eq %4 <- %2, %3
+    Load %5 <- string("reverse")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %4 <- string("x,y,z")
+    Load %2 <- string(",")
+    Call %6 <- string("std.string.split") [%4, %2] (def=d15)
+    Load %5 <- %6
+    StringLength %3 <- %5
+    Load %1 <- int(3)
+    Eq %2 <- %3, %1
+    Load %7 <- string("split len 3")
+    Call %4 <- string("std.assert.assert") [%2, %7] (def=d1)
+    Load %2 <- string("x,y,z")
+    Load %3 <- string(",")
+    Call %4 <- string("std.string.split") [%2, %3] (def=d15)
+    Load %7 <- %4
+    Load %8 <- int(0)
+    LoadIndex %1 <- %7[%8]
+    Load %5 <- string("x")
+    Eq %3 <- %1, %5
+    Load %9 <- string("split[0] == x")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d1)
+    Load %3 <- string("ab")
+    Call %2 <- string("std.string.chars") [%3] (def=d16)
+    Load %8 <- %2
+    StringLength %5 <- %8
+    Load %7 <- int(2)
+    Eq %1 <- %5, %7
+    Load %9 <- string("chars len 2")
+    Call %3 <- string("std.assert.assert") [%1, %9] (def=d1)
+    Load %1 <- string("42")
+    Call %3 <- string("std.string.parse_int") [%1] (def=d17)
+    Load %7 <- %3
+    Call %5 <- string("std.result.is_ok") [%7] (def=d18)
+    Load %8 <- string("parse_int ok")
+    Call %1 <- string("std.assert.assert") [%5, %8] (def=d1)
+    Load %5 <- string("not_a_number")
+    Call %1 <- string("std.string.parse_int") [%5] (def=d17)
+    Load %8 <- %1
+    Call %7 <- string("std.result.is_err") [%8] (def=d19)
+    Load %9 <- string("parse_int err on invalid")
+    Call %5 <- string("std.assert.assert") [%7, %9] (def=d1)
+    Load %7 <- string("xxx")
+    Call %5 <- string("std.string.parse_float") [%7] (def=d20)
+    Load %9 <- %5
+    Call %8 <- string("std.result.is_err") [%9] (def=d19)
+    Load %10 <- string("parse_float err on invalid")
+    Call %7 <- string("std.assert.assert") [%8, %10] (def=d1)
+    Load %11 <- string("A")
+    Load %12 <- int(0)
+    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
+    Load %10 <- int(65)
+    Eq %8 <- %9, %10
+    Load %13 <- string("char_code ASCII")
+    Call %7 <- string("std.assert.assert") [%8, %13] (def=d1)
+    Load %11 <- string("é")
+    Load %12 <- int(0)
+    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
+    Load %10 <- int(233)
+    Eq %8 <- %9, %10
+    Load %13 <- string("char_code Latin-1")
+    Call %7 <- string("std.assert.assert") [%8, %13] (def=d1)
+    Load %11 <- string("字")
+    Load %12 <- int(0)
+    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
+    Load %10 <- int(23383)
+    Eq %8 <- %9, %10
+    Load %13 <- string("char_code CJK")
+    Call %7 <- string("std.assert.assert") [%8, %13] (def=d1)
+    Load %11 <- string("héllo")
+    Load %12 <- int(1)
+    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
+    Load %10 <- int(233)
+    Eq %8 <- %9, %10
+    Load %13 <- string("char_code index past multibyte")
+    Call %7 <- string("std.assert.assert") [%8, %13] (def=d1)
+    Load %11 <- string("hi")
+    Load %12 <- int(2)
+    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
+    Load %13 <- int(1)
+    Neg %10 <- %13
+    Eq %8 <- %9, %10
+    Load %14 <- string("char_code out of range → -1")
+    Call %7 <- string("std.assert.assert") [%8, %14] (def=d1)
+    Load %11 <- string("")
+    Load %12 <- int(0)
+    Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
+    Load %13 <- int(1)
+    Neg %10 <- %13
+    Eq %8 <- %9, %10
+    Load %14 <- string("char_code on empty → -1")
+    Call %7 <- string("std.assert.assert") [%8, %14] (def=d1)
+    Load %8 <- int(65)
+    Call %7 <- string("std.string.from_char_code") [%8] (def=d22)
+    Load %10 <- %7
+    Call %9 <- string("std.result.is_ok") [%10] (def=d18)
+    Load %11 <- string("from_char_code ok")
+    Call %8 <- string("std.assert.assert") [%9, %11] (def=d1)
+    Load %12 <- %7
+    Call %10 <- string("std.result.unwrap") [%12] (def=d23)
+    Load %11 <- string("A")
+    Eq %9 <- %10, %11
+    Load %13 <- string("from_char_code roundtrip ASCII")
+    Call %8 <- string("std.assert.assert") [%9, %13] (def=d1)
+    Load %9 <- int(128512)
+    Call %8 <- string("std.string.from_char_code") [%9] (def=d22)
+    Load %11 <- %8
+    Call %10 <- string("std.result.is_ok") [%11] (def=d18)
+    Load %12 <- string("from_char_code astral ok")
+    Call %9 <- string("std.assert.assert") [%10, %12] (def=d1)
+    Load %14 <- %8
+    Call %13 <- string("std.result.unwrap") [%14] (def=d23)
+    Load %15 <- int(0)
+    Call %11 <- string("std.string.char_code") [%13, %15] (def=d21)
+    Load %12 <- int(128512)
+    Eq %10 <- %11, %12
+    Load %16 <- string("astral roundtrip")
+    Call %9 <- string("std.assert.assert") [%10, %16] (def=d1)
+    Load %13 <- int(1)
+    Neg %12 <- %13
+    Call %11 <- string("std.string.from_char_code") [%12] (def=d22)
+    Call %10 <- string("std.result.is_err") [%11] (def=d19)
+    Load %14 <- string("negative codepoint err")
+    Call %9 <- string("std.assert.assert") [%10, %14] (def=d1)
+    Load %12 <- int(55296)
+    Call %11 <- string("std.string.from_char_code") [%12] (def=d22)
+    Call %10 <- string("std.result.is_err") [%11] (def=d19)
+    Load %13 <- string("surrogate half err")
+    Call %9 <- string("std.assert.assert") [%10, %13] (def=d1)
+    Load %12 <- int(1114112)
+    Call %11 <- string("std.string.from_char_code") [%12] (def=d22)
+    Call %10 <- string("std.result.is_err") [%11] (def=d19)
+    Load %13 <- string("beyond max err")
+    Call %9 <- string("std.assert.assert") [%10, %13] (def=d1)
+    Load %13 <- string("Hello {}")
+    Load %14 <- string("world")
+    Call %11 <- string("std.string.format") [%13, %14] (def=d24)
+    Load %12 <- string("Hello world")
+    Eq %10 <- %11, %12
+    Load %15 <- string("format basic")
+    Call %9 <- string("std.assert.assert") [%10, %15] (def=d1)
+    Load %13 <- string("{0}+{1}={0}")
+    Load %14 <- int(1)
+    Load %15 <- int(2)
+    Call %11 <- string("std.string.format") [%13, %14, %15] (def=d24)
+    Load %12 <- string("1+2=1")
+    Eq %10 <- %11, %12
+    Load %16 <- string("format indexed reuse")
+    Call %9 <- string("std.assert.assert") [%10, %16] (def=d1)
+    Load %13 <- string("{{}}")
+    Call %11 <- string("std.string.format") [%13] (def=d24)
+    Load %12 <- string("{}")
+    Eq %10 <- %11, %12
+    Load %14 <- string("format brace escape")
+    Call %9 <- string("std.assert.assert") [%10, %14] (def=d1)
+    Load %13 <- string("a}}b")
+    Call %11 <- string("std.string.format") [%13] (def=d24)
+    Load %12 <- string("a}b")
+    Eq %10 <- %11, %12
+    Load %14 <- string("format lone close brace literal")
+    Call %9 <- string("std.assert.assert") [%10, %14] (def=d1)
+    Load %13 <- string("{0:.2f}")
+    Load %14 <- float(4614256650576692846)
+    Call %11 <- string("std.string.format") [%13, %14] (def=d24)
+    Load %12 <- string("3.14")
+    Eq %10 <- %11, %12
+    Load %15 <- string("format .2f")
+    Call %9 <- string("std.assert.assert") [%10, %15] (def=d1)
+    Load %13 <- string("[{0:5d}]")
+    Load %15 <- int(5)
+    Neg %14 <- %15
+    Call %11 <- string("std.string.format") [%13, %14] (def=d24)
+    Load %12 <- string("[   -5]")
+    Eq %10 <- %11, %12
+    Load %16 <- string("format width align")
+    Call %9 <- string("std.assert.assert") [%10, %16] (def=d1)
+    Load %13 <- string("{0:05d}")
+    Load %15 <- int(5)
+    Neg %14 <- %15
+    Call %11 <- string("std.string.format") [%13, %14] (def=d24)
+    Load %12 <- string("-0005")
+    Eq %10 <- %11, %12
+    Load %16 <- string("format zero flag")
+    Call %9 <- string("std.assert.assert") [%10, %16] (def=d1)
+    Load %13 <- string("{0:x}|{0:#x}|{0:b}|{0:o}")
+    Load %14 <- int(255)
+    Call %11 <- string("std.string.format") [%13, %14] (def=d24)
+    Load %12 <- string("ff|0xff|11111111|377")
+    Eq %10 <- %11, %12
+    Load %15 <- string("format radix presentations")
+    Call %9 <- string("std.assert.assert") [%10, %15] (def=d1)
+    Load %13 <- string("{0:e}")
+    Load %14 <- float(4614256650576692846)
+    Call %11 <- string("std.string.format") [%13, %14] (def=d24)
+    Load %12 <- string("3.141590e+00")
+    Eq %10 <- %11, %12
+    Load %15 <- string("format scientific")
+    Call %9 <- string("std.assert.assert") [%10, %15] (def=d1)
+    Load %13 <- string("{0:%}")
+    Load %14 <- float(4598175219545276416)
+    Call %11 <- string("std.string.format") [%13, %14] (def=d24)
+    Load %12 <- string("25.000000%")
+    Eq %10 <- %11, %12
+    Load %15 <- string("format percent")
+    Call %9 <- string("std.assert.assert") [%10, %15] (def=d1)
+    Load %13 <- string("{0:.3}")
+    Load %14 <- string("hello")
+    Call %11 <- string("std.string.format") [%13, %14] (def=d24)
+    Load %12 <- string("hel")
+    Eq %10 <- %11, %12
+    Load %15 <- string("format string precision")
+    Call %9 <- string("std.assert.assert") [%10, %15] (def=d1)
+    Load %13 <- string("{0:^7}")
+    Load %14 <- string("hi")
+    Call %11 <- string("std.string.format") [%13, %14] (def=d24)
+    Load %12 <- string("  hi   ")
+    Eq %10 <- %11, %12
+    Load %15 <- string("format center align")
+    Call %9 <- string("std.assert.assert") [%10, %15] (def=d1)
+    Ret %9
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,34 @@
+module
+  fn IsPositive(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 13, column: 34, offset: 679 }, end: Position { line: 13, column: 35, offset: 680 } }), right: Lit(Int(0), Span { start: Position { line: 13, column: 38, offset: 683 }, end: Position { line: 13, column: 39, offset: 684 } }), span: Span { start: Position { line: 13, column: 36, offset: 681 }, end: Position { line: 13, column: 37, offset: 682 } } }))] }
+  fn shifted() -> Generic { name: "IsPositive", args: [TypeRef("<const-expr>")] }
+    locals_total=2
+    Load %0 <- int(5)
+    Neg %1 <- %0
+    Ret %1
+    Ret %1
+  fn grown(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Generic { name: "IsPositive", args: [TypeRef("<const-expr>")] }
+    slot[0] b : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(1)
+    Add %3 <- %1, %2
+    Ret %3
+  fn main() -> Void
+    locals_total=6
+    Call %0 <- string("shifted") [] (def=d0)
+    Load %1 <- int(5)
+    Neg %2 <- %1
+    Eq %3 <- %0, %2
+    Load %4 <- string("shifted() == -5")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %1 <- int(3)
+    Call %0 <- string("grown") [%1] (def=d2)
+    Load %2 <- int(4)
+    Eq %3 <- %0, %2
+    Load %4 <- string("grown(3) == 4")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

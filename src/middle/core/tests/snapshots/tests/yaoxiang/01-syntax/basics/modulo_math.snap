@@ -1,0 +1,72 @@
+module
+  fn main() -> Void
+    slot[0] folded : Int(64) @depth1
+    locals_total=10
+    Load %0 <- int(10)
+    Load %1 <- int(3)
+    Mod %2 <- %0, %1
+    Load %3 <- int(1)
+    Eq %4 <- %2, %3
+    Load %5 <- string("10 % 3 == 1")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d0)
+    Load %5 <- int(7)
+    Neg %0 <- %5
+    Load %1 <- int(3)
+    Mod %2 <- %0, %1
+    Load %3 <- int(2)
+    Eq %4 <- %2, %3
+    Load %7 <- string("-7 % 3 == 2")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d0)
+    Load %0 <- int(7)
+    Load %5 <- int(3)
+    Neg %1 <- %5
+    Mod %2 <- %0, %1
+    Load %7 <- int(2)
+    Neg %3 <- %7
+    Eq %4 <- %2, %3
+    Load %8 <- string("7 % -3 == -2")
+    Call %6 <- string("std.assert.assert") [%4, %8] (def=d0)
+    Load %5 <- int(7)
+    Neg %0 <- %5
+    Load %7 <- int(3)
+    Neg %1 <- %7
+    Mod %2 <- %0, %1
+    Load %8 <- int(1)
+    Neg %3 <- %8
+    Eq %4 <- %2, %3
+    Load %9 <- string("-7 % -3 == -1")
+    Call %6 <- string("std.assert.assert") [%4, %9] (def=d0)
+    Load %0 <- float(4620130267728707584)
+    Load %1 <- float(4611686018427387904)
+    Mod %2 <- %0, %1
+    Load %3 <- float(4609434218613702656)
+    Eq %4 <- %2, %3
+    Load %5 <- string("7.5 % 2.0 == 1.5")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d0)
+    Load %5 <- float(4620130267728707584)
+    Neg %0 <- %5
+    Load %1 <- float(4611686018427387904)
+    Mod %2 <- %0, %1
+    Load %3 <- float(4602678819172646912)
+    Eq %4 <- %2, %3
+    Load %7 <- string("-7.5 % 2.0 == 0.5")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d0)
+    Load %3 <- int(7)
+    Neg %4 <- %3
+    Load %2 <- int(3)
+    Mod %6 <- %4, %2
+    Load %3 <- %6
+    Load %0 <- int(2)
+    Eq %2 <- %3, %0
+    Load %1 <- string("const-folded -7 % 3 == 2")
+    Call %4 <- string("std.assert.assert") [%2, %1] (def=d0)
+    Load %1 <- int(5)
+    Load %5 <- int(5)
+    Mod %3 <- %1, %5
+    Load %0 <- int(0)
+    Eq %2 <- %3, %0
+    Load %7 <- string("5 % 5 == 0")
+    Call %4 <- string("std.assert.assert") [%2, %7] (def=d0)
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

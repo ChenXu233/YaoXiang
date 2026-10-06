@@ -1,0 +1,38 @@
+module
+  fn main() -> Void
+    locals_total=8
+    Load %0 <- int(1)
+    Load %1 <- int(1)
+    Add %2 <- %0, %1
+    Load %3 <- int(2)
+    Eq %4 <- %2, %3
+    Load %5 <- string("basic equality")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d0)
+    Load %2 <- string("abc")
+    Load %3 <- string("abc")
+    Eq %4 <- %2, %3
+    Load %0 <- string("string equality")
+    Call %6 <- string("std.assert.assert") [%4, %0] (def=d0)
+    Load %3 <- int(5)
+    Load %0 <- int(3)
+    Gt %2 <- %3, %0
+    JmpIfNot %2 -> instr(20)
+    Load %1 <- int(3)
+    Load %5 <- int(5)
+    Lt %4 <- %1, %5
+    Jmp -> instr(21)
+    Load %4 <- bool(false)
+    Load %7 <- string("logical and")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d0)
+    Load %2 <- bool(false)
+    Not %4 <- %2
+    Load %3 <- string("logical not")
+    Call %6 <- string("std.assert.assert") [%4, %3] (def=d0)
+    Load %2 <- int(42)
+    Load %3 <- int(42)
+    Eq %4 <- %2, %3
+    Load %0 <- string("int equality")
+    Call %6 <- string("std.assert.assert") [%4, %0] (def=d0)
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,45 @@
+module
+  global[0] threshold : Int(64)
+  fn main() -> Void
+    slot[0] nums : Int(64) @depth1
+    slot[1] big : Int(64) @depth1
+    locals_total=9
+    AllocArray %0 size=int(4), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(6)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(3)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %7 <- int(8)
+    Load %8 <- int(3)
+    StoreIndex %0[%8] <- %7
+    Load %2 <- %0
+    MakeClosure %3 <- closure_0 env=[] (def=d0)
+    Call %1 <- string("std.list.filter") [%2, %3] (def=d1)
+    Load %6 <- %1
+    Call %4 <- string("std.list.len") [%6] (def=d2)
+    Load %5 <- int(2)
+    Eq %3 <- %4, %5
+    Load %7 <- string("闭包捕获外部值 filter")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d3)
+    Load %4 <- @0
+    Load %5 <- int(5)
+    Eq %3 <- %4, %5
+    Load %6 <- string("捕获后原值仍可用")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d3)
+    Ret %2
+  fn closure_0(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=9
+    Load %0 <- %1
+    Load %2 <- @0
+    Gt %3 <- %0, %2
+    Ret %3
+  init (locals=0)
+    Load %0 <- int(5)
+    Store @0 <- %0
+    Call %1 <- string("main") [] (def=_)

@@ -1,0 +1,84 @@
+module
+  global[0] empty : Void
+  global[1] d : Int(64)
+  global[2] five : Int(64)
+  global[3] nested : Int(64)
+  global[4] empty_dict : Int(64)
+  global[5] assign_last : Void
+  fn noop() -> Void
+    locals_total=0
+    Ret
+  fn get_five() -> Int(64)
+    locals_total=1
+    Load %0 <- int(5)
+    Ret %0
+  fn via_lambda() -> Void
+    locals_total=2
+    Load %0 <- int(7)
+    Ret %0
+    Ret
+  fn run_noop() -> Void
+    locals_total=1
+    Call %0 <- string("noop") [] (def=d0)
+    Ret %0
+  fn main() -> Void
+    locals_total=2
+    Load %0 <- string("empty_block_semantics: ok")
+    Call %1 <- string("std.io.println") [%0] (def=d1)
+    Ret %1
+  init (locals=15)
+    islot[3] x : Int(64) @depth1
+    islot[13] inner : Int(64) @depth1
+    islot[14] x : Int(64) @depth2
+    Store @0 <- %0
+    Load %1 <- string("a")
+    Load %2 <- int(1)
+    Load %3 <- string("b")
+    Load %4 <- int(2)
+    NewDict %5 <- keys=[%1, %3] values=[%2, %4]
+    Store @1 <- %5
+    Load %6 <- int(5)
+    Store @2 <- %6
+    Load %7 <- int(3)
+    Load %8 <- %7
+    Load %9 <- %8
+    Load %10 <- int(2)
+    Mul %11 <- %9, %10
+    Store @3 <- %11
+    Call %12 <- string("std.dict.new") [] (def=_)
+    Store @4 <- %12
+    Load %2 <- int(1)
+    Store @5 <- %1
+    Load %13 <- @2
+    Load %14 <- int(5)
+    Eq %15 <- %13, %14
+    Load %16 <- string("块的值 = 尾表达式")
+    Call %17 <- string("std.assert.assert") [%15, %16] (def=_)
+    Load %18 <- @3
+    Load %19 <- int(6)
+    Eq %20 <- %18, %19
+    Load %21 <- string("嵌套块的值")
+    Call %22 <- string("std.assert.assert") [%20, %21] (def=_)
+    Load %23 <- @4
+    Call %24 <- string("std.dict.is_empty") [%23] (def=_)
+    Load %25 <- string("dict.new() 是空字典")
+    Call %26 <- string("std.assert.assert") [%24, %25] (def=_)
+    Load %27 <- @4
+    Call %28 <- string("std.dict.len") [%27] (def=_)
+    Load %29 <- int(0)
+    Eq %30 <- %28, %29
+    Load %31 <- string("空字典长度为 0")
+    Call %32 <- string("std.assert.assert") [%30, %31] (def=_)
+    Call %0 <- string("noop") [] (def=_)
+    Call %2 <- string("get_five") [] (def=_)
+    Load %3 <- int(5)
+    Eq %1 <- %2, %3
+    Load %4 <- string("Fn 注解 → 函数")
+    Call %5 <- string("std.assert.assert") [%1, %4] (def=_)
+    Call %1 <- string("via_lambda") [] (def=_)
+    Load %2 <- int(7)
+    Eq %5 <- %1, %2
+    Load %3 <- string("lambda → 函数")
+    Call %0 <- string("std.assert.assert") [%5, %3] (def=_)
+    Call %5 <- string("run_noop") [] (def=_)
+    Call %1 <- string("main") [] (def=_)

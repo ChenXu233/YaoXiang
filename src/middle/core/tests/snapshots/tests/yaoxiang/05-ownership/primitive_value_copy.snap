@@ -1,0 +1,28 @@
+module
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] x : Int(64) @depth1
+    locals_total=9
+    Load %0 <- int(42)
+    Load %1 <- %0
+    Load %2 <- %0
+    Load %3 <- %1
+    Add %4 <- %2, %3
+    Load %5 <- int(84)
+    Eq %6 <- %4, %5
+    Load %7 <- string("原语赋值复制，两者都可用")
+    Call %8 <- string("std.assert.assert") [%6, %7] (def=d0)
+    Load %8 <- int(7)
+    Load %4 <- %8
+    Call %6 <- string("std.io.println") [%4] (def=d1)
+    Load %4 <- %8
+    Call %6 <- string("std.io.println") [%4] (def=d1)
+    Load %5 <- %8
+    Load %2 <- int(7)
+    Eq %4 <- %5, %2
+    Load %3 <- string("原语传参不 move 源")
+    Call %6 <- string("std.assert.assert") [%4, %3] (def=d0)
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

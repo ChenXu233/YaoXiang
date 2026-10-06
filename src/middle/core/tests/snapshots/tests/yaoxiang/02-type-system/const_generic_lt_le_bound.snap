@@ -1,0 +1,17 @@
+module
+  fn Capped(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }, Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["T"]
+    type_decl Struct { body: [Field(StructField { name: "_assert_lt", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 9, column: 17, offset: 338 }, end: Position { line: 9, column: 23, offset: 344 } }, args: [ConstExpr(BinOp { op: Lt, left: Var("N", Span { start: Position { line: 9, column: 24, offset: 345 }, end: Position { line: 9, column: 25, offset: 346 } }), right: Lit(Int(100), Span { start: Position { line: 9, column: 28, offset: 349 }, end: Position { line: 9, column: 31, offset: 352 } }), span: Span { start: Position { line: 9, column: 26, offset: 347 }, end: Position { line: 9, column: 27, offset: 348 } } })] }, default: None }), Field(StructField { name: "_assert_le", is_mut: false, ty: Generic { name: "Assert", name_span: Span { start: Position { line: 10, column: 17, offset: 371 }, end: Position { line: 10, column: 23, offset: 377 } }, args: [ConstExpr(BinOp { op: Le, left: Var("N", Span { start: Position { line: 10, column: 24, offset: 378 }, end: Position { line: 10, column: 25, offset: 379 } }), right: Lit(Int(100), Span { start: Position { line: 10, column: 29, offset: 383 }, end: Position { line: 10, column: 32, offset: 386 } }), span: Span { start: Position { line: 10, column: 26, offset: 380 }, end: Position { line: 10, column: 28, offset: 382 } } })] }, default: None }), Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Array", name_span: Span { start: Position { line: 11, column: 11, offset: 399 }, end: Position { line: 11, column: 16, offset: 404 } }, args: [Name { name: "T", span: Span { start: Position { line: 11, column: 17, offset: 405 }, end: Position { line: 11, column: 18, offset: 406 } } }, Name { name: "N", span: Span { start: Position { line: 11, column: 20, offset: 408 }, end: Position { line: 11, column: 21, offset: 409 } } }] }, default: None })] }
+  fn main() -> Void
+    slot[0] arr : Int(64) @depth1
+    locals_total=4
+    Load %0 <- void
+    Load %1 <- int(3)
+    Load %2 <- int(0)
+    Call %3 <- string("Capped") [%0, %1, %2] (def=d0)
+    Load %1 <- bool(true)
+    Load %2 <- string("Capped(Int, 3) with N < 100 and N <= 100 compiled and ran")
+    Call %0 <- string("std.assert.assert") [%1, %2] (def=d1)
+    Ret %0
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

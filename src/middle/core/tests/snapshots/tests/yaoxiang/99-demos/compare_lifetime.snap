@@ -1,0 +1,31 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 20, offset: 255 }, end: Position { line: 8, column: 25, offset: 260 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 8, column: 30, offset: 265 }, end: Position { line: 8, column: 35, offset: 270 } } }, default: None })] }
+  fn Window() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "target", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 11, column: 13, offset: 303 }, end: Position { line: 11, column: 18, offset: 308 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 12, column: 12, offset: 321 }, end: Position { line: 12, column: 17, offset: 326 } } }, span: Span { start: Position { line: 13, column: 1, offset: 380 }, end: Position { line: 13, column: 2, offset: 381 } } }, default: None })] }
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] ref_p : Int(64) @depth1
+    slot[2] w : Int(64) @depth1
+    locals_total=7
+    Load %0 <- float(4607182418800017408)
+    Load %1 <- float(4611686018427387904)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Move %0 <- %1
+    Load %3 <- %2
+    Load %4 <- %0
+    Call %1 <- string("Window") [%3, %4] (def=d1)
+    Load %4 <- bool(true)
+    Load %5 <- string("view x accessed")
+    Call %3 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Load %6 <- %1
+    LoadField %5 <- %6.1
+    LoadField %4 <- %5.0
+    Call %3 <- string("std.io.println") [%4] (def=d3)
+    Load %4 <- bool(true)
+    Load %5 <- string("all passed")
+    Call %3 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

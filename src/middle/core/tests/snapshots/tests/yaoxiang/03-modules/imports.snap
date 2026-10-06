@@ -1,0 +1,71 @@
+module
+  fn main() -> Void
+    slot[0] items : Int(64) @depth1
+    slot[1] mapped : Int(64) @depth1
+    locals_total=11
+    Load %0 <- string("module_import_ok")
+    Call %1 <- string("std.io.println") [%0] (def=d0)
+    AllocArray %1 size=int(5), elem=int(1)
+    Load %0 <- int(3)
+    Load %2 <- int(0)
+    StoreIndex %1[%2] <- %0
+    Load %3 <- int(1)
+    Load %4 <- int(1)
+    StoreIndex %1[%4] <- %3
+    Load %5 <- int(4)
+    Load %6 <- int(2)
+    StoreIndex %1[%6] <- %5
+    Load %7 <- int(1)
+    Load %8 <- int(3)
+    StoreIndex %1[%8] <- %7
+    Load %9 <- int(5)
+    Load %10 <- int(4)
+    StoreIndex %1[%10] <- %9
+    Load %2 <- %1
+    MakeClosure %3 <- closure_0 env=[] (def=d1)
+    Call %0 <- string("std.list.map") [%2, %3] (def=d2)
+    Load %6 <- %0
+    Load %7 <- int(0)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(6)
+    Eq %3 <- %4, %5
+    Load %8 <- string("list.map[0] == 6")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d3)
+    Load %6 <- %0
+    Load %7 <- int(1)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(2)
+    Eq %3 <- %4, %5
+    Load %8 <- string("list.map[1] == 2")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d3)
+    Load %6 <- %0
+    Load %7 <- int(2)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(8)
+    Eq %3 <- %4, %5
+    Load %8 <- string("list.map[2] == 8")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d3)
+    Load %6 <- %0
+    Load %7 <- int(3)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(2)
+    Eq %3 <- %4, %5
+    Load %8 <- string("list.map[3] == 2")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d3)
+    Load %6 <- %0
+    Load %7 <- int(4)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(10)
+    Eq %3 <- %4, %5
+    Load %8 <- string("list.map[4] == 10")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d3)
+    Ret %2
+  fn closure_0(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=11
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Mul %3 <- %0, %2
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

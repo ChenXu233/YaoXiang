@@ -1,0 +1,64 @@
+module
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] v : Int(64) @depth1
+    slot[3] x : Int(64) @depth2
+    slot[4] n : Int(64) @depth1
+    slot[5] tag : Int(64) @depth1
+    locals_total=17
+    Load %0 <- int(21)
+    CreateVariant %1 <- Result::0 %0
+    Load %0 <- void
+    Load %2 <- %1
+    VariantTag %3 <- %2 : Result
+    Load %4 <- int(0)
+    Eq %5 <- %3, %4
+    JmpIfNot %5 -> instr(15)
+    VariantPayload %6 <- %2 : Result
+    Move %7 <- %6
+    Load %8 <- %7
+    Load %9 <- int(2)
+    Mul %10 <- %8, %9
+    Move %0 <- %10
+    Jmp -> instr(23)
+    VariantTag %11 <- %2 : Result
+    Load %12 <- int(1)
+    Eq %13 <- %11, %12
+    JmpIfNot %13 -> instr(23)
+    VariantPayload %14 <- %2 : Result
+    Load %15 <- int(0)
+    Move %0 <- %15
+    Jmp -> instr(23)
+    Load %5 <- %0
+    Load %6 <- int(42)
+    Eq %4 <- %5, %6
+    Load %10 <- string("grouped use type bare name + match")
+    Call %3 <- string("std.assert.assert") [%4, %10] (def=d0)
+    Load %4 <- string("nope")
+    Call %3 <- string("std.string.parse_int") [%4] (def=d1)
+    Load %4 <- void
+    Load %5 <- %3
+    VariantTag %6 <- %5 : Result
+    Load %10 <- int(0)
+    Eq %8 <- %6, %10
+    JmpIfNot %8 -> instr(40)
+    VariantPayload %9 <- %5 : Result
+    Load %11 <- string("parsed")
+    Move %4 <- %11
+    Jmp -> instr(48)
+    VariantTag %12 <- %5 : Result
+    Load %13 <- int(1)
+    Eq %14 <- %12, %13
+    JmpIfNot %14 -> instr(48)
+    VariantPayload %15 <- %5 : Result
+    Load %16 <- string("failed")
+    Move %4 <- %16
+    Jmp -> instr(48)
+    Load %10 <- %4
+    Load %8 <- string("failed")
+    Eq %6 <- %10, %8
+    Load %9 <- string("grouped use match native Result")
+    Call %5 <- string("std.assert.assert") [%6, %9] (def=d0)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

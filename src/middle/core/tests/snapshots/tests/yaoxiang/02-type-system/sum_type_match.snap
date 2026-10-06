@@ -1,0 +1,97 @@
+module
+  fn Result(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }, MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["T", "E"]
+    type_decl Struct { body: [Field(StructField { name: "ok", is_mut: false, ty: Fn { params: [Name { name: "T", span: Span { start: Position { line: 9, column: 10, offset: 289 }, end: Position { line: 9, column: 11, offset: 290 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 9, column: 16, offset: 295 }, end: Position { line: 9, column: 22, offset: 301 } }, args: [Name { name: "T", span: Span { start: Position { line: 9, column: 23, offset: 302 }, end: Position { line: 9, column: 24, offset: 303 } } }, Name { name: "E", span: Span { start: Position { line: 9, column: 26, offset: 305 }, end: Position { line: 9, column: 27, offset: 306 } } }] } }, default: None }), Field(StructField { name: "err", is_mut: false, ty: Fn { params: [Name { name: "E", span: Span { start: Position { line: 10, column: 11, offset: 319 }, end: Position { line: 10, column: 12, offset: 320 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 10, column: 17, offset: 325 }, end: Position { line: 10, column: 23, offset: 331 } }, args: [Name { name: "T", span: Span { start: Position { line: 10, column: 24, offset: 332 }, end: Position { line: 10, column: 25, offset: 333 } } }, Name { name: "E", span: Span { start: Position { line: 10, column: 27, offset: 335 }, end: Position { line: 10, column: 28, offset: 336 } } }] } }, default: None })] }
+  fn describe(Generic { name: "Result", args: [TypeRef("T"), TypeRef("E")] }, Generic { name: "String", args: [] }) -> Fn { params: [Generic { name: "Result", args: [TypeRef("T"), TypeRef("E")] }, Generic { name: "String", args: [] }], return_type: Generic { name: "String", args: [] } }
+    generic_params: ["T", "E"]
+    slot[0] r : Int(64) @depth1
+    slot[1] tag : Int(64) @depth1
+    locals_total=3
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %1
+    Ret %2
+    Ret %2
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] v : Int(64) @depth1
+    slot[4] value : Int(64) @depth2
+    slot[12] e : Int(64) @depth2
+    slot[13] msg : Int(64) @depth1
+    slot[15] x : Int(64) @depth2
+    slot[21] msg : Int(64) @depth2
+    slot[22] tag : Int(64) @depth1
+    slot[24] x : Int(64) @depth2
+    slot[30] other : Int(64) @depth2
+    locals_total=33
+    Load %0 <- int(21)
+    CreateVariant %1 <- Result::0 %0
+    Load %2 <- string("bad")
+    CreateVariant %0 <- Result::1 %2
+    Load %2 <- void
+    Load %3 <- %1
+    VariantTag %4 <- %3 : Result
+    Load %5 <- int(0)
+    Eq %6 <- %4, %5
+    JmpIfNot %6 -> instr(17)
+    VariantPayload %7 <- %3 : Result
+    Move %8 <- %7
+    Load %9 <- %8
+    Load %10 <- int(2)
+    Mul %11 <- %9, %10
+    Move %2 <- %11
+    Jmp -> instr(26)
+    VariantTag %12 <- %3 : Result
+    Load %13 <- int(1)
+    Eq %14 <- %12, %13
+    JmpIfNot %14 -> instr(26)
+    VariantPayload %15 <- %3 : Result
+    Move %16 <- %15
+    Load %17 <- int(0)
+    Move %2 <- %17
+    Jmp -> instr(26)
+    Load %13 <- %2
+    Call %12 <- string("std.io.println") [%13] (def=d0)
+    Load %12 <- void
+    Load %13 <- %0
+    VariantTag %15 <- %13 : Result
+    Load %17 <- int(0)
+    Eq %18 <- %15, %17
+    JmpIfNot %18 -> instr(39)
+    VariantPayload %19 <- %13 : Result
+    Move %14 <- %19
+    Load %20 <- string("number")
+    Move %12 <- %20
+    Jmp -> instr(48)
+    VariantTag %21 <- %13 : Result
+    Load %22 <- int(1)
+    Eq %23 <- %21, %22
+    JmpIfNot %23 -> instr(48)
+    VariantPayload %24 <- %13 : Result
+    Move %25 <- %24
+    Load %26 <- %25
+    Move %12 <- %26
+    Jmp -> instr(48)
+    Load %22 <- %12
+    Call %21 <- string("std.io.println") [%22] (def=d0)
+    Load %21 <- void
+    Load %22 <- %1
+    VariantTag %24 <- %22 : Result
+    Load %26 <- int(0)
+    Eq %27 <- %24, %26
+    JmpIfNot %27 -> instr(61)
+    VariantPayload %28 <- %22 : Result
+    Move %23 <- %28
+    Load %29 <- string("is-ok")
+    Move %21 <- %29
+    Jmp -> instr(65)
+    Move %30 <- %22
+    Load %31 <- string("not-ok")
+    Move %21 <- %31
+    Jmp -> instr(65)
+    Load %32 <- %21
+    Call %31 <- string("std.io.println") [%32] (def=d0)
+    Ret %31
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

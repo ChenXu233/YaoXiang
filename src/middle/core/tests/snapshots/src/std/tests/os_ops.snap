@@ -1,0 +1,77 @@
+module
+  fn main() -> Void
+    slot[0] cwd : Int(64) @depth1
+    slot[1] argv : Int(64) @depth1
+    slot[2] path : Int(64) @depth1
+    slot[3] hp : Int(64) @depth1
+    slot[4] w : Int(64) @depth1
+    slot[5] n : Int(64) @depth1
+    slot[6] r : Int(64) @depth1
+    slot[7] tail : Int(64) @depth1
+    locals_total=15
+    Call %0 <- string("std.os.getcwd") [] (def=d0)
+    Load %1 <- %0
+    Call %2 <- string("std.string.len") [%1] (def=d1)
+    Load %3 <- int(0)
+    Gt %4 <- %2, %3
+    Load %5 <- string("getcwd should be non-empty")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Call %6 <- string("std.os.args") [] (def=d3)
+    Load %5 <- %6
+    Call %3 <- string("std.string.len") [%5] (def=d1)
+    Load %1 <- int(0)
+    Gt %2 <- %3, %1
+    Load %7 <- string("args should contain at least the binary")
+    Call %4 <- string("std.assert.assert") [%2, %7] (def=d2)
+    Load %2 <- string("PATH")
+    Call %4 <- string("std.os.get_env") [%2] (def=d4)
+    Load %7 <- %4
+    Call %1 <- string("std.string.len") [%7] (def=d1)
+    Load %5 <- int(0)
+    Gt %3 <- %1, %5
+    Load %8 <- string("PATH env var should exist")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Load %2 <- string("__yx_os_handle_tmp.txt")
+    Load %1 <- %2
+    Load %5 <- string("w")
+    Call %3 <- string("std.os.open") [%1, %5] (def=d5)
+    Load %5 <- %3
+    Load %7 <- string("hello world")
+    Call %1 <- string("std.os.write") [%5, %7] (def=d6)
+    Load %8 <- %1
+    Load %9 <- int(11)
+    Eq %7 <- %8, %9
+    Load %10 <- string("write returns byte count")
+    Call %5 <- string("std.assert.assert") [%7, %10] (def=d2)
+    Load %7 <- %3
+    Call %5 <- string("std.os.close") [%7] (def=d7)
+    Load %7 <- %2
+    Load %8 <- string("r")
+    Call %5 <- string("std.os.open") [%7, %8] (def=d5)
+    Load %8 <- %5
+    Load %9 <- int(6)
+    Call %7 <- string("std.os.seek") [%8, %9] (def=d8)
+    Load %8 <- %5
+    Load %9 <- int(5)
+    Call %7 <- string("std.os.read") [%8, %9] (def=d9)
+    Load %10 <- %7
+    Load %11 <- string("world")
+    Eq %9 <- %10, %11
+    Load %12 <- string("seek then read: got ")
+    Load %13 <- %7
+    Add %14 <- %12, %13
+    Call %8 <- string("std.assert.assert") [%9, %14] (def=d2)
+    Load %9 <- %5
+    Call %8 <- string("std.os.close") [%9] (def=d7)
+    Load %10 <- %2
+    Call %9 <- string("std.fs.remove") [%10] (def=d10)
+    Load %11 <- string("fs.remove handle tmp ok")
+    Call %8 <- string("std.assert.assert") [%9, %11] (def=d2)
+    Load %11 <- %2
+    Call %10 <- string("std.fs.exists") [%11] (def=d11)
+    Not %9 <- %10
+    Load %14 <- string("handle tmp gone after remove")
+    Call %8 <- string("std.assert.assert") [%9, %14] (def=d2)
+    Ret %8
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

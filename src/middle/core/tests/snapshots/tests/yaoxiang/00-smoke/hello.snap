@@ -1,0 +1,6 @@
+module
+  fn main() -> Void
+    locals_total=0
+    Ret
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

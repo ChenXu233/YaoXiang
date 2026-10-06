@@ -1,0 +1,63 @@
+module
+  fn main() -> Void
+    locals_total=6
+    Load %0 <- float(4607182418800017408)
+    Load %1 <- float(4607182418800017408)
+    Eq %2 <- %0, %1
+    Load %3 <- string("1.0 == 1.0 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- float(4607182418800017408)
+    Load %1 <- float(4611686018427387904)
+    Ne %2 <- %0, %1
+    Load %3 <- string("1.0 != 2.0 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- float(4607182418800017408)
+    Load %1 <- float(4611686018427387904)
+    Lt %2 <- %0, %1
+    Load %3 <- string("1.0 < 2.0 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- float(4607182418800017408)
+    Load %1 <- float(4607182418800017408)
+    Le %2 <- %0, %1
+    Load %3 <- string("1.0 <= 1.0 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- float(4611686018427387904)
+    Load %1 <- float(4607182418800017408)
+    Gt %2 <- %0, %1
+    Load %3 <- string("2.0 > 1.0 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- float(4607182418800017408)
+    Load %1 <- float(4607182418800017408)
+    Ge %2 <- %0, %1
+    Load %3 <- string("1.0 >= 1.0 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- float(0)
+    Load %1 <- float(0)
+    Eq %2 <- %0, %1
+    Load %3 <- string("0.0 == 0.0 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %3 <- float(4607182418800017408)
+    Neg %0 <- %3
+    Load %1 <- float(0)
+    Lt %2 <- %0, %1
+    Load %5 <- string("-1.0 < 0.0 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %5] (def=d0)
+    Load %3 <- float(4607182418800017408)
+    Neg %0 <- %3
+    Load %1 <- float(4607182418800017408)
+    Ne %2 <- %0, %1
+    Load %5 <- string("-1.0 != 1.0 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %5] (def=d0)
+    Load %0 <- float(4614253070214989087)
+    Load %1 <- float(4613937818241073152)
+    Gt %2 <- %0, %1
+    Load %3 <- string("3.14 > 3.0 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- float(4613937818241073152)
+    Load %1 <- float(4614253070214989087)
+    Lt %2 <- %0, %1
+    Load %3 <- string("3.0 < 3.14 should be true")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

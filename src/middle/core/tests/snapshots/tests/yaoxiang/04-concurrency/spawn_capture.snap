@@ -1,0 +1,74 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 306 }, end: Position { line: 8, column: 23, offset: 309 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 314 }, end: Position { line: 8, column: 31, offset: 317 } } }, default: None })] }
+  fn main() -> Void
+    slot[0] t1 : Int(64) @depth1
+    slot[1] t2 : Int(64) @depth1
+    slot[2] result : Int(64) @depth1
+    slot[3] data : Int(64) @depth1
+    slot[4] r1 : Int(64) @depth1
+    slot[5] p : Int(64) @depth1
+    slot[6] r2 : Int(64) @depth1
+    slot[7] a : Int(64) @depth1
+    slot[8] b : Int(64) @depth1
+    slot[9] c : Int(64) @depth1
+    slot[10] r3 : Int(64) @depth1
+    locals_total=16
+    Load %0 <- int(1)
+    Load %1 <- int(1)
+    Add %2 <- %0, %1
+    Load %1 <- int(2)
+    Load %3 <- int(2)
+    Add %0 <- %1, %3
+    Spawn %1 <- [] plan(groups=[], deps=[], resources=[])
+    Load %4 <- %2
+    Load %5 <- %0
+    Add %3 <- %4, %5
+    Move %1 <- %3
+    Load %5 <- %1
+    Load %6 <- int(6)
+    Eq %4 <- %5, %6
+    Load %7 <- string("spawn 捕获双变量 t1+t2 == 6")
+    Call %3 <- string("std.assert.assert") [%4, %7] (def=d0)
+    Load %3 <- int(42)
+    Spawn %4 <- [] plan(groups=[], deps=[], resources=[])
+    Load %5 <- %3
+    Move %4 <- %5
+    Load %7 <- %4
+    Load %8 <- int(42)
+    Eq %6 <- %7, %8
+    Load %9 <- string("spawn 捕获单变量 data == 42")
+    Call %5 <- string("std.assert.assert") [%6, %9] (def=d0)
+    Load %6 <- int(3)
+    Load %7 <- int(4)
+    Call %5 <- string("Point") [%6, %7] (def=d1)
+    Spawn %6 <- [] plan(groups=[], deps=[], resources=[])
+    Load %10 <- %5
+    LoadField %8 <- %10.0
+    Load %11 <- %5
+    LoadField %9 <- %11.1
+    Add %7 <- %8, %9
+    Move %6 <- %7
+    Load %9 <- %6
+    Load %10 <- int(7)
+    Eq %8 <- %9, %10
+    Load %11 <- string("spawn 捕获 Struct 字段 p.x+p.y == 7")
+    Call %7 <- string("std.assert.assert") [%8, %11] (def=d0)
+    Load %7 <- int(10)
+    Load %8 <- int(20)
+    Load %9 <- int(30)
+    Spawn %10 <- [] plan(groups=[], deps=[], resources=[])
+    Load %12 <- %7
+    Load %13 <- %8
+    Add %14 <- %12, %13
+    Load %15 <- %9
+    Mul %11 <- %14, %15
+    Move %10 <- %11
+    Load %15 <- %10
+    Load %12 <- int(900)
+    Eq %14 <- %15, %12
+    Load %13 <- string("spawn 嵌套表达式 (a+b)*c == 900")
+    Call %11 <- string("std.assert.assert") [%14, %13] (def=d0)
+    Ret %11
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

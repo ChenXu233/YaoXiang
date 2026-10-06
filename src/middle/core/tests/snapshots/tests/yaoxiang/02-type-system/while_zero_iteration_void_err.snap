@@ -1,0 +1,24 @@
+module
+  fn main() -> Void
+    slot[0] i : Int(64) @depth1
+    slot[1] last : Int(64) @depth1
+    locals_total=7
+    Load %0 <- int(0)
+    Load %1 <- void
+    Load %2 <- %0
+    Load %3 <- int(0)
+    Lt %4 <- %2, %3
+    JmpIfNot %4 -> instr(11)
+    Load %5 <- %0
+    Load %6 <- int(1)
+    Add %0 <- %5, %6
+    Load %1 <- %0
+    Jmp -> instr(2)
+    Load %3 <- %1
+    Load %5 <- int(0)
+    Eq %2 <- %3, %5
+    Load %6 <- string("零迭代 while 的值：残留形态，应在使用点响亮失败")
+    Call %4 <- string("std.assert.assert") [%2, %6] (def=d0)
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

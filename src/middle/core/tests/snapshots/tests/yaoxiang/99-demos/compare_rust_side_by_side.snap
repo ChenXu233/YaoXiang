@@ -1,0 +1,37 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 20, offset: 176 }, end: Position { line: 7, column: 25, offset: 181 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 30, offset: 186 }, end: Position { line: 7, column: 35, offset: 191 } } }, default: None })] }
+  fn PointView() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 13, column: 13, offset: 376 }, end: Position { line: 13, column: 18, offset: 381 } } }, span: Span { start: Position { line: 14, column: 1, offset: 382 }, end: Position { line: 14, column: 2, offset: 383 } } }, default: None })] }
+  fn get_x(Ref { mutable: false, inner: TypeRef("PointView") }) -> Float(64)
+    slot[0] view : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    LoadField %2 <- %1.0
+    LoadField %3 <- %2.0
+    Ret %3
+    Ret %3
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] v : Int(64) @depth1
+    slot[2] x : Int(64) @depth1
+    locals_total=6
+    Load %0 <- float(4613937818241073152)
+    Load %1 <- float(4616189618054758400)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Call %0 <- string("PointView") [%1] (def=d1)
+    Load %3 <- %0
+    Call %1 <- string("get_x") [%3] (def=d2)
+    Load %4 <- bool(true)
+    Load %5 <- string("x value from view")
+    Call %3 <- string("std.assert.assert") [%4, %5] (def=d3)
+    Load %4 <- %1
+    Call %3 <- string("std.io.println") [%4] (def=d4)
+    Load %4 <- bool(true)
+    Load %5 <- string("all passed")
+    Call %3 <- string("std.assert.assert") [%4, %5] (def=d3)
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

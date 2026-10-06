@@ -1,0 +1,25 @@
+module
+  global[0] a : Int(64)
+  global[1] i : Int(64)
+  init (locals=0)
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(3)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Store @0 <- %0
+    Load %7 <- int(5)
+    Store @1 <- %7
+    Load %8 <- @0
+    Load %9 <- @1
+    LoadIndex %10 <- %8[%9]
+    Load %11 <- @0
+    Load %12 <- @1
+    LoadIndex %13 <- %11[%12]
+    Call %14 <- string("int.to_string") [%13] (def=_)
+    Call %15 <- string("std.io.print") [%14] (def=_)

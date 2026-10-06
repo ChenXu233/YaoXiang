@@ -1,0 +1,50 @@
+module
+  fn main() -> Void
+    locals_total=7
+    Load %0 <- bool(true)
+    Not %1 <- %0
+    Load %2 <- bool(false)
+    Eq %3 <- %1, %2
+    Load %4 <- string("!true == false")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
+    Load %0 <- bool(false)
+    Not %1 <- %0
+    Load %2 <- bool(true)
+    Eq %3 <- %1, %2
+    Load %4 <- string("!false == true")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
+    Load %4 <- bool(true)
+    Not %0 <- %4
+    Not %1 <- %0
+    Load %2 <- bool(true)
+    Eq %3 <- %1, %2
+    Load %6 <- string("!!true == true")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d0)
+    Load %4 <- bool(false)
+    Not %0 <- %4
+    Not %1 <- %0
+    Load %2 <- bool(false)
+    Eq %3 <- %1, %2
+    Load %6 <- string("!!false == false")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d0)
+    Load %0 <- bool(true)
+    Not %1 <- %0
+    Load %2 <- bool(false)
+    Eq %3 <- %1, %2
+    Load %4 <- string("(!true) == false")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
+    Load %2 <- bool(true)
+    Load %0 <- bool(false)
+    Eq %1 <- %2, %0
+    Not %3 <- %1
+    Load %4 <- string("!(true == false) ≡ true")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
+    Load %2 <- int(1)
+    Load %0 <- int(2)
+    Eq %1 <- %2, %0
+    Not %3 <- %1
+    Load %4 <- string("!(1 == 2) ≡ true（显式括号取反比较结果）")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

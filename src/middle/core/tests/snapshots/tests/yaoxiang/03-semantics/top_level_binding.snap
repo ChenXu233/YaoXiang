@@ -1,0 +1,54 @@
+module
+  global[0] answer : Int(64)
+  global[1] nested : Int(64)
+  global[2] computed : Int(64)
+  global[3] plain : Int(64)
+  fn inc(Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(1)
+    Add %3 <- %1, %2
+    Ret %3
+    Ret
+  fn main() -> Void
+    locals_total=5
+    Load %0 <- @0
+    Load %1 <- int(42)
+    Eq %2 <- %0, %1
+    Load %3 <- string("顶层块值应为 42")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @1
+    Load %1 <- int(10)
+    Eq %2 <- %0, %1
+    Load %3 <- string("块内中间语句作用域应正确")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @2
+    Load %1 <- int(42)
+    Eq %2 <- %0, %1
+    Load %3 <- string("顶层调用初始化应运行时求值")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @3
+    Load %1 <- int(3)
+    Eq %2 <- %0, %1
+    Load %3 <- string("常量折叠路径不应回归")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %2 <- string("top_level_binding ok")
+    Call %4 <- string("std.io.println") [%2] (def=d1)
+    Ret %4
+  init (locals=3)
+    islot[2] inner : Int(64) @depth1
+    Load %0 <- int(42)
+    Store @0 <- %0
+    Load %1 <- int(5)
+    Load %2 <- %1
+    Load %3 <- int(2)
+    Mul %4 <- %2, %3
+    Store @1 <- %4
+    Load %1 <- int(41)
+    Call %4 <- string("inc") [%1] (def=_)
+    Store @2 <- %4
+    Load %2 <- int(3)
+    Store @3 <- %2
+    Call %1 <- string("main") [] (def=_)

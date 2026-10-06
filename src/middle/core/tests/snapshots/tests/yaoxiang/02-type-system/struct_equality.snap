@@ -1,0 +1,113 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 10, column: 8, offset: 270 }, end: Position { line: 10, column: 13, offset: 275 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 11, column: 8, offset: 284 }, end: Position { line: 11, column: 13, offset: 289 } } }, default: None })] }
+  fn Vec3() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 15, column: 8, offset: 316 }, end: Position { line: 15, column: 13, offset: 321 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 16, column: 8, offset: 330 }, end: Position { line: 16, column: 13, offset: 335 } } }, default: None }), Field(StructField { name: "z", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 17, column: 8, offset: 344 }, end: Position { line: 17, column: 13, offset: 349 } } }, default: None }), Expr(Generic { name: "Equal", name_span: Span { start: Position { line: 18, column: 5, offset: 355 }, end: Position { line: 18, column: 10, offset: 360 } }, args: [Name { name: "Vec3", span: Span { start: Position { line: 18, column: 11, offset: 361 }, end: Position { line: 18, column: 15, offset: 365 } } }, Name { name: "Vec3", span: Span { start: Position { line: 18, column: 17, offset: 367 }, end: Position { line: 18, column: 21, offset: 371 } } }] })] }
+  fn Vec3.equal(Ref { mutable: false, inner: TypeRef("Vec3") }, Ref { mutable: false, inner: TypeRef("Vec3") }) -> Bool
+    locals_total=7
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Load %3 <- %4
+    LoadField %5 <- %3.0
+    Eq %6 <- %2, %5
+    Ret %6
+    Ret %6
+  fn Line() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "start", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 27, column: 12, offset: 548 }, end: Position { line: 27, column: 17, offset: 553 } } }, default: None }), Field(StructField { name: "end", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 28, column: 10, offset: 564 }, end: Position { line: 28, column: 15, offset: 569 } } }, default: None })] }
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] c : Int(64) @depth1
+    slot[3] l1 : Int(64) @depth1
+    slot[4] l2 : Int(64) @depth1
+    slot[5] v1 : Int(64) @depth1
+    slot[6] v2 : Int(64) @depth1
+    slot[7] points : Int(64) @depth1
+    locals_total=16
+    Load %0 <- float(4607182418800017408)
+    Load %1 <- float(4611686018427387904)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- float(4607182418800017408)
+    Load %3 <- float(4611686018427387904)
+    Call %0 <- string("Point") [%1, %3] (def=d0)
+    Load %4 <- %2
+    Load %5 <- %0
+    Eq %3 <- %4, %5
+    Load %6 <- string("Point(1,2) == Point(1,2)")
+    Call %1 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load %3 <- float(4607182418800017408)
+    Load %4 <- float(4613937818241073152)
+    Call %1 <- string("Point") [%3, %4] (def=d0)
+    Load %5 <- %2
+    Load %6 <- %1
+    Ne %4 <- %5, %6
+    Load %7 <- string("Point(1,2) != Point(1,3)")
+    Call %3 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %5 <- %2
+    Load %6 <- %2
+    Eq %4 <- %5, %6
+    Load %7 <- string("identity equal")
+    Call %3 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %5 <- float(0)
+    Load %6 <- float(0)
+    Call %4 <- string("Point") [%5, %6] (def=d0)
+    Load %8 <- float(4607182418800017408)
+    Load %9 <- float(4607182418800017408)
+    Call %7 <- string("Point") [%8, %9] (def=d0)
+    Call %3 <- string("Line") [%4, %7] (def=d2)
+    Load %6 <- float(0)
+    Load %7 <- float(0)
+    Call %5 <- string("Point") [%6, %7] (def=d0)
+    Load %9 <- float(4607182418800017408)
+    Load %10 <- float(4607182418800017408)
+    Call %8 <- string("Point") [%9, %10] (def=d0)
+    Call %4 <- string("Line") [%5, %8] (def=d2)
+    Load %7 <- %3
+    Load %8 <- %4
+    Eq %6 <- %7, %8
+    Load %9 <- string("nested struct equality")
+    Call %5 <- string("std.assert.assert") [%6, %9] (def=d1)
+    Load %6 <- float(4607182418800017408)
+    Load %7 <- float(4611686018427387904)
+    Load %8 <- float(4613937818241073152)
+    Call %5 <- string("Vec3") [%6, %7, %8] (def=d3)
+    Load %7 <- float(4607182418800017408)
+    Load %8 <- float(4621762822593629389)
+    Load %9 <- float(4621762822593629389)
+    Call %6 <- string("Vec3") [%7, %8, %9] (def=d3)
+    Load %9 <- %5
+    Load %10 <- %6
+    Call %8 <- string("Vec3.equal") [%9, %10] (def=d4)
+    Load %11 <- string("explicit equal override compares x only")
+    Call %7 <- string("std.assert.assert") [%8, %11] (def=d1)
+    AllocArray %7 size=int(2), elem=int(1)
+    Load %9 <- float(4607182418800017408)
+    Load %10 <- float(4611686018427387904)
+    Call %8 <- string("Point") [%9, %10] (def=d0)
+    Load %11 <- int(0)
+    StoreIndex %7[%11] <- %8
+    Load %12 <- float(4613937818241073152)
+    Load %13 <- float(4616189618054758400)
+    Call %14 <- string("Point") [%12, %13] (def=d0)
+    Load %15 <- int(1)
+    StoreIndex %7[%15] <- %14
+    Load %10 <- %7
+    Load %14 <- float(4613937818241073152)
+    Load %12 <- float(4616189618054758400)
+    Call %11 <- string("Point") [%14, %12] (def=d0)
+    Call %9 <- string("std.list.contains") [%10, %11] (def=d5)
+    Load %13 <- string("contains finds struct")
+    Call %8 <- string("std.assert.assert") [%9, %13] (def=d1)
+    Load %11 <- %7
+    Load %12 <- float(4621256167635550208)
+    Load %13 <- float(4621256167635550208)
+    Call %14 <- string("Point") [%12, %13] (def=d0)
+    Call %10 <- string("std.list.contains") [%11, %14] (def=d5)
+    Not %9 <- %10
+    Load %15 <- string("contains rejects missing")
+    Call %8 <- string("std.assert.assert") [%9, %15] (def=d1)
+    Ret %8
+  init (locals=2)
+    islot[0] self : Int(64) @depth1
+    islot[1] other : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

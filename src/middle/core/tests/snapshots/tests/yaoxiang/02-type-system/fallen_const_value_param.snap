@@ -1,0 +1,20 @@
+module
+  fn g(Int(64)) -> Int(64)
+    slot[0] N : Int(64) @depth1
+    locals_total=2
+    Load %0 <- arg%0
+    Load %1 <- int(42)
+    Ret %1
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    locals_total=6
+    Load %0 <- int(99)
+    Call %1 <- string("g") [%0] (def=d0)
+    Load %2 <- %1
+    Load %3 <- int(42)
+    Eq %4 <- %2, %3
+    Load %5 <- string("g(99) should return 42")
+    Call %0 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Ret %0
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

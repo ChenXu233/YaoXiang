@@ -1,0 +1,150 @@
+module
+  fn main() -> Void
+    slot[0] r : Int(64) @depth1
+    slot[1] r2 : Int(64) @depth1
+    slot[2] r3 : Int(64) @depth1
+    locals_total=24
+    Load %0 <- int(1)
+    Load %1 <- int(10)
+    Load %2 <- int(1)
+    NewRange %3 <- %0, %1, %2
+    Load %1 <- int(1)
+    Load %2 <- int(10)
+    Load %4 <- int(1)
+    NewRange %0 <- %1, %2, %4
+    Load %2 <- int(1)
+    Load %4 <- int(11)
+    Load %5 <- int(1)
+    NewRange %1 <- %2, %4, %5
+    Load %5 <- %3
+    Load %6 <- %0
+    Eq %4 <- %5, %6
+    Load %7 <- string("range structural equality")
+    Call %2 <- string("std.assert.assert") [%4, %7] (def=d0)
+    Load %5 <- %3
+    Load %6 <- %1
+    Ne %4 <- %5, %6
+    Load %7 <- string("range inequality on end")
+    Call %2 <- string("std.assert.assert") [%4, %7] (def=d0)
+    Load %5 <- %3
+    Load %7 <- int(1)
+    Load %8 <- int(10)
+    Load %9 <- int(2)
+    NewRange %6 <- %7, %8, %9
+    Ne %4 <- %5, %6
+    Load %10 <- string("range inequality on step")
+    Call %2 <- string("std.assert.assert") [%4, %10] (def=d0)
+    Load %7 <- int(1)
+    Load %8 <- string("a")
+    NewTuple %5 <- [%7, %8]
+    Load %9 <- int(1)
+    Load %10 <- string("a")
+    NewTuple %6 <- [%9, %10]
+    Eq %4 <- %5, %6
+    Load %11 <- string("tuple equality")
+    Call %2 <- string("std.assert.assert") [%4, %11] (def=d0)
+    Load %7 <- int(1)
+    Load %8 <- string("a")
+    NewTuple %5 <- [%7, %8]
+    Load %9 <- int(1)
+    Load %10 <- string("b")
+    NewTuple %6 <- [%9, %10]
+    Ne %4 <- %5, %6
+    Load %11 <- string("tuple inequality")
+    Call %2 <- string("std.assert.assert") [%4, %11] (def=d0)
+    AllocArray %5 size=int(2), elem=int(1)
+    Load %7 <- int(1)
+    Load %8 <- int(0)
+    StoreIndex %5[%8] <- %7
+    Load %9 <- int(2)
+    Load %10 <- int(1)
+    StoreIndex %5[%10] <- %9
+    AllocArray %6 size=int(2), elem=int(1)
+    Load %11 <- int(1)
+    Load %12 <- int(0)
+    StoreIndex %6[%12] <- %11
+    Load %13 <- int(2)
+    Load %14 <- int(1)
+    StoreIndex %6[%14] <- %13
+    Eq %4 <- %5, %6
+    Load %15 <- string("list equality")
+    Call %2 <- string("std.assert.assert") [%4, %15] (def=d0)
+    AllocArray %5 size=int(2), elem=int(1)
+    Load %7 <- int(1)
+    Load %8 <- int(0)
+    StoreIndex %5[%8] <- %7
+    Load %9 <- int(2)
+    Load %10 <- int(1)
+    StoreIndex %5[%10] <- %9
+    AllocArray %6 size=int(2), elem=int(1)
+    Load %11 <- int(1)
+    Load %12 <- int(0)
+    StoreIndex %6[%12] <- %11
+    Load %13 <- int(3)
+    Load %14 <- int(1)
+    StoreIndex %6[%14] <- %13
+    Ne %4 <- %5, %6
+    Load %15 <- string("list inequality")
+    Call %2 <- string("std.assert.assert") [%4, %15] (def=d0)
+    AllocArray %5 size=int(2), elem=int(1)
+    Load %7 <- int(1)
+    Load %8 <- int(0)
+    StoreIndex %5[%8] <- %7
+    Load %9 <- int(2)
+    Load %10 <- int(1)
+    StoreIndex %5[%10] <- %9
+    AllocArray %6 size=int(3), elem=int(1)
+    Load %11 <- int(1)
+    Load %12 <- int(0)
+    StoreIndex %6[%12] <- %11
+    Load %13 <- int(2)
+    Load %14 <- int(1)
+    StoreIndex %6[%14] <- %13
+    Load %15 <- int(3)
+    Load %16 <- int(2)
+    StoreIndex %6[%16] <- %15
+    Ne %4 <- %5, %6
+    Load %17 <- string("list length inequality")
+    Call %2 <- string("std.assert.assert") [%4, %17] (def=d0)
+    AllocArray %5 size=int(2), elem=int(1)
+    Load %8 <- int(1)
+    Load %9 <- int(2)
+    NewTuple %7 <- [%8, %9]
+    Load %10 <- int(0)
+    StoreIndex %5[%10] <- %7
+    Load %12 <- int(3)
+    Load %13 <- int(4)
+    NewTuple %11 <- [%12, %13]
+    Load %14 <- int(1)
+    StoreIndex %5[%14] <- %11
+    AllocArray %6 size=int(2), elem=int(1)
+    Load %16 <- int(1)
+    Load %17 <- int(2)
+    NewTuple %15 <- [%16, %17]
+    Load %18 <- int(0)
+    StoreIndex %6[%18] <- %15
+    Load %19 <- int(3)
+    Load %20 <- int(4)
+    NewTuple %21 <- [%19, %20]
+    Load %22 <- int(1)
+    StoreIndex %6[%22] <- %21
+    Eq %4 <- %5, %6
+    Load %23 <- string("nested structural equality")
+    Call %2 <- string("std.assert.assert") [%4, %23] (def=d0)
+    Load %8 <- int(1)
+    Load %9 <- int(2)
+    NewTuple %6 <- [%8, %9]
+    AllocArray %7 size=int(2), elem=int(1)
+    Load %10 <- int(1)
+    Load %11 <- int(0)
+    StoreIndex %7[%11] <- %10
+    Load %12 <- int(2)
+    Load %13 <- int(1)
+    StoreIndex %7[%13] <- %12
+    Eq %5 <- %6, %7
+    Not %4 <- %5
+    Load %14 <- string("tuple vs list is false, not error")
+    Call %2 <- string("std.assert.assert") [%4, %14] (def=d0)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

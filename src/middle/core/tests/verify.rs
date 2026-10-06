@@ -13,88 +13,13 @@ use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::MonoType;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::core::ir::{
-    BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
-};
+use crate::middle::core::ir::{ConstValue, Instruction, Operand};
 use crate::middle::core::ir_gen::AstToIrGenerator;
 use crate::middle::core::verify::{verify_loose, verify_ssa, InvariantKind, VerifyError};
 use crate::util::span::Span;
 
 use super::corpus::{corpus_files, reaches_ir_generation};
-
-// =====================
-// 构造助手
-// =====================
-
-fn temp_slot(ty: MonoType) -> LocalSlot {
-    LocalSlot::temp(ty)
-}
-
-fn named_slot(
-    name: &str,
-    ty: MonoType,
-) -> LocalSlot {
-    LocalSlot {
-        name: Some(name.to_string()),
-        ty,
-        scope_depth: 0,
-    }
-}
-
-/// 单块函数：块内指令序即展平序（translator 线性铺平语义的直接对应）。
-fn func(
-    name: &str,
-    params: Vec<MonoType>,
-    return_type: MonoType,
-    locals: Vec<LocalSlot>,
-    instrs: Vec<Instruction>,
-) -> FunctionIR {
-    FunctionIR {
-        name: name.to_string(),
-        def: None,
-        params,
-        return_type,
-        generic_params: None,
-        body: FunctionBody::Code {
-            blocks: vec![BasicBlock {
-                label: 0,
-                instructions: instrs,
-                successors: Vec::new(),
-            }],
-            entry: 0,
-            locals,
-        },
-    }
-}
-
-fn module_with(functions: Vec<FunctionIR>) -> ModuleIR {
-    ModuleIR {
-        functions,
-        ..Default::default()
-    }
-}
-
-fn int_const(n: i128) -> Operand {
-    Operand::Const(ConstValue::Int(n))
-}
-
-fn move_instr(
-    dst: usize,
-    src: Operand,
-) -> Instruction {
-    Instruction::Move {
-        dst: Operand::Local(dst),
-        src,
-        span: Span::dummy(),
-    }
-}
-
-fn ret_void() -> Instruction {
-    Instruction::Ret {
-        value: None,
-        span: Span::dummy(),
-    }
-}
+use super::ir_build::{func, int_const, module_with, move_instr, named_slot, ret_void, temp_slot};
 
 fn violations_of(
     result: &Result<(), VerifyError>,

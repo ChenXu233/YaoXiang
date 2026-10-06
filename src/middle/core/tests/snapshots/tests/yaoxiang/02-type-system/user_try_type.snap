@@ -1,0 +1,162 @@
+module
+  fn Maybe() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "just", is_mut: false, ty: Fn { params: [Name { name: "Int", span: Span { start: Position { line: 12, column: 12, offset: 429 }, end: Position { line: 12, column: 15, offset: 432 } } }], return_type: Name { name: "Maybe", span: Span { start: Position { line: 12, column: 20, offset: 437 }, end: Position { line: 12, column: 25, offset: 442 } } } }, default: None }), Field(StructField { name: "nothing", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Maybe", span: Span { start: Position { line: 13, column: 20, offset: 463 }, end: Position { line: 13, column: 25, offset: 468 } } } }, default: None }), Expr(Generic { name: "Try", name_span: Span { start: Position { line: 14, column: 5, offset: 474 }, end: Position { line: 14, column: 8, offset: 477 } }, args: [Name { name: "Maybe", span: Span { start: Position { line: 14, column: 9, offset: 478 }, end: Position { line: 14, column: 14, offset: 483 } } }, Name { name: "Int", span: Span { start: Position { line: 14, column: 16, offset: 485 }, end: Position { line: 14, column: 19, offset: 488 } } }, Name { name: "String", span: Span { start: Position { line: 14, column: 21, offset: 490 }, end: Position { line: 14, column: 27, offset: 496 } } }] })] }
+  fn Maybe.is_failure(Ref { mutable: false, inner: TypeRef("Maybe") }) -> Bool
+    locals_total=12
+    Load %0 <- void
+    Load %1 <- %2
+    VariantTag %3 <- %1 : Maybe
+    Load %4 <- int(1)
+    Eq %5 <- %3, %4
+    JmpIfNot %5 -> instr(9)
+    Load %6 <- bool(true)
+    Move %0 <- %6
+    Jmp -> instr(17)
+    VariantTag %7 <- %1 : Maybe
+    Load %8 <- int(0)
+    Eq %9 <- %7, %8
+    JmpIfNot %9 -> instr(17)
+    VariantPayload %10 <- %1 : Maybe
+    Load %11 <- bool(false)
+    Move %0 <- %11
+    Jmp -> instr(17)
+    Ret %0
+  fn Maybe.success(Ref { mutable: false, inner: TypeRef("Maybe") }) -> Int(64)
+    slot[3] v : Int(64) @depth2
+    locals_total=14
+    Load %0 <- void
+    Load %1 <- %2
+    VariantTag %3 <- %1 : Maybe
+    Load %4 <- int(0)
+    Eq %5 <- %3, %4
+    JmpIfNot %5 -> instr(11)
+    VariantPayload %6 <- %1 : Maybe
+    Move %7 <- %6
+    Load %8 <- %7
+    Move %0 <- %8
+    Jmp -> instr(19)
+    VariantTag %9 <- %1 : Maybe
+    Load %10 <- int(1)
+    Eq %11 <- %9, %10
+    JmpIfNot %11 -> instr(19)
+    Load %12 <- bool(false)
+    Call %13 <- string("std.assert.assert") [%12] (def=d0)
+    Move %0 <- %13
+    Jmp -> instr(19)
+    Ret %0
+  fn Maybe.residual(Ref { mutable: false, inner: TypeRef("Maybe") }) -> Generic { name: "String", args: [] }
+    locals_total=13
+    Load %0 <- void
+    Load %1 <- %2
+    VariantTag %3 <- %1 : Maybe
+    Load %4 <- int(1)
+    Eq %5 <- %3, %4
+    JmpIfNot %5 -> instr(9)
+    Load %6 <- string("empty")
+    Move %0 <- %6
+    Jmp -> instr(18)
+    VariantTag %7 <- %1 : Maybe
+    Load %8 <- int(0)
+    Eq %9 <- %7, %8
+    JmpIfNot %9 -> instr(18)
+    VariantPayload %10 <- %1 : Maybe
+    Load %11 <- bool(false)
+    Call %12 <- string("std.assert.assert") [%11] (def=d0)
+    Move %0 <- %12
+    Jmp -> instr(18)
+    Ret %0
+  fn Maybe.from_error(Generic { name: "String", args: [] }) -> TypeRef("Maybe")
+    locals_total=5
+    Load %0 <- void
+    Load %1 <- %2
+    Load %3 <- void
+    CreateVariant %4 <- Maybe::1 %3
+    Move %0 <- %4
+    Jmp -> instr(6)
+    Ret %0
+  fn bump(Ref { mutable: false, inner: TypeRef("Maybe") }) -> TypeRef("Maybe")
+    slot[0] m : Int(64) @depth1
+    slot[1] v : Int(64) @depth1
+    locals_total=6
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Call %2 <- string("Maybe.is_failure") [%1] (def=d1)
+    JmpIf %2 -> instr(7)
+    Call %3 <- string("Maybe.success") [%1] (def=d2)
+    Load %1 <- %3
+    Jmp -> instr(10)
+    Call %4 <- string("Maybe.residual") [%1] (def=d3)
+    Call %5 <- string("Maybe.from_error") [%4] (def=d4)
+    Ret %5
+    Load %4 <- %1
+    Load %5 <- int(1)
+    Add %3 <- %4, %5
+    CreateVariant %2 <- Maybe::0 %3
+    Ret %2
+    Ret %2
+  fn main() -> Void
+    slot[0] some_case : Int(64) @depth1
+    slot[1] none_case : Int(64) @depth1
+    slot[2] bumped : Int(64) @depth1
+    slot[5] v : Int(64) @depth2
+    slot[6] propagated : Int(64) @depth1
+    locals_total=22
+    Load %0 <- int(4)
+    CreateVariant %1 <- Maybe::0 %0
+    Load %2 <- void
+    CreateVariant %0 <- Maybe::1 %2
+    Load %3 <- %1
+    Move %4 <- %3
+    Call %2 <- string("bump") [%4] (def=d5)
+    Load %4 <- void
+    Load %3 <- %2
+    VariantTag %5 <- %3 : Maybe
+    Load %6 <- int(0)
+    Eq %7 <- %5, %6
+    JmpIfNot %7 -> instr(22)
+    VariantPayload %8 <- %3 : Maybe
+    Move %9 <- %8
+    Load %10 <- %9
+    Load %11 <- int(5)
+    Eq %12 <- %10, %11
+    Load %13 <- string("? keeps payload")
+    Call %14 <- string("std.assert.assert") [%12, %13] (def=d0)
+    Move %4 <- %14
+    Jmp -> instr(31)
+    VariantTag %15 <- %3 : Maybe
+    Load %16 <- int(1)
+    Eq %17 <- %15, %16
+    JmpIfNot %17 -> instr(31)
+    Load %18 <- bool(false)
+    Load %19 <- string("? must not lose the payload")
+    Call %20 <- string("std.assert.assert") [%18, %19] (def=d0)
+    Move %4 <- %20
+    Jmp -> instr(31)
+    Load %7 <- %0
+    Move %6 <- %7
+    Call %5 <- string("bump") [%6] (def=d5)
+    Load %6 <- void
+    Load %7 <- %5
+    VariantTag %8 <- %7 : Maybe
+    Load %14 <- int(0)
+    Eq %12 <- %8, %14
+    JmpIfNot %12 -> instr(46)
+    VariantPayload %10 <- %7 : Maybe
+    Load %13 <- bool(false)
+    Load %15 <- string("? must not fabricate a value")
+    Call %11 <- string("std.assert.assert") [%13, %15] (def=d0)
+    Move %6 <- %11
+    Jmp -> instr(55)
+    VariantTag %16 <- %7 : Maybe
+    Load %17 <- int(1)
+    Eq %20 <- %16, %17
+    JmpIfNot %20 -> instr(55)
+    Load %19 <- bool(true)
+    Load %21 <- string("? propagates nothing")
+    Call %18 <- string("std.assert.assert") [%19, %21] (def=d0)
+    Move %6 <- %18
+    Jmp -> instr(55)
+    Ret %6
+  init (locals=1)
+    islot[0] e : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

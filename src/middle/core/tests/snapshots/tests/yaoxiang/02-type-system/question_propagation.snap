@@ -1,0 +1,86 @@
+module
+  fn parse_double(Ref { mutable: false, inner: Generic { name: "String", args: [] } }) -> Generic { name: "Result", args: [Int(64), TypeRef("Error")] }
+    slot[0] s : Int(64) @depth1
+    slot[1] n : Int(64) @depth1
+    locals_total=7
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Call %2 <- string("std.string.parse_int") [%1] (def=d0)
+    Call %3 <- string("std.result.Result.is_failure") [%2] (def=_)
+    JmpIf %3 -> instr(8)
+    Call %4 <- string("std.result.Result.success") [%2] (def=_)
+    Load %2 <- %4
+    Jmp -> instr(11)
+    Call %5 <- string("std.result.Result.residual") [%2] (def=_)
+    Call %6 <- string("std.result.Result.from_error") [%5] (def=_)
+    Ret %6
+    Load %4 <- %2
+    Load %5 <- int(2)
+    Mul %3 <- %4, %5
+    CreateVariant %1 <- Result::0 %3
+    Ret %1
+    Ret %1
+  fn parse_chain(Ref { mutable: false, inner: Generic { name: "String", args: [] } }) -> Generic { name: "Result", args: [Int(64), TypeRef("Error")] }
+    slot[0] s : Int(64) @depth1
+    slot[1] d : Int(64) @depth1
+    locals_total=7
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Call %2 <- string("parse_double") [%1] (def=d1)
+    Call %3 <- string("std.result.Result.is_failure") [%2] (def=_)
+    JmpIf %3 -> instr(8)
+    Call %4 <- string("std.result.Result.success") [%2] (def=_)
+    Load %2 <- %4
+    Jmp -> instr(11)
+    Call %5 <- string("std.result.Result.residual") [%2] (def=_)
+    Call %6 <- string("std.result.Result.from_error") [%5] (def=_)
+    Ret %6
+    Load %4 <- %2
+    Load %5 <- int(1)
+    Add %3 <- %4, %5
+    CreateVariant %1 <- Result::0 %3
+    Ret %1
+    Ret %1
+  fn main() -> Void
+    slot[0] ok : Int(64) @depth1
+    slot[1] err : Int(64) @depth1
+    slot[2] e : Int(64) @depth1
+    locals_total=11
+    Load %0 <- string("21")
+    Call %1 <- string("parse_chain") [%0] (def=d2)
+    Load %2 <- %1
+    Call %3 <- string("std.result.is_ok") [%2] (def=d3)
+    Load %4 <- string("chain ok: is_ok")
+    Call %0 <- string("std.assert.assert") [%3, %4] (def=d4)
+    Load %5 <- %1
+    Call %2 <- string("std.result.unwrap") [%5] (def=d5)
+    Load %4 <- int(43)
+    Eq %3 <- %2, %4
+    Load %6 <- string("chain ok: unwrap == 43")
+    Call %0 <- string("std.assert.assert") [%3, %6] (def=d4)
+    Load %3 <- string("nope")
+    Call %0 <- string("parse_chain") [%3] (def=d2)
+    Load %4 <- %0
+    Call %2 <- string("std.result.is_err") [%4] (def=d6)
+    Load %5 <- string("chain err: is_err")
+    Call %3 <- string("std.assert.assert") [%2, %5] (def=d4)
+    Load %6 <- %0
+    Load %7 <- int(1)
+    Neg %8 <- %7
+    Call %4 <- string("std.result.unwrap_or") [%6, %8] (def=d7)
+    Load %9 <- int(1)
+    Neg %5 <- %9
+    Eq %2 <- %4, %5
+    Load %10 <- string("chain err: unwrap_or default")
+    Call %3 <- string("std.assert.assert") [%2, %10] (def=d4)
+    Load %2 <- string("boom")
+    CreateVariant %3 <- Result::1 %2
+    Load %5 <- %3
+    Call %4 <- string("std.result.is_err") [%5] (def=d6)
+    Load %6 <- string("result.err is_err")
+    Call %2 <- string("std.assert.assert") [%4, %6] (def=d4)
+    Load %4 <- string("question_propagation_ok")
+    Call %2 <- string("std.io.print") [%4] (def=d8)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,24 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 169 }, end: Position { line: 7, column: 23, offset: 172 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 177 }, end: Position { line: 7, column: 31, offset: 180 } } }, default: None })] }
+  fn Window() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "target", is_mut: false, ty: Name { name: "Point", span: Span { start: Position { line: 10, column: 13, offset: 213 }, end: Position { line: 10, column: 18, offset: 218 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Point", span: Span { start: Position { line: 11, column: 12, offset: 231 }, end: Position { line: 11, column: 17, offset: 236 } } }, span: Span { start: Position { line: 11, column: 17, offset: 236 }, end: Position { line: 11, column: 18, offset: 237 } } }, default: None })] }
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] ref_p : Int(64) @depth1
+    slot[2] w : Int(64) @depth1
+    locals_total=6
+    Load %0 <- int(1)
+    Load %1 <- int(2)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Move %0 <- %1
+    Load %3 <- %2
+    Load %4 <- %0
+    Call %1 <- string("Window") [%3, %4] (def=d1)
+    Load %4 <- bool(true)
+    Load %5 <- string("token_in_struct — tokens can be stored as fields")
+    Call %3 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

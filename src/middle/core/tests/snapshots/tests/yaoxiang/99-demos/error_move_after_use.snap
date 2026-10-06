@@ -1,0 +1,18 @@
+module
+  fn main() -> Void
+    slot[0] x : Int(64) @depth1
+    slot[1] y : Int(64) @depth1
+    locals_total=5
+    Load %0 <- int(42)
+    Load %1 <- %0
+    Load %2 <- bool(true)
+    Load %3 <- string("value moved from x to y")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %2 <- %1
+    Call %4 <- string("std.io.println") [%2] (def=d1)
+    Load %2 <- bool(true)
+    Load %3 <- string("all passed")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

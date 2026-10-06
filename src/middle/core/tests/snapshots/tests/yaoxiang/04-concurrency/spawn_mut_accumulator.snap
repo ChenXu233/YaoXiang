@@ -1,0 +1,77 @@
+module
+  fn main() -> Void
+    slot[0] data : Int(64) @depth1
+    slot[1] result : Int(64) @depth1
+    slot[2] total : Int(64) @depth1
+    slot[11] i : Int(64) @depth2
+    slot[12] sum : Int(64) @depth1
+    slot[13] items : Int(64) @depth1
+    slot[16] n : Int(64) @depth2
+    locals_total=22
+    Load %0 <- int(42)
+    Spawn %1 <- [] plan(groups=[], deps=[], resources=[])
+    Load %2 <- %0
+    Move %1 <- %2
+    Load %3 <- %1
+    Load %4 <- int(42)
+    Eq %5 <- %3, %4
+    Load %6 <- string("spawn should capture outer variable")
+    Call %2 <- string("std.assert.assert") [%5, %6] (def=d0)
+    Load %2 <- int(0)
+    Load %3 <- int(0)
+    Load %4 <- int(100)
+    Load %6 <- int(1)
+    NewRange %5 <- %3, %4, %6
+    Call %7 <- string("std.range.iter") [%5] (def=d1)
+    VariantTag %8 <- %7 : Result
+    Load %9 <- int(0)
+    Eq %10 <- %8, %9
+    JmpIfNot %10 -> instr(21)
+    VariantPayload %7 <- %7 : Result
+    Jmp -> instr(22)
+    Call _ <- string("std.range.abort_invalid_step") [%5] (def=d2)
+    Call %11 <- string("std.range.has_next") [%7] (def=d3)
+    JmpIfNot %11 -> instr(30)
+    Call %12 <- string("std.range.next") [%7] (def=d4)
+    Store %13 <- %12
+    Load %14 <- %2
+    Load %15 <- %13
+    Add %2 <- %14, %15
+    Jmp -> instr(22)
+    Load %14 <- %2
+    Load %15 <- int(4950)
+    Eq %12 <- %14, %15
+    Load %16 <- string("for loop sum 0..99 == 4950")
+    Call %11 <- string("std.assert.assert") [%12, %16] (def=d0)
+    Load %11 <- int(0)
+    AllocArray %12 size=int(4), elem=int(1)
+    Load %14 <- int(10)
+    Load %15 <- int(0)
+    StoreIndex %12[%15] <- %14
+    Load %16 <- int(20)
+    Load %17 <- int(1)
+    StoreIndex %12[%17] <- %16
+    Load %18 <- int(30)
+    Load %19 <- int(2)
+    StoreIndex %12[%19] <- %18
+    Load %20 <- int(40)
+    Load %21 <- int(3)
+    StoreIndex %12[%21] <- %20
+    Load %14 <- %12
+    Call %15 <- string("std.list.iter") [%14] (def=d5)
+    Call %17 <- string("std.list.has_next") [%15] (def=d6)
+    JmpIfNot %17 -> instr(59)
+    Call %18 <- string("std.list.next") [%15] (def=d7)
+    Store %16 <- %18
+    Load %19 <- %11
+    Load %20 <- %16
+    Add %11 <- %19, %20
+    Jmp -> instr(51)
+    Load %19 <- %11
+    Load %20 <- int(100)
+    Eq %18 <- %19, %20
+    Load %21 <- string("for list sum 10+20+30+40 == 100")
+    Call %17 <- string("std.assert.assert") [%18, %21] (def=d0)
+    Ret %17
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

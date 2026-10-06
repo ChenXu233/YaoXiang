@@ -1,0 +1,400 @@
+module
+  fn main() -> Void
+    slot[0] items : Int(64) @depth1
+    slot[1] squares : Int(64) @depth1
+    slot[4] x : Int(64) @depth1
+    slot[5] words : Int(64) @depth1
+    slot[6] shouts : Int(64) @depth1
+    slot[9] s : Int(64) @depth1
+    slot[10] tens : Int(64) @depth1
+    slot[13] x : Int(64) @depth1
+    slot[14] evens : Int(64) @depth1
+    slot[17] x : Int(64) @depth1
+    slot[18] pairs : Int(64) @depth1
+    slot[25] x : Int(64) @depth1
+    slot[34] y : Int(64) @depth1
+    slot[35] filtered : Int(64) @depth1
+    slot[44] x : Int(64) @depth1
+    slot[56] y : Int(64) @depth1
+    slot[57] flat : Int(64) @depth1
+    slot[72] x : Int(64) @depth1
+    slot[77] y : Int(64) @depth1
+    locals_total=85
+    AllocArray %0 size=int(5), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(3)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %7 <- int(4)
+    Load %8 <- int(3)
+    StoreIndex %0[%8] <- %7
+    Load %9 <- int(5)
+    Load %10 <- int(4)
+    StoreIndex %0[%10] <- %9
+    AllocArray %1 size=int(0), elem=int(1)
+    Load %2 <- %0
+    Call %3 <- string("std.list.iter") [%2] (def=d0)
+    Call %5 <- string("std.list.has_next") [%3] (def=d1)
+    JmpIfNot %5 -> instr(28)
+    Call %6 <- string("std.list.next") [%3] (def=d2)
+    Store %4 <- %6
+    Load %8 <- %4
+    Load %9 <- %4
+    Mul %7 <- %8, %9
+    Call %1 <- string("std.list.push") [%1, %7] (def=d3)
+    Jmp -> instr(19)
+    Load %9 <- %1
+    Load %10 <- int(0)
+    LoadIndex %7 <- %9[%10]
+    Load %8 <- int(1)
+    Eq %6 <- %7, %8
+    Load %11 <- string("squares[0] == 1")
+    Call %5 <- string("std.assert.assert") [%6, %11] (def=d4)
+    Load %9 <- %1
+    Load %10 <- int(1)
+    LoadIndex %7 <- %9[%10]
+    Load %8 <- int(4)
+    Eq %6 <- %7, %8
+    Load %11 <- string("squares[1] == 4")
+    Call %5 <- string("std.assert.assert") [%6, %11] (def=d4)
+    Load %9 <- %1
+    Load %10 <- int(2)
+    LoadIndex %7 <- %9[%10]
+    Load %8 <- int(9)
+    Eq %6 <- %7, %8
+    Load %11 <- string("squares[2] == 9")
+    Call %5 <- string("std.assert.assert") [%6, %11] (def=d4)
+    Load %9 <- %1
+    Load %10 <- int(3)
+    LoadIndex %7 <- %9[%10]
+    Load %8 <- int(16)
+    Eq %6 <- %7, %8
+    Load %11 <- string("squares[3] == 16")
+    Call %5 <- string("std.assert.assert") [%6, %11] (def=d4)
+    Load %9 <- %1
+    Load %10 <- int(4)
+    LoadIndex %7 <- %9[%10]
+    Load %8 <- int(25)
+    Eq %6 <- %7, %8
+    Load %11 <- string("squares[4] == 25")
+    Call %5 <- string("std.assert.assert") [%6, %11] (def=d4)
+    AllocArray %5 size=int(2), elem=int(1)
+    Load %6 <- string("hello")
+    Load %7 <- int(0)
+    StoreIndex %5[%7] <- %6
+    Load %8 <- string("world")
+    Load %9 <- int(1)
+    StoreIndex %5[%9] <- %8
+    AllocArray %6 size=int(0), elem=int(1)
+    Load %7 <- %5
+    Call %8 <- string("std.list.iter") [%7] (def=d0)
+    Call %10 <- string("std.list.has_next") [%8] (def=d1)
+    JmpIfNot %10 -> instr(82)
+    Call %11 <- string("std.list.next") [%8] (def=d2)
+    Store %9 <- %11
+    Load %12 <- %9
+    Load %13 <- string("!!")
+    Add %14 <- %12, %13
+    Call %6 <- string("std.list.push") [%6, %14] (def=d3)
+    Jmp -> instr(73)
+    Load %13 <- %6
+    Load %15 <- int(0)
+    LoadIndex %14 <- %13[%15]
+    Load %12 <- string("hello!!")
+    Eq %11 <- %14, %12
+    Load %16 <- string("shouts[0] == hello!!")
+    Call %10 <- string("std.assert.assert") [%11, %16] (def=d4)
+    Load %13 <- %6
+    Load %15 <- int(1)
+    LoadIndex %14 <- %13[%15]
+    Load %12 <- string("world!!")
+    Eq %11 <- %14, %12
+    Load %16 <- string("shouts[1] == world!!")
+    Call %10 <- string("std.assert.assert") [%11, %16] (def=d4)
+    AllocArray %10 size=int(0), elem=int(1)
+    Load %11 <- %0
+    Call %14 <- string("std.list.iter") [%11] (def=d0)
+    Call %13 <- string("std.list.has_next") [%14] (def=d1)
+    JmpIfNot %13 -> instr(106)
+    Call %15 <- string("std.list.next") [%14] (def=d2)
+    Store %12 <- %15
+    Load %16 <- int(10)
+    Call %10 <- string("std.list.push") [%10, %16] (def=d3)
+    Jmp -> instr(99)
+    Load %17 <- %10
+    Load %18 <- int(0)
+    LoadIndex %16 <- %17[%18]
+    Load %19 <- int(10)
+    Eq %15 <- %16, %19
+    Load %20 <- string("tens[0] == 10")
+    Call %13 <- string("std.assert.assert") [%15, %20] (def=d4)
+    Load %17 <- %10
+    Load %18 <- int(1)
+    LoadIndex %16 <- %17[%18]
+    Load %19 <- int(10)
+    Eq %15 <- %16, %19
+    Load %20 <- string("tens[1] == 10")
+    Call %13 <- string("std.assert.assert") [%15, %20] (def=d4)
+    Load %17 <- %10
+    Load %18 <- int(2)
+    LoadIndex %16 <- %17[%18]
+    Load %19 <- int(10)
+    Eq %15 <- %16, %19
+    Load %20 <- string("tens[2] == 10")
+    Call %13 <- string("std.assert.assert") [%15, %20] (def=d4)
+    Load %17 <- %10
+    Load %18 <- int(3)
+    LoadIndex %16 <- %17[%18]
+    Load %19 <- int(10)
+    Eq %15 <- %16, %19
+    Load %20 <- string("tens[3] == 10")
+    Call %13 <- string("std.assert.assert") [%15, %20] (def=d4)
+    Load %17 <- %10
+    Load %18 <- int(4)
+    LoadIndex %16 <- %17[%18]
+    Load %19 <- int(10)
+    Eq %15 <- %16, %19
+    Load %20 <- string("tens[4] == 10")
+    Call %13 <- string("std.assert.assert") [%15, %20] (def=d4)
+    AllocArray %13 size=int(0), elem=int(1)
+    Load %15 <- %0
+    Call %16 <- string("std.list.iter") [%15] (def=d0)
+    Call %17 <- string("std.list.has_next") [%16] (def=d1)
+    JmpIfNot %17 -> instr(157)
+    Call %18 <- string("std.list.next") [%16] (def=d2)
+    Store %19 <- %18
+    Load %21 <- %19
+    Load %22 <- int(2)
+    Mod %23 <- %21, %22
+    Load %24 <- int(0)
+    Eq %20 <- %23, %24
+    JmpIfNot %20 -> instr(144)
+    Load %25 <- %19
+    Call %13 <- string("std.list.push") [%13, %25] (def=d3)
+    Jmp -> instr(144)
+    Load %24 <- %13
+    Call %20 <- string("std.list.len") [%24] (def=d5)
+    Load %23 <- int(2)
+    Eq %18 <- %20, %23
+    Load %21 <- string("len(evens) == 2")
+    Call %17 <- string("std.assert.assert") [%18, %21] (def=d4)
+    Load %24 <- %13
+    Load %21 <- int(0)
+    LoadIndex %20 <- %24[%21]
+    Load %23 <- int(2)
+    Eq %18 <- %20, %23
+    Load %22 <- string("evens[0] == 2")
+    Call %17 <- string("std.assert.assert") [%18, %22] (def=d4)
+    Load %24 <- %13
+    Load %21 <- int(1)
+    LoadIndex %20 <- %24[%21]
+    Load %23 <- int(4)
+    Eq %18 <- %20, %23
+    Load %22 <- string("evens[1] == 4")
+    Call %17 <- string("std.assert.assert") [%18, %22] (def=d4)
+    AllocArray %17 size=int(0), elem=int(1)
+    AllocArray %18 size=int(2), elem=int(1)
+    Load %20 <- int(1)
+    Load %23 <- int(0)
+    StoreIndex %18[%23] <- %20
+    Load %24 <- int(2)
+    Load %21 <- int(1)
+    StoreIndex %18[%21] <- %24
+    Call %22 <- string("std.list.iter") [%18] (def=d0)
+    Call %26 <- string("std.list.has_next") [%22] (def=d1)
+    JmpIfNot %26 -> instr(210)
+    Call %27 <- string("std.list.next") [%22] (def=d2)
+    Store %25 <- %27
+    AllocArray %28 size=int(2), elem=int(1)
+    Load %29 <- int(3)
+    Load %30 <- int(0)
+    StoreIndex %28[%30] <- %29
+    Load %31 <- int(4)
+    Load %32 <- int(1)
+    StoreIndex %28[%32] <- %31
+    Call %33 <- string("std.list.iter") [%28] (def=d0)
+    Call %34 <- string("std.list.has_next") [%33] (def=d1)
+    JmpIfNot %34 -> instr(209)
+    Call %35 <- string("std.list.next") [%33] (def=d2)
+    Store %36 <- %35
+    Load %37 <- %25
+    Load %38 <- int(10)
+    Mul %39 <- %37, %38
+    Load %40 <- %36
+    Add %41 <- %39, %40
+    Call %17 <- string("std.list.push") [%17, %41] (def=d3)
+    Jmp -> instr(198)
+    Jmp -> instr(186)
+    Load %40 <- %17
+    Call %41 <- string("std.list.len") [%40] (def=d5)
+    Load %39 <- int(4)
+    Eq %35 <- %41, %39
+    Load %37 <- string("len(pairs) == 4")
+    Call %34 <- string("std.assert.assert") [%35, %37] (def=d4)
+    Load %40 <- %17
+    Load %37 <- int(0)
+    LoadIndex %41 <- %40[%37]
+    Load %39 <- int(13)
+    Eq %35 <- %41, %39
+    Load %38 <- string("pairs[0] == 13")
+    Call %34 <- string("std.assert.assert") [%35, %38] (def=d4)
+    Load %40 <- %17
+    Load %37 <- int(1)
+    LoadIndex %41 <- %40[%37]
+    Load %39 <- int(14)
+    Eq %35 <- %41, %39
+    Load %38 <- string("pairs[1] == 14")
+    Call %34 <- string("std.assert.assert") [%35, %38] (def=d4)
+    Load %40 <- %17
+    Load %37 <- int(2)
+    LoadIndex %41 <- %40[%37]
+    Load %39 <- int(23)
+    Eq %35 <- %41, %39
+    Load %38 <- string("pairs[2] == 23")
+    Call %34 <- string("std.assert.assert") [%35, %38] (def=d4)
+    Load %40 <- %17
+    Load %37 <- int(3)
+    LoadIndex %41 <- %40[%37]
+    Load %39 <- int(24)
+    Eq %35 <- %41, %39
+    Load %38 <- string("pairs[3] == 24")
+    Call %34 <- string("std.assert.assert") [%35, %38] (def=d4)
+    AllocArray %34 size=int(0), elem=int(1)
+    AllocArray %35 size=int(3), elem=int(1)
+    Load %41 <- int(1)
+    Load %39 <- int(0)
+    StoreIndex %35[%39] <- %41
+    Load %40 <- int(2)
+    Load %37 <- int(1)
+    StoreIndex %35[%37] <- %40
+    Load %38 <- int(3)
+    Load %42 <- int(2)
+    StoreIndex %35[%42] <- %38
+    Call %43 <- string("std.list.iter") [%35] (def=d0)
+    Call %44 <- string("std.list.has_next") [%43] (def=d1)
+    JmpIfNot %44 -> instr(286)
+    Call %45 <- string("std.list.next") [%43] (def=d2)
+    Store %46 <- %45
+    Load %47 <- %46
+    Load %48 <- int(1)
+    Gt %49 <- %47, %48
+    JmpIfNot %49 -> instr(256)
+    AllocArray %50 size=int(2), elem=int(1)
+    Load %51 <- int(10)
+    Load %52 <- int(0)
+    StoreIndex %50[%52] <- %51
+    Load %53 <- int(20)
+    Load %54 <- int(1)
+    StoreIndex %50[%54] <- %53
+    Call %55 <- string("std.list.iter") [%50] (def=d0)
+    Call %56 <- string("std.list.has_next") [%55] (def=d1)
+    JmpIfNot %56 -> instr(285)
+    Call %57 <- string("std.list.next") [%55] (def=d2)
+    Store %58 <- %57
+    Load %59 <- %58
+    Load %60 <- int(20)
+    Eq %61 <- %59, %60
+    JmpIfNot %61 -> instr(272)
+    Load %62 <- %46
+    Load %63 <- %58
+    Mul %64 <- %62, %63
+    Call %34 <- string("std.list.push") [%34, %64] (def=d3)
+    Jmp -> instr(272)
+    Jmp -> instr(256)
+    Load %60 <- %34
+    Call %61 <- string("std.list.len") [%60] (def=d5)
+    Load %59 <- int(2)
+    Eq %57 <- %61, %59
+    Load %64 <- string("len(filtered) == 2")
+    Call %56 <- string("std.assert.assert") [%57, %64] (def=d4)
+    Load %60 <- %34
+    Load %64 <- int(0)
+    LoadIndex %61 <- %60[%64]
+    Load %59 <- int(40)
+    Eq %57 <- %61, %59
+    Load %62 <- string("filtered[0] == 40")
+    Call %56 <- string("std.assert.assert") [%57, %62] (def=d4)
+    Load %60 <- %34
+    Load %64 <- int(1)
+    LoadIndex %61 <- %60[%64]
+    Load %59 <- int(60)
+    Eq %57 <- %61, %59
+    Load %62 <- string("filtered[1] == 60")
+    Call %56 <- string("std.assert.assert") [%57, %62] (def=d4)
+    AllocArray %56 size=int(0), elem=int(1)
+    AllocArray %57 size=int(2), elem=int(1)
+    AllocArray %61 size=int(2), elem=int(1)
+    Load %59 <- int(1)
+    Load %60 <- int(0)
+    StoreIndex %61[%60] <- %59
+    Load %64 <- int(2)
+    Load %62 <- int(1)
+    StoreIndex %61[%62] <- %64
+    Load %63 <- int(0)
+    StoreIndex %57[%63] <- %61
+    AllocArray %65 size=int(2), elem=int(1)
+    Load %66 <- int(3)
+    Load %67 <- int(0)
+    StoreIndex %65[%67] <- %66
+    Load %68 <- int(4)
+    Load %69 <- int(1)
+    StoreIndex %65[%69] <- %68
+    Load %70 <- int(1)
+    StoreIndex %57[%70] <- %65
+    Call %71 <- string("std.list.iter") [%57] (def=d0)
+    Call %72 <- string("std.list.has_next") [%71] (def=d1)
+    JmpIfNot %72 -> instr(341)
+    Call %73 <- string("std.list.next") [%71] (def=d2)
+    Store %74 <- %73
+    Load %75 <- %74
+    Call %76 <- string("std.list.iter") [%75] (def=d0)
+    Call %77 <- string("std.list.has_next") [%76] (def=d1)
+    JmpIfNot %77 -> instr(340)
+    Call %78 <- string("std.list.next") [%76] (def=d2)
+    Store %79 <- %78
+    Load %80 <- %79
+    Call %56 <- string("std.list.push") [%56, %80] (def=d3)
+    Jmp -> instr(333)
+    Jmp -> instr(327)
+    Load %81 <- %56
+    Call %80 <- string("std.list.len") [%81] (def=d5)
+    Load %82 <- int(4)
+    Eq %78 <- %80, %82
+    Load %83 <- string("len(flat) == 4")
+    Call %77 <- string("std.assert.assert") [%78, %83] (def=d4)
+    Load %81 <- %56
+    Load %83 <- int(0)
+    LoadIndex %80 <- %81[%83]
+    Load %82 <- int(1)
+    Eq %78 <- %80, %82
+    Load %84 <- string("flat[0] == 1")
+    Call %77 <- string("std.assert.assert") [%78, %84] (def=d4)
+    Load %81 <- %56
+    Load %83 <- int(1)
+    LoadIndex %80 <- %81[%83]
+    Load %82 <- int(2)
+    Eq %78 <- %80, %82
+    Load %84 <- string("flat[1] == 2")
+    Call %77 <- string("std.assert.assert") [%78, %84] (def=d4)
+    Load %81 <- %56
+    Load %83 <- int(2)
+    LoadIndex %80 <- %81[%83]
+    Load %82 <- int(3)
+    Eq %78 <- %80, %82
+    Load %84 <- string("flat[2] == 3")
+    Call %77 <- string("std.assert.assert") [%78, %84] (def=d4)
+    Load %81 <- %56
+    Load %83 <- int(3)
+    LoadIndex %80 <- %81[%83]
+    Load %82 <- int(4)
+    Eq %78 <- %80, %82
+    Load %84 <- string("flat[3] == 4")
+    Call %77 <- string("std.assert.assert") [%78, %84] (def=d4)
+    Ret %77
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

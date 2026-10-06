@@ -1,0 +1,46 @@
+module
+  fn gcd(Int(64), Int(64)) -> Generic { name: "Terminates", args: [TypeRef("b")] }
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    locals_total=7
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %1
+    Load %3 <- int(0)
+    Eq %4 <- %2, %3
+    JmpIfNot %4 -> instr(8)
+    Load %5 <- %0
+    Ret %5
+    Load %2 <- %1
+    Load %5 <- %0
+    Load %6 <- %1
+    Mod %3 <- %5, %6
+    Call %4 <- string("gcd") [%2, %3] (def=d0)
+    Ret %4
+    Ret %4
+  fn main() -> Void
+    locals_total=7
+    Load %0 <- int(12)
+    Load %1 <- int(8)
+    Call %2 <- string("gcd") [%0, %1] (def=d0)
+    Load %3 <- int(4)
+    Eq %4 <- %2, %3
+    Load %5 <- string("gcd(12,8) == 4")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %0 <- int(1071)
+    Load %1 <- int(462)
+    Call %2 <- string("gcd") [%0, %1] (def=d0)
+    Load %3 <- int(21)
+    Eq %4 <- %2, %3
+    Load %5 <- string("gcd(1071,462) == 21")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %0 <- int(7)
+    Load %1 <- int(0)
+    Call %2 <- string("gcd") [%0, %1] (def=d0)
+    Load %3 <- int(7)
+    Eq %4 <- %2, %3
+    Load %5 <- string("gcd(7,0) == 7（零边界不递归）")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

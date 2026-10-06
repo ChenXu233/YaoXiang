@@ -1,0 +1,54 @@
+module
+  fn main() -> Void
+    slot[0] i : Int(64) @depth1
+    slot[1] last : Int(64) @depth1
+    slot[2] j : Int(64) @depth1
+    slot[3] total : Int(64) @depth1
+    locals_total=11
+    Load %0 <- int(0)
+    Load %1 <- void
+    Load %2 <- %0
+    Load %3 <- int(3)
+    Lt %4 <- %2, %3
+    JmpIfNot %4 -> instr(11)
+    Load %5 <- %0
+    Load %6 <- int(1)
+    Add %0 <- %5, %6
+    Load %1 <- %0
+    Jmp -> instr(2)
+    Load %3 <- %0
+    Load %5 <- int(3)
+    Eq %2 <- %3, %5
+    Load %6 <- string("循环应执行 3 次，i 累加到 3")
+    Call %4 <- string("std.assert.assert") [%2, %6] (def=d0)
+    Load %3 <- %1
+    Load %5 <- int(3)
+    Eq %2 <- %3, %5
+    Load %6 <- string("循环的值应为末次迭代的尾表达式值 3")
+    Call %4 <- string("std.assert.assert") [%2, %6] (def=d0)
+    Load %4 <- int(0)
+    Load %2 <- void
+    Load %5 <- %4
+    Load %6 <- int(4)
+    Lt %3 <- %5, %6
+    JmpIfNot %3 -> instr(34)
+    Load %7 <- %4
+    Load %8 <- int(1)
+    Add %4 <- %7, %8
+    Load %9 <- %4
+    Load %10 <- int(10)
+    Mul %2 <- %9, %10
+    Jmp -> instr(23)
+    Load %6 <- %4
+    Load %7 <- int(4)
+    Eq %5 <- %6, %7
+    Load %8 <- string("第二个循环应执行 4 次")
+    Call %3 <- string("std.assert.assert") [%5, %8] (def=d0)
+    Load %6 <- %2
+    Load %7 <- int(40)
+    Eq %5 <- %6, %7
+    Load %8 <- string("循环值应为末次迭代值 40，而非累加")
+    Call %3 <- string("std.assert.assert") [%5, %8] (def=d0)
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

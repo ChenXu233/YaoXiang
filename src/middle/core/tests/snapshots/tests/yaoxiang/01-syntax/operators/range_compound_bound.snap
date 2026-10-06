@@ -1,0 +1,69 @@
+module
+  fn main() -> Void
+    slot[0] n : Int(64) @depth1
+    slot[1] count : Int(64) @depth1
+    slot[12] i : Int(64) @depth2
+    locals_total=25
+    Load %0 <- int(3)
+    Load %1 <- int(0)
+    Load %2 <- int(0)
+    Load %3 <- %0
+    Load %4 <- int(2)
+    Add %5 <- %3, %4
+    Load %6 <- int(1)
+    NewRange %7 <- %2, %5, %6
+    Call %8 <- string("std.range.iter") [%7] (def=d0)
+    VariantTag %9 <- %8 : Result
+    Load %10 <- int(0)
+    Eq %11 <- %9, %10
+    JmpIfNot %11 -> instr(15)
+    VariantPayload %8 <- %8 : Result
+    Jmp -> instr(16)
+    Call _ <- string("std.range.abort_invalid_step") [%7] (def=d1)
+    Call %12 <- string("std.range.has_next") [%8] (def=d2)
+    JmpIfNot %12 -> instr(24)
+    Call %13 <- string("std.range.next") [%8] (def=d3)
+    Store %14 <- %13
+    Load %15 <- %1
+    Load %16 <- int(1)
+    Add %1 <- %15, %16
+    Jmp -> instr(16)
+    Load %15 <- %1
+    Load %16 <- int(5)
+    Eq %13 <- %15, %16
+    Load %17 <- string("0..(n+2) yields 5 iterations")
+    Call %12 <- string("std.assert.assert") [%13, %17] (def=d4)
+    Load %15 <- int(5)
+    Load %17 <- int(1)
+    Load %18 <- int(10)
+    Load %19 <- int(1)
+    NewRange %16 <- %17, %18, %19
+    Call %13 <- string("std.range.contains") [%16, %15] (def=d5)
+    VariantTag %20 <- %13 : Result
+    Load %21 <- int(0)
+    Eq %22 <- %20, %21
+    JmpIfNot %22 -> instr(41)
+    VariantPayload %13 <- %13 : Result
+    Jmp -> instr(42)
+    Call _ <- string("std.range.abort_invalid_step") [%16] (def=d1)
+    Load %23 <- string("range stays whole as in-rhs")
+    Call %12 <- string("std.assert.assert") [%13, %23] (def=d4)
+    Load %16 <- int(11)
+    Load %18 <- int(1)
+    Load %19 <- int(10)
+    Load %20 <- int(1)
+    NewRange %17 <- %18, %19, %20
+    Call %15 <- string("std.range.contains") [%17, %16] (def=d5)
+    VariantTag %21 <- %15 : Result
+    Load %22 <- int(0)
+    Eq %23 <- %21, %22
+    JmpIfNot %23 -> instr(56)
+    VariantPayload %15 <- %15 : Result
+    Jmp -> instr(57)
+    Call _ <- string("std.range.abort_invalid_step") [%17] (def=d1)
+    Not %13 <- %15
+    Load %24 <- string("range not in")
+    Call %12 <- string("std.assert.assert") [%13, %24] (def=d4)
+    Ret %12
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

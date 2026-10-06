@@ -1,0 +1,10 @@
+module
+  fn main() -> Void
+    locals_total=4
+    Load %0 <- string("not a url")
+    Call %1 <- string("std.dict.new") [] (def=d0)
+    Load %2 <- int(5)
+    Call %3 <- string("std.net.http_get") [%0, %1, %2] (def=d1)
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

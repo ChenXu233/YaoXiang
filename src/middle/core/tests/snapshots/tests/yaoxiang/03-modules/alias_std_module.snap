@@ -1,0 +1,22 @@
+module
+  global[0] main : Int(64)
+  init (locals=9)
+    islot[1] r : Int(64) @depth1
+    islot[8] r2 : Int(64) @depth1
+    Load %0 <- float(4625196817309499392)
+    Call %1 <- string("std.math.sqrt") [%0] (def=_)
+    Load %2 <- %1
+    Load %3 <- float(4616189618054758400)
+    Eq %4 <- %2, %3
+    Load %5 <- string("m.sqrt(16.0) should be 4.0 via std module alias")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=_)
+    Load %7 <- float(4621256167635550208)
+    Call %8 <- string("std.math.sqrt") [%7] (def=_)
+    Load %9 <- %8
+    Load %10 <- float(4613937818241073152)
+    Eq %11 <- %9, %10
+    Load %12 <- string("m.sqrt(9.0) should be 3.0 via aliased module")
+    Call %13 <- string("std.assert.assert") [%11, %12] (def=_)
+    Load %14 <- string("std module alias ok")
+    Call %15 <- string("std.io.print") [%14] (def=_)
+    Store @0 <- %15

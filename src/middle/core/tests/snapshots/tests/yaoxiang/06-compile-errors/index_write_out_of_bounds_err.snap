@@ -1,0 +1,31 @@
+module
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] i : Int(64) @depth1
+    locals_total=10
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(3)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %1 <- int(5)
+    Load %2 <- %0
+    Load %3 <- %1
+    Load %4 <- int(99)
+    StoreIndex %2[%3] <- %4
+    Load %4 <- %0
+    Load %5 <- int(0)
+    LoadIndex %3 <- %4[%5]
+    Load %7 <- %0
+    Load %8 <- int(0)
+    LoadIndex %6 <- %7[%8]
+    Call %9 <- string("int.to_string") [%6] (def=d0)
+    Call %2 <- string("std.io.print") [%9] (def=d1)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

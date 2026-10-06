@@ -1,0 +1,26 @@
+module
+  fn main() -> Void
+    locals_total=5
+    Call %0 <- string("std.time.now") [] (def=d0)
+    Load %1 <- int(0)
+    Gt %2 <- %0, %1
+    Load %3 <- string("now > 0")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d1)
+    Call %0 <- string("std.time.timestamp") [] (def=d2)
+    Load %1 <- int(0)
+    Gt %2 <- %0, %1
+    Load %3 <- string("timestamp > 0")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d1)
+    Call %0 <- string("std.time.timestamp_ms") [] (def=d3)
+    Load %1 <- int(0)
+    Gt %2 <- %0, %1
+    Load %3 <- string("timestamp_ms > 0")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d1)
+    Call %0 <- string("std.time.timestamp_ms") [] (def=d3)
+    Call %1 <- string("std.time.timestamp") [] (def=d2)
+    Ge %2 <- %0, %1
+    Load %3 <- string("ms >= s")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d1)
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

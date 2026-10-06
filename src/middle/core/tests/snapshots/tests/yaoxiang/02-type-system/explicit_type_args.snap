@@ -1,0 +1,122 @@
+module
+  fn mk(TypeRef("A")) -> TypeRef("A")
+    generic_params: ["A"]
+    slot[0] x : Int(64) @depth1
+    locals_total=2
+    Load %0 <- %1
+    Ret %0
+  fn pick_first(TypeRef("A"), TypeRef("B")) -> TypeRef("A")
+    generic_params: ["A", "B"]
+    slot[0] x : Int(64) @depth1
+    slot[1] y : Int(64) @depth1
+    locals_total=3
+    Load %0 <- %1
+    Ret %0
+  fn add2(Int(64)) -> Fn { params: [Int(64)], return_type: Int(64) }
+    locals_total=2
+    MakeClosure %0 <- __add2_l0 env=[%1] (def=d0)
+    Ret %0
+  fn main() -> Void
+    slot[0] inferred : Int(64) @depth1
+    slot[1] explicit : Int(64) @depth1
+    slot[2] s : Int(64) @depth1
+    slot[3] p : Int(64) @depth1
+    slot[4] r : Int(64) @depth1
+    slot[5] add10 : Int(64) @depth1
+    slot[6] v : Int(64) @depth1
+    slot[7] pushed : Int(64) @depth1
+    slot[8] s2 : Int(64) @depth1
+    locals_total=14
+    Load %0 <- int(5)
+    Call %1 <- string("mk") [%0] (def=d1)
+    Load %2 <- %1
+    Load %3 <- int(5)
+    Eq %4 <- %2, %3
+    Load %5 <- string("mk(5) inferred == 5")
+    Call %0 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Load %4 <- int(5)
+    Call %0 <- string("mk(int64)") [%4] (def=_)
+    Load %3 <- %0
+    Load %5 <- int(5)
+    Eq %2 <- %3, %5
+    Load %6 <- string("mk(Int)(5) == 5")
+    Call %4 <- string("std.assert.assert") [%2, %6] (def=d2)
+    Load %3 <- %0
+    Load %5 <- %1
+    Eq %2 <- %3, %5
+    Load %6 <- string("explicit == inferred")
+    Call %4 <- string("std.assert.assert") [%2, %6] (def=d2)
+    Load %2 <- string("hi")
+    Call %4 <- string("mk(string)") [%2] (def=_)
+    Load %5 <- %4
+    Load %6 <- string("hi")
+    Eq %3 <- %5, %6
+    Load %7 <- string("mk(String)(hi) == hi")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d2)
+    Load %3 <- int(7)
+    Load %5 <- string("ignored")
+    Call %2 <- string("pick_first(int64, string)") [%3, %5] (def=_)
+    Load %6 <- %2
+    Load %7 <- int(7)
+    Eq %5 <- %6, %7
+    Load %8 <- string("pick_first(Int,String)(7,...) == 7")
+    Call %3 <- string("std.assert.assert") [%5, %8] (def=d2)
+    Load %5 <- int(5)
+    Load %7 <- int(10)
+    Call %6 <- string("add2") [%7] (def=d3)
+    CallDyn %3 <- %6 [%5]
+    Load %7 <- %3
+    Load %8 <- int(15)
+    Eq %6 <- %7, %8
+    Load %9 <- string("add2(10)(5) == 15 (partial application)")
+    Call %5 <- string("std.assert.assert") [%6, %9] (def=d2)
+    Load %6 <- int(10)
+    Call %5 <- string("add2") [%6] (def=d3)
+    Load %10 <- int(1)
+    Load %11 <- %5
+    CallDyn %8 <- %11 [%10]
+    Load %9 <- int(11)
+    Eq %7 <- %8, %9
+    Load %12 <- string("add10(1) == 11")
+    Call %6 <- string("std.assert.assert") [%7, %12] (def=d2)
+    Load %10 <- int(7)
+    Load %11 <- %5
+    CallDyn %8 <- %11 [%10]
+    Load %9 <- int(17)
+    Eq %7 <- %8, %9
+    Load %12 <- string("add10(7) == 17")
+    Call %6 <- string("std.assert.assert") [%7, %12] (def=d2)
+    AllocArray %6 size=int(2), elem=int(1)
+    Load %7 <- int(1)
+    Load %8 <- int(0)
+    StoreIndex %6[%8] <- %7
+    Load %9 <- int(2)
+    Load %10 <- int(1)
+    StoreIndex %6[%10] <- %9
+    Load %8 <- int(9)
+    Load %9 <- %6
+    Call %7 <- string("std.list.push") [%9, %8] (def=d4)
+    Load %12 <- %7
+    Call %10 <- string("std.list.len") [%12] (def=d5)
+    Load %11 <- int(3)
+    Eq %9 <- %10, %11
+    Load %13 <- string("std.list.* survives monomorphization")
+    Call %8 <- string("std.assert.assert") [%9, %13] (def=d2)
+    Load %9 <- string("x")
+    Call %8 <- string("mk(string)") [%9] (def=_)
+    Load %11 <- %8
+    Load %12 <- string("x")
+    Eq %10 <- %11, %12
+    Load %13 <- string("explicit type arg still works alongside std.list")
+    Call %9 <- string("std.assert.assert") [%10, %13] (def=d2)
+    Ret %9
+  fn __add2_l0(Int(64)) -> Int(64)
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    locals_total=5
+    Load %0 <- %1
+    Load %2 <- %3
+    Add %4 <- %0, %2
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

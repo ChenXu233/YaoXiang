@@ -1,0 +1,32 @@
+module
+  fn head_of(Generic { name: "Array", args: [Int(64), Literal { name: "3", base_type: Int(64), value: Int(3) }] }) -> Int(64)
+    slot[0] a : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(0)
+    LoadIndex %3 <- %1[%2]
+    Ret %3
+    Ret %3
+  fn main() -> Void
+    slot[0] b : Int(64) @depth1
+    locals_total=7
+    Load %0 <- int(10)
+    Load %1 <- int(20)
+    Load %2 <- int(30)
+    AllocFixedArray %3 count=3
+    Load %4 <- int(0)
+    StoreIndex %3[%4] <- %0
+    Load %5 <- int(1)
+    StoreIndex %3[%5] <- %1
+    Load %6 <- int(2)
+    StoreIndex %3[%6] <- %2
+    Load %5 <- %3
+    Call %2 <- string("head_of") [%5] (def=d0)
+    Load %4 <- int(10)
+    Eq %1 <- %2, %4
+    Load %6 <- string("Array(Int,3) passed to Array(Int,3) param")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d1)
+    Ret %0
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

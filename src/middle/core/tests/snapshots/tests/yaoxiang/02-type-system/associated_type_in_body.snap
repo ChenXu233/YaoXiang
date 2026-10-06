@@ -1,0 +1,18 @@
+module
+  fn Option(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["T"]
+    type_decl Struct { body: [Field(StructField { name: "some", is_mut: false, ty: Fn { params: [Name { name: "T", span: Span { start: Position { line: 15, column: 38, offset: 731 }, end: Position { line: 15, column: 39, offset: 732 } } }], return_type: Name { name: "Self", span: Span { start: Position { line: 15, column: 44, offset: 737 }, end: Position { line: 15, column: 48, offset: 741 } } } }, default: None }), Field(StructField { name: "none", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Self", span: Span { start: Position { line: 15, column: 62, offset: 755 }, end: Position { line: 15, column: 66, offset: 759 } } } }, default: None })] }
+  fn Iterator(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["Item"]
+    type_decl Struct { body: [Field(StructField { name: "next", is_mut: false, ty: Fn { params: [Name { name: "Self", span: Span { start: Position { line: 17, column: 12, offset: 808 }, end: Position { line: 17, column: 16, offset: 812 } } }], return_type: Generic { name: "Option", name_span: Span { start: Position { line: 17, column: 21, offset: 817 }, end: Position { line: 17, column: 27, offset: 823 } }, args: [Name { name: "Item", span: Span { start: Position { line: 17, column: 28, offset: 824 }, end: Position { line: 17, column: 32, offset: 828 } } }] } }, default: None }), Field(StructField { name: "has_next", is_mut: false, ty: Fn { params: [Name { name: "Self", span: Span { start: Position { line: 18, column: 16, offset: 846 }, end: Position { line: 18, column: 20, offset: 850 } } }], return_type: Name { name: "Bool", span: Span { start: Position { line: 18, column: 25, offset: 855 }, end: Position { line: 18, column: 29, offset: 859 } } } }, default: None })] }
+  fn Container(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["Item"]
+    type_decl Struct { body: [Field(StructField { name: "IteratorType", is_mut: false, ty: Generic { name: "Iterator", name_span: Span { start: Position { line: 21, column: 19, offset: 916 }, end: Position { line: 21, column: 27, offset: 924 } }, args: [Name { name: "Item", span: Span { start: Position { line: 21, column: 28, offset: 925 }, end: Position { line: 21, column: 32, offset: 929 } } }] }, default: None }), Field(StructField { name: "iter", is_mut: false, ty: Fn { params: [Name { name: "Self", span: Span { start: Position { line: 22, column: 12, offset: 943 }, end: Position { line: 22, column: 16, offset: 947 } } }], return_type: Name { name: "IteratorType", span: Span { start: Position { line: 22, column: 21, offset: 952 }, end: Position { line: 22, column: 33, offset: 964 } } } }, default: None })] }
+  fn main() -> Void
+    locals_total=3
+    Load %0 <- bool(true)
+    Load %1 <- string("associated type member resolves within its own body")
+    Call %2 <- string("std.assert.assert") [%0, %1] (def=d0)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

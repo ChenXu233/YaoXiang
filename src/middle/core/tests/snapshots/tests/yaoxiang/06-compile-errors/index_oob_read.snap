@@ -1,0 +1,21 @@
+module
+  fn main() -> Void
+    slot[0] items : Int(64) @depth1
+    locals_total=7
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(3)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %3 <- %0
+    Load %4 <- int(5)
+    LoadIndex %2 <- %3[%4]
+    Call %1 <- string("std.io.println") [%2] (def=d0)
+    Ret %1
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

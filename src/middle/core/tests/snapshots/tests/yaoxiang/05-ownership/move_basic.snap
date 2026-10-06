@@ -1,0 +1,17 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 142 }, end: Position { line: 7, column: 23, offset: 145 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 150 }, end: Position { line: 7, column: 31, offset: 153 } } }, default: None })] }
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] p2 : Int(64) @depth1
+    locals_total=5
+    Load %0 <- int(1)
+    Load %1 <- int(2)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %0 <- %2
+    Load %3 <- bool(true)
+    Load %4 <- string("move completed — p2 should own the value")
+    Call %1 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Ret %1
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,85 @@
+module
+  fn main() -> Void
+    slot[0] t : Int(64) @depth1
+    slot[1] ts : Int(64) @depth1
+    slot[2] ts2 : Int(64) @depth1
+    locals_total=10
+    Call %0 <- string("std.time.now") [] (def=d0)
+    Load %1 <- %0
+    Call %2 <- string("std.time.datetime_year") [%1] (def=d1)
+    Load %3 <- int(2020)
+    Ge %4 <- %2, %3
+    Load %5 <- string("now() flows into accessors")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Load %1 <- %0
+    Load %5 <- string("%Y-%m")
+    Call %2 <- string("std.time.format_time") [%1, %5] (def=d3)
+    Load %3 <- string("")
+    Ne %4 <- %2, %3
+    Load %7 <- string("now() flows into format_time")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d2)
+    Load %4 <- string("%d/%m/%Y")
+    Load %2 <- string("15/01/2024")
+    Call %6 <- string("std.time.parse_time") [%4, %2] (def=d4)
+    Load %3 <- %6
+    Load %1 <- int(1705276800)
+    Eq %2 <- %3, %1
+    Load %5 <- string("parse_time honors fmt")
+    Call %4 <- string("std.assert.assert") [%2, %5] (def=d2)
+    Load %5 <- %6
+    Load %7 <- string("%Y-%m-%d")
+    Call %3 <- string("std.time.format_time") [%5, %7] (def=d3)
+    Load %1 <- string("2024-01-15")
+    Eq %2 <- %3, %1
+    Load %8 <- string("roundtrip")
+    Call %4 <- string("std.assert.assert") [%2, %8] (def=d2)
+    Load %2 <- string("%Y-%m-%dT%H:%M:%S")
+    Load %3 <- string("2024-01-15T10:30:00")
+    Call %4 <- string("std.time.parse_time") [%2, %3] (def=d4)
+    Load %7 <- %4
+    Load %8 <- string("%H:%M:%S")
+    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
+    Load %5 <- string("10:30:00")
+    Eq %3 <- %1, %5
+    Load %9 <- string("ISO with fmt")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
+    Load %7 <- int(0)
+    Load %8 <- string("%Y-%m-%d")
+    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
+    Load %5 <- string("1970-01-01")
+    Eq %3 <- %1, %5
+    Load %9 <- string("epoch")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
+    Load %7 <- int(951782400)
+    Load %8 <- string("%Y-%m-%d")
+    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
+    Load %5 <- string("2000-02-29")
+    Eq %3 <- %1, %5
+    Load %9 <- string("leap day")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
+    Load %7 <- int(1705276800)
+    Load %8 <- string("%Y-%m-%d")
+    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
+    Load %5 <- string("2024-01-15")
+    Eq %3 <- %1, %5
+    Load %9 <- string("2024")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
+    Load %7 <- int(1735689600)
+    Load %8 <- string("%Y-%m-%d")
+    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
+    Load %5 <- string("2025-01-01")
+    Eq %3 <- %1, %5
+    Load %9 <- string("2025")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
+    Load %7 <- int(1583020800)
+    Load %8 <- string("%Y-%m-%d")
+    Call %1 <- string("std.time.format_time") [%7, %8] (def=d3)
+    Load %5 <- string("2020-03-01")
+    Eq %3 <- %1, %5
+    Load %9 <- string("2020")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
+    Load %3 <- string("time semantics ok")
+    Call %2 <- string("std.io.println") [%3] (def=d5)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,16 @@
+module
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] c : Int(64) @depth1
+    locals_total=5
+    Load %0 <- int(1)
+    Load %1 <- int(0)
+    Load %2 <- %0
+    Load %3 <- %1
+    Div %4 <- %2, %3
+    Load %3 <- %4
+    Call %2 <- string("std.io.println") [%3] (def=d0)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

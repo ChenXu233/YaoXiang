@@ -1,0 +1,138 @@
+module
+  fn Entry(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }, MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["K", "V"]
+    type_decl Struct { body: [Field(StructField { name: "key", is_mut: false, ty: Name { name: "K", span: Span { start: Position { line: 16, column: 10, offset: 572 }, end: Position { line: 16, column: 11, offset: 573 } } }, default: None }), Field(StructField { name: "value", is_mut: false, ty: Name { name: "V", span: Span { start: Position { line: 17, column: 12, offset: 586 }, end: Position { line: 17, column: 13, offset: 587 } } }, default: None })] }
+  fn Box(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["T"]
+    type_decl Struct { body: [Field(StructField { name: "inner", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 22, column: 12, offset: 670 }, end: Position { line: 22, column: 13, offset: 671 } } }, default: None })] }
+  fn twice(Fn { params: [TypeRef("T")], return_type: TypeRef("T") }, TypeRef("T")) -> TypeRef("T")
+    generic_params: ["T"]
+    slot[0] f : Int(64) @depth1
+    slot[1] x : Int(64) @depth1
+    locals_total=8
+    Load %0 <- %1
+    Load %2 <- %3
+    CallDyn %4 <- %2 [%0]
+    Load %5 <- %3
+    CallDyn %6 <- %5 [%4]
+    Ret %6
+    Ret
+  fn identity(TypeRef("T")) -> TypeRef("T")
+    generic_params: ["T"]
+    slot[0] x : Int(64) @depth1
+    locals_total=3
+    Load %0 <- %1
+    Ret %0
+    Ret
+  fn main() -> Void
+    slot[0] e : Int(64) @depth1
+    slot[1] e2 : Int(64) @depth1
+    slot[2] b : Int(64) @depth1
+    slot[3] holder : Int(64) @depth1
+    slot[4] r : Int(64) @depth1
+    slot[5] nums : Int(64) @depth1
+    slot[6] moved : Int(64) @depth1
+    locals_total=13
+    Load %0 <- int(1)
+    Load %1 <- string("one")
+    Call %2 <- string("Entry") [%0, %1] (def=d0)
+    Load %3 <- %2
+    LoadField %4 <- %3.0
+    Load %5 <- int(1)
+    Eq %1 <- %4, %5
+    Load %6 <- string("Entry(Int, String).key == 1")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d1)
+    Load %3 <- %2
+    LoadField %4 <- %3.1
+    Load %5 <- string("one")
+    Eq %1 <- %4, %5
+    Load %6 <- string("Entry(Int, String).value == one")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d1)
+    Load %1 <- string("flag")
+    Load %4 <- bool(true)
+    Call %0 <- string("Entry") [%1, %4] (def=d0)
+    Load %6 <- %0
+    LoadField %5 <- %6.0
+    Load %3 <- string("flag")
+    Eq %4 <- %5, %3
+    Load %7 <- string("Entry(String, Bool).key")
+    Call %1 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %5 <- %0
+    LoadField %4 <- %5.1
+    Load %3 <- string("Entry(String, Bool).value == true")
+    Call %1 <- string("std.assert.assert") [%4, %3] (def=d1)
+    AllocArray %4 size=int(3), elem=int(1)
+    Load %5 <- int(1)
+    Load %3 <- int(0)
+    StoreIndex %4[%3] <- %5
+    Load %6 <- int(2)
+    Load %7 <- int(1)
+    StoreIndex %4[%7] <- %6
+    Load %8 <- int(3)
+    Load %9 <- int(2)
+    StoreIndex %4[%9] <- %8
+    Call %1 <- string("Box") [%4] (def=d2)
+    Load %5 <- %1
+    LoadField %4 <- %5.0
+    Load %8 <- %4
+    StringLength %6 <- %8
+    Load %7 <- int(3)
+    Eq %3 <- %6, %7
+    Load %9 <- string("Box(Vec(Int)).inner len == 3")
+    Call %5 <- string("std.assert.assert") [%3, %9] (def=d1)
+    Load %8 <- %4
+    Load %9 <- int(0)
+    LoadIndex %6 <- %8[%9]
+    Load %7 <- int(1)
+    Eq %3 <- %6, %7
+    Load %10 <- string("Box.inner first == 1")
+    Call %5 <- string("std.assert.assert") [%3, %10] (def=d1)
+    MakeClosure %3 <- closure_0 env=[] (def=d3)
+    Load %6 <- int(5)
+    Call %5 <- string("twice") [%3, %6] (def=d4)
+    Load %7 <- %5
+    Load %8 <- int(7)
+    Eq %6 <- %7, %8
+    Load %9 <- string("twice(x => x + 1, 5) == 7")
+    Call %3 <- string("std.assert.assert") [%6, %9] (def=d1)
+    AllocArray %3 size=int(2), elem=int(1)
+    Load %6 <- int(9)
+    Load %7 <- int(0)
+    StoreIndex %3[%7] <- %6
+    Load %8 <- int(8)
+    Load %9 <- int(1)
+    StoreIndex %3[%9] <- %8
+    Load %7 <- %3
+    Call %6 <- string("identity") [%7] (def=d5)
+    Load %11 <- %6
+    StringLength %9 <- %11
+    Load %10 <- int(2)
+    Eq %8 <- %9, %10
+    Load %12 <- string("identity([9, 8]) len == 2")
+    Call %7 <- string("std.assert.assert") [%8, %12] (def=d1)
+    Load %11 <- int(1)
+    Call %9 <- string("identity") [%11] (def=d5)
+    Load %10 <- int(1)
+    Eq %8 <- %9, %10
+    Load %12 <- string("identity Int")
+    Call %7 <- string("std.assert.assert") [%8, %12] (def=d1)
+    Load %11 <- string("s")
+    Call %9 <- string("identity") [%11] (def=d5)
+    Load %10 <- string("s")
+    Eq %8 <- %9, %10
+    Load %12 <- string("identity String")
+    Call %7 <- string("std.assert.assert") [%8, %12] (def=d1)
+    Load %9 <- bool(true)
+    Call %8 <- string("identity") [%9] (def=d5)
+    Load %10 <- string("identity Bool")
+    Call %7 <- string("std.assert.assert") [%8, %10] (def=d1)
+    Ret %7
+  fn closure_0(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=11
+    Load %0 <- %1
+    Load %2 <- int(1)
+    Add %3 <- %0, %2
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

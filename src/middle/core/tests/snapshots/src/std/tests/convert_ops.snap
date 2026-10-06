@@ -1,0 +1,50 @@
+module
+  fn main() -> Void
+    slot[0] s_list : Int(64) @depth1
+    slot[1] s_dict : Int(64) @depth1
+    locals_total=8
+    Load %0 <- int(42)
+    Call %1 <- string("std.convert.to_string") [%0] (def=d0)
+    Load %2 <- string("42")
+    Eq %3 <- %1, %2
+    Load %4 <- string("int to_string")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- bool(true)
+    Call %1 <- string("std.convert.to_string") [%0] (def=d0)
+    Load %2 <- string("true")
+    Eq %3 <- %1, %2
+    Load %4 <- string("bool to_string")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- bool(false)
+    Call %1 <- string("std.convert.to_string") [%0] (def=d0)
+    Load %2 <- string("false")
+    Eq %3 <- %1, %2
+    Load %4 <- string("bool false to_string")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    AllocArray %3 size=int(3), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %3[%2] <- %1
+    Load %0 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %3[%4] <- %0
+    Load %6 <- int(3)
+    Load %7 <- int(2)
+    StoreIndex %3[%7] <- %6
+    Call %5 <- string("std.convert.to_string") [%3] (def=d0)
+    Load %4 <- %5
+    Call %2 <- string("std.string.len") [%4] (def=d2)
+    Load %0 <- int(0)
+    Gt %1 <- %2, %0
+    Load %6 <- string("list to_string non-empty")
+    Call %3 <- string("std.assert.assert") [%1, %6] (def=d1)
+    Call %3 <- string("std.convert.to_string") [%1] (def=d0)
+    Load %6 <- %3
+    Call %0 <- string("std.string.len") [%6] (def=d2)
+    Load %4 <- int(0)
+    Gt %2 <- %0, %4
+    Load %7 <- string("dict to_string non-empty")
+    Call %1 <- string("std.assert.assert") [%2, %7] (def=d1)
+    Ret %1
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

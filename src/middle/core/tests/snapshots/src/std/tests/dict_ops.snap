@@ -1,0 +1,129 @@
+module
+  fn main() -> Void
+    slot[0] d : Int(64) @depth1
+    slot[1] d1 : Int(64) @depth1
+    slot[2] d2 : Int(64) @depth1
+    slot[3] ks : Int(64) @depth1
+    slot[4] vs : Int(64) @depth1
+    slot[5] m : Int(64) @depth1
+    slot[6] deleted : Int(64) @depth1
+    locals_total=16
+    Call %0 <- string("std.dict.new") [] (def=d0)
+    Load %1 <- %0
+    Load %2 <- string("a")
+    Load %3 <- int(1)
+    Call %4 <- string("std.dict.set") [%1, %2, %3] (def=d1)
+    Load %2 <- %4
+    Load %3 <- string("b")
+    Load %5 <- int(2)
+    Call %1 <- string("std.dict.set") [%2, %3, %5] (def=d1)
+    Load %6 <- %1
+    Load %7 <- string("a")
+    Call %5 <- string("std.dict.get") [%6, %7] (def=d2)
+    Load %8 <- int(1)
+    Eq %3 <- %5, %8
+    Load %9 <- string("get a == 1")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d3)
+    Load %6 <- %1
+    Load %7 <- string("b")
+    Call %5 <- string("std.dict.get") [%6, %7] (def=d2)
+    Load %8 <- int(2)
+    Eq %3 <- %5, %8
+    Load %9 <- string("get b == 2")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d3)
+    Load %5 <- %1
+    Load %8 <- string("a")
+    Call %3 <- string("std.dict.has") [%5, %8] (def=d4)
+    Load %6 <- string("has a")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d3)
+    Load %8 <- %1
+    Load %6 <- string("zzz")
+    Call %5 <- string("std.dict.has") [%8, %6] (def=d4)
+    Not %3 <- %5
+    Load %7 <- string("not has zzz")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d3)
+    Load %6 <- %1
+    Call %5 <- string("std.dict.len") [%6] (def=d5)
+    Load %8 <- int(2)
+    Eq %3 <- %5, %8
+    Load %7 <- string("len == 2")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d3)
+    Load %6 <- %1
+    Call %5 <- string("std.dict.len") [%6] (def=d5)
+    Load %8 <- int(2)
+    Eq %3 <- %5, %8
+    Load %7 <- string("len reusable")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d3)
+    Load %8 <- %1
+    Call %5 <- string("std.dict.is_empty") [%8] (def=d6)
+    Not %3 <- %5
+    Load %6 <- string("not empty")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d3)
+    Load %3 <- %1
+    Call %2 <- string("std.dict.keys") [%3] (def=d7)
+    Load %5 <- %1
+    Call %3 <- string("std.dict.values") [%5] (def=d8)
+    Load %9 <- %1
+    Call %6 <- string("std.dict.len") [%9] (def=d5)
+    Load %7 <- int(2)
+    Eq %8 <- %6, %7
+    Load %10 <- string("dict reusable after keys/values")
+    Call %5 <- string("std.assert.assert") [%8, %10] (def=d3)
+    Call %6 <- string("std.dict.new") [] (def=d0)
+    Load %7 <- string("x")
+    Load %9 <- int(10)
+    Call %8 <- string("std.dict.set") [%6, %7, %9] (def=d1)
+    Call %11 <- string("std.dict.new") [] (def=d0)
+    Load %12 <- string("y")
+    Load %13 <- int(20)
+    Call %10 <- string("std.dict.set") [%11, %12, %13] (def=d1)
+    Call %5 <- string("std.dict.merge") [%8, %10] (def=d9)
+    Load %10 <- %5
+    Load %11 <- string("x")
+    Call %7 <- string("std.dict.get") [%10, %11] (def=d2)
+    Load %9 <- int(10)
+    Eq %6 <- %7, %9
+    Load %12 <- string("merge x == 10")
+    Call %8 <- string("std.assert.assert") [%6, %12] (def=d3)
+    Load %10 <- %5
+    Load %11 <- string("y")
+    Call %7 <- string("std.dict.get") [%10, %11] (def=d2)
+    Load %9 <- int(20)
+    Eq %6 <- %7, %9
+    Load %12 <- string("merge y == 20")
+    Call %8 <- string("std.assert.assert") [%6, %12] (def=d3)
+    Load %9 <- %1
+    Load %10 <- string("nope")
+    Call %7 <- string("std.dict.has") [%9, %10] (def=d4)
+    Not %6 <- %7
+    Load %11 <- string("not has nope")
+    Call %8 <- string("std.assert.assert") [%6, %11] (def=d3)
+    Load %6 <- %1
+    Load %7 <- string("a")
+    Call %8 <- string("std.dict.has") [%6, %7] (def=d4)
+    JmpIfNot %8 -> instr(101)
+    Load %13 <- %1
+    Load %14 <- string("a")
+    Call %11 <- string("std.dict.get") [%13, %14] (def=d2)
+    Load %12 <- int(1)
+    Eq %10 <- %11, %12
+    Load %15 <- string("guarded get a == 1")
+    Call %9 <- string("std.assert.assert") [%10, %15] (def=d3)
+    Load %10 <- %1
+    Call %7 <- string("std.dict.len") [%10] (def=d5)
+    Load %9 <- int(2)
+    Eq %6 <- %7, %9
+    Load %11 <- string("dict intact after missing-get check")
+    Call %8 <- string("std.assert.assert") [%6, %11] (def=d3)
+    Load %6 <- %1
+    Load %7 <- string("a")
+    Call %8 <- string("std.dict.delete") [%6, %7] (def=d10)
+    Load %10 <- %8
+    Load %11 <- string("a")
+    Call %9 <- string("std.dict.has") [%10, %11] (def=d4)
+    Not %7 <- %9
+    Load %12 <- string("deleted has no a")
+    Call %6 <- string("std.assert.assert") [%7, %12] (def=d3)
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

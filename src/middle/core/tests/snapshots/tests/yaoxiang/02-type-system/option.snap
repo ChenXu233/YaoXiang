@@ -1,0 +1,19 @@
+module
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] w : Int(64) @depth1
+    slot[2] u : Int(64) @depth1
+    slot[3] u2 : Int(64) @depth1
+    locals_total=6
+    Load %0 <- int(42)
+    RcNew %1 <- %0
+    Load %2 <- %1
+    Call %0 <- string("std.weak.new") [%2] (def=d0)
+    Load %3 <- %0
+    Call %2 <- string("std.weak.upgrade") [%3] (def=d1)
+    Load %3 <- %2
+    Load %4 <- string("option roundtrip ok")
+    Call %5 <- string("std.io.println") [%4] (def=d2)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

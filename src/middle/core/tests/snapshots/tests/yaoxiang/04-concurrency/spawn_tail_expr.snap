@@ -1,0 +1,94 @@
+module
+  global[0] single_tail : Int(64)
+  global[1] deps_tail : Int(64)
+  global[2] nested_tail : Int(64)
+  global[3] literal_only : Int(64)
+  fn fetch_data(Generic { name: "String", args: [] }) -> Int(64)
+    slot[0] u : Int(64) @depth1
+    locals_total=2
+    Load %0 <- arg%0
+    Load %1 <- int(7)
+    Ret %1
+  fn process(Int(64), Int(64)) -> Int(64)
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %0
+    Load %3 <- %1
+    Add %4 <- %2, %3
+    Ret %4
+  fn main() -> Void
+    locals_total=5
+    Load %0 <- @0
+    Load %1 <- int(42)
+    Eq %2 <- %0, %1
+    Load %3 <- string("single tail expr should yield 42")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @1
+    Load %1 <- int(14)
+    Eq %2 <- %0, %1
+    Load %3 <- string("tail expr referencing task results should yield 14")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @2
+    Load %1 <- int(6)
+    Eq %2 <- %0, %1
+    Load %3 <- string("nested spawn tail expr should yield 6")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @3
+    Load %1 <- int(42)
+    Eq %2 <- %0, %1
+    Load %3 <- string("tail expr after stmts should yield 42")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Spawn %4 <- [] plan(groups=[], deps=[], resources=[])
+    Load %2 <- string("spawn tail expr ok")
+    Call %4 <- string("std.io.println") [%2] (def=d1)
+    Ret %4
+  init (locals=30)
+    islot[9] a : Int(64) @depth1
+    islot[11] b : Int(64) @depth1
+    islot[13] c : Int(64) @depth1
+    islot[19] inner : Int(64) @depth1
+    islot[29] x : Int(64) @depth1
+    Load %0 <- int(42)
+    Spawn %1 <- [] plan(groups=[], deps=[], resources=[])
+    Load %2 <- int(42)
+    Move %1 <- %2
+    Store @0 <- %1
+    Load %3 <- string("url1")
+    Call %4 <- string("fetch_data") [%3] (def=_)
+    Load %5 <- string("url2")
+    Call %6 <- string("fetch_data") [%5] (def=_)
+    Load %7 <- %4
+    Load %8 <- %6
+    Call %9 <- string("process") [%7, %8] (def=_)
+    Load %10 <- %9
+    Spawn %11 <- [] plan(groups=[], deps=[], resources=[])
+    Load %12 <- %9
+    Move %11 <- %12
+    Store @1 <- %11
+    Load %13 <- int(5)
+    Spawn %14 <- [] plan(groups=[], deps=[], resources=[])
+    Load %15 <- int(5)
+    Move %14 <- %15
+    Load %16 <- %14
+    Load %17 <- int(1)
+    Add %18 <- %16, %17
+    Spawn %19 <- [] plan(groups=[], deps=[], resources=[])
+    Load %20 <- %14
+    Load %21 <- int(1)
+    Add %22 <- %20, %21
+    Move %19 <- %22
+    Store @2 <- %19
+    Load %23 <- int(1)
+    Load %24 <- %23
+    Load %25 <- int(41)
+    Add %26 <- %24, %25
+    Spawn %27 <- [] plan(groups=[], deps=[], resources=[])
+    Load %28 <- %23
+    Load %29 <- int(41)
+    Add %30 <- %28, %29
+    Move %27 <- %30
+    Store @3 <- %27
+    Call %31 <- string("main") [] (def=_)

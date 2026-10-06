@@ -1,0 +1,30 @@
+module
+  fn main() -> Void
+    slot[0] data : Int(64) @depth1
+    slot[1] result : Int(64) @depth1
+    slot[2] double : Int(64) @depth2
+    slot[5] triple : Int(64) @depth2
+    locals_total=11
+    Load %0 <- int(100)
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Mul %3 <- %1, %2
+    Load %4 <- %0
+    Load %5 <- int(3)
+    Mul %6 <- %4, %5
+    Spawn %7 <- [] plan(groups=[], deps=[], resources=[])
+    Load %8 <- %3
+    Load %9 <- %6
+    NewTuple %10 <- [%8, %9]
+    Move %7 <- %10
+    Load %5 <- bool(true)
+    Load %10 <- string("spawn result captured")
+    Call %4 <- string("std.assert.assert") [%5, %10] (def=d0)
+    Load %5 <- %7
+    Call %4 <- string("std.io.println") [%5] (def=d1)
+    Load %5 <- bool(true)
+    Load %10 <- string("all passed")
+    Call %4 <- string("std.assert.assert") [%5, %10] (def=d0)
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

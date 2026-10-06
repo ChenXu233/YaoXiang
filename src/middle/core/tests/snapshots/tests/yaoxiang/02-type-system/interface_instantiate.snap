@@ -1,0 +1,43 @@
+module
+  fn Animal(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["Self"]
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 14, column: 20, offset: 652 }, end: Position { line: 14, column: 24, offset: 656 } } }, span: Span { start: Position { line: 14, column: 24, offset: 656 }, end: Position { line: 14, column: 25, offset: 657 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 14, column: 29, offset: 661 }, end: Position { line: 14, column: 35, offset: 667 } } } }, default: None }), Field(StructField { name: "age", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 15, column: 18, offset: 686 }, end: Position { line: 15, column: 22, offset: 690 } } }, span: Span { start: Position { line: 15, column: 22, offset: 690 }, end: Position { line: 15, column: 23, offset: 691 } } }], return_type: Name { name: "Int", span: Span { start: Position { line: 15, column: 27, offset: 695 }, end: Position { line: 15, column: 30, offset: 698 } } } }, default: None })] }
+  fn Dog() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 20, column: 11, offset: 767 }, end: Position { line: 20, column: 17, offset: 773 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 21, column: 5, offset: 779 }, end: Position { line: 21, column: 11, offset: 785 } }, args: [Name { name: "Dog", span: Span { start: Position { line: 21, column: 12, offset: 786 }, end: Position { line: 21, column: 15, offset: 789 } } }] })] }
+  fn Dog.speak(Ref { mutable: false, inner: TypeRef("Dog") }) -> Generic { name: "String", args: [] }
+    locals_total=2
+    Load %0 <- string("Woof")
+    Ret %0
+    Ret %0
+  fn Dog.age(Ref { mutable: false, inner: TypeRef("Dog") }) -> Int(64)
+    locals_total=2
+    Load %0 <- int(3)
+    Ret %0
+    Ret %0
+  fn main() -> Void
+    slot[0] d : Int(64) @depth1
+    locals_total=7
+    Load %0 <- string("Rex")
+    Call %1 <- string("Dog") [%0] (def=d0)
+    Load %2 <- %1
+    Call %3 <- string("Dog.speak") [%2] (def=d1)
+    Load %4 <- string("Woof")
+    Eq %5 <- %3, %4
+    Load %6 <- string("Animal.speak dispatch returns Woof")
+    Call %0 <- string("std.assert.assert") [%5, %6] (def=d2)
+    Load %2 <- %1
+    Call %3 <- string("Dog.age") [%2] (def=d3)
+    Load %4 <- int(3)
+    Eq %5 <- %3, %4
+    Load %6 <- string("Animal.age dispatch returns 3")
+    Call %0 <- string("std.assert.assert") [%5, %6] (def=d2)
+    Load %2 <- %1
+    LoadField %3 <- %2.0
+    Load %4 <- string("Rex")
+    Eq %5 <- %3, %4
+    Load %6 <- string("own field still accessible")
+    Call %0 <- string("std.assert.assert") [%5, %6] (def=d2)
+    Ret %0
+  init (locals=1)
+    islot[0] self : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,126 @@
+module
+  fn main() -> Void
+    slot[0] ranges : Int(64) @depth1
+    slot[1] total : Int(64) @depth1
+    slot[4] rg : Int(64) @depth2
+    slot[12] i : Int(64) @depth4
+    slot[13] lists : Int(64) @depth1
+    slot[14] sum : Int(64) @depth1
+    slot[17] inner : Int(64) @depth2
+    slot[22] x : Int(64) @depth4
+    slot[23] pairs : Int(64) @depth1
+    slot[27] p : Int(64) @depth2
+    locals_total=37
+    AllocArray %0 size=int(2), elem=int(1)
+    Load %1 <- int(0)
+    Load %2 <- int(3)
+    Load %3 <- int(1)
+    NewRange %4 <- %1, %2, %3
+    Load %5 <- int(0)
+    StoreIndex %0[%5] <- %4
+    Load %6 <- int(10)
+    Load %7 <- int(13)
+    Load %8 <- int(1)
+    NewRange %9 <- %6, %7, %8
+    Load %10 <- int(1)
+    StoreIndex %0[%10] <- %9
+    Load %4 <- int(0)
+    Load %1 <- %0
+    Call %2 <- string("std.list.iter") [%1] (def=d0)
+    Call %5 <- string("std.list.has_next") [%2] (def=d1)
+    JmpIfNot %5 -> instr(38)
+    Call %9 <- string("std.list.next") [%2] (def=d2)
+    Store %3 <- %9
+    Load %6 <- %3
+    Call %7 <- string("std.range.iter") [%6] (def=d3)
+    VariantTag %8 <- %7 : Result
+    Load %10 <- int(0)
+    Eq %11 <- %8, %10
+    JmpIfNot %11 -> instr(28)
+    VariantPayload %7 <- %7 : Result
+    Jmp -> instr(29)
+    Call _ <- string("std.range.abort_invalid_step") [%6] (def=d4)
+    Call %12 <- string("std.range.has_next") [%7] (def=d5)
+    JmpIfNot %12 -> instr(37)
+    Call %13 <- string("std.range.next") [%7] (def=d6)
+    Store %14 <- %13
+    Load %15 <- %4
+    Load %16 <- int(1)
+    Add %4 <- %15, %16
+    Jmp -> instr(29)
+    Jmp -> instr(16)
+    Load %15 <- %4
+    Load %16 <- int(6)
+    Eq %13 <- %15, %16
+    Load %17 <- string("nested range iteration")
+    Call %12 <- string("std.assert.assert") [%13, %17] (def=d7)
+    AllocArray %12 size=int(2), elem=int(1)
+    AllocArray %13 size=int(2), elem=int(1)
+    Load %15 <- int(1)
+    Load %16 <- int(0)
+    StoreIndex %13[%16] <- %15
+    Load %17 <- int(2)
+    Load %18 <- int(1)
+    StoreIndex %13[%18] <- %17
+    Load %19 <- int(0)
+    StoreIndex %12[%19] <- %13
+    AllocArray %20 size=int(2), elem=int(1)
+    Load %21 <- int(3)
+    Load %22 <- int(0)
+    StoreIndex %20[%22] <- %21
+    Load %23 <- int(4)
+    Load %24 <- int(1)
+    StoreIndex %20[%24] <- %23
+    Load %25 <- int(1)
+    StoreIndex %12[%25] <- %20
+    Load %13 <- int(0)
+    Load %15 <- %12
+    Call %16 <- string("std.list.iter") [%15] (def=d0)
+    Call %18 <- string("std.list.has_next") [%16] (def=d1)
+    JmpIfNot %18 -> instr(80)
+    Call %19 <- string("std.list.next") [%16] (def=d2)
+    Store %17 <- %19
+    Load %20 <- %17
+    Call %21 <- string("std.list.iter") [%20] (def=d0)
+    Call %23 <- string("std.list.has_next") [%21] (def=d1)
+    JmpIfNot %23 -> instr(79)
+    Call %24 <- string("std.list.next") [%21] (def=d2)
+    Store %22 <- %24
+    Load %25 <- %13
+    Load %26 <- %22
+    Add %13 <- %25, %26
+    Jmp -> instr(71)
+    Jmp -> instr(65)
+    Load %25 <- %13
+    Load %26 <- int(10)
+    Eq %24 <- %25, %26
+    Load %27 <- string("nested list iteration")
+    Call %23 <- string("std.assert.assert") [%24, %27] (def=d7)
+    AllocArray %23 size=int(2), elem=int(1)
+    Load %25 <- int(1)
+    Load %26 <- string("a")
+    NewTuple %24 <- [%25, %26]
+    Load %27 <- int(0)
+    StoreIndex %23[%27] <- %24
+    Load %28 <- int(2)
+    Load %29 <- string("b")
+    NewTuple %30 <- [%28, %29]
+    Load %31 <- int(1)
+    StoreIndex %23[%31] <- %30
+    Load %25 <- %23
+    Call %26 <- string("std.list.iter") [%25] (def=d0)
+    Call %30 <- string("std.list.has_next") [%26] (def=d1)
+    JmpIfNot %30 -> instr(110)
+    Call %28 <- string("std.list.next") [%26] (def=d2)
+    Store %27 <- %28
+    Load %32 <- %27
+    Load %33 <- int(0)
+    LoadIndex %34 <- %32[%33]
+    Load %35 <- int(0)
+    Gt %31 <- %34, %35
+    Load %36 <- string("tuple element index via loop var")
+    Call %29 <- string("std.assert.assert") [%31, %36] (def=d7)
+    Jmp -> instr(98)
+    Ret
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

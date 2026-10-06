@@ -1,0 +1,92 @@
+module
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] c : Int(64) @depth1
+    slot[3] d : Int(64) @depth1
+    slot[4] e : Int(64) @depth1
+    slot[5] gt : Int(64) @depth1
+    slot[6] lt : Int(64) @depth1
+    slot[7] eq : Int(64) @depth1
+    slot[8] ne : Int(64) @depth1
+    slot[9] result : Int(64) @depth1
+    locals_total=16
+    Load %0 <- int(10)
+    Load %1 <- int(20)
+    Add %2 <- %0, %1
+    Load %3 <- %2
+    Load %4 <- int(30)
+    Eq %1 <- %3, %4
+    Load %5 <- string("10 + 20 == 30")
+    Call %0 <- string("std.assert.assert") [%1, %5] (def=d0)
+    Load %1 <- int(100)
+    Load %3 <- int(30)
+    Sub %0 <- %1, %3
+    Load %4 <- %0
+    Load %5 <- int(70)
+    Eq %3 <- %4, %5
+    Load %6 <- string("100 - 30 == 70")
+    Call %1 <- string("std.assert.assert") [%3, %6] (def=d0)
+    Load %3 <- int(6)
+    Load %4 <- int(7)
+    Mul %1 <- %3, %4
+    Load %5 <- %1
+    Load %6 <- int(42)
+    Eq %4 <- %5, %6
+    Load %7 <- string("6 * 7 == 42")
+    Call %3 <- string("std.assert.assert") [%4, %7] (def=d0)
+    Load %4 <- int(42)
+    Load %5 <- int(2)
+    Div %3 <- %4, %5
+    Load %6 <- %3
+    Load %7 <- int(21)
+    Eq %5 <- %6, %7
+    Load %8 <- string("42 / 2 == 21")
+    Call %4 <- string("std.assert.assert") [%5, %8] (def=d0)
+    Load %5 <- int(10)
+    Load %6 <- int(3)
+    Mod %4 <- %5, %6
+    Load %7 <- %4
+    Load %8 <- int(1)
+    Eq %6 <- %7, %8
+    Load %9 <- string("10 % 3 == 1")
+    Call %5 <- string("std.assert.assert") [%6, %9] (def=d0)
+    Load %6 <- int(5)
+    Load %7 <- int(3)
+    Gt %5 <- %6, %7
+    Load %7 <- %5
+    Load %8 <- string("5 > 3")
+    Call %6 <- string("std.assert.assert") [%7, %8] (def=d0)
+    Load %7 <- int(3)
+    Load %8 <- int(5)
+    Lt %6 <- %7, %8
+    Load %8 <- %6
+    Load %9 <- string("3 < 5")
+    Call %7 <- string("std.assert.assert") [%8, %9] (def=d0)
+    Load %8 <- int(42)
+    Load %9 <- int(42)
+    Eq %7 <- %8, %9
+    Load %9 <- %7
+    Load %10 <- string("42 == 42")
+    Call %8 <- string("std.assert.assert") [%9, %10] (def=d0)
+    Load %9 <- int(42)
+    Load %10 <- int(0)
+    Ne %8 <- %9, %10
+    Load %10 <- %8
+    Load %11 <- string("42 != 0")
+    Call %9 <- string("std.assert.assert") [%10, %11] (def=d0)
+    Load %12 <- int(10)
+    Load %13 <- int(20)
+    Add %14 <- %12, %13
+    Load %15 <- int(2)
+    Mul %10 <- %14, %15
+    Load %11 <- int(5)
+    Sub %9 <- %10, %11
+    Load %14 <- %9
+    Load %15 <- int(55)
+    Eq %11 <- %14, %15
+    Load %12 <- string("(10+20)*2-5 == 55")
+    Call %10 <- string("std.assert.assert") [%11, %12] (def=d0)
+    Ret %10
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

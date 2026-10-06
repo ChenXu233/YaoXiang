@@ -1,0 +1,56 @@
+module
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    locals_total=9
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- int(10)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(20)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(30)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %5 <- %0
+    Load %6 <- int(0)
+    LoadIndex %3 <- %5[%6]
+    Load %4 <- int(10)
+    Eq %2 <- %3, %4
+    Load %7 <- string("bare literal stays List")
+    Call %1 <- string("std.assert.assert") [%2, %7] (def=d0)
+    Load %5 <- %0
+    Load %6 <- int(2)
+    LoadIndex %3 <- %5[%6]
+    Load %4 <- int(30)
+    Eq %2 <- %3, %4
+    Load %7 <- string("bare literal List index")
+    Call %1 <- string("std.assert.assert") [%2, %7] (def=d0)
+    Load %2 <- int(40)
+    Load %3 <- int(50)
+    Load %4 <- int(60)
+    AllocFixedArray %1 count=3
+    Load %5 <- int(0)
+    StoreIndex %1[%5] <- %2
+    Load %6 <- int(1)
+    StoreIndex %1[%6] <- %3
+    Load %7 <- int(2)
+    StoreIndex %1[%7] <- %4
+    Load %6 <- %1
+    Load %7 <- int(1)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(50)
+    Eq %3 <- %4, %5
+    Load %8 <- string("annotated literal becomes Array")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d0)
+    Load %6 <- %1
+    Load %7 <- int(0)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(40)
+    Eq %3 <- %4, %5
+    Load %8 <- string("Array index read")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d0)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

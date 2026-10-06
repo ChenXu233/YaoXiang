@@ -1,0 +1,51 @@
+module
+  fn f(Int(64)) -> Fn { params: [Int(64)], return_type: Int(64) }
+    locals_total=2
+    MakeClosure %0 <- __f_l0 env=[%1] (def=d0)
+    Ret %0
+  fn g(Int(64)) -> Fn { params: [TypeRef("N")], return_type: Int(64) }
+    generic_params: ["N"]
+    locals_total=2
+    MakeClosure %0 <- __g_l0 env=[%1] (def=d1)
+    Ret %0
+  fn main() -> Void
+    slot[0] r1 : Int(64) @depth1
+    slot[1] r2 : Int(64) @depth1
+    locals_total=7
+    Load %0 <- int(5)
+    Load %1 <- int(10)
+    Call %2 <- string("f") [%1] (def=d2)
+    CallDyn %3 <- %2 [%0]
+    Load %1 <- %3
+    Load %4 <- int(15)
+    Eq %2 <- %1, %4
+    Load %5 <- string("f(10)(5) should be 15")
+    Call %0 <- string("std.assert.assert") [%2, %5] (def=d3)
+    Load %2 <- int(4)
+    Load %4 <- int(7)
+    Call %1 <- string("g") [%4] (def=d4)
+    CallDyn %0 <- %1 [%2]
+    Load %4 <- %0
+    Load %5 <- int(8)
+    Eq %1 <- %4, %5
+    Load %6 <- string("g(7)(4) should be 8")
+    Call %2 <- string("std.assert.assert") [%1, %6] (def=d3)
+    Ret %2
+  fn __f_l0(Int(64)) -> Int(64)
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    locals_total=5
+    Load %0 <- %1
+    Load %2 <- %3
+    Add %4 <- %0, %2
+    Ret %4
+  fn __g_l0(TypeRef("N")) -> Int(64)
+    slot[0] N : Int(64) @depth1
+    slot[1] n : Int(64) @depth1
+    locals_total=5
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Mul %3 <- %0, %2
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

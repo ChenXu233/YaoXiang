@@ -1,0 +1,140 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 9, column: 8, offset: 253 }, end: Position { line: 9, column: 13, offset: 258 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 10, column: 8, offset: 267 }, end: Position { line: 10, column: 13, offset: 272 } } }, default: None }), Expr(Generic { name: "Add", name_span: Span { start: Position { line: 11, column: 5, offset: 278 }, end: Position { line: 11, column: 8, offset: 281 } }, args: [Name { name: "Point", span: Span { start: Position { line: 11, column: 9, offset: 282 }, end: Position { line: 11, column: 14, offset: 287 } } }, Name { name: "Point", span: Span { start: Position { line: 11, column: 16, offset: 289 }, end: Position { line: 11, column: 21, offset: 294 } } }, Name { name: "Point", span: Span { start: Position { line: 11, column: 23, offset: 296 }, end: Position { line: 11, column: 28, offset: 301 } } }] }), Expr(Generic { name: "Multiply", name_span: Span { start: Position { line: 12, column: 5, offset: 308 }, end: Position { line: 12, column: 13, offset: 316 } }, args: [Name { name: "Point", span: Span { start: Position { line: 12, column: 14, offset: 317 }, end: Position { line: 12, column: 19, offset: 322 } } }, Name { name: "Float", span: Span { start: Position { line: 12, column: 21, offset: 324 }, end: Position { line: 12, column: 26, offset: 329 } } }, Name { name: "Point", span: Span { start: Position { line: 12, column: 28, offset: 331 }, end: Position { line: 12, column: 33, offset: 336 } } }] })] }
+  fn Point.add(Ref { mutable: false, inner: TypeRef("Point") }, Ref { mutable: false, inner: TypeRef("Point") }) -> TypeRef("Point")
+    locals_total=13
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Load %3 <- %4
+    LoadField %5 <- %3.0
+    Add %6 <- %2, %5
+    Load %7 <- %1
+    LoadField %8 <- %7.1
+    Load %9 <- %4
+    LoadField %10 <- %9.1
+    Add %11 <- %8, %10
+    Call %12 <- string("Point") [%6, %11] (def=d0)
+    Ret %12
+    Ret %12
+  fn Point.multiply(Ref { mutable: false, inner: TypeRef("Point") }, Ref { mutable: false, inner: Float(64) }) -> TypeRef("Point")
+    locals_total=11
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Load %3 <- %4
+    Mul %5 <- %2, %3
+    Load %6 <- %1
+    LoadField %7 <- %6.1
+    Load %8 <- %4
+    Mul %9 <- %7, %8
+    Call %10 <- string("Point") [%5, %9] (def=d0)
+    Ret %10
+    Ret %10
+  fn combine(TypeRef("<const-expr>")) -> Fn { params: [TypeRef("T"), TypeRef("T"), TypeRef("T")], return_type: TypeRef("T") }
+    slot[0] T : Int(64) @depth1
+    locals_total=2
+    Load %0 <- arg%0
+    MakeClosure %1 <- closure_0 env=[] (def=d1)
+    Ret %1
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] c : Int(64) @depth1
+    slot[3] d : Int(64) @depth1
+    slot[4] e : Int(64) @depth1
+    locals_total=15
+    Load %0 <- int(1)
+    Load %1 <- float(4612811918334230528)
+    Add %2 <- %0, %1
+    Load %3 <- float(4615063718147915776)
+    Eq %4 <- %2, %3
+    Load %5 <- string("1 + 2.5 == 3.5")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Load %0 <- float(4612811918334230528)
+    Load %1 <- int(1)
+    Add %2 <- %0, %1
+    Load %3 <- float(4615063718147915776)
+    Eq %4 <- %2, %3
+    Load %5 <- string("2.5 + 1 == 3.5")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Load %0 <- int(7)
+    Load %1 <- float(4612811918334230528)
+    Sub %2 <- %0, %1
+    Load %3 <- float(4616752568008179712)
+    Eq %4 <- %2, %3
+    Load %5 <- string("7 - 2.5 == 4.5")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Load %0 <- int(3)
+    Load %1 <- float(4609434218613702656)
+    Mul %2 <- %0, %1
+    Load %3 <- float(4616752568008179712)
+    Eq %4 <- %2, %3
+    Load %5 <- string("3 * 1.5 == 4.5")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Load %4 <- float(4607182418800017408)
+    Load %2 <- float(4611686018427387904)
+    Call %6 <- string("Point") [%4, %2] (def=d0)
+    Load %2 <- float(4613937818241073152)
+    Load %3 <- float(4616189618054758400)
+    Call %4 <- string("Point") [%2, %3] (def=d0)
+    Load %3 <- %6
+    Load %0 <- %4
+    Call %2 <- string("Point.add") [%3, %0] (def=d3)
+    Load %7 <- %2
+    LoadField %5 <- %7.0
+    Load %8 <- float(4616189618054758400)
+    Eq %1 <- %5, %8
+    JmpIfNot %1 -> instr(47)
+    Load %9 <- %2
+    LoadField %10 <- %9.1
+    Load %11 <- float(4618441417868443648)
+    Eq %0 <- %10, %11
+    Jmp -> instr(48)
+    Load %0 <- bool(false)
+    Load %12 <- string("Point + Point")
+    Call %3 <- string("std.assert.assert") [%0, %12] (def=d2)
+    Load %0 <- %6
+    Load %1 <- float(4613937818241073152)
+    Call %3 <- string("Point.multiply") [%0, %1] (def=d4)
+    Load %10 <- %3
+    LoadField %8 <- %10.0
+    Load %7 <- float(4613937818241073152)
+    Eq %5 <- %8, %7
+    JmpIfNot %5 -> instr(63)
+    Load %12 <- %3
+    LoadField %11 <- %12.1
+    Load %9 <- float(4618441417868443648)
+    Eq %1 <- %11, %9
+    Jmp -> instr(64)
+    Load %1 <- bool(false)
+    Load %13 <- string("Point * Float scaling")
+    Call %0 <- string("std.assert.assert") [%1, %13] (def=d2)
+    Load %8 <- %6
+    Load %7 <- %4
+    Call %1 <- string("Point.add") [%8, %7] (def=d3)
+    Load %5 <- %6
+    Call %0 <- string("Point.add") [%1, %5] (def=d3)
+    Load %11 <- %0
+    LoadField %7 <- %11.0
+    Load %10 <- float(4617315517961601024)
+    Eq %8 <- %7, %10
+    JmpIfNot %8 -> instr(81)
+    Load %13 <- %0
+    LoadField %9 <- %13.1
+    Load %12 <- float(4620693217682128896)
+    Eq %5 <- %9, %12
+    Jmp -> instr(82)
+    Load %5 <- bool(false)
+    Load %14 <- string("chained Point + Point")
+    Call %1 <- string("std.assert.assert") [%5, %14] (def=d2)
+    Ret %1
+  fn closure_0(TypeRef("T"), TypeRef("T"), TypeRef("T")) -> Void
+    slot[0] a : Int(64) @depth2
+    slot[1] b : Int(64) @depth2
+    slot[2] c : Int(64) @depth2
+    locals_total=5
+    Load %0 <- %1
+    Ret %0
+  init (locals=2)
+    islot[0] self : Int(64) @depth1
+    islot[1] other : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

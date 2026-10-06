@@ -1,0 +1,65 @@
+module
+  fn gt(Int(64)) -> Fn { params: [Int(64)], return_type: Bool }
+    locals_total=2
+    MakeClosure %0 <- __gt_l0 env=[%1] (def=d0)
+    Ret %0
+  fn make_adder(Int(64)) -> Fn { params: [Int(64)], return_type: Int(64) }
+    locals_total=2
+    MakeClosure %0 <- __make_adder_l0 env=[%1] (def=d1)
+    Ret %0
+  fn main() -> Void
+    slot[0] add5 : Int(64) @depth1
+    slot[1] evens : Int(64) @depth1
+    locals_total=13
+    Load %0 <- int(5)
+    Call %1 <- string("make_adder") [%0] (def=d2)
+    Load %2 <- int(3)
+    Load %3 <- %1
+    CallDyn %4 <- %3 [%2]
+    Load %5 <- int(8)
+    Eq %6 <- %4, %5
+    Load %7 <- string("make_adder(5)(3) == 8")
+    Call %0 <- string("std.assert.assert") [%6, %7] (def=d3)
+    AllocArray %6 size=int(4), elem=int(1)
+    Load %4 <- int(1)
+    Load %5 <- int(0)
+    StoreIndex %6[%5] <- %4
+    Load %2 <- int(6)
+    Load %3 <- int(1)
+    StoreIndex %6[%3] <- %2
+    Load %7 <- int(3)
+    Load %8 <- int(2)
+    StoreIndex %6[%8] <- %7
+    Load %9 <- int(8)
+    Load %10 <- int(3)
+    StoreIndex %6[%10] <- %9
+    Load %11 <- int(5)
+    Call %12 <- string("gt") [%11] (def=d4)
+    Call %0 <- string("std.list.filter") [%6, %12] (def=d5)
+    Load %3 <- %0
+    Call %5 <- string("std.list.len") [%3] (def=d6)
+    Load %2 <- int(2)
+    Eq %4 <- %5, %2
+    Load %7 <- string("gt(5) 谓词 filter 保留 6,8")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d3)
+    Ret %6
+  fn __gt_l0(Int(64)) -> Bool
+    slot[0] t : Int(64) @depth1
+    slot[1] x : Int(64) @depth1
+    locals_total=6
+    Load %0 <- %1
+    Load %2 <- %3
+    Gt %4 <- %0, %2
+    Ret %4
+    Ret
+  fn __make_adder_l0(Int(64)) -> Int(64)
+    slot[0] n : Int(64) @depth1
+    slot[1] x : Int(64) @depth1
+    locals_total=6
+    Load %0 <- %1
+    Load %2 <- %3
+    Add %4 <- %0, %2
+    Ret %4
+    Ret
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

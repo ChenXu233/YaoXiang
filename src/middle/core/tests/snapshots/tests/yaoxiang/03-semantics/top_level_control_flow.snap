@@ -1,0 +1,65 @@
+module
+  global[0] i : Int(64)
+  global[1] sum : Int(64)
+  global[2] flag : Bool
+  init (locals=25)
+    islot[24] n : Int(64) @depth1
+    Load %0 <- int(0)
+    Store @0 <- %0
+    Load %1 <- int(0)
+    Store @1 <- %1
+    Load %2 <- bool(true)
+    Store @2 <- %2
+    Load %3 <- void
+    Load %4 <- @0
+    Load %5 <- int(3)
+    Lt %6 <- %4, %5
+    JmpIfNot %6 -> instr(16)
+    Load %7 <- @0
+    Load %8 <- int(1)
+    Add %9 <- %7, %8
+    Store @0 <- %9
+    Jmp -> instr(7)
+    Load %10 <- @0
+    Load %11 <- int(3)
+    Eq %12 <- %10, %11
+    Load %13 <- string("顶层 while 回跳正确")
+    Call %14 <- string("std.assert.assert") [%12, %13] (def=_)
+    AllocArray %15 size=int(4), elem=int(1)
+    Load %16 <- int(1)
+    Load %17 <- int(0)
+    StoreIndex %15[%17] <- %16
+    Load %18 <- int(2)
+    Load %19 <- int(1)
+    StoreIndex %15[%19] <- %18
+    Load %20 <- int(3)
+    Load %21 <- int(2)
+    StoreIndex %15[%21] <- %20
+    Load %22 <- int(4)
+    Load %23 <- int(3)
+    StoreIndex %15[%23] <- %22
+    Call %24 <- string("std.list.iter") [%15] (def=_)
+    Call %25 <- string("std.list.has_next") [%24] (def=_)
+    JmpIfNot %25 -> instr(44)
+    Call %26 <- string("std.list.next") [%24] (def=_)
+    Store %27 <- %26
+    Load %28 <- @1
+    Load %29 <- %27
+    Add %30 <- %28, %29
+    Store @1 <- %30
+    Jmp -> instr(35)
+    Load %30 <- @1
+    Load %28 <- int(10)
+    Eq %26 <- %30, %28
+    Load %29 <- string("顶层 for 遍历完整")
+    Call %25 <- string("std.assert.assert") [%26, %29] (def=_)
+    Load %31 <- @2
+    JmpIfNot %31 -> instr(54)
+    Load %32 <- string("顶层 if 分支")
+    Call %33 <- string("std.io.println") [%32] (def=_)
+    Jmp -> instr(57)
+    Load %26 <- bool(false)
+    Load %30 <- string("不应走 else")
+    Call %25 <- string("std.assert.assert") [%26, %30] (def=_)
+    Load %26 <- string("top_level_control_flow ok")
+    Call %25 <- string("std.io.println") [%26] (def=_)

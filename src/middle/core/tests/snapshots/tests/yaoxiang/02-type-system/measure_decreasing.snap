@@ -1,0 +1,34 @@
+module
+  fn NonNegative(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Ge, left: Var("x", Span { start: Position { line: 13, column: 35, offset: 678 }, end: Position { line: 13, column: 36, offset: 679 } }), right: Lit(Int(0), Span { start: Position { line: 13, column: 40, offset: 683 }, end: Position { line: 13, column: 41, offset: 684 } }), span: Span { start: Position { line: 13, column: 37, offset: 680 }, end: Position { line: 13, column: 39, offset: 682 } } }))] }
+  fn countdown(Int(64), Generic { name: "NonNegative", args: [TypeRef("b")] }) -> Generic { name: "Terminates", args: [TypeRef("b")] }
+    slot[0] n : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    locals_total=7
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %1
+    Load %3 <- int(0)
+    Eq %4 <- %2, %3
+    JmpIfNot %4 -> instr(8)
+    Load %5 <- %0
+    Ret %5
+    Load %2 <- %0
+    Load %5 <- %1
+    Load %6 <- int(1)
+    Sub %3 <- %5, %6
+    Call %4 <- string("countdown") [%2, %3] (def=d0)
+    Ret %4
+    Ret %4
+  fn main() -> Void
+    locals_total=7
+    Load %0 <- int(7)
+    Load %1 <- int(3)
+    Call %2 <- string("countdown") [%0, %1] (def=d0)
+    Load %3 <- int(7)
+    Eq %4 <- %2, %3
+    Load %5 <- string("countdown(7, 3) == 7（零边界返回 n）")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

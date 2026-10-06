@@ -1,0 +1,389 @@
+module
+  fn check_scalar_parse() -> Void
+    slot[0] r : Int(64) @depth1
+    slot[1] r2 : Int(64) @depth1
+    slot[2] rn : Int(64) @depth1
+    slot[3] rt : Int(64) @depth1
+    slot[4] rnull : Int(64) @depth1
+    slot[5] rstr : Int(64) @depth1
+    slot[6] rtrail : Int(64) @depth1
+    locals_total=11
+    Load %0 <- string("{\"s\": \"you\", \"i\": 42, \"f\": 2.5, \"t\": true, \"n\": null, \"a\": [1, \"x\"]}")
+    Call %1 <- string("std.json.parse") [%0] (def=d0)
+    Load %2 <- %1
+    Call %3 <- string("std.result.is_ok") [%2] (def=d1)
+    Load %4 <- string("composite parse ok")
+    Call %0 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %3 <- string("{\"deep\": {\"list\": [10, 20, 30]}}")
+    Call %0 <- string("std.json.parse") [%3] (def=d0)
+    Load %4 <- %0
+    Call %2 <- string("std.result.is_ok") [%4] (def=d1)
+    Load %5 <- string("nested parse ok")
+    Call %3 <- string("std.assert.assert") [%2, %5] (def=d2)
+    Load %2 <- string("-0.5")
+    Call %3 <- string("std.json.parse") [%2] (def=d0)
+    Load %5 <- %3
+    Call %4 <- string("std.result.is_ok") [%5] (def=d1)
+    Load %6 <- string("scalar number parse ok")
+    Call %2 <- string("std.assert.assert") [%4, %6] (def=d2)
+    Load %4 <- string("true")
+    Call %2 <- string("std.json.parse") [%4] (def=d0)
+    Load %6 <- %2
+    Call %5 <- string("std.result.is_ok") [%6] (def=d1)
+    Load %7 <- string("bool literal parse ok")
+    Call %4 <- string("std.assert.assert") [%5, %7] (def=d2)
+    Load %5 <- string("null")
+    Call %4 <- string("std.json.parse") [%5] (def=d0)
+    Load %7 <- %4
+    Call %6 <- string("std.result.is_ok") [%7] (def=d1)
+    Load %8 <- string("null literal parse ok")
+    Call %5 <- string("std.assert.assert") [%6, %8] (def=d2)
+    Load %6 <- string("\"plain\"")
+    Call %5 <- string("std.json.parse") [%6] (def=d0)
+    Load %8 <- %5
+    Call %7 <- string("std.result.is_ok") [%8] (def=d1)
+    Load %9 <- string("plain string parse ok")
+    Call %6 <- string("std.assert.assert") [%7, %9] (def=d2)
+    Load %7 <- string("[1, 2]")
+    Call %6 <- string("std.json.parse") [%7] (def=d0)
+    Load %9 <- %6
+    Call %8 <- string("std.result.is_ok") [%9] (def=d1)
+    Load %10 <- string("trailing whitespace tolerated")
+    Call %7 <- string("std.assert.assert") [%8, %10] (def=d2)
+    Ret %7
+  fn check_escapes() -> Void
+    slot[0] q : Int(64) @depth1
+    slot[1] bs : Int(64) @depth1
+    slot[2] esc_src : Int(64) @depth1
+    slot[3] resc : Int(64) @depth1
+    slot[4] s : Int(64) @depth1
+    locals_total=10
+    Load %0 <- int(34)
+    Call %1 <- string("std.string.from_char_code") [%0] (def=d3)
+    Call %2 <- string("std.result.unwrap") [%1] (def=d4)
+    Load %3 <- int(92)
+    Call %0 <- string("std.string.from_char_code") [%3] (def=d3)
+    Call %1 <- string("std.result.unwrap") [%0] (def=d4)
+    Load %3 <- string("{")
+    Load %4 <- %2
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- string("q")
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- %2
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- string(": ")
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- %2
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- string("a")
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- %1
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- %2
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- string("b")
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- %1
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- %1
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- string("c")
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- %2
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %3 <- %0
+    Load %4 <- string("}")
+    Call %0 <- string("std.string.concat") [%3, %4] (def=d5)
+    Load %4 <- %0
+    Call %3 <- string("std.json.parse") [%4] (def=d0)
+    Load %5 <- %3
+    Call %6 <- string("std.result.is_ok") [%5] (def=d1)
+    Load %7 <- string("escaped string parse ok")
+    Call %4 <- string("std.assert.assert") [%6, %7] (def=d2)
+    Load %5 <- %3
+    Call %6 <- string("std.result.unwrap") [%5] (def=d4)
+    Call %4 <- string("std.json.stringify") [%6] (def=d6)
+    Load %7 <- %4
+    Load %8 <- %1
+    Call %5 <- string("std.string.contains") [%7, %8] (def=d7)
+    Load %9 <- string("stringify re-escapes quote/backslash")
+    Call %6 <- string("std.assert.assert") [%5, %9] (def=d2)
+    Ret %6
+  fn check_unicode() -> Void
+    slot[0] q : Int(64) @depth1
+    slot[1] bs : Int(64) @depth1
+    slot[2] u : Int(64) @depth1
+    slot[3] d : Int(64) @depth1
+    slot[4] d8 : Int(64) @depth1
+    slot[5] d3 : Int(64) @depth1
+    slot[6] de : Int(64) @depth1
+    slot[7] d0 : Int(64) @depth1
+    slot[8] d9 : Int(64) @depth1
+    slot[9] hi : Int(64) @depth1
+    slot[10] lo : Int(64) @depth1
+    slot[11] bmp : Int(64) @depth1
+    slot[12] uni_src : Int(64) @depth1
+    slot[13] runi : Int(64) @depth1
+    slot[14] jv : Int(64) @depth1
+    slot[15] decoded : Int(64) @depth1
+    slot[17] s : Int(64) @depth2
+    slot[18] c0 : Int(64) @depth1
+    slot[19] c1 : Int(64) @depth1
+    slot[20] c2 : Int(64) @depth1
+    slot[21] lonely_src : Int(64) @depth1
+    slot[22] rlonely : Int(64) @depth1
+    locals_total=27
+    Load %0 <- int(34)
+    Call %1 <- string("std.string.from_char_code") [%0] (def=d3)
+    Call %2 <- string("std.result.unwrap") [%1] (def=d4)
+    Load %3 <- int(92)
+    Call %0 <- string("std.string.from_char_code") [%3] (def=d3)
+    Call %1 <- string("std.result.unwrap") [%0] (def=d4)
+    Load %4 <- int(117)
+    Call %3 <- string("std.string.from_char_code") [%4] (def=d3)
+    Call %0 <- string("std.result.unwrap") [%3] (def=d4)
+    Load %5 <- int(100)
+    Call %4 <- string("std.string.from_char_code") [%5] (def=d3)
+    Call %3 <- string("std.result.unwrap") [%4] (def=d4)
+    Load %6 <- int(56)
+    Call %5 <- string("std.string.from_char_code") [%6] (def=d3)
+    Call %4 <- string("std.result.unwrap") [%5] (def=d4)
+    Load %7 <- int(51)
+    Call %6 <- string("std.string.from_char_code") [%7] (def=d3)
+    Call %5 <- string("std.result.unwrap") [%6] (def=d4)
+    Load %8 <- int(101)
+    Call %7 <- string("std.string.from_char_code") [%8] (def=d3)
+    Call %6 <- string("std.result.unwrap") [%7] (def=d4)
+    Load %9 <- int(48)
+    Call %8 <- string("std.string.from_char_code") [%9] (def=d3)
+    Call %7 <- string("std.result.unwrap") [%8] (def=d4)
+    Load %10 <- int(57)
+    Call %9 <- string("std.string.from_char_code") [%10] (def=d3)
+    Call %8 <- string("std.result.unwrap") [%9] (def=d4)
+    Load %10 <- %1
+    Load %11 <- %0
+    Call %9 <- string("std.string.concat") [%10, %11] (def=d5)
+    Load %10 <- %9
+    Load %11 <- %3
+    Call %9 <- string("std.string.concat") [%10, %11] (def=d5)
+    Load %10 <- %9
+    Load %11 <- %4
+    Call %9 <- string("std.string.concat") [%10, %11] (def=d5)
+    Load %10 <- %9
+    Load %11 <- %5
+    Call %9 <- string("std.string.concat") [%10, %11] (def=d5)
+    Load %10 <- %9
+    Load %11 <- %3
+    Call %9 <- string("std.string.concat") [%10, %11] (def=d5)
+    Load %11 <- %1
+    Load %12 <- %0
+    Call %10 <- string("std.string.concat") [%11, %12] (def=d5)
+    Load %11 <- %10
+    Load %12 <- %3
+    Call %10 <- string("std.string.concat") [%11, %12] (def=d5)
+    Load %11 <- %10
+    Load %12 <- %3
+    Call %10 <- string("std.string.concat") [%11, %12] (def=d5)
+    Load %11 <- %10
+    Load %12 <- %6
+    Call %10 <- string("std.string.concat") [%11, %12] (def=d5)
+    Load %11 <- %10
+    Load %12 <- %7
+    Call %10 <- string("std.string.concat") [%11, %12] (def=d5)
+    Load %11 <- %10
+    Load %12 <- %7
+    Call %10 <- string("std.string.concat") [%11, %12] (def=d5)
+    Load %12 <- %1
+    Load %13 <- %0
+    Call %11 <- string("std.string.concat") [%12, %13] (def=d5)
+    Load %12 <- %11
+    Load %13 <- %7
+    Call %11 <- string("std.string.concat") [%12, %13] (def=d5)
+    Load %12 <- %11
+    Load %13 <- %7
+    Call %11 <- string("std.string.concat") [%12, %13] (def=d5)
+    Load %12 <- %11
+    Load %13 <- %6
+    Call %11 <- string("std.string.concat") [%12, %13] (def=d5)
+    Load %12 <- %11
+    Load %13 <- %8
+    Call %11 <- string("std.string.concat") [%12, %13] (def=d5)
+    Load %13 <- %2
+    Load %14 <- %11
+    Call %12 <- string("std.string.concat") [%13, %14] (def=d5)
+    Load %13 <- %12
+    Load %14 <- %9
+    Call %12 <- string("std.string.concat") [%13, %14] (def=d5)
+    Load %13 <- %12
+    Load %14 <- %10
+    Call %12 <- string("std.string.concat") [%13, %14] (def=d5)
+    Load %13 <- %12
+    Load %14 <- %2
+    Call %12 <- string("std.string.concat") [%13, %14] (def=d5)
+    Load %14 <- %12
+    Call %13 <- string("std.json.parse") [%14] (def=d0)
+    Load %15 <- %13
+    Call %16 <- string("std.result.is_ok") [%15] (def=d1)
+    Load %17 <- string("unicode escapes parse ok")
+    Call %14 <- string("std.assert.assert") [%16, %17] (def=d2)
+    Load %16 <- %13
+    Call %14 <- string("std.result.unwrap") [%16] (def=d4)
+    Load %16 <- void
+    Load %15 <- %14
+    VariantTag %18 <- %15 : Json
+    Load %19 <- int(3)
+    Eq %20 <- %18, %19
+    JmpIfNot %20 -> instr(106)
+    VariantPayload %21 <- %15 : Json
+    Move %17 <- %21
+    Load %22 <- %17
+    Move %16 <- %22
+    Jmp -> instr(109)
+    Load %23 <- string("")
+    Move %16 <- %23
+    Jmp -> instr(109)
+    Load %20 <- %16
+    Load %21 <- string("")
+    Ne %19 <- %20, %21
+    Load %22 <- string("string variant payload extracted")
+    Call %18 <- string("std.assert.assert") [%19, %22] (def=d2)
+    Load %20 <- %16
+    Load %21 <- int(0)
+    Load %22 <- int(1)
+    Call %19 <- string("std.string.substring") [%20, %21, %22] (def=d8)
+    Load %23 <- int(0)
+    Call %18 <- string("std.string.char_code") [%19, %23] (def=d9)
+    Load %21 <- %18
+    Load %22 <- int(233)
+    Eq %20 <- %21, %22
+    Load %23 <- string("BMP escape decodes to U+00E9")
+    Call %19 <- string("std.assert.assert") [%20, %23] (def=d2)
+    Load %21 <- %16
+    Load %22 <- int(1)
+    Load %23 <- int(2)
+    Call %20 <- string("std.string.substring") [%21, %22, %23] (def=d8)
+    Load %24 <- int(0)
+    Call %19 <- string("std.string.char_code") [%20, %24] (def=d9)
+    Load %22 <- %19
+    Load %23 <- int(128512)
+    Eq %21 <- %22, %23
+    Load %24 <- string("surrogate pair combines to U+1F600")
+    Call %20 <- string("std.assert.assert") [%21, %24] (def=d2)
+    Load %22 <- %16
+    Load %23 <- int(2)
+    Load %24 <- int(3)
+    Call %21 <- string("std.string.substring") [%22, %23, %24] (def=d8)
+    Load %25 <- int(0)
+    Call %20 <- string("std.string.char_code") [%21, %25] (def=d9)
+    Load %23 <- %20
+    Load %24 <- int(57)
+    Eq %22 <- %23, %24
+    Load %25 <- string("trailing 9 survives")
+    Call %21 <- string("std.assert.assert") [%22, %25] (def=d2)
+    Load %22 <- %2
+    Load %23 <- %9
+    Call %21 <- string("std.string.concat") [%22, %23] (def=d5)
+    Load %22 <- %21
+    Load %23 <- %2
+    Call %21 <- string("std.string.concat") [%22, %23] (def=d5)
+    Load %23 <- %21
+    Call %22 <- string("std.json.parse") [%23] (def=d0)
+    Load %25 <- %22
+    Call %24 <- string("std.result.is_err") [%25] (def=d10)
+    Load %26 <- string("lone high surrogate rejected")
+    Call %23 <- string("std.assert.assert") [%24, %26] (def=d2)
+    Ret %23
+  fn check_errors() -> Void
+    slot[0] rbad : Int(64) @depth1
+    slot[1] e : Int(64) @depth1
+    slot[2] m : Int(64) @depth1
+    slot[3] runterm : Int(64) @depth1
+    locals_total=8
+    Load %0 <- string("{\"a\": tru}")
+    Call %1 <- string("std.json.parse") [%0] (def=d0)
+    Load %2 <- %1
+    Call %3 <- string("std.result.is_err") [%2] (def=d10)
+    Load %4 <- string("invalid literal rejected")
+    Call %0 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %3 <- %1
+    Call %0 <- string("std.result.unwrap_err") [%3] (def=d11)
+    Load %2 <- %0
+    Call %3 <- string("std.result.message") [%2] (def=d12)
+    Load %5 <- %3
+    Load %6 <- string("2")
+    Call %4 <- string("std.string.contains") [%5, %6] (def=d7)
+    Load %7 <- string("error message carries position")
+    Call %2 <- string("std.assert.assert") [%4, %7] (def=d2)
+    Load %4 <- string("\"abc")
+    Call %2 <- string("std.json.parse") [%4] (def=d0)
+    Load %6 <- %2
+    Call %5 <- string("std.result.is_err") [%6] (def=d10)
+    Load %7 <- string("unterminated string rejected")
+    Call %4 <- string("std.assert.assert") [%5, %7] (def=d2)
+    Ret %4
+  fn check_roundtrip() -> Void
+    slot[0] r3 : Int(64) @depth1
+    slot[1] once : Int(64) @depth1
+    slot[2] r4 : Int(64) @depth1
+    slot[3] twice : Int(64) @depth1
+    slot[4] p : Int(64) @depth1
+    slot[5] rp : Int(64) @depth1
+    locals_total=10
+    Load %0 <- string("[123456789, \"\", {\"k\": [true, false, null]}]")
+    Call %1 <- string("std.json.parse") [%0] (def=d0)
+    Load %2 <- %1
+    Call %3 <- string("std.result.is_ok") [%2] (def=d1)
+    Load %4 <- string("roundtrip source parse ok")
+    Call %0 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %2 <- %1
+    Call %3 <- string("std.result.unwrap") [%2] (def=d4)
+    Call %0 <- string("std.json.stringify") [%3] (def=d6)
+    Load %2 <- %0
+    Call %3 <- string("std.json.parse") [%2] (def=d0)
+    Load %5 <- %3
+    Call %4 <- string("std.result.is_ok") [%5] (def=d1)
+    Load %6 <- string("re-parse stringify output ok")
+    Call %2 <- string("std.assert.assert") [%4, %6] (def=d2)
+    Load %5 <- %3
+    Call %4 <- string("std.result.unwrap") [%5] (def=d4)
+    Call %2 <- string("std.json.stringify") [%4] (def=d6)
+    Load %6 <- %0
+    Load %7 <- %2
+    Eq %5 <- %6, %7
+    Load %8 <- string("stringify is stable across roundtrip")
+    Call %4 <- string("std.assert.assert") [%5, %8] (def=d2)
+    Load %6 <- %1
+    Call %5 <- string("std.result.unwrap") [%6] (def=d4)
+    Call %4 <- string("std.json.pretty") [%5] (def=d13)
+    Load %7 <- %4
+    Load %8 <- string("\n")
+    Call %6 <- string("std.string.contains") [%7, %8] (def=d7)
+    Load %9 <- string("pretty output is multiline")
+    Call %5 <- string("std.assert.assert") [%6, %9] (def=d2)
+    Load %6 <- %4
+    Call %5 <- string("std.json.parse") [%6] (def=d0)
+    Load %8 <- %5
+    Call %7 <- string("std.result.is_ok") [%8] (def=d1)
+    Load %9 <- string("pretty output re-parses")
+    Call %6 <- string("std.assert.assert") [%7, %9] (def=d2)
+    Ret %6
+  fn main() -> Void
+    locals_total=1
+    Call %0 <- string("check_scalar_parse") [] (def=d14)
+    Call %0 <- string("check_escapes") [] (def=d15)
+    Call %0 <- string("check_unicode") [] (def=d16)
+    Call %0 <- string("check_errors") [] (def=d17)
+    Call %0 <- string("check_roundtrip") [] (def=d18)
+    Ret %0

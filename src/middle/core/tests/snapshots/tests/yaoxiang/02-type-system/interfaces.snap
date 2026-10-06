@@ -1,0 +1,47 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 6, column: 20, offset: 132 }, end: Position { line: 6, column: 25, offset: 137 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 6, column: 30, offset: 142 }, end: Position { line: 6, column: 35, offset: 147 } } }, default: None })] }
+  fn Point.draw(Ref { mutable: false, inner: TypeRef("Point") }, Generic { name: "String", args: [] }) -> Void
+    locals_total=2
+    Ret
+  fn Point.serialize(Ref { mutable: false, inner: TypeRef("Point") }) -> Generic { name: "String", args: [] }
+    locals_total=2
+    Load %0 <- string("point")
+    Ret %0
+    Ret %0
+  fn Point.get_x(Ref { mutable: false, inner: TypeRef("Point") }) -> Float(64)
+    locals_total=3
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Ret %2
+    Ret %2
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] s : Int(64) @depth1
+    slot[2] x : Int(64) @depth1
+    locals_total=8
+    Load %0 <- float(4607182418800017408)
+    Load %1 <- float(4611686018427387904)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Load %3 <- string("screen")
+    Call %0 <- string("Point.draw") [%1, %3] (def=d1)
+    Load %1 <- %2
+    Call %0 <- string("Point.serialize") [%1] (def=d2)
+    Load %4 <- %0
+    Load %5 <- string("point")
+    Eq %3 <- %4, %5
+    Load %6 <- string("Point.serialize() should return \"point\"")
+    Call %1 <- string("std.assert.assert") [%3, %6] (def=d3)
+    Load %3 <- %2
+    Call %1 <- string("Point.get_x") [%3] (def=d4)
+    Load %5 <- %1
+    Load %6 <- float(4607182418800017408)
+    Eq %4 <- %5, %6
+    Load %7 <- string("Point.get_x() should return 1.0")
+    Call %3 <- string("std.assert.assert") [%4, %7] (def=d3)
+    Ret %3
+  init (locals=2)
+    islot[0] self : Int(64) @depth1
+    islot[1] surface : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

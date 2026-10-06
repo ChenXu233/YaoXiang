@@ -1,0 +1,412 @@
+module
+  fn roundtrip() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] ok : Int(64) @depth1
+    locals_total=8
+    Load %0 <- string("__yx_fs_ops_tmp.txt")
+    Load %1 <- %0
+    Load %2 <- string("hello")
+    Call %3 <- string("std.fs.write_file") [%1, %2] (def=d0)
+    Load %2 <- %3
+    Load %4 <- string("write_file ok")
+    Call %1 <- string("std.assert.assert") [%2, %4] (def=d1)
+    Load %4 <- %0
+    Call %2 <- string("std.fs.exists") [%4] (def=d2)
+    Load %5 <- string("file exists after write")
+    Call %1 <- string("std.assert.assert") [%2, %5] (def=d1)
+    Load %6 <- %0
+    Call %4 <- string("std.fs.read_file") [%6] (def=d3)
+    Load %5 <- string("hello")
+    Eq %2 <- %4, %5
+    Load %7 <- string("read_file roundtrip")
+    Call %1 <- string("std.assert.assert") [%2, %7] (def=d1)
+    Load %2 <- %0
+    Load %4 <- string(" world")
+    Call %1 <- string("std.fs.append_file") [%2, %4] (def=d4)
+    Load %6 <- %0
+    Call %4 <- string("std.fs.read_file") [%6] (def=d3)
+    Load %5 <- string("hello world")
+    Eq %2 <- %4, %5
+    Load %7 <- string("append_file roundtrip")
+    Call %1 <- string("std.assert.assert") [%2, %7] (def=d1)
+    Load %4 <- %0
+    Call %2 <- string("std.fs.remove") [%4] (def=d5)
+    Load %5 <- string("remove roundtrip file")
+    Call %1 <- string("std.assert.assert") [%2, %5] (def=d1)
+    Load %5 <- %0
+    Call %4 <- string("std.fs.exists") [%5] (def=d2)
+    Not %2 <- %4
+    Load %6 <- string("roundtrip file gone")
+    Call %1 <- string("std.assert.assert") [%2, %6] (def=d1)
+    Ret %1
+  fn predicates() -> Void
+    slot[0] p : Int(64) @depth1
+    locals_total=6
+    Load %0 <- string("__yx_fs_ops_pred.txt")
+    Load %1 <- %0
+    Load %2 <- string("x")
+    Call %3 <- string("std.fs.write_file") [%1, %2] (def=d0)
+    Load %2 <- %0
+    Call %1 <- string("std.fs.is_file") [%2] (def=d6)
+    Load %4 <- string("is_file on file")
+    Call %3 <- string("std.assert.assert") [%1, %4] (def=d1)
+    Load %4 <- %0
+    Call %2 <- string("std.fs.is_dir") [%4] (def=d7)
+    Not %1 <- %2
+    Load %5 <- string("is_dir false on file")
+    Call %3 <- string("std.assert.assert") [%1, %5] (def=d1)
+    Load %4 <- string("__yx_fs_ops_missing.xyz")
+    Call %2 <- string("std.fs.exists") [%4] (def=d2)
+    Not %1 <- %2
+    Load %5 <- string("exists false when absent")
+    Call %3 <- string("std.assert.assert") [%1, %5] (def=d1)
+    Load %2 <- %0
+    Call %1 <- string("std.fs.remove") [%2] (def=d5)
+    Load %4 <- string("pred cleanup")
+    Call %3 <- string("std.assert.assert") [%1, %4] (def=d1)
+    Ret %3
+  fn dirs() -> Void
+    slot[0] d : Int(64) @depth1
+    slot[1] nested : Int(64) @depth1
+    slot[2] bfile : Int(64) @depth1
+    slot[3] names : Int(64) @depth1
+    slot[4] inner : Int(64) @depth1
+    slot[5] names2 : Int(64) @depth1
+    slot[6] walked : Int(64) @depth1
+    slot[7] basenames : Int(64) @depth1
+    locals_total=13
+    Load %0 <- string("__yx_fs_ops_dir/sep.txt")
+    Call %1 <- string("std.fs.exists") [%0] (def=d2)
+    JmpIfNot %1 -> instr(5)
+    Load %2 <- string("__yx_fs_ops_dir/sep.txt")
+    Call %3 <- string("std.fs.remove") [%2] (def=d5)
+    Load %0 <- string("__yx_fs_ops_dir")
+    Call %1 <- string("std.fs.exists") [%0] (def=d2)
+    JmpIfNot %1 -> instr(10)
+    Load %2 <- string("__yx_fs_ops_dir")
+    Call %3 <- string("std.fs.rmdir") [%2] (def=d8)
+    Load %0 <- string("__yx_fs_ops_nested/a/b/leaf.txt")
+    Call %1 <- string("std.fs.exists") [%0] (def=d2)
+    JmpIfNot %1 -> instr(15)
+    Load %2 <- string("__yx_fs_ops_nested/a/b/leaf.txt")
+    Call %3 <- string("std.fs.remove") [%2] (def=d5)
+    Load %0 <- string("__yx_fs_ops_nested/a/b")
+    Call %1 <- string("std.fs.exists") [%0] (def=d2)
+    JmpIfNot %1 -> instr(20)
+    Load %2 <- string("__yx_fs_ops_nested/a/b")
+    Call %3 <- string("std.fs.rmdir") [%2] (def=d8)
+    Load %0 <- string("__yx_fs_ops_nested/a")
+    Call %1 <- string("std.fs.exists") [%0] (def=d2)
+    JmpIfNot %1 -> instr(25)
+    Load %2 <- string("__yx_fs_ops_nested/a")
+    Call %3 <- string("std.fs.rmdir") [%2] (def=d8)
+    Load %0 <- string("__yx_fs_ops_nested")
+    Call %1 <- string("std.fs.exists") [%0] (def=d2)
+    JmpIfNot %1 -> instr(30)
+    Load %2 <- string("__yx_fs_ops_nested")
+    Call %3 <- string("std.fs.rmdir") [%2] (def=d8)
+    Load %1 <- string("__yx_fs_ops_dir")
+    Load %0 <- string("__yx_fs_ops_nested/a/b")
+    Load %4 <- %1
+    Call %2 <- string("std.fs.mkdir") [%4] (def=d9)
+    Load %5 <- string("mkdir single level")
+    Call %3 <- string("std.assert.assert") [%2, %5] (def=d1)
+    Load %4 <- %0
+    Call %2 <- string("std.fs.mkdir_all") [%4] (def=d10)
+    Load %5 <- string("mkdir_all recursive")
+    Call %3 <- string("std.assert.assert") [%2, %5] (def=d1)
+    Load %4 <- %0
+    Call %2 <- string("std.fs.is_dir") [%4] (def=d7)
+    Load %5 <- string("nested dir exists")
+    Call %3 <- string("std.assert.assert") [%2, %5] (def=d1)
+    Load %2 <- %0
+    Load %4 <- string("leaf.txt")
+    Call %3 <- string("std.fs.path_join") [%2, %4] (def=d11)
+    Load %4 <- %3
+    Load %5 <- string("leaf")
+    Call %2 <- string("std.fs.write_file") [%4, %5] (def=d0)
+    Load %4 <- %1
+    Call %2 <- string("std.fs.read_dir") [%4] (def=d12)
+    Load %6 <- %2
+    Call %7 <- string("std.list.len") [%6] (def=d13)
+    Load %8 <- int(0)
+    Eq %5 <- %7, %8
+    Load %9 <- string("read_dir on empty dir")
+    Call %4 <- string("std.assert.assert") [%5, %9] (def=d1)
+    Load %5 <- %1
+    Load %7 <- string("/sep.txt")
+    Add %4 <- %5, %7
+    Load %7 <- %4
+    Load %8 <- string("s")
+    Call %5 <- string("std.fs.write_file") [%7, %8] (def=d0)
+    Load %7 <- %1
+    Call %5 <- string("std.fs.read_dir") [%7] (def=d12)
+    Load %10 <- %5
+    Call %6 <- string("std.list.len") [%10] (def=d13)
+    Load %9 <- int(1)
+    Eq %8 <- %6, %9
+    Load %11 <- string("read_dir sees one entry")
+    Call %7 <- string("std.assert.assert") [%8, %11] (def=d1)
+    Load %10 <- %5
+    Load %11 <- int(0)
+    Call %6 <- string("std.list.get") [%10, %11] (def=d14)
+    Load %9 <- string("sep.txt")
+    Eq %8 <- %6, %9
+    Load %12 <- string("entry name only")
+    Call %7 <- string("std.assert.assert") [%8, %12] (def=d1)
+    Load %8 <- string("__yx_fs_ops_nested")
+    Call %7 <- string("std.fs.walk") [%8] (def=d15)
+    Load %11 <- %7
+    Call %9 <- string("std.list.len") [%11] (def=d13)
+    Load %10 <- int(3)
+    Eq %6 <- %9, %10
+    Load %12 <- string("walk: two dirs + one leaf")
+    Call %8 <- string("std.assert.assert") [%6, %12] (def=d1)
+    Load %6 <- %7
+    MakeClosure %9 <- closure_0 env=[] (def=d16)
+    Call %8 <- string("std.list.map") [%6, %9] (def=d17)
+    Load %10 <- %8
+    Load %11 <- string("leaf.txt")
+    Call %9 <- string("std.list.contains") [%10, %11] (def=d18)
+    Load %12 <- string("walk lists leaf")
+    Call %6 <- string("std.assert.assert") [%9, %12] (def=d1)
+    Load %10 <- %4
+    Call %9 <- string("std.fs.remove") [%10] (def=d5)
+    Load %11 <- string("remove inner file")
+    Call %6 <- string("std.assert.assert") [%9, %11] (def=d1)
+    Load %10 <- %1
+    Call %9 <- string("std.fs.rmdir") [%10] (def=d8)
+    Load %11 <- string("rmdir empty dir")
+    Call %6 <- string("std.assert.assert") [%9, %11] (def=d1)
+    Load %10 <- %3
+    Call %9 <- string("std.fs.remove") [%10] (def=d5)
+    Load %11 <- string("remove leaf")
+    Call %6 <- string("std.assert.assert") [%9, %11] (def=d1)
+    Load %10 <- %0
+    Call %9 <- string("std.fs.rmdir") [%10] (def=d8)
+    Load %11 <- string("rmdir nested b")
+    Call %6 <- string("std.assert.assert") [%9, %11] (def=d1)
+    Load %10 <- string("__yx_fs_ops_nested/a")
+    Call %9 <- string("std.fs.rmdir") [%10] (def=d8)
+    Load %11 <- string("rmdir nested a")
+    Call %6 <- string("std.assert.assert") [%9, %11] (def=d1)
+    Load %10 <- string("__yx_fs_ops_nested")
+    Call %9 <- string("std.fs.rmdir") [%10] (def=d8)
+    Load %11 <- string("rmdir nested root")
+    Call %6 <- string("std.assert.assert") [%9, %11] (def=d1)
+    Ret %6
+  fn copy_move() -> Void
+    slot[0] src : Int(64) @depth1
+    slot[1] cp : Int(64) @depth1
+    slot[2] mv : Int(64) @depth1
+    locals_total=8
+    Load %0 <- string("__yx_fs_ops_copy_src.txt")
+    Load %1 <- string("__yx_fs_ops_copy.txt")
+    Load %2 <- %0
+    Load %3 <- string("hello world")
+    Call %4 <- string("std.fs.write_file") [%2, %3] (def=d0)
+    Load %3 <- %0
+    Load %5 <- %1
+    Call %2 <- string("std.fs.copy") [%3, %5] (def=d19)
+    Load %6 <- string("copy ok")
+    Call %4 <- string("std.assert.assert") [%2, %6] (def=d1)
+    Load %6 <- %1
+    Call %3 <- string("std.fs.read_file") [%6] (def=d3)
+    Load %5 <- string("hello world")
+    Eq %2 <- %3, %5
+    Load %7 <- string("copy preserves content")
+    Call %4 <- string("std.assert.assert") [%2, %7] (def=d1)
+    Load %4 <- string("__yx_fs_ops_moved.txt")
+    Load %5 <- %1
+    Load %6 <- %4
+    Call %3 <- string("std.fs.rename") [%5, %6] (def=d20)
+    Load %7 <- string("rename ok")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d1)
+    Load %5 <- %4
+    Call %3 <- string("std.fs.exists") [%5] (def=d2)
+    Load %6 <- string("rename target exists")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load %6 <- %1
+    Call %5 <- string("std.fs.exists") [%6] (def=d2)
+    Not %3 <- %5
+    Load %7 <- string("rename source gone")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d1)
+    Load %5 <- %0
+    Call %3 <- string("std.fs.remove") [%5] (def=d5)
+    Load %6 <- string("copy_move cleanup src")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load %5 <- %4
+    Call %3 <- string("std.fs.remove") [%5] (def=d5)
+    Load %6 <- string("copy_move cleanup moved")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Ret %2
+  fn meta() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] d : Int(64) @depth1
+    slot[2] st : Int(64) @depth1
+    slot[3] size : Int(64) @depth1
+    slot[4] is_file : Int(64) @depth1
+    slot[5] is_dir : Int(64) @depth1
+    slot[6] dst : Int(64) @depth1
+    slot[7] dir_flag : Int(64) @depth1
+    locals_total=12
+    Load %0 <- string("__yx_fs_ops_meta.txt")
+    Load %1 <- string("__yx_fs_ops_meta_dir")
+    Load %2 <- %0
+    Load %3 <- string("12345")
+    Call %4 <- string("std.fs.write_file") [%2, %3] (def=d0)
+    Load %2 <- %1
+    Call %4 <- string("std.fs.mkdir") [%2] (def=d9)
+    Load %2 <- %0
+    Call %4 <- string("std.fs.stat") [%2] (def=d21)
+    Load %3 <- %4
+    Load %5 <- string("size")
+    LoadIndex %2 <- %3[%5]
+    Load %5 <- %4
+    Load %6 <- string("is_file")
+    LoadIndex %3 <- %5[%6]
+    Load %6 <- %4
+    Load %7 <- string("is_dir")
+    LoadIndex %5 <- %6[%7]
+    Load %8 <- %2
+    Load %9 <- int(5)
+    Eq %7 <- %8, %9
+    Load %10 <- string("stat size == 5")
+    Call %6 <- string("std.assert.assert") [%7, %10] (def=d1)
+    Load %7 <- %3
+    Load %8 <- string("stat is_file")
+    Call %6 <- string("std.assert.assert") [%7, %8] (def=d1)
+    Load %8 <- %5
+    Not %7 <- %8
+    Load %9 <- string("stat not is_dir")
+    Call %6 <- string("std.assert.assert") [%7, %9] (def=d1)
+    Load %7 <- %1
+    Call %6 <- string("std.fs.stat") [%7] (def=d21)
+    Load %8 <- %6
+    Load %9 <- string("is_dir")
+    LoadIndex %7 <- %8[%9]
+    Load %9 <- %7
+    Load %10 <- string("stat dir is_dir")
+    Call %8 <- string("std.assert.assert") [%9, %10] (def=d1)
+    Load %10 <- %0
+    Call %9 <- string("std.fs.remove") [%10] (def=d5)
+    Load %11 <- string("meta cleanup file")
+    Call %8 <- string("std.assert.assert") [%9, %11] (def=d1)
+    Load %10 <- %1
+    Call %9 <- string("std.fs.rmdir") [%10] (def=d8)
+    Load %11 <- string("meta cleanup dir")
+    Call %8 <- string("std.assert.assert") [%9, %11] (def=d1)
+    Ret %8
+  fn temp() -> Void
+    slot[0] td : Int(64) @depth1
+    slot[1] tf : Int(64) @depth1
+    slot[2] sys_tmp : Int(64) @depth1
+    locals_total=9
+    Load %0 <- string("yx_fs_ops_")
+    Call %1 <- string("std.fs.mkdtemp") [%0] (def=d22)
+    Load %2 <- %1
+    Call %3 <- string("std.fs.is_dir") [%2] (def=d7)
+    Load %4 <- string("mkdtemp creates dir")
+    Call %0 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %3 <- string("yx_fs_ops_")
+    Call %0 <- string("std.fs.tmpfile") [%3] (def=d23)
+    Load %4 <- %0
+    Call %2 <- string("std.fs.is_file") [%4] (def=d6)
+    Load %5 <- string("tmpfile creates file")
+    Call %3 <- string("std.assert.assert") [%2, %5] (def=d1)
+    Load %2 <- %0
+    Load %4 <- string("scratch")
+    Call %3 <- string("std.fs.write_file") [%2, %4] (def=d0)
+    Load %6 <- %0
+    Call %4 <- string("std.fs.read_file") [%6] (def=d3)
+    Load %5 <- string("scratch")
+    Eq %2 <- %4, %5
+    Load %7 <- string("tmpfile writable")
+    Call %3 <- string("std.assert.assert") [%2, %7] (def=d1)
+    Call %3 <- string("std.fs.temp_dir") [] (def=d24)
+    Load %7 <- %3
+    Call %5 <- string("std.string.len") [%7] (def=d25)
+    Load %6 <- int(0)
+    Gt %4 <- %5, %6
+    Load %8 <- string("temp_dir non-empty")
+    Call %2 <- string("std.assert.assert") [%4, %8] (def=d1)
+    Load %5 <- %0
+    Call %4 <- string("std.fs.remove") [%5] (def=d5)
+    Load %6 <- string("remove temp file")
+    Call %2 <- string("std.assert.assert") [%4, %6] (def=d1)
+    Load %5 <- %1
+    Call %4 <- string("std.fs.rmdir") [%5] (def=d8)
+    Load %6 <- string("rmdir temp dir")
+    Call %2 <- string("std.assert.assert") [%4, %6] (def=d1)
+    Ret %2
+  fn pathops() -> Void
+    slot[0] j : Int(64) @depth1
+    locals_total=6
+    Load %0 <- string("dir/file.txt")
+    Call %1 <- string("std.fs.path_basename") [%0] (def=d26)
+    Load %2 <- string("file.txt")
+    Eq %3 <- %1, %2
+    Load %4 <- string("path_basename")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- string("/")
+    Call %1 <- string("std.fs.path_basename") [%0] (def=d26)
+    Load %2 <- string("")
+    Eq %3 <- %1, %2
+    Load %4 <- string("path_basename no component")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- string("dir/file.txt")
+    Call %1 <- string("std.fs.path_dirname") [%0] (def=d27)
+    Load %2 <- string("dir")
+    Eq %3 <- %1, %2
+    Load %4 <- string("path_dirname")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- string("a.txt")
+    Call %1 <- string("std.fs.path_dirname") [%0] (def=d27)
+    Load %2 <- string("")
+    Eq %3 <- %1, %2
+    Load %4 <- string("path_dirname bare name")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- string("a.tar.gz")
+    Call %1 <- string("std.fs.path_extension") [%0] (def=d28)
+    Load %2 <- string("gz")
+    Eq %3 <- %1, %2
+    Load %4 <- string("path_extension last")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- string("noext")
+    Call %1 <- string("std.fs.path_extension") [%0] (def=d28)
+    Load %2 <- string("")
+    Eq %3 <- %1, %2
+    Load %4 <- string("path_extension none")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %3 <- string("dir")
+    Load %1 <- string("name.txt")
+    Call %5 <- string("std.fs.path_join") [%3, %1] (def=d11)
+    Load %2 <- %5
+    Load %0 <- string("name.txt")
+    Call %1 <- string("std.string.ends_with") [%2, %0] (def=d29)
+    Load %4 <- string("path_join keeps rel")
+    Call %3 <- string("std.assert.assert") [%1, %4] (def=d1)
+    Load %2 <- %5
+    Load %0 <- string("dir")
+    Call %1 <- string("std.string.starts_with") [%2, %0] (def=d30)
+    Load %4 <- string("path_join keeps base")
+    Call %3 <- string("std.assert.assert") [%1, %4] (def=d1)
+    Ret %3
+  fn main() -> Void
+    locals_total=1
+    Call %0 <- string("roundtrip") [] (def=d31)
+    Call %0 <- string("predicates") [] (def=d32)
+    Call %0 <- string("dirs") [] (def=d33)
+    Call %0 <- string("copy_move") [] (def=d34)
+    Call %0 <- string("meta") [] (def=d35)
+    Call %0 <- string("temp") [] (def=d36)
+    Call %0 <- string("pathops") [] (def=d37)
+    Ret %0
+  fn closure_0(Generic { name: "String", args: [] }) -> Void
+    slot[0] p : Int(64) @depth2
+    locals_total=13
+    Load %0 <- %1
+    Call %2 <- string("std.fs.path_basename") [%0] (def=d26)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,89 @@
+module
+  fn Box(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["T"]
+    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 12, column: 31, offset: 585 }, end: Position { line: 12, column: 34, offset: 588 } }, args: [Name { name: "T", span: Span { start: Position { line: 12, column: 35, offset: 589 }, end: Position { line: 12, column: 36, offset: 590 } } }] }, default: None }), Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 12, column: 42, offset: 596 }, end: Position { line: 12, column: 45, offset: 599 } } }, default: None })] }
+  fn mk(TypeRef("A")) -> Generic { name: "Box", args: [TypeRef("A")] }
+    generic_params: ["A"]
+    slot[0] item : Int(64) @depth1
+    slot[1] z : Int(64) @depth1
+    slot[2] b : Int(64) @depth1
+    locals_total=7
+    Load %0 <- arg%0
+    AllocArray %1 size=int(0), elem=int(1)
+    Load %2 <- %1
+    Load %3 <- int(0)
+    Call %4 <- string("Box") [%2, %3] (def=d0)
+    Load %3 <- %4
+    LoadField %2 <- %3.0
+    Load %5 <- int(0)
+    Load %6 <- %0
+    StoreIndex %2[%5] <- %6
+    Load %2 <- %4
+    Load %3 <- int(1)
+    StoreField %2.1 <- %3 (type=None, name=Some("n"))
+    Load %2 <- %4
+    Ret %2
+    Ret %2
+  fn count(Ref { mutable: false, inner: Generic { name: "Box", args: [TypeRef("A")] } }) -> Int(64)
+    generic_params: ["A"]
+    slot[0] b : Int(64) @depth1
+    locals_total=3
+    Load %0 <- %1
+    LoadField %2 <- %0.1
+    Ret %2
+    Ret %2
+  fn apply_to(Ref { mutable: false, inner: Generic { name: "Vec", args: [TypeRef("T")] } }, Fn { params: [TypeRef("T")], return_type: TypeRef("R") }) -> Generic { name: "Vec", args: [TypeRef("R")] }
+    generic_params: ["T", "R"]
+    slot[0] v : Int(64) @depth1
+    slot[1] f : Int(64) @depth1
+    slot[2] seed : Int(64) @depth1
+    locals_total=4
+    AllocArray %0 size=int(0), elem=int(1)
+    Load %1 <- %0
+    Ret %1
+    Ret %1
+  fn main() -> Void
+    slot[0] z : Int(64) @depth1
+    slot[1] xs : Int(64) @depth1
+    slot[2] out : Int(64) @depth1
+    locals_total=9
+    Load %0 <- void
+    Load %1 <- int(5)
+    Call %2 <- string("mk") [%0, %1] (def=d1)
+    Load %3 <- %2
+    Move %4 <- %3
+    Call %5 <- string("count") [%4] (def=d2)
+    Load %6 <- int(1)
+    Eq %1 <- %5, %6
+    Load %7 <- string("generic return keeps concrete type")
+    Call %0 <- string("std.assert.assert") [%1, %7] (def=d3)
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- int(1)
+    Load %5 <- int(0)
+    StoreIndex %0[%5] <- %1
+    Load %6 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %6
+    Load %3 <- int(3)
+    Load %7 <- int(2)
+    StoreIndex %0[%7] <- %3
+    Load %6 <- %0
+    Move %5 <- %6
+    MakeClosure %4 <- closure_0 env=[] (def=d4)
+    Call %1 <- string("apply_to") [%5, %4] (def=d5)
+    Load %7 <- %1
+    StringLength %4 <- %7
+    Load %3 <- int(0)
+    Eq %6 <- %4, %3
+    Load %8 <- string("lambda return type inferred")
+    Call %5 <- string("std.assert.assert") [%6, %8] (def=d3)
+    Ret %5
+  fn closure_0(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=8
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Mul %3 <- %0, %2
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

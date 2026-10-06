@@ -1,0 +1,29 @@
+module
+  fn identity(TypeRef("T")) -> TypeRef("T")
+    generic_params: ["T"]
+    slot[0] x : Int(64) @depth1
+    locals_total=3
+    Load %0 <- %1
+    Ret %0
+    Ret
+  fn main() -> Void
+    slot[0] x : Int(64) @depth1
+    slot[1] s : Int(64) @depth1
+    locals_total=7
+    Load %0 <- int(42)
+    Call %1 <- string("identity") [%0] (def=d0)
+    Load %2 <- %1
+    Load %3 <- int(42)
+    Eq %4 <- %2, %3
+    Load %5 <- string("identity(42) should be 42")
+    Call %0 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %4 <- string("hello")
+    Call %0 <- string("identity") [%4] (def=d0)
+    Load %3 <- %0
+    Load %5 <- string("hello")
+    Eq %2 <- %3, %5
+    Load %6 <- string("identity(\"hello\") should be \"hello\"")
+    Call %4 <- string("std.assert.assert") [%2, %6] (def=d1)
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

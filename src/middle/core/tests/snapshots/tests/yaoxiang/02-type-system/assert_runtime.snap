@@ -1,0 +1,9 @@
+module
+  fn main() -> Void
+    locals_total=3
+    Load %0 <- bool(true)
+    Load %1 <- string("true should pass")
+    Call %2 <- string("std.assert.assert") [%0, %1] (def=d0)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

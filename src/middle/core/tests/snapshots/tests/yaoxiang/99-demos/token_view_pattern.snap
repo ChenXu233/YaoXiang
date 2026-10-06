@@ -1,0 +1,34 @@
+module
+  fn Buffer() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "value", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 25, offset: 195 }, end: Position { line: 7, column: 28, offset: 198 } } }, default: None })] }
+  fn BufferView() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "owner", is_mut: false, ty: Name { name: "Buffer", span: Span { start: Position { line: 11, column: 12, offset: 279 }, end: Position { line: 11, column: 18, offset: 285 } } }, default: None }), Field(StructField { name: "view", is_mut: false, ty: Ref { mutable: false, inner: Name { name: "Buffer", span: Span { start: Position { line: 12, column: 12, offset: 298 }, end: Position { line: 12, column: 18, offset: 304 } } }, span: Span { start: Position { line: 13, column: 1, offset: 305 }, end: Position { line: 13, column: 2, offset: 306 } } }, default: None })] }
+  fn main() -> Void
+    slot[0] buf : Int(64) @depth1
+    slot[1] ref_buf : Int(64) @depth1
+    slot[2] v : Int(64) @depth1
+    locals_total=10
+    Load %0 <- int(42)
+    Call %1 <- string("Buffer") [%0] (def=d0)
+    Load %2 <- %1
+    Move %0 <- %2
+    Load %3 <- %1
+    Load %4 <- %0
+    Call %2 <- string("BufferView") [%3, %4] (def=d1)
+    Load %5 <- %2
+    LoadField %6 <- %5.1
+    LoadField %7 <- %6.0
+    Load %8 <- int(42)
+    Eq %4 <- %7, %8
+    Load %9 <- string("view value should be 42")
+    Call %3 <- string("std.assert.assert") [%4, %9] (def=d2)
+    Load %8 <- %2
+    LoadField %7 <- %8.1
+    LoadField %4 <- %7.0
+    Call %3 <- string("std.io.println") [%4] (def=d3)
+    Load %4 <- bool(true)
+    Load %7 <- string("all passed")
+    Call %3 <- string("std.assert.assert") [%4, %7] (def=d2)
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

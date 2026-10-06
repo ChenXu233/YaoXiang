@@ -1,0 +1,197 @@
+module
+  fn pick(Bool) -> Generic { name: "Option", args: [Int(64)] }
+    slot[0] empty : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    JmpIfNot %1 -> instr(6)
+    Load %2 <- void
+    CreateVariant %3 <- Option::1 %2
+    Ret %3
+    Load %3 <- int(7)
+    CreateVariant %1 <- Option::0 %3
+    Ret %1
+    Ret %1
+  fn mk(Bool) -> Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] }
+    slot[0] ok : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    JmpIfNot %1 -> instr(6)
+    Load %2 <- int(5)
+    CreateVariant %3 <- Result::0 %2
+    Ret %3
+    Load %3 <- string("no")
+    CreateVariant %1 <- Result::1 %3
+    Ret %1
+    Ret %1
+  fn Holder() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "opt", is_mut: false, ty: Generic { name: "Option", name_span: Span { start: Position { line: 28, column: 10, offset: 881 }, end: Position { line: 28, column: 16, offset: 887 } }, args: [Name { name: "Int", span: Span { start: Position { line: 28, column: 17, offset: 888 }, end: Position { line: 28, column: 20, offset: 891 } } }] }, default: None })] }
+  fn main() -> Void
+    slot[0] v : Int(64) @depth1
+    slot[3] x : Int(64) @depth2
+    slot[4] w : Int(64) @depth1
+    slot[7] x : Int(64) @depth2
+    slot[8] z : Int(64) @depth1
+    slot[15] x : Int(64) @depth2
+    slot[16] r : Int(64) @depth1
+    slot[19] x : Int(64) @depth2
+    slot[20] e : Int(64) @depth1
+    slot[23] x : Int(64) @depth2
+    slot[24] h : Int(64) @depth1
+    slot[25] f : Int(64) @depth1
+    slot[28] x : Int(64) @depth2
+    locals_total=38
+    Load %0 <- void
+    Load %1 <- bool(false)
+    Call %2 <- string("pick") [%1] (def=d0)
+    VariantTag %3 <- %2 : Option
+    Load %4 <- int(0)
+    Eq %5 <- %3, %4
+    JmpIfNot %5 -> instr(12)
+    VariantPayload %6 <- %2 : Option
+    Move %7 <- %6
+    Load %8 <- %7
+    Move %0 <- %8
+    Jmp -> instr(19)
+    VariantTag %9 <- %2 : Option
+    Load %10 <- int(1)
+    Eq %11 <- %9, %10
+    JmpIfNot %11 -> instr(19)
+    Load %12 <- int(0)
+    Move %0 <- %12
+    Jmp -> instr(19)
+    Load %5 <- %0
+    Load %6 <- int(7)
+    Eq %4 <- %5, %6
+    Load %8 <- string("call scrutinee some arm payload")
+    Call %3 <- string("std.assert.assert") [%4, %8] (def=d1)
+    Load %3 <- void
+    Load %5 <- bool(true)
+    Call %4 <- string("pick") [%5] (def=d0)
+    VariantTag %8 <- %4 : Option
+    Load %9 <- int(0)
+    Eq %10 <- %8, %9
+    JmpIfNot %10 -> instr(36)
+    VariantPayload %11 <- %4 : Option
+    Move %6 <- %11
+    Load %12 <- %6
+    Move %3 <- %12
+    Jmp -> instr(43)
+    VariantTag %13 <- %4 : Option
+    Load %14 <- int(1)
+    Eq %15 <- %13, %14
+    JmpIfNot %15 -> instr(43)
+    Load %16 <- int(0)
+    Move %3 <- %16
+    Jmp -> instr(43)
+    Load %10 <- %3
+    Load %11 <- int(0)
+    Eq %9 <- %10, %11
+    Load %12 <- string("call scrutinee none arm")
+    Call %8 <- string("std.assert.assert") [%9, %12] (def=d1)
+    Load %8 <- void
+    Load %10 <- void
+    CreateVariant %9 <- Option::1 %10
+    VariantTag %11 <- %9 : Option
+    Load %12 <- int(1)
+    Eq %13 <- %11, %12
+    JmpIfNot %13 -> instr(58)
+    Load %14 <- int(0)
+    Move %8 <- %14
+    Jmp -> instr(67)
+    VariantTag %16 <- %9 : Option
+    Load %17 <- int(0)
+    Eq %18 <- %16, %17
+    JmpIfNot %18 -> instr(67)
+    VariantPayload %19 <- %9 : Option
+    Move %15 <- %19
+    Load %20 <- %15
+    Move %8 <- %20
+    Jmp -> instr(67)
+    Load %18 <- %8
+    Load %19 <- int(0)
+    Eq %17 <- %18, %19
+    Load %20 <- string("inline ctor scrutinee none arm")
+    Call %16 <- string("std.assert.assert") [%17, %20] (def=d1)
+    Load %16 <- void
+    Load %18 <- bool(true)
+    Call %17 <- string("mk") [%18] (def=d2)
+    VariantTag %20 <- %17 : Result
+    Load %21 <- int(0)
+    Eq %22 <- %20, %21
+    JmpIfNot %22 -> instr(84)
+    VariantPayload %23 <- %17 : Result
+    Move %19 <- %23
+    Load %24 <- %19
+    Move %16 <- %24
+    Jmp -> instr(93)
+    VariantTag %25 <- %17 : Result
+    Load %26 <- int(1)
+    Eq %27 <- %25, %26
+    JmpIfNot %27 -> instr(93)
+    VariantPayload %28 <- %17 : Result
+    Load %29 <- int(1)
+    Neg %30 <- %29
+    Move %16 <- %30
+    Jmp -> instr(93)
+    Load %22 <- %16
+    Load %23 <- int(5)
+    Eq %21 <- %22, %23
+    Load %24 <- string("result call scrutinee ok arm")
+    Call %20 <- string("std.assert.assert") [%21, %24] (def=d1)
+    Load %20 <- void
+    Load %22 <- bool(false)
+    Call %21 <- string("mk") [%22] (def=d2)
+    VariantTag %24 <- %21 : Result
+    Load %25 <- int(0)
+    Eq %26 <- %24, %25
+    JmpIfNot %26 -> instr(110)
+    VariantPayload %27 <- %21 : Result
+    Move %23 <- %27
+    Load %28 <- %23
+    Move %20 <- %28
+    Jmp -> instr(119)
+    VariantTag %30 <- %21 : Result
+    Load %29 <- int(1)
+    Eq %31 <- %30, %29
+    JmpIfNot %31 -> instr(119)
+    VariantPayload %32 <- %21 : Result
+    Load %33 <- int(1)
+    Neg %34 <- %33
+    Move %20 <- %34
+    Jmp -> instr(119)
+    Load %26 <- %20
+    Load %28 <- int(1)
+    Neg %27 <- %28
+    Eq %25 <- %26, %27
+    Load %30 <- string("result call scrutinee err arm")
+    Call %24 <- string("std.assert.assert") [%25, %30] (def=d1)
+    Load %26 <- int(9)
+    CreateVariant %25 <- Option::0 %26
+    Call %24 <- string("Holder") [%25] (def=d3)
+    Load %25 <- void
+    Load %27 <- %24
+    LoadField %26 <- %27.0
+    VariantTag %30 <- %26 : Option
+    Load %29 <- int(0)
+    Eq %31 <- %30, %29
+    JmpIfNot %31 -> instr(140)
+    VariantPayload %32 <- %26 : Option
+    Move %28 <- %32
+    Load %34 <- %28
+    Move %25 <- %34
+    Jmp -> instr(147)
+    VariantTag %33 <- %26 : Option
+    Load %35 <- int(1)
+    Eq %36 <- %33, %35
+    JmpIfNot %36 -> instr(147)
+    Load %37 <- int(0)
+    Move %25 <- %37
+    Jmp -> instr(147)
+    Load %31 <- %25
+    Load %32 <- int(9)
+    Eq %29 <- %31, %32
+    Load %34 <- string("field access scrutinee payload")
+    Call %30 <- string("std.assert.assert") [%29, %34] (def=d1)
+    Ret %30

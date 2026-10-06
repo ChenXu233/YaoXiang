@@ -1,0 +1,206 @@
+module
+  fn main() -> Void
+    slot[0] items : Int(64) @depth1
+    slot[1] doubled : Int(64) @depth1
+    slot[2] items2 : Int(64) @depth1
+    slot[3] evens : Int(64) @depth1
+    slot[4] items3 : Int(64) @depth1
+    slot[5] total : Int(64) @depth1
+    slot[6] items4 : Int(64) @depth1
+    slot[7] result : Int(64) @depth1
+    locals_total=17
+    AllocArray %0 size=int(5), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(3)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %7 <- int(4)
+    Load %8 <- int(3)
+    StoreIndex %0[%8] <- %7
+    Load %9 <- int(5)
+    Load %10 <- int(4)
+    StoreIndex %0[%10] <- %9
+    Load %2 <- %0
+    MakeClosure %3 <- closure_0 env=[] (def=d0)
+    Call %1 <- string("std.list.map") [%2, %3] (def=d1)
+    Load %6 <- %1
+    Load %7 <- int(0)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(2)
+    Eq %3 <- %4, %5
+    Load %8 <- string("doubled[0]")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Load %6 <- %1
+    Load %7 <- int(1)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(4)
+    Eq %3 <- %4, %5
+    Load %8 <- string("doubled[1]")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Load %6 <- %1
+    Load %7 <- int(2)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(6)
+    Eq %3 <- %4, %5
+    Load %8 <- string("doubled[2]")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Load %6 <- %1
+    Load %7 <- int(3)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(8)
+    Eq %3 <- %4, %5
+    Load %8 <- string("doubled[3]")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Load %6 <- %1
+    Load %7 <- int(4)
+    LoadIndex %4 <- %6[%7]
+    Load %5 <- int(10)
+    Eq %3 <- %4, %5
+    Load %8 <- string("doubled[4]")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d2)
+    AllocArray %2 size=int(5), elem=int(1)
+    Load %3 <- int(1)
+    Load %4 <- int(0)
+    StoreIndex %2[%4] <- %3
+    Load %5 <- int(2)
+    Load %6 <- int(1)
+    StoreIndex %2[%6] <- %5
+    Load %7 <- int(3)
+    Load %8 <- int(2)
+    StoreIndex %2[%8] <- %7
+    Load %9 <- int(4)
+    Load %10 <- int(3)
+    StoreIndex %2[%10] <- %9
+    Load %11 <- int(5)
+    Load %12 <- int(4)
+    StoreIndex %2[%12] <- %11
+    Load %4 <- %2
+    MakeClosure %5 <- closure_1 env=[] (def=d3)
+    Call %3 <- string("std.list.filter") [%4, %5] (def=d4)
+    Load %8 <- %3
+    Load %9 <- int(0)
+    LoadIndex %6 <- %8[%9]
+    Load %7 <- int(2)
+    Eq %5 <- %6, %7
+    Load %10 <- string("evens[0]")
+    Call %4 <- string("std.assert.assert") [%5, %10] (def=d2)
+    Load %8 <- %3
+    Load %9 <- int(1)
+    LoadIndex %6 <- %8[%9]
+    Load %7 <- int(4)
+    Eq %5 <- %6, %7
+    Load %10 <- string("evens[1]")
+    Call %4 <- string("std.assert.assert") [%5, %10] (def=d2)
+    AllocArray %4 size=int(5), elem=int(1)
+    Load %5 <- int(1)
+    Load %6 <- int(0)
+    StoreIndex %4[%6] <- %5
+    Load %7 <- int(2)
+    Load %8 <- int(1)
+    StoreIndex %4[%8] <- %7
+    Load %9 <- int(3)
+    Load %10 <- int(2)
+    StoreIndex %4[%10] <- %9
+    Load %11 <- int(4)
+    Load %12 <- int(3)
+    StoreIndex %4[%12] <- %11
+    Load %13 <- int(5)
+    Load %14 <- int(4)
+    StoreIndex %4[%14] <- %13
+    Load %6 <- %4
+    MakeClosure %7 <- closure_2 env=[] (def=d5)
+    Load %8 <- int(0)
+    Call %5 <- string("std.list.reduce") [%6, %7, %8] (def=d6)
+    Load %8 <- %5
+    Load %9 <- int(15)
+    Eq %7 <- %8, %9
+    Load %10 <- string("reduce total == 15")
+    Call %6 <- string("std.assert.assert") [%7, %10] (def=d2)
+    AllocArray %6 size=int(5), elem=int(1)
+    Load %7 <- int(1)
+    Load %8 <- int(0)
+    StoreIndex %6[%8] <- %7
+    Load %9 <- int(2)
+    Load %10 <- int(1)
+    StoreIndex %6[%10] <- %9
+    Load %11 <- int(3)
+    Load %12 <- int(2)
+    StoreIndex %6[%12] <- %11
+    Load %13 <- int(4)
+    Load %14 <- int(3)
+    StoreIndex %6[%14] <- %13
+    Load %15 <- int(5)
+    Load %16 <- int(4)
+    StoreIndex %6[%16] <- %15
+    Load %9 <- %6
+    MakeClosure %10 <- closure_3 env=[] (def=d7)
+    Call %8 <- string("std.list.filter") [%9, %10] (def=d4)
+    MakeClosure %11 <- closure_4 env=[] (def=d8)
+    Call %7 <- string("std.list.map") [%8, %11] (def=d1)
+    Load %12 <- %7
+    Load %13 <- int(0)
+    LoadIndex %10 <- %12[%13]
+    Load %11 <- int(30)
+    Eq %9 <- %10, %11
+    Load %14 <- string("chain[0]")
+    Call %8 <- string("std.assert.assert") [%9, %14] (def=d2)
+    Load %12 <- %7
+    Load %13 <- int(1)
+    LoadIndex %10 <- %12[%13]
+    Load %11 <- int(40)
+    Eq %9 <- %10, %11
+    Load %14 <- string("chain[1]")
+    Call %8 <- string("std.assert.assert") [%9, %14] (def=d2)
+    Load %12 <- %7
+    Load %13 <- int(2)
+    LoadIndex %10 <- %12[%13]
+    Load %11 <- int(50)
+    Eq %9 <- %10, %11
+    Load %14 <- string("chain[2]")
+    Call %8 <- string("std.assert.assert") [%9, %14] (def=d2)
+    Ret %8
+  fn closure_0(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=11
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Mul %3 <- %0, %2
+    Ret %3
+  fn closure_1(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=13
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Mod %3 <- %0, %2
+    Load %4 <- int(0)
+    Eq %5 <- %3, %4
+    Ret %5
+  fn closure_2(Int(64), Int(64)) -> Void
+    slot[0] acc : Int(64) @depth2
+    slot[1] x : Int(64) @depth2
+    locals_total=15
+    Load %0 <- %1
+    Load %2 <- %3
+    Add %4 <- %0, %2
+    Ret %4
+  fn closure_3(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=17
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Gt %3 <- %0, %2
+    Ret %3
+  fn closure_4(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=17
+    Load %0 <- %1
+    Load %2 <- int(10)
+    Mul %3 <- %0, %2
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

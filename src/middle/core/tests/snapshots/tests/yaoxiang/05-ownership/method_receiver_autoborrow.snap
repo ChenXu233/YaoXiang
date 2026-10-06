@@ -1,0 +1,114 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 14, column: 20, offset: 757 }, end: Position { line: 14, column: 23, offset: 760 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 14, column: 28, offset: 765 }, end: Position { line: 14, column: 31, offset: 768 } } }, default: None })] }
+  fn Point.sum(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
+    locals_total=6
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Load %3 <- %1
+    LoadField %4 <- %3.1
+    Add %5 <- %2, %4
+    Ret %5
+    Ret %5
+  fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Int(64), Int(64)) -> Void
+    locals_total=14
+    Load %0 <- %1
+    Load %2 <- %1
+    LoadField %3 <- %2.0
+    Load %4 <- %5
+    Add %6 <- %3, %4
+    StoreField %0.0 <- %6 (type=None, name=Some("x"))
+    Load %7 <- %1
+    Load %8 <- %1
+    LoadField %9 <- %8.1
+    Load %10 <- %11
+    Add %12 <- %9, %10
+    StoreField %7.1 <- %12 (type=None, name=Some("y"))
+    Ret
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] q : Int(64) @depth1
+    slot[2] s1 : Int(64) @depth1
+    slot[3] s2 : Int(64) @depth1
+    slot[4] v : Int(64) @depth1
+    slot[5] s3 : Int(64) @depth1
+    locals_total=11
+    Load %0 <- int(1)
+    Load %1 <- int(2)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Load %3 <- int(10)
+    Load %4 <- int(20)
+    Call %0 <- string("Point.shift") [%1, %3, %4] (def=d1)
+    Load %5 <- %2
+    LoadField %4 <- %5.0
+    Load %6 <- int(11)
+    Eq %3 <- %4, %6
+    JmpIfNot %3 -> instr(17)
+    Load %7 <- %2
+    LoadField %8 <- %7.1
+    Load %9 <- int(22)
+    Eq %1 <- %8, %9
+    Jmp -> instr(18)
+    Load %1 <- bool(false)
+    Load %10 <- string("&mut 接收者写回源对象")
+    Call %0 <- string("std.assert.assert") [%1, %10] (def=d2)
+    Load %1 <- %2
+    Load %3 <- int(1)
+    Load %4 <- int(1)
+    Call %0 <- string("Point.shift") [%1, %3, %4] (def=d1)
+    Load %5 <- %2
+    LoadField %4 <- %5.0
+    Load %6 <- int(12)
+    Eq %3 <- %4, %6
+    JmpIfNot %3 -> instr(34)
+    Load %7 <- %2
+    LoadField %8 <- %7.1
+    Load %9 <- int(23)
+    Eq %1 <- %8, %9
+    Jmp -> instr(35)
+    Load %1 <- bool(false)
+    Load %10 <- string("连续 &mut 接收者顺序复用")
+    Call %0 <- string("std.assert.assert") [%1, %10] (def=d2)
+    Load %1 <- int(3)
+    Load %3 <- int(4)
+    Call %0 <- string("Point") [%1, %3] (def=d0)
+    Load %3 <- %0
+    Call %1 <- string("Point.sum") [%3] (def=d3)
+    Load %4 <- %0
+    Load %6 <- int(1)
+    Load %5 <- int(1)
+    Call %3 <- string("Point.shift") [%4, %6, %5] (def=d1)
+    Load %4 <- %0
+    Call %3 <- string("Point.sum") [%4] (def=d3)
+    Load %5 <- %1
+    Load %8 <- int(7)
+    Eq %6 <- %5, %8
+    Load %9 <- string("变更前读 == 7")
+    Call %4 <- string("std.assert.assert") [%6, %9] (def=d2)
+    Load %5 <- %3
+    Load %8 <- int(9)
+    Eq %6 <- %5, %8
+    Load %9 <- string("变更后读 == 9")
+    Call %4 <- string("std.assert.assert") [%6, %9] (def=d2)
+    Load %5 <- %0
+    LoadField %6 <- %5.1
+    Move %4 <- %6
+    Load %8 <- %4
+    Load %9 <- int(5)
+    Eq %5 <- %8, %9
+    Load %7 <- string("var 绑定读令牌活跃")
+    Call %6 <- string("std.assert.assert") [%5, %7] (def=d2)
+    Load %5 <- %0
+    Call %6 <- string("Point.sum") [%5] (def=d3)
+    Load %9 <- %6
+    Load %7 <- int(9)
+    Eq %8 <- %9, %7
+    Load %10 <- string("读接收者与活跃 var 绑定借用共存")
+    Call %5 <- string("std.assert.assert") [%8, %10] (def=d2)
+    Ret %5
+  init (locals=3)
+    islot[0] self : Int(64) @depth1
+    islot[1] dx : Int(64) @depth1
+    islot[2] dy : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

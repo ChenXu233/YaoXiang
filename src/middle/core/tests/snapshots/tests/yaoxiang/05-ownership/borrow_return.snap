@@ -1,0 +1,68 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 11, column: 20, offset: 491 }, end: Position { line: 11, column: 25, offset: 496 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 11, column: 30, offset: 501 }, end: Position { line: 11, column: 35, offset: 506 } } }, default: None })] }
+  fn Point.get_x(Ref { mutable: false, inner: TypeRef("Point") }) -> Generic { name: "Tuple", args: [Ref { mutable: false, inner: Float(64) }, Ref { mutable: false, inner: TypeRef("Point") }] }
+    locals_total=6
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Move %3 <- %2
+    Load %4 <- %1
+    NewTuple %5 <- [%3, %4]
+    Ret %5
+    Ret %5
+  fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Float(64), Float(64)) -> Void
+    locals_total=14
+    Load %0 <- %1
+    Load %2 <- %1
+    LoadField %3 <- %2.0
+    Load %4 <- %5
+    Add %6 <- %3, %4
+    StoreField %0.0 <- %6 (type=None, name=Some("x"))
+    Load %7 <- %1
+    Load %8 <- %1
+    LoadField %9 <- %8.1
+    Load %10 <- %11
+    Add %12 <- %9, %10
+    StoreField %7.1 <- %12 (type=None, name=Some("y"))
+    Ret
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[3] px_ref : Int(64) @depth1
+    slot[5] p : Int(64) @depth1
+    locals_total=12
+    Load %0 <- float(4607182418800017408)
+    Load %1 <- float(4611686018427387904)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Call %0 <- string("Point.get_x") [%1] (def=d1)
+    Load %3 <- int(0)
+    LoadIndex %4 <- %0[%3]
+    Load %5 <- int(1)
+    LoadIndex %6 <- %0[%5]
+    Load %7 <- %4
+    Load %8 <- float(4607182418800017408)
+    Eq %9 <- %7, %8
+    Load %10 <- string("子令牌活跃")
+    Call %5 <- string("std.assert.assert") [%9, %10] (def=d2)
+    Load %10 <- %6
+    LoadField %7 <- %10.1
+    Load %8 <- float(4611686018427387904)
+    Eq %9 <- %7, %8
+    Load %11 <- string("父令牌返回后活跃")
+    Call %5 <- string("std.assert.assert") [%9, %11] (def=d2)
+    Load %9 <- %6
+    Load %7 <- float(4602678819172646912)
+    Load %8 <- float(4602678819172646912)
+    Call %5 <- string("Point.shift") [%9, %7, %8] (def=d3)
+    Load %10 <- %6
+    LoadField %7 <- %10.0
+    Load %8 <- float(4609434218613702656)
+    Eq %9 <- %7, %8
+    Load %11 <- string("&mut 复用写回")
+    Call %5 <- string("std.assert.assert") [%9, %11] (def=d2)
+    Ret %5
+  init (locals=3)
+    islot[0] self : Int(64) @depth1
+    islot[1] dx : Int(64) @depth1
+    islot[2] dy : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

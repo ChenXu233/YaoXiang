@@ -1,0 +1,96 @@
+module
+  fn main() -> Void
+    slot[0] r1 : Int(64) @depth1
+    slot[1] r2 : Int(64) @depth1
+    slot[2] r3 : Int(64) @depth1
+    slot[3] r4 : Int(64) @depth1
+    slot[5] r5 : Int(64) @depth1
+    locals_total=14
+    Load %0 <- void
+    Load %1 <- int(1)
+    Load %2 <- int(1)
+    Eq %3 <- %1, %2
+    JmpIfNot %3 -> instr(8)
+    Load %4 <- string("one")
+    Move %0 <- %4
+    Jmp -> instr(17)
+    Load %5 <- int(2)
+    Eq %6 <- %1, %5
+    JmpIfNot %6 -> instr(14)
+    Load %7 <- string("two")
+    Move %0 <- %7
+    Jmp -> instr(17)
+    Load %8 <- string("other")
+    Move %0 <- %8
+    Jmp -> instr(17)
+    Load %1 <- void
+    Load %2 <- int(2)
+    Load %3 <- int(1)
+    Eq %4 <- %2, %3
+    JmpIfNot %4 -> instr(25)
+    Load %5 <- string("one")
+    Move %1 <- %5
+    Jmp -> instr(34)
+    Load %6 <- int(2)
+    Eq %7 <- %2, %6
+    JmpIfNot %7 -> instr(31)
+    Load %8 <- string("two")
+    Move %1 <- %8
+    Jmp -> instr(34)
+    Load %9 <- string("other")
+    Move %1 <- %9
+    Jmp -> instr(34)
+    Load %2 <- void
+    Load %3 <- int(99)
+    Load %4 <- int(1)
+    Eq %5 <- %3, %4
+    JmpIfNot %5 -> instr(42)
+    Load %6 <- string("one")
+    Move %2 <- %6
+    Jmp -> instr(51)
+    Load %7 <- int(2)
+    Eq %8 <- %3, %7
+    JmpIfNot %8 -> instr(48)
+    Load %9 <- string("two")
+    Move %2 <- %9
+    Jmp -> instr(51)
+    Load %10 <- string("other")
+    Move %2 <- %10
+    Jmp -> instr(51)
+    Load %3 <- void
+    Load %4 <- int(42)
+    Load %5 <- int(10)
+    Eq %6 <- %4, %5
+    JmpIfNot %6 -> instr(59)
+    Load %7 <- int(100)
+    Move %3 <- %7
+    Jmp -> instr(68)
+    Load %8 <- int(42)
+    Eq %9 <- %4, %8
+    JmpIfNot %9 -> instr(65)
+    Load %10 <- int(420)
+    Move %3 <- %10
+    Jmp -> instr(68)
+    Load %11 <- int(0)
+    Move %3 <- %11
+    Jmp -> instr(68)
+    Load %5 <- void
+    Load %6 <- string("hello")
+    Load %7 <- string("world")
+    Eq %8 <- %6, %7
+    JmpIfNot %8 -> instr(76)
+    Load %9 <- string("a")
+    Move %5 <- %9
+    Jmp -> instr(85)
+    Load %10 <- string("hello")
+    Eq %11 <- %6, %10
+    JmpIfNot %11 -> instr(82)
+    Load %12 <- string("b")
+    Move %5 <- %12
+    Jmp -> instr(85)
+    Load %13 <- string("c")
+    Move %5 <- %13
+    Jmp -> instr(85)
+    Ret
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

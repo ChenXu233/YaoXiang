@@ -1,0 +1,222 @@
+module
+  fn Animal(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["Self"]
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 11, column: 20, offset: 427 }, end: Position { line: 11, column: 24, offset: 431 } } }, span: Span { start: Position { line: 11, column: 24, offset: 431 }, end: Position { line: 11, column: 25, offset: 432 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 11, column: 29, offset: 436 }, end: Position { line: 11, column: 35, offset: 442 } } } }, default: None }), Field(StructField { name: "age", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 12, column: 18, offset: 461 }, end: Position { line: 12, column: 22, offset: 465 } } }, span: Span { start: Position { line: 12, column: 22, offset: 465 }, end: Position { line: 12, column: 23, offset: 466 } } }], return_type: Name { name: "Int", span: Span { start: Position { line: 12, column: 27, offset: 470 }, end: Position { line: 12, column: 30, offset: 473 } } } }, default: None }), Field(StructField { name: "age_up", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 13, column: 21, offset: 495 }, end: Position { line: 13, column: 25, offset: 499 } } }, span: Span { start: Position { line: 13, column: 25, offset: 499 }, end: Position { line: 13, column: 26, offset: 500 } } }, Name { name: "Int", span: Span { start: Position { line: 13, column: 34, offset: 508 }, end: Position { line: 13, column: 37, offset: 511 } } }], return_type: Name { name: "Int", span: Span { start: Position { line: 13, column: 42, offset: 516 }, end: Position { line: 13, column: 45, offset: 519 } } } }, default: None })] }
+  fn Dog() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 17, column: 11, offset: 548 }, end: Position { line: 17, column: 17, offset: 554 } } }, default: None }), Field(StructField { name: "age_years", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 18, column: 16, offset: 571 }, end: Position { line: 18, column: 19, offset: 574 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 19, column: 5, offset: 580 }, end: Position { line: 19, column: 11, offset: 586 } }, args: [Name { name: "Dog", span: Span { start: Position { line: 19, column: 12, offset: 587 }, end: Position { line: 19, column: 15, offset: 590 } } }] })] }
+  fn Dog.speak(Ref { mutable: false, inner: TypeRef("Dog") }) -> Generic { name: "String", args: [] }
+    locals_total=2
+    Load %0 <- string("Woof")
+    Ret %0
+    Ret %0
+  fn Dog.age(Ref { mutable: false, inner: TypeRef("Dog") }) -> Int(64)
+    locals_total=3
+    Load %0 <- %1
+    LoadField %2 <- %0.1
+    Ret %2
+    Ret %2
+  fn Dog.age_up(Ref { mutable: false, inner: TypeRef("Dog") }, Int(64)) -> Int(64)
+    locals_total=6
+    Load %0 <- %1
+    LoadField %2 <- %0.1
+    Load %3 <- %4
+    Add %5 <- %2, %3
+    Ret %5
+    Ret %5
+  fn Cat() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "lives", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 26, column: 12, offset: 812 }, end: Position { line: 26, column: 15, offset: 815 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 27, column: 5, offset: 821 }, end: Position { line: 27, column: 11, offset: 827 } }, args: [Name { name: "Cat", span: Span { start: Position { line: 27, column: 12, offset: 828 }, end: Position { line: 27, column: 15, offset: 831 } } }] })] }
+  fn Cat.speak(Ref { mutable: false, inner: TypeRef("Cat") }) -> Generic { name: "String", args: [] }
+    locals_total=2
+    Load %0 <- string("Meow")
+    Ret %0
+    Ret %0
+  fn Cat.age(Ref { mutable: false, inner: TypeRef("Cat") }) -> Int(64)
+    locals_total=5
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Load %3 <- int(3)
+    Mul %4 <- %2, %3
+    Ret %4
+    Ret %4
+  fn Cat.age_up(Ref { mutable: false, inner: TypeRef("Cat") }, Int(64)) -> Int(64)
+    locals_total=8
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Load %3 <- int(3)
+    Mul %4 <- %2, %3
+    Load %5 <- %6
+    Add %7 <- %4, %5
+    Ret %7
+    Ret %7
+  fn describe(TypeRef("Animal")) -> Generic { name: "String", args: [] }
+    slot[0] a : Int(64) @depth1
+    locals_total=10
+    Load %0 <- arg%0
+    Load %1 <- %0
+    VariantTag %2 <- %1 : Animal$Group
+    Load %3 <- int(0)
+    Eq %4 <- %2, %3
+    JmpIfNot %4 -> instr(9)
+    VariantPayload %5 <- %1 : Animal$Group
+    Call %6 <- string("Cat.speak") [%5] (def=d0)
+    Jmp -> instr(15)
+    Load %7 <- int(1)
+    Eq %8 <- %2, %7
+    JmpIfNot %8 -> instr(15)
+    VariantPayload %9 <- %1 : Animal$Group
+    Call %6 <- string("Dog.speak") [%9] (def=d1)
+    Jmp -> instr(15)
+    Ret %6
+    Ret %6
+  fn main() -> Void
+    slot[0] animals : Int(64) @depth1
+    slot[1] s0 : Int(64) @depth1
+    slot[2] s1 : Int(64) @depth1
+    slot[3] a1 : Int(64) @depth1
+    slot[4] d : Int(64) @depth1
+    slot[5] animals2 : Int(64) @depth1
+    locals_total=21
+    AllocArray %0 size=int(2), elem=int(1)
+    Load %1 <- string("Rex")
+    Load %2 <- int(3)
+    Call %3 <- string("Dog") [%1, %2] (def=d2)
+    CreateVariant %4 <- Animal$Group::1 %3
+    Load %5 <- int(0)
+    StoreIndex %0[%5] <- %4
+    Load %6 <- int(9)
+    Call %7 <- string("Cat") [%6] (def=d3)
+    CreateVariant %8 <- Animal$Group::0 %7
+    Load %9 <- int(1)
+    StoreIndex %0[%9] <- %8
+    Load %1 <- %0
+    Load %2 <- int(0)
+    LoadIndex %3 <- %1[%2]
+    VariantTag %5 <- %3 : Animal$Group
+    Load %8 <- int(0)
+    Eq %7 <- %5, %8
+    JmpIfNot %7 -> instr(22)
+    VariantPayload %6 <- %3 : Animal$Group
+    Call %4 <- string("Cat.speak") [%6] (def=d0)
+    Jmp -> instr(28)
+    Load %9 <- int(1)
+    Eq %10 <- %5, %9
+    JmpIfNot %10 -> instr(28)
+    VariantPayload %11 <- %3 : Animal$Group
+    Call %4 <- string("Dog.speak") [%11] (def=d1)
+    Jmp -> instr(28)
+    Load %2 <- %4
+    Load %5 <- string("Woof")
+    Eq %1 <- %2, %5
+    Load %8 <- string("Dog element dispatches speak -> Woof")
+    Call %3 <- string("std.assert.assert") [%1, %8] (def=d4)
+    Load %2 <- %0
+    Load %5 <- int(1)
+    LoadIndex %1 <- %2[%5]
+    VariantTag %8 <- %1 : Animal$Group
+    Load %7 <- int(0)
+    Eq %6 <- %8, %7
+    JmpIfNot %6 -> instr(43)
+    VariantPayload %9 <- %1 : Animal$Group
+    Call %3 <- string("Cat.speak") [%9] (def=d0)
+    Jmp -> instr(49)
+    Load %10 <- int(1)
+    Eq %11 <- %8, %10
+    JmpIfNot %11 -> instr(49)
+    VariantPayload %12 <- %1 : Animal$Group
+    Call %3 <- string("Dog.speak") [%12] (def=d1)
+    Jmp -> instr(49)
+    Load %5 <- %3
+    Load %8 <- string("Meow")
+    Eq %2 <- %5, %8
+    Load %7 <- string("Cat element dispatches speak -> Meow")
+    Call %1 <- string("std.assert.assert") [%2, %7] (def=d4)
+    Load %5 <- %0
+    Load %8 <- int(1)
+    LoadIndex %2 <- %5[%8]
+    Load %7 <- int(1)
+    VariantTag %6 <- %2 : Animal$Group
+    Load %9 <- int(0)
+    Eq %10 <- %6, %9
+    JmpIfNot %10 -> instr(65)
+    VariantPayload %11 <- %2 : Animal$Group
+    Call %1 <- string("Cat.age_up") [%11, %7] (def=d5)
+    Jmp -> instr(71)
+    Load %12 <- int(1)
+    Eq %13 <- %6, %12
+    JmpIfNot %13 -> instr(71)
+    VariantPayload %14 <- %2 : Animal$Group
+    Call %1 <- string("Dog.age_up") [%14, %7] (def=d6)
+    Jmp -> instr(71)
+    Load %8 <- %1
+    Load %7 <- int(28)
+    Eq %5 <- %8, %7
+    Load %6 <- string("Cat age_up(1) dispatches with argument (27+1)")
+    Call %2 <- string("std.assert.assert") [%5, %6] (def=d4)
+    Load %5 <- %0
+    Load %8 <- int(0)
+    LoadIndex %2 <- %5[%8]
+    Load %9 <- %2
+    VariantTag %10 <- %9 : Animal$Group
+    Load %11 <- int(0)
+    Eq %12 <- %10, %11
+    JmpIfNot %12 -> instr(87)
+    VariantPayload %13 <- %9 : Animal$Group
+    Call %7 <- string("Cat.speak") [%13] (def=d0)
+    Jmp -> instr(93)
+    Load %14 <- int(1)
+    Eq %15 <- %10, %14
+    JmpIfNot %15 -> instr(93)
+    VariantPayload %16 <- %9 : Animal$Group
+    Call %7 <- string("Dog.speak") [%16] (def=d1)
+    Jmp -> instr(93)
+    Load %6 <- string("Woof")
+    Eq %8 <- %7, %6
+    Load %17 <- string("two-step element dispatch")
+    Call %5 <- string("std.assert.assert") [%8, %17] (def=d4)
+    Load %10 <- %0
+    Load %11 <- int(0)
+    LoadIndex %9 <- %10[%11]
+    Call %7 <- string("describe") [%9] (def=d7)
+    Load %6 <- string("Woof")
+    Eq %8 <- %7, %6
+    Load %12 <- string("fn param polymorphism (Dog)")
+    Call %5 <- string("std.assert.assert") [%8, %12] (def=d4)
+    Load %10 <- %0
+    Load %11 <- int(1)
+    LoadIndex %9 <- %10[%11]
+    Call %7 <- string("describe") [%9] (def=d7)
+    Load %6 <- string("Meow")
+    Eq %8 <- %7, %6
+    Load %12 <- string("fn param polymorphism (Cat)")
+    Call %5 <- string("std.assert.assert") [%8, %12] (def=d4)
+    Load %8 <- %0
+    Load %9 <- string("Bella")
+    Load %10 <- int(5)
+    Call %6 <- string("Dog") [%9, %10] (def=d2)
+    CreateVariant %7 <- Animal$Group::1 %6
+    Call %5 <- string("std.list.append") [%8, %7] (def=d8)
+    Load %11 <- %5
+    Load %12 <- int(2)
+    LoadIndex %10 <- %11[%12]
+    VariantTag %13 <- %10 : Animal$Group
+    Load %14 <- int(0)
+    Eq %15 <- %13, %14
+    JmpIfNot %15 -> instr(129)
+    VariantPayload %16 <- %10 : Animal$Group
+    Call %6 <- string("Cat.speak") [%16] (def=d0)
+    Jmp -> instr(135)
+    Load %17 <- int(1)
+    Eq %18 <- %13, %17
+    JmpIfNot %18 -> instr(135)
+    VariantPayload %19 <- %10 : Animal$Group
+    Call %6 <- string("Dog.speak") [%19] (def=d1)
+    Jmp -> instr(135)
+    Load %9 <- string("Woof")
+    Eq %7 <- %6, %9
+    Load %20 <- string("append implements-member then dispatch")
+    Call %8 <- string("std.assert.assert") [%7, %20] (def=d4)
+    Ret %8
+  init (locals=2)
+    islot[0] self : Int(64) @depth1
+    islot[1] years : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

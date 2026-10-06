@@ -1,0 +1,50 @@
+module
+  fn always_fails() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
+    locals_total=3
+    Load %0 <- int(1)
+    Load %1 <- int(2)
+    Call %2 <- string("std.test.assert_eq") [%0, %1] (def=d0)
+    Ret %2
+  fn pop_still_runs() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
+    slot[0] xs : Int(64) @depth1
+    slot[1] shorter : Int(64) @depth1
+    locals_total=6
+    AllocArray %0 size=int(2), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %2 <- %0
+    Call %1 <- string("std.list.pop") [%2] (def=d1)
+    Load %4 <- %1
+    StringLength %3 <- %4
+    Load %5 <- int(1)
+    Call %2 <- string("std.test.assert_eq") [%3, %5] (def=d0)
+    Ret %2
+  fn main() -> Void
+    locals_total=10
+    AllocArray %0 size=int(2), elem=int(1)
+    Load %1 <- string("always_fails")
+    MakeClosure %2 <- closure_0 env=[] (def=d2)
+    NewTuple %3 <- [%1, %2]
+    Load %4 <- int(0)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- string("pop_still_runs")
+    MakeClosure %6 <- closure_1 env=[] (def=d3)
+    NewTuple %7 <- [%5, %6]
+    Load %8 <- int(1)
+    StoreIndex %0[%8] <- %7
+    Call %9 <- string("std.test.suite") [%0] (def=d4)
+    Ret %9
+  fn closure_0() -> Void
+    locals_total=5
+    Call %0 <- string("always_fails") [] (def=d5)
+    Ret %0
+  fn closure_1() -> Void
+    locals_total=9
+    Call %0 <- string("pop_still_runs") [] (def=d6)
+    Ret %0
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

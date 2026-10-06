@@ -1,0 +1,275 @@
+module
+  fn main() -> Void
+    slot[0] r : Int(64) @depth1
+    slot[1] first : Int(64) @depth1
+    slot[2] count : Int(64) @depth1
+    slot[8] x : Int(64) @depth2
+    slot[9] it : Int(64) @depth1
+    slot[10] it2 : Int(64) @depth1
+    slot[11] desc : Int(64) @depth1
+    slot[12] doubled : Int(64) @depth1
+    slot[13] big : Int(64) @depth1
+    slot[14] chained : Int(64) @depth1
+    slot[15] total : Int(64) @depth1
+    locals_total=23
+    Load %0 <- int(1)
+    Load %1 <- int(6)
+    Load %2 <- int(1)
+    NewRange %3 <- %0, %1, %2
+    Load %0 <- int(0)
+    Load %1 <- int(0)
+    Load %2 <- %3
+    Call %4 <- string("std.range.iter") [%2] (def=d0)
+    VariantTag %5 <- %4 : Result
+    Load %6 <- int(0)
+    Eq %7 <- %5, %6
+    JmpIfNot %7 -> instr(14)
+    VariantPayload %4 <- %4 : Result
+    Jmp -> instr(15)
+    Call _ <- string("std.range.abort_invalid_step") [%2] (def=d1)
+    Call %8 <- string("std.range.has_next") [%4] (def=d2)
+    JmpIfNot %8 -> instr(28)
+    Call %9 <- string("std.range.next") [%4] (def=d3)
+    Store %10 <- %9
+    Load %11 <- %1
+    Load %12 <- int(0)
+    Eq %13 <- %11, %12
+    JmpIfNot %13 -> instr(24)
+    Load %0 <- %10
+    Load %8 <- %1
+    Load %9 <- int(1)
+    Add %1 <- %8, %9
+    Jmp -> instr(15)
+    Load %13 <- %0
+    Load %11 <- int(1)
+    Eq %9 <- %13, %11
+    Load %12 <- string("first element is 1")
+    Call %8 <- string("std.assert.assert") [%9, %12] (def=d4)
+    Load %13 <- %1
+    Load %11 <- int(5)
+    Eq %9 <- %13, %11
+    Load %12 <- string("iterates 1..5")
+    Call %8 <- string("std.assert.assert") [%9, %12] (def=d4)
+    Load %11 <- int(1)
+    Load %12 <- int(3)
+    Load %14 <- int(1)
+    NewRange %13 <- %11, %12, %14
+    Call %9 <- string("std.range.iter") [%13] (def=d0)
+    Call %8 <- string("std.result.unwrap") [%9] (def=d5)
+    Load %11 <- %8
+    Call %13 <- string("std.range.has_next") [%11] (def=d2)
+    Load %12 <- string("fresh iterator has next")
+    Call %9 <- string("std.assert.assert") [%13, %12] (def=d4)
+    Load %12 <- int(1)
+    Load %14 <- int(3)
+    Load %15 <- int(1)
+    NewRange %11 <- %12, %14, %15
+    Call %13 <- string("std.range.iter") [%11] (def=d0)
+    Call %9 <- string("std.result.unwrap") [%13] (def=d5)
+    Load %15 <- %9
+    Call %12 <- string("std.range.next") [%15] (def=d3)
+    Load %14 <- int(1)
+    Eq %11 <- %12, %14
+    Load %16 <- string("next yields first element")
+    Call %13 <- string("std.assert.assert") [%11, %16] (def=d4)
+    Load %14 <- int(3)
+    Load %15 <- int(0)
+    Load %17 <- int(1)
+    Neg %16 <- %17
+    NewRange %12 <- %14, %15, %16
+    Call %11 <- string("std.range.iter") [%12] (def=d0)
+    Call %13 <- string("std.result.unwrap") [%11] (def=d5)
+    Load %16 <- %13
+    Call %14 <- string("std.range.next") [%16] (def=d3)
+    Load %15 <- int(3)
+    Eq %12 <- %14, %15
+    Load %17 <- string("descending first is 3")
+    Call %11 <- string("std.assert.assert") [%12, %17] (def=d4)
+    Load %16 <- %13
+    Call %14 <- string("std.range.next") [%16] (def=d3)
+    Load %15 <- int(2)
+    Eq %12 <- %14, %15
+    Load %17 <- string("descending next is 2")
+    Call %11 <- string("std.assert.assert") [%12, %17] (def=d4)
+    Load %14 <- %13
+    Call %12 <- string("std.range.has_next") [%14] (def=d2)
+    Load %15 <- string("descending still has 1")
+    Call %11 <- string("std.assert.assert") [%12, %15] (def=d4)
+    Load %16 <- int(1)
+    Load %17 <- int(10)
+    Load %18 <- int(1)
+    NewRange %15 <- %16, %17, %18
+    Load %19 <- int(5)
+    Call %14 <- string("std.range.contains") [%15, %19] (def=d6)
+    Call %12 <- string("std.result.unwrap") [%14] (def=d5)
+    Load %20 <- string("5 in 1..10")
+    Call %11 <- string("std.assert.assert") [%12, %20] (def=d4)
+    Load %17 <- int(1)
+    Load %18 <- int(10)
+    Load %19 <- int(1)
+    NewRange %16 <- %17, %18, %19
+    Load %20 <- int(10)
+    Call %15 <- string("std.range.contains") [%16, %20] (def=d6)
+    Call %14 <- string("std.result.unwrap") [%15] (def=d5)
+    Not %12 <- %14
+    Load %21 <- string("end excluded")
+    Call %11 <- string("std.assert.assert") [%12, %21] (def=d4)
+    Load %16 <- int(0)
+    Load %17 <- int(10)
+    Load %18 <- int(2)
+    NewRange %15 <- %16, %17, %18
+    Load %19 <- int(4)
+    Call %14 <- string("std.range.contains") [%15, %19] (def=d6)
+    Call %12 <- string("std.result.unwrap") [%14] (def=d5)
+    Load %20 <- string("aligned element")
+    Call %11 <- string("std.assert.assert") [%12, %20] (def=d4)
+    Load %17 <- int(0)
+    Load %18 <- int(10)
+    Load %19 <- int(2)
+    NewRange %16 <- %17, %18, %19
+    Load %20 <- int(3)
+    Call %15 <- string("std.range.contains") [%16, %20] (def=d6)
+    Call %14 <- string("std.result.unwrap") [%15] (def=d5)
+    Not %12 <- %14
+    Load %21 <- string("unaligned element")
+    Call %11 <- string("std.assert.assert") [%12, %21] (def=d4)
+    Load %16 <- int(10)
+    Load %17 <- int(0)
+    Load %19 <- int(2)
+    Neg %18 <- %19
+    NewRange %15 <- %16, %17, %18
+    Load %20 <- int(6)
+    Call %14 <- string("std.range.contains") [%15, %20] (def=d6)
+    Call %12 <- string("std.result.unwrap") [%14] (def=d5)
+    Load %21 <- string("descending aligned")
+    Call %11 <- string("std.assert.assert") [%12, %21] (def=d4)
+    Load %17 <- int(10)
+    Load %18 <- int(0)
+    Load %20 <- int(2)
+    Neg %19 <- %20
+    NewRange %16 <- %17, %18, %19
+    Load %21 <- int(5)
+    Call %15 <- string("std.range.contains") [%16, %21] (def=d6)
+    Call %14 <- string("std.result.unwrap") [%15] (def=d5)
+    Not %12 <- %14
+    Load %22 <- string("descending unaligned")
+    Call %11 <- string("std.assert.assert") [%12, %22] (def=d4)
+    Load %16 <- %3
+    Call %15 <- string("std.range.iter") [%16] (def=d0)
+    Call %14 <- string("std.result.unwrap") [%15] (def=d5)
+    MakeClosure %17 <- closure_0 env=[] (def=d7)
+    Call %12 <- string("std.range.map") [%14, %17] (def=d8)
+    Call %11 <- string("std.range.collect") [%12] (def=d9)
+    Load %17 <- %11
+    StringLength %15 <- %17
+    Load %16 <- int(5)
+    Eq %14 <- %15, %16
+    Load %18 <- string("map+collect length")
+    Call %12 <- string("std.assert.assert") [%14, %18] (def=d4)
+    Load %17 <- %11
+    Load %18 <- int(0)
+    LoadIndex %15 <- %17[%18]
+    Load %16 <- int(2)
+    Eq %14 <- %15, %16
+    Load %19 <- string("map first = 2")
+    Call %12 <- string("std.assert.assert") [%14, %19] (def=d4)
+    Load %17 <- %11
+    Load %18 <- int(4)
+    LoadIndex %15 <- %17[%18]
+    Load %16 <- int(10)
+    Eq %14 <- %15, %16
+    Load %19 <- string("map last = 10")
+    Call %12 <- string("std.assert.assert") [%14, %19] (def=d4)
+    Load %17 <- %3
+    Call %16 <- string("std.range.iter") [%17] (def=d0)
+    Call %15 <- string("std.result.unwrap") [%16] (def=d5)
+    MakeClosure %18 <- closure_1 env=[] (def=d10)
+    Call %14 <- string("std.range.filter") [%15, %18] (def=d11)
+    Call %12 <- string("std.range.collect") [%14] (def=d9)
+    Load %18 <- %12
+    StringLength %16 <- %18
+    Load %17 <- int(2)
+    Eq %15 <- %16, %17
+    Load %19 <- string("filter keeps 4,5")
+    Call %14 <- string("std.assert.assert") [%15, %19] (def=d4)
+    Load %18 <- %12
+    Load %19 <- int(0)
+    LoadIndex %16 <- %18[%19]
+    Load %17 <- int(4)
+    Eq %15 <- %16, %17
+    Load %20 <- string("filter first = 4")
+    Call %14 <- string("std.assert.assert") [%15, %20] (def=d4)
+    Load %19 <- %3
+    Call %18 <- string("std.range.iter") [%19] (def=d0)
+    Call %17 <- string("std.result.unwrap") [%18] (def=d5)
+    MakeClosure %20 <- closure_2 env=[] (def=d12)
+    Call %16 <- string("std.range.filter") [%17, %20] (def=d11)
+    MakeClosure %21 <- closure_3 env=[] (def=d13)
+    Call %15 <- string("std.range.map") [%16, %21] (def=d8)
+    Call %14 <- string("std.range.collect") [%15] (def=d9)
+    Load %19 <- %14
+    Load %20 <- int(0)
+    LoadIndex %17 <- %19[%20]
+    Load %18 <- int(20)
+    Eq %16 <- %17, %18
+    Load %21 <- string("chain even*10 first")
+    Call %15 <- string("std.assert.assert") [%16, %21] (def=d4)
+    Load %19 <- %14
+    Load %20 <- int(1)
+    LoadIndex %17 <- %19[%20]
+    Load %18 <- int(40)
+    Eq %16 <- %17, %18
+    Load %21 <- string("chain even*10 second")
+    Call %15 <- string("std.assert.assert") [%16, %21] (def=d4)
+    Load %18 <- %3
+    Call %17 <- string("std.range.iter") [%18] (def=d0)
+    Call %16 <- string("std.result.unwrap") [%17] (def=d5)
+    Load %19 <- int(0)
+    MakeClosure %20 <- closure_4 env=[] (def=d14)
+    Call %15 <- string("std.range.reduce") [%16, %19, %20] (def=d15)
+    Load %18 <- %15
+    Load %19 <- int(15)
+    Eq %17 <- %18, %19
+    Load %20 <- string("reduce sum 1..5 = 15")
+    Call %16 <- string("std.assert.assert") [%17, %20] (def=d4)
+    Ret %16
+  fn closure_0(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=23
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Mul %3 <- %0, %2
+    Ret %3
+  fn closure_1(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=23
+    Load %0 <- %1
+    Load %2 <- int(3)
+    Gt %3 <- %0, %2
+    Ret %3
+  fn closure_2(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=23
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Mod %3 <- %0, %2
+    Load %4 <- int(0)
+    Eq %5 <- %3, %4
+    Ret %5
+  fn closure_3(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=23
+    Load %0 <- %1
+    Load %2 <- int(10)
+    Mul %3 <- %0, %2
+    Ret %3
+  fn closure_4(Int(64), Int(64)) -> Void
+    slot[0] acc : Int(64) @depth2
+    slot[1] x : Int(64) @depth2
+    locals_total=23
+    Load %0 <- %1
+    Load %2 <- %3
+    Add %4 <- %0, %2
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

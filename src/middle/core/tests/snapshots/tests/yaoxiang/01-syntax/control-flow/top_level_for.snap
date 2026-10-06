@@ -1,0 +1,31 @@
+module
+  global[0] total : Int(64)
+  init (locals=10)
+    islot[9] n : Int(64) @depth1
+    Load %0 <- int(0)
+    Store @0 <- %0
+    AllocArray %1 size=int(3), elem=int(1)
+    Load %2 <- int(10)
+    Load %3 <- int(0)
+    StoreIndex %1[%3] <- %2
+    Load %4 <- int(20)
+    Load %5 <- int(1)
+    StoreIndex %1[%5] <- %4
+    Load %6 <- int(30)
+    Load %7 <- int(2)
+    StoreIndex %1[%7] <- %6
+    Call %8 <- string("std.list.iter") [%1] (def=_)
+    Call %9 <- string("std.list.has_next") [%8] (def=_)
+    JmpIfNot %9 -> instr(22)
+    Call %10 <- string("std.list.next") [%8] (def=_)
+    Store %11 <- %10
+    Load %12 <- @0
+    Load %13 <- %11
+    Add %14 <- %12, %13
+    Store @0 <- %14
+    Jmp -> instr(13)
+    Load %14 <- @0
+    Load %12 <- int(60)
+    Eq %10 <- %14, %12
+    Load %13 <- string("顶层 for 累加 10+20+30 == 60")
+    Call %9 <- string("std.assert.assert") [%10, %13] (def=_)

@@ -1,0 +1,39 @@
+module
+  fn main() -> Void
+    slot[0] pi_val : Int(64) @depth1
+    slot[1] neg_val : Int(64) @depth1
+    locals_total=7
+    Load %0 <- int(42)
+    Load %1 <- int(42)
+    Eq %2 <- %0, %1
+    Load %3 <- string("int 42")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %3 <- int(7)
+    Neg %0 <- %3
+    Load %5 <- int(7)
+    Neg %1 <- %5
+    Eq %2 <- %0, %1
+    Load %6 <- string("int -7")
+    Call %4 <- string("std.assert.assert") [%2, %6] (def=d0)
+    Load %4 <- float(4614253070214989087)
+    Load %0 <- float(4602678819172646912)
+    Neg %2 <- %0
+    Load %1 <- bool(true)
+    Load %3 <- string("float literals assigned")
+    Call %0 <- string("std.assert.assert") [%1, %3] (def=d0)
+    Load %3 <- string("hello")
+    Load %5 <- string("hello")
+    Eq %1 <- %3, %5
+    Load %6 <- string("str hello")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d0)
+    Load %3 <- string("")
+    Load %5 <- string("")
+    Eq %1 <- %3, %5
+    Load %6 <- string("str empty")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d0)
+    Load %1 <- bool(true)
+    Load %3 <- string("bool true")
+    Call %0 <- string("std.assert.assert") [%1, %3] (def=d0)
+    Ret %0
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

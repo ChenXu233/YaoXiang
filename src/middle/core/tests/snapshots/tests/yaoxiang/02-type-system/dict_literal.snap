@@ -1,0 +1,15 @@
+module
+  fn main() -> Void
+    slot[0] d : Int(64) @depth1
+    locals_total=5
+    Load %0 <- string("a")
+    Load %1 <- int(1)
+    Load %2 <- string("b")
+    Load %3 <- int(2)
+    NewDict %4 <- keys=[%0, %2] values=[%1, %3]
+    Load %1 <- bool(true)
+    Load %2 <- string("dict literal created successfully")
+    Call %0 <- string("std.assert.assert") [%1, %2] (def=d0)
+    Ret %0
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

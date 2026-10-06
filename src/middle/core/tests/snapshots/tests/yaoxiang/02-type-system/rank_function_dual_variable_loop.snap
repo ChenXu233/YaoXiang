@@ -1,0 +1,36 @@
+module
+  fn NonNegative(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Ge, left: Var("x", Span { start: Position { line: 12, column: 35, offset: 653 }, end: Position { line: 12, column: 36, offset: 654 } }), right: Lit(Int(0), Span { start: Position { line: 12, column: 40, offset: 658 }, end: Position { line: 12, column: 41, offset: 659 } }), span: Span { start: Position { line: 12, column: 37, offset: 655 }, end: Position { line: 12, column: 39, offset: 657 } } }))] }
+  fn AtMost(Int(64), Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Le, left: Var("x", Span { start: Position { line: 14, column: 38, offset: 700 }, end: Position { line: 14, column: 39, offset: 701 } }), right: Var("n", Span { start: Position { line: 14, column: 43, offset: 705 }, end: Position { line: 14, column: 44, offset: 706 } }), span: Span { start: Position { line: 14, column: 40, offset: 702 }, end: Position { line: 14, column: 42, offset: 704 } } }))] }
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    locals_total=10
+    Load %0 <- int(0)
+    Load %1 <- int(10)
+    Load %2 <- void
+    Load %3 <- %0
+    Load %4 <- %1
+    Lt %5 <- %3, %4
+    JmpIfNot %5 -> instr(14)
+    Load %6 <- %0
+    Load %7 <- int(1)
+    Add %0 <- %6, %7
+    Load %8 <- %1
+    Load %9 <- int(1)
+    Sub %1 <- %8, %9
+    Jmp -> instr(3)
+    Load %3 <- %0
+    Load %4 <- int(5)
+    Eq %5 <- %3, %4
+    Load %6 <- string("两侧各走 5 步后相等：a == 5")
+    Call %2 <- string("std.assert.assert") [%5, %6] (def=d0)
+    Load %3 <- %1
+    Load %4 <- int(5)
+    Eq %5 <- %3, %4
+    Load %6 <- string("两侧各走 5 步后相等：b == 5")
+    Call %2 <- string("std.assert.assert") [%5, %6] (def=d0)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

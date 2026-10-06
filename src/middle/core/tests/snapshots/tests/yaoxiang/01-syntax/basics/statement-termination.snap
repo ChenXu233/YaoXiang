@@ -1,0 +1,82 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 20, offset: 405 }, end: Position { line: 11, column: 23, offset: 408 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 11, column: 28, offset: 413 }, end: Position { line: 11, column: 31, offset: 416 } } }, default: None })] }
+  fn mk(Int(64), Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    slot[1] y : Int(64) @depth1
+    locals_total=6
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %0
+    Load %3 <- %1
+    Add %4 <- %2, %3
+    Ret %4
+    Ret
+  fn main() -> Void
+    slot[0] sum : Int(64) @depth1
+    slot[1] r : Int(64) @depth1
+    slot[2] c : Int(64) @depth1
+    slot[3] d : Int(64) @depth1
+    slot[4] p : Int(64) @depth1
+    slot[5] v : Int(64) @depth1
+    locals_total=12
+    Load %0 <- int(1)
+    Load %1 <- int(2)
+    Add %2 <- %0, %1
+    Load %3 <- int(3)
+    Add %4 <- %2, %3
+    Load %0 <- %4
+    Load %1 <- int(6)
+    Eq %3 <- %0, %1
+    Load %5 <- string("line-end operator continuation")
+    Call %2 <- string("std.assert.assert") [%3, %5] (def=d0)
+    Load %3 <- int(1)
+    Load %0 <- int(2)
+    Call %2 <- string("mk") [%3, %0] (def=d1)
+    Load %1 <- %2
+    Load %5 <- int(3)
+    Eq %0 <- %1, %5
+    Load %6 <- string("paren continuation in call args")
+    Call %3 <- string("std.assert.assert") [%0, %6] (def=d0)
+    Load %0 <- int(1)
+    Call %3 <- string("std.io.println") [%0] (def=d2)
+    Load %3 <- int(3)
+    Load %0 <- int(4)
+    Load %7 <- %3
+    Load %8 <- int(3)
+    Eq %6 <- %7, %8
+    JmpIfNot %6 -> instr(30)
+    Load %9 <- %0
+    Load %10 <- int(4)
+    Eq %5 <- %9, %10
+    Jmp -> instr(31)
+    Load %5 <- bool(false)
+    Load %11 <- string("destructure after newline not swallowed")
+    Call %1 <- string("std.assert.assert") [%5, %11] (def=d0)
+    Load %5 <- int(10)
+    Call %1 <- string("std.io.println") [%5] (def=d2)
+    AllocArray %1 size=int(3), elem=int(1)
+    Load %5 <- int(1)
+    Load %6 <- int(0)
+    StoreIndex %1[%6] <- %5
+    Load %7 <- int(2)
+    Load %8 <- int(1)
+    StoreIndex %1[%8] <- %7
+    Load %9 <- int(3)
+    Load %10 <- int(2)
+    StoreIndex %1[%10] <- %9
+    Load %5 <- int(10)
+    Call %1 <- string("std.io.println") [%5] (def=d2)
+    Load %5 <- int(6)
+    Load %6 <- int(2)
+    Call %1 <- string("Point") [%5, %6] (def=d3)
+    Load %6 <- %1
+    LoadField %5 <- %6.0
+    Load %8 <- %5
+    Load %9 <- int(6)
+    Eq %7 <- %8, %9
+    Load %10 <- string("leading-dot chained field access")
+    Call %6 <- string("std.assert.assert") [%7, %10] (def=d0)
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

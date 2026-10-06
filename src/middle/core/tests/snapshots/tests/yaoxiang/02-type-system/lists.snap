@@ -1,0 +1,26 @@
+module
+  fn main() -> Void
+    slot[0] items : Int(64) @depth1
+    slot[1] first : Int(64) @depth1
+    locals_total=7
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(3)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %2 <- %0
+    Load %3 <- int(0)
+    LoadIndex %1 <- %2[%3]
+    Load %4 <- %1
+    Load %5 <- int(1)
+    Eq %3 <- %4, %5
+    Load %6 <- string("first element should be 1")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d0)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

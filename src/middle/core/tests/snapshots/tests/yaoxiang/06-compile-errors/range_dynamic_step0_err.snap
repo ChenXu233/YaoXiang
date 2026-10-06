@@ -1,0 +1,32 @@
+module
+  fn main() -> Void
+    slot[0] n : Int(64) @depth1
+    slot[1] r : Int(64) @depth1
+    slot[8] i : Int(64) @depth2
+    locals_total=15
+    Load %0 <- int(0)
+    Load %1 <- int(1)
+    Load %2 <- int(10)
+    Load %3 <- %0
+    NewRange %4 <- %1, %2, %3
+    Load %2 <- %4
+    Call %3 <- string("std.range.iter") [%2] (def=d0)
+    VariantTag %5 <- %3 : Result
+    Load %6 <- int(0)
+    Eq %7 <- %5, %6
+    JmpIfNot %7 -> instr(13)
+    VariantPayload %3 <- %3 : Result
+    Jmp -> instr(14)
+    Call _ <- string("std.range.abort_invalid_step") [%2] (def=d1)
+    Call %8 <- string("std.range.has_next") [%3] (def=d2)
+    JmpIfNot %8 -> instr(23)
+    Call %9 <- string("std.range.next") [%3] (def=d3)
+    Store %10 <- %9
+    Load %11 <- %10
+    Load %12 <- %10
+    Call %13 <- string("int.to_string") [%12] (def=d4)
+    Call %14 <- string("std.io.print") [%13] (def=d5)
+    Jmp -> instr(14)
+    Ret
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,63 @@
+module
+  fn IsPositive(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 19, column: 34, offset: 1156 }, end: Position { line: 19, column: 35, offset: 1157 } }), right: Lit(Int(0), Span { start: Position { line: 19, column: 38, offset: 1160 }, end: Position { line: 19, column: 39, offset: 1161 } }), span: Span { start: Position { line: 19, column: 36, offset: 1158 }, end: Position { line: 19, column: 37, offset: 1159 } } }))] }
+  fn succ(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Generic { name: "IsPositive", args: [TypeRef("r")] }
+    slot[0] b : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(1)
+    Add %3 <- %1, %2
+    Ret %3
+  fn double(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Generic { name: "IsPositive", args: [TypeRef("b")] }
+    slot[0] b : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Mul %3 <- %1, %2
+    Ret %3
+  fn pick(Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Generic { name: "IsPositive", args: [TypeRef("r")] }
+    slot[0] b : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(100)
+    Gt %3 <- %1, %2
+    JmpIfNot %3 -> instr(7)
+    Load %4 <- %0
+    Ret %4
+    Load %1 <- %0
+    Load %2 <- int(1)
+    Add %3 <- %1, %2
+    Ret %3
+    Ret %3
+  fn main() -> Void
+    locals_total=6
+    Load %0 <- int(4)
+    Call %1 <- string("succ") [%0] (def=d0)
+    Load %2 <- int(5)
+    Eq %3 <- %1, %2
+    Load %4 <- string("succ(4) == 5")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- int(3)
+    Call %1 <- string("double") [%0] (def=d2)
+    Load %2 <- int(6)
+    Eq %3 <- %1, %2
+    Load %4 <- string("double(3) == 6")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- int(200)
+    Call %1 <- string("pick") [%0] (def=d3)
+    Load %2 <- int(200)
+    Eq %3 <- %1, %2
+    Load %4 <- string("pick(200) 走首条出口，返回 b")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- int(5)
+    Call %1 <- string("pick") [%0] (def=d3)
+    Load %2 <- int(6)
+    Eq %3 <- %1, %2
+    Load %4 <- string("pick(5) 走次条出口，返回 b + 1")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

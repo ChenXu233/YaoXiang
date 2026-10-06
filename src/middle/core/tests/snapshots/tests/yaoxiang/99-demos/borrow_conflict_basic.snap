@@ -1,0 +1,51 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 20, offset: 204 }, end: Position { line: 7, column: 25, offset: 209 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Float", span: Span { start: Position { line: 7, column: 30, offset: 214 }, end: Position { line: 7, column: 35, offset: 219 } } }, default: None })] }
+  fn Point.read(Ref { mutable: false, inner: TypeRef("Point") }) -> Void
+    locals_total=4
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Call %3 <- string("std.io.println") [%2] (def=d0)
+    Ret %3
+  fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Float(64), Float(64)) -> Void
+    locals_total=14
+    Load %0 <- %1
+    Load %2 <- %1
+    LoadField %3 <- %2.0
+    Load %4 <- %5
+    Add %6 <- %3, %4
+    StoreField %0.0 <- %6 (type=None, name=Some("x"))
+    Load %7 <- %1
+    Load %8 <- %1
+    LoadField %9 <- %8.1
+    Load %10 <- %11
+    Add %12 <- %9, %10
+    StoreField %7.1 <- %12 (type=None, name=Some("y"))
+    Ret
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    locals_total=5
+    Load %0 <- float(4607182418800017408)
+    Load %1 <- float(4611686018427387904)
+    Call %2 <- string("Point") [%0, %1] (def=d1)
+    Load %1 <- %2
+    Call %0 <- string("Point.read") [%1] (def=d2)
+    Drop %2
+    Load %1 <- %2
+    Load %3 <- float(4607182418800017408)
+    Load %4 <- float(4607182418800017408)
+    Call %0 <- string("Point.shift") [%1, %3, %4] (def=d3)
+    Load %1 <- bool(true)
+    Load %3 <- string("point shifted successfully")
+    Call %0 <- string("std.assert.assert") [%1, %3] (def=d4)
+    Load %1 <- %2
+    Call %0 <- string("std.io.println") [%1] (def=d0)
+    Load %1 <- bool(true)
+    Load %3 <- string("all passed")
+    Call %0 <- string("std.assert.assert") [%1, %3] (def=d4)
+    Ret %0
+  init (locals=3)
+    islot[0] self : Int(64) @depth1
+    islot[1] dx : Int(64) @depth1
+    islot[2] dy : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

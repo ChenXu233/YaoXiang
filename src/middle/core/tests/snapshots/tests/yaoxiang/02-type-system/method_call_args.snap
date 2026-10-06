@@ -1,0 +1,56 @@
+module
+  fn Counter() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "n", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 22, offset: 457 }, end: Position { line: 10, column: 25, offset: 460 } } }, default: None }), Field(StructField { name: "label", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 10, column: 34, offset: 469 }, end: Position { line: 10, column: 40, offset: 475 } } }, default: None })] }
+  fn Counter.bump(Ref { mutable: true, inner: TypeRef("Counter") }, Int(64)) -> Void
+    locals_total=8
+    Load %0 <- %1
+    Load %2 <- %1
+    LoadField %3 <- %2.0
+    Load %4 <- %5
+    Add %6 <- %3, %4
+    StoreField %0.0 <- %6 (type=None, name=Some("n"))
+    Ret
+  fn Counter.rename(Ref { mutable: true, inner: TypeRef("Counter") }, Generic { name: "String", args: [] }) -> Void
+    locals_total=5
+    Load %0 <- %1
+    Load %2 <- %3
+    StoreField %0.1 <- %2 (type=None, name=Some("label"))
+    Ret
+  fn Counter.value(Ref { mutable: false, inner: TypeRef("Counter") }) -> Int(64)
+    locals_total=3
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Ret %2
+    Ret %2
+  fn main() -> Void
+    slot[0] c : Int(64) @depth1
+    locals_total=7
+    Load %0 <- int(10)
+    Load %1 <- string("a")
+    Call %2 <- string("Counter") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Load %3 <- int(5)
+    Call %0 <- string("Counter.bump") [%1, %3] (def=d1)
+    Load %4 <- %2
+    Call %3 <- string("Counter.value") [%4] (def=d2)
+    Load %5 <- int(15)
+    Eq %1 <- %3, %5
+    Load %6 <- string("bump(5) should make value 15")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d3)
+    Load %1 <- %2
+    Load %3 <- int(1)
+    Call %0 <- string("Counter.bump") [%1, %3] (def=d1)
+    Load %1 <- %2
+    Load %3 <- string("b")
+    Call %0 <- string("Counter.rename") [%1, %3] (def=d4)
+    Load %4 <- %2
+    Call %3 <- string("Counter.value") [%4] (def=d2)
+    Load %5 <- int(16)
+    Eq %1 <- %3, %5
+    Load %6 <- string("second bump(1) should make value 16")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d3)
+    Ret %0
+  init (locals=2)
+    islot[0] self : Int(64) @depth1
+    islot[1] name : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

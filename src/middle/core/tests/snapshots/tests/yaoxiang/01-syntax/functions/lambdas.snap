@@ -1,0 +1,71 @@
+module
+  fn main() -> Void
+    locals_total=8
+    Load %0 <- int(21)
+    Call %1 <- string("double") [%0] (def=d0)
+    Load %2 <- int(42)
+    Eq %3 <- %1, %2
+    Load %4 <- string("double(21) == 42")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- int(3)
+    Load %4 <- int(4)
+    Call %1 <- string("add") [%0, %4] (def=d2)
+    Load %2 <- int(7)
+    Eq %3 <- %1, %2
+    Load %6 <- string("add(3, 4) == 7")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load %0 <- int(10)
+    Load %4 <- int(20)
+    Call %1 <- string("std.math.max") [%0, %4] (def=d3)
+    Load %2 <- int(20)
+    Eq %3 <- %1, %2
+    Load %6 <- string("max(10, 20) == 20")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load %0 <- int(30)
+    Load %4 <- int(5)
+    Call %1 <- string("std.math.max") [%0, %4] (def=d3)
+    Load %2 <- int(30)
+    Eq %3 <- %1, %2
+    Load %6 <- string("max(30, 5) == 30")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Ret %5
+  fn double(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Mul %3 <- %1, %2
+    Ret %3
+    Ret
+  fn add(Int(64), Int(64)) -> Void
+    slot[0] a : Int(64) @depth2
+    slot[1] b : Int(64) @depth2
+    locals_total=6
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %0
+    Load %3 <- %1
+    Add %4 <- %2, %3
+    Ret %4
+    Ret
+  fn max(Int(64), Int(64)) -> Void
+    slot[0] a : Int(64) @depth2
+    slot[1] b : Int(64) @depth2
+    locals_total=8
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %0
+    Load %3 <- %1
+    Gt %4 <- %2, %3
+    JmpIfNot %4 -> instr(10)
+    Load %5 <- %0
+    Ret %5
+    Move %6 <- %5
+    Jmp -> instr(13)
+    Load %7 <- %1
+    Ret %7
+    Move %6 <- %7
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

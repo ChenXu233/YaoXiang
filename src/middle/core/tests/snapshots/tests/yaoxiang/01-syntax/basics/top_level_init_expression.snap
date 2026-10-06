@@ -1,0 +1,79 @@
+module
+  global[0] literal : Int(64)
+  global[1] arithmetic : Int(64)
+  global[2] concat : Int(64)
+  global[3] pi_anno : Float(64)
+  global[4] doubled : Int(64)
+  global[5] incremented : Int(64)
+  global[6] fwd_derived : Int(64)
+  global[7] fwd_base : Int(64)
+  fn inc(Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(1)
+    Add %3 <- %1, %2
+    Ret %3
+    Ret
+  fn main() -> Void
+    locals_total=5
+    Load %0 <- @0
+    Load %1 <- int(42)
+    Eq %2 <- %0, %1
+    Load %3 <- string("顶层字面量绑定 == 42")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @1
+    Load %1 <- int(6)
+    Eq %2 <- %0, %1
+    Load %3 <- string("顶层算术绑定 == 6（#261）")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @2
+    Load %1 <- string("hello, world")
+    Eq %2 <- %0, %1
+    Load %3 <- string("顶层字符串拼接 == hello, world")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @3
+    Load %1 <- float(4614253070214989087)
+    Eq %2 <- %0, %1
+    Load %3 <- string("顶层类型标注绑定 == 3.14")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @4
+    Load %1 <- int(12)
+    Eq %2 <- %0, %1
+    Load %3 <- string("跨顶层 binding 引用（T2 运行时初始化）")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @5
+    Load %1 <- int(43)
+    Eq %2 <- %0, %1
+    Load %3 <- string("顶层调用初始化（T2 运行时求值）")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @6
+    Load %1 <- int(21)
+    Eq %2 <- %0, %1
+    Load %3 <- string("前向引用（T3 拓扑排序：fwd_base 先初始化）")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Ret %4
+  init (locals=0)
+    Load %0 <- int(42)
+    Store @0 <- %0
+    Load %1 <- int(6)
+    Store @1 <- %1
+    Load %2 <- string("hello, world")
+    Store @2 <- %2
+    Load %3 <- float(4614253070214989087)
+    Store @3 <- %3
+    Load %4 <- @1
+    Load %5 <- int(2)
+    Mul %6 <- %4, %5
+    Store @4 <- %6
+    Load %2 <- @0
+    Call %1 <- string("inc") [%2] (def=_)
+    Store @5 <- %1
+    Load %5 <- int(7)
+    Store @7 <- %5
+    Load %6 <- @7
+    Load %4 <- int(3)
+    Mul %3 <- %6, %4
+    Store @6 <- %3
+    Call %4 <- string("main") [] (def=_)

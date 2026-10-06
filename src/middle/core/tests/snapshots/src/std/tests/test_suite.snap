@@ -1,0 +1,86 @@
+module
+  fn push_grows_len() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
+    slot[0] xs : Int(64) @depth1
+    slot[1] extended : Int(64) @depth1
+    locals_total=6
+    AllocArray %0 size=int(1), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %2 <- %0
+    Load %3 <- int(2)
+    Call %1 <- string("std.list.push") [%2, %3] (def=d0)
+    Load %4 <- %1
+    Call %3 <- string("std.list.len") [%4] (def=d1)
+    Load %5 <- int(2)
+    Call %2 <- string("std.test.assert_eq") [%3, %5] (def=d2)
+    Ret %2
+  fn pop_shrinks_len() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
+    slot[0] xs : Int(64) @depth1
+    slot[1] shorter : Int(64) @depth1
+    locals_total=7
+    AllocArray %0 size=int(2), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %2 <- %0
+    Call %1 <- string("std.list.pop") [%2] (def=d3)
+    Load %4 <- %1
+    StringLength %3 <- %4
+    Load %5 <- int(1)
+    Call %2 <- string("std.test.assert_eq") [%3, %5] (def=d2)
+    Load %4 <- %1
+    Load %5 <- int(0)
+    LoadIndex %3 <- %4[%5]
+    Load %6 <- int(1)
+    Call %2 <- string("std.test.assert_eq") [%3, %6] (def=d2)
+    Ret %2
+  fn parse_ok() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
+    slot[0] p : Int(64) @depth1
+    slot[1] v : Int(64) @depth1
+    locals_total=5
+    Load %0 <- string("42")
+    Call %1 <- string("std.string.parse_int") [%0] (def=d4)
+    Load %2 <- %1
+    Call %0 <- string("std.result.unwrap") [%2] (def=d5)
+    Load %3 <- %0
+    Load %4 <- int(42)
+    Call %2 <- string("std.test.assert_eq") [%3, %4] (def=d2)
+    Ret %2
+  fn main() -> Void
+    locals_total=14
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- string("push_grows_len")
+    MakeClosure %2 <- closure_0 env=[] (def=d6)
+    NewTuple %3 <- [%1, %2]
+    Load %4 <- int(0)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- string("pop_shrinks_len")
+    MakeClosure %6 <- closure_1 env=[] (def=d7)
+    NewTuple %7 <- [%5, %6]
+    Load %8 <- int(1)
+    StoreIndex %0[%8] <- %7
+    Load %9 <- string("parse_ok")
+    MakeClosure %10 <- closure_2 env=[] (def=d8)
+    NewTuple %11 <- [%9, %10]
+    Load %12 <- int(2)
+    StoreIndex %0[%12] <- %11
+    Call %13 <- string("std.test.suite") [%0] (def=d9)
+    Ret %13
+  fn closure_0() -> Void
+    locals_total=5
+    Call %0 <- string("push_grows_len") [] (def=d10)
+    Ret %0
+  fn closure_1() -> Void
+    locals_total=9
+    Call %0 <- string("pop_shrinks_len") [] (def=d11)
+    Ret %0
+  fn closure_2() -> Void
+    locals_total=13
+    Call %0 <- string("parse_ok") [] (def=d12)
+    Ret %0
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

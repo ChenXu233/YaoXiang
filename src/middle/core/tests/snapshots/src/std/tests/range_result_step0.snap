@@ -1,0 +1,114 @@
+module
+  fn first_of(Int(64)) -> Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] }
+    slot[0] n : Int(64) @depth1
+    slot[1] r : Int(64) @depth1
+    slot[2] it : Int(64) @depth1
+    locals_total=8
+    Load %0 <- arg%0
+    Load %1 <- int(1)
+    Load %2 <- int(10)
+    Load %3 <- %0
+    NewRange %4 <- %1, %2, %3
+    Load %2 <- %4
+    Call %1 <- string("std.range.iter") [%2] (def=d0)
+    Call %3 <- string("std.result.Result.is_failure") [%1] (def=_)
+    JmpIf %3 -> instr(12)
+    Call %5 <- string("std.result.Result.success") [%1] (def=_)
+    Load %1 <- %5
+    Jmp -> instr(15)
+    Call %6 <- string("std.result.Result.residual") [%1] (def=_)
+    Call %7 <- string("std.result.Result.from_error") [%6] (def=_)
+    Ret %7
+    Load %5 <- %1
+    Call %3 <- string("std.range.next") [%5] (def=d1)
+    CreateVariant %2 <- Result::0 %3
+    Ret %2
+    Ret %2
+  fn contains_low(Int(64), Int(64)) -> Generic { name: "Result", args: [Bool, TypeRef("Error")] }
+    slot[0] n : Int(64) @depth1
+    slot[1] x : Int(64) @depth1
+    slot[2] r : Int(64) @depth1
+    locals_total=11
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- int(0)
+    Load %3 <- int(10)
+    Load %4 <- %0
+    NewRange %5 <- %2, %3, %4
+    Load %4 <- %5
+    Load %6 <- %1
+    Call %3 <- string("std.range.contains") [%4, %6] (def=d2)
+    Call %7 <- string("std.result.Result.is_failure") [%3] (def=_)
+    JmpIf %7 -> instr(14)
+    Call %8 <- string("std.result.Result.success") [%3] (def=_)
+    Load %3 <- %8
+    Jmp -> instr(17)
+    Call %9 <- string("std.result.Result.residual") [%3] (def=_)
+    Call %10 <- string("std.result.Result.from_error") [%9] (def=_)
+    Ret %10
+    CreateVariant %2 <- Result::0 %3
+    Ret %2
+    Ret %2
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] c : Int(64) @depth1
+    slot[3] d : Int(64) @depth1
+    slot[4] e : Int(64) @depth1
+    slot[5] it : Int(64) @depth1
+    locals_total=12
+    Load %0 <- int(2)
+    Call %1 <- string("first_of") [%0] (def=d3)
+    Load %2 <- %1
+    Call %3 <- string("std.result.is_ok") [%2] (def=d4)
+    Load %4 <- string("step=2 → Ok")
+    Call %0 <- string("std.assert.assert") [%3, %4] (def=d5)
+    Load %5 <- %1
+    Call %2 <- string("std.result.unwrap") [%5] (def=d6)
+    Load %4 <- int(1)
+    Eq %3 <- %2, %4
+    Load %6 <- string("step=2 首元素 1")
+    Call %0 <- string("std.assert.assert") [%3, %6] (def=d5)
+    Load %3 <- int(0)
+    Call %0 <- string("first_of") [%3] (def=d3)
+    Load %4 <- %0
+    Call %2 <- string("std.result.is_err") [%4] (def=d7)
+    Load %5 <- string("step=0 → Err 传播")
+    Call %3 <- string("std.assert.assert") [%2, %5] (def=d5)
+    Load %2 <- int(3)
+    Call %3 <- string("first_of") [%2] (def=d3)
+    Load %7 <- %3
+    Call %5 <- string("std.result.unwrap") [%7] (def=d6)
+    Load %6 <- int(1)
+    Eq %4 <- %5, %6
+    Load %8 <- string("step=3 首元素 1")
+    Call %2 <- string("std.assert.assert") [%4, %8] (def=d5)
+    Load %4 <- int(2)
+    Load %5 <- int(4)
+    Call %2 <- string("contains_low") [%4, %5] (def=d8)
+    Load %6 <- %2
+    Call %5 <- string("std.result.unwrap") [%6] (def=d6)
+    Load %7 <- string("step=2 对齐元素 in")
+    Call %4 <- string("std.assert.assert") [%5, %7] (def=d5)
+    Load %5 <- int(0)
+    Load %6 <- int(4)
+    Call %4 <- string("contains_low") [%5, %6] (def=d8)
+    Load %7 <- %4
+    Call %6 <- string("std.result.is_err") [%7] (def=d7)
+    Load %8 <- string("contains step=0 → Err")
+    Call %5 <- string("std.assert.assert") [%6, %8] (def=d5)
+    Load %8 <- int(1)
+    Load %9 <- int(3)
+    Load %10 <- int(1)
+    NewRange %7 <- %8, %9, %10
+    Call %6 <- string("std.range.iter") [%7] (def=d0)
+    Call %5 <- string("std.result.unwrap") [%6] (def=d6)
+    Load %10 <- %5
+    Call %8 <- string("std.range.next") [%10] (def=d1)
+    Load %9 <- int(1)
+    Eq %7 <- %8, %9
+    Load %11 <- string("unwrap 后迭代器可用")
+    Call %6 <- string("std.assert.assert") [%7, %11] (def=d5)
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

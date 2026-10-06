@@ -1,0 +1,57 @@
+module
+  fn fn_no_return(Int(64)) -> Void
+    slot[0] x : Int(64) @depth1
+    locals_total=3
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Call %2 <- string("std.io.println") [%1] (def=d0)
+    Ret %2
+  fn fn_early_return(Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(0)
+    Gt %3 <- %1, %2
+    JmpIfNot %3 -> instr(7)
+    Load %4 <- %0
+    Ret %4
+    Load %3 <- int(0)
+    Ret %3
+    Ret %3
+  fn fn_return_skips_rest() -> Int(64)
+    locals_total=1
+    Load %0 <- int(42)
+    Ret %0
+    Ret %0
+  fn main() -> Void
+    slot[0] r : Int(64) @depth1
+    slot[1] r2 : Int(64) @depth1
+    slot[2] r3 : Int(64) @depth1
+    locals_total=8
+    Load %0 <- int(99)
+    Call %1 <- string("fn_no_return") [%0] (def=d1)
+    Load %2 <- int(1)
+    Neg %0 <- %2
+    Call %1 <- string("fn_early_return") [%0] (def=d2)
+    Load %3 <- %1
+    Load %4 <- int(0)
+    Eq %2 <- %3, %4
+    Load %5 <- string("early_return(-1) should be 0")
+    Call %0 <- string("std.assert.assert") [%2, %5] (def=d3)
+    Load %2 <- int(5)
+    Call %0 <- string("fn_early_return") [%2] (def=d2)
+    Load %4 <- %0
+    Load %5 <- int(5)
+    Eq %3 <- %4, %5
+    Load %6 <- string("early_return(5) should be 5")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d3)
+    Call %2 <- string("fn_return_skips_rest") [] (def=d4)
+    Load %5 <- %2
+    Load %6 <- int(42)
+    Eq %4 <- %5, %6
+    Load %7 <- string("return_skips_rest should be 42")
+    Call %3 <- string("std.assert.assert") [%4, %7] (def=d3)
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

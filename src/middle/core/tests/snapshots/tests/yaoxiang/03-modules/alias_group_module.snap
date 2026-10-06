@@ -1,0 +1,14 @@
+module
+  global[0] main : Int(64)
+  init (locals=4)
+    islot[3] r : Int(64) @depth1
+    Load %0 <- string("group alias ok")
+    Call %1 <- string("std.io.print") [%0] (def=_)
+    Load %2 <- float(4625196817309499392)
+    Call %3 <- string("std.math.sqrt") [%2] (def=_)
+    Load %4 <- %3
+    Load %5 <- float(4616189618054758400)
+    Eq %6 <- %4, %5
+    Load %7 <- string("sq(16.0) should be 4.0 via inline item alias")
+    Call %8 <- string("std.assert.assert") [%6, %7] (def=_)
+    Store @0 <- %8

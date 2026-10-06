@@ -1,0 +1,132 @@
+module
+  fn Pair() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "make", is_mut: false, ty: Fn { params: [Name { name: "Int", span: Span { start: Position { line: 15, column: 12, offset: 551 }, end: Position { line: 15, column: 15, offset: 554 } } }, Name { name: "Int", span: Span { start: Position { line: 15, column: 17, offset: 556 }, end: Position { line: 15, column: 20, offset: 559 } } }], return_type: Name { name: "Pair", span: Span { start: Position { line: 15, column: 25, offset: 564 }, end: Position { line: 15, column: 29, offset: 568 } } } }, default: None }), Field(StructField { name: "empty", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Pair", span: Span { start: Position { line: 16, column: 18, offset: 587 }, end: Position { line: 16, column: 22, offset: 591 } } } }, default: None })] }
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 19, column: 20, offset: 615 }, end: Position { line: 19, column: 23, offset: 618 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 19, column: 28, offset: 623 }, end: Position { line: 19, column: 31, offset: 626 } } }, default: None })] }
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] v : Int(64) @depth1
+    slot[3] a : Int(64) @depth2
+    slot[4] b : Int(64) @depth2
+    slot[5] q : Int(64) @depth1
+    slot[6] w : Int(64) @depth1
+    slot[8] a : Int(64) @depth2
+    slot[9] b : Int(64) @depth2
+    slot[10] pt : Int(64) @depth1
+    slot[11] area : Int(64) @depth1
+    slot[13] x : Int(64) @depth2
+    slot[14] b : Int(64) @depth2
+    slot[15] r : Int(64) @depth1
+    slot[16] got : Int(64) @depth1
+    slot[18] n : Int(64) @depth2
+    locals_total=29
+    Load %0 <- int(3)
+    Load %1 <- int(4)
+    NewTuple %2 <- [%0, %1]
+    CreateVariant %3 <- Pair::0 %2
+    Load %2 <- void
+    Load %0 <- %3
+    VariantTag %4 <- %0 : Pair
+    Load %5 <- int(0)
+    Eq %6 <- %4, %5
+    JmpIfNot %6 -> instr(20)
+    VariantPayload %7 <- %0 : Pair
+    LoadField %8 <- %7.0
+    Move %1 <- %8
+    LoadField %9 <- %7.1
+    Move %10 <- %9
+    Load %11 <- %1
+    Load %12 <- %10
+    Mul %13 <- %11, %12
+    Move %2 <- %13
+    Jmp -> instr(27)
+    VariantTag %14 <- %0 : Pair
+    Load %15 <- int(1)
+    Eq %16 <- %14, %15
+    JmpIfNot %16 -> instr(27)
+    Load %17 <- int(0)
+    Move %2 <- %17
+    Jmp -> instr(27)
+    Load %6 <- %2
+    Load %7 <- int(12)
+    Eq %5 <- %6, %7
+    Load %8 <- string("multi-payload destructure")
+    Call %4 <- string("std.assert.assert") [%5, %8] (def=d0)
+    Load %5 <- void
+    CreateVariant %4 <- Pair::1 %5
+    Load %5 <- void
+    Load %6 <- %4
+    VariantTag %9 <- %6 : Pair
+    Load %13 <- int(0)
+    Eq %11 <- %9, %13
+    JmpIfNot %11 -> instr(50)
+    VariantPayload %12 <- %6 : Pair
+    LoadField %14 <- %12.0
+    Move %7 <- %14
+    LoadField %15 <- %12.1
+    Move %8 <- %15
+    Load %17 <- %7
+    Load %18 <- %8
+    Add %16 <- %17, %18
+    Move %5 <- %16
+    Jmp -> instr(57)
+    VariantTag %19 <- %6 : Pair
+    Load %20 <- int(1)
+    Eq %21 <- %19, %20
+    JmpIfNot %21 -> instr(57)
+    Load %22 <- int(42)
+    Move %5 <- %22
+    Jmp -> instr(57)
+    Load %11 <- %5
+    Load %12 <- int(42)
+    Eq %13 <- %11, %12
+    Load %14 <- string("zero-payload arm")
+    Call %9 <- string("std.assert.assert") [%13, %14] (def=d0)
+    Load %13 <- int(3)
+    Load %11 <- int(4)
+    Call %9 <- string("Point") [%13, %11] (def=d1)
+    Load %13 <- void
+    Load %11 <- %9
+    LoadField %15 <- %11.0
+    Move %12 <- %15
+    LoadField %16 <- %11.1
+    Move %14 <- %16
+    Load %18 <- %12
+    Load %19 <- %14
+    Mul %17 <- %18, %19
+    Move %13 <- %17
+    Jmp -> instr(76)
+    Load %17 <- %13
+    Load %18 <- int(12)
+    Eq %16 <- %17, %18
+    Load %19 <- string("struct pattern with rename")
+    Call %15 <- string("std.assert.assert") [%16, %19] (def=d0)
+    Load %16 <- int(7)
+    CreateVariant %15 <- Result::0 %16
+    Load %16 <- void
+    Load %17 <- %15
+    VariantTag %19 <- %17 : Result
+    Load %20 <- int(0)
+    Eq %21 <- %19, %20
+    JmpIfNot %21 -> instr(94)
+    VariantPayload %22 <- %17 : Result
+    Move %18 <- %22
+    Load %23 <- %18
+    Move %16 <- %23
+    Jmp -> instr(102)
+    VariantTag %24 <- %17 : Result
+    Load %25 <- int(1)
+    Eq %26 <- %24, %25
+    JmpIfNot %26 -> instr(102)
+    VariantPayload %27 <- %17 : Result
+    Load %28 <- int(0)
+    Move %16 <- %28
+    Jmp -> instr(102)
+    Load %21 <- %16
+    Load %22 <- int(7)
+    Eq %20 <- %21, %22
+    Load %23 <- string("variant payload binding")
+    Call %19 <- string("std.assert.assert") [%20, %23] (def=d0)
+    Ret %19
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,20 @@
+module
+  global[0] main : Int(64)
+  init (locals=9)
+    islot[1] a : Int(64) @depth1
+    islot[8] b : Int(64) @depth1
+    Load %0 <- float(4621256167635550208)
+    Call %1 <- string("std.math.sqrt") [%0] (def=_)
+    Load %2 <- %1
+    Load %3 <- float(4613937818241073152)
+    Eq %4 <- %2, %3
+    Load %5 <- string("m.sqrt(9.0) should be 3.0 via first alias")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=_)
+    Load %7 <- float(4616189618054758400)
+    Call %8 <- string("std.math.sqrt") [%7] (def=_)
+    Load %9 <- %8
+    Load %10 <- float(4611686018427387904)
+    Eq %11 <- %9, %10
+    Load %12 <- string("n.sqrt(4.0) should be 2.0 via second alias")
+    Call %13 <- string("std.assert.assert") [%11, %12] (def=_)
+    Store @0 <- %13

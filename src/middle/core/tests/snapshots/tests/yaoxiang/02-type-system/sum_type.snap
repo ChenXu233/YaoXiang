@@ -1,0 +1,45 @@
+module
+  fn Color() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "red", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 9, column: 16, offset: 280 }, end: Position { line: 9, column: 21, offset: 285 } } } }, default: None }), Field(StructField { name: "green", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 10, column: 18, offset: 304 }, end: Position { line: 10, column: 23, offset: 309 } } } }, default: None }), Field(StructField { name: "blue", is_mut: false, ty: Fn { params: [], return_type: Name { name: "Color", span: Span { start: Position { line: 11, column: 17, offset: 327 }, end: Position { line: 11, column: 22, offset: 332 } } } }, default: None })] }
+  fn Result(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }, MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["T", "E"]
+    type_decl Struct { body: [Field(StructField { name: "ok", is_mut: false, ty: Fn { params: [Name { name: "T", span: Span { start: Position { line: 15, column: 10, offset: 385 }, end: Position { line: 15, column: 11, offset: 386 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 15, column: 16, offset: 391 }, end: Position { line: 15, column: 22, offset: 397 } }, args: [Name { name: "T", span: Span { start: Position { line: 15, column: 23, offset: 398 }, end: Position { line: 15, column: 24, offset: 399 } } }, Name { name: "E", span: Span { start: Position { line: 15, column: 26, offset: 401 }, end: Position { line: 15, column: 27, offset: 402 } } }] } }, default: None }), Field(StructField { name: "err", is_mut: false, ty: Fn { params: [Name { name: "E", span: Span { start: Position { line: 16, column: 11, offset: 415 }, end: Position { line: 16, column: 12, offset: 416 } } }], return_type: Generic { name: "Result", name_span: Span { start: Position { line: 16, column: 17, offset: 421 }, end: Position { line: 16, column: 23, offset: 427 } }, args: [Name { name: "T", span: Span { start: Position { line: 16, column: 24, offset: 428 }, end: Position { line: 16, column: 25, offset: 429 } } }, Name { name: "E", span: Span { start: Position { line: 16, column: 27, offset: 431 }, end: Position { line: 16, column: 28, offset: 432 } } }] } }, default: None })] }
+  fn main() -> Void
+    slot[0] c : Int(64) @depth1
+    slot[1] a : Int(64) @depth1
+    slot[2] b : Int(64) @depth1
+    slot[3] e : Int(64) @depth1
+    locals_total=12
+    Load %0 <- void
+    CreateVariant %1 <- Color::1 %0
+    Load %2 <- int(5)
+    CreateVariant %0 <- Result::0 %2
+    Load %3 <- int(5)
+    CreateVariant %2 <- Result::0 %3
+    Load %4 <- string("bad")
+    CreateVariant %3 <- Result::1 %4
+    Load %5 <- %0
+    Load %6 <- %2
+    Eq %4 <- %5, %6
+    JmpIfNot %4 -> instr(14)
+    Load %7 <- string("EQ_OK")
+    Call %8 <- string("std.io.println") [%7] (def=d0)
+    Load %5 <- %0
+    Load %6 <- %3
+    Ne %4 <- %5, %6
+    JmpIfNot %4 -> instr(20)
+    Load %7 <- string("NE_OK")
+    Call %8 <- string("std.io.println") [%7] (def=d0)
+    Load %8 <- %1
+    Load %9 <- void
+    CreateVariant %7 <- Color::1 %9
+    Eq %6 <- %8, %7
+    JmpIfNot %6 -> instr(29)
+    Load %10 <- string("ZERO_PAYLOAD_EQ_OK")
+    Call %11 <- string("std.io.println") [%10] (def=d0)
+    Move %5 <- %11
+    Jmp -> instr(29)
+    Load %4 <- void
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

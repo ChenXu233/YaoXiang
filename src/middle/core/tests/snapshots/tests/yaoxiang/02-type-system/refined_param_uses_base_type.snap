@@ -1,0 +1,53 @@
+module
+  fn IsPositive(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 18, column: 34, offset: 1047 }, end: Position { line: 18, column: 35, offset: 1048 } }), right: Lit(Int(0), Span { start: Position { line: 18, column: 38, offset: 1051 }, end: Position { line: 18, column: 39, offset: 1052 } }), span: Span { start: Position { line: 18, column: 36, offset: 1049 }, end: Position { line: 18, column: 37, offset: 1050 } } }))] }
+  fn identity(TypeRef("IsPositive")) -> Int(64)
+    slot[0] b : Int(64) @depth1
+    locals_total=2
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Ret %1
+  fn succ(TypeRef("IsPositive")) -> Int(64)
+    slot[0] b : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(1)
+    Add %3 <- %1, %2
+    Ret %3
+  fn plain(Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Mul %3 <- %1, %2
+    Ret %3
+  fn doubled(TypeRef("IsPositive")) -> Int(64)
+    slot[0] b : Int(64) @depth1
+    locals_total=3
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Call %2 <- string("plain") [%1] (def=d0)
+    Ret %2
+  fn main() -> Void
+    locals_total=6
+    Load %0 <- int(7)
+    Call %1 <- string("identity") [%0] (def=d1)
+    Load %2 <- int(7)
+    Eq %3 <- %1, %2
+    Load %4 <- string("精化形参的运行时值应原样返回")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %0 <- int(7)
+    Call %1 <- string("succ") [%0] (def=d3)
+    Load %2 <- int(8)
+    Eq %3 <- %1, %2
+    Load %4 <- string("精化形参应可参与 Int 算术")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %0 <- int(7)
+    Call %1 <- string("doubled") [%0] (def=d4)
+    Load %2 <- int(14)
+    Eq %3 <- %1, %2
+    Load %4 <- string("精化形参应可传给期望 Int 的函数")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Ret %5

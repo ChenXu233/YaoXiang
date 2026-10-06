@@ -1,0 +1,11 @@
+module
+  fn main() -> Void
+    locals_total=5
+    Load %0 <- string("comments_work")
+    Load %1 <- string("comments_work")
+    Eq %2 <- %0, %1
+    Load %3 <- string("string literal")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

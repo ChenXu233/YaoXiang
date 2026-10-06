@@ -1,0 +1,91 @@
+module
+  fn main() -> Void
+    slot[0] total : Int(64) @depth1
+    slot[1] i : Int(64) @depth1
+    slot[18] x : Int(64) @depth3
+    slot[19] found : Int(64) @depth1
+    slot[20] n : Int(64) @depth1
+    slot[34] label : Int(64) @depth4
+    locals_total=40
+    Load %0 <- int(0)
+    Load %1 <- int(0)
+    Load %2 <- void
+    Load %3 <- %1
+    Load %4 <- int(3)
+    Lt %5 <- %3, %4
+    JmpIfNot %5 -> instr(43)
+    Load %6 <- %1
+    Load %7 <- int(1)
+    Add %1 <- %6, %7
+    AllocArray %8 size=int(4), elem=int(1)
+    Load %9 <- int(1)
+    Load %10 <- int(0)
+    StoreIndex %8[%10] <- %9
+    Load %11 <- int(2)
+    Load %12 <- int(1)
+    StoreIndex %8[%12] <- %11
+    Load %13 <- int(3)
+    Load %14 <- int(2)
+    StoreIndex %8[%14] <- %13
+    Load %15 <- int(4)
+    Load %16 <- int(3)
+    StoreIndex %8[%16] <- %15
+    Call %17 <- string("std.list.iter") [%8] (def=d0)
+    Call %18 <- string("std.list.has_next") [%17] (def=d1)
+    JmpIfNot %18 -> instr(42)
+    Call %19 <- string("std.list.next") [%17] (def=d2)
+    Store %20 <- %19
+    Load %21 <- %20
+    Load %22 <- int(2)
+    Eq %23 <- %21, %22
+    JmpIfNot %23 -> instr(33)
+    Jmp -> instr(24)
+    Load %19 <- %20
+    Load %23 <- int(4)
+    Eq %18 <- %19, %23
+    JmpIfNot %18 -> instr(38)
+    Jmp -> instr(42)
+    Load %18 <- %0
+    Load %19 <- %20
+    Add %0 <- %18, %19
+    Jmp -> instr(24)
+    Jmp -> instr(3)
+    Load %23 <- %0
+    Load %21 <- int(12)
+    Eq %19 <- %23, %21
+    Load %22 <- string("while 嵌套 for 的 break/continue 语义")
+    Call %18 <- string("std.assert.assert") [%19, %22] (def=d3)
+    Load %18 <- int(0)
+    Load %19 <- int(0)
+    Load %23 <- void
+    Load %22 <- %19
+    Load %24 <- int(5)
+    Lt %21 <- %22, %24
+    JmpIfNot %21 -> instr(74)
+    Load %25 <- %19
+    Load %26 <- int(1)
+    Add %19 <- %25, %26
+    Load %27 <- %19
+    Load %28 <- int(2)
+    Mod %29 <- %27, %28
+    Load %30 <- int(0)
+    Eq %31 <- %29, %30
+    JmpIfNot %31 -> instr(72)
+    Load %32 <- %19
+    Load %33 <- int(10)
+    Mul %34 <- %32, %33
+    Load %35 <- %18
+    Load %36 <- %34
+    Add %18 <- %35, %36
+    Move %37 <- %38
+    Jmp -> instr(72)
+    Load %23 <- void
+    Jmp -> instr(51)
+    Load %35 <- %18
+    Load %36 <- int(60)
+    Eq %33 <- %35, %36
+    Load %39 <- string("while 体 if 分支内带注解绑定（20 + 40）")
+    Call %32 <- string("std.assert.assert") [%33, %39] (def=d3)
+    Ret %32
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

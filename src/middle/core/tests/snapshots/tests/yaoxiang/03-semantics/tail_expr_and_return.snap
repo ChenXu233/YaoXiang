@@ -1,0 +1,98 @@
+module
+  fn tail_expr_value(Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Mul %3 <- %1, %2
+    Ret %3
+  fn early_return(Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(0)
+    Lt %3 <- %1, %2
+    JmpIfNot %3 -> instr(7)
+    Load %4 <- int(0)
+    Ret %4
+    Load %3 <- %0
+    Ret %3
+  fn block_tail_in_function(Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    slot[1] a : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(1)
+    Add %3 <- %1, %2
+    Load %2 <- %3
+    Load %4 <- int(2)
+    Mul %1 <- %2, %4
+    Ret %1
+  fn explicit_and_tail(Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    locals_total=6
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(0)
+    Lt %3 <- %1, %2
+    JmpIfNot %3 -> instr(8)
+    Load %4 <- int(1)
+    Neg %5 <- %4
+    Ret %5
+    Load %1 <- %0
+    Load %2 <- int(10)
+    Mul %3 <- %1, %2
+    Ret %3
+  fn no_return_has_side_effect() -> Void
+    locals_total=2
+    Load %0 <- string("side effect ok")
+    Call %1 <- string("std.io.println") [%0] (def=d0)
+    Ret %1
+  fn main() -> Void
+    locals_total=8
+    Load %0 <- int(21)
+    Call %1 <- string("tail_expr_value") [%0] (def=d1)
+    Load %2 <- int(42)
+    Eq %3 <- %1, %2
+    Load %4 <- string("tail_expr_value(21) should be 42")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %4 <- int(5)
+    Neg %0 <- %4
+    Call %1 <- string("early_return") [%0] (def=d3)
+    Load %2 <- int(0)
+    Eq %3 <- %1, %2
+    Load %6 <- string("early_return(-5) should be 0")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d2)
+    Load %0 <- int(7)
+    Call %1 <- string("early_return") [%0] (def=d3)
+    Load %2 <- int(7)
+    Eq %3 <- %1, %2
+    Load %4 <- string("early_return(7) should be 7")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %0 <- int(1)
+    Call %1 <- string("block_tail_in_function") [%0] (def=d4)
+    Load %2 <- int(4)
+    Eq %3 <- %1, %2
+    Load %4 <- string("block_tail_in_function(1) should be 4")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %4 <- int(1)
+    Neg %0 <- %4
+    Call %1 <- string("explicit_and_tail") [%0] (def=d5)
+    Load %6 <- int(1)
+    Neg %2 <- %6
+    Eq %3 <- %1, %2
+    Load %7 <- string("explicit_and_tail(-1) should be -1")
+    Call %5 <- string("std.assert.assert") [%3, %7] (def=d2)
+    Load %0 <- int(3)
+    Call %1 <- string("explicit_and_tail") [%0] (def=d5)
+    Load %2 <- int(30)
+    Eq %3 <- %1, %2
+    Load %4 <- string("explicit_and_tail(3) should be 30")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Call %5 <- string("no_return_has_side_effect") [] (def=d6)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

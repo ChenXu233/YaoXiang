@@ -1,0 +1,24 @@
+module
+  fn main() -> Void
+    slot[0] result : Int(64) @depth1
+    slot[1] t1 : Int(64) @depth2
+    slot[4] t2 : Int(64) @depth2
+    locals_total=10
+    Load %0 <- int(1)
+    Load %1 <- int(1)
+    Add %2 <- %0, %1
+    Load %3 <- int(2)
+    Load %4 <- int(2)
+    Add %5 <- %3, %4
+    Spawn %6 <- [] plan(groups=[], deps=[], resources=[])
+    Load %7 <- %2
+    Load %8 <- %5
+    Add %9 <- %7, %8
+    Move %6 <- %9
+    Load %9 <- %6
+    Load %7 <- int(6)
+    Eq %4 <- %9, %7
+    Call %3 <- string("std.assert.assert") [%4] (def=d0)
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

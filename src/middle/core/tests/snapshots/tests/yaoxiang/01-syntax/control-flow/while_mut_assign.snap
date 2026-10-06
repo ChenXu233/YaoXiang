@@ -1,0 +1,63 @@
+module
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    slot[2] j : Int(64) @depth1
+    slot[7] temp : Int(64) @depth2
+    slot[8] sum : Int(64) @depth1
+    slot[9] n : Int(64) @depth1
+    locals_total=18
+    Load %0 <- int(0)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    Load %3 <- void
+    Load %4 <- %2
+    Load %5 <- int(5)
+    Lt %6 <- %4, %5
+    JmpIfNot %6 -> instr(17)
+    Load %7 <- %0
+    Load %8 <- %1
+    Add %9 <- %7, %8
+    Load %0 <- %1
+    Load %1 <- %9
+    Load %10 <- %2
+    Load %11 <- int(1)
+    Add %2 <- %10, %11
+    Jmp -> instr(4)
+    Load %10 <- %1
+    Load %11 <- int(8)
+    Eq %8 <- %10, %11
+    Load %12 <- string("fib iter: b should be 8 after 5 iters")
+    Call %7 <- string("std.assert.assert") [%8, %12] (def=d0)
+    Load %10 <- %0
+    Load %11 <- int(5)
+    Eq %8 <- %10, %11
+    Load %12 <- string("fib iter: a should be 5 after 5 iters")
+    Call %7 <- string("std.assert.assert") [%8, %12] (def=d0)
+    Load %10 <- %2
+    Load %11 <- int(5)
+    Eq %8 <- %10, %11
+    Load %12 <- string("loop counter should be 5")
+    Call %7 <- string("std.assert.assert") [%8, %12] (def=d0)
+    Load %7 <- int(0)
+    Load %8 <- int(1)
+    Load %10 <- void
+    Load %12 <- %8
+    Load %13 <- int(10)
+    Le %11 <- %12, %13
+    JmpIfNot %11 -> instr(46)
+    Load %14 <- %7
+    Load %15 <- %8
+    Add %7 <- %14, %15
+    Load %16 <- %8
+    Load %17 <- int(1)
+    Add %8 <- %16, %17
+    Jmp -> instr(35)
+    Load %12 <- %7
+    Load %13 <- int(55)
+    Eq %11 <- %12, %13
+    Load %14 <- string("sum 1..10 should be 55")
+    Call %10 <- string("std.assert.assert") [%11, %14] (def=d0)
+    Ret %10
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

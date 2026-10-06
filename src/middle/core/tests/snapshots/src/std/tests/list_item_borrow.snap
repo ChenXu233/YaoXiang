@@ -1,0 +1,52 @@
+module
+  fn main() -> Void
+    slot[0] xs : Int(64) @depth1
+    slot[1] s : Int(64) @depth1
+    locals_total=9
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- string("a")
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- string("b")
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- string("c")
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %1 <- string("b")
+    Load %4 <- %0
+    Load %5 <- %1
+    Call %3 <- string("std.list.contains") [%4, %5] (def=d0)
+    Load %6 <- string("contains str item")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load %4 <- %1
+    Load %5 <- string("b")
+    Eq %3 <- %4, %5
+    Load %6 <- string("str item survives contains")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load %6 <- %0
+    Load %7 <- %1
+    Call %4 <- string("std.list.find_index") [%6, %7] (def=d2)
+    Load %5 <- int(1)
+    Eq %3 <- %4, %5
+    Load %8 <- string("find_index str item")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d1)
+    Load %4 <- %1
+    Load %5 <- string("b")
+    Eq %3 <- %4, %5
+    Load %6 <- string("str item survives find_index")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load %4 <- %0
+    Load %5 <- %1
+    Call %3 <- string("std.list.contains") [%4, %5] (def=d0)
+    Load %6 <- string("xs reusable across calls")
+    Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load %6 <- %0
+    Call %4 <- string("std.list.len") [%6] (def=d3)
+    Load %5 <- int(3)
+    Eq %3 <- %4, %5
+    Load %7 <- string("xs len intact")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d1)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

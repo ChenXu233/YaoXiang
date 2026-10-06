@@ -1,0 +1,108 @@
+module
+  fn main() -> Void
+    slot[0] ok : Int(64) @depth1
+    locals_total=12
+    Load %0 <- int(2)
+    AllocArray %1 size=int(3), elem=int(1)
+    Load %2 <- int(1)
+    Load %3 <- int(0)
+    StoreIndex %1[%3] <- %2
+    Load %4 <- int(2)
+    Load %5 <- int(1)
+    StoreIndex %1[%5] <- %4
+    Load %6 <- int(3)
+    Load %7 <- int(2)
+    StoreIndex %1[%7] <- %6
+    Contains %8 <- %0 in %1
+    Load %9 <- string("list in")
+    Call %10 <- string("std.assert.assert") [%8, %9] (def=d0)
+    Load %1 <- int(9)
+    AllocArray %2 size=int(3), elem=int(1)
+    Load %3 <- int(1)
+    Load %4 <- int(0)
+    StoreIndex %2[%4] <- %3
+    Load %5 <- int(2)
+    Load %6 <- int(1)
+    StoreIndex %2[%6] <- %5
+    Load %7 <- int(3)
+    Load %9 <- int(2)
+    StoreIndex %2[%9] <- %7
+    Contains %0 <- %1 in %2
+    Not %8 <- %0
+    Load %11 <- string("list not in")
+    Call %10 <- string("std.assert.assert") [%8, %11] (def=d0)
+    Load %0 <- string("a")
+    Load %2 <- string("a")
+    Load %3 <- int(1)
+    NewDict %1 <- keys=[%2] values=[%3]
+    Contains %8 <- %0 in %1
+    Load %4 <- string("dict key in")
+    Call %10 <- string("std.assert.assert") [%8, %4] (def=d0)
+    Load %1 <- string("x")
+    Load %3 <- string("a")
+    Load %4 <- int(1)
+    NewDict %2 <- keys=[%3] values=[%4]
+    Contains %0 <- %1 in %2
+    Not %8 <- %0
+    Load %5 <- string("dict key not in")
+    Call %10 <- string("std.assert.assert") [%8, %5] (def=d0)
+    Load %0 <- int(2)
+    Load %2 <- int(1)
+    Load %3 <- int(2)
+    Load %4 <- int(3)
+    NewTuple %1 <- [%2, %3, %4]
+    Contains %8 <- %0 in %1
+    Load %5 <- string("tuple in")
+    Call %10 <- string("std.assert.assert") [%8, %5] (def=d0)
+    Load %0 <- int(5)
+    Load %2 <- int(1)
+    Load %3 <- int(10)
+    Load %4 <- int(1)
+    NewRange %1 <- %2, %3, %4
+    Call %8 <- string("std.range.contains") [%1, %0] (def=d1)
+    VariantTag %5 <- %8 : Result
+    Load %6 <- int(0)
+    Eq %7 <- %5, %6
+    JmpIfNot %7 -> instr(64)
+    VariantPayload %8 <- %8 : Result
+    Jmp -> instr(65)
+    Call _ <- string("std.range.abort_invalid_step") [%1] (def=d2)
+    Load %9 <- string("range in")
+    Call %10 <- string("std.assert.assert") [%8, %9] (def=d0)
+    Load %1 <- int(11)
+    Load %3 <- int(1)
+    Load %4 <- int(10)
+    Load %5 <- int(1)
+    NewRange %2 <- %3, %4, %5
+    Call %0 <- string("std.range.contains") [%2, %1] (def=d1)
+    VariantTag %6 <- %0 : Result
+    Load %7 <- int(0)
+    Eq %9 <- %6, %7
+    JmpIfNot %9 -> instr(79)
+    VariantPayload %0 <- %0 : Result
+    Jmp -> instr(80)
+    Call _ <- string("std.range.abort_invalid_step") [%2] (def=d2)
+    Not %8 <- %0
+    Load %11 <- string("range not in")
+    Call %10 <- string("std.assert.assert") [%8, %11] (def=d0)
+    Load %0 <- int(5)
+    AllocArray %1 size=int(1), elem=int(1)
+    Load %2 <- int(5)
+    Load %3 <- int(0)
+    StoreIndex %1[%3] <- %2
+    Contains %8 <- %0 in %1
+    JmpIfNot %8 -> instr(97)
+    Load %4 <- int(3)
+    AllocArray %5 size=int(1), elem=int(1)
+    Load %6 <- int(3)
+    Load %7 <- int(0)
+    StoreIndex %5[%7] <- %6
+    Contains %10 <- %4 in %5
+    Jmp -> instr(98)
+    Load %10 <- bool(false)
+    Load %0 <- %10
+    Load %1 <- string("in composes with &&")
+    Call %8 <- string("std.assert.assert") [%0, %1] (def=d0)
+    Ret %8
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

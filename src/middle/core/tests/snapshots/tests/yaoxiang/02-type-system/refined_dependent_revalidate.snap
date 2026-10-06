@@ -1,0 +1,57 @@
+module
+  fn SumUpTo(Int(64), Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Eq, left: Var("s", Span { start: Position { line: 12, column: 39, offset: 681 }, end: Position { line: 12, column: 40, offset: 682 } }), right: BinOp { op: Mul, left: Var("n", Span { start: Position { line: 12, column: 44, offset: 686 }, end: Position { line: 12, column: 45, offset: 687 } }), right: Lit(Int(2), Span { start: Position { line: 12, column: 48, offset: 690 }, end: Position { line: 12, column: 49, offset: 691 } }), span: Span { start: Position { line: 12, column: 46, offset: 688 }, end: Position { line: 12, column: 47, offset: 689 } } }, span: Span { start: Position { line: 12, column: 41, offset: 683 }, end: Position { line: 12, column: 43, offset: 685 } } }))] }
+  fn keep_valid() -> Int(64)
+    slot[0] n : Int(64) @depth1
+    slot[1] s : Int(64) @depth1
+    locals_total=3
+    Load %0 <- int(3)
+    Load %1 <- int(6)
+    Load %0 <- int(3)
+    Load %2 <- %1
+    Ret %2
+  fn pruned_branch() -> Int(64)
+    slot[0] n : Int(64) @depth1
+    slot[1] s : Int(64) @depth1
+    locals_total=5
+    Load %0 <- int(3)
+    Load %1 <- int(6)
+    Load %2 <- %0
+    Load %3 <- int(2)
+    Gt %4 <- %2, %3
+    JmpIfNot %4 -> instr(8)
+    Load %0 <- int(3)
+    Jmp -> instr(9)
+    Load %0 <- int(4)
+    Load %4 <- %1
+    Ret %4
+  fn other(Int(64)) -> Int(64)
+    slot[0] n : Int(64) @depth1
+    slot[1] s : Int(64) @depth1
+    locals_total=3
+    Load %0 <- arg%0
+    Load %1 <- int(6)
+    Load %2 <- %1
+    Ret %2
+  fn main() -> Void
+    slot[0] n : Int(64) @depth1
+    locals_total=7
+    Call %0 <- string("keep_valid") [] (def=d0)
+    Load %1 <- int(6)
+    Eq %2 <- %0, %1
+    Load %3 <- string("约束成立时重验证应静默通过")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d1)
+    Call %0 <- string("pruned_branch") [] (def=d2)
+    Load %1 <- int(6)
+    Eq %2 <- %0, %1
+    Load %3 <- string("守卫裁剪：不可达分支不产生保守误报")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d1)
+    Load %4 <- int(3)
+    Load %4 <- int(5)
+    Load %5 <- int(3)
+    Call %1 <- string("other") [%5] (def=d3)
+    Load %3 <- int(6)
+    Eq %0 <- %1, %3
+    Load %6 <- string("跨函数同名不触发误报，other 正常求值")
+    Call %2 <- string("std.assert.assert") [%0, %6] (def=d1)
+    Ret %2

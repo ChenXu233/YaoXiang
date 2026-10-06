@@ -1,0 +1,40 @@
+module
+  fn main() -> Void
+    slot[0] x : Int(64) @depth1
+    slot[1] name : Int(64) @depth1
+    slot[2] flag : Int(64) @depth1
+    slot[3] pi : Int(64) @depth1
+    slot[4] counter : Int(64) @depth1
+    locals_total=10
+    Load %0 <- int(42)
+    Load %1 <- %0
+    Load %2 <- int(42)
+    Eq %3 <- %1, %2
+    Load %4 <- string("x == 42")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
+    Load %5 <- string("YaoXiang")
+    Load %2 <- %5
+    Load %4 <- string("YaoXiang")
+    Eq %1 <- %2, %4
+    Load %6 <- string("name == YaoXiang")
+    Call %3 <- string("std.assert.assert") [%1, %6] (def=d0)
+    Load %3 <- bool(true)
+    Load %2 <- %3
+    Load %4 <- string("flag is true")
+    Call %1 <- string("std.assert.assert") [%2, %4] (def=d0)
+    Load %1 <- float(4614253070214989087)
+    Load %4 <- bool(true)
+    Load %6 <- string("pi assigned")
+    Call %2 <- string("std.assert.assert") [%4, %6] (def=d0)
+    Load %2 <- int(0)
+    Load %4 <- %2
+    Load %6 <- int(1)
+    Add %2 <- %4, %6
+    Load %7 <- %2
+    Load %8 <- int(1)
+    Eq %6 <- %7, %8
+    Load %9 <- string("counter == 1")
+    Call %4 <- string("std.assert.assert") [%6, %9] (def=d0)
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

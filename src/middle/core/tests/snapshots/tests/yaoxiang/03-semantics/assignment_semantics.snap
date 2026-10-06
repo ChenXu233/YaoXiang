@@ -1,0 +1,52 @@
+module
+  global[0] fresh : Int(64)
+  global[1] counter : Int(64)
+  global[2] outer : Int(64)
+  global[3] declared_only : Int(64)
+  fn main() -> Void
+    locals_total=5
+    Load %0 <- @0
+    Load %1 <- int(1)
+    Eq %2 <- %0, %1
+    Load %3 <- string("新声明")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @1
+    Load %1 <- int(11)
+    Eq %2 <- %0, %1
+    Load %3 <- string("mut 重赋值累计")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @2
+    Load %1 <- int(10)
+    Eq %2 <- %0, %1
+    Load %3 <- string("跨作用域 mut 赋值")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %0 <- @3
+    Load %1 <- int(7)
+    Eq %2 <- %0, %1
+    Load %3 <- string("纯注解声明后赋值")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Load %2 <- string("assignment_semantics ok")
+    Call %4 <- string("std.io.println") [%2] (def=d1)
+    Ret %4
+  init (locals=0)
+    Load %0 <- int(1)
+    Store @0 <- %0
+    Load %1 <- int(0)
+    Store @1 <- %1
+    Load %2 <- int(5)
+    Store @2 <- %2
+    Load %3 <- int(7)
+    Store @3 <- %3
+    Load %4 <- @1
+    Load %5 <- int(1)
+    Add %6 <- %4, %5
+    Store @1 <- %6
+    Load %7 <- @1
+    Load %8 <- int(10)
+    Add %9 <- %7, %8
+    Store @1 <- %9
+    Load %10 <- @2
+    Load %11 <- int(2)
+    Mul %12 <- %10, %11
+    Store @2 <- %12
+    Call %6 <- string("main") [] (def=_)

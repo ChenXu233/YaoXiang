@@ -1,0 +1,73 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 20, offset: 413 }, end: Position { line: 10, column: 23, offset: 416 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 10, column: 28, offset: 421 }, end: Position { line: 10, column: 31, offset: 424 } } }, default: None })] }
+  fn manhattan(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
+    slot[0] p : Int(64) @depth1
+    locals_total=6
+    Load %0 <- arg%0
+    Load %1 <- %0
+    LoadField %2 <- %1.0
+    Load %3 <- %0
+    LoadField %4 <- %3.1
+    Add %5 <- %2, %4
+    Ret %5
+    Ret %5
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] d1 : Int(64) @depth1
+    slot[2] d2 : Int(64) @depth1
+    slot[3] xs : Int(64) @depth1
+    slot[4] n1 : Int(64) @depth1
+    slot[5] n2 : Int(64) @depth1
+    locals_total=14
+    Load %0 <- int(3)
+    Load %1 <- int(4)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Call %0 <- string("manhattan") [%1] (def=d1)
+    Load %3 <- %2
+    Call %1 <- string("manhattan") [%3] (def=d1)
+    Load %4 <- %0
+    Load %5 <- int(7)
+    Eq %6 <- %4, %5
+    Load %7 <- string("first call == 7")
+    Call %3 <- string("std.assert.assert") [%6, %7] (def=d2)
+    Load %4 <- %1
+    Load %5 <- int(7)
+    Eq %6 <- %4, %5
+    Load %7 <- string("second call reuses p == 7")
+    Call %3 <- string("std.assert.assert") [%6, %7] (def=d2)
+    Load %7 <- %2
+    LoadField %4 <- %7.0
+    Load %5 <- int(3)
+    Eq %6 <- %4, %5
+    Load %8 <- string("p.x intact after borrows")
+    Call %3 <- string("std.assert.assert") [%6, %8] (def=d2)
+    AllocArray %3 size=int(3), elem=int(1)
+    Load %6 <- int(1)
+    Load %4 <- int(0)
+    StoreIndex %3[%4] <- %6
+    Load %5 <- int(2)
+    Load %7 <- int(1)
+    StoreIndex %3[%7] <- %5
+    Load %8 <- int(3)
+    Load %9 <- int(2)
+    StoreIndex %3[%9] <- %8
+    Load %4 <- %3
+    Call %6 <- string("std.list.len") [%4] (def=d3)
+    Load %5 <- %3
+    Call %4 <- string("std.list.len") [%5] (def=d3)
+    Load %9 <- %6
+    Load %10 <- int(3)
+    Eq %8 <- %9, %10
+    JmpIfNot %8 -> instr(45)
+    Load %11 <- %4
+    Load %12 <- int(3)
+    Eq %7 <- %11, %12
+    Jmp -> instr(46)
+    Load %7 <- bool(false)
+    Load %13 <- string("std read fn reuses xs")
+    Call %5 <- string("std.assert.assert") [%7, %13] (def=d2)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,41 @@
+module
+  fn Animal(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["Self"]
+    type_decl Struct { body: [Field(StructField { name: "speak", is_mut: false, ty: Fn { params: [Ref { mutable: false, inner: Name { name: "Self", span: Span { start: Position { line: 11, column: 20, offset: 421 }, end: Position { line: 11, column: 24, offset: 425 } } }, span: Span { start: Position { line: 11, column: 24, offset: 425 }, end: Position { line: 11, column: 25, offset: 426 } } }], return_type: Name { name: "String", span: Span { start: Position { line: 11, column: 29, offset: 430 }, end: Position { line: 11, column: 35, offset: 436 } } } }, default: None })] }
+  fn Bird() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "name", is_mut: false, ty: Name { name: "String", span: Span { start: Position { line: 15, column: 11, offset: 466 }, end: Position { line: 15, column: 17, offset: 472 } } }, default: None }), Expr(Generic { name: "Animal", name_span: Span { start: Position { line: 16, column: 5, offset: 478 }, end: Position { line: 16, column: 11, offset: 484 } }, args: [Name { name: "Bird", span: Span { start: Position { line: 16, column: 12, offset: 485 }, end: Position { line: 16, column: 16, offset: 489 } } }] }), Binding(TypeBodyBinding { name: "speak", kind: External { function: "animal_speak", positions: [0] } })] }
+  fn animal_speak(Ref { mutable: false, inner: TypeRef("Bird") }) -> Generic { name: "String", args: [] }
+    slot[0] self : Int(64) @depth1
+    locals_total=2
+    Load %0 <- arg%0
+    Load %1 <- string("Tweet")
+    Ret %1
+    Ret %1
+  fn main() -> Void
+    slot[0] zoo : Int(64) @depth1
+    slot[1] s : Int(64) @depth1
+    locals_total=9
+    AllocArray %0 size=int(1), elem=int(1)
+    Load %1 <- string("Kiwi")
+    Call %2 <- string("Bird") [%1] (def=d0)
+    CreateVariant %3 <- Animal$Group::0 %2
+    Load %4 <- int(0)
+    StoreIndex %0[%4] <- %3
+    Load %1 <- %0
+    Load %4 <- int(0)
+    LoadIndex %2 <- %1[%4]
+    VariantTag %5 <- %2 : Animal$Group
+    Load %6 <- int(0)
+    Eq %7 <- %5, %6
+    JmpIfNot %7 -> instr(16)
+    VariantPayload %8 <- %2 : Animal$Group
+    Call %3 <- string("animal_speak") [%8] (def=d1)
+    Jmp -> instr(16)
+    Load %4 <- %3
+    Load %5 <- string("Tweet")
+    Eq %1 <- %4, %5
+    Load %6 <- string("rebound method dispatches through variant match")
+    Call %2 <- string("std.assert.assert") [%1, %6] (def=d2)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

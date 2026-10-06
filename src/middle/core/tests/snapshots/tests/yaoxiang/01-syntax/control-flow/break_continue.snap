@@ -1,0 +1,179 @@
+module
+  fn main() -> Void
+    slot[0] i : Int(64) @depth1
+    slot[1] sum : Int(64) @depth1
+    slot[2] n : Int(64) @depth1
+    slot[3] total : Int(64) @depth1
+    slot[16] x : Int(64) @depth2
+    slot[17] cnt : Int(64) @depth1
+    slot[30] x : Int(64) @depth2
+    slot[31] outer : Int(64) @depth1
+    slot[32] inner_hits : Int(64) @depth1
+    slot[33] j : Int(64) @depth1
+    slot[40] k : Int(64) @depth2
+    locals_total=51
+    Load %0 <- int(0)
+    Load %1 <- void
+    Load %2 <- %0
+    Load %3 <- int(10)
+    Lt %4 <- %2, %3
+    JmpIfNot %4 -> instr(18)
+    Load %5 <- %0
+    Load %6 <- int(1)
+    Add %0 <- %5, %6
+    Load %7 <- %0
+    Load %8 <- int(3)
+    Eq %9 <- %7, %8
+    JmpIfNot %9 -> instr(16)
+    Jmp -> instr(18)
+    Move %10 <- %11
+    Jmp -> instr(16)
+    Load %1 <- void
+    Jmp -> instr(2)
+    Load %2 <- %0
+    Load %3 <- int(3)
+    Eq %4 <- %2, %3
+    Load %5 <- string("while break stops at i == 3")
+    Call %1 <- string("std.assert.assert") [%4, %5] (def=d0)
+    Load %1 <- int(0)
+    Load %4 <- int(0)
+    Load %2 <- void
+    Load %5 <- %4
+    Load %6 <- int(5)
+    Lt %3 <- %5, %6
+    JmpIfNot %3 -> instr(42)
+    Load %10 <- %4
+    Load %9 <- int(1)
+    Add %4 <- %10, %9
+    Load %8 <- %4
+    Load %11 <- int(3)
+    Eq %7 <- %8, %11
+    JmpIfNot %7 -> instr(38)
+    Jmp -> instr(26)
+    Load %3 <- %1
+    Load %5 <- %4
+    Add %1 <- %3, %5
+    Jmp -> instr(26)
+    Load %5 <- %1
+    Load %6 <- int(12)
+    Eq %3 <- %5, %6
+    Load %10 <- string("while continue skips 3, sum 1+2+4+5 == 12")
+    Call %2 <- string("std.assert.assert") [%3, %10] (def=d0)
+    Load %2 <- int(0)
+    AllocArray %3 size=int(5), elem=int(1)
+    Load %5 <- int(1)
+    Load %6 <- int(0)
+    StoreIndex %3[%6] <- %5
+    Load %10 <- int(2)
+    Load %9 <- int(1)
+    StoreIndex %3[%9] <- %10
+    Load %7 <- int(3)
+    Load %8 <- int(2)
+    StoreIndex %3[%8] <- %7
+    Load %11 <- int(4)
+    Load %12 <- int(3)
+    StoreIndex %3[%12] <- %11
+    Load %13 <- int(5)
+    Load %14 <- int(4)
+    StoreIndex %3[%14] <- %13
+    Call %15 <- string("std.list.iter") [%3] (def=d1)
+    Call %16 <- string("std.list.has_next") [%15] (def=d2)
+    JmpIfNot %16 -> instr(78)
+    Call %17 <- string("std.list.next") [%15] (def=d3)
+    Store %18 <- %17
+    Load %19 <- %18
+    Load %20 <- int(4)
+    Eq %21 <- %19, %20
+    JmpIfNot %21 -> instr(74)
+    Jmp -> instr(78)
+    Load %16 <- %2
+    Load %17 <- %18
+    Add %2 <- %16, %17
+    Jmp -> instr(65)
+    Load %21 <- %2
+    Load %19 <- int(6)
+    Eq %17 <- %21, %19
+    Load %20 <- string("for break at 4, total 1+2+3 == 6")
+    Call %16 <- string("std.assert.assert") [%17, %20] (def=d0)
+    Load %16 <- int(0)
+    AllocArray %17 size=int(5), elem=int(1)
+    Load %21 <- int(1)
+    Load %19 <- int(0)
+    StoreIndex %17[%19] <- %21
+    Load %20 <- int(2)
+    Load %22 <- int(1)
+    StoreIndex %17[%22] <- %20
+    Load %23 <- int(3)
+    Load %24 <- int(2)
+    StoreIndex %17[%24] <- %23
+    Load %25 <- int(4)
+    Load %26 <- int(3)
+    StoreIndex %17[%26] <- %25
+    Load %27 <- int(5)
+    Load %28 <- int(4)
+    StoreIndex %17[%28] <- %27
+    Call %29 <- string("std.list.iter") [%17] (def=d1)
+    Call %30 <- string("std.list.has_next") [%29] (def=d2)
+    JmpIfNot %30 -> instr(114)
+    Call %31 <- string("std.list.next") [%29] (def=d3)
+    Store %32 <- %31
+    Load %33 <- %32
+    Load %34 <- int(2)
+    Eq %35 <- %33, %34
+    JmpIfNot %35 -> instr(110)
+    Jmp -> instr(101)
+    Load %30 <- %16
+    Load %31 <- int(1)
+    Add %16 <- %30, %31
+    Jmp -> instr(101)
+    Load %35 <- %16
+    Load %33 <- int(4)
+    Eq %31 <- %35, %33
+    Load %34 <- string("for continue skips one element")
+    Call %30 <- string("std.assert.assert") [%31, %34] (def=d0)
+    Load %30 <- int(0)
+    Load %31 <- int(0)
+    Load %35 <- int(0)
+    Load %33 <- void
+    Load %36 <- %35
+    Load %37 <- int(3)
+    Lt %34 <- %36, %37
+    JmpIfNot %34 -> instr(152)
+    Load %38 <- %35
+    Load %39 <- int(1)
+    Add %35 <- %38, %39
+    Load %40 <- int(0)
+    Load %41 <- void
+    Load %42 <- %40
+    Load %43 <- int(10)
+    Lt %44 <- %42, %43
+    JmpIfNot %44 -> instr(148)
+    Load %45 <- %40
+    Load %46 <- int(1)
+    Add %40 <- %45, %46
+    Load %47 <- %40
+    Load %48 <- int(2)
+    Eq %49 <- %47, %48
+    JmpIfNot %49 -> instr(144)
+    Jmp -> instr(148)
+    Load %44 <- %31
+    Load %42 <- int(1)
+    Add %31 <- %44, %42
+    Jmp -> instr(132)
+    Load %43 <- %30
+    Load %45 <- int(1)
+    Add %30 <- %43, %45
+    Jmp -> instr(123)
+    Load %42 <- %30
+    Load %43 <- int(3)
+    Eq %44 <- %42, %43
+    Load %45 <- string("outer loop survives inner break")
+    Call %41 <- string("std.assert.assert") [%44, %45] (def=d0)
+    Load %42 <- %31
+    Load %43 <- int(3)
+    Eq %44 <- %42, %43
+    Load %45 <- string("inner break fires once per outer iteration")
+    Call %41 <- string("std.assert.assert") [%44, %45] (def=d0)
+    Ret %41
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

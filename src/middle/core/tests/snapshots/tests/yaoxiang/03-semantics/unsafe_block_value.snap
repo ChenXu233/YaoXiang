@@ -1,0 +1,50 @@
+module
+  global[0] main2 : Int(64)
+  fn main() -> Void
+    slot[0] v : Int(64) @depth1
+    slot[1] w : Int(64) @depth1
+    slot[2] x : Int(64) @depth2
+    slot[4] y : Int(64) @depth2
+    locals_total=10
+    UnsafeBlockStart
+    Load %0 <- int(42)
+    UnsafeBlockEnd
+    Load %1 <- %0
+    Load %2 <- int(42)
+    Eq %3 <- %1, %2
+    Load %4 <- string("unsafe { 42 } should yield 42")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d0)
+    UnsafeBlockStart
+    Load %3 <- int(1)
+    Load %1 <- %3
+    Load %2 <- int(41)
+    Add %5 <- %1, %2
+    UnsafeBlockEnd
+    Load %4 <- %5
+    Load %6 <- int(42)
+    Eq %2 <- %4, %6
+    Load %7 <- string("unsafe block tail expr should yield 42")
+    Call %1 <- string("std.assert.assert") [%2, %7] (def=d0)
+    UnsafeBlockStart
+    Load %2 <- int(1)
+    UnsafeBlockEnd
+    Call %7 <- string("f") [] (def=d1)
+    Load %8 <- int(7)
+    Eq %6 <- %7, %8
+    Load %9 <- string("return should penetrate unsafe block")
+    Call %4 <- string("std.assert.assert") [%6, %9] (def=d0)
+    Load %6 <- string("unsafe block value ok")
+    Call %4 <- string("std.io.println") [%6] (def=d2)
+    Ret %4
+  fn f() -> Int(64)
+    locals_total=1
+    UnsafeBlockStart
+    Load %0 <- int(7)
+    Ret %0
+    UnsafeBlockEnd
+    Ret %0
+  init (locals=0)
+    Load %0 <- string("opaque type ok")
+    Call %1 <- string("std.io.println") [%0] (def=_)
+    Store @0 <- %1
+    Call %2 <- string("main") [] (def=_)

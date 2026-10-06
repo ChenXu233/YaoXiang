@@ -6,6 +6,7 @@
 pub mod bytecode;
 pub mod ir;
 pub mod ir_gen;
+pub mod normalize;
 pub mod verify;
 
 #[cfg(test)]

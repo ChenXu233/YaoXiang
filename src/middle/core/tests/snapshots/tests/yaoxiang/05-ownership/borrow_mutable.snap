@@ -1,0 +1,37 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 20, offset: 162 }, end: Position { line: 7, column: 23, offset: 165 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 7, column: 28, offset: 170 }, end: Position { line: 7, column: 31, offset: 173 } } }, default: None })] }
+  fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }, Int(64), Int(64)) -> Void
+    locals_total=14
+    Load %0 <- %1
+    Load %2 <- %1
+    LoadField %3 <- %2.0
+    Load %4 <- %5
+    Add %6 <- %3, %4
+    StoreField %0.0 <- %6 (type=None, name=Some("x"))
+    Load %7 <- %1
+    Load %8 <- %1
+    LoadField %9 <- %8.1
+    Load %10 <- %11
+    Add %12 <- %9, %10
+    StoreField %7.1 <- %12 (type=None, name=Some("y"))
+    Ret
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    locals_total=5
+    Load %0 <- int(1)
+    Load %1 <- int(2)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Load %3 <- int(3)
+    Load %4 <- int(4)
+    Call %0 <- string("Point.shift") [%1, %3, %4] (def=d1)
+    Load %1 <- bool(true)
+    Load %3 <- string("shift completed — &mut T mutation works")
+    Call %0 <- string("std.assert.assert") [%1, %3] (def=d2)
+    Ret %0
+  init (locals=3)
+    islot[0] self : Int(64) @depth1
+    islot[1] dx : Int(64) @depth1
+    islot[2] dy : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

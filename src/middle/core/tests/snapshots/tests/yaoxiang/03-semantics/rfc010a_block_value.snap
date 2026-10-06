@@ -1,0 +1,139 @@
+module
+  fn tail_expr(Int(64)) -> Int(64)
+    slot[0] n : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(1)
+    Add %3 <- %1, %2
+    Ret %3
+  fn tail_after_stmts(Int(64)) -> Int(64)
+    slot[0] n : Int(64) @depth1
+    slot[1] a : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Mul %3 <- %1, %2
+    Load %2 <- %3
+    Load %4 <- int(1)
+    Add %1 <- %2, %4
+    Ret %1
+  fn tail_if() -> Int(64)
+    locals_total=6
+    Load %0 <- int(1)
+    Load %1 <- int(1)
+    Eq %2 <- %0, %1
+    JmpIfNot %2 -> instr(7)
+    Load %3 <- int(5)
+    Move %4 <- %3
+    Jmp -> instr(9)
+    Load %5 <- int(6)
+    Move %4 <- %5
+    Ret %4
+  fn tail_match(Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    locals_total=7
+    Load %0 <- arg%0
+    Load %1 <- void
+    Load %2 <- %0
+    Load %3 <- int(1)
+    Eq %4 <- %2, %3
+    JmpIfNot %4 -> instr(9)
+    Load %5 <- int(10)
+    Move %1 <- %5
+    Jmp -> instr(12)
+    Load %6 <- int(20)
+    Move %1 <- %6
+    Jmp -> instr(12)
+    Ret %1
+  fn tail_assign() -> Void
+    slot[1] x : Int(64) @depth1
+    locals_total=3
+    Load %0 <- string("assign tail")
+    Call %1 <- string("std.io.println") [%0] (def=d0)
+    Ret
+  fn if_no_else_is_void() -> Void
+    slot[0] x : Int(64) @depth1
+    slot[2] y : Int(64) @depth1
+    locals_total=8
+    Load %0 <- int(1)
+    Load %1 <- int(1)
+    Eq %2 <- %0, %1
+    JmpIfNot %2 -> instr(7)
+    Load %3 <- int(19)
+    Move %4 <- %3
+    Jmp -> instr(7)
+    Load %5 <- void
+    Load %3 <- int(1)
+    Load %6 <- int(2)
+    Eq %1 <- %3, %6
+    JmpIfNot %1 -> instr(15)
+    Load %7 <- int(19)
+    Move %0 <- %7
+    Jmp -> instr(15)
+    Load %2 <- void
+    Ret
+  fn early_return(Int(64)) -> Int(64)
+    slot[0] n : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(0)
+    Lt %3 <- %1, %2
+    JmpIfNot %3 -> instr(7)
+    Load %4 <- int(0)
+    Ret %4
+    Load %3 <- %0
+    Ret %3
+  fn main() -> Void
+    locals_total=7
+    Load %0 <- int(4)
+    Call %1 <- string("tail_expr") [%0] (def=d1)
+    Load %2 <- int(5)
+    Eq %3 <- %1, %2
+    Load %4 <- string("tail_expr(4) should be 5")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %0 <- int(3)
+    Call %1 <- string("tail_after_stmts") [%0] (def=d3)
+    Load %2 <- int(7)
+    Eq %3 <- %1, %2
+    Load %4 <- string("tail_after_stmts(3) should be 7")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Call %1 <- string("tail_if") [] (def=d4)
+    Load %2 <- int(5)
+    Eq %3 <- %1, %2
+    Load %0 <- string("tail_if() should be 5 (if in tail position)")
+    Call %5 <- string("std.assert.assert") [%3, %0] (def=d2)
+    Load %0 <- int(1)
+    Call %1 <- string("tail_match") [%0] (def=d5)
+    Load %2 <- int(10)
+    Eq %3 <- %1, %2
+    Load %4 <- string("tail_match(1) should be 10")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %0 <- int(9)
+    Call %1 <- string("tail_match") [%0] (def=d5)
+    Load %2 <- int(20)
+    Eq %3 <- %1, %2
+    Load %4 <- string("tail_match(9) should be 20")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Load %4 <- int(1)
+    Neg %0 <- %4
+    Call %1 <- string("early_return") [%0] (def=d6)
+    Load %2 <- int(0)
+    Eq %3 <- %1, %2
+    Load %6 <- string("early_return(-1) should be 0")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d2)
+    Load %0 <- int(3)
+    Call %1 <- string("early_return") [%0] (def=d6)
+    Load %2 <- int(3)
+    Eq %3 <- %1, %2
+    Load %4 <- string("early_return(3) should be 3")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Call %5 <- string("tail_assign") [] (def=d7)
+    Call %5 <- string("if_no_else_is_void") [] (def=d8)
+    Load %3 <- string("rfc010a block value ok")
+    Call %5 <- string("std.io.println") [%3] (def=d0)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

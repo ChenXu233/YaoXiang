@@ -1,0 +1,70 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 20, offset: 561 }, end: Position { line: 9, column: 23, offset: 564 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 9, column: 28, offset: 569 }, end: Position { line: 9, column: 31, offset: 572 } } }, default: None })] }
+  fn bump(Ref { mutable: true, inner: TypeRef("Point") }) -> Void
+    slot[0] pt : Int(64) @depth1
+    locals_total=7
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- %0
+    LoadField %3 <- %2.0
+    Load %4 <- int(1)
+    Add %5 <- %3, %4
+    StoreField %1.0 <- %5 (type=None, name=Some("x"))
+    Ret
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] view : Int(64) @depth1
+    slot[2] i : Int(64) @depth1
+    slot[3] reads : Int(64) @depth1
+    slot[8] x : Int(64) @depth2
+    locals_total=25
+    Load %0 <- int(1)
+    Load %1 <- int(2)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Move %0 <- %1
+    Load %1 <- int(0)
+    Load %3 <- int(0)
+    Load %4 <- void
+    Load %5 <- %1
+    Load %6 <- int(3)
+    Lt %7 <- %5, %6
+    JmpIfNot %7 -> instr(35)
+    Load %8 <- %0
+    LoadField %9 <- %8.0
+    Load %10 <- %9
+    Load %11 <- int(1)
+    Eq %12 <- %10, %11
+    Load %13 <- string("borrowed read sees pre-write value (write is guarded to i == 3)")
+    Call %14 <- string("std.assert.assert") [%12, %13] (def=d1)
+    Load %15 <- %3
+    Load %16 <- int(1)
+    Add %3 <- %15, %16
+    Load %17 <- %1
+    Load %18 <- int(1)
+    Add %1 <- %17, %18
+    Load %19 <- %1
+    Load %20 <- int(3)
+    Eq %21 <- %19, %20
+    JmpIfNot %21 -> instr(33)
+    Load %22 <- %2
+    Call %23 <- string("bump") [%22] (def=d2)
+    Move %24 <- %23
+    Jmp -> instr(33)
+    Load %4 <- void
+    Jmp -> instr(8)
+    Load %12 <- %3
+    Load %10 <- int(3)
+    Eq %14 <- %12, %10
+    Load %11 <- string("loop ran 3 times")
+    Call %8 <- string("std.assert.assert") [%14, %11] (def=d1)
+    Load %11 <- %2
+    LoadField %12 <- %11.0
+    Load %10 <- int(2)
+    Eq %14 <- %12, %10
+    Load %13 <- string("guarded write fired exactly once")
+    Call %8 <- string("std.assert.assert") [%14, %13] (def=d1)
+    Ret %8
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

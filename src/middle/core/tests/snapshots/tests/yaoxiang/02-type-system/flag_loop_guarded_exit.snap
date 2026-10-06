@@ -1,0 +1,37 @@
+module
+  fn AtMost(Int(64), Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Le, left: Var("x", Span { start: Position { line: 12, column: 38, offset: 647 }, end: Position { line: 12, column: 39, offset: 648 } }), right: Var("n", Span { start: Position { line: 12, column: 43, offset: 652 }, end: Position { line: 12, column: 44, offset: 653 } }), span: Span { start: Position { line: 12, column: 40, offset: 649 }, end: Position { line: 12, column: 42, offset: 651 } } }))] }
+  fn main() -> Void
+    slot[0] flag : Int(64) @depth1
+    slot[1] i : Int(64) @depth1
+    locals_total=11
+    Load %0 <- bool(true)
+    Load %1 <- int(10)
+    Load %2 <- void
+    Load %3 <- %0
+    JmpIfNot %3 -> instr(17)
+    Load %4 <- %1
+    Load %5 <- int(1)
+    Sub %1 <- %4, %5
+    Load %6 <- %1
+    Load %7 <- int(0)
+    Le %8 <- %6, %7
+    JmpIfNot %8 -> instr(15)
+    Load %0 <- bool(false)
+    Move %9 <- %10
+    Jmp -> instr(15)
+    Load %2 <- void
+    Jmp -> instr(3)
+    Load %4 <- %0
+    Load %5 <- bool(false)
+    Eq %3 <- %4, %5
+    Load %9 <- string("标志已清零")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d0)
+    Load %4 <- %1
+    Load %5 <- int(0)
+    Eq %3 <- %4, %5
+    Load %9 <- string("i 归零：i == 0")
+    Call %2 <- string("std.assert.assert") [%3, %9] (def=d0)
+    Ret %2
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

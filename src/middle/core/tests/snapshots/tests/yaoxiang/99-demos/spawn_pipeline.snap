@@ -1,0 +1,45 @@
+module
+  fn main() -> Void
+    slot[1] t1 : Int(64) @depth2
+    slot[2] t2 : Int(64) @depth2
+    slot[3] t3 : Int(64) @depth2
+    slot[8] name : Int(64) @depth1
+    slot[10] age : Int(64) @depth1
+    slot[12] city : Int(64) @depth1
+    locals_total=16
+    Load %0 <- string("Alice")
+    Load %1 <- int(30)
+    Load %2 <- string("Beijing")
+    Spawn %3 <- [] plan(groups=[], deps=[], resources=[])
+    Load %4 <- %0
+    Load %5 <- %1
+    Load %6 <- %2
+    NewTuple %7 <- [%4, %5, %6]
+    Move %3 <- %7
+    Load %8 <- int(0)
+    LoadIndex %9 <- %3[%8]
+    Load %10 <- int(1)
+    LoadIndex %11 <- %3[%10]
+    Load %12 <- int(2)
+    LoadIndex %13 <- %3[%12]
+    Load %14 <- bool(true)
+    Load %15 <- string("name received from spawn")
+    Call %12 <- string("std.assert.assert") [%14, %15] (def=d0)
+    Load %14 <- %9
+    Call %12 <- string("std.io.println") [%14] (def=d1)
+    Load %14 <- bool(true)
+    Load %15 <- string("age received from spawn")
+    Call %12 <- string("std.assert.assert") [%14, %15] (def=d0)
+    Load %14 <- %11
+    Call %12 <- string("std.io.println") [%14] (def=d1)
+    Load %14 <- bool(true)
+    Load %15 <- string("city received from spawn")
+    Call %12 <- string("std.assert.assert") [%14, %15] (def=d0)
+    Load %14 <- %13
+    Call %12 <- string("std.io.println") [%14] (def=d1)
+    Load %14 <- bool(true)
+    Load %15 <- string("all passed")
+    Call %12 <- string("std.assert.assert") [%14, %15] (def=d0)
+    Ret %12
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

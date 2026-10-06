@@ -1,0 +1,107 @@
+module
+  fn Box(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["T"]
+    type_decl Struct { body: [Field(StructField { name: "v", is_mut: false, ty: Name { name: "T", span: Span { start: Position { line: 12, column: 31, offset: 496 }, end: Position { line: 12, column: 32, offset: 497 } } }, default: None })] }
+  fn Box.get(Ref { mutable: false, inner: Generic { name: "Box", args: [TypeRef("T")] } }) -> Fn { params: [Ref { mutable: false, inner: Generic { name: "Box", args: [TypeRef("T")] } }], return_type: TypeRef("T") }
+    locals_total=3
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Ret %2
+    Ret %2
+  fn MyList(MetaType { universe_level: UniverseLevel { level: "0" }, type_params: [] }) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    generic_params: ["T"]
+    type_decl Struct { body: [Field(StructField { name: "data", is_mut: false, ty: Generic { name: "Vec", name_span: Span { start: Position { line: 20, column: 11, offset: 700 }, end: Position { line: 20, column: 14, offset: 703 } }, args: [Name { name: "T", span: Span { start: Position { line: 20, column: 15, offset: 704 }, end: Position { line: 20, column: 16, offset: 705 } } }] }, default: None }), Field(StructField { name: "length", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 21, column: 13, offset: 720 }, end: Position { line: 21, column: 16, offset: 723 } } }, default: None })] }
+  fn MyList.push(Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, TypeRef("T")) -> Fn { params: [Ref { mutable: true, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, TypeRef("T")], return_type: Void }
+    locals_total=13
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Load %3 <- %1
+    LoadField %4 <- %3.1
+    Load %5 <- %6
+    StoreIndex %2[%4] <- %5
+    Load %7 <- %1
+    Load %8 <- %1
+    LoadField %9 <- %8.1
+    Load %10 <- int(1)
+    Add %11 <- %9, %10
+    StoreField %7.1 <- %11 (type=None, name=Some("length"))
+    Ret
+  fn MyList.get(Ref { mutable: false, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, Int(64)) -> Fn { params: [Ref { mutable: false, inner: Generic { name: "MyList", args: [TypeRef("T")] } }, Int(64)], return_type: TypeRef("T") }
+    locals_total=6
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Load %3 <- %4
+    LoadIndex %5 <- %2[%3]
+    Ret %5
+    Ret %5
+  fn read_box() -> Int(64)
+    slot[0] b : Int(64) @depth1
+    locals_total=3
+    Load %0 <- int(7)
+    Call %1 <- string("Box") [%0] (def=d0)
+    Load %2 <- %1
+    Call %0 <- string("Box.get") [%2] (def=d1)
+    Ret %0
+    Ret %0
+  fn build_list() -> Int(64)
+    slot[0] l : Int(64) @depth1
+    locals_total=8
+    AllocArray %0 size=int(1), elem=int(1)
+    Load %1 <- int(0)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(0)
+    Call %4 <- string("MyList") [%0, %3] (def=d2)
+    Load %1 <- %4
+    Load %2 <- int(42)
+    Call %0 <- string("MyList.push") [%1, %2] (def=d3)
+    Load %5 <- %4
+    LoadField %2 <- %5.1
+    Load %3 <- int(1)
+    Eq %1 <- %2, %3
+    Load %6 <- string("push grows length")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d4)
+    Load %5 <- %4
+    Load %6 <- int(0)
+    Call %2 <- string("MyList.get") [%5, %6] (def=d5)
+    Load %3 <- int(42)
+    Eq %1 <- %2, %3
+    Load %7 <- string("pushed value at slot 0")
+    Call %0 <- string("std.assert.assert") [%1, %7] (def=d4)
+    Load %1 <- %4
+    Load %2 <- int(43)
+    Call %0 <- string("MyList.push") [%1, %2] (def=d3)
+    Load %5 <- %4
+    LoadField %2 <- %5.1
+    Load %3 <- int(2)
+    Eq %1 <- %2, %3
+    Load %6 <- string("second push")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d4)
+    Load %5 <- %4
+    Load %6 <- int(1)
+    Call %2 <- string("MyList.get") [%5, %6] (def=d5)
+    Load %3 <- int(43)
+    Eq %1 <- %2, %3
+    Load %7 <- string("second pushed value")
+    Call %0 <- string("std.assert.assert") [%1, %7] (def=d4)
+    Load %1 <- %4
+    LoadField %0 <- %1.1
+    Ret %0
+    Ret %0
+  fn main() -> Void
+    locals_total=5
+    Call %0 <- string("read_box") [] (def=d6)
+    Load %1 <- int(7)
+    Eq %2 <- %0, %1
+    Load %3 <- string("generic method reads own field")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d4)
+    Call %0 <- string("build_list") [] (def=d7)
+    Load %1 <- int(2)
+    Eq %2 <- %0, %1
+    Load %3 <- string("library-style List built in YaoXiang")
+    Call %4 <- string("std.assert.assert") [%2, %3] (def=d4)
+    Ret %4
+  init (locals=2)
+    islot[0] self : Int(64) @depth1
+    islot[1] i : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

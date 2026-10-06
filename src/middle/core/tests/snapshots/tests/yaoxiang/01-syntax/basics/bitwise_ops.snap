@@ -1,0 +1,49 @@
+module
+  fn main() -> Void
+    slot[0] a : Int(64) @depth1
+    locals_total=10
+    Load %0 <- int(6)
+    Load %1 <- %0
+    Load %2 <- int(2)
+    And %3 <- %1, %2
+    Load %4 <- int(2)
+    Eq %5 <- %3, %4
+    Load %6 <- string("位与")
+    Call %7 <- string("std.assert.assert") [%5, %6] (def=d0)
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Or %3 <- %1, %2
+    Load %4 <- int(6)
+    Eq %5 <- %3, %4
+    Load %6 <- string("位或")
+    Call %7 <- string("std.assert.assert") [%5, %6] (def=d0)
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Xor %3 <- %1, %2
+    Load %4 <- int(4)
+    Eq %5 <- %3, %4
+    Load %6 <- string("位异或")
+    Call %7 <- string("std.assert.assert") [%5, %6] (def=d0)
+    Load %1 <- int(1024)
+    Load %6 <- int(2)
+    Load %8 <- int(4)
+    Add %2 <- %6, %8
+    And %3 <- %1, %2
+    Load %4 <- int(0)
+    Eq %5 <- %3, %4
+    Load %9 <- string("位与低于加减")
+    Call %7 <- string("std.assert.assert") [%5, %9] (def=d0)
+    Load %6 <- int(16)
+    Load %8 <- int(1)
+    Shr %1 <- %6, %8
+    Load %2 <- int(3)
+    And %3 <- %1, %2
+    Load %4 <- int(0)
+    Eq %5 <- %3, %4
+    Load %9 <- string("移位高于位与")
+    Call %7 <- string("std.assert.assert") [%5, %9] (def=d0)
+    Load %5 <- string("BITWISE_OPS_OK")
+    Call %7 <- string("std.io.println") [%5] (def=d1)
+    Ret %7
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

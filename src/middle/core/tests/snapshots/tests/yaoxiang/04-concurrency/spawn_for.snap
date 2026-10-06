@@ -1,0 +1,52 @@
+module
+  fn main() -> Void
+    slot[0] items : Int(64) @depth1
+    slot[5] item : Int(64) @depth2
+    locals_total=12
+    AllocArray %0 size=int(5), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(3)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %7 <- int(4)
+    Load %8 <- int(3)
+    StoreIndex %0[%8] <- %7
+    Load %9 <- int(5)
+    Load %10 <- int(4)
+    StoreIndex %0[%10] <- %9
+    AllocArray %2 size=int(0), elem=int(1)
+    Load %3 <- %0
+    Call %4 <- string("std.list.iter") [%3] (def=d0)
+    Call %6 <- string("std.list.has_next") [%4] (def=d1)
+    JmpIfNot %6 -> instr(26)
+    Call %7 <- string("std.list.next") [%4] (def=d2)
+    Store %5 <- %7
+    MakeClosure %8 <- closure_0 env=[%7] (def=d3)
+    Call %2 <- string("std.list.push") [%2, %8] (def=d4)
+    Jmp -> instr(19)
+    SpawnFromList %1 <- %2 plan(groups=[[0]], deps=[[]], resources=[[]])
+    Load %10 <- %0
+    Load %11 <- int(0)
+    LoadIndex %8 <- %10[%11]
+    Load %9 <- int(1)
+    Eq %7 <- %8, %9
+    Call %6 <- string("std.assert.assert") [%7] (def=d5)
+    Load %10 <- %0
+    Load %11 <- int(4)
+    LoadIndex %8 <- %10[%11]
+    Load %9 <- int(5)
+    Eq %7 <- %8, %9
+    Call %6 <- string("std.assert.assert") [%7] (def=d5)
+    Ret %6
+  fn closure_0(Int(64)) -> Void
+    slot[0] item : Int(64) @depth3
+    locals_total=11
+    Load %0 <- %1
+    Ret %0
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

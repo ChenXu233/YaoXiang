@@ -1,0 +1,79 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 339 }, end: Position { line: 8, column: 23, offset: 342 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 347 }, end: Position { line: 8, column: 31, offset: 350 } } }, default: None })] }
+  fn read_x(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
+    slot[0] p : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    LoadField %2 <- %1.0
+    Ret %2
+    Ret
+  fn copy_use(Ref { mutable: false, inner: TypeRef("Point") }) -> Int(64)
+    slot[0] p : Int(64) @depth1
+    slot[1] q : Int(64) @depth1
+    locals_total=7
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- %1
+    LoadField %3 <- %2.0
+    Load %4 <- %0
+    LoadField %5 <- %4.0
+    Add %6 <- %3, %5
+    Ret %6
+    Ret %6
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    slot[1] view : Int(64) @depth1
+    slot[2] view2 : Int(64) @depth1
+    slot[3] t : Int(64) @depth1
+    slot[4] v : Int(64) @depth1
+    slot[5] w : Int(64) @depth1
+    slot[6] r : Int(64) @depth1
+    locals_total=12
+    Load %0 <- int(1)
+    Load %1 <- int(2)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Move %0 <- %1
+    Load %1 <- %0
+    Load %3 <- %0
+    LoadField %4 <- %3.0
+    Load %5 <- int(1)
+    Eq %6 <- %4, %5
+    Load %7 <- string("原令牌活跃")
+    Call %8 <- string("std.assert.assert") [%6, %7] (def=d1)
+    Load %3 <- %1
+    LoadField %4 <- %3.1
+    Load %5 <- int(2)
+    Eq %6 <- %4, %5
+    Load %7 <- string("复制令牌活跃")
+    Call %8 <- string("std.assert.assert") [%6, %7] (def=d1)
+    Load %6 <- int(7)
+    Load %4 <- int(8)
+    Call %8 <- string("Point") [%6, %4] (def=d0)
+    Load %4 <- %8
+    Move %6 <- %4
+    Load %3 <- %6
+    Call %5 <- string("read_x") [%3] (def=d2)
+    Call %4 <- string("std.io.println") [%5] (def=d3)
+    Load %9 <- %6
+    LoadField %3 <- %9.1
+    Load %7 <- int(8)
+    Eq %5 <- %3, %7
+    Load %10 <- string("传参后源令牌仍活跃")
+    Call %4 <- string("std.assert.assert") [%5, %10] (def=d1)
+    Load %5 <- int(3)
+    Load %3 <- int(4)
+    Call %4 <- string("Point") [%5, %3] (def=d0)
+    Load %7 <- %4
+    Move %3 <- %7
+    Call %5 <- string("copy_use") [%3] (def=d4)
+    Load %9 <- %5
+    Load %10 <- int(6)
+    Eq %7 <- %9, %10
+    Load %11 <- string("参数令牌复制后两份都活跃")
+    Call %3 <- string("std.assert.assert") [%7, %11] (def=d1)
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

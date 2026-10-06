@@ -1,0 +1,37 @@
+module
+  fn Grid() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "cells", is_mut: false, ty: Generic { name: "List", name_span: Span { start: Position { line: 10, column: 12, offset: 321 }, end: Position { line: 10, column: 16, offset: 325 } }, args: [Name { name: "Float", span: Span { start: Position { line: 10, column: 17, offset: 326 }, end: Position { line: 10, column: 22, offset: 331 } } }] }, default: None }), Expr(Generic { name: "Index", name_span: Span { start: Position { line: 11, column: 5, offset: 338 }, end: Position { line: 11, column: 10, offset: 343 } }, args: [Name { name: "Grid", span: Span { start: Position { line: 11, column: 11, offset: 344 }, end: Position { line: 11, column: 15, offset: 348 } } }, Name { name: "Int", span: Span { start: Position { line: 11, column: 17, offset: 350 }, end: Position { line: 11, column: 20, offset: 353 } } }, Name { name: "Float", span: Span { start: Position { line: 11, column: 22, offset: 355 }, end: Position { line: 11, column: 27, offset: 360 } } }] })] }
+  fn Grid.index(Ref { mutable: false, inner: TypeRef("Grid") }, Ref { mutable: false, inner: Int(64) }) -> Float(64)
+    locals_total=6
+    Load %0 <- %1
+    LoadField %2 <- %0.0
+    Load %3 <- %4
+    LoadIndex %5 <- %2[%3]
+    Ret %5
+    Ret %5
+  fn main() -> Void
+    slot[0] g : Int(64) @depth1
+    locals_total=8
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- float(4619567317775286272)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- float(4620693217682128896)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- float(4621256167635550208)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Call %7 <- string("Grid") [%0] (def=d0)
+    Load %4 <- %7
+    Load %5 <- int(1)
+    Call %2 <- string("Grid.index") [%4, %5] (def=d1)
+    Load %3 <- float(4620693217682128896)
+    Eq %1 <- %2, %3
+    Load %6 <- string("g[1] == 8.0")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d2)
+    Ret %0
+  init (locals=2)
+    islot[0] self : Int(64) @depth1
+    islot[1] key : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

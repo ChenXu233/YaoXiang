@@ -1,0 +1,124 @@
+module
+  fn add(Int(64), Int(64)) -> Int(64)
+    slot[0] a : Int(64) @depth1
+    slot[1] b : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %0
+    Load %3 <- %1
+    Add %4 <- %2, %3
+    Ret %4
+  fn digits(Int(64), Int(64), Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    slot[1] y : Int(64) @depth1
+    slot[2] z : Int(64) @depth1
+    locals_total=12
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- arg%2
+    Load %3 <- %0
+    Load %4 <- int(100)
+    Mul %5 <- %3, %4
+    Load %6 <- %1
+    Load %7 <- int(10)
+    Mul %8 <- %6, %7
+    Add %9 <- %5, %8
+    Load %10 <- %2
+    Add %11 <- %9, %10
+    Ret %11
+  fn send(Generic { name: "String", args: [] }, Generic { name: "String", args: [] }, Generic { name: "String", args: [] }) -> Generic { name: "String", args: [] }
+    slot[0] to : Int(64) @depth1
+    slot[1] title : Int(64) @depth1
+    slot[2] body : Int(64) @depth1
+    locals_total=12
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- arg%2
+    Load %3 <- %0
+    Load %4 <- string("|")
+    Add %5 <- %3, %4
+    Load %6 <- %1
+    Add %7 <- %5, %6
+    Load %8 <- string("|")
+    Add %9 <- %7, %8
+    Load %10 <- %2
+    Add %11 <- %9, %10
+    Ret %11
+  fn main() -> Void
+    slot[0] v : Int(64) @depth1
+    slot[1] pushed : Int(64) @depth1
+    slot[2] msg : Int(64) @depth1
+    locals_total=9
+    Load %0 <- int(3)
+    Load %1 <- int(5)
+    Call %2 <- string("add") [%0, %1] (def=d0)
+    Load %3 <- int(8)
+    Eq %4 <- %2, %3
+    Load %5 <- string("named: declaration order")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %0 <- int(5)
+    Load %1 <- int(3)
+    Call %2 <- string("add") [%1, %0] (def=d0)
+    Load %3 <- int(8)
+    Eq %4 <- %2, %3
+    Load %5 <- string("named: reversed order")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %0 <- int(3)
+    Load %1 <- int(5)
+    Call %2 <- string("add") [%0, %1] (def=d0)
+    Load %3 <- int(8)
+    Eq %4 <- %2, %3
+    Load %5 <- string("named: mixed positional first")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %0 <- int(3)
+    Load %1 <- int(2)
+    Load %5 <- int(1)
+    Call %2 <- string("digits") [%5, %1, %0] (def=d2)
+    Load %3 <- int(123)
+    Eq %4 <- %2, %3
+    Load %7 <- string("named: three args reversed")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %0 <- int(1)
+    Load %1 <- int(3)
+    Load %5 <- int(2)
+    Call %2 <- string("digits") [%0, %5, %1] (def=d2)
+    Load %3 <- int(123)
+    Eq %4 <- %2, %3
+    Load %7 <- string("named: one positional + two named")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    AllocArray %6 size=int(2), elem=int(1)
+    Load %4 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %6[%2] <- %4
+    Load %3 <- int(2)
+    Load %0 <- int(1)
+    StoreIndex %6[%0] <- %3
+    Load %2 <- int(9)
+    Load %3 <- %6
+    Call %4 <- string("std.list.push") [%3, %2] (def=d3)
+    Load %5 <- %4
+    Call %0 <- string("std.list.len") [%5] (def=d4)
+    Load %1 <- int(3)
+    Eq %3 <- %0, %1
+    Load %7 <- string("named: qualified list.push len")
+    Call %2 <- string("std.assert.assert") [%3, %7] (def=d1)
+    Load %5 <- %4
+    Load %7 <- int(2)
+    Call %0 <- string("std.list.get") [%5, %7] (def=d5)
+    Load %1 <- int(9)
+    Eq %3 <- %0, %1
+    Load %8 <- string("named: qualified list.push value")
+    Call %2 <- string("std.assert.assert") [%3, %8] (def=d1)
+    Load %3 <- string("明天下午 3 点开会")
+    Load %0 <- string("alice@example.com")
+    Load %1 <- string("会议通知")
+    Call %2 <- string("send") [%0, %1, %3] (def=d6)
+    Load %1 <- %2
+    Load %5 <- string("alice@example.com|会议通知|明天下午 3 点开会")
+    Eq %0 <- %1, %5
+    Load %7 <- string("named: readable call")
+    Call %3 <- string("std.assert.assert") [%0, %7] (def=d1)
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

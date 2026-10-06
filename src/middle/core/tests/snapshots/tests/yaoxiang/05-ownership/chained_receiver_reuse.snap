@@ -1,0 +1,34 @@
+module
+  fn Point() -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Field(StructField { name: "x", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 20, offset: 278 }, end: Position { line: 8, column: 23, offset: 281 } } }, default: None }), Field(StructField { name: "y", is_mut: false, ty: Name { name: "Int", span: Span { start: Position { line: 8, column: 28, offset: 286 }, end: Position { line: 8, column: 31, offset: 289 } } }, default: None })] }
+  fn Point.shift(Ref { mutable: true, inner: TypeRef("Point") }) -> Void
+    locals_total=7
+    Load %0 <- %1
+    Load %2 <- %1
+    LoadField %3 <- %2.0
+    Load %4 <- int(1)
+    Add %5 <- %3, %4
+    StoreField %0.0 <- %5 (type=None, name=Some("x"))
+    Ret
+  fn main() -> Void
+    slot[0] p : Int(64) @depth1
+    locals_total=7
+    Load %0 <- int(0)
+    Load %1 <- int(0)
+    Call %2 <- string("Point") [%0, %1] (def=d0)
+    Load %1 <- %2
+    Call %0 <- string("Point.shift") [%1] (def=d1)
+    Drop %2
+    Load %1 <- %2
+    Call %0 <- string("Point.shift") [%1] (def=d1)
+    Drop %2
+    Load %3 <- %2
+    LoadField %4 <- %3.0
+    Load %5 <- int(2)
+    Eq %1 <- %4, %5
+    Load %6 <- string("sequential chained &mut receiver reuse")
+    Call %0 <- string("std.assert.assert") [%1, %6] (def=d2)
+    Ret %0
+  init (locals=1)
+    islot[0] self : Int(64) @depth1
+    Call %0 <- string("main") [] (def=_)

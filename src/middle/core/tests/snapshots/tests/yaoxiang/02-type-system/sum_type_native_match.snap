@@ -1,0 +1,90 @@
+module
+  fn main() -> Void
+    slot[0] f : Int(64) @depth1
+    slot[1] w : Int(64) @depth1
+    slot[3] x : Int(64) @depth2
+    slot[4] n : Int(64) @depth1
+    slot[5] v : Int(64) @depth1
+    slot[7] x : Int(64) @depth2
+    slot[8] tag : Int(64) @depth1
+    locals_total=20
+    Load %0 <- string("125.0")
+    Call %1 <- string("std.string.parse_float") [%0] (def=d0)
+    Load %0 <- void
+    Load %2 <- %1
+    VariantTag %3 <- %2 : Result
+    Load %4 <- int(0)
+    Eq %5 <- %3, %4
+    JmpIfNot %5 -> instr(13)
+    VariantPayload %6 <- %2 : Result
+    Move %7 <- %6
+    Load %8 <- %7
+    Move %0 <- %8
+    Jmp -> instr(21)
+    VariantTag %9 <- %2 : Result
+    Load %10 <- int(1)
+    Eq %11 <- %9, %10
+    JmpIfNot %11 -> instr(21)
+    VariantPayload %12 <- %2 : Result
+    Load %13 <- float(0)
+    Move %0 <- %13
+    Jmp -> instr(21)
+    Load %5 <- %0
+    Load %6 <- float(4638496509959077888)
+    Eq %4 <- %5, %6
+    Load %8 <- string("match native ok arm payload")
+    Call %3 <- string("std.assert.assert") [%4, %8] (def=d1)
+    Load %4 <- string("nope")
+    Call %3 <- string("std.string.parse_int") [%4] (def=d2)
+    Load %4 <- void
+    Load %5 <- %3
+    VariantTag %8 <- %5 : Result
+    Load %9 <- int(0)
+    Eq %10 <- %8, %9
+    JmpIfNot %10 -> instr(39)
+    VariantPayload %11 <- %5 : Result
+    Move %6 <- %11
+    Load %12 <- %6
+    Move %4 <- %12
+    Jmp -> instr(48)
+    VariantTag %13 <- %5 : Result
+    Load %14 <- int(1)
+    Eq %15 <- %13, %14
+    JmpIfNot %15 -> instr(48)
+    VariantPayload %16 <- %5 : Result
+    Load %17 <- int(1)
+    Neg %18 <- %17
+    Move %4 <- %18
+    Jmp -> instr(48)
+    Load %10 <- %4
+    Load %12 <- int(1)
+    Neg %11 <- %12
+    Eq %9 <- %10, %11
+    Load %13 <- string("match native err arm payload")
+    Call %8 <- string("std.assert.assert") [%9, %13] (def=d1)
+    Load %8 <- void
+    Load %9 <- %1
+    VariantTag %10 <- %9 : Result
+    Load %11 <- int(0)
+    Eq %12 <- %10, %11
+    JmpIfNot %12 -> instr(64)
+    VariantPayload %13 <- %9 : Result
+    Load %14 <- string("parsed")
+    Move %8 <- %14
+    Jmp -> instr(72)
+    VariantTag %15 <- %9 : Result
+    Load %16 <- int(1)
+    Eq %18 <- %15, %16
+    JmpIfNot %18 -> instr(72)
+    VariantPayload %17 <- %9 : Result
+    Load %19 <- string("failed")
+    Move %8 <- %19
+    Jmp -> instr(72)
+    Load %11 <- %8
+    Load %12 <- string("parsed")
+    Eq %10 <- %11, %12
+    Load %13 <- string("match native exhaustive arms")
+    Call %9 <- string("std.assert.assert") [%10, %13] (def=d1)
+    Ret %9
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,206 @@
+module
+  fn mk() -> Generic { name: "Vec", args: [Int(64)] }
+    slot[0] v : Int(64) @depth1
+    locals_total=9
+    AllocArray %0 size=int(4), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(3)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %7 <- int(4)
+    Load %8 <- int(3)
+    StoreIndex %0[%8] <- %7
+    Load %1 <- %0
+    Ret %1
+    Ret %1
+  fn main() -> Void
+    locals_total=9
+    Call %0 <- string("mk") [] (def=d0)
+    Call %1 <- string("std.list.len") [%0] (def=d1)
+    Load %2 <- int(4)
+    Eq %3 <- %1, %2
+    Load %4 <- string("len == 4")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Call %0 <- string("mk") [] (def=d0)
+    Load %4 <- int(1)
+    Call %1 <- string("std.list.get") [%0, %4] (def=d3)
+    Load %2 <- int(2)
+    Eq %3 <- %1, %2
+    Load %6 <- string("get(1) == 2")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d2)
+    Call %0 <- string("mk") [] (def=d0)
+    Call %1 <- string("std.list.first") [%0] (def=d4)
+    Load %2 <- int(1)
+    Eq %3 <- %1, %2
+    Load %4 <- string("first == 1")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Call %0 <- string("mk") [] (def=d0)
+    Call %1 <- string("std.list.last") [%0] (def=d5)
+    Load %2 <- int(4)
+    Eq %3 <- %1, %2
+    Load %4 <- string("last == 4")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Call %1 <- string("mk") [] (def=d0)
+    Load %2 <- int(3)
+    Call %3 <- string("std.list.contains") [%1, %2] (def=d6)
+    Load %0 <- string("contains 3")
+    Call %5 <- string("std.assert.assert") [%3, %0] (def=d2)
+    Call %2 <- string("mk") [] (def=d0)
+    Load %0 <- int(99)
+    Call %1 <- string("std.list.contains") [%2, %0] (def=d6)
+    Not %3 <- %1
+    Load %4 <- string("not contains 99")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Call %0 <- string("mk") [] (def=d0)
+    Load %4 <- int(3)
+    Call %1 <- string("std.list.find_index") [%0, %4] (def=d7)
+    Load %2 <- int(2)
+    Eq %3 <- %1, %2
+    Load %6 <- string("find_index 3 == 2")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d2)
+    Call %2 <- string("mk") [] (def=d0)
+    Call %1 <- string("std.list.is_empty") [%2] (def=d8)
+    Not %3 <- %1
+    Load %0 <- string("not empty")
+    Call %5 <- string("std.assert.assert") [%3, %0] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    Call %0 <- string("std.list.reverse") [%4] (def=d9)
+    Call %1 <- string("std.list.first") [%0] (def=d4)
+    Load %2 <- int(4)
+    Eq %3 <- %1, %2
+    Load %6 <- string("reverse first == 4")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    Call %6 <- string("mk") [] (def=d0)
+    Call %0 <- string("std.list.concat") [%4, %6] (def=d10)
+    Call %1 <- string("std.list.len") [%0] (def=d1)
+    Load %2 <- int(8)
+    Eq %3 <- %1, %2
+    Load %7 <- string("concat len == 8")
+    Call %5 <- string("std.assert.assert") [%3, %7] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    MakeClosure %6 <- closure_0 env=[] (def=d11)
+    Call %0 <- string("std.list.map") [%4, %6] (def=d12)
+    Load %7 <- int(0)
+    Call %1 <- string("std.list.get") [%0, %7] (def=d3)
+    Load %2 <- int(2)
+    Eq %3 <- %1, %2
+    Load %8 <- string("map [0] == 2")
+    Call %5 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    MakeClosure %6 <- closure_1 env=[] (def=d13)
+    Call %0 <- string("std.list.filter") [%4, %6] (def=d14)
+    Call %1 <- string("std.list.len") [%0] (def=d1)
+    Load %2 <- int(2)
+    Eq %3 <- %1, %2
+    Load %7 <- string("filter evens len == 2")
+    Call %5 <- string("std.assert.assert") [%3, %7] (def=d2)
+    Call %0 <- string("mk") [] (def=d0)
+    MakeClosure %4 <- closure_2 env=[] (def=d15)
+    Load %6 <- int(0)
+    Call %1 <- string("std.list.reduce") [%0, %4, %6] (def=d16)
+    Load %2 <- int(10)
+    Eq %3 <- %1, %2
+    Load %7 <- string("reduce sum == 10")
+    Call %5 <- string("std.assert.assert") [%3, %7] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    Load %6 <- int(3)
+    Call %0 <- string("std.list.push") [%4, %6] (def=d17)
+    Call %1 <- string("std.list.len") [%0] (def=d1)
+    Load %2 <- int(5)
+    Eq %3 <- %1, %2
+    Load %7 <- string("push returns new len 5")
+    Call %5 <- string("std.assert.assert") [%3, %7] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    Load %6 <- int(0)
+    Call %0 <- string("std.list.prepend") [%4, %6] (def=d18)
+    Call %1 <- string("std.list.len") [%0] (def=d1)
+    Load %2 <- int(5)
+    Eq %3 <- %1, %2
+    Load %7 <- string("prepend returns new len 5")
+    Call %5 <- string("std.assert.assert") [%3, %7] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    Load %6 <- int(0)
+    Call %0 <- string("std.list.remove_at") [%4, %6] (def=d19)
+    Call %1 <- string("std.list.len") [%0] (def=d1)
+    Load %2 <- int(3)
+    Eq %3 <- %1, %2
+    Load %7 <- string("remove_at drops one")
+    Call %5 <- string("std.assert.assert") [%3, %7] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    Load %6 <- int(0)
+    Load %7 <- int(9)
+    Call %0 <- string("std.list.set") [%4, %6, %7] (def=d20)
+    Call %1 <- string("std.list.len") [%0] (def=d1)
+    Load %2 <- int(4)
+    Eq %3 <- %1, %2
+    Load %8 <- string("set keeps len")
+    Call %5 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    Load %6 <- int(0)
+    Load %7 <- int(9)
+    Call %0 <- string("std.list.set") [%4, %6, %7] (def=d20)
+    Call %1 <- string("std.list.first") [%0] (def=d4)
+    Load %2 <- int(9)
+    Eq %3 <- %1, %2
+    Load %8 <- string("set writes slot")
+    Call %5 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Load %2 <- void
+    Call %1 <- string("std.list.empty") [%2] (def=d21)
+    Call %3 <- string("std.list.is_empty") [%1] (def=d8)
+    Load %0 <- string("empty is empty")
+    Call %5 <- string("std.assert.assert") [%3, %0] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    Load %6 <- int(0)
+    Load %7 <- int(2)
+    Call %0 <- string("std.list.slice") [%4, %6, %7] (def=d22)
+    Call %1 <- string("std.list.len") [%0] (def=d1)
+    Load %2 <- int(2)
+    Eq %3 <- %1, %2
+    Load %8 <- string("slice len == 2")
+    Call %5 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Call %4 <- string("mk") [] (def=d0)
+    Call %0 <- string("std.list.pop") [%4] (def=d23)
+    Call %1 <- string("std.list.len") [%0] (def=d1)
+    Load %2 <- int(3)
+    Eq %3 <- %1, %2
+    Load %6 <- string("pop drops last")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d2)
+    Load %0 <- void
+    Call %2 <- string("std.list.empty") [%0] (def=d21)
+    Call %1 <- string("std.list.pop") [%2] (def=d23)
+    Call %3 <- string("std.list.is_empty") [%1] (def=d8)
+    Load %4 <- string("pop empty stays empty")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
+    Ret %5
+  fn closure_0(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=8
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Mul %3 <- %0, %2
+    Ret %3
+  fn closure_1(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=9
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Mod %3 <- %0, %2
+    Load %4 <- int(0)
+    Eq %5 <- %3, %4
+    Ret %5
+  fn closure_2(Int(64), Int(64)) -> Void
+    slot[0] acc : Int(64) @depth2
+    slot[1] x : Int(64) @depth2
+    locals_total=9
+    Load %0 <- %1
+    Load %2 <- %3
+    Add %4 <- %0, %2
+    Ret %4
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

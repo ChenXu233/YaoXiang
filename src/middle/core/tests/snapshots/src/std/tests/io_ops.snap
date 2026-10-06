@@ -1,0 +1,17 @@
+module
+  fn main() -> Void
+    slot[0] s : Int(64) @depth1
+    locals_total=6
+    Load %0 <- int(42)
+    Load %1 <- string("int")
+    Call %2 <- string("std.io.format_fallback") [%0, %1] (def=d0)
+    Load %3 <- %2
+    Load %4 <- string("42")
+    Call %1 <- string("std.string.contains") [%3, %4] (def=d1)
+    Load %5 <- string("int value rendered")
+    Call %0 <- string("std.assert.assert") [%1, %5] (def=d2)
+    Load %1 <- string("io_ops: print/println smoke")
+    Call %0 <- string("std.io.println") [%1] (def=d3)
+    Ret %0
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,35 @@
+module
+  fn main() -> Void
+    slot[0] items : Int(64) @depth1
+    slot[1] sum : Int(64) @depth1
+    slot[4] n : Int(64) @depth2
+    locals_total=10
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- int(10)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(20)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(30)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %1 <- int(0)
+    Load %2 <- %0
+    Call %3 <- string("std.list.iter") [%2] (def=d0)
+    Call %5 <- string("std.list.has_next") [%3] (def=d1)
+    JmpIfNot %5 -> instr(21)
+    Call %6 <- string("std.list.next") [%3] (def=d2)
+    Store %4 <- %6
+    Load %7 <- %1
+    Load %8 <- %4
+    Add %1 <- %7, %8
+    Jmp -> instr(13)
+    Load %7 <- %1
+    Load %8 <- int(60)
+    Eq %6 <- %7, %8
+    Load %9 <- string("for sum 10+20+30 == 60")
+    Call %5 <- string("std.assert.assert") [%6, %9] (def=d3)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

@@ -1,0 +1,75 @@
+module
+  fn double(Int(64)) -> Int(64)
+    slot[0] a : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Mul %3 <- %1, %2
+    Ret %3
+  fn identity(TypeRef("T")) -> TypeRef("T")
+    generic_params: ["T"]
+    slot[0] x : Int(64) @depth1
+    locals_total=3
+    Load %0 <- %1
+    Ret %0
+    Ret
+  fn apply_twice(Fn { params: [Int(64)], return_type: Int(64) }, Int(64)) -> Int(64)
+    slot[0] h : Int(64) @depth1
+    slot[1] x : Int(64) @depth1
+    locals_total=7
+    Load %0 <- arg%0
+    Load %1 <- arg%1
+    Load %2 <- %1
+    Load %3 <- %0
+    CallDyn %4 <- %3 [%2]
+    Load %5 <- %0
+    CallDyn %6 <- %5 [%4]
+    Ret %6
+  fn main() -> Void
+    locals_total=7
+    Load %0 <- int(5)
+    Call %1 <- string("double") [%0] (def=d0)
+    Load %2 <- int(10)
+    Eq %3 <- %1, %2
+    Load %4 <- string("double(5) should be 10")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %0 <- int(7)
+    Call %1 <- string("identity") [%0] (def=d2)
+    Load %2 <- int(7)
+    Eq %3 <- %1, %2
+    Load %4 <- string("generic identity should work")
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Load %4 <- int(3)
+    Call %0 <- string("identity") [%4] (def=d2)
+    Call %1 <- string("double") [%0] (def=d0)
+    Load %2 <- int(6)
+    Eq %3 <- %1, %2
+    Load %6 <- string("generic + plain in one file")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d1)
+    MakeClosure %0 <- double env=[] (def=d0)
+    Load %4 <- int(3)
+    Call %1 <- string("apply_twice") [%0, %4] (def=d3)
+    Load %2 <- int(12)
+    Eq %3 <- %1, %2
+    Load %6 <- string("passing fn name as arg should work")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d1)
+    MakeClosure %0 <- closure_0 env=[] (def=d4)
+    Load %4 <- int(5)
+    Call %1 <- string("apply_twice") [%0, %4] (def=d3)
+    Load %2 <- int(7)
+    Eq %3 <- %1, %2
+    Load %6 <- string("inline lambda arg")
+    Call %5 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Load %3 <- string("fn value first class ok")
+    Call %5 <- string("std.io.println") [%3] (def=d5)
+    Ret %5
+  fn closure_0(Int(64)) -> Void
+    slot[0] x : Int(64) @depth2
+    locals_total=7
+    Load %0 <- %1
+    Load %2 <- int(1)
+    Add %3 <- %0, %2
+    Ret %3
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)
