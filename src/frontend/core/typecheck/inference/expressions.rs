@@ -3000,6 +3000,15 @@ impl<'a> ExpressionInferrer<'a> {
                             Ok(self.solver.new_var())
                         }
                     }
+                    // #385 定案 D3：String 下标放开——标量值（码点）下标，
+                    // 产出单字符 String（定案 C：单字符只用 String 表示，
+                    // 与 chars()/substring 同域）；越界/负索引由运行时
+                    // StringGetChar 报 E6003（索引失败契约）。此前 String
+                    // 落入下方 Index 接口查询臂被整体静态拒绝。
+                    MonoType::Generic { name, .. } if name == "String" => {
+                        self.infer_expr(index)?;
+                        Ok(MonoType::make_string())
+                    }
                     MonoType::Fn { .. } => {
                         // RFC-004 多位置绑定语法 f[0] / f[1,2]：索引结果由语句层
                         // 方法绑定机制消费，此处类型不收敛（既有宽松语义，非兜底洞）
@@ -3022,7 +3031,7 @@ impl<'a> ExpressionInferrer<'a> {
                             Some(hit) => hit,
                             None => {
                                 return Err(ErrorCodeDefinition::type_mismatch(
-                                    "List/Array/Dict/Tuple（可索引）或实现 Index 接口",
+                                    "List/Array/Dict/Tuple/String（可索引）或实现 Index 接口",
                                     &format!("{other}"),
                                 )
                                 .at(container.span())

@@ -5811,6 +5811,26 @@ impl AstToIrGenerator {
             return Ok(());
         }
 
+        // #385 定案 D3：String 基底下标脱糖为 StringGetChar——标量值下标、
+        // 产出单字符 String（与 chars()/substring 同表示），越界运行时报
+        // E6003。其余容器走 LoadIndex。
+        let base_is_string = self.get_expr_mono_type(expr).is_some_and(|t| {
+            let mut r = t;
+            while let MonoType::Ref { inner, .. } = r {
+                r = *inner;
+            }
+            r.is_string()
+        });
+        if base_is_string {
+            instructions.push(Instruction::StringGetChar {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(src_reg),
+                index: Operand::Local(index_reg),
+                span: *span,
+            });
+            return Ok(());
+        }
+
         instructions.push(Instruction::LoadIndex {
             dst: Operand::Local(result_reg),
             src: Operand::Local(src_reg),

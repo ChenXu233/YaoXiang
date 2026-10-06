@@ -367,6 +367,9 @@ Map: (K: Type, V: Type) -> Type = { ... }
 - **索引失败契约**（运行时报错为过渡态，目标态编译期精化覆盖，走值依赖类型，见 §8.4）：
   - 索引越界（含负索引）→ `E6003`
   - Dict 缺键 → `E6008`
+- **String 索引口径**（#385）：`s[i]` 按 **Unicode 标量值（码点）**下标取字符，产出单字符
+  `String`——与 `std.string` 的 `len` / `index_of` / `substring` / `chars` / `char_code`
+  同一单位，组合使用同域不错位；越界（含负索引）走上方索引失败契约 `E6003`。
 - **membership `in` 谓词**：返回 `Bool`
   不报错，右操作数覆盖List/Array/Dict(键)/Tuple/String/Range。一等霍尔谓词，是精化类型编译期可证命题的基底。`
 
