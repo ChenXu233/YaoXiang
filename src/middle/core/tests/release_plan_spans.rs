@@ -32,42 +32,15 @@
 //! P4 统一 Driver 自然并入（D20 迁移时同一观测点复用）。
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
+use super::corpus::{corpus_files, reaches_ir_generation};
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::core::ir_gen::AstToIrGenerator;
 use crate::util::span::Span;
-use crate::util::test_markers::{Expectation, TestFileSpec};
-
-fn collect_yx(
-    dir: &Path,
-    out: &mut Vec<PathBuf>,
-) {
-    if !dir.is_dir() {
-        return;
-    }
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            collect_yx(&path, out);
-        } else if path.extension().is_some_and(|e| e == "yx") {
-            out.push(path);
-        }
-    }
-}
-
-/// 语料文件全集（tests/yaoxiang/ + src/std/tests/，排序）。
-fn corpus_files() -> Vec<PathBuf> {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let mut files = Vec::new();
-    collect_yx(&manifest.join("tests").join("yaoxiang"), &mut files);
-    collect_yx(&manifest.join("src").join("std").join("tests"), &mut files);
-    files.sort();
-    files
-}
 
 /// 逐文件走真实生成序列，返回 (产出键集, 消费键集)。
 ///
@@ -107,8 +80,7 @@ fn test_release_plan_spans_consumed() {
 
     // Act：逐文件求差集
     for file in corpus_files() {
-        let spec = TestFileSpec::parse(&file);
-        if spec.skip_reason.is_some() || matches!(spec.expectation, Expectation::CompileError(_)) {
+        if !reaches_ir_generation(&file) {
             continue;
         }
         let relative = file
