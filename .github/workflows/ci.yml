@@ -111,7 +111,7 @@ jobs:
           if-no-files-found: ignore
 
   concepts:
-    name: Concept Gate (禁令一, report-only)
+    name: Concept Gates (禁令一-三, report-only)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -121,10 +121,16 @@ jobs:
         with:
           python-version: '3.13'
 
-      # P0 引入（09-execution-wbs 0.2.1）：报告现存平行表示 / 消歧别名 / 同义词表，
-      # 不阻断。P9 统一转硬：届时改为 python3 scripts/ci/check-concepts.py --strict。
+      # P0 引入（09-execution-wbs 0.2.1-0.2.3）：报告禁令一/三/二的现存命中，不阻断。
+      # P9 统一转硬：届时三个脚本均改为 --strict。
       - name: Check concept duplication (report-only)
         run: python3 scripts/ci/check-concepts.py
+
+      - name: Check entry fan-out (report-only)
+        run: python3 scripts/ci/check-fanout.py
+
+      - name: Check module boundaries (report-only)
+        run: python3 scripts/ci/check-boundary.py
 
   test:
     name: Test
