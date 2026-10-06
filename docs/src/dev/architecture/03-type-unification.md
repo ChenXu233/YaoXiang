@@ -178,7 +178,7 @@ match mono {
 
 **这张表存在的唯一理由是弥合 AST 层的不一致**：因为 `Type::Int(64)` 与 `Type::Name { name: "Int" }` 在 AST 层语义等价却类型不同（且 parser 只产出后者），`from_builtin_name` 才必须同时接受大小写、缩写、带符号名与 `DateTime` 别名。`"()"` 出现在 `Void` 行尤其说明问题——它在配合 `types.rs:836` 的 `Type::Void` 兜底。
 
-同一份"哪些名字是内置类型名"的知识在仓库里共有四处副本，彼此无任何一致性校验：
+同一份"哪些名字是内置类型名"的知识在仓库里共有七处副本，彼此无任何一致性校验：
 
 | # | 位置 | 形态 |
 | --- | --- | --- |
@@ -186,8 +186,13 @@ match mono {
 | 2 | `bytecode.rs:2371-2376` | 字符串 match，抄了 `"String"` / `"Bytes"` / `"Tuple"` 三个 |
 | 3 | `ast.rs:838-843` `CONST_PARAM_TYPES` | 15 个 const 泛型参数名（`"Int"` / `"Bool"` / `"Float"` / `"I8"`…`"F64"` / `"Char"` / `"String"`）的 `&[&str]` 常量 |
 | 4 | `src/lsp/world.rs:176` | LSP 侧的内置类型名清单 |
+| 5 | `const_data.rs:401-408` `ConstKind::from_ast_type_name` | 字符串 match，名字 → `ConstKind`。**覆盖与第 1 项不一致**：不收小写与 `i64` / `i32` 系别名（2026-10-06 P0 门禁登记） |
+| 6 | `eval/const_eval.rs:498-511` `eval_builtin` 的大小表 | 字符串 match，名字 → 字节大小。含 `"Uint"` 臂，而第 1 项根本没有 `Uint` 映射——**死臂，表漂移的活证据** |
+| 7 | `middle/passes/codegen/bytecode.rs:744-756` `to_type_id` | 字符串 match，内置名 → 序列化类型 ID。`"Set" => 25` 与 typecheck 侧"Set 除名"（`inference/expressions.rs:2917-2918`，#300 决策 4）矛盾 |
 
 第 3 项 `CONST_PARAM_TYPES` 被 `ast.rs:912` 的 `extract_generic_param_names` 用来判定 const 泛型参数——它枚举的是"可作 const 参数的类型名"，与 `from_builtin_name` 的全集是**部分重叠但不同一**的关系，且无任何机制保证两者同步。第 4 项是 LSP 语法高亮/悬停的第四份副本，同样无校验（T2 的比对范围纳入它）。
+
+第 5–7 项由 `check-concepts.py`（P0，[09](09-execution-wbs.md) §0.2.1）于 2026-10-06 首跑登记：第 5 项是第二张类型名同义词表；第 6 / 7 项与第 1–4 项同根（内置名 → 语义 / ID 的字符串键表），用途不同但漂移同险。同次门禁还在 typecheck / eval / middle 侧命中 11 处内置容器名的字符串分派（`"List" | "Vec" | "Array"` ×4、`"String" | "Bytes"` ×4 等）——**不在本节也不在 5.4 的 parser 数据流覆盖范围内**，清单与处置登记在 [06-cleanup-inventory.md](06-cleanup-inventory.md) §G3，归 P6 扩展核实项。
 
 ### 2.4 parser 对类型层的反向依赖
 

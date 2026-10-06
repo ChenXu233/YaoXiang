@@ -173,6 +173,8 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | E4 | `src/frontend/core/parser/statements/declarations.rs:82-117` / `:120-122` / `:145-167` | 旧函数语法探测与拒绝，约 120 行。其中 `skip_old_function_syntax`(`:120-122`) 函数体只有一行注释。**随 05-frontend-paradigm.md 一起删** |
 | E5 | `src/frontend/core/parser/pratt/precedence.rs:35-94` + `:98-133` | 96 行死代码（见 B6）。**随 05-frontend-paradigm.md 一起删** |
 | E6 | `docs/src/.vitepress/config.js:259-268` | "工具设计"侧边栏显式列出 `check/diagnostic-system`、`check/cross-file-analysis`、`check/incremental-checking`。**若执行 C1-C3 的文档删除，此处必须同步清理**，否则文档站出现 404 链接 |
+| E7 | 双 `ConstValue`：`src/frontend/core/types/const_data.rs:14-30` × `src/middle/core/ir.rs:738-755` | 5 个变体同名（`Int` / `Bool` / `Float` / `LibraryRef` / `ExternRef`），但 **`Float` 位宽不一致（f32 × f64）**；无 `From` / `TryFrom`，转换手写散落调用点（`const_eval.rs` / `ir_gen.rs`）。`const_data.rs:44` `kind()` 对 `LibraryRef` / `ExternRef` 是活 `todo!()`。**处置：合并为一份 + 显式转换 + `todo!()` 改降级输出，归 P10（E 类局部清理项）**。2026-10-06 P0 门禁登记（判据 A，J=0.56） |
+| E8 | `Literal` 下游映射同义重复（禁令三 A） | `Literal → MonoType` 同款臂 ≥3 处（`inference/expressions.rs`、`checker.rs`、`inference/patterns.rs` 的 `Literal::Int(_) => MonoType::Int(64)` 等）；`Literal → ir::ConstValue`（`ir_gen.rs` 19 处手写）与 `Literal → const_data::ConstValue`（`const_eval.rs` 4 处手写），无共享转换点。**处置：typecheck 侧 3 处提到共享层，归 P6；`ir_gen` / `const_eval` 侧随 E7 的 `ConstValue` 合并于 P10 一并收口**。2026-10-06 P0 门禁登记 |
 
 ### 不是死代码，但同类问题：三条硬编码丢弃
 
@@ -198,6 +200,17 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | F6 | `tools/cargo-dist/`（`dist.exe` 21,108,736 字节）与 `benches/shootout/out/`（8 个二进制） | **均未被 git 追踪**（`git ls-files` 返回空），被 `.gitignore` 排除。**不是问题**，仅记录以免后续审计误判为"提交了二进制" |
 | F7 | `tools/code-tables/src/lib.rs:66-78` | `extract_code_from_entry_line` 是**行首前缀匹配器**（`trim_start().strip_prefix("(\"")` 取到下一个引号），依赖 `("E1001", ...)` 元组语法，**不是 parser**。它的架构（`parse` + `validate` + build.rs 门禁 + `--fix` 治愈）值得复用到 opcode 表，但**提取器需按 opcode 形态重写（约 30 行）**。归属 06-cleanup-inventory.md 的后续工作或独立 RFC |
 | F8 | `src/backends/common/opcode.rs` 的门禁缺口 | 83 个常量、0 重复、范围 `0x00..0xE2`（span 227，**144 个空洞**）。同一份 opcode 事实被表达 **5 处**：`BytecodeInstr::opcode()`(`bytecode.rs:558-646`)/ `size()`(`649-803`)/ `opcode::opcode_name()`(`opcode.rs:120-206`)/ 解码 match(`bytecode.rs:978-2302`)/ 48 个 `translate_*`(`translator.rs:676-1577`)。**编译器只强制其中 2 处**（`backends/.../executor/debug.rs:194` 分派表 + 各 `ops/*.rs` 族函数的穷尽 match），`opcode()` / `size()` / 解码臂 / 编码器漏一处**只有跑 `.42` 产物才炸**。`size()` 表(649-803)的注释自述与实际编码不符（`bytecode.rs:2181-2182`），且**无系统性对拍测试**（现有 size 测试只覆盖 Nop/Mov/Borrow/Release 4 个）。运算符语义在此也走第三套平行枚举（`BinaryOp`/`UnaryOp`/`CompareOp`，`bytecode.rs:70/97/106`，`Rem`/`Xor`/`Sar` 又一套命名），随 opcode 生成期门禁一并收口。词表目标位置为 `middle/bytecode/opcode.rs`（随字节码域合并迁移，消除 L3→L4 反向，见 01） |
+
+## G. P0 门禁登记（2026-10-06）
+
+`scripts/ci/check-concepts.py`（[09](09-execution-wbs.md) §P0 0.2.1，禁令一 A/B/C/D）于 2026-10-06 首跑。按"门禁只报疑似、由人裁决"的分工（[08](08-maintenance-mechanism.md) §已知局限），本节登记裁决结果与处置归属。未展开的命中（判据 A 违规层 25 对、判据 B 全部疑似项）随对应阶段施工时逐对复核。
+
+| # | 对象 | 裁决 | 处置归属 |
+| --- | --- | --- | --- |
+| G1 | `ValueType` × `RuntimeValue`（`backends/common/value.rs:86` × `:236`，J=0.95） | **合法结构，不是平行表示**：值 / 类型标签对，由穷举 `value_type()`（`value.rs:326-369`）保持 1:1，漏改臂即编译失败。但 `ValueType` 的外部消费实质只剩 std/os/fs/net 报错路径的 `{:?}` 格式化与 `executor.rs:410` 恒置 `Void`，21 变体远超实际需求 | P10 S5 瘦身候选：降 `pub(crate)` 并评估裁剪；S5 施工时连同 `AsyncValue.value_type` 字段（`value.rs:217`）的必要性一并裁决 |
+| G2 | 双 `ConstValue`（判据 A，J=0.56） | **真阳性**，含 f32/f64 位宽不一致与 `kind()` 活 `todo!()` | 已落 E7 |
+| G3 | 类型名的字符串分派 11 处（判据 D 真阳性） | **真阳性，同一根因**：内置容器名无单一权威识别点。清单：`"List" \| "Vec" \| "Array"` ×4（`inference/existential.rs:120`、`inference/expressions.rs:2921`、`ir_gen.rs:4826`、`ir_gen.rs:4652`）、`"String" \| "Bytes"` ×4（`inference/expressions.rs:1738`、`eval/normalizer.rs:230`、`trait_data.rs:180`、`ir_gen.rs:62`）、`eval/const_eval.rs:498-511` 大小表（含 `"Uint"` 死臂）、`middle/passes/codegen/bytecode.rs:744-756` `to_type_id`（`"Set" => 25` 与 #300 决策 4 矛盾）、`trait_data.rs:187` 的 `"Clone" \| "Dup"` | **P6 扩展核实项**：这些点在 typecheck / eval / middle 侧，不在 03 §5.4 的 parser 数据流覆盖范围内；P6 施工时按 03 §5.3 的同一原则（`NameKind` 一次定死、match 臂不再做字符串比较）一并处置。副本表已同步更正为七处（03 §2.3） |
+| G4 | 判据 D 误报 4 处 | **合法查找 / 分派表，非弥合**：`package/build/requirements.rs:17-25` 工具安装指引、`package/vendor/mod.rs:134-139` 构建结果显示名、`repl/mod.rs:241-396` REPL 命令别名（8 臂，用户界面别名属正当 UX）、`util/diagnostic/mod.rs:462-468` `parse_runtime_mode`（带注释的历史别名，单一边界点） | P9 转硬时逐处加 `// reason:` 豁免；豁免数量随门禁报告过目 |
 
 ## 关键决策与理由
 
