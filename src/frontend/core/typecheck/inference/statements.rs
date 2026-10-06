@@ -150,6 +150,21 @@ pub struct StatementChecker {
     /// （E5001）且缺的是依赖包时，help 追加「运行 `yaoxiang install`」。
     /// 由 orchestrator 注入（单文件模式为 None，不加提示）。
     vendor_root: Option<std::path::PathBuf>,
+    /// 语义导入事件（#433/D55）：process_use_stmt 登记的 use 语句，
+    /// 由 TypeChecker 排空进 SemanticDB 的 imports 表。
+    /// 定义/引用事件走 ScopeManager 漏斗（scope.rs），不经此缓冲。
+    semantic_imports: Vec<SemanticImportEvent>,
+}
+
+/// 语义导入事件：一条 use 语句（#433/D55）。
+#[derive(Debug, Clone)]
+pub struct SemanticImportEvent {
+    /// 例如 `"std.io"`
+    pub module_path: String,
+    /// 显式导入项；`use path` / `use path as a` 为空
+    pub imported_names: Vec<String>,
+    /// use 语句 span
+    pub span: crate::util::span::Span,
 }
 
 impl StatementChecker {
@@ -213,6 +228,7 @@ impl StatementChecker {
             last_expr_stmt_ty: None,
             tail_annotation_span: None,
             vendor_root: None,
+            semantic_imports: Vec::new(),
         }
     }
 
@@ -618,6 +634,17 @@ impl StatementChecker {
             return Err(Box::new(builder.build()));
         };
 
+        // 语义导入事件（#433/D55）：模块解析成功即登记。
+        // `imported_names` 只收显式项（`use path.{a, b}`）；整体导入/别名导入
+        // 为空表——导入名的绑定经 add_imported_var 走定义事件漏斗，但其
+        // definition_span 为 dummy，引用侧 resolves_to 落空 DefId，
+        // 跳转按 precise-only 降级（导入项 AST 无 per-item span）。
+        self.semantic_imports.push(SemanticImportEvent {
+            module_path: path.to_string(),
+            imported_names: items.clone().unwrap_or_default(),
+            span: path_span,
+        });
+
         match (items.as_ref(), alias.as_ref()) {
             // use path
             (None, None) => {
@@ -683,6 +710,22 @@ impl StatementChecker {
     /// 获取求解器
     pub fn solver(&mut self) -> &mut TypeConstraintSolver {
         &mut self.solver
+    }
+
+    /// 取走累积的语义导入事件（#433/D55）：check 收尾时由 TypeChecker 调用一次。
+    /// 定义/引用事件走 ScopeManager 漏斗（`take_binding_events`/`take_reference_events`）。
+    pub fn take_import_events(&mut self) -> Vec<SemanticImportEvent> {
+        std::mem::take(&mut self.semantic_imports)
+    }
+
+    /// 取走作用域累积的定义事件（#433/D55）：转发 ScopeManager 采集漏斗
+    pub fn take_binding_events(&mut self) -> Vec<super::scope::BindingEvent> {
+        self.scope.take_binding_events()
+    }
+
+    /// 取走作用域累积的引用事件（#433/D55）：转发 ScopeManager 采集漏斗
+    pub fn take_reference_events(&mut self) -> Vec<super::scope::SemanticRefEvent> {
+        self.scope.take_reference_events()
     }
 
     /// 添加变量到当前作用域
@@ -943,7 +986,7 @@ impl StatementChecker {
                 param.name.clone(),
                 PolyType::mono(param_ty),
                 param.is_mut,
-                crate::util::span::Span::default(),
+                param.span,
             );
         }
 
@@ -1216,13 +1259,15 @@ impl StatementChecker {
                     }
                     return Ok(());
                 }
-                let (name, type_name) = match target.as_ref() {
-                    Expr::Var(n, _) => (n.clone(), None),
-                    Expr::FieldAccess { expr, field, .. } => {
+                let (name, name_span, type_name) = match target.as_ref() {
+                    Expr::Var(n, s) => (n.clone(), Some(*s), None),
+                    Expr::FieldAccess {
+                        expr, field, span, ..
+                    } => {
                         if let Expr::Var(tn, _) = expr.as_ref() {
-                            (field.clone(), Some(tn.clone()))
+                            (field.clone(), Some(*span), Some(tn.clone()))
                         } else {
-                            (field.clone(), None)
+                            (field.clone(), Some(*span), None)
                         }
                     }
                     _ => return Ok(()),
@@ -1237,6 +1282,9 @@ impl StatementChecker {
                     // RFC-010 类型定义绑定（`Db = unsafe { Db: Type = {...}; Db }`）
                     // 也是元绑定：编译期构造类型，不引入运行时变量。
                     || Expr::is_type_def_binding(value.as_deref());
+                // 绑定名的声明 span（#433/D55）：定义事件与引用 resolves_to 的落点。
+                // Var 左值用名字自身 span；字段/方法绑定用语句 span（声明行）。
+                let def_span = name_span.unwrap_or(*stmt_span);
                 // 从 value 提取 Lambda params/body。
                 // RFC-010a 附录D：`name = { ... }` 无注解时按内容推断（块值是尾表达式）；
                 // 非 Fn 注解→块值（交给 check_var_stmt 按普通变量审）。
@@ -1290,6 +1338,7 @@ impl StatementChecker {
                         &[],
                         synthetic_body,
                         *stmt_span,
+                        def_span,
                     );
                 }
 
@@ -1311,6 +1360,7 @@ impl StatementChecker {
                                     Some(v.as_ref()),
                                     *is_mut,
                                     *stmt_span,
+                                    def_span,
                                     is_method_binding,
                                 );
                             }
@@ -1322,6 +1372,7 @@ impl StatementChecker {
                                 Some(v.as_ref()),
                                 *is_mut,
                                 *stmt_span,
+                                def_span,
                                 is_method_binding,
                             );
                         }
@@ -1334,6 +1385,7 @@ impl StatementChecker {
                             None,
                             *is_mut,
                             *stmt_span,
+                            def_span,
                             is_method_binding,
                         );
                     }
@@ -1350,6 +1402,7 @@ impl StatementChecker {
                     &body_stmts,
                     body_block,
                     *stmt_span,
+                    def_span,
                 );
                 result
             }
@@ -1359,7 +1412,7 @@ impl StatementChecker {
                 iterable,
                 body,
                 ..
-            } => self.check_for_stmt(var, *var_mut, iterable, body),
+            } => self.check_for_stmt(var, *var_mut, iterable, body, stmt.span),
             crate::frontend::core::parser::ast::StmtKind::If {
                 condition,
                 then_branch,
@@ -1425,7 +1478,7 @@ impl StatementChecker {
                                 name.name.clone(),
                                 PolyType::mono(elem_ty.clone()),
                                 false,
-                                crate::util::span::Span::default(),
+                                name.span,
                             );
                         }
                         Ok(())
@@ -1438,7 +1491,7 @@ impl StatementChecker {
                                 name.name.clone(),
                                 PolyType::mono(ty),
                                 false,
-                                crate::util::span::Span::default(),
+                                name.span,
                             );
                         }
                         Ok(())
@@ -1552,6 +1605,7 @@ impl StatementChecker {
         _stmts: &[Stmt],
         body: Block,
         _span: crate::util::span::Span,
+        name_span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
         // #353：记录绑定语句的位置，供尾表达式不符时指向它（而非体的末行）。
         // 真正该改的是注解所在的声明，不是体里那个（可能完全正确的）值。
@@ -1811,12 +1865,7 @@ impl StatementChecker {
                 } else {
                     PolyType::new_with_const(Vec::new(), const_binders.clone(), fn_type)
                 };
-                self.scope.add_var(
-                    name.to_string(),
-                    poly,
-                    false,
-                    crate::util::span::Span::default(),
-                );
+                self.scope.add_var(name.to_string(), poly, false, name_span);
             }
         } else {
             let param_types: Vec<MonoType> = params
@@ -1832,12 +1881,8 @@ impl StatementChecker {
                 params: param_types,
                 return_type: Box::new(self.solver.new_var()),
             };
-            self.scope.add_var(
-                name.to_string(),
-                PolyType::mono(fn_type),
-                false,
-                crate::util::span::Span::default(),
-            );
+            self.scope
+                .add_var(name.to_string(), PolyType::mono(fn_type), false, name_span);
         }
 
         // Result 错误类型（用于 `?` 运算符检查）——取值级返回类型的 E 位
@@ -1929,6 +1974,7 @@ impl StatementChecker {
         initializer: Option<&Expr>,
         is_mut: bool,
         stmt_span: crate::util::span::Span,
+        name_span: crate::util::span::Span,
         is_method_binding: bool,
     ) -> Result<(), Box<Diagnostic>> {
         // 处理 prelude 语句（编译期求值部分）
@@ -2249,6 +2295,8 @@ impl StatementChecker {
         // 方法绑定（`Type.method = ...`）不走此判定：左值是类型限定名，
         // 不引入也不重赋值任何变量。
         if is_method_binding {
+            // 方法绑定（左值是类型限定名）不产定义事件：方法调用经
+            // method_bindings 表解析，不经变量引用链（span 保持 dummy）
             self.scope.add_var(
                 name.to_string(),
                 PolyType::mono(ty),
@@ -2302,12 +2350,8 @@ impl StatementChecker {
             }
         }
 
-        self.scope.add_var(
-            name.to_string(),
-            PolyType::mono(ty),
-            is_mut,
-            crate::util::span::Span::default(),
-        );
+        self.scope
+            .add_var(name.to_string(), PolyType::mono(ty), is_mut, name_span);
         Ok(())
     }
 
@@ -2320,6 +2364,7 @@ impl StatementChecker {
         var_mut: bool,
         iterable: &Expr,
         body: &Block,
+        var_span: crate::util::span::Span,
     ) -> Result<(), Box<Diagnostic>> {
         let iter_ty = self.check_expr(iterable)?;
         let elem_ty = match iter_ty {
@@ -2362,7 +2407,7 @@ impl StatementChecker {
             var.to_string(),
             PolyType::mono(elem_ty.clone()),
             var_mut,
-            crate::util::span::Span::default(),
+            var_span,
         );
         // #303：循环变量类型同步进 function_local_vars——块作用域 exit 即销毁，
         // 活不到函数退出时的统一保存，ir_gen 的 get_expr_mono_type(Var) 会查不到。
@@ -2535,7 +2580,14 @@ impl StatementChecker {
         match expr {
             // 变量：直接从 scope 中读取
             Expr::Var(name, span) => {
-                if let Some(poly) = self.scope.get_var(name).cloned() {
+                // 语义引用登记（#433/D55）：与本文件 infer_expr 的 Var 臂
+                // 共用 ScopeManager.record_reference 漏斗（两个遍历器、一个缓冲）
+                let resolved = self
+                    .scope
+                    .get_var_info(name)
+                    .map(|info| (info.poly.clone(), info.definition_span));
+                if let Some((poly, def_span)) = resolved {
+                    self.scope.record_reference(name, *span, def_span);
                     // #321 W1003：命中监视集的导入名记为已使用
                     self.note_import_use(name);
                     // 直接返回 scope 中的类型

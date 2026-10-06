@@ -1,24 +1,24 @@
 //! LSP 符号重命名处理器测试
 //!
+//! 语义数据由真实 typecheck 管线产出（见 support 模块），遵守静默通道判定
+//! （RFC-039 D55 / coding-rules 第六部分）：禁止手工构造 definitions/references。
+//!
 //! 测试覆盖：
-//! - 单文件重命名
+//! - 单文件重命名覆盖定义与全部使用点
 //! - 非标识符位置
 //! - 新名称保留
 
 use lsp_types::Uri;
+use std::str::FromStr;
 
-use crate::frontend::core::typecheck::semantic_db::{
-    DefId, DefinitionInfo, DefinitionKind, ReferenceInfo,
-};
+use super::support::{SAMPLE_URI, open_and_check};
 use crate::lsp::handlers::rename::handle_rename;
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
-use crate::util::span::{Position, Span};
 
 use lsp_types::{
     RenameParams, TextDocumentIdentifier, TextDocumentPositionParams, WorkDoneProgressParams,
 };
-use std::str::FromStr;
 
 fn make_rename_params(
     uri: &str,
@@ -38,143 +38,39 @@ fn make_rename_params(
     }
 }
 
+/// 样例：第二行 `y = x + x` 有两个 x 引用点，定义在第一行
 fn setup() -> (Session, World) {
-    let mut session = Session::new();
-    let mut world = World::new();
-
-    let content = "x = 1\ny = x + x\n";
-    session
-        .document_store_mut()
-        .open("file:///test/main.yx".to_string(), content.to_string(), 1);
-
-    let uri = "file:///test/main.yx";
-    let x_def_span = Span {
-        start: Position {
-            line: 1,
-            column: 1,
-            offset: 0,
-        },
-        end: Position {
-            line: 1,
-            column: 2,
-            offset: 1,
-        },
-    };
-
-    // x 的定义
-    world.semantic_db_mut().add_definition(
-        uri,
-        DefinitionInfo {
-            def_id: DefId {
-                file_path: uri.to_string(),
-                span: x_def_span,
-            },
-            name: "x".to_string(),
-            kind: DefinitionKind::Variable,
-            span: x_def_span,
-            file_path: uri.to_string(),
-            type_info: Some("Int".to_string()),
-            signature: None,
-        },
-    );
-
-    // x 的引用 1
-    world.semantic_db_mut().add_reference(
-        uri,
-        ReferenceInfo {
-            name: "x".to_string(),
-            span: Span {
-                start: Position {
-                    line: 2,
-                    column: 5,
-                    offset: 10,
-                },
-                end: Position {
-                    line: 2,
-                    column: 6,
-                    offset: 11,
-                },
-            },
-            file_path: uri.to_string(),
-            resolves_to: DefId {
-                file_path: uri.to_string(),
-                span: x_def_span,
-            },
-        },
-    );
-
-    // x 的引用 2
-    world.semantic_db_mut().add_reference(
-        uri,
-        ReferenceInfo {
-            name: "x".to_string(),
-            span: Span {
-                start: Position {
-                    line: 2,
-                    column: 9,
-                    offset: 14,
-                },
-                end: Position {
-                    line: 2,
-                    column: 10,
-                    offset: 15,
-                },
-            },
-            file_path: uri.to_string(),
-            resolves_to: DefId {
-                file_path: uri.to_string(),
-                span: x_def_span,
-            },
-        },
-    );
-
-    (session, world)
+    open_and_check("x = 1\ny = x + x\n")
 }
 
 #[test]
-#[allow(clippy::mutable_key_type)]
-fn test_rename_single_file() {
+fn test_rename_rewrites_definition_and_all_usages() {
+    // Arrange
     let (session, world) = setup();
-
-    // 重命名 'x' 为 'new_x'（光标在定义位置）
-    let params = make_rename_params("file:///test/main.yx", 0, 0, "new_x");
+    // Act：光标在第二行 x 引用上重命名
+    let params = make_rename_params(SAMPLE_URI, 1, 4, "renamed");
     let result = handle_rename(&session, &world, params);
-    assert!(result.is_some());
-
-    let changes = result.unwrap().changes;
-    assert!(changes.is_some());
-
-    let changes = changes.unwrap();
-    assert_eq!(changes.len(), 1, "应修改 1 个文件");
-
+    // Assert：同一文件的 3 处编辑（定义 + 两个使用点），新名一致
+    let edit = result.expect("重命名应返回 WorkspaceEdit");
+    let changes = edit.changes.expect("应包含 changes 表");
+    assert_eq!(changes.len(), 1, "单文件样例只应有一个文件被改");
     let edits = changes
-        .get(&Uri::from_str("file:///test/main.yx").unwrap())
-        .unwrap();
-    // 定义(1) + 引用(2) = 3 个编辑
-    assert_eq!(edits.len(), 3, "x 应出现 3 次（含定义）");
+        .get(&Uri::from_str(SAMPLE_URI).unwrap())
+        .expect("编辑应落在样例文档上");
+    assert_eq!(edits.len(), 3, "定义加两个使用点共 3 处编辑");
+    assert!(
+        edits.iter().all(|e| e.new_text == "renamed"),
+        "所有编辑的新名都应为 renamed"
+    );
 }
 
 #[test]
-fn test_rename_not_on_ident() {
+fn test_rename_not_on_ident_returns_none() {
+    // Arrange
     let (session, world) = setup();
-
-    let params = make_rename_params("file:///test/main.yx", 0, 2, "new_x");
+    // Act：光标在 '=' 号上（0-indexed line=0, character=2）
+    let params = make_rename_params(SAMPLE_URI, 0, 2, "renamed");
     let result = handle_rename(&session, &world, params);
-    assert!(result.is_none());
-}
-
-#[test]
-#[allow(clippy::mutable_key_type)]
-fn test_rename_preserves_new_name() {
-    let (session, world) = setup();
-
-    let params = make_rename_params("file:///test/main.yx", 0, 0, "renamed_var");
-    let result = handle_rename(&session, &world, params).unwrap();
-    let changes = result.changes.unwrap();
-    let edits = changes
-        .get(&Uri::from_str("file:///test/main.yx").unwrap())
-        .unwrap();
-    for edit in edits {
-        assert_eq!(edit.new_text, "renamed_var");
-    }
+    // Assert
+    assert!(result.is_none(), "非标识符位置应返回 None");
 }

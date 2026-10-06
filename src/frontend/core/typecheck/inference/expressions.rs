@@ -511,9 +511,9 @@ impl<'a> ExpressionInferrer<'a> {
         name: String,
         poly: PolyType,
         is_mut: bool,
+        definition_span: crate::util::span::Span,
     ) {
-        self.scope
-            .add_param(name, poly, is_mut, crate::util::span::Span::default());
+        self.scope.add_param(name, poly, is_mut, definition_span);
     }
 
     /// 检查变量是否存在于任何作用域中
@@ -525,6 +525,9 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 尝试添加变量到当前作用域
+    ///
+    /// `span` 转发给 `definition_span`（#433/D55）：for/推导式等表达层级
+    /// 绑定的定义事件需要真实声明位置，跳转定义靠它落 `DefId`。
     pub fn try_add_var(
         &mut self,
         name: String,
@@ -532,9 +535,7 @@ impl<'a> ExpressionInferrer<'a> {
         span: crate::util::span::Span,
         is_mut: bool,
     ) -> Result<()> {
-        let _ = span;
-        self.scope
-            .add_var(name, poly, is_mut, crate::util::span::Span::default());
+        self.scope.add_var(name, poly, is_mut, span);
         Ok(())
     }
 
@@ -2708,7 +2709,12 @@ impl<'a> ExpressionInferrer<'a> {
                     None => self.solver.new_var(),
                 },
             };
-            self.add_param(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
+            self.add_param(
+                param.name.clone(),
+                PolyType::mono(param_ty),
+                param.is_mut,
+                param.span,
+            );
         }
 
         // Lambda is a function boundary: it must not inherit outer `Result` context.
@@ -2783,8 +2789,14 @@ impl<'a> ExpressionInferrer<'a> {
 
             // 变量
             crate::frontend::core::parser::ast::Expr::Var(name, span) => {
-                let poly = self.scope.get_var(name).cloned();
-                if let Some(poly) = poly {
+                // 语义引用登记（#433/D55）：get_var_info 一次拿全类型与定义位置，
+                // resolves_to 与定义侧 BindingEvent 同源（同走 VarInfo.definition_span）
+                let resolved = self
+                    .scope
+                    .get_var_info(name)
+                    .map(|info| (info.poly.clone(), info.definition_span));
+                if let Some((poly, def_span)) = resolved {
+                    self.scope.record_reference(name, *span, def_span);
                     // #321 W1003：命中监视集的导入名记为已使用
                     self.note_import_use(name);
                     // 关键：直接使用 scope 中存储的类型！
@@ -3376,13 +3388,19 @@ impl<'a> ExpressionInferrer<'a> {
                 params,
                 return_type,
                 body,
+                span: fn_span,
                 ..
             } => {
                 self.scope.enter_fn();
                 let result: Result<()> = (|| {
                     for param in params {
                         let param_ty = self.solver.new_var();
-                        self.add_param(param.name.clone(), PolyType::mono(param_ty), param.is_mut);
+                        self.add_param(
+                            param.name.clone(),
+                            PolyType::mono(param_ty),
+                            param.is_mut,
+                            param.span,
+                        );
                     }
 
                     let ret_mono: MonoType =
@@ -3459,7 +3477,7 @@ impl<'a> ExpressionInferrer<'a> {
                     name.clone(),
                     PolyType::mono(fn_type.clone()),
                     false,
-                    crate::util::span::Span::default(),
+                    *fn_span,
                 );
 
                 Ok(fn_type)
@@ -3508,7 +3526,7 @@ impl<'a> ExpressionInferrer<'a> {
                                 name.clone(),
                                 PolyType::mono(MonoType::Void),
                                 false,
-                                crate::util::span::Span::default(),
+                                st.span,
                             );
                         }
                     }

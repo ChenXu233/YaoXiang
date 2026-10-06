@@ -737,14 +737,6 @@ impl TypeChecker {
                 }
             }
         }
-
-        // 更新全局作用域的符号列表
-        if let Some(file_info) = self.semantic_db.get_file_info(&self.env.module_name) {
-            if !file_info.scopes.is_empty() {
-                // We need mutable access; use set_file_info approach or direct access
-                // For simplicity, we recorded symbols inline already
-            }
-        }
     }
 
     /// 收集语句中的语义 tokens（递归）

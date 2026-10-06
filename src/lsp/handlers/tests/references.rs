@@ -1,25 +1,25 @@
 //! 查找引用处理器测试
 //!
+//! 语义数据由真实 typecheck 管线产出（见 support 模块），遵守静默通道判定
+//! （RFC-039 D55 / coding-rules 第六部分）：禁止手工构造 definitions/references。
+//!
 //! 测试覆盖：
 //! - 排除声明的引用查找
 //! - 包含声明的引用查找
 //! - 非标识符位置
 //! - 未打开文档
 
-use lsp_types::{ReferenceParams, Uri};
+use lsp_types::{ReferenceParams};
 use std::str::FromStr;
 
-use crate::frontend::core::typecheck::semantic_db::{
-    DefId, DefinitionInfo, DefinitionKind, ReferenceInfo,
-};
+use super::support::{SAMPLE_URI, open_and_check};
 use crate::lsp::handlers::references::handle_references;
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
-use crate::util::span::{Position, Span};
 
 use lsp_types::{
     PartialResultParams, ReferenceContext, TextDocumentIdentifier, TextDocumentPositionParams,
-    WorkDoneProgressParams,
+    WorkDoneProgressParams, Uri,
 };
 
 fn make_params(
@@ -43,141 +43,61 @@ fn make_params(
     }
 }
 
+/// 样例：第二行 `y = x + x` 有两个 x 引用点，定义在第一行
 fn setup() -> (Session, World) {
-    let mut session = Session::new();
-    let mut world = World::new();
-
-    let content = "x = 1\ny = x + x\n";
-    session
-        .document_store_mut()
-        .open("file:///test/main.yx".to_string(), content.to_string(), 1);
-
-    let uri = "file:///test/main.yx";
-    let x_def_span = Span {
-        start: Position {
-            line: 1,
-            column: 1,
-            offset: 0,
-        },
-        end: Position {
-            line: 1,
-            column: 2,
-            offset: 1,
-        },
-    };
-
-    // x 的定义
-    world.semantic_db_mut().add_definition(
-        uri,
-        DefinitionInfo {
-            def_id: DefId {
-                file_path: uri.to_string(),
-                span: x_def_span,
-            },
-            name: "x".to_string(),
-            kind: DefinitionKind::Variable,
-            span: x_def_span,
-            file_path: uri.to_string(),
-            type_info: Some("Int".to_string()),
-            signature: None,
-        },
-    );
-
-    // x 的引用 1（第二行 y = x...）
-    world.semantic_db_mut().add_reference(
-        uri,
-        ReferenceInfo {
-            name: "x".to_string(),
-            span: Span {
-                start: Position {
-                    line: 2,
-                    column: 5,
-                    offset: 10,
-                },
-                end: Position {
-                    line: 2,
-                    column: 6,
-                    offset: 11,
-                },
-            },
-            file_path: uri.to_string(),
-            resolves_to: DefId {
-                file_path: uri.to_string(),
-                span: x_def_span,
-            },
-        },
-    );
-
-    // x 的引用 2（第二行 + x）
-    world.semantic_db_mut().add_reference(
-        uri,
-        ReferenceInfo {
-            name: "x".to_string(),
-            span: Span {
-                start: Position {
-                    line: 2,
-                    column: 9,
-                    offset: 14,
-                },
-                end: Position {
-                    line: 2,
-                    column: 10,
-                    offset: 15,
-                },
-            },
-            file_path: uri.to_string(),
-            resolves_to: DefId {
-                file_path: uri.to_string(),
-                span: x_def_span,
-            },
-        },
-    );
-
-    (session, world)
+    open_and_check("x = 1\ny = x + x\n")
 }
 
 #[test]
-fn test_references_excluding_declaration() {
+fn test_references_excluding_declaration_finds_all_usages() {
+    // Arrange
     let (session, world) = setup();
-
-    // 光标在第一行的 'x' 定义上
-    let params = make_params("file:///test/main.yx", 0, 0, false);
+    // Act：光标在第二行第一个 x 引用上，不含声明
+    let params = make_params(SAMPLE_URI, 1, 4, false);
     let result = handle_references(&session, &world, params);
-    assert!(result.is_some());
-
-    let locs = result.unwrap();
-    // 应该只有 2 个引用（不含定义）
-    assert_eq!(locs.len(), 2, "x 应有 2 个引用（不含定义）");
+    // Assert：`y = x + x` 的两个使用点都在列，定义点不在列
+    let locations = result.expect("x 引用点必须给出引用列表");
+    assert_eq!(locations.len(), 2, "两个使用点都应被找到");
+    assert!(
+        locations.iter().all(|l| l.range.start.line == 1),
+        "排除声明时只应包含第二行的使用点"
+    );
 }
 
 #[test]
-fn test_references_include_declaration() {
+fn test_references_including_declaration_adds_definition_site() {
+    // Arrange
     let (session, world) = setup();
-
-    let params = make_params("file:///test/main.yx", 0, 0, true);
+    // Act：同上但包含声明
+    let params = make_params(SAMPLE_URI, 1, 4, true);
     let result = handle_references(&session, &world, params);
-    assert!(result.is_some());
-
-    let locs = result.unwrap();
-    // include_declaration=true: 定义(1) + 引用(2) = 3
-    assert_eq!(locs.len(), 3, "应有 3 个位置（含定义）");
+    // Assert：两个使用点 + 一个定义点
+    let locations = result.expect("x 引用点必须给出引用列表");
+    assert_eq!(locations.len(), 3, "两个使用点加一个定义点");
+    assert!(
+        locations.iter().any(|l| l.range.start.line == 0),
+        "定义点（第一行）应在列"
+    );
 }
 
 #[test]
-fn test_references_not_on_ident() {
+fn test_references_not_on_ident_returns_none() {
+    // Arrange
     let (session, world) = setup();
-
-    let params = make_params("file:///test/main.yx", 0, 2, false);
+    // Act：光标在 '+' 号上（0-indexed line=1, character=6）
+    let params = make_params(SAMPLE_URI, 1, 6, false);
     let result = handle_references(&session, &world, params);
-    assert!(result.is_none());
+    // Assert
+    assert!(result.is_none(), "非标识符位置应返回 None");
 }
 
 #[test]
-fn test_references_doc_not_open() {
-    let session = Session::new();
-    let world = World::new();
-
-    let params = make_params("file:///test/nope.yx", 0, 0, false);
+fn test_references_doc_not_open_returns_none() {
+    // Arrange
+    let (session, world) = setup();
+    // Act：请求未打开的文档
+    let params = make_params("file:///test/other.yx", 0, 0, false);
     let result = handle_references(&session, &world, params);
-    assert!(result.is_none());
+    // Assert
+    assert!(result.is_none(), "未打开的文档应返回 None");
 }

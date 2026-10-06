@@ -146,6 +146,38 @@ pub struct VarInfo {
     pub imported: bool,
 }
 
+/// 语义定义事件：绑定期单点采集，由 TypeChecker 排空进 SemanticDB（#433/D55）。
+///
+/// 采集点收敛在 [`ScopeManager`] 的四个 `add_*` 方法——所有绑定登记
+/// （顶层绑定、局部变量、参数、导入名）都经它们入链，无需在各登记点散布挂钩。
+/// `definition_span` 为 dummy 的事件（前向引用占位、循环变量提升）不入列：
+/// 它们没有真实声明位置，引用侧的 `resolves_to` 永远不会指向它们。
+#[derive(Debug, Clone)]
+pub struct BindingEvent {
+    pub name: String,
+    pub span: Span,
+    /// `poly.body` 为 `Fn` 即 Function，否则 Variable（参数也算 Variable）
+    pub kind: crate::frontend::core::typecheck::semantic_db::DefinitionKind,
+    /// 绑定类型的人类可读形态（hover 展示用）
+    pub type_info: Option<String>,
+}
+
+/// 语义引用事件：一次源码级标识符解析成功（#433/D55）。
+///
+/// `resolves_to_span` 取命中 `VarInfo` 的 `definition_span`——与定义侧
+/// 事件同源，保证 `resolves_to: DefId` 能在 SemanticDB 里命中定义。
+/// 缓冲在 [`ScopeManager`] 上：`ExpressionInferrer` 与 `StatementChecker`
+/// 共享同一实例，两个 walker 的登记天然汇入同一缓冲。
+/// file_path 由排空方（TypeChecker，持有模块路径）补齐，inference 层不持有路径。
+#[derive(Debug, Clone)]
+pub struct SemanticRefEvent {
+    pub name: String,
+    /// 标识符出现位置的 span（引用本身的范围）
+    pub span: Span,
+    /// 命中绑定的定义位置 span
+    pub resolves_to_span: Span,
+}
+
 /// 作用域管理器（#295 三链模型）
 ///
 /// 管理变量的作用域栈，支持嵌套作用域的进入与退出。
@@ -169,6 +201,10 @@ pub struct ScopeManager {
     /// containing_fn，mono 据此对占位类型实参（TypeRef(参数名)）求值。
     /// None = 上下文未知（eval/REPL 等场景）。
     fn_context: Option<String>,
+    /// 语义定义事件（#433）：四个 add_* 方法的采集漏斗
+    binding_events: Vec<BindingEvent>,
+    /// 语义引用事件（#433）：表达式解析臂经 record_reference 登记
+    reference_events: Vec<SemanticRefEvent>,
 }
 
 impl Default for ScopeManager {
@@ -188,7 +224,60 @@ impl ScopeManager {
             current_stmt_key: 0,
             type_ledger: HashMap::new(),
             fn_context: None,
+            binding_events: Vec::new(),
+            reference_events: Vec::new(),
         }
+    }
+
+    /// 取走累积的语义定义事件（#433）：check 收尾时由 TypeChecker 调用一次
+    pub fn take_binding_events(&mut self) -> Vec<BindingEvent> {
+        std::mem::take(&mut self.binding_events)
+    }
+
+    /// 登记一次源码级标识符引用（#433/D55）：在表达式解析臂解析成功处调用。
+    ///
+    /// `resolves_to_span` 取命中 `VarInfo` 的 `definition_span`；dummy 定义
+    /// （导入名等）照登——排空后引用的 `resolves_to` 落空 DefId，跳转按
+    /// precise-only 返回 None。
+    pub fn record_reference(
+        &mut self,
+        name: &str,
+        span: Span,
+        resolves_to_span: Span,
+    ) {
+        self.reference_events.push(SemanticRefEvent {
+            name: name.to_string(),
+            span,
+            resolves_to_span,
+        });
+    }
+
+    /// 取走累积的语义引用事件（#433）：check 收尾时由 TypeChecker 调用一次
+    pub fn take_reference_events(&mut self) -> Vec<SemanticRefEvent> {
+        std::mem::take(&mut self.reference_events)
+    }
+
+    /// 采集一条定义事件；dummy span（占位/提升路径）不产生事件
+    fn record_binding(
+        &mut self,
+        name: &str,
+        poly: &PolyType,
+        definition_span: Span,
+    ) {
+        if definition_span.is_dummy() {
+            return;
+        }
+        let kind = if matches!(poly.body, crate::frontend::core::types::MonoType::Fn { .. }) {
+            crate::frontend::core::typecheck::semantic_db::DefinitionKind::Function
+        } else {
+            crate::frontend::core::typecheck::semantic_db::DefinitionKind::Variable
+        };
+        self.binding_events.push(BindingEvent {
+            name: name.to_string(),
+            span: definition_span,
+            kind,
+            type_info: Some(format!("{}", poly.body)),
+        });
     }
 
     /// 设置当前正在检查的语句（账本键来源）——由 check_stmt 在入口调用
@@ -258,6 +347,7 @@ impl ScopeManager {
     ) {
         self.type_ledger
             .insert((self.current_stmt_key, name.clone()), poly.clone());
+        self.record_binding(&name, &poly, definition_span);
         let info = VarInfo {
             poly,
             is_mut,
@@ -284,6 +374,7 @@ impl ScopeManager {
         poly: PolyType,
         definition_span: Span,
     ) {
+        self.record_binding(&name, &poly, definition_span);
         let info = VarInfo {
             poly,
             is_mut: false,
@@ -306,6 +397,7 @@ impl ScopeManager {
         poly: PolyType,
         definition_span: Span,
     ) {
+        self.record_binding(&name, &poly, definition_span);
         let info = VarInfo {
             poly,
             is_mut: false,
@@ -330,6 +422,7 @@ impl ScopeManager {
     ) {
         self.type_ledger
             .insert((self.current_stmt_key, name.clone()), poly.clone());
+        self.record_binding(&name, &poly, definition_span);
         let info = VarInfo {
             poly,
             is_mut,

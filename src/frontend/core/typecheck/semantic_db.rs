@@ -12,19 +12,6 @@ use crate::util::span::Span;
 
 // ============ 核心数据结构 ============
 
-/// 将 SemanticTokenType 映射为 DefinitionKind
-fn token_type_to_def_kind(token_type: SemanticTokenType) -> DefinitionKind {
-    match token_type {
-        SemanticTokenType::Function => DefinitionKind::Function,
-        SemanticTokenType::Type => DefinitionKind::Type,
-        SemanticTokenType::Variable => DefinitionKind::Variable,
-        SemanticTokenType::Parameter => DefinitionKind::Parameter,
-        SemanticTokenType::Method => DefinitionKind::Method,
-        SemanticTokenType::TypeParameter => DefinitionKind::GenericParameter,
-        _ => DefinitionKind::Variable,
-    }
-}
-
 /// 语义信息数据库
 ///
 /// 由 typecheck 阶段产出，LSP 和增量编译直接查询复用。
@@ -363,79 +350,44 @@ impl SemanticDB {
         self.by_file.is_empty()
     }
 
-    /// 设置文件的语义信息（覆盖已有数据）
-    pub fn set_file_info(
+    /// 按文件 upsert：`other` 中出现的文件整体替换，其余文件（std/内置类型
+    /// 等会话级数据）原样保留（#433/D55——World 会话库不再被单文件 check
+    /// 结果整体替换）。
+    ///
+    /// 每个文件的符号名索引（symbol_defs/symbol_refs）先清后建，来源是该文件
+    /// tokens 的 Declaration 修饰位；definitions/references/imports 随
+    /// `FileSemanticInfo` 原样落库（由 checker 语义事件排空产出）。
+    pub fn upsert_from(
         &mut self,
-        file_path: String,
-        info: FileSemanticInfo,
+        other: SemanticDB,
     ) {
-        // 先清理该文件的旧符号索引
-        self.remove_file_symbols(&file_path);
+        for (file_path, info) in other.by_file {
+            self.remove_file_symbols(&file_path);
 
-        // 索引新的符号定义和引用
-        for token in &info.tokens {
-            let location = SymbolLocation {
-                file_path: file_path.clone(),
-                span: token.span,
-            };
-
-            if token
-                .modifiers
-                .contains(&SemanticTokenModifier::Declaration)
-            {
-                self.symbol_defs
-                    .entry(token.name.clone())
-                    .or_default()
-                    .push(location);
-
-                // 同时填充新的 definitions 结构
-                let file_info =
-                    self.by_file
-                        .entry(file_path.clone())
-                        .or_insert_with(|| FileSemanticInfo {
-                            file_path: file_path.clone(),
-                            ..Default::default()
-                        });
-                // 暂存：实际类型信息将在后续从 TypeChecker 同步
-                file_info.definitions.push(DefinitionInfo {
-                    def_id: DefId {
-                        file_path: file_path.clone(),
-                        span: token.span,
-                    },
-                    name: token.name.clone(),
-                    kind: token_type_to_def_kind(token.token_type),
-                    span: token.span,
+            for token in &info.tokens {
+                let location = SymbolLocation {
                     file_path: file_path.clone(),
-                    type_info: None,
-                    signature: None,
-                });
-            } else {
-                self.symbol_refs
-                    .entry(token.name.clone())
-                    .or_default()
-                    .push(location);
-
-                // 同时填充新的 references 结构
-                let file_info =
-                    self.by_file
-                        .entry(file_path.clone())
-                        .or_insert_with(|| FileSemanticInfo {
-                            file_path: file_path.clone(),
-                            ..Default::default()
-                        });
-                file_info.references.push(ReferenceInfo {
-                    name: token.name.clone(),
                     span: token.span,
-                    file_path: file_path.clone(),
-                    resolves_to: DefId {
-                        file_path: String::new(),
-                        span: crate::util::span::Span::default(),
-                    },
-                });
+                };
+
+                if token
+                    .modifiers
+                    .contains(&SemanticTokenModifier::Declaration)
+                {
+                    self.symbol_defs
+                        .entry(token.name.clone())
+                        .or_default()
+                        .push(location);
+                } else {
+                    self.symbol_refs
+                        .entry(token.name.clone())
+                        .or_default()
+                        .push(location);
+                }
             }
-        }
 
-        self.by_file.insert(file_path, info);
+            self.by_file.insert(file_path, info);
+        }
     }
 
     /// 移除指定文件的所有语义信息

@@ -37,5 +37,6 @@ mod rfc027_predicate_defs;
 mod rfc027_refined_transparency;
 mod rfc027_return_refinement;
 mod rfc027a;
+mod semantic_db;
 mod signature;
 mod types;

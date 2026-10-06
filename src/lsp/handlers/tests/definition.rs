@@ -1,21 +1,22 @@
 //! 跳转定义处理器测试
 //!
+//! 语义数据由真实 typecheck 管线产出（见 support 模块），遵守静默通道判定
+//! （RFC-039 D55 / coding-rules 第六部分）：禁止手工构造 definitions/references。
+//!
 //! 测试覆盖：
-//! - 定义查找成功
-//! - 定义查找失败（无符号）
+//! - 引用点跳转到绑定定义
+//! - 调用名跳转到函数绑定
+//! - 定义点自身无引用记录（precise-only）
 //! - 非标识符位置
 //! - 未打开的文档
 
 use lsp_types::{GotoDefinitionParams, GotoDefinitionResponse, Uri};
 use std::str::FromStr;
 
-use crate::frontend::core::typecheck::semantic_db::{
-    DefId, DefinitionInfo, DefinitionKind, ReferenceInfo,
-};
+use super::support::{SAMPLE_URI, open_and_check};
 use crate::lsp::handlers::definition::handle_definition;
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
-use crate::util::span::{Position, Span};
 
 use lsp_types::{
     PartialResultParams, TextDocumentIdentifier, TextDocumentPositionParams, WorkDoneProgressParams,
@@ -38,177 +39,80 @@ fn make_params(
     }
 }
 
-fn setup_session_and_world() -> (Session, World) {
-    let mut session = Session::new();
-    let mut world = World::new();
-
-    // 打开一个文档并创建语义信息
-    let content = "x = 42\nadd = (a, b) => a + b\n";
-    session
-        .document_store_mut()
-        .open("file:///test/main.yx".to_string(), content.to_string(), 1);
-
-    let uri = "file:///test/main.yx";
-
-    // 添加 x 的定义
-    let x_def = DefinitionInfo {
-        def_id: DefId {
-            file_path: uri.to_string(),
-            span: Span {
-                start: Position {
-                    line: 1,
-                    column: 1,
-                    offset: 0,
-                },
-                end: Position {
-                    line: 1,
-                    column: 2,
-                    offset: 1,
-                },
-            },
-        },
-        name: "x".to_string(),
-        kind: DefinitionKind::Variable,
-        span: Span {
-            start: Position {
-                line: 1,
-                column: 1,
-                offset: 0,
-            },
-            end: Position {
-                line: 1,
-                column: 2,
-                offset: 1,
-            },
-        },
-        file_path: uri.to_string(),
-        type_info: Some("Int".to_string()),
-        signature: None,
-    };
-    world.semantic_db_mut().add_definition(uri, x_def);
-
-    // 添加 x 的引用（出现在第二行的表达式中）
-    world.semantic_db_mut().add_reference(
-        uri,
-        ReferenceInfo {
-            name: "x".to_string(),
-            span: Span {
-                start: Position {
-                    line: 2,
-                    column: 1,
-                    offset: 7,
-                },
-                end: Position {
-                    line: 2,
-                    column: 2,
-                    offset: 8,
-                },
-            },
-            file_path: uri.to_string(),
-            resolves_to: DefId {
-                file_path: uri.to_string(),
-                span: Span {
-                    start: Position {
-                        line: 1,
-                        column: 1,
-                        offset: 0,
-                    },
-                    end: Position {
-                        line: 1,
-                        column: 2,
-                        offset: 1,
-                    },
-                },
-            },
-        },
-    );
-
-    // 添加 add 的定义
-    let add_def = DefinitionInfo {
-        def_id: DefId {
-            file_path: uri.to_string(),
-            span: Span {
-                start: Position {
-                    line: 2,
-                    column: 1,
-                    offset: 7,
-                },
-                end: Position {
-                    line: 2,
-                    column: 4,
-                    offset: 10,
-                },
-            },
-        },
-        name: "add".to_string(),
-        kind: DefinitionKind::Function,
-        span: Span {
-            start: Position {
-                line: 2,
-                column: 1,
-                offset: 7,
-            },
-            end: Position {
-                line: 2,
-                column: 4,
-                offset: 10,
-            },
-        },
-        file_path: uri.to_string(),
-        type_info: Some("(Int, Int) -> Int".to_string()),
-        signature: Some("add: (a: Int, b: Int) -> Int".to_string()),
-    };
-    world.semantic_db_mut().add_definition(uri, add_def);
-
-    (session, world)
+/// 样例：第二行 `y = x + x` 对 x 有两个引用点，定义在第一行
+fn setup() -> (Session, World) {
+    open_and_check("x = 1\ny = x + x\n")
 }
 
 #[test]
-fn test_definition_found() {
-    let (session, world) = setup_session_and_world();
-
-    // 光标在第二行的 'x' 引用上（1-indexed: line=2, col=1-2）
-    // 0-indexed: line=1, character=0
-    let params = make_params("file:///test/main.yx", 1, 0);
+fn test_definition_resolves_reference_to_binding() {
+    // Arrange
+    let (session, world) = setup();
+    // Act：光标在第二行第一个 x 引用上（0-indexed line=1, character=4）
+    let params = make_params(SAMPLE_URI, 1, 4);
     let result = handle_definition(&session, &world, params);
-    assert!(result.is_some(), "应找到 x 的定义");
-
-    match result.unwrap() {
+    // Assert：跳回第一行 x 定义
+    let response = result.expect("x 引用点必须跳转到定义（#433 数据链闭合）");
+    match response {
         GotoDefinitionResponse::Scalar(loc) => {
-            assert_eq!(loc.uri.to_string(), "file:///test/main.yx");
-            // 定义在第一行 (1-indexed line=1 → 0-indexed line=0)
-            assert_eq!(loc.range.start.line, 0);
+            assert_eq!(loc.uri.to_string(), SAMPLE_URI, "定义在同一文件");
+            assert_eq!(loc.range.start.line, 0, "x 定义在第一行（0-indexed）");
+            assert_eq!(loc.range.start.character, 0, "x 定义在第 1 列");
         }
-        _ => panic!("单个定义应返回 Scalar"),
+        _ => panic!("单一定义应返回 Scalar"),
     }
 }
 
 #[test]
-fn test_definition_not_found_no_symbol() {
-    let (session, world) = setup_session_and_world();
-
-    // 在第二行找 'a' (参数，未注册引用)
-    let params = make_params("file:///test/main.yx", 1, 7);
+fn test_definition_resolves_callee_to_function_binding() {
+    // Arrange：调用点与函数绑定
+    let (session, world) = open_and_check("add = (a, b) => a + b\ny = add(1, 2)\n");
+    // Act：光标在第二行 add 调用名上（0-indexed line=1, character=4）
+    let params = make_params(SAMPLE_URI, 1, 4);
     let result = handle_definition(&session, &world, params);
-    assert!(result.is_none());
+    // Assert：跳回第一行 add 绑定
+    let response = result.expect("add 调用名必须跳转到其绑定");
+    match response {
+        GotoDefinitionResponse::Scalar(loc) => {
+            assert_eq!(loc.range.start.line, 0, "add 绑定在第一行（0-indexed）");
+        }
+        _ => panic!("单一定义应返回 Scalar"),
+    }
 }
 
 #[test]
-fn test_definition_not_on_identifier() {
-    let (session, world) = setup_session_and_world();
-
-    // 光标在 '=' 号上
-    let params = make_params("file:///test/main.yx", 0, 2);
+fn test_definition_on_binding_site_returns_none_precise_only() {
+    // Arrange
+    let (session, world) = setup();
+    // Act：光标在第一行 x 定义名上——引用事件只登记使用点，
+    // 定义点自身没有 reference 记录，precise-only（D55）不造按名兜底
+    let params = make_params(SAMPLE_URI, 0, 0);
     let result = handle_definition(&session, &world, params);
+    // Assert
+    assert!(
+        result.is_none(),
+        "定义点自身无引用记录，precise-only 返回 None"
+    );
+}
+
+#[test]
+fn test_definition_not_on_identifier_returns_none() {
+    // Arrange
+    let (session, world) = setup();
+    // Act：光标在 '=' 号上（0-indexed line=0, character=2）
+    let params = make_params(SAMPLE_URI, 0, 2);
+    let result = handle_definition(&session, &world, params);
+    // Assert
     assert!(result.is_none(), "非标识符位置应返回 None");
 }
 
 #[test]
-fn test_definition_doc_not_open() {
-    let (session, world) = setup_session_and_world();
-
-    // 请求未打开的文档
+fn test_definition_doc_not_open_returns_none() {
+    // Arrange
+    let (session, world) = setup();
+    // Act：请求未打开的文档
     let params = make_params("file:///test/other.yx", 0, 0);
     let result = handle_definition(&session, &world, params);
+    // Assert
     assert!(result.is_none(), "未打开的文档应返回 None");
 }

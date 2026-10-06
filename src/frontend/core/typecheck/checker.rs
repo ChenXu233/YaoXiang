@@ -1346,6 +1346,56 @@ impl TypeChecker {
         // 即便类型检查存在错误（如语法或类型错误），我们也要尽可能收集当前的语义 token，保证代码染色等功能
         self.collect_semantic_tokens(module);
 
+        // 语义事件排空（#433/D55）：绑定期采集的定义/引用/导入事件落 SemanticDB。
+        // 定义与引用经 VarInfo.definition_span 同源衔接（resolves_to → DefId），
+        // dummy 定义（导入名/占位）不入列，对应引用的 resolves_to 落空 DefId，
+        // 跳转按 precise-only 返回 None。同 (名字, span) 去重——同一绑定
+        // 经多条路径重复登记时保第一条。
+        if let Some(bc) = self.body_checker.as_mut() {
+            let file_path = self.env.module_name.clone();
+            let mut seen_defs: HashSet<(String, crate::util::span::Span)> = HashSet::new();
+            for ev in bc.take_binding_events() {
+                if seen_defs.insert((ev.name.clone(), ev.span)) {
+                    let def = semantic_db::DefinitionInfo {
+                        def_id: semantic_db::DefId {
+                            file_path: file_path.clone(),
+                            span: ev.span,
+                        },
+                        name: ev.name,
+                        kind: ev.kind,
+                        span: ev.span,
+                        file_path: file_path.clone(),
+                        type_info: ev.type_info,
+                        signature: None,
+                    };
+                    self.semantic_db.add_definition(&file_path, def);
+                }
+            }
+            let (refs, imports) = (bc.take_reference_events(), bc.take_import_events());
+            for r in refs {
+                let r#ref = semantic_db::ReferenceInfo {
+                    name: r.name,
+                    span: r.span,
+                    file_path: file_path.clone(),
+                    resolves_to: semantic_db::DefId {
+                        file_path: file_path.clone(),
+                        span: r.resolves_to_span,
+                    },
+                };
+                self.semantic_db.add_reference(&file_path, r#ref);
+            }
+            for imp in imports {
+                self.semantic_db.add_import(
+                    &file_path,
+                    semantic_db::ImportInfo {
+                        module_path: imp.module_path,
+                        imported_names: imp.imported_names,
+                        span: imp.span,
+                    },
+                );
+            }
+        }
+
         // 收集错误（无论有无错误都收进 result.diagnostics）
         let diagnostics = self.errors().to_vec();
 

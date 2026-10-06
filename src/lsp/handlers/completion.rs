@@ -243,8 +243,17 @@ pub fn handle_completion(
     items.extend(reserved_word_items());
 
     // 2. 从 SemanticDB 获取可见符号
-    let (line, col) =
-        crate::lsp::locate::position_to_internal(&params.text_document_position.position);
+    let (line, col) = match session.document_store().get(&uri) {
+        Some(doc) => crate::lsp::locate::position_to_internal_utf16(
+            doc.content(),
+            &params.text_document_position.position,
+        ),
+        // 文档不在存储中时无从做 UTF-16 换算，退回裸换算（ASCII 场景等价）
+        None => {
+            let p = &params.text_document_position.position;
+            (p.line as usize + 1, p.character as usize + 1)
+        }
+    };
     items.extend(semantic_db_items(world, &uri, line, col));
 
     // 3. 当前文档符号
