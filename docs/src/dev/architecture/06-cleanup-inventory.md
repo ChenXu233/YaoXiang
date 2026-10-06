@@ -201,7 +201,7 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | F7 | `tools/code-tables/src/lib.rs:66-78` | `extract_code_from_entry_line` 是**行首前缀匹配器**（`trim_start().strip_prefix("(\"")` 取到下一个引号），依赖 `("E1001", ...)` 元组语法，**不是 parser**。它的架构（`parse` + `validate` + build.rs 门禁 + `--fix` 治愈）值得复用到 opcode 表，但**提取器需按 opcode 形态重写（约 30 行）**。归属 06-cleanup-inventory.md 的后续工作或独立 RFC |
 | F8 | `src/backends/common/opcode.rs` 的门禁缺口 | 83 个常量、0 重复、范围 `0x00..0xE2`（span 227，**144 个空洞**）。同一份 opcode 事实被表达 **5 处**：`BytecodeInstr::opcode()`(`bytecode.rs:558-646`)/ `size()`(`649-803`)/ `opcode::opcode_name()`(`opcode.rs:120-206`)/ 解码 match(`bytecode.rs:978-2302`)/ 48 个 `translate_*`(`translator.rs:676-1577`)。**编译器只强制其中 2 处**（`backends/.../executor/debug.rs:194` 分派表 + 各 `ops/*.rs` 族函数的穷尽 match），`opcode()` / `size()` / 解码臂 / 编码器漏一处**只有跑 `.42` 产物才炸**。`size()` 表(649-803)的注释自述与实际编码不符（`bytecode.rs:2181-2182`），且**无系统性对拍测试**（现有 size 测试只覆盖 Nop/Mov/Borrow/Release 4 个）。运算符语义在此也走第三套平行枚举（`BinaryOp`/`UnaryOp`/`CompareOp`，`bytecode.rs:70/97/106`，`Rem`/`Xor`/`Sar` 又一套命名），随 opcode 生成期门禁一并收口。词表目标位置为 `middle/bytecode/opcode.rs`（随字节码域合并迁移，消除 L3→L4 反向，见 01） |
 
-## G. P0 门禁登记（2026-10-06）
+## G. 门禁与判据发现登记（2026-10-06 起随各阶段施工续登）
 
 `scripts/ci/check-concepts.py`（[09](09-execution-wbs.md) §P0 0.2.1，禁令一 A/B/C/D）于 2026-10-06 首跑。按"门禁只报疑似、由人裁决"的分工（[08](08-maintenance-mechanism.md) §已知局限），本节登记裁决结果与处置归属。未展开的命中（判据 A 违规层 25 对、判据 B 全部疑似项）随对应阶段施工时逐对复核。
 
@@ -211,6 +211,7 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | G2 | 双 `ConstValue`（判据 A，J=0.56） | **真阳性**，含 f32/f64 位宽不一致与 `kind()` 活 `todo!()` | 已落 E7 |
 | G3 | 类型名的字符串分派 11 处（判据 D 真阳性） | **真阳性，同一根因**：内置容器名无单一权威识别点。清单：`"List" \| "Vec" \| "Array"` ×4（`inference/existential.rs:120`、`inference/expressions.rs:2921`、`ir_gen.rs:4826`、`ir_gen.rs:4652`）、`"String" \| "Bytes"` ×4（`inference/expressions.rs:1738`、`eval/normalizer.rs:230`、`trait_data.rs:180`、`ir_gen.rs:62`）、`eval/const_eval.rs:498-511` 大小表（含 `"Uint"` 死臂）、`middle/passes/codegen/bytecode.rs:744-756` `to_type_id`（`"Set" => 25` 与 #300 决策 4 矛盾）、`trait_data.rs:187` 的 `"Clone" \| "Dup"` | **P6 扩展核实项**：这些点在 typecheck / eval / middle 侧，不在 03 §5.4 的 parser 数据流覆盖范围内；P6 施工时按 03 §5.3 的同一原则（`NameKind` 一次定死、match 臂不再做字符串比较）一并处置。副本表已同步更正为七处（03 §2.3） |
 | G4 | 判据 D 误报 4 处 | **合法查找 / 分派表，非弥合**：`package/build/requirements.rs:17-25` 工具安装指引、`package/vendor/mod.rs:134-139` 构建结果显示名、`repl/mod.rs:241-396` REPL 命令别名（8 臂，用户界面别名属正当 UX）、`util/diagnostic/mod.rs:462-468` `parse_runtime_mode`（带注释的历史别名，单一边界点） | P9 转硬时逐处加 `// reason:` 豁免；豁免数量随门禁报告过目 |
+| G5 | `ReleasePlan.drops` span 键失配（P2 2.4.4 判据实测，非 P0 命中） | **真阳性，契约缺陷——D20 预言实证**：ownership 按「最后使用**表达式** span」记键（`ownership.rs:2574 build_release_plan`），`ir_gen.rs:1956` 按「**语句** span」查表，表达式级键永不命中——全语料实测 **168 文件 / 373 键** 未被消费，Drop 静默丢失（逐案证据见 `src/middle/core/tests/release_plan_spans.rs` 文件头） | **P4/D20**（Span 键 → PlanId，行为面约 168 文件，须等 C2 判据与语料差分就位）；判据 `test_release_plan_spans_consumed` 红态常驻（`#[ignore]`），D20 落地移除即转绿 |
 
 ## 关键决策与理由
 
