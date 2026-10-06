@@ -242,11 +242,11 @@ index_of: (s: &String, sub: &String) -> Int
 
 <!-- stdlib:sig:string.index_of end -->
 
-`sub` 首次出现的**字节**下标。
+`sub` 首次出现的**标量值（码点）下标**（#385）。
 
 返回：找到时返回下标；未找到返回 `-1`。
 
-> 返回的是字节偏移。含多字节字符时，可用 `chars` 转换后再定位字符下标。
+> 返回值与 `substring` / `char_code` / `s[i]` 同域，可直接组合使用。
 
 ```yaoxiang
 use std.assert
@@ -317,7 +317,8 @@ len: (s: &String) -> Int
 
 <!-- stdlib:sig:string.len end -->
 
-返回 **UTF-8 字节长度**，不是字符个数。
+返回 **Unicode 标量值（码点）个数**——与 `substring` / `chars` / `char_code` /
+`index_of` 同一口径（#385）。
 
 ```yaoxiang
 use std.assert
@@ -325,7 +326,7 @@ use std.string
 
 main: () -> Void = {
     assert(string.len("hello") == 5)
-    assert(string.len("中") == 3)   // 字节长度
+    assert(string.len("中") == 1)    // 码点数，不是 UTF-8 字节数
 }
 ```
 
@@ -521,7 +522,7 @@ char_code: (s: &String, i: Int) -> Int
 同域）。
 
 - `s` —— 源字符串（只读借用）
-- `i` —— 字符下标（**字符**下标，不是字节偏移）
+- `i` —— 字符下标（Unicode 标量值口径，与 [`index_of`](#index_of) 同单位）
 
 返回：码点；**下标越界返回 `-1`**（与 [`index_of`](#index_of) 未命中同一惯例——码点非负，
 `-1` 无歧义）。**不抛错**。
@@ -532,7 +533,7 @@ use std.string
 
 main: () -> Void = {
     assert(string.char_code("A", 0) == 65)
-    assert(string.char_code("中", 0) == 0x4E2D)     // 字符下标，不是字节偏移
+    assert(string.char_code("中", 0) == 0x4E2D)     // 标量值下标
     assert(string.char_code("A", 9) == -1)          // 越界返回 -1
 }
 ```

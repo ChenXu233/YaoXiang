@@ -54,6 +54,17 @@ main: () -> Void = {
     assert.assert(string.char_code("hi", 2) == -1, "char_code out of range → -1")
     assert.assert(string.char_code("", 0) == -1, "char_code on empty → -1")
 
+    // #385 定案 D1/D2：len/index_of 也是 Unicode 标量值口径——
+    // 与 substring/chars/char_code 同单位，多字节不再按字节劈开
+    assert.assert(string.len("héllo") == 5, "len counts code points")
+    assert.assert(string.len("中") == 1, "len CJK scalar")
+    assert.assert(string.index_of("héllo", "é") == 1, "index_of scalar index")
+    assert.assert(string.index_of("héllo", "lo") == 3, "index_of after multibyte")
+    // 同域组合：index_of 的返回值可直接喂 substring/char_code/s[i]
+    i = string.index_of("héllo", "é")
+    assert.assert(string.substring("héllo", i, i + 1) == "é", "index_of feeds substring")
+    assert.assert(string.char_code("héllo", i) == 233, "index_of feeds char_code")
+
     // from_char_code：合法码点 → 单字符字符串（Result ok）
     ok_c = string.from_char_code(65)
     assert.assert(result.is_ok(ok_c), "from_char_code ok")
