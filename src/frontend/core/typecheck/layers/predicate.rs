@@ -28,12 +28,24 @@ use super::super::proof::verdict::{
 /// 求解器实例——整个编译过程只初始化一次。
 ///
 /// 具体后端由 `backend::default_solver()` 决定（RFC-027 §8：不绑定具体求解器）。
-/// 初始化失败保持**硬失败**：软化会把「Z3 未安装」误诊为「约束超出内核能力」，
-/// 任何静默跳过验证的降级都不 sound。
+/// 初始化为 `Option`：后端不可用（Z3 未安装）时**不 panic**，两个使用点按
+/// `SMTResult::Unknown` 保守降级——`Solver` 契约（backend.rs）：未知一律
+/// 保守方向，由上层决定降级形态；此处上层即 checker 的 Unproven→诊断路径
+/// （E2031 族硬错误），诊断仍在、进程不崩（WBS 3.3.1，02 §改动清单）。
 #[cfg(not(target_arch = "wasm32"))]
-static SOLVER: LazyLock<Mutex<Box<dyn Solver>>> = LazyLock::new(|| {
-    Mutex::new(default_solver().expect("Z3 solver initialization failed — is libz3 installed?"))
-});
+static SOLVER: LazyLock<Mutex<Option<Box<dyn Solver>>>> =
+    LazyLock::new(|| Mutex::new(default_solver()));
+
+/// 求解器不可用时的保守降级结果。
+///
+/// 抽出为独立函数以便单测——进程级单例无法安全模拟 Z3 缺失（并发测试共享
+/// 本静态量，置 None 会污染其他用例）。
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn solver_unavailable_result() -> SMTResult {
+    SMTResult::Unknown {
+        reason: "SMT 求解器不可用（Z3 未安装或初始化失败）".to_string(),
+    }
+}
 
 /// 检查精化谓词是否成立
 ///
@@ -144,11 +156,14 @@ fn try_implication(
 
     let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
 
-    match SOLVER
-        .lock()
-        .unwrap()
-        .solve(&commands, ctx.budget.time_ms_limit())
-    {
+    let smt_result = {
+        let guard = SOLVER.lock().unwrap();
+        // 求解器不可用（None）= 无法判断 → 经 `?` 返回升级（与 Unknown 同一降级方向）
+        guard
+            .as_ref()
+            .map(|solver| solver.solve(&commands, ctx.budget.time_ms_limit()))?
+    };
+    match smt_result {
         SMTResult::Unsat => Some(ProofResult::Proved),
         // sat = 假设不蕴含，约束可能独立成立 → 升级
         SMTResult::Sat { .. } => None,
@@ -168,11 +183,15 @@ fn try_smt_solve(
     let assumptions = ctx.assumptions.current();
     let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
 
-    match SOLVER
-        .lock()
-        .unwrap()
-        .solve(&commands, ctx.budget.time_ms_limit())
-    {
+    let smt_result = {
+        let guard = SOLVER.lock().unwrap();
+        match guard.as_ref() {
+            Some(solver) => solver.solve(&commands, ctx.budget.time_ms_limit()),
+            // Z3 缺失不 panic——按 Unknown 保守降级（WBS 3.3.1）
+            None => solver_unavailable_result(),
+        }
+    };
+    match smt_result {
         SMTResult::Unsat => ProofResult::Proved,
         SMTResult::Sat { model } => ProofResult::Disproved(DisproofModel {
             kind: DisproofKind::PredicateViolation,

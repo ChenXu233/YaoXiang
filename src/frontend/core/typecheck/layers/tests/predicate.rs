@@ -277,3 +277,26 @@ fn test_implication_all_popped_falls_through() {
         "pop 全部后栈空，应进入 Level 3，实际: {result:?}"
     );
 }
+
+// WBS 3.3.1 / 02-stage-contract §改动清单：`.expect()` → SMTResult::Unknown + 诊断
+
+/// WBS 3.3.1：求解器不可用的降级结果是 SMTResult::Unknown（保守方向）且原因
+/// 文本指明 Z3——不再以 expect 崩溃进程。端到端（Z3 真实缺失下 check_predicate
+/// 返回 Unproven）受进程级单例限制无法在本进程模拟，结构性证据见提交信息。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_solver_unavailable_degrades_to_unknown_not_panic() {
+    // Arrange & Act
+    let result = crate::frontend::core::typecheck::layers::predicate::solver_unavailable_result();
+
+    // Assert
+    match result {
+        crate::frontend::core::typecheck::proof::smt::ast::SMTResult::Unknown { reason } => {
+            assert!(
+                reason.contains("Z3"),
+                "降级原因应指明 Z3 缺失，实际: {reason}"
+            );
+        }
+        other => panic!("求解器不可用必须降级为 SMTResult::Unknown，实际: {other:?}"),
+    }
+}
