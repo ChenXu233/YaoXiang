@@ -110,6 +110,22 @@ jobs:
             scripts/ci/_docs-orphan-report.txt
           if-no-files-found: ignore
 
+  concepts:
+    name: Concept Gate (禁令一, report-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # P0 引入（09-execution-wbs 0.2.1）：报告现存平行表示 / 消歧别名 / 同义词表，
+      # 不阻断。P9 统一转硬：届时改为 python3 scripts/ci/check-concepts.py --strict。
+      - name: Check concept duplication (report-only)
+        run: python3 scripts/ci/check-concepts.py
+
   test:
     name: Test
     runs-on: ubuntu-latest
