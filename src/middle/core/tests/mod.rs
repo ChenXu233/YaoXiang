@@ -5,3 +5,4 @@
 pub mod bytecode;
 pub mod def_assign;
 pub mod local_slots;
+pub mod release_plan_spans;

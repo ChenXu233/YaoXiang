@@ -189,6 +189,10 @@ pub struct AstToIrGenerator {
     anon_function_irs: Vec<FunctionIR>,
     /// NLL 精确释放计划（所有权检查器产出）
     release_plan: HashMap<Span, Vec<String>>,
+    /// D41/2.4.4 观测点：release_plan 的 span 键在生成期被实际消费的集合。
+    /// 「ownership 产出 ⊆ IR 构造消费」契约的判据数据出口
+    ///（test_release_plan_spans_consumed；P4 的 D20 PlanId 迁移同样依赖本观测）。
+    release_plan_consumed: std::collections::HashSet<Span>,
     /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
     /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
     pending_env_vars: Vec<Operand>,
@@ -339,6 +343,7 @@ impl AstToIrGenerator {
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             release_plan: type_result.release_plan.drops.clone(),
+            release_plan_consumed: std::collections::HashSet::new(),
             pending_env_vars: Vec::new(),
             pending_env_names: Vec::new(),
             closure_captures: HashMap::new(),
@@ -938,6 +943,14 @@ impl AstToIrGenerator {
     }
 
     /// 从 AST 模块生成 IR 模块
+    /// D41/2.4.4 判据数据出口：生成期实际消费的 `release_plan` span 键集合。
+    ///
+    /// 供 `test_release_plan_spans_consumed` 与 P4 的 D20（PlanId 迁移）观测——
+    /// 与 `typecheck::TypeCheckResult.release_plan.drops` 的键集做差集比对。
+    pub(crate) fn release_plan_consumed_spans(&self) -> &std::collections::HashSet<Span> {
+        &self.release_plan_consumed
+    }
+
     pub fn generate_module_ir(
         &mut self,
         module: &ast::Module,
@@ -1939,7 +1952,9 @@ impl AstToIrGenerator {
             );
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
             // NLL Release: 在语句边界插入 Drop 指令
+            let mut release_hit = false;
             if let Some(vars) = self.release_plan.get(&stmt.span) {
+                release_hit = true;
                 for var in vars {
                     if let Some(local_idx) = self.lookup_local(var) {
                         instructions.push(Instruction::Drop {
@@ -1948,6 +1963,10 @@ impl AstToIrGenerator {
                         });
                     }
                 }
+            }
+            if release_hit {
+                // D41/2.4.4 观测：键被实际消费即入册（借用在上方 if-let 结束后写入）
+                self.release_plan_consumed.insert(stmt.span);
             }
             // #393：语句级临时寄存器回收（同 generate_block_ir——临时不跨
             // 语句存活，回滚到具名水位与循环态地板的较大者）
