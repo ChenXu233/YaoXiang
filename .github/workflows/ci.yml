@@ -159,13 +159,20 @@ jobs:
             test-${{ runner.os }}-cargo-
 
       - name: Run tests
-        run: cargo test --all-features --lib --bins --test integration --test yx_runner
+        run: cargo test --all-features --lib --bins --test integration --test yx_runner --test yx_multifile_runner
 
       - name: Doc tests
         run: cargo test --doc --all-features
 
       - name: Build CLI
         run: cargo build --all-features --bin yaoxiang-rs
+
+      # P2 引入（09-execution-wbs 9.7）：语料行为差分 vs 入库基线，无任何分组放宽。
+      # 差分非空 = 回归（修代码）或有意变更（同一 PR 重生成基线）。
+      - name: Corpus parity vs baseline
+        run: |
+          cargo run --quiet --example corpus_probe > target/corpus-current.jsonl
+          python3 scripts/ci/check-corpus-parity.py tests/baselines/corpus-parity.jsonl target/corpus-current.jsonl
 
       # 教程/指南里的代码块直接被读者复制粘贴，必须真能编译。
       # 2026-10-02 审计实测发现 20 个示例用 0.8.2 编译器直接失败，

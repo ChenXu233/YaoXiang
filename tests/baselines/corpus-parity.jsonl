@@ -1,0 +1,322 @@
+{"expectation":"behavior","file":"src/std/tests/assert_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/concurrent_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/convert_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/dict_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/error_codes.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/fs_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/io_ops.yx","run":{"exit":0,"stderr":[],"stdout":["io_ops: print/println smoke"]}}
+{"expectation":"behavior","file":"src/std/tests/json_ops.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/list_item_borrow.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/list_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/math_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"src/std/tests/net_http_error.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6007\u001b[0m] runtime error: http_get failed for 'not a url': Bad URL: failed to parse URL: RelativeUrlWithoutBase: relative URL without a base","     │                 ^","  16 │     net.http_get(\"not a url\", dict.new(), 5)","  at __yx_module_init (E:\\git\\YaoXiang\\src\\std\\tests\\net_http_error.yx:19:5)","  at main (E:\\git\\YaoXiang\\src\\std\\tests\\net_http_error.yx:16:17)"," --> E:\\git\\YaoXiang\\src\\std\\tests\\net_http_error.yx:16:17","Runtime error","help: check the error message for details","stack trace:"],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/net_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/os_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/range_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/range_result_step0.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/result_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/string_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/test_assertions.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/test_suite.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[["W1001","E:/git/YaoXiang/src/std/tests/test_suite_fail.yx",15],["W1001","E:/git/YaoXiang/src/std/tests/test_suite_fail.yx",20],["W1003","E:/git/YaoXiang/src/std/tests/test_suite_fail.yx",12]],"exit":0},"expectation":"runtime-error","file":"src/std/tests/test_suite_fail.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6005\u001b[0m] Assertion failed: 1 of 2 test(s) failed","  [FAIL] always_fails: Expected 2, got 1","  at __yx_module_init (E:\\git\\YaoXiang\\src\\std\\tests\\test_suite_fail.yx:33:5)","  at main (E:\\git\\YaoXiang\\src\\std\\tests\\test_suite_fail.yx:27:15)","  at std.test.suite (E:\\git\\YaoXiang\\src\\std\\tests\\test_suite_fail.yx:113:18)"," --> E:\\git\\YaoXiang\\src\\std\\tests\\test_suite_fail.yx:113:18","Runtime error","help: Fix the assertion condition or provide valid input","stack trace:"],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/time_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/00-smoke/hello.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/bitwise_ops.yx","run":{"exit":0,"stderr":[],"stdout":["BITWISE_OPS_OK"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/comments.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/float_comparison.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/fstrings.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/literals.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/logical_not.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/logical_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/modulo_math.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/operators.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/shift_ops.yx","run":{"exit":0,"stderr":[],"stdout":["SHIFT_OPS_OK"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/statement-termination.yx","run":{"exit":0,"stderr":[],"stdout":["1","10","10"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/top_level_init_expression.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/typed_vars.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/variables.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/break_continue.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/for.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/if_else.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/if_expression.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/list_comp.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/match.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/pattern_matching.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/top_level_for.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/while.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/while_body_nested.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/control-flow/while_mut_assign.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/closures.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/definitions.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/lambdas.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/functions/named_arguments.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/in_operator.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_compound_bound.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_equality.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/01-syntax/operators/range_value.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/array_fn_boundary.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/array_literal.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/assert_runtime.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/associated_type_in_body.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/bare_loop_needs_no_termination_proof.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/builtin_container_ctor.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/call_arg_evidence.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/closure_arg_inference.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/closures.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/const_generic_assert.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/const_generic_instantiate.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/const_generic_lt_le_bound.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/constrained_generic_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/container_index_write.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/curry_tail_expr.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/curry_value_fix.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/dict_literal.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/dicts.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/explicit_termination_measure.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/explicit_termination_measure_loop.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/explicit_type_args.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/fallen_const_value_param.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/flag_loop_guarded_exit.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/fn_const_generic.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/fn_const_generic_lowercase.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generic_constructor.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generic_container_index.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generic_method_binding.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generic_slot_alignment.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generic_types.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/generics_matrix.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interface_dynamic_dispatch.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interface_inheritance.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interface_instantiate.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interface_rebind_dispatch.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/lists.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/match_call_scrutinee.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/measure_decreasing.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/method_block_tail_expr.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/method_call_args.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/method_overload.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/monomorphization.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/operator_index.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/operator_interfaces.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/option.yx","run":{"exit":0,"stderr":[],"stdout":["option roundtrip ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/option_try.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/pattern_destructure.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/pattern_or_guard.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/question_propagation.yx","run":{"exit":0,"stderr":[],"stdout":["question_propagation_ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/range_identity.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/range_in_list.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/rank_function_dual_variable_loop.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_dependent_module_scope.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_dependent_revalidate.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_param_arg_form.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_param_uses_base_type.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_variable_uses_base_type.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/result.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/return_refinement.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/return_refinement_arg_expr.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/std_name_shadowing.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/struct_equality.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/structs.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum_type.yx","run":{"exit":0,"stderr":[],"stdout":["EQ_OK","NE_OK","ZERO_PAYLOAD_EQ_OK"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum_type_equality_forms.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum_type_match.yx","run":{"exit":0,"stderr":[],"stdout":["42","bad","is-ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/sum_type_native_match.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/try_methods.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/tuple_index_field.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/tuples.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/user_try_type.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/while_block_value.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/02-type-system/while_zero_iteration_void_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6007\u001b[0m] runtime error: type mismatch in comparison Eq: Void vs Int(0)","     │     ^^^^^^","  32 │     assert.assert(last == 0, \"零迭代 while 的值：残留形态，应在使用点响亮失败\")","  at __yx_module_init (E:\\git\\YaoXiang\\tests\\yaoxiang\\02-type-system\\while_zero_iteration_void_err.yx:35:5)","  at main (E:\\git\\YaoXiang\\tests\\yaoxiang\\02-type-system\\while_zero_iteration_void_err.yx:32:5)"," --> E:\\git\\YaoXiang\\tests\\yaoxiang\\02-type-system\\while_zero_iteration_void_err.yx:32:5","Runtime error","help: check the error message for details","stack trace:"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/alias_group_module.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":["group alias ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/alias_multi.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/alias_std_module.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":["std module alias ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/grouped_use_type_payload.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/imports.yx","run":{"exit":0,"stderr":[],"stdout":["module_import_ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/native_arity_range.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/assignment_semantics.yx","run":{"exit":0,"stderr":[],"stdout":["assignment_semantics ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/binding_fn_vs_block.yx","run":{"exit":0,"stderr":[],"stdout":["binding fn vs block ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/empty_block_semantics.yx","run":{"exit":0,"stderr":[],"stdout":["empty_block_semantics: ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/fn_value_first_class.yx","run":{"exit":0,"stderr":[],"stdout":["fn value first class ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/fn_value_reuse.yx","run":{"exit":0,"stderr":[],"stdout":["fn value reuse ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/paren_return_fn.yx","run":{"exit":0,"stderr":[],"stdout":["paren return fn ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/return_stmt_semantics.yx","run":{"exit":0,"stderr":[],"stdout":["99"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/rfc010a_block_value.yx","run":{"exit":0,"stderr":[],"stdout":["assign tail","rfc010a block value ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/tail_expr_and_return.yx","run":{"exit":0,"stderr":[],"stdout":["side effect ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/time_semantics.yx","run":{"exit":0,"stderr":[],"stdout":["time semantics ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/top_level_binding.yx","run":{"exit":0,"stderr":[],"stdout":["top_level_binding ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/top_level_control_flow.yx","run":{"exit":0,"stderr":[],"stdout":["top_level_control_flow ok","顶层 if 分支"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-semantics/unsafe_block_value.yx","run":{"exit":0,"stderr":[],"stdout":["opaque type ok","unsafe block value ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_basic.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_capture.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_capture_standard.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_destructure.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_for.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_mut_accumulator.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_ref.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_return_no_closure.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_return_simple.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_simple.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_tail_expr.yx","run":{"exit":0,"stderr":[],"stdout":["spawn tail expr ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/spawn_tuple.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/04-concurrency/test_destructure.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/auto_borrow_free_fn.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_capture.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_immutable.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_mutable.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/borrow_return.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/chained_receiver_reuse.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/field_write_back.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/loop_borrow_guarded_write.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/loop_borrow_reuse.yx","run":{"exit":0,"stderr":[],"stdout":["unknown(2)loop_borrow_reuse_ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/method_receiver_autoborrow.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/move_basic.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/nested_token_scope.yx","run":{"exit":0,"stderr":[],"stdout":["1"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/ownership_deep.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/primitive_value_copy.yx","run":{"exit":0,"stderr":[],"stdout":["7","7"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/ref_shared.yx","run":{"exit":0,"stderr":[],"stdout":["ref shared ok"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/string_dup.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/struct_dup.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/token_dup_copy.yx","run":{"exit":0,"stderr":[],"stdout":["7"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/05-ownership/token_in_struct.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/array_elem_type_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/array_elem_type_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/array_empty_n_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/array_empty_n_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/array_n_mismatch_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/array_n_mismatch_err.yx"}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/array_neg_index_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] Array index out of bounds: valid range is 0..3, found -1","Runtime error","help: Ensure the index is within the array bounds"],"stdout":[]}}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/array_push_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/array_push_err.yx"}
+{"check":{"diagnostics":[["E1062","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/assert_compile_error.yx",16]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/assert_compile_error.yx"}
+{"check":{"diagnostics":[["E1062","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/assert_lt_compile_error.yx",16]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/assert_lt_compile_error.yx"}
+{"check":{"diagnostics":[["E1012","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/assign_tail_ret_type_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/assign_tail_ret_type_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/assign_type_change_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/assign_type_change_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/binop_type_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/binop_type_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/block_value_type_mismatch_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/block_value_type_mismatch_err.yx"}
+{"check":{"diagnostics":[["E2018","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/borrow_conflict_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/borrow_conflict_err.yx"}
+{"check":{"diagnostics":[["E1103","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/bracket_type_syntax_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/bracket_type_syntax_err.yx"}
+{"check":{"diagnostics":[],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/break_expr_position_err.yx"}
+{"check":{"diagnostics":[],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/break_label_err.yx"}
+{"check":{"diagnostics":[["E1102","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/break_outside_loop_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/break_outside_loop_err.yx"}
+{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/call_arg_no_evidence_err.yx"}
+{"check":{"diagnostics":[["E2018","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/chained_receiver_borrow_err.yx",17]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/chained_receiver_borrow_err.yx"}
+{"check":{"diagnostics":[["E1001","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/closure_capture_fn_body_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/closure_capture_fn_body_err.yx"}
+{"check":{"diagnostics":[["E1001","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/closure_capture_local_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/closure_capture_local_err.yx"}
+{"check":{"diagnostics":[],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/continue_label_err.yx"}
+{"check":{"diagnostics":[],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/dict_in_block_body_err.yx"}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/dict_missing_key_e6008.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6008\u001b[0m] Key not found: nope","     │          ^","  14 │     v = d[\"nope\"]","  at __yx_module_init (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\dict_missing_key_e6008.yx:17:5)","  at main (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\dict_missing_key_e6008.yx:14:10)"," --> E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\dict_missing_key_e6008.yx:14:10","Runtime error","help: Use dict.has to check if the key exists before indexing","stack trace:"],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/div_zero.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6001\u001b[0m] Expression 1 / 0 divides by zero","     │           ^","  13 │     c = a / b","  at __yx_module_init (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\div_zero.yx:17:5)","  at main (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\div_zero.yx:13:11)"," --> E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\div_zero.yx:13:11","Runtime error","help: Add a check to prevent division by zero","stack trace:"],"stdout":[]}}
+{"check":{"diagnostics":[["E5006","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/duplicate_import_alias_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/duplicate_import_alias_err.yx"}
+{"check":{"diagnostics":[["E5006","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/duplicate_import_same_stmt_err.yx",7]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/duplicate_import_same_stmt_err.yx"}
+{"check":{"diagnostics":[["E1012","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/empty_body_ret_type_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/empty_body_ret_type_err.yx"}
+{"check":{"diagnostics":[["E1101","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/equal_linear_token_err.yx",16]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/equal_linear_token_err.yx"}
+{"check":{"diagnostics":[["E5003","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/export_not_found_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/export_not_found_err.yx"}
+{"check":{"diagnostics":[["E1094","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/fallen_const_type_param_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/fallen_const_type_param_err.yx"}
+{"check":{"diagnostics":[["E1001","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/field_default_unknown_var_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/field_default_unknown_var_err.yx"}
+{"check":{"diagnostics":[["E2018","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/field_write_conflict_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/field_write_conflict_err.yx"}
+{"check":{"diagnostics":[["E2018","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/firstclass_mut_borrow_err.yx",16]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/firstclass_mut_borrow_err.yx"}
+{"check":{"diagnostics":[["E4021","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/flag_loop_guard_rewrites_counter_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/flag_loop_guard_rewrites_counter_err.yx"}
+{"check":{"diagnostics":[["E4021","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/flag_loop_guard_sets_counter_after_clear_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/flag_loop_guard_sets_counter_after_clear_err.yx"}
+{"check":{"diagnostics":[["E4021","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/flag_loop_guard_sets_counter_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/flag_loop_guard_sets_counter_err.yx"}
+{"check":{"diagnostics":[["E4021","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/flag_loop_unknown_counter_rebinding_err.yx",22]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/flag_loop_unknown_counter_rebinding_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/for_non_iterable_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/for_non_iterable_err.yx"}
+{"check":{"diagnostics":[["E1012","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/for_tail_ret_type_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/for_tail_ret_type_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/generic_ctor_const_infer_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generic_ctor_const_infer_err.yx"}
+{"check":{"diagnostics":[["E1010","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/generic_ctor_extra_arg_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generic_ctor_extra_arg_err.yx"}
+{"check":{"diagnostics":[["E1010","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/generic_ctor_missing_arg_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generic_ctor_missing_arg_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/generic_ctor_type_mismatch_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generic_ctor_type_mismatch_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/generic_infer_mismatch_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/generic_infer_mismatch_err.yx"}
+{"check":{"diagnostics":[["E3019","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/global_init_cycle_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/global_init_cycle_err.yx"}
+{"check":{"diagnostics":[["E1102","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/if_body_break_outside_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/if_body_break_outside_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/if_tail_branch_mismatch_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/if_tail_branch_mismatch_err.yx"}
+{"check":{"diagnostics":[["E5008","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/import_conflict_local_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/import_conflict_local_err.yx"}
+{"check":{"diagnostics":[["E1003","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/in_body_unknown_type_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/in_body_unknown_type_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/in_elem_type_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/in_elem_type_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/in_non_container_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/in_non_container_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/index_non_container_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/index_non_container_err.yx"}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/index_oob_read.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] Array index out of bounds: valid range is 0..3, found 5","     │                     ^","  12 │     io.println(items[5])","  at __yx_module_init (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\index_oob_read.yx:15:5)","  at main (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\index_oob_read.yx:12:21)"," --> E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\index_oob_read.yx:12:21","Runtime error","help: Ensure the index is within the array bounds","stack trace:"],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/index_write_out_of_bounds_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] Array index out of bounds: valid range is 0..3, found 5 (i)","     │     ^","  11 │     a[i] = 99","  at __yx_module_init (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\index_write_out_of_bounds_err.yx:15:5)","  at main (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\index_write_out_of_bounds_err.yx:11:5)"," --> E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\index_write_out_of_bounds_err.yx:11:5","Runtime error","help: Ensure the index is within the array bounds","stack trace:"],"stdout":[]}}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/int_overflow.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6007\u001b[0m] runtime error: integer overflow in `9223372036854775807 + 1`","     │     ^","  12 │     b = a + 1","  at __yx_module_init (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\int_overflow.yx:16:5)","  at main (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\int_overflow.yx:12:5)"," --> E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\int_overflow.yx:12:5","Runtime error","help: check the error message for details","stack trace:"],"stdout":[]}}
+{"check":{"diagnostics":[["E1100","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/interface_duplicate_impl.yx",22]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/interface_duplicate_impl.yx"}
+{"check":{"diagnostics":[["E1101","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/interface_elem_mismatch.yx",25]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/interface_elem_mismatch.yx"}
+{"check":{"diagnostics":[["E1101","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/interface_elem_not_impl.yx",28]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/interface_elem_not_impl.yx"}
+{"check":{"diagnostics":[["E1097","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/interface_member_conflict.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/interface_member_conflict.yx"}
+{"check":{"diagnostics":[["E1098","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/interface_missing_method.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/interface_missing_method.yx"}
+{"check":{"diagnostics":[["E1099","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/interface_signature_mismatch.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/interface_signature_mismatch.yx"}
+{"check":{"diagnostics":[["E1054","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/list_comp_cond_not_bool_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/list_comp_cond_not_bool_err.yx"}
+{"check":{"diagnostics":[["E2018","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/loop_borrow_write_err.yx",21]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/loop_borrow_write_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/match_arm_type_mismatch_err.yx",18]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/match_arm_type_mismatch_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/match_variant_pattern_err.yx",18]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/match_variant_pattern_err.yx"}
+{"check":{"diagnostics":[["E4022","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/measure_not_decreasing_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/method_arg_type_err.yx",17]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/method_arg_type_err.yx"}
+{"check":{"diagnostics":[["E1010","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/method_extra_arg_err.yx",18]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/method_extra_arg_err.yx"}
+{"check":{"diagnostics":[["E1010","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/method_missing_arg_err.yx",17]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/method_missing_arg_err.yx"}
+{"check":{"diagnostics":[["E1107","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/method_overload_ambiguous_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/method_overload_ambiguous_err.yx"}
+{"check":{"diagnostics":[["E2018","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/method_receiver_conflict_err.yx",18]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/method_receiver_conflict_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/mixed_comparison_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/mixed_comparison_err.yx"}
+{"check":{"diagnostics":[["E5001","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/module_not_found_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/module_not_found_err.yx"}
+{"check":{"diagnostics":[["E2014","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/move_after_use_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/move_after_use_err.yx"}
+{"check":{"diagnostics":[["E2018","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/mut_index_borrow_alias_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/mut_index_borrow_alias_err.yx"}
+{"check":{"diagnostics":[["E2003","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/mut_ref_copy_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/mut_ref_copy_err.yx"}
+{"check":{"diagnostics":[["E1015","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/named_arg_duplicate_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/named_arg_duplicate_err.yx"}
+{"check":{"diagnostics":[["E1010","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/named_arg_missing_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/named_arg_missing_err.yx"}
+{"check":{"diagnostics":[["E1014","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/named_arg_unknown_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/named_arg_unknown_err.yx"}
+{"check":{"diagnostics":[["E1010","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/namespace_extra_args_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/namespace_extra_args_err.yx"}
+{"check":{"diagnostics":[["E1065","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/not_callable_err.yx",16]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/not_callable_err.yx"}
+{"check":{"diagnostics":[["E1104","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/operator_orphan_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/operator_orphan_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/option_annotation_mismatch_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/option_annotation_mismatch_err.yx"}
+{"check":{"diagnostics":[],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/question_mark_as_param_type.yx"}
+{"check":{"diagnostics":[["E1082","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/question_nonresult_expr_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/question_nonresult_expr_err.yx"}
+{"check":{"diagnostics":[["E1081","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/question_nonresult_return_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/question_nonresult_return_err.yx"}
+{"check":{"diagnostics":[],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/range_dynamic_step0_err.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6007\u001b[0m] runtime error: Range step must be non-zero (for/in consumption)","     │     ^^^","  13 │     for i in r {","  at __yx_module_init (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\range_dynamic_step0_err.yx:18:5)","  at main (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\range_dynamic_step0_err.yx:13:5)"," --> E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\range_dynamic_step0_err.yx:13:5","Runtime error","help: check the error message for details","stack trace:"],"stdout":[]}}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/range_step_zero_err.yx",9]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/range_step_zero_err.yx"}
+{"check":{"diagnostics":[],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/ref_keyword_bug.yx"}
+{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refined_annotation_literal_violates_err.yx"}
+{"check":{"diagnostics":[["E1093","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/refined_arg_arity_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refined_arg_arity_err.yx"}
+{"check":{"diagnostics":[["E1092","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/refined_arg_invalid_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refined_arg_invalid_err.yx"}
+{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refined_dependent_folded_rhs_violates_err.yx"}
+{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refined_dependent_init_violates_err.yx"}
+{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refined_dependent_module_reassign_violates_err.yx"}
+{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refined_dependent_reassign_violates_err.yx"}
+{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/refined_param_arg_violates_err.yx"}
+{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/return_refinement_arg_expr_err.yx"}
+{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/return_refinement_multi_arg_literal_err.yx"}
+{"check":{"diagnostics":[["E2031","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/return_refinement_multi_arg_predicate_err.yx",17]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/return_refinement_multi_arg_predicate_err.yx"}
+{"check":{"diagnostics":[["E1001","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/return_refinement_undeclared_var_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/return_refinement_undeclared_var_err.yx"}
+{"check":{"diagnostics":[["E4018","",0]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/return_refinement_violated_err.yx"}
+{"check":{"diagnostics":[["E2010","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/shadow_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/shadow_err.yx"}
+{"check":{"diagnostics":[["E2013","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/shadowing_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/shadowing_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/spawn_body_type_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/spawn_body_type_err.yx"}
+{"check":{"diagnostics":[["E2018","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/std_mut_during_borrow_err.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/std_mut_during_borrow_err.yx"}
+{"check":{"diagnostics":[["E2014","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/struct_nested_move_field_err.yx",19]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/struct_nested_move_field_err.yx"}
+{"check":{"diagnostics":[["E1105","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/sum_type_field_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/sum_type_field_err.yx"}
+{"check":{"diagnostics":[["E1012","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/tail_expr_mismatch_with_stmts_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/tail_expr_mismatch_with_stmts_err.yx"}
+{"check":{"diagnostics":[["E1012","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/tail_expr_type_mismatch_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/tail_expr_type_mismatch_err.yx"}
+{"check":{"diagnostics":[["E4021","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/termination_unproven_err.yx",22]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/termination_unproven_err.yx"}
+{"check":{"diagnostics":[["W1004","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/top_level_index_oob.yx",13],["W1004","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/top_level_index_oob.yx",14]],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/top_level_index_oob.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] Array index out of bounds: valid range is 0..3, found 5 (i)","     │        ^","  15 │ print(a[i])","  at __yx_module_init (E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\top_level_index_oob.yx:15:8)"," --> E:\\git\\YaoXiang\\tests\\yaoxiang\\06-compile-errors\\top_level_index_oob.yx:15:8","Runtime error","help: Ensure the index is within the array bounds","stack trace:"],"stdout":[]}}
+{"check":{"diagnostics":[["E1071","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/type_def_in_local_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/type_def_in_local_err.yx"}
+{"check":{"diagnostics":[["E1003","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/unknown_type_in_field_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/unknown_type_in_field_err.yx"}
+{"check":{"diagnostics":[["E1003","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/unknown_type_in_param_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/unknown_type_in_param_err.yx"}
+{"check":{"diagnostics":[["E2014","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/use_after_move_branch_err.yx",25]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/use_after_move_branch_err.yx"}
+{"check":{"diagnostics":[["E2014","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/use_after_move_field_err.yx",17]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/use_after_move_field_err.yx"}
+{"check":{"diagnostics":[["E1003","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/value_name_as_type_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/value_name_as_type_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/while_assign_tail_is_void_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/while_assign_tail_is_void_err.yx"}
+{"check":{"diagnostics":[["E1002","E:/git/YaoXiang/tests/yaoxiang/06-compile-errors/while_body_type_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/while_body_type_err.yx"}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/auto_borrow.yx","run":{"exit":0,"stderr":[],"stdout":["3.0"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/borrow_conflict_basic.yx","run":{"exit":0,"stderr":[],"stdout":["1.0","struct@<ptr>"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/closure_concurrency.yx","run":{"exit":0,"stderr":[],"stdout":["(200, 300)"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_autoborrow.yx","run":{"exit":0,"stderr":[],"stdout":["25.0"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_concurrency.yx","run":{"exit":0,"stderr":[],"stdout":["arc(100)"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_lifetime.yx","run":{"exit":0,"stderr":[],"stdout":["1.0"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/compare_rust_side_by_side.yx","run":{"exit":0,"stderr":[],"stdout":["3.0"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/complex_data_structure.yx","run":{"exit":0,"stderr":[],"stdout":["60"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/error_move_after_use.yx","run":{"exit":0,"stderr":[],"stdout":["42"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/linked_list.yx","run":{"exit":0,"stderr":[],"stdout":["30"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/resource_raii.yx","run":{"exit":0,"stderr":[],"stdout":["closing file","opening file"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/spawn_pipeline.yx","run":{"exit":0,"stderr":[],"stdout":["30","Alice","Beijing"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/token_view_pattern.yx","run":{"exit":0,"stderr":[],"stdout":["42"]}}
+{"expectation":"behavior","file":"tests/yaoxiang/99-demos/tree_structure.yx","run":{"exit":0,"stderr":[],"stdout":["30"]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/cross-file-method/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[["E4018","",0],["W1001","E:/git/YaoXiang/tests/yaoxiang-multifile/proof-obligation-honored/main.yx",15],["W1002","E:/git/YaoXiang/tests/yaoxiang-multifile/proof-obligation-honored/main.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/proof-obligation-honored/main.yx"}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/subdirectory-module/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[["E1001","E:/git/YaoXiang/tests/yaoxiang-multifile/type-error-in-lib/lib.yx",2]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/type-error-in-lib/main.yx"}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/use-constant/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/use-type-and-function/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}

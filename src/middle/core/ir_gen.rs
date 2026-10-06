@@ -947,7 +947,7 @@ impl AstToIrGenerator {
     ///
     /// 供 `test_release_plan_spans_consumed` 与 P4 的 D20（PlanId 迁移）观测——
     /// 与 `typecheck::TypeCheckResult.release_plan.drops` 的键集做差集比对。
-    pub(crate) fn release_plan_consumed_spans(&self) -> &std::collections::HashSet<Span> {
+    pub fn release_plan_consumed_spans(&self) -> &std::collections::HashSet<Span> {
         &self.release_plan_consumed
     }
 
