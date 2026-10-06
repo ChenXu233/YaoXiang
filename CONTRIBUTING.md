@@ -1,80 +1,83 @@
-# Contributing Guide / 贡献指南
+# 贡献指南
 
-> Thank you for your interest in YaoXiang! We welcome contributions of all kinds.
 > 感谢您对 YaoXiang 项目的兴趣！我们欢迎各种形式的贡献。
 
----
-
-## Table of Contents / 目录
-
-- [Ways to Contribute / 贡献方式](#ways-to-contribute--贡献方式)
-- [Getting Started / 快速开始](#getting-started--快速开始)
-- [Submitting Changes / 提交流程](#submitting-changes--提交流程)
-- [RFC Process / 设计提案流程](#rfc-process--设计提案流程)
-- [Code Standards / 代码规范](#code-standards--代码规范)
-- [Code Review / 代码审查](#code-review--代码审查)
-- [Community Resources / 社区资源](#community-resources--社区资源)
-- [Code of Conduct / 行为准则](#code-of-conduct--行为准则)
+> 🌐 **语言** | [English](docs/gh/CONTRIBUTING.en.md)
 
 ---
 
-## Ways to Contribute / 贡献方式
+## 目录
 
-| English | 中文 |
-|---------|------|
-| Report bugs in GitHub Issues | 在 GitHub Issues 中报告问题 |
-| Propose new features or designs | 功能建议或设计讨论 |
-| Write or improve documentation | 改进文档或撰写教程 |
-| Submit code fixes or new features | 修复问题或实现新功能 |
-| Help with design (logo, UI, etc.) | 语言设计、Logo、UI |
+- [贡献方式](#贡献方式)
+- [快速开始](#快速开始)
+- [提交流程](#提交流程)
+- [设计提案流程（RFC）](#设计提案流程rfc)
+- [代码放置与变更规程](#代码放置与变更规程)
+- [代码规范](#代码规范)
+- [文档更新检查清单](#文档更新检查清单)
+- [贡献者许可协议（CLA）](#贡献者许可协议cla)
+- [代码审查](#代码审查)
+- [社区资源](#社区资源)
+- [行为准则](#行为准则)
 
 ---
 
-## Getting Started / 快速开始
+## 贡献方式
 
-### Prerequisites / 环境准备
+| 方式 |
+| --- |
+| 在 GitHub Issues 中报告问题 |
+| 功能建议或设计讨论 |
+| 改进文档或撰写教程 |
+| 修复问题或实现新功能 |
+| 语言设计、Logo、UI |
+
+---
+
+## 快速开始
+
+### 环境准备
 
 ```bash
-# Install Rust (recommended: rustup) / 安装 Rust（建议使用 rustup）
+# 安装 Rust（建议使用 rustup）
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Clone the repository / 克隆项目
+# 克隆项目
 git clone https://github.com/yourusername/yaoxiang.git
 cd yaoxiang
 
-# Build the project / 构建项目
+# 构建项目
 cargo build --release
 
-# Run tests / 运行测试
+# 运行测试
 cargo test
 ```
 
-### Code Style / 代码风格
+### 代码风格
 
 ```bash
-# Format code / 格式化代码
+# 格式化代码
 cargo fmt
 
-# Type checking / 类型检查
+# 类型检查
 cargo check
 
-# Run all checks / 运行所有检查
+# 运行所有检查
 cargo clippy
 ```
 
 ---
 
-## Submitting Changes / 提交流程
+## 提交流程
 
-### 1. Create a Branch / 创建分支
+### 1. 创建分支
 
 ```bash
 git checkout -b feature/your-feature-name
 ```
 
-### 2. Commit Convention / 提交规范
+### 2. 提交规范
 
-Follow the [commit convention](docs/src/dev/commit-convention.md):
 遵循 [提交规范](docs/src/dev/commit-convention.md)：
 
 ```
@@ -85,27 +88,19 @@ Follow the [commit convention](docs/src/dev/commit-convention.md):
 [optional footer]
 ```
 
-**Types / 类型**：
+**类型**：
 
-| Type | English | 中文 |
-|------|---------|------|
-| `feat` | New feature | 新功能 |
-| `fix` | Bug fix | Bug 修复 |
-| `docs` | Documentation changes | 文档更新 |
-| `style` | Code formatting (no functional changes) | 代码格式（不影响功能） |
-| `refactor` | Code refactoring | 重构代码 |
-| `test` | Add or modify tests | 添加测试 |
-| `chore` | Build tool or auxiliary changes | 构建工具或辅助功能更新 |
+| Type | 含义 |
+|------|------|
+| `feat` | 新功能 |
+| `fix` | Bug 修复 |
+| `docs` | 文档更新 |
+| `style` | 代码格式（不影响功能） |
+| `refactor` | 重构代码 |
+| `test` | 添加测试 |
+| `chore` | 构建工具或辅助功能更新 |
 
-**Examples / 示例**：
-
-```
-feat(frontend): Add type inference feature
-
-Implemented basic polymorphic type inference algorithm.
-
-Closes #123
-```
+**示例**：
 
 ```
 feat(frontend): 添加类型推断功能
@@ -115,46 +110,35 @@ feat(frontend): 添加类型推断功能
 Closes #123
 ```
 
-### 3. Submit PR / 提交 PR
+### 3. 提交 PR
 
-1. Push your branch: `git push origin feature/your-feature-name`
-2. 推送分支：`git push origin feature/your-feature-name`
-3. Visit GitHub to create a Pull Request
-4. 访问 GitHub 创建 Pull Request
-5. Fill in the PR template
-6. 填写 PR 模板
-7. Wait for code review
-8. 等待代码审查
+1. 推送分支：`git push origin feature/your-feature-name`
+2. 访问 GitHub 创建 Pull Request
+3. 填写 PR 模板
+4. 等待代码审查
 
 ---
 
-## RFC Process / 设计提案流程
+## 设计提案流程（RFC）
 
-### Submit an RFC / 提交 RFC
+### 提交 RFC
 
-For new features or major changes, please submit an RFC first:
 对于新功能或重大变更，请先提交 RFC：
 
-1. Read the [RFC Template](docs/src/rfc/RFC_TEMPLATE.md)
-2. 阅读 [RFC 模板](docs/src/rfc/RFC_TEMPLATE.md)
-3. Reference the [Full Example](docs/src/rfc/EXAMPLE_full_feature_proposal.md)
-4. 参考 [完整示例](docs/src/rfc/EXAMPLE_full_feature_proposal.md)
-5. Create a new RFC file in `docs/src/rfc/`
-6. 在 `docs/src/rfc/` 目录创建新 RFC 文件
-7. Set status to "Draft" (草案) or "Review" (审核中)
-8. 状态设为 "草案" 或 "审核中"
-9. Submit a PR for discussion
-10. 提交 PR 进行讨论
+1. 阅读 [RFC 模板](docs/src/rfc/RFC_TEMPLATE.md)
+2. 参考 [完整示例](docs/src/rfc/EXAMPLE_full_feature_proposal.md)
+3. 在 `docs/src/rfc/` 目录创建新 RFC 文件
+4. 状态设为 "草案" 或 "审核中"
+5. 提交 PR 进行讨论
 
-### RFC Lifecycle / RFC 状态流转
+### RFC 状态流转
 
 ```
 Draft (草案) → Review (审核中) → Accepted (已接受) → accepted/
-                                   → Rejected (已拒绝) → stays in rfc/
+                                 → Rejected (已拒绝) → stays in rfc/
 ```
 
-See [RFC Lifecycle](docs/src/rfc/RFC_TEMPLATE.md#lifecycle) for details.
-详见 [RFC 生命周期](docs/src/rfc/RFC_TEMPLATE.md#生命周期与归宿)。
+详见 [RFC 模板](docs/src/rfc/RFC_TEMPLATE.md)。
 
 ### RFC 实现与文档更新
 
@@ -167,18 +151,18 @@ See [RFC Lifecycle](docs/src/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 
 ---
 
-## 代码放置与变更规程 / Code Placement & Change Protocol
+## 代码放置与变更规程
 
 > 本节是**强制规程**，适用于所有代码变更，尤其是编译器架构重构（[RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md)）期间。
 > 动工前必读 [实现者手册 HOWTO.md](docs/src/dev/HOWTO.md)（自检表 + 补丁判定）；规则本体见 [coding-rules.md](docs/src/dev/coding-rules.md)。
 
-### 三条禁令 / Three Prohibitions
+### 三条禁令
 
 1. **不得生造** — 新增 `pub` 类型 / 枚举 / 常量表前，必须证明它与既有概念不重复（判据 A–D 见 coding-rules：职责重叠、调用点不足、需要消歧别名、靠同义词表弥合，任一命中即违规）
 2. **不得职责累积** — 一个模块只承担一类职责；要加新职责就新建模块或搬走既有职责。不设行数门禁，职责判定靠人工（这正是它不能被机器替代的原因）
 3. **该重构不补丁** — 命中以下任一条即停工走设计文档流程：同一行为需 ≥2 处复制；新增"第 N 个入口"而非登记进声明式阶段表；一次修改要同步改 ≥3 处同义映射
 
-### 决策程序 / Decision Procedure (D0–D4)
+### 决策程序（D0–D4）
 
 每次改动按序过五道闸（每道是可判定的布尔条件，命中即止；全文见 coding-rules 第二部分）：
 
@@ -190,7 +174,7 @@ See [RFC Lifecycle](docs/src/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 | D3 | ≥2 处复制 / 新增入口 / ≥3 处同义映射？ | 命中 → ⛔ 停工走设计流程；皆否 → 允许局部补丁 + 回归测试 |
 | D4 | 新增代码属于目标模块**已有的职责类别**吗？（职责表见 [01-routing.md](docs/src/dev/architecture/01-routing.md)） | 第 2 类及以上 → ⛔ 新建模块 |
 
-### 红线 / Hard Rules (review 必打回)
+### 红线（review 必打回）
 
 - 不看的代码不改：没打开文件、没 grep 过引用点，不许动
 - 核心功能不留 `todo!()` / "Not implemented yet" / 无限期"独立 issue"
@@ -199,31 +183,31 @@ See [RFC Lifecycle](docs/src/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 
 ---
 
-## Code Standards / 代码规范
+## 代码规范
 
-### Rust Code / Rust 代码
+### Rust 代码
 
-- Follow `rustfmt` default formatting / 遵循 `rustfmt` 默认格式
-- Use `clippy` for linting / 使用 `clippy` 进行静态检查
-- Add appropriate comments and documentation / 添加适当的注释和文档
-- Write rustdoc for public APIs / 为公开 API 编写 rustdoc
+- 遵循 `rustfmt` 默认格式
+- 使用 `clippy` 进行静态检查
+- 添加适当的注释和文档
+- 为公开 API 编写 rustdoc
 
-### Documentation / 文档
+### 文档
 
-- Use Chinese headings / 使用中文标题
-- Mark code blocks with language / 代码块标注语言
-- Keep terminology consistent / 术语保持一致
-- Follow [Documentation Maintenance](docs/maintenance/MAINTENANCE.md)
+- 使用中文标题
+- 代码块标注语言
+- 术语保持一致
+- 遵循 [文档规则](docs/src/dev/docs-rules.md)
 
-### Tests / 测试
+### 测试
 
-- Add unit tests for new features / 为新功能添加单元测试
-- Update integration tests if needed / 更新集成测试（如果需要）
-- Ensure all tests pass / 确保所有测试通过
+- 为新功能添加单元测试
+- 更新集成测试（如果需要）
+- 确保所有测试通过
 
 ---
 
-## Documentation Checklist / 文档更新检查清单
+## 文档更新检查清单
 
 > 每个 PR 在提交前必须问自己一个问题：**"这个改动是否需要更新文档？"**
 >
@@ -265,66 +249,61 @@ See [RFC Lifecycle](docs/src/rfc/RFC_TEMPLATE.md#lifecycle) for details.
 
 > **注意**：如果选择了"影响文档但未更新"，CI 会 block 并要求补充理由。
 
-## Contributor License Agreement / 贡献者许可协议
+---
 
-Before your first Pull Request can be merged, you must sign our [Contributor License Agreement (CLA)](CLA.md).
-在你的第一个 Pull Request 被合并之前，你需要签署我们的[贡献者许可协议 (CLA)](CLA.md)。
+## 贡献者许可协议（CLA）
 
-The CLA Assistant bot will automatically comment on your PR with instructions.
+在你的第一个 Pull Request 被合并之前，你需要签署我们的[贡献者许可协议（CLA）](CLA.md)。
+
 CLA Assistant bot 会自动在你的 PR 下留言，引导你完成签署。
 
-**What the CLA covers / 协议内容**：
+**CLA 覆盖的内容**：
 
-| English | 中文 |
-|---------|------|
-| Copyright license to use your contributions | 授权项目使用你的贡献 |
-| Patent license for any patents your contribution may cover | 授权项目使用你的贡献涉及的专利 |
-| Confirmation that your work is original and does not infringe third-party rights | 确认你的贡献是原创且不侵犯第三方权利 |
-
----
-
-## Code Review / 代码审查
-
-### Review Checklist / 审查要点
-
-| English | 中文 |
-|---------|------|
-| Code is functionally correct | 代码功能正确 |
-| Follows code standards | 符合代码规范 |
-| Has appropriate tests | 有适当的测试 |
-| Documentation is updated (see [Documentation Checklist](#documentation-checklist--文档更新检查清单)) | 文档已更新（参见[文档更新检查清单](#documentation-checklist--文档更新检查清单)） |
-| No performance regression | 没有引入性能回退 |
-
-### Responding to Feedback / 响应反馈
-
-| English | 中文 |
-|---------|------|
-| Reply to review comments in a timely manner | 及时回复审查意见 |
-| Explain your design decisions | 解释您的设计决策 |
-| Be open to reasonable suggestions | 愿意接受合理的建议 |
+| 内容 |
+| --- |
+| 授权项目使用你的贡献的版权许可 |
+| 授权你的贡献可能涉及的专利许可 |
+| 确认你的作品是原创的，且不侵犯第三方权利 |
 
 ---
 
-## Community Resources / 社区资源
+## 代码审查
 
-| English | 中文 |
-|---------|------|
-| GitHub Issues: Report bugs | GitHub Issues: 报告问题 |
-| GitHub Discussions: Community chat | GitHub Discussions: 讨论交流 |
-| Project Documentation | 项目文档 |
+### 审查要点
+
+| 要点 |
+| --- |
+| 代码功能正确 |
+| 符合代码规范 |
+| 有适当的测试 |
+| 文档已更新（参见[文档更新检查清单](#文档更新检查清单)） |
+| 没有引入性能回退 |
+
+### 响应反馈
+
+| 做法 |
+| --- |
+| 及时回复审查意见 |
+| 解释您的设计决策 |
+| 愿意接受合理的建议 |
 
 ---
 
-## Code of Conduct / 行为准则
+## 社区资源
 
-This project follows our [Code of Conduct](CODE_OF_CONDUCT.md).
-Please be respectful and friendly when contributing to our community.
+- GitHub Issues：报告问题
+- GitHub Discussions：讨论交流
+- 项目文档
+
+---
+
+## 行为准则
 
 本项目遵循我们的[行为准则](CODE_OF_CONDUCT.md)。
 贡献社区时请保持尊重和友善。
 
 ---
 
-> Thank you for your contribution! / 再次感谢您的贡献！
+> 再次感谢您的贡献！
 >
-> For questions, feel free to discuss in GitHub Discussions. / 如有问题，欢迎在 GitHub Discussions 中讨论。
+> 如有问题，欢迎在 GitHub Discussions 中讨论。

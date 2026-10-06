@@ -204,7 +204,7 @@ pre-commit run --all-files
 
 ## Contributing
 
-Contributions are welcome! Please read the [Contribution Guide](CONTRIBUTING.md).
+Contributions are welcome! Please read the [Contribution Guide](CONTRIBUTING.en.md).
 
 ## Community
 
