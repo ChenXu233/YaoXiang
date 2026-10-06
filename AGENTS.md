@@ -16,7 +16,7 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 
 ```bash
 cargo fmt                          # 格式化（提交前必跑）
-cargo clippy --all --all-features -- -D warnings
+cargo clippy --all --all-features --all-targets -- -D warnings
 cargo test                         # 测试；测试数只许增不许减
 python scripts/rfc/check_tracking.py   # RFC 状态一致性
 ```

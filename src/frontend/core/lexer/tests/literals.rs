@@ -60,8 +60,10 @@ fn test_int_binary_underscore() {
 
 #[test]
 fn test_float_simple() {
-    let tokens = tokenize("3.14").unwrap();
-    assert!(matches!(tokens[0].kind, TokenKind::FloatLiteral(v) if (v - 3.14).abs() < 0.001));
+    // 2.5 而非 3.14：3.14 近似 f64::consts::PI，触发 clippy approx_constant；
+    // 本测语义是「词法器把该字面量识别为等值浮点」，不能换成 PI 常量。
+    let tokens = tokenize("2.5").unwrap();
+    assert!(matches!(tokens[0].kind, TokenKind::FloatLiteral(v) if (v - 2.5).abs() < 0.001));
 }
 
 #[test]
