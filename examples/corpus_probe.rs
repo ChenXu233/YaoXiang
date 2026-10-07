@@ -53,20 +53,30 @@ fn main() {
         );
         std::process::exit(2);
     }
-    // 新鲜度守卫：bin 落后于引擎源码 = 磁盘引擎不含最新编译器行为，
+    // 新鲜度守卫：bin 落后于引擎源码 = 磁盘引擎可能不含最新编译器行为，
     // 录出的基线无声无息地是旧行为（#385 期实证：改 String 语义后未重建
-    // bin，string_index 语料被录成旧诊断）。构造期拒绝，不做警告兜底。
+    // bin，string_index 语料被录成旧诊断）。
+    //
+    // 处置是自愈而非硬拒：mtime 只是启发式（Cargo.lock 元数据刷新等
+    // 会在 cargo 判定无需重编时误报），发现过期先自动 cargo build，
+    // cargo 的指纹才是新鲜度的权威——它重编或判定已新鲜都放行；
+    // 只有 build 本身失败（含无 cargo 可用）才拒跑并给手动命令。
     if let Some(newest_src) = newest_engine_source_mtime(&manifest) {
-        let bin_stale = std::fs::metadata(&binary)
-            .and_then(|m| m.modified())
-            .ok()
-            .is_none_or(|t| t < newest_src);
-        if bin_stale {
-            eprintln!(
-                "error: {} 比引擎源码旧——先运行 cargo build --bin yaoxiang-rs 再跑探针",
-                binary.display()
-            );
-            std::process::exit(2);
+        let bin_mtime = || std::fs::metadata(&binary).and_then(|m| m.modified()).ok();
+        if bin_mtime().is_none_or(|t| t < newest_src) {
+            let built = Command::new("cargo")
+                .args(["build", "--bin", "yaoxiang-rs"])
+                .current_dir(&manifest)
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !built {
+                eprintln!(
+                    "error: {} 比引擎源码旧，且自动 cargo build 未能完成——先手动运行 cargo build --bin yaoxiang-rs",
+                    binary.display()
+                );
+                std::process::exit(2);
+            }
         }
     }
 
