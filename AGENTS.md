@@ -27,6 +27,20 @@ cargo run --quiet --example corpus_probe > tests/baselines/corpus-parity.jsonl  
 
 提交与 PR 规范：`docs/src/dev/commit-convention.md`；PR 模板含“职责归属与决策程序”必填块（D0–D4），写不出权威源模块名就是没查，review 会打回。
 
+## 推送到 dev 之后
+
+`dev` 上挂着自动翻译（`.github/workflows/auto-translate.yml`）：**任何改动
+`docs/src/**/*.md` 的 push 都会让 bot 追加一个 `:pencil: docs: auto-translate documentation`
+提交并回推 dev**。于是本地立刻落后 1 个提交，下一次 `git push` 报
+`non-fast-forward`——**这不是并行开发流**。确认与处理：
+
+```bash
+git log --oneline dev..origin/dev   # 作者是 github-actions[bot] 即是它
+git pull --rebase origin dev        # 与对端无冲突（merge-tree 干净）；已应用的补丁会被自动丢弃
+```
+
+推送后核对门禁：`gh run list --limit 5`（push 到 dev 会拉起 `ci.yml` 与 `docs-deploy.yml`）。
+
 ## 红线（review 必打回）
 
 - 不看代码就改：没打开文件、没 grep 过引用点，不许动
