@@ -183,7 +183,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | 二级 | 三级 | 前置 | 验收 |
 | --- | --- | --- | --- |
 | 4.1 声明式阶段表 | 4.1.1 `stage.rs`（`Stage` 变体 + `Stage::ALL` + `StageScope`）（**2026-10-07 已完成**） | P0 | `test_program_stage_coverage` |
-| | 4.1.2 `program.rs` / `unit.rs` | 4.1.1 | 同上 |
+| | 4.1.2 `program.rs` / `unit.rs`（**2026-10-07 已完成**） | 4.1.1 | 同上 |
 | | 4.1.3 `Pipeline::run` 改走 Driver（`pipeline.rs:141-227`） | 4.1.2 | **单文件诊断集与退出码逐字节相同** |
 | | 4.1.4 阶段覆盖断言 | 4.1.3 | C2 |
 | | 4.1.5 全语料 zero-diff | 4.1.4 | 诊断/退出码/stdout 全 zero-diff（293 语料） |

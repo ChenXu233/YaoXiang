@@ -4,9 +4,13 @@
 //! `middle`（L3）/ `backends`（L4）的接口；**L2/L3/L4 不得反向
 //! `use crate::driver`**，由 check-module-boundary 门禁拦截。
 
+pub mod program;
 pub mod stage;
+pub mod unit;
 
+pub use program::{Aggregation, Program, ProgramKind};
 pub use stage::{Stage, StageScope};
+pub use unit::Unit;
 
 #[cfg(test)]
 mod tests;
