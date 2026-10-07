@@ -45,8 +45,10 @@ jobs:
             tar xzf /tmp/z3-wasm.tar.gz -C .z3/z3-4.16.0-wasm
             echo "Z3 wasm 已就位：$(du -sh .z3/z3-4.16.0-wasm | cut -f1)"
           else
-            # 取不到就降级，但必须显式告警：静默降级正是这个仓库踩过的坑
-            echo "::warning::Z3 wasm 构件下载失败（$URL）——本次构建无 Z3"
+            # #435：无 Z3 的 wasm 形态不受支持（语言核心功能残缺）——直接失败，
+            # 不再降级（build.rs 也会 panic 拦截，此处提前给出可读错误）
+            echo "::error::Z3 wasm 构件下载失败（$URL）——wasm 构建必须带 Z3（#435）"
+            exit 1
           fi
 
       - name: Verify Z3 wasm
@@ -55,8 +57,8 @@ jobs:
             echo "Z3 wasm found"
             echo "### Z3 wasm: 已链接" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "::warning::未找到 .z3/z3-4.16.0-wasm/lib/libz3.a，本次 wasm 构建不含 Z3"
-            echo "### ⚠ Z3 wasm: 缺失（构建未含 Z3）" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::未找到 .z3/z3-4.16.0-wasm/lib/libz3.a——wasm 构建必须带 Z3（#435）"
+            exit 1
           fi
 
       - name: Cache cargo
@@ -73,6 +75,23 @@ jobs:
 
       - name: Build Wasm
         run: cd wasm && wasm-pack build --target web --out-name yaoxiang --out-dir ../pkg
+
+      # #435：wasm 形态 SMT 端到端实证——Z3 必须在 wasm 里真实求解，
+      # 而非「库链了但没人用」的静默空链（历史事故形态：cfg 排除下 extern
+      # 零引用，静态库不被拉取，Verify 步照样绿）。断言完整 solve 路径
+      # （DeclareConst + 比较断言 + CheckSat + Unsat 判定）的返回签名。
+      - name: SMT end-to-end proof (Z3 alive in wasm)
+        run: |
+          cd wasm && wasm-pack build --dev --target nodejs --out-name yaoxiang --out-dir ../target/pkg-smt-check
+          node -e "
+            const yx = require('../target/pkg-smt-check/yaoxiang.js');
+            const r = yx.test_smt();
+            if (r !== 'unsat (z3 alive)') {
+              console.error('SMT 实证失败：期望 unsat (z3 alive)，实际', JSON.stringify(r));
+              process.exit(1);
+            }
+            console.log('SMT 实证通过：Z3 在 wasm 下真实求解（unsat 判定正确）');
+          "
 
       - name: Package wasm
         run: cd pkg && zip -r ../yaoxiang-wasm.zip .

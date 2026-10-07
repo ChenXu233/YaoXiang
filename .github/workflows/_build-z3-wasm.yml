@@ -155,12 +155,39 @@ jobs:
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v16
         with:
-          version: latest
+          # pin 实证版本（#435）：wasm EH 配方（-fwasm-exceptions）+ sysroot
+          # 库变体命名都随 Emscripten 版本变，latest 漂移会无声打破资产兼容性
+          version: '6.0.11'
+
+      # #435 实证定稿的 wasm 构建补丁（两行 sed，CI 可复现）：
+      # 1. check_link_atomic 的 try_compile 在 -fwasm-exceptions 下假阴性
+      #    （手工实证 atomic 编译链接正常）——旁路为 WARNING + 置真
+      # 2. Z3_SINGLE_THREADED 下 cmake 仍无条件链 Threads::Threads（Z3 cmake
+      #    缺陷），Emscripten 无此目标——剔除
+      - name: Patch Z3 cmake for wasm
+        run: |
+          sed -i 's|message(FATAL_ERROR "Host compiler must support std::atomic!")|message(WARNING "atomic check bypassed for wasm")\n  set(BUILTIN_ATOMIC TRUE)|' \
+            z3-src/cmake/check_link_atomic.cmake
+          python3 - <<'EOF'
+          import pathlib
+          p = pathlib.Path('z3-src/CMakeLists.txt')
+          t = p.read_text()
+          old = 'find_package(Threads)\nlist(APPEND Z3_DEPENDENT_LIBS Threads::Threads)'
+          new = 'if (NOT Z3_SINGLE_THREADED)\n  find_package(Threads)\n  list(APPEND Z3_DEPENDENT_LIBS Threads::Threads)\nendif()'
+          assert old in t, 'Threads 补丁锚点失配'
+          p.write_text(t.replace(old, new))
+          EOF
 
       - name: Configure Z3 with Emscripten
         run: |
           mkdir -p z3-build
           cd z3-build
+          # #435 实证定稿：-fwasm-exceptions（wasm 原生异常——Z3 求解内核的
+          # 控制流依赖 C++ 异常捕获；默认 SjLj 形态引入 invoke_* JS 运行时，
+          # wasm32-unknown-unknown 无该胶水层）；SINGLE_THREADED + POLLING_TIMER
+          # （wasm 单线程语义，免 Threads 依赖与计时线程）
+          export CXXFLAGS='-fwasm-exceptions'
+          export LDFLAGS='-fwasm-exceptions'
           emcmake cmake ../z3-src \
             -G Ninja \
             -DZ3_BUILD_LIBZ3_SHARED=OFF \
@@ -170,6 +197,8 @@ jobs:
             -DZ3_ENABLE_EXAMPLE_TARGETS=OFF \
             -DZ3_ENABLE_TRACING=OFF \
             -DZ3_USE_LIB_GMP=OFF \
+            -DZ3_SINGLE_THREADED=ON \
+            -DZ3_POLLING_TIMER=ON \
             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build Z3
@@ -182,6 +211,15 @@ jobs:
             find z3-build -name "libz3.a" -exec cp {} dist/lib/ \;
           cp z3-src/src/api/z3.h dist/include/
           cp z3-src/src/api/z3_api.h dist/include/ 2>/dev/null || true
+
+          # #435：wasm32-unknown-unknown 链接 Z3 还需要 Emscripten sysroot 运行时库
+          # （C++ 异常链 + 分配器 + musl + builtins）。名单与 build.rs link_z3_wasm
+          # 的断言一一对应——改一边必须同步另一边。
+          SYSROOT="$EMSDK/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten"
+          for lib in libc++-wasmexcept.a libc++abi-wasmexcept.a libunwind-wasmexcept.a \
+                     libemmalloc.a libc.a libclang_rt.builtins.a; do
+            cp "$SYSROOT/$lib" dist/lib/
+          done
 
           # 自检：产不出 libz3.a 就失败，不发残缺资产出去
           [ -s dist/lib/libz3.a ] || { echo "::error::libz3.a not produced"; exit 1; }
