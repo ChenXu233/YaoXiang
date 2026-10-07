@@ -4,6 +4,9 @@
 //! allowing the YaoXiang compiler + interpreter to run in the browser.
 
 use wasm_bindgen::prelude::*;
+
+// 裸导出带出（#435 观测口）：terminated 后 JS 直读内存的唯一通道。
+pub use yaoxiang::util::{shim_log_len, shim_log_ptr};
 use yaoxiang::backends::Executor;
 
 /// Initialize panic hook for better error messages in the browser console.
@@ -23,6 +26,38 @@ pub fn ping() -> String {
 pub fn test_compiler() -> String {
     let _compiler = yaoxiang::frontend::Compiler::new();
     "compiler created".to_string()
+}
+
+/// Test: SMT 求解器在 wasm 下真实可用（#435——wasm 形态必须带 Z3）
+///
+/// 构造 `x > 5 ∧ x < 3`（不可满足）送 Z3：返回 Unsat 证明求解器真在跑；
+/// 任何降级形态（solver 缺失 / stub / 假链接）都会得到不同结果。
+#[wasm_bindgen]
+pub fn test_smt() -> String {
+    use yaoxiang::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTExpr, SMTSort};
+    use yaoxiang::frontend::core::typecheck::proof::smt::backend::default_solver;
+
+    let Some(solver) = default_solver() else {
+        return "solver unavailable".to_string();
+    };
+    let commands = vec![
+        SMTCommand::DeclareConst("x".to_string(), SMTSort::Int),
+        SMTCommand::Assert(SMTExpr::App(
+            ">".to_string(),
+            vec![SMTExpr::Atom("x".to_string()), SMTExpr::Atom("5".to_string())],
+        )),
+        SMTCommand::Assert(SMTExpr::App(
+            "<".to_string(),
+            vec![SMTExpr::Atom("x".to_string()), SMTExpr::Atom("3".to_string())],
+        )),
+        SMTCommand::CheckSat,
+    ];
+    match solver.solve(&commands, 5000) {
+        yaoxiang::frontend::core::typecheck::proof::smt::ast::SMTResult::Unsat => {
+            "unsat (z3 alive)".to_string()
+        }
+        other => format!("unexpected: {:?}", other),
+    }
 }
 
 /// Test: compile only
