@@ -48,6 +48,12 @@ name = "formatter"
 path = "benches/formatter.rs"
 harness = false
 
+# WBS 2.3.3 冒烟基线：全语料编译耗时 + CLI 冷启动（解释吞吐在 benches/lib.rs hotpath 组）
+[[bench]]
+name = "pipeline"
+path = "benches/pipeline.rs"
+harness = false
+
 [dependencies]
 # 日志 - tracing
 tracing = { version = "0.1", default-features = false, features = ["std"] }
