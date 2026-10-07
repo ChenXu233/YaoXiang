@@ -22,6 +22,7 @@
 
 // Public modules
 pub mod backends;
+pub mod driver;
 pub mod formatter;
 pub mod frontend;
 #[cfg(not(target_arch = "wasm32"))]

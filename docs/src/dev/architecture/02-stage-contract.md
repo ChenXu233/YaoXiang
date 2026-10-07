@@ -362,8 +362,8 @@ pub enum Stage {
     DeadCodeAnalysis,   // 死代码族分析              Project
     ProofExecution,     // 证明函数编译期执行         PerModule
     GlobalSlotAlloc,    // 全局槽位分配              Project
-    Monomorphization,   // 单态化                    Project
     IrGeneration,       // AST → ModuleIR            PerModule
+    Monomorphization,   // 单态化                    Project
     Linking,            // 跨模块链接 / IR 合并       Project
 }
 
@@ -382,6 +382,15 @@ pub enum StageScope { PerModule, Project }
 **`StageScope` 的用途**：`PerModule`（逐编译单元跑一次）与 `Project`（项目级跑一次）这把「哪些阶段必须逐模块跑、哪些必须项目级跑一次」变成类型上的事实。`Project` 作用域的阶段在 `dispatch` 中被结构性地保证只跑一次——这消除了当前 `orchestrator.rs` 里「`allocate_global_slots` 到底该不该每个文件调一次」这类需要人推理的问题。
 
 **阶段表按拓扑序而非字母序排列**，因为失败传播依赖顺序。
+
+> **修订注记（P4 实施，2026-10-07）**：两处与初稿的偏差按实施证据修正——
+>
+> 1. `Monomorphization` 移到 `IrGeneration` **之后**：单态化消费 IR 产物
+>    （`Monomorphizer::monomorphize(&ir, …)`，pipeline.rs），初稿次序与数据流矛盾。
+> 2. Check 形态的阶段表按 `Stage::ALL` 拓扑序归一为 死代码 **先于** proof：
+>    `check_project` 现状是 proof 先于死代码执行，两者无数据依赖，诊断集相同
+>    （C2 集合语义），仅文件内诊断顺序归一。单文件路径（死代码内嵌 typecheck、
+>    先于 proof）本就符合 ALL 序，逐字节验收不受影响。
 
 ### 2. 义务账本：`Obligations` + `assert_drained()`
 
