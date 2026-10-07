@@ -95,7 +95,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 - [x] **2.1 IR 静态校验器**（3 个三级任务，2026-10-06 全部完成：verify.rs 双模式 + 7 不变量 + 语料跑绿，实测修复 ir_gen 三缺陷）
 - [x] **2.2 规范化快照**（2 个三级任务，2026-10-07 完成：normalize.rs + 204 快照入库 + 门禁 9.5 入 CI）
-- [ ] **2.3 语料差分**（3 个三级任务）
+- [x] **2.3 语料差分**（3 个三级任务，2026-10-07 全部完成）
 - [x] **2.4 漏洞专门判据**（3 个三级任务，2026-10-06 全部完成：2.4.1/2.4.3 随 P3 转绿，2.4.4 红态就位待 P4/D20）
 - [ ] **2.5 回归门禁**（1 个三级任务）
 
@@ -108,7 +108,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 2.2.2 快照入库 + 人工 review 流程（`src/middle/core/tests/snapshots/`）（**2026-10-07 已完成**：204 快照按语料相对路径镜像入库；更新流程 `UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored` + git diff review + 同 PR 入库，见 tests/snapshot.rs 文件头；篡改实测精准报红） | 2.2.1 | C1/C3/C5 |
 | 2.3 语料差分 | 2.3.1 差分框架 + 293 语料基线（**2026-10-06 已完成**：探针 `examples/corpus_probe.rs` + 基线 `tests/baselines/corpus-parity.jsonl`（322 条）+ 门禁 `check-corpus-parity.py` 入 CI（硬门禁）；归一化含指针形态 scrub，两次全量运行门禁自比零差分） | — | 诊断/退出码/stdout 逐项 |
 | | 2.3.2 **多文件语料层**（新建 `tests/yaoxiang-multifile/`，带 `yaoxiang.toml` 的项目夹具——决议 D48）（**2026-10-06 已完成**） | — | **无条件必做（D40），是 P4 唯一可执行的行为判据来源** |
-| | 2.3.3 C4 行为差分必覆盖清单（10 类语义）+ 性能基线（criterion 冒烟基准） | — | C2/C4/C5；性能基线供 P4/P7/P8 对比 |
+| | 2.3.3 C4 行为差分必覆盖清单（10 类语义）+ 性能基线（criterion 冒烟基准）（**2026-10-07 已完成**：10 类语义逐项核对全覆盖，26 代表文件 26/26 在 corpus-parity.jsonl 差分基线内；冒烟基准 `benches/pipeline.rs` 首测——全语料编译 17.6s / CLI 冷启动 169.7ms，解释吞吐 benches/lib.rs hotpath 组已有覆盖） | — | C2/C4/C5；性能基线供 P4/P7/P8 对比 |
 | 2.4 漏洞专门判据 | 2.4.1 `test_multifile_proof_obligation_not_dropped`（**2026-10-06 已完成：红态就位**，实测单文件 ["E4018"] vs compile_project []） | 2.3.2 | **必须先为红** |
 | | 2.4.3 `test_no_silent_pass_on_unproven`（**2026-10-06 已完成：红态就位**，触发源在 compile_project 下实测静默） | — | 拦 `checker.rs:5179/5318/5448` |
 | | 2.4.4 `test_release_plan_spans_consumed`（**2026-10-06 已完成：红态就位**，实测 168 文件 373 键未被消费——D20 契约缺陷实证，修契约归 P4/D20） | — | **无白名单，差集必须为空（D41）** |
@@ -124,6 +124,8 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 > - 比对规范化对 07 (code, file, line) 表的有意偏离（剔除 file/line、只比 error 码集）的理由写在 2.4.1 测试注释。
 >
 > 原 2.4.2（`test_program_stage_coverage`）与 2.4.5（`test_obligations_drained` 骨架）**移出 P2**：两者引用的 `Program` / `Obligations` 类型在 P4 才存在，P2 无法编译。前者即 P4 的 4.1.4（勿双重登记），后者的 `#[ignore]` 红骨架并入 4.3.1。
+>
+> **2.3.3 落地（2026-10-07）**：C4 必覆盖清单逐项核对（07 §143），10 类语义语料层全覆盖且均在 corpus-parity.jsonl 差分基线内（26 个代表文件 26/26 命中，grep 实证）——ref/borrow/move 05-ownership 全目录（ref_shared、borrow_immutable/mutable/return、move_basic、ownership_deep 等）、闭包捕获 closures + closure_arg_inference + spawn_capture、柯里化 curry_value_fix + curry_tail_expr、spawn 04-concurrency ×13、迭代器 for spawn_for 等 16 文件、和类型 sum_type_*+ pattern_or_guard + match_call_scrutinee、existential 强制点 interface_dynamic_dispatch（Vec(Animal) 存在类型异构包装触发 existential_coercions）+ interface_rebind_dispatch、`?`/Try 传播 question_propagation + option_try + try_methods + user_try_type、方法重载 method_overload（+ method_overload_ambiguous_err 在诊断差分面）、精化约束 Drop 序列 refined_* ×5 + 05-ownership 驱动 ReleasePlan（span 键契约另有 2.4.4 红判据常驻）。性能基线 `benches/pipeline.rs` 入库（07 §145 三冒烟之二）：`corpus_compile_frontend` 全语料编译首测 17.6s、`cli_cold_start_hello` 进程冷启动 169.7ms；解释吞吐由 benches/lib.rs hotpath 组（interp_fib_recursive_27 / interp_loop_steady_10m）已有覆盖，不重复建设。回归门禁 check-perf-regression.sh 归 P9 统一清单（2.5）。
 
 ### P3 修正确性漏洞（最小方案）
 
