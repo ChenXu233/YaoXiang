@@ -139,7 +139,6 @@ use crate::frontend::core::typecheck::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofResult, UnprovenReason,
 };
 use super::super::proof::smt::ast::{SMTExpr, SMTCommand, SMTSort, SMTResult};
-#[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::backend::Solver;
 
 /// 显式测度在递归回边上产生的**义务原料**（RFC-027a §义务生成）。
@@ -213,8 +212,7 @@ pub struct TerminationChecker {
     /// 求解器（持有所有权）——策略 1 秩函数 SMT 验证 + 显式测度义务判定
     ///
     /// RFC-027a T4：生产在 `checker.rs` 注入 `default_solver()`；未注入则为
-    /// `None`，SMT 相关路径整体不执行（wasm 下无 Z3，见 #376）。
-    #[cfg(not(target_arch = "wasm32"))]
+    /// `None`，SMT 相关路径整体不执行（wasm 自 #435 起同带 Z3）。
     solver: Option<Box<dyn Solver>>,
     /// 带精化标注的变量名集合——决定循环是否进**验证模式**（RFC-027 §7）
     ///
@@ -279,7 +277,6 @@ impl TerminationChecker {
     pub fn new() -> Self {
         Self {
             results: Vec::new(),
-            #[cfg(not(target_arch = "wasm32"))]
             solver: None,
             refined_vars: std::collections::HashSet::new(),
             measures: std::collections::HashMap::new(),
@@ -372,7 +369,6 @@ impl TerminationChecker {
     /// RFC-027a T4：终止检查器**持有**求解器而非借 `&'static`——后者迫使调用方
     /// 用 `Box::leak` 把 `default_solver()` 的 `Box<dyn Solver>` 变成静态引用，
     /// 泄漏虽小但无必要（计划 D3）。
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn with_solver_owned(
         mut self,
         solver: Box<dyn Solver>,
@@ -443,7 +439,6 @@ impl TerminationChecker {
     }
 
     /// 逐函数计算良基性判定。
-    #[cfg(not(target_arch = "wasm32"))]
     fn compute_well_foundedness(&self) -> std::collections::HashMap<String, MeasureVerdict> {
         use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 
@@ -509,15 +504,6 @@ impl TerminationChecker {
         out
     }
 
-    /// 逐函数计算良基性判定（wasm: 无 Z3，恒 `Unjudged`）。
-    #[cfg(target_arch = "wasm32")]
-    fn compute_well_foundedness(&self) -> std::collections::HashMap<String, MeasureVerdict> {
-        self.measures
-            .keys()
-            .map(|k| (k.clone(), MeasureVerdict::Unjudged))
-            .collect()
-    }
-
     /// 判定已生成的测度义务（RFC-027a §判定管线）
     ///
     /// 对每条义务构造 `not (m[形参:=实参] < m)` 送求解器：Unsat = 严格递减成立。
@@ -533,7 +519,6 @@ impl TerminationChecker {
     ///
     /// 取 `&self` 并返回 owned Vec，避开「借 `self.solver` 的同时写
     /// `self.measure_verdicts`」的借用冲突。
-    #[cfg(not(target_arch = "wasm32"))]
     fn compute_measure_verdicts(&self) -> Vec<MeasureVerdict> {
         use crate::frontend::core::types::const_data::ConstExpr;
 
@@ -583,12 +568,6 @@ impl TerminationChecker {
                 }
             })
             .collect()
-    }
-
-    /// wasm 无 Z3（#376）：义务一律不判定。
-    #[cfg(target_arch = "wasm32")]
-    fn compute_measure_verdicts(&self) -> Vec<MeasureVerdict> {
-        vec![MeasureVerdict::Unjudged; self.measure_obligations.len()]
     }
 
     // ==================== 语句遍历 ====================
@@ -933,7 +912,6 @@ impl TerminationChecker {
         // 旧缺陷 (b)：delta 恒 +1 且对 v 直接加，导致 m' = m + 1 恒不小于 m。
         // 现按 Direction 推导：Increasing（m = bound - v）用 Δm = δbound - δv，
         // Decreasing（m = v - bound）用 Δm = δv - δbound（见 verify_rank_candidate）。
-        #[cfg(not(target_arch = "wasm32"))]
         if self.solver.is_some() {
             if let Some(measure) = self.try_linear_rank_function(
                 &all_bounds,
@@ -1484,7 +1462,6 @@ impl TerminationChecker {
     /// `bounds` 是**未过滤**的边界集合（调用点传 `all_bounds`）：秩函数形状的
     /// 边界本来就在循环体内被改，不能按「循环不变量」剔除。健全性来自逐赋值
     /// 验证，而不是来自边界不变。
-    #[cfg(not(target_arch = "wasm32"))]
     fn try_linear_rank_function(
         &self,
         bounds: &[(String, (BoundOp, BoundExpr))],
@@ -1566,7 +1543,6 @@ impl TerminationChecker {
     /// - 该变量的取值取全部赋值（含守卫内）的**最不利一端**（δv 最小 / 最大）；
     /// - `δbound`：常量边界为 0；变量边界取全部赋值的最不利一端（含守卫内），
     ///   任一赋值位移未知则拒绝论证；未被赋值即循环不变量（δbound = 0）。
-    #[cfg(not(target_arch = "wasm32"))]
     fn verify_rank_candidate(
         &self,
         candidate: &LinearMeasure,

@@ -8,18 +8,14 @@
 //!   4. 证明函数调用（Phase 2.5）——识别 ConstExpr::Call 让 Pipeline 编译期执行
 
 use std::collections::HashMap;
-#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{LazyLock, Mutex};
 
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
 use crate::frontend::core::types::eval::evaluator::Evaluator;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::context::ProofContext;
-#[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::ast::SMTResult;
-#[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::backend::{default_solver, Solver};
-#[cfg(not(target_arch = "wasm32"))]
 use super::super::proof::smt::translate;
 use super::super::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofFunctionCall, ProofResult, UnprovenReason,
@@ -32,7 +28,6 @@ use super::super::proof::verdict::{
 /// `SMTResult::Unknown` 保守降级——`Solver` 契约（backend.rs）：未知一律
 /// 保守方向，由上层决定降级形态；此处上层即 checker 的 Unproven→诊断路径
 /// （E2031 族硬错误），诊断仍在、进程不崩（WBS 3.3.1，02 §改动清单）。
-#[cfg(not(target_arch = "wasm32"))]
 static SOLVER: LazyLock<Mutex<Option<Box<dyn Solver>>>> =
     LazyLock::new(|| Mutex::new(default_solver()));
 
@@ -40,7 +35,6 @@ static SOLVER: LazyLock<Mutex<Option<Box<dyn Solver>>>> =
 ///
 /// 抽出为独立函数以便单测——进程级单例无法安全模拟 Z3 缺失（并发测试共享
 /// 本静态量，置 None 会污染其他用例）。
-#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn solver_unavailable_result() -> SMTResult {
     SMTResult::Unknown {
         reason: "SMT 求解器不可用（Z3 未安装或初始化失败）".to_string(),
@@ -79,7 +73,6 @@ pub fn check_predicate(
         return ProofResult::Proved;
     }
     // 2b：SMT 蕴含——假设非空但不精确匹配
-    #[cfg(not(target_arch = "wasm32"))]
     if !ctx.assumptions.is_empty() {
         if let Some(result) = try_implication(ctx, constraint, bindings) {
             return result;
@@ -88,7 +81,6 @@ pub fn check_predicate(
 
     // === 第 3 级：SMT 求解 ===
     // SMT 翻译不支持 Call/If/Range 形式——跳过，直接进入第 4 级
-    #[cfg(not(target_arch = "wasm32"))]
     if !matches!(
         constraint,
         ConstExpr::Call { .. } | ConstExpr::If { .. } | ConstExpr::Range { .. }
@@ -139,7 +131,6 @@ fn try_direct_eval(
 /// 检查当前假设栈是否蕴含目标约束。复用 `translate_constraint`
 /// 将假设作为背景断言、目标取反送 Z3。unsat 表示假设蕴含目标。
 /// sat/unknown 时不宣称 Disproved——返回 None 让后续级别继续。
-#[cfg(not(target_arch = "wasm32"))]
 fn try_implication(
     ctx: &ProofContext<'_>,
     constraint: &ConstExpr,
@@ -173,7 +164,6 @@ fn try_implication(
 }
 
 /// 第 3 级：SMT 求解
-#[cfg(not(target_arch = "wasm32"))]
 fn try_smt_solve(
     ctx: &ProofContext<'_>,
     constraint: &ConstExpr,

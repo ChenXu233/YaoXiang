@@ -62,8 +62,8 @@ pub trait Solver: Send + std::fmt::Debug {
 /// 注意选择 `Option` 而非 `Result`：调用方的降级动作不做区分
 /// （无论初始化失败还是 unknown 都是保守方向），额外错误类型无收益。
 ///
-/// wasm32 下无 FFI 后端，返回 `None`（消费方走文本路径或保守降级）。
-#[cfg(not(target_arch = "wasm32"))]
+/// wasm32 同样有 FFI 后端（#435：libz3.a 经 build.rs 静态链接进 wasm 产物，
+/// Emscripten 预编译资产由 z3-wasm release 供给）——全平台统一走 Z3。
 pub fn default_solver() -> Option<Box<dyn Solver>> {
     match super::z3_backend::Z3Backend::new() {
         Ok(b) => Some(Box::new(b)),

@@ -18,7 +18,6 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 
 use crate::frontend::core::typecheck::proof::smt::ast::{SMTSort, SMTResult};
 use crate::frontend::core::typecheck::proof::smt::translate::translate_constraint;
-#[cfg(not(target_arch = "wasm32"))]
 use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
 
 // ── ReleasePlan ───────────────────────────────────────────
@@ -601,11 +600,6 @@ pub(crate) fn smt_cut(
     path_cond: &ConstExpr,
     loop_cond: &ConstExpr,
 ) -> bool {
-    // wasm 模式下 Z3 不可用，保守不切断（回边穿越）
-    #[cfg(target_arch = "wasm32")]
-    return false;
-
-    #[cfg(not(target_arch = "wasm32"))]
     {
         let conj = ConstExpr::BinOp {
             op: BinOp::And,
@@ -630,7 +624,7 @@ pub(crate) fn smt_cut(
         };
 
         matches!(backend.solve(&commands, 100), SMTResult::Unsat)
-    } // cfg(not(target_arch = "wasm32"))
+    }
 }
 
 /// 收集 ConstExpr 中出现的 NamedVar 及其 SMT 排序。
