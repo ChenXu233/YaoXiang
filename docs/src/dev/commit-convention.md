@@ -151,6 +151,7 @@
 | `package`   | `src/package/`   | 包管理器                           |
 | `util`      | `src/util/`      | 工具库：诊断、缓存、i18n           |
 | `proof`     | `src/frontend/core/typecheck/proof/` | 证明与验证支撑（RFC-039 终态提为顶层域） |
+| `driver`    | `src/driver/`    | L1 编排层：统一 Driver 与阶段契约（RFC-039 P4 建立） |
 
 ### 前端子模块
 

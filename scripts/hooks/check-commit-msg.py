@@ -37,7 +37,7 @@ VALID_EMOJIS = {
 VALID_SCOPES = {
     # 顶层模块
     "frontend", "middle", "backends", "std", "formatter",
-    "lsp", "package", "util", "proof",
+    "lsp", "package", "util", "proof", "driver",
     # 前端子模块
     "parser", "lexer", "typecheck", "types",
     # 中间层子模块
