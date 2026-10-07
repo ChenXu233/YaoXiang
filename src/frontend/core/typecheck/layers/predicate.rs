@@ -41,7 +41,7 @@ static SOLVER: LazyLock<Mutex<Option<Box<dyn Solver>>>> =
 /// 抽出为独立函数以便单测——进程级单例无法安全模拟 Z3 缺失（并发测试共享
 /// 本静态量，置 None 会污染其他用例）。
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn solver_unavailable_result() -> SMTResult {
+pub(super) fn solver_unavailable_result() -> SMTResult {
     SMTResult::Unknown {
         reason: "SMT 求解器不可用（Z3 未安装或初始化失败）".to_string(),
     }

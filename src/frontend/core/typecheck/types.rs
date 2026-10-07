@@ -28,10 +28,12 @@ pub struct TypeCheckResult {
     /// 证明函数调用（RFC-027 Phase 2.5: 需要在编译期执行的证明函数）
     ///
     /// 读取必须经 [`Self::proof_calls`] getter——消费端盘点与 P4 Obligations
-    /// 迁移的收口点（02-stage-contract §义务字段，WBS 3.1.1）。字段保留
-    /// pub(crate) 是因为全仓 11 处构造字面量（10 处在测试辅助函数）依赖
-    /// 可见性；全私有留待 Obligations 迁移时一并收口。
-    pub(crate) proof_calls: Vec<ProofFunctionCall>,
+    /// 迁移的收口点（02-stage-contract §义务字段，WBS 3.1.1）。
+    /// 可见性 pub(super)：typecheck 树内（checker/layers/tests）共享构造权
+    /// （同一生杀圈），crate 外只读 getter——#434 裁决 B 消解（pub(crate)
+    /// 泄漏计数回落），全私有需改写 11 处 struct 字面量（Rust 字面量要求
+    /// 含 base 填充在内的全字段可见），churn 与收益不匹配。
+    pub(super) proof_calls: Vec<ProofFunctionCall>,
     /// NLL 精确释放计划（所有权检查阶段产出 → IR 生成阶段消费）
     pub release_plan: crate::frontend::core::typecheck::layers::ownership::ReleasePlan,
     /// ref 逃逸分析结果（跨 spawn 使用的 ref 变量 → 选 Arc）

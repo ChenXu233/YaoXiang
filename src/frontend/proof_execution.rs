@@ -28,7 +28,7 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 ///
 /// 调用方契约：**仅在类型检查无错误时调用**（与 pipeline 的门控一致——
 /// 带病 AST 执行证明函数只会产出噪声诊断）。
-pub(crate) fn execute_proof_calls(
+pub(super) fn execute_proof_calls(
     proof_calls: &[ProofFunctionCall],
     ast: &Module,
     type_result: &TypeCheckResult,
@@ -69,7 +69,7 @@ pub(crate) fn execute_proof_calls(
 /// 执行单个证明函数（RFC-027 Phase 2.5）
 ///
 /// 优先使用 const 求值（约束表达式），回退到 IR/字节码管线（return 形式）
-pub(crate) fn execute_single_proof_fn(
+pub(super) fn execute_single_proof_fn(
     call: &ProofFunctionCall,
     ast: &Module,
     type_result: &TypeCheckResult,
