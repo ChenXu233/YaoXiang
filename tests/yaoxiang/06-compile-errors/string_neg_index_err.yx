@@ -1,7 +1,7 @@
 // 06-compile-errors/string_neg_index_err.yx
 // #385 定案 D3——String 下标接入统一的索引失败契约
 // expect: runtime-error E6003
-// 覆盖: type-system.md 索引失败契约（负索引 → E6003）+ #385
+// 覆盖: type-system.md §4.1.1 索引失败契约（负索引 → E6003）+ #385
 // 验证: s[-1] 在标量值下标语义下报越界 E6003；String 下标放开后
 //       与容器索引同契约，不走「不可索引」静态拒绝
 // 状态: ❌ 应运行失败

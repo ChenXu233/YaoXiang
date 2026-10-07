@@ -1,5 +1,5 @@
 // 02-type-system/string_index.yx
-// 覆盖: #385 定案 D1/D3——String 下标 s[i] 与长度/定位的标量值口径
+// 覆盖: type-system.md §4.1.1（索引失败契约 + String 索引口径）——#385 定案 D1/D3
 // 验证:
 //   - s[i] 产出单字符 String（与 chars()/substring 同表示，单字符统一 String）
 //   - len/index_of/substring/char_code/s[i] 全部 Unicode 标量值（码点）单位
