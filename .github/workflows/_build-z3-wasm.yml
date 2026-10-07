@@ -20,6 +20,34 @@ name: Build Z3 Wasm
 #
 # 是否需要重建由 upstream-check job 判定（比较仓库 pin 的版本与已发布资产），
 # 一致则 build job 直接跳过，不白烧 30 分钟 Emscripten 编译。
+#
+# ## 判据只看版本号，看不见配方——改配方必须 force=true
+#
+# upstream-check 比的是「仓库 pin 的 Z3_VERSION」与「已发布资产名里带出的版本」。
+# 于是**改了配方而 Z3_VERSION 没动**时（换 Emscripten 版本 / 改编译 flag / 改打包
+# 内容），已发布资产仍叫 z3-wasm-<版本>.tar.gz，判据判「一致」→ build job 直接跳过、
+# Release 上还是旧文件，而整个 run 的结论是**绿色**的。#435 实例：配方新增 sysroot
+# 6 库而版本没动，默认触发等于什么都没做（要点在 run 摘要的 should_build 上）。
+#
+# 改配方后重建一律带 force：
+#
+#   gh workflow run _build-z3-wasm.yml --ref <带新配方的 ref> -f force=true
+#
+# 注意 workflow_dispatch 跑的是**所选 ref 上的 workflow 文件**：新配方还没到那个 ref
+# 时从旧 ref 触发，重建出来的仍是旧资产。
+#
+# ## 与消费方的时序（只在 push 后才暴露）
+#
+# 消费方是 _build-wasm.yml 的「Download Z3 wasm (prebuilt from release)」步，它按固定
+# URL 取本 Release 的资产；build.rs 的 link_z3_wasm 再对资产里的 6 个 sysroot 库逐个
+# assert（缺一即 panic）。**配方变更与资产重建不在同一次 push 里生效**，顺序必须是：
+#
+#   1. 让新配方在远端 ref 上可用（推分支或推 dev）；
+#   2. force=true 重建，等它跑到「Verify published asset is downloadable」通过；
+#   3. 之后消费方（push dev 触发的 docs-deploy → _build-wasm）才会绿。
+#
+# 反例：直接先推 dev，docs-deploy 立刻拿到旧资产 → build.rs 缺库 panic（缺
+# libc++-wasmexcept.a 等）红一次。这不是失误，是该顺序本身决定的。
 
 on:
   workflow_dispatch:
