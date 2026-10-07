@@ -11,13 +11,23 @@ use std::hash::{Hash, Hasher};
 
 use super::ast::{SMTCommand, SMTExpr, SMTModel, SMTResult, SMTSort};
 
+/// 缓存条目上限（#375）：触顶整体清空。SMT 查询的局部性随编译阶段迁移，
+/// 全清是最简单的保守策略；命中率经 `cache_stats` 计数器观测
+/// （WBS 4.4.2 的「缓存命中率可观测」判据在此落地）。
+pub(crate) const CACHE_CAP: usize = 8192;
+
 /// Z3 后端——封装 Z3 context 和 solver 生命周期
 ///
 /// 内部持有 `super::z3_ffi::Z3_context` 裸指针，通过外部 Mutex 保证互斥访问。
-/// SMT 查询结果缓存在 `cache` 中（RefCell 实现内部可变性——solve() 保持 &self）。
+/// SMT 查询结果缓存在 `cache` 中（RefCell 实现内部可变性——solve() 保持 &self）；
+/// 缓存触顶整体清空（#375：无上限会随编译过程无界增长）。
 pub struct Z3Backend {
     ctx: super::z3_ffi::Z3_context,
     cache: RefCell<HashMap<u64, SMTResult>>,
+    /// 缓存命中计数（Mutex 串行化访问下 Cell 足够，与 cache 的 RefCell 同理）
+    cache_hits: std::cell::Cell<u64>,
+    /// 缓存未命中计数
+    cache_misses: std::cell::Cell<u64>,
 }
 
 // SAFETY: Z3Backend 通过 `Mutex` 访问，确保同一时刻只有一个线程使用 Z3 context。
@@ -82,6 +92,8 @@ impl Z3Backend {
             Ok(Z3Backend {
                 ctx,
                 cache: RefCell::new(HashMap::new()),
+                cache_hits: std::cell::Cell::new(0),
+                cache_misses: std::cell::Cell::new(0),
             })
         }
     }
@@ -100,8 +112,10 @@ impl Z3Backend {
 
         // 缓存命中——直接返回
         if let Some(cached) = self.cache.borrow().get(&cache_key) {
+            self.cache_hits.set(self.cache_hits.get() + 1);
             return cached.clone();
         }
+        self.cache_misses.set(self.cache_misses.get() + 1);
 
         let result = unsafe {
             let solver = super::z3_ffi::Z3_mk_solver(self.ctx);
@@ -175,9 +189,26 @@ impl Z3Backend {
             smt_result
         };
 
-        // 写入缓存
-        self.cache.borrow_mut().insert(cache_key, result.clone());
+        // 写入缓存（触顶整体清空，见 CACHE_CAP）
+        {
+            let mut cache = self.cache.borrow_mut();
+            evict_if_full(&mut cache);
+            cache.insert(cache_key, result.clone());
+        }
         result
+    }
+
+    /// 缓存命中/未命中计数（WBS 4.4.2「缓存命中率可观测」判据）。
+    pub fn cache_stats(&self) -> (u64, u64) {
+        (self.cache_hits.get(), self.cache_misses.get())
+    }
+}
+
+/// 缓存触顶清空判定（#375）：条目数达到 [`CACHE_CAP`] 即整体清空。
+/// 独立成函数以便单测覆盖边界（8192 次 Z3 求解在单测里不可接受）。
+pub(crate) fn evict_if_full(cache: &mut HashMap<u64, SMTResult>) {
+    if cache.len() >= CACHE_CAP {
+        cache.clear();
     }
 }
 
