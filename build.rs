@@ -376,6 +376,7 @@ fn find_local_z3_wasm(z3_root: &Path) -> Option<std::path::PathBuf> {
 /// - libclang_rt.builtins 必须是非后缀版——`wasmsjlj` 变体同样引入 invoke_*
 /// - emmalloc 提供 malloc/free（musl libc.a 不含分配器）
 /// - c++abi 与 c 重复列出：lld wasm 单趟 archive 扫描，循环依赖靠重列解决
+///
 /// 缺失任何库 = 资产不完整，构建失败（不发残缺产物）。
 fn link_z3_wasm(z3_dir: &Path) {
     let lib_dir = z3_dir.join("lib");
