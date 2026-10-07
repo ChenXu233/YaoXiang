@@ -19,6 +19,10 @@ cargo fmt                          # 格式化（提交前必跑）
 cargo clippy --all --all-features --all-targets -- -D warnings
 cargo test                         # 测试；测试数只许增不许减
 python scripts/rfc/check_tracking.py   # RFC 状态一致性
+
+# 基线再生——改动影响 IR 或语料行为时必跑，diff 人工 review 后同提交入库：
+UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored    # IR 快照（src/middle/core/tests/snapshots/）
+cargo run --quiet --example corpus_probe > tests/baselines/corpus-parity.jsonl  # 语料差分
 ```
 
 提交与 PR 规范：`docs/src/dev/commit-convention.md`；PR 模板含“职责归属与决策程序”必填块（D0–D4），写不出权威源模块名就是没查，review 会打回。
@@ -29,6 +33,7 @@ python scripts/rfc/check_tracking.py   # RFC 状态一致性
 - 核心功能留 `todo!()` / “Not implemented yet” / 无限期“独立 issue”
 - 删测试或放宽判据换绿灯（不存在 C5′；做不到是实现缺陷，如实报告）
 - 写/改测试不读 [test-specification.md](docs/src/dev/test-specification.md)——命名必须 `test_<what>_<scenario>` 前缀、超 5 行必须 AAA 三段注释、断言必须带自定义消息、枚举匹配用 `assert!(matches!(...))`；判据红态常驻属设计形态（如 2.4.4），不是「永久 ignore」违规
+- 改 IR/语料行为而不同步基线：改 `src/`（前端/ir_gen/std）或语料 `.yx` 会改变 IR 或运行行为时，IR 快照与语料差分基线必须**同提交**更新（命令见常用命令区），各自 git diff 人工 review；快照/差分门禁红了说明基线欠账，不许绕
 - 用 import 别名弥合同语义概念（`as AstBinOp` 这类）
 - 新增 `include!`、新增跨层反向依赖（L2→L3 等）、`pub(crate)` 跨层泄漏增加
 
