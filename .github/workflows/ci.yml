@@ -201,7 +201,13 @@ jobs:
       - name: YaoXiang test suites (JSON summary)
         run: |
           BIN=target/debug/yaoxiang-rs
-          "$BIN" test --json --parallel > target/report-corpus.json || corpus_rc=$?
+          # 语言语料层显式给路径（与下一行库层同形态）。RFC-036 §5：默认
+          # patterns（tests/**/*.yx）覆盖的是**语言可用性语料**层，测试分层
+          # 在 CI 显式表达。tests/yaoxiang-multifile/ 是 RFC-039 D48 裁决的
+          # **项目夹具层**（每夹具 yaoxiang.toml + main.yx 入口 + lib.yx 模块），
+          # 运行器是 cargo test --test yx_multifile_runner；夹具内的模块文件
+          # 不是测试，被默认 patterns 扫进来只会误报「缺 main 绑定 / 未知变量」。
+          "$BIN" test --json --parallel tests/yaoxiang > target/report-corpus.json || corpus_rc=$?
           "$BIN" test --json --parallel src/std/tests > target/report-stdlib.json || stdlib_rc=$?
           CORPUS_RC="${corpus_rc:-0}" STDLIB_RC="${stdlib_rc:-0}" python3 - <<'EOF'
           import json
