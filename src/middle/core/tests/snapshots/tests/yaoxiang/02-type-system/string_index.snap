@@ -1,0 +1,66 @@
+module
+  fn main() -> Void
+    slot[0] s : Int(64) @depth1
+    locals_total=10
+    Load %0 <- string("héllo")
+    Load %1 <- %0
+    Call %2 <- string("std.string.len") [%1] (def=d0)
+    Load %3 <- int(5)
+    Eq %4 <- %2, %3
+    Load %5 <- string("len counts code points, not bytes")
+    Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Load %1 <- %0
+    Load %5 <- int(0)
+    StringGetChar %2 <- %1[%5]
+    Load %3 <- string("h")
+    Eq %4 <- %2, %3
+    Load %7 <- string("s[0] first char")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %1 <- %0
+    Load %5 <- int(1)
+    StringGetChar %2 <- %1[%5]
+    Load %3 <- string("é")
+    Eq %4 <- %2, %3
+    Load %7 <- string("s[1] lands on scalar after multibyte lead byte")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %1 <- %0
+    Load %5 <- int(4)
+    StringGetChar %2 <- %1[%5]
+    Load %3 <- string("o")
+    Eq %4 <- %2, %3
+    Load %7 <- string("s[4] last char")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %1 <- %0
+    Load %5 <- string("é")
+    Call %2 <- string("std.string.index_of") [%1, %5] (def=d2)
+    Load %3 <- int(1)
+    Eq %4 <- %2, %3
+    Load %7 <- string("index_of scalar index")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Load %1 <- %0
+    Load %7 <- %0
+    Load %8 <- string("é")
+    Call %5 <- string("std.string.index_of") [%7, %8] (def=d2)
+    StringGetChar %2 <- %1[%5]
+    Load %3 <- string("é")
+    Eq %4 <- %2, %3
+    Load %9 <- string("index_of feeds s[i]")
+    Call %6 <- string("std.assert.assert") [%4, %9] (def=d1)
+    Load %1 <- %0
+    Load %5 <- int(1)
+    Load %7 <- int(3)
+    Call %2 <- string("std.string.substring") [%1, %5, %7] (def=d3)
+    Load %3 <- string("él")
+    Eq %4 <- %2, %3
+    Load %8 <- string("index_of feeds substring")
+    Call %6 <- string("std.assert.assert") [%4, %8] (def=d1)
+    Load %1 <- %0
+    Load %5 <- int(1)
+    Call %2 <- string("std.string.char_code") [%1, %5] (def=d4)
+    Load %3 <- int(233)
+    Eq %4 <- %2, %3
+    Load %7 <- string("char_code same index unit")
+    Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Ret %6
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)

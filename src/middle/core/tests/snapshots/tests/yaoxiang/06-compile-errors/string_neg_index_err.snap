@@ -1,0 +1,13 @@
+module
+  fn main() -> Void
+    slot[0] s : Int(64) @depth1
+    locals_total=6
+    Load %0 <- string("héllo")
+    Load %1 <- %0
+    Load %2 <- int(1)
+    Neg %3 <- %2
+    StringGetChar %4 <- %1[%3]
+    Call %5 <- string("std.io.println") [%4] (def=d0)
+    Ret %5
+  init (locals=0)
+    Call %0 <- string("main") [] (def=_)
