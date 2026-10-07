@@ -55,20 +55,30 @@ fn main() {
         );
     }
 
-    // Skip Z3 linking for wasm targets
     let _target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     if target_arch == "wasm32" {
-        // wasm 不自动下载（没有预编译 wasm 二进制），但查找本地预编译的 libz3.a
+        // wasm 不自动下载（没有预编译 wasm 二进制），只认本地预编译资产：
+        // z3-wasm release 的 tar.gz 解压到 .z3/（含 libz3.a + Emscripten sysroot 库）。
+        //
+        // #435 裁决：wasm 形态必须带 Z3——无 Z3 时精化/终止性等核心功能不可用，
+        // 语言残缺。「找不到资产就降级」曾是 warning 形态，静默产出无 Z3 的
+        // 构建（8 天无人察觉的事故形态）；现在找不到 = 构建失败。
         let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
         let z3_root = Path::new(&manifest).join(".z3");
-        let local = find_local_z3_wasm(&z3_root);
-        if let Some(ref dir) = local {
-            println!("cargo:warning=Linking Z3 wasm from {:?}", dir);
-            link_z3_wasm(dir);
-            return;
-        }
-        println!("cargo:warning=No precompiled Z3 wasm found in .z3/, Z3 features disabled");
+        // 资产目录纳入指纹：删掉 .z3 后的增量构建也必须重新判定（禁缓存跳过）
+        println!("cargo:rerun-if-changed={}", z3_root.display());
+        let Some(dir) = find_local_z3_wasm(&z3_root) else {
+            panic!(
+                "wasm32 构建需要 Z3 wasm 预编译资产：\
+                 下载 https://github.com/ChenXu233/YaoXiang/releases/download/z3-wasm/z3-wasm-{}.tar.gz \
+                 解压到 .z3/（应含 lib/libz3.a + libc++-wasmexcept 等 sysroot 库）。\
+                 无 Z3 的 wasm 形态不受支持（#435）。",
+                Z3_VERSION
+            );
+        };
+        println!("cargo:warning=Linking Z3 wasm from {:?}", dir);
+        link_z3_wasm(&dir);
         return;
     }
 
@@ -255,8 +265,14 @@ fn find_local_z3(z3_root: &Path) -> Option<std::path::PathBuf> {
     }
     for entry in fs::read_dir(z3_root).ok()? {
         let entry = entry.ok()?;
-        if entry.path().join("include").join("z3.h").exists() {
-            return Some(entry.path());
+        let path = entry.path();
+        // #435：跳过 wasm 资产目录——同名 include/z3.h + lib/libz3.a 会被误认
+        // 为 host 库（wasm 目录没有 host 的 libz3.lib/dll，误认即 LNK1181）
+        if entry.file_name().to_string_lossy().contains("wasm") {
+            continue;
+        }
+        if path.join("include").join("z3.h").exists() {
+            return Some(path);
         }
     }
     None
@@ -351,9 +367,34 @@ fn find_local_z3_wasm(z3_root: &Path) -> Option<std::path::PathBuf> {
     None
 }
 
-/// 链接 wasm 预编译的 Z3（Emscripten 产出的 .a 文件）
+/// 链接 wasm 预编译的 Z3（Emscripten 产出的 .a 文件）+ sysroot 运行时链（#435）。
+///
+/// 库链名单是 wasm32-unknown-unknown 实证定稿（缺符号 194→0 的收敛结果）：
+/// - libc++/libc++abi/libunwind 必须用 **wasmexcept**（wasm 原生异常）变体——
+///   Z3 求解内核的控制流依赖 C++ 异常捕获，SjLj 变体会引入 invoke_*
+///   JS 运行时依赖（wasm32-unknown-unknown 没有那层胶水）
+/// - libclang_rt.builtins 必须是非后缀版——`wasmsjlj` 变体同样引入 invoke_*
+/// - emmalloc 提供 malloc/free（musl libc.a 不含分配器）
+/// - c++abi 与 c 重复列出：lld wasm 单趟 archive 扫描，循环依赖靠重列解决
+/// 缺失任何库 = 资产不完整，构建失败（不发残缺产物）。
 fn link_z3_wasm(z3_dir: &Path) {
     let lib_dir = z3_dir.join("lib");
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=static=z3");
+    // verbatim：库名含 '+' 和 '.'，绕过 -l 的 lib 前缀/后缀推导
+    const SYSROOT_LIBS: &[&str] = &[
+        "libc++-wasmexcept.a",
+        "libc++abi-wasmexcept.a",
+        "libunwind-wasmexcept.a",
+        "libemmalloc.a",
+        "libc.a",
+        "libclang_rt.builtins.a",
+    ];
+    for name in SYSROOT_LIBS {
+        assert!(
+            lib_dir.join(name).exists(),
+            "wasm Z3 资产不完整：缺 {name}——重新下载完整 z3-wasm release 资产（#435）"
+        );
+        println!("cargo:rustc-link-lib=static:+verbatim={name}");
+    }
 }
