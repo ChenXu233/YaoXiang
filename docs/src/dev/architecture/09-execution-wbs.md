@@ -171,7 +171,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 ### P3.5 RFC-029g：删除 `pub` 与自动绑定（外部轨道 / #399 —— 排序约束 D56）
 
-来源：[RFC-029g](../rfc/accepted/029g-remove-pub-and-auto-bind.md)（2026-10-02 已接受、实现未开工）、[#399](https://github.com/ChenXu233/YaoXiang/issues/399)。**本轨道不是重构自身的设计项，是被排序约束强制前置的规格符合性删除**；与 P10 S5「`pub` 项降可见性」（Rust 的 `pub(crate)` 收窄）是两件事。
+来源：[RFC-029g](../../rfc/accepted/029g-remove-pub-and-auto-bind.md)（2026-10-02 已接受、实现未开工）、[#399](https://github.com/ChenXu233/YaoXiang/issues/399)。**本轨道不是重构自身的设计项，是被排序约束强制前置的规格符合性删除**；与 P10 S5「`pub` 项降可见性」（Rust 的 `pub(crate)` 收窄）是两件事。
 
 **为什么必须整体先于 P4**：029g 的删除面与四个重构阶段的重写面重合，反序 = 在新文法 / 新 checker 布局 / 新 SSA IR 上重做同一批删除与基线更新。
 
