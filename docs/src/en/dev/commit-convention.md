@@ -1,77 +1,77 @@
 # Commit Submission Guide
 
-This document defines the Git commit conventions for the YaoXiang project, aiming to keep the commit
-history clear, readable, and easy to understand.
+This document defines the Git commit conventions for the YaoXiang project, aimed at keeping the
+commit history clear, readable, and easy to understand.
 
 ---
 
 ## Table of Contents
 
-- [提交格式](#提交格式)
-- [提交类型](#提交类型)
-- [完整 Emoji 参考](#完整-emoji-参考)
-- [作用域](#作用域)
-- [版本管理](#版本管理)
-- [消息规范](#消息规范)
-- [语言规范](#语言规范)
-- [🔖 发版提交](#-发版提交)
-- [示例](#示例)
-- [使用 Commit Template](#使用-commit-template)
-- [常见问题](#常见问题)
+- [Commit Format](#commit-format)
+- [Commit Types](#commit-types)
+- [Complete Emoji Reference](#complete-emoji-reference)
+- [Scope](#scope)
+- [Version Management](#version-management)
+- [Message Conventions](#message-conventions)
+- [Language Conventions](#language-conventions)
+- [🔖 Release Commits](#-release-commits)
+- [Examples](#examples)
+- [Using the Commit Template](#using-the-commit-template)
+- [FAQ](#faq)
 
 ---
 
 ## Commit Format
 
-**Very important!!!!!! Don't forget!!!** All commit messages follow this format:
+**Very important!!!!!! Don't forget!!!** All commit messages must follow this format:
 
 ```
-:emoji代码: type(scope): 主题（中文）
+:emoji_code: type(scope): subject (in Chinese)
 
-[可选的主体内容]
+[optional body]
 
-[可选的页脚]
+[optional footer]
 ```
 
-> ⚠️ **Important**: You MUST use **emoji codes** (such as `:sparkles:`) rather than typing the
-> actual emoji character.
+> ⚠️ **Important**: You must use the **emoji code** (e.g. `:sparkles:`) rather than typing the emoji
+> character directly.
 >
-> **Chinese commit messages are recommended** to maintain team communication consistency.
+> **Chinese commit messages are recommended** to keep team communication consistent.
 
 ### Components
 
-| Component | Description                                        | Required |
-| --------- | -------------------------------------------------- | -------- |
-| emoji代码 | Emoji that identifies the commit type              | ✅       |
-| type      | Commit type                                        | ✅       |
-| scope     | Affected area                                      | ✅       |
-| subject   | Brief description (Chinese, no more than 50 chars) | ✅       |
-| body      | Detailed explanation (optional)                    | ❌       |
-| footer    | Breaking changes or issue references (optional)    | ❌       |
+| Part       | Description                                           | Required |
+| ---------- | ----------------------------------------------------- | -------- |
+| emoji_code | Emoji symbol identifying the commit type              | ✅       |
+| type       | Commit type                                           | ✅       |
+| scope      | Area affected                                         | ✅       |
+| subject    | Short description (in Chinese, no more than 50 chars) | ✅       |
+| body       | Detailed explanation (optional)                       | ❌       |
+| footer     | Breaking change or issue closure (optional)           | ❌       |
 
 ---
 
 ## Commit Types
 
-| emoji code              | type     | Description                          |
-| ----------------------- | -------- | ------------------------------------ |
-| :sparkles:              | feat     | New feature                          |
-| :bug:                   | fix      | Bug fix                              |
-| :memo:                  | docs     | Documentation changes only           |
-| :lipstick:              | style    | Code formatting (no behavior change) |
-| :recycle:               | refactor | Code refactoring                     |
-| :zap:                   | perf     | Performance improvement              |
-| :white_check_mark:      | test     | Add or modify tests                  |
-| :wrench:                | chore    | Build tools, auxiliary tool changes  |
-| :building_construction: | build    | Build system changes                 |
-| :rocket:                | ci       | CI configuration changes             |
+| emoji_code                | type     | Description                            |
+| ------------------------- | -------- | -------------------------------------- |
+| `:sparkles:`              | feat     | New feature                            |
+| `:bug:`                   | fix      | Bug fix                                |
+| `:memo:`                  | docs     | Documentation-only changes             |
+| `:lipstick:`              | style    | Code formatting (no functional impact) |
+| `:recycle:`               | refactor | Code refactoring                       |
+| `:zap:`                   | perf     | Performance optimization               |
+| `:white_check_mark:`      | test     | Add or modify tests                    |
+| `:wrench:`                | chore    | Build tools, helper tool changes       |
+| `:building_construction:` | build    | Build system changes                   |
+| `:rocket:`                | ci       | CI configuration changes               |
 
 ---
 
 ## Complete Emoji Reference
 
-Below is the full emoji list aligned with the gitmoji project; pick the one that fits the commit
-content:
+The following is the complete emoji list consistent with the gitmoji project. Choose the appropriate
+emoji based on the commit content:
 
 | emoji | emoji code                    | commit description                      |
 | :---- | :---------------------------- | :-------------------------------------- |
@@ -102,12 +102,12 @@ content:
 | 👷    | `:construction_worker:`       | Add CI build system                     |
 | 📈    | `:chart_with_upwards_trend:`  | Add analytics or tracking code          |
 | ♻️    | `:recycle:`                   | Refactor code                           |
-| 🔨    | `:hammer:`                    | Major refactor                          |
+| 🔨    | `:hammer:`                    | Major refactoring                       |
 | ➖    | `:heavy_minus_sign:`          | Remove a dependency                     |
 | 🐳    | `:whale:`                     | Docker-related work                     |
 | ➕    | `:heavy_plus_sign:`           | Add a dependency                        |
 | 🔧    | `:wrench:`                    | Modify configuration files              |
-| 🌐    | `:globe_with_meridians:`      | Internationalization & localization     |
+| 🌐    | `:globe_with_meridians:`      | Internationalization and localization   |
 | ✏️    | `:pencil2:`                   | Fix typos                               |
 | 💩    | `:hankey:`                    | Write bad code that needs improvement   |
 | ⏪️    | `:rewind:`                    | Revert changes                          |
@@ -120,65 +120,66 @@ content:
 | 🍱    | `:bento:`                     | Add or update assets                    |
 | 👌    | `:ok_hand:`                   | Update code due to code review changes  |
 | ♿️    | `:wheelchair:`                | Improve accessibility                   |
-| 💡    | `:bulb:`                      | Add or update source comments           |
-| 🍻    | `:beers:`                     | Drunken coding                          |
+| 💡    | `:bulb:`                      | Document source code                    |
+| 🍻    | `:beers:`                     | Write code under the influence          |
 | 💬    | `:speech_balloon:`            | Update text and literals                |
-| 🗃️    | `:card_file_box:`             | Database-related changes                |
+| 🗃️    | `:card_file_box:`             | Perform database-related changes        |
 | 🔊    | `:loud_sound:`                | Add logs                                |
 | 🔇    | `:mute:`                      | Remove logs                             |
 | 👥    | `:busts_in_silhouette:`       | Add contributors                        |
-| 🚸    | `:children_crossing:`         | Improve UX/usability                    |
-| 🏗️    | `:building_construction:`     | Architectural changes                   |
+| 🚸    | `:children_crossing:`         | Improve user experience/usability       |
+| 🏗️    | `:building_construction:`     | Make architectural changes              |
 | 📱    | `:iphone:`                    | Work on responsive design               |
 | 🤡    | `:clown_face:`                | Mock things                             |
-| 🥚    | `:egg:`                       | Add an easter egg                       |
-| 🙈    | `:see_no_evil:`               | Add or update .gitignore                |
+| 🥚    | `:egg:`                       | Add an Easter egg                       |
+| 🙈    | `:see_no_evil:`               | Add or update .gitignore files          |
 | 📸    | `:camera_flash:`              | Add or update snapshots                 |
 
 ---
 
 ## Scope
 
-The scope is based on the repository directory structure. **You MUST use one of the following
-defined scopes**:
+The scope is based on the repository directory structure. **You must use the following defined
+scopes**:
 
-### Top-Level Modules
+### Top-level Modules
 
-| Scope       | Directory                            | Description                                                                    |
-| ----------- | ------------------------------------ | ------------------------------------------------------------------------------ |
-| `frontend`  | `src/frontend/`                      | Frontend: lexer, parser, type checker                                          |
-| `middle`    | `src/middle/`                        | Middle layer: IR, optimization, monomorphization                               |
-| `backends`  | `src/backends/`                      | Backend: interpreter, runtime, REPL                                            |
-| `std`       | `src/std/`                           | Standard library                                                               |
-| `formatter` | `src/formatter/`                     | Code formatter                                                                 |
-| `lsp`       | `src/lsp/`                           | Language Server Protocol                                                       |
-| `package`   | `src/package/`                       | Package manager                                                                |
-| `util`      | `src/util/`                          | Utilities: diagnostics, cache, i18n                                            |
-| `proof`     | `src/frontend/core/typecheck/proof/` | Proof and verification support (promoted to top-level per RFC-039 final state) |
+| Scope       | Corresponding Directory              | Description                                                                            |
+| ----------- | ------------------------------------ | -------------------------------------------------------------------------------------- |
+| `frontend`  | `src/frontend/`                      | Frontend: lexical analysis, syntax parsing, type checking                              |
+| `middle`    | `src/middle/`                        | Middle layer: IR, optimization, monomorphization                                       |
+| `backends`  | `src/backends/`                      | Backend: interpreter, runtime, REPL                                                    |
+| `std`       | `src/std/`                           | Standard library                                                                       |
+| `formatter` | `src/formatter/`                     | Code formatter                                                                         |
+| `lsp`       | `src/lsp/`                           | Language Server Protocol                                                               |
+| `package`   | `src/package/`                       | Package manager                                                                        |
+| `util`      | `src/util/`                          | Utility library: diagnostics, cache, i18n                                              |
+| `proof`     | `src/frontend/core/typecheck/proof/` | Proof and verification support (promoted to top-level domain by RFC-039 final state)   |
+| `driver`    | `src/driver/`                        | L1 orchestration layer: unified Driver and phase contracts (established by RFC-039 P4) |
 
-### Frontend Sub-Modules
+### Frontend Submodules
 
-| Scope       | Directory                      | Description             |
-| ----------- | ------------------------------ | ----------------------- |
-| `parser`    | `src/frontend/core/parser/`    | Syntax parser           |
-| `lexer`     | `src/frontend/core/lexer/`     | Lexical analyzer        |
-| `typecheck` | `src/frontend/core/typecheck/` | Type checking           |
-| `types`     | `src/frontend/core/types/`     | Type system definitions |
+| Scope       | Corresponding Directory        | Description            |
+| ----------- | ------------------------------ | ---------------------- |
+| `parser`    | `src/frontend/core/parser/`    | Syntax parser          |
+| `lexer`     | `src/frontend/core/lexer/`     | Lexical analyzer       |
+| `typecheck` | `src/frontend/core/typecheck/` | Type checking          |
+| `types`     | `src/frontend/core/types/`     | Type system definition |
 
-### Middle Layer Sub-Modules
+### Middle Layer Submodules
 
-| Scope          | Directory                     | Description                                                |
-| -------------- | ----------------------------- | ---------------------------------------------------------- |
-| `codegen`      | `src/middle/passes/codegen/`  | Code generation (bytecode)                                 |
-| `monomorphize` | `src/middle/passes/mono/`     | Monomorphization (directory renamed per RFC-039 P6 ruling) |
-| `lifetime`     | `src/middle/passes/lifetime/` | Lifetime analysis                                          |
+| Scope          | Corresponding Directory       | Description                                                              |
+| -------------- | ----------------------------- | ------------------------------------------------------------------------ |
+| `codegen`      | `src/middle/passes/codegen/`  | Code generation (bytecode)                                               |
+| `monomorphize` | `src/middle/passes/mono/`     | Monomorphization processing (directory rename pending RFC-039 P6 ruling) |
+| `lifetime`     | `src/middle/passes/lifetime/` | Lifetime analysis                                                        |
 
-### Backend Sub-Modules
+### Backend Submodules
 
-| Scope     | Directory               | Description              |
-| --------- | ----------------------- | ------------------------ |
-| `repl`    | `src/repl/`             | REPL interactive CLI     |
-| `runtime` | `src/backends/runtime/` | Runtime execution engine |
+| Scope     | Corresponding Directory | Description                   |
+| --------- | ----------------------- | ----------------------------- |
+| `repl`    | `src/repl/`             | REPL interactive command line |
+| `runtime` | `src/backends/runtime/` | Runtime execution engine      |
 
 ### Documentation Scopes
 
@@ -191,17 +192,17 @@ defined scopes**:
 
 ### Other Scopes
 
-| Scope      | Description                                     |
-| ---------- | ----------------------------------------------- |
-| `build`    | Build system, Cargo configuration               |
-| `ci`       | CI/CD configuration (GitHub Actions)            |
-| `test`     | Test-related                                    |
-| `release`  | Release-related                                 |
-| `meta`     | Project meta-config (.claude, .gitignore, etc.) |
-| `deps`     | Dependency upgrades (dependabot convention)     |
-| `examples` | Examples directory `examples/`                  |
-| `vscode`   | VS Code extension `vscode-extension/`           |
-| `benches`  | Benchmarks `benches/`                           |
+| Scope      | Description                                            |
+| ---------- | ------------------------------------------------------ |
+| `build`    | Build system, Cargo configuration                      |
+| `ci`       | CI/CD configuration (GitHub Actions)                   |
+| `test`     | Test-related                                           |
+| `release`  | Release-related                                        |
+| `meta`     | Project meta configuration (.claude, .gitignore, etc.) |
+| `deps`     | Dependency upgrades (same convention as dependabot)    |
+| `examples` | Examples directory `examples/`                         |
+| `vscode`   | VS Code extension `vscode-extension/`                  |
+| `benches`  | Benchmarks `benches/`                                  |
 
 ---
 
@@ -216,51 +217,52 @@ The version number is defined in the `version` field of `Cargo.toml` at the proj
 version = "0.7.2"
 ```
 
-We follow semantic versioning `MAJOR.MINOR.PATCH`:
+Semantic versioning `MAJOR.MINOR.PATCH` is used:
 
-| Version Type | Description                            | Example       |
-| ------------ | -------------------------------------- | ------------- |
-| **major**    | Major update, incompatible API changes | 0.7.2 → 1.0.0 |
-| **minor**    | New feature, backward-compatible       | 0.8.2 → 0.8.0 |
-| **patch**    | Bug fix, backward-compatible           | 0.7.2 → 0.7.3 |
+| Version Type | Description                           | Example       |
+| ------------ | ------------------------------------- | ------------- |
+| **major**    | Major update, incompatible API change | 0.7.2 → 1.0.0 |
+| **minor**    | New feature, backward compatible      | 0.7.2 → 0.8.0 |
+| **patch**    | Bug fix, backward compatible          | 0.7.2 → 0.7.3 |
 
-> ⚠️ When releasing, **update the `Cargo.toml` version on the `dev` branch** and merge to `main` via
-> PR. CI will then automatically create the tag and Release. **Do not push the tag manually**,
-> otherwise CI will skip the release workflow.
+> ⚠️ When releasing, **update the `Cargo.toml` version on the `dev` branch**, then merge to `main`
+> via PR. CI will automatically create the tag and Release. **Do not push tags manually**, otherwise
+> CI will skip the release workflow.
 
 ---
 
-### CI Release Workflow
+## CI Release Workflow
 
-Release is performed automatically by GitHub Actions (`dist-release.yml`):
+Releases are performed automatically by GitHub Actions (`dist-release.yml`). The workflow is as
+follows:
 
 ```
-1. 在 dev 分支上更新 Cargo.toml 的 version 字段
-2. cargo build 更新 Cargo.lock
-3. 按发版格式 commit（见下方 🔖 发版提交）
-   - commit message 必须包含自上次发版以来的所有变更（即 PR 的完整内容）
-4. 从 dev 创建 PR 到 main
-5. 合并 PR 到 main
-6. gate job 自动检测：
-   - 读取 Cargo.toml 版本号 → "v{version}"
-   - 检查该 tag 是否已存在
-   - 不存在 → 触发完整 release 流程
-   - 已存在 → 跳过（不会重复发布）
-7. 门禁：安全审计 + fmt/clippy/单测/doc test 全过
-8. 全过之后：创建并推送 tag
-9. tag 后构建与发布：
-   - cargo-dist 跨平台构建（Linux/Windows/macOS 五平台）+ 重组包（bin/ + lib/）+ wasm + Inno 向导
-   - 发布 GitHub Release（body 由 generate-commit-list.ts 生成）；apt 仓库另发 GitHub Pages
+1. Update the version field in Cargo.toml on the dev branch
+2. cargo build to update Cargo.lock
+3. Commit following the release format (see 🔖 Release Commits below)
+   - The commit message must include all changes since the last release (i.e. the full PR content)
+4. Create a PR from dev to main
+5. Merge the PR into main
+6. The gate job automatically detects:
+   - Read the Cargo.toml version number → "v{version}"
+   - Check whether the tag already exists
+   - Does not exist → trigger the full release workflow
+   - Exists → skip (no duplicate release)
+7. Gate: security audit + fmt/clippy/unit tests/doc tests all pass
+8. After all pass: create and push the tag
+9. Post-tag build and publish:
+   - cargo-dist cross-platform build (5 platforms for Linux/Windows/macOS) + reorganized packages (bin/ + lib/) + wasm + Inno setup wizard
+   - Publish GitHub Release (body generated by generate-commit-list.ts); apt repository published separately via GitHub Pages
 ```
 
-#### Key Rules
+### Key Rules
 
-| Rule                                           | Description                                                                                                                                                                       |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Do not push the tag manually**               | Release only triggers from the gate on push to main; manually pushed tags won't trigger a release (to re-publish, use `dist-release.yml`'s workflow_dispatch and specify the tag) |
-| **Bump version on dev**                        | The release commit is completed on dev, then merged to main via PR                                                                                                                |
-| **Release commit includes the full changelog** | The commit message must contain all changes for this release, since it becomes the PR description source                                                                          |
-| **Do not merge main back into dev**            | After the PR is merged, dev auto-syncs; no need to reverse merge                                                                                                                  |
+| Rule                                       | Description                                                                                                                                                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Do not push tags manually**              | The release only recognizes the gate check on push to main; manually pushed tags will not trigger the release (for re-releasing, use `dist-release.yml`'s `workflow_dispatch` to specify the tag) |
+| **Bump the version on dev**                | The release commit is done on dev, then merged to main via PR                                                                                                                                     |
+| **Release commit includes full changelog** | The commit message must include all changes in this release, since it is the source of the PR description                                                                                         |
+| **Do not merge main back into dev**        | After the PR is merged, dev will be synced automatically; no reverse merge is needed                                                                                                              |
 
 ---
 
@@ -268,11 +270,11 @@ Release is performed automatically by GitHub Actions (`dist-release.yml`):
 
 ### Language Conventions
 
-**Chinese commit messages are recommended** to maintain team communication consistency.
+**Chinese commit messages are recommended** to keep team communication consistent.
 
-- Use Chinese for the Subject; keep it concise and clear
-- Use Chinese for the Body to provide detail
-- Keep English for special technical terms when needed
+- Subject in Chinese, concise and clear
+- Body in Chinese for detailed explanation
+- Special technical terms may be kept in English
 
 ### Subject
 
@@ -282,103 +284,103 @@ Release is performed automatically by GitHub Actions (`dist-release.yml`):
 
 ### Body
 
-- Explain why and how the change was made
+- Explain in detail the reason for and approach of the change
 - No more than 72 characters per line
-- Use `-` or `*` for bullet points
+- Use `-` or `*` to list key points
 
 ### Footer
 
 - **Breaking change**: Start with `BREAKING CHANGE:`
-- **Close an issue**: Use `Closes #123` or `Fixes #456`
+- **Close issue**: Use `关闭 #123` (Close #123) or `修复 #456` (Fix #456)
 
 ---
 
 ## Examples
 
-### ✨ feat - New feature
+### ✨ feat - New Feature
 
 ```
-:sparkles: feat(parser): 添加闭包语法解析支持
+:sparkles: feat(parser): Add closure syntax parsing support
 
-实现闭包表达式解析：
-- 支持 |args| body 简写语法
-- 支持 move 语义捕获
-- 添加闭包类型推断
+Implement closure expression parsing:
+- Support |args| body shorthand syntax
+- Support move-semantic capture
+- Add closure type inference
 
 关闭 #42
 ```
 
-### 🐛 fix - Bug fix
+### 🐛 fix - Bug Fix
 
 ```
-:bug: fix(repl): 修复多行输入时补全器失效的问题
+:bug: fix(repl): Fix completer failure on multi-line input
 
-SessionREPL 在多行模式下未正确注册补全器，
-导致 Tab 补全无法触发。
+SessionREPL did not register the completer correctly in multi-line mode,
+causing Tab completion to fail to trigger.
 
 修复 #128
 ```
 
-### 📝 docs - Documentation update
+### 📝 docs - Documentation Update
 
 ```
-:memo: docs(design): 更新所有权模型与类型系统规范
+:memo: docs(design): Update ownership model and type system specifications
 
-同步 RFC-009 和 RFC-011 的最新设计变更。
+Sync the latest design changes from RFC-009 and RFC-011.
 ```
 
 ### ♻️ refactor - Refactor
 
 ```
-:recycle: refactor(typecheck): 分离原语值类型与 Dup 浅拷贝语义
+:recycle: refactor(typecheck): Separate primitive value types from Dup shallow-copy semantics
 
-将 MonoType 中的值类型和拷贝语义解耦，
-消除 match 分支中的特殊情况。
+Decouple value types and copy semantics in MonoType,
+eliminating special cases in match branches.
 ```
 
-### ⚡️ perf - Performance optimization
+### ⚡️ perf - Performance Optimization
 
 ```
-:zap: perf(types): 优化 const generic 求值性能
+:zap: perf(types): Optimize const generic evaluation performance
 
-为递归求值添加深度限制（默认 128），
-避免恶意构造的类型表达式导致栈溢出。
+Add a depth limit for recursive evaluation (default 128),
+to prevent stack overflow from maliciously crafted type expressions.
 ```
 
-### ✅ test - Tests
+### ✅ test - Test
 
 ```
-:white_check_mark: test(typecheck): 补充 scope VarInfo 可变性测试
+:white_check_mark: test(typecheck): Add scope VarInfo mutability tests
 
-覆盖场景：
-- 不可变绑定的只读访问
-- mut 绑定的可变性追踪
-- 跨作用域的可变性传播
+Coverage scenarios:
+- Read-only access of immutable bindings
+- Mutability tracking of mut bindings
+- Cross-scope mutability propagation
 ```
 
-### 🔧 chore - Misc
+### 🔧 chore - Miscellaneous
 
 ```
 :wrench: chore(build): bump rand, hashbrown, tempfile, ron, clap
 
-升级 6 个生产依赖至最新稳定版本。
+Upgrade 6 production dependencies to the latest stable versions.
 ```
 
-### 🚀 ci - CI configuration
+### 🚀 ci - CI Configuration
 
 ```
-:rocket: ci: 修复 nightly 构建 Rust 版本过低的问题
+:rocket: ci: Fix nightly build using too-old Rust version
 
-将 RUST_TOOLCHAIN 从 1.91.0 更新至 1.96.0，
-匹配 Cargo.toml 中的 rust-version 要求。
+Update RUST_TOOLCHAIN from 1.91.0 to 1.96.0,
+to match the rust-version requirement in Cargo.toml.
 ```
 
-### 💄 style - Formatting
+### 💄 style - Formatting Adjustment
 
 ```
-:lipstick: style(frontend): 应用 cargo fmt 格式化
+:lipstick: style(frontend): Apply cargo fmt formatting
 
-统一函数签名的换行风格。
+Unify the line-breaking style of function signatures.
 ```
 
 ---
@@ -387,49 +389,49 @@ SessionREPL 在多行模式下未正确注册补全器，
 
 ## 🔖 Release Commits
 
-When the commit is a **release**, the following rules MUST be followed:
+When this commit is a **release**, the following conventions must be followed:
 
 ### Release Commit Format
 
 ```
-:bookmark: V<版本号>: <发版标题>
+:bookmark: V<version>: <release title>
 
-## 📦 版本信息
+## 📦 Version Information
 
-**发布日期:** YYYY-MM-DD
+**Release Date:** YYYY-MM-DD
 
-**版本号:** <旧版本> → <新版本>
-
----
-
-## ✨ 新功能
-
-### <功能模块>
-- :sparkles: feat(<scope>): <功能描述>
+**Version:** <old version> → <new version>
 
 ---
 
-## ♻️ 重构优化
+## ✨ New Features
 
-- :recycle: refactor(<scope>): <重构描述>
-
----
-
-## 🐛 Bug 修复
-
-- :bug: fix(<scope>): <修复描述>
+### <feature module>
+- :sparkles: feat(<scope>): <feature description>
 
 ---
 
-## 🔧 其他变更
+## ♻️ Refactoring & Optimization
 
-- :wrench: chore: <变更描述>
+- :recycle: refactor(<scope>): <refactor description>
 
 ---
 
-## 📦 新增文件
+## 🐛 Bug Fixes
 
-- `<文件路径>` - <文件说明>
+- :bug: fix(<scope>): <fix description>
+
+---
+
+## 🔧 Other Changes
+
+- :wrench: chore: <change description>
+
+---
+
+## 📦 New Files
+
+- `<file path>` - <file description>
 
 ---
 
@@ -437,67 +439,67 @@ When the commit is a **release**, the following rules MUST be followed:
 
 ### Release Requirements
 
-1. **Message header**: MUST use the `:bookmark:` + `V<version>` format
-2. **Version**: Follow semantic versioning
-3. **Content completeness**: MUST include **all commits** since the last release
+1. **Message header**: Must use the `:bookmark:` + `V<version>` format
+2. **Version number**: Follow semantic versioning
+3. **Content completeness**: Must include **all commit** descriptions since the last release
 4. **Categorize by type**: Organize by `feat`, `fix`, `refactor`, `chore`, etc.
 
 ### Release Example
 
 ```
 
-:bookmark: V0.7.2: REPL 重写与类型系统改进
+:bookmark: V0.7.2: REPL rewrite and type system improvements
 
-## 📦 版本信息
+## 📦 Version Information
 
-**发布日期:** 2026-06-01
+**Release Date:** 2026-06-01
 
-**版本号:** 0.7.1 → 0.7.2
-
----
-
-## ✨ 新功能
-
-- :sparkles: feat(typecheck): 实现泛型类型参数自动推断
-- :sparkles: feat(typecheck): 添加 MonoType::Generic 结构化泛型表示
-- feat: 接入 CLI REPL 命令到 SessionREPL
+**Version:** 0.7.1 → 0.7.2
 
 ---
 
-## ♻️ 重构优化
+## ✨ New Features
 
-- :recycle: refactor(backends): 移除 tui_repl 模块，重写为 SessionREPL
-- :recycle: refactor(typecheck): scope 变量存储引入 VarInfo 追踪可变性
-- :recycle: refactor(typecheck): 分离原语值类型与 Dup 浅拷贝语义
-
----
-
-## 🐛 Bug 修复
-
-- :bug: fix(repl): 配置默认 REPL 历史记录，修复 shell evaluate_code
-- :bug: fix(repl): 注册补全器并修复多行输入
-- :bug: fix(repl): 移除 wrap_code 中多余的分号以保留表达式值
+- :sparkles: feat(typecheck): Implement automatic inference of generic type parameters
+- :sparkles: feat(typecheck): Add structured generic representation for MonoType::Generic
+- feat: Wire CLI REPL commands into SessionREPL
 
 ---
 
-## ⚡ 性能优化
+## ♻️ Refactoring & Optimization
 
-- :zap: perf(types): 为 const generic 求值添加递归深度限制
+- :recycle: refactor(backends): Remove tui_repl module, rewrite as SessionREPL
+- :recycle: refactor(typecheck): Introduce VarInfo to track mutability in scope variable storage
+- :recycle: refactor(typecheck): Separate primitive value types from Dup shallow-copy semantics
 
 ---
 
-## 🔧 其他变更
+## 🐛 Bug Fixes
+
+- :bug: fix(repl): Configure default REPL history, fix shell evaluate_code
+- :bug: fix(repl): Register completer and fix multi-line input
+- :bug: fix(repl): Remove extra semicolon in wrap_code to preserve expression value
+
+---
+
+## ⚡ Performance Optimization
+
+- :zap: perf(types): Add recursion depth limit for const generic evaluation
+
+---
+
+## 🔧 Other Changes
 
 - :wrench: chore(build): bump rand, hashbrown, tempfile, ron, clap, owo-colors
-- :white_check_mark: test(typecheck): 补充 scope VarInfo 可变性测试
+- :white_check_mark: test(typecheck): Add scope VarInfo mutability tests
 
 ### Reference Template
 
-Refer to the [`release.md`](release.md) template for the format when writing release notes.
+Please refer to the [`release.md`](release.md) template for release documents.
 
 ---
 
-### 1. Set Up a Commit Template
+### 1. Set Up the Commit Template
 
 ```bash
 # Run in the project root
@@ -506,12 +508,12 @@ git config commit.template .gitmessage.txt
 
 ### 2. Template File
 
-The format of `.gitmessage.txt` at the project root is as follows:
+The `.gitmessage.txt` file at the project root has the following format:
 
 ```
-# emoji_code type(scope): Subject (Chinese)
+# emoji_code type(scope): subject (in Chinese)
 #
-# Body (optional)
+# Body content (optional)
 #
 # Footer (optional)
 #
@@ -521,8 +523,8 @@ The format of `.gitmessage.txt` at the project root is as follows:
 #         std, formatter, lsp, package, util, docs, design, plan, rfc,
 #         build, ci, test, release, meta, deps, examples, vscode, benches
 #
-# Examples:
-# ✨ feat(db): Add bulk delete todo feature
+# Example:
+# ✨ feat(db): Add batch delete todo feature
 # 🐛 fix(provider): Fix timer background recovery issue
 #
 # Release format: 🔖 V1.0.0: Release title
@@ -532,13 +534,13 @@ The format of `.gitmessage.txt` at the project root is as follows:
 
 ## FAQ
 
-### Q: How to choose a commit type?
+### Q: How to choose the commit type?
 
-- **feat**: A change that the user can see
-- **fix**: Fix an issue reported by the user
-- **docs**: README, comments, etc.
+- **feat**: A feature change that users can see
+- **fix**: Fix a user-reported issue
+- **docs**: README, comments, and other documentation
 - **chore**: Dependency updates, configuration files
-- **refactor**: Code optimization that doesn't change behavior
+- **refactor**: Code optimization that does not change behavior
 
 ### Q: When should a commit be split?
 
@@ -552,10 +554,10 @@ The format of `.gitmessage.txt` at the project root is as follows:
 
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [gitmoji](https://gitmoji.carloscuesta.me/)
-- [Emoji 完整列表](#完整-emoji-参考)
+- [Full Emoji List](#complete-emoji-reference)
 - [release.md](release.md) - Release template
 
 ---
 
-> 💡 **Tip**: Keep commits atomic and clearly described, making code review and history navigation
-> more efficient!
+> 💡 **Tip**: Keep commits atomic and well-described, making code review and traceability more
+> efficient!
