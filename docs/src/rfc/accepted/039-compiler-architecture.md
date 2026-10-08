@@ -208,6 +208,7 @@ P0  仓库维护机制与代码放置规程 08        ← 先立规矩:三条禁
 P1  复活孤儿测试并修缺陷        06 §S1   ← 最便宜,收益最大
 P2  建立等价性判据基线          07 全部
 P3  修正确性漏洞(最小方案)      02 §修复
+P3.5 删除 pub 与自动绑定        RFC-029g / #399  ← 排序约束 D56,必须先于 P4
 P4  阶段契约与统一 Driver        02
 P5  checker 文件内拆分          09 §P5 补齐
 P6  类型表示单一化              03
@@ -225,6 +226,7 @@ P10 其余清理与状态修正          06 §S2-S6
 | P1 → P2 | 复活测试会改变测试数量与语料基线。先建基线会在 P1 后失效 |
 | P2 → P3 | 漏洞判据必须**先写成红的**才能证明修复有效。**收窄（D51）**：P3 的前置仅为 2.3.2（多文件语料层）+ 2.4.1/2.4.3（两个红判据）；P2 其余部分可与 P3 并行，但 P4 必须等 P2 全部完成——正确性漏洞的止血不被判据基础设施建设阻塞 |
 | P3 → P4 | 先修 bug 再重构。反序会让 bug 被阶段表固化成"既定行为" |
+| P3.5 → P4 | RFC-029g（#399）的删除面覆盖 P4 4.2.2 / P5 / P6 / P7 / P8 各自的重写对象（`check_project` 内的角色分派、`checker.rs`、`ast.rs` 与 `src/std`、`ir_gen.rs`、`lexer`+`parser`）。反序等于在新文法、新 checker 布局、新 IR 上重做同一批删除（D56） |
 | P4 → P5 | P5 以 `include!` → 真 `mod`（09 §P5 5.1）开场，随后的 checker 拆分与之动同一个文件，必须在 P4 之后连续进行 |
 | P5 → P6 | 同一文件的连续改动必须分开，否则回归无法二分定位 |
 | P6 → P7 / P8 | 类型表示不先收敛，SSA 的新 IR 会长成第三套表示 |
@@ -241,6 +243,7 @@ P10 其余清理与状态修正          06 §S2-S6
 | **P1** | 5 个文件补 `mod` 声明；**1005 行 / 78 个测试复活** | 测试数上升；**预期暴露真实缺陷**（`literals.rs` 溢出路径、`\x`/`\u` 非法转义从未被测过） | 逐文件 revert；**修复的缺陷不应回滚** |
 | **P2** | 新增 `verify.rs`、快照基线、语料差分框架、**多文件语料层**、性能基线（criterion 冒烟基准）、`scripts/ci/check-*` | `verify_loose` 跑绿；漏洞判据**写成红的** | 判据代码可整体移除 |
 | **P3** | `types.rs`（`proof_calls` 收成私有）、`orchestrator.rs` 三个消费点 | 漏洞判据**转绿**；**故意撤掉修复必须重新变红** | 纯行为修正 |
+| **P3.5** | 语言层 `pub` 与自动绑定的整体删除（RFC-029g / #399，**外部轨道，非本重构设计项**）：`lexer`/`parser` 的 `KwPub` 与语法分支、`ast.rs` 的 `is_pub` ×2、`checker.rs` 的 `auto_bind_to_type` / `collect_exports` pub 分支与 `env.exports` 死表、`dead_code.rs` 的 `exempt_pub`、formatter 回显、`semantic_tokens` 的 `Public`、`src/std/` 31 处、诊断文案与语言参考。与 P10 S5 的 Rust `pub(crate)` 降可见性是两件事 | `pub` 成解析错误 + Lib/Script 未引用顶层绑定报 W1001（**两条都红判据先行**）；测试数不降；语料差分基线同提交 | 整批一个 commit 组可独立 revert；`src/std` 改动须在 P6 冻结前完成 |
 | **P4** | 新增 `src/driver/`；改写 5 个入口；**4.5：`ReleasePlan` / `overload_resolutions` 键 `Span` → `PlanId`（D20）** | 诊断集相同 + 语料行为相同（C2）；span 键控静默失效归零 | **最大风险点**；保留旧入口、Driver 未接线即可回滚 |
 | **P5** | `include!` → 真 `mod`（5.1）；`checker.rs` 拆出 `refinement` / `annotations` | **IR 快照 zero-diff**（C1）；`statements.rs:16` 的 `pub(crate)` 路径不变 | 逐文件 revert |
 | **P6** | `ast.rs`、`types/mono.rs`、`solver.rs`、`ir.rs:3`、`bytecode.rs:2353-2390`；阶段收尾执行目录改名（D1：`typecheck/`→`sema/`、`middle/core/`→`middle/ir/`） | 诊断**码**相同（C3）；改名批次为纯搬移（C1 zero-diff） | 分阶段提交，变体处置与同义词表删除分开；改名独占 commit |
@@ -409,6 +412,9 @@ P10 其余清理与状态修正          06 §S2-S6
 | D50 | 阶段并行（多文件 typecheck） | **本轮不做。** 判据稳定后作为独立议题 | 并行会掩盖顺序依赖缺陷，与本轮排查目标冲突 |
 | D51 | P3 止血通道 | **允许。** P3 前置收窄为 2.3.2 + 2.4.1 + 2.4.3；P2 其余部分（IR 校验器/快照/单文件差分/性能基线）可与 P3 并行；P4 必须等 P2 全部完成 | 正确性漏洞（`Sorted(3)` 静默通过）的止血不应被快照基础设施建设阻塞；P4 需要三层判据全就位故不放宽 |
 | D52 | `.42` 三处硬编码丢弃（`bytecode.rs:2312`/`2315`/`2341`） | **全部收进 P7（7e），不留"独立 issue"。** `2315`（异常表）与 `2341`（全局变量）原定独立 issue，现收编 | 异常表丢失使 throw/try 在 `.42` 直跑时行为错误——throw/try 是语言核心语义；本次重构不留核心功能的待实现遗留。三处同修只需一次 `VERSION` 升版（4→5），比拆成两次升版便宜 |
+| D56 | RFC-029g（#399：删除 `pub` 关键字与自动绑定）与本次重构的排序 | **整体先于 P4 落地**（WBS 的 **P3.5** 轨道）。其删除面覆盖 P4 4.2.2（`check_project` 内的角色分派）/ P5（`checker.rs` 纯搬迁会把 pub 分支原样搬走）/ P6（`ast.rs`，且 `src/std` 在该阶段冻结）/ P7（`ir_gen.rs`）/ P8（`lexer`、`parser`） | 029g 是**已接受未实现的规格符合性删除**（语言参考已按裁定改写、关键字仍在），本身不是新设计；但它要删的文件恰好是四个重构阶段的重写对象。反序（等重构完成后再删）= 在新文法、新 checker 布局、新 SSA IR、新 Driver 上重做同一批删除；且其行为变化（`pub` 变解析错误、Lib/Script 新报 W1001）会以五笔分散的基线更新混进各阶段，违反 DoD 6（阶段可独立 revert）与 C2 判据的洁净前提。正序还顺带清掉 `env.exports` 死表，使 P4 4.3 的义务账本少一个无人消费字段 |
+| D57 | typecheck 义务字段的可见性收窄（#434：`proof_calls` 等 5 处 `pub(crate)` 泄漏） | **裁决 B：`pub(super)` + 唯一 getter。** typecheck 树内同生杀圈共享构造、crate 外只读 getter；`proof_execution` 模块私有化、`solver_unavailable_result` 收 `pub(super)`；`pub(crate)` 泄漏计数 145→140 | Rust struct 字面量要求含 base 填充字段在内的全字段可见——全私有会迫使 11 处构造点改写，止血阶段不取；`pub(super)` 在不破坏构造面的前提下切断 crate 级泄漏。终态收口归 P4 4.3 义务账本迁移 |
+| D58 | SMT 求解器获取面统一（02 §(b)(c)：三形态并存——predicate 进程单例 / checker 每模块新建注入 / ownership 每回边新建） | **进程级共享单例，真实修复位置在 `proof/smt/backend.rs`。** 形态 = `LazyLock<Mutex<Option<Box<dyn Solver>>>>`（predicate.rs 已验证的形态上移；02 写的 `&'static` 裸引用不可行——`dyn Solver` 不 `Sync`，Z3Backend 内含 RefCell/Cell）。访问口收敛为闭包 `with_shared_solver(f)`；三个生产消费点全部改走共享口：`predicate.rs` 删私有 SOLVER、`checker.rs` termination 注入改闭包内判定（`TerminationChecker` 生命周期参数化持 `&dyn Solver`）、`ownership.rs` 回边判定改共享口。`default_solver()`（新建实例）仅保留给测试与独立场景 | 缓存是实例内的（z3_backend.rs），新建型消费点使命中率计数与 CACHE_CAP 空转——单例化是「缓存命中率可观测」（4.4.2）的真实前提。**硬前置：Unknown 不入缓存**（否则一次超时经进程级缓存跨编译固化，且污染 cargo test 线程间共享）——该修复先行落地。禁令：闭包内禁止再次获取（Mutex 不可重入，嵌套即死锁）；调用链termination/ownership/predicate 串行不嵌套，文档化约束 |
 
 ### 唯一待补数据项
 

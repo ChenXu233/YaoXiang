@@ -106,6 +106,14 @@ RFC-039 给出**为什么**重构与**按什么顺序**做；本文给出 L1 的
 | 10 | 全局槽位分配 | 不适用 | 有 `allocate_global_slots`（`147`） | **无** | **无** | **无** |
 | 11 | IR 生成 + 限定名重写 + 链接 | 有（`205`） | 有（`152-236`） | **无** | **无** | 有（独立 ModuleIR 后合并） |
 
+> **复核注记（WBS 3.4.3，2026-10-07 逐格核对）**：本表是 `9e02e4db` 基线的诊断快照，留存不改。P3 落地后的现状差异：
+>
+> - **第 1 行已修复**：proof_execution 五入口共用 `frontend/proof_execution.rs` 同一实现（pipeline + orchestrator 四入口），唯一消费者缺陷不存。
+> - **第 2/4/5 行现状不变**（多文件 `run` 仍不输出 W1003、不跑死代码族）→ 归 WBS 3.4.6（前置 4.2.1）。
+> - **第 6 行**（单态化单文件独占）→ 归 WBS 3.4.8（前置 4.1.3，潜在风险未证缺陷）。
+> - **第 7 行** check_module / check_module_collect_all 双入口 → 归 4.2.7（Aggregation 参数驱动）。
+> - 代码侧引用的「#434 裁决」此前 docs 零登记——已补登为 RFC-039 **D57**。
+
 **两处需要精确表述，否则会写错：**
 
 - **第 4/5 行的准确结论是**：`yaoxiang run` 在**多文件**路径下（`lib.rs:154 run_project` → `compile_project`）永不报 W1001/W1002/W1003；在**单文件**路径下（`lib.rs:140 run_file` → `pipeline.rs:275-278`）是报的。原因在 `compile_project:138` —— `type_results.push(result)` 存下了完整 `TypeCheckResult`（含 `warnings`），但该函数**全程无任何 `result.warnings` 读取点**，`result` 唯一的下游用途是 `generate_ir_with_context`（`154-156`）。
@@ -266,6 +274,13 @@ README 第 3 行称「按层序执行，下层失败上层不跑」。实际 `Ty
 即：`termination` 与 `ownership` 顺序与声明**相反**；声明的 Layer 0 `equivalence` **根本没有出现在 `check_module` 的阶段序列里**（它只被 `inference/assignment.rs:17` 作为 `is_subtype` 工具函数使用，与 `ProofResult` 无关）。同时**不存在任何 short-circuit**——`checker.rs:1271-1276` 把 termination 的错误逐条 `add_error` 后继续往下走，README 承诺的「下层失败上层不跑」不成立。
 
 **（b）SMT 后端有三种获取策略、两种失败哲学。**
+
+> **复核注记（2026-10-07）**：硬失败 panic 已由 P3 的 3.3.1 消除（SOLVER 槽 Option 化，
+> 缺失按 `SMTResult::Unknown` 保守降级）；「静默跳过（不注入）」由 3.4.2 补 W1081 信号。
+> 三形态的统一（单例化）按 **RFC-039 D58** 执行，真实修复位置 `proof/smt/backend.rs`
+> （新增进程级共享单例 + `with_shared_solver` 闭包口），02 改动清单的
+> `default_solver() → &'static` 表述以 D58 为准（`&'static` 裸引用不可行：
+> `dyn Solver` 不 `Sync`）。
 
 | 消费点 | 获取策略 | 求解器不可用时 |
 | --- | --- | --- |
@@ -620,7 +635,7 @@ pub enum Aggregation {
 | `src/frontend/core/typecheck/checker.rs` | `1283-1293` | `unwrap_or_default()` 降级路径加 warning 诊断 |
 | `src/frontend/core/typecheck/checker.rs` | `1244` | 修正与 `1320` 不符的注释 |
 | `src/frontend/core/typecheck/layers/README.md` | `1-18` | 层序表改为**实际**执行顺序；删除「下层失败上层不跑」（不存在 short-circuit） |
-| `src/frontend/core/typecheck/proof/smt/backend.rs` | `67-72` | `default_solver()` 改为返回 `&'static` 单例引用（修复每回边新建 context） |
+| `src/frontend/core/typecheck/proof/smt/backend.rs` | `67-72` | **按 D58**：新增进程级共享单例（`LazyLock<Mutex<Option<Box<dyn Solver>>>>`）+ `with_shared_solver` 闭包访问口；`predicate.rs`/`checker.rs`/`ownership.rs` 三消费点改走共享口。`&'static` 裸引用形态不可行（`dyn Solver` 不 `Sync`），原文表述以 D58 为准 |
 
 **删除**：`src/util/diagnostic/mod.rs:621-661` 的 `check_single_file`；`src/lsp/handlers/diagnostics.rs:161-227` 的手工 lex/parse 序列。
 
@@ -695,7 +710,7 @@ pub enum Aggregation {
 | 交付 | 验收 |
 | --- | --- |
 | `layers/README.md` 层序改为实际顺序 | 文档与 `checker.rs` 调用点逐条对应 |
-| `backend.rs:67-72` 改单例 | 缓存命中率可观测（加计数器） |
+| `backend.rs` 进程级共享单例（D58；**硬前置：Unknown 不入缓存**——否则一次超时经进程级缓存跨编译固化、且污染 cargo test 线程间共享） | 生产路径 `default_solver()` 调用点归零（仅测试保留）；缓存命中率跨三消费点可观测（计数器已在 89576fafd 落地） |
 | `checker.rs:1283-1293` 降级加 warning | 无 `body_checker` 时有诊断 |
 | `orchestrator.rs` 12 个 wasm 属性的可达性判定 | 结论交 `06-cleanup-inventory.md`，本文只登记判定需求 |
 

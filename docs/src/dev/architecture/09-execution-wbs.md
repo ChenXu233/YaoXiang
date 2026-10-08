@@ -134,7 +134,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 - [x] **3.1 `proof_calls` 消费端**（2 个三级任务，2026-10-06 完成）
 - [x] **3.2 第二个静默丢弃点**（1 个三级任务，2026-10-06 完成；**表述与实测不符，见 3.2.1 行更正**）
 - [x] **3.3 panic 转诊断**（1 个三级任务，2026-10-06 完成）
-- [ ] **3.4 静默丢弃点补遗**（8 个三级任务，2026-10-07 审计新增，**全部待实施**）
+- [ ] **3.4 静默丢弃点补遗**（8 个三级任务，2026-10-07 审计新增；3.4.1/3.4.2/3.4.3 已实施，3.4.4–3.4.8 随 P4 前置推进）
 
 | 二级 | 三级 | 文件:行 | 前置 | 验收 |
 | --- | --- | --- | --- | --- |
@@ -142,9 +142,9 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 3.1.2 消费点补齐 | `orchestrator.rs:99` / `:273` / `:450` / `:1374`（实测四入口 + 单文件共 5 处） | 3.1.1 | C2 |
 | 3.2 第二个静默丢弃点 | 3.2.1 `Unproven` 空 match 臂产出诊断（**2026-10-07 核实：`ownership.rs` 只构造 `Proved`/`Disproved`，本臂源码不可达，属防御性代码；判据转绿由 3.1 承担，本项无独立判据**） | `checker.rs:1303-1314` | 2.4.3 | `test_no_silent_pass_on_unproven` |
 | 3.3 panic 转诊断 | 3.3.1 `.expect()` → `SMTResult::Unknown` + 诊断 | `predicate.rs:34-36` | — | Z3 缺失下不再 panic |
-| 3.4 静默丢弃点补遗（2026-10-07 审计新增） | 3.4.1 const 泛型约束 `Unproven` 空臂改产诊断/记账（**审计新增：全仓文档零登记、零任务**） | `environment.rs:422-426` | — | 新判据先红后绿：const 实参不可编译期求值时不得静默 |
-| | 3.4.2 终止检查求解器缺失留痕（`default_solver()` 为 `None` 时不注入、静默跳过全部 SMT 路径） | `checker.rs:1266-1268` | — | Z3 缺失时产 W 级诊断；与 3.3.1 同一降级哲学 |
-| | 3.4.3 02 §91 阶段覆盖表第 1 行同步（该行仍记四入口「无 proof_execution」，P3 已补齐；顺带登记代码引用的 `#434` 裁决——docs 侧查无此文） | `02:95-107` | — | 人工 review：逐格与代码核对 |
+| 3.4 静默丢弃点补遗（2026-10-07 审计新增） | 3.4.1 const 泛型约束 `Unproven` 空臂改产诊断/记账（**审计新增：全仓文档零登记、零任务**）（**2026-10-07 已实施**：接线已注册的 W1063——事实链 environment→ExpressionInferrer→StatementChecker→checker 汇聚发射；bounds 层区分 TypeVar 内部探测实参防误报；红判据先行） | `environment.rs:422-426` | — | 新判据先红后绿：const 实参不可编译期求值时不得静默 |
+| | 3.4.2 终止检查求解器缺失留痕（**2026-10-07 已实施**：新码 W1081——`count_unjudged_obligations` 纯函数取信号（递减+良基性两表合并），checker 汇聚发射；NotProved（求解器在但判不出）不触发，本码专属「求解器缺失」） | `checker.rs:1266-1268` | — | Z3 缺失时产 W 级诊断；与 3.3.1 同一降级哲学 |
+| | 3.4.3 02 §91 阶段覆盖表第 1 行同步（**2026-10-07 已完成**：表保留为 9e02e4db 诊断快照，复核注记逐格标注现状去向；`#434` 裁决补登为 RFC-039 **D57**） | `02:95-107` | — | 人工 review：逐格与代码核对 |
 | | 3.4.4 `variant_ctor_calls` 零消费者裁决（删字段 或 接线消费端；IR 侧现靠形态检测 `detect_variant_ctor_call`） | `types.rs:56`、`ir_gen.rs:7374` | 4.3.1 | `check-obligations.py`（9.2）不再报该字段；无静默歧义形态 |
 | | 3.4.5 `method_overload_ir_names` 与 `overload_resolutions` 平行表示二选一（禁令一） | `types.rs:60`、`ir_gen.rs:369` | 4.3.1 | 同一事实单点表达；C3 |
 | | 3.4.6 `compile_project` 补 `warnings` 消费（多文件 `run` 永不报 W1001/W1002/W1003） | `orchestrator.rs:99-159` | 4.2.1 | C2：多文件与单文件诊断集归一 |
@@ -168,6 +168,58 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 > **执行约定**：3.4.1 / 3.4.2 / 3.4.3 无 P4 前置，可随时就地落地（建议先做 3.4.1——唯一「全仓零登记」的活体漏洞，改动面最小）；3.4.4–3.4.8 随 P4 执行，其判据依赖义务账本（4.3.1）或统一 Driver（4.2.x）。**3.4 不新立判据体系**，一律复用既有 C2/C3 与 P9 的 9.2 门禁。
 
 > **止血通道（2026-10-05 裁决）**：P3 不必等 P2 全部完成。3.1/3.2 的唯一硬前置是 **2.3.2（多文件语料层）+ 2.4.1/2.4.3（两个红判据）**；2.1/2.2/2.3.1/2.3.3（IR 校验器、快照、单文件差分、性能基线）可与 P3 并行推进。正确性漏洞（`Sorted(3)` 静默通过）的止血不应被快照基础设施建设阻塞。3.3（panic 转诊断）无前置，可随时落地。
+
+### P3.5 RFC-029g：删除 `pub` 与自动绑定（外部轨道 / #399 —— 排序约束 D56）
+
+来源：[RFC-029g](../rfc/accepted/029g-remove-pub-and-auto-bind.md)（2026-10-02 已接受、实现未开工）、[#399](https://github.com/ChenXu233/YaoXiang/issues/399)。**本轨道不是重构自身的设计项，是被排序约束强制前置的规格符合性删除**；与 P10 S5「`pub` 项降可见性」（Rust 的 `pub(crate)` 收窄）是两件事。
+
+**为什么必须整体先于 P4**：029g 的删除面与四个重构阶段的重写面重合，反序 = 在新文法 / 新 checker 布局 / 新 SSA IR 上重做同一批删除与基线更新。
+
+| 029g 删除面 | 文件 | 被哪个阶段重写 |
+| --- | --- | --- |
+| `KwPub` 与语法分支 | `lexer/{tokens,state,mod}.rs`；`parser/parser_state.rs`、`statements/{declarations,imports,functions,bindings}.rs` | **P8**（8.2 词法收敛 / 8.3 建文法 / 8.6 删 Pratt / 8.7 拆 `parse_assign_after_target`） |
+| AST `is_pub` ×2（`Assign` / `TypeDefinition`） | `parser/ast.rs:247/270` | **P6 6.5 AST 死变体** + P8 + D1 目录改名（`parser/ast.rs` → 顶层 `src/ast/`） |
+| `auto_bind_to_type` 与 `collect_exports` 的 pub 分支 | `typecheck/checker.rs:2150/3802/3836`、`environment.rs:284` | **P5**（`include!`→真 `mod` 与 checker 拆分是**纯搬迁**，pub 分支会被原样搬进新文件） |
+| 死码豁免 `exempt_pub` / `is_exported` 与角色分派 | `typecheck/passes/dead_code.rs`、`module/orchestrator.rs:389-407`（`check_project` 体内） | **P4 4.2.2**（`check_project` 瘦身） |
+| `semantic_tokens` 的 `Public` modifier | `typecheck/checker/semantic_tokens.rs:450/498` | **P4 4.2.6** + P5 + 4.6（D55） |
+| `ir_gen` 的 `is_pub` 忽略绑定 | `middle/core/ir_gen.rs:1378` | **P7**（`ir_gen.rs` SSA 化） |
+| `src/std/` 31 处 `pub` | `std/list.yx`(25) / `json.yx`(4) / `option.yx`(1) / `result.yx`(1) | 无阶段直接改，但 **P6 硬验收要求 `git diff --stat tests/ src/std/` 为空**——只能在 P6 之前落 |
+
+**附带收益**：029g 删除 `env.exports` 死表（生产端灌表、全仓零消费）与 `is_exported`/`is_visible` 两个访问器 → P4 的 4.3 义务账本少一个「产出但无人消费」字段。
+
+- [ ] **3.5.1 词法与 parser 分支**（`KwPub` ×8）
+- [ ] **3.5.2 AST `is_pub` ×2**（含生产构造点与测试 fixture 同步）
+- [ ] **3.5.3 checker 侧**（`auto_bind_to_type`、`collect_exports` 的 pub 分支、`env.exports` 死表与两个访问器）
+- [ ] **3.5.4 死码豁免收敛**（`exempt_pub` / `is_exported` 删除；`orchestrator` 角色分派同步）
+- [ ] **3.5.5 外围回显**（formatter 的 pub 前缀、`semantic_tokens` 的 `Public`）
+- [ ] **3.5.6 std 与诊断文案**（31 处 pub 前缀；4 条 W1xxx help 的「pub 是对外接口」表述改 zh 源，译文走 bot）
+- [ ] **3.5.7 语言参考收敛**（`modules.md` §3.2–3.3、`syntax.md` 关键字表 18→17、`warning-codes.md`、`language-overview.md`、`guide/modules.md`）
+
+| 二级 | 三级 | 文件:行 | 验收 |
+| --- | --- | --- | --- |
+| 3.5.1 词法与 parser | 3.5.1.1 `KwPub` 变体与 `keyword_from_str` 条目删除 | `lexer/tokens.rs:83`、`state.rs:28`、`mod.rs:62` | 关键字表 18→17（`Kw*` 16→15，含 `tokens.rs:82` 计数注释） |
+| | 3.5.1.2 声明位的 pub 探测与 `pre_detected_pub` 删除 | `parser/statements/declarations.rs:672/675/731/747/880`、`functions.rs`、`bindings.rs` | `pub f = ...` 报解析错误（**红判据先行**） |
+| | 3.5.1.3 use 花括号条目内的 pub 跳过与语句前导 pub 删除 | `parser/statements/imports.rs:57`、`parser_state.rs:203` | `pub use m` 报解析错误（**红判据先行**） |
+| 3.5.2 AST | 3.5.2.1 `Assign`/`TypeDefinition` 的 `is_pub` 删除 + 构造点同步 | `parser/ast.rs:247/270` 与各构造点 | 编译器内无 pub 残留（`grep -rn is_pub src/` 为空） |
+| 3.5.3 checker | 3.5.3.1 `auto_bind_to_type` 删除（pub 是唯一调用理由） | `checker.rs:3802`、`environment.rs:284`、调用点 `checker.rs:2150` | 方法形式只剩显式组合（RFC-004），std 与语料零依赖 |
+| | 3.5.3.2 `collect_exports` 去 pub 分支 + `env.exports` 死表与 `is_exported`/`is_visible` 删除 | `checker.rs:3836`、`environment.rs:599/612` | 导出面唯一权威 = 模块注册表 `ModuleInfo.exports`；9.2 门禁少一字段 |
+| 3.5.4 死码豁免 | 3.5.4.1 `exempt_pub` / `is_exported` 与豁免分支删除 | `dead_code.rs:23/44/83/90/174/180/191/195/591/629` | Lib/Script 未引用的顶层绑定报 W1001（**红判据先行**） |
+| | 3.5.4.2 `orchestrator` 角色分派同步 | `orchestrator.rs:389-407` | 单文件 / 多文件诊断集归一（C2），W 码不混入消费方 |
+| 3.5.5 外围回显 | 3.5.5.1 formatter 的 pub 前缀 | `formatter/handlers/stmt.rs:81/117/146/151` | format 幂等（既有判据） |
+| | 3.5.5.2 `semantic_tokens` 的 `Public` modifier | `typecheck/checker/semantic_tokens.rs:450/498` | 语义着色不再产出 Public |
+| 3.5.6 std 与文案 | 3.5.6.1 `src/std` 31 处 pub 前缀删除 | `std/{list,json,option,result}.yx` | 语料与 std 自检全绿；**须在 P6 前完成** |
+| | 3.5.6.2 诊断文案 | 4 条 W1xxx help | 不再宣称「pub 是对外接口」；与 `dead_code.rs:574` 的 Bin 角色行为对齐 |
+| 3.5.7 文档 | 3.5.7.1 语言参考与指南 | `reference/language-spec/{modules,syntax,language-overview}.md`、`warning-code/warning-codes.md`、`guide/modules.md` | 规范不再出现与实现相反的「pub 仍可写」表述；`warning-codes.md:124`「pub 永不触发 W1001」一并修正 |
+
+**验收（行为变化，红判据先行）**：
+
+1. **先红后绿**：两条行为变化各自先落红判据再动代码——① `pub` 从「静默接受」变为解析错误；② Lib/Script 角色下未引用的顶层绑定新报 W1001（原先 pub 项绝对豁免）。
+2. **测试数不得下降**：删 `typecheck/passes/tests/dead_code.rs` 的 `exempt_pub` 用例与 `is_pub` fixture 时，必须由等价新用例替换。
+3. **基线同提交**：诊断集变化（新解析错误 + 新 W1001）→ 语料差分基线（`tests/baselines/corpus-parity.jsonl`）与 CHANGELOG 同提交更新；IR 快照预计 zero-diff，不为零须说明原因。
+4. **独立 revert 单元**：整批占一个 commit 组，不与其他阶段混提（DoD 6）。
+5. `cargo test` / `clippy -D warnings` / `python scripts/rfc/check_tracking.py` 全绿。
+
+**排序**：与 3.4 文件重叠（`checker.rs`、`environment.rs`）→ 两者串行、不得并行；**整体先于 P4**（RFC-039 D56）。P3.5 不依赖 3.4，先做哪个由实施者按在手上下文定。
 
 ### P4 阶段契约与统一 Driver
 
@@ -198,7 +250,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | 4.3 义务账本 | 4.3.1 `obligations.rs` + `assert_drained()`（新建；含 `#[ignore]` 红骨架先行） | 4.1.3 | `test_obligations_drained` 转绿 |
 | | 4.3.2 义务诊断 W→E 升级 | 4.3.1 | 人工 review 每处新增 E |
 | 4.4 证明层与 wasm 收尾 | 4.4.1 `layers/README.md` 层序改实际顺序 | — | **独立于 4.1–4.3 走** |
-| | 4.4.2 `default_solver()` 改 `&'static` 单例（`proof/smt/backend.rs:67-72`） | — | 缓存命中率可观测 |
+| | 4.4.2 SMT 求解器获取面统一为进程级共享单例（**按 D58**：真实修复位置 `backend.rs`——`LazyLock<Mutex<Option<Box<dyn Solver>>>>` + `with_shared_solver` 闭包口；`predicate.rs` 删私有 SOLVER、`checker.rs` termination 注入改闭包内判定（`TerminationChecker` 生命周期参数化）、`ownership.rs` 回边判定改共享口；`default_solver()` 仅保留测试用。**硬前置**：Unknown 不入缓存（否则超时结果经进程级缓存跨编译/跨测试固化）。89576fafd 只交付了计数器观测工具，本任务本体未动） | — | 生产路径 `default_solver()` 调用点归零 + 缓存命中率跨三消费点可观测 |
 | | 4.4.3 降级路径加 warning（`checker.rs:1283-1293`） | — | — |
 | 4.5 跨层契约 PlanId 化（D20） | 4.5.1 `ReleasePlan` 键 `Span` → `PlanId`（`layers/ownership.rs:31` 产出侧分配 + `ir_gen.rs:1942` 消费侧匹配） | 4.3.1 | `test_release_plan_spans_consumed` 差集为空（D41） |
 | | 4.5.2 `overload_resolutions` 键 `Span` → `PlanId` | 4.5.1 | C2；span 失配类静默失效归零 |
@@ -378,7 +430,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 ### 强制串行主链
 
-`P0 → P1 → P2 → P3 → P4 → P5 → P6 → (P7 ∥ P8) → P9 → P10`
+`P0 → P1 → P2 → P3 → P3.5 → P4 → P5 → P6 → (P7 ∥ P8) → P9 → P10`
 
 > **P3 止血通道（2026-10-05 裁决）**：P3 的前置收窄为 **2.3.2 + 2.4.1 + 2.4.3**（多文件语料层 + 两个红判据）。P2 的其余部分（2.1 IR 校验器、2.2 快照、2.3.1/2.3.3 差分与性能基线）可与 P3 并行推进。正确性漏洞的止血不被判据基础设施建设阻塞；但 **P4 仍必须等 P2 全部完成**——统一 Driver 需要三层判据全部就位。
 
@@ -388,6 +440,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | P1 → P2 | 复活测试会改变测试数量与语料基线 |
 | P2（收窄后）→ P3 | 漏洞判据必须**先写成红的**（2.4.1/2.4.3）+ 多文件语料层（2.3.2）存在，红测试才有地方跑 |
 | P3 → P4 | 先修 bug 再重构；反序会让 bug 被阶段表固化成"既定行为" |
+| P3.5 → P4 | RFC-029g（#399）的删除面覆盖 P4 4.2.2 / P5 / P6 / P7 / P8 各自的重写对象（清单见本文 §P3.5）——反序等于在新文法、新 checker 布局、新 IR 上重做同一批删除（D56） |
 | P4 → P5 | `include!` 改造与 checker 拆分动同一文件 |
 | P5 → P6 | 同一文件的连续改动必须分开，否则回归无法二分定位 |
 | P6 → P7 / P8 | 类型表示不先收敛，新 IR 会长成第三套表示 |
@@ -405,7 +458,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | F | 9.3 ∥ 9.9 ∥ 9.10（P0 引入的三个脚本可并行开发） | 9.5 的快照基线必须最后取 |
 | G | S3 ∥ S4 ∥ S5 | 文件集不相交（已核实 2026-10-05：S3 动 `docs/src/dev/design/check/` + `config.js`；S4 动 `docs/src/rfc/` + `check_tracking.py` 生成器；S5 动 `src/frontend/core/typecheck/` 两处 `pub`；两两无交集） |
 
-**不可并行（文件重叠）**：P1(1.1.x) ∥ P8(8.0.x)；1.2.1 ∥ 8.3.2；6.0 ∥ S2（B6/E5 同批文件）；4.3.2 ∥ 9.2（已统一到 P4）。
+**不可并行（文件重叠）**：P1(1.1.x) ∥ P8(8.0.x)；1.2.1 ∥ 8.3.2；6.0 ∥ S2（B6/E5 同批文件）；4.3.2 ∥ 9.2（已统一到 P4）；**3.4 ∥ P3.5**（`checker.rs` / `environment.rs` 同文件——外部轨道的删 pub 批次与静默通道修复必须串行）。
 
 **文档内部新增约束**：6.0→6.1→6.2→6.3→6.4→6.5→6.6 严格串行；7a→7b→7c→7d 严格串行，且 7b 的 `Phi` 臂必须先于 7d。
 
@@ -413,6 +466,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 - **P0 独立成阶段而非并入 P9**——门禁是"事后检查"，规程是"事前判断"。P9 的脚本无法阻止"该重构却打了补丁"，只有 D0–D4 的 review 清单能。
 - **P9 作为 CI 脚本的唯一权威清单**——原缺口 G3 的三套并存清单导致无法收口。本表合并后 10 个脚本各归属一个阶段，report-only 与转硬时点显式可查。
+- **P3.5 收编 RFC-029g 而非留作"独立轨道、等重构后做"**——它的删除面与 P4/P5/P6/P7/P8 的重写面重合（RFC-039 D56）。留待重构后执行，等于在新文法、新 checker 布局与新 IR 上把同一批删除重做一遍；这与 7e 收编 `2315`/`2341`、S4 收编 RFC 状态修正是同一条教训。
 - **P5 的步骤由本文补齐而非并入 P4**——P4 已是最大单点风险，再叠加 checker 拆分会超出可回滚粒度。
 - **5.3.2 以"零调用方改动"为硬验收**——拆分必须能独立 revert。
 

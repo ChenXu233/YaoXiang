@@ -33,7 +33,8 @@ dead-code = "warn"
 | `W1004` | 未使用的私有变量 | 否 | `未使用的变量：'{name}'` | ✅ 1 处 |
 | `W1005` | 未使用的私有方法 | 否 | `未使用的方法：'{name}'` | ✅ 1 处 |
 | `W1006` | 本地模块遮蔽依赖包 | 否 | `本地模块 '{module}' 遮蔽了依赖包 '{dependency}'` | ✅ 2 处 |
-| `W1063` | const 泛型约束无法求值 | 否 | `const 泛型约束无法求值: \`{constraint}\` ({var} = {value})` | ⚠ 暂未发射 |
+| `W1063` | const 泛型约束无法求值 | 否 | `const 泛型约束无法求值: \`{constraint}\`` | ✅ 1 处汇聚发射 |
+| `W1081` | 终止性义务未判定 | 否 | `{count} 条终止性测度义务未判定（SMT 求解器不可用）` | ✅ 1 处汇聚发射 |
 | `W1080` | 编译期证明降级 | 否 | `编译期无法证明约束，已降级为运行时检查` | ⚠ 暂未发射 |
 
 ## 逐码说明
@@ -90,9 +91,17 @@ dead-code = "warn"
 
 - **类别**：`Warning`
 - **span 豁免**：否
-- **模板**：`const 泛型约束无法求值: \`{constraint}\` ({var} = {value})`
+- **模板**：`const 泛型约束无法求值: \`{constraint}\``
 - **帮助**：确保 const 参数是编译期常量
-- **发射点**：⚠ 暂未发射（注册表中保留该码，但非测试代码里没有调用处）
+- **发射点**：✅ WBS 3.4.1（2026-10-07）接线——事实链 `environment.rs`（Unproven 臂收集）→ `ExpressionInferrer.unevaluable_const_constraints` → `StatementChecker` 回收 → `checker.rs` 汇聚发射。模板尾段 `({var} = {value})` 原为无注册参数的占位，接线时收敛为单 `{constraint}` 参数（约束描述携带 binder 与实参信息）
+
+### W1081：终止性义务未判定
+
+- **类别**：`Warning`
+- **span 豁免**：是（模块级汇总诊断，无单点 span）
+- **模板**：`{count} 条终止性测度义务未判定（SMT 求解器不可用）`
+- **帮助**：安装 Z3 求解器后重新检查，以获得终止性判定；「未判定」不等于「不终止」，但义务的判定被跳过了
+- **发射点**：✅ WBS 3.4.2（2026-10-07）接线——`TerminationChecker` 的 Unjudged 判定（无求解器时「只记录不发射」的静默通道）经 `count_unjudged_obligations` 计数，`checker.rs` 汇聚发射。求解器在场时的 NotProved（判不出）不触发本码——它是求解器**缺失**的专属信号
 
 ### W1080：编译期证明降级
 
