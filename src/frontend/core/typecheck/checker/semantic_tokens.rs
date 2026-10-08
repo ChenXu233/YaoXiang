@@ -447,7 +447,6 @@ impl TypeChecker {
                     type_annotation,
                     signature_params,
                     value,
-                    is_pub,
                     ..
                 } => {
                     let Some((name, type_name)) = target.receiver_parts() else {
@@ -495,9 +494,6 @@ impl TypeChecker {
                         }
                     } else if !params.is_empty() || !body.is_empty() {
                         let mut modifiers = vec![SemanticTokenModifier::Declaration];
-                        if *is_pub {
-                            modifiers.push(SemanticTokenModifier::Public);
-                        }
                         if !generic_params.is_empty() {
                             modifiers.push(SemanticTokenModifier::Generic);
                         }

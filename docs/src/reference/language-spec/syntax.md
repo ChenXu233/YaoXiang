@@ -22,14 +22,14 @@ YaoXiang 源文件必须使用 UTF-8 编码。源文件通常以 `.yx` 为扩展
 
 ### 1.3 关键字
 
-YaoXiang 共有 **18 个关键字**（`src/frontend/core/lexer/state.rs:25-55` 的
+YaoXiang 共有 **17 个关键字**（`src/frontend/core/lexer/state.rs` 的
 `keyword_from_str`，逐个对应一个 `TokenKind`）：
 
 ```
-pub     use     spawn  ref     mut
-if      else    match  while   for
-in      return  break  continue
-as      unsafe  and    or
+use     spawn   ref     mut
+if      else    match   while   for
+in      return  break   continue
+as      unsafe  and     or
 ```
 
 `and` / `or` 是逻辑与 / 或的**关键字**（Zig 式，优先级见 §2.2 第 10 级）；
@@ -38,18 +38,15 @@ as      unsafe  and    or
 这些关键字在任何上下文中都具有特殊含义，不能用作标识符。
 
 > **`type` 已经不是关键字**（RFC-010）：写类型定义用 `Name: Type = { ... }` 记法。
-> `src/frontend/core/lexer/state.rs:27` 明确注释了这一点，`TokenKind` 枚举头
-> （`src/frontend/core/lexer/tokens.rs:82`）也写着 “16 total - RFC-010: 'type' keyword
-> removed”——**那个 16 是过期注释**，实际已列 18 个（含 `and` / `or`，而 `Kw*` 前缀
-> 那批仍是 16 个）。
+> `keyword_from_str` 与 `TokenKind` 枚举头（`src/frontend/core/lexer/tokens.rs`）
+> 都标注了 “RFC-010: 'type' keyword removed”。
 >
-> **`pub` 不产生可见性效果**：`pub` 仍被词法层识别为 `KwPub`
-> （`src/frontend/core/lexer/state.rs:28`），解析器在声明与导入项处跳过它
-> （`src/frontend/core/parser/statements/declarations.rs:666-671,726`、
-> `.../imports.rs:57-59`），但模块系统**不据此做任何可见性判定**——已接受的
-> [RFC-029](../../rfc/accepted/029-module-semantics.md) 明确
-> “没有 `pub`、没有 `private`、没有 `export`，没有可见性机制”（该文件第 17 行）。
-> 写不写 `pub` 对可见性没有区别。
+> **`pub` 已经不是关键字**（RFC-029g，2026-10-02 接受）：语言不设可见性机制，
+> `pub` 已从词法、AST、类型检查、死码豁免、格式化器与 LSP 中整体删除
+> （[RFC-029g](../../rfc/accepted/029g-remove-pub-and-auto-bind.md)）。它现在只是
+> 普通标识符——旧写法 `pub x = 1` 会按未定义名报 E1001。
+> 所有顶层绑定默认可导入，修饰符对可见性没有区别
+> （[RFC-029](../../rfc/accepted/029-module-semantics.md)）。
 
 ### 1.4 保留字
 
@@ -986,17 +983,17 @@ b: Int = a + 1                    // 错误：a → b → a
 
 ## 附录：语法速查
 
-### A.0 关键字（18 个）
+### A.0 关键字（17 个）
 
 ```
-pub     use     spawn  ref     mut
-if      else    match  while   for
-in      return  break  continue
-as      unsafe  and    or
+use     spawn   ref     mut
+if      else    match   while   for
+in      return  break   continue
+as      unsafe  and     or
 ```
 
-`type` 已不是关键字（RFC-010，改用 `Name: Type = { ... }`）；`pub` 不产生可见性效果
-（RFC-029）。字面量保留字 `true` / `false` / `void` 见 §1.4.1，元类型名 `Type` 与内建
+`type` 已不是关键字（RFC-010，改用 `Name: Type = { ... }`）；`pub` 已随 RFC-029g
+整体删除，退回普通标识符。字面量保留字 `true` / `false` / `void` 见 §1.4.1，元类型名 `Type` 与内建
 类型名 `Void` / `Never` / `Int` / `Float` / `Bool` / `Char` / `String` 见 §1.4.3。
 
 ### A.1 控制流

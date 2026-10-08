@@ -244,7 +244,6 @@ pub enum StmtKind {
         /// 签名第一组参数原样（含参数名），供 typechecker classify_generic_params 使用
         signature_params: Vec<Param>,
         value: Option<Box<Expr>>,
-        is_pub: bool,
         is_mut: bool,
         span: Span,
     },
@@ -266,8 +265,6 @@ pub enum StmtKind {
         signature_params: Vec<Param>,
         /// 解析后的类型体（必有）
         definition: Type,
-        /// 是否 pub
-        is_pub: bool,
     },
     /// Use statement: `use module.path` / `use module.{a, b}` /
     /// `use module as m` / `use module.{a as x}`（#245）

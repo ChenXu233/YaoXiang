@@ -1375,7 +1375,6 @@ impl AstToIrGenerator {
                 name,
                 signature_params,
                 definition,
-                is_pub: _,
             } => {
                 self.declared_type_names.insert(name.clone());
                 use crate::frontend::core::parser::ast::extract_generic_param_names;

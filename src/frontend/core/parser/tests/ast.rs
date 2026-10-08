@@ -34,7 +34,6 @@ fn point_type_definition_stmt() -> Stmt {
                     }),
                 ],
             },
-            is_pub: false,
         },
         span: Span::dummy(),
     }
@@ -336,7 +335,6 @@ fn test_stmtkind_var() {
             type_annotation: None,
             signature_params: Vec::new(),
             value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
-            is_pub: false,
             is_mut: false,
             span: Span::dummy(),
         },
@@ -367,7 +365,6 @@ fn test_stmtkind_binding() {
                 }),
                 span: Span::dummy(),
             })),
-            is_pub: false,
             is_mut: false,
             span: Span::dummy(),
         },

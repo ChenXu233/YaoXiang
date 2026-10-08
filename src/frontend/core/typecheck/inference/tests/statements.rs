@@ -81,7 +81,6 @@ fn test_check_var_stmt_with_type_annotation() {
         type_annotation: Some(ast::Type::Int(64)),
         signature_params: vec![],
         value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
-        is_pub: false,
         is_mut: false,
         span: Span::dummy(),
     });
@@ -111,7 +110,6 @@ fn test_check_var_stmt_type_inference() {
         type_annotation: None,
         signature_params: vec![],
         value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
-        is_pub: false,
         is_mut: false,
         span: Span::dummy(),
     });
@@ -366,7 +364,6 @@ fn test_check_var_stmt_type_mismatch() {
         type_annotation: Some(ast::Type::Bool),
         signature_params: vec![],
         value: Some(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
-        is_pub: false,
         is_mut: false,
         span: Span::dummy(),
     });
@@ -525,7 +522,6 @@ fn test_check_statement_checker_with_many_statements() {
             type_annotation: Some(ast::Type::Int(64)),
             signature_params: vec![],
             value: Some(Box::new(Expr::Lit(Literal::Int(i as i128), Span::dummy()))),
-            is_pub: false,
             is_mut: false,
             span: Span::dummy(),
         }));
@@ -620,7 +616,6 @@ fn test_check_var_stmt_only_annotation() {
         type_annotation: Some(ast::Type::Float(64)),
         signature_params: vec![],
         value: None,
-        is_pub: false,
         is_mut: false,
         span: Span::dummy(),
     });

@@ -54,10 +54,6 @@ pub fn parse_use_stmt(
                     }
                     state.skip(&TokenKind::Comma);
                 }
-                Some(TokenKind::KwPub) => {
-                    // Skip 'pub' in import items
-                    state.bump();
-                }
                 _ => break,
             }
         }

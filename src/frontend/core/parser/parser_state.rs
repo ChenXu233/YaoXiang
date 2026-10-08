@@ -200,7 +200,6 @@ impl<'a> ParserState<'a> {
             // 走表达式语句，否则落入下方「关键字误用」分支报 E0018（#347）。
             Some(TokenKind::KwUnsafe) => parse_expr_stmt(self, ss),
             Some(TokenKind::KwMut) => parse_var_stmt(self, ss),
-            Some(TokenKind::KwPub) => parse_identifier_stmt(self, ss),
             Some(TokenKind::Identifier(_)) => parse_identifier_stmt(self, ss),
             Some(TokenKind::LParen) => parse_paren_destructure_stmt(self, ss),
             Some(TokenKind::Eof) | None => None,

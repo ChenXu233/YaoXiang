@@ -12,12 +12,11 @@ use crate::util::span::Span;
 use super::types::parse_type_annotation_required;
 
 /// Parse function definition with already parsed name
-/// Handles: `[pub] name = (params) => body`
+/// Handles: `name = (params) => body`
 pub fn parse_fn_stmt_with_name(
     state: &mut ParserState<'_>,
     name: String,
     span: Span,
-    is_pub: bool,
 ) -> Option<Stmt> {
     if !state.expect(&TokenKind::LParen) {
         return None;
@@ -43,7 +42,6 @@ pub fn parse_fn_stmt_with_name(
                 body: Box::new(Block { stmts: body, span }),
                 span,
             })),
-            is_pub,
             is_mut: false,
             span,
         },
@@ -52,12 +50,11 @@ pub fn parse_fn_stmt_with_name(
 }
 
 /// Parse function definition with already parsed name (simple form)
-/// Handles: `[pub] name = param => body` (single param without parentheses)
+/// Handles: `name = param => body` (single param without parentheses)
 pub fn parse_fn_stmt_with_name_simple(
     state: &mut ParserState<'_>,
     name: String,
     span: Span,
-    is_pub: bool,
 ) -> Option<Stmt> {
     let param_span = state.span();
     let param_name = match state.current().map(|t| &t.kind) {
@@ -87,7 +84,6 @@ pub fn parse_fn_stmt_with_name_simple(
                 body: Box::new(Block { stmts: body, span }),
                 span,
             })),
-            is_pub,
             is_mut: false,
             span,
         },

@@ -302,7 +302,7 @@ fn test_e2e_check_nonexistent_file_exits_nonzero() {
 
 #[test]
 fn test_e2e_check_unused_private_fn_warns_but_exits_zero() {
-    // Arrange: 私有函数无任何引用 → W1001（pub 函数是对外接口，永不报）
+    // Arrange: 函数无任何引用 → W1001（RFC-029g 后无 pub 豁免；引用池未命中）
     let tmp = TempDir::new().unwrap();
     let src = write_yx(
         tmp.path(),
@@ -515,15 +515,15 @@ fn write_manifest(
 }
 
 #[test]
-fn test_e2e_check_bin_role_reports_unused_pub_fn() {
+fn test_e2e_check_bin_role_reports_unused_fn() {
     // Arrange: 无声明面项目——含 main 且无人 use 的入口文件推断为 Bin，
-    // 其未使用 pub 可报（RFC-029f 角色语义；pub 仍豁免时此测试红）
+    // 其未使用的顶层函数可报（RFC-029f 角色语义；RFC-029g 前 pub 豁免时此测试红）
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "");
     let src = write_yx(
         tmp.path(),
         "main.yx",
-        "pub dead_api = (x: Int) => x\nmain = () => { x = 1 }",
+        "dead_api = (x: Int) => x\nmain = () => { x = 1 }",
     );
 
     // Act
@@ -533,13 +533,14 @@ fn test_e2e_check_bin_role_reports_unused_pub_fn() {
     assert_eq!(code, 0, "警告不构成错误，check 应 exit 0");
     assert!(
         stderr.contains("W1001"),
-        "Bin 角色未使用 pub 应报 W1001，实际: {stderr:?}"
+        "Bin 角色未使用的顶层函数应报 W1001，实际: {stderr:?}"
     );
 }
 
 #[test]
-fn test_e2e_check_lib_file_unused_pub_exempt() {
-    // Arrange: [lib] 声明的库文件是对外接口——未使用 pub 豁免（定案 B 语义）
+fn test_e2e_check_lib_file_unused_fn_reports() {
+    // Arrange: [lib] 声明的库文件——RFC-029g 后不再有 pub 绝对豁免，
+    // 未被任何文件引用的 lib_dead 应报（引用池只救活 lib_fn）
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "[lib]\npath = \"lib.yx\"\n");
     let _main = write_yx(
@@ -550,7 +551,7 @@ fn test_e2e_check_lib_file_unused_pub_exempt() {
     let lib = write_yx(
         tmp.path(),
         "lib.yx",
-        "pub lib_fn = (x: Int) => x\npub lib_dead = (y: Int) => y",
+        "lib_fn = (x: Int) => x\nlib_dead = (y: Int) => y",
     );
 
     // Act
@@ -559,8 +560,8 @@ fn test_e2e_check_lib_file_unused_pub_exempt() {
     // Assert
     assert_eq!(code, 0);
     assert!(
-        !stderr.contains("W1001"),
-        "Lib 角色 pub 是对外接口不应报 W1001，实际: {stderr:?}"
+        stderr.contains("W1001") && stderr.contains("lib_dead"),
+        "引用池未命中的 Lib 顶层函数应报 W1001，实际: {stderr:?}"
     );
 }
 
@@ -573,11 +574,7 @@ fn test_e2e_check_tests_dir_exempt_from_dead_code() {
     let test_file = tmp.path().join("tests");
     std::fs::create_dir(&test_file).unwrap();
     let test_src = test_file.join("util_test.yx");
-    std::fs::write(
-        &test_src,
-        "pub helper = (x: Int) => x\nmain = () => { x = 1 }",
-    )
-    .unwrap();
+    std::fs::write(&test_src, "helper = (x: Int) => x\nmain = () => { x = 1 }").unwrap();
 
     // Act: check 目录——tests/ 下的文件作为入口被检查
     let (code, _stdout, stderr) = run_yx(&["check", tmp.path().to_str().unwrap()], tmp.path());
@@ -599,8 +596,8 @@ fn test_e2e_check_vendor_import_surface_allows_exported() {
     let dep = tmp.path().join(".yaoxiang/vendor/dep-0.1.0");
     std::fs::create_dir_all(dep.join("src")).unwrap();
     write_manifest(&dep, "dep", "[exports]\n\".\" = \"src/dep.yx\"\n");
-    std::fs::write(dep.join("src/dep.yx"), "pub api = (x: Int) => x").unwrap();
-    std::fs::write(dep.join("src/hidden.yx"), "pub secret = (x: Int) => x").unwrap();
+    std::fs::write(dep.join("src/dep.yx"), "api = (x: Int) => x").unwrap();
+    std::fs::write(dep.join("src/hidden.yx"), "secret = (x: Int) => x").unwrap();
     let src = write_yx(
         tmp.path(),
         "main.yx",
@@ -622,8 +619,8 @@ fn test_e2e_check_vendor_import_surface_blocks_hidden() {
     let dep = tmp.path().join(".yaoxiang/vendor/dep-0.1.0");
     std::fs::create_dir_all(dep.join("src")).unwrap();
     write_manifest(&dep, "dep", "[exports]\n\".\" = \"src/dep.yx\"\n");
-    std::fs::write(dep.join("src/dep.yx"), "pub api = (x: Int) => x").unwrap();
-    std::fs::write(dep.join("src/hidden.yx"), "pub secret = (x: Int) => x").unwrap();
+    std::fs::write(dep.join("src/dep.yx"), "api = (x: Int) => x").unwrap();
+    std::fs::write(dep.join("src/hidden.yx"), "secret = (x: Int) => x").unwrap();
     let src = write_yx(
         tmp.path(),
         "main.yx",
@@ -644,16 +641,16 @@ fn test_e2e_check_vendor_import_surface_blocks_hidden() {
 // RFC-029f Phase 2：Internal pub 收紧 + [tool.test] patterns 级 Test 判定
 
 #[test]
-fn test_e2e_check_internal_unused_pub_reports() {
-    // Arrange: internal.yx 无人 use、无 main → Internal 角色；其 pub 无引用
-    // （Phase 2 收紧：包内 use 图不可达即报）
+fn test_e2e_check_internal_unused_fn_reports() {
+    // Arrange: internal.yx 无人 use、无 main → Internal 角色；其顶层函数无引用
+    // （RFC-029f 包内 use 图不可达即报）
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "");
     let _main = write_yx(tmp.path(), "main.yx", "main = () => { x = 1 }");
     let internal = write_yx(
         tmp.path(),
         "internal.yx",
-        "pub orphan = (x: Int) => x\nconst_used = 1",
+        "orphan = (x: Int) => x\nconst_used = 1",
     );
 
     // Act: 单文件入口检查 internal.yx
@@ -663,13 +660,13 @@ fn test_e2e_check_internal_unused_pub_reports() {
     assert_eq!(code, 0);
     assert!(
         stderr.contains("W1001"),
-        "Internal 角色 unreferenced pub 应报 W1001，实际: {stderr:?}"
+        "Internal 角色未被引用的顶层函数应报 W1001，实际: {stderr:?}"
     );
 }
 
 #[test]
-fn test_e2e_check_internal_pub_used_elsewhere_alive() {
-    // Arrange: 同样的 pub 定义，但被其他文件具名导入并调用——
+fn test_e2e_check_internal_fn_used_elsewhere_alive() {
+    // Arrange: 同样的顶层定义，但被其他文件具名导入并调用——
     // 引用池来自全项目扫描，使用方在发现集之外也能救活
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "");
@@ -678,7 +675,7 @@ fn test_e2e_check_internal_pub_used_elsewhere_alive() {
         "main.yx",
         "use internal.{util}\nmain = () => { util(1) }",
     );
-    let internal = write_yx(tmp.path(), "internal.yx", "pub util = (x: Int) => x");
+    let internal = write_yx(tmp.path(), "internal.yx", "util = (x: Int) => x");
 
     // Act
     let (code, _stdout, stderr) = run_yx(&["check", internal.to_str().unwrap()], tmp.path());
@@ -687,7 +684,7 @@ fn test_e2e_check_internal_pub_used_elsewhere_alive() {
     assert_eq!(code, 0);
     assert!(
         !stderr.contains("W1001"),
-        "被包内其他文件使用的 Internal pub 不应报，实际: {stderr:?}"
+        "被包内其他文件使用的 Internal 顶层函数不应报，实际: {stderr:?}"
     );
 }
 
@@ -705,7 +702,7 @@ fn test_e2e_check_custom_test_patterns() {
     let checks = tmp.path().join("checks");
     std::fs::create_dir(&checks).unwrap();
     let guard = checks.join("guard.yx");
-    std::fs::write(&guard, "pub ensure = (x: Int) => x\nmain = () => { x = 1 }").unwrap();
+    std::fs::write(&guard, "ensure = (x: Int) => x\nmain = () => { x = 1 }").unwrap();
 
     // Act
     let (code, _stdout, stderr) = run_yx(&["check", guard.to_str().unwrap()], tmp.path());
@@ -1409,12 +1406,12 @@ fn test_e2e_lib_truly_dead_non_pub_fn_still_flagged() {
 }
 
 #[test]
-fn test_e2e_lib_unused_pub_fn_still_exempt() {
-    // Arrange: Lib 文件的 pub 无人引用 —— 分发边界语义维持绝对豁免（宁漏报）
+fn test_e2e_lib_unused_fn_reports() {
+    // Arrange: Lib 文件的顶层函数无人引用——RFC-029g 后不再有绝对豁免，按引用池判定
     let tmp = TempDir::new().unwrap();
     write_manifest(tmp.path(), "app", "");
     std::fs::create_dir_all(tmp.path().join("src/util")).unwrap();
-    write_yx(tmp.path(), "src/util/mod.yx", "pub api = () => 9\n");
+    write_yx(tmp.path(), "src/util/mod.yx", "api = () => 9\n");
     write_yx(
         tmp.path(),
         "src/main.yx",
@@ -1427,8 +1424,8 @@ fn test_e2e_lib_unused_pub_fn_still_exempt() {
     // Assert
     assert_eq!(code, 0);
     assert!(
-        !stderr.contains("W1001"),
-        "pub in Lib must stay unconditionally exempt, stderr: {stderr:?}"
+        stderr.contains("W1001") && stderr.contains("api"),
+        "unreferenced top-level fn in Lib must be reported, stderr: {stderr:?}"
     );
 }
 

@@ -264,6 +264,7 @@
 {"check":{"diagnostics":[["E1065","tests/yaoxiang/06-compile-errors/not_callable_err.yx",16]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/not_callable_err.yx"}
 {"check":{"diagnostics":[["E1104","tests/yaoxiang/06-compile-errors/operator_orphan_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/operator_orphan_err.yx"}
 {"check":{"diagnostics":[["E1002","tests/yaoxiang/06-compile-errors/option_annotation_mismatch_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/option_annotation_mismatch_err.yx"}
+{"check":{"diagnostics":[["E1001","tests/yaoxiang/06-compile-errors/pub_declaration_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/pub_declaration_err.yx"}
 {"check":{"diagnostics":[],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/question_mark_as_param_type.yx"}
 {"check":{"diagnostics":[["E1082","tests/yaoxiang/06-compile-errors/question_nonresult_expr_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/question_nonresult_expr_err.yx"}
 {"check":{"diagnostics":[["E1081","tests/yaoxiang/06-compile-errors/question_nonresult_return_err.yx",12]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/question_nonresult_return_err.yx"}

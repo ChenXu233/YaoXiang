@@ -71,7 +71,6 @@ pub fn parse_method_bind(
                 body: Box::new(Block { stmts: body, span }),
                 span,
             })),
-            is_pub: false,
             is_mut: false,
             span,
         },

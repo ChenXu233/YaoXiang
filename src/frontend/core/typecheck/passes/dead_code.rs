@@ -1,9 +1,10 @@
 //! 死代码分析器
 //!
 //! 识别从未被引用的定义，生成警告信息。
-//! 码义（RFC-013，#321 定案 B + RFC-029f 角色语义）：`pub` 定义的豁免与否
-//! 由角色决定——Script/Lib/Internal 豁免（pub = 对外接口），Bin 不豁免
-//! （无包外消费者，未使用 pub 可报，即 #321 方案 A 的兑现）。
+//! 码义（RFC-013 + RFC-029f + RFC-029g）：顶层绑定不因任何修饰符豁免——
+//! 可达性由文件内引用与包内引用池（[`DeadCodeAnalyzer::set_project_refs`]）
+//! 共同判定。单文件（Script）路径没有包视角，未引用的顶层绑定一律报
+//! W1001/W1002/W1004/W1005。`pub` 关键字已由 RFC-029g 删除，不再是豁免来源。
 //! 未使用导入（W1003）由 typecheck 的 use elaboration 检测，不在此处。
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -15,20 +16,15 @@ use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind, Expr, Block};
 
 /// 死代码分析器
 pub struct DeadCodeAnalyzer {
-    /// 入口点集合（可达性根：main 与 pub 函数/类型）
+    /// 入口点集合（可达性根：`main`）
     entry_points: HashSet<String>,
     /// 所有符号定义
     all_defs: HashMap<String, SymbolDef>,
-    /// pub 定义是否豁免（默认 true；Bin 角色设为 false）
-    exempt_pub: bool,
-    /// 包内引用池（Phase 2）：Some 时 Internal 的 pub 由池判定生死
+    /// 包内引用池（RFC-029f；RFC-029g 收敛为唯一豁免口）：包内所有文件
+    /// （含测试）引用到的标识符并集。文件内不可达但池中命中的定义视为活
+    /// ——跨文件消费者在本文件不可见，这是「宁漏报」方向。
+    /// `None`（单文件 Script 路径）= 无包视角，只按文件内可达性判定。
     project_refs: Option<HashSet<String>>,
-    /// 跨文件引用豁免（029f Lib 角色非 pub 补遗，RFC-014 项目模式盘出）：
-    /// Lib（被包内 use 的文件）的消费者在文件外，非 pub 定义只按文件内
-    /// 可达性判定会把跨文件引用判成死代码——误报方向，违背 029f「宁漏报」。
-    /// 与 `project_refs` 分开：后者同时改写 pub 政策（Internal Phase 2 收紧），
-    /// 本字段只豁免非 pub，pub 维持「绝对豁免」不动。
-    cross_file_refs: Option<HashSet<String>>,
 }
 
 /// 符号定义
@@ -40,8 +36,6 @@ pub struct SymbolDef {
     pub kind: SymbolKind,
     /// 定义位置
     pub location: Span,
-    /// 是否导出（pub = 对外接口，永不报告）
-    pub is_exported: bool,
 }
 
 /// 符号种类
@@ -80,24 +74,13 @@ impl DeadCodeAnalyzer {
         Self {
             entry_points: HashSet::new(),
             all_defs: HashMap::new(),
-            exempt_pub: true,
             project_refs: None,
-            cross_file_refs: None,
         }
     }
 
-    /// 设置 pub 豁免（RFC-029f：Bin 角色 = false，未使用 pub 可报）
-    pub fn set_exempt_pub(
-        &mut self,
-        exempt: bool,
-    ) {
-        self.exempt_pub = exempt;
-    }
-
-    /// 设置包内引用池（RFC-029f Phase 2）：项目内所有文件引用到的标识符
-    /// 并集。提供后，`exempt_pub` 的 Internal 角色语义从"绝对豁免"收紧为
-    /// "pub 名在池中才豁免"——包内 use 图不可达的 pub 可报。
-    /// None（单文件 Script 路径）= 无包视角，pub 维持绝对豁免。
+    /// 设置包内引用池（RFC-029f）：项目内所有文件引用到的标识符并集。
+    /// 提供后，文件内不可达但被包内其它文件引用的定义视为活——跨文件
+    /// 消费者在本文件不可见，这是「宁漏报」方向。`None` = 单文件视角。
     pub fn set_project_refs(
         &mut self,
         refs: HashSet<String>,
@@ -105,20 +88,10 @@ impl DeadCodeAnalyzer {
         self.project_refs = Some(refs);
     }
 
-    /// 设置跨文件引用池（仅豁免非 pub，见字段注释）。
-    pub fn set_cross_file_refs(
-        &mut self,
-        refs: HashSet<String>,
-    ) {
-        self.cross_file_refs = Some(refs);
-    }
-
     /// 收集入口点和符号定义（合并处理以减少代码重复）
     ///
-    /// 入口点（可达性根）：
-    /// 1. `main` 函数
-    /// 2. `pub` 导出的函数与 `pub` 类型定义（对外接口）——仅在 [`Self::exempt_pub`]
-    ///    时作为可达根；Bin 角色 pub 不再自动豁免
+    /// 入口点（可达性根）：`main` 函数。RFC-029g 后没有第二个根——修饰符
+    /// 不产生任何可见性语义，顶层绑定一律参与可达性判定。
     ///
     /// 类型定义走 `TypeDefinition` 语句（`Point: Type = {...}`），
     /// 不再从 Assign 形状猜测——带类型注解的变量赋值是变量，不是类型。
@@ -132,7 +105,6 @@ impl DeadCodeAnalyzer {
                     target,
                     type_annotation,
                     value,
-                    is_pub,
                     ..
                 } => {
                     let Some((name, type_name)) = target.receiver_parts() else {
@@ -171,30 +143,21 @@ impl DeadCodeAnalyzer {
                             name: def_name.clone(),
                             kind,
                             location: stmt.span,
-                            is_exported: *is_pub,
                         },
                     );
                     if !is_method && name == "main" {
                         self.entry_points.insert(name.clone());
                     }
-                    if *is_pub && self.exempt_pub && self.project_refs.is_none() {
-                        self.entry_points.insert(def_name);
-                    }
                 }
-                StmtKind::TypeDefinition { name, is_pub, .. } => {
+                StmtKind::TypeDefinition { name, .. } => {
                     self.all_defs.insert(
                         name.clone(),
                         SymbolDef {
                             name: name.clone(),
                             kind: SymbolKind::Type,
                             location: stmt.span,
-                            is_exported: *is_pub,
                         },
                     );
-                    // pub 类型是对外接口（可达根）；私有类型仅被引用时可达
-                    if *is_pub && self.exempt_pub && self.project_refs.is_none() {
-                        self.entry_points.insert(name.clone());
-                    }
                 }
                 _ => {}
             }
@@ -566,19 +529,15 @@ impl DeadCodeAnalyzer {
         reachable
     }
 
-    /// 找出未被引用的私有定义
+    /// 找出未被引用的定义（RFC-029f + RFC-029g）
     ///
-    /// 找出未被引用的定义（RFC-029f 角色语义）
-    ///
-    /// pub 豁免由角色决定：
-    /// - Bin（`exempt_pub = false`）：无包外消费者，未使用 pub 报警（#321 方案 A）
-    /// - Internal（`exempt_pub = true` + 提供引用池）：收紧为"包内 use 图可达才豁免"，
-    ///   pub 名不在池中即报（Phase 2）
-    /// - Script/Lib（`exempt_pub = true` 且无引用池）：绝对豁免——pub 是对外接口
-    ///   （#321 定案 B）；包外消费者不可见，宁漏报
-    ///
-    /// 私有定义不受豁免影响，始终参与判定（既有语义）。
-    pub fn find_unused_private_defs(
+    /// 判定只有两道闸：文件内可达性，以及包内引用池。
+    /// - 提供引用池（项目模式）：池中命中即活——跨文件消费者在本文件不可见，
+    ///   这是「宁漏报」方向（也曾是 Lib 非 pub 误报的根因）。
+    /// - 无引用池（单文件 Script 路径）：只按文件内可达性判定，
+    ///   未引用的顶层绑定一律报告。
+    /// - 没有任何修饰符能豁免——`pub` 关键字已由 RFC-029g 删除。
+    pub fn find_unused_defs(
         &self,
         reachable: &HashSet<String>,
     ) -> Vec<DeadCodeWarning> {
@@ -588,12 +547,8 @@ impl DeadCodeAnalyzer {
             if Self::is_reachable(name, def, reachable) {
                 continue;
             }
-            if def.is_exported && !self.pub_should_warn(name) {
-                continue;
-            }
-            // 非 pub：包内任一文件（含测试）引用即活——跨文件消费者不可见
-            // 曾是 Lib 非 pub 误报的根因
-            if let Some(refs) = &self.cross_file_refs {
+            // 包内任一文件（含测试）引用即活
+            if let Some(refs) = &self.project_refs {
                 let short_name = name.rsplit('.').next().unwrap_or(name);
                 if refs.contains(short_name) {
                     continue;
@@ -614,28 +569,6 @@ impl DeadCodeAnalyzer {
         }
 
         warnings
-    }
-
-    /// pub 定义是否应当报告（不可达前提下）
-    ///
-    /// - `exempt_pub = false`（Bin）→ 报
-    /// - `exempt_pub = true` + 引用池（Internal）→ 池中无短名才报；
-    ///   短名匹配与 [`Self::is_reachable`] 同构（`Type.method` 取方法名）
-    /// - `exempt_pub = true` 无引用池（Script/Lib）→ 不报（绝对豁免）
-    fn pub_should_warn(
-        &self,
-        name: &str,
-    ) -> bool {
-        if !self.exempt_pub {
-            return true;
-        }
-        match &self.project_refs {
-            Some(refs) => {
-                let short_name = name.rsplit('.').next().unwrap_or(name);
-                !refs.contains(short_name)
-            }
-            None => false,
-        }
     }
 
     /// 判定定义是否可达；方法用短名匹配（调用点 `w.render()` 只出现短名）
@@ -665,8 +598,8 @@ impl DeadCodeAnalyzer {
         // 2. 计算可达性
         let reachable = self.compute_reachability(ast);
 
-        // 3. 找出未被引用的私有定义
-        self.find_unused_private_defs(&reachable)
+        // 3. 找出未被引用的定义
+        self.find_unused_defs(&reachable)
     }
 
     /// 将警告转换为诊断信息

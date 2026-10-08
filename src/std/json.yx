@@ -27,7 +27,7 @@ use std.list
 
 /// JSON 值。六变体对齐 RFC 8259 §3：null / boolean / number / string /
 /// array / object。
-pub Json: Type = {
+Json: Type = {
     null: () -> Json,
     bool: (Bool) -> Json,
     num: (Float) -> Json,
@@ -53,7 +53,7 @@ StrSpanned: Type = {
 
 /// 解析 JSON 文本。失败返回 E6013，消息含 行:列 与原因。
 /// 语法按 RFC 8259：不接受尾随逗号、尾随内容、单引号、注释。
-pub parse: (s: &String) -> Result(Json, Error) = {
+parse: (s: &String) -> Result(Json, Error) = {
     cs = string.chars(s)
     i = skip_ws(cs, 0)
     rv = parse_value(cs, s, i)
@@ -488,12 +488,12 @@ err_at: (cs: &Vec(String), i: Int, msg: &String) -> Error = {
 /// 紧凑序列化（无空白）。字符串转义对齐 RFC 8259 §7：
 /// `"` `\` 与 U+0000..U+001F（\b \t \n \f \r 用短形态，其余 \u00xx），
 /// 非 ASCII 原样输出（合法 UTF-8）。
-pub stringify: (v: &Json) -> String = {
+stringify: (v: &Json) -> String = {
     return write_value(v, false, 0)
 }
 
 /// 格式化序列化：2 空格缩进，数组/对象展开，空容器紧凑。
-pub pretty: (v: &Json) -> String = {
+pretty: (v: &Json) -> String = {
     return write_value(v, true, 0)
 }
 

@@ -1197,7 +1197,6 @@ impl TypeChecker {
         self.finalize_interface_instantiations();
 
         // 收集所有导出项
-        self.collect_exports(module);
 
         // #371/#372：注解里的类型名校验。
         //
@@ -1840,7 +1839,6 @@ impl TypeChecker {
                 type_annotation,
                 signature_params,
                 value,
-                is_pub,
                 ..
             } if value.as_ref().is_some_and(|v| {
                 matches!(
@@ -2175,11 +2173,6 @@ impl TypeChecker {
                         PolyType::new_with_const(Vec::new(), const_binders.clone(), fn_ty.clone())
                     };
                     self.env.add_var(name.clone(), poly);
-                }
-
-                // 处理 pub 自动绑定
-                if *is_pub {
-                    self.auto_bind_to_type(&name, &final_param_types, fn_ty);
                 }
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
@@ -3825,65 +3818,6 @@ impl TypeChecker {
         for impl_ in impls_to_add {
             // auto_derive 已有 has_trait_impl 前置检查，这里不会冲突
             let _ = self.env.add_trait_impl(impl_);
-        }
-    }
-
-    /// 自动将函数绑定到类型
-    /// pub 函数的默认行为：绑定到第一个参数的类型
-    /// 例如: pub distance: (p1: Point, p2: Point) -> Float 自动绑定为 Point.distance
-    fn auto_bind_to_type(
-        &mut self,
-        fn_name: &str,
-        param_types: &[MonoType],
-        fn_type: MonoType,
-    ) {
-        if param_types.is_empty() {
-            // 无参数函数无法自动绑定（工厂函数模式需要特殊处理）
-            return;
-        }
-
-        // 获取第一个参数的类型名称
-        let first_param_ty = &param_types[0];
-        let type_name = match first_param_ty {
-            MonoType::TypeRef(name) => name.clone(),
-            _ => return, // 无法确定绑定目标类型
-        };
-
-        // 检查该类型是否在当前模块中定义
-        if self.env.types.contains_key(&type_name) {
-            // 绑定方法到类型
-            self.env.add_method_binding(&type_name, fn_name, fn_type);
-        }
-    }
-
-    /// 收集模块的所有导出项
-    fn collect_exports(
-        &mut self,
-        module: &Module,
-    ) {
-        use crate::frontend::core::parser::ast::StmtKind;
-        for stmt in &module.items {
-            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
-            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            if let StmtKind::Assign { target, is_pub, .. } = &stmt.kind {
-                let Some((name, type_name)) = target.receiver_parts() else {
-                    continue;
-                };
-                let is_method = type_name.is_some();
-                if is_method || *is_pub {
-                    if is_method {
-                        if let Some(ty_name) = type_name {
-                            self.env.add_export(&format!("{}.{}", ty_name, name));
-                        }
-                    } else {
-                        self.env.add_export(&name);
-                    }
-                }
-            }
-            if let StmtKind::TypeDefinition { name, .. } = &stmt.kind {
-                // 类型定义始终导出
-                self.env.add_export(name);
-            }
         }
     }
 

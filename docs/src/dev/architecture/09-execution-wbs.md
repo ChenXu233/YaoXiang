@@ -187,13 +187,13 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 **附带收益**：029g 删除 `env.exports` 死表（生产端灌表、全仓零消费）与 `is_exported`/`is_visible` 两个访问器 → P4 的 4.3 义务账本少一个「产出但无人消费」字段。
 
-- [ ] **3.5.1 词法与 parser 分支**（`KwPub` ×8）
-- [ ] **3.5.2 AST `is_pub` ×2**（含生产构造点与测试 fixture 同步）
-- [ ] **3.5.3 checker 侧**（`auto_bind_to_type`、`collect_exports` 的 pub 分支、`env.exports` 死表与两个访问器）
-- [ ] **3.5.4 死码豁免收敛**（`exempt_pub` / `is_exported` 删除；`orchestrator` 角色分派同步）
-- [ ] **3.5.5 外围回显**（formatter 的 pub 前缀、`semantic_tokens` 的 `Public`）
-- [ ] **3.5.6 std 与诊断文案**（31 处 pub 前缀；4 条 W1xxx help 的「pub 是对外接口」表述改 zh 源，译文走 bot）
-- [ ] **3.5.7 语言参考收敛**（`modules.md` §3.2–3.3、`syntax.md` 关键字表 18→17、`warning-codes.md`、`language-overview.md`、`guide/modules.md`）
+- [x] **3.5.1 词法与 parser 分支**（`KwPub` ×8；2026-10-08 完成）
+- [x] **3.5.2 AST `is_pub` ×2**（含生产构造点与测试 fixture 同步；2026-10-08 完成）
+- [x] **3.5.3 checker 侧**（`auto_bind_to_type`、`collect_exports` 的 pub 分支、`env.exports` 死表与两个访问器；2026-10-08 完成）
+- [x] **3.5.4 死码豁免收敛**（`exempt_pub` / `is_exported` 删除；`orchestrator` 角色分派同步；2026-10-08 完成）
+- [x] **3.5.5 外围回显**（formatter 的 pub 前缀、`semantic_tokens` 的 `Public`；2026-10-08 完成）
+- [x] **3.5.6 std 与诊断文案**（31 处 pub 前缀；4 条 W1xxx help 改 zh 源，译文走 bot；2026-10-08 完成）
+- [x] **3.5.7 语言参考收敛**（`syntax.md` 关键字表 18→17、`warning-codes.md`、`guide/language-overview.md`、`guide/modules.md`；2026-10-08 完成）
 
 | 二级 | 三级 | 文件:行 | 验收 |
 | --- | --- | --- | --- |
@@ -222,6 +222,15 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 **排序**：与 3.4 文件重叠（`checker.rs`、`environment.rs`）→ 两者串行、不得并行；**整体先于 P4**（RFC-039 D56）。P3.5 不依赖 3.4，先做哪个由实施者按在手上下文定。
 
 > **提交对照（2026-10-08）**：本节的收编（P3.5 章节 + 主链/约束行）与 RFC-039 的 D56，在并行流清扫工作区时被一并并入 `97071c81b`——该提交的消息记的是「3.4 补遗登记 + D57/D58 裁决落档」，未提及本轨道。历史不改写，按既有体例（`d5b18390` 先例，见 P2 落地注）就地登记，作为事后二分依据。
+>
+> **P3.5 落地（2026-10-08）**：七个二级任务全部完成，整批一个 commit（可独立 revert）。
+>
+> - **实测与计划不符（如实登记）**：3.5.1.2/3.5.1.3 的验收原写「`pub f = ...` 报**解析错误**」——实际删除 `KwPub` 后 `pub` 退回普通标识符，旧写法落到语义层报 **E1001 Unknown variable: 'pub'**（span 指向 `pub`）。按 RFC-039 **D27**「专门探测已移除语法是反模式」，**不新增**迁移专用诊断；语料夹具 `pub_declaration_err.yx` 钉住 E1001，文档（`syntax.md`）如实写明该后果。
+> - **设计收敛（超出 RFC 字面，须 review）**：`project_refs` 与 `cross_file_refs` 两个字段在 pub 删除后语义完全重合（同一份「包内引用并集」，禁令一禁止平行表示）→ 合并为单一 `project_refs`，`set_exempt_pub`/`set_cross_file_refs` 两个开关删除。行为上 Internal 角色的非 pub 项从「文件内可达性」改为「引用池判定」（放宽，宁漏报方向）；Lib 由「pub 绝对豁免」收紧为引用池判定；Script 未引用顶层绑定开始报 W1001/W1002/W1004/W1005。
+> - **死表清理**：`env.exports` + `add_export`/`is_exported`/`is_visible` + `auto_bind_to_type` + `typecheck/mod.rs` 的 exports 回写全部删除（生产端灌表、全仓零消费）。
+> - **测试迁移**（测试数不降）：新增 `lexer/tests/rfc029g_lexer.rs`（1）；`parser/statements/tests/bindings.rs` 的「pub 被识别」断言反转为「pub 不再是修饰符」；`passes/tests/dead_code.rs` 7 个角色语义用例重写（断言反转 2 个）；`tests/integration/cli_e2e.rs` 8 个角色用例改写（`lib`/`internal` 的豁免断言反转为报告断言）。
+> - **基线**：IR 快照 **zero-diff**（`pub` 不参与 IR）；语料差分基线仅新增 1 条（`pub_declaration_err.yx` → E1001），命令 `cargo run --quiet --example corpus_probe` 再生后人工 review。
+> - **实测**：lib 2556 / integration 272 / 语料 322 条基线全绿；`cargo fmt` / `clippy -D warnings` / `check-boundary` / `check-concepts` / `check-fanout` / `check_tracking.py` 全绿。
 
 ### P4 阶段契约与统一 Driver
 

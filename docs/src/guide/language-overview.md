@@ -15,7 +15,7 @@ mut y = 0                 // 可变
 name: String = "hello"    // 显式类型
 count: Int = 100          // 类型注解
 
-pub version = "1.0"       // 公开导出
+// 顶层绑定默认可导入 —— 语言没有 pub/private/export 修饰符
 ```
 
 ## 函数

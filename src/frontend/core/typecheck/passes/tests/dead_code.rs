@@ -2,7 +2,8 @@
 //!
 //! §3: 类型系统
 //! RFC-011 §7: 死代码消除机制
-//! #321 定案 B: pub 定义是对外接口永不报；仅私有定义参与死代码判定
+//! RFC-029g: `pub` 关键字已删除；未引用的顶层绑定一律参与判定，
+//! 唯一豁免口是包内引用池（RFC-029f，跨文件消费者不可见）
 
 use crate::frontend::core::typecheck::passes::dead_code::{DeadCodeAnalyzer, DeadCodeWarning};
 use crate::frontend::core::parser::ast::{Block, Module, Stmt, StmtKind, Expr, Type};
@@ -25,7 +26,6 @@ fn outer_with_inner_field() -> Stmt {
                     },
                 ))],
             },
-            is_pub: false,
         },
         span: Span::dummy(),
     }
@@ -55,7 +55,6 @@ fn module_with_point_param_annotation() -> Module {
                     }),
                     span: Span::dummy(),
                 })),
-                is_pub: false,
                 is_mut: false,
                 span: Span::dummy(),
             },
@@ -78,7 +77,6 @@ fn empty_module() -> Module {
 /// 构造一个 Assign 语句（函数 / 方法）
 fn make_binding(
     name: &str,
-    is_pub: bool,
     type_name: Option<&str>,
     body_stmts: Vec<Stmt>,
 ) -> Stmt {
@@ -104,7 +102,6 @@ fn make_binding(
                 }),
                 span: Span::dummy(),
             })),
-            is_pub,
             is_mut: false,
             span: Span::dummy(),
         },
@@ -114,16 +111,12 @@ fn make_binding(
 
 /// 构造一个类型定义语句（`Name: Type = ...` 的真实语法形态，#321）
 /// definition 用原生类型——不引用自身（自引用会被收集成使用，污染判定）
-fn make_type_def(
-    name: &str,
-    is_pub: bool,
-) -> Stmt {
+fn make_type_def(name: &str) -> Stmt {
     Stmt {
         kind: StmtKind::TypeDefinition {
             name: name.to_string(),
             signature_params: vec![],
             definition: Type::Int(64),
-            is_pub,
         },
         span: Span::dummy(),
     }
@@ -137,7 +130,6 @@ fn make_var(name: &str) -> Stmt {
             type_annotation: None,
             signature_params: vec![],
             value: None,
-            is_pub: false,
             is_mut: false,
             span: Span::dummy(),
         },
@@ -156,7 +148,6 @@ fn make_annotated_var(name: &str) -> Stmt {
             }),
             signature_params: vec![],
             value: None,
-            is_pub: false,
             is_mut: false,
             span: Span::dummy(),
         },
@@ -209,7 +200,7 @@ fn test_analyze_active_function_no_warning() {
     // Arrange: main 函数是入口点且被引用，不应产生警告
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("main", true, None, vec![])],
+        items: vec![make_binding("main", None, vec![])],
         span: Span::dummy(),
     };
 
@@ -229,7 +220,7 @@ fn test_main_function_is_entry_point_reachable() {
     // Arrange: main 函数作为入口点应始终可达（不产生死代码警告）
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("main", false, None, vec![])],
+        items: vec![make_binding("main", None, vec![])],
         span: Span::dummy(),
     };
 
@@ -244,23 +235,23 @@ fn test_main_function_is_entry_point_reachable() {
 }
 
 #[test]
-fn test_pub_function_is_entry_point_reachable() {
-    // Arrange: pub 函数是对外接口（#321 定案 B），不应被报告
+fn test_function_without_reference_is_not_reachable() {
+    // Arrange: 没有任何引用的顶层函数不是可达根（RFC-029g 删除 pub 后无豁免）
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("public_fn", true, None, vec![])],
+        items: vec![make_binding("unreferenced_fn", None, vec![])],
         span: Span::dummy(),
     };
+    analyzer.collect_entry_points_and_definitions(&ast);
 
     // Act
-    let warnings = analyzer.analyze(&ast);
+    let reachable = analyzer.compute_reachability(&ast);
 
-    // Assert: pub 函数作为入口点，不应出现 W1001 警告
+    // Assert
     assert!(
-        warnings
-            .iter()
-            .all(|w| w.code != "W1001" || !w.message.contains("public_fn")),
-        "pub 函数是对外接口，不应被报告为死代码"
+        !reachable.contains("unreferenced_fn"),
+        "RFC-029g 后修饰符不再产生可达根，实际可达集: {:?}",
+        reachable
     );
 }
 
@@ -270,8 +261,8 @@ fn test_compute_reachability_from_entry_point() {
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
-            make_binding("main", false, None, vec![make_call_stmt("helper")]),
-            make_binding("helper", false, None, vec![]),
+            make_binding("main", None, vec![make_call_stmt("helper")]),
+            make_binding("helper", None, vec![]),
         ],
         span: Span::dummy(),
     };
@@ -292,7 +283,7 @@ fn test_unused_private_function_reports_w1001() {
     // Arrange: 私有函数无任何引用 → W1001
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("dead_fn", false, None, vec![])],
+        items: vec![make_binding("dead_fn", None, vec![])],
         span: Span::dummy(),
     };
 
@@ -315,8 +306,8 @@ fn test_private_fn_used_by_reachable_fn_no_warning() {
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
-            make_binding("main", false, None, vec![make_call_stmt("helper")]),
-            make_binding("helper", false, None, vec![]),
+            make_binding("main", None, vec![make_call_stmt("helper")]),
+            make_binding("helper", None, vec![]),
         ],
         span: Span::dummy(),
     };
@@ -382,7 +373,7 @@ fn test_unused_private_type_reports_w1002() {
     // Arrange: 私有类型定义无任何引用 → W1002
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_type_def("DeadType", false)],
+        items: vec![make_type_def("DeadType")],
         span: Span::dummy(),
     };
 
@@ -404,7 +395,7 @@ fn test_unused_private_method_reports_w1005() {
     // Arrange: 私有方法绑定无任何引用 → W1005
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("render", false, Some("Widget"), vec![])],
+        items: vec![make_binding("render", Some("Widget"), vec![])],
         span: Span::dummy(),
     };
 
@@ -422,15 +413,38 @@ fn test_unused_private_method_reports_w1005() {
 }
 
 #[test]
-fn test_pub_defs_never_warn() {
-    // Arrange: pub 函数/类型/变量/方法都是对外接口，即使"无引用"也不报
-    //（对外消费方是否使用超出单文件分析边界，宁静默不误报）
+fn test_unreferenced_defs_all_report() {
+    // Arrange: 函数 / 类型 / 方法都无引用——RFC-029g 后没有任何豁免口
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
-            make_binding("pub_fn", true, None, vec![]),
-            make_type_def("PubType", true),
-            make_binding("pub_method", true, Some("PubType"), vec![]),
+            make_binding("orphan_fn", None, vec![]),
+            make_type_def("OrphanType"),
+            make_binding("orphan_method", Some("OrphanType"), vec![]),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    let codes: Vec<&str> = warnings.iter().map(|w| w.code.as_str()).collect();
+    assert!(
+        codes.contains(&"W1001") && codes.contains(&"W1002") && codes.contains(&"W1005"),
+        "函数 / 类型 / 方法三类未引用定义都应报告，实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_referenced_variable_is_not_reported() {
+    // Arrange: 变量被 main 引用 → 可达，不报（RFC-029g 后判定只看引用）
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let ast = Module {
+        items: vec![
+            make_binding("main", None, vec![make_call_stmt("used_var")]),
+            make_var("used_var"),
         ],
         span: Span::dummy(),
     };
@@ -440,39 +454,10 @@ fn test_pub_defs_never_warn() {
 
     // Assert
     assert!(
-        warnings.is_empty(),
-        "pub 定义是对外接口，不应报死代码警告，实际: {:?}",
         warnings
-    );
-}
-
-#[test]
-fn test_pub_variable_never_warns() {
-    // Arrange: pub 变量是对外接口
-    let mut analyzer = DeadCodeAnalyzer::new();
-    let ast = Module {
-        items: vec![Stmt {
-            kind: StmtKind::Assign {
-                target: Box::new(Expr::Var("pub_var".to_string(), Span::dummy())),
-                type_annotation: None,
-                signature_params: vec![],
-                value: None,
-                is_pub: true,
-                is_mut: false,
-                span: Span::dummy(),
-            },
-            span: Span::dummy(),
-        }],
-        span: Span::dummy(),
-    };
-
-    // Act
-    let warnings = analyzer.analyze(&ast);
-
-    // Assert
-    assert!(
-        warnings.iter().all(|w| w.code != "W1004"),
-        "pub 变量是对外接口，不应报 W1004，实际: {:?}",
+            .iter()
+            .all(|w| !(w.code == "W1004" && w.message.contains("used_var"))),
+        "被引用的变量不应报 W1004，实际: {:?}",
         warnings
     );
 }
@@ -516,7 +501,7 @@ fn test_analyze_many_functions() {
     // Arrange: 生成大量函数，验证分析器性能和正确性
     let mut analyzer = DeadCodeAnalyzer::new();
     let items: Vec<Stmt> = (0..100)
-        .map(|i| make_binding(&format!("func_{}", i), true, None, vec![]))
+        .map(|i| make_binding(&format!("func_{}", i), None, vec![]))
         .collect();
     let ast = Module {
         items,
@@ -526,8 +511,13 @@ fn test_analyze_many_functions() {
     // Act
     let warnings = analyzer.analyze(&ast);
 
-    // Assert: 所有 pub 函数都是对外接口，不应产生警告
-    assert_eq!(warnings.len(), 0, "pub 函数是对外接口，不应产生警告");
+    // Assert: RFC-029g 后无引用即报——100 个函数各产生一条 W1001
+    assert_eq!(
+        warnings.len(),
+        100,
+        "未引用的顶层函数应逐个报告，实际: {:?}",
+        warnings.len()
+    );
 }
 
 #[test]
@@ -537,11 +527,11 @@ fn test_mutual_reference_functions_reachable() {
     let ast = Module {
         items: vec![
             // main 调用 func_a
-            make_binding("main", false, None, vec![make_call_stmt("func_a")]),
+            make_binding("main", None, vec![make_call_stmt("func_a")]),
             // func_a 调用 func_b
-            make_binding("func_a", false, None, vec![make_call_stmt("func_b")]),
+            make_binding("func_a", None, vec![make_call_stmt("func_b")]),
             // func_b 调用 func_a
-            make_binding("func_b", false, None, vec![make_call_stmt("func_a")]),
+            make_binding("func_b", None, vec![make_call_stmt("func_a")]),
         ],
         span: Span::dummy(),
     };
@@ -560,21 +550,23 @@ fn test_mutual_reference_functions_reachable() {
 }
 
 #[test]
-fn test_pub_type_is_entry_point() {
-    // Arrange: pub 类型是对外接口（可达根），不应产生警告
+fn test_unused_type_is_not_an_entry_point() {
+    // Arrange: 未被引用的类型定义不再是可达根（RFC-029g 删除 pub 后无豁免）
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_type_def("PubType", true)],
+        items: vec![make_type_def("UnusedType")],
         span: Span::dummy(),
     };
+    analyzer.collect_entry_points_and_definitions(&ast);
 
     // Act
-    let warnings = analyzer.analyze(&ast);
+    let reachable = analyzer.compute_reachability(&ast);
 
     // Assert
     assert!(
-        warnings.iter().all(|w| !w.message.contains("PubType")),
-        "pub 类型是对外接口，不应被报告为死代码"
+        !reachable.contains("UnusedType"),
+        "RFC-029g 后类型定义不因修饰符成为可达根，实际可达集: {:?}",
+        reachable
     );
 }
 
@@ -583,7 +575,7 @@ fn test_method_binding_no_function_warning() {
     // Arrange: pub 方法绑定（Type.method）是对外接口，不应作为普通函数被报告
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
-        items: vec![make_binding("render", true, Some("Widget"), vec![])],
+        items: vec![make_binding("render", Some("Widget"), vec![])],
         span: Span::dummy(),
     };
 
@@ -660,7 +652,6 @@ fn make_index_assign_stmt(
             type_annotation: None,
             signature_params: vec![],
             value: Some(Box::new(Expr::Var(value_var.to_string(), Span::dummy()))),
-            is_pub: false,
             is_mut: false,
             span: Span::dummy(),
         },
@@ -674,13 +665,8 @@ fn test_type_referenced_in_match_pattern_is_alive() {
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
-            make_type_def("Color", false),
-            make_binding(
-                "main",
-                false,
-                None,
-                vec![make_match_stmt("c", "Color", vec![])],
-            ),
+            make_type_def("Color"),
+            make_binding("main", None, vec![make_match_stmt("c", "Color", vec![])]),
         ],
         span: Span::dummy(),
     };
@@ -702,10 +688,9 @@ fn test_fn_referenced_in_spawn_body_is_alive() {
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
-            make_binding("worker", false, None, vec![]),
+            make_binding("worker", None, vec![]),
             make_binding(
                 "main",
-                false,
                 None,
                 vec![make_spawn_stmt(vec![make_call_stmt("worker")])],
             ),
@@ -731,12 +716,7 @@ fn test_var_written_via_index_assign_is_alive() {
     let ast = Module {
         items: vec![
             make_var("counts"),
-            make_binding(
-                "main",
-                false,
-                None,
-                vec![make_index_assign_stmt("counts", "item")],
-            ),
+            make_binding("main", None, vec![make_index_assign_stmt("counts", "item")]),
             make_var("item"),
         ],
         span: Span::dummy(),
@@ -760,9 +740,9 @@ fn test_only_dead_root_reported_not_its_callees() {
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
-            make_binding("main", false, None, vec![]),
-            make_binding("ghost", false, None, vec![make_call_stmt("helper")]),
-            make_binding("helper", false, None, vec![]),
+            make_binding("main", None, vec![]),
+            make_binding("ghost", None, vec![make_call_stmt("helper")]),
+            make_binding("helper", None, vec![]),
         ],
         span: Span::dummy(),
     };
@@ -792,8 +772,8 @@ fn test_no_entry_point_all_unused_private_defs_dead() {
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
-            make_binding("ghost", false, None, vec![make_call_stmt("helper")]),
-            make_binding("helper", false, None, vec![]),
+            make_binding("ghost", None, vec![make_call_stmt("helper")]),
+            make_binding("helper", None, vec![]),
         ],
         span: Span::dummy(),
     };
@@ -825,9 +805,9 @@ fn test_private_type_used_in_type_body_is_alive() {
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
-            make_type_def("Inner", false),
+            make_type_def("Inner"),
             outer_with_inner_field(),
-            make_binding("main", false, None, vec![make_call_stmt("Outer")]),
+            make_binding("main", None, vec![make_call_stmt("Outer")]),
         ],
         span: Span::dummy(),
     };
@@ -865,17 +845,16 @@ fn test_collect_ident_refs_covers_param_type_annotations() {
     );
 }
 
-// RFC-029f 角色语义：exempt_pub 开关（Bin 角色不豁免 pub）
+// RFC-029g：`pub` 删除后，死码豁免只剩包内引用池一道 —— 角色不再改写 pub 政策
 
 #[test]
-fn test_bin_role_reports_unused_pub_fn() {
-    // Arrange: Bin 角色（exempt_pub = false）——pub 无包外消费者，未使用可报
+fn test_unused_top_level_function_is_reported() {
+    // Arrange: 无引用池（Script 视角）——main 之外的未引用函数无处豁免
     let mut analyzer = DeadCodeAnalyzer::new();
-    analyzer.set_exempt_pub(false);
     let ast = Module {
         items: vec![
-            make_binding("main", false, None, vec![]),
-            make_binding("pub_dead", true, None, vec![]),
+            make_binding("main", None, vec![]),
+            make_binding("dead_fn", None, vec![]),
         ],
         span: Span::dummy(),
     };
@@ -887,20 +866,45 @@ fn test_bin_role_reports_unused_pub_fn() {
     assert!(
         warnings
             .iter()
-            .any(|w| w.code == "W1001" && w.message.contains("pub_dead")),
-        "Bin 角色未使用的 pub 函数应报 W1001，实际: {:?}",
+            .any(|w| w.code == "W1001" && w.message.contains("dead_fn")),
+        "未使用的顶层函数应报 W1001，实际: {:?}",
         warnings
     );
 }
 
 #[test]
-fn test_lib_role_exempt_pub_default() {
-    // Arrange: 默认（Script/Lib/Internal）pub 豁免——同样的文件不报
+fn test_script_role_reports_unused_top_level_variable() {
+    // Arrange: Script 角色（无跨文件引用池）——RFC-029g 后变量绑定同样不豁免
     let mut analyzer = DeadCodeAnalyzer::new();
     let ast = Module {
         items: vec![
-            make_binding("main", false, None, vec![]),
-            make_binding("pub_dead", true, None, vec![]),
+            make_binding("main", None, vec![]),
+            make_var("dead_top_level_var"),
+        ],
+        span: Span::dummy(),
+    };
+
+    // Act
+    let warnings = analyzer.analyze(&ast);
+
+    // Assert
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.code == "W1004" && w.message.contains("dead_top_level_var")),
+        "RFC-029g 后 Script 角色未使用的顶层变量应报 W1004（不再有豁免），实际: {:?}",
+        warnings
+    );
+}
+
+#[test]
+fn test_used_top_level_function_is_not_reported() {
+    // Arrange: 被 main 引用的顶层函数可达，不报
+    let mut analyzer = DeadCodeAnalyzer::new();
+    let ast = Module {
+        items: vec![
+            make_binding("main", None, vec![make_call_stmt("used_fn")]),
+            make_binding("used_fn", None, vec![]),
         ],
         span: Span::dummy(),
     };
@@ -911,44 +915,19 @@ fn test_lib_role_exempt_pub_default() {
     // Assert
     assert!(
         warnings.is_empty(),
-        "pub 豁免角色（Lib/Internal/Script）不应报，实际: {:?}",
+        "被引用的顶层函数不应报，实际: {:?}",
         warnings
     );
 }
 
 #[test]
-fn test_bin_role_used_pub_fn_not_reported() {
-    // Arrange: Bin 角色下被引用的 pub 函数可达，不报
+fn test_unused_type_definition_is_reported() {
+    // Arrange: 未使用的类型定义没有修饰符可豁免 → W1002
     let mut analyzer = DeadCodeAnalyzer::new();
-    analyzer.set_exempt_pub(false);
     let ast = Module {
         items: vec![
-            make_binding("main", false, None, vec![make_call_stmt("pub_used")]),
-            make_binding("pub_used", true, None, vec![]),
-        ],
-        span: Span::dummy(),
-    };
-
-    // Act
-    let warnings = analyzer.analyze(&ast);
-
-    // Assert
-    assert!(
-        warnings.is_empty(),
-        "Bin 角色被引用的 pub 函数不应报，实际: {:?}",
-        warnings
-    );
-}
-
-#[test]
-fn test_bin_role_reports_unused_pub_type() {
-    // Arrange: Bin 角色 pub 类型定义未使用 → W1002
-    let mut analyzer = DeadCodeAnalyzer::new();
-    analyzer.set_exempt_pub(false);
-    let ast = Module {
-        items: vec![
-            make_binding("main", false, None, vec![]),
-            make_type_def("DeadType", true),
+            make_binding("main", None, vec![]),
+            make_type_def("DeadType"),
         ],
         span: Span::dummy(),
     };
@@ -961,23 +940,22 @@ fn test_bin_role_reports_unused_pub_type() {
         warnings
             .iter()
             .any(|w| w.code == "W1002" && w.message.contains("DeadType")),
-        "Bin 角色未使用的 pub 类型应报 W1002，实际: {:?}",
+        "未使用的类型定义应报 W1002，实际: {:?}",
         warnings
     );
 }
 
-// RFC-029f Phase 2：Internal 角色 pub 按包内引用池判定
+// RFC-029f：包内引用池是唯一豁免口（跨文件消费者在本文件不可见，宁漏报）
 
 use std::collections::HashSet as StdHashSet;
 
 #[test]
-fn test_internal_role_pub_in_project_refs_is_alive() {
-    // Arrange: Internal 角色（exempt + 引用池）——pub fn 被包内其他文件引用
+fn test_project_refs_hit_exempts_definition() {
+    // Arrange: 提供包内引用池且命中该定义
     let mut analyzer = DeadCodeAnalyzer::new();
-    analyzer.set_exempt_pub(true);
-    analyzer.set_project_refs(StdHashSet::from(["used_pub".to_string()]));
+    analyzer.set_project_refs(StdHashSet::from(["used_across_files".to_string()]));
     let ast = Module {
-        items: vec![make_binding("used_pub", true, None, vec![])],
+        items: vec![make_binding("used_across_files", None, vec![])],
         span: Span::dummy(),
     };
 
@@ -987,19 +965,18 @@ fn test_internal_role_pub_in_project_refs_is_alive() {
     // Assert
     assert!(
         warnings.is_empty(),
-        "引用池命中的 Internal pub 应豁免，实际: {:?}",
+        "引用池命中的定义应豁免，实际: {:?}",
         warnings
     );
 }
 
 #[test]
-fn test_internal_role_pub_not_in_project_refs_reports() {
-    // Arrange: Internal 角色——pub 完全无引用（Phase 2 收紧：报）
+fn test_project_refs_miss_reports_definition() {
+    // Arrange: 引用池存在但未命中该定义 → 报
     let mut analyzer = DeadCodeAnalyzer::new();
-    analyzer.set_exempt_pub(true);
     analyzer.set_project_refs(StdHashSet::from(["other_name".to_string()]));
     let ast = Module {
-        items: vec![make_binding("orphan_pub", true, None, vec![])],
+        items: vec![make_binding("orphan_fn", None, vec![])],
         span: Span::dummy(),
     };
 
@@ -1010,19 +987,18 @@ fn test_internal_role_pub_not_in_project_refs_reports() {
     assert!(
         warnings
             .iter()
-            .any(|w| w.code == "W1001" && w.message.contains("orphan_pub")),
-        "引用池未命中的 Internal pub 应报 W1001，实际: {:?}",
+            .any(|w| w.code == "W1001" && w.message.contains("orphan_fn")),
+        "引用池未命中的定义应报 W1001，实际: {:?}",
         warnings
     );
 }
 
 #[test]
-fn test_no_project_refs_keeps_absolute_exempt() {
-    // Arrange: Script/Lib（exempt 且无引用池）——pub 绝对豁免
+fn test_no_project_refs_keeps_file_local_judgement() {
+    // Arrange: 单文件路径（无引用池）——RFC-029g 后不再有绝对豁免
     let mut analyzer = DeadCodeAnalyzer::new();
-    analyzer.set_exempt_pub(true);
     let ast = Module {
-        items: vec![make_binding("orphan_pub", true, None, vec![])],
+        items: vec![make_binding("orphan_fn", None, vec![])],
         span: Span::dummy(),
     };
 
@@ -1031,8 +1007,10 @@ fn test_no_project_refs_keeps_absolute_exempt() {
 
     // Assert
     assert!(
-        warnings.is_empty(),
-        "无引用池的 pub 豁免角色不应报，实际: {:?}",
+        warnings
+            .iter()
+            .any(|w| w.code == "W1001" && w.message.contains("orphan_fn")),
+        "无引用池时未引用的顶层绑定应报 W1001，实际: {:?}",
         warnings
     );
 }

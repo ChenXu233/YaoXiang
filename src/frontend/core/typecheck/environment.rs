@@ -2,7 +2,7 @@
 //!
 //! 管理类型检查过程中的所有状态信息
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::types::eval::const_eval::ConstFunction;
@@ -128,10 +128,8 @@ pub struct TypeEnvironment {
     /// 导入追踪 - 模块导入信息
     /// 包含源模块ID用于访问控制
     pub imports: Vec<ImportInfo>,
-    /// 当前模块的导出项
-    pub exports: HashSet<String>,
     /// 方法绑定关系: "Type.method" -> FunctionType
-    /// 用于存储显式绑定和 pub 自动绑定
+    /// 用于存储显式绑定（RFC-004 组合形态）
     pub method_bindings: HashMap<String, MonoType>,
     /// RFC-011b: 同名方法的重载候选表（"Type.method" -> 全部签名）。
     /// `method_bindings` 是单值表，同键互相覆盖；接口实例化的完整性检查
@@ -285,34 +283,6 @@ impl TypeEnvironment {
         // 如果有 type_name，注册为方法绑定
         if let Some(ty) = type_name {
             self.add_method_binding(ty, name, fn_type);
-        }
-    }
-
-    /// 自动绑定 pub 函数到类型
-    ///
-    /// 根据第一个参数的类型自动将函数绑定到该类型。
-    /// 例如: pub distance: (self: Point, other: Point) -> Float 自动绑定为 Point.distance
-    ///
-    /// - 如果第一个参数类型是 TypeRef 且该类型在当前模块定义，则绑定
-    /// - 否则不做任何操作
-    pub fn auto_bind_to_type(
-        &mut self,
-        fn_name: &str,
-        param_types: &[MonoType],
-        fn_type: MonoType,
-    ) {
-        if param_types.is_empty() {
-            return;
-        }
-
-        // 获取第一个参数的类型名称
-        let first_param_ty = &param_types[0];
-        if let MonoType::TypeRef(type_name) = first_param_ty {
-            // 检查该类型是否在当前模块中定义
-            if self.types.contains_key(type_name) {
-                // 绑定方法到类型
-                self.add_method_binding(type_name, fn_name, fn_type);
-            }
         }
     }
 
@@ -602,9 +572,7 @@ impl TypeEnvironment {
         fn_type: MonoType,
     ) {
         let key = format!("{}.{}", type_name, method_name);
-        self.method_bindings.insert(key.clone(), fn_type);
-        // 方法绑定也导出
-        self.exports.insert(key);
+        self.method_bindings.insert(key, fn_type);
     }
 
     /// 获取方法绑定
@@ -615,47 +583,6 @@ impl TypeEnvironment {
     ) -> Option<&MonoType> {
         let key = format!("{}.{}", type_name, method_name);
         self.method_bindings.get(&key)
-    }
-
-    /// 添加导出项
-    pub fn add_export(
-        &mut self,
-        name: &str,
-    ) {
-        self.exports.insert(name.to_string());
-    }
-
-    /// 检查是否是导出项
-    pub fn is_exported(
-        &self,
-        name: &str,
-    ) -> bool {
-        self.exports.contains(name)
-    }
-
-    /// 检查名称是否可见（可从当前模块访问）
-    ///
-    /// 一个名称在以下情况下可见：
-    /// 1. 在当前模块中定义
-    /// 2. 被当前模块导出
-    /// 3. 从导入了该名称的模块导入
-    pub fn is_visible(
-        &self,
-        name: &str,
-    ) -> bool {
-        // 当前模块定义的变量总是可见的
-        if self.vars.contains_key(name) {
-            return true;
-        }
-        // 当前模块定义的类型总是可见的
-        if self.types.contains_key(name) {
-            return true;
-        }
-        // 当前模块导出的内容可见
-        if self.exports.contains(name) {
-            return true;
-        }
-        false
     }
 
     // ============ Trait 相关方法 ============

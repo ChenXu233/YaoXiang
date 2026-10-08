@@ -121,22 +121,21 @@ fn skip_old_function_syntax(_state: &mut ParserState<'_>) {
     // 旧语法已移除，此函数不再需要
 }
 
-/// Parse variable declaration: `[mut] [pub] name[: type] [= expr];`
-/// Function definition: `[pub] name: (ParamTypes) -> ReturnType = (params) => body;`
-/// Generic function: `[pub] name[T: Clone]: (ParamTypes) -> ReturnType = (params) => body;`
+/// Parse variable declaration: `[mut] name[: type] [= expr];`
+/// Function definition: `name: (ParamTypes) -> ReturnType = (params) => body;`
+/// Generic function: `name[T: Clone]: (ParamTypes) -> ReturnType = (params) => body;`
 pub fn parse_var_stmt(
     state: &mut ParserState<'_>,
     span: Span,
 ) -> Option<Stmt> {
-    parse_var_stmt_with_pub(state, span, None)
+    parse_var_stmt_with_mut(state, span)
 }
 
-/// Parse variable declaration with optional pre-detected pub modifier.
+/// Parse variable declaration after the leading `mut`, if any.
 /// target 已被调用者解析为表达式；此函数处理 `:` 类型标注 / `=` 初始化 部分。
 fn parse_assign_after_target(
     state: &mut ParserState<'_>,
     target: Expr,
-    is_pub: bool,
     is_mut: bool,
     span: Span,
 ) -> Option<Stmt> {
@@ -303,7 +302,6 @@ fn parse_assign_after_target(
                                     name: name.clone(),
                                     signature_params: fn_params.clone().unwrap_or_default(),
                                     definition,
-                                    is_pub,
                                 },
                                 span,
                             });
@@ -448,7 +446,6 @@ fn parse_assign_after_target(
                                     type_annotation,
                                     signature_params: extracted_params.clone(),
                                     value: Some(Box::new(value)),
-                                    is_pub,
                                     is_mut,
                                     span,
                                 },
@@ -471,7 +468,6 @@ fn parse_assign_after_target(
                             type_annotation,
                             signature_params: extracted_params.clone(),
                             value: Some(Box::new(value)),
-                            is_pub,
                             is_mut,
                             span,
                         },
@@ -543,7 +539,6 @@ fn parse_assign_after_target(
                             type_annotation,
                             signature_params: extracted_params.clone(),
                             value: Some(Box::new(value)),
-                            is_pub,
                             is_mut,
                             span,
                         },
@@ -574,7 +569,6 @@ fn parse_assign_after_target(
                                         name_span: Span::dummy(),
                                         args: Vec::new(),
                                     },
-                                    is_pub: false,
                                 },
                                 span,
                             });
@@ -590,7 +584,6 @@ fn parse_assign_after_target(
                         name: name.clone(),
                         signature_params: Vec::new(),
                         definition,
-                        is_pub: false,
                     },
                     span,
                 });
@@ -618,7 +611,6 @@ fn parse_assign_after_target(
                 type_annotation,
                 signature_params: Vec::new(),
                 value: Some(Box::new(initializer)),
-                is_pub,
                 is_mut,
                 span,
             },
@@ -659,21 +651,13 @@ fn parse_type_definition(state: &mut ParserState<'_>) -> Option<Type> {
 
     Some(first_type)
 }
-/// Parse variable declaration with optional pre-detected pub modifier.
+/// Parse variable declaration after the leading `mut`, if any.
 /// This is the entry point when `:` is detected after an identifier.
-fn parse_var_stmt_with_pub(
+fn parse_var_stmt_with_mut(
     state: &mut ParserState<'_>,
     span: Span,
-    pre_detected_pub: Option<bool>,
 ) -> Option<Stmt> {
     let is_mut = state.skip(&TokenKind::KwMut);
-
-    let final_is_pub = if pre_detected_pub == Some(true) {
-        state.skip(&TokenKind::KwPub);
-        true
-    } else {
-        state.skip(&TokenKind::KwPub)
-    };
 
     // Parse target as expression (identifier → Var)
     let target = match state.current() {
@@ -707,7 +691,7 @@ fn parse_var_stmt_with_pub(
         }
     };
 
-    parse_assign_after_target(state, target, final_is_pub, is_mut, span)
+    parse_assign_after_target(state, target, is_mut, span)
 }
 
 pub fn parse_identifier_stmt(
@@ -727,14 +711,6 @@ pub fn parse_identifier_stmt(
         }
     }
 
-    // 检测 pub 关键字
-    let is_pub = if matches!(state.current().map(|t| &t.kind), Some(TokenKind::KwPub)) {
-        state.bump();
-        true
-    } else {
-        false
-    };
-
     // 检测 mut 关键字
     let is_mut = state.skip(&TokenKind::KwMut);
 
@@ -744,10 +720,10 @@ pub fn parse_identifier_stmt(
         Some(expr) => expr,
         None => {
             // 解析失败，可能是旧语法残留
-            if is_pub || is_mut {
+            if is_mut {
                 state.error(parse_msg(
                     state,
-                    "Expected expression after pub/mut".to_string(),
+                    "Expected expression after mut".to_string(),
                 ));
                 return None;
             }
@@ -840,7 +816,7 @@ pub fn parse_identifier_stmt(
 
     // ── `:` 类型标注 ──
     if state.at(&TokenKind::Colon) {
-        return parse_assign_after_target(state, target, is_pub, is_mut, span);
+        return parse_assign_after_target(state, target, is_mut, span);
     }
 
     // ── `=` 初始化 ──
@@ -866,7 +842,6 @@ pub fn parse_identifier_stmt(
                 type_annotation: None,
                 signature_params: Vec::new(),
                 value: Some(Box::new(value)),
-                is_pub,
                 is_mut,
                 span,
             },
@@ -877,11 +852,11 @@ pub fn parse_identifier_stmt(
     // ── 否则: 表达式语句 ──
     state.skip(&TokenKind::Semicolon);
 
-    if is_pub || is_mut {
-        // pub/mut 后面不是赋值或类型标注，报错
+    if is_mut {
+        // mut 后面不是赋值或类型标注，报错
         state.error(parse_msg(
             state,
-            "Expected ':' or '=' after pub/mut identifier".to_string(),
+            "Expected ':' or '=' after mut identifier".to_string(),
         ));
         return None;
     }

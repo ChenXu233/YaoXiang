@@ -381,27 +381,17 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
             }
             // W1003 未使用导入随 W 码通道流出（Warning severity，不阻断编译）
             diagnostics.extend(result.warnings);
-            // 角色感知死代码（RFC-029f）：
+            // 角色感知死代码（RFC-029f + RFC-029g）：
             // - Test 不参与
-            // - Bin 不豁免 pub（Phase 1）
-            // - Internal 豁免收紧为引用池判定（Phase 2）
-            // - Script/Lib 绝对豁免（pub = 对外接口）
+            // - Bin/Internal/Lib：按包内引用池判定——跨文件消费者在本文件不可见，
+            //   宁漏报方向（曾是 W1001 误报根因）
+            // - Script：无包视角，只按文件内可达性判定
+            // RFC-029g 删除 pub 后三种角色收敛为同一个引用池，不再有豁免开关。
             if !matches!(role, FileRole::Test) {
                 let mut analyzer = DeadCodeAnalyzer::new();
                 match role {
-                    FileRole::Bin => {
-                        analyzer.set_exempt_pub(false);
+                    FileRole::Bin | FileRole::Internal | FileRole::Lib => {
                         analyzer.set_project_refs(project_refs.clone());
-                    }
-                    FileRole::Internal => {
-                        analyzer.set_exempt_pub(true);
-                        analyzer.set_project_refs(project_refs.clone());
-                    }
-                    // Lib（被包内 use 的文件，029f 推断规则）：pub 维持绝对豁免
-                    //（分发边界，宁漏报），非 pub 按包内引用池判定——跨文件
-                    // 消费者不可见曾是 W1001 误报根因
-                    FileRole::Lib => {
-                        analyzer.set_cross_file_refs(project_refs.clone());
                     }
                     _ => {}
                 }

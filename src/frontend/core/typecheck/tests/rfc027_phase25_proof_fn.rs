@@ -203,7 +203,6 @@ fn make_proof_fn_module(
                 }),
                 span: Span::dummy(),
             })),
-            is_pub: false,
             is_mut: false,
             span: Span::dummy(),
         },
@@ -400,7 +399,6 @@ fn make_proof_fn_typedef_module(
             definition: AstType::Struct {
                 body: vec![TypeBodyItem::Expr(AstType::ConstExpr(Box::new(body_expr)))],
             },
-            is_pub: false,
         },
         span: Span::dummy(),
     };

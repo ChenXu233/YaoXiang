@@ -294,7 +294,7 @@ fn test_cross_file_reference() {
         &file_a,
         r#"use std.io
 
-pub greet: (name: String) -> Void = (name) => {
+greet: (name: String) -> Void = (name) => {
     print(name)
 }
 "#,

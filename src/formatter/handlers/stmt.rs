@@ -78,7 +78,6 @@ pub fn format_stmt(
             type_annotation,
             signature_params,
             value,
-            is_pub,
             is_mut,
             ..
         } => format_assign(
@@ -86,7 +85,6 @@ pub fn format_stmt(
             type_annotation,
             signature_params,
             value,
-            *is_pub,
             *is_mut,
             ctx,
             source_map,
@@ -114,20 +112,16 @@ pub fn format_stmt(
             name,
             signature_params,
             definition,
-            is_pub,
         } => {
-            let pub_prefix = if *is_pub { "pub " } else { "" };
             if signature_params.is_empty() {
                 format!(
-                    "{}{}: Type = {}",
-                    pub_prefix,
+                    "{}: Type = {}",
                     name,
                     format_type(definition, ctx, source_map)
                 )
             } else {
                 format!(
-                    "{}{}: {} -> Type = {}",
-                    pub_prefix,
+                    "{}: {} -> Type = {}",
                     name,
                     format_signature_params(signature_params, ctx, source_map),
                     format_type(definition, ctx, source_map)
@@ -143,20 +137,11 @@ fn format_assign(
     type_annotation: &Option<Type>,
     signature_params: &[Param],
     value: &Option<Box<Expr>>,
-    is_pub: bool,
     is_mut: bool,
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    let pub_str = if is_pub {
-        "pub "
-    } else {
-        if is_mut {
-            "mut "
-        } else {
-            ""
-        }
-    };
+    let mut_str = if is_mut { "mut " } else { "" };
     let target_str = format_expr(target, ctx, source_map);
 
     let type_str = format_type_annotation(type_annotation, signature_params, ctx, source_map);
@@ -190,9 +175,9 @@ fn format_assign(
             // 其他表达式
             other => format_expr(other, ctx, source_map),
         };
-        format!("{}{}{} = {}", pub_str, target_str, type_str, val_str)
+        format!("{}{}{} = {}", mut_str, target_str, type_str, val_str)
     } else {
-        format!("{}{}{}", pub_str, target_str, type_str)
+        format!("{}{}{}", mut_str, target_str, type_str)
     }
 }
 

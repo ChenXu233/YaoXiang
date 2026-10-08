@@ -25,7 +25,7 @@ impl LexerState {
         match s {
             // Basic type and declaration keywords
             // RFC-010: "type" is no longer a keyword. Use `Name: Type = { ... }` syntax.
-            "pub" => Some(TokenKind::KwPub),
+            // RFC-029g: "pub" is no longer a keyword — it is an ordinary identifier.
             "use" => Some(TokenKind::KwUse),
 
             // Concurrency keywords

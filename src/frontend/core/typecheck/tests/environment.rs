@@ -18,7 +18,6 @@ fn test_environment_new_creates_empty() {
     assert!(env.vars.is_empty(), "vars should be empty");
     assert!(env.types.is_empty(), "types should be empty");
     assert!(env.imports.is_empty(), "imports should be empty");
-    assert!(env.exports.is_empty(), "exports should be empty");
 }
 
 #[test]
