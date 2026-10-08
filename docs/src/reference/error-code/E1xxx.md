@@ -69,6 +69,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 | `E1106` | 约束未满足 | `TypeCheck` | 否 | `类型 '{type}' 未实现 \`{interface}\`——泛型参数 \`{param}\` 的约束 \`{param}: {interface}\` 在此调用点不成立` | ✅ 1 处 |
 | `E1107` | 方法重载歧义 | `TypeCheck` | 否 | `方法重载歧义：'{key}' 有 {count} 个候选匹配且无法区分` | ✅ 1 处 |
 | `E1108` | 空块落入容器期望位 | `TypeCheck` | 是 | `此处期望容器类型，但 \`{}\` 是空块（值 Void）` | ✅ 2 处 |
+| `E1109` | return 出现在函数外 | `TypeCheck` | 否 | `'return' 出现在函数外` | ✅ 3 处 |
 
 ## 逐码说明
 
@@ -646,3 +647,16 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **帮助**：B 方案语义（SPEC syntax §1.6.4）：`{}` 是空块，不是空字典。空字典用 `dict.new()`，空列表用 `[]`
 - **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3329`、`src/frontend/core/typecheck/inference/expressions.rs:4084`
 - **源码注释名**：空块 `{}` 落入容器期望位（#394：B 方案定案的 `{}` = 空块 Void，
+
+### E1109：return 出现在函数外
+
+- **类别**：`TypeCheck`
+- **span 豁免**：否
+- **构造函数**：`ErrorCodeDefinition::return_outside_function()`
+- **模板**：`'return' 出现在函数外`
+- **消息**：return 只能在函数体内使用；Script 顶层是模块初始化层，没有函数边界可退
+- **帮助**：把 'return' 移入函数体；Script 模式下顶层语句即程序主体，要提前结束一段顶层逻辑请收进函数、在调用点控制
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:1534`、`src/frontend/core/typecheck/inference/statements.rs:1544`、`src/frontend/core/typecheck/inference/expressions.rs:3355`
+- **源码注释名**：return 出现在函数外（RFC-010a 规则②边界条件：`return` 退出最近的
+  函数边界，Script 顶层=模块初始化层没有函数边界——编译期拒绝，不再运行期静默终止
+  初始化、跳过后续顶层语句）

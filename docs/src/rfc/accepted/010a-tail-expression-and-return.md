@@ -53,7 +53,8 @@ issue: '#342'
 
 语料覆盖：`tests/yaoxiang/03-semantics/rfc010a_block_value.yx`（正向）+
 `tests/yaoxiang/06-compile-errors/tail_expr_type_mismatch{,_with_stmts}_err.yx`（负向）+
-`tests/yaoxiang/06-compile-errors/top_level_return{,_block_value}_err.yx`（规则② 边界负向）。
+`tests/yaoxiang/06-compile-errors/top_level_return*_err.yx`（规则② 边界负向：
+带值/无值/绑定值块内/if 块内/unsafe 块内）。
 
 ## 动机
 
