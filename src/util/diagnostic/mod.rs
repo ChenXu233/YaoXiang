@@ -381,7 +381,8 @@ pub fn run_file_with_diagnostics(
             // 语句即程序主体，自动执行会与显式 main() 双跑（#356）。但静默
             // 成功有欺骗性：main 定义了却完全惰性（未调用、值型块体也未在
             // 初始化期求值）时给出显式提示；值型块体已求值的不再提示——
-            // 此刻照提示补 main() 会双跑（#422 UX 对账）。
+            // 无调用它也已经执行，且照提示补 main() 只会编译报错（E1065，
+            // Void 不可调用）（#422 UX 对账）。
             if module.source_files.is_empty() && script_main_never_called(&module) {
                 eprintln!(
                     "提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。"
@@ -443,9 +444,11 @@ pub fn run_file_with_diagnostics(
 /// （`f = main; f()`）识别不出——提示是尽力而为的辅导信息，不是诊断。
 ///
 /// 值型 main 的两种形态必须区分（#422 UX 对账）：`main = { 块体 }` 的块体
-/// 在初始化期内联求值、末尾 `Store` 写回 main 的全局槽——main 的效果已经
-/// 发生，提示"未被调用"是误导（照提示补 `main()` 会双跑，与 #356 同源）；
-/// 而 `main = () => {...}` 存的是 `MakeClosure` 的新闭包，体仍惰性，提示保留。
+/// 在初始化期内联求值、末尾 `Store` 写回 main 的全局槽——**无调用也已执行**
+/// （实测：块体内的 print 照常输出），提示"未被调用"是误导；且此时 main 槽位
+/// 存的是块体的求值结果（Void），照提示补 `main()` 直接编译报错（E1065
+/// 「void is not callable」），不是双跑。而 `main = () => {...}` 存的是
+/// `MakeClosure` 的新闭包，体仍惰性，提示保留（补 `main()` 恰好跑一次）。
 /// 判别：main 槽位的 `Store` 源寄存器若由本 init 段的 `MakeClosure` 写出则
 /// 视为惰性，否则视为已在初始化期求值。
 fn script_main_never_called(module: &crate::middle::ModuleIR) -> bool {
