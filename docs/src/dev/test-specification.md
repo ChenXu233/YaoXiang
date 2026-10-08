@@ -657,6 +657,8 @@ use yaoxiang::middle::codegen::bytecode::BytecodeFile;
 fn test_fibonacci() {
     run_ok(
         r#"
+        // 内联源码以 Script 模式运行：顶层语句即程序主体（SPEC syntax §3.11）。
+        // 带型 main 若不显式调用只是惰性 lambda——循环体永远不会执行。
         main: () -> Void = {
             mut a = 0
             mut b = 1
@@ -666,6 +668,7 @@ fn test_fibonacci() {
                 b = next
             }
         }
+        main()
         "#,
     );
 }
