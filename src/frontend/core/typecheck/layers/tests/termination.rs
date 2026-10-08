@@ -1876,3 +1876,43 @@ fn test_real_solver_loop_measure_well_founded_from_loop_guard() {
          说明守卫未进良基性假设；实际: {verdicts:?}"
     );
 }
+
+// ==================== WBS 3.4.2：Unjudged 义务计数（求解器缺失的静默通道）====================
+// 规范来源：RFC-027a §义务生成 + 02-stage-contract §41-52「失败不产生信号」类缺陷。
+// T4 现状「只判定并记录，不发射诊断」——count_unjudged_obligations 是信号取出口，
+// 计数 > 0 时 checker 发射 W1081。
+
+#[test]
+fn test_count_unjudged_obligations_counts_both_kinds() {
+    use crate::frontend::core::typecheck::layers::termination::count_unjudged_obligations;
+
+    // Arrange: 递减判定 2 条（1 Unjudged + 1 Proved）+ 良基性 2 条（1 Unjudged + 1 NotProved）
+    let measure = vec![MeasureVerdict::Unjudged, MeasureVerdict::Proved];
+    let mut well_founded = std::collections::HashMap::new();
+    well_founded.insert("f".to_string(), MeasureVerdict::Unjudged);
+    well_founded.insert("g".to_string(), MeasureVerdict::NotProved);
+
+    // Act
+    let count = count_unjudged_obligations(&measure, &well_founded);
+
+    // Assert
+    assert_eq!(count, 2, "两条 Unjudged（递减 1 + 良基性 1）必须都计入");
+}
+
+#[test]
+fn test_count_unjudged_obligations_zero_when_all_judged() {
+    use crate::frontend::core::typecheck::layers::termination::count_unjudged_obligations;
+
+    // Arrange: 全部已判定（含 NotProved——求解器在但判不出，不属于「缺失」静默）
+    let measure = vec![MeasureVerdict::Proved, MeasureVerdict::NotProved];
+    let well_founded = std::collections::HashMap::new();
+
+    // Act
+    let count = count_unjudged_obligations(&measure, &well_founded);
+
+    // Assert
+    assert_eq!(
+        count, 0,
+        "无 Unjudged 时不得产生信号（NotProved 非求解器缺失）"
+    );
+}

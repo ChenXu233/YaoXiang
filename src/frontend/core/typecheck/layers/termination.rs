@@ -190,6 +190,31 @@ pub enum MeasureVerdict {
     Unjudged,
 }
 
+/// WBS 3.4.2：统计未判定（Unjudged）的终止性义务——递减判定与良基性判定
+/// 两处合并计数。
+///
+/// Unjudged 的唯一成因是无求解器（`compute_measure_verdicts`：「无求解器 →
+/// Unjudged，不得把『未判』当『成立』」）。T4 现状「只判定并记录，不发射
+/// 诊断」使求解器缺失成为静默通道——本函数是信号的取出口：计数 > 0 时
+/// 调用方（checker）必须发射 W1081。
+///
+/// 独立成纯函数以便单测覆盖（checker 层无法模拟求解器缺失——测试环境
+/// `default_solver()` 恒为 Some）。
+pub fn count_unjudged_obligations(
+    measure_verdicts: &[MeasureVerdict],
+    well_founded_verdicts: &std::collections::HashMap<String, MeasureVerdict>,
+) -> usize {
+    let measure = measure_verdicts
+        .iter()
+        .filter(|v| matches!(v, MeasureVerdict::Unjudged))
+        .count();
+    let well_founded = well_founded_verdicts
+        .values()
+        .filter(|v| matches!(v, MeasureVerdict::Unjudged))
+        .count();
+    measure + well_founded
+}
+
 /// 当前正在遍历的、**带显式测度**的函数上下文（RFC-027a §义务生成）。
 ///
 /// 只在函数有显式测度时建立——无测度的递归不走显式测度路径（RFC-027 §7

@@ -1253,7 +1253,9 @@ impl TypeChecker {
         // RFC-027a §良基性：函数前置条件（形参精化代入后的约束）——良基性
         // `m >= 0` 的证据只能来自它（ℤ 上 `<` 不良基）。
         let param_assumptions = self.collect_param_refinements();
-        let term_results = {
+        // WBS 3.4.2：终止性义务未判定数（无求解器时 Unjudged）随结果一并取出——
+        // T4「只判定并记录，不发射诊断」是静默通道，计数在 warnings 汇聚点发 W1081。
+        let (term_results, unjudged_termination_obligations) = {
             #[allow(unused_mut)]
             let mut term_checker = super::layers::termination::TerminationChecker::new()
                 .set_refined_vars(refined_vars)
@@ -1266,7 +1268,12 @@ impl TypeChecker {
             if let Some(solver) = super::proof::smt::backend::default_solver() {
                 term_checker = term_checker.with_solver_owned(solver);
             }
-            term_checker.check_module(module, self.env())
+            let results = term_checker.check_module(module, self.env());
+            let unjudged = super::layers::termination::count_unjudged_obligations(
+                term_checker.measure_verdicts(),
+                term_checker.well_founded_verdicts(),
+            );
+            (results, unjudged)
         };
         for result in term_results {
             match result.into_result() {
@@ -1495,6 +1502,31 @@ impl TypeChecker {
         // #321 W1003：未使用导入警告（Warning 级，不阻断编译，经 warnings 通道流出）
         let import_warnings = self.collect_unused_import_warnings(module);
 
+        // WBS 3.4.2：求解器缺失时终止性测度义务判 Unjudged——「未判」≠「成立」，
+        // 义务存在而判不了必须让用户知情（Warning 级，不阻断——同 W1003 契约）
+        let mut warnings = import_warnings;
+        if unjudged_termination_obligations > 0 {
+            warnings.push(
+                ErrorCodeDefinition::termination_obligations_unjudged(
+                    unjudged_termination_obligations,
+                )
+                .build(),
+            );
+        }
+
+        // WBS 3.4.1：编译期不可求值的 const 泛型约束——事实链
+        //（environment → ExpressionInferrer → StatementChecker）在此汇聚，
+        // 发射 W1063（Warning 级，不阻断——与 W1003 同一契约）
+        if let Some(ref bc) = self.body_checker {
+            for (span, constraint) in &bc.unevaluable_const_constraints {
+                warnings.push(
+                    ErrorCodeDefinition::const_generic_unevaluable(constraint)
+                        .at(*span)
+                        .build(),
+                );
+            }
+        }
+
         TypeCheckResult {
             module_name: self.env.module_name.clone(),
             diagnostics,
@@ -1528,7 +1560,7 @@ impl TypeChecker {
                 .map(|(name, d)| (name.clone(), d.type_param_names.clone()))
                 .collect(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
-            warnings: import_warnings,
+            warnings,
         }
     }
 
