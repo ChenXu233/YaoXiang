@@ -18,6 +18,9 @@ define_codes!(W1XXX, {
     ("W1006", Warning, false, module_shadows_dependency(module: &str, dependency: &str) => .param("module", module) .param("dependency", dependency)),
     // W1063
     ("W1063", Warning, false, const_generic_unevaluable(constraint: &str) => .param("constraint", constraint)),
+    // W1081 终止性测度义务未判定（WBS 3.4.2：无求解器时 Unjudged 不再静默——
+    // 「未判」≠「成立」，义务存在而判不了必须让用户知情）
+    ("W1081", Warning, false, termination_obligations_unjudged(count: usize) => .param("count", count.to_string())),
     // W1080 编译期无法证明约束，已降级为运行时检查
     ("W1080", Warning, false, constraint_demoted() => ),
 });

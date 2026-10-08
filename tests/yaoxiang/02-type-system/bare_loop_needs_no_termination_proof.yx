@@ -14,22 +14,20 @@
 
 use std.assert
 
-main: () -> Void = {
-    // 布尔标志循环：策略 1 的典型目标，但策略 1 不可用（#377）
-    mut flag: Bool = true
-    mut i: Int = 0
-    while flag {
-        i = i + 1
-        if i > 3 { flag = false }
-    }
-    assert.assert(i == 4, "布尔标志循环应正常退出，i 累加到 4")
-
-    // 双变量循环：i 增 j 减，bounded 但策略 3/4 不覆盖
-    mut a: Int = 0
-    mut b: Int = 10
-    while a < b {
-        a = a + 1
-        b = b - 1
-    }
-    assert.assert(a == b or a == b + 1, "双变量循环应收敛（a 追上 b）")
+// 布尔标志循环：策略 1 的典型目标，但策略 1 不可用（#377）
+mut flag: Bool = true
+mut i: Int = 0
+while flag {
+    i = i + 1
+    if i > 3 { flag = false }
 }
+assert.assert(i == 4, "布尔标志循环应正常退出，i 累加到 4")
+
+// 双变量循环：i 增 j 减，bounded 但策略 3/4 不覆盖
+mut a: Int = 0
+mut b: Int = 10
+while a < b {
+    a = a + 1
+    b = b - 1
+}
+assert.assert(a == b or a == b + 1, "双变量循环应收敛（a 追上 b）")

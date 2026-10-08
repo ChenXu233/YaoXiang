@@ -793,7 +793,7 @@
   "W1063": {
     "title": "const 泛型约束不可求值",
     "message": "const 泛型参数之值约束不可于编译期求值",
-    "template": "const 泛型约束不可求值: `{constraint}` ({var} = {value})",
+    "template": "const 泛型约束不可求值: `{constraint}`",
     "help": "务使 const 参数为编译期之常量",
     "example": "BadArray(Int, n)  // n 非编译期之常量",
     "error_output": "warning[W1063]: const 泛型约束不可求值\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 不可于编译期求值约束 `N > 0`"
@@ -997,6 +997,14 @@
     "template": "程序入口 '{name}' 当为函数，然乃值绑定",
     "help": "入口当为函数：作 main = () => { ... }，或加函数注解 main: () -> Void = ...。裸块绑定 main = { ... } 乃值绑定（于模块初始化期求值），不作入口而执行。"
   },
+  "W1081": {
+    "title": "终止义务未判",
+    "message": "SMT 求解器不可用，终止性测度之义务未判",
+    "template": "终止性测度义务 {count} 条未判（SMT 求解器不可用）",
+    "help": "装 Z3 求解器而复检，以得终止之判；未判非谓不终止，然义务之判实被略过",
+    "example": "f: (n: Int) -> Int = { f(n - 1) }",
+    "error_output": "warning[W1081]: 终止义务未判\n --> example.yx:1:1\n  |\n1 | f: (n: Int) -> Int = { f(n - 1) }\n  | ^ 终止性测度义务 2 条未判"
+  },
   "E1065": {
     "title": "以非函数之值而调用",
     "template": "类型 `{type}` 不可调用——非函数也",
@@ -1152,6 +1160,12 @@
     "help": "B方案之语义（SPEC syntax §1.6.4）：`{}`者空块也，非空字典。空字典用`dict.new()`，空列表用`[]`",
     "example": "net.http_get(url, {}, 5)",
     "error_output": "error[E1108]: 空块入于容器之望位\n --> main.yx:2:33\n  |\n2 |     net.http_get(url, {}, 5)\n  |                            ^ 此处望容器类型，然`{}`者空块也（其值Void）"
+  },
+  "E1109": {
+    "title": "return 出于函数之外",
+    "message": "return 唯可用于函数体之内；Script 顶层者，模块初始化层也，无函数边界可退",
+    "template": "'return' 出于函数之外",
+    "help": "移 'return' 入函数体；Script 模式下顶层语句即程序主体，欲早止顶层之逻辑，请收之入函数，于调用处制之"
   },
   "E5008": {
     "title": "导入名相冲",

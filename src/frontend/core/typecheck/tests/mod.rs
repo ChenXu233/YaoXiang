@@ -22,6 +22,7 @@ mod environment;
 mod gamma_assume_effect;
 mod predicate_resolver;
 mod rfc010;
+mod rfc010a;
 mod rfc011;
 mod rfc011a;
 pub(crate) mod rfc011a_dispatch;

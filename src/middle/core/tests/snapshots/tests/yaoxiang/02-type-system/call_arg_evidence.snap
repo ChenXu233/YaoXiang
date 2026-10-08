@@ -1,4 +1,8 @@
 module
+  global[0] a : Int(64)
+  global[1] n : Generic { name: "IsPositive", args: [TypeRef("n")] }
+  global[2] b : Int(64)
+  global[3] c : Int(64)
   fn IsPositive(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 14, column: 34, offset: 794 }, end: Position { line: 14, column: 35, offset: 795 } }), right: Lit(Int(0), Span { start: Position { line: 14, column: 38, offset: 798 }, end: Position { line: 14, column: 39, offset: 799 } }), span: Span { start: Position { line: 14, column: 36, offset: 796 }, end: Position { line: 14, column: 37, offset: 797 } } }))] }
   fn divide(Int(64), Generic { name: "IsPositive", args: [TypeRef("b")] }) -> Int(64)
@@ -36,43 +40,41 @@ module
     Load %6 <- int(1)
     Neg %5 <- %6
     Ret %5
-  fn main() -> Void
-    slot[0] a : Int(64) @depth1
-    slot[1] n : Int(64) @depth1
-    slot[2] b : Int(64) @depth1
-    slot[3] c : Int(64) @depth1
-    locals_total=13
+  init (locals=0)
     Load %0 <- int(5)
-    Call %1 <- string("via_param") [%0] (def=d1)
-    Load %2 <- %1
-    Load %3 <- int(7)
-    Eq %4 <- %2, %3
-    Load %5 <- string("形参精化 n > 0 即证据，调用应通过")
-    Call %0 <- string("std.assert.assert") [%4, %5] (def=d2)
-    Load %0 <- int(3)
-    Load %2 <- int(9)
-    Load %3 <- %0
-    Call %4 <- string("divide") [%2, %3] (def=d0)
-    Load %5 <- %4
-    Load %6 <- int(9)
-    Eq %3 <- %5, %6
-    Load %7 <- string("局部精化变量作证据")
-    Call %2 <- string("std.assert.assert") [%3, %7] (def=d2)
-    Load %3 <- int(7)
-    Load %5 <- int(3)
-    Call %2 <- string("guarded") [%3, %5] (def=d3)
-    Load %6 <- %2
-    Load %7 <- int(7)
-    Eq %5 <- %6, %7
-    Load %8 <- string("守卫成立分支内的调用应通过")
-    Call %3 <- string("std.assert.assert") [%5, %8] (def=d2)
-    Load %8 <- int(7)
-    Load %9 <- int(3)
-    Neg %10 <- %9
-    Call %6 <- string("guarded") [%8, %10] (def=d3)
-    Load %11 <- int(1)
-    Neg %7 <- %11
-    Eq %5 <- %6, %7
-    Load %12 <- string("守卫不成立时不调用，返回 -1")
-    Call %3 <- string("std.assert.assert") [%5, %12] (def=d2)
-    Ret %3
+    Call %1 <- string("via_param") [%0] (def=_)
+    Store @0 <- %1
+    Load %2 <- int(3)
+    Store @1 <- %2
+    Load %3 <- int(9)
+    Load %4 <- @1
+    Call %5 <- string("divide") [%3, %4] (def=_)
+    Store @2 <- %5
+    Load %6 <- int(7)
+    Load %7 <- int(3)
+    Call %8 <- string("guarded") [%6, %7] (def=_)
+    Store @3 <- %8
+    Load %9 <- @0
+    Load %10 <- int(7)
+    Eq %11 <- %9, %10
+    Load %12 <- string("形参精化 n > 0 即证据，调用应通过")
+    Call %13 <- string("std.assert.assert") [%11, %12] (def=_)
+    Load %14 <- @2
+    Load %15 <- int(9)
+    Eq %16 <- %14, %15
+    Load %17 <- string("局部精化变量作证据")
+    Call %18 <- string("std.assert.assert") [%16, %17] (def=_)
+    Load %19 <- @3
+    Load %20 <- int(7)
+    Eq %21 <- %19, %20
+    Load %22 <- string("守卫成立分支内的调用应通过")
+    Call %23 <- string("std.assert.assert") [%21, %22] (def=_)
+    Load %24 <- int(7)
+    Load %25 <- int(3)
+    Neg %26 <- %25
+    Call %27 <- string("guarded") [%24, %26] (def=_)
+    Load %28 <- int(1)
+    Neg %29 <- %28
+    Eq %30 <- %27, %29
+    Load %31 <- string("守卫不成立时不调用，返回 -1")
+    Call %32 <- string("std.assert.assert") [%30, %31] (def=_)

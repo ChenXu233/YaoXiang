@@ -43,6 +43,7 @@ issue: '#342'
 | ① 块的值 = 尾表达式       | 空块 `{}` → `Void`                  | ✅ 已实现                     |
 | ① 保护由类型检查提供      | 尾表达式与声明返回类型统一          | ✅ 已实现（#345）             |
 | ② `return` 非局部退出     | 穿出 `if`/`while`/`for`/裸块/嵌套块 | ✅ 已实现                     |
+| ② `return` 非局部退出     | 模块初始化层（Script 顶层）无函数边界，编译期拒绝（E1109） | ✅ 已实现     |
 | ② `Never <: T` 爆炸原理   | `unify` 与 `is_subtype` 一致        | ✅ 已实现（本次修正内部矛盾） |
 | ③ `if` 无 `else` → `Void` | 表达式位置不泄漏分支值              | ✅ 已实现（#346）             |
 | ① 块的值 = 尾表达式       | 裸块值绑定 `x = { ... }`            | ✅ 已实现（#343）             |
@@ -51,7 +52,8 @@ issue: '#342'
 | ① 块的值 = 尾表达式       | `spawn {}` 值出口（尾表达式）       | ✅ 已实现（#365）             |
 
 语料覆盖：`tests/yaoxiang/03-semantics/rfc010a_block_value.yx`（正向）+
-`tests/yaoxiang/06-compile-errors/tail_expr_type_mismatch{,_with_stmts}_err.yx`（负向）。
+`tests/yaoxiang/06-compile-errors/tail_expr_type_mismatch{,_with_stmts}_err.yx`（负向）+
+`tests/yaoxiang/06-compile-errors/top_level_return{,_block_value}_err.yx`（规则② 边界负向）。
 
 ## 动机
 
@@ -167,6 +169,12 @@ c = {
 
 - **退出最近的函数边界**，把值交给调用者
 - **穿透一切块**——（若有）`if` / `while` / `for` / `match` / 裸块 / `spawn` / `unsafe`
+
+**什么构成函数边界（规则② 的适用前提）**：命名函数体、lambda 体、`spawn` 体三者各自构成
+函数边界，`return` 退出其中最近的一个。**模块初始化层不构成函数边界**——Script 顶层
+（无 `yaoxiang.toml` 的单文件，SPEC syntax §3.11）的顶层语句序列没有「最近的函数边界」
+可退，`return` 在此**编译期拒绝**（`E1109`）：放行只会在运行期静默终止初始化并跳过其余
+顶层语句。块值不是函数边界，顶层绑定值块内的 `return` 同样拒绝。
 
 `return` 不「返回给块」。`{ return n }` 作为块，其值是 `n`（尾表达式规则）， **类型 `Never`**；同时
 `return` 的作用是退出函数。**两件事同时成立。**

@@ -355,10 +355,18 @@
   "W1063": {
     "title": "const generic constraint cannot be evaluated",
     "message": "const generic parameter value constraint cannot be evaluated at compile-time",
-    "template": "const generic constraint cannot be evaluated: `{constraint}` ({var} = {value})",
+    "template": "const generic constraint cannot be evaluated: `{constraint}`",
     "help": "ensure that const parameters are compile-time constants",
     "example": "BadArray(Int, n)  // n is not a compile-time constant",
     "error_output": "warning[W1063]: const generic constraint cannot be evaluated\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ cannot evaluate constraint `N > 0` at compile-time"
+  },
+  "W1081": {
+    "title": "termination obligations unjudged",
+    "message": "SMT solver unavailable; termination measure obligations were not judged",
+    "template": "{count} termination measure obligation(s) unjudged (SMT solver unavailable)",
+    "help": "install the Z3 solver and re-check to obtain termination verdicts; unjudged does not mean non-terminating, but the obligations were skipped",
+    "example": "f: (n: Int) -> Int = { f(n - 1) }  // Terminates measure present, but no solver",
+    "error_output": "warning[W1081]: termination obligations unjudged\n --> example.yx:1:1\n  |\n1 | f: (n: Int) -> Int = { f(n - 1) }\n  | ^ 2 termination measure obligation(s) unjudged (SMT solver unavailable)"
   },
   "E1065": {
     "title": "call on non-function value",
@@ -1143,6 +1151,12 @@
     "help": "Plan B semantics (SPEC syntax §1.6.4): `{}` is an empty block, not an empty dict. Use `dict.new()` for an empty dict, `[]` for an empty list",
     "example": "net.http_get(url, {}, 5)",
     "error_output": "error[E1108]: empty block falls into expected container position\n --> main.yx:2:33\n  |\n2 |     net.http_get(url, {}, 5)\n  |                            ^ a container type is expected here, but `{}` is an empty block (value Void)"
+  },
+  "E1109": {
+    "title": "return outside of a function",
+    "message": "'return' can only be used inside a function body; the Script top level is the module initializer, with no function boundary to return from",
+    "template": "'return' outside of a function",
+    "help": "move the 'return' into a function body; in Script mode top-level statements are the program body — to end top-level logic early, wrap it in a function and control it at the call site"
   },
   "E5008": {
     "title": "Import name conflict",

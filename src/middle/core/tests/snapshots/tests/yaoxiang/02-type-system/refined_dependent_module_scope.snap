@@ -3,23 +3,20 @@ module
   global[1] s : Generic { name: "SumUpTo", args: [TypeRef("n"), Literal { name: "6", base_type: Int(64), value: Int(6) }] }
   fn SumUpTo(Int(64), Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
     type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Eq, left: Var("s", Span { start: Position { line: 11, column: 39, offset: 572 }, end: Position { line: 11, column: 40, offset: 573 } }), right: BinOp { op: Mul, left: Var("n", Span { start: Position { line: 11, column: 44, offset: 577 }, end: Position { line: 11, column: 45, offset: 578 } }), right: Lit(Int(2), Span { start: Position { line: 11, column: 48, offset: 581 }, end: Position { line: 11, column: 49, offset: 582 } }), span: Span { start: Position { line: 11, column: 46, offset: 579 }, end: Position { line: 11, column: 47, offset: 580 } } }, span: Span { start: Position { line: 11, column: 41, offset: 574 }, end: Position { line: 11, column: 43, offset: 576 } } }))] }
-  fn main() -> Void
-    locals_total=5
-    Load %0 <- @0
-    Load %1 <- int(6)
-    Eq %2 <- %0, %1
-    Load %3 <- string("模块级依赖精化：约束成立的重赋应静默通过")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Load %0 <- @1
-    Load %1 <- int(3)
-    Eq %2 <- %0, %1
-    Load %3 <- string("模块级 mut 变量重赋生效")
-    Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
-    Ret %4
   init (locals=0)
     Load %0 <- int(3)
-    Store @1 <- %0
+    Store @0 <- %0
     Load %1 <- int(6)
-    Store @0 <- %1
+    Store @1 <- %1
     Load %2 <- int(3)
-    Store @1 <- %2
+    Store @0 <- %2
+    Load %3 <- @1
+    Load %4 <- int(6)
+    Eq %5 <- %3, %4
+    Load %6 <- string("模块级依赖精化：约束成立的重赋应静默通过")
+    Call %7 <- string("std.assert.assert") [%5, %6] (def=_)
+    Load %8 <- @0
+    Load %9 <- int(3)
+    Eq %10 <- %8, %9
+    Load %11 <- string("模块级 mut 变量重赋生效")
+    Call %12 <- string("std.assert.assert") [%10, %11] (def=_)

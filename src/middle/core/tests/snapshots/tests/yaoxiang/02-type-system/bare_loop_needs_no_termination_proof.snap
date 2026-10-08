@@ -1,57 +1,63 @@
 module
-  fn main() -> Void
-    slot[0] flag : Int(64) @depth1
-    slot[1] i : Int(64) @depth1
-    slot[2] a : Int(64) @depth1
-    slot[3] b : Int(64) @depth1
-    locals_total=14
+  global[0] flag : Bool
+  global[1] i : Int(64)
+  global[2] a : Int(64)
+  global[3] b : Int(64)
+  init (locals=0)
     Load %0 <- bool(true)
+    Store @0 <- %0
     Load %1 <- int(0)
-    Load %2 <- void
-    Load %3 <- %0
-    JmpIfNot %3 -> instr(17)
-    Load %4 <- %1
-    Load %5 <- int(1)
-    Add %1 <- %4, %5
-    Load %6 <- %1
-    Load %7 <- int(3)
-    Gt %8 <- %6, %7
-    JmpIfNot %8 -> instr(15)
-    Load %0 <- bool(false)
-    Move %9 <- %10
-    Jmp -> instr(15)
-    Load %2 <- void
-    Jmp -> instr(3)
-    Load %4 <- %1
-    Load %5 <- int(4)
-    Eq %3 <- %4, %5
-    Load %9 <- string("布尔标志循环应正常退出，i 累加到 4")
-    Call %2 <- string("std.assert.assert") [%3, %9] (def=d0)
+    Store @1 <- %1
     Load %2 <- int(0)
+    Store @2 <- %2
     Load %3 <- int(10)
+    Store @3 <- %3
     Load %4 <- void
-    Load %9 <- %2
-    Load %8 <- %3
-    Lt %5 <- %9, %8
-    JmpIfNot %5 -> instr(36)
-    Load %6 <- %2
+    Load %5 <- @0
+    JmpIfNot %5 -> instr(25)
+    Load %6 <- @1
     Load %7 <- int(1)
-    Add %2 <- %6, %7
-    Load %10 <- %3
-    Load %11 <- int(1)
-    Sub %3 <- %10, %11
-    Jmp -> instr(25)
-    Load %8 <- %2
-    Load %6 <- %3
-    Eq %9 <- %8, %6
-    JmpIf %9 -> instr(46)
-    Load %7 <- %2
-    Load %11 <- %3
-    Load %12 <- int(1)
-    Add %10 <- %11, %12
-    Eq %5 <- %7, %10
-    Jmp -> instr(47)
-    Load %5 <- bool(true)
-    Load %13 <- string("双变量循环应收敛（a 追上 b）")
-    Call %4 <- string("std.assert.assert") [%5, %13] (def=d0)
-    Ret %4
+    Add %8 <- %6, %7
+    Store @1 <- %8
+    Load %9 <- @1
+    Load %10 <- int(3)
+    Gt %11 <- %9, %10
+    JmpIfNot %11 -> instr(23)
+    Load %12 <- bool(false)
+    Store @0 <- %12
+    Move %13 <- %14
+    Jmp -> instr(23)
+    Load %4 <- void
+    Jmp -> instr(9)
+    Load %15 <- @1
+    Load %16 <- int(4)
+    Eq %17 <- %15, %16
+    Load %18 <- string("布尔标志循环应正常退出，i 累加到 4")
+    Call %19 <- string("std.assert.assert") [%17, %18] (def=_)
+    Load %20 <- void
+    Load %21 <- @2
+    Load %22 <- @3
+    Lt %23 <- %21, %22
+    JmpIfNot %23 -> instr(44)
+    Load %24 <- @2
+    Load %25 <- int(1)
+    Add %26 <- %24, %25
+    Store @2 <- %26
+    Load %27 <- @3
+    Load %28 <- int(1)
+    Sub %29 <- %27, %28
+    Store @3 <- %29
+    Jmp -> instr(31)
+    Load %30 <- @2
+    Load %31 <- @3
+    Eq %32 <- %30, %31
+    JmpIf %32 -> instr(54)
+    Load %33 <- @2
+    Load %34 <- @3
+    Load %35 <- int(1)
+    Add %36 <- %34, %35
+    Eq %37 <- %33, %36
+    Jmp -> instr(55)
+    Load %37 <- bool(true)
+    Load %38 <- string("双变量循环应收敛（a 追上 b）")
+    Call %39 <- string("std.assert.assert") [%37, %38] (def=_)

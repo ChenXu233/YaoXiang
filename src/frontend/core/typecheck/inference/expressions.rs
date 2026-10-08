@@ -63,6 +63,11 @@ pub struct ExpressionInferrer<'a> {
     /// 函数体（FnDef/Lambda）边界重置——闭包体不继承外层循环上下文；
     /// spawn for 体是逐元素闭包执行，不计入可 break 的循环上下文。
     loop_depth: usize,
+    /// 函数边界嵌套深度（RFC-010a 规则②）：0 = 模块初始化层（Script 顶层），
+    /// ≥1 = 函数体内。命名函数体经语句侧 is_top_level 镜像下传（set_fn_depth）；
+    /// lambda / spawn / 带返回类型的函数体在本 walker 进体时 +1。
+    /// `return` 在深度 0 处编译期拒绝（E1109）。
+    fn_depth: usize,
     /// 重载候选存储引用
     overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Native 函数签名引用
@@ -135,6 +140,10 @@ pub struct ExpressionInferrer<'a> {
     /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
     /// generate_match_expr_ir 按 span 回查，替代对复合 scrutinee 的 AST 猜测
     pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
+    /// WBS 3.4.1：编译期不可求值的 const 泛型约束（span + 约束描述）——
+    /// 事实收集，经 StatementChecker 回收、checker 发射 W1063（先例同构：
+    /// instantiation_requests 等字段的同一条汇聚链）。
+    pub unevaluable_const_constraints: Vec<(crate::util::span::Span, String)>,
 }
 
 impl<'a> ExpressionInferrer<'a> {
@@ -148,6 +157,7 @@ impl<'a> ExpressionInferrer<'a> {
             scope,
             solver,
             loop_depth: 0,
+            fn_depth: 0,
             overload_candidates,
             native_signatures: &EMPTY_SIGNATURES,
             module_aliases: None,
@@ -175,6 +185,7 @@ impl<'a> ExpressionInferrer<'a> {
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
             match_scrutinee_types: HashMap::new(),
+            unevaluable_const_constraints: Vec::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -193,6 +204,7 @@ impl<'a> ExpressionInferrer<'a> {
             scope,
             solver,
             loop_depth: 0,
+            fn_depth: 0,
             overload_candidates,
             native_signatures,
             module_aliases: None,
@@ -220,6 +232,7 @@ impl<'a> ExpressionInferrer<'a> {
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
             match_scrutinee_types: HashMap::new(),
+            unevaluable_const_constraints: Vec::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -239,6 +252,7 @@ impl<'a> ExpressionInferrer<'a> {
             scope,
             solver,
             loop_depth: 0,
+            fn_depth: 0,
             overload_candidates,
             native_signatures,
             module_aliases: None,
@@ -266,6 +280,7 @@ impl<'a> ExpressionInferrer<'a> {
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
             match_scrutinee_types: HashMap::new(),
+            unevaluable_const_constraints: Vec::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -287,6 +302,7 @@ impl<'a> ExpressionInferrer<'a> {
             scope,
             solver,
             loop_depth: 0,
+            fn_depth: 0,
             overload_candidates,
             native_signatures,
             module_aliases: None,
@@ -314,6 +330,7 @@ impl<'a> ExpressionInferrer<'a> {
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
             match_scrutinee_types: HashMap::new(),
+            unevaluable_const_constraints: Vec::new(),
             dep_env: None,
             gamma: None,
             import_watch: HashMap::new(),
@@ -641,6 +658,16 @@ impl<'a> ExpressionInferrer<'a> {
         depth: usize,
     ) {
         self.loop_depth = depth;
+    }
+
+    /// 语句侧镜像 set_loop_depth：委托表达式检查时把函数边界深度传入
+    /// （命名函数体内 is_top_level=false → 1，模块初始化层 → 0），
+    /// 保证 E1109（return 函数外）判定跨两个 walker 同源
+    pub fn set_fn_depth(
+        &mut self,
+        depth: usize,
+    ) {
+        self.fn_depth = depth;
     }
 
     /// 推断字面量表达式类型
@@ -2727,6 +2754,9 @@ impl<'a> ExpressionInferrer<'a> {
         // #311：函数体同样是循环上下文边界
         let saved_loop_depth = self.loop_depth;
         self.loop_depth = 0;
+        // Lambda 也是函数边界（RFC-010a 规则②）：体内 return 退出的是本 lambda
+        let saved_fn_depth = self.fn_depth;
+        self.fn_depth += 1;
         let body_ty = self.infer_block(body, true, None);
         // 箭头 lambda（`(x) => expr`）的体被解析成只含 `return expr` 的块，
         // 块值按规则恒为 `Never`（`return : Never`）。此处**在退出 lambda 作用域前**
@@ -2741,6 +2771,7 @@ impl<'a> ExpressionInferrer<'a> {
             _ => None,
         };
         self.loop_depth = saved_loop_depth;
+        self.fn_depth = saved_fn_depth;
         self.expected_return_type = saved_expected_ret;
         self.result_err = saved_result_err;
 
@@ -3065,7 +3096,10 @@ impl<'a> ExpressionInferrer<'a> {
 
             // 字段访问
             crate::frontend::core::parser::ast::Expr::FieldAccess {
-                expr: obj, field, ..
+                expr: obj,
+                field,
+                span,
+                ..
             } => {
                 let obj_ty = self.infer_expr(obj)?;
                 let obj_ty = self.solver.resolve_type(&obj_ty);
@@ -3107,12 +3141,22 @@ impl<'a> ExpressionInferrer<'a> {
                 // 泛型类型定义，先实例化成 Struct 再做字段/方法查找——
                 // 非泛型结构体（Point）走原有 Struct 路径不受影响。
                 let resolved = match &resolved {
-                    MonoType::Generic { name, args } if self.generic_type_defs.contains_key(name) => {
+                    MonoType::Generic { name, args }
+                        if self.generic_type_defs.contains_key(name) =>
+                    {
                         match crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
                             &self.generic_type_defs[name],
                             args,
                         ) {
-                            Ok(inst) => self.solver.resolve_type(&inst),
+                            Ok(inst) => {
+                                // 3.4.1：不可求值 const 约束事实上达（W1063 汇聚链）
+                                self.unevaluable_const_constraints.extend(
+                                    inst.unevaluable_constraints
+                                        .iter()
+                                        .map(|c| (*span, c.clone())),
+                                );
+                                self.solver.resolve_type(&inst.ty)
+                            }
                             Err(_) => resolved,
                         }
                     }
@@ -3304,6 +3348,14 @@ impl<'a> ExpressionInferrer<'a> {
 
             // Return 表达式
             crate::frontend::core::parser::ast::Expr::Return(expr, span) => {
+                // RFC-010a 规则② 边界条件：模块初始化层（Script 顶层）没有函数
+                // 边界可退——编译期拒绝（E1109），不再运行期静默终止初始化、
+                // 跳过后续顶层语句
+                if self.fn_depth == 0 {
+                    return Err(ErrorCodeDefinition::return_outside_function()
+                        .at(*span)
+                        .build());
+                }
                 if let Some(e) = expr {
                     let ret_ty = self.infer_expr(e)?;
                     // If we know the expected return type, check that the return
@@ -3441,6 +3493,9 @@ impl<'a> ExpressionInferrer<'a> {
                     // #311：函数体是循环上下文边界——外层循环的 break/continue 不可跨入
                     let saved_loop_depth = self.loop_depth;
                     self.loop_depth = 0;
+                    // 函数边界（RFC-010a 规则②）：体内 return 退出本函数（E1109 判定）
+                    let saved_fn_depth = self.fn_depth;
+                    self.fn_depth += 1;
 
                     let body_ty_res = self.infer_block(body, true, Some(&expected_body_ty));
 
@@ -3448,6 +3503,7 @@ impl<'a> ExpressionInferrer<'a> {
                     self.expected_return_type = saved_expected_ret;
                     self.result_err = saved_result_err;
                     self.loop_depth = saved_loop_depth;
+                    self.fn_depth = saved_fn_depth;
 
                     let body_ty = body_ty_res?;
 
@@ -3555,7 +3611,11 @@ impl<'a> ExpressionInferrer<'a> {
                 // 导致 `f: () -> Void = { r = spawn { return 1 + 2 } }` 误报
                 // E1002（把 spawn 体的 return 当外层 void 函数的 return）。
                 let saved = self.expected_return_type.take();
+                // spawn 体是函数边界（RFC-010a 规则②）：体内 return 退出 spawn（E1109 判定）
+                let saved_fn_depth = self.fn_depth;
+                self.fn_depth += 1;
                 let result = self.infer_block(body, true, None);
+                self.fn_depth = saved_fn_depth;
                 self.expected_return_type = saved;
                 result
             }
@@ -4577,10 +4637,21 @@ impl<'a> ExpressionInferrer<'a> {
                             }
                             let _ = binder; // 避免未使用警告
                         }
-                        return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
-                                &generic_def,
-                                &full_args,
-                            );
+                        return match crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
+                            &generic_def,
+                            &full_args,
+                        ) {
+                            Ok(inst) => {
+                                // 3.4.1：不可求值 const 约束事实上达（W1063 汇聚链）
+                                self.unevaluable_const_constraints.extend(
+                                    inst.unevaluable_constraints
+                                        .iter()
+                                        .map(|c| (span, c.clone())),
+                                );
+                                Ok(inst.ty)
+                            }
+                            Err(e) => Err(e),
+                        };
                     }
 
                     if any_matched {
@@ -4704,10 +4775,21 @@ impl<'a> ExpressionInferrer<'a> {
                                 args: type_args,
                             });
                         }
-                        return crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
-                                &generic_def,
-                                &type_args,
-                            );
+                        return match crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(
+                            &generic_def,
+                            &type_args,
+                        ) {
+                            Ok(inst) => {
+                                // 3.4.1：不可求值 const 约束事实上达（W1063 汇聚链）
+                                self.unevaluable_const_constraints.extend(
+                                    inst.unevaluable_constraints
+                                        .iter()
+                                        .map(|c| (span, c.clone())),
+                                );
+                                Ok(inst.ty)
+                            }
+                            Err(e) => Err(e),
+                        };
                     }
                 }
             }

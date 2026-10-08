@@ -66,3 +66,33 @@ fn test_cache_counters_count_hit_and_miss() {
         "缓存命中返回的结果必须与真求解一致"
     );
 }
+
+/// Unknown 不入缓存：资源依赖的非确定性结果不得固化（#375 方向4 补遗，
+/// D58 单例化硬前置）。此前 solve 对任何结果 insert——一次超时会把
+/// 「首次求解时的机器负载」固化为进程级事实。
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_unknown_result_is_never_cached() {
+    use crate::frontend::core::typecheck::proof::smt::z3_backend::should_cache;
+
+    // Arrange: 三种结果的典型形态
+    let unknown = SMTResult::Unknown {
+        reason: "timeout".to_string(),
+    };
+    let sat = SMTResult::Sat {
+        model: crate::frontend::core::typecheck::proof::smt::ast::SMTModel {
+            assignments: vec![("x".to_string(), "1".to_string())],
+        },
+    };
+    let unsat = SMTResult::Unsat;
+
+    // Act
+    let unknown_cacheable = should_cache(&unknown);
+    let sat_cacheable = should_cache(&sat);
+    let unsat_cacheable = should_cache(&unsat);
+
+    // Assert
+    assert!(!unknown_cacheable, "Unknown（超时/能力外）不得入缓存");
+    assert!(sat_cacheable, "Sat 是确定性结果，应可缓存");
+    assert!(unsat_cacheable, "Unsat 是确定性结果，应可缓存");
+}

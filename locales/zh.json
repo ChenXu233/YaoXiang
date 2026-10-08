@@ -371,10 +371,18 @@
   "W1063": {
     "title": "const 泛型约束无法求值",
     "message": "const 泛型参数的值约束无法在编译期求值",
-    "template": "const 泛型约束无法求值: `{constraint}` ({var} = {value})",
+    "template": "const 泛型约束无法求值: `{constraint}`",
     "help": "确保 const 参数是编译期常量",
     "example": "BadArray(Int, n)  // n 不是编译期常量",
     "error_output": "warning[W1063]: const 泛型约束无法求值\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 无法在编译期求值约束 `N > 0`"
+  },
+  "W1081": {
+    "title": "终止性义务未判定",
+    "message": "SMT 求解器不可用，终止性测度义务未判定",
+    "template": "{count} 条终止性测度义务未判定（SMT 求解器不可用）",
+    "help": "安装 Z3 求解器后重新检查，以获得终止性判定；「未判定」不等于「不终止」，但义务的判定被跳过了",
+    "example": "f: (n: Int) -> Int = { f(n - 1) }  // 带 Terminates 测度，但无求解器",
+    "error_output": "warning[W1081]: 终止性义务未判定\n --> example.yx:1:1\n  |\n1 | f: (n: Int) -> Int = { f(n - 1) }\n  | ^ 2 条终止性测度义务未判定（SMT 求解器不可用）"
   },
   "E1065": {
     "title": "对非函数值调用",
@@ -983,6 +991,12 @@
     "message": "break/continue 只能在 while/for 循环体内使用",
     "template": "'{keyword}' 出现在循环外",
     "help": "把 '{keyword}' 移入 while/for 循环体内"
+  },
+  "E1109": {
+    "title": "return 出现在函数外",
+    "message": "return 只能在函数体内使用；Script 顶层是模块初始化层，没有函数边界可退",
+    "template": "'return' 出现在函数外",
+    "help": "把 'return' 移入函数体；Script 模式下顶层语句即程序主体，要提前结束一段顶层逻辑请收进函数、在调用点控制"
   },
   "E1064": {
     "title": "绑定位置索引无效",

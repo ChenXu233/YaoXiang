@@ -104,7 +104,9 @@ impl BoundsChecker {
             });
         }
 
-        // Layer 2: 值约束求值
+        // Layer 2: 值约束求值（WBS 3.4.1 注：实参必为 Literal——
+        // Layer 1 已拒绝一切非字面量实参；Unproven 只来自约束表达式
+        // 求值失败（引用未绑定变量等）或求值结果非 Bool 两支）
         for (binder, arg) in const_binders.iter().zip(const_args.iter()) {
             for constraint in &binder.constraints {
                 let mut eval = ConstGenericEval::new();
@@ -125,7 +127,7 @@ impl BoundsChecker {
                     Ok(_) | Err(_) => {
                         return ProofResult::Unproven {
                             reason: UnprovenReason::Symbolic(format!(
-                                "const 参数 `{}` 的约束无法在编译期求值",
+                                "`{constraint}`（const 参数 `{}` 的实参不是编译期常量）",
                                 binder.name
                             )),
                             proof_calls: Vec::new(),

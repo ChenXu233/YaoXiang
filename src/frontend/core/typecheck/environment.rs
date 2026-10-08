@@ -28,6 +28,20 @@ pub struct GenericTypeDef {
     pub type_param_names: Vec<String>,
 }
 
+/// 泛型类型实例化结果（WBS 3.4.1）。
+///
+/// `unevaluable_constraints` 携带编译期不可求值的 const 约束描述——
+/// environment 层产事实、调用方发诊断（W1063）；空 vec = 全部约束可判定。
+/// 此前 Unproven 在 `instantiate_generic_type` 被空臂静默丢弃（02 §41-52
+/// 「失败不产生信号」类缺陷，全仓零登记），本字段是其上达通道。
+#[derive(Debug, Clone)]
+pub struct InstantiatedGeneric {
+    /// 实例化得到的类型
+    pub ty: MonoType,
+    /// 编译期不可求值的 const 约束描述（调用方应发射 W1063）
+    pub unevaluable_constraints: Vec<String>,
+}
+
 /// RFC-011a §5.3: 实现证明——某类型完整实现了某接口的编译期凭证。
 /// 纯编译期概念，运行时擦除（RFC-011a §6.4）；阶段 3 动态分发的类型收集
 /// 将以此为依据枚举某接口的全部实现类型。
@@ -365,8 +379,11 @@ impl TypeEnvironment {
     pub fn instantiate_generic_type(
         def: &GenericTypeDef,
         args: &[MonoType],
-    ) -> Result<MonoType, crate::util::diagnostic::Diagnostic> {
+    ) -> Result<InstantiatedGeneric, crate::util::diagnostic::Diagnostic> {
         use crate::util::diagnostic::ErrorCodeDefinition;
+
+        // 3.4.1：不可求值 const 约束事实（Unproven 臂收集，随结果上达）
+        let mut unevaluable_constraints: Vec<String> = Vec::new();
 
         let type_arg_count = def.type_param_names.len();
         let const_arg_count = def.poly.const_binders.len();
@@ -420,14 +437,27 @@ impl TypeEnvironment {
                     return Err(ErrorCodeDefinition::const_constraint_failed(&var_info).build());
                 }
                 crate::frontend::core::typecheck::proof::verdict::ProofResult::Unproven {
+                    reason,
                     ..
                 } => {
-                    // 约束无法求值 — 允许编译继续
+                    // WBS 3.4.1：约束无法求值不再静默——事实上达，由调用方
+                    // 发射 W1063（Warning，不阻断：实参非编译期常量 ≠ 程序错误，
+                    // 但「约束保护失效」必须让用户知情——此前这里是全仓零登记的
+                    // silent pass）。
+                    use crate::frontend::core::typecheck::proof::verdict::UnprovenReason;
+                    let desc = match &reason {
+                        UnprovenReason::Symbolic(s) => s.clone(),
+                        other => format!("{other:?}"),
+                    };
+                    unevaluable_constraints.push(desc);
                 }
             }
         }
 
-        Ok(Self::resolve_type_refs(&body))
+        Ok(InstantiatedGeneric {
+            ty: Self::resolve_type_refs(&body),
+            unevaluable_constraints,
+        })
     }
 
     /// 按名称查找并实例化泛型类型（TypeEnvironment 便捷方法）
@@ -435,7 +465,7 @@ impl TypeEnvironment {
         &self,
         name: &str,
         args: &[MonoType],
-    ) -> Result<MonoType, crate::util::diagnostic::Diagnostic> {
+    ) -> Result<InstantiatedGeneric, crate::util::diagnostic::Diagnostic> {
         let def = self.generic_type_defs.get(name).ok_or_else(|| {
             crate::util::diagnostic::ErrorCodeDefinition::unknown_type(name).build()
         })?;

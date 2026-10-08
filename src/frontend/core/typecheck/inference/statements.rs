@@ -82,6 +82,9 @@ pub struct StatementChecker {
     type_defs: HashMap<String, MonoType>,
     /// 实例化请求（收集所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
+    /// WBS 3.4.1：编译期不可求值的 const 泛型约束（span + 约束描述）——
+    /// 回收 ExpressionInferrer 同名收集字段，checker 汇聚发射 W1063
+    pub unevaluable_const_constraints: Vec<(crate::util::span::Span, String)>,
     /// #335 G3 类型信息流接口：调用点所有权解析表（按调用 span 键控）
     pub call_ownership: super::call_ownership::CallOwnershipTable,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
@@ -208,6 +211,7 @@ impl StatementChecker {
             generic_fn_type_params: HashMap::new(),
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
+            unevaluable_const_constraints: Vec::new(),
             call_ownership: super::call_ownership::CallOwnershipTable::new(),
             existential_coercions: Vec::new(),
             interface_impl_registry: HashMap::new(),
@@ -419,12 +423,16 @@ impl StatementChecker {
     /// `Generic{name:“L”}` 表示不一致，unify 会报 E1002——而它们语义相同。
     /// 此时返回 None 让调用方回退到 `Generic` 形态，两侧表示一致。
     fn try_instantiate_generic_type(
-        &self,
+        &mut self,
         type_ann: &crate::frontend::core::parser::ast::Type,
     ) -> Option<MonoType> {
         use crate::frontend::core::typecheck::TypeEnvironment;
         match type_ann {
-            crate::frontend::core::parser::ast::Type::Generic { name, args, .. } => {
+            crate::frontend::core::parser::ast::Type::Generic {
+                name,
+                args,
+                name_span,
+            } => {
                 let def = self.generic_type_defs.get(name)?;
                 let arg_types: Vec<MonoType> =
                     args.iter().map(|a| MonoType::from(a.clone())).collect();
@@ -432,7 +440,18 @@ impl StatementChecker {
                 if arg_types.iter().any(contains_unresolved_param) {
                     return None;
                 }
-                TypeEnvironment::instantiate_generic_type(def, &arg_types).ok()
+                match TypeEnvironment::instantiate_generic_type(def, &arg_types) {
+                    Ok(inst) => {
+                        // 3.4.1：不可求值 const 约束事实上达（W1063 汇聚链）
+                        self.unevaluable_const_constraints.extend(
+                            inst.unevaluable_constraints
+                                .iter()
+                                .map(|c| (*name_span, c.clone())),
+                        );
+                        Some(inst.ty)
+                    }
+                    Err(_) => None,
+                }
             }
             _ => None,
         }
@@ -1506,10 +1525,29 @@ impl StatementChecker {
             )),
             // #295：Return 语句此前落 _ => Ok(()) 静默跳过——lambda 体 `x + n` 的自由
             // 变量从未被检查（ir_gen 才报 E3006 / 错绑）。此处检查返回表达式。
+            // RFC-010a 规则② 边界条件：`return` 退出最近的函数边界，顶层是
+            // 模块初始化层、没有函数边界——编译期拒绝（E1109），不再运行期
+            // 静默终止初始化、跳过后续顶层语句。
             crate::frontend::core::parser::ast::StmtKind::Return(Some(expr)) => {
+                if self.is_top_level {
+                    return Err(Box::new(
+                        ErrorCodeDefinition::return_outside_function()
+                            .at(stmt.span)
+                            .build(),
+                    ));
+                }
                 self.check_expr(expr).map(|_| ())
             }
-            crate::frontend::core::parser::ast::StmtKind::Return(None) => Ok(()),
+            crate::frontend::core::parser::ast::StmtKind::Return(None) => {
+                if self.is_top_level {
+                    return Err(Box::new(
+                        ErrorCodeDefinition::return_outside_function()
+                            .at(stmt.span)
+                            .build(),
+                    ));
+                }
+                Ok(())
+            }
             // 类型定义是模块级概念（checker.rs pass1 只扫 module.items 注册）——
             // 模块级出现合法（pass1 已注册，此处无事可做）；函数体内出现此前
             // 落 `_ => Ok(())` 静默跳过（#295），留下误导性「Unknown variable」错误。
@@ -2792,6 +2830,10 @@ impl StatementChecker {
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                         inferrer.set_loop_depth(self.loop_depth);
+                        // RFC-010a 规则②：函数边界深度随语句侧上下文下传——
+                        // 命名函数体内 is_top_level=false → 1，模块初始化层 → 0，
+                        // E1109（return 函数外）判定跨 walker 同源
+                        inferrer.set_fn_depth(if self.is_top_level { 0 } else { 1 });
                         // #321 W1003：导入名监视集随委托传入
                         inferrer.set_import_watch(&self.import_watch);
                         // #396：模块别名集合随委托传入（E1043 判定）
@@ -2891,6 +2933,8 @@ impl StatementChecker {
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
                 inferrer.set_loop_depth(self.loop_depth);
+                // RFC-010a 规则②：函数边界深度随语句侧上下文下传（E1109 判定）
+                inferrer.set_fn_depth(if self.is_top_level { 0 } else { 1 });
                 // #321 W1003：导入名监视集随委托传入
                 inferrer.set_import_watch(&self.import_watch);
                 // #396：模块别名集合随委托传入（E1043 判定）
@@ -2902,6 +2946,8 @@ impl StatementChecker {
                 self.imported_used.extend(inferrer.take_import_used());
                 self.instantiation_requests
                     .extend(inferrer.instantiation_requests);
+                self.unevaluable_const_constraints
+                    .extend(inferrer.unevaluable_const_constraints);
                 self.call_ownership.extend(inferrer.call_ownership);
                 self.existential_coercions
                     .extend(inferrer.existential_coercions);

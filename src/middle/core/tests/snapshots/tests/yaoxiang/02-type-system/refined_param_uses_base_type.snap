@@ -30,24 +30,22 @@ module
     Load %1 <- %0
     Call %2 <- string("plain") [%1] (def=d0)
     Ret %2
-  fn main() -> Void
-    locals_total=6
+  init (locals=0)
     Load %0 <- int(7)
-    Call %1 <- string("identity") [%0] (def=d1)
+    Call %1 <- string("identity") [%0] (def=_)
     Load %2 <- int(7)
     Eq %3 <- %1, %2
     Load %4 <- string("精化形参的运行时值应原样返回")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
-    Load %0 <- int(7)
-    Call %1 <- string("succ") [%0] (def=d3)
-    Load %2 <- int(8)
-    Eq %3 <- %1, %2
-    Load %4 <- string("精化形参应可参与 Int 算术")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
-    Load %0 <- int(7)
-    Call %1 <- string("doubled") [%0] (def=d4)
-    Load %2 <- int(14)
-    Eq %3 <- %1, %2
-    Load %4 <- string("精化形参应可传给期望 Int 的函数")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=d2)
-    Ret %5
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=_)
+    Load %6 <- int(7)
+    Call %7 <- string("succ") [%6] (def=_)
+    Load %8 <- int(8)
+    Eq %9 <- %7, %8
+    Load %10 <- string("精化形参应可参与 Int 算术")
+    Call %11 <- string("std.assert.assert") [%9, %10] (def=_)
+    Load %12 <- int(7)
+    Call %13 <- string("doubled") [%12] (def=_)
+    Load %14 <- int(14)
+    Eq %15 <- %13, %14
+    Load %16 <- string("精化形参应可传给期望 Int 的函数")
+    Call %17 <- string("std.assert.assert") [%15, %16] (def=_)

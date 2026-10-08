@@ -806,7 +806,7 @@
   "W1063": {
     "title": "呜喵～const 泛型约束没法求值呢～",
     "message": "喵～const 泛型参数的值约束在编译期没法求值哦nya～",
-    "template": "呜～const 泛型约束没法求值呢喵: `{constraint}` ({var} = {value})～",
+    "template": "呜～const 泛型约束没法求值呢喵: `{constraint}`～",
     "help": "喵～请确保 const 参数是编译期常量哦～",
     "example": "BadArray(Int, n)  // n 不是编译期常量",
     "error_output": "warning[W1063]: 呜喵～const 泛型约束没法求值呢～\n --> example.yx:1:1\n  |\n1 | bad = BadArray(Int, n)\n  | ^ 喵呜～在编译期没法求值约束 `N > 0` 哦～"
@@ -988,6 +988,14 @@
     "template": "程序入口 '{name}' 必须是函数喵~，但它是值绑定喵~",
     "help": "入口必须是函数喵~：写成 main = () => { ... } 或者加函数注解 main: () -> Void = ... 喵~。裸块绑定 main = { ... } 是值绑定（在模块初始化期求值），不会作为入口执行喵~"
   },
+  "W1081": {
+    "title": "呜喵～终止性义务没法判定呢～",
+    "message": "喵～SMT 求解器不在，终止性测度义务判定不了哦nya～",
+    "template": "呜～有 {count} 条终止性测度义务没法判定呢（SMT 求解器不在喵）～",
+    "help": "喵～装好 Z3 求解器再检查一次啦～没判定不等于不终止，但义务被跳过了哦～",
+    "example": "f: (n: Int) -> Int = { f(n - 1) }",
+    "error_output": "warning[W1081]: 呜喵～终止性义务没法判定呢～\n --> example.yx:1:1\n  |\n1 | f: (n: Int) -> Int = { f(n - 1) }\n  | ^ 呜～有 2 条没法判定呢～"
+  },
   "E1065": {
     "title": "呜喵～对不是函数的值进行了调用呢～",
     "template": "喵呜...类型 `{type}` 不能被调用哦~它才不是函数的说(´;ω;`)",
@@ -1143,6 +1151,12 @@
     "help": "B 方案语义（SPEC syntax §1.6.4）喵～：`{}` 是空块，不是空字典nya～。空字典用 `dict.new()`，空列表用 `[]`",
     "example": "net.http_get(url, {}, 5)",
     "error_output": "error[E1108]: 空块落入容器期望位喵～\n --> main.yx:2:33\n  |\n2 |     net.http_get(url, {}, 5)\n  |                            ^ 此处期望容器类型，但 `{}` 是空块（值 Void）nya～"
+  },
+  "E1109": {
+    "title": "呜喵～return 跑到函数外面了呢～",
+    "message": "喵～'return' 只能在函数体里面用哦～Script 顶层是模块初始化层，没有函数边界可以退喵～",
+    "template": "'return' 出现在函数外面了喵～",
+    "help": "喵～把 'return' 收进函数体里啦～Script 模式下顶层语句就是程序主体，想提前结束就包成函数、在调用的地方控制哦～"
   },
   "E5008": {
     "title": "导入名冲突了喵~",

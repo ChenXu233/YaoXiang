@@ -1,4 +1,7 @@
 module
+  global[0] a : Int(64)
+  global[1] b : Int(64)
+  global[2] c : Int(64)
   fn apply_int(Fn { params: [Int(64)], return_type: Int(64) }) -> Int(64)
     slot[0] f : Int(64) @depth1
     locals_total=4
@@ -27,46 +30,43 @@ module
     Mul %3 <- %1, %2
     Ret %3
     Ret
-  fn main() -> Void
-    slot[0] a : Int(64) @depth1
-    slot[1] b : Int(64) @depth1
-    slot[2] c : Int(64) @depth1
-    locals_total=8
-    MakeClosure %0 <- closure_0 env=[] (def=d0)
-    Call %1 <- string("apply_int") [%0] (def=d1)
-    Load %2 <- %1
-    Load %3 <- int(2)
-    Eq %4 <- %2, %3
-    Load %5 <- string("concrete-signature closure arg")
-    Call %0 <- string("std.assert.assert") [%4, %5] (def=d2)
-    Load %4 <- int(3)
-    MakeClosure %2 <- closure_1 env=[] (def=d3)
-    Call %0 <- string("pick") [%4, %2] (def=d4)
-    Load %3 <- %0
-    Load %5 <- int(6)
-    Eq %2 <- %3, %5
-    Load %6 <- string("generic higher-order closure arg")
-    Call %4 <- string("std.assert.assert") [%2, %6] (def=d2)
-    MakeClosure %2 <- double env=[] (def=d5)
-    Call %4 <- string("apply_int") [%2] (def=d1)
-    Load %5 <- %4
-    Load %6 <- int(2)
-    Eq %3 <- %5, %6
-    Load %7 <- string("named fn arg unchanged")
-    Call %2 <- string("std.assert.assert") [%3, %7] (def=d2)
-    Ret
-    Ret %2
   fn closure_0(Int(64)) -> Void
-    slot[0] x : Int(64) @depth2
+    slot[0] x : Int(64) @depth1
     locals_total=5
     Load %0 <- %1
     Load %2 <- int(1)
     Add %3 <- %0, %2
     Ret %3
   fn closure_1(Int(64)) -> Void
-    slot[0] x : Int(64) @depth2
-    locals_total=6
+    slot[0] x : Int(64) @depth1
+    locals_total=11
     Load %0 <- %1
     Load %2 <- int(2)
     Mul %3 <- %0, %2
     Ret %3
+  init (locals=0)
+    MakeClosure %0 <- closure_0 env=[] (def=_)
+    Call %1 <- string("apply_int") [%0] (def=_)
+    Store @0 <- %1
+    Load %2 <- int(3)
+    MakeClosure %3 <- closure_1 env=[] (def=_)
+    Call %4 <- string("pick") [%2, %3] (def=_)
+    Store @1 <- %4
+    MakeClosure %5 <- double env=[] (def=_)
+    Call %6 <- string("apply_int") [%5] (def=_)
+    Store @2 <- %6
+    Load %7 <- @0
+    Load %8 <- int(2)
+    Eq %9 <- %7, %8
+    Load %10 <- string("concrete-signature closure arg")
+    Call %11 <- string("std.assert.assert") [%9, %10] (def=_)
+    Load %12 <- @1
+    Load %13 <- int(6)
+    Eq %14 <- %12, %13
+    Load %15 <- string("generic higher-order closure arg")
+    Call %16 <- string("std.assert.assert") [%14, %15] (def=_)
+    Load %17 <- @2
+    Load %18 <- int(2)
+    Eq %19 <- %17, %18
+    Load %20 <- string("named fn arg unchanged")
+    Call %21 <- string("std.assert.assert") [%19, %20] (def=_)

@@ -58,10 +58,10 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/array_literal.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/assert_runtime.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/associated_type_in_body.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/bare_loop_needs_no_termination_proof.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/bare_loop_needs_no_termination_proof.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/builtin_container_ctor.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/call_arg_evidence.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/closure_arg_inference.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/call_arg_evidence.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/closure_arg_inference.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/closures.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/const_generic_assert.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/const_generic_instantiate.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
@@ -92,7 +92,7 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interface_rebind_dispatch.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/interfaces.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/lists.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/match_call_scrutinee.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/match_call_scrutinee.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/measure_decreasing.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/method_block_tail_expr.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/method_call_args.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
@@ -108,11 +108,11 @@
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/range_identity.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/range_in_list.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/rank_function_dual_variable_loop.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_dependent_module_scope.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_dependent_revalidate.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_param_arg_form.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_param_uses_base_type.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
-{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_variable_uses_base_type.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_dependent_module_scope.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_dependent_revalidate.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_param_arg_form.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_param_uses_base_type.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/02-type-system/refined_variable_uses_base_type.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/result.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/return_refinement.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/02-type-system/return_refinement_arg_expr.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
@@ -135,7 +135,7 @@
 {"expectation":"behavior","file":"tests/yaoxiang/03-modules/alias_std_module.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":["std module alias ok"]}}
 {"expectation":"behavior","file":"tests/yaoxiang/03-modules/grouped_use_type_payload.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/03-modules/imports.yx","run":{"exit":0,"stderr":[],"stdout":["module_import_ok"]}}
-{"expectation":"behavior","file":"tests/yaoxiang/03-modules/native_arity_range.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang/03-modules/native_arity_range.yx","run":{"exit":0,"stderr":[],"stdout":["none_opt built enum::v1","variadic args ok"]}}
 {"expectation":"behavior","file":"tests/yaoxiang/03-semantics/assignment_semantics.yx","run":{"exit":0,"stderr":[],"stdout":["assignment_semantics ok"]}}
 {"expectation":"behavior","file":"tests/yaoxiang/03-semantics/binding_fn_vs_block.yx","run":{"exit":0,"stderr":[],"stdout":["binding fn vs block ok"]}}
 {"expectation":"behavior","file":"tests/yaoxiang/03-semantics/empty_block_semantics.yx","run":{"exit":0,"stderr":[],"stdout":["empty_block_semantics: ok"]}}
@@ -294,6 +294,8 @@
 {"check":{"diagnostics":[["E1012","tests/yaoxiang/06-compile-errors/tail_expr_type_mismatch_err.yx",8]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/tail_expr_type_mismatch_err.yx"}
 {"check":{"diagnostics":[["E4021","tests/yaoxiang/06-compile-errors/termination_unproven_err.yx",22]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/termination_unproven_err.yx"}
 {"check":{"diagnostics":[["W1004","tests/yaoxiang/06-compile-errors/top_level_index_oob.yx",13],["W1004","tests/yaoxiang/06-compile-errors/top_level_index_oob.yx",14]],"exit":0},"expectation":"runtime-error","file":"tests/yaoxiang/06-compile-errors/top_level_index_oob.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6003\u001b[0m] Array index out of bounds: valid range is 0..3, found 5 (i)","     │        ^","  15 │ print(a[i])","  at __yx_module_init (tests/yaoxiang/06-compile-errors/top_level_index_oob.yx:15:8)"," --> tests/yaoxiang/06-compile-errors/top_level_index_oob.yx:15:8","Runtime error","help: Ensure the index is within the array bounds","stack trace:"],"stdout":[]}}
+{"check":{"diagnostics":[["E1109","tests/yaoxiang/06-compile-errors/top_level_return_block_value_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/top_level_return_block_value_err.yx"}
+{"check":{"diagnostics":[["E1109","tests/yaoxiang/06-compile-errors/top_level_return_err.yx",10]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/top_level_return_err.yx"}
 {"check":{"diagnostics":[["E1071","tests/yaoxiang/06-compile-errors/type_def_in_local_err.yx",11]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/type_def_in_local_err.yx"}
 {"check":{"diagnostics":[["E1003","tests/yaoxiang/06-compile-errors/unknown_type_in_field_err.yx",15]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/unknown_type_in_field_err.yx"}
 {"check":{"diagnostics":[["E1003","tests/yaoxiang/06-compile-errors/unknown_type_in_param_err.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang/06-compile-errors/unknown_type_in_param_err.yx"}

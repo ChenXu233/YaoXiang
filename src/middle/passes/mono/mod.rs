@@ -294,6 +294,22 @@ impl Monomorphizer {
             .functions
             .iter()
             .flat_map(Self::call_target_names)
+            // init 段（模块顶层语句）的按名调用同属保留依据：它不在
+            // module.functions 里，漏扫会让「只被顶层调用的泛型」在别的泛型
+            // 触发特化时从函数表消失（与 std.list.push 同型，运行时 E6006）
+            .chain(
+                module
+                    .init
+                    .iter()
+                    .filter_map(|instr| match instr {
+                        Instruction::Call {
+                            func: Operand::Const(ConstValue::String(name)),
+                            ..
+                        } => Some(name.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>(),
+            )
             .collect();
 
         let mut functions: Vec<FunctionIR> = module
@@ -623,6 +639,26 @@ impl Monomorphizer {
         for func in &mut module.functions {
             if func.generic_params.is_none() {
                 self.replace_calls_in_function(func, &call_site_map);
+            }
+        }
+
+        // init 段（模块顶层语句）：调用点同样按特化名改写。typecheck 在模块层
+        // 收集的请求 containing_fn=None（anon 键）；此前只遍历 functions，
+        // 顶层调用点保留原泛型名——原泛型又被特化删除，运行期按原名查表
+        // 落空（E6006，「Native function not found」，#416 家族）
+        for instr in &mut module.init {
+            if let Instruction::Call {
+                func: ref mut callee,
+                span,
+                ..
+            } = instr
+            {
+                if let Operand::Const(ConstValue::String(name)) = callee {
+                    if let Some(specialized_name) = call_site_map.get(&(None, name.clone(), *span))
+                    {
+                        *callee = Operand::Const(ConstValue::String(specialized_name.clone()));
+                    }
+                }
             }
         }
     }

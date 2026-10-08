@@ -345,6 +345,7 @@ E1001::unknown_variable(&var_name)
 | E1106 | 约束未满足                 |
 | E1107 | 方法重载歧义                |
 | E1108 | 空块落入容器期望位             |
+| E1109 | return 出现在函数外         |
 <!-- code-table:E1xxx end -->
 
 > **RFC-011b 关联（2026-09-22 注）**：[RFC-011b: 运算符重载](011b-operator-overloading.md)
@@ -499,6 +500,7 @@ E1001::unknown_variable(&var_name)
 | W1006 | 本地模块遮蔽依赖包      |
 | W1063 | const 泛型约束无法求值 |
 | W1080 | 编译期证明降级        |
+| W1081 | 终止性义务未判定       |
 <!-- code-table:W1xxx end -->
 
 > W 码位规则：与 E 码同构按阶段分组（W+阶段千位段），W1xxx = 类型检查阶段警告。

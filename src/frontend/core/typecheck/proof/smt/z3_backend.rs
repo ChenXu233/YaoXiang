@@ -189,8 +189,10 @@ impl Z3Backend {
             smt_result
         };
 
-        // 写入缓存（触顶整体清空，见 CACHE_CAP）
-        {
+        // 写入缓存（触顶整体清空，见 CACHE_CAP）——仅确定性结果可入
+        //（Unknown 是资源依赖的非确定性结果，缓存它会固化首次求解时的
+        // 机器负载，见 should_cache 契约）
+        if should_cache(&result) {
             let mut cache = self.cache.borrow_mut();
             evict_if_full(&mut cache);
             cache.insert(cache_key, result.clone());
@@ -210,6 +212,26 @@ pub(crate) fn evict_if_full(cache: &mut HashMap<u64, SMTResult>) {
     if cache.len() >= CACHE_CAP {
         cache.clear();
     }
+}
+
+/// 结果是否可缓存（缓存契约，#375 方向4 补遗）。
+///
+/// **只有确定性结果可缓存**（`Sat`/`Unsat`：同一查询任何时候求解结论相同）。
+/// `Unknown` 是**资源依赖的非确定性结果**（超时/能力外）——缓存它会把
+/// 「首次求解时的机器负载」固化为进程级事实：一次超时 → 该查询在本进程
+/// 永远 Unknown → 消费端保守降级（E2031 族/回边不切断），同一项目不同
+/// 负载下编译诊断不同。这正是 D58 单例化的硬前置：进程级缓存一旦共享，
+/// 被缓存的 Unknown 还会跨编译/跨测试传播。
+///
+/// 其余边界（写明的接受项）：
+/// - 缓存键 = `Debug` 文本 + timeout 的 u64 哈希，无比对（碰撞概率 ~2⁻⁶⁴ 级，接受）；
+///   同一查询不同 timeout 视为不同查询（timeout 入键）。
+/// - `cache_stats` 计数在整体清空后**不清零**——命中率是进程累计语义。
+/// - 上限管条数不管字节（`Sat` 携带的模型字符串不在计量内）。
+pub(crate) fn should_cache(result: &SMTResult) -> bool {
+    // Unknown（超时/能力外/异常码）是资源依赖的非确定性结果——不入缓存，
+    // 让下一次求解在资源充裕时有机会给出确定结论。
+    !matches!(result, SMTResult::Unknown { .. })
 }
 
 impl Drop for Z3Backend {
