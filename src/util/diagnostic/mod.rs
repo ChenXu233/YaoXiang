@@ -379,7 +379,9 @@ pub fn run_file_with_diagnostics(
             // #413：Script 模式（项目外单文件）不自动执行 main——T4 决议
             // （codegen find_entry_point）：无 manifest 就没有入口概念，顶层
             // 语句即程序主体，自动执行会与显式 main() 双跑（#356）。但静默
-            // 成功有欺骗性：文件定义了 main 而顶层从未调用时给出显式提示。
+            // 成功有欺骗性：main 定义了却完全惰性（未调用、值型块体也未在
+            // 初始化期求值）时给出显式提示；值型块体已求值的不再提示——
+            // 此刻照提示补 main() 会双跑（#422 UX 对账）。
             if module.source_files.is_empty() && script_main_never_called(&module) {
                 eprintln!(
                     "提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。"
@@ -432,15 +434,23 @@ pub fn run_file_with_diagnostics(
     Ok(())
 }
 
-/// #413：Script 模式提示判定——文件绑定了 `main` 且模块初始化序列没有对它的
-/// 直接调用。
+/// #413：Script 模式提示判定——文件绑定了 `main`，且模块初始化序列既没有对它
+/// 的直接调用、也没有在初始化期**求值过它的值**。
 ///
 /// 顶层 `main()` 调用在 init 中是 `Call { func: Const(String("main")), .. }`
 /// （调用目标以名字常量编码，见 ir_gen 的 Call 生成）；定义本身
 /// （`main = () => {...}`）不产生对 main 的 Call。经别名中转的间接调用
 /// （`f = main; f()`）识别不出——提示是尽力而为的辅导信息，不是诊断。
+///
+/// 值型 main 的两种形态必须区分（#422 UX 对账）：`main = { 块体 }` 的块体
+/// 在初始化期内联求值、末尾 `Store` 写回 main 的全局槽——main 的效果已经
+/// 发生，提示"未被调用"是误导（照提示补 `main()` 会双跑，与 #356 同源）；
+/// 而 `main = () => {...}` 存的是 `MakeClosure` 的新闭包，体仍惰性，提示保留。
+/// 判别：main 槽位的 `Store` 源寄存器若由本 init 段的 `MakeClosure` 写出则
+/// 视为惰性，否则视为已在初始化期求值。
 fn script_main_never_called(module: &crate::middle::ModuleIR) -> bool {
     use crate::middle::core::ir::{ConstValue, Instruction, Operand};
+    use std::collections::HashSet;
 
     let defines_main = module.functions.iter().any(|f| f.name == "main")
         || module.globals.iter().any(|g| g.name == "main");
@@ -456,7 +466,38 @@ fn script_main_never_called(module: &crate::middle::ModuleIR) -> bool {
         }
         _ => false,
     });
-    defines_main && !top_level_call
+    if top_level_call {
+        return false;
+    }
+    // 值型 main 已在初始化期求值 → 不提示（效果已发生，补调用会双跑）
+    let Some(main_slot) = module
+        .globals
+        .iter()
+        .find(|g| g.name == "main")
+        .map(|g| g.index)
+    else {
+        return true; // main 是函数形态（未调用即死码），提示成立
+    };
+    let closure_regs: HashSet<usize> = module
+        .init
+        .iter()
+        .filter_map(|inst| match inst {
+            Instruction::MakeClosure {
+                dst: Operand::Local(reg),
+                ..
+            } => Some(*reg),
+            _ => None,
+        })
+        .collect();
+    let evaluated_at_init = module.init.iter().any(|inst| match inst {
+        Instruction::Store {
+            dst: Operand::Global(idx),
+            src,
+            ..
+        } => *idx == main_slot && !matches!(src, Operand::Local(reg) if closure_regs.contains(reg)),
+        _ => false,
+    });
+    !evaluated_at_init
 }
 
 /// 解析运行时模式字符串（"full" 历史别名等价 Standard，work-stealing 从未实现）
