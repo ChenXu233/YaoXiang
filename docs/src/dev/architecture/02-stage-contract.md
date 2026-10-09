@@ -567,6 +567,16 @@ impl Driver {
 >     附带修复潜伏缺陷：Registry 臂对嵌入 std 单元的重复收获注册会顶掉
 >     with_std() 已合并的 native 半面（E1043 误报）——嵌入单元现跳过
 >     重复注册。
+> 11. LSP 单文件兜底统一（4.2.6）：`run_diagnostics` 的手工
+>     lex→parse→check_module_collect_all 序列删除，改走
+>     `Program { kind: SingleFile, aggregation: CollectAll }`——LSP
+>     与 CLI 同一 Driver。SingleFile+CollectAll 形态：Parsing 收全量
+>     parse 错误、保留残缺 AST 继续 typecheck（编辑器哲学自 4.2.3
+>     裁决延伸；不标阶段失败，否则拓扑跳过让 typecheck 永远跑不到）；
+>     Typecheck 分派 `check_module_collect_all` 自由函数。LSP 单文件
+>     路径自此补齐 proof（E4018）、W 码警告（W1001–W1005，测试钉板）
+>     与 IR 级错误；词法失败改报真实诊断（旧合成「E0001 词法错误」
+>     文本随序列删除消失——真实诊断带精确 span，无信息损失）。
 
 **十个入口的改造方式（逐个指定函数）**：
 

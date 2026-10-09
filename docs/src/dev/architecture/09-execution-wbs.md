@@ -148,7 +148,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 3.4.4 `variant_ctor_calls` 零消费者裁决（删字段 或 接线消费端；IR 侧现靠形态检测 `detect_variant_ctor_call`） | `types.rs:56`、`ir_gen.rs:7374` | 4.3.1 | `check-obligations.py`（9.2）不再报该字段；无静默歧义形态 |
 | | 3.4.5 `method_overload_ir_names` 与 `overload_resolutions` 平行表示二选一（禁令一） | `types.rs:60`、`ir_gen.rs:369` | 4.3.1 | 同一事实单点表达；C3 |
 | | 3.4.6 `compile_project` 补 `warnings` 消费（多文件 `run` 永不报 W1001/W1002/W1003） | `orchestrator.rs:99-159` | 4.2.1 | C2：多文件与单文件诊断集归一 |
-| | 3.4.7 LSP 非项目内路径接入统一消费端（现直调 `check_module_collect_all`：不跑 proof、不读 warnings、不做死代码分析） | `lsp/handlers/diagnostics.rs:161-206` | 4.2.6 | LSP 与 CLI 对同一文件同诊断集 |
+| | 3.4.7 LSP 非项目内路径接入统一消费端（**2026-10-09 已完成**，随 4.2.6 落地 bf582555：手工 `check_module_collect_all` 直调序列删除，统一走 `Program{SingleFile, CollectAll}`——proof/warnings/死代码分析全部接入） | `lsp/handlers/diagnostics.rs:161-206` | 4.2.6 | LSP 与 CLI 对同一文件同诊断集 |
 | | 3.4.8 多文件单态化臂（`instantiation_requests` 唯一消费者在单文件 pipeline；跨文件泛型矩阵探针实测通过，属**潜在**风险未证缺陷） | `orchestrator.rs:174`、`pipeline.rs:330` | 4.1.3 | C2：跨文件泛型矩阵与单文件等价 |
 
 **验收**：漏洞判据转绿，且**故意撤掉修复必须重新变红**。**风险**：多文件路径新增 E4018 是破坏性变更。
@@ -257,7 +257,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 4.2.3 `check_source_in_project`（**2026-10-09 已完成**，83a6dd34；LSP 降级按文件来源分流裁决——磁盘文件同 Check 方案 B、缓冲区保留残缺 AST，登记 02 §3 注记 #8；顺手修复 LSP 对无关磁盘文件硬中止的怪癖） | 4.2.2 | 同上 |
 | | 4.2.4 `compile_embedded_module`（**2026-10-09 已完成**，e6fa163a；`Program::with_shared_registry` 注入共享注册表（#94 契约显式化），orchestrator 四入口全部迁入 Driver） | 4.2.3 | 同上 |
 | | 4.2.5 删 `check_single_file`（**2026-10-09 已完成**，0ef6ae6b；standalone 统一走 `Program{Check}` + 裁决 A 相对导入解析 + CHECK 加 GlobalSlotAlloc/IrGeneration 两阶段（用户裁决——runner 门禁实证 IR 级错误只在 ir_gen 产生）+ 嵌入 std 注册表面覆盖修复） | 4.2.1 | `check` 项目内外一致 |
-| | 4.2.6 删 LSP 手工阶段序列（`lsp/handlers/diagnostics.rs:161-227`） | 4.2.1 | LSP 与 CLI 诊断集相同 |
+| | 4.2.6 删 LSP 手工阶段序列（**2026-10-09 已完成**，bf582555；SingleFile+CollectAll 新形态——Parsing 收全量 + 残缺 AST 继续 typecheck（编辑器哲学延伸），Typecheck 分派 `check_module_collect_all`；LSP 补齐 proof/W 码/IR 级错误，登记 02 §3 注记 #11） | 4.2.1 | LSP 与 CLI 诊断集相同 |
 | | 4.2.7 `Aggregation` 参数驱动二选一（`orchestrator.rs:486-494`——4.2.3 已删该包装，语义在 driver Typecheck 臂） | 4.2.1 | **实施时逐行核实两函数内部差异**（冲突登记 C5 已裁决为必做核实项）；**含 collect_all 重复诊断**（同码同 span 同消息重复报告——4.2.5 基线实证，LSP 项目路径既有） |
 | | 4.2.8 wasm 改走 `ProgramKind::WasmPlayground`（`wasm/src/lib.rs:30-36,42-51`） | 4.2.1 | 见 C6 |
 | | 4.2.9 `driver/mod.rs` 拆分为 `state.rs`/`arms.rs`/`helpers.rs`（**2026-10-09 已完成**，c59fb751——1766 行超 P5 的 1500 行拆分阈值；零行为变化，内部可见性收紧为 `pub(in crate::driver)`） | 4.2.4 | C1：全量回归绿 + `crate::driver::*` 公开路径不变 |
