@@ -46,7 +46,9 @@ impl Driver {
     }
 
     /// SingleFile/WasmPlayground 形态：移植自 pipeline.rs:149-171 /
-    /// 229-258——parse 失败只取**首个**错误对外（逐字节判据的一部分）。
+    /// 229-258——FailFast 下 parse 失败只取**首个**错误对外（逐字节
+    /// 判据的一部分）；CollectAll（LSP 兜底，4.2.6）收全量 parse 错误
+    /// 并保留残缺 AST 继续 typecheck（编辑器哲学，4.2.3 裁决延伸）。
     pub(super) fn parsing_single_file(
         &self,
         state: &mut State,
@@ -73,6 +75,14 @@ impl Driver {
             };
             let result = parser::parse(&tokens);
             if result.has_errors {
+                if matches!(program.aggregation, Aggregation::CollectAll) {
+                    // CollectAll：全量 parse 错误 + 残缺 AST 继续下游——
+                    // 不标阶段失败（残缺 AST 仍是可用产物；标了会触发拓扑
+                    // 跳过，typecheck 永远跑不到——编辑器哲学落空）
+                    errors.extend(result.errors.into_iter().map(PipelineError::LexParse));
+                    *ast_slot = Some(result.module);
+                    continue;
+                }
                 let first = result.errors.into_iter().next().unwrap_or_else(|| {
                     ErrorCodeDefinition::unexpected_token("unknown")
                         .at(Span::dummy())
@@ -80,10 +90,7 @@ impl Driver {
                 });
                 errors.push(PipelineError::LexParse(first));
                 failed_stages.push(Stage::Parsing);
-                if matches!(program.aggregation, Aggregation::FailFast) {
-                    return;
-                }
-                continue;
+                return;
             }
             *ast_slot = Some(result.module);
         }
@@ -236,7 +243,12 @@ impl Driver {
             let Some(ast) = &asts[i] else {
                 continue; // CollectAll 下 parse 失败的单元（4.1.3 不可达）
             };
-            let mut type_result = typecheck::check_module(ast, &mut None);
+            // checker 入口由 Aggregation 驱动（4.2.7 语义）：FailFast
+            // 首错即返；CollectAll（LSP 兜底）收集模式
+            let mut type_result = match program.aggregation {
+                Aggregation::FailFast => typecheck::check_module(ast, &mut None),
+                Aggregation::CollectAll => typecheck::check_module_collect_all(ast, &mut None),
+            };
             let diagnostics = std::mem::take(&mut type_result.diagnostics);
             if !diagnostics.is_empty() {
                 us.typecheck_failed = true;

@@ -990,3 +990,60 @@ fn test_driver_run_check_embedded_std_keeps_merged_surface() {
         "嵌入 std 的合并表面不得被重复注册顶掉: {all:?}"
     );
 }
+
+// ===================== 4.2.6 SingleFile+CollectAll 形态（LSP 单文件兜底）=====================
+
+/// 以 SingleFile + CollectAll 跑 Driver（LSP 单文件兜底路径的形态，
+/// 02 §3 入口表——pipeline 的 FailFast 契约不受影响）。
+fn run_single_collect_all(source: &str) -> Result<DriverOutcome, DriverError> {
+    let program = Program::new(
+        ProgramKind::SingleFile,
+        vec![Unit::new("test", "test.yx", source)],
+        CompileConfig::default(),
+    )
+    .with_aggregation(Aggregation::CollectAll);
+    Driver::new().run(program)
+}
+
+#[test]
+fn test_driver_run_single_file_collect_all_collects_parse_errors() {
+    // Arrange: 两处语法错误——CollectAll 语义应收全量（编辑器要标出所有
+    // 语法错误）；pipeline 的 FailFast 首错形态不受影响
+    let source = "x = @ @\ny = @ @\n"; // 探针实证：4 条 parse 错误
+
+    // Act
+    let outcome = run_single_collect_all(source).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.result.errors.len() >= 2,
+        "CollectAll 应收齐全部 parse 错误（非首错）: {:?}",
+        outcome.result.errors
+    );
+}
+
+#[test]
+fn test_driver_run_single_file_collect_all_typechecks_partial_ast() {
+    // Arrange（编辑器哲学在单文件兜底的同构，4.2.3 裁决延伸）：一处语法
+    // 错误 + 一个幸存语句的类型错误——残缺 AST 继续 typecheck
+    let source = "main: Int = \"nope\"\nlet = ;\n";
+
+    // Act
+    let outcome = run_single_collect_all(source).expect("driver run failed");
+
+    // Assert
+    let codes: Vec<String> = outcome
+        .result
+        .errors
+        .iter()
+        .filter_map(|e| e.diagnostic().map(|d| d.code))
+        .collect();
+    assert!(
+        codes.contains(&"E0012".to_string()),
+        "parse 错误必须收集: {codes:?}"
+    );
+    assert!(
+        codes.contains(&"E1002".to_string()),
+        "幸存语句必须继续 typecheck（编辑器哲学）: {codes:?}"
+    );
+}
