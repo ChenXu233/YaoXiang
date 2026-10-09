@@ -935,6 +935,13 @@ pub(crate) fn scan_use_refs(source: &str) -> Vec<UsePathRef> {
 /// 入口调用经 `short_to_qualified_map` 命名成 `std.test.assert_eq`，合并后即可解析。
 /// `registry` 必须与入口 IR 生成共用（共享 SymbolTable），否则嵌入函数与入口调用点的
 /// DefId 分属两张表，数值撞车会导致字节码按 DefId 分发到错误函数（#94）。
+///
+/// 02 §改动清单（WBS 4.2.4）：入口已瘦身为 `Program { kind: Embedded }`
+/// 构造器并转调 Driver——阶段实现见 `crate::driver` 的 `Stage` 臂
+///（Parsing/Typecheck/ProofExecution/IrGeneration；共享 registry 经
+/// `Program::with_shared_registry` 注入）。错误路径文本从
+/// `<std.test> (embedded std)` 归一为单元虚拟路径 `<std/test>`
+///（仅编译器内部错误面——嵌入 std 自身损坏才可达，无测试钉住）。
 pub fn compile_embedded_module(
     key: &str,
     registry: &ModuleRegistry,
@@ -944,50 +951,31 @@ pub fn compile_embedded_module(
             path: key.to_string(),
             reason: format!("不是嵌入 std 模块: {key}"),
         })?;
-    let ast = parse_file(Path::new(&format!("<{}>", key.replace('.', "/"))), source)?;
-    let mut checker = TypeChecker::new("<embedded>");
-    checker.env().module_registry = registry.clone();
-    let result = checker.check_module(&ast);
-    if !result.diagnostics.is_empty() {
-        let msg = result
-            .diagnostics
-            .iter()
-            .map(|d| d.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-        return Err(OrchestratorError::TypeCheck {
-            path: format!("<{key}> (embedded std)"),
-            message: msg,
-            diagnostics: result.diagnostics,
-        });
-    }
-    // RFC-027 Phase 2.5 消费端（P3 止血）：嵌入 std 模块自身的证明义务同样
-    // 执行（02-stage-contract §漏洞证据链第 6 步——丢弃路径曾覆盖 std 自身）。
-    let proof_errors =
-        crate::frontend::proof_execution::execute_proof_calls(result.proof_calls(), &ast, &result);
-    if !proof_errors.is_empty() {
-        let msg = proof_errors
-            .iter()
-            .map(|d| d.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-        return Err(OrchestratorError::TypeCheck {
-            path: format!("<{key}> (embedded std)"),
-            message: msg,
-            diagnostics: proof_errors,
-        });
-    }
-    crate::middle::generate_ir_with_context(&ast, &result, &[], &[], 0, registry, key).map_err(
-        |diags| OrchestratorError::Compile {
-            path: format!("<{key}> (embedded std)"),
-            message: diags
-                .iter()
-                .map(|d| d.to_string())
-                .collect::<Vec<_>>()
-                .join("\n"),
-            diagnostics: diags,
-        },
+    let program = crate::driver::Program::new(
+        crate::driver::ProgramKind::Embedded,
+        vec![crate::driver::Unit::new(
+            key,
+            format!("<{}>", key.replace('.', "/")),
+            source,
+        )],
+        crate::frontend::config::CompileConfig::default(),
     )
+    .with_shared_registry(registry.clone());
+    let outcome = crate::driver::Driver::new()
+        .run(program)
+        .map_err(|e| OrchestratorError::Io {
+            // Embedded 阶段表全接线且恒为 1 单元——结构性不可达
+            path: key.to_string(),
+            reason: format!("driver: {e}"),
+        })?;
+    match outcome.failure {
+        Some(e) => Err(e),
+        None => outcome.module.ok_or_else(|| OrchestratorError::Io {
+            // IrGeneration 成功必产 ModuleIR——结构性不可达
+            path: key.to_string(),
+            reason: "driver: embedded ir generation produced no module".to_string(),
+        }),
+    }
 }
 
 /// 解析单个文件为 AST。

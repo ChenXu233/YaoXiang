@@ -852,3 +852,48 @@ fn test_driver_run_lsp_buffer_lex_error_collected() {
         "词法错误必须以 Error 级收集: {main:?}"
     );
 }
+
+// ===================== 4.2.4 Embedded 形态 =====================
+
+/// 以 Embedded 形态跑 Driver（调用方共享注册表随程序注入，#94）。
+/// 嵌入源是编译期常量——无需临时目录。
+fn run_embedded(key: &str) -> Result<DriverOutcome, DriverError> {
+    let source =
+        crate::std::yx_sources::embedded_std_source(key).expect("embedded std source must exist");
+    let program = Program::new(
+        ProgramKind::Embedded,
+        vec![Unit::new(
+            key,
+            format!("<{}>", key.replace('.', "/")),
+            source,
+        )],
+        CompileConfig::default(),
+    )
+    .with_shared_registry(crate::frontend::module::registry::ModuleRegistry::with_std());
+    Driver::new().run(program)
+}
+
+#[test]
+fn test_driver_run_embedded_compiles_embedded_std_module() {
+    // Arrange: 嵌入 std 模块 std.list（#117 硬切换后 for 循环脱糖依赖
+    // iter/has_next/next）作为独立编译单元——EMBEDDED_STAGES 四臂
+    //（无 Registry/GlobalSlotAlloc/Linking，registry 由调用方注入共享）
+
+    // Act
+    let outcome = run_embedded("std.list").expect("driver run failed");
+
+    // Assert: 无故障；产出独立 ModuleIR，迭代协议函数带限定名在产物中
+    assert!(
+        outcome.failure.is_none(),
+        "嵌入 std 模块编译不得失败: {:?}",
+        outcome.failure
+    );
+    let module = outcome.module.expect("Embedded 形态必须产出 ModuleIR");
+    let names: Vec<&str> = module.functions.iter().map(|f| f.name.as_str()).collect();
+    for expected in ["std.list.iter", "std.list.has_next", "std.list.next"] {
+        assert!(
+            names.contains(&expected),
+            "迭代协议函数 {expected} 必须在产物中: {names:?}"
+        );
+    }
+}

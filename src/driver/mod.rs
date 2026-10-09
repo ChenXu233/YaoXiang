@@ -405,14 +405,17 @@ impl Driver {
             entry_path,
             ..
         } = state;
-        let (Some(registry), Some(method_bindings)) = (registry.as_ref(), method_bindings.as_ref())
-        else {
+        // Embedded 形态无 Registry 阶段——registry 由调用方注入
+        //（shared_registry，#94）；method_bindings 仅 Registry 臂产出
+        //（Embedded 现状不注入，保持空表）
+        let Some(registry) = registry.as_ref() else {
             return; // 上游已失败（FailFast 下 run 循环已中止，防御）
         };
         // 逐文件收集通道（Check/Lsp）；Lsp 只检目标文件——其余单元
         // 仅为 registry 供签名，不参与 typecheck（现状契约）
         let collect_per_file = matches!(program.kind, ProgramKind::Check | ProgramKind::Lsp);
         let is_lsp = matches!(program.kind, ProgramKind::Lsp);
+        let is_embedded = matches!(program.kind, ProgramKind::Embedded);
         let vendor_root = vendor_root.clone();
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
@@ -421,9 +424,16 @@ impl Driver {
             if is_lsp && program.units[i].path != *entry_path {
                 continue; // LSP 只 typecheck 目标文件
             };
-            let mut checker = TypeChecker::new("<module>");
+            // checker 名按形态保现状（Embedded 用 "<embedded>"）
+            let mut checker = TypeChecker::new(if is_embedded {
+                "<embedded>"
+            } else {
+                "<module>"
+            });
             checker.env().module_registry = registry.clone();
-            checker.env().method_bindings = method_bindings.clone();
+            if let Some(method_bindings) = method_bindings {
+                checker.env().method_bindings = method_bindings.clone();
+            }
             // RFC-014：vendor 根注入（缺依赖包的 E5001 追加 install 提示）
             if let Some(root) = &vendor_root {
                 checker.set_vendor_root(root.clone());
@@ -692,8 +702,63 @@ impl Driver {
         if state.uses_pipeline_channel() {
             return self.ir_generation_single_file(state);
         }
+        if matches!(state.program.kind, ProgramKind::Embedded) {
+            self.ir_generation_embedded(state);
+            return Ok(());
+        }
         self.ir_generation_orchestrated(state);
         Ok(())
+    }
+
+    /// Embedded 形态（4.2.4）：`generate_ir_with_context` 以空调用面
+    ///（无跨文件 AST 上下文、无全局布局、槽位基址 0）+ 调用方注入的
+    /// 共享 registry（#94：与入口 IR 生成共用 SymbolTable，DefId 一致）。
+    /// 嵌入 std 模块是独立编译单元——无 Discovery/GlobalSlotAlloc/
+    /// Linking 阶段；错误归入 `OrchestratorError::Compile`（现状契约）。
+    fn ir_generation_embedded(
+        &self,
+        state: &mut State,
+    ) {
+        debug_assert_eq!(state.program.units.len(), 1, "Embedded 程序恒为 1 单元");
+        let State {
+            program,
+            asts,
+            units,
+            registry,
+            failure,
+            failed_stages,
+            ..
+        } = state;
+        let Some(registry) = registry.as_ref() else {
+            return; // 调用方未注入共享 registry——构造 bug，入口以 Io 兜底
+        };
+        let (Some(ast), Some(type_result)) = (&asts[0], &units[0].type_result) else {
+            return; // 上游已失败（FailFast 下 run 循环已中止，防御）
+        };
+        match crate::middle::generate_ir_with_context(
+            ast,
+            type_result,
+            &[],
+            &[],
+            0,
+            registry,
+            &program.units[0].key,
+        ) {
+            Ok(ir) => units[0].ir = Some(ir),
+            Err(diags) => {
+                let message = diags
+                    .iter()
+                    .map(|d| d.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                *failure = Some(OrchestratorError::Compile {
+                    path: program.units[0].path.display().to_string(),
+                    message,
+                    diagnostics: diags,
+                });
+                failed_stages.push(Stage::IrGeneration);
+            }
+        }
     }
 
     /// SingleFile/WasmPlayground 形态：移植自 pipeline.rs:205-227 / 302-341
@@ -1107,7 +1172,8 @@ pub struct SkippedStage {
 pub struct DriverOutcome {
     /// 编译结果（诊断集与 pipeline 时代逐字节相同，C2 判据）
     pub result: CompilationResult,
-    /// 多文件合并 IR（Linking 产物；MultiFile 成功时 Some）
+    /// 多文件合并 IR（Linking 产物；MultiFile 成功时 Some）/ 嵌入 std
+    /// 模块的独立 ModuleIR（Embedded 成功时 Some，4.2.4）
     pub module: Option<ModuleIR>,
     /// 多文件结构化故障（OrchestratorError 契约；失败时 Some）
     pub failure: Option<OrchestratorError>,
@@ -1221,12 +1287,15 @@ struct UnitState {
 }
 
 impl State {
-    fn new(program: Program) -> Self {
+    fn new(mut program: Program) -> Self {
         // 占位入口单元（多文件形态）或唯一单元（单文件形态）——Discovery
         // 臂会重建 units，入口信息先行捕获（run() 已拒绝空 units）
         let entry_path = program.units[0].path.clone();
         let entry_key = program.units[0].key.clone();
         let n = program.units.len();
+        // Embedded 形态（4.2.4）：注册表来自调用方注入（阶段表无
+        // Registry 阶段）；其余形态由 Registry 臂产出
+        let shared_registry = program.shared_registry.take();
         Self {
             program,
             units: (0..n).map(|_| UnitState::default()).collect(),
@@ -1241,7 +1310,7 @@ impl State {
             used_by: HashSet::new(),
             shadow_events: Vec::new(),
             vendor_root: None,
-            registry: None,
+            registry: shared_registry,
             method_bindings: None,
             global_layout: None,
             slot_bases: Vec::new(),
@@ -1334,6 +1403,13 @@ impl State {
             } else {
                 Vec::new()
             };
+        // Embedded 产物（4.2.4）：唯一单元的 IR 即最终产物（阶段表无
+        // Linking）；MultiFile 的 module 仍由 Linking 臂写入 merged_ir
+        let module = if matches!(self.program.kind, ProgramKind::Embedded) {
+            self.units.first_mut().and_then(|u| u.ir.take())
+        } else {
+            self.merged_ir.take()
+        };
         let single_file = self.uses_pipeline_channel();
         let result = if self.errors.is_empty() {
             // SingleFile：unit 0 的 IR 即最终产物
@@ -1355,7 +1431,7 @@ impl State {
         };
         DriverOutcome {
             result,
-            module: self.merged_ir.take(),
+            module,
             failure: None,
             check_diagnostics,
             skipped: self.skipped,

@@ -141,6 +141,10 @@ pub struct Program {
     pub aggregation: Aggregation,
     /// 编译配置（死代码/单态化门控等）
     pub config: CompileConfig,
+    /// 调用方共享注册表（仅 Embedded 形态，4.2.4）：嵌入 std 模块与入口
+    /// IR 生成共用同一 registry（共享 SymbolTable，DefId 一致，#94）；
+    /// Embedded 阶段表没有 Registry 阶段，本字段是它唯一的注册表来源
+    pub shared_registry: Option<crate::frontend::module::registry::ModuleRegistry>,
 }
 
 impl Program {
@@ -156,7 +160,18 @@ impl Program {
             stages: kind.stages(),
             aggregation: kind.default_aggregation(),
             config,
+            shared_registry: None,
         }
+    }
+
+    /// 注入调用方共享注册表（Embedded 形态必须调用——缺省时各臂防御性
+    /// 跳过，入口以 Io 错误兜底；#94 的 DefId 一致性契约）。
+    pub fn with_shared_registry(
+        mut self,
+        registry: crate::frontend::module::registry::ModuleRegistry,
+    ) -> Self {
+        self.shared_registry = Some(registry);
+        self
     }
 
     /// 覆盖聚合模式（LSP 单文件分支：SingleFile 形态 + CollectAll）。
