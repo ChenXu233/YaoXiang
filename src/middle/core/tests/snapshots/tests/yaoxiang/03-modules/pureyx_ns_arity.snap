@@ -1,0 +1,37 @@
+module
+  global[0] ok_eq : Int(64)
+  global[1] ok_ne : Int(64)
+  global[2] ok_true : Int(64)
+  global[3] err_eq : Int(64)
+  init (locals=0)
+    Load %0 <- int(2)
+    Load %1 <- int(2)
+    Call %2 <- string("std.test.assert_eq") [%0, %1] (def=_)
+    Call %3 <- string("std.result.is_ok") [%2] (def=_)
+    Store @0 <- %3
+    Load %4 <- int(1)
+    Load %5 <- int(3)
+    Call %6 <- string("std.test.assert_ne") [%4, %5] (def=_)
+    Call %7 <- string("std.result.is_ok") [%6] (def=_)
+    Store @1 <- %7
+    Load %8 <- bool(true)
+    Call %9 <- string("std.test.assert_true") [%8] (def=_)
+    Call %10 <- string("std.result.is_ok") [%9] (def=_)
+    Store @2 <- %10
+    Load %11 <- int(1)
+    Load %12 <- int(3)
+    Call %13 <- string("std.test.assert_eq") [%11, %12] (def=_)
+    Call %14 <- string("std.result.is_err") [%13] (def=_)
+    Store @3 <- %14
+    Load %15 <- @0
+    Load %16 <- string("assert_eq(2, 2) 相等应返回 Ok")
+    Call %17 <- string("std.assert.assert") [%15, %16] (def=_)
+    Load %18 <- @1
+    Load %19 <- string("assert_ne(1, 3) 不等应返回 Ok")
+    Call %20 <- string("std.assert.assert") [%18, %19] (def=_)
+    Load %21 <- @2
+    Load %22 <- string("assert_true(true) 单参精确调用返回 Ok")
+    Call %23 <- string("std.assert.assert") [%21, %22] (def=_)
+    Load %24 <- @3
+    Load %25 <- string("assert_eq(1, 3) 不等应返回 Err")
+    Call %26 <- string("std.assert.assert") [%24, %25] (def=_)

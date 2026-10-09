@@ -4941,9 +4941,11 @@ impl<'a> ExpressionInferrer<'a> {
         // - 命中 native arity 表（直接或 `std.` 前缀回退）→ 命名空间 native，
         //   区间严格，无接收者豁免（表区间与签名参数数矛盾视为同名遮蔽，回退
         //   严格计数）；
-        // - 未命中表 → 按接收者形态判别：显式实参数+1==形参数（接收者占
-        //   params[0]，接口派发/impl 方法/Try 方法同族，#317 同款约定）放行，
-        //   否则按签名严格计数。params 为空（计数不可靠）维持跳过。
+        // - 未命中表 → 先判命名空间还是值接收者：限定名根段命中模块别名
+        //   （判定与 E1043 同款，#396）即模块限定调用——RFC-029 §6 模块同质，
+        //   无接收者，严格计数；`+1` 启发式（显式实参数+1==形参数，接收者占
+        //   params[0]，接口派发/impl 方法/Try 方法同族，#317 同款约定）只属于
+        //   值接收者形态。params 为空（计数不可靠）维持跳过。
         if method_key.is_none() {
             if let crate::frontend::core::parser::ast::Expr::FieldAccess {
                 expr: obj, field, ..
@@ -4973,11 +4975,26 @@ impl<'a> ExpressionInferrer<'a> {
                             }
                         }
                         None => {
-                            if params.is_empty() || total + 1 == params.len() {
-                                // 接收者形态（或计数不可靠）：放行
+                            // #387：缺参形态此前被 `+1` 启发式误吞——命名空间
+                            // 调用没有接收者，`total+1==params.len()` 纯属巧合
+                            // 命中，少传的实参落运行期以 Void 兜底填充炸 E6007，
+                            // 报错点位还在被调函数内部。根段是模块别名的限定
+                            // 调用一律严格计数。
+                            let is_namespace_call = ns_key
+                                .as_deref()
+                                .and_then(|k| k.split('.').next())
+                                .is_some_and(|root| {
+                                    self.module_aliases
+                                        .is_some_and(|aliases| aliases.contains(root))
+                                });
+                            if params.is_empty() {
+                                // 计数不可靠：维持跳过
                                 None
-                            } else {
+                            } else if is_namespace_call || total + 1 != params.len() {
                                 Some((params.len(), Some(params.len())))
+                            } else {
+                                // 值接收者形态：放行
+                                None
                             }
                         }
                     };

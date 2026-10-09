@@ -1,0 +1,15 @@
+// 06-compile-errors/pureyx_ns_extra_args_err.yx
+// #387——嵌入路径（纯 yx std）命名空间限定调用超签实参必须编译期拒绝。
+// RFC-029 §1/§6：模块 = record of bindings，纯 yx std 模块与 native 同规；
+// 对照 namespace_extra_args_err.yx（native concat 形态），本文件覆盖嵌入
+// std.test 形态（issue 修复方向 3 的「嵌入路径同款」语料）。
+// expect: compile-error E1010
+// （assert_eq 签名 (a: Any, b: Any)，第三实参无落点即错）
+// 验证: 嵌入路径严格计数覆盖超参形态
+// 状态: ❌ 应编译失败
+
+use std.test
+
+main: () -> Void = {
+    r = test.assert_eq(1, 2, 3)
+}
