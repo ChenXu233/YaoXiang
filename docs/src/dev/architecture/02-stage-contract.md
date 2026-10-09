@@ -114,6 +114,13 @@ RFC-039 给出**为什么**重构与**按什么顺序**做；本文给出 L1 的
 > - **第 7 行** check_module / check_module_collect_all 双入口 → 归 4.2.7（Aggregation 参数驱动）。
 > - 代码侧引用的「#434 裁决」此前 docs 零登记——已补登为 RFC-039 **D57**。
 > - **嵌入 std 纳入不对称（表外新事实，2026-10-09 补登）**：单文件路径由 `merge_embedded_std_ir` 无条件注入 std.list（for 循环脱糖必需，#117 硬切换），多文件 `discover` 此前只认显式 `use`——项目内 for 循环编译通过、运行期 E6006（探针实证）。已修复并勾销 WBS 4.10.2；同族「多文件缺单文件一步」的 parse 硬中止怪癖挂号 WBS 4.10.1——**亦已修复**（4.2.2 后随即落地，Check 路径降级为逐文件收集；本审计方法看「阶段覆盖/字段消费」维度，这条是编译单元成员差异，属漏网维度）。
+>
+> - **嵌入 std 注册表面覆盖（4.2.5 施工发现，已修）**：Registry 臂对嵌入
+>   std 单元用 `extract_module_info` 重复收获注册，会顶掉 `with_std()`
+>   已按「native + yx 表面合并」注册的 native 半面（`result.is_err` 等
+>   丢失 → std.test 误报 E1043）。本审计的第三漏网维度：「同一模块键的
+>   两个注册来源」的合并语义——单文件路径的注册表只经 `with_std()`
+>   一次成形，多文件/Check 的 Registry 臂逐单元 insert 才有覆盖面。
 
 **两处需要精确表述，否则会写错：**
 
@@ -548,6 +555,18 @@ impl Driver {
 >    `<std.test> (embedded std)` 归一为单元虚拟路径 `<std/test>`（仅
 >    编译器内部错误面，无测试钉住）。至此 orchestrator 四入口全部迁入
 >    Driver。
+> 10. standalone check 统一（4.2.5，裁决 A + IR 阶段裁决，2026-10-09）：
+>     Check 形态对无项目根程序即单文件语义的忠实承载——警告面只覆盖
+>     入口文件（邻旁文件只收错误，宁漏勿误）；相对 `use` 沿导入者目录
+>     解析（rustc 单文件 mod 对齐）。CHECK 阶段表加 GlobalSlotAlloc +
+>     IrGeneration：standalone 旧路径（pipeline 全链）本就跑 IR 生成，
+>     E3019/E1014/E1015 等只在 ir_gen 产生（runner 门禁实证）。
+>     IrGeneration 的 Check 形态纯检查不消费 IR；Script/Bin 分形以
+>     module_key 的 None/Some 表达（E3023 的既有开关，ir_gen.rs:1660）。
+>     Monomorphization 不入 CHECK（只产资源超限/内部错误，零语料依赖）。
+>     附带修复潜伏缺陷：Registry 臂对嵌入 std 单元的重复收获注册会顶掉
+>     with_std() 已合并的 native 半面（E1043 误报）——嵌入单元现跳过
+>     重复注册。
 
 **十个入口的改造方式（逐个指定函数）**：
 

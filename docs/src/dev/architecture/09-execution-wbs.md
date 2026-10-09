@@ -243,7 +243,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 - [ ] **4.5 跨层契约 PlanId 化（D20）**（2 个三级任务）
 - [ ] **4.6 LSP 语义数据管线统一（D55）**（1 个三级任务）
 - [ ] **4.9 引用池正确实现（RFC-029f 修正）**（5 个三级任务）
-- [x] **4.10 多文件语义缺口（4.2.1 施工发现登记；两项均提前于 P4 内完成）**（2 个三级任务）
+- [ ] **4.10 多文件语义缺口（4.2.1/4.2.5 施工发现登记；4.10.1/4.10.2 已完成，4.10.3 为 4.2.5 裁决 A 的 run 半边）**（3 个三级任务）
 
 | 二级 | 三级 | 前置 | 验收 |
 | --- | --- | --- | --- |
@@ -256,9 +256,9 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 4.2.2 `check_project`（**2026-10-09 已完成**，6ec330d2；RoleClassification 臂接线收齐 12 变体，顺序归一 + E3020 归属裁决登记 02 §1 注记 #4） | 4.2.1 | 同上 |
 | | 4.2.3 `check_source_in_project`（**2026-10-09 已完成**，83a6dd34；LSP 降级按文件来源分流裁决——磁盘文件同 Check 方案 B、缓冲区保留残缺 AST，登记 02 §3 注记 #8；顺手修复 LSP 对无关磁盘文件硬中止的怪癖） | 4.2.2 | 同上 |
 | | 4.2.4 `compile_embedded_module`（**2026-10-09 已完成**，e6fa163a；`Program::with_shared_registry` 注入共享注册表（#94 契约显式化），orchestrator 四入口全部迁入 Driver） | 4.2.3 | 同上 |
-| | 4.2.5 删 `check_single_file`（`diagnostic/mod.rs:621-661`） | 4.2.1 | `check` 项目内外一致 |
+| | 4.2.5 删 `check_single_file`（**2026-10-09 已完成**，0ef6ae6b；standalone 统一走 `Program{Check}` + 裁决 A 相对导入解析 + CHECK 加 GlobalSlotAlloc/IrGeneration 两阶段（用户裁决——runner 门禁实证 IR 级错误只在 ir_gen 产生）+ 嵌入 std 注册表面覆盖修复） | 4.2.1 | `check` 项目内外一致 |
 | | 4.2.6 删 LSP 手工阶段序列（`lsp/handlers/diagnostics.rs:161-227`） | 4.2.1 | LSP 与 CLI 诊断集相同 |
-| | 4.2.7 `Aggregation` 参数驱动二选一（`orchestrator.rs:486-494`） | 4.2.1 | **实施时逐行核实两函数内部差异**（冲突登记 C5 已裁决为必做核实项） |
+| | 4.2.7 `Aggregation` 参数驱动二选一（`orchestrator.rs:486-494`——4.2.3 已删该包装，语义在 driver Typecheck 臂） | 4.2.1 | **实施时逐行核实两函数内部差异**（冲突登记 C5 已裁决为必做核实项）；**含 collect_all 重复诊断**（同码同 span 同消息重复报告——4.2.5 基线实证，LSP 项目路径既有） |
 | | 4.2.8 wasm 改走 `ProgramKind::WasmPlayground`（`wasm/src/lib.rs:30-36,42-51`） | 4.2.1 | 见 C6 |
 | | 4.2.9 `driver/mod.rs` 拆分为 `state.rs`/`arms.rs`/`helpers.rs`（**2026-10-09 已完成**，c59fb751——1766 行超 P5 的 1500 行拆分阈值；零行为变化，内部可见性收紧为 `pub(in crate::driver)`） | 4.2.4 | C1：全量回归绿 + `crate::driver::*` 公开路径不变 |
 | 4.3 义务账本 | 4.3.1 `obligations.rs` + `assert_drained()`（新建；含 `#[ignore]` 红骨架先行） | 4.1.3 | `test_obligations_drained` 转绿 |
@@ -276,6 +276,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 4.9.5 测试池分离：tests/ 的引用单独成池，不豁免生产代码（src/）的未使用定义 | 4.9.4 | **单测：tests/helper.yx 引用 src/util.yx 的 `debug_print`，但 src/ 内无消费者时，`debug_print` 仍报 W1001**；RFC-029f 表格更新（测试豁免范围缩窄到仅测试自身） |
 | 4.10 多文件语义缺口 | 4.10.1 check 路径 parse 错误硬中止降级（**2026-10-09 已完成**，d929c77b——用户裁决 rust 式收集语义 + 方案 B「带病文件退出编译单元」：parse 失败文件只报 parse 诊断、不进 registry，其余文件照常全阶段收集，CLI 汇总后非零退出；compile 路径 FailFast 硬中止保留为正确语义；LSP 路径的同类形态随 4.2.3 继承） | 4.2.2 | 含语法错误项目的 `yaoxiang check` 产出逐文件诊断而非整体中止（语料夹具 `parse-error-in-collect-all` + driver/CLI 钉板） |
 | | 4.10.2 discover 自动注入 std.list（对齐单文件 `merge_embedded_std_ir` 的 #117 行为）（**2026-10-09 已完成**，5ba52eaf——用户裁决 fast-track 本轮修复，不再缓办）：多文件项目无显式 `use std.list` 的 for 循环曾**编译通过、运行期 E6006**（探针实证） | — | corpus 夹具 `for-loop-no-use-std-list` 绿；基线 331 语料既有 330 条零漂移 |
+| | 4.10.3 standalone run 与 MultiFile 编排统一（4.2.5 裁决 A 的 run 半边，用户指示**插队**）：`run_file_with_diagnostics` 的 standalone 分支改走 `compile_project`——相对导入解析与 check 对齐。**前置**：3.4.8 多文件 mono 臂（compile_project 无 Monomorphization 阶段，standalone 泛型程序会被削能力）；另需 Linking 的 `entry_function` 按 `is_bin_role` 门控（Script 不自动调 main，#413）+ #413 Script 提示重新键控（`module.source_files.is_empty()` 标记消失） | 3.4.8 | standalone 相对导入 run/check 一致解析；#413 提示的测试钉板不动 |
 
 ### P5 checker 文件内拆分 —— 本文档补齐（原缺口 G1）
 
