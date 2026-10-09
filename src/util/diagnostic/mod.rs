@@ -636,7 +636,11 @@ pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Res
 
     let mut result = CheckResult::default();
 
-    // 按项目根分组；同项目的多个入口各自发现一遍，用 seen 去重避免重复诊断。
+    // 按项目根分组（分组只影响发现起点选择的注释价值）；standalone
+    //（无项目根）与项目内文件统一走 `check_project`（Program{Check}，
+    // WBS 4.2.5）——`check_single_file` 已删除。4.2.5 裁决 A：standalone
+    // 的相对 `use` 沿导入者目录解析（与 rustc 单文件 mod 解析对齐），
+    // 邻旁文件随之进入发现集。
     let mut project_groups: Vec<(std::path::PathBuf, Vec<std::path::PathBuf>)> = Vec::new();
     let mut standalone: Vec<&std::path::PathBuf> = Vec::new();
     for file in files {
@@ -649,83 +653,37 @@ pub fn check_files_with_diagnostics(files: &[std::path::PathBuf]) -> anyhow::Res
         }
     }
 
-    for (_, group) in &project_groups {
-        let mut seen: HashSet<std::path::PathBuf> = HashSet::new();
-        for entry in group {
-            if seen.contains(entry) {
+    // 一个共享 seen 去重：已被前序入口可达集覆盖的文件不重复收录（check
+    // 收集全项目文件时共享依赖会被多入口同时覆盖；standalone 邻旁文件同理）
+    let mut seen: HashSet<std::path::PathBuf> = HashSet::new();
+    let entries = project_groups
+        .iter()
+        .flat_map(|(_, group)| group.iter())
+        .chain(standalone);
+    for entry in entries {
+        if seen.contains(entry) {
+            continue;
+        }
+        let per_file = orchestrator::check_project(entry).map_err(|e| anyhow::anyhow!("{}", e))?;
+        for (path, diagnostics) in per_file {
+            if !seen.insert(path.clone()) {
                 continue;
             }
-            let per_file =
-                orchestrator::check_project(entry).map_err(|e| anyhow::anyhow!("{}", e))?;
-            for (path, diagnostics) in per_file {
-                // 已被前序入口的可达集覆盖：诊断收录过一次，再 push 会让
-                // 输出重复、error_count/warning_count 翻倍（check 默认收集
-                // 全项目文件时，共享依赖会被多个入口的可达集同时覆盖）
-                if !seen.insert(path.clone()) {
-                    continue;
-                }
-                // 读不回源码（竞态删除/权限）时不伪造空 SourceFile——
-                // 渲染端对缺源文件本就按无片段处理
-                if let Ok(source) = std::fs::read_to_string(&path) {
-                    result.source_files.insert(
-                        path.display().to_string(),
-                        SourceFile::new(path.display().to_string(), source),
-                    );
-                }
-                for diagnostic in diagnostics {
-                    push_diagnostic(&mut result, path.display().to_string(), diagnostic);
-                }
+            // 读不回源码（竞态删除/权限/虚拟路径）时不伪造空 SourceFile——
+            // 渲染端对缺源文件本就按无片段处理
+            if let Ok(source) = std::fs::read_to_string(&path) {
+                result.source_files.insert(
+                    path.display().to_string(),
+                    SourceFile::new(path.display().to_string(), source),
+                );
+            }
+            for diagnostic in diagnostics {
+                push_diagnostic(&mut result, path.display().to_string(), diagnostic);
             }
         }
-    }
-
-    for file in standalone {
-        check_single_file(file, &mut result)?;
     }
 
     Ok(result)
-}
-
-/// 单文件检查（无项目上下文）。
-#[cfg(feature = "cli")]
-fn check_single_file(
-    file: &std::path::PathBuf,
-    result: &mut CheckResult,
-) -> anyhow::Result<()> {
-    let source = std::fs::read_to_string(file)
-        .map_err(|e| anyhow::anyhow!("Failed to read {}: {}", file.display(), e))?;
-    let source_file = SourceFile::new(file.display().to_string(), source.clone());
-    result
-        .source_files
-        .insert(file.display().to_string(), source_file);
-
-    let mut compiler = crate::frontend::Compiler::new();
-    match compiler.compile_with_source(&file.display().to_string(), &source) {
-        Ok(_) => {
-            // #321 M2：收割警告诊断（builder 按 W 前缀标注 Warning severity），
-            // 计入 warning_count，不阻断编译
-            for diag in compiler.take_warnings() {
-                push_diagnostic(result, file.display().to_string(), diag);
-            }
-        }
-        Err(e) if e.is_type_error() => {
-            // #268：透传原始类型诊断（保留 E1002 与 span），与 run 一致；
-            // 仅无原始诊断的 TypeError（如 IR 阶段）才用 E8001 兜底
-            let diag = match e.diagnostic() {
-                Some(diag) => diag.clone(),
-                None => {
-                    crate::util::diagnostic::ErrorCodeDefinition::internal_error(&format!("{}", e))
-                        .build()
-                }
-            };
-            push_diagnostic(result, file.display().to_string(), diag);
-        }
-        Err(e) => {
-            let err_msg = format!("{}", e);
-            return Err(anyhow::anyhow!(err_msg));
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

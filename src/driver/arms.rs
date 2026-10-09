@@ -432,10 +432,14 @@ impl Driver {
         let project_root_canon = project_root
             .as_ref()
             .map(|root| root.canonicalize().unwrap_or_else(|_| root.clone()));
-        let in_project = |file_canon: &Path| -> bool {
-            project_root_canon
-                .as_deref()
-                .is_some_and(|root| file_canon.starts_with(root))
+        // 4.2.5：无项目根（standalone 单文件）时，警告面只覆盖入口文件
+        // 本身（check_single_file 的单文件语义直译）；被 use 带入的邻旁
+        // 文件只收错误、不警告（无项目引用池兜底，宁漏勿误）
+        let in_project = |file_canon: &Path, raw_path: &Path| -> bool {
+            match project_root_canon.as_deref() {
+                Some(root) => file_canon.starts_with(root),
+                None => raw_path == entry_path.as_path(),
+            }
         };
         // RFC-029f Phase 2：包内引用池 = 项目根下全部 .yx 文件的标识符
         // 引用并集（含 Test——测试使用使产品绑定存活）。聚合全项目而非
@@ -451,8 +455,8 @@ impl Driver {
             };
             let path = &program.units[i].path;
             let file_canon = path.canonicalize().unwrap_or_else(|_| path.clone());
-            if !in_project(&file_canon) {
-                continue; // 警告仅对本项目文件呈现（RFC-029f）
+            if !in_project(&file_canon, path) {
+                continue; // 警告仅对本项目文件呈现（RFC-029f；standalone 仅入口文件）
             }
             // RFC-014 §项目模式：W1006 本地模块遮蔽依赖包（发现期事件，
             // 附着在做遮蔽 use 的文件上；Warning severity 不阻断）
@@ -566,9 +570,10 @@ impl Driver {
         }
     }
 
-    /// `Stage::IrGeneration` 臂（PerModule）：AST → ModuleIR。双形态——
+    /// `Stage::IrGeneration` 臂（PerModule）：AST → ModuleIR。多形态——
     /// 单文件做嵌入 std 合并，多文件经 `generate_ir_with_context`
-    /// （共享 registry + 跨文件上下文 + 槽位基址），合并由 Linking 负责。
+    ///（共享 registry + 跨文件上下文 + 槽位基址），合并由 Linking 负责；
+    /// Embedded 以空调用面产独立 IR；Check 纯检查不消费 IR。
     pub(super) fn ir_generation(
         &self,
         state: &mut State,
@@ -580,8 +585,70 @@ impl Driver {
             self.ir_generation_embedded(state);
             return Ok(());
         }
+        if matches!(state.program.kind, ProgramKind::Check) {
+            self.ir_generation_check(state);
+            return Ok(());
+        }
         self.ir_generation_orchestrated(state);
         Ok(())
+    }
+
+    /// Check 形态（4.2.5，用户裁决）：IR 生成在 check 里是**检查**不是
+    /// 产物——逐文件收集 IR 级错误（E3019 初始化环 / E1014-E1015 命名
+    /// 参数 / E3023 等，ir_gen 是这些码的唯一产生点），不中止、不消费
+    /// IR。standalone check 旧路径（pipeline 全链）本就跑 IR 生成；项目
+    /// check 从此补上这一层（02 不一致表第 11 行缺口）。typecheck 失败
+    /// 的单元无 type_result，自然跳过（与 run 路径门控一致）。
+    ///
+    /// Script/Bin 分形：ir_gen 的 E3023（顶层可执行语句拒绝）以
+    /// `module_key.is_none()` 为开关（ir_gen.rs:1660）。无项目根的
+    /// standalone 程序是 Script 语义（顶层语句即程序主体，T4）——逐单元
+    /// 传 None（与 pipeline 单文件同参）；有 manifest 的项目传单元键
+    ///（Bin 语义，与 compile 路径一致）。跨文件上下文（类型/全局/槽位
+    /// 基址）两种形态同样播种。
+    pub(super) fn ir_generation_check(
+        &self,
+        state: &mut State,
+    ) {
+        let rootless = orchestrator::find_project_root(&state.entry_path).is_none();
+        let State {
+            program,
+            asts,
+            units,
+            registry,
+            global_layout,
+            slot_bases,
+            ..
+        } = state;
+        let (Some(registry), Some(global_layout)) = (registry.as_ref(), global_layout.as_ref())
+        else {
+            return; // 上游已失败（防御）
+        };
+        // 跨文件上下文：所有文件的 AST 引用视图（与 orchestrated 同构）
+        let all_ast_refs: Vec<&Module> = asts.iter().filter_map(|a| a.as_ref()).collect();
+        for (i, us) in units.iter_mut().enumerate() {
+            let (Some(ast), Some(type_result)) = (&asts[i], &us.type_result) else {
+                continue;
+            };
+            // 与 generate_ir_with_context 同构，仅 module_key 按 Script/Bin
+            // 分形（见臂注释）
+            let mut generator = AstToIrGenerator::new_with_type_result(
+                type_result,
+                registry.clone(),
+                if rootless {
+                    None
+                } else {
+                    Some(program.units[i].key.clone())
+                },
+            );
+            generator.seed_cross_file_types(&all_ast_refs);
+            generator.seed_cross_file_globals(global_layout);
+            generator.set_global_slot_base(slot_bases[i]);
+            if let Err(diags) = generator.generate_module_ir(ast) {
+                // IR 级错误进逐文件收集通道（不标阶段失败、不中止）
+                us.check_diagnostics.extend(diags);
+            }
+        }
     }
 
     /// Embedded 形态（4.2.4）：`generate_ir_with_context` 以空调用面
@@ -861,6 +928,14 @@ impl Driver {
             let Some(ast) = ast else {
                 continue; // 上游失败（FailFast 下 run 循环已中止，防御）
             };
+            // 嵌入 std 模块（虚拟路径 `<std/...>`）跳过注册：`with_std()`
+            // 已按「native + yx 表面合并」语义注册过它们（register_std_
+            // modules，registry.rs:305-330）；此处再注册会把 native 半面
+            //（如 std.result.is_err）整体顶掉——4.2.5 施工发现的潜伏
+            // 缺陷：std.test 与 std.result 同现的 check 曾误报 E1043
+            if unit.path.to_str().is_some_and(|p| p.starts_with('<')) {
+                continue;
+            }
             let mut info = orchestrator::extract_module_info(&unit.key, ast);
             // 来源标记：vendor 依赖目录下的文件是 Vendor（与本地 User 区分）
             if orchestrator::is_vendor_path(&unit.path) {

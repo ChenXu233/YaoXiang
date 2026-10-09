@@ -94,20 +94,25 @@ main = () => {
 // 错误路径：有类型错误的 .yx 文件
 #[test]
 fn test_check_syntax_error() {
+    // Arrange（4.10.1 + 4.2.5 显式翻转）：语法错误不再整体硬中止——rust
+    // 式收集语义下 parse 诊断（E0012）计入错误数；旧断言「parse 阶段返回
+    // Err」钉的是已修复的怪癖
     let dir = temp_dir();
     let file = create_yx_file(&dir, "syntax_error.yx", r#"main = () => { x =  }"#);
-    let result = check_file(&file);
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert
+    let codes = error_codes(&result);
     assert!(
-        result.is_err(),
-        "Syntax error should fail at parse stage (return Err)"
+        codes.contains(&"E0012".to_string()),
+        "语法错误必须以 E0012 进收集通道: {codes:?}"
     );
-    let err_msg = format!("{}", result.unwrap_err());
     assert!(
-        err_msg.to_lowercase().contains("parse")
-            || err_msg.to_lowercase().contains("syntax")
-            || err_msg.to_lowercase().contains("expect"),
-        "Error message should mention parse/syntax issue, got: {}",
-        err_msg
+        result.error_count >= 1,
+        "语法错误计入错误数（非零退出的依据）: {}",
+        result.error_count
     );
 }
 
@@ -449,6 +454,48 @@ fn test_check_multifile_parse_error_collects_all_errors() {
         result.error_count >= 2,
         "两类错误都计入错误数（非零退出的依据）: {}",
         result.error_count
+    );
+}
+
+/// standalone（无 manifest）单文件的相对导入解析（WBS 4.2.5 裁决 A）：
+/// 与 rustc 单文件 mod 解析对齐——邻旁文件沿导入者目录被发现，
+/// 不再报 E5001。
+#[test]
+fn test_check_standalone_relative_use_resolves() {
+    // Arrange - 无 manifest 的目录：a.yx 相对导入 b.yx
+    let dir = temp_dir();
+    create_yx_file(&dir, "b.yx", "f: (x: Int) -> Int = (x) => x + 1\n");
+    let main = create_yx_file(&dir, "a.yx", "use b.{f}\nmain = () => {\n    y = f(1)\n}\n");
+
+    // Act
+    let result = check_file(&main);
+
+    // Assert - 旧路径（check_single_file 单文件管线）报 E5001
+    assert!(result.is_ok(), "standalone 相对导入应正常解析: {result:?}");
+    assert_eq!(result.unwrap(), 0, "相对导入解析成功则零错误（裁决 A）");
+}
+
+/// standalone 多错误文件的收集语义（WBS 4.2.5 归一）：统一 Check 形态后
+/// CollectAll 全报——旧 check_single_file 走 pipeline FailFast 只报首错。
+#[test]
+fn test_check_standalone_collects_all_errors() {
+    // Arrange - 两个独立的类型错误（y 与 z）
+    let dir = temp_dir();
+    let file = create_yx_file(
+        &dir,
+        "multi_err.yx",
+        "x: Int = 1\ny: Int = \"s\"\nz: Bool = 42\nmain: () -> Void = {}\n",
+    );
+
+    // Act
+    let result = check_result(&file);
+
+    // Assert - y 与 z 的 E1002 都在
+    let codes = error_codes(&result);
+    let e1002_count = codes.iter().filter(|c| *c == "E1002").count();
+    assert!(
+        e1002_count >= 2,
+        "CollectAll 应收齐全部类型错误（旧行为只报首错）: {codes:?}"
     );
 }
 

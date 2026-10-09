@@ -897,3 +897,96 @@ fn test_driver_run_embedded_compiles_embedded_std_module() {
         );
     }
 }
+
+// ===================== 4.2.5 standalone 统一（裁决 A，2026-10-09）=====================
+
+#[test]
+fn test_driver_run_check_standalone_entry_warns_dead_code() {
+    // Arrange: 无 manifest 的 standalone 文件——警告面只覆盖入口文件本身
+    //（check_single_file 的单文件语义直译：Script 角色 + 无项目引用池）；
+    // 被带入的邻旁文件只收错误、不警告（宁漏勿误）
+    let dir = tempfile::tempdir().expect("tempdir creation failed");
+    std::fs::write(
+        dir.path().join("main.yx"),
+        "dead = (x: Int) => x\nmain = () => { x = 1 }\n",
+    )
+    .expect("write fixture failed");
+    let entry = dir.path().join("main.yx");
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "standalone check 不得走故障通道: {:?}",
+        outcome.failure
+    );
+    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert!(
+        diags.iter().any(|d| d.code == "W1001"),
+        "standalone 入口文件的死代码警告不得丢失（4.2.5 防回归）: {diags:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_check_standalone_resolves_relative_use() {
+    // Arrange（裁决 A 钉板）：无 manifest 的单文件带相对 use——Discovery
+    // 沿导入者目录解析邻旁文件（与 rustc 单文件 mod 解析对齐）；旧
+    // check_single_file 路径报 E5001
+    let dir = tempfile::tempdir().expect("tempdir creation failed");
+    std::fs::write(
+        dir.path().join("b.yx"),
+        "f: (x: Int) -> Int = (x) => x + 1\n",
+    )
+    .expect("write fixture failed");
+    std::fs::write(
+        dir.path().join("main.yx"),
+        "use b.{f}\nmain = () => {\n    y = f(1)\n}\n",
+    )
+    .expect("write fixture failed");
+    let entry = dir.path().join("main.yx");
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    let main = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert!(
+        !main.iter().any(|d| d.code == "E5001"),
+        "standalone 相对导入不得再报模块未找到: {main:?}"
+    );
+    assert!(
+        check_diags_of(&outcome, "b.yx").is_some(),
+        "邻旁文件必须进发现集（每个发现文件都有条目）"
+    );
+}
+
+#[test]
+fn test_driver_run_check_embedded_std_keeps_merged_surface() {
+    // Arrange（4.2.5 施工发现的潜伏缺陷钉板）：同时使用 std.result 与
+    // std.test——with_std() 已按「native + yx 表面合并」注册嵌入模块，
+    // Registry 臂若重复收获注册会把 native 半面（result.is_err 等）整体
+    // 顶掉（std.test 内部调用 result.is_err → 误报 E1043）
+    let dir = tempfile::tempdir().expect("tempdir creation failed");
+    std::fs::write(
+        dir.path().join("main.yx"),
+        "use std.result\nuse std.test\n\nmain: () -> Void = {}\n",
+    )
+    .expect("write fixture failed");
+    let entry = dir.path().join("main.yx");
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert: 全部条目的诊断集合都不得出现 E1043
+    let all: Vec<&str> = outcome
+        .check_diagnostics
+        .iter()
+        .flat_map(|(_, ds)| ds.iter().map(|d| d.code.as_str()))
+        .collect();
+    assert!(
+        !all.contains(&"E1043"),
+        "嵌入 std 的合并表面不得被重复注册顶掉: {all:?}"
+    );
+}
