@@ -413,6 +413,16 @@ pub enum StageScope { PerModule, Project }
 >    撒谎；且多文件 parse 因此从 2 次降为 1 次。附带的现状如实登记：多文件
 >    路径 parse 错误仍是硬中止（`build_registry_from` 的 `?` 传播，与
 >    CollectAll 语义的张力登记为 WBS 4.10.1，4.2.1 测试钉板）。
+> 4. Check 形态落地（4.2.2，2026-10-09 用户裁决）补两条登记：
+>    a. 数据依赖边 14→16：`RoleClassification` 消费 Discovery 的 used_by
+>       边集、`DeadCodeAnalysis` 消费 Discovery 的 W1006 遮蔽事件——初稿
+>       漏列（这两个产物在 orchestrator 时代由 `discover_with_used` 产出、
+>       被 `discover` 包装丢弃，数据流没进表格就丢了）；
+>    b. 文件内诊断顺序归一扩展为本注记 #2 的完整形态：E3020 入口校验
+>       移入 RoleClassification 臂（check 无 Linking 阶段，握着 surfaces
+>       与 AST 的臂负责校验），文件内诊断顺序 = 阶段拓扑序（E3020 →
+>       typecheck → W1006/W1003/死代码 → proof）；诊断集合不变（C2
+>       集合语义），仅 stderr 条目顺序变化。
 
 ### 2. 义务账本：`Obligations` + `assert_drained()`
 
@@ -513,6 +523,11 @@ impl Driver {
 > 4. `proof_execution` 模块可见性放宽为 `pub(crate)`：driver 臂是唯一新调用方（L1→L2 为允许方向）；orchestrator 存量调用点随 4.2 迁走后归位再议。
 > 5. 多文件形态下 ProofExecution 是独立阶段、在**全部** typecheck 之后执行（A1，2026-10-09 用户裁决）：`compile_project` 原把 proof 穿插在逐文件 typecheck 循环内（文件 N 的 proof 先于文件 N+1 的 typecheck）。单重失败两者逐字节相同；「文件1 proof 失败 + 文件2 typecheck 失败」的多重失败场景，首报从 proof 错误变为 typecheck 错误（测试钉板）。
 > 6. `DriverOutcome` 按 ProgramKind 分通道携带产物：`result`（pipeline 契约）/ `module` + `failure`（orchestrator 契约，4.2.1）——各入口的外部错误契约（PipelineError / OrchestratorError）不属 Driver 可统一的类型面。
+> 7. Check 通道落地（4.2.2）：`DriverOutcome.check_diagnostics` 携带逐文件
+>    诊断（每个发现文件都有条目，干净文件为空 Vec——check_project 现状
+>    契约）；Discovery 产物扩展为「文件集 + used_by 边集 + 遮蔽事件」
+>    三元组入 State（MultiFile 形态无下游消费者，仅记录不外发）；check
+>    路径每文件 parse 随 C3 拓扑从 2 次降为 1 次。
 
 **十个入口的改造方式（逐个指定函数）**：
 
