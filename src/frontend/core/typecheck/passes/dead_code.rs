@@ -20,11 +20,10 @@ pub struct DeadCodeAnalyzer {
     entry_points: HashSet<String>,
     /// 所有符号定义
     all_defs: HashMap<String, SymbolDef>,
-    /// 包内引用池（RFC-029f；RFC-029g 收敛为唯一豁免口）：包内所有文件
-    /// （含测试）引用到的标识符并集。文件内不可达但池中命中的定义视为活
-    /// ——跨文件消费者在本文件不可见，这是「宁漏报」方向。
-    /// `None`（单文件 Script 路径）= 无包视角，只按文件内可达性判定。
-    project_refs: Option<HashSet<String>>,
+    /// Bin/Internal 的 pub 项豁免池（扫描目录所得，已知缺陷见 RFC-029f）
+    exempt_pub: HashSet<String>,
+    /// Lib/Script 的跨文件引用池（扫描目录所得，已知缺陷见 RFC-029f）
+    cross_file_refs: HashSet<String>,
 }
 
 /// 符号定义
@@ -74,18 +73,25 @@ impl DeadCodeAnalyzer {
         Self {
             entry_points: HashSet::new(),
             all_defs: HashMap::new(),
-            project_refs: None,
+            exempt_pub: HashSet::new(),
+            cross_file_refs: HashSet::new(),
         }
     }
 
-    /// 设置包内引用池（RFC-029f）：项目内所有文件引用到的标识符并集。
-    /// 提供后，文件内不可达但被包内其它文件引用的定义视为活——跨文件
-    /// 消费者在本文件不可见，这是「宁漏报」方向。`None` = 单文件视角。
-    pub fn set_project_refs(
+    /// 设置 Bin/Internal 的 pub 项豁免池（扫描目录所得，已知缺陷见 RFC-029f）
+    pub fn set_exempt_pub(
+        &mut self,
+        names: HashSet<String>,
+    ) {
+        self.exempt_pub = names;
+    }
+
+    /// 设置 Lib/Script 的跨文件引用池（扫描目录所得，已知缺陷见 RFC-029f）
+    pub fn set_cross_file_refs(
         &mut self,
         refs: HashSet<String>,
     ) {
-        self.project_refs = Some(refs);
+        self.cross_file_refs = refs;
     }
 
     /// 收集入口点和符号定义（合并处理以减少代码重复）
@@ -547,12 +553,13 @@ impl DeadCodeAnalyzer {
             if Self::is_reachable(name, def, reachable) {
                 continue;
             }
-            // 包内任一文件（含测试）引用即活
-            if let Some(refs) = &self.project_refs {
-                let short_name = name.rsplit('.').next().unwrap_or(name);
-                if refs.contains(short_name) {
-                    continue;
-                }
+            // Bin/Internal: exempt_pub 豁免；Lib/Script: cross_file_refs 豁免
+            let short_name = name.rsplit('.').next().unwrap_or(name);
+            if !self.exempt_pub.is_empty() && self.exempt_pub.contains(short_name) {
+                continue;
+            }
+            if !self.cross_file_refs.is_empty() && self.cross_file_refs.contains(short_name) {
+                continue;
             }
             let (code, message) = match def.kind {
                 SymbolKind::Function => ("W1001", format!("Unused function: '{}'", name)),

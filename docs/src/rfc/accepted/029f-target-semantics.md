@@ -321,3 +321,25 @@ fn classify(files, manifest, entry_reach) -> Map<File, Role>:
 - RFC-014c 工作空间支持（导入面的首个消费方，审核中）
 - RFC-036 测试框架（Test 角色规则来源）
 - #321 M2 警告码独立发射通道（定案 B 与方案 A 的出处）
+
+## 已知缺陷与后续改进（2026-10-09）
+
+### 引用池的三处设计缺陷
+
+**现状**：当前引用池通过 `collect_project_refs`（orchestrator.rs:603-648）收集标识符，存在以下缺陷：
+
+| # | 缺陷 | 影响 | 根因 |
+|---|------|------|------|
+| 1 | **扫描面是目录而非编译面** | 从未被 `use` 的孤立文件、tests/ 目录下的测试文件，其标识符也进入池，豁免生产代码的未使用定义 | `collect_yx` 递归扫描 `.yx`（除 `.git`/`target`/`.yaoxiang`），不限于 `discover_with_used` 的编译集 |
+| 2 | **粒度是项目级裸名，无模块维度** | 同名局部变量（`let x = 1`）会意外豁免顶级定义（`fn x()`）；a.yx 的 `foo` 和 b.yx 的 `foo` 无法区分 | 池类型 `HashSet<String>`，key 是裸名 |
+| 3 | **Script 复用 Lib 的池（违反单文件语义）** | `yx run script.yx` 时，项目中其他文件的引用会豁免 script.yx 的未使用定义——Script 的语义是"单文件直跑"，不应受项目影响 | orchestrator.rs:393-396 让 Script 使用 `cross_file_refs` |
+
+**后续改进方向**（待 P4 4.9 落地）：
+
+1. **扫描面改为编译面**：只收集 `discover_with_used` 返回的编译集中的引用
+2. **粒度升级为 `(module, name)`**：池类型改为 `HashMap<ModulePath, HashSet<String>>`
+3. **Script 不用池**：单文件语义，只按定义-使用图判定
+4. **消费定义细化**：区分"被 import"和"被 import 后真实使用"（仅后者算消费）
+5. **测试池分离**：tests/ 的引用不豁免生产代码
+
+**不在 P3.5 改的理由**：模块级解析需要 `use` 项的路径解析完成（`use a::foo` → foo 来自模块 a），属 P4 阶段契约与 Driver 统一的范畴。

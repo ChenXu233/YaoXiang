@@ -953,7 +953,7 @@ use std::collections::HashSet as StdHashSet;
 fn test_project_refs_hit_exempts_definition() {
     // Arrange: 提供包内引用池且命中该定义
     let mut analyzer = DeadCodeAnalyzer::new();
-    analyzer.set_project_refs(StdHashSet::from(["used_across_files".to_string()]));
+    analyzer.set_cross_file_refs(StdHashSet::from(["used_across_files".to_string()]));
     let ast = Module {
         items: vec![make_binding("used_across_files", None, vec![])],
         span: Span::dummy(),
@@ -974,7 +974,7 @@ fn test_project_refs_hit_exempts_definition() {
 fn test_project_refs_miss_reports_definition() {
     // Arrange: 引用池存在但未命中该定义 → 报
     let mut analyzer = DeadCodeAnalyzer::new();
-    analyzer.set_project_refs(StdHashSet::from(["other_name".to_string()]));
+    analyzer.set_cross_file_refs(StdHashSet::from(["other_name".to_string()]));
     let ast = Module {
         items: vec![make_binding("orphan_fn", None, vec![])],
         span: Span::dummy(),

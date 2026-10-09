@@ -390,10 +390,13 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
             if !matches!(role, FileRole::Test) {
                 let mut analyzer = DeadCodeAnalyzer::new();
                 match role {
-                    FileRole::Bin | FileRole::Internal | FileRole::Lib => {
-                        analyzer.set_project_refs(project_refs.clone());
+                    FileRole::Bin | FileRole::Internal => {
+                        analyzer.set_exempt_pub(project_refs.clone());
                     }
-                    _ => {}
+                    FileRole::Lib | FileRole::Script => {
+                        analyzer.set_cross_file_refs(project_refs.clone());
+                    }
+                    FileRole::Test => {}
                 }
                 let warnings = analyzer.analyze(ast);
                 diagnostics.extend(analyzer.to_diagnostics(&warnings));

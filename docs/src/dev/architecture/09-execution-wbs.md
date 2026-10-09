@@ -242,6 +242,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 - [ ] **4.4 证明层与 wasm 收尾**（3 个三级任务）
 - [ ] **4.5 跨层契约 PlanId 化（D20）**（2 个三级任务）
 - [ ] **4.6 LSP 语义数据管线统一（D55）**（1 个三级任务）
+- [ ] **4.9 引用池正确实现（RFC-029f 修正）**（5 个三级任务）
 
 | 二级 | 三级 | 前置 | 验收 |
 | --- | --- | --- | --- |
@@ -266,6 +267,11 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | 4.5 跨层契约 PlanId 化（D20） | 4.5.1 `ReleasePlan` 键 `Span` → `PlanId`（`layers/ownership.rs:31` 产出侧分配 + `ir_gen.rs:1942` 消费侧匹配） | 4.3.1 | `test_release_plan_spans_consumed` 差集为空（D41） |
 | | 4.5.2 `overload_resolutions` 键 `Span` → `PlanId` | 4.5.1 | C2；span 失配类静默失效归零 |
 | 4.6 LSP 语义数据管线统一 | 4.6.1 项目内文件的语义数据（SemanticDB）走 orchestrator 同管线，与诊断同源；跨文件引用带 `resolves_to` | 4.2.1 | 项目内跨文件跳转命中定义；语义数据与诊断出自同一次编译 |
+| 4.9 引用池正确实现 | 4.9.1 扫描面改为编译面：`collect_project_refs` 只收集 `discover_with_used` 返回的编译集（不含孤立文件、tests/ 目录） | 4.2.1 | `collect_yx` 不再递归扫描目录；**corpus 语料 diff 零未归因新增 W1001**（每条新增警告必须可追溯到某个真实未使用定义） |
+| | 4.9.2 粒度升级为 `(module, name)`：池类型改为 `HashMap<ModulePath, HashSet<String>>`，区分不同模块的同名标识符 | 4.9.1 | 同名局部变量不再意外豁免顶级定义；**单测：a.yx 的 `foo` 和 b.yx 的 `foo` 独立计数** |
+| | 4.9.3 Script 不用池：`FileRole::Script` 路径不调用 `set_cross_file_refs`，只按定义-使用图判定 | 4.9.2 | Script 单文件语义恢复；**单测：项目内其他文件的引用不影响 script.yx 的 W1001** |
+| | 4.9.4 消费定义细化：区分"被 import"和"被 import 后真实使用"——只有后者算消费（需 `use` 项的路径解析 + 实际使用点追踪） | 4.9.3 + 4.6.1 | `use a::foo` 但从不调用 `foo()` 的情况下，a.yx 的 `foo` 仍报 W1001；**硬前置**：`use` 项路径解析（4.6.1 交付） |
+| | 4.9.5 测试池分离：tests/ 的引用单独成池，不豁免生产代码（src/）的未使用定义 | 4.9.4 | **单测：tests/helper.yx 引用 src/util.yx 的 `debug_print`，但 src/ 内无消费者时，`debug_print` 仍报 W1001**；RFC-029f 表格更新（测试豁免范围缩窄到仅测试自身） |
 
 ### P5 checker 文件内拆分 —— 本文档补齐（原缺口 G1）
 
