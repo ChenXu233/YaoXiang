@@ -235,30 +235,6 @@ fn test_driver_run_mono_disabled_records_config_skip() {
 }
 
 #[test]
-fn test_driver_run_check_kind_hits_unwired_role_classification() {
-    // Arrange: 4.2.1 后 MultiFile 全接线；Check 形态的 RoleClassification
-    // 臂随 4.2.2 落地——跑到那里必须显式报错而非 panic/todo!
-    let (_dir, entry) = make_project(&[("main.yx", "main: () -> Void = {}\n")]);
-    let program = Program::new(
-        ProgramKind::Check,
-        vec![Unit::new("main", &entry, "")],
-        CompileConfig::default(),
-    );
-
-    // Act
-    let result = Driver::new().run(program);
-
-    // Assert
-    assert!(
-        matches!(
-            result,
-            Err(DriverError::StageNotWired(Stage::RoleClassification))
-        ),
-        "Check must fail at its first unwired stage: {result:?}"
-    );
-}
-
-#[test]
 fn test_driver_run_empty_units_rejected() {
     // Arrange: 无编译单元的程序是调用方 bug——显式错误，不许静默 vacuous success
     let program = Program::new(
@@ -467,4 +443,223 @@ fn test_driver_run_multi_file_parse_error_hard_aborts() {
         "parse error must hard-abort as OrchestratorError::Parse: {:?}",
         outcome.failure
     );
+}
+
+// ===================== 4.2.2 Check 形态（顺序归一 / E3020 归属裁决，2026-10-09）=====================
+// 原未接线钉板 `test_driver_run_check_kind_hits_unwired_role_classification`
+// 随本批接线完成退役——Check 形态全接线后的行为由下列用例钉住。
+
+/// 以 Check 形态跑 Driver（占位入口单元，Discovery 臂沿 use 图展开）。
+fn run_check(entry: &Path) -> Result<DriverOutcome, DriverError> {
+    let program = Program::new(
+        ProgramKind::Check,
+        vec![Unit::new("main", entry, "")],
+        CompileConfig::default(),
+    );
+    Driver::new().run(program)
+}
+
+/// 取某文件在 check 通道里的诊断（按路径后缀匹配——发现集含嵌入 std 虚拟路径）。
+fn check_diags_of<'a>(
+    outcome: &'a DriverOutcome,
+    suffix: &str,
+) -> Option<&'a [crate::util::diagnostic::Diagnostic]> {
+    outcome
+        .check_diagnostics
+        .iter()
+        .find(|(p, _)| p.ends_with(suffix))
+        .map(|(_, d)| d.as_slice())
+}
+
+#[test]
+fn test_driver_run_check_collects_per_file_diagnostics() {
+    // Arrange: lib.yx 类型错误 + main.yx 干净——Check 契约 = 逐文件收集
+    // 诊断而非硬中止（与 compile 路径 FailFast 对立的另一面）
+    let (_dir, entry) = make_project(&[
+        ("lib.yx", "bad: Int = \"oops\"\n"),
+        ("main.yx", "use lib.{bad}\nmain = () => {\n    y = bad\n}\n"),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert: 无故障通道；每个发现文件都有条目（干净文件为空 Vec）
+    assert!(
+        outcome.failure.is_none(),
+        "check 诊断收集不得走故障通道: {:?}",
+        outcome.failure
+    );
+    let lib_diags = check_diags_of(&outcome, "lib.yx").expect("lib.yx must have a per-file entry");
+    assert!(
+        !lib_diags.is_empty(),
+        "lib.yx 的类型错误必须进收集通道: {lib_diags:?}"
+    );
+    let main_diags =
+        check_diags_of(&outcome, "main.yx").expect("main.yx must have a per-file entry");
+    assert!(
+        main_diags.is_empty(),
+        "干净文件的条目应为空 Vec（check_project 现状契约）: {main_diags:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_check_collect_all_continues_past_first_error() {
+    // Arrange: aaa.yx 与 zzz.yx 各带一个类型错误——compile 路径在首个出错
+    // 文件即中止（FailFast），check 必须两份都收集（CollectAll 语义）
+    let (_dir, entry) = make_project(&[
+        ("aaa.yx", "bad_a: Int = \"oops\"\n"),
+        (
+            "main.yx",
+            "use aaa.{bad_a}\nuse zzz.{bad_z}\nmain = () => {\n    y = bad_a\n    z = bad_z\n}\n",
+        ),
+        ("zzz.yx", "bad_z: Int = \"nope\"\n"),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "CollectAll 不得因单文件错误硬中止: {:?}",
+        outcome.failure
+    );
+    let aaa = check_diags_of(&outcome, "aaa.yx").expect("entry for aaa.yx");
+    assert!(!aaa.is_empty(), "aaa.yx 的类型错误必须被收集: {aaa:?}");
+    let zzz = check_diags_of(&outcome, "zzz.yx").expect("entry for zzz.yx");
+    assert!(
+        !zzz.is_empty(),
+        "zzz.yx 的类型错误必须同样被收集（不停留在首错）: {zzz:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_check_role_aware_dead_code_w1001() {
+    // Arrange: Bin 角色（有 manifest + main 绑定）文件里的未使用顶层函数——
+    // RFC-029f 角色感知死代码经 RoleClassification → DeadCodeAnalysis 链路
+    // 产出（夹具同 cli_e2e test_e2e_check_bin_unused_fn_reports）
+    let (_dir, entry) = make_project(&[(
+        "main.yx",
+        "dead_api = (x: Int) => x\nmain = () => { x = 1 }\n",
+    )]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert!(
+        diags.iter().any(|d| d.code == "W1001"),
+        "Bin 角色未使用顶层函数应报 W1001: {diags:?}"
+    );
+}
+
+/// manifest 声明面带 `[[bin]] main.yx` 的项目夹具（文件无 main 绑定，
+/// 另有一个未使用函数供顺序断言用）。
+fn make_declared_bin_project() -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir creation failed");
+    std::fs::write(
+        dir.path().join("yaoxiang.toml"),
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n\n[[bin]]\nname = \"app\"\npath = \"main.yx\"\n",
+    )
+    .expect("write manifest failed");
+    std::fs::write(dir.path().join("main.yx"), "helper: () -> Void = {}\n")
+        .expect("write fixture failed");
+    let entry = dir.path().join("main.yx");
+    (dir, entry)
+}
+
+#[test]
+fn test_driver_run_check_declared_bin_missing_main_reports_e3020() {
+    // Arrange: #388 定案 check 半边判据（surfaces.bins 声明面）——
+    // 声明为 bin 的文件缺 main 绑定报 E3020，进逐文件收集通道而非故障通道
+    let (_dir, entry) = make_declared_bin_project();
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "E3020 是收集诊断而非硬中止: {:?}",
+        outcome.failure
+    );
+    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert!(
+        diags.iter().any(|d| d.code == "E3020"),
+        "声明面 bin 缺 main 必须报 E3020: {diags:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_check_diagnostic_order_follows_stage_topology() {
+    // Arrange: 顺序归一裁决（2026-10-09 用户定夺，02 §1 修订注记 #2 扩展）——
+    // 文件内诊断顺序 = 阶段拓扑序：E3020（RoleClassification）先于
+    // W1001（DeadCodeAnalysis）；诊断集合不变，仅顺序归一
+    let (_dir, entry) = make_declared_bin_project();
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    let codes: Vec<&str> = diags.iter().map(|d| d.code.as_str()).collect();
+    assert_eq!(
+        codes,
+        ["E3020", "W1001"],
+        "文件内诊断必须按阶段拓扑序归一（E3020 → W1001）: {codes:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_check_parse_error_hard_aborts() {
+    // Arrange（4.10.1 怪癖钉板，check 半边）：broken.yx 语法错误——现状
+    // check 路径同样硬中止（解析失败即 OrchestratorError::Parse），而非
+    // 降级为逐文件诊断；4.10.1 修复时必须显式翻转本测试
+    let (_dir, entry) = make_project(&[
+        ("broken.yx", "let = ;\n"),
+        ("main.yx", "use broken.{x}\nmain: () -> Void = {}\n"),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        matches!(&outcome.failure, Some(OrchestratorError::Parse { path, .. }) if path.ends_with("broken.yx")),
+        "check 路径 parse 错误现状 = OrchestratorError::Parse 硬中止: {:?}",
+        outcome.failure
+    );
+}
+
+#[test]
+fn test_driver_run_check_proof_error_collected_per_file() {
+    // Arrange（A1 对照钉板）：aaa.yx 带一个会失败的证明义务（返回位注解），
+    // zzz.yx 带类型错误。compile 路径下 zzz 的类型错误掩盖 aaa 的 E4018
+    //（A1 首报归一）；check 是 CollectAll——两者都必须按文件收集到位
+    let (_dir, entry) = make_project(&[
+        (
+            "aaa.yx",
+            "IsLe: (n: Int, r: Int) -> Type = { r < n }\nf: () -> (r: IsLe(3, r)) = {\n    return 7\n}\n",
+        ),
+        ("main.yx", "use aaa.{f}\nuse zzz.{bad}\nmain: () -> Void = {}\n"),
+        ("zzz.yx", "bad: Int = \"nope\"\n"),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "proof/类型错误都是收集诊断，不得硬中止: {:?}",
+        outcome.failure
+    );
+    let aaa = check_diags_of(&outcome, "aaa.yx").expect("entry for aaa.yx");
+    assert!(
+        aaa.iter().any(|d| d.code == "E4018"),
+        "aaa.yx 的证明失败必须进收集通道: {aaa:?}"
+    );
+    let zzz = check_diags_of(&outcome, "zzz.yx").expect("entry for zzz.yx");
+    assert!(!zzz.is_empty(), "zzz.yx 的类型错误必须进收集通道: {zzz:?}");
 }

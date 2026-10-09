@@ -64,14 +64,18 @@ fn test_stage_all_has_no_duplicates() {
 
 #[test]
 fn test_stage_all_topological_order_follows_data_dependencies() {
-    // Arrange: 02 §1 的数据依赖边（上游必须先于下游）——C3 修订后全集，
-    // 与 driver/mod.rs data_dependencies 实现对账（两边独立罗列）
-    let dependency_edges: [(Stage, Stage); 14] = [
+    // Arrange: 02 §1 的数据依赖边（上游必须先于下游）——C3 修订 + 4.2.2
+    // 补边后全集，与 driver/mod.rs data_dependencies 实现对账（两边独立罗列）。
+    // 4.2.2 新增两条诚实申报边：RoleClassification 消费 Discovery 的 used_by
+    // 边集；DeadCodeAnalysis 消费 Discovery 的 W1006 遮蔽事件。
+    let dependency_edges: [(Stage, Stage); 16] = [
         (Stage::Discovery, Stage::Parsing),
         (Stage::Parsing, Stage::Registry),
+        (Stage::Discovery, Stage::RoleClassification),
         (Stage::Parsing, Stage::RoleClassification),
         (Stage::Parsing, Stage::Typecheck),
         (Stage::Registry, Stage::Typecheck),
+        (Stage::Discovery, Stage::DeadCodeAnalysis),
         (Stage::Parsing, Stage::DeadCodeAnalysis),
         (Stage::RoleClassification, Stage::DeadCodeAnalysis),
         (Stage::Typecheck, Stage::ProofExecution),

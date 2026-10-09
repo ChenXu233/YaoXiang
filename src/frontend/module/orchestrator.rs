@@ -25,16 +25,15 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::parser::ast::{Expr, StmtKind};
-use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use crate::util::diagnostic::Diagnostic;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::tokenize;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
-use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::frontend::module::roles::{self, FileRole};
+use crate::frontend::module::roles;
 use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 use crate::middle::ModuleIR;
@@ -134,201 +133,41 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
     }
 }
 
-/// T4：入口文件的 span（用于无源码位置的诊断）。
-/// 用文件首行首列作占位——诊断需要位置才能渲染，而“缺 main”是文件级问题。
-fn entry_span(_entry: &Path) -> crate::util::span::Span {
-    crate::util::span::Span::default()
-}
-
 /// 检查一个项目：发现源文件 → 构建 Registry → 逐文件 typecheck。
 ///
 /// 与 `compile_project` 共用发现/注册表阶段，但不生成 IR；返回**全部**诊断
 /// （按文件分组，不早退），供 `yaoxiang check` 与 `run` 走同一条编译路径。
 ///
-/// RFC-029f：逐文件分类编译目标角色（Script/Bin/Lib/Test/Internal）——
-/// 警告诊断（死代码族 + W1003 未使用导入）按角色接入：
-/// - Test 不参与死代码（`[tool.test]` patterns/exclude 规则，RFC-036）
-/// - Bin 角色未使用 pub 可报（Phase 1）
-/// - Internal 角色 pub 收紧为"包内 use 图可达才豁免"（Phase 2：聚合本项目
-///   全部文件的引用池传入分析器）
-///
-/// 警告为 Warning severity，不阻断、不计入错误数。
+/// 02 §改动清单（WBS 4.2.2）：入口已瘦身为 `Program { kind: Check }`
+/// 构造器 + Driver 调用——阶段实现见 `crate::driver` 的 `Stage` 臂
+///（VendorConsistency/Discovery/Parsing/Registry/RoleClassification/
+/// Typecheck/DeadCodeAnalysis/ProofExecution）。外部契约不变：返回
+/// `Vec<(文件, 诊断)>`（每个发现文件都有条目，干净文件为空 Vec）；
+/// vendor/发现/解析失败仍经 `OrchestratorError` 硬中止（4.10.1 怪癖
+/// 保留，driver 侧测试钉板）。文件内诊断顺序归一为阶段拓扑序
+///（2026-10-09 用户裁决，02 §1 修订注记 #4）。
 pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, OrchestratorError> {
-    let vendor_root = ensure_vendor_consistency(entry)?;
-    let (files, used_by, shadow_events) = discover_with_used(entry)?;
-    let registry = build_registry_from(&files)?;
-    let method_bindings = registry.all_method_bindings();
-
-    // 项目角色上下文：manifest 缺失或损坏 → surfaces 为 None → 全体 Script 态
-    //（行为与引入角色模型前一致）。双解析：目标字段（RFC-015）与 [tool.test]
-    //（RFC-036，经 util::config 的宽松结构）各取所需。wasm32 下 package 模块
-    // 不编译，角色上下文降级为 None（Script 态，行为安全）。
-    let project_root = find_project_root(entry);
-    let (surfaces, test_rules) = role_context(project_root.as_deref());
-
-    // 先解析全部文件（Phase 2：引用池需要全项目视角）
-    let mut parsed: Vec<(&DiscoveredFile, Module)> = Vec::new();
-    for file in &files {
-        let ast = parse_file(&file.path, &file.source)?;
-        parsed.push((file, ast));
+    let program = crate::driver::Program::new(
+        crate::driver::ProgramKind::Check,
+        // 占位入口单元：Discovery 臂沿 use 图重建完整单元集
+        vec![crate::driver::Unit::new(
+            entry_module_key(entry),
+            entry.to_path_buf(),
+            "",
+        )],
+        crate::frontend::config::CompileConfig::default(),
+    );
+    let outcome = crate::driver::Driver::new()
+        .run(program)
+        .map_err(|e| OrchestratorError::Io {
+            // Check 阶段表全接线且恒有占位入口单元——结构性不可达
+            path: entry.display().to_string(),
+            reason: format!("driver: {e}"),
+        })?;
+    match outcome.failure {
+        Some(e) => Err(e),
+        None => Ok(outcome.check_diagnostics),
     }
-
-    let project_root_canon = project_root
-        .as_ref()
-        .map(|root| root.canonicalize().unwrap_or_else(|_| root.clone()));
-    let in_project = |file_canon: &Path| -> bool {
-        project_root_canon
-            .as_deref()
-            .is_some_and(|root| file_canon.starts_with(root))
-    };
-
-    // RFC-029f Phase 2：包内引用池 = 项目根下全部 .yx 文件的标识符引用并集
-    //（含 Test——测试使用使产品 pub 存活）。聚合全项目而非入口可达集：
-    // 单文件 check 时引用方可能不在发现集，按可达集聚合会产生顺序敏感的
-    // 误报。仅收集名字、解析失败静默跳过——不产生诊断，不破坏发现隔离
-    //（#247）。vendor/嵌入 std 不入池（外部包视角）。
-    let project_refs: HashSet<String> = project_root_canon
-        .as_deref()
-        .map(collect_project_refs)
-        .unwrap_or_default();
-
-    let mut out = Vec::new();
-    for (file, ast) in &parsed {
-        let result =
-            typecheck_with_registry_in(ast, &registry, &method_bindings, vendor_root.as_deref());
-
-        // RFC-027 Phase 2.5 消费端（P3 止血）：本文件无类型错误时才执行证明函数
-        //（与 pipeline 门控一致），诊断并入 collect-all 输出。
-        let proof_errors = if result.diagnostics.is_empty() {
-            crate::frontend::proof_execution::execute_proof_calls(
-                result.proof_calls(),
-                ast,
-                &result,
-            )
-        } else {
-            Vec::new()
-        };
-
-        let file_canon = file
-            .path
-            .canonicalize()
-            .unwrap_or_else(|_| file.path.clone());
-        let role = roles::classify(
-            &file_canon,
-            project_root.as_deref(),
-            surfaces.as_ref(),
-            test_rules.as_ref(),
-            used_by.contains(&file_canon),
-            ast_has_main(ast),
-        );
-
-        // 警告仅对本项目文件呈现（RFC-029f）：vendor 依赖与嵌入 std 的内部
-        // 警告属于其所属包，不混入消费方的 check 输出
-        let mut diagnostics = result.diagnostics;
-        diagnostics.extend(proof_errors);
-        if in_project(&file_canon) {
-            // RFC-014 §项目模式：W1006 本地模块遮蔽依赖包（发现期事件，
-            // 附着在做遮蔽 use 的文件上；Warning severity 不阻断）
-            for (shadow_path, use_path, span, pkg) in &shadow_events {
-                if shadow_path == &file.path {
-                    // use 路径在模板里显示为文件式路径（data/json）
-                    diagnostics.push(
-                        ErrorCodeDefinition::module_shadows_dependency(
-                            &use_path.replace('.', "/"),
-                            pkg,
-                        )
-                        .at(*span)
-                        .build(),
-                    );
-                }
-            }
-            // W1003 未使用导入随 W 码通道流出（Warning severity，不阻断编译）
-            diagnostics.extend(result.warnings);
-            // 角色感知死代码（RFC-029f + RFC-029g）：
-            // - Test 不参与
-            // - Bin/Internal/Lib：按包内引用池判定——跨文件消费者在本文件不可见，
-            //   宁漏报方向（曾是 W1001 误报根因）
-            // - Script：无包视角，只按文件内可达性判定
-            // RFC-029g 删除 pub 后三种角色收敛为同一个引用池，不再有豁免开关。
-            if !matches!(role, FileRole::Test) {
-                let mut analyzer = DeadCodeAnalyzer::new();
-                match role {
-                    FileRole::Bin | FileRole::Internal => {
-                        analyzer.set_exempt_pub(project_refs.clone());
-                    }
-                    FileRole::Lib | FileRole::Script => {
-                        analyzer.set_cross_file_refs(project_refs.clone());
-                    }
-                    FileRole::Test => {}
-                }
-                let warnings = analyzer.analyze(ast);
-                diagnostics.extend(analyzer.to_diagnostics(&warnings));
-            }
-        }
-        // 入口存在性（#388 定案：check 与 run 同判据）：manifest 声明面里的
-        // 入口文件（`[[bin]].path` / `[run].main`，与 roles::classify 同源的
-        // canonical 匹配）必须有名为 `main` 的绑定（值/函数皆可）。
-        // 声明面之外的文件不查——Lib/Internal/Test 不要求 main（RFC-029f
-        // 角色语义）：被 check ≠ 被当程序跑，`run` 的入口要求只在真正执行
-        // 某文件时生效（is_bin_role）。
-        if surfaces
-            .as_ref()
-            .is_some_and(|s| s.bins.contains(&file_canon))
-            && !ast_has_main(ast)
-        {
-            diagnostics.push(
-                ErrorCodeDefinition::bin_missing_main(&file.path.display().to_string())
-                    .at(entry_span(&file.path))
-                    .build(),
-            );
-        }
-        out.push((file.path.clone(), diagnostics));
-    }
-    Ok(out)
-}
-
-/// 项目角色上下文（RFC-029f）：显式声明面 + 测试发现规则。
-/// manifest 读取解析依赖 `crate::package`——wasm32 下不存在，降级为
-/// (None, None)（全体 Script 态、无 patterns 规则，行为与引入模型前一致）。
-#[cfg(not(target_arch = "wasm32"))]
-fn role_context(
-    project_root: Option<&Path>
-) -> (Option<roles::ExplicitSurfaces>, Option<roles::TestRules>) {
-    let Some(root) = project_root else {
-        return (None, None);
-    };
-    let Ok(src) = std::fs::read_to_string(root.join(crate::package::manifest::MANIFEST_FILE))
-    else {
-        return (None, None);
-    };
-    let surfaces = toml::from_str::<PackageManifest>(&src)
-        .ok()
-        .map(|manifest| roles::TargetViews {
-            bins: manifest
-                .bin
-                .iter()
-                .map(|b| b.path.clone())
-                .chain(manifest.run.as_ref().and_then(|r| r.main.clone()))
-                .collect(),
-            libs: manifest
-                .exports
-                .values()
-                .cloned()
-                .chain(manifest.lib.as_ref().map(|l| l.path.clone()))
-                .collect(),
-        })
-        .map(|views| roles::explicit_surfaces(&views, root));
-    let test_rules = toml::from_str::<crate::util::config::ProjectConfig>(&src)
-        .ok()
-        .map(|config| roles::TestRules::from_config(&config.tool.test));
-    (surfaces, test_rules)
-}
-
-#[cfg(target_arch = "wasm32")]
-fn role_context(
-    _project_root: Option<&Path>
-) -> (Option<roles::ExplicitSurfaces>, Option<roles::TestRules>) {
-    (None, None)
 }
 
 /// 用项目上下文检查一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）。
@@ -457,64 +296,6 @@ pub(crate) fn ensure_vendor_consistency(
     }
 }
 
-/// 顶层是否存在 `main` 绑定（角色推断的 Bin 信号，RFC-029f）
-fn ast_has_main(ast: &Module) -> bool {
-    ast.items.iter().any(|stmt| {
-        matches!(
-            &stmt.kind,
-            StmtKind::Assign { target, .. }
-                if matches!(target.as_ref(), Expr::Var(name, _) if name == "main")
-        )
-    })
-}
-
-/// 收集项目根下全部 `.yx` 文件的标识符引用并集（RFC-029f Phase 2 引用池）。
-///
-/// 跳过 `.git`/`.yaoxiang`（vendor）/`target` 目录；词法或语法失败的文件
-/// 静默跳过——引用池是容错的辅助判定，不允许它制造新的检查失败。
-fn collect_project_refs(project_root: &Path) -> HashSet<String> {
-    fn is_excluded_dir(dir: &Path) -> bool {
-        dir.file_name().is_some_and(|name| {
-            let name = name.to_string_lossy();
-            name == ".git" || name == ".yaoxiang" || name == "target"
-        })
-    }
-
-    fn collect_yx(
-        dir: &Path,
-        out: &mut Vec<PathBuf>,
-    ) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if !is_excluded_dir(&path) {
-                    collect_yx(&path, out);
-                }
-            } else if path.extension().is_some_and(|e| e == "yx") {
-                out.push(path);
-            }
-        }
-    }
-
-    let mut refs = HashSet::new();
-    let mut files = Vec::new();
-    collect_yx(project_root, &mut files);
-    for path in files {
-        let Ok(source) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        let Ok(tokens) = tokenize(&source) else {
-            continue;
-        };
-        let parsed = parser::parse(&tokens);
-        refs.extend(DeadCodeAnalyzer::collect_ident_refs(&parsed.module));
-    }
-    refs
-}
-
 /// 提取一个文件定义的全局变量（顶层非函数绑定）的名字与类型。
 ///
 /// 镜像 `generate_stmt_ir` 的函数/全局分流（`block_binding_is_function`
@@ -579,15 +360,23 @@ pub(crate) fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, Orchestrator
 }
 
 /// 遮蔽事件：文件路径、use 路径、use 的 span、被遮蔽的包名
-type ShadowEvent = (PathBuf, String, crate::util::span::Span, String);
+///
+/// pub(crate)：P4 4.2.2 起 driver（L1）的 Discovery 臂消费本类型；
+/// 编排辅助类型随 4.2.3-4.2.4 迁移完随归属归位
+pub(crate) type ShadowEvent = (PathBuf, String, crate::util::span::Span, String);
 
 /// 发现产物：可达文件、use 边集合、遮蔽事件
-type Discovery = (Vec<DiscoveredFile>, HashSet<PathBuf>, Vec<ShadowEvent>);
+///
+/// pub(crate)：同 `ShadowEvent` 的过渡性放宽（4.2.2）
+pub(crate) type Discovery = (Vec<DiscoveredFile>, HashSet<PathBuf>, Vec<ShadowEvent>);
 
 /// 同 [`discover`]，附带 use 边信息：被 ≥1 个文件 `use` 的文件路径集合
 /// （canonical 化，与发现文件路径同口径比对）——角色推断的 Lib 信号（RFC-029f）；
 /// 以及本地模块遮蔽依赖包事件（RFC-014 §项目模式，W1006）。
-fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
+///
+/// pub(crate)：P4 4.2.2 起 driver 的 Discovery 臂直调（MultiFile 取文件
+/// 集，Check 另取 use 边与遮蔽事件）；随 4.2.3-4.2.4 迁移归位
+pub(crate) fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
     let project_root = find_project_root(entry);
     // RFC-014c 6c：工作空间成员上下文——严格可见性（成员只见自己声明的依赖）
     // 与成员引用/path 依赖的路径解析都从这里出发
