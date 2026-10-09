@@ -689,7 +689,7 @@
     "title": "Unused private function",
     "message": "Private function is never called",
     "template": "unused function: '{name}'",
-    "help": "function is never referenced, consider removing it or adding a call; pub functions are external interfaces and will not trigger this warning",
+    "help": "Function is never referenced, consider removing it or adding a call; this warning is not reported when referenced by other files in the package",
     "example": "fn dead_function() { }",
     "error_output": "warning[W1001]: unused function: 'dead_function'\n --> example.yx:1:1\n  |\n1 | fn dead_function() { }\n  | ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: function is never used"
   },
@@ -697,7 +697,7 @@
     "title": "unused private type",
     "message": "private type is never used",
     "template": "unused type: '{name}'",
-    "help": "type is never referenced, consider removing it or using the type; pub types are external interfaces and will not trigger this warning",
+    "help": "Type is never referenced, consider removing it or using the type; this warning is not reported when referenced by other files in the package",
     "example": "type DeadType = Int",
     "error_output": "warning[W1002]: unused type: 'DeadType'\n --> example.yx:1:1\n  |\n1 | type DeadType = Int\n  | ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: type is never used"
   },
@@ -713,7 +713,7 @@
     "title": "unused private variable",
     "message": "private variable is never used",
     "template": "unused variable: '{name}'",
-    "help": "variable is never referenced, consider removing it or using the variable; pub variables are external interfaces and will not trigger this warning",
+    "help": "Variable is never referenced, consider removing it or using the variable; this warning is not reported when referenced by other files in the package",
     "example": "dead_var = 42",
     "error_output": "warning[W1004]: unused variable: 'dead_var'\n --> example.yx:1:1\n  |\n1 | dead_var = 42\n  | ^^^^^^^^^^^^^\n  |\n  = note: variable was never used"
   },
@@ -721,7 +721,7 @@
     "title": "Unused private method",
     "message": "Private method never called",
     "template": "Unused method: '{name}'",
-    "help": "Method never referenced, consider removing or adding a call; pub methods are external interface and will not trigger this warning",
+    "help": "Method is never referenced, consider removing it or adding a call; this warning is not reported when referenced by other files in the package",
     "example": "fn Foo.dead_method() { }",
     "error_output": "warning[W1005]: unused method: 'dead_method'\n --> example.yx:1:1\n  |\n1 | fn Foo.dead_method() { }\n  | ^^^^^^^^^^^^^^^^^^^^^\n  |\n  = note: method was never used"
   },
