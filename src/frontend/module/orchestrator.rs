@@ -680,6 +680,21 @@ fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
         });
     }
 
+    // #117 硬切换补齐（WBS 4.10.2）：for 循环脱糖调用迭代协议
+    // std.list.iter/has_next/next，该协议由纯 yx 模块提供（src/std/list.yx），
+    // 必须无条件纳入编译单元——单文件路径由 merge_embedded_std_ir 注入，
+    // 多文件发现此前只认显式 use（不对称缺陷：编译通过、运行期 E6006，
+    // 2026-10-09 探针实证）。规则与单文件同源：已显式 use 则不重复纳入。
+    if !files.iter().any(|f| f.module_key == "std.list") {
+        if let Some(src) = crate::std::yx_sources::embedded_std_source("std.list") {
+            files.push(DiscoveredFile {
+                module_key: "std.list".to_string(),
+                path: PathBuf::from("<std/list>"),
+                source: src.to_string(),
+            });
+        }
+    }
+
     // 稳定顺序，保证编译/合并可复现
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok((files, used_by, shadow_events))

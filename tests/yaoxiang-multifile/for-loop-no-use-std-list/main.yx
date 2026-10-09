@@ -1,0 +1,17 @@
+// for-loop-no-use-std-list/main.yx
+// 覆盖: RFC-036 §4 嵌入 std 编译单元纳入（#117 硬切换）+ WBS 4.10.2
+// 验证: 多文件项目无显式 `use std.list` 时，for 循环脱糖依赖的
+//       std.list.iter/has_next/next 仍被自动纳入编译单元——修复前：
+//       编译通过、运行期 E6006「Native function not found: std.list.iter」
+//       （2026-10-09 探针实证）；单文件路径由 merge_embedded_std_ir 无条件
+//       注入，多文件 discovery 此前只认显式 use（不对称缺陷）
+// 状态: ✅ 可运行
+
+use std.assert
+
+main = () => {
+    xs = [1, 2, 3]
+    for x in xs {
+        assert.assert(x > 0, "iterated element must be positive")
+    }
+}
