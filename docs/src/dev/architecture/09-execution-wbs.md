@@ -254,7 +254,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 4.1.5 全语料 zero-diff（**2026-10-09 已完成**，实测 330 语料） | 4.1.4 | 诊断/退出码/stdout 全 zero-diff（293 语料） |
 | 4.2 入口合并 | 4.2.1 `compile_project` 瘦身为 Program 构造器（**2026-10-09 已完成**，be60e01f；A1/B1/C3 裁决登记 02 §1/§3 修订注记） | 4.1.5 | 四入口诊断集归一后相同 |
 | | 4.2.2 `check_project`（**2026-10-09 已完成**，6ec330d2；RoleClassification 臂接线收齐 12 变体，顺序归一 + E3020 归属裁决登记 02 §1 注记 #4） | 4.2.1 | 同上 |
-| | 4.2.3 `check_source_in_project`（`:450`） | 4.2.2 | 同上 |
+| | 4.2.3 `check_source_in_project`（**2026-10-09 已完成**，83a6dd34；LSP 降级按文件来源分流裁决——磁盘文件同 Check 方案 B、缓冲区保留残缺 AST，登记 02 §3 注记 #8；顺手修复 LSP 对无关磁盘文件硬中止的怪癖） | 4.2.2 | 同上 |
 | | 4.2.4 `compile_embedded_module`（`:1374`） | 4.2.3 | 同上 |
 | | 4.2.5 删 `check_single_file`（`diagnostic/mod.rs:621-661`） | 4.2.1 | `check` 项目内外一致 |
 | | 4.2.6 删 LSP 手工阶段序列（`lsp/handlers/diagnostics.rs:161-227`） | 4.2.1 | LSP 与 CLI 诊断集相同 |

@@ -532,6 +532,15 @@ impl Driver {
 >    契约）；Discovery 产物扩展为「文件集 + used_by 边集 + 遮蔽事件」
 >    三元组入 State（MultiFile 形态无下游消费者，仅记录不外发）；check
 >    路径每文件 parse 随 C3 拓扑从 2 次降为 1 次。
+> 8. Lsp 形态落地（4.2.3，按文件来源分流裁决，2026-10-09 用户定夺）：
+>    磁盘文件 parse 失败同 Check 的方案 B（收集 + 退出编译单元——两端
+>    降级收敛）；被编辑缓冲区 parse 失败保留残缺 AST 继续 typecheck
+>    （编辑器哲学——打字中间态不该让语义功能消失）。Discovery 臂为
+>    Lsp 保留缓冲区源码覆盖磁盘陈旧内容；Typecheck 在 Lsp 下只检目标
+>    文件（其余单元仅为 registry 供签名）；文件内诊断顺序归一原则延伸
+>    至 LSP（typecheck 诊断 → W 码警告 → proof 错误）。旧行为里 LSP
+>    对无关磁盘文件 parse 错误硬中止、handler 静默退回单文件路径的
+>    怪癖随本步修复。
 
 **十个入口的改造方式（逐个指定函数）**：
 
