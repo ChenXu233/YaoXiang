@@ -55,6 +55,11 @@ pub fn run_format_command(
                 for d in diags {
                     eprintln!("  error[{}]: {}", d.code, d.message);
                 }
+                // #419：语义错误计入失败。此前只打印继续，stdout / dry-run /
+                // write 三种形态都 exit 0——CI 的「跑 format 看退出码」格式
+                // 门禁对不可格式化的文件一律放行，dry-run 的 exit 2 门禁反而
+                // 只拦「未格式化」不拦「不可格式化」。
+                errors.push(format!("semantic error(s) in {}", file.display()));
             }
             Err(FormatError::FormatterBug { .. }) => {
                 eprintln!(
@@ -62,6 +67,9 @@ pub fn run_format_command(
                      https://github.com/ChenXu233/YaoXiang/issues/new",
                     file.display()
                 );
+                // #419：FormatterBug（post-verify 守卫产出，ICE 级事件）与
+                // 语义错误同等待遇，不得静默 exit 0。
+                errors.push(format!("formatter bug on {}", file.display()));
             }
         }
     }
