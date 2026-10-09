@@ -1,21 +1,21 @@
 # YaoXiang Quick Start
 
-> This guide helps you get started quickly with the YaoXiang programming language.
+> This guide helps you get up and running with the YaoXiang programming language quickly.
 >
 > **Note**: The code examples in this document are written based on the YaoXiang language
-> specification. If you encounter syntax differences when actually running them, please refer to
+> specification. If you encounter syntax differences during actual execution, please refer to the
 > [Language Specification](../reference/language-spec/index.md).
 
 ## Installation
 
-### Building from source (recommended)
+### Build from Source (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/ChenXu233/YaoXiang.git
 cd yaoxiang
 
-# Build (debug version, for development and testing)
+# Build (debug version, for development testing)
 cargo build
 
 # Build (release version, recommended for production)
@@ -30,7 +30,7 @@ cargo test
 ./target/release/yaoxiang-rs --version
 ```
 
-**Verifying the installation succeeded**:
+**Verify Successful Installation**:
 
 ```bash
 ./target/debug/yaoxiang-rs --version
@@ -45,8 +45,8 @@ Create the file `hello.yx`:
 // hello.yx
 use std.io
 
-// Function definition: name: (param: Type, ...) -> return_type = { return ... }  # Code blocks must use explicit return
-// Expression form:      name: (param: Type, ...) -> return_type = expr             # Expression returns its value directly
+// Function definition: name: (param: Type, ...) -> return_type = { return ... }  # Code blocks must explicitly use return
+// Expression form:      name: (param: Type, ...) -> return_type = expr            # The expression returns its value directly
 main: () -> Void = {
     print("Hello, YaoXiang!")
 }
@@ -77,14 +77,14 @@ name = "YaoXiang"  // inferred as String
 pi = 3.14159  // inferred as Float
 is_valid = true  // inferred as Bool
 
-// Explicit type annotation (recommended to use centralized type conventions)
+// Explicit type annotation (using the centralized type convention is recommended)
 count: Int = 100
 
 // Immutable by default (safety feature)
 x = 10
-x = 20  // ❌ Compile error! Immutable
+x = 20  // ❌ Compile error! Immutable.
 
-// Mutable variables (require explicit declaration)
+// Mutable variable (requires explicit declaration)
 mut counter = 0
 counter = counter + 1  // ✅ OK
 ```
@@ -93,10 +93,10 @@ counter = counter + 1  // ✅ OK
 
 ```yaoxiang
 // Function definition syntax
-// Expression form: returns the value directly, no `return` needed
+// Expression form: returns the value directly, no return needed
 add: (a: Int, b: Int) -> Int = a + b
 
-// Block form: must use `return` to return a value
+// Code block form: must use return to return a value
 // add: (a: Int, b: Int) -> Int = { return a + b }
 
 // Call
@@ -121,13 +121,13 @@ add: (a: Int, b: Int) -> Int = a + b
 // Type definition (using curly braces)
 Point: Type = { x: Float, y: Float }
 
-// Using a type
+// Using the type
 p: Point = Point(x=1.0, y=2.0)
 p.x  // 1.0
 p.y  // 2.0
 ```
 
-#### Record Types
+#### Record Type
 
 <!-- docs-example: skip -->
 
@@ -141,7 +141,7 @@ p = Point(x=3.0, y=4.0)
 r = Rect(x=0.0, y=0.0, width=10.0, height=20.0)
 ```
 
-#### Interface Definitions
+#### Interface Definition
 
 An interface is a record type whose fields are all function types:
 
@@ -181,39 +181,19 @@ Point.serialize: (self: Point) -> String = {
     "Point({self.x}, {self.y})"
 }
 
-// Using methods (syntactic sugar)
+// Using the method (syntactic sugar)
 p = Point(x=1.0, y=2.0)
 p.draw(screen)  // → Point.draw(p, screen)
 str = p.serialize()  // → Point.serialize(p)
 ```
 
-#### Auto-Binding
+#### No Implicit Binding
 
-Functions declared with the `pub` keyword are automatically bound to the type defined in the same
-file:
+Methods are not automatically attached to types, and the `pub` keyword has also been removed
+(RFC-029g) — to add a method, write it explicitly using `Type.method: (self: T, …) -> R = …` as in
+the previous section, and use `.` at the call site.
 
-```yaoxiang
-Point: Type = { x: Float, y: Float }
-
-// `pub` declaration is automatically bound to Point
-pub distance: (p1: Point, p2: Point) -> Float = {
-    dx = p1.x - p2.x
-    dy = p1.y - p2.y
-    (dx * dx + dy * dy).sqrt()
-}
-
-// Usage
-p1 = Point(x=3.0, y=4.0)
-p2 = Point(x=1.0, y=2.0)
-
-// Functional call
-d = distance(p1, p2)  // 3.606...
-
-// OOP syntactic sugar (automatically bound to Point.distance)
-d2 = p1.distance(p2)  // → distance(p1, p2)
-```
-
-#### Enum Types
+#### Enum Type
 
 ```yaoxiang
 // Simple enum
@@ -223,12 +203,12 @@ Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
 // Using generics — variant constructors must be qualified with "Type.variant"
-// Writing bare ok(42) / err("not found") raises E1001
+// Writing bare ok(42) / err("not found") reports E1001
 success: Result(Int, String) = Result(Int, String).ok(42)
 failure: Result(Int, String) = Result(Int, String).err("not found")
 ```
 
-#### Generic Types
+#### Generic Type
 
 ```yaoxiang
 // Generic type definition
@@ -283,8 +263,8 @@ first = numbers[0]  // 1
 scores = {"Alice": 90, "Bob": 85}
 alice_score = scores["Alice"]  // 90
 
-// Adding elements: lists have no instance methods; use the std.list function form
-// Note: do not name a variable `list` — that would shadow the module
+// Adding elements: lists have no instance methods, call std.list functions
+// Note: don't name a variable `list` — it would shadow the module
 mut items = [1, 2, 3]
 items = list.push(items, 4)  // [1, 2, 3, 4]
 ```
@@ -293,7 +273,7 @@ items = list.push(items, 4)  // [1, 2, 3, 4]
 
 ```yaoxiang
 // match expression
-// Note: the Result constructor requires `use std.result` first; writing bare ok(42) raises E1001
+// Note: Result constructors need std.result imported first; bare ok(42) reports E1001
 use std.result
 result: Result(Int, String) = Result(Int, String).ok(42)
 
@@ -305,25 +285,25 @@ message = match result {
 
 ## Spawn Programming (Concurrency)
 
-YaoXiang's concurrency model is built around the `spawn <expr>` primitive — it is the sole entry
+YaoXiang's concurrency model is built around the `spawn <expr>` primitive — it is the only entry
 point for parallelism.
 
 <!-- docs-example: skip -->
 
 ```yaoxiang
-// `spawn` decorates any expression and runs it in parallel automatically
+// spawn decorates any expression and runs it in parallel automatically
 main: () -> Void = {
-    user = spawn fetch_user(1)   // executes in the background
+    user = spawn fetch_user(1)   // runs in the background
     posts = spawn fetch_posts()  // another parallel step
 
-    // Automatically blocks waiting for the result when it is needed
+    // When the result is needed, it automatically blocks and waits
     print(user.name)
     print(posts.length)
 }
 ```
 
-**Core rule**: An expression decorated with `spawn` runs in the background, and the outer code
-synchronously blocks waiting for the result. Tasks without dependencies run in parallel
+**Core rule**: An expression decorated with `spawn` runs in the background, and the outer
+synchronous code blocks and waits for its result. Tasks without dependencies run in parallel
 automatically, scheduled by the runtime's GMP model.
 
 ## Module System
@@ -333,17 +313,17 @@ automatically, scheduled by the runtime's GMP model.
 use std.io
 use std.math
 
-// Using imported functions
+// Use imported functions
 result = math.sqrt(16.0)  // 4.0
 print("Hello!")
 ```
 
 ## FAQ
 
-### Q: Variables are immutable by default — how do I change one?
+### Q: Variables are immutable by default. How do I change a variable?
 
 ```yaoxiang
-// Use the `mut` keyword to declare a mutable variable
+// Use the mut keyword to declare a mutable variable
 mut x = 10
 x = 20  // ✅ OK
 ```
@@ -361,14 +341,14 @@ add = (a, b) => a + b
 ### Q: How do I handle errors?
 
 ```yaoxiang
-// Variants of record-like sum types are written as "field_name: (payload) -> Type"
-// Note: `|` cannot be used inside type bodies — `{ ok(T) | err(E) }` fails to parse with E0010
-// In real projects, just use the built-in Result from the standard library
+// Record-style enum variants are written as "field: (payload) -> Type"
+// Note: `|` cannot be used inside a type body — `{ ok(T) | err(E) }` fails to parse with E0010
+// In practice, just use the built-in Result from the standard library
 use std.result
 
 r = Result(Int, String).ok(42)
 
-// Handling with pattern matching
+// Handle with pattern matching
 match r {
     ok(value) => print("Success: {value}")
     err(e) => print("Error: " + e)
@@ -377,9 +357,9 @@ match r {
 
 ## Next Steps
 
-- 📚 See the [Language Specification](../reference/language-spec/index.md) for the complete syntax
+- 📚 Check the [Language Specification](../reference/language-spec/index.md) for the complete syntax
 - 🏗️ Browse the [Design Documents](../explanation/) for implementation details
-- 💡 See the [Design Manifesto](../explanation/manifesto.md) for the core philosophy
+- 💡 Read the [Design Manifesto](../explanation/manifesto.md) to learn the core ideas
 
 ## Related Resources
 

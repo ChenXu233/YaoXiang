@@ -1,10 +1,10 @@
 ---
-title: 'Syntax Cheat Sheet'
+title: 'Syntax Cheatsheet'
 ---
 
-# Syntax Cheat Sheet
+# Syntax Cheatsheet
 
-Understand the core syntax of YaoXiang in 5 minutes. For in-depth learning, visit the
+Learn YaoXiang's core syntax in 5 minutes. For in-depth learning, visit
 [Tutorial](../tutorial/index.md).
 
 ## Variables
@@ -16,7 +16,7 @@ mut y = 0                 // Mutable
 name: String = "hello"    // Explicit type
 count: Int = 100          // Type annotation
 
-pub version = "1.0"       // Public export
+// Top-level bindings are importable by default — the language has no pub/private/export modifiers
 ```
 
 ## Functions
@@ -26,7 +26,7 @@ Everything is `name: type = value`. Functions are values too.
 ```yaoxiang
 use std.io
 
-// Expression form (returns the value directly)
+// Expression form (returns value directly)
 add: (a: Int, b: Int) -> Int = a + b
 
 // Block form (explicit return)
@@ -35,19 +35,19 @@ factorial: (n: Int) -> Int = {
     return n * factorial(n - 1)
 }
 
-// Lambda (parameter names can be omitted when the signature is complete)
+// Lambda (parameter names can be omitted when signature is complete)
 double = (x) => x * 2
 add = (a, b) => a + b
 inc = x => x + 1            // Single parameter can omit parentheses
 
-// A code block requires return
+// Block form requires return
 process: (x: Int) -> Int = {
     a = x * 2
     b = a + 1
     return b
 }
 
-// Void functions do not need return
+// Void functions don't need return
 greet: (name: String) -> Void = {
     io.println("Hello, " + name)
 }
@@ -55,8 +55,7 @@ greet: (name: String) -> Void = {
 
 ## Types
 
-There are no `type`, `struct`, `trait`, or `impl` keywords. A single unified declaration handles
-everything.
+No `type`, `struct`, `trait`, or `impl` keywords. A single unified declaration handles everything.
 
 <!-- docs-example: skip -->
 
@@ -74,22 +73,22 @@ Point(x=1.0)                   // OK: x=1.0, y=0
 // Variant type (enum)
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
-// Note: the standard library already provides std.option (Option + Try); defining your own is not recommended
+// Note: std.option (Option + Try) is already built into the standard library, not recommended to define your own
 // Option: (T: Type) -> Type = { some: (T) -> Option(T), none: () -> Option(T) }
-// Note: bare constructors ok/err currently report E1001 (verified); see std.result in the standard library
+// Note: bare constructors ok/err currently report E1001 (verified), see std.result in the standard library
 // Result: (T: Type, E: Type) -> Type = { ok: (T) -> Result(T, E), err: (E) -> Result(T, E) }
 
-// Interface (a record type whose fields are all function types)
+// Interface (record type with all function-type fields)
 Drawable: Type = { draw: (Surface) -> Void }
 
 // Interface composition
 DrawableSerializable: Type = Drawable & Serializable
 
-// Implementing an interface inside a type declaration
+// Declare interface implementations within a type
 Circle: Type = {
     radius: Float,
-    Drawable,              // Implements Drawable interface
-    Serializable,          // Implements Serializable interface
+    Drawable,              // Implement Drawable interface
+    Serializable,          // Implement Serializable interface
 }
 
 // Generic type
@@ -112,20 +111,20 @@ sort: (list: List(T)) -> List(T)
 <!-- docs-example: skip -->
 
 ```yaoxiang
-// Namespace function (Type.method is just an ownership tag, not a binding)
+// Namespace function (Type.method is just an attribution marker, not a binding)
 Point.distance: (a: &Point, b: &Point) -> Float = {
     dx = a.x - b.x
     dy = a.y - b.y
-    // Note: parenthesized expressions cannot directly carry a method (verified E1053); bind to a variable first
+    // Note: parenthesized expressions cannot directly attach methods (verified E1053), need to first bind to a variable
     d2 = dx * dx + dy * dy
     return d2.sqrt()
 }
 
-// Only after explicit binding does the . call syntax become available
+// Dot-call syntax is only available after explicit binding
 Point.distance = distance[0]
 // After this, p1.distance(p2) → distance(p1, p2)
 
-// Quick definition + binding
+// Quick define + bind
 Point.draw: (self: &Point, surface: Surface) -> Void = {
     surface.plot(self.x, self.y)
 }
@@ -148,7 +147,7 @@ result = match value {
     _ => "unknown",
 }
 
-// Loops
+// Loop
 for i in 0..5 { io.println(i) }
 for item in items { io.println(item) }
 
@@ -166,7 +165,7 @@ use std.list
 nums = [1, 2, 3, 4, 5]
 first = nums[0]           // 1
 
-// Dict
+// Dictionary
 scores = {"Alice": 90, "Bob": 85}
 a = scores["Alice"]       // 90
 
@@ -177,8 +176,8 @@ doubled = [x * 2 for x in nums]
 
 ## Pattern Matching
 
-> **Note**: 0.8.2 **does not yet implement record/struct destructuring patterns** (verified that
-> `match s { circle(r) => ... }` reports E0010). The following is the target syntax, currently not
+> **Note**: 0.8.2 **does not yet implement record/struct destructuring patterns** (verified
+> `match s { circle(r) => ... }` reports E0010), the following is the target syntax, not yet
 > runnable.
 
 <!-- docs-example: skip -->
@@ -203,7 +202,7 @@ match t {
 // Destructuring assignment
 a, b = (1, 2)              // a=1, b=2
 
-// Guard expression
+// Guard expressions
 match age {
     n if n >= 18 => true,
     _ => false,
@@ -213,43 +212,43 @@ match age {
 ## Modules and Imports
 
 ```yaoxiang
-// Import an entire module, access via namespace
+// Import entire module, access via namespace
 use std.io
 
-// Import only specified entries, use them directly
+// Import only specified items, use directly
 use std.math.{sqrt, sin, cos}
 use std.{list, string}
 
-// Inline alias for an entry
+// Inline alias for items
 use std.io.{print as say}
 
 io.println("hello")
-result = sqrt(16.0)       // 4.0 (note: passing an Int returns 0.0; you must pass Float)
+result = sqrt(16.0)       // 4.0 (Note: Int input returns 0.0, must pass Float)
 say("aliased")
 
-// All top-level bindings in a module can be imported externally by default; no pub needed
+// All top-level bindings of a module are importable by default, no pub needed
 add: (a: Int, b: Int) -> Int = a + b
 Point: Type = { x: Float, y: Float }
 ```
 
-See [Module System](modules) for module paths, directory entry conventions, and the full form of
-`use`.
+For module paths, directory entry conventions, and the complete form of `use`, see
+[Module System](modules).
 
 ## Ownership
 
 ```yaoxiang
-// Move: ownership transfer by default
+// Move: default ownership transfer
 p1 = Point(1.0, 2.0)
 p2 = p1                   // p1 is moved
 
-// Borrow &: automatically create a token (no manual & needed)
+// Borrow &: automatic token creation (no manual & needed)
 distance: (a: &Point, b: &Point) -> Float = ...
-d = distance(p1, p2)      // The compiler automatically creates borrow tokens
+d = distance(p1, p2)      // Compiler automatically creates borrow tokens
 
 // Mutable borrow &mut
 update: (p: &mut Point, x: Float) -> Void = { p.x = x }
 
-// ref: shared ownership (compiler automatically picks Rc/Arc)
+// ref: shared ownership (compiler automatically chooses Rc/Arc)
 shared = ref data
 
 // clone: explicit deep copy
@@ -258,7 +257,7 @@ backup = data.clone()
 
 ## Concurrency
 
-spawn is the only parallel primitive. No async/await, no Send/Sync.
+`spawn` is the only parallel primitive. No async/await, no Send/Sync.
 
 <!-- docs-example: skip -->
 
@@ -292,5 +291,5 @@ pi = 3.14159
 name = "YaoXiang"
 print(f"Hello {name}")               // Hello YaoXiang
 print(f"Sum: {10 + 20}")             // Sum: 30
-print(f"Pi: {pi}")                    // Verified: format specifiers are not yet implemented, outputs 3.14159
+print(f"Pi: {pi}")                    // Verified: format specifiers not yet implemented, outputs 3.14159
 ```
