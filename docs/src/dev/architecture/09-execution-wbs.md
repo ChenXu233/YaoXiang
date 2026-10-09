@@ -260,6 +260,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 4.2.6 删 LSP 手工阶段序列（`lsp/handlers/diagnostics.rs:161-227`） | 4.2.1 | LSP 与 CLI 诊断集相同 |
 | | 4.2.7 `Aggregation` 参数驱动二选一（`orchestrator.rs:486-494`） | 4.2.1 | **实施时逐行核实两函数内部差异**（冲突登记 C5 已裁决为必做核实项） |
 | | 4.2.8 wasm 改走 `ProgramKind::WasmPlayground`（`wasm/src/lib.rs:30-36,42-51`） | 4.2.1 | 见 C6 |
+| | 4.2.9 `driver/mod.rs` 拆分为 `state.rs`/`arms.rs`/`helpers.rs`（**2026-10-09 已完成**，c59fb751——1766 行超 P5 的 1500 行拆分阈值；零行为变化，内部可见性收紧为 `pub(in crate::driver)`） | 4.2.4 | C1：全量回归绿 + `crate::driver::*` 公开路径不变 |
 | 4.3 义务账本 | 4.3.1 `obligations.rs` + `assert_drained()`（新建；含 `#[ignore]` 红骨架先行） | 4.1.3 | `test_obligations_drained` 转绿 |
 | | 4.3.2 义务诊断 W→E 升级 | 4.3.1 | 人工 review 每处新增 E |
 | 4.4 证明层与 wasm 收尾 | 4.4.1 `layers/README.md` 层序改实际顺序 | — | **独立于 4.1–4.3 走** |
