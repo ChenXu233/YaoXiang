@@ -39,13 +39,15 @@ fn expected_stages(kind: ProgramKind) -> &'static [Stage] {
             IrGeneration,
             Monomorphization,
         ],
-        // compile_project：vendor → discover → registry → parse/typecheck/proof
-        // → slot alloc → IR → link（现状无角色分类/死代码/单态化）
+        // compile_project：vendor → discover → parse → registry → typecheck/proof
+        // → slot alloc → IR → link（现状无角色分类/死代码/单态化——
+        // 决策 B1，2026-10-09：死代码警告不进 compile 路径，02 §运行时行为
+        // 那行过期描述已修；C3：Registry 消费 Parsing 产物故排其后）
         ProgramKind::MultiFile => &[
             VendorConsistency,
             Discovery,
-            Registry,
             Parsing,
+            Registry,
             Typecheck,
             ProofExecution,
             GlobalSlotAlloc,
@@ -58,9 +60,9 @@ fn expected_stages(kind: ProgramKind) -> &'static [Stage] {
         ProgramKind::Check => &[
             VendorConsistency,
             Discovery,
+            Parsing,
             Registry,
             RoleClassification,
-            Parsing,
             Typecheck,
             DeadCodeAnalysis,
             ProofExecution,
@@ -69,8 +71,8 @@ fn expected_stages(kind: ProgramKind) -> &'static [Stage] {
         ProgramKind::Lsp => &[
             VendorConsistency,
             Discovery,
-            Registry,
             Parsing,
+            Registry,
             Typecheck,
             ProofExecution,
         ],

@@ -4,10 +4,13 @@
 //! 对它的穷尽 `match` 让「新增阶段必须被编排层处理」成为编译期事实
 //! （与 opcode 表同构的强制机制，RFC-039 路由表 B）。
 //!
-//! `Stage::ALL` 按**真实数据依赖的拓扑序**排列：
-//! `Monomorphization` 消费 IR 产物（`Monomorphizer::monomorphize(&ir, …)`），
-//! 故排在 `IrGeneration` **之后**——02 文档阶段表初稿把这一次序写反，
-//! 实施时按数据流修正（02 §目标设计 1 修订注记）。
+//! `Stage::ALL` 按**真实数据依赖的拓扑序**排列，两处实施修正
+//! （02 §目标设计 1 修订注记）：
+//! - `Monomorphization` 消费 IR 产物（`Monomorphizer::monomorphize(&ir, …)`），
+//!   故排在 `IrGeneration` **之后**——02 初稿把这一次序写反；
+//! - `Parsing` 先于 `Registry`/`RoleClassification`（C3，2026-10-09 用户裁决）：
+//!   签名收集与 `ast_has_main` 都消费 AST 产物——02 初稿次序会让 Registry
+//!   臂被迫「隐藏 parse」，阶段表对数据流撒谎。
 
 /// 编译阶段（12 变体）。
 ///
@@ -61,9 +64,9 @@ impl Stage {
     pub const ALL: &'static [Stage] = &[
         Stage::VendorConsistency,
         Stage::Discovery,
+        Stage::Parsing,
         Stage::Registry,
         Stage::RoleClassification,
-        Stage::Parsing,
         Stage::Typecheck,
         Stage::DeadCodeAnalysis,
         Stage::ProofExecution,

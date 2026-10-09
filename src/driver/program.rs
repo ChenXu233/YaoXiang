@@ -60,8 +60,8 @@ const SINGLE_FILE_STAGES: &[Stage] = &[
 const MULTI_FILE_STAGES: &[Stage] = &[
     Stage::VendorConsistency,
     Stage::Discovery,
-    Stage::Registry,
     Stage::Parsing,
+    Stage::Registry,
     Stage::Typecheck,
     Stage::ProofExecution,
     Stage::GlobalSlotAlloc,
@@ -75,9 +75,9 @@ const MULTI_FILE_STAGES: &[Stage] = &[
 const CHECK_STAGES: &[Stage] = &[
     Stage::VendorConsistency,
     Stage::Discovery,
+    Stage::Parsing,
     Stage::Registry,
     Stage::RoleClassification,
-    Stage::Parsing,
     Stage::Typecheck,
     Stage::DeadCodeAnalysis,
     Stage::ProofExecution,
@@ -86,8 +86,8 @@ const CHECK_STAGES: &[Stage] = &[
 const LSP_STAGES: &[Stage] = &[
     Stage::VendorConsistency,
     Stage::Discovery,
-    Stage::Registry,
     Stage::Parsing,
+    Stage::Registry,
     Stage::Typecheck,
     Stage::ProofExecution,
 ];

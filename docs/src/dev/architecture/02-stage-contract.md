@@ -370,9 +370,9 @@ wasm 目标**已建成并在 CI 中构建**，`cdylib` 不在主 crate 而在独
 pub enum Stage {
     VendorConsistency,  // 供应商一致性核对          Project
     Discovery,          // 文件发现                  Project
+    Parsing,            // 词法 + 语法               PerModule
     Registry,           // 模块注册表构建            Project
     RoleClassification, // 角色分类（Script/Bin/…）   Project
-    Parsing,            // 词法 + 语法               PerModule
     Typecheck,          // 类型检查（含内嵌证明层）   PerModule
     DeadCodeAnalysis,   // 死代码族分析              Project
     ProofExecution,     // 证明函数编译期执行         PerModule
@@ -406,6 +406,12 @@ pub enum StageScope { PerModule, Project }
 >    `check_project` 现状是 proof 先于死代码执行，两者无数据依赖，诊断集相同
 >    （C2 集合语义），仅文件内诊断顺序归一。单文件路径（死代码内嵌 typecheck、
 >    先于 proof）本就符合 ALL 序，逐字节验收不受影响。
+> 3. `Parsing` 移到 `Registry`/`RoleClassification` **之前**（C3，2026-10-09
+>    用户裁决）：签名收集（`extract_module_info`）与 `ast_has_main` 都消费
+>    AST 产物——初稿次序会逼 Registry 臂「隐藏 parse」，让阶段表对数据流
+>    撒谎；且多文件 parse 因此从 2 次降为 1 次。附带的现状如实登记：多文件
+>    路径 parse 错误仍是硬中止（`build_registry_from` 的 `?` 传播，与
+>    CollectAll 语义的张力登记为 WBS 4.10.1，4.2.1 测试钉板）。
 
 ### 2. 义务账本：`Obligations` + `assert_drained()`
 

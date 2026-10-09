@@ -7,12 +7,14 @@
 use crate::driver::stage::{Stage, StageScope};
 
 /// 02 §1 的 12 变体全集——测试侧独立罗列，防实现侧漏加/多加。
+/// 顺序 = Stage::ALL 拓扑序（C3 修订，2026-10-09：Parsing 先于 Registry——
+/// 签名收集消费 AST 产物；RoleClassification 需要 ast_has_main 同移）。
 const ALL_VARIANTS: [Stage; 12] = [
     Stage::VendorConsistency,
     Stage::Discovery,
+    Stage::Parsing,
     Stage::Registry,
     Stage::RoleClassification,
-    Stage::Parsing,
     Stage::Typecheck,
     Stage::DeadCodeAnalysis,
     Stage::ProofExecution,
@@ -62,12 +64,20 @@ fn test_stage_all_has_no_duplicates() {
 
 #[test]
 fn test_stage_all_topological_order_follows_data_dependencies() {
-    // Arrange: 02 §1 的数据依赖边（上游必须先于下游）
-    let dependency_edges: [(Stage, Stage); 7] = [
-        (Stage::Discovery, Stage::Registry),
-        (Stage::Registry, Stage::Parsing),
+    // Arrange: 02 §1 的数据依赖边（上游必须先于下游）——C3 修订后全集，
+    // 与 driver/mod.rs data_dependencies 实现对账（两边独立罗列）
+    let dependency_edges: [(Stage, Stage); 14] = [
+        (Stage::Discovery, Stage::Parsing),
+        (Stage::Parsing, Stage::Registry),
+        (Stage::Parsing, Stage::RoleClassification),
         (Stage::Parsing, Stage::Typecheck),
+        (Stage::Registry, Stage::Typecheck),
+        (Stage::Parsing, Stage::DeadCodeAnalysis),
+        (Stage::RoleClassification, Stage::DeadCodeAnalysis),
         (Stage::Typecheck, Stage::ProofExecution),
+        (Stage::Parsing, Stage::GlobalSlotAlloc),
+        (Stage::Parsing, Stage::IrGeneration),
+        (Stage::Registry, Stage::IrGeneration),
         (Stage::GlobalSlotAlloc, Stage::IrGeneration),
         // 修订注记：mono 消费 IR 产物（monomorphize(&ir, …)），必须在 IrGeneration 后
         (Stage::IrGeneration, Stage::Monomorphization),
