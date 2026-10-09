@@ -20,6 +20,7 @@
 {"expectation":"behavior","file":"src/std/tests/test_suite.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"check":{"diagnostics":[["W1001","src/std/tests/test_suite_fail.yx",15],["W1001","src/std/tests/test_suite_fail.yx",20],["W1003","src/std/tests/test_suite_fail.yx",12]],"exit":0},"expectation":"runtime-error","file":"src/std/tests/test_suite_fail.yx","run":{"exit":1,"stderr":["\u001b[31merror\u001b[0m [\u001b[1mE6005\u001b[0m] assertion failed: 1 of 2 test(s) failed","  [FAIL] always_fails: Expected 2, got 1","  at __yx_module_init (src/std/tests/test_suite_fail.yx:33:5)","  at main (src/std/tests/test_suite_fail.yx:27:15)","  at std.test.suite (src/std/tests/test_suite_fail.yx:113:18)"," --> src/std/tests/test_suite_fail.yx:113:18","Runtime error","help: fix the assertion condition or provide valid input","stack trace:"],"stdout":[]}}
 {"expectation":"behavior","file":"src/std/tests/time_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/weak_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/00-smoke/hello.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/bitwise_ops.yx","run":{"exit":0,"stderr":[],"stdout":["BITWISE_OPS_OK"]}}
 {"expectation":"behavior","file":"tests/yaoxiang/01-syntax/basics/comments.yx","run":{"exit":0,"stderr":[],"stdout":[]}}

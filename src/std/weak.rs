@@ -30,12 +30,26 @@ use crate::std::{NativeContext, NativeExport, StdModule};
 ///
 /// This function wraps the Arc in a Weak, allowing it to be upgraded later
 /// without preventing the Arc's drop.
+///
+/// #384：必须从传入的 `RuntimeValue::Arc` 提取**既有句柄**做降级——
+/// 此前把值克隆进全新 `Arc` 再降级，该新 Arc 强计数 1 且随即消亡，
+/// `upgrade` 对全程存活的目标也恒返回 none，弱引用三大语义全部落空。
 pub fn weak_new(
     arc: &crate::backends::common::value::RuntimeValue
 ) -> crate::backends::common::value::RuntimeValue {
-    crate::backends::common::value::RuntimeValue::from_arc_into_weak(
-        crate::backends::common::value::RuntimeValue::Arc(std::sync::Arc::new(arc.clone())),
-    )
+    use crate::backends::common::value::RuntimeValue;
+    match arc {
+        RuntimeValue::Arc(inner) => {
+            // 句柄 clone（强计数临时 +1）→ downgrade → 临时句柄随函数返回
+            // 消亡：调用方 Arc 的强计数净变化为零，Weak 与其同源。
+            RuntimeValue::from_arc_into_weak(RuntimeValue::Arc(inner.clone()))
+        }
+        // 类型层签名 `(arc: Arc(T))` 已保证 Arc 形态；非 Arc 防御路径维持
+        // 旧行为（独立 Arc 包装），仅供运行时内部误用兜底。
+        other => {
+            RuntimeValue::from_arc_into_weak(RuntimeValue::Arc(std::sync::Arc::new(other.clone())))
+        }
+    }
 }
 
 /// Upgrade a Weak reference to an Arc
