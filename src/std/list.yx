@@ -151,6 +151,10 @@ pop: (A: Type) -> (list: Vec(A)) -> Vec(A) = {
 
 /// 移除下标 `index` 处元素，后移其余，返回新列表。O(n)。
 remove_at: (A: Type) -> (list: Vec(A), index: Int) -> Vec(A) = {
+    // 入口先走一次 `[]` 读（#400）：越界统一由 Vec 底座的 E6003 契约拦截。
+    // 此前只靠循环体内的写检查——`index >= length - 1` 时循环一次不进，
+    // 正上界越界静默截断；负下标反而因循环会执行而被兜住，两形态不对称。
+    probe = list[index]
     // 上界先提到局部变量：终止证明的秩函数合成只处理 `i < 简单名` 形态，
     // 复合上界（`i + 1 < list.length`）目前推不出递减度量。
     limit = list.length - 1

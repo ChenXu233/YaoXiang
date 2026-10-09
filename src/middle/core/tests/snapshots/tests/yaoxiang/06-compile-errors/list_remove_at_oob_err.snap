@@ -1,0 +1,18 @@
+module
+  global[0] l : Int(64)
+  init (locals=0)
+    AllocArray %0 size=int(3), elem=int(1)
+    Load %1 <- int(1)
+    Load %2 <- int(0)
+    StoreIndex %0[%2] <- %1
+    Load %3 <- int(2)
+    Load %4 <- int(1)
+    StoreIndex %0[%4] <- %3
+    Load %5 <- int(3)
+    Load %6 <- int(2)
+    StoreIndex %0[%6] <- %5
+    Load %7 <- int(5)
+    Call %8 <- string("std.list.remove_at") [%0, %7] (def=_)
+    Store @0 <- %8
+    Load %9 <- @0
+    Call %10 <- string("std.io.println") [%9] (def=_)
