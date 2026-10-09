@@ -12,13 +12,12 @@
 //! （02 §4）：三类原因（上游失败 / 无义务 / 配置未启用）记入
 //! `DriverOutcome.skipped`。
 //!
-//! **4.1.3 边界**：只有 SingleFile / WasmPlayground 形态用到的六臂已接线
-//! （Parsing / Typecheck / DeadCodeAnalysis / ProofExecution /
-//! IrGeneration / Monomorphization）；其余六臂返回
-//! `DriverError::StageNotWired`，随 4.2 入口合并逐臂落地。Skipped 在本
-//! 阶段只进内部记录、**不外发诊断**（外发随 4.3 义务账本，02 §4 文案
-//! 表）——4.1.3 的验收是单文件诊断集与退出码逐字节相同（C2），任何
-//! 新增对外诊断都会打破它。
+//! **接线现状（4.2.1）**：SingleFile / WasmPlayground 六臂 + MultiFile
+//! 九臂（VendorConsistency / Discovery / Parsing / Registry / Typecheck /
+//! ProofExecution / GlobalSlotAlloc / IrGeneration / Linking）全接线；
+//! RoleClassification 臂随 4.2.2 落地（Check/Lsp/Embedded 入口随之开通）。
+//! Skipped 只进内部记录、**不外发诊断**（外发随 4.3 义务账本，02 §4
+//! 文案表）——zero-diff 判据（C2）要求任何新增对外诊断都必须显式裁决。
 //!
 //! 与 02 草图的两处偏差（语义等价，登记备查）：
 //! - 02 §4 的 `StageOutcome` 三态不由阶段臂返回，而由 `State` 的失败
@@ -37,13 +36,21 @@ pub use program::{Aggregation, Program, ProgramKind};
 pub use stage::{Stage, StageScope};
 pub use unit::Unit;
 
+use std::collections::HashMap;
 use std::fmt;
+use std::path::PathBuf;
 
 use crate::frontend::core::lexer;
+use crate::frontend::core::parser::ast::{Expr, StmtKind};
 use crate::frontend::core::parser::{self, Module};
-use crate::frontend::core::typecheck::{self, TypeCheckResult};
+use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
+use crate::frontend::core::typecheck::{self, TypeCheckResult};
+use crate::frontend::core::types::mono::MonoType;
+use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
+use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::module::ModuleSource;
 use crate::frontend::pipeline::{CompilationResult, PipelineError};
 use crate::middle::core::ir_gen::AstToIrGenerator;
 use crate::middle::passes::mono::Monomorphizer;
@@ -92,22 +99,29 @@ impl Driver {
     }
 
     /// 穷尽 dispatch——新增 `Stage` 变体时本 match 编译失败（02 §1 的
-    /// 强制机制）。六个未接线臂随 4.2 入口合并落地；以显式错误而非
-    /// `todo!()` 占位（红线）。
+    /// 强制机制）。4.2.1 后只剩 RoleClassification 未接线（随 4.2.2
+    /// 落地）；以显式错误而非 `todo!()` 占位（红线）。
     fn dispatch(
         &self,
         stage: Stage,
         state: &mut State,
     ) -> Result<(), DriverError> {
         match stage {
-            Stage::VendorConsistency
-            | Stage::Discovery
-            | Stage::Registry
-            | Stage::RoleClassification
-            | Stage::GlobalSlotAlloc
-            | Stage::Linking => Err(DriverError::StageNotWired(stage)),
+            Stage::RoleClassification => Err(DriverError::StageNotWired(stage)),
+            Stage::VendorConsistency => {
+                self.vendor_consistency(state);
+                Ok(())
+            }
+            Stage::Discovery => {
+                self.discovery(state);
+                Ok(())
+            }
             Stage::Parsing => {
                 self.parsing(state);
+                Ok(())
+            }
+            Stage::Registry => {
+                self.registry(state);
                 Ok(())
             }
             Stage::Typecheck => {
@@ -122,27 +136,46 @@ impl Driver {
                 self.proof_execution(state);
                 Ok(())
             }
+            Stage::GlobalSlotAlloc => {
+                self.global_slot_alloc(state);
+                Ok(())
+            }
             Stage::IrGeneration => self.ir_generation(state),
             Stage::Monomorphization => self.monomorphization(state),
+            Stage::Linking => {
+                self.linking(state);
+                Ok(())
+            }
         }
     }
 
-    /// `Stage::Parsing` 臂（PerModule）：lex → parse。
-    ///
-    /// 移植自 pipeline.rs:149-171 / 229-258——parse 失败只取**首个**错误
-    /// 对外（逐字节判据的一部分）。
+    /// `Stage::Parsing` 臂（PerModule）：lex → parse。双形态——
+    /// 形状由 ProgramKind 定义（本阶段无上游产物可自适应）。
     fn parsing(
+        &self,
+        state: &mut State,
+    ) {
+        if state.uses_pipeline_channel() {
+            self.parsing_single_file(state);
+        } else {
+            self.parsing_orchestrated(state);
+        }
+    }
+
+    /// SingleFile/WasmPlayground 形态：移植自 pipeline.rs:149-171 /
+    /// 229-258——parse 失败只取**首个**错误对外（逐字节判据的一部分）。
+    fn parsing_single_file(
         &self,
         state: &mut State,
     ) {
         let State {
             program,
-            units,
+            asts,
             errors,
             failed_stages,
             ..
         } = state;
-        for (i, us) in units.iter_mut().enumerate() {
+        for (i, ast_slot) in asts.iter_mut().enumerate() {
             let source = &program.units[i].source;
             let tokens = match lexer::tokenize(source) {
                 Ok(tokens) => tokens,
@@ -169,28 +202,65 @@ impl Driver {
                 }
                 continue;
             }
-            us.ast = Some(result.module);
+            *ast_slot = Some(result.module);
         }
     }
 
-    /// `Stage::Typecheck` 臂（PerModule）：`check_module`。
-    ///
-    /// 移植自 pipeline.rs:173-183 / 262-285。警告**暂存**而非立即外发——
-    /// 是否外发由 DeadCodeAnalysis 臂的门控决定（忠实复刻 pipeline 的
-    /// 耦合：`dead_code.enabled == false` 时 typecheck 警告一并丢弃）。
+    /// 多文件形态（4.2.1）：逐文件 `orchestrator::parse_file`，首错经
+    /// `OrchestratorError::Parse` 硬中止——`?` 传播的现状怪癖（WBS
+    /// 4.10.1 登记、测试钉板），与 Aggregation 无关。
+    fn parsing_orchestrated(
+        &self,
+        state: &mut State,
+    ) {
+        let mut failure = None;
+        for (i, ast_slot) in state.asts.iter_mut().enumerate() {
+            let unit = &state.program.units[i];
+            match orchestrator::parse_file(&unit.path, &unit.source) {
+                Ok(ast) => *ast_slot = Some(ast),
+                Err(e) => {
+                    failure = Some(e);
+                    break;
+                }
+            }
+        }
+        if let Some(e) = failure {
+            state.fail_with(Stage::Parsing, e);
+        }
+    }
+
+    /// `Stage::Typecheck` 臂（PerModule）：`check_module`。双形态——
+    /// 环境由上游阶段产物供给（State 中有无 Registry 产物），这正是
+    /// 阶段模型的本意。
     fn typecheck(
+        &self,
+        state: &mut State,
+    ) {
+        if state.uses_pipeline_channel() {
+            self.typecheck_single_file(state);
+        } else {
+            self.typecheck_orchestrated(state);
+        }
+    }
+
+    /// SingleFile/WasmPlayground 形态：移植自 pipeline.rs:173-183 /
+    /// 262-285。警告**暂存**而非立即外发——是否外发由 DeadCodeAnalysis
+    /// 臂的门控决定（忠实复刻 pipeline 的耦合：`dead_code.enabled ==
+    /// false` 时 typecheck 警告一并丢弃）。
+    fn typecheck_single_file(
         &self,
         state: &mut State,
     ) {
         let State {
             program,
+            asts,
             units,
             errors,
             failed_stages,
             ..
         } = state;
-        for us in units.iter_mut() {
-            let Some(ast) = &us.ast else {
+        for (i, us) in units.iter_mut().enumerate() {
+            let Some(ast) = &asts[i] else {
                 continue; // CollectAll 下 parse 失败的单元（4.1.3 不可达）
             };
             let mut type_result = typecheck::check_module(ast, &mut None);
@@ -209,6 +279,69 @@ impl Driver {
         }
     }
 
+    /// 多文件形态（4.2.1）：移植自 compile_project 的逐文件 checker 装配
+    /// （`TypeChecker::new("<module>")` + registry/method_bindings/vendor
+    /// 注入）。checker 入口由 `Aggregation` 驱动二选一——02 §改动清单
+    /// 4.2.7 的语义在此预置（FailFast → `check_module`，CollectAll →
+    /// `check_module_collect_all`；4.2.1 只开通 FailFast，CollectAll 的
+    /// 逐文件收集通道随 4.2.2 落地）。首错经 `OrchestratorError::TypeCheck`
+    /// 即返（compile_project 现状）；`result.warnings` 按现状丢弃
+    /// （决策 B1：死代码警告不进 compile 路径）。
+    fn typecheck_orchestrated(
+        &self,
+        state: &mut State,
+    ) {
+        let State {
+            program,
+            asts,
+            units,
+            registry,
+            method_bindings,
+            vendor_root,
+            failure,
+            failed_stages,
+            ..
+        } = state;
+        let (Some(registry), Some(method_bindings)) = (registry.as_ref(), method_bindings.as_ref())
+        else {
+            return; // 上游已失败（FailFast 下 run 循环已中止，防御）
+        };
+        let vendor_root = vendor_root.clone();
+        for (i, us) in units.iter_mut().enumerate() {
+            let Some(ast) = &asts[i] else {
+                continue;
+            };
+            let mut checker = TypeChecker::new("<module>");
+            checker.env().module_registry = registry.clone();
+            checker.env().method_bindings = method_bindings.clone();
+            // RFC-014：vendor 根注入（缺依赖包的 E5001 追加 install 提示）
+            if let Some(root) = &vendor_root {
+                checker.set_vendor_root(root.clone());
+            }
+            let result = match program.aggregation {
+                Aggregation::FailFast => checker.check_module(ast),
+                Aggregation::CollectAll => checker.check_module_collect_all(ast),
+            };
+            if !result.diagnostics.is_empty() {
+                us.typecheck_failed = true;
+                let message = result
+                    .diagnostics
+                    .iter()
+                    .map(|d| d.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                *failure = Some(OrchestratorError::TypeCheck {
+                    path: program.units[i].path.display().to_string(),
+                    message,
+                    diagnostics: result.diagnostics,
+                });
+                failed_stages.push(Stage::Typecheck);
+                return;
+            }
+            us.type_result = Some(result);
+        }
+    }
+
     /// `Stage::DeadCodeAnalysis` 臂（Project 作用域，臂内逐单元）。
     ///
     /// 移植自 pipeline.rs:275-278 / 288-299。门控
@@ -221,6 +354,7 @@ impl Driver {
     ) {
         let State {
             program,
+            asts,
             units,
             warnings,
             skipped,
@@ -236,8 +370,8 @@ impl Driver {
             });
             return;
         }
-        for us in units.iter_mut() {
-            let Some(ast) = &us.ast else {
+        for (i, us) in units.iter_mut().enumerate() {
+            let Some(ast) = &asts[i] else {
                 continue;
             };
             if us.typecheck_failed {
@@ -262,17 +396,20 @@ impl Driver {
         &self,
         state: &mut State,
     ) {
+        let single_file = state.uses_pipeline_channel();
         let State {
             program,
+            asts,
             units,
             errors,
             skipped,
             failed_stages,
+            failure,
             ..
         } = state;
         let mut any_obligation = false;
-        for us in units.iter_mut() {
-            let (Some(ast), Some(type_result)) = (&us.ast, &us.type_result) else {
+        for (i, us) in units.iter_mut().enumerate() {
+            let (Some(ast), Some(type_result)) = (&asts[i], &us.type_result) else {
                 continue;
             };
             if us.typecheck_failed || type_result.proof_calls().is_empty() {
@@ -285,9 +422,24 @@ impl Driver {
                 type_result,
             );
             if !stage_errors.is_empty() {
-                errors.extend(stage_errors.into_iter().map(PipelineError::ProofExecution));
+                if single_file {
+                    errors.extend(stage_errors.into_iter().map(PipelineError::ProofExecution));
+                } else {
+                    // 多文件契约：proof 失败归入 TypeCheck 变体（compile_project
+                    // 现状），路径指向出错文件
+                    let message = stage_errors
+                        .iter()
+                        .map(|d| d.to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    *failure = Some(OrchestratorError::TypeCheck {
+                        path: program.units[i].path.display().to_string(),
+                        message,
+                        diagnostics: stage_errors,
+                    });
+                }
                 failed_stages.push(Stage::ProofExecution);
-                if matches!(program.aggregation, Aggregation::FailFast) {
+                if !single_file || matches!(program.aggregation, Aggregation::FailFast) {
                     return;
                 }
             }
@@ -300,14 +452,24 @@ impl Driver {
         }
     }
 
-    /// `Stage::IrGeneration` 臂（PerModule）：AST → ModuleIR + 嵌入 std
-    /// 合并（#94 共享 registry）。
-    ///
-    /// 移植自 pipeline.rs:205-227 / 302-341 + `merge_embedded_std_ir`。
-    /// IR 错误归入 `PipelineError::TypeCheck`（pipeline 现状映射）。
-    /// 本臂是单文件形态（嵌入 std 合并逐单元做）；多文件的共享 registry /
-    /// 槽位分配形态随 4.2 / 3.4.8 落地，多单元显式报错而非静默错跑。
+    /// `Stage::IrGeneration` 臂（PerModule）：AST → ModuleIR。双形态——
+    /// 单文件做嵌入 std 合并，多文件经 `generate_ir_with_context`
+    /// （共享 registry + 跨文件上下文 + 槽位基址），合并由 Linking 负责。
     fn ir_generation(
+        &self,
+        state: &mut State,
+    ) -> Result<(), DriverError> {
+        if state.uses_pipeline_channel() {
+            return self.ir_generation_single_file(state);
+        }
+        self.ir_generation_orchestrated(state);
+        Ok(())
+    }
+
+    /// SingleFile/WasmPlayground 形态：移植自 pipeline.rs:205-227 / 302-341
+    /// + `merge_embedded_std_ir`（#94 共享 registry）。IR 错误归入
+    ///   `PipelineError::TypeCheck`（pipeline 现状映射）。
+    fn ir_generation_single_file(
         &self,
         state: &mut State,
     ) -> Result<(), DriverError> {
@@ -316,13 +478,13 @@ impl Driver {
         }
         let State {
             program,
+            asts,
             units,
             errors,
             failed_stages,
             ..
         } = state;
-        let us = &mut units[0];
-        let (Some(ast), Some(type_result)) = (&us.ast, &us.type_result) else {
+        let (Some(ast), Some(type_result)) = (&asts[0], &units[0].type_result) else {
             return Ok(()); // 上游已失败（CollectAll；4.1.3 不可达）
         };
         // 单文件模式：入口与嵌入 std 模块（std.test 等，RFC-036 §4）共用同一
@@ -346,8 +508,65 @@ impl Driver {
             failed_stages.push(Stage::IrGeneration);
             return Ok(());
         }
-        us.ir = Some(ir);
+        units[0].ir = Some(ir);
         Ok(())
+    }
+
+    /// 多文件形态（4.2.1）：移植自 compile_project Phase 2——预注册跨文件
+    /// 上下文的 `generate_ir_with_context`，错误归入
+    /// `OrchestratorError::Compile` 并首错即返。
+    fn ir_generation_orchestrated(
+        &self,
+        state: &mut State,
+    ) {
+        let State {
+            program,
+            asts,
+            units,
+            registry,
+            global_layout,
+            slot_bases,
+            failure,
+            failed_stages,
+            ..
+        } = state;
+        let (Some(registry), Some(global_layout)) = (registry.as_ref(), global_layout.as_ref())
+        else {
+            return; // 上游已失败（FailFast 下 run 循环已中止，防御）
+        };
+        // 跨文件上下文：所有文件的 AST 引用视图（结构体布局/全局名解析用）
+        let all_ast_refs: Vec<&Module> = asts.iter().filter_map(|a| a.as_ref()).collect();
+        for (i, us) in units.iter_mut().enumerate() {
+            let (Some(ast), Some(type_result)) = (&asts[i], &us.type_result) else {
+                continue;
+            };
+            let ir = match crate::middle::generate_ir_with_context(
+                ast,
+                type_result,
+                &all_ast_refs,
+                global_layout,
+                slot_bases[i],
+                registry,
+                &program.units[i].key,
+            ) {
+                Ok(ir) => ir,
+                Err(diags) => {
+                    let message = diags
+                        .iter()
+                        .map(|d| d.to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    *failure = Some(OrchestratorError::Compile {
+                        path: program.units[i].path.display().to_string(),
+                        message,
+                        diagnostics: diags,
+                    });
+                    failed_stages.push(Stage::IrGeneration);
+                    return;
+                }
+            };
+            us.ir = Some(ir);
+        }
     }
 
     /// `Stage::Monomorphization` 臂（Project 作用域）：消费 IR 产物与
@@ -400,6 +619,144 @@ impl Driver {
         }
         Ok(())
     }
+
+    /// `Stage::VendorConsistency` 臂（Project）：RFC-014 §项目模式
+    /// vendor 与 yaoxiang.lock 一致性核对（实现留在 orchestrator——Node
+    /// 语义：不静默自动安装；vendor 根供 Typecheck 注入 E5001 install 提示）。
+    fn vendor_consistency(
+        &self,
+        state: &mut State,
+    ) {
+        match orchestrator::ensure_vendor_consistency(&state.entry_path) {
+            Ok(root) => state.vendor_root = root,
+            Err(e) => state.fail_with(Stage::VendorConsistency, e),
+        }
+    }
+
+    /// `Stage::Discovery` 臂（Project）：沿 `use` BFS 发现编译单元集
+    /// （#247；嵌入 std 模块以虚拟路径混入），按路径排序后**重建**程序的
+    /// 单元列表——多文件 Program 构造时只有占位入口单元，本臂是唯一展开点。
+    fn discovery(
+        &self,
+        state: &mut State,
+    ) {
+        match orchestrator::discover(&state.entry_path) {
+            Ok(files) => {
+                state.program.units = files
+                    .iter()
+                    .map(|f| Unit::new(&f.module_key, &f.path, &f.source))
+                    .collect();
+                let n = state.program.units.len();
+                state.units = (0..n).map(|_| UnitState::default()).collect();
+                state.asts = (0..n).map(|_| None).collect();
+            }
+            Err(e) => state.fail_with(Stage::Discovery, e),
+        }
+    }
+
+    /// `Stage::Registry` 臂（Project）：消费全部单元的 AST 产物做签名
+    /// 收集（C3 拓扑修正——本臂不再自行 parse），构建共享 ModuleRegistry
+    /// 与跨文件方法绑定（RFC-029）。
+    fn registry(
+        &self,
+        state: &mut State,
+    ) {
+        let mut registry = ModuleRegistry::with_std();
+        for (unit, ast) in state.program.units.iter().zip(state.asts.iter()) {
+            let Some(ast) = ast else {
+                continue; // 上游失败（FailFast 下 run 循环已中止，防御）
+            };
+            let mut info = orchestrator::extract_module_info(&unit.key, ast);
+            // 来源标记：vendor 依赖目录下的文件是 Vendor（与本地 User 区分）
+            if orchestrator::is_vendor_path(&unit.path) {
+                info.source = ModuleSource::Vendor;
+            }
+            registry.register(info);
+        }
+        state.method_bindings = Some(registry.all_method_bindings());
+        state.registry = Some(registry);
+    }
+
+    /// `Stage::GlobalSlotAlloc` 臂（Project）：为所有文件分配不相交的
+    /// 全局槽位区间（T5——引用方与定义方共享同一份布局）。
+    fn global_slot_alloc(
+        &self,
+        state: &mut State,
+    ) {
+        let (layout, bases) = allocate_global_slots(&state.program.units, &state.asts);
+        state.global_layout = Some(layout);
+        state.slot_bases = bases;
+    }
+
+    /// `Stage::Linking` 臂（Project）：IR 层链接（限定名共存）+ 入口
+    /// 语义校验（#388 缺 main / #357 带参 main，自 compile_project 移入）。
+    fn linking(
+        &self,
+        state: &mut State,
+    ) {
+        let mut irs: Vec<(String, ModuleIR)> = Vec::new();
+        for (i, us) in state.units.iter_mut().enumerate() {
+            if let Some(ir) = us.ir.take() {
+                irs.push((state.program.units[i].path.display().to_string(), ir));
+            }
+        }
+        let merged = match link_module_irs(irs, &state.entry_key) {
+            Ok(merged) => merged,
+            Err(e) => {
+                state.fail_with(Stage::Linking, e);
+                return;
+            }
+        };
+        // T4：入口语义（RFC-029f 角色驱动；#388 定案：按**绑定存在性**判定）。
+        // Script 无入口概念（顶层代码即程序）；Bin 要求存在名为 main 的绑定
+        // （值/函数皆可）；带参 main 编译期拒绝（#357：入口恒零参调用）。
+        if is_bin_role(&state.entry_path) {
+            let qualified_main = format!("{}.main", state.entry_key);
+            let has_main_fn = merged.functions.iter().any(|f| f.name == qualified_main);
+            let has_main_value = merged
+                .globals
+                .iter()
+                .any(|g| g.name == "main" || g.name == qualified_main);
+            if !has_main_fn && !has_main_value {
+                let diag =
+                    ErrorCodeDefinition::bin_missing_main(&state.entry_path.display().to_string())
+                        .at(Span::default())
+                        .build();
+                state.fail_with(
+                    Stage::Linking,
+                    OrchestratorError::TypeCheck {
+                        path: state.entry_path.display().to_string(),
+                        message: diag.to_string(),
+                        diagnostics: vec![diag],
+                    },
+                );
+                return;
+            }
+            if let Some(main_fn) = merged.functions.iter().find(|f| f.name == qualified_main) {
+                if !main_fn.params.is_empty() {
+                    let found = main_fn
+                        .params
+                        .iter()
+                        .map(|p| format!("{p}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let diag = ErrorCodeDefinition::bin_main_signature("main", "()", &found)
+                        .at(Span::default())
+                        .build();
+                    state.fail_with(
+                        Stage::Linking,
+                        OrchestratorError::TypeCheck {
+                            path: state.entry_path.display().to_string(),
+                            message: diag.to_string(),
+                            diagnostics: vec![diag],
+                        },
+                    );
+                    return;
+                }
+            }
+        }
+        state.merged_ir = Some(merged);
+    }
 }
 
 /// 阶段跳过原因（02 §4 文案表的三类）。
@@ -423,12 +780,21 @@ pub struct SkippedStage {
 }
 
 /// Driver 一次运行的产出。
+///
+/// 产物通道按 ProgramKind 分（各入口的外部契约各归其主，02 草图的单一
+/// CompilationResult 无法表达 OrchestratorError 契约）：
+/// - SingleFile/WasmPlayground：`result`（pipeline 契约；IR 在 `result.ir`）；
+/// - MultiFile：`module`（Linking 产物）+ `failure`（OrchestratorError
+///   契约）；Check/Lsp/Embedded 的通道随 4.2.2-4.2.4 按需扩展。
 #[derive(Debug)]
 pub struct DriverOutcome {
     /// 编译结果（诊断集与 pipeline 时代逐字节相同，C2 判据）
     pub result: CompilationResult,
-    /// 被跳过的阶段及原因——4.1.3 仅内部记录；对外 Skipped 诊断
-    /// 随 4.3 义务账本接入（02 §4）
+    /// 多文件合并 IR（Linking 产物；MultiFile 成功时 Some）
+    pub module: Option<ModuleIR>,
+    /// 多文件结构化故障（OrchestratorError 契约；失败时 Some）
+    pub failure: Option<OrchestratorError>,
+    /// 被跳过的阶段及原因——仅内部记录；对外 Skipped 诊断随 4.3 义务账本接入（02 §4）
     pub skipped: Vec<SkippedStage>,
 }
 
@@ -475,6 +841,10 @@ struct State {
     program: Program,
     /// 逐编译单元的阶段产物（与 `program.units` 等长、按下标对应）
     units: Vec<UnitState>,
+    /// Parsing 产物（独立存放：多文件 IrGeneration 需要全部 AST 的引用
+    /// 视图——挂在 UnitState 上会与逐单元可变访问冲突；orchestrator 时代
+    /// asts 同样是独立 Vec）
+    asts: Vec<Option<Module>>,
     /// 已产出的错误诊断（FailFast 下恰为首个失败阶段的那批）
     errors: Vec<PipelineError>,
     /// 已产出的警告诊断
@@ -483,13 +853,30 @@ struct State {
     skipped: Vec<SkippedStage>,
     /// 已失败的阶段（拓扑跳过的判定依据）
     failed_stages: Vec<Stage>,
+    /// 入口路径与模块键（Discovery 重建 units 前从占位入口单元捕获）
+    entry_path: PathBuf,
+    /// 入口模块键（Linking 的 `{entry_key}.main` 查找用）
+    entry_key: String,
+    /// 多文件结构化故障（OrchestratorError 契约；与 errors 通道互斥——
+    /// 通道选择见 `uses_pipeline_channel`）
+    failure: Option<OrchestratorError>,
+    /// VendorConsistency 产物（Typecheck 的 E5001 install 提示注入用）
+    vendor_root: Option<PathBuf>,
+    /// Registry 产物（多文件 Typecheck / IrGeneration 的共享注册表）
+    registry: Option<ModuleRegistry>,
+    /// Registry 产物（跨文件方法调用解析，RFC-029）
+    method_bindings: Option<HashMap<String, MonoType>>,
+    /// GlobalSlotAlloc 产物（限定名 → 绝对槽位号）
+    global_layout: Option<Vec<(String, usize)>>,
+    /// GlobalSlotAlloc 产物（各文件槽位基址）
+    slot_bases: Vec<usize>,
+    /// Linking 产物
+    merged_ir: Option<ModuleIR>,
 }
 
 /// 逐编译单元的阶段产物（PerModule 阶段的执行粒度）。
 #[derive(Default)]
 struct UnitState {
-    /// Parsing 产物
-    ast: Option<Module>,
     /// Typecheck 产物
     type_result: Option<TypeCheckResult>,
     /// typecheck 警告暂存——外发与否由 DeadCodeAnalysis 臂的门控决定
@@ -503,16 +890,28 @@ struct UnitState {
 
 impl State {
     fn new(program: Program) -> Self {
-        let units = (0..program.units.len())
-            .map(|_| UnitState::default())
-            .collect();
+        // 占位入口单元（多文件形态）或唯一单元（单文件形态）——Discovery
+        // 臂会重建 units，入口信息先行捕获（run() 已拒绝空 units）
+        let entry_path = program.units[0].path.clone();
+        let entry_key = program.units[0].key.clone();
+        let n = program.units.len();
         Self {
             program,
-            units,
+            units: (0..n).map(|_| UnitState::default()).collect(),
+            asts: (0..n).map(|_| None).collect(),
             errors: Vec::new(),
             warnings: Vec::new(),
             skipped: Vec::new(),
             failed_stages: Vec::new(),
+            entry_path,
+            entry_key,
+            failure: None,
+            vendor_root: None,
+            registry: None,
+            method_bindings: None,
+            global_layout: None,
+            slot_bases: Vec::new(),
+            merged_ir: None,
         }
     }
 
@@ -525,8 +924,32 @@ impl State {
         self.skipped.push(SkippedStage { stage, reason });
     }
 
-    /// 聚合模式门控：FailFast 下首个失败阶段即中止（02 §3 草图 break）。
+    /// 结果通道选择：SingleFile/WasmPlayground 走 PipelineError 通道
+    /// （pipeline 外部契约）；其余形态走 OrchestratorError 故障通道
+    /// （orchestrator 外部契约，4.2.1）。
+    fn uses_pipeline_channel(&self) -> bool {
+        matches!(
+            self.program.kind,
+            ProgramKind::SingleFile | ProgramKind::WasmPlayground
+        )
+    }
+
+    /// 记录一次多文件故障（OrchestratorError 通道）并标记阶段失败。
+    fn fail_with(
+        &mut self,
+        stage: Stage,
+        error: OrchestratorError,
+    ) {
+        self.failure = Some(error);
+        self.failed_stages.push(stage);
+    }
+
+    /// 聚合模式门控：FailFast 下首个失败阶段即中止（02 §3 草图 break）；
+    /// 多文件故障一律中止（compile_project 现状：`?` 传播）。
     fn should_abort(&self) -> bool {
+        if self.failure.is_some() {
+            return true;
+        }
         matches!(self.program.aggregation, Aggregation::FailFast) && !self.errors.is_empty()
     }
 
@@ -542,13 +965,27 @@ impl State {
             .copied()
     }
 
-    /// 收尾：产出 CompilationResult。失败时警告按 pipeline 现状一并丢弃
+    /// 收尾：按通道产出。多文件故障直接进 `failure`（OrchestratorError
+    /// 契约）；单文件失败时警告按 pipeline 现状一并丢弃
     /// （`CompilationResult::failed` 语义）；`total_duration_ms` 由
     /// 调用方（`Pipeline::run`）覆写。
     fn into_outcome(mut self) -> DriverOutcome {
+        if let Some(error) = self.failure.take() {
+            return DriverOutcome {
+                result: CompilationResult::default(),
+                module: None,
+                failure: Some(error),
+                skipped: self.skipped,
+            };
+        }
+        let single_file = self.uses_pipeline_channel();
         let result = if self.errors.is_empty() {
-            // SingleFile：unit 0 的 IR 即最终产物；多单元合并（Linking）随 4.2
-            let ir = self.units.iter_mut().find_map(|u| u.ir.take());
+            // SingleFile：unit 0 的 IR 即最终产物
+            let ir = if single_file {
+                self.units.iter_mut().find_map(|u| u.ir.take())
+            } else {
+                None
+            };
             CompilationResult {
                 ir,
                 error_count: 0,
@@ -562,6 +999,8 @@ impl State {
         };
         DriverOutcome {
             result,
+            module: self.merged_ir.take(),
+            failure: None,
             skipped: self.skipped,
         }
     }
@@ -571,11 +1010,14 @@ impl State {
 /// 清单对账——两边独立罗列，防单方漂移）。
 fn data_dependencies(stage: Stage) -> &'static [Stage] {
     match stage {
-        Stage::Registry => &[Stage::Discovery],
-        Stage::Parsing => &[Stage::Registry],
-        Stage::Typecheck => &[Stage::Parsing],
+        Stage::Parsing => &[Stage::Discovery],
+        Stage::Registry => &[Stage::Parsing],
+        Stage::RoleClassification => &[Stage::Parsing],
+        Stage::Typecheck => &[Stage::Parsing, Stage::Registry],
+        Stage::DeadCodeAnalysis => &[Stage::Parsing, Stage::RoleClassification],
         Stage::ProofExecution => &[Stage::Typecheck],
-        Stage::IrGeneration => &[Stage::GlobalSlotAlloc],
+        Stage::GlobalSlotAlloc => &[Stage::Parsing],
+        Stage::IrGeneration => &[Stage::Parsing, Stage::Registry, Stage::GlobalSlotAlloc],
         Stage::Monomorphization => &[Stage::IrGeneration],
         Stage::Linking => &[Stage::IrGeneration],
         _ => &[],
@@ -628,6 +1070,155 @@ fn merge_embedded_std_ir(
         }
     }
     Ok(())
+}
+
+/// 为所有文件分配不相交的全局槽位区间（T5）——自 orchestrator 移入
+/// （4.2.1；入参由 owned 元组切片改为「单元 + AST 槽」引用视图，避免全量
+/// AST clone——原签名里的 PathBuf 本就未被使用）。
+///
+/// 返回 `(限定名 → 绝对槽位号, 各文件的槽位基址)`。槽位号按发现顺序连续
+/// 分配；限定名用 `{module_key}.{name}`（与 `SymbolTable::qualify` 同源），
+/// 使 `use lib.{value}` 解析到 `lib.value`。只登记**真正的值绑定**
+/// （非函数）——函数进函数表，不占全局槽位。
+fn allocate_global_slots(
+    units: &[Unit],
+    asts: &[Option<Module>],
+) -> (Vec<(String, usize)>, Vec<usize>) {
+    let mut layout: Vec<(String, usize)> = Vec::new();
+    let mut bases: Vec<usize> = Vec::with_capacity(units.len());
+    let mut next_slot = 0usize;
+    for (unit, ast) in units.iter().zip(asts.iter()) {
+        bases.push(next_slot);
+        let Some(ast) = ast else {
+            continue; // 上游失败（FailFast 下 run 循环已中止，防御）
+        };
+        for (name, _ty) in extract_global_defs(ast) {
+            layout.push((SymbolTable::qualify(&unit.key, &name), next_slot));
+            next_slot += 1;
+        }
+    }
+    (layout, bases)
+}
+
+/// 提取顶层**值绑定**（非函数）——自 orchestrator 移入（4.2.1）。
+fn extract_global_defs(ast: &Module) -> Vec<(String, MonoType)> {
+    let mut out = Vec::new();
+    for stmt in &ast.items {
+        if let StmtKind::Assign {
+            target,
+            type_annotation,
+            value,
+            ..
+        } = &stmt.kind
+        {
+            if let Expr::Var(name, _) = target.as_ref() {
+                // RFC-010a 附录D + B 方案（33f2ebbe）：Lambda → 函数；注解是
+                // Fn → 函数；其余（含无注解块，内容决定类型）→ 块值。
+                // 此前这里写「Block 就是函数」，把 `x: Int = { 5 }`
+                // 误判为函数——与 ir_gen 的注册口径不一致，导致跨文件引用
+                // `use lib.{x}` 找不到槽位（T5）。
+                let is_fn =
+                    Expr::block_binding_is_function(type_annotation.as_ref(), value.as_deref())
+                        || matches!(value.as_deref(), Some(Expr::Lambda { .. }));
+                if !is_fn {
+                    let ty = type_annotation
+                        .as_ref()
+                        .map(|t| MonoType::from(t.clone()))
+                        .unwrap_or(MonoType::Int(64));
+                    out.push((name.clone(), ty));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// 链接多个文件的 `ModuleIR`：拼接函数/全局/FFI，合并 per-function 映射
+/// ——自 orchestrator 移入（4.2.1）。
+///
+/// 各文件的函数已带模块限定名（`qualify_module_ir`），跨文件同名函数天然共存。
+/// 仅当同一限定名出现两次（同名文件重复发现等病态情形）才报错。入口函数：
+/// main 为函数绑定时设 `{entry_key}.main`；值 main 时为 None——程序体就是
+/// 初始化序列（#388 定案：值 main 初始化期求值即执行）。
+fn link_module_irs(
+    irs: Vec<(String, ModuleIR)>,
+    entry_key: &str,
+) -> Result<ModuleIR, OrchestratorError> {
+    let mut seen: HashMap<String, String> = HashMap::new();
+    for (path, ir) in &irs {
+        for func in &ir.functions {
+            if let Some(prev) = seen.get(&func.name) {
+                return Err(OrchestratorError::Collision {
+                    name: func.name.clone(),
+                    first: prev.clone(),
+                    second: path.clone(),
+                });
+            }
+            seen.insert(func.name.clone(), path.clone());
+        }
+    }
+
+    let mut merged = ModuleIR {
+        globals: Vec::new(),
+        functions: Vec::new(),
+        init: Vec::new(),
+        init_locals: Vec::new(),
+        init_file_ids: Vec::new(),
+        ffi_libs: Vec::new(),
+        ffi_bindings: Vec::new(),
+        entry_function: None,
+        source_files: irs.iter().map(|(p, _)| p.clone()).collect(),
+        function_files: HashMap::new(),
+    };
+    for (i, (_, ir)) in irs.iter().enumerate() {
+        for func in &ir.functions {
+            merged.function_files.insert(func.name.clone(), i);
+        }
+    }
+    for (file_idx, (_, ir)) in irs.into_iter().enumerate() {
+        merged.globals.extend(ir.globals);
+        merged.functions.extend(ir.functions);
+        // T5：各文件的初始化序列按发现顺序拼接（被依赖模块先于入口文件）。
+        // #368：每条指令记下所属文件——多文件下按它给 debug span 定 file_id，
+        // 否则所有段的错误都指向同一个（错的）文件。
+        merged
+            .init_file_ids
+            .extend(std::iter::repeat_n(file_idx, ir.init.len()));
+        merged.init.extend(ir.init);
+        // 不合并 init_locals：各文件槽位号从 0 起算，直接拼接会错位。
+        // 多文件下顶层只有声明（可执行语句被 E3023 拒），具名局部仅出现在
+        // Script 模式，故此处不需要它。
+        merged.ffi_libs.extend(ir.ffi_libs);
+        merged.ffi_bindings.extend(ir.ffi_bindings);
+    }
+    // 槽位号已由 allocate_global_slots 全局唯一，此处仅按索引稳定排序，
+    // 便于调试与运行时按索引直取。
+    merged.globals.sort_by_key(|g| g.index);
+
+    // 入口函数仅在 main 为**函数**绑定时设置：值 main 的程序体就是初始化
+    // 序列（求值即执行），无需入口调用——与 Script 同款执行形态（#356
+    // 防双跑：初始化与入口调用绝不叠加）。
+    let entry_fn = format!("{}.main", entry_key);
+    if merged.functions.iter().any(|f| f.name == entry_fn) {
+        merged.entry_function = Some(entry_fn);
+    }
+
+    Ok(merged)
+}
+
+/// T4：入口文件是否必须定义 `main`（Bin 要求）——自 orchestrator 移入（4.2.1）。
+///
+/// 判据：项目里有 manifest（`yaoxiang.toml`）。
+///
+/// 为何不用 `roles::classify`：那个模型回答「这个文件被谁消费」（服务于死代码
+/// 分析），而这里要回答的是「这个文件能不能当程序跑」——两回事。有 manifest
+/// 却没 `main` 的文件在 classify 里是 Internal（合理：它不被别的文件 use），
+/// 但用户刚把它当入口跑了，此时必须有入口，否则静默什么都不做。
+///
+/// 对无 manifest 的单文件直跑（Script 角色）：顶层语句即程序主体，
+/// 无需 main——这是「默认情况零门槛」。
+fn is_bin_role(entry: &std::path::Path) -> bool {
+    crate::frontend::module::orchestrator::find_project_root(entry).is_some()
 }
 
 #[cfg(test)]

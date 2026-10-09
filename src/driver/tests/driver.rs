@@ -12,7 +12,9 @@ use crate::driver::{
     Aggregation, Driver, DriverError, DriverOutcome, Program, ProgramKind, SkipReason, Stage, Unit,
 };
 use crate::frontend::config::CompileConfig;
+use crate::frontend::module::orchestrator::OrchestratorError;
 use crate::frontend::pipeline::{Pipeline, PipelineError};
+use std::path::{Path, PathBuf};
 
 /// 构造 SingleFile 程序并跑 Driver。
 fn run_single(
@@ -233,24 +235,26 @@ fn test_driver_run_mono_disabled_records_config_skip() {
 }
 
 #[test]
-fn test_driver_run_multi_file_kind_hits_unwired_stage() {
-    // Arrange: 4.1.3 只接线 SingleFile 形态——MultiFile 首阶段即未接线
+fn test_driver_run_check_kind_hits_unwired_role_classification() {
+    // Arrange: 4.2.1 后 MultiFile 全接线；Check 形态的 RoleClassification
+    // 臂随 4.2.2 落地——跑到那里必须显式报错而非 panic/todo!
+    let (_dir, entry) = make_project(&[("main.yx", "main: () -> Void = {}\n")]);
     let program = Program::new(
-        ProgramKind::MultiFile,
-        vec![Unit::new("app", "app.yx", "main: () -> Void = {}")],
+        ProgramKind::Check,
+        vec![Unit::new("main", &entry, "")],
         CompileConfig::default(),
     );
 
     // Act
     let result = Driver::new().run(program);
 
-    // Assert: 显式错误而非 panic/todo!（02 §改动清单：其余臂随 4.2 落地）
+    // Assert
     assert!(
         matches!(
             result,
-            Err(DriverError::StageNotWired(Stage::VendorConsistency))
+            Err(DriverError::StageNotWired(Stage::RoleClassification))
         ),
-        "MultiFile must fail at its first unwired stage: {result:?}"
+        "Check must fail at its first unwired stage: {result:?}"
     );
 }
 
@@ -288,4 +292,179 @@ fn test_pipeline_run_delegates_to_driver() {
         result.errors
     );
     let _aggregation_witness: Aggregation = Aggregation::FailFast; // SingleFile 默认聚合
+}
+
+// ===================== 4.2.1 多文件形态（A1/B1/C3 裁决，2026-10-09）=====================
+
+/// 在临时目录落一个多文件项目（yaoxiang.toml + 给定 .yx），返回 (dir 守卫, 入口路径)。
+fn make_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir creation failed");
+    std::fs::write(
+        dir.path().join("yaoxiang.toml"),
+        "[package]\nname = \"t\"\n",
+    )
+    .expect("write manifest failed");
+    for (name, content) in files {
+        std::fs::write(dir.path().join(name), content).expect("write fixture failed");
+    }
+    let entry = dir.path().join("main.yx");
+    (dir, entry)
+}
+
+/// 以 MultiFile 形态跑 Driver（入口单元为占位——Discovery 臂负责展开）。
+fn run_multi(entry: &Path) -> Result<DriverOutcome, DriverError> {
+    let program = Program::new(
+        ProgramKind::MultiFile,
+        vec![Unit::new("main", entry, "")],
+        CompileConfig::default(),
+    );
+    Driver::new().run(program)
+}
+
+#[test]
+fn test_driver_run_multi_file_success_links_modules() {
+    // Arrange: lib.yx 出一个函数，main.yx 经 use 导入并调用（夹具语法同
+    // tests/yaoxiang-multifile/use-type-and-function）
+    let (_dir, entry) = make_project(&[
+        (
+            "lib.yx",
+            "add_one: (x: Int) -> Int = (x) => {\n    return x + 1\n}\n",
+        ),
+        (
+            "main.yx",
+            "use lib.{add_one}\nmain = () => {\n    y = add_one(1)\n}\n",
+        ),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert: 无故障；Linking 产物含双方限定名函数
+    assert!(
+        outcome.failure.is_none(),
+        "clean project must not fail: {:?}",
+        outcome.failure
+    );
+    let module = outcome.module.expect("Linking must produce merged IR");
+    let names: Vec<&str> = module.functions.iter().map(|f| f.name.as_str()).collect();
+    assert!(
+        names.contains(&"main.main"),
+        "entry main must be linked as main.main: {names:?}"
+    );
+    assert!(
+        names.contains(&"lib.add_one"),
+        "lib function must be linked as lib.add_one: {names:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_multi_file_typecheck_error_surfaces_file_contract() {
+    // Arrange: lib.yx 顶层类型错误——compile_project 现状契约 =
+    // OrchestratorError::TypeCheck{ path 指向出错文件, diagnostics 原样 }
+    let (_dir, entry) = make_project(&[
+        ("lib.yx", "bad: Int = \"oops\"\n"),
+        ("main.yx", "use lib.{bad}\nmain: () -> Void = {}\n"),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert
+    let Some(OrchestratorError::TypeCheck {
+        path, diagnostics, ..
+    }) = &outcome.failure
+    else {
+        panic!(
+            "expected OrchestratorError::TypeCheck, got {:?}",
+            outcome.failure
+        );
+    };
+    assert!(
+        path.ends_with("lib.yx"),
+        "error must point at the failing file: {path}"
+    );
+    assert!(
+        !diagnostics.is_empty(),
+        "TypeCheck variant must carry the diagnostics"
+    );
+}
+
+#[test]
+fn test_driver_run_multi_file_missing_main_rejected() {
+    // Arrange: Bin 角色（有 manifest）但无 main 绑定——#388 定案必须编译期拒绝
+    let (_dir, entry) = make_project(&[("main.yx", "helper: () -> Void = {}\n")]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert: E3020 bin_missing_main
+    let Some(OrchestratorError::TypeCheck { diagnostics, .. }) = &outcome.failure else {
+        panic!(
+            "expected OrchestratorError::TypeCheck, got {:?}",
+            outcome.failure
+        );
+    };
+    assert!(
+        diagnostics.iter().any(|d| d.code == "E3020"),
+        "missing main must yield E3020: {diagnostics:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_multi_file_proof_error_yields_to_typecheck_error() {
+    // Arrange（A1 裁决钉板）：aaa.yx 带一个会失败的证明义务（返回位注解），
+    // zzz.yx 带类型错误。发现序 aaa < main < zzz——旧交错顺序会在 aaa 的
+    // typecheck 通过后立刻执行其 proof 并报 E4018；A1 阶段分离后，
+    // ProofExecution 在全部 typecheck 之后，zzz 的类型错误必须先报
+    let (_dir, entry) = make_project(&[
+        (
+            "aaa.yx",
+            "IsLe: (n: Int, r: Int) -> Type = { r < n }\nf: () -> (r: IsLe(3, r)) = {\n    return 7\n}\n",
+        ),
+        ("main.yx", "use aaa.{f}\nuse zzz.{bad}\nmain: () -> Void = {}\n"),
+        ("zzz.yx", "bad: Int = \"nope\"\n"),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert: 报 zzz 的 typecheck 错误而非 aaa 的 E4018
+    let Some(OrchestratorError::TypeCheck {
+        path, diagnostics, ..
+    }) = &outcome.failure
+    else {
+        panic!(
+            "expected OrchestratorError::TypeCheck, got {:?}",
+            outcome.failure
+        );
+    };
+    assert!(
+        path.ends_with("zzz.yx"),
+        "A1: typecheck failure must precede proof failure: {path}"
+    );
+    assert!(
+        !diagnostics.iter().any(|d| d.code == "E4018"),
+        "proof error must not surface before typecheck stage completes: {diagnostics:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_multi_file_parse_error_hard_aborts() {
+    // Arrange（4.10.1 怪癖钉板）：broken.yx 语法错误——现状多文件路径
+    // parse 错误是 OrchestratorError::Parse 硬中止（`?` 传播），不是逐文件
+    // 诊断；本测试钉住现状，4.10.1 修复时必须显式翻转
+    let (_dir, entry) = make_project(&[
+        ("broken.yx", "let = ;\n"),
+        ("main.yx", "use broken.{x}\nmain: () -> Void = {}\n"),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        matches!(&outcome.failure, Some(OrchestratorError::Parse { path, .. }) if path.ends_with("broken.yx")),
+        "parse error must hard-abort as OrchestratorError::Parse: {:?}",
+        outcome.failure
+    );
 }
