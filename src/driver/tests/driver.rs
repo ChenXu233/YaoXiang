@@ -426,9 +426,10 @@ fn test_driver_run_multi_file_proof_error_yields_to_typecheck_error() {
 
 #[test]
 fn test_driver_run_multi_file_parse_error_hard_aborts() {
-    // Arrange（4.10.1 怪癖钉板）：broken.yx 语法错误——现状多文件路径
-    // parse 错误是 OrchestratorError::Parse 硬中止（`?` 传播），不是逐文件
-    // 诊断；本测试钉住现状，4.10.1 修复时必须显式翻转
+    // Arrange：broken.yx 语法错误——compile 路径（FailFast）parse 错误
+    // 硬中止是**正确语义**（坏文件产不出 IR），本钉板长期有效；Check
+    // 路径的降级由 test_driver_run_check_parse_error_collected_per_file
+    // 钉住（4.10.1 已修复，2026-10-09）
     let (_dir, entry) = make_project(&[
         ("broken.yx", "let = ;\n"),
         ("main.yx", "use broken.{x}\nmain: () -> Void = {}\n"),
@@ -612,10 +613,12 @@ fn test_driver_run_check_diagnostic_order_follows_stage_topology() {
 }
 
 #[test]
-fn test_driver_run_check_parse_error_hard_aborts() {
-    // Arrange（4.10.1 怪癖钉板，check 半边）：broken.yx 语法错误——现状
-    // check 路径同样硬中止（解析失败即 OrchestratorError::Parse），而非
-    // 降级为逐文件诊断；4.10.1 修复时必须显式翻转本测试
+fn test_driver_run_check_parse_error_collected_per_file() {
+    // Arrange（4.10.1 修复钉板，rust 式收集语义，2026-10-09 用户裁决）——
+    // 本测试由 test_driver_run_check_parse_error_hard_aborts 显式翻转而来：
+    // broken.yx 语法错误不再整体硬中止，parse 失败降级为逐文件诊断收集；
+    // 带病文件退出编译单元（方案 B：AST 槽 None，registry/typecheck 等
+    // 下游全跳过），导入方报模块未找到（E5001）
     let (_dir, entry) = make_project(&[
         ("broken.yx", "let = ;\n"),
         ("main.yx", "use broken.{x}\nmain: () -> Void = {}\n"),
@@ -626,9 +629,55 @@ fn test_driver_run_check_parse_error_hard_aborts() {
 
     // Assert
     assert!(
-        matches!(&outcome.failure, Some(OrchestratorError::Parse { path, .. }) if path.ends_with("broken.yx")),
-        "check 路径 parse 错误现状 = OrchestratorError::Parse 硬中止: {:?}",
+        outcome.failure.is_none(),
+        "check 路径 parse 错误不得再走故障通道: {:?}",
         outcome.failure
+    );
+    let broken = check_diags_of(&outcome, "broken.yx").expect("entry for broken.yx");
+    assert!(
+        broken
+            .iter()
+            .any(|d| matches!(d.severity, crate::util::diagnostic::Severity::Error)),
+        "带病文件必须收 Error 级 parse 诊断: {broken:?}"
+    );
+    let main = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert!(
+        main.iter().any(|d| d.code == "E5001"),
+        "导入带病模块应报模块未找到（方案 B 语义）: {main:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_check_parse_error_does_not_mask_other_files() {
+    // Arrange: broken.yx parse 失败与 zzz.yx 类型错误并存——rust 式收集
+    // 语义（2026-10-09 裁决）：所有文件的错误一次性收齐，谁也不掩盖谁
+    let (_dir, entry) = make_project(&[
+        ("broken.yx", "let = ;\n"),
+        (
+            "main.yx",
+            "use broken.{x}\nuse zzz.{bad}\nmain = () => {\n    y = bad\n}\n",
+        ),
+        ("zzz.yx", "bad: Int = \"nope\"\n"),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "CollectAll 不得因 parse 失败中止: {:?}",
+        outcome.failure
+    );
+    let broken = check_diags_of(&outcome, "broken.yx").expect("entry for broken.yx");
+    assert!(
+        !broken.is_empty(),
+        "broken.yx 的 parse 错误必须被收集: {broken:?}"
+    );
+    let zzz = check_diags_of(&outcome, "zzz.yx").expect("entry for zzz.yx");
+    assert!(
+        !zzz.is_empty(),
+        "zzz.yx 的类型错误不得被 parse 失败掩盖: {zzz:?}"
     );
 }
 

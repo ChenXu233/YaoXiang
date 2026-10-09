@@ -419,6 +419,39 @@ fn test_check_missing_main_reports_e3020() {
     );
 }
 
+/// 项目内某文件语法错误：check 不再整体中止——带病文件的 parse 诊断与
+/// 导入方的模块未找到一次性收齐（rust 式收集语义，WBS 4.10.1，
+/// 2026-10-09 用户裁决），错误计数非零。
+#[test]
+fn test_check_multifile_parse_error_collects_all_errors() {
+    // Arrange - lib.yx 语法错误（E0012 族 parse 失败），main 导入它
+    let dir = create_project(&[
+        ("lib.yx", "let = ;\n"),
+        ("main.yx", "use lib.{x}\nmain: () -> Void = {}\n"),
+    ]);
+    let main = dir.path().join("main.yx");
+
+    // Act
+    let result = check_result(&main);
+
+    // Assert - lib 的 parse 错误（E0012，词法/语法族 E0）与 main 的
+    // E5001 同批出现
+    let codes = error_codes(&result);
+    assert!(
+        codes.contains(&"E0012".to_string()),
+        "带病文件的 parse 诊断必须进收集结果: {codes:?}"
+    );
+    assert!(
+        codes.contains(&"E5001".to_string()),
+        "导入带病模块应报模块未找到: {codes:?}"
+    );
+    assert!(
+        result.error_count >= 2,
+        "两类错误都计入错误数（非零退出的依据）: {}",
+        result.error_count
+    );
+}
+
 #[test]
 fn test_check_missing_module_reports_e5001() {
     // Arrange - 导入不存在的模块

@@ -327,6 +327,7 @@
 {"expectation":"behavior","file":"tests/yaoxiang/99-demos/tree_structure.yx","run":{"exit":0,"stderr":[],"stdout":["30"]}}
 {"expectation":"behavior","file":"tests/yaoxiang-multifile/cross-file-method/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang-multifile/for-loop-no-use-std-list/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"check":{"diagnostics":[["E0012","tests/yaoxiang-multifile/parse-error-in-collect-all/lib.yx",3],["E5001","tests/yaoxiang-multifile/parse-error-in-collect-all/main.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/parse-error-in-collect-all/main.yx"}
 {"check":{"diagnostics":[["E4018","",0],["W1001","tests/yaoxiang-multifile/proof-obligation-honored/main.yx",15],["W1002","tests/yaoxiang-multifile/proof-obligation-honored/main.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/proof-obligation-honored/main.yx"}
 {"expectation":"behavior","file":"tests/yaoxiang-multifile/subdirectory-module/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"check":{"diagnostics":[["E1001","tests/yaoxiang-multifile/type-error-in-lib/lib.yx",2]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/type-error-in-lib/main.yx"}

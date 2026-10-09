@@ -214,13 +214,19 @@ impl Driver {
         }
     }
 
-    /// 多文件形态（4.2.1）：逐文件 `orchestrator::parse_file`，首错经
-    /// `OrchestratorError::Parse` 硬中止——`?` 传播的现状怪癖（WBS
-    /// 4.10.1 登记、测试钉板），与 Aggregation 无关。
+    /// 多文件形态：双形——
+    /// - MultiFile：逐文件 `orchestrator::parse_file`，首错经
+    ///   `OrchestratorError::Parse` 硬中止（FailFast 的正确语义：坏文件
+    ///   产不出 IR；测试钉板长期有效）；
+    /// - Check（WBS 4.10.1 修复，2026-10-09 用户裁决 rust 式收集语义）：
+    ///   parse 失败降级为逐文件诊断收集（`parsing_check`）。
     fn parsing_orchestrated(
         &self,
         state: &mut State,
     ) {
+        if matches!(state.program.kind, ProgramKind::Check) {
+            return self.parsing_check(state);
+        }
         let mut failure = None;
         for (i, ast_slot) in state.asts.iter_mut().enumerate() {
             let unit = &state.program.units[i];
@@ -234,6 +240,44 @@ impl Driver {
         }
         if let Some(e) = failure {
             state.fail_with(Stage::Parsing, e);
+        }
+    }
+
+    /// Check 形态（WBS 4.10.1）：parse 失败的文件**退出编译单元**——
+    /// AST 槽保持 `None`，Registry/RoleClassification/Typecheck/
+    /// DeadCodeAnalysis/ProofExecution 经既有 None 防御跳过该单元；
+    /// 全量 parse 错误进该文件的收集通道（CollectAll，不止首错），
+    /// 其余文件照常全阶段收集，最终由 CLI 汇总报错并非零退出
+    ///（rust 式「收集所有错误再统一报告」语义）。带病 AST **不进**
+    /// registry（方案 B 裁决：坏文件 = 不存在于本次编译——registry 永远
+    /// 干净，导入方报模块未找到 E5001；部分签名参与解析的误导性次级
+    /// 诊断由此归零）。
+    fn parsing_check(
+        &self,
+        state: &mut State,
+    ) {
+        let State {
+            program,
+            asts,
+            units,
+            ..
+        } = state;
+        for (i, ast_slot) in asts.iter_mut().enumerate() {
+            let source = &program.units[i].source;
+            let tokens = match lexer::tokenize(source) {
+                Ok(tokens) => tokens,
+                Err(e) => {
+                    // 词法失败：无 tokens 可 parse——该单元直接退出编译
+                    units[i].check_diagnostics.push(e.to_diagnostic());
+                    continue;
+                }
+            };
+            let result = parser::parse(&tokens);
+            if result.has_errors {
+                units[i].check_diagnostics.extend(result.errors);
+                continue;
+            }
+            *ast_slot = Some(result.module);
         }
     }
 
