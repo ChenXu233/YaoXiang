@@ -29,7 +29,6 @@ use crate::util::diagnostic::Diagnostic;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::tokenize;
 use crate::frontend::core::typecheck::checker::TypeChecker;
-use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
 use crate::frontend::module::registry::ModuleRegistry;
@@ -174,63 +173,46 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
 ///
 /// 注册表来自磁盘发现（同 `check_project`），被检查的模块用传入源码——
 /// 编辑器因此能得到与 `yaoxiang check` 一致的跨文件解析结果。
-/// 解析错误作为诊断返回（不中断），与 LSP 单文件路径的容错一致。
+///
+/// 02 §改动清单（WBS 4.2.3）：入口已瘦身为 `Program { kind: Lsp }` 构造器
+/// 并转调 Driver。降级策略按文件来源分流（2026-10-09 用户裁决）：磁盘
+/// 文件 parse 失败同 Check 的方案 B（收集 + 退出编译单元——修复旧行为
+/// 对无关磁盘文件硬中止、handler 静默退回单文件路径的怪癖）；被编辑
+/// 缓冲区 parse 失败保留残缺 AST 继续 typecheck（编辑器哲学）。返回
+/// 目标文件的诊断集（其余文件的收集条目不返回——LSP 按文档发布模型，
+/// 诊断由各自的 didOpen/didChange 驱动）。
 pub fn check_source_in_project(
     path: &Path,
     source: &str,
 ) -> Result<Vec<Diagnostic>, OrchestratorError> {
-    let files = discover(path)?;
-    let registry = build_registry_from(&files)?;
-    let method_bindings = registry.all_method_bindings();
-
-    let vendor_root = ensure_vendor_consistency(path)?;
-    let tokens = tokenize(source).map_err(|e| OrchestratorError::Parse {
-        path: path.display().to_string(),
-        message: format!("{:?}", e),
-    })?;
-    let parse_result = parser::parse(&tokens);
-    let mut diagnostics: Vec<Diagnostic> = parse_result.errors.to_vec();
-    let result = typecheck_with_registry_in(
-        &parse_result.module,
-        &registry,
-        &method_bindings,
-        vendor_root.as_deref(),
+    let program = crate::driver::Program::new(
+        crate::driver::ProgramKind::Lsp,
+        // 占位入口单元携带缓冲区源码——Discovery 臂重建单元集时
+        // 入口单元以缓冲区为准（覆盖磁盘陈旧内容）
+        vec![crate::driver::Unit::new(
+            entry_module_key(path),
+            path.to_path_buf(),
+            source,
+        )],
+        crate::frontend::config::CompileConfig::default(),
     );
-    // RFC-027 Phase 2.5 消费端（P3 止血）：LSP 项目内路径同样执行证明函数——
-    // 无类型错误时才执行（与 pipeline 门控一致），诊断并入收集输出。
-    let proof_errors = if result.diagnostics.is_empty() {
-        crate::frontend::proof_execution::execute_proof_calls(
-            result.proof_calls(),
-            &parse_result.module,
-            &result,
-        )
-    } else {
-        Vec::new()
-    };
-    // 错误 + 警告（W1003 等 Warning 级，LSP 侧以 severity 区分呈现）
-    diagnostics.extend(result.diagnostics);
-    diagnostics.extend(proof_errors);
-    diagnostics.extend(result.warnings);
-    Ok(diagnostics)
-}
-
-/// 用预构建注册表检查单个模块（collect_all 模式，不早退）。
-/// 返回完整结果——调用方取 `diagnostics`（错误）与 `warnings`（W 码警告）。
-/// `vendor_root` 非 None 时（RFC-014 §项目模式）缺依赖包的 E5001
-/// 追加 `yaoxiang install` 提示。
-fn typecheck_with_registry_in(
-    ast: &Module,
-    registry: &ModuleRegistry,
-    method_bindings: &HashMap<String, MonoType>,
-    vendor_root: Option<&Path>,
-) -> TypeCheckResult {
-    let mut checker = TypeChecker::new("<module>");
-    checker.env().module_registry = registry.clone();
-    checker.env().method_bindings = method_bindings.clone();
-    if let Some(vendor_root) = vendor_root {
-        checker.set_vendor_root(vendor_root.to_path_buf());
+    let outcome = crate::driver::Driver::new()
+        .run(program)
+        .map_err(|e| OrchestratorError::Io {
+            // Lsp 阶段表全接线且恒有占位入口单元——结构性不可达
+            path: path.display().to_string(),
+            reason: format!("driver: {e}"),
+        })?;
+    match outcome.failure {
+        Some(e) => Err(e),
+        // 结果过滤到目标文件（ProgramKind::Lsp 契约）
+        None => Ok(outcome
+            .check_diagnostics
+            .into_iter()
+            .find(|(p, _)| p.as_path() == path)
+            .map(|(_, diagnostics)| diagnostics)
+            .unwrap_or_default()),
     }
-    checker.check_module_collect_all(ast)
 }
 
 /// RFC-014 §项目模式前置检查（2026-09-15 决议）。

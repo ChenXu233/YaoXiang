@@ -12,11 +12,12 @@
 //! （02 §4）：三类原因（上游失败 / 无义务 / 配置未启用）记入
 //! `DriverOutcome.skipped`。
 //!
-//! **接线现状（4.2.2）**：12 个 `Stage` 变体全接线。SingleFile /
+//! **接线现状（4.2.3）**：12 个 `Stage` 变体全接线。SingleFile /
 //! WasmPlayground 六臂、MultiFile 九臂、Check 八臂（VendorConsistency /
 //! Discovery / Parsing / Registry / RoleClassification / Typecheck /
-//! DeadCodeAnalysis / ProofExecution）已开通；Lsp/Embedded 入口随
-//! 4.2.3/4.2.4 开通。
+//! DeadCodeAnalysis / ProofExecution）、Lsp 六臂（VendorConsistency /
+//! Discovery / Parsing / Registry / Typecheck / ProofExecution）已开通；
+//! Embedded 入口随 4.2.4 开通。
 //! Skipped 只进内部记录、**不外发诊断**（外发随 4.3 义务账本，02 §4
 //! 文案表）——zero-diff 判据（C2）要求任何新增对外诊断都必须显式裁决。
 //!
@@ -214,18 +215,21 @@ impl Driver {
         }
     }
 
-    /// 多文件形态：双形——
+    /// 多文件形态：三形——
     /// - MultiFile：逐文件 `orchestrator::parse_file`，首错经
     ///   `OrchestratorError::Parse` 硬中止（FailFast 的正确语义：坏文件
     ///   产不出 IR；测试钉板长期有效）；
     /// - Check（WBS 4.10.1 修复，2026-10-09 用户裁决 rust 式收集语义）：
-    ///   parse 失败降级为逐文件诊断收集（`parsing_check`）。
+    ///   parse 失败降级为逐文件诊断收集（`parsing_check`）；
+    /// - Lsp（4.2.3）：按文件来源分流（`parsing_lsp`）。
     fn parsing_orchestrated(
         &self,
         state: &mut State,
     ) {
-        if matches!(state.program.kind, ProgramKind::Check) {
-            return self.parsing_check(state);
+        match state.program.kind {
+            ProgramKind::Check => return self.parsing_check(state),
+            ProgramKind::Lsp => return self.parsing_lsp(state),
+            _ => {}
         }
         let mut failure = None;
         for (i, ast_slot) in state.asts.iter_mut().enumerate() {
@@ -275,6 +279,49 @@ impl Driver {
             let result = parser::parse(&tokens);
             if result.has_errors {
                 units[i].check_diagnostics.extend(result.errors);
+                continue;
+            }
+            *ast_slot = Some(result.module);
+        }
+    }
+
+    /// Lsp 形态（4.2.3，按文件来源分流裁决，2026-10-09）：
+    /// - **被编辑缓冲区**（入口单元，源码来自内存）：编辑器哲学——
+    ///   parse 错误收集后**保留残缺 AST** 继续 typecheck（打字中间态
+    ///   不该让补全/跳转的世界消失）；词法失败无 tokens 可恢复，
+    ///   只收诊断（旧行为此处硬中止，handler 被迫退回单文件路径）；
+    /// - **磁盘文件**：与 Check 同款的方案 B（收集 + 退出编译单元）——
+    ///   修复旧行为里 `build_registry_from` 对无关磁盘文件硬中止、
+    ///   handler 静默退回单文件路径的怪癖（两端降级策略收敛，「不报
+    ///   误导性次级错误」的优点在 LSP 侧同样成立）。
+    fn parsing_lsp(
+        &self,
+        state: &mut State,
+    ) {
+        let State {
+            program,
+            asts,
+            units,
+            entry_path,
+            ..
+        } = state;
+        for (i, ast_slot) in asts.iter_mut().enumerate() {
+            let is_buffer = program.units[i].path == *entry_path;
+            let source = &program.units[i].source;
+            let tokens = match lexer::tokenize(source) {
+                Ok(tokens) => tokens,
+                Err(e) => {
+                    units[i].check_diagnostics.push(e.to_diagnostic());
+                    continue;
+                }
+            };
+            let result = parser::parse(&tokens);
+            if result.has_errors {
+                units[i].check_diagnostics.extend(result.errors);
+                // 缓冲区保留残缺 AST（编辑器哲学）；磁盘文件退出编译单元
+                if is_buffer {
+                    *ast_slot = Some(result.module);
+                }
                 continue;
             }
             *ast_slot = Some(result.module);
@@ -355,17 +402,24 @@ impl Driver {
             vendor_root,
             failure,
             failed_stages,
+            entry_path,
             ..
         } = state;
         let (Some(registry), Some(method_bindings)) = (registry.as_ref(), method_bindings.as_ref())
         else {
             return; // 上游已失败（FailFast 下 run 循环已中止，防御）
         };
-        let is_check = matches!(program.kind, ProgramKind::Check);
+        // 逐文件收集通道（Check/Lsp）；Lsp 只检目标文件——其余单元
+        // 仅为 registry 供签名，不参与 typecheck（现状契约）
+        let collect_per_file = matches!(program.kind, ProgramKind::Check | ProgramKind::Lsp);
+        let is_lsp = matches!(program.kind, ProgramKind::Lsp);
         let vendor_root = vendor_root.clone();
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue;
+            };
+            if is_lsp && program.units[i].path != *entry_path {
+                continue; // LSP 只 typecheck 目标文件
             };
             let mut checker = TypeChecker::new("<module>");
             checker.env().module_registry = registry.clone();
@@ -378,16 +432,29 @@ impl Driver {
                 Aggregation::FailFast => checker.check_module(ast),
                 Aggregation::CollectAll => checker.check_module_collect_all(ast),
             };
-            if is_check {
-                // Check 通道：警告暂存（DeadCodeAnalysis 臂按 in_project
-                // 门控外发）；诊断逐文件收集，不标阶段失败、不中止
-                us.typecheck_warnings = std::mem::take(&mut result.warnings);
-                if !result.diagnostics.is_empty() {
+            if collect_per_file {
+                // 诊断逐文件收集，不标阶段失败、不中止。警告：Check
+                // 暂存（DeadCodeAnalysis 臂按 in_project 门控外发）；
+                // Lsp 无 DeadCodeAnalysis 阶段，警告随 typecheck 直接
+                // 入通道（文件内顺序归一：typecheck 诊断 → W 码警告 →
+                // proof 错误——02 §1 注记 #4 同原则延伸）
+                let warnings = std::mem::take(&mut result.warnings);
+                if result.diagnostics.is_empty() {
+                    if is_lsp {
+                        us.check_diagnostics.extend(warnings);
+                    } else {
+                        us.typecheck_warnings = warnings;
+                    }
+                    us.type_result = Some(result);
+                } else {
                     us.typecheck_failed = true;
                     us.check_diagnostics.extend(result.diagnostics);
-                    continue;
+                    if is_lsp {
+                        us.check_diagnostics.extend(warnings);
+                    } else {
+                        us.typecheck_warnings = warnings;
+                    }
                 }
-                us.type_result = Some(result);
                 continue;
             }
             if !result.diagnostics.is_empty() {
@@ -579,9 +646,9 @@ impl Driver {
                 type_result,
             );
             if !stage_errors.is_empty() {
-                // Check 通道（4.2.2）：proof 失败是逐文件收集诊断——不标
-                // 阶段失败、不中止（check_project 现状的 CollectAll 语义）
-                if matches!(program.kind, ProgramKind::Check) {
+                // Check/Lsp 通道（4.2.2/4.2.3）：proof 失败是逐文件收集
+                // 诊断——不标阶段失败、不中止（CollectAll 语义）
+                if matches!(program.kind, ProgramKind::Check | ProgramKind::Lsp) {
                     us.check_diagnostics.extend(stage_errors);
                     continue;
                 }
@@ -807,6 +874,15 @@ impl Driver {
         &self,
         state: &mut State,
     ) {
+        // LSP 形态（4.2.3）：占位入口单元携带的是内存缓冲区源码（脏
+        // 缓冲区）——重建单元集后，入口单元的源码以缓冲区为准（覆盖
+        // 磁盘上的陈旧/损坏内容；磁盘旧版的 parse 错误因此不会误杀
+        // 正在编辑的缓冲区）
+        let lsp_buffer = if matches!(state.program.kind, ProgramKind::Lsp) {
+            Some(state.program.units[0].source.clone())
+        } else {
+            None
+        };
         match orchestrator::discover_with_used(&state.entry_path) {
             Ok((files, used_by, shadow_events)) => {
                 state.program.units = files
@@ -818,6 +894,17 @@ impl Driver {
                 state.asts = (0..n).map(|_| None).collect();
                 state.used_by = used_by;
                 state.shadow_events = shadow_events;
+                if let Some(source) = lsp_buffer {
+                    if let Some(unit) = state
+                        .program
+                        .units
+                        .iter_mut()
+                        .find(|u| u.path == state.entry_path)
+                    {
+                        unit.source = source;
+                    }
+                    // 入口单元不在发现集（病态情形）→ 丢弃覆盖，防御
+                }
             }
             Err(e) => state.fail_with(Stage::Discovery, e),
         }
@@ -1014,8 +1101,8 @@ pub struct SkippedStage {
 /// CompilationResult 无法表达 OrchestratorError 契约）：
 /// - SingleFile/WasmPlayground：`result`（pipeline 契约；IR 在 `result.ir`）；
 /// - MultiFile：`module`（Linking 产物）+ `failure`（OrchestratorError
-///   契约）；Check：`check_diagnostics`（逐文件收集通道，4.2.2）；
-///   Lsp/Embedded 的通道随 4.2.3/4.2.4 按需扩展。
+///   契约）；Check/Lsp：`check_diagnostics`（逐文件收集通道，4.2.2/
+///   4.2.3——Lsp 由调用方过滤到目标文件）；Embedded 随 4.2.4 落地。
 #[derive(Debug)]
 pub struct DriverOutcome {
     /// 编译结果（诊断集与 pipeline 时代逐字节相同，C2 判据）
@@ -1228,23 +1315,25 @@ impl State {
                 skipped: self.skipped,
             };
         }
-        // Check 通道（4.2.2）：逐文件诊断收集——每个发现文件都有条目
-        //（干净文件为空 Vec，check_project 契约）；其余形态恒空
-        let check_diagnostics = if matches!(self.program.kind, ProgramKind::Check) {
-            let units_meta = &self.program.units;
-            self.units
-                .iter_mut()
-                .enumerate()
-                .map(|(i, us)| {
-                    (
-                        units_meta[i].path.clone(),
-                        std::mem::take(&mut us.check_diagnostics),
-                    )
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        // Check/Lsp 通道（4.2.2/4.2.3）：逐文件诊断收集——每个发现文件
+        // 都有条目（干净文件为空 Vec，check_project 契约；Lsp 由调用方
+        // 过滤到目标文件）；其余形态恒空
+        let check_diagnostics =
+            if matches!(self.program.kind, ProgramKind::Check | ProgramKind::Lsp) {
+                let units_meta = &self.program.units;
+                self.units
+                    .iter_mut()
+                    .enumerate()
+                    .map(|(i, us)| {
+                        (
+                            units_meta[i].path.clone(),
+                            std::mem::take(&mut us.check_diagnostics),
+                        )
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
         let single_file = self.uses_pipeline_channel();
         let result = if self.errors.is_empty() {
             // SingleFile：unit 0 的 IR 即最终产物

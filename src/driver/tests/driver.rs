@@ -712,3 +712,143 @@ fn test_driver_run_check_proof_error_collected_per_file() {
     let zzz = check_diags_of(&outcome, "zzz.yx").expect("entry for zzz.yx");
     assert!(!zzz.is_empty(), "zzz.yx 的类型错误必须进收集通道: {zzz:?}");
 }
+
+// ===================== 4.2.3 Lsp 形态（按文件来源分流裁决，2026-10-09）=====================
+
+/// 以 Lsp 形态跑 Driver：占位入口单元携带内存缓冲区源码（脏缓冲区），
+/// Discovery 重建单元集时入口单元的源码以缓冲区为准。
+fn run_lsp(
+    entry: &Path,
+    buffer: &str,
+) -> Result<DriverOutcome, DriverError> {
+    let program = Program::new(
+        ProgramKind::Lsp,
+        vec![Unit::new("main", entry, buffer)],
+        CompileConfig::default(),
+    );
+    Driver::new().run(program)
+}
+
+#[test]
+fn test_driver_run_lsp_typechecks_buffer_with_disk_registry() {
+    // Arrange: 磁盘项目干净；缓冲区把 add_one 的实参改成错误类型——LSP
+    // 契约：被编辑内容参与 typecheck，磁盘 lib 的签名照常解析（编辑器
+    // 里的跨文件结果与 yaoxiang check 一致）
+    let (_dir, entry) = make_project(&[
+        (
+            "lib.yx",
+            "add_one: (x: Int) -> Int = (x) => {\n    return x + 1\n}\n",
+        ),
+        (
+            "main.yx",
+            "use lib.{add_one}\nmain = () => {\n    y = add_one(1)\n}\n",
+        ),
+    ]);
+    let buffer = "use lib.{add_one}\nmain = () => {\n    y = add_one(\"nope\")\n}\n";
+
+    // Act
+    let outcome = run_lsp(&entry, buffer).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "LSP 诊断收集不得走故障通道: {:?}",
+        outcome.failure
+    );
+    let main = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert!(
+        main.iter().any(|d| d.code == "E1002"),
+        "缓冲区的类型错误必须被收集: {main:?}"
+    );
+    assert!(
+        !main.iter().any(|d| d.code == "E5001"),
+        "磁盘 lib 的签名必须照常解析（不得误报模块未找到）: {main:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_lsp_buffer_parse_error_keeps_partial_ast() {
+    // Arrange（编辑器哲学钉板）：缓冲区末尾有一处语法错误（E0012），但
+    // 幸存语句的类型错误（E1002）仍应被检出——残缺 AST 继续 typecheck，
+    // 而非整体丢弃（与 Check 路径的方案 B 按文件来源分流）
+    let (_dir, entry) = make_project(&[("main.yx", "main: () -> Void = {}\n")]);
+    let buffer = "main: Int = \"nope\"\nlet = ;\n";
+
+    // Act
+    let outcome = run_lsp(&entry, buffer).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "缓冲区 parse 错误不得硬中止: {:?}",
+        outcome.failure
+    );
+    let main = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    let codes: Vec<&str> = main.iter().map(|d| d.code.as_str()).collect();
+    assert!(
+        codes.contains(&"E0012"),
+        "缓冲区 parse 错误必须收集: {codes:?}"
+    );
+    assert!(
+        codes.contains(&"E1002"),
+        "幸存语句必须继续 typecheck（编辑器哲学）: {codes:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_lsp_disk_parse_error_degrades_like_check() {
+    // Arrange（LSP 硬中止怪癖修复钉板）：磁盘上 lib.yx 语法错误——旧行为
+    // build_registry_from 硬中止，handler 静默退回单文件路径（跨文件解析
+    // 能力丧失）；裁决后磁盘文件同 Check 方案 B（收集 + 退出编译单元），
+    // 缓冲区照常检查，导入方报模块未找到
+    let (_dir, entry) = make_project(&[
+        ("lib.yx", "let = ;\n"),
+        ("main.yx", "use lib.{x}\nmain: () -> Void = {}\n"),
+    ]);
+    let buffer = "use lib.{x}\nmain: () -> Void = {}\n";
+
+    // Act
+    let outcome = run_lsp(&entry, buffer).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "磁盘文件 parse 错误不得硬中止 LSP: {:?}",
+        outcome.failure
+    );
+    let lib = check_diags_of(&outcome, "lib.yx").expect("entry for lib.yx");
+    assert!(
+        lib.iter().any(|d| d.code == "E0012"),
+        "磁盘带病文件的 parse 诊断入其条目: {lib:?}"
+    );
+    let main = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert!(
+        main.iter().any(|d| d.code == "E5001"),
+        "导入带病磁盘模块报模块未找到（方案 B 收敛）: {main:?}"
+    );
+}
+
+#[test]
+fn test_driver_run_lsp_buffer_lex_error_collected() {
+    // Arrange（编辑器哲学延伸）：缓冲区词法失败（未终结字符串）——无
+    // tokens 可 parse，收词法诊断并跳过 typecheck，不再硬中止（旧行为
+    // 经 OrchestratorError::Parse 让 handler 退回单文件路径）
+    let (_dir, entry) = make_project(&[("main.yx", "main: () -> Void = {}\n")]);
+    let buffer = "main = () => {\n    s = \"unterminated\n}\n";
+
+    // Act
+    let outcome = run_lsp(&entry, buffer).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "缓冲区词法错误不得硬中止: {:?}",
+        outcome.failure
+    );
+    let main = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert!(
+        main.iter()
+            .any(|d| matches!(d.severity, crate::util::diagnostic::Severity::Error)),
+        "词法错误必须以 Error 级收集: {main:?}"
+    );
+}
