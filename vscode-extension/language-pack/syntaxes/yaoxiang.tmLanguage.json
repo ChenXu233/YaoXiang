@@ -37,7 +37,7 @@
         },
         {
           "name": "keyword.declaration.yaoxiang",
-          "match": "\\b(pub|use|spawn|ref|mut|unsafe)\\b"
+          "match": "\\b(use|spawn|ref|mut|unsafe)\\b"
         },
         {
           "name": "keyword.other.yaoxiang",
