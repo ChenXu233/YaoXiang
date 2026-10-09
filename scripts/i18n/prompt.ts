@@ -1,6 +1,10 @@
 import type { LanguageConfig } from './config.ts';
 
-const DEFAULT_LANGUAGE_PROMPT = '请进行专业准确的技术文档翻译。';
+// 稳定性条款（#421）：既有译文是既定产物，重译只发生在源文案语义变化时——
+// 风格层面（大小写、措辞习惯、句式）保持克制，不做无谓改写
+export const DEFAULT_LANGUAGE_PROMPT =
+  '请进行专业准确的技术文档翻译。目标语言的既有译文是既定产物：' +
+  '除非源文案语义发生变化，保持既有译法与风格（大小写、措辞习惯），不做无谓改写。';
 
 /** 含 `languages` 表的最小配置形状（只取本函数所需字段） */
 interface PromptConfig {

@@ -38,26 +38,49 @@ export function saveCache(cachePath: string, cache: TranslationCache): void {
 }
 
 /**
+ * 待翻译键的甄别结果
+ *
+ * - `translate`：需要（重）翻译——目标缺失，或缓存有记录且源文案 hash 已变
+ * - `adopt`：收养——缓存无记录但目标已有译文（#421）。缓存冷启动（CI 缓存
+ *   丢失/首次接入）时，hash 无从比对，「无记录」曾被当成「全部待翻」，
+ *   一轮就把全部既有产物重写（9a1ccdbd 415 处、9bb4d257c 五语言全量）。
+ *   既有译文是既定产物，收养进缓存而非重译；确需全量刷新走 `--full`。
+ */
+export interface KeysToTranslate {
+  translate: string[];
+  adopt: string[];
+}
+
+/**
  * 获取需要翻译的 key 列表
  * @param sourceKeys - 源 key-value 映射
  * @param cache - cache 对象
  * @param lang - 目标语言代码
- * @returns 需要翻译的 key 列表（源文案 hash 变了的）
+ * @param existingTarget - 目标语言现有译文（缺失视为空表）
+ * @returns translate / adopt 两组 key（见 {@link KeysToTranslate}）
  */
 export function getKeysToTranslate(
   sourceKeys: FlatKeys,
   cache: TranslationCache,
   lang: string,
-): string[] {
-  const result: string[] = [];
+  existingTarget: FlatKeys = {},
+): KeysToTranslate {
+  const translate: string[] = [];
+  const adopt: string[] = [];
   for (const [key, value] of Object.entries(sourceKeys)) {
     const cacheKey = `${key}:${lang}`;
     const currentHash = computeHash(value);
-    if (cache[cacheKey] !== currentHash) {
-      result.push(key);
+    if (cache[cacheKey] === currentHash) {
+      continue;
+    }
+    const existing = existingTarget[key];
+    if (cache[cacheKey] === undefined && existing !== undefined && existing !== '') {
+      adopt.push(key);
+    } else {
+      translate.push(key);
     }
   }
-  return result;
+  return { translate, adopt };
 }
 
 /**
