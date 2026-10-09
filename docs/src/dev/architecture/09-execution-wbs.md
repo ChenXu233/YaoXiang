@@ -243,7 +243,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 - [ ] **4.5 跨层契约 PlanId 化（D20）**（2 个三级任务）
 - [ ] **4.6 LSP 语义数据管线统一（D55）**（1 个三级任务）
 - [ ] **4.9 引用池正确实现（RFC-029f 修正）**（5 个三级任务）
-- [ ] **4.10 多文件语义缺口（4.2.1 施工发现登记；可延后至 P10）**（2 个三级任务）
+- [x] **4.10 多文件语义缺口（4.2.1 施工发现登记；两项均提前于 P4 内完成）**（2 个三级任务）
 
 | 二级 | 三级 | 前置 | 验收 |
 | --- | --- | --- | --- |
@@ -273,7 +273,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 4.9.3 Script 不用池：`FileRole::Script` 路径不调用 `set_cross_file_refs`，只按定义-使用图判定 | 4.9.2 | Script 单文件语义恢复；**单测：项目内其他文件的引用不影响 script.yx 的 W1001** |
 | | 4.9.4 消费定义细化：区分"被 import"和"被 import 后真实使用"——只有后者算消费（需 `use` 项的路径解析 + 实际使用点追踪） | 4.9.3 + 4.6.1 | `use a::foo` 但从不调用 `foo()` 的情况下，a.yx 的 `foo` 仍报 W1001；**硬前置**：`use` 项路径解析（4.6.1 交付） |
 | | 4.9.5 测试池分离：tests/ 的引用单独成池，不豁免生产代码（src/）的未使用定义 | 4.9.4 | **单测：tests/helper.yx 引用 src/util.yx 的 `debug_print`，但 src/ 内无消费者时，`debug_print` 仍报 W1001**；RFC-029f 表格更新（测试豁免范围缩窄到仅测试自身） |
-| 4.10 多文件语义缺口 | 4.10.1 check 路径 parse 错误硬中止降级：parse 失败文件降级为「空 AST + 诊断」，registry 跳过其签名，check 对其余文件继续收集（现状 `build_registry_from` 的 `?` 硬传播与 CollectAll 语义矛盾——CollectAll 只覆盖 typecheck 及之后；LSP 受影响最大。**先裁决**「带病 AST 进 registry」语义再动手） | 4.2.2 | 含语法错误项目的 `yaoxiang check` 产出逐文件诊断而非整体中止 |
+| 4.10 多文件语义缺口 | 4.10.1 check 路径 parse 错误硬中止降级（**2026-10-09 已完成**，d929c77b——用户裁决 rust 式收集语义 + 方案 B「带病文件退出编译单元」：parse 失败文件只报 parse 诊断、不进 registry，其余文件照常全阶段收集，CLI 汇总后非零退出；compile 路径 FailFast 硬中止保留为正确语义；LSP 路径的同类形态随 4.2.3 继承） | 4.2.2 | 含语法错误项目的 `yaoxiang check` 产出逐文件诊断而非整体中止（语料夹具 `parse-error-in-collect-all` + driver/CLI 钉板） |
 | | 4.10.2 discover 自动注入 std.list（对齐单文件 `merge_embedded_std_ir` 的 #117 行为）（**2026-10-09 已完成**，5ba52eaf——用户裁决 fast-track 本轮修复，不再缓办）：多文件项目无显式 `use std.list` 的 for 循环曾**编译通过、运行期 E6006**（探针实证） | — | corpus 夹具 `for-loop-no-use-std-list` 绿；基线 331 语料既有 330 条零漂移 |
 
 ### P5 checker 文件内拆分 —— 本文档补齐（原缺口 G1）

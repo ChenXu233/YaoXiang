@@ -113,7 +113,7 @@ RFC-039 给出**为什么**重构与**按什么顺序**做；本文给出 L1 的
 > - **第 6 行**（单态化单文件独占）→ 归 WBS 3.4.8（前置 4.1.3，潜在风险未证缺陷）。
 > - **第 7 行** check_module / check_module_collect_all 双入口 → 归 4.2.7（Aggregation 参数驱动）。
 > - 代码侧引用的「#434 裁决」此前 docs 零登记——已补登为 RFC-039 **D57**。
-> - **嵌入 std 纳入不对称（表外新事实，2026-10-09 补登）**：单文件路径由 `merge_embedded_std_ir` 无条件注入 std.list（for 循环脱糖必需，#117 硬切换），多文件 `discover` 此前只认显式 `use`——项目内 for 循环编译通过、运行期 E6006（探针实证）。已修复并勾销 WBS 4.10.2；同族「多文件缺单文件一步」的 parse 硬中止怪癖挂号 WBS 4.10.1（本审计方法看「阶段覆盖/字段消费」维度，这条是编译单元成员差异，属漏网维度）。
+> - **嵌入 std 纳入不对称（表外新事实，2026-10-09 补登）**：单文件路径由 `merge_embedded_std_ir` 无条件注入 std.list（for 循环脱糖必需，#117 硬切换），多文件 `discover` 此前只认显式 `use`——项目内 for 循环编译通过、运行期 E6006（探针实证）。已修复并勾销 WBS 4.10.2；同族「多文件缺单文件一步」的 parse 硬中止怪癖挂号 WBS 4.10.1——**亦已修复**（4.2.2 后随即落地，Check 路径降级为逐文件收集；本审计方法看「阶段覆盖/字段消费」维度，这条是编译单元成员差异，属漏网维度）。
 
 **两处需要精确表述，否则会写错：**
 
@@ -411,8 +411,12 @@ pub enum StageScope { PerModule, Project }
 >    用户裁决）：签名收集（`extract_module_info`）与 `ast_has_main` 都消费
 >    AST 产物——初稿次序会逼 Registry 臂「隐藏 parse」，让阶段表对数据流
 >    撒谎；且多文件 parse 因此从 2 次降为 1 次。附带的现状如实登记：多文件
->    路径 parse 错误仍是硬中止（`build_registry_from` 的 `?` 传播，与
->    CollectAll 语义的张力登记为 WBS 4.10.1，4.2.1 测试钉板）。
+>    路径 parse 错误曾是硬中止（`build_registry_from` 的 `?` 传播，与
+>    CollectAll 语义的张力登记为 WBS 4.10.1）——**4.10.1 已修复**
+>    （2026-10-09 用户裁决 rust 式收集语义 + 方案 B）：Check 路径 parse
+>    失败降级为逐文件诊断收集、带病文件退出编译单元（不进 registry，
+>    导入方报 E5001）；MultiFile 路径保留硬中止（FailFast 下坏文件产不出
+>    IR，属正确语义，钉板长期有效）。
 > 4. Check 形态落地（4.2.2，2026-10-09 用户裁决）补两条登记：
 >    a. 数据依赖边 14→16：`RoleClassification` 消费 Discovery 的 used_by
 >       边集、`DeadCodeAnalysis` 消费 Discovery 的 W1006 遮蔽事件——初稿
