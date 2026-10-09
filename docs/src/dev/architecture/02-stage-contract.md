@@ -113,6 +113,7 @@ RFC-039 给出**为什么**重构与**按什么顺序**做；本文给出 L1 的
 > - **第 6 行**（单态化单文件独占）→ 归 WBS 3.4.8（前置 4.1.3，潜在风险未证缺陷）。
 > - **第 7 行** check_module / check_module_collect_all 双入口 → 归 4.2.7（Aggregation 参数驱动）。
 > - 代码侧引用的「#434 裁决」此前 docs 零登记——已补登为 RFC-039 **D57**。
+> - **嵌入 std 纳入不对称（表外新事实，2026-10-09 补登）**：单文件路径由 `merge_embedded_std_ir` 无条件注入 std.list（for 循环脱糖必需，#117 硬切换），多文件 `discover` 此前只认显式 `use`——项目内 for 循环编译通过、运行期 E6006（探针实证）。已修复并勾销 WBS 4.10.2；同族「多文件缺单文件一步」的 parse 硬中止怪癖挂号 WBS 4.10.1（本审计方法看「阶段覆盖/字段消费」维度，这条是编译单元成员差异，属漏网维度）。
 
 **两处需要精确表述，否则会写错：**
 
@@ -510,6 +511,8 @@ impl Driver {
 > 2. `Driver` 无 `config` 字段——配置唯一来源是 `Program.config`（§5「避免 Driver 持可变全局状态」的判定覆盖草图字段）；
 > 3. `Skipped` 诊断在 4.1.3 仅记入 `DriverOutcome.skipped` 内部台账，不外发——S2「刻意不修任何 bug」的 zero-diff 判据要求；外发随 4.3 义务账本；
 > 4. `proof_execution` 模块可见性放宽为 `pub(crate)`：driver 臂是唯一新调用方（L1→L2 为允许方向）；orchestrator 存量调用点随 4.2 迁走后归位再议。
+> 5. 多文件形态下 ProofExecution 是独立阶段、在**全部** typecheck 之后执行（A1，2026-10-09 用户裁决）：`compile_project` 原把 proof 穿插在逐文件 typecheck 循环内（文件 N 的 proof 先于文件 N+1 的 typecheck）。单重失败两者逐字节相同；「文件1 proof 失败 + 文件2 typecheck 失败」的多重失败场景，首报从 proof 错误变为 typecheck 错误（测试钉板）。
+> 6. `DriverOutcome` 按 ProgramKind 分通道携带产物：`result`（pipeline 契约）/ `module` + `failure`（orchestrator 契约，4.2.1）——各入口的外部错误契约（PipelineError / OrchestratorError）不属 Driver 可统一的类型面。
 
 **十个入口的改造方式（逐个指定函数）**：
 
@@ -602,9 +605,9 @@ pub enum Aggregation {
 | 场景 | 改造前 | 改造后 |
 | --- | --- | --- |
 | `yaoxiang run app.yx`（单文件） | 5 阶段 | 同 5 阶段 + `assert_drained()` 结算 |
-| `yaoxiang run`（多文件） | 无 proof_execution、无 W1001/W1002/W1003 | **新增** proof_execution；**新增**警告输出 |
-| `yaoxiang check`（多文件） | 无 proof_execution | **新增** proof_execution |
-| LSP（项目内） | 无 proof_execution | **新增** proof_execution |
+| `yaoxiang run`（多文件） | 无 proof_execution、无 W1001/W1002/W1003 | proof_execution 已在 P3 止血接入；**警告面维持不新增**（决策 B1，2026-10-09：死代码族警告不进 compile 路径——池语义正被 4.9 判缺陷修正，归一警告面留待 4.9 之后再议；本行初稿「新增警告输出」作废） |
+| `yaoxiang check`（多文件） | 无 proof_execution | 已在 P3 止血接入 |
+| LSP（项目内） | 无 proof_execution | 已在 P3 止血接入 |
 | Z3 未安装 + 单文件 | `predicate.rs:35` **panic** | 改为 `Abort` + E 级诊断（**这是行为变更，见兼容性**） |
 | Z3 未安装 + 多文件 | 静默跳过 | 同上，统一 |
 

@@ -49,6 +49,7 @@ P4「统一 Driver」是全计划最大风险点，本层是 P4 唯一可执行�
 | subdirectory-module | 子目录模块解析（`use util.math.{double}`） | 行为 |
 | type-error-in-lib | 被引用模块内的错误沿 use 图传导（E1001） | compile-error |
 | proof-obligation-honored | 多文件路径证明义务被执行（RFC-027 §4.2，P3 漏洞修复） | compile-error |
+| for-loop-no-use-std-list | 无显式 `use std.list` 的 for 循环（#117 硬切换补齐，WBS 4.10.2） | 行为 |
 
 ## 计划扩展（登记用，落地时勾掉）
 
