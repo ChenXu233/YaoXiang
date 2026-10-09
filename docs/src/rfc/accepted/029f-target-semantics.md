@@ -12,6 +12,12 @@ issue: '#334'
 
 ## 摘要
 
+> **落地修正（2026-10-08，RFC-029g）**：`pub` 关键字已由 RFC-029g 整体删除。本文正文中
+> 所有「`pub` 豁免 / `pub` 文件 / 未用 pub 报警」的表述，请按「**顶层绑定 + 包内引用池**」
+> 读取：角色分类（Script / Bin / Lib / Internal / Test）与导入面语义不变，变化只在死代码
+> 豁免的判定条件（见 [029g](029g-remove-pub-and-auto-bind.md) 与
+> `docs/src/reference/warning-code/warning-codes.md` 的判定口径）。
+
 兑现 RFC-029「子 RFC 规划」的延伸槽位（029b–029e 已占，顺延 029f）：为源文件定义
 **编译目标角色模型**（Script / Bin / Lib / Test / Internal 五类）及其**导入面语义**——
 无 manifest 时按入口可达性推断（零配置），有 manifest 时按 `[lib]` / `[[bin]]` /

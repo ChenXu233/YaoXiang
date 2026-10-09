@@ -47,7 +47,7 @@
 `src/std/option.yx` 全文：
 
 ```
-pub Option: (T: Type) -> Type = {
+Option: (T: Type) -> Type = {
     some: (T) -> Option(T),
     none: () -> Option(T),
     Try(Option(T), T, Void),
@@ -85,7 +85,7 @@ pub Option: (T: Type) -> Type = {
 `Result` 类型本体（`src/std/result.yx:19-23`）：
 
 ```
-pub Result: (T: Type, E: Type) -> Type = {
+Result: (T: Type, E: Type) -> Type = {
     ok: (T) -> Result(T, E),
     err: (E) -> Result(T, E),
     Try(Result(T, E), T, E),

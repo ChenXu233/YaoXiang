@@ -30,7 +30,7 @@ struct 'option'`。它们以**方法调用**语法 `o.is_failure()` 访问。
 ## 类型体
 
 ```
-pub Option: (T: Type) -> Type = {
+Option: (T: Type) -> Type = {
     some: (T) -> Option(T),
     none: () -> Option(T),
     Try(Option(T), T, Void),

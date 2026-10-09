@@ -334,10 +334,9 @@ main: () -> Void = {
 
 ---
 
-## pub 与自动绑定
+## 方法与显式绑定
 
-在模块中，用 `pub` 关键字声明的函数可以被其他模块导入使用。更有趣的是，**`pub`
-函数会自动绑定到同文件中定义的类型上**，让你可以用 OOP 风格调用。
+方法不靠修饰符自动生成——**方法形式是显式组合**：把首参写成 `self`，用 `Type.method` 命名。
 
 ```yaoxiang
 // point.yx
@@ -347,29 +346,26 @@ use std.math
 // 定义类型
 Point: Type = { x: Float, y: Float }
 
-// pub 函数：编译器自动将其绑定为 Point.distance
+// 显式方法：首参 self 决定接收者
 // 注意：表达式不能直接挂方法——`(dx*dx+dy*dy).sqrt()` 报 E1053，用 math.sqrt
-pub distance: (p1: Point, p2: Point) -> Float = {
-    dx = p1.x - p2.x
-    dy = p1.y - p2.y
+Point.distance: (self: Point, other: Point) -> Float = {
+    dx = self.x - other.x
+    dy = self.y - other.y
     d = dx * dx + dy * dy
     return math.sqrt(d)
 }
 
 main: () -> Void = {
-    // 两种调用方式都可以
     p1 = Point(x=3.0, y=4.0)
     p2 = Point(x=1.0, y=2.0)
 
-    d1 = distance(p1, p2)       // 函数式调用
-    d2 = p1.distance(p2)        // OOP 风格调用（语法糖）
-    print(d1)
-    print(d2)
+    d = p1.distance(p2)         // 点号调用
+    print(d)
 }
 ```
 
-编译器看到 `pub distance(p1: Point, p2: Point)`，发现 `Point` 在同一个文件中定义，就自动创建了
-`Point.distance` 的绑定。你不需要写任何额外的 `impl` 代码。
+调用点 `p1.distance(p2)` 就是 `Point.distance` 的方法调用；写成 `Point.distance(p1, p2)`
+会报 E1010。签名里的 `self` 必须显式写出——方法没有任何隐式绑定，也不需要 `impl` 块。
 
 ---
 
@@ -396,8 +392,8 @@ double = (x: Int) => x * 2
 // 有参—省略 Lambda 头（推荐）
 triple: (x: Int) -> Int = x * 3
 
-// pub 导出 + 自动绑定
-pub negate: (x: Int) -> Int = 0 - x
+// 顶层绑定默认对外可见——没有 pub/private 之类的修饰符
+negate: (x: Int) -> Int = 0 - x
 
 // ── 调用语法 ──
 
@@ -417,7 +413,7 @@ result = add(1, b = 2)      // 混用（位置在前）
 - **代码块形式**：`= { ...; return expr }`，块内必须用 `return` 显式返回
 - **参数类型标注**：签名或 Lambda 头至少一处写类型，推荐写在签名中
 - **调用**：位置参数或命名参数，命名参数顺序任意
-- **pub 自动绑定**：`pub` 函数自动绑定到同文件的类型上，支持 `obj.method()` 调用
+- **方法显式绑定**：`Type.method: (self: T, …) -> R = {...}`，没有隐式绑定，调用点用 `.`
 - **无参最简**：`name = { ... }`，编译器自动推断为 `() -> Void`
 
 下一步，你可以继续学习[控制流](../../../dev/design/formatter/formatting-rules/control-flow.md)章节，了解如何在函数中使用 `if`、`for` 和 `while`。

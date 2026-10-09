@@ -78,28 +78,11 @@ main: () -> Void = {
 }
 ```
 
-### pub 自动绑定
+### 没有隐式方法绑定
 
-在同一文件中，`pub` 声明的函数会自动绑定到同文件定义的类型：
-
-<!-- docs-example: skip -->
-```yaoxiang
-Point: Type = { x: Float, y: Float }
-
-// pub 函数自动绑定到 Point
-pub distance: (p1: Point, p2: Point) -> Float = {
-    dx = p1.x - p2.x
-    dy = p1.y - p2.y
-    d = dx * dx + dy * dy
-    return math.sqrt(d)
-}
-
-p1 = Point(x= 0.0, y= 0.0)
-p2 = Point(x= 3.0, y= 4.0)
-
-// 自动绑定的方法用 . 调用
-print(p1.distance(p2))  // 5.0
-```
+方法不会因为命名或修饰符被自动挂到类型上——唯一形态就是上一节的显式 `Type.method`
+组合（首参写 `self`）。RFC-029g 已把 `pub` 关键字整体删除，旧教程里的「`pub` 自动绑定」
+不再存在。
 
 ## 枚举类型
 

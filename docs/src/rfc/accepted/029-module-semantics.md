@@ -268,7 +268,7 @@ native 函数的特殊处理推迟到 IR gen / codegen 层。
 | `frontend/core/parser/statements/imports.rs` | 不改（`use` 解析已实现） |
 | `package/source/module_resolver.rs` | **删除**，逻辑迁移到 `frontend/module/resolver.rs` |
 | `frontend/core/typecheck/` | `use` 处理改为查 Registry（当前只查 std） |
-| AST `is_pub: bool` | ~~不动~~（029g 已裁定推翻：随 `pub` 关键字删除一并移除，2026-10-02，待实施） |
+| AST `is_pub: bool` | ~~不动~~（029g 已裁定推翻：随 `pub` 关键字删除一并移除；**2026-10-08 已落地**，见 [029g](029g-remove-pub-and-auto-bind.md) 与 WBS §P3.5） |
 
 ### 不存在的文件（RFC 旧版声称"已实现"但实际不存在）
 

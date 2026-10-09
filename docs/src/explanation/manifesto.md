@@ -369,27 +369,27 @@ identity_3x3: Matrix(Float, 3, 3) = identity(Float, 3)(3)
 
 ### 3.6 创新六：极简关键字设计
 
-YaoXiang 仅定义 18 个核心关键字，数量远少于主流语言：
+YaoXiang 仅定义 17 个核心关键字，数量远少于主流语言：
 
 ```
-pub    use    spawn
-ref    mut    if     else
-match  while  for    return
-break  continue as     in     unsafe
+use    spawn  ref
+mut    if     else   match
+while  for    return break
+continue as    in    unsafe
 and    or
 ```
 
 | 对比语言   | 关键字数量 |
 | ---------- | ---------- |
-| YaoXiang   | **18**     |
+| YaoXiang   | **17**     |
 | Rust       | 51+        |
 | Python     | 35         |
 | TypeScript | 64+        |
 | Go         | 25         |
 
-> **关于 `pub`**：lexer 仍会把它识别为关键字（`src/frontend/core/lexer/state.rs`），但按
-> [RFC-029 模块语义](../rfc/accepted/029-module-semantics.md)，语言**不引入任何可见性机制**——
-> 没有 `pub`，没有 `private`，没有 `export`。`pub` 不产生任何可见性效果。
+> **关于 `pub`**：按 [RFC-029 模块语义](../rfc/accepted/029-module-semantics.md)，语言**不引入
+> 任何可见性机制**——没有 `pub`，没有 `private`，没有 `export`。RFC-029g 已把这个关键字
+> 整体删除：`pub` 现在只是普通标识符（旧写法 `pub x = 1` 报 E1001），关键字表由 18 变 17。
 
 **创新价值**：更低的记忆负担，更一致的语法风格，更易解析的语法结构。
 
@@ -780,7 +780,7 @@ docs(readme): update installation instructions
 
 | 关键字                  | 作用                            |
 | ----------------------- | ------------------------------- |
-| `pub`                   | 保留关键字，不产生可见性效果（RFC-029） |
+| ~~`pub`~~               | 已删除（RFC-029g）——不再是关键字，退回普通标识符 |
 | `use`                   | 导入模块                        |
 | `spawn`                 | 并作标记                        |
 | `ref`                   | 共享持有（编译器自动选 Rc/Arc） |

@@ -183,30 +183,10 @@ p.draw(screen)  // → Point.draw(p, screen)
 str = p.serialize()  // → Point.serialize(p)
 ```
 
-#### 自动绑定
+#### 没有隐式绑定
 
-使用 `pub` 关键字声明的函数会自动绑定到同文件定义的类型：
-
-```yaoxiang
-Point: Type = { x: Float, y: Float }
-
-// pub 声明自动绑定到 Point
-pub distance: (p1: Point, p2: Point) -> Float = {
-    dx = p1.x - p2.x
-    dy = p1.y - p2.y
-    (dx * dx + dy * dy).sqrt()
-}
-
-// 使用
-p1 = Point(x=3.0, y=4.0)
-p2 = Point(x=1.0, y=2.0)
-
-// 函数式调用
-d = distance(p1, p2)  // 3.606...
-
-// OOP 语法糖（自动绑定到 Point.distance）
-d2 = p1.distance(p2)  // → distance(p1, p2)
-```
+方法不会自动挂到类型上，`pub` 关键字也已删除（RFC-029g）——要加方法就按上一节的
+`Type.method: (self: T, …) -> R = …` 显式写，调用点用 `.`。
 
 #### 枚举类型
 

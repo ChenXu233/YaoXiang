@@ -6,7 +6,6 @@
   "spawn": "spawn",
   "impl": "impl",
   "enum": "enum",
-  "pub": "pub",
   "mut": "mut",
   "ref": "ref",
   "use": "use",
