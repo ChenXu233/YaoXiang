@@ -43,7 +43,7 @@ jobs:
         run: cargo fmt --check --all
 
       - name: Clippy
-        run: cargo clippy --all --all-features -- -D warnings
+        run: cargo clippy --all --all-features --all-targets -- -D warnings
 
       - name: Build check
         run: cargo check --all-features
@@ -299,7 +299,7 @@ jobs:
         run: |
           cargo check --all-features
           cargo fmt --check --all
-          cargo clippy --all --all-features -- -D warnings
+          cargo clippy --all --all-features --all-targets -- -D warnings
 
       - name: Test with MSRV
         run: |
