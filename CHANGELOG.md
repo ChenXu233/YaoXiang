@@ -22,6 +22,7 @@
 - **`yaoxiang check` 文件内诊断顺序归一**：同一文件有多条诊断时，stderr 条目顺序从「主循环装配序」归一为阶段拓扑序（E3020 入口校验 → 类型错误 → W1006/W1003/死代码 → 证明错误）；诊断集合、错误/警告计数与退出码完全不变。（顺序归一裁决 / WBS 4.2.2）
 - **`yaoxiang check` 对含语法错误的项目改为收集式报告**：项目内某文件有语法错误时，不再整体中止只报首处 parse 错误——带病文件退出当次编译（不参与 registry/typecheck），其 parse 诊断与其余文件的检查诊断一次性收齐，导入方报「模块未找到 E5001」，退出码照常非零（rust 式收集语义）。（WBS 4.10.1）
 - **内部重构（无行为变化）**：`check_project` 瘦身为 `Program { kind: Check }` 构造器，编译阶段 12 变体全接线（RoleClassification 落地），check 路径每文件 parse 从 2 次降为 1 次。（WBS 4.2.2）
+- **内部重构（无行为变化）**：`check_source_in_project` 与 `compile_embedded_module` 分别瘦身为 `Program { kind: Lsp }` / `Program { kind: Embedded }` 构造器——orchestrator 四个入口全部迁移到统一 Driver，声明式阶段表覆盖全部六条编译路径。（WBS 4.2.3 / 4.2.4）
 - **LSP 项目内诊断不再被无关文件打断**：编辑器内做项目级诊断时，若项目里其他磁盘文件有语法错误，此前整体静默退回单文件模式（跨文件解析能力丧失）；现磁盘文件与 `yaoxiang check` 同策略降级（收集其 parse 诊断并跳过该单元），被编辑缓冲区的跨文件诊断不受影响；缓冲区的语法错误保留残缺 AST 继续分析（打字中间态语义功能不消失）。（WBS 4.2.3）
 - **内部重构（无行为变化）**：单文件 `Pipeline::run` 与多文件 `compile_project` 统一为 Driver 驱动（声明式阶段表 + 拓扑跳过台账）；全语料 331 项诊断/退出码/输出 zero-diff，IR 快照零漂移。（WBS 4.1.3 / 4.2.1）
 

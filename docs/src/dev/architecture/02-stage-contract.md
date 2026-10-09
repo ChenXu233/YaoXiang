@@ -541,6 +541,13 @@ impl Driver {
 >    至 LSP（typecheck 诊断 → W 码警告 → proof 错误）。旧行为里 LSP
 >    对无关磁盘文件 parse 错误硬中止、handler 静默退回单文件路径的
 >    怪癖随本步修复。
+> 9. Embedded 形态落地（4.2.4）：`Program` 新增 `shared_registry`
+>    字段——嵌入 std 模块是子编译，注册表是**输入**而非产物（EMBEDDED_
+>    STAGES 无 Registry 阶段），#94 的 SymbolTable 共享契约由此从
+>    「调用方记得传同一个 registry」显式化为程序声明。错误路径文本从
+>    `<std.test> (embedded std)` 归一为单元虚拟路径 `<std/test>`（仅
+>    编译器内部错误面，无测试钉住）。至此 orchestrator 四入口全部迁入
+>    Driver。
 
 **十个入口的改造方式（逐个指定函数）**：
 
