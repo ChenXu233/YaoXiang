@@ -498,6 +498,13 @@ impl Driver {
 }
 ```
 
+> **修订注记（P4 实施，2026-10-09，4.1.3 落地）**：与上方草图的四处实施偏差，语义等价、登记备查——
+>
+> 1. §4 的 `StageOutcome` 三态不由阶段臂返回，由 `State` 失败标记 + `Aggregation` 门控表达（Continue / Warn / Abort 语义不变，省去每臂样板返回）；
+> 2. `Driver` 无 `config` 字段——配置唯一来源是 `Program.config`（§5「避免 Driver 持可变全局状态」的判定覆盖草图字段）；
+> 3. `Skipped` 诊断在 4.1.3 仅记入 `DriverOutcome.skipped` 内部台账，不外发——S2「刻意不修任何 bug」的 zero-diff 判据要求；外发随 4.3 义务账本；
+> 4. `proof_execution` 模块可见性放宽为 `pub(crate)`：driver 臂是唯一新调用方（L1→L2 为允许方向）；orchestrator 存量调用点随 4.2 迁走后归位再议。
+
 **十个入口的改造方式（逐个指定函数）**：
 
 | 入口 | 改造后 |
