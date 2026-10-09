@@ -32,7 +32,7 @@ jobs:
           echo "dist ran successfully"
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: artifacts-plan-dist-manifest
           path: plan-dist-manifest.json
@@ -99,7 +99,7 @@ jobs:
             "$VERSION-nightly.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}.${GITHUB_SHA:0:7}" \
             "${{ join(matrix.targets, '-') }}"
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: yaoxiang-nightly-${{ join(matrix.targets, '_') }}
           path: |
@@ -169,7 +169,7 @@ jobs:
 
       - name: Upload benchmark results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: benchmark-results
           path: |
@@ -249,7 +249,7 @@ jobs:
 
       - name: Upload results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: shootout-results
           path: |
@@ -288,7 +288,7 @@ jobs:
           cat bench-notes.md
 
       - name: Upload notes
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: bench-notes
           path: bench-notes.md
@@ -326,7 +326,7 @@ jobs:
         run: cargo llvm-cov --all-features --html
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-report
           path: target/llvm-cov/html/

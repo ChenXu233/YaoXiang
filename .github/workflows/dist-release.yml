@@ -197,7 +197,7 @@ jobs:
           cat plan-dist-manifest.json
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: "Upload dist-manifest.json"
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: artifacts-plan-dist-manifest
           path: plan-dist-manifest.json
@@ -256,7 +256,7 @@ jobs:
             "${{ needs.plan.outputs.version }}" \
             "${{ join(matrix.targets, '-') }}"
       - name: "Upload artifacts"
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: artifacts-build-local-${{ join(matrix.targets, '_') }}
           path: |
@@ -301,7 +301,7 @@ jobs:
         # PkgDir 相对 .iss 所在目录解析（scripts/build/），须上溯到仓库根
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ needs.plan.outputs.version }} /DPkgDir=..\..\pkg\extracted\yaoxiang-${{ needs.plan.outputs.version }}-x86_64-pc-windows-msvc scripts/build/setup.iss'
       - name: "Upload installer"
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: yaoxiang-windows-installer
           # OutputDir=..\dist 同样相对 .iss 所在目录解析 → scripts/dist/
