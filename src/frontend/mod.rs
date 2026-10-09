@@ -62,7 +62,9 @@ pub mod config;
 pub mod pipeline;
 
 // 编译期证明函数执行（RFC-027 Phase 2.5）——编排层共享原语
-mod proof_execution;
+// pub(crate)：P4 4.1.3 起 Stage::ProofExecution 臂在 driver（L1）消费本模块；
+// orchestrator（L2）四入口的调用点随 4.2 迁入 driver 后归属再议
+pub(crate) mod proof_execution;
 
 // 诊断系统
 pub use crate::util::diagnostic;

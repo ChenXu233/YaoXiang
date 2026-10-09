@@ -28,7 +28,9 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 ///
 /// 调用方契约：**仅在类型检查无错误时调用**（与 pipeline 的门控一致——
 /// 带病 AST 执行证明函数只会产出噪声诊断）。
-pub(super) fn execute_proof_calls(
+// pub(crate)：driver（L1）的 Stage::ProofExecution 臂是唯一新调用方
+// （WBS 4.1.3，02 §改动清单）；orchestrator 存量调用点随 4.2 迁走后归位再议
+pub(crate) fn execute_proof_calls(
     proof_calls: &[ProofFunctionCall],
     ast: &Module,
     type_result: &TypeCheckResult,
