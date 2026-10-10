@@ -1,50 +1,50 @@
 # Coding Rules
 
 > **This document is the sole authoritative source for YaoXiang code change rules.** It precisely
-> describes the rules, without diagnosis of current state or historical argumentation. Historical
-> incident evidence and decision rationale are in
-> [08-maintenance-mechanism.md](architecture/08-maintenance-mechanism.md) (2026-10 diagnosis
-> records, archived with RFC-039); external convention references (Go / rustc, etc.) are in the same
-> document. Execution entry point: [HOWTO.md](HOWTO.md) (pre-work self-check) → this document
-> (rules) → PR template (mandatory at submission time).
+> describes the rules, without status diagnosis or historical justification. Historical incident
+> evidence and decision rationale: see
+> [08-maintenance-mechanism.md](architecture/08-maintenance-mechanism.md) (October 2026 diagnosis
+> records, archived with RFC-039); external convention references (Go / rustc, etc.) are also in
+> that document. Execution entry point: [HOWTO.md](HOWTO.md) (pre-work self-check) → This document
+> (rules) → PR template (mandatory at submission).
 
 ## Part One: Three Prohibitions
 
-### Prohibition 1: No Inventing
+### Prohibition One: No Fabricating New Concepts
 
-Before adding any `pub` type / enum / constant table / concept, the following four criteria **must
-all pass** to be compliant. Any one hit is a violation:
+Before adding any `pub` type / enum / constant table / concept, **all four** of the following
+criteria must pass for it to be compliant. Any single hit is a violation:
 
-| Criterion                     | Rule                                                                                                                                                             |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A. Overlapping responsibility | New item shares ≥ half of its variant names with an existing item AND has overlapping responsibility → violation                                                 |
-| B. Insufficient call sites    | New `pub` item has < 2 call sites (only the definition site + the single call site) → violation; cannot prove it is a concept rather than a local implementation |
-| C. Needs disambiguation alias | Needs `use … as XxxBinOp`-style aliases to distinguish items with the same semantics → violation                                                                 |
-| D. Bridged by synonym table   | Bridges differences through hand-written string matching → violation; must be changed to exhaustive enumeration or explicit conversion                           |
+| Criterion                        | Rule                                                                                                                                                           |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A. Responsibility Overlap        | The new item's variant names overlap with some existing item by ≥ 50% and have overlapping responsibilities → Violation                                        |
+| B. Insufficient Call Sites       | New `pub` item has < 2 call sites (only the definition site + the sole call site) → Violation; cannot prove it is a concept rather than a local implementation |
+| C. Need for Disambiguating Alias | Need `use … as XxxBinOp`-style aliases to distinguish same-semantic items → Violation                                                                          |
+| D. Relying on Synonym Tables     | Relying on hand-written string matching to bridge differences → Violation; must be changed to exhaustive matching or explicit conversion                       |
 
-### Prohibition 2: No Responsibility Accumulation
+### Prohibition Two: No Accumulation of Responsibilities
 
-A module only takes on one class of responsibility. No line count / volume / file size gate—scale
-issues are solved by responsibility separation, not by numbers.
+A module takes on only one class of responsibility. No line count / volume / file size gates are
+set—scale issues are solved by responsibility separation, not by numbers.
 
-| Criterion                             | Rule                                                                                                                                                                                                                                                   |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A. Responsibility class               | New code does not belong to the **existing responsibility class** of the target module (class 2 or above) → violation, create a new module or move the existing code for that responsibility along with it. **Manual judgment, not machine-checkable** |
-| B. Bypassing the authoritative source | New table entry added but the unique authoritative source is not updated (hand-written copy bypassing the authoritative table) → violation                                                                                                             |
-| C. Boundary erosion                   | Any new cross-layer dependency (L2→L3, L4→L1/L2), `include!`, `pub(crate)` cross-layer leakage → violation. **Machine-checkable, enforced by CI**                                                                                                      |
+| Criterion                             | Rule                                                                                                                                                                                                                                            |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A. Responsibility Class               | The new code does not belong to the target module's **existing responsibility class** (class 2 or above) → Violation; create a new module or move existing code of that responsibility along with it. **Manual judgment, cannot be mechanized** |
+| B. Bypassing the Authoritative Source | New table entry added but the sole authoritative source is not updated (hand-written copies bypassing the authoritative table) → Violation                                                                                                      |
+| C. Boundary Erosion                   | Any new cross-layer dependency (L2→L3, L4→L1/L2), `include!`, or `pub(crate)` cross-layer leak → Violation. **Can be mechanized, checked by CI**                                                                                                |
 
-### Prohibition 3: No Patching What Should Be Refactored
+### Prohibition Three: Refactor, Don't Patch
 
-| Criterion                 | Rule                                                                                                                                                                             |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A. Synonymous duplication | The same behavior appears in ≥ 2 places (alias / conversion / stage wiring / error mapping) → violation, must be lifted to the shared layer                                      |
-| B. Excessive fan-out      | One modification requires synchronous changes to ≥ 3 existing synonymous mappings → **determined as an architectural change**, stop work, go through the design document process |
-| C. New entry point        | Adding "the Nth entry / table entry" instead of registering in the declarative stage table → violation                                                                           |
+| Criterion                  | Rule                                                                                                                                                                         |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A. Synonymous Duplication  | The same behavior appears in ≥ 2 places (aliases / conversions / stage wiring / error mapping) → Violation; must be lifted to a shared layer                                 |
+| B. Excessive Fan-out       | A single change requires synchronously modifying ≥ 3 existing synonymous mappings → **Judged as an architectural change**, stop work, go through the design document process |
+| C. Adding New Entry Points | Adding "the Nth entry point / table item" rather than registering it in the declarative stage table → Violation                                                              |
 
 ## Part Two: Decision Procedure (D0–D4)
 
-Each code change passes through five gates in order. Each gate is a decidable boolean condition,
-**stops on hit**:
+Every code change passes through five gates in order. Each gate is a decidable boolean condition,
+**stop on the first hit**:
 
 ```
 D0  门禁    本次改动是否触碰任何一张已存在的表（错误码/opcode/类型/入口阶段）？
@@ -74,60 +74,73 @@ D4  职责?    本次新增代码属于目标模块已有的职责类别吗？
              └─ 是 → 合规
 ```
 
-## Part Three: Red Lines (Review Must Reject)
+**Trade-off Criteria (throughout D0–D4)**: Reasons for rejecting a proposal can **only** be based on
+**correctness** and **readability**; "size of change surface", "whether a new mechanism is
+introduced", and "implementation cost" **do not constitute grounds for rejection**. This is parallel
+to, not in conflict with, Prohibition One—Prohibition One constrains "whether concepts are
+duplicated", while this clause constrains "whether the rationale for the trade-off is valid":
+reviewers must immediately reject proposals rejected solely on the basis of change surface or new
+mechanisms.
 
-1. **Don't change code you haven't looked at** — without opening the modified file, without grepping
-   for related reference points, you are not allowed to touch it
-2. **No "to be implemented" remnants in core functionality** — no new `todo!()`, `unimplemented!()`,
-   `Vec::new() // Not implemented yet`-style silent discarding, or indefinite "separate issue". Find
-   and fix when discovered, or register in the current stage's tasks
-3. **Don't delete tests, don't loosen criteria for green lights** — being unable to do it is an
-   implementation defect; report honestly and reassess—this is not a reason to modify the criteria;
-   the number of tests can only increase, not decrease
-4. **Don't use import aliases to bridge concepts with the same semantics**
-5. **Don't add `include!`, don't add cross-layer reverse dependencies, `pub(crate)` cross-layer
-   leakage can only decrease, not increase**
-6. **PR required fields must be filled in truthfully** — if the D0 authoritative source module name
-   cannot be written, it means you didn't check; reject directly
+For trade-offs that require user adjudication (architectural choice, semantic deviation,
+register/don't register, breaking changes, queue-jumping), follow [AGENTS.md](../../../../AGENTS.md)
+"When Requesting User Adjudication (Mandatory)" and provide all four: situation + evidence, itemized
+pros and cons, clear recommendation + cost, and explicit call-out of breaking impact.
+
+## Part Three: Red Lines (Reviewers Must Reject)
+
+1. **Don't change code you haven't looked at**—without having opened the file being changed, without
+   having grepped the relevant reference points, you may not touch it.
+2. **No unimplemented stubs left in core functionality**—no new `todo!()`, `unimplemented!()`,
+   `Vec::new() // Not implemented yet`-style silent discarding, or indefinite "separate issue".
+   Found it, fix it, or register it in the current stage's tasks.
+3. **Don't delete tests, don't loosen criteria to pass**—inability to do so is an implementation
+   defect; report honestly and re-evaluate, not a reason to modify the criteria; the test count may
+   only increase, not decrease.
+4. **Don't use import aliases to bridge same-semantic concepts.**
+5. **Don't add new `include!`, don't add new cross-layer reverse dependencies, `pub(crate)`
+   cross-layer leaks may only decrease, not increase.**
+6. **PR required fields must be filled in truthfully**—if you can't write down the D0 authoritative
+   source module name = you didn't check, immediately rejected.
 
 ## Part Four: Division of Labor Between Machine and Human
 
-**Mechanical problems go to tools; review only looks at non-mechanical problems.**
+**Mechanical issues go to tools; reviewers only look at non-mechanical issues.**
 
-| Category                                                                                                               | Executor                                                                  |
-| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Formatting, lint, table consistency, boundary erosion (Prohibition 2 C), test wiring, cross-layer dependencies         | Tools: `cargo fmt` / `clippy` / `build.rs` gate / `scripts/ci/check-*.py` |
-| Responsibility class determination (Prohibition 2 A), D3's "patch or architectural change" judgment, exemption reasons | Human: PR required fields + review                                        |
+| Category                                                                                                              | Executor                                                                 |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Formatting, lint, table consistency, boundary erosion (Prohibition Two C), test wiring, cross-layer dependencies      | Tool: `cargo fmt` / `clippy` / `build.rs` gate / `scripts/ci/check-*.py` |
+| Responsibility class judgment (Prohibition Two A), D3's "patch or architectural change" judgment, exemption rationale | Human: PR required fields + review                                       |
 
 ## Part Five: Exemption Mechanism
 
-- Exemptions for machine-checkable criteria uniformly use `// reason: <reason>` inline comments
-- The number of exemptions itself is included in the gate report and is reviewed item by item
-- Exemptions are **exception vouchers**, not **convention**; when the same kind of exemption appears
-  for the 2nd time, the correct action is to change the rule or the criterion, not to add a 3rd
-  exemption
+- Exemptions to mechanical criteria always use `// reason: <reason>` inline comments.
+- The number of exemptions itself enters the gate report and is reviewed item by item.
+- Exemptions are **exceptional credentials**, not **convention**; when the same kind of exemption
+  appears for the 2nd time, the correct action is to change the rule or the criterion, not to add a
+  3rd exemption.
 
 ## Part Six: Code Review Checklist
 
-Each PR's review goes through these items one by one:
+Every PR's review goes through this item by item:
 
-- [ ] **D0** Does it touch any table? What is the unique authoritative implementation module of that
+- [ ] **D0** Did it touch any table? Which is the sole authoritative implementation module of that
       table?
-- [ ] **D1** Can the new concept be expressed with an existing concept + parameters? If not, where
-      is the reason written?
-- [ ] **D2** Does it have the same semantics as an existing concept? Where is the conversion? Does
-      it need an import alias?
-- [ ] **D3** Does the same behavior appear in ≥ 2 places? Did it add an entry point instead of
-      registering in the stage table? Does it need to change ≥ 3 synonymous mappings?
-- [ ] **D4** Does the new code added this time belong to the existing responsibility class of the
-      target module?
-- [ ] **Silent channel** Are the producer-side and consumer-side **direct-driven** tests of
-      "register-consume"-type mechanisms (one party registers data, the other consumes, such as
-      SemanticDB, proof_calls, duty ledgers) delivered in the same batch? Consumer-side tests
-      manually construct registered data while the producer-side has no direct-driven evidence = the
-      mechanism appears to exist but the data flow never happened; reject (three cases so far:
-      proof_calls, RFC-039 D54, RFC-039 D55)
-- [ ] **Boundary** Has it been eroded? New cross-layer dependencies / `include!` / `pub(crate)`
-      cross-layer leakage?
-- [ ] **Division of labor** Have mechanical problems been caught by tools? Is the review only spent
-      on non-mechanical problems?
+- [ ] **D1** Can the new concept be expressed with existing concepts + parameters? If not, where is
+      the reason written?
+- [ ] **D2** Is it semantically the same as an existing concept? Where is the conversion? Does it
+      need an import alias?
+- [ ] **D3** Does the same behavior appear in ≥ 2 places? Was a new entry point added rather than
+      registered in the stage table? Do ≥ 3 synonymous mappings need to be changed?
+- [ ] **D4** Does the new code in this change belong to the target module's existing responsibility
+      class?
+- [ ] **Silent Channels** For "register-consume"-type mechanisms (one side registers data, the other
+      consumes, e.g., SemanticDB, proof_calls, obligation ledger), are the **direct-drive** tests on
+      the producer and consumer sides delivered in the same batch? If the consumer-side test
+      hand-constructs registered data while the producer side has no direct-drive evidence = the
+      mechanism superficially exists but the data flow never happened, reject (already three cases:
+      proof_calls, RFC-039 D54, RFC-039 D55).
+- [ ] **Boundary** Has the boundary been eroded? New cross-layer dependencies / `include!` /
+      `pub(crate)` cross-layer leaks?
+- [ ] **Division of Labor** Have mechanical issues been caught by tools? Does the review only spend
+      time on non-mechanical issues?
