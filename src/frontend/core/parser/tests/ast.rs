@@ -397,7 +397,10 @@ fn test_stmtkind_use() {
                     span: Span::dummy(),
                 },
             ],
-            items: Some(vec!["println".into()]),
+            items: Some(vec![SpannedIdent {
+                name: "println".into(),
+                span: Span::dummy(),
+            }]),
             alias: None,
             item_aliases: None,
         },

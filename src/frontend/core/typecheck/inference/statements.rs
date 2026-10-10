@@ -616,15 +616,18 @@ impl StatementChecker {
     fn import_binding(
         &mut self,
         binding_name: &str,
+        definition_span: crate::util::span::Span,
         export: &Export,
     ) {
         let ty = self.export_type(export);
         // 标记为导入：导入名不是本文件的绑定，不参与 spec §4.3 的
         // 「沿作用域链查找」（否则 `ok = ...` 撞 `std.result.ok` 会误报 E2010）。
+        // definition_span = use 行该项的名源位置：定义事件与引用 resolves_to
+        // 同源落到 use 行（#433 余项：导入项跳转）。
         self.scope.add_imported_var(
             binding_name.to_string(),
             PolyType::mono(ty),
-            crate::util::span::Span::default(),
+            definition_span,
         );
     }
 
@@ -632,9 +635,9 @@ impl StatementChecker {
         &mut self,
         path: &str,
         path_span: crate::util::span::Span,
-        items: &Option<Vec<String>>,
+        items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
         alias: &Option<Vec<String>>,
-        item_aliases: &Option<Vec<Option<String>>>,
+        item_aliases: &Option<Vec<Option<crate::frontend::core::parser::ast::SpannedIdent>>>,
     ) -> Result<(), Box<Diagnostic>> {
         let Some(module) = self.module_registry.get(path).cloned() else {
             // E5001：模块未找到（此前静默 return，错误延后成"unknown variable"）。
@@ -655,12 +658,16 @@ impl StatementChecker {
 
         // 语义导入事件（#433/D55）：模块解析成功即登记。
         // `imported_names` 只收显式项（`use path.{a, b}`）；整体导入/别名导入
-        // 为空表——导入名的绑定经 add_imported_var 走定义事件漏斗，但其
-        // definition_span 为 dummy，引用侧 resolves_to 落空 DefId，
-        // 跳转按 precise-only 降级（导入项 AST 无 per-item span）。
+        // 为空表——导入项名的绑定经 import_binding 走定义事件漏斗，
+        // definition_span = use 行该项名源位置，引用侧 resolves_to 同源指回。
         self.semantic_imports.push(SemanticImportEvent {
             module_path: path.to_string(),
-            imported_names: items.clone().unwrap_or_default(),
+            imported_names: items
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|i| i.name)
+                .collect(),
             span: path_span,
         });
 
@@ -697,16 +704,19 @@ impl StatementChecker {
             }
             // use path.{a, b} / use path.{a as x}（#245：仅内联别名）
             (Some(item_names), _) => {
-                for (i, item_name) in item_names.iter().enumerate() {
-                    let local_name = item_aliases
+                for (i, item) in item_names.iter().enumerate() {
+                    // 本地名：内联别名（#245）优先，名源位置随别名 token；
+                    // 无别名时随项名 token——绑定与 use 行该项同源
+                    let (local_name, local_span) = item_aliases
                         .as_ref()
                         .and_then(|v| v.get(i))
                         .and_then(|a| a.as_ref())
-                        .unwrap_or(item_name);
+                        .map(|a| (a.name.as_str(), a.span))
+                        .unwrap_or((item.name.as_str(), item.span));
                     // E5003：导出未找到（此前静默跳过，用户只看到下游 unknown variable）
-                    let Some(export) = module.exports.get(item_name).cloned() else {
+                    let Some(export) = module.exports.get(&item.name).cloned() else {
                         return Err(Box::new(
-                            ErrorCodeDefinition::export_not_found(item_name, path)
+                            ErrorCodeDefinition::export_not_found(&item.name, path)
                                 .at(path_span)
                                 .build(),
                         ));
@@ -714,12 +724,12 @@ impl StatementChecker {
                     // #414：同名字项导入两次直接报错（RFC-029 §导入冲突）
                     self.ensure_import_name_free(
                         local_name,
-                        &format!("{path}.{item_name}"),
+                        &format!("{path}.{}", item.name),
                         path_span,
                     )?;
                     // #321 W1003：登记导入本地名（内联别名优先）
                     self.note_body_import(local_name, path_span);
-                    self.import_binding(local_name, &export);
+                    self.import_binding(local_name, local_span, &export);
                 }
             }
         }

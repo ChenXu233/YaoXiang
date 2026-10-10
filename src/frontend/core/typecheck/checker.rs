@@ -2212,7 +2212,7 @@ impl TypeChecker {
                     let mut exports_to_import: Vec<&crate::frontend::module::Export> = Vec::new();
                     for export in module.exports.values() {
                         let should_import = import_all
-                            || items_ref.is_some_and(|i| i.iter().any(|s| s == &export.name));
+                            || items_ref.is_some_and(|i| i.iter().any(|s| s.name == export.name));
                         if should_import {
                             exports_to_import.push(export);
                         }
@@ -2275,14 +2275,15 @@ impl TypeChecker {
                         // use path.{a, b} / use path.{a as x}（#245：仅内联别名）。
                         // 按 item 名查导出——exports 是 HashMap 无序，zip 会错配。
                         (Some(item_names), _) => {
-                            for (i, item_name) in item_names.iter().enumerate() {
-                                let Some(export) = module.exports.get(item_name) else {
+                            for (i, item) in item_names.iter().enumerate() {
+                                let Some(export) = module.exports.get(&item.name) else {
                                     continue;
                                 };
                                 let local_name = item_aliases
                                     .as_ref()
                                     .and_then(|v| v.get(i))
-                                    .and_then(|a| a.as_ref());
+                                    .and_then(|a| a.as_ref())
+                                    .map(|a| a.name.as_str());
                                 // #415：子模块导出经内联别名绑定时（`use std.{io as printer}`），
                                 // is_std_submodule 只认裸子模块名，别名必须入 namespace 表，
                                 // 否则 ir_gen 解析 `printer.print` → E3006。非别名条目入表与
@@ -2291,18 +2292,18 @@ impl TypeChecker {
                                     export.kind,
                                     crate::frontend::module::ExportKind::SubModule
                                 ) {
-                                    let ns_name = local_name.unwrap_or(item_name);
+                                    let ns_name = local_name.unwrap_or(&item.name);
                                     self.module_namespaces
                                         .insert(ns_name.to_string(), export.full_path.clone());
                                 }
                                 // #321 W1003：登记导入本地名（内联别名优先）
                                 match local_name {
                                     Some(local) => self.record_import_name(local, stmt.span),
-                                    None => self.record_import_name(item_name, stmt.span),
+                                    None => self.record_import_name(&item.name, stmt.span),
                                 }
                                 match local_name {
                                     Some(local) => self.register_use_export(local, export, true),
-                                    None => self.register_use_export(item_name, export, false),
+                                    None => self.register_use_export(&item.name, export, false),
                                 }
                             }
                         }
@@ -3860,7 +3861,7 @@ impl TypeChecker {
         &self,
         imported_module_roots: &mut HashSet<String>,
         path: &str,
-        items: &Option<Vec<String>>,
+        items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
         alias: &Option<Vec<String>>,
     ) {
         if items.is_some() {

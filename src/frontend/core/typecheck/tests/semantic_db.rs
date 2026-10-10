@@ -3,7 +3,8 @@
 //! 测试语义数据库功能与生产端语义事件管线（#433/RFC-039 D55）：
 //! - checker 语义事件排空：definitions/references/imports 由真实 typecheck 管线产出
 //! - resolve_reference 往返：引用 resolves_to 与定义 def_id 同源衔接（跳转定义数据链）
-//! - dummy 定义过滤：导入名/占位绑定不产生定义事件，precise-only 降级
+//! - dummy 定义过滤：模块整体导入名/占位绑定不产生定义事件，precise-only 降级；
+//!   花括号导入项（带名源位置）则产生定义事件并同源衔接引用（#433 余项）
 //! - upsert_from：按文件替换，会话级数据（std/内置类型）保留
 //!
 //! 静默通道判定（coding-rules 第六部分）：本文件即「生产端直驱」测试——
@@ -128,6 +129,75 @@ fn test_imported_names_produce_no_definition_events() {
     assert!(
         defs.iter().all(|d| d.name != "list"),
         "导入名 definition_span 为 dummy，不得产生定义事件（precise-only）"
+    );
+}
+
+#[test]
+fn test_item_import_binds_definition_at_use_line_and_resolves() {
+    // Arrange：花括号项导入，第二行调用 println（#433 余项：导入项跳转）
+    let uri = "file:///t.yx";
+    let source = "use std.io.{println}\nv = println(\"hi\")\n";
+
+    // Act：真实管线产出 SemanticDB
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：println 定义事件落在 use 行该项名源位置，使用点引用同源指回
+    let defs = db.get_definitions(uri);
+    let println_def = defs
+        .iter()
+        .find(|d| d.name == "println")
+        .expect("花括号项导入必须产出定义事件（绑定落 use 行该项）");
+    assert_eq!(
+        println_def.span.start.line, 1,
+        "导入项定义在 use 行（第 1 行）"
+    );
+    assert_eq!(
+        println_def.span.start.column, 13,
+        "定义 span 指向 println 标识符（第 13 列）"
+    );
+
+    let refs = db.get_references(uri);
+    let use_ref = refs
+        .iter()
+        .find(|r| r.name == "println")
+        .expect("使用点必须产出引用事件");
+    assert_eq!(use_ref.span.start.line, 2, "使用点在第 2 行");
+    assert_eq!(
+        use_ref.resolves_to.span, println_def.def_id.span,
+        "引用 resolves_to 必须指回 use 行定义（导入项跳转数据链）"
+    );
+}
+
+#[test]
+fn test_item_import_with_inline_alias_binds_at_alias_token() {
+    // Arrange：内联别名——本地名是 say，绑定应落别名 token
+    let uri = "file:///t.yx";
+    let source = "use std.io.{println as say}\nv = say(\"hi\")\n";
+
+    // Act
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：say 有定义事件（span 在 use 行别名 token），引用指回
+    let defs = db.get_definitions(uri);
+    let say_def = defs
+        .iter()
+        .find(|d| d.name == "say")
+        .expect("内联别名必须产出定义事件（绑定落别名 token）");
+    assert_eq!(say_def.span.start.line, 1, "别名绑定在 use 行");
+    assert_eq!(say_def.span.start.column, 24, "say 别名在第 24 列");
+    assert!(
+        defs.iter().all(|d| d.name != "println"),
+        "原名未在文件绑定，不产生定义事件"
+    );
+
+    let refs = db.get_references(uri);
+    let say_ref = refs
+        .iter()
+        .find(|r| r.name == "say")
+        .expect("say 使用点必须产出引用事件");
+    assert_eq!(
+        say_ref.resolves_to.span, say_def.def_id.span,
+        "别名引用必须指回 use 行别名 token"
     );
 }
 

@@ -6,6 +6,7 @@
 //! 测试覆盖：
 //! - 引用点跳转到绑定定义
 //! - 调用名跳转到函数绑定
+//! - 导入名使用点跳转到 use 行该项（#433 余项）
 //! - 定义点自身无引用记录（precise-only）
 //! - 非标识符位置
 //! - 未打开的文档
@@ -74,6 +75,26 @@ fn test_definition_resolves_callee_to_function_binding() {
         panic!("单一定义应返回 Scalar");
     };
     assert_eq!(loc.range.start.line, 0, "add 绑定在第一行（0-indexed）");
+}
+
+#[test]
+fn test_definition_on_imported_item_usage_jumps_to_use_line() {
+    // Arrange：花括号项导入，第二行调用 println（#433 余项：导入项跳转）
+    let (session, world) = open_and_check("use std.io.{println}\nv = println(\"hi\")\n");
+    // Act：光标在第二行 println 使用点（0-indexed line=1, character=4）
+    let params = make_params(SAMPLE_URI, 1, 4);
+    let result = handle_definition(&session, &world, params);
+    // Assert：跳回第一行 use 的 println 项（0-indexed line=0, character=12）
+    let response = result.expect("导入名使用点必须跳转到 use 行该项（#433 余项）");
+    let GotoDefinitionResponse::Scalar(loc) = response else {
+        panic!("单一定义应返回 Scalar");
+    };
+    assert_eq!(loc.uri.to_string(), SAMPLE_URI, "定义在同一文件");
+    assert_eq!(loc.range.start.line, 0, "use 行是第 1 行（0-indexed）");
+    assert_eq!(
+        loc.range.start.character, 12,
+        "println 项在第 13 列（0-indexed 12）"
+    );
 }
 
 #[test]

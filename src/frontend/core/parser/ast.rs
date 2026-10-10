@@ -274,12 +274,13 @@ pub enum StmtKind {
         path_span: Span,
         /// Spans of each identifier in the module path (dot-separated)
         path_parts: Vec<SpannedIdent>,
-        items: Option<Vec<String>>,
+        /// 花括号导入项（带名源位置，供 LSP 导入项跳转定位绑定）
+        items: Option<Vec<SpannedIdent>>,
         alias: Option<Vec<String>>,
         /// 花括号内联别名（#245）：与 `items` 逐项对齐，`None` 表示该项无别名。
         /// `use lib.{helper as h}` → items=["helper"], item_aliases=[Some("h")]。
         /// 全项均无别名时为 `None`。
-        item_aliases: Option<Vec<Option<String>>>,
+        item_aliases: Option<Vec<Option<SpannedIdent>>>,
     },
     /// If statement: `if condition { then_branch } elif branches else_branch`
     If {

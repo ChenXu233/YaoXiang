@@ -28,13 +28,19 @@ pub fn parse_use_stmt(
         while !state.at(&TokenKind::RBrace) && !state.at_end() {
             match state.current().map(|t| &t.kind) {
                 Some(TokenKind::Identifier(n)) => {
-                    items.push(n.clone());
+                    items.push(SpannedIdent {
+                        name: n.clone(),
+                        span: state.span(),
+                    });
                     state.bump();
                     // 内联别名：item as alias（#245）
                     if state.skip(&TokenKind::KwAs) {
                         match state.current().map(|t| &t.kind) {
                             Some(TokenKind::Identifier(a)) => {
-                                aliases.push(Some(a.clone()));
+                                aliases.push(Some(SpannedIdent {
+                                    name: a.clone(),
+                                    span: state.span(),
+                                }));
                                 any_alias = true;
                                 state.bump();
                             }

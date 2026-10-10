@@ -36,8 +36,9 @@ fn test_use_with_items() {
     let kind = parse_use("use std.io.{print, read}");
     if let StmtKind::Use { items, .. } = &kind {
         let items = items.as_ref().unwrap();
-        assert!(items.contains(&"print".to_string()));
-        assert!(items.contains(&"read".to_string()));
+        let names: Vec<&str> = items.iter().map(|i| i.name.as_str()).collect();
+        assert!(names.contains(&"print"));
+        assert!(names.contains(&"read"));
     } else {
         panic!("Expected StmtKind::Use");
     }
@@ -79,16 +80,18 @@ fn test_use_item_inline_alias() {
         ..
     } = &kind
     {
+        let items = items.as_ref().unwrap();
         assert_eq!(
-            items.as_ref().unwrap(),
-            &vec!["helper".to_string()],
+            items.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(),
+            vec!["helper"],
             "items 应保留原名"
         );
-        assert_eq!(
-            item_aliases.as_ref().unwrap(),
-            &vec![Some("h".to_string())],
-            "item_aliases 应记录内联别名"
-        );
+        let aliases = item_aliases.as_ref().unwrap();
+        let alias_names: Vec<&str> = aliases
+            .iter()
+            .map(|a| a.as_ref().map(|s| s.name.as_str()).unwrap_or(""))
+            .collect();
+        assert_eq!(alias_names, vec!["h"], "item_aliases 应记录内联别名");
     } else {
         panic!("Expected StmtKind::Use");
     }
@@ -106,15 +109,61 @@ fn test_use_item_mixed_alias_and_plain() {
         ..
     } = &kind
     {
+        let items = items.as_ref().unwrap();
+        let names: Vec<&str> = items.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, vec!["helper", "Point"], "items 应按序保留原名");
+        let aliases = item_aliases.as_ref().unwrap();
+        assert!(
+            matches!(&aliases[0], Some(a) if a.name == "h"),
+            "带别名项应记录 h，实际: {:?}",
+            aliases[0]
+        );
+        assert!(aliases[1].is_none(), "无别名项应对齐为 None");
+    } else {
+        panic!("Expected StmtKind::Use");
+    }
+}
+
+#[test]
+fn test_use_items_carry_source_spans() {
+    // Arrange / Act - 花括号项与内联别名各带名源位置（#433 余项：导入项跳转）
+    let kind = parse_use("use lib.{helper as h, plain}");
+
+    // Assert - span 精确覆盖各标识符 token（同一行，按列界定）
+    if let StmtKind::Use {
+        items,
+        item_aliases,
+        ..
+    } = &kind
+    {
+        let items = items.as_ref().unwrap();
+        assert_eq!(items.len(), 2, "两项导入");
+        let helper = &items[0];
+        assert_eq!(helper.name, "helper", "首项为 helper");
         assert_eq!(
-            items.as_ref().unwrap(),
-            &vec!["helper".to_string(), "Point".to_string()],
-            "items 应按序保留原名"
+            (helper.span.start.line, helper.span.end.line),
+            (1, 1),
+            "helper span 在第一行"
         );
         assert_eq!(
-            item_aliases.as_ref().unwrap(),
-            &vec![Some("h".to_string()), None],
-            "无别名项应对齐为 None"
+            (helper.span.start.column, helper.span.end.column),
+            (10, 16),
+            "helper span 覆盖第 10..16 列（use lib.{{ 后）"
+        );
+        let plain = &items[1];
+        assert_eq!(plain.name, "plain", "次项为 plain");
+        assert_eq!(
+            (plain.span.start.column, plain.span.end.column),
+            (23, 28),
+            "plain span 覆盖第 23..28 列"
+        );
+        let aliases = item_aliases.as_ref().unwrap();
+        let h = aliases[0].as_ref().expect("helper 的别名 h 应存在");
+        assert_eq!(h.name, "h", "别名为 h");
+        assert_eq!(
+            (h.span.start.column, h.span.end.column),
+            (20, 21),
+            "别名 h span 覆盖第 20..21 列"
         );
     } else {
         panic!("Expected StmtKind::Use");

@@ -40,7 +40,7 @@ pub fn format_stmt(
                         .and_then(|v| v.get(i))
                         .and_then(|a| a.as_ref())
                     {
-                        Some(a) => format!("{} as {}", name, a),
+                        Some(a) => format!("{} as {}", name, a.name),
                         None => name.to_string(),
                     }
                 };
@@ -48,7 +48,7 @@ pub fn format_stmt(
                 let rendered: Vec<String> = items
                     .iter()
                     .enumerate()
-                    .map(|(i, name)| render(i, name))
+                    .map(|(i, item)| render(i, &item.name))
                     .collect();
                 result.push_str(&rendered.join(", "));
                 result.push_str(" }");

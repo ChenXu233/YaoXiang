@@ -21,7 +21,7 @@ impl TypeChecker {
         file_path: &str,
         path: &str,
         path_parts: &[crate::frontend::core::parser::ast::SpannedIdent],
-        items: &Option<Vec<String>>,
+        items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
         alias: &Option<Vec<String>>,
     ) {
         // use path.{...} 的 path 部分始终是模块命名空间

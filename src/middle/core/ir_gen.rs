@@ -1133,8 +1133,8 @@ impl AstToIrGenerator {
                 };
                 if let Some(names) = items {
                     // 本地名：内联别名（#245）> 原名
-                    for (i, name) in names.iter().enumerate() {
-                        if let Some(export) = exports.get(name) {
+                    for (i, item) in names.iter().enumerate() {
+                        if let Some(export) = exports.get(&item.name) {
                             // #244：类型也限定——构造调用 `Point(...)` 与方法调用 `Point.get_x`
                             // 都需把本地短名别名到源模块限定名才能解析。
                             if matches!(
@@ -1145,7 +1145,8 @@ impl AstToIrGenerator {
                                     .as_ref()
                                     .and_then(|v| v.get(i))
                                     .and_then(|a| a.as_ref())
-                                    .unwrap_or(name);
+                                    .map(|a| &a.name)
+                                    .unwrap_or(&item.name);
                                 aliases.insert(local_name.clone(), export.full_path.clone());
                             }
                         }
