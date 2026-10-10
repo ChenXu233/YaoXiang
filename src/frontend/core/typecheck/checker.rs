@@ -1402,8 +1402,21 @@ impl TypeChecker {
             }
         }
 
-        // 收集错误（无论有无错误都收进 result.diagnostics）
-        let diagnostics = self.errors().to_vec();
+        // 收集错误（无论有无错误都收进 result.diagnostics）。
+        //
+        // 4.2.7 去重：同一诊断事实（同码同 span 同消息）可经多条通道重复
+        // 汇入——收集点的 collected_errors/Err 双通道（pass-3 与 drain 各
+        // 收一份，嵌套作用域还会经外层收集点再收）、注解校验的签名形参与
+        // 整体注解双访（E1003/E1103）、所有权层同点双发（E2014/E2018）。
+        // 诊断是位置事实，重复报告不携带信息——模块结果边界统一去重，
+        // 保首次出现、顺序不变（4.2.5 基线实证 64 个语料条目带重复副本）。
+        let mut seen: HashSet<(String, Option<crate::util::span::Span>, String)> = HashSet::new();
+        let mut diagnostics = Vec::new();
+        for d in self.errors() {
+            if seen.insert((d.code.clone(), d.span, d.message.clone())) {
+                diagnostics.push(d.clone());
+            }
+        }
 
         // 构建类型检查结果
         // 合并 StatementChecker 中的局部变量类型到 bindings

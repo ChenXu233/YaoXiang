@@ -1047,3 +1047,30 @@ fn test_driver_run_single_file_collect_all_typechecks_partial_ast() {
         "幸存语句必须继续 typecheck（编辑器哲学）: {codes:?}"
     );
 }
+
+// ===================== 4.2.7 collect_all 重复诊断去重 =====================
+
+#[test]
+fn test_driver_run_check_dedupes_collect_all_diagnostics() {
+    // Arrange: 带标注函数体内的类型错误——收集点把首错同时放进
+    // collected_errors 与 Err 返回通道，4.2.5 基线实证此类 fixture
+    // 的同码同 span 同消息诊断重复报告（64 个语料条目）
+    let dir = tempfile::tempdir().expect("tempdir creation failed");
+    std::fs::write(
+        dir.path().join("main.yx"),
+        "main: () -> Void = {\n  x = 1 + \"a\"\n}\n",
+    )
+    .expect("write fixture failed");
+    let entry = dir.path().join("main.yx");
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert: E1002 恰好一份（去重键 = 码 + span + 消息）
+    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    let count = diags.iter().filter(|d| d.code == "E1002").count();
+    assert_eq!(
+        count, 1,
+        "同一诊断事实不得重复报告（4.2.7 去重）: {diags:?}"
+    );
+}
