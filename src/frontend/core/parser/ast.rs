@@ -276,7 +276,8 @@ pub enum StmtKind {
         path_parts: Vec<SpannedIdent>,
         /// 花括号导入项（带名源位置，供 LSP 导入项跳转定位绑定）
         items: Option<Vec<SpannedIdent>>,
-        alias: Option<Vec<String>>,
+        /// 位置别名 `use path as m`（带名源位置，同上）
+        alias: Option<Vec<SpannedIdent>>,
         /// 花括号内联别名（#245）：与 `items` 逐项对齐，`None` 表示该项无别名。
         /// `use lib.{helper as h}` → items=["helper"], item_aliases=[Some("h")]。
         /// 全项均无别名时为 `None`。

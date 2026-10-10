@@ -22,7 +22,7 @@ impl TypeChecker {
         path: &str,
         path_parts: &[crate::frontend::core::parser::ast::SpannedIdent],
         items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
-        alias: &Option<Vec<String>>,
+        alias: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
     ) {
         // use path.{...} 的 path 部分始终是模块命名空间
         if items.is_some() {

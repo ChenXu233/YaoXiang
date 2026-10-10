@@ -116,19 +116,28 @@ fn test_use_statement_registers_import_event() {
 }
 
 #[test]
-fn test_imported_names_produce_no_definition_events() {
-    // Arrange：模块整体导入——导入名 definition_span 为 dummy
+fn test_module_import_without_usage_binds_but_records_no_reference() {
+    // Arrange：模块整体导入且文件内无使用
+    // （原判据「导入名 dummy 不产定义事件」随 #433 余项能力落地失效：
+    //   绑定现落 use 行路径末段 token，不再是 dummy）
     let uri = "file:///t.yx";
     let source = "use std.list\nmain = () => ()\n";
 
     // Act
     let db = check_to_semantic_db(uri, source);
 
-    // Assert：dummy 定义不入定义表，precise-only
+    // Assert：导入名有定义事件（绑定在 use 行），
+    // 但导入行自身不造引用事件——定义点 precise-only 仍成立
     let defs = db.get_definitions(uri);
+    let list_def = defs
+        .iter()
+        .find(|d| d.name == "list")
+        .expect("模块导入名应产出定义事件（绑定落 use 行末段）");
+    assert_eq!(list_def.span.start.line, 1, "list 绑定在 use 行");
+    let refs = db.get_references(uri);
     assert!(
-        defs.iter().all(|d| d.name != "list"),
-        "导入名 definition_span 为 dummy，不得产生定义事件（precise-only）"
+        refs.iter().all(|r| r.name != "list"),
+        "use 行不产生 list 引用事件，定义点跳转保持 precise-only"
     );
 }
 
@@ -197,6 +206,64 @@ fn test_item_import_with_inline_alias_binds_at_alias_token() {
         .expect("say 使用点必须产出引用事件");
     assert_eq!(
         say_ref.resolves_to.span, say_def.def_id.span,
+        "别名引用必须指回 use 行别名 token"
+    );
+}
+
+#[test]
+fn test_module_import_binds_at_last_path_part_and_resolves() {
+    // Arrange：模块整体导入，io 经 FieldAccess 根使用（Var 臂递归登记引用）
+    let uri = "file:///t.yx";
+    let source = "use std.io\nv = io.println(\"hi\")\n";
+
+    // Act
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：io 定义事件落在 use 行路径末段 token（第 10 列），引用指回
+    let defs = db.get_definitions(uri);
+    let io_def = defs
+        .iter()
+        .find(|d| d.name == "io")
+        .expect("模块整体导入名必须产出定义事件（绑定落路径末段）");
+    assert_eq!(io_def.span.start.line, 1, "io 绑定在 use 行");
+    assert_eq!(io_def.span.start.column, 9, "io 末段 token 在第 9 列");
+
+    let refs = db.get_references(uri);
+    let io_ref = refs
+        .iter()
+        .find(|r| r.name == "io")
+        .expect("io.println 的根必须产出引用事件");
+    assert_eq!(
+        io_ref.resolves_to.span, io_def.def_id.span,
+        "模块别名引用必须指回 use 行末段 token"
+    );
+}
+
+#[test]
+fn test_module_alias_import_binds_at_alias_token_and_resolves() {
+    // Arrange：位置别名导入，printer 经 FieldAccess 根使用
+    let uri = "file:///t.yx";
+    let source = "use std.io as printer\nv = printer.println(\"hi\")\n";
+
+    // Act
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：printer 定义事件落别名 token（第 15 列），引用指回
+    let defs = db.get_definitions(uri);
+    let printer_def = defs
+        .iter()
+        .find(|d| d.name == "printer")
+        .expect("位置别名必须产出定义事件（绑定落别名 token）");
+    assert_eq!(printer_def.span.start.line, 1, "printer 绑定在 use 行");
+    assert_eq!(printer_def.span.start.column, 15, "printer 别名在第 15 列");
+
+    let refs = db.get_references(uri);
+    let printer_ref = refs
+        .iter()
+        .find(|r| r.name == "printer")
+        .expect("printer.println 的根必须产出引用事件");
+    assert_eq!(
+        printer_ref.resolves_to.span, printer_def.def_id.span,
         "别名引用必须指回 use 行别名 token"
     );
 }

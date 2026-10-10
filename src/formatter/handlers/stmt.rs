@@ -55,7 +55,8 @@ pub fn format_stmt(
             }
             if let Some(aliases) = alias {
                 result.push_str(" as ");
-                result.push_str(&aliases.join(", "));
+                let names: Vec<&str> = aliases.iter().map(|a| a.name.as_str()).collect();
+                result.push_str(&names.join(", "));
             }
             result
         }

@@ -84,7 +84,10 @@ pub fn parse_use_stmt(
         }
         let mut aliases = Vec::new();
         while let Some(TokenKind::Identifier(n)) = state.current().map(|t| &t.kind) {
-            aliases.push(n.clone());
+            aliases.push(SpannedIdent {
+                name: n.clone(),
+                span: state.span(),
+            });
             state.bump();
             // 继续读取逗号分隔的下一个别名
             if !state.skip(&TokenKind::Comma) {

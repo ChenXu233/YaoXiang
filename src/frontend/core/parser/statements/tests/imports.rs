@@ -50,7 +50,12 @@ fn test_use_with_alias() {
     let kind = parse_use("use std.io as io");
     if let StmtKind::Use { alias, items, .. } = &kind {
         assert!(items.is_none());
-        assert_eq!(alias.as_ref().unwrap(), &vec!["io".to_string()]);
+        let aliases = alias.as_ref().unwrap();
+        assert_eq!(
+            aliases.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(),
+            vec!["io"],
+            "位置别名应记录 io"
+        );
     } else {
         panic!("Expected StmtKind::Use");
     }

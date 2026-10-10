@@ -1070,6 +1070,7 @@ impl TypeChecker {
             if let StmtKind::Use {
                 path,
                 path_span,
+                path_parts,
                 items,
                 alias,
                 item_aliases,
@@ -1079,6 +1080,7 @@ impl TypeChecker {
                 let _ = self.body_checker_mut().process_use_stmt(
                     path,
                     *path_span,
+                    path_parts,
                     items,
                     alias,
                     item_aliases,
@@ -2251,7 +2253,8 @@ impl TypeChecker {
                         // use path as alias → 整个模块用别名注册
                         // #414：单/多别名统一走此臂——每个别名各绑一份模块 record
                         (None, Some(aliases)) => {
-                            for alias_name in aliases {
+                            for alias in aliases {
+                                let alias_name = alias.name.as_str();
                                 // #321 W1003：登记导入本地名与导出成员监视
                                 self.record_import_name(alias_name, stmt.span);
                                 self.watch_import_members(alias_name, &module);
@@ -2259,7 +2262,7 @@ impl TypeChecker {
                                 // is_std_submodule 兜住，别名只有这张表能救；漏登记则
                                 // ir_gen 把 `m.sqrt` 当闭包值调用 → E8001 ICE
                                 self.module_namespaces
-                                    .insert(alias_name.clone(), path.clone());
+                                    .insert(alias_name.to_string(), path.clone());
                                 for export in &exports_to_import {
                                     if matches!(
                                         export.kind,
@@ -3862,7 +3865,7 @@ impl TypeChecker {
         imported_module_roots: &mut HashSet<String>,
         path: &str,
         items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
-        alias: &Option<Vec<String>>,
+        alias: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
     ) {
         if items.is_some() {
             return;
@@ -3871,7 +3874,7 @@ impl TypeChecker {
         if self.env.module_registry.has_module(path) {
             if let Some(aliases) = alias {
                 if aliases.len() == 1 {
-                    imported_module_roots.insert(aliases[0].clone());
+                    imported_module_roots.insert(aliases[0].name.clone());
                     return;
                 }
             }
@@ -3895,7 +3898,7 @@ impl TypeChecker {
         // 回退策略：未知路径按旧行为处理
         if let Some(aliases) = alias {
             if aliases.len() == 1 {
-                imported_module_roots.insert(aliases[0].clone());
+                imported_module_roots.insert(aliases[0].name.clone());
                 return;
             }
         }

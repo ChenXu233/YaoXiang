@@ -635,8 +635,9 @@ impl StatementChecker {
         &mut self,
         path: &str,
         path_span: crate::util::span::Span,
+        path_parts: &[crate::frontend::core::parser::ast::SpannedIdent],
         items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
-        alias: &Option<Vec<String>>,
+        alias: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
         item_aliases: &Option<Vec<Option<crate::frontend::core::parser::ast::SpannedIdent>>>,
     ) -> Result<(), Box<Diagnostic>> {
         let Some(module) = self.module_registry.get(path).cloned() else {
@@ -675,6 +676,8 @@ impl StatementChecker {
             // use path
             (None, None) => {
                 let module_alias = path.split('.').next_back().unwrap_or(path);
+                // 绑定名源位置 = 路径末段 token（本地名就是它，如 `use std.io` 的 io）
+                let binding_span = path_parts.last().map(|p| p.span).unwrap_or_default();
                 // #414：同名绑定直接报错（RFC-029 §导入冲突）
                 self.ensure_import_name_free(module_alias, path, path_span)?;
                 // #321 W1003：登记导入本地名与导出成员监视
@@ -684,21 +687,21 @@ impl StatementChecker {
                     module_alias.to_string(),
                     PolyType::mono(module_ty),
                     false,
-                    crate::util::span::Span::default(),
+                    binding_span,
                 );
             }
             // use path as alias（#414：单/多别名统一——每个别名各绑一份模块 record）
             (None, Some(aliases)) => {
                 for module_alias in aliases {
-                    self.ensure_import_name_free(module_alias, path, path_span)?;
+                    self.ensure_import_name_free(&module_alias.name, path, path_span)?;
                     // #321 W1003：登记导入本地名与导出成员监视
-                    self.note_body_import_members(module_alias, &module, path_span);
-                    let module_ty = self.module_as_struct_type(&module, module_alias);
+                    self.note_body_import_members(&module_alias.name, &module, path_span);
+                    let module_ty = self.module_as_struct_type(&module, &module_alias.name);
                     self.scope.add_var(
-                        module_alias.to_string(),
+                        module_alias.name.clone(),
                         PolyType::mono(module_ty),
                         false,
-                        crate::util::span::Span::default(),
+                        module_alias.span,
                     );
                 }
             }
@@ -1465,11 +1468,19 @@ impl StatementChecker {
             crate::frontend::core::parser::ast::StmtKind::Use {
                 path,
                 path_span,
+                path_parts,
                 items,
                 alias,
                 item_aliases,
                 ..
-            } => match self.process_use_stmt(path, *path_span, items, alias, item_aliases) {
+            } => match self.process_use_stmt(
+                path,
+                *path_span,
+                path_parts,
+                items,
+                alias,
+                item_aliases,
+            ) {
                 Ok(()) => Ok(()),
                 // #F2：模块/导出未命中不再静默——收集模式下累积，否则短路返回
                 Err(err) => {
