@@ -44,11 +44,17 @@ pub fn test_smt() -> String {
         SMTCommand::DeclareConst("x".to_string(), SMTSort::Int),
         SMTCommand::Assert(SMTExpr::App(
             ">".to_string(),
-            vec![SMTExpr::Atom("x".to_string()), SMTExpr::Atom("5".to_string())],
+            vec![
+                SMTExpr::Atom("x".to_string()),
+                SMTExpr::Atom("5".to_string()),
+            ],
         )),
         SMTCommand::Assert(SMTExpr::App(
             "<".to_string(),
-            vec![SMTExpr::Atom("x".to_string()), SMTExpr::Atom("3".to_string())],
+            vec![
+                SMTExpr::Atom("x".to_string()),
+                SMTExpr::Atom("3".to_string()),
+            ],
         )),
         SMTCommand::CheckSat,
     ];
@@ -63,11 +69,50 @@ pub fn test_smt() -> String {
 /// Test: compile only
 #[wasm_bindgen]
 pub fn test_compile(source: &str) -> String {
-    let mut compiler = yaoxiang::frontend::Compiler::new();
-    match compiler.compile_with_source("<test>", source) {
+    match compile_playground(source) {
         Ok(_) => "compiled ok".to_string(),
         Err(e) => format!("error: {}", e),
     }
+}
+
+/// 编译 playground 源码为 ModuleIR（4.2.8：显式 `ProgramKind::WasmPlayground`
+/// + 统一 Driver——与 SingleFile 同一张阶段表，02 §3 入口表）。
+///
+/// 错误文本逐字节对齐旧 `Compiler` 路径的 `CompileError` Display 前缀
+/// （`Parse error:`/`Type error:`/`Internal error:`），playground UI
+/// 零可见差异。
+fn compile_playground(source: &str) -> Result<yaoxiang::middle::ModuleIR, String> {
+    use yaoxiang::driver::{Driver, Program, ProgramKind, Unit};
+    use yaoxiang::frontend::config::CompileConfig;
+    use yaoxiang::frontend::pipeline::PipelineError;
+
+    let program = Program::new(
+        ProgramKind::WasmPlayground,
+        vec![Unit::new("<playground>", "<playground>", source)],
+        CompileConfig::new(),
+    );
+    let result = match Driver::new().run(program) {
+        Ok(outcome) => outcome.result,
+        // WasmPlayground 阶段表全接线且恒为 1 单元——结构性不可达；
+        // wasm 边界无 panic 通道：显式错误文本优于 unwinding
+        Err(e) => return Err(format!("Internal error: {e}")),
+    };
+    if result.error_count == 0 {
+        if let Some(ir) = result.ir {
+            return Ok(ir);
+        }
+    }
+    let joined = result
+        .errors
+        .iter()
+        .map(|e| format!("{e}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Err(match result.errors.first() {
+        Some(PipelineError::LexParse(diag)) => format!("Parse error: {diag}"),
+        Some(_) => format!("Type error: {joined}"),
+        None => format!("Internal error: {joined}"),
+    })
 }
 
 /// Compile and execute YaoXiang source code.
@@ -78,9 +123,8 @@ pub fn run_code(source: &str) -> String {
     // Clear output buffer
     yaoxiang::std::io::wasm_output::clear();
 
-    // Compile
-    let mut compiler = yaoxiang::frontend::Compiler::new();
-    let module = match compiler.compile_with_source("<playground>", source) {
+    // Compile（4.2.8：Program{WasmPlayground} + Driver，见 compile_playground）
+    let module = match compile_playground(source) {
         Ok(m) => m,
         Err(e) => return format!("Compilation Error:\n{}", e),
     };
