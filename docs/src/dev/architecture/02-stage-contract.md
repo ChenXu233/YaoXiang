@@ -577,6 +577,21 @@ impl Driver {
 >     路径自此补齐 proof（E4018）、W 码警告（W1001–W1005，测试钉板）
 >     与 IR 级错误；词法失败改报真实诊断（旧合成「E0001 词法错误」
 >     文本随序列删除消失——真实诊断带精确 span，无信息损失）。
+> 12. `check_module` / `check_module_collect_all` 逐行核实（4.2.7，
+>     C5 必做项）：两入口早已各自收敛——mod.rs 层是
+>     `check_module_inner(ast, env, collect_all)` 单布尔、checker 层是
+>     `check_module_impl(module, collect_all)`；唯一分叉是
+>     `init_body_checker(collect_all)` → `set_collect_all_errors`，
+>     pass-3 与 drain 两模式同跑、差异由 collected_errors 是否为空承载；
+>     statements.rs 五个收集点（函数体/use/for/块/while）。核实中证实
+>     重复诊断缺陷并修复：收集点把首错同时放进 collected_errors 与
+>     Err 返回通道，pass-3 对 Err 的 add_error 造成同码同 span 同消息
+>     ×2（嵌套可 ×3）；另有注解校验签名形参与整体注解双访
+>     （E1003/E1103）、所有权层同点双发（E2014/E2018）两条独立机制。
+>     修复落于模块结果边界：按 (code, span, message) 去重——诊断是
+>     位置事实，重复不携带信息；63 个语料条目去除重复副本，run 列与
+>     退出码零漂移（borrow_conflict_err 的「重复」是基线三元组格式
+>     不含列号的伪影——两条 E2018 实是不同列的合法诊断）。
 
 **十个入口的改造方式（逐个指定函数）**：
 

@@ -258,7 +258,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 4.2.4 `compile_embedded_module`（**2026-10-09 已完成**，e6fa163a；`Program::with_shared_registry` 注入共享注册表（#94 契约显式化），orchestrator 四入口全部迁入 Driver） | 4.2.3 | 同上 |
 | | 4.2.5 删 `check_single_file`（**2026-10-09 已完成**，0ef6ae6b；standalone 统一走 `Program{Check}` + 裁决 A 相对导入解析 + CHECK 加 GlobalSlotAlloc/IrGeneration 两阶段（用户裁决——runner 门禁实证 IR 级错误只在 ir_gen 产生）+ 嵌入 std 注册表面覆盖修复） | 4.2.1 | `check` 项目内外一致 |
 | | 4.2.6 删 LSP 手工阶段序列（**2026-10-09 已完成**，bf582555；SingleFile+CollectAll 新形态——Parsing 收全量 + 残缺 AST 继续 typecheck（编辑器哲学延伸），Typecheck 分派 `check_module_collect_all`；LSP 补齐 proof/W 码/IR 级错误，登记 02 §3 注记 #11） | 4.2.1 | LSP 与 CLI 诊断集相同 |
-| | 4.2.7 `Aggregation` 参数驱动二选一（`orchestrator.rs:486-494`——4.2.3 已删该包装，语义在 driver Typecheck 臂） | 4.2.1 | **实施时逐行核实两函数内部差异**（冲突登记 C5 已裁决为必做核实项）；**含 collect_all 重复诊断**（同码同 span 同消息重复报告——4.2.5 基线实证，LSP 项目路径既有） |
+| | 4.2.7 `Aggregation` 参数驱动二选一（**2026-10-10 已完成**，04343d2c；C5 逐行核实：两入口已收敛于 `check_module_inner`/`check_module_impl` 单布尔分叉，唯一分岔 `set_collect_all_errors`；collect_all 重复诊断修复——模块结果边界按 (code, span, message) 去重，63 个语料条目去重、run 列零漂移，登记 02 §3 注记 #12） | 4.2.1 | ~~**实施时逐行核实两函数内部差异**（冲突登记 C5 已裁决为必做核实项）~~已核实；~~**含 collect_all 重复诊断**~~已修复 |
 | | 4.2.8 wasm 改走 `ProgramKind::WasmPlayground`（`wasm/src/lib.rs:30-36,42-51`） | 4.2.1 | 见 C6 |
 | | 4.2.9 `driver/mod.rs` 拆分为 `state.rs`/`arms.rs`/`helpers.rs`（**2026-10-09 已完成**，c59fb751——1766 行超 P5 的 1500 行拆分阈值；零行为变化，内部可见性收紧为 `pub(in crate::driver)`） | 4.2.4 | C1：全量回归绿 + `crate::driver::*` 公开路径不变 |
 | 4.3 义务账本 | 4.3.1 `obligations.rs` + `assert_drained()`（新建；含 `#[ignore]` 红骨架先行） | 4.1.3 | `test_obligations_drained` 转绿 |
