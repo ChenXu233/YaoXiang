@@ -149,7 +149,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 3.4.5 `method_overload_ir_names` 与 `overload_resolutions` 平行表示二选一（禁令一） | `types.rs:60`、`ir_gen.rs:369` | 4.3.1 | 同一事实单点表达；C3 |
 | | 3.4.6 `compile_project` 补 `warnings` 消费（多文件 `run` 永不报 W1001/W1002/W1003） | `orchestrator.rs:99-159` | 4.2.1 | C2：多文件与单文件诊断集归一 |
 | | 3.4.7 LSP 非项目内路径接入统一消费端（**2026-10-09 已完成**，随 4.2.6 落地 bf582555：手工 `check_module_collect_all` 直调序列删除，统一走 `Program{SingleFile, CollectAll}`——proof/warnings/死代码分析全部接入） | `lsp/handlers/diagnostics.rs:161-206` | 4.2.6 | LSP 与 CLI 对同一文件同诊断集 |
-| | 3.4.8 多文件单态化臂（`instantiation_requests` 唯一消费者在单文件 pipeline；跨文件泛型矩阵探针实测通过，属**潜在**风险未证缺陷） | `orchestrator.rs:174`、`pipeline.rs:330` | 4.1.3 | C2：跨文件泛型矩阵与单文件等价 |
+| | 3.4.8 多文件单态化臂（**已实证缺陷**，2026-10-10 升级表述：病态泛型递归 `f(x)=f([x])` 在无 mono 的多文件路径下编译器进程爆栈 0xc00000fd——mono 深度闸是唯一编译期防线；「类型擦除兜底」假设经 RFC-033 反射裁决作废——`^^List(Int)` 需要实例化的真实身份。范围（2026-10-10 用户裁决）：①typecheck 对限定调用（`lib.f(x)`，FieldAccess 形态）产 instantiation_request，generic_id 用限定名（现只认裸 Var，expressions.rs:2455）；②MULTI_FILE 阶段表加 Monomorphization 于 Linking **之后**（消费 merged_ir，聚合全单元请求，containing_fn 限定化；单文件阶段表不动）；③CHECK 加 Linking（纯合并——E3020 入口校验留 RoleClassification 防双报）+ Monomorphization（纯检查不消费，同 IrGeneration 的 Check 形态）——**撤回 4.2.5 的 mono 排除**（02 §3 注记 #14）；④资源保护随全程序 BFS 覆盖跨单元互递归 | `expressions.rs:2455`、`arms.rs:838`、`program.rs:60-92` | 4.2.8 | C2：跨文件泛型矩阵与单文件等价；病态递归多文件 → 编译期 E3005（不再爆栈）；单文件 IR 快照零漂移 |
 
 **验收**：漏洞判据转绿，且**故意撤掉修复必须重新变红**。**风险**：多文件路径新增 E4018 是破坏性变更。
 
@@ -256,7 +256,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 4.2.2 `check_project`（**2026-10-09 已完成**，6ec330d2；RoleClassification 臂接线收齐 12 变体，顺序归一 + E3020 归属裁决登记 02 §1 注记 #4） | 4.2.1 | 同上 |
 | | 4.2.3 `check_source_in_project`（**2026-10-09 已完成**，83a6dd34；LSP 降级按文件来源分流裁决——磁盘文件同 Check 方案 B、缓冲区保留残缺 AST，登记 02 §3 注记 #8；顺手修复 LSP 对无关磁盘文件硬中止的怪癖） | 4.2.2 | 同上 |
 | | 4.2.4 `compile_embedded_module`（**2026-10-09 已完成**，e6fa163a；`Program::with_shared_registry` 注入共享注册表（#94 契约显式化），orchestrator 四入口全部迁入 Driver） | 4.2.3 | 同上 |
-| | 4.2.5 删 `check_single_file`（**2026-10-09 已完成**，0ef6ae6b；standalone 统一走 `Program{Check}` + 裁决 A 相对导入解析 + CHECK 加 GlobalSlotAlloc/IrGeneration 两阶段（用户裁决——runner 门禁实证 IR 级错误只在 ir_gen 产生）+ 嵌入 std 注册表面覆盖修复） | 4.2.1 | `check` 项目内外一致 |
+| | 4.2.5 删 `check_single_file`（**2026-10-09 已完成**，0ef6ae6b；standalone 统一走 `Program{Check}` + 裁决 A 相对导入解析 + CHECK 加 GlobalSlotAlloc/IrGeneration 两阶段（用户裁决——runner 门禁实证 IR 级错误只在 ir_gen 产生）+ 嵌入 std 注册表面覆盖修复；**mono 排除部分经 3.4.8 实证撤回**——E3005 是病态泛型递归的唯一编译期防线，「零语料依赖」实为语料无病态 fixture 的证据盲区（02 §3 注记 #14） | 4.2.1 | `check` 项目内外一致 |
 | | 4.2.6 删 LSP 手工阶段序列（**2026-10-09 已完成**，bf582555；SingleFile+CollectAll 新形态——Parsing 收全量 + 残缺 AST 继续 typecheck（编辑器哲学延伸），Typecheck 分派 `check_module_collect_all`；LSP 补齐 proof/W 码/IR 级错误，登记 02 §3 注记 #11） | 4.2.1 | LSP 与 CLI 诊断集相同 |
 | | 4.2.7 `Aggregation` 参数驱动二选一（**2026-10-10 已完成**，04343d2c；C5 逐行核实：两入口已收敛于 `check_module_inner`/`check_module_impl` 单布尔分叉，唯一分岔 `set_collect_all_errors`；collect_all 重复诊断修复——模块结果边界按 (code, span, message) 去重，63 个语料条目去重、run 列零漂移，登记 02 §3 注记 #12） | 4.2.1 | ~~**实施时逐行核实两函数内部差异**（冲突登记 C5 已裁决为必做核实项）~~已核实；~~**含 collect_all 重复诊断**~~已修复 |
 | | 4.2.8 wasm 改走 `ProgramKind::WasmPlayground`（**2026-10-10 已完成**，06d26410；`compile_playground` 统一构造，错误文本逐字节对齐旧 `CompileError` 前缀；wasm32 目标 check/clippy 实证，登记 02 §3 注记 #13） | 4.2.1 | 见 C6——旧路径零残留引用（`test_compiler` 仅探活 `Compiler` 类型存在） |

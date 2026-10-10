@@ -564,6 +564,9 @@ impl Driver {
 >     IrGeneration 的 Check 形态纯检查不消费 IR；Script/Bin 分形以
 >     module_key 的 None/Some 表达（E3023 的既有开关，ir_gen.rs:1660）。
 >     Monomorphization 不入 CHECK（只产资源超限/内部错误，零语料依赖）。
+>     **〔2026-10-10 经 3.4.8 实证撤回〕**——「零语料依赖」实为语料无
+>     病态递归 fixture 的证据盲区；E3005 是该类程序唯一的编译期防线。
+>     见注记 #14。
 >     附带修复潜伏缺陷：Registry 臂对嵌入 std 单元的重复收获注册会顶掉
 >     with_std() 已合并的 native 半面（E1043 误报）——嵌入单元现跳过
 >     重复注册。
@@ -599,6 +602,27 @@ impl Driver {
 >     error:），playground UI 零可见差异。WasmPlayground 与 SingleFile
 >     共用 SINGLE_FILE_STAGES + FailFast（4.1 既有声明，本步起有真实
 >     生产者）。
+> 14. 多文件单态化与 CHECK 阶段表修正（3.4.8，2026-10-10 用户裁决，
+>     **部分撤回注记 #10 的 mono 排除**）。实证推翻「mono 只产资源限制
+>     噪音」：病态泛型递归（`f(x)=f([x])`）在无 mono 的多文件路径下
+>     编译器进程爆栈（0xc00000fd——解释器在 Rust 层递归，无优雅运行时
+>     错误），mono 深度闸是唯一编译期防线；standalone check 在 4.2.5 前
+>     走 pipeline 全链本有 mono，排除裁决造成静默覆盖回归（「零语料
+>     依赖」只证明语料无病态 fixture）。「类型擦除兜底」假设经 RFC-033
+>     反射裁决作废——`^^List(Int)` 需要实例化的真实身份，单态化是
+>     反射的地基而非可选优化。设计四点：①typecheck 对限定调用
+>     （`lib.f(x)`，FieldAccess 形态）产 instantiation_request，
+>     generic_id 用限定名，与 merged IR 同命名空间（现只认裸 Var，
+>     expressions.rs:2455）；②`Stage::ALL` 拓扑改为 Linking 先于
+>     Monomorphization，MULTI_FILE 阶段表尾部加 Monomorphization——
+>     消费 merged_ir、聚合全单元请求（deferred 桶的 containing_fn
+>     限定化），mono 从单模块 pass 升格为全程序 pass；单文件阶段表
+>     不动（无 Linking，子序列性质保持，IR 快照零漂移）；③CHECK 加
+>     Linking（纯合并——E3020 入口校验留 RoleClassification，防双报）
+>     与 Monomorphization（纯检查不消费，同 IrGeneration 的 Check
+>     形态）两阶段；④资源保护随全程序 BFS 覆盖跨单元互递归。
+>     Monomorphizer 本体不变（消费 ModuleIR + 请求集的契约恰好是
+>     merged IR 形态）。
 
 **十个入口的改造方式（逐个指定函数）**：
 
