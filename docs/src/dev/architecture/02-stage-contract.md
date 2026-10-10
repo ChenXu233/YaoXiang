@@ -592,6 +592,13 @@ impl Driver {
 >     位置事实，重复不携带信息；63 个语料条目去除重复副本，run 列与
 >     退出码零漂移（borrow_conflict_err 的「重复」是基线三元组格式
 >     不含列号的伪影——两条 E2018 实是不同列的合法诊断）。
+> 13. wasm playground 落地（4.2.8）：`run_code`/`test_compile` 经
+>     `compile_playground` 构造 `Program { kind: WasmPlayground }` +
+>     Driver——`Compiler` 包装层不再经手。错误文本逐字节对齐旧
+>     `CompileError` Display 前缀（Parse error:/Type error:/Internal
+>     error:），playground UI 零可见差异。WasmPlayground 与 SingleFile
+>     共用 SINGLE_FILE_STAGES + FailFast（4.1 既有声明，本步起有真实
+>     生产者）。
 
 **十个入口的改造方式（逐个指定函数）**：
 
