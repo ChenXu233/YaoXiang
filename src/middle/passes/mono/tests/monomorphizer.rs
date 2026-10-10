@@ -798,6 +798,275 @@ fn test_monomorphize_end_to_end_specializes_and_replaces_calls() {
 /// 「identity(int64) 特化函数应存在」的失败文案。
 const MISSING_SPECIALIZED: &str = "应该存在 identity(int64) 特化函数";
 
+/// 机制（3.4.8-R1+ / t3）：删除判据按**泛型名**（site_requests 的名字集合），
+/// 调用点改写判据按 **(containing_fn, 名, span)** 三元键。同一泛型的两个调用点
+/// 里只要有一个没有请求键（请求因符号化实参进 deferred 桶未排水，或该调用点
+/// 从未产出请求），删除原件就让那个调用点悬空——运行期按原名查表落空（E6006）。
+///
+/// 规范：RFC-011 §4 泛型函数特化。实证现场：src/std/tests/list_ops.yx:53 的
+/// `list.is_empty(list.empty(Int))`——该泛型的请求只存在于同一函数内的另一调用点。
+#[test]
+fn test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key() {
+    // Arrange：泛型 std.list.is_empty + main 里两个调用点（仅前者有请求键）
+    let requested_span = span_at(10, 5, 100, 12, 107);
+    let unrequested_span = span_at(20, 5, 200, 12, 207);
+    let generic = make_fn_ir(
+        "std.list.is_empty",
+        vec![MonoType::Generic {
+            name: "Vec".to_string(),
+            args: vec![MonoType::TypeVar(TypeVar::new(0))],
+        }],
+        MonoType::Bool,
+        Some(vec!["A".to_string()]),
+        vec![ret_instr(Some(Operand::Const(ConstValue::Bool(true))))],
+        vec![],
+    );
+    let main_func = make_main_ir(
+        MonoType::Void,
+        vec![
+            call_instr_at(None, "std.list.is_empty", vec![], requested_span),
+            call_instr_at(None, "std.list.is_empty", vec![], unrequested_span),
+            ret_instr(None),
+        ],
+        vec![],
+    );
+    let module = module_with(vec![generic, main_func]);
+    let mut covered_request = request(
+        "std.list.is_empty",
+        &["A"],
+        MonoType::Int(64),
+        requested_span,
+    );
+    covered_request.containing_fn = Some("main".to_string());
+    let requests = [covered_request];
+
+    // Act
+    let result = Monomorphizer::new()
+        .monomorphize(&module, &requests)
+        .expect("单态化不应失败");
+
+    // Assert 1：有请求键的调用点改写成特化名
+    let main_out = find_fn(&result, "main", "模块中应存在 main 函数");
+    assert!(
+        is_call_to(
+            &main_out.blocks()[0].instructions[0],
+            "std.list.is_empty(int64)"
+        ),
+        "有请求键的调用点应改写成特化名 std.list.is_empty(int64)"
+    );
+    // Assert 2：无请求键的调用点保持原名（该调用点不在改写映射里）
+    assert!(
+        is_call_to(&main_out.blocks()[0].instructions[1], "std.list.is_empty"),
+        "无请求键的调用点应保持原名 std.list.is_empty"
+    );
+    // Assert 3：原件必须保留——删除会让 Assert 2 的调用点悬空（运行期 E6006）
+    assert!(
+        result
+            .functions
+            .iter()
+            .any(|f| f.name == "std.list.is_empty"),
+        "存在未覆盖调用点时不得删除原件（否则运行期按原名查表落空 E6006）"
+    );
+}
+
+/// 三个泛型原件（`std.list.is_empty` / `.len` / `.pop`）各带一个「有请求键」与一个
+/// 「无请求键」调用点——三者都会被 t3 闭合闸放回，用于检验放回段的顺序纪律。
+fn restore_three_generics_case() -> (ModuleIR, Vec<InstantiationRequest>) {
+    let mut functions = Vec::new();
+    let mut instructions = Vec::new();
+    let mut requests = Vec::new();
+    for (name, covered_span, uncovered_span) in [
+        (
+            "std.list.is_empty",
+            span_at(10, 5, 100, 12, 107),
+            span_at(11, 5, 120, 12, 127),
+        ),
+        (
+            "std.list.len",
+            span_at(20, 5, 200, 12, 207),
+            span_at(21, 5, 220, 12, 227),
+        ),
+        (
+            "std.list.pop",
+            span_at(30, 5, 300, 12, 307),
+            span_at(31, 5, 320, 12, 327),
+        ),
+    ] {
+        functions.push(make_fn_ir(
+            name,
+            vec![MonoType::Generic {
+                name: "Vec".to_string(),
+                args: vec![MonoType::TypeVar(TypeVar::new(0))],
+            }],
+            MonoType::Bool,
+            Some(vec!["A".to_string()]),
+            vec![ret_instr(Some(Operand::Const(ConstValue::Bool(true))))],
+            vec![],
+        ));
+        instructions.push(call_instr_at(None, name, vec![], covered_span));
+        instructions.push(call_instr_at(None, name, vec![], uncovered_span));
+        let mut req = request(name, &["A"], MonoType::Int(64), covered_span);
+        req.containing_fn = Some("main".to_string());
+        requests.push(req);
+    }
+    instructions.push(ret_instr(None));
+    functions.push(make_main_ir(MonoType::Void, instructions, vec![]));
+    (module_with(functions), requests)
+}
+
+/// 输出里「被放回的原件」的名字序列（特化副本名带 `(...)` 后缀，故同名者必为原件）。
+fn restored_name_sequence(module: &ModuleIR) -> Vec<String> {
+    const ORIGINALS: [&str; 3] = ["std.list.is_empty", "std.list.len", "std.list.pop"];
+    module
+        .functions
+        .iter()
+        .map(|f| f.name.clone())
+        .filter(|n| ORIGINALS.contains(&n.as_str()))
+        .collect()
+}
+
+/// 顺序纪律（3.4.8-R1++ / F1）：闭合闸放回的原件必须**按函数名排序**追加，与
+/// `build_output` 的特化函数追加同款（mod.rs 明文：「HashMap 迭代顺序随进程随机化…
+/// 按名排序固定顺序」）。按 `HashSet` 迭代序追加会让同一份源码产出不同的函数
+/// 序号（.42 字节不可复现、dump 不可复现）。
+#[test]
+fn test_restore_gate_orders_restored_generics_by_name() {
+    // Arrange：三个泛型原件都因「存在未覆盖调用点」被放回
+    let (module, requests) = restore_three_generics_case();
+
+    // Act
+    let result = Monomorphizer::new()
+        .monomorphize(&module, &requests)
+        .expect("单态化不应失败");
+
+    // Assert：强形式——顺序即契约，不依赖 HashSet 迭代序
+    assert_eq!(
+        restored_name_sequence(&result),
+        vec!["std.list.is_empty", "std.list.len", "std.list.pop"],
+        "放回的原件必须按函数名排序追加（对齐 build_output 的排序纪律）"
+    );
+}
+
+/// 跨次可复现（3.4.8-R1++ / F1）：同一进程内对同一输入多次单态化，输出函数表顺序
+/// 必须逐元素一致——否则同一源码的函数序号随 HashSet 随机种子漂移。
+#[test]
+fn test_restore_gate_output_order_is_stable_across_runs() {
+    // Arrange：同一输入；≥2 次（取 8 次以消除 HashSet 顺序偶然一致的判别力缺口）
+    let (module, requests) = restore_three_generics_case();
+    let mut orders: Vec<Vec<String>> = Vec::new();
+
+    // Act
+    for _ in 0..8 {
+        let out = Monomorphizer::new()
+            .monomorphize(&module, &requests)
+            .expect("单态化不应失败");
+        orders.push(out.functions.iter().map(|f| f.name.clone()).collect());
+    }
+
+    // Assert：逐元素一致
+    let first = &orders[0];
+    for (i, order) in orders.iter().enumerate() {
+        assert_eq!(
+            order, first,
+            "第 {i} 次单态化的函数表顺序与首次不一致：{order:?} vs {first:?}"
+        );
+    }
+}
+
+/// 泛型 `std.list.is_empty` **只**被一个「非改写面」站点（`MakeClosure` / `TailCall`）
+/// 按名引用，且该站点在请求集合里有键（span 对齐）——用于钉「非改写面站点一律计
+/// 未覆盖」。返回（模块, 请求）。
+fn non_rewritable_ref_case(
+    reference: Instruction,
+    reference_span: Span,
+) -> (ModuleIR, Vec<InstantiationRequest>) {
+    let generic = make_fn_ir(
+        "std.list.is_empty",
+        vec![MonoType::Generic {
+            name: "Vec".to_string(),
+            args: vec![MonoType::TypeVar(TypeVar::new(0))],
+        }],
+        MonoType::Bool,
+        Some(vec!["A".to_string()]),
+        vec![ret_instr(Some(Operand::Const(ConstValue::Bool(true))))],
+        vec![],
+    );
+    let main_func = make_main_ir(
+        MonoType::Void,
+        vec![reference, ret_instr(None)],
+        vec![LocalSlot::temp(MonoType::Bool)],
+    );
+    let mut req = request(
+        "std.list.is_empty",
+        &["A"],
+        MonoType::Int(64),
+        reference_span,
+    );
+    req.containing_fn = Some("main".to_string());
+    (module_with(vec![generic, main_func]), vec![req])
+}
+
+/// 指令形态不对称（3.4.8-R1+++ / t6）：扫描面（`by_name_call_target`）覆盖
+/// `Call`/`TailCall`/`MakeClosure`，改写面（`replace_calls_in_function`）**只**处理
+/// `Call`。`MakeClosure` 臂若照常查映射键，「有键」会被误判为「已覆盖」——原件被删
+/// 而该站点永不被改写 → 悬空（t3 同缺陷类）。钉住：一律计未覆盖 → 原件保留。
+#[test]
+fn test_restore_gate_keeps_generic_referenced_only_by_make_closure() {
+    // Arrange：仅 MakeClosure 站点按名引用，且该站点有对齐的请求键
+    let reference_span = span_at(10, 5, 100, 12, 107);
+    let reference = Instruction::MakeClosure {
+        dst: Operand::Local(0),
+        func: "std.list.is_empty".to_string(),
+        def: None,
+        env: vec![],
+        span: reference_span,
+    };
+    let (module, requests) = non_rewritable_ref_case(reference, reference_span);
+
+    // Act
+    let result = Monomorphizer::new()
+        .monomorphize(&module, &requests)
+        .expect("单态化不应失败");
+
+    // Assert：原件保留（MakeClosure 站点不会被改写，删除即悬空）
+    assert!(
+        result
+            .functions
+            .iter()
+            .any(|f| f.name == "std.list.is_empty"),
+        "MakeClosure 按名目标一律计未覆盖：原件必须保留（修复前「有键→判覆盖→被删」）"
+    );
+}
+
+/// 同上缺陷类：`TailCall` 也不在改写面内，同样一律计未覆盖（注释早已如此声明，
+/// 修复前代码却仍查映射键）。钉住行为与声明一致。
+#[test]
+fn test_restore_gate_keeps_generic_referenced_only_by_tail_call() {
+    // Arrange：仅 TailCall 站点按名引用，且该站点有对齐的请求键
+    let reference_span = span_at(20, 5, 200, 12, 207);
+    let reference = Instruction::TailCall {
+        func: Operand::Const(ConstValue::String("std.list.is_empty".to_string())),
+        args: vec![],
+        def: None,
+        span: reference_span,
+    };
+    let (module, requests) = non_rewritable_ref_case(reference, reference_span);
+
+    // Act
+    let result = Monomorphizer::new()
+        .monomorphize(&module, &requests)
+        .expect("单态化不应失败");
+
+    // Assert：原件保留（TailCall 站点不会被改写，删除即悬空）
+    assert!(
+        result
+            .functions
+            .iter()
+            .any(|f| f.name == "std.list.is_empty"),
+        "TailCall 按名目标一律计未覆盖：原件必须保留（修复前「有键→判覆盖→被删」）"
+    );
+}
+
 // ==================== specialize_type 测试 (Issue #197 类型单态化) ====================
 
 #[test]

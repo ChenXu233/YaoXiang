@@ -9,6 +9,7 @@ use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use crate::frontend::core::parser::ast::{BinOp, UnOp};
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::core::typecheck::passes::overload;
+use crate::frontend::module::symbol::SymbolTable;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use std::collections::{HashMap, HashSet};
 
@@ -75,6 +76,18 @@ pub struct ExpressionInferrer<'a> {
     /// 模块别名集合（#396）：Some 时，模块别名 Struct 上取成员失败报
     /// E1043（模块语义）而非 E1042（struct 语义）。测试等直构场景为 None。
     module_aliases: Option<&'a std::collections::HashSet<String>>,
+    /// 模块别名 → 模块限定键（`use lib` → `lib`；`use std.list` → `std.list`；
+    /// `use std.io as printer` → `std.io`）。由 StatementChecker 加工 use 时登记，
+    /// 随委托注入。
+    ///
+    /// 用途（RFC-039 §3.4.8 ①）：限定调用 `lib.f(x)` 的实例化请求必须携带
+    /// **与 merged-IR 同源的限定名** `{module_key}.{f}`——ir_gen 的
+    /// `qualify_names` 把每个模块的顶层函数重写为这一格式，下游 mono 消费
+    /// merged_ir 时按名匹配泛型定义表；用裸 `f` 匹配不到 `lib.f`，请求被静默
+    /// 跳过。限定名拼接一律经 [`SymbolTable::qualify`]（格式唯一所有者）。
+    ///
+    /// None（测试直构 / 独立表达式推断）→ 限定调用不发请求，行为与注入前一致。
+    module_namespaces: Option<&'a HashMap<String, String>>,
     /// 当前函数的 Result 错误类型（若为 None，则不允许使用 `?`）
     result_err: Option<MonoType>,
     /// 当前函数的预期返回类型（用于 return 语句的类型检查）
@@ -161,6 +174,7 @@ impl<'a> ExpressionInferrer<'a> {
             overload_candidates,
             native_signatures: &EMPTY_SIGNATURES,
             module_aliases: None,
+            module_namespaces: None,
             result_err: None,
             expected_return_type: None,
             unsafe_depth: 0,
@@ -208,6 +222,7 @@ impl<'a> ExpressionInferrer<'a> {
             overload_candidates,
             native_signatures,
             module_aliases: None,
+            module_namespaces: None,
             result_err: None,
             expected_return_type: None,
             unsafe_depth: 0,
@@ -256,6 +271,7 @@ impl<'a> ExpressionInferrer<'a> {
             overload_candidates,
             native_signatures,
             module_aliases: None,
+            module_namespaces: None,
             result_err,
             expected_return_type: None,
             unsafe_depth: 0,
@@ -306,6 +322,7 @@ impl<'a> ExpressionInferrer<'a> {
             overload_candidates,
             native_signatures,
             module_aliases: None,
+            module_namespaces: None,
             result_err,
             expected_return_type,
             unsafe_depth: 0,
@@ -364,6 +381,14 @@ impl<'a> ExpressionInferrer<'a> {
         aliases: &'a std::collections::HashSet<String>,
     ) {
         self.module_aliases = Some(aliases);
+    }
+
+    /// 注入模块别名 → 模块限定键表（限定调用的实例化请求用，见字段注释）。
+    pub fn set_module_namespaces(
+        &mut self,
+        namespaces: &'a HashMap<String, String>,
+    ) {
+        self.module_namespaces = Some(namespaces);
     }
 
     /// #321 W1003：变量成功解析时调用——命中监视集的名字记为已使用
@@ -2383,6 +2408,37 @@ impl<'a> ExpressionInferrer<'a> {
         }
     }
 
+    /// 被调方在**泛型定义命名空间**里的名字（实例化请求的 `generic_id` 名）。
+    ///
+    /// - 裸 `Var`：其名本身（既有行为，`main`/单文件路径一字不改）；
+    /// - 限定调用 `lib.f`：与 merged-IR 同源的限定名 `{module_key}.{f}`——
+    ///   `module_key` 取该别名的模块限定键（use 路径），拼接经
+    ///   [`SymbolTable::qualify`]（全仓限定名格式的唯一所有者，与 ir_gen
+    ///   `qualify_names`、`Resolver::resolve_namespace` 同源）。
+    ///
+    /// 返回 None 的形态不发请求：非 Var 结尾的接收者（lambda 调用、值接收者
+    /// 方法调用、嵌套限定路径 `a.b.f`）与未注入模块表的直构场景——
+    /// 两者都保持注入前的行为。
+    fn callee_generic_name(
+        &self,
+        func_expr: &crate::frontend::core::parser::ast::Expr,
+    ) -> Option<String> {
+        use crate::frontend::core::parser::ast::Expr;
+        match func_expr {
+            Expr::Var(name, _) => Some(name.clone()),
+            Expr::FieldAccess {
+                expr: obj, field, ..
+            } => {
+                let Expr::Var(alias, _) = obj.as_ref() else {
+                    return None;
+                };
+                let module_key = self.module_namespaces?.get(alias)?;
+                Some(SymbolTable::qualify(module_key, field))
+            }
+            _ => None,
+        }
+    }
+
     /// 收集泛型函数实例化请求
     ///
     /// 检测函数调用是否是泛型函数调用，如果是则构造 InstantiationRequest
@@ -2404,6 +2460,19 @@ impl<'a> ExpressionInferrer<'a> {
             return;
         };
 
+        // 被调方在泛型定义命名空间里的名字：裸 Var 用其名（既有行为），
+        // 限定调用 `lib.f` 用与 merged-IR 同源的限定名。不是这两种形态
+        //（lambda 调用、值接收者方法调用）→ 不收集，与既有行为一致。
+        let Some(fn_name) = self.callee_generic_name(func_expr) else {
+            return;
+        };
+        // 限定调用（被调方是 FieldAccess）标记：下方第一条路径的 arity
+        // 判据随之收紧（见该处注释）。
+        let is_qualified = matches!(
+            func_expr,
+            crate::frontend::core::parser::ast::Expr::FieldAccess { .. }
+        );
+
         // 优先：单态化阶段已按声明序解出的类型实参。
         // 它覆盖按名声明的类型参数（`(T: Type, Acc: Type)`）——这类参数在
         // MonoType 侧是 TypeRef 或嵌在 `Ref(Generic)` 里，下面的 TypeVar 位置
@@ -2416,18 +2485,25 @@ impl<'a> ExpressionInferrer<'a> {
             .filter(|t| !matches!(t, MonoType::TypeVar(_)))
             .collect();
         if !monomorphized_args.is_empty() {
-            if let crate::frontend::core::parser::ast::Expr::Var(ref name, _) = func_expr {
-                let type_params: Vec<String> = self.lookup_type_params(name);
-                let arity_ok =
-                    type_params.is_empty() || type_params.len() == monomorphized_args.len();
-                if arity_ok {
-                    let generic_id = GenericFunctionId::new(name.clone(), type_params);
-                    let mut request =
-                        InstantiationRequest::new(generic_id, monomorphized_args, call_span);
-                    request.containing_fn = self.scope.fn_context().map(str::to_owned);
-                    self.instantiation_requests.push(request);
-                    return;
-                }
+            let type_params: Vec<String> = self.lookup_type_params(&fn_name);
+            // arity 判据：裸名沿用既有行为（空表 = 无 arity 约束）。
+            // 限定名没有「无约束」余地——`last_type_args` 是 monomorphize 按
+            // **裸字段名**的表解出来的，那个键可能属于本模块的同名函数而非被调
+            // 模块的声明（跨模块导出只在随导出携带 `type_params` 时有该键）。
+            // 限定名表解不出时宁可落第二条路径（它按实际签名取值，不会错配），
+            // 否则会发出 arity 错配的请求，mono 侧硬报 E3018（比不特化更糟）。
+            let arity_ok = if type_params.is_empty() {
+                !is_qualified
+            } else {
+                type_params.len() == monomorphized_args.len()
+            };
+            if arity_ok {
+                let generic_id = GenericFunctionId::new(fn_name.clone(), type_params);
+                let mut request =
+                    InstantiationRequest::new(generic_id, monomorphized_args, call_span);
+                request.containing_fn = self.scope.fn_context().map(str::to_owned);
+                self.instantiation_requests.push(request);
+                return;
             }
         }
 
@@ -2451,13 +2527,7 @@ impl<'a> ExpressionInferrer<'a> {
             }
         }
 
-        // 获取函数名称（从 AST）
-        let fn_name = match func_expr {
-            crate::frontend::core::parser::ast::Expr::Var(ref name, _) => name.clone(),
-            _ => return, // 对于非命名函数调用（如 lambda 调用），暂不收集
-        };
-
-        // 获取泛型参数名称列表
+        // 获取泛型参数名称列表（裸名或限定名，见 callee_generic_name）
         let type_params: Vec<String> = self.lookup_type_params(&fn_name);
 
         // 从单态化后的函数类型中提取具体的类型参数
@@ -2500,6 +2570,13 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 查找函数的泛型类型参数名称
+    ///
+    /// `fn_name` 接受两种键：本模块的裸函数名，以及**跨模块限定名**
+    /// `{module_key}.{bare}`（限定调用 `lib.f(x)` 的请求用它）。跨模块导出
+    /// 随 `Export::type_params` 携带声明名时，`export_type` 会同时登记
+    /// `export.name` 与 `export.full_path` 两个键，故限定名在此可解析；
+    /// 导出未携带声明名（用户模块经 `extract_module_info` 导出，
+    /// `type_params: None`）时返回空表——调用方按「无 arity 约束」处理。
     fn lookup_type_params(
         &self,
         fn_name: &str,

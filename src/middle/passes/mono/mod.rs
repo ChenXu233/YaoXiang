@@ -129,6 +129,11 @@ impl Monomorphizer {
         // 5. 构建输出
         let mut output = self.build_output(module);
 
+        // 5b. t3 闭合闸：删除判据（按泛型名）与改写判据（按 (containing_fn, 名, span)
+        //     三元键）粒度不同——未覆盖的调用点在原件被删后会悬空（运行期 E6006）。
+        //     放回「仍被按名调用且调用点不在改写映射里」的原件，使两个判据闭合。
+        self.restore_generics_with_uncovered_call_sites(module, &mut output);
+
         // 6. 替换调用点
         self.replace_call_sites(&mut output);
 
@@ -692,6 +697,137 @@ impl Monomorphizer {
             );
         }
         map
+    }
+
+    /// t3 闭合闸：把「输出里仍被按名调用、但调用点不在改写映射里」的泛型原件放回函数表。
+    ///
+    /// 缺口成因：`build_output` 的删除判据按**泛型名**（`site_requests` 的名字集合，
+    /// mod.rs `requested_generic_names`），而改写判据按 **(containing_fn, 名, span)**
+    /// 三元键（[`Self::build_call_site_map`]）。同一泛型的多个调用点里只要有一个
+    /// 没有请求键——实参符号化使请求进 `deferred` 桶、且所在函数非泛型时不排水；
+    /// 或该调用点从未产出请求——删除原件就让那个调用点悬空：运行期按原名查表落空
+    /// （E6006。实证：`src/std/tests/list_ops.yx:53` 的 `list.is_empty(list.empty(Int))`，
+    /// 该泛型名的请求只存在于同函数内另一调用点）。
+    ///
+    /// 判据与改写**同一份映射**：映射里查不到即视为未覆盖。放回的原件让该调用点
+    /// 退回类型擦除执行——正是单态化未介入时的既有语义；这不是「一律保留」：
+    /// 全部调用点都被覆盖的泛型仍按原判据删除（[`Self::build_output`]）。
+    fn restore_generics_with_uncovered_call_sites(
+        &self,
+        input: &ModuleIR,
+        output: &mut ModuleIR,
+    ) {
+        let call_site_map = self.build_call_site_map(&self.site_requests);
+        // 放回的原件体内可能再引用别的已删泛型 → 迭代到不动点。每轮至少放回一个，
+        // 上界为输入模块函数数，必然终止。
+        loop {
+            // 名单**按函数名排序**后追加：与 `build_output` 的特化函数追加同一纪律
+            //（`specialized.sort_by(|a, b| a.name.cmp(&b.name))`）。`HashSet` 迭代顺序
+            // 随进程/实例随机化（F1 实证：同一输入 4 次构建出 2 个不同的 .42 SHA256），
+            // 直接按迭代序追加会让同一份源码产出不同的函数序号——数序号即产物
+            //（dump/字节码不可复现）。
+            let mut pending: Vec<&FunctionIR> = self
+                .uncovered_call_targets(output, &call_site_map)
+                .into_iter()
+                .filter(|name| !output.functions.iter().any(|f| &f.name == name))
+                // 按名目标不是本模块定义（std native 等）——不归本闸管
+                .filter_map(|name| input.functions.iter().find(|f| f.name == name))
+                .collect();
+            if pending.is_empty() {
+                break;
+            }
+            pending.sort_by(|a, b| a.name.cmp(&b.name));
+            for original in pending {
+                output.functions.push(original.clone());
+            }
+        }
+    }
+
+    /// 输出模块里**按名调用**的目标名中，调用点不在改写映射里的那些（去重）。
+    fn uncovered_call_targets(
+        &self,
+        output: &ModuleIR,
+        call_site_map: &HashMap<(Option<String>, String, crate::util::span::Span), String>,
+    ) -> HashSet<String> {
+        let mut names = HashSet::new();
+        for func in &output.functions {
+            let FunctionBody::Code { blocks, .. } = &func.body else {
+                continue;
+            };
+            for block in blocks {
+                for instr in &block.instructions {
+                    let Some((callee, span)) = Self::by_name_call_target(instr) else {
+                        continue;
+                    };
+                    // 改写面只覆盖 `Call`（[`Self::call_form_is_rewritten`]）：
+                    // `TailCall` / `MakeClosure` 的按名目标永不被替换成特化名，
+                    // 故**一律计未覆盖**、不查映射键——「有键」只说明该站点在
+                    // typecheck 侧产过请求，不代表改写会发生。保守方向：宁保留
+                    //（该站点退回类型擦除执行，对应特化版可能成为死码）不悬空。
+                    if !Self::call_form_is_rewritten(instr) {
+                        names.insert(callee);
+                        continue;
+                    }
+                    let named = (Some(func.name.clone()), callee.clone(), span);
+                    let anon = (None, callee.clone(), span);
+                    if !call_site_map.contains_key(&named) && !call_site_map.contains_key(&anon) {
+                        names.insert(callee);
+                    }
+                }
+            }
+        }
+        // init 段（模块顶层语句）的按名调用：改写侧用 (None, 名, span) 兜底键；
+        // 「非改写面形态一律计未覆盖」同规则适用。
+        for instr in &output.init {
+            let Some((callee, span)) = Self::by_name_call_target(instr) else {
+                continue;
+            };
+            if !Self::call_form_is_rewritten(instr)
+                || !call_site_map.contains_key(&(None, callee.clone(), span))
+            {
+                names.insert(callee);
+            }
+        }
+        names
+    }
+
+    /// 调用点改写面（[`Self::replace_calls_in_function`]）是否覆盖该形态的按名目标。
+    ///
+    /// **只覆盖 `Call`**（且 func 为字符串常量）：`TailCall` / `MakeClosure` 的按名
+    /// 目标不会被替换成特化名。扫描面（[`Self::by_name_call_target`]）比改写面宽，
+    /// 不对称只在此单点判定——非改写面形态一律按「未覆盖」保守处理，触发原件保留。
+    fn call_form_is_rewritten(instr: &Instruction) -> bool {
+        matches!(
+            instr,
+            Instruction::Call {
+                func: Operand::Const(ConstValue::String(_)),
+                ..
+            }
+        )
+    }
+
+    /// 指令的**按名调用目标**与调用点 span：IR 里以字符串名分发的三种形态
+    ///（`Call` / `TailCall` / `MakeClosure`）。
+    ///
+    /// 不要据此假定「取到名字即会被改写」：改写面只覆盖 `Call`——某形态是否被
+    /// 覆盖由 [`Self::call_form_is_rewritten`] 单点判定；扫描面更宽的那些形态在
+    /// [`Self::uncovered_call_targets`] 里一律计未覆盖（保守保留原件，防删除后
+    /// 调用点悬空 → 运行期 E6006）。
+    fn by_name_call_target(instr: &Instruction) -> Option<(String, crate::util::span::Span)> {
+        match instr {
+            Instruction::Call {
+                func: Operand::Const(ConstValue::String(name)),
+                span,
+                ..
+            }
+            | Instruction::TailCall {
+                func: Operand::Const(ConstValue::String(name)),
+                span,
+                ..
+            } => Some((name.clone(), *span)),
+            Instruction::MakeClosure { func, span, .. } => Some((func.clone(), *span)),
+            _ => None,
+        }
     }
 
     /// 替换单个函数中所有 Call 指令的泛型函数名为特化函数名

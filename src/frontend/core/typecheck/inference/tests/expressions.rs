@@ -3,6 +3,10 @@
 //! §3.2: 原类型（Int 默认 8 字节 = Int(64)）
 //! §4.1-§4.10: 表达式分类
 //! RFC-010: 统一类型语法
+//! RFC-029: 模块限定名 `{module_key}.{bare}`（ir_gen 的 `qualify_names` 与
+//!   `SymbolTable::qualify` 同源）
+//! RFC-039 §3.4.8 ①: 跨模块限定调用 `lib.f(x)` 发泛型实例化请求（generic_id
+//!   用限定名，与 merged-IR 的函数表键对齐）
 
 use crate::frontend::core::typecheck::inference::expressions::ExpressionInferrer;
 use crate::frontend::core::typecheck::inference::scope::ScopeManager;
@@ -11,6 +15,10 @@ use crate::frontend::core::parser::ast::Expr;
 use crate::util::span::Span;
 
 use std::collections::HashMap;
+
+use crate::frontend::core::typecheck::TypeCheckResult;
+use crate::frontend::module::ModuleInfo;
+use crate::middle::passes::mono::instance::InstantiationRequest;
 
 /// 整数字面量表达式 `n`。
 fn int_expr(n: i128) -> Expr {
@@ -32,6 +40,56 @@ fn binop_expr(
         right: Box::new(right),
         span: Span::dummy(),
     }
+}
+
+/// 按多文件编排的导出提取管线（tokenize → parse → extract_module_info）构造
+/// 模块导出面——full_path 为 `{module_key}.{bare}`，与 `build_registry_from` 同源。
+fn module_info_from_source(
+    module_key: &str,
+    source: &str,
+) -> ModuleInfo {
+    let tokens = crate::frontend::core::lexer::tokenize(source).expect("模块源码必须可词法分析");
+    let parsed = crate::frontend::core::parser::parse(&tokens);
+    assert!(
+        !parsed.has_errors,
+        "模块源码必须可解析：{:?}",
+        parsed.errors
+    );
+    crate::frontend::module::orchestrator::extract_module_info(module_key, &parsed.module)
+}
+
+/// 以真实 tokenize → parse → check 管线检查入口源码；`modules` 预先注册进
+/// 检查器的模块注册表（等价于多文件编排预构建的用户模块集）。
+fn check_entry_with_modules(
+    source: &str,
+    modules: Vec<ModuleInfo>,
+) -> TypeCheckResult {
+    let tokens = crate::frontend::core::lexer::tokenize(source).expect("入口源码必须可词法分析");
+    let parsed = crate::frontend::core::parser::parse(&tokens);
+    assert!(
+        !parsed.has_errors,
+        "入口源码必须可解析：{:?}",
+        parsed.errors
+    );
+    let mut checker = crate::frontend::core::typecheck::TypeChecker::new("main");
+    for module in modules {
+        checker.env().module_registry.register(module);
+    }
+    checker.check_module_collect_all(&parsed.module)
+}
+
+/// 实例化请求快照：`(generic_id 名, 声明序类型参数名, 类型实参)`。
+fn request_triples(requests: &[InstantiationRequest]) -> Vec<(String, Vec<String>, Vec<MonoType>)> {
+    requests
+        .iter()
+        .map(|r| {
+            (
+                r.generic_id().name().to_string(),
+                r.generic_id().type_params().to_vec(),
+                r.type_args().to_vec(),
+            )
+        })
+        .collect()
 }
 
 /// Test context that owns the dependencies borrowed by ExpressionInferrer.
@@ -190,5 +248,133 @@ fn test_infer_nested_expressions() {
         result.unwrap(),
         MonoType::Int(64),
         "nested int arithmetic expression should infer to Int(64)"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RFC-039 §3.4.8 ①：跨模块限定调用 lib.f(x) 的泛型实例化请求
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// RFC-039 §3.4.8 ① / RFC-029：`use lib` 后限定调用泛型函数 `lib.f(x)` 必须
+/// 发出实例化请求，且 `generic_id` 用与 merged-IR 同源的限定名 `lib.f`
+///（ir_gen 的 `qualify_names` 把每个模块的顶层函数重写为 `{module_key}.{bare}`；
+/// 用裸名 `f` 在 merged-IR 的函数表里匹配不到，请求会被下游静默跳过）。
+#[test]
+fn test_instantiation_request_qualified_module_call_uses_module_qualified_name() {
+    // Arrange：lib 导出泛型 f: (T) -> T；入口整体导入后限定调用
+    let lib = module_info_from_source("lib", "f: (T: Type) -> (x: T) -> T = (x) => x\n");
+    let source = "use lib\nv = lib.f(42)\n";
+
+    // Act：真实 tokenize → parse → check 管线
+    let result = check_entry_with_modules(source, vec![lib]);
+
+    // Assert：请求携带限定名 lib.f，实参已解成 Int(64)
+    assert!(
+        result.diagnostics.is_empty(),
+        "限定调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        request_triples(&result.instantiation_requests),
+        vec![("lib.f".to_string(), Vec::new(), vec![MonoType::Int(64)])],
+        "限定调用的 generic_id 必须是限定名 lib.f（与 merged-IR 函数表键同源）"
+    );
+}
+
+/// RFC-039 §3.4.8 ①：限定名必须能按名解析出被调方的声明序类型参数名——
+/// `use std.list` 的 `list.len` 声明为 `(A: Type) -> (&Vec(A)) -> Int`，
+/// 请求的 `generic_id` 名 = `std.list.len`、类型参数名 = ["A"]。
+#[test]
+fn test_instantiation_request_qualified_std_call_resolves_declared_type_params() {
+    // Arrange：std.list 由 with_std 预载（含 yx 表面导出），入口限定调用 len
+    let source = "use std.list\nxs = [1, 2]\nv = list.len(xs)\n";
+
+    // Act
+    let result = check_entry_with_modules(source, Vec::new());
+
+    // Assert：限定名 + 声明名 A（限定名解析不出声明名时 arity 无从判定，请求发不出）
+    assert!(
+        result.diagnostics.is_empty(),
+        "限定调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        request_triples(&result.instantiation_requests),
+        vec![(
+            "std.list.len".to_string(),
+            vec!["A".to_string()],
+            vec![MonoType::Int(64)]
+        )],
+        "限定名 std.list.len 必须解析出声明序类型参数名 [\"A\"]"
+    );
+}
+
+/// 行为守恒（验收红线）：无 `use` 的单文件路径一字不改——裸 `Var` 调用仍发
+/// **裸名**请求（不带模块前缀），声明名与实参照旧。
+#[test]
+fn test_instantiation_request_bare_call_keeps_unqualified_name() {
+    // Arrange：本模块定义泛型 identity，无模块别名世界
+    let source = "identity: (T: Type) -> (x: T) -> T = (x) => x\nv = identity(42)\n";
+
+    // Act
+    let result = check_entry_with_modules(source, Vec::new());
+
+    // Assert
+    assert!(
+        result.diagnostics.is_empty(),
+        "泛型裸调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        request_triples(&result.instantiation_requests),
+        vec![(
+            "identity".to_string(),
+            vec!["T".to_string()],
+            vec![MonoType::Int(64)]
+        )],
+        "裸 Var 调用的请求名保持裸名 identity（不得被限定化）"
+    );
+}
+
+/// 边界：被调方是 FieldAccess 但接收者是**值**（方法调用），不是导入模块别名——
+/// 不产生任何实例化请求（请求只属于模块限定调用 `lib.f(x)`）。
+#[test]
+fn test_instantiation_request_value_receiver_method_call_not_collected() {
+    // Arrange：Point 类型上声明方法 get_x，值为接收者调用 p.get_x()
+    let source =
+        "Point: Type = { x: Int }\nPoint.get_x: (self: &Point) -> Int = (self) => self.x\n\
+                p = Point(1)\nv = p.get_x()\n";
+
+    // Act
+    let result = check_entry_with_modules(source, Vec::new());
+
+    // Assert：值接收者方法调用不是模块限定调用，零请求
+    assert!(
+        result.diagnostics.is_empty(),
+        "方法调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        result.instantiation_requests.is_empty(),
+        "值接收者方法调用不得产生实例化请求，实际：{:?}",
+        request_triples(&result.instantiation_requests)
     );
 }

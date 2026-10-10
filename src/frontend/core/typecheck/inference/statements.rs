@@ -49,6 +49,16 @@ pub struct StatementChecker {
     /// 模块别名集合（#396）：区分「模块别名 Struct」与真 struct，
     /// 成员缺失时分别报 E1043 / E1042。
     module_aliases: std::collections::HashSet<String>,
+    /// 模块别名 → 模块限定键（use 路径，含 std 子模块：`use std.list` →
+    /// `list` → `std.list`）。加工 use 时登记，随表达式委托注入表达式推断器。
+    ///
+    /// 用途（RFC-039 §3.4.8 ①）：限定调用 `lib.f(x)` 发实例化请求时，
+    /// `generic_id` 必须用与 merged-IR 同源的限定名 `{module_key}.{f}`。
+    /// 与 `TypeChecker::module_namespaces`（同名概念，供 ir_gen 的 Resolver 用）
+    /// 的差别：那张表按 `is_std_submodule` 规则**排除 std 裸子模块**，
+    /// 本表是 body 检查期的完整视图（std 子模块一并登记），只服务请求的
+    /// 限定名生成，不改任何既有名字解析。
+    module_namespaces: HashMap<String, String>,
     /// 是否在顶层作用域（模块级，非函数内部）
     is_top_level: bool,
     /// 当前嵌套的 `unsafe {}` 深度（RFC-010：unsafe 块内允许类型定义）
@@ -193,6 +203,7 @@ impl StatementChecker {
             native_arity: HashMap::new(),
             module_registry: ModuleRegistry::with_std(),
             module_aliases: std::collections::HashSet::new(),
+            module_namespaces: HashMap::new(),
             is_top_level: true,
             unsafe_depth: 0,
             collected_errors: Vec::new(),
@@ -680,6 +691,11 @@ impl StatementChecker {
                 let binding_span = path_parts.last().map(|p| p.span).unwrap_or_default();
                 // #414：同名绑定直接报错（RFC-029 §导入冲突）
                 self.ensure_import_name_free(module_alias, path, path_span)?;
+                // 模块限定键登记（限定调用的实例化请求用，见字段注释）：
+                // use 路径即该模块的 module_key（orchestrator::discover 以
+                // use 路径作 DiscoveredFile.module_key，ir_gen 的限定名前缀同源）
+                self.module_namespaces
+                    .insert(module_alias.to_string(), path.to_string());
                 // #321 W1003：登记导入本地名与导出成员监视
                 self.note_body_import_members(module_alias, &module, path_span);
                 let module_ty = self.module_as_struct_type(&module, module_alias);
@@ -694,6 +710,9 @@ impl StatementChecker {
             (None, Some(aliases)) => {
                 for module_alias in aliases {
                     self.ensure_import_name_free(&module_alias.name, path, path_span)?;
+                    // 模块限定键登记：别名与模块键分离（`use lib as l` → l → lib）
+                    self.module_namespaces
+                        .insert(module_alias.name.clone(), path.to_string());
                     // #321 W1003：登记导入本地名与导出成员监视
                     self.note_body_import_members(&module_alias.name, &module, path_span);
                     let module_ty = self.module_as_struct_type(&module, &module_alias.name);
@@ -730,6 +749,14 @@ impl StatementChecker {
                         &format!("{path}.{}", item.name),
                         path_span,
                     )?;
+                    // 子模块项是命名空间头（`use std.{io as printer}` 后
+                    // `printer.println`）——模块限定键随导出携带的 full_path
+                    // （同 TypeChecker 侧 #415 的登记判据）。函数/常量/类型项不是
+                    // 命名空间，不入表。
+                    if matches!(export.kind, ExportKind::SubModule) {
+                        self.module_namespaces
+                            .insert(local_name.to_string(), export.full_path.clone());
+                    }
                     // #321 W1003：登记导入本地名（内联别名优先）
                     self.note_body_import(local_name, path_span);
                     self.import_binding(local_name, local_span, &export);
@@ -2859,6 +2886,9 @@ impl StatementChecker {
                         inferrer.set_import_watch(&self.import_watch);
                         // #396：模块别名集合随委托传入（E1043 判定）
                         inferrer.set_module_aliases(&self.module_aliases);
+                        // RFC-039 §3.4.8 ①：模块别名 → 模块限定键（限定调用
+                        // `lib.f(x)` 的实例化请求按它生成限定名）
+                        inferrer.set_module_namespaces(&self.module_namespaces);
                         if let Some(gamma) = &mut self.gamma {
                             inferrer.set_gamma(gamma);
                         }
@@ -2960,6 +2990,9 @@ impl StatementChecker {
                 inferrer.set_import_watch(&self.import_watch);
                 // #396：模块别名集合随委托传入（E1043 判定）
                 inferrer.set_module_aliases(&self.module_aliases);
+                // RFC-039 §3.4.8 ①：模块别名 → 模块限定键（限定调用
+                // `lib.f(x)` 的实例化请求按它生成限定名）
+                inferrer.set_module_namespaces(&self.module_namespaces);
                 if let Some(gamma) = &mut self.gamma {
                     inferrer.set_gamma(gamma);
                 }
