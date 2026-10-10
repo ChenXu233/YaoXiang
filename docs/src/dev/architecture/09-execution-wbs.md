@@ -134,7 +134,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 - [x] **3.1 `proof_calls` 消费端**（2 个三级任务，2026-10-06 完成）
 - [x] **3.2 第二个静默丢弃点**（1 个三级任务，2026-10-06 完成；**表述与实测不符，见 3.2.1 行更正**）
 - [x] **3.3 panic 转诊断**（1 个三级任务，2026-10-06 完成）
-- [ ] **3.4 静默丢弃点补遗**（8 个三级任务，2026-10-07 审计新增；3.4.1/3.4.2/3.4.3 已实施，3.4.4–3.4.8 随 P4 前置推进）
+- [ ] **3.4 静默丢弃点补遗**（8 个三级任务，2026-10-07 审计新增；3.4.1/3.4.2/3.4.3 已实施，3.4.4–3.4.8 随 P4 前置推进；**3.4.8 ① 已完成** a9438007）
 
 | 二级 | 三级 | 文件:行 | 前置 | 验收 |
 | --- | --- | --- | --- | --- |
@@ -149,7 +149,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 3.4.5 `method_overload_ir_names` 与 `overload_resolutions` 平行表示二选一（禁令一） | `types.rs:60`、`ir_gen.rs:369` | 4.3.1 | 同一事实单点表达；C3 |
 | | 3.4.6 `compile_project` 补 `warnings` 消费（多文件 `run` 永不报 W1001/W1002/W1003） | `orchestrator.rs:99-159` | 4.2.1 | C2：多文件与单文件诊断集归一 |
 | | 3.4.7 LSP 非项目内路径接入统一消费端（**2026-10-09 已完成**，随 4.2.6 落地 bf582555：手工 `check_module_collect_all` 直调序列删除，统一走 `Program{SingleFile, CollectAll}`——proof/warnings/死代码分析全部接入） | `lsp/handlers/diagnostics.rs:161-206` | 4.2.6 | LSP 与 CLI 对同一文件同诊断集 |
-| | 3.4.8 多文件单态化臂（**已实证缺陷**，2026-10-10 升级表述：病态泛型递归 `f(x)=f([x])` 在无 mono 的多文件路径下编译器进程爆栈 0xc00000fd——mono 深度闸是唯一编译期防线；「类型擦除兜底」假设经 RFC-033 反射裁决作废——`^^List(Int)` 需要实例化的真实身份。范围（2026-10-10 用户裁决）：①typecheck 对限定调用（`lib.f(x)`，FieldAccess 形态）产 instantiation_request，generic_id 用限定名（现只认裸 Var，expressions.rs:2455）；②MULTI_FILE 阶段表加 Monomorphization 于 Linking **之后**（消费 merged_ir，聚合全单元请求，containing_fn 限定化；单文件阶段表不动）；③CHECK 加 Linking（纯合并——E3020 入口校验留 RoleClassification 防双报）+ Monomorphization（纯检查不消费，同 IrGeneration 的 Check 形态）——**撤回 4.2.5 的 mono 排除**（02 §3 注记 #14）；④资源保护随全程序 BFS 覆盖跨单元互递归 | `expressions.rs:2455`、`arms.rs:838`、`program.rs:60-92` | 4.2.8 | C2：跨文件泛型矩阵与单文件等价；病态递归多文件 → 编译期 E3005（不再爆栈）；单文件 IR 快照零漂移 |
+| | 3.4.8 多文件单态化臂（**已实证缺陷**，2026-10-10 升级表述：病态泛型递归 `f(x)=f([x])` 在无 mono 的多文件路径下编译器进程爆栈 0xc00000fd——mono 深度闸是唯一编译期防线；「类型擦除兜底」假设经 RFC-033 反射裁决作废——`^^List(Int)` 需要实例化的真实身份。范围（2026-10-10 用户裁决）：①typecheck 对限定调用（`lib.f(x)`，FieldAccess 形态）产 instantiation_request，generic_id 用限定名（现只认裸 Var，expressions.rs:2455）；②MULTI_FILE 阶段表加 Monomorphization 于 Linking **之后**（消费 merged_ir，聚合全单元请求，containing_fn 限定化；单文件阶段表不动）；③CHECK 加 Linking（纯合并——E3020 入口校验留 RoleClassification 防双报）+ Monomorphization（纯检查不消费，同 IrGeneration 的 Check 形态）——**撤回 4.2.5 的 mono 排除**（02 §3 注记 #14）；④资源保护随全程序 BFS 覆盖跨单元互递归（**① 2026-10-10 完成**，a9438007：限定名实例化收集 + mono 恢复闸落地，实证并修复删除/改写粒度失配、恢复段顺序不确定、非改写面形态误查映射键三个不对称缺陷，机制与提交勘记见 02 §3 注记 #15；②③④ 随 R2–R4 推进） | `expressions.rs:2455`、`arms.rs:838`、`program.rs:60-92` | 4.2.8 | C2：跨文件泛型矩阵与单文件等价；病态递归多文件 → 编译期 E3005（不再爆栈）；单文件 IR 快照零漂移 |
 
 **验收**：漏洞判据转绿，且**故意撤掉修复必须重新变红**。**风险**：多文件路径新增 E4018 是破坏性变更。
 

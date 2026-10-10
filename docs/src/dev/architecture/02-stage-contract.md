@@ -623,6 +623,25 @@ impl Driver {
 >     形态）两阶段；④资源保护随全程序 BFS 覆盖跨单元互递归。
 >     Monomorphizer 本体不变（消费 ModuleIR + 请求集的契约恰好是
 >     merged IR 形态）。
+> 15. 3.4.8 R1（①）落地（2026-10-10，a9438007）。按 #14 设计落地限定调用
+>     实例化收集：`ExpressionInferrer` 注入模块限定键表（`use` 三臂登记——普通
+>     / 别名 / 逐项别名且仅 SubModule 类导出），`callee_generic_name` 经
+>     `SymbolTable::qualify` 拼接与 merged IR 同源的限定名；限定调用首路径
+>     arity 判据收紧（参数表解不出时落第二路径按签名取实参，避免跨模块同名函数
+>     错配误报 E3018）。实施中实证 mono 侧**三个不对称缺陷**并同轮修复：
+>     (1) 删除键（泛型名集合）与改写键（containing_fn + 名 + span 三元组）
+>     粒度失配——解不出实参的站点退化为符号请求进 deferred 桶，容器函数非泛型
+>     时桶永不排水，原件却已被按名删除 → 悬空调用（`list_ops.yx:53` 运行期
+>     E6006 实证）；修复为恢复闸 `restore_generics_with_uncovered_call_sites`，
+>     以 `build_call_site_map` 为单一事实源判定覆盖，未覆盖站点的原件保留。
+>     (2) 恢复段 `HashSet` 迭代序致函数表顺序不确定（t2 复审 F1）→ 改 `Vec`
+>     并按名排序，产物字节级可复现。(3) 非改写面形态 TailCall / MakeClosure
+>     原照样查映射键（注释却声称保守）→ `call_form_is_rewritten` 单点判定、
+>     非改写形态一律计未覆盖。三者各配钉测试（修复前红态实证判别力）。语料
+>     差分基线同提交再生恰一行（remove_at 帧补 `(int64)`）。**提交策略勘记**：
+>     typecheck 收集与 mono 修复分拆两笔时，仅含前者的暂存树触发 `stdlib_docs`
+>     对 HEAD 既有缺陷的红（`list.is_empty([])` 同族 E6006）——两半互为对方的
+>     绿灯前提，故并为一笔原子提交。
 
 **十个入口的改造方式（逐个指定函数）**：
 
