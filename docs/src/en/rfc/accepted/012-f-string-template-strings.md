@@ -273,7 +273,7 @@ is converted to:
 
 - [x] Support escaped braces? Consistent with Python: use double braces for a single brace, e.g.
       <code v-pre>{{</code> represents <code v-pre>{</code>, and
-                                                                                                                      <code v-pre>}}</code> represents
+                                                                                                                          <code v-pre>}}</code> represents
       <code v-pre>}</code>
 - [x] Support custom format functions? Consistent with Python: support customizing a type's
       formatting behavior through an `__format__` method
