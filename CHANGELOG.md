@@ -5,8 +5,8 @@
 ### ⚠️ 行为变更（RFC-029g：删除 `pub` 关键字与自动绑定 —— #399 / WBS P3.5）
 
 - **`pub` 不再是关键字**：RFC-029 早已裁定「没有可见性机制」，本次把 RFC-029g 的删除执行到底——`pub` 从词法、AST、类型检查、死代码豁免、格式化器与 LSP 语义着色中整体移除。它现在只是普通标识符，旧写法 `pub x = 1` 会按未定义名报 `E1001`。
-- **死代码告警口径收敛**：`W1001`–`W1005` 不再豁免 `pub` 声明（`exempt_pub` 开关与角色分派删除）。唯一豁免口是**包内引用池**（RFC-029f）：项目内任一文件引用到的名字视为活。按角色的变化——Bin/Internal 不变；Lib 从「pub 绝对豁免」收紧为引用池判定；Script（单文件）未引用的顶层绑定开始报 W1001/W1002/W1004/W1005。
-- **死表清理**：typecheck 环境的 `exports` 集合（生产端灌表、全仓零消费）与 `add_export`/`is_exported`/`is_visible` 访问器、`auto_bind_to_type` 自动绑定、`env.exports` 回写全部删除——导出面的唯一权威仍是模块注册表 `ModuleInfo.exports`。`project_refs` / `cross_file_refs` 两个同义引用池收敛为一个。
+- **死代码告警口径收敛**：`W1001`–`W1005` 不再豁免 `pub` 声明。唯一豁免口是**包内引用池**（RFC-029f）：项目内任一文件引用到的名字视为活。按角色的变化——Bin/Internal 不变；Lib 从「pub 绝对豁免」收紧为引用池判定；Script（单文件）未引用的顶层绑定开始报 W1001/W1002/W1004/W1005。
+- **死表清理**：typecheck 环境的 `exports` 集合（生产端灌表、全仓零消费）与 `add_export`/`is_exported`/`is_visible` 访问器、`auto_bind_to_type` 自动绑定、`env.exports` 回写全部删除——导出面的唯一权威仍是模块注册表 `ModuleInfo.exports`。逐角色的引用池分派保留（Bin/Internal 与 Lib/Script 各持一池，均收包内引用并集）；池的已知缺陷与正确实现归 RFC-029f「已知缺陷」节与 WBS 4.9。
 - **std 适配**：`src/std/{list,json,option,result}.yx` 的 31 处 `pub` 前缀删除。
 
 ### ⚠️ 行为变更（WBS 3.4 静默丢弃点补遗 + SMT 缓存契约）
