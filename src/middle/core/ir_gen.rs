@@ -213,6 +213,13 @@ pub struct AstToIrGenerator {
     registry: ModuleRegistry,
     /// 本文件的模块限定键（多文件模式 Some → 启用限定；单文件 None → 不限定）。
     module_key: Option<String>,
+    /// Script/Bin 语义标志（E3023 的开关；3.4.8 ③ 回归修复与 `module_key` 解耦）：
+    /// `true` = Script（无 manifest：顶层语句即程序主体、顶层同名重绑定后者生效）；
+    /// `false` = Bin（顶层只允许定义，可执行语句报 E3023）。默认跟随 `module_key`
+    ///（None = Script）；调用方用 [`Self::with_script_mode`] 覆盖——rootless check
+    /// 需要「按单元键限定名 + Script 语义」这一组合：限定名是 Linking 合并无冲突的
+    /// 前提，Script 语义是 standalone 的对外契约。
+    script_mode: bool,
     /// RFC-011a §6: 存在类型包装点（span → 接口名），来自 typecheck 强制点收集。
     /// generate_expr_ir 入口查表命中 → 值生成后包 CreateVariant。
     existential_wraps: HashMap<Span, String>,
@@ -316,6 +323,9 @@ impl AstToIrGenerator {
         registry: ModuleRegistry,
         module_key: Option<String>,
     ) -> Self {
+        // Script/Bin 语义默认跟随 module_key（None = Script）；调用方可用
+        // `with_script_mode` 覆盖（3.4.8 ③：与限定名键解耦）。
+        let script_mode = module_key.is_none();
         Self {
             symbols: vec![HashMap::new()],
             type_result: Some(Box::new(type_result.clone())),
@@ -351,6 +361,7 @@ impl AstToIrGenerator {
             use_aliases: HashMap::new(),
             registry,
             module_key,
+            script_mode,
             existential_wraps: type_result
                 .existential_coercions
                 .iter()
@@ -406,6 +417,20 @@ impl AstToIrGenerator {
             cur_span: Span::dummy(),
             cur_locals: Vec::new(),
         }
+    }
+
+    /// 覆盖 Script/Bin 语义标志（默认跟随构造时的 `module_key`：None = Script）。
+    ///
+    /// 3.4.8 ③ 回归修复：`module_key` 此前**一职两用**——既决定是否限定名
+    /// （`qualify_names`），又派生 Script/Bin 语义（E3023 开关）。解耦后，无项目根
+    /// 的 standalone check 可以既按单元键限定名字（否则 Linking 合并把跨单元同名
+    /// 函数判成「模块限定名冲突」），又保持 Script 语义（顶层语句即程序主体）。
+    pub fn with_script_mode(
+        mut self,
+        script_mode: bool,
+    ) -> Self {
+        self.script_mode = script_mode;
+        self
     }
 
     /// 当前文件的模块限定键（单文件模式默认 `main`，与 TypeChecker 一致）。
@@ -978,6 +1003,26 @@ impl AstToIrGenerator {
             }
         }
 
+        // Script 模式：顶层同名重绑定 = **后者生效**——被遮蔽的前一个定义从函数表
+        // 里去掉。语义依据是单文件扁平函数表的按序插入（后者覆盖前者）：
+        // `f: () -> Int = () => 1 / f = () => 2 / print(f())` 实测输出 2。
+        // 留着两份同名定义会让 Linking 的合并校验把「同一模块内的重绑定」误报成
+        // 「模块限定名冲突（同一路径 ×2）」并打红整个 check（3.4.8 ③ 回归，文档
+        // 示例门禁 10 项）。只在 `script_mode` 下做：Bin 形态的顶层重声明不在本
+        // 修复面（其合并校验现状保留），项目形态的 IR 不受影响。
+        if self.script_mode && functions.len() > 1 {
+            let mut last_index: HashMap<String, usize> = HashMap::new();
+            for (idx, func) in functions.iter().enumerate() {
+                last_index.insert(func.name.clone(), idx);
+            }
+            let mut idx = 0usize;
+            functions.retain(|func| {
+                let keep = last_index.get(&func.name) == Some(&idx);
+                idx += 1;
+                keep
+            });
+        }
+
         if !errors.is_empty() {
             return Err(errors);
         }
@@ -1040,15 +1085,13 @@ impl AstToIrGenerator {
             source_files: Vec::new(),
             function_files: HashMap::new(),
         };
-        // RFC-029: 多文件模式下限定本文件的顶层函数名与调用引用。
-        // 单文件（module_key 为 None）不限定，保持原有行为。
-        //
-        // 注意（3.4.8 ③ 补口）：无项目根的**多文件** check 也走 None（standalone
-        // Script 语义）——本函数的定义键保持扁平名（`f`），而 [`Resolver`] 产出的
-        // 调用名与 typecheck 的实例化请求名是限定名（`lib.f`）。两种形态的对应关系
-        // 由驱动侧聚合（`driver::helpers::aggregate_instantiation_requests` 的
-        // `flat_defs`）用 `SymbolTable::qualify` 的精确反查补齐——本函数不因该形态
-        // 改变资格/语义（E3023 开关仍由 module_key 唯一决定）。
+        // RFC-029: 有模块键时限定本文件的顶层函数名与调用引用（定义键、调用名
+        // 与 typecheck 的实例化请求名三者同源为 `{module_key}.{name}`）；
+        // `module_key` 为 None（单文件管线/无项目根 standalone）时不限定——
+        // 但 3.4.8 ③ 起「不限定」只发生在**单单元**程序上：多单元形态由调用方
+        // 传单元键（见 `with_script_mode` 的注释），否则合并时跨单元同名函数会
+        // 被判成「模块限定名冲突」。Script/Bin 语义与限定名开关已解耦，本闸门
+        // 只看 `module_key`。
         if let Some(key) = &self.module_key {
             let aliases = self.build_import_aliases(module);
             Self::qualify_names(&mut ir, key, &aliases);
@@ -1070,10 +1113,12 @@ impl AstToIrGenerator {
         &self,
         ir: &mut ModuleIR,
     ) {
-        let single_file = self.module_key.is_none();
+        // intern 规则跟随**限定名开关**（不是 Script/Bin 语义）：未限定名的
+        // 程序用 `main.` 前缀兜底，与 `module_key_or_main` 一致。
+        let unqualified_names = self.module_key.is_none();
         let mut symbols = self.registry.symbols_mut();
         for func in &mut ir.functions {
-            let intern_name = if single_file {
+            let intern_name = if unqualified_names {
                 SymbolTable::qualify("main", &func.name)
             } else {
                 func.name.clone()
@@ -1085,11 +1130,11 @@ impl AstToIrGenerator {
             };
             func.def = Some(symbols.intern_full(&intern_name, kind));
         }
-        // 解析静态引用：先直查（多文件限定名 / std 原生），单文件裸名回退 qualify("main", ·)。
-        // 所有函数已 intern 完毕，前向引用在此必然可解。
+        // 解析静态引用：先直查（限定名 / std 原生），未限定名的程序裸名回退
+        // qualify("main", ·)。所有函数已 intern 完毕，前向引用在此必然可解。
         let resolve = |name: &str| {
             symbols.def(name).or_else(|| {
-                if single_file {
+                if unqualified_names {
                     symbols.def(&SymbolTable::qualify("main", name))
                 } else {
                     None
@@ -1735,7 +1780,7 @@ impl AstToIrGenerator {
             // 顶层散语句会让「先建什么后建什么」含糊。
             // 注：初始化序列本身也是代码——所以顶层可执行语句不报错，
             // 而是像 Python 一样按序执行。这是「默认情况零门槛」的代价与红利。
-            _ if self.module_key.is_none() => {
+            _ if self.script_mode => {
                 // T4：顶层可执行语句（Script 模式）——先收进 module_stmts，
                 // 待所有绑定初始化（拓扑序）就绪后再拼到后面。
                 //

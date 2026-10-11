@@ -1,13 +1,14 @@
 //! rootless 多文件 check 的单态化命名同源钉测试 — 基于 02-stage-contract §3 注记 #14 第③点
 //!
-//! 形态：**无项目根**（standalone / Script 语义）的多文件 check。该形态下
-//! `ir_generation_check` 对每个单元传 `module_key=None`（src/driver/arms.rs），
-//! 于是 ir_gen 跳过 `qualify_names`——单元 IR 的**定义键是扁平名**（`f`）；
-//! 而 `Resolver` 产出的调用名与 typecheck 产出的实例化请求名都是**限定名**
-//! （`lib.f`）。聚合（`aggregate_instantiation_requests`）必须把请求名锚定到
-//! 定义表，mono 才会真解析：良构程序静默，病态泛型递归在 check 编译期报 E3005。
+//! 形态：**无项目根**（standalone / Script 语义）的多文件 check。3.4.8 ③ 回归
+//! 修复后，`ir_generation_check` 逐单元传**单元键**限定名 + `with_script_mode(true)`
+//! 保持 Script 语义（限定名开关 ⊥ Script/Bin 开关，3.4.8 ③ 回归修复）。于是三者
+//! 同源：IR 定义键、IR 调用名、聚合请求名都是 `{单元键}.{名字}`——mono 真解析
+//!（良构静默、病态泛型递归编译期报 E3005），合并也不会把跨单元同名函数判成
+//!「模块限定名冲突」。
 //!
-//! 判据来源：WBS 3.4.8 ③（02 §3 注记 #14 第③点）；t3 独立验证登记的 F1 缺口。
+//! 判据来源：WBS 3.4.8 ③（02 §3 注记 #14 第③点）；t3 独立验证登记的 F1 缺口；
+//! t11 回归（rootless 未限定名 → 跨单元同名合并报冲突，文档示例门禁 10 项红）。
 
 use std::path::{Path, PathBuf};
 
@@ -157,9 +158,10 @@ fn test_driver_run_check_rootless_multi_file_well_formed_generic_stays_clean() {
 }
 
 /// Script 语义守卫：rootless 多文件的顶层可执行语句必须合法（standalone =
-/// 顶层语句即程序体）——修复 F1 **不得**以「让 rootless 也走限定名」的方式
-/// 连带打开 E3023。对照：同一对源文件加 manifest（Bin 语义）时 E3023 必须出现，
-/// 证明本断言不是空转（E3023 开关确实由 module_key 控制）。
+/// 顶层语句即程序体）。3.4.8 ③ 回归修复让 rootless **走限定名**（units 需按单元键
+/// 限定才能合并），但 Script/Bin 语义由 `with_script_mode` 独立承载——不得连带
+/// 打开 E3023。对照：同一对源文件加 manifest（Bin 语义）时 E3023 必须出现，
+/// 证明本断言不是空转（E3023 开关确实由 Script/Bin 标志控制）。
 #[test]
 fn test_driver_run_check_rootless_multi_file_keeps_script_semantics() {
     // Arrange：入口有顶层调用语句（Script 程序体），lib 提供被调函数
@@ -185,5 +187,93 @@ fn test_driver_run_check_rootless_multi_file_keeps_script_semantics() {
     assert!(
         bin_codes.iter().any(|c| c == "E3023"),
         "对照组（有 manifest 的 Bin 语义）必须报 E3023——否则本守卫空转: {bin_codes:?}"
+    );
+}
+/// 跨单元同名（用户模块 ↔ 嵌入 std 模块）：用户文件里的 `map` 与 `<std/list>` 的
+/// `map` 同名——各单元 IR 定义键按单元键限定后合并无冲突（t11 回归的 4/10 形状）。
+/// 判别力：rootless 不限定名时 `link_module_irs` 报「模块限定名冲突 `map`
+///（exNN.yx 与 <std/list>）」，`outcome.failure` 变 Some → 第一条断言红。
+#[test]
+fn test_driver_run_check_rootless_cross_unit_name_clashes_with_std_stays_clean() {
+    // Arrange：入口定义 `map`（与 std.list 的 map 同名）并调用 std.list 的 len
+    let (_dir, entry) = make_rootless_project(&[(
+        "main.yx",
+        "use std.list\nmap: (xs: Vec(Int)) -> Int = (xs) => list.len(xs)\nv = map([1, 2])\n",
+    )]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert：不得有冲突故障，也不得引入错误诊断
+    assert!(
+        outcome.failure.is_none(),
+        "用户 `map` 与 <std/list>.map 不得被判成模块限定名冲突: {:?}",
+        outcome.failure
+    );
+    let codes = check_codes(&outcome, "main.yx");
+    assert!(
+        !codes.iter().any(|c| c.starts_with('E')),
+        "同名不得引入错误诊断: {codes:?}"
+    );
+}
+
+/// 跨单元同名（用户模块 ↔ 用户模块）：两个文件各定义 `add`——限定名后共存，
+/// 各自调用落在各自定义上（与 project 形态一致）。判别力：不限定名时合并报
+///「模块限定名冲突 `add`（lib.yx 与 util.yx）」，第一条断言红。
+#[test]
+fn test_driver_run_check_rootless_cross_unit_name_clashes_across_user_modules_stays_clean() {
+    // Arrange：lib 与 util 各定义同名 `add`（不同签名，各自被调用）
+    let (_dir, entry) = make_rootless_project(&[
+        ("lib.yx", "add: (a: Int, b: Int) -> Int = (a, b) => a + b\n"),
+        ("util.yx", "add: (s: String) -> String = (s) => s\n"),
+        (
+            "main.yx",
+            "use lib\nuse util\nv = lib.add(1, 2)\nw = util.add(\"x\")\n",
+        ),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "两个用户模块的同名函数不得被判成模块限定名冲突: {:?}",
+        outcome.failure
+    );
+    let mut codes = check_codes(&outcome, "main.yx");
+    codes.extend(check_codes(&outcome, "lib.yx"));
+    codes.extend(check_codes(&outcome, "util.yx"));
+    assert!(
+        !codes.iter().any(|c| c.starts_with('E')),
+        "同名不得引入错误诊断: {codes:?}"
+    );
+}
+
+/// 同一文件内的顶层同名重绑定（Script 语义：后者生效）：IR 只留一份定义，合并不
+/// 再把「同一模块内的重绑定」误报成「模块限定名冲突（同一路径 ×2）」。
+/// 判别力：t11 红态实测（文档示例 ex11 形状）→ Collision + check 退出码 1，
+/// 第一条断言红；若重绑定语义反了，`driver.rs` 的取值钉板（后者 = 2）会红。
+#[test]
+fn test_driver_run_check_rootless_redeclared_function_stays_clean() {
+    // Arrange：同一文件里 `add` 声明两次（docs「完整形式 / 简短形式」示例形状）
+    let (_dir, entry) = make_rootless_project(&[(
+        "main.yx",
+        "add: (a: Int, b: Int) -> Int = a + b\nadd = (a, b) => a + b\n",
+    )]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "同一模块内的顶层重绑定不得被判成模块限定名冲突: {:?}",
+        outcome.failure
+    );
+    let codes = check_codes(&outcome, "main.yx");
+    assert!(
+        !codes.iter().any(|c| c.starts_with('E')),
+        "重绑定不得引入错误诊断: {codes:?}"
     );
 }

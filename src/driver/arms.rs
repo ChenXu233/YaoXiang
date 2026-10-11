@@ -616,12 +616,13 @@ impl Driver {
     /// Monomorphization 的检查形态都要消费它。IR 只驻内存（不进
     /// DriverOutcome、不写任何产物），check 的对外诊断集不因此改变。
     ///
-    /// Script/Bin 分形：ir_gen 的 E3023（顶层可执行语句拒绝）以
-    /// `module_key.is_none()` 为开关（ir_gen.rs:1660）。无项目根的
-    /// standalone 程序是 Script 语义（顶层语句即程序主体，T4）——逐单元
-    /// 传 None（与 pipeline 单文件同参）；有 manifest 的项目传单元键
-    ///（Bin 语义，与 compile 路径一致）。跨文件上下文（类型/全局/槽位
-    /// 基址）两种形态同样播种。
+    /// 命名与语义（3.4.8 ③ 回归修复）：本形态是**多单元**程序——逐单元 IR 一律
+    /// 按单元键限定名（`Some(unit.key)`），否则合并时跨单元同名函数（用户模块之间、
+    /// 或用户模块与 `<std/list>` 之间）会被 `link_module_irs` 判成「模块限定名
+    /// 冲突」，把 standalone 程序整体打红（文档示例门禁 10 项实证）。
+    /// 无项目根的 standalone 程序仍保持 **Script 语义**（顶层语句即程序主体，T4，
+    /// E3023 不打开）——用 `with_script_mode(rootless)` 显式表达，与限定名键解耦。
+    /// 跨文件上下文（类型/全局/槽位基址）两种形态同样播种。
     pub(super) fn ir_generation_check(
         &self,
         state: &mut State,
@@ -646,17 +647,14 @@ impl Driver {
             let (Some(ast), Some(type_result)) = (&asts[i], &us.type_result) else {
                 continue;
             };
-            // 与 generate_ir_with_context 同构，仅 module_key 按 Script/Bin
-            // 分形（见臂注释）
+            // 与 generate_ir_with_context 同构，但 Script/Bin 语义与限定名键
+            // 解耦（见臂注释）：限定名恒按单元键，Script 语义由 with_script_mode 给
             let mut generator = AstToIrGenerator::new_with_type_result(
                 type_result,
                 registry.clone(),
-                if rootless {
-                    None
-                } else {
-                    Some(program.units[i].key.clone())
-                },
-            );
+                Some(program.units[i].key.clone()),
+            )
+            .with_script_mode(rootless);
             generator.seed_cross_file_types(&all_ast_refs);
             generator.seed_cross_file_globals(global_layout);
             generator.set_global_slot_base(slot_bases[i]);

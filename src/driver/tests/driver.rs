@@ -270,6 +270,50 @@ fn test_pipeline_run_delegates_to_driver() {
     let _aggregation_witness: Aggregation = Aggregation::FailFast; // SingleFile 默认聚合
 }
 
+// ============ 3.4.8 ③ 回归修复：Script 顶层同名重绑定（后者生效）============
+
+/// Script 模式（无 manifest）的顶层同名重绑定：**后者生效**——被遮蔽的前一个定义
+/// 从函数表移除（单文件扁平函数表按序插入的语义；实测 `run` 输出 2）。
+/// 不这么做时同一模块里会出现两份同名 IR，Linking 的合并校验把「同一模块内的
+/// 重绑定」误报成「模块限定名冲突（同一路径 ×2）」并打红整个 check
+///（3.4.8 ③ 回归，文档示例门禁 10 项中 6 项即此形状）。
+#[test]
+fn test_driver_run_script_rebinding_keeps_last_definition() {
+    // Arrange：同一顶层名 `f` 先声明（带注解）再重绑定——docs「完整形式 / 简短
+    // 形式」示例形状；typecheck 接受该形状（无注解的重复绑定会报 E2002，那是
+    // 另一条既有判据，不经 IR）
+    let source = "f: () -> Int = () => 1\nf = () => 2\nv = f()\n";
+
+    // Act
+    let outcome = run_single(source, CompileConfig::default()).expect("driver run failed");
+
+    // Assert：函数表只剩后者；执行取到的也是后者（2）
+    assert!(
+        outcome.result.is_success(),
+        "Script 重绑定程序必须编译成功: {:?}",
+        outcome.result.errors
+    );
+    let ir = outcome
+        .result
+        .ir
+        .expect("single-file script must produce IR");
+    let definitions = ir.functions.iter().filter(|f| f.name == "f").count();
+    assert_eq!(
+        definitions,
+        1,
+        "Script 重绑定后者生效：函数表不得留两份 f: {:?}",
+        ir.functions
+            .iter()
+            .map(|f| f.name.clone())
+            .collect::<Vec<_>>()
+    );
+    let value = run_merged_slot0(ir);
+    assert_eq!(
+        value, "Int(2)",
+        "被遮蔽的前定义不得再生效：v = f() 应取后者（2），实际 {value:?}"
+    );
+}
+
 // ===================== 4.2.1 多文件形态（A1/B1/C3 裁决，2026-10-09）=====================
 
 /// 在临时目录落一个多文件项目（yaoxiang.toml + 给定 .yx），返回 (dir 守卫, 入口路径)。
