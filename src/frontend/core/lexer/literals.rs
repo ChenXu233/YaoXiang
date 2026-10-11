@@ -88,8 +88,15 @@ fn reject_trailing_alnum(
 ) -> Option<Token> {
     if let Some(&c) = lexer.peek() {
         if c.is_ascii_alphanumeric() || c == '_' {
+            // E0002 的 `literal` 参数是 i18n 模板 `'{literal}'` 的唯一填充位，
+            // 只能承载字面量本身的文本——把「哪个进制 / 哪个字符非法」的说明
+            // 混进该参数会让消息出现嵌套引号、并把源码注释漏进全部语言（实测
+            // 连 -L en 也是中文）。参数取「已扫描的 value + 触发拒绝的那个字符」：
+            // 单字符后缀即用户写下的完整非法字面量（0b12 / 0x1FG / 0o18），
+            // 多字符后缀时给到首个非法字符为止（123abc → 123a，E0002 只有一个
+            // 参数位，不为此新增参数与六语言模板）。
             lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
-                format!("{value}（{radix_label} 字面量后紧跟非法字符 {c:?}）"),
+                format!("{value}{c}"),
                 point(lexer),
             ));
             return Some(

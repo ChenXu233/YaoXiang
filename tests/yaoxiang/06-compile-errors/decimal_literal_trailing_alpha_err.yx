@@ -1,0 +1,9 @@
+// 06-compile-errors/decimal_literal_trailing_alpha_err.yx
+// 覆盖: 规范 syntax.md §1.6.1 整数 BNF（Decimal ::= [0-9][0-9_]*）
+// 验证: 十进制字面量后紧跟非法字母在词法层拒绝（E0002），不再留给下游报
+//       误导性的「未知变量 E1001」
+// 状态: ✅ 可运行
+
+// expect: compile-error E0002
+
+x = 123abc
