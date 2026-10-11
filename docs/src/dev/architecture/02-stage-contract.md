@@ -681,6 +681,7 @@ impl Driver {
 >     即致红）。**勘误（2026-10-11）**：上述提交号经 `git pull --rebase` 重写——原
 >     b554497b/e60dcc87/b7ac7396 依次对应 rebase 后的 375789d2/d922a551/38bd4b9e；
 >     已推送的 dev 历史以新号为准（旧号为本地临时号，未进入远程历史）。
+> 19. 3.4.8 ③④ 落地与验证（2026-10-11，8ecf56f93）。（③④ 的设计依据见 #14；② 的落地见 #17，本条是其收口。）**实现**：`CHECK_STAGES` 尾部 = `…IrGeneration → Linking → Monomorphization`；Check 的 `Linking` 只做纯合并（聚合请求 + `link_module_irs`），入口校验整块留给 `RoleClassification`；`ir_generation_check` 生成后留存 `us.ir`（仅内存）；mono 失败在 Check 进收集通道、在 MultiFile 保持 `fail_with`；`into_outcome` 先 `take_check_diagnostics` 再判故障（结构故障不再清空已收集诊断）。**验证**：四轮独立验证（t3/t4/t10 + t5 跨形态矩阵）与一轮复审（t6）全 pass；语料差分 340/340 逐行 IDENTICAL、IR 快照零漂移、测试数 2643→2656。**过程中发现并同轮修的既有缺口**：F1（rootless 多文件 check 的请求名与 IR 定义键不同源 → 静默不特化，见 WBS 3.4.8 行的落地注记）——修法为聚合侧按真实定义键精确反查（非启发式），并登记 `flat_defs` 桥待 4.10.3 删除。**留档（既有、非本轮回归）**：E3005 help 文案与资源保护语义不符；multi-file E3005 的 span 标签错位（HEAD 二进制可复现）；请求收集面的类型参数位置依赖（同面归 3.5）。
 
 **十个入口的改造方式（逐个指定函数）**：
 
