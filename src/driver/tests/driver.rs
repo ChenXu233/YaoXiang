@@ -857,16 +857,18 @@ fn test_driver_run_check_declared_bin_missing_main_reports_e3020() {
     // Act
     let outcome = run_check(&entry).expect("driver run failed");
 
-    // Assert
+    // Assert：恰好一条——Linking 加入 CHECK（3.4.8 ③）后只做纯合并，
+    // 不再重复 RoleClassification 的入口校验（双报防线）
     assert!(
         outcome.failure.is_none(),
         "E3020 是收集诊断而非硬中止: {:?}",
         outcome.failure
     );
     let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
-    assert!(
-        diags.iter().any(|d| d.code == "E3020"),
-        "声明面 bin 缺 main 必须报 E3020: {diags:?}"
+    assert_eq!(
+        diags.iter().filter(|d| d.code == "E3020").count(),
+        1,
+        "声明面 bin 缺 main 必须恰好报一条 E3020（阶段增补后不得双报）: {diags:?}"
     );
 }
 
@@ -1350,5 +1352,203 @@ fn test_driver_run_check_dedupes_collect_all_diagnostics() {
     assert_eq!(
         count, 1,
         "同一诊断事实不得重复报告（4.2.7 去重）: {diags:?}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WBS 3.4.8 ③（2026-10-10 用户裁决，02 §3 注记 #14）：CHECK 加 Linking（纯合并）
+// + Monomorphization（检查形态）——行为判据
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// check 形态下病态泛型递归必须编译期报 E3005——`yaoxiang check` 与单文件/
+/// 多文件路径共享同一 mono 资源防线（无 mono 时该程序以类型擦除执行到进程
+/// 爆栈 0xC00000FD）。判别力：CHECK 表里没有 mono（本步之前），或 Linking/mono
+/// 拿不到单元 IR（请求表空 → NoObligations 空转、E3005 永不产生）时，
+/// check 报告里都没有 E3005，本测试红。
+#[test]
+fn test_driver_run_check_monomorphizes_pathological_generic_recursion() {
+    // Arrange：项目根 + lib.f 递归调用自身、实参类型逐层增长（T → Vec(T) → …）
+    // ——带 manifest 才有模块限定名（与多文件 run 路径同一命名口径）
+    let (_dir, entry) = make_project(&[
+        (
+            "lib.yx",
+            "f: (T: Type) -> (x: T) -> T = (x) => {\n    return f([x])\n}\n",
+        ),
+        (
+            "main.yx",
+            "use lib\nmain: () -> Void = {\n    y = lib.f(1)\n}\n",
+        ),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert：mono 真跑（E3005 进收集通道而非故障通道），且不是 NoObligations 空转
+    assert!(
+        outcome.failure.is_none(),
+        "check 形态的 mono 失败是收集诊断，不得走硬中止: {:?}",
+        outcome.failure
+    );
+    let diags = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert_eq!(
+        diags.iter().filter(|d| d.code == "E3005").count(),
+        1,
+        "病态泛型递归在 check 形态必须报恰好一条 E3005: {diags:?}"
+    );
+    assert!(
+        !outcome
+            .skipped
+            .iter()
+            .any(|s| s.stage == Stage::Monomorphization),
+        "有实例化请求时 mono 不得记跳过（空转即假绿）: {:?}",
+        outcome.skipped
+    );
+}
+
+/// check 形态下良构泛型项目必须**无多余错误诊断**：mono 消费合并 IR 只为
+/// 特化，成功即静默；IR 也不因加阶段而变成 check 的对外产物。判别力：
+/// mono 在 check 误报（E3018/E3005）时第一条断言红；请求表限定化缺口让
+/// mono 空转时第二条断言红；IR 经 DriverOutcome.module 外发时第三条红。
+#[test]
+fn test_driver_run_check_generic_project_passes_without_extra_diagnostics() {
+    // Arrange：项目根 + 跨单元泛型调用（lib.pick 的类型参数只在借用内层 &T）
+    let (_dir, entry) = make_project(&[
+        ("lib.yx", "pick: (T: Type) -> (x: &T) -> T = (x) => x\n"),
+        (
+            "main.yx",
+            "use lib\nmain: () -> Void = {\n    v = lib.pick(7)\n}\n",
+        ),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "良构泛型项目不得硬中止: {:?}",
+        outcome.failure
+    );
+    let errors: Vec<String> = outcome
+        .check_diagnostics
+        .iter()
+        .flat_map(|(_, ds)| {
+            ds.iter()
+                .filter(|d| matches!(d.severity, crate::util::diagnostic::Severity::Error))
+                .map(|d| format!("{}: {}", d.code, d.message))
+        })
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "良构泛型项目在 check 形态不得有多余错误诊断: {errors:?}"
+    );
+    assert!(
+        !outcome
+            .skipped
+            .iter()
+            .any(|s| s.stage == Stage::Monomorphization),
+        "有实例化请求时 mono 必须真跑（NoObligations 即空转）: {:?}",
+        outcome.skipped
+    );
+    assert!(
+        outcome.module.is_none(),
+        "check 的 IR 只驻内存供合并与 mono 消费，不得外发为产物（3.4.8 ③）"
+    );
+}
+
+/// mono 失败不得丢掉其余文件已收集的诊断（check 的收集语义保持）。判别力：
+/// mono 若走 fail_with 硬失败，outcome.failure 变 Some（第一条断言红）；
+/// 若收集通道在 mono 失败时丢弃已收条目，zzz 的 E1002 消失（第三条断言红）。
+#[test]
+fn test_driver_run_check_mono_failure_keeps_other_file_diagnostics() {
+    // Arrange：项目根 + lib 病态泛型递归（mono 失败）+ zzz 类型错误（另一文件的诊断）
+    let (_dir, entry) = make_project(&[
+        (
+            "lib.yx",
+            "f: (T: Type) -> (x: T) -> T = (x) => {\n    return f([x])\n}\n",
+        ),
+        ("zzz.yx", "bad: Int = \"oops\"\n"),
+        (
+            "main.yx",
+            "use lib\nuse zzz.{bad}\nmain: () -> Void = {\n    v = lib.f(1)\n    w = bad\n}\n",
+        ),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "mono 失败在 check 形态不得转为硬中止: {:?}",
+        outcome.failure
+    );
+    let main = check_diags_of(&outcome, "main.yx").expect("entry for main.yx");
+    assert!(
+        main.iter().any(|d| d.code == "E3005"),
+        "mono 的 E3005 必须进入口文件的收集条目: {main:?}"
+    );
+    let zzz = check_diags_of(&outcome, "zzz.yx").expect("entry for zzz.yx");
+    assert!(
+        zzz.iter().any(|d| d.code == "E1002"),
+        "mono 失败不得丢掉其余文件的诊断: {zzz:?}"
+    );
+}
+
+/// 纯合并的另一面：**未声明**为 bin 的入口缺 main 时 check 既不报 E3020，也
+/// 不走故障通道——该判据属 RoleClassification 的声明面（`[[bin]].path` /
+/// `[run].main`），Linking 在 check 不做入口校验。判别力：Linking 照搬 compile
+/// 的 `is_bin_role`（只问项目根是否存在）时，有 manifest 的入口缺 main 会被判
+/// 缺 main 而硬中止（且「入口自身有错 → 无 IR」也会被误判成缺 main），
+/// 第一条断言红。
+#[test]
+fn test_driver_run_check_undeclared_entry_without_main_reports_no_e3020() {
+    // Arrange：有 manifest（[package]）但无 [[bin]] 声明，入口无 main 绑定
+    let (_dir, entry) = make_project(&[("main.yx", "helper: () -> Void = {}\n")]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert：故障通道与收集通道都不得出现 E3020（无 IR 也不许被误判为缺 main）
+    assert!(
+        outcome.failure.is_none(),
+        "未声明 bin 的入口缺 main 不得触发 run 路径的入口校验: {:?}",
+        outcome.failure
+    );
+    let codes: Vec<&str> = outcome
+        .check_diagnostics
+        .iter()
+        .flat_map(|(_, ds)| ds.iter().map(|d| d.code.as_str()))
+        .collect();
+    assert!(
+        !codes.contains(&"E3020"),
+        "未声明 bin 的入口缺 main 不属 check 的 E3020 判据（Linking 纯合并不查入口）: {codes:?}"
+    );
+}
+
+/// 无实例化请求时 mono 在 check 形态记 NoObligations 跳过——与 run 路径同
+/// 口径（阶段记录不自相矛盾：没跑 = 明确记录原因，而不是静默缺失）。
+/// 判别力：mono 未接线（阶段表缺它）或在 check 记成 UpstreamFailed/失败时红。
+#[test]
+fn test_driver_run_check_records_mono_skip_when_no_requests() {
+    // Arrange：干净的非泛型项目
+    let (_dir, entry) = make_project(&[("main.yx", "main: () -> Void = {}\n")]);
+
+    // Act
+    let outcome = run_check(&entry).expect("driver run failed");
+
+    // Assert
+    assert!(
+        outcome.failure.is_none(),
+        "干净项目不得硬中止: {:?}",
+        outcome.failure
+    );
+    assert!(
+        matches!(
+            skip_reason(&outcome, Stage::Monomorphization),
+            Some(SkipReason::NoObligations)
+        ),
+        "无实例化请求时 mono 必须记 NoObligations（同 run 路径口径）: {:?}",
+        outcome.skipped
     );
 }

@@ -145,9 +145,10 @@ fn test_stage_all_orders_linking_before_monomorphization() {
     );
 }
 
-/// 形态表按本次接线的差异：MULTI_FILE 尾部含 Monomorphization（在 Linking
-/// 之后）；SINGLE_FILE / EMBEDDED 的表**不动**（各自在单元 IR 上跑 mono），
-/// CHECK 的增补属 R3——本步不许动。
+/// 形态表按 3.4.8 的接线差异：MULTI_FILE 尾部含 Monomorphization（在
+/// Linking 之后）；SINGLE_FILE / EMBEDDED 的表**不动**（各自在单元 IR 上跑
+/// mono）；CHECK 于 ③ 增补 Linking + Monomorphization 两阶段（02 §3 注记
+/// #14——纯合并 + 检查形态），位置遵 `Stage::ALL` 拓扑序。
 #[test]
 fn test_program_kind_stage_tables_after_mono_wiring() {
     // Arrange
@@ -178,9 +179,17 @@ fn test_program_kind_stage_tables_after_mono_wiring() {
         ]),
         "EMBEDDED stage table must not change in this step: {embedded:?}"
     );
+    // Assert（3.4.8 ③ 翻转并加强）：CHECK 尾部 = IrGeneration → Linking →
+    // Monomorphization（顺序即 Stage::ALL 拓扑序；反转次序会让 mono 拿到
+    // 未合并的单元 IR）
+    assert_eq!(
+        check.iter().rev().take(3).copied().collect::<Vec<_>>(),
+        vec![Stage::Monomorphization, Stage::Linking, Stage::IrGeneration],
+        "CHECK must end with IrGeneration then Linking then Monomorphization:\n{check:?}"
+    );
     assert!(
-        !check.contains(&Stage::Monomorphization),
-        "CHECK must not gain Monomorphization in this step (that is R3): {check:?}"
+        check.contains(&Stage::Linking) && check.contains(&Stage::Monomorphization),
+        "CHECK must gain both Linking (pure merge) and Monomorphization (check form): {check:?}"
     );
 }
 

@@ -99,10 +99,11 @@ pub enum OrchestratorError {
 /// 返回合并后的 `ModuleIR`，可直接交给 codegen。入口文件的 `main` 函数即程序入口。
 ///
 /// 02 §改动清单（WBS 4.2.1）：入口已瘦身为 `Program { kind: MultiFile }`
-/// 构造器 + Driver 调用——阶段实现见 `crate::driver` 的 `Stage` 臂
-/// （VendorConsistency/Discovery/Parsing/Registry/Typecheck/ProofExecution/
-/// GlobalSlotAlloc/IrGeneration/Linking）。外部契约（`OrchestratorError`
-/// 各 variant 的渲染与退出码）逐字节不变。
+/// 构造器 + Driver 调用——阶段表以 `src/driver/program.rs` 的
+/// `MULTI_FILE_STAGES`（由 `ProgramKind::MultiFile` 派生）为**唯一权威**，
+/// 本注释不抄录清单（副本会随阶段增补腐烂：3.4.8 ② 追加 mono 时此处曾是
+/// 一份过期副本）；各阶段的执行体见 `crate::driver` 的阶段臂。外部契约
+///（`OrchestratorError` 各 variant 的渲染与退出码）逐字节不变。
 pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
     let program = crate::driver::Program::new(
         crate::driver::ProgramKind::MultiFile,
@@ -132,15 +133,21 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
     }
 }
 
-/// 检查一个项目：发现源文件 → 构建 Registry → 逐文件 typecheck。
+/// 检查一个项目，返回**全部**诊断（按文件分组，不早退），供 `yaoxiang check`
+/// 与 `run` 走同一条编译路径。
 ///
-/// 与 `compile_project` 共用发现/注册表阶段，但不生成 IR；返回**全部**诊断
-/// （按文件分组，不早退），供 `yaoxiang check` 与 `run` 走同一条编译路径。
+/// 阶段表以 `src/driver/program.rs` 的 `CHECK_STAGES`（由 `ProgramKind::Check`
+/// 派生）为**唯一权威**——本注释不抄录清单：副本正是它腐烂到 4.2.2 的原因；
+/// 各阶段的执行体见 `crate::driver` 的阶段臂。与 `compile_project` 共用发现/
+/// 注册表骨架，差别只在阶段集合与聚合模式（`Check` + `CollectAll`）。
+///
+/// IR 语义（3.4.8 ③）：Check 形态**确实**生成 IR——`ir_generation_check` 逐
+/// 单元生成并**仅驻内存**留存，供 Linking 的纯合并与 Monomorphization 的检查
+/// 形态消费；IR 不外发（`DriverOutcome.module` 恒 None）、不写盘、不产快照，
+/// 这两阶段的产物只服务诊断、成功即静默。
 ///
 /// 02 §改动清单（WBS 4.2.2）：入口已瘦身为 `Program { kind: Check }`
-/// 构造器 + Driver 调用——阶段实现见 `crate::driver` 的 `Stage` 臂
-///（VendorConsistency/Discovery/Parsing/Registry/RoleClassification/
-/// Typecheck/DeadCodeAnalysis/ProofExecution）。外部契约不变：返回
+/// 构造器 + Driver 调用。外部契约不变：返回
 /// `Vec<(文件, 诊断)>`（每个发现文件都有条目，干净文件为空 Vec）；
 /// vendor/发现/解析失败仍经 `OrchestratorError` 硬中止（4.10.1 怪癖
 /// 保留，driver 侧测试钉板）。文件内诊断顺序归一为阶段拓扑序
@@ -937,9 +944,10 @@ pub(crate) fn scan_use_refs(source: &str) -> Vec<UsePathRef> {
 /// DefId 分属两张表，数值撞车会导致字节码按 DefId 分发到错误函数（#94）。
 ///
 /// 02 §改动清单（WBS 4.2.4）：入口已瘦身为 `Program { kind: Embedded }`
-/// 构造器并转调 Driver——阶段实现见 `crate::driver` 的 `Stage` 臂
-///（Parsing/Typecheck/ProofExecution/IrGeneration；共享 registry 经
-/// `Program::with_shared_registry` 注入）。错误路径文本从
+/// 构造器并转调 Driver——阶段表以 `src/driver/program.rs` 的
+/// `EMBEDDED_STAGES`（由 `ProgramKind::Embedded` 派生）为**唯一权威**，
+/// 本注释不抄录清单；各阶段的执行体见 `crate::driver` 的阶段臂
+///（共享 registry 经 `Program::with_shared_registry` 注入）。错误路径文本从
 /// `<std.test> (embedded std)` 归一为单元虚拟路径 `<std/test>`
 ///（仅编译器内部错误面——嵌入 std 自身损坏才可达，无测试钉住）。
 pub fn compile_embedded_module(

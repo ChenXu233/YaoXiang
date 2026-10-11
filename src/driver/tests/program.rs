@@ -60,9 +60,10 @@ fn expected_stages(kind: ProgramKind) -> &'static [Stage] {
             Monomorphization,
         ],
         // check_project：compile 骨架 + 角色分类 + 死代码族 + slot/IR
-        //（4.2.5 起——IR 级错误捕获，无 mono/link）。死代码按 Stage::ALL
-        // 拓扑序排在 proof 前（现状 proof 在前；两者无数据依赖，C2 集合
-        // 语义下诊断集相同——02 §1 修订注记）
+        //（4.2.5 起——IR 级错误捕获）+ Linking/Monomorphization
+        //（3.4.8 ③——纯合并 + 检查形态，02 §3 注记 #14）。死代码按
+        // Stage::ALL 拓扑序排在 proof 前（现状 proof 在前；两者无数据
+        // 依赖，C2 集合语义下诊断集相同——02 §1 修订注记）
         ProgramKind::Check => &[
             VendorConsistency,
             Discovery,
@@ -74,6 +75,8 @@ fn expected_stages(kind: ProgramKind) -> &'static [Stage] {
             ProofExecution,
             GlobalSlotAlloc,
             IrGeneration,
+            Linking,
+            Monomorphization,
         ],
         // check_source_in_project：check 骨架但无角色分类/死代码（现状）
         ProgramKind::Lsp => &[

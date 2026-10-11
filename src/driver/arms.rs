@@ -607,10 +607,14 @@ impl Driver {
 
     /// Check 形态（4.2.5，用户裁决）：IR 生成在 check 里是**检查**不是
     /// 产物——逐文件收集 IR 级错误（E3019 初始化环 / E1014-E1015 命名
-    /// 参数 / E3023 等，ir_gen 是这些码的唯一产生点），不中止、不消费
-    /// IR。standalone check 旧路径（pipeline 全链）本就跑 IR 生成；项目
-    /// check 从此补上这一层（02 不一致表第 11 行缺口）。typecheck 失败
-    /// 的单元无 type_result，自然跳过（与 run 路径门控一致）。
+    /// 参数 / E3023 等，ir_gen 是这些码的唯一产生点），不中止。standalone
+    /// check 旧路径（pipeline 全链）本就跑 IR 生成；项目 check 从此补上
+    /// 这一层（02 不一致表第 11 行缺口）。typecheck 失败的单元无
+    /// type_result，自然跳过（与 run 路径门控一致）。
+    ///
+    /// 3.4.8 ③：生成的 IR 存入 `UnitState.ir`——Linking 的纯合并与
+    /// Monomorphization 的检查形态都要消费它。IR 只驻内存（不进
+    /// DriverOutcome、不写任何产物），check 的对外诊断集不因此改变。
     ///
     /// Script/Bin 分形：ir_gen 的 E3023（顶层可执行语句拒绝）以
     /// `module_key.is_none()` 为开关（ir_gen.rs:1660）。无项目根的
@@ -656,9 +660,12 @@ impl Driver {
             generator.seed_cross_file_types(&all_ast_refs);
             generator.seed_cross_file_globals(global_layout);
             generator.set_global_slot_base(slot_bases[i]);
-            if let Err(diags) = generator.generate_module_ir(ast) {
+            match generator.generate_module_ir(ast) {
+                // 3.4.8 ③：Check 形态也留存单元 IR（仅内存）——它是
+                // Linking 纯合并与 mono 检查形态的输入；不外发、不写盘。
+                Ok(ir) => us.ir = Some(ir),
                 // IR 级错误进逐文件收集通道（不标阶段失败、不中止）
-                us.check_diagnostics.extend(diags);
+                Err(diags) => us.check_diagnostics.extend(diags),
             }
         }
     }
@@ -823,18 +830,21 @@ impl Driver {
     /// 移植自 pipeline.rs:329-338。两道门控原样保留：配置关闭 →
     /// ConfigDisabled；请求为空 → NoObligations。
     ///
-    /// 两种形态的 IR 与请求来源不同：
+    /// 三种形态的 IR 与请求来源不同：
     /// - SingleFile / WasmPlayground：唯一单元的 IR 与请求（阶段表在
     ///   `Stage::ALL` 拓扑下仍把 mono 排在单元 IR 之后——本形态无 Linking，
     ///   本次次序调整对它零影响）；
-    /// - MultiFile：**Linking 产物**（merged IR，全程序唯一完整函数表）与
-    ///   聚合后的全程序请求表；`containing_fn` 在此限定化为 merged IR 的
-    ///   函数表键（见 `aggregate_instantiation_requests`）。
+    /// - MultiFile / Check：**Linking 产物**（merged IR，全程序唯一完整函数
+    ///   表）与聚合后的全程序请求表；`containing_fn` 在此限定化为 merged IR
+    ///   的函数表键（见 `aggregate_instantiation_requests`）。Check 用它做
+    ///   检查（3.4.8 ③——同 IrGeneration 的 Check 形态），MultiFile 用它做
+    ///   产物。
     ///
     /// 错误通道按形态分流：单文件走 pipeline 契约
     /// （`PipelineError::TypeCheck`，mono 失败映射为类型检查错误）；多文件走
     /// orchestrator 契约（`OrchestratorError::TypeCheck`，与 Linking 的入口
-    /// 校验同形）。
+    /// 校验同形）；Check 走逐文件收集通道（3.4.8 ③，检查形态）——mono 失败
+    /// 不该丢掉其余文件已收集的诊断。
     pub(super) fn monomorphization(
         &self,
         state: &mut State,
@@ -912,6 +922,27 @@ impl Driver {
         match mono.monomorphize(&merged, &requests) {
             Ok(mono_ir) => state.merged_ir = Some(mono_ir),
             Err(diag) => {
+                // Check（3.4.8 ③）：mono 失败是**检查诊断**——进逐文件收集
+                // 通道（同 IrGeneration 的 Check 形态），不因它丢掉其余文件
+                // 已收的诊断；标记阶段失败使下游按拓扑跳过（本阶段之后无
+                // 下游，记录口径与 run 路径一致）。
+                //
+                // 归属入口文件：与 run 路径同口径（`OrchestratorError::
+                // TypeCheck{path}` 恒为入口）——mono 诊断是程序级事实，失败
+                // 请求的 span 不携带文件身份，无从逐文件归属。
+                if matches!(state.program.kind, ProgramKind::Check) {
+                    let entry_index = state
+                        .program
+                        .units
+                        .iter()
+                        .position(|u| u.path == state.entry_path)
+                        // 防御：发现成功必含入口单元；不可达时退回首单元
+                        //（归属偏差好过静默丢诊断）
+                        .unwrap_or(0);
+                    state.units[entry_index].check_diagnostics.push(diag);
+                    state.failed_stages.push(Stage::Monomorphization);
+                    return Ok(());
+                }
                 let message = diag.to_string();
                 state.fail_with(
                     Stage::Monomorphization,
@@ -1025,8 +1056,11 @@ impl Driver {
     /// 校验」——manifest 声明面里的入口文件（`[[bin]].path` /
     /// `[run].main`）必须有名为 `main` 的绑定，缺失报 E3020 进逐文件
     /// 收集通道。归入本臂因为只有这里同时握着 surfaces 与 AST（compile
-    /// 路径的同类校验在 Linking 臂——两边对称：握着判据的臂负责校验；
-    /// check 路径没有 Linking 阶段）。
+    /// 路径的同类校验在 Linking 臂——两边对称：握着判据的臂负责校验）。
+    ///
+    /// 3.4.8 ③（2026-10-10 裁决）：CHECK 自本步起也**有** Linking 阶段，
+    /// 但它只做纯合并（不跑 Linking 的入口校验，见该臂注释）——判据仍归
+    /// 本臂（声明面 = surfaces.bins），否则同一缺失在 check 里双报。
     pub(super) fn role_classification(
         &self,
         state: &mut State,
@@ -1090,6 +1124,14 @@ impl Driver {
 
     /// `Stage::Linking` 臂（Project）：IR 层链接（限定名共存）+ 入口
     /// 语义校验（#388 缺 main / #357 带参 main，自 compile_project 移入）。
+    ///
+    /// **Check 形态（3.4.8 ③，2026-10-10 用户裁决）只做纯合并**：先把全程序
+    /// 实例化请求聚合出来（②），再把单元 IR 合并供 mono 的检查形态消费，
+    /// **不跑入口校验**——声明面 bin 缺 main 在 check 里已由 RoleClassification
+    /// 报 E3020，本臂再查一次就是同一缺失双报（02 §3 注记 #14 的「纯合并」）。
+    /// 合并冲突（模块限定名撞名）是项目结构错误，与 compile 路径同口径走
+    /// 故障通道：它没有可归属的结构化诊断（判据见 state.rs `into_outcome`
+    /// 的注释——已收的逐文件诊断不会因此丢失）。
     pub(super) fn linking(
         &self,
         state: &mut State,
@@ -1135,7 +1177,16 @@ impl Driver {
         // T4：入口语义（RFC-029f 角色驱动；#388 定案：按**绑定存在性**判定）。
         // Script 无入口概念（顶层代码即程序）；Bin 要求存在名为 main 的绑定
         // （值/函数皆可）；带参 main 编译期拒绝（#357：入口恒零参调用）。
-        if is_bin_role(&state.entry_path) {
+        //
+        // Check 形态整块跳过（纯合并）：E3020 的判据归 RoleClassification
+        // （双报防线，见臂注释）；E3022 属 run 路径的入口契约，check 现状不报
+        // 它——本臂在 check 只合并，不给 check 添新诊断。
+        //
+        // 还有一层硬性理由：run 路径的入口校验以「merged IR 里有没有 main」
+        // 判定，而在 Check 的收集语义下，入口自身带错（parse/typecheck 失败）
+        // 就没有 IR——会被误判成「缺 main」而硬中止，把 rust 式收集退化成
+        // FailFast。并入纯合并即无此形状。
+        if !matches!(state.program.kind, ProgramKind::Check) && is_bin_role(&state.entry_path) {
             let qualified_main = format!("{}.main", state.entry_key);
             let has_main_fn = merged.functions.iter().any(|f| f.name == qualified_main);
             let has_main_value = merged

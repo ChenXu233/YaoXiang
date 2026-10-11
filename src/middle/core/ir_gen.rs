@@ -1042,6 +1042,13 @@ impl AstToIrGenerator {
         };
         // RFC-029: 多文件模式下限定本文件的顶层函数名与调用引用。
         // 单文件（module_key 为 None）不限定，保持原有行为。
+        //
+        // 注意（3.4.8 ③ 补口）：无项目根的**多文件** check 也走 None（standalone
+        // Script 语义）——本函数的定义键保持扁平名（`f`），而 [`Resolver`] 产出的
+        // 调用名与 typecheck 的实例化请求名是限定名（`lib.f`）。两种形态的对应关系
+        // 由驱动侧聚合（`driver::helpers::aggregate_instantiation_requests` 的
+        // `flat_defs`）用 `SymbolTable::qualify` 的精确反查补齐——本函数不因该形态
+        // 改变资格/语义（E3023 开关仍由 module_key 唯一决定）。
         if let Some(key) = &self.module_key {
             let aliases = self.build_import_aliases(module);
             Self::qualify_names(&mut ir, key, &aliases);

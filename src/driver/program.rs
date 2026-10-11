@@ -69,7 +69,7 @@ const MULTI_FILE_STAGES: &[Stage] = &[
     Stage::Linking,
     // 3.4.8 ②（2026-10-10）：合并 IR 之后的单态化——全程序一张函数表，
     // 各单元的实例化请求在此聚合（单文件与 EMBEDDED 的表不动，仍各自在
-    // 单元 IR 上跑 mono；CHECK 的增补属 R3）
+    // 单元 IR 上跑 mono）。CHECK 于 3.4.8 ③ 按同一次序增补（见下）。
     Stage::Monomorphization,
 ];
 
@@ -79,9 +79,21 @@ const MULTI_FILE_STAGES: &[Stage] = &[
 // 4.2.5（用户裁决）：CHECK 加 GlobalSlotAlloc + IrGeneration——standalone
 // check 旧路径（pipeline 全链）本就跑 IR 生成，E3019/E1014/E1015 等只在
 // ir_gen 产生；不加则 standalone check 能力回归（runner 门禁实证）。项目
-// check 从此也捕获 IR 级错误（02 不一致表第 11 行缺口填上）。IR 在 Check
-// 形态下纯检查不消费；Monomorphization 不加（只产资源超限/内部错误，
-// 零语料依赖）。
+// check 从此也捕获 IR 级错误（02 不一致表第 11 行缺口填上）。
+//
+// 3.4.8 ③（2026-10-10 用户裁决，02 §3 注记 #14）：CHECK 再加 Linking 与
+// Monomorphization 两阶段，**撤回注记 #10 的 mono 排除**——「mono 只产资源
+// 超限/内部错误、零语料依赖」只证明语料里没有病态泛型递归 fixture；
+// E3005（特化链深度超限）正是 `f(x) = f([x])` 这类程序唯一的编译期防线
+//（无 mono 时解释器在 Rust 层递归，进程爆栈 0xC00000FD）。
+// - Linking 在 Check 只做**纯合并**：聚合全程序实例化请求 + 合并单元 IR；
+//   入口校验（E3020/E3022）留在 RoleClassification——声明面 bin 缺 main 已
+//   由该臂报 E3020，此臂再查一次即同一缺失双报（02 注记 #14 的「纯合并」）；
+// - Monomorphization 是**检查形态**（同 IrGeneration 的 Check 形态）：消费
+//   合并 IR 与请求表只为产出 E3005/E3018 类诊断，失败进逐文件收集通道
+//（不丢其余文件的诊断），成功产物不消费、不外发。
+// 因此 Check 形态下单元 IR 与 merged IR 都只驻内存（`UnitState.ir` /
+// `State.merged_ir`），DriverOutcome 不带任何 IR 产物。
 const CHECK_STAGES: &[Stage] = &[
     Stage::VendorConsistency,
     Stage::Discovery,
@@ -93,6 +105,8 @@ const CHECK_STAGES: &[Stage] = &[
     Stage::ProofExecution,
     Stage::GlobalSlotAlloc,
     Stage::IrGeneration,
+    Stage::Linking,
+    Stage::Monomorphization,
 ];
 
 const LSP_STAGES: &[Stage] = &[

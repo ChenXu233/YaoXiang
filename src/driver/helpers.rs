@@ -225,6 +225,17 @@ pub(in crate::driver) fn link_module_irs(
 /// 函数（AST 属于本单元），故按单元自己的函数名集合匹配。合并后重名不冲突
 ///（函数名已限定化）；嵌套函数名（`outer.inner`）不在单元顶层函数表里，
 /// 保持原样——它们的 deferred 语义与单文件一致。
+///
+/// **无项目根（rootless）形态的名字对齐（3.4.8 ③ 补口）**：
+/// `ir_generation_check` 对无项目根程序传 `module_key=None`（standalone Script
+/// 语义，4.2.5 裁决 A），ir_gen 因此跳过 `qualify_names`——单元 IR 的**定义键
+/// 是扁平名**（`f`、`Point.get_x`），而 Resolver 产出的调用名与 typecheck 产出的
+/// 请求名都是**限定名**（`lib.f`）。此时请求名必须锚定到真实定义键：mono 的
+/// 定义表查找与 deferred 桶键都以该键为准，否则 mono 按「native 泛型无 IR
+/// 定义」静默 skip——病态泛型递归在 check 下报 0 error 后以类型擦除爆栈。
+/// 反查表 `flat_defs` 由权威输入**精确枚举**（单元键 × 该单元真实函数表，
+/// 限定形式经 `SymbolTable::qualify` 生成），命中要求精确相等，歧义放弃；
+/// 这不是后缀猜测/唯一后缀匹配（R2 已删除同类启发式）。
 pub(in crate::driver) fn aggregate_instantiation_requests(
     units: &[Unit],
     unit_irs: &[Option<ModuleIR>],
@@ -241,13 +252,48 @@ pub(in crate::driver) fn aggregate_instantiation_requests(
         .flatten()
         .flat_map(|ir| ir.functions.iter().map(|f| f.name.as_str()))
         .collect();
+    // rootless（无项目根）形态的定义键反查表：限定名 → 该单元 IR 里的**真实**
+    // 定义键。由两个权威输入精确枚举——单元键（Discovery 给出）× 该单元真实
+    // 函数表，限定形式经 `SymbolTable::qualify`（限定名语法的唯一所有者）；
+    // 项目形态下定义键自带 `{单元键}.` 前缀 → 不登记（既有解析路径一字不变），
+    // 表只对 rootless 的扁平定义键（`f`、`Point.get_x`）成立。
+    //
+    // 歧义（两个单元键拼出同一限定形式）时**整个条目放弃**：宁可不解析也不
+    // 静默错配到别的定义（t5 裁决的落点）。
+    let mut flat_defs: HashMap<String, Option<String>> = HashMap::new();
+    for (i, ir) in unit_irs.iter().enumerate() {
+        let Some(ir) = ir else { continue };
+        // 登记判据是**结构性**的：项目形态下 `qualify_names` 保证顶层函数键自带
+        // `{单元键}.` 前缀，rootless 扁平形态不带——前缀判据不是后缀猜测。
+        //（扁平世界里嵌套名恰好以单元键开头时被跳过：宁可少解析，不误配。）
+        let key_prefix = format!("{}.", units[i].key);
+        for func in &ir.functions {
+            if func.name.starts_with(&key_prefix) {
+                continue; // 定义键已带本单元键前缀（项目形态）：反查无意义
+            }
+            let qualified = SymbolTable::qualify(&units[i].key, &func.name);
+            flat_defs
+                .entry(qualified)
+                .and_modify(|slot| {
+                    if slot.as_deref() != Some(func.name.as_str()) {
+                        *slot = None; // 歧义：放弃该条目
+                    }
+                })
+                .or_insert_with(|| Some(func.name.clone()));
+        }
+    }
+    let flat_defs: HashMap<String, String> = flat_defs
+        .into_iter()
+        .filter_map(|(qualified, flat)| flat.map(|flat| (qualified, flat)))
+        .collect();
     let mut aggregated: Vec<InstantiationRequest> = Vec::new();
     for (i, ir) in unit_irs.iter().enumerate() {
         let (Some(ir), Some(type_result)) = (ir, type_results.get(i).copied().flatten()) else {
             continue; // 上游已失败 / 无产物（FailFast 下 run 循环已中止，防御）
         };
-        // 单元 IR 的函数名**已限定**（ir_gen 的 `qualify_names`：`lib.f`），
-        // 故判据是「限定名是否在该单元函数表里」而非「裸名」——
+        // 单元 IR 的函数名形态分两种：项目形态**已限定**（ir_gen 的
+        // `qualify_names`：`lib.f`），rootless 形态是扁平名（见上 `flat_defs`）。
+        // 故判据统一按「名字是否在该单元函数表里」取，不假定限定化形态——
         // `containing_fn` 由 typecheck 给的是裸名。
         let top_level: HashSet<&str> = ir.functions.iter().map(|f| f.name.as_str()).collect();
         // 对应 `qualify_names` 里的 `rename` 表：本单元函数**已限定**，故这里是
@@ -283,6 +329,10 @@ pub(in crate::driver) fn aggregate_instantiation_requests(
                     .contains(qualified.as_str())
                     .then_some(qualified)
             })
+            // rootless（无项目根）的最后一跳：请求名是限定名、而定义键是扁平名
+            // （ir_gen 对 module_key=None 跳过 `qualify_names`）——按精确反查表
+            // 锚定到真实定义键；表为空（项目形态）时本跳恒不命中。
+            .or_else(|| flat_defs.get(name).cloned())
         };
         for request in &type_result.instantiation_requests {
             let mut request = request.clone();

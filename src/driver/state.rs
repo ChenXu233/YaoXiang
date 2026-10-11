@@ -54,12 +54,14 @@ pub struct DriverOutcome {
     /// 编译结果（诊断集与 pipeline 时代逐字节相同，C2 判据）
     pub result: CompilationResult,
     /// 多文件合并 IR（Linking 产物；MultiFile 成功时 Some）/ 嵌入 std
-    /// 模块的独立 ModuleIR（Embedded 成功时 Some，4.2.4）
+    /// 模块的独立 ModuleIR（Embedded 成功时 Some，4.2.4）。Check 形态
+    /// 的 merged IR 只作 mono 的输入（3.4.8 ③），此处恒 None
     pub module: Option<ModuleIR>,
     /// 多文件结构化故障（OrchestratorError 契约；失败时 Some）
     pub failure: Option<OrchestratorError>,
     /// 逐文件诊断收集（Check 契约：`Vec<(文件, 该文件诊断)>`，每个发现文件
-    /// 都有条目——干净文件为空 Vec；4.2.2）
+    /// 都有条目——干净文件为空 Vec；4.2.2）。故障路径（failure 为 Some）
+    /// 同样带出已收集条目——故障不清空收集（3.4.8 ③）
     pub check_diagnostics: Vec<(PathBuf, Vec<Diagnostic>)>,
     /// 被跳过的阶段及原因——仅内部记录；对外 Skipped 诊断随 4.3 义务账本接入（02 §4）
     pub skipped: Vec<SkippedStage>,
@@ -143,7 +145,7 @@ pub(in crate::driver) struct State {
     pub(in crate::driver) global_layout: Option<Vec<(String, usize)>>,
     /// GlobalSlotAlloc 产物（各文件槽位基址）
     pub(in crate::driver) slot_bases: Vec<usize>,
-    /// Linking 产物
+    /// Linking 产物（Check 形态下只作 mono 的输入，不进 DriverOutcome）
     pub(in crate::driver) merged_ir: Option<ModuleIR>,
     /// 全程序实例化请求表（3.4.8 ②）：Linking 臂在**消费各单元 IR 之前**
     /// 聚合产出（`aggregate_instantiation_requests`）——`containing_fn`
@@ -162,7 +164,8 @@ pub(in crate::driver) struct UnitState {
     pub(in crate::driver) typecheck_warnings: Vec<Diagnostic>,
     /// 本单元 typecheck 是否产出错误（死代码门控的 `!has_errors` 半边）
     pub(in crate::driver) typecheck_failed: bool,
-    /// IrGeneration（+ Monomorphization 改写）产物
+    /// IrGeneration（+ Monomorphization 改写）产物。Check 形态也在此暂存
+    /// 单元 IR（供 Linking 纯合并与 mono 检查形态消费），但不外发（3.4.8 ③）
     pub(in crate::driver) ir: Option<ModuleIR>,
     /// RoleClassification 产物（RFC-029f 角色；DeadCodeAnalysis 的消费端，4.2.2）
     pub(in crate::driver) role: Option<FileRole>,
@@ -217,8 +220,9 @@ impl State {
     /// 结果通道选择：SingleFile/WasmPlayground 走 PipelineError 通道
     /// （pipeline 外部契约）；其余形态走 OrchestratorError 故障通道
     /// （orchestrator 外部契约，4.2.1）。Check 的诊断主体不走这两条——
-    /// 逐文件收集进 `check_diagnostics`（4.2.2），故障通道只承载
-    /// vendor/发现/解析三类硬中止。
+    /// 逐文件收集进 `check_diagnostics`（4.2.2）：vendor/发现/解析三类
+    /// 硬中止之外，3.4.8 ③ 起 mono 的失败也进收集通道（检查形态），
+    /// 故障通道只多一类无结构化诊断可归属的结构错误（Linking 合并冲突）。
     pub(in crate::driver) fn uses_pipeline_channel(&self) -> bool {
         matches!(
             self.program.kind,
@@ -262,40 +266,29 @@ impl State {
     /// （`CompilationResult::failed` 语义）；`total_duration_ms` 由
     /// 调用方（`Pipeline::run`）覆写。
     pub(in crate::driver) fn into_outcome(mut self) -> DriverOutcome {
+        // Check/Lsp 的逐文件收集**先取后判**：硬故障（vendor/发现/解析/
+        // 合并冲突）也不清空已收集的诊断——`check_diagnostics` 在故障
+        // 路径上同样带出（3.4.8 ③：mono/Linking 进 CHECK 后故障通道与
+        // 收集通道并存，收集物不因故障被丢弃）。
+        let check_diagnostics = self.take_check_diagnostics();
         if let Some(error) = self.failure.take() {
             return DriverOutcome {
                 result: CompilationResult::default(),
                 module: None,
                 failure: Some(error),
-                check_diagnostics: Vec::new(),
+                check_diagnostics,
                 skipped: self.skipped,
             };
         }
-        // Check/Lsp 通道（4.2.2/4.2.3）：逐文件诊断收集——每个发现文件
-        // 都有条目（干净文件为空 Vec，check_project 契约；Lsp 由调用方
-        // 过滤到目标文件）；其余形态恒空
-        let check_diagnostics =
-            if matches!(self.program.kind, ProgramKind::Check | ProgramKind::Lsp) {
-                let units_meta = &self.program.units;
-                self.units
-                    .iter_mut()
-                    .enumerate()
-                    .map(|(i, us)| {
-                        (
-                            units_meta[i].path.clone(),
-                            std::mem::take(&mut us.check_diagnostics),
-                        )
-                    })
-                    .collect()
-            } else {
-                Vec::new()
-            };
         // Embedded 产物（4.2.4）：唯一单元的 IR 即最终产物（阶段表无
-        // Linking）；MultiFile 的 module 仍由 Linking 臂写入 merged_ir
-        let module = if matches!(self.program.kind, ProgramKind::Embedded) {
-            self.units.first_mut().and_then(|u| u.ir.take())
-        } else {
-            self.merged_ir.take()
+        // Linking）；MultiFile 的 module 仍由 Linking 臂写入 merged_ir。
+        // Check 的 merged IR 是**运行期内部产物**（3.4.8 ③：Linking 纯
+        // 合并 + mono 检查形态消费），随本函数丢弃——check 的产物契约
+        // 仍只有 check_diagnostics，不因加阶段而多出 IR 面。
+        let module = match self.program.kind {
+            ProgramKind::Embedded => self.units.first_mut().and_then(|u| u.ir.take()),
+            ProgramKind::Check => None,
+            _ => self.merged_ir.take(),
         };
         let single_file = self.uses_pipeline_channel();
         let result = if self.errors.is_empty() {
@@ -323,6 +316,27 @@ impl State {
             check_diagnostics,
             skipped: self.skipped,
         }
+    }
+
+    /// 取走 Check/Lsp 的逐文件收集条目——每个发现文件一条（干净文件为空
+    /// Vec，check_project 契约；Lsp 由调用方过滤到目标文件），其余形态
+    /// 恒空。成功路径与故障路径共用本实现。
+    fn take_check_diagnostics(&mut self) -> Vec<(PathBuf, Vec<Diagnostic>)> {
+        if !matches!(self.program.kind, ProgramKind::Check | ProgramKind::Lsp) {
+            return Vec::new();
+        }
+        // 字段级分借：program.units（元信息）与 units（阶段产物）互不重叠
+        let units_meta = &self.program.units;
+        self.units
+            .iter_mut()
+            .enumerate()
+            .map(|(i, us)| {
+                (
+                    units_meta[i].path.clone(),
+                    std::mem::take(&mut us.check_diagnostics),
+                )
+            })
+            .collect()
     }
 }
 
