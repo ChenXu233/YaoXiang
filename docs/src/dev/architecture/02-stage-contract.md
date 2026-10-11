@@ -672,6 +672,13 @@ impl Driver {
 >     并以矩阵钉测试覆盖具名导入两形态。**留档**：init 段 `DefId` 空白经实证为「一致性空白」
 >     而非活体缺陷（codegen 名字回退可解析、四类 init 调用实测通过），已登记 WBS 3.7.4
 >     以收口「函数体走 def、init 靠名字」的口径分叉。
+> 18. init 段 DefId 口径分叉收口（3.7.4，2026-10-11，b7ac7396）：`assign_defs` 抽出
+>     `resolve_static_targets` 单点（Call/TailCall 字符串操作数 + MakeClosure），函数体与
+>     `ir.init` 共用同一实现与同一 `resolve` 闭包；208 个 IR 快照再生后仅 309 对
+>     `(def=_)`→`(def=dN)` 变化（other-lines 0；全树 init 段 0 条残留 `(def=_)`）。codegen
+>     的 DefId 主路径与名字回退两态下翻译结果与执行值逐项一致（四类 init 调用实测），
+>     语料基线零漂移；探针按新口径翻转并加强（身份 + 精确索引 + 执行值，回退 init 覆盖
+>     即致红）。
 
 **十个入口的改造方式（逐个指定函数）**：
 
