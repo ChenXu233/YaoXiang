@@ -17,6 +17,8 @@
   - [ ] 新增了"第 N 个入口 / 接线点"
   - [ ] 一次修改要同步改 ≥3 处同义映射
   - [ ] 以上皆否（局部补丁已附回归测试）
+- **错误类型（必填文字，按 [RFC-039 D59](../docs/src/rfc/accepted/039-compiler-architecture.md)）**：本次改动属 A 静默失败 / B 静默错配 / C 未定义行为与资源失控 / D 用户可见语义 / E 对外契约表 / F RFC 设计变更 中的哪一类？（可多选，写明主错类型）。A/B/C 类须给出**先红后绿的红判据**引用；D/E/F 类须给出**决议号或用户裁决**记录：
+  <!-- 例：C（主）+ A（附带）｜红判据：test_driver_run_multi_file_pathological_generic_recursion_reports_e3005｜裁决：RFC-039 D59 -->
 - [ ] 我不是在做"不看实际情况的补丁式修复"：我已打开被改文件阅读上下文，并 grep 过相关引用点
 - [ ] 若本 PR 属于 RFC-039 施工，我已核对 [09-execution-wbs.md](../docs/src/dev/architecture/09-execution-wbs.md) 中对应三级任务的前置与验收判据
 
