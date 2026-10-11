@@ -2473,6 +2473,18 @@ impl<'a> ExpressionInferrer<'a> {
             crate::frontend::core::parser::ast::Expr::FieldAccess { .. }
         );
 
+        // ── 层级：声明名为权威，签名形态反推只兜底 ────────────────────
+        //
+        // 第一条路径（下方）：`last_type_args` 由 `monomorphize_func_ty` 按**声明序
+        // 类型参数名**解出（名字来自 `lookup_type_params` → `generic_fn_type_params`，
+        // 被调模块的名字随 `Export::type_params` 的声明期快照跨界）。名字是权威：
+        // 只有名字能把签名里的 `TypeRef("A")` 与声明表对上，嵌套/借用位置才解得开。
+        //
+        // 第二条路径（再下方）：从签名**实际形态**反推（按位置取 `TypeVar`）。
+        // 它是显式标注的**兜底**，只在第一条拿不到声明名时生效——类型参数
+        // 只出现在嵌套/借用位置（`x: &T`、`Vec(T)`）时反推取不到任何东西，
+        // 故它不能替代声明名，只能服务声明名表未覆盖的老路径。
+        //
         // 优先：单态化阶段已按声明序解出的类型实参。
         // 它覆盖按名声明的类型参数（`(T: Type, Acc: Type)`）——这类参数在
         // MonoType 侧是 TypeRef 或嵌在 `Ref(Generic)` 里，下面的 TypeVar 位置
@@ -2507,7 +2519,13 @@ impl<'a> ExpressionInferrer<'a> {
             }
         }
 
-        // 收集「参数位直接是 TypeVar」的位置（如 identity 的 x: T、twice 的 x: T）。
+        // ── 兜底路径：从签名形态反推（按位置取 TypeVar）────────────────
+        //
+        // 仅当上面的**声明名**路径没给出实参（`last_type_args` 空或不收敛）时走到
+        // 这里：按位置扫形参，参数位**直接是** TypeVar 的才收（如 identity 的
+        // x: T、twice 的 x: T）。这是能力受限的兜底——类型参数只出现在嵌套/
+        // 借用位置（`x: &T`、`Vec(T)`）时什么也收不到，那类形态必须靠声明名。
+        //
         // 不能收集嵌套 TypeVar 的参数位：twice(f: (T) -> T, x: T) 的 f 位是 fn(T)->T，
         // 解析后是 fn(int64)->int64，用它当 type_arg 会让 T 绑到错误类型（#255）。
         let mut type_var_indices = HashSet::new();
@@ -2574,9 +2592,21 @@ impl<'a> ExpressionInferrer<'a> {
     /// `fn_name` 接受两种键：本模块的裸函数名，以及**跨模块限定名**
     /// `{module_key}.{bare}`（限定调用 `lib.f(x)` 的请求用它）。跨模块导出
     /// 随 `Export::type_params` 携带声明名时，`export_type` 会同时登记
-    /// `export.name` 与 `export.full_path` 两个键，故限定名在此可解析；
-    /// 导出未携带声明名（用户模块经 `extract_module_info` 导出，
-    /// `type_params: None`）时返回空表——调用方按「无 arity 约束」处理。
+    /// `export.name` 与 `export.full_path` 两个键，故限定名在此可解析。
+    ///
+    /// 三条来源的层级（权威 → 兜底）：
+    ///
+    /// 1. 重载候选（`OverloadCandidate::type_params`）——声明侧的显式登记；
+    /// 2. 作用域 `PolyType::type_binders`——只剩编号、无名字，故退回占位名
+    ///    `T0`/`T1`（下游按位置匹配）；
+    /// 3. `generic_fn_type_params` 声明名表——**跨模块导出的登记口**：
+    ///    本模块函数由 `check_fn_stmt` 登记，被调模块的由
+    ///    `export_type` 按 `Export::type_params`（声明期快照）登记。
+    ///
+    /// 三条都是「按声明名查」的不同通道，层级只关乎查得到多少；三条都拿不到
+    /// （如导出面来自旧路径、未携带声明名）时返回空表——调用方按「无 arity
+    /// 约束」处理，由签名形态反推兜底（见 `collect_instantiation_request`
+    /// 第二条路径；反推收不全嵌套/借用位的类型参数）。
     fn lookup_type_params(
         &self,
         fn_name: &str,

@@ -1015,6 +1015,11 @@ pub(crate) fn extract_module_info(
     // 导入方访问时报误导性的「成员未找到」。
     checker.harvest_untyped_value_bindings(ast);
 
+    // 声明期类型参数名（按声明序）：跨模块调用的单态化需要它们绑定签名里的
+    // `TypeRef("A")`。随导出一并携带，调用方不必从签名形态反推
+    // （反推区分不了类型参数与普通类型名，会误伤 `Dict(K,V)` / `File` 等）。
+    let fn_type_params = checker.generic_fn_type_params_snapshot();
+
     // TypeEnvironment 不实现 Clone，只克隆需要的几张表。
     let vars = checker.env().vars.clone();
     let types = checker.env().types.clone();
@@ -1028,7 +1033,8 @@ pub(crate) fn extract_module_info(
                 name, definition, ..
             } => {
                 if let Some(ty) = lookup(&types, name) {
-                    let mut export = make_export(module_key, name, ExportKind::Type, ty);
+                    let mut export =
+                        make_export(module_key, name, ExportKind::Type, ty, &fn_type_params);
                     // 跨模块类型传播：泛型模板 + 和类型变体 + 接口实现随导出携带
                     export.type_payload = checker.type_def_export_payload(name, definition);
                     info.add_export(export);
@@ -1047,19 +1053,31 @@ pub(crate) fn extract_module_info(
                         } else {
                             ExportKind::Constant
                         };
-                        info.add_export(make_export(module_key, name, kind, ty));
+                        info.add_export(make_export(module_key, name, kind, ty, &fn_type_params));
                     } else if let Some(type_ann) = type_annotation {
                         // 普通常量（如 `value: Int = 7`）不会被当作签名收集，
                         // 从类型标注导出其类型。
                         let ty = MonoType::from(type_ann.clone());
-                        info.add_export(make_export(module_key, name, ExportKind::Constant, ty));
+                        info.add_export(make_export(
+                            module_key,
+                            name,
+                            ExportKind::Constant,
+                            ty,
+                            &fn_type_params,
+                        ));
                     }
                 }
             }
             StmtKind::Expr(expr) => {
                 if let Expr::FnDef { name, .. } = expr.as_ref() {
                     if let Some(ty) = lookup(&vars, name) {
-                        info.add_export(make_export(module_key, name, ExportKind::Function, ty));
+                        info.add_export(make_export(
+                            module_key,
+                            name,
+                            ExportKind::Function,
+                            ty,
+                            &fn_type_params,
+                        ));
                     }
                 }
             }
@@ -1070,19 +1088,34 @@ pub(crate) fn extract_module_info(
     info
 }
 
+/// 构造单个导出项。
+///
+/// `fn_type_params` 是本模块的**声明期类型参数名快照**（名字 → 按声明序的参数名，
+/// 签名收集阶段填表；见 [`TypeChecker::generic_fn_type_params_snapshot`]）。
+/// 只有**函数类导出**把它带进 [`Export::type_params`]**：
+/// 类型/常量导出没有「声明期类型参数」可言；非泛型函数在快照里查不到键 → `None`。
+/// 与 std 路径（`embedded_std_module_info`）同构——两条导出面都从同一张声明表取值。
 fn make_export(
     module_key: &str,
     name: &str,
     kind: ExportKind,
     ty: MonoType,
+    fn_type_params: &HashMap<String, Vec<String>>,
 ) -> Export {
+    // 快照只登记泛型函数，故 `Function` 之外的 kind 即使同名也拿不到值；
+    // 仍显式按 kind 收敛，避免将来快照语义扩展时把类型/常量卷进来。
+    let type_params = if matches!(kind, ExportKind::Function) {
+        fn_type_params.get(name).cloned()
+    } else {
+        None
+    };
     Export {
         name: name.to_string(),
         full_path: SymbolTable::qualify(module_key, name),
         kind,
         signature: String::new(),
         mono_type: Some(ty),
-        type_params: None,
+        type_params,
         param_names: None,
         type_payload: None,
     }
@@ -1093,4 +1126,68 @@ fn lookup(
     name: &str,
 ) -> Option<MonoType> {
     map.get(name).map(|p| p.body.clone())
+}
+
+#[cfg(test)]
+mod export_type_params_tests {
+    //! RFC-039 §3.4.8 ①（D2 裁甲，2026-10-10）：用户模块导出携带声明期类型参数快照。
+    //!
+    //! 快照按声明序给出被调函数的真实类型参数名——跨模块限定调用的单态化只有
+    //! 拿到名字才能绑定签名里的 `TypeRef("A")`；类型/常量导出不携带。
+
+    use super::extract_module_info;
+    use crate::frontend::module::Export;
+
+    /// 取导出面里名为 `name` 的导出；缺失即断言失败（附可用导出清单）。
+    fn export_named(
+        info: &crate::frontend::module::ModuleInfo,
+        name: &str,
+    ) -> Export {
+        info.exports
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| panic!("导出面缺少 {name}，实际: {:?}", info.exports.keys()))
+    }
+
+    /// 函数导出带声明名快照，类型/常量导出一律 None——按 `ExportKind` 区分。
+    #[test]
+    fn test_user_module_function_exports_carry_declared_type_params_snapshot() {
+        // Arrange：一个模块同时给出泛型函数、非泛型函数、类型与常量
+        let source = "read: (T: Type) -> (x: &T) -> T = (x) => x\n\
+                      \nplain: (n: Int) -> Int = (n) => n\n\
+                      \nBox: Type = { inner: Int }\n\
+                      \nvalue: Int = 7\n";
+        let tokens = crate::frontend::core::tokenize(source).expect("模块源码必须可词法分析");
+        let parsed = crate::frontend::core::parser::parse(&tokens);
+        assert!(
+            !parsed.has_errors,
+            "模块源码必须可解析：{:?}",
+            parsed.errors
+        );
+
+        // Act
+        let info = extract_module_info("lib", &parsed.module);
+
+        // Assert：按 kind 区分——仅函数类导出携带，其余一律 None
+        assert_eq!(
+            export_named(&info, "read").type_params,
+            Some(vec!["T".to_string()]),
+            "泛型函数导出的 type_params 必须是声明序声明名 [T]（权威来源）"
+        );
+        assert_eq!(
+            export_named(&info, "plain").type_params,
+            None,
+            "非泛型函数导出的 type_params 必须保持 None"
+        );
+        assert_eq!(
+            export_named(&info, "Box").type_params,
+            None,
+            "类型导出的 type_params 必须保持 None（声明期类型参数只属于函数）"
+        );
+        assert_eq!(
+            export_named(&info, "value").type_params,
+            None,
+            "常量导出的 type_params 必须保持 None（声明期类型参数只属于函数）"
+        );
+    }
 }

@@ -261,6 +261,10 @@ fn test_infer_nested_expressions() {
 /// 发出实例化请求，且 `generic_id` 用与 merged-IR 同源的限定名 `lib.f`
 ///（ir_gen 的 `qualify_names` 把每个模块的顶层函数重写为 `{module_key}.{bare}`；
 /// 用裸名 `f` 在 merged-IR 的函数表里匹配不到，请求会被下游静默跳过）。
+///
+/// D2 裁甲（2026-10-10）：用户模块导出随 `Export::type_params` 携带声明期
+/// 类型参数名快照，故 `generic_id` 的类型参数名由原先的空表变为 ["T"]——
+/// 声明名是权威来源，mono 单态化按它给特化版本命名。
 #[test]
 fn test_instantiation_request_qualified_module_call_uses_module_qualified_name() {
     // Arrange：lib 导出泛型 f: (T) -> T；入口整体导入后限定调用
@@ -282,8 +286,12 @@ fn test_instantiation_request_qualified_module_call_uses_module_qualified_name()
     );
     assert_eq!(
         request_triples(&result.instantiation_requests),
-        vec![("lib.f".to_string(), Vec::new(), vec![MonoType::Int(64)])],
-        "限定调用的 generic_id 必须是限定名 lib.f（与 merged-IR 函数表键同源）"
+        vec![(
+            "lib.f".to_string(),
+            vec!["T".to_string()],
+            vec![MonoType::Int(64)],
+        )],
+        "限定调用的 generic_id 必须是限定名 lib.f 且携带导出快照的声明名 T"
     );
 }
 
@@ -376,5 +384,50 @@ fn test_instantiation_request_value_receiver_method_call_not_collected() {
         result.instantiation_requests.is_empty(),
         "值接收者方法调用不得产生实例化请求，实际：{:?}",
         request_triples(&result.instantiation_requests)
+    );
+}
+
+/// RFC-039 §3.4.8 ①（钉测试）：跨模块限定调用的**声明名前**权威来源——导出快照。
+///
+/// 探针形态：被调泛型函数 read 的类型参数 T 只出现在嵌套/借用位置
+/// （形参 x: &T，整份签名里没有裸 T）——类型实参本应由形参位的借用解出，
+/// 而声明序声明名 ["T"] 只能来自被调模块的导出快照；签名形态反推在这类
+/// 形态上什么也收集不到。用户模块导出硬编码 type_params: None 时请求不发出
+/// （mono 不特化 → 运行时报 E6006）。
+#[test]
+fn test_qualified_generic_call_borrowed_param_uses_export_declared_type_params() {
+    // Arrange：lib 导出泛型 read: (T) -> (&T) -> T；类型参数只出现在借用内层
+    let lib = module_info_from_source("lib", "read: (T: Type) -> (x: &T) -> T = (x) => x\n");
+    let source = "use lib\nv = lib.read(7)\n";
+
+    // Act：真实 tokenize → parse → check 管线
+    let result = check_entry_with_modules(source, vec![lib]);
+
+    // Assert：诊断为空 + 请求带限定名 lib.read 与声明序声明名 ["T"]
+    assert!(
+        result.diagnostics.is_empty(),
+        "限定调用不应产生诊断，实际：{:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.to_string())
+            .collect::<Vec<_>>()
+    );
+    let triples = request_triples(&result.instantiation_requests);
+    assert_eq!(
+        triples.len(),
+        1,
+        "被调泛型函数的类型参数只在借用内层时，仍必须发出恰好一条实例化请求，实际：{triples:?}"
+    );
+    assert_eq!(
+        triples[0].0, "lib.read",
+        "generic_id 名必须是限定名 lib.read（与 merged-IR 函数表键同源），实际：{:?}",
+        triples[0].0
+    );
+    assert_eq!(
+        triples[0].1,
+        vec!["T".to_string()],
+        "声明序类型参数名必须由导出快照携带（用户模块 Export::type_params），实际：{:?}",
+        triples[0].1
     );
 }
