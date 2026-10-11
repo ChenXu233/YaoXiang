@@ -1472,6 +1472,107 @@ fn test_deferred_bucket_qualified_container_key_expands_recursion_chain() {
     );
 }
 
+/// 3.4.8 ④ 钉测试（跨单元互递归的 mono 侧机制）：deferred 桶按**发出请求的函数**
+/// 分桶（`containing_fn`），而请求的**实参**含符号化 `TypeRef(参数名)`——只有当
+/// 该容器函数自己特化时才能求值。
+///
+/// 跨单元互递归正是「容器 ≠ 请求目标」的形态：`a.f` 体内以增长类型调 `b.g`
+///（桶在 `b.g` 下，求值依赖 `a.f` 的参数绑定），`b.g` 体内再调回 `a.f`。
+/// 若 `fire_deferred` 用请求自带的名字（而非本次特化的定义名）查桶，链会在第一层
+/// 断掉：既不报深度诊断，原件又被放回、以类型擦除执行到进程栈溢出（0xC00000FD）。
+///
+/// 红态：把 `fire_deferred` 的桶键换成 `req.generic_id().name()`（或驱动侧漏做
+/// `containing_fn` 限定化）时，下列断言逐条转红。
+#[test]
+fn test_cross_unit_mutual_recursion_deferred_bucket_expands_across_containers() {
+    // Arrange：两个泛型定义各属一个单元（IR 键为限定名），互递归请求挂在
+    // 对方单元的桶下。夹具构造抽成闭包——两次 Act 各用**全新** Monomorphizer：
+    // 失败的那次已把 seed 记进 processed（同实例重跑会直接去重跳过）
+    let t = MonoType::TypeVar(TypeVar::new(0));
+    let build_fixture = |max_depth: usize| -> (Monomorphizer, Vec<InstantiationRequest>) {
+        let mut mono = Monomorphizer::with_max_depth(max_depth);
+        mono.generic_functions.insert(
+            "a.f".to_string(),
+            make_fn_ir(
+                "a.f",
+                vec![t.clone()],
+                t.clone(),
+                Some(vec!["T".to_string()]),
+                vec![
+                    call_instr(Some(Operand::Local(1)), "b.g", vec![Operand::Local(0)]),
+                    ret_instr(Some(Operand::Local(1))),
+                ],
+                vec![LocalSlot::temp(list_of(t.clone()))],
+            ),
+        );
+        mono.generic_functions.insert(
+            "b.g".to_string(),
+            make_fn_ir(
+                "b.g",
+                vec![t.clone()],
+                t.clone(),
+                Some(vec!["T".to_string()]),
+                vec![
+                    call_instr(Some(Operand::Local(1)), "a.f", vec![Operand::Local(0)]),
+                    ret_instr(Some(Operand::Local(1))),
+                ],
+                vec![LocalSlot::temp(list_of(t.clone()))],
+            ),
+        );
+        // **互递归**的两个占位请求——键是**发出请求的函数**，实参是符号化
+        // 的 List(T)，只有该函数自己特化后才解得开：
+        //   a.f 体内调 b.g  → 桶键 a.f（值 b.g）
+        //   b.g 体内调 a.f  → 桶键 b.g（值 a.f）← 容器 ≠ 目标，正是跨单元形态
+        let mut from_a = request("b.g", &["T"], list_of(type_ref("T")), Span::default());
+        from_a.containing_fn = Some("a.f".to_string());
+        defer_request(&mut mono, "a.f", from_a);
+        let mut from_b = request("a.f", &["T"], list_of(type_ref("T")), Span::default());
+        from_b.containing_fn = Some("b.g".to_string());
+        defer_request(&mut mono, "b.g", from_b);
+        // 驱动侧聚合表里的两个入口请求（真实形态：两个单元各有一处具体调用）
+        let mut seed_a = request("a.f", &["T"], MonoType::Int(64), Span::default());
+        seed_a.containing_fn = Some("a.f".to_string());
+        let mut seed_b = request("b.g", &["T"], MonoType::Int(64), Span::default());
+        seed_b.containing_fn = Some("b.g".to_string());
+        (mono, vec![seed_a, seed_b])
+    };
+
+    // Act：小上限跑一次——诊断里的「当前深度」是链跨单元逐层计数的直接证据
+    let (mut shallow, seeds) = build_fixture(3);
+    let err = shallow
+        .monomorphize(&module_with(Vec::new()), &seeds)
+        .expect_err("跨单元互递归链必须展开到深度上限并报错");
+
+    // Assert①：深度恰为 4（seed 深度 0 + 三轮跨单元展开）——少一轮即链断在
+    // 某一层（此时既不报深度诊断、原件又被放回，退回类型擦除执行）
+    assert!(
+        err.message.contains("当前 4"),
+        "报错深度必须是 4（seed 深度 0 + b.g → a.f → b.g 三轮），实际：{}",
+        err.message
+    );
+
+    // Act：同一夹具跑到深度上限被拦为止——已发生的跨单元展开留在特化表里
+    //（链本身发散，永远收敛不了；要的是它「怎么走」而不是「走到哪停」）
+    let (mut converged, seeds) = build_fixture(100);
+    let _ = converged.monomorphize(&module_with(Vec::new()), &seeds);
+
+    // Assert②：链在两单元间交替展开——a.f(int64) 引发 b.g(List(int64))，
+    // b.g(List(int64)) 再引发 a.f(List(List(int64)))：每一层的实参都是具体的
+    // List(...)，deferred 桶键或 name_map 求值任一错配时对应那层不会出现
+    let names: Vec<String> = converged.specialized_functions.keys().cloned().collect();
+    for expected in [
+        "a.f(int64)",
+        "b.g(List(int64))",
+        "a.f(List(List(int64)))",
+        "b.g(List(List(List(int64))))",
+    ] {
+        assert!(
+            names.iter().any(|n| n == expected),
+            "跨单元互递归链必须特化出 {expected}（缺它即 deferred 桶键或 name_map 在那一层错配）：{names:?}"
+        );
+    }
+}
+
 /// 3.4.8 ② 钉测试：请求带的**裸名**（typecheck 逐单元只知道裸名）必须按容器
 /// 限定名解析到 IR 定义（`main.identity`），同时调用点改写的名字维度仍与 IR
 /// 调用指令逐字一致（`identity`）——两件事必须同时成立，否则调用点会悬空（E6006）。
