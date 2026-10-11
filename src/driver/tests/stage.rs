@@ -20,8 +20,8 @@ const ALL_VARIANTS: [Stage; 12] = [
     Stage::ProofExecution,
     Stage::GlobalSlotAlloc,
     Stage::IrGeneration,
-    Stage::Monomorphization,
     Stage::Linking,
+    Stage::Monomorphization,
 ];
 
 fn position_in_all(stage: Stage) -> usize {
@@ -83,9 +83,10 @@ fn test_stage_all_topological_order_follows_data_dependencies() {
         (Stage::Parsing, Stage::IrGeneration),
         (Stage::Registry, Stage::IrGeneration),
         (Stage::GlobalSlotAlloc, Stage::IrGeneration),
-        // 修订注记：mono 消费 IR 产物（monomorphize(&ir, …)），必须在 IrGeneration 后
-        (Stage::IrGeneration, Stage::Monomorphization),
         (Stage::IrGeneration, Stage::Linking),
+        // 3.4.8 ② 修订注记（2026-10-10）：mono 消费 **Linking 产物**——
+        // 多文件形态下 merged IR 是全程序唯一完整函数表，必须在 Linking 后
+        (Stage::Linking, Stage::Monomorphization),
     ];
 
     // Act / Assert
@@ -122,6 +123,65 @@ fn test_stage_scope_classification() {
             );
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WBS 3.4.8 ②（2026-10-10）：多文件单态化臂接线——阶段表拓扑与形态表
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `Stage::ALL` 中 Linking 必须先于 Monomorphization：多文件形态下 mono
+/// 消费的是 **Linking 产物**（merged IR 是全程序唯一完整函数表，跨单元
+/// 泛型定义只在那里齐备）。次序写反则 mono 拿到的是残缺视图。
+#[test]
+fn test_stage_all_orders_linking_before_monomorphization() {
+    // Arrange / Act
+    let linking = position_in_all(Stage::Linking);
+    let mono = position_in_all(Stage::Monomorphization);
+
+    // Assert
+    assert!(
+        linking < mono,
+        "Stage::Linking ({linking}) must precede Stage::Monomorphization ({mono})"
+    );
+}
+
+/// 形态表按本次接线的差异：MULTI_FILE 尾部含 Monomorphization（在 Linking
+/// 之后）；SINGLE_FILE / EMBEDDED 的表**不动**（各自在单元 IR 上跑 mono），
+/// CHECK 的增补属 R3——本步不许动。
+#[test]
+fn test_program_kind_stage_tables_after_mono_wiring() {
+    // Arrange
+    use crate::driver::ProgramKind;
+
+    // Act
+    let multi = ProgramKind::MultiFile.stages();
+    let single = ProgramKind::SingleFile.stages();
+    let embedded = ProgramKind::Embedded.stages();
+    let check = ProgramKind::Check.stages();
+
+    // Assert：MULTI_FILE 尾部 = Linking → Monomorphization
+    assert_eq!(
+        multi.iter().rev().take(2).copied().collect::<Vec<_>>(),
+        vec![Stage::Monomorphization, Stage::Linking],
+        "MULTI_FILE must end with Linking then Monomorphization: {multi:?}"
+    );
+    assert!(
+        single.contains(&Stage::Monomorphization) && !single.contains(&Stage::Linking),
+        "SINGLE_FILE keeps its own mono position and has no Linking: {single:?}"
+    );
+    assert!(
+        embedded.eq(&[
+            Stage::Parsing,
+            Stage::Typecheck,
+            Stage::ProofExecution,
+            Stage::IrGeneration,
+        ]),
+        "EMBEDDED stage table must not change in this step: {embedded:?}"
+    );
+    assert!(
+        !check.contains(&Stage::Monomorphization),
+        "CHECK must not gain Monomorphization in this step (that is R3): {check:?}"
+    );
 }
 
 #[test]

@@ -25,8 +25,8 @@ use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
 use super::helpers::{
-    allocate_global_slots, ast_has_main, collect_project_refs, is_bin_role, link_module_irs,
-    merge_embedded_std_ir, role_context,
+    aggregate_instantiation_requests, allocate_global_slots, ast_has_main, collect_project_refs,
+    is_bin_role, link_module_irs, merge_embedded_std_ir, role_context,
 };
 use super::state::{DriverError, SkipReason, SkippedStage, State, UnitState};
 use super::{Aggregation, Driver, ProgramKind, Stage, Unit};
@@ -818,11 +818,23 @@ impl Driver {
     }
 
     /// `Stage::Monomorphization` 臂（Project 作用域）：消费 IR 产物与
-    /// 聚合的实例化请求。
+    /// 聚合的实例化请求。双形态（3.4.8 ②，2026-10-10）。
     ///
     /// 移植自 pipeline.rs:329-338。两道门控原样保留：配置关闭 →
-    /// ConfigDisabled；请求为空 → NoObligations。错误归入 TypeCheck
-    /// （pipeline 现状：mono 失败经 IRResult 映射为类型检查错误）。
+    /// ConfigDisabled；请求为空 → NoObligations。
+    ///
+    /// 两种形态的 IR 与请求来源不同：
+    /// - SingleFile / WasmPlayground：唯一单元的 IR 与请求（阶段表在
+    ///   `Stage::ALL` 拓扑下仍把 mono 排在单元 IR 之后——本形态无 Linking，
+    ///   本次次序调整对它零影响）；
+    /// - MultiFile：**Linking 产物**（merged IR，全程序唯一完整函数表）与
+    ///   聚合后的全程序请求表；`containing_fn` 在此限定化为 merged IR 的
+    ///   函数表键（见 `aggregate_instantiation_requests`）。
+    ///
+    /// 错误通道按形态分流：单文件走 pipeline 契约
+    /// （`PipelineError::TypeCheck`，mono 失败映射为类型检查错误）；多文件走
+    /// orchestrator 契约（`OrchestratorError::TypeCheck`，与 Linking 的入口
+    /// 校验同形）。
     pub(super) fn monomorphization(
         &self,
         state: &mut State,
@@ -835,8 +847,11 @@ impl Driver {
             state.record_skipped(Stage::Monomorphization, SkipReason::ConfigDisabled);
             return Ok(());
         }
-        if state.units.len() != 1 {
-            return Err(DriverError::MultiUnitNotWired(Stage::Monomorphization));
+        // 形态判据用 ProgramKind（数据流形状），不用单元数——单文件项目
+        // 在 MultiFile 形态下也是 1 单元，但它的 IR 在 Linking 的 merged_ir
+        // 里（单元 IR 已被链接取走），按单元数分派会走进单文件分支空转。
+        if !state.uses_pipeline_channel() {
+            return self.monomorphization_multi_file(state, max_depth, max_instantiations);
         }
         let State {
             units,
@@ -863,6 +878,49 @@ impl Driver {
             Err(diag) => {
                 errors.push(PipelineError::TypeCheck(diag));
                 failed_stages.push(Stage::Monomorphization);
+            }
+        }
+        Ok(())
+    }
+
+    /// 多文件形态的 mono（3.4.8 ②）：消费 **Linking 产物**（merged IR）。
+    ///
+    /// 请求表 = 各单元 typecheck 请求的并集，`containing_fn` 在聚合时
+    /// 限定化（裸名 → `{module_key}.{bare}`），使 deferred 桶键与 merged IR
+    /// 的函数表键同源。两道门控与单文件同形：关闭 → ConfigDisabled；
+    /// 聚合后请求为空 → NoObligations（**排空**由聚合表空集判定，不再由
+    /// 「单元数 != 1」硬拒）。
+    fn monomorphization_multi_file(
+        &self,
+        state: &mut State,
+        max_depth: usize,
+        max_instantiations: usize,
+    ) -> Result<(), DriverError> {
+        let requests = std::mem::take(&mut state.aggregated_requests);
+
+        if requests.is_empty() {
+            state.record_skipped(Stage::Monomorphization, SkipReason::NoObligations);
+            return Ok(());
+        }
+        let Some(merged) = state.merged_ir.take() else {
+            // 上游 Linking 未产出 merged IR（拓扑应在失败时跳过本阶段；防御）
+            state.record_skipped(Stage::Monomorphization, SkipReason::NoObligations);
+            return Ok(());
+        };
+        let mut mono =
+            Monomorphizer::with_max_depth(max_depth).with_max_instantiations(max_instantiations);
+        match mono.monomorphize(&merged, &requests) {
+            Ok(mono_ir) => state.merged_ir = Some(mono_ir),
+            Err(diag) => {
+                let message = diag.to_string();
+                state.fail_with(
+                    Stage::Monomorphization,
+                    OrchestratorError::TypeCheck {
+                        path: state.entry_path.display().to_string(),
+                        message,
+                        diagnostics: vec![diag],
+                    },
+                );
             }
         }
         Ok(())
@@ -1036,6 +1094,31 @@ impl Driver {
         &self,
         state: &mut State,
     ) {
+        // 3.4.8 ②：聚合全程序实例化请求——必须在 take 各单元 IR **之前**
+        // （限定化 `containing_fn` 要逐单元的函数名集合），产物交
+        // Monomorphization 臂消费。
+        //
+        // t10：请求名要对齐成 IR 调用指令里的名字，故这里连同单元 AST 与 registry
+        // 一起交给聚合函数——它用 ir_gen 的 `import_aliases_from`（`qualify_names`
+        // 改写调用名用的同一实现）现场取别名表，驱动侧不另建表。
+        {
+            let unit_irs: Vec<Option<ModuleIR>> =
+                state.units.iter().map(|us| us.ir.clone()).collect();
+            let type_results: Vec<Option<&crate::frontend::core::typecheck::TypeCheckResult>> =
+                state
+                    .units
+                    .iter()
+                    .map(|us| us.type_result.as_ref())
+                    .collect();
+            let registry = state.registry.clone();
+            state.aggregated_requests = aggregate_instantiation_requests(
+                &state.program.units,
+                &unit_irs,
+                &type_results,
+                &state.asts,
+                registry.as_ref().expect("Registry 阶段必产注册表"),
+            );
+        }
         let mut irs: Vec<(String, ModuleIR)> = Vec::new();
         for (i, us) in state.units.iter_mut().enumerate() {
             if let Some(ir) = us.ir.take() {

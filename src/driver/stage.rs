@@ -4,10 +4,12 @@
 //! 对它的穷尽 `match` 让「新增阶段必须被编排层处理」成为编译期事实
 //! （与 opcode 表同构的强制机制，RFC-039 路由表 B）。
 //!
-//! `Stage::ALL` 按**真实数据依赖的拓扑序**排列，两处实施修正
+//! `Stage::ALL` 按**真实数据依赖的拓扑序**排列，三处实施修正
 //! （02 §目标设计 1 修订注记）：
-//! - `Monomorphization` 消费 IR 产物（`Monomorphizer::monomorphize(&ir, …)`），
-//!   故排在 `IrGeneration` **之后**——02 初稿把这一次序写反；
+//! - `Monomorphization` 排在 `Linking` **之后**（WBS 3.4.8 ②，2026-10-10）：
+//!   多文件形态下它消费 Linking 产物（merged IR 是全程序唯一完整函数表，
+//!   跨单元泛型定义只在那里齐备）；单文件形态的阶段表没有 Linking，
+//!   该相对次序对它是空约束，pipeline 行为不变；
 //! - `Parsing` 先于 `Registry`/`RoleClassification`（C3，2026-10-09 用户裁决）：
 //!   签名收集与 `ast_has_main` 都消费 AST 产物——02 初稿次序会让 Registry
 //!   臂被迫「隐藏 parse」，阶段表对数据流撒谎。
@@ -38,10 +40,10 @@ pub enum Stage {
     GlobalSlotAlloc,
     /// AST → ModuleIR（含单文件路径的嵌入 std 合并）
     IrGeneration,
-    /// 单态化（消费 IR 产物与聚合的实例化请求）
-    Monomorphization,
     /// 跨模块链接 / IR 合并（含入口 main 校验，#388）
     Linking,
+    /// 单态化（消费 IR 产物与聚合的实例化请求）
+    Monomorphization,
 }
 
 /// 阶段作用域：逐编译单元执行，还是项目级恰好执行一次。
@@ -72,8 +74,8 @@ impl Stage {
         Stage::ProofExecution,
         Stage::GlobalSlotAlloc,
         Stage::IrGeneration,
-        Stage::Monomorphization,
         Stage::Linking,
+        Stage::Monomorphization,
     ];
 
     /// 本阶段的作用域（02 §目标设计 1 表格）。

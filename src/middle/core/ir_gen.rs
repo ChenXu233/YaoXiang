@@ -1089,6 +1089,10 @@ impl AstToIrGenerator {
                 }
             })
         };
+        // 指令的 DefId 解析只覆盖函数体——init 段保持既有行为（多文件下 def
+        // 仍为 None，运行期按限定名解析）。t3 F1 只需调用名重写（见
+        // `qualify_names` 的 init 循环）；补 init 的 def 会改动全部 IR 快照，
+        // 而所修行为相同，故不并入本轮。
         for func in &mut ir.functions {
             if func.is_type_decl() {
                 continue; // TypeDecl 无指令体
@@ -1119,6 +1123,23 @@ impl AstToIrGenerator {
         &self,
         module: &ast::Module,
     ) -> HashMap<String, String> {
+        Self::import_aliases_from(module, &self.registry)
+    }
+
+    /// `use` 导入别名表（本地调用名 → 限定名）的**唯一生产实现**（t10）。
+    ///
+    /// 为什么抽成 pub 关联函数：驱动侧聚合实例化请求时要把 typecheck 的裸名请求
+    /// 对齐成 IR 调用指令里的名字，而那个名字正是由本表在 `qualify_names` 里
+    /// 改写出来的——两边必须**同源**。抽出来后驱动直接调它（传单元 AST 与同一
+    /// registry），不再另建平行表、也不复刻解析规则（禁令三：一处生产、一处消费）。
+    ///
+    /// 规则（原实现逐字迁移）：只登记 `use path.{item}` 的**项**形态（含 #245 内联
+    /// 别名），且仅对 Function/Constant/Type 类导出——#244：类型也限定，构造调用
+    /// `Point(...)` 与方法调用 `Point.get_x` 都要把本地短名别名到源模块限定名才能解析。
+    pub fn import_aliases_from(
+        module: &ast::Module,
+        registry: &crate::frontend::module::registry::ModuleRegistry,
+    ) -> HashMap<String, String> {
         let mut aliases = HashMap::new();
         for stmt in &module.items {
             if let ast::StmtKind::Use {
@@ -1128,15 +1149,13 @@ impl AstToIrGenerator {
                 ..
             } = &stmt.kind
             {
-                let Some(exports) = self.registry.get_exports(path) else {
+                let Some(exports) = registry.get_exports(path) else {
                     continue;
                 };
                 if let Some(names) = items {
                     // 本地名：内联别名（#245）> 原名
                     for (i, item) in names.iter().enumerate() {
                         if let Some(export) = exports.get(&item.name) {
-                            // #244：类型也限定——构造调用 `Point(...)` 与方法调用 `Point.get_x`
-                            // 都需把本地短名别名到源模块限定名才能解析。
                             if matches!(
                                 export.kind,
                                 ExportKind::Function | ExportKind::Constant | ExportKind::Type
@@ -1158,7 +1177,9 @@ impl AstToIrGenerator {
     }
 
     /// RFC-029 限定名：把本文件 IR 里的顶层函数名重写为 `{module_key}.{name}`，
-    /// 并把函数体里对这些函数与导入函数的调用/闭包引用一并重写。
+    /// 并把**函数体与模块顶层初始化序列**里对这些函数与导入函数的调用/闭包
+    /// 引用一并重写（init 段见 t3 F1——漏掉它就出现「定义已限定、调用仍裸名」
+    /// 的不自洽 IR，运行期 E6006）。
     ///
     /// module=record 语义：`a.helper` 与 `b.helper` 是两个 record 的不同字段，本就不冲突；
     /// 解释器函数表是扁平 name→func，故用限定名作键使其共存。限定名统一经
@@ -1217,32 +1238,63 @@ impl AstToIrGenerator {
                 }
             }
         }
+
+        // 模块顶层初始化序列（`ir.init`）走**同一张 rename/aliases 表与同一
+        // `rewrite_call_names`**（t3 F1）：此前只重写函数体，init 里对本文件
+        // 顶层函数的调用名保持裸名，而函数定义已被限定——运行期按裸名查扁平
+        // 函数表落空（E6006）。这与泛型无关，是既有的多文件正确性漏洞。
+        for instr in &mut ir.init {
+            Self::rewrite_call_names(instr, &rename, aliases);
+        }
+    }
+
+    /// **调用名解析的单点实现**：把一个调用名解析成 IR 函数表里的最终名字。
+    ///
+    /// 解析顺序：完全匹配 rename（本文件函数）→ 完全匹配 aliases（导入函数）→
+    /// 前缀匹配（方法调用 `Point.get_x` 经 `Point` 的 rename/alias 限定为
+    /// `lib.Point.get_x`）。
+    ///
+    /// 为什么单独成一个 pub 函数：驱动侧要把 typecheck 的实例化请求名对齐到
+    /// 「IR 调用指令里的名字」，而这正是本函数给出的结果。请求名与指令名只要
+    /// 有一处用了别的规则，就会一边限定、一边裸名——单态化改不到调用点
+    /// （E6006）或误报未限定化（E3018）。故本函数是**唯一**的解析规则所有者：
+    /// `rewrite_call_names` 在 IR 生成期用它改写指令，驱动在聚合期用它对齐请求名。
+    ///
+    /// 驱动侧传入的两张表与生成期同源：`rename` 是**已限定**名字的恒等映射
+    /// （`qualify_names` 之后的函数表），`aliases` 由驱动侧**直调**
+    /// [`Self::import_aliases_from`]`(单元 AST, 同一 registry)` 取得——即
+    /// `qualify_names` 改写调用名所用的同一个实现，不是驱动侧另建的表。
+    /// 细节见 `driver::helpers::aggregate_instantiation_requests` 的注释。
+    pub fn resolve_call_target(
+        name: &str,
+        rename: &HashMap<String, String>,
+        aliases: &HashMap<String, String>,
+    ) -> Option<String> {
+        rename
+            .get(name)
+            .cloned()
+            .or_else(|| aliases.get(name).cloned())
+            .or_else(|| {
+                let dot_pos = name.find('.')?;
+                let prefix = &name[..dot_pos];
+                let suffix = &name[dot_pos..]; // 含点
+                rename
+                    .get(prefix)
+                    .or_else(|| aliases.get(prefix))
+                    .map(|q| format!("{}{}", q, suffix))
+            })
     }
 
     /// 重写单条指令里的函数名引用（Call/TailCall 的字符串 func、MakeClosure 的 func）。
     ///
-    /// 解析顺序：完全匹配 rename（本文件函数）→ 完全匹配 aliases（导入函数）→
-    /// 前缀匹配（方法调用 `Point.get_x` 经 `Point` 的 rename/alias 限定为 `lib.Point.get_x`）。
+    /// 解析规则见 [`Self::resolve_call_target`]（单点实现）。
     fn rewrite_call_names(
         instr: &mut Instruction,
         rename: &HashMap<String, String>,
         aliases: &HashMap<String, String>,
     ) {
-        let resolve = |name: &str| -> Option<String> {
-            rename
-                .get(name)
-                .cloned()
-                .or_else(|| aliases.get(name).cloned())
-                .or_else(|| {
-                    let dot_pos = name.find('.')?;
-                    let prefix = &name[..dot_pos];
-                    let suffix = &name[dot_pos..]; // 含点
-                    rename
-                        .get(prefix)
-                        .or_else(|| aliases.get(prefix))
-                        .map(|q| format!("{}{}", q, suffix))
-                })
-        };
+        let resolve =
+            |name: &str| -> Option<String> { Self::resolve_call_target(name, rename, aliases) };
         match instr {
             Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
                 if let Operand::Const(ConstValue::String(name)) = func {

@@ -156,6 +156,69 @@ impl Monomorphizer {
         }
     }
 
+    /// 解析请求的泛型名到 IR 定义表的键：直接命中优先，否则按**容器模块**
+    /// 补足限定名（3.4.8 ②，2026-10-10）。
+    ///
+    /// 为什么需要：多文件 IR 的每个顶层函数都被 `qualify_names` 限定
+    ///（`pick` → `main.pick`），而 typecheck 逐单元运行、请求里的名字可能是
+    /// 裸名（同模块/自引用调用：`f(x) = f([x])` 的嵌套请求、入口顶层绑定的
+    /// 调用点）。查定义表用这个**已限定**的键，调用点改写仍用请求自己的名字
+    /// ——后者必须与 IR 调用指令里的字符串逐字相同（`build_call_site_map`
+    /// 的名字维度），改名会让改写落空、原件删除后调用点悬空（E6006）。
+    ///
+    /// 解析是**确定性**的：定义表直命中 → 容器模块前缀，两条都不猜。
+    ///
+    /// 容器限定的前提是「同一文件内的顶层函数同属一个模块键」——`lib.A.f`
+    /// 取首段 `lib`，与方法派生函数（`lib.Point.get_x`）规则一致。
+    ///
+    /// 为什么不再有「全程序唯一后缀」启发式（t5，2026-10-11 用户裁决乙′）：
+    /// 请求名由驱动侧 `aggregate_instantiation_requests` 按单元键限定化
+    /// （与 `qualify_names` 同源），限定名恒等于 merged IR 的定义键；后缀
+    /// 猜测会在「两个模块同名泛型」时把请求悄悄接到错误那一侧——静默错配
+    /// 比不解析更糟。歧义/未命中一律由调用方报响亮诊断。
+    fn resolve_generic_name(
+        &self,
+        name: &str,
+        containing_fn: Option<&str>,
+    ) -> String {
+        if self.generic_def_contains(name) {
+            return name.to_string();
+        }
+        // 按容器模块补限定（函数体内调用：`lib.f` 容器下的裸名 `f`）
+        if let Some((module, _)) = containing_fn.and_then(|c| c.split_once('.')) {
+            let qualified = format!("{module}.{name}");
+            if self.generic_def_contains(&qualified) {
+                return qualified;
+            }
+        }
+        name.to_string()
+    }
+
+    /// 名字在定义表里是否**有歧义**：裸名 `name` 能唯一后缀命中某个定义键，
+    /// 但该键不等于 `name`（即「本该由驱动侧限定化却没限定」）。
+    ///
+    /// 用于把「静默跳过」变成响亮诊断：这类请求一定是限定化漏了，属实现
+    /// 缺陷面，必须报出来（native 泛型无 IR 定义，后缀命中数恒为 0，不受
+    /// 影响）。
+    fn ambiguous_bare_hit(
+        &self,
+        name: &str,
+    ) -> Option<String> {
+        let suffix = format!(".{name}");
+        self.generic_functions
+            .keys()
+            .chain(self.generic_types.keys())
+            .find(|k| k.ends_with(&suffix))
+            .cloned()
+    }
+
+    /// 定义表（泛型函数 + 泛型类型）里是否有这个名字。
+    fn generic_def_contains(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.generic_functions.contains_key(name) || self.generic_types.contains_key(name)
+    }
     fn process_queue(&mut self) -> Result<(), Diagnostic> {
         while let Some(req) = self.pending_queue.pop_front() {
             let key = req.specialization_key();
@@ -186,13 +249,35 @@ impl Monomorphizer {
 
             // #335：实例化失败显式报错——此前 `if let Some(spec)` 静默跳过，
             // 下游症状是 E6006「函数表缺失」，根因不可见
-            let generic_name = req.generic_id().name().to_string();
+            //
+            // 3.4.8 ②：查定义表用 `resolve_generic_name` 的结果（多文件下请求
+            // 名字可能是裸名、IR 键是限定名）；`req` 本身不改名——调用点改写
+            // 的名字维度必须与 IR 调用指令逐字相同。
+            let request_name = req.generic_id().name().to_string();
+            let generic_name =
+                self.resolve_generic_name(&request_name, req.containing_fn.as_deref());
             let n_type_params = if let Some(g) = self.generic_types.get(&generic_name) {
                 g.generic_params.as_ref().map(|p| p.len()).unwrap_or(0)
             } else if let Some(g) = self.generic_functions.get(&generic_name) {
                 g.generic_params.as_ref().map(|p| p.len()).unwrap_or(0)
+            } else if let Some(hit) = self.ambiguous_bare_hit(&request_name) {
+                // 响亮路径（t5）：请求名是**未限定化的裸名**，而定义表里存在
+                // `{module}.{bare}`——即驱动侧限定化漏了这一步。此前的静默
+                // `continue` 会把这类缺陷藏到运行期（调用点悬空 E6006 或
+                // 退回类型擦除），必须在此报出。
+                return Err(ErrorCodeDefinition::ir_instantiation_failed(
+                    &request_name,
+                    &format!(
+                        "实例化请求的名字未限定化：裸名 `{request_name}` 在 merged IR 定义表里只存在 `{hit}`；\
+                         这是驱动侧 `aggregate_instantiation_requests` 的限定化缺口（请求名必须与 IR 调用指令同源）"
+                    ),
+                )
+                .at(req.source_location)
+                .build());
             } else {
-                // 请求目标不在 IR 泛型定义表中（限定名/native 等历史宽松路径）
+                // 无 IR 泛型定义：native 泛型（无 IR 体）等**本来就无特化义务**的
+                // 请求，显式跳过而非静默擦除——它与上面的「漏限定化」由
+                // `ambiguous_bare_hit` 区分（后缀命中数 0 vs ≥1）。
                 continue;
             };
             let type_args_len = req.type_args().len();
@@ -207,11 +292,19 @@ impl Monomorphizer {
 
             self.processed.insert(key);
 
+            // 特化按**已解析**的名字建件（多文件下 IR 定义键是限定名），
+            // 但请求本身保持原名字——调用点改写的 (容器, 名, span) 三元键
+            // 必须与 IR 调用指令里的字符串逐字一致
+            let mut resolved_req = req.clone();
+            resolved_req.generic_id = GenericFunctionId::new(
+                generic_name.clone(),
+                req.generic_id().type_params().to_vec(),
+            );
             // 先尝试类型特化，再尝试函数特化
             let specialized = if self.generic_types.contains_key(&generic_name) {
-                self.specialize_type(&req)
+                self.specialize_type(&resolved_req)
             } else {
-                self.specialize_function(&req)
+                self.specialize_function(&resolved_req)
             };
 
             match specialized {
@@ -233,6 +326,10 @@ impl Monomorphizer {
                         .filter(|(i, _)| *i < req.type_args().len())
                         .map(|(i, n)| (n.clone(), req.type_args()[i].clone()))
                         .collect();
+                    // deferred 桶键 = 容器函数的限定名（`aggregate_instantiation_requests`
+                    // 在驱动侧已限定化，多文件下与 IR 函数表键同源），故用**已解析**
+                    // 的定义名查桶——请求自带的裸名（`f`）与桶键（`lib.f`）不同源，
+                    // 用它会漏查，递归链在第一层就断（E3005 永不触发，退回擦除执行）
                     self.fire_deferred(&generic_name, &spec.name, &name_map, child_depth);
                     self.scan_for_generic_types(&spec, child_depth);
                     self.specialized_functions.insert(spec.name.clone(), spec);
@@ -677,10 +774,13 @@ impl Monomorphizer {
         for req in requests {
             let generic_name = req.generic_id().name().to_string();
 
-            // 处理泛型函数和泛型类型（fix #255：泛型类型构造器也需要替换）
-            if !self.generic_functions.contains_key(&generic_name)
-                && !self.generic_types.contains_key(&generic_name)
-            {
+            // 处理泛型函数和泛型类型（fix #255：泛型类型构造器也需要替换）。
+            // 3.4.8 ②：命中判据按**已解析**的定义键（多文件下 IR 键是
+            // 限定名，请求名可能是裸名）——否则映射为空表、调用点改名落空，
+            // 原件一旦被删就悬空（E6006）。映射的**名字维度仍用请求自己的
+            // 名字**（与 IR 调用指令逐字一致）。
+            let resolved = self.resolve_generic_name(&generic_name, req.containing_fn.as_deref());
+            if !self.generic_def_contains(&resolved) {
                 continue;
             }
 
@@ -690,7 +790,9 @@ impl Monomorphizer {
                 .map(|t| t.type_name())
                 .collect::<Vec<_>>()
                 .join(", ");
-            let specialized_name = format!("{}({})", generic_name, type_args_str);
+            // 特化名按**定义键**（`main.pick(int64)`——与 `specialize_function`
+            // 建件同名）；映射键的名字维度用请求自己的名字（与 IR 调用指令逐字一致）
+            let specialized_name = format!("{}({})", resolved, type_args_str);
             map.insert(
                 (req.containing_fn.clone(), generic_name, req.source_location),
                 specialized_name,

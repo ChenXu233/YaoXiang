@@ -10,11 +10,13 @@ use crate::frontend::core::lexer;
 use crate::frontend::core::parser::ast::{Expr, StmtKind};
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
+use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::module::orchestrator::OrchestratorError;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles;
 use crate::frontend::module::symbol::SymbolTable;
+use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::middle::ModuleIR;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
@@ -204,6 +206,110 @@ pub(in crate::driver) fn link_module_irs(
     }
 
     Ok(merged)
+}
+
+/// 多文件形态（3.4.8 ②）：把各单元的实例化请求聚合为**全程序一张请求表**，
+/// 并把 `containing_fn` 的裸名限定化为 merged IR 的函数表键。
+///
+/// 为什么需要限定化：`containing_fn` 是 mono 的 deferred 桶键（泛型体内的嵌套
+/// 调用请求按所在函数暂存，待该函数特化时求值），也是调用点改写三元键的容器
+/// 维度。typecheck 逐单元运行，`scope.fn_context()` 只知道**裸名**（`f`）；
+/// 而 ir_gen 的 `qualify_names` 已把每个单元的顶层函数重命名为
+/// `{module_key}.{bare}`，Linking 之后 merged IR 的函数表只有限定名。
+/// 不限定化则 deferred 桶**永不排水**：桶建在裸名下、特化按限定名查桶——
+/// 递归泛型（`f(x) = f([x])`）的整条特化链不展开，既不出深度诊断，
+/// 原件又被 `restore_generics_with_uncovered_call_sites` 放回、以类型擦除
+/// 执行到进程栈溢出（0xC00000FD）。
+///
+/// 判据「该单元是否定义了这个名字」：`containing_fn` 只可能是**本单元**的
+/// 函数（AST 属于本单元），故按单元自己的函数名集合匹配。合并后重名不冲突
+///（函数名已限定化）；嵌套函数名（`outer.inner`）不在单元顶层函数表里，
+/// 保持原样——它们的 deferred 语义与单文件一致。
+pub(in crate::driver) fn aggregate_instantiation_requests(
+    units: &[Unit],
+    unit_irs: &[Option<ModuleIR>],
+    type_results: &[Option<&TypeCheckResult>],
+    unit_asts: &[Option<Module>],
+    registry: &ModuleRegistry,
+) -> Vec<InstantiationRequest> {
+    // 全程序函数名表：链接后 merged IR 的函数集 = 各单元函数集的并集
+    // （`link_module_irs` 对同名限定键报 Collision，故并集即最终键集）。
+    // 别名改写的目标（`pick` → `lib.pick`）落在**别的单元**，单看本单元函数表
+    // 会误判为「不存在」而拒绝——故校验用并集。
+    let program_functions: HashSet<&str> = unit_irs
+        .iter()
+        .flatten()
+        .flat_map(|ir| ir.functions.iter().map(|f| f.name.as_str()))
+        .collect();
+    let mut aggregated: Vec<InstantiationRequest> = Vec::new();
+    for (i, ir) in unit_irs.iter().enumerate() {
+        let (Some(ir), Some(type_result)) = (ir, type_results.get(i).copied().flatten()) else {
+            continue; // 上游已失败 / 无产物（FailFast 下 run 循环已中止，防御）
+        };
+        // 单元 IR 的函数名**已限定**（ir_gen 的 `qualify_names`：`lib.f`），
+        // 故判据是「限定名是否在该单元函数表里」而非「裸名」——
+        // `containing_fn` 由 typecheck 给的是裸名。
+        let top_level: HashSet<&str> = ir.functions.iter().map(|f| f.name.as_str()).collect();
+        // 对应 `qualify_names` 里的 `rename` 表：本单元函数**已限定**，故这里是
+        // 恒等映射（限定名 → 自身）。恒等而非「裸名 → 限定名」很重要：请求名若是
+        // 裸名（具名导入 `use lib.{pick}` 的 `pick`），不得被本单元同名的限定名
+        // 抢先命中——那种情况正是模块别名（`pick` → `lib.pick`）要接管的分支。
+        let rename: HashMap<String, String> = top_level
+            .iter()
+            .map(|name| ((*name).to_string(), (*name).to_string()))
+            .collect();
+        // 模块别名表（本地名 → 限定名）：调 ir_gen 的**同一实现**
+        // `import_aliases_from`（`qualify_names` 改写调用名用的就是它跑出来的表），
+        // 传本单元 AST 与同一 registry——一处生产、一处消费，不在驱动侧另建表，
+        // 也不复刻任何解析/优先级规则。
+        let aliases: HashMap<String, String> = unit_asts
+            .get(i)
+            .and_then(|a| a.as_ref())
+            .map(|ast| {
+                crate::middle::core::ir_gen::AstToIrGenerator::import_aliases_from(ast, registry)
+            })
+            // 无 AST（上游失败）时无可解析：空表等价于纯单元键限定化
+            .unwrap_or_default();
+        let resolver = |name: &str| -> Option<String> {
+            // 解析走 ir_gen 的**单点实现**（与生成期改写指令同一函数）
+            let raw = crate::middle::core::ir_gen::AstToIrGenerator::resolve_call_target(
+                name, &rename, &aliases,
+            );
+            let raw = raw.filter(|r| program_functions.contains(r.as_str()));
+            // 别名未命中时按单元键限定化——这正是 `qualify_names` 对**本单元**
+            raw.or_else(|| {
+                let qualified = SymbolTable::qualify(&units[i].key, name);
+                program_functions
+                    .contains(qualified.as_str())
+                    .then_some(qualified)
+            })
+        };
+        for request in &type_result.instantiation_requests {
+            let mut request = request.clone();
+            // 被调方名字（`generic_id.name`）→ IR 调用指令里的名字。
+            //
+            // 规则与 `qualify_names` **同一个实现**（`resolve_call_target`）：
+            // 完全匹配本单元函数名 / 完全匹配别名（具名导入 `use lib.{pick}`
+            // 的 `pick` → `lib.pick`）/ 前缀匹配（`Point.get_x` → `lib.Point.get_x`）。
+            // 请求名与 IR 调用指令名必须逐字一致（调用点改写三元键的名字维度）：
+            // 只改一边会让改写落空、原件删除后调用点悬空（E6006），或反过来让
+            // mono 认不出请求对象（E3018）。std 调用（`std.list.len`）与 native
+            // 名不在本单元函数表里，保持原名（mono 侧显式跳过）。
+            if let Some(resolved) = resolver(request.generic_id().name()) {
+                request.generic_id =
+                    GenericFunctionId::new(resolved, request.generic_id().type_params().to_vec());
+            }
+            // 所在函数名：裸名 → 本单元限定名，使 deferred 桶键与 merged IR 同源
+            if let Some(bare) = request.containing_fn.as_deref() {
+                let qualified = SymbolTable::qualify(&units[i].key, bare);
+                if top_level.contains(qualified.as_str()) {
+                    request.containing_fn = Some(qualified);
+                }
+            }
+            aggregated.push(request);
+        }
+    }
+    aggregated
 }
 
 /// T4：入口文件是否必须定义 `main`（Bin 要求）——自 orchestrator 移入（4.2.1）。

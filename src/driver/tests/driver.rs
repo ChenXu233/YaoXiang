@@ -288,13 +288,291 @@ fn make_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
 }
 
 /// 以 MultiFile 形态跑 Driver（入口单元为占位——Discovery 臂负责展开）。
-fn run_multi(entry: &Path) -> Result<DriverOutcome, DriverError> {
+pub(super) fn run_multi(entry: &Path) -> Result<DriverOutcome, DriverError> {
     let program = Program::new(
         ProgramKind::MultiFile,
         vec![Unit::new("main", entry, "")],
         CompileConfig::default(),
     );
     Driver::new().run(program)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WBS 3.4.8 ②（2026-10-10）：多文件单态化臂接线——行为判据
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// 多文件项目夹具：写盘但**不放 manifest**——入口按 Script 角色编译，
+/// 顶层绑定即程序体（值绑定 `v = …` 在初始化期求值，可经解释器全局槽位观察）。
+/// 带 manifest 的 Bin 角色还要求 main 绑定（E3020），与本组判据无关。
+pub(super) fn make_script_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let mut entry = PathBuf::new();
+    for (name, content) in files {
+        let path = dir.path().join(name);
+        std::fs::write(&path, content).expect("write project file");
+        if *name == "main.yx" {
+            entry = path;
+        }
+    }
+    (dir, entry)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// t3 F1：多文件 IR 自洽——模块顶层初始化序列的调用名也必须限定
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// F1 红判据（t3 p9/p10 的驱动侧复现）：多文件下**模块顶层调用本模块顶层函数**
+/// 时，函数定义被 `qualify_names` 限定（`main.main.helper`）、而 `ir.init` 里的
+/// 调用名此前保持裸名 → 运行期按裸名查扁平函数表落空（E6006）。
+/// 与泛型无关：这里 `helper` 是普通非泛型函数。
+#[test]
+fn test_driver_run_multi_file_top_level_call_to_local_function_runs() {
+    // Arrange：single.yx 顶层绑定直接调用同文件普通函数（无 use、无泛型）
+    let (_dir, entry) =
+        make_script_project(&[("main.yx", "helper: () -> Int = () => { 7 }\nv = helper()\n")]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert：编译成功且 init 段真的把 v 算出来了（Int(7)）
+    assert!(
+        outcome.failure.is_none(),
+        "顶层调用本文件函数不得编译失败：{:?}",
+        outcome.failure
+    );
+    let value = run_merged_slot0(outcome.module.expect("must produce IR"));
+    assert!(
+        value == "Int(7)",
+        "多文件顶层调用本文件函数应得 Int(7)（F1 前是 E6006：函数表缺失裸名 helper），实际：{value:?}"
+    );
+}
+
+/// t3 p3a/p11 形态（泛型红判据）：两个模块各自定义**同名**泛型函数、各自在
+/// 模块顶层调用它——两个定义都进 merged IR，调用点必须各自落到正确的那一个上
+/// （不是静默停在类型擦除、也不是接到另一侧）。
+#[test]
+fn test_driver_run_multi_file_same_name_generics_specialize_per_module() {
+    // Arrange：a.pick 一参 + b.pick 两参，各自模块顶层调用（入口同时 use 两边）
+    let (_dir, entry) = make_script_project(&[
+        (
+            "a.yx",
+            "pick: (T: Type) -> (x: T) -> T = (x) => x\nv = pick(11)\n",
+        ),
+        (
+            "b.yx",
+            "pick: (T: Type) -> (x: T, n: Int) -> T = (x, n) => x\nw = pick(22, 3)\n",
+        ),
+        ("main.yx", "use a\nuse b\n"),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert：两个同名泛型各自特化出自己的版本（不得合并/漏掉一侧）
+    assert!(
+        outcome.failure.is_none(),
+        "同名泛型跨模块各自顶层调用不得编译失败：{:?}",
+        outcome.failure
+    );
+    let merged = outcome.module.expect("Linking+mono must produce IR");
+    let names: Vec<String> = merged.functions.iter().map(|f| f.name.clone()).collect();
+    for expected in ["a.pick(int64)", "b.pick(int64)"] {
+        assert!(
+            names.iter().any(|n| n == expected),
+            "每个模块的同名泛型都必须特化出 {expected}（静默不特化的证据是它缺失）：{names:?}"
+        );
+    }
+
+    // Assert（运行期）：两处调用各自算出自己的实参值，互不串味
+    let values = run_merged_slot_values(merged);
+    assert!(
+        values.iter().any(|v| v == "Int(11)") && values.iter().any(|v| v == "Int(22)"),
+        "a.pick(11) 与 b.pick(22,3) 应各自算出 11 与 22，实际全局值：{values:?}"
+    );
+}
+
+/// F1 结构判据：合并 IR 里 init 段的调用名必须与函数表键**同源**（都带模块键）。
+/// 这条不依赖运行期，直接钉「IR 自洽」——只改函数体不改 init 就会在此红。
+#[test]
+fn test_driver_run_multi_file_init_calls_use_qualified_names() {
+    // Arrange：同一项目形态，另加一个被顶层调用的函数
+    let (_dir, entry) =
+        make_script_project(&[("main.yx", "helper: () -> Int = () => { 7 }\nv = helper()\n")]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+    let merged = outcome.module.expect("must produce IR");
+
+    // Assert：init 里出现的调用名都在函数表里（自洽），且裸名 helper 不存在
+    let function_names: Vec<String> = merged.functions.iter().map(|f| f.name.clone()).collect();
+    let init_calls: Vec<String> = merged
+        .init
+        .iter()
+        .filter_map(|i| match i {
+            crate::middle::core::ir::Instruction::Call {
+                func:
+                    crate::middle::core::ir::Operand::Const(
+                        crate::middle::core::ir::ConstValue::String(n),
+                    ),
+                ..
+            } => Some(n.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !init_calls.is_empty(),
+        "夹具应至少有一条 init 调用（否则判据空转）：{init_calls:?}"
+    );
+    assert!(
+        !init_calls.iter().any(|n| n == "helper"),
+        "init 段不得残留裸名 helper——函数表里只有 main.helper，裸名即 E6006：{init_calls:?}"
+    );
+    assert!(
+        init_calls.iter().all(|n| function_names.contains(n)),
+        "init 段调用名必须都在函数表里（同源）：init={init_calls:?} funcs={function_names:?}"
+    );
+}
+/// 多文件编译产物跑完 codegen + 解释器后，全局槽位 0 的值。
+/// 判据与 codegen 全局槽位测试同源：`v` 是入口顶层值绑定，槽位由
+/// `allocate_global_slots` 分配（本项目内它是 0 号）。
+/// 多文件产物跑完 codegen + 解释器后，**全部**全局槽位的值（调试字符串）。
+/// 槽位号由 `allocate_global_slots` 按单元发现序分配，本组用例不依赖具体号，
+/// 故取全集断言「值出现过」。
+fn run_merged_slot_values(module: crate::middle::ModuleIR) -> Vec<String> {
+    let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+    let file = ctx.generate().expect("codegen must succeed");
+    let bytecode_module = crate::middle::bytecode::BytecodeModule::from(file);
+    let mut interp = crate::backends::interpreter::Interpreter::new();
+    use crate::backends::Executor as _;
+    interp
+        .execute_module(&bytecode_module)
+        .expect("interpreter must execute merged module");
+    (0..16)
+        .map_while(|i| interp.global_slot(i).map(|v| format!("{v:?}")))
+        .collect()
+}
+
+fn run_merged_slot0(module: crate::middle::ModuleIR) -> String {
+    let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+    let file = ctx.generate().expect("codegen must succeed");
+    let bytecode_module = crate::middle::bytecode::BytecodeModule::from(file);
+    let mut interp = crate::backends::interpreter::Interpreter::new();
+    use crate::backends::Executor as _;
+    interp
+        .execute_module(&bytecode_module)
+        .expect("interpreter must execute merged module");
+    format!(
+        "{:?}",
+        interp.global_slot(0).expect("global slot 0 must exist")
+    )
+}
+
+/// 3.4.8 ②：跨单元泛型调用在多文件路径下必须真正被单态化并执行——
+/// `lib.pick` 的类型参数只出现在**借用内层**（`x: &T`），这是 T1 之前
+/// 收集不到请求、mono 不介入的形态。断言「执行成功 + 槽位值等于实参」，
+/// 与单文件路径的同一表达式对照（等价判据：两形态产出同一可观测值）。
+#[test]
+fn test_driver_run_multi_file_cross_unit_generic_call_runs_like_single_file() {
+    // Arrange：lib 导出泛型 read（类型参数只在借用内层），入口跨模块限定调用
+    let (_dir, entry) = make_script_project(&[
+        ("lib.yx", "pick: (T: Type) -> (x: &T) -> T = (x) => x\n"),
+        ("main.yx", "use lib\nv = lib.pick(7)\n"),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert：编译无故障，且执行后槽位值 = 实参 7（单文件同式同值）
+    assert!(
+        outcome.failure.is_none(),
+        "跨单元泛型调用不得编译失败：{:?}",
+        outcome.failure
+    );
+    let merged = outcome.module.expect("Linking+mono must produce IR");
+    let multi_file_value = run_merged_slot0(merged);
+    assert!(
+        multi_file_value == "Int(7)",
+        "跨单元泛型调用 v = lib.pick(7) 应得 Int(7)，实际：{multi_file_value:?}"
+    );
+
+    // Assert（等价判据）：同一表达式走**单文件**路径（泛型定义与调用同文件）
+    // 执行后必须得到同一可观测值——跨单元调用不改变语义
+    let single = run_single(
+        "pick: (T: Type) -> (x: &T) -> T = (x) => x\nv = pick(7)\n",
+        CompileConfig::default(),
+    )
+    .expect("single-file driver run failed");
+    assert!(
+        single.result.is_success(),
+        "单文件对照程序必须编译成功：{:?}",
+        single.result.errors
+    );
+    let single_file_value = run_merged_slot0(single.result.ir.expect("single-file IR"));
+    assert_eq!(
+        multi_file_value, single_file_value,
+        "多文件跨单元泛型调用必须与单文件同表达式产出同一值"
+    );
+}
+
+/// 3.4.8 ②：**单文件项目**（MultiFile 形态下 N=1）也必须走多文件 mono 路径——
+/// 形态判据是 ProgramKind（数据流形状），不是单元数：该形态下单元 IR 已被
+/// Linking 取走进 merged_ir，按单元数分派会落进单文件分支空转（mono 名存实亡，
+/// 泛型调用退回类型擦除执行）。
+#[test]
+fn test_driver_run_single_file_project_still_monomorphizes() {
+    // Arrange：只有入口一个文件，泛型定义与调用同文件（Script 角色，值绑定可观察）
+    let (_dir, entry) = make_script_project(&[(
+        "main.yx",
+        "pick: (T: Type) -> (x: T) -> T = (x) => x\nv = pick(7)\n",
+    )]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert：编译成功且执行得 Int(7)（mono 真跑过，不是擦除执行）
+    assert!(
+        outcome.failure.is_none(),
+        "单文件项目不得编译失败：{:?}",
+        outcome.failure
+    );
+    let value = run_merged_slot0(outcome.module.expect("must produce IR"));
+    assert!(
+        value == "Int(7)",
+        "单文件项目的泛型调用应得 Int(7)，实际：{value:?}"
+    );
+}
+/// 3.4.8 ②：病态泛型递归 `f(x) = f([x])` 在多文件下必须在**编译期**报
+/// E3005（特化链深度超限）——mono 介入前该程序以类型擦除执行到进程栈
+/// 溢出（0xC00000FD）。断言：有故障 + 诊断码 E3005 + 阶段为 mono。
+#[test]
+fn test_driver_run_multi_file_pathological_generic_recursion_reports_e3005() {
+    // Arrange：lib.f 递归调用自身、实参类型逐层增长（T → Vec(T) → …）
+    let (_dir, entry) = make_script_project(&[
+        (
+            "lib.yx",
+            "f: (T: Type) -> (x: T) -> T = (x) => {\n    return f([x])\n}\n",
+        ),
+        ("main.yx", "use lib\nv = lib.f(1)\n"),
+    ]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+
+    // Assert：编译期 E3005，不是栈溢出、也不是静默成功
+    let Some(OrchestratorError::TypeCheck { diagnostics, .. }) = &outcome.failure else {
+        panic!(
+            "病态泛型递归必须编译期失败（E3005），实际：{:?}",
+            outcome.failure.as_ref().map(|e| format!("{e}"))
+        );
+    };
+    assert!(
+        diagnostics.iter().any(|d| d.code == "E3005"),
+        "诊断必须是 E3005（特化链深度超限）：{diagnostics:?}"
+    );
+    assert!(
+        outcome.module.is_none(),
+        "mono 失败后不得产出 IR（否则下游会执行未特化的原件）"
+    );
 }
 
 #[test]

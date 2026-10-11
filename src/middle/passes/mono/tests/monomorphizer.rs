@@ -1394,3 +1394,191 @@ fn test_scale_cap_independent_of_depth() {
         err.message
     );
 }
+
+// ==================== 3.4.8 ② 全程序 mono：桶键与名字解析 ====================
+
+/// t5（响亮路径）：请求名是**未限定化的裸名**、而定义表里只有 `{module}.{bare}`
+/// 时，必须报诊断而不是静默 `continue`——后者会把「驱动侧限定化漏了」藏到
+/// 运行期（调用点悬空 E6006 或退回类型擦除）。
+#[test]
+fn test_unqualified_request_name_with_qualified_definition_is_loud() {
+    // Arrange：定义键是 main.pick，请求名却是裸名 pick
+    let mut mono = Monomorphizer::new();
+    let mut identity = make_identity_ir();
+    identity.name = "main.pick".to_string();
+    mono.generic_functions
+        .insert("main.pick".to_string(), identity);
+    let req = request("pick", &["T"], MonoType::Int(64), Span::default());
+
+    // Act
+    let result = mono.monomorphize(&module_with(Vec::new()), &[req]);
+
+    // Assert：响亮失败，且消息指向「未限定化」这一根因
+    let err = result.expect_err("未限定化的裸名请求必须报诊断而非静默跳过");
+    assert!(
+        err.message.contains("未限定化") || err.message.contains("main.pick"),
+        "诊断应指出请求名未限定化并给出真实定义键，实际：{}",
+        err.message
+    );
+}
+
+/// t5（native 面不受影响）：定义表里**根本没有**同名候选时保持跳过——
+/// native 泛型没有 IR 定义，不该被响亮路径误伤。
+#[test]
+fn test_request_without_any_definition_stays_skipped() {
+    // Arrange：请求指向一个定义表里不存在的名字（native 泛型形态）
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+    let req = request("native_only", &["T"], MonoType::Int(64), Span::default());
+
+    // Act
+    let result = mono.monomorphize(&module_with(Vec::new()), &[req]);
+
+    // Assert：无定义可特化 → 跳过（不报错、不产特化）
+    let output = result.expect("无 IR 定义的请求（native 形态）不得报错");
+    let names: Vec<String> = output.functions.iter().map(|f| f.name.clone()).collect();
+    assert!(
+        !names.iter().any(|n| n.starts_with("native_only(")),
+        "无 IR 定义的请求不得产出特化：{names:?}"
+    );
+}
+
+/// 3.4.8 ② 钉测试：deferred 桶键 = 容器函数的**限定名**（与多文件 merged IR
+/// 的函数表键同源）时，递归链必须逐层展开（此处 `grow(T)` 的实参类型逐层
+/// 增长），深度上限拦截并报错。桶键错配（驱动侧限定化缺失）时链在第一层断掉，
+/// 既不出诊断、原件又以类型擦除执行——即本测试的红态。
+#[test]
+fn test_deferred_bucket_qualified_container_key_expands_recursion_chain() {
+    // Arrange：IR 键为限定名 lib.grow，桶挂在同一限定名下（同驱动侧产物）
+    let mut mono = Monomorphizer::with_max_depth(5);
+    let mut grow = make_grow_ir();
+    grow.name = "lib.grow".to_string();
+    mono.generic_functions.insert("lib.grow".to_string(), grow);
+    let mut seed = request("lib.grow", &["T"], MonoType::Int(64), Span::default());
+    seed.containing_fn = Some("lib.grow".to_string());
+    let placeholder = request("lib.grow", &["T"], list_of(type_ref("T")), Span::default());
+    defer_request(&mut mono, "lib.grow", placeholder);
+
+    // Act
+    let result = mono.monomorphize(&module_with(Vec::new()), &[seed]);
+
+    // Assert：链展开到超过 max_depth(5) 即被拦（不是静默通过）
+    let err = result.expect_err("限定名桶键下的递归链必须展开到深度上限并报错");
+    assert!(
+        err.message.contains("深度") || err.message.contains("递归"),
+        "错误应指向特化链深度，实际：{}",
+        err.message
+    );
+}
+
+/// 3.4.8 ② 钉测试：请求带的**裸名**（typecheck 逐单元只知道裸名）必须按容器
+/// 限定名解析到 IR 定义（`main.identity`），同时调用点改写的名字维度仍与 IR
+/// 调用指令逐字一致（`identity`）——两件事必须同时成立，否则调用点会悬空（E6006）。
+#[test]
+fn test_bare_request_name_resolves_to_qualified_definition_and_rewrites_call_site() {
+    // Arrange：定义键限定、请求裸名、调用指令也用裸名（多文件 IR 的真实形态）
+    let mut identity = make_identity_ir();
+    identity.name = "main.identity".to_string();
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("main.identity".to_string(), identity);
+    let call_span = span_at(0, 0, 0, 1, 1);
+    let main = make_fn_ir(
+        "main.main",
+        Vec::new(),
+        MonoType::Void,
+        None,
+        vec![
+            call_instr_at(
+                Some(Operand::Local(0)),
+                "identity",
+                vec![Operand::Const(ConstValue::Int(7))],
+                call_span,
+            ),
+            ret_instr(None),
+        ],
+        vec![LocalSlot::temp(MonoType::Int(64))],
+    );
+    let mut req = request("identity", &["T"], MonoType::Int(64), call_span);
+    req.containing_fn = Some("main.main".to_string());
+
+    // Act
+    let output = mono
+        .monomorphize(&module_with(vec![main]), &[req])
+        .expect("裸名请求应解析到限定定义并完成特化");
+
+    // Assert：产出限定特化名 `main.identity(int64)`，且调用点改写为同名
+    let names: Vec<String> = output.functions.iter().map(|f| f.name.clone()).collect();
+    assert!(
+        names.iter().any(|n| n == "main.identity(int64)"),
+        "裸名请求必须特化出限定名版本 main.identity(int64)，实际函数表：{names:?}"
+    );
+    let rewritten = output
+        .functions
+        .iter()
+        .find(|f| f.name == "main.main")
+        .expect("非泛型 main 必须保留");
+    let call_ok = rewritten
+        .blocks()
+        .iter()
+        .flat_map(|b| b.instructions.iter())
+        .any(|i| is_call_to(i, "main.identity(int64)"));
+    assert!(
+        call_ok,
+        "调用点必须改写到限定特化名 main.identity(int64)（否则原件删除后悬空 E6006）"
+    );
+}
+
+/// t5 钉测试（歧义守卫 → 响亮）：全程序有**两个**同名泛型定义、请求又是未限定
+/// 裸名时，不得擅自命中其中之一——t5 起这条路径改为**响亮诊断**（此前静默
+/// 跳过会把「驱动侧限定化漏了」藏到运行期）。
+#[test]
+fn test_ambiguous_bare_name_is_not_resolved_to_arbitrary_definition() {
+    // Arrange：a.pick 与 b.pick 两个同名泛型定义，请求不带容器
+    let mut a = make_identity_ir();
+    a.name = "a.pick".to_string();
+    let mut b = make_identity_ir();
+    b.name = "b.pick".to_string();
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions.insert("a.pick".to_string(), a);
+    mono.generic_functions.insert("b.pick".to_string(), b);
+    let req = request("pick", &["T"], MonoType::Int(64), Span::default());
+
+    // Act
+    let result = mono.monomorphize(&module_with(Vec::new()), &[req]);
+
+    // Assert：响亮失败（不得挑一个特化、也不得静默通过）
+    let err = result.expect_err("歧义裸名必须响亮诊断而非静默挑一个特化");
+    assert!(
+        err.message.contains("未限定化"),
+        "诊断应指出请求名未限定化（歧义根因），实际：{}",
+        err.message
+    );
+}
+
+/// 3.4.8 ② 钉死（deferred 桶的显式形态）：符号化实参的请求若**没有容器**
+/// （模块顶层 init 里调用泛型，围住它的不是任何函数），不得入队、也不得
+/// 伪造特化——维持「不特化、调用点不动」的显式跳过（类型擦除执行）。
+#[test]
+fn test_symbolic_request_without_container_stays_erased() {
+    // Arrange：请求实参含 TypeRef（符号化）且 containing_fn = None
+    let mut mono = Monomorphizer::new();
+    mono.generic_functions
+        .insert("identity".to_string(), make_identity_ir());
+    let req = request("identity", &["T"], type_ref("T"), Span::default());
+
+    // Act
+    let output = mono
+        .monomorphize(&module_with(Vec::new()), &[req])
+        .expect("无容器的符号化请求应被跳过而非报错");
+
+    // Assert：不得伪造**符号化**特化版本（`identity(T)`——T 未求值）。
+    // 注：请求无容器时**不入队**，这份 `name` 是 `build_output` 按
+    // 「无请求的泛型」既有判据保留的原件，不是求值产物。
+    let names: Vec<String> = output.functions.iter().map(|f| f.name.clone()).collect();
+    assert!(
+        !names.iter().any(|n| n.contains("(int64)")),
+        "无容器的符号化请求不得被当成具体实参特化（这是它区别于入队路径的判据）：{names:?}"
+    );
+}

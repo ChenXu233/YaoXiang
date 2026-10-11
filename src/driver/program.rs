@@ -67,6 +67,10 @@ const MULTI_FILE_STAGES: &[Stage] = &[
     Stage::GlobalSlotAlloc,
     Stage::IrGeneration,
     Stage::Linking,
+    // 3.4.8 ②（2026-10-10）：合并 IR 之后的单态化——全程序一张函数表，
+    // 各单元的实例化请求在此聚合（单文件与 EMBEDDED 的表不动，仍各自在
+    // 单元 IR 上跑 mono；CHECK 的增补属 R3）
+    Stage::Monomorphization,
 ];
 
 // 注：check_project 现状是 proof（orchestrator.rs）先于 dead_code 执行；

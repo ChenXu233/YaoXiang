@@ -15,6 +15,7 @@ use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::FileRole;
 use crate::frontend::pipeline::{CompilationResult, PipelineError};
+use crate::middle::passes::mono::instance::InstantiationRequest;
 use crate::middle::ModuleIR;
 use crate::util::diagnostic::Diagnostic;
 
@@ -144,6 +145,11 @@ pub(in crate::driver) struct State {
     pub(in crate::driver) slot_bases: Vec<usize>,
     /// Linking 产物
     pub(in crate::driver) merged_ir: Option<ModuleIR>,
+    /// 全程序实例化请求表（3.4.8 ②）：Linking 臂在**消费各单元 IR 之前**
+    /// 聚合产出（`aggregate_instantiation_requests`）——`containing_fn`
+    /// 限定化需要逐单元的函数名集合，而那正是 Linking 取走的产物；
+    /// Monomorphization 臂读它（多文件形态的请求来源）。
+    pub(in crate::driver) aggregated_requests: Vec<InstantiationRequest>,
 }
 
 /// 逐编译单元的阶段产物（PerModule 阶段的执行粒度）。
@@ -195,6 +201,7 @@ impl State {
             global_layout: None,
             slot_bases: Vec::new(),
             merged_ir: None,
+            aggregated_requests: Vec::new(),
         }
     }
 
@@ -333,8 +340,11 @@ fn data_dependencies(stage: Stage) -> &'static [Stage] {
         Stage::ProofExecution => &[Stage::Typecheck],
         Stage::GlobalSlotAlloc => &[Stage::Parsing],
         Stage::IrGeneration => &[Stage::Parsing, Stage::Registry, Stage::GlobalSlotAlloc],
-        Stage::Monomorphization => &[Stage::IrGeneration],
         Stage::Linking => &[Stage::IrGeneration],
+        // 3.4.8 ②（2026-10-10）：mono 消费 Linking 产物——多文件形态下
+        // 跨单元泛型定义只在 merged IR 里齐备；单文件阶段表无 Linking，
+        // 该边对它不生效（拓扑判定只在阶段表内找上游）
+        Stage::Monomorphization => &[Stage::Linking],
         _ => &[],
     }
 }
