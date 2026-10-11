@@ -656,7 +656,7 @@ impl Driver {
 >     理由，落 `coding-rules.md` 第二部分与 HOWTO 自检表；需用户拍板的取舍按
 >     `AGENTS.md`「请求用户裁决时（强制）」给全四件（情况+证据 / 逐项优缺点 /
 >     明确推荐+代价 / 破坏性点名）。
-> 17. 3.4.8 ② 落地与 F1 根因（2026-10-11，b554497b + e60dcc87）。② 按 #14 设计落地：
+> 17. 3.4.8 ② 落地与 F1 根因（2026-10-11，375789d2 + d922a551）。② 按 #14 设计落地：
 >     `Stage::ALL` 改为 Linking 先于 Monomorphization、MULTI_FILE 表尾追加 mono；Linking 臂
 >     在**取走各单元 IR 之前**聚合全程序请求并把 `containing_fn` 限定化（否则 deferred 桶键
 >     与 merged IR 不同源、桶永不排水）。**① 收口（D2 裁甲）**：用户模块导出随
@@ -672,13 +672,15 @@ impl Driver {
 >     并以矩阵钉测试覆盖具名导入两形态。**留档**：init 段 `DefId` 空白经实证为「一致性空白」
 >     而非活体缺陷（codegen 名字回退可解析、四类 init 调用实测通过），已登记 WBS 3.7.4
 >     以收口「函数体走 def、init 靠名字」的口径分叉。
-> 18. init 段 DefId 口径分叉收口（3.7.4，2026-10-11，b7ac7396）：`assign_defs` 抽出
+> 18. init 段 DefId 口径分叉收口（3.7.4，2026-10-11，38bd4b9e）：`assign_defs` 抽出
 >     `resolve_static_targets` 单点（Call/TailCall 字符串操作数 + MakeClosure），函数体与
 >     `ir.init` 共用同一实现与同一 `resolve` 闭包；208 个 IR 快照再生后仅 309 对
 >     `(def=_)`→`(def=dN)` 变化（other-lines 0；全树 init 段 0 条残留 `(def=_)`）。codegen
 >     的 DefId 主路径与名字回退两态下翻译结果与执行值逐项一致（四类 init 调用实测），
 >     语料基线零漂移；探针按新口径翻转并加强（身份 + 精确索引 + 执行值，回退 init 覆盖
->     即致红）。
+>     即致红）。**勘误（2026-10-11）**：上述提交号经 `git pull --rebase` 重写——原
+>     b554497b/e60dcc87/b7ac7396 依次对应 rebase 后的 375789d2/d922a551/38bd4b9e；
+>     已推送的 dev 历史以新号为准（旧号为本地临时号，未进入远程历史）。
 
 **十个入口的改造方式（逐个指定函数）**：
 
