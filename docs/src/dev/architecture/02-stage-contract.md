@@ -656,6 +656,22 @@ impl Driver {
 >     理由，落 `coding-rules.md` 第二部分与 HOWTO 自检表；需用户拍板的取舍按
 >     `AGENTS.md`「请求用户裁决时（强制）」给全四件（情况+证据 / 逐项优缺点 /
 >     明确推荐+代价 / 破坏性点名）。
+> 17. 3.4.8 ② 落地与 F1 根因（2026-10-11，b554497b + e60dcc87）。② 按 #14 设计落地：
+>     `Stage::ALL` 改为 Linking 先于 Monomorphization、MULTI_FILE 表尾追加 mono；Linking 臂
+>     在**取走各单元 IR 之前**聚合全程序请求并把 `containing_fn` 限定化（否则 deferred 桶键
+>     与 merged IR 不同源、桶永不排水）。**① 收口（D2 裁甲）**：用户模块导出随
+>     `Export::type_params` 携带声明期类型参数快照，与 std 路径（`yx_sources.rs:62/108`）同构。
+>     **过程中实证并修复的既有缺陷**：(a) **F1**——`qualify_names` 只重写函数体，`ir.init`
+>     从不被访问，多文件下函数定义已限定而模块顶层调用仍裸名 → 运行期 E6006
+>     （**非泛型即复现**，与泛型无关）；修复为 init 复用同一 `rename`/`aliases` 与同一
+>     `rewrite_call_names`。(b) mono 侧「全程序唯一后缀」启发式与未命中静默 `continue` →
+>     删除启发式、未命中改**响亮 E3018**（歧义静默错配比不解析更糟）。**独立验证抓到并修复
+>     的回归**：t6 发现具名导入 `use lib.{pick}` 后裸名调用被 E3018 误拒（IR 指令名是别名
+>     限定名、请求名是裸名，聚合侧只按单元键限定化）→ 修复为聚合侧**直调 ir_gen 的**
+>     `import_aliases_from` 与 `resolve_call_target`（抽为 pub 单点，一处生产一处消费），
+>     并以矩阵钉测试覆盖具名导入两形态。**留档**：init 段 `DefId` 空白经实证为「一致性空白」
+>     而非活体缺陷（codegen 名字回退可解析、四类 init 调用实测通过），已登记 WBS 3.7.4
+>     以收口「函数体走 def、init 靠名字」的口径分叉。
 
 **十个入口的改造方式（逐个指定函数）**：
 
