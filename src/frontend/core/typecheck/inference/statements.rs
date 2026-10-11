@@ -2865,7 +2865,6 @@ impl StatementChecker {
                         inferrer.set_type_defs(&self.type_defs);
                         inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_generic_type_defs(&self.generic_type_defs);
-                        inferrer.set_generic_fn_type_params(&self.generic_fn_type_params);
                         inferrer.set_current_fn_param_constraints(
                             self.current_fn_param_constraints.as_ref(),
                         );
