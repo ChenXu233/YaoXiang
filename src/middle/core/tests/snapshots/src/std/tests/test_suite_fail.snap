@@ -47,4 +47,4 @@ module
     Call %0 <- string("pop_still_runs") [] (def=d6)
     Ret %0
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d7)

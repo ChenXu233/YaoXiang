@@ -44,4 +44,4 @@ module
   init (locals=2)
     islot[0] self : Int(64) @depth1
     islot[1] surface : Int(64) @depth1
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d5)

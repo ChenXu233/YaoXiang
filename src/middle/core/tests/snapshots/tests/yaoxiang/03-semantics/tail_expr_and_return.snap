@@ -95,4 +95,4 @@ module
     Call %5 <- string("no_return_has_side_effect") [] (def=d6)
     Ret %5
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d7)

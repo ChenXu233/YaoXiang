@@ -1089,30 +1089,48 @@ impl AstToIrGenerator {
                 }
             })
         };
-        // 指令的 DefId 解析只覆盖函数体——init 段保持既有行为（多文件下 def
-        // 仍为 None，运行期按限定名解析）。t3 F1 只需调用名重写（见
-        // `qualify_names` 的 init 循环）；补 init 的 def 会改动全部 IR 快照，
-        // 而所修行为相同，故不并入本轮。
+        // 函数体：逐指令解析静态调用目标。
         for func in &mut ir.functions {
             if func.is_type_decl() {
                 continue; // TypeDecl 无指令体
             }
             for block in func.blocks_mut() {
                 for instr in &mut block.instructions {
-                    match instr {
-                        Instruction::Call { func, def, .. }
-                        | Instruction::TailCall { func, def, .. } => {
-                            if let Operand::Const(ConstValue::String(name)) = func {
-                                *def = resolve(name);
-                            }
-                        }
-                        Instruction::MakeClosure { func, def, .. } => {
-                            *def = resolve(func);
-                        }
-                        _ => {}
-                    }
+                    Self::resolve_static_targets(instr, &resolve);
                 }
             }
+        }
+        // 模块顶层初始化序列：与函数体**同一套解析规则**（2026-10-11 裁甲）。
+        //
+        // 此前 init 段被有意跳过，于是同一张扁平函数表出现两套身份口径：函数体
+        // 走 DefId，init 段恒 None 只能按名回退。名字与 def 在 codegen 里指向同一
+        // 个函数表下标（名字由 `qualify_names` 与函数定义同源改写），故本改动
+        // 不改变翻译结果，只消除「def 是否为空」的口径分叉——将来任何假设
+        // 「def 恒有值」的 IR pass 不会在 init 段踩空。
+        for instr in &mut ir.init {
+            Self::resolve_static_targets(instr, &resolve);
+        }
+    }
+
+    /// 解析单条指令里的静态调用目标 DefId：`Call`/`TailCall` 的字符串操作数、
+    /// `MakeClosure` 的目标名，其余指令不动。
+    ///
+    /// 函数体与模块初始化序列**共用本实现**（禁令三：一处生产、一处消费）——
+    /// 两处若各写一套映射，正是 t12 要消除的口径分叉。
+    fn resolve_static_targets(
+        instr: &mut Instruction,
+        resolve: &impl Fn(&str) -> Option<crate::frontend::module::symbol::DefId>,
+    ) {
+        match instr {
+            Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {
+                if let Operand::Const(ConstValue::String(name)) = func {
+                    *def = resolve(name);
+                }
+            }
+            Instruction::MakeClosure { func, def, .. } => {
+                *def = resolve(func);
+            }
+            _ => {}
         }
     }
 

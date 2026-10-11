@@ -83,4 +83,4 @@ module
     Load %0 <- int(42)
     Ret %0
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d10)

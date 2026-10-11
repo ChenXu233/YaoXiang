@@ -409,4 +409,4 @@ module
     Call %2 <- string("std.fs.path_basename") [%0] (def=d26)
     Ret %2
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d38)

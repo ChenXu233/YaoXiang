@@ -48,4 +48,4 @@ module
     islot[0] self : Int(64) @depth1
     islot[1] dx : Int(64) @depth1
     islot[2] dy : Int(64) @depth1
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d5)

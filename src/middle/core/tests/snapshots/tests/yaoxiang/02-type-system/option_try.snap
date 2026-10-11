@@ -83,4 +83,4 @@ module
     Jmp -> instr(55)
     Ret %6
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d6)

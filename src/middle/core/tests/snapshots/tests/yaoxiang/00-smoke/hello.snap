@@ -3,4 +3,4 @@ module
     locals_total=0
     Ret
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d0)

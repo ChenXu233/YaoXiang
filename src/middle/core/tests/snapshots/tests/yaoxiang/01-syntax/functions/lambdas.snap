@@ -68,4 +68,4 @@ module
     Move %6 <- %7
     Ret %6
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d4)

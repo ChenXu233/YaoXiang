@@ -100,4 +100,4 @@ module
     Load %0 <- int(7)
     Store @1 <- %0
     Store @0 <- %1
-    Call %2 <- string("main") [] (def=_)
+    Call %2 <- string("main") [] (def=d7)

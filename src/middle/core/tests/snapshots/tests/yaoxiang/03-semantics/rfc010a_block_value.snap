@@ -136,4 +136,4 @@ module
     Call %5 <- string("std.io.println") [%3] (def=d0)
     Ret %5
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d9)

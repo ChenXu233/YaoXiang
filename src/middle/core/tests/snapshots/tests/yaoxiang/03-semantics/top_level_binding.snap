@@ -47,8 +47,8 @@ module
     Mul %4 <- %2, %3
     Store @1 <- %4
     Load %1 <- int(41)
-    Call %4 <- string("inc") [%1] (def=_)
+    Call %4 <- string("inc") [%1] (def=d2)
     Store @2 <- %4
     Load %2 <- int(3)
     Store @3 <- %2
-    Call %1 <- string("main") [] (def=_)
+    Call %1 <- string("main") [] (def=d3)

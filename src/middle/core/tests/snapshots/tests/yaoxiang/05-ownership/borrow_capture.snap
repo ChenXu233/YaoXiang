@@ -42,4 +42,4 @@ module
   init (locals=0)
     Load %0 <- int(5)
     Store @0 <- %0
-    Call %1 <- string("main") [] (def=_)
+    Call %1 <- string("main") [] (def=d4)

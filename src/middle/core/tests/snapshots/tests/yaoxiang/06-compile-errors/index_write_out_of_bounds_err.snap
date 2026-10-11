@@ -28,4 +28,4 @@ module
     Call %2 <- string("std.io.print") [%9] (def=d1)
     Ret %2
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d2)

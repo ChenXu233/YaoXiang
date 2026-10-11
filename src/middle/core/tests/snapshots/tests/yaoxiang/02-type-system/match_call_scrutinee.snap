@@ -43,7 +43,7 @@ module
     islot[104] x : Int(64) @depth1
     Load %0 <- void
     Load %1 <- bool(false)
-    Call %2 <- string("pick") [%1] (def=_)
+    Call %2 <- string("pick") [%1] (def=d0)
     VariantTag %3 <- %2 : Option
     Load %4 <- int(0)
     Eq %5 <- %3, %4
@@ -63,7 +63,7 @@ module
     Store @0 <- %0
     Load %13 <- void
     Load %14 <- bool(true)
-    Call %15 <- string("pick") [%14] (def=_)
+    Call %15 <- string("pick") [%14] (def=d0)
     VariantTag %16 <- %15 : Option
     Load %17 <- int(0)
     Eq %18 <- %16, %17
@@ -103,7 +103,7 @@ module
     Store @2 <- %26
     Load %39 <- void
     Load %40 <- bool(true)
-    Call %41 <- string("mk") [%40] (def=_)
+    Call %41 <- string("mk") [%40] (def=d1)
     VariantTag %42 <- %41 : Result
     Load %43 <- int(0)
     Eq %44 <- %42, %43
@@ -125,7 +125,7 @@ module
     Store @3 <- %39
     Load %54 <- void
     Load %55 <- bool(false)
-    Call %56 <- string("mk") [%55] (def=_)
+    Call %56 <- string("mk") [%55] (def=d1)
     VariantTag %57 <- %56 : Result
     Load %58 <- int(0)
     Eq %59 <- %57, %58
@@ -147,7 +147,7 @@ module
     Store @4 <- %54
     Load %69 <- int(9)
     CreateVariant %70 <- Option::0 %69
-    Call %71 <- string("Holder") [%70] (def=_)
+    Call %71 <- string("Holder") [%70] (def=d2)
     Store @5 <- %71
     Load %72 <- void
     Load %73 <- @5
@@ -173,30 +173,30 @@ module
     Load %86 <- int(7)
     Eq %87 <- %85, %86
     Load %88 <- string("call scrutinee some arm payload")
-    Call %89 <- string("std.assert.assert") [%87, %88] (def=_)
+    Call %89 <- string("std.assert.assert") [%87, %88] (def=d3)
     Load %90 <- @1
     Load %91 <- int(0)
     Eq %92 <- %90, %91
     Load %93 <- string("call scrutinee none arm")
-    Call %94 <- string("std.assert.assert") [%92, %93] (def=_)
+    Call %94 <- string("std.assert.assert") [%92, %93] (def=d3)
     Load %95 <- @2
     Load %96 <- int(0)
     Eq %97 <- %95, %96
     Load %98 <- string("inline ctor scrutinee none arm")
-    Call %99 <- string("std.assert.assert") [%97, %98] (def=_)
+    Call %99 <- string("std.assert.assert") [%97, %98] (def=d3)
     Load %100 <- @3
     Load %101 <- int(5)
     Eq %102 <- %100, %101
     Load %103 <- string("result call scrutinee ok arm")
-    Call %104 <- string("std.assert.assert") [%102, %103] (def=_)
+    Call %104 <- string("std.assert.assert") [%102, %103] (def=d3)
     Load %105 <- @4
     Load %106 <- int(1)
     Neg %107 <- %106
     Eq %108 <- %105, %107
     Load %109 <- string("result call scrutinee err arm")
-    Call %110 <- string("std.assert.assert") [%108, %109] (def=_)
+    Call %110 <- string("std.assert.assert") [%108, %109] (def=d3)
     Load %111 <- @6
     Load %112 <- int(9)
     Eq %113 <- %111, %112
     Load %114 <- string("field access scrutinee payload")
-    Call %115 <- string("std.assert.assert") [%113, %114] (def=_)
+    Call %115 <- string("std.assert.assert") [%113, %114] (def=d3)

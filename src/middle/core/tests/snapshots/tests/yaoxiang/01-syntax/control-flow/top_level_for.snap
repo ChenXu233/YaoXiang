@@ -14,10 +14,10 @@ module
     Load %6 <- int(30)
     Load %7 <- int(2)
     StoreIndex %1[%7] <- %6
-    Call %8 <- string("std.list.iter") [%1] (def=_)
-    Call %9 <- string("std.list.has_next") [%8] (def=_)
+    Call %8 <- string("std.list.iter") [%1] (def=d0)
+    Call %9 <- string("std.list.has_next") [%8] (def=d1)
     JmpIfNot %9 -> instr(22)
-    Call %10 <- string("std.list.next") [%8] (def=_)
+    Call %10 <- string("std.list.next") [%8] (def=d2)
     Store %11 <- %10
     Load %12 <- @0
     Load %13 <- %11
@@ -28,4 +28,4 @@ module
     Load %12 <- int(60)
     Eq %10 <- %14, %12
     Load %13 <- string("顶层 for 累加 10+20+30 == 60")
-    Call %9 <- string("std.assert.assert") [%10, %13] (def=_)
+    Call %9 <- string("std.assert.assert") [%10, %13] (def=d3)

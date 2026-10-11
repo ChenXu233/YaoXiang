@@ -49,4 +49,4 @@ module
     Load %0 <- %1
     Ret %0
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d6)

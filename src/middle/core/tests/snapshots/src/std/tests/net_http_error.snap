@@ -7,4 +7,4 @@ module
     Call %3 <- string("std.net.http_get") [%0, %1, %2] (def=d1)
     Ret %3
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d2)

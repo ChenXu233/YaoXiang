@@ -20,16 +20,16 @@ module
     Load %7 <- int(5)
     Eq %8 <- %6, %7
     Load %9 <- string("精化变量的运行时值应原样传递")
-    Call %10 <- string("std.assert.assert") [%8, %9] (def=_)
+    Call %10 <- string("std.assert.assert") [%8, %9] (def=d0)
     Load %11 <- @2
     Load %12 <- int(6)
     Eq %13 <- %11, %12
     Load %14 <- string("精化变量应可参与 Int 算术")
-    Call %15 <- string("std.assert.assert") [%13, %14] (def=_)
+    Call %15 <- string("std.assert.assert") [%13, %14] (def=d0)
     Load %16 <- int(6)
     Store @3 <- %16
     Load %17 <- @3
     Load %18 <- int(6)
     Eq %19 <- %17, %18
     Load %20 <- string("精化变量的运行时类型是 Int，应可重赋 Int 值")
-    Call %21 <- string("std.assert.assert") [%19, %20] (def=_)
+    Call %21 <- string("std.assert.assert") [%19, %20] (def=d0)

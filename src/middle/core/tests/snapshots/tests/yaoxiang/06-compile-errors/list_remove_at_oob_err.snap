@@ -12,7 +12,7 @@ module
     Load %6 <- int(2)
     StoreIndex %0[%6] <- %5
     Load %7 <- int(5)
-    Call %8 <- string("std.list.remove_at") [%0, %7] (def=_)
+    Call %8 <- string("std.list.remove_at") [%0, %7] (def=d0)
     Store @0 <- %8
     Load %9 <- @0
-    Call %10 <- string("std.io.println") [%9] (def=_)
+    Call %10 <- string("std.io.println") [%9] (def=d1)

@@ -45,6 +45,6 @@ module
     Ret %0
   init (locals=0)
     Load %0 <- string("opaque type ok")
-    Call %1 <- string("std.io.println") [%0] (def=_)
+    Call %1 <- string("std.io.println") [%0] (def=d2)
     Store @0 <- %1
-    Call %2 <- string("main") [] (def=_)
+    Call %2 <- string("main") [] (def=d3)

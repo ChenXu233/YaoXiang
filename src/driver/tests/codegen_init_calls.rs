@@ -1,18 +1,30 @@
-//! 实证：**init 段（`def=None`）的调用在 codegen→字节码路径能否解析**。
+//! WBS 3.7.4 收口：**init 段与函数体的静态调用目标同口径**（2026-10-11 裁甲）。
 //!
-//! 背景：`ir_gen::assign_defs` 只覆盖 `ir.functions`，`ir.init` 的调用目标
-//! `def` 恒为 None；`translator::translate_call` 的解析优先级是
-//! DefId 命中 → FFI 元数据 → **名字命中** → std native 回退。
-//! 本组探针只做实证（不改解析优先级）：直接跑「编译 → codegen → 执行」。
+//! 规范来源：RFC-039 §3.7.4「init 段 DefId 与函数体同口径」。
 //!
-//! 每类调用都钉两件事：① 合并 IR 的 init 段确实 `def=None`；② 该调用在 codegen
-//! 后被解析成 CALL_STATIC 且索引落在真实函数上（执行成功 + 全局槽位取到正确值
-//! 即反向证明索引没错位）。
+//! 背景：ir_gen::assign_defs 原只覆盖 ir.functions，ir.init（模块顶层语句序列）
+//! 的调用目标 def 恒为 None；translator::translate_call 的解析优先级是
+//! DefId 命中 → FFI 元数据 → 名字命中 → std native 回退，故 init 段恒定走
+//! 「名字命中」。两套口径（函数体有 def、init 段无 def）本身不是活体缺陷——名字
+//! 与 def 在 codegen 里指向同一函数表下标；本组探针钉的是**分叉已消除**：init 段
+//! 与函数体由同一套规则（resolve_static_targets + 同一 resolve 闭包）解析，且这
+//! 一次解析的 DefId 指向的正是目标函数自身。
+//!
+//! 每类调用钉三件事，且**断言顺序固定为「翻译 → 执行 → 身份」**：
+//! ① codegen 后 CALL_STATIC 索引**精确**落在目标函数上（native 类落 CALL_NATIVE，
+//!    不进函数表）；
+//! ② 执行值与分级前的名字路径一致（同一函数、同一索引，不得错位）；
+//! ③ init 段调用的 def 有值且**等于目标函数自身的 def**（同一绑定身份，不是
+//!    「随便有个值」）。
+//! 把身份断言放最后：回退 assign_defs 的 init 覆盖时，失败点落在最后一条本身就
+//! 证明前两条（索引、执行值）在旧口径下已经成立——「翻译结果语义不变」的对照证据。
 
 use super::driver::{make_script_project, run_multi};
+use crate::frontend::module::symbol::DefId;
+use crate::middle::core::ir::{ConstValue, Instruction, ModuleIR, Operand};
 
 /// 跑合并 IR 的 codegen + 解释器，返回 (全部全局槽位值, 执行错误)。
-fn run_codegen(module: crate::middle::ModuleIR) -> (Vec<String>, Option<String>) {
+fn run_codegen(module: ModuleIR) -> (Vec<String>, Option<String>) {
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
     let file = match ctx.generate() {
         Ok(f) => f,
@@ -31,11 +43,8 @@ fn run_codegen(module: crate::middle::ModuleIR) -> (Vec<String>, Option<String>)
     (values, exec)
 }
 
-/// 合并 IR 的 init 段调用：`(被调名, def)` 列表——用于证明 `def=None`。
-fn init_calls(
-    module: &crate::middle::ModuleIR
-) -> Vec<(String, Option<crate::frontend::module::symbol::DefId>)> {
-    use crate::middle::core::ir::{ConstValue, Instruction, Operand};
+/// 合并 IR 的 init 段调用：(被调名, def) 列表。
+fn init_calls(module: &ModuleIR) -> Vec<(String, Option<DefId>)> {
     module
         .init
         .iter()
@@ -51,8 +60,51 @@ fn init_calls(
         .collect()
 }
 
-/// 编译后 `__yx_module_init` 的静态调用目标索引 + 函数表名字清单。
-fn init_call_targets(module: crate::middle::ModuleIR) -> (Vec<u32>, Vec<String>) {
+/// 合并 IR 里名为 name 的函数自身的 def——「指向正确函数」的判据基准。
+///
+/// 辅助函数内的失败必须带上下文（测试规范规则 5.2）：函数表全表随 panic 打印。
+fn function_def(
+    module: &ModuleIR,
+    name: &str,
+) -> DefId {
+    let names: Vec<&String> = module.functions.iter().map(|f| &f.name).collect();
+    let func = module
+        .functions
+        .iter()
+        .find(|f| f.name == name)
+        .unwrap_or_else(|| panic!("函数表应含 {name}，实际：{names:?}"));
+    func.def
+        .unwrap_or_else(|| panic!("函数 {name} 自身的 def 不应为 None（assign_defs 覆盖全部函数）"))
+}
+
+/// 函数 func_name 体内对 callee 的静态调用携带的 def——同口径对照用函数体侧样本。
+fn function_body_call_def(
+    module: &ModuleIR,
+    func_name: &str,
+    callee: &str,
+) -> Option<DefId> {
+    let names: Vec<&String> = module.functions.iter().map(|f| &f.name).collect();
+    let func = module
+        .functions
+        .iter()
+        .find(|f| f.name == func_name)
+        .unwrap_or_else(|| panic!("函数表应含 {func_name}，实际：{names:?}"));
+    func.blocks()
+        .iter()
+        .flat_map(|b| b.instructions.iter())
+        .find_map(|i| match i {
+            Instruction::Call {
+                func: Operand::Const(ConstValue::String(n)),
+                def,
+                ..
+            } if n == callee => Some(*def),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("{func_name} 体内应有对 {callee} 的静态调用"))
+}
+
+/// 编译后 __yx_module_init 的静态调用目标索引 + 函数表名字清单。
+fn init_call_targets(module: ModuleIR) -> (Vec<u32>, Vec<String>) {
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
     let file = ctx.generate().expect("codegen must succeed");
     let bytecode = crate::middle::bytecode::BytecodeModule::from(file);
@@ -70,8 +122,8 @@ fn init_call_targets(module: crate::middle::ModuleIR) -> (Vec<u32>, Vec<String>)
     (targets, names)
 }
 
-/// 编译后 `__yx_module_init` 里的 native 调用名（CALL_NATIVE 的名字操作数）。
-fn init_native_calls(module: crate::middle::ModuleIR) -> Vec<String> {
+/// 编译后 __yx_module_init 里的 native 调用名（CALL_NATIVE 的名字操作数）。
+fn init_native_calls(module: ModuleIR) -> Vec<String> {
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
     let file = ctx.generate().expect("codegen must succeed");
     let bytecode = crate::middle::bytecode::BytecodeModule::from(file);
@@ -88,10 +140,22 @@ fn init_native_calls(module: crate::middle::ModuleIR) -> Vec<String> {
         })
         .collect()
 }
-/// 探针 A：**本模块函数**调用（init 段，def=None）。
+
+/// 函数表里 name 的下标（CALL_STATIC 应精确等于它）。
+fn function_index(
+    names: &[String],
+    name: &str,
+) -> u32 {
+    names
+        .iter()
+        .position(|n| n == name)
+        .unwrap_or_else(|| panic!("函数表应含 {name}，实际：{names:?}")) as u32
+}
+
+/// 探针 A：**本模块函数**调用——init 段的 def 指向 main.helper 自身。
 #[test]
 fn test_init_call_local_function_resolves() {
-    // Arrange
+    // Arrange：顶层初始化序列调用本模块顶层函数
     let (_dir, entry) =
         make_script_project(&[("main.yx", "helper: () -> Int = () => { 7 }\nv = helper()\n")]);
 
@@ -104,50 +168,39 @@ fn test_init_call_local_function_resolves() {
     );
     let module = outcome.module.expect("multi-file must produce IR");
 
-    // Assert①：init 段调用确实 def=None（本实证的前提）
-    let calls = init_calls(&module);
-    assert!(
-        calls.iter().any(|(n, _)| n == "main.helper"),
-        "init 段应出现限定名 main.helper 调用，实际：{calls:?}"
-    );
-    assert!(
-        calls.iter().all(|(_, def)| def.is_none()),
-        "本实证前提：init 段 def 应恒为 None，实际：{calls:?}"
-    );
-
-    // Assert②：codegen 后的静态调用索引落在真实函数上
+    // Assert①：codegen 后的静态调用索引**精确**指向 main.helper
     let (targets, names) = init_call_targets(module.clone());
+    let helper_idx = function_index(&names, "main.helper");
     assert!(
-        !targets.is_empty(),
-        "init 段应有静态调用，实际字节码函数表：{names:?}"
-    );
-    assert!(
-        targets.iter().all(|t| (*t as usize) < names.len()),
-        "CALL_STATIC 索引必须落在函数表内：targets={targets:?} functions={names:?}"
-    );
-    // 索引必须**精确**指向 main.helper（不是同表内碰巧可执行的别的函数）
-    let helper_idx = names
-        .iter()
-        .position(|n| n == "main.helper")
-        .unwrap_or_else(|| panic!("函数表应含 main.helper，实际：{names:?}"));
-    assert!(
-        targets.contains(&(helper_idx as u32)),
+        targets.contains(&helper_idx),
         "init 段 CallStatic 应指向 main.helper(#{helper_idx})，实际 targets={targets:?}"
     );
 
-    // Assert③：执行成功且拿到 7（名字回退兜住了）
-    let (values, exec) = run_codegen(module);
+    // Assert②：执行成功且拿到 7（值与名字路径一致）
+    let (values, exec) = run_codegen(module.clone());
     assert!(exec.is_none(), "执行不得报错：{exec:?}");
     assert!(
         values.iter().any(|v| v == "Int(7)"),
         "v = helper() 应得 Int(7)，实际全局值：{values:?}"
     );
+
+    // Assert③：init 段 main.helper 调用的 def 等于该函数自身的 def（同口径身份）
+    let calls = init_calls(&module);
+    let (_, init_def) = calls
+        .iter()
+        .find(|(n, _)| n == "main.helper")
+        .unwrap_or_else(|| panic!("init 段应出现限定名 main.helper 调用，实际：{calls:?}"));
+    assert_eq!(
+        *init_def,
+        Some(function_def(&module, "main.helper")),
+        "init 段 main.helper 调用的 def 必须指向 main.helper 自身，实际：{calls:?}"
+    );
 }
 
-/// 探针 B：**跨模块导入函数**调用（init 段，def=None，名字是 lib.* 限定名）。
+/// 探针 B：**跨模块导入函数**调用——init 段的 def 指向 lib.add1 自身。
 #[test]
 fn test_init_call_cross_module_function_resolves() {
-    // Arrange
+    // Arrange：lib 导出 add1，入口以具名导入裸名调用
     let (_dir, entry) = make_script_project(&[
         ("lib.yx", "add1: (x: Int) -> Int = (x) => { x + 1 }\n"),
         ("main.yx", "use lib.{add1}\nv = add1(41)\n"),
@@ -162,29 +215,40 @@ fn test_init_call_cross_module_function_resolves() {
     );
     let module = outcome.module.expect("multi-file must produce IR");
 
-    // Assert①：init 调用名已限定为 lib.add1 且 def=None
-    let calls = init_calls(&module);
+    // Assert①：静态调用索引精确落在 lib.add1
+    let (targets, names) = init_call_targets(module.clone());
+    let add1_idx = function_index(&names, "lib.add1");
     assert!(
-        calls
-            .iter()
-            .any(|(n, def)| n == "lib.add1" && def.is_none()),
-        "init 段应出现 def=None 的限定名 lib.add1 调用，实际：{calls:?}"
+        targets.contains(&add1_idx),
+        "init 段 CallStatic 应指向 lib.add1(#{add1_idx})，实际 targets={targets:?}"
     );
 
     // Assert②：执行成功且 add1(41) = 42
-    let (values, exec) = run_codegen(module);
+    let (values, exec) = run_codegen(module.clone());
     assert!(exec.is_none(), "执行不得报错：{exec:?}");
     assert!(
         values.iter().any(|v| v == "Int(42)"),
         "v = add1(41) 应得 Int(42)，实际全局值：{values:?}"
     );
+
+    // Assert③：init 段 lib.add1 调用的 def 等于该函数自身的 def（同口径身份）
+    let calls = init_calls(&module);
+    let (_, init_def) = calls
+        .iter()
+        .find(|(n, _)| n == "lib.add1")
+        .unwrap_or_else(|| panic!("init 段应出现限定名 lib.add1 调用，实际：{calls:?}"));
+    assert_eq!(
+        *init_def,
+        Some(function_def(&module, "lib.add1")),
+        "init 段 lib.add1 调用的 def 必须指向 lib.add1 自身，实际：{calls:?}"
+    );
 }
 
-/// 探针 C：**构造器**调用（init 段；`Point(...)` 的身份是类型 DefId，def=None
-/// 时只能靠名字命中合成构造函数）。
+/// 探针 C：**构造器**调用——init 段的 def 指向类型声明 main.Point 自身
+/// （codegen 对 TypeDecl 合成构造函数，索引即该声明下标）。
 #[test]
 fn test_init_constructor_call_resolves() {
-    // Arrange
+    // Arrange：顶层构造 Point 并读取字段
     let (_dir, entry) = make_script_project(&[(
         "main.yx",
         "Point: Type = { x: Int }\np = Point(5)\nv = p.x\n",
@@ -199,28 +263,40 @@ fn test_init_constructor_call_resolves() {
     );
     let module = outcome.module.expect("multi-file must produce IR");
 
-    // Assert①：init 段有 def=None 的构造调用（限定名 main.Point）
-    let calls = init_calls(&module);
+    // Assert①：静态索引精确落在 main.Point（合成构造函数的位置）
+    let (targets, names) = init_call_targets(module.clone());
+    let point_idx = function_index(&names, "main.Point");
     assert!(
-        calls
-            .iter()
-            .any(|(n, def)| n.ends_with("Point") && def.is_none()),
-        "init 段应出现 def=None 的构造器调用，实际：{calls:?}"
+        targets.contains(&point_idx),
+        "init 段 CallStatic 应指向 main.Point(#{point_idx})，实际 targets={targets:?}"
     );
 
     // Assert②：执行成功且 p.x = 5（构造器索引没错位到别处）
-    let (values, exec) = run_codegen(module);
+    let (values, exec) = run_codegen(module.clone());
     assert!(exec.is_none(), "执行不得报错：{exec:?}");
     assert!(
         values.iter().any(|v| v == "Int(5)"),
         "p.x 应得 Int(5)，实际全局值：{values:?}"
     );
+
+    // Assert③：init 段构造调用的 def 等于类型声明 main.Point 自身的 def
+    let calls = init_calls(&module);
+    let (_, init_def) = calls
+        .iter()
+        .find(|(n, _)| n == "main.Point")
+        .unwrap_or_else(|| panic!("init 段应出现 main.Point 构造调用，实际：{calls:?}"));
+    assert_eq!(
+        *init_def,
+        Some(function_def(&module, "main.Point")),
+        "init 段构造调用的 def 必须指向类型声明 main.Point 自身，实际：{calls:?}"
+    );
 }
 
-/// 探针 D：**native 调用**（init 段，def=None，函数表无此名 → 落 std native 回退）。
+/// 探针 D：**native 调用**——init 段的 def 是 std 符号（同函数体口径），但模块内
+/// 无同名函数 ⇒ codegen 的 DefId 命中落空，仍翻译为 CALL_NATIVE(std.math.abs)。
 #[test]
 fn test_init_native_call_resolves() {
-    // Arrange：abs 是 std native（无 IR 定义、不在函数表）
+    // Arrange：abs 是 std native（无 IR 函数定义、不在函数表）
     let (_dir, entry) = make_script_project(&[("main.yx", "v = abs(-3)\n")]);
 
     // Act
@@ -232,26 +308,104 @@ fn test_init_native_call_resolves() {
     );
     let module = outcome.module.expect("multi-file must produce IR");
 
-    // Assert①：init 段调用 def=None（native 名不在函数表）
-    let calls = init_calls(&module);
-    assert!(
-        calls.iter().any(|(_, def)| def.is_none()),
-        "init 段 native 调用应为 def=None，实际：{calls:?}"
-    );
-
-    // Assert②：翻译成 CALL_NATIVE（名字不在函数表 → 第 3 条 native 回退），
-    // 而不是被错塞进某个 CALL_STATIC 索引
+    // Assert①：翻译成 CALL_NATIVE，而不是被错塞进某个 CALL_STATIC 索引
     let native_calls = init_native_calls(module.clone());
     assert!(
         native_calls.iter().any(|n| n == "std.math.abs"),
-        "init 段 native 调用应翻译为 CALL_NATIVE(std.math.abs)（名字不在函数表 → 第 3 条回退），实际：{native_calls:?}"
+        "init 段 native 调用应翻译为 CALL_NATIVE(std.math.abs)，实际：{native_calls:?}"
     );
 
-    // Assert③：执行成功且 abs(-3) = 3
-    let (values, exec) = run_codegen(module);
+    // Assert②：执行成功且 abs(-3) = 3
+    let (values, exec) = run_codegen(module.clone());
     assert!(exec.is_none(), "执行不得报错：{exec:?}");
     assert!(
         values.iter().any(|v| v == "Int(3)"),
         "abs(-3) 应得 Int(3)，实际全局值：{values:?}"
+    );
+
+    // Assert③：init 段 native 调用名是 std.math.abs，且模块内无同名 IR 函数
+    // ——DefId 有值也命不中字节码函数表（第 0 条落空），翻译保持 native 回退
+    let calls = init_calls(&module);
+    assert!(
+        calls.iter().any(|(n, _)| n == "std.math.abs"),
+        "init 段应出现 std.math.abs 调用，实际：{calls:?}"
+    );
+    assert!(
+        module.functions.iter().all(|f| f.name != "std.math.abs"),
+        "std native 不应出现在 IR 函数表（否则 DefId 命中路径会把它错当 IR 函数）：{:?}",
+        module.functions.iter().map(|f| &f.name).collect::<Vec<_>>()
+    );
+}
+
+/// 同口径判据①：同一目标函数在**函数体**与 **init 段**的调用获得同一个 DefId
+/// ——解析规则只有一套（resolve_static_targets + 同一 resolve 闭包）。
+#[test]
+fn test_init_call_def_matches_function_body_call_def() {
+    // Arrange：helper 同时被函数体与顶层初始化序列调用
+    let (_dir, entry) = make_script_project(&[(
+        "main.yx",
+        "helper: () -> Int = () => { 7 }\ng: () -> Int = () => { return helper() }\nv = helper()\n",
+    )]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+    assert!(
+        outcome.failure.is_none(),
+        "compile failure: {:?}",
+        outcome.failure
+    );
+    let module = outcome.module.expect("multi-file must produce IR");
+
+    // Assert：init 段的 def 有值，且与函数体内的 def 逐值相等（同一绑定身份）
+    let calls = init_calls(&module);
+    let (_, init_def) = calls
+        .iter()
+        .find(|(n, _)| n == "main.helper")
+        .unwrap_or_else(|| panic!("init 段应出现 main.helper 调用，实际：{calls:?}"));
+    let body_def = function_body_call_def(&module, "main.g", "main.helper");
+    assert!(
+        init_def.is_some(),
+        "init 段调用必须携带 DefId（与函数体同口径），实际：{calls:?}"
+    );
+    assert_eq!(
+        *init_def, body_def,
+        "同一目标函数在 init 段与函数体必须解析到同一个 DefId（一套规则）"
+    );
+}
+
+/// 同口径判据②：std native 调用在两侧同解——函数体与 init 段得到**相同**的 def，
+/// 翻译结果都是 CALL_NATIVE。
+#[test]
+fn test_init_native_call_def_matches_function_body_call_def() {
+    // Arrange：abs 同时被函数体与顶层初始化序列调用
+    let (_dir, entry) = make_script_project(&[(
+        "main.yx",
+        "g: () -> Int = () => { return abs(-3) }\nv = abs(-3)\n",
+    )]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("driver run failed");
+    assert!(
+        outcome.failure.is_none(),
+        "compile failure: {:?}",
+        outcome.failure
+    );
+    let module = outcome.module.expect("multi-file must produce IR");
+
+    // Assert：init 段仍落 CALL_NATIVE，且两侧 def 相等（同一套解析规则）
+    let native_calls = init_native_calls(module.clone());
+    assert!(
+        native_calls.iter().any(|n| n == "std.math.abs"),
+        "native 调用翻译必须保持 CALL_NATIVE(std.math.abs)，实际：{native_calls:?}"
+    );
+    let calls = init_calls(&module);
+    let (_, init_def) = calls
+        .iter()
+        .find(|(n, _)| n == "std.math.abs")
+        .unwrap_or_else(|| panic!("init 段应出现 std.math.abs 调用，实际：{calls:?}"));
+    let body_def = function_body_call_def(&module, "main.g", "std.math.abs");
+    assert_eq!(
+        *init_def, body_def,
+        "std native 在 init 段与函数体必须解析到同一个 def（一套规则）"
     );
 }

@@ -72,4 +72,4 @@ module
     Add %3 <- %0, %2
     Ret %3
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d6)

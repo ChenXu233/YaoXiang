@@ -49,4 +49,4 @@ module
     Load %11 <- int(2)
     Mul %12 <- %10, %11
     Store @2 <- %12
-    Call %6 <- string("main") [] (def=_)
+    Call %6 <- string("main") [] (def=d2)

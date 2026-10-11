@@ -42,4 +42,4 @@ module
     Load %4 <- void
     Ret %4
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d1)

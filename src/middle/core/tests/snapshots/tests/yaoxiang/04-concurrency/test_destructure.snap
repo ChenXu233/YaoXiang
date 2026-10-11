@@ -45,4 +45,4 @@ module
     Call %7 <- string("std.assert.assert") [%10] (def=d0)
     Ret %7
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d1)

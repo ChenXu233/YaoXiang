@@ -40,21 +40,21 @@ module
   init (locals=0)
     Load %0 <- int(3)
     Store @0 <- %0
-    Call %1 <- string("keep_valid") [] (def=_)
+    Call %1 <- string("keep_valid") [] (def=d0)
     Load %2 <- int(6)
     Eq %3 <- %1, %2
     Load %4 <- string("约束成立时重验证应静默通过")
-    Call %5 <- string("std.assert.assert") [%3, %4] (def=_)
-    Call %6 <- string("pruned_branch") [] (def=_)
+    Call %5 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Call %6 <- string("pruned_branch") [] (def=d2)
     Load %7 <- int(6)
     Eq %8 <- %6, %7
     Load %9 <- string("守卫裁剪：不可达分支不产生保守误报")
-    Call %10 <- string("std.assert.assert") [%8, %9] (def=_)
+    Call %10 <- string("std.assert.assert") [%8, %9] (def=d1)
     Load %11 <- int(5)
     Store @0 <- %11
     Load %12 <- int(3)
-    Call %13 <- string("other") [%12] (def=_)
+    Call %13 <- string("other") [%12] (def=d3)
     Load %14 <- int(6)
     Eq %15 <- %13, %14
     Load %16 <- string("跨函数同名不触发误报，other 正常求值")
-    Call %17 <- string("std.assert.assert") [%15, %16] (def=_)
+    Call %17 <- string("std.assert.assert") [%15, %16] (def=d1)

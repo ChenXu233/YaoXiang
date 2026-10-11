@@ -19,4 +19,4 @@ module
     LoadIndex %2 <- %3[%4]
     Ret
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d0)

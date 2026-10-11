@@ -42,4 +42,4 @@ module
     Ret %0
   init (locals=1)
     islot[0] self : Int(64) @depth1
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d5)

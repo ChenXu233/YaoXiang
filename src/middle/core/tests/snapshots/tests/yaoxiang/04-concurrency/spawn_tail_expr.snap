@@ -57,12 +57,12 @@ module
     Move %1 <- %2
     Store @0 <- %1
     Load %3 <- string("url1")
-    Call %4 <- string("fetch_data") [%3] (def=_)
+    Call %4 <- string("fetch_data") [%3] (def=d2)
     Load %5 <- string("url2")
-    Call %6 <- string("fetch_data") [%5] (def=_)
+    Call %6 <- string("fetch_data") [%5] (def=d2)
     Load %7 <- %4
     Load %8 <- %6
-    Call %9 <- string("process") [%7, %8] (def=_)
+    Call %9 <- string("process") [%7, %8] (def=d3)
     Load %10 <- %9
     Spawn %11 <- [] plan(groups=[], deps=[], resources=[])
     Load %12 <- %9
@@ -91,4 +91,4 @@ module
     Add %30 <- %28, %29
     Move %27 <- %30
     Store @3 <- %27
-    Call %31 <- string("main") [] (def=_)
+    Call %31 <- string("main") [] (def=d4)

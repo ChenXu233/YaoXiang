@@ -20,7 +20,7 @@ module
     islot[28] v : Int(64) @depth1
     Load %0 <- string("a")
     Load %1 <- string("b")
-    Call %2 <- string("std.string.concat") [%0, %1] (def=_)
+    Call %2 <- string("std.string.concat") [%0, %1] (def=d0)
     Store @0 <- %2
     Load %3 <- int(5)
     CreateVariant %4 <- Result::0 %3
@@ -46,34 +46,34 @@ module
     Jmp -> instr(26)
     Store @2 <- %5
     Load %18 <- bool(true)
-    Call %19 <- string("pick") [%18] (def=_)
+    Call %19 <- string("pick") [%18] (def=d1)
     Store @3 <- %19
     Load %20 <- @0
     Load %21 <- string("ab")
     Eq %22 <- %20, %21
     Load %23 <- string("concat with exactly two args")
-    Call %24 <- string("std.assert.assert") [%22, %23] (def=_)
+    Call %24 <- string("std.assert.assert") [%22, %23] (def=d2)
     Load %25 <- int(1)
     Load %26 <- int(0)
     Gt %27 <- %25, %26
-    Call %28 <- string("std.assert.assert") [%27] (def=_)
+    Call %28 <- string("std.assert.assert") [%27] (def=d2)
     Load %29 <- int(1)
     Load %30 <- int(0)
     Gt %31 <- %29, %30
     Load %32 <- string("with optional message")
-    Call %33 <- string("std.assert.assert") [%31, %32] (def=_)
+    Call %33 <- string("std.assert.assert") [%31, %32] (def=d2)
     Load %34 <- string("variadic")
     Load %35 <- string("args")
     Load %36 <- string("ok")
-    Call %37 <- string("std.io.println") [%34, %35, %36] (def=_)
+    Call %37 <- string("std.io.println") [%34, %35, %36] (def=d3)
     Load %38 <- @2
     Load %39 <- int(5)
     Eq %40 <- %38, %39
     Load %41 <- string("variant ctor with payload passes arity check")
-    Call %42 <- string("std.assert.assert") [%40, %41] (def=_)
+    Call %42 <- string("std.assert.assert") [%40, %41] (def=d2)
     Load %43 <- string("none_opt built")
     Load %44 <- @3
-    Call %45 <- string("std.io.println") [%43, %44] (def=_)
+    Call %45 <- string("std.io.println") [%43, %44] (def=d3)
     Load %46 <- bool(true)
     Load %47 <- string("zero/one-payload variant ctors compile and run")
-    Call %48 <- string("std.assert.assert") [%46, %47] (def=_)
+    Call %48 <- string("std.assert.assert") [%46, %47] (def=d2)

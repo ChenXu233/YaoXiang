@@ -21,5 +21,5 @@ module
     Load %11 <- @0
     Load %12 <- @1
     LoadIndex %13 <- %11[%12]
-    Call %14 <- string("int.to_string") [%13] (def=_)
-    Call %15 <- string("std.io.print") [%14] (def=_)
+    Call %14 <- string("int.to_string") [%13] (def=d0)
+    Call %15 <- string("std.io.print") [%14] (def=d1)

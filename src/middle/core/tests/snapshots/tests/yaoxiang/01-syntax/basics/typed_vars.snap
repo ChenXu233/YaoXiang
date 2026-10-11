@@ -48,4 +48,4 @@ module
     Store @2 <- %2
     Load %3 <- float(4614253070214989087)
     Store @3 <- %3
-    Call %4 <- string("main") [] (def=_)
+    Call %4 <- string("main") [] (def=d1)

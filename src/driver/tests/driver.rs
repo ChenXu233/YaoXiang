@@ -490,8 +490,8 @@ fn test_driver_run_multi_file_cross_unit_generic_call_runs_like_single_file() {
     );
     let merged = outcome.module.expect("Linking+mono must produce IR");
     let multi_file_value = run_merged_slot0(merged);
-    assert!(
-        multi_file_value == "Int(7)",
+    assert_eq!(
+        multi_file_value, "Int(7)",
         "跨单元泛型调用 v = lib.pick(7) 应得 Int(7)，实际：{multi_file_value:?}"
     );
 

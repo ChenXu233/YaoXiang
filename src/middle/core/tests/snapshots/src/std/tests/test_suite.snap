@@ -83,4 +83,4 @@ module
     Call %0 <- string("parse_ok") [] (def=d12)
     Ret %0
   init (locals=0)
-    Call %0 <- string("main") [] (def=_)
+    Call %0 <- string("main") [] (def=d13)

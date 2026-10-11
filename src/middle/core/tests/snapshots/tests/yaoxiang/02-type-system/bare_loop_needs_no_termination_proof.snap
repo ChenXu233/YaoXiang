@@ -33,7 +33,7 @@ module
     Load %16 <- int(4)
     Eq %17 <- %15, %16
     Load %18 <- string("布尔标志循环应正常退出，i 累加到 4")
-    Call %19 <- string("std.assert.assert") [%17, %18] (def=_)
+    Call %19 <- string("std.assert.assert") [%17, %18] (def=d0)
     Load %20 <- void
     Load %21 <- @2
     Load %22 <- @3
@@ -60,4 +60,4 @@ module
     Jmp -> instr(55)
     Load %37 <- bool(true)
     Load %38 <- string("双变量循环应收敛（a 追上 b）")
-    Call %39 <- string("std.assert.assert") [%37, %38] (def=_)
+    Call %39 <- string("std.assert.assert") [%37, %38] (def=d0)
