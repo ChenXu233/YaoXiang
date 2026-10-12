@@ -149,7 +149,8 @@ impl Interpreter {
         }
 
         if self.call_stack[fi].ip >= self.image.functions_by_id[fid].instructions.len() {
-            self.call_stack.pop();
+            // 指令耗尽 = 无返回值返回（Void）：返回值去向同 Return 指令
+            self.return_from_frame(RuntimeValue::Void)?;
             return Ok(StepOutcome::Returned);
         }
 

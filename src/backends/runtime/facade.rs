@@ -15,7 +15,8 @@ use crossbeam_channel::{Receiver, Sender};
 use crate::backends::common::value::TaskId;
 
 use super::engine::{
-    sv, LocalRuntime, RuntimeError, RuntimeStats, TaskMeta, TaskOutcome, TaskPoll, TaskResult,
+    LocalRuntime, RuntimeError, RuntimeStats, TaskFailure, TaskMeta, TaskOutcome, TaskPoll,
+    TaskResult,
 };
 
 /// Runtime mode (three-tier per RFC-008).
@@ -284,7 +285,9 @@ impl EmbeddedRuntime {
         if !meta.deps.is_empty() || !meta.resources.is_empty() {
             self.outcomes.insert(
                 task_id,
-                TaskOutcome::Err(sv("embedded runtime does not support deps/resources")),
+                TaskOutcome::Err(TaskFailure::message(
+                    "embedded runtime does not support deps/resources",
+                )),
             );
             self.stats.failed_count += 1;
             self.stats.total_spawned += 1;
@@ -494,7 +497,7 @@ impl StandardRuntime {
                     None => {
                         self.graph.complete(
                             next,
-                            TaskOutcome::Err(sv("task payload missing")),
+                            TaskOutcome::Err(TaskFailure::message("task payload missing")),
                             Duration::ZERO,
                         )?;
                         continue;

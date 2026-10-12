@@ -218,6 +218,89 @@ fn test_render_runtime_function_not_found_with_span() {
     assert!(!clean_output.contains("(ip:"), "{}", clean_output);
 }
 
+/// WBS 3.11.2 判据之一：**浅栈逐帧回显**——帧数不超过阈值时不得出现省略行，
+/// 每帧都按既有形态输出（既有断言因此无需放宽）。
+#[test]
+fn test_render_runtime_stack_trace_shallow_keeps_every_frame() {
+    // Arrange — 3 帧（远小于首尾阈值之和 24）
+    let module = BytecodeModule::new("shallow_trace_test".to_string());
+    let frames: Vec<StackFrame> = (0..3)
+        .map(|i| StackFrame {
+            function_name: format!("f{i}"),
+            ip: i,
+        })
+        .collect();
+    let err = ExecutorError::stack_overflow(1024, frames);
+
+    // Act
+    let clean = strip_ansi(&render_runtime_error(&err, &module, None));
+
+    // Assert — 逐帧都在，且无省略行
+    for i in 0..3 {
+        assert!(
+            clean.contains(&format!("  at f{i}\n")),
+            "浅栈必须逐帧回显 f{i}：{clean}"
+        );
+    }
+    assert!(!clean.contains("省略"), "浅栈不得出现省略行：{clean}");
+}
+
+/// WBS 3.11.2 判据之二：**深栈受控回显**——首 16 帧 + 计数省略行 + 末 8 帧，
+/// 帧行数封顶 24（修复前 200 帧全量打印）。
+#[test]
+fn test_render_runtime_stack_trace_deep_truncates_with_head_tail_and_count() {
+    // Arrange — 200 帧（超过首尾阈值之和 24）
+    let module = BytecodeModule::new("deep_trace_test".to_string());
+    let frames: Vec<StackFrame> = (0..200)
+        .map(|i| StackFrame {
+            function_name: format!("d{i:03}"),
+            ip: i,
+        })
+        .collect();
+    let err = ExecutorError::stack_overflow(1024, frames);
+
+    // Act
+    let clean = strip_ansi(&render_runtime_error(&err, &module, None));
+
+    // Assert①：帧行数 = 首 16 + 末 8；省略行报出被省略的 176 帧
+    let frame_lines = clean.lines().filter(|l| l.starts_with("  at ")).count();
+    assert_eq!(
+        frame_lines, 24,
+        "深栈回显应为 16 首 + 8 末 = 24 帧行，实际 {frame_lines}：{clean}"
+    );
+    assert!(
+        clean.contains("  … 省略 176 帧 …"),
+        "深栈必须给出计数省略行（省略 176 帧）：{clean}"
+    );
+    // Assert②：首段第一帧与末段最后一帧都在（保留首尾）
+    assert!(clean.contains("  at d000\n"), "首帧必须保留：{clean}");
+    assert!(clean.contains("  at d199\n"), "末帧必须保留：{clean}");
+}
+
+#[test]
+fn test_render_runtime_stack_overflow_carries_real_limit() {
+    // Arrange — WBS 3.9.1：E6004 的 limit 必须来自配置真实上限（修复前恒传 0）
+    let module = BytecodeModule::new("stack_overflow_limit_test".to_string());
+    let err = ExecutorError::stack_overflow(8191, vec![]);
+
+    // Act — 渲染运行时错误并去掉 ANSI，便于断言纯文本
+    let output = render_runtime_error(&err, &module, None);
+    let clean_output = strip_ansi(&output);
+
+    // Assert — 码正确 + 报文携带真实上限（占位 0 会被后两条断言挡住）
+    assert!(clean_output.contains("error [E6004]"), "{}", clean_output);
+    assert!(
+        clean_output.contains("8191"),
+        "E6004 报文应携带配置真实上限 8191：{}",
+        clean_output
+    );
+    assert!(
+        !clean_output.contains("限制 0") && !clean_output.contains("limit 0"),
+        "E6004 报文不得再出现占位上限 0：{}",
+        clean_output
+    );
+}
+
 #[test]
 fn test_check_files_with_diagnostics_ok() {
     let dir = tempdir().expect("create temp dir");

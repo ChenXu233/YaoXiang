@@ -18,8 +18,44 @@ use crate::backends::common::value::TaskId;
 /// Shared, thread-safe payload used by the runtime.
 pub type SyncValue = Arc<dyn Any + Send + Sync>;
 
+/// 任务失败载荷——**结构化错误**，单通道（WBS 3.11.1 / issue #448）。
+///
+/// 背景：此前 `TaskResult` 的错误侧与本类型同形（都是 `SyncValue`），解释器先把
+/// `ExecutorError` `format!("{e}")` 成字符串再塞进来——错误码身份
+/// （E6001/E6003/E6004/E6008…）在任务边界处丢失，接收方一律落 E6007。
+///
+/// 现在错误载荷**按值携带结构化错误**：
+/// - 解释器任务：`ExecutorError`（接收方 downcast 取回原错误，码与消息逐字保真）；
+/// - 调度层自身失败：消息字符串（没有解释器错误可携带的场合，如缺载荷/不支持依赖）。
+///
+/// 只有这一条通道——不存在「字符串通道 + 结构体通道」两套表示（禁令一）。
+#[derive(Debug, Clone)]
+pub struct TaskFailure(SyncValue);
+
+impl TaskFailure {
+    /// 结构化错误载荷：错误**按值**跨任务边界传递，码身份保真。
+    pub fn from_error<E: Any + Send + Sync + 'static>(error: E) -> Self {
+        Self(sv(error))
+    }
+
+    /// 调度层失败消息（无结构化错误可携带时的兜底路径）。
+    pub fn message(msg: impl Into<String>) -> Self {
+        Self(sv(msg.into()))
+    }
+
+    /// 取回结构化错误（无则 None）。
+    pub fn downcast_ref<T: Any>(&self) -> Option<&T> {
+        self.0.downcast_ref::<T>()
+    }
+
+    /// 底层载荷（供依赖摘要等展示用途）。
+    pub fn payload(&self) -> &SyncValue {
+        &self.0
+    }
+}
+
 /// Task result used by the runtime.
-pub type TaskResult = Result<SyncValue, SyncValue>;
+pub type TaskResult = Result<SyncValue, TaskFailure>;
 
 /// Result of polling/running a cooperative task slice.
 #[derive(Debug)]
@@ -81,7 +117,8 @@ pub enum TaskCancelReason {
 #[derive(Debug, Clone)]
 pub enum TaskOutcome {
     Ok(SyncValue),
-    Err(SyncValue),
+    /// 失败载荷是结构化错误（见 [`TaskFailure`]）——码身份跨任务边界保真。
+    Err(TaskFailure),
     Cancelled(TaskCancelReason),
 }
 

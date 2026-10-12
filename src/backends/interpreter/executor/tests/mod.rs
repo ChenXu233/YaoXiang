@@ -7,3 +7,5 @@ mod execute;
 mod float_compare;
 mod logical_not;
 mod stack_frames;
+mod stack_guard;
+mod task_error_fidelity;

@@ -57,7 +57,15 @@ pub enum ExecutorError {
     /// Type error with optional stack trace
     Type(String, Option<Vec<StackFrame>>),
     /// Stack overflow
-    StackOverflow(Option<Vec<StackFrame>>),
+    ///
+    /// WBS 3.9.1：变体携带触发时的**真实**深度上限（此前恒传 0 给 E6004 的
+    /// `limit` 参数，用户看到「递归深度超出限制 0」）。
+    StackOverflow {
+        /// 配置的调用深度上限（`ExecutorConfig::max_stack_depth`）
+        limit: usize,
+        /// 调用栈
+        stack: Option<Vec<StackFrame>>,
+    },
     /// Division by zero（#282：携带触发表达式，渲染层直接使用）
     DivisionByZero(String, Option<Vec<StackFrame>>),
     /// Index out of bounds（#280：携带 max/index 以映射 E6003）
@@ -102,7 +110,7 @@ impl ExecutorError {
         match self {
             ExecutorError::Runtime(_, stack) => stack.as_ref(),
             ExecutorError::Type(_, stack) => stack.as_ref(),
-            ExecutorError::StackOverflow(stack) => stack.as_ref(),
+            ExecutorError::StackOverflow { stack, .. } => stack.as_ref(),
             ExecutorError::DivisionByZero(_, stack) => stack.as_ref(),
             ExecutorError::IndexOutOfBounds { stack, .. } => stack.as_ref(),
             ExecutorError::AssertionFailed(_, stack) => stack.as_ref(),
@@ -155,8 +163,17 @@ impl ExecutorError {
     }
 
     /// Create a stack overflow error with stack trace
-    pub fn stack_overflow(stack: Vec<StackFrame>) -> Self {
-        ExecutorError::StackOverflow(Some(stack))
+    ///
+    /// `limit` 是**触发时的真实上限**（`ExecutorConfig::max_stack_depth`），
+    /// 由 E6004 报文的 `{limit}` 参数单点消费（禁令一：真值只有一份）。
+    pub fn stack_overflow(
+        limit: usize,
+        stack: Vec<StackFrame>,
+    ) -> Self {
+        ExecutorError::StackOverflow {
+            limit,
+            stack: Some(stack),
+        }
     }
 
     /// Create a division by zero error with stack trace
@@ -199,7 +216,7 @@ impl ExecutorError {
             ExecutorError::KeyNotFound { stack: Some(_), .. } => self,
             ExecutorError::Runtime(_, Some(_)) => self,
             ExecutorError::Type(_, Some(_)) => self,
-            ExecutorError::StackOverflow(Some(_)) => self,
+            ExecutorError::StackOverflow { stack: Some(_), .. } => self,
             ExecutorError::DivisionByZero(_, Some(_)) => self,
             ExecutorError::IndexOutOfBounds { stack: Some(_), .. } => self,
             ExecutorError::AssertionFailed(_, Some(_)) => self,
@@ -208,7 +225,10 @@ impl ExecutorError {
             // Add stack trace
             ExecutorError::Runtime(msg, None) => ExecutorError::Runtime(msg, Some(stack)),
             ExecutorError::Type(msg, None) => ExecutorError::Type(msg, Some(stack)),
-            ExecutorError::StackOverflow(None) => ExecutorError::StackOverflow(Some(stack)),
+            ExecutorError::StackOverflow { limit, stack: None } => ExecutorError::StackOverflow {
+                limit,
+                stack: Some(stack),
+            },
             ExecutorError::DivisionByZero(expr, None) => {
                 ExecutorError::DivisionByZero(expr, Some(stack))
             }
@@ -264,8 +284,8 @@ impl std::fmt::Display for ExecutorError {
                 }
                 Ok(())
             }
-            ExecutorError::StackOverflow(stack) => {
-                write!(f, "Stack overflow")?;
+            ExecutorError::StackOverflow { limit, stack } => {
+                write!(f, "Stack overflow (limit {limit})")?;
                 if let Some(frames) = stack {
                     for frame in frames {
                         writeln!(f, "{}", frame)?;
@@ -344,6 +364,9 @@ pub struct ExecutionState {
     /// Instruction pointer
     pub ip: usize,
     /// Call stack depth
+    ///
+    /// 由 `Interpreter::call_stack.len()` 单点派生（帧入栈/弹栈处 `sync_depth`
+    /// 同步，见 `interpreter/executor/executor.rs`）——不构成第二个真值源。
     pub call_depth: usize,
     /// Whether execution is complete
     pub is_complete: bool,

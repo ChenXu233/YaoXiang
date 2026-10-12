@@ -40,9 +40,9 @@ impl Interpreter {
                     let mut v = self.make_async_pending(task_id);
                     self.force_value_in_place(&mut v)?;
                 }
-                self.last_return_value = RuntimeValue::Void;
-                // 帧原地驻留后，返回由指令自身弹出（旧实现由 step_one 省略 push 完成）
-                self.call_stack.pop();
+                // 帧原地驻留后，返回由指令自身弹出；返回值去向由帧的 `return_target`
+                // 决定（宿主入口 → last_return_value；解释型调用 → 调用者 dst 槽）。
+                self.return_from_frame(RuntimeValue::Void)?;
                 Ok(StepOutcome::Returned)
             }
             BytecodeInstr::ReturnValue { value } => {
@@ -54,9 +54,7 @@ impl Interpreter {
                     let mut v = self.make_async_pending(task_id);
                     self.force_value_in_place(&mut v)?;
                 }
-                self.last_return_value = result;
-                // 帧原地驻留后，返回由指令自身弹出
-                self.call_stack.pop();
+                self.return_from_frame(result)?;
                 Ok(StepOutcome::Returned)
             }
 

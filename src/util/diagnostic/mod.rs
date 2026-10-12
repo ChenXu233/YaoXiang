@@ -201,7 +201,9 @@ fn build_runtime_diagnostic(
         }
         ExecutorError::Runtime(message, _) => ErrorCodeDefinition::runtime_error(message.as_str()),
         ExecutorError::Type(message, _) => ErrorCodeDefinition::runtime_error(message.as_str()),
-        ExecutorError::StackOverflow(_) => ErrorCodeDefinition::stack_overflow(0),
+        // WBS 3.9.1：limit 来自错误变体携带的真实上限（单点事实源是
+        // `ExecutorConfig::max_stack_depth`），不再恒传 0。
+        ExecutorError::StackOverflow { limit, .. } => ErrorCodeDefinition::stack_overflow(*limit),
         // #280：专用变体映射专用码，不再落通用 E6007
         ExecutorError::IndexOutOfBounds {
             max,
@@ -246,6 +248,37 @@ fn finish(
     builder.build()
 }
 
+/// 深栈回显：保留的前导帧数（WBS 3.11.2 / issue #448）。
+const STACK_TRACE_HEAD_FRAMES: usize = 16;
+/// 深栈回显：保留的末尾帧数（末尾 = 最靠近触发点之外的收尾链）。
+const STACK_TRACE_TAIL_FRAMES: usize = 8;
+
+/// 回显单个栈帧（`#327`：用户面向输出不暴露字节码 ip）。
+fn format_stack_frame(
+    frame: &crate::backends::StackFrame,
+    module: &crate::middle::bytecode::BytecodeModule,
+    sources: Option<&SourceMap>,
+) -> String {
+    if let Some(ds) = resolve_runtime_span(module, frame).filter(|s| !s.is_dummy()) {
+        let loc = match sources.and_then(|sm| sm.get(ds.file_id)) {
+            Some(sf) => format!(
+                "{}:{}:{}",
+                sf.name, ds.span.start.line, ds.span.start.column
+            ),
+            None => format!("{}:{}", ds.span.start.line, ds.span.start.column),
+        };
+        format!("  at {} ({})\n", frame.function_name, loc)
+    } else {
+        format!("  at {}\n", frame.function_name)
+    }
+}
+
+/// 渲染运行时栈回溯。
+///
+/// **深栈受控回显**（WBS 3.11.2 / issue #448）：帧数超过「首段 + 末段」阈值时，
+/// 只回显首尾两段并用一行计数省略中间——E6004 首次可达后曾把完整 1024 帧
+/// 全量打印（stderr 1035 行），既淹没真正的线索也放大了输出。
+/// 阈值以内**逐帧回显**：浅栈输出与修复前逐字节相同（既有断言不放宽）。
 fn format_runtime_stack_trace(
     error: &crate::backends::ExecutorError,
     module: &crate::middle::bytecode::BytecodeModule,
@@ -256,19 +289,19 @@ fn format_runtime_stack_trace(
     };
 
     let mut out = String::from("stack trace:\n");
-    for frame in stack {
-        // #327：用户面向输出不暴露字节码 ip（形态对齐编译期；字节码定位归 RFC-034 工具链）
-        if let Some(ds) = resolve_runtime_span(module, frame).filter(|s| !s.is_dummy()) {
-            let loc = match sources.and_then(|sm| sm.get(ds.file_id)) {
-                Some(sf) => format!(
-                    "{}:{}:{}",
-                    sf.name, ds.span.start.line, ds.span.start.column
-                ),
-                None => format!("{}:{}", ds.span.start.line, ds.span.start.column),
-            };
-            out.push_str(&format!("  at {} ({})\n", frame.function_name, loc));
-        } else {
-            out.push_str(&format!("  at {}\n", frame.function_name));
+    let total = stack.len();
+    let deep = total > STACK_TRACE_HEAD_FRAMES + STACK_TRACE_TAIL_FRAMES;
+    let head_len = if deep { STACK_TRACE_HEAD_FRAMES } else { total };
+    for frame in &stack[..head_len] {
+        out.push_str(&format_stack_frame(frame, module, sources));
+    }
+    if deep {
+        out.push_str(&format!(
+            "  … 省略 {} 帧 …\n",
+            total - STACK_TRACE_HEAD_FRAMES - STACK_TRACE_TAIL_FRAMES
+        ));
+        for frame in &stack[total - STACK_TRACE_TAIL_FRAMES..] {
+            out.push_str(&format_stack_frame(frame, module, sources));
         }
     }
     out

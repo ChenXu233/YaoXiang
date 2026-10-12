@@ -2,11 +2,89 @@
 //!
 //! This module provides the call frame structure used for function calls.
 
-use crate::backends::common::value::TaskId;
+use crate::backends::common::value::{FunctionId, TaskId};
 use crate::backends::common::RuntimeValue;
+use crate::middle::bytecode::Reg;
+use std::collections::VecDeque;
 
 /// Maximum number of local variables
 pub const MAX_LOCALS: usize = 256;
+
+/// 返回值去向（蹦床调度，WBS 3.9.1）。
+///
+/// 解释型调用不再递归进入 `execute_by_id`：被调帧由外层 `step_one` 循环驱动，
+/// 故其返回值无法经 Rust 函数的返回值带出——本类型指明它该落到哪里。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReturnTarget {
+    /// 宿主入口帧（`execute_by_id` / `call_function_by_id` / `call_closure` 压入）：
+    /// 返回值经 `Interpreter::last_return_value` 交还宿主循环。
+    Host,
+    /// 解释型调用帧：写回调用者帧（弹栈后的栈顶）的该槽位。
+    CallerSlot(u16),
+    /// 解释型调用帧且指令不带 dst：返回值直接丢弃。
+    Discard,
+}
+
+impl ReturnTarget {
+    /// 从指令的 `dst` 得出返回值去向（解释型调用帧）。
+    pub fn from_dst(dst: Option<Reg>) -> Self {
+        match dst {
+            Some(reg) => ReturnTarget::CallerSlot(reg.0),
+            None => ReturnTarget::Discard,
+        }
+    }
+}
+
+/// 一次待启动的解释型调用（蹦床）。
+///
+/// 一条指令可能发起多个调用（`Spawn` 的多闭包、`SpawnFromList` 的列表闭包），
+/// 而蹦床一次只压一帧：第一个调用立即压帧，其余排进调用者帧的
+/// `pending_calls`，由 `Interpreter::return_from_frame` 在被调返回后逐个启动——
+/// 全程不递归进入 `execute_by_id`，故解释型深度不消耗原生栈。
+#[derive(Debug, Clone)]
+pub struct PendingCall {
+    /// 函数表索引
+    pub func_id: FunctionId,
+    /// 实参（闭包调用含 env 前置段）
+    pub args: Vec<RuntimeValue>,
+    /// 上值表（闭包调用为 env；静态/虚表调用为空）
+    pub upvalues: Vec<RuntimeValue>,
+    /// 返回值落点
+    pub target: ReturnTarget,
+}
+
+impl PendingCall {
+    /// 按函数表索引的调用（`CallStatic` / `CallVirt` / `SpawnFromList` 内层）：
+    /// 不注入上值。
+    pub fn function(
+        func_id: FunctionId,
+        args: Vec<RuntimeValue>,
+        dst: Option<Reg>,
+    ) -> Self {
+        Self {
+            func_id,
+            args,
+            upvalues: Vec::new(),
+            target: ReturnTarget::from_dst(dst),
+        }
+    }
+
+    /// 闭包调用（`CallDyn` / `Spawn` 内层）：env 同时作上值（`LoadUpvalue` 读）
+    /// 与实参前段（`LoadArg` 读）。
+    pub fn closure(
+        func_id: FunctionId,
+        args: Vec<RuntimeValue>,
+        upvalues: Vec<RuntimeValue>,
+        dst: Option<Reg>,
+    ) -> Self {
+        Self {
+            func_id,
+            args,
+            upvalues,
+            target: ReturnTarget::from_dst(dst),
+        }
+    }
+}
 
 /// Call frame for function execution
 ///
@@ -38,6 +116,10 @@ pub struct Frame {
     upvalues: Vec<RuntimeValue>,
     /// Spawn task groups (RFC-024: only meaningful inside spawn scopes).
     spawn_groups: Vec<Vec<TaskId>>,
+    /// 返回值去向（蹦床）。宿主入口压入的帧默认 `Host`。
+    return_target: ReturnTarget,
+    /// 本帧发起、尚未启动的解释型调用（多调用指令的后续项）。
+    pending_calls: VecDeque<PendingCall>,
 }
 
 impl Frame {
@@ -55,6 +137,8 @@ impl Frame {
             slots: vec![RuntimeValue::Void; local_count.max(1)],
             upvalues: Vec::new(),
             spawn_groups: Vec::new(),
+            return_target: ReturnTarget::Host,
+            pending_calls: VecDeque::new(),
         }
     }
 
@@ -161,5 +245,31 @@ impl Frame {
     /// Get mutable access to upvalues (for closure capture)
     pub fn upvalues_mut(&mut self) -> &mut Vec<RuntimeValue> {
         &mut self.upvalues
+    }
+
+    /// 本帧的返回值去向（蹦床）。
+    pub fn return_target(&self) -> ReturnTarget {
+        self.return_target
+    }
+
+    /// 设置返回值去向。解释型调用帧在压栈前设置；宿主入口帧保持 Host。
+    pub fn set_return_target(
+        &mut self,
+        target: ReturnTarget,
+    ) {
+        self.return_target = target;
+    }
+
+    /// 排入一个待启动的解释型调用（多调用指令的后续项）。
+    pub fn push_pending_call(
+        &mut self,
+        call: PendingCall,
+    ) {
+        self.pending_calls.push_back(call);
+    }
+
+    /// 取出下一个待启动的解释型调用（无则返回 None）。
+    pub fn pop_pending_call(&mut self) -> Option<PendingCall> {
+        self.pending_calls.pop_front()
     }
 }
