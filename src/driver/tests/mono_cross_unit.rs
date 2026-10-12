@@ -156,11 +156,11 @@ fn test_multi_file_cross_unit_mutual_recursion_reports_e3005() {
 /// 这条把「E3005 来自深度闸」从旁证变成直证：若拦截来自别的机制（类型错误、
 /// 规模上限、解析器），报错位置不会随该配置平移。
 ///
-/// **上限取值说明**：本测试刻意只抬到 150 而非任意大。深度闸是**唯一**
-/// 编译期防线，上限就是防线的强度；抬到远超解释器可用栈深的量级
-/// （实测 5000：mono 放行后类型擦除执行 0xC00000FD，测试进程直接
-/// STATUS_STACK_OVERFLOW）会把「编译期拦截」换成「进程崩溃」。配置可调
-/// 不等于任意大安全——这是设计边界，不是本测试的取舍。
+/// **上限取值说明**：本测试取 150（贴近默认 100，逐层计数肉眼可验）。
+/// 上限抬到远超此处量级的形态（5000）另有一条判据
+/// `test_multi_file_cross_unit_pathological_recursion_at_5000_reports_e3005`：
+/// 修复前（WBS 3.10.1 / issue #447）该形态会在闸门之前耗尽主线程栈
+/// （0xC00000FD）——深度闸的强度不能超过「闸门之前那条路径」的栈安全边界。
 #[test]
 fn test_multi_file_cross_unit_mutual_recursion_depth_follows_configured_max_depth() {
     // Arrange：同一病态夹具，深度上限抬到 150（总数上限 10_000 仍是上界，
@@ -264,5 +264,41 @@ fn test_multi_file_cross_unit_generic_chain_matches_single_file_value() {
     assert!(
         values.iter().any(|v| v == "Int(7)"),
         "跨单元与单文件同表达式必须产出同一值 Int(7)，实际：{values:?}"
+    );
+}
+
+/// WBS 3.10.1 判据：抬高 `mono.max_depth` 到 5000 后，病态泛型递归仍必须
+/// **编译期**终止于 E3005（含真实上限 5000）——而不是在闸门之前耗尽原生栈崩进程
+/// （修复前实测：编译到约第 2500 层 0xC00000FD）。
+#[test]
+fn test_multi_file_cross_unit_pathological_recursion_at_5000_reports_e3005() {
+    // Arrange：同一病态夹具，深度上限抬到 5000（总数上限保持默认）
+    let (_dir, entry) = make_script_project(PATHOLOGICAL_FILES);
+    let mono = MonoConfig {
+        max_depth: 5000,
+        ..MonoConfig::default()
+    };
+
+    // Act
+    let outcome = run_multi_with_mono(&entry, mono).expect("driver run failed");
+
+    // Assert：E3005 + 真实上限 5000/当前 5001（闸门真的走到 5000 层，而不是崩栈）
+    let diagnostics = failure_diagnostics(&outcome);
+    let (_, message) = diagnostics
+        .iter()
+        .find(|(code, _)| code == "E3005")
+        .unwrap_or_else(|| {
+            panic!(
+                "上限抬到 5000 后仍须在编译期报 E3005（不是爆栈、不是静默）。实际故障：{:?}",
+                outcome.failure.as_ref().map(|e| format!("{e}"))
+            )
+        });
+    assert!(
+        message.contains("5000") && message.contains("5001"),
+        "E3005 必须报出配置上限 5000 与当前深度 5001，实际：{message}"
+    );
+    assert!(
+        outcome.module.is_none(),
+        "mono 失败后不得产出 IR（否则下游会执行未特化的原件）"
     );
 }

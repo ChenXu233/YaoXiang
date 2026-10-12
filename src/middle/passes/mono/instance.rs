@@ -163,131 +163,170 @@ impl Hash for SpecializationKey {
 // ==================== 辅助函数 ====================
 
 /// 计算 MonoType 的哈希值
-#[allow(clippy::only_used_in_recursion)]
+///
+/// **显式栈驱动（工作列表）——WBS 3.10.1 / issue #447**：递归版的原生栈用量随
+/// **类型嵌套深度**线性增长（实测约 164 字节/层）。病态泛型递归
+/// （`f(x) = f([x])`）的实参类型逐层嵌套，每层特化请求都要经此写入去重集合
+/// （`processed`）——深度闸抬到 5000 后这条路径先于闸门耗尽原生栈（0xC00000FD），
+/// 闸门诊断 E3005 永远不可达。
+///
+/// 工作列表使原生栈用量与嵌套深度无关；各类分支的**哈希写入顺序与递归版逐字节
+/// 一致**（`processed` 只作 contains/insert/len，不参与输出排序，故顺序本身也不
+/// 影响产物——此处仍保持一致以免行为漂移）。
 fn type_name_hash<H: Hasher>(
     ty: &MonoType,
     state: &mut H,
 ) {
-    match ty {
-        MonoType::Void => "void".hash(state),
-        MonoType::Never => "never".hash(state),
-        MonoType::Bool => "bool".hash(state),
-        MonoType::Int(n) => format!("int{}", n).hash(state),
-        MonoType::Float(n) => format!("float{}", n).hash(state),
-        MonoType::Char => "char".hash(state),
-        MonoType::Struct(s) => s.name.hash(state),
-        MonoType::Enum(e) => e.name.hash(state),
-        MonoType::Fn { .. } => "fn".hash(state),
-        MonoType::TypeVar(v) => format!("var{}", v.index()).hash(state),
-        MonoType::TypeRef(n) => n.hash(state),
-        // 联合类型和交集类型使用 TypeRef 的哈希方式
-        MonoType::Union(types) => {
-            "union".hash(state);
-            for t in types {
-                type_name_hash(t, state);
+    /// 待执行的哈希任务（逆序入栈 ⇒ 弹出即递归版的书写顺序）
+    enum Task<'a> {
+        Ty(&'a MonoType),
+        /// 常量值哈希（`Literal`）——须在 base_type 子树之后执行
+        ConstValue(&'a crate::frontend::core::types::ConstValue),
+        /// 字符串哈希（`DepFn` 参数名）——与类型子树交错执行
+        Name(&'a str),
+        /// `MetaType` 参数走派生 Hash（保留原序列；该变体不在深层嵌套路径上）
+        DerivedHash(&'a MonoType),
+    }
+
+    fn push_children<'a>(
+        stack: &mut Vec<Task<'a>>,
+        children: &'a [MonoType],
+    ) {
+        for child in children.iter().rev() {
+            stack.push(Task::Ty(child));
+        }
+    }
+
+    let mut stack: Vec<Task<'_>> = vec![Task::Ty(ty)];
+    while let Some(task) = stack.pop() {
+        let ty = match task {
+            Task::Name(name) => {
+                name.hash(state);
+                continue;
             }
-        }
-        MonoType::Intersection(types) => {
-            "intersection".hash(state);
-            for t in types {
-                type_name_hash(t, state);
+            Task::DerivedHash(t) => {
+                t.hash(state);
+                continue;
             }
-        }
-        MonoType::Ref { mutable, inner } => {
-            "ref".hash(state);
-            mutable.hash(state);
-            type_name_hash(inner, state);
-        }
-        MonoType::AssocType {
-            host_type,
-            assoc_name,
-            assoc_args,
-        } => {
-            "assoc_type".hash(state);
-            type_name_hash(host_type, state);
-            assoc_name.hash(state);
-            for t in assoc_args {
-                type_name_hash(t, state);
-            }
-        }
-        MonoType::Literal {
-            name,
-            base_type,
-            value,
-        } => {
-            "literal".hash(state);
-            name.hash(state);
-            type_name_hash(base_type, state);
-            // 哈希常量值
-            match value {
-                crate::frontend::core::types::ConstValue::Int(n) => {
-                    format!("int:{}", n).hash(state);
+            Task::ConstValue(value) => {
+                // 哈希常量值
+                match value {
+                    crate::frontend::core::types::ConstValue::Int(n) => {
+                        format!("int:{}", n).hash(state);
+                    }
+                    crate::frontend::core::types::ConstValue::Bool(b) => {
+                        format!("bool:{}", b).hash(state);
+                    }
+                    crate::frontend::core::types::ConstValue::Float(f) => {
+                        format!("float:{}", f.to_bits()).hash(state);
+                    }
+                    crate::frontend::core::types::ConstValue::LibraryRef { mechanism, lib } => {
+                        format!("library_ref:{mechanism}:{lib}").hash(state);
+                    }
+                    crate::frontend::core::types::ConstValue::ExternRef {
+                        mechanism,
+                        lib,
+                        symbol,
+                    } => {
+                        format!("extern_ref:{mechanism}:{lib}:{symbol}").hash(state);
+                    }
                 }
-                crate::frontend::core::types::ConstValue::Bool(b) => {
-                    format!("bool:{}", b).hash(state);
-                }
-                crate::frontend::core::types::ConstValue::Float(f) => {
-                    format!("float:{}", f.to_bits()).hash(state);
-                }
-                crate::frontend::core::types::ConstValue::LibraryRef { mechanism, lib } => {
-                    format!("library_ref:{mechanism}:{lib}").hash(state);
-                }
-                crate::frontend::core::types::ConstValue::ExternRef {
-                    mechanism,
-                    lib,
-                    symbol,
-                } => {
-                    format!("extern_ref:{mechanism}:{lib}:{symbol}").hash(state);
+                continue;
+            }
+            Task::Ty(ty) => ty,
+        };
+        match ty {
+            MonoType::Void => "void".hash(state),
+            MonoType::Never => "never".hash(state),
+            MonoType::Bool => "bool".hash(state),
+            MonoType::Int(n) => format!("int{}", n).hash(state),
+            MonoType::Float(n) => format!("float{}", n).hash(state),
+            MonoType::Char => "char".hash(state),
+            MonoType::Struct(s) => s.name.hash(state),
+            MonoType::Enum(e) => e.name.hash(state),
+            MonoType::Fn { .. } => "fn".hash(state),
+            MonoType::TypeVar(v) => format!("var{}", v.index()).hash(state),
+            MonoType::TypeRef(n) => n.hash(state),
+            // 联合类型和交集类型使用 TypeRef 的哈希方式
+            MonoType::Union(types) => {
+                "union".hash(state);
+                push_children(&mut stack, types);
+            }
+            MonoType::Intersection(types) => {
+                "intersection".hash(state);
+                push_children(&mut stack, types);
+            }
+            MonoType::Ref { mutable, inner } => {
+                "ref".hash(state);
+                mutable.hash(state);
+                stack.push(Task::Ty(inner));
+            }
+            MonoType::AssocType {
+                host_type,
+                assoc_name,
+                assoc_args,
+            } => {
+                "assoc_type".hash(state);
+                push_children(&mut stack, assoc_args);
+                stack.push(Task::Name(assoc_name));
+                stack.push(Task::Ty(host_type));
+            }
+            MonoType::Literal {
+                name,
+                base_type,
+                value,
+            } => {
+                "literal".hash(state);
+                name.hash(state);
+                stack.push(Task::ConstValue(value));
+                stack.push(Task::Ty(base_type));
+            }
+            MonoType::MetaType {
+                universe_level,
+                type_params,
+            } => {
+                "meta_type".hash(state);
+                universe_level.hash(state);
+                for p in type_params.iter().rev() {
+                    stack.push(Task::DerivedHash(p));
                 }
             }
-        }
-        MonoType::MetaType {
-            universe_level,
-            type_params,
-        } => {
-            "meta_type".hash(state);
-            universe_level.hash(state);
-            for p in type_params {
-                p.hash(state);
+            MonoType::Generic { name, args } => {
+                "generic".hash(state);
+                name.hash(state);
+                push_children(&mut stack, args);
             }
-        }
-        MonoType::Generic { name, args } => {
-            "generic".hash(state);
-            name.hash(state);
-            for arg in args {
-                type_name_hash(arg, state);
+            MonoType::Refined { base, constraint } => {
+                "refined".hash(state);
+                constraint.hash(state);
+                stack.push(Task::Ty(base));
             }
-        }
-        MonoType::Refined { base, constraint } => {
-            "refined".hash(state);
-            type_name_hash(base, state);
-            constraint.hash(state);
-        }
-        MonoType::DepFn {
-            params,
-            return_type,
-        } => {
-            "depfn".hash(state);
-            for p in params {
-                p.name.hash(state);
-                type_name_hash(&p.ty, state);
+            MonoType::DepFn {
+                params,
+                return_type,
+            } => {
+                "depfn".hash(state);
+                stack.push(Task::Ty(return_type));
+                for p in params.iter().rev() {
+                    stack.push(Task::Ty(&p.ty));
+                    stack.push(Task::Name(&p.name));
+                }
             }
-            type_name_hash(return_type, state);
-        }
-        MonoType::LibraryRef { mechanism, lib } => {
-            "library_ref".hash(state);
-            mechanism.hash(state);
-            lib.hash(state);
-        }
-        MonoType::ExternRef {
-            mechanism,
-            lib,
-            symbol,
-        } => {
-            "extern_ref".hash(state);
-            mechanism.hash(state);
-            lib.hash(state);
-            symbol.hash(state);
+            MonoType::LibraryRef { mechanism, lib } => {
+                "library_ref".hash(state);
+                mechanism.hash(state);
+                lib.hash(state);
+            }
+            MonoType::ExternRef {
+                mechanism,
+                lib,
+                symbol,
+            } => {
+                "extern_ref".hash(state);
+                mechanism.hash(state);
+                lib.hash(state);
+                symbol.hash(state);
+            }
         }
     }
 }

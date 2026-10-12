@@ -1683,3 +1683,53 @@ fn test_symbolic_request_without_container_stays_erased() {
         "无容器的符号化请求不得被当成具体实参特化（这是它区别于入队路径的判据）：{names:?}"
     );
 }
+
+// ==================== WBS 3.10.1 / issue #447：深嵌套类型的栈安全回归闸 ====================
+
+/// 构造 `Vec^n(Int64)`（n 层嵌套 `Generic`）——「类型逐层增长」的最小载体。
+fn nested_generic(n: usize) -> MonoType {
+    let mut ty = MonoType::Int(64);
+    for _ in 0..n {
+        ty = MonoType::Generic {
+            name: "Vec".to_string(),
+            args: vec![ty],
+        };
+    }
+    ty
+}
+
+/// 深嵌套类型上的四项结构操作都必须在**默认栈**内完成，不得崩栈。
+///
+/// 判据来源（WBS 3.10.1 / issue #447 定位结论）：这些操作此前都是按类型嵌套
+/// 深度递归的原生调用，实测每层约：`Clone` 400 字节、`type_name` 328 字节、
+/// `type_name_hash` 164 字节；1 MiB 主线程栈在约 2500 层耗尽（0xC00000FD）。
+/// 深度取 4000（> 修复前临界 2500、< 修复后工作列表可承受的规模）：
+/// 任一项回退成递归实现，本测试进程即 `0xC00000FD` 崩溃——红态是崩溃而非断言失败，
+/// 这正是被测现象本身。
+#[test]
+fn test_deep_nested_type_operations_survive_default_stack() {
+    // Arrange：4000 层嵌套（修复前 Clone/type_name 在约 2500 层即崩栈）
+    let depth = 4000;
+    let ty = nested_generic(depth);
+
+    // Act：深拷贝 / 结构相等 / 渲染 / 哈希
+    let cloned = ty.clone();
+    let rendered = cloned.type_name();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    use std::hash::{Hash, Hasher};
+    cloned.hash(&mut hasher);
+    let digest = hasher.finish();
+
+    // Assert：值与结构保真（渲染出的名字长度 = 每层 "Vec(" + 内层 + ")"）
+    assert!(cloned == ty, "深拷贝必须与原类型结构逐层相等（{depth} 层）");
+    assert_eq!(
+        rendered,
+        "Vec(".repeat(depth) + "int64" + &")".repeat(depth),
+        "渲染结果必须与逐层包裹的文本一致（{depth} 层）"
+    );
+    assert!(digest != 0, "深层类型必须可哈希（digest={digest}）");
+
+    // Act & Assert②：释放（Drop 仍是递归实现，4000 层远低于其临界）
+    drop(cloned);
+    drop(ty);
+}

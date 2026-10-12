@@ -220,7 +220,7 @@ impl Monomorphizer {
         self.generic_functions.contains_key(name) || self.generic_types.contains_key(name)
     }
     fn process_queue(&mut self) -> Result<(), Diagnostic> {
-        while let Some(req) = self.pending_queue.pop_front() {
+        while let Some(mut req) = self.pending_queue.pop_front() {
             let key = req.specialization_key();
 
             if self.processed.contains(&key) {
@@ -295,16 +295,16 @@ impl Monomorphizer {
             // 特化按**已解析**的名字建件（多文件下 IR 定义键是限定名），
             // 但请求本身保持原名字——调用点改写的 (容器, 名, span) 三元键
             // 必须与 IR 调用指令里的字符串逐字一致
-            let mut resolved_req = req.clone();
-            resolved_req.generic_id = GenericFunctionId::new(
-                generic_name.clone(),
-                req.generic_id().type_params().to_vec(),
-            );
+            // 原地改「已解析名」而不是整请求深拷贝（WBS 3.10.1）：类型逐层增长时
+            // 每次深拷贝都要走一遍嵌套结构，原生栈被逐层吃光。
+            let resolved_type_params = req.generic_id().type_params().to_vec();
+            req.generic_id = GenericFunctionId::new(generic_name.clone(), resolved_type_params);
+            let resolved_req = &req;
             // 先尝试类型特化，再尝试函数特化
             let specialized = if self.generic_types.contains_key(&generic_name) {
-                self.specialize_type(&resolved_req)
+                self.specialize_type(resolved_req)
             } else {
-                self.specialize_function(&resolved_req)
+                self.specialize_function(resolved_req)
             };
 
             match specialized {
@@ -685,35 +685,43 @@ impl Monomorphizer {
         ty: &MonoType,
         depth: usize,
     ) {
-        match ty {
-            MonoType::Generic { name, args } => {
-                if self.generic_types.contains_key(name) {
-                    let key = SpecializationKey::new(name.clone(), args.clone());
-                    if !self.processed.contains(&key) {
-                        let mut req = InstantiationRequest::new(
-                            GenericFunctionId::new(name.clone(), Vec::new()),
-                            args.clone(),
-                            crate::util::span::Span::default(),
-                        );
-                        req.depth = depth;
-                        self.pending_queue.push_back(req);
+        // 显式工作列表（WBS 3.10.1 / issue #447）：递归版的原生栈用量随类型嵌套
+        // 深度线性增长。病态泛型递归的实参类型逐层嵌套（每层一层 `Generic`），
+        // 本扫描对每个特化实例都要走一遍整条链——深度闸抬到 5000 后它先于闸门
+        // 耗尽主线程栈，使 E3005 不可达。弹出顺序 = 原递归的前序顺序（队列入队
+        // 顺序不变）。
+        let mut stack: Vec<&MonoType> = vec![ty];
+        while let Some(ty) = stack.pop() {
+            match ty {
+                MonoType::Generic { name, args } => {
+                    if self.generic_types.contains_key(name) {
+                        let key = SpecializationKey::new(name.clone(), args.clone());
+                        if !self.processed.contains(&key) {
+                            let mut req = InstantiationRequest::new(
+                                GenericFunctionId::new(name.clone(), Vec::new()),
+                                args.clone(),
+                                crate::util::span::Span::default(),
+                            );
+                            req.depth = depth;
+                            self.pending_queue.push_back(req);
+                        }
+                    }
+                    // 扫描参数（嵌套泛型：List(List(Int))）——逆序入栈 ⇒ 前序弹出
+                    for arg in args.iter().rev() {
+                        stack.push(arg);
                     }
                 }
-                // 递归扫描参数（嵌套泛型：List(List(Int))）
-                for arg in args {
-                    self.collect_generic_type_refs(arg, depth);
+                MonoType::Fn {
+                    params,
+                    return_type,
+                } => {
+                    stack.push(return_type);
+                    for t in params.iter().rev() {
+                        stack.push(t);
+                    }
                 }
+                _ => {}
             }
-            MonoType::Fn {
-                params,
-                return_type,
-            } => {
-                for t in params {
-                    self.collect_generic_type_refs(t, depth);
-                }
-                self.collect_generic_type_refs(return_type, depth);
-            }
-            _ => {}
         }
     }
 
