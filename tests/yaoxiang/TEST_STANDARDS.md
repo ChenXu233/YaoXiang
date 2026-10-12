@@ -62,13 +62,37 @@ tests/yaoxiang/
 ├── 01-syntax/            # 语法规范（对应 syntax.md）
 │   ├── basics/           #   基本语法
 │   ├── functions/        #   函数定义与调用
-│   └── control-flow/     #   控制流
+│   ├── control-flow/     #   控制流
+│   └── operators/        #   运算符
 ├── 02-type-system/       # 类型系统（对应 type-system.md）
+│   ├── generics/         #   泛型、const 泛型、单态化
+│   ├── aggregates/       #   struct / tuple / list / dict / array / range
+│   ├── sum-types/        #   sum type / option / result / try 传播
+│   ├── interfaces/       #   接口、运算符接口、关联类型
+│   ├── functions/        #   闭包、curry、方法
+│   ├── refinement/       #   精化类型与返回精化
+│   ├── termination/      #   终止性证明（显式 measure / flag 循环）
+│   ├── patterns/         #   模式匹配
+│   ├── runtime/          #   运行期失败与栈深度等运行语义
+│   └── name-resolution/  #   名字解析与遮蔽
 ├── 03-modules/           # 模块系统（对应 modules.md）
 ├── 03-semantics/         # 语义（return/尾表达式）
 ├── 04-concurrency/       # 并发模型（对应 concurrency.md）
 ├── 05-ownership/         # 所有权（独立章节）
-├── 06-compile-errors/    # 编译期错误检测
+├── 06-compile-errors/    # 编译期错误检测（按错误类别分层；运行期失败夹具在 runtime/）
+│   ├── types/            #   类型不匹配、注解/尾表达式
+│   ├── control-flow/     #   break/continue/return/循环体类型
+│   ├── ownership/        #   借用、移动、线性 token
+│   ├── refinement/       #   精化类型违反
+│   ├── runtime/          #   运行期失败（E6001/E6003/E6004/E6007/E6008…）
+│   ├── modules/          #   导入/模块/命名空间/可见性
+│   ├── call-args/        #   方法调用、具名实参、实参类型/目数
+│   ├── patterns/         #   模式匹配完整性
+│   ├── interfaces/       #   接口实现契约
+│   ├── generics/         #   泛型实参/推断
+│   ├── termination/      #   终止性证明
+│   ├── literals/         #   字面量词法错误
+│   └── name-resolution/  #   遮蔽与重名
 ├── 99-demos/             # 论文演示（非规范测试）
 └── TEST_STANDARDS.md     # 本文件
 ```

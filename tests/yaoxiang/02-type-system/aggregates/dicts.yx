@@ -1,0 +1,13 @@
+// 02-type-system/aggregates/dicts.yx
+// 覆盖: 规范 §2.6.4 集合字面量
+// 验证: Dict 字面量
+// 状态: ✅ 可运行
+
+use std.assert
+
+main: () -> Void = {
+    mut d = {"key": 42}
+    assert.assert(true, "dict created successfully")
+}
+
+main()

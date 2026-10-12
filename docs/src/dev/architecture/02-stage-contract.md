@@ -219,7 +219,7 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 - 因此 `check_files_with_diagnostics`（`diagnostic/mod.rs:565`）对每个语料文件都命中 `standalone` 分支（`614-616`）→ `check_single_file`（`623-661`）→ `Compiler::compile_with_source`（`635`）→ `Pipeline::run` → **proof_execution 执行**。
 - 换言之，**293 个语料文件全部走单文件路径，全部覆盖 proof_execution，全部不覆盖多文件路径。**
 
-`tests/yaoxiang/06-compile-errors/refined_annotation_literal_violates_err.yx` 正是这一点的实证。该文件标注 `// expect: compile-error E4018`（第 15 行），其头部注释第 7 行写着「状态: ❌ 应被编译期拒绝」——**它能通过，正因为它走的是唯一执行证明函数的那条路**。
+`tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx` 正是这一点的实证。该文件标注 `// expect: compile-error E4018`（第 15 行），其头部注释第 7 行写着「状态: ❌ 应被编译期拒绝」——**它能通过，正因为它走的是唯一执行证明函数的那条路**。
 
 **结论：第三层判据需要补充多文件语料层，否则它无法充当本文的验收工具。** 见「实施要点」S1。
 
@@ -949,7 +949,7 @@ pub enum Aggregation {
 - `src/frontend/core/typecheck/proof/smt/backend.rs:60` — 「调用方应保守降级」的契约声明（与 `predicate.rs` 矛盾）
 - `src/frontend/core/typecheck/types.rs:16-70` — 16 个下游必须消费的义务字段
 - `src/frontend/core/typecheck/tests/rfc027_refined_transparency.rs:13-15` — 单测自认「停在 pipeline 之前」
-- `tests/yaoxiang/06-compile-errors/refined_annotation_literal_violates_err.yx:12-13` — 语料自认「由 pipeline.rs 在 check_module 之后执行」
+- `tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx:12-13` — 语料自认「由 pipeline.rs 在 check_module 之后执行」
 - `wasm/src/lib.rs:48` — playground 的第四个编译调用方（单文件路径，故执行 proof_execution）
 - `wasm/Cargo.toml:10-18` — cdylib + wasm-bindgen 在 shim crate 而非主 crate
 - `build.rs:19-55` — 错误码构建期门禁，本项目强制机制的范例

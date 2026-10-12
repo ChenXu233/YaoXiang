@@ -54,7 +54,7 @@ const RETURN_POSITION: &str =
 
 /// 触发源 2：调用点实参义务（命中 checker.rs:5318 的 extend 分支）。
 /// 调用须写成语句层赋值右侧——嵌套在 assert 里的调用不进检查（#395，
-/// tests/yaoxiang/02-type-system/call_arg_evidence.yx 的注释钉死）。
+/// tests/yaoxiang/02-type-system/refinement/call_arg_evidence.yx 的注释钉死）。
 const CALL_ARG: &str =
     "h: (s: SumUpTo(3, s)) -> Int = { s }\n\nmain: () -> Void = {\n    z: Int = h(7)\n}\n";
 

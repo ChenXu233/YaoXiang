@@ -19,11 +19,11 @@
 //! 替代写法由 E2031 的本地化 help 给出；实参全为字面量时仍生成证明函数调用交
 //! 编译期执行。
 //!
-//! 端到端对照语料：`tests/yaoxiang/02-type-system/return_refinement_arg_expr.yx`、
-//! `tests/yaoxiang/06-compile-errors/return_refinement_arg_expr_err.yx`、
-//! `tests/yaoxiang/06-compile-errors/return_refinement_undeclared_var_err.yx`、
-//! `tests/yaoxiang/06-compile-errors/return_refinement_multi_arg_predicate_err.yx`、
-//! `tests/yaoxiang/06-compile-errors/return_refinement_multi_arg_literal_err.yx`。
+//! 端到端对照语料：`tests/yaoxiang/02-type-system/refinement/return_refinement_arg_expr.yx`、
+//! `tests/yaoxiang/06-compile-errors/refinement/return_refinement_arg_expr_err.yx`、
+//! `tests/yaoxiang/06-compile-errors/refinement/return_refinement_undeclared_var_err.yx`、
+//! `tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_predicate_err.yx`、
+//! `tests/yaoxiang/06-compile-errors/refinement/return_refinement_multi_arg_literal_err.yx`。
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
@@ -331,7 +331,7 @@ fn test_bare_multi_arg_predicate_points_at_return_position() {
 ///
 /// `f: () -> (r: SumUpTo(3, r)) = { return 7 }` ⇒ 实参 [Int(3), Int(7)]。
 /// E4018 由 pipeline 在 `check_module` 之后报，故端到端由语料
-/// `06-compile-errors/return_refinement_multi_arg_literal_err.yx` 覆盖，
+/// `06-compile-errors/refinement/return_refinement_multi_arg_literal_err.yx` 覆盖，
 /// 本测试钉住「调用被生成且实参为 [Int(3), Int(7)]」这一步。
 #[test]
 fn test_multi_arg_predicate_with_literal_arg_collects_proof_call() {

@@ -1,0 +1,23 @@
+// 02-type-system/generics/generics.yx
+// 验证: 泛型类型和函数
+// 状态: 待测试
+use std.assert
+
+// 泛型类型定义
+// Container: (T: Type) -> Type = { value: T }
+
+// 泛型函数
+identity: (T: Type) -> (x: T) -> T = (x) => x
+
+// 泛型函数调用
+main: () -> Void = {
+    // 类型推断：T = Int
+    x = identity(42)
+    assert.assert(x == 42, "identity(42) should be 42")
+
+    // 类型推断：T = String
+    s = identity("hello")
+    assert.assert(s == "hello", "identity(\"hello\") should be \"hello\"")
+}
+
+main()

@@ -5,14 +5,14 @@
 //! 本节钉住这条基础规则——「精化类型可当它的基类型用」。
 //!
 //! 背景：绑定位的同类规则已落地（`c280ea86`，语料
-//! `tests/yaoxiang/02-type-system/refined_variable_uses_base_type.yx`），但
+//! `tests/yaoxiang/02-type-system/refinement/refined_variable_uses_base_type.yx`），但
 //! **形参位不成立**：`b: NonNegative(b)` 在体内是名义类型，于是
 //! 1) 体内 `b` 当值用报 E1012/E1002，2) 任何调用方传入基类型报 E1002
 //!    （连合法的 `f(5)` 都被拒——不是谓词校验，是个坏类型）。
 //!
 //! 本文件只断言 `check_module` 能看到的东西。证明调用（E4018）由 `pipeline.rs`
 //! 在 `check_module` **之后**执行，故精化**违反**的用例在 `.yx` 层，见
-//! `tests/yaoxiang/06-compile-errors/refined_annotation_literal_violates_err.yx`。
+//! `tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx`。
 
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::typecheck::types::TypeCheckResult;
@@ -151,7 +151,7 @@ fn test_refined_fn_accepts_base_type_argument() {
 /// 谓词定义注册（#377-3）后，形参约束是**谓词体**（`b >= 0` 而非不透明应用），
 /// 常量实参可直接折叠判伪，故诊断在 `check_module` 内即产生（不必等 pipeline
 /// 执行证明函数）。端到端见
-/// `tests/yaoxiang/06-compile-errors/refined_param_arg_violates_err.yx`。
+/// `tests/yaoxiang/06-compile-errors/refinement/refined_param_arg_violates_err.yx`。
 #[test]
 fn test_call_arg_refinement_violation_judged_directly() {
     // Arrange — f(-5) 违反 b >= 0

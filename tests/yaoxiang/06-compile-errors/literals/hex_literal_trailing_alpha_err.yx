@@ -1,0 +1,8 @@
+// 06-compile-errors/literals/hex_literal_trailing_alpha_err.yx
+// 覆盖: 规范 syntax.md §1.6.1 整数 BNF（Hex ::= 0x[0-9a-fA-F][0-9a-fA-F_]*）
+// 验证: 十六进制字面量后紧跟非法字母在词法层拒绝（E0002），不再拆成 0x1F + G
+// 状态: ✅ 可运行
+
+// expect: compile-error E0002
+
+x = 0x1FG

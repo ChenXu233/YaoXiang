@@ -1,0 +1,14 @@
+// 02-type-system/generics/fn_const_generic_lowercase.yx
+// 覆盖: RFC-011 §4.1 函数级 const 泛型 — 大小写等价
+// 验证: 小写 m 作为 const 泛型参数，大小写不决定分类，与大写 N 版行为一致
+
+use std.assert
+
+f: (m: Int) -> (n: m) -> Int = (n) => n
+
+main: () -> Void = {
+    result = f(42)(5)
+    assert.assert(result == 5, "f(42)(5) with lowercase m should return 5")
+}
+
+main()

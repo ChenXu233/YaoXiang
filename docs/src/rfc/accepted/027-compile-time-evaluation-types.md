@@ -713,7 +713,7 @@ loop: (n: Int) -> Int = {
 > 不是静默错值）。这是**静态近似边界**：`block_value_ty` 判据给的是体尾表达式的类型，
 > 对「循环是否至少执行一次」没有判定能力（需要数据流/可证性分析），故类型侧不擅自降级
 > （降级会破坏本节 `Terminates` 循环绑定所依赖的值类型）。
-> 该残留的契约由语料 `tests/yaoxiang/02-type-system/while_zero_iteration_void_err.yx`
+> 该残留的契约由语料 `tests/yaoxiang/02-type-system/termination/while_zero_iteration_void_err.yx`
 > （`// expect: runtime-error E6007`）钉住。**该残留已被确认为有意保留的设计边界**
 > （2026-10-04 裁定，暂不修复），故 issue
 > [#409](https://github.com/ChenXu233/YaoXiang/issues/409) 已随主形态修复关闭，不再单开跟踪项。

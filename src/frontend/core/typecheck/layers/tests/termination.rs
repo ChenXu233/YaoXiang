@@ -534,7 +534,7 @@ fn test_strategy1_proves_dual_variable_loop() {
 /// `while i > 0 { i = i + 1 }`：候选按 `Gt` 取 Decreasing（测度 `i - 0`），
 /// 但 `δi = +1` ⇒ `Δm = δv - δbound = +1 - 0 = +1 ≥ 0` ⇒ 合成侧直接否掉，
 /// 不交给求解器。即便注入「恒 Unsat」的桩（无条件认可任何候选）也必须 Unproven——
-/// 这是 tests/yaoxiang/06-compile-errors/termination_unproven_err.yx 的单元级对照。
+/// 这是 tests/yaoxiang/06-compile-errors/termination/termination_unproven_err.yx 的单元级对照。
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test_strategy1_rejects_increment_toward_lower_bound() {
