@@ -5,19 +5,19 @@ description: 'String search, splitting, formatting, and parsing'
 
 # std.string
 
-String operation module. Except for `format`, all functions take read-only borrows (`&String`) of
-their inputs, and the source string can still be used after the call.
+String operations module. Except for `format`, all functions take read-only borrows (`&String`) of
+their arguments, so the source string remains usable after the call.
 
-All functions degrade to **empty string semantics** (rather than reporting an error) when the
-argument types do not match: `split`/`trim`/`upper` etc. treat non-`String` inputs as `""`. This
-means wrong argument types won't interrupt execution, but you also won't get the expected result —
-it is recommended to rely on the type checker to catch this at compile-time.
+When argument types do not match, all functions degrade to **empty string semantics** (rather than
+reporting an error): `split`/`trim`/`upper` and others treat non-`String` arguments as `""`. This
+means a wrong argument type will not be interrupted, but it will not produce the expected result —
+it is recommended to rely on the type checker to catch this at compile time.
 
 ```yaoxiang
 use std.string
 ```
 
-## Function overview
+## Function Overview
 
 <!-- stdlib:table:string start -->
 
@@ -45,7 +45,9 @@ use std.string
 | `char_code`      | `(s: &String, i: Int) -> Int`                        |
 | `from_char_code` | `(n: Int) -> Result(String, Error)`                  |
 
-<!-- stdlib:table:string end -->## Functions
+<!-- stdlib:table:string end -->
+
+## Functions
 
 ### split
 
@@ -57,12 +59,12 @@ split: (s: &String, sep: &String) -> Vec(String)
 
 <!-- stdlib:sig:string.split end -->
 
-Split `s` by `sep`, returns a list of substrings.
+Splits `s` by `sep`, returning a list of substrings.
 
-- `s` —— string to split
-- `sep` —— separator; **when empty, splits character by character**
+- `s` — the source string to split
+- `sep` — the separator; **when empty, splits by individual characters**
 
-Returns: `List(String)`. Returns a single-element list when the separator is not found.
+Returns: `List(String)`. When the separator is not found, returns a single-element list.
 
 ```yaoxiang
 use std.assert
@@ -90,7 +92,7 @@ trim: (s: &String) -> String
 
 <!-- stdlib:sig:string.trim end -->
 
-Remove leading and trailing Unicode whitespace characters.
+Removes leading and trailing Unicode whitespace.
 
 Returns: a new string with leading and trailing whitespace removed (does not modify `s`).
 
@@ -113,7 +115,7 @@ upper: (s: &String) -> String
 
 <!-- stdlib:sig:string.upper end -->
 
-Convert to uppercase (Unicode-aware).
+Converts to uppercase (Unicode-aware).
 
 ```yaoxiang
 use std.assert
@@ -134,7 +136,7 @@ lower: (s: &String) -> String
 
 <!-- stdlib:sig:string.lower end -->
 
-Convert to lowercase (Unicode-aware).
+Converts to lowercase (Unicode-aware).
 
 ```yaoxiang
 use std.assert
@@ -155,9 +157,9 @@ replace: (s: &String, old: &String, new: &String) -> String
 
 <!-- stdlib:sig:string.replace end -->
 
-Replace **all** occurrences of `old` in `s` with `new`.
+Replaces **all** occurrences of `old` in `s` with `new`.
 
-- `old` —— when empty, **returns `s` as-is** (no insertion)
+- `old` — when empty, returns `s` **as-is** (no insertion)
 
 ```yaoxiang
 use std.assert
@@ -179,7 +181,7 @@ contains: (s: &String, sub: &String) -> Bool
 
 <!-- stdlib:sig:string.contains end -->
 
-Whether `sub` appears in `s`. An empty string is always `true`.
+Whether `sub` appears in `s`. Always `true` for an empty string.
 
 ```yaoxiang
 use std.assert
@@ -201,7 +203,7 @@ starts_with: (s: &String, prefix: &String) -> Bool
 
 <!-- stdlib:sig:string.starts_with end -->
 
-Whether `s` starts with `prefix`. An empty `prefix` is always `true`.
+Whether `s` starts with `prefix`. Always `true` for an empty `prefix`.
 
 ```yaoxiang
 use std.assert
@@ -222,7 +224,7 @@ ends_with: (s: &String, suffix: &String) -> Bool
 
 <!-- stdlib:sig:string.ends_with end -->
 
-Whether `s` ends with `suffix`. An empty `suffix` is always `true`.
+Whether `s` ends with `suffix`. Always `true` for an empty `suffix`.
 
 ```yaoxiang
 use std.assert
@@ -243,12 +245,12 @@ index_of: (s: &String, sub: &String) -> Int
 
 <!-- stdlib:sig:string.index_of end -->
 
-**Byte** index of the first occurrence of `sub`.
+The **scalar value (code point) index** of the first occurrence of `sub` (#385).
 
-Returns: returns the index when found; returns `-1` when not found.
+Returns: the index if found; `-1` if not found.
 
-> The return value is a byte offset. When multi-byte characters are involved, you can use `chars` to
-> convert first and then locate the character index.
+> The return value is in the same domain as `substring` / `char_code` / `s[i]`, and can be composed
+> directly with them.
 
 ```yaoxiang
 use std.assert
@@ -270,13 +272,13 @@ substring: (s: &String, start: Int, end: Int) -> String
 
 <!-- stdlib:sig:string.substring end -->
 
-Take the `[start, end)` range by **character** index.
+Takes the `[start, end)` range by **character** index.
 
-- `start` —— starting character index, default `0`
-- `end` —— ending character index (exclusive), default is the end of the string
+- `start` — start character index, default `0`
+- `end` — end character index (exclusive), defaults to the end of the string
 
-Returns: the substring result. Out-of-range boundaries are **clamped** to the valid range, no error;
-when `start > end`, clamped to an empty string.
+Returns: the substring. Out-of-range bounds are **clamped** to the valid range without error; when
+`start > end`, the result is clamped to an empty string.
 
 ```yaoxiang
 use std.assert
@@ -284,7 +286,7 @@ use std.string
 
 main: () -> Void = {
     assert(string.substring("hello", 1, 4) == "ell")
-    assert(string.substring("hello", 1, 99) == "ello")   // upper bound clamp
+    assert(string.substring("hello", 1, 99) == "ello")   // Upper bound clamped
 }
 ```
 
@@ -320,7 +322,8 @@ len: (s: &String) -> Int
 
 <!-- stdlib:sig:string.len end -->
 
-Returns the **UTF-8 byte length**, not the number of characters.
+Returns the **count of Unicode scalar values (code points)** — same domain as `substring` / `chars`
+/ `char_code` / `index_of` (#385).
 
 ```yaoxiang
 use std.assert
@@ -328,7 +331,7 @@ use std.string
 
 main: () -> Void = {
     assert(string.len("hello") == 5)
-    assert(string.len("中") == 3)   // byte length
+    assert(string.len("中") == 1)    // Code point count, not UTF-8 byte count
 }
 ```
 
@@ -342,7 +345,7 @@ chars: (s: &String) -> Vec(String)
 
 <!-- stdlib:sig:string.chars end -->
 
-Split into a list of single-character strings (by Unicode scalar value).
+Splits into a list of single-character strings (by Unicode scalar values).
 
 ```yaoxiang
 use std.assert
@@ -366,7 +369,7 @@ concat: (s1: &String, s2: &String) -> String
 
 <!-- stdlib:sig:string.concat end -->
 
-Concatenate two strings. You can also use the `+` operator directly.
+Concatenates two strings. You can also use the `+` operator directly.
 
 ```yaoxiang
 use std.assert
@@ -387,9 +390,9 @@ repeat: (s: &String, n: Int) -> String
 
 <!-- stdlib:sig:string.repeat end -->
 
-Repeat `s` `n` times.
+Repeats `s` `n` times.
 
-- `n` —— number of repetitions; `n <= 0` returns an empty string
+- `n` — repeat count; returns an empty string when `n <= 0`
 
 ```yaoxiang
 use std.assert
@@ -411,7 +414,7 @@ reverse: (s: &String) -> String
 
 <!-- stdlib:sig:string.reverse end -->
 
-Reverse by character.
+Reverses by character.
 
 ```yaoxiang
 use std.assert
@@ -432,23 +435,23 @@ format: (format: &String, ...args) -> String
 
 <!-- stdlib:sig:string.format end -->
 
-Format using `{index}` placeholders, with optional width/alignment specifiers.
+Formats using `{index}` placeholders, with optional width/alignment specifiers.
 
 Placeholder syntax:
 
 | Form     | Meaning                                                         |
 | -------- | --------------------------------------------------------------- |
-| `{0}`    | The 0th argument (arguments are numbered from 0 after `format`) |
-| `{0:03}` | Width 3                                                         |
-| `{0:>3}` | Width 3, right-aligned (default)                                |
-| `{0:<3}` | Width 3, left-aligned                                           |
-| `{0:^3}` | Width 3, centered                                               |
+| `{0}`    | the 0th argument (arguments after `format` are numbered from 0) |
+| `{0:03}` | width 3                                                         |
+| `{0:>3}` | width 3, right-aligned (default)                                |
+| `{0:<3}` | width 3, left-aligned                                           |
+| `{0:^3}` | width 3, centered                                               |
 
-Literal curly braces are written by doubling: two left braces produce one literal left brace, and
-similarly for right braces.
+Literal curly braces are written by doubling: two left braces produce one literal left brace, same
+for right braces.
 
 Return value: the formatted string. Arguments are first converted to strings (same as
-`convert.to_string`); out-of-range indices yield an empty string, and invalid widths are treated as
+`convert.to_string`); out-of-range indices yield an empty string, and illegal widths are treated as
 `0`.
 
 ```yaoxiang
@@ -472,10 +475,10 @@ parse_int: (s: &String) -> Result(Int, Error)
 
 <!-- stdlib:sig:string.parse_int end -->
 
-Parse a decimal integer (automatically trims leading and trailing whitespace).
+Parses a decimal integer (automatically strips leading and trailing whitespace).
 
-Returns: on success, `Result.ok(Int)`; on failure, `Result.err(Error)` with `code` `E6010`. **Does
-not throw**.
+Returns: `Result.ok(Int)` on success; `Result.err(Error)` on failure, whose `code` is `E6010`.
+**Does not throw**.
 
 ```yaoxiang
 use std.assert
@@ -498,9 +501,9 @@ parse_float: (s: &String) -> Result(Float, Error)
 
 <!-- stdlib:sig:string.parse_float end -->
 
-Parse a floating-point number (automatically trims leading and trailing whitespace).
+Parses a floating-point number (automatically strips leading and trailing whitespace).
 
-Returns: on success, `Result.ok(Float)`; on failure, `Result.err(Error)` with `code` `E6011`.
+Returns: `Result.ok(Float)` on success; `Result.err(Error)` on failure, whose `code` is `E6011`.
 
 ```yaoxiang
 use std.assert
@@ -523,15 +526,14 @@ char_code: (s: &String, i: Int) -> Int
 
 <!-- stdlib:sig:string.char_code end -->
 
-Get the Unicode code point of the `i`-th character (scalar value semantics, in the same domain as
+Returns the Unicode code point of the `i`-th character (scalar value domain, same as
 [`chars`](#chars) / [`substring`](#substring)).
 
-- `s` —— source string (read-only borrow)
-- `i` —— character index (**character** index, not byte offset)
+- `s` — source string (read-only borrow)
+- `i` — character index (Unicode scalar value domain, same unit as [`index_of`](#index_of))
 
-Returns: the code point; **returns `-1` for an out-of-range index** (same convention as
-[`index_of`](#index_of) miss — code points are non-negative, so `-1` is unambiguous). **Does not
-throw**.
+Returns: the code point; **returns `-1` if the index is out of range** (same convention as a miss in
+[`index_of`](#index_of) — code points are non-negative, so `-1` is unambiguous). **Does not throw**.
 
 ```yaoxiang
 use std.assert
@@ -539,8 +541,8 @@ use std.string
 
 main: () -> Void = {
     assert(string.char_code("A", 0) == 65)
-    assert(string.char_code("中", 0) == 0x4E2D)     // character index, not byte offset
-    assert(string.char_code("A", 9) == -1)          // out-of-range returns -1
+    assert(string.char_code("中", 0) == 0x4E2D)     // Scalar value index
+    assert(string.char_code("A", 9) == -1)          // Out of range returns -1
 }
 ```
 
@@ -554,16 +556,16 @@ from_char_code: (n: Int) -> Result(String, Error)
 
 <!-- stdlib:sig:string.from_char_code end -->
 
-Code point to single-character string.
+Converts a code point to a single-character string.
 
-- `n` —— Unicode code point
+- `n` — Unicode code point
 
-Returns: on success, `Result.ok(String)` (a single string); on invalid code point,
-`Result.err(Error)` with `code` `E6012`. **Does not throw**. Validity is determined using
-`char::from_u32` (`src/std/string.rs:613-619`), the same rules as the lexer-level `\u{…}` escape:
-negatives, the surrogate range (U+D800–U+DFFF), and values greater than `U+10FFFF` are all invalid.
-`U+10000..=U+10FFFF` directly produces valid 4-byte UTF-8; UTF-16 surrogate pair composition is left
-to the yx layer.
+Returns: `Result.ok(String)` (a single-character string) on success; `Result.err(Error)` for an
+illegal code point, whose `code` is `E6012`. **Does not throw**. Validity is determined by
+`char::from_u32` (`src/std/string.rs:613-619`), the same set of rules as the lexer-level `\u{…}`
+escape: negative numbers, the surrogate range (U+D800–U+DFFF), and values greater than `U+10FFFF`
+are all illegal. `U+10000..=U+10FFFF` directly produces valid 4-byte UTF-8; UTF-16 surrogate pair
+composition is left to the yx layer.
 
 ```yaoxiang
 use std.assert
@@ -574,17 +576,17 @@ main: () -> Void = {
     assert(result.unwrap(string.from_char_code(65)) == "A")
     assert(result.unwrap(string.from_char_code(0x4E2D)) == "中")
 
-    // invalid code point goes to the Err branch
+    // Illegal code point goes to the Err branch
     assert(result.is_err(string.from_char_code(-1)))
     assert(result.code(result.unwrap_err(string.from_char_code(-1))) == "E6012")
 
-    // inverse of char_code
+    // Inverse of char_code
     assert(result.unwrap(string.from_char_code(string.char_code("A", 0))) == "A")
 }
 ```
 
 ## Related
 
-- [`std.convert`](./convert) —— number to string
-- [`std.result`](./result) —— unwrap results of `parse_*` / `from_char_code`
-- [`std.json`](./json) —— Unicode primitives for string escaping come from this module
+- [`std.convert`](convert) — number to string conversion
+- [`std.result`](result) — unpack results of `parse_*` / `from_char_code`
+- [`std.json`](json) — the Unicode primitives used for string escaping come from this module

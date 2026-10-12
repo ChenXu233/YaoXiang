@@ -348,13 +348,13 @@ fn test_multi_arg_predicate_with_literal_arg_collects_proof_call() {
         result.diagnostics
     );
     let call = result
-        .proof_calls
+        .proof_calls()
         .iter()
         .find(|c| c.func_name == "SumUpTo")
         .unwrap_or_else(|| {
             panic!(
                 "应生成 SumUpTo 的证明函数调用；实际: {:#?}",
-                result.proof_calls
+                result.proof_calls()
             )
         });
     assert!(
@@ -387,7 +387,7 @@ fn test_multi_arg_predicate_with_literal_arg_satisfied_is_clean() {
         result.diagnostics
     );
     let call = result
-        .proof_calls
+        .proof_calls()
         .iter()
         .find(|c| c.func_name == "SumUpTo")
         .expect("应生成 SumUpTo 的证明函数调用交编译期执行");

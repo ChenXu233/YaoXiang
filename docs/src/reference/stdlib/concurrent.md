@@ -41,7 +41,7 @@ sleep: (millis: Int) -> Void
 
 - `millis` —— 休眠毫秒数；非 `Int` 或缺失时按 `0` 处理（不报错）
 
-> **单位注意**：[`std.time.sleep`](./time#sleep)
+> **单位注意**：[`std.time.sleep`](time#sleep)
 > 以**秒**为单位且接受小数，本函数以**毫秒**为单位。`concurrent.sleep(1)` 睡 1 毫秒，
 > `time.sleep(1)` 睡 1 秒。
 
@@ -102,5 +102,5 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.time.sleep`](./time#sleep) —— 秒级休眠
+- [`std.time.sleep`](time#sleep) —— 秒级休眠
 - [语言规范：并发模型](../language-spec/concurrency.md) —— `spawn` 与并作语义

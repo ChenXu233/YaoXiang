@@ -1,5 +1,319 @@
 //! SemanticDB 模块测试
 //!
-//! 测试语义数据库功能
+//! 测试语义数据库功能与生产端语义事件管线（#433/RFC-039 D55）：
+//! - checker 语义事件排空：definitions/references/imports 由真实 typecheck 管线产出
+//! - resolve_reference 往返：引用 resolves_to 与定义 def_id 同源衔接（跳转定义数据链）
+//! - dummy 定义过滤：模块整体导入名/占位绑定不产生定义事件，precise-only 降级；
+//!   花括号导入项（带名源位置）则产生定义事件并同源衔接引用（#433 余项）
+//! - upsert_from：按文件替换，会话级数据（std/内置类型）保留
+//!
+//! 静默通道判定（coding-rules 第六部分）：本文件即「生产端直驱」测试——
+//! 语义数据全部来自真实 tokenize → parse → check 管线，不手工构造登记数据。
 
-use crate::frontend::core::typecheck::semantic_db::SemanticDB;
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::parser::parse;
+use crate::frontend::core::typecheck::TypeChecker;
+use crate::frontend::core::typecheck::semantic_db::{DefinitionInfo, SemanticDB};
+use crate::util::span::Span;
+
+/// 以生产管线检查源码，返回文件键为 `uri` 的 SemanticDB
+fn check_to_semantic_db(
+    uri: &str,
+    source: &str,
+) -> SemanticDB {
+    // Act：tokenize → parse → check_module_collect_all（与 server.rs 同管线）
+    let tokens = tokenize(source).expect("测试源码必须可词法分析");
+    let parsed = parse(&tokens);
+    let mut checker = TypeChecker::new(uri);
+    let result = checker.check_module_collect_all(&parsed.module);
+    result.semantic_db
+}
+
+#[test]
+fn test_semantic_events_link_references_to_binding_definitions() {
+    // Arrange：第二行 `y = x + x` 对 x 有两个引用点，定义在第一行
+    let uri = "file:///t.yx";
+
+    // Act：真实管线产出 SemanticDB
+    let db = check_to_semantic_db(uri, "x = 1\ny = x + x\n");
+
+    // Assert：x 有定义事件与两个引用事件，resolves_to 指回定义
+    let defs = db.get_definitions(uri);
+    let x_def = defs
+        .iter()
+        .find(|d| d.name == "x")
+        .expect("顶层绑定 x 必须产出定义事件");
+    assert_eq!(x_def.span.start.line, 1, "x 定义在第一行");
+
+    let refs = db.get_references(uri);
+    let x_refs: Vec<_> = refs.iter().filter(|r| r.name == "x").collect();
+    assert_eq!(x_refs.len(), 2, "y = x + x 应产出两个 x 引用事件");
+    for r in &x_refs {
+        assert_eq!(r.span.start.line, 2, "x 引用在第二行");
+        assert_eq!(
+            r.resolves_to.span, x_def.def_id.span,
+            "引用 resolves_to 必须指向 x 定义（同源 VarInfo.definition_span）"
+        );
+    }
+}
+
+#[test]
+fn test_resolve_reference_round_trip_for_goto_definition() {
+    // Arrange：同一 x 样例；引用点在第二行第 5 列（1-indexed）
+    let uri = "file:///t.yx";
+    let db = check_to_semantic_db(uri, "x = 1\ny = x + x\n");
+
+    // Act：以引用起点精确解析（跳转定义的核心查询路径）
+    let def = db.resolve_reference(uri, 2, 5);
+
+    // Assert：解析回 x 的定义
+    let def = def.expect("x 引用点必须解析到定义（跳转定义数据链闭合）");
+    assert_eq!(def.name, "x", "解析目标应为 x");
+    assert_eq!(def.span.start.line, 1, "定义在第一行");
+}
+
+#[test]
+fn test_lambda_params_produce_definitions_and_body_references() {
+    // Arrange：lambda 参数在体内被引用
+    let uri = "file:///t.yx";
+    let source = "add = (a, b) => a + b\n";
+
+    // Act
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：参数 a 有定义事件，且体内 a 的引用 resolves_to 指回该定义
+    let defs = db.get_definitions(uri);
+    let a_def = defs
+        .iter()
+        .find(|d| d.name == "a")
+        .expect("lambda 参数 a 必须产出定义事件");
+    let refs = db.get_references(uri);
+    let a_ref = refs
+        .iter()
+        .find(|r| r.name == "a")
+        .expect("体内 a 必须产出引用事件");
+    assert_eq!(
+        a_ref.resolves_to.span, a_def.def_id.span,
+        "参数引用必须指回参数定义"
+    );
+}
+
+#[test]
+fn test_use_statement_registers_import_event() {
+    // Arrange：模块整体导入
+    let uri = "file:///t.yx";
+    let source = "use std.list\nmain = () => ()\n";
+
+    // Act
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：use 语句产出导入事件
+    let imports = db.get_imports(uri);
+    assert!(
+        imports.iter().any(|i| i.module_path == "std.list"),
+        "use 语句必须产出导入事件（module_path=std.list）"
+    );
+}
+
+#[test]
+fn test_module_import_without_usage_binds_but_records_no_reference() {
+    // Arrange：模块整体导入且文件内无使用
+    // （原判据「导入名 dummy 不产定义事件」随 #433 余项能力落地失效：
+    //   绑定现落 use 行路径末段 token，不再是 dummy）
+    let uri = "file:///t.yx";
+    let source = "use std.list\nmain = () => ()\n";
+
+    // Act
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：导入名有定义事件（绑定在 use 行），
+    // 但导入行自身不造引用事件——定义点 precise-only 仍成立
+    let defs = db.get_definitions(uri);
+    let list_def = defs
+        .iter()
+        .find(|d| d.name == "list")
+        .expect("模块导入名应产出定义事件（绑定落 use 行末段）");
+    assert_eq!(list_def.span.start.line, 1, "list 绑定在 use 行");
+    let refs = db.get_references(uri);
+    assert!(
+        refs.iter().all(|r| r.name != "list"),
+        "use 行不产生 list 引用事件，定义点跳转保持 precise-only"
+    );
+}
+
+#[test]
+fn test_item_import_binds_definition_at_use_line_and_resolves() {
+    // Arrange：花括号项导入，第二行调用 println（#433 余项：导入项跳转）
+    let uri = "file:///t.yx";
+    let source = "use std.io.{println}\nv = println(\"hi\")\n";
+
+    // Act：真实管线产出 SemanticDB
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：println 定义事件落在 use 行该项名源位置，使用点引用同源指回
+    let defs = db.get_definitions(uri);
+    let println_def = defs
+        .iter()
+        .find(|d| d.name == "println")
+        .expect("花括号项导入必须产出定义事件（绑定落 use 行该项）");
+    assert_eq!(
+        println_def.span.start.line, 1,
+        "导入项定义在 use 行（第 1 行）"
+    );
+    assert_eq!(
+        println_def.span.start.column, 13,
+        "定义 span 指向 println 标识符（第 13 列）"
+    );
+
+    let refs = db.get_references(uri);
+    let use_ref = refs
+        .iter()
+        .find(|r| r.name == "println")
+        .expect("使用点必须产出引用事件");
+    assert_eq!(use_ref.span.start.line, 2, "使用点在第 2 行");
+    assert_eq!(
+        use_ref.resolves_to.span, println_def.def_id.span,
+        "引用 resolves_to 必须指回 use 行定义（导入项跳转数据链）"
+    );
+}
+
+#[test]
+fn test_item_import_with_inline_alias_binds_at_alias_token() {
+    // Arrange：内联别名——本地名是 say，绑定应落别名 token
+    let uri = "file:///t.yx";
+    let source = "use std.io.{println as say}\nv = say(\"hi\")\n";
+
+    // Act
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：say 有定义事件（span 在 use 行别名 token），引用指回
+    let defs = db.get_definitions(uri);
+    let say_def = defs
+        .iter()
+        .find(|d| d.name == "say")
+        .expect("内联别名必须产出定义事件（绑定落别名 token）");
+    assert_eq!(say_def.span.start.line, 1, "别名绑定在 use 行");
+    assert_eq!(say_def.span.start.column, 24, "say 别名在第 24 列");
+    assert!(
+        defs.iter().all(|d| d.name != "println"),
+        "原名未在文件绑定，不产生定义事件"
+    );
+
+    let refs = db.get_references(uri);
+    let say_ref = refs
+        .iter()
+        .find(|r| r.name == "say")
+        .expect("say 使用点必须产出引用事件");
+    assert_eq!(
+        say_ref.resolves_to.span, say_def.def_id.span,
+        "别名引用必须指回 use 行别名 token"
+    );
+}
+
+#[test]
+fn test_module_import_binds_at_last_path_part_and_resolves() {
+    // Arrange：模块整体导入，io 经 FieldAccess 根使用（Var 臂递归登记引用）
+    let uri = "file:///t.yx";
+    let source = "use std.io\nv = io.println(\"hi\")\n";
+
+    // Act
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：io 定义事件落在 use 行路径末段 token（第 10 列），引用指回
+    let defs = db.get_definitions(uri);
+    let io_def = defs
+        .iter()
+        .find(|d| d.name == "io")
+        .expect("模块整体导入名必须产出定义事件（绑定落路径末段）");
+    assert_eq!(io_def.span.start.line, 1, "io 绑定在 use 行");
+    assert_eq!(io_def.span.start.column, 9, "io 末段 token 在第 9 列");
+
+    let refs = db.get_references(uri);
+    let io_ref = refs
+        .iter()
+        .find(|r| r.name == "io")
+        .expect("io.println 的根必须产出引用事件");
+    assert_eq!(
+        io_ref.resolves_to.span, io_def.def_id.span,
+        "模块别名引用必须指回 use 行末段 token"
+    );
+}
+
+#[test]
+fn test_module_alias_import_binds_at_alias_token_and_resolves() {
+    // Arrange：位置别名导入，printer 经 FieldAccess 根使用
+    let uri = "file:///t.yx";
+    let source = "use std.io as printer\nv = printer.println(\"hi\")\n";
+
+    // Act
+    let db = check_to_semantic_db(uri, source);
+
+    // Assert：printer 定义事件落别名 token（第 15 列），引用指回
+    let defs = db.get_definitions(uri);
+    let printer_def = defs
+        .iter()
+        .find(|d| d.name == "printer")
+        .expect("位置别名必须产出定义事件（绑定落别名 token）");
+    assert_eq!(printer_def.span.start.line, 1, "printer 绑定在 use 行");
+    assert_eq!(printer_def.span.start.column, 15, "printer 别名在第 15 列");
+
+    let refs = db.get_references(uri);
+    let printer_ref = refs
+        .iter()
+        .find(|r| r.name == "printer")
+        .expect("printer.println 的根必须产出引用事件");
+    assert_eq!(
+        printer_ref.resolves_to.span, printer_def.def_id.span,
+        "别名引用必须指回 use 行别名 token"
+    );
+}
+
+/// 构造一个 std 会话级虚拟定义（World 启动时 `load_std_symbols_to_semantic_db`
+/// 的形态：dummy span + `std://` 虚拟路径）
+fn session_std_definition() -> DefinitionInfo {
+    use crate::frontend::core::typecheck::semantic_db::DefId;
+    use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
+    DefinitionInfo {
+        def_id: DefId {
+            file_path: "std://std.list".to_string(),
+            span: Span::default(),
+        },
+        name: "list".to_string(),
+        kind: DefinitionKind::Type,
+        span: Span::default(),
+        file_path: "std://std.list".to_string(),
+        type_info: None,
+        signature: None,
+    }
+}
+
+#[test]
+fn test_upsert_from_replaces_only_target_file_and_keeps_session_data() {
+    // Arrange：会话库带一个 std 虚拟定义，随后依次 upsert 文件 A 与文件 B
+    let mut db = SemanticDB::new();
+    db.add_definition("std://std.list", session_std_definition());
+
+    // Act：先 upsert 文件 A，再 upsert 文件 B（模拟用户先后编辑两个文件）
+    db.upsert_from(check_to_semantic_db("file:///a.yx", "x = 1\n"));
+    db.upsert_from(check_to_semantic_db("file:///b.yx", "y = 2\n"));
+
+    // Assert：A 的数据在 upsert B 后仍在（多文件不互踩），std 会话级定义保留
+    assert!(
+        !db.get_tokens("file:///a.yx").unwrap_or(&[]).is_empty(),
+        "upsert 文件 B 不得清掉文件 A 的 tokens（#433 多文件互踩）"
+    );
+    assert!(
+        !db.get_tokens("file:///b.yx").unwrap_or(&[]).is_empty(),
+        "文件 B 的 tokens 应已入库"
+    );
+    assert!(
+        !db.get_definitions("std://std.list").is_empty(),
+        "std 会话级定义必须在 upsert 后保留"
+    );
+    assert!(
+        db.get_definitions("file:///b.yx")
+            .iter()
+            .any(|d| d.name == "y"),
+        "文件 B 的绑定应产出定义"
+    );
+}

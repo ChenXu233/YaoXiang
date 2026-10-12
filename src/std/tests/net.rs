@@ -7,7 +7,7 @@
 //! - 响应头名大小写不敏感；请求头按传入原样发送；POST 体按原样发送；
 //! - 「非正数 timeout_secs」报运行时错误、参数类型不符报类型错误。
 //!
-//! 规范来源：`std.net` 无独立 RFC（`docs/src/design/rfc/` 内无 std.net 专章），
+//! 规范来源：`std.net` 无独立 RFC（`docs/src/rfc/` 内无 std.net 专章），
 //! 故断言对象为上述实现契约，其出处是 `src/std/net.rs` 模块头注释（#56 真实实现 +
 //! 响应字典结构）与 `native_http_get` / `response_to_value` 的文档注释；错误码段位依据
 //! RFC-013（`013-error-code-specification.md:560`「E7xxx 为 std.io / std.net 错误值预留段位」）；

@@ -96,10 +96,22 @@ async function translateSystem(
     if (!langConfig) continue;
     console.log(`\n  🌐 Translating to ${lang} (${langConfig.name})...`);
 
+    // 读取目标 JSON——甄别待翻键要参考既有译文（#421 收养判定）
+    const targetPath = path.join(ROOT, systemConfig.targetDir, `${lang}.json`);
+    let targetJson: LocaleJson = readJsonIfExists(targetPath);
+
     // 获取需要翻译的 key
-    const keysToTranslate = isFullTranslate
-      ? Object.keys(sourceKeys)
-      : getKeysToTranslate(sourceKeys, cache, lang);
+    const { translate: keysToTranslate, adopt } = isFullTranslate
+      ? { translate: Object.keys(sourceKeys), adopt: [] }
+      : getKeysToTranslate(sourceKeys, cache, lang, adapter.extractKeys(targetJson));
+
+    // #421：缓存冷启动时既有译文收养进缓存——只登记 hash，不重译，
+    // 产物零改写（确需全量刷新走 --full）
+    if (adopt.length > 0) {
+      cache = updateCache(cache, sourceKeys, lang, adopt);
+      saveCache(cacheFullPath, cache);
+      console.log(`    🔒 Adopted ${adopt.length} existing translation(s) into cache`);
+    }
 
     if (keysToTranslate.length === 0) {
       console.log(`    ✅ No keys to translate (up to date)`);
@@ -107,10 +119,6 @@ async function translateSystem(
     }
 
     console.log(`    📝 ${keysToTranslate.length} keys to translate`);
-
-    // 读取目标 JSON
-    const targetPath = path.join(ROOT, systemConfig.targetDir, `${lang}.json`);
-    let targetJson: LocaleJson = readJsonIfExists(targetPath);
 
     // 按 batchSize 分组翻译
     const batchSize = config.batchSize || 20;

@@ -21,8 +21,8 @@ impl TypeChecker {
         file_path: &str,
         path: &str,
         path_parts: &[crate::frontend::core::parser::ast::SpannedIdent],
-        items: &Option<Vec<String>>,
-        alias: &Option<Vec<String>>,
+        items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
+        alias: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
     ) {
         // use path.{...} 的 path 部分始终是模块命名空间
         if items.is_some() {
@@ -447,7 +447,6 @@ impl TypeChecker {
                     type_annotation,
                     signature_params,
                     value,
-                    is_pub,
                     ..
                 } => {
                     let Some((name, type_name)) = target.receiver_parts() else {
@@ -495,9 +494,6 @@ impl TypeChecker {
                         }
                     } else if !params.is_empty() || !body.is_empty() {
                         let mut modifiers = vec![SemanticTokenModifier::Declaration];
-                        if *is_pub {
-                            modifiers.push(SemanticTokenModifier::Public);
-                        }
                         if !generic_params.is_empty() {
                             modifiers.push(SemanticTokenModifier::Generic);
                         }
@@ -735,14 +731,6 @@ impl TypeChecker {
                         );
                     }
                 }
-            }
-        }
-
-        // 更新全局作用域的符号列表
-        if let Some(file_info) = self.semantic_db.get_file_info(&self.env.module_name) {
-            if !file_info.scopes.is_empty() {
-                // We need mutable access; use set_file_info approach or direct access
-                // For simplicity, we recorded symbols inline already
             }
         }
     }

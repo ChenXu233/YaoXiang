@@ -1,0 +1,72 @@
+module
+  global[0] a : Int(64)
+  global[1] b : Int(64)
+  global[2] c : Int(64)
+  fn apply_int(Fn { params: [Int(64)], return_type: Int(64) }) -> Int(64)
+    slot[0] f : Int(64) @depth1
+    locals_total=4
+    Load %0 <- arg%0
+    Load %1 <- int(1)
+    Load %2 <- %0
+    CallDyn %3 <- %2 [%1]
+    Ret %3
+    Ret %3
+  fn pick(TypeRef("T"), Fn { params: [TypeRef("T")], return_type: TypeRef("T") }) -> TypeRef("T")
+    generic_params: ["T"]
+    slot[0] v : Int(64) @depth1
+    slot[1] f : Int(64) @depth1
+    locals_total=5
+    Load %0 <- %1
+    Load %2 <- %3
+    CallDyn %4 <- %2 [%0]
+    Ret %4
+    Ret %4
+  fn double(Int(64)) -> Int(64)
+    slot[0] x : Int(64) @depth1
+    locals_total=5
+    Load %0 <- arg%0
+    Load %1 <- %0
+    Load %2 <- int(2)
+    Mul %3 <- %1, %2
+    Ret %3
+    Ret
+  fn closure_0(Int(64)) -> Void
+    slot[0] x : Int(64) @depth1
+    locals_total=5
+    Load %0 <- %1
+    Load %2 <- int(1)
+    Add %3 <- %0, %2
+    Ret %3
+  fn closure_1(Int(64)) -> Void
+    slot[0] x : Int(64) @depth1
+    locals_total=11
+    Load %0 <- %1
+    Load %2 <- int(2)
+    Mul %3 <- %0, %2
+    Ret %3
+  init (locals=0)
+    MakeClosure %0 <- closure_0 env=[] (def=d0)
+    Call %1 <- string("apply_int") [%0] (def=d1)
+    Store @0 <- %1
+    Load %2 <- int(3)
+    MakeClosure %3 <- closure_1 env=[] (def=d2)
+    Call %4 <- string("pick") [%2, %3] (def=d3)
+    Store @1 <- %4
+    MakeClosure %5 <- double env=[] (def=d4)
+    Call %6 <- string("apply_int") [%5] (def=d1)
+    Store @2 <- %6
+    Load %7 <- @0
+    Load %8 <- int(2)
+    Eq %9 <- %7, %8
+    Load %10 <- string("concrete-signature closure arg")
+    Call %11 <- string("std.assert.assert") [%9, %10] (def=d5)
+    Load %12 <- @1
+    Load %13 <- int(6)
+    Eq %14 <- %12, %13
+    Load %15 <- string("generic higher-order closure arg")
+    Call %16 <- string("std.assert.assert") [%14, %15] (def=d5)
+    Load %17 <- @2
+    Load %18 <- int(2)
+    Eq %19 <- %17, %18
+    Load %20 <- string("named fn arg unchanged")
+    Call %21 <- string("std.assert.assert") [%19, %20] (def=d5)

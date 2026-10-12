@@ -5,7 +5,7 @@
 //! - 字面量逐元素成员检查（主 unify 只作用首个元素的缺口由走查兜住）
 //! - E1101（具体类型未实现接口）在字面量 / append 实参两个决策点
 //!
-//! 参照 docs/src/design/rfc/accepted/011a-interface-implementation.md §6
+//! 参照 docs/src/rfc/accepted/011a-interface-implementation.md §6
 
 use super::rfc011a::check_source_with_checker;
 

@@ -1,0 +1,11 @@
+// use-constant/main.yx
+// 覆盖: RFC-029 多文件模块编排 —— 跨文件常量导入
+// 验证: lib.yx 的顶层常量经 use 导入后参与断言求值
+// 状态: ✅ 可运行
+
+use std.assert
+use lib.{value}
+
+main = () => {
+    assert.assert(value == 7, "imported constant value should be 7")
+}

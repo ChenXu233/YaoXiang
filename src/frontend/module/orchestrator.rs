@@ -25,16 +25,14 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::parser::ast::{Expr, StmtKind};
-use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use crate::util::diagnostic::Diagnostic;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::tokenize;
 use crate::frontend::core::typecheck::checker::TypeChecker;
-use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
-use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::frontend::module::roles::{self, FileRole};
+use crate::frontend::module::roles;
 use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 use crate::middle::ModuleIR;
@@ -44,13 +42,16 @@ use crate::middle::ModuleIR;
 use crate::package::manifest::PackageManifest;
 
 /// 一个已发现的源文件：模块键 + 磁盘路径 + 源码
-struct DiscoveredFile {
+///
+/// pub(crate)：P4 4.2.1 起 driver（L1）的 Discovery 臂消费本类型；
+/// orchestrator 存量入口 4.2.2-4.2.4 迁完后随归属归位
+pub(crate) struct DiscoveredFile {
     /// 模块键（相对入口目录的点分路径，如 `lib`、`math.geometry`）
-    module_key: String,
+    pub(crate) module_key: String,
     /// 磁盘路径
-    path: PathBuf,
+    pub(crate) path: PathBuf,
     /// 源码内容
-    source: String,
+    pub(crate) source: String,
 }
 
 /// 编排错误
@@ -96,401 +97,129 @@ pub enum OrchestratorError {
 /// 编排一个项目：发现源文件 → 构建 Registry → 逐文件 typecheck → 整体编译。
 ///
 /// 返回合并后的 `ModuleIR`，可直接交给 codegen。入口文件的 `main` 函数即程序入口。
+///
+/// 02 §改动清单（WBS 4.2.1）：入口已瘦身为 `Program { kind: MultiFile }`
+/// 构造器 + Driver 调用——阶段表以 `src/driver/program.rs` 的
+/// `MULTI_FILE_STAGES`（由 `ProgramKind::MultiFile` 派生）为**唯一权威**，
+/// 本注释不抄录清单（副本会随阶段增补腐烂：3.4.8 ② 追加 mono 时此处曾是
+/// 一份过期副本）；各阶段的执行体见 `crate::driver` 的阶段臂。外部契约
+///（`OrchestratorError` 各 variant 的渲染与退出码）逐字节不变。
 pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
-    let vendor_root = ensure_vendor_consistency(entry)?;
-    let files = discover(entry)?;
-    let registry = build_registry_from(&files)?;
-
-    // 解析所有文件 → AST（只解析一次，Phase 1/2 复用）。携带模块键供限定名使用。
-    let mut asts: Vec<(String, PathBuf, Module)> = Vec::new();
-    for file in &files {
-        let ast = parse_file(&file.path, &file.source)?;
-        asts.push((file.module_key.clone(), file.path.clone(), ast));
-    }
-
-    // Phase 1: 逐文件 typecheck，强制模块边界（必须 use 才能跨文件访问）。
-    // 保留每个文件的 TypeCheckResult，供 Phase 2 IR 生成复用。
-    // RFC-029：注入所有模块的方法绑定，使跨文件方法调用（导入类型后调其方法）能解析。
-    let method_bindings = registry.all_method_bindings();
-    let mut type_results: Vec<TypeCheckResult> = Vec::new();
-    for (_key, path, ast) in &asts {
-        let mut checker = TypeChecker::new("<module>");
-        checker.env().module_registry = registry.clone();
-        checker.env().method_bindings = method_bindings.clone();
-        // RFC-014：vendor 根注入（缺依赖包的 E5001 追加 install 提示）
-        if let Some(ref vendor_root) = vendor_root {
-            checker.set_vendor_root(vendor_root.clone());
-        }
-        let result = checker.check_module(ast);
-        if !result.diagnostics.is_empty() {
-            let msg = result
-                .diagnostics
-                .iter()
-                .map(|d| d.to_string())
-                .collect::<Vec<_>>()
-                .join("\n");
-            return Err(OrchestratorError::TypeCheck {
-                path: path.display().to_string(),
-                message: msg,
-                diagnostics: result.diagnostics,
-            });
-        }
-        type_results.push(result);
-    }
-
-    // 收集跨文件上下文：所有文件的类型（结构体布局/方法绑定）与全局变量布局。
-    //
-    // 全局槽位布局（T5）：逐文件分配不相交的槽位区间，并把限定名（`lib.value`）
-    // 映射到绝对槽位号。各文件共享这份布局，故引用方与定义方用同一索引。
-    // 分配结果同时决定各文件的 `global_slot_base`。
-    let all_ast_refs: Vec<&Module> = asts.iter().map(|(_, _, ast)| ast).collect();
-    let (global_layout, slot_bases) = allocate_global_slots(&asts);
-
-    // Phase 2: 逐文件 IR 生成（预注册跨文件上下文）→ 限定名重写 → IR 层链接。
-    // 每个文件是独立编译单元——不合并 AST。函数名带模块限定名（module=record 语义），
-    // 跨文件同名顶层函数因此天然共存，不再冲突。
-    let mut module_irs: Vec<(String, ModuleIR)> = Vec::new();
-    for (file_idx, ((key, path, ast), result)) in asts.iter().zip(type_results.iter()).enumerate() {
-        let ir = crate::middle::generate_ir_with_context(
-            ast,
-            result,
-            &all_ast_refs,
-            &global_layout,
-            slot_bases[file_idx],
-            &registry,
-            key,
-        )
-        .map_err(|diags| {
-            let message = diags
-                .iter()
-                .map(|d| d.to_string())
-                .collect::<Vec<_>>()
-                .join("\n");
-            OrchestratorError::Compile {
-                path: path.display().to_string(),
-                message,
-                diagnostics: diags,
-            }
+    let program = crate::driver::Program::new(
+        crate::driver::ProgramKind::MultiFile,
+        // 占位入口单元：Discovery 臂沿 use 图重建完整单元集（key 同
+        // `entry_module_key` 规则；source 由 Discovery 读盘填充）
+        vec![crate::driver::Unit::new(
+            entry_module_key(entry),
+            entry.to_path_buf(),
+            "",
+        )],
+        crate::frontend::config::CompileConfig::default(),
+    );
+    let outcome = crate::driver::Driver::new()
+        .run(program)
+        .map_err(|e| OrchestratorError::Io {
+            // MultiFile 阶段表全接线且恒有占位入口单元——结构性不可达
+            path: entry.display().to_string(),
+            reason: format!("driver: {e}"),
         })?;
-        module_irs.push((path.display().to_string(), ir));
+    match outcome.failure {
+        Some(e) => Err(e),
+        None => outcome.module.ok_or_else(|| OrchestratorError::Io {
+            // Linking 成功必产 merged IR——结构性不可达
+            path: entry.display().to_string(),
+            reason: "driver: linking produced no merged IR".to_string(),
+        }),
     }
-
-    let entry_key = entry_module_key(entry);
-    let merged = link_module_irs(module_irs, &entry_key)?;
-
-    // T4：入口语义（RFC-029f 角色驱动；#388 定案：按**绑定存在性**判定）。
-    //
-    // - Script（无 yaoxiang.toml，单文件直跑）：无入口概念，顶层代码本身就是
-    //   程序（顶层语句与绑定编入模块初始化序列）；`main` 不特殊（想跑就写 `main()`）。
-    // - Bin（有 manifest）：要求存在名为 `main` 的绑定，值或函数皆可——
-    //   函数已是值（类型层统一），两者只差求值策略：值 main 在初始化期
-    //   求值即执行，函数 main 在入口期零参调用（求值结果即使是函数值
-    //   也不再调用）。缺 main 时**全部函数不可达**，属编译错误——而非静默
-    //   执行函数表第一个函数。
-    if is_bin_role(entry) {
-        // 值绑定的名字已限定（`{entry_key}.main`），两种形态都要查。
-        let qualified_main = format!("{entry_key}.main");
-        let has_main_fn = merged.functions.iter().any(|f| f.name == qualified_main);
-        let has_main_value = merged
-            .globals
-            .iter()
-            .any(|g| g.name == "main" || g.name == qualified_main);
-        if !has_main_fn && !has_main_value {
-            let diag = ErrorCodeDefinition::bin_missing_main(&entry.display().to_string())
-                .at(entry_span(entry));
-            return Err(OrchestratorError::TypeCheck {
-                path: entry.display().to_string(),
-                message: diag.build().to_string(),
-                diagnostics: vec![diag.build()],
-            });
-        }
-
-        // #357：入口总是以**零参**调用（`execute_module` 传 `&[]`）。
-        //
-        // 带参的 main 此前静默运行：参数位是未初始化值（读成 Void），
-        // `main: (x: Int) -> Void = (x) => { io.println(x) }` 打出 "void" 且退出码 0。
-        // 无诊断的错误行为比报错更贵——必须在编译期拒绝。
-        if let Some(main_fn) = merged
-            .functions
-            .iter()
-            .find(|f| f.name == format!("{entry_key}.main"))
-        {
-            if !main_fn.params.is_empty() {
-                let found = main_fn
-                    .params
-                    .iter()
-                    .map(|p| format!("{p}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let diag = ErrorCodeDefinition::bin_main_signature("main", "()", &found)
-                    .at(entry_span(entry));
-                return Err(OrchestratorError::TypeCheck {
-                    path: entry.display().to_string(),
-                    message: diag.build().to_string(),
-                    diagnostics: vec![diag.build()],
-                });
-            }
-        }
-    }
-
-    Ok(merged)
 }
 
-/// T4：入口文件是否必须定义 `main`（Bin 要求）。
+/// 检查一个项目，返回**全部**诊断（按文件分组，不早退），供 `yaoxiang check`
+/// 与 `run` 走同一条编译路径。
 ///
-/// 判据：项目里有 manifest（`yaoxiang.toml`）。
+/// 阶段表以 `src/driver/program.rs` 的 `CHECK_STAGES`（由 `ProgramKind::Check`
+/// 派生）为**唯一权威**——本注释不抄录清单：副本正是它腐烂到 4.2.2 的原因；
+/// 各阶段的执行体见 `crate::driver` 的阶段臂。与 `compile_project` 共用发现/
+/// 注册表骨架，差别只在阶段集合与聚合模式（`Check` + `CollectAll`）。
 ///
-/// 为何不用 `roles::classify`：那个模型回答「这个文件被谁消费」（服务于死代码
-/// 分析），而这里要回答的是「这个文件能不能当程序跑」——两回事。有 manifest
-/// 却没 `main` 的文件在 classify 里是 Internal（合理：它不被别的文件 use），
-/// 但用户刚把它当入口跑了，此时必须有入口，否则静默什么都不做。
+/// IR 语义（3.4.8 ③）：Check 形态**确实**生成 IR——`ir_generation_check` 逐
+/// 单元生成并**仅驻内存**留存，供 Linking 的纯合并与 Monomorphization 的检查
+/// 形态消费；IR 不外发（`DriverOutcome.module` 恒 None）、不写盘、不产快照，
+/// 这两阶段的产物只服务诊断、成功即静默。
 ///
-/// 对无 manifest 的单文件直跑（Script 角色）：顶层语句即程序主体，
-/// 无需 main——这是「默认情况零门槛」。
-fn is_bin_role(entry: &Path) -> bool {
-    find_project_root(entry).is_some()
-}
-
-/// T4：入口文件的 span（用于无源码位置的诊断）。
-/// 用文件首行首列作占位——诊断需要位置才能渲染，而“缺 main”是文件级问题。
-fn entry_span(_entry: &Path) -> crate::util::span::Span {
-    crate::util::span::Span::default()
-}
-
-/// 检查一个项目：发现源文件 → 构建 Registry → 逐文件 typecheck。
-///
-/// 与 `compile_project` 共用发现/注册表阶段，但不生成 IR；返回**全部**诊断
-/// （按文件分组，不早退），供 `yaoxiang check` 与 `run` 走同一条编译路径。
-///
-/// RFC-029f：逐文件分类编译目标角色（Script/Bin/Lib/Test/Internal）——
-/// 警告诊断（死代码族 + W1003 未使用导入）按角色接入：
-/// - Test 不参与死代码（`[tool.test]` patterns/exclude 规则，RFC-036）
-/// - Bin 角色未使用 pub 可报（Phase 1）
-/// - Internal 角色 pub 收紧为"包内 use 图可达才豁免"（Phase 2：聚合本项目
-///   全部文件的引用池传入分析器）
-///
-/// 警告为 Warning severity，不阻断、不计入错误数。
+/// 02 §改动清单（WBS 4.2.2）：入口已瘦身为 `Program { kind: Check }`
+/// 构造器 + Driver 调用。外部契约不变：返回
+/// `Vec<(文件, 诊断)>`（每个发现文件都有条目，干净文件为空 Vec）；
+/// vendor/发现/解析失败仍经 `OrchestratorError` 硬中止（4.10.1 怪癖
+/// 保留，driver 侧测试钉板）。文件内诊断顺序归一为阶段拓扑序
+///（2026-10-09 用户裁决，02 §1 修订注记 #4）。
 pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, OrchestratorError> {
-    let vendor_root = ensure_vendor_consistency(entry)?;
-    let (files, used_by, shadow_events) = discover_with_used(entry)?;
-    let registry = build_registry_from(&files)?;
-    let method_bindings = registry.all_method_bindings();
-
-    // 项目角色上下文：manifest 缺失或损坏 → surfaces 为 None → 全体 Script 态
-    //（行为与引入角色模型前一致）。双解析：目标字段（RFC-015）与 [tool.test]
-    //（RFC-036，经 util::config 的宽松结构）各取所需。wasm32 下 package 模块
-    // 不编译，角色上下文降级为 None（Script 态，行为安全）。
-    let project_root = find_project_root(entry);
-    let (surfaces, test_rules) = role_context(project_root.as_deref());
-
-    // 先解析全部文件（Phase 2：引用池需要全项目视角）
-    let mut parsed: Vec<(&DiscoveredFile, Module)> = Vec::new();
-    for file in &files {
-        let ast = parse_file(&file.path, &file.source)?;
-        parsed.push((file, ast));
+    let program = crate::driver::Program::new(
+        crate::driver::ProgramKind::Check,
+        // 占位入口单元：Discovery 臂沿 use 图重建完整单元集
+        vec![crate::driver::Unit::new(
+            entry_module_key(entry),
+            entry.to_path_buf(),
+            "",
+        )],
+        crate::frontend::config::CompileConfig::default(),
+    );
+    let outcome = crate::driver::Driver::new()
+        .run(program)
+        .map_err(|e| OrchestratorError::Io {
+            // Check 阶段表全接线且恒有占位入口单元——结构性不可达
+            path: entry.display().to_string(),
+            reason: format!("driver: {e}"),
+        })?;
+    match outcome.failure {
+        Some(e) => Err(e),
+        None => Ok(outcome.check_diagnostics),
     }
-
-    let project_root_canon = project_root
-        .as_ref()
-        .map(|root| root.canonicalize().unwrap_or_else(|_| root.clone()));
-    let in_project = |file_canon: &Path| -> bool {
-        project_root_canon
-            .as_deref()
-            .is_some_and(|root| file_canon.starts_with(root))
-    };
-
-    // RFC-029f Phase 2：包内引用池 = 项目根下全部 .yx 文件的标识符引用并集
-    //（含 Test——测试使用使产品 pub 存活）。聚合全项目而非入口可达集：
-    // 单文件 check 时引用方可能不在发现集，按可达集聚合会产生顺序敏感的
-    // 误报。仅收集名字、解析失败静默跳过——不产生诊断，不破坏发现隔离
-    //（#247）。vendor/嵌入 std 不入池（外部包视角）。
-    let project_refs: HashSet<String> = project_root_canon
-        .as_deref()
-        .map(collect_project_refs)
-        .unwrap_or_default();
-
-    let mut out = Vec::new();
-    for (file, ast) in &parsed {
-        let result =
-            typecheck_with_registry_in(ast, &registry, &method_bindings, vendor_root.as_deref());
-
-        let file_canon = file
-            .path
-            .canonicalize()
-            .unwrap_or_else(|_| file.path.clone());
-        let role = roles::classify(
-            &file_canon,
-            project_root.as_deref(),
-            surfaces.as_ref(),
-            test_rules.as_ref(),
-            used_by.contains(&file_canon),
-            ast_has_main(ast),
-        );
-
-        // 警告仅对本项目文件呈现（RFC-029f）：vendor 依赖与嵌入 std 的内部
-        // 警告属于其所属包，不混入消费方的 check 输出
-        let mut diagnostics = result.diagnostics;
-        if in_project(&file_canon) {
-            // RFC-014 §项目模式：W1006 本地模块遮蔽依赖包（发现期事件，
-            // 附着在做遮蔽 use 的文件上；Warning severity 不阻断）
-            for (shadow_path, use_path, span, pkg) in &shadow_events {
-                if shadow_path == &file.path {
-                    // use 路径在模板里显示为文件式路径（data/json）
-                    diagnostics.push(
-                        ErrorCodeDefinition::module_shadows_dependency(
-                            &use_path.replace('.', "/"),
-                            pkg,
-                        )
-                        .at(*span)
-                        .build(),
-                    );
-                }
-            }
-            // W1003 未使用导入随 W 码通道流出（Warning severity，不阻断编译）
-            diagnostics.extend(result.warnings);
-            // 角色感知死代码（RFC-029f）：
-            // - Test 不参与
-            // - Bin 不豁免 pub（Phase 1）
-            // - Internal 豁免收紧为引用池判定（Phase 2）
-            // - Script/Lib 绝对豁免（pub = 对外接口）
-            if !matches!(role, FileRole::Test) {
-                let mut analyzer = DeadCodeAnalyzer::new();
-                match role {
-                    FileRole::Bin => {
-                        analyzer.set_exempt_pub(false);
-                        analyzer.set_project_refs(project_refs.clone());
-                    }
-                    FileRole::Internal => {
-                        analyzer.set_exempt_pub(true);
-                        analyzer.set_project_refs(project_refs.clone());
-                    }
-                    // Lib（被包内 use 的文件，029f 推断规则）：pub 维持绝对豁免
-                    //（分发边界，宁漏报），非 pub 按包内引用池判定——跨文件
-                    // 消费者不可见曾是 W1001 误报根因
-                    FileRole::Lib => {
-                        analyzer.set_cross_file_refs(project_refs.clone());
-                    }
-                    _ => {}
-                }
-                let warnings = analyzer.analyze(ast);
-                diagnostics.extend(analyzer.to_diagnostics(&warnings));
-            }
-        }
-        // 入口存在性（#388 定案：check 与 run 同判据）：manifest 声明面里的
-        // 入口文件（`[[bin]].path` / `[run].main`，与 roles::classify 同源的
-        // canonical 匹配）必须有名为 `main` 的绑定（值/函数皆可）。
-        // 声明面之外的文件不查——Lib/Internal/Test 不要求 main（RFC-029f
-        // 角色语义）：被 check ≠ 被当程序跑，`run` 的入口要求只在真正执行
-        // 某文件时生效（is_bin_role）。
-        if surfaces
-            .as_ref()
-            .is_some_and(|s| s.bins.contains(&file_canon))
-            && !ast_has_main(ast)
-        {
-            diagnostics.push(
-                ErrorCodeDefinition::bin_missing_main(&file.path.display().to_string())
-                    .at(entry_span(&file.path))
-                    .build(),
-            );
-        }
-        out.push((file.path.clone(), diagnostics));
-    }
-    Ok(out)
-}
-
-/// 项目角色上下文（RFC-029f）：显式声明面 + 测试发现规则。
-/// manifest 读取解析依赖 `crate::package`——wasm32 下不存在，降级为
-/// (None, None)（全体 Script 态、无 patterns 规则，行为与引入模型前一致）。
-#[cfg(not(target_arch = "wasm32"))]
-fn role_context(
-    project_root: Option<&Path>
-) -> (Option<roles::ExplicitSurfaces>, Option<roles::TestRules>) {
-    let Some(root) = project_root else {
-        return (None, None);
-    };
-    let Ok(src) = std::fs::read_to_string(root.join(crate::package::manifest::MANIFEST_FILE))
-    else {
-        return (None, None);
-    };
-    let surfaces = toml::from_str::<PackageManifest>(&src)
-        .ok()
-        .map(|manifest| roles::TargetViews {
-            bins: manifest
-                .bin
-                .iter()
-                .map(|b| b.path.clone())
-                .chain(manifest.run.as_ref().and_then(|r| r.main.clone()))
-                .collect(),
-            libs: manifest
-                .exports
-                .values()
-                .cloned()
-                .chain(manifest.lib.as_ref().map(|l| l.path.clone()))
-                .collect(),
-        })
-        .map(|views| roles::explicit_surfaces(&views, root));
-    let test_rules = toml::from_str::<crate::util::config::ProjectConfig>(&src)
-        .ok()
-        .map(|config| roles::TestRules::from_config(&config.tool.test));
-    (surfaces, test_rules)
-}
-
-#[cfg(target_arch = "wasm32")]
-fn role_context(
-    _project_root: Option<&Path>
-) -> (Option<roles::ExplicitSurfaces>, Option<roles::TestRules>) {
-    (None, None)
 }
 
 /// 用项目上下文检查一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）。
 ///
 /// 注册表来自磁盘发现（同 `check_project`），被检查的模块用传入源码——
 /// 编辑器因此能得到与 `yaoxiang check` 一致的跨文件解析结果。
-/// 解析错误作为诊断返回（不中断），与 LSP 单文件路径的容错一致。
+///
+/// 02 §改动清单（WBS 4.2.3）：入口已瘦身为 `Program { kind: Lsp }` 构造器
+/// 并转调 Driver。降级策略按文件来源分流（2026-10-09 用户裁决）：磁盘
+/// 文件 parse 失败同 Check 的方案 B（收集 + 退出编译单元——修复旧行为
+/// 对无关磁盘文件硬中止、handler 静默退回单文件路径的怪癖）；被编辑
+/// 缓冲区 parse 失败保留残缺 AST 继续 typecheck（编辑器哲学）。返回
+/// 目标文件的诊断集（其余文件的收集条目不返回——LSP 按文档发布模型，
+/// 诊断由各自的 didOpen/didChange 驱动）。
 pub fn check_source_in_project(
     path: &Path,
     source: &str,
 ) -> Result<Vec<Diagnostic>, OrchestratorError> {
-    let files = discover(path)?;
-    let registry = build_registry_from(&files)?;
-    let method_bindings = registry.all_method_bindings();
-
-    let vendor_root = ensure_vendor_consistency(path)?;
-    let tokens = tokenize(source).map_err(|e| OrchestratorError::Parse {
-        path: path.display().to_string(),
-        message: format!("{:?}", e),
-    })?;
-    let parse_result = parser::parse(&tokens);
-    let mut diagnostics: Vec<Diagnostic> = parse_result.errors.to_vec();
-    let result = typecheck_with_registry_in(
-        &parse_result.module,
-        &registry,
-        &method_bindings,
-        vendor_root.as_deref(),
+    let program = crate::driver::Program::new(
+        crate::driver::ProgramKind::Lsp,
+        // 占位入口单元携带缓冲区源码——Discovery 臂重建单元集时
+        // 入口单元以缓冲区为准（覆盖磁盘陈旧内容）
+        vec![crate::driver::Unit::new(
+            entry_module_key(path),
+            path.to_path_buf(),
+            source,
+        )],
+        crate::frontend::config::CompileConfig::default(),
     );
-    // 错误 + 警告（W1003 等 Warning 级，LSP 侧以 severity 区分呈现）
-    diagnostics.extend(result.diagnostics);
-    diagnostics.extend(result.warnings);
-    Ok(diagnostics)
-}
-
-/// 用预构建注册表检查单个模块（collect_all 模式，不早退）。
-/// 返回完整结果——调用方取 `diagnostics`（错误）与 `warnings`（W 码警告）。
-/// `vendor_root` 非 None 时（RFC-014 §项目模式）缺依赖包的 E5001
-/// 追加 `yaoxiang install` 提示。
-fn typecheck_with_registry_in(
-    ast: &Module,
-    registry: &ModuleRegistry,
-    method_bindings: &HashMap<String, MonoType>,
-    vendor_root: Option<&Path>,
-) -> TypeCheckResult {
-    let mut checker = TypeChecker::new("<module>");
-    checker.env().module_registry = registry.clone();
-    checker.env().method_bindings = method_bindings.clone();
-    if let Some(vendor_root) = vendor_root {
-        checker.set_vendor_root(vendor_root.to_path_buf());
+    let outcome = crate::driver::Driver::new()
+        .run(program)
+        .map_err(|e| OrchestratorError::Io {
+            // Lsp 阶段表全接线且恒有占位入口单元——结构性不可达
+            path: path.display().to_string(),
+            reason: format!("driver: {e}"),
+        })?;
+    match outcome.failure {
+        Some(e) => Err(e),
+        // 结果过滤到目标文件（ProgramKind::Lsp 契约）
+        None => Ok(outcome
+            .check_diagnostics
+            .into_iter()
+            .find(|(p, _)| p.as_path() == path)
+            .map(|(_, diagnostics)| diagnostics)
+            .unwrap_or_default()),
     }
-    checker.check_module_collect_all(ast)
 }
 
 /// RFC-014 §项目模式前置检查（2026-09-15 决议）。
@@ -503,7 +232,9 @@ fn typecheck_with_registry_in(
 ///
 /// 无 vendor（单文件/未 install 项目）返回 `Ok(None)`——零配置可用，
 /// 「manifest 有依赖但从未 install」由 E5001 的 install 提示负责。
-fn ensure_vendor_consistency(entry: &Path) -> Result<Option<PathBuf>, OrchestratorError> {
+pub(crate) fn ensure_vendor_consistency(
+    entry: &Path
+) -> Result<Option<PathBuf>, OrchestratorError> {
     // wasm32 下 package 模块不编译（与角色上下文同一降级策略）
     #[cfg(target_arch = "wasm32")]
     {
@@ -554,194 +285,11 @@ fn ensure_vendor_consistency(entry: &Path) -> Result<Option<PathBuf>, Orchestrat
     }
 }
 
-/// 顶层是否存在 `main` 绑定（角色推断的 Bin 信号，RFC-029f）
-fn ast_has_main(ast: &Module) -> bool {
-    ast.items.iter().any(|stmt| {
-        matches!(
-            &stmt.kind,
-            StmtKind::Assign { target, .. }
-                if matches!(target.as_ref(), Expr::Var(name, _) if name == "main")
-        )
-    })
-}
-
-/// 收集项目根下全部 `.yx` 文件的标识符引用并集（RFC-029f Phase 2 引用池）。
-///
-/// 跳过 `.git`/`.yaoxiang`（vendor）/`target` 目录；词法或语法失败的文件
-/// 静默跳过——引用池是容错的辅助判定，不允许它制造新的检查失败。
-fn collect_project_refs(project_root: &Path) -> HashSet<String> {
-    fn is_excluded_dir(dir: &Path) -> bool {
-        dir.file_name().is_some_and(|name| {
-            let name = name.to_string_lossy();
-            name == ".git" || name == ".yaoxiang" || name == "target"
-        })
-    }
-
-    fn collect_yx(
-        dir: &Path,
-        out: &mut Vec<PathBuf>,
-    ) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if !is_excluded_dir(&path) {
-                    collect_yx(&path, out);
-                }
-            } else if path.extension().is_some_and(|e| e == "yx") {
-                out.push(path);
-            }
-        }
-    }
-
-    let mut refs = HashSet::new();
-    let mut files = Vec::new();
-    collect_yx(project_root, &mut files);
-    for path in files {
-        let Ok(source) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        let Ok(tokens) = tokenize(&source) else {
-            continue;
-        };
-        let parsed = parser::parse(&tokens);
-        refs.extend(DeadCodeAnalyzer::collect_ident_refs(&parsed.module));
-    }
-    refs
-}
-
 /// 提取一个文件定义的全局变量（顶层非函数绑定）的名字与类型。
 ///
 /// 镜像 `generate_stmt_ir` 的函数/全局分流（`block_binding_is_function`
 /// 单源判定）：Lambda 或 Fn 注解块为函数，其余为全局。
 /// 用于跨文件全局解析——其他文件引用这些名字时生成 `Call(访问器函数)`。
-fn extract_global_defs(ast: &Module) -> Vec<(String, MonoType)> {
-    let mut out = Vec::new();
-    for stmt in &ast.items {
-        if let StmtKind::Assign {
-            target,
-            type_annotation,
-            value,
-            ..
-        } = &stmt.kind
-        {
-            if let Expr::Var(name, _) = target.as_ref() {
-                // RFC-010a 附录D + B 方案（33f2ebbe）：Lambda → 函数；注解是
-                // Fn → 函数；其余（含无注解块，内容决定类型）→ 块值。
-                // 此前这里写「Block 就是函数」，把 `x: Int = { 5 }`
-                // 误判为函数——与 ir_gen 的注册口径不一致，导致跨文件引用
-                // `use lib.{x}` 找不到槽位（T5）。
-                let is_fn =
-                    Expr::block_binding_is_function(type_annotation.as_ref(), value.as_deref())
-                        || matches!(value.as_deref(), Some(Expr::Lambda { .. }));
-                if !is_fn {
-                    let ty = type_annotation
-                        .as_ref()
-                        .map(|t| MonoType::from(t.clone()))
-                        .unwrap_or(MonoType::Int(64));
-                    out.push((name.clone(), ty));
-                }
-            }
-        }
-    }
-    out
-}
-
-/// 为所有文件分配不相交的全局槽位区间（T5）。
-///
-/// 返回 `(限定名 → 绝对槽位号, 各文件的槽位基址)`。
-/// 槽位号按发现顺序连续分配；限定名用 `{module_key}.{name}`（与
-/// `SymbolTable::qualify` 同源），使 `use lib.{value}` 解析到 `lib.value`。
-///
-/// 只登记**真正的值绑定**（非函数）——函数进函数表，不占全局槽位。
-fn allocate_global_slots(asts: &[(String, PathBuf, Module)]) -> (Vec<(String, usize)>, Vec<usize>) {
-    let mut layout: Vec<(String, usize)> = Vec::new();
-    let mut bases: Vec<usize> = Vec::with_capacity(asts.len());
-    let mut next_slot = 0usize;
-    for (key, _, ast) in asts {
-        bases.push(next_slot);
-        for (name, _ty) in extract_global_defs(ast) {
-            layout.push((SymbolTable::qualify(key, &name), next_slot));
-            next_slot += 1;
-        }
-    }
-    (layout, bases)
-}
-
-/// 链接多个文件的 `ModuleIR`：拼接函数/全局/FFI，合并 per-function 映射。
-///
-/// 各文件的函数已带模块限定名（`qualify_module_ir`），跨文件同名函数天然共存。
-/// 仅当同一限定名出现两次（同名文件重复发现等病态情形）才报错。入口函数：
-/// main 为函数绑定时设 `{entry_key}.main`；值 main 时为 None——程序体就是
-/// 初始化序列（#388 定案：值 main 初始化期求值即执行）。
-fn link_module_irs(
-    irs: Vec<(String, ModuleIR)>,
-    entry_key: &str,
-) -> Result<ModuleIR, OrchestratorError> {
-    let mut seen: HashMap<String, String> = HashMap::new();
-    for (path, ir) in &irs {
-        for func in &ir.functions {
-            if let Some(prev) = seen.get(&func.name) {
-                return Err(OrchestratorError::Collision {
-                    name: func.name.clone(),
-                    first: prev.clone(),
-                    second: path.clone(),
-                });
-            }
-            seen.insert(func.name.clone(), path.clone());
-        }
-    }
-
-    let mut merged = ModuleIR {
-        globals: Vec::new(),
-        functions: Vec::new(),
-        init: Vec::new(),
-        init_locals: Vec::new(),
-        init_file_ids: Vec::new(),
-        ffi_libs: Vec::new(),
-        ffi_bindings: Vec::new(),
-        entry_function: None,
-        source_files: irs.iter().map(|(p, _)| p.clone()).collect(),
-        function_files: HashMap::new(),
-    };
-    for (i, (_, ir)) in irs.iter().enumerate() {
-        for func in &ir.functions {
-            merged.function_files.insert(func.name.clone(), i);
-        }
-    }
-    for (file_idx, (_, ir)) in irs.into_iter().enumerate() {
-        merged.globals.extend(ir.globals);
-        merged.functions.extend(ir.functions);
-        // T5：各文件的初始化序列按发现顺序拼接（被依赖模块先于入口文件）。
-        // #368：每条指令记下所属文件——多文件下按它给 debug span 定 file_id，
-        // 否则所有段的错误都指向同一个（错的）文件。
-        merged
-            .init_file_ids
-            .extend(std::iter::repeat_n(file_idx, ir.init.len()));
-        merged.init.extend(ir.init);
-        // 不合并 init_locals：各文件槽位号从 0 起算，直接拼接会错位。
-        // 多文件下顶层只有声明（可执行语句被 E3023 拒），具名局部仅出现在
-        // Script 模式，故此处不需要它。
-        merged.ffi_libs.extend(ir.ffi_libs);
-        merged.ffi_bindings.extend(ir.ffi_bindings);
-    }
-    // 槽位号已由 allocate_global_slots 全局唯一，此处仅按索引稳定排序，
-    // 便于调试与运行时按索引直取。
-    merged.globals.sort_by_key(|g| g.index);
-
-    // 入口函数仅在 main 为**函数**绑定时设置：值 main 的程序体就是初始化
-    // 序列（求值即执行），无需入口调用——与 Script 同款执行形态（#356
-    // 防双跑：初始化与入口调用绝不叠加）。
-    let entry_fn = format!("{}.main", entry_key);
-    if merged.functions.iter().any(|f| f.name == entry_fn) {
-        merged.entry_function = Some(entry_fn);
-    }
-
-    Ok(merged)
-}
-
 /// 计算入口文件的模块键（文件 stem，`mod.yx` 折叠为目录名）。
 fn entry_module_key(entry: &Path) -> String {
     let stem = entry
@@ -779,7 +327,7 @@ fn build_registry_from(files: &[DiscoveredFile]) -> Result<ModuleRegistry, Orche
 }
 
 /// 路径是否位于某个项目的 `.yaoxiang/vendor/` 下。
-fn is_vendor_path(path: &Path) -> bool {
+pub(crate) fn is_vendor_path(path: &Path) -> bool {
     let mut prev = None;
     for component in path.components() {
         let name = component.as_os_str().to_string_lossy();
@@ -796,20 +344,28 @@ fn is_vendor_path(path: &Path) -> bool {
 ///
 /// 解析双根：`use a.b` 先按**导入者所在目录**解析，未命中再按**项目根**
 /// （最近的 yaoxiang.toml 祖先）解析。模块键 = use 路径，与解析自哪个根无关。
-fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
+pub(crate) fn discover(entry: &Path) -> Result<Vec<DiscoveredFile>, OrchestratorError> {
     discover_with_used(entry).map(|(files, _, _)| files)
 }
 
 /// 遮蔽事件：文件路径、use 路径、use 的 span、被遮蔽的包名
-type ShadowEvent = (PathBuf, String, crate::util::span::Span, String);
+///
+/// pub(crate)：P4 4.2.2 起 driver（L1）的 Discovery 臂消费本类型；
+/// 编排辅助类型随 4.2.3-4.2.4 迁移完随归属归位
+pub(crate) type ShadowEvent = (PathBuf, String, crate::util::span::Span, String);
 
 /// 发现产物：可达文件、use 边集合、遮蔽事件
-type Discovery = (Vec<DiscoveredFile>, HashSet<PathBuf>, Vec<ShadowEvent>);
+///
+/// pub(crate)：同 `ShadowEvent` 的过渡性放宽（4.2.2）
+pub(crate) type Discovery = (Vec<DiscoveredFile>, HashSet<PathBuf>, Vec<ShadowEvent>);
 
 /// 同 [`discover`]，附带 use 边信息：被 ≥1 个文件 `use` 的文件路径集合
 /// （canonical 化，与发现文件路径同口径比对）——角色推断的 Lib 信号（RFC-029f）；
 /// 以及本地模块遮蔽依赖包事件（RFC-014 §项目模式，W1006）。
-fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
+///
+/// pub(crate)：P4 4.2.2 起 driver 的 Discovery 臂直调（MultiFile 取文件
+/// 集，Check 另取 use 边与遮蔽事件）；随 4.2.3-4.2.4 迁移归位
+pub(crate) fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
     let project_root = find_project_root(entry);
     // RFC-014c 6c：工作空间成员上下文——严格可见性（成员只见自己声明的依赖）
     // 与成员引用/path 依赖的路径解析都从这里出发
@@ -900,6 +456,21 @@ fn discover_with_used(entry: &Path) -> Result<Discovery, OrchestratorError> {
             path,
             source,
         });
+    }
+
+    // #117 硬切换补齐（WBS 4.10.2）：for 循环脱糖调用迭代协议
+    // std.list.iter/has_next/next，该协议由纯 yx 模块提供（src/std/list.yx），
+    // 必须无条件纳入编译单元——单文件路径由 merge_embedded_std_ir 注入，
+    // 多文件发现此前只认显式 use（不对称缺陷：编译通过、运行期 E6006，
+    // 2026-10-09 探针实证）。规则与单文件同源：已显式 use 则不重复纳入。
+    if !files.iter().any(|f| f.module_key == "std.list") {
+        if let Some(src) = crate::std::yx_sources::embedded_std_source("std.list") {
+            files.push(DiscoveredFile {
+                module_key: "std.list".to_string(),
+                path: PathBuf::from("<std/list>"),
+                source: src.to_string(),
+            });
+        }
     }
 
     // 稳定顺序，保证编译/合并可复现
@@ -1371,6 +942,14 @@ pub(crate) fn scan_use_refs(source: &str) -> Vec<UsePathRef> {
 /// 入口调用经 `short_to_qualified_map` 命名成 `std.test.assert_eq`，合并后即可解析。
 /// `registry` 必须与入口 IR 生成共用（共享 SymbolTable），否则嵌入函数与入口调用点的
 /// DefId 分属两张表，数值撞车会导致字节码按 DefId 分发到错误函数（#94）。
+///
+/// 02 §改动清单（WBS 4.2.4）：入口已瘦身为 `Program { kind: Embedded }`
+/// 构造器并转调 Driver——阶段表以 `src/driver/program.rs` 的
+/// `EMBEDDED_STAGES`（由 `ProgramKind::Embedded` 派生）为**唯一权威**，
+/// 本注释不抄录清单；各阶段的执行体见 `crate::driver` 的阶段臂
+///（共享 registry 经 `Program::with_shared_registry` 注入）。错误路径文本从
+/// `<std.test> (embedded std)` 归一为单元虚拟路径 `<std/test>`
+///（仅编译器内部错误面——嵌入 std 自身损坏才可达，无测试钉住）。
 pub fn compile_embedded_module(
     key: &str,
     registry: &ModuleRegistry,
@@ -1380,38 +959,35 @@ pub fn compile_embedded_module(
             path: key.to_string(),
             reason: format!("不是嵌入 std 模块: {key}"),
         })?;
-    let ast = parse_file(Path::new(&format!("<{}>", key.replace('.', "/"))), source)?;
-    let mut checker = TypeChecker::new("<embedded>");
-    checker.env().module_registry = registry.clone();
-    let result = checker.check_module(&ast);
-    if !result.diagnostics.is_empty() {
-        let msg = result
-            .diagnostics
-            .iter()
-            .map(|d| d.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-        return Err(OrchestratorError::TypeCheck {
-            path: format!("<{key}> (embedded std)"),
-            message: msg,
-            diagnostics: result.diagnostics,
-        });
-    }
-    crate::middle::generate_ir_with_context(&ast, &result, &[], &[], 0, registry, key).map_err(
-        |diags| OrchestratorError::Compile {
-            path: format!("<{key}> (embedded std)"),
-            message: diags
-                .iter()
-                .map(|d| d.to_string())
-                .collect::<Vec<_>>()
-                .join("\n"),
-            diagnostics: diags,
-        },
+    let program = crate::driver::Program::new(
+        crate::driver::ProgramKind::Embedded,
+        vec![crate::driver::Unit::new(
+            key,
+            format!("<{}>", key.replace('.', "/")),
+            source,
+        )],
+        crate::frontend::config::CompileConfig::default(),
     )
+    .with_shared_registry(registry.clone());
+    let outcome = crate::driver::Driver::new()
+        .run(program)
+        .map_err(|e| OrchestratorError::Io {
+            // Embedded 阶段表全接线且恒为 1 单元——结构性不可达
+            path: key.to_string(),
+            reason: format!("driver: {e}"),
+        })?;
+    match outcome.failure {
+        Some(e) => Err(e),
+        None => outcome.module.ok_or_else(|| OrchestratorError::Io {
+            // IrGeneration 成功必产 ModuleIR——结构性不可达
+            path: key.to_string(),
+            reason: "driver: embedded ir generation produced no module".to_string(),
+        }),
+    }
 }
 
 /// 解析单个文件为 AST。
-fn parse_file(
+pub(crate) fn parse_file(
     path: &Path,
     source: &str,
 ) -> Result<Module, OrchestratorError> {
@@ -1436,7 +1012,7 @@ fn parse_file(
 }
 
 /// 提取一个文件的模块信息：跑签名收集，导出所有顶层绑定的真实类型。
-fn extract_module_info(
+pub(crate) fn extract_module_info(
     module_key: &str,
     ast: &Module,
 ) -> ModuleInfo {
@@ -1446,6 +1022,11 @@ fn extract_module_info(
     // 此前这类绑定既不在签名表也无标注可读，导出面直接丢弃，
     // 导入方访问时报误导性的「成员未找到」。
     checker.harvest_untyped_value_bindings(ast);
+
+    // 声明期类型参数名（按声明序）：跨模块调用的单态化需要它们绑定签名里的
+    // `TypeRef("A")`。随导出一并携带，调用方不必从签名形态反推
+    // （反推区分不了类型参数与普通类型名，会误伤 `Dict(K,V)` / `File` 等）。
+    let fn_type_params = checker.generic_fn_type_params_snapshot();
 
     // TypeEnvironment 不实现 Clone，只克隆需要的几张表。
     let vars = checker.env().vars.clone();
@@ -1460,7 +1041,8 @@ fn extract_module_info(
                 name, definition, ..
             } => {
                 if let Some(ty) = lookup(&types, name) {
-                    let mut export = make_export(module_key, name, ExportKind::Type, ty);
+                    let mut export =
+                        make_export(module_key, name, ExportKind::Type, ty, &fn_type_params);
                     // 跨模块类型传播：泛型模板 + 和类型变体 + 接口实现随导出携带
                     export.type_payload = checker.type_def_export_payload(name, definition);
                     info.add_export(export);
@@ -1479,19 +1061,31 @@ fn extract_module_info(
                         } else {
                             ExportKind::Constant
                         };
-                        info.add_export(make_export(module_key, name, kind, ty));
+                        info.add_export(make_export(module_key, name, kind, ty, &fn_type_params));
                     } else if let Some(type_ann) = type_annotation {
                         // 普通常量（如 `value: Int = 7`）不会被当作签名收集，
                         // 从类型标注导出其类型。
                         let ty = MonoType::from(type_ann.clone());
-                        info.add_export(make_export(module_key, name, ExportKind::Constant, ty));
+                        info.add_export(make_export(
+                            module_key,
+                            name,
+                            ExportKind::Constant,
+                            ty,
+                            &fn_type_params,
+                        ));
                     }
                 }
             }
             StmtKind::Expr(expr) => {
                 if let Expr::FnDef { name, .. } = expr.as_ref() {
                     if let Some(ty) = lookup(&vars, name) {
-                        info.add_export(make_export(module_key, name, ExportKind::Function, ty));
+                        info.add_export(make_export(
+                            module_key,
+                            name,
+                            ExportKind::Function,
+                            ty,
+                            &fn_type_params,
+                        ));
                     }
                 }
             }
@@ -1502,19 +1096,34 @@ fn extract_module_info(
     info
 }
 
+/// 构造单个导出项。
+///
+/// `fn_type_params` 是本模块的**声明期类型参数名快照**（名字 → 按声明序的参数名，
+/// 签名收集阶段填表；见 [`TypeChecker::generic_fn_type_params_snapshot`]）。
+/// 只有**函数类导出**把它带进 [`Export::type_params`]**：
+/// 类型/常量导出没有「声明期类型参数」可言；非泛型函数在快照里查不到键 → `None`。
+/// 与 std 路径（`embedded_std_module_info`）同构——两条导出面都从同一张声明表取值。
 fn make_export(
     module_key: &str,
     name: &str,
     kind: ExportKind,
     ty: MonoType,
+    fn_type_params: &HashMap<String, Vec<String>>,
 ) -> Export {
+    // 快照只登记泛型函数，故 `Function` 之外的 kind 即使同名也拿不到值；
+    // 仍显式按 kind 收敛，避免将来快照语义扩展时把类型/常量卷进来。
+    let type_params = if matches!(kind, ExportKind::Function) {
+        fn_type_params.get(name).cloned()
+    } else {
+        None
+    };
     Export {
         name: name.to_string(),
         full_path: SymbolTable::qualify(module_key, name),
         kind,
         signature: String::new(),
         mono_type: Some(ty),
-        type_params: None,
+        type_params,
         param_names: None,
         type_payload: None,
     }
@@ -1525,4 +1134,68 @@ fn lookup(
     name: &str,
 ) -> Option<MonoType> {
     map.get(name).map(|p| p.body.clone())
+}
+
+#[cfg(test)]
+mod export_type_params_tests {
+    //! RFC-039 §3.4.8 ①（D2 裁甲，2026-10-10）：用户模块导出携带声明期类型参数快照。
+    //!
+    //! 快照按声明序给出被调函数的真实类型参数名——跨模块限定调用的单态化只有
+    //! 拿到名字才能绑定签名里的 `TypeRef("A")`；类型/常量导出不携带。
+
+    use super::extract_module_info;
+    use crate::frontend::module::Export;
+
+    /// 取导出面里名为 `name` 的导出；缺失即断言失败（附可用导出清单）。
+    fn export_named(
+        info: &crate::frontend::module::ModuleInfo,
+        name: &str,
+    ) -> Export {
+        info.exports
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| panic!("导出面缺少 {name}，实际: {:?}", info.exports.keys()))
+    }
+
+    /// 函数导出带声明名快照，类型/常量导出一律 None——按 `ExportKind` 区分。
+    #[test]
+    fn test_user_module_function_exports_carry_declared_type_params_snapshot() {
+        // Arrange：一个模块同时给出泛型函数、非泛型函数、类型与常量
+        let source = "read: (T: Type) -> (x: &T) -> T = (x) => x\n\
+                      \nplain: (n: Int) -> Int = (n) => n\n\
+                      \nBox: Type = { inner: Int }\n\
+                      \nvalue: Int = 7\n";
+        let tokens = crate::frontend::core::tokenize(source).expect("模块源码必须可词法分析");
+        let parsed = crate::frontend::core::parser::parse(&tokens);
+        assert!(
+            !parsed.has_errors,
+            "模块源码必须可解析：{:?}",
+            parsed.errors
+        );
+
+        // Act
+        let info = extract_module_info("lib", &parsed.module);
+
+        // Assert：按 kind 区分——仅函数类导出携带，其余一律 None
+        assert_eq!(
+            export_named(&info, "read").type_params,
+            Some(vec!["T".to_string()]),
+            "泛型函数导出的 type_params 必须是声明序声明名 [T]（权威来源）"
+        );
+        assert_eq!(
+            export_named(&info, "plain").type_params,
+            None,
+            "非泛型函数导出的 type_params 必须保持 None"
+        );
+        assert_eq!(
+            export_named(&info, "Box").type_params,
+            None,
+            "类型导出的 type_params 必须保持 None（声明期类型参数只属于函数）"
+        );
+        assert_eq!(
+            export_named(&info, "value").type_params,
+            None,
+            "常量导出的 type_params 必须保持 None（声明期类型参数只属于函数）"
+        );
+    }
 }

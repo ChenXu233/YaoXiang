@@ -5,7 +5,6 @@
   "enum": "enum",
   "ref": "ref",
   "mut": "mut",
-  "pub": "pub",
   "use": "use",
   "type inference": "类型推导",
   "type check": "类型检查",

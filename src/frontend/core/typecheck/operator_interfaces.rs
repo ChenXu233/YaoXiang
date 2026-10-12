@@ -531,7 +531,12 @@ fn bind_template_self(
         }
         _ => {
             let fresh: Vec<MonoType> = args.iter().map(|_| solver.new_var()).collect();
-            let inst = TypeEnvironment::instantiate_generic_type(&def, &fresh).ok()?;
+            // 3.4.1：本路径 fresh TypeVar 实参被 Layer 1 拒绝（非字面量），
+            // 带 const binder 的 def 在此返回 None 走 fallback——既有行为，
+            // 不会触发 Unproven 事实；此处只需实例化后的类型。
+            let inst = TypeEnvironment::instantiate_generic_type(&def, &fresh)
+                .ok()?
+                .ty;
             let mut p0 = scrutinee.clone();
             while let MonoType::Ref { inner, .. } = p0 {
                 p0 = *inner;

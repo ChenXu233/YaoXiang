@@ -31,7 +31,7 @@
 //!   每文件附 `kind`，summary 附 `by_kind` 计数
 //! - `--fail-fast` 首个失败即停；`--list` 每行一个路径，不执行
 //!
-//! 规范来源：docs/src/design/rfc/accepted/036-test-framework.md §1 CLI 设计 /
+//! 规范来源：docs/src/rfc/accepted/036-test-framework.md §1 CLI 设计 /
 //! §5 发现与执行 / §8.2 负向测试判定
 
 use std::collections::BTreeMap;

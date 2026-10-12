@@ -16,7 +16,7 @@
 
 use std.assert
 
-pub Result: (T: Type, E: Type) -> Type = {
+Result: (T: Type, E: Type) -> Type = {
     ok: (T) -> Result(T, E),
     err: (E) -> Result(T, E),
     Try(Result(T, E), T, E),

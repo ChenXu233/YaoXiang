@@ -1,6 +1,6 @@
 //! 泛型系统测试 — 基于 RFC-011 泛型系统设计
 //!
-//! RFC-011: https://github.com/YaoXiang/YaoXiang/docs/src/design/rfc/accepted/011-generic-type-system.md
+//! RFC-011: https://github.com/YaoXiang/YaoXiang/docs/src/rfc/accepted/011-generic-type-system.md
 //!
 //! 测试点：
 //! - §1: 基础泛型（泛型参数、类型推导、单态化）

@@ -9,7 +9,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 
 程序运行期（VM / std 原生函数）产生的错误。
 
-本族共 **7** 个码，全部在 `define_codes!` 注册表中，类别为 `Runtime`。完整索引见[错误码首页](./index.md)。
+本族共 **7** 个码，全部在 `define_codes!` 注册表中，类别为 `Runtime`。完整索引见[错误码首页](index.md)。
 
 ## 码一览
 

@@ -1,0 +1,211 @@
+//! Stage 测试 — 基于 02-stage-contract §目标设计 1 / RFC-039 L1
+//!
+//! §1: Stage 为编译期可穷举枚举（12 变体），Stage::ALL 按数据依赖拓扑序
+//! §1: StageScope 把「逐模块 vs 项目级」变成类型事实
+//! 修订注记: Monomorphization 消费 IR 产物，拓扑序在 IrGeneration 之后
+
+use crate::driver::stage::{Stage, StageScope};
+
+/// 02 §1 的 12 变体全集——测试侧独立罗列，防实现侧漏加/多加。
+/// 顺序 = Stage::ALL 拓扑序（C3 修订，2026-10-09：Parsing 先于 Registry——
+/// 签名收集消费 AST 产物；RoleClassification 需要 ast_has_main 同移）。
+const ALL_VARIANTS: [Stage; 12] = [
+    Stage::VendorConsistency,
+    Stage::Discovery,
+    Stage::Parsing,
+    Stage::Registry,
+    Stage::RoleClassification,
+    Stage::Typecheck,
+    Stage::DeadCodeAnalysis,
+    Stage::ProofExecution,
+    Stage::GlobalSlotAlloc,
+    Stage::IrGeneration,
+    Stage::Linking,
+    Stage::Monomorphization,
+];
+
+fn position_in_all(stage: Stage) -> usize {
+    Stage::ALL
+        .iter()
+        .position(|s| *s == stage)
+        .unwrap_or_else(|| panic!("{stage:?} must be present in Stage::ALL"))
+}
+
+#[test]
+fn test_stage_all_covers_every_variant() {
+    // Arrange（ALL_VARIANTS 即规范全集）
+
+    // Act / Assert
+    assert_eq!(Stage::ALL.len(), ALL_VARIANTS.len());
+    for variant in ALL_VARIANTS {
+        assert!(
+            Stage::ALL.contains(&variant),
+            "Stage::{variant:?} declared but missing from Stage::ALL"
+        );
+    }
+}
+
+#[test]
+fn test_stage_all_has_no_duplicates() {
+    // Arrange / Act: 逐对比较下标
+
+    // Assert
+    for (i, a) in Stage::ALL.iter().enumerate() {
+        for (j, b) in Stage::ALL.iter().enumerate() {
+            if i != j {
+                assert!(
+                    a != b,
+                    "Stage::{a:?} appears twice in Stage::ALL ({i} and {j})"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn test_stage_all_topological_order_follows_data_dependencies() {
+    // Arrange: 02 §1 的数据依赖边（上游必须先于下游）——C3 修订 + 4.2.2
+    // 补边后全集，与 driver/mod.rs data_dependencies 实现对账（两边独立罗列）。
+    // 4.2.2 新增两条诚实申报边：RoleClassification 消费 Discovery 的 used_by
+    // 边集；DeadCodeAnalysis 消费 Discovery 的 W1006 遮蔽事件。
+    let dependency_edges: [(Stage, Stage); 16] = [
+        (Stage::Discovery, Stage::Parsing),
+        (Stage::Parsing, Stage::Registry),
+        (Stage::Discovery, Stage::RoleClassification),
+        (Stage::Parsing, Stage::RoleClassification),
+        (Stage::Parsing, Stage::Typecheck),
+        (Stage::Registry, Stage::Typecheck),
+        (Stage::Discovery, Stage::DeadCodeAnalysis),
+        (Stage::Parsing, Stage::DeadCodeAnalysis),
+        (Stage::RoleClassification, Stage::DeadCodeAnalysis),
+        (Stage::Typecheck, Stage::ProofExecution),
+        (Stage::Parsing, Stage::GlobalSlotAlloc),
+        (Stage::Parsing, Stage::IrGeneration),
+        (Stage::Registry, Stage::IrGeneration),
+        (Stage::GlobalSlotAlloc, Stage::IrGeneration),
+        (Stage::IrGeneration, Stage::Linking),
+        // 3.4.8 ② 修订注记（2026-10-10）：mono 消费 **Linking 产物**——
+        // 多文件形态下 merged IR 是全程序唯一完整函数表，必须在 Linking 后
+        (Stage::Linking, Stage::Monomorphization),
+    ];
+
+    // Act / Assert
+    for (upstream, downstream) in dependency_edges {
+        assert!(
+            position_in_all(upstream) < position_in_all(downstream),
+            "topological order violated: {upstream:?} must precede {downstream:?} in Stage::ALL"
+        );
+    }
+}
+
+#[test]
+fn test_stage_scope_classification() {
+    // Arrange: 02 §1 表格的作用域划分
+    let per_module = [
+        Stage::Parsing,
+        Stage::Typecheck,
+        Stage::ProofExecution,
+        Stage::IrGeneration,
+    ];
+
+    // Act / Assert
+    for stage in ALL_VARIANTS {
+        let expect_per_module = per_module.contains(&stage);
+        if expect_per_module {
+            assert!(
+                matches!(stage.scope(), StageScope::PerModule),
+                "Stage::{stage:?} should be PerModule"
+            );
+        } else {
+            assert!(
+                matches!(stage.scope(), StageScope::Project),
+                "Stage::{stage:?} should be Project"
+            );
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WBS 3.4.8 ②（2026-10-10）：多文件单态化臂接线——阶段表拓扑与形态表
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `Stage::ALL` 中 Linking 必须先于 Monomorphization：多文件形态下 mono
+/// 消费的是 **Linking 产物**（merged IR 是全程序唯一完整函数表，跨单元
+/// 泛型定义只在那里齐备）。次序写反则 mono 拿到的是残缺视图。
+#[test]
+fn test_stage_all_orders_linking_before_monomorphization() {
+    // Arrange / Act
+    let linking = position_in_all(Stage::Linking);
+    let mono = position_in_all(Stage::Monomorphization);
+
+    // Assert
+    assert!(
+        linking < mono,
+        "Stage::Linking ({linking}) must precede Stage::Monomorphization ({mono})"
+    );
+}
+
+/// 形态表按 3.4.8 的接线差异：MULTI_FILE 尾部含 Monomorphization（在
+/// Linking 之后）；SINGLE_FILE / EMBEDDED 的表**不动**（各自在单元 IR 上跑
+/// mono）；CHECK 于 ③ 增补 Linking + Monomorphization 两阶段（02 §3 注记
+/// #14——纯合并 + 检查形态），位置遵 `Stage::ALL` 拓扑序。
+#[test]
+fn test_program_kind_stage_tables_after_mono_wiring() {
+    // Arrange
+    use crate::driver::ProgramKind;
+
+    // Act
+    let multi = ProgramKind::MultiFile.stages();
+    let single = ProgramKind::SingleFile.stages();
+    let embedded = ProgramKind::Embedded.stages();
+    let check = ProgramKind::Check.stages();
+
+    // Assert：MULTI_FILE 尾部 = Linking → Monomorphization
+    assert_eq!(
+        multi.iter().rev().take(2).copied().collect::<Vec<_>>(),
+        vec![Stage::Monomorphization, Stage::Linking],
+        "MULTI_FILE must end with Linking then Monomorphization: {multi:?}"
+    );
+    assert!(
+        single.contains(&Stage::Monomorphization) && !single.contains(&Stage::Linking),
+        "SINGLE_FILE keeps its own mono position and has no Linking: {single:?}"
+    );
+    assert!(
+        embedded.eq(&[
+            Stage::Parsing,
+            Stage::Typecheck,
+            Stage::ProofExecution,
+            Stage::IrGeneration,
+        ]),
+        "EMBEDDED stage table must not change in this step: {embedded:?}"
+    );
+    // Assert（3.4.8 ③ 翻转并加强）：CHECK 尾部 = IrGeneration → Linking →
+    // Monomorphization（顺序即 Stage::ALL 拓扑序；反转次序会让 mono 拿到
+    // 未合并的单元 IR）
+    assert_eq!(
+        check.iter().rev().take(3).copied().collect::<Vec<_>>(),
+        vec![Stage::Monomorphization, Stage::Linking, Stage::IrGeneration],
+        "CHECK must end with IrGeneration then Linking then Monomorphization:\n{check:?}"
+    );
+    assert!(
+        check.contains(&Stage::Linking) && check.contains(&Stage::Monomorphization),
+        "CHECK must gain both Linking (pure merge) and Monomorphization (check form): {check:?}"
+    );
+}
+
+#[test]
+fn test_stage_slug_unique_and_nonempty() {
+    // Arrange / Act: 收集全部 slug
+
+    // Assert
+    for (i, a) in ALL_VARIANTS.iter().enumerate() {
+        assert!(!a.slug().is_empty(), "Stage::{a:?} slug must be nonempty");
+        for b in ALL_VARIANTS.iter().skip(i + 1) {
+            assert_ne!(
+                a.slug(),
+                b.slug(),
+                "Stage::{a:?} and Stage::{b:?} share a slug"
+            );
+        }
+    }
+}

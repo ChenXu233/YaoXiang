@@ -1,6 +1,6 @@
 //! 编译期值参数判定测试 — RFC-011 §4.1 两步判定精筛实现
 //!
-//! RFC-011: docs/src/design/rfc/accepted/011-generic-type-system.md §4.1
+//! RFC-011: docs/src/rfc/accepted/011-generic-type-system.md §4.1
 //!
 //! 测试点：
 //! - 用途命中的候选 → const_binders（index 连续，基于 Type 参数数起编）

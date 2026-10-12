@@ -63,3 +63,41 @@ fn test_top_level_calls_other_fn_main_still_hinted() {
     // Assert
     assert!(hinted, "顶层只调用别的函数、main 未被调用应命中提示判定");
 }
+
+#[test]
+fn test_value_block_main_silences_hint() {
+    // Arrange：#422 UX 对账——值型块体在初始化期内联求值，main 的效果已发生；
+    // 此时提示"未被调用"是误导（照提示补 main() 会双跑）
+    let src = "main = {\n    print(\"x\")\n}\n";
+
+    // Act
+    let hinted = compile_and_check(src);
+
+    // Assert
+    assert!(!hinted, "值型块体 main 已在初始化期求值，不应命中提示判定");
+}
+
+#[test]
+fn test_value_scalar_main_silences_hint() {
+    // Arrange：标量值 main（`main = 5`）——初始化期求值，无观察效果但无惰性体可跑
+    let src = "main = 5\n";
+
+    // Act
+    let hinted = compile_and_check(src);
+
+    // Assert
+    assert!(!hinted, "标量值 main 已在初始化期求值，不应命中提示判定");
+}
+
+#[test]
+fn test_block_tail_lambda_main_still_hinted() {
+    // Arrange：块值求值的结果是**新闭包**（`main = { () => {...} }`）——
+    // main 的值惰性，体从未运行，提示成立
+    let src = "main = { () => {\n    print(\"x\")\n} }\n";
+
+    // Act
+    let hinted = compile_and_check(src);
+
+    // Assert
+    assert!(hinted, "块尾 lambda（存入新闭包）体未运行，应命中提示判定");
+}

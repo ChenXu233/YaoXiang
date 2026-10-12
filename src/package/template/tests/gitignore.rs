@@ -1,4 +1,5 @@
 //! 测试 `.gitignore` 模板生成
+//! 规范来源：docs/src/reference/package/commands.md（init 模板约定）
 //!
 //! 覆盖:
 //! - 包含 `.yaoxiang/` 目录忽略

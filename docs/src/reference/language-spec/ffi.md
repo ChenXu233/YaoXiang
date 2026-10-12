@@ -3,7 +3,7 @@
 本文件定义 YaoXiang 编程语言的 FFI（外部函数接口）规范，包括类型定义、函数声明、方法绑定和不透明类型的处理。
 
 > **详细设计**：FFI 的完整设计、动机和权衡详见
-> [RFC-026: FFI 核心机制](../../design/rfc/accepted/026-ffi-core-mechanism.md)。
+> [RFC-026: FFI 核心机制](../../rfc/accepted/026-ffi-core-mechanism.md)。
 
 ---
 
@@ -243,7 +243,7 @@ SqliteDb.exec = sqlite3_exec[0]
 ## 第六章：yx-bindgen 工具链（计划中，未实现）
 
 > **状态：未实现。** 从 C 头文件自动生成绑定是
-> [RFC-026b](../../design/rfc/accepted/026-ffi-core-mechanism.md)（本章的自动化子提案，
+> [RFC-026b](../../rfc/accepted/026-ffi-core-mechanism.md)（本章的自动化子提案，
 > 仓库里尚无独立文档）的目标，当前**没有任何可执行入口**：
 >
 > - `Cargo.toml` 只声明了一个二进制 `[[bin]] yaoxiang-rs`，没有 `yx-bindgen`；

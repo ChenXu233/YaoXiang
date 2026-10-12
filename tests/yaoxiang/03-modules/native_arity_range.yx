@@ -18,28 +18,26 @@ pick: (empty: Bool) -> Option(Int) = {
     return Option(Int).some(7)
 }
 
-main: () -> Void = {
-    // 严格区间 [2,2]：concat 两端合法
-    ab = string.concat("a", "b")
-    assert.assert(ab == "ab", "concat with exactly two args")
+// 严格区间 [2,2]：concat 两端合法
+ab = string.concat("a", "b")
+assert.assert(ab == "ab", "concat with exactly two args")
 
-    // 可选区间 [1,2]：assert 单参与双参皆合法
-    assert.assert(1 > 0)
-    assert.assert(1 > 0, "with optional message")
+// 可选区间 [1,2]：assert 单参与双参皆合法
+assert.assert(1 > 0)
+assert.assert(1 > 0, "with optional message")
 
-    // 变参不设上限
-    io.println("variadic", "args", "ok")
+// 变参不设上限
+io.println("variadic", "args", "ok")
 
-    // 和类型变体构造（FieldAccess 形态）：单载荷
-    r = Result(Int, String).ok(5)
-    n = match r {
-        ok(v) => v,
-        err(_) => 0,
-    }
-    assert.assert(n == 5, "variant ctor with payload passes arity check")
-
-    // 零载荷构造（`none: ()`，合法区间 [0,0]）：编译运行不误伤
-    none_opt = pick(true)
-    io.println("none_opt built", none_opt)
-    assert.assert(true, "zero/one-payload variant ctors compile and run")
+// 和类型变体构造（FieldAccess 形态）：单载荷
+r = Result(Int, String).ok(5)
+n = match r {
+    ok(v) => v,
+    err(_) => 0,
 }
+assert.assert(n == 5, "variant ctor with payload passes arity check")
+
+// 零载荷构造（`none: ()`，合法区间 [0,0]）：编译运行不误伤
+none_opt = pick(true)
+io.println("none_opt built", none_opt)
+assert.assert(true, "zero/one-payload variant ctors compile and run")

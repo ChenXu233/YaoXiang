@@ -402,4 +402,4 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.string.parse_float`](./string#parse_float) —— 字符串解析为 `Float`
+- [`std.string.parse_float`](string#parse_float) —— 字符串解析为 `Float`

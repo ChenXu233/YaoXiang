@@ -27,8 +27,6 @@ succ: (b: IsPositive) -> Int = { b + 1 }
 plain: (x: Int) -> Int = { x * 2 }
 doubled: (b: IsPositive) -> Int = { plain(b) }
 
-main: () -> Void = {
-    assert.assert(identity(7) == 7, "精化形参的运行时值应原样返回")
-    assert.assert(succ(7) == 8, "精化形参应可参与 Int 算术")
-    assert.assert(doubled(7) == 14, "精化形参应可传给期望 Int 的函数")
-}
+assert.assert(identity(7) == 7, "精化形参的运行时值应原样返回")
+assert.assert(succ(7) == 8, "精化形参应可参与 Int 算术")
+assert.assert(doubled(7) == 14, "精化形参应可传给期望 Int 的函数")

@@ -19,6 +19,9 @@
 //! - 指令解析失败 = panic（构造期拒绝）
 //! - `// skip: <原因>` 跳过，`// mode: <模式>` 指定子进程运行时模式
 //!
+//! 二进制定位与 check/run 子进程拉起共享自 `tests/common/`（禁令三：
+//! 与多文件语料运行器 yx_multifile_runner 同一实现）。
+//!
 //! Directory structure (aligned with `docs/src/reference/language-spec/`):
 //!
 //! ```text
@@ -37,9 +40,11 @@
 //! └── 99-demos/             # 论文演示（非规范测试）
 //! ```
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+mod common;
 
+use std::path::{Path, PathBuf};
+
+use common::{binary_name, collect_yx_files, spawn_check, spawn_run};
 use yaoxiang::util::test_markers::{Expectation, TestFileSpec};
 
 /// Find all `.yx` test files across both tiers (RFC-036 §9), sorted.
@@ -52,91 +57,6 @@ fn discover_yx_tests() -> Vec<PathBuf> {
     collect_yx_files(&manifest.join("src").join("std").join("tests"), &mut files);
     files.sort();
     files
-}
-
-fn collect_yx_files(
-    dir: &Path,
-    files: &mut Vec<PathBuf>,
-) {
-    if !dir.is_dir() {
-        return;
-    }
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if path.is_dir() {
-            collect_yx_files(&path, files);
-        } else if path.extension().is_some_and(|e| e == "yx") {
-            files.push(path);
-        }
-    }
-}
-
-/// Locate the `yaoxiang-rs` binary.
-///
-/// Priority:
-/// 1. `CARGO_BIN_EXE_yaoxiang-rs` (set by `cargo test`)
-/// 2. Build once with `cargo build` and use the output path
-fn binary_name() -> String {
-    // When running via `cargo test`, the binary should be discoverable
-    // via CARGO_BIN_EXE_yaoxiang-rs (set by cargo test --test).
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_yaoxiang-rs") {
-        return path;
-    }
-    // Build once and use the binary directly
-    let build_output = Command::new("cargo")
-        .args(["build", "--bin", "yaoxiang-rs"])
-        .output()
-        .expect("Failed to build yaoxiang-rs binary");
-    if !build_output.status.success() {
-        panic!(
-            "Failed to build yaoxiang-rs:\n{}",
-            String::from_utf8_lossy(&build_output.stderr)
-        );
-    }
-    // cargo build puts the binary in target/debug/yaoxiang-rs
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let ext = if cfg!(target_os = "windows") {
-        ".exe"
-    } else {
-        ""
-    };
-    let path = format!("{manifest_dir}/target/debug/yaoxiang-rs{ext}");
-    // Verify it exists
-    assert!(
-        std::path::Path::new(&path).exists(),
-        "Built binary not found at {path}"
-    );
-    path
-}
-
-/// `check` 单文件（编译期判定步）。
-fn spawn_check(
-    binary: &str,
-    file: &Path,
-) -> std::process::Output {
-    Command::new(binary)
-        .arg("check")
-        .arg(file)
-        .output()
-        .unwrap_or_else(|e| panic!("Failed to run {binary} check for {}: {e}", file.display()))
-}
-
-/// `run` 单文件（`// mode:` 透传 `--runtime`）。
-fn spawn_run(
-    binary: &str,
-    file: &Path,
-    mode: Option<&String>,
-) -> std::process::Output {
-    let mut command = Command::new(binary);
-    command.arg("run");
-    if let Some(mode) = mode {
-        command.arg("--runtime").arg(mode);
-    }
-    command.arg(file);
-    command
-        .output()
-        .unwrap_or_else(|e| panic!("Failed to run {binary} for {}: {e}", file.display()))
 }
 
 // Tests

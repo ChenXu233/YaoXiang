@@ -274,6 +274,9 @@ fn native_ends_with(
 }
 
 /// Native implementation: index_of - find substring position
+/// #385 定案 D1/D2：返回标量值（码点）下标——`s.find` 给字节偏移，换算成
+/// 前缀字符数，与 substring/char_code/s[i] 同域，组合使用不再在多字节
+/// 字符处错位。找不到返回 -1。此前返回字节偏移，是三套口径分裂的成员之一。
 fn native_index_of(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
@@ -282,7 +285,7 @@ fn native_index_of(
     let sub = args.get(1).map(extract_string).unwrap_or_default();
 
     match s.find(&sub) {
-        Some(pos) => Ok(RuntimeValue::Int(pos as i64)),
+        Some(pos) => Ok(RuntimeValue::Int(s[..pos].chars().count() as i64)),
         None => Ok(RuntimeValue::Int(-1)),
     }
 }
@@ -293,8 +296,13 @@ fn native_substring(
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let s = args.first().map(extract_string).unwrap_or_default();
+    // #385：端点缺省为字符数（标量值口径）；此前缺省 `s.len()` 是字节
+    // 长度，靠下方 clamp 恰好等价，这里改成显式同口径。
     let start = args.get(1).map(extract_int).unwrap_or(0) as usize;
-    let end = args.get(2).map(extract_int).unwrap_or(s.len() as i64) as usize;
+    let end = args
+        .get(2)
+        .map(extract_int)
+        .unwrap_or(s.chars().count() as i64) as usize;
 
     let chars: Vec<char> = s.chars().collect();
     let end = end.min(chars.len());
@@ -314,12 +322,15 @@ fn native_is_empty(
 }
 
 /// Native implementation: len - get string length
+/// #385 定案 D1/D2：Unicode 标量值（码点）口径，与 substring/chars/
+/// char_code/index_of 同单位；此前返回 UTF-8 字节长度，是三套口径分裂
+/// 的成员之一。UTF-8 承载下为 O(n) 扫描。
 fn native_len(
     args: &[RuntimeValue],
     _ctx: &mut NativeContext<'_>,
 ) -> Result<RuntimeValue, ExecutorError> {
     let s = args.first().map(extract_string).unwrap_or_default();
-    Ok(RuntimeValue::Int(s.len() as i64))
+    Ok(RuntimeValue::Int(s.chars().count() as i64))
 }
 
 /// Native implementation: chars - get character list

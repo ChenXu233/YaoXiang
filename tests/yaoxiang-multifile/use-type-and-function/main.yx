@@ -1,0 +1,14 @@
+// use-type-and-function/main.yx
+// 覆盖: RFC-029 多文件模块编排 —— 跨文件 use 导入类型与函数
+// 验证: lib.yx 定义的 Point/distance 被 main.yx 导入、构造、调用，求值结果正确
+// 状态: ✅ 可运行
+
+use std.assert
+use lib.{Point, distance}
+
+main = () => {
+    p = Point(1.0, 2.0)
+    q = Point(4.0, 6.0)
+    d = distance(p, q)
+    assert.assert(d == 25.0, "distance((1,2),(4,6)) should be 25")
+}

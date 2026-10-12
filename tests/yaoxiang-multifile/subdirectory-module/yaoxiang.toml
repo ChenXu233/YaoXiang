@@ -1,0 +1,3 @@
+[package]
+name = "subdirectory-module"
+version = "0.1.0"

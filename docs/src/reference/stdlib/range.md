@@ -38,7 +38,7 @@ main: () -> Void = {
 
 > **两侧形态相反**：`has_next` 的签名**无 `&`**（`src/std/range.rs:40`），按值消耗迭代器，
 > 每次判定都要重新 `iter`；`next` 的签名**有 `&`**（`src/std/range.rs:46`），借用。
-> [`std.list`](./list) 恰好相反——它两个方法都借用（`&Iter(T)` / `&mut Iter(T)`），
+> [`std.list`](list) 恰好相反——它两个方法都借用（`&Iter(T)` / `&mut Iter(T)`），
 > 同一个迭代器可以连续取。照搬任一侧的写法到另一侧都会不匹配。
 
 ```yaoxiang
@@ -159,7 +159,7 @@ next: (it: &Iterator(Any)) -> Any
 返回：当前元素；迭代结束时返回 `Void`。
 
 > **借用**迭代器（签名有 `&`，`src/std/range.rs:46`），不消耗它。
-> 这与 [`has_next`](#has_next) 相反，也与 [`std.list`](./list) 侧的
+> 这与 [`has_next`](#has_next) 相反，也与 [`std.list`](list) 侧的
 > 「两个方法都借用」相反。
 
 ```yaoxiang
@@ -355,7 +355,7 @@ reduce: (it: Iterator(Any), init: Any, f: (Any, Any) -> Any) -> Any
 - `init` —— 初始累加值
 - `f` —— 归约函数 `(累加值, 元素) -> 新累加值`
 
-> 注意参数顺序与 [`std.list.reduce`](./list#reduce) 不同：本模块是
+> 注意参数顺序与 [`std.list.reduce`](list#reduce) 不同：本模块是
 > `(迭代器, 初值, 函数)`，`std.list` 是 `(列表, 函数, 初值)`。
 
 ```yaoxiang
@@ -398,6 +398,6 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.list`](./list) —— 列表与其迭代器
-- [`std.result`](./result) —— 解包 `iter` / `contains` 的返回值
+- [`std.list`](list) —— 列表与其迭代器
+- [`std.result`](result) —— 解包 `iter` / `contains` 的返回值
 - [错误码参考](../error-code/) —— `E6009` 步长非法

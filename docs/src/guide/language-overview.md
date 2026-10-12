@@ -15,7 +15,7 @@ mut y = 0                 // 可变
 name: String = "hello"    // 显式类型
 count: Int = 100          // 类型注解
 
-pub version = "1.0"       // 公开导出
+// 顶层绑定默认可导入 —— 语言没有 pub/private/export 修饰符
 ```
 
 ## 函数
@@ -226,7 +226,7 @@ add: (a: Int, b: Int) -> Int = a + b
 Point: Type = { x: Float, y: Float }
 ```
 
-模块路径、目录入口约定与 `use` 的完整形态见[模块系统](./modules)。
+模块路径、目录入口约定与 `use` 的完整形态见[模块系统](modules)。
 
 ## 所有权
 

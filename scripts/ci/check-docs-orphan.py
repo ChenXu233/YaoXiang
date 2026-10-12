@@ -36,8 +36,8 @@ notes = []
 # generateSidebar 扫描的目录 —— 这些目录的文件标题来自 frontmatter
 SIDEBAR_DIRS = [
     'tutorial/basics', 'tutorial/advanced',
-    'design/rfc/accepted', 'design/rfc/review', 'design/rfc/draft',
-    'design/rfc/rejected', 'design/rfc/deprecated',
+    'rfc/accepted', 'rfc/review', 'rfc/draft',
+    'rfc/rejected', 'rfc/deprecated',
     'reference/error-code', 'reference/package',
 ]
 # 显式排除在构建之外的目录（config.js:40 srcExclude）
@@ -110,7 +110,7 @@ def resolve(p, link):
 # 目录说明页（README.md）的作用是解释「这个目录收什么」，
 # 内容是指向 TRACKING.md 等权威索引的指针，不重复维护列表。
 ORPHAN_EXEMPT = {
-    'design/rfc/accepted/README.md',
+    'rfc/accepted/README.md',
 }
 
 # 显式豁免的重复 H1：两个「包管理器」分别是面向用户的上手指南与
@@ -208,7 +208,7 @@ def main():
                 continue
             # RFC 里讨论历史/提案中的 URL 结构（如 006 里的 /zh/getting-started），
             # 那是方案文本不是当前链接，VitePress 也不会校验。
-            if rel(p).startswith('design/rfc/') and link.startswith(('/zh', '/en/zh')):
+            if rel(p).startswith('rfc/') and link.startswith(('/zh', '/en/zh')):
                 continue
             # `](1,2,3)` 这类是正则/表格里的误抓
             if re.fullmatch(r'[\d\s,.\-+]+', link):

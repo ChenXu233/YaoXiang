@@ -1,8 +1,8 @@
 //! RFC-004 Binding Syntax Lexer Tests
 //! Tests lexer support for RFC-004 binding syntax
 
-use yaoxiang::frontend::core::lexer::tokenize;
-use yaoxiang::frontend::core::lexer::tokens::{TokenKind, Token};
+use crate::frontend::core::lexer::tokenize;
+use crate::frontend::core::lexer::tokens::TokenKind;
 
 #[test]
 fn test_binding_syntax_tokenization() {
@@ -10,7 +10,8 @@ fn test_binding_syntax_tokenization() {
     let source = "function[0, 1, 2]";
     let tokens = tokenize(source).unwrap();
 
-    assert_eq!(tokens.len(), 8); // Identifier, LBracket, Int, Comma, Int, Comma, Int, RBracket
+    // Identifier, LBracket, Int, Comma, Int, Comma, Int, RBracket, Eof
+    assert_eq!(tokens.len(), 9, "应产出 8 个内容 token + Eof");
 
     assert!(matches!(tokens[0].kind, TokenKind::Identifier(_)));
     assert_eq!(tokens[1].kind, TokenKind::LBracket);
@@ -72,10 +73,10 @@ fn test_binding_with_generic() {
     let source = "List(T)[0, 1]";
     let tokens = tokenize(source).unwrap();
 
-    // Should tokenize: List < T > [ 0 , 1 ]
+    // Should tokenize: List ( T ) [ 0 , 1 ]（泛型为圆括号语法，无尖括号形态）
     assert!(matches!(tokens[0].kind, TokenKind::Identifier(_)));
-    assert_eq!(tokens[1].kind, TokenKind::Lt);
+    assert_eq!(tokens[1].kind, TokenKind::LParen);
     assert!(matches!(tokens[2].kind, TokenKind::Identifier(_)));
-    assert_eq!(tokens[3].kind, TokenKind::Gt);
+    assert_eq!(tokens[3].kind, TokenKind::RParen);
     assert_eq!(tokens[4].kind, TokenKind::LBracket);
 }

@@ -11,7 +11,7 @@ use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind};
 use tracing::debug;
 
 use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
-use crate::lsp::locate::{find_identifier_at_position, position_to_internal, span_to_range};
+use crate::lsp::locate::{find_identifier_at_position, position_to_internal_utf16, span_to_range};
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 
@@ -48,7 +48,7 @@ pub fn handle_hover(
 
     // 核心路径：SemanticDB 精确解析
     let db = world.semantic_db();
-    let (line, col) = position_to_internal(position);
+    let (line, col) = position_to_internal_utf16(content, position);
 
     let def = db.resolve_reference(&uri_str, line, col)?;
 

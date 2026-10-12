@@ -79,9 +79,14 @@ CROSS_BLOCK_CODES = {'E1001', 'E1003', 'E1053', 'E2002', 'E2010'}
 # 包装伪影：把片段包进 main 后，文档里原本依赖「外层作用域」的写法会被编译器
 # 判成非法。典型是 `for i in 0..5 { i = i + 1 }` —— for 的循环变量是只读的，
 # 但文档原意是演示「不要这样写」或只是示意。这类不是文档错误。
+# 大小写不敏感：诊断报文随 i18n 统一小写化（locales/en.json 的
+# E2010 template 为 "cannot assign to immutable variable"），而本判据原先
+# 只匹配大写形态，导致 13 个包装伪影全部漏判为真失败。报文首字母大小写
+# 不属判据语义，故对整条正则关闭大小写敏感（与 _eligible 的 SKIP_MARKERS
+# 同理：bot 翻译会改大小写，按大小写匹配会漏判）。
 WRAPPER_ARTIFACT = re.compile(
     r"E2010\] Cannot assign to immutable variable|"
-    r"E0011\] Unexpected token: 'LParen'")
+    r"E0011\] Unexpected token: 'LParen'", re.IGNORECASE)
 
 
 def _is_wrapper_artifact(first):

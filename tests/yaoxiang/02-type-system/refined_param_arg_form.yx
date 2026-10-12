@@ -22,7 +22,5 @@ identity: (b: IsPositive(b)) -> Int = { b }
 // 带实参形式参与算术
 succ: (b: IsPositive(b)) -> Int = { b + 1 }
 
-main: () -> Void = {
-    assert.assert(identity(7) == 7, "带实参的精化形参应原样返回")
-    assert.assert(succ(7) == 8, "带实参的精化形参应可参与 Int 算术")
-}
+assert.assert(identity(7) == 7, "带实参的精化形参应原样返回")
+assert.assert(succ(7) == 8, "带实参的精化形参应可参与 Int 算术")

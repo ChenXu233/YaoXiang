@@ -8,3 +8,6 @@
 *.yx text eol=lf
 # shell 脚本带 CRLF 在 bash 下直接炸（\r 进命令词）
 *.sh text eol=lf
+# 判据文件（IR 快照 / 语料差分基线）：逐字节比对，换行漂移会假红
+*.snap text eol=lf
+*.jsonl text eol=lf

@@ -43,7 +43,7 @@ jobs:
         run: cargo fmt --check --all
 
       - name: Clippy
-        run: cargo clippy --all --all-features -- -D warnings
+        run: cargo clippy --all --all-features --all-targets -- -D warnings
 
       - name: Build check
         run: cargo check --all-features
@@ -82,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
 
@@ -102,13 +102,35 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docs-truth-reports
           path: |
             scripts/ci/_docs-truth-report.txt
             scripts/ci/_docs-orphan-report.txt
           if-no-files-found: ignore
+
+  concepts:
+    name: Concept Gates (禁令一-三, report-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      # P0 引入（09-execution-wbs 0.2.1-0.2.3）：报告禁令一/三/二的现存命中，不阻断。
+      # P9 统一转硬：届时三个脚本均改为 --strict。
+      - name: Check concept duplication (report-only)
+        run: python3 scripts/ci/check-concepts.py
+
+      - name: Check entry fan-out (report-only)
+        run: python3 scripts/ci/check-fanout.py
+
+      - name: Check module boundaries (report-only)
+        run: python3 scripts/ci/check-boundary.py
 
   test:
     name: Test
@@ -137,13 +159,29 @@ jobs:
             test-${{ runner.os }}-cargo-
 
       - name: Run tests
-        run: cargo test --all-features --lib --bins --test integration --test yx_runner
+        run: cargo test --all-features --lib --bins --test integration --test yx_runner --test yx_multifile_runner
 
       - name: Doc tests
         run: cargo test --doc --all-features
 
       - name: Build CLI
         run: cargo build --all-features --bin yaoxiang-rs
+
+      # P2 引入（09-execution-wbs 9.5）：规范化 IR 快照零漂移（C1 zero-diff）。
+      - name: IR snapshot drift
+        run: bash scripts/ci/check-snapshot-drift.sh
+
+      # P2 引入（09-execution-wbs 9.6）：全语料 verify_loose 跑绿（P7 批 a 准入
+      # 硬门槛），校验面非空断言内置于判据测试。
+      - name: IR verifier on corpus
+        run: bash scripts/ci/check-ir-verifier.sh
+
+      # P2 引入（09-execution-wbs 9.7）：语料行为差分 vs 入库基线，无任何分组放宽。
+      # 差分非空 = 回归（修代码）或有意变更（同一 PR 重生成基线）。
+      - name: Corpus parity vs baseline
+        run: |
+          cargo run --quiet --example corpus_probe > target/corpus-current.jsonl
+          python3 scripts/ci/check-corpus-parity.py tests/baselines/corpus-parity.jsonl target/corpus-current.jsonl
 
       # 教程/指南里的代码块直接被读者复制粘贴，必须真能编译。
       # 2026-10-02 审计实测发现 20 个示例用 0.8.2 编译器直接失败，
@@ -154,7 +192,7 @@ jobs:
 
       - name: Upload example report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docs-examples-report
           path: scripts/ci/_docs-examples-report.txt
@@ -163,7 +201,13 @@ jobs:
       - name: YaoXiang test suites (JSON summary)
         run: |
           BIN=target/debug/yaoxiang-rs
-          "$BIN" test --json --parallel > target/report-corpus.json || corpus_rc=$?
+          # 语言语料层显式给路径（与下一行库层同形态）。RFC-036 §5：默认
+          # patterns（tests/**/*.yx）覆盖的是**语言可用性语料**层，测试分层
+          # 在 CI 显式表达。tests/yaoxiang-multifile/ 是 RFC-039 D48 裁决的
+          # **项目夹具层**（每夹具 yaoxiang.toml + main.yx 入口 + lib.yx 模块），
+          # 运行器是 cargo test --test yx_multifile_runner；夹具内的模块文件
+          # 不是测试，被默认 patterns 扫进来只会误报「缺 main 绑定 / 未知变量」。
+          "$BIN" test --json --parallel tests/yaoxiang > target/report-corpus.json || corpus_rc=$?
           "$BIN" test --json --parallel src/std/tests > target/report-stdlib.json || stdlib_rc=$?
           CORPUS_RC="${corpus_rc:-0}" STDLIB_RC="${stdlib_rc:-0}" python3 - <<'EOF'
           import json
@@ -255,7 +299,7 @@ jobs:
         run: |
           cargo check --all-features
           cargo fmt --check --all
-          cargo clippy --all --all-features -- -D warnings
+          cargo clippy --all --all-features --all-targets -- -D warnings
 
       - name: Test with MSRV
         run: |

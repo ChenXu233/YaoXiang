@@ -1,0 +1,8 @@
+// 06-compile-errors/pub_declaration_err.yx
+// 覆盖: RFC-029g —— `pub` 关键字已删除（语言不设可见性机制）
+// 验证: 旧写法 `pub x = 1` 不再被静默接受——`pub` 退回普通标识符后按未定义名报 E1001
+// 状态: ✅ 可运行
+
+// expect: compile-error E1001
+
+pub helper = 1

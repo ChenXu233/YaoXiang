@@ -15,7 +15,5 @@ mut s: SumUpTo(n, 6) = 6
 
 n = 3
 
-main: () -> Void = {
-    assert.assert(s == 6, "模块级依赖精化：约束成立的重赋应静默通过")
-    assert.assert(n == 3, "模块级 mut 变量重赋生效")
-}
+assert.assert(s == 6, "模块级依赖精化：约束成立的重赋应静默通过")
+assert.assert(n == 3, "模块级 mut 变量重赋生效")

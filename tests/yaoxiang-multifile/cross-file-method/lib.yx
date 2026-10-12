@@ -1,0 +1,10 @@
+// lib.yx —— 被导入模块：类型及其方法绑定
+Point: Type = { x: Float, y: Float }
+
+Point.get_x: (self: &Point) -> Float = {
+    return self.x
+}
+
+Point.norm_sq: (self: &Point) -> Float = {
+    return self.x * self.x + self.y * self.y
+}

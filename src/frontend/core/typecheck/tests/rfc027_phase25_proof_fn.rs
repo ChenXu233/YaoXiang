@@ -150,7 +150,7 @@ fn test_call_with_named_var_args() {
 // --- Section 2: execute_single_proof_fn 单元测试 ---
 // 规范来源: RFC-027 §4.2 Phase 2.5 — 证明函数执行管线
 
-use crate::frontend::pipeline::execute_single_proof_fn;
+use crate::frontend::proof_execution::execute_single_proof_fn;
 use crate::frontend::core::parser::ast::{
     BinOp as AstBinOp, Block, Expr, Literal, Module, Param, Stmt, StmtKind, Type as AstType,
     TypeBodyItem,
@@ -203,7 +203,6 @@ fn make_proof_fn_module(
                 }),
                 span: Span::dummy(),
             })),
-            is_pub: false,
             is_mut: false,
             span: Span::dummy(),
         },
@@ -400,7 +399,6 @@ fn make_proof_fn_typedef_module(
             definition: AstType::Struct {
                 body: vec![TypeBodyItem::Expr(AstType::ConstExpr(Box::new(body_expr)))],
             },
-            is_pub: false,
         },
         span: Span::dummy(),
     };

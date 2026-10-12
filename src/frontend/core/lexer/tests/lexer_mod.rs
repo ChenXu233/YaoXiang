@@ -1,4 +1,5 @@
 //! Lexer 模块测试
+//! 规范来源：docs/src/reference/language-spec/syntax.md §1.6；RFC-004 / RFC-010
 //!
 //! 测试词法分析器的核心功能，包括：
 //! - 基础分词功能

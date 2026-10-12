@@ -6,7 +6,7 @@ description: '文件句柄、环境变量与工作目录'
 # std.os
 
 操作系统接口模块：文件句柄读写、环境变量与工作目录。路径级文件操作（整文件读写、
-目录、元数据、路径运算）见 [`std.fs`](./fs)。
+目录、元数据、路径运算）见 [`std.fs`](fs)。
 
 ```yaoxiang
 use std.os
@@ -38,7 +38,7 @@ use std.os
 > `open → write → close` 会报 `E2014`。
 
 若想避免手工管理句柄，可用不开句柄的便捷函数——它们在
-[`std.fs`](./fs)（**不在** `std.io`）：`fs.read_file` / `fs.write_file` /
+[`std.fs`](fs)（**不在** `std.io`）：`fs.read_file` / `fs.write_file` /
 `fs.append_file`。本模块（`std.os`）只有句柄级增量读写，没有 `append_file`
 （`os.append_file` 报 `E1042`）。
 
@@ -440,5 +440,5 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.fs`](./fs) —— 路径级文件与目录操作
+- [`std.fs`](fs) —— 路径级文件与目录操作
 - [错误码参考](../error-code/) —— `E6007` 通用运行时错误

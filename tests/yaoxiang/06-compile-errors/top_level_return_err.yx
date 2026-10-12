@@ -1,0 +1,11 @@
+// 06-compile-errors/top_level_return_err.yx
+// 覆盖: RFC-010a 规则② —— `return` 退出最近的函数边界；Script 顶层是模块初始化层，没有函数边界
+// 验证: 顶层 return 编译期拒绝（E1109），不再静默终止模块初始化、跳过后续顶层语句
+// 状态: ✅ 可运行
+
+// expect: compile-error E1109
+
+use std.assert
+
+return 5
+assert.assert(false, "顶层 return 之后的语句应被编译期拒绝，不得静默跳过")

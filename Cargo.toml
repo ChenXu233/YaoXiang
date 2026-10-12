@@ -5,7 +5,7 @@ resolver = "2"
 
 # RFC-037：工具链单一版本源（引擎 yaoxiang-rs 与前门 yx 同版本发布）
 [workspace.package]
-version = "0.8.3"
+version = "0.8.4"
 
 [package]
 name = "yaoxiang"
@@ -46,6 +46,12 @@ harness = false
 [[bench]]
 name = "formatter"
 path = "benches/formatter.rs"
+harness = false
+
+# WBS 2.3.3 冒烟基线：全语料编译耗时 + CLI 冷启动（解释吞吐在 benches/lib.rs hotpath 组）
+[[bench]]
+name = "pipeline"
+path = "benches/pipeline.rs"
 harness = false
 
 [dependencies]

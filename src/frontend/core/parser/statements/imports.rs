@@ -28,13 +28,19 @@ pub fn parse_use_stmt(
         while !state.at(&TokenKind::RBrace) && !state.at_end() {
             match state.current().map(|t| &t.kind) {
                 Some(TokenKind::Identifier(n)) => {
-                    items.push(n.clone());
+                    items.push(SpannedIdent {
+                        name: n.clone(),
+                        span: state.span(),
+                    });
                     state.bump();
                     // 内联别名：item as alias（#245）
                     if state.skip(&TokenKind::KwAs) {
                         match state.current().map(|t| &t.kind) {
                             Some(TokenKind::Identifier(a)) => {
-                                aliases.push(Some(a.clone()));
+                                aliases.push(Some(SpannedIdent {
+                                    name: a.clone(),
+                                    span: state.span(),
+                                }));
                                 any_alias = true;
                                 state.bump();
                             }
@@ -53,10 +59,6 @@ pub fn parse_use_stmt(
                         aliases.push(None);
                     }
                     state.skip(&TokenKind::Comma);
-                }
-                Some(TokenKind::KwPub) => {
-                    // Skip 'pub' in import items
-                    state.bump();
                 }
                 _ => break,
             }
@@ -82,7 +84,10 @@ pub fn parse_use_stmt(
         }
         let mut aliases = Vec::new();
         while let Some(TokenKind::Identifier(n)) = state.current().map(|t| &t.kind) {
-            aliases.push(n.clone());
+            aliases.push(SpannedIdent {
+                name: n.clone(),
+                span: state.span(),
+            });
             state.bump();
             // 继续读取逗号分隔的下一个别名
             if !state.skip(&TokenKind::Comma) {

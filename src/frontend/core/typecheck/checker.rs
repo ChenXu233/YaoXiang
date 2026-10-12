@@ -1070,6 +1070,7 @@ impl TypeChecker {
             if let StmtKind::Use {
                 path,
                 path_span,
+                path_parts,
                 items,
                 alias,
                 item_aliases,
@@ -1079,6 +1080,7 @@ impl TypeChecker {
                 let _ = self.body_checker_mut().process_use_stmt(
                     path,
                     *path_span,
+                    path_parts,
                     items,
                     alias,
                     item_aliases,
@@ -1197,7 +1199,6 @@ impl TypeChecker {
         self.finalize_interface_instantiations();
 
         // 收集所有导出项
-        self.collect_exports(module);
 
         // #371/#372：注解里的类型名校验。
         //
@@ -1253,7 +1254,9 @@ impl TypeChecker {
         // RFC-027a §良基性：函数前置条件（形参精化代入后的约束）——良基性
         // `m >= 0` 的证据只能来自它（ℤ 上 `<` 不良基）。
         let param_assumptions = self.collect_param_refinements();
-        let term_results = {
+        // WBS 3.4.2：终止性义务未判定数（无求解器时 Unjudged）随结果一并取出——
+        // T4「只判定并记录，不发射诊断」是静默通道，计数在 warnings 汇聚点发 W1081。
+        let (term_results, unjudged_termination_obligations) = {
             #[allow(unused_mut)]
             let mut term_checker = super::layers::termination::TerminationChecker::new()
                 .set_refined_vars(refined_vars)
@@ -1261,12 +1264,17 @@ impl TypeChecker {
                 .set_param_assumptions(param_assumptions);
             // RFC-027a T4（即 #377-1）：生产在此注入求解器后端。此前从不调用
             // 注入点，`self.solver` 恒为 `None`，SMT 相关路径在任何平台都不执行。
-            // wasm 下无 Z3（#376），`default_solver()` 返回 `None` 时保持不注入。
-            #[cfg(not(target_arch = "wasm32"))]
+            // `default_solver()` 返回 `None`（初始化失败）时保持不注入——
+            // wasm 自 #435 起同带 Z3（libz3.a 静态链接进产物）。
             if let Some(solver) = super::proof::smt::backend::default_solver() {
                 term_checker = term_checker.with_solver_owned(solver);
             }
-            term_checker.check_module(module, self.env())
+            let results = term_checker.check_module(module, self.env());
+            let unjudged = super::layers::termination::count_unjudged_obligations(
+                term_checker.measure_verdicts(),
+                term_checker.well_founded_verdicts(),
+            );
+            (results, unjudged)
         };
         for result in term_results {
             match result.into_result() {
@@ -1310,7 +1318,23 @@ impl TypeChecker {
                         let _model_guard = crate::util::diagnostic::push_current_span(module.span);
                         self.add_error(model.into_diagnostic());
                     }
-                    ProofResult::Unproven { .. } => {}
+                    // 02-stage-contract §漏洞证据链第 8 步（WBS 3.2.1）：所有权层
+                    // Unproven 不得被空臂吞掉——记账（proof_calls 上抛，与
+                    // 5179/5318/5448 三处精化分支同一契约）+ 诊断（into_result
+                    // 既定转换路径，不新造第二个 Unproven→Diagnostic 实现）。
+                    result @ ProofResult::Unproven { .. } => {
+                        if let ProofResult::Unproven {
+                            proof_calls: calls, ..
+                        } = &result
+                        {
+                            proof_calls.extend(calls.iter().cloned());
+                        }
+                        // 同 Disproved 臂：spanless 构造前挂模块 span 兜底（#324）
+                        let _model_guard = crate::util::diagnostic::push_current_span(module.span);
+                        if let Err(diag) = result.into_result() {
+                            self.add_error(diag);
+                        }
+                    }
                 }
             }
             (plan, escaped_refs)
@@ -1330,8 +1354,71 @@ impl TypeChecker {
         // 即便类型检查存在错误（如语法或类型错误），我们也要尽可能收集当前的语义 token，保证代码染色等功能
         self.collect_semantic_tokens(module);
 
-        // 收集错误（无论有无错误都收进 result.diagnostics）
-        let diagnostics = self.errors().to_vec();
+        // 语义事件排空（#433/D55）：绑定期采集的定义/引用/导入事件落 SemanticDB。
+        // 定义与引用经 VarInfo.definition_span 同源衔接（resolves_to → DefId），
+        // dummy 定义（导入名/占位）不入列，对应引用的 resolves_to 落空 DefId，
+        // 跳转按 precise-only 返回 None。同 (名字, span) 去重——同一绑定
+        // 经多条路径重复登记时保第一条。
+        if let Some(bc) = self.body_checker.as_mut() {
+            let file_path = self.env.module_name.clone();
+            let mut seen_defs: HashSet<(String, crate::util::span::Span)> = HashSet::new();
+            for ev in bc.take_binding_events() {
+                if seen_defs.insert((ev.name.clone(), ev.span)) {
+                    let def = semantic_db::DefinitionInfo {
+                        def_id: semantic_db::DefId {
+                            file_path: file_path.clone(),
+                            span: ev.span,
+                        },
+                        name: ev.name,
+                        kind: ev.kind,
+                        span: ev.span,
+                        file_path: file_path.clone(),
+                        type_info: ev.type_info,
+                        signature: None,
+                    };
+                    self.semantic_db.add_definition(&file_path, def);
+                }
+            }
+            let (refs, imports) = (bc.take_reference_events(), bc.take_import_events());
+            for r in refs {
+                let r#ref = semantic_db::ReferenceInfo {
+                    name: r.name,
+                    span: r.span,
+                    file_path: file_path.clone(),
+                    resolves_to: semantic_db::DefId {
+                        file_path: file_path.clone(),
+                        span: r.resolves_to_span,
+                    },
+                };
+                self.semantic_db.add_reference(&file_path, r#ref);
+            }
+            for imp in imports {
+                self.semantic_db.add_import(
+                    &file_path,
+                    semantic_db::ImportInfo {
+                        module_path: imp.module_path,
+                        imported_names: imp.imported_names,
+                        span: imp.span,
+                    },
+                );
+            }
+        }
+
+        // 收集错误（无论有无错误都收进 result.diagnostics）。
+        //
+        // 4.2.7 去重：同一诊断事实（同码同 span 同消息）可经多条通道重复
+        // 汇入——收集点的 collected_errors/Err 双通道（pass-3 与 drain 各
+        // 收一份，嵌套作用域还会经外层收集点再收）、注解校验的签名形参与
+        // 整体注解双访（E1003/E1103）、所有权层同点双发（E2014/E2018）。
+        // 诊断是位置事实，重复报告不携带信息——模块结果边界统一去重，
+        // 保首次出现、顺序不变（4.2.5 基线实证 64 个语料条目带重复副本）。
+        let mut seen: HashSet<(String, Option<crate::util::span::Span>, String)> = HashSet::new();
+        let mut diagnostics = Vec::new();
+        for d in self.errors() {
+            if seen.insert((d.code.clone(), d.span, d.message.clone())) {
+                diagnostics.push(d.clone());
+            }
+        }
 
         // 构建类型检查结果
         // 合并 StatementChecker 中的局部变量类型到 bindings
@@ -1429,6 +1516,31 @@ impl TypeChecker {
         // #321 W1003：未使用导入警告（Warning 级，不阻断编译，经 warnings 通道流出）
         let import_warnings = self.collect_unused_import_warnings(module);
 
+        // WBS 3.4.2：求解器缺失时终止性测度义务判 Unjudged——「未判」≠「成立」，
+        // 义务存在而判不了必须让用户知情（Warning 级，不阻断——同 W1003 契约）
+        let mut warnings = import_warnings;
+        if unjudged_termination_obligations > 0 {
+            warnings.push(
+                ErrorCodeDefinition::termination_obligations_unjudged(
+                    unjudged_termination_obligations,
+                )
+                .build(),
+            );
+        }
+
+        // WBS 3.4.1：编译期不可求值的 const 泛型约束——事实链
+        //（environment → ExpressionInferrer → StatementChecker）在此汇聚，
+        // 发射 W1063（Warning 级，不阻断——与 W1003 同一契约）
+        if let Some(ref bc) = self.body_checker {
+            for (span, constraint) in &bc.unevaluable_const_constraints {
+                warnings.push(
+                    ErrorCodeDefinition::const_generic_unevaluable(constraint)
+                        .at(*span)
+                        .build(),
+                );
+            }
+        }
+
         TypeCheckResult {
             module_name: self.env.module_name.clone(),
             diagnostics,
@@ -1462,7 +1574,7 @@ impl TypeChecker {
                 .map(|(name, d)| (name.clone(), d.type_param_names.clone()))
                 .collect(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
-            warnings: import_warnings,
+            warnings,
         }
     }
 
@@ -1742,7 +1854,6 @@ impl TypeChecker {
                 type_annotation,
                 signature_params,
                 value,
-                is_pub,
                 ..
             } if value.as_ref().is_some_and(|v| {
                 matches!(
@@ -2078,11 +2189,6 @@ impl TypeChecker {
                     };
                     self.env.add_var(name.clone(), poly);
                 }
-
-                // 处理 pub 自动绑定
-                if *is_pub {
-                    self.auto_bind_to_type(&name, &final_param_types, fn_ty);
-                }
             }
             crate::frontend::core::parser::ast::StmtKind::Use {
                 path,
@@ -2108,7 +2214,7 @@ impl TypeChecker {
                     let mut exports_to_import: Vec<&crate::frontend::module::Export> = Vec::new();
                     for export in module.exports.values() {
                         let should_import = import_all
-                            || items_ref.is_some_and(|i| i.iter().any(|s| s == &export.name));
+                            || items_ref.is_some_and(|i| i.iter().any(|s| s.name == export.name));
                         if should_import {
                             exports_to_import.push(export);
                         }
@@ -2147,7 +2253,8 @@ impl TypeChecker {
                         // use path as alias → 整个模块用别名注册
                         // #414：单/多别名统一走此臂——每个别名各绑一份模块 record
                         (None, Some(aliases)) => {
-                            for alias_name in aliases {
+                            for alias in aliases {
+                                let alias_name = alias.name.as_str();
                                 // #321 W1003：登记导入本地名与导出成员监视
                                 self.record_import_name(alias_name, stmt.span);
                                 self.watch_import_members(alias_name, &module);
@@ -2155,7 +2262,7 @@ impl TypeChecker {
                                 // is_std_submodule 兜住，别名只有这张表能救；漏登记则
                                 // ir_gen 把 `m.sqrt` 当闭包值调用 → E8001 ICE
                                 self.module_namespaces
-                                    .insert(alias_name.clone(), path.clone());
+                                    .insert(alias_name.to_string(), path.clone());
                                 for export in &exports_to_import {
                                     if matches!(
                                         export.kind,
@@ -2171,14 +2278,15 @@ impl TypeChecker {
                         // use path.{a, b} / use path.{a as x}（#245：仅内联别名）。
                         // 按 item 名查导出——exports 是 HashMap 无序，zip 会错配。
                         (Some(item_names), _) => {
-                            for (i, item_name) in item_names.iter().enumerate() {
-                                let Some(export) = module.exports.get(item_name) else {
+                            for (i, item) in item_names.iter().enumerate() {
+                                let Some(export) = module.exports.get(&item.name) else {
                                     continue;
                                 };
                                 let local_name = item_aliases
                                     .as_ref()
                                     .and_then(|v| v.get(i))
-                                    .and_then(|a| a.as_ref());
+                                    .and_then(|a| a.as_ref())
+                                    .map(|a| a.name.as_str());
                                 // #415：子模块导出经内联别名绑定时（`use std.{io as printer}`），
                                 // is_std_submodule 只认裸子模块名，别名必须入 namespace 表，
                                 // 否则 ir_gen 解析 `printer.print` → E3006。非别名条目入表与
@@ -2187,18 +2295,18 @@ impl TypeChecker {
                                     export.kind,
                                     crate::frontend::module::ExportKind::SubModule
                                 ) {
-                                    let ns_name = local_name.unwrap_or(item_name);
+                                    let ns_name = local_name.unwrap_or(&item.name);
                                     self.module_namespaces
                                         .insert(ns_name.to_string(), export.full_path.clone());
                                 }
                                 // #321 W1003：登记导入本地名（内联别名优先）
                                 match local_name {
                                     Some(local) => self.record_import_name(local, stmt.span),
-                                    None => self.record_import_name(item_name, stmt.span),
+                                    None => self.record_import_name(&item.name, stmt.span),
                                 }
                                 match local_name {
                                     Some(local) => self.register_use_export(local, export, true),
-                                    None => self.register_use_export(item_name, export, false),
+                                    None => self.register_use_export(&item.name, export, false),
                                 }
                             }
                         }
@@ -3730,65 +3838,6 @@ impl TypeChecker {
         }
     }
 
-    /// 自动将函数绑定到类型
-    /// pub 函数的默认行为：绑定到第一个参数的类型
-    /// 例如: pub distance: (p1: Point, p2: Point) -> Float 自动绑定为 Point.distance
-    fn auto_bind_to_type(
-        &mut self,
-        fn_name: &str,
-        param_types: &[MonoType],
-        fn_type: MonoType,
-    ) {
-        if param_types.is_empty() {
-            // 无参数函数无法自动绑定（工厂函数模式需要特殊处理）
-            return;
-        }
-
-        // 获取第一个参数的类型名称
-        let first_param_ty = &param_types[0];
-        let type_name = match first_param_ty {
-            MonoType::TypeRef(name) => name.clone(),
-            _ => return, // 无法确定绑定目标类型
-        };
-
-        // 检查该类型是否在当前模块中定义
-        if self.env.types.contains_key(&type_name) {
-            // 绑定方法到类型
-            self.env.add_method_binding(&type_name, fn_name, fn_type);
-        }
-    }
-
-    /// 收集模块的所有导出项
-    fn collect_exports(
-        &mut self,
-        module: &Module,
-    ) {
-        use crate::frontend::core::parser::ast::StmtKind;
-        for stmt in &module.items {
-            // #324：模块级阶段挂当前语句 span，诊断自动获得位置
-            let _module_span_guard = crate::util::diagnostic::push_current_span(stmt.span);
-            if let StmtKind::Assign { target, is_pub, .. } = &stmt.kind {
-                let Some((name, type_name)) = target.receiver_parts() else {
-                    continue;
-                };
-                let is_method = type_name.is_some();
-                if is_method || *is_pub {
-                    if is_method {
-                        if let Some(ty_name) = type_name {
-                            self.env.add_export(&format!("{}.{}", ty_name, name));
-                        }
-                    } else {
-                        self.env.add_export(&name);
-                    }
-                }
-            }
-            if let StmtKind::TypeDefinition { name, .. } = &stmt.kind {
-                // 类型定义始终导出
-                self.env.add_export(name);
-            }
-        }
-    }
-
     // ============ 语义信息收集 ============
 
     /// 从已完成类型检查的 AST 收集语义 tokens
@@ -3815,8 +3864,8 @@ impl TypeChecker {
         &self,
         imported_module_roots: &mut HashSet<String>,
         path: &str,
-        items: &Option<Vec<String>>,
-        alias: &Option<Vec<String>>,
+        items: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
+        alias: &Option<Vec<crate::frontend::core::parser::ast::SpannedIdent>>,
     ) {
         if items.is_some() {
             return;
@@ -3825,7 +3874,7 @@ impl TypeChecker {
         if self.env.module_registry.has_module(path) {
             if let Some(aliases) = alias {
                 if aliases.len() == 1 {
-                    imported_module_roots.insert(aliases[0].clone());
+                    imported_module_roots.insert(aliases[0].name.clone());
                     return;
                 }
             }
@@ -3849,7 +3898,7 @@ impl TypeChecker {
         // 回退策略：未知路径按旧行为处理
         if let Some(aliases) = alias {
             if aliases.len() == 1 {
-                imported_module_roots.insert(aliases[0].clone());
+                imported_module_roots.insert(aliases[0].name.clone());
                 return;
             }
         }

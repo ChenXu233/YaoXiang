@@ -1,0 +1,2 @@
+// lib.yx —— 被导入模块：内含编译期错误（未定义变量）
+value: Int = undefined_name

@@ -1,13 +1,12 @@
 //! Symbols 模块测试
+//! 规范来源：RFC-004（绑定语法）/ RFC-010（统一类型语法）
 //!
 //! 测试符号验证器相关功能，包括：
 //! - 绑定语法验证
 //! - 泛型参数验证
 //! - 类型系统验证
 
-use crate::frontend::core::lexer::symbols::{
-    BindingValidator, GenericValidator, TypeSystemValidator,
-};
+use crate::frontend::core::lexer::symbols::{BindingValidator, GenericValidator, TypeSystemValidator};
 
 #[test]
 fn test_binding_validator() {

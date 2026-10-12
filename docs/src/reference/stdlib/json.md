@@ -132,7 +132,7 @@ main: () -> Void = {
 
 ## 构造 Json
 
-对象变体 `obj` 收的是 `Dict(String, Json)`，用 [`std.dict`](./dict) 逐键构造：
+对象变体 `obj` 收的是 `Dict(String, Json)`，用 [`std.dict`](dict) 逐键构造：
 
 ```yaoxiang
 use std.dict
@@ -155,8 +155,8 @@ main: () -> Void = {
 | 行列定位                   | 消息形如 `… at line 1, column 2`    |
 | 类型不符（传非 `&String`） | 编译期类型错误                      |
 
-解析失败**不中断执行**，用 `?` 传播或 [`result.unwrap`](./result#unwrap) 显式分流。
-注意 `?` 传播要求外层函数返回 `Result`（见 [Option 页](./option#已知缺口) 中关于
+解析失败**不中断执行**，用 `?` 传播或 [`result.unwrap`](result#unwrap) 显式分流。
+注意 `?` 传播要求外层函数返回 `Result`（见 [Option 页](option#已知缺口) 中关于
 `Try` 实例化的说明）。
 
 ## 已知缺口
@@ -167,7 +167,7 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.dict`](./dict) —— 构造与读取 `Json.obj` 用的字典
-- [`std.string`](./string) —— `char_code` / `from_char_code` 是本模块的转义基元
-- [`std.result`](./result) —— 拆包 `parse` 的返回值
+- [`std.dict`](dict) —— 构造与读取 `Json.obj` 用的字典
+- [`std.string`](string) —— `char_code` / `from_char_code` 是本模块的转义基元
+- [`std.result`](result) —— 拆包 `parse` 的返回值
 - [错误码参考](../error-code/) —— `E6013` JSON 解析失败

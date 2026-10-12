@@ -5,19 +5,19 @@ description: 'Option optional value and sum type'
 
 # std.option
 
-`Option(T)`—the optional value type for "having a value (`some`) or having no value (`none`)". It is
-the **record-style sum type** exported by this module (RFC-010), sharing the same mechanism as
-user-defined sum types: variant construction, match variant deconstruction, exhaustiveness checking.
-`use std.option` before use.
+`Option(T)` — the optional value type representing 'has a value (`some`)' or 'has no value
+(`none`)'. It is the **record-style sum type** (RFC-010) exported by this module, sharing the same
+mechanism as user-defined sum types: variant construction, match variant destructuring,
+exhaustiveness checking. `use std.option` before use.
 
 ```yaoxiang
 use std.option
 ```
 
-> **This page is handwritten.** This module is implemented purely in YaoXiang source code
-> (`src/std/option.yx`), and is not within the generation range of `StdModule::exports()`, so there
-> is no `<!-- stdlib:... -->` generation marker. The signatures in the table below are taken
-> verbatim from the export declarations in that file.
+> **This page is hand-written.** This module is implemented in pure YaoXiang source
+> (`src/std/option.yx`), outside the generation range of `StdModule::exports()`, so there is no
+> `<!-- stdlib:... -->` generation-region marker. The signatures in the table below are taken
+> verbatim from that file's export declarations.
 
 ## Exports
 
@@ -25,44 +25,44 @@ use std.option
 | -------- | ------------------- | ------------------------------------------- |
 | `Option` | `(T: Type) -> Type` | Sum type, with two variants `some` / `none` |
 
-The module **only exports the single binding `Option`**. The four methods of `Try` are declared
-inside the type body (see below) and **are not module-level exports**—`option.is_failure(...)`
-reports `E1042 field 'is_failure' not found in struct 'option'`. They are accessed with the **method
-call** syntax `o.is_failure()`.
+The module **only exports the single binding `Option`**. The four `Try` methods are declared in the
+type body (see below), **not as module-level exports** — `option.is_failure(...)` reports
+`E1042 field 'is_failure' not found in struct 'option'`. They are accessed via the **method call**
+syntax `o.is_failure()`.
 
 ## Type Body
 
 ```
-pub Option: (T: Type) -> Type = {
+Option: (T: Type) -> Type = {
     some: (T) -> Option(T),
     none: () -> Option(T),
     Try(Option(T), T, Void),
 }
 ```
 
-- `some` — the value variant carrying a `T`
+- `some` — the value-carrying variant with a `T`
 - `none` — the no-value variant carrying no payload
-- `Try(Option(T), T, Void)` — on failure the residual type is `Void` (corresponding to the `NoneT`
-  semantics of Rust's `Try` experiment)
+- `Try(Option(T), T, Void)` — the residual type on failure is `Void` (corresponding to the `NoneT`
+  semantics of the Rust `Try` experiment)
 
-Variant construction at expression position **requires type qualification**: `Option(Int).some(5)`,
-`Option(Int).none()`; a bare name `some(5)` is not a constructor call (see
+Variant construction in expression position **requires type qualification**: `Option(Int).some(5)`,
+`Option(Int).none()`; the bare name `some(5)` is not a constructor call (see
 [Syntax Specification §1.4.2](../language-spec/syntax.md)).
 
 ## Functions
 
-The `Try` methods defined inside the type body (`src/std/option.yx:23-45`):
+The `Try` methods defined in the type body (`src/std/option.yx:23-45`):
 
-| Method                | Signature                    | on `some`                     | on `none`                     |
-| --------------------- | ---------------------------- | ----------------------------- | ----------------------------- |
-| `is_failure()`        | `(self: &Option(T)) -> Bool` | `false`                       | `true`                        |
-| `success()`           | `(self: &Option(T)) -> T`    | returns payload               | `E6005` (dead end)            |
-| `residual()`          | `(self: &Option(T)) -> Void` | `E6005` (dead end)            | returns `void`                |
-| `from_error(v: Void)` | `(v: Void) -> Option(T)`     | see [Known Gaps](#known-gaps) | see [Known Gaps](#known-gaps) |
+| Method                | Signature                    | On `some`                   | On `none`                   |
+| --------------------- | ---------------------------- | --------------------------- | --------------------------- |
+| `is_failure()`        | `(self: &Option(T)) -> Bool` | `false`                     | `true`                      |
+| `success()`           | `(self: &Option(T)) -> T`    | Returns payload             | `E6005` (dead end)          |
+| `residual()`          | `(self: &Option(T)) -> Void` | `E6005` (dead end)          | Returns `void`              |
+| `from_error(v: Void)` | `(v: Void) -> Option(T)`     | See [Known Gaps](#已知缺口) | See [Known Gaps](#已知缺口) |
 
-The "dead end" in the latter three is the `assert(false)` written explicitly inside the type body
-(`src/std/option.yx:33,40`); `Never <: T` makes these branches legal at the type level and
-terminates with `E6005` at runtime.
+The "dead ends" in the latter three are the explicit `assert(false)` written in the type body
+(`src/std/option.yx:33,40`); `Never <: T` makes these branches valid at the type level and terminate
+at runtime with `E6005`.
 
 ```yaoxiang
 use std.option
@@ -71,20 +71,20 @@ main: () -> Void = {
     s = Option(Int).some(7)
     println(s.is_failure())   // false
     println(s.success())      // 7
-    // s.residual() will diverge: the some arm is a dead end (E6005), cannot be called
+    // s.residual() will diverge: the some arm is a dead end (E6005), not callable
 
     n = Option(Int).none()
     println(n.is_failure())   // true
     println(n.residual())     // void
-    // n.success() also diverges: the none arm is a dead end (E6005)
+    // n.success() likewise diverges: the none arm is a dead end (E6005)
 }
 ```
 
-## match Variant Deconstruction
+## match Variant Destructuring
 
-Deconstructing `Option` requires the variant set to be in scope, i.e. `use std.option` first (see
-[Syntax Specification §2.8](../language-spec/syntax.md)). The exhaustiveness check goes over the
-full variant set—both `some` and `none` arms must be written; a catch-all arm `_` may be exempt.
+Destructuring `Option` requires the variant set to be in scope, i.e. first `use std.option` (see
+[Syntax Specification §2.8](../language-spec/syntax.md)). Exhaustiveness checks the full variant set
+— both `some` / `none` arms must be written; the catch-all arm `_` is exempt.
 
 ```yaoxiang
 use std.option
@@ -109,24 +109,24 @@ main: () -> Void = {
 
 ## Known Gaps
 
-The following three "declared but currently not runnable" items have each been confirmed through
-actual testing with `yaoxiang-rs run`:
+The following three items are "declared but currently cannot be run", each confirmed by
+`yaoxiang-rs run` testing:
 
 1. **`?` propagation does not apply to `Option`.** The type body instantiates
    `Try(Option(T), T, Void)`, but the type checker only recognizes `Result`: `o?` reports
-   `E1081 ? is only allowed in functions returning a type that implements Try`. `?` on `Result`
-   works normally and can serve as a reference.
-2. **`from_error` cannot be called.** Written as a method `o.from_error()` it compiles but at
-   runtime reports `E6006 Function not found: from_error`; written as `Option(T).from_error(...)` it
-   reports `E1042` at compile time. It is the internal bridge for `?` propagation, and since `?` is
-   unavailable, this bridge has no call sites.
-3. **No `is_some` / `is_none` / `unwrap` / `unwrap_or` / `map`.** These names have zero hits in the
-   standard library; to check failure use `is_failure()`, to take the payload use `success()`. The
-   corresponding utilities on the `Result` side are in [`std.result`](./result).
+   `E1081 ? is only allowed in functions returning a type that implements Try`. The `?` operator on
+   `Result` works normally and can serve as a comparison.
+2. **`from_error` cannot be called.** Written as a method `o.from_error()` it compiles but reports
+   `E6006 Function not found: from_error` at runtime; written as `Option(T).from_error(...)` it is
+   reported at compile time as `E1042`. It is the internal bridge of `?` propagation, and since `?`
+   is unavailable, this bridge has no call site.
+3. **No `is_some` / `is_none` / `unwrap` / `unwrap_or` / `map`.** These names have 0 hits in the
+   standard library; check failure with `is_failure()`, retrieve the payload with `success()`. The
+   corresponding tools on the `Result` side are in [`std.result`](result).
 
-## See Also
+## Related
 
-- [`std.result`](./result) — `Result(T, E)`; `?` propagation is currently available **only** on it
-- [`std.assert`](./assert) — source of `assert(false)` in dead-end branches
-- [Syntax Specification §2.8](../language-spec/syntax.md) — variant deconstruction and
-  exhaustiveness checking
+- [`std.result`](result) — `Result(T, E)`; `?` propagation is currently available **only** on it
+- [`std.assert`](assert) — source of the `assert(false)` for dead-end branches
+- [Syntax Specification §2.8](../language-spec/syntax.md) — variant destructuring and exhaustiveness
+  checking

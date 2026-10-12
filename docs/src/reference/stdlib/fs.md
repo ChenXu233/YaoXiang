@@ -7,8 +7,8 @@ description: '文件、目录与路径操作'
 
 路径级文件系统操作：整文件读写、目录管理与遍历、文件元数据、临时文件与路径运算。
 
-需要按句柄增量读写（open/read/seek）时用 [`std.os`](./os)；控制台输入输出用
-[`std.io`](./io)。
+需要按句柄增量读写（open/read/seek）时用 [`std.os`](os)；控制台输入输出用
+[`std.io`](io)。
 
 ```yaoxiang
 use std.fs
@@ -566,6 +566,6 @@ path_extension: (path: &String) -> String
 
 ## 相关
 
-- [`std.os`](./os) —— 文件句柄级增量读写与环境变量
-- [`std.io`](./io) —— 控制台输入输出
+- [`std.os`](os) —— 文件句柄级增量读写与环境变量
+- [`std.io`](io) —— 控制台输入输出
 - [错误码参考](../error-code/) —— `E6007` 通用运行时错误

@@ -1,0 +1,16 @@
+// parse-error-in-collect-all/main.yx
+// 覆盖: 多文件 check 的 parse 错误降级收集（WBS 4.10.1，2026-10-09 裁决）
+// 验证: lib.yx 语法错误不再整体中止——带病文件退出编译单元（只报 parse
+//       诊断），导入方 main 收 E5001（模块未找到），check 退出码非 0
+// 状态: ❌ 应被编译期拒绝（rust 式收集：全部错误一次性报告）
+//
+// 本夹具是**编译期拒绝测试**（expect: compile-error），判定契约是
+// 「check 非 0 且输出含预期码」，不执行运行期语句——故无 assert.assert。
+// 旧行为（硬中止）下 check 只吐 E0012 就退出、E5001 不出现，本夹具因此
+// 能区分新旧语义。
+
+// expect: compile-error E5001
+
+use lib.{x}
+
+main: () -> Void = {}

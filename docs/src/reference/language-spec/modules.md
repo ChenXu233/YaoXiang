@@ -2,7 +2,7 @@
 
 本文件定义 YaoXiang 的模块系统规范：模块如何定义、`use` 如何导入、导出面是什么、作用域如何划分。
 
-设计依据：[RFC-029 模块语义](../../design/rfc/accepted/029-module-semantics.md)、[RFC-029g 移除 pub 关键字与自动绑定](../../design/rfc/accepted/029g-remove-pub-and-auto-bind.md)。
+设计依据：[RFC-029 模块语义](../../rfc/accepted/029-module-semantics.md)、[RFC-029g 移除 pub 关键字与自动绑定](../../rfc/accepted/029g-remove-pub-and-auto-bind.md)。
 
 面向使用者的操作指南见[模块系统](../../guide/modules)。
 

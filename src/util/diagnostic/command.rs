@@ -128,6 +128,10 @@ pub fn render_explain_output(
             help: &'a str,
             example: Option<&'a str>,
             error_output: Option<&'a str>,
+            // RFC-013「JSON 输出格式」最后一个字段：语言是运行期由
+            // CLI > env > 配置 > 默认链解析出来的，JSON 消费者需要知道
+            // 上面各文本字段实际用的语言，故输出解析结果而非请求值。
+            language: &'a str,
         }
 
         let output = ExplainOutput {
@@ -138,6 +142,7 @@ pub fn render_explain_output(
             help: info.help,
             example: info.example,
             error_output: info.error_output,
+            language: lang_code,
         };
 
         Ok(Some(serde_json::to_string_pretty(&output)?))

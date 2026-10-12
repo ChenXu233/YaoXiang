@@ -9,7 +9,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 
 词法分析器（Lexer）与语法分析器（Parser）阶段产生的错误。
 
-本族共 **11** 个码，全部在 `define_codes!` 注册表中，类别为 `Lexer / Parser`。完整索引见[错误码首页](./index.md)。
+本族共 **11** 个码，全部在 `define_codes!` 注册表中，类别为 `Lexer / Parser`。完整索引见[错误码首页](index.md)。
 
 ## 码一览
 

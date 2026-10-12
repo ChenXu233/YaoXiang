@@ -135,7 +135,7 @@ sleep: (seconds: Float) -> Void
 
 <!-- stdlib:sig:time.sleep end -->
 
-休眠指定**秒数**（可带小数）。同名的 [`std.concurrent.sleep`](./concurrent#sleep)
+休眠指定**秒数**（可带小数）。同名的 [`std.concurrent.sleep`](concurrent#sleep)
 以**毫秒**为单位，注意区分。
 
 - `seconds` —— 休眠秒数；接受 `Int`（按秒解释）或 `Float`
@@ -293,5 +293,5 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.concurrent`](./concurrent) —— 毫秒级休眠
+- [`std.concurrent`](concurrent) —— 毫秒级休眠
 - [错误码参考](../error-code/) —— `E6007` 通用运行时错误

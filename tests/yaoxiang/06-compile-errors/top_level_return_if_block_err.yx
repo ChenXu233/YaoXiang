@@ -1,0 +1,11 @@
+// 06-compile-errors/top_level_return_if_block_err.yx
+// 覆盖: RFC-010a 规则② 边界条件 —— if 块不是函数边界：顶层 if 分支内的 return 同样无处可退
+// 验证: 顶层 if 块内 return 编译期拒绝（E1109），不因包进控制流块而获得函数边界
+// 状态: ✅ 可运行
+
+// expect: compile-error E1109
+
+use std.assert
+
+if true { return 5 }
+assert.assert(false, "顶层 if 块内的 return 应被编译期拒绝")

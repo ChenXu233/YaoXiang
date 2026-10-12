@@ -1,0 +1,17 @@
+// type-error-in-lib/main.yx
+// 覆盖: RFC-029 多文件模块编排 —— 错误沿 use 图传导
+// 验证: lib.yx 内的未定义变量（E1001）在 check 入口文件时被检出，
+//       不因错误位于被引用模块而静默（多文件诊断完整性负向判据）
+// 状态: ❌ 应被编译期拒绝
+//
+// 本夹具是**编译期拒绝测试**（expect: compile-error），判定契约是
+// 「check 非 0 且输出含预期码」，不执行运行期语句——故无 assert.assert。
+
+// expect: compile-error E1001
+
+use std.io
+use lib.{value}
+
+main = () => {
+    io.println(value)
+}

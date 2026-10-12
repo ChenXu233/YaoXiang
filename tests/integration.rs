@@ -34,6 +34,10 @@ mod token_system;
 #[path = "integration/multifile.rs"]
 mod multifile;
 
+/// RFC-039 P2 漏洞专门判据：证明义务静默丢弃（先红后绿）
+#[path = "integration/proof_obligations.rs"]
+mod proof_obligations;
+
 /// `yaoxiang` CLI 子命令集成测试
 #[path = "integration/cli.rs"]
 mod cli;

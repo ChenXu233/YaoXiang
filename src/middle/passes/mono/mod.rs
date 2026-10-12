@@ -129,6 +129,11 @@ impl Monomorphizer {
         // 5. 构建输出
         let mut output = self.build_output(module);
 
+        // 5b. t3 闭合闸：删除判据（按泛型名）与改写判据（按 (containing_fn, 名, span)
+        //     三元键）粒度不同——未覆盖的调用点在原件被删后会悬空（运行期 E6006）。
+        //     放回「仍被按名调用且调用点不在改写映射里」的原件，使两个判据闭合。
+        self.restore_generics_with_uncovered_call_sites(module, &mut output);
+
         // 6. 替换调用点
         self.replace_call_sites(&mut output);
 
@@ -151,6 +156,69 @@ impl Monomorphizer {
         }
     }
 
+    /// 解析请求的泛型名到 IR 定义表的键：直接命中优先，否则按**容器模块**
+    /// 补足限定名（3.4.8 ②，2026-10-10）。
+    ///
+    /// 为什么需要：多文件 IR 的每个顶层函数都被 `qualify_names` 限定
+    ///（`pick` → `main.pick`），而 typecheck 逐单元运行、请求里的名字可能是
+    /// 裸名（同模块/自引用调用：`f(x) = f([x])` 的嵌套请求、入口顶层绑定的
+    /// 调用点）。查定义表用这个**已限定**的键，调用点改写仍用请求自己的名字
+    /// ——后者必须与 IR 调用指令里的字符串逐字相同（`build_call_site_map`
+    /// 的名字维度），改名会让改写落空、原件删除后调用点悬空（E6006）。
+    ///
+    /// 解析是**确定性**的：定义表直命中 → 容器模块前缀，两条都不猜。
+    ///
+    /// 容器限定的前提是「同一文件内的顶层函数同属一个模块键」——`lib.A.f`
+    /// 取首段 `lib`，与方法派生函数（`lib.Point.get_x`）规则一致。
+    ///
+    /// 为什么不再有「全程序唯一后缀」启发式（t5，2026-10-11 用户裁决乙′）：
+    /// 请求名由驱动侧 `aggregate_instantiation_requests` 按单元键限定化
+    /// （与 `qualify_names` 同源），限定名恒等于 merged IR 的定义键；后缀
+    /// 猜测会在「两个模块同名泛型」时把请求悄悄接到错误那一侧——静默错配
+    /// 比不解析更糟。歧义/未命中一律由调用方报响亮诊断。
+    fn resolve_generic_name(
+        &self,
+        name: &str,
+        containing_fn: Option<&str>,
+    ) -> String {
+        if self.generic_def_contains(name) {
+            return name.to_string();
+        }
+        // 按容器模块补限定（函数体内调用：`lib.f` 容器下的裸名 `f`）
+        if let Some((module, _)) = containing_fn.and_then(|c| c.split_once('.')) {
+            let qualified = format!("{module}.{name}");
+            if self.generic_def_contains(&qualified) {
+                return qualified;
+            }
+        }
+        name.to_string()
+    }
+
+    /// 名字在定义表里是否**有歧义**：裸名 `name` 能唯一后缀命中某个定义键，
+    /// 但该键不等于 `name`（即「本该由驱动侧限定化却没限定」）。
+    ///
+    /// 用于把「静默跳过」变成响亮诊断：这类请求一定是限定化漏了，属实现
+    /// 缺陷面，必须报出来（native 泛型无 IR 定义，后缀命中数恒为 0，不受
+    /// 影响）。
+    fn ambiguous_bare_hit(
+        &self,
+        name: &str,
+    ) -> Option<String> {
+        let suffix = format!(".{name}");
+        self.generic_functions
+            .keys()
+            .chain(self.generic_types.keys())
+            .find(|k| k.ends_with(&suffix))
+            .cloned()
+    }
+
+    /// 定义表（泛型函数 + 泛型类型）里是否有这个名字。
+    fn generic_def_contains(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.generic_functions.contains_key(name) || self.generic_types.contains_key(name)
+    }
     fn process_queue(&mut self) -> Result<(), Diagnostic> {
         while let Some(req) = self.pending_queue.pop_front() {
             let key = req.specialization_key();
@@ -181,13 +249,35 @@ impl Monomorphizer {
 
             // #335：实例化失败显式报错——此前 `if let Some(spec)` 静默跳过，
             // 下游症状是 E6006「函数表缺失」，根因不可见
-            let generic_name = req.generic_id().name().to_string();
+            //
+            // 3.4.8 ②：查定义表用 `resolve_generic_name` 的结果（多文件下请求
+            // 名字可能是裸名、IR 键是限定名）；`req` 本身不改名——调用点改写
+            // 的名字维度必须与 IR 调用指令逐字相同。
+            let request_name = req.generic_id().name().to_string();
+            let generic_name =
+                self.resolve_generic_name(&request_name, req.containing_fn.as_deref());
             let n_type_params = if let Some(g) = self.generic_types.get(&generic_name) {
                 g.generic_params.as_ref().map(|p| p.len()).unwrap_or(0)
             } else if let Some(g) = self.generic_functions.get(&generic_name) {
                 g.generic_params.as_ref().map(|p| p.len()).unwrap_or(0)
+            } else if let Some(hit) = self.ambiguous_bare_hit(&request_name) {
+                // 响亮路径（t5）：请求名是**未限定化的裸名**，而定义表里存在
+                // `{module}.{bare}`——即驱动侧限定化漏了这一步。此前的静默
+                // `continue` 会把这类缺陷藏到运行期（调用点悬空 E6006 或
+                // 退回类型擦除），必须在此报出。
+                return Err(ErrorCodeDefinition::ir_instantiation_failed(
+                    &request_name,
+                    &format!(
+                        "实例化请求的名字未限定化：裸名 `{request_name}` 在 merged IR 定义表里只存在 `{hit}`；\
+                         这是驱动侧 `aggregate_instantiation_requests` 的限定化缺口（请求名必须与 IR 调用指令同源）"
+                    ),
+                )
+                .at(req.source_location)
+                .build());
             } else {
-                // 请求目标不在 IR 泛型定义表中（限定名/native 等历史宽松路径）
+                // 无 IR 泛型定义：native 泛型（无 IR 体）等**本来就无特化义务**的
+                // 请求，显式跳过而非静默擦除——它与上面的「漏限定化」由
+                // `ambiguous_bare_hit` 区分（后缀命中数 0 vs ≥1）。
                 continue;
             };
             let type_args_len = req.type_args().len();
@@ -202,11 +292,19 @@ impl Monomorphizer {
 
             self.processed.insert(key);
 
+            // 特化按**已解析**的名字建件（多文件下 IR 定义键是限定名），
+            // 但请求本身保持原名字——调用点改写的 (容器, 名, span) 三元键
+            // 必须与 IR 调用指令里的字符串逐字一致
+            let mut resolved_req = req.clone();
+            resolved_req.generic_id = GenericFunctionId::new(
+                generic_name.clone(),
+                req.generic_id().type_params().to_vec(),
+            );
             // 先尝试类型特化，再尝试函数特化
             let specialized = if self.generic_types.contains_key(&generic_name) {
-                self.specialize_type(&req)
+                self.specialize_type(&resolved_req)
             } else {
-                self.specialize_function(&req)
+                self.specialize_function(&resolved_req)
             };
 
             match specialized {
@@ -228,6 +326,10 @@ impl Monomorphizer {
                         .filter(|(i, _)| *i < req.type_args().len())
                         .map(|(i, n)| (n.clone(), req.type_args()[i].clone()))
                         .collect();
+                    // deferred 桶键 = 容器函数的限定名（`aggregate_instantiation_requests`
+                    // 在驱动侧已限定化，多文件下与 IR 函数表键同源），故用**已解析**
+                    // 的定义名查桶——请求自带的裸名（`f`）与桶键（`lib.f`）不同源，
+                    // 用它会漏查，递归链在第一层就断（E3005 永不触发，退回擦除执行）
                     self.fire_deferred(&generic_name, &spec.name, &name_map, child_depth);
                     self.scan_for_generic_types(&spec, child_depth);
                     self.specialized_functions.insert(spec.name.clone(), spec);
@@ -294,6 +396,22 @@ impl Monomorphizer {
             .functions
             .iter()
             .flat_map(Self::call_target_names)
+            // init 段（模块顶层语句）的按名调用同属保留依据：它不在
+            // module.functions 里，漏扫会让「只被顶层调用的泛型」在别的泛型
+            // 触发特化时从函数表消失（与 std.list.push 同型，运行时 E6006）
+            .chain(
+                module
+                    .init
+                    .iter()
+                    .filter_map(|instr| match instr {
+                        Instruction::Call {
+                            func: Operand::Const(ConstValue::String(name)),
+                            ..
+                        } => Some(name.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>(),
+            )
             .collect();
 
         let mut functions: Vec<FunctionIR> = module
@@ -625,6 +743,26 @@ impl Monomorphizer {
                 self.replace_calls_in_function(func, &call_site_map);
             }
         }
+
+        // init 段（模块顶层语句）：调用点同样按特化名改写。typecheck 在模块层
+        // 收集的请求 containing_fn=None（anon 键）；此前只遍历 functions，
+        // 顶层调用点保留原泛型名——原泛型又被特化删除，运行期按原名查表
+        // 落空（E6006，「Native function not found」，#416 家族）
+        for instr in &mut module.init {
+            if let Instruction::Call {
+                func: ref mut callee,
+                span,
+                ..
+            } = instr
+            {
+                if let Operand::Const(ConstValue::String(name)) = callee {
+                    if let Some(specialized_name) = call_site_map.get(&(None, name.clone(), *span))
+                    {
+                        *callee = Operand::Const(ConstValue::String(specialized_name.clone()));
+                    }
+                }
+            }
+        }
     }
 
     /// 构建 (泛型名, 调用点 span) → 特化函数名 的映射
@@ -636,10 +774,13 @@ impl Monomorphizer {
         for req in requests {
             let generic_name = req.generic_id().name().to_string();
 
-            // 处理泛型函数和泛型类型（fix #255：泛型类型构造器也需要替换）
-            if !self.generic_functions.contains_key(&generic_name)
-                && !self.generic_types.contains_key(&generic_name)
-            {
+            // 处理泛型函数和泛型类型（fix #255：泛型类型构造器也需要替换）。
+            // 3.4.8 ②：命中判据按**已解析**的定义键（多文件下 IR 键是
+            // 限定名，请求名可能是裸名）——否则映射为空表、调用点改名落空，
+            // 原件一旦被删就悬空（E6006）。映射的**名字维度仍用请求自己的
+            // 名字**（与 IR 调用指令逐字一致）。
+            let resolved = self.resolve_generic_name(&generic_name, req.containing_fn.as_deref());
+            if !self.generic_def_contains(&resolved) {
                 continue;
             }
 
@@ -649,13 +790,146 @@ impl Monomorphizer {
                 .map(|t| t.type_name())
                 .collect::<Vec<_>>()
                 .join(", ");
-            let specialized_name = format!("{}({})", generic_name, type_args_str);
+            // 特化名按**定义键**（`main.pick(int64)`——与 `specialize_function`
+            // 建件同名）；映射键的名字维度用请求自己的名字（与 IR 调用指令逐字一致）
+            let specialized_name = format!("{}({})", resolved, type_args_str);
             map.insert(
                 (req.containing_fn.clone(), generic_name, req.source_location),
                 specialized_name,
             );
         }
         map
+    }
+
+    /// t3 闭合闸：把「输出里仍被按名调用、但调用点不在改写映射里」的泛型原件放回函数表。
+    ///
+    /// 缺口成因：`build_output` 的删除判据按**泛型名**（`site_requests` 的名字集合，
+    /// mod.rs `requested_generic_names`），而改写判据按 **(containing_fn, 名, span)**
+    /// 三元键（[`Self::build_call_site_map`]）。同一泛型的多个调用点里只要有一个
+    /// 没有请求键——实参符号化使请求进 `deferred` 桶、且所在函数非泛型时不排水；
+    /// 或该调用点从未产出请求——删除原件就让那个调用点悬空：运行期按原名查表落空
+    /// （E6006。实证：`src/std/tests/list_ops.yx:53` 的 `list.is_empty(list.empty(Int))`，
+    /// 该泛型名的请求只存在于同函数内另一调用点）。
+    ///
+    /// 判据与改写**同一份映射**：映射里查不到即视为未覆盖。放回的原件让该调用点
+    /// 退回类型擦除执行——正是单态化未介入时的既有语义；这不是「一律保留」：
+    /// 全部调用点都被覆盖的泛型仍按原判据删除（[`Self::build_output`]）。
+    fn restore_generics_with_uncovered_call_sites(
+        &self,
+        input: &ModuleIR,
+        output: &mut ModuleIR,
+    ) {
+        let call_site_map = self.build_call_site_map(&self.site_requests);
+        // 放回的原件体内可能再引用别的已删泛型 → 迭代到不动点。每轮至少放回一个，
+        // 上界为输入模块函数数，必然终止。
+        loop {
+            // 名单**按函数名排序**后追加：与 `build_output` 的特化函数追加同一纪律
+            //（`specialized.sort_by(|a, b| a.name.cmp(&b.name))`）。`HashSet` 迭代顺序
+            // 随进程/实例随机化（F1 实证：同一输入 4 次构建出 2 个不同的 .42 SHA256），
+            // 直接按迭代序追加会让同一份源码产出不同的函数序号——数序号即产物
+            //（dump/字节码不可复现）。
+            let mut pending: Vec<&FunctionIR> = self
+                .uncovered_call_targets(output, &call_site_map)
+                .into_iter()
+                .filter(|name| !output.functions.iter().any(|f| &f.name == name))
+                // 按名目标不是本模块定义（std native 等）——不归本闸管
+                .filter_map(|name| input.functions.iter().find(|f| f.name == name))
+                .collect();
+            if pending.is_empty() {
+                break;
+            }
+            pending.sort_by(|a, b| a.name.cmp(&b.name));
+            for original in pending {
+                output.functions.push(original.clone());
+            }
+        }
+    }
+
+    /// 输出模块里**按名调用**的目标名中，调用点不在改写映射里的那些（去重）。
+    fn uncovered_call_targets(
+        &self,
+        output: &ModuleIR,
+        call_site_map: &HashMap<(Option<String>, String, crate::util::span::Span), String>,
+    ) -> HashSet<String> {
+        let mut names = HashSet::new();
+        for func in &output.functions {
+            let FunctionBody::Code { blocks, .. } = &func.body else {
+                continue;
+            };
+            for block in blocks {
+                for instr in &block.instructions {
+                    let Some((callee, span)) = Self::by_name_call_target(instr) else {
+                        continue;
+                    };
+                    // 改写面只覆盖 `Call`（[`Self::call_form_is_rewritten`]）：
+                    // `TailCall` / `MakeClosure` 的按名目标永不被替换成特化名，
+                    // 故**一律计未覆盖**、不查映射键——「有键」只说明该站点在
+                    // typecheck 侧产过请求，不代表改写会发生。保守方向：宁保留
+                    //（该站点退回类型擦除执行，对应特化版可能成为死码）不悬空。
+                    if !Self::call_form_is_rewritten(instr) {
+                        names.insert(callee);
+                        continue;
+                    }
+                    let named = (Some(func.name.clone()), callee.clone(), span);
+                    let anon = (None, callee.clone(), span);
+                    if !call_site_map.contains_key(&named) && !call_site_map.contains_key(&anon) {
+                        names.insert(callee);
+                    }
+                }
+            }
+        }
+        // init 段（模块顶层语句）的按名调用：改写侧用 (None, 名, span) 兜底键；
+        // 「非改写面形态一律计未覆盖」同规则适用。
+        for instr in &output.init {
+            let Some((callee, span)) = Self::by_name_call_target(instr) else {
+                continue;
+            };
+            if !Self::call_form_is_rewritten(instr)
+                || !call_site_map.contains_key(&(None, callee.clone(), span))
+            {
+                names.insert(callee);
+            }
+        }
+        names
+    }
+
+    /// 调用点改写面（[`Self::replace_calls_in_function`]）是否覆盖该形态的按名目标。
+    ///
+    /// **只覆盖 `Call`**（且 func 为字符串常量）：`TailCall` / `MakeClosure` 的按名
+    /// 目标不会被替换成特化名。扫描面（[`Self::by_name_call_target`]）比改写面宽，
+    /// 不对称只在此单点判定——非改写面形态一律按「未覆盖」保守处理，触发原件保留。
+    fn call_form_is_rewritten(instr: &Instruction) -> bool {
+        matches!(
+            instr,
+            Instruction::Call {
+                func: Operand::Const(ConstValue::String(_)),
+                ..
+            }
+        )
+    }
+
+    /// 指令的**按名调用目标**与调用点 span：IR 里以字符串名分发的三种形态
+    ///（`Call` / `TailCall` / `MakeClosure`）。
+    ///
+    /// 不要据此假定「取到名字即会被改写」：改写面只覆盖 `Call`——某形态是否被
+    /// 覆盖由 [`Self::call_form_is_rewritten`] 单点判定；扫描面更宽的那些形态在
+    /// [`Self::uncovered_call_targets`] 里一律计未覆盖（保守保留原件，防删除后
+    /// 调用点悬空 → 运行期 E6006）。
+    fn by_name_call_target(instr: &Instruction) -> Option<(String, crate::util::span::Span)> {
+        match instr {
+            Instruction::Call {
+                func: Operand::Const(ConstValue::String(name)),
+                span,
+                ..
+            }
+            | Instruction::TailCall {
+                func: Operand::Const(ConstValue::String(name)),
+                span,
+                ..
+            } => Some((name.clone(), *span)),
+            Instruction::MakeClosure { func, span, .. } => Some((func.clone(), *span)),
+            _ => None,
+        }
     }
 
     /// 替换单个函数中所有 Call 指令的泛型函数名为特化函数名

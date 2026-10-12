@@ -46,13 +46,13 @@ description: '系统学习 YaoXiang 核心概念'
 
 如果你是有编程基础的用户，我们建议你从「有基础入门」开始。
 
-[🚀 有基础入门 →](./getting-started)
+[🚀 有基础入门 →](getting-started)
 
 ### 没有编程基础的用户
 
 如果你是没有编程基础的用户，我们建议你从「零基础入门」开始。
 
-[💡 零基础入门 →](./basics/variables/index.md)
+[💡 零基础入门 →](basics/variables/index.md)
 
 > **💡 提示**：没有编程基础反而是优势——没有其他语言的包袱，能最直接地理解爻象的设计哲学。
 
@@ -68,30 +68,30 @@ description: '系统学习 YaoXiang 核心概念'
 
 ## 下一步
 
-[🚀 快速开始 →](./getting-started)
+[🚀 快速开始 →](getting-started)
 
 或者，从核心概念开始：
 
-- [什么是「一切皆类型」？](./basics/variables/)
-- [为什么不需要写 await？](./getting-started#并作编程并发)
-- [所有权是什么？](./advanced/ownership/)
+- [什么是「一切皆类型」？](basics/variables/)
+- [为什么不需要写 await？](getting-started#并作编程并发)
+- [所有权是什么？](advanced/ownership/)
 
 ### 零基础入门全部章节
 
-- [变量与字面量](./basics/variables/index.md)
-- [字符串](./basics/string/index.md)
-- [函数](./basics/functions/index.md)
-- [Lambda 与闭包](./basics/lambda/index.md)
-- [数据结构](./basics/data-structures/index.md)
-- [模式匹配](./basics/pattern-matching/index.md)
-- [控制流](./basics/control-flow/index.md)
+- [变量与字面量](basics/variables/index.md)
+- [字符串](basics/string/index.md)
+- [函数](basics/functions/index.md)
+- [Lambda 与闭包](basics/lambda/index.md)
+- [数据结构](basics/data-structures/index.md)
+- [模式匹配](basics/pattern-matching/index.md)
+- [控制流](basics/control-flow/index.md)
 
 ### 进阶
 
-- [类型系统](./advanced/type-system/index.md) - 泛型、接口、运算符重载
-- [所有权](./advanced/ownership/index.md) - 借用、引用与所有权模型
+- [类型系统](advanced/type-system/index.md) - 泛型、接口、运算符重载
+- [所有权](advanced/ownership/index.md) - 借用、引用与所有权模型
 
-推荐从 [快速开始](./getting-started) 开始系统学习。
+推荐从 [快速开始](getting-started) 开始系统学习。
 ---
 
 > 「天行健，君子以自强不息。」

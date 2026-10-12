@@ -129,5 +129,5 @@ main: () -> Void = {
 
 ## 相关
 
-- [`std.io`](./io) —— `print` / `println` 的内部格式化走同一套规则
-- [`std.string`](./string) —— 字符串操作
+- [`std.io`](io) —— `print` / `println` 的内部格式化走同一套规则
+- [`std.string`](string) —— 字符串操作

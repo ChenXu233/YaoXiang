@@ -169,7 +169,8 @@ export default defineConfig({
           {
             text: "更多",
             items: [
-              { text: "设计", link: "/design/" },
+              { text: "阐释", link: "/explanation/" },
+              { text: "RFC", link: "/rfc/" },
               { text: "开发", link: "/dev/" },
               { text: "码场", link: "/playground/" },
               { text: "博客", link: "/blog/" },
@@ -207,33 +208,37 @@ export default defineConfig({
             },
           ],
 
-          "/design/": [
+          "/explanation/": [
             {
-              text: "设计文档",
+              text: "阐释",
               items: [
-                { text: "设计目录", link: "/design" },
-                { text: "爻象宣言", link: "/design/manifesto" },
-                { text: "爻象宣言 WTF 版", link: "/design/manifesto-wtf" },
+                { text: "阐释目录", link: "/explanation/" },
+                { text: "爻象宣言", link: "/explanation/manifesto" },
+                { text: "爻象宣言 WTF 版", link: "/explanation/manifesto-wtf" },
                 {
                   text: "一个 2006 年出生者的语言设计观",
-                  link: "/design/2006-born-language-design",
+                  link: "/explanation/2006-born-language-design",
                 },
               ],
             },
+          ],
+
+          "/rfc/": [
             {
               text: "RFC 文档",
               items: [
-                { text: "RFC 目录", link: "/design/rfc" },
-                { text: "RFC 模板", link: "/design/rfc/RFC_TEMPLATE" },
+                { text: "RFC 目录", link: "/rfc/" },
+                { text: "RFC 模板", link: "/rfc/RFC_TEMPLATE" },
                 {
                   text: "RFC 完整模板（示例）",
-                  link: "/design/rfc/EXAMPLE_full_feature_proposal",
+                  link: "/rfc/EXAMPLE_full_feature_proposal",
                 },
+                { text: "RFC 追踪表", link: "/rfc/TRACKING" },
                 {
                   text: "已接受",
                   collapsed: true,
                   items: generateSidebar({
-                    scanStartPath: "/design/rfc/accepted",
+                    scanStartPath: "/rfc/accepted",
                     useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
@@ -243,7 +248,7 @@ export default defineConfig({
                   text: "审核中",
                   collapsed: true,
                   items: generateSidebar({
-                    scanStartPath: "/design/rfc/review",
+                    scanStartPath: "/rfc/review",
                     useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
@@ -253,7 +258,7 @@ export default defineConfig({
                   text: "草案",
                   collapsed: true,
                   items: generateSidebar({
-                    scanStartPath: "/design/rfc/draft",
+                    scanStartPath: "/rfc/draft",
                     useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
@@ -263,7 +268,7 @@ export default defineConfig({
                   text: "已拒绝",
                   collapsed: true,
                   items: generateSidebar({
-                    scanStartPath: "/design/rfc/rejected",
+                    scanStartPath: "/rfc/rejected",
                     useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
@@ -273,73 +278,12 @@ export default defineConfig({
                   text: "已废弃",
                   collapsed: true,
                   items: generateSidebar({
-                    scanStartPath: "/design/rfc/deprecated",
+                    scanStartPath: "/rfc/deprecated",
                     useTitleFromFrontmatter: true,
                     collapsed: true,
                     hyphenToSpace: true,
                   }),
                 },
-              ],
-            },
-            {
-              text: "工具设计",
-              collapsed: true,
-              items: [
-                { text: "check 命令", link: "/design/check/" },
-                { text: "诊断系统", link: "/design/check/diagnostic-system" },
-                {
-                  text: "跨文件分析",
-                  link: "/design/check/cross-file-analysis",
-                },
-                {
-                  text: "增量检查",
-                  link: "/design/check/incremental-checking",
-                },
-              ],
-            },
-            {
-              text: "格式化规范",
-              collapsed: true,
-              items: [
-                { text: "规范总览", link: "/design/formatter/" },
-                {
-                  text: "格式化规则",
-                  collapsed: true,
-                  items: [
-                    {
-                      text: "规则总览",
-                      link: "/design/formatter/formatting-rules/",
-                    },
-                    {
-                      text: "基础格式",
-                      link: "/design/formatter/formatting-rules/basic",
-                    },
-                    {
-                      text: "函数和调用",
-                      link: "/design/formatter/formatting-rules/functions",
-                    },
-                    {
-                      text: "类型系统",
-                      link: "/design/formatter/formatting-rules/types",
-                    },
-                    {
-                      text: "数据结构",
-                      link: "/design/formatter/formatting-rules/data-structures",
-                    },
-                    {
-                      text: "控制流",
-                      link: "/design/formatter/formatting-rules/control-flow",
-                    },
-                    {
-                      text: "特殊语法",
-                      link: "/design/formatter/formatting-rules/special-syntax",
-                    },
-                  ],
-                },
-                { text: "配置规范", link: "/design/formatter/configuration" },
-                { text: "注释规范", link: "/design/formatter/comments" },
-                { text: "错误处理", link: "/design/formatter/error-handling" },
-                { text: "CLI 规范", link: "/design/formatter/cli" },
               ],
             },
           ],
@@ -429,9 +373,68 @@ export default defineConfig({
 
           "/dev/": [
             {
-              text: "开发文档",
+              text: "实现者手册",
               items: [
                 { text: "开发目录", link: "/dev/" },
+                { text: "动工前自检（HOWTO）", link: "/dev/HOWTO" },
+                { text: "代码规则（coding-rules）", link: "/dev/coding-rules" },
+                { text: "文档规则（docs-rules）", link: "/dev/docs-rules" },
+              ],
+            },
+            {
+              text: "编译器架构（RFC-039 附属）",
+              collapsed: true,
+              items: [
+                { text: "架构文档目录", link: "/dev/architecture/" },
+                { text: "01 功能路由与依赖规范", link: "/dev/architecture/01-routing" },
+                { text: "02 编译阶段契约与义务账本", link: "/dev/architecture/02-stage-contract" },
+                { text: "03 类型表示单一化", link: "/dev/architecture/03-type-unification" },
+                { text: "04 中间表示 SSA 化", link: "/dev/architecture/04-ssa" },
+                { text: "05 前端范式：词法与语法", link: "/dev/architecture/05-frontend-paradigm" },
+                { text: "06 死代码与空头设计清理", link: "/dev/architecture/06-cleanup-inventory" },
+                { text: "07 重构等价性判据", link: "/dev/architecture/07-equivalence-oracle" },
+                { text: "08 仓库维护机制与决策规程", link: "/dev/architecture/08-maintenance-mechanism" },
+                { text: "09 多级施工任务表（WBS）", link: "/dev/architecture/09-execution-wbs" },
+              ],
+            },
+            {
+              text: "工具设计",
+              collapsed: true,
+              items: [
+                { text: "check 命令", link: "/dev/design/check/" },
+                { text: "诊断系统", link: "/dev/design/check/diagnostic-system" },
+                { text: "跨文件分析", link: "/dev/design/check/cross-file-analysis" },
+                { text: "增量检查", link: "/dev/design/check/incremental-checking" },
+              ],
+            },
+            {
+              text: "格式化规范",
+              collapsed: true,
+              items: [
+                { text: "规范总览", link: "/dev/design/formatter/" },
+                {
+                  text: "格式化规则",
+                  collapsed: true,
+                  items: [
+                    { text: "规则总览", link: "/dev/design/formatter/formatting-rules/" },
+                    { text: "基础格式", link: "/dev/design/formatter/formatting-rules/basic" },
+                    { text: "函数和调用", link: "/dev/design/formatter/formatting-rules/functions" },
+                    { text: "类型系统", link: "/dev/design/formatter/formatting-rules/types" },
+                    { text: "数据结构", link: "/dev/design/formatter/formatting-rules/data-structures" },
+                    { text: "控制流", link: "/dev/design/formatter/formatting-rules/control-flow" },
+                    { text: "特殊语法", link: "/dev/design/formatter/formatting-rules/special-syntax" },
+                  ],
+                },
+                { text: "配置规范", link: "/dev/design/formatter/configuration" },
+                { text: "注释规范", link: "/dev/design/formatter/comments" },
+                { text: "错误处理", link: "/dev/design/formatter/error-handling" },
+                { text: "CLI 规范", link: "/dev/design/formatter/cli" },
+              ],
+            },
+            {
+              text: "流程与规范",
+              collapsed: true,
+              items: [
                 { text: "贡献指南", link: "/dev/contributing" },
                 { text: "提交指南", link: "/dev/commit-convention" },
                 { text: "分支指南", link: "/dev/branch-maintenance-guide" },

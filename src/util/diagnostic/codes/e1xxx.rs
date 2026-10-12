@@ -120,4 +120,8 @@ define_codes!(E1XXX, {
     // E1108 空块 `{}` 落入容器期望位（#394：B 方案定案的 `{}` = 空块 Void，
     // SPEC syntax §1.6.4；诊断必须把钦定写法传递给用户而非裸报 found void）
     ("E1108", TypeCheck, true, empty_block_as_container() => ),
+    // E1109 return 出现在函数外（RFC-010a 规则②边界条件：`return` 退出最近的
+    // 函数边界，Script 顶层=模块初始化层没有函数边界——编译期拒绝，
+    // 不再运行期静默终止初始化、跳过后续顶层语句）
+    ("E1109", TypeCheck, false, return_outside_function() => ),
 });

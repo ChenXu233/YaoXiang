@@ -66,12 +66,15 @@ impl World {
         (&self.semantic_db, &mut self.semantic_tokens_cache)
     }
 
-    /// 从 TypeCheckResult 的 SemanticDB 合并语义信息
+    /// 从 TypeCheckResult 的 SemanticDB 按文件 upsert 语义信息（#433/D55）
+    ///
+    /// 只替换 `other` 覆盖到的文件，std/内置类型等会话级数据原样保留——
+    /// 此前是整体替换，多文件同开互相踩踏、std 符号在首次 didOpen 即蒸发。
     pub fn update_semantic_db(
         &mut self,
         other: SemanticDB,
     ) {
-        self.semantic_db = other;
+        self.semantic_db.upsert_from(other);
     }
 
     /// 移除某个文件的所有符号和语义信息（文件关闭或重新解析时调用）

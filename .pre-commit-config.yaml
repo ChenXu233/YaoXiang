@@ -16,10 +16,22 @@ repos:
         language: system
         pass_filenames: false
 
-      - id: cargo-clippy
-        name: cargo clippy
+      - id: cargo-clippy-fix
+        name: cargo clippy --fix
+        # 覆盖范围与 CI Check 步一致（--all --all-features），外加 --fix 自动修。
         # clippy-driver 产物指纹与 rustc 不同，用独立 target 目录避免污染缓存导致 cargo test 全量重编
-        entry: cargo clippy --fix --allow-dirty --all-targets --target-dir target/clippy -- -D warnings
+        entry: cargo clippy --fix --allow-dirty --all --all-features --all-targets --target-dir target/clippy -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy (门禁)
+        # --fix 会让 -D warnings 失效，自动修不能当门禁：实测同一个 lint 在 --fix 下只报
+        # warning（clippy 自陈「the clippy::doc_lazy_continuation lint ignores -D warnings」）
+        # 并以 0 退出，去掉 --fix 才是 error/101。故修完必须再用不带 --fix 的口径挡一次。
+        # 口径与 CI Check 步相同（--all --all-features -- -D warnings）；target 目录只影响缓存。
+        entry: cargo clippy --all --all-features --target-dir target/clippy -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false

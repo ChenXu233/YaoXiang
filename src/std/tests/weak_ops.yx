@@ -1,10 +1,9 @@
 // src/std/tests/weak_ops.yx
-// 覆盖: std.weak 模块（#117）— Arc/Weak 泛型签名（#242 结构化统一）
+// 覆盖: std.weak 模块（#117）— Arc/Weak 泛型签名（#242 结构化统一）+
+//       RFC-009 弱引用存活语义（#384：weak.new 降级传入 Arc 句柄）
 // 验证: ref 创建 Arc → weak.new 登记 → upgrade 存活 Arc 返回 some →
 //       match 变体解构取回载荷（变体集随 use std.option 导入）
-// skip: weak.new 把值克隆进全新 Arc 而非降级传入的 Arc（src/std/weak.rs
-//   weak_new），upgrade 因此对存活目标也返回 none（#384）
-// 状态: ❌ 忽略-实现 bug
+// 状态: ✅ 可运行
 
 use std.weak
 use std.option
@@ -18,7 +17,6 @@ main: () -> Void = {
     w = weak.new(p)
 
     // 存活 Arc 的 upgrade：应返回 some 变体，match 解构取回载荷。
-    // 断言本身正确（文档语义：存活 → some）；当前实现返回 none。
     u = weak.upgrade(w)
     mut got = 0
     match u {

@@ -1,0 +1,15 @@
+// 06-compile-errors/list_remove_at_oob_err.yx
+// list.remove_at 上界越界应报运行时错误（#400：原静默截断丢尾元素、rc=0）
+// expect: runtime-error E6003
+// 覆盖: RFC-013 错误码规范（Runtime index out of bounds 条目）+ #400
+// 验证: remove_at 的 index >= length 走 Vec 底座 E6003 契约，与
+//       get/slice/first 的越界行为对齐（入口探底座下标读）
+// 状态: ❌ 应运行失败
+
+use std.io
+use std.list
+
+// 顶层语句：运行期错误必须在模块初始化期真实执行才触发
+//（带型 main 不调用 = 死码，运行期契约不会被行使）
+l = list.remove_at([1, 2, 3], 5)
+io.println(l)

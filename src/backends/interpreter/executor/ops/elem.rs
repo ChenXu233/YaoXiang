@@ -292,12 +292,24 @@ impl Interpreter {
                     RuntimeValue::String(s) => s.as_ref().to_string(),
                     _ => String::new(),
                 };
-                let result = s
-                    .chars()
-                    .nth(index.0 as usize)
-                    .map(|c| RuntimeValue::Char(c as u32))
-                    .unwrap_or(RuntimeValue::Void);
-                self.call_stack[fi].set_slot(dst.0 as usize, result);
+                // #385 定案 D3：标量值（码点）下标取字符，产出单字符 String
+                // （与 chars()/substring 同表示）；越界/负索引对齐容器索引
+                // 失败契约报 E6003（#280），不再静默 Void。旧实现把槽号当
+                // 字符下标且越界给 Void——死指令从未被发射，随 s[i] 接线
+                // 一并纠正。
+                let idx = self.force_slot(fi, *index)?.to_int().unwrap_or(-1);
+                let chars: Vec<char> = s.chars().collect();
+                if idx < 0 || idx as usize >= chars.len() {
+                    let stack = self.capture_stack();
+                    return Err(ExecutorError::index_out_of_bounds(
+                        chars.len(),
+                        idx,
+                        Some(stack),
+                    ));
+                }
+                let c = chars[idx as usize];
+                self.call_stack[fi]
+                    .set_slot(dst.0 as usize, RuntimeValue::String(c.to_string().into()));
                 self.call_stack[fi].advance();
                 Ok(StepOutcome::Continue)
             }

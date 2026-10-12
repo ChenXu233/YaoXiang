@@ -50,24 +50,24 @@ my-project/
 
 | 命令                              | 说明                         |
 | --------------------------------- | ---------------------------- |
-| [`yx init`](./commands#yx-init)   | 初始化项目，支持 `--lib`     |
-| [`yx add`](./commands#yx-add)     | 添加依赖                     |
-| [`yx install`](./commands#yx-install) | 安装依赖                |
-| [`yx update`](./commands#yx-update) | 更新依赖                   |
-| [`yx list`](./commands#yx-list)   | 列出依赖及来源               |
-| [`yx rm`](./commands#yx-rm)       | 移除依赖                     |
-| [`yx outdated`](./commands#yx-outdated) | 检查可升级依赖         |
-| [`yx clean`](./commands#yx-clean) | 清理构建产物与冗余 vendor 包 |
-| [`yx cache clean`](./commands#yx-cache-clean) | 清空全局缓存       |
-| [`yx workspace`](./commands#yx-workspace) | 工作空间成员管理    |
-| [`yx publish`](./commands#yx-publish) | 打包与发布             |
+| [`yx init`](commands#yx-init)   | 初始化项目，支持 `--lib`     |
+| [`yx add`](commands#yx-add)     | 添加依赖                     |
+| [`yx install`](commands#yx-install) | 安装依赖                |
+| [`yx update`](commands#yx-update) | 更新依赖                   |
+| [`yx list`](commands#yx-list)   | 列出依赖及来源               |
+| [`yx rm`](commands#yx-rm)       | 移除依赖                     |
+| [`yx outdated`](commands#yx-outdated) | 检查可升级依赖         |
+| [`yx clean`](commands#yx-clean) | 清理构建产物与冗余 vendor 包 |
+| [`yx cache clean`](commands#yx-cache-clean) | 清空全局缓存       |
+| [`yx workspace`](commands#yx-workspace) | 工作空间成员管理    |
+| [`yx publish`](commands#yx-publish) | 打包与发布             |
 
 其余子命令（`run`、`check`、`test`、`build`、`format`、`lsp`、`repl`、`eval`、`explain`、`dump`）与包管理无关。
 
 ## 文档索引
 
-- [命令行接口](./commands) - 所有包管理命令的详细说明
-- [yaoxiang.toml 格式](./manifest) - 项目配置文件格式
-- [yaoxiang.lock 格式](./lock) - 锁文件格式说明
-- [错误码](./error-codes) - 包管理相关错误及处理方式
+- [命令行接口](commands) - 所有包管理命令的详细说明
+- [yaoxiang.toml 格式](manifest) - 项目配置文件格式
+- [yaoxiang.lock 格式](lock) - 锁文件格式说明
+- [错误码](error-codes) - 包管理相关错误及处理方式
 - [包管理系统指南](../../guide/packaging) - 面向使用者的完整流程

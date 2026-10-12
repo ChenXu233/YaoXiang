@@ -11,13 +11,23 @@ use std::hash::{Hash, Hasher};
 
 use super::ast::{SMTCommand, SMTExpr, SMTModel, SMTResult, SMTSort};
 
+/// 缓存条目上限（#375）：触顶整体清空。SMT 查询的局部性随编译阶段迁移，
+/// 全清是最简单的保守策略；命中率经 `cache_stats` 计数器观测
+/// （WBS 4.4.2 的「缓存命中率可观测」判据在此落地）。
+pub(crate) const CACHE_CAP: usize = 8192;
+
 /// Z3 后端——封装 Z3 context 和 solver 生命周期
 ///
 /// 内部持有 `super::z3_ffi::Z3_context` 裸指针，通过外部 Mutex 保证互斥访问。
-/// SMT 查询结果缓存在 `cache` 中（RefCell 实现内部可变性——solve() 保持 &self）。
+/// SMT 查询结果缓存在 `cache` 中（RefCell 实现内部可变性——solve() 保持 &self）；
+/// 缓存触顶整体清空（#375：无上限会随编译过程无界增长）。
 pub struct Z3Backend {
     ctx: super::z3_ffi::Z3_context,
     cache: RefCell<HashMap<u64, SMTResult>>,
+    /// 缓存命中计数（Mutex 串行化访问下 Cell 足够，与 cache 的 RefCell 同理）
+    cache_hits: std::cell::Cell<u64>,
+    /// 缓存未命中计数
+    cache_misses: std::cell::Cell<u64>,
 }
 
 // SAFETY: Z3Backend 通过 `Mutex` 访问，确保同一时刻只有一个线程使用 Z3 context。
@@ -82,6 +92,8 @@ impl Z3Backend {
             Ok(Z3Backend {
                 ctx,
                 cache: RefCell::new(HashMap::new()),
+                cache_hits: std::cell::Cell::new(0),
+                cache_misses: std::cell::Cell::new(0),
             })
         }
     }
@@ -100,8 +112,10 @@ impl Z3Backend {
 
         // 缓存命中——直接返回
         if let Some(cached) = self.cache.borrow().get(&cache_key) {
+            self.cache_hits.set(self.cache_hits.get() + 1);
             return cached.clone();
         }
+        self.cache_misses.set(self.cache_misses.get() + 1);
 
         let result = unsafe {
             let solver = super::z3_ffi::Z3_mk_solver(self.ctx);
@@ -175,10 +189,49 @@ impl Z3Backend {
             smt_result
         };
 
-        // 写入缓存
-        self.cache.borrow_mut().insert(cache_key, result.clone());
+        // 写入缓存（触顶整体清空，见 CACHE_CAP）——仅确定性结果可入
+        //（Unknown 是资源依赖的非确定性结果，缓存它会固化首次求解时的
+        // 机器负载，见 should_cache 契约）
+        if should_cache(&result) {
+            let mut cache = self.cache.borrow_mut();
+            evict_if_full(&mut cache);
+            cache.insert(cache_key, result.clone());
+        }
         result
     }
+
+    /// 缓存命中/未命中计数（WBS 4.4.2「缓存命中率可观测」判据）。
+    pub fn cache_stats(&self) -> (u64, u64) {
+        (self.cache_hits.get(), self.cache_misses.get())
+    }
+}
+
+/// 缓存触顶清空判定（#375）：条目数达到 [`CACHE_CAP`] 即整体清空。
+/// 独立成函数以便单测覆盖边界（8192 次 Z3 求解在单测里不可接受）。
+pub(crate) fn evict_if_full(cache: &mut HashMap<u64, SMTResult>) {
+    if cache.len() >= CACHE_CAP {
+        cache.clear();
+    }
+}
+
+/// 结果是否可缓存（缓存契约，#375 方向4 补遗）。
+///
+/// **只有确定性结果可缓存**（`Sat`/`Unsat`：同一查询任何时候求解结论相同）。
+/// `Unknown` 是**资源依赖的非确定性结果**（超时/能力外）——缓存它会把
+/// 「首次求解时的机器负载」固化为进程级事实：一次超时 → 该查询在本进程
+/// 永远 Unknown → 消费端保守降级（E2031 族/回边不切断），同一项目不同
+/// 负载下编译诊断不同。这正是 D58 单例化的硬前置：进程级缓存一旦共享，
+/// 被缓存的 Unknown 还会跨编译/跨测试传播。
+///
+/// 其余边界（写明的接受项）：
+/// - 缓存键 = `Debug` 文本 + timeout 的 u64 哈希，无比对（碰撞概率 ~2⁻⁶⁴ 级，接受）；
+///   同一查询不同 timeout 视为不同查询（timeout 入键）。
+/// - `cache_stats` 计数在整体清空后**不清零**——命中率是进程累计语义。
+/// - 上限管条数不管字节（`Sat` 携带的模型字符串不在计量内）。
+pub(crate) fn should_cache(result: &SMTResult) -> bool {
+    // Unknown（超时/能力外/异常码）是资源依赖的非确定性结果——不入缓存，
+    // 让下一次求解在资源充裕时有机会给出确定结论。
+    !matches!(result, SMTResult::Unknown { .. })
 }
 
 impl Drop for Z3Backend {

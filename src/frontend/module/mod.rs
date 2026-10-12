@@ -64,6 +64,20 @@ pub struct Export {
     /// 于是签名里的 `TypeRef("A")` 无人绑定、实参无法与 `&Vec(A)` unify（E1002）。
     /// 随导出一并携带可让调用方直接使用**真实名字**，无需从签名形态反推
     /// （反推无法区分类型参数与普通类型名，会误伤 `Dict(K,V)` / `File` 等）。
+    ///
+    /// 两条来源的层级（谁权威、何时兜底）：
+    ///
+    /// 1. **权威**：本字段。声明期快照按声明序给出真实名字（std 见
+    ///    `crate::std::yx_sources`，用户模块见 `orchestrator::extract_module_info`），
+    ///    导入方 `export_type` 据它登记短名与限定名两个键，调用点才拿得到
+    ///    类型参数名（`lookup_type_params`）与实例化请求的 `generic_id`。
+    /// 2. **兜底**：从签名形态反推——真实落点是 `collect_instantiation_request`
+    ///    的第二条分支（`expressions.rs` 里 `let mut type_var_indices = …` 那段
+    ///    位置直扫：只收「参数位直接是 TypeVar」的位），底层取变量用
+    ///    `collect_type_vars_positional`。只在第 1 条拿不到名字时生效，且
+    ///    **收不全**——类型参数只出现在嵌套/借用位置（`x: &T`、`Vec(T)`）时
+    ///    位置直扫什么也取不到（形参位是 `Ref(TypeRef)` 而非 `TypeVar`），
+    ///    故它不能替代本字段，只能服务老路径。
     pub type_params: Option<Vec<String>>,
     /// 该导出函数的**声明期形参名**（按声明序），无参或未知为 None。
     ///

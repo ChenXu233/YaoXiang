@@ -12,7 +12,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const RFC_DIR = path.join(__dirname, '..', 'src', 'design', 'rfc')
+const RFC_DIR = path.join(__dirname, '..', 'src', 'rfc')
 
 // RFC 分类目录
 const CATEGORIES = {
@@ -346,7 +346,7 @@ function generateIndex(allRfcs) {
   lines.push('1. 阅读 [RFC_TEMPLATE.md](RFC_TEMPLATE.md) 了解格式要求')
   lines.push('2. 参考 [EXAMPLE_full_feature_proposal.md](EXAMPLE_full_feature_proposal.md) 学习写法')
   lines.push('3. 创建新文件，命名为 `序号-描述性标题.md`')
-  lines.push('4. 将文件放入 `docs/src/design/rfc/draft/` 目录')
+  lines.push('4. 将文件放入 `docs/src/rfc/draft/` 目录')
   lines.push('5. 更新本索引文件，添加新RFC条目')
   lines.push('6. 提交PR进入审核流程')
   lines.push('')

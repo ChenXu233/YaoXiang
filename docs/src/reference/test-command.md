@@ -26,7 +26,7 @@ yx test [OPTIONS] [PATH]...
 | `runtime-error` | `check` 必须通过且运行必须失败，声明的错误码全部出现即通过               |
 | `invalid`       | 文件声明不合法（如期望码与类别矛盾），不计入通过也不计入失败             |
 
-期望声明文法见 [RFC-036](../design/rfc/accepted/036-test-framework.md)。
+期望声明文法见 [RFC-036](../rfc/accepted/036-test-framework.md)。
 
 ## 选项
 
@@ -115,7 +115,7 @@ yx test --json > report.json
 
 ## 另请参阅
 
-- [`yx check`](./check-command.md) -- 静态检查
-- [`yx format`](./format-command.md) -- 代码格式化
-- [RFC-036: std.test 测试框架](../design/rfc/accepted/036-test-framework.md) -- 测试框架设计
+- [`yx check`](check-command.md) -- 静态检查
+- [`yx format`](format-command.md) -- 代码格式化
+- [RFC-036: std.test 测试框架](../rfc/accepted/036-test-framework.md) -- 测试框架设计
 - [CI 集成指南](../guide/ci-integration.md) -- CI/CD 集成

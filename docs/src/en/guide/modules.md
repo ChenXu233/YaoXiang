@@ -5,10 +5,10 @@ description: 'use imports, module definitions, and directory organization'
 
 # Module System
 
-YaoXiang has no `import` keyword, nor a "declare-then-export" module declaration. **A `.yx` file is
-a module**, and `use` brings bindings from another module into scope.
+YaoXiang has no `import` keyword, nor any "declare-then-export" module declarations. **A `.yx` file
+is a module**, and `use` brings another module's bindings into scope.
 
-This page covers how to use them. For design decisions, see the
+This page covers how to use it. For design decisions, see the
 [Module System Specification](../reference/language-spec/modules).
 
 ## 60-Second Quick Start
@@ -20,7 +20,7 @@ use std.math.{sqrt}
 // Whole module import → access via namespace
 io.println("hello")
 
-// Specific item import → use directly without prefix
+// Specific item import → use directly bare
 result = sqrt(16.0)
 ```
 
@@ -32,16 +32,16 @@ result = sqrt(16.0)
 use std.io
 
 main = () => {
-    io.println("用 io. 前缀访问")
-    io.print("print 和 println 都在 std.io 里")
+    io.println("Access via the io. prefix")
+    io.print("Both print and println live in std.io")
 }
 ```
 
-`use std.io` introduces a **namespace**; members are accessed with the `io.` prefix.
+`use std.io` introduces a **namespace**, and members are accessed with the `io.` prefix.
 
 ### 2. Import Only Specific Items
 
-Names listed in curly braces are bound directly to the current scope, **without a prefix**:
+Names listed inside curly braces are bound directly into the current scope, **without a prefix**:
 
 ```yaoxiang
 use std.math.{sqrt, sin, cos}
@@ -52,10 +52,10 @@ main = () => {
 }
 ```
 
-This form is useful when you only need a few functions from a module — it avoids both repeatedly
-writing the prefix and dragging in the entire namespace.
+This form is great when you only need a few functions from a module — it saves you from repeatedly
+typing the prefix while avoiding pulling the entire namespace into scope.
 
-### 3. Inline Item Alias
+### 3. Inline Item Aliases
 
 The rename is written **inside** the curly braces:
 
@@ -63,17 +63,17 @@ The rename is written **inside** the curly braces:
 use std.io.{print as say}
 
 main = () => {
-    say("用 say 代替 print")
+    say("Using say instead of print")
 }
 ```
 
-::: warning Aliases Must Be Written Inside Curly Braces This form is supported:
+::: warning Aliases Must Go Inside the Curly Braces This form is supported:
 
 ```yaoxiang
 use std.io.{print as say}   // ✅
 ```
 
-The form below will be rejected; the compiler will suggest you switch to the inline form:
+The one below is rejected — the compiler will suggest the inline form:
 
 <!-- docs-example: skip -->
 
@@ -91,26 +91,26 @@ use std.io.{print} as say   // ❌ Positional alias, not supported
 use helper as h
 
 main = () => {
-    h.shout("通过 h 访问 helper")
+    h.shout("Access helper through h")
 }
 ```
 
 ::: danger Known Issue: Aliasing Standard Library Modules Crashes
-`use <project-local module> as <alias>` works, but `use <standard library module> as <alias>`
-currently triggers a compiler internal error (`E8001` closure function not registered in the
-function name mapping table):
+`use <project-internal-module> as <alias>` works, but `use <standard-library-module> as <alias>`
+currently triggers an internal compiler error (`E8001` closure function not registered in the
+function name map):
 
 ```yaoxiang
 use std.math as m   // ❌ Calling m.sqrt(...) reports E8001
 ```
 
-**Workaround**: Switch to inline item aliases, which work fine for standard library modules:
+**Workaround**: Use inline item aliases instead — they work fine for standard library modules:
 
 ```yaoxiang
 use std.math.{sqrt, sin, cos}   // ✅
 ```
 
-This issue is tracked separately and does not affect the three other forms above. :::
+This issue is tracked separately and does not affect the three forms above. :::
 
 ## Module Directory Organization
 
@@ -151,19 +151,20 @@ use helper
 
 main = () => {
     io.print(helper.label())
-    helper.shout("跨模块调用成功")
+    helper.shout("Cross-module call succeeded")
 }
 ```
 
 ### index.yx Is Not Recognized
 
-This is the most common pitfall for those coming from Rust. Writing `index.yx` cannot be resolved:
+This is the most common pitfall for those coming from Rust. Writing it as `index.yx` cannot be
+resolved:
 
 <!-- docs-example: skip -->
 
 ```yaoxiang
 // src/helper/index.yx
-label: () => string = "这样写会失败"
+label: () => string = "This will fail"
 ```
 
 <!-- docs-example: skip -->
@@ -172,9 +173,9 @@ label: () => string = "这样写会失败"
 use helper   // ❌ E5001: module 'helper' not found
 ```
 
-**Reason**: path mapping only recognizes the two forms `name.yx` and `name/mod.yx`; `index.yx` is
-not among them. `mod.yx` is a convention, not a requirement — `helper.yx` can serve equally well as
-the module `helper`.
+**Reason**: Path mapping only recognizes two forms — `name.yx` and `name/mod.yx` — and `index.yx` is
+not one of them. `mod.yx` is a convention rather than a hard rule — `helper.yx` can serve as module
+`helper` just as well.
 
 ## Exports: No `pub` Needed
 
@@ -186,8 +187,8 @@ Every top-level binding in a module is visible to any code that can write the mo
 
 ```yaoxiang
 // src/helper/mod.yx
-// plain has no modifier before it
-plain: () => string = "没有 pub 也能被导入"
+// plain has no modifier in front of it
+plain: () => string = "Importable even without pub"
 ```
 
 <!-- docs-example: skip -->
@@ -198,24 +199,24 @@ use helper
 ```
 
 If you want to "restrict" a binding from being used externally, the only way is to not place it at
-the top level of a module.
+the module's top level.
 
-> **`pub` history**: Earlier specifications taught "use `pub` to declare exported items, with
-> private as the default". That design was overturned by RFC-029, and RFC-029g ruled to remove the
-> `pub` keyword. `pub` never participates in export determination — whether you write it or not does
-> not affect whether an item can be imported. See
-> [Specification §3](../reference/language-spec/modules#第三章导出面) for details.
+> **History of `pub`**: Earlier specs taught "use `pub` to declare exports, default to private."
+> That design was overturned by RFC-029, and RFC-029g removed the `pub` keyword entirely — it's now
+> just an ordinary identifier, and writing `pub x = 1` will report an error for an undefined name.
+> Top-level bindings are importable by default, regardless of any modifier. See
+> [Spec §3](../reference/language-spec/modules#第三章导出面) for details.
 
-## Methods Must Be Bound Explicitly
+## Methods Must Be Explicitly Bound
 
-Methods are not auto-generated by `pub`; they are written explicitly on the type:
+Methods aren't auto-generated by `pub`; they are written explicitly on the type:
 
 <!-- docs-example: skip -->
 
 ```yaoxiang
 Point: Type = { x: Float, y: Float }
 
-// Explicit method: the first parameter is self
+// Explicit method: first parameter is self
 Point.distance: (self: &Point, other: &Point) -> Float = {
     dx = self.x - other.x
     dy = self.y - other.y
@@ -227,19 +228,20 @@ Point.distance: (self: &Point, other: &Point) -> Float = {
 
 ### E5001: module not found
 
-Troubleshoot in order of likelihood:
+Check in order of likelihood:
 
-1. **Directory entry was written as `index.yx`** — change it to `mod.yx`; this is the most common
+1. **The directory entry is written as `index.yx`** — change it to `mod.yx`; this is the most common
    cause
-2. **Path spelling or level is wrong** — `use math.vector` corresponds to `src/math/vector.yx`
-3. **Dependencies not installed** — the error message will suggest running `yx install`
-4. **File is outside the project** — there are only two search starting points: "the importer's
+2. **Path is misspelled or at the wrong level** — `use math.vector` corresponds to
+   `src/math/vector.yx`
+3. **Dependencies aren't installed** — the error message will suggest running `yx install`
+4. **The file is outside the project** — the lookup starts only at two places: "the importer's
    directory" and "the project root"
 
 ### E5003: export not found
 
-The module was found, but it does not contain the name you want. Often this is a spelling
-difference; for example, `std.io` has `read_line` rather than `read`:
+The module was found, but it doesn't contain the name you want. Often it's a spelling difference —
+for example, in `std.io` it's `read_line` rather than `read`:
 
 <!-- docs-example: skip -->
 
@@ -250,12 +252,12 @@ use std.io.{read}        // ❌ E5003
 
 ## Quick Reference
 
-| Form                        | Effect                                                         |
-| --------------------------- | -------------------------------------------------------------- |
-| `use std.io`                | Namespace `io`, access via `io.x`                              |
-| `use std.math.{sqrt}`       | Use `sqrt` directly                                            |
-| `use std.io.{print as say}` | Use `say` directly                                             |
-| `use helper as h`           | Namespace `h`, access via `h.x`                                |
-| `use std.io.{print} as say` | Syntax error, use the inline form                              |
-| `use .relative`             | Syntax error, paths must be written fully from the module root |
-| `pub fn foo`                | Semantically invalid, no visibility exists                     |
+| Syntax                      | Effect                                                          |
+| --------------------------- | --------------------------------------------------------------- |
+| `use std.io`                | Namespace `io`, access via `io.x`                               |
+| `use std.math.{sqrt}`       | Bare use of `sqrt`                                              |
+| `use std.io.{print as say}` | Bare use of `say`                                               |
+| `use helper as h`           | Namespace `h`, access via `h.x`                                 |
+| `use std.io.{print} as say` | Syntax error, use the inline form                               |
+| `use .relative`             | Syntax error, path must be written in full from the module root |
+| `pub fn foo`                | Semantically invalid, no visibility                             |

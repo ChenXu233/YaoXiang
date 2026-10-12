@@ -5,5 +5,6 @@
 
 mod ast;
 mod backend;
+mod cache_bound;
 mod feature_gate;
 mod translate;

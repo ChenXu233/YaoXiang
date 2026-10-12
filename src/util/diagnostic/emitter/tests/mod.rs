@@ -4,4 +4,5 @@
 //! §4.2: ANSI 工具提取
 
 mod ansi;
+mod json;
 mod text;

@@ -26,5 +26,6 @@ mod inlay_hint;
 mod references;
 mod rename;
 mod semantic_tokens;
+mod support;
 mod text_document;
 mod workspace_symbol;

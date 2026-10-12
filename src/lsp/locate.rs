@@ -18,14 +18,36 @@ pub struct IdentAtPosition {
     pub span: Span,
 }
 
-/// LSP 0-indexed Position → 内部 1-indexed (line, col)
-pub fn position_to_internal(position: &LspPosition) -> (usize, usize) {
-    (position.line as usize + 1, position.character as usize + 1)
+/// LSP Position（0-indexed，UTF-16 列）→ 内部 (line, col)（1-indexed，char 列）
+///
+/// 列单位换算依赖源码：LSP `character` 按 UTF-16 code unit 计数，lexer 列按
+/// char 计数（#433）——扩展平面字符（emoji 等）一个 char 占两个 UTF-16 单元，
+/// 不换算则该行跳转/hover/引用全部错位。位置越出行尾/文末时按实际行宽收敛，
+/// 容忍客户端基于陈旧文本发出的位置。
+pub fn position_to_internal_utf16(
+    source: &str,
+    position: &LspPosition,
+) -> (usize, usize) {
+    let target_line = position.line as usize;
+    let line_str = source.split('\n').nth(target_line).unwrap_or("");
+
+    let mut utf16_seen = 0usize;
+    let mut col = line_str.chars().count() + 1;
+    for (chars_seen, ch) in line_str.chars().enumerate() {
+        if utf16_seen >= position.character as usize {
+            col = chars_seen + 1;
+            break;
+        }
+        utf16_seen += ch.len_utf16();
+    }
+
+    (target_line + 1, col)
 }
 
 /// 在源码中查找光标位置处的标识符
 ///
-/// LSP Position 是 0-indexed，内部 Span 是 1-indexed，此函数负责转换。
+/// LSP Position（0-indexed，UTF-16 列）由 [`position_to_internal_utf16`]
+/// 换算为内部 1-indexed char 列。
 ///
 /// 返回 `None` 如果：
 /// - 词法分析失败
@@ -36,9 +58,8 @@ pub fn find_identifier_at_position(
 ) -> Option<IdentAtPosition> {
     let tokens = tokenize(source).ok()?;
 
-    // LSP 0-indexed → 内部 1-indexed
-    let target_line = position.line as usize + 1;
-    let target_col = position.character as usize + 1;
+    // LSP 0-indexed UTF-16 → 内部 1-indexed char
+    let (target_line, target_col) = position_to_internal_utf16(source, position);
 
     for token in &tokens {
         let span = &token.span;

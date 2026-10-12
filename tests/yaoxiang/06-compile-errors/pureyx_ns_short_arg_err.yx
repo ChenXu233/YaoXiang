@@ -1,0 +1,15 @@
+// 06-compile-errors/pureyx_ns_short_arg_err.yx
+// #387——嵌入路径（纯 yx std）命名空间限定调用的缺参形态必须编译期拒绝。
+// RFC-029 §1/§6：模块 = record of bindings，限定调用无接收者；此前缺参被
+// FieldAccess 臂的接收者 +1 启发式误吞（total+1==params.len() 巧合命中），
+// 少传的实参落运行期以 Void 兜底填充炸 E6007，报错点位还在 std.test 内部。
+// expect: compile-error E1010
+// （assert_eq 签名 (a: Any, b: Any) -> Result(Void, String)，少传 1 实参即错）
+// 验证: 命名空间调用缺参不再落入接收者启发式
+// 状态: ❌ 应编译失败
+
+use std.test
+
+main: () -> Void = {
+    r = test.assert_eq(1)
+}

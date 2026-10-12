@@ -9,9 +9,9 @@
 pub mod ast;
 pub mod backend;
 pub mod translate;
-#[cfg(not(target_arch = "wasm32"))]
+// wasm32 下同样编译（#435：wasm 形态必须带 Z3——libz3.a 经 build.rs 链接，
+// Emscripten 预编译资产由 z3-wasm release 供给）；无库时 build.rs 拒绝构建。
 pub mod z3_backend;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod z3_ffi;
 
 #[cfg(test)]

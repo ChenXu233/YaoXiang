@@ -1,0 +1,4 @@
+// util/math.yx —— 子目录模块：模块键 util.math
+double: (x: Int) -> Int = (x) => {
+    return x * 2
+}

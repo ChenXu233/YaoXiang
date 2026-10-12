@@ -4,18 +4,20 @@
 //!
 //! **状态**：阶段 2 实现
 //!
-//! 诊断管线：
+//! 诊断管线（4.2.6 起）：
 //! ```text
-//! 源代码 → tokenize → parse → check_module_collect_all
-//!                          ↓                ↓
-//!                    ParseError[]      Diagnostic[]
-//!                          ↓                ↓
-//!                    parse_error_to_diagnostic   to_lsp_diagnostics
-//!                          ↓                ↓
-//!                          └──── 合并 ────┘
-//!                                    ↓
-//!                          PublishDiagnosticsParams
+//! 项目内文件 → orchestrator::check_source_in_project（Lsp 形态）
+//! 单文件兜底 → Program{SingleFile, CollectAll} + Driver
+//!                          ↓
+//!                    Diagnostic[]（errors + warnings 合并）
+//!                          ↓
+//!                    to_lsp_diagnostics
+//!                          ↓
+//!                    PublishDiagnosticsParams
 //! ```
+//!
+//! 手工 lex→parse→typecheck 序列已删除（02 §3 入口表）：CLI 与 LSP
+//! 同一 Driver，proof（E4018）与警告（W 码）随统一管线进入 LSP。
 
 use std::str::FromStr;
 
@@ -24,9 +26,8 @@ use lsp_types::{
 };
 use tracing::{debug, warn};
 
-use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse;
-use crate::frontend::core::typecheck::check_module_collect_all;
+use crate::driver::{Aggregation, Driver, Program, ProgramKind, Unit};
+use crate::frontend::config::CompileConfig;
 use crate::util::diagnostic::{Diagnostic, Severity};
 use crate::util::span::Span;
 
@@ -133,13 +134,14 @@ fn percent_decode(s: &str) -> String {
 
 /// 对文档内容运行完整诊断管线
 ///
-/// 流程：tokenize → parse → check_module_collect_all
-///
-/// 任何阶段的错误都会收集为 LSP 诊断返回。
-/// Lex 错误会短路（无法继续解析），但 parse 错误不影响 typecheck。
-///
-/// 项目内文件（向上能找到 `yaoxiang.toml`）改走 orchestrator——
+/// 项目内文件（向上能找到 `yaoxiang.toml`）走 orchestrator——
 /// 与 `yaoxiang check` / `run` 同一条编译路径，跨文件 `use` 不再假报。
+///
+/// 单文件/非项目兜底（4.2.6，02 §3 入口表）：走
+/// `Program { kind: SingleFile, aggregation: CollectAll }` + Driver，
+/// 与 CLI 同一编译管线。CollectAll 语义下 parse 收全量错误、残缺 AST
+/// 继续 typecheck（编辑器哲学）；proof（E4018）与警告（W 码）随统一
+/// 管线进入 LSP（原手工 lex→parse→typecheck 序列已删除）。
 ///
 /// ponytail: 每次编辑都重建项目注册表（全项目文件签名收集），大项目会偏慢；
 /// 注册表缓存/增量是 RFC-029a 的活，此处不预支。
@@ -147,10 +149,11 @@ pub fn run_diagnostics(
     uri: &str,
     content: &str,
 ) -> PublishDiagnosticsParams {
-    if let Some(path) = uri_to_path(uri) {
+    let path = uri_to_path(uri);
+    if let Some(p) = &path {
         use crate::frontend::module::orchestrator;
-        if orchestrator::find_project_root(&path).is_some() {
-            if let Ok(diagnostics) = orchestrator::check_source_in_project(&path, content) {
+        if orchestrator::find_project_root(p).is_some() {
+            if let Ok(diagnostics) = orchestrator::check_source_in_project(p, content) {
                 debug!("项目诊断完成: {} ({} 条)", uri, diagnostics.len());
                 return make_publish_params(uri, to_lsp_diagnostics(&diagnostics));
             }
@@ -158,51 +161,36 @@ pub fn run_diagnostics(
         }
     }
 
-    let mut all_diagnostics: Vec<LspDiagnostic> = Vec::new();
-
-    // 1. 词法分析
-    let tokens = match tokenize(content) {
-        Ok(tokens) => tokens,
-        Err(lex_err) => {
-            warn!("词法分析失败: {} - {}", uri, lex_err);
-            // Lex 错误 → 单条诊断，无法继续
-            all_diagnostics.push(LspDiagnostic {
-                range: Range::default(),
-                severity: Some(DiagnosticSeverity::ERROR),
-                code: Some(lsp_types::NumberOrString::String("E0001".to_string())),
-                source: Some("yaoxiang".to_string()),
-                message: format!("词法错误: {}", lex_err),
-                related_information: None,
-                tags: None,
-                code_description: None,
-                data: None,
-            });
-
-            return make_publish_params(uri, all_diagnostics);
+    // 单文件兜底：与 CLI 同一 Driver（SingleFile + CollectAll）
+    let unit_path = path
+        .as_ref()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| uri.to_string());
+    let program = Program::new(
+        ProgramKind::SingleFile,
+        vec![Unit::new("<lsp>", unit_path, content)],
+        CompileConfig::default(),
+    )
+    .with_aggregation(Aggregation::CollectAll);
+    let outcome = match Driver::new().run(program) {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            // 结构性不可达（SingleFile 恒 1 单元、各臂全接线）——防御：退回空诊断
+            warn!("driver 运行失败: {} - {}", uri, e);
+            return make_publish_params(uri, Vec::new());
         }
     };
+    let diagnostics: Vec<Diagnostic> = outcome
+        .result
+        .errors
+        .iter()
+        .filter_map(|e| e.diagnostic())
+        .chain(outcome.result.warnings.iter().cloned())
+        .collect();
 
-    // 2. 语法分析
-    let parse_result = parse(&tokens);
+    debug!("诊断完成: {} ({} 条诊断)", uri, diagnostics.len());
 
-    if parse_result.has_errors {
-        debug!("解析错误 ({} 个): {}", parse_result.errors.len(), uri);
-        let parse_diags: Vec<Diagnostic> = parse_result.errors.to_vec();
-        all_diagnostics.extend(to_lsp_diagnostics(&parse_diags));
-    }
-
-    // 3. 类型检查（收集所有错误模式）
-    let type_result = check_module_collect_all(&parse_result.module, &mut None);
-    if !type_result.diagnostics.is_empty() {
-        debug!("类型错误 ({} 个): {}", type_result.diagnostics.len(), uri);
-        all_diagnostics.extend(to_lsp_diagnostics(&type_result.diagnostics));
-    } else {
-        debug!("类型检查通过: {}", uri);
-    }
-
-    debug!("诊断完成: {} ({} 条诊断)", uri, all_diagnostics.len());
-
-    make_publish_params(uri, all_diagnostics)
+    make_publish_params(uri, to_lsp_diagnostics(&diagnostics))
 }
 
 /// 为关闭的文档生成空诊断（清除已有诊断）

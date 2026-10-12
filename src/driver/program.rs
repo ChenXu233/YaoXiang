@@ -1,0 +1,216 @@
+//! 编译程序描述：`Program` / `ProgramKind` / `Aggregation`
+//! —— 02-stage-contract §目标设计 3/5。
+//!
+//! `Program` 把「这次编译是什么形态、跑哪些阶段、诊断怎么聚合」变成
+//! 一份声明式描述；`Driver` 是唯一解释它的地方。
+//!
+//! **关键约束**：`Program.stages` 只能来自 `ProgramKind::stages()` 的
+//! 6 个预定义组合之一，**不接受调用方自由传数组**——这是防止 `Program`
+//! 抽象退化成「什么都能传的自由参数」的机制，由 `test_program_stage_coverage`
+//! 断言（02 §目标设计 3）。
+
+use super::stage::Stage;
+use super::unit::Unit;
+use crate::frontend::config::CompileConfig;
+
+/// 编译程序形态——六条编译路径各对应一个变体
+/// （02 §现状「六条编译路径、十个入口函数」表格的归并）。
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum ProgramKind {
+    /// 单文件管线（pipeline.rs / lib::run_file / build_bytecode）
+    SingleFile,
+    /// 多文件编译（orchestrator::compile_project / lib::run_project）
+    MultiFile,
+    /// 多文件检查（orchestrator::check_project / yaoxiang check）
+    Check,
+    /// LSP 项目内检查（orchestrator::check_source_in_project，结果过滤到目标文件）
+    Lsp,
+    /// 嵌入 std 模块编译（orchestrator::compile_embedded_module，RFC-036 §4）
+    Embedded,
+    /// wasm playground（wasm/src/lib.rs——单文件路径的第四个调用方）
+    WasmPlayground,
+}
+
+/// 诊断聚合模式（02 §目标设计 5）。
+///
+/// 必须是 `Program` 的字段而非 Driver 全局设置：LSP 在同一进程内既服务
+/// 项目内文件也服务单文件，CLI 的 run 与 check 是两次独立调用。
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+pub enum Aggregation {
+    /// 首个错误即中止（compile 路径）
+    FailFast,
+    /// 收集全部诊断（check / LSP 路径）
+    CollectAll,
+}
+
+/// 各 ProgramKind 的阶段表——预定义组合的**唯一来源**。
+///
+/// 阶段集合按各路径的**现状行为**归并（02 §现状 11 处不一致表 + P3 止血
+/// 后的 proof 接线）；统一后的一致性行为由本表声明，差异处即 02 要修的
+/// 覆盖缺口。拓扑位置一律合法（皆为 `Stage::ALL` 顺序的子序列）。
+const SINGLE_FILE_STAGES: &[Stage] = &[
+    Stage::Parsing,
+    Stage::Typecheck,
+    Stage::DeadCodeAnalysis,
+    Stage::ProofExecution,
+    Stage::IrGeneration,
+    Stage::Monomorphization,
+];
+
+const MULTI_FILE_STAGES: &[Stage] = &[
+    Stage::VendorConsistency,
+    Stage::Discovery,
+    Stage::Parsing,
+    Stage::Registry,
+    Stage::Typecheck,
+    Stage::ProofExecution,
+    Stage::GlobalSlotAlloc,
+    Stage::IrGeneration,
+    Stage::Linking,
+    // 3.4.8 ②（2026-10-10）：合并 IR 之后的单态化——全程序一张函数表，
+    // 各单元的实例化请求在此聚合（单文件与 EMBEDDED 的表不动，仍各自在
+    // 单元 IR 上跑 mono）。CHECK 于 3.4.8 ③ 按同一次序增补（见下）。
+    Stage::Monomorphization,
+];
+
+// 注：check_project 现状是 proof（orchestrator.rs）先于 dead_code 执行；
+// 统一后按 Stage::ALL 拓扑序 dead_code 先于 proof——两者无数据依赖，
+// 诊断集相同（C2 集合语义），仅文件内诊断顺序归一（02 §1 修订注记）。
+// 4.2.5（用户裁决）：CHECK 加 GlobalSlotAlloc + IrGeneration——standalone
+// check 旧路径（pipeline 全链）本就跑 IR 生成，E3019/E1014/E1015 等只在
+// ir_gen 产生；不加则 standalone check 能力回归（runner 门禁实证）。项目
+// check 从此也捕获 IR 级错误（02 不一致表第 11 行缺口填上）。
+//
+// 3.4.8 ③（2026-10-10 用户裁决，02 §3 注记 #14）：CHECK 再加 Linking 与
+// Monomorphization 两阶段，**撤回注记 #10 的 mono 排除**——「mono 只产资源
+// 超限/内部错误、零语料依赖」只证明语料里没有病态泛型递归 fixture；
+// E3005（特化链深度超限）正是 `f(x) = f([x])` 这类程序唯一的编译期防线
+//（无 mono 时解释器在 Rust 层递归，进程爆栈 0xC00000FD）。
+// - Linking 在 Check 只做**纯合并**：聚合全程序实例化请求 + 合并单元 IR；
+//   入口校验（E3020/E3022）留在 RoleClassification——声明面 bin 缺 main 已
+//   由该臂报 E3020，此臂再查一次即同一缺失双报（02 注记 #14 的「纯合并」）；
+// - Monomorphization 是**检查形态**（同 IrGeneration 的 Check 形态）：消费
+//   合并 IR 与请求表只为产出 E3005/E3018 类诊断，失败进逐文件收集通道
+//（不丢其余文件的诊断），成功产物不消费、不外发。
+// 因此 Check 形态下单元 IR 与 merged IR 都只驻内存（`UnitState.ir` /
+// `State.merged_ir`），DriverOutcome 不带任何 IR 产物。
+const CHECK_STAGES: &[Stage] = &[
+    Stage::VendorConsistency,
+    Stage::Discovery,
+    Stage::Parsing,
+    Stage::Registry,
+    Stage::RoleClassification,
+    Stage::Typecheck,
+    Stage::DeadCodeAnalysis,
+    Stage::ProofExecution,
+    Stage::GlobalSlotAlloc,
+    Stage::IrGeneration,
+    Stage::Linking,
+    Stage::Monomorphization,
+];
+
+const LSP_STAGES: &[Stage] = &[
+    Stage::VendorConsistency,
+    Stage::Discovery,
+    Stage::Parsing,
+    Stage::Registry,
+    Stage::Typecheck,
+    Stage::ProofExecution,
+];
+
+const EMBEDDED_STAGES: &[Stage] = &[
+    Stage::Parsing,
+    Stage::Typecheck,
+    Stage::ProofExecution,
+    Stage::IrGeneration,
+];
+
+impl ProgramKind {
+    /// 本形态的阶段表（6 个预定义组合之一）。
+    ///
+    /// `SingleFile` 与 `WasmPlayground` 共用同一条单文件管线
+    /// （wasm playground 经 `Compiler::compile_with_source` 落到 pipeline）。
+    pub fn stages(self) -> &'static [Stage] {
+        match self {
+            ProgramKind::SingleFile | ProgramKind::WasmPlayground => SINGLE_FILE_STAGES,
+            ProgramKind::MultiFile => MULTI_FILE_STAGES,
+            ProgramKind::Check => CHECK_STAGES,
+            ProgramKind::Lsp => LSP_STAGES,
+            ProgramKind::Embedded => EMBEDDED_STAGES,
+        }
+    }
+
+    /// 本形态的默认聚合模式（02 §目标设计 5 现状对应表）。
+    pub fn default_aggregation(self) -> Aggregation {
+        match self {
+            ProgramKind::SingleFile
+            | ProgramKind::MultiFile
+            | ProgramKind::Embedded
+            | ProgramKind::WasmPlayground => Aggregation::FailFast,
+            ProgramKind::Check | ProgramKind::Lsp => Aggregation::CollectAll,
+        }
+    }
+}
+
+/// 一次编译的完整声明式描述。
+///
+/// `stages` 字段**私有**：只能经 `Program::new` 从 `kind` 派生，
+/// 调用方无法传入自定义阶段数组（02 §目标设计 3 的防退化约束）。
+pub struct Program {
+    /// 编译形态
+    pub kind: ProgramKind,
+    /// 编译单元（单文件 1 个 / 多文件 N 个）
+    pub units: Vec<Unit>,
+    /// 阶段表——只能来自 `ProgramKind::stages()`
+    stages: &'static [Stage],
+    /// 诊断聚合模式
+    pub aggregation: Aggregation,
+    /// 编译配置（死代码/单态化门控等）
+    pub config: CompileConfig,
+    /// 调用方共享注册表（仅 Embedded 形态，4.2.4）：嵌入 std 模块与入口
+    /// IR 生成共用同一 registry（共享 SymbolTable，DefId 一致，#94）；
+    /// Embedded 阶段表没有 Registry 阶段，本字段是它唯一的注册表来源
+    pub shared_registry: Option<crate::frontend::module::registry::ModuleRegistry>,
+}
+
+impl Program {
+    /// 以默认聚合模式构造。
+    pub fn new(
+        kind: ProgramKind,
+        units: Vec<Unit>,
+        config: CompileConfig,
+    ) -> Self {
+        Self {
+            kind,
+            units,
+            stages: kind.stages(),
+            aggregation: kind.default_aggregation(),
+            config,
+            shared_registry: None,
+        }
+    }
+
+    /// 注入调用方共享注册表（Embedded 形态必须调用——缺省时各臂防御性
+    /// 跳过，入口以 Io 错误兜底；#94 的 DefId 一致性契约）。
+    pub fn with_shared_registry(
+        mut self,
+        registry: crate::frontend::module::registry::ModuleRegistry,
+    ) -> Self {
+        self.shared_registry = Some(registry);
+        self
+    }
+
+    /// 覆盖聚合模式（LSP 单文件分支：SingleFile 形态 + CollectAll）。
+    pub fn with_aggregation(
+        mut self,
+        aggregation: Aggregation,
+    ) -> Self {
+        self.aggregation = aggregation;
+        self
+    }
+
+    /// 阶段表（来自 `ProgramKind::stages()` 的预定义组合）。
+    pub fn stages(&self) -> &'static [Stage] {
+        self.stages
+    }
+}

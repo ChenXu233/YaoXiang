@@ -265,13 +265,25 @@ fn test_rfc010_anonymous_binding() {
 }
 
 #[test]
-fn test_rfc010_pub_fn_with_point_param() {
-    let kind = parse_stmt("pub distance: (p1: Point, p2: Point) -> Float = { 0.0 }");
-    if let StmtKind::Assign { is_pub, .. } = &kind {
-        assert!(is_pub, "pub 标记应被识别");
-    } else {
-        panic!("Expected Binding");
-    }
+fn test_pub_is_not_a_binding_modifier_after_rfc029g() {
+    // Arrange: RFC-029g 后 `pub` 是普通标识符，不再被解析器吞为绑定修饰符
+    let tokens = tokenize("pub distance: (p1: Point, p2: Point) -> Float = { 0.0 }").unwrap();
+
+    // Act
+    let result = parse(&tokens);
+
+    // Assert
+    assert_eq!(
+        result.module.items.len(),
+        2,
+        "`pub` 应自成一个标识符表达式语句、`distance: …` 应自成一个绑定语句，实际: {:?}",
+        result.module.items
+    );
+    assert!(
+        matches!(&result.module.items[0].kind, StmtKind::Expr(_)),
+        "首个语句应是 `pub` 标识符表达式（不再被当作修饰符），实际: {:?}",
+        result.module.items[0].kind
+    );
 }
 
 #[test]

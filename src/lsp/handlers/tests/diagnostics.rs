@@ -98,12 +98,50 @@ fn test_no_span_uses_default_range() {
 
 #[test]
 fn test_run_diagnostics_valid_code() {
-    // 合法的 YaoXiang 代码应产生零诊断
-    let result = run_diagnostics("file:///test.yx", "x = 42\n");
+    // Arrange: 合法且无警告的 YaoXiang 代码（无用户绑定，
+    // DeadCodeAnalysis 无可疑对象）——应产生零诊断
+    let source = "print(42)\n";
+
+    // Act
+    let result = run_diagnostics("file:///test.yx", source);
+
+    // Assert
     assert!(
         result.diagnostics.is_empty(),
         "合法代码不应有诊断，但得到: {:?}",
         result.diagnostics
+    );
+}
+
+#[test]
+fn test_run_diagnostics_reports_warnings() {
+    // Arrange: 顶层未使用变量——4.2.6 起 LSP 与 CLI 同一 Driver，
+    // DeadCodeAnalysis 的 W1004 警告随统一管线进入 LSP
+    // （02 §3 入口表；原手工序列只到 typecheck，从无警告）
+    let source = "x = 42\n";
+
+    // Act
+    let result = run_diagnostics("file:///test.yx", source);
+
+    // Assert: 恰好一条 W1004 警告
+    assert_eq!(
+        result.diagnostics.len(),
+        1,
+        "应恰好一条警告，但得到: {:?}",
+        result.diagnostics
+    );
+    let diag = &result.diagnostics[0];
+    assert_eq!(
+        diag.code,
+        Some(lsp_types::NumberOrString::String("W1004".to_string())),
+        "警告码应为 W1004，但得到: {:?}",
+        diag.code
+    );
+    assert_eq!(
+        diag.severity,
+        Some(DiagnosticSeverity::WARNING),
+        "应为 WARNING 级别，但得到: {:?}",
+        diag.severity
     );
 }
 

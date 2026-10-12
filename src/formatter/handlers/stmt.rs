@@ -40,7 +40,7 @@ pub fn format_stmt(
                         .and_then(|v| v.get(i))
                         .and_then(|a| a.as_ref())
                     {
-                        Some(a) => format!("{} as {}", name, a),
+                        Some(a) => format!("{} as {}", name, a.name),
                         None => name.to_string(),
                     }
                 };
@@ -48,14 +48,15 @@ pub fn format_stmt(
                 let rendered: Vec<String> = items
                     .iter()
                     .enumerate()
-                    .map(|(i, name)| render(i, name))
+                    .map(|(i, item)| render(i, &item.name))
                     .collect();
                 result.push_str(&rendered.join(", "));
                 result.push_str(" }");
             }
             if let Some(aliases) = alias {
                 result.push_str(" as ");
-                result.push_str(&aliases.join(", "));
+                let names: Vec<&str> = aliases.iter().map(|a| a.name.as_str()).collect();
+                result.push_str(&names.join(", "));
             }
             result
         }
@@ -78,7 +79,6 @@ pub fn format_stmt(
             type_annotation,
             signature_params,
             value,
-            is_pub,
             is_mut,
             ..
         } => format_assign(
@@ -86,7 +86,6 @@ pub fn format_stmt(
             type_annotation,
             signature_params,
             value,
-            *is_pub,
             *is_mut,
             ctx,
             source_map,
@@ -114,20 +113,16 @@ pub fn format_stmt(
             name,
             signature_params,
             definition,
-            is_pub,
         } => {
-            let pub_prefix = if *is_pub { "pub " } else { "" };
             if signature_params.is_empty() {
                 format!(
-                    "{}{}: Type = {}",
-                    pub_prefix,
+                    "{}: Type = {}",
                     name,
                     format_type(definition, ctx, source_map)
                 )
             } else {
                 format!(
-                    "{}{}: {} -> Type = {}",
-                    pub_prefix,
+                    "{}: {} -> Type = {}",
                     name,
                     format_signature_params(signature_params, ctx, source_map),
                     format_type(definition, ctx, source_map)
@@ -143,48 +138,36 @@ fn format_assign(
     type_annotation: &Option<Type>,
     signature_params: &[Param],
     value: &Option<Box<Expr>>,
-    is_pub: bool,
     is_mut: bool,
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
-    let pub_str = if is_pub {
-        "pub "
-    } else {
-        if is_mut {
-            "mut "
-        } else {
-            ""
-        }
-    };
+    let mut_str = if is_mut { "mut " } else { "" };
     let target_str = format_expr(target, ctx, source_map);
 
-    let lambda_params: &[Param] = match value.as_ref().map(|v| v.as_ref()) {
-        Some(Expr::Lambda { params, .. }) => params,
-        _ => &[],
-    };
-    let type_str = format_type_annotation(
-        type_annotation,
-        signature_params,
-        lambda_params,
-        ctx,
-        source_map,
-    );
+    let type_str = format_type_annotation(type_annotation, signature_params, ctx, source_map);
 
     if let Some(val) = value {
         let val_str = match val.as_ref() {
-            // Lambda value: 函数定义
+            // Lambda value: 函数定义。零参分叉：
+            // 有 Fn 标注 → `= { body }` 规范形——parser 会把标注 Fn 的块值包成
+            //   零参 Lambda，`main: () -> Void = { ... }` 与 `() => { ... }` 收敛于
+            //   同一 AST，输出必须取规范形；
+            // 无标注 → 恒保留 `() =>` 前缀——落成块值后不可调用
+            //   （`f = () => 42` 物化成 `f = { 42 }` 后 f() 报 E1065，#424 探针）。
             Expr::Lambda { params, body, .. } => {
                 if params.is_empty() {
-                    // 空参数: name = { body }（不加 () =>）
-                    format_lambda_body(body, type_annotation.is_some(), ctx, source_map)
+                    if type_annotation.is_some() {
+                        format_zero_param_body(body, ctx, source_map)
+                    } else {
+                        format!("() => {}", format_lambda_body(body, ctx, source_map))
+                    }
                 } else {
-                    // 有参数: name = (params) => { body }
                     let params_str = format_params(params, ctx, source_map);
                     format!(
                         "{} => {}",
                         params_str,
-                        format_lambda_body(body, type_annotation.is_some(), ctx, source_map)
+                        format_lambda_body(body, ctx, source_map)
                     )
                 }
             }
@@ -193,53 +176,71 @@ fn format_assign(
             // 其他表达式
             other => format_expr(other, ctx, source_map),
         };
-        format!("{}{}{} = {}", pub_str, target_str, type_str, val_str)
+        format!("{}{}{} = {}", mut_str, target_str, type_str, val_str)
     } else {
-        format!("{}{}{}", pub_str, target_str, type_str)
+        format!("{}{}{}", mut_str, target_str, type_str)
     }
 }
 
-/// 格式化 Lambda 函数体：单条 Return 语句去掉 return 关键字
+/// 格式化 Lambda 函数体：单条 Return 语句去掉 return 关键字（§12.1，#424）
 ///
-/// 有类型标注时输出 `=> expr`（与无标注一致，确保 re-parse 后类型不变）；
-/// 无类型标注时输出 `{ expr }`（保留块语义，避免歧义）。
+/// 裸 body `=> expr` 由 parser 包成 `Block[Return(expr)]`（pratt/led.rs 的语法糖），
+/// 带花括号的 body 其尾表达式是 `Expr` 语句——因此单条 `Return` ⇔ 源码裸 body，
+/// 恒输出裸表达式，re-parse 后 AST 不变。
 fn format_lambda_body(
     body: &Block,
-    has_type_annotation: bool,
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
+    if let Some(expr) = single_return_expr(body) {
+        return format_expr(expr, ctx, source_map);
+    }
+    format_block(body, ctx, source_map)
+}
+
+/// 零参 Lambda 在有 Fn 标注时的规范形：`= { body }`（不加 `() =>` 前缀）
+///
+/// parser 会把标注 Fn 的块值包成零参 Lambda，两种源码形态收敛于同一 AST，
+/// 输出取 `= { body }` 规范形；单条 Return 仍去 return 关键字
+/// （与 format_lambda_body 同一归一化）。
+fn format_zero_param_body(
+    body: &Block,
+    ctx: &FormatContext,
+    source_map: &SourceMap,
+) -> String {
+    if let Some(expr) = single_return_expr(body) {
+        return format!("{{ {} }}", format_expr(expr, ctx, source_map));
+    }
+    format_block(body, ctx, source_map)
+}
+
+/// 单语句块若恰为一条 `return expr`，返回该表达式
+fn single_return_expr(body: &Block) -> Option<&Expr> {
     if body.stmts.len() == 1 {
         if let Stmt {
             kind: StmtKind::Return(Some(expr)),
             ..
         } = &body.stmts[0]
         {
-            if has_type_annotation {
-                return format_expr(expr, ctx, source_map);
-            } else {
-                return format!("{{ {} }}", format_expr(expr, ctx, source_map));
-            }
+            return Some(expr.as_ref());
         }
     }
-    format_block(body, ctx, source_map)
+    None
 }
 
 /// 格式化类型标注字符串（含冒号前缀）
 ///
-/// Fn 类型走 format_fn_signature，用 value_params 补全内层参数名；
-/// 其他类型直接 format_type。无标注返回空串。
+/// Fn 类型走 format_fn_signature；其他类型直接 format_type。无标注返回空串。
 fn format_type_annotation(
     type_annotation: &Option<Type>,
     signature_params: &[Param],
-    value_params: &[Param],
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
     match type_annotation {
         Some(ty) if matches!(ty, Type::Fn { .. }) => format!(
             ": {}",
-            super::expr::format_fn_signature(signature_params, ty, value_params, ctx, source_map)
+            super::expr::format_fn_signature(signature_params, ty, ctx, source_map)
         ),
         Some(ty) => format!(": {}", format_type(ty, ctx, source_map)),
         None => String::new(),

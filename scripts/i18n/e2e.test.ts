@@ -26,7 +26,7 @@ describe('E2E: Translation workflow', () => {
     // 第一次翻译：所有 key 都需要翻译
     const cachePath = path.join(tmpDir, '.i18n-cache.json');
     let cache = loadCache(cachePath);
-    const keysToTranslate = getKeysToTranslate(source, cache, 'en');
+    const { translate: keysToTranslate } = getKeysToTranslate(source, cache, 'en');
     expect(keysToTranslate).toEqual(['cmd_received', 'run_file']);
 
     // 模拟翻译结果
@@ -45,7 +45,7 @@ describe('E2E: Translation workflow', () => {
 
     // 第二次翻译：没有 key 需要翻译
     cache = loadCache(cachePath);
-    const keysToTranslate2 = getKeysToTranslate(source, cache, 'en');
+    const { translate: keysToTranslate2 } = getKeysToTranslate(source, cache, 'en');
     expect(keysToTranslate2).toEqual([]);
 
     // 修改源文件
@@ -55,8 +55,37 @@ describe('E2E: Translation workflow', () => {
     };
 
     // 第三次翻译：只有修改的 key 需要翻译
-    const keysToTranslate3 = getKeysToTranslate(source2, cache, 'en');
+    const { translate: keysToTranslate3 } = getKeysToTranslate(source2, cache, 'en');
     expect(keysToTranslate3).toEqual(['cmd_received']);
+  });
+
+  // #421：缓存冷启动 + 目标已有译文 → 收养进缓存而非重译，产物零改写
+  it('should adopt existing translations on cold cache', () => {
+    const source = {
+      cmd_received: '收到命令',
+      run_file: '运行文件'
+    };
+
+    // 目标文件已有上一轮产物；缓存丢失（冷启动）
+    const target: localesAdapter.LocaleJson = {
+      _meta: { lang: 'en' },
+      cmd_received: 'Command received',
+      run_file: 'Run file'
+    };
+    const cache = loadCache(path.join(os.tmpdir(), 'nonexistent-i18n-cache'));
+
+    const { translate, adopt } = getKeysToTranslate(
+      source,
+      cache,
+      'en',
+      localesAdapter.extractKeys(target)
+    );
+    expect(adopt).toEqual(['cmd_received', 'run_file']);
+    expect(translate).toEqual([]);
+
+    // 收养 = 只登记 hash，译文不动
+    cache['cmd_received:en'] = 'adopted';
+    expect(target.cmd_received).toBe('Command received');
   });
 
   it('should handle incremental translation for diagnostic', () => {
@@ -78,7 +107,7 @@ describe('E2E: Translation workflow', () => {
     });
 
     // 检查需要翻译的 key
-    const keysToTranslate = getKeysToTranslate(sourceKeys, cache, 'en');
+    const { translate: keysToTranslate } = getKeysToTranslate(sourceKeys, cache, 'en');
     expect(keysToTranslate).toEqual(['E0001.title', 'E0001.template']);
 
     // 模拟翻译
@@ -100,7 +129,7 @@ describe('E2E: Translation workflow', () => {
 
     // 再次检查
     cache = loadCache(cachePath);
-    const keysToTranslate2 = getKeysToTranslate(sourceKeys, cache, 'en');
+    const { translate: keysToTranslate2 } = getKeysToTranslate(sourceKeys, cache, 'en');
     expect(keysToTranslate2).toEqual([]);
   });
 });

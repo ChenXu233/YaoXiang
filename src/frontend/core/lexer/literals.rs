@@ -74,6 +74,39 @@ pub fn scan_number(
 }
 
 /// Scan hexadecimal number
+/// §1.6.1 基数字面量收尾校验：字面量后不得紧跟字母 / 数字 / 下划线。
+///
+/// 非法邻接（如 `0b102`、`0x1FG`、`123abc`）此前被静默拆成两个字面量——
+/// `0b102` 甚至能编译通过并得到错误值 2（拆成 `0b10` + `2` 两个整数 token），
+/// 或留给下游报误导性的「未知变量」（E1001）。统一在词法层拒绝：
+/// 返回 Some(错误 token) 表示违规，None 表示无邻接。
+/// （RFC-039 P1 1.3.1：同一行为不复制 5 处，实现集中于此，调用点各一行。）
+fn reject_trailing_alnum(
+    lexer: &mut super::tokenizer::Lexer<'_>,
+    radix_label: &str,
+    value: &str,
+) -> Option<Token> {
+    if let Some(&c) = lexer.peek() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            // E0002 的 `literal` 参数是 i18n 模板 `'{literal}'` 的唯一填充位，
+            // 只能承载字面量本身的文本——把「哪个进制 / 哪个字符非法」的说明
+            // 混进该参数会让消息出现嵌套引号、并把源码注释漏进全部语言（实测
+            // 连 -L en 也是中文）。参数取「已扫描的 value + 触发拒绝的那个字符」：
+            // 单字符后缀即用户写下的完整非法字面量（0b12 / 0x1FG / 0o18），
+            // 多字符后缀时给到首个非法字符为止（123abc → 123a，E0002 只有一个
+            // 参数位，不为此新增参数与六语言模板）。
+            lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
+                format!("{value}{c}"),
+                point(lexer),
+            ));
+            return Some(
+                lexer.make_token(TokenKind::Error(format!("Invalid {radix_label} number"))),
+            );
+        }
+    }
+    None
+}
+
 fn scan_hex_number(
     lexer: &mut super::tokenizer::Lexer<'_>,
     mut value: String,
@@ -120,6 +153,10 @@ fn scan_hex_number(
         } else {
             break;
         }
+    }
+
+    if let Some(err) = reject_trailing_alnum(lexer, "hex", &value) {
+        return Some(err);
     }
 
     if !has_digits {
@@ -208,6 +245,10 @@ fn scan_octal_number(
         }
     }
 
+    if let Some(err) = reject_trailing_alnum(lexer, "octal", &value) {
+        return Some(err);
+    }
+
     if !has_digits {
         lexer.error = Some(crate::frontend::core::lexer::LexError::InvalidNumber(
             "Expected octal digits".to_string(),
@@ -292,6 +333,10 @@ fn scan_binary_number(
         } else {
             break;
         }
+    }
+
+    if let Some(err) = reject_trailing_alnum(lexer, "binary", &value) {
+        return Some(err);
     }
 
     if !has_digits {
@@ -470,6 +515,10 @@ fn scan_decimal_number(
         }
     }
 
+    if let Some(err) = reject_trailing_alnum(lexer, "decimal", &value) {
+        return Some(err);
+    }
+
     let cleaned: String = value.chars().filter(|&c| c != '_').collect();
 
     let num_str = &cleaned;
@@ -604,6 +653,10 @@ pub fn scan_leading_dot(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token
                 point(lexer),
             ));
         }
+    }
+
+    if let Some(err) = reject_trailing_alnum(lexer, "float", &value) {
+        return Some(err);
     }
 
     let cleaned: String = value.chars().filter(|&c| c != '_').collect();

@@ -189,6 +189,10 @@ pub struct AstToIrGenerator {
     anon_function_irs: Vec<FunctionIR>,
     /// NLL 精确释放计划（所有权检查器产出）
     release_plan: HashMap<Span, Vec<String>>,
+    /// D41/2.4.4 观测点：release_plan 的 span 键在生成期被实际消费的集合。
+    /// 「ownership 产出 ⊆ IR 构造消费」契约的判据数据出口
+    ///（test_release_plan_spans_consumed；P4 的 D20 PlanId 迁移同样依赖本观测）。
+    release_plan_consumed: std::collections::HashSet<Span>,
     /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
     /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
     pending_env_vars: Vec<Operand>,
@@ -209,6 +213,13 @@ pub struct AstToIrGenerator {
     registry: ModuleRegistry,
     /// 本文件的模块限定键（多文件模式 Some → 启用限定；单文件 None → 不限定）。
     module_key: Option<String>,
+    /// Script/Bin 语义标志（E3023 的开关；3.4.8 ③ 回归修复与 `module_key` 解耦）：
+    /// `true` = Script（无 manifest：顶层语句即程序主体、顶层同名重绑定后者生效）；
+    /// `false` = Bin（顶层只允许定义，可执行语句报 E3023）。默认跟随 `module_key`
+    ///（None = Script）；调用方用 [`Self::with_script_mode`] 覆盖——rootless check
+    /// 需要「按单元键限定名 + Script 语义」这一组合：限定名是 Linking 合并无冲突的
+    /// 前提，Script 语义是 standalone 的对外契约。
+    script_mode: bool,
     /// RFC-011a §6: 存在类型包装点（span → 接口名），来自 typecheck 强制点收集。
     /// generate_expr_ir 入口查表命中 → 值生成后包 CreateVariant。
     existential_wraps: HashMap<Span, String>,
@@ -312,6 +323,9 @@ impl AstToIrGenerator {
         registry: ModuleRegistry,
         module_key: Option<String>,
     ) -> Self {
+        // Script/Bin 语义默认跟随 module_key（None = Script）；调用方可用
+        // `with_script_mode` 覆盖（3.4.8 ③：与限定名键解耦）。
+        let script_mode = module_key.is_none();
         Self {
             symbols: vec![HashMap::new()],
             type_result: Some(Box::new(type_result.clone())),
@@ -339,6 +353,7 @@ impl AstToIrGenerator {
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             release_plan: type_result.release_plan.drops.clone(),
+            release_plan_consumed: std::collections::HashSet::new(),
             pending_env_vars: Vec::new(),
             pending_env_names: Vec::new(),
             closure_captures: HashMap::new(),
@@ -346,6 +361,7 @@ impl AstToIrGenerator {
             use_aliases: HashMap::new(),
             registry,
             module_key,
+            script_mode,
             existential_wraps: type_result
                 .existential_coercions
                 .iter()
@@ -401,6 +417,20 @@ impl AstToIrGenerator {
             cur_span: Span::dummy(),
             cur_locals: Vec::new(),
         }
+    }
+
+    /// 覆盖 Script/Bin 语义标志（默认跟随构造时的 `module_key`：None = Script）。
+    ///
+    /// 3.4.8 ③ 回归修复：`module_key` 此前**一职两用**——既决定是否限定名
+    /// （`qualify_names`），又派生 Script/Bin 语义（E3023 开关）。解耦后，无项目根
+    /// 的 standalone check 可以既按单元键限定名字（否则 Linking 合并把跨单元同名
+    /// 函数判成「模块限定名冲突」），又保持 Script 语义（顶层语句即程序主体）。
+    pub fn with_script_mode(
+        mut self,
+        script_mode: bool,
+    ) -> Self {
+        self.script_mode = script_mode;
+        self
     }
 
     /// 当前文件的模块限定键（单文件模式默认 `main`，与 TypeChecker 一致）。
@@ -938,6 +968,14 @@ impl AstToIrGenerator {
     }
 
     /// 从 AST 模块生成 IR 模块
+    /// D41/2.4.4 判据数据出口：生成期实际消费的 `release_plan` span 键集合。
+    ///
+    /// 供 `test_release_plan_spans_consumed` 与 P4 的 D20（PlanId 迁移）观测——
+    /// 与 `typecheck::TypeCheckResult.release_plan.drops` 的键集做差集比对。
+    pub fn release_plan_consumed_spans(&self) -> &std::collections::HashSet<Span> {
+        &self.release_plan_consumed
+    }
+
     pub fn generate_module_ir(
         &mut self,
         module: &ast::Module,
@@ -963,6 +1001,26 @@ impl AstToIrGenerator {
                 Ok(None) => {}
                 Err(e) => errors.push(e),
             }
+        }
+
+        // Script 模式：顶层同名重绑定 = **后者生效**——被遮蔽的前一个定义从函数表
+        // 里去掉。语义依据是单文件扁平函数表的按序插入（后者覆盖前者）：
+        // `f: () -> Int = () => 1 / f = () => 2 / print(f())` 实测输出 2。
+        // 留着两份同名定义会让 Linking 的合并校验把「同一模块内的重绑定」误报成
+        // 「模块限定名冲突（同一路径 ×2）」并打红整个 check（3.4.8 ③ 回归，文档
+        // 示例门禁 10 项）。只在 `script_mode` 下做：Bin 形态的顶层重声明不在本
+        // 修复面（其合并校验现状保留），项目形态的 IR 不受影响。
+        if self.script_mode && functions.len() > 1 {
+            let mut last_index: HashMap<String, usize> = HashMap::new();
+            for (idx, func) in functions.iter().enumerate() {
+                last_index.insert(func.name.clone(), idx);
+            }
+            let mut idx = 0usize;
+            functions.retain(|func| {
+                let keep = last_index.get(&func.name) == Some(&idx);
+                idx += 1;
+                keep
+            });
         }
 
         if !errors.is_empty() {
@@ -1027,8 +1085,13 @@ impl AstToIrGenerator {
             source_files: Vec::new(),
             function_files: HashMap::new(),
         };
-        // RFC-029: 多文件模式下限定本文件的顶层函数名与调用引用。
-        // 单文件（module_key 为 None）不限定，保持原有行为。
+        // RFC-029: 有模块键时限定本文件的顶层函数名与调用引用（定义键、调用名
+        // 与 typecheck 的实例化请求名三者同源为 `{module_key}.{name}`）；
+        // `module_key` 为 None（单文件管线/无项目根 standalone）时不限定——
+        // 但 3.4.8 ③ 起「不限定」只发生在**单单元**程序上：多单元形态由调用方
+        // 传单元键（见 `with_script_mode` 的注释），否则合并时跨单元同名函数会
+        // 被判成「模块限定名冲突」。Script/Bin 语义与限定名开关已解耦，本闸门
+        // 只看 `module_key`。
         if let Some(key) = &self.module_key {
             let aliases = self.build_import_aliases(module);
             Self::qualify_names(&mut ir, key, &aliases);
@@ -1050,10 +1113,12 @@ impl AstToIrGenerator {
         &self,
         ir: &mut ModuleIR,
     ) {
-        let single_file = self.module_key.is_none();
+        // intern 规则跟随**限定名开关**（不是 Script/Bin 语义）：未限定名的
+        // 程序用 `main.` 前缀兜底，与 `module_key_or_main` 一致。
+        let unqualified_names = self.module_key.is_none();
         let mut symbols = self.registry.symbols_mut();
         for func in &mut ir.functions {
-            let intern_name = if single_file {
+            let intern_name = if unqualified_names {
                 SymbolTable::qualify("main", &func.name)
             } else {
                 func.name.clone()
@@ -1065,37 +1130,59 @@ impl AstToIrGenerator {
             };
             func.def = Some(symbols.intern_full(&intern_name, kind));
         }
-        // 解析静态引用：先直查（多文件限定名 / std 原生），单文件裸名回退 qualify("main", ·)。
-        // 所有函数已 intern 完毕，前向引用在此必然可解。
+        // 解析静态引用：先直查（限定名 / std 原生），未限定名的程序裸名回退
+        // qualify("main", ·)。所有函数已 intern 完毕，前向引用在此必然可解。
         let resolve = |name: &str| {
             symbols.def(name).or_else(|| {
-                if single_file {
+                if unqualified_names {
                     symbols.def(&SymbolTable::qualify("main", name))
                 } else {
                     None
                 }
             })
         };
+        // 函数体：逐指令解析静态调用目标。
         for func in &mut ir.functions {
             if func.is_type_decl() {
                 continue; // TypeDecl 无指令体
             }
             for block in func.blocks_mut() {
                 for instr in &mut block.instructions {
-                    match instr {
-                        Instruction::Call { func, def, .. }
-                        | Instruction::TailCall { func, def, .. } => {
-                            if let Operand::Const(ConstValue::String(name)) = func {
-                                *def = resolve(name);
-                            }
-                        }
-                        Instruction::MakeClosure { func, def, .. } => {
-                            *def = resolve(func);
-                        }
-                        _ => {}
-                    }
+                    Self::resolve_static_targets(instr, &resolve);
                 }
             }
+        }
+        // 模块顶层初始化序列：与函数体**同一套解析规则**（2026-10-11 裁甲）。
+        //
+        // 此前 init 段被有意跳过，于是同一张扁平函数表出现两套身份口径：函数体
+        // 走 DefId，init 段恒 None 只能按名回退。名字与 def 在 codegen 里指向同一
+        // 个函数表下标（名字由 `qualify_names` 与函数定义同源改写），故本改动
+        // 不改变翻译结果，只消除「def 是否为空」的口径分叉——将来任何假设
+        // 「def 恒有值」的 IR pass 不会在 init 段踩空。
+        for instr in &mut ir.init {
+            Self::resolve_static_targets(instr, &resolve);
+        }
+    }
+
+    /// 解析单条指令里的静态调用目标 DefId：`Call`/`TailCall` 的字符串操作数、
+    /// `MakeClosure` 的目标名，其余指令不动。
+    ///
+    /// 函数体与模块初始化序列**共用本实现**（禁令三：一处生产、一处消费）——
+    /// 两处若各写一套映射，正是 t12 要消除的口径分叉。
+    fn resolve_static_targets(
+        instr: &mut Instruction,
+        resolve: &impl Fn(&str) -> Option<crate::frontend::module::symbol::DefId>,
+    ) {
+        match instr {
+            Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {
+                if let Operand::Const(ConstValue::String(name)) = func {
+                    *def = resolve(name);
+                }
+            }
+            Instruction::MakeClosure { func, def, .. } => {
+                *def = resolve(func);
+            }
+            _ => {}
         }
     }
 
@@ -1106,6 +1193,23 @@ impl AstToIrGenerator {
         &self,
         module: &ast::Module,
     ) -> HashMap<String, String> {
+        Self::import_aliases_from(module, &self.registry)
+    }
+
+    /// `use` 导入别名表（本地调用名 → 限定名）的**唯一生产实现**（t10）。
+    ///
+    /// 为什么抽成 pub 关联函数：驱动侧聚合实例化请求时要把 typecheck 的裸名请求
+    /// 对齐成 IR 调用指令里的名字，而那个名字正是由本表在 `qualify_names` 里
+    /// 改写出来的——两边必须**同源**。抽出来后驱动直接调它（传单元 AST 与同一
+    /// registry），不再另建平行表、也不复刻解析规则（禁令三：一处生产、一处消费）。
+    ///
+    /// 规则（原实现逐字迁移）：只登记 `use path.{item}` 的**项**形态（含 #245 内联
+    /// 别名），且仅对 Function/Constant/Type 类导出——#244：类型也限定，构造调用
+    /// `Point(...)` 与方法调用 `Point.get_x` 都要把本地短名别名到源模块限定名才能解析。
+    pub fn import_aliases_from(
+        module: &ast::Module,
+        registry: &crate::frontend::module::registry::ModuleRegistry,
+    ) -> HashMap<String, String> {
         let mut aliases = HashMap::new();
         for stmt in &module.items {
             if let ast::StmtKind::Use {
@@ -1115,15 +1219,13 @@ impl AstToIrGenerator {
                 ..
             } = &stmt.kind
             {
-                let Some(exports) = self.registry.get_exports(path) else {
+                let Some(exports) = registry.get_exports(path) else {
                     continue;
                 };
                 if let Some(names) = items {
                     // 本地名：内联别名（#245）> 原名
-                    for (i, name) in names.iter().enumerate() {
-                        if let Some(export) = exports.get(name) {
-                            // #244：类型也限定——构造调用 `Point(...)` 与方法调用 `Point.get_x`
-                            // 都需把本地短名别名到源模块限定名才能解析。
+                    for (i, item) in names.iter().enumerate() {
+                        if let Some(export) = exports.get(&item.name) {
                             if matches!(
                                 export.kind,
                                 ExportKind::Function | ExportKind::Constant | ExportKind::Type
@@ -1132,7 +1234,8 @@ impl AstToIrGenerator {
                                     .as_ref()
                                     .and_then(|v| v.get(i))
                                     .and_then(|a| a.as_ref())
-                                    .unwrap_or(name);
+                                    .map(|a| &a.name)
+                                    .unwrap_or(&item.name);
                                 aliases.insert(local_name.clone(), export.full_path.clone());
                             }
                         }
@@ -1144,7 +1247,9 @@ impl AstToIrGenerator {
     }
 
     /// RFC-029 限定名：把本文件 IR 里的顶层函数名重写为 `{module_key}.{name}`，
-    /// 并把函数体里对这些函数与导入函数的调用/闭包引用一并重写。
+    /// 并把**函数体与模块顶层初始化序列**里对这些函数与导入函数的调用/闭包
+    /// 引用一并重写（init 段见 t3 F1——漏掉它就出现「定义已限定、调用仍裸名」
+    /// 的不自洽 IR，运行期 E6006）。
     ///
     /// module=record 语义：`a.helper` 与 `b.helper` 是两个 record 的不同字段，本就不冲突；
     /// 解释器函数表是扁平 name→func，故用限定名作键使其共存。限定名统一经
@@ -1203,32 +1308,63 @@ impl AstToIrGenerator {
                 }
             }
         }
+
+        // 模块顶层初始化序列（`ir.init`）走**同一张 rename/aliases 表与同一
+        // `rewrite_call_names`**（t3 F1）：此前只重写函数体，init 里对本文件
+        // 顶层函数的调用名保持裸名，而函数定义已被限定——运行期按裸名查扁平
+        // 函数表落空（E6006）。这与泛型无关，是既有的多文件正确性漏洞。
+        for instr in &mut ir.init {
+            Self::rewrite_call_names(instr, &rename, aliases);
+        }
+    }
+
+    /// **调用名解析的单点实现**：把一个调用名解析成 IR 函数表里的最终名字。
+    ///
+    /// 解析顺序：完全匹配 rename（本文件函数）→ 完全匹配 aliases（导入函数）→
+    /// 前缀匹配（方法调用 `Point.get_x` 经 `Point` 的 rename/alias 限定为
+    /// `lib.Point.get_x`）。
+    ///
+    /// 为什么单独成一个 pub 函数：驱动侧要把 typecheck 的实例化请求名对齐到
+    /// 「IR 调用指令里的名字」，而这正是本函数给出的结果。请求名与指令名只要
+    /// 有一处用了别的规则，就会一边限定、一边裸名——单态化改不到调用点
+    /// （E6006）或误报未限定化（E3018）。故本函数是**唯一**的解析规则所有者：
+    /// `rewrite_call_names` 在 IR 生成期用它改写指令，驱动在聚合期用它对齐请求名。
+    ///
+    /// 驱动侧传入的两张表与生成期同源：`rename` 是**已限定**名字的恒等映射
+    /// （`qualify_names` 之后的函数表），`aliases` 由驱动侧**直调**
+    /// [`Self::import_aliases_from`]`(单元 AST, 同一 registry)` 取得——即
+    /// `qualify_names` 改写调用名所用的同一个实现，不是驱动侧另建的表。
+    /// 细节见 `driver::helpers::aggregate_instantiation_requests` 的注释。
+    pub fn resolve_call_target(
+        name: &str,
+        rename: &HashMap<String, String>,
+        aliases: &HashMap<String, String>,
+    ) -> Option<String> {
+        rename
+            .get(name)
+            .cloned()
+            .or_else(|| aliases.get(name).cloned())
+            .or_else(|| {
+                let dot_pos = name.find('.')?;
+                let prefix = &name[..dot_pos];
+                let suffix = &name[dot_pos..]; // 含点
+                rename
+                    .get(prefix)
+                    .or_else(|| aliases.get(prefix))
+                    .map(|q| format!("{}{}", q, suffix))
+            })
     }
 
     /// 重写单条指令里的函数名引用（Call/TailCall 的字符串 func、MakeClosure 的 func）。
     ///
-    /// 解析顺序：完全匹配 rename（本文件函数）→ 完全匹配 aliases（导入函数）→
-    /// 前缀匹配（方法调用 `Point.get_x` 经 `Point` 的 rename/alias 限定为 `lib.Point.get_x`）。
+    /// 解析规则见 [`Self::resolve_call_target`]（单点实现）。
     fn rewrite_call_names(
         instr: &mut Instruction,
         rename: &HashMap<String, String>,
         aliases: &HashMap<String, String>,
     ) {
-        let resolve = |name: &str| -> Option<String> {
-            rename
-                .get(name)
-                .cloned()
-                .or_else(|| aliases.get(name).cloned())
-                .or_else(|| {
-                    let dot_pos = name.find('.')?;
-                    let prefix = &name[..dot_pos];
-                    let suffix = &name[dot_pos..]; // 含点
-                    rename
-                        .get(prefix)
-                        .or_else(|| aliases.get(prefix))
-                        .map(|q| format!("{}{}", q, suffix))
-                })
-        };
+        let resolve =
+            |name: &str| -> Option<String> { Self::resolve_call_target(name, rename, aliases) };
         match instr {
             Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
                 if let Operand::Const(ConstValue::String(name)) = func {
@@ -1362,7 +1498,6 @@ impl AstToIrGenerator {
                 name,
                 signature_params,
                 definition,
-                is_pub: _,
             } => {
                 self.declared_type_names.insert(name.clone());
                 use crate::frontend::core::parser::ast::extract_generic_param_names;
@@ -1645,7 +1780,7 @@ impl AstToIrGenerator {
             // 顶层散语句会让「先建什么后建什么」含糊。
             // 注：初始化序列本身也是代码——所以顶层可执行语句不报错，
             // 而是像 Python 一样按序执行。这是「默认情况零门槛」的代价与红利。
-            _ if self.module_key.is_none() => {
+            _ if self.script_mode => {
                 // T4：顶层可执行语句（Script 模式）——先收进 module_stmts，
                 // 待所有绑定初始化（拓扑序）就绪后再拼到后面。
                 //
@@ -1795,7 +1930,13 @@ impl AstToIrGenerator {
         // 退出作用域
         self.exit_scope();
 
-        let locals_types: Vec<LocalSlot> = self.take_cur_locals(param_types.len());
+        // WBS 2.1.2 实测缺陷修复：此前传 param_types.len()，locals 表被截断到
+        // 参数数，方法体的临时槽（高水位之内）全部丢失——local_count 低估，
+        // 运行时靠 Frame::set_slot 越界 resize（frames.rs:103-105）静默容错。
+        // 与 generate_function_ir / generate_lambda_body_ir 对齐：以高水位为准。
+        // 行为等价论证：Frame 预分配槽位初值同为 Void，set_slot 容错路径不再
+        // 触发但结果相同；调试信息 local_names 只取具名槽，不受空槽扩展影响。
+        let locals_types: Vec<LocalSlot> = self.take_cur_locals(self.temp_high_water);
 
         // 构建函数 IR
         let func_ir = FunctionIR {
@@ -1939,7 +2080,9 @@ impl AstToIrGenerator {
             );
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
             // NLL Release: 在语句边界插入 Drop 指令
+            let mut release_hit = false;
             if let Some(vars) = self.release_plan.get(&stmt.span) {
+                release_hit = true;
                 for var in vars {
                     if let Some(local_idx) = self.lookup_local(var) {
                         instructions.push(Instruction::Drop {
@@ -1948,6 +2091,10 @@ impl AstToIrGenerator {
                         });
                     }
                 }
+            }
+            if release_hit {
+                // D41/2.4.4 观测：键被实际消费即入册（借用在上方 if-let 结束后写入）
+                self.release_plan_consumed.insert(stmt.span);
             }
             // #393：语句级临时寄存器回收（同 generate_block_ir——临时不跨
             // 语句存活，回滚到具名水位与循环态地板的较大者）
@@ -2004,10 +2151,11 @@ impl AstToIrGenerator {
         let func_ir = FunctionIR {
             def: None, // 由 generate_module_ir 尾部 assign_defs 填充
             name: name.to_string(),
+            // WBS 2.1.2：无注解参数填 Int(64) 占位，对齐 method 1749 惯例——
+            // filter_map 丢弃会让 params 长度与帧布局错位（verify 实测）
             params: params
                 .iter()
-                .filter_map(|p| p.ty.clone())
-                .map(|t| t.into())
+                .map(|p| p.ty.clone().map(|t| t.into()).unwrap_or(MonoType::Int(64)))
                 .collect(),
             return_type,
             generic_params,
@@ -2069,11 +2217,15 @@ impl AstToIrGenerator {
         });
 
         // 5. 构建 FunctionIR
+        // WBS 2.1.2：同上——无注解参数占位而非丢弃
         let param_types: Vec<MonoType> = layer
             .params
             .iter()
-            .filter_map(|p| p.ty.clone())
-            .map(MonoType::from)
+            .map(|p| {
+                p.ty.clone()
+                    .map(MonoType::from)
+                    .unwrap_or(MonoType::Int(64))
+            })
             .collect();
         let return_type: MonoType = layer.return_type.clone().into();
         let total_locals = self.temp_high_water;
@@ -2167,11 +2319,15 @@ impl AstToIrGenerator {
             });
         }
 
+        // WBS 2.1.2：同上——无注解参数占位而非丢弃
         let param_types: Vec<MonoType> = layer
             .params
             .iter()
-            .filter_map(|p| p.ty.clone())
-            .map(MonoType::from)
+            .map(|p| {
+                p.ty.clone()
+                    .map(MonoType::from)
+                    .unwrap_or(MonoType::Int(64))
+            })
             .collect();
         let total_locals = self.temp_high_water;
         let locals_types: Vec<LocalSlot> = self.take_cur_locals(total_locals);
@@ -5253,6 +5409,19 @@ impl AstToIrGenerator {
         // 绑定进臂专属 scope（遮蔽外层，出臂恢复外层槽位映射——否则后续
         // match 以该名为 scrutinee 会读到从未写入的载荷槽 → 运行时 Void）。
         //
+        // WBS 2.1.2 实测缺陷修复：结果槽先显式预置 Void——末臂守卫失败的
+        // 容错落点（fail_jumps 全跳到 end）此前依赖帧 Void 预初始化（隐式，
+        // frames.rs:55），汇合点读在 CFG 上存在无定义路径（verify_loose 支配性
+        // 判定无法覆盖隐式语义）。显式预置使定义显式化。行为等价：容错路径
+        // 读到的值同为 Void，非容错路径被臂内 Move 覆盖。
+        // （Load 而非 Move：translate_move 的 src 走寄存器解析，Const 会触发
+        // E3017；translate_load 的 Const 臂走 LOAD_CONST 常量表）
+        instructions.push(Instruction::Load {
+            dst: Operand::Local(result_reg),
+            src: Operand::Const(ConstValue::Void),
+            span: match_span,
+        });
+        //
         // 1. 评估 scrutinee（类型信息驱动嵌套模式的载荷/字段/元组类型解析）
         let scrutinee_reg = self.next_temp_reg();
         self.generate_expr_ir(match_expr, scrutinee_reg, instructions, constants)?;
@@ -5760,6 +5929,26 @@ impl AstToIrGenerator {
                 args: vec![Operand::Local(src_reg), Operand::Local(index_reg)],
                 span: *span,
                 def: None,
+            });
+            return Ok(());
+        }
+
+        // #385 定案 D3：String 基底下标脱糖为 StringGetChar——标量值下标、
+        // 产出单字符 String（与 chars()/substring 同表示），越界运行时报
+        // E6003。其余容器走 LoadIndex。
+        let base_is_string = self.get_expr_mono_type(expr).is_some_and(|t| {
+            let mut r = t;
+            while let MonoType::Ref { inner, .. } = r {
+                r = *inner;
+            }
+            r.is_string()
+        });
+        if base_is_string {
+            instructions.push(Instruction::StringGetChar {
+                dst: Operand::Local(result_reg),
+                src: Operand::Local(src_reg),
+                index: Operand::Local(index_reg),
+                span: *span,
             });
             return Ok(());
         }
@@ -6621,10 +6810,12 @@ impl AstToIrGenerator {
         self.closure_captures.clear();
 
         // 6. 创建闭包函数 IR
+        // WBS 2.1.2 实测缺陷修复：无注解参数此前被 filter_map 丢弃，
+        // params 长度与帧布局错位（参数槽仍在 env_count+i 占位，元数据却空）。
+        // 对齐 generate_method_ir:1749 惯例：无注解参数填 Int(64) 占位。
         let param_types: Vec<MonoType> = params
             .iter()
-            .filter_map(|p| p.ty.clone())
-            .map(|t| t.into())
+            .map(|p| p.ty.clone().map(|t| t.into()).unwrap_or(MonoType::Int(64)))
             .collect();
 
         let closure_func = FunctionIR {

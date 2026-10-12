@@ -22,14 +22,14 @@ YaoXiang 源文件必须使用 UTF-8 编码。源文件通常以 `.yx` 为扩展
 
 ### 1.3 关键字
 
-YaoXiang 共有 **18 个关键字**（`src/frontend/core/lexer/state.rs:25-55` 的
+YaoXiang 共有 **17 个关键字**（`src/frontend/core/lexer/state.rs` 的
 `keyword_from_str`，逐个对应一个 `TokenKind`）：
 
 ```
-pub     use     spawn  ref     mut
-if      else    match  while   for
-in      return  break  continue
-as      unsafe  and    or
+use     spawn   ref     mut
+if      else    match   while   for
+in      return  break   continue
+as      unsafe  and     or
 ```
 
 `and` / `or` 是逻辑与 / 或的**关键字**（Zig 式，优先级见 §2.2 第 10 级）；
@@ -38,18 +38,15 @@ as      unsafe  and    or
 这些关键字在任何上下文中都具有特殊含义，不能用作标识符。
 
 > **`type` 已经不是关键字**（RFC-010）：写类型定义用 `Name: Type = { ... }` 记法。
-> `src/frontend/core/lexer/state.rs:27` 明确注释了这一点，`TokenKind` 枚举头
-> （`src/frontend/core/lexer/tokens.rs:82`）也写着 “16 total - RFC-010: 'type' keyword
-> removed”——**那个 16 是过期注释**，实际已列 18 个（含 `and` / `or`，而 `Kw*` 前缀
-> 那批仍是 16 个）。
+> `keyword_from_str` 与 `TokenKind` 枚举头（`src/frontend/core/lexer/tokens.rs`）
+> 都标注了 “RFC-010: 'type' keyword removed”。
 >
-> **`pub` 不产生可见性效果**：`pub` 仍被词法层识别为 `KwPub`
-> （`src/frontend/core/lexer/state.rs:28`），解析器在声明与导入项处跳过它
-> （`src/frontend/core/parser/statements/declarations.rs:666-671,726`、
-> `.../imports.rs:57-59`），但模块系统**不据此做任何可见性判定**——已接受的
-> [RFC-029](../../design/rfc/accepted/029-module-semantics.md) 明确
-> “没有 `pub`、没有 `private`、没有 `export`，没有可见性机制”（该文件第 17 行）。
-> 写不写 `pub` 对可见性没有区别。
+> **`pub` 已经不是关键字**（RFC-029g，2026-10-02 接受）：语言不设可见性机制，
+> `pub` 已从词法、AST、类型检查、死码豁免、格式化器与 LSP 中整体删除
+> （[RFC-029g](../../rfc/accepted/029g-remove-pub-and-auto-bind.md)）。它现在只是
+> 普通标识符——旧写法 `pub x = 1` 会按未定义名报 E1001。
+> 所有顶层绑定默认可导入，修饰符对可见性没有区别
+> （[RFC-029](../../rfc/accepted/029-module-semantics.md)）。
 
 ### 1.4 保留字
 
@@ -290,6 +287,13 @@ add(3, b = 5)      // 混用，位置在前
 命名实参写错名字报 **E1014**，同一形参被位置与命名同时指定报 **E1015**，个数不符报
 **E1010**（RFC-013）。
 
+**无名参数与命名实参**：签名参数位允许裸类型形态（`mk: (Int, Int) -> Int`），它是**未命名
+带型参数**——类型约束按位置生效，名字属于实现（lambda 头自带，见
+[RFC-007](../../rfc/accepted/007-function-syntax-unification.md) 简写规则），不进契约。无名
+参数不可被命名实参引用（没有名字可引用），只能按位置传递；名字进契约的写法是
+`mk: (a: Int, b: Int) -> Int`。裸标识符必须是已声明的类型，解析不到类型报错（见
+[type-system §3.5](type-system.md#35-函数类型)）。
+
 ### 2.4 成员访问
 
 ```
@@ -349,7 +353,7 @@ Block       ::= '{' Stmt* Expr? '}'
 ```
 
 > **语句终止规则**：Stmt 之间的分隔与换行行为（`;` 显式分隔、换行终止、续行例外、行首 `(`/`[`
-> 永不合并）由 [RFC-038](../../design/rfc/accepted/038-statement-termination.md) 定义。
+> 永不合并）由 [RFC-038](../../rfc/accepted/038-statement-termination.md) 定义。
 
 #### 2.9.1 `{` 的三种形态
 
@@ -374,7 +378,7 @@ Block       ::= '{' Stmt* Expr? '}'
 >
 > **为何函数需要注解**：`f = { stmt }`
 > 是**值**（尾表达式类型），不是函数。要定义函数就写明 Fn 注解：`f: () -> Int = { 5 }`。这与字典同一原则：**类型由内容决定**，不由注解存在与否决定。（此规则见
-> [RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md) 附录 D。）
+> [RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md) 附录 D。）
 
 **统一语义**：所有 `{}` 块的值均由**尾表达式**给出，`return` 是 `Never` 型的非局部退出。
 
@@ -384,12 +388,13 @@ Block       ::= '{' Stmt* Expr? '}'
 | `unsafe {}` | 尾表达式 | `Void`    |
 | `spawn {}`  | 尾表达式 | `Void`    |
 
-**核心原则**（详见 [RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md)）：
+**核心原则**（详见 [RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md)）：
 
 - **块的值 = 尾表达式**（最后一个表达式），唯一出口，无例外
 - 末位为**赋值语句**时块值为 `Void`；想要 `Void` 就显式写 `Void`
 - **`return` 退出最近的函数边界**（穿出一切块，不「返回给块」），类型 `Never`；`Never <: T`
-  对任意类型成立（爆炸原理），故可出现在任何返回类型的位置
+  对任意类型成立（爆炸原理），故可出现在任何返回类型的位置。模块初始化层（Script 顶层）
+  没有函数边界，`return` 在此编译期拒绝（`E1109`，见 §3.11）
 - 表达式形式 `= expr` 直接给出值
 
 ```yaoxiang
@@ -606,7 +611,7 @@ add: (a: Int, b: Int) -> Int = {
 - `mut x = value`：显式新可变声明，禁止与外层同名
 - 同作用域内任何名字只能声明一次
 
-> **详细定义**：作用域的完整规则、变量声明和遮蔽机制详见 [模块系统规范](./modules.md#第四章作用域)。
+> **详细定义**：作用域的完整规则、变量声明和遮蔽机制详见 [模块系统规范](modules.md#第四章作用域)。
 
 ---
 
@@ -643,13 +648,13 @@ ReturnStmt  ::= 'return' Expr?
 / `match` / 裸块 / `spawn` / `unsafe`），把值交给调用者。它**不「返回给块」**。
 
 **类型**：`return e : Never`（`e : T`）。`Never <: T'` 对任意 `T'` 成立（爆炸原理，见
-[类型系统 §2.2](./type-system.md)），故 `return` 可出现在任何返回类型的位置，无需额外规则约束。
+[类型系统 §2.2](type-system.md)），故 `return` 可出现在任何返回类型的位置，无需额外规则约束。
 
 **与块求值的关系**：块的值恒为**尾表达式**（见 §2.9）。`{ return n }` 作为块，其值是 `n`，类型
 `Never`；同时 `return` 的作用是退出函数。**两件事同时成立**，靠爆炸原理共存。
 
 `return` 与尾表达式共同使「提前返回」成立，无需 `return` 特指函数的额外规则——见
-[RFC-010a](../../design/rfc/accepted/010a-tail-expression-and-return.md)。
+[RFC-010a](../../rfc/accepted/010a-tail-expression-and-return.md)。
 
 ```yaoxiang
 factorial: (n: Int) -> Int = {
@@ -675,7 +680,7 @@ BreakStmt   ::= 'break'
   循环体内（含体内嵌套的块/if/match），出现在循环外编译报错（E1102 `'break' outside of a loop`）
 - **不影响终止性证明**：`break`
   不参与终止性论证——它既不提供测度，也不构成测度的递减步骤；循环的终止义务与 `break`
-  无关，由精化类型触发（见 [type-system §8.4](./type-system.md#84-terminates终止测度谓词)）。
+  无关，由精化类型触发（见 [type-system §8.4](type-system.md#84-terminates终止测度谓词)）。
 - **借用语义**：break 的控制流边参与 RFC-009a 反向 BFS 活性分析的结构性切断（跳出的迭代不参与回边活性推导）
 
 ```yaoxiang
@@ -810,7 +815,7 @@ for j in 1..5 {
 }
 ```
 
-此规则适用于所有代码块，详见 [4.3 遮蔽规则](./modules.md#43-遮蔽规则)。
+此规则适用于所有代码块，详见 [4.3 遮蔽规则](modules.md#43-遮蔽规则)。
 
 #### 3.9.4 与其他语言的对比
 
@@ -889,7 +894,7 @@ result = spawn {
 
 #### Script：顶层语句即程序
 
-无 manifest 时文件是一个「脚本」，**顶层语句按书写顺序执行**：
+无 manifest 时文件是一个「脚本」，**顶层语句按书写顺序执行**（顶层**绑定初始化**整体先行，见下文「[顶层绑定的初始化](#顶层绑定的初始化)」）：
 
 ```yaoxiang
 use std.io
@@ -909,6 +914,10 @@ main()                       // ← 必须写这一行
 
 > **为何不自动调用 `main`？** 顶层语句已经是程序主体。若再隐式调用 `main`，显式写了 `main()`
 > 的脚本会执行两次。两种规则不能共存，故 Script 下只有「顶层语句」一个执行入口。
+
+顶层同样**不得使用 `return`**：Script 顶层是模块初始化层，没有函数边界可退（RFC-010a
+规则②），编译期报 `E1109`——而不是运行期静默终止初始化、跳过其余顶层语句。要提前
+结束一段顶层逻辑，把它收进函数、在调用点控制。
 
 #### Bin：`main` 是入口
 
@@ -946,11 +955,19 @@ inc: (Int) -> Int = (x) => x + 1
 computed: Int = inc(41)           // 函数调用
 ```
 
-初始化按**依赖顺序**执行，与书写顺序无关：
+初始化按**依赖顺序**执行，与书写顺序无关（被依赖者先初始化；无依赖的绑定按声明序）：
 
 ```yaoxiang
 derived: Int = base * 3           // 引用后声明的 base
 base: Int = 7                     // 先初始化（拓扑排序）
+```
+
+且**全部绑定初始化先于顶层语句执行**——绑定初始化器里的副作用发生在任何顶层语句之前，与二者的书写交错无关：
+
+```yaoxiang
+print("a")                        // 后执行
+x = { print("b") }                // 先执行（绑定初始化整体先行）
+print("c")                        // 输出顺序：b、a、c
 ```
 
 循环依赖是编译错误（会列出环上的名字）：
@@ -966,17 +983,17 @@ b: Int = a + 1                    // 错误：a → b → a
 
 ## 附录：语法速查
 
-### A.0 关键字（18 个）
+### A.0 关键字（17 个）
 
 ```
-pub     use     spawn  ref     mut
-if      else    match  while   for
-in      return  break  continue
-as      unsafe  and    or
+use     spawn   ref     mut
+if      else    match   while   for
+in      return  break   continue
+as      unsafe  and     or
 ```
 
-`type` 已不是关键字（RFC-010，改用 `Name: Type = { ... }`）；`pub` 不产生可见性效果
-（RFC-029）。字面量保留字 `true` / `false` / `void` 见 §1.4.1，元类型名 `Type` 与内建
+`type` 已不是关键字（RFC-010，改用 `Name: Type = { ... }`）；`pub` 已随 RFC-029g
+整体删除，退回普通标识符。字面量保留字 `true` / `false` / `void` 见 §1.4.1，元类型名 `Type` 与内建
 类型名 `Void` / `Never` / `Int` / `Float` / `Bool` / `Char` / `String` 见 §1.4.3。
 
 ### A.1 控制流

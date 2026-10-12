@@ -59,8 +59,7 @@ fn log_token(token: &Token) {
 
     let (msg, arg) = match &token.kind {
         TokenKind::Identifier(name) => (MSG::LexTokenIdentifier, name.clone()),
-        TokenKind::KwPub
-        | TokenKind::KwUse
+        TokenKind::KwUse
         | TokenKind::KwSpawn
         | TokenKind::KwRef
         | TokenKind::KwMut
@@ -102,5 +101,4 @@ fn log_token(token: &Token) {
 }
 
 #[cfg(test)]
-#[path = "tests/fstring.rs"]
-mod fstring_tests;
+mod tests;

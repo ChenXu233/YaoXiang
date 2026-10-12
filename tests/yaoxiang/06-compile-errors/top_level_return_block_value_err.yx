@@ -1,0 +1,11 @@
+// 06-compile-errors/top_level_return_block_value_err.yx
+// 覆盖: RFC-010a 规则② —— 块值不是函数边界：顶层绑定值块内的 return 同样无边界可退
+// 验证: 模块初始化层的 return（即使包在块里）编译期拒绝（E1109）
+// 状态: ✅ 可运行
+
+// expect: compile-error E1109
+
+use std.assert
+
+x: Int = { return 5 }
+assert.assert(false, "顶层块值内的 return 应被编译期拒绝")

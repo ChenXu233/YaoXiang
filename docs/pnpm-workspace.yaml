@@ -14,3 +14,10 @@ overrides:
   # 限定 5.x 内升级，避免跨大版本动 vitepress 的构建链
   vite@>=5.4.0 <6.4.3: ^6.4.3
   esbuild@<=0.24.2: ^0.25.0
+  # GHSA-6j4f-fj2g-mc7p / GHSA-qhr7-859c-m2p7 / GHSA-q2hr-2g5m-vwhr：
+  # brace-expansion <5.0.12 的三项 DoS 告警（嵌套花括号递归 / 二次方展开，
+  # 5.0.10、5.0.11、5.0.12 依次修复）。消费链 minimatch@10.2.x ->
+  # brace-expansion。minimatch 声明的范围（^5.0.2 / ^5.0.8）本就容纳
+  # 5.0.12，是入库 lockfile 把解析钉在 5.0.9；此处显式拉平，既修当前解析，
+  # 也防止后续 install 再回退到受害版本。
+  brace-expansion@<5.0.12: ^5.0.12

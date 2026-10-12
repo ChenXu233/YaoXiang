@@ -28,45 +28,43 @@ Holder: Type = {
     opt: Option(Int),
 }
 
-main: () -> Void = {
-    // 函数调用 scrutinee：some 臂载荷
-    v = match pick(false) {
-        some(x) => x,
-        none() => 0,
-    }
-    assert.assert(v == 7, "call scrutinee some arm payload")
-
-    // 函数调用 scrutinee：none 臂
-    w = match pick(true) {
-        some(x) => x,
-        none() => 0,
-    }
-    assert.assert(w == 0, "call scrutinee none arm")
-
-    // 内联构造 scrutinee（零载荷臂在前）
-    z = match Option(Int).none() {
-        none() => 0,
-        some(x) => x,
-    }
-    assert.assert(z == 0, "inline ctor scrutinee none arm")
-
-    // Result 调用 scrutinee：ok/err 两臂
-    r = match mk(true) {
-        ok(x) => x,
-        err(_) => -1,
-    }
-    assert.assert(r == 5, "result call scrutinee ok arm")
-    e = match mk(false) {
-        ok(x) => x,
-        err(_) => -1,
-    }
-    assert.assert(e == -1, "result call scrutinee err arm")
-
-    // 字段访问 scrutinee
-    h = Holder(Option(Int).some(9))
-    f = match h.opt {
-        some(x) => x,
-        none() => 0,
-    }
-    assert.assert(f == 9, "field access scrutinee payload")
+// 函数调用 scrutinee：some 臂载荷
+v = match pick(false) {
+    some(x) => x,
+    none() => 0,
 }
+assert.assert(v == 7, "call scrutinee some arm payload")
+
+// 函数调用 scrutinee：none 臂
+w = match pick(true) {
+    some(x) => x,
+    none() => 0,
+}
+assert.assert(w == 0, "call scrutinee none arm")
+
+// 内联构造 scrutinee（零载荷臂在前）
+z = match Option(Int).none() {
+    none() => 0,
+    some(x) => x,
+}
+assert.assert(z == 0, "inline ctor scrutinee none arm")
+
+// Result 调用 scrutinee：ok/err 两臂
+r = match mk(true) {
+    ok(x) => x,
+    err(_) => -1,
+}
+assert.assert(r == 5, "result call scrutinee ok arm")
+e = match mk(false) {
+    ok(x) => x,
+    err(_) => -1,
+}
+assert.assert(e == -1, "result call scrutinee err arm")
+
+// 字段访问 scrutinee
+h = Holder(Option(Int).some(9))
+f = match h.opt {
+    some(x) => x,
+    none() => 0,
+}
+assert.assert(f == 9, "field access scrutinee payload")

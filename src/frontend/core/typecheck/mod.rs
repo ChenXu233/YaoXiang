@@ -126,9 +126,8 @@ fn check_module_inner(
         checker.check_module(ast)
     };
 
-    // 将 exports 和 method_bindings 导回传入的环境
+    // 将 method_bindings 导回传入的环境
     if let Some(ref mut ext_env) = env {
-        ext_env.exports = checker.env().exports.clone();
         ext_env.method_bindings = checker.env().method_bindings.clone();
     }
 

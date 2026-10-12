@@ -1,4 +1,5 @@
 //! Overload 分析模块测试
+//! 规范来源：RFC-011b（运算符重载）
 //!
 //! 测试重载解析功能，包括：
 //! - 重载候选创建
@@ -11,9 +12,9 @@
 use std::collections::HashMap;
 
 use crate::frontend::core::typecheck::passes::overload::{
-    instantiate_return_type, resolve_generic_fallback, OverloadCandidate, OverloadResolver, TypeVar,
+    instantiate_return_type, resolve_generic_fallback, OverloadCandidate, OverloadResolver,
 };
-use crate::frontend::core::types::MonoType;
+use crate::frontend::core::types::{MonoType, TypeVar};
 
 fn int_type() -> MonoType {
     MonoType::Int(32)
@@ -103,20 +104,42 @@ fn test_overload_resolution_no_match() {
     ));
 
     // 使用不兼容的类型
+    // #324：诊断构造要求 span——生产路径由 typecheck walk 上下文自动填入，
+    // 单测裸调需显式挂上下文（push_current_span guard，Drop 恢复）
+    let guard =
+        crate::util::diagnostic::codes::builder::push_current_span(crate::util::span::Span::new(
+            crate::util::span::Position::new(1, 1),
+            crate::util::span::Position::new(1, 10),
+        ));
     let result = resolver.resolve("add", &[string_type(), int_type()]);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().code.starts_with("E10"));
+    drop(guard);
+    assert!(result.is_err(), "不兼容类型应解析失败");
+    let err = result.unwrap_err();
+    assert!(
+        err.code.starts_with("E10"),
+        "重载解析失败的诊断码应为 E10xx，实际为 {}",
+        err.code
+    );
 }
 
 #[test]
 fn test_type_match_score() {
+    // Arrange
     let resolver = OverloadResolver::new();
 
-    // 精确匹配
-    assert_eq!(resolver.type_match_score(&int_type(), &int_type()), 1.0);
+    // Act / Assert
+    // 精确匹配：评分 ≥ 0 → 可兼容（评分细则 1.0/0.8/0.5/-1.0 是实现细节，
+    // 行为契约经公开方法 is_compatible 断言，见 overload.rs:332）
+    assert!(
+        resolver.is_compatible(&int_type(), &int_type()),
+        "相同类型应判定为可兼容"
+    );
 
-    // 不匹配
-    assert_eq!(resolver.type_match_score(&int_type(), &float_type()), -1.0);
+    // 不匹配：评分 < 0 → 不可兼容
+    assert!(
+        !resolver.is_compatible(&int_type(), &float_type()),
+        "Int 与 Float 应判定为不兼容"
+    );
 }
 
 #[test]

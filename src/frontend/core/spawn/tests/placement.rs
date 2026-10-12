@@ -39,7 +39,6 @@ fn var_stmt(name: &str) -> Stmt {
             type_annotation: None,
             signature_params: vec![],
             value: None,
-            is_pub: false,
             is_mut: false,
             span: Span::dummy(),
         },

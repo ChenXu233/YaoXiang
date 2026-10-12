@@ -497,6 +497,9 @@ pub enum Instruction {
         rhs: Operand,
         span: Span,
     },
+    /// #385 定案 D3：`s[i]` —— 标量值（码点）下标取字符，产出**单字符
+    /// String**（单字符统一用 String 表示，与 chars()/substring 同域）；
+    /// 越界/负索引运行时报 E6003。
     StringGetChar {
         dst: Operand,
         src: Operand,

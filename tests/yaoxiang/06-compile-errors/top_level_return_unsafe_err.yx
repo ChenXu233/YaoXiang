@@ -1,0 +1,12 @@
+// 06-compile-errors/top_level_return_unsafe_err.yx
+// 覆盖: RFC-010a 规则② 边界条件 —— unsafe 块不是函数边界：块内 return 无处可退
+// 验证: 顶层 unsafe 块内 return 编译期拒绝（E1109）；函数边界清单只有
+//       命名函数体 / lambda 体 / spawn 体（RFC-010a 规则②），unsafe 不在其列
+// 状态: ✅ 可运行
+
+// expect: compile-error E1109
+
+use std.assert
+
+unsafe { return 5 }
+assert.assert(false, "顶层 unsafe 块内的 return 应被编译期拒绝")

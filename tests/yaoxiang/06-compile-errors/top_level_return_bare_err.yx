@@ -1,0 +1,11 @@
+// 06-compile-errors/top_level_return_bare_err.yx
+// 覆盖: RFC-010a 规则② 边界条件 —— 无值 return（Void 退出形态）在顶层同样无处可退
+// 验证: 顶层无值 return 编译期拒绝（E1109），钉住 Return(None) 判定臂
+// 状态: ✅ 可运行
+
+// expect: compile-error E1109
+
+use std.assert
+
+return
+assert.assert(false, "顶层无值 return 应被编译期拒绝")

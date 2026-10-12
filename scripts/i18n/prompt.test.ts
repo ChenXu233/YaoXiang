@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { resolveLanguagePrompt } from './prompt.ts';
+import { resolveLanguagePrompt, DEFAULT_LANGUAGE_PROMPT } from './prompt.ts';
 import type { I18nConfig } from './config.ts';
 
 describe('resolveLanguagePrompt', () => {
   it('should return default prompt for standard languages', () => {
     const result = resolveLanguagePrompt('en', { languages: { en: { name: 'English' } } });
-    expect(result).toBe('请进行专业准确的技术文档翻译。');
+    expect(result).toBe(DEFAULT_LANGUAGE_PROMPT);
   });
 
   it('should return custom prompt from config', () => {
@@ -23,7 +23,7 @@ describe('resolveLanguagePrompt', () => {
   it('should return default prompt if no custom prompt in config', () => {
     const config = { languages: { en: { name: 'English' } } };
     const result = resolveLanguagePrompt('en', config);
-    expect(result).toBe('请进行专业准确的技术文档翻译。');
+    expect(result).toBe(DEFAULT_LANGUAGE_PROMPT);
   });
 
   // 回归：本函数的键名必须与**仓库里真实的** i18n.config.json 对齐。
@@ -43,6 +43,6 @@ describe('resolveLanguagePrompt', () => {
     }
 
     // 未定义风格指令的语言应拿默认 prompt
-    expect(resolveLanguagePrompt('en', config)).toBe('请进行专业准确的技术文档翻译。');
+    expect(resolveLanguagePrompt('en', config)).toBe(DEFAULT_LANGUAGE_PROMPT);
   });
 });

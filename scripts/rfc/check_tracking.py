@@ -2,7 +2,7 @@
 """
 check_tracking.py - 验证 RFC 目录中的 frontmatter 完整性并生成 TRACKING.md
 
-扫描 docs/src/design/rfc/ 下所有状态子目录中的 .md 文件，
+扫描 docs/src/rfc/ 下所有状态子目录中的 .md 文件，
 解析 YAML frontmatter，验证必填字段，生成 TRACKING.md 追踪表。
 
 用法:
@@ -20,7 +20,7 @@ from datetime import date, timedelta
 
 # ── 常量 ─────────────────────────────────────────────────────────────────
 
-RFC_ROOT = os.path.join("docs", "src", "design", "rfc")
+RFC_ROOT = os.path.join("docs", "src", "rfc")
 TRACKING_FILE = os.path.join(RFC_ROOT, "TRACKING.md")
 
 # 状态 -> 目录名映射
