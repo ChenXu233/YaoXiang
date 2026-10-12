@@ -176,6 +176,27 @@ graph TD
     I[删除 hotfix 分支]
 ```
 
+### Dependabot 安全更新（恒定向 `main`，按紧急修复处理）
+
+GitHub 的 Dependabot **安全更新**不读 `.github/dependabot.yml` 的 `target-branch`：它由**默认分支**（本仓库为 `main`）的依赖图告警驱动，PR 一律指向 `main`。每周的**版本更新** PR 才照常进 `dev`。这是 GitHub 的既有行为，不是配置写错（[dependabot-core#2767](https://github.com/dependabot/dependabot-core/issues/2767) 至今未支持改向）。
+
+因此安全更新 PR 按上面这条流程处理，两步缺一不可：
+
+1. 把它**合并进 `main`**。不要改基线到 `dev`——告警判定基于默认分支，改基线只会让告警一直挂着，Dependabot 还可能就同一条告警再对 `main` 开一张。
+2. **当天**把 `main` 反向合并回 `dev`：
+
+```bash
+git fetch origin
+git switch dev
+git merge --ff-only origin/main   # dev 无独立提交时直接快进
+git push origin dev
+```
+
+若 `dev` 已有独立提交无法快进，改用 `git merge origin/main`（历史形态即 `Merge remote-tracking branch 'origin/main' into dev`）。
+
+> **适用范围**：`docs/` 这类**构建期**依赖（不进发布产物）按上面走。
+> **Cargo 生产依赖**（进二进制的运行时依赖）**不适用**：等每周版本更新或下一次发版会把修复拖到一周以上，此时应在 `dev` 上人工提 PR 修，随发版进 `main`。
+
 ### 发布流程
 
 ```mermaid
