@@ -683,6 +683,34 @@ impl Driver {
 >     已推送的 dev 历史以新号为准（旧号为本地临时号，未进入远程历史）。
 > 19. 3.4.8 ③④ 落地与验证（2026-10-11，8ecf56f93）。（③④ 的设计依据见 #14；② 的落地见 #17，本条是其收口。）**实现**：`CHECK_STAGES` 尾部 = `…IrGeneration → Linking → Monomorphization`；Check 的 `Linking` 只做纯合并（聚合请求 + `link_module_irs`），入口校验整块留给 `RoleClassification`；`ir_generation_check` 生成后留存 `us.ir`（仅内存）；mono 失败在 Check 进收集通道、在 MultiFile 保持 `fail_with`；`into_outcome` 先 `take_check_diagnostics` 再判故障（结构故障不再清空已收集诊断）。**验证**：四轮独立验证（t3/t4/t10 + t5 跨形态矩阵）与一轮复审（t6）全 pass；语料差分 340/340 逐行 IDENTICAL、IR 快照零漂移、测试数 2643→2656。**过程中发现并同轮修的既有缺口**：F1（rootless 多文件 check 的请求名与 IR 定义键不同源 → 静默不特化，见 WBS 3.4.8 行的落地注记）——修法为聚合侧按真实定义键精确反查（非启发式），首版修法为聚合侧按真实定义键精确反查（`flat_defs`）；**同日勘误**：该桥已在回归修复中删除，根因改由 `module_key` 一职两用解耦（`script_mode`）解决，三者同源为 `{单元键}.{名字}`。该回归（CI 文档示例门禁 258 块 10 失败 → 0 失败）的定位与修法见 WBS 3.4.8 行的落地注记。**留档（既有、非本轮回归）**：E3005 help 文案与资源保护语义不符；multi-file E3005 的 span 标签错位（HEAD 二进制可复现）；请求收集面的类型参数位置依赖（同面归 3.5）。
 
+> 20. 3.9.1 / 3.10.1 / 3.11.1 落地与诊断面收口（2026-10-12，809b9b936 + 8605a081b + 后续两笔）。
+>     **3.9.1（执行层守卫可达）**：解释型调用改**显式栈驱动**——`CallStatic`/`CallVirt`/`CallDyn`/`Spawn`/
+>     `SpawnFromList` 压帧后把控制权交还外层 `step_one`，帧携带 `ReturnTarget{Host|CallerSlot|Discard}`，返回时
+>     写回调用者槽位，多调用指令用帧内 `pending_calls` 续跑。基线实测每层解释调用耗原生栈 **2544 B**、崩溃临界在
+>     `count_down(394)`（Windows 主线程 1 MiB）；修复后 20 000 层递归可在 512 KiB 栈线程上跑通（每层约 0）。
+>     守卫（`push_frame`）由此在任何入口、任何 `max_stack_depth` 取值下可达；`ExecutorError::StackOverflow` 改为
+>     携带真实上限（原 `util/diagnostic/mod.rs` 恒传 0）。**原 3.11.2（深栈回显截断）经用户裁决并入本任务**
+>     （同处该文件、按文件不可分）：回显改首 16 帧 + 计数省略 + 末 8 帧，浅栈逐帧不变。
+>     **3.10.1（编译期无闸原生递归，#447）**：先定位后改——崩溃点为 `MonoType::type_name` 递归（**328 B/层**，
+>     SP 探针 + 逐操作临界确定），同路径另有派生 `Clone`（~400 B/层）、`substitute` 内深拷贝、`type_name_hash`
+>     （164 B/层）、`collect_generic_type_refs`；四处改工作列表并去掉每层一次整请求深拷贝后，`mono.max_depth=5000`
+>     的病态泛型递归产出 **E3005（含真实上限）**，不再爆栈。
+>     **3.11.1（任务边界错误码保真，#448）**：任务结果错误侧由值改**结构化**（`TaskResult = Result<SyncValue,
+>     TaskFailure>`、`TaskOutcome::Err(TaskFailure)`），跨边界按值还原 `ExecutorError`；任务内 E6001/E6003/
+>     E6004/E6008 在 Standard 模式与 Embedded 消息逐字一致。两条 **pub API 载荷形态变更**已在提交里写
+>     `BREAKING CHANGE`。
+>     **提交策略勘记**：3.9.1 与 3.11.1 **在文件粒度上不可分**——`interpreter/executor/executor.rs` 同时承载
+>     蹦床与错误通道的生产/消费点，`TaskFailure` 定义在 `runtime/engine.rs`，只暂存任一侧都编译不过（pre-commit
+>     以**暂存子集**编译，实测两次拒绝），故按 #15 的同一口径并为**一笔原子提交**。
+>     **已知边界与后续**：Drop 派生（~75 B/层）⇒ `mono.max_depth ≳ 13000` 仍可能崩；E4012（常量求值）闸门承载
+>     在原生递归上（每层 ~3 696 B、默认 256 层 ≈ 924 KiB），当前零调用点、生产不可达，将来接线须同族收口；
+>     Standard 模式任务解释器按默认 `ExecutorConfig` 构造 ⇒ 其 E6004 上限恒为 1024（配置传播登记为 WBS 3.12，
+>     用户裁决乙：另起队伍）；测试运行时预算另开 issue #449（病态夹具 76s、clippy 双 target、提交跑全量），
+>     不属本 RFC 施工面。
+>     **语料目录分层（同轮，8605a081b）**：`02-type-system`（78）与 `06-compile-errors`（134）共 212 个夹具拆入
+>     23 个按类别划分的子目录，88 个 IR 快照按镜像路径同步搬迁；语料基线同提交再生（342 行，独立复算逐行比对：
+>     仅 `file` 字段与 2 条新增变化），41 个快照因文件头路径变长而重新生成，逐行核对**只有 span 偏移变化**
+>     （去偏移归一化后零差异）。
 **十个入口的改造方式（逐个指定函数）**：
 
 | 入口 | 改造后 |
