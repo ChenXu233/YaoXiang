@@ -22,6 +22,9 @@ check-obligations.py —— 义务字段静态门禁（WBS 9.2 / 02-stage-contra
      指到不存在的符号」这种纯文本锚点的陈旧形态。
      F4 表格锚点：02 §义务字段表的「定义行」列必须等于 types.rs 的字段声明行
      （表注约定），防两组行号各自为政。
+     F5 范围锚点：02 正文里凡以完整路径写的 types.rs:A-B 一律视为结构体范围，
+     必须等于实际结构体范围——新增字段/注释都会推移它，机械对账不到就会静默漂移。
+     要引用字段的注释块（子区间）请省略路径前缀（写「同文件 `:47-51`」）。
   2. 读出证据：非红名单义务必须在声明的消费者文件里有真读取
        （成员访问 .字段名；注释、测试代码、字符串不算）
        —— 这是「定义 + 写入 + 真消费」的 9.2 判据强化版
@@ -334,6 +337,25 @@ def parse_doc_table(text):
     return rows, declared
 
 
+def parse_struct_span(text, struct_name):
+    """结构体的行范围（start, end）——F5 的基准。"""
+    lines = text.splitlines()
+    start = None
+    depth = 0
+    for idx, line in enumerate(lines):
+        if start is None:
+            if re.match(r'\s*pub struct ' + re.escape(struct_name) + r'\s*\{', line):
+                start = idx + 1
+                depth = line.count('{') - line.count('}')
+                if depth <= 0:
+                    return start, idx + 1
+            continue
+        depth += line.count('{') - line.count('}')
+        if depth <= 0:
+            return start, idx + 1
+    return None
+
+
 def parse_decl_lines(text):
     """types.rs 的字段声明行：字段名 → 行号（F4 的基准）。"""
     decls = {}
@@ -451,6 +473,16 @@ def check(root, verbose=False):
         if e['evidence']:
             violations.extend(verify_anchors(
                 root, e['evidence'], '义务 %s 的证据指针' % e['field']))
+
+    # F5（范围锚点）：02 里写的 TypeCheckResult 行范围必须等于实际范围
+    span = parse_struct_span(read(types_path), 'TypeCheckResult')
+    if span:
+        # 只认完整路径形态的结构体范围（`src/frontend/core/typecheck/types.rs:A-B`）——
+        # 正文里裸写 `types.rs:47-48` 这类「某字段注释块」的行号不属本判据
+        for sm in re.finditer(r'core/typecheck/types\.rs:(\d+)-(\d+)', read(contract_path)):
+            if (int(sm.group(1)), int(sm.group(2))) != span:
+                violations.append('02 里写的 struct 范围 types.rs:%s-%s 与实际 %d-%d 不一致（F5）'
+                                  % (sm.group(1), sm.group(2), span[0], span[1]))
 
     # F4（表格锚点）：02 §义务字段表的「定义行」必须等于类型声明行
     if doc_rows:
