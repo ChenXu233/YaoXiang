@@ -986,6 +986,14 @@
     "template": "The constraint cannot be proven at compile-time; downgraded to a runtime check",
     "help": "Consider adding a proof function to improve safety"
   },
+  "W1090": {
+    "title": "obligation produced but never consumed",
+    "message": "An obligation field was produced, but no downstream stage consumed it",
+    "template": "obligation field `{field}` was produced in {file} but never consumed: {detail}",
+    "help": "This is a stage-contract defect inside the compiler, not a mistake in your program: a field produced by one stage was never read by the next stage, so the obligation may have been silently dropped. Please report this diagnostic with the field name and file path, together with a minimal reproduction program.",
+    "example": "// 02-stage-contract §2 obligation ledger: an undrained obligation settled at the tail of the stage table",
+    "error_output": "warning[W1090]: obligation produced but never consumed\n --> example.yx:1:1\n  |\n1 | main: () -> Void = {}\n  | ^ obligation field `variant_ctor_calls` was produced in example.yx but never consumed: red list (cleanup task WBS 3.4.4): zero cross-stage consumers"
+  },
   "E6009": {
     "title": "Invalid Range step",
     "message": "The step of a Range must be non-zero",

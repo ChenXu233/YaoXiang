@@ -132,6 +132,28 @@ jobs:
       - name: Check module boundaries (report-only)
         run: python3 scripts/ci/check-boundary.py
 
+  # P4 引入（09-execution-wbs 9.2，唯一归属）：义务字段静态门禁。
+  # 判据不止「定义 + 写入但无第三文件读取」——交付标记是声明，必须与
+  # 「该字段在消费端真被读到」对账（2026-10-13 用户裁决：机制甲），
+  # 另有红名单陈旧检测。--selftest 用自带反例/正例夹具证明探测器不空转
+  # （反例必红、正例必绿），否则「门禁能抓到零消费字段」只是自述。
+  obligations:
+    name: Obligation Gate (WBS 9.2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Check obligation fields (static gate)
+        run: python3 scripts/ci/check-obligations.py
+
+      - name: Self-test the gate (negative must be red, positive must be green)
+        run: python3 scripts/ci/check-obligations.py --selftest
+
   test:
     name: Test
     runs-on: ubuntu-latest

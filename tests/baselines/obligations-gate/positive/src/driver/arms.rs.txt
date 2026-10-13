@@ -1,0 +1,4 @@
+/// 夹具版 IrGeneration 臂（正例）：交付点有标记。
+fn ir_generation(state: &mut State) {
+    state.units[0].delivered.deliver(Obligation::GhostField);
+}

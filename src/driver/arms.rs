@@ -24,6 +24,7 @@ use crate::middle::ModuleIR;
 use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
+use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::helpers::{
     aggregate_instantiation_requests, allocate_global_slots, ast_has_main, collect_project_refs,
     is_bin_role, link_module_irs, merge_embedded_std_ir, role_context,
@@ -533,13 +534,24 @@ impl Driver {
         } = state;
         let mut any_obligation = false;
         for (i, us) in units.iter_mut().enumerate() {
-            let (Some(ast), Some(type_result)) = (&asts[i], &us.type_result) else {
+            let UnitState {
+                type_result,
+                typecheck_failed,
+                check_diagnostics,
+                delivered,
+                ..
+            } = us;
+            let (Some(ast), Some(type_result)) = (&asts[i], type_result.as_ref()) else {
                 continue;
             };
-            if us.typecheck_failed || type_result.proof_calls().is_empty() {
+            if *typecheck_failed || type_result.proof_calls().is_empty() {
                 continue;
             }
             any_obligation = true;
+            // 唯一交付点（ProofExecution）：本单元证明义务交给消费者。
+            // 交付点是 execute_proof_calls 调用本身——proof_calls() 是
+            // TypeCheckResult 对该义务的唯一对外读取路径（types.rs:84）。
+            delivered.deliver(Obligation::ProofCalls);
             let stage_errors = crate::frontend::proof_execution::execute_proof_calls(
                 type_result.proof_calls(),
                 ast,
@@ -549,7 +561,7 @@ impl Driver {
                 // Check/Lsp 通道（4.2.2/4.2.3）：proof 失败是逐文件收集
                 // 诊断——不标阶段失败、不中止（CollectAll 语义）
                 if matches!(program.kind, ProgramKind::Check | ProgramKind::Lsp) {
-                    us.check_diagnostics.extend(stage_errors);
+                    check_diagnostics.extend(stage_errors);
                     continue;
                 }
                 if single_file {
@@ -644,9 +656,20 @@ impl Driver {
         // 跨文件上下文：所有文件的 AST 引用视图（与 orchestrated 同构）
         let all_ast_refs: Vec<&Module> = asts.iter().filter_map(|a| a.as_ref()).collect();
         for (i, us) in units.iter_mut().enumerate() {
-            let (Some(ast), Some(type_result)) = (&asts[i], &us.type_result) else {
+            let UnitState {
+                type_result,
+                ir: ir_slot,
+                check_diagnostics,
+                delivered,
+                ..
+            } = us;
+            let (Some(ast), Some(type_result)) = (&asts[i], type_result.as_ref()) else {
                 continue;
             };
+            // 唯一交付点（IrGeneration）：整份 TypeCheckResult 交给 IR 生成器
+            // ——new_with_type_result 是 11 条 IrGeneration 义务的唯一交付口
+            //（构造期读 8 条 + 生成期按 span 回查其余，见 obligations.rs 清单）。
+            delivered.deliver_all(IR_GENERATION_DELIVERED);
             // 与 generate_ir_with_context 同构，但 Script/Bin 语义与限定名键
             // 解耦（见臂注释）：限定名恒按单元键，Script 语义由 with_script_mode 给
             let mut generator = AstToIrGenerator::new_with_type_result(
@@ -661,9 +684,9 @@ impl Driver {
             match generator.generate_module_ir(ast) {
                 // 3.4.8 ③：Check 形态也留存单元 IR（仅内存）——它是
                 // Linking 纯合并与 mono 检查形态的输入；不外发、不写盘。
-                Ok(ir) => us.ir = Some(ir),
+                Ok(ir) => *ir_slot = Some(ir),
                 // IR 级错误进逐文件收集通道（不标阶段失败、不中止）
-                Err(diags) => us.check_diagnostics.extend(diags),
+                Err(diags) => check_diagnostics.extend(diags),
             }
         }
     }
@@ -690,9 +713,17 @@ impl Driver {
         let Some(registry) = registry.as_ref() else {
             return; // 调用方未注入共享 registry——构造 bug，入口以 Io 兜底
         };
-        let (Some(ast), Some(type_result)) = (&asts[0], &units[0].type_result) else {
+        let UnitState {
+            type_result,
+            ir: ir_slot,
+            delivered,
+            ..
+        } = &mut units[0];
+        let (Some(ast), Some(type_result)) = (&asts[0], type_result.as_ref()) else {
             return; // 上游已失败（FailFast 下 run 循环已中止，防御）
         };
+        // 唯一交付点（IrGeneration，Embedded 形态）
+        delivered.deliver_all(IR_GENERATION_DELIVERED);
         match crate::middle::generate_ir_with_context(
             ast,
             type_result,
@@ -702,7 +733,7 @@ impl Driver {
             registry,
             &program.units[0].key,
         ) {
-            Ok(ir) => units[0].ir = Some(ir),
+            Ok(ir) => *ir_slot = Some(ir),
             Err(diags) => {
                 let message = diags
                     .iter()
@@ -737,9 +768,17 @@ impl Driver {
             failed_stages,
             ..
         } = state;
-        let (Some(ast), Some(type_result)) = (&asts[0], &units[0].type_result) else {
+        let UnitState {
+            type_result,
+            ir: ir_slot,
+            delivered,
+            ..
+        } = &mut units[0];
+        let (Some(ast), Some(type_result)) = (&asts[0], type_result.as_ref()) else {
             return Ok(()); // 上游已失败（CollectAll；4.1.3 不可达）
         };
+        // 唯一交付点（IrGeneration，SingleFile/WasmPlayground 形态）
+        delivered.deliver_all(IR_GENERATION_DELIVERED);
         // 单文件模式：入口与嵌入 std 模块（std.test 等，RFC-036 §4）共用同一
         // registry（共享 SymbolTable），使嵌入函数的 DefId 与入口调用点解析到
         // 的一致，避免跨表 DefId 撞车错分发（#94）。
@@ -761,7 +800,7 @@ impl Driver {
             failed_stages.push(Stage::IrGeneration);
             return Ok(());
         }
-        units[0].ir = Some(ir);
+        *ir_slot = Some(ir);
         Ok(())
     }
 
@@ -790,9 +829,17 @@ impl Driver {
         // 跨文件上下文：所有文件的 AST 引用视图（结构体布局/全局名解析用）
         let all_ast_refs: Vec<&Module> = asts.iter().filter_map(|a| a.as_ref()).collect();
         for (i, us) in units.iter_mut().enumerate() {
-            let (Some(ast), Some(type_result)) = (&asts[i], &us.type_result) else {
+            let UnitState {
+                type_result,
+                ir: ir_slot,
+                delivered,
+                ..
+            } = us;
+            let (Some(ast), Some(type_result)) = (&asts[i], type_result.as_ref()) else {
                 continue;
             };
+            // 唯一交付点（IrGeneration，MultiFile 形态）
+            delivered.deliver_all(IR_GENERATION_DELIVERED);
             let ir = match crate::middle::generate_ir_with_context(
                 ast,
                 type_result,
@@ -818,7 +865,7 @@ impl Driver {
                     return;
                 }
             };
-            us.ir = Some(ir);
+            *ir_slot = Some(ir);
         }
     }
 
@@ -868,8 +915,13 @@ impl Driver {
             failed_stages,
             ..
         } = state;
-        let us = &mut units[0];
-        let (Some(type_result), Some(ir)) = (&us.type_result, &mut us.ir) else {
+        let UnitState {
+            type_result,
+            ir,
+            delivered,
+            ..
+        } = &mut units[0];
+        let (Some(type_result), Some(ir)) = (type_result.as_ref(), ir.as_mut()) else {
             return Ok(()); // 上游已失败（CollectAll；4.1.3 不可达）
         };
         if type_result.instantiation_requests.is_empty() {
@@ -879,6 +931,9 @@ impl Driver {
             });
             return Ok(());
         }
+        // 唯一交付点（Monomorphization，单文件/WasmPlayground 形态）：
+        // 本单元的实例化请求表交给单态化器
+        delivered.deliver(Obligation::InstantiationRequests);
         let mut mono =
             Monomorphizer::with_max_depth(max_depth).with_max_instantiations(max_instantiations);
         match mono.monomorphize(ir, &type_result.instantiation_requests) {
@@ -1158,6 +1213,14 @@ impl Driver {
                 &state.asts,
                 registry.as_ref().expect("Registry 阶段必产注册表"),
             );
+            // 唯一交付点（Monomorphization，MultiFile/Check 形态）：本臂的
+            // 全程序聚合**读取了各单元的请求表**，聚合产物交 mono 臂消费
+            // ——多文件形态的请求表在这里离开产出阶段，故标记落在此处。
+            for us in state.units.iter_mut() {
+                if us.type_result.is_some() {
+                    us.delivered.deliver(Obligation::InstantiationRequests);
+                }
+            }
         }
         let mut irs: Vec<(String, ModuleIR)> = Vec::new();
         for (i, us) in state.units.iter_mut().enumerate() {

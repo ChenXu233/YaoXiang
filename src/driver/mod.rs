@@ -14,9 +14,18 @@
 //!
 //! **接线现状（4.2.4）**：12 个 `Stage` 变体全接线；六条编译路径
 //!（SingleFile / WasmPlayground / MultiFile / Check / Lsp / Embedded）
-//! 全部开通。Skipped 只进内部记录、**不外发诊断**（外发随 4.3 义务账本，
-//! 02 §4 文案表）——zero-diff 判据（C2）要求任何新增对外诊断都必须显式
-//! 裁决。
+//! 全部开通。
+//!
+//! **义务账本接线（4.3.1）**：`run` 在阶段表尾部、产出 `CompilationResult`
+//! 之前调用 `State::assert_drained()`——**唯一结算点**（02 §2）。结算把
+//! 「义务非空但没交付」外发为 W1090（2026-10-13 用户裁决：4.3.1 外发 W 级，
+//! RFC-039 D5 的观测期；W→E 归 4.3.2）。**红名单三字段例外**：它们由 typecheck
+//! 预置表灌入、恒非空（运行期信号无区分度），按 captain 裁定不外发用户可见诊断，
+//! 其「不静默」由 `DriverOutcome.obligations.findings` 审计面 +
+//! `scripts/ci/check-obligations.py` 门禁 + 02 §2 注记三处承担
+//! （详见 `obligations.rs` 模块头「红名单」一节）。`Skipped` 记录本身**仍不外发诊断**
+//!（02 §4 文案表的外发归后续轮次；本轮契约明列「上游失败 / 配置关闭导致的
+//! 跳过不报」），它只作义务结算的豁免判据与审计面。
 //!
 //! **文件布局（4.2.9 拆分——mod.rs 达 1766 行，超仓库 1500 行阈值）**：
 //! - `mod.rs`：`Driver`、`run`/`dispatch` 解释器核心与模块级重导出；
@@ -36,6 +45,7 @@
 //!   （02 §5：避免 Driver 持可变全局状态），一次 run 的可变状态全部
 //!   在 `State` 内。
 
+pub mod obligations;
 pub mod program;
 pub mod stage;
 pub mod unit;
@@ -44,6 +54,10 @@ mod arms;
 mod helpers;
 mod state;
 
+pub use obligations::{
+    Obligation, ObligationFinding, ObligationSettlement, OBLIGATION_UNDRAINED_CODE, RedListEntry,
+    UndrainedCause,
+};
 pub use program::{Aggregation, Program, ProgramKind};
 pub use stage::{Stage, StageScope};
 pub use state::{DriverError, DriverOutcome, SkipReason, SkippedStage};
@@ -65,6 +79,9 @@ impl Driver {
 
     /// 解释执行一份 `Program`：按阶段表拓扑序 dispatch，直到表尾或
     /// `Aggregation::FailFast` 下首个失败阶段（02 §3 草图的 break）。
+    ///
+    /// **阶段表尾部结算义务账本**（02 §2）：`assert_drained()` 的调用点是
+    /// 唯一的一处——产出 `CompilationResult`（`into_outcome`）之前。
     pub fn run(
         &mut self,
         program: Program,
@@ -88,6 +105,9 @@ impl Driver {
                 break;
             }
         }
+        // 义务账本结算：阶段表尾部、产出 CompilationResult 之前
+        // ——02 §2 的唯一调用点（早退路径同样结算：失败的编译也有账）
+        state.assert_drained();
         Ok(state.into_outcome())
     }
 

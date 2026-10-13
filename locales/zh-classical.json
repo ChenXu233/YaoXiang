@@ -943,6 +943,14 @@
     "template": "编译期难证此约束，已降为运行时之检",
     "help": "盍增证明函数，以固其安"
   },
+  "W1090": {
+    "title": "义务既出而无受者",
+    "message": "义务之字段既出，而后诸阶段无一受之",
+    "template": "义务之字段 `{field}` 出于 {file} 而终无人受之：{detail}",
+    "help": "此乃编译器内部阶段契约之阙，非君程序之误也：某阶段所出之义务字段，下阶段未尝读之，其效恐已默然弃之。请以此诊断，并字段名与文件路径，具报于 issue，附最小可复现之程序。",
+    "example": "// 02-stage-contract §2 义务之簿：阶段表之末所结未清之义务",
+    "error_output": "warning[W1090]: 义务既出而无受者\n --> example.yx:1:1\n  |\n1 | main: () -> Void = {}\n  | ^ 义务之字段 `variant_ctor_calls` 出于 example.yx 而终无人受之：丹书（清账之役 WBS 3.4.4）：跨阶段之受者，无有"
+  },
   "E6009": {
     "title": "Range 步长，非法",
     "message": "Range 之步长须非零",
