@@ -60,7 +60,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`重复定义：'{name}' 已在当前作用域中定义`
 - **消息**：变量在同一作用域中定义了多次
 - **帮助**：重命名或删除重复的定义
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1740`、`src/frontend/core/typecheck/inference/expressions.rs:5474`、`src/frontend/core/typecheck/inference/statements.rs:1734` 等 4 处
+- **发射点**：`src/frontend/core/typecheck/checker.rs:1733`、`src/frontend/core/typecheck/inference/expressions.rs:5462`、`src/frontend/core/typecheck/inference/statements.rs:1731` 等 4 处
 
 ### E2003：所有权错误
 
@@ -81,7 +81,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无法给不可变变量 '{name}' 赋值`
 - **消息**：试图修改不可变变量
 - **帮助**：使用 'mut' 声明可变变量
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:5469`、`src/frontend/core/typecheck/inference/statements.rs:2401`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:5457`、`src/frontend/core/typecheck/inference/statements.rs:2398`
 
 ### E2011：使用未初始化变量
 
@@ -111,7 +111,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`Cannot shadow existing variable '{name}'`
 - **消息**：不能遮蔽已有变量
 - **帮助**：使用不同的变量名，或在不同的作用域中声明变量
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:5479`、`src/frontend/core/typecheck/inference/statements.rs:2415`、`src/frontend/core/typecheck/inference/statements.rs:2488`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:5467`、`src/frontend/core/typecheck/inference/statements.rs:2412`、`src/frontend/core/typecheck/inference/statements.rs:2485`
 
 ### E2014：使用已移动的值
 
@@ -187,7 +187,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_constraint_violated(assigned, var, constraint, counterexample)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 不再满足精化类型约束：{constraint}（反例：{counterexample}）`
 - **帮助**：精化类型标注要求依赖变量在相关赋值之后仍然满足谓词约束。请调整赋值使约束成立，或放宽类型标注。
-- **发射点**：`src/frontend/core/typecheck/checker.rs:5199`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:5192`
 - **源码注释名**：精化类型约束违反（赋值后依赖变量 VC 被 SMT 证伪——
 
 ### E2031：精化约束无法证明
@@ -197,7 +197,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **构造函数**：`ErrorCodeDefinition::refined_unproven(assigned, var, constraint)`
 - **模板**：`对 '{assigned}' 赋值后，'{var}' 的精化类型约束：{constraint} 在证明内核内无法静态证明`
 - **帮助**：RFC-027 要求所有精化约束在编译期得到证明——证不出即编译错误。请改写约束使其实参可静态取值（字面量或字面量可折叠的表达式），或提供返回 Type 的证明函数参与编译期执行。
-- **发射点**：`src/frontend/core/typecheck/checker.rs:5220`、`src/frontend/core/typecheck/checker.rs:5358`、`src/frontend/core/typecheck/checker.rs:5492`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:5213`、`src/frontend/core/typecheck/checker.rs:5351`、`src/frontend/core/typecheck/checker.rs:5485`
 - **源码注释名**：精化约束无法证明（RFC-027 §4/§9：Unproven → 编译错误 + 未解命题，
 
 ### E2090：无效签名

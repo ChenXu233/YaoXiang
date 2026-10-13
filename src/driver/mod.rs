@@ -16,14 +16,17 @@
 //!（SingleFile / WasmPlayground / MultiFile / Check / Lsp / Embedded）
 //! 全部开通。
 //!
-//! **义务账本接线（4.3.1）**：`run` 在阶段表尾部、产出 `CompilationResult`
+//! **义务账本接线（4.3.1 / 4.3.2）**：`run` 在阶段表尾部、产出 `CompilationResult`
 //! 之前调用 `State::assert_drained()`——**唯一结算点**（02 §2）。结算把
-//! 「义务非空但没交付」外发为 W1090（2026-10-13 用户裁决：4.3.1 外发 W 级，
-//! RFC-039 D5 的观测期；W→E 归 4.3.2）。**红名单三字段例外**：它们由 typecheck
-//! 预置表灌入、恒非空（运行期信号无区分度），按 captain 裁定不外发用户可见诊断，
-//! 其「不静默」由 `DriverOutcome.obligations.findings` 审计面 +
+//! 「义务非空但没交付」外发为 `W1090`：4.3.1 为 W 级（RFC-039 D5 观测期），
+//! **4.3.2 起同码升 E**（显式 `Severity::Error`，2026-10-13 用户裁决甲；码号不变、
+//! 不新增 E 码）——触发即进错误通道、渲染 `error[W1090]`、退出码非零
+//! （D59 的 D 类破坏项；健康态零发射，故既有语料与用户程序零影响）。
+//! **红名单当前为空**（3.4.4/3.4.5/3.4.9 三条清账任务已全部落地）：机制保留、条目为零；
+//! 字段普查由「义务清单 ∪ 非义务登记（`NON_OBLIGATION_FIELDS`）」闭合，
+//! 由 `DriverOutcome.obligations.findings` 审计面 +
 //! `scripts/ci/check-obligations.py` 门禁 + 02 §2 注记三处承担
-//! （详见 `obligations.rs` 模块头「红名单」一节）。`Skipped` 记录本身**仍不外发诊断**
+//! （详见 `obligations.rs` 模块头）。`Skipped` 记录本身**仍不外发诊断**
 //!（02 §4 文案表的外发归后续轮次；本轮契约明列「上游失败 / 配置关闭导致的
 //! 跳过不报」），它只作义务结算的豁免判据与审计面。
 //!

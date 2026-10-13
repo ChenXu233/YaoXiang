@@ -1,10 +1,11 @@
-//! 义务账本：16 个跨阶段契约字段的产出 / 交付 / 结算
+//! 义务账本：跨阶段契约字段（义务）的产出 / 交付 / 结算
 //! —— 02-stage-contract §2「义务账本：`Obligations` + `assert_drained()`」
-//! / RFC-039 D5（W→E 两步走）。
+//! / RFC-039 D5（两步走：4.3.1 观测期 W 级 → 4.3.2 同码升 E，已完成）。
 //!
 //! # 为什么需要它
 //!
-//! `TypeCheckResult` 里有 16 个字段的契约是「由某阶段产出 → 由另一阶段消费」
+//! `TypeCheckResult` 里有一批字段的契约是「由某阶段产出 → 由另一阶段消费」
+//!（条数以 `Obligation::ALL` / 02 §义务字段表为准，本模块不写死计数）
 //! （02 §义务字段表）。编译流程把**整份结果**交给下游，却没有任何机制保证
 //! 下游真的读了某个字段——`proof_calls` 曾在 orchestrator 四入口被静默丢弃
 //! （02 §正确性漏洞证据链）。本模块把「交付」变成显式标记，并在阶段表尾部
@@ -18,28 +19,33 @@
 //! | 消费者阶段不在本 ProgramKind 阶段表 | `ProgramKind::stages()`（S1，2026-10-13 用户裁决） | 通过（不判欠：Lsp 无 IrGeneration/Monomorphization，Embedded 无 Monomorphization） |
 //! | 消费者阶段被跳过 | `SkipReason::UpstreamFailed` / `ConfigDisabled` | 通过（跳过不是丢弃） |
 //! | 有交付标记 | 交付点调用 `deliver` | 通过（已交付） |
-//! | 其余（非空 + 消费者阶段已运行 + 无标记） | — | **产 W1090** |
+//! | 其余（非空 + 消费者阶段已运行 + 无标记） | — | **产 W1090**（4.3.1 W 级 → 4.3.2 **error 级**，D5 终态） |
 //!
-//! # 红名单（2026-10-13 用户裁决「机制=甲」+ captain 裁定「丙」，见 §外发面）
+//! # 红名单（当前为空）与非义务字段登记
 //!
 //! 红名单条目（[`Obligation::red_list`]）是已核实的「跨阶段消费者为零」字段：
-//! 它们没有可交付点。**它们不进用户可见诊断流**（裁定丙）——理由是实测事实：
-//! `interface_impl_registry` 由 typecheck 预置表灌入、**恒非空**，逐编译外发
-//! 得到的是常量信号（无区分度），却会破坏「干净程序零诊断 / LSP 零诊断 /
-//! warning_count==0」三条既有对外契约，并迫使 12 个既有用例放宽断言。
+//! 它们没有可交付点，**不进用户可见诊断流**（裁定丙），其「不静默」由三处承担：
+//! 1. **审计面**：[`DriverOutcome.obligations.findings`] 每次运行带出（含 WBS id 与证据）；
+//! 2. **静态门禁**：`scripts/ci/check-obligations.py`（WBS 9.2）逐条对账 + **陈旧检测**
+//!    （红名单字段长出消费者即红）+ `--selftest` 反例/正例夹具（含 stale-red-list 形态）；
+//! 3. **文档注记**：02-stage-contract §2 实施修订注记逐条登记。
 //!
-//! 它们的「不静默」由三处承担，缺一不可：
-//! 1. **审计面**：[`DriverOutcome.obligations.findings`] 每次运行都带出全部红名单
-//!    条目（每条含 WBS 任务 id + 零消费者证据指针）——见 `ObligationSettlement`；
-//! 2. **静态门禁**：`scripts/ci/check-obligations.py`（WBS 9.2）每次运行打印红名单、
-//!    逐条对账「消费者为零」，并做**陈旧检测**（红名单字段长出消费者即红）；
-//!    自带反例/正例夹具证明探测器不空转（`--selftest`）；
-//! 3. **文档注记**：02-stage-contract §2 实施修订注记逐条登记（WBS 4.3.1 的 t5 收口）。
+//! **2026-10-13 清账收口：红名单 3 → 0**（09-WBS 三条全部落地）。
+//! - `variant_ctor_calls` → 3.4.4 **已清账**（删字段：IR 侧 `detect_variant_ctor_call`
+//!   就地形态检测等价兑现其职责，跨层 span 键控会引入失配）；
+//! - `method_overload_ir_names` → 3.4.5 **已清账**（删 `TypeCheckResult` 上的跨阶段镜像，
+//!   在相位候选名表与 `overload_resolutions` 保留）；
+//! - `interface_impl_registry` → 3.4.9 **已清账**（用户裁决甲：改判为**树内事实**——
+//!   它在 typecheck 树内有真实在相位消费（`src/frontend/core/typecheck/operator_interfaces.rs:623` 运算符查询、
+//!   `src/frontend/core/typecheck/inference/expressions.rs` 七处约束求解查询、
+//!   `src/frontend/core/typecheck/checker.rs:214-217` 只读访问器），
+//!   而跨阶段读取为零（`src/middle` 0 命中）；删掉类型注释里「镜像供 middle 端/LSP
+//!   消费」的**声明**，保留字段本身与在相位消费。将来 LSP 真需要该表，按 4.6.x
+//!   新登记走，不在本轮造消费者）。
 //!
-//! 清账进度（09-WBS）：`variant_ctor_calls` → 3.4.4 **已清账**（删字段：IR 侧
-//! `detect_variant_ctor_call` 就地形态检测等价兑现其职责，跨层 span 键控会引入失配）；
-//! `method_overload_ir_names` → 3.4.5 **已清账**（删 `TypeCheckResult` 上的跨阶段镜像，
-//! 在相位候选名表与 `overload_resolutions` 保留）；`interface_impl_registry` → 3.4.9 待清。
+//! 红名单为空后，字段普查由 [`NON_OBLIGATION_FIELDS`] 与非义务登记一起闭合：
+//! `TypeCheckResult` 的字段集必须恰好等于「义务清单 ∪ 非义务登记」，两端都不许
+//! 有未登记字段（门禁判据 1 的反向 containment）。
 //!
 //! **唯一调用点**：`Driver::run` 阶段表尾部、`into_outcome()` 产出
 //! `CompilationResult` 之前（02 §2；`State::assert_drained`）。
@@ -52,17 +58,21 @@
 //! 在消费端真被读到」做成硬判据，并对红名单做**陈旧检测**（红名单字段若长出
 //! 消费者，门禁必须红）。
 //!
-//! # 级别（D5 两步走）
+//! # 级别（D5 两步走 → 终态）
 //!
-//! 本模块只产 **W** 级（2026-10-13 用户裁决：4.3.1 外发 W 级，D5 的观测期）；
-//! W→E 的升级归 WBS 4.3.2（同码升 E 还是另立 E 码，届时裁决）。
+//! **4.3.1（观测期）**：只产 W 级（2026-10-13 用户裁决，D5 的观测期）。
+//! **4.3.2（终态，2026-10-13 用户裁决甲）**：**同码升 E**——码号仍是 `W1090`，
+//! 发射级别由显式 `.severity(Severity::Error)` 抬到 error（不新增 E 码：同一事实
+//! 两个码即平行表示）。触发即进错误通道、改退出码（D59 的 D 类破坏项，如实登记）；
+//! 健康态零发射，故对既有语料与用户程序零影响。
 //! `span_exempt` 的理由见 `src/util/diagnostic/codes/w1xxx.rs` 的 W1090 条目。
 
 use std::path::PathBuf;
 
 use crate::frontend::core::typecheck::TypeCheckResult;
-use crate::frontend::module::orchestrator::is_vendor_path;
-use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use crate::frontend::module::orchestrator::{is_vendor_path, OrchestratorError};
+use crate::frontend::pipeline::PipelineError;
+use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition, Severity};
 
 use super::program::ProgramKind;
 use super::stage::Stage;
@@ -71,7 +81,7 @@ use super::state::{SkipReason, SkippedStage, State};
 /// W1090 的码字符串（注册单源在 `src/util/diagnostic/codes/w1xxx.rs`）。
 pub const OBLIGATION_UNDRAINED_CODE: &str = "W1090";
 
-/// 义务字段——`TypeCheckResult` 中 16 个「产出即契约」的字段
+/// 义务字段——`TypeCheckResult` 中「产出即契约」的字段（条数见 [`Obligation::ALL`]）
 /// （02-stage-contract §义务字段表；定义见
 /// `src/frontend/core/typecheck/types.rs:16-77`）。
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -88,9 +98,6 @@ pub enum Obligation {
     ExistentialCoercions,
     /// `implementation_proofs`：typecheck → IR 生成
     ImplementationProofs,
-    /// `interface_impl_registry`：typecheck → 运算符查询 / 约束求解 / LSP；
-    /// 跨阶段消费者为零（红名单）
-    InterfaceImplRegistry,
     /// `sum_types`：typecheck → IR 生成
     SumTypes,
     /// `sum_type_param_names`：typecheck → IR 生成
@@ -117,6 +124,64 @@ pub struct RedListEntry {
     pub evidence: &'static str,
 }
 
+/// `TypeCheckResult` 里**不属跨阶段义务**的字段登记（字段名 + 理由）。
+///
+/// 判据 1（三处对账）的第三处：`scripts/ci/check-obligations.py` 拿它与
+/// [`Obligation::ALL`] 一起做**反向 containment**——`TypeCheckResult` 的字段集
+/// 必须恰好等于「义务清单 ∪ 本登记」，两端都不许有未登记字段。这样
+/// 「删字段忘了同步清单」与「加字段忘了登记」都必须当场红，而不是靠放宽
+/// containment 绕过。
+///
+/// **为什么不是「接线消费端」**：这些字段要么是通道/元信息/阶段内产物，
+/// 要么是**树内事实**（按设计由 typecheck 在相位消费、跨阶段零读取，
+/// 如 3.4.9 改判的 `interface_impl_registry`）。给它们造一个下游消费者
+/// 只会凭空引入假义务，把「按设计不需要跨阶段消费」伪装成契约缺陷。
+///
+/// 收编判据（与 02 §义务字段表一致）：文档注释是否声明「由 X 阶段产出 →
+/// Y 阶段消费」。本表逐条写明该字段的实测消费面，供将来复核。
+pub struct NonObligationField {
+    /// `TypeCheckResult` 里的字段名（逐字一致）
+    pub field: &'static str,
+    /// 为什么它不是跨阶段义务（必须写实测消费面 / 通道归属，不许留空）
+    pub reason: &'static str,
+}
+
+/// 非义务字段登记表（见 [`NonObligationField`]）。
+pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
+    NonObligationField {
+        field: "module_name",
+        reason: "单元身份元信息：文档注释未声明跨阶段契约，src/middle 0 命中",
+    },
+    NonObligationField {
+        field: "diagnostics",
+        reason: "错误诊断通道：各入口直接读取的错误集合，是既有通道而非「产出即契约」",
+    },
+    NonObligationField {
+        field: "bindings",
+        reason: "类型绑定表：确有跨阶段读取（src/middle/core/ir_gen.rs:735/:5034），但文档注释未声明跨阶段契约 ⇒ 未收编进 02 义务字段表；登记在此闭合字段普查",
+    },
+    NonObligationField {
+        field: "local_var_types",
+        reason: "诊断渲染用局部类型表：跨阶段读取在 src/middle/core/ir_gen.rs:852/:4543/:4794（错误消息），与 bindings 同——未声明契约",
+    },
+    NonObligationField {
+        field: "semantic_db",
+        reason: "语义信息数据库：消费者在 LSP（src/lsp/server.rs:493 world.update_semantic_db），不属编译阶段义务",
+    },
+    NonObligationField {
+        field: "trait_table",
+        reason: "trait 表：跨阶段读取在 src/middle/core/ir_gen.rs:4336/:6867（与 local_var_types 配对传参），文档注释未声明契约",
+    },
+    NonObligationField {
+        field: "warnings",
+        reason: "警告诊断通道：与 diagnostics 同类，由 driver 臂按形态门控外发",
+    },
+    NonObligationField {
+        field: "interface_impl_registry",
+        reason: "树内事实（3.4.9 用户裁决甲）：在相位消费 src/frontend/core/typecheck/operator_interfaces.rs:623、src/frontend/core/typecheck/inference/expressions.rs:1514 等七处约束求解查询、src/frontend/core/typecheck/checker.rs:214-217 只读访问器；跨阶段零读取（src/middle 0 命中）",
+    },
+];
+
 /// 一条义务的静态清单（字段名 / 消费者阶段 / 红名单）。
 ///
 /// **单一事实来源**：`scripts/ci/check-obligations.py` 逐条解析本表，与
@@ -132,7 +197,7 @@ struct ObligationSpec {
     red_list: Option<RedListEntry>,
 }
 
-/// 16 个义务的清单（顺序 = 02 §义务字段表）。
+/// 义务清单（顺序 = 02 §义务字段表；条数见 [`Obligation::ALL`]）。
 const INVENTORY: &[ObligationSpec] = &[
     ObligationSpec {
         obligation: Obligation::ProofCalls,
@@ -169,18 +234,6 @@ const INVENTORY: &[ObligationSpec] = &[
         field: "implementation_proofs",
         consumer: Stage::IrGeneration,
         red_list: None,
-    },
-    // 红名单 #3：文档声明的三个消费者（运算符查询 / 约束求解）在本阶段内、
-    // （LSP）零命中——跨阶段消费者为零。字段级裁决单独立行为 WBS 3.4.9
-    //（漏删「镜像供 middle/LSP 消费」声明 或 建镜像），与 3.4.4/3.4.5 同批清账。
-    ObligationSpec {
-        obligation: Obligation::InterfaceImplRegistry,
-        field: "interface_impl_registry",
-        consumer: Stage::IrGeneration,
-        red_list: Some(RedListEntry {
-            wbs: "3.4.9",
-            evidence: "证据命令：rg -w interface_impl_registry src（typecheck 树外唯一命中 src/frontend/module/mod.rs:92 是文档注释、非代码读取；src/lsp/ 零命中）——文档声明的「镜像供 middle 端/LSP 消费」无实现",
-        }),
     },
     ObligationSpec {
         obligation: Obligation::SumTypes,
@@ -244,7 +297,7 @@ pub const IR_GENERATION_DELIVERED: &[Obligation] = &[
 ];
 
 impl Obligation {
-    /// 全部 14 个义务（顺序 = 02 §义务字段表；3.4.4/3.4.5 清账后由 16 降为 14）。
+    /// 全部 13 个义务（顺序 = 02 §义务字段表；3.4.4/3.4.5/3.4.9 清账后由 16 降为 13）。
     pub const ALL: &'static [Obligation] = &[
         Obligation::ProofCalls,
         Obligation::ReleasePlan,
@@ -252,7 +305,6 @@ impl Obligation {
         Obligation::InstantiationRequests,
         Obligation::ExistentialCoercions,
         Obligation::ImplementationProofs,
-        Obligation::InterfaceImplRegistry,
         Obligation::SumTypes,
         Obligation::SumTypeParamNames,
         Obligation::OperatorDispatches,
@@ -267,7 +319,7 @@ impl Obligation {
         INVENTORY
             .iter()
             .find(|s| s.obligation == self)
-            .expect("INVENTORY 必须覆盖全部 14 个义务（test_obligation_inventory_covers_every_variant 钉住）")
+            .expect("INVENTORY 必须覆盖全部 13 个义务（test_obligation_inventory_covers_every_variant 钉住）")
     }
 
     /// `TypeCheckResult` 里的字段名（逐字一致；静态门禁据此对账）。
@@ -300,7 +352,6 @@ impl Obligation {
             Obligation::InstantiationRequests => !type_result.instantiation_requests.is_empty(),
             Obligation::ExistentialCoercions => !type_result.existential_coercions.is_empty(),
             Obligation::ImplementationProofs => !type_result.implementation_proofs.is_empty(),
-            Obligation::InterfaceImplRegistry => !type_result.interface_impl_registry.is_empty(),
             Obligation::SumTypes => !type_result.sum_types.is_empty(),
             Obligation::SumTypeParamNames => !type_result.sum_type_param_names.is_empty(),
             Obligation::OperatorDispatches => !type_result.operator_dispatches.is_empty(),
@@ -382,13 +433,21 @@ impl ObligationFinding {
         )
     }
 
-    /// 构造成用户可见的 W1090 诊断（级别与文案注册在 codes/locales）。
+    /// 构造成用户可见的 W1090 诊断。
+    ///
+    /// **同码升 E**（2026-10-13 用户裁决甲，WBS 4.3.2 / RFC-039 D5 的终态）：
+    /// 码号仍是 `W1090`（不新增 E 码——同一事实两个码即平行表示），发射级别由
+    /// **显式 `.severity(Severity::Error)`** 决定（`codes/builder.rs:186-203`：
+    /// 显式 severity 优先于「码以 `W` 开头 → Warning」的默认；注册表的
+    /// `ErrorCategory` 不参与严重级）。后果如实登记：**一旦发射即改退出码**
+    /// （D59 的 D 类破坏项）；当前健康态零发射，故对既有语料与用户程序零影响。
     pub fn to_diagnostic(&self) -> Diagnostic {
         ErrorCodeDefinition::obligation_not_drained(
             self.obligation.field_name(),
             &self.path.display().to_string(),
             &self.cause.detail(),
         )
+        .severity(Severity::Error)
         .build()
     }
 }
@@ -597,6 +656,7 @@ impl State {
         settlement: &ObligationSettlement,
     ) -> usize {
         let per_file = matches!(self.program.kind, ProgramKind::Check | ProgramKind::Lsp);
+        let orchestrated = !self.uses_pipeline_channel();
         let mut emitted = 0;
         for finding in &settlement.findings {
             if finding.obligation.red_list().is_some() {
@@ -611,10 +671,34 @@ impl State {
                     unit.check_diagnostics.push(diagnostic);
                     emitted += 1;
                 }
-            } else {
-                self.warnings.push(diagnostic);
-                emitted += 1;
+                continue;
             }
+            if diagnostic.severity == Severity::Error {
+                // E 级（4.3.2，D5 终态）：进**错误通道**，触发即改退出码——
+                // 单文件形态走 PipelineError::TypeCheck（result 失败面），
+                // 多文件/嵌入形态另记 OrchestratorError 故障（compile_project
+                // 的 failure 契约；否则 result.errors 无人消费）。
+                let stage = finding.obligation.consumer_stage();
+                // 首个失败优先：本次运行若已因上游失败（如 zzz.yx 的类型错误）
+                // 记过故障，结算**不得覆盖**它——结算只是尾部后置条件，
+                // 抢走主因会把真实的首个错误从用户视野里换掉
+                // （test_driver_run_multi_file_proof_error_yields_to_typecheck_error）。
+                if orchestrated && self.failure.is_none() {
+                    self.fail_with(
+                        stage,
+                        OrchestratorError::TypeCheck {
+                            path: finding.path.display().to_string(),
+                            message: diagnostic.to_string(),
+                            diagnostics: vec![diagnostic.clone()],
+                        },
+                    );
+                }
+                self.errors.push(PipelineError::TypeCheck(diagnostic));
+                emitted += 1;
+                continue;
+            }
+            self.warnings.push(diagnostic);
+            emitted += 1;
         }
         emitted
     }

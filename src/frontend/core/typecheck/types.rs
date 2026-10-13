@@ -45,7 +45,10 @@ pub struct TypeCheckResult {
     /// RFC-011a §5.3 实现证明（编译期擦除；阶段3 ir_gen 由此得每接口的变体集合）
     pub implementation_proofs: Vec<super::environment::ImplementationProof>,
     /// RFC-011b 接口实现登记表（接口名 → 带类型实参的实例化条目）。
-    /// 运算符查询与约束求解的唯一判据；镜像供 middle 端/LSP 消费。
+    /// 运算符查询与约束求解的唯一判据——**树内事实**：在相位消费
+    /// （operator_interfaces.rs / inference/expressions.rs），跨阶段零读取
+    /// （src/middle 0 命中，src/lsp 0 命中）。3.4.9 用户裁决甲改判：将来 LSP
+    /// 真需要该表时按 WBS 4.6.x 新登记，此处不再声明镜像。
     pub interface_impl_registry: HashMap<String, Vec<super::environment::InterfaceImplEntry>>,
     /// RFC-010 和类型登记表（类型名 → 变体定义，声明序）
     pub sum_types: HashMap<String, Vec<super::environment::SumVariantDef>>,

@@ -17,7 +17,8 @@
 //! 转绿后另做三处「摘掉交付标记」的变异测试留档。
 
 use crate::driver::obligations::{
-    Obligation, UndrainedCause, IR_GENERATION_DELIVERED, OBLIGATION_UNDRAINED_CODE,
+    Obligation, UndrainedCause, IR_GENERATION_DELIVERED, NON_OBLIGATION_FIELDS,
+    OBLIGATION_UNDRAINED_CODE,
 };
 use crate::driver::state::{SkipReason, State};
 use crate::driver::{Driver, DriverOutcome, Program, ProgramKind, Stage, Unit};
@@ -107,10 +108,10 @@ fn audit_keys_for_file(
     keys
 }
 
-/// 三档表第一档：**空义务不报**——14 条全空时零发现（且结算确实跑了）。
+/// 三档表第一档：**空义务不报**——13 条全空时零发现（且结算确实跑了）。
 #[test]
 fn test_obligation_settlement_is_quiet_for_empty_obligations() {
-    // Arrange：14 个义务字段全空的合成产物
+    // Arrange：13 个义务字段全空的合成产物
     let state = state_with(ProgramKind::SingleFile, TypeCheckResult::default());
 
     // Act
@@ -123,12 +124,12 @@ fn test_obligation_settlement_is_quiet_for_empty_obligations() {
         settlement.findings
     );
     assert_eq!(
-        settlement.pairs, 14,
-        "有 typecheck 产物的单元必须参与全部 14 条义务的结算"
+        settlement.pairs, 13,
+        "有 typecheck 产物的单元必须参与全部 13 条义务的结算"
     );
     assert_eq!(
-        settlement.empty, 14,
-        "14 条义务全部走第一档（空义务）: {settlement:?}"
+        settlement.empty, 13,
+        "13 条义务全部走第一档（空义务）: {settlement:?}"
     );
 }
 
@@ -143,16 +144,13 @@ fn test_obligation_settlement_has_no_undelivered_in_real_program() {
 
     // Assert：只有红名单条目可以出现——NotDelivered 意味着交付点没接线
     assert!(
-        settlement
-            .findings
-            .iter()
-            .all(|f| matches!(f.cause, UndrainedCause::RedList { .. })),
-        "真实程序里除红名单外不得有未交付义务: {:?}",
+        settlement.is_drained(),
+        "红名单归零后，健康程序的结算必须零发现: {:?}",
         settlement.findings
     );
     assert!(
-        settlement.pairs == 14 && settlement.empty > 0,
-        "结算必须真的跑过（14 对、有空义务档）: {settlement:?}"
+        settlement.pairs == 13 && settlement.empty > 0,
+        "结算必须真的跑过（13 对、有空义务档）: {settlement:?}"
     );
 }
 
@@ -177,11 +175,8 @@ fn test_obligation_delivery_mark_drains_ir_generation_obligations() {
         "和类型程序的 sum_types 必须经 IrGeneration 交付点通过: {settlement:?}"
     );
     assert!(
-        settlement
-            .findings
-            .iter()
-            .all(|f| matches!(f.cause, UndrainedCause::RedList { .. })),
-        "摘掉 IrGeneration 交付标记必须让本例变红: {:?}",
+        settlement.is_drained(),
+        "摘掉 IrGeneration 交付标记必须让本例变红（健康态应零发现）: {:?}",
         settlement.findings
     );
 }
@@ -208,11 +203,8 @@ fn test_obligation_delivery_mark_drains_instantiation_requests() {
         "泛型调用的实例化请求必须经 Monomorphization 交付点通过: {settlement:?}"
     );
     assert!(
-        settlement
-            .findings
-            .iter()
-            .all(|f| matches!(f.cause, UndrainedCause::RedList { .. })),
-        "摘掉 mono 交付标记必须让本例变红: {:?}",
+        settlement.is_drained(),
+        "摘掉 mono 交付标记必须让本例变红（健康态应零发现）: {:?}",
         settlement.findings
     );
 }
@@ -237,11 +229,8 @@ fn test_obligation_delivery_mark_drains_proof_calls() {
         "证明义务必须经 ProofExecution 交付点通过（真值 6 == 3 * 2）: {settlement:?}"
     );
     assert!(
-        settlement
-            .findings
-            .iter()
-            .all(|f| matches!(f.cause, UndrainedCause::RedList { .. })),
-        "摘掉 proof 交付标记必须让本例变红: {:?}",
+        settlement.is_drained(),
+        "摘掉 proof 交付标记必须让本例变红（健康态应零发现）: {:?}",
         settlement.findings
     );
 }
@@ -416,48 +405,39 @@ fn test_obligation_settlement_counters_are_conserved() {
     );
 }
 
-/// 红名单（裁定丙 · 承担面 ①）：审计面必须带 WBS id 与零消费者证据，且**不外发**。
+/// 红名单归零（3.4.9 清账收口）：健康程序的审计面零发现、且不外发任何 W1090。
 ///
-/// 3.4.4/3.4.5 清账后红名单只剩 `interface_impl_registry`（WBS 3.4.9）——
-/// 它由 typecheck 预置表灌入，任何程序都非空，是审计面最稳的载体。
+/// 红名单为空后 `UndrainedCause::RedList` 无活体入口——本用例钉住「没有任何
+/// 字段被当作零消费者登记」这一事实。红名单**机制**仍在（门禁判据 4 的陈旧
+/// 检测与 `--selftest` 的 stale-red-list 夹具继续覆盖其检测面）。
 #[test]
-fn test_obligation_red_list_is_in_audit_face_but_not_externalized() {
+fn test_obligation_red_list_is_empty_and_audit_face_is_silent() {
     // Arrange
     let outcome = run_single(SUM_TYPE_SOURCE);
 
     // Act
-    let finding = outcome
-        .obligations
-        .findings
+    let findings = &outcome.obligations.findings;
+    let externalized = outcome
+        .result
+        .warnings
         .iter()
-        .find(|f| f.obligation == Obligation::InterfaceImplRegistry);
+        .any(|d| d.code == OBLIGATION_UNDRAINED_CODE);
 
-    // Assert：审计面每条带清账任务 id 与证据指针
-    let finding = finding.expect("interface_impl_registry 非空必须在审计面报到（不静默）");
-    match finding.cause {
-        UndrainedCause::RedList { wbs, evidence } => {
-            assert_eq!(wbs, "3.4.9", "清账任务 id 必须是 WBS 3.4.9");
-            assert!(
-                evidence.contains("interface_impl_registry"),
-                "证据指针必须点名该字段与零消费者证据: {evidence}"
-            );
-        }
-        other => panic!("红名单字段的原因必须是 RedList: {other:?}"),
-    }
+    // Assert
     assert!(
-        !outcome
-            .result
-            .warnings
-            .iter()
-            .any(|d| d.code == OBLIGATION_UNDRAINED_CODE),
-        "红名单不进用户可见诊断流（裁定丙）: {:?}",
+        findings.is_empty(),
+        "红名单归零后健康程序的审计面必须零发现: {findings:?}"
+    );
+    assert!(
+        !externalized,
+        "健康程序不得外发 W1090: {:?}",
         outcome.result.warnings
     );
 }
 
-/// 结算诊断的**外发**（裁定丙 · 非红名单）：未交付义务必须进本形态诊断通道。
+/// 结算诊断的**外发**（4.3.2 同码升 E）：未交付义务进**错误通道**、触发即失败。
 #[test]
-fn test_obligation_undrained_is_externalized_as_w1090() {
+fn test_obligation_undrained_is_externalized_as_error() {
     // Arrange：非红名单义务非空、交付标记缺席（等价于交付点被摘掉）
     let mut state = state_with(
         ProgramKind::SingleFile,
@@ -476,18 +456,93 @@ fn test_obligation_undrained_is_externalized_as_w1090() {
         state.obligations
     );
     let diagnostic = state
-        .warnings
+        .errors
         .iter()
+        .filter_map(|e| e.diagnostic())
         .find(|d| d.code == OBLIGATION_UNDRAINED_CODE)
-        .expect("非红名单未交付义务必须外发 W1090");
+        .expect("未交付义务必须进错误通道（E 级）");
     assert!(
         diagnostic.message.contains("escaped_refs"),
         "诊断必须点名义务字段: {}",
         diagnostic.message
     );
+    assert_eq!(
+        diagnostic.severity,
+        Severity::Error,
+        "4.3.2 同码升 E：发射级别必须是 error"
+    );
+    assert!(
+        state.warnings.is_empty(),
+        "E 级不得落进警告通道（否则不计入 error_count、退出码不为非零）: {:?}",
+        state.warnings
+    );
 }
 
-/// 结算清单与 14 条义务的静态事实一致（字段名/交付集无漂移）。
+/// 同码升 E 的多文件形态：未交付义务另记 OrchestratorError 故障（触发即编译失败）。
+#[test]
+fn test_obligation_undrained_fails_orchestrated_compilation() {
+    // Arrange：MultiFile 形态（非 pipeline 通道）的合成产物 + 交付标记缺席
+    let mut state = state_with(
+        ProgramKind::MultiFile,
+        type_result_with(|r| {
+            r.escaped_refs.insert("v".to_string());
+        }),
+    );
+
+    // Act
+    state.assert_drained();
+
+    // Assert：错误通道 + failure 双落位（compile_project 契约读 failure）
+    assert!(
+        state
+            .errors
+            .iter()
+            .filter_map(|e| e.diagnostic())
+            .any(|d| d.code == OBLIGATION_UNDRAINED_CODE && d.severity == Severity::Error),
+        "多文件形态也必须进错误通道: {:?}",
+        state.errors
+    );
+    assert!(
+        state.failure.is_some(),
+        "多文件形态必须记 OrchestratorError 故障（否则 result.errors 无人消费）: {:?}",
+        state.obligations
+    );
+}
+
+/// C2（机制级 · 防空转）：同一条未交付义务在 run 与 check 形态下产出的键必须一致。
+///
+/// 端到端侧健康程序两侧都静默（见上一条用例）——本用例用合成 State 造出
+/// 「非空且未交付」的义务，证明两侧都**会**报，且报的键逐字相同。
+#[test]
+fn test_obligation_settlement_keys_agree_across_run_and_check_kinds() {
+    // Arrange：同一份合成产物（escaped_refs 非空、交付标记缺席），两种形态各一份
+    let make = |kind: ProgramKind| {
+        state_with(
+            kind,
+            type_result_with(|r| {
+                r.escaped_refs.insert("v".to_string());
+            }),
+        )
+        .settle_obligations()
+    };
+
+    // Act
+    let run_settlement = make(ProgramKind::SingleFile);
+    let check_settlement = make(ProgramKind::Check);
+
+    // Assert：两侧都非空（否则比对是空转），且键集逐字一致
+    assert!(
+        !run_settlement.keys().is_empty() && !check_settlement.keys().is_empty(),
+        "同一未交付义务在两种形态下都必须产出发现: run={run_settlement:?} check={check_settlement:?}"
+    );
+    assert_eq!(
+        run_settlement.keys(),
+        check_settlement.keys(),
+        "run 与 check 形态对同一义务的结算键必须一致（C2）"
+    );
+}
+
+/// 结算清单与 13 条义务的静态事实一致（字段名/交付集无漂移）。
 #[test]
 fn test_obligation_inventory_is_complete_and_drift_free() {
     // Arrange
@@ -501,10 +556,10 @@ fn test_obligation_inventory_is_complete_and_drift_free() {
     // Assert
     assert_eq!(
         all.len(),
-        14,
-        "02 §义务字段表在 3.4.4/3.4.5 清账后共 14 条义务"
+        13,
+        "02 §义务字段表在 3.4.4/3.4.5/3.4.9 清账后共 13 条义务"
     );
-    assert_eq!(fields.len(), 14, "字段名必须逐条唯一");
+    assert_eq!(fields.len(), 13, "字段名必须逐条唯一");
     let ir_fields: Vec<Obligation> = all
         .iter()
         .copied()
@@ -517,12 +572,12 @@ fn test_obligation_inventory_is_complete_and_drift_free() {
     );
 }
 
-/// 红名单现状：清账任务 id 与「消费者为零」证据指针。
+/// 红名单为空（3.4.4 / 3.4.5 / 3.4.9 三条全部清账收口）。
 ///
-/// 3.4.4（variant_ctor_calls）与 3.4.5（method_overload_ir_names）已清账，
-/// 只剩 3.4.9；本用例钉死「红名单不会悄悄变长或变短」。
+/// 一条登记（哪怕只是占位）都必须是一次**显式裁决**——它会要求连带更新本用例
+/// 与门禁判据 4；因此「悄悄加回一条」在本用例下必然红。
 #[test]
-fn test_obligation_red_list_entries_carry_cleanup_ids_and_evidence() {
+fn test_obligation_red_list_is_empty_after_cleanup() {
     // Arrange：红名单条目（字段 / 清账 WBS / 证据指针）
     let red: Vec<(Obligation, &str, &str)> = Obligation::ALL
         .iter()
@@ -530,29 +585,56 @@ fn test_obligation_red_list_entries_carry_cleanup_ids_and_evidence() {
         .collect();
 
     // Act
-    let mut ids: Vec<&str> = red.iter().map(|(_, wbs, _)| *wbs).collect();
-    ids.sort_unstable();
-    ids.dedup();
+    let red_fields: Vec<&str> = red.iter().map(|(o, _, _)| o.field_name()).collect();
 
     // Assert
-    assert_eq!(
-        red.len(),
-        1,
-        "3.4.4/3.4.5 清账后红名单恰好一条（interface_impl_registry）: {red:?}"
+    assert!(
+        red_fields.is_empty(),
+        "3.4.4/3.4.5/3.4.9 清账后红名单必须为空（重新登记须走显式裁决）: {red_fields:?}"
     );
-    assert_eq!(ids, vec!["3.4.9"], "剩余清账任务 id 必须与 09-WBS 登记一致");
-    for (obligation, _, evidence) in &red {
+}
+
+/// 非义务字段登记：与义务清单互补、理由写实（门禁判据 1 的第三处）。
+#[test]
+fn test_non_obligation_registry_is_wellformed() {
+    // Arrange
+    let obligation_fields: Vec<&str> = Obligation::ALL.iter().map(|o| o.field_name()).collect();
+    let entries = NON_OBLIGATION_FIELDS;
+
+    // Act
+    let mut names: Vec<&str> = entries.iter().map(|e| e.field).collect();
+    names.sort_unstable();
+    let before_dedup = names.len();
+    names.dedup();
+
+    // Assert
+    assert!(
+        !entries.is_empty(),
+        "非义务登记不得为空（8 条在其中，含 3.4.9 改判的 interface_impl_registry）"
+    );
+    assert_eq!(
+        names.len(),
+        before_dedup,
+        "非义务登记不得有重复字段: {names:?}"
+    );
+    for entry in entries {
         assert!(
-            evidence.contains("证据命令"),
-            "{} 必须带可复核的「消费者为零」证据指针: {evidence}",
-            obligation.field_name()
+            !obligation_fields.contains(&entry.field),
+            "{} 不能同时是义务与非义务（两表必须互补）",
+            entry.field
+        );
+        assert!(
+            entry.reason.len() >= 12,
+            "{} 的理由必须写实测消费面（不少于 12 字）: {:?}",
+            entry.field,
+            entry.reason
         );
     }
 }
 
-/// W1090 已注册、W 级、span 豁免（结算点没有用户可指的源码位置）。
+/// W1090 已注册、span 豁免、**发射级别为 error**（4.3.2 同码升 E 的终态）。
 #[test]
-fn test_obligation_code_is_registered_as_span_exempt_warning() {
+fn test_obligation_code_is_span_exempt_and_emits_error_severity() {
     // Arrange
     let definition = ErrorCodeDefinition::find(OBLIGATION_UNDRAINED_CODE);
     let finding = state_with(
@@ -577,8 +659,13 @@ fn test_obligation_code_is_registered_as_span_exempt_warning() {
     );
     assert_eq!(
         finding.to_diagnostic().severity,
-        Severity::Warning,
-        "4.3.1 只外发 W 级（D5 观测期，升 E 归 4.3.2）"
+        Severity::Error,
+        "4.3.2 同码升 E（显式 .severity(Error)，码号仍是 W1090）——D5 终态"
+    );
+    assert_eq!(
+        finding.to_diagnostic().code,
+        OBLIGATION_UNDRAINED_CODE,
+        "升 E 不改码号（不新增 E 码：同一事实两个码即平行表示）"
     );
 }
 
@@ -609,12 +696,15 @@ fn test_obligation_diagnostics_agree_across_run_and_check() {
         .expect("check entry must not fail structurally");
 
     // Assert：① 审计面按键归一后一致（同源文件；check 会额外带上 <std/...> 单元，
-    //         按文件名过滤——C2 判据的主语是「同源文件」）
+    //         按文件名过滤——C2 判据的主语是「同源文件」）。
+    //         红名单归零后健康程序两侧都**零发现**：这不是空转——下面同时断言
+    //         两侧结算都真的跑过（pairs ≥ 义务条数），即「静默是算出来的静默」。
     let run_keys = audit_keys_for_file(&run_outcome, "main.yx");
     assert!(
-        !run_keys.is_empty(),
-        "审计面必须非空（否则比对是空转）: {:?}",
-        run_outcome.obligations
+        run_outcome.obligations.pairs >= 13 && check_outcome.obligations.pairs >= 13,
+        "两侧结算都必须真的跑过（pairs ≥ 13）: run={:?} check={:?}",
+        run_outcome.obligations,
+        check_outcome.obligations
     );
     assert_eq!(
         run_keys,

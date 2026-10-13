@@ -1,0 +1,4 @@
+/// 夹具版 IrGeneration 臂：故意不含锚点所指的那个符号。
+fn ir_generation(state: &mut State) {
+    state.units[0].delivered.deliver(Obligation::GhostField);
+}

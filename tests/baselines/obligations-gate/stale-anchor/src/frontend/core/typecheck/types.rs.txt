@@ -1,0 +1,6 @@
+/// 夹具版 TypeCheckResult（mini）。
+pub struct TypeCheckResult {
+    pub ghost_field: Vec<String>,
+    pub fixture_meta: String,
+    pub fixture_other: String,
+}

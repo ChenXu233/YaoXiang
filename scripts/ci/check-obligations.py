@@ -10,10 +10,18 @@ check-obligations.py —— 义务字段静态门禁（WBS 9.2 / 02-stage-contra
 
 判据（任一违反 → 退出码 1）：
 
-  1. 清单对账：三处逐字一致（16 条义务）
+  1. 清单对账：三处逐字一致（义务条数以 02 §义务字段表表头为准）
        a) src/driver/obligations.rs 的 INVENTORY（字段名 / 消费者阶段 / 红名单）
        b) src/frontend/core/typecheck/types.rs 的 TypeCheckResult 字段定义
        c) docs/src/dev/architecture/02-stage-contract.md §义务字段表
+     反向 containment（F2）：TypeCheckResult 的字段集必须恰好等于「INVENTORY ∪
+     NON_OBLIGATION_FIELDS（显式登记，含理由）」——两端都不许有未登记字段，
+     并通过「字段数 − 义务数 − 非义务数 = 0」的差值显式输出。
+     F1 锚点校验：登记理由与证据指针里的 file:line 必须可复核（文件存在、
+     行号在册、锚点后紧跟的符号必须真的出现在被锚文件里）——防「指针悄悄
+     指到不存在的符号」这种纯文本锚点的陈旧形态。
+     F4 表格锚点：02 §义务字段表的「定义行」列必须等于 types.rs 的字段声明行
+     （表注约定），防两组行号各自为政。
   2. 读出证据：非红名单义务必须在声明的消费者文件里有真读取
        （成员访问 .字段名；注释、测试代码、字符串不算）
        —— 这是「定义 + 写入 + 真消费」的 9.2 判据强化版
@@ -23,14 +31,15 @@ check-obligations.py —— 义务字段静态门禁（WBS 9.2 / 02-stage-contra
   4. 红名单陈旧检测：红名单义务必须在 typecheck 树 + 本清单之外零真读取；
        每条必须带 WBS 任务 id 与「消费者为零」的证据指针
        （唯一允许的清单外读取点是 obligations.rs 自己的空义务探针 is_produced）
-  5. 反例自检（--selftest）：自带 negative 夹具必须判红、positive 夹具必须判绿
+  5. 反例自检（--selftest）：自带七类夹具（幽灵义务 / 正例·红名单为空 / 清单滞后 /
+     结构体滞后 / 红名单陈旧 / 未登记字段 / 锚点失效）各按预期红绿
 
 退出码：0 = 门禁通过（红名单条目按登记原样输出，不静默）；
         1 = 违反判据；2 = 脚本自身无法完成对账
 
 用法：
   python scripts/ci/check-obligations.py                 # 对当前仓库跑门禁
-  python scripts/ci/check-obligations.py --selftest      # 只跑反例/正例自检
+  python scripts/ci/check-obligations.py --selftest      # 只跑夹具自检（六类）
   python scripts/ci/check-obligations.py --root <dir>    # 对指定仓库根跑（夹具）
   python scripts/ci/check-obligations.py --verbose
 """
@@ -185,6 +194,104 @@ def parse_manifest(text):
     return entries
 
 
+def parse_non_obligation_fields(text):
+    """解析 obligations.rs 的 NON_OBLIGATION_FIELDS 登记（字段名 + 理由）。
+
+    判据 1 的第三处：与 INVENTORY 一起闭合 TypeCheckResult 的字段普查。
+    """
+    start = text.find('pub const NON_OBLIGATION_FIELDS')
+    if start == -1:
+        return None
+    end = text.find(chr(10) + '];', start)
+    if end == -1:
+        return None
+    block = text[start:end]
+    entries = []
+    for chunk in block.split('NonObligationField {')[1:]:
+        field = re.search(r'field:\s*"([^"]+)"', chunk)
+        reason = re.search(r'reason:\s*"([^"]+)"', chunk)
+        if field:
+            entries.append({
+                'field': field.group(1),
+                'reason': reason.group(1) if reason else '',
+            })
+    return entries
+
+
+ANCHOR_RE = re.compile(
+    r'([A-Za-z0-9_./-]+\.(?:rs|py|md|json|toml|yx)):(\d+)(?:-(\d+))?'
+    r'(?:[ \t]+([A-Za-z_][A-Za-z0-9_.:]*))?')
+CONT_ANCHOR_RE = re.compile(r'(?<![\w./:-]):(\d+)(?:-(\d+))?(?![\d-])')
+FILE_MENTION_RE = re.compile(r'([A-Za-z0-9_./-]+\.(?:rs|py|md|json|toml|yx))')
+
+
+def resolve_anchor_path(root, rel):
+    """把锚点里的路径解析到仓库内：先原样、再 src/ 下、最后按唯一基名。"""
+    parts = [os.path.join(root, rel), os.path.join(root, 'src', rel)]
+    for cand in parts:
+        for probe in (cand, cand + '.txt'):
+            if os.path.isfile(probe):
+                return probe
+    base = os.path.basename(rel)
+    found = []
+    src_root = os.path.join(root, 'src')
+    for dirpath, dirnames, filenames in os.walk(src_root):
+        dirnames[:] = [d for d in dirnames if d not in ('.git', 'target')]
+        if base in filenames:
+            found.append(os.path.join(dirpath, base))
+            if len(found) > 1:
+                return None
+        elif base + '.txt' in filenames:
+            found.append(os.path.join(dirpath, base + '.txt'))
+            if len(found) > 1:
+                return None
+    return found[0] if found else None
+
+
+def verify_anchors(root, text, label):
+    """F1：登记/证据里的 file:line 锚点必须可复核——文件存在、行号在册、
+    锚点后紧跟的符号（若有）必须在被锚文件里出现。"""
+    violations = []
+    matched_spans = []
+    anchors = []
+    for m in ANCHOR_RE.finditer(text):
+        anchors.append((m.group(1), int(m.group(2)),
+                        int(m.group(3)) if m.group(3) else None, m.group(4)))
+        matched_spans.append((m.start(), m.end()))
+    for m in CONT_ANCHOR_RE.finditer(text):
+        if any(lo <= m.start() < hi for lo, hi in matched_spans):
+            continue
+        mentions = FILE_MENTION_RE.findall(text[:m.start()])
+        if not mentions:
+            continue
+        anchors.append((mentions[-1], int(m.group(1)),
+                        int(m.group(2)) if m.group(2) else None, None))
+    for rel, line, end_line, symbol in anchors:
+        where = '%s: %s:%d' % (label, rel, line)
+        path = resolve_anchor_path(root, rel)
+        if path is None:
+            violations.append('%s 的锚点文件无法定位（%s）' % (where, rel))
+            continue
+        try:
+            body = io.open(path, encoding='utf-8', errors='replace').read()
+        except IOError:
+            violations.append('%s 的锚点文件读不出（%s）' % (where, path))
+            continue
+        total = body.count(chr(10)) + 1
+        if line < 1 or line > total:
+            violations.append('%s 行号越界（该文件共 %d 行）' % (where, total))
+            continue
+        if end_line is not None and (end_line < line or end_line > total):
+            violations.append('%s 区间终点越界（该文件共 %d 行）' % (where, total))
+            continue
+        if symbol:
+            tail = re.split(r'[.:]', symbol)[-1]
+            if tail and tail not in body:
+                violations.append('%s 的锚点符号 %s 不在该文件里（F1 符号锚）'
+                                  % (where, symbol))
+    return violations
+
+
 def parse_ir_generation_delivered(text):
     """解析 IR_GENERATION_DELIVERED 常量里的义务变体名。"""
     m = re.search(r'pub const IR_GENERATION_DELIVERED[^=]*=\s*&\[(.*?)\];', text, re.S)
@@ -207,22 +314,34 @@ def parse_struct_fields(text, struct_name):
 
 
 def parse_doc_table(text):
-    """解析 02-stage-contract §义务字段表：字段名集合 + 表头声明的条数。
+    """解析 02-stage-contract §义务字段表：字段名 → 定义行 + 表头声明的条数。
 
     表头（### 义务字段：N 个…）自己声明了条数——把它与 INVENTORY 对账，
     这样「三处一起漏改」也会红（只对字段名集合做不到这一点）。
+    定义行按表注约定取**字段声明行**（含行号时一并返回，供 F4 对账）。
     """
     bt = chr(96)
     m = re.search(r'^### 义务字段：\s*(\d+)\s*个.*?$(.*?)^###', text, re.S | re.M)
     if not m:
         return None, None
     declared = int(m.group(1))
-    fields = []
+    rows = {}
     for line in m.group(2).splitlines():
-        rm = re.match(r'\|\s*' + bt + r'([a-z_][a-z0-9_]*)' + bt + r'\s*\|', line)
+        rm = re.match(r'\|\s*' + bt + r'([a-z_][a-z0-9_]*)' + bt + r'\s*\|\s*' +
+                      bt + r'(\d+)' + bt + r'\s*\|', line)
         if rm:
-            fields.append(rm.group(1))
-    return fields, declared
+            rows[rm.group(1)] = int(rm.group(2))
+    return rows, declared
+
+
+def parse_decl_lines(text):
+    """types.rs 的字段声明行：字段名 → 行号（F4 的基准）。"""
+    decls = {}
+    for idx, line in enumerate(text.splitlines()):
+        dm = re.match(r'\s*pub(?:\(super\))?\s+([a-z_][a-z0-9_]*)\s*:', line)
+        if dm:
+            decls.setdefault(dm.group(1), idx + 1)
+    return decls
 
 
 def reads_field(text, field):
@@ -295,12 +414,20 @@ def check(root, verbose=False):
     if not entries:
         violations.append('INVENTORY 为空')
 
+    struct_decls = parse_decl_lines(read(types_path))
     struct_fields = parse_struct_fields(read(types_path), 'TypeCheckResult')
     if struct_fields is None:
         violations.append('无法解析 %s 的 TypeCheckResult 结构体' % TYPES)
         struct_fields = set()
 
-    doc_fields, declared = parse_doc_table(read(contract_path))
+    non_obligation = parse_non_obligation_fields(manifest_text)
+    if non_obligation is None:
+        violations.append('无法解析 %s 的 NON_OBLIGATION_FIELDS（判据 1 的第三处）' % MANIFEST)
+        non_obligation = []
+    non_obligation_fields = {e['field'] for e in non_obligation}
+
+    doc_rows, declared = parse_doc_table(read(contract_path))
+    doc_fields = sorted(doc_rows) if doc_rows else None
     if doc_fields is None:
         violations.append('无法解析 %s 的 §义务字段表（含表头条数声明）' % CONTRACT)
         doc_fields, declared = [], None
@@ -315,6 +442,41 @@ def check(root, verbose=False):
         if e['consumer'] not in DELIVERY_STAGES:
             violations.append('字段 %s 的消费者阶段 %s 不是交付阶段之一 %s'
                               % (f, e['consumer'], list(DELIVERY_STAGES)))
+
+    # F1（门禁加固）：登记与证据里的锚点必须可复核
+    for entry in non_obligation:
+        violations.extend(verify_anchors(
+            root, entry['reason'], '非义务登记 %s 的理由' % entry['field']))
+    for e in entries:
+        if e['evidence']:
+            violations.extend(verify_anchors(
+                root, e['evidence'], '义务 %s 的证据指针' % e['field']))
+
+    # F4（表格锚点）：02 §义务字段表的「定义行」必须等于类型声明行
+    if doc_rows:
+        for field, doc_line in sorted(doc_rows.items()):
+            actual = struct_decls.get(field)
+            if actual is None:
+                continue
+            if actual != doc_line:
+                violations.append('02 §义务字段表 %s 的定义行写 %d，实际声明在 %s:%d'
+                                  '（表注约定：字段声明行）'
+                                  % (field, doc_line, TYPES, actual))
+
+    # 判据 1 的反向 containment：结构体字段必须全部登记（义务清单或非义务登记）
+    inventory_fields = set(fields)
+    for f in sorted(struct_fields - inventory_fields - non_obligation_fields):
+        violations.append('TypeCheckResult 字段 %s 未登记：既不在义务清单（INVENTORY）也不在'
+                          '非义务字段登记（NON_OBLIGATION_FIELDS，须含理由）' % f)
+    for entry in non_obligation:
+        f = entry['field']
+        if f not in struct_fields:
+            violations.append('非义务登记 %s 不在 TypeCheckResult 里（登记已陈旧）' % f)
+        if f in inventory_fields:
+            violations.append('字段 %s 同时登记为义务与非义务——两表必须互补' % f)
+        if len(entry['reason']) < 12:
+            violations.append('非义务登记 %s 的理由过短/为空（必须写实测消费面）: %r'
+                              % (f, entry['reason']))
     missing_in_doc = [f for f in fields if f not in doc_fields]
     extra_in_doc = [f for f in doc_fields if f not in fields]
     if missing_in_doc:
@@ -378,6 +540,9 @@ def check(root, verbose=False):
         'to_deliver': len(expected_marks),
         'marked': len(expected_marks & marks),
         'red_list': [(e['field'], e['wbs']) for e in entries if e['wbs']],
+        'non_obligation': len(non_obligation),
+        'struct_total': len(struct_fields),
+        'residual': sorted(struct_fields - set(fields) - non_obligation_fields),
     }
     return violations, notes, summary
 
@@ -397,10 +562,23 @@ def run_root(root, verbose=False):
         for v in violations:
             print('  x %s' % v)
         return 1, violations
-    print('义务字段门禁：PASS（%d 条义务：%d 条须交付且全部有交付标记；红名单 %d 条按登记保留）'
-          % (summary['entries'], summary['to_deliver'], len(summary['red_list'])))
-    for field, wbs in summary['red_list']:
-        print('  红名单（不静默）：%s —— 清账任务 WBS %s' % (field, wbs))
+    if summary['red_list']:
+        print('义务字段门禁：PASS（%d 条义务：%d 条须交付且全部有交付标记；红名单 %d 条按登记保留；'
+              '非义务登记 %d 条）'
+              % (summary['entries'], summary['to_deliver'], len(summary['red_list']),
+                 summary['non_obligation']))
+        for field, wbs in summary['red_list']:
+            print('  红名单（不静默）：%s —— 清账任务 WBS %s' % (field, wbs))
+    else:
+        print('义务字段门禁：PASS（%d 条义务：%d 条须交付且全部有交付标记；'
+              '红名单 0 条——已清账归零；非义务登记 %d 条）'
+              % (summary['entries'], summary['to_deliver'], summary['non_obligation']))
+        print('  红名单为空：字段普查由「义务清单 ∪ 非义务登记」闭合（反向 containment 判据）')
+    print('  字段普查差值（F2）：TypeCheckResult %d 字段 - 义务 %d - 非义务登记 %d = %d%s'
+          % (summary['struct_total'], summary['entries'], summary['non_obligation'],
+             len(summary['residual']),
+             '' if not summary['residual']
+             else '（未登记：%s）' % ', '.join(summary['residual'])))
     return 0, []
 
 
@@ -408,11 +586,13 @@ def selftest():
     """判据 5：自带反例/正例夹具——探测器不得空转。
 
     四种夹具各钉一类事实，缺一即探测器有盲区：
-      negative        幽灵义务（定义 + 写入但零读取、未登记红名单）→ 必红
-      positive        正例（有交付标记 + 真实读取）→ 必绿
-      stale-manifest  代码删了清单没同步（结构体已无该字段，INVENTORY 仍登记）→ 必红
-      stale-struct    清单删了代码还在（INVENTORY 少登记，结构体与文档表仍在）→ 必红
-      stale-red-list  红名单字段长出消费者（陈旧登记）→ 必红
+      negative            幽灵义务（定义 + 写入但零读取、未登记红名单）→ 必红
+      positive            正例（红名单为空 + 有交付标记 + 真实读取）→ 必绿
+      stale-manifest      代码删了清单没同步（结构体已无该字段，INVENTORY 仍登记）→ 必红
+      stale-struct        清单删了代码还在（INVENTORY 少登记，结构体与文档表仍在）→ 必红
+      stale-red-list      红名单字段长出消费者（陈旧登记）→ 必红
+      unregistered-field  结构体新增字段既不在义务清单也不在非义务登记 → 必红
+      stale-anchor        登记理由里的 file:line 锚点失效（符号不存在 / 行号越界）→ 必红
     """
     base = os.path.join(ROOT, 'tests', 'baselines', 'obligations-gate')
     fixtures = (
@@ -421,6 +601,8 @@ def selftest():
         ('stale-manifest', True),
         ('stale-struct', True),
         ('stale-red-list', True),
+        ('unregistered-field', True),
+        ('stale-anchor', True),
     )
     ok = True
     for name, want_red in fixtures:
@@ -434,12 +616,13 @@ def selftest():
         verdict = 'PASS' if is_red == want_red else 'FAIL'
         if verdict == 'FAIL':
             ok = False
-        print('自检夹具 %-16s 期望 %s，实际 %s -> %s'
+        print('自检夹具 %-18s 期望 %s，实际 %s -> %s'
               % (name, '红' if want_red else '绿', '红' if is_red else '绿', verdict))
     if not ok:
         print('自检失败：探测器判据不可信（反例未红 或 正例未绿）')
         return 1
-    print('自检通过：五类夹具（幽灵义务 / 正例 / 清单滞后 / 结构体滞后 / 红名单陈旧）行为符合预期')
+    print('自检通过：七类夹具（幽灵义务 / 正例·红名单为空 / 清单滞后 / 结构体滞后 / '
+          '红名单陈旧 / 未登记字段 / 锚点失效）行为符合预期')
     return 0
 
 

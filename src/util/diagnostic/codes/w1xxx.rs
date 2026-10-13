@@ -24,7 +24,11 @@ define_codes!(W1XXX, {
     // W1080 编译期无法证明约束，已降级为运行时检查
     ("W1080", Warning, false, constraint_demoted() => ),
     // W1090 义务已产出但无消费者（02-stage-contract §2 义务账本 / RFC-039 D5，
-    // WBS 4.3.1：阶段表尾部结算的未排空义务，级别先 W 后 E）。
+    // WBS 4.3.1 阶段表尾部结算的未排空义务；WBS 4.3.2 同码升 E，2026-10-13 用户裁决甲）。
+    // **码族与发射级别解耦**：码号留在 W 族（不新增 E 码——同一事实两个码即平行表示），
+    // 发射级别由构造点的显式 `.severity(Severity::Error)` 决定
+    // （driver/obligations.rs 的 `to_diagnostic`）；本表的 `Warning` 类目
+    // 只表示编号归属，不决定级别（RFC-013「发射通道」节）。
     // span_exempt=true 的理由（宏文档 codes/mod.rs:8-18 要求在此写明）：
     // 结算发生在 Driver::run 阶段表尾部，诊断粒度是「编译单元（文件/模块）
     // × 义务字段」——义务是阶段之间的契约，不存在用户可指的那一行源码，

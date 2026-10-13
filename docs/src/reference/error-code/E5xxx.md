@@ -34,7 +34,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`模块 '{module}' 未找到`
 - **消息**：引用的模块不存在
 - **帮助**：检查模块路径，确保它存在
-- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:658`
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:655`
 
 ### E5002：导入错误
 
@@ -54,7 +54,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`在模块 '{module}' 中找不到导出 '{export}'`
 - **消息**：模块中不存在的导出
 - **帮助**：检查模块的导出
-- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:741`
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:738`
 
 ### E5004：循环依赖
 
@@ -82,7 +82,7 @@ description: '模块系统与导入解析相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::duplicate_import(name)`
 - **模板**：`重复导入：'{name}' 已被导入`
 - **帮助**：请移除重复的导入，或使用不同名字/模块别名
-- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:319`
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:316`
 
 ### E5007：模块导出
 
@@ -101,5 +101,5 @@ description: '模块系统与导入解析相关的错误。'
 - **构造函数**：`ErrorCodeDefinition::import_name_conflict(name, module)`
 - **模板**：`导入名 '{name}' 与现有绑定冲突（导入自 '{module}'）`
 - **帮助**：请使用不同名字或模块别名
-- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:328`
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:325`
 - **源码注释名**：导入名与现有绑定冲突（#414，RFC-029 §导入冲突）

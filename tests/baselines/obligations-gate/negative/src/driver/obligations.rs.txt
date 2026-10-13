@@ -14,3 +14,16 @@ const INVENTORY: &[ObligationSpec] = &[
         red_list: None,
     },
 ];
+
+/// 夹具版非义务字段登记（mini）。
+pub struct NonObligationField {
+    pub field: &'static str,
+    pub reason: &'static str,
+}
+
+pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
+    NonObligationField {
+        field: "fixture_meta",
+        reason: "夹具占位：非义务字段（单元元信息，无跨阶段契约）",
+    },
+];

@@ -223,26 +223,33 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 
 **结论：第三层判据需要补充多文件语料层，否则它无法充当本文的验收工具。** 见「实施要点」S1。
 
-### 义务字段：14 个「产出即契约」的字段，零机制保证
+### 义务字段：13 个「产出即契约」的字段，零机制保证
 
-`src/frontend/core/typecheck/types.rs:16-73` 的 `TypeCheckResult` 中，有 **14 个字段**的文档注释明确写着「由 X 阶段产出 → Y 阶段消费」，即它们本质上是**跨阶段义务**：
+`src/frontend/core/typecheck/types.rs:16-73` 的 `TypeCheckResult` 中，有 **13 个字段**的文档注释明确写着「由 X 阶段产出 → Y 阶段消费」，即它们本质上是**跨阶段义务**：
 
 | 字段 | 定义行 | 产出方 → 消费方 |
 | --- | --- | --- |
+
+> **取行约定**：定义行 = `types.rs` 里该字段的**声明行**（`pub` / `pub(super)` 那一行），不是 doc 注释首行——同一字段的注释块可能多行，声明行才是唯一可锚定的位置。
 | `proof_calls` | `36` | typecheck → **proof_execution** |
 | `release_plan` | `38` | ownership → IR 生成（`ir_gen.rs:341` 读、`:1942` 用） |
 | `escaped_refs` | `40` | ownership → IR 生成 |
 | `instantiation_requests` | `42` | typecheck → 单态化（`pipeline.rs:381`） |
 | `existential_coercions` | `44` | typecheck → IR 生成 |
 | `implementation_proofs` | `46` | typecheck → IR 生成 |
-| `interface_impl_registry` | `49` | typecheck → 运算符查询 / 约束求解 / LSP |
-| `sum_types` | `51` | typecheck → IR 生成 |
-| `sum_type_param_names` | `54` | typecheck → IR 生成 |
-| `operator_dispatches` | `56` | typecheck → IR 生成（span 键控） |
-| `overload_resolutions` | `59` | typecheck → IR 生成（span 键控） |
-| `try_expr_impls` | `62` | typecheck → IR 生成（span 键控） |
-| `match_scrutinee_types` | `66` | typecheck → IR 生成（span 键控） |
-| `module_namespaces` | `69` | typecheck → IR 生成 |
+| `sum_types` | `54` | typecheck → IR 生成 |
+| `sum_type_param_names` | `57` | typecheck → IR 生成 |
+| `operator_dispatches` | `59` | typecheck → IR 生成（span 键控） |
+| `overload_resolutions` | `62` | typecheck → IR 生成（span 键控） |
+| `try_expr_impls` | `65` | typecheck → IR 生成（span 键控） |
+| `match_scrutinee_types` | `69` | typecheck → IR 生成（span 键控） |
+| `module_namespaces` | `72` | typecheck → IR 生成 |
+
+**改判记录（3.4.9，2026-10-13 用户裁决甲）**：原第 14 行 `interface_impl_registry`（types.rs:49）已**改判为树内事实**——它按设计由 typecheck 在相位消费、跨阶段零读取，不是义务：
+
+- **在相位消费点（活体）**：`operator_interfaces.rs:623`（运算符查询读 `env.interface_impl_registry`）、`inference/expressions.rs` 七处约束求解查询（:1514 / :1646 / :3151 / :3876 / :3899 / :4400 / :4408）、`checker.rs:214-217` 只读访问器、`checker.rs:974` 注入 body_checker。
+- **跨阶段零读取（直证）**：`git grep -n 'interface_impl_registry' -- src/middle` → 空；`src/driver` 侧仅账本自身的登记与文档（已随本轮移除）。
+- **处置**：删掉文档注释里「镜像供 middle 端/LSP 消费」的**声明**，保留字段与在相位消费；该字段登记在 `src/driver/obligations.rs` 的 `NON_OBLIGATION_FIELDS`（含理由）。将来 LSP 真需要该表，按 4.6.x 新登记走，**不在本轮造消费者**。
 
 **这些字段全部以 `Span` 或名字表为键跨层传递。** 等价性判据文档已指出 span 键控契约的失配会「静默失效，无任何错误」（`ReleasePlan` 是典型：两侧 span 计算方式任何一处不一致 → `Drop` 指令静默消失）。
 
@@ -251,7 +258,24 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 - `release_plan` 的消费者 `ir_gen.rs:341`（`release_plan: type_result.release_plan.drops.clone()`）位于 `generate_ir_with_context` 内部，而 `compile_project:154-156` **恰好把完整的 `&TypeCheckResult` 传给了它**——消费者在下游模块，而下游模块在所有入口的必经之路上。
 - `proof_calls` 的消费者在 `pipeline.rs` **顶层**，属于**另一个入口实现**。orchestrator 的四个入口根本不经过 `pipeline.rs` 这一层。
 
-**已核实事实**：目前全仓库**没有任何机制**保证这 14 个字段被消费。唯一"保护"是 `ReleasePlan` 恰好搭上了 IR 生成的便车。
+**已核实事实**：目前全仓库**没有任何机制**保证这 13 个字段被消费。唯一"保护"是 `ReleasePlan` 恰好搭上了 IR 生成的便车。
+
+### 非义务字段登记：`TypeCheckResult` 里的通道 / 在相位 / 树内事实字段
+
+**`NON_OBLIGATION_FIELDS`（8 条）**：`TypeCheckResult` 里不属跨阶段义务的字段逐一登记（字段名 + 理由），与上面「§义务字段」表**互补**：
+
+| 字段 | 为什么不是跨阶段义务（要点） |
+| --- | --- |
+| `module_name` | 单元身份元信息（`src/middle` 0 命中） |
+| `diagnostics` | 错误诊断通道（既有通道，非「产出即契约」） |
+| `bindings` | 有跨阶段读取（ir_gen.rs:735/:5034），但文档注释未声明跨阶段契约 ⇒ 未收编 |
+| `local_var_types` | 诊断渲染用（ir_gen.rs:852/:4543/:4794），同 `bindings`——未声明契约 |
+| `semantic_db` | 消费者在 LSP（src/lsp/server.rs:493），不属编译阶段义务 |
+| `trait_table` | 跨阶段读取 ir_gen.rs:4336/:6867，文档注释未声明契约 |
+| `warnings` | 警告诊断通道（与 `diagnostics` 同类） |
+| `interface_impl_registry` | 树内事实（3.4.9 用户裁决甲；在相位消费点见「§义务字段」的改判记录） |
+
+**为什么不是「接线消费端」**：给这些字段造下游只会凭空引入假义务，把「按设计不需要跨阶段消费」伪装成契约缺陷；正确的闭合机制是**反向 containment**——`TypeCheckResult` 字段集 = 义务清单 ∪ 非义务登记（由 `scripts/ci/check-obligations.py` 判据 1 硬判：加字段忘登记、删字段忘同步、非义务登记缺理由、两表重叠都当场红）。
 
 ### 证明层的四个附加契约缺陷
 
@@ -477,12 +501,13 @@ impl Obligations {
 >
 > **一、落地物（file:line）**
 >
-> - 账本 `src/driver/obligations.rs`：14 条义务清单 `INVENTORY`（:136，字段名/消费者阶段/红名单）、
->   交付标记台账 `DeliveryLedger`、纯结算 `settle_obligations`（:518）、外发 `emit_obligation_diagnostics`（:595）、
->   非消费方门控 `consumer_visible_unit`（:479）、跳过判据 `consumer_stage_skipped`（:490）、
->   IrGeneration 交付集 `IR_GENERATION_DELIVERED`（:232）、W1090 码串常量 `OBLIGATION_UNDRAINED_CODE`。
+> - 账本 `src/driver/obligations.rs`：13 条义务清单 `INVENTORY`（:201，字段名/消费者阶段/红名单）、
+>   **非义务字段登记 `NON_OBLIGATION_FIELDS`（:150，8 条含理由）**、交付标记台账 `DeliveryLedger`、
+>   纯结算 `settle_obligations`（:577）、外发 `emit_obligation_diagnostics`（:654）、
+>   非消费方门控 `consumer_visible_unit`（:538）、跳过判据 `consumer_stage_skipped`（:549）、
+>   IrGeneration 交付集 `IR_GENERATION_DELIVERED`（:285）、W1090 码串常量 `OBLIGATION_UNDRAINED_CODE`。
 > - **唯一结算点**：`Driver::run` 阶段表尾部、`into_outcome()` 产出 `CompilationResult` 之前
->   —— `src/driver/mod.rs:110`（`State::assert_drained`，obligations.rs:511）。`Aggregation::FailFast` 的
+>   —— `src/driver/mod.rs:110`（`State::assert_drained`，obligations.rs:570）。`Aggregation::FailFast` 的
 >   早退路径同样结算（账要平）。
 > - **七个交付点**（每臂一处；摘掉任一处，运行期 W1090 必响）：
 >   ProofExecution `src/driver/arms.rs:554`（`proof_calls()` 是 `TypeCheckResult` 对该义务的唯一对外读取路径，`types.rs:84`）；
@@ -495,31 +520,40 @@ impl Obligations {
 >   守恒式 `pairs = empty + consumer_stage_absent + consumer_stage_skipped + delivered + findings.len()` 由用例钉住。
 > - 诊断码：W1090 注册于 `src/util/diagnostic/codes/w1xxx.rs:32`（`span_exempt=true`，理由写在条目上方 :26-31
 >   —— 结算粒度是「单元 × 义务」，没有用户可指的源码位置，不塞 dummy span）；六语言文案见 `locales/*.json`。
+>   **发射级别**：4.3.2 起为 **error**（同码升 E，见第三段）——由 `to_diagnostic`（obligations.rs:444）的
+>   显式 `.severity(Severity::Error)` 决定，码号仍是 W 族。
 > - 静态门禁：`scripts/ci/check-obligations.py`；CI 新 job `obligations`（`.github/workflows/ci.yml:140-155`，含 `--selftest`）。
 >
 > **二、三档表的逐格落地 + 两条加档**
 >
 > | 上方三档表的情形 | 实现判据 | 代码 |
 > | --- | --- | --- |
-> | 义务被声明的消费者读取 | **交付标记存在**（标记 ↔ 真实读取由静态门禁对账，见第五段） | obligations.rs:559-563 |
-> | 义务非空但无消费者 | 非空 + 消费者阶段已运行 + 无标记 → W1090 | obligations.rs:565-570 |
-> | 义务为空 | `Obligation::is_produced` 逐字段判空 → 通过 | obligations.rs:529-531 |
+> | 义务被声明的消费者读取 | **交付标记存在**（标记 ↔ 真实读取由静态门禁对账，见第五段） | obligations.rs:618-623 |
+> | 义务非空但无消费者 | 非空 + 消费者阶段已运行 + 无标记 → W1090（**error 级**，见第三段） | obligations.rs:624-630 |
+> | 义务为空 | `Obligation::is_produced` 逐字段判空 → 通过 | obligations.rs:587-591 |
 >
 > 两条**加档**（2026-10-13 用户裁决，草图未含）：
 >
-> 1. **S1**：义务的消费者阶段不在本 `ProgramKind` 的阶段表里 → **不判欠**（obligations.rs:534-537）。
+> 1. **S1**：义务的消费者阶段不在本 `ProgramKind` 的阶段表里 → **不判欠**（obligations.rs:593-597）。
 >    证据：`LSP_STAGES` 无 IrGeneration/Monomorphization（program.rs:112-119）、`EMBEDDED_STAGES` 无 Monomorphization（:121-126）。
-> 2. **跳过豁免**：消费者阶段以 `SkipReason::UpstreamFailed` / `ConfigDisabled` 跳过 → 不判欠（obligations.rs:539-542）。
+> 2. **跳过豁免**：消费者阶段以 `SkipReason::UpstreamFailed` / `ConfigDisabled` 跳过 → 不判欠（obligations.rs:598-602）。
 >    `NoObligations` **不**豁免——义务非空而该阶段自认无义务，正说明账不平，必须报。
 >
 > **三、外发口径（裁定「丙」）与它背后的实测数字**
 >
-> 本机制只外发 **W 级**（W1090）；**无 strict 开关**，「同码升 E 还是另立 E 码」归 WBS 4.3.2（RFC-039 D5 两步走）。
+> **4.3.1（观测期）**：本机制只外发 **W 级**（W1090）；**无 strict 开关**。
+> **4.3.2（终态，2026-10-13 用户裁决甲）**：**同码升 E**——`W1090` 码号不变，
+> 发射级别抬到 `error`（显式 `.severity(Severity::Error)`，`to_diagnostic` obligations.rs:444）；
+> **不新增 E 码**（同一事实两个码即平行表示）。**升级只改发射级别、不改发射条件**。
+> **这是 D59 的 D 类破坏项（改变对外可观察行为），如实登记**：健康程序零发射（义务全部有交付标记时不报），
+> 故既有语料与用户程序零影响（342/342「差异: 空」）；但一旦某次运行真的命中未交付义务，
+> 该诊断即**计入 `error_count`、渲染 `error[W1090]`、退出码非零**——与此前「W 级不阻断编译」不同。
+> 码族与发射级别解耦的口径已登记 RFC-013「发射通道」节（码号前缀只决定编号归属，级别由构造点显式 severity 决定）。
 > 机制事实（实测）：严重级取显式 `.severity()`，否则「码以 `W` 开头 → Warning」（`codes/builder.rs:186-203`），
 > 注册表的 `ErrorCategory` **不参与**严重级；退出码由 `(error_count, warning_count)`（`util/diagnostic/command.rs:87`）
-> 与 `--deny-warnings`（`src/main.rs:567-568`）决定，W 本身不改退出码。
+> 与 `--deny-warnings`（`src/main.rs:567-568`）决定，**W1090 因显式 error 而走 `error_count`（4.3.2 起）**。
 >
-> **红名单字段不进用户可见诊断流**（captain 2026-10-13 裁定丙），理由是可复算的：
+> **红名单字段不进用户可见诊断流**（captain 2026-10-13 裁定丙；当前红名单已归零，见第四段），理由是可复算的：
 >
 > - 裁定甲（红名单按 W 外发）实测代价：`interface_impl_registry` 由 typecheck 预置表灌入、**恒非空**，
 >   逐编译外发的是**常量信号**（无区分度），却会破坏三条既有对外契约——「干净程序零诊断 / LSP 零诊断 /
@@ -533,11 +567,11 @@ impl Obligations {
 >   （三处交付点各做过摘标记变异，CLI `check` 在 Check 臂摘标记时打出 2 条 `warning [W1090]`）。
 >
 > 红名单的「不静默」由三处承担：① `DriverOutcome.obligations.findings` 审计面（每次运行都带出，含 WBS id 与证据指针）；
-> ② `check-obligations.py` 每次运行打印红名单（当前 1 条）+ 陈旧检测；③ 本注记。
+> ② `check-obligations.py` 每次运行打印红名单（当前为空）+ 陈旧检测；③ 本注记。
 >
-> **四、红名单现状（清账进度）与 3.4.4/3.4.5 的落地记录**
+> **四、红名单现状（清账收口）与 3.4.4/3.4.5/3.4.9 的落地记录**
 >
-> 红名单由 3 条降为 **1 条**——3.4.4 与 3.4.5 已于 2026-10-13 清账落地：
+> 红名单 3 → **0**——三条清账任务已于 2026-10-13 全部落地：
 >
 > - **3.4.4 `variant_ctor_calls` → 删字段**。其声明职责（「ir_gen 生成 CreateVariant」）由 IR 侧
 >   就地形态检测等价兑现：`src/middle/core/ir_gen.rs:7448 fn detect_variant_ctor_call`（同一 AST 形态
@@ -553,19 +587,26 @@ impl Obligations {
 >   `TypeCheckResult` 的**零读者镜像**。命名事实仍单点表达：候选名表（在相位）+ span 键控决议
 >   （跨阶段，`ir_gen.rs:380` 构造、`:7632/:7705` 消费）；定义侧混编名由 `method_def_ordinals`（`:1828`）自算。
 >
-> 清账后剩余红名单（「不静默」仍由三处承担）：
+> - **3.4.9 `interface_impl_registry` → 改判为树内事实**（用户裁决甲，详见本文 §义务字段表的改判记录）。
+>   删的是文档注释里「镜像供 middle 端/LSP 消费」的**声明**（types.rs:47-48），保留字段与其在相位消费
+>   （`operator_interfaces.rs:623` 运算符查询、`inference/expressions.rs` 七处约束求解查询、
+>   `checker.rs:214-217` 只读访问器）；跨阶段零读取直证 `git grep -n 'interface_impl_registry' -- src/middle` → 空。
+>   **为什么不接线消费端**：该表的内容是 typecheck 预置表灌入的环境镜像（恒非空），LSP 若真需要按 4.6.x 新登记走；
+>   给「按设计不需要跨阶段消费」的字段造消费者，只会把假义务引入账本。
 >
-> | 字段 | 清账任务（09-WBS） | 「消费者为零」证据 |
-> | --- | --- | --- |
-> | `interface_impl_registry` | 3.4.9 | typecheck 树外唯一命中 `src/frontend/module/mod.rs:92` 是文档注释（非代码读取）；`src/lsp/` 零命中 |
+> 红名单归零后，**字段普查由「义务清单 ∪ 非义务字段登记（`NON_OBLIGATION_FIELDS`，含理由）」闭合**——
+> 门禁判据 1 的反向 containment 端到端守住这条（加字段忘登记 / 删字段忘同步都当场红）。红名单**机制**保留：
+> 门禁判据 4 的陈旧检测与 `--selftest` 的 `stale-red-list` 夹具继续覆盖其检测面，将来重新登记须走显式裁决。
 >
-> 随清账同步的口径：义务清单 16 → **14**（`INVENTORY` / `Obligation::ALL` / 本文 §义务字段表）；
-> 门禁 `--selftest` 另加两类「清单不同步」反例（代码删了清单没同步 / 清单删了代码还在），
-> 见 `tests/baselines/obligations-gate/{stale-manifest,stale-struct}/`。
+> 随清账同步的口径：义务清单 16 → **13**（`INVENTORY` / `Obligation::ALL` / 本文 §义务字段表）；
+> 门禁 `--selftest` 现覆盖七类夹具（新增「未登记字段」「锚点失效」与「红名单为空」三种形态），
+> 见 `tests/baselines/obligations-gate/{stale-manifest,stale-struct,stale-red-list,unregistered-field,stale-anchor}/`。
 >
 > **五、静态门禁（9.2）的实际判据**（比草图那句话多三条硬判据）
 >
-> 1. **三处对账**：`obligations.rs` 的 `INVENTORY` ↔ `TypeCheckResult` 字段定义 ↔ 本文「§义务字段」表（含表头条数声明），任一漂移即红；
+> 1. **三处对账 + 反向 containment（F2）+ 锚点校验（F1）**：`obligations.rs` 的 `INVENTORY` ↔ `TypeCheckResult` 字段定义 ↔ 本文「§义务字段」表（含表头条数声明），任一漂移即红；
+>    并且 `TypeCheckResult` 的字段集必须**恰好等于**「义务清单 ∪ 非义务登记（`NON_OBLIGATION_FIELDS`，含理由）」——
+>    加字段忘登记、删字段忘同步、非义务登记缺理由、两表重叠都当场红；
 > 2. **读出证据**：非红名单义务必须在**声明的消费者文件**里有真读取（`.字段名` 成员访问；注释/测试/字符串不算）——这条把「交付标记 ↔ 下游真实读取」做成硬判据（机制甲的主要风险正是二者漂移）；
 > 3. **交付标记**：非红名单义务必须在交付点被标记；红名单反之不得被标记；
 > 4. **红名单陈旧检测**：红名单字段必须零真读取（长出消费者即红），且每条带 WBS id 与证据指针；
@@ -580,27 +621,33 @@ impl Obligations {
 >    理由：义务与产物是同一份数据，`take()` 会把下游要用的东西取走；且 11 条 IrGeneration 义务是「整份
 >    `&TypeCheckResult` 交给 ir_gen」的形态，无法逐字段 take。
 > 3. 草图签名 `pub fn assert_drained(&self) -> Vec<Diagnostic>` → 实际 `State::assert_drained(&mut self)`：
->    结论写入 `DriverOutcome.obligations`，诊断按 `ProgramKind` 分流（Check/Lsp 走逐文件收集通道，其余走警告通道）。
+>    结论写入 `DriverOutcome.obligations`，诊断按 `ProgramKind` 分流：Check/Lsp 走逐文件收集通道；
+>    其余形态按**级别**分流（4.3.2 起 W1090 为 E 级）——单文件走 `PipelineError::TypeCheck`（obligations.rs:654 外发臂），
+>    多文件/嵌入另记 `OrchestratorError` 故障（否则 `result.errors` 无人消费）。
 >    理由：返回 `Vec<Diagnostic>` 会丢掉形态分流——check 的诊断必须逐文件归属。
 > 4. 三档表第一档判据从「义务被声明的消费者读取」落为「有交付标记」；「标记 ↔ 真实读取」交给静态门禁（第五段判据 2）。
-> 5. 三档表第二档的「`strict` 模式升 E 级」**本轮没有实现**（无 strict 开关）：只产 W1090，W→E 归 WBS 4.3.2。
+> 5. 三档表第二档的「`strict` 模式升 E 级」**未走 strict 开关**，改为 **4.3.2 同码升 E**（无 strict 开关也升，
+>    因为健康态零发射已足够安全，R4）。
 > 6. 静态门禁判据由「字段出现 ≥2 次但无第三文件读取」升级为第五段的四条。
 > 7. 草图未含的两条加档（S1、跳过豁免）见第二段。
 > 8. S1/S4 表提到的单测试名 `test_obligations_drained`：实际落为 `src/driver/tests/obligations.rs` 的
->    **17 条用例**（先 `#[ignore]` 骨架 → 转绿；红态留档：摘除唯一结算点后 `pairs: 0`、6 条失败）。S1/S4 两行已同步为实际文件。
+>    **20 条用例**（先 `#[ignore]` 骨架 → 转绿；红态留档：摘除唯一结算点后 `pairs: 0`、6 条失败）。S1/S4 两行已同步为实际文件。
 >
-> **七、4.3.2 的接口与待办（门禁加固）**
+> **七、4.3.2 的落地记录（定级 + 门禁加固）**
 >
 > - **逐字段复核的输入**：`ObligationSettlement.drained_kinds`（本次运行真的被排空的义务种类，逐运行可得）
 >   与五个计数（第二段守恒式）；配合审计面 `findings` 可给出「该字段是否被任何入口消费过」的事实。
-> - **级别决策的输入**：第三段的机制事实（严重级与码类目独立；退出码由 `warning_count` / `--deny-warnings` 决定；
->   同码升级与 W1006 式命令层升级都不必改本机制结构）。
-> - **门禁加固项**（t3 独立验证 F1/F2 与 t4 复审 R2/R3 的登记；**尚未落地**，本注记不代为实现）：
->   - F1/R2：红名单 evidence 是纯文本指针，替代消费者被整体摘除时（如 `detect_variant_ctor_call` 改名）
->     CLI 与门禁**双盲**（t3 MG1 复现：改名后 `check` exit 0、门禁 PASS）。加固方向：门禁解析 evidence 中的
->     file:line，校验该行仍含点名符号（锚点存在性），或改用符号锚。
->   - F2/R3：门禁判据 1 只有「清单 ⊆ 结构体字段」的单向包含，缺反向 containment——新增字段忘登记时门禁 PASS
->     （t3 MG4 复现）。加固方向：输出「`TypeCheckResult` 字段集 − `INVENTORY` 字段集」差值。
+> - **级别：同码升 E 已落地**（2026-10-13 用户裁决甲；见第三段的终态登记与 D59 D 类破坏项声明）。
+>   实现面：`to_diagnostic` 显式 `.severity(Severity::Error)`；外发臂按级别分流错误通道。
+>   变异证据：摘掉任一处交付标记 → 该形态的编译失败、`check` 退出码非零（`error [W1090]`）；
+>   还原后健康态零发射（语料 342/342 零变化）。locale 文案已在六语言里写明「W 族码、发射级别为 error」。
+> - **门禁加固项（F1/F2，均已落地）**：
+>   - **F1/R2 锚点校验**：门禁现在解析**非义务登记理由与红名单证据**里的 `file:line` 锚点，校验
+>     「文件可定位（唯一）+ 行号在册 + 锚点后紧跟的符号真的出现在被锚文件里」；锚点指到不存在的符号即红。
+>     自带反例夹具 `tests/baselines/obligations-gate/stale-anchor/`（符号不存在 / 行号越界各一条）。
+>     注：红名单当前为空，故该判据的实际落点是**非义务登记**与将来的证据指针（同一代码路径）。
+>   - **F2/R3 反向 containment**：门禁输出「`TypeCheckResult` 字段数 − 义务数 − 非义务登记数 = 差值」，
+>     差值非空即红；自带反例夹具 `unregistered-field/`（结构体新增字段未登记）。
 > - **信息项 F3**：`SkipReason::UpstreamFailed` 豁免在真实入口不可达（typecheck 失败的单元不保留 `type_result`，
 >   义务本就不存在）；该档语义由合成 `State` 用例钉住，真实端到端只覆盖 `ConfigDisabled`（t3 T06）。
 >
@@ -1066,7 +1113,7 @@ pub enum Aggregation {
 | 决策 | 决定 | 理由 |
 | --- | --- | --- |
 | **阶段模型** | `Stage` 为 12 变体的编译期可穷举枚举，**拒绝运行期注册** | 穷尽 `match` 是零成本的编译期强制：新增变体时 `dispatch` 编译不过。这与 opcode 表在 RFC-039 路由表 B 中已被验证的机制同构。`StageScope` 进一步把「逐模块还是项目级」变成类型事实，消除需要人推理的调用次数问题 |
-| **义务机制** | `Obligations` + `assert_drained()` 做**运行期**结算，与 `scripts/ci/check-obligations.py` 的**静态**门禁并用；严重级先 W 后 E（**实施形态见 §2 修订注记**：账本不复制字段结构；红名单字段——清账后 1 条——不进用户可见诊断流） | 修的是一整类 bug，不是一个 bug：当前已核实同类隐患至少 2 处（`proof_calls`、`checker.rs:1313`），16 个 span 键控字段全在射程内。先 W 再 E 是为了让每一步的 C2 判据都可用——一步升到 E 会让 `yaoxiang check` 突然多出大量此前被静默的诊断 |
+| **义务机制** | `Obligations` + `assert_drained()` 做**运行期**结算，与 `scripts/ci/check-obligations.py` 的**静态**门禁并用；严重级先 W 后 E（**实施形态见 §2 修订注记**：账本不复制字段结构；红名单字段——清账后 0 条——不进用户可见诊断流） | 修的是一整类 bug，不是一个 bug：当前已核实同类隐患至少 2 处（`proof_calls`、`checker.rs:1313`），16 个 span 键控字段全在射程内。先 W 再 E 是为了让每一步的 C2 判据都可用——一步升到 E 会让 `yaoxiang check` 突然多出大量此前被静默的诊断 |
 | **修复范围** | 修**消费端**（编排层），**不动** `checker.rs:5164/5179/5306/5318/5420/5448` 六处 `Unproven` 分支的生产端逻辑 | 问题在消费端不在生产端。改生产端会把架构缺陷掩盖成"逻辑修好了"，而这三处分支的逻辑本身是正确的 |
 
 这样设计额外消除两类裂缝：
@@ -1107,7 +1154,7 @@ pub enum Aggregation {
 - `src/frontend/core/typecheck/layers/README.md:3` — 「下层失败上层不跑」的明文声明（实际无 short-circuit）
 - `src/frontend/core/typecheck/layers/predicate.rs:31-32` — SMT 初始化硬失败的明文理由
 - `src/frontend/core/typecheck/proof/smt/backend.rs:60` — 「调用方应保守降级」的契约声明（与 `predicate.rs` 矛盾）
-- `src/frontend/core/typecheck/types.rs:16-73` — 14 个下游必须消费的义务字段（3.4.4/3.4.5 清账后）
+- `src/frontend/core/typecheck/types.rs:16-73` — 13 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
 - `src/frontend/core/typecheck/tests/rfc027_refined_transparency.rs:13-15` — 单测自认「停在 pipeline 之前」
 - `tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx:12-13` — 语料自认「由 pipeline.rs 在 check_module 之后执行」
 - `wasm/src/lib.rs:48` — playground 的第四个编译调用方（单文件路径，故执行 proof_execution）

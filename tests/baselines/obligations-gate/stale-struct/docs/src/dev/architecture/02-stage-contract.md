@@ -4,7 +4,7 @@
 
 | 字段 | 定义行 | 产出方 → 消费方 |
 | --- | --- | --- |
-| `ghost_field` | `17` | typecheck → 生成阶段 |
-| `ghost_two` | `19` | typecheck → 生成阶段 |
+| `ghost_field` | `5` | typecheck → 生成阶段 |
+| `ghost_two` | `6` | typecheck → 生成阶段 |
 
 ### 下一节
