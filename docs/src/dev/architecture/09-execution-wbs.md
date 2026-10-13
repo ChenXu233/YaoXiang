@@ -144,7 +144,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | 3.4 静默丢弃点补遗（2026-10-07 审计新增） | 3.4.1 const 泛型约束 `Unproven` 空臂改产诊断/记账（**审计新增：全仓文档零登记、零任务**）（**2026-10-07 已实施**：接线已注册的 W1063——事实链 environment→ExpressionInferrer→StatementChecker→checker 汇聚发射；bounds 层区分 TypeVar 内部探测实参防误报；红判据先行） | `environment.rs:422-426` | — | 新判据先红后绿：const 实参不可编译期求值时不得静默 |
 | | 3.4.2 终止检查求解器缺失留痕（**2026-10-07 已实施**：新码 W1081——`count_unjudged_obligations` 纯函数取信号（递减+良基性两表合并），checker 汇聚发射；NotProved（求解器在但判不出）不触发，本码专属「求解器缺失」） | `checker.rs:1266-1268` | — | Z3 缺失时产 W 级诊断；与 3.3.1 同一降级哲学 |
 | | 3.4.3 02 §91 阶段覆盖表第 1 行同步（**2026-10-07 已完成**：表保留为 9e02e4db 诊断快照，复核注记逐格标注现状去向；`#434` 裁决补登为 RFC-039 **D57**） | `02:95-107` | — | 人工 review：逐格与代码核对 |
-| | 3.4.4 `variant_ctor_calls` 零消费者裁决（删字段 或 接线消费端；IR 侧现靠形态检测 `detect_variant_ctor_call`） | `types.rs:56`、`ir_gen.rs:7374` | 4.3.1 | `check-obligations.py`（9.2）不再报该字段；无静默歧义形态；**2026-10-13 用户裁决：跨二级加框并入 4.3 义务账本团队**（4.3 的后续清账轮次） |
+| | 3.4.4 `variant_ctor_calls` 零消费者裁决（删字段 或 接线消费端；IR 侧现靠形态检测 `detect_variant_ctor_call`） | `types.rs:56`、`ir_gen.rs:7448` | 4.3.1 | `check-obligations.py`（9.2）不再报该字段；无静默歧义形态；**2026-10-13 用户裁决：跨二级加框并入 4.3 义务账本团队**（4.3 的后续清账轮次） |
 | | 3.4.5 `method_overload_ir_names` 与 `overload_resolutions` 平行表示二选一（禁令一） | `types.rs:60`、`ir_gen.rs:369` | 4.3.1 | 同一事实单点表达；C3；**2026-10-13 用户裁决：跨二级加框并入 4.3 义务账本团队**（4.3 的后续清账轮次） |
 | | 3.4.6 `compile_project` 补 `warnings` 消费（多文件 `run` 永不报 W1001/W1002/W1003） | `orchestrator.rs:99-159` | 4.2.1 | C2：多文件与单文件诊断集归一 |
 | | 3.4.7 LSP 非项目内路径接入统一消费端（**2026-10-09 已完成**，随 4.2.6 落地 bf582555：手工 `check_module_collect_all` 直调序列删除，统一走 `Program{SingleFile, CollectAll}`——proof/warnings/死代码分析全部接入） | `lsp/handlers/diagnostics.rs:161-206` | 4.2.6 | LSP 与 CLI 对同一文件同诊断集 |
@@ -230,7 +230,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 
 - [x] **4.1 声明式阶段表**（5 个三级任务）
 - [ ] **4.2 入口合并**（8 个三级任务）
-- [ ] **4.3 义务账本**（2 个三级任务）
+- [ ] **4.3 义务账本**（2 个三级任务；**4.3.1 已完成** 2026-10-13，4.3.2 待做）
 - [ ] **4.4 证明层与 wasm 收尾**（3 个三级任务）
 - [ ] **4.5 跨层契约 PlanId 化（D20）**（2 个三级任务）
 - [ ] **4.6 LSP 语义数据管线统一（D55）**（1 个三级任务）
@@ -253,7 +253,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | | 4.2.7 `Aggregation` 参数驱动二选一（**2026-10-10 已完成**，04343d2c；C5 逐行核实：两入口已收敛于 `check_module_inner`/`check_module_impl` 单布尔分叉，唯一分岔 `set_collect_all_errors`；collect_all 重复诊断修复——模块结果边界按 (code, span, message) 去重，63 个语料条目去重、run 列零漂移，登记 02 §3 注记 #12） | 4.2.1 | ~~**实施时逐行核实两函数内部差异**（冲突登记 C5 已裁决为必做核实项）~~已核实；~~**含 collect_all 重复诊断**~~已修复 |
 | | 4.2.8 wasm 改走 `ProgramKind::WasmPlayground`（**2026-10-10 已完成**，06d26410；`compile_playground` 统一构造，错误文本逐字节对齐旧 `CompileError` 前缀；wasm32 目标 check/clippy 实证，登记 02 §3 注记 #13） | 4.2.1 | 见 C6——旧路径零残留引用（`test_compiler` 仅探活 `Compiler` 类型存在） |
 | | 4.2.9 `driver/mod.rs` 拆分为 `state.rs`/`arms.rs`/`helpers.rs`（**2026-10-09 已完成**，c59fb751——1766 行超 P5 的 1500 行拆分阈值；零行为变化，内部可见性收紧为 `pub(in crate::driver)`） | 4.2.4 | C1：全量回归绿 + `crate::driver::*` 公开路径不变 |
-| 4.3 义务账本 | 4.3.1 `obligations.rs` + `assert_drained()`（新建；含 `#[ignore]` 红骨架先行） | 4.1.3 | `test_obligations_drained` 转绿 |
+| 4.3 义务账本 | 4.3.1 `obligations.rs` + `assert_drained()`（**2026-10-13 已完成**，1941cc47a——7 处交付标记 + 唯一结算点 `driver/mod.rs:110` + 审计面 + 红名单三条（3.4.4/3.4.5/3.4.9）+ W1090 注册 + `check-obligations.py`（9.2）接入 CI，17 条新用例；t3 独立验证 PASS / t4 复审 PASS / t5 落 02 §2 注记；慢用例降档 99079bc52） | 4.1.3 | `test_obligations_drained` 转绿；**CI run 38337943411 七作业全绿** |
 | | 4.3.2 义务诊断 W→E 升级 | 4.3.1 | 人工 review 每处新增 E |
 | 4.4 证明层与 wasm 收尾 | 4.4.1 `layers/README.md` 层序改实际顺序 | — | **独立于 4.1–4.3 走** |
 | | 4.4.2 SMT 求解器获取面统一为进程级共享单例（**按 D58**：真实修复位置 `backend.rs`——`LazyLock<Mutex<Option<Box<dyn Solver>>>>` + `with_shared_solver` 闭包口；`predicate.rs` 删私有 SOLVER、`checker.rs` termination 注入改闭包内判定（`TerminationChecker` 生命周期参数化）、`ownership.rs` 回边判定改共享口；`default_solver()` 仅保留测试用。**硬前置**：Unknown 不入缓存（否则超时结果经进程级缓存跨编译/跨测试固化）。89576fafd 只交付了计数器观测工具，本任务本体未动） | — | 生产路径 `default_solver()` 调用点归零 + 缓存命中率跨三消费点可观测 |
