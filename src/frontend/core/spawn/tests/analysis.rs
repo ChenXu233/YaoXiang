@@ -7,7 +7,7 @@
 //! RFC-018 §5: spawn 块代码生成
 
 use crate::frontend::core::parser::ast::{
-    BinOp, Block, Expr, FStringSegment, MatchArm, Pattern, Stmt, StmtKind,
+    BinOp, Block, Expr, FStringSegment, MatchArm, Pattern, PlanId, Stmt, StmtKind,
 };
 use crate::frontend::core::spawn::analysis::{
     analyze_reads_writes, analyze_spawn_body, analyze_spawn_for, build_execution_plan,
@@ -47,6 +47,7 @@ fn assign_stmt(
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -106,6 +107,7 @@ fn combining_spawn_for_body() -> Block {
                 vec![var_expr("item"), var_expr("prefix")],
             ))),
             span: dummy_span(),
+            plan_id: PlanId::UNPLANNED,
         }],
         span: dummy_span(),
     }
@@ -131,6 +133,7 @@ fn mixed_children_spawn_body() -> Block {
                     span: dummy_span(),
                 },
                 span: dummy_span(),
+                plan_id: PlanId::UNPLANNED,
             },
             // 直接子表达式：赋值
             assign_stmt("t1", call_expr("f", vec![])),
@@ -146,6 +149,7 @@ fn test_is_direct_child_with_expr_stmt() {
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(var_expr("x"))),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
 
     // Act
@@ -172,6 +176,7 @@ fn test_is_direct_child_with_var_decl_is_false() {
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
 
     // Act
@@ -321,6 +326,7 @@ fn test_reads_writes_match_expr_and_arms() {
                 stmts: vec![Stmt {
                     kind: StmtKind::Expr(Box::new(var_expr("result"))),
                     span: dummy_span(),
+                    plan_id: PlanId::UNPLANNED,
                 }],
                 span: dummy_span(),
             },
@@ -349,6 +355,7 @@ fn test_reads_writes_if_expr_branches() {
             stmts: vec![Stmt {
                 kind: StmtKind::Expr(Box::new(var_expr("a"))),
                 span: dummy_span(),
+                plan_id: PlanId::UNPLANNED,
             }],
             span: dummy_span(),
         }),
@@ -357,6 +364,7 @@ fn test_reads_writes_if_expr_branches() {
             stmts: vec![Stmt {
                 kind: StmtKind::Expr(Box::new(var_expr("b"))),
                 span: dummy_span(),
+                plan_id: PlanId::UNPLANNED,
             }],
             span: dummy_span(),
         })),
@@ -631,6 +639,7 @@ fn test_spawn_for_reads_writes() {
         stmts: vec![Stmt {
             kind: StmtKind::Expr(Box::new(call_expr("process", vec![var_expr("item")]))),
             span: dummy_span(),
+            plan_id: PlanId::UNPLANNED,
         }],
         span: dummy_span(),
     };
@@ -696,6 +705,7 @@ fn test_spawn_body_no_direct_children() {
                 span: dummy_span(),
             },
             span: dummy_span(),
+            plan_id: PlanId::UNPLANNED,
         }],
         span: dummy_span(),
     };
@@ -795,6 +805,7 @@ fn test_spawn_for_end_to_end_independent_iterations() {
         stmts: vec![Stmt {
             kind: StmtKind::Expr(Box::new(call_expr("process", vec![var_expr("item")]))),
             span: dummy_span(),
+            plan_id: PlanId::UNPLANNED,
         }],
         span: dummy_span(),
     };
@@ -829,6 +840,7 @@ fn expr_stmt(expr: Expr) -> Stmt {
     Stmt {
         kind: StmtKind::Expr(Box::new(expr)),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 

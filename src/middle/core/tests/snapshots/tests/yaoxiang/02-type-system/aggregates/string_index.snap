@@ -9,6 +9,7 @@ module
     Eq %4 <- %2, %3
     Load %5 <- string("len counts code points, not bytes")
     Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Drop %0
     Load %1 <- %0
     Load %5 <- int(0)
     StringGetChar %2 <- %1[%5]
@@ -37,6 +38,7 @@ module
     Eq %4 <- %2, %3
     Load %7 <- string("index_of scalar index")
     Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Drop %0
     Load %1 <- %0
     Load %7 <- %0
     Load %8 <- string("é")
@@ -46,6 +48,7 @@ module
     Eq %4 <- %2, %3
     Load %9 <- string("index_of feeds s[i]")
     Call %6 <- string("std.assert.assert") [%4, %9] (def=d1)
+    Drop %0
     Load %1 <- %0
     Load %5 <- int(1)
     Load %7 <- int(3)
@@ -54,6 +57,7 @@ module
     Eq %4 <- %2, %3
     Load %8 <- string("index_of feeds substring")
     Call %6 <- string("std.assert.assert") [%4, %8] (def=d1)
+    Drop %0
     Load %1 <- %0
     Load %5 <- int(1)
     Call %2 <- string("std.string.char_code") [%1, %5] (def=d4)
@@ -61,6 +65,7 @@ module
     Eq %4 <- %2, %3
     Load %7 <- string("char_code same index unit")
     Call %6 <- string("std.assert.assert") [%4, %7] (def=d1)
+    Drop %0
     Ret %6
   init (locals=0)
     Call %0 <- string("main") [] (def=d5)

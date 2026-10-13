@@ -28,6 +28,7 @@ module
     Load %2 <- %0
     MakeClosure %3 <- closure_0 env=[] (def=d0)
     Call %1 <- string("std.list.map") [%2, %3] (def=d1)
+    Drop %0
     Load %6 <- %1
     Load %7 <- int(0)
     LoadIndex %4 <- %6[%7]
@@ -82,6 +83,7 @@ module
     Load %4 <- %2
     MakeClosure %5 <- closure_1 env=[] (def=d3)
     Call %3 <- string("std.list.filter") [%4, %5] (def=d4)
+    Drop %2
     Load %8 <- %3
     Load %9 <- int(0)
     LoadIndex %6 <- %8[%9]
@@ -116,6 +118,7 @@ module
     MakeClosure %7 <- closure_2 env=[] (def=d5)
     Load %8 <- int(0)
     Call %5 <- string("std.list.reduce") [%6, %7, %8] (def=d6)
+    Drop %4
     Load %8 <- %5
     Load %9 <- int(15)
     Eq %7 <- %8, %9
@@ -142,6 +145,7 @@ module
     Call %8 <- string("std.list.filter") [%9, %10] (def=d4)
     MakeClosure %11 <- closure_4 env=[] (def=d8)
     Call %7 <- string("std.list.map") [%8, %11] (def=d1)
+    Drop %6
     Load %12 <- %7
     Load %13 <- int(0)
     LoadIndex %10 <- %12[%13]
@@ -163,6 +167,14 @@ module
     Eq %9 <- %10, %11
     Load %14 <- string("chain[2]")
     Call %8 <- string("std.assert.assert") [%9, %14] (def=d2)
+    Drop %1
+    Drop %3
+    Drop %0
+    Drop %2
+    Drop %4
+    Drop %6
+    Drop %7
+    Drop %5
     Ret %8
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2

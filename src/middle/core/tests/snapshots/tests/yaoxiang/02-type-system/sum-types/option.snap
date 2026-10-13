@@ -14,6 +14,8 @@ module
     Load %3 <- %2
     Load %4 <- string("option roundtrip ok")
     Call %5 <- string("std.io.println") [%4] (def=d2)
+    Drop %1
+    Drop %3
     Ret %5
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

@@ -9,6 +9,8 @@ module
     Add %3 <- %1, %2
     Load %2 <- %3
     Call %1 <- string("std.io.println") [%2] (def=d0)
+    Drop %0
+    Drop %3
     Ret %1
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

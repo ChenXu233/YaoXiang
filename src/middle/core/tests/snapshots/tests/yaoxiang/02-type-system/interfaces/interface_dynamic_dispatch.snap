@@ -195,26 +195,33 @@ module
     Call %6 <- string("Dog") [%9, %10] (def=d2)
     CreateVariant %7 <- Animal$Group::1 %6
     Call %5 <- string("std.list.append") [%8, %7] (def=d8)
+    Drop %0
     Load %11 <- %5
     Load %12 <- int(2)
     LoadIndex %10 <- %11[%12]
     VariantTag %13 <- %10 : Animal$Group
     Load %14 <- int(0)
     Eq %15 <- %13, %14
-    JmpIfNot %15 -> instr(129)
+    JmpIfNot %15 -> instr(130)
     VariantPayload %16 <- %10 : Animal$Group
     Call %6 <- string("Cat.speak") [%16] (def=d0)
-    Jmp -> instr(135)
+    Jmp -> instr(136)
     Load %17 <- int(1)
     Eq %18 <- %13, %17
-    JmpIfNot %18 -> instr(135)
+    JmpIfNot %18 -> instr(136)
     VariantPayload %19 <- %10 : Animal$Group
     Call %6 <- string("Dog.speak") [%19] (def=d1)
-    Jmp -> instr(135)
+    Jmp -> instr(136)
     Load %9 <- string("Woof")
     Eq %7 <- %6, %9
     Load %20 <- string("append implements-member then dispatch")
     Call %8 <- string("std.assert.assert") [%7, %20] (def=d4)
+    Drop %1
+    Drop %0
+    Drop %5
+    Drop %2
+    Drop %4
+    Drop %3
     Ret %8
   init (locals=2)
     islot[0] self : Int(64) @depth1

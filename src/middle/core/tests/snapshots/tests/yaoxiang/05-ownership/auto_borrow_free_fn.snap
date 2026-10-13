@@ -25,8 +25,10 @@ module
     Call %2 <- string("Point") [%0, %1] (def=d0)
     Load %1 <- %2
     Call %0 <- string("manhattan") [%1] (def=d1)
+    Drop %2
     Load %3 <- %2
     Call %1 <- string("manhattan") [%3] (def=d1)
+    Drop %2
     Load %4 <- %0
     Load %5 <- int(7)
     Eq %6 <- %4, %5
@@ -55,19 +57,27 @@ module
     StoreIndex %3[%9] <- %8
     Load %4 <- %3
     Call %6 <- string("std.list.len") [%4] (def=d3)
+    Drop %3
     Load %5 <- %3
     Call %4 <- string("std.list.len") [%5] (def=d3)
+    Drop %3
     Load %9 <- %6
     Load %10 <- int(3)
     Eq %8 <- %9, %10
-    JmpIfNot %8 -> instr(45)
+    JmpIfNot %8 -> instr(49)
     Load %11 <- %4
     Load %12 <- int(3)
     Eq %7 <- %11, %12
-    Jmp -> instr(46)
+    Jmp -> instr(50)
     Load %7 <- bool(false)
     Load %13 <- string("std read fn reuses xs")
     Call %5 <- string("std.assert.assert") [%7, %13] (def=d2)
+    Drop %2
+    Drop %0
+    Drop %1
+    Drop %6
+    Drop %4
+    Drop %3
     Ret %5
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

@@ -30,6 +30,8 @@ module
     Eq %6 <- %7, %8
     Load %9 <- string("for sum 10+20+30 == 60")
     Call %5 <- string("std.assert.assert") [%6, %9] (def=d3)
+    Drop %0
+    Drop %1
     Ret %5
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

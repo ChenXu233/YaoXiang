@@ -45,11 +45,17 @@ module
     Call %4 <- string("std.assert.assert") [%5, %8] (def=d2)
     Load %5 <- %2
     Call %4 <- string("Box.get") [%5] (def=d3)
+    Drop %2
     Load %7 <- %4
     Load %8 <- int(42)
     Eq %6 <- %7, %8
     Load %9 <- string("generic curried method call")
     Call %5 <- string("std.assert.assert") [%6, %9] (def=d2)
+    Drop %2
+    Drop %4
+    Drop %1
+    Drop %0
+    Drop %3
     Ret %5
   init (locals=2)
     islot[0] self : Int(64) @depth1

@@ -8,6 +8,7 @@ module
     Neg %3 <- %2
     StringGetChar %4 <- %1[%3]
     Call %5 <- string("std.io.println") [%4] (def=d0)
+    Drop %0
     Ret %5
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

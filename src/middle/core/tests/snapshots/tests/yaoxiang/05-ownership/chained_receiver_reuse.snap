@@ -28,6 +28,7 @@ module
     Eq %1 <- %4, %5
     Load %6 <- string("sequential chained &mut receiver reuse")
     Call %0 <- string("std.assert.assert") [%1, %6] (def=d2)
+    Drop %2
     Ret %0
   init (locals=1)
     islot[0] self : Int(64) @depth1

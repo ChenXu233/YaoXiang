@@ -46,6 +46,7 @@ pub fn parse_fn_stmt_with_name(
             span,
         },
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 
@@ -88,6 +89,7 @@ pub fn parse_fn_stmt_with_name_simple(
             span,
         },
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 
@@ -104,9 +106,14 @@ pub(crate) fn parse_fn_body(state: &mut ParserState<'_>) -> Option<Vec<Stmt>> {
         Some(body)
     } else {
         let expr = state.parse_expression(BP_LOWEST)?;
+        // 合成体语句：不经过 parse_statement（身份的统一发放点），
+        // 就地发放身份——它会作为函数体语句被 ownership/ir_gen 走到。
+        let span = state.span();
+        let plan_id = state.alloc_plan_id();
         Some(vec![Stmt {
             kind: StmtKind::Expr(Box::new(expr)),
-            span: state.span(),
+            span,
+            plan_id,
         }])
     }
 }

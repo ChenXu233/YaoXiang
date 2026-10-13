@@ -19,6 +19,7 @@
 //! | 消费者阶段不在本 ProgramKind 阶段表 | `ProgramKind::stages()`（S1，2026-10-13 用户裁决） | 通过（不判欠：Lsp 无 IrGeneration/Monomorphization，Embedded 无 Monomorphization） |
 //! | 消费者阶段被跳过 | `SkipReason::UpstreamFailed` / `ConfigDisabled` | 通过（跳过不是丢弃） |
 //! | 有交付标记 | 交付点调用 `deliver` | 通过（已交付） |
+//! | 有交付标记，但消费台账仍有未消费键 | `ReleasePlan::unconsumed()` 非空（4.5.1；消费者已产出产物） | **产 W1090**（交付 ≠ 消费，D20/D41） |
 //! | 其余（非空 + 消费者阶段已运行 + 无标记） | — | **产 W1090**（4.3.1 W 级 → 4.3.2 **error 级**，D5 终态） |
 //!
 //! # 红名单（当前为空）与非义务字段登记
@@ -57,6 +58,22 @@
 //! `scripts/ci/check-obligations.py`（WBS 9.2）拦截**：它把「交付标记 ↔ 该字段
 //! 在消费端真被读到」做成硬判据，并对红名单做**陈旧检测**（红名单字段若长出
 //! 消费者，门禁必须红）。
+//!
+//! # 消费台账（4.5.1，D20/D41）——把「交付」推进到「消费」
+//!
+//! `release_plan` 这条义务曾经最隐蔽：它以 Span 为键，ownership 按「最后使用
+//! 表达式的 span」记键、ir_gen 按「语句 span」查表，两个跨层各自持有的位置量
+//! 对不上 ⇒ Drop 静默丢失（实测 173 语料文件 / 533 个产出键永不命中）。修法
+//! 是键改 `PlanId`（解析期分配、随 AST 节点走的语句身份），IR 生成在**每条
+//! 语句边界**经 `ReleasePlan::consume` 取条目——**取即记账**，消费台账随计划
+//! 本体走（生成器持有的是 `TypeCheckResult` 的克隆，`Arc` 共享同一份账）。
+//! 于是「每条产出的计划必被消费」成了结算点可直接判的事实：
+//! `ReleasePlan::unconsumed()` 非空即产 W1090（[`UndrainedCause::NotConsumed`]），
+//! 与「交付标记缺失」（[`UndrainedCause::NotDelivered`]）分列两种原因。
+//! 豁免：消费台账**没有完整跑完一轮**（生成失败 / 未运行）时不判消费——此时
+//! 失败本身已按首因响亮报出，结算不抢首因。判据取台账自身的完成标记，不取
+//! 「IR 产物还在不在」：Check 形态的 Linking/Monomorphization 会把
+//! `UnitState.ir` 取走，按产物判会让真实的未消费静默通过。
 //!
 //! # 级别（D5 两步走 → 终态）
 //!
@@ -296,6 +313,28 @@ pub const IR_GENERATION_DELIVERED: &[Obligation] = &[
     Obligation::ModuleNamespaces,
 ];
 
+/// 义务**消费侧**的结算输入（RFC-039 D20 / WBS 4.5.1）。
+///
+/// 交付标记只说「交出去了」，消费台账说「下游真的取了」——4.3 的「两半互补」
+/// （运行期标记 + 静态门禁）在这里补上运行期的第三段事实：
+/// **产出 → 交付 → 消费**。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConsumptionState {
+    /// 本义务没有运行期消费台账——其消费面由静态门禁判据 2 承担
+    /// （`check-obligations.py`：字段在声明消费者文件里必须真被读取）。
+    Untracked,
+    /// 消费者没有完整跑完一轮（生成失败 / 未运行）：**不判**消费欠账——
+    /// 失败本身已按首因响亮报出，结算不抢首因、也不把「没跑」记成「跑过」。
+    ConsumerIncomplete,
+    /// 有台账且消费者跑完，产出键全部被消费。
+    Consumed,
+    /// 有台账且消费者跑完，但还有 `unconsumed` 个产出键没有消费记录。
+    Unconsumed {
+        /// 未被消费的产出键数
+        unconsumed: usize,
+    },
+}
+
 impl Obligation {
     /// 全部 13 个义务（顺序 = 02 §义务字段表；3.4.4/3.4.5/3.4.9 清账后由 16 降为 13）。
     pub const ALL: &'static [Obligation] = &[
@@ -359,6 +398,37 @@ impl Obligation {
             Obligation::TryExprImpls => !type_result.try_expr_impls.is_empty(),
             Obligation::MatchScrutineeTypes => !type_result.match_scrutinee_types.is_empty(),
             Obligation::ModuleNamespaces => !type_result.module_namespaces.is_empty(),
+        }
+    }
+
+    /// 该义务在本单元的**消费侧**结算输入（RFC-039 D20 / WBS 4.5.1）。
+    ///
+    /// 消费台账（[`ConsumptionState`]）：交付标记只说「交给下游了」，台账说
+    /// 「下游真的取了」。当前只有 `ReleasePlan` 带运行期消费台账——它在 IR 生成
+    /// 的语句边界经 `ReleasePlan::consume` 记账（取即记账，不可漂移）；其余义务
+    /// 的消费面由静态门禁判据 2 承担（模块头注释「两半互补」）。
+    pub fn consumption(
+        self,
+        type_result: &TypeCheckResult,
+    ) -> ConsumptionState {
+        match self {
+            Obligation::ReleasePlan => {
+                let plan = &type_result.release_plan;
+                // 消费者没跑完一轮（失败 / 未运行）⇒ 不判消费欠账。判据取自
+                // **台账自身的完成标记**而不是「IR 产物还在不在」：Check 形态的
+                // Linking/Monomorphization 会把 `UnitState.ir` 取走，按产物判会让
+                // 真实的未消费静默通过（实测：check 形态曾因此漏报）。
+                if !plan.consumption_completed() {
+                    return ConsumptionState::ConsumerIncomplete;
+                }
+                let unconsumed = plan.unconsumed().len();
+                if unconsumed == 0 {
+                    ConsumptionState::Consumed
+                } else {
+                    ConsumptionState::Unconsumed { unconsumed }
+                }
+            }
+            _ => ConsumptionState::Untracked,
         }
     }
 }
@@ -457,6 +527,12 @@ impl ObligationFinding {
 pub enum UndrainedCause {
     /// 消费者阶段已运行，但交付点没有标记（下游没拿到义务）。
     NotDelivered,
+    /// 义务已交付、消费者阶段也产出了产物，但**消费台账**显示产出键没被消费完
+    /// （RFC-039 D20 / WBS 4.5.1：交付 ≠ 消费）。
+    NotConsumed {
+        /// 未被消费的产出键数
+        unconsumed: usize,
+    },
     /// 红名单：已核实的零跨阶段消费者字段（清账任务见 `wbs`）。
     RedList {
         /// 负责清账的 WBS 任务 id
@@ -471,6 +547,7 @@ impl UndrainedCause {
     pub fn kind(self) -> &'static str {
         match self {
             UndrainedCause::NotDelivered => "not-delivered",
+            UndrainedCause::NotConsumed { .. } => "not-consumed",
             UndrainedCause::RedList { .. } => "red-list",
         }
     }
@@ -481,6 +558,10 @@ impl UndrainedCause {
             UndrainedCause::NotDelivered => {
                 "消费者阶段已运行，但交付点没有标记交付（编译器内部契约缺陷）".to_string()
             }
+            UndrainedCause::NotConsumed { unconsumed } => format!(
+                "交付后仍有 {unconsumed} 个产出键未被消费（IR 生成未在语句边界取到该条目；\
+                 D41：产出 ⊆ 消费，差集必须为空）"
+            ),
             UndrainedCause::RedList { wbs, evidence } => {
                 format!("红名单（清账任务 WBS {wbs}）：跨阶段消费者为零；证据：{evidence}")
             }
@@ -615,8 +696,25 @@ impl State {
                     });
                     continue;
                 }
-                // 交付标记存在 → 通过
+                // 交付标记存在 → 通过交付档；但「交付 ≠ 消费」（4.5.1）：
+                // 有消费台账的义务还要求产出键**真的被消费完**。
                 if unit.delivered.is_delivered(obligation) {
+                    if let ConsumptionState::Unconsumed { unconsumed } =
+                        obligation.consumption(type_result)
+                    {
+                        // 走到这里 ⟺ 消费者跑完了一轮且仍有产出键没被消费——
+                        // 这是真实缺陷（不是失败噪声），必须响亮。
+                        {
+                            settlement.findings.push(ObligationFinding {
+                                obligation,
+                                unit_index,
+                                unit_key: self.program.units[unit_index].key.clone(),
+                                path: self.program.units[unit_index].path.clone(),
+                                cause: UndrainedCause::NotConsumed { unconsumed },
+                            });
+                            continue;
+                        }
+                    }
                     settlement.delivered += 1;
                     settlement.drained_kinds.push(obligation);
                     continue;

@@ -18,6 +18,7 @@ module
     Load %2 <- %4
     Load %3 <- int(1)
     StoreField %2.1 <- %3 (type=None, name=Some("n"))
+    Drop %4
     Load %2 <- %4
     Ret %2
     Ret %2
@@ -51,6 +52,8 @@ module
     Eq %3 <- %4, %2
     Load %8 <- string("user generic type wins over std constant")
     Call %5 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Drop %0
+    Drop %1
     Ret %5
   init (locals=0)
     Call %0 <- string("main") [] (def=d5)

@@ -11,6 +11,9 @@ module
     Div %4 <- %2, %3
     Load %3 <- %4
     Call %2 <- string("std.io.println") [%3] (def=d0)
+    Drop %0
+    Drop %1
+    Drop %4
     Ret %2
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

@@ -102,6 +102,7 @@ module
     Eq %9 <- %10, %11
     Load %13 <- string("std.list.* survives monomorphization")
     Call %8 <- string("std.assert.assert") [%9, %13] (def=d2)
+    Drop %7
     Load %9 <- string("x")
     Call %8 <- string("mk(string)") [%9] (def=_)
     Load %11 <- %8
@@ -109,6 +110,15 @@ module
     Eq %10 <- %11, %12
     Load %13 <- string("explicit type arg still works alongside std.list")
     Call %9 <- string("std.assert.assert") [%10, %13] (def=d2)
+    Drop %5
+    Drop %0
+    Drop %1
+    Drop %2
+    Drop %7
+    Drop %3
+    Drop %4
+    Drop %8
+    Drop %6
     Ret %9
   fn __add2_l0(Int(64)) -> Int(64)
     slot[0] a : Int(64) @depth1

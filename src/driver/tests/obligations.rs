@@ -27,6 +27,7 @@ use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::MonoType;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::util::diagnostic::{ErrorCodeDefinition, Severity};
+use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 
 /// 造一个带指定义务的合成 typecheck 产物（结构体字面量需要 typecheck 树内的
@@ -716,5 +717,168 @@ fn test_obligation_diagnostics_agree_across_run_and_check() {
         normalized_obligation_diagnostics(&run_outcome),
         normalized_obligation_diagnostics(&check_outcome),
         "run 与 check 的义务外发诊断集必须一致（C2）"
+    );
+}
+/// 释放义务夹具：函数体局部变量 + 嵌套块 + 尾表达式——三处语句边界都有释放条目。
+const RELEASE_PLAN_SOURCE: &str = "f: (a: Int) -> Int = {\n    x = a + 1\n    if x > 0 {\n        y = x + 1\n    }\n    x\n}\n\nmain: () -> Void = {\n    z = f(1)\n}\n\nmain()\n";
+
+/// 4.5.1 直驱（产出 → 交付 → 消费）：真实链路的释放计划必须全数被消费——
+/// 结算面零发现，且该义务进 `drained_kinds`（= 本轮真的排空，不是空转）。
+#[test]
+fn test_release_plan_obligation_is_drained_end_to_end() {
+    // Arrange / Act：真实入口（parse → typecheck → ownership → ir_gen → 结算）
+    let outcome = run_single(RELEASE_PLAN_SOURCE);
+
+    // Assert
+    assert!(
+        outcome.obligations.findings.is_empty(),
+        "健康程序的结算面必须零发现: {:?}",
+        outcome.obligations.findings
+    );
+    assert!(
+        outcome
+            .obligations
+            .drained_kinds
+            .contains(&Obligation::ReleasePlan),
+        "释放计划义务必须在本轮被排空（消费台账全数记账）: {:?}",
+        outcome.obligations.drained_kinds
+    );
+}
+
+/// 消费必达（4.5.1 / D41）：交付标记齐、消费者也跑完了一轮，但消费台账缺一个
+/// 键 → **响亮**。
+///
+/// 两处同时钉住：审计面出 [`UndrainedCause::NotConsumed`]（区别于「未交付」），
+/// 唯一结算点 `assert_drained` 把它外发成 **E 级 W1090**（触发即改退出码）。
+#[test]
+fn test_release_plan_unconsumed_is_reported_loudly() {
+    // Arrange：产出键存在（合成产物）+ 交付标记齐 + 台账完成标记（消费者跑完）
+    let mut state = state_with(
+        ProgramKind::SingleFile,
+        type_result_with(|r| {
+            r.release_plan
+                .drops
+                .insert(PlanId::from_ordinal(7), vec!["x".to_string()]);
+        }),
+    );
+    state.units[0]
+        .delivered
+        .deliver_all(IR_GENERATION_DELIVERED);
+    state.units[0]
+        .type_result
+        .as_ref()
+        .expect("合成产物已在场")
+        .release_plan
+        .mark_consumption_completed();
+
+    // Act：唯一结算点的纯函数
+    let settlement = state.settle_obligations();
+
+    // Assert：审计面必须给出「未消费」原因（交付 ≠ 消费）
+    let finding = settlement
+        .findings
+        .iter()
+        .find(|f| f.obligation == Obligation::ReleasePlan)
+        .expect("未消费的产出键必须进结算发现（不得静默）");
+    assert!(
+        matches!(finding.cause, UndrainedCause::NotConsumed { unconsumed: 1 }),
+        "原因必须是 NotConsumed（区别于 NotDelivered）: {:?}",
+        finding.cause
+    );
+
+    // Act / Assert：外发成 E 级 W1090（响亮失败，不是警告噪声）
+    state.assert_drained();
+    let diagnostic = state
+        .errors
+        .iter()
+        .filter_map(|e| e.diagnostic())
+        .find(|d| d.code == OBLIGATION_UNDRAINED_CODE)
+        .expect("未消费义务必须外发 W1090");
+    assert_eq!(diagnostic.severity, Severity::Error, "4.3.2 同码升 E");
+    assert!(
+        diagnostic.message.contains("release_plan") && diagnostic.message.contains('1'),
+        "诊断必须点名义务字段与未消费键数: {}",
+        diagnostic.message
+    );
+}
+
+/// 消费结算的豁免：消费台账**没有完整跑完一轮**（IR 生成失败 / 未运行）时不判
+/// 消费——此时失败本身已按首因响亮报出，结算不得抢首因、也不得把「没跑」记成
+/// 「跑过」。
+#[test]
+fn test_release_plan_unconsumed_is_exempt_without_completed_round() {
+    // Arrange：同一份未消费的产出键，但台账没有完成标记（消费者没跑完）
+    let mut state = state_with(
+        ProgramKind::SingleFile,
+        type_result_with(|r| {
+            r.release_plan
+                .drops
+                .insert(PlanId::from_ordinal(7), vec!["x".to_string()]);
+        }),
+    );
+    state.units[0]
+        .delivered
+        .deliver_all(IR_GENERATION_DELIVERED);
+
+    // Act
+    let settlement = state.settle_obligations();
+
+    // Assert
+    assert!(
+        !settlement
+            .findings
+            .iter()
+            .any(|f| f.obligation == Obligation::ReleasePlan),
+        "消费者没跑完一轮时不判消费（失败已按首因报出）: {:?}",
+        settlement.findings
+    );
+}
+
+/// check 形态的消费必达（2026-10-13 实测缺口回归）：Check 形态下
+/// Linking/Monomorphization 会把 `UnitState.ir` 取走——判据若挂在「IR 产物还在
+/// 不在」，真实的未消费就会在 check 形态**静默通过**。本用例钉住：完成标记在、
+/// 未消费键在时，check 形态同样产发现并外发到逐文件通道。
+#[test]
+fn test_release_plan_unconsumed_is_reported_in_check_kind() {
+    // Arrange：Check 形态的合成产物（交付标记齐 + 完成标记 + 一个未消费键）
+    let mut state = state_with(
+        ProgramKind::Check,
+        type_result_with(|r| {
+            r.release_plan
+                .drops
+                .insert(PlanId::from_ordinal(7), vec!["x".to_string()]);
+        }),
+    );
+    state.units[0]
+        .delivered
+        .deliver_all(IR_GENERATION_DELIVERED);
+    state.units[0]
+        .type_result
+        .as_ref()
+        .expect("合成产物已在场")
+        .release_plan
+        .mark_consumption_completed();
+
+    // Act
+    let settlement = state.settle_obligations();
+    state.assert_drained();
+
+    // Assert：发现进审计面 + 外发进逐文件收集通道（Check 的对外通道）
+    assert!(
+        settlement
+            .findings
+            .iter()
+            .any(|f| f.obligation == Obligation::ReleasePlan
+                && matches!(f.cause, UndrainedCause::NotConsumed { unconsumed: 1 })),
+        "check 形态的未消费必须同样响亮（IR 产物被取走不是豁免理由）: {:?}",
+        settlement.findings
+    );
+    assert!(
+        state.units[0]
+            .check_diagnostics
+            .iter()
+            .any(|d| d.code == OBLIGATION_UNDRAINED_CODE),
+        "check 形态必须把 W1090 外发进逐文件通道: {:?}",
+        state.units[0].check_diagnostics
     );
 }

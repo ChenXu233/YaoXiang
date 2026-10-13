@@ -45,6 +45,7 @@ module
     Load %2 <- %1
     Load %3 <- int(2)
     Mul %4 <- %2, %3
+    Drop %1
     Store @1 <- %4
     Load %1 <- int(41)
     Call %4 <- string("inc") [%1] (def=d2)

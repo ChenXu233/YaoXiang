@@ -126,6 +126,12 @@ module
     Call %8 <- string("identity") [%9] (def=d5)
     Load %10 <- string("identity Bool")
     Call %7 <- string("std.assert.assert") [%8, %10] (def=d1)
+    Drop %1
+    Drop %2
+    Drop %0
+    Drop %4
+    Drop %6
+    Drop %5
     Ret %7
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2

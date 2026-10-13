@@ -17,6 +17,8 @@ module
     Load %5 <- int(1)
     Neg %4 <- %5
     LoadIndex %2 <- %3[%4]
+    Drop %0
+    Drop %2
     Ret
   init (locals=0)
     Call %0 <- string("main") [] (def=d0)

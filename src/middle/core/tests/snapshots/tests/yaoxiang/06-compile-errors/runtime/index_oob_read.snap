@@ -16,6 +16,7 @@ module
     Load %4 <- int(5)
     LoadIndex %2 <- %3[%4]
     Call %1 <- string("std.io.println") [%2] (def=d0)
+    Drop %0
     Ret %1
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

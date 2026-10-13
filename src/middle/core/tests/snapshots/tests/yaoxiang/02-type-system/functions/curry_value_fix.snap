@@ -42,6 +42,8 @@ module
     Eq %4 <- %5, %2
     Load %7 <- string("gt(5) 谓词 filter 保留 6,8")
     Call %6 <- string("std.assert.assert") [%4, %7] (def=d3)
+    Drop %1
+    Drop %0
     Ret %6
   fn __gt_l0(Int(64)) -> Bool
     slot[0] t : Int(64) @depth1

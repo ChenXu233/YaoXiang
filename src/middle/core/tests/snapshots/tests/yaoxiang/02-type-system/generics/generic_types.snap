@@ -41,6 +41,9 @@ module
     Eq %4 <- %2, %6
     Load %8 <- string("Pair(7, 9).second should be 9")
     Call %3 <- string("std.assert.assert") [%4, %8] (def=d1)
+    Drop %1
+    Drop %0
+    Drop %5
     Ret %3
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

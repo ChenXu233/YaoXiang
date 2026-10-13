@@ -27,6 +27,7 @@ pub fn parse_return_stmt(
     Some(Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Return(value, span))),
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 
@@ -52,6 +53,7 @@ pub fn parse_break_stmt(
     Some(Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Break(span))),
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 
@@ -77,6 +79,7 @@ pub fn parse_continue_stmt(
     Some(Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Continue(span))),
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 
@@ -124,10 +127,14 @@ pub fn parse_for_stmt(
     } else {
         let expr = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
         let span = state.span();
+        // 合成体语句：不经过 parse_statement（身份的唯一统一发放点），
+        // 但它是一条真实语句（ownership 会走它）——就地发放身份。
+        let plan_id = state.alloc_plan_id();
         Block {
             stmts: vec![Stmt {
                 kind: StmtKind::Expr(Box::new(expr)),
                 span,
+                plan_id,
             }],
             span,
         }
@@ -144,6 +151,7 @@ pub fn parse_for_stmt(
             body: Box::new(body),
         },
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 
@@ -185,10 +193,13 @@ pub fn parse_if_stmt(
             } else {
                 let expr = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
                 let span = state.span();
+                // 合成体语句就地发放身份（同 for 体分支的理由）
+                let plan_id = state.alloc_plan_id();
                 else_branch = Some(Box::new(Block {
                     stmts: vec![Stmt {
                         kind: StmtKind::Expr(Box::new(expr)),
                         span,
+                        plan_id,
                     }],
                     span,
                 }));
@@ -206,6 +217,7 @@ pub fn parse_if_stmt(
             span,
         },
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 /// Parse while loop statement: `while condition { body }`
@@ -223,10 +235,13 @@ pub fn parse_while_stmt(
     } else {
         let expr = state.parse_expression(crate::frontend::core::parser::BP_LOWEST)?;
         let span = state.span();
+        // 合成体语句就地发放身份（同 for 体分支的理由）
+        let plan_id = state.alloc_plan_id();
         Block {
             stmts: vec![Stmt {
                 kind: StmtKind::Expr(Box::new(expr)),
                 span,
+                plan_id,
             }],
             span,
         }
@@ -241,6 +256,7 @@ pub fn parse_while_stmt(
             span,
         })),
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 /// Parse block statement: `{ ... }`
@@ -252,6 +268,7 @@ pub fn parse_block_stmt(
     Some(Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Block(block))),
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 

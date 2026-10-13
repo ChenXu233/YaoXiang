@@ -126,6 +126,11 @@ module
     Load %5 <- bool(false)
     Load %14 <- string("chained Point + Point")
     Call %1 <- string("std.assert.assert") [%5, %14] (def=d2)
+    Drop %6
+    Drop %4
+    Drop %2
+    Drop %3
+    Drop %0
     Ret %1
   fn closure_0(TypeRef("T"), TypeRef("T"), TypeRef("T")) -> Void
     slot[0] a : Int(64) @depth2

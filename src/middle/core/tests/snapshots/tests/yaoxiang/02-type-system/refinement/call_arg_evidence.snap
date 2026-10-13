@@ -31,12 +31,13 @@ module
     Load %2 <- %1
     Load %3 <- int(0)
     Gt %4 <- %2, %3
-    JmpIfNot %4 -> instr(11)
+    JmpIfNot %4 -> instr(12)
     Load %5 <- %0
     Load %6 <- %1
     Call %7 <- string("divide") [%5, %6] (def=d0)
     Load %5 <- %7
     Ret %5
+    Drop %7
     Load %6 <- int(1)
     Neg %5 <- %6
     Ret %5

@@ -21,6 +21,8 @@ module
     Eq %3 <- %4, %5
     Load %6 <- string("first element should be 1")
     Call %2 <- string("std.assert.assert") [%3, %6] (def=d0)
+    Drop %1
+    Drop %0
     Ret %2
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

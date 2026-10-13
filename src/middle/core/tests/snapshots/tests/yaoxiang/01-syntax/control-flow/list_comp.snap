@@ -183,6 +183,7 @@ module
     Eq %18 <- %20, %23
     Load %21 <- string("len(evens) == 2")
     Call %17 <- string("std.assert.assert") [%18, %21] (def=d4)
+    Drop %13
     Load %24 <- %13
     Load %21 <- int(0)
     LoadIndex %20 <- %24[%21]
@@ -207,7 +208,7 @@ module
     StoreIndex %18[%21] <- %24
     Call %22 <- string("std.list.iter") [%18] (def=d0)
     Call %26 <- string("std.list.has_next") [%22] (def=d1)
-    JmpIfNot %26 -> instr(210)
+    JmpIfNot %26 -> instr(211)
     Call %27 <- string("std.list.next") [%22] (def=d2)
     Store %25 <- %27
     AllocArray %28 size=int(2), elem=int(1)
@@ -219,7 +220,7 @@ module
     StoreIndex %28[%32] <- %31
     Call %33 <- string("std.list.iter") [%28] (def=d0)
     Call %34 <- string("std.list.has_next") [%33] (def=d1)
-    JmpIfNot %34 -> instr(209)
+    JmpIfNot %34 -> instr(210)
     Call %35 <- string("std.list.next") [%33] (def=d2)
     Store %36 <- %35
     Load %37 <- %25
@@ -228,14 +229,15 @@ module
     Load %40 <- %36
     Add %41 <- %39, %40
     Call %17 <- string("std.list.push") [%17, %41] (def=d3)
-    Jmp -> instr(198)
-    Jmp -> instr(186)
+    Jmp -> instr(199)
+    Jmp -> instr(187)
     Load %40 <- %17
     Call %41 <- string("std.list.len") [%40] (def=d5)
     Load %39 <- int(4)
     Eq %35 <- %41, %39
     Load %37 <- string("len(pairs) == 4")
     Call %34 <- string("std.assert.assert") [%35, %37] (def=d4)
+    Drop %17
     Load %40 <- %17
     Load %37 <- int(0)
     LoadIndex %41 <- %40[%37]
@@ -277,13 +279,13 @@ module
     StoreIndex %35[%42] <- %38
     Call %43 <- string("std.list.iter") [%35] (def=d0)
     Call %44 <- string("std.list.has_next") [%43] (def=d1)
-    JmpIfNot %44 -> instr(286)
+    JmpIfNot %44 -> instr(288)
     Call %45 <- string("std.list.next") [%43] (def=d2)
     Store %46 <- %45
     Load %47 <- %46
     Load %48 <- int(1)
     Gt %49 <- %47, %48
-    JmpIfNot %49 -> instr(256)
+    JmpIfNot %49 -> instr(258)
     AllocArray %50 size=int(2), elem=int(1)
     Load %51 <- int(10)
     Load %52 <- int(0)
@@ -293,25 +295,26 @@ module
     StoreIndex %50[%54] <- %53
     Call %55 <- string("std.list.iter") [%50] (def=d0)
     Call %56 <- string("std.list.has_next") [%55] (def=d1)
-    JmpIfNot %56 -> instr(285)
+    JmpIfNot %56 -> instr(287)
     Call %57 <- string("std.list.next") [%55] (def=d2)
     Store %58 <- %57
     Load %59 <- %58
     Load %60 <- int(20)
     Eq %61 <- %59, %60
-    JmpIfNot %61 -> instr(272)
+    JmpIfNot %61 -> instr(274)
     Load %62 <- %46
     Load %63 <- %58
     Mul %64 <- %62, %63
     Call %34 <- string("std.list.push") [%34, %64] (def=d3)
-    Jmp -> instr(272)
-    Jmp -> instr(256)
+    Jmp -> instr(274)
+    Jmp -> instr(258)
     Load %60 <- %34
     Call %61 <- string("std.list.len") [%60] (def=d5)
     Load %59 <- int(2)
     Eq %57 <- %61, %59
     Load %64 <- string("len(filtered) == 2")
     Call %56 <- string("std.assert.assert") [%57, %64] (def=d4)
+    Drop %34
     Load %60 <- %34
     Load %64 <- int(0)
     LoadIndex %61 <- %60[%64]
@@ -348,25 +351,26 @@ module
     StoreIndex %57[%70] <- %65
     Call %71 <- string("std.list.iter") [%57] (def=d0)
     Call %72 <- string("std.list.has_next") [%71] (def=d1)
-    JmpIfNot %72 -> instr(341)
+    JmpIfNot %72 -> instr(344)
     Call %73 <- string("std.list.next") [%71] (def=d2)
     Store %74 <- %73
     Load %75 <- %74
     Call %76 <- string("std.list.iter") [%75] (def=d0)
     Call %77 <- string("std.list.has_next") [%76] (def=d1)
-    JmpIfNot %77 -> instr(340)
+    JmpIfNot %77 -> instr(343)
     Call %78 <- string("std.list.next") [%76] (def=d2)
     Store %79 <- %78
     Load %80 <- %79
     Call %56 <- string("std.list.push") [%56, %80] (def=d3)
-    Jmp -> instr(333)
-    Jmp -> instr(327)
+    Jmp -> instr(336)
+    Jmp -> instr(330)
     Load %81 <- %56
     Call %80 <- string("std.list.len") [%81] (def=d5)
     Load %82 <- int(4)
     Eq %78 <- %80, %82
     Load %83 <- string("len(flat) == 4")
     Call %77 <- string("std.assert.assert") [%78, %83] (def=d4)
+    Drop %56
     Load %81 <- %56
     Load %83 <- int(0)
     LoadIndex %80 <- %81[%83]
@@ -395,6 +399,15 @@ module
     Eq %78 <- %80, %82
     Load %84 <- string("flat[3] == 4")
     Call %77 <- string("std.assert.assert") [%78, %84] (def=d4)
+    Drop %13
+    Drop %34
+    Drop %56
+    Drop %0
+    Drop %17
+    Drop %6
+    Drop %1
+    Drop %10
+    Drop %5
     Ret %77
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

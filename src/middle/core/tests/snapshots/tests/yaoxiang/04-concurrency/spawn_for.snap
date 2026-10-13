@@ -42,6 +42,7 @@ module
     Load %9 <- int(5)
     Eq %7 <- %8, %9
     Call %6 <- string("std.assert.assert") [%7] (def=d5)
+    Drop %0
     Ret %6
   fn closure_0(Int(64)) -> Void
     slot[0] item : Int(64) @depth3

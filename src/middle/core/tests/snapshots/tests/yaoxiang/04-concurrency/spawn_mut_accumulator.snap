@@ -72,6 +72,11 @@ module
     Eq %18 <- %19, %20
     Load %21 <- string("for list sum 10+20+30+40 == 100")
     Call %17 <- string("std.assert.assert") [%18, %21] (def=d0)
+    Drop %0
+    Drop %12
+    Drop %1
+    Drop %11
+    Drop %2
     Ret %17
   init (locals=0)
     Call %0 <- string("main") [] (def=d8)

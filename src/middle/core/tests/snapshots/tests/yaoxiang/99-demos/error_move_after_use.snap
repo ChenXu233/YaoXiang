@@ -13,6 +13,8 @@ module
     Load %2 <- bool(true)
     Load %3 <- string("all passed")
     Call %4 <- string("std.assert.assert") [%2, %3] (def=d0)
+    Drop %0
+    Drop %1
     Ret %4
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

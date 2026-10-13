@@ -34,14 +34,16 @@ module
     Load %6 <- string("if false 分支应返回 200")
     Call %1 <- string("std.assert.assert") [%3, %6] (def=d0)
     Load %3 <- bool(true)
-    JmpIfNot %3 -> instr(33)
+    JmpIfNot %3 -> instr(35)
     Load %5 <- int(10)
     Load %6 <- int(20)
     Load %7 <- %5
     Load %8 <- %6
     Add %4 <- %7, %8
+    Drop %5
+    Drop %6
     Move %1 <- %4
-    Jmp -> instr(35)
+    Jmp -> instr(37)
     Load %9 <- int(0)
     Move %1 <- %9
     Load %9 <- %1
@@ -50,16 +52,16 @@ module
     Load %11 <- string("块内多语句 + 尾随表达式应作为块的值")
     Call %7 <- string("std.assert.assert") [%8, %11] (def=d0)
     Load %8 <- bool(true)
-    JmpIfNot %8 -> instr(51)
+    JmpIfNot %8 -> instr(53)
     Load %10 <- bool(false)
-    JmpIfNot %10 -> instr(47)
+    JmpIfNot %10 -> instr(49)
     Load %11 <- int(1)
     Move %9 <- %11
-    Jmp -> instr(49)
+    Jmp -> instr(51)
     Load %12 <- int(2)
     Move %9 <- %12
     Move %7 <- %9
-    Jmp -> instr(53)
+    Jmp -> instr(55)
     Load %13 <- int(3)
     Move %7 <- %13
     Load %10 <- %7
@@ -71,24 +73,24 @@ module
     Load %11 <- %8
     Load %12 <- int(90)
     Ge %10 <- %11, %12
-    JmpIfNot %10 -> instr(66)
+    JmpIfNot %10 -> instr(68)
     Load %13 <- string("A")
     Move %9 <- %13
-    Jmp -> instr(82)
+    Jmp -> instr(84)
     Load %14 <- %8
     Load %15 <- int(80)
     Ge %16 <- %14, %15
-    JmpIfNot %16 -> instr(73)
+    JmpIfNot %16 -> instr(75)
     Load %17 <- string("B")
     Move %9 <- %17
-    Jmp -> instr(82)
+    Jmp -> instr(84)
     Load %18 <- %8
     Load %19 <- int(70)
     Ge %20 <- %18, %19
-    JmpIfNot %20 -> instr(80)
+    JmpIfNot %20 -> instr(82)
     Load %21 <- string("C")
     Move %9 <- %21
-    Jmp -> instr(82)
+    Jmp -> instr(84)
     Load %22 <- string("D")
     Move %9 <- %22
     Load %12 <- %9
@@ -96,6 +98,12 @@ module
     Eq %11 <- %12, %13
     Load %16 <- string("score 85 对应 B 等级")
     Call %10 <- string("std.assert.assert") [%11, %16] (def=d0)
+    Drop %2
+    Drop %0
+    Drop %1
+    Drop %7
+    Drop %9
+    Drop %8
     Ret %10
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

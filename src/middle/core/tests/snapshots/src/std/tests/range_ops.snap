@@ -72,6 +72,7 @@ module
     Eq %11 <- %12, %14
     Load %16 <- string("next yields first element")
     Call %13 <- string("std.assert.assert") [%11, %16] (def=d4)
+    Drop %9
     Load %14 <- int(3)
     Load %15 <- int(0)
     Load %17 <- int(1)
@@ -85,12 +86,14 @@ module
     Eq %12 <- %14, %15
     Load %17 <- string("descending first is 3")
     Call %11 <- string("std.assert.assert") [%12, %17] (def=d4)
+    Drop %13
     Load %16 <- %13
     Call %14 <- string("std.range.next") [%16] (def=d3)
     Load %15 <- int(2)
     Eq %12 <- %14, %15
     Load %17 <- string("descending next is 2")
     Call %11 <- string("std.assert.assert") [%12, %17] (def=d4)
+    Drop %13
     Load %14 <- %13
     Call %12 <- string("std.range.has_next") [%14] (def=d2)
     Load %15 <- string("descending still has 1")
@@ -232,6 +235,14 @@ module
     Eq %17 <- %18, %19
     Load %20 <- string("reduce sum 1..5 = 15")
     Call %16 <- string("std.assert.assert") [%17, %20] (def=d4)
+    Drop %12
+    Drop %14
+    Drop %1
+    Drop %11
+    Drop %0
+    Drop %9
+    Drop %3
+    Drop %15
     Ret %16
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2

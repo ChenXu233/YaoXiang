@@ -42,6 +42,7 @@ module
     Load %2 <- %1
     Call %0 <- string("Box.get") [%2] (def=d1)
     Ret %0
+    Drop %1
     Ret %0
   fn build_list() -> Int(64)
     slot[0] l : Int(64) @depth1
@@ -87,6 +88,7 @@ module
     Load %1 <- %4
     LoadField %0 <- %1.1
     Ret %0
+    Drop %4
     Ret %0
   fn main() -> Void
     locals_total=5

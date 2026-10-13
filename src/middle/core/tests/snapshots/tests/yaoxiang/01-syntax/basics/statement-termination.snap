@@ -77,6 +77,10 @@ module
     Eq %7 <- %8, %9
     Load %10 <- string("leading-dot chained field access")
     Call %6 <- string("std.assert.assert") [%7, %10] (def=d0)
+    Drop %1
+    Drop %2
+    Drop %4
+    Drop %5
     Ret %6
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

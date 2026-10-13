@@ -91,30 +91,35 @@ module
     Not %0 <- %2
     Load %5 <- string("precondition: file absent")
     Call %1 <- string("std.assert.assert") [%0, %5] (def=d0)
+    Drop %3
     Load %0 <- bool(false)
-    JmpIfNot %0 -> instr(95)
+    JmpIfNot %0 -> instr(96)
     Load %2 <- %3
     Load %4 <- string("side effect")
     Call %1 <- string("std.fs.write_file") [%2, %4] (def=d2)
-    Jmp -> instr(96)
+    Jmp -> instr(97)
     Load %1 <- bool(false)
+    Drop %3
     Load %4 <- %3
     Call %2 <- string("std.fs.exists") [%4] (def=d1)
     Not %0 <- %2
     Load %5 <- string("and short-circuit skipped rhs")
     Call %1 <- string("std.assert.assert") [%0, %5] (def=d0)
+    Drop %3
     Load %0 <- bool(true)
-    JmpIf %0 -> instr(107)
+    JmpIf %0 -> instr(110)
     Load %2 <- %3
     Load %4 <- string("side effect")
     Call %1 <- string("std.fs.write_file") [%2, %4] (def=d2)
-    Jmp -> instr(108)
+    Jmp -> instr(111)
     Load %1 <- bool(true)
+    Drop %3
     Load %4 <- %3
     Call %2 <- string("std.fs.exists") [%4] (def=d1)
     Not %0 <- %2
     Load %5 <- string("or short-circuit skipped rhs")
     Call %1 <- string("std.assert.assert") [%0, %5] (def=d0)
+    Drop %3
     Ret %1
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

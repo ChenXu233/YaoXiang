@@ -54,12 +54,14 @@ module
     Load %7 <- float(4602678819172646912)
     Load %8 <- float(4602678819172646912)
     Call %5 <- string("Point.shift") [%9, %7, %8] (def=d3)
+    Drop %6
     Load %10 <- %6
     LoadField %7 <- %10.0
     Load %8 <- float(4609434218613702656)
     Eq %9 <- %7, %8
     Load %11 <- string("&mut 复用写回")
     Call %5 <- string("std.assert.assert") [%9, %11] (def=d2)
+    Drop %6
     Ret %5
   init (locals=3)
     islot[0] self : Int(64) @depth1

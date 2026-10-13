@@ -33,6 +33,9 @@ module
     Load %2 <- %3
     Load %5 <- string("不同变体不相等")
     Call %0 <- string("std.assert.assert") [%2, %5] (def=d0)
+    Drop %3
+    Drop %4
+    Drop %1
     Ret %0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

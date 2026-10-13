@@ -69,6 +69,17 @@ module
     Eq %14 <- %15, %12
     Load %13 <- string("spawn 嵌套表达式 (a+b)*c == 900")
     Call %11 <- string("std.assert.assert") [%14, %13] (def=d0)
+    Drop %7
+    Drop %8
+    Drop %9
+    Drop %3
+    Drop %5
+    Drop %4
+    Drop %6
+    Drop %10
+    Drop %1
+    Drop %2
+    Drop %0
     Ret %11
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

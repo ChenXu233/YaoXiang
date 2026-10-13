@@ -8,6 +8,7 @@ module
     Load %1 <- bool(true)
     Load %3 <- string("dict created successfully")
     Call %0 <- string("std.assert.assert") [%1, %3] (def=d0)
+    Drop %2
     Ret %0
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

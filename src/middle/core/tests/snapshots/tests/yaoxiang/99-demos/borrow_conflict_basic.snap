@@ -35,6 +35,7 @@ module
     Load %3 <- float(4607182418800017408)
     Load %4 <- float(4607182418800017408)
     Call %0 <- string("Point.shift") [%1, %3, %4] (def=d3)
+    Drop %2
     Load %1 <- bool(true)
     Load %3 <- string("point shifted successfully")
     Call %0 <- string("std.assert.assert") [%1, %3] (def=d4)
@@ -43,6 +44,7 @@ module
     Load %1 <- bool(true)
     Load %3 <- string("all passed")
     Call %0 <- string("std.assert.assert") [%1, %3] (def=d4)
+    Drop %2
     Ret %0
   init (locals=3)
     islot[0] self : Int(64) @depth1

@@ -24,6 +24,7 @@ module
     Load %5 <- %4
     Call %3 <- string("std.net.url_encode") [%5] (def=d0)
     Call %2 <- string("std.net.url_decode") [%3] (def=d2)
+    Drop %4
     Load %6 <- %2
     Load %7 <- %4
     Eq %5 <- %6, %7
@@ -36,6 +37,11 @@ module
     Eq %6 <- %7, %8
     Load %9 <- string("url_decode: %20 to space")
     Call %5 <- string("std.assert.assert") [%6, %9] (def=d1)
+    Drop %3
+    Drop %1
+    Drop %0
+    Drop %4
+    Drop %2
     Ret %5
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

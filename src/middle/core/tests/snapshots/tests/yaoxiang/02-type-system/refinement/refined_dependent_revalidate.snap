@@ -11,6 +11,7 @@ module
     Load %1 <- int(3)
     Store @0 <- %1
     Load %1 <- %0
+    Drop %0
     Ret %1
   fn pruned_branch() -> Int(64)
     slot[0] s : Int(64) @depth1
@@ -28,6 +29,7 @@ module
     Load %3 <- int(4)
     Store @0 <- %3
     Load %3 <- %0
+    Drop %0
     Ret %3
   fn other(Int(64)) -> Int(64)
     slot[0] n : Int(64) @depth1
@@ -36,6 +38,7 @@ module
     Load %0 <- arg%0
     Load %1 <- int(6)
     Load %2 <- %1
+    Drop %1
     Ret %2
   init (locals=0)
     Load %0 <- int(3)

@@ -30,6 +30,7 @@ module
     Eq %1 <- %2, %3
     Load %6 <- string("g[1] == 8.0")
     Call %0 <- string("std.assert.assert") [%1, %6] (def=d2)
+    Drop %7
     Ret %0
   init (locals=2)
     islot[0] self : Int(64) @depth1

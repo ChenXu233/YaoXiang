@@ -67,6 +67,7 @@ module
     Eq %2 <- %3, %0
     Load %7 <- string("5 % 5 == 0")
     Call %4 <- string("std.assert.assert") [%2, %7] (def=d0)
+    Drop %6
     Ret %4
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

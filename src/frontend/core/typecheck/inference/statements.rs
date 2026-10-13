@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use crate::frontend::module::{Export, ExportKind, ModuleInfo};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
-use crate::frontend::core::parser::ast::{classify_generic_params, Block, Expr, Param, Stmt};
+use crate::frontend::core::parser::ast::{classify_generic_params, Block, Expr, Param, PlanId, Stmt};
 use crate::frontend::core::typecheck::scope::VarInfo;
 use crate::frontend::core::typecheck::checker::collect_used_in_type;
 use crate::middle::passes::mono::instance::InstantiationRequest;
@@ -1383,6 +1383,7 @@ impl StatementChecker {
                                 }),
                             )),
                             span: stmt.span,
+                            plan_id: PlanId::UNPLANNED,
                         }],
                         span: stmt.span,
                     };

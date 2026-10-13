@@ -85,6 +85,11 @@ module
     Eq %10 <- %11, %12
     Load %13 <- string("match native exhaustive arms")
     Call %9 <- string("std.assert.assert") [%10, %13] (def=d1)
+    Drop %1
+    Drop %3
+    Drop %8
+    Drop %4
+    Drop %0
     Ret %9
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

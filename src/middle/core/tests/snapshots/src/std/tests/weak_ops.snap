@@ -36,6 +36,9 @@ module
     Eq %7 <- %8, %9
     Load %11 <- string("upgrade of live Arc must be some")
     Call %6 <- string("std.assert.assert") [%7, %11] (def=d2)
+    Drop %3
+    Drop %1
+    Drop %2
     Ret %6
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

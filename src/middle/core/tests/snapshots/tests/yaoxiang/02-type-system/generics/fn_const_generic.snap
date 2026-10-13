@@ -16,6 +16,7 @@ module
     Eq %2 <- %1, %4
     Load %5 <- string("f(42)(5) should return 5")
     Call %0 <- string("std.assert.assert") [%2, %5] (def=d2)
+    Drop %3
     Ret %0
   fn __f_l0(TypeRef("N")) -> Int(64)
     slot[0] N : Int(64) @depth1

@@ -10,8 +10,10 @@ module
     Call %1 <- string("std.string.contains") [%3, %4] (def=d1)
     Load %5 <- string("int value rendered")
     Call %0 <- string("std.assert.assert") [%1, %5] (def=d2)
+    Drop %2
     Load %1 <- string("io_ops: print/println smoke")
     Call %0 <- string("std.io.println") [%1] (def=d3)
+    Drop %2
     Ret %0
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

@@ -23,6 +23,9 @@ module
     Eq %4 <- %5, %2
     Load %3 <- string("原语传参不 move 源")
     Call %6 <- string("std.assert.assert") [%4, %3] (def=d0)
+    Drop %0
+    Drop %1
+    Drop %8
     Ret %6
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

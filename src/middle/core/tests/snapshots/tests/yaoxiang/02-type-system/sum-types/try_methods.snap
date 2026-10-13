@@ -59,6 +59,11 @@ module
     Call %4 <- string("std.result.Result.is_failure") [%7] (def=_)
     Load %8 <- string("from_error rebuilds as failure")
     Call %6 <- string("std.assert.assert") [%4, %8] (def=d1)
+    Drop %2
+    Drop %0
+    Drop %1
+    Drop %5
+    Drop %3
     Ret %6
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

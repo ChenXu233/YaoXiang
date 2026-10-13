@@ -24,6 +24,7 @@ module
     Load %2 <- %1
     MakeClosure %3 <- closure_0 env=[] (def=d1)
     Call %0 <- string("std.list.map") [%2, %3] (def=d2)
+    Drop %1
     Load %6 <- %0
     Load %7 <- int(0)
     LoadIndex %4 <- %6[%7]
@@ -59,6 +60,8 @@ module
     Eq %3 <- %4, %5
     Load %8 <- string("list.map[4] == 10")
     Call %2 <- string("std.assert.assert") [%3, %8] (def=d3)
+    Drop %1
+    Drop %0
     Ret %2
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2

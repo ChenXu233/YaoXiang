@@ -18,6 +18,7 @@ module
     Add %3 <- %4, %5
     CreateVariant %2 <- Option::0 %3
     Ret %2
+    Drop %1
     Ret %2
   fn main() -> Void
     slot[0] some_case : Int(64) @depth1
@@ -33,12 +34,13 @@ module
     Load %3 <- %1
     Move %4 <- %3
     Call %2 <- string("bump") [%4] (def=d4)
+    Drop %1
     Load %4 <- void
     Load %3 <- %2
     VariantTag %5 <- %3 : Option
     Load %6 <- int(0)
     Eq %7 <- %5, %6
-    JmpIfNot %7 -> instr(22)
+    JmpIfNot %7 -> instr(23)
     VariantPayload %8 <- %3 : Option
     Move %9 <- %8
     Load %10 <- %9
@@ -47,40 +49,45 @@ module
     Load %13 <- string("? keeps some payload")
     Call %14 <- string("std.assert.assert") [%12, %13] (def=d5)
     Move %4 <- %14
-    Jmp -> instr(31)
+    Jmp -> instr(32)
     VariantTag %15 <- %3 : Option
     Load %16 <- int(1)
     Eq %17 <- %15, %16
-    JmpIfNot %17 -> instr(31)
+    JmpIfNot %17 -> instr(32)
     Load %18 <- bool(false)
     Load %19 <- string("? must not turn some into none")
     Call %20 <- string("std.assert.assert") [%18, %19] (def=d5)
     Move %4 <- %20
-    Jmp -> instr(31)
+    Jmp -> instr(32)
     Load %7 <- %0
     Move %6 <- %7
     Call %5 <- string("bump") [%6] (def=d4)
+    Drop %0
     Load %6 <- void
     Load %7 <- %5
     VariantTag %8 <- %7 : Option
     Load %14 <- int(0)
     Eq %12 <- %8, %14
-    JmpIfNot %12 -> instr(46)
+    JmpIfNot %12 -> instr(48)
     VariantPayload %10 <- %7 : Option
     Load %13 <- bool(false)
     Load %15 <- string("? must not fabricate a value")
     Call %11 <- string("std.assert.assert") [%13, %15] (def=d5)
     Move %6 <- %11
-    Jmp -> instr(55)
+    Jmp -> instr(57)
     VariantTag %16 <- %7 : Option
     Load %17 <- int(1)
     Eq %20 <- %16, %17
-    JmpIfNot %20 -> instr(55)
+    JmpIfNot %20 -> instr(57)
     Load %19 <- bool(true)
     Load %21 <- string("? propagates none")
     Call %18 <- string("std.assert.assert") [%19, %21] (def=d5)
     Move %6 <- %18
-    Jmp -> instr(55)
+    Jmp -> instr(57)
+    Drop %2
+    Drop %0
+    Drop %5
+    Drop %1
     Ret %6
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

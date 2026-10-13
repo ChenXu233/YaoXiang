@@ -24,6 +24,8 @@ module
     Eq %2 <- %3, %5
     Load %6 <- string("identity(\"hello\") should be \"hello\"")
     Call %4 <- string("std.assert.assert") [%2, %6] (def=d1)
+    Drop %0
+    Drop %1
     Ret %4
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

@@ -18,6 +18,7 @@ module
     Load %2 <- %3
     Load %4 <- int(1)
     Add %1 <- %2, %4
+    Drop %3
     Ret %1
   fn tail_if() -> Int(64)
     locals_total=6
@@ -52,6 +53,7 @@ module
     locals_total=3
     Load %0 <- string("assign tail")
     Call %1 <- string("std.io.println") [%0] (def=d0)
+    Drop %1
     Ret
   fn if_no_else_is_void() -> Void
     slot[0] x : Int(64) @depth1
@@ -73,6 +75,8 @@ module
     Move %0 <- %7
     Jmp -> instr(15)
     Load %2 <- void
+    Drop %5
+    Drop %2
     Ret
   fn early_return(Int(64)) -> Int(64)
     slot[0] n : Int(64) @depth1

@@ -98,6 +98,7 @@ module
     Call %9 <- string("std.list.contains") [%10, %11] (def=d5)
     Load %13 <- string("contains finds struct")
     Call %8 <- string("std.assert.assert") [%9, %13] (def=d1)
+    Drop %7
     Load %11 <- %7
     Load %12 <- float(4621256167635550208)
     Load %13 <- float(4621256167635550208)
@@ -106,6 +107,14 @@ module
     Not %9 <- %10
     Load %15 <- string("contains rejects missing")
     Call %8 <- string("std.assert.assert") [%9, %15] (def=d1)
+    Drop %2
+    Drop %0
+    Drop %1
+    Drop %3
+    Drop %4
+    Drop %7
+    Drop %5
+    Drop %6
     Ret %8
   init (locals=2)
     islot[0] self : Int(64) @depth1

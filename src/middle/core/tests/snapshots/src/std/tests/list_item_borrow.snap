@@ -19,6 +19,8 @@ module
     Call %3 <- string("std.list.contains") [%4, %5] (def=d0)
     Load %6 <- string("contains str item")
     Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Drop %1
+    Drop %0
     Load %4 <- %1
     Load %5 <- string("b")
     Eq %3 <- %4, %5
@@ -31,6 +33,8 @@ module
     Eq %3 <- %4, %5
     Load %8 <- string("find_index str item")
     Call %2 <- string("std.assert.assert") [%3, %8] (def=d1)
+    Drop %1
+    Drop %0
     Load %4 <- %1
     Load %5 <- string("b")
     Eq %3 <- %4, %5
@@ -41,12 +45,16 @@ module
     Call %3 <- string("std.list.contains") [%4, %5] (def=d0)
     Load %6 <- string("xs reusable across calls")
     Call %2 <- string("std.assert.assert") [%3, %6] (def=d1)
+    Drop %1
+    Drop %0
     Load %6 <- %0
     Call %4 <- string("std.list.len") [%6] (def=d3)
     Load %5 <- int(3)
     Eq %3 <- %4, %5
     Load %7 <- string("xs len intact")
     Call %2 <- string("std.assert.assert") [%3, %7] (def=d1)
+    Drop %1
+    Drop %0
     Ret %2
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

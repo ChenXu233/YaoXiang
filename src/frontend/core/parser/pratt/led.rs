@@ -413,12 +413,16 @@ impl<'a> ParserState<'a> {
         } else {
             // Single expression body - use StmtKind::Return as sugar for => { return expr }
             let expr = self.parse_expression(BP_LOWEST)?;
+            // 合成体语句：不经过 parse_statement（身份的统一发放点），就地发放身份
+            let span = self.span();
+            let plan_id = self.alloc_plan_id();
             Block {
                 stmts: vec![Stmt {
                     kind: StmtKind::Return(Some(Box::new(expr))),
-                    span: self.span(),
+                    span,
+                    plan_id,
                 }],
-                span: self.span(),
+                span,
             }
         };
 

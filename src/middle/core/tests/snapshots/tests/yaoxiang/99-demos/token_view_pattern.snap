@@ -15,6 +15,7 @@ module
     Load %3 <- %1
     Load %4 <- %0
     Call %2 <- string("BufferView") [%3, %4] (def=d1)
+    Drop %1
     Load %5 <- %2
     LoadField %6 <- %5.1
     LoadField %7 <- %6.0
@@ -29,6 +30,9 @@ module
     Load %4 <- bool(true)
     Load %7 <- string("all passed")
     Call %3 <- string("std.assert.assert") [%4, %7] (def=d2)
+    Drop %1
+    Drop %0
+    Drop %2
     Ret %3
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

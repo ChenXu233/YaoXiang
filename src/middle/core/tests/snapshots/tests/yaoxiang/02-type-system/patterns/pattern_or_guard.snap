@@ -115,6 +115,16 @@ module
     Eq %15 <- %16, %17
     Load %18 <- string("guard falls through")
     Call %14 <- string("std.assert.assert") [%15, %18] (def=d0)
+    Drop %4
+    Drop %6
+    Drop %10
+    Drop %5
+    Drop %7
+    Drop %11
+    Drop %1
+    Drop %3
+    Drop %0
+    Drop %2
     Ret %14
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

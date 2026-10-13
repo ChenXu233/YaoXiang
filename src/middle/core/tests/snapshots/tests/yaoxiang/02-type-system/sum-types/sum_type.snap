@@ -40,6 +40,10 @@ module
     Move %5 <- %11
     Jmp -> instr(29)
     Load %4 <- void
+    Drop %0
+    Drop %2
+    Drop %1
+    Drop %3
     Ret %4
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

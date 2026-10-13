@@ -92,6 +92,11 @@ module
     Jmp -> instr(65)
     Load %32 <- %21
     Call %31 <- string("std.io.println") [%32] (def=d0)
+    Drop %1
+    Drop %0
+    Drop %12
+    Drop %21
+    Drop %2
     Ret %31
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

@@ -21,6 +21,7 @@ module
     Load %2 <- %4
     Load %3 <- int(1)
     StoreField %2.1 <- %3 (type=None, name=Some("n"))
+    Drop %4
     Load %2 <- %4
     Ret %2
     Ret %2
@@ -57,6 +58,7 @@ module
     Eq %1 <- %5, %6
     Load %7 <- string("generic return keeps concrete type")
     Call %0 <- string("std.assert.assert") [%1, %7] (def=d3)
+    Drop %2
     AllocArray %0 size=int(3), elem=int(1)
     Load %1 <- int(1)
     Load %5 <- int(0)
@@ -71,12 +73,16 @@ module
     Move %5 <- %6
     MakeClosure %4 <- closure_0 env=[] (def=d4)
     Call %1 <- string("apply_to") [%5, %4] (def=d5)
+    Drop %0
     Load %7 <- %1
     StringLength %4 <- %7
     Load %3 <- int(0)
     Eq %6 <- %4, %3
     Load %8 <- string("lambda return type inferred")
     Call %5 <- string("std.assert.assert") [%6, %8] (def=d3)
+    Drop %1
+    Drop %0
+    Drop %2
     Ret %5
   fn closure_0(Int(64)) -> Void
     slot[0] x : Int(64) @depth2

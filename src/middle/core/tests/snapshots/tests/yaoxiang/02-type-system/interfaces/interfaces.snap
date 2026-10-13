@@ -26,8 +26,10 @@ module
     Load %1 <- %2
     Load %3 <- string("screen")
     Call %0 <- string("Point.draw") [%1, %3] (def=d1)
+    Drop %2
     Load %1 <- %2
     Call %0 <- string("Point.serialize") [%1] (def=d2)
+    Drop %2
     Load %4 <- %0
     Load %5 <- string("point")
     Eq %3 <- %4, %5
@@ -35,11 +37,15 @@ module
     Call %1 <- string("std.assert.assert") [%3, %6] (def=d3)
     Load %3 <- %2
     Call %1 <- string("Point.get_x") [%3] (def=d4)
+    Drop %2
     Load %5 <- %1
     Load %6 <- float(4607182418800017408)
     Eq %4 <- %5, %6
     Load %7 <- string("Point.get_x() should return 1.0")
     Call %3 <- string("std.assert.assert") [%4, %7] (def=d3)
+    Drop %2
+    Drop %0
+    Drop %1
     Ret %3
   init (locals=2)
     islot[0] self : Int(64) @depth1

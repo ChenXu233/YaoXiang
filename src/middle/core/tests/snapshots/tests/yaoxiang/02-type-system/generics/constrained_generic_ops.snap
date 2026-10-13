@@ -61,6 +61,10 @@ module
     Eq %5 <- %7, %8
     Load %9 <- string("constrained generic over Vec3")
     Call %4 <- string("std.assert.assert") [%5, %9] (def=d2)
+    Drop %0
+    Drop %1
+    Drop %2
+    Drop %3
     Ret %4
   init (locals=2)
     islot[0] self : Int(64) @depth1

@@ -58,6 +58,7 @@ module
     Call %4 <- string("std.assert.assert") [%2, %7] (def=d4)
     Load %2 <- string("paren return fn ok")
     Call %4 <- string("std.io.println") [%2] (def=d9)
+    Drop %6
     Ret %4
   fn closure_0(Int(64)) -> Void
     slot[0] a : Int(64) @depth2

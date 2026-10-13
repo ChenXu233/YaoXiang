@@ -17,6 +17,8 @@ module
     Load %9 <- %6
     NewTuple %10 <- [%8, %9]
     Move %7 <- %10
+    Drop %3
+    Drop %6
     Load %5 <- bool(true)
     Load %10 <- string("spawn result captured")
     Call %4 <- string("std.assert.assert") [%5, %10] (def=d0)
@@ -25,6 +27,8 @@ module
     Load %5 <- bool(true)
     Load %10 <- string("all passed")
     Call %4 <- string("std.assert.assert") [%5, %10] (def=d0)
+    Drop %0
+    Drop %7
     Ret %4
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

@@ -18,6 +18,7 @@ module
     Jmp -> instr(3)
     Load %5 <- %2
     Ret %5
+    Drop %1
     Ret %5
   fn countdown(Int(64)) -> Int(64)
     slot[0] n : Int(64) @depth1
@@ -40,6 +41,7 @@ module
     Jmp -> instr(3)
     Load %5 <- %2
     Ret %5
+    Drop %1
     Ret %5
   fn main() -> Void
     locals_total=6

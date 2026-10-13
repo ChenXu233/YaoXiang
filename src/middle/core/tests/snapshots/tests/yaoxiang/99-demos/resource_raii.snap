@@ -39,6 +39,7 @@ module
     Load %1 <- bool(true)
     Load %3 <- string("all passed")
     Call %0 <- string("std.assert.assert") [%1, %3] (def=d3)
+    Drop %2
     Ret %0
   init (locals=1)
     islot[0] self : Int(64) @depth1

@@ -103,6 +103,7 @@ module
     Eq %3 <- %0, %1
     Load %7 <- string("named: qualified list.push len")
     Call %2 <- string("std.assert.assert") [%3, %7] (def=d1)
+    Drop %4
     Load %5 <- %4
     Load %7 <- int(2)
     Call %0 <- string("std.list.get") [%5, %7] (def=d5)
@@ -110,6 +111,7 @@ module
     Eq %3 <- %0, %1
     Load %8 <- string("named: qualified list.push value")
     Call %2 <- string("std.assert.assert") [%3, %8] (def=d1)
+    Drop %4
     Load %3 <- string("明天下午 3 点开会")
     Load %0 <- string("alice@example.com")
     Load %1 <- string("会议通知")
@@ -119,6 +121,9 @@ module
     Eq %0 <- %1, %5
     Load %7 <- string("named: readable call")
     Call %3 <- string("std.assert.assert") [%0, %7] (def=d1)
+    Drop %2
+    Drop %4
+    Drop %6
     Ret %3
   init (locals=0)
     Call %0 <- string("main") [] (def=d7)

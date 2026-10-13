@@ -99,12 +99,16 @@ impl<'a> ParserState<'a> {
         } else {
             // Unsafe without braces is a single expression
             let expr = self.parse_expression(BP_UNARY)?;
+            // 合成体语句：不经过 parse_statement（身份的统一发放点），就地发放身份
+            let span = self.span();
+            let plan_id = self.alloc_plan_id();
             Block {
                 stmts: vec![Stmt {
                     kind: StmtKind::Expr(Box::new(expr)),
-                    span: self.span(),
+                    span,
+                    plan_id,
                 }],
-                span: self.span(),
+                span,
             }
         };
 
@@ -937,12 +941,16 @@ impl<'a> ParserState<'a> {
             } else {
                 // Simple expression body - use lower precedence for the body
                 let body_expr = self.parse_expression(BP_LOWEST)?;
+                // 合成体语句：不经过 parse_statement（身份的统一发放点），就地发放身份
+                let span = self.span();
+                let plan_id = self.alloc_plan_id();
                 Block {
                     stmts: vec![Stmt {
                         kind: StmtKind::Expr(Box::new(body_expr)),
-                        span: self.span(),
+                        span,
+                        plan_id,
                     }],
-                    span: self.span(),
+                    span,
                 }
             };
 

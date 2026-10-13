@@ -30,7 +30,7 @@ module
     Load %5 <- %1
     Load %6 <- int(3)
     Lt %7 <- %5, %6
-    JmpIfNot %7 -> instr(35)
+    JmpIfNot %7 -> instr(37)
     Load %8 <- %0
     LoadField %9 <- %8.0
     Load %10 <- %9
@@ -47,12 +47,14 @@ module
     Load %19 <- %1
     Load %20 <- int(3)
     Eq %21 <- %19, %20
-    JmpIfNot %21 -> instr(33)
+    JmpIfNot %21 -> instr(34)
     Load %22 <- %2
     Call %23 <- string("bump") [%22] (def=d2)
+    Drop %2
     Move %24 <- %23
-    Jmp -> instr(33)
+    Jmp -> instr(34)
     Load %4 <- void
+    Drop %9
     Jmp -> instr(8)
     Load %12 <- %3
     Load %10 <- int(3)
@@ -65,6 +67,10 @@ module
     Eq %14 <- %12, %10
     Load %13 <- string("guarded write fired exactly once")
     Call %8 <- string("std.assert.assert") [%14, %13] (def=d1)
+    Drop %2
+    Drop %1
+    Drop %3
+    Drop %0
     Ret %8
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

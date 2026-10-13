@@ -81,6 +81,7 @@ fn match_literal_expr() -> Expr {
                             Span::dummy(),
                         ))),
                         span: Span::dummy(),
+                        plan_id: PlanId::UNPLANNED,
                     }],
                     span: Span::dummy(),
                 },
@@ -95,6 +96,7 @@ fn match_literal_expr() -> Expr {
                             Span::dummy(),
                         ))),
                         span: Span::dummy(),
+                        plan_id: PlanId::UNPLANNED,
                     }],
                     span: Span::dummy(),
                 },
@@ -311,6 +313,7 @@ fn test_format_single_stmt_block_inline() {
         stmts: vec![Stmt {
             kind: StmtKind::Expr(Box::new(Expr::Lit(Literal::Int(42), Span::dummy()))),
             span: Span::dummy(),
+            plan_id: PlanId::UNPLANNED,
         }],
         span: Span::dummy(),
     };
@@ -329,6 +332,7 @@ fn test_format_single_stmt_block_multiline_when_long() {
         stmts: vec![Stmt {
             kind: StmtKind::Expr(Box::new(Expr::Var(long_name.to_string(), Span::dummy()))),
             span: Span::dummy(),
+            plan_id: PlanId::UNPLANNED,
         }],
         span: Span::dummy(),
     };
@@ -471,6 +475,7 @@ fn test_format_unsafe_block() {
             stmts: vec![Stmt {
                 kind: StmtKind::Expr(Box::new(Expr::Var("x".to_string(), Span::dummy()))),
                 span: Span::dummy(),
+                plan_id: PlanId::UNPLANNED,
             }],
             span: Span::dummy(),
         }),

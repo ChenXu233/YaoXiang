@@ -451,7 +451,9 @@ fn test_mut_allowed() {
 
 // ── E2E 集成测试（RFC-009a §用例分析） ──────────────────
 
-use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, Module, Param, Stmt, StmtKind};
+use crate::frontend::core::parser::ast::{
+    BinOp, Block, Expr, Literal, Module, Param, PlanId, Stmt, StmtKind,
+};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::layers::ownership::OwnershipChecker;
 
@@ -477,6 +479,7 @@ fn make_var_stmt(
             span: Span::default(),
         },
         span: Span::default(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -494,6 +497,7 @@ fn make_mut_var_stmt(
             span: Span::default(),
         },
         span: Span::default(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -501,6 +505,7 @@ fn make_expr_stmt(expr: Expr) -> Stmt {
     Stmt {
         kind: StmtKind::Expr(Box::new(expr)),
         span: Span::default(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 fn make_binding(
@@ -533,6 +538,7 @@ fn make_binding(
             span: Span::default(),
         },
         span: Span::default(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -1197,6 +1203,7 @@ fn test_e2e_return_moved_value() {
             Stmt {
                 kind: StmtKind::Return(Some(Box::new(make_var("x")))),
                 span: Span::default(),
+                plan_id: PlanId::UNPLANNED,
             },
         ],
     );
@@ -1225,6 +1232,7 @@ fn test_e2e_use_after_return_rejected() {
             Stmt {
                 kind: StmtKind::Return(Some(Box::new(make_var("x")))),
                 span: Span::default(),
+                plan_id: PlanId::UNPLANNED,
             },
             make_expr_stmt(make_var("x")),
         ],
@@ -1814,6 +1822,7 @@ fn make_if_stmt(
             span: Span::default(),
         },
         span: Span::default(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 

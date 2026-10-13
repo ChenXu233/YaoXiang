@@ -75,6 +75,7 @@ module
     Eq %5 <- %4, %6
     Load %8 <- string("range survives iterator creation")
     Call %2 <- string("std.assert.assert") [%5, %8] (def=d0)
+    Drop %1
     Load %2 <- int(0)
     Load %4 <- int(5)
     Load %6 <- int(0)
@@ -85,16 +86,16 @@ module
     VariantTag %10 <- %9 : Result
     Load %11 <- int(0)
     Eq %12 <- %10, %11
-    JmpIfNot %12 -> instr(78)
+    JmpIfNot %12 -> instr(79)
     VariantPayload %9 <- %9 : Result
-    Jmp -> instr(79)
+    Jmp -> instr(80)
     Call _ <- string("std.range.abort_invalid_step") [%5] (def=d5)
     Call %13 <- string("std.range.has_next") [%9] (def=d6)
-    JmpIfNot %13 -> instr(85)
+    JmpIfNot %13 -> instr(86)
     Call %14 <- string("std.range.next") [%9] (def=d4)
     Store %15 <- %14
     Load %2 <- %15
-    Jmp -> instr(79)
+    Jmp -> instr(80)
     Load %16 <- %2
     Load %17 <- int(1)
     Eq %14 <- %16, %17
@@ -117,7 +118,7 @@ module
     Load %16 <- %13
     Call %17 <- string("std.list.iter") [%16] (def=d7)
     Call %19 <- string("std.list.has_next") [%17] (def=d8)
-    JmpIfNot %19 -> instr(128)
+    JmpIfNot %19 -> instr(129)
     Call %23 <- string("std.list.next") [%17] (def=d9)
     Store %18 <- %23
     Load %20 <- %18
@@ -125,24 +126,30 @@ module
     VariantTag %22 <- %21 : Result
     Load %24 <- int(0)
     Eq %25 <- %22, %24
-    JmpIfNot %25 -> instr(118)
+    JmpIfNot %25 -> instr(119)
     VariantPayload %21 <- %21 : Result
-    Jmp -> instr(119)
+    Jmp -> instr(120)
     Call _ <- string("std.range.abort_invalid_step") [%20] (def=d5)
     Call %26 <- string("std.range.has_next") [%21] (def=d6)
-    JmpIfNot %26 -> instr(127)
+    JmpIfNot %26 -> instr(128)
     Call %27 <- string("std.range.next") [%21] (def=d4)
     Store %28 <- %27
     Load %29 <- %14
     Load %30 <- int(1)
     Add %14 <- %29, %30
-    Jmp -> instr(119)
-    Jmp -> instr(106)
+    Jmp -> instr(120)
+    Jmp -> instr(107)
     Load %29 <- %14
     Load %30 <- int(6)
     Eq %27 <- %29, %30
     Load %31 <- string("nested range iteration")
     Call %26 <- string("std.assert.assert") [%27, %31] (def=d0)
+    Drop %1
+    Drop %2
+    Drop %3
+    Drop %0
+    Drop %13
+    Drop %14
     Ret %26
   init (locals=0)
     Call %0 <- string("main") [] (def=d10)

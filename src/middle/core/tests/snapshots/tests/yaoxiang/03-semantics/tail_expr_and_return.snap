@@ -30,6 +30,7 @@ module
     Load %2 <- %3
     Load %4 <- int(2)
     Mul %1 <- %2, %4
+    Drop %3
     Ret %1
   fn explicit_and_tail(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1

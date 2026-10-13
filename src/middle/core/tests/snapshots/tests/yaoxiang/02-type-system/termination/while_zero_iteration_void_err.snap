@@ -19,6 +19,8 @@ module
     Eq %2 <- %3, %5
     Load %6 <- string("零迭代 while 的值：残留形态，应在使用点响亮失败")
     Call %4 <- string("std.assert.assert") [%2, %6] (def=d0)
+    Drop %0
+    Drop %1
     Ret %4
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

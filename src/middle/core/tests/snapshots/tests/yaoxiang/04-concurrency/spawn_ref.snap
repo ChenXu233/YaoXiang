@@ -14,6 +14,9 @@ module
     Load %5 <- int(42)
     Eq %6 <- %4, %5
     Call %3 <- string("std.assert.assert") [%6] (def=d0)
+    Drop %0
+    Drop %1
+    Drop %2
     Ret %3
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

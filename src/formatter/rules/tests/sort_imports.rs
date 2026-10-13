@@ -22,6 +22,7 @@ fn make_use_stmt(path: &str) -> Stmt {
             item_aliases: None,
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 

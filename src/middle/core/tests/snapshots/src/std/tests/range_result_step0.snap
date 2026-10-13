@@ -23,6 +23,8 @@ module
     Call %3 <- string("std.range.next") [%5] (def=d1)
     CreateVariant %2 <- Result::0 %3
     Ret %2
+    Drop %1
+    Drop %4
     Ret %2
   fn contains_low(Int(64), Int(64)) -> Generic { name: "Result", args: [Bool, TypeRef("Error")] }
     slot[0] n : Int(64) @depth1
@@ -48,6 +50,7 @@ module
     Ret %10
     CreateVariant %2 <- Result::0 %3
     Ret %2
+    Drop %5
     Ret %2
   fn main() -> Void
     slot[0] a : Int(64) @depth1
@@ -63,18 +66,21 @@ module
     Call %3 <- string("std.result.is_ok") [%2] (def=d4)
     Load %4 <- string("step=2 → Ok")
     Call %0 <- string("std.assert.assert") [%3, %4] (def=d5)
+    Drop %1
     Load %5 <- %1
     Call %2 <- string("std.result.unwrap") [%5] (def=d6)
     Load %4 <- int(1)
     Eq %3 <- %2, %4
     Load %6 <- string("step=2 首元素 1")
     Call %0 <- string("std.assert.assert") [%3, %6] (def=d5)
+    Drop %1
     Load %3 <- int(0)
     Call %0 <- string("first_of") [%3] (def=d3)
     Load %4 <- %0
     Call %2 <- string("std.result.is_err") [%4] (def=d7)
     Load %5 <- string("step=0 → Err 传播")
     Call %3 <- string("std.assert.assert") [%2, %5] (def=d5)
+    Drop %0
     Load %2 <- int(3)
     Call %3 <- string("first_of") [%2] (def=d3)
     Load %7 <- %3
@@ -83,6 +89,7 @@ module
     Eq %4 <- %5, %6
     Load %8 <- string("step=3 首元素 1")
     Call %2 <- string("std.assert.assert") [%4, %8] (def=d5)
+    Drop %3
     Load %4 <- int(2)
     Load %5 <- int(4)
     Call %2 <- string("contains_low") [%4, %5] (def=d8)
@@ -90,6 +97,7 @@ module
     Call %5 <- string("std.result.unwrap") [%6] (def=d6)
     Load %7 <- string("step=2 对齐元素 in")
     Call %4 <- string("std.assert.assert") [%5, %7] (def=d5)
+    Drop %2
     Load %5 <- int(0)
     Load %6 <- int(4)
     Call %4 <- string("contains_low") [%5, %6] (def=d8)
@@ -97,6 +105,7 @@ module
     Call %6 <- string("std.result.is_err") [%7] (def=d7)
     Load %8 <- string("contains step=0 → Err")
     Call %5 <- string("std.assert.assert") [%6, %8] (def=d5)
+    Drop %4
     Load %8 <- int(1)
     Load %9 <- int(3)
     Load %10 <- int(1)
@@ -109,6 +118,12 @@ module
     Eq %7 <- %8, %9
     Load %11 <- string("unwrap 后迭代器可用")
     Call %6 <- string("std.assert.assert") [%7, %11] (def=d5)
+    Drop %1
+    Drop %0
+    Drop %3
+    Drop %2
+    Drop %4
+    Drop %5
     Ret %6
   init (locals=0)
     Call %0 <- string("main") [] (def=d9)

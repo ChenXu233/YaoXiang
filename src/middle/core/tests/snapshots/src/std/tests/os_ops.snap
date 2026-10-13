@@ -16,6 +16,7 @@ module
     Gt %4 <- %2, %3
     Load %5 <- string("getcwd should be non-empty")
     Call %6 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Drop %0
     Call %6 <- string("std.os.args") [] (def=d3)
     Load %5 <- %6
     Call %3 <- string("std.string.len") [%5] (def=d1)
@@ -23,6 +24,7 @@ module
     Gt %2 <- %3, %1
     Load %7 <- string("args should contain at least the binary")
     Call %4 <- string("std.assert.assert") [%2, %7] (def=d2)
+    Drop %6
     Load %2 <- string("PATH")
     Call %4 <- string("std.os.get_env") [%2] (def=d4)
     Load %7 <- %4
@@ -31,13 +33,16 @@ module
     Gt %3 <- %1, %5
     Load %8 <- string("PATH env var should exist")
     Call %2 <- string("std.assert.assert") [%3, %8] (def=d2)
+    Drop %4
     Load %2 <- string("__yx_os_handle_tmp.txt")
     Load %1 <- %2
     Load %5 <- string("w")
     Call %3 <- string("std.os.open") [%1, %5] (def=d5)
+    Drop %2
     Load %5 <- %3
     Load %7 <- string("hello world")
     Call %1 <- string("std.os.write") [%5, %7] (def=d6)
+    Drop %3
     Load %8 <- %1
     Load %9 <- int(11)
     Eq %7 <- %8, %9
@@ -45,15 +50,19 @@ module
     Call %5 <- string("std.assert.assert") [%7, %10] (def=d2)
     Load %7 <- %3
     Call %5 <- string("std.os.close") [%7] (def=d7)
+    Drop %3
     Load %7 <- %2
     Load %8 <- string("r")
     Call %5 <- string("std.os.open") [%7, %8] (def=d5)
+    Drop %2
     Load %8 <- %5
     Load %9 <- int(6)
     Call %7 <- string("std.os.seek") [%8, %9] (def=d8)
+    Drop %5
     Load %8 <- %5
     Load %9 <- int(5)
     Call %7 <- string("std.os.read") [%8, %9] (def=d9)
+    Drop %5
     Load %10 <- %7
     Load %11 <- string("world")
     Eq %9 <- %10, %11
@@ -63,15 +72,25 @@ module
     Call %8 <- string("std.assert.assert") [%9, %14] (def=d2)
     Load %9 <- %5
     Call %8 <- string("std.os.close") [%9] (def=d7)
+    Drop %5
     Load %10 <- %2
     Call %9 <- string("std.fs.remove") [%10] (def=d10)
     Load %11 <- string("fs.remove handle tmp ok")
     Call %8 <- string("std.assert.assert") [%9, %11] (def=d2)
+    Drop %2
     Load %11 <- %2
     Call %10 <- string("std.fs.exists") [%11] (def=d11)
     Not %9 <- %10
     Load %14 <- string("handle tmp gone after remove")
     Call %8 <- string("std.assert.assert") [%9, %14] (def=d2)
+    Drop %6
+    Drop %0
+    Drop %2
+    Drop %1
+    Drop %4
+    Drop %5
+    Drop %7
+    Drop %3
     Ret %8
   init (locals=0)
     Call %0 <- string("main") [] (def=d12)

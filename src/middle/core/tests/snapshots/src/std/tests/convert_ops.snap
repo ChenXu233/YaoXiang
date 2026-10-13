@@ -38,6 +38,7 @@ module
     Gt %1 <- %2, %0
     Load %6 <- string("list to_string non-empty")
     Call %3 <- string("std.assert.assert") [%1, %6] (def=d1)
+    Drop %5
     Call %3 <- string("std.convert.to_string") [%1] (def=d0)
     Load %6 <- %3
     Call %0 <- string("std.string.len") [%6] (def=d2)
@@ -45,6 +46,8 @@ module
     Gt %2 <- %0, %4
     Load %7 <- string("dict to_string non-empty")
     Call %1 <- string("std.assert.assert") [%2, %7] (def=d1)
+    Drop %3
+    Drop %5
     Ret %1
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

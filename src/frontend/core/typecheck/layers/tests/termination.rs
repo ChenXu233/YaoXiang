@@ -11,7 +11,7 @@ use crate::frontend::core::typecheck::layers::termination::{
     MeasureObligation, MeasureVerdict, TerminationChecker,
 };
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
-use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, Stmt, StmtKind};
+use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, PlanId, Stmt, StmtKind};
 use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstExpr};
 use crate::util::span::Span;
 
@@ -39,6 +39,7 @@ fn make_increment(
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -60,6 +61,7 @@ fn make_decrement(
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -134,6 +136,7 @@ fn run_check_with_refined(
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(expr.clone())),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let module = crate::frontend::core::parser::ast::Module {
         items: vec![stmt],
@@ -151,6 +154,7 @@ fn run_check(expr: &Expr) -> Vec<ProofResult> {
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(expr.clone())),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let module = crate::frontend::core::parser::ast::Module {
         items: vec![stmt],
@@ -177,6 +181,7 @@ fn run_check_with_stub_solver_refined(
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(expr.clone())),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let module = crate::frontend::core::parser::ast::Module {
         items: vec![stmt],
@@ -301,6 +306,7 @@ fn test_while_constant_condition_fails() {
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     });
     let while_expr = Box::new(Expr::While {
         condition: Box::new(Expr::Lit(Literal::Bool(true), dummy_span())),
@@ -340,6 +346,7 @@ fn test_bare_while_without_refinement_generates_no_obligation() {
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     });
     let while_expr = Box::new(Expr::While {
         condition: Box::new(Expr::Lit(Literal::Bool(true), dummy_span())),
@@ -367,6 +374,7 @@ fn test_while_no_assignment_fails() {
     let body_stmt = Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Var("i".to_string(), dummy_span()))),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_while(make_lt_condition("i", "n"), vec![body_stmt]);
 
@@ -421,6 +429,7 @@ fn test_for_loop_trivially_terminates() {
     let body_stmt = Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Var("x".to_string(), dummy_span()))),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let for_expr = make_for(
         "x",
@@ -446,6 +455,7 @@ fn test_nested_while_both_terminating() {
     let inner_stmt = Stmt {
         kind: StmtKind::Expr(inner_while),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let body_stmts = vec![make_increment("i", 1), inner_stmt];
     let outer_while = make_while(make_lt_condition("i", "n"), body_stmts);
@@ -477,6 +487,7 @@ fn test_nested_while_inner_fails() {
     let inner_stmt = Stmt {
         kind: StmtKind::Expr(inner_while),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let outer_while = make_while(
         make_lt_condition("i", "n"),
@@ -575,6 +586,7 @@ fn test_strategy1_rejects_bound_moving_away_under_guard() {
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_while(
         make_lt_condition("i", "j"),
@@ -615,6 +627,7 @@ fn test_strategy1_needs_unconditional_movement_of_measure_var() {
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_while(make_lt_condition("i", "j"), vec![guarded_step]);
 
@@ -651,6 +664,7 @@ fn test_strategy1_accepts_guarded_bound_moving_in_favourable_direction() {
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_while(
         make_lt_condition("i", "j"),
@@ -690,6 +704,7 @@ fn test_shapes_beyond_strategies_1_3_4_stay_unproven_placeholder() {
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_while(make_lt_condition("i", "n"), vec![unknown_step_increment]);
 
@@ -724,6 +739,7 @@ fn make_flag_clear() -> Stmt {
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -749,6 +765,7 @@ fn make_if_i_threshold(
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -798,6 +815,7 @@ fn test_strategy1_flag_loop_rejected_when_flag_is_set_true_again() {
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_flag_while(vec![
         make_decrement("i", 1),
@@ -866,6 +884,7 @@ fn test_strategy1_flag_loop_rejected_when_guard_block_rewrites_measure_var() {
             span: dummy_span(),
         }))),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_flag_while(vec![
         make_decrement("i", 1),
@@ -902,6 +921,7 @@ fn test_strategy1_flag_loop_rejected_when_counter_has_unknown_rebinding() {
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_flag_while(vec![
         unknown_rebinding,

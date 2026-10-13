@@ -121,6 +121,11 @@ module
     Load %36 <- string("tuple element index via loop var")
     Call %29 <- string("std.assert.assert") [%31, %36] (def=d7)
     Jmp -> instr(98)
+    Drop %12
+    Drop %23
+    Drop %0
+    Drop %13
+    Drop %4
     Ret
   init (locals=0)
     Call %0 <- string("main") [] (def=d8)

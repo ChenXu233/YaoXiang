@@ -51,6 +51,8 @@ module
     Call %5 <- string("std.assert.assert") [%3, %8] (def=d0)
     Load %3 <- string("SHIFT_OPS_OK")
     Call %5 <- string("std.io.println") [%3] (def=d1)
+    Drop %0
+    Drop %7
     Ret %5
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

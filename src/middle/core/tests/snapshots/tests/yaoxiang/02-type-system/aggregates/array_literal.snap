@@ -51,6 +51,8 @@ module
     Eq %3 <- %4, %5
     Load %8 <- string("Array index read")
     Call %2 <- string("std.assert.assert") [%3, %8] (def=d0)
+    Drop %0
+    Drop %1
     Ret %2
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

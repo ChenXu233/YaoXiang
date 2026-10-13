@@ -115,6 +115,7 @@ pub fn parse_use_stmt(
             item_aliases,
         },
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 

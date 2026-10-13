@@ -27,6 +27,8 @@ module
     Call %13 <- string("int.to_string") [%12] (def=d4)
     Call %14 <- string("std.io.print") [%13] (def=d5)
     Jmp -> instr(14)
+    Drop %0
+    Drop %4
     Ret
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

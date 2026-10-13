@@ -11,6 +11,7 @@ module
     Load %1 <- bool(true)
     Load %3 <- string("SafeArray(Int, 3) instantiation compiled and ran")
     Call %0 <- string("std.assert.assert") [%1, %3] (def=d1)
+    Drop %2
     Ret %0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

@@ -9,7 +9,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::types::{MonoType, PolyType};
-use crate::frontend::core::parser::ast::{Block, Module, Stmt, Expr, Type as AstType};
+use crate::frontend::core::parser::ast::{Block, Module, PlanId, Stmt, Expr, Type as AstType};
 use crate::util::span::Span;
 
 // ── 辅助：AST 夹具 ──────────────────────────────────────
@@ -38,6 +38,7 @@ fn expr_stmt(
     Stmt {
         kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(expr)),
         span,
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -58,6 +59,7 @@ fn assign_stmt(
             span,
         },
         span,
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -171,6 +173,7 @@ fn generic_wrapper_module() -> Module {
                 },
             },
             span: Span::dummy(),
+            plan_id: PlanId::UNPLANNED,
         },
         // w: Wrapper<Int> = Wrapper(1)  (使用泛型类型)
         assign_stmt(

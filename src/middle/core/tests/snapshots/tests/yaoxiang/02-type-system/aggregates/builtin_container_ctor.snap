@@ -104,6 +104,13 @@ module
     Eq %8 <- %9, %10
     Load %13 <- string("grown[2] == 9")
     Call %7 <- string("std.assert.assert") [%8, %13] (def=d0)
+    Drop %1
+    Drop %4
+    Drop %3
+    Drop %6
+    Drop %0
+    Drop %5
+    Drop %2
     Ret %7
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

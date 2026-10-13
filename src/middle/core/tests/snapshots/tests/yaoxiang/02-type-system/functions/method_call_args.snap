@@ -31,24 +31,29 @@ module
     Load %1 <- %2
     Load %3 <- int(5)
     Call %0 <- string("Counter.bump") [%1, %3] (def=d1)
+    Drop %2
     Load %4 <- %2
     Call %3 <- string("Counter.value") [%4] (def=d2)
     Load %5 <- int(15)
     Eq %1 <- %3, %5
     Load %6 <- string("bump(5) should make value 15")
     Call %0 <- string("std.assert.assert") [%1, %6] (def=d3)
+    Drop %2
     Load %1 <- %2
     Load %3 <- int(1)
     Call %0 <- string("Counter.bump") [%1, %3] (def=d1)
+    Drop %2
     Load %1 <- %2
     Load %3 <- string("b")
     Call %0 <- string("Counter.rename") [%1, %3] (def=d4)
+    Drop %2
     Load %4 <- %2
     Call %3 <- string("Counter.value") [%4] (def=d2)
     Load %5 <- int(16)
     Eq %1 <- %3, %5
     Load %6 <- string("second bump(1) should make value 16")
     Call %0 <- string("std.assert.assert") [%1, %6] (def=d3)
+    Drop %2
     Ret %0
   init (locals=2)
     islot[0] self : Int(64) @depth1

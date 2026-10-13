@@ -12,6 +12,7 @@ module
     Load %1 <- bool(true)
     Load %2 <- string("Capped(Int, 3) with N < 100 and N <= 100 compiled and ran")
     Call %0 <- string("std.assert.assert") [%1, %2] (def=d1)
+    Drop %3
     Ret %0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

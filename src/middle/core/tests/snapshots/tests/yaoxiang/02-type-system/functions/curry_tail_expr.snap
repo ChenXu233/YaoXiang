@@ -30,6 +30,8 @@ module
     Eq %1 <- %4, %5
     Load %6 <- string("g(7)(4) should be 8")
     Call %2 <- string("std.assert.assert") [%1, %6] (def=d3)
+    Drop %3
+    Drop %0
     Ret %2
   fn __f_l0(Int(64)) -> Int(64)
     slot[0] a : Int(64) @depth1

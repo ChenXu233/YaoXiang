@@ -93,6 +93,7 @@ module
     Add %3 <- %4, %5
     CreateVariant %2 <- Maybe::0 %3
     Ret %2
+    Drop %1
     Ret %2
   fn main() -> Void
     slot[0] some_case : Int(64) @depth1
@@ -108,12 +109,13 @@ module
     Load %3 <- %1
     Move %4 <- %3
     Call %2 <- string("bump") [%4] (def=d5)
+    Drop %1
     Load %4 <- void
     Load %3 <- %2
     VariantTag %5 <- %3 : Maybe
     Load %6 <- int(0)
     Eq %7 <- %5, %6
-    JmpIfNot %7 -> instr(22)
+    JmpIfNot %7 -> instr(23)
     VariantPayload %8 <- %3 : Maybe
     Move %9 <- %8
     Load %10 <- %9
@@ -122,40 +124,45 @@ module
     Load %13 <- string("? keeps payload")
     Call %14 <- string("std.assert.assert") [%12, %13] (def=d0)
     Move %4 <- %14
-    Jmp -> instr(31)
+    Jmp -> instr(32)
     VariantTag %15 <- %3 : Maybe
     Load %16 <- int(1)
     Eq %17 <- %15, %16
-    JmpIfNot %17 -> instr(31)
+    JmpIfNot %17 -> instr(32)
     Load %18 <- bool(false)
     Load %19 <- string("? must not lose the payload")
     Call %20 <- string("std.assert.assert") [%18, %19] (def=d0)
     Move %4 <- %20
-    Jmp -> instr(31)
+    Jmp -> instr(32)
     Load %7 <- %0
     Move %6 <- %7
     Call %5 <- string("bump") [%6] (def=d5)
+    Drop %0
     Load %6 <- void
     Load %7 <- %5
     VariantTag %8 <- %7 : Maybe
     Load %14 <- int(0)
     Eq %12 <- %8, %14
-    JmpIfNot %12 -> instr(46)
+    JmpIfNot %12 -> instr(48)
     VariantPayload %10 <- %7 : Maybe
     Load %13 <- bool(false)
     Load %15 <- string("? must not fabricate a value")
     Call %11 <- string("std.assert.assert") [%13, %15] (def=d0)
     Move %6 <- %11
-    Jmp -> instr(55)
+    Jmp -> instr(57)
     VariantTag %16 <- %7 : Maybe
     Load %17 <- int(1)
     Eq %20 <- %16, %17
-    JmpIfNot %20 -> instr(55)
+    JmpIfNot %20 -> instr(57)
     Load %19 <- bool(true)
     Load %21 <- string("? propagates nothing")
     Call %18 <- string("std.assert.assert") [%19, %21] (def=d0)
     Move %6 <- %18
-    Jmp -> instr(55)
+    Jmp -> instr(57)
+    Drop %2
+    Drop %0
+    Drop %5
+    Drop %1
     Ret %6
   init (locals=1)
     islot[0] e : Int(64) @depth1

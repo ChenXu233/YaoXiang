@@ -53,6 +53,7 @@ module
     Eq %6 <- %4, %5
     Load %7 <- string("原令牌活跃")
     Call %8 <- string("std.assert.assert") [%6, %7] (def=d1)
+    Drop %2
     Load %3 <- %1
     LoadField %4 <- %3.1
     Load %5 <- int(2)
@@ -73,12 +74,15 @@ module
     Call %4 <- string("Point") [%5, %3] (def=d0)
     Load %3 <- %4
     Call %5 <- string("Point.sum") [%3] (def=d2)
+    Drop %4
     Load %7 <- %4
     Load %9 <- int(1)
     Load %10 <- int(1)
     Call %3 <- string("Point.shift") [%7, %9, %10] (def=d3)
+    Drop %4
     Load %7 <- %4
     Call %3 <- string("Point.sum") [%7] (def=d2)
+    Drop %4
     Load %10 <- %5
     Load %11 <- int(7)
     Eq %9 <- %10, %11
@@ -103,20 +107,22 @@ module
     Load %12 <- int(1)
     Load %13 <- int(0)
     Call %10 <- string("Point.shift") [%11, %12, %13] (def=d3)
+    Drop %9
     Load %11 <- %9
     Load %12 <- int(0)
     Load %13 <- int(1)
     Call %10 <- string("Point.shift") [%11, %12, %13] (def=d3)
+    Drop %9
     Load %15 <- %9
     LoadField %13 <- %15.0
     Load %14 <- int(1)
     Eq %12 <- %13, %14
-    JmpIfNot %12 -> instr(76)
+    JmpIfNot %12 -> instr(82)
     Load %16 <- %9
     LoadField %17 <- %16.1
     Load %18 <- int(1)
     Eq %11 <- %17, %18
-    Jmp -> instr(77)
+    Jmp -> instr(83)
     Load %11 <- bool(false)
     Load %19 <- string("&mut 顺序调用")
     Call %10 <- string("std.assert.assert") [%11, %19] (def=d1)
@@ -126,6 +132,7 @@ module
     Load %13 <- %10
     Move %12 <- %13
     Call %11 <- string("Window") [%12] (def=d4)
+    Drop %10
     Load %18 <- %11
     LoadField %17 <- %18.0
     LoadField %14 <- %17.0
@@ -139,6 +146,18 @@ module
     Eq %13 <- %14, %15
     Load %18 <- string("派生令牌后源仍可读")
     Call %12 <- string("std.assert.assert") [%13, %18] (def=d1)
+    Drop %4
+    Drop %9
+    Drop %10
+    Drop %8
+    Drop %6
+    Drop %2
+    Drop %7
+    Drop %5
+    Drop %3
+    Drop %0
+    Drop %1
+    Drop %11
     Ret %12
   init (locals=3)
     islot[0] self : Int(64) @depth1

@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 pub use crate::frontend::core::lexer::tokens::Literal;
+pub use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 
 #[derive(Debug, Clone)]
@@ -227,6 +228,14 @@ pub enum UnOp {
 pub struct Stmt {
     pub kind: StmtKind,
     pub span: Span,
+    /// 释放计划身份（RFC-039 D20 / WBS 4.5.1）：解析期由 `ParserState`
+    /// **单调分配**、编译单元内唯一，随语句节点走。
+    ///
+    /// 它把 `ReleasePlan` 的键从「span 位置巧合」换成「AST 节点结构身份」：
+    /// ownership 把释放点归属到释放边界所在的语句，ir_gen 在语句边界按同一
+    /// 身份查表发射 `Instruction::Drop`。不经解析器的合成语句恒为
+    /// [`PlanId::UNPLANNED`]（不构成释放计划义务）。
+    pub plan_id: PlanId,
 }
 
 /// Statement kind

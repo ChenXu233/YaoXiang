@@ -15,6 +15,7 @@ use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::resolver::Resolver;
 use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
+use crate::frontend::core::typecheck::layers::ownership::ReleasePlan;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
@@ -22,6 +23,7 @@ use crate::middle::core::ir::{
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
+use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
@@ -187,12 +189,12 @@ pub struct AstToIrGenerator {
     constraint_var_concrete_types: HashMap<String, String>,
     /// RFC-004: 匿名函数绑定生成的独立 FunctionIR 列表
     anon_function_irs: Vec<FunctionIR>,
-    /// NLL 精确释放计划（所有权检查器产出）
-    release_plan: HashMap<Span, Vec<String>>,
-    /// D41/2.4.4 观测点：release_plan 的 span 键在生成期被实际消费的集合。
-    /// 「ownership 产出 ⊆ IR 构造消费」契约的判据数据出口
-    ///（test_release_plan_spans_consumed；P4 的 D20 PlanId 迁移同样依赖本观测）。
-    release_plan_consumed: std::collections::HashSet<Span>,
+    /// NLL 精确释放计划（所有权检查器产出；RFC-039 D20 / WBS 4.5.1）。
+    ///
+    /// 键 = 释放边界所在语句的 PlanId——本生成器在语句边界经
+    /// [`ReleasePlan::consume`] 取条目（取即记账），故计划本体同时携带
+    /// 「产出」与「已消费」两侧事实：结算（义务账本 W1090）读的是同一份账。
+    release_plan: ReleasePlan,
     /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
     /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
     pending_env_vars: Vec<Operand>,
@@ -352,8 +354,7 @@ impl AstToIrGenerator {
             fn_param_names: HashMap::new(),
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
-            release_plan: type_result.release_plan.drops.clone(),
-            release_plan_consumed: std::collections::HashSet::new(),
+            release_plan: type_result.release_plan.clone(),
             pending_env_vars: Vec::new(),
             pending_env_names: Vec::new(),
             closure_captures: HashMap::new(),
@@ -968,14 +969,6 @@ impl AstToIrGenerator {
     }
 
     /// 从 AST 模块生成 IR 模块
-    /// D41/2.4.4 判据数据出口：生成期实际消费的 `release_plan` span 键集合。
-    ///
-    /// 供 `test_release_plan_spans_consumed` 与 P4 的 D20（PlanId 迁移）观测——
-    /// 与 `typecheck::TypeCheckResult.release_plan.drops` 的键集做差集比对。
-    pub fn release_plan_consumed_spans(&self) -> &std::collections::HashSet<Span> {
-        &self.release_plan_consumed
-    }
-
     pub fn generate_module_ir(
         &mut self,
         module: &ast::Module,
@@ -1097,6 +1090,10 @@ impl AstToIrGenerator {
             Self::qualify_names(&mut ir, key, &aliases);
         }
         self.assign_defs(&mut ir);
+        // RFC-039 D20 / WBS 4.5.1：消费侧完整跑完一轮（生成成功返回）——
+        // 结算据此区分「消费者跑完但漏了条目」（响亮）与「消费者没跑完 / 失败」
+        //（不判：失败已按首因报出）。失败路径提前 `return Err`，不会标到这里。
+        self.release_plan.mark_consumption_completed();
         Ok(ir)
     }
 
@@ -1908,6 +1905,12 @@ impl AstToIrGenerator {
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
                         span: self.cur_span,
@@ -1918,6 +1921,8 @@ impl AstToIrGenerator {
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
             self.set_cur_span(stmt.span);
         }
         if !tail_handled {
@@ -2064,6 +2069,12 @@ impl AstToIrGenerator {
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
                         span: self.cur_span,
@@ -2079,23 +2090,8 @@ impl AstToIrGenerator {
                 &self.symbols.len().to_string()
             );
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
-            // NLL Release: 在语句边界插入 Drop 指令
-            let mut release_hit = false;
-            if let Some(vars) = self.release_plan.get(&stmt.span) {
-                release_hit = true;
-                for var in vars {
-                    if let Some(local_idx) = self.lookup_local(var) {
-                        instructions.push(Instruction::Drop {
-                            src: Operand::Local(local_idx),
-                            span: self.cur_span,
-                        });
-                    }
-                }
-            }
-            if release_hit {
-                // D41/2.4.4 观测：键被实际消费即入册（借用在上方 if-let 结束后写入）
-                self.release_plan_consumed.insert(stmt.span);
-            }
+            // NLL Release: 在语句边界消费释放计划并插入 Drop 指令
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
             // #393：语句级临时寄存器回收（同 generate_block_ir——临时不跨
             // 语句存活，回滚到具名水位与循环态地板的较大者）
             let named_watermark = self
@@ -2300,6 +2296,12 @@ impl AstToIrGenerator {
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
                         span: self.cur_span,
@@ -2310,6 +2312,8 @@ impl AstToIrGenerator {
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
             self.set_cur_span(stmt.span);
         }
         if !tail_handled {
@@ -3083,6 +3087,31 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 语句边界的释放计划消费（RFC-039 D20 / WBS 4.5.1）——**唯一消费点**。
+    ///
+    /// `ReleasePlan::consume` 命中即记账（消费台账随计划本体走），故
+    /// 「查表 → 记账 → 发 Drop」是一次动作，台账不可能与真实消费漂移。
+    /// 所有语句边界（函数体 / curry 层 / 方法体 / lambda 体 / 嵌套块 / 尾语句
+    /// 路径）都必须经过它：漏一处，该语句的计划键就没有消费，义务账本结算
+    /// 报 W1090（D41——差集必须为空，无白名单）。
+    fn emit_release_drops(
+        &mut self,
+        statement: PlanId,
+        instructions: &mut Vec<Instruction>,
+    ) {
+        let Some(vars) = self.release_plan.consume(statement) else {
+            return;
+        };
+        for var in vars {
+            if let Some(local_idx) = self.lookup_local(var) {
+                instructions.push(Instruction::Drop {
+                    src: Operand::Local(local_idx),
+                    span: self.cur_span,
+                });
+            }
+        }
+    }
+
     fn generate_local_stmt_ir(
         &mut self,
         stmt: &ast::Stmt,
@@ -3773,12 +3802,18 @@ impl AstToIrGenerator {
             // 块作为表达式 + 最后一条语句贡献块值 → 值写入 result_reg
             if let (Some(reg), true) = (result_reg, is_last) {
                 if self.generate_tail_stmt_ir(stmt, reg, instructions, constants)? {
+                    // 尾语句路径同款消费（块值已进 reg，Drop 排在块出口之前）
+                    self.emit_release_drops(stmt.plan_id, instructions);
                     self.set_cur_span(stmt.span);
                     continue;
                 }
             }
             // 其他情况正常生成语句
             self.generate_local_stmt_ir(stmt, instructions, constants)?;
+            // NLL Release: 块内每条语句边界都消费释放计划（RFC-039 D20）——
+            // 嵌套块（if/for/while/块表达式的体）的语句也各有自己的条目，
+            // 作用域退出的 Drop 就归属在块的最后一条语句上
+            self.emit_release_drops(stmt.plan_id, instructions);
             // #393：语句级临时寄存器回收——临时不跨语句存活，语句生成完
             // 回滚到「具名局部水位 ⋈ 循环态地板」。具名水位取 cur_locals
             // 最后一个具名槽（参数与全部具名绑定，含已退出作用域者，保守
@@ -4900,6 +4935,12 @@ impl AstToIrGenerator {
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
                         span: self.cur_span,
@@ -4910,6 +4951,8 @@ impl AstToIrGenerator {
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
             // #393：语句级临时寄存器回收（同 generate_block_ir）
             let named_watermark = self
                 .cur_locals
@@ -6916,6 +6959,7 @@ impl AstToIrGenerator {
                     stmts: vec![ast::Stmt {
                         kind: ast::StmtKind::Expr(Box::new(task.expr.clone())),
                         span: *span,
+                        plan_id: ast::PlanId::UNPLANNED,
                     }],
                     span: *span,
                 }),
@@ -6934,6 +6978,8 @@ impl AstToIrGenerator {
                 || crate::frontend::core::spawn::analysis::is_spawn_tail_expr(body, i)
             {
                 self.generate_local_stmt_ir(stmt, instructions, constants)?;
+                // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+                self.emit_release_drops(stmt.plan_id, instructions);
             }
         }
 
@@ -6985,7 +7031,23 @@ impl AstToIrGenerator {
             }
         }
 
-        // 7. 退出 spawn 作用域
+        // 7. spawn 体语句的释放边界结算（RFC-039 D20 / WBS 4.5.1）
+        //
+        // 直接子表达式语句在第 3 步被**闭包化**（每条包成无参闭包），
+        // 尾表达式 / return 在第 6 步单独取值——这两类语句都不过通用语句循环。
+        // 但 ownership 同样走它们（`walk_expr` 的 `Expr::Spawn` 臂遍历
+        // `body.stmts`），条目必须有消费点：spawn 体的作用域退点就是此处
+        //（`Spawn` 指令已把所有闭包 join 回来）。漏掉这一处，spawn 体语句的
+        // 产出键就永远没人消费——义务结算报 W1090（实测红态残留 7 键即此类）。
+        for (i, stmt) in body.stmts.iter().enumerate() {
+            let generated_in_loop = !crate::frontend::core::spawn::analysis::is_direct_child(stmt)
+                || crate::frontend::core::spawn::analysis::is_spawn_tail_expr(body, i);
+            if !generated_in_loop {
+                self.emit_release_drops(stmt.plan_id, instructions);
+            }
+        }
+
+        // 8. 退出 spawn 作用域
         self.exit_scope();
         Ok(())
     }

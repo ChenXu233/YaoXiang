@@ -88,12 +88,18 @@ module
     Eq %3 <- %6, %7
     Load %10 <- string("tuple index on ref receiver")
     Call %5 <- string("std.assert.assert") [%3, %10] (def=d0)
+    Drop %4
     Load %5 <- float(4602678819172646912)
     Load %7 <- %5
     Load %8 <- float(4602678819172646912)
     Eq %6 <- %7, %8
     Load %9 <- string("leading-dot float still works")
     Call %3 <- string("std.assert.assert") [%6, %9] (def=d0)
+    Drop %5
+    Drop %4
+    Drop %2
+    Drop %0
+    Drop %1
     Ret %3
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

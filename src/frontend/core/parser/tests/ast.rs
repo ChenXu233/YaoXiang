@@ -4,8 +4,8 @@
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{
     self, BindingKind, BinOp, Block, Expr, FStringSegment, GenericParam, GenericParamKind,
-    MatchArm, Param, Pattern, SpannedIdent, Stmt, StmtKind, StructField, Type, TypeBodyBinding,
-    UnOp, is_meta_type,
+    MatchArm, Param, Pattern, PlanId, SpannedIdent, Stmt, StmtKind, StructField, Type,
+    TypeBodyBinding, UnOp, is_meta_type,
 };
 use crate::util::span::Span;
 
@@ -36,6 +36,7 @@ fn point_type_definition_stmt() -> Stmt {
             },
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -159,6 +160,7 @@ fn test_expr_block() {
         stmts: vec![Stmt {
             kind: StmtKind::Expr(Box::new(Expr::Lit(Literal::Int(1), Span::dummy()))),
             span: Span::dummy(),
+            plan_id: PlanId::UNPLANNED,
         }],
         span: Span::dummy(),
     };
@@ -339,6 +341,7 @@ fn test_stmtkind_var() {
             span: Span::dummy(),
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     };
     if let StmtKind::Assign { target, is_mut, .. } = &stmt.kind {
         if let Expr::Var(name, _) = target.as_ref() {
@@ -369,6 +372,7 @@ fn test_stmtkind_binding() {
             span: Span::dummy(),
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     };
     if let StmtKind::Assign { target, .. } = &stmt.kind {
         if let Expr::Var(name, _) = target.as_ref() {
@@ -405,6 +409,7 @@ fn test_stmtkind_use() {
             item_aliases: None,
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     };
     if let StmtKind::Use { path, .. } = &stmt.kind {
         assert_eq!(path, "std.io");
