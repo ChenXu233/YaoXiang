@@ -116,8 +116,6 @@ pub struct StatementChecker {
     pub current_expected: Option<MonoType>,
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types: HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
-    /// RFC-010: 变体构造调用点（span 键控）
-    pub variant_ctor_calls: Vec<crate::frontend::core::typecheck::environment::VariantCtorCall>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
     pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
     pub operator_dispatches:
@@ -227,7 +225,6 @@ impl StatementChecker {
             existential_coercions: Vec::new(),
             interface_impl_registry: HashMap::new(),
             sum_types: HashMap::new(),
-            variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             match_scrutinee_types: HashMap::new(),
@@ -2903,7 +2900,6 @@ impl StatementChecker {
                             .append(&mut inferrer.overload_resolutions);
                         self.operator_dispatches
                             .extend(inferrer.operator_dispatches);
-                        self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
                         // #389：match scrutinee 类型表随委托回流
                         self.match_scrutinee_types
                             .extend(inferrer.match_scrutinee_types);
@@ -3009,7 +3005,6 @@ impl StatementChecker {
                     .append(&mut inferrer.overload_resolutions);
                 self.operator_dispatches
                     .extend(inferrer.operator_dispatches);
-                self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
                 // #389：match scrutinee 类型表随委托回流
                 self.match_scrutinee_types
                     .extend(inferrer.match_scrutinee_types);

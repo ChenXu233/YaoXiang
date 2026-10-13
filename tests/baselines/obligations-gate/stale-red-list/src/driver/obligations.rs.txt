@@ -1,0 +1,19 @@
+/// 夹具版义务清单（mini）：ghost_field 登记为红名单（零消费者）。
+struct ObligationSpec {
+    obligation: Obligation,
+    field: &'static str,
+    consumer: Stage,
+    red_list: Option<RedListEntry>,
+}
+
+const INVENTORY: &[ObligationSpec] = &[
+    ObligationSpec {
+        obligation: Obligation::GhostField,
+        field: "ghost_field",
+        consumer: Stage::IrGeneration,
+        red_list: Some(RedListEntry {
+            wbs: "9.9.9",
+            evidence: "夹具证据：红名单字段若长出消费者，陈旧检测必须红——本夹具正是该形态",
+        }),
+    },
+];

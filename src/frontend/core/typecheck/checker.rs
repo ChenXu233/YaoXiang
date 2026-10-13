@@ -1486,11 +1486,6 @@ impl TypeChecker {
         };
 
         // RFC-011a §6: 从 body_checker 收集存在类型强制点（ir_gen 包装注入用）
-        let variant_ctor_calls = if let Some(ref bc) = self.body_checker {
-            bc.variant_ctor_calls.clone()
-        } else {
-            Vec::new()
-        };
         let try_expr_impls = if let Some(ref bc) = self.body_checker {
             bc.try_expr_impls.clone()
         } else {
@@ -1555,14 +1550,12 @@ impl TypeChecker {
             existential_coercions,
             try_expr_impls,
             match_scrutinee_types,
-            method_overload_ir_names: self.env.method_overload_ir_names.clone(),
             overload_resolutions: if let Some(ref bc) = self.body_checker {
                 bc.overload_resolutions.clone()
             } else {
                 Vec::new()
             },
             operator_dispatches,
-            variant_ctor_calls,
             implementation_proofs: self.env.implementation_proofs.clone(),
             interface_impl_registry: self.env.interface_impl_registry.clone(),
             sum_types: self.env.sum_types.clone(),

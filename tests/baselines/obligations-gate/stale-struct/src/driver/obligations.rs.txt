@@ -1,0 +1,16 @@
+/// 夹具版义务清单（mini）：少了 ghost_two（代码与文档表仍在）。
+struct ObligationSpec {
+    obligation: Obligation,
+    field: &'static str,
+    consumer: Stage,
+    red_list: Option<RedListEntry>,
+}
+
+const INVENTORY: &[ObligationSpec] = &[
+    ObligationSpec {
+        obligation: Obligation::GhostField,
+        field: "ghost_field",
+        consumer: Stage::IrGeneration,
+        red_list: None,
+    },
+];

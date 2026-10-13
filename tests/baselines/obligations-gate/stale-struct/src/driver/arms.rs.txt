@@ -1,0 +1,4 @@
+/// 夹具版 IrGeneration 臂：唯一登记的义务有标记。
+fn ir_generation(state: &mut State) {
+    state.units[0].delivered.deliver(Obligation::GhostField);
+}

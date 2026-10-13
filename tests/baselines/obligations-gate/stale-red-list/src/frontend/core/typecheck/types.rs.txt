@@ -1,0 +1,4 @@
+/// 夹具版 TypeCheckResult（mini）：字段仍在结构体里。
+pub struct TypeCheckResult {
+    pub ghost_field: Vec<String>,
+}

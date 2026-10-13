@@ -31,13 +31,15 @@
 //! 它们的「不静默」由三处承担，缺一不可：
 //! 1. **审计面**：[`DriverOutcome.obligations.findings`] 每次运行都带出全部红名单
 //!    条目（每条含 WBS 任务 id + 零消费者证据指针）——见 `ObligationSettlement`；
-//! 2. **静态门禁**：`scripts/ci/check-obligations.py`（WBS 9.2）每次运行打印三条红名单、
+//! 2. **静态门禁**：`scripts/ci/check-obligations.py`（WBS 9.2）每次运行打印红名单、
 //!    逐条对账「消费者为零」，并做**陈旧检测**（红名单字段长出消费者即红）；
 //!    自带反例/正例夹具证明探测器不空转（`--selftest`）；
 //! 3. **文档注记**：02-stage-contract §2 实施修订注记逐条登记（WBS 4.3.1 的 t5 收口）。
 //!
-//! 清账任务 id（09-WBS）：`variant_ctor_calls` → 3.4.4；
-//! `method_overload_ir_names` → 3.4.5；`interface_impl_registry` → 3.4.9。
+//! 清账进度（09-WBS）：`variant_ctor_calls` → 3.4.4 **已清账**（删字段：IR 侧
+//! `detect_variant_ctor_call` 就地形态检测等价兑现其职责，跨层 span 键控会引入失配）；
+//! `method_overload_ir_names` → 3.4.5 **已清账**（删 `TypeCheckResult` 上的跨阶段镜像，
+//! 在相位候选名表与 `overload_resolutions` 保留）；`interface_impl_registry` → 3.4.9 待清。
 //!
 //! **唯一调用点**：`Driver::run` 阶段表尾部、`into_outcome()` 产出
 //! `CompilationResult` 之前（02 §2；`State::assert_drained`）。
@@ -93,14 +95,8 @@ pub enum Obligation {
     SumTypes,
     /// `sum_type_param_names`：typecheck → IR 生成
     SumTypeParamNames,
-    /// `variant_ctor_calls`：typecheck → IR 生成（span 键控）；
-    /// 跨阶段消费者为零（红名单）
-    VariantCtorCalls,
     /// `operator_dispatches`：typecheck → IR 生成（span 键控）
     OperatorDispatches,
-    /// `method_overload_ir_names`：typecheck → IR 生成；
-    /// 跨阶段消费者为零（红名单）
-    MethodOverloadIrNames,
     /// `overload_resolutions`：typecheck → IR 生成（span 键控）
     OverloadResolutions,
     /// `try_expr_impls`：typecheck → IR 生成（span 键控）
@@ -198,32 +194,11 @@ const INVENTORY: &[ObligationSpec] = &[
         consumer: Stage::IrGeneration,
         red_list: None,
     },
-    // 红名单 #1：IR 侧以形态检测替代（detect_variant_ctor_call），字段本身零消费者。
-    ObligationSpec {
-        obligation: Obligation::VariantCtorCalls,
-        field: "variant_ctor_calls",
-        consumer: Stage::IrGeneration,
-        red_list: Some(RedListEntry {
-            wbs: "3.4.4",
-            evidence: "证据命令：rg -w variant_ctor_calls src（typecheck 树外 0 命中；其余仅 02 文档与 typecheck 单测）；IR 侧以形态检测替代——src/middle/core/ir_gen.rs:7448 fn detect_variant_ctor_call，调用点 :7496",
-        }),
-    },
     ObligationSpec {
         obligation: Obligation::OperatorDispatches,
         field: "operator_dispatches",
         consumer: Stage::IrGeneration,
         red_list: None,
-    },
-    // 红名单 #2：IR 侧用 overload_resolutions + method_def_ordinals 就地混编，
-    // 本字段是与之平行的第二表示（禁令一）——消费为零。
-    ObligationSpec {
-        obligation: Obligation::MethodOverloadIrNames,
-        field: "method_overload_ir_names",
-        consumer: Stage::IrGeneration,
-        red_list: Some(RedListEntry {
-            wbs: "3.4.5",
-            evidence: "证据命令：rg -w method_overload_ir_names src（typecheck 树外 0 命中）；IR 侧用 overload_resolutions（src/middle/core/ir_gen.rs:380 构造、:7632/:7705 消费）+ method_def_ordinals（:1828 定义序分配）就地混编",
-        }),
     },
     ObligationSpec {
         obligation: Obligation::OverloadResolutions,
@@ -269,7 +244,7 @@ pub const IR_GENERATION_DELIVERED: &[Obligation] = &[
 ];
 
 impl Obligation {
-    /// 全部 16 个义务（顺序 = 02 §义务字段表）。
+    /// 全部 14 个义务（顺序 = 02 §义务字段表；3.4.4/3.4.5 清账后由 16 降为 14）。
     pub const ALL: &'static [Obligation] = &[
         Obligation::ProofCalls,
         Obligation::ReleasePlan,
@@ -280,9 +255,7 @@ impl Obligation {
         Obligation::InterfaceImplRegistry,
         Obligation::SumTypes,
         Obligation::SumTypeParamNames,
-        Obligation::VariantCtorCalls,
         Obligation::OperatorDispatches,
-        Obligation::MethodOverloadIrNames,
         Obligation::OverloadResolutions,
         Obligation::TryExprImpls,
         Obligation::MatchScrutineeTypes,
@@ -294,7 +267,7 @@ impl Obligation {
         INVENTORY
             .iter()
             .find(|s| s.obligation == self)
-            .expect("INVENTORY 必须覆盖全部 16 个义务（test_obligation_inventory_covers_every_variant 钉住）")
+            .expect("INVENTORY 必须覆盖全部 14 个义务（test_obligation_inventory_covers_every_variant 钉住）")
     }
 
     /// `TypeCheckResult` 里的字段名（逐字一致；静态门禁据此对账）。
@@ -330,9 +303,7 @@ impl Obligation {
             Obligation::InterfaceImplRegistry => !type_result.interface_impl_registry.is_empty(),
             Obligation::SumTypes => !type_result.sum_types.is_empty(),
             Obligation::SumTypeParamNames => !type_result.sum_type_param_names.is_empty(),
-            Obligation::VariantCtorCalls => !type_result.variant_ctor_calls.is_empty(),
             Obligation::OperatorDispatches => !type_result.operator_dispatches.is_empty(),
-            Obligation::MethodOverloadIrNames => !type_result.method_overload_ir_names.is_empty(),
             Obligation::OverloadResolutions => !type_result.overload_resolutions.is_empty(),
             Obligation::TryExprImpls => !type_result.try_expr_impls.is_empty(),
             Obligation::MatchScrutineeTypes => !type_result.match_scrutinee_types.is_empty(),

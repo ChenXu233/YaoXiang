@@ -636,36 +636,48 @@ fn test_rfc010_not_sum_type_with_binding() {
 // ===== RFC-010 变体构造（W2/W3）=====
 
 /// 规范（RFC-010 调用形态/推断）：类型限定调用类型自足——
-/// `Result(Int, String).ok(5)` 推断为 Generic{Result,[Int,String]}，
-/// 并记录 VariantCtorCall（span 键控，ir_gen 生成 CreateVariant）
+/// `Result(Int, String).ok(5)` 推断为 Generic{Result,[Int,String]}。
+///
+/// 声明序与载荷数的事实源是和类型登记表 sum_types（IR 侧
+/// `detect_variant_ctor_call` 正是从它取变体序）；WBS 3.4.4 删掉跨层的
+/// span 键控调用点表后，判据锚在这里 + IR 快照（CreateVariant 的 group/variant 序）。
 #[test]
 fn test_rfc010_variant_ctor_type_inferred() {
-    let (result, _checker) = check_source_with_checker(RESULT_VARIANT_FULL);
+    // Arrange
+    let (result, mut checker) = check_source_with_checker(RESULT_VARIANT_FULL);
+
+    // Act
+    let inferred = result.local_var_types.get("r").cloned();
+    let variants = checker
+        .env()
+        .sum_types
+        .get("Result")
+        .cloned()
+        .expect("Result 必须在和类型登记表里");
+
+    // Assert
     assert!(
         result.diagnostics.is_empty(),
         "variant construction should pass: {:?}",
         result.diagnostics
     );
     assert_eq!(
-        result.local_var_types.get("r"),
-        Some(&crate::frontend::core::types::MonoType::Generic {
+        inferred,
+        Some(crate::frontend::core::types::MonoType::Generic {
             name: "Result".to_string(),
             args: vec![
                 crate::frontend::core::types::MonoType::Int(64),
                 crate::frontend::core::types::MonoType::make_string(),
             ],
         }),
+        "变体构造类型自足：r 必须推断为 Result(Int, String)"
     );
-    let d = result
-        .variant_ctor_calls
-        .iter()
-        .find(|c| c.type_name == "Result")
-        .expect("variant ctor call expected");
-    assert_eq!(d.variant_index, 0, "ok is declaration-order 0");
-    assert_eq!(d.payload_count, 1);
+    assert_eq!(variants[0].name, "ok", "ok 是声明序 0");
+    assert_eq!(variants[0].params.len(), 1, "ok 载荷数 1");
 }
 
-/// 规范（零载荷变体）：`Color.red()` 函数调用形态，构造点 payload_count = 0
+/// 规范（零载荷变体）：`Color.green()` 函数调用形态——类型推断为 Color、
+/// 登记表里 green 是声明序 1 且零载荷（IR 侧 CreateVariant 的变体序同源）。
 #[test]
 fn test_rfc010_zero_payload_variant() {
     let source = r#"
@@ -679,19 +691,28 @@ fn test_rfc010_zero_payload_variant() {
             return
         }
     "#;
-    let (result, _checker) = check_source_with_checker(source);
+    let (result, mut checker) = check_source_with_checker(source);
     assert!(
         result.diagnostics.is_empty(),
         "zero-payload variant should pass: {:?}",
         result.diagnostics
     );
-    let d = result
-        .variant_ctor_calls
-        .iter()
-        .find(|c| c.type_name == "Color")
-        .expect("Color ctor call expected");
-    assert_eq!(d.variant_index, 1, "green is declaration-order 1");
-    assert_eq!(d.payload_count, 0);
+    assert_eq!(
+        result.local_var_types.get("c"),
+        Some(&crate::frontend::core::types::MonoType::Generic {
+            name: "Color".to_string(),
+            args: vec![],
+        }),
+        "零载荷变体构造后 c 的类型必须是 Color"
+    );
+    let variants = checker
+        .env()
+        .sum_types
+        .get("Color")
+        .cloned()
+        .expect("Color 必须在和类型登记表里");
+    assert_eq!(variants[1].name, "green", "green 是声明序 1");
+    assert!(variants[1].params.is_empty(), "零载荷变体的载荷表为空");
 }
 
 /// 规范（字段升格）：和类型值的变体名字段访问 → E1105

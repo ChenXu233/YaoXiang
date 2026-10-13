@@ -405,10 +405,25 @@ def run_root(root, verbose=False):
 
 
 def selftest():
-    """判据 5：自带反例/正例夹具——探测器不得空转。"""
+    """判据 5：自带反例/正例夹具——探测器不得空转。
+
+    四种夹具各钉一类事实，缺一即探测器有盲区：
+      negative        幽灵义务（定义 + 写入但零读取、未登记红名单）→ 必红
+      positive        正例（有交付标记 + 真实读取）→ 必绿
+      stale-manifest  代码删了清单没同步（结构体已无该字段，INVENTORY 仍登记）→ 必红
+      stale-struct    清单删了代码还在（INVENTORY 少登记，结构体与文档表仍在）→ 必红
+      stale-red-list  红名单字段长出消费者（陈旧登记）→ 必红
+    """
     base = os.path.join(ROOT, 'tests', 'baselines', 'obligations-gate')
+    fixtures = (
+        ('negative', True),
+        ('positive', False),
+        ('stale-manifest', True),
+        ('stale-struct', True),
+        ('stale-red-list', True),
+    )
     ok = True
-    for name, want_red in (('negative', True), ('positive', False)):
+    for name, want_red in fixtures:
         root = os.path.join(base, name)
         if not os.path.isdir(root):
             print('自检：缺夹具目录 %s' % root)
@@ -419,12 +434,12 @@ def selftest():
         verdict = 'PASS' if is_red == want_red else 'FAIL'
         if verdict == 'FAIL':
             ok = False
-        print('自检夹具 %-8s 期望 %s，实际 %s -> %s'
+        print('自检夹具 %-16s 期望 %s，实际 %s -> %s'
               % (name, '红' if want_red else '绿', '红' if is_red else '绿', verdict))
     if not ok:
         print('自检失败：探测器判据不可信（反例未红 或 正例未绿）')
         return 1
-    print('自检通过：反例必红、正例必绿（探测器不空转）')
+    print('自检通过：五类夹具（幽灵义务 / 正例 / 清单滞后 / 结构体滞后 / 红名单陈旧）行为符合预期')
     return 0
 
 

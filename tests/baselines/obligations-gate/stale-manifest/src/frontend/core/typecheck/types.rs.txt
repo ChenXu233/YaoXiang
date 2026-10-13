@@ -1,0 +1,5 @@
+/// 夹具版 TypeCheckResult（mini）：removed_field 已被删除（代码侧），
+/// 但 INVENTORY 与文档表仍登记它——门禁判据 1 必须红。
+pub struct TypeCheckResult {
+    pub ghost_field: Vec<String>,
+}

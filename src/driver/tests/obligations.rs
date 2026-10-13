@@ -107,10 +107,10 @@ fn audit_keys_for_file(
     keys
 }
 
-/// 三档表第一档：**空义务不报**——16 条全空时零发现（且结算确实跑了）。
+/// 三档表第一档：**空义务不报**——14 条全空时零发现（且结算确实跑了）。
 #[test]
 fn test_obligation_settlement_is_quiet_for_empty_obligations() {
-    // Arrange：16 个义务字段全空的合成产物
+    // Arrange：14 个义务字段全空的合成产物
     let state = state_with(ProgramKind::SingleFile, TypeCheckResult::default());
 
     // Act
@@ -123,12 +123,12 @@ fn test_obligation_settlement_is_quiet_for_empty_obligations() {
         settlement.findings
     );
     assert_eq!(
-        settlement.pairs, 16,
-        "有 typecheck 产物的单元必须参与全部 16 条义务的结算"
+        settlement.pairs, 14,
+        "有 typecheck 产物的单元必须参与全部 14 条义务的结算"
     );
     assert_eq!(
-        settlement.empty, 16,
-        "16 条义务全部走第一档（空义务）: {settlement:?}"
+        settlement.empty, 14,
+        "14 条义务全部走第一档（空义务）: {settlement:?}"
     );
 }
 
@@ -151,8 +151,8 @@ fn test_obligation_settlement_has_no_undelivered_in_real_program() {
         settlement.findings
     );
     assert!(
-        settlement.pairs == 16 && settlement.empty > 0,
-        "结算必须真的跑过（16 对、有空义务档）: {settlement:?}"
+        settlement.pairs == 14 && settlement.empty > 0,
+        "结算必须真的跑过（14 对、有空义务档）: {settlement:?}"
     );
 }
 
@@ -417,6 +417,9 @@ fn test_obligation_settlement_counters_are_conserved() {
 }
 
 /// 红名单（裁定丙 · 承担面 ①）：审计面必须带 WBS id 与零消费者证据，且**不外发**。
+///
+/// 3.4.4/3.4.5 清账后红名单只剩 `interface_impl_registry`（WBS 3.4.9）——
+/// 它由 typecheck 预置表灌入，任何程序都非空，是审计面最稳的载体。
 #[test]
 fn test_obligation_red_list_is_in_audit_face_but_not_externalized() {
     // Arrange
@@ -427,16 +430,16 @@ fn test_obligation_red_list_is_in_audit_face_but_not_externalized() {
         .obligations
         .findings
         .iter()
-        .find(|f| f.obligation == Obligation::VariantCtorCalls);
+        .find(|f| f.obligation == Obligation::InterfaceImplRegistry);
 
     // Assert：审计面每条带清账任务 id 与证据指针
-    let finding = finding.expect("variant_ctor_calls 非空必须在审计面报到（不静默）");
+    let finding = finding.expect("interface_impl_registry 非空必须在审计面报到（不静默）");
     match finding.cause {
         UndrainedCause::RedList { wbs, evidence } => {
-            assert_eq!(wbs, "3.4.4", "清账任务 id 必须是 WBS 3.4.4");
+            assert_eq!(wbs, "3.4.9", "清账任务 id 必须是 WBS 3.4.9");
             assert!(
-                evidence.contains("detect_variant_ctor_call"),
-                "证据指针必须指向 IR 侧形态检测替代: {evidence}"
+                evidence.contains("interface_impl_registry"),
+                "证据指针必须点名该字段与零消费者证据: {evidence}"
             );
         }
         other => panic!("红名单字段的原因必须是 RedList: {other:?}"),
@@ -484,7 +487,7 @@ fn test_obligation_undrained_is_externalized_as_w1090() {
     );
 }
 
-/// 结算清单与 16 条义务的静态事实一致（字段名/交付集无漂移）。
+/// 结算清单与 14 条义务的静态事实一致（字段名/交付集无漂移）。
 #[test]
 fn test_obligation_inventory_is_complete_and_drift_free() {
     // Arrange
@@ -496,8 +499,12 @@ fn test_obligation_inventory_is_complete_and_drift_free() {
     fields.dedup();
 
     // Assert
-    assert_eq!(all.len(), 16, "02 §义务字段表共 16 条义务");
-    assert_eq!(fields.len(), 16, "字段名必须逐条唯一");
+    assert_eq!(
+        all.len(),
+        14,
+        "02 §义务字段表在 3.4.4/3.4.5 清账后共 14 条义务"
+    );
+    assert_eq!(fields.len(), 14, "字段名必须逐条唯一");
     let ir_fields: Vec<Obligation> = all
         .iter()
         .copied()
@@ -510,7 +517,10 @@ fn test_obligation_inventory_is_complete_and_drift_free() {
     );
 }
 
-/// 红名单三条：清账任务 id 与「消费者为零」证据指针（2026-10-13 captain 裁定）。
+/// 红名单现状：清账任务 id 与「消费者为零」证据指针。
+///
+/// 3.4.4（variant_ctor_calls）与 3.4.5（method_overload_ir_names）已清账，
+/// 只剩 3.4.9；本用例钉死「红名单不会悄悄变长或变短」。
 #[test]
 fn test_obligation_red_list_entries_carry_cleanup_ids_and_evidence() {
     // Arrange：红名单条目（字段 / 清账 WBS / 证据指针）
@@ -527,14 +537,10 @@ fn test_obligation_red_list_entries_carry_cleanup_ids_and_evidence() {
     // Assert
     assert_eq!(
         red.len(),
-        3,
-        "红名单恰好三条（variant_ctor_calls / method_overload_ir_names / interface_impl_registry）: {red:?}"
+        1,
+        "3.4.4/3.4.5 清账后红名单恰好一条（interface_impl_registry）: {red:?}"
     );
-    assert_eq!(
-        ids,
-        vec!["3.4.4", "3.4.5", "3.4.9"],
-        "三条清账任务 id 必须与 09-WBS 登记一致"
-    );
+    assert_eq!(ids, vec!["3.4.9"], "剩余清账任务 id 必须与 09-WBS 登记一致");
     for (obligation, _, evidence) in &red {
         assert!(
             evidence.contains("证据命令"),

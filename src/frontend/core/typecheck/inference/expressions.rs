@@ -103,8 +103,6 @@ pub struct ExpressionInferrer<'a> {
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types:
         &'a HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
-    /// RFC-010: 变体构造调用点（span 键控，ir_gen 生成 CreateVariant）
-    pub variant_ctor_calls: Vec<crate::frontend::core::typecheck::environment::VariantCtorCall>,
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析（字段访问等）
     type_defs: &'a HashMap<String, MonoType>,
@@ -193,7 +191,6 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
-            variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
@@ -241,7 +238,6 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
-            variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
@@ -290,7 +286,6 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
-            variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
@@ -341,7 +336,6 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
-            variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
@@ -1418,7 +1412,9 @@ impl<'a> ExpressionInferrer<'a> {
     /// 前置：func 形如 `FieldAccess { expr: Call(Var(和类型名), 类型实参), field: 变体名 }`
     /// 且和类型名已判定（sum_types）。流程：内层实例化（Call 臂和类型分支产出
     /// `Generic{名, 实参}`）→ 变体查找（声明序）→ 变体参数按类型实参替换 →
-    /// 载荷逐参 unify → 记录 VariantCtorCall（span 键控）→ 返回该和类型。
+    /// 载荷逐参 unify → 返回该和类型。（IR 侧的 CreateVariant 由 ir_gen 就地
+    /// 形态检测产生：见 ir_gen.rs 的 detect_variant_ctor_call——span 键跨系统
+    /// 语义不同，跨层传调用点表会引入失配缺陷，2026-10-13 WBS 3.4.4 裁决删。）
     #[allow(clippy::too_many_arguments)]
     fn infer_variant_ctor_call(
         &mut self,
@@ -1436,7 +1432,7 @@ impl<'a> ExpressionInferrer<'a> {
                     .build(),
             );
         };
-        let Some((variant_index, vdef)) = variants
+        let Some((_, vdef)) = variants
             .iter()
             .enumerate()
             .find(|(_, v)| v.name == variant_name)
@@ -1496,14 +1492,6 @@ impl<'a> ExpressionInferrer<'a> {
                 .build());
             }
         }
-        self.variant_ctor_calls.push(
-            crate::frontend::core::typecheck::environment::VariantCtorCall {
-                span,
-                type_name: type_name.to_string(),
-                variant_index,
-                payload_count: subst_params.len(),
-            },
-        );
         Ok(MonoType::Generic {
             name: type_name.to_string(),
             args: concrete,

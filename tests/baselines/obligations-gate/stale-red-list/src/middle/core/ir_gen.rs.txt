@@ -1,0 +1,6 @@
+/// 夹具版 IR 生成器：**故意**读取红名单字段——陈旧检测必须红。
+fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
+    let payload = type_result.ghost_field.clone();
+    let _ = payload;
+    Self
+}

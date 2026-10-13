@@ -1,0 +1,4 @@
+/// 夹具版 IrGeneration 臂：已删字段不再有任何标记（故障只在判据 1）。
+fn ir_generation(state: &mut State) {
+    state.units[0].delivered.deliver(Obligation::GhostField);
+}
