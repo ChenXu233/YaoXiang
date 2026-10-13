@@ -75,6 +75,12 @@
 //! 「IR 产物还在不在」：Check 形态的 Linking/Monomorphization 会把
 //! `UnitState.ir` 取走，按产物判会让真实的未消费静默通过。
 //!
+//! **4.5.2（D20）把同一条机制复用到第二条义务**：`overload_resolutions` 的键从
+//! 调用表达式的 span 换成调用点 `PlanId`（解析期分配、随 `Expr::Call` 节点走），
+//! IR 生成按同一身份经 `OverloadResolutions::get` 取名（命中即记账）。台账类型
+//! 是同一份（`src/util/consumption.rs` 的 `ConsumptionLedger`），三态映射也只有
+//! 一处（`consumption_state`）——不设第二套。
+//!
 //! # 级别（D5 两步走 → 终态）
 //!
 //! **4.3.1（观测期）**：只产 W 级（2026-10-13 用户裁决，D5 的观测期）。
@@ -401,12 +407,13 @@ impl Obligation {
         }
     }
 
-    /// 该义务在本单元的**消费侧**结算输入（RFC-039 D20 / WBS 4.5.1）。
+    /// 该义务在本单元的**消费侧**结算输入（RFC-039 D20 / WBS 4.5.1 · 4.5.2）。
     ///
     /// 消费台账（[`ConsumptionState`]）：交付标记只说「交给下游了」，台账说
-    /// 「下游真的取了」。当前只有 `ReleasePlan` 带运行期消费台账——它在 IR 生成
-    /// 的语句边界经 `ReleasePlan::consume` 记账（取即记账，不可漂移）；其余义务
-    /// 的消费面由静态门禁判据 2 承担（模块头注释「两半互补」）。
+    /// 「下游真的取了」。两条义务带运行期消费台账——`ReleasePlan`（IR 生成按
+    /// 语句身份 `ReleasePlan::consume` 记账）与 `OverloadResolutions`（IR 生成按
+    /// 调用点身份 `OverloadResolutions::get` 记账）：同一套台账机制 + 同一套三态
+    /// 映射，不设第二套。其余义务的消费面由静态门禁判据 2 承担（「两半互补」）。
     pub fn consumption(
         self,
         type_result: &TypeCheckResult,
@@ -414,22 +421,35 @@ impl Obligation {
         match self {
             Obligation::ReleasePlan => {
                 let plan = &type_result.release_plan;
-                // 消费者没跑完一轮（失败 / 未运行）⇒ 不判消费欠账。判据取自
-                // **台账自身的完成标记**而不是「IR 产物还在不在」：Check 形态的
-                // Linking/Monomorphization 会把 `UnitState.ir` 取走，按产物判会让
-                // 真实的未消费静默通过（实测：check 形态曾因此漏报）。
-                if !plan.consumption_completed() {
-                    return ConsumptionState::ConsumerIncomplete;
-                }
-                let unconsumed = plan.unconsumed().len();
-                if unconsumed == 0 {
-                    ConsumptionState::Consumed
-                } else {
-                    ConsumptionState::Unconsumed { unconsumed }
-                }
+                consumption_state(plan.consumption_completed(), plan.unconsumed().len())
+            }
+            Obligation::OverloadResolutions => {
+                let table = &type_result.overload_resolutions;
+                consumption_state(table.consumption_completed(), table.unconsumed().len())
             }
             _ => ConsumptionState::Untracked,
         }
+    }
+}
+
+/// 消费台账 → 结算三态的**唯一映射**（两条带台账的义务共用）。
+///
+/// 消费者没跑完一轮（失败 / 未运行）⇒ 不判消费欠账。判据取自**台账自身的
+/// 完成标记**而不是「IR 产物还在不在」：Check 形态的 Linking/Monomorphization
+/// 会把 `UnitState.ir` 取走，按产物判会让真实的未消费静默通过（2026-10-13
+/// 实测：check 形态曾因此漏报）。
+///
+fn consumption_state(
+    completed: bool,
+    unconsumed: usize,
+) -> ConsumptionState {
+    if !completed {
+        return ConsumptionState::ConsumerIncomplete;
+    }
+    if unconsumed == 0 {
+        ConsumptionState::Consumed
+    } else {
+        ConsumptionState::Unconsumed { unconsumed }
     }
 }
 
@@ -559,8 +579,8 @@ impl UndrainedCause {
                 "消费者阶段已运行，但交付点没有标记交付（编译器内部契约缺陷）".to_string()
             }
             UndrainedCause::NotConsumed { unconsumed } => format!(
-                "交付后仍有 {unconsumed} 个产出键未被消费（IR 生成未在语句边界取到该条目；\
-                 D41：产出 ⊆ 消费，差集必须为空）"
+                "交付后仍有 {unconsumed} 个产出键未被消费（IR 生成未在消费点取到该条目：\
+                 释放计划按语句身份、重载决议按调用点身份；D41/D20：产出 ⊆ 消费，差集必须为空）"
             ),
             UndrainedCause::RedList { wbs, evidence } => {
                 format!("红名单（清账任务 WBS {wbs}）：跨阶段消费者为零；证据：{evidence}")

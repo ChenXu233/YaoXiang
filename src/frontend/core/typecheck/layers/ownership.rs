@@ -11,7 +11,7 @@
 //! § 慢速通道: SMT 逻辑切断
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use crate::util::consumption::ConsumptionLedger;
 use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 use super::super::proof::context::ProofContext;
@@ -37,8 +37,8 @@ use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
 pub struct ReleasePlan {
     /// 产出：语句身份 → 该边界释放的变量名（LIFO 顺序）
     pub drops: HashMap<PlanId, Vec<String>>,
-    /// 消费台账（与计划同体，见 [`PlanConsumption`]）
-    consumption: PlanConsumption,
+    /// 消费台账（与计划同体；4.5.2 的重载决议表共用同一实现）
+    consumption: ConsumptionLedger<PlanId>,
 }
 
 impl ReleasePlan {
@@ -72,7 +72,7 @@ impl ReleasePlan {
     /// 标记消费侧已完整跑完一轮（IR 生成成功返回时调用；幂等）。
     ///
     /// 结算的「消费者真的跑过」判据——失败 / 未运行时不标，此时未消费键不判
-    /// （见 [`PlanConsumption::is_completed`]）。
+    /// （见 [`ConsumptionLedger::is_completed`]）。
     pub fn mark_consumption_completed(&self) {
         self.consumption.mark_completed();
     }
@@ -85,80 +85,6 @@ impl ReleasePlan {
     /// 已记账的消费条数（审计面计数：结算报告里「消费过多少条」只有它给得出）。
     pub fn consumed_len(&self) -> usize {
         self.consumption.len()
-    }
-}
-
-/// 释放计划消费台账（RFC-039 D20 / WBS 4.5.1）。
-///
-/// 「每条产出的计划必被消费」是跨层契约：ownership 产出（前端）→ IR 生成消费
-/// （中间层）→ driver 义务账本结算。结算点要看到**消费事实**，消费台账就必须
-/// 与计划同体：IR 生成器持有的是 `TypeCheckResult` 的克隆，故台账用 `Arc` 共享
-/// ——生成器写的那份与结算读的那份是同一个账（克隆共享，不是复制）。
-///
-/// 锁中毒（持锁线程 panic）两侧都朝**响亮**方向退化：记账失败 ⇒ 该条目仍算
-/// 未消费 ⇒ 结算报 W1090；读取失败 ⇒ 一律算未消费。不存在「静默算已消费」。
-#[derive(Debug, Clone, Default)]
-pub struct PlanConsumption(Arc<Mutex<ConsumptionLedger>>);
-
-/// 消费台账本体（与计划同体，随 `ReleasePlan` 克隆共享）。
-#[derive(Debug, Default)]
-struct ConsumptionLedger {
-    /// 已消费的语句身份
-    consumed: HashSet<PlanId>,
-    /// 消费侧是否**完整跑完一轮**（IR 生成成功返回）：结算的「消费者真的跑过」
-    /// 判据。失败 / 未运行时台账不完整——此时未消费键**不判**（失败本身已按
-    /// 首因响亮报出，结算不抢首因、也不造假账）。
-    completed: bool,
-}
-
-impl PlanConsumption {
-    /// 记账：该语句边界的计划条目已被消费（幂等）。
-    fn mark(
-        &self,
-        statement: PlanId,
-    ) {
-        if let Ok(mut ledger) = self.0.lock() {
-            ledger.consumed.insert(statement);
-        }
-    }
-
-    /// 标记消费侧已完整跑完一轮（IR 生成成功返回；幂等）。
-    fn mark_completed(&self) {
-        if let Ok(mut ledger) = self.0.lock() {
-            ledger.completed = true;
-        }
-    }
-
-    /// 该条目的消费是否已记账。
-    pub fn contains(
-        &self,
-        statement: PlanId,
-    ) -> bool {
-        self.0
-            .lock()
-            .map(|ledger| ledger.consumed.contains(&statement))
-            .unwrap_or(false)
-    }
-
-    /// 消费侧是否完整跑完一轮（IR 生成成功返回）。
-    pub fn is_completed(&self) -> bool {
-        self.0
-            .lock()
-            .map(|ledger| ledger.completed)
-            .unwrap_or(false)
-    }
-
-    /// 已记账条数。
-    pub fn len(&self) -> usize {
-        self.0
-            .lock()
-            .map(|ledger| ledger.consumed.len())
-            .unwrap_or(0)
-    }
-
-    /// 是否一条都没记账（审计面用）。
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 }
 
@@ -2799,7 +2725,7 @@ impl OwnershipChecker {
 
         ReleasePlan {
             drops,
-            consumption: PlanConsumption::default(),
+            consumption: ConsumptionLedger::default(),
         }
     }
 
@@ -3022,7 +2948,7 @@ impl OwnershipChecker {
             results,
             ReleasePlan {
                 drops: merged_drops,
-                consumption: PlanConsumption::default(),
+                consumption: ConsumptionLedger::default(),
             },
             merged_escaped,
         )

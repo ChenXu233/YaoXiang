@@ -4,12 +4,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::frontend::core::types::MonoType;
-use crate::frontend::core::types::PolyType;
-use crate::frontend::core::types::TraitTable;
+// 顶部 `use` 行数**必须净零**：02 §义务字段表把字段声明行钉成锚点（门禁 F4 逐行对账）。
+use crate::frontend::core::types::{MonoType, PolyType, TraitTable};
+use crate::util::consumption::ConsumptionLedger;
+use crate::util::plan_id::PlanId;
 
-use super::semantic_db;
-use super::proof::verdict::ProofFunctionCall;
+use super::{proof::verdict::ProofFunctionCall, semantic_db};
 
 /// 类型检查结果
 #[derive(Debug, Clone, Default)]
@@ -57,9 +57,9 @@ pub struct TypeCheckResult {
     pub sum_type_param_names: HashMap<String, Vec<String>>,
     /// RFC-011b 运算符派发点（span 键控；ir_gen 据此把原生指令换为方法调用）
     pub operator_dispatches: Vec<super::operator_interfaces::OperatorDispatch>,
-    /// RFC-011a §3：重载决议点（span 键控；ir_gen 据此把方法调用命名为
-    /// 决议出的混编名——同名多候选时裸名会撞函数表）
-    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
+    /// RFC-011a §3：重载决议表（**调用点 `PlanId` 键控**，RFC-039 D20/WBS 4.5.2；
+    /// ir_gen 据此把方法调用命名为决议出的混编名——同名多候选时裸名会撞函数表）
+    pub overload_resolutions: OverloadResolutions,
     /// RFC-011b `?` 表达式的 Try 实现类型名（span 键控；ir_gen 据此命名
     /// 四方法调用链——接收者是任意表达式时类型名别无来处）
     pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
@@ -73,6 +73,93 @@ pub struct TypeCheckResult {
     /// 警告诊断（#321：未使用导入 W1003 等，Warning 级、不阻断编译）。
     /// 与 diagnostics 分离——混入会被管线按错误计数，破坏非阻断契约。
     pub warnings: Vec<crate::util::diagnostic::Diagnostic>,
+}
+
+/// 方法级重载决议表（RFC-011a §3 / RFC-039 D20 / WBS 4.5.2）。
+///
+/// 键 = **调用表达式节点的 [`PlanId`]**：决议产出点（`inference/expressions.rs`
+/// 的 `infer_call_expr`）与消费点（`ir_gen` 的两处方法调用命名）读的是同一个
+/// 调用节点上的同一个值——不再靠「Call 的 span 两处各算一遍」的位置巧合。
+///
+/// 消费经 [`Self::get`]（命中即记账，台账与表同体）；结算读
+/// [`Self::unconsumed`]：非空即响亮（义务账本 W1090）。未分配身份
+/// （[`PlanId::UNPLANNED`]，解析器之外的合成调用）**不可被消费**——任何
+/// 「合成调用进了重载决议」都会以未消费条目在结算处响亮，不会静默落回
+/// 未混编名。
+#[derive(Debug, Clone, Default)]
+pub struct OverloadResolutions {
+    /// 产出：调用点身份 → 决议出的混编 IR 名
+    entries: HashMap<PlanId, String>,
+    /// 消费台账（与表同体；4.5.1 释放计划共用同一实现）
+    consumption: ConsumptionLedger<PlanId>,
+}
+
+impl OverloadResolutions {
+    /// 产出：登记一次重载决议（typecheck 侧唯一写入点）。
+    pub fn resolve(
+        &mut self,
+        call: PlanId,
+        ir_name: String,
+    ) {
+        self.entries.insert(call, ir_name);
+    }
+
+    /// 由 (调用点, 混编名) 序列装配（checker 组装 `TypeCheckResult` 时用）。
+    pub fn from_entries(entries: impl IntoIterator<Item = (PlanId, String)>) -> Self {
+        let mut table = Self::default();
+        for (call, ir_name) in entries {
+            table.resolve(call, ir_name);
+        }
+        table
+    }
+
+    /// **唯一消费入口**：按调用点身份取混编 IR 名，命中即记账。
+    ///
+    /// 未分配身份（合成调用）一律 `None`：不消费、也不冒充消费——它若真的
+    /// 进了决议表，结算会把它作为未消费条目报出来（响亮）。
+    pub fn get(
+        &self,
+        call: PlanId,
+    ) -> Option<&str> {
+        if !call.is_planned() {
+            return None;
+        }
+        let ir_name = self.entries.get(&call)?;
+        self.consumption.mark(call);
+        Some(ir_name.as_str())
+    }
+
+    /// 未消费的产出键（**结算判据：必须为空**；升序，诊断可比）。
+    pub fn unconsumed(&self) -> Vec<PlanId> {
+        let mut ids = self.consumption.unconsumed(self.entries.keys().copied());
+        ids.sort_unstable();
+        ids
+    }
+
+    /// 是否没有决议条目（空义务不报的判据）。
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// 决议条目数（审计面）。
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// 标记消费侧已完整跑完一轮（IR 生成成功返回时调用；幂等）。
+    pub fn mark_consumption_completed(&self) {
+        self.consumption.mark_completed();
+    }
+
+    /// 消费侧是否完整跑完一轮（IR 生成成功返回）。
+    pub fn consumption_completed(&self) -> bool {
+        self.consumption.is_completed()
+    }
+
+    /// 已记账的消费条数（审计面计数）。
+    pub fn consumed_len(&self) -> usize {
+        self.consumption.len()
+    }
 }
 
 impl TypeCheckResult {

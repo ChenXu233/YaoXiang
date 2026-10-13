@@ -110,8 +110,8 @@ pub struct StatementChecker {
     pub method_overloads: std::collections::HashMap<String, Vec<MonoType>>,
     /// RFC-011a §3：重载候选的 IR 混编名
     pub method_overload_ir_names: std::collections::HashMap<String, Vec<String>>,
-    /// RFC-011a §3：重载决议点（span → 混编 IR 名）
-    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
+    /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
+    pub overload_resolutions: Vec<(crate::util::plan_id::PlanId, String)>,
     /// 期望类型（带注解绑定的初始化推断时设置，方法重载按期望返回决议）
     pub current_expected: Option<MonoType>,
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）

@@ -16,6 +16,7 @@ use crate::frontend::module::resolver::Resolver;
 use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
 use crate::frontend::core::typecheck::layers::ownership::ReleasePlan;
+use crate::frontend::core::typecheck::types::OverloadResolutions;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
@@ -231,8 +232,10 @@ pub struct AstToIrGenerator {
     operator_dispatches: HashMap<Span, (String, String, bool)>,
     /// RFC-011b：`?` 表达式的 Try 实现类型名（span 键控）
     try_expr_impls: HashMap<Span, String>,
-    /// RFC-011a §3：方法级重载决议（span 键控 → 混编 IR 名）
-    overload_resolutions: HashMap<Span, String>,
+    /// RFC-011a §3：方法级重载决议（**调用点 PlanId** 键控 → 混编 IR 名；
+    /// RFC-039 D20 / WBS 4.5.2）。消费经 `OverloadResolutions::get`（命中即
+    /// 记账），故本字段携带决议表本体（含消费台账），结算读的是同一份账。
+    overload_resolutions: OverloadResolutions,
     /// 方法定义序（key → 已生成定义数）：混编名的定义侧计数
     method_def_ordinals: HashMap<String, usize>,
 
@@ -378,11 +381,7 @@ impl AstToIrGenerator {
                 .iter()
                 .map(|(span, name)| (*span, name.clone()))
                 .collect(),
-            overload_resolutions: type_result
-                .overload_resolutions
-                .iter()
-                .map(|(span, name)| (*span, name.clone()))
-                .collect(),
+            overload_resolutions: type_result.overload_resolutions.clone(),
             method_def_ordinals: HashMap::new(),
             sum_type_variants: type_result
                 .sum_types
@@ -1094,6 +1093,8 @@ impl AstToIrGenerator {
         // 结算据此区分「消费者跑完但漏了条目」（响亮）与「消费者没跑完 / 失败」
         //（不判：失败已按首因报出）。失败路径提前 `return Err`，不会标到这里。
         self.release_plan.mark_consumption_completed();
+        // 同点标记重载决议表的消费侧（4.5.2 复用同一台账机制）
+        self.overload_resolutions.mark_consumption_completed();
         Ok(ir)
     }
 
@@ -7538,7 +7539,8 @@ impl AstToIrGenerator {
 
     /// 生成 Call 表达式 IR
     ///
-    /// `_expr` 为分发点透传的原表达式（当前未使用，保留以对齐其余外提臂的签名）。
+    /// `call_plan_id` = **本调用节点的身份**（`Expr::Call::plan_id`，RFC-039 D20）：
+    /// 重载决议表的消费键就是它——与 typecheck 产出侧读同一个节点上的同一个值。
     #[allow(clippy::too_many_arguments)]
     fn generate_call_expr_ir(
         &mut self,
@@ -7546,7 +7548,7 @@ impl AstToIrGenerator {
         args: &[Expr],
         named_args: &[(String, Expr)],
         span: &Span,
-        _expr: &Expr,
+        call_plan_id: PlanId,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -7691,9 +7693,10 @@ impl AstToIrGenerator {
                     // RFC-011a §3：方法级重载决议命中时，binding.function
                     //（后定义覆盖的单值）替换为决议出的混编名
                     let binding = if named_args.is_empty() {
-                        if let Some(mangled) = self.overload_resolutions.get(span) {
+                        // RFC-039 D20：按**调用点身份**消费重载决议（命中即记账）
+                        if let Some(mangled) = self.overload_resolutions.get(call_plan_id) {
                             BindingInfo {
-                                function: mangled.clone(),
+                                function: mangled.to_string(),
                                 positions: binding.positions.clone(),
                             }
                         } else {
@@ -7764,7 +7767,11 @@ impl AstToIrGenerator {
                     // RFC-011a §3：方法级重载决议命中时直接调用混编名
                     //（typecheck 按 实参+期望返回 决议，span 键控）
                     if named_args.is_empty() {
-                        if let Some(mangled) = self.overload_resolutions.get(span).cloned() {
+                        if let Some(mangled) = self
+                            .overload_resolutions
+                            .get(call_plan_id)
+                            .map(str::to_string)
+                        {
                             let obj_reg = self.next_temp_reg();
                             self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
                             let mut call_args = vec![Operand::Local(obj_reg)];
@@ -8323,14 +8330,14 @@ impl AstToIrGenerator {
                 args,
                 named_args,
                 span,
-                ..
+                plan_id,
             } => {
                 self.generate_call_expr_ir(
                     func,
                     args,
                     named_args,
                     span,
-                    expr,
+                    *plan_id,
                     result_reg,
                     instructions,
                     constants,

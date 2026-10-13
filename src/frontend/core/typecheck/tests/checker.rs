@@ -186,12 +186,13 @@ fn generic_wrapper_module() -> Module {
                     span: Span::dummy(),
                 }],
             }),
-            Expr::Call {
-                func: Box::new(var("Wrapper", Span::dummy())),
-                args: vec![int_lit(1, Span::dummy())],
-                named_args: vec![],
-                span: Span::dummy(),
-            },
+            Expr::call(
+                var("Wrapper", Span::dummy()),
+                vec![int_lit(1, Span::dummy())],
+                vec![],
+                Span::dummy(),
+                PlanId::UNPLANNED,
+            ),
             Span::dummy(),
         ),
     ])
@@ -385,15 +386,16 @@ fn test_type_checker_reports_fn_param_type_mismatch() {
         int_identity_fn("add"),
         // add("hello") — 传入 String 但参数期望 Int
         expr_stmt(
-            Expr::Call {
-                func: Box::new(var("add", Span::dummy())),
-                args: vec![Expr::Lit(
+            Expr::call(
+                var("add", Span::dummy()),
+                vec![Expr::Lit(
                     crate::frontend::core::lexer::tokens::Literal::String("hello".to_string()),
                     Span::dummy(),
                 )],
-                named_args: vec![],
-                span: Span::dummy(),
-            },
+                vec![],
+                Span::dummy(),
+                PlanId::UNPLANNED,
+            ),
             Span::dummy(),
         ),
     ]);

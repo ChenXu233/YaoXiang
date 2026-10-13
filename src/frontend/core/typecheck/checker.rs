@@ -1550,11 +1550,13 @@ impl TypeChecker {
             existential_coercions,
             try_expr_impls,
             match_scrutinee_types,
-            overload_resolutions: if let Some(ref bc) = self.body_checker {
-                bc.overload_resolutions.clone()
-            } else {
-                Vec::new()
-            },
+            overload_resolutions:
+                crate::frontend::core::typecheck::types::OverloadResolutions::from_entries(
+                    self.body_checker
+                        .as_ref()
+                        .map(|bc| bc.overload_resolutions.clone())
+                        .unwrap_or_default(),
+                ),
             operator_dispatches,
             implementation_proofs: self.env.implementation_proofs.clone(),
             interface_impl_registry: self.env.interface_impl_registry.clone(),

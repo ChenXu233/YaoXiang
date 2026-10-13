@@ -118,8 +118,8 @@ pub struct ExpressionInferrer<'a> {
     method_overload_ir_names: Option<&'a HashMap<String, Vec<String>>>,
     /// 期望类型（带注解绑定传入，方法重载按期望返回决议）
     current_expected: Option<MonoType>,
-    /// RFC-011a §3：重载决议点（span → 混编 IR 名）
-    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
+    /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
+    pub overload_resolutions: Vec<(crate::util::plan_id::PlanId, String)>,
     /// RFC-011 §5.2：泛型函数约束表——调用点复检
     generic_fn_constraints: Option<&'a HashMap<String, Vec<(String, String)>>>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
@@ -3389,8 +3389,8 @@ impl<'a> ExpressionInferrer<'a> {
                 args,
                 named_args,
                 span,
-                ..
-            } => self.infer_call_expr(func, args, named_args, *span),
+                plan_id,
+            } => self.infer_call_expr(func, args, named_args, *span, *plan_id),
 
             // If 表达式
             crate::frontend::core::parser::ast::Expr::If {
@@ -3955,6 +3955,7 @@ impl<'a> ExpressionInferrer<'a> {
         args: &[crate::frontend::core::parser::ast::Expr],
         named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
         span: crate::util::span::Span,
+        call_plan_id: crate::util::plan_id::PlanId,
     ) -> Result<MonoType> {
         // RFC-010: 变体构造——Result(Int, String).ok(5) / Color.red()。
         // 构造器只以调用形态存在（无一等构造器值），在 infer(func) 之前
@@ -4482,7 +4483,7 @@ impl<'a> ExpressionInferrer<'a> {
         // 期望返回 选择。候选的形参变量是 pass2 注册期共享的，
         // 逐调用 fresh 化后再 unify。选中后：
         //   - 以候选签名作为本调用的函数类型（分派/所有权同源）
-        //   - 记录决议（span → 混编 IR 名），ir_gen 据此命名调用
+        //   - 记录决议（**调用点 PlanId** → 混编 IR 名），ir_gen 据此命名调用
         let selected_overload: Option<MonoType> = match &method_key {
             Some(key) => {
                 let cands = self.method_overloads.as_ref().and_then(|m| m.get(key));
@@ -4545,7 +4546,8 @@ impl<'a> ExpressionInferrer<'a> {
                         match matches.len() {
                             1 => matches.first().and_then(|(i, f)| {
                                 let ir = irs.get(*i)?;
-                                self.overload_resolutions.push((span, ir.clone()));
+                                // RFC-039 D20：键 = 调用表达式节点的身份（产出侧唯一写入点）
+                                self.overload_resolutions.push((call_plan_id, ir.clone()));
                                 Some(f.clone())
                             }),
                             // 多候选无法区分 = 隐式假设调用者想要哪一个——

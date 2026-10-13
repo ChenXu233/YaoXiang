@@ -55,12 +55,13 @@ fn call_expr(
     func: &str,
     args: Vec<Expr>,
 ) -> Expr {
-    Expr::Call {
-        func: Box::new(var_expr(func)),
+    Expr::call(
+        var_expr(func),
         args,
-        named_args: vec![],
-        span: dummy_span(),
-    }
+        vec![],
+        dummy_span(),
+        PlanId::UNPLANNED,
+    )
 }
 
 fn resource_trait_table() -> (TraitTable, HashMap<String, MonoType>) {

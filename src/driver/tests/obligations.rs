@@ -882,3 +882,106 @@ fn test_release_plan_unconsumed_is_reported_in_check_kind() {
         state.units[0].check_diagnostics
     );
 }
+/// 重载决议夹具：同名方法双候选，调用点按期望返回决议（与语料 method_overload.yx 同形）。
+const OVERLOAD_SOURCE: &str = "Temp: Type = { value: Float }\n\nTemp.to: (self: &Temp) -> Float = (self) => {\n    return self.value\n}\n\nTemp.to: (self: &Temp) -> String = (self) => {\n    return \"hot\"\n}\n\nmain: () -> Void = {\n    t = Temp(1.0)\n    a: Float = t.to()\n    b: String = t.to()\n}\n\nmain()\n";
+
+/// 4.5.2 直驱（产出 → 交付 → 消费）：真实链路的重载决议条目必须全数被消费——
+/// 结算面零发现，且该义务进 `drained_kinds`（本轮真的排空，不是空转）。
+#[test]
+fn test_overload_resolutions_obligation_is_drained_end_to_end() {
+    // Arrange / Act：真实入口（parse → typecheck → ir_gen → 结算）
+    let outcome = run_single(OVERLOAD_SOURCE);
+
+    // Assert
+    assert!(
+        outcome.obligations.findings.is_empty(),
+        "健康程序的结算面必须零发现: {:?}",
+        outcome.obligations.findings
+    );
+    assert!(
+        outcome
+            .obligations
+            .drained_kinds
+            .contains(&Obligation::OverloadResolutions),
+        "重载决议义务必须在本轮被排空（消费台账全数记账）: {:?}",
+        outcome.obligations.drained_kinds
+    );
+}
+
+/// 消费必达（4.5.2 / D20）：交付标记齐、消费者跑完一轮，但决议表仍有未消费条目
+/// → **响亮**（审计面 NotConsumed + 唯一结算点外发 E 级 W1090）。
+#[test]
+fn test_overload_resolutions_unconsumed_is_reported_loudly() {
+    // Arrange：一条未消费的决议条目 + 交付标记 + 台账完成标记
+    let mut state = state_with(
+        ProgramKind::SingleFile,
+        type_result_with(|r| {
+            r.overload_resolutions
+                .resolve(PlanId::from_ordinal(11), "Temp.synth".to_string());
+            r.overload_resolutions.mark_consumption_completed();
+        }),
+    );
+    state.units[0]
+        .delivered
+        .deliver_all(IR_GENERATION_DELIVERED);
+
+    // Act：唯一结算点的纯函数
+    let settlement = state.settle_obligations();
+
+    // Assert：原因必须是「未消费」（区别于「未交付」）
+    let finding = settlement
+        .findings
+        .iter()
+        .find(|f| f.obligation == Obligation::OverloadResolutions)
+        .expect("未消费的决议条目必须进结算发现（不得静默）");
+    assert!(
+        matches!(finding.cause, UndrainedCause::NotConsumed { unconsumed: 1 }),
+        "原因必须是 NotConsumed（区别于 NotDelivered）: {:?}",
+        finding.cause
+    );
+
+    // Act / Assert：外发成 E 级 W1090
+    state.assert_drained();
+    let diagnostic = state
+        .errors
+        .iter()
+        .filter_map(|e| e.diagnostic())
+        .find(|d| d.code == OBLIGATION_UNDRAINED_CODE)
+        .expect("未消费的决议条目必须外发 W1090");
+    assert_eq!(diagnostic.severity, Severity::Error, "4.3.2 同码升 E");
+    assert!(
+        diagnostic.message.contains("overload_resolutions"),
+        "诊断必须点名义务字段: {}",
+        diagnostic.message
+    );
+}
+
+/// 消费结算的豁免：消费台账没有完整跑完一轮（IR 生成失败 / 未运行）时不判——
+/// 失败本身已按首因响亮报出，结算不抢首因、也不把「没跑」记成「跑过」。
+#[test]
+fn test_overload_resolutions_unconsumed_is_exempt_without_completed_round() {
+    // Arrange：同一份未消费条目，但台账没有完成标记
+    let mut state = state_with(
+        ProgramKind::SingleFile,
+        type_result_with(|r| {
+            r.overload_resolutions
+                .resolve(PlanId::from_ordinal(11), "Temp.synth".to_string());
+        }),
+    );
+    state.units[0]
+        .delivered
+        .deliver_all(IR_GENERATION_DELIVERED);
+
+    // Act
+    let settlement = state.settle_obligations();
+
+    // Assert
+    assert!(
+        !settlement
+            .findings
+            .iter()
+            .any(|f| f.obligation == Obligation::OverloadResolutions),
+        "消费者没跑完一轮时不判消费（失败已按首因报出）: {:?}",
+        settlement.findings
+    );
+}

@@ -217,12 +217,10 @@ impl<'a> ParserState<'a> {
         // Empty argument list
         if self.at(&TokenKind::RParen) {
             self.bump(); // consume ')'
-            return Some(Expr::Call {
-                func: Box::new(lhs),
-                args,
-                named_args,
-                span,
-            });
+                         // 调用点身份（RFC-039 D20 / WBS 4.5.2）：与 Stmt.plan_id 同一分配器，
+                         // 重载决议表以它为键（产出/消费读同一个节点上的同一个值）
+            let plan_id = self.alloc_plan_id();
+            return Some(Expr::call(lhs, args, named_args, span, plan_id));
         }
 
         loop {
@@ -264,12 +262,8 @@ impl<'a> ParserState<'a> {
             }
         }
 
-        Some(Expr::Call {
-            func: Box::new(lhs),
-            args,
-            named_args,
-            span,
-        })
+        let plan_id = self.alloc_plan_id();
+        Some(Expr::call(lhs, args, named_args, span, plan_id))
     }
 
     /// Parse field access expression

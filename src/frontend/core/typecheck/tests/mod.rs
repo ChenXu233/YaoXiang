@@ -20,6 +20,7 @@ mod checker;
 mod const_param;
 mod environment;
 mod gamma_assume_effect;
+mod overload_resolutions;
 mod predicate_resolver;
 mod rfc010;
 mod rfc010a;

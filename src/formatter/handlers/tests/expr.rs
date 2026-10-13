@@ -454,12 +454,13 @@ fn test_format_fstring_with_spec() {
 #[test]
 fn test_format_try_operator() {
     let expr = Expr::Try {
-        expr: Box::new(Expr::Call {
-            func: Box::new(Expr::Var("foo".to_string(), Span::dummy())),
-            args: vec![],
-            named_args: vec![],
-            span: Span::dummy(),
-        }),
+        expr: Box::new(Expr::call(
+            Expr::Var("foo".to_string(), Span::dummy()),
+            vec![],
+            vec![],
+            Span::dummy(),
+            PlanId::UNPLANNED,
+        )),
         span: Span::dummy(),
     };
     let result = format_expr(&expr, &default_ctx(), &default_source_map());
@@ -680,12 +681,13 @@ fn test_format_ref_simple() {
 fn test_format_ref_expression() {
     let ctx = default_ctx();
     let expr = Expr::Ref {
-        expr: Box::new(Expr::Call {
-            func: Box::new(Expr::Var("foo".to_string(), Span::dummy())),
-            args: vec![],
-            named_args: vec![],
-            span: Span::dummy(),
-        }),
+        expr: Box::new(Expr::call(
+            Expr::Var("foo".to_string(), Span::dummy()),
+            vec![],
+            vec![],
+            Span::dummy(),
+            PlanId::UNPLANNED,
+        )),
         span: Span::dummy(),
     };
     let result = format_expr(&expr, &ctx, &default_source_map());

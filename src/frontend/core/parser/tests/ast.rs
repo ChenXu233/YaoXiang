@@ -100,12 +100,13 @@ fn test_expr_unop() {
 
 #[test]
 fn test_expr_call() {
-    let expr = Expr::Call {
-        func: Box::new(Expr::Var("f".into(), Span::dummy())),
-        args: vec![Expr::Lit(Literal::Int(1), Span::dummy())],
-        named_args: vec![("x".into(), Expr::Lit(Literal::Int(2), Span::dummy()))],
-        span: Span::dummy(),
-    };
+    let expr = Expr::call(
+        Expr::Var("f".into(), Span::dummy()),
+        vec![Expr::Lit(Literal::Int(1), Span::dummy())],
+        vec![("x".into(), Expr::Lit(Literal::Int(2), Span::dummy()))],
+        Span::dummy(),
+        PlanId::UNPLANNED,
+    );
     if let Expr::Call {
         args, named_args, ..
     } = &expr

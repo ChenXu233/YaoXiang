@@ -38,7 +38,7 @@ pub fn format_expr(
             func,
             args,
             named_args,
-            span: _,
+            ..
         } => format_call(func, args, named_args, ctx, source_map),
         Expr::FnDef {
             name,

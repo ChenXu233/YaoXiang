@@ -564,12 +564,13 @@ fn make_call(
     func_name: &str,
     args: Vec<Expr>,
 ) -> Expr {
-    Expr::Call {
-        func: Box::new(Expr::Var(func_name.into(), Span::default())),
+    Expr::call(
+        Expr::Var(func_name.into(), Span::default()),
         args,
-        named_args: vec![],
-        span: Span::default(),
-    }
+        vec![],
+        Span::default(),
+        PlanId::UNPLANNED,
+    )
 }
 
 fn make_bool_lit(b: bool) -> Expr {
@@ -809,12 +810,13 @@ fn test_e2e_argument_passed_to_function_is_moved() {
     // x 作为参数传给 f 后不能再使用
     let (results, _plan, _escaped) = run_main(vec![
         make_var_stmt("x", make_lit(42)),
-        make_expr_stmt(Expr::Call {
-            func: Box::new(make_var("f")),
-            args: vec![make_var("x")],
-            named_args: vec![],
-            span: Span::default(),
-        }),
+        make_expr_stmt(Expr::call(
+            make_var("f"),
+            vec![make_var("x")],
+            vec![],
+            Span::default(),
+            PlanId::UNPLANNED,
+        )),
         make_expr_stmt(make_var("x")),
     ]);
 

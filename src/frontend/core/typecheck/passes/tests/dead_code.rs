@@ -164,12 +164,13 @@ fn make_annotated_var(name: &str) -> Stmt {
 /// 构造一个引用某符号的 Call 表达式语句
 fn make_call_stmt(name: &str) -> Stmt {
     Stmt {
-        kind: StmtKind::Expr(Box::new(Expr::Call {
-            func: Box::new(Expr::Var(name.to_string(), Span::dummy())),
-            args: vec![],
-            named_args: vec![],
-            span: Span::dummy(),
-        })),
+        kind: StmtKind::Expr(Box::new(Expr::call(
+            Expr::Var(name.to_string(), Span::dummy()),
+            vec![],
+            vec![],
+            Span::dummy(),
+            PlanId::UNPLANNED,
+        ))),
         span: Span::dummy(),
         plan_id: PlanId::UNPLANNED,
     }
