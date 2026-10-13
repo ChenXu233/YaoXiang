@@ -267,10 +267,59 @@ fn test_multi_file_cross_unit_generic_chain_matches_single_file_value() {
     );
 }
 
-/// WBS 3.10.1 判据：抬高 `mono.max_depth` 到 5000 后，病态泛型递归仍必须
+/// 病态递归在默认套件里的深度档：越过修复前的原生栈崩点（约第 2500 层）——
+/// 即「原生栈不再随特化深度增长」这条 3.9/3.10 修复在默认套件里仍被覆盖——
+/// 同时把堆内存压在 16 GB 托管 runner 可承受的范围（5000 档实测峰值 15.6 GB，
+/// 会让 CI 的测试作业被 OOM 杀掉，见 issue #449；那一档由下方 `#[ignore]` 用例保留）。
+const PATHOLOGICAL_CI_DEPTH: usize = 2600;
+
+/// 3.10.1 判据（CI 预算档）：病态泛型递归在越过旧崩点的深度上仍必须**编译期**
+/// 终止于 E3005，且报出配置上限与当前深度——不是耗尽原生栈崩进程。
+#[test]
+fn test_multi_file_cross_unit_pathological_recursion_within_ci_budget_reports_e3005() {
+    // Arrange：同一病态夹具，深度上限抬到 CI 预算内的 PATHOLOGICAL_CI_DEPTH
+    let (_dir, entry) = make_script_project(PATHOLOGICAL_FILES);
+    let mono = MonoConfig {
+        max_depth: PATHOLOGICAL_CI_DEPTH,
+        ..MonoConfig::default()
+    };
+
+    // Act
+    let outcome = run_multi_with_mono(&entry, mono).expect("driver run failed");
+
+    // Assert：E3005 + 真实上限/当前深度（闸门真的走到该层，而不是崩栈）
+    let diagnostics = failure_diagnostics(&outcome);
+    let (_, message) = diagnostics
+        .iter()
+        .find(|(code, _)| code == "E3005")
+        .unwrap_or_else(|| {
+            panic!(
+                "上限抬到 {PATHOLOGICAL_CI_DEPTH} 后仍须在编译期报 E3005（不是爆栈、不是静默）。实际故障：{:?}",
+                outcome.failure.as_ref().map(|e| format!("{e}"))
+            )
+        });
+    assert!(
+        message.contains(&PATHOLOGICAL_CI_DEPTH.to_string())
+            && message.contains(&(PATHOLOGICAL_CI_DEPTH + 1).to_string()),
+        "E3005 必须报出配置上限 {PATHOLOGICAL_CI_DEPTH} 与当前深度 {}，实际：{message}",
+        PATHOLOGICAL_CI_DEPTH + 1
+    );
+    assert!(
+        outcome.module.is_none(),
+        "mono 失败后不得产出 IR（否则下游会执行未特化的原件）"
+    );
+}
+
+/// WBS 3.10.1 判据（生产默认档）：抬高 `mono.max_depth` 到 5000 后，病态泛型递归仍必须
 /// **编译期**终止于 E3005（含真实上限 5000）——而不是在闸门之前耗尽原生栈崩进程
 /// （修复前实测：编译到约第 2500 层 0xC00000FD）。
+///
+/// `#[ignore]` 的理由：本档实测 72.6 s / 峰值 15.6 GB（2026-10-13，issue #449），
+/// 16 GB 的 GitHub 托管 runner 会被 OOM 杀掉（表现是测试作业被取消），故不进默认套件。
+/// 显式运行：
+/// `cargo test --lib --all-features driver::tests::mono_cross_unit::test_multi_file_cross_unit_pathological_recursion_at_5000 -- --ignored --exact`
 #[test]
+#[ignore = "5000 档实测 72.6 s / 15.6 GB，会 OOM 掉 16 GB 的 CI runner；默认套件由 PATHOLOGICAL_CI_DEPTH 档覆盖（issue #449）"]
 fn test_multi_file_cross_unit_pathological_recursion_at_5000_reports_e3005() {
     // Arrange：同一病态夹具，深度上限抬到 5000（总数上限保持默认）
     let (_dir, entry) = make_script_project(PATHOLOGICAL_FILES);
