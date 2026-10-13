@@ -77,9 +77,9 @@ pub struct TypeCheckResult {
 
 /// 方法级重载决议表（RFC-011a §3 / RFC-039 D20 / WBS 4.5.2）。
 ///
-/// 键 = **调用表达式节点的 [`PlanId`]**：决议产出点（`inference/expressions.rs`
-/// 的 `infer_call_expr`）与消费点（`ir_gen` 的两处方法调用命名）读的是同一个
-/// 调用节点上的同一个值——不再靠「Call 的 span 两处各算一遍」的位置巧合。
+/// 键 = **调用表达式节点的 [`PlanId`]**：产出点（`inference/expressions.rs:4550`）与消费点
+/// （`ir_gen.rs:7697` 有绑定 / `:7772` 无绑定，经 [`Self::get`]）读的是同一个调用节点上的
+/// 同一个值——不再靠「Call 的 span 两处各算一遍」的位置巧合。
 ///
 /// 消费经 [`Self::get`]（命中即记账，台账与表同体）；结算读
 /// [`Self::unconsumed`]：非空即响亮（义务账本 W1090）。未分配身份
