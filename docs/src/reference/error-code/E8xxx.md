@@ -9,13 +9,13 @@ description: '编译器内部错误，通常表示编译器自身的缺陷。遇
 
 编译器内部错误，通常表示编译器自身的缺陷。遇到此类错误请提交 issue。
 
-本族共 **3** 个码，全部在 `define_codes!` 注册表中，类别为 `Internal`。完整索引见[错误码首页](index.md)。
+本族共 **3** 个码，全部在 `define_codes!` 注册表中，类别为 `Internal`。完整索引见[错误码首页](./index.md)。
 
 ## 码一览
 
 | 码号 | 中文名 | 类别 | span 豁免 | 模板 | 发射点 |
 | --- | --- | --- | --- | --- | --- |
-| `E8001` | 内部编译器错误 | `Internal` | 是 | `内部编译器错误：{message}` | ✅ 27 处 |
+| `E8001` | 内部编译器错误 | `Internal` | 是 | `内部编译器错误：{message}` | ✅ 25 处 |
 | `E8002` | 意外 Panic | `Internal` | 否 | `意外编译器 panic：{reason}` | ⚠ 暂未发射 |
 | `E8003` | 编译器阶段错误 | `Internal` | 否 | `编译器阶段错误：{phase} - {message}` | ⚠ 暂未发射 |
 
@@ -29,8 +29,7 @@ description: '编译器内部错误，通常表示编译器自身的缺陷。遇
 - **模板**：`内部编译器错误：{message}`
 - **消息**：编译器发生内部错误
 - **帮助**：请在 https://github.com/ChenXu233/YaoXiang/issues/new 报告此错误
-- **发射点**：`src/frontend/pipeline.rs:427`、`src/frontend/core/typecheck/proof/verdict.rs:289` 等 26 处
-- **历史**：原列出的 `src/frontend/core/typecheck/layers/dispatch.rs:151` 随该模块在 #377-2 删除而消失（原计数 27 处，现为 26 处）
+- **发射点**：`src/driver/helpers.rs:62`、`src/frontend/core/typecheck/proof/verdict.rs:289`、`src/middle/core/ir_gen.rs:1853` 等 25 处
 
 ### E8002：意外 Panic
 
