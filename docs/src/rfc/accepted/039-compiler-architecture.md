@@ -244,7 +244,7 @@ P10 其余清理与状态修正          06 §S2-S6
 | **P2** | 新增 `verify.rs`、快照基线、语料差分框架、**多文件语料层**、性能基线（criterion 冒烟基准）、`scripts/ci/check-*` | `verify_loose` 跑绿；漏洞判据**写成红的** | 判据代码可整体移除 |
 | **P3** | `types.rs`（`proof_calls` 收成私有）、`orchestrator.rs` 三个消费点 | 漏洞判据**转绿**；**故意撤掉修复必须重新变红** | 纯行为修正 |
 | **P3.5** | 语言层 `pub` 与自动绑定的整体删除（RFC-029g / #399，**外部轨道，非本重构设计项**）：`lexer`/`parser` 的 `KwPub` 与语法分支、`ast.rs` 的 `is_pub` ×2、`checker.rs` 的 `auto_bind_to_type` / `collect_exports` pub 分支与 `env.exports` 死表、`dead_code.rs` 的 `exempt_pub`、formatter 回显、`semantic_tokens` 的 `Public`、`src/std/` 31 处、诊断文案与语言参考。与 P10 S5 的 Rust `pub(crate)` 降可见性是两件事 | `pub` 成解析错误 + Lib/Script 未引用顶层绑定报 W1001（**两条都红判据先行**）；测试数不降；语料差分基线同提交 | 整批一个 commit 组可独立 revert；`src/std` 改动须在 P6 冻结前完成 |
-| **P4** | 新增 `src/driver/`；改写 5 个入口；**4.5：`ReleasePlan` / `overload_resolutions` 键 `Span` → `PlanId`（D20）** | 诊断集相同 + 语料行为相同（C2）；span 键控静默失效归零 | **最大风险点**；保留旧入口、Driver 未接线即可回滚 |
+| **P4** | 新增 `src/driver/`；改写 5 个入口；**4.5：`ReleasePlan` / `overload_resolutions` 键 `Span` → `PlanId`（D20）**（**2026-10-13 已落地**：`Stmt.plan_id` / `Expr::Call.plan_id` 载体 + 唯一分配器；消费唯一入口 + 消费必达结算 E 级 `W1090`；落地形态见 [02 §2 修订注记](../../dev/architecture/02-stage-contract.md)） | 诊断集相同 + 语料行为相同（C2）；span 键控静默失效归零（实测：语料 342 条零 diff、IR 快照零漂移、两条同型判据差集为空 + 证据面地板） | **最大风险点**；保留旧入口、Driver 未接线即可回滚 |
 | **P5** | `include!` → 真 `mod`（5.1）；`checker.rs` 拆出 `refinement` / `annotations` | **IR 快照 zero-diff**（C1）；`statements.rs:16` 的 `pub(crate)` 路径不变 | 逐文件 revert |
 | **P6** | `ast.rs`、`types/mono.rs`、`solver.rs`、`ir.rs:3`、`bytecode.rs:2353-2390`；阶段收尾执行目录改名（D1：`typecheck/`→`sema/`、`middle/core/`→`middle/ir/`） | 诊断**码**相同（C3）；改名批次为纯搬移（C1 zero-diff） | 分阶段提交，变体处置与同义词表删除分开；改名独占 commit |
 | **P7** | `ir.rs`、`ir_gen.rs`（8448 行）、`bytecode.rs`、`translator.rs`；**7e：三处 `.42` 数据丢失修复（`upvalue_count` / `exception_handlers` / `globals`）+ `VERSION` 4→5（D17、D52）** | **行为等价 + `verify_ssa` 绿**（C4）。**不是 IR 快照全等**；`.42` 往返测试 | 逐批 revert |
@@ -363,7 +363,7 @@ P10 其余清理与状态修正          06 §S2-S6
 | D17 | `bytecode.rs:2312` `upvalue_count: 0` | **修；新增字段时把 `.42` 的版本号从 4 升到 5**（格式头已有 `MAGIC` + `VERSION: u32` 字段，`codegen/bytecode.rs:14-16`，读取侧按版本校验） | 这是数据丢失缺陷不是死代码；升版后旧 `.42` 被读取侧按既有行为拒绝（`.42` 是构建产物，跨版本兼容不是目标）；已分配未使用的 opcode 值随升版一并处理 |
 | D18 | 删除后 u8/255 槽位上限是否够用 | **批 d 末尾必须实测**；不够则扩到 `u16` | 这是验证项不是待定项 |
 | D19 | 线性扫描分配器是否先做原型计时 | **不做原型，直接实现。** 耗时在 CI 中实测 | 计时不改变设计决策，是拖延 |
-| D20 | `ReleasePlan` / `overload_resolutions` 的 Span 键控 | **改为 `PlanId`**，消除跨层 span 契约；归 P4 | span 失配导致 Drop 静默丢失，是最隐蔽的一类缺陷 |
+| D20 | `ReleasePlan` / `overload_resolutions` 的 Span 键控 | **改为 `PlanId`**，消除跨层 span 契约；归 P4（**2026-10-13 已落地**：4.5.1 / 4.5.2，载体随 AST 节点走 + 唯一分配器 `ParserState::alloc_plan_id`；消费**读与记账同一次调用**，差集非空即 E 级 `W1090`） | span 失配导致 Drop 静默丢失，是最隐蔽的一类缺陷 |
 | D21 | `method_def_ordinals` 归 03 还是 04 | **归 04**（P7 批 c） | 它是 IR 构造期状态，不是类型问题 |
 | D22 | `synth.rs` 边界是否推广到整个 L3 | **推广到整个 L3**；L4 另查后一并纳入 | 边界规则要么完整要么无效 |
 | D23 | `compile_pattern` / `eval_const_expr` 是否"不处理" | **纳入批 d 范围**，不是豁免 | 用"标注为不处理"回避工作，是修补性思维 |
@@ -395,7 +395,7 @@ P10 其余清理与状态修正          06 §S2-S6
 | D38 | `verify_loose` 若跑不绿 | **不开豁免。** 跑不绿说明 `ir_gen` 存在隐式"同槽多次写"依赖，**那是必须先修的缺陷** | 豁免清单是新的技术债，等于用门禁掩盖设计问题 |
 | D39 | 快照基线体积与压缩 | **不引入 git-lfs，接受体积** | 快照是回归判据，可读性优先于体积 |
 | D40 | 多文件语料层 | **无条件必做**（P2 的 2.3.2），不是"不做则 P4 暂缓" | 条件句是给自己留后门 |
-| D41 | `test_release_plan_spans_consumed` 的白名单 | **无白名单，差集必须为空**（该测试为 P2 新建；仓库现存的 `WHITELIST = ["SWITCH"]` 属 opcode 往返测试，与本项无关）。空不了说明 ReleasePlan 契约有缺陷，修契约（见 D20） | 白名单就是把 bug 合法化 |
+| D41 | `test_release_plan_spans_consumed` 的白名单 | **无白名单，差集必须为空**（该测试为 P2 新建；仓库现存的 `WHITELIST = ["SWITCH"]` 属 opcode 往返测试，与本项无关）。空不了说明 ReleasePlan 契约有缺陷，修契约（见 D20）。**2026-10-13 落地**：判据去 `#[ignore]` 常驻并按 `PlanId` 结算（`examined ≥ 173` 地板）；4.5.2 新增同型判据 `test_overload_resolutions_consumed`（差集空 + 证据面地板 `examined ≥ 1` / `consumed ≥ 2`） | 白名单就是把 bug 合法化 |
 | D42 | `verify()` 接 `cargo test` 还是 CI | **CI** | 全语料校验耗时不适合每次本地跑 |
 | D43 | 禁令一 A 判据的相似度算法 | **Jaccard ≥ 0.5** | 已在 `08` 正文定，删开放问题 |
 | D44 | PR 是否强制声明职责归属 | **是。** PR 模板加必填字段 | 职责判定不可机器化，只能靠流程强制 |

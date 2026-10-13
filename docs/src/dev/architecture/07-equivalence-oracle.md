@@ -49,7 +49,7 @@
 
 更危险的是：这一类错误在"规范化快照"下**也可能测不出来**——如果快照工具把临时寄存器号 normalize 掉（这是常规做法），那么"第 3 个实参本该用第 5 个寄存器"这类错误在快照里是**完全相同**的。
 
-**缺陷类 3：span 键控的跨层契约静默失效。** `ReleasePlan` 以 `Span` 为键（`layers/ownership.rs:31` 产出），经 `checker.rs:1440` 传递，最终由 `ir_gen.rs:1942` 的 `self.release_plan.get(&stmt.span)` 匹配并发射 `Instruction::Drop`。两侧 span 计算方式任何一处不一致 → **Drop 指令静默消失，无任何错误**。`overload_resolutions` 同为 span 键控。
+**缺陷类 3（已消除）：span 键控的跨层契约静默失效。** `ReleasePlan` 曾以 `Span` 为键（`layers/ownership.rs:31` 产出），经 `checker.rs:1440` 传递，最终由 `ir_gen` 的 `self.release_plan.get(&stmt.span)` 匹配并发射 `Instruction::Drop`；两侧 span 计算方式任何一处不一致 → **Drop 指令静默消失，无任何错误**。`overload_resolutions` 同属这一形态。**2026-10-13（RFC-039 D20 / WBS 4.5）**：两条契约均改为 `PlanId` **结构身份键**（消费唯一入口 `ReleasePlan::consume` / `OverloadResolutions::get`，读与记账同一次调用；差集非空即 E 级 `W1090`），本类缺陷归零——落地形态与判据见 [02](02-stage-contract.md) §2 修订注记。
 
 > **`method_def_ordinals` 不是 span 键控**：它是 `HashMap<String, usize>`（`ir_gen.rs:224`，key 为无模块限定的 `"Type.method"`）——其风险性质不同（定义序/重名失配而非 span 失配），且 SSA 化不解决它（处置见 [04](04-ssa.md) 机制三）。因此 span 键控契约是 **2 个**（`ReleasePlan` / `overload_resolutions`）。### 现有测试资产
 
@@ -166,7 +166,8 @@ fn test_multifile_proof_obligation_not_dropped() {
 | --- | --- | --- |
 | `test_program_stage_coverage` | 每个 `Program::stages()` ⊆ `Stage::ALL` 且等于期望数组 | 未来漏接阶段 |
 | `test_no_silent_pass_on_unproven` | `ProofResult::Unproven` 在任一模式下必产诊断 | `checker.rs:5179/5318/5448` 的 extend 分支 |
-| `test_release_plan_spans_consumed` | ownership 产出的 Span 集合 ⊆ IR 构造消费的 Span 集合 | `ReleasePlan` span 键静默丢 Drop |
+| `test_release_plan_spans_consumed` | ownership 产出的 `PlanId` 集合 ⊆ IR 构造消费的集合（**按结构身份结算，无白名单**） | `ReleasePlan` span 键静默丢 Drop（历史形态；键迁移后由消费台账 + `W1090` 兜底） |
+| `test_overload_resolutions_consumed` | 语料逐文件：重载决议产出 ⊆ 消费，且**证据面地板** `examined ≥ 1` / 被真实消费 `≥ 2` | 决议条目被静默丢弃（回落到默认绑定的静默错答） |
 | `test_obligations_drained` | 任何 `Obligations` 字段在全仓无消费点时 CI 失败 | 本类缺陷的整个类别 |
 
 ### 语义修正的分流判据（D59）

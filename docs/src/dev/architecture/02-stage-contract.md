@@ -232,7 +232,7 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 
 > **取行约定**：定义行 = `types.rs` 里该字段的**声明行**（`pub` / `pub(super)` 那一行），不是 doc 注释首行——同一字段的注释块可能多行，声明行才是唯一可锚定的位置。本表上方那句里的**结构体范围**（`src/frontend/core/typecheck/types.rs:16-76`）随结构体行号浮动，由门禁 **F5** 机械对账（写错即红）；定义行列由 **F4** 对账。
 | `proof_calls` | `36` | typecheck → **proof_execution** |
-| `release_plan` | `38` | ownership → IR 生成（`ir_gen.rs:341` 读、`:1942` 用） |
+| `release_plan` | `38` | ownership → IR 生成（**`PlanId` 键控**：`ir_gen.rs:360` 读（`type_result.release_plan.clone()`）、`:3103` 用（`ReleasePlan::consume`）；结算完成标记 `:1095`） |
 | `escaped_refs` | `40` | ownership → IR 生成 |
 | `instantiation_requests` | `42` | typecheck → 单态化（`pipeline.rs:381`） |
 | `existential_coercions` | `44` | typecheck → IR 生成 |
@@ -240,7 +240,7 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 | `sum_types` | `54` | typecheck → IR 生成 |
 | `sum_type_param_names` | `57` | typecheck → IR 生成 |
 | `operator_dispatches` | `59` | typecheck → IR 生成（span 键控） |
-| `overload_resolutions` | `62` | typecheck → IR 生成（span 键控） |
+| `overload_resolutions` | `62` | typecheck → IR 生成（**`PlanId` 键控**——调用点身份：产出 `inference/expressions.rs:4550`、消费 `ir_gen.rs:7697` / `:7772`（`OverloadResolutions::get`）；结算完成标记 `:1097`） |
 | `try_expr_impls` | `65` | typecheck → IR 生成（span 键控） |
 | `match_scrutinee_types` | `69` | typecheck → IR 生成（span 键控） |
 | `module_namespaces` | `72` | typecheck → IR 生成 |
@@ -255,7 +255,7 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 
 `release_plan` 为什么存活而 `proof_calls` 死了？差别是**结构性的，不是偶然的**：
 
-- `release_plan` 的消费者 `ir_gen.rs:341`（`release_plan: type_result.release_plan.drops.clone()`）位于 `generate_ir_with_context` 内部，而 `compile_project:154-156` **恰好把完整的 `&TypeCheckResult` 传给了它**——消费者在下游模块，而下游模块在所有入口的必经之路上。
+- `release_plan` 的消费者 `ir_gen.rs:360`（`release_plan: type_result.release_plan.clone()`）位于 `generate_ir_with_context` 内部，而 `compile_project:154-156` **恰好把完整的 `&TypeCheckResult` 传给了它**——消费者在下游模块，而下游模块在所有入口的必经之路上。
 - `proof_calls` 的消费者在 `pipeline.rs` **顶层**，属于**另一个入口实现**。orchestrator 的四个入口根本不经过 `pipeline.rs` 这一层。
 
 **已核实事实**：目前全仓库**没有任何机制**保证这 13 个字段被消费。唯一"保护"是 `ReleasePlan` 恰好搭上了 IR 生成的便车。
@@ -465,11 +465,11 @@ pub enum StageScope { PerModule, Project }
 // src/driver/obligations.rs
 pub struct Obligations {
     pub proof_calls:             Vec<ProofFunctionCall>,     // types.rs:29
-    pub release_plan:            ReleasePlan,                // types.rs:31
-    pub escaped_refs:            HashSet<String>,            // types.rs:33
-    pub instantiation_requests:  Vec<InstantiationRequest>,  // types.rs:35
-    pub existential_coercions:   Vec<ExistentialCoercion>,   // types.rs:37
-    pub overload_resolutions:    Vec<(Span, String)>,        // types.rs:56
+    pub release_plan:            ReleasePlan,                // types.rs:38
+    pub escaped_refs:            HashSet<String>,            // types.rs:40
+    pub instantiation_requests:  Vec<InstantiationRequest>,  // types.rs:42
+    pub existential_coercions:   Vec<ExistentialCoercion>,   // types.rs:44
+    pub overload_resolutions:    OverloadResolutions,         // types.rs:62
     pub try_expr_impls:          Vec<(Span, String)>,        // types.rs:59
     // …其余 span 键控字段
 }
@@ -510,7 +510,7 @@ impl Obligations {
 >   —— `src/driver/mod.rs:110`（`State::assert_drained`，obligations.rs:570）。`Aggregation::FailFast` 的
 >   早退路径同样结算（账要平）。
 > - **七个交付点**（每臂一处；摘掉任一处，运行期 W1090 必响）：
->   ProofExecution `src/driver/arms.rs:554`（`proof_calls()` 是 `TypeCheckResult` 对该义务的唯一对外读取路径，`types.rs:84`）；
+>   ProofExecution `src/driver/arms.rs:554`（`proof_calls()` 是 `TypeCheckResult` 对该义务的唯一对外读取路径，`types.rs:170`）；
 >   IrGeneration `arms.rs:672`（Check）/ `:726`（Embedded）/ `:781`（SingleFile·WasmPlayground）/ `:842`（MultiFile）
 >   —— 四处同一交付口：`AstToIrGenerator::new_with_type_result` / `middle::generate_ir_with_context`；
 >   Monomorphization `arms.rs:936`（单文件直读请求表）/ `:1221`（MultiFile·Check：Linking 臂聚合，
@@ -697,6 +697,51 @@ impl Obligations {
 >   需**人工 review 承担**，或扩 F1 的扫描面——两者取其一，不许默认无人管。
 > - **门禁的静态边界**：交付标记的集合级校验在静态侧（判据 3），单臂摘除由**运行期结算**补位——
 >   静态 + 运行双层是设计形态，不是缺口（t11 的 M11A/M11B/M11C 变异双向验证）。
+
+> **修订注记（P4 实施，2026-10-13，4.5 跨层契约 PlanId 化落地）**：上方 13 条义务里**两条 span 键控契约**
+> （`release_plan` / `overload_resolutions`）已按 RFC-039 **D20** 改为**结构身份键**（`PlanId`）。本注记登记落地形态、
+> 判据、分类依据与已知边界；定义行仍由门禁 **F4** 对账（上表两行的行号即当前代码事实）。
+>
+> **一、落地形态（载体取甲：`PlanId`）**
+>
+> 键是随 AST 节点走的**结构身份**，不再靠「两侧各算一遍 span」的位置巧合：`PlanId`（`src/util/plan_id.rs`，`u32` 单调、
+> 编译单元内唯一、`UNPLANNED = u32::MAX` 表解析器之外的合成节点）由**唯一分配器** `ParserState::alloc_plan_id` 发放。
+> 载体两处：`Stmt.plan_id`（语句身份 → 释放计划的归属与消费）与 `Expr::Call.plan_id`（调用点身份 → 重载决议的产出与消费）；
+> `Expr::call` 是全仓唯一的调用表达式构造器，解析器外的合成调用一律记 `UNPLANNED`（**不可被消费**，见第二段）。
+>
+> - `release_plan`：`drops` 为 `HashMap<PlanId, Vec<String>>`（`layers/ownership.rs`），消费唯一入口
+>   `ReleasePlan::consume(stmt)`——**读与记账同一次调用**；`ir_gen.rs:360` 读、`:3103` 用（语句身份由 `walk_stmt` 的
+>   置/恢复 + CFG 节点→语句身份表给出；作用域退出的 Drop 归属本作用域最后一条语句）。
+> - `overload_resolutions`：`OverloadResolutions`（表 + 消费台账**同体**），产出点 `inference/expressions.rs:4550`
+>   （按调用点 `PlanId` 写，dispatch 从 `Expr::Call { plan_id }` 解构透传），消费点 `ir_gen.rs:7697`（有绑定）/ `:7772`
+>   （无绑定）经 `OverloadResolutions::get`（命中即记账）。
+>
+> **二、消费必达结算（复用 4.3 账本，不造第二套）**：消费台账是**单一实现** `ConsumptionLedger<K>`
+> （`src/util/consumption.rs`），两张表各持一个实例；`generate_module_ir` 成功返回时**同点**标两条台账的
+> 「完整跑完一轮」（`ir_gen.rs:1095` 释放计划 / `:1097` 重载决议）；三态映射唯一
+> （`src/driver/obligations.rs` 的 `consumption_state`），唯一结算点对两条义务各接入一行——差集非空即
+> **E 级 W1090**（同码升 E，口径见第三段）。豁免判据挂在**台账自身的完成标记**上（不是 `unit.ir` 是否存在），
+> 故 `check` 形态取走 IR 产物不构成豁免。
+>
+> **三、D59 分类依据（C 类，先红后绿）**：`Type.method(位置实参, 名字 = 值)` 这一形态在改动前是**静默给错答案**
+> （实测：`r: Int = t.pick(1, a = 2)` 编译干净、运行输出 `1` 而非 `20`——决议出的候选被丢弃、回落到定义序最后的绑定）；
+> 改动后同一程序编译期 `error [W1090] ... 产出键未被消费`。修法取**响亮**而非「把决议名塞进带命名实参的调用」：
+> 后者会丢命名实参，等于换一种静默（终态语义见 [09](./09-execution-wbs.md) §3.14 / issue #452）。
+> 另：`Drop` 指令在解释器是 no-op（`src/backends/interpreter/executor/ops/control.rs` 通配臂仅 `advance()`），
+> 故释放计划的键迁移不改运行行为——语料 342 条差分空是这一点的实证。
+>
+> **四、判据与证据**：D41 同型判据 `test_release_plan_spans_consumed`（按 `PlanId` 结算）与新增
+> `test_overload_resolutions_consumed`（语料逐文件 lex→parse→typecheck→ir_gen，**差集必须为空 + 证据面地板**：
+> 产出过决议的文件数 `≥ 1`、被真实消费条目 `≥ 2`，无白名单）；决议形态覆盖 9 项钉板见
+> `src/frontend/core/typecheck/tests/overload_resolutions.rs`（期望返回 / 位置实参 / 类型体内绑定 / `?` 操作数 /
+> 纯命名 / 位置+命名 / 歧义 / 变体构造 / 未分配身份）。变异驱动：消费键偏移一位 ⇒ 判据红 + 真实程序
+> `error [W1090]` + 语料门禁差异；还原后复绿。门禁数值：`check-obligations.py` PASS、语料 342 条差分为空、
+> `cargo test --lib` 2712 passed / 0 failed（IR 快照零漂移）。
+>
+> **五、已知边界（登记项，不是未落地承诺）**：`ir_gen.rs:7766-7790` 的**无绑定消费点**在当前语料与测试面
+> **不可达**（方法声明统一经 `register_type_bindings` 走有绑定消费点），故该分支的键控正确性**无红态可证伪**；
+> 保留理由 = 它是有绑定路径的对称分支，删除会把「无 `type_bindings` 的方法调用」形态改写成静默。由独立验证
+> （t5 F-1）与复审（t6 F2）登记，**不新开任务**。
 
 ### 3. 统一 Driver：单一 `dispatch`
 

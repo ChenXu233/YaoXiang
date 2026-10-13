@@ -236,7 +236,7 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 - [x] **4.2 入口合并**（9 个三级任务；4.2.1–4.2.9 全部完成 2026-10-09/10；九个工作提交均在史，dev 头 CI run 38372921921 七作业全绿覆盖其全部改动）
 - [x] **4.3 义务账本**（2 个三级任务；4.3.1 / 4.3.2 均已完成 2026-10-13；含跨二级加框的 3.4.4 / 3.4.5 / 3.4.9 清账）
 - [ ] **4.4 证明层与 wasm 收尾**（3 个三级任务）
-- [ ] **4.5 跨层契约 PlanId 化（D20）**（2 个三级任务）
+- [x] **4.5 跨层契约 PlanId 化（D20）**（2 个三级任务；4.5.1 / 4.5.2 均已完成 2026-10-13，t1–t7 收口：实现 / 独立验证 / 复审各自独立，t5 的 F-1 / F-2 已按 §3.13 / §3.14 与本轮注记处置）
 - [ ] **4.6 LSP 语义数据管线统一（D55）**（1 个三级任务）
 - [ ] **4.9 引用池正确实现（RFC-029f 修正）**（5 个三级任务）（**2026-10-13 登记 `#450`**：重载方法被调用且决议生效，仍被误报 `W1005 Unused method`——引用计数对重载调用失真；归属在本二级任务内待定，见 issue）
 - [ ] **4.10 多文件语义缺口（4.2.1/4.2.5 施工发现登记；4.10.1/4.10.2 已完成，4.10.3 为 4.2.5 裁决 A 的 run 半边）**（3 个三级任务）
@@ -262,8 +262,8 @@ P10 其余清理与状态修正             06 §S2/S3/S4/S5/S6
 | 4.4 证明层与 wasm 收尾 | 4.4.1 `layers/README.md` 层序改实际顺序 | — | **独立于 4.1–4.3 走** |
 | | 4.4.2 SMT 求解器获取面统一为进程级共享单例（**按 D58**：真实修复位置 `backend.rs`——`LazyLock<Mutex<Option<Box<dyn Solver>>>>` + `with_shared_solver` 闭包口；`predicate.rs` 删私有 SOLVER、`checker.rs` termination 注入改闭包内判定（`TerminationChecker` 生命周期参数化）、`ownership.rs` 回边判定改共享口；`default_solver()` 仅保留测试用。**硬前置**：Unknown 不入缓存（否则超时结果经进程级缓存跨编译/跨测试固化）。89576fafd 只交付了计数器观测工具，本任务本体未动） | — | 生产路径 `default_solver()` 调用点归零 + 缓存命中率跨三消费点可观测 |
 | | 4.4.3 降级路径加 warning（`checker.rs:1283-1293`） | — | — |
-| 4.5 跨层契约 PlanId 化（D20） | 4.5.1 `ReleasePlan` 键 `Span` → `PlanId`（`layers/ownership.rs:31` 产出侧分配 + `ir_gen.rs:1942` 消费侧匹配） | 4.3.1 | `test_release_plan_spans_consumed` 差集为空（D41） |
-| | 4.5.2 `overload_resolutions` 键 `Span` → `PlanId` | 4.5.1 | C2；span 失配类静默失效归零 |
+| 4.5 跨层契约 PlanId 化（D20） | 4.5.1 `ReleasePlan` 键 `Span` → `PlanId`（**2026-10-13 已完成**：`PlanId` 载体 + 语句身份归属 + `ReleasePlan::consume` 唯一消费入口；消费必达结算 `ConsumptionLedger<K>` + `ir_gen.rs:1095` 完成标记，缺一即 E 级 `W1090`；t1 实现 / t2 独立验证 PASS / t3 复审 PASS） | 4.3.1 | `test_release_plan_spans_consumed` 差集为空（D41，`examined ≥ 173`，无白名单）；语料 342 条零 diff；**CI run 38385449219 全绿** |
+| | 4.5.2 `overload_resolutions` 键 `Span` → `PlanId`（**2026-10-13 已完成**：调用点身份（`Expr::Call.plan_id`，同一分配器）；产出 `inference/expressions.rs:4550`、消费 `ir_gen.rs:7697`（有绑定）/ `:7772`（无绑定），读与记账同一次调用；t4 实现 / t5 独立验证 PASS / t6 复审 PASS） | 4.5.1 | `test_overload_resolutions_consumed` 差集为空 + **证据面地板**（examined ≥ 1 / consumed ≥ 2）；C2 语料 342 条零 diff；IR 快照零漂移；**CI run 38404887215 全绿**（覆盖 4.5.2 代码树——其自身 run 被后续文档推送取消） |
 | 4.6 LSP 语义数据管线统一 | 4.6.1 项目内文件的语义数据（SemanticDB）走 orchestrator 同管线，与诊断同源；跨文件引用带 `resolves_to` | 4.2.1 | 项目内跨文件跳转命中定义；语义数据与诊断出自同一次编译 |
 | 4.9 引用池正确实现 | 4.9.1 扫描面改为编译面：`collect_project_refs` 只收集 `discover_with_used` 返回的编译集（不含孤立文件、tests/ 目录） | 4.2.1 | `collect_yx` 不再递归扫描目录；**corpus 语料 diff 零未归因新增 W1001**（每条新增警告必须可追溯到某个真实未使用定义） |
 | | 4.9.2 粒度升级为 `(module, name)`：池类型改为 `HashMap<ModulePath, HashSet<String>>`，区分不同模块的同名标识符 | 4.9.1 | 同名局部变量不再意外豁免顶级定义；**单测：a.yx 的 `foo` 和 b.yx 的 `foo` 独立计数** |

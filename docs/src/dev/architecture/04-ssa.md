@@ -171,25 +171,27 @@ let final_args: Vec<Operand> = arg_regs.clone();
 
 **补充核实：结构体构造路径的重排无重复槽守卫。** `7724` 的 `final_args` 按"位置实参先入位、命名实参按字段名覆写"填充，**覆写前没有 `slots[idx].is_some()` 之类的重复槽检查**（对比命名空间路径 `7381` 有）——命名实参静默顶掉位置实参时不 panic、不诊断；且实参**求值顺序**（源码序）与最终 `arg_regs` 顺序（字段声明序）在此分叉。批 d 的 `fill_missing` 断言化必须一并覆盖"重复槽"检查，否则结构体构造路径的静默顶替会原样存活。
 
-### 缺陷类 3：span 键控的跨层契约静默失效
+### 缺陷类 3：span 键控的跨层契约静默失效（**已消除**，2026-10-13 / RFC-039 D20、WBS 4.5）
 
-**已核实事实。** 全仓有**两个** span 键控的跨层契约：
+**已核实事实（审计时点）。** 全仓有**两个** span 键控的跨层契约：
 
 | 契约 | 声明 | 产出 | 传递 | 消费 |
 | --- | --- | --- | --- | --- |
-| `release_plan` | `ir_gen.rs:191` `HashMap<Span, Vec<String>>` | `ownership.rs:31`（`ReleasePlan::drops` 字段）、`2574` `build_release_plan`、`2786` 调用 | `typecheck/types.rs:31` ← `checker.rs:1282` / `1440` ← `ir_gen.rs:341` | `ir_gen.rs:1942` |
-| `overload_resolutions` | `ir_gen.rs:222` `HashMap<Span, String>` | `inference/expressions.rs:4366`、`inference/statements.rs:2758` / `2857` | `typecheck/types.rs:56` ← `checker.rs:1447-1448` ← `ir_gen.rs:364-366` | `ir_gen.rs:7420`、`7493` |
+| `release_plan` | ~~`ir_gen.rs:191` `HashMap<Span, Vec<String>>`~~ → 现 `HashMap<PlanId, Vec<String>>`（`ownership.rs:39`） | `ownership.rs:31`（`ReleasePlan::drops` 字段）、`build_release_plan`（分派 `walk_stmt` 的语句身份） | `typecheck/types.rs:38` ← `checker.rs` 传递 ← `ir_gen.rs:360`（克隆读点） | `ir_gen.rs:3103`（`ReleasePlan::consume`，唯一入口；结算完成标记 `:1095`） |
+| `overload_resolutions` | ~~`ir_gen.rs:222` `HashMap<Span, String>`~~ → 现 `OverloadResolutions`（表 + 消费台账同体，`types.rs:62`） | `inference/expressions.rs:4550`（按调用点 `PlanId` 写；（`inference/statements.rs` 仅透传合并） | `typecheck/types.rs:62` ← `checker.rs` 组装 ← `ir_gen.rs` 字段持有 | `ir_gen.rs:7697`（有绑定）、`7772`（无绑定）（`OverloadResolutions::get`；结算完成标记 `:1097`） |
 
-`1942` 的形态：
+审计时点的形态（`ir_gen.rs:1942`，**现已不存在**）：
 
 ```rust
 // NLL Release: 在语句边界插入 Drop 指令
 if let Some(vars) = self.release_plan.get(&stmt.span) {
 ```
 
-`if let Some` —— **查不到就是查不到，没有 else 分支、没有断言、没有计数**。两侧 span 计算方式任何一处不一致 → **Drop 指令静默消失，零错误**。精化类型（refinement type）的 Drop 序列是本项目所有权语义的核心载体（`ownership.rs:26-32` 自述「NLL 精确释放计划」，key 为最后使用位置的 Span），而它的落地是静默的。
+`if let Some` —— **查不到就是查不到，没有 else 分支、没有断言、没有计数**。两侧 span 计算方式任何一处不一致 → **Drop 指令静默消失，零错误**。精化类型（refinement type）的 Drop 序列是本项目所有权语义的核心载体（`ownership.rs:26-32` 自述「NLL 精确释放计划」），而它的落地曾是静默的。
 
 `7420` / `7493` 同款形态（`if let Some(mangled) = self.overload_resolutions.get(span)`），后果是重载决议回退到默认绑定。
+
+**处置（4.5 落地）**：两条键均改为 `PlanId` 结构身份，消费**命中即记账**（读与记账同一次调用），差集非空在唯一结算点报 **E 级 `W1090`**——「查不到」不再是静默。落地形态与判据见 [02](02-stage-contract.md) §2 修订注记（4.5）；本行号（`1942` / `7420` / `7493`）保留为审计时点证据，不作为现状指针。
 
 > **`method_def_ordinals` 不是 span 键控。** 它是 `HashMap<String, usize>`（`ir_gen.rs:224`），在 `:369` 初始化，唯一写入点 `:1692-1702`（按 `base_name` 的定义序分配 `#N` 后缀）。它的风险是**另一种**：定义序依赖——`#N` 后缀由 AST 定义顺序决定，若生成顺序与 typecheck 注册序不一致，同一函数名会解析到不同目标。这一条不是 span 失配，但同样"错了不报错"，处置见「span 键控的额外机制」的机制三。
 
@@ -230,7 +232,7 @@ if let Some(vars) = self.release_plan.get(&stmt.span) {
 | --- | --- | --- |
 | `compile_pattern` 复杂度 | `ir_gen.rs:5390-5687`，**298 行**，自递归 4 次（`5473` / `5504` / `5619` / `5640`），外部调用点 `5270` | 模式匹配（union 载荷 / 元组 / 结构体 / 字面量 / 嵌套）的分派复杂度是**算法固有**的。SSA 只把守卫产生的 `JmpIfNot` 变成 `Phi`，不减少守卫数量 |
 | `eval_const_expr` 复杂度 | `ir_gen.rs:2298-2488`，**191 行**（`2297` 有 `#[allow(clippy::only_used_in_recursion)]`，确认自递归） | 常量折叠的表达式覆盖度与 SSA 无关 |
-| span 键控失效 | `release_plan`（`1942`）、`overload_resolutions`（`7420` / `7493`） | **SSA 完全没有触及这一层。** 需要独立机制，见「span 键控的额外机制」 |
+| span 键控失效（**已消除**） | 审计时点：`release_plan`（`1942`）、`overload_resolutions`（`7420` / `7493`）——4.5 后为 `PlanId` 键 + 结算必达 | **SSA 完全没有触及这一层**（结论不变）。已由[02](02-stage-contract.md) 的义务账本独立机制解决，见「span 键控问题的处置」机制二 |
 | `Instruction` 变体数 | 76 个（`ir.rs:47-533`） | SSA 增加 `Phi`，**净变化 +1**。76 变体对应 76 个字节码 opcode 或降级为 NOP，不会因 SSA 减少 |
 | `method_def_ordinals` 定义序依赖 | `ir_gen.rs:224` / `369` / `1692-1702` | 与 span 键控同类但不同因，见「span 键控的额外机制」机制三 |
 
@@ -426,8 +428,8 @@ pub fn synth_closure(
 
 **设计判断。** 三个独立机制，按成本排序：
 
-**机制一：消费覆盖率断言（必做，成本最低）。**
-07 已定义 `test_release_plan_spans_consumed`（ownership 产出的 Span 集合 ⊆ IR 消费的 Span 集合）。本文的补充是把它做成**运行期计数**而非仅测试：
+**机制一：消费覆盖率断言（必做，成本最低；2026-10-13 已由更强形态取代）。**
+07 已定义 `test_release_plan_spans_consumed`（现按 `PlanId` 结算）。本文的补充原是把它做成**运行期计数**而非仅测试；落地形态比该设想更强——**消费台账（`ConsumptionLedger<K>`）+ 唯一结算点（E 级 `W1090`）**，不新增诊断码，也不靠 ir_gen 内部计数器自证：
 
 ```rust
 // ir_gen.rs:341 附近
@@ -442,7 +444,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 
 **为什么这能工作**：`drop()` 指令对非 `ref` 局部是运行时可观察的（析构副作用），但**"该 drop 的没 drop"在 YaoXiang 当前值语义 + Arc/Rc 模型下未必立刻崩溃**——这正是它静默的原因。计数把"静默"变成"可检测"。
 
-**机制二：Span 键改为 `DefId` 或显式计划 ID（中期）。**
+**机制二：Span 键改为 `DefId` 或显式计划 ID（**2026-10-13 已落地**：RFC-039 D20 / WBS 4.5 按本机制实现为 `PlanId(u32)` 结构身份键 + 消费必达结算，落地形态见 [02](02-stage-contract.md) §2 修订注记）。**
 根本修法是**不要用 Span 当键**。`Span` 是源码位置，会因宏展开、`include`、多文件合并而漂移。`FunctionIR` 已有 `def: Option<DefId>` 字段（`ir.rs:677`），说明 DefId 在 IR 层可用。**设计判断**：为 `ReleasePlan` 与 `overload_resolutions` 引入 `PlanId(u32)`，由 ownership / overload 决议在产出时分配，IR 消费时按 `PlanId` 匹配。**这属于 02 的义务账本（`Obligations`）范畴，应与 [02](02-stage-contract.md) 一并实施，不放在本文。**
 
 **机制三：`method_def_ordinals` 的定义序依赖（独立小项）。**
@@ -716,7 +718,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 - `src/middle/core/ir_gen.rs:7395` / `7724` / `7835-7848` / `8000` — 三处语义重排与克隆
 - `src/middle/core/ir_gen.rs:7838-7846` — 「补 0」静默兜底
 
-**缺陷类 3（span 键控）**
+**缺陷类 3（span 键控）** —— 下列为**审计时点**的取证指针（4.5 键迁移后：`release_plan` / `overload_resolutions` 两键已 `PlanId` 化，现状指针见 [02](02-stage-contract.md) §2 修订注记；`method_def_ordinals` 仍为机制三的待办）
 
 - `src/middle/core/ir_gen.rs:191` / `222` / `224` — 三个跨层字段的声明
 - `src/middle/core/ir_gen.rs:341` / `1942` — `release_plan` 的写入与消费

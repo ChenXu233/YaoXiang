@@ -78,3 +78,45 @@
 > - **测试迁移**（测试数不降）：新增 `lexer/tests/rfc029g_lexer.rs`（1）；`parser/statements/tests/bindings.rs` 的「pub 被识别」断言反转为「pub 不再是修饰符」；`passes/tests/dead_code.rs` 7 个角色语义用例重写（断言反转 2 个）；`tests/integration/cli_e2e.rs` 8 个角色用例改写（`lib`/`internal` 的豁免断言反转为报告断言）。
 > - **基线**：IR 快照 **zero-diff**（`pub` 不参与 IR）；语料差分基线仅新增 1 条（`pub_declaration_err.yx` → E1001），命令 `cargo run --quiet --example corpus_probe` 再生后人工 review。
 > - **实测**：lib 2556 / integration 272 / 语料 322 条基线全绿；`cargo fmt` / `clippy -D warnings` / `check-boundary` / `check-concepts` / `check-fanout` / `check_tracking.py` 全绿。
+>
+## P4 4.5 跨层契约 PlanId 化（D20）
+
+> **4.5 落地实录（2026-10-13）**：4.5.1（`ReleasePlan` 键 `Span` → `PlanId`）与 4.5.2（`overload_resolutions` 键 `Span` → `PlanId`）
+> 分两笔功能提交落地，收口（登记 / WBS 勾选 / 门禁 / 推送）由 t7 完成。前置 = 4.3.1 义务账本（红态留档 173 文件 / 533 键）。
+>
+> **一、载体裁决（甲：`PlanId` 随 AST 节点走）**：新增 `PlanId`（`src/util/plan_id.rs`，`u32` 单调、编译单元内唯一、
+> `UNPLANNED = u32::MAX` 表解析器之外的合成节点），由**唯一分配器** `ParserState::alloc_plan_id` 发放；载体两处——
+> `Stmt.plan_id`（语句身份）与 `Expr::Call.plan_id`（调用点身份），`Expr::call` 为全仓唯一调用构造器。
+> 否决的是「两侧各自按 span 推导同一身份」的位置巧合形态（D20 的原始缺陷）。
+>
+> **二、两级验证与复审（成员独立）**：每笔功能提交各配一名独立验证者与一名复审者，**验证/复审不复用实现者证据**：
+> 4.5.1 = t1 实现 / t2 独立验证（外部树 + 5 处变异）/ t3 复审；4.5.2 = t4 实现 / t5 独立验证（外部树 + 5 处变异）/ t6 复审。
+> 复核时点与被复核 revision 均落在不可变历史（`git show` 可核）。
+> **provider 更名导致 t5 / t6 换成员续派**：原验证/复审成员因 provider 更名不可续用，按编排约定换人续派并**在记录里写明原因**
+> （跨轮次上下文保留优先，压缩不可用时才换人）；续派后结论与原轮一致（PASS），未复用实现者证据。
+>
+> **三、实现期自查发现并修掉的两个缺陷（t1，均在 inScope 内）**：① 消费豁免判据曾挂在 `UnitState.ir.is_some()`——
+> `check` 形态的 Linking/Mono 会把 `unit.ir` 取走，真实未消费在 check 形态**静默通过**（变异实测：D41 红而 CLI check exit 0）；
+> 改为读**台账自身的完成标记**，并补回归用例。② Drop 序列随进程哈希种子漂移（偏序 `sort_by` + `HashSet` 迭代）：
+> 快照判据连续三次跑出 106/120/114 的行数漂移；改为**全序排序**（同名取最大深度 + 名字升序）后连跑两次零漂移。
+>
+> **四、判据与证据数字**：4.5.1 后 `test_release_plan_spans_consumed` 去 `#[ignore]` 常驻（`examined ≥ 173` 地板 + 无白名单），
+> 172 个 IR 快照同提交再生（程序化 review：新增 1083 行 Drop + 86 行跳转索引平移，零删除、无重排），语料 342 条差分为空；
+> 4.5.2 新增 `test_overload_resolutions_consumed`（差集空 + 证据面地板 `examined ≥ 1` / `consumed ≥ 2`；实测 examined=1、
+> 消费条目 2、无决议跳过 210），决议形态 9 项钉板，`cargo test --lib` 2712 passed / 0 failed，IR 快照**零漂移**。
+> 变异驱动：消费键偏移一位 ⇒ 判据红 + 真实程序 `error [W1090] ... 产出键未被消费` + 语料门禁差异；还原后复绿。
+>
+> **五、语义修正的分类依据（D59）**：`Type.method(位置实参, 名字 = 值)` 在改动前**静默给错答案**（实测编译干净、
+> 运行输出 `1` 而非 `20`）⇒ **C 类**（旧行为非成功），修法取「响亮」：改动后同一程序编译期 `error [W1090]`；
+> 「命名实参参与决议」的终态语义属 **D 类**，已登记 §3.14 并留 issue #452 待专门队伍承接。
+> 另：`Drop` 在解释器是 no-op（`backends/interpreter/executor/ops/control.rs` 通配臂仅 `advance()`）——键迁移不改运行行为。
+>
+> **六、F-1 / F-2 处置（t5 独立验证发现）**：**F-1（medium）** 无绑定消费点（`ir_gen.rs:7766-7790`）在当前语料与测试面
+> 不可达、键控正确性无红态可证伪 ⇒ 按「已知边界」登记进 [02](02-stage-contract.md) §2 修订注记第五段（保留理由 + 不新开任务）；
+> **F-2（low）** 指针漂移 ⇒ `types.rs` 的 `OverloadResolutions` 文档注释改为精确指针（产出 `inference/expressions.rs:4550`、
+> 消费 `ir_gen.rs:7697` / `:7772`），单独一笔小提交，未混入文档提交。
+>
+> **七、收口（t7）**：02 义务字段表两行改为 `PlanId` 键 + 当前消费点行号（`:360` 读 / `:3103` 用 / `:1095` 与 `:1097` 结算标记）；
+> 07 判据表与 04-ssa 缺陷类 3 改过去式；09 勾选 4.5 / 4.5.1 / 4.5.2；CHANGELOG 记一行行为变化；`check-obligations.py` 与
+> `check_tracking.py` 绿、CI 与 Deploy Docs 绿。**收口发现的记账偏差**：t3 / t6 报告里的指针 `ir_gen.rs:357` / `:3102` / `:1096`
+> 与代码事实差一至三行（实为 `:360` / `:3103` / `:1095`+`:1097`，4.5.2 的插入使然）——以代码事实为准登记，本注记同时留痕。
