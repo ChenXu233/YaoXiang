@@ -110,6 +110,8 @@ pub struct StatementChecker {
     pub method_overloads: std::collections::HashMap<String, Vec<MonoType>>,
     /// RFC-011a §3：重载候选的 IR 混编名
     pub method_overload_ir_names: std::collections::HashMap<String, Vec<String>>,
+    /// RFC-011a §3 / #452：重载候选的声明期形参名（与候选序一一对应，含接收者位）
+    pub method_overload_param_names: std::collections::HashMap<String, Vec<Vec<String>>>,
     /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
     pub overload_resolutions: Vec<(crate::util::plan_id::PlanId, String)>,
     /// 期望类型（带注解绑定的初始化推断时设置，方法重载按期望返回决议）
@@ -212,6 +214,7 @@ impl StatementChecker {
             current_fn_param_constraints: None,
             method_overloads: std::collections::HashMap::new(),
             method_overload_ir_names: std::collections::HashMap::new(),
+            method_overload_param_names: std::collections::HashMap::new(),
             overload_resolutions: Vec::new(),
             current_expected: None,
             expected_return_type: None,
@@ -2871,6 +2874,7 @@ impl StatementChecker {
                             &self.method_overloads,
                             &self.method_overload_ir_names,
                         );
+                        inferrer.set_method_overload_param_names(&self.method_overload_param_names);
                         inferrer.set_current_expected(self.current_expected.clone());
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
@@ -2976,6 +2980,7 @@ impl StatementChecker {
                 inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
                 inferrer
                     .set_method_overloads(&self.method_overloads, &self.method_overload_ir_names);
+                inferrer.set_method_overload_param_names(&self.method_overload_param_names);
                 inferrer.set_current_expected(self.current_expected.clone());
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致

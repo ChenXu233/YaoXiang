@@ -126,6 +126,14 @@ pub struct TypeEnvironment {
     pub method_overloads: HashMap<String, Vec<MonoType>>,
     /// RFC-011a §3：重载候选的 IR 混编名（与 method_overloads 候选序一一对应）
     pub method_overload_ir_names: HashMap<String, Vec<String>>,
+    /// RFC-011a §3：重载候选的**声明期形参名**（与 method_overloads 候选序一一对应，
+    /// 每项含接收者位 self；内层空表 = 声明期拿不到名字）。
+    ///
+    /// 命名实参（#452）进入调用点决议的唯一名字来源：位置实参占前导槽位、
+    /// 命名实参按名入槽，两者落在同一槽位即冲突（不得静默择一）。名字拿不到
+    /// （形参数与候选签名对不齐、跨模块外部绑定）时**留空**——调用点据此退回
+    /// 「不按名匹配」，不伪装成「名字已核对」。
+    pub method_overload_param_names: HashMap<String, Vec<Vec<String>>>,
     /// RFC-011a: 已通过的接口实现证明（编译期，运行时擦除）
     pub implementation_proofs: Vec<ImplementationProof>,
     /// RFC-011b: 接口实现登记表（接口名 → 实例化条目，带类型实参维度）。
@@ -190,6 +198,25 @@ impl TypeEnvironment {
         key: &str,
         ty: MonoType,
     ) {
+        self.add_method_overload_with_params(key, ty, Vec::new());
+    }
+
+    /// RFC-011a §3 / #452：登记方法重载候选**并携带其声明期形参名**。
+    ///
+    /// 形参名是命名实参进入调用点决议的唯一依据（位置实参占前导槽位、命名实参
+    /// 按名入槽）。名字长度与候选签名对不齐时**留空**——调用点退回「不按名匹配」，
+    /// 宁可不匹配也不拿错位的名字去匹配（错位比缺失更危险）。
+    pub fn add_method_overload_with_params(
+        &mut self,
+        key: &str,
+        ty: MonoType,
+        param_names: Vec<String>,
+    ) {
+        // 形参名必须与候选签名逐一对应；对不齐视为「这个名字的来源不可信」。
+        let param_names = match &ty {
+            MonoType::Fn { params, .. } if params.len() == param_names.len() => param_names,
+            _ => Vec::new(),
+        };
         let list = self.method_overloads.entry(key.to_string()).or_default();
         if !list.contains(&ty) {
             list.push(ty);
@@ -205,6 +232,10 @@ impl TypeEnvironment {
                 .entry(key.to_string())
                 .or_default()
                 .push(ir_name);
+            self.method_overload_param_names
+                .entry(key.to_string())
+                .or_default()
+                .push(param_names);
         }
     }
 

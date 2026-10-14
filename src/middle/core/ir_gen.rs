@@ -496,6 +496,86 @@ impl AstToIrGenerator {
         Some(self.resolver().resolve_namespace(head, &segs))
     }
 
+    /// 从限定/混编调用名取叶子段（形参名表的键就是声明处的短名）。
+    ///
+    /// `Temp.pick` / `Temp.pick#1` → `pick`；无分隔符时原样返回。
+    fn call_name_leaf(name: &str) -> &str {
+        name.rsplit('.')
+            .next()
+            .and_then(|leaf| leaf.split('#').next())
+            .unwrap_or(name)
+    }
+
+    /// #452：把方法调用的实参按**形参声明序**放回槽位（含接收者位下标 0）。
+    ///
+    /// 位置实参占前导槽位（第 i 个 → 形参 1+i），命名实参按名入槽；命名后接
+    /// 位置实参、同一槽位重复指定、名字不在形参表里一律报错——**不得静默丢弃
+    /// 命名实参**（丢弃即换一种静默：实参进了调用但落错槽位，运行期才炸）。
+    ///
+    /// 返回逐槽的实参序（`Some(k)`：k < 位置实参数 → `args[k]`，否则
+    /// `named_args[k - 位置实参数]`；`None` = 该槽空缺）。槽位下标与 typecheck
+    /// 侧 `bind_named_args` 同坐标系（全形参表，含接收者位）。
+    fn build_arg_slots(
+        names: &[String],
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+        span: &Span,
+    ) -> crate::util::diagnostic::Result<Vec<Option<usize>>> {
+        if names.is_empty() {
+            if named_args.is_empty() {
+                return Ok((0..args.len()).map(Some).collect());
+            }
+            // 形参名不可得：能力不足要**响亮**，不许把命名实参悄悄丢掉
+            return Err(ErrorCodeDefinition::unknown_argument(
+                "<method>",
+                &named_args[0].0,
+                "（形参名表不可得）",
+            )
+            .at(*span)
+            .build());
+        }
+        let mut slots: Vec<Option<usize>> = vec![None; names.len()];
+        for i in 0..args.len() {
+            if 1 + i < slots.len() {
+                slots[1 + i] = Some(i);
+            }
+        }
+        if let (Some(last), Some((first_named_name, first_named))) =
+            (args.last(), named_args.first())
+        {
+            if first_named.span().start.offset < last.span().start.offset {
+                return Err(
+                    ErrorCodeDefinition::duplicate_argument("<method>", first_named_name)
+                        .at(*span)
+                        .with_help("位置实参必须写在命名实参之前")
+                        .build(),
+                );
+            }
+        }
+        for (i, (name, _)) in named_args.iter().enumerate() {
+            let Some(slot) = names
+                .iter()
+                .position(|p| p == name)
+                .filter(|slot| *slot > 0)
+            else {
+                return Err(ErrorCodeDefinition::unknown_argument(
+                    Self::call_name_leaf(names.first().map(String::as_str).unwrap_or("<method>")),
+                    name,
+                    &names.join(", "),
+                )
+                .at(*span)
+                .build());
+            };
+            if slots[slot].is_some() {
+                return Err(ErrorCodeDefinition::duplicate_argument("<method>", name)
+                    .at(*span)
+                    .build());
+            }
+            slots[slot] = Some(args.len() + i);
+        }
+        Ok(slots)
+    }
+
     /// 查一个函数的**声明期形参名**（按声明序），供命名参数重排。
     ///
     /// 两个来源，按就近优先：
@@ -7704,18 +7784,15 @@ impl AstToIrGenerator {
 
                 if let Some(binding) = binding_info {
                     // RFC-011a §3：方法级重载决议命中时，binding.function
-                    // （后定义覆盖的单值）替换为决议出的混编名
-                    // RFC-011a §3：方法级重载决议命中时，binding.function
                     //（后定义覆盖的单值）替换为决议出的混编名
-                    let binding = if named_args.is_empty() {
-                        // RFC-039 D20：按**调用点身份**消费重载决议（命中即记账）
-                        if let Some(mangled) = self.overload_resolutions.get(call_plan_id) {
-                            BindingInfo {
-                                function: mangled.to_string(),
-                                positions: binding.positions.clone(),
-                            }
-                        } else {
-                            binding
+                    let binding = if let Some(mangled) = self.overload_resolutions.get(call_plan_id)
+                    {
+                        // RFC-039 D20：按**调用点身份**消费重载决议（命中即记账）。
+                        // #452：命名实参调用同样消费——决议已把命名实参计入匹配，
+                        // 这里的名字必须真的被用到（消费侧不得再带形态门）。
+                        BindingInfo {
+                            function: mangled.to_string(),
+                            positions: binding.positions.clone(),
                         }
                     } else {
                         binding
@@ -7731,12 +7808,46 @@ impl AstToIrGenerator {
                     let obj_reg = self.next_temp_reg();
                     self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
 
-                    // 生成所有方法参数 IR
+                    // 生成所有方法参数 IR。
+                    // #452：命名实参先按绑定函数的**值形参名**入槽（位置实参占前导
+                    // 槽位），再交给绑定位置重排——两步各自有据，不互相顶替。
+                    let bound_params = self
+                        .lookup_param_names(
+                            &binding.function,
+                            Self::call_name_leaf(&binding.function),
+                        )
+                        .or_else(|| {
+                            self.lookup_param_names(&format!("{}.{}", field, field), field.as_str())
+                        });
                     let mut method_arg_regs = Vec::new();
-                    for arg in args.iter() {
-                        let arg_reg = self.next_temp_reg();
-                        self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                        method_arg_regs.push(Operand::Local(arg_reg));
+                    if !named_args.is_empty() {
+                        if let Some(names) = bound_params {
+                            let slots = Self::build_arg_slots(&names, args, named_args, span)?;
+                            for slot in slots.iter() {
+                                let arg_expr = match slot {
+                                    Some(slot) => {
+                                        if *slot < args.len() {
+                                            &args[*slot]
+                                        } else {
+                                            &named_args[*slot - args.len()].1
+                                        }
+                                    }
+                                    // 空槽说明给出诊断的 typecheck 侧未跑（本路径
+                                    // 只在 typecheck 通过后才到）——维持旧形态
+                                    None => continue,
+                                };
+                                let arg_reg = self.next_temp_reg();
+                                self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                                method_arg_regs.push(Operand::Local(arg_reg));
+                            }
+                        }
+                    }
+                    if method_arg_regs.is_empty() {
+                        for arg in args.iter() {
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                            method_arg_regs.push(Operand::Local(arg_reg));
+                        }
                     }
 
                     // 按绑定位置重排参数。
@@ -7780,30 +7891,45 @@ impl AstToIrGenerator {
                 } else {
                     // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
                     // RFC-011a §3：方法级重载决议命中时直接调用混编名
-                    //（typecheck 按 实参+期望返回 决议，span 键控）
-                    if named_args.is_empty() {
-                        if let Some(mangled) = self
-                            .overload_resolutions
-                            .get(call_plan_id)
-                            .map(str::to_string)
-                        {
-                            let obj_reg = self.next_temp_reg();
-                            self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                            let mut call_args = vec![Operand::Local(obj_reg)];
-                            for a in args {
-                                let r = self.next_temp_reg();
-                                self.generate_expr_ir(a, r, instructions, constants)?;
-                                call_args.push(Operand::Local(r));
-                            }
-                            instructions.push(Instruction::Call {
-                                dst: Some(Operand::Local(result_reg)),
-                                func: Operand::Const(ConstValue::String(mangled)),
-                                args: call_args,
-                                span: *span,
-                                def: None,
-                            });
-                            return Ok(());
+                    //（typecheck 按 实参兼容 + 期望返回 决议，键 = 调用点 PlanId）
+                    if let Some(mangled) = self
+                        .overload_resolutions
+                        .get(call_plan_id)
+                        .map(str::to_string)
+                    {
+                        // #452：命名实参调用同样消费决议（消费侧不得再带
+                        // named_args.is_empty() 门——那会让决议出的名字被丢弃，
+                        // 实参也按位置错配）。实参按**形参声明序**重建：位置实参占
+                        // 前导槽位、命名实参按名入槽；名字不可得则响亮报错，
+                        // 不静默丢弃命名实参。
+                        let leaf = Self::call_name_leaf(&mangled).to_string();
+                        let names = self.lookup_param_names(&mangled, &leaf).unwrap_or_default();
+                        let ordered_args = Self::build_arg_slots(&names, args, named_args, span)?;
+                        let obj_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                        let mut call_args = vec![Operand::Local(obj_reg)];
+                        for slot in ordered_args.iter() {
+                            let Some(slot) = *slot else {
+                                // 空槽：诊断归 typecheck（它保证决议通过即无空槽）
+                                continue;
+                            };
+                            let arg_expr = if slot < args.len() {
+                                &args[slot]
+                            } else {
+                                &named_args[slot - args.len()].1
+                            };
+                            let r = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, r, instructions, constants)?;
+                            call_args.push(Operand::Local(r));
                         }
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(mangled)),
+                            args: call_args,
+                            span: *span,
+                            def: None,
+                        });
+                        return Ok(());
                     }
                     // 接口直接赋值优化：检查对象是否是约束变量
                     let mut arg_regs = Vec::new();

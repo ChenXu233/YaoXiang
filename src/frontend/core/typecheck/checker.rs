@@ -970,6 +970,8 @@ impl TypeChecker {
         body_checker.set_method_bindings(self.env.method_bindings.clone());
         body_checker.method_overloads = self.env.method_overloads.clone();
         body_checker.method_overload_ir_names = self.env.method_overload_ir_names.clone();
+        // #452：形参名表同源注入——漏一处会让决议段静默退回「不按名匹配」
+        body_checker.method_overload_param_names = self.env.method_overload_param_names.clone();
         // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
         body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
         body_checker.set_sum_types(self.env.sum_types.clone());
@@ -2168,10 +2170,15 @@ impl TypeChecker {
                     self.declared_methods.insert(key, fn_ty.clone());
                     self.env
                         .add_fn_binding(&name, type_name.as_deref(), fn_ty.clone());
-                    // RFC-011b: 重载候选表（接口完整性检查按候选集匹配）
+                    // RFC-011b: 重载候选表（接口完整性检查按候选集匹配）；
+                    // #452 连形参名一并登记——命名实参入决议要靠它（登记期的
+                    // 声明序形参名是本阶段唯一可信来源，调用点再无 AST 可查）。
                     if let Some(tn) = type_name.as_deref() {
                         let okey = format!("{}.{}", tn, name);
-                        self.env.add_method_overload(&okey, fn_ty.clone());
+                        let param_names: Vec<String> =
+                            signature_params.iter().map(|p| p.name.clone()).collect();
+                        self.env
+                            .add_method_overload_with_params(&okey, fn_ty.clone(), param_names);
                     }
                 } else {
                     // 如果函数有 const 泛型参数，存进 PolyType.const_binders
@@ -3007,9 +3014,12 @@ impl TypeChecker {
             let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
             self.env
                 .add_method_binding(type_name, method_name, method_ty.clone());
-            // RFC-011b: 绑定形态同样进重载候选表（接口完整性检查按候选集匹配）
+            // RFC-011b: 绑定形态同样进重载候选表（接口完整性检查按候选集匹配）。
+            // #452：外部绑定的形参名在 typecheck 侧拿不到（被绑函数只留签名、
+            // 不留名字），留空 = 调用点不按名匹配（不冒充「名字已核对」）。
             let okey = format!("{}.{}", type_name, method_name);
-            self.env.add_method_overload(&okey, method_ty);
+            self.env
+                .add_method_overload_with_params(&okey, method_ty, Vec::new());
         }
     }
 

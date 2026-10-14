@@ -23,19 +23,17 @@
 //! | 位置实参兼容过滤 | 1 | ✓ 决议出的混编名进 IR | `positional_arg` |
 //! | 类型体内绑定（`pick = fn[0]`，有绑定消费点） | 1 | ✓ 决议名替换绑定名 | `type_body_binding` |
 //! | `?`/Try 操作数中的调用 | 1 | ✓ | `try_operand` |
-//! | 命名实参（纯命名） | 0 | —（typecheck 不决议：按默认绑定检查） | `named_args` |
-//! | 命名实参（位置 + 命名混合） | 1 | ✗ 消费点不查表 ⇒ **响亮**（W1090） | `mixed_args` |
+//! | 命名实参（纯命名） | 1 | ✓ 决议 + 消费（#452） | `named_args` |
+//! | 命名实参（位置 + 命名混合） | 1 | ✓ 决议 + 消费（#452） | `mixed_args` |
 //! | 歧义（无期望上下文） | 0 | —（E1107 报错） | `ambiguous` |
 //! | 变体构造 `Color.red()` | 0 | —（走变体构造路径，另在相位） | `variant_ctor` |
 //! | 未分配身份（合成调用） | 不可消费 | —（`get` 拒绝，结算响亮） | `unplanned_key` |
 //!
-//! 命名实参两条形态的语义边界（实测）：resolver 按**位置实参**匹配候选，故纯命名
-//! 调用不产生条目（按默认绑定检查：类型不符即 E1002 响亮）；位置 + 命名混合调用**会**
-//! 产生条目而 ir_gen 的消费点带 `named_args.is_empty()` 门 ⇒ 条目未被消费。
-//! 改动前该形态是**静默给错答案**（实测：`r: Int = t.pick(1, a = 2)` 编译干净、运行
-//! 输出 `1` 而非 `20`——决议出的候选被丢弃、落回默认绑定），属 D59 的 C 类；
-//! 修法是**响亮**（结算报 W1090、编译失败），不是把决议名硬塞进带命名实参的调用
-//!（那条路径会丢命名实参，等于换一种静默）。
+//! 命名实参两条形态的语义边界（#452 修订）：命名实参按**形参名**绑定到候选形参位后
+//! 与位置实参一起参与匹配 ⇒ 两条形态都产出条目且都被消费。改动前的实测红态：
+//! `r: Int = t.pick(1, a = 2)` 决议候选被丢弃、落回默认绑定（静默给错答案）；
+//! 4.5.2 把消费门落成响亮（W1090）；#452 把决议与消费两端一起补齐，
+//! 冲突/缺参/未知名/重复命名一律编译期报错（不得静默择一）。
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
@@ -222,14 +220,16 @@ Temp: Type = { v: Int }
 Temp.get: (self: &Temp, s: String) -> Option(Int) = (self, s) => { return Option(Int).some(1) }
 Temp.get: (self: &Temp, s: Int) -> Option(Int) = (self, s) => { return Option(Int).some(2) }
 f: (t: &Temp) -> Option(Int) = (t) => {
-    v = t.get(1)?
+    v = t.get("x")?
     return Option(Int).some(v)
 }
 main: () -> Void = { t = Temp(1) }
 main()
 "#;
 
-/// `?`/Try 操作数里的方法调用：调用节点仍是决议键的主人——条目被消费，IR 用 Int 候选。
+/// `?`/Try 操作数里的方法调用：调用节点仍是决议键的主人——条目被消费。
+/// （实参取 string 以与首候选一一对应：两候选若都相容会命中 E1107 歧义，
+/// 那是正确行为但不是本条要钉的形态。）
 #[test]
 fn test_overload_resolution_try_operand_is_consumed() {
     // Arrange / Act
@@ -244,16 +244,16 @@ fn test_overload_resolution_try_operand_is_consumed() {
     assert_eq!(probe.entries, 1, "Try 操作数里的调用同样参与决议");
     assert_eq!(probe.unconsumed, 0, "条目必须被消费");
     assert!(
-        probe.call_targets.contains(&"Temp.get#1".to_string()),
-        "应调用 Int 候选（#1）: {:?}",
+        probe.call_targets.contains(&"Temp.get".to_string()),
+        "应调用 String 候选（裸名首定义）: {:?}",
         probe.call_targets
     );
 }
 
 const MIXED_ARGS_FIXTURE: &str = r#"
 Temp: Type = { v: Int }
-Temp.pick: (self: &Temp, a: Int) -> Int = (self, a) => { return a * 10 }
-Temp.pick: (self: &Temp, a: String) -> String = (self, a) => { return a }
+Temp.pick: (self: &Temp, n: Int, a: Int) -> Int = (self, n, a) => { return n * 100 + a }
+Temp.pick: (self: &Temp, n: String, a: Int) -> Int = (self, n, a) => { return a }
 main: () -> Void = {
     t = Temp(1)
     r: Int = t.pick(1, a = 2)
@@ -261,24 +261,35 @@ main: () -> Void = {
 main()
 "#;
 
-/// 位置 + 命名混合实参：resolver 按位置实参决议出一条条目，而 ir_gen 的消费点带
-/// `named_args.is_empty()` 门 ⇒ 条目**不被消费**——这正是「缺一即响亮」的席位：
-/// 结算（driver 唯一结算点）据此报 W1090，而不是静默落回未混编名。
+/// 位置 + 命名混合实参（#452 后）：命名实参加入候选匹配 ⇒ 决议唯一命中 Int 候选，
+/// 且 ir_gen 的消费点不再带 `named_args.is_empty()` 门 ⇒ 条目被真实消费。
+/// 改动前该形态是**静默给错答案**（决议出的候选被丢弃、落回默认绑定），
+/// 4.5.2 曾把消费门落成响亮 W1090；#452 把两端一起补齐。
 #[test]
-fn test_overload_resolution_mixed_named_args_leaves_entry_unconsumed() {
+fn test_overload_resolution_mixed_named_args_is_consumed() {
     // Arrange / Act
     let probe = probe_overload(MIXED_ARGS_FIXTURE);
 
     // Assert
     assert!(
         probe.diagnostics.is_empty(),
-        "夹具必须通过类型检查（改动前它就是静默给错答案的形态）: {:?}",
+        "混合实参夹具必须通过类型检查: {:?}",
         probe.diagnostics
     );
-    assert_eq!(probe.entries, 1, "位置实参足以决议出候选");
+    assert_eq!(probe.entries, 1, "位置 + 命名实参共同决议出一条条目");
     assert_eq!(
-        probe.unconsumed, 1,
-        "消费点带命名实参门 ⇒ 该条目必须保持未消费（由结算报 W1090）"
+        probe.unconsumed, 0,
+        "消费门取消 ⇒ 决议出的混编名必须被真实消费（#452）"
+    );
+    assert!(
+        probe.call_targets.contains(&"Temp.pick".to_string()),
+        "应命中首候选（n: Int，与位置实参 1 相容）: {:?}",
+        probe.call_targets
+    );
+    assert!(
+        !probe.call_targets.contains(&"Temp.pick#1".to_string()),
+        "不得调用 n: String 的候选（位置实参 1 是 Int）: {:?}",
+        probe.call_targets
     );
 }
 
@@ -311,29 +322,34 @@ fn test_overload_resolution_ambiguous_call_is_rejected_without_entry() {
 const NAMED_ONLY_FIXTURE: &str = r#"
 Temp: Type = { v: Int }
 Temp.pick: (self: &Temp, a: Int) -> Int = (self, a) => { return a * 10 }
-Temp.pick: (self: &Temp, a: String) -> String = (self, a) => { return a }
+Temp.pick: (self: &Temp, a: String) -> Int = (self, a) => { return 0 }
 main: () -> Void = {
     t = Temp(1)
-    s: String = t.pick(a = "x")
+    s: Int = t.pick(a = 2)
 }
 main()
 "#;
 
-/// 纯命名实参：resolver 按位置实参匹配 ⇒ 不产出条目；调用按**默认绑定**检查
-/// （类型不符即 E1002 响亮）。「不产出」= 没有可静默丢弃的决议。
+/// 纯命名实参（#452 后）：命名实参按形参名绑定后与位置实参一起匹配 ⇒ 决议命中
+/// Int 候选并被消费。改动前不产出条目、按默认绑定检查（名字与候选无关）。
 #[test]
-fn test_overload_resolution_named_only_produces_no_entry() {
+fn test_overload_resolution_named_only_is_consumed() {
     // Arrange / Act
     let probe = probe_overload(NAMED_ONLY_FIXTURE);
 
     // Assert
     assert!(
         probe.diagnostics.is_empty(),
-        "该夹具按默认绑定检查通过: {:?}",
+        "夹具必须通过类型检查: {:?}",
         probe.diagnostics
     );
-    assert_eq!(probe.entries, 0, "纯命名实参不参与决议（无条目可丢）");
-    assert_eq!(probe.unconsumed, 0, "无条目即无欠消费");
+    assert_eq!(probe.entries, 1, "纯命名实参参与决议（#452）");
+    assert_eq!(probe.unconsumed, 0, "条目必须被消费");
+    assert!(
+        probe.call_targets.contains(&"Temp.pick".to_string()),
+        "实参名 a 与两个候选都相容，而实参类型 Int 只与首候选相容: {:?}",
+        probe.call_targets
+    );
 }
 
 const VARIANT_CTOR_FIXTURE: &str = r#"
