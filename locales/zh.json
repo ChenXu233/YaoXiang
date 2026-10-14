@@ -998,6 +998,12 @@
     "template": "'return' 出现在函数外",
     "help": "把 'return' 移入函数体；Script 模式下顶层语句即程序主体，要提前结束一段顶层逻辑请收进函数、在调用点控制"
   },
+  "E1110": {
+    "title": "方法绑定缺少签名标注",
+    "message": "方法绑定 '{type}.{method}' 没有签名标注，编译器无法确定它的接收者、形参名与返回类型",
+    "template": "'{type}.{method}' 缺少签名标注",
+    "help": "补上签名标注：'{type}.{method}: (self: &{type}, ...) -> 返回类型 = 函数体'；要复用现成函数则写 '{type}.{method}: (…) -> 返回类型 = 函数名[位置]'"
+  },
   "E1064": {
     "title": "绑定位置索引无效",
     "template": "绑定位置索引无效：{positions}（函数共 {total} 个参数）",

@@ -1671,11 +1671,26 @@ impl AstToIrGenerator {
                         );
                         return Ok(None);
                     }
-                    // MethodBind
+                    // MethodBind：签名标注是绑定语义的唯一来源（接收者位、形参名、
+                    // 返回类型都取自它）。无标注时**不得**对 None 执行 unwrap——
+                    // 那会把用户写法错误变成编译器进程 panic（#451，D59 A 类：
+                    // 实测 `exit=101`）；此处编译期拒绝并指明补全写法。
+                    let Some(method_type) = type_annotation.as_ref() else {
+                        return Err(ErrorCodeDefinition::method_binding_without_signature(
+                            &type_name,
+                            &name,
+                        )
+                        .at(stmt.span)
+                        .with_help(format!(
+                            "补上签名标注：`{type_name}.{name}: (self: &{type_name}, ...) -> 返回类型 = 函数体`；\
+                             要复用现成函数则写 `{type_name}.{name}: (…) -> 返回类型 = 函数名[位置]`"
+                        ))
+                        .build());
+                    };
                     self.generate_method_ir(
                         &type_name,
                         &name,
-                        type_annotation.as_ref().unwrap(),
+                        method_type,
                         &params,
                         &body,
                         constants,
