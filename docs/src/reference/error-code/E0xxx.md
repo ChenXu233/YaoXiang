@@ -127,7 +127,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望表达式：{context}`
 - **消息**：解析器期望一个表达式
 - **帮助**：在此位置提供一个有效的表达式
-- **发射点**：`src/frontend/core/parser/pratt/nud.rs:129`、`src/frontend/core/parser/pratt/nud.rs:169`、`src/frontend/core/parser/pratt/nud.rs:186` 等 4 处
+- **发射点**：`src/frontend/core/parser/pratt/nud.rs:133`、`src/frontend/core/parser/pratt/nud.rs:173`、`src/frontend/core/parser/pratt/nud.rs:190` 等 4 处
 
 ### E0018：关键字作名称
 
@@ -137,5 +137,5 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`'{keyword}' 是关键字，不能用作名称`
 - **消息**：关键字不能用作变量或表达式名称
 - **帮助**：换一个不同的标识符代替关键字
-- **发射点**：`src/frontend/core/parser/parser_state.rs:221`
+- **发射点**：`src/frontend/core/parser/parser_state.rs:243`
 - **源码注释名**：关键字作变量名

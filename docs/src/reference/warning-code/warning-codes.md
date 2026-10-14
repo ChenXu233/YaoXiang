@@ -62,7 +62,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的导入：'{name}'`
 - **帮助**：考虑移除未使用的导入
-- **发射点**：`src/frontend/core/typecheck/checker.rs:3234`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:3246`
 
 ### W1004：未使用的私有变量
 
@@ -94,7 +94,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`const 泛型约束无法求值: \`{constraint}\``
 - **帮助**：确保 const 参数是编译期常量
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1532`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:1534`
 
 ### W1080：编译期证明降级
 
@@ -110,7 +110,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`{count} 条终止性测度义务未判定（SMT 求解器不可用）`
 - **帮助**：安装 Z3 求解器后重新检查，以获得终止性判定；「未判定」不等于「不终止」，但义务的判定被跳过了
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1519`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:1521`
 
 ### W1090：义务已产出但无消费者
 
@@ -118,7 +118,7 @@ dead-code = "warn"
 - **span 豁免**：是
 - **模板**：`义务字段 \`{field}\` 在 {file} 已产出但从未被消费：{detail}`
 - **帮助**：这是编译器内部的阶段契约缺陷，不是你的程序写错了：某阶段产出的义务字段没有被下一阶段读取，义务的效果可能已被静默丢弃。请把这条诊断连同字段名与文件路径报成 issue，并附最小复现程序。  本码属 **W 族**（码号前缀 W），但**发射级别为 error**：2026-10-13 用户裁决（WBS 4.3.2，RFC-039 D5 的终态）**同码升 E**——不新增 E 码（同一事实两个码即平行表示），发射级别由显式 severity 决定；触发即计入 error_count 并改变退出码。注意：健康程序零发射（义务全部有交付标记时不报），因此升级只在此缺陷真的出现时影响构建结果。
-- **发射点**：`src/driver/obligations.rs:445`、`src/driver/obligations.rs:82`
+- **发射点**：`src/driver/obligations.rs:105`、`src/driver/obligations.rs:535`
 
 ## 警告级别
 
