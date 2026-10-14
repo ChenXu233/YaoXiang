@@ -1171,5 +1171,11 @@
     "title": "Import name conflict",
     "template": "Import name '{name}' conflicts with an existing binding (imported from '{module}')",
     "help": "Please use a different name or module alias"
+  },
+  "E1110": {
+    "title": "Method binding missing signature annotation",
+    "message": "Method binding '{type}.{method}' has no signature annotation, the compiler cannot determine its receiver, parameter names and return type",
+    "template": "'{type}.{method}' is missing a signature annotation",
+    "help": "Add a signature annotation: '{type}.{method}: (self: &{type}, ...) -> return type = function body'; to reuse an existing function, write '{type}.{method}: (…) -> return type = function_name[position]'"
   }
 }
