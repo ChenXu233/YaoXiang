@@ -158,6 +158,10 @@ pub struct TypeEnvironment {
     /// max=None 表示变参不设上限。手注 FFI 签名（add_native_signature 路径）
     /// 无表项——检查层对无表项的 native 维持旧宽容。
     pub native_arity: HashMap<String, (usize, Option<usize>)>,
+    /// #454：原生导出的**形参名**（全限定名 + 短名 → 声明序形参名）。
+    /// 与 native_signatures / native_arity 同源灌装（同一签名串、同一解析入口）——
+    /// 命名实参在原生导出上的按名绑定与未知名/重复命名判定都用它。
+    pub native_param_names: HashMap<String, Vec<String>>,
     /// 模块注册表 - 提供统一的模块查询接口
     pub module_registry: crate::frontend::module::registry::ModuleRegistry,
     /// 已注册为「模块 Struct」的别名集合（#396：register_module_as_struct 与

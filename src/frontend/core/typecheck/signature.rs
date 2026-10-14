@@ -211,6 +211,52 @@ fn find_matching_close(
     None
 }
 
+/// 解析签名字符串的**形参名**（按声明序，与 `parse_signature` 的 params 同位）。
+///
+/// 原生导出（`src/std/mod.rs`）的注册点只带签名串、不带形参名表，命名实参
+/// （#452 语义）需要它才能按名绑定：#454 之前的消费者拿不到名字 ⇒ 按名绑定整段
+/// 静默跳过（命名实参被丢弃、未知名零诊断，C 类静默错值）。
+///
+/// 归一化：
+/// - `?name` → `name`（可选位前缀不属于形参名）
+/// - `...args` → `args`（变参名）
+/// - 与泛型前缀同名之外的位取不出标识符时**整体返回 None**——宁可不按名匹配，
+///   也不拿错位的名字去匹配
+pub fn parse_signature_param_names(signature: &str) -> Option<Vec<String>> {
+    let signature = signature.trim();
+    let (_generic_params, rest) = parse_generic_prefix(signature);
+    if !rest.starts_with('(') {
+        return None;
+    }
+    let closing = find_matching_close(rest, 0)?;
+    let params_str = &rest[1..closing];
+    if params_str.trim().is_empty() {
+        return Some(Vec::new());
+    }
+    let mut names: Vec<String> = Vec::new();
+    for piece in split_params_top_level(params_str) {
+        let mut name = piece.trim();
+        for prefix in ["...", "?"] {
+            if let Some(rest) = name.strip_prefix(prefix) {
+                name = rest.trim();
+            }
+        }
+        // 只取冒号前的标识符（类型位/匿名位取不出名字 ⇒ 整体不可用）
+        let head = name.split(':').next().unwrap_or("").trim();
+        if head.is_empty()
+            || !head
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphabetic() || c == '_')
+            || !head.chars().all(|c| c.is_alphanumeric() || c == '_')
+        {
+            return None;
+        }
+        names.push(head.to_string());
+    }
+    Some(names)
+}
+
 /// 解析签名字符串的 arity 区间（#387）
 ///
 /// `?` 前缀参数名可选（`?msg: String`），`...` 前缀变参（`...args`）。

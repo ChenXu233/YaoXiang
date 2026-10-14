@@ -956,6 +956,8 @@ impl TypeChecker {
         body_checker.set_native_signatures(self.env.native_signatures.clone());
         // #387：native arity 区间表随签名表同源传递
         body_checker.set_native_arities(self.env.native_arity.clone());
+        // #454：native 形参名随签名表同源传递（命名实参按名绑定的唯一来源）
+        body_checker.set_native_param_names(self.env.native_param_names.clone());
         // 设置模块注册表，支持函数体/块作用域 use
         body_checker.set_module_registry(self.env.module_registry.clone());
         // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
@@ -1589,6 +1591,8 @@ impl TypeChecker {
             body_checker.set_native_signatures(self.env.native_signatures.clone());
             // #387：native arity 区间表随签名表同源传递
             body_checker.set_native_arities(self.env.native_arity.clone());
+            // #454：native 形参名随签名表同源传递（命名实参按名绑定的唯一来源）
+            body_checker.set_native_param_names(self.env.native_param_names.clone());
             // 设置模块注册表，支持函数体/块作用域 use
             body_checker.set_module_registry(self.env.module_registry.clone());
             // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042

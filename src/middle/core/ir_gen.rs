@@ -596,7 +596,21 @@ impl AstToIrGenerator {
             return Some(names.clone());
         }
         let export = self.registry.resolve_export(full_path).ok()?;
-        export.param_names.clone()
+        if let Some(names) = export.param_names.clone() {
+            return Some(names);
+        }
+        // #454：原生导出的注册点（src/std/mod.rs）只带签名串、不带形参名表，
+        // 故第三个来源 = 从**签名串**提取形参名（"(value, type_name: &String) -> String"
+        // → [value, type_name]）。此前这里直接返回 None ⇒ 命名空间调用的按名绑定
+        // 整段被静默跳过（命名实参被整体丢弃、未知名零诊断，C 类静默错值）。
+        Self::param_names_from_signature(&export.signature)
+    }
+
+    /// #454：从声明签名串提取**形参名**（按声明序）——单一实现在
+    /// `typecheck::signature::parse_signature_param_names`（与 native_signatures /
+    /// native_arity 同一解析入口，避免两份同名解析漂移）。
+    fn param_names_from_signature(signature: &str) -> Option<Vec<String>> {
+        crate::frontend::core::typecheck::signature::parse_signature_param_names(signature)
     }
 
     /// 拆分 curry 签名为多层

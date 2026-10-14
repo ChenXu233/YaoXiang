@@ -177,3 +177,108 @@ fn test_named_args_matching_shapes_stay_green() {
         );
     }
 }
+
+/// #454：stdlib 原生导出的命名实参必须与 #452 方法级规则同一套判据。
+///
+/// 红态（修复前实测，rev 携带 45418b717/9ec7d89a8 的主仓二进制）：
+/// `io.format_fallback(value = 42, type_name = "int")` 与
+/// `io.format_fallback(value = 42, kind = "int")` **都** exit=0 输出 `()`
+/// ——命名实参被整体丢弃、未知名零诊断（原生注册点只带签名串、不带形参名表，
+/// `lookup_param_names` 返回 None ⇒ 按名绑定整段静默跳过）。
+/// 修法 = 从**签名串**提取形参名（"(value, type_name: &String) -> String"）。
+const NATIVE_SRC: &str = r#"
+use std.io
+use std.assert
+main: () -> Void = {
+    s = io.format_fallback(value = 42, type_name = "int")
+    io.println(s)
+}
+main()
+"#;
+
+/// 用同一夹具替换 main 体里的一行，生成形态变体。
+fn native_variant(call: &str) -> String {
+    NATIVE_SRC.replace(
+        "    s = io.format_fallback(value = 42, type_name = \"int\")",
+        &format!("    {call}"),
+    )
+}
+
+/// 形态正确（位置 / 纯命名 / 混合 / 命名逆序）⇒ 编译期零诊断。
+#[test]
+fn test_native_named_args_matching_shapes_stay_green() {
+    // Arrange
+    let cases: &[(&str, &str)] = &[
+        ("positional", "s = io.format_fallback(42, \"int\")"),
+        (
+            "named_decl_order",
+            "s = io.format_fallback(value = 42, type_name = \"int\")",
+        ),
+        (
+            "named_reversed",
+            "s = io.format_fallback(type_name = \"int\", value = 42)",
+        ),
+        ("mixed", "s = io.format_fallback(42, type_name = \"int\")"),
+    ];
+    for (label, call) in cases {
+        // Act
+        let codes = compile_codes(&native_variant(call));
+        // Assert
+        assert!(
+            codes.is_empty(),
+            "原生导出「{label}」形态必须零诊断（不得因签名串取名而误报），实际 {codes:?}"
+        );
+    }
+}
+
+/// 四类冲突（未知名 / 缺参 / 重复命名 / 争槽）⇒ 编译期必响亮，且**不得**静默 ()。
+#[test]
+fn test_native_named_args_conflicts_error_at_compile_time() {
+    // Arrange
+    let cases: &[(&str, &str)] = &[
+        (
+            "unknown_name",
+            "s = io.format_fallback(value = 42, kind = \"int\")",
+        ),
+        ("missing", "s = io.format_fallback(value = 42)"),
+        (
+            "duplicate_name",
+            "s = io.format_fallback(value = 42, value = 43, type_name = \"int\")",
+        ),
+        (
+            "slot_fight",
+            "s = io.format_fallback(42, value = 43, type_name = \"int\")",
+        ),
+    ];
+    for (label, call) in cases {
+        // Act
+        let codes = compile_codes(&native_variant(call));
+        // Assert
+        assert!(
+            !codes.is_empty(),
+            "原生导出「{label}」必须编译期报错（红态是 exit=0 静默输出 ()），实际零诊断"
+        );
+    }
+}
+
+/// assert 侧同类：形参名与真实签名不符 ⇒ 编译期报错；相符 ⇒ 零诊断。
+#[test]
+fn test_native_assert_named_args_checked_by_signature() {
+    // Arrange：native_assert 的签名是 (cond: Bool, ?msg: String) -> Never
+    let ok = "use std.assert\nmain: () -> Void = {\n    assert.assert(cond = 1 == 1, msg = \"ok\")\n}\nmain()\n";
+    let bad = "use std.assert\nmain: () -> Void = {\n    assert.assert(cond = 1 == 1, message = \"bad\")\n}\nmain()\n";
+
+    // Act
+    let ok_codes = compile_codes(ok);
+    let bad_codes = compile_codes(bad);
+
+    // Assert
+    assert!(
+        ok_codes.is_empty(),
+        "assert(cond = …, msg = …) 形参名与签名相符，必须零诊断：{ok_codes:?}"
+    );
+    assert!(
+        bad_codes.iter().any(|c| c == "E1014"),
+        "assert(cond = …, message = …) 形参名不符，必须编译期 E1014（红态是运行期 E6007）：{bad_codes:?}"
+    );
+}

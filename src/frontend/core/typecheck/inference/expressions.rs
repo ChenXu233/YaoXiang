@@ -24,6 +24,10 @@ static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
 static EMPTY_ARITY: std::sync::LazyLock<HashMap<String, (usize, Option<usize>)>> =
     std::sync::LazyLock::new(HashMap::new);
 
+/// #454：native 导出形参名表空缺省（未注入时使用）
+static EMPTY_NATIVE_PARAM_NAMES: std::sync::LazyLock<HashMap<String, Vec<String>>> =
+    std::sync::LazyLock::new(HashMap::new);
+
 /// RFC-009 读视图：剥离借用层，算术/比较按 inner 类型判定（读穿透）
 pub(super) fn read_view(ty: &MonoType) -> MonoType {
     let mut cur = ty;
@@ -151,6 +155,9 @@ pub struct ExpressionInferrer<'a> {
     pub call_ownership: CallOwnershipTable,
     /// #387：native arity 区间表（随签名表同源注入，缺省空表=无区间）
     native_arity: &'a HashMap<String, (usize, Option<usize>)>,
+    /// #454：native 导出形参名表（全限定名 + 短名 → 声明序形参名）。
+    /// 命名空间限定的原生调用据此按名绑定/判定未知名（此前整段静默跳过）。
+    native_param_names: &'a HashMap<String, Vec<String>>,
     /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
     /// generate_match_expr_ir 按 span 回查，替代对复合 scrutinee 的 AST 猜测
     pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
@@ -199,6 +206,7 @@ impl<'a> ExpressionInferrer<'a> {
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             dep_env: None,
@@ -247,6 +255,7 @@ impl<'a> ExpressionInferrer<'a> {
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             dep_env: None,
@@ -296,6 +305,7 @@ impl<'a> ExpressionInferrer<'a> {
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             dep_env: None,
@@ -347,6 +357,7 @@ impl<'a> ExpressionInferrer<'a> {
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             dep_env: None,
@@ -469,6 +480,14 @@ impl<'a> ExpressionInferrer<'a> {
         defs: &'a HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
     ) {
         self.generic_type_defs = defs;
+    }
+
+    /// 设置 native 导出形参名表（#454）
+    pub fn set_native_param_names(
+        &mut self,
+        names: &'a HashMap<String, Vec<String>>,
+    ) {
+        self.native_param_names = names;
     }
 
     /// 设置 native arity 区间表（#387）
@@ -5441,6 +5460,7 @@ impl<'a> ExpressionInferrer<'a> {
             {
                 if let MonoType::Fn { params, .. } = &mono_func_ty {
                     let ns_key = extract_namespace_path(obj).map(|p| format!("{p}.{field}"));
+                    // #387：native arity 区间（直接命中或 std. 前缀回退）
                     let table_range = ns_key
                         .as_deref()
                         .and_then(|k| self.native_arity.get(k).copied())
@@ -5450,6 +5470,77 @@ impl<'a> ExpressionInferrer<'a> {
                                 .map(|k| format!("std.{k}"))
                                 .and_then(|k| self.native_arity.get(k.as_str()).copied())
                         });
+                    // #454：命名空间限定的**原生导出**同样按形参名结算命名实参
+                    // （与 #452 方法级同一套判据）。原生注册点只带签名串，形参名由
+                    // `signature::parse_signature_param_names` 同源提取（native_param_names）。
+                    // 此前该表不存在 ⇒ 命名实参被整体丢弃、未知名零诊断（C 类静默错值）。
+                    if !named_args.is_empty() {
+                        if let Some(names) = ns_key
+                            .as_deref()
+                            .and_then(|k| self.native_param_names.get(k))
+                            .or_else(|| {
+                                ns_key
+                                    .as_deref()
+                                    .map(|k| format!("std.{k}"))
+                                    .and_then(|k| self.native_param_names.get(k.as_str()))
+                            })
+                        {
+                            let diag_name = ns_key.as_deref().unwrap_or(field);
+                            // 元数：原生 arity 区间（min..max）——
+                            // 命名实参按名入槽，位置实参占前导槽位
+                            let mut slots: Vec<Option<()>> = vec![None; names.len()];
+                            for k in 0..arg_types.len() {
+                                if let Some(slot) = slots.get_mut(k) {
+                                    *slot = Some(());
+                                }
+                            }
+                            let mut seen: Vec<&str> = Vec::with_capacity(named_args.len());
+                            for (name, _) in named_args {
+                                let Some(slot) = names.iter().position(|p| p == name) else {
+                                    return Err(ErrorCodeDefinition::unknown_argument(
+                                        diag_name,
+                                        name,
+                                        &names.join(", "),
+                                    )
+                                    .at(span)
+                                    .build());
+                                };
+                                if seen.contains(&name.as_str()) {
+                                    return Err(ErrorCodeDefinition::duplicate_argument(
+                                        diag_name, name,
+                                    )
+                                    .at(span)
+                                    .build());
+                                }
+                                seen.push(name.as_str());
+                                if slots[slot].is_some() {
+                                    return Err(ErrorCodeDefinition::argument_order_invalid(
+                                        diag_name, name,
+                                    )
+                                    .at(span)
+                                    .build());
+                                }
+                                slots[slot] = Some(());
+                            }
+                            let missing: Vec<&str> = names
+                                .iter()
+                                .enumerate()
+                                .filter(|(i, _)| slots.get(*i).is_none_or(|s| s.is_none()))
+                                .map(|(_, n)| n.as_str())
+                                .collect();
+                            // 可选位（arity min < 形参数）允许缺省：只报「连必需位都填不满」
+                            let min = table_range.map(|(min, _)| min).unwrap_or(names.len());
+                            if arg_types.len() + named_args.len() < min && !missing.is_empty() {
+                                return Err(ErrorCodeDefinition::argument_count_mismatch(
+                                    diag_name,
+                                    min,
+                                    arg_types.len() + named_args.len(),
+                                )
+                                .at(span)
+                                .build());
+                            }
+                        }
+                    }
                     let total = arg_types.len() + named_args.len();
                     let range = match table_range {
                         Some((min, max)) => {

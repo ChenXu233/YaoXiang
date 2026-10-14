@@ -44,6 +44,8 @@ pub struct StatementChecker {
     native_signatures: HashMap<String, MonoType>,
     /// Native 函数 arity 区间表（#387，随签名表同源灌装）
     native_arity: HashMap<String, (usize, Option<usize>)>,
+    /// #454：Native 导出形参名（全限定名 + 短名 → 声明序形参名）
+    native_param_names: HashMap<String, Vec<String>>,
     /// 模块注册表（用于在函数体/块作用域中处理 use 语句）
     module_registry: ModuleRegistry,
     /// 模块别名集合（#396）：区分「模块别名 Struct」与真 struct，
@@ -201,6 +203,7 @@ impl StatementChecker {
             overload_candidates: HashMap::new(),
             native_signatures: HashMap::new(),
             native_arity: HashMap::new(),
+            native_param_names: HashMap::new(),
             module_registry: ModuleRegistry::with_std(),
             module_aliases: std::collections::HashSet::new(),
             module_namespaces: HashMap::new(),
@@ -526,6 +529,14 @@ impl StatementChecker {
         arities: HashMap<String, (usize, Option<usize>)>,
     ) {
         self.native_arity = arities;
+    }
+
+    /// 设置 native 导出形参名表（#454）
+    pub fn set_native_param_names(
+        &mut self,
+        names: HashMap<String, Vec<String>>,
+    ) {
+        self.native_param_names = names;
     }
 
     /// 设置模块注册表
@@ -2860,6 +2871,7 @@ impl StatementChecker {
                                 current_result_err,
                             );
                         inferrer.set_native_arities(&self.native_arity);
+                        inferrer.set_native_param_names(&self.native_param_names);
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                         inferrer.set_sum_types(&self.sum_types);
@@ -2970,6 +2982,7 @@ impl StatementChecker {
                     &self.method_bindings,
                 );
                 inferrer.set_native_arities(&self.native_arity);
+                inferrer.set_native_param_names(&self.native_param_names);
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                 inferrer.set_sum_types(&self.sum_types);
