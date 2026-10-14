@@ -21,6 +21,7 @@
   python scripts/dev/scratch.py use     <batch> --rev <sha> --by <member> --task <id> [--steal]
   python scripts/dev/scratch.py build   <batch> [--quiet]
   python scripts/dev/scratch.py release <batch> --by <member>
+  python scripts/dev/scratch.py trial   <batch> --patch <p> -- <command...>   # 变异：apply→跑→restore 全自动
   python scripts/dev/scratch.py status  [--json] [--size]
   python scripts/dev/scratch.py rm      <batch> [--force]
   python scripts/dev/scratch.py gc      [--force]
@@ -217,6 +218,61 @@ def cmd_release(args):
     print(f"[scratch] {args.batch} 已释放")
 
 
+def cmd_trial(args):
+    """变异试验：git apply 变异补丁 → 跑命令 → git apply -R 还原 → 校验逐文件 blob 回到 HEAD。
+
+    为什么必须机械可逆（AGENTS.md 第 10 条②）：验证者要证明「判据能失败」，
+    唯一硬证据是故意把修复改坏看测试会不会红。但手工改文件、手工改回来，
+    既可能忘、也可能改得不逐字节一致 —— 于是把它做成补丁 + 自动还原。
+    """
+    repo = repo_root()
+    meta = load_meta(repo, args.batch)
+    path = Path(meta["path"])
+    patch = Path(args.patch)
+    if not patch.is_absolute():
+        patch = repo / patch
+    if not patch.exists():
+        die(f"补丁不存在：{patch}")
+    dirty = run(["git", "status", "--porcelain"], cwd=path).stdout.strip()
+    if dirty:
+        die("树里已有未提交改动——先清理干净再 trial，否则分不清改动是谁的：\n" + dirty)
+    r = run(["git", "apply", str(patch)], cwd=path)
+    if r.returncode != 0:
+        die(f"git apply 失败（树未改动）：{(r.stderr or r.stdout).strip()[:400]}")
+    changed = [l[3:].strip() for l in run(["git", "status", "--porcelain"], cwd=path).stdout.splitlines() if l.strip()]
+    if not changed:
+        die("补丁没有产生任何改动（空补丁？）")
+    head_blob = {f: run(["git", "rev-parse", f"HEAD:{f}"], cwd=path).stdout.strip() for f in changed}
+    mutated_blob = {f: run(["git", "hash-object", f], cwd=path).stdout.strip() for f in changed}
+    print(f"[trial] 已应用变异补丁：{', '.join(changed)}")
+    for f in changed:
+        print(f"[trial]   {f}: HEAD={head_blob[f][:12]}… → 变异后={mutated_blob[f][:12]}…")
+    cmd = list(args.command)
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
+    if not cmd:
+        die("要给命令：scratch.py trial <batch> --patch <p> -- <命令...>")
+    print(f"[trial] 执行：{' '.join(cmd)}")
+    rc = subprocess.run(cmd, cwd=str(path), text=True, encoding="utf-8", errors="replace")
+    print(f"[trial] 命令退出码 = {rc.returncode}")
+    r2 = run(["git", "apply", "-R", str(patch)], cwd=path)
+    fallback = r2.returncode != 0
+    if fallback:
+        run(["git", "checkout", "--", *changed], cwd=path)
+    after_status = run(["git", "status", "--porcelain"], cwd=path).stdout.strip()
+    restored_blob = {f: run(["git", "hash-object", f], cwd=path).stdout.strip() for f in changed}
+    back_to_head = all(restored_blob[f] == head_blob[f] for f in changed)
+    print(f"[trial] 还原：{'apply -R 成功' if not fallback else 'apply -R 失败（已 git checkout 兜底）'}")
+    for f in changed:
+        ok = '是' if restored_blob[f] == head_blob[f] else '否'
+        print(f"[trial]   {f}: 还原后={restored_blob[f][:12]}…  与 HEAD 一致={ok}")
+    print(f"[trial] 还原后 git status：{after_status if after_status else 'CLEAN'}")
+    if after_status or not back_to_head:
+        print("[trial] 警告：树没回到 HEAD 状态，请人工核对后再继续", file=sys.stderr)
+        sys.exit(3)
+    print("[trial] 结论：" + ("变异使命令失败（判据抓到了）——把上面的输出留档" if rc.returncode != 0 else "变异后命令仍成功——判读这是不是「判据抓不到」"))
+
+
 def cmd_status(args):
     repo = repo_root()
     rows = []
@@ -293,6 +349,11 @@ def main(argv=None):
     s.add_argument("--by", required=True); s.add_argument("--task", required=True); s.add_argument("--steal", action="store_true"); s.set_defaults(f=cmd_use)
     s = sub.add_parser("build", help="在树里构建 CLI 二进制"); s.add_argument("batch"); s.add_argument("--quiet", action="store_true"); s.set_defaults(f=cmd_build)
     s = sub.add_parser("release", help="解锁"); s.add_argument("batch"); s.add_argument("--by", required=True); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_release)
+    s = sub.add_parser("trial", help="变异试验（apply→跑→restore 全自动）")
+    s.add_argument("batch")
+    s.add_argument("--patch", required=True)
+    s.add_argument("command", nargs="*")  # 用 -- 分隔；REMAINDER 会把 --patch 也吞掉
+    s.set_defaults(f=cmd_trial)
     s = sub.add_parser("status", help="列出批次树"); s.add_argument("--json", action="store_true"); s.add_argument("--size", action="store_true"); s.set_defaults(f=cmd_status)
     s = sub.add_parser("rm", help="删除一个批次树"); s.add_argument("batch"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_rm)
     s = sub.add_parser("gc", help="回收所有未持有的批次树"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_gc)
