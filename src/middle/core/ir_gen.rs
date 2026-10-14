@@ -7752,35 +7752,34 @@ impl AstToIrGenerator {
                         .unwrap_or(&method_function_name);
                     // 本模块表 → 跨模块导出携带的 `param_names`
                     if let Some(names) = self.lookup_param_names(&method_function_name, leaf) {
-                        if arg_regs.len() <= names.len() {
-                            let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
-                            for (i, reg) in arg_regs.iter().enumerate() {
-                                slots[i] = Some(reg.clone());
+                        // t12-F1：槽位判定收敛到共享判据（此前是与另一处互抄的第二份
+                        // 内联副本，槽冲突报旧码 E1015、缺规则④）。
+                        let optional = vec![false; names.len()];
+                        let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                            &method_function_name,
+                            &names,
+                            args,
+                            named_args,
+                            0, // 命名空间调用无接收者位
+                            &optional,
+                            *span,
+                        )?;
+                        let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
+                        for (arg_pos, pos) in positions.iter().enumerate() {
+                            if *pos >= slots.len() {
+                                continue; // 超签实参：由类型检查阶段报 E1010
                             }
-                            for (arg_name, arg_expr) in named_args.iter() {
-                                let Some(idx) = names.iter().position(|n| n == arg_name) else {
-                                    return Err(ErrorCodeDefinition::unknown_argument(
-                                        &method_function_name,
-                                        arg_name,
-                                        &names.join(", "),
-                                    )
-                                    .at(*span)
-                                    .build());
-                                };
-                                if slots[idx].is_some() {
-                                    return Err(ErrorCodeDefinition::duplicate_argument(
-                                        &method_function_name,
-                                        arg_name,
-                                    )
-                                    .at(*span)
-                                    .build());
-                                }
+                            let reg = if arg_pos < arg_regs.len() {
+                                arg_regs[arg_pos].clone()
+                            } else {
+                                let arg_expr = &named_args[arg_pos - arg_regs.len()].1;
                                 let arg_reg = self.next_temp_reg();
                                 self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
-                                slots[idx] = Some(Operand::Local(arg_reg));
-                            }
-                            arg_regs = slots.into_iter().flatten().collect();
+                                Operand::Local(arg_reg)
+                            };
+                            slots[*pos] = Some(reg);
                         }
+                        arg_regs = slots.into_iter().flatten().collect();
                     }
                 }
                 instructions.push(Instruction::Call {
@@ -8247,52 +8246,51 @@ impl AstToIrGenerator {
                     .filter(|_| !is_ctor)
                     .and_then(|n| self.lookup_param_names(qualified.as_deref().unwrap_or(n), n))
                 {
-                    // 位置实参必须在命名实参之前（同教程“位置参数必须在前面”）。
-                    // 它们按序占前导槽位。
-                    if arg_regs.len() <= names.len() {
-                        let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
-                        for (i, reg) in arg_regs.iter().enumerate() {
-                            slots[i] = Some(reg.clone());
+                    // t12-F1：槽位判定收敛到共享判据（与方法与 typecheck 原生臂
+                    // 同一实现）——此前这里是第三份内联副本，槽冲突还报旧码
+                    // E1015、且缺规则④（命名后接位置）。
+                    let diag_key = callee.as_deref().unwrap_or("<fn>");
+                    let optional = vec![false; names.len()];
+                    let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                        diag_key,
+                        &names,
+                        args,
+                        named_args,
+                        0, // 命名空间调用无接收者位
+                        &optional,
+                        *span,
+                    )?;
+                    let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
+                    for (arg_pos, pos) in positions.iter().enumerate() {
+                        if *pos >= slots.len() {
+                            continue; // 超签实参：由类型检查阶段报 E1010
                         }
-                        for (arg_name, arg_expr) in named_args.iter() {
-                            let Some(idx) = names.iter().position(|n| n == arg_name) else {
-                                return Err(ErrorCodeDefinition::unknown_argument(
-                                    callee.as_deref().unwrap_or("<fn>"),
-                                    arg_name,
-                                    &names.join(", "),
-                                )
-                                .at(*span)
-                                .build());
-                            };
-                            if slots[idx].is_some() {
-                                return Err(ErrorCodeDefinition::duplicate_argument(
-                                    callee.as_deref().unwrap_or("<fn>"),
-                                    arg_name,
-                                )
-                                .at(*span)
-                                .build());
-                            }
+                        let reg = if arg_pos < arg_regs.len() {
+                            arg_regs[arg_pos].clone()
+                        } else {
+                            let arg_expr = &named_args[arg_pos - arg_regs.len()].1;
                             let arg_reg = self.next_temp_reg();
                             self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
-                            slots[idx] = Some(Operand::Local(arg_reg));
-                        }
-                        // 未覆盖的槽位：保持缺席，由类型检查阶段报 E1010。
-                        // 运行期为安全起见补 0（正常路径不会到这里）。
-                        arg_regs = slots
-                            .into_iter()
-                            .map(|s| {
-                                s.unwrap_or_else(|| {
-                                    let r = self.next_temp_reg();
-                                    instructions.push(Instruction::Load {
-                                        dst: Operand::Local(r),
-                                        src: Operand::Const(ConstValue::Int(0)),
-                                        span: self.cur_span,
-                                    });
-                                    Operand::Local(r)
-                                })
-                            })
-                            .collect();
+                            Operand::Local(arg_reg)
+                        };
+                        slots[*pos] = Some(reg);
                     }
+                    // 未覆盖的槽位：保持缺席，由类型检查阶段报 E1010。
+                    // 运行期为安全起见补 0（正常路径不会到这里）。
+                    arg_regs = slots
+                        .into_iter()
+                        .map(|s| {
+                            s.unwrap_or_else(|| {
+                                let r = self.next_temp_reg();
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(r),
+                                    src: Operand::Const(ConstValue::Int(0)),
+                                    span: self.cur_span,
+                                });
+                                Operand::Local(r)
+                            })
+                        })
+                        .collect();
                 }
             }
 

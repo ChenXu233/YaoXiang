@@ -2713,6 +2713,8 @@ impl<'a> ExpressionInferrer<'a> {
         out
     }
 
+    /// 方法调用的实参绑定：收敛到共享判据 `arg_binding::bind_args_to_params`
+    /// （#452 / #454 / t12-F1：判据不再有第二份）。
     fn bind_named_args(
         key: &str,
         param_names: &[String],
@@ -2720,98 +2722,16 @@ impl<'a> ExpressionInferrer<'a> {
         named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
         call_span: crate::util::span::Span,
     ) -> Result<Vec<usize>> {
-        // param_names[0] = 接收者位 self（不参与实参绑定）；槽位下标按**全形参表**
-        // 计（含接收者位），与调用点最终实参序（接收者在首位）同源。
-        let mut slots: Vec<Option<usize>> = vec![None; param_names.len()];
-        let mut positions: Vec<usize> = Vec::with_capacity(args.len() + named_args.len());
-        for i in 0..args.len() {
-            if 1 + i < slots.len() {
-                slots[1 + i] = Some(1 + i);
-            }
-            positions.push(1 + i);
-        }
-        // 规则④：位置实参不得出现在命名实参之后。解析器按书写序收集，
-        // 故「命名实参先写、位置实参后写」在这里表现为 args 非空且
-        // 首个命名实参的源码位置早于最后一个位置实参。
-        if let (Some(last), Some((first_named_name, first_named))) =
-            (args.last(), named_args.first())
-        {
-            if first_named.span().start.offset < last.span().start.offset {
-                // E1111（非重复）：位置实参写在命名实参之后——用户每个实参只写了一次，
-                // 错在**顺序**，不是「重复指定」（#452 复审 F2）
-                return Err(
-                    ErrorCodeDefinition::argument_order_invalid(key, first_named_name)
-                        .at(call_span)
-                        .build(),
-                );
-            }
-        }
-        let mut seen_named: Vec<&str> = Vec::with_capacity(named_args.len());
-        for (name, _) in named_args {
-            // 规则②：名字必须匹配某个值形参（接收者位 self 不在候选内）
-            let Some(slot) = param_names
-                .iter()
-                .position(|p| p == name)
-                .filter(|s| *s > 0)
-            else {
-                return Err(ErrorCodeDefinition::unknown_argument(
-                    key,
-                    name,
-                    &param_names
-                        .iter()
-                        .skip(1)
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                )
-                .at(call_span)
-                .build());
-            };
-            // 规则⑤：同一形参重复命名
-            if seen_named.contains(&name.as_str()) {
-                return Err(ErrorCodeDefinition::duplicate_argument(key, name)
-                    .at(call_span)
-                    .build());
-            }
-            seen_named.push(name.as_str());
-            // 规则③：位置实参已占该槽位——同一个形参收到两个实参（F2：
-            // 用「重复指定」描述与事实矛盾，用户每个实参只写了一次）
-            if slots[slot].is_some() {
-                return Err(ErrorCodeDefinition::argument_order_invalid(key, name)
-                    .at(call_span)
-                    .build());
-            }
-            slots[slot] = Some(slot);
-            positions.push(slot);
-        }
-        // 规则⑥：必需形参必须全部有实参（不得补零、不得把命名实参当位置实参）。
-        // 接收者位由字段访问形态提供，不计入实参覆盖检查。
-        // 报数用**实参侧计数**（位置实参数 + 命名实参数）而非空槽下标：
-        // E1010 的 found 是「传了几个」，空槽下标是不同维度的量，两者混用会把
-        // 「缺 1 个」说成「传了 0 个」；缺的是哪些形参名进 help。
-        let missing_names: Vec<&str> = param_names
-            .iter()
-            .enumerate()
-            .skip(1)
-            .filter(|(i, _)| slots.get(*i).is_none_or(|s| s.is_none()))
-            .map(|(_, name)| name.as_str())
-            .collect();
-        if !missing_names.is_empty() {
-            return Err(ErrorCodeDefinition::argument_count_mismatch(
-                key,
-                slots.len() - 1,
-                args.len() + named_args.len(),
-            )
-            .at(call_span)
-            .with_help(format!(
-                "缺少必需形参：{}（命名实参只按形参名入槽，不占前导位置）",
-                missing_names.join(", ")
-            ))
-            .build());
-        }
-        Ok(positions)
+        super::arg_binding::bind_args_to_params(
+            key,
+            param_names,
+            args,
+            named_args,
+            1, // 方法形态：param_names[0] 是接收者位 self
+            &vec![false; param_names.len()],
+            call_span,
+        )
     }
-
     /// #317：FieldAccess 调用目标是否解析自 method_bindings（impl 方法绑定形态）
     ///
     /// 返回 Some(方法键) 时，签名 params[0] 是接收者占位，实参对应 params[1..]。
@@ -5470,10 +5390,11 @@ impl<'a> ExpressionInferrer<'a> {
                                 .map(|k| format!("std.{k}"))
                                 .and_then(|k| self.native_arity.get(k.as_str()).copied())
                         });
-                    // #454：命名空间限定的**原生导出**同样按形参名结算命名实参
-                    // （与 #452 方法级同一套判据）。原生注册点只带签名串，形参名由
-                    // `signature::parse_signature_param_names` 同源提取（native_param_names）。
-                    // 此前该表不存在 ⇒ 命名实参被整体丢弃、未知名零诊断（C 类静默错值）。
+                    // #454 / t12-F1：原生导出与方法级调用**同一套判据**——
+                    // 收敛到共享实现 `arg_binding::bind_args_to_params`（此前这里
+                    // 内联复制一份且缺规则④：方法与原生对同一书写序裁决分歧）。
+                    // 原生注册点只带签名串，形参名由 `parse_signature_param_names`
+                    // 同源提取（native_param_names）。
                     if !named_args.is_empty() {
                         if let Some(names) = ns_key
                             .as_deref()
@@ -5486,59 +5407,17 @@ impl<'a> ExpressionInferrer<'a> {
                             })
                         {
                             let diag_name = ns_key.as_deref().unwrap_or(field);
-                            // 元数：原生 arity 区间（min..max）——
-                            // 命名实参按名入槽，位置实参占前导槽位
-                            let mut slots: Vec<Option<()>> = vec![None; names.len()];
-                            for k in 0..arg_types.len() {
-                                if let Some(slot) = slots.get_mut(k) {
-                                    *slot = Some(());
-                                }
-                            }
-                            let mut seen: Vec<&str> = Vec::with_capacity(named_args.len());
-                            for (name, _) in named_args {
-                                let Some(slot) = names.iter().position(|p| p == name) else {
-                                    return Err(ErrorCodeDefinition::unknown_argument(
-                                        diag_name,
-                                        name,
-                                        &names.join(", "),
-                                    )
-                                    .at(span)
-                                    .build());
-                                };
-                                if seen.contains(&name.as_str()) {
-                                    return Err(ErrorCodeDefinition::duplicate_argument(
-                                        diag_name, name,
-                                    )
-                                    .at(span)
-                                    .build());
-                                }
-                                seen.push(name.as_str());
-                                if slots[slot].is_some() {
-                                    return Err(ErrorCodeDefinition::argument_order_invalid(
-                                        diag_name, name,
-                                    )
-                                    .at(span)
-                                    .build());
-                                }
-                                slots[slot] = Some(());
-                            }
-                            let missing: Vec<&str> = names
-                                .iter()
-                                .enumerate()
-                                .filter(|(i, _)| slots.get(*i).is_none_or(|s| s.is_none()))
-                                .map(|(_, n)| n.as_str())
-                                .collect();
-                            // 可选位（arity min < 形参数）允许缺省：只报「连必需位都填不满」
-                            let min = table_range.map(|(min, _)| min).unwrap_or(names.len());
-                            if arg_types.len() + named_args.len() < min && !missing.is_empty() {
-                                return Err(ErrorCodeDefinition::argument_count_mismatch(
-                                    diag_name,
-                                    min,
-                                    arg_types.len() + named_args.len(),
-                                )
-                                .at(span)
-                                .build());
-                            }
+                            // 可选位（签名 `?name`）：由原生 arity 区间的 min 界定
+                            // 「至少几个值形参必须有实参」，逐个标记送共享判据。
+                            let min_required =
+                                table_range.map(|(min, _)| min).unwrap_or(names.len());
+                            let optional: Vec<bool> =
+                                (0..names.len()).map(|i| i >= min_required).collect();
+                            super::arg_binding::bind_args_to_params(
+                                diag_name, names, args, named_args,
+                                0, // 命名空间调用无接收者位
+                                &optional, span,
+                            )?;
                         }
                     }
                     let total = arg_types.len() + named_args.len();

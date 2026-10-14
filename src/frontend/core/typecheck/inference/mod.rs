@@ -4,6 +4,8 @@
 //! 统一的类型推断入口，合并了原 checking/ 和 inference/ 模块
 
 // ✅ 核心模块
+// #452 / #454 / t12-F1：命名实参槽位绑定判据（唯一权威点，三处调用点共用）
+pub mod arg_binding;
 pub mod call_ownership;
 pub mod expressions;
 pub mod scope;

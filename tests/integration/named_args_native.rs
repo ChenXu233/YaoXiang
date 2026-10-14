@@ -23,6 +23,7 @@ main: () -> Void = {
     s = io.format_fallback(42, "int")
     assert.assert(s == "int(42)", "positional must still bind in order")
 }
+main()
 "#)
     .expect("位置实参调用必须成功");
 }
@@ -37,6 +38,7 @@ main: () -> Void = {
     s = io.format_fallback(value = 42, type_name = "int")
     assert.assert(s == "int(42)", "named args must bind by name")
 }
+main()
 "#)
     .expect("纯命名实参（形参名正确）必须成功");
 }
@@ -51,6 +53,7 @@ main: () -> Void = {
     s = io.format_fallback(42, type_name = "int")
     assert.assert(s == "int(42)", "positional first, then named")
 }
+main()
 "#)
     .expect("混合实参必须成功");
 }
@@ -66,6 +69,7 @@ use std.assert
 main: () -> Void = {
     assert.assert(cond = 1 == 1, msg = "named on assert")
 }
+main()
 "#)
     .expect("assert 的形参名与签名一致（cond / msg）时必须通过");
 }

@@ -157,6 +157,11 @@ pub struct TypeEnvironment {
     /// 解析出的 [min, max]。Key 与 native_signatures 同（全限定名 + 短名）；
     /// max=None 表示变参不设上限。手注 FFI 签名（add_native_signature 路径）
     /// 无表项——检查层对无表项的 native 维持旧宽容。
+    ///
+    /// **已知限制（#454 复审 F4，未修）**：`add_native_signature` 只灌
+    /// `native_signatures`，不灌 `native_param_names` ⇒ 走这条路径注册的宿主
+    /// 嵌入函数上，命名实参仍会被静默丢弃（`?454` 之后的 std 原生导出已修）。
+    /// 仓内零调用者，属宿主嵌入面待办；修法与 std 导出同构（补一张形参名表）。
     pub native_arity: HashMap<String, (usize, Option<usize>)>,
     /// #454：原生导出的**形参名**（全限定名 + 短名 → 声明序形参名）。
     /// 与 native_signatures / native_arity 同源灌装（同一签名串、同一解析入口）——
