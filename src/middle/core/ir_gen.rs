@@ -515,7 +515,11 @@ impl AstToIrGenerator {
     /// 返回逐槽的实参序（`Some(k)`：k < 位置实参数 → `args[k]`，否则
     /// `named_args[k - 位置实参数]`；`None` = 该槽空缺）。槽位下标与 typecheck
     /// 侧 `bind_named_args` 同坐标系（全形参表，含接收者位）。
+    /// `key` 是诊断里要显示的真名（调用点传方法键或决议出的混编名叶子段）——
+    /// 此前硬编 `"<method>"`、或拿 `names.first()`（= 接收者位 self）冒名，
+    /// 用户看到的是 "Function self has no parameter named z"（F3）。
     fn build_arg_slots(
+        key: &str,
         names: &[String],
         args: &[Expr],
         named_args: &[(String, Expr)],
@@ -527,7 +531,7 @@ impl AstToIrGenerator {
             }
             // 形参名不可得：能力不足要**响亮**，不许把命名实参悄悄丢掉
             return Err(ErrorCodeDefinition::unknown_argument(
-                "<method>",
+                key,
                 &named_args[0].0,
                 "（形参名表不可得）",
             )
@@ -544,10 +548,10 @@ impl AstToIrGenerator {
             (args.last(), named_args.first())
         {
             if first_named.span().start.offset < last.span().start.offset {
+                // 顺序非法（非重复）：一个形参收到多个实参 / 位置实参写在命名实参之后（E1111）
                 return Err(
-                    ErrorCodeDefinition::duplicate_argument("<method>", first_named_name)
+                    ErrorCodeDefinition::argument_order_invalid(key, first_named_name)
                         .at(*span)
-                        .with_help("位置实参必须写在命名实参之前")
                         .build(),
                 );
             }
@@ -558,16 +562,14 @@ impl AstToIrGenerator {
                 .position(|p| p == name)
                 .filter(|slot| *slot > 0)
             else {
-                return Err(ErrorCodeDefinition::unknown_argument(
-                    Self::call_name_leaf(names.first().map(String::as_str).unwrap_or("<method>")),
-                    name,
-                    &names.join(", "),
-                )
-                .at(*span)
-                .build());
+                return Err(
+                    ErrorCodeDefinition::unknown_argument(key, name, &names.join(", "))
+                        .at(*span)
+                        .build(),
+                );
             };
             if slots[slot].is_some() {
-                return Err(ErrorCodeDefinition::duplicate_argument("<method>", name)
+                return Err(ErrorCodeDefinition::argument_order_invalid(key, name)
                     .at(*span)
                     .build());
             }
@@ -7811,18 +7813,24 @@ impl AstToIrGenerator {
                     // 生成所有方法参数 IR。
                     // #452：命名实参先按绑定函数的**值形参名**入槽（位置实参占前导
                     // 槽位），再交给绑定位置重排——两步各自有据，不互相顶替。
-                    let bound_params = self
-                        .lookup_param_names(
-                            &binding.function,
-                            Self::call_name_leaf(&binding.function),
-                        )
-                        .or_else(|| {
-                            self.lookup_param_names(&format!("{}.{}", field, field), field.as_str())
-                        });
+                    // 只用**被绑函数**的形参名：绑定路径把实参交给 binding.positions
+                    // 重排，槽序以被绑函数的形参表为准；用方法键的声明序形参名会把
+                    // 接收者位的占位错算成实参（类型体绑定形态实测 E1010）。
+                    let bound_params = self.lookup_param_names(
+                        &binding.function,
+                        Self::call_name_leaf(&binding.function),
+                    );
                     let mut method_arg_regs = Vec::new();
                     if !named_args.is_empty() {
                         if let Some(names) = bound_params {
-                            let slots = Self::build_arg_slots(&names, args, named_args, span)?;
+                            // F3：诊断用真实方法名（不是硬编 <method>，也不是 self）
+                            let diag_key = if field.is_empty() {
+                                Self::call_name_leaf(&binding.function)
+                            } else {
+                                field.as_str()
+                            };
+                            let slots =
+                                Self::build_arg_slots(diag_key, &names, args, named_args, span)?;
                             for slot in slots.iter() {
                                 let arg_expr = match slot {
                                     Some(slot) => {
@@ -7904,7 +7912,9 @@ impl AstToIrGenerator {
                         // 不静默丢弃命名实参。
                         let leaf = Self::call_name_leaf(&mangled).to_string();
                         let names = self.lookup_param_names(&mangled, &leaf).unwrap_or_default();
-                        let ordered_args = Self::build_arg_slots(&names, args, named_args, span)?;
+                        // F3：诊断用决议出的真实方法名（叶子段），不再硬编 <method>
+                        let ordered_args =
+                            Self::build_arg_slots(&leaf, &names, args, named_args, span)?;
                         let obj_reg = self.next_temp_reg();
                         self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
                         let mut call_args = vec![Operand::Local(obj_reg)];

@@ -2661,9 +2661,9 @@ impl<'a> ExpressionInferrer<'a> {
     /// 绑定规则（用户 2026-10-14 裁决，主流约定）：
     /// ① 位置实参按声明顺序占前导槽位（第 i 个位置实参 → 第 i 个值形参）；
     /// ② 命名实参按形参名入槽；名字不匹配任何形参 → E1014；
-    /// ③ 位置与命名落在同一槽位 → E1015（既不许命名覆盖位置，也不许丢弃位置实参）；
-    /// ④ 命名实参之后不得再出现位置实参 → E1014；
-    /// ⑤ 同一形参被重复命名 → E1015；
+    /// ③ 位置与命名落在同一槽位 → E1111（既不许命名覆盖位置，也不许丢弃位置实参）；
+    /// ④ 命名实参之后不得再出现位置实参 → E1111；
+    /// ⑤ 同一形参被重复命名 → E1015（字面重复，只有这一条是「重复指定」）；
     /// ⑥ 任一形参槽位空缺 → E1010（缺实参）。
     ///
     /// 返回**逐实参的形参位**（长度 = 位置实参数 + 命名实参数，顺序 = 位置实参
@@ -2672,6 +2672,28 @@ impl<'a> ExpressionInferrer<'a> {
     ///
     /// 形参名对应的是**值形参**（不含接收者位 self）：接收者由字段访问形态提供，
     /// 不是实参，也不可能被命名实参指定。
+    /// #452 / F1：把候选形参表按**元数**分组（元数 = 值形参数 = 形参表长度 - 1），
+    /// 每组取首候选的形参名作代表（同元数下形参名以声明为准；名字互不相同的
+    /// 同元数候选会在调用点被拒绝，不会走到这里）。
+    ///
+    /// **空表 = 名字不可用**（泛型方法声明里的类型级形参被剥离后名字表对不齐，
+    /// 登记时留空；见 `add_method_overload_with_params`）：这种条目不构成元数
+    /// 证据，不得参与分组——否则元数被误算成 0，`b.get()` 这类合法调用会报 E1010。
+    fn candidate_arity_groups(lists: &[Vec<String>]) -> Vec<(usize, Vec<String>)> {
+        let mut out: Vec<(usize, Vec<String>)> = Vec::new();
+        for names in lists.iter() {
+            if names.is_empty() {
+                continue; // 名字不可用：不构成元数证据
+            }
+            let arity = names.len() - 1;
+            if out.iter().any(|(a, _)| *a == arity) {
+                continue;
+            }
+            out.push((arity, names.clone()));
+        }
+        out
+    }
+
     fn bind_named_args(
         key: &str,
         param_names: &[String],
@@ -2696,10 +2718,13 @@ impl<'a> ExpressionInferrer<'a> {
             (args.last(), named_args.first())
         {
             if first_named.span().start.offset < last.span().start.offset {
-                return Err(ErrorCodeDefinition::duplicate_argument(key, first_named_name)
-                    .at(call_span)
-                    .with_help("位置实参必须写在命名实参之前（先命名后位置 ⇒ 无从判断位置实参该占哪个槽位）")
-                    .build());
+                // E1111（非重复）：位置实参写在命名实参之后——用户每个实参只写了一次，
+                // 错在**顺序**，不是「重复指定」（#452 复审 F2）
+                return Err(
+                    ErrorCodeDefinition::argument_order_invalid(key, first_named_name)
+                        .at(call_span)
+                        .build(),
+                );
             }
         }
         let mut seen_named: Vec<&str> = Vec::with_capacity(named_args.len());
@@ -2730,9 +2755,10 @@ impl<'a> ExpressionInferrer<'a> {
                     .build());
             }
             seen_named.push(name.as_str());
-            // 规则③：位置实参已占该槽位
+            // 规则③：位置实参已占该槽位——同一个形参收到两个实参（F2：
+            // 用「重复指定」描述与事实矛盾，用户每个实参只写了一次）
             if slots[slot].is_some() {
-                return Err(ErrorCodeDefinition::duplicate_argument(key, name)
+                return Err(ErrorCodeDefinition::argument_order_invalid(key, name)
                     .at(call_span)
                     .build());
             }
@@ -4633,7 +4659,9 @@ impl<'a> ExpressionInferrer<'a> {
                     .as_ref()
                     .and_then(|m| m.get(key));
                 match (cands, irs) {
-                    (Some(cands), Some(irs)) if cands.len() > 1 && irs.len() == cands.len() => {
+                    // #452 / F1：候选**非空**即走决议——单候选也要跑，否则单签名的
+                    // 命名实参调用整段跳过逐参类型检查（实测运行时才 E6007）。
+                    (Some(cands), Some(irs)) if !cands.is_empty() && irs.len() == cands.len() => {
                         let mut matches: Vec<(usize, MonoType)> = Vec::new();
                         for (i, cand) in cands.iter().enumerate() {
                             let Some(MonoType::Fn { params, .. }) = Some(cand) else {
@@ -4733,11 +4761,14 @@ impl<'a> ExpressionInferrer<'a> {
                             if !ok {
                                 continue;
                             }
-                            // 期望返回过滤（带注解绑定的调用点传入）
+                            // 期望返回过滤（带注解绑定的调用点传入）。
+                            // F4：先在自己那份沙盒里试 unify——unify 非失败原子
+                            // （bind 一落即生效、无回滚），直接打在 self.solver 上时
+                            // 失败路径会留下半截绑定，污染后续候选与同名调用。
                             if let Some(exp) = &self.current_expected {
                                 let er = self.solver.resolve_type(exp);
-                                let frr = self.solver.resolve_type(fr);
-                                if self.solver.unify(&frr, &er).is_err() {
+                                let frr = sandbox.resolve_type(fr);
+                                if sandbox.unify(&frr, &er).is_err() {
                                     continue;
                                 }
                             }
@@ -4824,30 +4855,65 @@ impl<'a> ExpressionInferrer<'a> {
             Some((ty, names)) => (Some(ty), Some(names)),
             None => (None, None),
         };
+        // 选中候选的形参数（空形参名表要靠它结算元数：把空表读成「元数 0」
+        // 会把合法的 t.pick(1) 误报成 expected 0 arguments）
+        let selected_params_len: Option<usize> = match &selected_overload {
+            Some(MonoType::Fn { params, .. }) if !params.is_empty() => Some(params.len()),
+            _ => None,
+        };
         let mono_func_ty = selected_overload.unwrap_or(mono_func_ty);
 
-        // #452：命名实参 → 方法形参槽位的绑定（决议命中时形参名随签名带出，
-        // 未命中则从候选表按元数取名）。返回**逐实参的形参位**：位置实参占前导
-        // 槽位、命名实参按名入槽。冲突 / 未知名 / 重复命名 / 命名后接位置实参 /
+        // #452：命名实参 → 方法形参槽位的绑定。返回**逐实参的形参位**：位置实参占
+        // 前导槽位、命名实参按名入槽。冲突 / 未知名 / 重复命名 / 命名后接位置实参 /
         // 缺实参在此一律编译期报错——**不得静默择一**。
         let mut param_positions: Option<Vec<usize>> = None;
+        // 判定出的形参表元数（值形参数）——元数结算的权威值；不用 positions 的最大
+        // 下标推（超出形参表的实参也会推出同样大的下标，见 p10 超参形态）
+        let mut bound_arity: Option<usize> = None;
         if let Some(key) = &method_key {
-            // 名字来源：① 决议选中的候选（多候选时唯一可信）；② 该方法只有
-            // **一个**候选签名（此时候选唯一，名字不会张冠李戴）——它的元数由
-            // 形参表自己给出，实参数由 bind_named_args 结算（缺参正是要报的形态，
-            // 不能拿实参数去筛形参表，否则「缺参」这一格永远筛不到名字）；
-            // ③ 其余（多候选但未决议，无法判定哪条签名）留空，不猜。
+            // 名字来源（按可信度）：① 决议选中的候选（多候选时唯一可信）；
+            // ② 全部候选同元数 ⇒ 该元数唯一，取首候选形参名；
+            // ③ 恰有一条候选的元数与实参数相符 ⇒ 取它的形参名；
+            // ④ 该键下只有一条候选签名（缺参/超参正是要报的形态，不能拿实参数
+            //    去筛形参表，否则「缺参」这一格永远筛不到名字）；
+            // ⑤ 其余（多候选且元数互不相同、实参数又与任一都不符）留空不猜。
+            //
+            // #452 / F1：②③④ 是「多候选但无一命中」路径的落点——决议零命中时
+            // 名字不随签名带出，若就此留空，逐参类型检查与元数结算会被整段跳过，
+            // 命名实参调用在编译期静默通过（实测 run 打印错值 / void）。
             let names: Option<Vec<String>> = selected_param_names.or_else(|| {
-                self.method_overload_param_names
+                let lists = self
+                    .method_overload_param_names
                     .as_ref()
-                    .and_then(|m| m.get(key))
-                    .filter(|lists| lists.len() == 1)
-                    .and_then(|lists| lists.first())
-                    .cloned()
+                    .and_then(|m| m.get(key))?;
+                let groups = Self::candidate_arity_groups(lists);
+                // ① 全部候选名字可用且同元数 ⇒ 该元数唯一，取首候选形参名
+                if groups.len() == lists.len() && groups.len() == 1 {
+                    return groups.first().map(|(_, names)| names.clone());
+                }
+                // ② 恰有一组候选的元数与实参数相符 ⇒ 取它的形参名
+                let total_args = arg_types.len() + named_args.len();
+                let mut exact = groups
+                    .iter()
+                    .filter(|(arity, _)| *arity == total_args)
+                    .map(|(_, names)| names);
+                let first = exact.next()?;
+                // 元数与实参数相符的候选不止一组时名字不可判定，宁可不按名匹配
+                exact.next().is_none().then(|| first.clone())
             });
             if let Some(names) = names {
-                // names 含接收者位 self（下标 0）——绑定与 IR 重排同用全形参表坐标
-                param_positions = Some(Self::bind_named_args(key, &names, args, named_args, span)?);
+                // 空表 = 名字不可用（登记期对不齐留空）：此时**只能**从选中候选的
+                // 签名结算元数，不能把空表读成「元数 0」
+                bound_arity = if names.is_empty() {
+                    selected_params_len.map(|len| len - 1)
+                } else {
+                    // names 含接收者位 self（下标 0）——绑定与 IR 重排同用全形参表坐标
+                    Some(names.len() - 1)
+                };
+                if !names.is_empty() {
+                    param_positions =
+                        Some(Self::bind_named_args(key, &names, args, named_args, span)?);
+                }
             }
         }
 
@@ -5299,18 +5365,59 @@ impl<'a> ExpressionInferrer<'a> {
         // 形态。接收者占 params[0]，实参数须等于 params.len()-1；不符拦为
         // 编译期 E1010（原先缺参拖到运行时 E6007、超参/类型错整体静默跳过，
         // 超参仅因 3==params.len() 错位对齐意外报错）
+        // #452 / F1：命名实参同样计入——此前的 `named_args.is_empty()` 门让
+        // 「带命名实参 + 决议零命中」整段跳过元数结算（实参被静默丢弃或补零）。
+        // 期望元数取自**判定出的形参表**（bound_arity / 候选元数集合），拿不到
+        // 才退回当前签名；只对元数明显不符响亮，元数相符的形态交给上面的
+        // bind_named_args（缺参 E1010 / 未知名 E1014 / 撞槽 E1111）与逐参类型
+        // 检查（E1002）报更精确的码。
         if let Some(method_key) = &method_key {
-            if named_args.is_empty() {
-                if let MonoType::Fn { params, .. } = &mono_func_ty {
-                    if !params.is_empty() && arg_types.len() + 1 != params.len() {
-                        return Err(ErrorCodeDefinition::argument_count_mismatch(
-                            method_key,
-                            params.len() - 1,
-                            arg_types.len(),
-                        )
-                        .at(span)
-                        .build());
-                    }
+            // 候选形参表按元数分组（每组首候选作代表；空表不构成证据）
+            let arity_groups: Vec<(usize, Vec<String>)> = self
+                .method_overload_param_names
+                .as_ref()
+                .and_then(|m| m.get(method_key))
+                .map(|lists| Self::candidate_arity_groups(lists))
+                .unwrap_or_default();
+            let bind_names: Option<&Vec<String>> = arity_groups.first().map(|(_, n)| n);
+            let expected_arity: Option<usize> = bound_arity.or_else(|| match bind_names {
+                // 有候选表：以候选的元数集合为权威。全为空表（名字不可用，
+                // 如类型体绑定形态）⇒ 元数无可信来源，不报。
+                Some(names) => Some(names.len() - 1),
+                // 无候选表（调用点为单签名）：退回当前签名
+                None => match &mono_func_ty {
+                    MonoType::Fn { params, .. } if !params.is_empty() => Some(params.len() - 1),
+                    _ => None,
+                },
+            });
+            let total_args = arg_types.len() + named_args.len();
+            // 名称优先于元数：名字不在候选形参表里时，「实参个数」这个描述是
+            // 误导的（用户写了 1 个实参，但那个名字根本不存在）——先报 E1014。
+            let unknown = bind_names.and_then(|names| {
+                named_args
+                    .iter()
+                    .map(|(n, _)| n.as_str())
+                    .find(|n| !names.iter().any(|p| p == n))
+            });
+            if let Some(name) = unknown {
+                return Err(ErrorCodeDefinition::unknown_argument(
+                    method_key,
+                    name,
+                    &bind_names
+                        .map(|names| names.iter().skip(1).cloned().collect::<Vec<_>>())
+                        .unwrap_or_default()
+                        .join(", "),
+                )
+                .at(span)
+                .build());
+            }
+            if let Some(expected) = expected_arity {
+                if total_args != expected {
+                    return Err(ErrorCodeDefinition::argument_count_mismatch(
+                        method_key, expected, total_args,
+                    )
+                    .at(span)
+                    .build());
                 }
             }
         }
@@ -5411,6 +5518,14 @@ impl<'a> ExpressionInferrer<'a> {
                 // #452：逐实参 → 形参位对齐。有绑定表时**按位**取形参类型
                 // （命名实参不再因「个数对不上」整体跳过类型检查）；无绑定表
                 // （纯位置实参 / 名字不可用）维持旧的对位规则。
+                //
+                // #452 / F1：实参序 = 位置实参（前导，与 args 同序）+ 命名实参
+                // （书写序）。元数一律按**两者之和**结算：此前用 arg_types.len()
+                // （只含位置实参）与 positions 对齐，带命名实参的调用恒失配 ⇒
+                // 整段逐参类型检查被静默跳过（多候选零命中/单候选都中招）。
+                let total_args = arg_types.len() + named_args.len();
+                let mut arg_types_all: Vec<&MonoType> = arg_types.iter().collect();
+                arg_types_all.extend(named_types.iter().copied());
                 let aligned: Option<
                     Vec<(
                         &MonoType,
@@ -5418,17 +5533,16 @@ impl<'a> ExpressionInferrer<'a> {
                         &crate::frontend::core::parser::ast::Expr,
                     )>,
                 > = param_positions.as_ref().and_then(|positions| {
-                    if positions.len() != arg_types.len() {
+                    if positions.len() != total_args {
                         return None;
                     }
                     let mut out = Vec::with_capacity(positions.len());
-                    for (i, (position, arg_ty)) in
-                        positions.iter().zip(arg_types.iter()).enumerate()
-                    {
+                    for (i, position) in positions.iter().enumerate() {
                         // 槽位下标含接收者位（全形参表坐标）；args 侧余下的是值形参
                         let value_slot = position.checked_sub(recv_offset)?;
                         let param_ty = param_slice.get(value_slot)?;
-                        // 实参序 = 位置实参（前导，与 args 同序）+ 命名实参（声明序）
+                        let arg_ty = *arg_types_all.get(i)?;
+                        // 实参序 = 位置实参（前导，与 args 同序）+ 命名实参（书写序）
                         let arg_expr = if i < args.len() {
                             args.get(i)?
                         } else {
@@ -5444,7 +5558,7 @@ impl<'a> ExpressionInferrer<'a> {
                     &crate::frontend::core::parser::ast::Expr,
                 )> = match aligned {
                     Some(list) => list,
-                    None if arg_types.len() == param_slice.len() => args
+                    None if total_args == param_slice.len() => args
                         .iter()
                         .zip(arg_types.iter().zip(param_slice.iter()))
                         .map(|(arg_expr, (arg_ty, param_ty))| (arg_ty, param_ty, arg_expr))

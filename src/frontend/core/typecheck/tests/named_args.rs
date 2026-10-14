@@ -203,7 +203,7 @@ fn test_named_args_missing_required_reports_argument_count() {
 
 // ── 验收矩阵 5：位置实参与命名争同一槽位 → 报错（不得静默择一） ────
 #[test]
-fn test_named_args_positional_slot_conflict_reports_duplicate() {
+fn test_named_args_positional_slot_conflict_reports_e1111() {
     // Arrange：单值形参方法上 pick2(1, a = 2) —— 1 已占 a 的槽位
     let source = format!(
         "Temp: Type = {{ v: Int }}\n\
@@ -214,8 +214,8 @@ fn test_named_args_positional_slot_conflict_reports_duplicate() {
     let p = probe(&source);
     // Assert
     assert!(
-        p.diagnostics.contains(&"E1015".to_string()),
-        "位置与命名争同一槽位必须报 E1015：{:?}",
+        p.diagnostics.contains(&"E1111".to_string()),
+        "位置与命名争同一槽位必须报 E1111（#452 复审 F2：不是「重复指定」）：{:?}",
         p.diagnostics
     );
 }

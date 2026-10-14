@@ -21,6 +21,7 @@ mod const_param;
 mod environment;
 mod gamma_assume_effect;
 mod named_args;
+mod named_args_loud;
 mod overload_resolutions;
 mod predicate_resolver;
 mod rfc010;
