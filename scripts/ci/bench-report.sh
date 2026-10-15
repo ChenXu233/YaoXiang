@@ -10,6 +10,7 @@
 # 用法:
 #   ./scripts/ci/bench-report.sh                            # 只汇总 Criterion
 #   ./scripts/ci/bench-report.sh --shootout-json r.json     # 附多语言横比表
+#   ./scripts/ci/bench-report.sh --meta m.json              # 报告头写明测于哪个提交
 #   ./scripts/ci/bench-report.sh --shootout out.txt         # 降级：原样搬运
 #   ./scripts/ci/bench-report.sh --out-json r.json          # 同时写机器可读结果
 #
@@ -26,6 +27,7 @@ CRITERION_DIR="target/criterion"
 OUT_JSON=""
 SHOOTOUT_FILE=""
 SHOOTOUT_JSON=""
+META_FILE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -33,6 +35,7 @@ while [[ $# -gt 0 ]]; do
     --shootout)       SHOOTOUT_FILE="$2"; shift 2 ;;
     --shootout-json)  SHOOTOUT_JSON="$2"; shift 2 ;;
     --out-json)       OUT_JSON="$2"; shift 2 ;;
+    --meta)           META_FILE="$2"; shift 2 ;;
     -h|--help)        sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
@@ -75,9 +78,56 @@ resolve_criterion_dir() {
 }
 CRITERION_DIR="$(resolve_criterion_dir "$CRITERION_DIR")"
 
+# ── 解析 artifact 内文件 ──
+# 调用方可能给的确切路径不存在（artifact 内部层次随 upload-artifact 的路径推断
+# 变化，不写死），则从**最近的已存在祖先目录**向下搜同名文件。
+# 向上找祖先而非直接用 dirname：工件的中间层目录可能整层不存在。
+resolve_artifact_file() {
+  local given="$1"
+  [[ -z "$given" ]] && { echo ""; return; }
+  [[ -f "$given" ]] && { echo "$given"; return; }
+  local base dir found
+  base="$(basename "$given")"
+  dir="$(dirname "$given")"
+  while [[ -n "$dir" && ! -d "$dir" && "$dir" != "/" && "$dir" != "." ]]; do
+    dir="$(dirname "$dir")"
+  done
+  [[ -d "$dir" ]] || { echo "$given"; return; }
+  found="$(find "$dir" -type f -name "$base" -print -quit 2>/dev/null || true)"
+  echo "${found:-$given}"
+}
+
+# ── 运行归因（测的是哪个提交、哪台机器）──
+# 必须写在报告最前：不写这一行，读数变了就无从判断是代码变了还是环境换了。
+# nightly 的基准 job 显式 checkout dev（见 nightly.yml），而 release 构件走
+# 默认分支——不点明这层，读者会把 dev 的数字当成 release 构件的数字。
+if [[ -n "$META_FILE" ]]; then
+  META_FILE="$(resolve_artifact_file "$META_FILE")"
+fi
+if [[ -n "$META_FILE" && -f "$META_FILE" ]]; then
+  "$PY" - "$META_FILE" <<'PYEOF'
+import json
+import pathlib
+import sys
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, OSError):
+    pass
+
+meta = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(f"> 本次基准测于 `{meta.get('ref', '?')}@{meta.get('sha', '?')}`"
+      f"（run {meta.get('run', '?')}，{meta.get('ts', '?')}）。")
+if meta.get("cpu"):
+    print(f"> 机器：{meta['cpu']}（{meta.get('os', '?')}，{meta.get('cpus', '?')} 核）。")
+print()
+PYEOF
+fi
+
 # ── Criterion 汇总（estimates.json 的 mean.point_estimate 单位是纳秒）──
 "$PY" - "$CRITERION_DIR" "$OUT_JSON" <<'PYEOF'
 import json
+import math
 import pathlib
 import sys
 
@@ -146,26 +196,8 @@ if out_json:
         encoding="utf-8",
     )
 PYEOF
-# ── 解析 shootout 文件 ──
-# 调用方可能给的确切路径不存在（artifact 内部层次随 upload-artifact 的路径推断
-# 变化，不写死），则从**最近的已存在祖先目录**向下搜同名文件。
-# 向上找祖先而非直接用 dirname：工件的中间层目录可能整层不存在。
-resolve_shootout_file() {
-  local given="$1"
-  [[ -z "$given" ]] && { echo ""; return; }
-  [[ -f "$given" ]] && { echo "$given"; return; }
-  local base dir found
-  base="$(basename "$given")"
-  dir="$(dirname "$given")"
-  while [[ -n "$dir" && ! -d "$dir" && "$dir" != "/" && "$dir" != "." ]]; do
-    dir="$(dirname "$dir")"
-  done
-  [[ -d "$dir" ]] || { echo "$given"; return; }
-  found="$(find "$dir" -type f -name "$base" -print -quit 2>/dev/null || true)"
-  echo "${found:-$given}"
-}
 if [[ -n "$SHOOTOUT_FILE" ]]; then
-  SHOOTOUT_FILE="$(resolve_shootout_file "$SHOOTOUT_FILE")"
+  SHOOTOUT_FILE="$(resolve_artifact_file "$SHOOTOUT_FILE")"
 fi
 
 # ── 多语言横比：渲染为表格 ──
@@ -176,7 +208,7 @@ fi
 # 后面的 13 行子进程输出（`6765` × 13）、以及宽度对不齐的标题框。
 # 人读不了，机器也读不了。
 if [[ -n "$SHOOTOUT_JSON" ]]; then
-  SHOOTOUT_JSON="$(resolve_shootout_file "$SHOOTOUT_JSON")"
+  SHOOTOUT_JSON="$(resolve_artifact_file "$SHOOTOUT_JSON")"
 fi
 # 明确传了 JSON 却没找到 → 显式告警。否则会静默降级到原始文本，
 # 而原始文本正是被取代的那个可读性问题（无法从结果看出降级了）。
@@ -225,37 +257,105 @@ by_bench = {}
 for r in rows:
     by_bench.setdefault(r["bench"], []).append(r)
 
+
+def median_of(r):
+    """头条数字用中位数：墙钟样本右偏，一次调度抖动就能拉高均值。"""
+    m = r.get("median_ms")
+    return m if m is not None else r["mean_ms"]
+
+
+def input_key(r):
+    # 输入规模按数值排序（避免字符串序把 100 排在 20 前）
+    try:
+        return (0, float(r["input"]))
+    except (TypeError, ValueError):
+        return (1, str(r["input"]))
+
+
+def to_num(s):
+    try:
+        return (0, float(s))
+    except (TypeError, ValueError):
+        return (1, str(s))
+
+
+meta = data.get("meta") or {}
+toolchains = meta.get("toolchains") or {}
+
 if by_bench:
     print("### 多语言横比（shootout）")
     print()
-    print("同问题、同输入规模下各语言的运行耗时；单位越小越快。")
-    print("列 `输出` 是被测程序的实际输出——同输入下应跨语言一致，可据此发现算错。")
+    print("同问题、同输入规模下各语言的运行耗时，单位越小越快。")
+    print("`运行` 取**中位数**（跨夜趋势同一口径）；`相对最快` 是该输入下最快语言的倍数。")
+    print("`输出` 是被测程序的实际输出——同输入下跨语言必须一致（runner 按金标/一致性判失败）。")
+    if toolchains:
+        print()
+        print("工具链：" + "；".join(f"{k} `{v}`" for k, v in sorted(toolchains.items())))
+    if meta.get("cpu"):
+        print()
+        print(
+            f"机器：{meta.get('cpu')}"
+            f"（{meta.get('os', '?')}/{meta.get('arch', '?')}，{meta.get('cpus', '?')} 核）"
+        )
     print()
 
+    # 每个 (bench, input) 的最快中位数 → 相对最快列
+    fastest = {}
+    for r in rows:
+        key = (r["bench"], str(r["input"]))
+        m = median_of(r)
+        if m > 0 and (key not in fastest or m < fastest[key]):
+            fastest[key] = m
+
+    ratios = {}
+    single_lang = []
     for bench, items in by_bench.items():
         desc = next((r.get("description") for r in items if r.get("description")), None)
         print(f"**{bench}**" + (f" — {desc}" if desc else ""))
         print()
-        # 输入规模按数值排序（避免字符串序把 100 排在 20 前）
-        def input_key(r):
-            try:
-                return (0, float(r["input"]))
-            except (TypeError, ValueError):
-                return (1, r["input"])
-        items_sorted = sorted(items, key=lambda r: (input_key(r), r["mean_ms"]))
-        print("| 输入 | 语言 | 运行 | 相对偏差 | 编译 | 输出 |")
-        print("|---|---|---|---|---|---|")
+        items_sorted = sorted(items, key=lambda r: (input_key(r), median_of(r)))
+        print("| 输入 | 语言 | 运行（中位） | 相对偏差 | 相对最快 | 编译 | 输出 |")
+        print("|---|---|---|---|---|---|---|")
         for r in items_sorted:
             out = (r.get("output") or "")
             # 表格里不能有裸 `|` 或换行
             out = out.replace("|", r"\|").replace("\n", " ")
             if len(out) > 40:
                 out = out[:40] + "…"
+            m = median_of(r)
+            base = fastest.get((r["bench"], str(r["input"])))
+            ratio = (m / base) if (base and m > 0) else None
+            if ratio:
+                ratios.setdefault(r["lang"], []).append(ratio)
             print(
-                f"| {r['input']} | {r['lang']} | {fmt_ms(r['mean_ms'])} "
+                f"| {r['input']} | {r['lang']} | {fmt_ms(m)} "
                 f"± {fmt_ms(r['stddev_ms'])} | {r['relative_pct']:.1f}% "
+                f"| {f'{ratio:.2f}×' if ratio else '—'} "
                 f"| {fmt_ms(r.get('compile_ms'))} | `{out}` |"
             )
+        print()
+        # 单语言测点没有横比对象：必须显式点出，否则「只有一行」会被读成「这语言最快」
+        for input_val in sorted({str(r["input"]) for r in items}, key=to_num):
+            langs = [r["lang"] for r in items if str(r["input"]) == input_val]
+            if len(langs) == 1:
+                single_lang.append(f"{bench}/{input_val}（仅 {langs[0]}）")
+
+    # 几何平均比值：加/减一个 benchmark 不会让这个数跳动，适合跨夜追踪
+    if ratios:
+        print("**各语言相对最快的几何平均**（越小越接近最快）")
+        print()
+        print("| 语言 | geomean 比值 | 测点数 |")
+        print("|---|---|---|")
+        for lang in sorted(ratios):
+            vals = [v for v in ratios[lang] if v and v > 0]
+            if not vals:
+                continue
+            g = math.exp(sum(math.log(v) for v in vals) / len(vals))
+            print(f"| {lang} | {g:.2f}× | {len(vals)} |")
+        print()
+
+    if single_lang:
+        print(f"> ⚠ 单语言测点：{'、'.join(single_lang)}——只有自身读数，没有跨语言对照。")
         print()
 
 # 失败必须显式列出：只「少一行」会读成「没配这项」，与「配了但挂了」不同。
@@ -292,4 +392,4 @@ fi
 echo
 echo "---"
 echo
-echo "_机器可读结果见 workflow artifact；Criterion 目录：\`$CRITERION_DIR\`_"
+echo "_机器可读结果见 workflow artifact；性能历史（`benches/history/`）与趋势图（`/perf/`）由 nightly 自动入库；Criterion 目录：`$CRITERION_DIR`_"
