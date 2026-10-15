@@ -468,7 +468,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let yaml_content = std::fs::read_to_string(&cli.config).context("读取 bench.yaml 失败")?;
-    let cfg: Config = serde_yaml::from_str(&yaml_content).context("解析 bench.yaml 失败")?;
+    let cfg: Config = serde_yaml_ng::from_str(&yaml_content).context("解析 bench.yaml 失败")?;
 
     let ctx = RunCtx::new(&cli);
     let report = ctx.run(&cfg)?;
