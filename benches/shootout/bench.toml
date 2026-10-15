@@ -29,7 +29,21 @@
 #   2. 无金标时退化为「同一输入下各语言输出必须一致」；
 #   3. 既无金标又只有一门语言 → 报告里显式记为「未校验」，不默认通过。
 #   string_concat 属第 3 类：输出是 12×输入长度的字符串，写金标等于往配置里
-#   塞 19000 字符；它目前也只有 yaoxiang 一门实现。补独立参照实现属待办。
+#   塞 19000 字符；它靠第 2 条「多语言输出一致」兜底（现有 yaoxiang/python/rust）。
+#
+# ⚠ 跨语言对照的口径（2026-10-15 定）：
+#   同一问题、同一算法、同一操作序列，只允许语言层面的写法差异；**复杂度必须
+#   对齐**——否则这张表量到的是复杂度差异，而不是语言差异。逐问题的对齐方式：
+#     - fibonacci：同一迭代算法；
+#     - matrix：同一三重循环（取 c[0][0]，恒为 0，是跨语言一致性校验点）；
+#     - list_ops：三语言统一用**摊还 O(1) 追加**（yx `list.push` / python `append` /
+#       rust `push`）。yx 侧原用 `nums = nums + [j]` 建表（每次复制整个列表 → O(n²)，
+#       本机 input=100 均值 1.25s），改用 push 后同机中位 488ms——留着旧写法，这一栏
+#       比的就不是语言；
+#     - string_concat：三语言统一为「累积拼接、每轮重建」（yx/python 的 `s = s + frag`
+#       天然如此；rust 侧刻意 `.clone()`，因为 `String + &str` 会复用缓冲 → 摊还
+#       O(1)，不 clone 就凭复杂度取胜）。
+#   新增 benchmark 时的硬要求：先把复杂度对齐，再谈读数。
 #
 # `version` 取该语言工具链版本，随读数一并入库——读数变了却不知道编译器
 # 也换版了，就无从判断是语言退步还是环境变化。
@@ -121,6 +135,17 @@ compile = { cmd = "%y build %s -o %o" }
 run = { cmd = "%y run %o" }
 version = "%y --version"
 
+[benchmarks.list_ops.languages.rust]
+src = "src/list_ops/list_ops.rs"
+compile = { cmd = "rustc -O %s -o %o" }
+run = { cmd = "%o" }
+version = "rustc --version"
+
+[benchmarks.list_ops.languages.python]
+src = "src/list_ops/list_ops.py"
+run = { cmd = "python %s" }
+version = "python --version"
+
 [benchmarks.string_concat]
 description = "字符串拼接 — 字符串操作性能"
 warmup = 3
@@ -133,3 +158,14 @@ compile = { cmd = "%y build %s -o %o" }
 # 跑编译产物 .42，与 fib 处一致（详见文件头「读数可比性」）
 run = { cmd = "%y run %o" }
 version = "%y --version"
+
+[benchmarks.string_concat.languages.rust]
+src = "src/string_concat/string_concat.rs"
+compile = { cmd = "rustc -O %s -o %o" }
+run = { cmd = "%o" }
+version = "rustc --version"
+
+[benchmarks.string_concat.languages.python]
+src = "src/string_concat/string_concat.py"
+run = { cmd = "python %s" }
+version = "python --version"
