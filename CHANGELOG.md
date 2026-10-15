@@ -11,7 +11,14 @@
 - **命名实参绑定判据统一（WBS 3.14 / 3.16，RFC-039 D60，issues #452 / #454）**：方法级重载决议与 stdlib 原生导出收敛为同一套六条绑定规则——位置实参按声明顺序占值形参槽位、命名实参按形参名绑定（与书写顺序无关）、位置与命名落同一槽位 / 命名写在位置之前 / 同一形参重复命名三类冲突一律编译期报错、命名实参计入重载候选匹配。原先打到原生导出（如 `io.format_fallback(value = 42, type_name = "int")`）的命名实参被整体静默丢弃（输出 `()`、未知形参名零诊断）；未知名 → E1014（附可用形参表）、缺参 → E1010、重复命名 → E1015、同槽/顺序非法 → 新对外码 **E1111（argument_order_invalid）**。纯位置实参调用零影响；语料 342 行与 IR 快照零漂移。
 - **跨层契约改按结构身份键控（RFC-039 D20 / WBS 4.5）**：`ReleasePlan` 与 `overload_resolutions` 的键由 `Span`（源码位置）改为 `PlanId`，消费「读与记账同一次调用」，差集非空即在唯一结算点报 `error[W1090]`——原先两侧位置推导不一致时的「静默丢 Drop / 静默回落默认绑定」不再存在。
 - **standalone `run` 与 `check` 统一编排（WBS 4.10.3）**：无 `yaoxiang.toml` 的文件直接 `yaoxiang run` 时，相对 `use`（如同目录 `use b.{f}`）由报 E5001 改为与 `yaoxiang check` 一致解析并真实执行（4.2.5 裁决 A 的 run 半边）；运行期错误的栈帧函数名按单元键限定（如 `main` → `main.main`、`f` → `stack_overflow_e6004.f`），与多文件项目 run 同口径。Script 语义不变：顶层语句即程序主体、不自动执行 `main`、#413 提示保留（键控改由项目探针驱动）。已知缺口：约束泛型运算符派发在**类型与泛型定义不同模块**时仍运行期 E6006（MultiFile 预存在缺陷，登记 WBS §3.18，待 P6 类型身份收敛）。
-- **依赖安全**：rustls 升级 0.23.45 → 0.23.46（RUSTSEC-2026-0346/0347/0348/0349 四条公告，`cargo audit` 恢复 exit 0，issue #455）；基准运行器的 `serde_yaml` 0.9（deprecated）替换为维护分叉 `serde_yaml_ng` 0.10。
+- **依赖安全**：rustls 升级 0.23.45 → 0.23.46（RUSTSEC-2026-0346/0347/0348/0349 四条公告，`cargo audit` 恢复 exit 0，issue #455）；基准运行器的配置格式由 YAML 改为 TOML（`benches/shootout/bench.yaml` → `bench.toml`），解析改用本就在依赖树内的 `toml`——`serde_yaml` 0.9（deprecated）与它的维护分叉 `serde_yaml_ng` 都依赖 `unsafe-libyaml`（RUSTSEC-2024-0449，unmaintained），此链随之整体移除，`cargo audit` 由「1 allowed warning」转为零告警；迁移前后两种格式解析出的清单经单元测试逐字段比对一致。
+
+### 🛠️ 基准与性能追踪
+
+- **性能历史入库**：nightly 的两套基准结果（Criterion 自身微基准、shootout 多语言横比）每次追加进 `benches/history/*.jsonl` 并推回 `dev`。此前只挂 artifact（保留 30 天），而 nightly 的 Pre-release 每晚被删掉重建——超过 30 天就没有「上一夜是多少」可比。数据带环境归因（工具链版本 / CPU / 分支 / 提交），同一 (run, attempt) 幂等（nightly 重跑是替换而非重复追加），趋势图由 `scripts/ci/bench-history.py --render-chart` 派生到文档站 `/perf/`。
+- **基准 job 改测 `dev`**：nightly 的 schedule 事件走默认分支 `main`，而代码落在 `dev`（`main` 上次变更是 2026-10-12，其后八个 nightly 测的是同一棵树，趋势图会是一条直线）。基准与 shootout 两个 job 现显式 `checkout dev`，报告头写明「本次基准测于 dev@<sha>」；release 构件仍来自默认分支，报告里显式区分这层归属。
+- **横比专业化**：头条数字由均值改为**中位数**（墙钟样本右偏，一次调度抖动就能把均值拉高）；报告新增「相对最快」倍数与跨测点的 geomean 比值；每门语言记工具链版本、每次运行记机器与 CPU；单语言测点显式列出（无横比对象）。
+- **正确性判据**：输出与配置金标不符、或同输入下跨语言输出不一致，一律以**非零码失败**——算错的程序再快也不是读数，不该混进报告与历史。既无金标又只有一门语言的测点显式标为「未校验」，不默认通过。
 
 ## :bookmark: V0.8.4: 静默缺陷收口与统一 Driver（RFC-039 进行中）
 
