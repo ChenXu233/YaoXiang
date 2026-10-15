@@ -35,7 +35,7 @@ nightly 此前只把结果挂 artifact（保留 30 天），而 nightly 的 Pre-
   python scripts/ci/bench-history.py --mark-release --version 0.8.5 --sha abc1234
 
   # 4) 从入库数据派生图表用聚合文件（按点数截断，原始 JSONL 不动）
-  python scripts/ci/bench-history.py --render-chart       --out docs/src/.vitepress/public/perf/history.json
+  python scripts/ci/bench-history.py --render-chart       --out docs/src/public/perf/history.json
 """
 
 from __future__ import annotations
@@ -249,7 +249,13 @@ def cmd_mark_release(args: argparse.Namespace) -> int:
 
 
 def cmd_render_chart(args: argparse.Namespace) -> int:
-    """把原始 JSONL 派生成图表用的聚合文件（可重建，故可按点数截断）。"""
+    """把原始 JSONL 派生成图表用的聚合文件（可重建，故可按点数截断）。
+
+    输出必须落在 docs/src/public/ 下：那才是 VitePress 真正会拷贝进站点产物的
+    public 目录。docs/src/.vitepress/public/ **不是**——实测该目录不被拷贝
+    （站点里的 wasm 是靠 docs/build.js 手工复制才到位的）。放错地方不会报错，
+    只是部署后页面 404。
+    """
     hist = pathlib.Path(args.history_dir)
     runs = {}
     series = {}

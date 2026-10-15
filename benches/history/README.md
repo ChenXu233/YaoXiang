@@ -33,7 +33,7 @@ JSONL 一行一条、自描述，三种行靠 `kind` 区分：
 1. 两个基准 job 显式 **checkout `dev`**（schedule 事件走默认分支 `main`，而代码落在
    `dev`——照默认分支测，每晚测的都是同一个提交，趋势图会是一条直线）；
 2. 结果随 artifact 带到 `bench-history`，由 `scripts/ci/bench-history.py` 追加进本目录；
-3. 由 `--render-chart` 派生 `docs/src/.vitepress/public/perf/history.json`；
+3. 由 `--render-chart` 派生 `docs/src/public/perf/history.json`；
 4. 一笔提交推回 `dev`（`git pull --rebase` 重试，与 auto-translate bot 抢分支时用）。
    提交由默认 `GITHUB_TOKEN` 发出，GitHub 的防递归规则下不会再拉起 workflow run。
 
@@ -56,7 +56,9 @@ python scripts/ci/bench-history.py --render-chart \
 
 ## 图表
 
-- 页面：`docs/src/.vitepress/public/perf/index.html`（静态页，部署后在文档站 `/perf/`）
+- 页面：`docs/src/public/perf/index.html`（静态页，部署后在文档站 `/perf/`）
+  注：**必须**放 `docs/src/public/`——`docs/src/.vitepress/public/` 不是 VitePress
+  的 public 目录（实测不被拷贝，站点里的 wasm 靠 `docs/build.js` 手工复制）
 - 数据：同目录 `history.json`，由上面的 `--render-chart` 生成
 - 页面可切换「相对首个点（%）」「对数纵轴」，发版竖线来自 `releases.jsonl`
 

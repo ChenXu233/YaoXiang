@@ -346,7 +346,7 @@ jobs:
           fi
           python3 scripts/ci/bench-history.py --render-chart \
             --history-dir benches/history \
-            --out docs/src/.vitepress/public/perf/history.json || rc=1
+            --out docs/src/public/perf/history.json || rc=1
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
@@ -355,7 +355,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add benches/history docs/src/.vitepress/public/perf/history.json
+          git add benches/history docs/src/public/perf/history.json
           if git diff --cached --quiet; then
             echo "历史无变化，跳过提交"
             exit 0
