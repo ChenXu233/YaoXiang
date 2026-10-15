@@ -216,20 +216,22 @@ graph TD
 
 ## 🗂️ Worktree 并行工作台
 
-> 适用场景：单人需要并行处理多件"必须开分支"的事，同时保持 `dev` 工作目录稳定。约定一个**长驻 worktree** 作为个人并行工作台——worktree 永久保留，任务分支随用随切、做完即删。
+> 适用场景：单人需要并行处理多件"必须开分支"的事，同时保持 `dev` 工作目录稳定。约定一个 worktree 作为个人并行工作台——**按需创建、用完即删**，不常驻：空置的工作台只占磁盘（本机曾有一台常驻工作台 `E:/git/YaoXiang-wt`，2026-10-15 因空置且无未合并提交而删除）。
 
 ### 约定
 
-| 项         | 值                     | 说明                                             |
-| ---------- | ---------------------- | ------------------------------------------------ |
-| 工作台路径 | `E:/git/YaoXiang-wt`   | 固定路径，不带任务后缀；改名用 `git worktree move` |
-| 常驻分支   | `scratch`              | 任务间的"停车位"，仅本地存在，不推送               |
-| 任务分支   | 遵循上文命名规则        | 每个任务在 worktree 里现切现用，做完删除           |
+| 项         | 值                   | 说明                                                   |
+| ---------- | -------------------- | ------------------------------------------------------ |
+| 工作台路径 | `E:/git/YaoXiang-wt` | 固定路径，不带任务后缀；改名用 `git worktree move`     |
+| 停车分支   | `scratch`            | 任务间的"停车位"，仅本地存在，不推送；随工作台一起删除 |
+| 任务分支   | 遵循上文命名规则     | 每个任务在 worktree 里现切现用，做完删除               |
+
+> **与 AGENTS.md 第 9 条的分工**：第 9 条约束的是**批次验证树**（唯一入口 `scripts/dev/scratch.py`，固定建在仓库内 `target/yx-scratch/<batch>/tree`，禁止成员在仓库外新建目录）；本节讲的是**人类并行的个人分支工作台**——前者服务于冻结点量测，后者服务于分支开发，用途不同，但同一个原则：**不常驻**。
 
 ### 一次任务的完整回路
 
 ```bash
-# 0. 首次创建（一次性）
+# 0. 按需创建（用完即删）
 git worktree add E:/git/YaoXiang-wt -b scratch dev
 
 # 1. 领任务：在 worktree 里从最新 dev 切任务分支
@@ -242,11 +244,13 @@ git switch -c <task-branch> dev
 cd E:/git/YaoXiang
 git merge <task-branch>   # 小步修复直接 fast-forward，保持 dev 首父历史线性
 
-# 4. 收尾：worktree 停回 scratch，再删已合并的任务分支
+# 4. 收尾：停回 scratch → 删已合并的任务分支 → 删工作台
 cd E:/git/YaoXiang-wt
 git switch scratch
 cd E:/git/YaoXiang
 git branch -d <task-branch>
+git worktree remove E:/git/YaoXiang-wt
+git branch -d scratch
 ```
 
 此回路面向个人快速修复；较大变更仍走上文的 PR 流程。
@@ -255,10 +259,11 @@ git branch -d <task-branch>
 
 1. **同一分支不能被两个 worktree 同时检出**。`dev` 常驻主仓库，worktree 里 `git switch dev` 会被拒绝，只能以 `dev` 为基点切新分支——这正是需要 `scratch` 停车位的原因。
 2. **合并一律在主仓库做**。主仓库持有 `dev`，是唯一合并点；worktree 只负责任务分支上的开发与提交。
-3. **`target/` 构建产物不共享**。每个 worktree 独立编译（本仓库约 16 万行 Rust，首次全量重编需数分钟）；反过来说，长驻 worktree 的构建缓存持续有效，是保留它的主要收益。
+3. **`target/` 构建产物不共享**。每个 worktree 独立编译（本仓库约 16 万行 Rust，首次全量重编需数分钟）；反过来说，只有「连着几天开分支干活」的时段构建缓存才持续有效，这是它主要的收益；空置时收益为零，应当及时删掉。
 4. **钩子共享且正常执行**。worktree 与主仓库共享同一套钩子配置，提交时完整钩子链照常跑（历史上 worktree 的 `GIT_DIR` 泄漏问题已修复）；不要在 worktree 里执行 `pre-commit install` / `autoupdate`。
 5. **路径一律写绝对路径**，Windows 下相对路径易踩坑。
 6. 常用管理命令：`git worktree list` / `git worktree move <旧路径> <新路径>` / `git worktree remove <路径>`。
+7. **`git worktree remove` 在 Windows 上可能留下目录残留**：装过 `node_modules` 的工作台（pnpm 用联接点）删完后，文件已清空、worktree 也已从 `.git/worktrees` 注销，但联接点骨架与空目录会留下（实测一次：残留 1238 个联接点、0 个文件、0 字节）。此时该路径已是普通目录，用 `cmd /c rd /s /q <路径>` 清掉即可；删之前先确认所有联接点的目标都落在该目录内（`Get-ChildItem -Recurse -Force` 逐个取 `.Target`），否则递归删除可能穿透到别的树。
 
 ---
 
