@@ -15,6 +15,8 @@
 
 ### 🛠️ 基准与性能追踪
 
+- **跨语言对照定口径**（2026-10-15）：同一问题、同一算法、同一操作序列，**复杂度必须对齐**——否则量到的是复杂度差异而不是语言差异。据此把 `list_ops` / `string_concat` 补到 3 门语言（yaoxiang / python / rust），并把 yx 侧 `list_ops` 的建表由 `nums = nums + [j]`（每次复制整个列表 → O(n²)）改为 `list.push`（摊还 O(1)）：本机 input=100 平均值 1.25s → 中位数 488ms。对照实现里有两处刻意为之的「反惯用」写法（python 不用 `+=`、rust 显式 `.clone()`），理由写在各自文件头注——不这么做，rust/python 的读数会凭复杂度取胜。
+
 - **性能历史入库**：nightly 的两套基准结果（Criterion 自身微基准、shootout 多语言横比）每次追加进 `benches/history/*.jsonl` 并推回 `dev`。此前只挂 artifact（保留 30 天），而 nightly 的 Pre-release 每晚被删掉重建——超过 30 天就没有「上一夜是多少」可比。数据带环境归因（工具链版本 / CPU / 分支 / 提交），同一 (run, attempt) 幂等（nightly 重跑是替换而非重复追加），趋势图由 `scripts/ci/bench-history.py --render-chart` 派生到文档站 `/perf/`（数据落 `docs/src/public/`——VitePress 真正会拷贝的 public 目录）。
 - **基准 job 改测 `dev`**：nightly 的 schedule 事件走默认分支 `main`，而代码落在 `dev`（`main` 上次变更是 2026-10-12，其后八个 nightly 测的是同一棵树，趋势图会是一条直线）。基准与 shootout 两个 job 现显式 `checkout dev`，报告头写明「本次基准测于 dev@<sha>」；release 构件仍来自默认分支，报告里显式区分这层归属。
 - **横比专业化**：头条数字由均值改为**中位数**（墙钟样本右偏，一次调度抖动就能把均值拉高）；报告新增「相对最快」倍数与跨测点的 geomean 比值；每门语言记工具链版本、每次运行记机器与 CPU；单语言测点显式列出（无横比对象）。
