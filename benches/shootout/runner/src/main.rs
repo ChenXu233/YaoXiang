@@ -1,6 +1,12 @@
 //! # shootout — YaoXiang 多语言基准对比运行器
 //!
-//! 读取 `bench.yaml`，逐 benchmark 编译/运行各语言实现，输出对比结果。
+//! 读取 `bench.toml`，逐 benchmark 编译/运行各语言实现，输出对比结果。
+//!
+//! 配置格式为 TOML（2026-10-15 由 YAML 迁移）：`serde_yaml` 与 `serde_yaml_ng` 都
+//! 依赖 `unsafe-libyaml`（RUSTSEC-2024-0449，unmaintained），而 `toml` 本来就在本
+//! 仓库依赖树内（根 `Cargo.toml`、`tools/yx/Cargo.toml`）——本次迁移不引入新包，
+//! 只净减该条链，`cargo audit` 由「1 allowed warning」转为零告警。取舍详见
+//! `bench.toml` 头注。
 //!
 //! ## 用法
 //! ```bash
@@ -28,32 +34,46 @@ use serde::{Deserialize, Serialize};
 // ============================================================================
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Config {
     benchmarks: BTreeMap<String, BenchmarkDef>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct BenchmarkDef {
     description: Option<String>,
     warmup: u32,
     runs: u32,
     inputs: Vec<String>,
     languages: BTreeMap<String, LangDef>,
+    /// 输入规模 → 期望输出（金标）。逐语言比对，不符即判失败。
+    ///
+    /// 必须**全覆盖或全不写**：写一半会让剩下的输入静默失去校验
+    /// （由 `test_config_manifest_parses_and_paths_exist` 钉住）。
+    #[serde(default)]
+    expected: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LangDef {
     src: String,
     compile: Option<CompileDef>,
     run: Option<RunDef>,
+    /// 取版本号的命令（如 `rustc --version`）。用于报告与历史数据的归因：
+    /// 只在配置里写一次，runner 每语言只跑一次（多 benchmark 共用会去重）。
+    version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CompileDef {
     cmd: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RunDef {
     cmd: String,
 }
@@ -73,6 +93,9 @@ struct Row {
     /// 编译耗时（毫秒）。解释型语言（无 compile 步骤）为 null。
     compile_ms: Option<f64>,
     mean_ms: f64,
+    /// 中位数。跨语言/跨夜的头条数字用它而非均值：墙钟样本右偏，一次调度
+    /// 抖动就能把均值拉高，中位数抗离群。
+    median_ms: f64,
     stddev_ms: f64,
     /// 相对偏差（stddev/mean），百分比。
     relative_pct: f64,
@@ -96,8 +119,23 @@ struct Failure {
 
 #[derive(Debug, Serialize, Default)]
 struct Report {
+    /// 本次运行的环境归因。读数变了却不知道工具链或机器也变了，就无从判断
+    /// 是语言退步还是环境换版——故与 rows 同存、同入库。
+    meta: Meta,
     rows: Vec<Row>,
     failures: Vec<Failure>,
+}
+
+/// 环境归因（跨夜可比性的前提条件）。
+#[derive(Debug, Serialize, Default)]
+struct Meta {
+    /// 被测语言 → 版本号首行（由配置里该语言的 `version` 命令取得）。
+    toolchains: BTreeMap<String, String>,
+    os: String,
+    arch: String,
+    cpus: usize,
+    /// CPU 型号：Linux 读 /proc/cpuinfo，Windows 读 PROCESSOR_IDENTIFIER。
+    cpu: String,
 }
 
 // ============================================================================
@@ -115,8 +153,8 @@ struct Cli {
     #[arg(long, value_name = "LANG")]
     lang: Option<String>,
 
-    /// bench.yaml 路径
-    #[arg(long, default_value = "benches/shootout/bench.yaml")]
+    /// bench.toml 路径
+    #[arg(long, default_value = "benches/shootout/bench.toml")]
     config: PathBuf,
 
     /// 基准根目录（源码、编译产物等基准路径）
@@ -235,6 +273,21 @@ fn run_rounds(
         }
     }
     Ok((samples, first.unwrap_or_default()))
+}
+
+/// 中位数（样本数为偶数时取中间两个的均值）。
+fn median(samples: &[f64]) -> f64 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let mut v = samples.to_vec();
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let n = v.len();
+    if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) / 2.0
+    }
 }
 
 /// 计算 mean ± stddev
@@ -411,6 +464,7 @@ impl RunCtx {
                         {
                             Ok((samples, output)) => {
                                 let (mean, stddev) = stats(&samples);
+                                let med = median(&samples);
                                 let relative = if mean > 0.0 {
                                     (stddev / mean) * 100.0
                                 } else {
@@ -421,9 +475,10 @@ impl RunCtx {
                                     None => String::new(),
                                 };
                                 println!(
-                                    "{} ± {} (相对偏差: {:.1}%){} → {}",
+                                    "{} ± {}（中位 {}，相对偏差 {:.1}%）{} → {}",
                                     fmt_duration(mean),
                                     fmt_duration(stddev),
+                                    fmt_duration(med),
                                     relative,
                                     compile_info,
                                     summarize_output(&output),
@@ -436,6 +491,7 @@ impl RunCtx {
                                     input: input.clone(),
                                     compile_ms: compile_time,
                                     mean_ms: mean,
+                                    median_ms: med,
                                     stddev_ms: stddev,
                                     relative_pct: relative,
                                     output,
@@ -458,6 +514,141 @@ impl RunCtx {
         }
         Ok(report)
     }
+
+    /// 每门语言只取一次版本号（多 benchmark 共用同一条命令 → 去重）。
+    ///
+    /// 取不到版本不影响测量：记为 `<获取失败: …>` 继续跑——基准的价值在读数，
+    /// 归因信息缺失应当显眼，但不该阻断整轮。
+    fn collect_toolchains(
+        &self,
+        cfg: &Config,
+    ) -> BTreeMap<String, String> {
+        let mut out: BTreeMap<String, String> = BTreeMap::new();
+        for bench_def in cfg.benchmarks.values() {
+            for (lang_name, lang_def) in &bench_def.languages {
+                if out.contains_key(lang_name) {
+                    continue;
+                }
+                let Some(tpl) = &lang_def.version else {
+                    continue;
+                };
+                let src_path = self.bench_root.join(&lang_def.src);
+                let out_path = self
+                    .bench_root
+                    .join("out")
+                    .join(format!("{lang_name}.version"));
+                let cmd = render_cmd(tpl, &src_path, &out_path, &self.yaoxiang_bin);
+                let text = match time_cmd(&cmd, "") {
+                    Ok((_, t)) => t.lines().next().unwrap_or("").trim().to_string(),
+                    Err(e) => format!("<获取失败: {e}>"),
+                };
+                out.insert(lang_name.clone(), text);
+            }
+        }
+        out
+    }
+}
+
+/// 采集环境归因（机器身份 + 语言工具链版本）。
+fn env_meta(toolchains: BTreeMap<String, String>) -> Meta {
+    let cpu = std::fs::read_to_string("/proc/cpuinfo")
+        .ok()
+        .and_then(|text| {
+            text.lines()
+                .find(|l| l.starts_with("model name"))
+                .and_then(|l| l.split(':').nth(1))
+                .map(|s| s.trim().to_string())
+        })
+        .or_else(|| std::env::var("PROCESSOR_IDENTIFIER").ok())
+        .unwrap_or_else(|| "unknown".to_string());
+    Meta {
+        toolchains,
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        cpus: std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(0),
+        cpu,
+    }
+}
+
+/// 正确性判据：金标 + 跨语言一致。
+///
+/// 把「哪门语言算错了」从人肉看表格变成显式失败。两级判据：
+///   1. 配置 `[benchmarks.X.expected]` 声明的**金标**——逐语言逐输入比对；
+///   2. 同一 (bench, input) 下各语言输出必须**互相一致**——无金标时的兜底。
+///
+/// 既无金标又只有一门语言时无法判定：此时**显式报告未校验的组数**，而不是
+/// 默认通过——「没检查」与「检查通过」在报告里必须能分开。
+fn verify_outputs(
+    report: &mut Report,
+    cfg: &Config,
+) {
+    // (bench, input) -> lang -> output
+    let mut groups: BTreeMap<(String, String), BTreeMap<String, String>> = BTreeMap::new();
+    for r in &report.rows {
+        groups
+            .entry((r.bench.clone(), r.input.clone()))
+            .or_default()
+            .insert(r.lang.clone(), r.output.clone());
+    }
+
+    let (mut golden_groups, mut consensus_groups, mut unchecked) = (0usize, 0usize, 0usize);
+    for ((bench, input), by_lang) in &groups {
+        let expected = cfg
+            .benchmarks
+            .get(bench)
+            .and_then(|b| b.expected.get(input));
+        match expected {
+            Some(exp) => {
+                golden_groups += 1;
+                for (lang, out) in by_lang {
+                    if out != exp {
+                        report.failures.push(Failure {
+                            bench: bench.clone(),
+                            lang: lang.clone(),
+                            input: Some(input.clone()),
+                            error: format!("输出与金标不符：期望 {exp:?}，实际 {out:?}"),
+                        });
+                    }
+                }
+            }
+            None if by_lang.len() > 1 => {
+                consensus_groups += 1;
+                let mut distinct: Vec<&String> = by_lang.values().collect();
+                distinct.sort();
+                distinct.dedup();
+                if distinct.len() > 1 {
+                    let detail = by_lang
+                        .iter()
+                        .map(|(l, o)| format!("{l}={o:?}"))
+                        .collect::<Vec<_>>()
+                        .join("，");
+                    report.failures.push(Failure {
+                        bench: bench.clone(),
+                        lang: by_lang.keys().cloned().collect::<Vec<_>>().join("+"),
+                        input: Some(input.clone()),
+                        error: format!("跨语言输出不一致：{detail}"),
+                    });
+                }
+            }
+            None => unchecked += 1,
+        }
+    }
+
+    println!(
+        "  正确性：金标校验 {} 组、跨语言一致性 {} 组，⚠ 未校验 {} 组（无金标且仅一门语言）",
+        golden_groups, consensus_groups, unchecked
+    );
+    for f in &report.failures {
+        println!(
+            "    ✗ {} / {} 输入 {}：{}",
+            f.bench,
+            f.lang,
+            f.input.clone().unwrap_or_else(|| "-".into()),
+            f.error
+        );
+    }
 }
 
 // ============================================================================
@@ -467,11 +658,16 @@ impl RunCtx {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let yaml_content = std::fs::read_to_string(&cli.config).context("读取 bench.yaml 失败")?;
-    let cfg: Config = serde_yaml_ng::from_str(&yaml_content).context("解析 bench.yaml 失败")?;
+    let config_text = std::fs::read_to_string(&cli.config)
+        .with_context(|| format!("读取配置失败: {}", cli.config.display()))?;
+    // 带路径的报错：--config 可指向任意文件，只说「bench.toml 失败」会指错地方
+    let cfg: Config = toml::from_str(&config_text)
+        .with_context(|| format!("解析配置失败: {}", cli.config.display()))?;
 
     let ctx = RunCtx::new(&cli);
-    let report = ctx.run(&cfg)?;
+    let mut report = ctx.run(&cfg)?;
+    report.meta = env_meta(ctx.collect_toolchains(&cfg));
+    verify_outputs(&mut report, &cfg);
 
     // 先写 JSON 再决定是否 bail：benchmark 挂了但结果仍要留下，
     // 否则 CI 里只剩一个退出码，报告端拿不到失败详情。
@@ -505,6 +701,7 @@ mod tests {
 
     fn sample_report() -> Report {
         Report {
+            meta: Meta::default(),
             rows: vec![Row {
                 bench: "fibonacci".into(),
                 description: Some("迭代斐波那契".into()),
@@ -512,6 +709,7 @@ mod tests {
                 input: "20".into(),
                 compile_ms: Some(302.88),
                 mean_ms: 24.3,
+                median_ms: 24.1,
                 stddev_ms: 2.87,
                 relative_pct: 11.8,
                 output: "6765".into(),
@@ -538,11 +736,18 @@ mod tests {
             "input",
             "compile_ms",
             "mean_ms",
+            "median_ms",
             "stddev_ms",
             "relative_pct",
             "output",
         ] {
             assert!(row.get(key).is_some(), "Row 缺少字段 {key}");
+        }
+
+        // 环境归因也是入库契约的一部分：历史数据少了工具链/机器字段就失去可比性
+        let meta = &v["meta"];
+        for key in ["toolchains", "os", "arch", "cpus", "cpu"] {
+            assert!(meta.get(key).is_some(), "Meta 缺少字段 {key}");
         }
 
         let f = &v["failures"][0];
@@ -574,6 +779,205 @@ mod tests {
         let got = summarize_output(&long);
         assert!(got.ends_with('…'), "应截断并带省略号，实际 {got:?}");
         assert_eq!(got.chars().count(), 49, "48 字符 + 省略号");
+    }
+
+    /// 清单必须能被真实解析，且每条语言配置都指向真实存在的源码。
+    ///
+    /// 配置只在 nightly CI 的基准 job 里被读取，而那个 job 不阻断发布：写错字段名
+    /// 或路径，本地全绿、夜里 release notes 直接少一张表。故把整份清单当夹具解析
+    /// 一遍。字段名拼错由 `deny_unknown_fields` 报错，路径写错由本测试报错。
+    #[test]
+    fn test_config_manifest_parses_and_paths_exist() {
+        // Arrange
+        let bench_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let config_path = bench_root.join("bench.toml");
+        let text = std::fs::read_to_string(&config_path)
+            .unwrap_or_else(|e| panic!("读取 {} 失败: {e}", config_path.display()));
+
+        // Act
+        let cfg: Config = toml::from_str(&text)
+            .unwrap_or_else(|e| panic!("解析 {} 失败: {e}", config_path.display()));
+
+        // Assert
+        assert!(
+            !cfg.benchmarks.is_empty(),
+            "{} 里应至少有一个 benchmark",
+            config_path.display()
+        );
+        for (bench, def) in &cfg.benchmarks {
+            assert!(def.runs > 0, "{bench}: runs 必须大于 0，否则取样为空");
+            assert!(!def.inputs.is_empty(), "{bench}: inputs 不能为空");
+            assert!(!def.languages.is_empty(), "{bench}: 至少要配一种语言");
+            for (lang, l) in &def.languages {
+                let src = bench_root.join(&l.src);
+                assert!(
+                    src.is_file(),
+                    "{bench}/{lang}: 源码不存在——{}（相对 {}）",
+                    l.src,
+                    bench_root.display()
+                );
+                assert!(
+                    l.run.is_some(),
+                    "{bench}/{lang}: 未配 run，该项不会产生任何读数"
+                );
+            }
+            // 金标必须**全覆盖或全不写**：写一半会让余下的输入静默失去校验，
+            // 而「没检查」在报告里必须能跟「检查通过」分开。
+            if !def.expected.is_empty() {
+                for input in &def.inputs {
+                    assert!(
+                        def.expected.contains_key(input),
+                        "{bench}: 输入 {input} 缺金标（金标要么全覆盖，要么不写）"
+                    );
+                }
+            }
+        }
+    }
+
+    /// 中位数抗离群：偶数样本取中间两个的均值。
+    #[test]
+    fn test_median_ignores_outlier() {
+        // Arrange：一个被调度抖动拉高的样本
+        let samples = [10.0, 11.0, 12.0, 13.0, 900.0];
+
+        // Act
+        let got = median(&samples);
+
+        // Assert
+        assert!((got - 12.0).abs() < 1e-9, "中位数应为 12.0，实际 {got}");
+        assert!(
+            (median(&[1.0, 2.0, 3.0, 4.0]) - 2.5).abs() < 1e-9,
+            "偶数样本应取中间两个的均值"
+        );
+        assert_eq!(median(&[]), 0.0, "空样本应为 0.0 而非 panic");
+    }
+
+    fn report_with(
+        lang: &str,
+        output: &str,
+    ) -> Report {
+        Report {
+            meta: Meta::default(),
+            rows: vec![Row {
+                bench: "fibonacci".into(),
+                description: None,
+                lang: lang.into(),
+                input: "20".into(),
+                compile_ms: None,
+                mean_ms: 1.0,
+                median_ms: 1.0,
+                stddev_ms: 0.1,
+                relative_pct: 10.0,
+                output: output.into(),
+            }],
+            failures: Vec::new(),
+        }
+    }
+
+    fn cfg_with_expected(expected: &[(&str, &str)]) -> Config {
+        let mut expected_map = BTreeMap::new();
+        for (k, v) in expected {
+            expected_map.insert((*k).to_string(), (*v).to_string());
+        }
+        let mut languages = BTreeMap::new();
+        languages.insert(
+            "rust".to_string(),
+            LangDef {
+                src: "src/fibonacci/fibonacci.rs".into(),
+                compile: None,
+                run: None,
+                version: None,
+            },
+        );
+        let mut benchmarks = BTreeMap::new();
+        benchmarks.insert(
+            "fibonacci".to_string(),
+            BenchmarkDef {
+                description: None,
+                warmup: 0,
+                runs: 1,
+                inputs: vec!["20".into()],
+                languages,
+                expected: expected_map,
+            },
+        );
+        Config { benchmarks }
+    }
+
+    /// 算错的输出必须被金标拦下：「跑得快的错答案」不是基准读数。
+    #[test]
+    fn test_verify_outputs_flags_golden_mismatch() {
+        // Arrange
+        let mut report = report_with("rust", "9999");
+        let cfg = cfg_with_expected(&[("20", "6765")]);
+
+        // Act
+        verify_outputs(&mut report, &cfg);
+
+        // Assert
+        assert_eq!(report.failures.len(), 1, "金标不符应产出一条失败");
+        assert!(
+            report.failures[0].error.contains("金标"),
+            "失败信息应指明是金标不符，实际 {:?}",
+            report.failures[0].error
+        );
+    }
+
+    /// 无金标时退化为跨语言一致性：两门语言输出不同必须响亮失败。
+    #[test]
+    fn test_verify_outputs_flags_cross_language_disagreement() {
+        // Arrange：两门语言跑同一输入，输出不同
+        let mut report = report_with("rust", "6765");
+        report.rows.push(Row {
+            bench: "fibonacci".into(),
+            description: None,
+            lang: "python".into(),
+            input: "20".into(),
+            compile_ms: None,
+            mean_ms: 2.0,
+            median_ms: 2.0,
+            stddev_ms: 0.2,
+            relative_pct: 10.0,
+            output: "832040".into(),
+        });
+        let cfg = cfg_with_expected(&[]);
+
+        // Act
+        verify_outputs(&mut report, &cfg);
+
+        // Assert
+        assert_eq!(report.failures.len(), 1, "跨语言不一致应产出一条失败");
+        assert!(
+            report.failures[0].error.contains("跨语言"),
+            "失败信息应指明是跨语言不一致，实际 {:?}",
+            report.failures[0].error
+        );
+    }
+
+    /// 两门语言输出一致时不得报失败（否则判据会变成噪声源）。
+    #[test]
+    fn test_verify_outputs_accepts_agreeing_languages() {
+        // Arrange
+        let mut report = report_with("rust", "6765");
+        report.rows.push(Row {
+            bench: "fibonacci".into(),
+            description: None,
+            lang: "python".into(),
+            input: "20".into(),
+            compile_ms: None,
+            mean_ms: 2.0,
+            median_ms: 2.0,
+            stddev_ms: 0.2,
+            relative_pct: 10.0,
+            output: "6765".into(),
+        });
+        let cfg = cfg_with_expected(&[]);
+
+        // Act
+        verify_outputs(&mut report, &cfg);
+
+        // Assert
+        assert!(report.failures.is_empty(), "输出一致时不应有失败");
     }
 
     #[test]

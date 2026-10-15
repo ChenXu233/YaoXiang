@@ -1,0 +1,135 @@
+# YaoXiang 多语言基准测试配置
+# 用法: cargo run -p shootout [--bench <name>] [--lang <lang>]
+#
+# 每个 benchmark 通过 BENCH_INPUT 环境变量注入输入规模
+# 所有语言实现均从 BENCH_INPUT 读取，无需 %i 模板替换
+#
+# ⚠ 配置格式是 TOML，不是 YAML（2026-10-15 迁移）：
+#   `serde_yaml` / `serde_yaml_ng` 都依赖 `unsafe-libyaml`（RUSTSEC-2024-0449，
+#   unmaintained，cargo audit 的一条 allowed warning）。解析改用 `toml`——它本来
+#   就在本仓库依赖树内（根 Cargo.toml 与 tools/yx/Cargo.toml 均已依赖），故迁移
+#   不引入任何新包，只净减 serde_yaml_ng + unsafe-libyaml 两个，audit 归零。
+#   不用 JSON：JSON 没有注释，而本文件的注释记着下面这些判定依据。
+#
+# ⚠ 读数可比性（2026-09-20 已对齐）：
+#   所有语言统一跑**编译产物**——rust/cpp/go 跑原生可执行文件，YaoXiang 跑
+#   `compile` 产出的 .42 字节码（`%y run %o`，实测可正常执行且输出一致）。
+#   故各语言的「运行」一列现在是纯执行时间，可横向比较。
+#
+#   历史：此前 YaoXiang 写 `%y run %s` 跑源码，读数混入约 65ms 编译开销，
+#   与其他语言不可比。已改成与它们一致的「跑产物」形式。
+#
+# `inputs` 是**字符串**数组（TOML 里必须带引号）：runner 原样经 BENCH_INPUT
+# 注入，怎么解析由各语言实现自理，不假设一定是数字。
+#
+# `[benchmarks.X.expected]` 是**金标**：输入 → 期望输出。runner 逐语言比对，
+# 不符即判失败并让整套以非零码退出（算错的程序再快也不是读数）。约束：
+#   1. 要么覆盖该 benchmark 的每个 input，要么整块不写（写一半＝余下的输入
+#      静默失去校验；由 cargo test -p shootout 的清单门禁钉住）；
+#   2. 无金标时退化为「同一输入下各语言输出必须一致」；
+#   3. 既无金标又只有一门语言 → 报告里显式记为「未校验」，不默认通过。
+#   string_concat 属第 3 类：输出是 12×输入长度的字符串，写金标等于往配置里
+#   塞 19000 字符；它目前也只有 yaoxiang 一门实现。补独立参照实现属待办。
+#
+# `version` 取该语言工具链版本，随读数一并入库——读数变了却不知道编译器
+# 也换版了，就无从判断是语言退步还是环境变化。
+
+[benchmarks.fibonacci]
+description = "迭代斐波那契数列 — 整数运算和循环性能"
+warmup = 3
+runs = 10
+# 5 门语言实测一致（本机 2026-10-15 全量跑过一遍）：20/30/40 → 6765/832040/102334155
+inputs = ["20", "30", "40"]
+
+[benchmarks.fibonacci.expected]
+"20" = "6765"
+"30" = "832040"
+"40" = "102334155"
+
+[benchmarks.fibonacci.languages.yaoxiang]
+src = "src/fibonacci/fibonacci.yx"
+compile = { cmd = "%y build %s -o %o" }
+# 跑 `compile` 产出的 .42 字节码，与 rust/cpp/go 跑编译产物对齐；
+# 若写 `%y run %s` 则每次运行都重编译源码，读数混入编译开销。
+run = { cmd = "%y run %o" }
+version = "%y --version"
+
+[benchmarks.fibonacci.languages.rust]
+src = "src/fibonacci/fibonacci.rs"
+compile = { cmd = "rustc -O %s -o %o" }
+run = { cmd = "%o" }
+version = "rustc --version"
+
+[benchmarks.fibonacci.languages.python]
+src = "src/fibonacci/fibonacci.py"
+# 无 compile = 解释执行
+run = { cmd = "python %s" }
+version = "python --version"
+
+[benchmarks.fibonacci.languages.cpp]
+src = "src/fibonacci/fibonacci.cpp"
+compile = { cmd = "g++ -O3 -o %o %s" }
+run = { cmd = "%o" }
+version = "g++ --version"
+
+[benchmarks.fibonacci.languages.go]
+src = "src/fibonacci/fibonacci.go"
+compile = { cmd = "go build -o %o %s" }
+run = { cmd = "%o" }
+version = "go version"
+
+[benchmarks.matrix]
+description = "矩阵乘法 — 嵌套循环和多维数组"
+warmup = 3
+runs = 10
+# 金标恒为 0：a[0][k] = 0*k 使 c[0][0] 必为 0，这是跨语言一致性校验点，
+# 不是数值校验点（matrix.yx 头注同此说明）。三档输入实测 python/yaoxiang 一致。
+inputs = ["10", "20", "50"]
+
+[benchmarks.matrix.expected]
+"10" = "0"
+"20" = "0"
+"50" = "0"
+
+[benchmarks.matrix.languages.yaoxiang]
+src = "src/matrix/matrix.yx"
+compile = { cmd = "%y build %s -o %o" }
+# 跑编译产物 .42，与 fib 处一致（详见文件头「读数可比性」）
+run = { cmd = "%y run %o" }
+version = "%y --version"
+
+[benchmarks.matrix.languages.python]
+src = "src/matrix/matrix.py"
+run = { cmd = "python %s" }
+version = "python --version"
+
+[benchmarks.list_ops]
+description = "列表操作 — 列表创建、遍历、过滤和映射"
+warmup = 3
+runs = 10
+inputs = ["100"]
+
+[benchmarks.list_ops.expected]
+# 金标来自 yaoxiang 实现（doubled[0] = 0 恒成立）。目前只有一门实现，
+# 属文件头所说的「未校验」档：它锁住的是「没跑挂」，不是跨语言数值正确性。
+"100" = "0"
+
+[benchmarks.list_ops.languages.yaoxiang]
+src = "src/list_ops/list_ops.yx"
+compile = { cmd = "%y build %s -o %o" }
+# 跑编译产物 .42，与 fib 处一致（详见文件头「读数可比性」）
+run = { cmd = "%y run %o" }
+version = "%y --version"
+
+[benchmarks.string_concat]
+description = "字符串拼接 — 字符串操作性能"
+warmup = 3
+runs = 10
+inputs = ["100", "500", "1000"]
+
+[benchmarks.string_concat.languages.yaoxiang]
+src = "src/string_concat/string_concat.yx"
+compile = { cmd = "%y build %s -o %o" }
+# 跑编译产物 .42，与 fib 处一致（详见文件头「读数可比性」）
+run = { cmd = "%y run %o" }
+version = "%y --version"
