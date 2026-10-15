@@ -1071,7 +1071,7 @@ pub enum Aggregation {
 
 | 场景 | 改造前 | 改造后 |
 | --- | --- | --- |
-| `yaoxiang run app.yx`（单文件） | 5 阶段 | 同 5 阶段 + `assert_drained()` 结算 |
+| `yaoxiang run app.yx`（单文件） | 5 阶段 | 同 5 阶段 + `assert_drained()` 结算（**4.10.3 修订，2026-10-15**：CLI `run` 对 standalone 不再走本管线——统一改走 `compile_project`（MULTI_FILE 阶段表），Script 语义由 rootless 驱动；本行现仅描述 `lib::run_file` / `Compiler::compile` 库路径） |
 | `yaoxiang run`（多文件） | 无 proof_execution、无 W1001/W1002/W1003 | proof_execution 已在 P3 止血接入；**警告面维持不新增**（决策 B1，2026-10-09：死代码族警告不进 compile 路径——池语义正被 4.9 判缺陷修正，归一警告面留待 4.9 之后再议；本行初稿「新增警告输出」作废） |
 | `yaoxiang check`（多文件） | 无 proof_execution | 已在 P3 止血接入 |
 | LSP（项目内） | 无 proof_execution | 已在 P3 止血接入 |

@@ -146,3 +146,59 @@
 > 07 判据表与 04-ssa 缺陷类 3 改过去式；09 勾选 4.5 / 4.5.1 / 4.5.2；CHANGELOG 记一行行为变化；`check-obligations.py` 与
 > `check_tracking.py` 绿、CI 与 Deploy Docs 绿。**收口发现的记账偏差**：t3 / t6 报告里的指针 `ir_gen.rs:357` / `:3102` / `:1096`
 > 与代码事实差一至三行（实为 `:360` / `:3103` / `:1095`+`:1097`，4.5.2 的插入使然）——以代码事实为准登记，本注记同时留痕。
+
+## P4 4.10.3 standalone run 与 MultiFile 编排统一（4.2.5 裁决 A 的 run 半边）
+
+> **丙批实录（2026-10-15 登记 → 2026-10-15 收口）**：用户 2026-10-15 裁决丙——本轮只做 4.10.3
+>（同批候选 3.4.6 按 B1（[02](02-stage-contract.md) §运行时行为表「死代码族警告不进 compile 路径」）
+> 缓议至 4.9 后，前置已改挂并注记）；实施形态 = **完全体单队**（用户指示不开 DAG、不建团队，
+> 单会话实现 + 自验）。批前欠账先行落地：#455 依赖公告修复（rustls 0.23.46 + serde_yaml_ng，
+> `cargo audit` 由 exit 1 恢复 exit 0）、WBS 登记债（#456 登记为 3.17 + 未完成行补
+> 「归属阶段 / 是否阻塞主线」字段）。
+>
+> **一、先红后绿**：driver 级红判据 3 条（`src/driver/tests/run_rootless.rs`——rootless
+> merged IR 不得带 entry_function（红态 `Some("main.main")`）、rootless 顶层可执行语句不得报
+> E3023（红态不产 module）、Bin 对照 entry_function 保持（绿态常驻））+ CLI e2e 3 钉
+>（standalone 相对导入 run（红态 E5001）、Script 顶层语句执行与 #413 提示两枚绿态钉板）。
+>
+> **二、实现面**：CLI `run` 统一走 `compile_project`（`run_file_with_diagnostics` 的项目/
+> standalone 二分岔删除）；Linking 的 `entry_function` 按 `is_bin_role` 门控（#413 T4——
+> Script 不自动调 main）；#413 提示键控由 `module.source_files.is_empty()` 改为调用点项目
+> 探针（统一后 ModuleIR 恒带 source_files，原标记失效）；`script_main_never_called` 适配
+> 限定名形态（函数 `{key}.main`，全局槽位实测同为限定名——以 IR 取证为准，非凭注释推断）。
+>
+> **三、统一暴露的既有缺口（同批顺路修，A/B/C 类——仅把失败程序修成成功，原先成功程序零影响）**：
+>
+> 1. **显式类型实参预特化名**（`mk(Int)(5)`）：ir_gen 按 D6.3 直发特化名（mono 会剥未特化
+>    原件），`resolve_call_target` 三臂（rename / aliases / 点前缀）都不覆盖 `mk(int64)`
+>    形态 ⇒ 调用点悬空 E6006。修法 = 该单点解析器加第四臂（基名限定、类型参数串原样保留）。
+>    **Bin 项目同形复现（预存在缺陷，非本批引入）**。
+> 2. **Script 顶层 `mut` 赋值语句重复配槽**：`extract_global_defs` 与
+>    `register_global_slots` 把 `counter = counter + 1`（与声明同形的 Assign）逐语句
+>    计数 ⇒ 同一变量配 3 槽、初始化写后配的槽而读取用先配的槽（运行期 Add 类型错配）。
+>    修法 = 两处按名合并（同一判据同源）。
+> 3. **同模块约束泛型运算符派发**（RFC-011 §5.2）：mono 派发改写产裸名 `Vec3.add`，
+>    merged 表实为 `{key}.Vec3.add`。修法 = `qualify_deferred_method` 确定性候选 +
+>    查表验证（精确命中 → 泛型所属单元键限定命中 → 回退裸名现状；非后缀启发式，与
+>    `resolve_generic_name` 同形态）。
+>
+> **四、登记缺口（本批不修）**：约束派发在**类型与泛型定义不同模块**时仍 E6006（rootless
+> 双文件探针实证；Bin 同形）——根因 = MonoType 用户类型名不携带定义模块，正确修法属 P6
+> 类型身份收敛；登记 WBS **3.18**（归属 P3、前置待 P6、不阻塞主线），
+> `qualify_deferred_method` 注记同面。
+>
+> **五、测试适配（诚实登记）**：`tests/integration/multifile.rs` 夹具补 manifest——其测的
+> 是 RFC-029 项目编排（Bin 自动入口）而非 Script 语义；`cli_e2e` 一枚钉板（顶层诊断变量名
+> 可见性）与 `script_main_hint` 夹具（7 例）按限定名形态同步——生产消费端只吃 merged IR，
+> 夹具直驱同形态，不用管线产物替身。
+>
+> **六、最终门禁（收口 revision 084eaf87b）**：fmt --check 0 / clippy -D warnings 0 /
+> `cargo test --lib` **2733 passed**（+3 新钉）/ `--test integration` **287 passed** /
+> check-obligations PASS（13·13·0·8）/ check-docs-truth exit=0 / check_tracking exit=0 /
+> 边界三门禁 report-only / markdownlint 0 / pnpm docs:build 0 / IR 快照零漂移 /
+> 语料差分基线再生 **12 行**——逐行结构化核对：exit / stdout / 诊断码全部逐条相同，仅
+> 栈帧函数名与变量名按单元键限定（人工 review 通过）；再生后 `check-corpus-parity.py` exit=0。
+>
+> **七、过程事件（如实登记）**：本批一次在 pre-commit 钩子运行期间并发编辑工作区文档，
+> 被钩子的 stash 回滚吃掉且该次提交失败（配置注释里预告过的并发形态）——纪律 = 钩子
+> 运行期间不动工作区；#455 的提交因此拆成两次尝试（第二次全绿）。
