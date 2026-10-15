@@ -103,8 +103,13 @@ pub(in crate::driver) fn allocate_global_slots(
 }
 
 /// 提取顶层**值绑定**（非函数）——自 orchestrator 移入（4.2.1）。
+///
+/// 同名只登记一次（4.10.3）：Script 顶层对 `mut` 的**赋值语句**与声明同形
+///（`counter = counter + 1` 也是 `Assign { target: Var, .. }`），逐语句计数
+/// 会给同一变量重复配槽——与 ir_gen `register_global_slots` 的按名合并同一
+/// 判据（裸名）。
 pub(in crate::driver) fn extract_global_defs(ast: &Module) -> Vec<(String, MonoType)> {
-    let mut out = Vec::new();
+    let mut out: Vec<(String, MonoType)> = Vec::new();
     for stmt in &ast.items {
         if let StmtKind::Assign {
             target,
@@ -122,7 +127,7 @@ pub(in crate::driver) fn extract_global_defs(ast: &Module) -> Vec<(String, MonoT
                 let is_fn =
                     Expr::block_binding_is_function(type_annotation.as_ref(), value.as_deref())
                         || matches!(value.as_deref(), Some(Expr::Lambda { .. }));
-                if !is_fn {
+                if !is_fn && !out.iter().any(|(n, _)| n == name) {
                     let ty = type_annotation
                         .as_ref()
                         .map(|t| MonoType::from(t.clone()))

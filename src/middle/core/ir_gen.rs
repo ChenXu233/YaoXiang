@@ -1041,6 +1041,12 @@ impl AstToIrGenerator {
         &mut self,
         module: &ast::Module,
     ) {
+        // 本单元内按名判重（4.10.3）：Script 顶层对 `mut` 的赋值语句与声明
+        // 同形，逐语句计数会给同一变量重复配槽（初始化写后配的槽、读取用先
+        // 配的槽，运行时类型错配）。布局键在多文件是限定名、本检查是裸名拦
+        // 不到（见下行），故判重必须本单元局部做——与 extract_global_defs
+        // 同名判据同源。
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         for stmt in &module.items {
             let ast::StmtKind::Assign {
                 target,
@@ -1058,6 +1064,9 @@ impl AstToIrGenerator {
             if ast::Expr::block_binding_is_function(type_annotation.as_ref(), value.as_deref())
                 || Self::is_type_def_binding(value.as_deref())
             {
+                continue;
+            }
+            if !seen.insert(name.clone()) {
                 continue;
             }
             // 已登记（如跨文件布局已有同名的本文件绑定）则跳过
@@ -1461,6 +1470,19 @@ impl AstToIrGenerator {
                 rename
                     .get(prefix)
                     .or_else(|| aliases.get(prefix))
+                    .map(|q| format!("{}{}", q, suffix))
+            })
+            .or_else(|| {
+                // 显式类型实参的预特化名（`mk(int64)`）：两层调用 `mk(Int)(5)`
+                // 由 ir_gen 按 D6.3 直接发特化名（mono 会剥掉未特化原件），其
+                // 基名同样是本单元函数——按同一套规则限定基名、类型参数串原样
+                // 保留，否则限定后查表落空（E6006；4.10.3 语料实证）。
+                let open = name.find('(')?;
+                let base = &name[..open];
+                let suffix = &name[open..]; // 含左括号
+                rename
+                    .get(base)
+                    .or_else(|| aliases.get(base))
                     .map(|q| format!("{}{}", q, suffix))
             })
     }
@@ -8744,6 +8766,7 @@ pub fn generate_ir(
 /// 预注册其他文件的类型布局（`cross_file_types`）与全局变量名（`cross_file_globals`），
 /// 使本文件的跨文件字段访问、方法调用与全局引用能正确解析；随后仅对 `ast`
 /// 这一个文件生成 IR。各文件产出的 `ModuleIR` 由编排器在 IR 层链接。
+#[allow(clippy::too_many_arguments)]
 pub fn generate_ir_with_context(
     ast: &crate::frontend::core::parser::ast::Module,
     result: &crate::frontend::core::typecheck::TypeCheckResult,
@@ -8753,12 +8776,17 @@ pub fn generate_ir_with_context(
     global_slot_base: usize,
     registry: &ModuleRegistry,
     module_key: &str,
+    // Script/Bin 语义开关（顶层可执行语句是否放行，E3023）——与限定名键
+    // 解耦（3.4.8 ③ 同源判据）：rootless（standalone）多单元形态传 true，
+    // 项目（Bin）与嵌入模块传 false
+    script_mode: bool,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     let mut generator = AstToIrGenerator::new_with_type_result(
         result,
         registry.clone(),
         Some(module_key.to_string()),
-    );
+    )
+    .with_script_mode(script_mode);
     generator.seed_cross_file_types(cross_file_types);
     generator.seed_cross_file_globals(global_layout);
     generator.set_global_slot_base(global_slot_base);

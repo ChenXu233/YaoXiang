@@ -291,7 +291,7 @@ pub(crate) fn ensure_vendor_consistency(
 /// 单源判定）：Lambda 或 Fn 注解块为函数，其余为全局。
 /// 用于跨文件全局解析——其他文件引用这些名字时生成 `Call(访问器函数)`。
 /// 计算入口文件的模块键（文件 stem，`mod.yx` 折叠为目录名）。
-fn entry_module_key(entry: &Path) -> String {
+pub(crate) fn entry_module_key(entry: &Path) -> String {
     let stem = entry
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())

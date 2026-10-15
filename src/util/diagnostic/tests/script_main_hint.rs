@@ -5,15 +5,20 @@
 //! main 会与显式 main() 双跑，#356）。本文件锚定提示判定
 //! `script_main_never_called` 的行为契约：文件绑定 main 且模块初始化序列
 //! 无对它的直接调用 → 判定命中（提示输出）。
+//!
+//! 夹具形态（4.10.3）：生产消费端只吃 merged IR（统一编排，函数限定名
+//! `{entry_key}.main`、全局槽位裸名）——夹具直驱同一形态（rootless
+//! `compile_project`），不用管线产物替身。
 
-use crate::frontend::Compiler;
-
-/// 单文件编译（script 模式同路径）后判定 main 是否被顶层调用
+/// rootless 编排编译（生产同形态：限定名函数 + 裸名全局槽位）后判定 main
+/// 是否被顶层调用
 fn compile_and_check(src: &str) -> bool {
-    let module = Compiler::new()
-        .compile("t.yx", src)
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let path = dir.path().join("t.yx");
+    std::fs::write(&path, src).expect("write fixture");
+    let module = crate::frontend::module::orchestrator::compile_project(&path)
         .unwrap_or_else(|e| panic!("compile failed:\nSource:\n{src}\nError:\n{e:?}"));
-    crate::util::diagnostic::script_main_never_called(&module)
+    crate::util::diagnostic::script_main_never_called(&module, "t.main")
 }
 
 #[test]

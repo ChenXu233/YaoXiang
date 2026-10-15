@@ -6,11 +6,19 @@
 //! 入口语义：RFC-029f（Bin 入口按绑定存在性判定、值 main 初始化期求值，#388 定案）。
 
 /// 在临时目录写入多文件项目并运行入口文件，返回运行结果（错误为调试文本）。
+///
+/// 夹具带 manifest（Bin 语义）：4.10.3 后 rootless = Script 语义（不自动调
+/// main，#413），而本文件测的是 RFC-029 项目编排的入口语义（Bin 自动入口）。
 fn run_project(
     files: &[(&str, &str)],
     entry: &str,
 ) -> Result<(), String> {
     let dir = tempfile::tempdir().expect("create tempdir");
+    std::fs::write(
+        dir.path().join("yaoxiang.toml"),
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write manifest");
     for (name, content) in files {
         let path = dir.path().join(name);
         if let Some(parent) = path.parent() {

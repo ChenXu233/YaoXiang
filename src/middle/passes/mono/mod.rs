@@ -53,6 +53,9 @@ pub struct Monomorphizer {
     site_requests: Vec<InstantiationRequest>,
     /// 已处理的请求（去重）
     processed: HashSet<SpecializationKey>,
+    /// 合并函数表全名集（4.10.3）：约束泛型运算符派发（`T.add` → 用户
+    /// 方法）在多文件下查表验证限定名用——只存名字，不克隆函数体
+    all_function_names: std::collections::HashSet<String>,
     /// 最大特化链深度（同一实例化链上嵌套泛型调用的层数；
     /// 拦截无限类型增长递归，如 f(T) → f(List(T)) → …）
     max_depth: usize,
@@ -67,6 +70,7 @@ impl Monomorphizer {
             generic_functions: HashMap::new(),
             generic_types: HashMap::new(),
             specialized_functions: HashMap::new(),
+            all_function_names: std::collections::HashSet::new(),
             pending_queue: VecDeque::new(),
             deferred: HashMap::new(),
             site_requests: Vec::new(),
@@ -145,6 +149,7 @@ impl Monomorphizer {
         module: &ModuleIR,
     ) {
         for func in &module.functions {
+            self.all_function_names.insert(func.name.clone());
             if func.generic_params.is_some() {
                 if func.is_type_decl() {
                     self.generic_types.insert(func.name.clone(), func.clone());
@@ -538,10 +543,12 @@ impl Monomorphizer {
                         let prefix = format!("{pn}.");
                         if name.starts_with(&prefix) {
                             if let Some(concrete) = type_args.get(i) {
-                                *name = format!(
-                                    "{}.{}",
-                                    crate::frontend::core::typecheck::operator_interfaces::operator_type_display(concrete),
-                                    &name[prefix.len()..]
+                                let display = crate::frontend::core::typecheck::operator_interfaces::operator_type_display(concrete);
+                                let bare = format!("{}.{}", display, &name[prefix.len()..]);
+                                *name = Self::qualify_deferred_method(
+                                    &bare,
+                                    &generic.name,
+                                    &self.all_function_names,
                                 );
                             }
                         }
@@ -564,6 +571,34 @@ impl Monomorphizer {
                 locals: new_locals,
             },
         })
+    }
+
+    /// 约束泛型运算符派发名的多文件限定（4.10.3）：`operator_type_display`
+    /// 给用户类型的**裸名义名**（`Vec3`），而多文件合并函数表中用户方法
+    /// 按定义单元键限定（`lib.Vec3.add`）——类型的定义模块在 MonoType 里
+    /// 已丢失，无法从类型实参还原。确定性解析（与 `resolve_generic_name`
+    /// 同一形态，不做后缀猜测）：表内精确命中（原生背书 `Int.add`、单文件
+    /// 裸名表）直接用；否则试「泛型所属单元键」限定名并**查表验证**，命中
+    /// 才采用；都不中回退裸名（既有失败态，不差于现状）。已知缺口：类型
+    /// 与泛型定义**不同模块**时限定名仍无法还原（需 MonoType 携带定义模块，
+    /// 属 P6 类型身份收敛），维持既有 E6006 并登记 WBS。
+    fn qualify_deferred_method(
+        bare: &str,
+        generic_name: &str,
+        table: &std::collections::HashSet<String>,
+    ) -> String {
+        if table.contains(bare) {
+            return bare.to_string();
+        }
+        // 泛型所属单元键（首段切分，与 `resolve_generic_name` 的容器模块
+        // 规则同源：`lib.sum` → `lib`，方法派生 `lib.Point.get_x` → `lib`）
+        if let Some((module, _)) = generic_name.split_once('.') {
+            let qualified = format!("{module}.{bare}");
+            if table.contains(&qualified) {
+                return qualified;
+            }
+        }
+        bare.to_string()
     }
 
     /// 特化类型定义：将泛型类型按类型参数替换为具体类型定义

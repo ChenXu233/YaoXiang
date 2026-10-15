@@ -732,6 +732,7 @@ impl Driver {
             0,
             registry,
             &program.units[0].key,
+            false, // 嵌入模块：非 Script 语义（保持现状）
         ) {
             Ok(ir) => *ir_slot = Some(ir),
             Err(diags) => {
@@ -807,6 +808,10 @@ impl Driver {
     /// 多文件形态（4.2.1）：移植自 compile_project Phase 2——预注册跨文件
     /// 上下文的 `generate_ir_with_context`，错误归入
     /// `OrchestratorError::Compile` 并首错即返。
+    ///
+    /// 4.10.3：rootless（standalone，无项目根）时 Script 语义放行顶层可执行
+    /// 语句（E3023 关闭）——run 半边与 3.4.8 ③ 的 check 半边同一开关：限定名
+    /// 恒按单元键，Script/Bin 语义由 script_mode 独立承载（与限定名键解耦）。
     pub(super) fn ir_generation_orchestrated(
         &self,
         state: &mut State,
@@ -826,6 +831,8 @@ impl Driver {
         else {
             return; // 上游已失败（FailFast 下 run 循环已中止，防御）
         };
+        // 4.10.3：Script/Bin 语义开关（见臂注释）
+        let rootless = orchestrator::find_project_root(&state.entry_path).is_none();
         // 跨文件上下文：所有文件的 AST 引用视图（结构体布局/全局名解析用）
         let all_ast_refs: Vec<&Module> = asts.iter().filter_map(|a| a.as_ref()).collect();
         for (i, us) in units.iter_mut().enumerate() {
@@ -848,6 +855,7 @@ impl Driver {
                 slot_bases[i],
                 registry,
                 &program.units[i].key,
+                rootless,
             ) {
                 Ok(ir) => ir,
                 Err(diags) => {
@@ -1228,13 +1236,20 @@ impl Driver {
                 irs.push((state.program.units[i].path.display().to_string(), ir));
             }
         }
-        let merged = match link_module_irs(irs, &state.entry_key) {
+        let mut merged = match link_module_irs(irs, &state.entry_key) {
             Ok(merged) => merged,
             Err(e) => {
                 state.fail_with(Stage::Linking, e);
                 return;
             }
         };
+        // #413 / 4.10.3：entry_function 按 is_bin_role 门控——Script（无项目根）
+        // 无入口概念（顶层语句即程序主体），自动调 main 会与显式 main() 双跑
+        //（#356）。link_module_irs 只看绑定存在性、不看角色；角色门控归本臂
+        //（与下方入口校验同一判据 is_bin_role，单点）。
+        if !is_bin_role(&state.entry_path) {
+            merged.entry_function = None;
+        }
         // T4：入口语义（RFC-029f 角色驱动；#388 定案：按**绑定存在性**判定）。
         // Script 无入口概念（顶层代码即程序）；Bin 要求存在名为 main 的绑定
         // （值/函数皆可）；带参 main 编译期拒绝（#357：入口恒零参调用）。
