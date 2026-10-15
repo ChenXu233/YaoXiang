@@ -28,6 +28,19 @@ pub struct GenericTypeDef {
     pub type_param_names: Vec<String>,
 }
 
+/// #454 / t14：原生导出一个签名的**形参名 + 必需下限**（同一签名串的两个事实）。
+///
+/// `required_min` = 至少要有实参的**值形参个数**（`?name` 可选位与 `...args` 变参
+/// 尾位不计入）。调用点把「第 required_min 位及其后」标为可选位喂共享判据；
+/// 两侧（typecheck 原生臂与 ir_gen）都必须从这里取，避免各算一份而分歧。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportParamInfo {
+    /// 声明序形参名（不含接收者位；原生导出无接收者）
+    pub names: Vec<String>,
+    /// 必需个数下限（0..=names.len()）
+    pub required_min: usize,
+}
+
 /// 泛型类型实例化结果（WBS 3.4.1）。
 ///
 /// `unevaluable_constraints` 携带编译期不可求值的 const 约束描述——
@@ -163,10 +176,11 @@ pub struct TypeEnvironment {
     /// 嵌入函数上，命名实参仍会被静默丢弃（`?454` 之后的 std 原生导出已修）。
     /// 仓内零调用者，属宿主嵌入面待办；修法与 std 导出同构（补一张形参名表）。
     pub native_arity: HashMap<String, (usize, Option<usize>)>,
-    /// #454：原生导出的**形参名**（全限定名 + 短名 → 声明序形参名）。
-    /// 与 native_signatures / native_arity 同源灌装（同一签名串、同一解析入口）——
-    /// 命名实参在原生导出上的按名绑定与未知名/重复命名判定都用它。
-    pub native_param_names: HashMap<String, Vec<String>>,
+    /// #454 / t14：原生导出的**形参名 + 必需下限**（全限定名 + 短名）。
+    /// 与 native_signatures / native_arity 同源灌装（同一签名串、同一解析入口
+    /// `signature::export_signature_param_info`）——命名实参在原生导出上的按名绑定、
+    /// 未知名/重复命名判定、以及「可选位允许缺席」都只从这张表取，调用点不各算一份。
+    pub native_param_names: HashMap<String, ExportParamInfo>,
     /// 模块注册表 - 提供统一的模块查询接口
     pub module_registry: crate::frontend::module::registry::ModuleRegistry,
     /// 已注册为「模块 Struct」的别名集合（#396：register_module_as_struct 与

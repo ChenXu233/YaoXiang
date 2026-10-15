@@ -578,42 +578,58 @@ impl AstToIrGenerator {
         Ok(slots)
     }
 
-    /// 查一个函数的**声明期形参名**（按声明序），供命名参数重排。
+    /// 查一个函数的**声明期形参名 + 必需下限**（供命名参数重排与「可选位放行」）。
     ///
     /// 两个来源，按就近优先：
-    /// 1. 本模块的 `fn_param_names`（定义与调用同文件）
-    /// 2. 模块注册表里该导出携带的 `param_names`——跨模块调用
-    ///    （`list.push(item = 9, list = v)`）时定义方的 IR 生成器实例拿不到，
-    ///    名字必须随导出传过来（同 `Export.type_params` 的跨模块情形）。
+    /// 1. 本模块的 `fn_param_names`（定义与调用同文件）——同模块函数的形参表
+    ///    不含可选位语义，故 `required_min` 取全长（全必需）
+    /// 2. 模块注册表里的导出：优先用导出携带的 `param_names`（无必需下限信息，
+    ///    同样按全必需），否则走**与 typecheck 原生臂同一出口**
+    ///    `signature::export_signature_param_info`（同一签名串给出形参名与必需下限）。
+    ///    这层同源是 t14 的要点：ir_gen 曾硬编全必需位 ⇒ 合法省略可选位的命名调用
+    ///    被共享判据误报 E1010（实测 `assert.assert(cond = 1 == 1)`）。
     ///
     /// `full_path` 是解析后的限定名（如 `std.list.push`）；`leaf` 是短名。
-    fn lookup_param_names(
+    fn lookup_param_info(
         &self,
         full_path: &str,
         leaf: &str,
-    ) -> Option<Vec<String>> {
+    ) -> Option<crate::frontend::core::typecheck::environment::ExportParamInfo> {
         if let Some(names) = self.fn_param_names.get(leaf) {
-            return Some(names.clone());
+            let names = names.clone();
+            let required_min = names.len();
+            return Some(
+                crate::frontend::core::typecheck::environment::ExportParamInfo {
+                    names,
+                    required_min,
+                },
+            );
         }
         let export = self.registry.resolve_export(full_path).ok()?;
         if let Some(names) = export.param_names.clone() {
-            return Some(names);
+            let required_min = names.len();
+            return Some(
+                crate::frontend::core::typecheck::environment::ExportParamInfo {
+                    names,
+                    required_min,
+                },
+            );
         }
-        // #454：原生导出的注册点（src/std/mod.rs）只带签名串、不带形参名表，
-        // 故第三个来源 = 从**签名串**提取形参名（"(value, type_name: &String) -> String"
-        // → [value, type_name]）。此前这里直接返回 None ⇒ 命名空间调用的按名绑定
-        // 整段被静默跳过（命名实参被整体丢弃、未知名零诊断，C 类静默错值）。
-        Self::param_names_from_signature(&export.signature)
+        // #454 / t14：原生导出的注册点（src/std/mod.rs）只带签名串、不带形参名表，
+        // 故第三个来源 = 从**签名串**提取形参名与必需下限——与 typecheck 原生臂
+        // 同一出口，避免两侧各算一份而分歧。
+        let (names, required_min) =
+            crate::frontend::core::typecheck::signature::export_signature_param_info(
+                &export.signature,
+            )?;
+        Some(
+            crate::frontend::core::typecheck::environment::ExportParamInfo {
+                names,
+                required_min,
+            },
+        )
     }
 
-    /// #454：从声明签名串提取**形参名**（按声明序）——单一实现在
-    /// `typecheck::signature::parse_signature_param_names`（与 native_signatures /
-    /// native_arity 同一解析入口，避免两份同名解析漂移）。
-    fn param_names_from_signature(signature: &str) -> Option<Vec<String>> {
-        crate::frontend::core::typecheck::signature::parse_signature_param_names(signature)
-    }
-
-    /// 拆分 curry 签名为多层
     ///
     /// 输入：`type_annotation` 是 `Type::Fn` 的嵌套结构（如 `(N: Int) -> (n: N) -> Int`）
     /// 输入：`signature_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
@@ -7751,13 +7767,15 @@ impl AstToIrGenerator {
                         .next()
                         .unwrap_or(&method_function_name);
                     // 本模块表 → 跨模块导出携带的 `param_names`
-                    if let Some(names) = self.lookup_param_names(&method_function_name, leaf) {
-                        // t12-F1：槽位判定收敛到共享判据（此前是与另一处互抄的第二份
-                        // 内联副本，槽冲突报旧码 E1015、缺规则④）。
-                        let optional = vec![false; names.len()];
+                    if let Some(info) = self.lookup_param_info(&method_function_name, leaf) {
+                        let names = &info.names;
+                        // t12-F1 / t14：槽位判定收敛到共享判据（此前是与另一处互抄的第二份
+                        // 内联副本，槽冲突报旧码 E1015、缺规则④）；可选位与形参名同出一源。
+                        let optional: Vec<bool> =
+                            (0..names.len()).map(|i| i >= info.required_min).collect();
                         let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
                             &method_function_name,
-                            &names,
+                            names,
                             args,
                             named_args,
                             0, // 命名空间调用无接收者位
@@ -7829,10 +7847,12 @@ impl AstToIrGenerator {
                     // 只用**被绑函数**的形参名：绑定路径把实参交给 binding.positions
                     // 重排，槽序以被绑函数的形参表为准；用方法键的声明序形参名会把
                     // 接收者位的占位错算成实参（类型体绑定形态实测 E1010）。
-                    let bound_params = self.lookup_param_names(
-                        &binding.function,
-                        Self::call_name_leaf(&binding.function),
-                    );
+                    let bound_params = self
+                        .lookup_param_info(
+                            &binding.function,
+                            Self::call_name_leaf(&binding.function),
+                        )
+                        .map(|info| info.names);
                     let mut method_arg_regs = Vec::new();
                     if !named_args.is_empty() {
                         if let Some(names) = bound_params {
@@ -7924,7 +7944,10 @@ impl AstToIrGenerator {
                         // 前导槽位、命名实参按名入槽；名字不可得则响亮报错，
                         // 不静默丢弃命名实参。
                         let leaf = Self::call_name_leaf(&mangled).to_string();
-                        let names = self.lookup_param_names(&mangled, &leaf).unwrap_or_default();
+                        let names = self
+                            .lookup_param_info(&mangled, &leaf)
+                            .map(|info| info.names)
+                            .unwrap_or_default();
                         // F3：诊断用决议出的真实方法名（叶子段），不再硬编 <method>
                         let ordered_args =
                             Self::build_arg_slots(&leaf, &names, args, named_args, span)?;
@@ -8241,19 +8264,21 @@ impl AstToIrGenerator {
                     }
                     _ => None,
                 };
-                if let Some(names) = callee
+                if let Some(info) = callee
                     .as_ref()
                     .filter(|_| !is_ctor)
-                    .and_then(|n| self.lookup_param_names(qualified.as_deref().unwrap_or(n), n))
+                    .and_then(|n| self.lookup_param_info(qualified.as_deref().unwrap_or(n), n))
                 {
-                    // t12-F1：槽位判定收敛到共享判据（与方法与 typecheck 原生臂
+                    let names = &info.names;
+                    // t12-F1 / t14：槽位判定收敛到共享判据（与方法与 typecheck 原生臂
                     // 同一实现）——此前这里是第三份内联副本，槽冲突还报旧码
-                    // E1015、且缺规则④（命名后接位置）。
+                    // E1015、且缺规则④（命名后接位置）；可选位与形参名同出一源。
                     let diag_key = callee.as_deref().unwrap_or("<fn>");
-                    let optional = vec![false; names.len()];
+                    let optional: Vec<bool> =
+                        (0..names.len()).map(|i| i >= info.required_min).collect();
                     let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
                         diag_key,
-                        &names,
+                        names,
                         args,
                         named_args,
                         0, // 命名空间调用无接收者位

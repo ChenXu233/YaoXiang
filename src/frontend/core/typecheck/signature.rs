@@ -223,6 +223,27 @@ fn find_matching_close(
 /// - 与泛型前缀同名之外的位取不出标识符时**整体返回 None**——宁可不按名匹配，
 ///   也不拿错位的名字去匹配
 pub fn parse_signature_param_names(signature: &str) -> Option<Vec<String>> {
+    export_signature_param_info(signature).map(|(names, _)| names)
+}
+
+/// 导出签名 → (形参名, **必需个数下限**)：命名实参入槽与「可选位放行」的
+/// **同一出口**。
+///
+/// 下限取自 [`parse_signature_arity`] 的 min（`?name` 可选位与 `...args` 变参
+/// 尾位都不计入必需）。调用点据此把「第 min 位及其后」标成可选位，再喂给共享
+/// 判据——typecheck 原生臂与 ir_gen 原生路径都只能从这里取，避免两侧各算一份
+/// 而分歧（#454 复审：ir_gen 曾硬编全必需位 ⇒ 合法省略可选位的调用被误报 E1010）。
+pub fn export_signature_param_info(signature: &str) -> Option<(Vec<String>, usize)> {
+    let names = parse_names_only(signature)?;
+    let (min, _max) = parse_signature_arity(signature);
+    // 下限不得超过形参名表（畸形/对不齐时退化为「全部必需」，保守不放松）
+    let required_min = min.min(names.len());
+    Some((names, required_min))
+}
+
+/// 形参名解析主体（[`parse_signature_param_names`] 与
+/// [`export_signature_param_info`] 共用，避免两份同名解析漂移）。
+fn parse_names_only(signature: &str) -> Option<Vec<String>> {
     let signature = signature.trim();
     let (_generic_params, rest) = parse_generic_prefix(signature);
     if !rest.starts_with('(') {

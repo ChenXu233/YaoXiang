@@ -25,8 +25,9 @@ static EMPTY_ARITY: std::sync::LazyLock<HashMap<String, (usize, Option<usize>)>>
     std::sync::LazyLock::new(HashMap::new);
 
 /// #454：native 导出形参名表空缺省（未注入时使用）
-static EMPTY_NATIVE_PARAM_NAMES: std::sync::LazyLock<HashMap<String, Vec<String>>> =
-    std::sync::LazyLock::new(HashMap::new);
+static EMPTY_NATIVE_PARAM_NAMES: std::sync::LazyLock<
+    HashMap<String, crate::frontend::core::typecheck::environment::ExportParamInfo>,
+> = std::sync::LazyLock::new(HashMap::new);
 
 /// RFC-009 读视图：剥离借用层，算术/比较按 inner 类型判定（读穿透）
 pub(super) fn read_view(ty: &MonoType) -> MonoType {
@@ -157,7 +158,8 @@ pub struct ExpressionInferrer<'a> {
     native_arity: &'a HashMap<String, (usize, Option<usize>)>,
     /// #454：native 导出形参名表（全限定名 + 短名 → 声明序形参名）。
     /// 命名空间限定的原生调用据此按名绑定/判定未知名（此前整段静默跳过）。
-    native_param_names: &'a HashMap<String, Vec<String>>,
+    native_param_names:
+        &'a HashMap<String, crate::frontend::core::typecheck::environment::ExportParamInfo>,
     /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
     /// generate_match_expr_ir 按 span 回查，替代对复合 scrutinee 的 AST 猜测
     pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
@@ -485,7 +487,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// 设置 native 导出形参名表（#454）
     pub fn set_native_param_names(
         &mut self,
-        names: &'a HashMap<String, Vec<String>>,
+        names: &'a HashMap<String, crate::frontend::core::typecheck::environment::ExportParamInfo>,
     ) {
         self.native_param_names = names;
     }
@@ -5390,13 +5392,13 @@ impl<'a> ExpressionInferrer<'a> {
                                 .map(|k| format!("std.{k}"))
                                 .and_then(|k| self.native_arity.get(k.as_str()).copied())
                         });
-                    // #454 / t12-F1：原生导出与方法级调用**同一套判据**——
-                    // 收敛到共享实现 `arg_binding::bind_args_to_params`（此前这里
-                    // 内联复制一份且缺规则④：方法与原生对同一书写序裁决分歧）。
-                    // 原生注册点只带签名串，形参名由 `parse_signature_param_names`
-                    // 同源提取（native_param_names）。
+                    // #454 / t12-F1 / t14：原生导出与方法级调用**同一套判据**——
+                    // 收敛到共享实现 `arg_binding::bind_args_to_params`。形参名与
+                    // **必需下限**同出一源：`signature::export_signature_param_info`
+                    // （同一签名串的解析出口），调用点不再各算一份——两侧各算曾
+                    // 实体分歧（ir_gen 硬编全必需位 ⇒ 省略可选位的合法调用被误报 E1010）。
                     if !named_args.is_empty() {
-                        if let Some(names) = ns_key
+                        if let Some(info) = ns_key
                             .as_deref()
                             .and_then(|k| self.native_param_names.get(k))
                             .or_else(|| {
@@ -5407,16 +5409,18 @@ impl<'a> ExpressionInferrer<'a> {
                             })
                         {
                             let diag_name = ns_key.as_deref().unwrap_or(field);
-                            // 可选位（签名 `?name`）：由原生 arity 区间的 min 界定
-                            // 「至少几个值形参必须有实参」，逐个标记送共享判据。
-                            let min_required =
-                                table_range.map(|(min, _)| min).unwrap_or(names.len());
-                            let optional: Vec<bool> =
-                                (0..names.len()).map(|i| i >= min_required).collect();
+                            // 可选位：第 `required_min` 位及其后（`?name` / `...args` 尾位）
+                            let optional: Vec<bool> = (0..info.names.len())
+                                .map(|i| i >= info.required_min)
+                                .collect();
                             super::arg_binding::bind_args_to_params(
-                                diag_name, names, args, named_args,
+                                diag_name,
+                                &info.names,
+                                args,
+                                named_args,
                                 0, // 命名空间调用无接收者位
-                                &optional, span,
+                                &optional,
+                                span,
                             )?;
                         }
                     }

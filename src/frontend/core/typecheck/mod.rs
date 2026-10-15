@@ -201,12 +201,18 @@ pub fn add_native_function_types(
                 env.native_signatures
                     .insert(export.full_path.clone(), fn_ty.clone());
 
-                // #454：同源灌装形参名（同一签名串、同一解析入口）——
-                // 命名实参在原生导出上的按名绑定据此判定
-                if let Some(names) = signature::parse_signature_param_names(&export.signature) {
+                // #454 / t14：同源灌装「形参名 + 必需下限」（同一签名串、同一解析出口）——
+                // 命名实参的按名绑定与「可选位允许缺席」都据此判定，两侧不再各算一份
+                if let Some((names, required_min)) =
+                    signature::export_signature_param_info(&export.signature)
+                {
+                    let info = crate::frontend::core::typecheck::environment::ExportParamInfo {
+                        names,
+                        required_min,
+                    };
                     env.native_param_names
-                        .insert(export.full_path.clone(), names.clone());
-                    env.native_param_names.insert(export.name.clone(), names);
+                        .insert(export.full_path.clone(), info.clone());
+                    env.native_param_names.insert(export.name.clone(), info);
                 }
 
                 // 注册短名称

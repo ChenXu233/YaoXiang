@@ -96,3 +96,55 @@ main: () -> Void = {
         "未知名必须报 E1014（红态是静默 ()）；实际错误：{msg}"
     );
 }
+
+/// t14 形态一：**命名 + 省略可选位**（`assert` 签名 `(cond: Bool, ?msg: String)`）。
+///
+/// 红态（t12 版本二进制实测）：`assert.assert(cond = 1 == 1)` 被误报
+/// `E1010 expected 2 arguments, found 1`——ir_gen 原生路径硬编「全必需位」，
+/// 与 typecheck 原生臂按 arity min 导出的可选位不一致。绿态：编译通过并执行。
+#[test]
+fn test_native_named_args_may_omit_optional_parameter() {
+    // Arrange / Act / Assert
+    run(r#"
+use std.assert
+main: () -> Void = {
+    assert.assert(cond = 1 == 1)
+}
+main()
+"#)
+    .expect("命名实参省略可选位（?msg）必须编译通过并执行");
+}
+
+/// t14 形态二：**命名 + 变参尾位无对应实参**（`string.format` 签名
+/// `(format: &String, ...args) -> String`）。
+///
+/// 红态：`string.format(format = "plain")` 与形态一同因被误报 E1010 而失败；
+/// 绿态：只给必需位、不写变参实参也能调用，值按 format 返回。
+#[test]
+fn test_native_named_args_may_omit_variadic_tail() {
+    // Arrange / Act / Assert
+    run(r#"
+use std.{assert, string}
+main: () -> Void = {
+    s = string.format(format = "plain")
+    assert.assert(s == "plain", "只给必需位时 format 必须按原样返回")
+}
+main()
+"#)
+    .expect("命名实参省略变参尾位（...args）必须编译通过并执行");
+}
+
+/// t14 形态二对照：变参位有实参时仍按槽位送达（值级）。
+#[test]
+fn test_native_named_args_with_variadic_tail_still_formats() {
+    // Arrange / Act / Assert
+    run(r#"
+use std.{assert, string}
+main: () -> Void = {
+    s = string.format(format = "x{}", args = 1)
+    assert.assert(s == "x1", "命名形式给全 format 与 args 时必须代入占位符")
+}
+main()
+"#)
+    .expect("命名实参给全变参位必须成功并代入");
+}

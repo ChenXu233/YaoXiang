@@ -45,7 +45,8 @@ pub struct StatementChecker {
     /// Native 函数 arity 区间表（#387，随签名表同源灌装）
     native_arity: HashMap<String, (usize, Option<usize>)>,
     /// #454：Native 导出形参名（全限定名 + 短名 → 声明序形参名）
-    native_param_names: HashMap<String, Vec<String>>,
+    native_param_names:
+        HashMap<String, crate::frontend::core::typecheck::environment::ExportParamInfo>,
     /// 模块注册表（用于在函数体/块作用域中处理 use 语句）
     module_registry: ModuleRegistry,
     /// 模块别名集合（#396）：区分「模块别名 Struct」与真 struct，
@@ -534,7 +535,7 @@ impl StatementChecker {
     /// 设置 native 导出形参名表（#454）
     pub fn set_native_param_names(
         &mut self,
-        names: HashMap<String, Vec<String>>,
+        names: HashMap<String, crate::frontend::core::typecheck::environment::ExportParamInfo>,
     ) {
         self.native_param_names = names;
     }
