@@ -1,0 +1,4 @@
+// helper.yx —— 与 lib.foo 同名的局部变量（本文件没有同名顶层定义）
+touch: (n: Int) -> Void = (n) => {
+    foo = n
+}

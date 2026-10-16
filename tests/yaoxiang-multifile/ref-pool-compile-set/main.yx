@@ -1,0 +1,13 @@
+// ref-pool-compile-set/main.yx
+// 覆盖: RFC-029f 引用池改进 1（WBS 4.9.1）——池的来源是 discover_with_used
+//       的编译集，不是项目根目录下的全部 .yx
+// 验证: 孤立文件 stray.yx（无人 use，不在入口编译集里）对 lib.helper 的引用不构成
+//       消费——check 本入口文件时 lib.helper 如实报 W1001；lib.other 有 main 消费不报
+// 状态: ✅ 可运行（check 入口文件会报 1 条 W1001：lib.yx 的 helper）
+
+use std.assert
+use lib.{other}
+
+main: () -> Void = {
+    assert.assert(other() == 1, "other() should be 1")
+}

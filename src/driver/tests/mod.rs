@@ -9,6 +9,7 @@ mod mono_cross_unit;
 mod named_import_calls;
 mod obligations;
 mod program;
+mod ref_pool;
 mod run_rootless;
 mod stage;
 mod unit;

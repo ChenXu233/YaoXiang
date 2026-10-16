@@ -6,7 +6,7 @@
 //! 分形（形状选择即形态契约，各形注释标注现状出处）。
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
@@ -25,8 +25,9 @@ use crate::util::span::Span;
 
 use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::helpers::{
-    aggregate_instantiation_requests, allocate_global_slots, ast_has_main, collect_project_refs,
-    is_bin_role, link_module_irs, merge_embedded_std_ir, role_context,
+    aggregate_instantiation_requests, allocate_global_slots, ast_has_main,
+    collect_compilation_refs, collect_package_refs, is_bin_role, link_module_irs,
+    merge_embedded_std_ir, role_context,
 };
 use super::state::{DriverError, SkipReason, SkippedStage, State, UnitState};
 use super::{Aggregation, Driver, ProgramKind, Stage, Unit};
@@ -495,9 +496,10 @@ impl Driver {
     /// - 无 `config.dead_code.enabled` 门控（check 不读该开关）；
     /// - 不按 `typecheck_failed` 跳过（死代码只看 AST，与类型错误并存）；
     /// - 角色感知分析器（RFC-029f：Test 不参与；Bin/Internal 按
-    ///   `set_exempt_pub`、Lib/Script 按 `set_cross_file_refs` 接项目
-    ///   引用池），W1006 遮蔽事件 / W1003 未使用导入 / 死代码警告仅对
-    ///   **本项目文件**外发（vendor/嵌入 std 的内部警告不混入消费方）。
+    ///   `set_exempt_pub`、Lib 按 `set_cross_file_refs` 接**编译集**引用池，
+    ///   Script 不接池——4.9.3），W1006 遮蔽事件 / W1003 未使用导入 /
+    ///   死代码警告仅对 **本项目文件**外发（vendor/嵌入 std 的内部警告
+    ///   不混入消费方）。
     pub(super) fn dead_code_analysis_check(
         &self,
         state: &mut State,
@@ -523,14 +525,47 @@ impl Driver {
                 None => raw_path == entry_path.as_path(),
             }
         };
-        // RFC-029f Phase 2：包内引用池 = 项目根下全部 .yx 文件的标识符
-        // 引用并集（含 Test——测试使用使产品绑定存活）。聚合全项目而非
-        // 入口可达集：单文件 check 时引用方可能不在发现集，按可达集聚合
-        // 会产生顺序敏感的误报。vendor/嵌入 std 不入池（外部包视角）
-        let project_refs: HashSet<String> = project_root_canon
-            .as_deref()
-            .map(collect_project_refs)
+        // RFC-029f 改进 1+2（WBS 4.9.1/4.9.2 / #334）：包内引用池的**根**按判定
+        // 三层解析（roles.rs 文件头：manifest 显式声明 > 入口可达性推断 >
+        // RFC-036 测试约定）——manifest 声明面的**包目标**优先：
+        //   roots = ExplicitSurfaces.bins ∪ libs
+        //           （`[run].main` / `[[bin]]` / `[lib]` / `[exports]` 指向的文件）
+        // 池 = 各 root `discover_with_used` 编译集的引用并集（身份 = (模块, 名字)：
+        // 装配期已剔除每个模块自有的名字，池里留下的每个名字都表示「**别的
+        // 模块**在消费它」）；**无声明面时退化为被检文件自身的编译集**。
+        // 两条路径都不为找入口递归扫目录——这正是 RFC-029f 缺陷 1 的修法
+        // （孤立文件、tests/ 下的测试文件不再进池）。
+        //
+        // 旧口径的注释理由（「聚合全项目而非入口可达集：单文件 check 时引用方
+        // 可能不在发现集，按可达集聚合会产生顺序敏感的误报」）逐句处置：
+        // - 成立的一半（保留）：引用方只要不在**同一个编译面**里就不该豁免，
+        //   故池取**包目标**的编译面而非被检文件一个文件的发现集——
+        //   `check internal.yx` 时包入口 main.yx 的消费照样救活 internal 的定义
+        //   （tests/integration/cli_e2e.rs 的 Internal 用例钉的就是这条，#334）；
+        // - 被取代的一半：**「全项目」不再等于「项目根目录下全部 .yx」**——
+        //   目录扫描把从未参与编译的文件也算成消费者（缺陷 1），改由「包目标的
+        //   编译集」表达「全项目」，扫目录这条路整体作废。
+        // vendor/嵌入 std 不入池（外部包视角，保留原口径）。
+        let (surfaces, _) = role_context(project_root_canon.as_deref());
+        let mut package_roots: Vec<PathBuf> = surfaces
+            .map(|s| s.bins.into_iter().chain(s.libs).collect())
             .unwrap_or_default();
+        package_roots.sort();
+        package_roots.dedup();
+        let project_refs_by_module = if package_roots.is_empty() {
+            // 无声明面（含无 manifest 的 standalone 单文件）：退化为被检文件
+            // 自身的编译集
+            collect_compilation_refs(&program.units, asts.as_slice())
+        } else {
+            let pool = collect_package_refs(&package_roots);
+            if pool.is_empty() {
+                // 声明面存在却一个 root 都跑不通（文件缺失 / 语法全败）——
+                // 宁漏勿误：退化为被检文件自身的编译集，不用空池制造误报
+                collect_compilation_refs(&program.units, asts.as_slice())
+            } else {
+                pool
+            }
+        };
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue; // 上游失败（FailFast 下 run 循环已中止，防御）
@@ -561,16 +596,29 @@ impl Driver {
             if matches!(us.role, Some(FileRole::Test)) {
                 continue; // Test 不参与死代码判定（RFC-036 测试发现规则）
             }
+            // 本单元可消费的池 = 除它自己以外的模块条目的并集——(module, name)
+            // 身份在消费端同样显式可见（本单元条目里的名字已剔除自有名，
+            // 这里再按模块键排一次，语义即「别的模块对本名字的引用」）
+            let unit_key = program.units[i].key.clone();
+            let other_module_refs = || -> HashSet<String> {
+                project_refs_by_module
+                    .iter()
+                    .filter(|(key, _)| **key != unit_key)
+                    .flat_map(|(_, names)| names.iter().cloned())
+                    .collect()
+            };
             let mut analyzer = DeadCodeAnalyzer::new();
             match us.role {
                 Some(FileRole::Bin | FileRole::Internal) => {
-                    analyzer.set_exempt_pub(project_refs.clone());
+                    analyzer.set_exempt_pub(other_module_refs());
                 }
-                Some(FileRole::Lib | FileRole::Script) => {
-                    analyzer.set_cross_file_refs(project_refs.clone());
+                Some(FileRole::Lib) => {
+                    analyzer.set_cross_file_refs(other_module_refs());
                 }
+                // Script：不接池（RFC-029f 改进 3 / WBS 4.9.3）——单文件语义
+                // 只按定义-使用图判定，项目内其它文件的引用不豁免它；
                 // Test 上面已跳过；None 防御不可达（RoleClassification 恒
-                // 产角色）——不给池，退化为纯文件内可达判定
+                // 产角色）——两者都不给池，退化为纯文件内可达判定
                 _ => {}
             }
             let warnings = analyzer.analyze(ast);

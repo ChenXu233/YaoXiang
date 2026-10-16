@@ -1,0 +1,4 @@
+// stray.yx —— 编译集外的孤立文件：引用 lib.helper，但谁也没有 use 它
+use lib.{helper}
+
+probe: () -> Int = helper()

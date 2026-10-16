@@ -1,0 +1,4 @@
+// lib.yx —— 被导入模块：other 被 main 消费，helper 只被编译集外的孤立文件引用
+other: () -> Int = () => { return 1 }
+
+helper: () -> Int = () => { return 42 }

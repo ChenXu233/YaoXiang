@@ -12,6 +12,7 @@ use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::types::mono::MonoType;
+use crate::frontend::module::orchestrator;
 use crate::frontend::module::orchestrator::OrchestratorError;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles;
@@ -397,51 +398,116 @@ pub(in crate::driver) fn role_context(
     (None, None)
 }
 
-/// 收集项目根下全部 `.yx` 文件的标识符引用并集（RFC-029f Phase 2 引用池）
-/// ——自 orchestrator 移入（4.2.2；唯一消费端是 DeadCodeAnalysis 臂的
-/// Check 形态）。
-///
-/// 跳过 `.git`/`.yaoxiang`（vendor）/`target` 目录；词法或语法失败的文件
-/// 静默跳过——引用池是容错的辅助判定，不允许它制造新的检查失败。
-pub(in crate::driver) fn collect_project_refs(project_root: &Path) -> HashSet<String> {
-    fn is_excluded_dir(dir: &Path) -> bool {
-        dir.file_name().is_some_and(|name| {
-            let name = name.to_string_lossy();
-            name == ".git" || name == ".yaoxiang" || name == "target"
-        })
-    }
+/// 引用池的装配输入：模块键 + 源路径 + 已解析 AST（借用视图）
+pub(in crate::driver) struct PoolModule<'a> {
+    /// 模块键（限定名前缀）
+    pub key: &'a str,
+    /// 源路径（嵌入 std 模块为虚拟路径）
+    pub path: &'a Path,
+    /// 已解析 AST
+    pub ast: &'a Module,
+}
 
-    fn collect_yx(
-        dir: &Path,
-        out: &mut Vec<PathBuf>,
-    ) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
+/// 引用池（RFC-029f 改进 1+2）：`模块键 → 该模块**对外引用**的标识符集合`。
+///
+/// **来源 = 编译面，不是目录**（缺陷 1 / #334「包内 use 图」）：池的根由调用方
+/// 按 RFC-029f 判定三层给定——manifest 声明面的包目标（`[run].main` /
+/// `[[bin]]` / `[lib]` / `[exports]`）优先（[collect_package_refs]），无声明面
+/// 时退化为被检文件自身的编译集（[collect_compilation_refs]）；**两条路径都
+/// 不为找入口递归扫目录**。从未被 `use` 的孤立文件、tests/ 下的测试文件因此
+/// 不再构成生产代码的消费者。
+///
+/// **身份 = `(模块, 名字)`**（缺陷 2）：每个模块自有的名字（顶层定义与局部
+/// 绑定，见 `DeadCodeAnalyzer::collect_refs_and_own_names`）从**它自己**的
+/// 条目里剔除——同名标识符在不同模块各自计数，模块自己的 `foo`（定义或
+/// 局部变量）不构成它对别的模块 `foo` 的消费。
+///
+/// 两个既有例外保留：vendor 依赖文件与嵌入 std 模块（虚拟路径）不入池
+/// （外部包视角——它们不是本项目自己声明的消费面）。
+///
+/// 本函数是**唯一装配点**（两条来源路径共用，口径不得分歧）
+pub(in crate::driver) fn collect_ref_pool(
+    modules: &[PoolModule<'_>]
+) -> HashMap<String, HashSet<String>> {
+    let mut pool: HashMap<String, HashSet<String>> = HashMap::new();
+    for module in modules {
+        // 嵌入 std 模块：虚拟路径不是磁盘文件，也不属于本项目的消费面
+        if module.path.to_str().is_some_and(|p| p.starts_with('<')) {
+            continue;
+        }
+        // vendor 依赖：外部包视角（RFC-029f 原口径保留）
+        if orchestrator::is_vendor_path(module.path) {
+            continue;
+        }
+        let (refs, own) = DeadCodeAnalyzer::collect_refs_and_own_names(module.ast);
+        pool.insert(
+            module.key.to_string(),
+            refs.difference(&own).cloned().collect(),
+        );
+    }
+    pool
+}
+
+/// 退化为「被检文件自身的编译集」：Discovery 臂 `discover_with_used` 的产物
+/// （`units`/`asts` 按下标对应）。只读传入的 AST——不做词法/语法/IO，也就
+/// 没有「容错跳过」一说（解析失败的文件在 `asts` 里本就是 `None`）。
+pub(in crate::driver) fn collect_compilation_refs(
+    units: &[Unit],
+    asts: &[Option<Module>],
+) -> HashMap<String, HashSet<String>> {
+    let modules: Vec<PoolModule<'_>> = units
+        .iter()
+        .zip(asts.iter())
+        .filter_map(|(unit, ast)| {
+            Some(PoolModule {
+                key: unit.key.as_str(),
+                path: unit.path.as_path(),
+                ast: ast.as_ref()?,
+            })
+        })
+        .collect();
+    collect_ref_pool(&modules)
+}
+
+/// manifest 声明面优先的池来源（#334「包内 use 图不可达的报警」）：对每个包目标
+/// root 跑一次 `discover_with_used`，把编译集里的文件现场词法+语法解析后装配池。
+///
+/// - root 取自 `roles::ExplicitSurfaces`（`[run].main`/`[[bin]]`/`[lib]`/
+///   `[exports]` 指向的文件，路径已 canonicalize）——**不扫目录找入口**；
+/// - 去重口径 = canonical 路径（与发现期同口径）；
+/// - root 读不到（声明了却不存在）、词法/语法失败的文件静默跳过：池是辅助判定，
+///   不允许它制造新的检查失败（解析失败的文件本就退出编译单元，4.10.1 同口径）；
+/// - 全部 root 都跑不通时返回空池，调用方据此退化为被检文件自身的编译集。
+pub(in crate::driver) fn collect_package_refs(
+    roots: &[PathBuf]
+) -> HashMap<String, HashSet<String>> {
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+    let mut owned: Vec<(String, PathBuf, Module)> = Vec::new();
+    for root in roots {
+        let Ok((files, _, _)) = orchestrator::discover_with_used(root) else {
+            continue;
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if !is_excluded_dir(&path) {
-                    collect_yx(&path, out);
-                }
-            } else if path.extension().is_some_and(|e| e == "yx") {
-                out.push(path);
+        for file in files {
+            let canon = file
+                .path
+                .canonicalize()
+                .unwrap_or_else(|_| file.path.clone());
+            if !seen.insert(canon) {
+                continue;
             }
+            let Ok(tokens) = lexer::tokenize(&file.source) else {
+                continue;
+            };
+            let parsed = parser::parse(&tokens);
+            if parsed.has_errors {
+                continue;
+            }
+            owned.push((file.module_key, file.path, parsed.module));
         }
     }
-
-    let mut refs = HashSet::new();
-    let mut files = Vec::new();
-    collect_yx(project_root, &mut files);
-    for path in files {
-        let Ok(source) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        let Ok(tokens) = lexer::tokenize(&source) else {
-            continue;
-        };
-        let parsed = parser::parse(&tokens);
-        refs.extend(DeadCodeAnalyzer::collect_ident_refs(&parsed.module));
-    }
-    refs
+    let modules: Vec<PoolModule<'_>> = owned
+        .iter()
+        .map(|(key, path, ast)| PoolModule { key, path, ast })
+        .collect();
+    collect_ref_pool(&modules)
 }

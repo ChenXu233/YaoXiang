@@ -1,0 +1,17 @@
+// ref-pool-module-identity/main.yx
+// 覆盖: RFC-029f 引用池改进 2（WBS 4.9.2）——池的身份是 (模块, 名字)
+// 验证: 同名标识符按模块独立计数——main 自己的顶层 foo 与 helper 的同名局部 foo
+//       都不豁免 lib.foo（check 入口文件时如实报 W1001）；lib.used 有 main 消费不报
+// 状态: ✅ 可运行（check 入口文件会报 1 条 W1001：lib.yx 的 foo）
+
+use std.assert
+use lib.{used}
+use helper.{touch}
+
+foo: () -> Int = () => { return 9 }
+
+main: () -> Void = {
+    assert.assert(foo() == 9, "own foo should be 9")
+    assert.assert(used() == 1, "used() should be 1")
+    touch(1)
+}

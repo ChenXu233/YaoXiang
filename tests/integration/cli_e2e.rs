@@ -644,8 +644,12 @@ fn test_e2e_check_vendor_import_surface_blocks_hidden() {
 fn test_e2e_check_internal_unused_fn_reports() {
     // Arrange: internal.yx 无人 use、无 main → Internal 角色；其顶层函数无引用
     // （RFC-029f 包内 use 图不可达即报）
+    //
+    // 声明面（WBS 4.9.1 / #334）：引用池的根 = 包目标。本夹具补 `[run].main`
+    // 指向入口文件，成为 RFC-029f 意义上的合法包——池 = 入口 discover_with_used
+    // 的编译集（main.yx 未 use internal.yx ⇒ internal 仍不在包内 use 图里）。
     let tmp = TempDir::new().unwrap();
-    write_manifest(tmp.path(), "app", "");
+    write_manifest(tmp.path(), "app", "[run]\nmain = \"main.yx\"\n");
     let _main = write_yx(tmp.path(), "main.yx", "main = () => { x = 1 }");
     let internal = write_yx(
         tmp.path(),
@@ -666,10 +670,14 @@ fn test_e2e_check_internal_unused_fn_reports() {
 
 #[test]
 fn test_e2e_check_internal_fn_used_elsewhere_alive() {
-    // Arrange: 同样的顶层定义，但被其他文件具名导入并调用——
-    // 引用池来自全项目扫描，使用方在发现集之外也能救活
+    // Arrange: 同样的顶层定义，但被其他文件具名导入并调用——引用池的根 =
+    // **包目标**（WBS 4.9.1 / #334「包内 use 图」）：本夹具补 `[run].main`
+    // 指向入口文件，池 = 入口 discover_with_used 的编译集，于是使用方（入口
+    // 文件）不在被检文件的发现集里也能救活这条定义。
+    // （旧实现靠项目根目录递归扫描达成同一效果；本轮把扫描面改成编译面——
+    // 目录里从未参与编译的文件不再算消费者，见 RFC-029f 缺陷 1。）
     let tmp = TempDir::new().unwrap();
-    write_manifest(tmp.path(), "app", "");
+    write_manifest(tmp.path(), "app", "[run]\nmain = \"main.yx\"\n");
     let _main = write_yx(
         tmp.path(),
         "main.yx",
