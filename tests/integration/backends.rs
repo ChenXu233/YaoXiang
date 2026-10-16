@@ -35,7 +35,6 @@ fn test_heap_creation() {
 fn test_execution_state_default() {
     let state = ExecutionState::default();
 
-    assert_eq!(state.call_depth, 0);
     assert_eq!(state.ip, 0);
     assert!(state.current_function.is_none());
     assert!(!state.is_complete);

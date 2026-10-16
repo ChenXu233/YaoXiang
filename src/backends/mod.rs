@@ -363,11 +363,6 @@ pub struct ExecutionState {
     pub current_function: Option<String>,
     /// Instruction pointer
     pub ip: usize,
-    /// Call stack depth
-    ///
-    /// 由 `Interpreter::call_stack.len()` 单点派生（帧入栈/弹栈处 `sync_depth`
-    /// 同步，见 `interpreter/executor/executor.rs`）——不构成第二个真值源。
-    pub call_depth: usize,
     /// Whether execution is complete
     pub is_complete: bool,
 }

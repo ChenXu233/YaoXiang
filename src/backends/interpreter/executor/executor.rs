@@ -302,16 +302,7 @@ impl Interpreter {
             ));
         }
         self.call_stack.push(frame);
-        self.sync_depth();
         Ok(())
-    }
-
-    /// 帧数变化的单点同步：`ExecutionState::call_depth` 由 `call_stack.len()` 派生。
-    ///
-    /// `call_depth` 此前是全仓零读写的平行表示（自附 grep 证据）；保留字段是
-    /// 为了 `Executor::state()` 的对外契约，但真值源只有一个：`call_stack`。
-    fn sync_depth(&mut self) {
-        self.state.call_depth = self.call_stack.len();
     }
 
     /// 函数表查询：范围校验 + `local_count`。
@@ -425,7 +416,6 @@ impl Interpreter {
                 }
             }
         }
-        self.sync_depth();
         if matches!(return_target, ReturnTarget::Host) {
             // 宿主入口帧：控制权交还 `drive_frame` 的循环；调用者帧的 ip 由它
             // 自己执行的指令推进（本次返回与它无关）。
