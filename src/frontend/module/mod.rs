@@ -24,8 +24,10 @@ pub mod roles;
 pub mod symbol;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use crate::frontend::core::types::mono::MonoType;
+use crate::util::span::Span;
 
 /// 导出项类型
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,6 +95,12 @@ pub struct Export {
     /// 变体构造、match 变体解构在导入方即失败。载荷随导出传播，导入方
     /// `register_use_export` 据此写入同构的三张表。
     pub type_payload: Option<TypeDefPayload>,
+    /// 该导出在**定义文件**中的名源位置（WBS 4.6.1）：用户/embedded-yx 模块
+    /// 由签名收集（`orchestrator::extract_module_info`）从 AST 标识符节点填
+    /// `Some`，与 typecheck 定义事件（`VarInfo.definition_span`）同源同值；
+    /// native std 导出无源码位置，为 `None`——导入方跨文件 `resolves_to`
+    /// 据此回退到 use 行名源位置（现状语义）。
+    pub definition_span: Option<Span>,
 }
 
 /// 类型定义导出载荷（见 [`Export::type_payload`]）。
@@ -138,6 +146,11 @@ pub struct ModuleInfo {
     pub method_bindings: HashMap<String, MonoType>,
     /// 子模块名称列表
     pub submodules: Vec<String>,
+    /// 模块的**定义文件**（WBS 4.6.1）：Registry 臂按 `DiscoveredFile` 填
+    /// `Some`（含 vendor 依赖——vendor 文件同样是磁盘真实文件）；
+    /// std 虚拟模块为 `None`。跨文件 `resolves_to` 的文件身份与 4.9.4 的
+    /// use 项路径解析都以此为唯一来源。
+    pub definition_file: Option<PathBuf>,
 }
 
 impl ModuleInfo {
@@ -152,6 +165,7 @@ impl ModuleInfo {
             exports: HashMap::new(),
             method_bindings: HashMap::new(),
             submodules: Vec::new(),
+            definition_file: None,
         }
     }
 

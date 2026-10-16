@@ -46,12 +46,13 @@ pub fn handle_references(
     let db = world.semantic_db();
     let (line, col) = position_to_internal_utf16(content, position);
 
-    // 先尝试通过引用找到定义
-    let def = if let Some(def) = db.resolve_reference(&uri_str, line, col) {
+    // 先尝试通过引用找到定义（键经 4.6.1 规范化）
+    let def_key = crate::lsp::uri::db_key(&uri_str);
+    let def = if let Some(def) = db.resolve_reference(&def_key, line, col) {
         def
     } else {
         // 光标可能在定义位置本身，查找 definitions
-        let defs = db.get_definitions(&uri_str);
+        let defs = db.get_definitions(&def_key);
         defs.iter().find(|d| {
             d.span.start.line == line && d.span.start.column <= col && d.span.end.column > col
         })?

@@ -50,7 +50,7 @@ pub fn handle_hover(
     let db = world.semantic_db();
     let (line, col) = position_to_internal_utf16(content, position);
 
-    let def = db.resolve_reference(&uri_str, line, col)?;
+    let def = db.resolve_reference(&crate::lsp::uri::db_key(&uri_str), line, col)?;
 
     // 构建悬停内容
     let mut markdown = String::from("```yaoxiang\n");

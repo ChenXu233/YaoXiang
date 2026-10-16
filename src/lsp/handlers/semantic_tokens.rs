@@ -89,7 +89,10 @@ pub fn handle_semantic_tokens_full(
     let uri = params.text_document.uri.as_str();
 
     let empty: &[crate::frontend::core::typecheck::semantic_db::SemanticToken] = &[];
-    let db_tokens = semantic_db.get_tokens(uri).unwrap_or(empty);
+    // 键经 4.6.1 规范化（客户端 URI 等价形式 → 规范化 file URI 键）
+    let db_tokens = semantic_db
+        .get_tokens(&crate::lsp::uri::db_key(uri))
+        .unwrap_or(empty);
 
     debug!(
         "semanticTokens full: uri={}, tokens_count={}",
@@ -129,8 +132,8 @@ pub fn handle_semantic_tokens_full_delta(
     let uri = params.text_document.uri.as_str();
     let previous_result_id = &params.previous_result_id;
 
-    // 获取当前最新 tokens
-    let db_tokens = semantic_db.get_tokens(uri);
+    // 获取当前最新 tokens（键经 4.6.1 规范化）
+    let db_tokens = semantic_db.get_tokens(&crate::lsp::uri::db_key(uri));
     let all_files = semantic_db.all_files();
     debug!(
         "semanticTokens delta: uri={}, db_tokens={:?}, all_files_in_db={:?}",

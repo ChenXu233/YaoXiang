@@ -17,7 +17,7 @@ use lsp_types::request::{Completion, GotoDefinition, Initialize, References, Shu
 use lsp_types::request::HoverRequest;
 use lsp_types::InitializeParams;
 
-use crate::lsp::server::{handle_request, handle_notification, publish_diagnostics_for_uri};
+use crate::lsp::server::{analyze_and_publish, handle_request, handle_notification};
 use crate::lsp::session::{Session, SessionState};
 use crate::lsp::world::World;
 
@@ -311,16 +311,17 @@ fn test_handle_notification_did_close_clears_diagnostics() {
 }
 
 #[test]
-fn test_publish_diagnostics_for_uri() {
+fn test_analyze_and_publish() {
     let (conn, rx) = test_connection();
     let mut session = Session::new();
+    let mut world = World::new();
     session.document_store_mut().open(
         "file:///test/main.yx".to_string(),
         "x = 42\n".to_string(),
         1,
     );
 
-    publish_diagnostics_for_uri(&conn, &session, "file:///test/main.yx");
+    analyze_and_publish(&conn, &session, &mut world, "file:///test/main.yx");
 
     let msg = rx.try_recv();
     assert!(msg.is_ok());

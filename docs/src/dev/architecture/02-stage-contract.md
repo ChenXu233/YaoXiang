@@ -270,7 +270,7 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 | `diagnostics` | 错误诊断通道（既有通道，非「产出即契约」） |
 | `bindings` | 有跨阶段读取（ir_gen.rs:735/:5034），但文档注释未声明跨阶段契约 ⇒ 未收编 |
 | `local_var_types` | 诊断渲染用（ir_gen.rs:852/:4543/:4794），同 `bindings`——未声明契约 |
-| `semantic_db` | 消费者在 LSP（src/lsp/server.rs:493），不属编译阶段义务 |
+| `semantic_db` | 消费者在 LSP（4.6.1 起经 `DriverOutcome.semantic_db` 通道外发，src/lsp/server.rs:482），不属编译阶段义务 |
 | `trait_table` | 跨阶段读取 ir_gen.rs:4336/:6867，文档注释未声明契约 |
 | `warnings` | 警告诊断通道（与 `diagnostics` 同类） |
 | `interface_impl_registry` | 树内事实（3.4.9 用户裁决甲；在相位消费点见「§义务字段」的改判记录） |
@@ -981,6 +981,38 @@ impl Driver {
 >     23 个按类别划分的子目录，88 个 IR 快照按镜像路径同步搬迁；语料基线同提交再生（342 行，独立复算逐行比对：
 >     仅 `file` 字段与 2 条新增变化），41 个快照因文件头路径变长而重新生成，逐行核对**只有 span 偏移变化**
 >     （去偏移归一化后零差异）。
+> 21. LSP 语义数据管线统一（4.6.1，2026-10-16）。诊断与语义数据由**同一
+>     次编译**产出，项目内跨文件引用携带 `resolves_to` 指向真实定义——
+>     旧形态是 didOpen/didChange 触发**两趟**编译：诊断走统一 Driver 管线，
+>     语义数据走 server.rs 的手工 lex→parse→单文件 typecheck（无模块注册表，
+>     项目内 `use` 解析失败、引用事件不产生，跨文件跳转/重命名/引用查找
+>     静默落空——D55 登记的静默失败在本任务收口）。**实现**：(1) `Export`
+>     携带 `definition_span`（extract_module_info 自 AST 标识符节点收割，
+>     与 typecheck 定义事件的 `def_span` 同源同值；native std 恒 None），
+>     `ModuleInfo` 携带 `definition_file`（Registry 臂按 DiscoveredFile
+>     填）；(2) checker 排空引用事件时经 `import_def_locations` 把跨文件
+>     导入项的 `resolves_to` 从 use 行重定向到定义文件的真实位置（std
+>     导入无登记，维持落 use 行）；(3) checker 模块身份由统一 `"<module>"`
+>     改为单元文件路径（该值只消费于语义数据面，零诊断消费——实证
+>     `env.module_name` 全部 4 个消费点）；(4) `DriverOutcome` 新增
+>     `semantic_db` 通道——CollectAll 形态（Lsp 目标文件无论诊断成败 +
+>     SingleFile 兜底）汇入，Lsp 臂尾从 registry 注入非目标文件的顶层
+>     导出定义面（`external_definitions`，未打开的文件也能跳转；类型/
+>     子模块导出不注入——typecheck 侧类型注册不产生定义事件，两侧保持
+>     一致的空缺）；(5) orchestrator 新增 `analyze_source_in_project`
+>     （`check_source_in_project` 转调并只取诊断半边）；(6) LSP 侧
+>     `analysis.rs` 单编译入口取代手工管线（server.rs 的
+>     `update_semantic_db` 删除），World 键统一为规范化 file URI
+>     （`uri.rs`：`path_to_uri(uri_to_path(u))` 幂等归一，盘符大小写
+>     与 %XX 编码差异归一到同键）。**顺路修（D59 分流 B 类——旧行为
+>     静默不动作，不改变任何原先成功程序的对外表现）**：项目内文件的
+>     跨文件跳转/重命名/引用查找自静默落空转为命中真实定义；词法错误
+>     时旧手工管线删除语义信息改为残缺 AST 染色保留（4.2.6 编辑器哲学
+>     延伸）；目标文件带类型错误时语义数据不再随 `type_result` 一并
+>     丢弃（染色/跳转在打字中间态不消失）。**钉板**：driver 级 6 枚
+>     （目标文件路径键/跨文件 resolves_to+外部定义面往返/std 导入回退
+>     use 行/错误文件保留/单文件兜底路径键+错误保留）、LSP e2e 1 枚
+>     （先红后绿实证——修复前跳转返回 None）、uri 规范化 4 枚。
 **十个入口的改造方式（逐个指定函数）**：
 
 | 入口 | 改造后 |

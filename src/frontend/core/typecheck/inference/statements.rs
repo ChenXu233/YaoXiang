@@ -170,6 +170,12 @@ pub struct StatementChecker {
     /// 由 TypeChecker 排空进 SemanticDB 的 imports 表。
     /// 定义/引用事件走 ScopeManager 漏斗（scope.rs），不经此缓冲。
     semantic_imports: Vec<SemanticImportEvent>,
+    /// 跨文件导入项的真实定义位置（WBS 4.6.1）：use 行绑定名源 span →
+    /// （定义文件， 定义名源 span）。import_binding 在导出携带
+    /// `definition_span` 且模块携带 `definition_file` 时登记；std/native
+    /// 导出不登记（回退现状：resolves_to 落 use 行）。TypeChecker 排空
+    /// 引用事件时查本表重写 DefId，使跨文件跳转命中真实定义。
+    import_def_locations: HashMap<crate::util::span::Span, (String, crate::util::span::Span)>,
 }
 
 /// 语义导入事件：一条 use 语句（#433/D55）。
@@ -248,6 +254,7 @@ impl StatementChecker {
             tail_annotation_span: None,
             vendor_root: None,
             semantic_imports: Vec::new(),
+            import_def_locations: HashMap::new(),
         }
     }
 
@@ -641,6 +648,7 @@ impl StatementChecker {
         binding_name: &str,
         definition_span: crate::util::span::Span,
         export: &Export,
+        module: &ModuleInfo,
     ) {
         let ty = self.export_type(export);
         // 标记为导入：导入名不是本文件的绑定，不参与 spec §4.3 的
@@ -652,6 +660,15 @@ impl StatementChecker {
             PolyType::mono(ty),
             definition_span,
         );
+        // 4.6.1：被导入符号在**定义文件**里有真实位置时（用户/vendor 模块
+        // 的函数与常量导出），登记 use 行 span → 真实定义的映射；排空引用
+        // 事件时据此把 resolves_to 重定向出本文件（跨文件跳转命中定义）。
+        // std/native 导出两个位置都缺（definition_file/definition_span 为
+        // None），不登记——resolves_to 维持落 use 行的现状语义。
+        if let (Some(file), Some(def_span)) = (&module.definition_file, export.definition_span) {
+            self.import_def_locations
+                .insert(definition_span, (file.display().to_string(), def_span));
+        }
     }
 
     pub(in crate::frontend::core::typecheck) fn process_use_stmt(
@@ -771,7 +788,7 @@ impl StatementChecker {
                     }
                     // #321 W1003：登记导入本地名（内联别名优先）
                     self.note_body_import(local_name, path_span);
-                    self.import_binding(local_name, local_span, &export);
+                    self.import_binding(local_name, local_span, &export, &module);
                 }
             }
         }
@@ -787,6 +804,15 @@ impl StatementChecker {
     /// 定义/引用事件走 ScopeManager 漏斗（`take_binding_events`/`take_reference_events`）。
     pub fn take_import_events(&mut self) -> Vec<SemanticImportEvent> {
         std::mem::take(&mut self.semantic_imports)
+    }
+
+    /// 取走跨文件导入项的真实定义位置表（WBS 4.6.1）：use 行绑定名源 span →
+    /// （定义文件， 定义名源 span）。TypeChecker 排空引用事件时查表重写
+    /// `resolves_to` 的 DefId。
+    pub fn take_import_def_locations(
+        &mut self
+    ) -> HashMap<crate::util::span::Span, (String, crate::util::span::Span)> {
+        std::mem::take(&mut self.import_def_locations)
     }
 
     /// 取走作用域累积的定义事件（#433/D55）：转发 ScopeManager 采集漏斗

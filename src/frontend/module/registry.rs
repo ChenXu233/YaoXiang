@@ -296,6 +296,7 @@ impl ModuleRegistry {
                 type_params: None,
                 param_names: None,
                 type_payload: None,
+                definition_span: None, // std 虚拟模块无源码定义位置（4.6.1）
             });
 
             // 注册模块信息
@@ -352,6 +353,7 @@ impl ModuleRegistry {
                         type_params: None,
                         param_names: None,
                         type_payload: None,
+                        definition_span: None, // std 虚拟模块无源码定义位置（4.6.1）
                     });
                     self.register(info);
                 }
@@ -418,6 +420,7 @@ mod tests {
             type_params: None,
             param_names: None,
             type_payload: None,
+            definition_span: None,
         }
     }
 

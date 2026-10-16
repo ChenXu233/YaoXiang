@@ -425,9 +425,8 @@ pub(crate) fn handle_notification(
         m if m == <DidOpenTextDocument as lsp_types::notification::Notification>::METHOD => {
             if let Ok(params) = serde_json::from_value(not.params) {
                 let uri = handlers::text_document::handle_did_open(session, params);
-                update_semantic_db(session, world, &uri);
+                analyze_and_publish(connection, session, world, &uri);
                 request_semantic_tokens_refresh(connection);
-                publish_diagnostics_for_uri(connection, session, &uri);
             }
         }
 
@@ -435,9 +434,8 @@ pub(crate) fn handle_notification(
         m if m == <DidChangeTextDocument as lsp_types::notification::Notification>::METHOD => {
             if let Ok(params) = serde_json::from_value(not.params) {
                 if let Some(uri) = handlers::text_document::handle_did_change(session, params) {
-                    update_semantic_db(session, world, &uri);
+                    analyze_and_publish(connection, session, world, &uri);
                     request_semantic_tokens_refresh(connection);
-                    publish_diagnostics_for_uri(connection, session, &uri);
                 }
             }
         }
@@ -467,53 +465,34 @@ pub(crate) fn handle_notification(
     Ok(false)
 }
 
-/// 更新指定文件的符号索引和语义数据库
-///
-/// 从 DocumentStore 获取文件内容，解析后更新 World 的语义数据库。
-fn update_semantic_db(
+/// 分析指定文档并发布结果（WBS 4.6.1）：**一次编译**同时更新 World 的
+/// 语义数据库并发送 publishDiagnostics——诊断与语义数据同源（4.6.1 前是
+/// 两趟编译：诊断走统一管线、语义数据走手工 lex→parse→单文件 typecheck，
+/// 项目内跨文件引用因此没有 resolves_to）。
+pub(crate) fn analyze_and_publish(
+    connection: &Connection,
     session: &Session,
     world: &mut World,
     uri: &str,
 ) {
     if let Some(doc) = session.document_store().get(uri) {
-        let tokens = match crate::frontend::core::lexer::tokenize(doc.content()) {
-            Ok(t) => t,
-            Err(_) => {
-                // 词法错误时移除旧语义信息
-                world.remove_file_symbols(uri);
-                return;
-            }
-        };
+        let (diagnostics, semantic_db) = crate::lsp::analysis::analyze_document(uri, doc.content());
+        let diag_count = diagnostics.len();
 
-        let parse_result = crate::frontend::core::parser::parse(&tokens);
+        world.update_semantic_db(semantic_db);
 
-        // 运行 typecheck 收集语义 tokens（使用 collect_all 模式以收集更多信息）
-        let mut tc = crate::frontend::core::typecheck::TypeChecker::new(uri);
-        let result = tc.check_module_collect_all(&parse_result.module);
-        world.update_semantic_db(result.semantic_db);
-
-        debug!("已更新语义数据库: {}", uri);
-    }
-}
-
-/// 对指定 URI 的文档运行诊断并发送 publishDiagnostics 通知
-pub(crate) fn publish_diagnostics_for_uri(
-    connection: &Connection,
-    session: &Session,
-    uri: &str,
-) {
-    if let Some(doc) = session.document_store().get(uri) {
-        let params = handlers::diagnostics::run_diagnostics(uri, doc.content());
-        let diag_count = params.diagnostics.len();
-
+        let params = handlers::diagnostics::make_publish_params(
+            uri,
+            handlers::diagnostics::to_lsp_diagnostics(&diagnostics),
+        );
         let not = publish_diagnostics(params);
         if let Err(e) = connection.sender.send(Message::Notification(not)) {
             warn!("发送诊断失败: {}", e);
         }
 
-        debug!("已发布 {} 条诊断: {}", diag_count, uri);
+        debug!("已发布 {} 条诊断（语义数据同源更新）: {}", diag_count, uri);
     } else {
-        warn!("文档未找到，跳过诊断: {}", uri);
+        warn!("文档未找到，跳过分析: {}", uri);
     }
 }
 

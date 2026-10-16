@@ -189,7 +189,7 @@ pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
     },
     NonObligationField {
         field: "semantic_db",
-        reason: "语义信息数据库：消费者在 LSP（src/lsp/server.rs:493 world.update_semantic_db），不属编译阶段义务",
+        reason: "语义信息数据库：消费者在 LSP（WBS 4.6.1 起经 DriverOutcome.semantic_db 通道外发，src/lsp/server.rs:482 world.update_semantic_db），不属编译阶段义务",
     },
     NonObligationField {
         field: "trait_table",

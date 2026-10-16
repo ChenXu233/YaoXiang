@@ -42,7 +42,7 @@ pub fn handle_initialize(
     // root_path 可能是 file URI（root_uri）或纯路径（root_path），两者都接。
     let project_dir = root_path
         .as_deref()
-        .and_then(crate::lsp::handlers::diagnostics::uri_to_path)
+        .and_then(crate::lsp::uri::uri_to_path)
         .or_else(|| root_path.as_ref().map(std::path::PathBuf::from))
         .filter(|p| p.is_dir());
     world.reset_for_new_session(project_dir.as_deref());

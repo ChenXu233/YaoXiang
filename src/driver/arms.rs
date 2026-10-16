@@ -11,7 +11,6 @@ use std::path::Path;
 use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::typecheck::checker::TypeChecker;
-use crate::frontend::core::typecheck::{self};
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
@@ -228,6 +227,11 @@ impl Driver {
     /// 262-285。警告**暂存**而非立即外发——是否外发由 DeadCodeAnalysis
     /// 臂的门控决定（忠实复刻 pipeline 的耦合：`dead_code.enabled ==
     /// false` 时 typecheck 警告一并丢弃）。
+    ///
+    /// 4.6.1：checker 以**单元文件路径**为模块身份（原硬编码 `"main"`，
+    /// 经自由函数 `check_module_inner`）——SemanticDB 的文件身份由此
+    /// 可得；CollectAll（LSP 兜底）无论诊断成败都把语义数据汇入
+    /// `State.semantic_db`（染色/跳转在打字中间态不消失）。
     pub(super) fn typecheck_single_file(
         &self,
         state: &mut State,
@@ -238,6 +242,7 @@ impl Driver {
             units,
             errors,
             failed_stages,
+            semantic_db,
             ..
         } = state;
         for (i, us) in units.iter_mut().enumerate() {
@@ -246,10 +251,16 @@ impl Driver {
             };
             // checker 入口由 Aggregation 驱动（4.2.7 语义）：FailFast
             // 首错即返；CollectAll（LSP 兜底）收集模式
+            let mut checker = TypeChecker::new(&program.units[i].path.display().to_string());
             let mut type_result = match program.aggregation {
-                Aggregation::FailFast => typecheck::check_module(ast, &mut None),
-                Aggregation::CollectAll => typecheck::check_module_collect_all(ast, &mut None),
+                Aggregation::FailFast => checker.check_module(ast),
+                Aggregation::CollectAll => checker.check_module_collect_all(ast),
             };
+            // 语义数据面（4.6.1）：仅 CollectAll 形态产出（LSP 消费）；
+            // 在诊断判定**之前**取走，错误文件同样保留染色/跳转数据
+            if matches!(program.aggregation, Aggregation::CollectAll) {
+                semantic_db.upsert_from(std::mem::take(&mut type_result.semantic_db));
+            }
             let diagnostics = std::mem::take(&mut type_result.diagnostics);
             if !diagnostics.is_empty() {
                 us.typecheck_failed = true;
@@ -290,6 +301,7 @@ impl Driver {
             failure,
             failed_stages,
             entry_path,
+            semantic_db,
             ..
         } = state;
         // Embedded 形态无 Registry 阶段——registry 由调用方注入
@@ -311,12 +323,16 @@ impl Driver {
             if is_lsp && program.units[i].path != *entry_path {
                 continue; // LSP 只 typecheck 目标文件
             };
-            // checker 名按形态保现状（Embedded 用 "<embedded>"）
-            let mut checker = TypeChecker::new(if is_embedded {
-                "<embedded>"
+            // checker 身份按形态区分：Embedded 用 "<embedded>"；其余以
+            // **单元文件路径**为模块身份（原统一 "<module>"）——SemanticDB
+            // 的文件身份由此可得（4.6.1；该值只消费于语义数据面与
+            // TypeCheckResult.module_name 元信息，不进诊断）
+            let unit_name = if is_embedded {
+                "<embedded>".to_string()
             } else {
-                "<module>"
-            });
+                program.units[i].path.display().to_string()
+            };
+            let mut checker = TypeChecker::new(&unit_name);
             checker.env().module_registry = registry.clone();
             if let Some(method_bindings) = method_bindings {
                 checker.env().method_bindings = method_bindings.clone();
@@ -329,6 +345,11 @@ impl Driver {
                 Aggregation::FailFast => checker.check_module(ast),
                 Aggregation::CollectAll => checker.check_module_collect_all(ast),
             };
+            // 语义数据面（4.6.1）：Lsp 形态的目标文件无论诊断成败都汇入
+            // ——染色/跳转在打字中间态不消失；Check 无消费者不汇入
+            if is_lsp {
+                semantic_db.upsert_from(std::mem::take(&mut result.semantic_db));
+            }
             if collect_per_file {
                 // 诊断逐文件收集，不标阶段失败、不中止。警告：Check
                 // 暂存（DeadCodeAnalysis 臂按 in_project 门控外发）；
@@ -371,6 +392,54 @@ impl Driver {
                 return;
             }
             us.type_result = Some(result);
+        }
+        // 外部定义面（4.6.1）：Lsp 形态把**非目标文件**的顶层导出定义
+        // （函数/常量，带定义文件与名源 span）注入语义数据面——跨文件
+        // 跳转在定义文件尚未被编辑器打开时也能命中。定义面来自 Registry
+        // 臂的签名收集（与诊断同一次编译的上游），不要求那些文件参与
+        // typecheck（「Lsp 只检目标文件」的性能契约不动）。std/嵌入模块
+        // 无定义文件（definition_file 为 None），天然排除。
+        if is_lsp {
+            use crate::frontend::core::typecheck::semantic_db::{DefId, DefinitionInfo, DefinitionKind};
+            use crate::frontend::module::ExportKind;
+            let mut externals = Vec::new();
+            for unit in &program.units {
+                if unit.path == *entry_path {
+                    continue; // 目标文件自身：全量语义信息已在 typecheck 汇入
+                }
+                let Some(module) = registry.get(&unit.key) else {
+                    continue; // 嵌入 std 等未注册单元
+                };
+                let Some(file) = &module.definition_file else {
+                    continue;
+                };
+                let file_path = file.display().to_string();
+                for export in module.exports.values() {
+                    let Some(span) = export.definition_span else {
+                        continue; // std/native 导出无定义位置
+                    };
+                    let kind = match export.kind {
+                        ExportKind::Function => DefinitionKind::Function,
+                        ExportKind::Constant => DefinitionKind::Variable,
+                        // 类型/子模块导出不注入：typecheck 侧类型注册不产生
+                        // 定义事件，两侧口径保持一致的空缺（4.6.1）
+                        ExportKind::Type | ExportKind::SubModule => continue,
+                    };
+                    externals.push(DefinitionInfo {
+                        def_id: DefId {
+                            file_path: file_path.clone(),
+                            span,
+                        },
+                        name: export.name.clone(),
+                        kind,
+                        span,
+                        file_path: file_path.clone(),
+                        type_info: export.mono_type.as_ref().map(|t| t.to_string()),
+                        signature: None,
+                    });
+                }
+            }
+            semantic_db.set_external_definitions(externals);
         }
     }
 
@@ -1103,6 +1172,9 @@ impl Driver {
             if orchestrator::is_vendor_path(&unit.path) {
                 info.source = ModuleSource::Vendor;
             }
+            // 4.6.1：模块 → 定义文件映射随注册表携带——typecheck 的导入处理
+            // 据此把跨文件引用的 resolves_to 指向真实定义位置（LSP 跳转）
+            info.definition_file = Some(unit.path.clone());
             registry.register(info);
         }
         state.method_bindings = Some(registry.all_method_bindings());

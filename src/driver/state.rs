@@ -64,6 +64,11 @@ pub struct DriverOutcome {
     /// 都有条目——干净文件为空 Vec；4.2.2）。故障路径（failure 为 Some）
     /// 同样带出已收集条目——故障不清空收集（3.4.8 ③）
     pub check_diagnostics: Vec<(PathBuf, Vec<Diagnostic>)>,
+    /// 语义数据面（WBS 4.6.1）：仅 CollectAll 形态（LSP 项目内 / LSP 单文件
+    /// 兜底）填充——目标文件的全量语义信息 + 非目标文件的顶层导出定义面；
+    /// 其余形态恒空（无消费者）。文件身份为 OS 路径（`Unit.path` 的
+    /// display 形态），URI 换算在 LSP 摄入边界完成。
+    pub semantic_db: crate::frontend::core::typecheck::semantic_db::SemanticDB,
     /// 被跳过的阶段及原因——仅内部记录；**跳过原因本身不外发诊断**（4.3.1
     /// 契约：上游失败 / 配置关闭导致的跳过不报），它只作为义务结算的
     /// 豁免判据与审计面（02 §4 文案表的外发归后续轮次）
@@ -155,6 +160,12 @@ pub(in crate::driver) struct State {
     pub(in crate::driver) merged_ir: Option<ModuleIR>,
     /// 义务账本结算结果（`assert_drained` 的产出；随 `DriverOutcome` 外发）
     pub(in crate::driver) obligations: ObligationSettlement,
+    /// 语义数据面（WBS 4.6.1）：CollectAll 形态（LSP 项目内 / LSP 单文件
+    /// 兜底）由 Typecheck 臂按单元汇入——Lsp 取目标文件（无论诊断成败，
+    /// 染色/跳转在打字中间态不消失），SingleFile 兜底取唯一单元；此外
+    /// Lsp 形态在臂尾从 registry 注入非目标文件的顶层导出定义面
+    /// （`external_definitions`）。FailFast 形态不产出（无消费者）。
+    pub(in crate::driver) semantic_db: crate::frontend::core::typecheck::semantic_db::SemanticDB,
     /// 全程序实例化请求表（3.4.8 ②）：Linking 臂在**消费各单元 IR 之前**
     /// 聚合产出（`aggregate_instantiation_requests`）——`containing_fn`
     /// 限定化需要逐单元的函数名集合，而那正是 Linking 取走的产物；
@@ -216,6 +227,7 @@ impl State {
             global_layout: None,
             slot_bases: Vec::new(),
             merged_ir: None,
+            semantic_db: crate::frontend::core::typecheck::semantic_db::SemanticDB::new(),
             aggregated_requests: Vec::new(),
             obligations: ObligationSettlement::default(),
         }
@@ -290,6 +302,10 @@ impl State {
                 module: None,
                 failure: Some(error),
                 check_diagnostics,
+                // 故障路径同样带出已收集的语义数据面（同 check_diagnostics
+                // 的「故障不清空收集」原则——打字中间态 vendor/发现失败时
+                // 染色与跳转不消失）
+                semantic_db: self.semantic_db,
                 skipped: self.skipped,
                 obligations: self.obligations,
             };
@@ -328,6 +344,7 @@ impl State {
             module,
             failure: None,
             check_diagnostics,
+            semantic_db: self.semantic_db,
             skipped: self.skipped,
             obligations: self.obligations,
         }

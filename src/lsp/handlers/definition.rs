@@ -50,7 +50,9 @@ pub fn handle_definition(
     let db = world.semantic_db();
     let (line, col) = position_to_internal_utf16(content, position);
 
-    if let Some(def) = db.resolve_reference(&uri_str, line, col) {
+    // 键规范化（4.6.1）：客户端 URI 的等价形式（盘符大小写、%XX 编码）
+    // 归一到与编译产物相同的规范化 file URI 键
+    if let Some(def) = db.resolve_reference(&crate::lsp::uri::db_key(&uri_str), line, col) {
         let uri = Uri::from_str(&def.file_path).ok()?;
         let range = span_to_range(&def.span);
         debug!(

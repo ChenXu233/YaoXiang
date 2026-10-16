@@ -1384,15 +1384,28 @@ impl TypeChecker {
                 }
             }
             let (refs, imports) = (bc.take_reference_events(), bc.take_import_events());
+            // 4.6.1：跨文件导入项的 resolves_to 重定向——引用命中的绑定
+            // 是 use 行导入名（定义事件落 use 行），其真实定义在定义文件里
+            // 时（import_def_locations 登记表），DefId 指向真实定义位置，
+            // 跨文件跳转因此命中定义而非 use 行；std/native 导入无登记，
+            // 维持落 use 行的现状。
+            let import_def_locations = bc.take_import_def_locations();
             for r in refs {
+                let resolves_to = match import_def_locations.get(&r.resolves_to_span) {
+                    Some((def_file, def_span)) => semantic_db::DefId {
+                        file_path: def_file.clone(),
+                        span: *def_span,
+                    },
+                    None => semantic_db::DefId {
+                        file_path: file_path.clone(),
+                        span: r.resolves_to_span,
+                    },
+                };
                 let r#ref = semantic_db::ReferenceInfo {
                     name: r.name,
                     span: r.span,
                     file_path: file_path.clone(),
-                    resolves_to: semantic_db::DefId {
-                        file_path: file_path.clone(),
-                        span: r.resolves_to_span,
-                    },
+                    resolves_to,
                 };
                 self.semantic_db.add_reference(&file_path, r#ref);
             }
