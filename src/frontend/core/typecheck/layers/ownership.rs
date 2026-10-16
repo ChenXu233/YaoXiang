@@ -81,11 +81,6 @@ impl ReleasePlan {
     pub fn consumption_completed(&self) -> bool {
         self.consumption.is_completed()
     }
-
-    /// 已记账的消费条数（审计面计数：结算报告里「消费过多少条」只有它给得出）。
-    pub fn consumed_len(&self) -> usize {
-        self.consumption.len()
-    }
 }
 
 /// 参数的所有权语义（从函数签名推导）

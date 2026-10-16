@@ -155,11 +155,6 @@ impl OverloadResolutions {
     pub fn consumption_completed(&self) -> bool {
         self.consumption.is_completed()
     }
-
-    /// 已记账的消费条数（审计面计数）。
-    pub fn consumed_len(&self) -> usize {
-        self.consumption.len()
-    }
 }
 
 impl TypeCheckResult {
