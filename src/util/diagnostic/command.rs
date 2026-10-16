@@ -177,7 +177,12 @@ fn collect_yx_files_from_paths(
         if !path.exists() {
             return Err(anyhow::anyhow!("Path does not exist: {}", path.display()));
         }
-        if should_exclude_path(path, &excludes) {
+        // issue #463：显式给出的路径只受 `--exclude` 约束。默认排除表（`.git` /
+        // `.yaoxiang` / `target`）描述的是「遍历时该跳过哪些子项」，不是「用户点名
+        // 要看的路径也要拒绝」——否则 AGENTS.md 第 9 条指定的探针位置
+        // （`target/yx-scratch/<batch>/`）无法直接跑。判据序：`--exclude` >
+        // 显式路径 > 默认排除表。
+        if is_user_excluded(path, &excludes) {
             continue;
         }
 
@@ -195,22 +200,21 @@ fn collect_yx_files_from_paths(
     Ok(files)
 }
 
+/// 递归收集目录下的 `.yx`。**入口目录由调用方判定**（显式路径只受 `--exclude`
+/// 约束，见上），递归过程中遇到的默认排除目录（`.git` / `.yaoxiang` / `target`）
+/// 仍照旧跳过——「探针放 `target/` 下不进语料」这条性质由它保证。
 fn collect_yx_files_recursive_with_excludes(
     dir: &Path,
     excludes: &[PathBuf],
     files: &mut Vec<PathBuf>,
 ) -> Result<()> {
-    if should_exclude_path(dir, excludes) {
-        return Ok(());
-    }
-
     for entry in std::fs::read_dir(dir)
         .with_context(|| format!("Failed to read directory: {}", dir.display()))?
     {
         let entry = entry?;
         let path = entry.path();
 
-        if should_exclude_path(&path, excludes) {
+        if is_default_excluded_child(&path) || is_user_excluded(&path, excludes) {
             continue;
         }
 
@@ -256,35 +260,50 @@ fn normalize_check_paths(paths: &[PathBuf]) -> Result<Vec<PathBuf>> {
         .collect())
 }
 
+/// 规范化 `--exclude` 路径：与 [`is_user_excluded`] 的比较基准**同源**。
+///
+/// 两侧都必须过 [`safe_canonicalize`]：Windows 上 `canonicalize` 产出 `\\?\` 前缀的
+/// verbatim 路径，而 `cwd.join(p)` 是平面路径，`starts_with` 永不成立——排除表会
+/// 恒空（`--exclude` 静默失效，issue `#463` 顺路发现并一并修）。
 fn normalize_exclude_paths(excludes: &[PathBuf]) -> Result<Vec<PathBuf>> {
     let cwd = std::env::current_dir().context("Failed to get current directory")?;
     Ok(excludes
         .iter()
         .map(|p| {
-            if p.is_absolute() {
+            let absolute = if p.is_absolute() {
                 p.clone()
             } else {
                 cwd.join(p)
-            }
+            };
+            safe_canonicalize(&absolute)
         })
         .collect())
 }
 
-fn is_default_excluded_name(path: &Path) -> bool {
-    path.components().any(|component| {
-        let name = component.as_os_str().to_string_lossy();
+/// 默认排除的目录名判据——只看**子项自己的名字**，不看祖先路径。
+///
+/// 两条边界（issue `#463`）：
+/// - 不作用于用户显式给出的路径（`collect_yx_files_from_paths` 只对它套 `--exclude`）；
+/// - 遍历时判的是 `file_name`，否则「显式给出 `target/…` 下的目录」时，其所有后代
+///   都会因绝对路径含 `target` 而被连带跳过（首版修法即栽在这里）。
+///
+/// 于是「探针放 `target/yx-scratch/<batch>/` 下不进语料」仍成立：项目根遍历到
+/// `target/` 这一级就停了。
+fn is_default_excluded_child(path: &Path) -> bool {
+    path.file_name().is_some_and(|name| {
+        let name = name.to_string_lossy();
         name == ".git" || name == ".yaoxiang" || name == "target"
     })
 }
 
-fn should_exclude_path(
+/// 用户 `--exclude` 判据（规范化前后缀比对）。
+///
+/// 与默认排除表的分工见 [`is_default_excluded_child`]：本判据对**显式路径与
+/// 遍历子项一视同仁**，默认排除表只作用于遍历子项（issue #463）。
+fn is_user_excluded(
     path: &Path,
     excludes: &[PathBuf],
 ) -> bool {
-    if is_default_excluded_name(path) {
-        return true;
-    }
-
     let absolute = safe_canonicalize(path);
 
     excludes

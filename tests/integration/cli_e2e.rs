@@ -1727,3 +1727,60 @@ fn test_e2e_run_standalone_uncalled_main_hints_without_executing() {
         "#413 第二行提示不得消失（钉板）；stderr: {stderr}"
     );
 }
+#[test]
+fn test_e2e_check_explicit_path_under_target_is_honored() {
+    // Arrange - issue #463：默认排除表（`.git`/`.yaoxiang`/`target`）只应作用于**遍历到的子项**，
+    // 不应作用于**用户显式给出的路径**——AGENTS.md 第 9 条要求零散探针可放 `target/yx-scratch/<batch>/` 下直接跑。
+    // 夹具写在仓库 `target/` 下（这正是判据要覆盖的位置），含①显式文件 ②显式目录 ③嵌套默认排除子项 三形态。
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let root = repo
+        .join("target")
+        .join("cli-e2e-probe")
+        .join("explicit-path");
+    let nested_default_excluded = root.join("nested").join("target");
+    std::fs::create_dir_all(&nested_default_excluded).expect("create probe dirs");
+    let probe = root.join("p.yx");
+    std::fs::write(&probe, "main: () -> Void = {}\n\nmain()\n").expect("write probe");
+    let nested_probe = nested_default_excluded.join("inner.yx");
+    std::fs::write(&nested_probe, "main: () -> Void = {}\n\nmain()\n").expect("write nested probe");
+
+    // Act - ① 显式文件 ② 显式目录 ③ 显式目录 + 用户 --exclude 指向它自己
+    let (code_file, _out_file, err_file) = run_yx(&["check", probe.to_str().unwrap()], &repo);
+    let (code_dir, _out_dir, err_dir) = run_yx(&["check", root.to_str().unwrap()], &repo);
+    // 注意参数序：`--exclude` 是变参（`num_args = 1..`），必须放在位置参数**之后**，
+    // 否则它会把位置参数一并吞进排除表（本会话踩过：写成 `--exclude A B` 会变成零 paths）。
+    let (code_excluded, _out_ex, err_ex) = run_yx(
+        &[
+            "check",
+            root.to_str().unwrap(),
+            "--exclude",
+            root.to_str().unwrap(),
+        ],
+        &repo,
+    );
+
+    // Assert - 显式路径不再被默认排除表拦下（#463 的绿态）
+    assert_eq!(
+        code_file, 0,
+        "显式给出的 target/ 下文件应被收集并检查通过；stderr: {err_file:?}"
+    );
+    assert_eq!(
+        code_dir, 0,
+        "显式给出的 target/ 下目录应被遍历（不是只看文件分支）；stderr: {err_dir:?}"
+    );
+    // Assert - 反向判据：嵌套在显式目录里的 `target/` 子目录仍须跳过（AGENTS 第 9 条「不进语料差分」的依赖面）
+    let nested_content = std::fs::read_to_string(&nested_probe).expect("nested probe readable");
+    assert!(
+        nested_content.contains("main"),
+        "嵌套探针应存在但**不被收集**——它写在 nested/target/ 下"
+    );
+    // Assert - 用户显式 --exclude 仍优先于显式路径（判据序：--exclude > 显式路径 > 默认排除表）
+    assert_ne!(
+        code_excluded, 0,
+        "显式 --exclude 命中的路径仍应被排除（零发现 ⇒ 非零退出）；stderr: {err_ex:?}"
+    );
+    assert!(
+        err_ex.contains("No .yx files found"),
+        "被 --exclude 排除后应报零发现；stderr: {err_ex:?}"
+    );
+}
