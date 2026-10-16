@@ -214,6 +214,42 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | G5 | `ReleasePlan.drops` span 键失配（P2 2.4.4 判据实测，非 P0 命中） | **真阳性，契约缺陷——D20 预言实证**：ownership 按「最后使用**表达式** span」记键（`ownership.rs:2574 build_release_plan`），`ir_gen.rs:1956` 按「**语句** span」查表，表达式级键永不命中——全语料实测 **168 文件 / 373 键** 未被消费，Drop 静默丢失（逐案证据见 `src/middle/core/tests/release_plan_spans.rs` 文件头） | **P4/D20**（Span 键 → PlanId，行为面约 168 文件，须等 C2 判据与语料差分就位）；判据 `test_release_plan_spans_consumed` 红态常驻（`#[ignore]`），D20 落地移除即转绿 |
 | G6 | IR 元数据三缺陷（P2 2.1.2 判据 `verify_loose` 语料跑绿过程实测，D38 预言兑现） | **真阳性×3，全部随 2.1 修复**（语料差分基线自比零差分证行为等价）：① 方法 IR 的 locals 表截断至参数数（`ir_gen.rs` 原 `take_cur_locals(param_types.len())`）——local_count 低估，运行时靠 `Frame::set_slot` 越界 resize（`frames.rs:103-105`）静默容错；② lambda / curry 中间层 / 函数路径的无注解参数被 `filter_map` 丢弃（三处），params 长度与帧布局错位——对齐 method 路径既有惯例填 `Int(64)` 占位；③ match 结果槽依赖帧隐式 Void 预初始化（末臂守卫失败的容错落点在 CFG 上有无定义路径）——`generate_match_expr_ir` 入口显式预置 Void | 已修复（2.1 同批）。**判定面收窄登记**（verify.rs 文件头为权威）：temp 槽支配性不查（Void 预初始化是帧语义，ir_gen 有意依赖）；类型一致的可信源收窄为参数槽签名 + 常量（ir_gen 从不写 `LocalSlot.ty`，全表占位 `Int(64)`——完整判定面归 P7 值表 04 §262）；`init_locals` 是 #368 调试视角表非分配上限，init 的 Local 越界不查 |
 
+## H. 巨函数清单（发版前审计口径，2026-10-16 起）
+
+> 口径（2026-10-16 `/pre-release-audit` 定）：函数跨度 > 150 行是**初筛阈值**，不是「逐个报告」
+> 的命令——全列会把清单变成行数堆砌，把本次新增信号淹没在存量里。报告条目必须含三个数：
+> **宿主行数 / 本次插入行数 / 插入前行数**。分两类：**A. 既有巨函数被插分支**（>150 行且本次
+> 插入 >50 行）；**B. 本次新增的大函数**（几乎全新且 >100 行）。下表行号取自审计 revision
+> `1935aab53`（`v0.8.4..1935aab53` 范围）。
+
+### A. 既有巨函数被插分支
+
+| 函数 | 位置 | 宿主行数 | 本次插入 | 插入前 |
+| --- | --- | --- | --- | --- |
+| `infer_call_expr` | `src/frontend/core/typecheck/inference/expressions.rs:4045` | 1594 | 358 | 1236 |
+| `generate_call_expr_ir` | `src/middle/core/ir_gen.rs:7694` | 813 | 171 | 642 |
+
+### B. 本次新增的大函数
+
+| 函数 | 位置 | 行数 | 本次新增 |
+| --- | --- | --- | --- |
+| `push_joined`（局部 helper） | `src/frontend/core/types/mono.rs:603` | 180 | 177 |
+| `consumer_stage_skipped` | `src/driver/obligations.rs:650` | 122 | 122 |
+| `push_children` | `src/middle/passes/mono/instance.rs:191` | 159 | 130 |
+| `local_count_of` | `src/backends/interpreter/executor/executor.rs:321` | 130 | 107 |
+
+**不在清单内的既有巨函数**（本次插入 ≤ 4 行，只登记不处置）：`infer_expr`（`expressions.rs:2999`，
+955 行）、`collect_function_signature`（`checker.rs:1738`，669 行）、`check_module_impl`
+（`checker.rs:1153`，441 行）、`generate_local_stmt_ir`（`ir_gen.rs:3265`，368 行）等。
+
+### 处置取向
+
+- **A 类**：随 `infer_call_expr` / `generate_call_expr_ir` 的后续拆分任务一并消解——两者是仓库里
+  最重的宿主，本次命名实参改造把 358 行插进了前者。
+- **B 类**：`push_joined` 是 `Task` 工作列表式类型格式化的**局部** helper（其宿主才是那 180 行
+  新增），与 `mono.rs:123 increment_level_string`（174 行，做层级名改写）**职责不同、不构成重复，
+  不要合并**；`consumer_stage_skipped` 与 `local_count_of` 可独立拆分。
+
 ## 关键决策与理由
 
 授权是"允许彻底删除"，但本文对若干项给出**不同建议**：
