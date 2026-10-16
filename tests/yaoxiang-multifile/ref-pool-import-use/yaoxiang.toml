@@ -1,0 +1,6 @@
+[package]
+name = "ref-pool-import-use"
+version = "0.1.0"
+
+[run]
+main = "main.yx"

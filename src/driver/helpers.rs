@@ -15,7 +15,7 @@ use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::module::orchestrator;
 use crate::frontend::module::orchestrator::OrchestratorError;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::frontend::module::roles;
+use crate::frontend::module::roles::{self, FileRole};
 use crate::frontend::module::symbol::SymbolTable;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::middle::ModuleIR;
@@ -398,38 +398,59 @@ pub(in crate::driver) fn role_context(
     (None, None)
 }
 
-/// 引用池的装配输入：模块键 + 源路径 + 已解析 AST（借用视图）
+/// 引用池的装配输入：源路径 + 角色 + 已解析 AST（借用视图）
+///
+/// 不持模块键：池按**定义模块**记账（`consumed_from` 的键来自 import 路径，
+/// 见 `resolve_import_module`），装配方自己的模块键只用于查表不参与装配。
 pub(in crate::driver) struct PoolModule<'a> {
-    /// 模块键（限定名前缀）
-    pub key: &'a str,
     /// 源路径（嵌入 std 模块为虚拟路径）
     pub path: &'a Path,
+    /// 该模块的角色（改进 5：Test 不贡献消费面）
+    pub role: FileRole,
     /// 已解析 AST
     pub ast: &'a Module,
 }
 
-/// 引用池（RFC-029f 改进 1+2）：`模块键 → 该模块**对外引用**的标识符集合`。
+/// 包内引用池（RFC-029f 改进 1/2/4/5）：按**定义模块**记账的消费面。
 ///
 /// **来源 = 编译面，不是目录**（缺陷 1 / #334「包内 use 图」）：池的根由调用方
 /// 按 RFC-029f 判定三层给定——manifest 声明面的包目标（`[run].main` /
 /// `[[bin]]` / `[lib]` / `[exports]`）优先（[collect_package_refs]），无声明面
 /// 时退化为被检文件自身的编译集（[collect_compilation_refs]）；**两条路径都
-/// 不为找入口递归扫目录**。从未被 `use` 的孤立文件、tests/ 下的测试文件因此
-/// 不再构成生产代码的消费者。
+/// 不为找入口递归扫目录**。
 ///
-/// **身份 = `(模块, 名字)`**（缺陷 2）：每个模块自有的名字（顶层定义与局部
-/// 绑定，见 `DeadCodeAnalyzer::collect_refs_and_own_names`）从**它自己**的
-/// 条目里剔除——同名标识符在不同模块各自计数，模块自己的 `foo`（定义或
-/// 局部变量）不构成它对别的模块 `foo` 的消费。
+/// **消费判据 = 「被 import 后真实使用」**（改进 4）：一条消费记录 = 「某模块
+/// 用 `use` 把名字 n 从模块 M 带进作用域、且在**使用点**真的引用了 n」，
+/// 只记到 M（`consumed_from`）——仅出现在 use 项里而没有使用点（未使用导入，
+/// 另由 W1003 报告）、以及别的模块对**同名**标识符的引用（名字撞名）都不算
+/// 消费。import 的目标模块由 `module_keys`（本次编译面的模块键集合，发现期
+/// 同一份解析产物）判定，不另起一套路径解析。
+///
+/// **Test 不贡献**（改进 5）：`FileRole::Test` 模块的引用单独成池——Test 自身
+/// 不参与死代码判定，故其引用不外溢去豁免生产代码的定义。
+///
+/// **字段/方法位残差**（改进 4 的残面，归 #450 另案）：`obj.render()` 只出现
+/// 短名 `render`，AST 层归因不到接收者类型所属模块；**只有基名命中命名空间
+/// 导入**（`use lib` + `lib.foo()`）时才按 import 归因，其余按名字维度保守
+/// 计入 `field_names`（宁漏报方向）。
 ///
 /// 两个既有例外保留：vendor 依赖文件与嵌入 std 模块（虚拟路径）不入池
 /// （外部包视角——它们不是本项目自己声明的消费面）。
 ///
 /// 本函数是**唯一装配点**（两条来源路径共用，口径不得分歧）
+#[derive(Default)]
+pub(in crate::driver) struct RefPool {
+    /// 定义模块键 → 被别的模块 import 后真实使用的名字（改进 4 的消费面）
+    pub consumed_from: HashMap<String, HashSet<String>>,
+    /// 字段/方法位引用（归因不到模块的残差，按名字维度保守计入）
+    pub field_names: HashSet<String>,
+}
+
 pub(in crate::driver) fn collect_ref_pool(
-    modules: &[PoolModule<'_>]
-) -> HashMap<String, HashSet<String>> {
-    let mut pool: HashMap<String, HashSet<String>> = HashMap::new();
+    modules: &[PoolModule<'_>],
+    module_keys: &HashSet<String>,
+) -> RefPool {
+    let mut pool = RefPool::default();
     for module in modules {
         // 嵌入 std 模块：虚拟路径不是磁盘文件，也不属于本项目的消费面
         if module.path.to_str().is_some_and(|p| p.starts_with('<')) {
@@ -439,34 +460,98 @@ pub(in crate::driver) fn collect_ref_pool(
         if orchestrator::is_vendor_path(module.path) {
             continue;
         }
-        let (refs, own) = DeadCodeAnalyzer::collect_refs_and_own_names(module.ast);
-        pool.insert(
-            module.key.to_string(),
-            refs.difference(&own).cloned().collect(),
-        );
+        // 改进 5：测试引用单独成池，不豁免生产代码（Test 自身不参与死代码判定）
+        if module.role == FileRole::Test {
+            continue;
+        }
+        let names = DeadCodeAnalyzer::collect_module_names(module.ast);
+        // 改进 4（花括号项）：use 项带入的名字**且**在使用点被引用 ⇒ 记到目标模块
+        for (local, target, use_path) in &names.imported {
+            if !names.refs.contains(local) {
+                continue; // 只有 use 项、没有使用点（未使用导入）不算消费
+            }
+            if let Some(key) = resolve_import_module(use_path, target, module_keys) {
+                pool.consumed_from
+                    .entry(key)
+                    .or_default()
+                    .insert(target.clone());
+            }
+        }
+        // 改进 4（命名空间形态）：use lib + lib.foo() ⇒ foo 记到 lib
+        let mut residual: HashSet<String> = names.field_refs_free.clone();
+        for (base, field) in &names.namespaced_fields {
+            let attributed = names
+                .namespaces
+                .iter()
+                .find(|(ns, _)| ns == base)
+                .and_then(|(_, use_path)| resolve_import_module(use_path, field, module_keys));
+            match attributed {
+                Some(key) => {
+                    pool.consumed_from
+                        .entry(key)
+                        .or_default()
+                        .insert(field.clone());
+                }
+                // 值上的方法调用 / 未解析的命名空间：名字维度保守计入
+                None => {
+                    residual.insert(field.clone());
+                }
+            }
+        }
+        // 模块自有名不是对别的模块的消费（改进 2）
+        pool.field_names
+            .extend(residual.difference(&names.own).cloned());
     }
     pool
 }
 
+/// import 路径 → 编译面里的模块键（`module_keys` = 发现期同一份解析产物，
+/// 不另起一套路径解析）：名字是子模块时键为 `<use 路径>.<名字>`，否则为
+/// `<use 路径>`；两者都不在编译面里（E5001 未解析）时不算消费。
+fn resolve_import_module(
+    use_path: &str,
+    name: &str,
+    module_keys: &HashSet<String>,
+) -> Option<String> {
+    let submodule = format!("{use_path}.{name}");
+    if module_keys.contains(&submodule) {
+        return Some(submodule);
+    }
+    if module_keys.contains(use_path) {
+        return Some(use_path.to_string());
+    }
+    None
+}
+
 /// 退化为「被检文件自身的编译集」：Discovery 臂 `discover_with_used` 的产物
-/// （`units`/`asts` 按下标对应）。只读传入的 AST——不做词法/语法/IO，也就
-/// 没有「容错跳过」一说（解析失败的文件在 `asts` 里本就是 `None`）。
+/// （`units`/`asts` 按下标对应；`roles` 由 RoleClassification 臂给出，
+/// 与包目标路径同用 `roles::classify` 单点判定）。只读传入的 AST——不做
+/// 词法/语法/IO，也就没有「容错跳过」一说（解析失败的文件在 `asts` 里本就是
+/// `None`）。
 pub(in crate::driver) fn collect_compilation_refs(
     units: &[Unit],
     asts: &[Option<Module>],
-) -> HashMap<String, HashSet<String>> {
+    roles: &[Option<FileRole>],
+) -> RefPool {
+    let module_keys: HashSet<String> = units.iter().map(|unit| unit.key.clone()).collect();
     let modules: Vec<PoolModule<'_>> = units
         .iter()
         .zip(asts.iter())
-        .filter_map(|(unit, ast)| {
+        .enumerate()
+        .filter_map(|(i, (unit, ast))| {
             Some(PoolModule {
-                key: unit.key.as_str(),
                 path: unit.path.as_path(),
+                // 角色缺省（防御路径）按 Internal 计入：贡献消费面是「宁漏报」方向
+                role: roles
+                    .get(i)
+                    .copied()
+                    .flatten()
+                    .unwrap_or(FileRole::Internal),
                 ast: ast.as_ref()?,
             })
         })
         .collect();
-    collect_ref_pool(&modules)
+    collect_ref_pool(&modules, &module_keys)
 }
 
 /// manifest 声明面优先的池来源（#334「包内 use 图不可达的报警」）：对每个包目标
@@ -477,22 +562,32 @@ pub(in crate::driver) fn collect_compilation_refs(
 /// - 去重口径 = canonical 路径（与发现期同口径）；
 /// - root 读不到（声明了却不存在）、词法/语法失败的文件静默跳过：池是辅助判定，
 ///   不允许它制造新的检查失败（解析失败的文件本就退出编译单元，4.10.1 同口径）；
-/// - 全部 root 都跑不通时返回空池，调用方据此退化为被检文件自身的编译集。
+/// - 模块键集合取各 root 的发现结果（import 归因的解析判据，改进 4）；角色用
+///   `roles::classify` 单点判定（Test 不贡献消费面，改进 5）；
+/// - 全部 root 都跑不通时返回 `None`，调用方据此退化为被检文件自身的编译集。
 pub(in crate::driver) fn collect_package_refs(
-    roots: &[PathBuf]
-) -> HashMap<String, HashSet<String>> {
+    roots: &[PathBuf],
+    project_root: Option<&Path>,
+    surfaces: Option<&roles::ExplicitSurfaces>,
+    test_rules: Option<&roles::TestRules>,
+) -> Option<RefPool> {
     let mut seen: HashSet<PathBuf> = HashSet::new();
-    let mut owned: Vec<(String, PathBuf, Module)> = Vec::new();
+    let mut module_keys: HashSet<String> = HashSet::new();
+    let mut owned: Vec<(String, PathBuf, Module, FileRole)> = Vec::new();
+    let mut reached = false;
     for root in roots {
-        let Ok((files, _, _)) = orchestrator::discover_with_used(root) else {
+        let Ok((files, used_by, _)) = orchestrator::discover_with_used(root) else {
             continue;
         };
+        reached = true;
         for file in files {
             let canon = file
                 .path
                 .canonicalize()
                 .unwrap_or_else(|_| file.path.clone());
-            if !seen.insert(canon) {
+            // 模块键先记：语法失败的文件仍是一个已解析的 import 目标（无定义可豁免）
+            module_keys.insert(file.module_key.clone());
+            if !seen.insert(canon.clone()) {
                 continue;
             }
             let Ok(tokens) = lexer::tokenize(&file.source) else {
@@ -502,12 +597,28 @@ pub(in crate::driver) fn collect_package_refs(
             if parsed.has_errors {
                 continue;
             }
-            owned.push((file.module_key, file.path, parsed.module));
+            // 角色单点判定（roles::classify）：Test 不贡献消费面（改进 5）
+            let role = roles::classify(
+                &canon,
+                project_root,
+                surfaces,
+                test_rules,
+                used_by.contains(&canon),
+                ast_has_main(&parsed.module),
+            );
+            owned.push((file.module_key, file.path, parsed.module, role));
         }
+    }
+    if !reached {
+        return None; // 一个 root 都没跑通：调用方退化为被检文件自身的编译集
     }
     let modules: Vec<PoolModule<'_>> = owned
         .iter()
-        .map(|(key, path, ast)| PoolModule { key, path, ast })
+        .map(|(_, path, ast, role)| PoolModule {
+            path,
+            role: *role,
+            ast,
+        })
         .collect();
-    collect_ref_pool(&modules)
+    Some(collect_ref_pool(&modules, &module_keys))
 }

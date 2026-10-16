@@ -1,0 +1,6 @@
+// src/util.yx —— 生产代码：debug_print 在 src/ 内无消费者（4.9.5 判据）
+debug_print: (x: Int) -> Void = (x) => {
+    return
+}
+
+helper: () -> Int = () => { return 1 }

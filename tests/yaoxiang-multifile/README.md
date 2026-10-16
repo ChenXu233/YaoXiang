@@ -53,6 +53,8 @@ P4「统一 Driver」是全计划最大风险点，本层是 P4 唯一可执行�
 | parse-error-in-collect-all | 模块语法错误降级为逐文件收集（E0012 + E5001，WBS 4.10.1） | compile-error |
 | ref-pool-compile-set | 引用池来源 = 编译集：孤立文件（无人 use）的引用不豁免生产定义（RFC-029f 改进 1 / WBS 4.9.1） | 行为 |
 | ref-pool-module-identity | 引用池身份 = (模块, 名字)：别的模块的同名顶层定义/局部变量不豁免本定义（RFC-029f 改进 2 / WBS 4.9.2） | 行为 |
+| ref-pool-import-use | 消费判据 = 被 import 后真实使用：别的模块对同名标识符的调用不救活本定义，只看 use 项不算消费（RFC-029f 改进 4 / WBS 4.9.4） | 行为 |
+| ref-pool-test-pool | 测试池分离：tests/ 的引用不豁免生产代码（src/）的定义（RFC-029f 改进 5 / WBS 4.9.5） | 行为 |
 
 ## 计划扩展（登记用，落地时勾掉）
 
@@ -64,5 +66,9 @@ P4「统一 Driver」是全计划最大风险点，本层是 P4 唯一可执行�
       `ref-pool-compile-set` = 编译集外引用不进池、`ref-pool-module-identity` = 同名
       标识符按模块独立计数；两条夹具的 `check <入口>` 各报 1 条 W1001，是**判据
       本身**要钉的新行为——池的来源与身份见 RFC-029f 改进 1+2）
+- [x] ~~P4 4.9.4/4.9.5 落地后：补消费判据与测试池分离的夹具~~（2026-10-16 已补：
+      `ref-pool-import-use` = 名字只记到 import 解析出的模块、只 import 不使用不算消费；
+      `ref-pool-test-pool` = tests/ 引用不外溢——两条夹具的 `check` 面各新增 1 条
+      预期 W1001，见 RFC-029f 改进 4+5）
 - [ ] P4 前按 07「C4 行为差分必覆盖清单」扩充：闭包捕获跨文件、spawn/迭代器、
       和类型 pattern、`?` 传播、方法重载、精化 Drop 序列等多文件形态。

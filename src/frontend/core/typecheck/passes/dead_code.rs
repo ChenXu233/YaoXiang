@@ -3,14 +3,16 @@
 //! 识别从未被引用的定义，生成警告信息。
 //! 码义（RFC-013 + RFC-029f + RFC-029g）：顶层绑定不因任何修饰符豁免——
 //! 可达性由文件内引用与**包内引用池**（[`DeadCodeAnalyzer::set_cross_file_refs`]
-//! / [`DeadCodeAnalyzer::set_exempt_pub`]）共同判定。池的来源是本次编译的
-//! **编译集**（driver 侧 `collect_compilation_refs`，RFC-029f 改进 1）；
-//! 身份是 `(模块, 名字)`——模块自有的名字（顶层定义与局部绑定）不算它对
-//! 别的模块的消费（改进 2，见 [`DeadCodeAnalyzer::collect_refs_and_own_names`]）。
-//! `FileRole::Script` 不接池：单文件路径没有包视角，未引用的顶层绑定一律报
-//! W1001/W1002/W1004/W1005（改进 3）。`pub` 关键字已由 RFC-029g 删除，
-//! 不再是豁免来源。未使用导入（W1003）由 typecheck 的 use elaboration 检测，
-//! 不在此处。
+//! / [`DeadCodeAnalyzer::set_exempt_pub`]）共同判定。池的来源是包目标的
+//! **编译面**（driver 侧 `collect_package_refs` / `collect_compilation_refs`，
+//! RFC-029f 改进 1）；身份是 `(模块, 名字)`——名字只记到 import 解析出的那个
+//! 模块，模块自有的名字（顶层定义与局部绑定）不算它对别的模块的消费
+//! （改进 2/4，见 [`DeadCodeAnalyzer::collect_module_names`] 与 driver 侧
+//! `RefPool`：只有「被 import 后**真实使用**」才算消费）。
+//! `FileRole::Script` 不接池（单文件路径没有包视角，未引用的顶层绑定一律报
+//! W1001/W1002/W1004/W1005，改进 3）；`FileRole::Test` 的引用单独成池、
+//! 不豁免生产代码（改进 5）。`pub` 关键字已由 RFC-029g 删除，不再是豁免来源。
+//! 未使用导入（W1003）由 typecheck 的 use elaboration 检测，不在此处。
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -67,10 +69,11 @@ pub struct DeadCodeWarning {
     pub span: Span,
 }
 
-/// 引用/绑定双集收集器（RFC-029f 改进 2）：一趟遍历同时产出**标识符引用**
-/// （死代码可达性与 W1003 复用）与**本模块自有的名字**（顶层定义 + 局部绑定）。
+/// 引用/绑定收集器（RFC-029f 改进 2/4）：一趟遍历同时产出**标识符引用**
+/// （死代码可达性与 W1003 复用）、**本模块自有的名字**（顶层定义 + 局部绑定）
+/// 与**字段位引用**（方法/字段短名）。
 ///
-/// 两集必须同源：池的口径（哪些名字算「别的模块在消费」）与可达性的口径
+/// 各集必须同源：池的口径（哪些名字算「别的模块在消费」）与可达性的口径
 /// （哪些名字算「本文件在用」）若各走一趟遍历，分歧处就会让池自我豁免——
 /// 正是 RFC-029f 缺陷 2 的成因。
 #[derive(Default)]
@@ -80,6 +83,12 @@ struct IdentSink {
     /// 本模块绑定的名字：顶层定义、函数体赋值目标、解构名、参数、
     /// for/spawn/gen 迭代变量、嵌套函数名
     bound: HashSet<String>,
+    /// 字段/方法位引用（`obj.render()` 只出现短名 render），**基名不是 Var**
+    /// 的那些（`f().render()`）：连命名空间归因都无从谈起，只能按名字维度计入
+    field_refs_free: HashSet<String>,
+    /// 命名空间位引用：`l.foo` 记成 基名 l 与 字段名 foo 一对——基名命中
+    /// 命名空间导入时归因到该模块（RFC-029f 改进 4 的命名空间形态）
+    namespaced_fields: Vec<(String, String)>,
 }
 
 impl IdentSink {
@@ -98,13 +107,32 @@ impl IdentSink {
     ) {
         self.bound.insert(name);
     }
+
+    /// 记一次「基名不是 Var」的字段/方法位引用
+    fn field_free(
+        &mut self,
+        name: String,
+    ) {
+        self.field_refs_free.insert(name);
+    }
 }
 
-/// `use` 项带入本模块的名字（池的例外面：显式声明的对外消费面）。
-/// 花括号项的别名优先（`use lib.{f as g}` → `g`）；整体导入取路径末段
-/// （`use std.assert` → `assert`；`use std.assert as a` → `a`）。
-fn collect_use_names(ast: &Module) -> HashSet<String> {
-    let mut names = HashSet::new();
+/// `use` 面（RFC-029f 改进 2/4 的池输入，读同一份 AST 的顶层 use 项）
+#[derive(Default)]
+struct ImportFace {
+    /// 作用域内的名字（池的自有名扣减面：显式声明的对外消费面不算自有）
+    names: HashSet<String>,
+    /// 花括号项：作用域内名字 → 目标定义名 → 模块路径
+    /// （`use lib.{f as g}` 记成 g、f、lib）
+    items: Vec<(String, String, String)>,
+    /// 整体导入：基名 → 模块路径（`use std.assert` 记成 assert、std.assert；
+    /// `use lib as l` 记成 l、lib）
+    namespaces: Vec<(String, String)>,
+}
+
+/// 收集 `use` 面：花括号项的别名优先；整体导入取路径末段（无别名时）
+fn collect_import_face(ast: &Module) -> ImportFace {
+    let mut face = ImportFace::default();
     for stmt in &ast.items {
         let StmtKind::Use {
             path,
@@ -123,24 +151,42 @@ fn collect_use_names(ast: &Module) -> HashSet<String> {
                         .as_ref()
                         .and_then(|aliases| aliases.get(i))
                         .and_then(|alias| alias.as_ref());
-                    names.insert(
-                        aliased.map_or_else(|| item.name.clone(), |alias| alias.name.clone()),
-                    );
+                    let local =
+                        aliased.map_or_else(|| item.name.clone(), |alias| alias.name.clone());
+                    face.names.insert(local.clone());
+                    face.items.push((local, item.name.clone(), path.clone()));
                 }
             }
-            None => match alias.as_ref().and_then(|alias| alias.last()) {
-                Some(alias) => {
-                    names.insert(alias.name.clone());
-                }
-                None => {
-                    if let Some(last) = path.rsplit('.').next() {
-                        names.insert(last.to_string());
-                    }
-                }
-            },
+            None => {
+                let (local, module_path) = match alias.as_ref().and_then(|alias| alias.last()) {
+                    Some(alias) => (alias.name.clone(), path.clone()),
+                    None => match path.rsplit('.').next() {
+                        Some(last) => (last.to_string(), path.clone()),
+                        None => (path.clone(), path.clone()),
+                    },
+                };
+                face.names.insert(local.clone());
+                face.namespaces.push((local, module_path));
+            }
         }
     }
-    names
+    face
+}
+
+/// 模块的名字面——池（RFC-029f 改进 2/4/5）与可达性共用**一趟遍历**的产物
+pub struct ModuleNames {
+    /// 全部标识符引用（可达性 / W1003 用）
+    pub refs: HashSet<String>,
+    /// 本模块自有名：顶层定义 + 局部绑定，扣掉 `use` 带入的名字
+    pub own: HashSet<String>,
+    /// 基名不是 Var 的字段/方法位引用（`f().render()`）
+    pub field_refs_free: HashSet<String>,
+    /// 命名空间位引用：基名与字段名一对（`l.foo` → l、foo）
+    pub namespaced_fields: Vec<(String, String)>,
+    /// 花括号导入项：作用域内名字 → 目标定义名 → 模块路径
+    pub imported: Vec<(String, String, String)>,
+    /// 整体导入：基名 → 模块路径
+    pub namespaces: Vec<(String, String)>,
 }
 
 impl Default for DeadCodeAnalyzer {
@@ -266,17 +312,17 @@ impl DeadCodeAnalyzer {
     /// 本遍历做语法级兜底——覆盖 match 模式、spawn 体、类型注解等
     /// Var 推断臂看不到的位置，宁多收（漏报方向）不漏收（误报方向）。
     pub fn collect_ident_refs(ast: &Module) -> HashSet<String> {
-        Self::collect_refs_and_own_names(ast).0
+        Self::collect_module_names(ast).refs
     }
 
-    /// 同一趟遍历产出两半（RFC-029f 改进 2 的机制，返回值口径见模块头）：
-    /// `(refs, own)` = （标识符引用集，本模块自有的名字集）。
+    /// 从 AST 收集模块的**名字面**（RFC-029f 改进 2/4/5 的池输入；一趟遍历）：
+    /// 引用集、自有名集、字段位引用集、命名空间位引用与 `use` 面。
     ///
-    /// `own` = 本模块绑定的名字（顶层定义 + 局部绑定）**扣掉** `use` 导入的
+    /// `own` = 本模块绑定的名字（顶层定义 + 局部绑定）**扣掉** `use` 带入的
     /// 名字：模块自己命名空间里的标识符（`fn foo()` 的定义、函数体里的
     /// `foo = 1`、参数、for/迭代变量）不是它对**别的模块**同名定义的消费；
-    /// `use` 导入的名字是显式声明的对外消费面，同名局部遮蔽不得吞掉它。
-    pub fn collect_refs_and_own_names(ast: &Module) -> (HashSet<String>, HashSet<String>) {
+    /// `use` 带入的名字是显式声明的对外消费面，同名局部遮蔽不得吞掉它。
+    pub fn collect_module_names(ast: &Module) -> ModuleNames {
         let mut referenced = IdentSink::default();
 
         fn collect_from_expr(
@@ -297,6 +343,16 @@ impl DeadCodeAnalyzer {
                     collect_from_expr(expr, referenced);
                     // 字段名一并收集：方法调用 obj.render() 只出现短名
                     referenced.insert(field.clone());
+                    // 基名是 Var 时记成（基名, 字段名）：命中命名空间导入即可归因；
+                    // 其余（f().render() 等）连基名都没有，只能按名字维度计入
+                    match expr.as_ref() {
+                        Expr::Var(base, _) => {
+                            referenced
+                                .namespaced_fields
+                                .push((base.clone(), field.clone()));
+                        }
+                        _ => referenced.field_free(field.clone()),
+                    }
                 }
                 Expr::BinOp { left, right, .. } => {
                     collect_from_expr(left, referenced);
@@ -619,11 +675,18 @@ impl DeadCodeAnalyzer {
         for stmt in &ast.items {
             collect_from_stmt(stmt, &mut referenced, true);
         }
-        // 自有的名字 = 本模块绑定的名字 − `use` 导入的名字（后者是显式声明的
+        // 自有的名字 = 本模块绑定的名字 − `use` 带入的名字（后者是显式声明的
         // 对外消费面，同名局部遮蔽不得吞掉它）
-        let imported = collect_use_names(ast);
-        let own = referenced.bound.difference(&imported).cloned().collect();
-        (referenced.refs, own)
+        let face = collect_import_face(ast);
+        let own = referenced.bound.difference(&face.names).cloned().collect();
+        ModuleNames {
+            refs: referenced.refs,
+            own,
+            field_refs_free: referenced.field_refs_free,
+            namespaced_fields: referenced.namespaced_fields,
+            imported: face.items,
+            namespaces: face.namespaces,
+        }
     }
 
     /// 从入口点出发，计算可达符号集合

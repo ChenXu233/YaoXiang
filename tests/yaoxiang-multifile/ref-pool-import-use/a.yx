@@ -1,0 +1,6 @@
+// a.yx —— 4.9.4 判据：
+//   foo  : 被 b.yx 的同名定义「撞名」——main 用的是 b.foo，不该救活 a.foo
+//   guard: 只被 import（main 的 use 项）而从未被调用——不该算消费
+foo: () -> Int = () => { return 7 }
+
+guard: () -> Int = () => { return 8 }

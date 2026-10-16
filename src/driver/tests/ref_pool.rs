@@ -15,11 +15,11 @@
 //! 对照组 `test_ref_pool_stays_exempt_...` 钉住「未修分支」——Bin/Lib 的
 //! 跨文件消费仍必须豁免，防修复把池整体关掉（只证新行为对不足以放行）。
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::driver::helpers::collect_compilation_refs;
 use crate::driver::{Driver, DriverError, DriverOutcome, Program, ProgramKind, Unit};
+use crate::frontend::module::roles::FileRole;
 use crate::frontend::config::CompileConfig;
 
 /// 合法 manifest（[package] 可解析 ⇒ 角色上下文可用 ⇒ Bin/Lib/Internal 分类生效）
@@ -215,42 +215,64 @@ fn test_ref_pool_stays_exempt_for_cross_module_consumption() {
     assert_warnings(&outcome, "lib.yx", &[], &[("W1001", 2), ("W1002", 4)]);
 }
 
-/// 池的机制直证（4.9.1 的来源 = 编译集 + 4.9.2 的身份 = (模块, 名字)）：
-/// 装配只读传入的 units/asts（合成夹具不经文件系统），键是模块键，
-/// 且每个模块自有的名字从**它自己**的条目里剔除。
+/// 池的机制直证（4.9.4 改进 4：消费只记到 import 解析出的定义模块，且必须
+/// 「被 import 后真实使用」）：装配只读传入的 units/asts（合成夹具不经文件系统）。
 #[test]
-fn test_collect_compilation_refs_keys_by_module_and_drops_own_names() {
-    // Arrange：a 定义 foo 并在自己函数体里用同名局部；b 引用 foo 与 other
-    let a_src = "foo: () -> Int = () => { return 1 }\n\nprobe: () -> Int = {\n    foo = 5\n    return foo\n}\n";
-    let b_src = "use a.{foo}\n\nbar: () -> Int = foo()\n\nbaz: () -> Int = other()\n";
+fn test_collect_ref_pool_credits_imported_and_used_names_only() {
+    // Arrange：a 定义 foo/other；b 的 use 项里 foo 真实使用、guard 只 import 未用，
+    // 另有未 import 的同名引用 other；t 是 Test 模块（引用 other）
+    let a_src = "foo: () -> Int = () => { return 1 }\n\nother: () -> Int = () => { return 2 }\n";
+    let b_src = "use a.{foo, guard}\n\nbar: () -> Int = foo()\n\nbaz: () -> Int = other()\n";
+    let t_src = "use a.{other}\n\nprobe: () -> Int = other()\n";
     let parse = |src: &str| {
         let tokens = crate::frontend::core::lexer::tokenize(src).expect("夹具可词法分析");
         let parsed = crate::frontend::core::parser::parse(&tokens);
         assert!(!parsed.has_errors, "夹具必须可解析：{:?}", parsed.errors);
         parsed.module
     };
-    let units = vec![Unit::new("a", "a.yx", a_src), Unit::new("b", "b.yx", b_src)];
-    let asts = vec![Some(parse(a_src)), Some(parse(b_src))];
+    let units = vec![
+        Unit::new("a", "a.yx", a_src),
+        Unit::new("b", "b.yx", b_src),
+        Unit::new("t", "tests/t.yx", t_src),
+    ];
+    let asts = vec![Some(parse(a_src)), Some(parse(b_src)), Some(parse(t_src))];
+    let roles = vec![
+        Some(FileRole::Bin),
+        Some(FileRole::Bin),
+        Some(FileRole::Test),
+    ];
 
     // Act
-    let pool = collect_compilation_refs(&units, &asts);
+    let pool = collect_compilation_refs(&units, &asts, &roles);
+    let credited = |name: &str| -> bool {
+        pool.consumed_from
+            .values()
+            .any(|names| names.contains(name))
+    };
 
-    // Assert：键 = 模块键；a 自有的 foo 不在自己的条目里；b 对 foo 的引用留下
-    let keys: HashSet<String> = pool.keys().cloned().collect();
-    assert_eq!(
-        keys,
-        HashSet::from(["a".to_string(), "b".to_string()]),
-        "池的键必须是模块键（unit.key）"
+    // Assert：foo 被 import 后真实使用 ⇒ 记到 a；guard 只在 use 项里 ⇒ 不算；
+    // other 未 import（b）或来自 Test 模块（t）⇒ 不算；b 自有的引用不给自己记账
+    assert!(
+        pool.consumed_from
+            .get("a")
+            .is_some_and(|names| names.contains("foo")),
+        "被 import 后真实使用的名字必须记到目标模块: {:?}",
+        pool.consumed_from
     );
     assert!(
-        !pool["a"].contains("foo"),
-        "模块自有的名字（定义或局部绑定）不得留在自己的池条目里（自我豁免）: {:?}",
-        pool["a"]
+        !credited("guard"),
+        "只出现在 use 项里、没有使用点的名字不算消费: {:?}",
+        pool.consumed_from
     );
     assert!(
-        pool["b"].contains("foo") && pool["b"].contains("other"),
-        "别的模块对名字的引用必须留下（跨文件消费证据）: {:?}",
-        pool["b"]
+        !credited("other"),
+        "未 import 的同名引用与 Test 模块的引用都不算消费: {:?}",
+        pool.consumed_from
+    );
+    assert!(
+        !pool.consumed_from.contains_key("b") && !pool.consumed_from.contains_key("t"),
+        "模块自己的引用不得给自己记账: {:?}",
+        pool.consumed_from
     );
 }
 
@@ -280,4 +302,59 @@ fn test_ref_pool_root_follows_declared_package_target() {
     // Assert：util（第 2 行）被包入口消费 ⇒ 活；orphan（第 4 行）只被编译面外的
     // 孤立文件引用 ⇒ 死（旧口径的目录扫描会把它误救，这正是 RFC-029f 缺陷 1）
     assert_warnings(&outcome, "internal.yx", &[("W1001", 4)], &[("W1001", 2)]);
+}
+
+/// 4.9.4：消费只记到 **import 解析出的那个模块**——别的模块调用同名标识符
+/// （use b.{foo} + foo()）不该救活 a.yx 的同名定义；而「只被 import、从未被
+/// 调用」的名字（use 项里出现但无使用点）同样不算消费。
+#[test]
+fn test_ref_pool_credits_consumption_to_the_imported_module_only() {
+    // Arrange：main 从 b 取 foo 并调用；a.foo 无人消费；a.guard 只出现在 use 项里
+    let a = "// a.yx —— foo 与 b.foo 同名但无人消费；guard 只被 import 未使用\nfoo: () -> Int = () => { return 7 }\n\nguard: () -> Int = () => { return 8 }\n";
+    let b = "// b.yx —— 被 main 真实使用的 foo\nfoo: () -> Int = () => { return 9 }\n";
+    let main = "use std.assert\nuse a.{guard}\nuse b.{foo}\n\nmain: () -> Void = {\n    assert.assert(foo() == 9, \"b.foo() should be 9\")\n}\n";
+    let (_dir, entry) = write_project(
+        &[("a.yx", a), ("b.yx", b), ("main.yx", main)],
+        Some(MANIFEST_DECLARED),
+    );
+    let a_path = entry.with_file_name("a.yx");
+    let b_path = entry.with_file_name("b.yx");
+
+    // Act：分别检查 a.yx / b.yx（池的根都是声明的包目标 main.yx）
+    let a_outcome = run_check(&a_path).expect("check 必须返回产物");
+    let b_outcome = run_check(&b_path).expect("check 必须返回产物");
+
+    // Assert：a.foo（第 2 行）与 a.guard（第 4 行）都是死代码；b.foo（第 2 行）被
+    // main 的 use b.{foo} + 调用消费，不得报
+    assert_warnings(&a_outcome, "a.yx", &[("W1001", 2), ("W1001", 4)], &[]);
+    assert_warnings(&b_outcome, "b.yx", &[], &[("W1001", 2)]);
+}
+
+/// 4.9.5：tests/ 的引用不豁免生产代码——测试文件引用 src/util.yx 的 debug_print，
+/// 而 src/ 内无消费者时 debug_print 仍报 W1001（测试引用单独成池，只豁免测试自身）。
+#[test]
+fn test_ref_pool_excludes_test_role_references() {
+    // Arrange：src/util.yx 的 debug_print 只被 tests/helper.yx 引用；helper 被 main 消费
+    let util = "// src/util.yx —— debug_print 在 src/ 内无消费者（4.9.5 判据）\ndebug_print: (x: Int) -> Void = (x) => {\n    return\n}\n\nhelper: () -> Int = () => { return 1 }\n";
+    let main = "// 项目入口：只消费 src/util.yx 的 helper\nuse src.util.{helper}\n\nmain: () -> Void = {\n    n = helper()\n}\n";
+    let test_helper = "// tests/helper.yx —— 测试代码：引用 src/util.yx 的 debug_print\nuse src.util.{debug_print}\n\nprobe: () -> Void = () => {\n    debug_print(1)\n}\n";
+    let (_dir, entry) = write_project(
+        &[
+            ("src/util.yx", util),
+            ("main.yx", main),
+            ("tests/helper.yx", test_helper),
+        ],
+        Some(MANIFEST),
+    );
+    let util_path = entry.with_file_name("src").join("util.yx");
+    let test_path = entry.with_file_name("tests").join("helper.yx");
+
+    // Act：① 以测试文件为被检入口（其编译集里含 src/util.yx，测试引用最接近消费者）
+    // ② 以生产文件为被检入口（src/ 内无消费者）
+    let from_test = run_check(&test_path).expect("check 必须返回产物");
+    let from_src = run_check(&util_path).expect("check 必须返回产物");
+
+    // Assert：debug_print（第 2 行）在两种入口下都必须报
+    assert_warnings(&from_test, "src/util.yx", &[("W1001", 2)], &[]);
+    assert_warnings(&from_src, "src/util.yx", &[("W1001", 2)], &[]);
 }

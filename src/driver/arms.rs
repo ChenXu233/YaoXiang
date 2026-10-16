@@ -546,24 +546,35 @@ impl Driver {
         //   目录扫描把从未参与编译的文件也算成消费者（缺陷 1），改由「包目标的
         //   编译集」表达「全项目」，扫目录这条路整体作废。
         // vendor/嵌入 std 不入池（外部包视角，保留原口径）。
-        let (surfaces, _) = role_context(project_root_canon.as_deref());
+        //
+        // 轮 2（WBS 4.9.4/4.9.5）在本块之上把**消费判据**收紧：名字只记到
+        // import 解析出的那个模块（改进 4：被 import 后真实使用才算消费），
+        // 且 Test 模块的引用不贡献（改进 5）——见 helpers.rs 的 `RefPool`。
+        let (surfaces, test_rules) = role_context(project_root_canon.as_deref());
         let mut package_roots: Vec<PathBuf> = surfaces
-            .map(|s| s.bins.into_iter().chain(s.libs).collect())
+            .as_ref()
+            .map(|s| s.bins.iter().chain(s.libs.iter()).cloned().collect())
             .unwrap_or_default();
         package_roots.sort();
         package_roots.dedup();
-        let project_refs_by_module = if package_roots.is_empty() {
+        // 退化路径要本单元的角色（Test 不贡献消费面）；roles 在 RoleClassification
+        // 臂已产，这里只读不写
+        let unit_roles: Vec<Option<FileRole>> = units.iter().map(|us| us.role).collect();
+        let pool = if package_roots.is_empty() {
             // 无声明面（含无 manifest 的 standalone 单文件）：退化为被检文件
             // 自身的编译集
-            collect_compilation_refs(&program.units, asts.as_slice())
+            collect_compilation_refs(&program.units, asts.as_slice(), &unit_roles)
         } else {
-            let pool = collect_package_refs(&package_roots);
-            if pool.is_empty() {
+            match collect_package_refs(
+                &package_roots,
+                project_root_canon.as_deref(),
+                surfaces.as_ref(),
+                test_rules.as_ref(),
+            ) {
+                Some(pool) => pool,
                 // 声明面存在却一个 root 都跑不通（文件缺失 / 语法全败）——
                 // 宁漏勿误：退化为被检文件自身的编译集，不用空池制造误报
-                collect_compilation_refs(&program.units, asts.as_slice())
-            } else {
-                pool
+                None => collect_compilation_refs(&program.units, asts.as_slice(), &unit_roles),
             }
         };
         for (i, us) in units.iter_mut().enumerate() {
@@ -596,24 +607,26 @@ impl Driver {
             if matches!(us.role, Some(FileRole::Test)) {
                 continue; // Test 不参与死代码判定（RFC-036 测试发现规则）
             }
-            // 本单元可消费的池 = 除它自己以外的模块条目的并集——(module, name)
-            // 身份在消费端同样显式可见（本单元条目里的名字已剔除自有名，
-            // 这里再按模块键排一次，语义即「别的模块对本名字的引用」）
+            // 本单元可消费的池 = **从本模块 import 出去且被真实使用**的名字
+            // （改进 4 的 (module, name) 归属）+ 字段/方法位残差（AST 层归因不到
+            // 模块，名字维度保守计入；方法决议归 #450 另案）
             let unit_key = program.units[i].key.clone();
-            let other_module_refs = || -> HashSet<String> {
-                project_refs_by_module
-                    .iter()
-                    .filter(|(key, _)| **key != unit_key)
-                    .flat_map(|(_, names)| names.iter().cloned())
-                    .collect()
+            let consumed_names = || -> HashSet<String> {
+                let mut names: HashSet<String> = pool
+                    .consumed_from
+                    .get(&unit_key)
+                    .cloned()
+                    .unwrap_or_default();
+                names.extend(pool.field_names.iter().cloned());
+                names
             };
             let mut analyzer = DeadCodeAnalyzer::new();
             match us.role {
                 Some(FileRole::Bin | FileRole::Internal) => {
-                    analyzer.set_exempt_pub(other_module_refs());
+                    analyzer.set_exempt_pub(consumed_names());
                 }
                 Some(FileRole::Lib) => {
-                    analyzer.set_cross_file_refs(other_module_refs());
+                    analyzer.set_cross_file_refs(consumed_names());
                 }
                 // Script：不接池（RFC-029f 改进 3 / WBS 4.9.3）——单文件语义
                 // 只按定义-使用图判定，项目内其它文件的引用不豁免它；
@@ -1256,9 +1269,18 @@ impl Driver {
         } = state;
         // 项目角色上下文：manifest 缺失或损坏 → surfaces 为 None → 全体
         // Script 态（行为与引入角色模型前一致）；wasm32 下 package 模块
-        // 不编译，同样降级
+        // 不编译，同样降级。
+        //
+        // canonical 口径必须与下面 `file_canon` 一致：`roles::classify` 的
+        // TestRules / 声明面都是 canonical 比较（roles.rs 的 `canonical()`），
+        // 根用原始路径时 `file_canon.starts_with(root.join("tests"))` 在
+        // Windows 的 `\\?\` 前缀下静默为 false——tests/ 下的文件被误判成
+        // Internal（CLI 恰好因入口先 canonicalize 而掩盖了这条）
         let project_root = orchestrator::find_project_root(entry_path);
-        let (surfaces, test_rules) = role_context(project_root.as_deref());
+        let project_root_canon = project_root
+            .as_ref()
+            .map(|root| root.canonicalize().unwrap_or_else(|_| root.clone()));
+        let (surfaces, test_rules) = role_context(project_root_canon.as_deref());
         for (i, us) in units.iter_mut().enumerate() {
             let Some(ast) = &asts[i] else {
                 continue; // 上游失败（FailFast 下 run 循环已中止，防御）
@@ -1267,7 +1289,7 @@ impl Driver {
             let file_canon = path.canonicalize().unwrap_or_else(|_| path.clone());
             let role = roles::classify(
                 &file_canon,
-                project_root.as_deref(),
+                project_root_canon.as_deref(),
                 surfaces.as_ref(),
                 test_rules.as_ref(),
                 used_by.contains(&file_canon),

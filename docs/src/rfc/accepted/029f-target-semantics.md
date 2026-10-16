@@ -334,9 +334,15 @@ fn classify(files, manifest, entry_reach) -> Map<File, Role>:
 | 2 | 粒度是项目级裸名，无模块维度 | **池类型 = `HashMap<String, HashSet<String>>`**：键 = 模块键、值 = 该模块的引用名集合；消费端在 `arms.rs:603-609` 把「除本单元外」的所有模块条目并集后送给 `DeadCodeAnalyzer`，模块自有名（顶层定义与局部绑定，`use` 导入名例外）不再豁免别的模块同名定义 | `src/driver/arms.rs:603-609`（消费端 `other_module_refs`）；装配唯一入口 `src/driver/helpers.rs:429-449`（`collect_ref_pool`） |
 | 3 | Script 复用 Lib 的池（违反单文件语义） | **Script 不接池**：`arms.rs:611-623` 的 `match us.role` 只对 `Bin`/`Internal`（`set_exempt_pub`）与 `Lib`（`set_cross_file_refs`）装配，Script/Test 走 `_ => {}` 默认臂；后者只按文件内定义-使用图判定 | `src/driver/arms.rs:611-623` |
 
-**落地后留待 WBS 4.9 后续轮次的项**（本轮 inScope 之外）：
+**后续改进 4 / 5 —— 修正状态（2026-10-16，WBS 4.9 轮 2）**
 
-- **消费定义细化（4.9.4）**：区分「被 import」与「被 import 后真实使用」——本轮不在，依赖 `use` 项的路径解析（前置 = 4.6.1，已由 `39546020` 交付）。
-- **测试池分离（4.9.5）**：tests/ 的引用单独成池，不豁免生产代码（src/）的未使用定义。
+> 本节两项原列「待 P4 4.9 落地」。两项已由 WBS 4.9 轮 2 逐条落地；下表 file:line 取于**本次落地工作树**（提交号由批次收口在推送后补，见 09a——轮 1 教训：push 前的本地哈希会被 `pull --rebase` 重写）。
+
+| # | 原改进 | 现状（2026-10-16） | 落地代码 |
+|---|--------|-------------------|----------|
+| 4 | 消费定义细化：区分「被 import」和「被 import 后真实使用」（仅后者算消费） | **消费判据 = 「被 import 后真实使用」**：一条消费记录 = 某模块用 `use` 把名字 n 从模块 M 带进作用域**且在使用点真的引用了 n**，只记到 M（`RefPool::consumed_from`）；只出现在 use 项里（无使用点）、别的模块对**同名**标识符的引用都不算消费。import 的目标模块按发现期的模块键集合判定（`resolve_import_module`，**不另起一套路径解析**——复用 4.6.1 已交付的发现期解析产物，见 `39546020`）；命名空间形态（`use lib` + `lib.foo()`）同样归因 | `src/driver/helpers.rs:442-446`（`RefPool`）；`src/driver/helpers.rs:449-524`（`collect_ref_pool` + `resolve_import_module`）；`src/frontend/core/typecheck/passes/dead_code.rs:180-192`（`ModuleNames`）、`:328-352`（`collect_module_names`）、`:122-176`（`ImportFace` / `collect_import_face`） |
+| 5 | 测试池分离：tests/ 的引用不豁免生产代码（src/） | **`FileRole::Test` 不贡献消费面**：Test 模块的引用单独成池（Test 自身不参与死代码判定，故其引用不外溢），生产代码的定义只被生产代码的消费救活。角色由 `roles::classify` 单点判定（测试发现规则 RFC-036） | `src/driver/helpers.rs:470-476`（`collect_ref_pool` 的 Test 短路）；`src/driver/helpers.rs:595-601`（`roles::classify` 单点判定）；`src/driver/arms.rs:562-580`（退化/声明面两条路径都把角色喂给池） |
+
+**残留面（登记，不阻塞）**：字段/方法位引用（`obj.render()` 只有短名）在 AST 层无法归因到接收者类型所属模块——只有基名命中命名空间导入时才按 import 归因，其余按名字维度保守计入 `RefPool::field_names`（`src/driver/helpers.rs:446`）；重载方法调用的逐候选归因见 WBS 4.9.6（issue #450）。
 
 **不在 P3.5 改的理由（与上一版一致）**：模块级解析需要 `use` 项的路径解析完成（`use a::foo` → foo 来自模块 a），属 P4 阶段契约与 Driver 统一的范畴。
