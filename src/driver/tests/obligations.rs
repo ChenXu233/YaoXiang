@@ -120,7 +120,7 @@ fn test_obligation_settlement_is_quiet_for_empty_obligations() {
 
     // Assert
     assert!(
-        settlement.is_drained(),
+        settlement.findings.is_empty(),
         "空义务不得产任何结算发现: {:?}",
         settlement.findings
     );
@@ -145,7 +145,7 @@ fn test_obligation_settlement_has_no_undelivered_in_real_program() {
 
     // Assert：只有红名单条目可以出现——NotDelivered 意味着交付点没接线
     assert!(
-        settlement.is_drained(),
+        settlement.findings.is_empty(),
         "红名单归零后，健康程序的结算必须零发现: {:?}",
         settlement.findings
     );
@@ -176,7 +176,7 @@ fn test_obligation_delivery_mark_drains_ir_generation_obligations() {
         "和类型程序的 sum_types 必须经 IrGeneration 交付点通过: {settlement:?}"
     );
     assert!(
-        settlement.is_drained(),
+        settlement.findings.is_empty(),
         "摘掉 IrGeneration 交付标记必须让本例变红（健康态应零发现）: {:?}",
         settlement.findings
     );
@@ -204,7 +204,7 @@ fn test_obligation_delivery_mark_drains_instantiation_requests() {
         "泛型调用的实例化请求必须经 Monomorphization 交付点通过: {settlement:?}"
     );
     assert!(
-        settlement.is_drained(),
+        settlement.findings.is_empty(),
         "摘掉 mono 交付标记必须让本例变红（健康态应零发现）: {:?}",
         settlement.findings
     );
@@ -230,7 +230,7 @@ fn test_obligation_delivery_mark_drains_proof_calls() {
         "证明义务必须经 ProofExecution 交付点通过（真值 6 == 3 * 2）: {settlement:?}"
     );
     assert!(
-        settlement.is_drained(),
+        settlement.findings.is_empty(),
         "摘掉 proof 交付标记必须让本例变红（健康态应零发现）: {:?}",
         settlement.findings
     );

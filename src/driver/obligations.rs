@@ -619,11 +619,6 @@ pub struct ObligationSettlement {
 }
 
 impl ObligationSettlement {
-    /// 全部义务已排空（无发现）。
-    pub fn is_drained(&self) -> bool {
-        self.findings.is_empty()
-    }
-
     /// 归一化键集合（C2 跨入口一致性比对用；升序）。
     pub fn keys(&self) -> Vec<String> {
         let mut keys: Vec<String> = self.findings.iter().map(|f| f.key()).collect();
