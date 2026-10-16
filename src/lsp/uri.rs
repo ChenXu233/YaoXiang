@@ -38,7 +38,11 @@ pub(crate) fn uri_to_path(uri: &str) -> Option<PathBuf> {
 /// 互逆（规范化键的幂等性来源）。
 pub(crate) fn path_to_uri(path: &Path) -> String {
     let mut out = String::from("file:///");
+    // 前缀已含路径起始的 `/`——POSIX 绝对路径（`/tmp/a.yx`）的前导 `/`
+    // 必须剥掉，否则产出四斜杠的非法形式（`file:////tmp/a.yx`）；
+    // Windows 盘符路径（`E:/a.yx`）无前导 `/`，不受影响
     let display = path.display().to_string().replace('\\', "/");
+    let display = display.trim_start_matches('/');
     for ch in display.chars() {
         if ch.is_ascii_alphanumeric()
             || matches!(
