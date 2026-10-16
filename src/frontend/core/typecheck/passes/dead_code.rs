@@ -14,7 +14,7 @@
 //! 不豁免生产代码（改进 5）。`pub` 关键字已由 RFC-029g 删除，不再是豁免来源。
 //! 未使用导入（W1003）由 typecheck 的 use elaboration 检测，不在此处。
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 
 use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -25,8 +25,8 @@ use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind, Expr, Block};
 pub struct DeadCodeAnalyzer {
     /// 入口点集合（可达性根：`main`）
     entry_points: HashSet<String>,
-    /// 所有符号定义
-    all_defs: HashMap<String, SymbolDef>,
+    /// 所有符号定义——**逐定义一条**（同名重载不互相覆盖：WBS 4.9.6 / #450）
+    all_defs: Vec<SymbolDef>,
     /// Bin/Internal 的包内引用池（driver 侧按**编译集**装配、名字已按模块
     /// 身份剔除自有名：RFC-029f 改进 1+2）
     exempt_pub: HashSet<String>,
@@ -200,7 +200,7 @@ impl DeadCodeAnalyzer {
     pub fn new() -> Self {
         Self {
             entry_points: HashSet::new(),
-            all_defs: HashMap::new(),
+            all_defs: Vec::new(),
             exempt_pub: HashSet::new(),
             cross_file_refs: HashSet::new(),
         }
@@ -274,30 +274,48 @@ impl DeadCodeAnalyzer {
                     } else {
                         (name.clone(), SymbolKind::Function)
                     };
-                    self.all_defs.insert(
-                        def_name.clone(),
-                        SymbolDef {
-                            name: def_name.clone(),
-                            kind,
-                            location: stmt.span,
-                        },
-                    );
+                    self.record_definition(SymbolDef {
+                        name: def_name.clone(),
+                        kind,
+                        location: stmt.span,
+                    });
                     if !is_method && name == "main" {
                         self.entry_points.insert(name.clone());
                     }
                 }
                 StmtKind::TypeDefinition { name, .. } => {
-                    self.all_defs.insert(
-                        name.clone(),
-                        SymbolDef {
-                            name: name.clone(),
-                            kind: SymbolKind::Type,
-                            location: stmt.span,
-                        },
-                    );
+                    self.record_definition(SymbolDef {
+                        name: name.clone(),
+                        kind: SymbolKind::Type,
+                        location: stmt.span,
+                    });
                 }
                 _ => {}
             }
+        }
+    }
+
+    /// 记一条定义（WBS 4.9.6 / #450）：
+    ///
+    /// - **方法**逐定义**追加**——同名重载是各自独立的定义，不得互相覆盖
+    ///   （旧实现按 full name 键控，两个重载只剩一条）；
+    /// - 其余按**名字去重并保留最后一次**（顶层同名再绑定/重赋值是同一个绑定，
+    ///   与旧 map 的「后写覆盖」行为一致——不额外制造同名重复告警）。
+    fn record_definition(
+        &mut self,
+        def: SymbolDef,
+    ) {
+        if matches!(def.kind, SymbolKind::Method) {
+            self.all_defs.push(def);
+            return;
+        }
+        match self
+            .all_defs
+            .iter_mut()
+            .find(|existing| existing.name == def.name)
+        {
+            Some(slot) => *slot = def,
+            None => self.all_defs.push(def),
         }
     }
 
@@ -712,9 +730,16 @@ impl DeadCodeAnalyzer {
             }
             reachable.insert(symbol.clone());
 
-            for def_name in self.all_defs.keys() {
-                if ast_references.contains(def_name) && !reachable.contains(def_name) {
-                    queue.push_back(def_name.clone());
+            for def in &self.all_defs {
+                // 方法只以**短名**出现在引用里（`obj.render()` 收集到的是 render，
+                // 不是 Point.render），故方法用短名探针——被调用的方法必须可达；
+                // 未被调用的方法（短名不在引用里）仍不可达（WBS 4.9.6 / #450）
+                let probe = match def.kind {
+                    SymbolKind::Method => def.name.rsplit('.').next().unwrap_or(&def.name),
+                    _ => def.name.as_str(),
+                };
+                if ast_references.contains(probe) && !reachable.contains(&def.name) {
+                    queue.push_back(def.name.clone());
                 }
             }
         }
@@ -738,7 +763,8 @@ impl DeadCodeAnalyzer {
     ) -> Vec<DeadCodeWarning> {
         let mut warnings = Vec::new();
 
-        for (name, def) in &self.all_defs {
+        for def in &self.all_defs {
+            let name = &def.name;
             if Self::is_reachable(name, def, reachable) {
                 continue;
             }

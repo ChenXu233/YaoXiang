@@ -54,7 +54,7 @@ pub(super) fn make_bin_project(files: &[(&str, &str)]) -> (tempfile::TempDir, Pa
 }
 
 /// 以 Check 形态跑 Driver（与 `yaoxiang check` 同一入口形态）。
-fn run_check(entry: &Path) -> Result<DriverOutcome, DriverError> {
+pub(super) fn run_check(entry: &Path) -> Result<DriverOutcome, DriverError> {
     let program = Program::new(
         ProgramKind::Check,
         vec![Unit::new("main", entry, "")],
@@ -64,7 +64,7 @@ fn run_check(entry: &Path) -> Result<DriverOutcome, DriverError> {
 }
 
 /// 某文件条目里的诊断码列表（按路径后缀匹配；无条目 = panic，不静默返回空表）。
-fn check_codes(
+pub(super) fn check_codes(
     outcome: &DriverOutcome,
     suffix: &str,
 ) -> Vec<String> {

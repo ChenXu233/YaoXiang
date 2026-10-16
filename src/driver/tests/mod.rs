@@ -5,6 +5,7 @@ mod codegen_init_calls;
 mod driver;
 mod helpers;
 mod lsp_semantic_db;
+mod method_unused;
 mod mono_cross_unit;
 mod named_import_calls;
 mod obligations;
