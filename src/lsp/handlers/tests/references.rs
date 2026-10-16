@@ -101,3 +101,18 @@ fn test_references_doc_not_open_returns_none() {
     // Assert
     assert!(result.is_none(), "未打开的文档应返回 None");
 }
+
+#[test]
+fn test_references_mid_identifier_cursor_also_finds() {
+    // Arrange：三字符名 abc——光标落在标识符**中部**（b 上）
+    // （2026-10-16 用户裁决：查库键 = 标识符自身起点）
+    let (session, world) = open_and_check("abc = 1\ny = abc + abc\n");
+
+    // Act
+    let params = make_params(SAMPLE_URI, 1, 5, false);
+    let result = handle_references(&session, &world, params);
+
+    // Assert：与起点光标同效——两个使用点都在列
+    let locations = result.expect("标识符中部光标必须同效找到引用（起点查库键裁决）");
+    assert_eq!(locations.len(), 2, "两个使用点都应被找到");
+}

@@ -75,9 +75,9 @@ fn test_definition_cross_file_import_hits_real_definition() {
     };
     handle_notification(&conn, &mut session, &mut world, open).expect("didOpen 通知处理不应报错");
 
-    // Act - 光标落在 `y = add_one(1)` 的 `add_one` 起点（0-indexed 行 2、列 4）：
-    // resolve_reference 按引用**起点**精确匹配（D55 precise-only 现状口径，
-    // 光标在标识符中部的容差不属于本任务）
+    // Act - 光标落在 `y = add_one(1)` 的 `add_one` 上。查库键 = 光标下
+    // 标识符自身的起点（2026-10-16 用户裁决）——起点（列 4）与中部（列 6）
+    // 两个位置必须同效命中
     let req = Request {
         id: 1.into(),
         method: <GotoDefinition as lsp_types::request::Request>::METHOD.to_string(),
@@ -117,6 +117,45 @@ fn test_definition_cross_file_import_hits_real_definition() {
         location.range.start.line, 0,
         "add_one 定义在 lib.yx 第 0 行，实际 {:?}",
         location.range
+    );
+
+    // Act 2 - 同一调用点、光标移到标识符**中部**（列 6 的 d 上）
+    let mid_req = Request {
+        id: 2.into(),
+        method: <GotoDefinition as lsp_types::request::Request>::METHOD.to_string(),
+        params: serde_json::to_value(lsp_types::GotoDefinitionParams {
+            text_document_position_params: lsp_types::TextDocumentPositionParams {
+                text_document: lsp_types::TextDocumentIdentifier {
+                    uri: lsp_types::Uri::from_str(&main_uri).expect("main URI 应可解析"),
+                },
+                position: lsp_types::Position {
+                    line: 2,
+                    character: 6,
+                },
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        })
+        .expect("definition 参数应可序列化"),
+    };
+    let mid_resp =
+        handle_request(&mut session, &mut world, mid_req).expect("definition 请求应有响应");
+    let mid_value = mid_resp
+        .response_result
+        .expect("definition 请求不应返回错误");
+    let mid_locations: Option<lsp_types::GotoDefinitionResponse> =
+        serde_json::from_value(mid_value)
+            .expect("definition 载荷应为 GotoDefinitionResponse 或 null");
+
+    // Assert 2 - 中部光标同效命中 lib.yx（起点查库键裁决）
+    let mid_response = mid_locations.expect("标识符中部光标的跨文件跳转不得落空");
+    let lsp_types::GotoDefinitionResponse::Scalar(mid_location) = mid_response else {
+        panic!("跳转结果应为单个 Location，实际 {mid_response:?}");
+    };
+    assert!(
+        mid_location.uri.as_str().ends_with("lib.yx"),
+        "中部光标的跨文件跳转必须同样命中 lib.yx，实际 {}",
+        mid_location.uri.as_str()
     );
     // 钉板：跳转不得落在 use 行（main.yx 行 0 是 `use lib.{add_one}`）
     let _ = lib_path;

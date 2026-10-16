@@ -14,7 +14,7 @@ use lsp_types::{GotoDefinitionParams, GotoDefinitionResponse, Location, Uri};
 use std::str::FromStr;
 use tracing::debug;
 
-use crate::lsp::locate::{find_identifier_at_position, position_to_internal_utf16, span_to_range};
+use crate::lsp::locate::{find_identifier_at_position, span_to_range};
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 
@@ -48,7 +48,11 @@ pub fn handle_definition(
 
     // 核心路径：SemanticDB 精确解析（按文件+位置）
     let db = world.semantic_db();
-    let (line, col) = position_to_internal_utf16(content, position);
+    // 查库键 = 光标下标识符**自身的起点**（2026-10-16 用户裁决）：
+    // resolve_reference 按引用起点精确匹配（D55 precise-only），直接用
+    // 光标位置会让标识符中部的点击静默落空；ident.span 与语义事件同
+    // 坐标系（lexer 1-indexed char 列），不经 UTF-16 换算
+    let (line, col) = (ident.span.start.line, ident.span.start.column);
 
     // 键规范化（4.6.1）：客户端 URI 的等价形式（盘符大小写、%XX 编码）
     // 归一到与编译产物相同的规范化 file URI 键
