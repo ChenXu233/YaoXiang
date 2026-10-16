@@ -12,131 +12,133 @@ issue: '#334'
 
 ## Summary
 
-> **Landing revision (2026-10-08, RFC-029g)**: The `pub` keyword has been entirely removed by
-> RFC-029g. All "pub exemption / pub files / unused pub warnings" wording in the body of this
-> document should be read as "**top-level bindings + in-package reference pool**": role
-> classification (Script / Bin / Lib / Internal / Test) and import surface semantics remain
-> unchanged; the change is only in the dead-code exemption criteria (see
+> **Landing correction (2026-10-08, RFC-029g)**: The `pub` keyword has been removed in its entirety
+> by RFC-029g. Throughout this document, every mention of "the `pub` exemption / `pub` files /
+> unused-pub warnings" should be read as "**top-level binding + intra-package reference pool**": the
+> role classification (Script / Bin / Lib / Internal / Test) and import surface semantics are
+> unchanged — the only change is in the condition that determines the dead-code exemption (see
 > [029g](029g-remove-pub-and-auto-bind.md) and the criteria in
 > `docs/src/reference/warning-code/warning-codes.md`).
 
-Fulfilling the extension slot promised in RFC-029's "Sub-RFC Plan" (slots 029b–029e are taken, 029f
-follows): define a **compilation target role model** for source files (the five classes Script / Bin
-/ Lib / Test / Internal) along with its **import surface semantics**—when there is no manifest,
-infer from entry reachability (zero configuration); when there is a manifest, declare explicitly via
-`[lib]` / `[[bin]]` / `[exports]` (fields already defined by RFC-015). This fills four outstanding
-semantic gaps: what governs cross-package import surfaces, the applicability scope of the dead-code
-warning's `pub` exemption (case B decided in #321), the relationship between `[exports]` and
-Registry reachability, and the naming disambiguation between RFC-014b's `[binaries]` (precompiled
-distribution artifacts) and the bin-role source file.
+Fulfills the extension slot promised in RFC-029's "Sub-RFC Plan" (slots 029b–029e are taken, so 029f
+follows): define a **compilation target role model** (five classes: Script / Bin / Lib / Test /
+Internal) for source files, together with its **import surface semantics** — inferred by entry
+reachability when no manifest exists (zero configuration), or declared explicitly via `[lib]` /
+`[[bin]]` / `[exports]` (fields already defined by RFC-015) when a manifest is present. This fills
+four dangling semantic gaps: how the cross-package import surface is computed; the applicable scope
+of the `pub` exemption for the dead-code warning (Decision B of #321); the relationship between
+`[exports]` and Registry reachability; and the disambiguation of the term "bin" between the
+`[binaries]` field in RFC-014b (pre-compiled distribution artifacts) and the bin-role source files.
 
 ## Motivation
 
-### Host and Boundary Basis
+### Host and boundary basis
 
-RFC-029 (accepted) and its entry-selection and visibility decisions are the direct upstream of this
+The entry selection and visibility decisions in RFC-029 (accepted) are the direct upstream of this
 RFC:
 
-> **Entry file selection** priority: 1. `[run].main` 2. The first `[[bin]]`'s `path` 3.
-> `src/main.yx` (convention default). — RFC-029 §Inter-package cycles: revisit
+> **Entry-file selection** priority: 1. `[run].main` 2. `[[bin]]` first entry's `path` 3.
+> `src/main.yx` (conventional default). — RFC-029 § Package-Level Cycles: Revisited
 
-> **Visibility**: does not exist. Scope + distribution boundary cover all scenarios; no new keyword
-> is needed. — RFC-029 §Decision Log (2026-07-30)
+> **Visibility**: does not exist. Scope + distribution boundary cover every scenario; no new keyword
+> is needed. — RFC-029 § Design Decision Record (2026-07-30)
 
-The second quote is the design red line of this RFC: the import surface semantics **must not
-introduce any new visibility keyword**; it can only be carried by "distribution boundary" (file
+The second point is the design red line of this RFC: the import surface semantics **must not
+introduce any new visibility keyword**; it can only be carried by the "distribution boundary" (file
 role + declared export surface).
 
-The four consumers each hit the same wall:
+Four consumers each hit the same wall:
 
-| Consumer                                         | Where it hits the wall                                                                                                                                                                                                                                    |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #321 Dead-code warnings                          | Case B "pub = external interface, never reported" exists because there is no role model to distinguish "truly external" from "looks external"; whether unused pub inside a bin should be reported (option A) has been on hold                             |
-| RFC-014c Workspace (under review, #113)          | When member packages `use` each other, what governs the import surface—`[exports]`, the `[lib]` single file, or all pub files—**there is not a single semantic clause in the entire document**                                                            |
-| RFC-015 Configuration system (accepted)          | The `[lib]` / `[[bin]]` / `[exports]` fields are defined, but aside from RFC-029 consuming the entry priority, the semantics of the remaining fields (especially the relationship between `[exports]` and Registry reachability) are not aligned anywhere |
-| RFC-037 Packaging / RFC-029a Cache (draft, #293) | Packaging artifact selection, cache-unit boundary for incremental recompilation—both need the role model as a prerequisite                                                                                                                                |
+| Consumer                                           | Where it hits the wall                                                                                                                                                                                                                                 |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #321 Dead-code warning                             | Decision B's "pub = external interface, never reported" exists because there is no role model to distinguish "truly external" from "looks external"; whether to report an unused pub inside a bin (Option A) is still pending                          |
+| RFC-014c Workspace (under review, #113)            | When member packages `use` one another, what defines the import surface — `[exports]`, the `[lib]` single file, or all pub files — **there is not a single semantic clause on the subject**                                                            |
+| RFC-015 Configuration system (accepted)            | The `[lib]` / `[[bin]]` / `[exports]` fields are defined; except for RFC-029's consumption of the entry priority, no one has aligned the semantics of the remaining fields (especially the relationship between `[exports]` and Registry reachability) |
+| RFC-037 Packaging / RFC-029a Caching (draft, #293) | Choice of packaging artifacts and the cache-unit boundary for incremental recompilation both need the role model as a prerequisite                                                                                                                     |
 
-### Current Problem
+### Current problems
 
-**Four semantic gaps** (inventory taken 2026-09-12, confirmed by reviewing the full text of
-014/014a/014b/014c/015/029):
+**Four semantic gaps** (audit of 2026-09-12; confirmed by re-reading 014/014a/014b/014c/015/029 in
+full):
 
-1. **No definition of cross-package import surface**. The 014c example of member packages referring
-   to each other only has a directory layout (`src/lib.yx`); nothing in the spec says what
-   `use utils.helper` can resolve to. The current implicit rule is "all top-level pub files in the
-   package"—internal implementation files are dragged into the namespace, making dependency
-   boundaries meaningless.
-2. **The dead-code pub exemption has no applicability scope**. Case B from #321, "pub is never
-   reported", is over-conservative in a single-file script (a script has no external consumer, so
-   pub is meaningless) and over-permissive in the entry file of a multi-file project (a pub on the
-   root file that no one imports is dead code). Without a role model, the dividing line between
-   cases A and B cannot be drawn.
-3. **Three export concepts are unaligned**. `[exports]` (015, path mapping), `[lib]` (015,
-   single-file path), Registry reachability (029, reachable from entry via `use`)—whether the three
-   are in a containment relation, an equality relation, or each independent is not specified.
-4. **Naming collision**. RFC-014b's `[binaries]` is a **precompiled distribution artifact** (.so/exe
-   download-priority policy), which is an entirely different layer from "the bin target (source-code
-   role)". Once 014c lands, the two will inevitably appear side by side; if we don't disambiguate
-   now, the confusion will persist.
+1. **No definition of the cross-package import surface**. The 014c example of member packages
+   importing each other only shows a directory structure (`src/lib.yx`); there is no clause stating
+   what `use utils.helper` can resolve to. The current implicit rule is "all top-level pub files of
+   the package" — internal implementation files are dragged into the namespace too, and the
+   dependency boundary becomes a fiction.
+2. **The `pub` exemption has no applicable scope**. Decision B of #321 — "pub is never reported" —
+   is overly conservative for a single-file script (a script has no external consumers, so pub is
+   meaningless), and overly loose for the entry file of a multi-file project (an unused pub on a
+   root file with no importers is dead code). Without a role model, no line can be drawn between
+   Options A and B.
+3. **Three export concepts have not been aligned**. `[exports]` (RFC-015, path mapping), `[lib]`
+   (RFC-015, single file path), and Registry reachability (RFC-029, reachable from entry along
+   `use`) — is this a containment relationship, an equality relationship, or each does its own
+   thing? No clause on the subject.
+4. **Term collision**. RFC-014b's `[binaries]` is a **pre-compiled distribution artifact** (an
+   .so/exe download-preference policy), and is on a completely different layer from the "bin target
+   (source-code role)". Once 014c lands, the two will inevitably appear on screen together, and the
+   confusion will persist unless disambiguated early.
 
-**Empirical evidence: the conservatism of case B is already a real pain point**. #321 M2
-retrospective records that the structural reason W1001–W1005 are all silent under default
-configuration is precisely "all pub are treated as external interfaces"—this is a compensation for a
-missing model, not a terminal state.
+**Evidence: Decision B's conservatism is already a real pain point**. The #321 M2 retrospective
+records that the structural reason W1001–W1005 are all silent by default is precisely "every pub is
+treated as an external interface" — this is compensatory behavior caused by a missing model, not a
+terminal state.
 
 ## Proposal
 
-### Core Design: File Role Model
+### Core design: the file role model
 
-**Role is a file-level attribute** (matching the granularity of 015's fields: `[lib]` is a single
-file, `[[bin]]` is a list of files, `[exports]` is a file mapping), not a package-level switch.
+**A role is a file-level attribute** (matching the granularity of RFC-015's fields: `[lib]` is a
+single file, `[[bin]]` is a list of files, `[exports]` is a file map) — not a package-level switch.
 
-| Role         | Determination                                                                                                                                      | Semantics                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Bin**      | The file pointed to by `[run].main` / `[[bin]].path`; or (without a manifest) the file containing `main` that is not `use`d by any other file      | Program entry. Requires a **binding** named `main`, either a value or a function: a function main is called with zero arguments at entry; a value main is evaluated at initialization (and the result, even if it is a function value, is not called again). Missing `main` is a compile error (E3020); top-level executable statements are not allowed. Its `pub` **may be reported as dead code** (no out-of-package consumer); `main` is a reachability root |
-| **Lib**      | A file hit by an `[exports]` mapping; or `[lib].path`; or (without a manifest) a file `use`d by some other file                                    | Distribution boundary. Its `pub` **is exempt from dead-code** (out-of-package consumer is invisible, prefer under-reporting); symbols exported through it are visible across packages                                                                                                                                                                                                                                                                           |
-| **Test**     | Files matched by RFC-036 test file rules (`tests/` directory, `*_test.yx`, and other existing conventions); **no** `[[test]]` explicit declaration | Test code. Does not participate in dead-code determination; its references count as reachability roots of code under test                                                                                                                                                                                                                                                                                                                                       |
-| **Internal** | When the package has a manifest: a file that is neither in the export surface nor contains main                                                    | In-package implementation. `pub` exemption extended to a phase 2 (tightened by in-package use-graph reachability, gated on Bin-role corpus validation); out-of-package `use` **is unreachable**                                                                                                                                                                                                                                                                 |
-| **Script**   | A file run directly as a single file (`run foo.yx`)                                                                                                | **No entry concept**. Top-level statements (including binding initialization) form the program body in source order; `main` is an ordinary binding, **not auto-called**—to run, write `main()`. The Registry contains only std                                                                                                                                                                                                                                  |
+| Role         | Determination                                                                                                                                                          | Semantics                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Bin**      | The file pointed to by `[run].main` or `[[bin]].path`; or (without a manifest) a file containing `main` that is not `use`d by any other file                           | Program entry. Requires a binding named `main`, which may be a value or a function: a function `main` is invoked at entry with zero arguments; a value `main` is evaluated at initialization time and that single evaluation is the execution (even if the evaluated result is a function value, it is not invoked again). Missing `main` is a compile error (E3020); top-level executable statements are forbidden. Its `pub` **may be reported as dead code** (no consumers outside the package); `main` is a reachability root |
+| **Lib**      | Files hit by an `[exports]` mapping; or `[lib].path`; or (without a manifest) files `use`d by some other file                                                          | Distribution boundary. Its `pub` **is exempt from dead-code reporting** (consumers outside the package are invisible, so we prefer false negatives); symbols exported through it are visible across packages                                                                                                                                                                                                                                                                                                                      |
+| **Test**     | Files matched by the RFC-036 test file rules (the `tests/` directory, `*_test.yx`, and other existing conventions); **no** explicit `[[test]]` declaration is provided | Test code. Does not participate in dead-code analysis; its references count as reachability roots for the code under test                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **Internal** | In a package with a manifest, files that are neither on the export surface nor contain `main`                                                                          | Intra-package implementation. `pub` is exempt pending Phase 2 (to be tightened to the intra-package `use`-graph reachability, contingent on the Bin role corpus as a prerequisite); `use` from outside the package **cannot reach it**                                                                                                                                                                                                                                                                                            |
+| **Script**   | A file run directly as a single file (`run foo.yx`)                                                                                                                    | **No entry concept**. Top-level statements (including binding initializers) are the program body in source order; `main` is a normal binding, **not called automatically** — to run it, write `main()`. The Registry contains only std                                                                                                                                                                                                                                                                                            |
 
-**Determination priority**: explicit manifest declaration > entry-reachability inference > 036 test
-convention. Explicit declaration always wins—inference is only the default when there is no
-declaration.
+**Determination priority**: explicit manifest declaration > entry-reachability inference > RFC-036
+test conventions. Explicit declarations always win — inference is only the default in the absence of
+a declaration.
 
-### Entry Determination
+### Entry determination
 
-The role model is used not only for dead-code analysis, but also to **drive entry determination**.
+The role model is used not only for dead-code analysis but also **drives entry determination**.
 Entry rules per role:
 
-| Role                      | Entry rule                                                                                                                                                                                                                                                  |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Script** (no manifest)  | **No entry concept**. Top-level statements (including binding initialization) form the program body in source order; `main` is an ordinary binding, **not auto-called**—to run, write `main()`                                                              |
-| **Bin** (with manifest)   | Requires a **binding** named `main` (either value or function: value main is evaluated at initialization, function main is called with zero arguments at entry); missing `main` is a compile error (E3020). Top-level executable statements are not allowed |
-| **Lib / Internal / Test** | `main` is not required (they are not entries)                                                                                                                                                                                                               |
+| Role                      | Entry rule                                                                                                                                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Script** (no manifest)  | **No entry concept**. Top-level statements (including binding initializers) are the program body in source order; `main` is a normal binding, **not called automatically** — to run it, write `main()`                                                  |
+| **Bin** (with manifest)   | Requires a binding named `main` (value or function: a value `main` is evaluated at initialization; a function `main` is invoked at entry with zero arguments); missing `main` is a compile error (E3020). Top-level executable statements are forbidden |
+| **Lib / Internal / Test** | Do not require `main` (they are not entries)                                                                                                                                                                                                            |
 
-**Script and Bin entry rules must be mutually exclusive**: "in Script, `main` is not special" and
-"in Bin, `main` is the entry" cannot both hold—if Script both executes top-level statements and
-implicitly calls `main`, a script that explicitly writes `main()` would run twice (#356). Therefore
-Script has only one execution entry: top-level statements.
+**Script and Bin entries must be mutually exclusive**: "Script treats `main` as ordinary" and "Bin
+treats `main` as the entry" cannot both hold — if a Script both executes its top-level statements
+and implicitly calls `main`, a script that explicitly writes `main()` would be double-run (#356).
+Therefore a Script has only one execution entry: its top-level statements.
 
-**Difference between role determination and entry determination** (implementation note): entry
-determination uses "whether a manifest exists" (`find_project_root().is_some()`) rather than
-`roles::classify()`. The reason is that classify answers "who consumes this file" (serving dead-code
-analysis); a file with a manifest but no `main` is Internal under classify (it is not `use`d by
-other files, which is reasonable), yet the user runs it as an entry— in that case there must be an
-entry. The two questions differ, so the criteria differ.
+**The distinction between role determination and entry determination** (implementation note): entry
+determination uses "presence of a manifest" (`find_project_root().is_some()`), not
+`roles::classify()`. The reason: `classify` answers "who consumes this file" (in service of
+dead-code analysis); a file with a manifest but no `main` is classified as Internal by `classify`
+(it isn't `use`d by any other file, which is reasonable), yet the user runs it as the entry — at
+which point an entry must exist. Two different questions, hence two different criteria.
 
-**Execution form of value `main`** (decided in #388): a function is already a value (unified at the
-type layer), so entry is judged by **binding existence** rather than callability—a value main and a
-function main only differ in evaluation strategy. A value main has no entry invocation (#356
-prevents double running: initialization and entry invocation never stack); it shares the same
-execution form as Script. Its evaluation is part of the initialization sequence: executed in the
-global binding topological order, with independent bindings following source order. Therefore,
-wrapping Script top-level statements in `main = { ... }` to migrate into a Bin is **not an
-order-preserving migration**— scattered statements execute in source order, while binding
-initialization follows topological order; initialization that needs to come first should make `main`
-explicitly depend on it. An uncallable value main like `main: Int = 5` is a legal program with no
-observable effect (analogous to Rust's empty `fn main() {}`).
+**The execution form of a value `main`** (Decision #388): functions are already values (unified at
+the type layer), so the entry is determined by **the existence of the binding**, not its callability
+— a value `main` and a function `main` differ only in evaluation strategy. A value `main` does not
+receive an entry-time call (prevention of double-run per #356: initialization and entry call never
+stack), and shares the execution form with Script; its evaluation is part of the initialization
+sequence: executed in the global binding topological order, with independent bindings following
+source order. Therefore migrating a Script by wrapping its top-level statements into
+`main = { ... }` and moving it into a Bin **is not an order-preserving migration** — scattered
+statements execute in source order, while binding initializers execute in topological order;
+initializations that need to come first should make `main` depend on them explicitly. A value `main`
+like `main: Int = 5` (a non-callable value `main`) is a legal but observationally empty program
+(analogous to Rust's empty `fn main() {}`).
 
 See `docs/src/reference/language-spec/syntax.md` §3.11 for details.
 
@@ -153,54 +155,55 @@ path = "src/cli.yx"
 
 [exports]
 "." = "src/lib.yx"
-"./internal-helper" = "src/helper.yx"   # ← what determines cross-package visibility is this, not pub
+"./internal-helper" = "src/helper.yx"   # ← it is this field, not pub, that determines cross-package visibility
 ```
 
 ```yaoxiang
 # src/cli.yx (Bin role)
-pub unused_fn = (x: Int) => x    # ← W1001 may be reported: the bin has no out-of-package consumer
+pub unused_fn = (x: Int) => x    # ← W1001 may report: bin has no consumers outside the package
 main: () -> Void = { ... }
 
 # src/lib.yx (Lib role, on the export surface)
-pub api_fn = ...                 # ← never reported: out-of-package consumer is invisible
+pub api_fn = ...                 # ← never reports: consumers outside the package are invisible
 
 # src/other.yx (Internal role, not on the export surface)
-pub semi_api = ...               # ← exemption extended to phase 2 (prefer under-reporting); later tightened by the use graph
+pub semi_api = ...               # ← exempt pending Phase 2 (prefer false negatives); to be tightened by the use graph when that lands
 ```
 
-### Import Surface Semantics
+### Import surface semantics
 
-Resolution order of cross-package `use pkg.x` (the first match takes effect):
+The resolution order for cross-package `use pkg.x` (the first hit takes effect):
 
-1. If an `[exports]` mapping exists → the import surface = the set of files listed in the mapping;
-   `x` must be among the top-level bindings of those files;
-2. Otherwise, if `[lib].path` exists → the import surface = that single file;
-3. If neither exists (no-manifest dependency, raw directory dependency) → **status quo**: all
-   top-level files are importable (compatibility with existing behavior; tightening is a separate
-   matter).
+1. An `[exports]` mapping exists → the import surface = the set of files listed in the mapping, and
+   `x` must be a top-level binding in one of those files;
+2. Otherwise `[lib].path` exists → the import surface = that single file;
+3. Neither exists (a manifest-less dependency, or a path pointing at a bare directory) → **status
+   quo**: all top-level files are importable (compatible with existing behavior; tightening to be
+   discussed separately).
 
 **Workspace members**: the export surface is defined solely by each member package's own manifest;
-the workspace root must not override or extend the member export surface—member self-containment is
-the core design of 014c, and root override would break encapsulation.
+the workspace root must not override or extend a member's export surface — member self-containment
+is 014c's core design, and root overrides would break encapsulation.
 
-Relationship to Registry reachability (aligned with 029): `[exports]`/`[lib]` define the **set of
-valid starting points for cross-package resolution**; once the starting points are fixed, the
-Registry still expands per 029's "reachable from the entry along `use`"—internal files that an
-exported file itself `use`s join via linking, but do not create new cross-package starting points.
+The relationship with Registry reachability (aligned with RFC-029): `[exports]`/`[lib]` define the
+**set of legal starting points for cross-package resolution**; once the starting points are
+determined, the Registry still expands per RFC-029's "reachable from entry along `use`" — internal
+files brought in by the export file's own `use` enter via linking, but do not produce new
+cross-package starting points.
 
-### Boundary With Existing Plans
+### Demarcation from existing plans
 
-| Neighbor                                           | Boundary                                                                                                                                                                                                                                                                         |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC-029d "CLI `--entry` overrides entry" (planned) | 029f defines the role model; 029d consumes it—`--entry` is the CLI-level override means for the Bin role                                                                                                                                                                         |
-| RFC-014b `[binaries]`                              | **Naming disambiguation**: `[binaries]` is a precompiled distribution artifact (download-priority policy); `[[bin]]` is a source-code role declaration. The former lives in a dependency package's manifest, the latter in this package's manifest; they are not interchangeable |
-| RFC-014c Workspace                                 | Cross-member import surface = the resolution order in this RFC; workspace coordination mechanisms (members, shared lockfile) still belong to 014c                                                                                                                                |
-| RFC-036 Testing                                    | Test role determination directly reuses 036's existing file rules, no new convention added                                                                                                                                                                                       |
-| #321 Dead code                                     | Case B (pub always exempt) is explicitly downgraded to "transitional semantics when no target exists"; the Bin role's pub being reportable is this RFC's realization of option A                                                                                                 |
+| Neighbor                                          | Boundary                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC-029d "CLI `--entry` entry override" (planned) | 029f defines the role model; 029d consumes it — `--entry` is a CLI-level override for the Bin role                                                                                                                                                                        |
+| RFC-014b `[binaries]`                             | **Term disambiguation**: `[binaries]` is a pre-compiled distribution artifact (download-preference policy), `[[bin]]` is a source-code role declaration. The former lives in a dependency's manifest, the latter in this package's manifest; they are not interchangeable |
+| RFC-014c Workspace                                | The import surface for member packages' mutual imports is the resolution order defined by this RFC; workspace coordination mechanisms (members, shared lockfile) still belong to 014c                                                                                     |
+| RFC-036 Testing                                   | The Test role is determined by RFC-036's existing file rules; no new convention is added                                                                                                                                                                                  |
+| #321 Dead code                                    | Decision B ("pub always exempt") is explicitly downgraded to "transitional semantics when no target exists"; reporting a Bin role's `pub` is the realization of Option A promised by this RFC                                                                             |
 
-## Detailed Design
+## Detailed design
 
-### Role Determination Algorithm (Inside the Orchestrator)
+### Role determination algorithm (inside the orchestrator)
 
 ```
 fn classify(files, manifest, entry_reach) -> Map<File, Role>:
@@ -210,179 +213,180 @@ fn classify(files, manifest, entry_reach) -> Map<File, Role>:
     for b in manifest.binaries:          role[b.path] = Bin
     if manifest.run_main:                role[run_main] = Bin
 
-    # 2. Inference layer: undetermined files fall back to entry-reachability
-    for f in files where role[f] undetermined:
-        if f is use'd by ≥1 file other than itself:  role[f] = Lib
-        elif f contains main and no other file uses it: role[f] = Bin
+    # 2. Inference layer: by entry reachability where no declaration exists
+    for f in files where role[f] 未定:
+        if f 被 ≥1 个非自身文件 use:      role[f] = Lib
+        elif f 含 main 且无其他文件 use 它: role[f] = Bin
         else:                             role[f] = Internal
 
-    # 3. Test layer: 036 rule hit → Test (overrides Lib/Internal, not explicit Bin)
+    # 3. Test layer: 036 rules hit → Test (overrides Lib/Internal, does not override explicit Bin)
     apply_rfc036_test_rules(files, &role)
 
-    # Single-file direct run: the whole model is bypassed, behavior unchanged
+    # Single-file direct run: entire model bypassed, behavior unchanged
     if no manifest and single_file:      all Script
 ```
 
-### Compiler Changes
+### Compiler changes
 
-- `frontend/config.rs`: manifest parsing adds a mapping from `[exports]` to the role table (field
-  parsing already exists in 015).
-- `frontend/module/orchestrator.rs`: insert a role-classification stage before Registry
-  construction; cross-package resolution validates `use` targets against the import surface order,
-  out-of-bounds reports the existing `module_not_found` family (no new error code, message adds the
-  hint "not on the export surface").
+- `frontend/config.rs`: manifest parsing supplements the `[exports]` → role-table mapping (field
+  parsing already exists in RFC-015).
+- `frontend/module/orchestrator.rs`: insert a role-classification phase before building the
+  Registry; cross-package resolution validates `use` targets against the import-surface order, with
+  out-of-surface accesses reported under the existing `module_not_found` family (no new error code;
+  the message adds the "not on the export surface" hint).
 - `typecheck/passes/dead_code.rs`: the entry-point set changes from "main + all pub" to "main + pub
-  of Lib-role files" (Bin is immediately reportable; Internal is exempt until phase 2; see
-  Implementation Strategy for Phase 2).
-- LSP (RFC-017): completion/hover's "importable items" is filtered by the import surface; the
-  missing-`main` diagnostic is reported only for Bin-role files.
+  of Lib-role files" (Bins can be reported immediately; Internals remain exempt pending Phase 2 —
+  see Implementation Strategy).
+- LSP (RFC-017): completion and hover's "importable items" are filtered by the import surface; the
+  "missing `main`" diagnostic is reported only for Bin-role files.
 
-### Runtime Behavior
+### Runtime behavior
 
-No change. The role model is purely a compile-time/parse-time semantic, and does not affect IR or
-execution.
+No change. The role model is purely a compile-time / parse-time semantic; it does not affect the IR
+or execution.
 
-### Backward Compatibility
+### Backward compatibility
 
-- Projects with no manifest: behavior is entirely unchanged (the inference layer reproduces the
-  current state—what's `use`d is Lib, what contains `main` is Bin). The dead-code warning's only
-  delta is in Bin files: an unused pub on the root file that no one imports goes from silent to
-  W1001— this is the expected behavior of #321 option A, not a breakage.
-- Projects with a manifest: once `[exports]` is declared, the import surface narrows from "all pub
-  files" to the declared surface. **This is the only behavior-narrowing point**: code that depends
-  on another package's internal files will start reporting `module_not_found`. Given that the
-  package ecosystem is not yet established (029: "currently no third-party package ecosystem"), the
-  breakage surface is zero; nevertheless, a one-minor-version transition period is reserved
-  (out-of-bounds first warns, then errors).
+- Projects without a manifest: behavior is completely unchanged (the inference layer reproduces the
+  current state — a `use`d file is Lib, a file containing `main` is Bin). The dead-code-warning
+  increment is confined to Bin files: an unused pub on a root file with no importers goes from
+  silent to W1001 — this is the expected behavior of Option A from #321, not a break.
+- Projects with a manifest: where `[exports]` is already declared, the import surface narrows from
+  "all pub files" to the declared surface. **This is the only behavior-narrowing point**: code that
+  depends on another package's internal files will start reporting `module_not_found`. Given that
+  the package ecosystem has not yet been built (RFC-029: "no third-party package ecosystem
+  currently"), the break surface is zero; a minor-version transition period is still provided
+  (out-of-surface accesses warn first, then become errors).
 
 ## Trade-offs
 
 ### Advantages
 
-- Zero new configuration surface: all fields are already defined by 015; this RFC only adds
+- Zero new configuration surface: all fields are already defined by RFC-015; this RFC only adds
   semantics.
-- Zero new keyword: the import surface is carried by the distribution boundary, isomorphic to 029's
-  "visibility does not exist" decision.
-- Four consumers (#321 / 014c / 029a / 037) are modeled once, no longer each hitting their own wall.
-- The no-manifest path is zero-cost: the zero-configuration gene of the scripting language is fully
+- Zero new keyword: the import surface is carried by the distribution boundary, isomorphic to
+  RFC-029's "no visibility" decision.
+- Four consumers (#321 / 014c / 029a / 037) are modeled once, each ceasing to hit its own wall.
+- The manifest-less path has zero cost: the scripting language's zero-configuration DNA is fully
   preserved.
 
 ### Disadvantages
 
-- Role inference (anything `use`d becomes Lib) classifies utility files as Lib in the common shape
-  of "entry file uses utility files", granting them pub exemption—coarser than the ideal
-  granularity. This is a deliberate under-reporting choice; tightening requires call-direction
-  analysis on the use graph, which is not done in v1.
-- Narrowing the import surface via `[exports]` is a breaking semantic tightening (despite the
+- Role inference ("being `use`d ⇒ Lib") in the common shape "the entry file `use`s a utility file"
+  will classify the utility file as Lib, exempting its `pub` — coarser than the ideal granularity.
+  This is a deliberate choice in the prefer-false-negative direction; tightening requires
+  call-direction analysis on the use graph and is not done in the first version.
+- The narrowing of the import surface by `[exports]` is a breaking semantic tightening (despite the
   transition period).
 
 ## Alternatives
 
-| Alternative                              | Description                                                                                      | Reason not adopted                                                                                                                                                                                                                          |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Top-level RFC-040                        | Open a new top-level number                                                                      | Module-graph semantics (import surface / reachability / entry) all live in 029's territory; splitting into a top-level RFC would create two top-level documents for the same object; also the 029b–029e slot pattern is already established |
-| Attach to 014c                           | As a section of workspace                                                                        | The dependency direction is reversed: the language layer (029x) defines semantics, the package layer (014x) consumes them. 014c is still under review; expanding scope mid-review would delay its landing                                   |
-| Option A as-is (#321 menu)               | Dead-code semantics only for projects that declare `[[bin]]`/`[[lib]]` targets in their manifest | Introduces mandatory configuration for a narrow slice (unused pub on a `main`-containing root file); this RFC's inference layer achieves the same payoff with zero configuration                                                            |
-| Pure entry inference (no manifest layer) | Don't consume 015 fields                                                                         | `[exports]` is already an accepted 015 field; cross-package import surface cannot bypass it; not defining it equals leaving a gap for 014c                                                                                                  |
+| Alternative                              | Description                                                                         | Reason not adopted                                                                                                                                                                                                                          |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A top-level RFC-040                      | Open a new top-level number                                                         | Module-graph semantics (import surface / reachability / entry) all live in the RFC-029 domain; splitting at the top level would produce two top-level documents for the same object; the 029b–029e slot pattern is also already established |
+| Attach to 014c                           | Make it a section of the workspace RFC                                              | The dependency direction is reversed: the language layer (029x) defines semantics, and the package layer (014x) consumes them. 014c is still under review; expanding its scope mid-review would slow its landing                            |
+| Option A as-is (the #321 menu)           | Force a `[[bin]]`/`[[lib]]` target in the manifest before dead-code semantics apply | Introduces a mandatory configuration for a narrow slice (unused pub on a root file with `main`); this RFC's inference layer achieves the same benefit with zero configuration                                                               |
+| Pure entry inference (no manifest layer) | Do not consume RFC-015 fields                                                       | `[exports]` is an already-accepted RFC-015 field, and the cross-package import surface cannot avoid it; not defining it leaves a gap for 014c                                                                                               |
 
-## Implementation Strategy
+## Implementation strategy
 
-### Phased
+### Phases
 
-- **Phase 1**: role classification + import surface resolution + Bin pub reportable (Internal/Test
+- **Phase 1**: role classification + import-surface resolution + Bin pub reportable (Internal/Test
   remain exempt)
-- **Phase 2**: Internal pub tightened to "reportable when unreachable on the in-package use
-  graph"—prerequisite is that after Phase 1 lands, Bin-role warning corpus validation shows no false
-  positives; triggered to proceed, no schedule set
+- **Phase 2**: Internal pub tightened to "reportable if unreachable in the intra-package use graph"
+  — gated on Phase 1's Bin role corpus verifying zero false-positive regressions; triggered when
+  ready, no schedule
 
 ### Dependencies
 
 - Prerequisites: RFC-029 orchestrator (landed), RFC-015 manifest fields (defined).
-- Dependents: #321 (Bin pub reportable), RFC-014c (import surface), RFC-029a (role as cache-unit
-  boundary), RFC-037 (artifact selection), RFC-029d (`--entry` override).
-- Landing order with RFC-014c: 014c must not be approved before 029f's import surface order is
-  finalized; 014c consumes it by reference, to avoid expanding scope mid-review.
+- Depended on by: #321 (Bin pub reportable), RFC-014c (import surface), RFC-029a (roles as
+  cache-unit boundaries), RFC-037 (artifact selection), RFC-029d (`--entry` override).
+- Landing order with RFC-014c: before 014c is approved, 029f's import-surface order should be
+  finalized, and 014c should consume it by reference — to avoid expanding the scope of an in-flight
+  review.
 
 ### Risks
 
-- Deviation between role inference and user intuition (the first trade-off above) → all incremental
-  behavior is presented as warnings (non-blocking), and can be disabled at any time.
-- Transition-period management of the `[exports]` narrowing → within one minor version, warn first.
+- Divergence between inferred roles and user intuition (the first item in Trade-offs) → all
+  incremental behavior surfaces as warnings (non-blocking) and can be disabled at any time.
+- Managing the transition period for `[exports]` narrowing → warn first within one minor version.
 
-## Open Questions
+## Open questions
 
-All three draft-stage items have been decided (2026-09-13, resolutions recorded in Appendix B and in
-the body), no outstanding items:
+All three draft-stage questions have been resolved (2026-09-13; decisions recorded in Appendix B and
+the body); no outstanding items:
 
-- [x] Whether to tighten Internal pub → **Decided**: phase 2, tightened by in-package use-graph
-      reachability, with Bin-role corpus validation as the prerequisite (see Implementation Strategy
-      Phase 2)
-- [x] `[[test]]` explicit declaration → **Decided**: not introduced, the Test role is determined
-      solely by 036's rules; if 036 needs an explicit declaration in the future, it will be extended
-      by 036 itself
-- [x] Whether the workspace root can override member export surfaces → **Decided**: not allowed;
-      member self-containment is 014c's core design, and root override breaks encapsulation
+- [x] Whether to tighten Internal `pub` → **Decision**: tighten in Phase 2 to intra-package
+      use-graph reachability, with Bin role corpus verification as the prerequisite (see
+      Implementation Strategy Phase 2)
+- [x] `[[test]]` explicit declaration → **Decision**: not introduced; the Test role is determined
+      solely by RFC-036 rules; if RFC-036 ever needs explicit declarations, it will extend on its
+      own
+- [x] Whether the workspace root can override a member's export surface → **Decision**: not allowed;
+      member self-containment is 014c's core design, and root overrides would break encapsulation
 
 ---
 
-## Appendix B: Decision Log
+## Appendix B: Design Decision Record
 
-| Decision                                               | Resolution                                                                                         | Date       | Recorder | Basis                                                                                                                         |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ---------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Number                                                 | 029f (029b reserved for hot reload, 029c deleted, 029d/029e occupied)                              | 2026-09-12 | Chenxu   | RFC-029 §Sub-RFC Plan                                                                                                         |
-| Belongs to the 029 family, not a top-level RFC         | Yes                                                                                                | 2026-09-12 | Chenxu   | Import surface / reachability / entry all belong to module-graph semantics; 029 already consumes the `[[bin]]` entry priority |
-| Visibility keyword                                     | Not introduced                                                                                     | 2026-09-12 | Chenxu   | Isomorphic to RFC-029's "visibility does not exist" decision; the import surface is carried by the distribution boundary      |
-| Status of #321 case B                                  | Downgraded to "transitional semantics when no target exists"                                       | 2026-09-12 | Chenxu   | Bin-role pub reportable is the realization of #321 option A                                                                   |
-| Role granularity                                       | File-level                                                                                         | 2026-09-12 | Chenxu   | 015 field granularity (`[lib]` single file, `[[bin]]` list, `[exports]` mapping)                                              |
-| `[binaries]` disambiguation                            | 014b precompiled distribution artifact ≠ `[[bin]]` source-code role                                | 2026-09-12 | Chenxu   | Two layers of concept (download policy vs. compilation role); nail it down before 014c lands                                  |
-| Tightening Internal pub                                | Phase 2, tightened by in-package use-graph reachability, prerequisite = Bin-role corpus validation | 2026-09-13 | Chenxu   | Prefer under-reporting with gradual tightening; corpus-driven to avoid premature false positives                              |
-| `[[test]]` explicit declaration                        | Not introduced; Test is determined solely by 036's rules                                           | 2026-09-13 | Chenxu   | No configuration surface added before 036 has a need                                                                          |
-| Workspace root overriding member export surfaces       | Not allowed                                                                                        | 2026-09-13 | Chenxu   | Member self-containment is 014c's core design; root override breaks encapsulation                                             |
-| Whether `main` is auto-called in Script                | **No auto-call**—top-level statements are the program; `main()` must be explicit                   | 2026-09-17 | Chenxu   | Coexistence of the two rules would double-run an explicit `main()` (#356); Script can have only one execution entry           |
-| Whether the role model is used for entry determination | **Yes** (previously only used for dead-code warnings)                                              | 2026-09-17 | Chenxu   | This RFC defines Bin's "`main` is the reachability root"; without connecting to entry, that semantic idles                    |
+| Decision                                               | Resolution                                                                                            | Date       | Recorder | Basis                                                                                                                                 |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Number                                                 | 029f (029b is reserved for hot reload, 029c was deleted, 029d/029e are taken)                         | 2026-09-12 | Chenxu   | RFC-029 § Sub-RFC Plan                                                                                                                |
+| Belongs to the 029 family, not a top-level RFC         | Yes                                                                                                   | 2026-09-12 | Chenxu   | Import surface / reachability / entry all belong to module-graph semantics; RFC-029 has already consumed the `[[bin]]` entry priority |
+| Visibility keyword                                     | Not introduced                                                                                        | 2026-09-12 | Chenxu   | Isomorphic with RFC-029's "no visibility" decision; the import surface is carried by the distribution boundary                        |
+| Status of #321 Decision B                              | Downgraded to "transitional semantics when no target exists"                                          | 2026-09-12 | Chenxu   | Bin role's pub being reportable is the realization of #321 Option A                                                                   |
+| Role granularity                                       | File-level                                                                                            | 2026-09-12 | Chenxu   | Matches the granularity of RFC-015 fields (`[lib]` single file, `[[bin]]` list, `[exports]` map)                                      |
+| `[binaries]` disambiguation                            | RFC-014b's pre-compiled distribution artifacts ≠ `[[bin]]` source-code role                           | 2026-09-12 | Chenxu   | Two-layer concepts (download policy vs. compilation role); pin down before 014c lands                                                 |
+| Internal pub tightening                                | Phase 2: tighten to intra-package use-graph reachability, prerequisite = Bin role corpus verification | 2026-09-13 | Chenxu   | Prefer-false-negative gradual tightening, corpus-driven to avoid premature false positives                                            |
+| `[[test]]` explicit declaration                        | Not introduced; Test is determined solely by RFC-036 rules                                            | 2026-09-13 | Chenxu   | No new configuration surface until RFC-036 needs it                                                                                   |
+| Workspace root overriding a member's export surface    | Not allowed                                                                                           | 2026-09-13 | Chenxu   | Member self-containment is 014c's core design; root overrides break encapsulation                                                     |
+| Whether Script's `main` is auto-called                 | **Not auto-called** — top-level statements are the program, `main()` must be explicit                 | 2026-09-17 | Chenxu   | Having both rules in play would double-run an explicit `main()` (#356); a Script can only have one execution entry                    |
+| Whether the role model is used for entry determination | **Yes** (previously only used for the dead-code warning)                                              | 2026-09-17 | Chenxu   | This RFC defines Bin's "main is a reachability root"; without entry, that semantic sits idle                                          |
 
 ## Appendix C: Glossary
 
 | Term                  | Definition                                                                                                                           |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | Role                  | A source file's compilation target identity: Script / Bin / Lib / Test / Internal                                                    |
-| Import Surface        | The set of files that serve as valid resolution starting points for cross-package `use`, declared by `[exports]`/`[lib]` or inferred |
-| Distribution boundary | 029 term: a package's externally exposed scope; this RFC refines it from the implicit (all pub files) form to the import surface     |
-| Script state          | The bypass form for running a single file without a manifest; all behavior is identical to the current state                         |
+| Import Surface        | The set of files that serve as legal resolution starting points for cross-package `use`, declared by `[exports]`/`[lib]` or inferred |
+| Distribution boundary | RFC-029 term: the externally exposed range of a package; this RFC refines it from the implicit "all pub files" to the import surface |
+| Script state          | The bypass state of a manifest-less single-file direct run; all behavior matches the status quo                                      |
 
 ## References
 
-- RFC-029 Module Semantics (parent RFC: entry selection, visibility decision, sub-RFC plan)
-- RFC-015 Configuration System (`[lib]`/`[[bin]]`/`[exports]` field definitions)
-- RFC-014b Build System and Binary Distribution (`[binaries]`, target of naming disambiguation)
-- RFC-014c Workspace Support (first consumer of import surface, under review)
-- RFC-036 Testing Framework (source of Test role rules)
-- #321 M2 Independent warning code emission channel (origin of case B and option A)
+- RFC-029 Module semantics (parent RFC: entry selection, visibility decision, sub-RFC plan)
+- RFC-015 Configuration system (definitions of the `[lib]`/`[[bin]]`/`[exports]` fields)
+- RFC-014b Build system and binary distribution (`[binaries]`, the disambiguation target)
+- RFC-014c Workspace support (first consumer of the import surface, under review)
+- RFC-036 Testing framework (source of the Test role rules)
+- #321 M2 independent emission channel for warning codes (origin of Decision B and Option A)
 
-## Known Defects and Future Improvements (2026-10-09)
+## Known defects: landed (2026-10-16, WBS 4.9 round 1)
 
-### Three Design Defects in the Reference Pool
+> The previous version (2026-10-09) listed the following three items as "three design flaws of the
+> reference pool". All three have been landed by WBS 4.9 round 1 (commit `7e62b0454`);
+> `collect_project_refs` and `orchestrator.rs` have been split out of P4 4.2.9 and moved into
+> `src/driver/{state,arms,helpers}.rs`; all `file:line` references in the table below have been
+> re-fetched on the referenced revision.
 
-**Current state**: the current reference pool collects identifiers via `collect_project_refs`
-(orchestrator.rs:603-648) and has the following defects:
+### Three design flaws of the reference pool — fix status
 
-| #   | Defect                                                                | Impact                                                                                                                                                                                                   | Root cause                                                                                                                                     |
-| --- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Scan surface is a directory, not the compilation set**              | Identifiers from isolated files never `use`d, and from files under tests/, also enter the pool and exempt unused definitions in production code                                                          | `collect_yx` recursively scans `.yx` (except `.git`/`target`/`.yaoxiang`), not limited to the compilation set returned by `discover_with_used` |
-| 2   | **Granularity is project-level bare names, with no module dimension** | A same-name local variable (`let x = 1`) accidentally exempts a top-level definition (`fn x()`); `foo` in a.yx and `foo` in b.yx cannot be distinguished                                                 | Pool type is `HashSet<String>`, key is the bare name                                                                                           |
-| 3   | **Script reuses the Lib pool (violates single-file semantics)**       | When `yx run script.yx` runs, references from other files in the project exempt unused definitions in script.yx—Script's semantics is "single-file direct run" and should not be affected by the project | orchestrator.rs:393-396 lets Script use `cross_file_refs`                                                                                      |
+| #   | Original flaw                                                     | Current state (2026-10-16)                                                                                                                                                                                                                                                                                                                                                                                                             | Landed code (rev `7e62b0454`)                                                                                                                   |
+| --- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The scan surface is a directory, not the compilation surface      | **Pool root = package targets**: `collect_package_refs` (`helpers.rs:481`) calls `discover_with_used` per the `[[bin]]`/`[lib]`/`[exports]`/`[run].main` roots from `roles::ExplicitSurfaces` to take the compilation set; it **does not scan directories to find entries**. When none of the roots can be resolved, it falls back to the compilation set of the inspected file itself (`collect_compilation_refs` / `helpers.rs:454`) | `src/driver/helpers.rs:454-512` (fallback path); `src/driver/helpers.rs:481-512` (manifest-declared surface path)                               |
+| 2   | Granularity is project-level bare names, with no module dimension | **Pool type = `HashMap<String, HashSet<String>>`**: key = module key, value = the set of reference names for that module; on the consumer side, `arms.rs:603-609` unions all "non-self-unit" module entries and hands them to `DeadCodeAnalyzer`; module self names (top-level definitions and local bindings, with the exception of `use`-imported names) no longer exempt definitions of the same name in other modules              | `src/driver/arms.rs:603-609` (consumer-side `other_module_refs`); single assembly entry at `src/driver/helpers.rs:429-449` (`collect_ref_pool`) |
+| 3   | Script reuses Lib's pool (violates single-file semantics)         | **Script does not consume the pool**: the `match us.role` at `arms.rs:611-623` only assembles the pool for `Bin`/`Internal` (`set_exempt_pub`) and `Lib` (`set_cross_file_refs`); Script/Test go through the `_ => {}` default arm, which only reasons about the within-file definition-use graph                                                                                                                                      | `src/driver/arms.rs:611-623`                                                                                                                    |
 
-**Future improvement directions** (pending P4 4.9 landing):
+**Items left for subsequent rounds of WBS 4.9 after landing** (out of scope for this round):
 
-1. **Scan surface changed to the compilation set**: only collect references from the compilation set
-   returned by `discover_with_used`
-2. **Granularity upgraded to `(module, name)`**: pool type changed to
-   `HashMap<ModulePath, HashSet<String>>`
-3. **Script doesn't use the pool**: single-file semantics, decided only by the definition-use graph
-4. **Refined consumption definition**: distinguish "imported" from "actually used after import"
-   (only the latter counts as consumption)
-5. **Test pool separated**: references in tests/ do not exempt production code
+- **Consumption-definition refinement (4.9.4)**: distinguish "imported" from "actually used after
+  import" — not in this round, depends on path resolution of `use` items (prerequisite = 4.6.1,
+  delivered by `39546020`).
+- **Test pool separation (4.9.5)**: references in tests/ form their own pool, and do not exempt
+  unused definitions in production code (src/).
 
-**Reason not changed in P3.5**: module-level resolution requires the path resolution of `use` items
-to complete (`use a::foo` → foo comes from module a), which belongs to the P4 stage contract and
-Driver unification scope.
+**Reason not changed in P3.5 (unchanged from the previous version)**: module-level resolution
+requires the path resolution of `use` items to be complete (`use a::foo` → foo comes from module a),
+which belongs to the P4-stage contract and the Driver unification scope.
