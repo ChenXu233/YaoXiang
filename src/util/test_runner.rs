@@ -43,6 +43,7 @@ use std::time::Instant;
 
 use serde::Serialize;
 
+use crate::package::manifest::{ENTRY_FILE, MANIFEST_FILE};
 use crate::util::config::TestConfig;
 use crate::util::diagnostic::emitter::ansi::strip_ansi;
 use crate::util::test_markers::{Expectation, TestFileSpec};
@@ -641,11 +642,27 @@ fn collect_pattern(
     }
 }
 
-/// 递归收集目录下全部 .yx 文件（目录不可读时静默跳过——发现不是错误边界）。
+/// 递归收集目录下的测试 `.yx`（目录不可读时静默跳过——发现不是错误边界）。
+///
+/// **工程目录不是散测试集**（RFC-036 §5 点 6）：目录含 `yaoxiang.toml` 时它是一个
+/// 工程，只把约定入口 `ENTRY_FILE` 纳入发现——不递归、也不收集同目录的其余 `.yx`。
+/// 模块文件由 `use` 导入、按定义没有 `main`，当独立测试目标跑必然报「缺少 main
+/// 绑定」。判定「这是测试」不能只看扩展名：把非测试的 `.yx`（夹具、库模块）放在
+/// `tests/` 下是合法布局，而库测试层与项目夹具层都曾因此被默认发现误报——前者被
+/// 移出 `tests/`，后者一直靠 CI 显式给路径绕开。
+///
+/// 工程目录缺入口时**不发现任何文件**（工程不是散测试集），不算错误边界。
 fn collect_yx_recursive(
     dir: &Path,
     out: &mut Vec<PathBuf>,
 ) {
+    if dir.join(MANIFEST_FILE).is_file() {
+        let entry = dir.join(ENTRY_FILE);
+        if entry.is_file() {
+            out.push(entry);
+        }
+        return;
+    }
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
