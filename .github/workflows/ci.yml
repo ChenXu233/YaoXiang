@@ -97,6 +97,24 @@ jobs:
       - name: Check docs against source of truth
         run: python3 scripts/ci/check-docs-truth.py
 
+      # 生成物必须与「码表注册表 + zh 文案」同源同时。生成器自称幂等
+      # （见 scripts/docs/gen-error-code-docs.py 模块文档），所以"跑完 git diff
+      # 非空"就是"已提交页面落后于注册表"的直证。实例（2026-10-15）：#452/#454
+      # 的判据收敛把 E1014 发射点 6→4、E1015 3→1，收敛提交未再跑生成器，页面
+      # 停在旧计数上——上面的 check-docs-truth.py 只对账"码有没有页面"，对不到
+      # 每码的发射点计数。diff 范围 = 生成器声明的全部输出（11 个文件 / 3 目录）。
+      - name: Error-code docs up to date (generator idempotent)
+        run: |
+          python3 scripts/docs/gen-error-code-docs.py
+          if ! git diff --quiet -- \
+              docs/src/reference/error-code \
+              docs/src/reference/warning-code \
+              docs/src/reference/package; then
+            echo "::error::错误码文档落后于码表/locales——请跑 python scripts/docs/gen-error-code-docs.py 并同提交入库"
+            git diff --stat -- docs/src/reference/error-code docs/src/reference/warning-code docs/src/reference/package
+            exit 1
+          fi
+
       - name: Check docs structure (orphan / frontmatter / dead link)
         run: python3 scripts/ci/check-docs-orphan.py
 
