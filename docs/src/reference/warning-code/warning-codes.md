@@ -62,7 +62,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的导入：'{name}'`
 - **帮助**：考虑移除未使用的导入
-- **发射点**：`src/frontend/core/typecheck/checker.rs:3246`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:3263`
 
 ### W1004：未使用的私有变量
 
@@ -86,7 +86,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`本地模块 '{module}' 遮蔽了依赖包 '{dependency}'`
 - **帮助**：本地模块解析优先级最高（RFC-014）：'./src/{module}' 覆盖 .yaoxiang/vendor/ 中的依赖包 '{dependency}'。若遮蔽非本意请重命名本地模块；可用 --deny-shadowing 将其升级为错误
-- **发射点**：`src/driver/arms.rs:480`、`src/util/diagnostic/command.rs:78`
+- **发射点**：`src/driver/arms.rs:549`、`src/util/diagnostic/command.rs:78`
 
 ### W1063：const 泛型约束无法求值
 
@@ -94,7 +94,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`const 泛型约束无法求值: \`{constraint}\``
 - **帮助**：确保 const 参数是编译期常量
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1534`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:1549`
 
 ### W1080：编译期证明降级
 
@@ -110,7 +110,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`{count} 条终止性测度义务未判定（SMT 求解器不可用）`
 - **帮助**：安装 Z3 求解器后重新检查，以获得终止性判定；「未判定」不等于「不终止」，但义务的判定被跳过了
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1521`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:1536`
 
 ### W1090：义务已产出但无消费者
 
