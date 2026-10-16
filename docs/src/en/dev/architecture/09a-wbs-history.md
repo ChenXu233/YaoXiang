@@ -1,835 +1,782 @@
-# WBS Historical Notes (Landing Record · Audit · Decision Trail)
+# WBS Historical Notes (Implementation Record · Audit · Decision Trail)
 
-> This document is the **historical notes** for [09-execution-wbs.md](./09-execution-wbs.md) (the
-> construction task table): landing records, audit findings, decision trails, and corrections for
-> each stage. **Division of labor**: 09 describes only the **plan** (Kanban, three-level task table,
+> This document is a **historical note** for [09-execution-wbs.md](./09-execution-wbs.md)
+> (construction task table): implementation records, audit findings, decision trails, and errata for
+> each phase. **Division of work**: 09 describes only the **plan** (kanban, three-level task table,
 > dependencies, risks, acceptance); this document records only the **history** (what was done, what
-> was discovered, how it was decided), appended chronologically without rewriting history.
+> was found, how it was decided), appended chronologically, never rewriting history.
 
-## P2 Establishing the Equivalence Criterion Baseline
+## P2 Establish Equivalence Criterion Baseline
 
-> **P2 landing (2026-10-06, 2.1)**: `verify.rs` dual mode + 7 invariants + all corpus runs green.
-> **D38 prediction fulfilled** — the green-run process actually measured and fixed three real
-> defects in `ir_gen` (see 06 §G6 for details): the method `locals` table was truncated to the
-> parameter count (underestimated `local_count`, the runtime relied on `Frame::set_slot` to absorb
-> the error), unannotated parameters were dropped by `filter_map` (three locations, mismatch between
-> `params` metadata and frame layout), and the `match` result slot depended on the frame's implicit
-> `Void` initialization (now explicitly pre-initialized). The actual semantics of the jump `target`
-> is a flattened instruction index (not the label-keyed form in the 07 text); the CFG is built at
-> the instruction level — recorded in the `verify.rs` file header. **Commit cross-reference**:
-> `ir_gen` fix = `a9ea199b`; `verify` main body = `d5b18390` (⚠ a parallel-stream `COMMIT_EDITMSG`
-> collision caused its message to be mislabeled as "docs(rfc): RFC-027a…", but the content was
-> actually `verify.rs` plus six test files; it is buried in history and cannot be amended, so it is
-> recorded here).
+> **P2 Implementation (2026-10-06, 2.1)**: verify.rs dual-mode + 7 invariants + full corpus green.
+> **D38 prophecy fulfilled** — the green-running process actually measured and fixed three real
+> defects in ir_gen (see 06 §G6): method locals table truncated to parameter count (local_count
+> underestimated, runtime tolerates via Frame::set_slot), unannotated parameters dropped by
+> filter_map (three places, params metadata misaligned with frame layout), match result slot relied
+> on frame's implicit Void initialization (now explicitly pre-initialized). The actual semantic of
+> jump target is flattened instruction index (not label-keyed as in 07 text), CFG built at
+> instruction level — recorded in verify.rs file header. **Commit correspondence**: ir_gen fix =
+> `a9ea199b`; verify main body = `d5b18390` (⚠ parallel stream COMMIT_EDITMSG collision caused its
+> message to be mislabeled as "docs(rfc): RFC-027a…", content is actually verify.rs + six test
+> files, buried in history middle unamendable, hereby recorded).
 >
-> **P2 narrowing landing (2026-10-06)**: 2.3.2 + 2.4.1 + 2.4.3 are all in place; **the P3
-> stop-bleeding channel preconditions are unlocked**.
+> **P2 Narrowed-scope Implementation (2026-10-06)**: 2.3.2 + 2.4.1 + 2.4.3 all in place, **P3
+> plug-channel prerequisites unlocked**.
 >
-> - 2.3.2: 5 fixtures in `tests/yaoxiang-multifile/` (behavior ×4 + compile-error ×1) plus runner
->   `tests/yx_multifile_runner.rs`; the judgment contract uses the same `TestFileSpec` as the
->   single-file corpus (single source of truth on the library side), and binary location /
->   subprocess spawning is abstracted into `tests/common/`, with `yx_runner` migrated in lockstep
->   (prohibition three).
-> - 2.4.1 / 2.4.3: `tests/integration/proof_obligations.rs`. The trigger source uses the
->   `SumUpTo(3, r)` form nailed by the rfc027 tests (return site / call site / binding site) — the
->   `Sorted(3)` annotation example from 02 would currently be substituted and evaluated and directly
->   yield `Disproved`, not the silent `Unproven`; the `Sorted(3)` in 07's pseudocode is illustrative
->   only. Red-state measurement data is in the test file header.
-> - The two red criteria are pinned with `#[ignore]` as persistent based on the 2.4.5 red-skeleton
->   precedent: the default suite is all green, and `-- --ignored` reproduces the red state; **when
->   the P3 fix lands, removing the attribute turns it green**.
-> - The reason for the deliberate deviation from 07's (code, file, line) table in normalization
->   (dropping `file`/`line`, only comparing the set of error codes) is written in the 2.4.1 test
+> - 2.3.2: `tests/yaoxiang-multifile/` 5 fixtures (behavior ×4 + compile-error ×1) + runner
+>   `tests/yx_multifile_runner.rs`; judgment contract shares the same `TestFileSpec` as single-file
+>   corpus (single point on library side), binary location / subprocess launch abstracted to
+>   `tests/common/` with yx_runner migrated in sync (Constraint 3).
+> - 2.4.1/2.4.3: `tests/integration/proof_obligations.rs`. The trigger source adopts the rfc027
+>   test-pinned `SumUpTo(3, r)` form (return position / call point / binding position) — the
+>   `Sorted(3)` annotation example in 02 would be substituted and evaluated, going directly to
+>   Disproved under current code, not silently showing Unproven; the `Sorted(3)` in 07's pseudo-code
+>   is illustrative only. Red-state measured data in test file header.
+> - The two red criteria are pinned with `#[ignore]` constant per the 2.4.5 red-skeleton precedent:
+>   default suite fully green, `-- --ignored` reproduces red state; **turn green immediately upon
+>   removal when P3 fix lands**.
+> - The rationale for the deliberate deviation from 07's (code, file, line) table in comparison
+>   normalization (removing file/line, comparing only error code sets) is written in the 2.4.1 test
 >   comment.
 >
 > The original 2.4.2 (`test_program_stage_coverage`) and 2.4.5 (`test_obligations_drained` skeleton)
-> are **moved out of P2**: the `Program` / `Obligations` types they reference only exist in P4, so
-> P2 cannot compile them. The former becomes P4's 4.1.4 (no double registration), and the latter's
-> `#[ignore]` red skeleton is merged into 4.3.1.
+> **moved out of P2**: the `Program` / `Obligations` types they reference only exist in P4, P2
+> cannot compile. The former becomes P4's 4.1.4 (no double registration), the latter's `#[ignore]`
+> red skeleton merges into 4.3.1.
 >
-> **2.3.3 landing (2026-10-07)**: The C4 required-coverage checklist was item-by-item verified (07
-> §143); 10 categories of semantic corpus layers are fully covered and all within the
-> `corpus-parity.jsonl` differential baseline (26 representative files, 26/26 hit, proven by grep) —
-> ref/borrow/move under 05-ownership (full directory: `ref_shared`,
-> `borrow_immutable/mutable/return`, `move_basic`, `ownership_deep`, etc.), closure capture
-> (`closures` + `closure_arg_inference` + `spawn_capture`), currying (`curry_value_fix` +
-> `curry_tail_expr`), spawn (04-concurrency ×13), iterators (16 files including `for`, `spawn_for`,
-> etc.), sum types (`sum_type_*` + `pattern_or_guard` + `match_call_scrutinee`), existential
-> coercion forcing points (`interface_dynamic_dispatch` — heterogeneous wrapping of `Vec(Animal)`
-> triggers `existential_coercions` + `interface_rebind_dispatch`), `?`/Try propagation
-> (`question_propagation` + `option_try` + `try_methods` + `user_try_type`), method overloading
-> (`method_overload` + `method_overload_ambiguous_err` on the diagnostic-differential surface),
-> refinement constraints with the Drop sequence (`refined_*` ×5 + 05-ownership driving
-> `ReleasePlan`; the span-key contract has another persistent red criterion at 2.4.4). The
-> performance baseline `benches/pipeline.rs` is in the repo (07 §145, two of three smoke tests):
-> first-pass full-corpus compile in `corpus_compile_frontend` 17.6s, cold process start in
-> `cli_cold_start_hello` 169.7ms; interpreter throughput is already covered by the `benches/lib.rs`
-> hotpath group (`interp_fib_recursive_27` / `interp_loop_steady_10m`), no duplicate construction.
-> The regression gate `check-perf-regression.sh` is folded into P9's unified checklist (2.5).
+> **2.3.3 Implementation (2026-10-07)**: C4 must-cover checklist item-by-item verification (07
+> §143), all 10 semantic corpus layers fully covered and all within the corpus-parity.jsonl diff
+> baseline (26 representative files hit 26/26, grep verified) — ref/borrow/move entire 05-ownership
+> directory (ref_shared, borrow_immutable/mutable/return, move_basic, ownership_deep, etc.), closure
+> capture closures + closure_arg_inference + spawn_capture, currying curry_value_fix +
+> curry_tail_expr, spawn 04-concurrency ×13, iterator for spawn_for and 16 files total, sum type
+> sum_type__+ pattern_or_guard + match_call_scrutinee, existential enforcement point
+> interface_dynamic_dispatch (Vec(Animal) heterogeneous packaging triggers existential_coercions) +
+> interface_rebind_dispatch, `?`/Try propagation question_propagation + option_try + try_methods +
+> user_try_type, method overload method_overload (+ method_overload_ambiguous_err on diagnostic
+> diff), refinement constraint Drop sequence refined__ ×5 + 05-ownership driven ReleasePlan (span
+> key contract has separate 2.4.4 red criterion constant). Performance baseline
+> `benches/pipeline.rs` committed (07 §145 three smoke tests, two): `corpus_compile_frontend` first
+> pass of full corpus compilation 17.6s, `cli_cold_start_hello` cold process startup 169.7ms;
+> interpretation throughput already covered by benches/lib.rs hotpath group (interp_fib_recursive_27
+> / interp_loop_steady_10m), not duplicated. Regression gate check-perf-regression.sh assigned to P9
+> unified checklist (2.5).
 
-## P3 Correctness Vulnerability Fixes (Minimal Plan)
+## P3 Correctness Bug Fixes (Minimum Solution)
 
-> **Error-type annotations for landed rows** (retroactive annotation, history is not changed): 3.1 =
-> B ｜ 3.2 = B (defensive empty arm, criterion turning green is carried by 3.1) ｜ 3.3 = A ｜ 3.4.1
-> / 3.4.2 = A (new W code) ｜ 3.4.3 = equivalent refactor (manual review) ｜ 3.4.6 / 3.4.7 = D
+> **Error type annotation for completed rows** (retrospective annotation, no history modification):
+> 3.1 = B ｜ 3.2 = B (defensive empty branch, criterion turn-green borne by 3.1) ｜ 3.3 = A ｜ 3.4.1
+> / 3.4.2 = A (new W codes) ｜ 3.4.3 = equivalent refactor (manual review) ｜ 3.4.6 / 3.4.7 = D
 > (user-visible surface, already user-decided) ｜ 3.4.8 ①② = C (main) + A (incidental three
-> locations) ｜ 3.5 / 3.6 / 3.7 / 3.8 = D (all user-decided).
+> places) ｜ 3.5 / 3.6 / 3.7 / 3.8 = D (all user-decided).
 >
-> **P3 diagnosis (2026-10-12, requested by user)**: a one-time accounting triage in response to the
-> perception that "P3 items keep growing."
+> **P3 Diagnosis (2026-10-12, user request)**: A diagnostic accounting to address the perception
+> that "P3 items keep growing".
 >
-> **1. First, clarify scale (the perception was amplified by two accounting defects)**
+> **I. First, clarify scale (perception amplified by two accounting defects)**
 >
-> 1. **Duplicate numbering**: `3.5.x` was shared by two task families — (a) the 2026-10-08 **029g
->    `pub` visibility convergence** (7 three-level rows: lexical and parser branches / AST `is_pub`
->    / checker side / dead-code exemption convergence / peripheral echo / std and diagnostic text /
->    language reference convergence, all checked); (b) the 2026-10-10 logged **3.5 higher-kinded
->    type parameter call-path completion** (3 three-level rows). Both used `3.5.x` ⇒ cross-reference
->    ambiguity (**on 2026-10-12, per the user's decision, renumbered: the 029g family is now
->    `029g.x`**), which also caused the 029g rows to be mistakenly counted under P3. **Pending
->    decision**: rename the 029g family to `029g.x` (or move it into its own stage), and synchronize
->    all other references in the document.
-> 2. **Missing checks**: the 4 three-level rows under `3.7` (3.7.1–3.7.4) are all complete
->    (`d922a551` / `38bd4b9e`) but were not checked off ⇒ corrected in this entry.
+> 1. **Numbering collision**: `3.5.x` is shared by two task families — (a) 2026-10-08's **029g `pub`
+>    visibility convergence** (7 three-level: lexical and parser branches / AST `is_pub` / checker
+>    side / dead code exemption convergence / peripheral echo / std and diagnostic text / language
+>    reference convergence, all checked); (b) 2026-10-10 registered **3.5 Higher-Kinded Type
+>    parameter call path completion** (3 three-level). Both share `3.5.x` ⇒ cross-reference
+>    ambiguity (**2026-10-12 renumbered per user decision: 029g family changed to `029g.x`**), and
+>    caused 029g's rows to be miscounted as P3. **Pending decision**: Rename 029g family to `029g.x`
+>    (or move to its owning phase), synchronize all references in the document.
+> 2. **Missed checkmarks**: `3.7`'s 4 three-level (3.7.1–3.7.4) are all completed (d922a551 /
+>    38bd4b9e) but not checked ⇒ this item corrected in this pass.
 >
-> **2. P3 actual accounting (12 second-level rows)**
+> **II. P3 Actual Accounting (12 secondary rows)**
 >
-> | Row                                                                   | Status                                                                                                                                                                                                 | Disposition suggestion                                                                                                              |
-> | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-> | 3.1 / 3.2 / 3.3                                                       | Complete                                                                                                                                                                                               | —                                                                                                                                   |
-> | 3.4 silent-drop point additions (8 three-level)                       | 3.4.1 / 3.4.2 / 3.4.3 / 3.4.7 / 3.4.8 complete; **3.4.6 is unlocked** (precondition 4.2.1 was completed on 2026-10-09, `be60e01f`); 3.4.4 and 3.4.5 **still blocked** (precondition 4.3.1 not started) | 3.4.6 **can be done now**; 3.4.4 / 3.4.5 unlocked by 4.3.1                                                                          |
-> | 3.5 higher-kinded type parameter call-path completion (3 three-level) | Not started (declaration side alive, call side broken)                                                                                                                                                 | Keep in P3; **does not block the main refactor line**, but is "accepted feature not implemented" and has priority over pure cleanup |
-> | 3.6 function-type value call path (1 three-level)                     | Not started (semantics already decided (i))                                                                                                                                                            | **Keep**: a correctness defect with a clear criterion                                                                               |
-> | 3.7 init-segment call-name qualification (4 three-level)              | **All complete**                                                                                                                                                                                       | Check off and close in this entry                                                                                                   |
-> | 3.8 native shadowing (1 three-level)                                  | Not started                                                                                                                                                                                            | **Stuck on a decision** (name-resolution priority must be decided first), not a scheduling issue                                    |
-> | 3.9 / 3.10 / 3.11                                                     | Complete (2026-10-12)                                                                                                                                                                                  | —                                                                                                                                   |
-> | 3.12 runtime-mode executor configuration propagation (1 three-level)  | Not started (category D, user decision 乙: separate team)                                                                                                                                              | **Suggest moving out of P3 → P8 (execution layer)**, pending decision                                                               |
+> | Row                                                                   | Status                                                                                                                                                                             | Disposition suggestion                                                                                                          |
+> | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+> | 3.1 / 3.2 / 3.3                                                       | Completed                                                                                                                                                                          | —                                                                                                                               |
+> | 3.4 Silent discard points supplementation (8 three-level)             | 3.4.1/3.4.2/3.4.3/3.4.7/3.4.8 completed; **3.4.6 unlocked** (prerequisite 4.2.1 completed 2026-10-09 be60e01f); 3.4.4 and 3.4.5 **still blocked** (prerequisite 4.3.1 not started) | 3.4.6 **now doable**; 3.4.4/3.4.5 unlocks with 4.3.1                                                                            |
+> | 3.5 Higher-Kinded Type parameter call path completion (3 three-level) | Not started (declaration side live, call side broken)                                                                                                                              | Retain in P3; **does not block refactor main line**, but is "accepted feature unimplemented", priority above pure cleanup items |
+> | 3.6 Function type value call path (1 three-level)                     | Not started (semantics already cut (i))                                                                                                                                            | **Retain**: correctness defect, criterion clear                                                                                 |
+> | 3.7 init segment call name qualification (4 three-level)              | **All completed**                                                                                                                                                                  | This pass checks and closes                                                                                                     |
+> | 3.8 native shadowing (1 three-level)                                  | Not started                                                                                                                                                                        | **Stuck on decision** (first define name resolution priority), not a scheduling issue                                           |
+> | 3.9 / 3.10 / 3.11                                                     | Completed (2026-10-12)                                                                                                                                                             | —                                                                                                                               |
+> | 3.12 Runtime-mode executor config propagation (1 three-level)         | Not started (D class, user decision ②: separate team)                                                                                                                              | **Suggest moving out of P3 → P8 (execution layer)**, pending decision                                                           |
 >
-> **4. The leverage of 4.3.1 (main-line landmark)**: `4.3.1 obligations.rs + assert_drained()` is
-> simultaneously the precondition of **3.4.4**, **3.4.5**, and **4.5.1** (cross-layer contract
-> PlanId-ization) ⇒ doing it once advances the main line and clears two P3 stranded items. 3.5
-> (HKT), 3.6 (function-type value call), 4.6.1, and 4.9.1 have **no unmet preconditions** and are
-> doable any time; 3.8 is stuck on a semantic decision (user-defined first vs. explicit diagnostic).
+> **IV. Leverage of 4.3.1 (main line marker)**: `4.3.1 obligations.rs + assert_drained()` is
+> simultaneously the prerequisite for **3.4.4**, **3.4.5**, and **4.5.1** (cross-layer contract
+> PlanId-ization) ⇒ take it once to push the main line and clear two P3 stranded items at the same
+> time. 3.5 (HKT), 3.6 (function type value call), and 4.6.1/4.9.1 all have **no unmet
+> prerequisites**, are doable anytime; 3.8 is stuck on semantic decision (user definition priority
+> vs. explicit diagnostic).
 >
-> **3. Mechanism suggestion (prevention of recurrence)**: every newly registered second- /
-> third-level row **must carry two fields** — "owning stage" (which P it really belongs to) and
-> "whether it blocks the main line"; "registered, pending scheduling" is no longer a default state;
-> if not annotated, it is considered unschedulable. This makes bloat visible and sortable, rather
-> than undifferentiated accumulation. **Pending decision**: whether to write this into the
-> registration conventions of this document and into `src/dev/coding-rules.md`.
+> **III. Mechanism suggestion (anti-recurrence)**: Newly registered secondary/tertiary rows **must
+> carry two fields** — "owning phase" (which P it really belongs to) and "whether it blocks the main
+> line"; `registered awaiting scheduling` no longer serves as default state, unmarked items are
+> deemed unschedulable. This way expansion is visible and sortable, rather than indiscriminate
+> accumulation. **Pending decision**: Whether to write this item into this document's registration
+> convention and `src/dev/coding-rules.md`.
 >
-> **P3 landing (2026-10-06)**: 3.1.1 `proof_calls` visibility narrowed + sole getter (recorded at
-> the time as `pub(crate)`; **on 2026-10-07 it was verified that the actual landing was
-> `pub(super)`** — the `#434` decision referenced in code comments has no entry on the docs side,
-> see 3.4.3; going fully private would require rewriting 11 construction literals, not taken in the
-> stop-bleeding phase; the final closure happens when P4 migrates the Obligations); the execution
-> mechanism is extracted into `src/frontend/proof_execution.rs` (prohibition three, single point —
-> must not live in `typecheck/`, that would create a reverse L3→L4 dependency); 3.1.2 follows step 5
-> of 02's evidence chain to plug all **four entry points** (the WBS row omitted
-> `compile_project :99`, which had to be added and registered per 3.1.1's acceptance "criterion
-> turns green"); 3.2.1 turns the empty arm into bookkeeping (`proof_calls` propagates upward) +
-> diagnostics (`into_result` is the established conversion path); 3.3.1 makes the SOLVER slot
-> `Option`-typed, and Z3 absence falls back conservatively as `SMTResult::Unknown` (E2031-family
-> diagnostics replace process crashes). The `#[ignore]` is removed from the two vulnerability
-> criteria and they turn normally green; the supplementary corpus fixture `proof-obligation-honored`
-> is added; the `check-fanout` repo migrates accordingly (wiring point 19 = repo). Measured:
-> criteria 2.4.1 / 2.4.3 turn green; the full suite is lib 2494 / integration 272 / dual-layer
-> corpus all green.
+> **P3 Implementation (2026-10-06)**: 3.1.1 `proof_calls` narrowed visibility + single getter
+> (recorded at the time as `pub(crate)`; **2026-10-07 verified actual implementation is
+> `pub(super)`** — the `#434` decision referenced in code comments has no docs-side registration,
+> see 3.4.3; fully private requires rewriting 11 construction literals, not taken in plug phase;
+> closed at P4 Obligations migration); execution mechanism extracted to
+> `src/frontend/proof_execution.rs` (Constraint 3 single point — cannot go in typecheck/, that would
+> create L3→L4 reverse dependency); 3.1.2 per 02 evidence chain step 5, added **four entry points**
+> (WBS row missed compile_project `:99`, must be added and registered per 3.1.1 acceptance
+> "criterion turn-green"); 3.2.1 empty branch changed to accounting (proof_calls throws up) +
+> diagnostic (`into_result` established conversion path); 3.3.1 SOLVER slot Option-ified, Z3 missing
+> falls back conservatively per `SMTResult::Unknown` (E2031 family diagnostic replaces process
+> crash). Two bug criteria removed `#[ignore]` and turned normal green, corpus fixture
+> `proof-obligation-honored` added; check-fanout inventory migrated (wiring point 19 = inventory).
+> Measurement: criteria 2.4.1/2.4.3 turned green, full suite lib 2494 / integration 272 / corpus
+> two-layer all green.
 >
-> **3.4 audit (2026-10-07, re-check after P3 landing)**: For the class of defects "failure produces
-> no signal" (definition in 02 §41–52), a fresh inventory was taken on unchanged code, locating 8
-> more locations, all registered as 3.4.x in the table above. Method and evidence:
+> **3.4 Audit (2026-10-07, P3 post-implementation review)**: For the "failure produces no signal"
+> category of defects (definition see 02 §41-52), an in-place re-inventory without code changes
+> located 8 more places, all registered as the 3.4.x above. Method and evidence:
 >
-> - **Consumer-side inventory** (every one of the 16 obligation fields grepped across the whole repo
->   for read sites): `variant_ctor_calls` has **zero consumers** — the only read at
->   `checker.rs:1468` is "writes it into `TypeCheckResult` itself"; the IR side uses shape detection
->   at `ir_gen.rs:7374`; `rfc011b.rs:659/688` only assert the production side, which is exactly the
->   form critiqued in 02 §186 ("only tests the production side, naturally immune to consumer-side
->   defects") → 3.4.4. The result-level field `method_overload_ir_names` likewise has zero external
->   consumers; IR uses the parallel `overload_resolutions` → 3.4.5.
-> - **Stage-coverage re-check**: row 1 of the table in 02 §91 (the four-entry-point "no
->   `proof_execution`") was fixed by 3.1.2, and the current state is 5 locations sharing a single
->   implementation (`pipeline.rs:189`, `orchestrator.rs:141/340/507/1448`); but rows 2 / 4 / 5 are
->   unchanged (the multi-file `run` still does not emit W1003 and still does not run the dead-code
->   family) → 3.4.6; the LSP out-of-project path (02 §77 "manual lex→parse") likewise does not run
->   `proof` → 3.4.7.
-> - **Same-shape empty-arm scan** (`Unproven`'s only four consumers in the repo): three refinement
->   branches in checker (covered by 3.1), the ownership arm fixed by 3.2.1 (**unreachable in
->   source**), and `environment.rs:422` (**reachable, zero diagnostics, zero bookkeeping, and zero
->   entries across the whole repo's docs**) → 3.4.1, the only "nobody knows about it" living defect
->   in this audit.
-> - **Solver-acquisition surface**: `default_solver()` has three call sites with different
->   consumption shapes (`predicate.rs:32` per-process singleton / `checker.rs:1266` injected per
->   `check_module` / `ownership.rs:621` new instance per back-edge decision) — 3.3.1 only removed
->   the panic; the **silent surface** of the other two is 3.4.2, and **singleton-ization and cache
->   hit** belong to P4's 4.4.2 (no double registration).
-> - **Items not counted in 3.4 that already have an owner**: 2.4.4 (`ReleasePlan` span-key mismatch,
->   168 files / 373 keys not consumed, Drop silently lost) remains a P2 persistent red state, owned
->   by 4.5.1 / D20; 4.4.1 (layer order declared vs. actual reversed, `equivalence` layer not in the
->   pipeline) / 4.4.3 (`unwrap_or_default()` empty-ledger degradation) are already in P4.
+> - **Consumer-side inventory** (grep all-repo read points for 16 obligation fields field by field):
+>   `variant_ctor_calls` **zero consumers** — the only read `checker.rs:1468` is "pumping into
+>   `TypeCheckResult` itself", IR side goes through shape detection `ir_gen.rs:7374`;
+>   `rfc011b.rs:659/688` only asserts production side, exactly the "only tests production side,
+>   naturally immune to consumer-side defects" form criticized in 02 §186 → 3.4.4.
+>   `method_overload_ir_names` result-level field also has zero external consumers, IR uses parallel
+>   `overload_resolutions` → 3.4.5.
+> - **Phase coverage review**: 02 §91 table row 1 (four entry points "no proof_execution") already
+>   fixed by 3.1.2, current state is 5 places sharing one implementation (`pipeline.rs:189`,
+>   `orchestrator.rs:141/340/507/1448`); but rows 2/4/5 unchanged (multi-file `run` still doesn't
+>   output W1003, still doesn't run dead code family) → 3.4.6; LSP non-in-project path (02 §77
+>   "manual lex→parse") likewise doesn't run proof → 3.4.7.
+> - **Same-form empty branch scan** (`Unproven` all-repo consumers only four places): checker three
+>   refinement branches (3.1 covered), the 3.2.1 fixed ownership branch (**source unreachable**),
+>   and `environment.rs:422` (**reachable, zero diagnostic, zero accounting, and all-repo docs zero
+>   registration**) → 3.4.1, the only "all-unknown" live defect in this audit.
+> - **Solver acquisition surface**: `default_solver()` three consumer forms vary (`predicate.rs:32`
+>   process singleton / `checker.rs:1266` injected per `check_module` / `ownership.rs:621` newly
+>   created per back-edge decision) — 3.3.1 only eliminated the panic; the **silent surface** of the
+>   other two goes to 3.4.2, **singleton-ization and cache hits** go to P4's 4.4.2 (no double
+>   registration).
+> - **Existing ownership not counted in 3.4**: 2.4.4 (`ReleasePlan` span key mismatch, 168 files /
+>   373 keys not consumed, Drop silently lost) remains P2 red-state constant, ownership 4.5.1/D20
+>   unchanged; 4.4.1 (layer order declaration opposite to actual, `equivalence` layer not in
+>   pipeline) / 4.4.3 (`unwrap_or_default()` empty ledger degradation) already in P4 register.
 >
-> **Execution convention**: 3.4.1 / 3.4.2 / 3.4.3 have no P4 preconditions and can land in place any
-> time (suggested first: 3.4.1 — the only "zero repo-wide entries" living defect, with the smallest
-> change surface); 3.4.4–3.4.8 follow P4 execution, since their criteria depend on the obligations
-> ledger (4.3.1) or the unified Driver (4.2.x). **3.4 does not stand up a new criterion system**; it
-> uniformly reuses the existing C2 / C3 and P9's 9.2 gate.
+> **Execution convention**: 3.4.1 / 3.4.2 / 3.4.3 have no P4 prerequisites, can land in place
+> anytime (recommend 3.4.1 first — the only "all-repo zero registered" live defect, smallest change
+> surface); 3.4.4–3.4.8 follow P4 execution, their criteria depend on obligation ledger (4.3.1) or
+> unified Driver (4.2.x). **3.4 does not establish new criterion system**, reuses existing C2/C3 and
+> P9's 9.2 gate.
 >
-> **Batch 3.13–3.16 landing record (registered 2026-10-13 → closed 2026-10-15)**: On 2026-10-14, the
-> user decided to merge four relevance sub-items (#451 method-binding panic / #452
-> named-actual-parameter resolution / #453 dead-inference entry / #454 native export
-> named-actual-parameter — the last one being a boundary discovered while verifying 3.14, verified
-> the same day by attribution experiment to be **not introduced by #452**, user decision ① merged
-> into this batch) for a single team to handle. Closeout status: all four items complete, the
-> decision is logged as RFC-039 **D60** (six binding rules + single-point shared criterion).
+> **Batch 3.13–3.16 Implementation Record (registered 2026-10-13 → closed 2026-10-15)**: User
+> decided 2026-10-14 to merge four correlation small items (#451 method binding panic / #452 named
+> argument into resolution / #453 dead inference entry / #454 native export named argument — the
+> last is a boundary discovery while verifying 3.14, same-day attribution experiment verified **not
+> introduced by #452**, user decision ① merges into this batch) for one team to handle. Closing
+> status: all four items completed, decision registered as RFC-039 **D60** (six binding rules +
+> shared criterion single-point).
 >
-> **1. Two contract corrections (lesson: the contract itself can be wrong)**
+> **I. Two contract corrections (lesson: contracts themselves can be wrong)**
 >
-> 1. **Self-contradictory acceptance fixture**: the #452 task contract required both "mixed actuals
->    output 20" and "position and named at the same slot produce an error", but the pinned-board
->    fixture `Temp.pick(self, a)` has only a single value parameter — the same actual-argument
->    combination is both "mixed" and "conflicting". The first implementer honestly reported a
->    blocker, marked the task failed, and reverted the whole thing (no silent green). Disposition:
->    task reassigned + contract revised — the **six binding rules** and the **8-value-level matrix**
->    were given (fixture changed to two value parameters `pick(self, n, a)`), and attempt 2 was
->    completed by a second implementer. The full text of the six rules has been incorporated
->    verbatim into D60.
-> 2. **inScope missed a mechanically required surface**: the #452 contract `inScope` listed
->    `docs/src/rfc/accepted/013-error-code-specification.md`, **missing the regenerated
->    `docs/src/reference/error-code/`** under the generator. After E1110 was registered, only
->    `code-tables --fix` was run, and **`scripts/docs/gen-error-code-docs.py` was NOT rerun** ⇒ CI
->    Docs Truth red ("source has registered/emitted 1 missing from docs: E1110", source 154 / docs
->    153, run **38518624964** — the only CI red line in this batch). Fix = mechanical regeneration
->    (8 files, +83/−70, only `docs/src/reference/`), reconciled 154/154, CI 38520209026 green.
+> 1. **Acceptance fixture self-contradictory**: #452 task contract simultaneously required "mixed
+>    argument output 20" and "position and naming fight for same position errors", but pinned
+>    fixture `Temp.pick(self, a)` has only one value formal parameter — the same argument
+>    combination is both "mixed" and "conflicting". First implementer honestly reported blocker and
+>    set task failed, overall revert (no silent green). Disposition: task reassigned + contract
+>    revision — after giving **six binding rules** and **8-row value matrix** (fixture changed to
+>    two value formals `pick(self, n, a)`) attempt 2 was completed by second implementer. Full text
+>    of six rules word-for-word recorded in D60.
+> 2. **inScope missed mechanically-required surface**: #452 contract inScope listed
+>    `docs/src/rfc/accepted/013-error-code-specification.md`, **missed the generator-regenerated
+>    `docs/src/reference/error-code/`**. After E1110 was registered, only ran `code-tables --fix`,
+>    **did not re-run** `scripts/docs/gen-error-code-docs.py` ⇒ CI Docs Truth red ("source
+>    registered/emitted but document missing 1: E1110", source 154 / document 153, run
+>    **38518624964** — the only CI red line in this batch). Fix = mechanical regeneration (8 files
+>    +83/−70, only `docs/src/reference/`), reconciled 154/154, CI 38520209026 green.
 >
-> **2. Two closed loops: review → fix → re-review**
+> **II. Review → Fix → Re-review two closed loops**
 >
-> 1. **#452 line**: round-1 review `needs_revision` (F1–F5; F1 = the arity guard
->    `named_args.is_empty()` did not narrow with the resolution ⇒ calls with named actuals on the
->    multi-candidate zero-hit and single-candidate hit paths went silently throughout the chain) →
->    the fix round added the outward code **E1111 (`argument_order_invalid`)** (the code table,
->    locales, RFC-013, and the generator four-piece set in the same commit; code count 154→155) →
->    round-2 review pass.
-> 2. **#454 line**: implementation (shared parse entry + native arm resolves by name) → independent
->    verification PASS (12-cell value-level matrix, corpus 342/342, 5 mutations all mechanically
->    reversibly replayed via `scratch.py trial` and captured, restoration byte-for-byte identical) →
->    round-1 review `needs_revision` (F1 = the typecheck native arm **inlined a copy** of the
->    binding criterion, missing rule ④ ⇒ method-vs-native same-shape calls **diverge in decision** —
->    methods report E1111, native silently exits 0; ir_gen has a third existing copy reporting the
->    old code E1015) → convergence round collapsed the criterion into a single implementation
->    `bind_args_to_params` (`arg_binding.rs:35`, four call sites `expressions.rs:2727`/`:5416`,
->    `ir_gen.rs:7776`/`:8279`) → round-2 review caught a **regression** introduced by the
->    convergence round (the IR convergence block lost the native optional slot ⇒ programs that
->    previously succeeded by omitting the optional slot were falsely flagged E1010) → fix round (the
->    optional-slot criterion comes from the same `signature.rs:236` sole exit as the parameter name)
->    → round-3 review PASS (independent reproduction red→green; under mutation, the in-repo pinned
->    board FAILED, empirically proving the criterion can fail). **Lesson**: review must cover
->    "un-fixed branches of similar paths" (both `needs_revision` rounds in this batch happened
->    because probes all landed on the hit surface); the fix round itself can also introduce
->    regressions (the optional-slot case), caught by the next round's fresh reviewer.
+> 1. **#452 line**: round-1 review needs_revision (F1–F5; F1 = arity guard `named_args.is_empty()`
+>    not narrowed with resolution ⇒ calls with named arguments silently pass through both zero-hit
+>    and single-hit paths of multi-candidates) → fix round added new external code **E1111
+>    (argument_order_invalid)** (code table + locales + RFC-013 + generator four-piece suite in same
+>    commit; code count 154→155) → round-2 review pass.
+> 2. **#454 line**: implementation (shared parsing entry + native arm settled by name) → independent
+>    verification PASS (value matrix 12 cells, corpus 342/342, 5 mutations mechanically reversible
+>    replayed all caught, restore byte-for-byte identical) → round-1 review needs_revision (F1 =
+>    typecheck native arm **inlined copy** of binding criterion, missing rule ④ ⇒ **divergent
+>    decisions** on same-form method and native calls — method reports E1111, native silently exits
+>    with exit=0; ir_gen has a third stock copy reporting old code E1015) → convergence round
+>    consolidated criterion to single implementation `bind_args_to_params` (`arg_binding.rs:35`,
+>    four call points `expressions.rs:2727` / `:5416`, `ir_gen.rs:7776` / `:8279`) → round-2 review
+>    caught a **regression** introduced by convergence round (IR convergence block lost native
+>    omittable position ⇒ previously successful programs with optional positions omitted wrongly
+>    reported E1010) → fix round (optional position criterion and formal name from same source
+>    `signature.rs:236` single exit) → round-3 review PASS (independently reproduced red→green;
+>    mutation under pinned board FAILED empirically criterion can fail). **Lesson**: review must
+>    cover "unfixed branches of similar paths" (both needs_revision in this batch were probes
+>    falling entirely on hit surface); the fix round itself can introduce regressions (optional
+>    position), caught by next round of different reviewer.
 >
-> **3. Process events (recorded faithfully, not pointing at individuals)**
+> **III. Process events (recorded as-is, not pointing at individuals)**
 >
-> 1. **External whole-tree discard (around 2026-10-14 17:14)**: the working tree was externally
->    restored silently — the implementer's in-progress fixes (typecheck/ir_gen/code
->    table/locales/RFC-013, etc.) all vanished, and **at the same moment two review documents the
->    user themselves had been editing also disappeared from `git status`** ⇒ judged a repo-level
->    discard (most likely a user-side manual cleanup / IDE "discard all changes"). Three pieces of
->    evidence rule out group members: empty stash, no new commits, no `reset` in reflog. The
->    implementer replayed the in-progress work from context and pushed; discipline was changed to
->    "**first save the patch to scratch, then sample the red state**".
-> 2. **Verifier ran out of context, member swap**: the independent verifier for 3.16 ran out of room
->    mid-way (no closing message), and per load rules a swap was made — the successor reused the
->    already-ready artifacts (green-state results, corpus equivalence script, mutation plan), and
->    verification ultimately passed. A positive precedent for handing off partial artifacts.
-> 3. **Round-5 reviewer rotation and historical-round roll-back**: when rotating the reviewer per
->    the load cap rule ⑤, `remove_member` rolled back already-decided terminal review/verification
->    rounds **into the shared pool** along with them, and the scheduler immediately re-ran them (t3
->    / t8 were re-claimed by new members, causing duplicate work and blocking downstream).
->    Disposition: the lead took over and canceled the rolled-back historical rounds (t3 / t8 / t13),
->    and added AGENTS.md rule 12 (handle rolled-back rounds immediately after a member swap)
->    accordingly. The closeout record for this batch is logged under that rule.
-> 4. **scratch governance (~6.3 GB)**: in the early part of the batch, each task had an external
->    tree, with 6 directories scattered outside the repo (~780 MB, cleaned up) plus two members'
->    external verification trees (~2.2 GB / 3.3 GB, self-deleted after use). The output is the
->    governance tool `scripts/dev/scratch.py` (`init` / `use` / `build` / `release` / **trial** /
->    `status` / `rm` / `gc`) and AGENTS.md rules 9 (batch-tree single entry), 10 (verifier
->    environment six rules: mechanically reversible mutation / take line numbers from the referenced
->    revision / CI-only gates must run, etc.), 11 (writer-side load cap), 12 (handle rolled-back
->    rounds after a member swap), and two top-of-file meta rules (no private content / verify before
->    asserting).
-> 5. **Contract defect (not pointing at a member)**: the fix-round #454 contract `inScope` only
->    circled 2 files, but the actually mechanically required surface was 8 files (rule 6 is exactly
->    the prevention — the contract template should preset the mechanically required surface list);
->    additionally, the terminal-state field of that task had been occupied by probe payload, and the
->    formal acceptance / command evidence was supplemented by the lead per the convention.
+> 1. **External whole-tree discard (around 17:14 2026-10-14)**: work tree was externally restored
+>    silently — implementer's fix WIP (typecheck/ir_gen/code table/locales/RFC-013 etc.) all
+>    disappeared, **at the same moment two review documents edited by the user themselves also
+>    disappeared from git status** ⇒ determined to be repository-level discard (most likely
+>    user-side manual cleanup / IDE "discard all changes"). Three pieces of evidence excluded group
+>    members: stash empty, no new commits, reflog no reset. Implementer replayed WIP per context and
+>    pushed; discipline changed to "**save patch to scratch first, then sample red state**".
+> 2. **Verifier context exhausted, changed personnel**: independent verifier verifying 3.16 ran out
+>    of room midway (no closing message), changed personnel per load rule — successor continued
+>    using already-ready outputs (green-state result, corpus equivalence script, mutation plan),
+>    verification finally PASS. Positive precedent for partial output handover.
+> 3. **Round 5 review rotation and historical round retraction**: when rotating the ⑤th reviewer per
+>    load cap, `remove_member` also retracted **already-decided terminal review/verification
+>    rounds** into the shared pool, the scheduler immediately re-ran them (t3/t8 were re-picked by
+>    new members, duplicated work and blocked downstream). Disposition: lead took over and cancelled
+>    retracted historical rounds (t3/t8/t13), based on which AGENTS.md rule 12 added (handle
+>    retracted rounds immediately after personnel change). This batch's closing record registers
+>    this event per that rule.
+> 4. **scratch governance (~6.3 GB)**: early batch had one external tree per task, 6 directories
+>    scattered outside repo (~780 MB, cleaned) + two members' external verification trees (~2.2 GB /
+>    3.3 GB, self-deleted after use). Produced governance tool `scripts/dev/scratch.py`
+>    (init/use/build/release/**trial**/status/rm/gc) and AGENTS.md rule 9 (batch tree single entry),
+>    rule 10 (verification environment six points: mechanically reversible mutations / line numbers
+>    from cited revision / CI-only gates must run etc.), rule 11 (writer load cap), rule 12 (handle
+>    retracted rounds after personnel change) plus two top-level meta rules (no private content /
+>    verify before asserting).
+> 5. **Contract defect (not pointing at members)**: #454 fix round's contract inScope only covered 2
+>    files, actual mechanically-required surface 8 (item 6 is designed to prevent this — contract
+>    template should pre-set mechanically-required surface list); also that task's terminal field
+>    was once occupied by probe payload, formal acceptance/command evidence was backfilled by lead
+>    per convention.
 >
-> **4. Carry-over items (not fixed in this batch, logged for reference)**: three low-severity
-> findings from the round-3 review — ① the method-path `build_arg_slots` (`ir_gen.rs:521`) is still
-> a **second copy** of the criterion (existing, per the previous round's practice logged at
-> closeout, not converged) — **2026-10-16 pre-release audit added three notes**: (a) it has **two**
-> call sites: `ir_gen.rs:7888` (method-binding path, using the bound function `binding.function`'s
-> parameter names) and `:7975` (overload-resolution path, using the resolved mixed-name leaf
-> segment); the original log only wrote "`ir_gen.rs:521` area"; (b) it has **already diverged from
-> the shared implementation `bind_args_to_params`**: missing rule ⑤ (duplicate named → E1015), rule
-> ⑥ (missing required parameter → E1010), and the concept of "optional slot", and it hardcodes the
-> receiver slot as `1 + i`; both call sites `continue` on an empty slot (the comment says
-> "diagnostics belong to typecheck (which guarantees that resolution passing means no empty
-> slots)"), a **dangling invariant written in a comment with no assertion backing it**; (c) **the
-> "all call sites converge into it" enumeration in RFC-039 D60 missed these two**, a mismatch
-> between declaration and fact, and the cited line numbers were not retaken on the referenced
-> revision — the D60 text has been corrected along with this note; ② the `cargo fmt --all` error
-> inside the batch verification tree (worktree) is a worktree workspace artifact, and the gate
-> checklist should note that `fmt` runs on the main repo; ③ the repair-class contract template
-> should preset the mechanically required surface into `inScope` (see 3.5).
+> **IV. Remaining items (not fixed this batch, registered for tracking)**: round-3 review three
+> low-severity findings — ① method path's `build_arg_slots` (`ir_gen.rs:521`) remains a **second
+> copy** of the criterion (stock, registered per last round's convention, not converged) —
+> **2026-10-16 pre-release audit added three points**: (a) it has **two** call points:
+> `ir_gen.rs:7888` (method binding path, uses bound function `binding.function`'s formal name) and
+> `:7975` (overload resolution path, uses resolved hybrid name leaf segment), original registration
+> only wrote "around `ir_gen.rs:521`"; (b) it has **already diverged from the shared implementation
+> `bind_args_to_params`**: missing rule ⑤ (duplicate naming → E1015), rule ⑥ (missing required
+> formal → E1010) and the "optional position" concept, and hardcodes the receiver position as
+> `1 + i`; both call points `continue` on empty slots uniformly (comment says "diagnostic belongs to
+> typecheck (it guarantees no empty slots if resolution passes)"), is a **dangling invariant written
+> in comment with no assertion backstop**; (c) **RFC-039 D60's "all call points converge on it"
+> enumeration missed these two places**, declaration inconsistent with fact, and the cited line
+> numbers were not re-fetched on the cited revision, D60 text corrected together with this item; ②
+> batch verification tree (worktree) `cargo fmt --all` error is a worktree workspace artifact, gate
+> checklist should note fmt runs in main repo; ③ repair-type contract templates should pre-set
+> mechanically-required surface into inScope (see III.5).
 >
-> **5. Final gates (closeout revision, two local implementation commits and one docs commit pushed
-> together — the only push in this batch)**: `fmt --check` 0 / `clippy -D warnings` 0 /
+> **V. Final gate (closing revision, local two implementation commits + one documentation commit
+> pushed together — the only push in this batch)**: fmt --check 0 / clippy -D warnings 0 /
 > `cargo test --lib` **2730 passed / 0 failed / 2 ignored** / `--test integration` **284 passed** /
-> `--test yx_runner` 2 passed / `check-obligations` **PASS (13·13·0·8)** / `check-docs-truth` exit=0
-> / `corpus_probe` **342 lines byte-for-byte identical to baseline** (the only regenerated line:
-> `named_arg_duplicate_err.yx` E1015@14 → E1111@16, expected code and line number moved in sync,
+> `--test yx_runner` 2 passed / check-obligations **PASS (13·13·0·8)** / check-docs-truth exit=0 /
+> corpus_probe **342 rows byte-for-byte identical to baseline** (only regenerated row:
+> `named_arg_duplicate_err.yx` E1015@14 → E1111@16, expected code and line number synchronized,
 > manually reviewed) / IR snapshot zero drift.
 >
-> **6. Run links (push-side evidence)**: 3.16 implementation push (`cb45de1fc`) → CI **38550504517**
-> (8/8 jobs success, including Docs Truth + Obligation Gate) / Deploy Docs **38550504587**; #452 fix
-> round (`9ec7d89a8`) → Docs Truth job 38545762349 (the same run's MSRV/Test was cancelled by the
-> subsequent push per concurrency — cancel ≠ failure, the later run overrides); governance-tool push
-> → CI 38546373435 / 38561405117; WBS registration (3.16 row + table header 56→57 / 147→148) →
-> CI 38528560364. The CI / Deploy Docs run for the closeout push itself is back-filled into the task
-> record after the push.
+> **VI. Run links (push-side evidence)**: 3.16 implementation push (cb45de1fc) → CI **38550504517**
+> (8/8 job success, including Docs Truth + Obligation Gate) / Deploy Docs **38550504587**; #452 fix
+> round (9ec7d89a8) → Docs Truth job 38545762349 (same run's MSRV/Test cancelled by subsequent push
+> per concurrency — cancellation ≠ failure, covered by later run); governance tool push → CI
+> 38546373435 / 38561405117; WBS registration (3.16 row + table header 56→57 / 147→148) →
+> CI 38528560364. Closing push's own CI / Deploy Docs run logged into task record after push.
 >
-> **3.4.8 ③④ landing (2026-10-11, `8ecf56f93`)**: ③ Add `Linking` to the tail of `CHECK_STAGES`
-> (**pure merge**, skipping the `is_bin_role` entry validation entirely — the E3020 criterion still
-> belongs to `RoleClassification` to prevent double reports; another hard reason: the `run` path
-> judges "has main" from the merged IR, and under the collection semantic "entry itself errors → no
-> IR" it would be misjudged as missing main and hard-aborted) → `Monomorphization` (shape check);
-> `ir_generation_check` retains the unit IR (**memory only**, consumed by pure-merge and mono, not
-> emitted / not written to disk / not producing snapshots — without retention, the aggregate request
-> set is empty, and mono would falsely greenlight as `NoObligations`); mono failures in the Check
-> path go through a per-file collection channel (diagnostics attributed to the entry file +
-> `failed_stages`, not set to `failure`); `MultiFile` keeps `fail_with`; `into_outcome` is changed
-> to "collect first, then judge failure". ④ Empirically **zero production change**: the
-> whole-program BFS already covers cross-unit mutual recursion (pathological → E3005, well-formed
-> three-layer chain executes correct values); four e2e groups and one mono unit test are delivered
-> as living criteria.
+> **3.4.8 ③④ Implementation (2026-10-11, 8ecf56f93)**: ③ `CHECK_STAGES` tail added `Linking` (**pure
+> merge**, entirely skipping `is_bin_role` entry validation — E3020 criterion still belongs to
+> `RoleClassification` to prevent double reporting; additional hard reason: run path determines "has
+> main" by merged IR, under collection semantics "entry itself errors → no IR" would be misjudged as
+> missing main and hard-aborted) → `Monomorphization` (check shape); `ir_generation_check` retains
+> unit IR (**in-memory only**, for pure merge and mono consumption, not externalized / not written
+> to disk / not producing snapshot — without retention aggregation request is empty, mono
+> false-greens with `NoObligations`); mono failure goes through per-file collection channel in Check
+> (diagnostic attributed to entry file + `failed_stages`, not set to failure), MultiFile keeps
+> `fail_with`; `into_outcome` changed to "first take collection then judge failure". ④ empirically
+> **zero production change**: full-program BFS already covers cross-unit mutual recursion
+> (pathological → E3005, well-formed three-layer chain executes correct values), delivers four e2e +
+> one mono unit test as living criterion.
 >
-> **Verification chain** (all independent of the implementation): t3 (③, 9 self-built fixtures +
-> byte-for-byte cross-check with the HEAD binary), t4 (④, 10 fixtures + `max_depth` parameterized
-> boundaries), t10 (F1 fix, 11 cases + dual-binary comparison) all pass; t5 cross-shape matrix
-> (single / multi / check three shapes + corpus 340/340 IDENTICAL + IR snapshot zero drift); t6
-> review PASS; test count 2643 → 2656 (only increases).
+> **Verification chain** (all independent of implementation): t3 (③, 9 self-built fixtures +
+> byte-by-byte cross with HEAD binary), t4 (④, 10 fixtures + `max_depth` parameterized boundary),
+> t10 (F1 fix, 11 cases + dual binary comparison) all pass; t5 cross-shape matrix
+> (single/multi/check three shapes + corpus 340/340 IDENTICAL + IR snapshot zero drift); t6 review
+> PASS; test count 2643 → 2656 (only increased, not decreased).
 >
-> **F1 (discovered during verification, D59 A/B class, fixed in the same round)**: in the standalone
-> multi-file `check` without a project root, the aggregate request name (`lib.f`) and the unit IR
-> definition key (`f`) do not share a source → mono silently `continue`s on "native has no IR
-> definition", and `check` reports 0 error / exit 0. Fix: on the aggregate side, add a lookup by
-> each unit's **actual definition key** (exact enumeration + byte-equal + ambiguity drop, not a
-> suffix heuristic; the project shape is not registered, existing paths unchanged). **Correction
-> (same day)**: that lookup was **deleted** in the subsequent regression fix; the root cause is now
-> resolved at the naming layer by **`module_key` decoupling into dual use** (added `script_mode`) —
-> IR definition key = IR call name = aggregate request name = `{unit-key}.{name}`. **Regression
-> record**: after ③ landed, CI's `Check tutorial/guide code examples compile` went red (258 blocks /
-> 10 failures: 6 cases of same-file same-name rebinding + 4 cases of name collision with
-> `<std/list>`; rootless `check` does no qualification, triggering the conflict check in
-> `link_module_irs`); fix = `ir_gen` splits `script_mode` (qualified name ⊥ Script / Bin, the E3023
-> gate now checks it) + `ir_generation_check` per unit always passes through the unit key +
-> `.with_script_mode(rootless)` + Script top-level same-name rebinding "latter wins" (consistent
-> with the existing `run` path behavior); verification = docs gate 258/0, three-binary cross-check
-> (HEAD / ③-tree / fix-tree) for the three collision fixture categories, E3005 does not regress in
-> the check shape, E3023 not opened.
+> **F1 (found during verification, D59 A/B class, same-round fix)**: in rootless standalone
+> multi-file check without project root, aggregation request name (`lib.f`) and unit IR definition
+> key (`f`) are not from same source → mono falls into "native has no IR definition" silent
+> `continue`, check reports 0 error/exit 0. Fix: aggregation side added lookup jump by each unit's
+> **true definition key** (precise enumeration + byte-equal + ambiguity abandon, not suffix
+> heuristic; project shape not registered, existing paths unchanged). **Errata (same day)**: the
+> lookup jump was **deleted** in the subsequent regression fix; root cause instead solved from
+> naming dimension by `module_key` dual-use decoupling (added `script_mode`) — IR definition key =
+> IR call name = aggregation request name = `{unit_key}.{name}`. **Regression record**: after ③
+> landed, CI's `Check tutorial/guide code examples compile` red (258 blocks / 10 failures: 6 items
+> same-file same-name rebinding + 4 items colliding with `<std/list>`, rootless check doesn't do
+> qualification triggering `link_module_irs`'s conflict validation); fix = ir_gen split
+> `script_mode` (qualified name ⊥ Script/Bin, E3023 gate changed to look at it) +
+> `ir_generation_check` always passes unit key per unit + `.with_script_mode(rootless)` + Script
+> top-level same-name rebinding "latter wins" (consistent with run path existing behavior);
+> verification = documentation gate 258/0, three-binary comparison (HEAD/③-tree/fix-tree) three
+> collision fixtures, check shape E3005 not regressed, E3023 not opened.
 >
-> **F2 / F3 (accepted)**: mono diagnostics attributed to the entry file's item, span can cross units
-> (same caliber as the `run` path's `path=entry`); in the Check shape, each unit holds one
-> `ModuleIR` (memory only, released at the end of `check`).
+> **F2/F3 (accepted)**: mono diagnostic attributed to entry file item, span can cross units (same
+> dimension as run path `path=entry`); Check shape holds one ModuleIR per unit (in-memory only,
+> released when check ends).
 >
-> **Pre-existing issues left for follow-up (not regressions in this round)**: ① E3005's help text
-> still reads "internal error; please report this issue", which doesn't match the
-> resource-protection semantics (precedent: `e3xxx.rs:47` once moved the same kind of "user code
-> error" out of E3005) — registered, pending scheduling; ② the span render label of multi-file E3005
-> is misaligned (reproduced with the HEAD binary, pre-existing); ③ there is a **type-parameter
-> position dependency** on the request-collection side (a generic call whose type parameter is not
-> at the value-parameter position does not emit an instantiation request, and mono records
-> `NoObligations` — convergent mutual recursion is this shape) — same surface as 3.5 (HKT call
-> path), logged into that row.
+> **Existing issues for follow-up (not this round's regression)**: ① E3005's help text still says
+> "internal error; please report this issue", inconsistent with resource protection semantics
+> (precedent: `e3xxx.rs:47` moved similar "user-written error" out of E3005) — registered awaiting
+> scheduling; ② multi-file E3005's span rendering label offset (reproduced with HEAD binary,
+> pre-existing); ③ request collection surface has **type parameter position dependence** (generic
+> calls with type parameters not in value parameter position don't issue instantiation requests,
+> mono records `NoObligations`, converging mutual recursion is exactly this form) — same surface as
+> 3.5 (HKT call path), registered to that row.
 
-## External Track RFC-029g: Deleting `pub` and Auto-Binding (#399)
+## External Track RFC-029g: Remove `pub` and Auto-Binding (#399
 
-> **P3.5 landing (2026-10-08)**: all seven second-level tasks complete, the entire batch is one
-> commit (independently revertible).
+> **P3.5 Implementation (2026-10-08)**: all 7 secondary tasks completed, the whole batch in one
+> commit (independently revertable).
 >
-> - **Measurements diverged from the plan (recorded faithfully)**: the acceptance for 029g.1.2 /
->   029g.1.3 originally said "`pub f = ...` reports a **parse error**" — after deleting `KwPub`,
->   `pub` actually falls back to a normal identifier, and the old form reports **E1001 Unknown
->   variable: 'pub'** at the semantic layer (span pointing at `pub`). Per RFC-039 **D27**
->   ("specifically detecting removed syntax is an anti-pattern"), **no** migration-specific
->   diagnostic is added; the corpus fixture `pub_declaration_err.yx` nails E1001, and the document
->   (`syntax.md`) honestly describes the consequence.
-> - **Design convergence (beyond the RFC literal, requires review)**: after `pub` was deleted, the
->   semantics of `project_refs` and `cross_file_refs` are fully identical (the same "set of
->   in-package references", prohibition one forbids parallel representations) → merged into a single
->   `project_refs`, the `set_exempt_pub` / `set_cross_file_refs` switches deleted. Behaviorally,
->   non-`pub` items in the Internal role changed from "file-internal reachability" to
->   "reference-pool judgment" (loosened, in the under-reporting direction); Lib tightened from
->   "absolute `pub` exemption" to reference-pool judgment; Script top-level bindings that are not
->   referenced now report W1001 / W1002 / W1004 / W1005.
-> - **Dead-table cleanup**: `env.exports` + `add_export` / `is_exported` / `is_visible` +
->   `auto_bind_to_type` + the `exports` write-back in `typecheck/mod.rs` all deleted
->   (production-side writes, zero repo-wide consumers).
-> - **Test migration** (test count does not decrease): added `lexer/tests/rfc029g_lexer.rs` (1); the
->   "pub is recognized" assertion in `parser/statements/tests/bindings.rs` is reversed to "pub is no
->   longer a modifier"; 7 role-semantic cases in `passes/tests/dead_code.rs` rewritten (2 assertions
->   reversed); 8 role cases in `tests/integration/cli_e2e.rs` rewritten (the exemption assertions
->   for `lib` / `internal` reversed into report assertions).
-> - **Baseline**: IR snapshot **zero-diff** (`pub` is not part of IR); the corpus differential
->   baseline only adds 1 entry (`pub_declaration_err.yx` → E1001), and the command
->   `cargo run --quiet --example corpus_probe` was run to regenerate and manually reviewed.
-> - **Measurements**: lib 2556 / integration 272 / 322-entry corpus baseline all green; `cargo fmt`
->   / `clippy -D warnings` / `check-boundary` / `check-concepts` / `check-fanout` /
+> - **Measurement inconsistent with plan (recorded as-is)**: 029g.1.2/029g.1.3 acceptance originally
+>   wrote "`pub f = ...` reports **parse error**" — actually after removing `KwPub`, `pub` falls
+>   back to ordinary identifier, old usage hits semantic layer reporting **E1001 Unknown variable:
+>   'pub'** (span points at `pub`). Per RFC-039 **D27** "specially detecting removed syntax is an
+>   anti-pattern", **no new** migration-specific diagnostic added; corpus fixture
+>   `pub_declaration_err.yx` pins E1001, document (`syntax.md`) honestly writes this consequence.
+> - **Design convergence (beyond RFC literal, needs review)**: `project_refs` and `cross_file_refs`
+>   two fields after pub removal have semantically identical meaning (same "in-package reference
+>   union", Constraint 1 prohibits parallel representation) → merged into single `project_refs`,
+>   `set_exempt_pub`/`set_cross_file_refs` two switches removed. Behaviorally, Internal role's
+>   non-pub items changed from "in-file reachability" to "reference pool judgment" (relaxed,
+>   preferring false-negative direction); Lib tightened from "pub absolute exemption" to reference
+>   pool judgment; Script top-level bindings not referenced start reporting W1001/W1002/W1004/W1005.
+> - **Dead table cleanup**: `env.exports` + `add_export`/`is_exported`/`is_visible` +
+>   `auto_bind_to_type` + `typecheck/mod.rs`'s exports writeback all removed (production-side
+>   pumping, all-repo zero consumption).
+> - **Test migration** (test count not decreased): added `lexer/tests/rfc029g_lexer.rs` (1);
+>   `parser/statements/tests/bindings.rs`'s "pub is recognized" assertion reversed to "pub is no
+>   longer modifier"; `passes/tests/dead_code.rs` 7 role semantic test cases rewritten (2 assertion
+>   reversals); `tests/integration/cli_e2e.rs` 8 role test cases rewritten (`lib`/`internal`
+>   exemption assertions reversed to reporting assertions).
+> - **Baseline**: IR snapshot **zero-diff** (`pub` not in IR); corpus diff baseline only added 1
+>   entry (`pub_declaration_err.yx` → E1001), command `cargo run --quiet --example corpus_probe`
+>   regenerated then manually reviewed.
+> - **Measurement**: lib 2556 / integration 272 / corpus 322 baseline all green; `cargo fmt` /
+>   `clippy -D warnings` / `check-boundary` / `check-concepts` / `check-fanout` /
 >   `check_tracking.py` all green.
 
 ## P4 4.5 Cross-Layer Contract PlanId-ization (D20)
 
-> **4.5 landing record (2026-10-13)**: 4.5.1 (`ReleasePlan` key `Span` → `PlanId`) and 4.5.2
-> (`overload_resolutions` key `Span` → `PlanId`) landed in two functional commits, and the closeout
-> (registration / WBS check-off / gate / push) was done by t7. Precondition = 4.3.1 obligations
-> ledger (red-state archive 173 files / 533 keys).
+> **4.5 Implementation Record (2026-10-13)**: 4.5.1 (`ReleasePlan` key `Span` → `PlanId`) and 4.5.2
+> (`overload_resolutions` key `Span` → `PlanId`) landed in two functional commits, closing
+> (registration / WBS check / gate / push) by t7. Prerequisite = 4.3.1 obligation ledger (red state
+> archive 173 files / 533 keys).
 >
-> **1. Carrier decision (option A: `PlanId` travels with the AST node)**: Added `PlanId`
-> (`src/util/plan_id.rs`, `u32` monotonic, unique within a compilation unit, `UNPLANNED = u32::MAX`
-> denotes synthetic nodes outside the parser), issued by the **sole allocator**
-> `ParserState::alloc_plan_id`; two carrier locations — `Stmt.plan_id` (statement identity) and
-> `Expr::Call.plan_id` (call-site identity), with `Expr::call` as the only call constructor
-> repo-wide. The rejected alternative was the "two sides each derive the same identity from span"
-> positional-coincidence form (D20's original defect).
+> **I. Carrier Decision (Option A: `PlanId` follows AST node)**: Added `PlanId`
+> (`src/util/plan_id.rs`, `u32` monotonic, unique within compilation unit, `UNPLANNED = u32::MAX`
+> represents synthetic nodes outside parser), issued by **sole allocator**
+> `ParserState::alloc_plan_id`; carrier two places — `Stmt.plan_id` (statement identity) and
+> `Expr::Call.plan_id` (call point identity), `Expr::call` is the only call constructor in the repo.
+> The rejected form was "both sides derive same identity by span" position coincidence form (D20's
+> original defect).
 >
-> **2. Two-level verification and review (members independent)**: each functional commit is paired
-> with an independent verifier and a reviewer, **verifier/reviewer do not reuse the implementer's
+> **II. Two-Level Verification and Review (independent members)**: Each functional commit paired
+> with an independent verifier and reviewer, **verifier/reviewer don't reuse implementer's
 > evidence**: 4.5.1 = t1 implement / t2 independent verify (external tree + 5 mutations) / t3
 > review; 4.5.2 = t4 implement / t5 independent verify (external tree + 5 mutations) / t6 review.
-> The review point in time and the reviewed revision both fall on immutable history (verifiable via
-> `git show`). **Provider rename caused t5 / t6 to swap members for continuation**: the original
-> verifier / reviewer members could not continue due to a provider rename, and per the orchestration
-> convention, a swap was made and **the reason is written into the record** (cross-round context
-> preservation is preferred; only compress when unusable); after the swap, the conclusion was
-> consistent with the original round (PASS), and the implementer's evidence was not reused.
+> Review point and reviewed revision both fall on immutable history (`git show` verifiable).
+> **Provider renaming caused t5 / t6 personnel change continuation**: original verify/review member
+> unavailable due to provider rename, per orchestration convention changed personnel and **record
+> reason in writing** (cross-round context retention priority, personnel change only when
+> compression unavailable); after continuation conclusion consistent with original round (PASS), did
+> not reuse implementer's evidence.
 >
-> **3. Two defects self-discovered and fixed during implementation (t1, both within `inScope`)**: ①
-> The consumption-exemption criterion was once attached to `UnitState.ir.is_some()` — in the `check`
-> shape, Linking / Mono take `unit.ir` away, and real non-consumption in the `check` shape
-> **silently passes** (mutation measurement: D41 red while CLI `check` exits 0); changed to read the
-> **ledger's own completion marker**, and a regression case was added. ② The Drop sequence drifted
-> with the process hash seed (partial order `sort_by` + `HashSet` iteration): the snapshot criterion
-> ran three times in a row producing line-count drift 106 / 120 / 114; after switching to
-> **total-order sort** (same name takes max depth + name ascending) two consecutive runs were
-> zero-drift.
+> **III. Two defects self-found and fixed during implementation (t1, both within inScope)**: ①
+> Consumption exemption criterion was hung on `UnitState.ir.is_some()` — `check` shape's
+> Linking/Mono takes `unit.ir` away, real non-consumption in check shape **silently passes**
+> (mutation measurement: D41 red but CLI check exit 0); changed to read **the ledger's own
+> completion flag**, and added regression test. ② Drop sequence drifts with process hash seed
+> (partial order `sort_by` + `HashSet` iteration): snapshot criterion ran three times in a row
+> producing 106/120/114 line drift; changed to **total order sorting** (same name takes max depth +
+> name ascending) then ran twice with zero drift.
 >
-> **4. Criteria and evidence numbers**: after 4.5.1, `test_release_plan_spans_consumed` removes the
-> persistent `#[ignore` (floor `examined ≥ 173` + no whitelist), 172 IR snapshots regenerated in the
-> same commit (programmatic review: 1083 new lines of Drop + 86 lines of jump-index shift, zero
-> deletions, no reordering), the 342-entry corpus differential is empty; 4.5.2 added
-> `test_overload_resolutions_consumed` (empty difference set + evidence surface floor `examined ≥ 1`
-> / `consumed ≥ 2`; measured `examined=1`, consumption items 2, no skipped resolution 210), 9
-> resolution-shape pinned boards, `cargo test --lib` 2712 passed / 0 failed, IR snapshot **zero
-> drift**. Mutation-driven: shift the consumption key by one → criterion red + real program
-> `error [W1090] ... produced key not consumed` + corpus gate divergence; restored to green.
+> **IV. Criteria and Evidence Numbers**: After 4.5.1, `test_release_plan_spans_consumed` removed
+> `#[ignore]` constant (`examined ≥ 173` floor + no whitelist), 172 IR snapshots regenerated in same
+> commit (programmatic review: added 1083 lines Drop + 86 lines jump index shift, zero deletions, no
+> reordering), corpus 342 entries diff empty; 4.5.2 added `test_overload_resolutions_consumed`
+> (difference set empty + evidence floor `examined ≥ 1` / `consumed ≥ 2`; measured examined=1,
+> consumption items 2, no resolution skipped 210), 9 resolution form pins, `cargo test --lib` 2712
+> passed / 0 failed, IR snapshot **zero drift**. Mutation-driven: consumption key shifted one
+> position ⇒ criterion red + real program `error [W1090] ... produced key not consumed` + corpus
+> gate difference; after restore re-green.
 >
-> **5. Classification basis for the semantic fix (D59)**:
-> `Type.method(positional args, name = value)` before the change **silently gave the wrong answer**
-> (measured to compile cleanly, run output `1` instead of `20`) ⇒ **class C** (old behavior was not
-> successful), and the fix takes the "loud" path: after the change the same program produces
-> `error [W1090]` at compile time; the terminal semantic of "named actual parameters participating
-> in resolution" is **class D**, already registered in §3.14 and left as issue #452 for a dedicated
-> team to take. Additionally: `Drop` is a no-op in the interpreter
-> (`backends/interpreter/executor/ops/control.rs` wildcard arm is only `advance()`) — key migration
-> does not change runtime behavior.
+> **V. Semantic Correction Classification Basis (D59)**: `Type.method(position arg, name = value)`
+> **silently gave wrong answer** before change (measured compile clean, runtime output `1` instead
+> of `20`) ⇒ **Class C** (old behavior non-success), fix takes "loud": after change same program
+> compile-time `error [W1090]`; terminal semantic of "named argument participates in resolution" is
+> **Class D**, registered in §3.14 with issue #452 left for dedicated team. Also: `Drop` is no-op in
+> interpreter (`backends/interpreter/executor/ops/control.rs` wildcard arm only `advance()`) — key
+> migration doesn't change runtime behavior.
 >
-> **6. F-1 / F-2 disposition (found by t5 independent verification)**: **F-1 (medium)** the unbound
-> consumption point (`ir_gen.rs:7766-7790`) is unreachable in the current corpus and test surface,
-> and the key-controlled correctness has no red state that can be falsified ⇒ per "known boundary",
-> register into [02](02-stage-contract.md) §2 revision note fifth paragraph (preservation
-> rationale + no new task); **F-2 (low)** pointer drift ⇒ the `OverloadResolutions` doc comment in
-> `types.rs` is changed to precise pointers (produced at `inference/expressions.rs:4550`, consumed
-> at `ir_gen.rs:7697` / `:7772`), as a separate small commit, not mixed into the docs commit.
+> **VI. F-1 / F-2 Disposition (found by t5 independent verification)**: **F-1 (medium)** unbound
+> consumption point (`ir_gen.rs:7766-7790`) unreachable under current corpus and test surface,
+> keying correctness has no red state falsifiable ⇒ per "known boundary" convention registered into
+> [02](02-stage-contract.md) §2 revision note fifth paragraph (preserve reason + don't open new
+> task); **F-2 (low)** pointer drift ⇒ `types.rs`'s `OverloadResolutions` documentation comment
+> changed to precise pointers (produced `inference/expressions.rs:4550`, consumed `ir_gen.rs:7697` /
+> `:7772`), separate small commit, not mixed into documentation commit.
 >
-> **7. Closeout (t7)**: the two obligation-field rows in 02 are changed to `PlanId` keys + current
-> consumption-point line numbers (`:360` read / `:3103` use / `:1095` and `:1097` settlement
-> marker); the criteria table in 07 and defect class 3 in 04-ssa are changed to past tense; 09
-> checks off 4.5 / 4.5.1 / 4.5.2; CHANGELOG logs a one-line behavior change; `check-obligations.py`
-> and `check_tracking.py` are green, CI and Deploy Docs are green. **Closeout-discovered bookkeeping
-> deviation**: the pointers `ir_gen.rs:357` / `:3102` / `:1096` in the t3 / t6 reports are one to
-> three lines off from the code fact (actually `:360` / `:3103` / `:1095`+`:1097`, due to 4.5.2's
-> insertion) — registered as the code fact dictates, and this note is kept as a trace.
+> **VII. Closing (t7)**: 02 obligation field table two rows changed to `PlanId` key + current
+> consumption point line numbers (`:360` read / `:3103` use / `:1095` and `:1097` settlement flag);
+> 07 criteria table and 04-ssa defect class 3 changed to past tense; 09 checked 4.5 / 4.5.1 / 4.5.2;
+> CHANGELOG recorded one line behavior change; `check-obligations.py` and `check_tracking.py` green,
+> CI and Deploy Docs green. **Accounting deviation found at closing**: pointers `ir_gen.rs:357` /
+> `:3102` / `:1096` in t3 / t6 reports are 1-3 lines off from code fact (actually `:360` / `:3103` /
+> `:1095`+`:1097`, due to 4.5.2's insertion) — register per code fact, this note retains the trail.
 
-## P4 4.10.3 Standalone `run` and MultiFile Orchestration Unification (the `run` half of 4.2.5 decision A)
+## P4 4.10.3 Standalone run and MultiFile Orchestration Unification (run half of 4.2.5 Decision A)
 
-> **丙 batch record (registered 2026-10-15 → closed 2026-10-15)**: On 2026-10-15 the user ruled 丙 —
-> this round only does 4.10.3 (the same-batch candidate 3.4.6 is deferred to after 4.9 per B1
-> ([02](02-stage-contract.md) §Runtime Behavior Table "dead-code family warnings do not enter the
-> `compile` path"), the precondition has been re-attached and noted); implementation form =
-> **fully-integrated single team** (user's instruction: no DAG, no team building, single-session
-> implementation + self-verification). Pre-batch debt landed first: #455 dependency announcement fix
-> (rustls 0.23.46 + serde_yaml_ng, `cargo audit` recovered from exit 1 to exit 0), WBS registration
-> debt (#456 registered as 3.17 + incomplete rows filled in with "owning stage / whether it blocks
-> the main line" fields).
+> **Batch C Record (registered 2026-10-15 → closed 2026-10-15)**: User decided 2026-10-15 ③ — this
+> round only does 4.10.3 (same-batch candidate 3.4.6 deferred to after 4.9 per B1
+> ([02](02-stage-contract.md) §Runtime Behavior Table "dead code family warnings don't enter compile
+> path"), prerequisites already re-anchored and annotated); implementation form = **complete single
+> team** (user directed no DAG, no team, single-session implementation + self-verification).
+> Pre-batch outstanding work landed first: #455 dependency announcement fix (rustls 0.23.46 +
+> serde_yaml_ng, `cargo audit` restored from exit 1 to exit 0), WBS registration debt (#456
+> registered as 3.17 + incomplete rows added "owning phase / whether blocks main line" fields).
 >
-> **1. Red before green**: 3 driver-level red criteria (`src/driver/tests/run_rootless.rs` —
-> rootless merged IR must not carry an `entry_function` (red state `Some("main.main")`), rootless
-> top-level executable statements must not report E3023 (red state produces no module), Bin control
-> `entry_function` preserved (persistent green state)) + 3 CLI e2e pins (standalone relative import
-> `run` (red state E5001), Script top-level statement execution, and two persistent green pins for
-> the #413 hint).
+> **I. Red before green**: 3 driver-level red criteria (`src/driver/tests/run_rootless.rs` —
+> rootless merged IR must not carry entry_function (red state `Some("main.main")`), rootless
+> top-level executable statement must not report E3023 (red state produces no module), Bin control
+> entry_function maintained (green state constant)) + 3 CLI e2e pins (standalone relative import run
+> (red state E5001), Script top-level statement execution and #413 hint two green state pins).
 >
-> **2. Implementation surface**: CLI `run` uniformly goes through `compile_project` (the project /
-> standalone fork in `run_file_with_diagnostics` deleted); the `entry_function` in Linking is gated
-> by `is_bin_role` (#413 T4 — Script does not auto-call `main`); the #413 hint keying changes from
-> `module.source_files.is_empty()` to a call-site project probe (after unification, `ModuleIR`
-> always carries `source_files`, so the original marker is invalid); `script_main_never_called`
-> adapted to the qualified-name form (function `{key}.main`, the global slot is measured to be the
-> same qualified name — IR evidence is authoritative, not inferred from comments).
+> **II. Implementation surface**: CLI `run` uniformly goes through `compile_project` (the
+> project/standalone fork in `run_file_with_diagnostics` deleted); Linking's `entry_function` gated
+> by `is_bin_role` (#413 T4 — Script doesn't auto-call main); #413 hint keying changed from
+> `module.source_files.is_empty()` to call point project probe (after unification ModuleIR always
+> carries source_files, original marker invalid); `script_main_never_called` adapted to qualified
+> name form (function `{key}.main`, global slot empirically same qualified name — based on IR
+> evidence, not comment inference).
 >
-> **3. Pre-existing gaps exposed by unification (fixed along the way, A/B/C class — only turn
-> failing programs into successful ones, zero impact on previously successful programs)**:
+> **III. Existing gaps exposed by unification (same-batch along-the-way fixes, A/B/C class — only
+> fixing failed programs to succeed, zero impact on previously successful programs)**:
 >
-> 1. **Explicit type-argument pre-specialized name** (`mk(Int)(5)`): `ir_gen` directly emits the
->    pre-specialized name per D6.3 (mono will strip the un-specialized original), and the three arms
->    of `resolve_call_target` (rename / aliases / dot prefix) don't cover the `mk(int64)` form ⇒ the
->    call site is dangling with E6006. Fix = this single resolver point adds a fourth arm (base-name
->    qualification, type-parameter strings kept verbatim). **Same shape reproduced in the Bin
->    project** (pre-existing defect, not introduced by this batch).
-> 2. **Script top-level `mut` assignment statements duplicate slot allocation**:
->    `extract_global_defs` and `register_global_slots` count `counter = counter + 1` (an `Assign` of
->    the same shape as the declaration) statement by statement ⇒ the same variable gets 3 slots, the
->    initialization writes to the later-allocated slot but the read uses the earlier-allocated one
->    (Add type mismatch at runtime). Fix = the two locations merge by name (same criterion, same
->    source).
-> 3. **Same-module constrained generic operator dispatch** (RFC-011 §5.2): mono dispatch rewriting
->    produces the bare name `Vec3.add`, while the merged table actually holds `{key}.Vec3.add`. Fix
->    = `qualify_deferred_method` deterministic candidate + table lookup validation (exact hit →
->    qualified hit by the generic's owning unit key → fall back to bare name; not a suffix
->    heuristic, same form as `resolve_generic_name`).
+> 1. **Explicit type argument pre-specialization name** (`mk(Int)(5)`): ir_gen per D6.3 directly
+>    emits specialized name (mono strips unspecialized original), `resolve_call_target` three arms
+>    (rename / aliases / dot prefix) all don't cover `mk(int64)` form ⇒ call point dangling E6006.
+>    Fix = add fourth arm to this single-point resolver (base name qualified, type parameter string
+>    preserved as-is). **Same-form reproduction in Bin project (pre-existing defect, not introduced
+>    by this batch)**.
+> 2. **Script top-level `mut` assignment statement duplicate slot allocation**:
+>    `extract_global_defs` and `register_global_slots` count `counter = counter + 1` (Assign
+>    same-form as declaration) per statement ⇒ same variable allocated 3 slots, initialization
+>    writes to later-allocated slot but read uses earlier-allocated slot (runtime Add type
+>    mismatch). Fix = two places merge by name (same criterion same source).
+> 3. **Same-module constrained generic operator dispatch** (RFC-011 §5.2): mono dispatch rewrite
+>    produces bare name `Vec3.add`, merged table actually is `{key}.Vec3.add`. Fix =
+>    `qualify_deferred_method` deterministic candidates + table verification (precise hit → generic
+>    owner unit key qualified hit → fallback to bare name current state; not suffix heuristic, same
+>    form as `resolve_generic_name`).
 >
-> **4. Registration gap (not fixed in this batch)**: constrained dispatch still produces E6006 when
-> the **type and generic definition are in different modules** (verified by a rootless two-file
-> probe; same shape in Bin) — root cause = `MonoType` user type names do not carry the defining
-> module, the proper fix belongs to P6 type-identity convergence; registered as WBS **3.18** (owned
-> by P3, precondition pending P6, does not block the main line), with the same surface noted in
-> `qualify_deferred_method`.
+> **IV. Registration gap (not fixed this batch)**: Constraint dispatch still E6006 when **type and
+> generic definition are in different modules** (rootless two-file probe verified; Bin same form) —
+> root cause = MonoType user type name doesn't carry definition module, correct fix belongs to P6
+> type identity convergence; registered WBS **3.18** (owns P3, prerequisite awaits P6, doesn't block
+> main line), `qualify_deferred_method` annotated same surface.
 >
-> **5. Test adaptation (honest recording)**: `tests/integration/multifile.rs` fixture was
-> supplemented with a manifest — what it tests is RFC-029 project orchestration (Bin auto-entry)
-> rather than Script semantics; one pin in `cli_e2e` (top-level diagnostic variable-name visibility)
-> and the `script_main_hint` fixture (7 cases) were synced to the qualified-name form — the
-> production consumer side only eats the merged IR, and the fixture drives the same form directly,
-> no need for a pipeline-product stand-in.
+> **V. Test Adaptation (honest registration)**: `tests/integration/multifile.rs` fixtures add
+> manifest — what it tests is RFC-029 project orchestration (Bin auto-entry) not Script semantics;
+> `cli_e2e` one pin (top-level diagnostic variable name visibility) and `script_main_hint` fixture
+> (7 cases) synchronized per qualified name form — production consumer side only takes merged IR,
+> fixtures directly drive same form, no pipeline product stand-in needed.
 >
-> **6. Final gate (closeout revision `084eaf87b`)**: `fmt --check` 0 / `clippy -D warnings` 0 /
+> **VI. Final gate (closing revision 084eaf87b)**: fmt --check 0 / clippy -D warnings 0 /
 > `cargo test --lib` **2733 passed** (+3 new pins) / `--test integration` **287 passed** /
-> `check-obligations` PASS (13·13·0·8) / `check-docs-truth` exit=0 / `check_tracking` exit=0 /
-> boundary three gates report-only / `markdownlint` 0 / `pnpm docs:build` 0 / IR snapshot zero drift
-> / corpus differential baseline regenerated **12 lines** — structured per-line check: exit / stdout
-> / diagnostic codes all match line by line, only stack-frame function names and variable names are
-> qualified by the unit key (passed manual review); after regeneration, `check-corpus-parity.py`
-> exit=0.
+> check-obligations PASS (13·13·0·8) / check-docs-truth exit=0 / check_tracking exit=0 / boundary
+> three gates report-only / markdownlint 0 / pnpm docs:build 0 / IR snapshot zero drift / corpus
+> diff baseline regeneration **12 rows** — line-by-line structural check: exit / stdout / diagnostic
+> codes all identical, only stack frame function names and variable names qualified per unit key
+> (manual review passed); after regeneration `check-corpus-parity.py` exit=0.
 >
-> **7. Process event (recorded faithfully)**: in this batch, during the pre-commit hook run, the
-> workspace docs were concurrently edited, and the hook's stash rollback consumed them and the
-> commit failed (a concurrent form warned about in the config comment) — discipline = no editing of
-> the workspace while the hook is running; the #455 commit was therefore split into two attempts
-> (the second was fully green).
+> **VII. Process events (recorded as-is)**: This batch once concurrently edited workspace documents
+> during pre-commit hook running, was eaten by hook's stash rollback and that commit failed (the
+> concurrent form warned about in configuration comment) — discipline = don't move workspace during
+> hook running; #455's commit was therefore split into two attempts (second all green).
 
-## P4 4.6.1 LSP Semantic Data Pipeline Unification (D55 Closeout)
+## P4 4.6.1 LSP Semantic Data Pipeline Unification (D55 Closing)
 
-> **4.6 batch record (registered 2026-10-16 → closed 2026-10-16)**: On 2026-10-16 the user directed
-> progression in the order 4.6 → 4.9 → 4.4 → P5, starting with 4.6; implementation form =
-> **fully-integrated single team** (following the previous batch's user instruction: no DAG, no team
-> building, single-session implementation + self-verification). Task definition (09 three-level
-> table): project-internal files' semantic data (SemanticDB) goes through the orchestrator's same
-> pipeline as diagnostics, with the same source; cross-file references carry `resolves_to`.
-> Acceptance: project-internal cross-file navigation hits the definition; semantic data and
-> diagnostics come from the same compilation.
+> **4.6 Batch Record (registered 2026-10-16 → closed 2026-10-16)**: User instructed 2026-10-16 to
+> advance in 4.6 → 4.9 → 4.4 → P5 order, do 4.6 first; implementation form = **complete single
+> team** (continuing last batch's user direction: no DAG, no team, single-session implementation +
+> self-verification). Task definition (09 three-level table): semantic data (SemanticDB) of
+> in-project files goes through orchestrator's same pipeline, same source as diagnostics; cross-file
+> references carry `resolves_to`. Acceptance: in-project cross-file jump hits definition; semantic
+> data and diagnostics come from the same compilation.
 >
-> **1. Current-state verification (verify before asserting)**: `didOpen` / `didChange` triggers
-> **two** compilations — diagnostics go through the unified Driver pipeline (already unified in
-> 4.2.3 / 4.2.6), and semantic data goes through the manual
-> lex→parse→`TypeChecker::new(uri).check_module_collect_all` in `src/lsp/server.rs` (no module
-> registry ⇒ project-internal `use` resolution fails, cross-file reference events are not produced,
-> navigation / rename / reference-find silently fail on imported symbols — the silent failure
-> registered as D55). The orchestration arm's checker uniformly names `"<module>"` (the SemanticDB
-> file identity is lost); `type_result` (containing `semantic_db`) is dropped when diagnostics are
-> non-empty and never emitted; the checker.rs's reference-drain unconditionally overwrites the
-> `resolves_to` DefId's file identity to the current file; neither `Export` nor `ModuleInfo` has a
-> definition-location surface.
+> **I. Current state empirical (verify before asserting)**: didOpen/didChange triggers **two**
+> compilations — diagnostics go through unified Driver pipeline (4.2.3/4.2.6 already unified),
+> semantic data goes through `src/lsp/server.rs`'s manual
+> lex→parse→`TypeChecker::new(uri).check_module_collect_all` (no module registry ⇒ in-project `use`
+> resolution fails, cross-file reference events don't occur, jump/rename/reference lookup silently
+> fails for imported symbols — D55's registered silent failure). Orchestrator arm's checker
+> uniformly names `"<module>"` (SemanticDB file identity lost), `type_result` (contains semantic_db)
+> is discarded when diagnostics non-empty and never externalized; `checker.rs` exhaustively
+> overwrites `resolves_to`'s DefId file identity to current file; `Export`/`ModuleInfo` both lack
+> definition location surface.
 >
-> **2. Red before green**: LSP e2e pin (`src/lsp/tests/cross_file.rs`) — after `didOpen` on
-> `main.yx` in a temp two-file project, send `GotoDefinition` for the `add_one` call site; **before
-> the fix it returns None (red, empirically the silent failure described above)**, and after the fix
-> it hits the definition at line 0 of `lib.yx` (green). One probe localization during the process:
-> the compiler-side chain (driver probe dump) was already fully connected, but the e2e was still
-> empty — the root cause is that `resolve_reference` does an exact match on the reference **start
-> point** (D55's current precise-only convention), and the test cursor landed in the middle of the
-> identifier; this tolerance is an existing behavior surface and is not touched in this batch (see
-> 7).
+> **II. Red before green**: LSP e2e pin (`src/lsp/tests/cross_file.rs`) — after didOpen main.yx on
+> temp two-file project, send GotoDefinition to `add_one` call point, **before fix returns None
+> (red, empirically the silent failure in last section)**, after fix hits lib.yx line 0 definition
+> (green). One probe positioning during process: compiler-side link (driver probe dump) already
+> fully connected but e2e still empty — root cause is `resolve_reference` precisely matches by
+> reference **start point** (D55 precise-only current state), test cursor falls at identifier
+> middle; this tolerance belongs to existing behavior surface, not changed this batch (see VII).
 >
-> **3. Implementation surface**: (1) `Export.definition_span` (harvested in `extract_module_info`
-> from the AST identifier node, same source and value as the typecheck definition event's
-> `def_span`; native `std` is always `None`) + `ModuleInfo.definition_file` (filled in the Registry
-> arm from `DiscoveredFile`, includes vendor; `std` always `None`); (2) the checker's reference
-> drain uses `import_def_locations` (the `use` line binding span → definition file + definition
-> span) to redirect the cross-file imported item's `resolves_to` out of the current file; std
-> imports are not registered and fall back to the `use` line as before; (3) the checker's module
-> identity is changed from the unified `"<module>"` to the unit file path (empirically all 4
-> consumer points of `env.module_name` are diagnostic-free); (4) the `DriverOutcome.semantic_db`
-> channel — collected in `CollectAll` form (LSP target file **regardless of diagnostic success or
-> failure** + `SingleFile` fallback) into the pool, and the LSP arm tail injects non-target files'
-> top-level export definition surface from the registry (`external_definitions`, so even un-opened
-> files can be navigated; type / submodule exports are not injected — the typecheck side's type
-> registration does not produce definition events, and both sides keep the same empty area); (5)
-> `orchestrator::analyze_source_in_project` (re-routes `check_source_in_project` to take the
-> diagnostic half); (6) the LSP `analysis.rs` single compilation entry replaces the manual pipeline
-> (`update_semantic_db` deleted), the World key uniformly normalizes the file URI (`uri.rs`:
-> `path_to_uri(uri_to_path(u))` idempotent normalization, drive-letter case and `%XX` encoding
-> differences normalized to the same key, cross-file DefIds therefore hit stably); 5 handlers + the
-> `semanticTokens` dual request connect to `db_key`.
+> **III. Implementation surface**: (1) `Export.definition_span` (extract_module_info harvested from
+> AST identifier node, same source same value as typecheck definition event's `def_span`; native std
+> always None) + `ModuleInfo.definition_file` (Registry arm fills by DiscoveredFile, including
+> vendor; std always None); (2) checker reference exhaustion via `import_def_locations` (use line
+> binding span → definition file + definition span) redirects cross-file imported items'
+> `resolves_to` out of this file; std imports unregistered, fall back to use line; (3) checker
+> module identity changed from unified `"<module>"` to unit file path (empirically all 4 consumption
+> points of `env.module_name` zero diagnostic consumption); (4) `DriverOutcome.semantic_db` channel
+> — CollectAll form (Lsp target file **regardless of diagnostic success or failure** + SingleFile
+> fallback) gathered, Lsp arm tail injects non-target file top-level export definition surface from
+> registry (`external_definitions`, can also jump to unopened files; type / submodule exports not
+> injected — typecheck-side type registration doesn't produce definition events, both sides maintain
+> consistent gap); (5) `orchestrator::analyze_source_in_project` (`check_source_in_project`
+> delegation takes diagnostic half); (6) LSP `analysis.rs` single compilation entry replaces manual
+> pipeline (`update_semantic_db` deleted), World key uniformly normalizes file URI (`uri.rs`:
+> `path_to_uri(uri_to_path(u))` idempotent normalization, drive letter case and %XX encoding
+> differences normalized to same key, cross-file DefId therefore stably hits); 5 handlers +
+> semanticTokens dual request connect to `db_key`.
 >
-> **4. Drive-by fixes (D59 split B class — old behavior silently did nothing, previously successful
-> programs are externally unaffected)**: ① project-internal file cross-file navigation / rename /
-> reference-find changed from silently failing to hitting the real definition; ② the old manual
-> pipeline deleted semantic info on lexical errors (highlighting disappeared) → the malformed AST's
-> highlighting is preserved (extension of the 4.2.6 editor philosophy); ③ when the target file has
-> type errors, semantic data is no longer dropped along with `type_result` (typing-in-progress
-> highlighting / navigation does not disappear).
+> **IV. Along-the-way fixes (D59 split Class B — old behavior silently does nothing, zero external
+> impact on previously successful programs)**: ① in-project file cross-file jump/rename/reference
+> lookup changed from silent empty to hitting real definition; ② when lexical errors occur, old
+> manual pipeline deleted semantic information (coloring disappeared) → broken AST coloring
+> preserved (4.2.6 editor philosophy extension); ③ when target file has type errors, semantic data
+> no longer discarded with `type_result` (mid-typing coloring/jump not lost).
 >
-> **5. Pins**: 6 driver-level (`src/driver/tests/lsp_semantic_db.rs` — target-file path key +
-> same-source diagnostic channel, cross-file `resolves_to` + external-definition surface round trip,
-> std import falls back to `use` line, errored file retention, single-file fallback path key,
-> single-file error retention) + 1 LSP e2e (red before green) + 4 URI normalization
-> (`src/lsp/tests/uri.rs` — drive-letter conversion, space encoding, idempotent normalization,
-> non-`file` scheme passthrough).
+> **V. Pins**: 6 driver-level (`src/driver/tests/lsp_semantic_db.rs` — target file path key +
+> same-source diagnostic channel, cross-file resolves_to + external definition surface round-trip,
+> std import fallback use line, error file retention, single file fallback path key, single file
+> error retention) + 1 LSP e2e (red before green) + 4 uri normalization (`src/lsp/tests/uri.rs` —
+> drive letter conversion, space encoding, idempotent normalization, non-file scheme pass-through).
 >
-> **6. Mutation verification (`scratch.py trial`, mechanically reversible)**: batch tree `wbs-46` @
-> closeout revision `39546020`; both mutations made the hit pin turn red, and after restoration the
-> blob matches HEAD byte-for-byte + `git status` CLEAN — m1 removes the `import_def_locations`
-> registration (`statements.rs`) ⇒ cross-file driver pin + LSP e2e pin turn red, the other 7 pins
-> stay green; m2 removes the `external_definitions` injection (`arms.rs`) ⇒ the same two pins turn
-> red (round-trip resolution loses anchor), the other 7 stay green. The batch tree has been `gc`-ed
-> (released 4.8 GB, `status` shows no batch tree).
+> **VI. Mutation verification (scratch.py trial, mechanically reversible)**: batch tree wbs-46 @
+> closing revision 39546020, two mutations both cause hit pins to go red, after restoration blob
+> identical to HEAD + git status CLEAN — m1 removed `import_def_locations` registration
+> (statements.rs) ⇒ cross-file driver pin + LSP e2e pin red, remaining 7 green; m2 removed
+> `external_definitions` injection (arms.rs) ⇒ same two pins red (round-trip parsing loses anchor),
+> remaining 7 green. Batch tree gc'd (freed 4.8 GB, `status` no batch trees).
 >
-> **7. Final gate (closeout revision `39546020`)**: `fmt --check` 0 / `clippy -D warnings` 0 /
+> **VII. Final gate (closing revision 39546020)**: fmt --check 0 / clippy -D warnings 0 /
 > `cargo test --lib` **2744 passed** (+11 new pins) / `--test integration` **287 passed** / corpus
-> differential **byte-for-byte zero drift** / IR snapshot zero drift / `check-obligations` PASS
-> (13·13·0·8, the consumer anchor for `semantic_db`'s non-obligation reason is synchronized with
-> `server.rs:482` and the 02 §Obligation Field Table) / `check-docs-truth` 0 / `docs-examples` 258
-> entries 0 failures / `docs-orphan` 0 / `markdownlint` only two MD056 in the user's unsubmitted 032
-> remain in the whole repo (user's own edits, untouched) / `pnpm docs:build` 0. **Process event
-> (recorded faithfully)**: an MD037 at `en/09a-wbs-history.md:54` was introduced by the
-> auto-translate bot when re-translating the previous batch's 09a (no space in the zh original) and
-> was fixed in this batch — `markdownlint` red was not on this batch's change surface but is in the
-> same file as 09a, and is recorded together. **Carry-over observation (registered for discussion,
-> not touched)**: `resolve_reference` only does exact match on the reference start point — when the
-> cursor lands in the middle of the identifier, navigation / hover / rename silently does nothing
-> (D55 precise-only current state, same form across the file); if tolerance matching is required, it
-> is an independent behavior change and is reported to the user for a decision.
+> diff **byte-for-byte zero drift** / IR snapshot zero drift / check-obligations PASS (13·13·0·8,
+> `semantic_db` non-obligation reason consumer anchor synchronized server.rs:482 and 02 §Obligation
+> Field Table) / check-docs-truth 0 / docs-examples 258 entries 0 failures / docs-orphan 0 /
+> markdownlint repo only remaining user-unsubmitted 032 two MD056 (user's own editing, untouched) /
+> pnpm docs:build 0. **Process events (recorded as-is)**: en/09a-wbs-history.md:54 one MD037 was
+> introduced by auto-translate bot when retranslating last batch's 09a (zh source had no space),
+> this batch fixed in passing — markdownlint red not this batch's change surface but in same file as
+> 09a, registered together. **Remaining observation (registered for discussion, untouched)**:
+> `resolve_reference` only precisely matches by reference start point — when cursor falls at
+> identifier middle, jump/hover/rename silently does nothing (D55 precise-only current state,
+> all-file form isomorphic), tolerance matching would be independent behavior change, report to user
+> for decision.
 >
-> **Same-day follow-up batch (4.6.2, landed after user decision)**: after the wrap-up report was
-> delivered, the user ruled on "carry-over observation ①" with "yes, then change it" — the
-> lookup-key tolerance was implemented per plan A: the four handlers' (definition / hover /
-> references / rename) lookup keys changed from the cursor position (after UTF-16 conversion) to the
-> **identifier's own start point** located by `find_identifier_at_position` (same coordinate system
-> as the semantic event, no conversion); `resolve_reference`'s start-point exact-match semantics are
-> unchanged (D55 precise-only unchanged). The definition-point fallback decision for `references` /
-> `rename` (`start <= col < end`) holds under the same form for the identifier start point. Red
-> before green: the middle-cursor pin for `definition` first red (None) then green; one
-> middle-cursor pin for each of the four handlers + cross-file e2e start-point / middle-point
-> dual-position assertion; `--lib` 2748 (+4) all green, `clippy -D warnings` 0. Registered as WBS
-> 4.6.2 (three-level count 150→151).
+> **Same-day continued batch (4.6.2, implemented after user decision)**: After closing report
+> delivery user decided on "remaining observation ①" "OK, then change it" — implemented lookup key
+> tolerance per Option A: 4 handlers' (definition/hover/references/rename) lookup key changed from
+> cursor position (via UTF-16 conversion) to **identifier's own start point** already located by
+> `find_identifier_at_position` (same coordinate system as semantic events, no conversion needed);
+> `resolve_reference`'s start point precise matching semantic unchanged (D55 precise-only
+> unchanged). Definition point fallback judgment (start <= col < end) for references/rename also
+> holds for identifier start point isomorphically. Red before green: definition middle cursor pin
+> first red (None) then green; 4 handlers middle cursor 1 pin each + cross-file e2e start/middle
+> dual position assertion, `--lib` 2748 (+4) all green, clippy -D warnings 0. Register WBS 4.6.2
+> (three-level count 150→151).
 
-## P4 4.9 Reference Pool Correct Implementation (RFC-029f Fix) — Round 1 Closeout (4.9.1 / 4.9.2 / 4.9.3)
+## P4 4.9 Reference Pool Correct Implementation (RFC-029f Correction) — Round 1 Closing (4.9.1 / 4.9.2 / 4.9.3)
 
-> **4.9 batch record (registered 2026-10-16 → closed 2026-10-16)**: On 2026-10-16 the user decided
-> to merge the three related three-level tasks 4.9.1 / 4.9.2 / 4.9.3 **into one team for one round**
-> (reason: they all belong to "the pool's source and identity" side; merged landing avoids repeated
-> rewrites of the intermediate state after `collect_project_refs` is deleted; 4.9.4 / 4.9.5 belong
-> to consumer refinement and test-pool separation, depend on the `use` path resolution from 4.6.1,
-> and forcing them into the same batch would widen the gate surface). #450 ownership **pending
-> decision** — the evidence points to "overload-resolved name not passed back to the reference
-> count" class, and it still reproduces under the form landed in round 1; per user decision 丙 it is
-> dispatched. Frozen rev = `7e62b0454` (parent commit `492f25eef` is the pre-fix baseline);
+> **4.9 Batch Record (registered 2026-10-16 → closed 2026-10-16)**: User decided 2026-10-16 to merge
+> 4.9.1 / 4.9.2 / 4.9.3 three related three-level tasks **into one team, one round** (reason: they
+> all belong to the "pool source and identity" surface, merged implementation avoids the
+> intermediate state repeated rewriting after `collect_project_refs` deletion; 4.9.4 / 4.9.5 belong
+> to consumption refinement and test pool separation respectively, depend on 4.6.1's `use` path
+> resolution, forcing them into same batch would expand the gate surface). #450 ownership **pending
+> decision** — evidence shows it belongs to "overload resolution name not passed back to reference
+> count" class, still reproduces under round 1's already-landed form, register and handle as
+> independent WBS item (lead recommends A: register as independent item in round 2; **pending user
+> decision**). Frozen rev = `3863a9ff0` (parent commit `62f6e1a59` is pre-fix baseline);
 > verification PASS attempt `aab92fe0` (i.e. t2); review pass attempt `96452696` (i.e. t3). Evidence
-> archived at `target/yx-scratch/yx49/EVIDENCE.md` (containing 8 mutation patches and
-> `warn_compare_v8.json`).
+> archive: `target/yx-scratch/yx49/EVIDENCE.md` (includes 8 mutation patches and
+> warn_compare_v8.json).
 >
-> **1. Merge decision**
+> **I. Merge Decision**
 >
-> 1. **The decision itself**: three related three-level tasks merged into round 1. **4.9.4 (consumer
->    refinement) / 4.9.5 (test-pool separation) next round** — the former depends on the `use` path
->    resolution delivered by 4.6.1 (already landed at `39546020`, can start); the latter needs to be
->    in the same batch as the RFC-029f table absorption, registered at the end of RFC-029f pending
->    change.
-> 2. **Reason**: (a) 4.9.1 / 4.9.2 / 4.9.3 are mutual preconditions (4.9.2 changes the pool type →
->    4.9.1's assembly side must be rewritten → only then does 4.9.3 have the role table for
->    denominator judgment); doing them in separate rounds would necessarily write an intermediate
->    state and then change it twice; (b) all three belong to the "pool's source and identity" side,
->    while 4.9.4 / 4.9.5 are another side, and the split is by "cohesion" rather than "independently
->    revertible".
-> 3. **Merge result**: a single commit `7e62b0454` (one line `:recycle: refactor(driver)`), a single
->    push, a single batch of gates.
+> 1. **Decision itself**: three related three-level tasks merged into round 1. **4.9.4 (consumption
+>    refinement) / 4.9.5 (test pool separation) next round** — the former depends on 4.6.1's
+>    delivered `use` path resolution (already landed in `39546020`, can start); the latter grouped
+>    with RFC-029f table incorporation, registered in RFC-029f end section pending change.
+> 2. **Reason**: (a) 4.9.1 / 4.9.2 / 4.9.3 mutually prerequisite (4.9.2 changes pool type → 4.9.1
+>    assembly surface needs rewriting → only then 4.9.3 has denominator-judged role table), doing
+>    them in separate rounds inevitably means writing one intermediate state then changing twice;
+>    (b) all three belong to "pool source and identity" surface, 4.9.4 / 4.9.5 belong to another
+>    surface, batch division is by "cohesion" rather than "independently revertable".
+> 3. **Merge result**: single commit `3863a9ff0` (one line `:recycle: refactor(driver)`), single
+>    push, single batch gate. **Hash explanation**: pre-push `git pull --rebase` merged in
+>    auto-translate bot's commit (`72f364169`), all this batch's hashes rewritten — implementation
+>    `3863a9ff0`→`3863a9ff0`, pre-fix baseline combined with their documentation commit
+>    `62f6e1a59`→`62f6e1a59`, their code commit `33f14e8ab`→`b122b7ad1`. **External references all
+>    use post-push hash** (old hashes unreachable in fresh clone).
 >
-> **2. Red / green measurement criteria for the five criteria**
+> **II. Five Criteria Red/Green Empirical Dimensions**
 >
-> | #   | Criterion                                                    | Red state (pre-fix / P1 directory-scan replay patch)                                                                                                               | Green state (round 1 landed)                                                                                                                                                                                                                                                                                                                                                                                                |
-> | --- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-> | ①   | Pool root = package target (#334)                            | Directory recursive scan ⇒ identifiers in files under `tests/` also enter the pool, exempting unused production-code definitions                                   | `collect_package_refs` (`helpers.rs:481`) calls `discover_with_used` per `ExplicitSurfaces` root; full-root degradation falls back to `collect_compilation_refs` (`helpers.rs:454`)                                                                                                                                                                                                                                         |
-> | ②   | Pool granularity = `(module, name)`                          | Same-named local variable (`let foo = …`) accidentally exempts the same-named top-level definition (`fn foo()`); `foo` in a.yx and `foo` in b.yx cross-contaminate | `HashMap<String, HashSet<String>>` (key = module key); `collect_ref_pool` (`helpers.rs:429-449`) is the sole assembly entry; `arms.rs:603-609`'s `other_module_refs` takes the union of all other modules' entries and sends them to `DeadCodeAnalyzer`; the module's own names (top-level definitions and local bindings, with `use`-imported names as exceptions) no longer exempt same-name definitions in other modules |
-> | ③   | `FileRole::Script` does not use the pool                     | Script is affected by references from other files in the project                                                                                                   | `arms.rs:611-623`'s `match us.role` only assembles for `Bin` / `Internal` (`set_exempt_pub`) and `Lib` (`set_cross_file_refs`); Script / Test go through the `_ => {}` default arm (judged by the file-internal definition-use graph)                                                                                                                                                                                       |
-> | ④   | Fixture A: definition at line 4 of lib.yx must report W1001  | Pre-fix: reports `W1003@1` (actually "unused import"), not W1001                                                                                                   | Red-state measurement (red 1 fixture `red1`) reports `W1001@3`; green state all 6 fixtures PASS                                                                                                                                                                                                                                                                                                                             |
-> | ⑤   | Fixture B: definition at line 4 of main.yx must report W1001 | Pre-fix: reports `W1003@1`                                                                                                                                         | Same as above                                                                                                                                                                                                                                                                                                                                                                                                               |
+> | #   | Criterion                                              | Red state (pre-fix / P1 directory scan backflow patch)                                                                                                 | Green state (round 1 landed)                                                                                                                                                                                                                                                                                                                                                                           |
+> | --- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+> | ①   | Pool root = package target (#334)                      | Directory recursive scan ⇒ files under tests/ also enter pool, exempting production code unused definitions                                            | `collect_package_refs` (`helpers.rs:481`) calls `discover_with_used` per `ExplicitSurfaces` root; when all roots degenerate, fallback `collect_compilation_refs` (`helpers.rs:454`)                                                                                                                                                                                                                    |
+> | ②   | Pool granularity = `(module, name)`                    | Same-name local variable (`let foo = …`) accidentally exempts same-name top-level definition (`fn foo()`); a.yx's `foo` and b.yx's `foo` cross-pollute | `HashMap<String, HashSet<String>>` (key = module key); `collect_ref_pool` (`helpers.rs:429-449`) assembly single entry; `arms.rs:603-609`'s `other_module_refs` takes union of "all modules except this unit" entries and sends to `DeadCodeAnalyzer`; module's own names (top-level definition and local binding, `use` import name exception) no longer exempts other module's same-name definitions |
+> | ③   | `FileRole::Script` doesn't use pool                    | Script affected by references from other in-project files                                                                                              | `arms.rs:611-623`'s `match us.role` only assembles for `Bin`/`Internal` (`set_exempt_pub`) and `Lib` (`set_cross_file_refs`), Script/Test goes through `_ => {}` default arm (judged by in-file definition-use graph)                                                                                                                                                                                  |
+> | ④   | Fixture A: lib.yx line 4 definition must report W1001  | Before fix: reports `W1003@1` (actually "unused import"), not W1001                                                                                    | Red state measurement (red 1 fixture red1) reports `W1001@3`; green state all 6 fixtures PASS                                                                                                                                                                                                                                                                                                          |
+> | ⑤   | Fixture B: main.yx line 4 definition must report W1001 | Before fix: reports `W1003@1`                                                                                                                          | Same as above                                                                                                                                                                                                                                                                                                                                                                                          |
 >
-> **"Reasoned red" for criterion ②** (self-stated by implementer, closed by verifier): the
-> `let foo = …` in the red2 fixture is in `helper.yx`; under the old pool's bare-name union, `foo`
-> is treated as a whole as "used by helper", and `foo` in `lib.yx` is exempted. **Measurement**:
-> red2 fixture vs. pre-fix binary → no W1001 (old-caliber exemption); red2 vs. post-fix binary →
-> W1001@1.
+> **Criterion ②'s "derived red"** (implementer self-stated + verifier closed): red2 fixture's
+> `let foo = …` in helper.yx; old pool under bare-name union treats `foo` as a whole "used by
+> helper", lib.yx's `foo` exempt. **Measurement**: red2 fixture vs pre-fix binary → no W1001 (old
+> dimension exempt); red2 vs post-fix binary → W1001@1.
 >
-> **Criterion ③** (Script does not use the pool) red-state fixture **first version failed**: the
-> first version of the fixture placed a same-named local variable in the same file, triggering E2010
-> (the language does not allow same-module shadowing of a top-level definition); after moving to
-> another module (`helper.yx`), it became a reasoned red state. Both t3's review and t2's verifier
-> independently reproduced this, **not a contract defect** — same-module shadowing is a hard
-> constraint of the language, and the fixture must cross modules.
+> **Criterion ③** (Script doesn't use pool) red state fixture **first version failed**: first
+> version fixture put same-name local variable in same file triggering E2010 (this language
+> disallows same-module shadowing of top-level definition), moved to another module (helper.yx) for
+> derived red state. This point was independently reproduced by t3 review and t2 verification, **not
+> a contract defect** — same-module shadowing is this language's hard constraint, fixtures must be
+> cross-module.
 >
-> **3. Correspondence between the +8 and +16 counts** (**as established by t3's review**)
+> **III. +8 and +16 Two Sets of Counting Correspondence** (**t3 review confirmed as authoritative**)
 >
-> The C section of `target/yx-scratch/yx49/EVIDENCE.md` writes `+16/−0`, but omits the **"new
-> fixture records"** component — the v8 instrument (`warn_compare_v8.json`, 331-file symmetric diff,
-> `only_before=0`) convention **includes** new fixtures; the t1 implementer's self-built "+8" is
-> **warn-before / warn-after (325 entries each) aggregated by fixture** (each member file's `check`
-> runs once). The review maps these line by line:
+> `target/yx-scratch/yx49/EVIDENCE.md`'s section C writes `+16/−0`, but missed the **"new fixture
+> records"** component — v8 instrument (`warn_compare_v8.json`, 331 files symmetric diff,
+> `only_before=0`) dimension **includes** new fixtures; t1 implementer's self-built "+8" is
+> **warn-before / warn-after (325 entries each) aggregated by fixture** (each member file checked
+> once). Review item-by-item mapping:
 >
-> - **+8** (8 new warnings, all `check <non-entry-file>`, `check <entry-file>` zero change)
+> - **+8** (`8` new warnings, all `check <non-entry-file>`, `check <entry-file>` zero change)
 >   - `cross-file-method/lib.yx`: `W1002@2(Point)`, `W1005@4(get_x)`, `W1005@8(norm_sq)`
 >   - `subdirectory-module/util/math.yx`: `W1001@2(double)`
 >   - `type-error-in-lib/lib.yx`: `W1004@2(value)`
 >   - `use-constant/lib.yx`: `W1004@2(value)`
 >   - `use-type-and-function/lib.yx`: `W1001@4(distance)`, `W1002@2(Point)`
->   - **Cause (unified attribution)**: these 8 fixtures all **did not declare a package target** ⇒
->     4.9.1's root degrades to the checked file's own compilation set, and the consumer `main.yx` is
->     not in it; this is a designed-in change (before, these files' `check` surface was already
->     zero-warning, not an exemption path). The repo-root `yaoxiang.toml` is empty ⇒ the same
->     degradation path is empirically valid.
+>   - **Cause (unified attribution)**: these 8 fixtures all **did not declare package target** ⇒
+>     4.9.1 root degenerated to checked file's own compilation set, consumer main.yx not in it; this
+>     is design-intended change (before fix these files' check surface was zero warnings anyway, not
+>     exemption path). Repo root `yaoxiang.toml` is empty file ⇒ same degenerate path empirically
+>     holds.
 > - **+16 residual 8** (check surface = `ref-pool-compile-set/{lib.yx,main.yx,stray.yx}` +
 >   `ref-pool-module-identity/{helper.yx,lib.yx,main.yx}`)
->   - These check-surface files have `exit=None` in t1's `warn-before.jsonl` (the sampling point in
->     time **does not exist** — these are new fixtures added in this batch). So the "+8"'s "+ 0 − 0"
->     differential does not include them, while the +16 v8 symmetric differential does.
->   - In `v8`, only `W1001@2(probe)` remains for `stray.yx`: the reason is that the pre-fix binary
->     also reports `probe@stray.yx:4` (the fixture runs `probe` once per file), and after
->     **cancellation** only one lib entry remains — the three data sets (+8 / +16 / dual-binary
->     ABBA) are mutually consistent.
-> - **8 new fixture entries** vs. **+16 residual 8 entries**: the same batch of files
->   (`ref-pool-compile-set/` and `ref-pool-module-identity/` newly added in 4.9.1 / 4.9.2), the
->   instrument treats each of their `check` runs as an independent record — the same file may
->   trigger different diagnostic entries for multiple `role / context`.
+>   - These check surface files in t1's `warn-before.jsonl` have `exit=None` (shooting time point
+>     **didn't exist** — these are new fixtures added this batch). So +8's "+ 0 − 0" diff doesn't
+>     include them, +16's v8 symmetric diff does.
+>   - `v8`'s `stray.yx` has only `W1001@2(probe)` remaining: reason is pre-fix binary also reports
+>     `probe@stray.yx:4` (this fixture runs `probe` per file), **cancel out** leaving only lib's 1
+>     entry — three data sources (+8 / +16 / dual binary ABBA) mutually consistent.
+> - **8 new fixtures** vs **+16 residual 8 entries**: same batch of files (4.9.1 / 4.9.2 added
+>   `ref-pool-compile-set/` and `ref-pool-module-identity/`), instrument treats each check as
+>   independent record — same file may trigger different diagnostic entries for multiple
+>   `role / context`.
 >
-> **Conclusion**: **+16 = +8 (aggregated by fixture) ∪ 8 new fixture entries** — both counts are
-> correct, **different conventions**: t1's "8 new entries" is the fixture-layer convention, t2's
-> "+16 entries" is the file-layer convention (symmetric diff includes new fixtures). The review's ①
-> +8⊆+16 is established; **review ② writes "do not copy EVIDENCE.md's C section verbatim"** — C
-> section omits the "new fixture records" component, and this entry is rewritten based on t3's
-> review `pass` conclusion.
+> **Conclusion**: **+16 = +8 (aggregated by fixture) ∪ 8 new fixture entries** — both counts
+> correct, **different dimensions**: t1's "added 8 entries" is fixture-layer dimension, t2's "+16
+> entries" is file-layer dimension (symmetric diff includes new fixtures). t3 review ① +8⊆+16
+> confirmed; **review ② wrote "don't copy EVIDENCE.md section C verbatim"** — section C missed "new
+> fixture records" component, this item rewritten per t3 review's `pass` conclusion.
 >
-> **4. Mutation experiments (mechanically reversible, all via `scratch.py trial`)**
+> **IV. Mutation Experiments (Mechanically Reversible, All `scratch.py trial`)**
 >
-> 8 mutation patches (`target/yx-scratch/yx49/*.patch`, p1 directory scan, p2b `use` imported name
-> removal, p3b Script access to the pool, p3 flat consumption, p4 std access to the pool, p7final
-> self-built 4 criteria, p8 std close, p9 vendor access to the pool + `p_stack2` / `p_stack3`
-> stacking surfaces). Each trial output contains: HEAD blob → mutated blob → restored blob matches
-> HEAD = yes + `git status` CLEAN. The local `core.autocrlf=true` requires `GIT_CONFIG_*` injection
-> of `false` (`trial_env.ps1`), otherwise the patch's new lines become CRLF and both apply / restore
-> fail — **only affects the mechanical nature of the patch, not the tested behavior**.
+> 8 mutation patches (`target/yx-scratch/yx49/*.patch`, p1 directory scan, p2b use import name
+> removal, p3b script takes pool, p3 flat consumption, p4 std takes pool, p7final self-built 4
+> criteria, p8 std off, p9 vendor takes pool + p_stack2 / p_stack3 stacked surface). Each trial
+> output contains: HEAD blob → post-mutation blob → post-restore blob identical to HEAD = yes +
+> `git status` CLEAN. Local `core.autocrlf=true` needs `GIT_CONFIG_*` injection of `false`
+> (`trial_env.ps1`), otherwise patch new lines converted to CRLF causing apply/restore dual failure
+> — **only affects patch mechanics, doesn't change tested behavior**.
 >
-> **5. Process events / environment lessons (must read for handoff to next round)**
+> **V. Process Events / Environment Lessons (Required Reading for Next Round Handover)**
 >
-> 1. **`core.autocrlf` injection**: the local `core.autocrlf=true` must have `false` injected via
->    `GIT_CONFIG_*` to keep the patch mechanically reversible; see
->    `target/yx-scratch/yx49/trial_env.ps1`. **Do not reuse** any trial script that lacks the
->    injection in the next round.
-> 2. **Same-tree `trial` must be strictly serial**: `trial` and `cargo build` **must be strictly
->    serial** on the same tree. `trial`'s internal `git apply` and `cargo build` both touch the
->    worktree; in parallel you get two kinds of races — "patch not yet complete but already seen by
->    build" or "build and apply interlock".
-> 3. **Confirm sync when `trial` rebuilds the binary**: after `trial` completes it rebuilds the
->    tree's binary (cargo's fingerprint includes the source path, **switching tree = full
->    rebuild**); before subsequent measurement you must confirm `bin/yaoxiang-rs` is in sync with
->    HEAD. **This round once used a residual mutation binary to measure fake data**, which was
->    corrected by rebuilding and re-measuring.
-> 4. **Reason for the second tree `yx49-b`**: cross-comparison needs the pre-fix binary
->    (`492f25eef`), which is not available in the batch; `scratch.py init yx49-b` opened a second
->    tree (eating another full build). **The tree has been released** (see 6), and the deletion is
->    left to the closeout's `gc` for handling.
-> 5. **Reason for supplementing the two Internal-case fixtures in `cli_e2e` to be a legal package
->    (adding `[run].main`, assertions untouched)**: the pre-fix `cli_e2e`'s two `Internal` role
->    pinned-board fixtures **did not declare `[run].main`** ⇒ after 4.9.1 landed, `compile_project`
->    went through the `ExplicitSurfaces` root-call path and could not find `main` ⇒ the entire batch
->    of 2 fixtures' behavior drifted from "Script fallback" to "entry not found" — this is a
->    fallback behavior introduced by 4.9.1, not a defect. After adding the `[run].main` field, the
->    two fixtures go through the normal package path, and the **assertions** (exit code / diagnostic
->    code / warning set) are unchanged verbatim.
-> 6. **Safe way to delete the second-round tree**: after `release`, use
->    `python scripts/dev/scratch.py rm yx49-b` (not `rm -rf`); it will verify "no mount" before
->    deletion. It has been released before the batch closeout, and the next step is `gc` to clean up
->    naturally.
+> 1. **core.autocrlf injection**: Local `core.autocrlf=true` must have `false` injected via
+>    `GIT_CONFIG_*` to ensure patches are mechanically reversible; see
+>    `target/yx-scratch/yx49/trial_env.ps1`. **Next round don't reuse** any trial scripts without
+>    injection.
+> 2. **Same-tree trial serial**: `trial` and `cargo build` on the same tree **must be strictly
+>    serial**. `trial`'s internal `git apply` and `cargo build` both touch worktree, parallel can
+>    produce "patch incomplete when build sees it" or "build and apply deadlock" two types of races.
+> 3. **Trial rebuild binary needs sync confirmation**: After `trial` completes it rebuilds in-tree
+>    binary (cargo's fingerprint contains source paths, **switching tree = full rebuild**), before
+>    subsequent measurement must confirm `bin/yaoxiang-rs` synchronized with HEAD. **This round once
+>    used residual mutation binary to measure false data**, rebuilt and remeasured for correction.
+> 4. **Second tree yx49-b's creation reason**: Comparison needed pre-fix binary (62f6e1a59), no
+>    existing product in batch; `scratch.py init yx49-b` opened second tree (ate another full
+>    build). **Tree released** (see VI), deletion handled by batch closing `gc` disposition.
+> 5. **cli_e2e two Internal test case fixtures patched to legal package (add `[run].main`,
+>    assertions unchanged) reason**: Before fix `cli_e2e`'s two `Internal` role pin fixtures
+>    **didn't declare `[run].main`** ⇒ after 4.9.1 landed `compile_project` went through
+>    `ExplicitSurfaces` root call path, couldn't find `main` ⇒ whole batch 2 fixtures behavior
+>    drifted from "Script fallback" to "entry not found" — is 4.9.1-introduced fallback behavior not
+>    defect. After adding `[run].main` field two fixtures go through normal package path,
+>    **assertions** (exit code / diagnostic code / warning set) byte-for-byte unchanged.
+> 6. **Second round tree deletion safe way**: After release use
+>    `python scripts/dev/scratch.py rm yx49-b` (not `rm -rf`), will verify "no mount" then delete.
+>    Released before this batch closes, next step `gc` naturally cleans.
 >
-> **6. Batch tree state**
+> **VI. Batch Tree Status**
 >
-> Before closeout: `yx49` has been released (4.8 GB freed), `yx49-b` has been released. Neither tree
-> has a mount, and the status can be re-checked via `scratch.py status`. The task output ends with
-> the full `scratch.py gc` status.
+> Before closing: yx49 released (4.8 GB freed), yx49-b released. Both trees unmounted, status
+> verifiable in `scratch.py status`. This task output appends `scratch.py gc` complete status.
 >
-> **7. RFC-029f "Known Defects" table flip**
+> **VII. RFC-029f "Known Defects" Table Flip**
 >
-> The previous version (2026-10-09) described "three design defects in the reference pool" in the
-> present tense (including deleted code locations such as `collect_project_refs` /
-> `orchestrator.rs:603-648` / `orchestrator.rs:393-396`). The closeout of this batch synchronously
-> rewrites it to "**known defect: landed (2026-10-16, WBS 4.9 round 1)**": ① the current pool's root
-> = `collect_package_refs` (`helpers.rs:481`), resolved per `ExplicitSurfaces`, no directory scan; ②
-> the current pool type `HashMap<String, HashSet<String>>` (key = module key), the sole assembly
-> entry `collect_ref_pool` (`helpers.rs:429-449`), the consumer `arms.rs:603-609`; ③ the current
-> Script does not access the pool, `arms.rs:611-623`'s `match us.role` default arm. **All
-> `file:line` are retaken on the referenced revision `7e62b0454`**. `collect_project_refs` and
-> `orchestrator.rs` have been split per P4 4.2.9 (`c59fb751`) and moved into
-> `src/driver/{state,arms,helpers}.rs`; the old locations in the table no longer hit — this is a fix
-> of "declaration not matching fact" (t3 review note ①).
+> Previous version (2026-10-09) described in present tense "three design defects of reference pool"
+> (including deleted code positions like `collect_project_refs` / `orchestrator.rs:603-648` /
+> `orchestrator.rs:393-396`). This batch closing synchronously rewrites to "**known defects: landed
+> (2026-10-16, WBS 4.9 Round 1)**": ① current pool's root = `collect_package_refs`
+> (`helpers.rs:481`), resolves per `ExplicitSurfaces`, doesn't scan directories; ② current pool type
+> `HashMap<String, HashSet<String>>` (key = module key), assembly single entry `collect_ref_pool`
+> (`helpers.rs:429-449`), consumer end `arms.rs:603-609`; ③ current Script doesn't take pool,
+> `arms.rs:611-623`'s `match us.role` default arm. **All file:line re-fetched on cited revision
+> `3863a9ff0`**. `collect_project_refs` and `orchestrator.rs` already moved to
+> `src/driver/{state,arms,helpers}.rs` with P4 4.2.9 split (`c59fb751`), old positions in table no
+> longer hit — this is "declaration inconsistent with fact" fix (t3 review note ①).
 >
-> **8. Final gate (closeout revision `7e62b0454`)**
+> **VIII. Final Gate (Closing revision `3863a9ff0`)**
 >
-> `fmt --check` 0 / `clippy -D warnings` 0 / `cargo test --lib` 2754 passed / `--test integration`
-> 287 passed / `yx_multifile_runner` all green / corpus baseline **only +2 lines** (two new
-> fixtures' behavior run, 338, a339, 340; the other 342 lines are byte-for-byte unchanged) / IR
-> snapshot 204 entries zero drift / `check-obligations` PASS (13·13·0·8) + selftest /
-> `check-docs-truth` 0. **Process event**: in this batch one `cargo` build converted script line
-> endings to CRLF due to `core.autocrlf`, and `yaoxiang-rs` under the team scratch path reported
-> `BadImage` on startup, empirically due to encoding inconsistent with the git index — passed after
-> rebuild (parallel with the 4.6 batch's "external whole-tree discard" lesson, but with a different
-> cause).
+> fmt --check 0 / clippy -D warnings 0 / `cargo test --lib` 2754 passed / `--test integration` 287
+> passed / `yx_multifile_runner` all green / corpus baseline **only +2 rows** (two new fixtures
+> behavior run, 338a339,340; another 342 rows byte-for-byte unchanged) / IR snapshot 204 entries
+> zero drift / check-obligations PASS (13·13·0·8) + selftest / check-docs-truth 0. **Process
+> event**: this batch once cargo build failed due to `core.autocrlf` converting script line endings
+> to CRLF, team scratch path `yaoxiang-rs` started with `BadImage`, empirically encoding
+> inconsistent with git index — passed after rebuild (parallel to 4.6 batch's "external whole-tree
+> discard" lesson, different cause).
 >
-> **9. Carry-over (handoff to the next round)**
+> **IX. Remaining (Handover to Next Round)**
 >
-> 1. **#450 ownership decision**: the evidence points to the "overload-resolved name not passed back
->    to the reference count" class, **and it still reproduces under the form landed in round 1** —
->    per user decision 丙, it is dispatched. **#450 probe**: the dual-binary same set
->    `{W1002@2, W1005@4}` (empirically, rootless form) has no direct relationship with the round 1
->    changes, but the fix for #450 may need to wait for 4.9.4 (consumer refinement) — because the
->    root cause is "passing the overload-resolved name to the reference count" which needs the
->    precise consumption surface of the `use` item, and 4.9.4's "actually used after import" is the
->    precise version of the same criterion.
-> 2. **`dead_code.rs:683` pointer nit**: the comment reads "the two pools' assembly convention is in
->    `collect_compilation_refs` on the driver side" — but `collect_compilation_refs` is actually the
->    fallback path, and the main path is `collect_package_refs` (`helpers.rs:481`). The comment is
->    out of step with the code's main path (**not in this batch's write scope**); it is left to be
->    corrected when 4.9.4 / 4.9.5 land.
-> 3. **4.9.4 / 4.9.5 preconditions unlocked**: 4.6.1 (`use` path resolution) has been delivered by
->    `39546020`; 4.9.4 can start immediately. 4.9.5 (test-pool separation) needs to first settle the
->    RFC-029f table absorption (paved by this batch's "7.").
-> 4. **`yaoxiang check` multi-file `run` never reports dead-code-family warnings** (WBS 3.4.6,
->    deferred to after 4.9 per user decision 丙 on 2026-10-15) — not covered in this round 1; to be
->    handled in the same batch when 4.9.4 / 4.9.5 land in the next round.
+> 1. **#450 ownership decision**: evidence shows it belongs to "overload resolution name not passed
+>    back to reference count" class, **still reproduces under round 1's already-landed form** —
+>    dispatch per user decision ③ process. **#450 probe**: dual binary same set `{W1002@2, W1005@4}`
+>    (measured, rootless form), not directly related to round 1 changes, but #450's fix may need to
+>    wait for 4.9.4 (consumption refinement) together — because root cause "name passed to reference
+>    count after overload resolution" needs use item's precise consumption surface, 4.9.4's "really
+>    used after import" is precise version of same criterion.
+> 2. **dead_code.rs:683 pointer nit**: comment says "two pools' assembly dimensions see driver side
+>    collect_compilation_refs" — actually `collect_compilation_refs` is fallback path, main path is
+>    `collect_package_refs` (`helpers.rs:481`). Comment and code main path dimension inconsistent
+>    (**not in this batch's write scope**), left to 4.9.4 / 4.9.5 landing for correction.
+> 3. **4.9.4 / 4.9.5 prerequisites unlocked**: 4.6.1 (`use` path resolution) already delivered by
+>    `39546020`; 4.9.4 can start immediately. 4.9.5 (test pool separation) needs first determine
+>    RFC-029f table incorporation (already paved by this batch's "VII." flip).
+> 4. **`yaoxiang check` multi-file `run` never reports dead code family warnings** (WBS 3.4.6, user
+>    decided 2026-10-15 ③ deferred to after 4.9) — this round 1 not involved; next round 4.9.4 /
+>    4.9.5 landing handles in same batch.
