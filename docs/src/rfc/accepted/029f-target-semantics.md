@@ -322,24 +322,21 @@ fn classify(files, manifest, entry_reach) -> Map<File, Role>:
 - RFC-036 测试框架（Test 角色规则来源）
 - #321 M2 警告码独立发射通道（定案 B 与方案 A 的出处）
 
-## 已知缺陷与后续改进（2026-10-09）
+## 已知缺陷：已落地（2026-10-16，WBS 4.9 轮 1）
 
-### 引用池的三处设计缺陷
+> 上一版（2026-10-09）将下列三项列为「引用池的三处设计缺陷」。三项已由 WBS 4.9 轮 1（提交 `7e62b0454`）逐条落地；`collect_project_refs` 与 `orchestrator.rs` 已随 P4 4.2.9 拆分移入 `src/driver/{state,arms,helpers}.rs`，下表所有 file:line 均在被引用 revision 上重取。
 
-**现状**：当前引用池通过 `collect_project_refs`（orchestrator.rs:603-648）收集标识符，存在以下缺陷：
+### 引用池的三处设计缺陷 —— 修正状态
 
-| # | 缺陷 | 影响 | 根因 |
-|---|------|------|------|
-| 1 | **扫描面是目录而非编译面** | 从未被 `use` 的孤立文件、tests/ 目录下的测试文件，其标识符也进入池，豁免生产代码的未使用定义 | `collect_yx` 递归扫描 `.yx`（除 `.git`/`target`/`.yaoxiang`），不限于 `discover_with_used` 的编译集 |
-| 2 | **粒度是项目级裸名，无模块维度** | 同名局部变量（`let x = 1`）会意外豁免顶级定义（`fn x()`）；a.yx 的 `foo` 和 b.yx 的 `foo` 无法区分 | 池类型 `HashSet<String>`，key 是裸名 |
-| 3 | **Script 复用 Lib 的池（违反单文件语义）** | `yx run script.yx` 时，项目中其他文件的引用会豁免 script.yx 的未使用定义——Script 的语义是"单文件直跑"，不应受项目影响 | orchestrator.rs:393-396 让 Script 使用 `cross_file_refs` |
+| # | 原缺陷 | 现状（2026-10-16） | 落地代码（rev `7e62b0454`） |
+|---|--------|-------------------|----------------------------|
+| 1 | 扫描面是目录而非编译面 | **池的根 = 包目标**：`collect_package_refs`（`helpers.rs:481`）按 `roles::ExplicitSurfaces` 的 `[[bin]]`/`[lib]`/`[exports]`/`[run].main` 根调 `discover_with_used` 取编译集；**不扫目录找入口**。全部根都跑不通时退化为被检文件自身的编译集（`collect_compilation_refs` / `helpers.rs:454`） | `src/driver/helpers.rs:454-512`（退路路径）；`src/driver/helpers.rs:481-512`（manifest 声明面路径） |
+| 2 | 粒度是项目级裸名，无模块维度 | **池类型 = `HashMap<String, HashSet<String>>`**：键 = 模块键、值 = 该模块的引用名集合；消费端在 `arms.rs:603-609` 把「除本单元外」的所有模块条目并集后送给 `DeadCodeAnalyzer`，模块自有名（顶层定义与局部绑定，`use` 导入名例外）不再豁免别的模块同名定义 | `src/driver/arms.rs:603-609`（消费端 `other_module_refs`）；装配唯一入口 `src/driver/helpers.rs:429-449`（`collect_ref_pool`） |
+| 3 | Script 复用 Lib 的池（违反单文件语义） | **Script 不接池**：`arms.rs:611-623` 的 `match us.role` 只对 `Bin`/`Internal`（`set_exempt_pub`）与 `Lib`（`set_cross_file_refs`）装配，Script/Test 走 `_ => {}` 默认臂；后者只按文件内定义-使用图判定 | `src/driver/arms.rs:611-623` |
 
-**后续改进方向**（待 P4 4.9 落地）：
+**落地后留待 WBS 4.9 后续轮次的项**（本轮 inScope 之外）：
 
-1. **扫描面改为编译面**：只收集 `discover_with_used` 返回的编译集中的引用
-2. **粒度升级为 `(module, name)`**：池类型改为 `HashMap<ModulePath, HashSet<String>>`
-3. **Script 不用池**：单文件语义，只按定义-使用图判定
-4. **消费定义细化**：区分"被 import"和"被 import 后真实使用"（仅后者算消费）
-5. **测试池分离**：tests/ 的引用不豁免生产代码
+- **消费定义细化（4.9.4）**：区分「被 import」与「被 import 后真实使用」——本轮不在，依赖 `use` 项的路径解析（前置 = 4.6.1，已由 `39546020` 交付）。
+- **测试池分离（4.9.5）**：tests/ 的引用单独成池，不豁免生产代码（src/）的未使用定义。
 
-**不在 P3.5 改的理由**：模块级解析需要 `use` 项的路径解析完成（`use a::foo` → foo 来自模块 a），属 P4 阶段契约与 Driver 统一的范畴。
+**不在 P3.5 改的理由（与上一版一致）**：模块级解析需要 `use` 项的路径解析完成（`use a::foo` → foo 来自模块 a），属 P4 阶段契约与 Driver 统一的范畴。

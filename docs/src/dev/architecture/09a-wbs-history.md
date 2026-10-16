@@ -276,3 +276,138 @@
 > 判定（start <= col < end）对标识符起点同构成立。先红后绿：definition 中部光标钉
 > 先红（None）后绿；四 handler 中部光标各 1 钉 + 跨文件 e2e 起点/中部双位置断言，
 > `--lib` 2748（+4）全绿、clippy -D warnings 0。登记 WBS 4.6.2（三级计数 150→151）。
+
+## P4 4.9 引用池正确实现（RFC-029f 修正）— 轮 1 收口（4.9.1 / 4.9.2 / 4.9.3）
+
+> **4.9 批实录（2026-10-16 登记 → 2026-10-16 收口）**：用户 2026-10-16 裁决将 4.9.1 / 4.9.2 / 4.9.3
+> 三条相关三级任务**并为一支团队一轮**（理由：它们同属「池的来源与身份」一面，合并落地可避免
+> `collect_project_refs` 删后的中间态反复重写；4.9.4 / 4.9.5 分属消费细化与测试池分离，
+> 依赖 4.6.1 的 `use` 路径解析，强行同批会扩大闸口面）。#450 归属**待裁决**——证据
+> 表明属「过载解析后名字未传回引用计数」类，仍在轮 1 已落地形态下复现，按用户裁决丙
+> 流程分派。冻结 rev = `7e62b0454`（父提交 `492f25eef` 为修复前基线）；验证 PASS attempt
+> `aab92fe0`（即 t2）；复审 pass attempt `96452696`（即 t3）。证据留档：
+> `target/yx-scratch/yx49/EVIDENCE.md`（含 8 份变异补丁与 warn_compare_v8.json）。
+>
+> **一、合并裁决**
+>
+> 1. **裁决本身**：三条相关三级任务合为轮 1。**4.9.4（消费细化）/ 4.9.5（测试池分离）下轮**——
+>    前者依赖 4.6.1 交付的 `use` 路径解析（已于 `39546020` 落地，可启动）；后者与 RFC-029f 表格
+>    收编同批，登记 RFC-029f 末节待改。
+> 2. **理由**：(a) 4.9.1 / 4.9.2 / 4.9.3 互为前置（4.9.2 改池类型 → 4.9.1 装配面要重写 → 4.9.3 才
+>    有分母判定的角色表），分轮做必然要写一次中间态后改两次；(b) 三条都属于「池的来源与身份」
+>    一面，4.9.4 / 4.9.5 属另一面，分批是按「内聚」而非「可独立 revert」做的切分。
+> 3. **合并结果**：单提交 `7e62b0454`（一行 `:recycle: refactor(driver)`），单次推送，单批门禁。
+>
+> **二、五条判据的红/绿实测口径**
+>
+> | # | 判据 | 红态（修复前 / P1 目录扫描回潮补丁） | 绿态（轮 1 落地） |
+> |---|------|------------------------------------|-----------------|
+> | ① | 池的根 = 包目标（#334） | 目录递归扫描 ⇒ tests/ 下的文件标识符也入池，豁免生产代码未使用定义 | `collect_package_refs`（`helpers.rs:481`）按 `ExplicitSurfaces` 根调 `discover_with_used`；全根退化时退路 `collect_compilation_refs`（`helpers.rs:454`） |
+> | ② | 池粒度 = `(module, name)` | 同名局部变量（`let foo = …`）意外豁免同名顶级定义（`fn foo()`）；a.yx 的 `foo` 和 b.yx 的 `foo` 串味 | `HashMap<String, HashSet<String>>`（键 = 模块键）；`collect_ref_pool`（`helpers.rs:429-449`）装配唯一入口；`arms.rs:603-609` 的 `other_module_refs` 把「除本单元外」的全部模块条目并集后送 `DeadCodeAnalyzer`；模块自有名（顶层定义与局部绑定，`use` 导入名例外）不再豁免别模块同名定义 |
+> | ③ | `FileRole::Script` 不用池 | Script 受项目内其它文件的引用影响 | `arms.rs:611-623` 的 `match us.role` 只对 `Bin`/`Internal`（`set_exempt_pub`）与 `Lib`（`set_cross_file_refs`）装配，Script/Test 走 `_ => {}` 默认臂（按文件内定义-使用图判定） |
+> | ④ | 夹具 A：lib.yx 第 4 行定义须报 W1001 | 修复前：报 `W1003@1`（实际「未使用导入」），不是 W1001 | 红态实测（红 1 夹具 red1）报 `W1001@3`；绿态所有 6 夹具 PASS |
+> | ⑤ | 夹具 B：main.yx 第 4 行定义须报 W1001 | 修复前：报 `W1003@1` | 同上 |
+>
+> **判据②的「推演红」**（实现者自陈 + 验证者闭合）：red2 夹具的 `let foo = …` 在 helper.yx；
+> 旧池在裸名并集下把 `foo` 整体当成「被 helper 用了」，lib.yx 的 `foo` 豁免。**实测**：red2
+> 夹具 vs 修复前二进制 → 无 W1001（旧口径豁免）；red2 vs 修复后二进制 → W1001@1。
+>
+> **判据③**（Script 不用池）的红态夹具**首版失败**：首版夹具在同文件里放同名局部变量
+> 触发 E2010（该语言不许同模块遮蔽顶层定义），改到另一模块（helper.yx）后为推演红态。
+> 这一点 t3 复审与 t2 验证均独立复现，**非契约缺陷**——同模块遮蔽是该语言的硬约束，夹具
+> 必须跨模块。
+>
+> **三、+8 与 +16 两套计数的对应关系**（**以 t3 复审证死**为准）
+>
+> `target/yx-scratch/yx49/EVIDENCE.md` 的 C 节写 `+16/−0`，但漏了「**新夹具记录**」这一
+> 成分——v8 仪器（`warn_compare_v8.json`，331 文件 symmetric diff，`only_before=0`）的口径
+> **含**新夹具；t1 实现者自建的「+8」是 **warn-before / warn-after（各 325 条）按夹具
+> 聚合**（每个成员文件 check 一次）。复审逐条映射：
+>
+> - **+8**（`8` 条新警告，全部是 `check <非入口文件>`，`check <入口文件>` 零变化）
+>   - `cross-file-method/lib.yx`：`W1002@2(Point)`、`W1005@4(get_x)`、`W1005@8(norm_sq)`
+>   - `subdirectory-module/util/math.yx`：`W1001@2(double)`
+>   - `type-error-in-lib/lib.yx`：`W1004@2(value)`
+>   - `use-constant/lib.yx`：`W1004@2(value)`
+>   - `use-type-and-function/lib.yx`：`W1001@4(distance)`、`W1002@2(Point)`
+>   - **成因（统一归因）**：这 8 条夹具均**未声明包目标** ⇒ 4.9.1 根退化为被检文件自身编译集，
+>     消费者 main.yx 不在其中；本就是设计内变化（before 时这些文件的 check 面本就零警告，
+>     非豁免路径）。仓库根 `yaoxiang.toml` 为空文件 ⇒ 同一退化路径实测成立。
+> - **+16 残差 8**（检查面 = `ref-pool-compile-set/{lib.yx,main.yx,stray.yx}` + `ref-pool-module-identity/{helper.yx,lib.yx,main.yx}`）
+>   - 这些检查面文件在 t1 的 `warn-before.jsonl` 中 `exit=None`（拍摄时点**不存在**——是本批新增的
+>     夹具）。故 +8 的「+ 0 − 0」差分里没有它们，+16 的 v8 对称差分里有。
+>   - `v8` 的 `stray.yx` 只剩 `W1001@2(probe)` 一条：原因是修复前二进制同样报 `probe@stray.yx:4`
+>     （该夹具对每个文件跑一次 `probe`），**相消**后只剩 lib 的 1 条——三份数据（+8 / +16 / 双二进制
+>     ABBA）互洽。
+> - **新夹具 8 条** vs **+16 残差 8 条**：同一批文件（4.9.1 / 4.9.2 新加的 `ref-pool-compile-set/`
+>   与 `ref-pool-module-identity/`），仪器把它们的每次 check 当成独立记录——同一文件可能对多个
+>   `角色（role）/ context` 触发不同诊断条目。
+>
+> **结论**：**+16 = +8（按夹具聚合）∪ 新夹具 8 条**——两种计数都正确，**口径不同**：t1 报
+> 「新增 8 条」是夹具层口径，t2 报「+16 条」是文件层口径（symmetric diff 含新夹具）。
+> t3 复审 ① +8⊆+16 已证死；**复审 ② 写「不要照抄 EVIDENCE.md C 节」**——C 节漏了
+> 「新夹具记录」成分，本条据 t3 复审 `pass` 结论改写。
+>
+> **四、变异试验（机械可逆，全部 `scratch.py trial`）**
+>
+> 8 份变异补丁（`target/yx-scratch/yx49/*.patch`，p1 目录扫描、p2b use 导入名剔除、p3b script
+> 接池、p3 flat 消费、p4 std 接池、p7final 自建 4 判据、p8 std 关闭、p9 vendor 接池 +
+> p_stack2 / p_stack3 叠加面）。每个 trial 输出含：HEAD blob → 变异后 blob → 还原后 blob
+> 与 HEAD 一致 = 是 + `git status` CLEAN。本机 `core.autocrlf=true` 需经 `GIT_CONFIG_*`
+> 注入 `false`（`trial_env.ps1`），否则补丁新增行转 CRLF 导致 apply/还原双失败——**只影响
+> 补丁机械性，不改被测行为**。
+>
+> **五、过程事件 / 环境教训（移交下轮必读）**
+>
+> 1. **core.autocrlf 注入**：本机 `core.autocrlf=true` 必须经 `GIT_CONFIG_*` 注入 `false`
+>    才能保证补丁机械可逆；详见 `target/yx-scratch/yx49/trial_env.ps1`。**下轮不要复用**
+>    任何不含注入的 trial 脚本。
+> 2. **同树 trial 串行**：同一棵树上的 `trial` 与 `cargo build` **必须严格串行**。`trial`
+>    内部 `git apply` 与 `cargo build` 都要触碰 worktree，并行会出现「修补未完成就被 build
+>    看到」或「build 与 apply 互锁」两类竞态。
+> 3. **trial 重建二进制需确认同步**：`trial` 完成后会重建树内二进制（cargo 的 fingerprint
+>    含源码路径，**换树 = 全量重建**），后续量测前必须确认 `bin/yaoxiang-rs` 与 HEAD 同步。
+>    **本轮曾用残留变异二进制测得假数据**，已重建重测修正。
+> 4. **第二棵树 yx49-b 的建树理由**：对拍需要修复前二进制（492f25eef），批次内无现成品；
+>    `scratch.py init yx49-b` 开了第二棵树（再吃一次全量构建）。**树已 release**（详见六），
+>    删除留批次收口 `gc` 处置。
+> 5. **cli_e2e 两条 Internal 用例夹具补成合法包（补 `[run].main`，断言未动）的理由**：
+>    修复前 `cli_e2e` 中两枚 `Internal` 角色钉板夹具**未声明 `[run].main`** ⇒ 4.9.1 落地
+>    后 `compile_project` 走的是 `ExplicitSurfaces` 根调路径，找不到 `main` ⇒ 整批 2 夹具
+>    行为从「按 Script 兜底」漂移到「找不到入口」——是 4.9.1 引入的退路行为而非缺陷。
+>    补 `[run].main` 字段后两夹具走正常包路径，**断言**（exit code / 诊断码 / 警告集合）
+>    逐字未动。
+> 6. **第二轮树删除的安全方式**：release 后用 `python scripts/dev/scratch.py rm yx49-b`
+>    （不是 `rm -rf`），会校验「无挂载」后再删。本批收口前已 release，下一步 `gc` 自然清理。
+>
+> **六、批次树状态**
+>
+> 收口前：yx49 已 release（4.8 GB 释放），yx49-b 已 release。两棵树无挂载，状态可在 `scratch.py status` 复核。本任务输出末附 `scratch.py gc` 完整 status。
+>
+> **七、RFC-029f「已知缺陷」表翻转**
+>
+> 上一版（2026-10-09）以现在时描述「引用池的三处设计缺陷」（含 `collect_project_refs` / `orchestrator.rs:603-648` / `orchestrator.rs:393-396` 等已删代码位置）。本批收口同步改写为「**已知缺陷：已落地（2026-10-16，WBS 4.9 轮 1）**」：① 现池的根 = `collect_package_refs`（`helpers.rs:481`），按 `ExplicitSurfaces` 解析，不扫目录；② 现池类型 `HashMap<String, HashSet<String>>`（键 = 模块键），装配唯一入口 `collect_ref_pool`（`helpers.rs:429-449`），消费端 `arms.rs:603-609`；③ 现 Script 不接池，`arms.rs:611-623` 的 `match us.role` 默认臂。**所有 file:line 均在被引用 revision `7e62b0454` 上重取**。`collect_project_refs` 与 `orchestrator.rs` 已随 P4 4.2.9 拆分（`c59fb751`）移入 `src/driver/{state,arms,helpers}.rs`，表中旧位置不再命中——这是「声明与事实不符」的修复（t3 复审备注①）。
+>
+> **八、最终门禁（收口 revision `7e62b0454`）**
+>
+> fmt --check 0 / clippy -D warnings 0 / `cargo test --lib` 2754 passed / `--test integration` 287 passed /
+> `yx_multifile_runner` 全绿 / 语料基线**仅 +2 行**（两条新夹具 behavior run，338a339,340；另 342 行
+> 逐字节不变）/ IR 快照 204 条零漂移 / check-obligations PASS（13·13·0·8）+ selftest /
+> check-docs-truth 0。**过程事件**：本批一次 cargo 构建因 `core.autocrlf` 把脚本行尾
+> 转 CRLF，team scratch 路径下 `yaoxiang-rs` 启动报 `BadImage`，实测为编码与 git 索引不一致
+> ——重建后通过（与 4.6 批「外部整树 discard」教训并行、原因不同）。
+>
+> **九、遗留（移交下轮）**
+>
+> 1. **#450 归属裁决**：证据表明属「过载解析后名字未传回引用计数」类，**仍在轮 1 已落地
+>    形态下复现**——按用户裁决丙流程分派。**#450 探针**：双二进制同集合 `{W1002@2, W1005@4}`
+>    （实测，rootless 形态），与轮 1 改造无直接关系，但 #450 的修法可能要等 4.9.4（消费细化）
+>    一起做——因为根因是「过载解析后名字传引用计数」需要 use 项的精确消费面，4.9.4 的
+>    「被 import 后真实使用」是同类判据的精确版。
+> 2. **dead_code.rs:683 指路 nit**：注释写「两池的装配口径见 driver 侧 collect_compilation_refs」
+>    ——实际 `collect_compilation_refs` 是退路路径，主路径是 `collect_package_refs`（`helpers.rs:481`）。
+>    注释与代码主路径口径不齐（**不在本批写范围**），留给 4.9.4 / 4.9.5 落地时一起改正。
+> 3. **4.9.4 / 4.9.5 前置已解锁**：4.6.1（`use` 路径解析）已由 `39546020` 交付；4.9.4 可立即
+>    启动。4.9.5（测试池分离）需先定 RFC-029f 表格收编（已由本批「七、」翻转铺垫）。
+> 4. **`yaoxiang check` 多文件 `run` 永不报死代码族警告**（WBS 3.4.6，2026-10-15 用户裁决丙缓议
+>    至 4.9 后）——本批轮 1 未涉及；下一轮 4.9.4 / 4.9.5 落地时同批处理。
