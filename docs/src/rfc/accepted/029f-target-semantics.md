@@ -324,11 +324,11 @@ fn classify(files, manifest, entry_reach) -> Map<File, Role>:
 
 ## 已知缺陷：已落地（2026-10-16，WBS 4.9 轮 1）
 
-> 上一版（2026-10-09）将下列三项列为「引用池的三处设计缺陷」。三项已由 WBS 4.9 轮 1（提交 `7e62b0454`）逐条落地；`collect_project_refs` 与 `orchestrator.rs` 已随 P4 4.2.9 拆分移入 `src/driver/{state,arms,helpers}.rs`，下表所有 file:line 均在被引用 revision 上重取。
+> 上一版（2026-10-09）将下列三项列为「引用池的三处设计缺陷」。三项已由 WBS 4.9 轮 1（提交 `3863a9ff0`）逐条落地；`collect_project_refs` 与 `orchestrator.rs` 已随 P4 4.2.9 拆分移入 `src/driver/{state,arms,helpers}.rs`，下表所有 file:line 均在被引用 revision 上重取。
 
 ### 引用池的三处设计缺陷 —— 修正状态
 
-| # | 原缺陷 | 现状（2026-10-16） | 落地代码（rev `7e62b0454`） |
+| # | 原缺陷 | 现状（2026-10-16） | 落地代码（rev `3863a9ff0`） |
 |---|--------|-------------------|----------------------------|
 | 1 | 扫描面是目录而非编译面 | **池的根 = 包目标**：`collect_package_refs`（`helpers.rs:481`）按 `roles::ExplicitSurfaces` 的 `[[bin]]`/`[lib]`/`[exports]`/`[run].main` 根调 `discover_with_used` 取编译集；**不扫目录找入口**。全部根都跑不通时退化为被检文件自身的编译集（`collect_compilation_refs` / `helpers.rs:454`） | `src/driver/helpers.rs:454-512`（退路路径）；`src/driver/helpers.rs:481-512`（manifest 声明面路径） |
 | 2 | 粒度是项目级裸名，无模块维度 | **池类型 = `HashMap<String, HashSet<String>>`**：键 = 模块键、值 = 该模块的引用名集合；消费端在 `arms.rs:603-609` 把「除本单元外」的所有模块条目并集后送给 `DeadCodeAnalyzer`，模块自有名（顶层定义与局部绑定，`use` 导入名例外）不再豁免别的模块同名定义 | `src/driver/arms.rs:603-609`（消费端 `other_module_refs`）；装配唯一入口 `src/driver/helpers.rs:429-449`（`collect_ref_pool`） |

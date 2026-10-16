@@ -283,8 +283,7 @@
 > 三条相关三级任务**并为一支团队一轮**（理由：它们同属「池的来源与身份」一面，合并落地可避免
 > `collect_project_refs` 删后的中间态反复重写；4.9.4 / 4.9.5 分属消费细化与测试池分离，
 > 依赖 4.6.1 的 `use` 路径解析，强行同批会扩大闸口面）。#450 归属**待裁决**——证据
-> 表明属「过载解析后名字未传回引用计数」类，仍在轮 1 已落地形态下复现，按用户裁决丙
-> 流程分派。冻结 rev = `7e62b0454`（父提交 `492f25eef` 为修复前基线）；验证 PASS attempt
+> 表明属「过载解析后名字未传回引用计数」类，仍在轮 1 已落地形态下复现，按独立 WBS 条目登记处置（队长推荐 A：并入轮 2 时登记为独立条目；**待用户裁决**）。冻结 rev = `3863a9ff0`（父提交 `62f6e1a59` 为修复前基线）；验证 PASS attempt
 > `aab92fe0`（即 t2）；复审 pass attempt `96452696`（即 t3）。证据留档：
 > `target/yx-scratch/yx49/EVIDENCE.md`（含 8 份变异补丁与 warn_compare_v8.json）。
 >
@@ -296,7 +295,10 @@
 > 2. **理由**：(a) 4.9.1 / 4.9.2 / 4.9.3 互为前置（4.9.2 改池类型 → 4.9.1 装配面要重写 → 4.9.3 才
 >    有分母判定的角色表），分轮做必然要写一次中间态后改两次；(b) 三条都属于「池的来源与身份」
 >    一面，4.9.4 / 4.9.5 属另一面，分批是按「内聚」而非「可独立 revert」做的切分。
-> 3. **合并结果**：单提交 `7e62b0454`（一行 `:recycle: refactor(driver)`），单次推送，单批门禁。
+> 3. **合并结果**：单提交 `3863a9ff0`（一行 `:recycle: refactor(driver)`），单次推送，单批门禁。
+>    **哈希说明**：推送前 `git pull --rebase` 并入自动翻译 bot 提交（`72f364169`）后本批哈希全部重写——
+>    实现 `3863a9ff0`→`3863a9ff0`、修复前基线兼对方文档提交 `62f6e1a59`→`62f6e1a59`、
+>    对方代码提交 `33f14e8ab`→`b122b7ad1`。**对外引用一律以 push 后的哈希为准**（旧哈希在新克隆中不可达）。
 >
 > **二、五条判据的红/绿实测口径**
 >
@@ -368,7 +370,7 @@
 > 3. **trial 重建二进制需确认同步**：`trial` 完成后会重建树内二进制（cargo 的 fingerprint
 >    含源码路径，**换树 = 全量重建**），后续量测前必须确认 `bin/yaoxiang-rs` 与 HEAD 同步。
 >    **本轮曾用残留变异二进制测得假数据**，已重建重测修正。
-> 4. **第二棵树 yx49-b 的建树理由**：对拍需要修复前二进制（492f25eef），批次内无现成品；
+> 4. **第二棵树 yx49-b 的建树理由**：对拍需要修复前二进制（62f6e1a59），批次内无现成品；
 >    `scratch.py init yx49-b` 开了第二棵树（再吃一次全量构建）。**树已 release**（详见六），
 >    删除留批次收口 `gc` 处置。
 > 5. **cli_e2e 两条 Internal 用例夹具补成合法包（补 `[run].main`，断言未动）的理由**：
@@ -386,9 +388,9 @@
 >
 > **七、RFC-029f「已知缺陷」表翻转**
 >
-> 上一版（2026-10-09）以现在时描述「引用池的三处设计缺陷」（含 `collect_project_refs` / `orchestrator.rs:603-648` / `orchestrator.rs:393-396` 等已删代码位置）。本批收口同步改写为「**已知缺陷：已落地（2026-10-16，WBS 4.9 轮 1）**」：① 现池的根 = `collect_package_refs`（`helpers.rs:481`），按 `ExplicitSurfaces` 解析，不扫目录；② 现池类型 `HashMap<String, HashSet<String>>`（键 = 模块键），装配唯一入口 `collect_ref_pool`（`helpers.rs:429-449`），消费端 `arms.rs:603-609`；③ 现 Script 不接池，`arms.rs:611-623` 的 `match us.role` 默认臂。**所有 file:line 均在被引用 revision `7e62b0454` 上重取**。`collect_project_refs` 与 `orchestrator.rs` 已随 P4 4.2.9 拆分（`c59fb751`）移入 `src/driver/{state,arms,helpers}.rs`，表中旧位置不再命中——这是「声明与事实不符」的修复（t3 复审备注①）。
+> 上一版（2026-10-09）以现在时描述「引用池的三处设计缺陷」（含 `collect_project_refs` / `orchestrator.rs:603-648` / `orchestrator.rs:393-396` 等已删代码位置）。本批收口同步改写为「**已知缺陷：已落地（2026-10-16，WBS 4.9 轮 1）**」：① 现池的根 = `collect_package_refs`（`helpers.rs:481`），按 `ExplicitSurfaces` 解析，不扫目录；② 现池类型 `HashMap<String, HashSet<String>>`（键 = 模块键），装配唯一入口 `collect_ref_pool`（`helpers.rs:429-449`），消费端 `arms.rs:603-609`；③ 现 Script 不接池，`arms.rs:611-623` 的 `match us.role` 默认臂。**所有 file:line 均在被引用 revision `3863a9ff0` 上重取**。`collect_project_refs` 与 `orchestrator.rs` 已随 P4 4.2.9 拆分（`c59fb751`）移入 `src/driver/{state,arms,helpers}.rs`，表中旧位置不再命中——这是「声明与事实不符」的修复（t3 复审备注①）。
 >
-> **八、最终门禁（收口 revision `7e62b0454`）**
+> **八、最终门禁（收口 revision `3863a9ff0`）**
 >
 > fmt --check 0 / clippy -D warnings 0 / `cargo test --lib` 2754 passed / `--test integration` 287 passed /
 > `yx_multifile_runner` 全绿 / 语料基线**仅 +2 行**（两条新夹具 behavior run，338a339,340；另 342 行
