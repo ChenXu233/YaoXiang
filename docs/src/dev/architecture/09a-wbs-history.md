@@ -202,3 +202,68 @@
 > **七、过程事件（如实登记）**：本批一次在 pre-commit 钩子运行期间并发编辑工作区文档，
 > 被钩子的 stash 回滚吃掉且该次提交失败（配置注释里预告过的并发形态）——纪律 = 钩子
 > 运行期间不动工作区；#455 的提交因此拆成两次尝试（第二次全绿）。
+
+## P4 4.6.1 LSP 语义数据管线统一（D55 收口）
+
+> **4.6 批实录（2026-10-16 登记 → 2026-10-16 收口）**：用户 2026-10-16 指示按 4.6 → 4.9 →
+> 4.4 → P5 顺序推进、先做 4.6；实施形态 = **完全体单队**（沿上批用户指示：不开 DAG、不建
+> 团队，单会话实现 + 自验）。任务定义（09 三级表）：项目内文件的语义数据（SemanticDB）走
+> orchestrator 同管线、与诊断同源；跨文件引用带 `resolves_to`。验收：项目内跨文件跳转命中
+> 定义；语义数据与诊断出自同一次编译。
+>
+> **一、现状实证（先查证再断言）**：didOpen/didChange 触发**两趟**编译——诊断走统一 Driver
+> 管线（4.2.3/4.2.6 已统一），语义数据走 `src/lsp/server.rs` 的手工 lex→parse→
+> `TypeChecker::new(uri).check_module_collect_all`（无模块注册表 ⇒ 项目内 `use` 解析失败、
+> 跨文件引用事件不产生，跳转/重命名/引用查找对导入符号静默落空——D55 登记的静默失败）。
+> 编排臂的 checker 统一命名 `"<module>"`（SemanticDB 文件身份丢失），`type_result`（含
+> semantic_db）在诊断非空时被丢弃且从不外发；`checker.rs` 排空把 `resolves_to` 的 DefId
+> 文件身份恒盖成当前文件；`Export`/`ModuleInfo` 均无定义位置面。
+>
+> **二、先红后绿**：LSP e2e 钉（`src/lsp/tests/cross_file.rs`）——temp 双文件项目 didOpen
+> main.yx 后对 `add_one` 调用点发 GotoDefinition，**修复前返回 None（红，实证上节静默失败）**，
+> 修复后命中 lib.yx 第 0 行定义（绿）。过程中一次探针定位：编译器侧链路（driver 探针 dump）
+> 已全程贯通而 e2e 仍空——根因是 `resolve_reference` 按引用**起点**精确匹配（D55
+> precise-only 现状口径），测试光标落在标识符中部；该容差属既有行为面，本批不动（见七）。
+>
+> **三、实现面**：(1) `Export.definition_span`（extract_module_info 自 AST 标识符节点收割，
+> 与 typecheck 定义事件的 `def_span` 同源同值；native std 恒 None）+ `ModuleInfo.
+> definition_file`（Registry 臂按 DiscoveredFile 填，含 vendor；std 恒 None）；(2) checker
+> 引用排空经 `import_def_locations`（use 行绑定 span → 定义文件+定义 span）把跨文件导入项的
+> `resolves_to` 重定向出本文件；std 导入无登记，维持落 use 行；(3) checker 模块身份由统一
+> `"<module>"` 改为单元文件路径（实证 `env.module_name` 全部 4 个消费点零诊断消费）；
+> (4) `DriverOutcome.semantic_db` 通道——CollectAll 形态（Lsp 目标文件**无论诊断成败** +
+> SingleFile 兜底）汇入，Lsp 臂尾从 registry 注入非目标文件顶层导出定义面
+> （`external_definitions`，未打开的文件也能跳转；类型/子模块导出不注入——typecheck 侧
+> 类型注册不产生定义事件，两侧保持一致的空缺）；(5) `orchestrator::analyze_source_in_
+> project`（`check_source_in_project` 转调取诊断半边）；(6) LSP `analysis.rs` 单编译入口
+> 取代手工管线（`update_semantic_db` 删除），World 键统一规范化 file URI（`uri.rs`：
+> `path_to_uri(uri_to_path(u))` 幂等归一，盘符大小写与 %XX 编码差异归一到同键，跨文件
+> DefId 因此稳定命中）；5 个 handler + semanticTokens 双请求接 `db_key`。
+>
+> **四、顺路修（D59 分流 B 类——旧行为静默不动作，原先成功程序对外表现零影响）**：
+> ① 项目内文件跨文件跳转/重命名/引用查找自静默落空转为命中真实定义；② 词法错误时旧手工
+> 管线删除语义信息（染色消失）→ 残缺 AST 染色保留（4.2.6 编辑器哲学延伸）；③ 目标文件带
+> 类型错误时语义数据不再随 `type_result` 一并丢弃（打字中间态染色/跳转不消失）。
+>
+> **五、钉板**：driver 级 6 枚（`src/driver/tests/lsp_semantic_db.rs`——目标文件路径键+同源
+> 诊断通道、跨文件 resolves_to+外部定义面往返、std 导入回退 use 行、错误文件保留、单文件
+> 兜底路径键、单文件错误保留）+ LSP e2e 1 枚（先红后绿）+ uri 规范化 4 枚
+> （`src/lsp/tests/uri.rs`——盘符换算、空格编码、幂等归一、非 file scheme 透传）。
+>
+> **六、变异验证（scratch.py trial，机械可逆）**：批次树 wbs-46 @ 收口 revision 39546020，
+> 两枚变异均使命中钉板转红、还原后 blob 与 HEAD 一致 + git status CLEAN——
+> m1 摘 `import_def_locations` 登记（statements.rs）⇒ 跨文件 driver 钉 + LSP e2e 钉红、
+> 其余 7 枚绿；m2 摘 `external_definitions` 注入（arms.rs）⇒ 同两钉红（往返解析失锚）、
+> 其余 7 枚绿。批次树已 gc（释放 4.8 GB，`status` 无批次树）。
+>
+> **七、最终门禁（收口 revision 39546020）**：fmt --check 0 / clippy -D warnings 0 /
+> `cargo test --lib` **2744 passed**（+11 新钉）/ `--test integration` **287 passed** /
+> 语料差分**逐字节零漂移** / IR 快照零漂移 / check-obligations PASS（13·13·0·8，
+> `semantic_db` 非义务理由的消费者锚点同步 server.rs:482 与 02 §义务字段表）/ check-docs-
+> truth 0 / docs-examples 258 条 0 失败 / docs-orphan 0 / markdownlint 全仓仅剩用户未提交
+> 的 032 两处 MD056（用户自有编辑，未动）/ pnpm docs:build 0。**过程事件（如实登记）**：
+> en/09a-wbs-history.md:54 一处 MD037 为 auto-translate bot 重译上一批 09a 时引入（zh 原文
+> 无空格），本批顺手修回——markdownlint 红非本批改动面但与 09a 同文件，一并登记。
+> **遗留观察（登记待议，未动）**：`resolve_reference` 只按引用起点精确匹配——光标落在
+> 标识符中部时跳转/悬停/重命名静默不动作（D55 precise-only 现状，全文件形态同构），
+> 如需容差匹配属独立行为变更，报用户裁决。

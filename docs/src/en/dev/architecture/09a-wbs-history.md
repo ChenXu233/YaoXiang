@@ -51,7 +51,7 @@
 > directory (ref_shared, borrow_immutable/mutable/return, move_basic, ownership_deep, etc.), closure
 > capture closures + closure_arg_inference + spawn_capture, currying curry_value_fix +
 > curry_tail_expr, spawn 04-concurrency ×13, iterator for spawn_for and 16 other files, sum types
-> sum_type_* + pattern_or_guard + match_call_scrutinee, existential coercion forced at
+> sum_type_*+pattern_or_guard + match_call_scrutinee, existential coercion forced at
 > interface_dynamic_dispatch (Vec(Animal) heterogeneous existential-type wrapping triggers
 > existential_coercions) + interface_rebind_dispatch, `?`/Try propagation question_propagation +
 > option_try + try_methods + user_try_type, method overload method_overload (plus
