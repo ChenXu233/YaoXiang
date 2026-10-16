@@ -195,3 +195,61 @@ fn test_unpack_tar_regular_files_still_extract() {
         "regular file must extract with content intact under stripped path"
     );
 }
+/// 按 zip 归档写出条目（entries: 名字 → 内容；deflate 压缩，覆盖解压读取路径）
+fn write_zip(
+    archive: &std::path::Path,
+    entries: &[(&str, &[u8])],
+) {
+    use std::io::Write;
+    let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for (name, content) in entries {
+        w.start_file(*name, opts).unwrap();
+        w.write_all(content).unwrap();
+    }
+    fs::write(archive, w.finish().unwrap().into_inner()).unwrap();
+}
+
+#[test]
+fn test_unpack_zip_extracts_deflated_entry() {
+    // Arrange: Windows 发行包形态（zip，deflate 压缩的普通文件条目）
+    let dir = TempDir::new().unwrap();
+    let archive = dir.path().join("a.zip");
+    write_zip(&archive, &[("pkg/bin/yx.exe", b"hello")]);
+    let out = dir.path().join("out");
+
+    // Act
+    crate::dl::unpack(&archive, "windows", &out).unwrap();
+
+    // Assert
+    assert_eq!(
+        fs::read(out.join("bin/yx.exe")).unwrap(),
+        b"hello",
+        "deflated zip entry must extract with content intact under stripped path"
+    );
+}
+
+#[test]
+fn test_unpack_zip_rejects_parent_traversal_entry() {
+    // Arrange: 正/反斜杠两种分隔符的 .. 条目——写穿解包目录的经典向量
+    for name in ["pkg/../evil.txt", "pkg\\..\\..\\evil2.txt"] {
+        let dir = TempDir::new().unwrap();
+        let archive = dir.path().join("a.zip");
+        write_zip(&archive, &[(name, b"evil")]);
+        let out = dir.path().join("out");
+
+        // Act
+        let result = crate::dl::unpack(&archive, "windows", &out);
+
+        // Assert: 拒绝，且文件不得落进解包根的上一级
+        assert!(
+            result.is_err(),
+            "traversal entry {name:?} must be rejected, got {result:?}"
+        );
+        assert!(
+            !dir.path().join("evil.txt").exists(),
+            "traversal entry {name:?} must not write outside the extraction root"
+        );
+    }
+}
