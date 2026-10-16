@@ -267,3 +267,12 @@
 > **遗留观察（登记待议，未动）**：`resolve_reference` 只按引用起点精确匹配——光标落在
 > 标识符中部时跳转/悬停/重命名静默不动作（D55 precise-only 现状，全文件形态同构），
 > 如需容差匹配属独立行为变更，报用户裁决。
+
+> **同日续批（4.6.2，用户裁决后落地）**：收尾报告交付后用户就「遗留观察①」裁决
+> 「可以，那就改」——查库键容差按方案甲实施：definition/hover/references/rename
+> 四 handler 的查库键由光标位置（经 UTF-16 换算）改用 `find_identifier_at_position`
+> 已定位出的**标识符自身起点**（与语义事件同坐标系，免换算）；`resolve_reference`
+> 的起点精确匹配语义不动（D55 precise-only 不变）。references/rename 的定义点回退
+> 判定（start <= col < end）对标识符起点同构成立。先红后绿：definition 中部光标钉
+> 先红（None）后绿；四 handler 中部光标各 1 钉 + 跨文件 e2e 起点/中部双位置断言，
+> `--lib` 2748（+4）全绿、clippy -D warnings 0。登记 WBS 4.6.2（三级计数 150→151）。
