@@ -48,7 +48,7 @@
     "brace-expansion": "5.0.12"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/vscode": "^1.140.0",
     "typescript": "^7.0.2"
   }
