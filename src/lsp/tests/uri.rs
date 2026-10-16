@@ -42,6 +42,19 @@ fn test_db_key_is_idempotent_on_encoded_form() {
     assert_eq!(db_key(&hyphen_encoded), hyphen_encoded);
 }
 
+// POSIX 绝对路径换算（Linux/macOS runner 的真实面）
+#[cfg(not(windows))]
+#[test]
+fn test_path_to_uri_posix_absolute_path() {
+    // Arrange + Act
+    let uri = path_to_uri(std::path::Path::new("/tmp/a/b.yx"));
+
+    // Assert
+    assert_eq!(uri, "file:///tmp/a/b.yx");
+    // 归一结果再归一仍是自身（幂等闭包）
+    assert_eq!(db_key(&uri), uri);
+}
+
 #[test]
 fn test_db_key_non_file_scheme_passthrough() {
     // Arrange + Act - std:// 等虚拟键原样保留
