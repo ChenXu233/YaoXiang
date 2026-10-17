@@ -9,6 +9,7 @@ mod method_unused;
 mod mono_cross_unit;
 mod named_import_calls;
 mod obligations;
+mod overload_injection;
 mod program;
 mod ref_pool;
 mod run_rootless;
