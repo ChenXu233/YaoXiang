@@ -5,12 +5,13 @@
 //! 由 run 循环按拓扑判定，臂自身不决定跳过。跨形态的臂按 ProgramKind
 //! 分形（形状选择即形态契约，各形注释标注现状出处）。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
@@ -339,6 +340,18 @@ impl Driver {
             if let Some(method_bindings) = method_bindings {
                 checker.env().method_bindings = method_bindings.clone();
             }
+            // RFC-029f 改进 4 / WBS 4.9.7（#464）：跨单元方法调用的**重载候选**注入。
+            // 只注入本单元 import face 指向的模块面（裸类型名命名得到的 1-hop 面，
+            // 合并按模块键升序 ⇒ 确定性）——全注册表并集会让同名类型的跨单元候选
+            // 互相污染成 E1107 误报，理由与实测见本文件 `visible_method_overloads`。
+            // 入口单元自己的候选不在此列：它们由本单元签名收集现场登记（自有优先）。
+            checker
+                .env()
+                .inject_method_overloads(visible_method_overloads(
+                    ast,
+                    &program.units[i].key,
+                    registry,
+                ));
             // RFC-014：vendor 根注入（缺依赖包的 E5001 追加 install 提示）
             if let Some(root) = &vendor_root {
                 checker.set_vendor_root(root.clone());
@@ -1461,4 +1474,85 @@ impl Driver {
         }
         state.merged_ir = Some(merged);
     }
+}
+
+/// 一个单元**能按裸类型名命名的方法候选面**（RFC-029f 改进 4 / WBS 4.9.7 / #464）：
+/// 本单元 `use M.{Type}` 带进来的类型名所对应模块的候选组，按模块键升序合并。
+///
+/// 为什么必须限定在这层（而不是"全注册表并集"）：候选键是**裸类型名**
+/// （`{Type}.{method}`）——两个单元各自定义同名类型时键相同。把本单元**命名
+/// 不到**的候选并进决议表，同一个调用点会匹配到两个签名相同的候选，按「多候选
+/// 无法区分即报错」的规则报 E1107 误报（实测：main.yx 只 `use a.{Temp}` 时若并上
+/// b 的同名同序 `Temp.to`，两候选都匹配 ⇒ 歧义）；反过来命名得到的候选一个都不能
+/// 少（漏并 ⇒ 决议不产生条目 ⇒ 跨单元方法回落池的名字级豁免，W1005 漏报）。
+///
+/// 三条收窄规则（都朝**宁漏报**方向，宁可不产生条目也不制造歧义误报）：
+/// ① 只认**花括号项**形态（`use M.{Type}`）：整体导入 `use M` 把类型名挂在模块
+///    命名空间下（另按导出名补一份裸名镜像），两形态混用时裸名归属由导入顺序
+///    静默决定（last-wins）——这种源程序在名字层已经歧义，本函数不为它产条目；
+/// ② 只认**局部名 = 目标名**（无内联别名 `as`）：决议键的前缀是调用方写的裸名，
+///    别名形态下它与定义侧前缀不同名，配不上（不猜、不重命名）；
+/// ③ 同一个裸类型名被**多个模块**带进作用域时整名跳过（同上：源程序已歧义）。
+///
+/// 本单元**自有键位不外并**：同名裸类型在本单元已有定义时，调用点解析到的就是
+/// 本单元那一个（模块身份优先）；自有候选由本单元自己的签名收集现场登记。
+///
+/// 名字面复用既有单点：[DeadCodeAnalyzer::collect_module_names]（use 面）+
+/// 注册表导出查询（[ModuleRegistry::get_exports]）——与 checker 处理
+/// `use M.{Type}` 时查模块导出的**同一张表**，不另造路径解析。
+fn visible_method_overloads(
+    ast: &Module,
+    own_module_key: &str,
+    registry: &ModuleRegistry,
+) -> Vec<(String, MethodOverloadCandidates)> {
+    let names = DeadCodeAnalyzer::collect_module_names(ast);
+    // 裸类型名 → 带它进作用域的模块键（重复 = 名字层歧义 ⇒ 整名跳过）
+    let mut scope: HashMap<String, String> = HashMap::new();
+    let mut conflicted: HashSet<String> = HashSet::new();
+    for (local, target, use_path) in &names.imported {
+        if local != target {
+            continue; // ② 内联别名：调用方写的裸名与定义侧前缀不同名
+        }
+        // use 路径必须命中注册表模块、且该模块确实导出这个名字（未解析导入 /
+        // 子模块名都不构成裸类型名）；查法与 checker 的 use 处理同表
+        let Some(exports) = registry.get_exports(use_path) else {
+            continue;
+        };
+        if !exports.contains_key(target) {
+            continue;
+        }
+        match scope.get(target) {
+            Some(existing) if existing != use_path => {
+                conflicted.insert(target.clone()); // ③ 同名被多模块带进作用域
+            }
+            Some(_) => {}
+            None => {
+                scope.insert(target.clone(), use_path.clone());
+            }
+        }
+    }
+    let own_keys: HashSet<String> = registry
+        .get(own_module_key)
+        .map(|module| module.method_overloads.keys().cloned().collect())
+        .unwrap_or_default();
+    // 只保留「键前缀 = 该裸类型名」的候选组；模块键升序 ⇒ 合并顺序确定
+    let mut modules: Vec<String> = scope
+        .iter()
+        .filter(|(name, _)| !conflicted.contains(*name))
+        .map(|(_, module)| module.clone())
+        .collect();
+    modules.sort();
+    modules.dedup();
+    let prefixes: HashSet<&str> = scope.keys().map(String::as_str).collect();
+    registry
+        .merge_method_overloads(&modules)
+        .into_iter()
+        .filter(|(key, _)| {
+            if own_keys.contains(key) {
+                return false; // 自有定义优先，自有候选由本单元签名收集登记
+            }
+            key.split_once('.')
+                .is_some_and(|(type_name, _)| prefixes.contains(type_name))
+        })
+        .collect()
 }

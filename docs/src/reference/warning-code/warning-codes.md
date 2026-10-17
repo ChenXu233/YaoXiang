@@ -86,7 +86,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`本地模块 '{module}' 遮蔽了依赖包 '{dependency}'`
 - **帮助**：本地模块解析优先级最高（RFC-014）：'./src/{module}' 覆盖 .yaoxiang/vendor/ 中的依赖包 '{dependency}'。若遮蔽非本意请重命名本地模块；可用 --deny-shadowing 将其升级为错误
-- **发射点**：`src/driver/arms.rs:603`、`src/util/diagnostic/command.rs:78`
+- **发射点**：`src/driver/arms.rs:616`、`src/util/diagnostic/command.rs:78`
 
 ### W1063：const 泛型约束无法求值
 

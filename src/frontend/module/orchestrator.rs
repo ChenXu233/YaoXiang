@@ -1066,6 +1066,15 @@ pub(crate) fn extract_module_info(
     let mut info = ModuleInfo::new(module_key.to_string(), ModuleSource::User);
     // RFC-029：导出本文件的方法绑定（如 Point.get_x），供其他文件导入类型后调用。
     info.method_bindings = checker.env().method_bindings.clone();
+    // RFC-029f 改进 4 / WBS 4.9.7（#464）：方法**重载候选**同源导出。与
+    // `method_bindings` 同一趟签名收集产出（pass2 + flush_pending_body_bindings），
+    // 候选序 = 定义侧声明序（与 ir_gen 的定义侧混编序同源）——跨单元调用点的
+    // 决议按它取名，序一旦错位，调用名与定义名就不再对应。
+    info.method_overloads = checker
+        .env()
+        .method_overload_snapshot()
+        .into_iter()
+        .collect();
 
     for stmt in &ast.items {
         match &stmt.kind {

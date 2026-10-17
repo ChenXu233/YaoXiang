@@ -120,6 +120,44 @@ pub enum BaseKind {
     Unknown,
 }
 
+/// 定义侧方法重载候选的一个键位（RFC-029f 改进 4 / WBS 4.9.7 / issue #464）。
+///
+/// 打包而非三张平行表的理由：候选、混编 IR 名、声明期形参名是**同序**配对
+/// 不变式（调用点按候选序取名，定义侧按声明序混编）。跨单元传递若拆成三条
+/// 独立通路，任一条漏接或错序都会让调用名与定义名不再对应——这里让配对随值
+/// 一起走，注入侧只做**整组同序追加**。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MethodOverloadCandidates {
+    /// 候选签名（定义侧声明序）
+    pub candidates: Vec<MonoType>,
+    /// 与 `candidates` 同序的混编 IR 名（0 = 裸名 `{Type}.{method}`，其后 `#序`）
+    pub ir_names: Vec<String>,
+    /// 与 `candidates` 同序的声明期形参名（不可得时为空表 = 不按名匹配）
+    pub param_names: Vec<Vec<String>>,
+}
+
+impl MethodOverloadCandidates {
+    /// 同键位追加另一模块的候选组（跨单元合并的**唯一**追加点：三张表同序追加）。
+    pub fn merge_from(
+        &mut self,
+        other: &MethodOverloadCandidates,
+    ) {
+        self.candidates.extend(other.candidates.iter().cloned());
+        self.ir_names.extend(other.ir_names.iter().cloned());
+        self.param_names.extend(other.param_names.iter().cloned());
+    }
+
+    /// 候选数
+    pub fn len(&self) -> usize {
+        self.candidates.len()
+    }
+
+    /// 是否没有候选
+    pub fn is_empty(&self) -> bool {
+        self.candidates.is_empty()
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct TypeEnvironment {
     pub vars: HashMap<String, PolyType>,
@@ -259,6 +297,65 @@ impl TypeEnvironment {
                 .entry(key.to_string())
                 .or_default()
                 .push(param_names);
+        }
+    }
+
+    /// 定义侧候选表的**快照**（键升序）：跨单元方法调用的决议输入
+    /// （RFC-029f 改进 4 / WBS 4.9.7 / issue #464）。
+    ///
+    /// 返回有序 `Vec` 而非 `HashMap`：跨单元合并的确定性从这一层起——
+    /// 模块内按定义序、模块间按模块键序，HashMap 迭代序不外泄。
+    pub fn method_overload_snapshot(&self) -> Vec<(String, MethodOverloadCandidates)> {
+        let mut keys: Vec<&String> = self.method_overloads.keys().collect();
+        keys.sort();
+        keys.into_iter()
+            .map(|key| {
+                (
+                    key.clone(),
+                    MethodOverloadCandidates {
+                        candidates: self.method_overloads.get(key).cloned().unwrap_or_default(),
+                        ir_names: self
+                            .method_overload_ir_names
+                            .get(key)
+                            .cloned()
+                            .unwrap_or_default(),
+                        param_names: self
+                            .method_overload_param_names
+                            .get(key)
+                            .cloned()
+                            .unwrap_or_default(),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// 注入跨模块的方法重载候选（WBS 4.9.7 / #464）：三张平行表**同序**追加。
+    ///
+    /// 与 `add_method_overload_with_params` 同源维护配对不变式——两处若各写
+    /// 一套追加逻辑，正是「候选 ↔ 名字」配对分叉的入口（禁令三）。
+    pub fn inject_method_overloads(
+        &mut self,
+        table: Vec<(String, MethodOverloadCandidates)>,
+    ) {
+        for (key, group) in table {
+            let MethodOverloadCandidates {
+                candidates,
+                ir_names,
+                param_names,
+            } = group;
+            self.method_overloads
+                .entry(key.clone())
+                .or_default()
+                .extend(candidates);
+            self.method_overload_ir_names
+                .entry(key.clone())
+                .or_default()
+                .extend(ir_names);
+            self.method_overload_param_names
+                .entry(key)
+                .or_default()
+                .extend(param_names);
         }
     }
 
