@@ -503,3 +503,91 @@
 > **七、批次树状态**
 >
 > yx49 与 yx49-b 均已 release（收口时 gc 统一删除）；仓库外无本批新增目录。
+
+## P4 4.9 引用池正确实现（RFC-029f 修正）— 轮 3 收口（4.9.7）
+
+> **4.9 轮 3 批实录（2026-10-17 实现 → 2026-10-17 收口）**：覆盖 4.9.7（跨单元方法调用的决议
+> 登记与接收者归因，issue `#464`——WBS 4.9 的最后一个三级任务；本轮收口后 4.9 整个二级任务
+> 看板勾选）。链路 = 产出侧 t19 → 独立验证 t20 PASS → 复审 t21 needs_revision（F1：注入面
+> 误报）→ 修复轮 t24 → 独立验证 t25 PASS → 复审 t26 PASS（增量，verdict=pass）。全部提交号
+> 为 push 后真值（判定方式 = 补丁 blob 相同；`git diff <rev>~1 <rev> | git hash-object --stdin`
+> 两侧一致）。
+>
+> **一、判决链与提交（push 后真值）**
+>
+> | 步 | 内容 | push 后提交 | 判定方式 |
+> |---|------|------------|---------|
+> | 1 | 产出侧：跨单元方法调用产生 D20 决议条目（`feat(typecheck)`，t19） | `b8b3cc3f6` | 补丁 blob 相同 |
+> | 2 | 驱动侧归因：方法可达性按定义单元给出标记、有决议记录的名字组停用池的名字级豁免（t20 验证 PASS / t21 复审抓 F1） | `d5c00235a` | 补丁 blob 相同 |
+> | 3 | 注入面修复轮 F1：候选注入按「名字 ← 提供模块」**逐对**过滤，消除 E1107 误报（t24，含 F2 表述与 F3 落表单点） | `d5dd1a37b` | 补丁 blob 相同 |
+> | 4 | 钉测试归位：`src/frontend/core/typecheck/tests/environment.rs` 的 F3 钉板迁入声明面 `src/driver/tests/overload_injection.rs` | `c2f887843` | 补丁 blob 相同 |
+> | 5 | dev 顶端 | `e9675c9dd` | merge 提交，见「二」 |
+>
+> **二、哈希映射与 dev 顶端的两笔 merge（来源未确认，不许写成员所为）**：轮 3 的四笔提交
+> （上表 1–4）均已推上 origin/dev；`git worktree list` 的主挂载在 `e9675c9dd`。dev 顶端存在两笔
+> **非本团队命令面产生**的 merge 提交（`5da05b885` / `e9675c9dd`，reflog 显示为 `pull --tags` +
+> push 形态），来源未确认——按第 10 条④（引用必须任何人可解析）与第 13 条（门禁交专门核对）
+> 的同一次收口口径，此处只登记事实与 reflog 证据，不做成员归因；另见「五、」教训②（push 归属
+> 约定必须可核）。
+>
+> **三、D20 契约扩展的实际形态（键形态与消费点）**：产出侧把「候选 / 混编 IR 名 / 声明期形参名」
+> 三张平行表**同序**打包进 `ModuleInfo.method_overloads`（`src/frontend/module/mod.rs:157`）随单元
+> 跨界，注册表按模块键升序确定性合并（`src/frontend/module/registry.rs:150`）；typecheck 臂按
+> 本单元 import face 逐对注入（`src/driver/arms.rs:354` → `visible_method_overloads`，
+> `src/driver/arms.rs:1521-1579`：名字 ← 提供模块逐对、同名冲突整名跳过、自有键位不外并），
+> 落表单点 `append_overload_group`（`src/frontend/core/typecheck/environment.rs:399`：三表同序
+> 追加 + 等长 debug 断言）；消费端把 D20 决议产物按**定义单元**归因（`MethodMarks`，
+> `src/driver/helpers.rs:569-573`；`typed_owners` `:591`；`resolved_method_marks` `:621`），并让
+> 有决议记录的名字组停用池的名字级豁免（`src/frontend/core/typecheck/passes/dead_code.rs:252-267`、
+> `:825-841`）。键形态 = 条目名 `{Type}.{method}#k`（`{Type}` 为定义侧裸名；`#k` 声明序）。
+>
+> **四、键作用域与误报防线实测（修复轮 F1 与五条残余边界）**：F1 的红态是修复前 `d5c00235a` 的
+> 注入面「名字集合 × 模块集合」组合把另一模块定义的同名类型候选并进同一键位 ⇒ `use a.{Temp}` +
+> `use b.{Other}`（a 亦定义 Other、b 亦定义 Temp、方法同名同序）的夹具 `check` 报 2×E1107、退出 1
+> （修前成功的程序编译失败）；修复后 `check`/`run` 均退出 0，4 条 W1005 如实报出两侧**未被调用**的
+> 同名定义（反向漏报面也核了）。入库夹具 `tests/yaoxiang-multifile/ref-pool-cross-unit-name-owner/`；
+> 驱动级钉 `src/driver/tests/overload_injection.rs` 3 条 + `src/driver/tests/method_unused.rs` 轮 2 的
+> 5 条 #464 判据与 4 条 #450 旧判据全绿；主验收夹具 `tests/yaoxiang-multifile/ref-pool-cross-unit-method/`
+> 诊断集在修复前后逐条一致（未回退）。五条残余边界与逐条实测（单独 `check` 定义文件不报 / 名字层
+> 歧义 E5006 整名跳过 / 边界(c) 按 t20 实测改写 / 内联别名与 `ns.T` 不注入候选面 / 整体导入 `use M`
+> 与 std 候选面不产条目）全文见 [029f](../../rfc/accepted/029f-target-semantics.md) §跨单元方法可达性
+> 归因「残余边界」，此处不重复。
+>
+> **五、过程事件与教训（四类延续）**：
+>
+> 1. **契约措辞写窄会直接变成缺陷**：F1 的根因之一是契约只写「只注入能按裸类型名命名的模块面」，
+>    没写「按名字逐对归属」——实现按字面取了「名字集合 × 模块集合」的组合，复审才抓出 E1107 误报。
+>    契约里描述行为边界时必须把**组合学**写死（按名逐对 / 全组合），不能留给实现自行理解。
+> 2. **约定必须可核：「push 由队长做」只写在派工消息里 ⇒ 出现第三方 push/merge 时无法归因**。
+>    本轮 dev 顶端出现两笔来源未确认的 merge（见「二」），最终靠 reflog 反推并撤回一次错误归因。
+>    可核形态 = 成员不运行 `git push`/`fetch`/`pull`、同步一律 `pull --rebase`、用 reflog 核对。
+> 3. **基础设施不稳，先落 patch 再换人**：本批共 5 次不可恢复故障（3×TRANSPORT、1×INVALID_REQUEST（thinking 协议）、
+>    1×后台子代理无消息退出）；处置惯例 = 已产出的证据与补丁先落到仓库内路径（`target/yx-scratch/<batch>/`）
+>    再换人续做，同一会话连续两次失败不赌第三次。
+> 4. **文档提交的真正判据是「本地真构建一次」**：轮 2 收口的文档提交（`042c07860`）让 Deploy Docs 红
+>    在 VitePress 的 Vue 模板编译（尖括号占位符 `<rev>` 等没进反引号被当元素解析，报 `Element is missing
+>    end tag`）；markdownlint 抓不到这一类，且 pre-commit 的 markdownlint 钩子在仅含 docs 的提交里被判
+>    `no files to check` 跳过（实测两次）。修复提交 `0c837e1b4` 以本地构建 exit=0 佐证。本轮该教训的红→绿 run：Deploy Docs **39011946793**（红）→ **39014696984**（绿，详见「六」）。
+>
+> **六、轮 2 门禁结论补登记（第 13 条，定时核对环节回填）**：轮 2 收口提交 `b940300ac` 的推送——
+> CI **39011946778** success / Auto Translate **39011946796** success / Deploy Docs **39011946793**
+> **failure**（VitePress 构建红，即「五、4」的尖括号占位符；已由 `0c837e1b4` 修复）；修复提交
+> `0c837e1b4` 推送后三绿：CI **39014697000** / Auto Translate **39014697044** / Deploy Docs **39014696984**。
+> 连推覆盖关系：CI@`0c837e1b4` 的 **39014356642** 被后继 run 以 concurrency 取消（取消 ≠ 失败，后代 run
+> 覆盖前一笔，与轮 2 §六的口径一致）。
+>
+> **七、最终门禁（收口 revision `e9675c9dd`，本地数字；CI 结论交定时核对，见「八」）**：
+> lib 2770 passed / integration 289 passed / yx_multifile_runner 1 passed / IR 快照 7 passed 零漂移 /
+> clippy `-D warnings` 0 / docs-truth 0 / 生成器幂等（重跑 `scripts/docs/gen-error-code-docs.py` 后
+> `git status` 干净）；语料基线 346 → 347 → 348 行（每笔 +1 条 behavior 记录，其余行逐字节不变；
+> 基线 `tests/baselines/corpus-parity.jsonl` 在 `e9675c9dd` 共 348 行）。
+>
+> **八、门禁核对安排（第 13 条）**：本批（含本篇文档提交）推送后的 CI / Auto Translate / Deploy Docs
+> run 结论**交由定时核对环节登记**（run id + conclusion + 连推覆盖关系），不在会话内等待，也不把
+> 「没等」写成「已绿」。
+>
+> **九、批次树状态（收口 gc，status 输出）**：收口前 `scratch.py status`——t25（holder=-）与 yx49b
+> （holder=-，此前由已停用成员 verify-r3 陈旧持有，队长 `release --force` 释放）两棵树均无持有者；
+> `gc` 删除两棵，释放约 12.7 GB；gc 后 `status` = 「没有批次树」，`git worktree list` 只剩主挂载。
+> 另：`target/yx-scratch/yx49r3/` 与 `yx49r4/` 不是批次树（无 meta.json），是成员放证据/探针的目录，
+> 不属「残留批次树」。仓库外无本批新增目录。
