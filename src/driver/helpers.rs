@@ -558,19 +558,20 @@ pub(in crate::driver) fn collect_compilation_refs(
 ///
 /// - 决议名形如 `Type.method#k`（`#k` 缺省 = 声明序 0；定义侧按声明序混编）——
 ///   解析的是**既有命名约定的消费**，不复制 ir_gen 的命名实现；
-/// - 剥除定义模块限定前缀（各单元键 + `.`）后得到基名：IR 名↔定义的配对留在 L1，
-///   分析器只收这个二元组（L2 不得知道 IR 名）；
+/// - 决议名**不带定义单元（模块键）前缀**：ir_name 只由 `Environment` 的登记键派生
+///   （`{Type}.{method}`，见 `typecheck/environment.rs:add_method_overload_with_params`），
+///   唯一拼接限定名的 `SymbolTable::qualify` 不喂决议表 ⇒ 无需剥前缀（WBS 4.9.7 / #464）；
 /// - 经 `OverloadResolutions::iter` **纯读**（不触达 `get`、不动消费台账）；
-/// - 跨单元同名方法：标记按名字对所有单元生效（多标 = 少报，宁漏报方向）。
+/// - 标记按名字全局生效：跨单元（registry 解析）的方法调用**不产生决议条目**
+///   （WBS 4.9.7 / #464），故该名字组回落名字级豁免（宁漏报方向）。
 pub(in crate::driver) fn resolved_method_marks(
-    units: &[Unit],
-    type_results: &[Option<&TypeCheckResult>],
+    type_results: &[Option<&TypeCheckResult>]
 ) -> HashSet<(String, usize)> {
     let mut marks = HashSet::new();
     for result in type_results.iter().flatten() {
         for (_, ir_name) in result.overload_resolutions.iter() {
             let (base, ordinal) = split_overload_ir_name(ir_name);
-            marks.insert((strip_unit_prefix(&base, units), ordinal));
+            marks.insert((base, ordinal));
         }
     }
     marks
@@ -582,19 +583,6 @@ fn split_overload_ir_name(ir_name: &str) -> (String, usize) {
         Some((base, idx)) => (base.to_string(), idx.parse().unwrap_or(0)),
         None => (ir_name.to_string(), 0),
     }
-}
-
-/// 剥除定义模块限定前缀（任一单元键 + `.`）——剩下的基名与各单元 `all_defs` 同名
-fn strip_unit_prefix(
-    base: &str,
-    units: &[Unit],
-) -> String {
-    for unit in units {
-        if let Some(rest) = base.strip_prefix(&format!("{}.", unit.key)) {
-            return rest.to_string();
-        }
-    }
-    base.to_string()
 }
 
 /// manifest 声明面优先的池来源（#334「包内 use 图不可达的报警」）：对每个包目标

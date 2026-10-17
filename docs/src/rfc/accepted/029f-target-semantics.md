@@ -343,7 +343,7 @@ fn classify(files, manifest, entry_reach) -> Map<File, Role>:
 | 4 | 消费定义细化：区分「被 import」和「被 import 后真实使用」（仅后者算消费） | **消费判据 = 「被 import 后真实使用」**：一条消费记录 = 某模块用 `use` 把名字 n 从模块 M 带进作用域**且在使用点真的引用了 n**，只记到 M（`RefPool::consumed_from`）；只出现在 use 项里（无使用点）、别的模块对**同名**标识符的引用都不算消费。import 的目标模块按发现期的模块键集合判定（`resolve_import_module`，**不另起一套路径解析**——复用 4.6.1 已交付的发现期解析产物，见 `39546020`）；命名空间形态（`use lib` + `lib.foo()`）同样归因 | `src/driver/helpers.rs:442-446`（`RefPool`）；`src/driver/helpers.rs:449-524`（`collect_ref_pool` + `resolve_import_module`）；`src/frontend/core/typecheck/passes/dead_code.rs:180-192`（`ModuleNames`）、`:328-352`（`collect_module_names`）、`:122-176`（`ImportFace` / `collect_import_face`） |
 | 5 | 测试池分离：tests/ 的引用不豁免生产代码（src/） | **`FileRole::Test` 不贡献消费面**：Test 模块的引用单独成池（Test 自身不参与死代码判定，故其引用不外溢），生产代码的定义只被生产代码的消费救活。角色由 `roles::classify` 单点判定（测试发现规则 RFC-036） | `src/driver/helpers.rs:470-476`（`collect_ref_pool` 的 Test 短路）；`src/driver/helpers.rs:595-601`（`roles::classify` 单点判定）；`src/driver/arms.rs:562-580`（退化/声明面两条路径都把角色喂给池） |
 
-**残留面（登记，不阻塞）**：① 字段/方法位引用（`obj.render()` 只有短名）在 AST 层无法归因到接收者类型所属模块——只有基名命中命名空间导入时才按 import 归因，其余按名字维度保守计入 `RefPool::field_names`；② 同名重载之间：**逐候选归因已完成**（WBS 4.9.6 修复轮）——可达性消费 D20 决议产物（`TypeCheckResult.overload_resolutions` 的**纯读**枚举 `iter`，不触达 `get`、不计入消费台账）；IR 名↔定义的配对（同名第 k 个声明 ↔ 决议名 `#k`）只在 L1 driver 完成（`resolved_method_marks`），分析器只收 `(基名, 声明序)` 二元组（L2 不得知道 IR 名）；被决议命中的声明可达，**未被命中的兄弟重载仍如实报 W1005**（验收③「含未被重载决议命中」成立）。**回落边界（登记，宁漏报方向）**：某名字组在本单元**没有任何决议记录**时（如调用点歧义 E1107、或不经重载决议的调用形态）回落短名共判——此时**不**宣称「未被调用的方法一律如实报」；该边界由驱动级钉 `src/driver/tests/method_unused.rs` 的混合重载用例（部分调用 ⇒ 恰报未命中的那一个）共同界定。
+**残留面（登记，不阻塞）**：① 字段/方法位引用（`obj.render()` 只有短名）在 AST 层无法归因到接收者类型所属模块——只有基名命中命名空间导入时才按 import 归因，其余按名字维度保守计入 `RefPool::field_names`（`src/driver/helpers.rs` 的 `collect_ref_pool`）；② 方法可达性：**同单元内**按 D20 决议产物逐候选收窄（`resolved_method_marks`；未被命中的兄弟重载仍如实报 W1005）；**跨单元（registry 解析）的方法调用不产生决议条目**（WBS 4.9.7 / issue #464）⇒ 该名字组回落到池的**名字级豁免**（`RefPool::field_names` 全局平铺）⇒ 跨单元同名同序的方法此前不被报；该缺口登记为 WBS 4.9.7 / issue #464（能力扩展，不在本轮）。回落边界：某名字组在本单元无任何决议记录时（如调用点歧义 E1107、不经决议的调用形态）回落短名共判（宁漏报方向）——因此不宣称「未被调用的方法一律如实报」。
 
 ### 引用计数失真（WBS 4.9.6 / issue #450）—— 修正状态（2026-10-16）
 
@@ -351,7 +351,7 @@ fn classify(files, manifest, entry_reach) -> Map<File, Role>:
 
 | 环节 | 原缺陷 | 现状 | 落地代码 |
 |------|--------|------|----------|
-| 可达性探针 | 扫描按**限定名**查引用（`Point.render`），而引用点收集到的是**短名**（`obj.render()` 只有 `render`）⇒ 被调用的方法永远不可达，无项目根路径下误报 W1005 | 方法按**短名探针**判定调用面，并以 **D20 决议产物**做逐候选收窄（`resolved_methods`；未被决议命中的兄弟重载仍报 W1005）；无决议记录的名字组回落短名共判（见残留面②） | `src/frontend/core/typecheck/passes/dead_code.rs:733-744`（探针）；`:766-770`（逐定义判定） |
+| 可达性探针 | 扫描按**限定名**查引用（`Point.render`），而引用点收集到的是**短名**（`obj.render()` 只有 `render`）⇒ 被调用的方法永远不可达，无项目根路径下误报 W1005 | 方法按**短名探针**判定调用面，并以 **D20 决议产物**做逐候选收窄（`resolved_methods`；未被决议命中的兄弟重载仍报 W1005）。作用域边界：同单元内逐候选成立；**跨单元（registry 解析）调用不产生决议条目** ⇒ 回落名字级豁免（issue #464，见残留面②） | `src/frontend/core/typecheck/passes/dead_code.rs:733-744`（探针）；`:766-770`（逐定义判定） |
 | 定义表键控 | `all_defs` 按限定名键控 ⇒ **同名重载互相覆盖**（两个重载只剩一条，只报 1 条） | 定义表**逐定义一条**：方法追加、同名非方法绑定按名字去重保留最后一次（重载是各自独立的定义，顶层重赋值是同一个绑定） | `src/frontend/core/typecheck/passes/dead_code.rs:304-322`（`record_definition`）、`:28-29`（字段） |
 
 **不在 P3.5 改的理由（与上一版一致）**：模块级解析需要 `use` 项的路径解析完成（`use a::foo` → foo 来自模块 a），属 P4 阶段契约与 Driver 统一的范畴。

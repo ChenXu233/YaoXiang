@@ -561,12 +561,12 @@ impl Driver {
         // 退化路径要本单元的角色（Test 不贡献消费面）；roles 在 RoleClassification
         // 臂已产，这里只读不写
         let unit_roles: Vec<Option<FileRole>> = units.iter().map(|us| us.role).collect();
-        // WBS 4.9.6 / #450 逐候选方法标记：从 D20 决议产物（纯读）解析
-        // （基名, 声明序），IR 名↔定义的配对留在本层；分析器只收二元组
+        // WBS 4.9.6 / #450 逐候选方法标记：从 D20 决议产物（纯读）解析（基名, 声明序）；
+        // 决议名不带单元前缀（WBS 4.9.7 / #464），故不传 units、无前缀剥离
         let resolved_marks = {
             let results: Vec<Option<&TypeCheckResult>> =
                 units.iter().map(|us| us.type_result.as_ref()).collect();
-            resolved_method_marks(&program.units, &results)
+            resolved_method_marks(&results)
         };
         let pool = if package_roots.is_empty() {
             // 无声明面（含无 manifest 的 standalone 单文件）：退化为被检文件
