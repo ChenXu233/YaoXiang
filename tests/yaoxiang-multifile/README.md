@@ -55,6 +55,8 @@ P4「统一 Driver」是全计划最大风险点，本层是 P4 唯一可执行�
 | ref-pool-module-identity | 引用池身份 = (模块, 名字)：别的模块的同名顶层定义/局部变量不豁免本定义（RFC-029f 改进 2 / WBS 4.9.2） | 行为 |
 | ref-pool-import-use | 消费判据 = 被 import 后真实使用：别的模块对同名标识符的调用不救活本定义，只看 use 项不算消费（RFC-029f 改进 4 / WBS 4.9.4） | 行为 |
 | ref-pool-test-pool | 测试池分离：tests/ 的引用不豁免生产代码（src/）的定义（RFC-029f 改进 5 / WBS 4.9.5） | 行为 |
+| ref-pool-cross-unit-method | 跨单元方法调用的定义单元归因：未被调用的同名同序方法如实报 W1005（WBS 4.9.7 / #464） | 行为 |
+| ref-pool-cross-unit-name-owner | 跨单元方法候选注入面的名字归属过滤：每个裸类型名只由自己的提供模块供候选（WBS 4.9.7 / #464） | 行为 |
 
 ## 计划扩展（登记用，落地时勾掉）
 

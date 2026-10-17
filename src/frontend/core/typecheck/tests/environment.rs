@@ -9,6 +9,67 @@ use crate::frontend::core::types::{MonoType, PolyType};
 
 // Happy path 测试
 
+/// WBS 4.9.7 / issue #464（修复轮 F3）：候选三元组（候选 / 混编 IR 名 / 声明期形参名）
+/// 的**同序落表**与**等长不变式**——声明期登记与跨单元注入共用同一写入点，
+/// 快照出口校验等长；错位不得静默流到别的编译单元（错位 = 调用点拿别人的名字派发）。
+#[test]
+fn test_method_overload_triple_stays_aligned_across_registration_and_injection() {
+    // Arrange：声明期登记两个同名候选（签名不同 ⇒ 各自占一个声明序）
+    let mut source = TypeEnvironment::new();
+    let first = MonoType::Fn {
+        params: vec![MonoType::Int(64)],
+        return_type: Box::new(MonoType::Float(64)),
+    };
+    let second = MonoType::Fn {
+        params: vec![MonoType::make_string()],
+        return_type: Box::new(MonoType::Float(64)),
+    };
+    source.add_method_overload_with_params("Temp.to", first.clone(), vec!["x".to_string()]);
+    source.add_method_overload_with_params("Temp.to", second.clone(), vec!["s".to_string()]);
+    // 同签名重复登记不占新声明序（既有去重口径不得因改写而变）
+    source.add_method_overload_with_params("Temp.to", first.clone(), vec!["x".to_string()]);
+
+    // Act：快照（跨单元通路的出口）→ 注入另一个环境（通路的入口）
+    let snapshot = source.method_overload_snapshot();
+    let mut target = TypeEnvironment::new();
+    target.inject_method_overloads(snapshot.clone());
+
+    // Assert：逐位对齐——候选序 = 声明序、混编名 0=裸名其后 #序、形参名同位
+    let (key, group) = &snapshot[0];
+    assert_eq!(key, "Temp.to", "快照键 = 登记键，实际: {key}");
+    assert_eq!(
+        group.candidates,
+        vec![first, second],
+        "候选必须按声明序排列（重复登记不得占新序），实际: {:?}",
+        group.candidates
+    );
+    assert_eq!(
+        group.ir_names,
+        vec!["Temp.to".to_string(), "Temp.to#1".to_string()],
+        "混编名必须与候选同序（0=裸名、其后 #序），实际: {:?}",
+        group.ir_names
+    );
+    assert_eq!(
+        group.param_names,
+        vec![vec!["x".to_string()], vec!["s".to_string()]],
+        "声明期形参名必须与候选同序，实际: {:?}",
+        group.param_names
+    );
+    // 注入端与快照端逐表一致（跨单元通路的往返不得改序、不得丢位）
+    let injected: Vec<(String, _)> = target.method_overload_snapshot();
+    assert_eq!(
+        injected.len(),
+        1,
+        "注入后目标环境应恰有 1 个键位，实际: {:?}",
+        injected.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        injected[0].1,
+        group.clone(),
+        "注入不得改变三元组的顺序与配对"
+    );
+}
+
 #[test]
 fn test_environment_new_creates_empty() {
     // Arrange & Act

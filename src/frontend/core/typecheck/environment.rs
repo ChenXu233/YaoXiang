@@ -137,14 +137,37 @@ pub struct MethodOverloadCandidates {
 }
 
 impl MethodOverloadCandidates {
-    /// 同键位追加另一模块的候选组（跨单元合并的**唯一**追加点：三张表同序追加）。
+    /// 同键位追加另一模块的候选组（候选组之间的**唯一**追加点：三向量同序追加）。
+    ///
+    /// 三向量等长是配对不变式（候选 ↔ 混编 IR 名 ↔ 声明期形参名）。不等长 ⇒ 合并
+    /// 结果必然错位，且错位是**静默**的（调用点会拿别人的名字派发）——debug 构建
+    /// （含全部 `cargo test`）在此当场响亮失败，不产出错位表。
     pub fn merge_from(
         &mut self,
         other: &MethodOverloadCandidates,
     ) {
+        debug_assert_eq!(
+            other.candidates.len(),
+            other.ir_names.len(),
+            "被并入的候选组自身必须等长（候选 {} / 混编名 {}）",
+            other.candidates.len(),
+            other.ir_names.len()
+        );
+        debug_assert_eq!(
+            other.candidates.len(),
+            other.param_names.len(),
+            "被并入的候选组自身必须等长（候选 {} / 形参名 {}）",
+            other.candidates.len(),
+            other.param_names.len()
+        );
         self.candidates.extend(other.candidates.iter().cloned());
         self.ir_names.extend(other.ir_names.iter().cloned());
         self.param_names.extend(other.param_names.iter().cloned());
+        debug_assert_eq!(
+            self.candidates.len(),
+            self.ir_names.len(),
+            "合并后候选组必须保持等长（键位内的配对不得错位）"
+        );
     }
 
     /// 候选数
@@ -278,26 +301,31 @@ impl TypeEnvironment {
             MonoType::Fn { params, .. } if params.len() == param_names.len() => param_names,
             _ => Vec::new(),
         };
-        let list = self.method_overloads.entry(key.to_string()).or_default();
-        if !list.contains(&ty) {
-            list.push(ty);
-            // RFC-011a §3：重载候选的 IR 混编名（注册序，0=裸名）——
-            // 定义侧 ir_gen 按同一 AST 序混编，调用点决议后按名派发
-            let ordinal = list.len() - 1;
-            let ir_name = if ordinal == 0 {
-                key.to_string()
-            } else {
-                format!("{key}#{ordinal}")
-            };
-            self.method_overload_ir_names
-                .entry(key.to_string())
-                .or_default()
-                .push(ir_name);
-            self.method_overload_param_names
-                .entry(key.to_string())
-                .or_default()
-                .push(param_names);
+        // 同签名去重（RFC-011b 原口径）：已登记过同一签名 ⇒ 不占新声明序
+        if self
+            .method_overloads
+            .get(key)
+            .is_some_and(|list| list.contains(&ty))
+        {
+            return;
         }
+        // RFC-011a §3：重载候选的 IR 混编名（注册序，0=裸名）——
+        // 定义侧 ir_gen 按同一 AST 序混编，调用点决议后按名派发
+        let ordinal = self.method_overloads.get(key).map_or(0, Vec::len);
+        let ir_name = if ordinal == 0 {
+            key.to_string()
+        } else {
+            format!("{key}#{ordinal}")
+        };
+        // 三张平行表经**唯一写入点**落表（顺序/配对规则只有一份）
+        self.append_overload_group(
+            key,
+            MethodOverloadCandidates {
+                candidates: vec![ty],
+                ir_names: vec![ir_name],
+                param_names: vec![param_names],
+            },
+        );
     }
 
     /// 定义侧候选表的**快照**（键升序）：跨单元方法调用的决议输入
@@ -310,20 +338,39 @@ impl TypeEnvironment {
         keys.sort();
         keys.into_iter()
             .map(|key| {
+                let candidates = self.method_overloads.get(key).cloned().unwrap_or_default();
+                let ir_names = self
+                    .method_overload_ir_names
+                    .get(key)
+                    .cloned()
+                    .unwrap_or_default();
+                let param_names = self
+                    .method_overload_param_names
+                    .get(key)
+                    .cloned()
+                    .unwrap_or_default();
+                // 快照是跨单元通路的出口：三表不等长在这里当场响亮失败，不让错位的
+                // 「候选 ↔ 名字」配对流到别的编译单元（配对不变式的最后一道闸）
+                debug_assert_eq!(
+                    candidates.len(),
+                    ir_names.len(),
+                    "快照三表必须等长（键 {key}：候选 {} / 混编名 {}）",
+                    candidates.len(),
+                    ir_names.len()
+                );
+                debug_assert_eq!(
+                    candidates.len(),
+                    param_names.len(),
+                    "快照三表必须等长（键 {key}：候选 {} / 形参名 {}）",
+                    candidates.len(),
+                    param_names.len()
+                );
                 (
                     key.clone(),
                     MethodOverloadCandidates {
-                        candidates: self.method_overloads.get(key).cloned().unwrap_or_default(),
-                        ir_names: self
-                            .method_overload_ir_names
-                            .get(key)
-                            .cloned()
-                            .unwrap_or_default(),
-                        param_names: self
-                            .method_overload_param_names
-                            .get(key)
-                            .cloned()
-                            .unwrap_or_default(),
+                        candidates,
+                        ir_names,
+                        param_names,
                     },
                 )
             })
@@ -339,24 +386,52 @@ impl TypeEnvironment {
         table: Vec<(String, MethodOverloadCandidates)>,
     ) {
         for (key, group) in table {
-            let MethodOverloadCandidates {
-                candidates,
-                ir_names,
-                param_names,
-            } = group;
-            self.method_overloads
-                .entry(key.clone())
-                .or_default()
-                .extend(candidates);
-            self.method_overload_ir_names
-                .entry(key.clone())
-                .or_default()
-                .extend(ir_names);
-            self.method_overload_param_names
-                .entry(key)
-                .or_default()
-                .extend(param_names);
+            self.append_overload_group(&key, group);
         }
+    }
+
+    /// 把一组候选**同序展开**进三张平行表——三张表**唯一**的写入点。
+    ///
+    /// 声明期登记（[Self::add_method_overload_with_params]）与跨单元注入
+    /// （[Self::inject_method_overloads]）都经此处落表：顺序/配对规则只有一份，
+    /// 两处各写一套「push candidate、push ir_name、push param_names」正是配对
+    /// 分叉的入口（禁令三）。落表前校验三向量等长（debug 构建响亮失败）。
+    fn append_overload_group(
+        &mut self,
+        key: &str,
+        group: MethodOverloadCandidates,
+    ) {
+        let MethodOverloadCandidates {
+            candidates,
+            ir_names,
+            param_names,
+        } = group;
+        debug_assert_eq!(
+            candidates.len(),
+            ir_names.len(),
+            "落表三表必须等长（键 {key}：候选 {} / 混编名 {}）",
+            candidates.len(),
+            ir_names.len()
+        );
+        debug_assert_eq!(
+            candidates.len(),
+            param_names.len(),
+            "落表三表必须等长（键 {key}：候选 {} / 形参名 {}）",
+            candidates.len(),
+            param_names.len()
+        );
+        self.method_overloads
+            .entry(key.to_string())
+            .or_default()
+            .extend(candidates);
+        self.method_overload_ir_names
+            .entry(key.to_string())
+            .or_default()
+            .extend(ir_names);
+        self.method_overload_param_names
+            .entry(key.to_string())
+            .or_default()
+            .extend(param_names);
     }
 
     /// RFC-011b: 查方法重载候选

@@ -1,0 +1,6 @@
+[package]
+name = "ref-pool-cross-unit-name-owner"
+version = "0.1.0"
+
+[run]
+main = "main.yx"

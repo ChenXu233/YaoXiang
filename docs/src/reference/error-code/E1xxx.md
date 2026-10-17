@@ -103,7 +103,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知类型：'{type}'`
 - **消息**：引用的类型不存在
 - **帮助**：检查类型名是否拼写正确
-- **发射点**：`src/frontend/core/typecheck/checker.rs:691`、`src/frontend/core/typecheck/environment.rs:579`、`src/util/test_markers.rs:241`
+- **发射点**：`src/frontend/core/typecheck/checker.rs:691`、`src/frontend/core/typecheck/environment.rs:654`、`src/util/test_markers.rs:241`
 
 ### E1010：参数数量不匹配
 
@@ -113,7 +113,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`函数 '{func}' 期望 {expected} 个参数，找到 {found} 个`
 - **消息**：函数调用参数与定义不匹配
 - **帮助**：检查函数调用参数数量
-- **发射点**：`src/frontend/core/typecheck/environment.rs:501`、`src/frontend/core/typecheck/inference/arg_binding.rs:123`、`src/frontend/core/typecheck/inference/expressions.rs:1273` 等 19 处
+- **发射点**：`src/frontend/core/typecheck/environment.rs:576`、`src/frontend/core/typecheck/inference/arg_binding.rs:123`、`src/frontend/core/typecheck/inference/expressions.rs:1273` 等 19 处
 
 ### E1011：参数类型不匹配
 
@@ -378,7 +378,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`const 泛型约束失败: \`{constraint}\` 不成立`
 - **消息**：const 泛型参数的值约束不满足
 - **帮助**：修改 const 参数值使其满足约束
-- **发射点**：`src/frontend/core/typecheck/environment.rs:546`
+- **发射点**：`src/frontend/core/typecheck/environment.rs:621`
 
 ### E1064：绑定位置索引无效
 

@@ -360,12 +360,12 @@ fn classify(files, manifest, entry_reach) -> Map<File, Role>:
 
 > 原登记（残留面②）：跨单元（registry 解析）的方法调用不产生 D20 决议条目 ⇒ 该名字组回落池的**名字级**
 > 豁免 ⇒ **跨单元同名同序的未调用方法不被报**。本条分两笔落地：**产出侧**（跨单元方法调用产生决议条目，
-> 提交 `3a97ff1f`）与**驱动侧归因**（按定义单元给出可达性标记并停用名字级豁免）。下表 file:line 取于
+> 提交 `b8b3cc3f6`；其注入面在修复轮按名字归属逐对过滤，见下表）与**驱动侧归因**（按定义单元给出可达性标记并停用名字级豁免）。下表 file:line 取于
 > **驱动侧归因工作树**（提交号由批次收口在推送后补，见 09a——push 前的本地哈希会被 `pull --rebase` 重写）。
 
 | 环节 | 原缺陷 | 现状 | 落地代码 |
 |------|--------|------|----------|
-| 决议条目产出 | 跨单元调用点的候选表三张全缺（`method_overloads` / `method_overload_ir_names` / `method_overload_param_names`）⇒ 决议段整段跳过 ⇒ 条目 **0 条** | 候选组「候选 / 混编 IR 名 / 声明期形参名」按同序打包随 `ModuleInfo.method_overloads` 跨单元传递，注册表按模块键升序确定性合并；Typecheck 臂按本单元 import face 只注入「能按**裸类型名**命名的模块面」的候选组（自有键位不外并、同名冲突整名跳过）⇒ 同点 `cands=1`、条目 1 条（`Temp.to`） | `src/frontend/core/typecheck/environment.rs:308-360`（快照 / 注入）；`src/frontend/module/registry.rs:148-170`（`merge_method_overloads`）；`src/frontend/module/mod.rs:149-157`（`ModuleInfo` 字段）；`src/driver/arms.rs:348-354`（注入面）、`:1512-1566`（`visible_method_overloads`） |
+| 决议条目产出 | 跨单元调用点的候选表三张全缺（`method_overloads` / `method_overload_ir_names` / `method_overload_param_names`）⇒ 决议段整段跳过 ⇒ 条目 **0 条** | 候选组「候选 / 混编 IR 名 / 声明期形参名」按同序打包随 `ModuleInfo.method_overloads` 跨单元传递，注册表按模块键升序确定性合并；Typecheck 臂按本单元 import face **逐对**取候选——只注入「键的提供模块 == 该**类型名前缀**在本单元 scope 里的提供模块」的候选组（名字 ← 模块配对，不跨对组合；自有键位不外并、同名冲突整名跳过）⇒ 同点 `cands=1`、条目 1 条（`Temp.to`）。**修复轮实测（F1）**：此前「名字集合 × 模块集合」的组合会把另一模块定义的同名类型候选并进同一键位 ⇒ `use a.{Temp}` + `use b.{Other}`（a 亦定义 Other、b 亦定义 Temp、方法同名同序）下 `check` 报 2×E1107、退出 1（修前成功的程序编译失败）；逐对过滤后 `check`/`run` 均退出 0，入库夹具 `tests/yaoxiang-multifile/ref-pool-cross-unit-name-owner/` | `src/frontend/core/typecheck/environment.rs:145`（`merge_from`：候选组级同序追加）、`:336`（快照）、`:384`（注入）、`:399`（`append_overload_group`：三张平行表**唯一**落表点，落表前校验等长）；`src/frontend/module/registry.rs:150`（`merge_method_overloads`）；`src/frontend/module/mod.rs:155-157`（`ModuleInfo` 字段）；`src/driver/arms.rs:348-355`（注入面）、`:1517-1575`（`visible_method_overloads`） |
 | 驱动侧归因 | 决议条目按**名字**全局标记（`(基名, 声明序)` 一个集合）⇒ 另一单元的同名同序定义被同名兄弟的调用豁免（跨单元同名同序此前**不报**） | 标记按**定义单元**归因（`MethodMarks { by_unit, groups }`）：条目名 `{Type}.{method}#k` 的 `{Type}` 是**定义侧**裸名且不带单元 ⇒ 用记录方单元的**类型名面**算「该单元能拼出这个名字的模块集合」，条目归入集合内各单元的 `by_unit`；`groups` = 出现过条目的名字组（全局） | `src/driver/helpers.rs:570-573`（`MethodMarks`）、`:591-619`（`typed_owners`：花括号项 + 内联别名目标 + 模块限定访问 `ns.T`，复用 `collect_module_names` + `resolve_import_module` 单点）、`:621-654`（`resolved_method_marks`，经 `OverloadResolutions::iter` 纯读）、`src/driver/arms.rs:577-583`（逐单元取 `by_unit[unit_key]`）、`:644-655`（注入分析器） |
 | 判定面 | 有决议记录的名字组仍走池的**名字级**豁免（短名全局平铺） | 有决议记录的名字组**不走名字级豁免**：命中本单元声明的活、未命中的如实报 W1005（`!marked_group` 为豁免闸的前置条件） | `src/frontend/core/typecheck/passes/dead_code.rs:44`（字段）、`:252-257`（`set_resolved_groups`）、`:262-267`（`method_group_has_marks`）、`:782-792`（可达性逐候选）、`:815-877`（逐定义判定 / 豁免闸 / W1005 发射） |
 

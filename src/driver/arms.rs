@@ -341,10 +341,14 @@ impl Driver {
                 checker.env().method_bindings = method_bindings.clone();
             }
             // RFC-029f 改进 4 / WBS 4.9.7（#464）：跨单元方法调用的**重载候选**注入。
-            // 只注入本单元 import face 指向的模块面（裸类型名命名得到的 1-hop 面，
-            // 合并按模块键升序 ⇒ 确定性）——全注册表并集会让同名类型的跨单元候选
-            // 互相污染成 E1107 误报，理由与实测见本文件 `visible_method_overloads`。
-            // 入口单元自己的候选不在此列：它们由本单元签名收集现场登记（自有优先）。
+            // 注入面 = 本单元裸类型名面**逐对**（名字 ← 它自己的提供模块）取到的候选组：
+            // 只并入「键的提供模块 == 该类型名前缀在本单元 scope 里的提供模块」的候选组
+            // （名字升序 ⇒ 合并顺序确定）。跨对组合（名字集合 × 模块集合）会把别的模块
+            // 定义的同名类型候选塞进来 ⇒ 调用点 2 候选 ⇒ E1107 误报（修复轮实测：
+            // `use a.{Temp}` + `use b.{Other}`、a 亦定义 Other、b 亦定义 Temp 时
+            // 2×E1107；逐对过滤后 check/run 均退出 0）。判据与理由见本文件的
+            // `visible_method_overloads`；入口单元自己的候选不在此列——它们由本单元
+            // 签名收集现场登记（自有优先）。
             checker
                 .env()
                 .inject_method_overloads(visible_method_overloads(
@@ -1487,14 +1491,18 @@ impl Driver {
 }
 
 /// 一个单元**能按裸类型名命名的方法候选面**（RFC-029f 改进 4 / WBS 4.9.7 / #464）：
-/// 本单元 `use M.{Type}` 带进来的类型名所对应模块的候选组，按模块键升序合并。
+/// 本单元 `use M.{Type}` 带进来的**每个类型名**，只取它**自己的提供模块 M** 下
+/// 「键前缀 = 该名字」的候选组（名字 ← 模块**逐对**配对，不跨对组合）。
 ///
-/// 为什么必须限定在这层（而不是"全注册表并集"）：候选键是**裸类型名**
-/// （`{Type}.{method}`）——两个单元各自定义同名类型时键相同。把本单元**命名
-/// 不到**的候选并进决议表，同一个调用点会匹配到两个签名相同的候选，按「多候选
-/// 无法区分即报错」的规则报 E1107 误报（实测：main.yx 只 `use a.{Temp}` 时若并上
-/// b 的同名同序 `Temp.to`，两候选都匹配 ⇒ 歧义）；反过来命名得到的候选一个都不能
-/// 少（漏并 ⇒ 决议不产生条目 ⇒ 跨单元方法回落池的名字级豁免，W1005 漏报）。
+/// 为什么必须逐对过滤（而不是"名字集合 × 模块集合"）：候选键是**裸类型名**
+/// （`{Type}.{method}`）——两个单元各自定义同名类型时键相同。若把「本单元能命名
+/// 到的模块集合」整体合并后再按「键前缀 ∈ 名字集合」过滤，任一被命名到的模块定义
+/// 的同键候选都会混进来：调用点因此出现 2 个签名相同的候选，按「多候选无法区分即
+/// 报错」的规则报 E1107。实测（WBS 4.9.7 修复轮）：main 用 `use a.{Temp}` +
+/// `use b.{Other}`，a 也定义 Other、b 也定义 Temp ⇒ 每个名字只由一个模块带进
+/// 作用域、接收者类型唯一，程序仍然 2×E1107（Temp.to / Other.to 各 2 候选）。
+/// 反过来命名得到的候选一个都不能少（漏并 ⇒ 决议不产生条目 ⇒ 跨单元方法回落池的
+/// 名字级豁免，W1005 漏报）。
 ///
 /// 三条收窄规则（都朝**宁漏报**方向，宁可不产生条目也不制造歧义误报）：
 /// ① 只认**花括号项**形态（`use M.{Type}`）：整体导入 `use M` 把类型名挂在模块
@@ -1545,24 +1553,27 @@ fn visible_method_overloads(
         .get(own_module_key)
         .map(|module| module.method_overloads.keys().cloned().collect())
         .unwrap_or_default();
-    // 只保留「键前缀 = 该裸类型名」的候选组；模块键升序 ⇒ 合并顺序确定
-    let mut modules: Vec<String> = scope
-        .iter()
-        .filter(|(name, _)| !conflicted.contains(*name))
-        .map(|(_, module)| module.clone())
-        .collect();
-    modules.sort();
-    modules.dedup();
-    let prefixes: HashSet<&str> = scope.keys().map(String::as_str).collect();
-    registry
-        .merge_method_overloads(&modules)
+    // 名字 ← 提供模块**逐对**取候选：只有「键的提供模块 == 该类型名前缀的提供模块」
+    // 的候选组才进决议表（跨对组合会把别的模块的同名类型候选塞进来 ⇒ 2 候选 ⇒ E1107）。
+    // 名字升序 ⇒ 合并顺序确定（不同前缀的键互不相干）。
+    let mut pairs: Vec<(String, String)> = scope
         .into_iter()
-        .filter(|(key, _)| {
-            if own_keys.contains(key) {
-                return false; // 自有定义优先，自有候选由本单元签名收集登记
+        .filter(|(name, _)| !conflicted.contains(name))
+        .collect();
+    pairs.sort();
+    let mut merged: Vec<(String, MethodOverloadCandidates)> = Vec::new();
+    for (name, module) in pairs {
+        for (key, group) in registry.merge_method_overloads(&[module]) {
+            if own_keys.contains(&key) {
+                continue; // 自有定义优先：自有候选由本单元签名收集现场登记
             }
-            key.split_once('.')
-                .is_some_and(|(type_name, _)| prefixes.contains(type_name))
-        })
-        .collect()
+            if key
+                .split_once('.')
+                .is_some_and(|(type_name, _)| type_name == name)
+            {
+                merged.push((key, group));
+            }
+        }
+    }
+    merged
 }
