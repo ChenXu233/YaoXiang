@@ -37,6 +37,11 @@ pub struct DeadCodeAnalyzer {
     /// 解析后传入——分析器**不认识 IR 名**，只收这个二元组（IR 名↔定义的配对
     /// 留在 L1；分层：L2 不新增对 ir_gen 命名实现的依赖）
     resolved_methods: HashSet<(String, usize)>,
+    /// 出现过 D20 决议条目的**名字组**（基名，全局；WBS 4.9.7 / issue #464）：
+    /// 这些组的方法级消费由决议逐候选给出 ⇒ 池的**名字级**豁免
+    /// （`RefPool::field_names` 全局平铺）对它们不成立，判定不因同名兄弟的
+    /// 跨文件同名引用而放宽（宁漏报方向仍保留给无决议记录的组）
+    resolved_groups: HashSet<String>,
 }
 
 /// 符号定义
@@ -209,6 +214,7 @@ impl DeadCodeAnalyzer {
             exempt_pub: HashSet::new(),
             cross_file_refs: HashSet::new(),
             resolved_methods: HashSet::new(),
+            resolved_groups: HashSet::new(),
         }
     }
 
@@ -242,12 +248,22 @@ impl DeadCodeAnalyzer {
         self.resolved_methods = marks;
     }
 
-    /// 本模块里同名方法组是否有决议记录（决定逐候选还是回落短名共判）
+    /// 设置「出现过决议条目的名字组」（全局集合；WBS 4.9.7 / issue #464）
+    pub fn set_resolved_groups(
+        &mut self,
+        groups: HashSet<String>,
+    ) {
+        self.resolved_groups = groups;
+    }
+
+    /// 该名字组是否有决议记录（决定逐候选还是回落短名共判）——
+    /// 用驱动侧汇总的**全局**名字组：跨单元同名方法的决议记在别的单元上，
+    /// 本单元也要据「该组受决议控制」停用池的名字级豁免
     fn method_group_has_marks(
         &self,
         name: &str,
     ) -> bool {
-        self.resolved_methods.iter().any(|(mark, _)| mark == name)
+        self.resolved_groups.contains(name)
     }
 
     /// 收集入口点和符号定义（合并处理以减少代码重复）
@@ -818,8 +834,8 @@ impl DeadCodeAnalyzer {
                 _ => 0,
             };
             if marked_group {
-                // 逐候选：决议命中该声明 ⇒ 活；未命中 ⇒ 不因同名兄弟的调用而豁免，
-                // 继续走池判定与 W1005 报告（验收③：不得放宽）
+                // 逐候选：决议命中**本单元这条定义** ⇒ 活；未命中 ⇒ 判死
+                // （WBS 4.9.7 / #464：跨单元同名同序不被兄弟的调用豁免）
                 if self.resolved_methods.contains(&(name.clone(), this_decl)) {
                     continue;
                 }
@@ -827,12 +843,18 @@ impl DeadCodeAnalyzer {
                 continue;
             }
             // Bin/Internal: exempt_pub 豁免；Lib: cross_file_refs 豁免
-            // （Script 不接池；两池的装配口径见 driver 侧 collect_compilation_refs）
+            // （Script 不接池；两池的装配口径见 driver 侧 collect_compilation_refs）。
+            // **有决议记录的名字组不走名字级豁免**：field_names 是全局平铺的短名集合，
+            // 会让同单元/跨单元同名兄弟互相通吃（WBS 4.9.7 / issue #464）
             let short_name = name.rsplit('.').next().unwrap_or(name);
-            if !self.exempt_pub.is_empty() && self.exempt_pub.contains(short_name) {
+            if !marked_group && !self.exempt_pub.is_empty() && self.exempt_pub.contains(short_name)
+            {
                 continue;
             }
-            if !self.cross_file_refs.is_empty() && self.cross_file_refs.contains(short_name) {
+            if !marked_group
+                && !self.cross_file_refs.is_empty()
+                && self.cross_file_refs.contains(short_name)
+            {
                 continue;
             }
             let (code, message) = match def.kind {

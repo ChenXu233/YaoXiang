@@ -343,7 +343,7 @@ fn classify(files, manifest, entry_reach) -> Map<File, Role>:
 | 4 | 消费定义细化：区分「被 import」和「被 import 后真实使用」（仅后者算消费） | **消费判据 = 「被 import 后真实使用」**：一条消费记录 = 某模块用 `use` 把名字 n 从模块 M 带进作用域**且在使用点真的引用了 n**，只记到 M（`RefPool::consumed_from`）；只出现在 use 项里（无使用点）、别的模块对**同名**标识符的引用都不算消费。import 的目标模块按发现期的模块键集合判定（`resolve_import_module`，**不另起一套路径解析**——复用 4.6.1 已交付的发现期解析产物，见 `39546020`）；命名空间形态（`use lib` + `lib.foo()`）同样归因 | `src/driver/helpers.rs:442-446`（`RefPool`）；`src/driver/helpers.rs:449-524`（`collect_ref_pool` + `resolve_import_module`）；`src/frontend/core/typecheck/passes/dead_code.rs:180-192`（`ModuleNames`）、`:328-352`（`collect_module_names`）、`:122-176`（`ImportFace` / `collect_import_face`） |
 | 5 | 测试池分离：tests/ 的引用不豁免生产代码（src/） | **`FileRole::Test` 不贡献消费面**：Test 模块的引用单独成池（Test 自身不参与死代码判定，故其引用不外溢），生产代码的定义只被生产代码的消费救活。角色由 `roles::classify` 单点判定（测试发现规则 RFC-036） | `src/driver/helpers.rs:470-476`（`collect_ref_pool` 的 Test 短路）；`src/driver/helpers.rs:595-601`（`roles::classify` 单点判定）；`src/driver/arms.rs:562-580`（退化/声明面两条路径都把角色喂给池） |
 
-**残留面（登记，不阻塞）**：① 字段/方法位引用（`obj.render()` 只有短名）在 AST 层无法归因到接收者类型所属模块——只有基名命中命名空间导入时才按 import 归因，其余按名字维度保守计入 `RefPool::field_names`（`src/driver/helpers.rs` 的 `collect_ref_pool`）；② 方法可达性：**同单元内**按 D20 决议产物逐候选收窄（`resolved_method_marks`；未被命中的兄弟重载仍如实报 W1005）；**跨单元（registry 解析）的方法调用不产生决议条目**（WBS 4.9.7 / issue #464）⇒ 该名字组回落到池的**名字级豁免**（`RefPool::field_names` 全局平铺）⇒ 跨单元同名同序的方法此前不被报；该缺口登记为 WBS 4.9.7 / issue #464（能力扩展，不在本轮）。回落边界：某名字组在本单元无任何决议记录时（如调用点歧义 E1107、不经决议的调用形态）回落短名共判（宁漏报方向）——因此不宣称「未被调用的方法一律如实报」。
+**残留面（登记，不阻塞）**：① 字段/方法位引用（`obj.render()` 只有短名）在 AST 层无法归因到接收者类型所属模块——基名命中命名空间导入时按 import 归因、模块限定构造 `ns.T` 按**类型名面**归入方法归因（见下节 4.9.7），其余按名字维度保守计入 `RefPool::field_names`（`src/driver/helpers.rs` 的 `collect_ref_pool`）；② 方法可达性：按 D20 决议产物**逐候选 + 按定义单元**收窄（`resolved_method_marks`）——**同单元内**未被命中的兄弟重载如实报 W1005；**跨单元同名同序的未调用定义在可达形态下**同样如实报（WBS 4.9.7 / issue #464，已收口，机制与实测见下节）。**残余边界（登记，不得宣称全域；全部按实测）**：(a) 单独 `check <定义文件>`（该文件无调用点、调用方不在单元集）⇒ 没有决议条目 ⇒ 回落池的**名字级豁免**（`RefPool::field_names` 全局平铺）⇒ **不报**；(b) 同一个裸类型名被多个模块带进作用域（源程序在名字层已歧义，入口另报 E5006）⇒ 候选面整名跳过 ⇒ 无决议条目 ⇒ 同名同序组不报；(c) 调用方以任一形态拼出该类型名却从不调用其方法（如只写 `b.Temp(..)` 构造）⇒ 该单元按**可能归属**并入 ⇒ 不报；(d) 整体导入 `use M` 不让裸类型名进作用域、std 模块的候选面未接入——两形态都不产条目，回落名字级豁免。回落边界：某名字组在本单元无任何决议记录时（如调用点歧义 E1107、不经决议的调用形态）回落短名共判（宁漏报方向）——因此不宣称「未被调用的方法一律如实报」。
 
 ### 引用计数失真（WBS 4.9.6 / issue #450）—— 修正状态（2026-10-16）
 
@@ -351,7 +351,57 @@ fn classify(files, manifest, entry_reach) -> Map<File, Role>:
 
 | 环节 | 原缺陷 | 现状 | 落地代码 |
 |------|--------|------|----------|
-| 可达性探针 | 扫描按**限定名**查引用（`Point.render`），而引用点收集到的是**短名**（`obj.render()` 只有 `render`）⇒ 被调用的方法永远不可达，无项目根路径下误报 W1005 | 方法按**短名探针**判定调用面，并以 **D20 决议产物**做逐候选收窄（`resolved_methods`；未被决议命中的兄弟重载仍报 W1005）。作用域边界：同单元内逐候选成立；**跨单元（registry 解析）调用不产生决议条目** ⇒ 回落名字级豁免（issue #464，见残留面②） | `src/frontend/core/typecheck/passes/dead_code.rs:733-744`（探针）；`:766-770`（逐定义判定） |
+| 可达性探针 | 扫描按**限定名**查引用（`Point.render`），而引用点收集到的是**短名**（`obj.render()` 只有 `render`）⇒ 被调用的方法永远不可达，无项目根路径下误报 W1005 | 方法按**短名探针**判定调用面，并以 **D20 决议产物**做逐候选收窄（`resolved_methods` + `resolved_groups`；未被决议命中的兄弟重载仍报 W1005）。作用域边界：**同单元内**逐候选成立；**跨单元（registry 解析）调用**在产出侧（`3a97ff1f`）与驱动侧归因（本批）落地后，**在可达形态下**同样逐候选 + 逐定义单元成立（见残留面②与下节 4.9.7） | `src/frontend/core/typecheck/passes/dead_code.rs:782-792`（探针）；`:815-877`（逐定义判定与豁免闸） |
 | 定义表键控 | `all_defs` 按限定名键控 ⇒ **同名重载互相覆盖**（两个重载只剩一条，只报 1 条） | 定义表**逐定义一条**：方法追加、同名非方法绑定按名字去重保留最后一次（重载是各自独立的定义，顶层重赋值是同一个绑定） | `src/frontend/core/typecheck/passes/dead_code.rs:304-322`（`record_definition`）、`:28-29`（字段） |
 
 **不在 P3.5 改的理由（与上一版一致）**：模块级解析需要 `use` 项的路径解析完成（`use a::foo` → foo 来自模块 a），属 P4 阶段契约与 Driver 统一的范畴。
+
+### 跨单元方法可达性归因（WBS 4.9.7 / issue #464）—— 修正状态（2026-10-17）
+
+> 原登记（残留面②）：跨单元（registry 解析）的方法调用不产生 D20 决议条目 ⇒ 该名字组回落池的**名字级**
+> 豁免 ⇒ **跨单元同名同序的未调用方法不被报**。本条分两笔落地：**产出侧**（跨单元方法调用产生决议条目，
+> 提交 `3a97ff1f`）与**驱动侧归因**（按定义单元给出可达性标记并停用名字级豁免）。下表 file:line 取于
+> **驱动侧归因工作树**（提交号由批次收口在推送后补，见 09a——push 前的本地哈希会被 `pull --rebase` 重写）。
+
+| 环节 | 原缺陷 | 现状 | 落地代码 |
+|------|--------|------|----------|
+| 决议条目产出 | 跨单元调用点的候选表三张全缺（`method_overloads` / `method_overload_ir_names` / `method_overload_param_names`）⇒ 决议段整段跳过 ⇒ 条目 **0 条** | 候选组「候选 / 混编 IR 名 / 声明期形参名」按同序打包随 `ModuleInfo.method_overloads` 跨单元传递，注册表按模块键升序确定性合并；Typecheck 臂按本单元 import face 只注入「能按**裸类型名**命名的模块面」的候选组（自有键位不外并、同名冲突整名跳过）⇒ 同点 `cands=1`、条目 1 条（`Temp.to`） | `src/frontend/core/typecheck/environment.rs:308-360`（快照 / 注入）；`src/frontend/module/registry.rs:148-170`（`merge_method_overloads`）；`src/frontend/module/mod.rs:149-157`（`ModuleInfo` 字段）；`src/driver/arms.rs:348-354`（注入面）、`:1512-1566`（`visible_method_overloads`） |
+| 驱动侧归因 | 决议条目按**名字**全局标记（`(基名, 声明序)` 一个集合）⇒ 另一单元的同名同序定义被同名兄弟的调用豁免（跨单元同名同序此前**不报**） | 标记按**定义单元**归因（`MethodMarks { by_unit, groups }`）：条目名 `{Type}.{method}#k` 的 `{Type}` 是**定义侧**裸名且不带单元 ⇒ 用记录方单元的**类型名面**算「该单元能拼出这个名字的模块集合」，条目归入集合内各单元的 `by_unit`；`groups` = 出现过条目的名字组（全局） | `src/driver/helpers.rs:570-573`（`MethodMarks`）、`:591-619`（`typed_owners`：花括号项 + 内联别名目标 + 模块限定访问 `ns.T`，复用 `collect_module_names` + `resolve_import_module` 单点）、`:621-654`（`resolved_method_marks`，经 `OverloadResolutions::iter` 纯读）、`src/driver/arms.rs:577-583`（逐单元取 `by_unit[unit_key]`）、`:644-655`（注入分析器） |
+| 判定面 | 有决议记录的名字组仍走池的**名字级**豁免（短名全局平铺） | 有决议记录的名字组**不走名字级豁免**：命中本单元声明的活、未命中的如实报 W1005（`!marked_group` 为豁免闸的前置条件） | `src/frontend/core/typecheck/passes/dead_code.rs:44`（字段）、`:252-257`（`set_resolved_groups`）、`:262-267`（`method_group_has_marks`）、`:782-792`（可达性逐候选）、`:815-877`（逐定义判定 / 豁免闸 / W1005 发射） |
+
+**对外可观察变化（A 类：旧行为非成功 ⇒ 顺路修，同提交登记）**：
+
+- **跨单元重载决议此前不生效**：候选表三张全缺 ⇒ 退回跨单元单值绑定表（`method_bindings`，同名定义
+  last-wins）⇒ **多候选同名方法的调用报 `error[E1002]`**（实测 `Expected type 'string', found type 'int64'`）；
+  修复后按实参逐候选决议，同夹具实测 `Type check passed`。判据落在 integration 用例
+  `test_multifile_cross_unit_method_overload_resolves_by_argument_type`（`tests/integration/multifile.rs`，
+  同名同序 Int/String 两候选、两条调用各自命中）——把注入面关掉时该用例翻红于同一条 E1002。
+- **跨单元同名同序的未调用方法在可达形态下开始如实报 W1005**：三文件夹具（`main.yx` 用
+  `use a.{Temp}` 命名类型、`use b` 只把 b 带进编译集）实测——`a.Temp.to` 有调用点不报、`a.Temp.other`
+  报、**`b.Temp.to` 报**；修复前同一夹具只报 `a.Temp.other`（b 的定义靠池的名字级豁免蒙混过关）。
+  入库夹具 `tests/yaoxiang-multifile/ref-pool-cross-unit-method/`（CLI 可复跑）；驱动级钉
+  `src/driver/tests/method_unused.rs` 的 `test_cross_unit_uncalled_same_named_method_is_reported`。
+
+**残余边界（登记，不得宣称全域；逐条按实测）**：
+
+1. **单独 `check <定义文件>`**（该文件无调用点、调用方不在单元集）⇒ 没有决议条目 ⇒ 回落名字级豁免
+   ⇒ **不报**（宁漏报方向）。实测：同一三文件夹具 `check b.yx` 只报未使用类型 W1002，不报 `b.Temp.to`。
+2. **名字层已歧义**：同一个裸类型名被多个模块带进作用域（`use a.{Temp}` + `use b.{Temp}`）⇒ 候选面整名
+   跳过 ⇒ 无决议条目 ⇒ 同名同序组回落名字级豁免、不报；该入口另报 `E5006 Duplicate import`。实测对照
+   （只把 b 按命名空间导入）同类兄弟候选如实报，证明判据不是空转。
+3. **调用方拼出类型名但从不调用其方法**（如只写 `b.Temp(..)` 构造）⇒ 该单元按**可能归属**并入 ⇒ 不报
+   （宁漏报方向）。
+4. **内联别名 `use M.{T as X}` 与模块限定构造 `ns.T` 不注入候选面**（产出侧收窄规则②）：调用点键仍是
+   定义侧 `T`（实测两形态的 `X(..).to()` / `ns.T(..).to()` 都落键 `T.to`）⇒ 同名类型的 `#k` 精确性以
+   「记录方能拼出的模块集合」为界，**不区分「哪个单元的定义真被选中」**；也正因如此，这些形态下
+   **不能**把另一单元的同名同序定义判死（否则真实被调用的方法被误报）。
+5. **整体导入 `use M` 不让裸类型名进作用域**（实测写 `Temp(...)` 报 E1001）、**std 模块的候选面未接入**
+   （其 `ModuleInfo` 由 std 注册路径构造）——两形态都不产条目，回落名字级豁免。
+
+**驱动侧读取是纯读**：`resolved_method_marks` 经 `OverloadResolutions::iter`（不触达 `get`、不计入消费
+台账）⇒ 不掩盖 W1090「消费必达」结算；驱动级钉
+`test_resolved_method_marks_read_leaves_consumption_ledger_untouched`（读后条目仍在 `unconsumed()` 差集里）。
+
+**判据与漂移（本批实测）**：驱动级钉测试 5 条（主验收 / 内联别名误报防线 / 模块限定名误报防线 /
+键作用域双向 / 纯读，另 4 条 #450 旧判据不回归）；IR 快照 204 条零漂移；语料基线 346 → 347 行
+（只多新夹具 1 条 behavior 记录，其余 346 行逐字节不变）。

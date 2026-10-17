@@ -554,24 +554,100 @@ pub(in crate::driver) fn collect_compilation_refs(
     collect_ref_pool(&modules, &module_keys)
 }
 
-/// 从 D20 决议产物解析「被重载决议命中的方法定义」标记 `(基名, 声明序)`（WBS 4.9.6 / #450）：
+/// 方法可达性标记（WBS 4.9.6 / #450 + WBS 4.9.7 / issue #464），按**定义单元**归因：
 ///
-/// - 决议名形如 `Type.method#k`（`#k` 缺省 = 声明序 0；定义侧按声明序混编）——
-///   解析的是**既有命名约定的消费**，不复制 ir_gen 的命名实现；
-/// - 决议名**不带定义单元（模块键）前缀**：ir_name 只由 `Environment` 的登记键派生
-///   （`{Type}.{method}`，见 `typecheck/environment.rs:add_method_overload_with_params`），
-///   唯一拼接限定名的 `SymbolTable::qualify` 不喂决议表 ⇒ 无需剥前缀（WBS 4.9.7 / #464）；
-/// - 经 `OverloadResolutions::iter` **纯读**（不触达 `get`、不动消费台账）；
-/// - 标记按名字全局生效：跨单元（registry 解析）的方法调用**不产生决议条目**
-///   （WBS 4.9.7 / #464），故该名字组回落名字级豁免（宁漏报方向）。
+/// - `by_unit`：定义单元键 → 该单元内**被决议命中**的 `(基名, 声明序)`；
+/// - `groups`：出现过决议条目的**名字组**（基名）——池的名字级豁免
+///   （`RefPool::field_names` 全局平铺）对这些组不成立，由驱动侧交给分析器
+///   （`DeadCodeAnalyzer::set_resolved_groups`）；
+/// - 定义单元归属：`OverloadResolutions` 每单元一份（条目记在**记录方**单元），
+///   名字形如 `{Type}.{method}#k`——`{Type}` 是**定义侧**的裸类型名且**不带单元**
+///   （见 `typecheck/environment.rs` 的 `add_method_overload_with_params`）⇒ 一条
+///   条目可能指向**多个单元**的同名类型（同名类型跨单元，见 `typed_owners`）；
+///   故归因按「记录方能拼出该类型名的模块集合」给出，而不是单值反查；
+/// - 只读：经 `OverloadResolutions::iter`（不触达 `get`、不计入消费台账）。
+#[derive(Default)]
+pub(in crate::driver) struct MethodMarks {
+    pub by_unit: HashMap<String, HashSet<(String, usize)>>,
+    pub groups: HashSet<String>,
+}
+
+/// 记录方单元的**类型名面**：定义侧裸类型名 → 该单元能拼出这个名字的模块键集合
+/// （WBS 4.9.7 / issue #464 的归因输入）。
+///
+/// 三类来源（全部复用既有单点 `DeadCodeAnalyzer::collect_module_names` +
+/// `resolve_import_module`，不另起路径解析）：
+/// ① 花括号项 `use M.{T}`：`T` 是调用方写出的裸名，也是 t19 注入面的来源——
+///    候选真从这里来，归属**确定**；
+/// ② 内联别名 `use M.{T as X}` 与模块限定构造/访问 `ns.T`：调用点键仍是**定义侧**
+///    `T`（实测：两种形态的 `X(..).to()` / `ns.T(..).to()` 都落键 `T.to`），
+///    而 t19 的注入面按收窄规则**不**注入它们（`arms.rs::visible_method_overloads`
+///    规则②）⇒ 条目与定义单元不再一一对应。这些模块按**可能归属**并入：漏并会让
+///    「经别名/限定名真实被调用」的同名方法被 W1005 误报（误报防线，宁漏报方向）；
+/// ③ 记录方自身：本单元定义的类型（含自有键位不外并的形态）。
+///
+/// 未在记录方名字面出现的模块**不**并入——这正是 4.9.7 收的缺口：跨单元同名同序的
+/// **未调用**定义此前靠池的名字级豁免（短名全局平铺）蒙混过关。
+fn typed_owners(
+    ast: Option<&Module>,
+    recorder_unit: &str,
+    module_keys: &HashSet<String>,
+) -> HashMap<String, HashSet<String>> {
+    let mut owners: HashMap<String, HashSet<String>> = HashMap::new();
+    let Some(ast) = ast else { return owners };
+    let names = DeadCodeAnalyzer::collect_module_names(ast);
+    // ① + ②：花括号项（含内联别名）—— local 是调用方写出的名字，target 是定义侧类型名
+    for (_, target, use_path) in &names.imported {
+        if let Some(key) = resolve_import_module(use_path, target, module_keys) {
+            owners.entry(target.clone()).or_default().insert(key);
+        }
+    }
+    // ②：模块限定访问 `ns.T`——字段名即定义侧类型名，命名空间已解析到模块
+    for (base, field) in &names.namespaced_fields {
+        let Some((_, use_path)) = names.namespaces.iter().find(|(ns, _)| ns == base) else {
+            continue; // 基名不是命名空间导入（值上的方法调用）——不是类型名面
+        };
+        if let Some(key) = resolve_import_module(use_path, field, module_keys) {
+            owners.entry(field.clone()).or_default().insert(key);
+        }
+    }
+    // ③：记录方自身
+    for key in owners.values_mut() {
+        key.insert(recorder_unit.to_string());
+    }
+    owners
+}
+
 pub(in crate::driver) fn resolved_method_marks(
-    type_results: &[Option<&TypeCheckResult>]
-) -> HashSet<(String, usize)> {
-    let mut marks = HashSet::new();
-    for result in type_results.iter().flatten() {
+    units: &[Unit],
+    asts: &[Option<Module>],
+    type_results: &[Option<&TypeCheckResult>],
+) -> MethodMarks {
+    let module_keys: HashSet<String> = units.iter().map(|u| u.key.clone()).collect();
+    let mut marks = MethodMarks::default();
+    for (i, result) in type_results.iter().enumerate() {
+        let Some(result) = result else { continue };
+        let recorder_unit = units.get(i).map(|u| u.key.clone()).unwrap_or_default();
+        let owners = typed_owners(
+            asts.get(i).and_then(|a| a.as_ref()),
+            &recorder_unit,
+            &module_keys,
+        );
         for (_, ir_name) in result.overload_resolutions.iter() {
             let (base, ordinal) = split_overload_ir_name(ir_name);
-            marks.insert((base, ordinal));
+            let type_name = base.split('.').next().unwrap_or(&base);
+            // 名字面里没有这个类型名（记录方自有类型且未出现在 import/限定访问里）时，
+            // 归记录方自身——本地定义的候选由本单元现场登记，条目必来自本单元
+            let mut defining: HashSet<String> = owners.get(type_name).cloned().unwrap_or_default();
+            defining.insert(recorder_unit.clone());
+            for key in defining {
+                marks
+                    .by_unit
+                    .entry(key)
+                    .or_default()
+                    .insert((base.clone(), ordinal));
+            }
+            marks.groups.insert(base);
         }
     }
     marks

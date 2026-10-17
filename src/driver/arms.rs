@@ -574,12 +574,13 @@ impl Driver {
         // 退化路径要本单元的角色（Test 不贡献消费面）；roles 在 RoleClassification
         // 臂已产，这里只读不写
         let unit_roles: Vec<Option<FileRole>> = units.iter().map(|us| us.role).collect();
-        // WBS 4.9.6 / #450 逐候选方法标记：从 D20 决议产物（纯读）解析（基名, 声明序）；
-        // 决议名不带单元前缀（WBS 4.9.7 / #464），故不传 units、无前缀剥离
+        // WBS 4.9.6 / #450 + 4.9.7 / #464 逐候选方法标记：从 D20 决议产物（纯读）解析，
+        // 按**定义单元**归因（条目记在记录方单元；定义单元由记录方的类型名面反查，
+        // 见 helpers.rs::typed_owners）
         let resolved_marks = {
             let results: Vec<Option<&TypeCheckResult>> =
                 units.iter().map(|us| us.type_result.as_ref()).collect();
-            resolved_method_marks(&results)
+            resolved_method_marks(&program.units, asts.as_slice(), &results)
         };
         let pool = if package_roots.is_empty() {
             // 无声明面（含无 manifest 的 standalone 单文件）：退化为被检文件
@@ -642,8 +643,17 @@ impl Driver {
                 names
             };
             let mut analyzer = DeadCodeAnalyzer::new();
-            // 逐候选方法标记（同名重载各自判定：未被决议命中的兄弟重载仍报 W1005）
-            analyzer.set_resolved_methods(resolved_marks.clone());
+            // 逐候选方法标记（同名重载各自判定：未被决议命中的兄弟重载仍报 W1005）——
+            // 只喂**本单元定义上**的标记；另喂「存在决议条目的名字组」，
+            // 让池的名字级豁免对这类组让位（WBS 4.9.7 / #464）
+            analyzer.set_resolved_methods(
+                resolved_marks
+                    .by_unit
+                    .get(&unit_key)
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+            analyzer.set_resolved_groups(resolved_marks.groups.clone());
             match us.role {
                 Some(FileRole::Bin | FileRole::Internal) => {
                     analyzer.set_exempt_pub(consumed_names());

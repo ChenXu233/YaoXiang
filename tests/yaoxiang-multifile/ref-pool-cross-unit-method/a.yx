@@ -1,0 +1,10 @@
+// a.yx —— 被导入模块：Temp.to 有调用点（main 的 t.to()），Temp.other 没有
+Temp: Type = { v: Float }
+
+Temp.to: (self: &Temp) -> Float = (self) => {
+    self.v
+}
+
+Temp.other: (self: &Temp) -> Float = (self) => {
+    self.v
+}

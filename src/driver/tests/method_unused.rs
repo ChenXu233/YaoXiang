@@ -1,4 +1,5 @@
-//! 方法死代码判据的驱动级钉测试（WBS 4.9.6 / issue #450，用户 2026-10-16 裁决 A）
+//! 方法死代码判据的驱动级钉测试（WBS 4.9.6 / issue #450，用户 2026-10-16 裁决 A；
+//! 跨单元归因 WBS 4.9.7 / issue #464）
 //!
 //! 判据（D 类修复：删掉误报即改变诊断对外面）：
 //! ① 无项目根路径下**被调用**的方法（含重载决议生效）不得报 W1005；
@@ -6,14 +7,87 @@
 //!    full name 键控，两个重载只剩一条，于是「2 个重载报 1 条」）；
 //! ③ **未被调用**的方法仍须如实报 W1005（不得借修复放宽判据）。
 //!
-//! 红态（修复前，实测）：语料 `tests/yaoxiang/02-type-system/functions/
+//! 跨单元（4.9.7 / #464，可达形态 = 调用方与定义方同处编译集）：
+//! ④ 名字组有决议条目时按**定义单元**判定：调用方拼不出另一单元的类型名
+//!    （`use b` 只把该文件带进编译集）⇒ 那一单元未被调用的同名同序定义如实报
+//!    W1005。修复前回落池的**名字级**豁免（`RefPool::field_names` 短名全局平铺）
+//!    ⇒ 不报（红态实测见下）；
+//! ⑤ 误报防线：两单元各含同名同序方法且**都被调用** ⇒ 两侧都不报。内联别名
+//!    （`use b.{Temp as TempB}`）与模块限定构造（`b.Temp(..)`）两种形态的调用点
+//!    键都是**定义侧**裸名（实测都落 `Temp.to`），而 t19 的注入面按收窄规则不注入
+//!    它们 ⇒ 归因必须按「记录方能拼出该类型名的模块集合」并入
+//!    （`helpers.rs::typed_owners` 规则②），否则真实被调用的定义被误报；
+//! ⑥ 键作用域双向：同单元未被命中的兄弟候选仍报（不过窄）；另一单元的未调用
+//!    定义不被同名兄弟的调用豁免（不过宽）；
+//! ⑦ 驱动侧读取是**纯读**：经 `OverloadResolutions::iter`，不触达 `get`、不写
+//!    消费台账——否则 W1090「消费必达」结算会被驱动侧的读取掩盖（读一次 = 记一次消费）。
+//!
+//! 红态（4.9.6 修复前，实测）：语料 `tests/yaoxiang/02-type-system/functions/
 //! method_call_args.yx` 3 条 W1005（三个方法都被调用）、`method_overload.yx`
 //! 1 条（两个重载都被调用，却只报 1 条）、`06-compile-errors/call-args/
 //! method_overload_ambiguous_err.yx` 1 条（两个重载各占一条定义，只报 1 条）。
 //! 夹具形态与语料同构：**无 manifest**（rootless / Script 语义，无包内引用池）。
+//!
+//! 红态（4.9.7 修复前，实测）：④ 的三文件夹具 `check main.yx` 只报 a.yx 的
+//! `Temp.other`（:8）与 b.yx 的未使用类型 W1002，**b.yx 的未调用 `Temp.to` 不报**
+//! ——跨单元同名同序的定义靠池的名字级豁免蒙混过关。
+//! 残余边界（登记，宁漏报方向）：单独 `check <定义文件>`（调用方不在单元集）时
+//! 没有决议条目 ⇒ 回落名字级豁免 ⇒ 不报；调用方只写 `b.Temp(..)` 构造而从不调用
+//! 其方法时，该单元的同名同序方法也不报（归因按名字面的**可能**归属并入）。
+
+use std::path::PathBuf;
 
 use super::check_rootless_mono::{check_codes, make_rootless_project, run_check};
 use super::ref_pool::assert_warnings;
+use crate::driver::helpers::resolved_method_marks;
+use crate::frontend::core::typecheck::types::OverloadResolutions;
+use crate::frontend::core::typecheck::TypeCheckResult;
+use crate::util::plan_id::PlanId;
+
+/// 带 `[run].main` 声明面的多文件夹具——`yaoxiang check main.yx` 的直驱等价形态：
+/// 池按 manifest 声明面的包目标装配（`helpers.rs::collect_package_refs`），警告面
+/// 覆盖包内文件（`DeadCodeAnalysis` 臂的 `in_project` 门控）。
+fn make_declared_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
+    let dir = tempfile::tempdir().expect("create tempdir");
+    std::fs::write(
+        dir.path().join("yaoxiang.toml"),
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n\n[run]\nmain = \"main.yx\"\n",
+    )
+    .expect("write manifest");
+    let mut entry = PathBuf::new();
+    for (name, content) in files {
+        std::fs::write(dir.path().join(name), content).expect("write project file");
+        if *name == "main.yx" {
+            entry = dir.path().join(name);
+        }
+    }
+    assert!(entry.is_file(), "夹具必须含 main.yx（入口约定）");
+    (dir, entry)
+}
+
+/// 跨单元同名同序夹具（④ 主验收，可达形态）：a.yx 的 `Temp.to` 有调用点（:4）、
+/// `Temp.other` 没有（:8）；b.yx 的同名同序 `Temp.to` 没有（:4）。入口只用
+/// `use a.{Temp}` 命名类型，`use b` 只把 b 带进编译集 ⇒ 调用方拼不出 b 的类型名
+/// （这正是「跨单元同名同序的未调用定义」此前漏报的形态）。
+const CROSS_UNIT_A: &str = "// a.yx —— 被调用的 Temp.to（:4）+ 未被调用的 Temp.other（:8）\nTemp: Type = { v: Float }\n\nTemp.to: (self: &Temp) -> Float = (self) => {\n    self.v\n}\n\nTemp.other: (self: &Temp) -> Float = (self) => {\n    self.v\n}\n";
+
+/// 同名同序、无调用点的 `Temp.to`（:4）——b 只被入口的 `use b` 带进编译集。
+const CROSS_UNIT_B: &str = "// b.yx —— 同名同序、无调用点的 Temp.to（:4）\nTemp: Type = { v: Float }\n\nTemp.to: (self: &Temp) -> Float = (self) => {\n    self.v\n}\n";
+
+/// ④ 的入口：类型只经 a 的裸名命名，b 只进编译集（拼不出 b 的类型名）。
+const CROSS_UNIT_MAIN_BARE: &str = "// main.yx —— 只用 a 的 Temp 命名类型；use b 只把 b 带进编译集\nuse std.assert\nuse a.{Temp}\nuse b\n\nmain = () => {\n    t = Temp(1.0)\n    x: Float = t.to()\n    assert.assert(x == 1.0, \"a.to\")\n}\n";
+
+/// ⑤ 的入口（内联别名形态）：a 经裸名、b 经 `TempB` 别名——两侧都被调用。
+const CROSS_UNIT_MAIN_ALIAS: &str = "// main.yx —— 两个类型各自被调用：a 经裸名、b 经内联别名\nuse std.assert\nuse a.{Temp}\nuse b.{Temp as TempB}\n\nmain = () => {\n    t = Temp(1.0)\n    x: Float = t.to()\n    u = TempB(2.0)\n    y: Float = u.to()\n    assert.assert(x == 1.0, \"a.to\")\n    assert.assert(y == 2.0, \"b.to\")\n}\n";
+
+/// ⑤ 的入口（模块限定构造形态）：a 经裸名、b 经 `b.Temp(..)`——两侧都被调用。
+const CROSS_UNIT_MAIN_QUALIFIED: &str = "// main.yx —— 两个类型各自被调用：a 经裸名、b 经模块限定构造\nuse std.assert\nuse a.{Temp}\nuse b\n\nmain = () => {\n    t = Temp(1.0)\n    x: Float = t.to()\n    u = b.Temp(2.0)\n    y: Float = u.to()\n    assert.assert(x == 1.0, \"a.to\")\n    assert.assert(y == 2.0, \"b.to\")\n}\n";
+
+/// ⑥ 的定义侧：三个同名候选（声明序 0/1/2 → :4 / :8 / :12）+ 未被调用的 other（:16）。
+const CROSS_UNIT_OVERLOAD_A: &str = "// a.yx —— 三个同名候选，只命中声明序 0（:4）；other 未被调用（:16）\nTemp: Type = { v: Float }\n\nTemp.to: (self: &Temp, n: Int) -> Int = (self, n) => {\n    n\n}\n\nTemp.to: (self: &Temp, s: String) -> String = (self, s) => {\n    s\n}\n\nTemp.to: (self: &Temp, f: Float) -> Float = (self, f) => {\n    f\n}\n\nTemp.other: (self: &Temp) -> Float = (self) => {\n    self.v\n}\n";
+
+/// ⑥ 的入口：调用点只命中 a 的声明序 0 候选（Int）。
+const CROSS_UNIT_OVERLOAD_MAIN: &str = "// main.yx —— 调用点只命中 a 的声明序 0 候选（Int）\nuse std.assert\nuse a.{Temp}\nuse b\n\nmain = () => {\n    t = Temp(1.0)\n    x: Int = t.to(1)\n    assert.assert(x == 1, \"a.to#0\")\n}\n";
 
 /// 4.9.6 / #450 ①：被调用的方法不得报 W1005（无项目根路径）。
 #[test]
@@ -90,4 +164,115 @@ fn test_partially_called_overload_group_reports_the_unhit_sibling() {
     // ->Float（:3）报——行号方向即配对方向，配错会在此翻红
     assert_warnings(&out_first, "main.yx", &[("W1005", 7)], &[("W1005", 3)]);
     assert_warnings(&out_second, "main.yx", &[("W1005", 3)], &[("W1005", 7)]);
+}
+
+/// 4.9.7 / #464 ④（主验收，可达形态）：跨单元同名同序的**未调用**定义如实报 W1005。
+/// 修复前该定义靠池的名字级豁免（短名平铺的 `to`）蒙混过关——红态实测为「不报」。
+#[test]
+fn test_cross_unit_uncalled_same_named_method_is_reported() {
+    // Arrange：a 的 Temp.to 有调用点、Temp.other 没有；b 的同名同序 Temp.to 没有
+    let (_dir, entry) = make_declared_project(&[
+        ("a.yx", CROSS_UNIT_A),
+        ("b.yx", CROSS_UNIT_B),
+        ("main.yx", CROSS_UNIT_MAIN_BARE),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("check 必须返回产物");
+
+    // Assert：b 的未调用定义必须报；a 的被调用定义不报、a 的未调用兄弟（:8）仍报
+    assert_warnings(&outcome, "b.yx", &[("W1005", 4)], &[]);
+    assert_warnings(&outcome, "a.yx", &[("W1005", 8)], &[("W1005", 4)]);
+}
+
+/// 4.9.7 / #464 ⑤ 误报防线（内联别名形态）：两单元各含同名同序方法且**都被调用**
+/// ⇒ 两侧都不报。别名调用点的键是**定义侧**裸名（实测落 `Temp.to`），而该模块按
+/// t19 收窄规则不进注入面 ⇒ 归因必须按记录方名字面并入（`typed_owners` 规则②）。
+#[test]
+fn test_cross_unit_same_named_method_called_through_alias_is_not_reported() {
+    // Arrange：a 经裸名调用、b 经 `TempB` 别名调用（同名同序、两侧都活）
+    let (_dir, entry) = make_declared_project(&[
+        ("a.yx", CROSS_UNIT_A),
+        ("b.yx", CROSS_UNIT_B),
+        ("main.yx", CROSS_UNIT_MAIN_ALIAS),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("check 必须返回产物");
+
+    // Assert：两侧被调用的 Temp.to（:4）都不得报（同单元未被调用的 other 仍报 :8）
+    assert_warnings(&outcome, "a.yx", &[("W1005", 8)], &[("W1005", 4)]);
+    assert_warnings(&outcome, "b.yx", &[], &[("W1005", 4)]);
+}
+
+/// 4.9.7 / #464 ⑤ 误报防线（模块限定构造形态）：`b.Temp(..)` 之后的 `.to()` 同样落
+/// 定义侧键名 ⇒ 该模块必须并入可能归属，两侧都不报。
+#[test]
+fn test_cross_unit_same_named_method_called_through_qualified_path_is_not_reported() {
+    // Arrange：a 经裸名调用、b 经 `b.Temp(..)` 构造后调用（同名同序、两侧都活）
+    let (_dir, entry) = make_declared_project(&[
+        ("a.yx", CROSS_UNIT_A),
+        ("b.yx", CROSS_UNIT_B),
+        ("main.yx", CROSS_UNIT_MAIN_QUALIFIED),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("check 必须返回产物");
+
+    // Assert：两侧被调用的 Temp.to（:4）都不得报（同单元未被调用的 other 仍报 :8）
+    assert_warnings(&outcome, "a.yx", &[("W1005", 8)], &[("W1005", 4)]);
+    assert_warnings(&outcome, "b.yx", &[], &[("W1005", 4)]);
+}
+
+/// 4.9.7 / #464 ⑥ 键作用域双向：a 的三个同名候选只命中声明序 0 ⇒ 未被命中的两个
+/// 兄弟仍报（不过窄）；b 的同名同序定义没有任何调用点、调用方也拼不出 b 的类型名
+/// ⇒ 不得被 a 的调用跨单元豁免（不过宽）。
+#[test]
+fn test_cross_unit_key_scope_reports_unhit_siblings_without_cross_unit_exemption() {
+    // Arrange：a 侧三候选只命中声明序 0；b 侧同名同序定义无人调用
+    let (_dir, entry) = make_declared_project(&[
+        ("a.yx", CROSS_UNIT_OVERLOAD_A),
+        ("b.yx", CROSS_UNIT_B),
+        ("main.yx", CROSS_UNIT_OVERLOAD_MAIN),
+    ]);
+
+    // Act
+    let outcome = run_check(&entry).expect("check 必须返回产物");
+
+    // Assert：a 的未命中兄弟（:8 / :12）与未调用 other（:16）报、被命中的（:4）不报；
+    // b 的未调用同名同序定义（:4）也报（跨单元不互相豁免）
+    assert_warnings(
+        &outcome,
+        "a.yx",
+        &[("W1005", 8), ("W1005", 12), ("W1005", 16)],
+        &[("W1005", 4)],
+    );
+    assert_warnings(&outcome, "b.yx", &[("W1005", 4)], &[]);
+}
+
+/// 4.9.7 / #464 ⑦ 驱动侧读取是纯读：读归因标记**不触达** `OverloadResolutions::get`
+/// ⇒ 决议条目仍在未消费差集里——否则「消费必达」结算（W1090）会被驱动侧的读取掩盖
+/// （读一次 = 记一次消费）。空 `units`/`asts`：本条只钉读取面本身。
+#[test]
+fn test_resolved_method_marks_read_leaves_consumption_ledger_untouched() {
+    // Arrange：一条已登记、尚无消费者（ir_gen 未跑）的决议条目
+    let call = PlanId::from_ordinal(7);
+    let mut result = TypeCheckResult::default();
+    result.overload_resolutions =
+        OverloadResolutions::from_entries([(call, "Temp.to".to_string())]);
+
+    // Act：驱动侧唯一读取面
+    let marks = resolved_method_marks(&[], &[], &[Some(&result)]);
+
+    // Assert：读取面命中该条目（不是空转）；台账的未消费差集不变（纯读）
+    assert!(
+        marks.groups.contains("Temp.to"),
+        "读取面必须命中决议条目（否则本条断言空转）: {:?}",
+        marks.groups
+    );
+    assert_eq!(
+        result.overload_resolutions.unconsumed(),
+        vec![call],
+        "驱动侧读取不得计入消费台账（否则掩盖 W1090 结算）"
+    );
 }

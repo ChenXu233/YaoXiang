@@ -1,0 +1,16 @@
+// ref-pool-cross-unit-method/main.yx
+// 覆盖: RFC-029f 残留面② / WBS 4.9.7（issue #464）——方法可达性按**定义单元**归因
+// 验证: 调用方与定义方同处编译集（可达形态）时，未被调用的同名同序方法如实报 W1005：
+//       a.yx 的 Temp.to 有调用点（不报）、a.yx 的 Temp.other 没有（报）、
+//       b.yx 的同名同序 Temp.to 没有（报——修复前靠池的名字级豁免蒙混过关，不报）
+// 状态: ✅ 可运行（run 退出码 0；check 退出码 0 + 3 条警告：a.yx:8 的 Temp.other W1005、
+//       b.yx:4 的 Temp 类型 W1002、b.yx:6 的同名同序 Temp.to W1005）
+use std.assert
+use a.{Temp}
+use b
+
+main = () => {
+    t = Temp(1.0)
+    x: Float = t.to()
+    assert.assert(x == 1.0, "a.Temp.to should return 1.0")
+}
