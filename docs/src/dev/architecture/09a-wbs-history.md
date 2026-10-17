@@ -435,8 +435,8 @@
 > | 6 | 收口修复 = PA-2（删 strip_unit_prefix 死分支 + 029f/CHANGELOG 三处失实表述纠正，登记 #464） | b940300ac | e13984465 | 补丁 blob 相同（patch-id 9bda3cfe4c…） |
 >
 > **哈希说明**：每笔推送前的 git pull --rebase 会重写本地哈希；上表「判定方式」列均为
-> 「补丁 blob 相同」（git diff <rev>~1 <rev> | git hash-object --stdin 两侧一致 +
-> git range-diff 无差异）。本篇不引用任何 push 前哈希作权威出处。
+> 「补丁 blob 相同」（`git diff <rev>~1 <rev> | git hash-object --stdin` 两侧一致 +
+> `git range-diff` 无差异）。本篇不引用任何 push 前哈希作权威出处。
 >
 > **二、三条判据的红/绿实测口径**（验证者自建复现，不采信实现者判据）
 >
@@ -482,8 +482,8 @@
 > **五、警告面全量对拍（口径先讲清）**
 >
 > 仪器 = warn_surface_r2.py（自建解析器，(文件, 码, 行, 列) 四元组 symmetric diff，项目态通道
-> cwd=文件父目录，全路径键）；命令 = python warn_surface_r2.py corpus_listing_r2.txt <before-exe>
-> <after-exe>（337 文件 × 2 二进制）。**口径**：本轮 before 抓拍已含全部夹具 ⇒ matched set = 全集
+> cwd=文件父目录，全路径键）；命令 = `python warn_surface_r2.py corpus_listing_r2.txt <before-exe> <after-exe>`
+> （337 文件 × 2 二进制）。**口径**：本轮 before 抓拍已含全部夹具 ⇒ matched set = 全集
 > 337，不存在轮 1 的 +8（matched 增量）/+16（全集）双口径问题。结果：only_before = 42 条 W1005
 > （26 文件，全部为被调用方法的误报消除 = 阶段 B 的 −42；逐文件核对其全部在 behavior-run exit=0
 > 基线上，方法真实被调用执行——**无一条真死代码被救活**）/ only_after = 3 条 W1001（ref-pool-import-use
