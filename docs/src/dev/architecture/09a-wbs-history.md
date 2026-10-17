@@ -582,9 +582,15 @@
 > `git status` 干净）；语料基线 346 → 347 → 348 行（每笔 +1 条 behavior 记录，其余行逐字节不变；
 > 基线 `tests/baselines/corpus-parity.jsonl` 在 `e9675c9dd` 共 348 行）。
 >
-> **八、门禁核对安排（第 13 条）**：本批（含本篇文档提交）推送后的 CI / Auto Translate / Deploy Docs
-> run 结论**交由定时核对环节登记**（run id + conclusion + 连推覆盖关系），不在会话内等待，也不把
-> 「没等」写成「已绿」。
+> **八、门禁核对安排与结论（第 13 条）**：本批推送后的 CI / Auto Translate / Deploy Docs 结论交由定时
+> 核对环节登记（不在会话内等待，也不把「没等」写成「已绿」）。**回填（2026-10-17 定时核对）**：
+> `d5c00235a` 的 CI `39023417670` = **failure**——Docs Truth 报「错误码文档落后于码表/locales」，
+> 即该笔漏了生成物同提交；由其后 `d5dd1a37b`（再生生成物）修复：`5da05b885` CI `39027788246` /
+> Deploy Docs `39027788268` / Auto Translate `39027788340` 均 success，覆盖前一笔；
+> `e9675c9dd` CI `39028827871` / Deploy Docs `39028827896` success；`d0cfc4e62` CI `39033963240` /
+> Deploy Docs `39033963278` / Auto Translate `39033963261` success。三笔的 run 各自跑到终态，
+> 本轮无 concurrency 取消。教训：**「本地生成器幂等」不等于「生成物已同提交入库」**——收口前应
+> 逐笔核 CI 结论，而不是只看最新一笔。
 >
 > **九、批次树状态（收口 gc，status 输出）**：收口前 `scratch.py status`——t25（holder=-）与 yx49b
 > （holder=-，此前由已停用成员 verify-r3 陈旧持有，队长 `release --force` 释放）两棵树均无持有者；

@@ -50,7 +50,7 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
    - **及时删除**：批次收口任务跑 `python scripts/dev/scratch.py gc`，把 `status` 输出贴进任务输出；验收项 = 「`git status` 干净 + 仓库外无本批新增目录 + 无残留批次树」。
    - 零散探针（`.yx`）同样放 `target/yx-scratch/<batch>/`（实测 CLI 能直接跑，且不进语料差分）。
    - 参考数字：一棵树首次全量约 5 分钟 / 约 3 GB；此后每次切 revision 只重编差异面。本会话曾一度每任务一棵、并在仓库外散落 6 个目录约 780 MB（2026-10-14 已清理），本条即为根治。
-10. **验证环境与提交证据（七则）**：
+10. **验证环境与提交证据（九则）**：
    - ① 独立检出 / 探针一律走第 9 条的 `scripts/dev/scratch.py`（批次树，仓库内），不另建树、不出仓库。
    - ② **变异必须机械可逆**：把「故意改坏」写成补丁，用 `python scripts/dev/scratch.py trial <batch> --patch <p> -- <命令…>` 执行（内部 `git apply` → 跑命令 → `git apply -R` 还原 → 逐文件比对 blob 与 `HEAD` 一致并要求 `git status` 干净）。**手工改文件再手工改回来不算**；报告里给补丁路径与还原前后 blob。为什么：验证者要证明「判据能失败」，唯一硬证据是破坏它看测试红不红——但还原必须是机械的，不能靠记性。
    - ③ **连推会取消前一轮 CI**（`concurrency`）：**不必为此在会话里等 run（见第 13 条）**——照常连推；两笔推送并存时**记明**「以后代 run 的结论覆盖前一笔」，核对环节按这条覆盖关系取结论。
@@ -58,6 +58,8 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
    - ⑤ 本地 verify 清单**必须包含 CI 独有门禁**（至少 `python scripts/ci/check-docs-truth.py`）；**新增或改动诊断码必须重跑** `python scripts/docs/gen-error-code-docs.py`（该生成器位置敏感，再生必带行号平移与自身计数更正——提交信息须分类说明，**禁止手改生成物**）。
    - ⑥ 验证探针必须覆盖**同类路径的未修分支**：只证「新功能对」不足以放行（本批实例：t2 放行、t3 抓到 F1——t2 的探针全落在命中面）。
    - ⑦ **提交期间的 stash 窗口（操作约定，2026-10-16 用户同意）**：`pre-commit` 在跑钩子前会把**全部未暂存改动** stash 走、跑完再恢复（日志行 `[INFO] Stashing unstaged files to …` / `Restored changes from …`）。因此提交进行中的那几分钟里，其他成员直接读工作树会看到「只剩已 staged 文件」的假象（本会话实例：验证者据此报告「轮 2 改动丢失」，实为窗口内读取）。约定：① 提交前先给未暂存改动留 patch 备份；② 提交期间他人只按冻结 sha 量测、不读工作树；③ 每笔提交完成后用 `git status` 核对剩余改动完整性。
+   - ⑧ **推送与同步归属可核（2026-10-17）**：成员**不得**运行 `git push` / `git fetch` / `git pull`；同步与推送由队长统一做，同步一律 `git pull --rebase origin dev`，**出现 merge 提交即视为流程偏差**。两条都可用 `git reflog --date=iso` 与 `git reflog show origin/dev` 直接核验——**流程归因不得凭报告措辞推断**（实例：队长据「报告里写已在 origin/dev」断言某成员自行 push，reflog 显示实为命令面之外的 `pull --tags` + push，归因撤回）；发现远端/工作树被第三方改动须当场报告。派工消息里的口头约定不构成判据——可核项必须写进任务契约的验收。
+   - ⑨ **文档提交必须本地真构建一次（2026-10-17）**：markdownlint 抓不到 VitePress 的 Vue 编译错误（尖括号占位符被当成元素，报 `Element is missing end tag`），且 pre-commit 的 markdownlint 钩子在仅含 docs 的提交里会被判 `no files to check` 跳过。故：**占位符一律进反引号**，文档提交推送前**本地跑一次真实构建**（`npm run docs:build`）。实例：`042c07860` 使 Deploy Docs 红（run 39011946793），修复提交 `0c837e1b4`。
 11. **写入方负载上限（2026-10-14 用户裁决；依据 = 上下文过载会导致质量下滑，见 ⑧ 的实测）**——**注意 ⑨：本条是「当前无上下文压缩能力」时的替代措施，压缩可用后 ① 即作废**：
    - ① **单一成员 attempt 上限 3**：指派前先数 `agent_teams_status` 里该成员已完成/失败的 attempt；到限即换人（`agent_teams_add_member` 新建 → `agent_teams_reassign_task` 改派 → `agent_teams_remove_member` 收回）。
    - ② **同一工作项内部的多轮 review→repair→再评审属正常返工，不占这 3 个额度**（本会话：t1→t2→t3→t9→t10 算 1 个工作项；t6→t7→t8→t12→t13 算 1 个）。
