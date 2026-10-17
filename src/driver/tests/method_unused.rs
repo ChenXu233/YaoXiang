@@ -13,6 +13,7 @@
 //! 夹具形态与语料同构：**无 manifest**（rootless / Script 语义，无包内引用池）。
 
 use super::check_rootless_mono::{check_codes, make_rootless_project, run_check};
+use super::ref_pool::assert_warnings;
 
 /// 4.9.6 / #450 ①：被调用的方法不得报 W1005（无项目根路径）。
 #[test]
@@ -67,4 +68,26 @@ fn test_uncalled_method_still_reported() {
         codes.iter().any(|c| c == "W1005"),
         "未被调用的方法必须报 W1005，实际: {codes:?}"
     );
+}
+
+/// 4.9.6 / #450 ①+③ 逐候选（验收③「含未被重载决议命中」）：
+/// 一组同名重载**仅一个被调用**时，未被决议命中的兄弟重载仍须报 W1005——
+/// 且必须报**正确的那一个**（行号断言 = 声明序 ↔ 决议名 #k 的配对实测）。
+#[test]
+fn test_partially_called_overload_group_reports_the_unhit_sibling() {
+    // Arrange：两个 Temp.to 重载（第 3 行 ->Float 声明序 0、第 7 行 ->String 声明序 1），
+    // 调用点带类型注解 ⇒ 重载决议生效（D20 决议表记下被选中的那一个）
+    let call_first = "Temp: Type = { value: Float }\n\nTemp.to: (self: &Temp) -> Float = (self) => {\n    return self.value\n}\n\nTemp.to: (self: &Temp) -> String = (self) => {\n    return \"hot\"\n}\n\nmain: () -> Void = {\n    t = Temp(1.0)\n    a: Float = t.to()\n}\n";
+    let call_second = "Temp: Type = { value: Float }\n\nTemp.to: (self: &Temp) -> Float = (self) => {\n    return self.value\n}\n\nTemp.to: (self: &Temp) -> String = (self) => {\n    return \"hot\"\n}\n\nmain: () -> Void = {\n    t = Temp(1.0)\n    b: String = t.to()\n}\n";
+    let (_d1, first_entry) = make_rootless_project(&[("main.yx", call_first)]);
+    let (_d2, second_entry) = make_rootless_project(&[("main.yx", call_second)]);
+
+    // Act：分别调用声明序 0 / 声明序 1 的候选
+    let out_first = run_check(&first_entry).expect("check 必须返回产物");
+    let out_second = run_check(&second_entry).expect("check 必须返回产物");
+
+    // Assert：命中 ->Float（:3）时兄弟 ->String（:7）报；命中 ->String（:7）时兄弟
+    // ->Float（:3）报——行号方向即配对方向，配错会在此翻红
+    assert_warnings(&out_first, "main.yx", &[("W1005", 7)], &[("W1005", 3)]);
+    assert_warnings(&out_second, "main.yx", &[("W1005", 3)], &[("W1005", 7)]);
 }

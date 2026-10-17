@@ -14,7 +14,7 @@
 //! 不豁免生产代码（改进 5）。`pub` 关键字已由 RFC-029g 删除，不再是豁免来源。
 //! 未使用导入（W1003）由 typecheck 的 use elaboration 检测，不在此处。
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::util::span::Span;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -32,6 +32,11 @@ pub struct DeadCodeAnalyzer {
     exempt_pub: HashSet<String>,
     /// Lib 的跨文件引用池（同上；`FileRole::Script` 不接池——改进 3）
     cross_file_refs: HashSet<String>,
+    /// 被重载决议**命中**的方法定义标记 `(限定名去掉 #k 的基名, 声明序)`：
+    /// 由 driver 从 D20 决议产物（`overload_resolutions`，RFC-039 D20 / WBS 4.5.2）
+    /// 解析后传入——分析器**不认识 IR 名**，只收这个二元组（IR 名↔定义的配对
+    /// 留在 L1；分层：L2 不新增对 ir_gen 命名实现的依赖）
+    resolved_methods: HashSet<(String, usize)>,
 }
 
 /// 符号定义
@@ -203,6 +208,7 @@ impl DeadCodeAnalyzer {
             all_defs: Vec::new(),
             exempt_pub: HashSet::new(),
             cross_file_refs: HashSet::new(),
+            resolved_methods: HashSet::new(),
         }
     }
 
@@ -223,6 +229,25 @@ impl DeadCodeAnalyzer {
         refs: HashSet<String>,
     ) {
         self.cross_file_refs = refs;
+    }
+
+    /// 设置「被重载决议命中的方法定义」标记 `(基名, 声明序)`（WBS 4.9.6 / #450）：
+    /// driver 从 D20 决议产物解析后传入；同名重载因此**逐候选**判定——
+    /// 未被决议命中的兄弟重载落回「未调用 ⇒ 报 W1005」（验收③）。
+    /// 名字未出现在任何标记里时（调用点歧义 / 未经决议路径）回落短名共判（宁漏报）。
+    pub fn set_resolved_methods(
+        &mut self,
+        marks: HashSet<(String, usize)>,
+    ) {
+        self.resolved_methods = marks;
+    }
+
+    /// 本模块里同名方法组是否有决议记录（决定逐候选还是回落短名共判）
+    fn method_group_has_marks(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.resolved_methods.iter().any(|(mark, _)| mark == name)
     }
 
     /// 收集入口点和符号定义（合并处理以减少代码重复）
@@ -730,15 +755,29 @@ impl DeadCodeAnalyzer {
             }
             reachable.insert(symbol.clone());
 
+            // 同名方法组的声明序（逐候选标记的配对键：第 k 个同名声明 ↔ 决议名 #k）
+            let mut ordinal: HashMap<String, usize> = HashMap::new();
             for def in &self.all_defs {
                 // 方法只以**短名**出现在引用里（`obj.render()` 收集到的是 render，
-                // 不是 Point.render），故方法用短名探针——被调用的方法必须可达；
-                // 未被调用的方法（短名不在引用里）仍不可达（WBS 4.9.6 / #450）
-                let probe = match def.kind {
-                    SymbolKind::Method => def.name.rsplit('.').next().unwrap_or(&def.name),
-                    _ => def.name.as_str(),
+                // 不是 Point.render），故方法用短名探针——被调用的方法必须可达。
+                // WBS 4.9.6 / #450 逐候选：该名字组**有决议记录**时只认被命中的
+                // 那一个声明（未被命中的兄弟重载仍不可达 ⇒ 如实报 W1005）；
+                // 无任何决议记录（调用点歧义 / 未经决议路径）时回落短名共判（宁漏报）
+                let hit = match def.kind {
+                    SymbolKind::Method => {
+                        let k = ordinal.entry(def.name.clone()).or_insert(0);
+                        let this = *k;
+                        *k += 1;
+                        if self.method_group_has_marks(&def.name) {
+                            self.resolved_methods.contains(&(def.name.clone(), this))
+                        } else {
+                            let short = def.name.rsplit('.').next().unwrap_or(&def.name);
+                            ast_references.contains(short)
+                        }
+                    }
+                    _ => ast_references.contains(def.name.as_str()),
                 };
-                if ast_references.contains(probe) && !reachable.contains(&def.name) {
+                if hit && !reachable.contains(&def.name) {
                     queue.push_back(def.name.clone());
                 }
             }
@@ -762,10 +801,29 @@ impl DeadCodeAnalyzer {
         reachable: &HashSet<String>,
     ) -> Vec<DeadCodeWarning> {
         let mut warnings = Vec::new();
+        // 同名方法组的声明序：有决议记录时按「命中该声明」逐候选判定（WBS 4.9.6 / #450）
+        let mut ordinal: HashMap<String, usize> = HashMap::new();
 
         for def in &self.all_defs {
             let name = &def.name;
-            if Self::is_reachable(name, def, reachable) {
+            let marked_group =
+                matches!(def.kind, SymbolKind::Method) && self.method_group_has_marks(name);
+            let this_decl = match def.kind {
+                SymbolKind::Method => {
+                    let k = ordinal.entry(def.name.clone()).or_insert(0);
+                    let this = *k;
+                    *k += 1;
+                    this
+                }
+                _ => 0,
+            };
+            if marked_group {
+                // 逐候选：决议命中该声明 ⇒ 活；未命中 ⇒ 不因同名兄弟的调用而豁免，
+                // 继续走池判定与 W1005 报告（验收③：不得放宽）
+                if self.resolved_methods.contains(&(name.clone(), this_decl)) {
+                    continue;
+                }
+            } else if Self::is_reachable(name, def, reachable) {
                 continue;
             }
             // Bin/Internal: exempt_pub 豁免；Lib: cross_file_refs 豁免

@@ -129,6 +129,14 @@ impl OverloadResolutions {
         Some(ir_name.as_str())
     }
 
+    /// **只读**枚举决议条目 `(调用点, 混编 IR 名)`——不触达 `get`、不计入消费台账
+    /// （WBS 4.9.6 / #450 逐候选归因的读取面；纯读保证不掩盖「消费必达」结算）。
+    pub fn iter(&self) -> impl Iterator<Item = (&PlanId, &str)> {
+        self.entries
+            .iter()
+            .map(|(call, name)| (call, name.as_str()))
+    }
+
     /// 未消费的产出键（**结算判据：必须为空**；升序，诊断可比）。
     pub fn unconsumed(&self) -> Vec<PlanId> {
         let mut ids = self.consumption.unconsumed(self.entries.keys().copied());

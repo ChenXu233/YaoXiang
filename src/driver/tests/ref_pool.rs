@@ -71,7 +71,7 @@ fn run_check(entry: &Path) -> Result<DriverOutcome, DriverError> {
 }
 
 /// 某文件条目里的 (码, 起始行) 列表——无条目 = panic（不静默返回空表）
-fn diagnostics_of(
+pub(super) fn diagnostics_of(
     outcome: &DriverOutcome,
     suffix: &str,
 ) -> Vec<(String, usize)> {
@@ -97,7 +97,7 @@ fn diagnostics_of(
 }
 
 /// 断言某文件的 W 码集合逐条命中且**不含**禁止项——防误报面整体漂移。
-fn assert_warnings(
+pub(super) fn assert_warnings(
     outcome: &DriverOutcome,
     suffix: &str,
     required: &[(&str, usize)],

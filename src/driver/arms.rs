@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::typecheck::checker::TypeChecker;
+use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::frontend::core::typecheck::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::module::orchestrator::{self, OrchestratorError};
 use crate::frontend::module::registry::ModuleRegistry;
@@ -27,7 +28,7 @@ use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::helpers::{
     aggregate_instantiation_requests, allocate_global_slots, ast_has_main,
     collect_compilation_refs, collect_package_refs, is_bin_role, link_module_irs,
-    merge_embedded_std_ir, role_context,
+    merge_embedded_std_ir, resolved_method_marks, role_context,
 };
 use super::state::{DriverError, SkipReason, SkippedStage, State, UnitState};
 use super::{Aggregation, Driver, ProgramKind, Stage, Unit};
@@ -560,6 +561,13 @@ impl Driver {
         // 退化路径要本单元的角色（Test 不贡献消费面）；roles 在 RoleClassification
         // 臂已产，这里只读不写
         let unit_roles: Vec<Option<FileRole>> = units.iter().map(|us| us.role).collect();
+        // WBS 4.9.6 / #450 逐候选方法标记：从 D20 决议产物（纯读）解析
+        // （基名, 声明序），IR 名↔定义的配对留在本层；分析器只收二元组
+        let resolved_marks = {
+            let results: Vec<Option<&TypeCheckResult>> =
+                units.iter().map(|us| us.type_result.as_ref()).collect();
+            resolved_method_marks(&program.units, &results)
+        };
         let pool = if package_roots.is_empty() {
             // 无声明面（含无 manifest 的 standalone 单文件）：退化为被检文件
             // 自身的编译集
@@ -621,6 +629,8 @@ impl Driver {
                 names
             };
             let mut analyzer = DeadCodeAnalyzer::new();
+            // 逐候选方法标记（同名重载各自判定：未被决议命中的兄弟重载仍报 W1005）
+            analyzer.set_resolved_methods(resolved_marks.clone());
             match us.role {
                 Some(FileRole::Bin | FileRole::Internal) => {
                     analyzer.set_exempt_pub(consumed_names());

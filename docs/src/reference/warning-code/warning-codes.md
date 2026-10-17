@@ -46,7 +46,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的函数：'{name}'`
 - **帮助**：函数从未被引用，考虑移除或添加调用；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:781`
+- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:839`
 
 ### W1002：未使用的私有类型
 
@@ -54,7 +54,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的类型：'{name}'`
 - **帮助**：类型从未被引用，考虑移除或使用该类型；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:782`
+- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:840`
 
 ### W1003：未使用的导入
 
@@ -70,7 +70,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的变量：'{name}'`
 - **帮助**：变量从未被引用，考虑移除或使用该变量；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:783`
+- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:841`
 
 ### W1005：未使用的私有方法
 
@@ -78,7 +78,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`未使用的方法：'{name}'`
 - **帮助**：方法从未被引用，考虑移除或添加调用；被包内其它文件引用时不报此警告
-- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:784`
+- **发射点**：`src/frontend/core/typecheck/passes/dead_code.rs:842`
 
 ### W1006：本地模块遮蔽依赖包
 
@@ -86,7 +86,7 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`本地模块 '{module}' 遮蔽了依赖包 '{dependency}'`
 - **帮助**：本地模块解析优先级最高（RFC-014）：'./src/{module}' 覆盖 .yaoxiang/vendor/ 中的依赖包 '{dependency}'。若遮蔽非本意请重命名本地模块；可用 --deny-shadowing 将其升级为错误
-- **发射点**：`src/driver/arms.rs:595`、`src/util/diagnostic/command.rs:78`
+- **发射点**：`src/driver/arms.rs:603`、`src/util/diagnostic/command.rs:78`
 
 ### W1063：const 泛型约束无法求值
 

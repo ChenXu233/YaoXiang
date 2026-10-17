@@ -554,6 +554,49 @@ pub(in crate::driver) fn collect_compilation_refs(
     collect_ref_pool(&modules, &module_keys)
 }
 
+/// 从 D20 决议产物解析「被重载决议命中的方法定义」标记 `(基名, 声明序)`（WBS 4.9.6 / #450）：
+///
+/// - 决议名形如 `Type.method#k`（`#k` 缺省 = 声明序 0；定义侧按声明序混编）——
+///   解析的是**既有命名约定的消费**，不复制 ir_gen 的命名实现；
+/// - 剥除定义模块限定前缀（各单元键 + `.`）后得到基名：IR 名↔定义的配对留在 L1，
+///   分析器只收这个二元组（L2 不得知道 IR 名）；
+/// - 经 `OverloadResolutions::iter` **纯读**（不触达 `get`、不动消费台账）；
+/// - 跨单元同名方法：标记按名字对所有单元生效（多标 = 少报，宁漏报方向）。
+pub(in crate::driver) fn resolved_method_marks(
+    units: &[Unit],
+    type_results: &[Option<&TypeCheckResult>],
+) -> HashSet<(String, usize)> {
+    let mut marks = HashSet::new();
+    for result in type_results.iter().flatten() {
+        for (_, ir_name) in result.overload_resolutions.iter() {
+            let (base, ordinal) = split_overload_ir_name(ir_name);
+            marks.insert((strip_unit_prefix(&base, units), ordinal));
+        }
+    }
+    marks
+}
+
+/// `Type.method#k` → `(Type.method, k)`；无 `#` 后缀 ⇒ 声明序 0
+fn split_overload_ir_name(ir_name: &str) -> (String, usize) {
+    match ir_name.rsplit_once('#') {
+        Some((base, idx)) => (base.to_string(), idx.parse().unwrap_or(0)),
+        None => (ir_name.to_string(), 0),
+    }
+}
+
+/// 剥除定义模块限定前缀（任一单元键 + `.`）——剩下的基名与各单元 `all_defs` 同名
+fn strip_unit_prefix(
+    base: &str,
+    units: &[Unit],
+) -> String {
+    for unit in units {
+        if let Some(rest) = base.strip_prefix(&format!("{}.", unit.key)) {
+            return rest.to_string();
+        }
+    }
+    base.to_string()
+}
+
 /// manifest 声明面优先的池来源（#334「包内 use 图不可达的报警」）：对每个包目标
 /// root 跑一次 `discover_with_used`，把编译集里的文件现场词法+语法解析后装配池。
 ///
