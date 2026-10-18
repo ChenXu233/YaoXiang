@@ -199,7 +199,7 @@
   "src/rfc/deprecated/019-typed-homoiconicity.md:en": "d0fa663d2ac2892b81ab8823f49ac53c",
   "src/guide/modules.md:en": "92b361c0aa0bcc4285d462ccb1109676",
   "src/dev/architecture/01-routing.md:en": "4069c52d9fa348db416249860e7aca8a",
-  "src/dev/architecture/02-stage-contract.md:en": "b846bf4e6bf18561c3ecd4159063cda8",
+  "src/dev/architecture/02-stage-contract.md:en": "58aa3bc6b4bf86fdf548d90a723d40d0",
   "src/dev/architecture/06-cleanup-inventory.md:en": "a2eb0b3276038bfe2ad5d8910c505116",
   "src/dev/architecture/04-ssa.md:en": "8ef74bd4b1f98d58e9e7ed53dc921929",
   "src/dev/architecture/05-frontend-paradigm.md:en": "fa0e2770bf6bf65bf5df23c72da13cc3",
@@ -207,12 +207,12 @@
   "src/dev/architecture/03-type-unification.md:en": "6e18a4665eb74791f7ed02228a65be67",
   "src/dev/architecture/08-maintenance-mechanism.md:en": "d1f26bd0a19962938902d19056a67274",
   "src/dev/architecture/index.md:en": "f4cba2dbff576f3c9fc16393f4db153d",
-  "src/dev/architecture/09-execution-wbs.md:en": "67dabc1656592a57db375196091a2c6f",
+  "src/dev/architecture/09-execution-wbs.md:en": "35a8563dd906e7f385e9b51be9deae16",
   "src/dev/HOWTO.md:en": "d558da50c607e400c5dec74ef46663f0",
   "src/dev/coding-rules.md:en": "82103d53a1b7893f978223cc12504f2b",
   "src/dev/docs-rules.md:en": "a5afbf17bcea9dec0031684757474ddf",
   "src/explanation/index.md:en": "3dc95c6110cb38d3635600268ffe904a",
   "src/rfc/accepted/039-compiler-architecture.md:en": "348bf4b16d5086cffe39959007f5199b",
   "src/rfc/accepted/027a-termination-explicit-measure.md:en": "fe67f308209f9a47a64c5fcf08be3425",
-  "src/dev/architecture/09a-wbs-history.md:en": "36c0371ae2407ed72d728031754343e4"
+  "src/dev/architecture/09a-wbs-history.md:en": "b2f77ae4cec08c275aba727c42009755"
 }
