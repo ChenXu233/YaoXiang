@@ -276,7 +276,7 @@ src/
 | 要加的东西 | 落点 | 需要同步改的地方 |
 | --- | --- | --- |
 | **编译阶段** | `driver/stage.rs` 加 `Stage` 变体 | `driver/stage.rs` 的 `Stage::ALL`、对应 `Program::stages()`、`driver/mod.rs` 的 `dispatch`（穷尽 match 强制补全）、CI 阶段覆盖测试 |
-| **跨阶段检查层**（类 ownership / termination） | `sema/layers/` 加模块 | 阶段表登记 + `layers/README.md` 更新（**当前该 README 声明的层序与实际执行顺序相反**）+ 产出并入 `Obligations` |
+| **跨阶段检查层**（类 ownership / termination） | `sema/layers/` 加模块 | 阶段表登记 + `layers/README.md` 更新（**调用序表与 `checker.rs` 调用点逐条对应**）+ 产出并入 `Obligations` |
 | **opcode** | `middle/bytecode/opcode.rs`（现状 `backends/common/opcode.rs`，随字节码域合并迁移，触点全部收进 `middle/` 一个目录） | **5 处**：`BytecodeInstr::opcode()`、`size()`、`opcode_name()`、`From<BytecodeFile>` 解码 match、`translator.rs` 的 `translate_*`。其中只有 2 处被编译器穷尽 match 强制，另外 3 处漏改只有跑 `.42` 产物才炸。要求生成期门禁（见 06） |
 | **CLI 子命令** | `main.rs` 的 `Commands` 枚举 | `lib.rs` 的 `pub` 入口（当前 7 个）、`main.rs` 的 `match command`（当前 373 行） |
 | **LSP 能力** | `lsp/handlers/` 加 handler | `lsp/server.rs` 的 `handle_request`（当前 274 行、13 处重复样板）、`lsp/world.rs` 状态 |
@@ -310,7 +310,7 @@ src/
 
 1. 在 `sema/layers/` 建模块，**不依赖序号更大的层**。
 2. 产出物归入 `Obligations`，由编排层统一消费。
-3. 更新 `sema/layers/README.md`——**让它描述实际层序**，而不是意图层序。当前该文件描述的是一套未建成的架构。
+3. 更新 `sema/layers/README.md`——**让它描述实际层序**（行号按现树取，定位以函数名/驱动点为锚）。
 4. 登记进 `Stage` 枚举，`Program::stages()` 里显式声明在哪些模式下运行。
 
 ---

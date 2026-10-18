@@ -281,27 +281,21 @@ RFC-027 的三个单测（`src/frontend/core/typecheck/tests/rfc027_phase25_proo
 
 以下均来自证明层分析，独立于入口分叉问题，但都属于「阶段契约没有被强制」这一类。
 
-**（a）层序声明与实际执行顺序矛盾，且 `equivalence` 层根本不在管线里。**
+**（a）层序只在文档里声明，没有机制强制；`equivalence` 层不在管线里。**
 
-`src/frontend/core/typecheck/layers/README.md:5-11` 声明的层序：
+`src/frontend/core/typecheck/layers/README.md` 描述的是 `checker.rs::check_module_impl` 的实际调用序（定位以函数名/驱动点为锚，行号按现树取）：
 
-| 层 | 文件 | 依赖 |
+| 实际顺序 | 调用点 | 对应层 |
 | --- | --- | --- |
-| 0 | `equivalence.rs` | types/eval |
-| 1 | `ownership.rs` | Layer 0 |
-| 2 | `termination.rs` | Layer 0, 1 |
-| 3 | `predicate.rs` | Layer 0, 1, 2 |
+| 1 | 精化走查驱动 `predicate::check_predicate`（`revalidate_refined` / `check_call_arg_refinements` / `check_return_refinement` 三个站点） | `predicate.rs` |
+| 2 | `termination::TerminationChecker::check_module` | `termination.rs` |
+| 3 | `ownership::check_ownership` | `ownership.rs` |
+| 4 | 类型约束求解 `env.solver().solve()`（不在 `layers/`） | — |
+| — | `equivalence::check_type_equivalence` — **`checker.rs` 中零调用** | `equivalence.rs` |
 
-README 第 3 行称「按层序执行，下层失败上层不跑」。实际 `TypeChecker::check_module` 内的调用点：
+层号标签（`equivalence.rs` = 0、`ownership.rs` = 1、`predicate.rs` = 3）只存在于各模块自己的头注释里，与调用顺序不对应；README 里没有「编号 → 调用时机」的映射。
 
-| 实际顺序 | 调用点 | 对应声明层 |
-| --- | --- | --- |
-| 1 | `termination` — `checker.rs:1256-1270` | Layer 2 |
-| 2 | `ownership` — `checker.rs:1296` | Layer 1 |
-| 3 | `predicate` — `checker.rs:5123` / `5276` / `5397` | Layer 3 |
-| — | `equivalence` — **`checker.rs` 中零调用** | Layer 0 |
-
-即：`termination` 与 `ownership` 顺序与声明**相反**；声明的 Layer 0 `equivalence` **根本没有出现在 `check_module` 的阶段序列里**（它只被 `inference/assignment.rs:17` 作为 `is_subtype` 工具函数使用，与 `ProofResult` 无关）。同时**不存在任何 short-circuit**——`checker.rs:1271-1276` 把 termination 的错误逐条 `add_error` 后继续往下走，README 承诺的「下层失败上层不跑」不成立。
+`equivalence` 只被 `inference/assignment.rs:17` 作为 `is_subtype` 工具函数使用，与 `ProofResult` 无关。同时**不存在任何 short-circuit**——`check_module_impl` 把 termination 的错误逐条 `add_error` 后继续往下走，「下层失败上层不跑」不是事实。
 
 **（b）SMT 后端有三种获取策略、两种失败哲学。**
 
@@ -1149,7 +1143,7 @@ pub enum Aggregation {
 | `src/frontend/core/typecheck/checker.rs` | `1303-1314` | `ProofResult::Unproven { .. } => {}` 空臂改为产诊断（**修复第二个静默丢弃点**） |
 | `src/frontend/core/typecheck/checker.rs` | `1283-1293` | `unwrap_or_default()` 降级路径加 warning 诊断 |
 | `src/frontend/core/typecheck/checker.rs` | `1244` | 修正与 `1320` 不符的注释 |
-| `src/frontend/core/typecheck/layers/README.md` | `1-18` | 层序表改为**实际**执行顺序；删除「下层失败上层不跑」（不存在 short-circuit） |
+| `src/frontend/core/typecheck/layers/README.md` | 全文 | 层序表改为**实际**执行顺序；删除「下层失败上层不跑」（不存在 short-circuit） |
 | `src/frontend/core/typecheck/proof/smt/backend.rs` | `67-72` | **按 D58**：新增进程级共享单例（`LazyLock<Mutex<Option<Box<dyn Solver>>>>`）+ `with_shared_solver` 闭包访问口；`predicate.rs`/`checker.rs`/`ownership.rs` 三消费点改走共享口。`&'static` 裸引用形态不可行（`dyn Solver` 不 `Sync`），原文表述以 D58 为准 |
 
 **删除**：`src/util/diagnostic/mod.rs:621-661` 的 `check_single_file`；`src/lsp/handlers/diagnostics.rs:161-227` 的手工 lex/parse 序列。
@@ -1241,7 +1235,7 @@ pub enum Aggregation {
 
 这样设计额外消除两类裂缝：
 
-- **「注释承诺」与「代码行为」的裂缝**。`checker.rs:5165` 的「不得让 silent pass 复活」和 `layers/README.md:3` 的「下层失败上层不跑」都是**注释级契约**——前者靠 `assert_drained()` 兑现，后者靠拓扑驱动的 `Skipped` 诊断暴露。
+- **「注释承诺」与「代码行为」的裂缝**。`checker.rs:5165` 的「不得让 silent pass 复活」是**注释级契约**，靠 `assert_drained()` 兑现。
 - **「一个数组忘记 append」**。当前是五个函数各自手写调用序列；统一后是唯一一张阶段表，且新增阶段漏接会在编译期报错。
 
 ### 未采纳的方向
@@ -1274,7 +1268,7 @@ pub enum Aggregation {
 - [RFC-027 编译期求值与类型](../../rfc/accepted/027-compile-time-evaluation-types.md) — Phase 2.5 证明函数执行的设计来源
 - [RFC-013 错误码规范](../../rfc/accepted/013-error-code-specification.md) — `build.rs:19-55` 门禁的对照码表
 - `src/frontend/core/typecheck/checker.rs:5165-5169` — 「不得让 silent pass 复活」的明文声明
-- `src/frontend/core/typecheck/layers/README.md:3` — 「下层失败上层不跑」的明文声明（实际无 short-circuit）
+- `src/frontend/core/typecheck/layers/README.md` — 层序调用表与 `equivalence` 的真实身份（无 short-circuit）
 - `src/frontend/core/typecheck/layers/predicate.rs:31-32` — SMT 初始化硬失败的明文理由
 - `src/frontend/core/typecheck/proof/smt/backend.rs:60` — 「调用方应保守降级」的契约声明（与 `predicate.rs` 矛盾）
 - `src/frontend/core/typecheck/types.rs:16-76` — 13 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
