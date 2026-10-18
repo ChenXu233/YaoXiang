@@ -358,7 +358,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 | **产不出值的 opcode / 指令** | **补构造点或删 opcode** | B8（`TailCall`）、B9（`Switch`，opcode 往返测试已以 `WHITELIST=["SWITCH"]` 显式登记）、B10（`UnaryOp::Not` 静默退化）。三选一，不能维持现状；D32/D33/D34 已裁决为删，随 `.42` 升版一并处理 |
 | **数据丢失缺陷** | ~~独立 issue~~ **P7 批 e（D52）** | E 节三条硬编码丢弃——不是死代码 |
 | **无模块身份但有效** | **改造不删除** | F1（`semantic_tokens.rs`）改 `include!` → 真 `mod`（见 `02`） |
-| **需要决策的** | **列为开放问题** | F2 的**不可达 wasm 分支**清理范围、层序修正会暴露新诊断 |
+| **需要决策的** | **列为开放问题** | F2 的 wasm32 清理已登记为 [09](09-execution-wbs.md) §P10 **S7**（wasm32 门控 project-mode 子树，2026-10-18 用户裁决 B；含三条未核实原样保留）；层序修正会暴露新诊断 |
 
 ### 未采纳的方向
 
