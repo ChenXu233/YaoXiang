@@ -1,194 +1,196 @@
-# Compilation Stage Contracts and Obligation Ledger
+# Compilation Stage Contract and Obligations Ledger
 
-> **Supplementary design document**. This document is a supplement to
-> [RFC-039 Compiler Architecture Refactor](../../rfc/accepted/039-compiler-architecture.md). The
-> four-layer model, acceptance criterion grading, and execution stage order are in the RFC-039 body;
-> the positioning of each supplementary document is in the [directory index](index.md).
+> **Subsidiary design document**. This document is a subsidiary of
+> [RFC-039: Compiler Architecture Restructuring](../../rfc/accepted/039-compiler-architecture.md).
+> The four-layer model, the acceptance-criteria grading, and the execution-stage sequence are in the
+> RFC-039 main text; the positioning of each subsidiary document is in
+> [this directory's index](index.md).
 
 ## Positioning and Scope
 
 This document is the **L1 orchestration layer** construction blueprint for RFC-039. It addresses one
-question: **"Which stages did this compilation run, which did it not, and why"** is currently
-scattered across six paths and ten entry functions, each manually wired, with no single place that
-can answer this question.
+problem: **"Which stages ran in this compilation, which didn't, and why" is currently scattered
+across six paths and ten entry functions, each hand-wired — there is not a single place that can
+answer this question.**
 
 The current state can be summarized in one sentence:
 
-> **The invariants declared by the code itself are broken by architecture, not by logic.**
+> **Invariants declared by the code itself are violated by the architecture, not by logic.**
 
-The comment at `src/frontend/core/typecheck/checker.rs:5165` literally reads "Unproven → compile
-error, no degradation, no silent pass… silent pass must not be resurrected." But this invariant only
-holds on the **single-file path**: proof function constraints like `x: Sorted(3)` **silently pass**
-on the multi-file `yaoxiang run`, `yaoxiang check`, and LSP paths, proof functions are never
-executed, and no diagnostics are produced.
+The comment at `src/frontend/core/typecheck/checker.rs:5165` literally says "Unproven → compile
+error, no degradation, no silent pass… must not let silent pass be revived." But this invariant only
+holds on the **single-file path**: refinement constraints on proof functions, of the form
+`x: Sorted(3)`, **silently pass** under the three paths of multi-file `yaoxiang run`,
+`yaoxiang check`, and LSP — the proof function is never executed and no diagnostic is produced.
 
 ### Coverage
 
-- The `Stage` enum (exhaustive, non-runtime registration) and `StageScope`;
-- The `Obligations` obligation ledger and `assert_drained()` settlement;
-- The unified `Driver` (single `dispatch`) and the per-function refactoring plan for the ten entry
+- The `Stage` enum (exhaustive, not registered at runtime) and `StageScope`;
+- The `Obligations` ledger and `assert_drained()` settlement;
+- The unified `Driver` (single `dispatch`) and the per-function refactoring for the ten entry
   functions;
 - Stage failure semantics (`Continue` / `Abort` / `Warn`) and diagnostic aggregation modes
   (`FailFast` / `CollectAll`);
-- All files and line numbers affected by the above changes, compatibility impact, implementation
+- All files and line numbers touched by the above changes, compatibility impact, and implementation
   order.
 
 ### Not Covered
 
-- Four-layer model, dependency direction specification, anti-rebound gate → `01-routing.md`
-- Equivalence criteria (C1-C6 grading, three-tier criteria) → `07-equivalence-oracle.md`
-- Convergence of three parallel type representations → `03-type-unification.md`; SSA conversion →
-  `04-ssa.md`; frontend paradigm → `05-frontend-paradigm.md`
+- The four-layer model, dependency direction conventions, anti-rebound gate → `01-routing.md`
+- Equivalence criteria (C1–C6 grading, three-tier criteria) → `07-equivalence-oracle.md`
+- Convergence of the three parallel type representations → `03-type-unification.md`; SSA conversion
+  → `04-ssa.md`; frontend paradigm → `05-frontend-paradigm.md`
 - Dead code and wasm branch reachability cleanup → `06-cleanup-inventory.md`
-- P1-P10 global execution order and G1-G10 acceptance gates → RFC-039 body
+- The global P1–P10 execution order and G1–G10 acceptance gates → RFC-039 main text
 
 ### Division of Labor with RFC-039
 
-RFC-039 provides **why** the refactor and **in what order**; this document provides the L1
-**concrete form**, **per-file change list**, and **implementation stages within this document**
-(corresponding to RFC-039 global sequence P3 "fix correctness vulnerabilities" and P4 "stage
-contracts and unified Driver"). Where this document conflicts with RFC-039, RFC-039 prevails.
+RFC-039 gives the **why** of the refactoring and the **order** to do it; this document gives L1's
+**concrete form**, the **per-file change list**, and the **implementation phases within this
+document** (corresponding to RFC-039 global sequence P3 "fix correctness vulnerabilities" and P4
+"stage contract and unified Driver"). Where this document conflicts with RFC-039, RFC-039 takes
+precedence.
 
-Equivalence criteria are executed per the [Equivalence Oracle document](07-equivalence-oracle.md)
-**C2 (orchestration changes)** category: same diagnostic set per entry + same corpus behavior.
+Equivalence criteria are executed per the **C2 (orchestration change)** category of the
+[Equivalence Criteria document](07-equivalence-oracle.md): same diagnostic set at each entry + same
+corpus behavior.
 
 ## Current State
 
-> This section is entirely **verified fact**, each entry with file path + line number. Line numbers
+> All items in this section are **verified facts**, each with file path + line number. Line numbers
 > are based on `9e02e4db`.
 
-### Stage Boundaries Are the Only "One Mistake, Whole Repo Silent" Structural Defect
+### Stage Boundaries are the Only "One Miswrite, Silent Whole-Repo" Structural Defect
 
-It differs in nature from the other two defect classes (module boundaries, test wiring):
+It is qualitatively different from the other two defect types (module boundaries, test wiring):
 
-| Defect                | Typical Manifestation            | Is There a Signal?       |
-| --------------------- | -------------------------------- | ------------------------ |
-| Lexical/syntax error  | Source code written wrong        | Has diagnostics          |
-| Type mismatch         | Type written wrong               | Has diagnostics          |
-| Stage missing         | Some stage is not called at all  | **No signal whatsoever** |
-| Obligation unconsumed | Field filled but no one reads it | **No signal whatsoever** |
+| Defect                  | Typical manifestation               | Is there a signal?   |
+| ----------------------- | ----------------------------------- | -------------------- |
+| Lexical/syntactic error | Source code is wrong                | Has diagnostic       |
+| Type mismatch           | Type is wrong                       | Has diagnostic       |
+| Stage mis-wired         | Some stage was never called         | **No signal at all** |
+| Obligation not consumed | Field is filled but no one reads it | **No signal at all** |
 
-The common feature of the latter two is: **failure produces no error**. Therefore they cannot be
-resolved by "writing code more carefully" or "reviewing more strictly" — code review can only see
-what was written, not what was not written. This is exactly the root cause RFC-039 diagnoses: "this
-project treats 'design' as a documentation convention, not as an executable constraint."
+The common feature of the latter two is: **failure does not produce an error**. Therefore they
+cannot be solved by "writing code more carefully" or "reviewing more strictly" — code review can
+only see what was written, not **what was not written**. This is exactly the root cause diagnosed by
+RFC-039: "this project treats 'design' as a documentation convention, not as an executable
+constraint."
 
-### Existing Mandatory Mechanisms in This Repository
+### Existing Enforcement Mechanisms in this Repository
 
-The same repository already has mature mandatory mechanisms — they just have not been extended to
+The same repository already has mature enforcement mechanisms; they just haven't been extended to
 the stage layer:
 
-- **145 error codes** (137 E + 8 W) in `src/util/diagnostic/codes/` are enforced by **build-time
-  hard gates** through `build.rs:19-55` via `tools/code-tables`, which compares each entry against
-  the RFC-013 code table — any inconsistency directly triggers `panic!` to refuse compilation.
-- `src/package/` (**76 files / 13,012 lines**, of which the `tests/` directory is 6,227 lines /
-  47.9%) has high test density, and each module's test subtree is declared wired — this is the most
-  complete test wiring in the repository and can serve as a formal reference for the stage-layer
-  gate.
+- The **145 error codes** in `src/util/diagnostic/codes/` (137 E + 8 W) are **hard-gated at build
+  time** by `build.rs:19-55` via `tools/code-tables`, comparing each entry against the RFC-013 code
+  table; any inconsistency immediately `panic!`s and refuses to compile.
+- `src/package/` (**76 files / 13012 lines**, of which `tests/` is 6227 lines, 47.9%) has high test
+  density and a declared wiring for each module's test subtree — this is the most complete
+  test-wiring area in the whole repo, and can serve as a formal reference for stage-layer gating.
 
-**The design capability is sufficient. What's missing is "a same-level gate in the orchestration
-layer as well."**
+**The design capability is sufficient. What's missing is "putting a gate of the same level in the
+orchestration layer too."**
 
-(Line count metric: `(Get-Content).Count`, see the "Line count metric" section of
+(Line-count basis: `(Get-Content).Count`, see the "Line-count basis" section of
 `06-cleanup-inventory.md`.)
 
 ### Six Compilation Paths, Ten Entry Functions
 
-| #   | Path                       | Entry Function                                        | Location                                      | Which Compilation                                  |
-| --- | -------------------------- | ----------------------------------------------------- | --------------------------------------------- | -------------------------------------------------- |
-| 1   | **Single-file pipeline**   | `Pipeline::run`                                       | `src/frontend/pipeline.rs:141-227`            | 5 stages direct call                               |
-| 2   | **Single-file wrapper**    | `Compiler::compile` / `Compiler::compile_with_source` | `src/frontend/compiler.rs:95` / `106`         | Wraps `Pipeline`                                   |
-| 3a  | **Multi-file compilation** | `orchestrator::compile_project`                       | `src/frontend/module/orchestrator.rs:99-237`  | Per-file `check_module` + IR + linking             |
-| 3b  | **Multi-file check**       | `orchestrator::check_project`                         | `src/frontend/module/orchestrator.rs:273-399` | Per-file typecheck, collect all diagnostics        |
-| 3c  | **LSP within project**     | `orchestrator::check_source_in_project`               | `src/frontend/module/orchestrator.rs:450`     | `check_module_collect_all` (`493`)                 |
-| 3d  | **Embedded std**           | `orchestrator::compile_embedded_module`               | `src/frontend/module/orchestrator.rs:1374`    | `check_module` (`1386`) + standalone IR            |
-| 4a  | **CLI single-file**        | `lib::run_file`                                       | `src/lib.rs:140-147`                          | → `run_with_source_name` → path 1                  |
-| 4b  | **CLI multi-file**         | `lib::run_project`                                    | `src/lib.rs:154-167`                          | → `compile_project` (path 3a)                      |
-| 5   | **LSP / `yaoxiang check`** | `lsp::run_diagnostics`                                | `src/lsp/handlers/diagnostics.rs:146`         | Within project goes 3c, otherwise manual lex→parse |
-|     |                            | `check_files_with_diagnostics`                        | `src/util/diagnostic/mod.rs:565`              | → `check_project` (`590-591`)                      |
-| 6   | **wasm playground**        | `run_code` / `test_compile`                           | `wasm/src/lib.rs:42` / `30`                   | `Compiler::compile_with_source` → path 1           |
+| #   | Path                       | Entry function                                        | Location                                      | Which compilation does it take?                 |
+| --- | -------------------------- | ----------------------------------------------------- | --------------------------------------------- | ----------------------------------------------- |
+| 1   | **Single-file pipeline**   | `Pipeline::run`                                       | `src/frontend/pipeline.rs:141-227`            | 5-stage direct call                             |
+| 2   | **Single-file wrapper**    | `Compiler::compile` / `Compiler::compile_with_source` | `src/frontend/compiler.rs:95` / `106`         | Wraps `Pipeline`                                |
+| 3a  | **Multi-file compile**     | `orchestrator::compile_project`                       | `src/frontend/module/orchestrator.rs:99-237`  | Per-file `check_module` + IR + linking          |
+| 3b  | **Multi-file check**       | `orchestrator::check_project`                         | `src/frontend/module/orchestrator.rs:273-399` | Per-file typecheck, collect all diagnostics     |
+| 3c  | **LSP in project**         | `orchestrator::check_source_in_project`               | `src/frontend/module/orchestrator.rs:450`     | `check_module_collect_all` (`493`)              |
+| 3d  | **Embedded std**           | `orchestrator::compile_embedded_module`               | `src/frontend/module/orchestrator.rs:1374`    | `check_module` (`1386`) + independent IR        |
+| 4a  | **CLI single-file**        | `lib::run_file`                                       | `src/lib.rs:140-147`                          | → `run_with_source_name` → path 1               |
+| 4b  | **CLI multi-file**         | `lib::run_project`                                    | `src/lib.rs:154-167`                          | → `compile_project` (path 3a)                   |
+| 5   | **LSP / `yaoxiang check`** | `lsp::run_diagnostics`                                | `src/lsp/handlers/diagnostics.rs:146`         | In-project takes 3c, otherwise manual lex→parse |
+|     |                            | `check_files_with_diagnostics`                        | `src/util/diagnostic/mod.rs:565`              | → `check_project` (`590-591`)                   |
+| 6   | **wasm playground**        | `run_code` / `test_compile`                           | `wasm/src/lib.rs:42` / `30`                   | `Compiler::compile_with_source` → path 1        |
 
 The 5 stages of the single-file path (`pipeline.rs`):
 
-| Stage               | Call Site     | Implementation                                                        |
-| ------------------- | ------------- | --------------------------------------------------------------------- |
-| lexing              | `149`         | `run_lexing` (`230-239`)                                              |
-| parsing             | `161`         | `run_parsing`                                                         |
-| typecheck           | `173`         | `run_typecheck` (`268-285`)                                           |
-| **proof_execution** | **`187-203`** | `run_proof_execution` (`306-311`) — RFC-027 Phase 2.5                 |
-| ir_generation       | `205`         | `run_ir_generation`, **monomorphization embedded within** (`381-389`) |
+| Stage               | Call site     | Implementation                                                       |
+| ------------------- | ------------- | -------------------------------------------------------------------- |
+| lexing              | `149`         | `run_lexing` (`230-239`)                                             |
+| parsing             | `161`         | `run_parsing`                                                        |
+| typecheck           | `173`         | `run_typecheck` (`268-285`)                                          |
+| **proof_execution** | **`187-203`** | `run_proof_execution` (`306-311`) — RFC-027 Phase 2.5                |
+| ir_generation       | `205`         | `run_ir_generation`, **monomorphization inlined within** (`381-389`) |
 
-### 11 Inconsistencies in Stage Coverage
+### 11 Stage-Coverage Inconsistencies
 
-The table below provides evidence cell by cell. **A blank cell does not mean "this entry does not do
-this thing", but rather "no code in this entry does this thing"** — this is the very nature of the
+The table below gives evidence cell by cell. **A blank does not mean "this entry doesn't do this
+thing", but "there is no code in this entry that does this thing"** — which is the essence of the
 defect.
 
-| #   | Stage / Behavior                                         | `pipeline` (single-file)                         | `compile_project`                                       | `check_project`                                             | `check_source_in_project` (LSP)    | `compile_embedded_module`                  |
-| --- | -------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------- | ------------------------------------------ |
-| 1   | **proof_execution**                                      | **Yes** `187-203`                                | **None**                                                | **None**                                                    | **None**                           | **None**                                   |
-| 2   | Dead code analysis                                       | Yes `275-278` (`config.dead_code.enabled` gated) | **None**                                                | Yes `356-377` (role-aware, no config gating)                | **None**                           | **None**                                   |
-| 3   | W1006 local module shadowing                             | **None**                                         | **None**                                                | Yes `336-348`                                               | **None**                           | **None**                                   |
-| 4   | W1003 unused imports                                     | Yes (`277` collects `type_result.warnings`)      | **Collected but never output**                          | Yes `350`                                                   | **None**                           | **None**                                   |
-| 5   | W1001/W1002 dead code family                             | Yes (same as 2)                                  | **None**                                                | Yes (same as 2)                                             | **None**                           | **None**                                   |
-| 6   | **Monomorphization**                                     | Yes `381-389` (`config.mono.enabled` gated)      | **None**                                                | N/A                                                         | N/A                                | **None**                                   |
-| 7   | typecheck branch                                         | `check_module`                                   | `check_module` (`124`), **first-error returns** (`132`) | `check_module_collect_all` (via `315` → `493`), collect all | `check_module_collect_all` (`493`) | `check_module` (`1386`)                    |
-| 8   | File discovery                                           | N/A                                              | `discover` (`101`, drops `used_by`/`shadow_events`)     | `discover_with_used` (`275`)                                | `discover` (`454`)                 | N/A                                        |
-| 9   | Role context (`surfaces`/`test_rules`/`roles::classify`) | **None**                                         | **None**                                                | Yes (`321-328`)                                             | **None**                           | **None**                                   |
-| 10  | Global slot allocation                                   | N/A                                              | Yes `allocate_global_slots` (`147`)                     | **None**                                                    | **None**                           | **None**                                   |
-| 11  | IR generation + qualified name rewrite + linking         | Yes (`205`)                                      | Yes (`152-236`)                                         | **None**                                                    | **None**                           | Yes (after standalone ModuleIR then merge) |
+| #   | Stage / behavior                                         | `pipeline` (single-file)                            | `compile_project`                                         | `check_project`                                             | `check_source_in_project` (LSP)    | `compile_embedded_module`             |
+| --- | -------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------- | ------------------------------------- |
+| 1   | **proof_execution**                                      | **yes** `187-203`                                   | **no**                                                    | **no**                                                      | **no**                             | **no**                                |
+| 2   | Dead-code analysis                                       | yes `275-278` (gated by `config.dead_code.enabled`) | **no**                                                    | yes `356-377` (role-aware, no config gate)                  | **no**                             | **no**                                |
+| 3   | W1006 local module shadowing                             | **no**                                              | **no**                                                    | yes `336-348`                                               | **no**                             | **no**                                |
+| 4   | W1003 unused import                                      | yes (`277` collects `type_result.warnings`)         | **collected but never output**                            | yes `350`                                                   | **no**                             | **no**                                |
+| 5   | W1001/W1002 dead-code family                             | yes (same as 2)                                     | **no**                                                    | yes (same as 2)                                             | **no**                             | **no**                                |
+| 6   | **Monomorphization**                                     | yes `381-389` (gated by `config.mono.enabled`)      | **no**                                                    | N/A                                                         | N/A                                | **no**                                |
+| 7   | typecheck branch                                         | `check_module`                                      | `check_module` (`124`), **return on first error** (`132`) | `check_module_collect_all` (via `315` → `493`), collect all | `check_module_collect_all` (`493`) | `check_module` (`1386`)               |
+| 8   | File discovery                                           | N/A                                                 | `discover` (`101`, drops `used_by`/`shadow_events`)       | `discover_with_used` (`275`)                                | `discover` (`454`)                 | N/A                                   |
+| 9   | Role context (`surfaces`/`test_rules`/`roles::classify`) | **no**                                              | **no**                                                    | yes (`321-328`)                                             | **no**                             | **no**                                |
+| 10  | Global slot allocation                                   | N/A                                                 | yes `allocate_global_slots` (`147`)                       | **no**                                                      | **no**                             | **no**                                |
+| 11  | IR generation + qualified-name rewriting + linking       | yes (`205`)                                         | yes (`152-236`)                                           | **no**                                                      | **no**                             | yes (independent ModuleIR then merge) |
 
-> **Review notes (WBS 3.4.3, 2026-10-07 cell-by-cell verification)**: This table is a diagnostic
-> snapshot of the `9e02e4db` baseline, preserved unchanged. Status differences after P3 lands:
+> **Review note (WBS 3.4.3, 2026-10-07 cell-by-cell check)**: this table is the diagnostic snapshot
+> of the `9e02e4db` baseline, kept as-is. The current-state differences after P3 lands:
 >
-> - **Row 1 has been fixed**: proof_execution shares the same implementation across five entries via
->   `frontend/proof_execution.rs` (pipeline + orchestrator's four entries), the lone-consumer defect
+> - **Row 1 fixed**: proof_execution is shared across five entries via the same implementation in
+>   `frontend/proof_execution.rs` (pipeline + four orchestrator entries); the single-consumer defect
 >   no longer exists.
-> - **Rows 2/4/5 status unchanged** (multi-file `run` still does not output W1003, does not run dead
->   code family) → categorized as WBS 3.4.6 (prerequisite 4.2.1).
-> - **Row 6** (monomorphization single-file only) → categorized as WBS 3.4.8 (prerequisite 4.1.3,
->   potential risk unproven defect).
-> - **Row 7** check_module / check_module_collect_all dual entry → categorized as 4.2.7 (Aggregation
->   parameter driven).
-> - The "#434 ruling" referenced on the code side had zero registration in docs — now registered as
->   RFC-039 **D57**.
-> - **Embedded std included asymmetry (new fact outside the table, registered 2026-10-09)**: the
->   single-file path unconditionally injects std.list via `merge_embedded_std_ir` (required for
->   for-loop desugaring, #117 hard switch); multi-file `discover` previously only recognized
->   explicit `use` — for loops within a project compile fine, but produce E6006 at runtime (probe
->   empirical). Fixed and struck from WBS 4.10.2; the same-family "multi-file missing one
->   single-file step" parse hard-abort quirk filed as WBS 4.10.1 — **also fixed** (landed
->   immediately after 4.2.2, Check path downgraded to per-file collection; this audit's "stage
->   coverage/field consumption" dimension makes this a compilation unit membership difference, a
->   slipped-through dimension).
+> - **Rows 2/4/5 unchanged** (multi-file `run` still doesn't output W1003, doesn't run dead-code
+>   family) → assigned to WBS 3.4.6 (prerequisite 4.2.1).
+> - **Row 6** (monomorphization single-file only) → assigned to WBS 3.4.8 (prerequisite 4.1.3,
+>   unverified potential risk).
+> - **Row 7**: `check_module` / `check_module_collect_all` dual entries → assigned to 4.2.7
+>   (Aggregation-parameter driven).
+> - The "Ruling #434" referenced by code previously had zero registration in docs — now registered
+>   as RFC-039 **D57**.
+> - **Embedded std included in asymmetry (new fact outside the table, registered 2026-10-09)**: the
+>   single-file path unconditionally injects `std.list` via `merge_embedded_std_ir` (required for
+>   `for`-loop desugaring, #117 hard switch); multi-file `discover` previously only recognized
+>   explicit `use` — in-project `for` loops compile cleanly, then E6006 at runtime (probe-verified).
+>   Fixed and struck through WBS 4.10.2; the same-family "multi-file missing the single-file step"
+>   parse-hard-abort quirk is filed under WBS 4.10.1 — **also fixed** (landed right after 4.2.2; the
+>   Check path degraded to per-file collection; from this audit's "stage coverage / field
+>   consumption" view, this is a compilation-unit membership difference, a missed dimension).
 >
-> - **Embedded std registration surface coverage (found during 4.2.5 construction, fixed)**: The
->   Registry arm uses `extract_module_info` to re-harvest registration for embedded std units, which
->   overwrites the native half already registered as "native + yx surface merged" by `with_std()`
->   (loss of `result.is_err` etc → std.test falsely reports E1043). This audit's third
->   slipped-through dimension: "the merge semantics of two registration sources for the same module
->   key" — the single-file path's registry is formed once via `with_std()`, while multi-file/Check's
->   Registry arm inserts per unit to have coverage.
+> - **Embedded std registration surface coverage (found during 4.2.5 construction, fixed)**: the
+>   Registry arm re-harvests registration for embedded-std units via `extract_module_info`,
+>   overwriting the native half already registered by `with_std()` under "native + yx surface merge"
+>   (lost `result.is_err` etc. → std.test false-positive E1043). The third missed dimension of this
+>   audit: "the merge semantics of two registration sources for the same module key" — the
+>   single-file path's registration table is only shaped once via `with_std()`; multi-file/Check's
+>   Registry arm inserts per unit, which is the only place this surface exists.
 
-**Two points need precise expression, otherwise they will be written wrong:**
+**Two places need precise wording, or you'll write them wrong:**
 
-- **The accurate conclusion for rows 4/5 is**: `yaoxiang run` on the **multi-file** path
-  (`lib.rs:154 run_project` → `compile_project`) never reports W1001/W1002/W1003; on the
+- **The exact conclusion for rows 4/5 is**: `yaoxiang run` under the **multi-file** path
+  (`lib.rs:154 run_project` → `compile_project`) never reports W1001/W1002/W1003; under the
   **single-file** path (`lib.rs:140 run_file` → `pipeline.rs:275-278`) it does. The reason is at
-  `compile_project:138` — `type_results.push(result)` stores the complete `TypeCheckResult`
-  (including `warnings`), but this function **has no `result.warnings` read site whatsoever**; the
-  only downstream use of `result` is `generate_ir_with_context` (`154-156`).
-- **Row 11's entry `main` criterion is also not from the same source**: `check_project:385-395` uses
-  `surfaces.bins` (manifest declared surface); `compile_project` uses `is_bin_role` (`250-252`, only
-  checks "whether there is a manifest"). The two functions give different answers to "what file must
-  define `main`".
+  `compile_project:138` — `type_results.push(result)` stores the full `TypeCheckResult` (including
+  `warnings`), but this function **has no `result.warnings` read site at all**; the only downstream
+  use of `result` is `generate_ir_with_context` (`154-156`).
+- **Row 11's `main` criterion also has different sources at each entry**: `check_project:385-395`
+  uses `surfaces.bins` (manifest-declared surface); `compile_project` uses `is_bin_role` (`250-252`,
+  only judges "is there a manifest"). The two functions give different answers to "which files must
+  define `main`."
 
 ### Correctness Vulnerability: Proof Obligations Silently Discarded (Complete Evidence Chain)
 
 **This is the core of this document. All eight steps below are reproducible.**
 
-**Step 1 — The obligation's single production point.**
-`src/frontend/core/typecheck/layers/predicate.rs:232-239` is the **only** position in the entire
+**Step 1 — The obligation production point is unique.**
+`src/frontend/core/typecheck/layers/predicate.rs:232-239` is the **only** place in the whole
 repository that constructs a non-empty `proof_calls`:
 
 ```rust
@@ -203,36 +205,36 @@ return ProofResult::Unproven {
 };
 ```
 
-The semantics are: "The predicate arguments of this refinement constraint are compile-time literals;
-this proof function must actually be executed to determine."
+The semantics: "the predicate arguments of this refinement constraint are compile-time literals;
+this proof function must actually be executed to decide."
 
-**Step 2 — The consumption points are inside checker, but they only emit, they do not consume.**
-`src/frontend/core/typecheck/checker.rs` has **three isomorphic branches** handling
+**Step 2 — The consumption point is inside checker, but it only emits, never consumes.**
+`src/frontend/core/typecheck/checker.rs` has **three isomorphic branches** that handle
 `ProofResult::Unproven`:
 
-| Branch                     | Location                                                                                                | Behavior                  |
-| -------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Parameter refinement check | `5164` `if calls.is_empty()` → hard error (`5170-5177`); `5179` `ctx.proof_calls.extend(calls.clone())` | **No diagnostic emitted** |
-| Call site argument check   | `5306` → hard error (`5308-5316`); `5318` `ctx.proof_calls.extend(calls)`                               | **No diagnostic emitted** |
-| Return position obligation | `5420` → hard error (`5442-5446`); `5448` `ctx.proof_calls.extend(calls)`                               | **No diagnostic emitted** |
+| Branch                              | Location                                                                                                     | Behavior                |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| Parameter-position refinement check | `5164` `if calls.is_empty()` → push hard error (`5170-5177`); `5179` `ctx.proof_calls.extend(calls.clone())` | **emits no diagnostic** |
+| Call-site argument check            | `5306` → push hard error (`5308-5316`); `5318` `ctx.proof_calls.extend(calls)`                               | **emits no diagnostic** |
+| Return-position obligation          | `5420` → push hard error (`5442-5446`); `5448` `ctx.proof_calls.extend(calls)`                               | **emits no diagnostic** |
 
 The original comment at `checker.rs:5165-5169`:
 
 > `RFC-027 §4/§9: Unproven → compile error, no degradation, no silent pass.` ……
-> `This branch therefore becomes a real front line rather than forward-looking padding: silent pass must not be resurrected.`
+> `This branch therefore becomes a real line of defense, not a forward-looking stopgap: must not let silent pass be revived.`
 
-That is: the author is well aware that "not producing diagnostics" is a defect, explicitly
-classifying it as a **known, nowhere-to-go intermediate state**, with the design assumption that
-"someone will come to read `proof_calls`."
+i.e.: the author knew that "producing no diagnostic" is a defect, explicitly classified it as a
+**known, homeless intermediate state**, and designed under the assumption that "someone will come to
+read `proof_calls`."
 
 **Step 3 — The field is indeed filled into the result.** `checker.rs:1234-1235` declares a local
-`proof_calls` and collects it; `checker.rs:1439` writes it to `TypeCheckResult` as
-`proof_calls, // Phase 2.5 pre-registration proof function obligation`. The field is defined at
-`types.rs:29`.
+`proof_calls` and collects; `checker.rs:1439` writes it as
+`proof_calls, // Phase 2.5 pre-register proof function obligations` into `TypeCheckResult`. The
+field is defined at `types.rs:29`.
 
-**Step 4 — There is only one read site in the entire repository.** `TypeCheckResult.proof_calls`
-(`types.rs:29`) is **read in production code at only one place: `src/frontend/pipeline.rs:187`**
-(`189` pass argument):
+**Step 4 — There is only one read site in the whole repository.** `TypeCheckResult.proof_calls`
+(`types.rs:29`) in production code **is read at exactly one place: `src/frontend/pipeline.rs:187`**
+(passed as arg at `189`):
 
 ```rust
 // pipeline.rs:187-203
@@ -244,229 +246,223 @@ if !typecheck_result.type_result.proof_calls.is_empty() {
 ```
 
 (All other hits of the `proof_calls` identifier in the repo fall into three categories, none of
-which are consumers of this field: `checker.rs:1234/4564/5494` are production-side collection;
+which is a consumer of this field: `checker.rs:1234/4564/5494` are production-side collection;
 `verdict.rs:61` is a same-name field of `ProofResult`; `tests/rfc027_*.rs` reads `ProofResult`.)
 
-**Step 5 — The orchestrator's four entries all bypass that layer.**
-`src/frontend/module/orchestrator.rs`'s `compile_project` (`99`), `check_project` (`273`),
-`check_source_in_project` (`450`), `compile_embedded_module` (`1374`) **all do not call
-`pipeline.rs`**, calling `TypeChecker::check_module` directly (`124` / `493` / `1386`). Therefore
-they cannot even reach the only read site at `pipeline.rs:187`.
+**Step 5 — All four orchestrator entries skip that layer.** `compile_project` (`99`),
+`check_project` (`273`), `check_source_in_project` (`450`), `compile_embedded_module` (`1374`) in
+`src/frontend/module/orchestrator.rs` **do not call `pipeline.rs`**, but directly call
+`TypeChecker::check_module` (`124` / `493` / `1386`). Thus they can't even reach that one read site
+at `pipeline.rs:187`.
 
-**Step 6 — Consequence: refinement obligations of the standard library itself also take the discard
-path.** `compile_embedded_module` (`1374`, `check_module` call at `1386`) is responsible for
+**Step 6 — Consequence: the standard library's own refinement obligations also go through the
+discard path.** `compile_embedded_module` (`1374`, `check_module` call at `1386`) is responsible for
 compiling the embedded std. This means **the proof obligations of the embedded std module itself are
 likewise not executed**.
 
 **Step 7 — Consequence: constraints silently pass.** `y: Sorted(3) = 5` (with
-`Sorted: (x: Int) -> Type = { ... }`) on the multi-file / check / LSP paths **compiles, runs,
-produces no diagnostics**. The proof function is never called.
+`Sorted: (x: Int) -> Type = { ... }`) **compiles cleanly, runs cleanly, produces no diagnostic**
+under the multi-file / check / LSP paths. The proof function is never called.
 
-**Step 8 (supplementary verification) — A second silent discard point exists within the layer.**
-`checker.rs:1303-1314` when handling the ownership layer's result:
+**Step 8 (supplementary verification) — There's a second silent-discard point inside the layer.**
+`checker.rs:1303-1314` handles ownership-layer results:
 
 ```rust
 // checker.rs:1313
 ProofResult::Unproven { .. } => {}
 ```
 
-**The `Unproven` from the ownership check layer is swallowed by an empty match arm, with no
-diagnostic, no bookkeeping.** This directly contradicts the `5164` branch's "silent pass must not be
-resurrected" promise, and is **independent of the orchestrator issue** — even if the entry layer is
-completely fixed, this point will still remain silent. (Handling timing: should be processed in the
-same batch as the obligation ledger, because it is the same class of problem as the obligation
-ledger.)
+**The `Unproven` in the ownership-check layer is swallowed by an empty match arm, with no
+diagnostic, no bookkeeping.** This directly contradicts the `5164`-branch commitment "must not let
+silent pass be revived", and is **independent of the orchestrator issue** — even if the entry layer
+were fully fixed, this one would still be silent. (Processing timing: should be handled in the same
+batch as the obligations ledger, because it's the same kind of problem.)
 
-### Why Tests Did Not Catch This
+### Why Tests Didn't Catch It
 
-**`tests/integration/multifile.rs` (726 lines / 27 `#[test]`) has 0 hits for the three keywords
+**`tests/integration/multifile.rs` (726 lines / 27 `#[test]`s) has zero hits for the three keywords
 `Sorted` / `proof` / `refin`.** Zero coverage of proof obligations on the multi-file path.
 
-The three single-tests of RFC-027 (`src/frontend/core/typecheck/tests/rfc027_phase25_proof_fn.rs`,
-`rfc027_refined_transparency.rs`, `rfc027_return_refinement.rs`) do indeed assert that `proof_calls`
-is non-empty — for example `rfc027_return_refinement.rs:350-359` asserts the presence of a `SumUpTo`
-call in `result.proof_calls`. But they **all go through `check_source` →
+The three RFC-027 unit tests (`src/frontend/core/typecheck/tests/rfc027_phase25_proof_fn.rs`,
+`rfc027_refined_transparency.rs`, `rfc027_return_refinement.rs`) do assert that `proof_calls` is
+non-empty — for example `rfc027_return_refinement.rs:350-359` asserts that `result.proof_calls`
+contains a `SumUpTo` call. But they **all go through `check_source` →
 `checker.check_module(&module)`** (`rfc027_return_refinement.rs:45/75`,
 `rfc027_refined_transparency.rs:27/57`), **stopping right before `pipeline.rs`**.
 
-The test file's own documentation comment has already stated this.
-`rfc027_refined_transparency.rs:13-15`:
+The test file's own doc comment already says this. `rfc027_refined_transparency.rs:13-15`:
 
-> `This file only asserts what check_module can see. Proof calls (E4018) are executed by pipeline.rs after check_module, so refinement violation cases live in .yx layer`
+> `This file only asserts what check_module can see. The proof call (E4018) is executed by pipeline.rs after check_module, so refinement-violation cases are at the .yx level`
 
-**This is exactly the shape of the problem: the tests verify "the obligation was filled in", but the
-bug is "the consumer didn't read it".** A test that only tests the producer side, not the consumer
-side, is naturally immune to this class of defect.
+**This is exactly the shape of the problem: the test verifies "the obligation is filled", but the
+bug is "the consumer doesn't read it."** A test that only tests the production side and not the
+consumption side is naturally immune to this class of defect.
 
-### A Stronger Finding: The Equivalence Oracle's Main Corpus Is the Single-File Path
+### A Stronger Finding: the Equivalence-Criterion Main Corpus is the Single-File Path
 
-The [Equivalence Oracle document](07-equivalence-oracle.md) takes the end-to-end differential of 293
-`.yx` corpus files in `tests/yaoxiang/` as the **third-tier criterion**, as the primary acceptance
-means for C2 stages. But empirical testing:
+The [Equivalence Criteria document](07-equivalence-oracle.md) takes end-to-end diffing of the 293
+`.yx` corpora in `tests/yaoxiang/` as the **third-tier criterion**, as the main acceptance means for
+C2 stages. But empirically:
 
-- The `tests/` directory has **no `yaoxiang.toml` at all** (zero hits for the whole-directory glob).
+- The `tests/` directory has **no `yaoxiang.toml` at all** (zero hits by glob in the entire
+  directory).
 - Therefore `check_files_with_diagnostics` (`diagnostic/mod.rs:565`) hits the `standalone` branch
-  for each corpus file (`614-616`) → `check_single_file` (`623-661`) →
-  `Compiler::compile_with_source` (`635`) → `Pipeline::run` → **proof_execution executes**.
-- In other words, **all 293 corpus files go through the single-file path, all cover proof_execution,
-  all do not cover the multi-file path**.
+  (`614-616`) for every corpus file → `check_single_file` (`623-661`) →
+  `Compiler::compile_with_source` (`635`) → `Pipeline::run` → **proof_execution runs**.
+- In other words, **all 293 corpus files take the single-file path, all cover proof_execution, none
+  cover the multi-file path.**
 
-`tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx` is the
-empirical evidence for this. The file is annotated with `// expect: compile-error E4018` (line 15),
-and its header comment on line 7 reads "Status: ❌ Should be rejected at compile time" — **it can
-pass precisely because it takes the only path that actually executes the proof function**.
+`tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx` is
+precisely empirical evidence of this. That file is tagged `// expect: compile-error E4018` (line
+15), and its header comment on line 7 says "Status: ❌ Should be rejected at compile time" — **it
+passes precisely because it takes the only path that actually executes the proof function**.
 
-**Conclusion: The third-tier criterion needs a supplemental multi-file corpus layer, otherwise it
-cannot serve as the acceptance tool for this document.** See "Implementation Points" S1.
+**Conclusion: the third-tier criterion needs a multi-file corpus layer added, otherwise it cannot
+serve as the acceptance tool for this document.** See "Implementation notes" S1.
 
-### Obligation Fields: 13 "Produced-Hence-Contract" Fields, Zero Mechanism Guarantee
+### Obligation Fields: 13 "Produced-then-Contract" Fields, Zero Mechanism
 
 In `TypeCheckResult` at `src/frontend/core/typecheck/types.rs:16-76`, there are **13 fields** whose
-documentation comments explicitly state "produced by stage X → consumed by stage Y", i.e. they are
-**cross-stage obligations** in nature:
+doc comments explicitly say "produced by stage X → consumed by stage Y", i.e. they are **cross-stage
+obligations** by nature:
 
-| Field | Definition Line | Producer → Consumer |
+| Field | Definition line | Producer → Consumer |
 | ----- | --------------- | ------------------- |
 
-> **Row conventions**: definition line = the field's **declaration line** in `types.rs` (the `pub` /
-> `pub(super)` line), not the first line of the doc comment — a single field's comment block may
-> span multiple lines, the declaration line is the only anchorable position. The **struct range** in
-> the sentence above the table (`src/frontend/core/typecheck/types.rs:16-76`) floats with the
-> struct's line numbers and is mechanically reconciled by gate **F5** (red on mismatch); the
-> definition line column is reconciled by **F4**. | `proof_calls` | `36` | typecheck →
-> **proof_execution** | | `release_plan` | `38` | ownership → IR generation (**`PlanId` keyed**:
-> `ir_gen.rs:360` reads (`type_result.release_plan.clone()`), `:3103` uses (`ReleasePlan::consume`);
-> settlement completion marker `:1095`) | | `escaped_refs` | `40` | ownership → IR generation | |
+> **Row-fetch convention**: definition line = the **declaration line** of the field in `types.rs`
+> (the `pub` / `pub(super)` line), not the first line of the doc comment — the comment block for the
+> same field may span multiple lines, and the declaration line is the only uniquely anchorable
+> position. The **struct range** in the sentence above the table
+> (`src/frontend/core/typecheck/types.rs:16-76`) floats with the struct's line numbers, mechanically
+> reconciled by gate **F5** (wrong write turns red); the definition-line column is reconciled by
+> **F4**. | `proof_calls` | `36` | typecheck → **proof_execution** | | `release_plan` | `38` |
+> ownership → IR generation (**`PlanId`-keyed**: read at `ir_gen.rs:360`
+> (`type_result.release_plan.clone()`), used at `:3103` (`ReleasePlan::consume`);
+> settlement-complete marker at `:1095`) | | `escaped_refs` | `40` | ownership → IR generation | |
 > `instantiation_requests` | `42` | typecheck → monomorphization (`pipeline.rs:381`) | |
 > `existential_coercions` | `44` | typecheck → IR generation | | `implementation_proofs` | `46` |
 > typecheck → IR generation | | `sum_types` | `54` | typecheck → IR generation | |
 > `sum_type_param_names` | `57` | typecheck → IR generation | | `operator_dispatches` | `59` |
-> typecheck → IR generation (span keyed) | | `overload_resolutions` | `62` | typecheck → IR
-> generation (**`PlanId` keyed** — call site identity: produced at `inference/expressions.rs:4550`,
-> consumed at `ir_gen.rs:7697` / `:7772` (`OverloadResolutions::get`); settlement completion marker
-> `:1097`) | | `try_expr_impls` | `65` | typecheck → IR generation (span keyed) | |
-> `match_scrutinee_types` | `69` | typecheck → IR generation (span keyed) | | `module_namespaces` |
+> typecheck → IR generation (span-keyed) | | `overload_resolutions` | `62` | typecheck → IR
+> generation (**`PlanId`-keyed** — call-site identity: produced at `inference/expressions.rs:4550`,
+> consumed at `ir_gen.rs:7697` / `:7772` (`OverloadResolutions::get`); settlement-complete marker at
+> `:1097`) | | `try_expr_impls` | `65` | typecheck → IR generation (span-keyed) | |
+> `match_scrutinee_types` | `69` | typecheck → IR generation (span-keyed) | | `module_namespaces` |
 > `72` | typecheck → IR generation |
 
-**Ruling change record (3.4.9, 2026-10-13 user verdict A)**: The original row 14
-`interface_impl_registry` (`types.rs:49`) has been **reclassified as in-tree fact** — by design it
-is consumed in-phase by typecheck, with zero cross-stage reads, so it is not an obligation:
+**Ruling record (3.4.9, user ruling A on 2026-10-13)**: the original row 14
+`interface_impl_registry` (`types.rs:49`) has been **reclassified as an in-tree fact** — by design
+it's consumed in-phase by typecheck and has zero cross-stage reads, so it is not an obligation:
 
-- **At in-phase consumption points (live)**: `operator_interfaces.rs:623` (operator query reads
-  `env.interface_impl_registry`), seven constraint-solver queries in `inference/expressions.rs`
-  (`:1514` / `:1646` / `:3151` / `:3876` / `:3899` / `:4400` / `:4408`), the read-only accessor at
-  `checker.rs:214-217`, injection into body_checker at `checker.rs:974`.
+- **In-phase consumption sites (live)**: `operator_interfaces.rs:623` (operator query reads
+  `env.interface_impl_registry`), seven constraint-solving queries in `inference/expressions.rs`
+  (`:1514` / `:1646` / `:3151` / `:3876` / `:3899` / `:4400` / `:4408`), `checker.rs:214-217`
+  read-only accessor, `checker.rs:974` injects into body_checker.
 - **Zero cross-stage reads (direct evidence)**:
   `git grep -n 'interface_impl_registry' -- src/middle` → empty; the `src/driver` side only has the
-  ledger's own registration and documentation (removed in this round).
-- **Disposition**: delete the doc comment **declaration** that says "mirrored for middle-end/LSP
-  consumption", keep the field and in-phase consumption; this field is registered in
-  `NON_OBLIGATION_FIELDS` in `src/driver/obligations.rs` (with reason). If LSP actually needs this
-  table in the future, it should be re-registered under 4.6.x, **not introduce a consumer in this
-  round**.
+  ledger's own registration and docs (already removed this round).
+- **Disposition**: remove the doc-comment **declaration** "mirrored for middle-side / LSP
+  consumption", keep the field and its in-phase consumption; the field is registered in
+  `NON_OBLIGATION_FIELDS` of `src/driver/obligations.rs` (with reason). If LSP really needs that
+  table later, register under 4.6.x, **do not create a consumer in this round**.
 
-**All these fields cross layers keyed by `Span` or name tables.** The equivalence oracle document
-has already pointed out that mismatches in span-keyed contracts "silently fail, with no error
-whatsoever" (`ReleasePlan` is typical: any inconsistency in how the two sides compute span → `Drop`
-instructions silently disappear).
+**All these fields cross layers keyed by `Span` or by name table.** The Equivalence Criteria
+document has already noted that a span-key contract mismatch will "silently fail, no error at all"
+(`ReleasePlan` is typical: any inconsistency in how the two sides compute the span → `Drop`
+instructions silently vanish).
 
-Why does `release_plan` survive while `proof_calls` dies? The difference is **structural, not
+Why does `release_plan` survive while `proof_calls` died? The difference is **structural, not
 coincidental**:
 
-- `release_plan`'s consumer `ir_gen.rs:360` (`release_plan: type_result.release_plan.clone()`) is
-  inside `generate_ir_with_context`, and `compile_project:154-156` **happens to pass the complete
+- `release_plan`'s consumer `ir_gen.rs:360` (`release_plan: type_result.release_plan.clone()`) lives
+  inside `generate_ir_with_context`, and `compile_project:154-156` **happens to pass the full
   `&TypeCheckResult` to it** — the consumer is in the downstream module, and the downstream module
-  is on the inevitable path of all entries.
-- `proof_calls`'s consumer is at the **top level of `pipeline.rs`**, belonging to **another entry's
-  implementation**. The orchestrator's four entries don't go through `pipeline.rs` at all.
+  is on the inevitable path of every entry.
+- `proof_calls`'s consumer is at the **top of `pipeline.rs`**, which is **another entry
+  implementation**. The orchestrator's four entries don't even pass through that layer of
+  `pipeline.rs`.
 
-**Verified fact**: Currently the entire repository has **no mechanism whatsoever** to guarantee that
-these 13 fields are consumed. The only "protection" is that `ReleasePlan` happens to ride the IR
-generation's coattails.
+**Verified fact**: the repository currently has **no mechanism whatsoever** to ensure these 13
+fields are consumed. The only "protection" is that `ReleasePlan` happens to hitch a ride on IR
+generation.
 
-### Non-Obligation Field Registration: Channel / In-Phase / In-Tree Fact Fields in `TypeCheckResult`
+### Non-Obligation Field Registration: Channel / In-Phase / In-Tree-Fact Fields in `TypeCheckResult`
 
-**`NON_OBLIGATION_FIELDS` (8 entries)**: Fields in `TypeCheckResult` that are not cross-stage
-obligations are registered one by one (field name + reason), **complementary** to the "§ Obligation
+**`NON_OBLIGATION_FIELDS` (8 entries)**: the fields in `TypeCheckResult` that are not cross-stage
+obligations, registered one by one (field name + reason), **complementary to** the "§Obligation
 Fields" table above:
 
-| Field                     | Why Not a Cross-Stage Obligation (Key Point)                                                                                                  |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `module_name`             | Unit identity metadata (0 hits in `src/middle`)                                                                                               |
-| `diagnostics`             | Error diagnostic channel (existing channel, not "produced-hence-contract")                                                                    |
-| `bindings`                | Has cross-stage reads (`ir_gen.rs:735/:5034`), but doc comment does not declare cross-stage contract ⇒ not included                           |
-| `local_var_types`         | For diagnostic rendering (`ir_gen.rs:852/:4543/:4794`), same as `bindings` — no contract declared                                             |
-| `semantic_db`             | Consumer is in LSP (exported via `DriverOutcome.semantic_db` channel from 4.6.1, `src/lsp/server.rs:482`), not a compilation stage obligation |
-| `trait_table`             | Cross-stage reads at `ir_gen.rs:4336/:6867`, doc comment does not declare contract                                                            |
-| `warnings`                | Warning diagnostic channel (same class as `diagnostics`)                                                                                      |
-| `interface_impl_registry` | In-tree fact (3.4.9 user verdict A; in-phase consumption points see "§ Obligation Fields" ruling change record)                               |
+| Field                     | Why it is not a cross-stage obligation (key point)                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `module_name`             | Unit-identity meta info (0 hits in `src/middle`)                                                                                                   |
+| `diagnostics`             | Error-diagnostic channel (existing channel, not "produced-then-contract")                                                                          |
+| `bindings`                | Has cross-stage reads (`ir_gen.rs:735/:5034`), but doc comment doesn't declare a cross-stage contract ⇒ not enlisted                               |
+| `local_var_types`         | Used for diagnostic rendering (`ir_gen.rs:852/:4543/:4794`), same as `bindings` — no declared contract                                             |
+| `semantic_db`             | Consumer is in LSP (since 4.6.1 sent out via the `DriverOutcome.semantic_db` channel, `src/lsp/server.rs:482`), not a compilation-stage obligation |
+| `trait_table`             | Cross-stage reads at `ir_gen.rs:4336/:6867`, doc comment doesn't declare a contract                                                                |
+| `warnings`                | Warning-diagnostic channel (same kind as `diagnostics`)                                                                                            |
+| `interface_impl_registry` | In-tree fact (3.4.9 user ruling A; in-phase consumption sites in "§Obligation Fields" ruling record)                                               |
 
-**Why not "wire up a consumer"**: Forging a downstream for these fields would only introduce false
-obligations out of thin air, disguising "by design no cross-stage consumption is needed" as a
-contract defect; the correct closure mechanism is **reverse containment** — `TypeCheckResult` field
-set = obligation list ∪ non-obligation registration (hard-enforced by
-`scripts/ci/check-obligations.py` criterion 1: add a field and forget to register, delete a field
-and forget to sync, non-obligation registration missing reason, two tables overlap — all immediately
-red).
+**Why not "wire a consumer"**: creating downstream consumers for these fields would only invent fake
+obligations, dressing up "by design doesn't need cross-stage consumption" as a contract defect; the
+correct closure mechanism is **reverse containment** — the `TypeCheckResult` field set = obligations
+list ∪ non-obligation registration (hard-gated by `scripts/ci/check-obligations.py` criterion 1: add
+a field and forget to register, remove a field and forget to sync, non-obligation registration
+without reason, two tables overlap → all turn red on the spot).
 
 ### Four Additional Contract Defects in the Proof Layer
 
-The following all come from proof layer analysis, independent of the entry forking problem, but all
-belong to the class of "stage contracts not enforced."
+All of the following come from proof-layer analysis, are independent of the entry-bifurcation
+problem, but all belong to the category "stage contracts are not enforced."
 
-**(a) Layer order declaration contradicts actual execution order, and the `equivalence` layer is not
-in the pipeline at all.**
+**(a) Layer order is declared only in docs, no mechanism enforces it; the `equivalence` layer is not
+in the pipeline.**
 
-The layer order declared in `src/frontend/core/typecheck/layers/README.md:5-11`:
+`src/frontend/core/typecheck/layers/README.md` describes the actual call order of
+`checker.rs::check_module_impl` (anchored by function name / drive point, line numbers taken from
+the current tree):
 
-| Layer | File             | Dependencies  |
-| ----- | ---------------- | ------------- |
-| 0     | `equivalence.rs` | types/eval    |
-| 1     | `ownership.rs`   | Layer 0       |
-| 2     | `termination.rs` | Layer 0, 1    |
-| 3     | `predicate.rs`   | Layer 0, 1, 2 |
+| Actual order | Call site                                                                                                                                          | Corresponding layer |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| 1            | Refinement-walk driver `predicate::check_predicate` (three sites: `revalidate_refined` / `check_call_arg_refinements` / `check_return_refinement`) | `predicate.rs`      |
+| 2            | `termination::TerminationChecker::check_module`                                                                                                    | `termination.rs`    |
+| 3            | `ownership::check_ownership`                                                                                                                       | `ownership.rs`      |
+| 4            | Type-constraint solving `env.solver().solve()` (not in `layers/`)                                                                                  | —                   |
+| —            | `equivalence::check_type_equivalence` — **zero calls in `checker.rs`**                                                                             | `equivalence.rs`    |
 
-README line 3 says "Execute by layer order, lower layer fails, upper layer does not run". Actual
-call sites inside `TypeChecker::check_module`:
+Layer-number labels (`equivalence.rs` = 0, `ownership.rs` = 1, `predicate.rs` = 3) only exist in
+each module's own header comments, and don't match the call order; there's no "number → call timing"
+map in the README.
 
-| Actual Order | Call Site                                         | Corresponding Declared Layer |
-| ------------ | ------------------------------------------------- | ---------------------------- |
-| 1            | `termination` — `checker.rs:1256-1270`            | Layer 2                      |
-| 2            | `ownership` — `checker.rs:1296`                   | Layer 1                      |
-| 3            | `predicate` — `checker.rs:5123` / `5276` / `5397` | Layer 3                      |
-| —            | `equivalence` — **zero calls in `checker.rs`**    | Layer 0                      |
+`equivalence` is only used by `inference/assignment.rs:17` as the `is_subtype` utility function,
+unrelated to `ProofResult`. At the same time **there is no short-circuit whatsoever** —
+`check_module_impl` keeps going down after `add_error`-ing each termination error one by one; "the
+lower layer failing means the upper layer won't run" is not a fact.
 
-That is: the order of `termination` and `ownership` is **opposite** to the declaration; the declared
-Layer 0 `equivalence` **does not appear at all in `check_module`'s stage sequence** (it is only used
-as an `is_subtype` utility function by `inference/assignment.rs:17`, unrelated to `ProofResult`). At
-the same time **no short-circuit exists whatsoever** — `checker.rs:1271-1276` after collecting
-termination's errors one by one via `add_error` continues forward; the README's promise of "lower
-layer fails, upper layer does not run" does not hold.
+**(b) The SMT backend has three acquisition strategies and two failure philosophies.**
 
-**(b) The SMT backend has three acquisition strategies, two failure philosophies.**
+> **Review note (2026-10-07)**: the hard-failure `panic` was eliminated by 3.3.1 of P3 (the SOLVER
+> slot is `Option`-ified; missing falls back conservatively to `SMTResult::Unknown`); the "silently
+> skip (don't inject)" was supplemented with a W1081 signal by 3.4.2. The three-shape unification
+> (singleton) is executed per **RFC-039 D58**; the real fix location is `proof/smt/backend.rs` (new
+> process-level shared singleton + `with_shared_solver` closure access), and the 02 change-list's
+> `default_solver() → &'static` wording follows D58 (`&'static` bare reference is infeasible:
+> `dyn Solver` is not `Sync`).
 
-> **Review note (2026-10-07)**: The hard-failure panic was eliminated by P3's 3.3.1 (SOLVER slot
-> Option-ized, missing falls back to `SMTResult::Unknown` conservatively); "silent skip (no
-> injection)" was supplemented with the W1081 signal by 3.4.2. Unification of the three forms
-> (singletonization) is executed per **RFC-039 D58**; actual fix location `proof/smt/backend.rs`
-> (added process-level shared singleton + `with_shared_solver` closure port); the
-> `default_solver() → &'static` statement in the 02 change list is governed by D58 (`&'static` raw
-> reference is infeasible: `dyn Solver` is not `Sync`).
+| Consumer                                                | Acquisition strategy                                     | When the solver is unavailable                            |
+| ------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| `predicate.rs:34-36`                                    | Global `static SOLVER: LazyLock<Mutex<Box<dyn Solver>>>` | **`.expect("Z3 solver initialization failed…")` → panic** |
+| `termination.rs` (via `checker.rs:1265-1268` injection) | Injection at construction via `with_solver_owned`        | `None` → **silently skip** (don't inject)                 |
+| `ownership.rs:627` (back-edge cut decision)             | **Each call** to `default_solver()`                      | `None => return false` (`629`) → conservatively don't cut |
 
-| Consumer                                               | Acquisition Strategy                                     | When Solver Unavailable                                   |
-| ------------------------------------------------------ | -------------------------------------------------------- | --------------------------------------------------------- |
-| `predicate.rs:34-36`                                   | Global `static SOLVER: LazyLock<Mutex<Box<dyn Solver>>>` | **`.expect("Z3 solver initialization failed…")` → panic** |
-| `termination.rs` (injected via `checker.rs:1265-1268`) | Construction-time injection `with_solver_owned`          | `None` → **silently skip** (no injection)                 |
-| `ownership.rs:627` (back-edge cutoff determination)    | **New on every call** `default_solver()`                 | `None => return false` (`629`) → conservatively not cut   |
+The comment at `predicate.rs:31-32` explicitly chose hard failure: "keep initialization failure as
+**hard failure**: softening would misdiagnose 'Z3 not installed' as 'constraint exceeds kernel
+capability'." But the contract docs at `backend.rs:60` say "`None`: backend unavailable… **caller
+should degrade conservatively**." **Two philosophies coexist in the same code, and the hard-failure
+one panics rather than returning an error.**
 
-The comment at `predicate.rs:31-32` explicitly opts for hard failure: "Initialization failure
-maintains **hard failure**: softening would misdiagnose 'Z3 not installed' as 'constraint exceeds
-kernel capability'". Whereas `backend.rs:60`'s contract documentation says "`None`: backend
-unavailable… **the caller should degrade conservatively**". **Two philosophies coexist in the same
-codebase, and the hard-failure one panics rather than returning an error.**
-
-**(c) Every back-edge determination creates a new Z3 context; the cache is effectively useless.**
-`ownership.rs:627` calls `default_solver()` on the hot path of back-edge cutoff determination. While
+**(c) A new Z3 context is created for every back-edge decision; the cache is useless.**
+`ownership.rs:627` calls `default_solver()` on the hot path of the back-edge-cut decision. While
 `src/frontend/core/typecheck/proof/smt/backend.rs:67-72`:
 
 ```rust
@@ -479,15 +475,15 @@ pub fn default_solver() -> Option<Box<dyn Solver>> {
 ```
 
 **This is a factory function, not a singleton** — every call does `Z3Backend::new()`, i.e. creates a
-new Z3 context. `Z3Backend`'s cache field (`proof/smt/z3_backend.rs:20`
-`cache: RefCell<HashMap<u64, SMTResult>>`) is **instance-internal**, while `z3_backend.rs:17`'s doc
-comment claims "SMT query results are cached in `cache`". Not shared across calls ⇒ **this cache
-never hits under this calling mode**.
+new Z3 context. The cache field on `Z3Backend` (`proof/smt/z3_backend.rs:20`
+`cache: RefCell<HashMap<u64, SMTResult>>`) is **per-instance**, while the doc comment at
+`z3_backend.rs:17` claims "SMT query results are cached in `cache`." Not shared across calls ⇒
+**that cache can never hit under this call pattern**.
 
-(Comparison: the `LazyLock` at `predicate.rs:34-36` is indeed a singleton. Same backend, two
-lifetime strategies.)
+(For comparison: `predicate.rs:34-36`'s `LazyLock` is a real singleton. Same backend, two lifetime
+strategies.)
 
-**(d) Checker silently degrades + comment disagrees with reality.** `checker.rs:1283-1287` and
+**(d) Checker silently degrades + comment doesn't match reality.** `checker.rs:1283-1287` and
 `1289-1293`:
 
 ```rust
@@ -496,86 +492,86 @@ let ledger = self.body_checker.as_ref()
     .unwrap_or_default();          // body_checker is None → empty type ledger
 let call_ownership = self.body_checker.as_ref()
     .map(|bc| bc.call_ownership.clone())
-    .unwrap_or_default();          // body_checker is None → empty call ownership table
+    .unwrap_or_default();          // body_checker is None → empty call-ownership table
 ```
 
-When `body_checker` is `None`, the ownership check gets an **empty type ledger and empty call
-table** and runs normally — ownership analysis degrades to "nothing conflicts", **with no warning
-whatsoever**. (Processing suggestion: should be recorded as a warning-level diagnostic, or at least
-left as a trace in the obligation ledger.)
+When `body_checker` is `None`, the ownership check receives an **empty type ledger and empty call
+table** and runs as normal — ownership analysis degenerates to "nothing conflicts", **with no
+warning whatsoever**. (Suggested fix: should be recorded as a warning-level diagnostic, or at least
+leave a trace in the obligations ledger.)
 
-The comment at `checker.rs:1244` claims termination check "runs after type check, before constraint
-solving". Actual `self.env.solver().solve()` is at `checker.rs:1320` — **termination is at `1256`,
-ownership at `1296` afterwards, i.e. what the comment calls "before" is actually "two layers
-after"**.
+The comment at `checker.rs:1244` says termination check "runs after typecheck, before constraint
+solving". In reality `self.env.solver().solve()` is at `checker.rs:1320` — **termination is at
+`1256`, ownership is after `1296`, i.e. what the comment calls "before" is actually "two layers
+later"**.
 
-### wasm Current State: Shim Crate Bearer, 27-File Branch Is Live
+### wasm Current State: carried by the shim crate, the 27-file branch is live
 
-The wasm target **is built and constructed in CI**, with the `cdylib` not in the main crate but in a
-separate shim crate.
+The wasm target **is built and in CI**, and the `cdylib` is not in the main crate but in a separate
+shim crate.
 
 | Fact                                              | Evidence                                                                                                                                                                                                                                                                          |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Main crate is only `rlib`                         | `Cargo.toml:29-31`                                                                                                                                                                                                                                                                |
+| Main crate is `rlib` only                         | `Cargo.toml:29-31`                                                                                                                                                                                                                                                                |
 | **Shim crate provides `cdylib` + `wasm-bindgen`** | `wasm/Cargo.toml:10-11` (`crate-type = ["cdylib"]`), `wasm/Cargo.toml:18` (`wasm-bindgen = "0.2"`)                                                                                                                                                                                |
-| Shim depends on main crate (rlib) as library      | `wasm/Cargo.toml:17` `yaoxiang = { path = "..", default-features = false }`                                                                                                                                                                                                       |
-| Main crate has wasm target dependency section     | `Cargo.toml:133-134` `[target.'cfg(target_arch = "wasm32")'.dependencies]` / `web-time = "1"` (`Cargo.toml:125-131` is the corresponding non-wasm section: tokio/ureq/tempfile)                                                                                                   |
+| Shim depends on main crate (rlib) as a library    | `wasm/Cargo.toml:17` `yaoxiang = { path = "..", default-features = false }`                                                                                                                                                                                                       |
+| Main crate has a wasm target dependency section   | `Cargo.toml:133-134` `[target.'cfg(target_arch = "wasm32")'.dependencies]` / `web-time = "1"` (`Cargo.toml:125-131` is the corresponding non-wasm section: tokio/ureq/tempfile)                                                                                                   |
 | Shim directory excluded from main workspace       | `Cargo.toml:3` `exclude = ["wasm", ...]`                                                                                                                                                                                                                                          |
 | **CI has 4 wasm builds**                          | `_build-wasm.yml` (reusable workflow, `:75` `wasm-pack build --target web --out-name yaoxiang`); callers `dist-release.yml:267-273` (artifact `yaoxiang-wasm`), `docs-deploy.yml:23-56` (unpacked into `docs/src/.vitepress/public/wasm`, i.e. playground), `nightly.yml:110-114` |
-| Z3 wasm static library is prebuilt by Emscripten  | `_build-z3-wasm.yml:220`, `_build-wasm.yml:35-59` (fetch `libz3.a` from a fixed URL, downgrades to warning if missing)                                                                                                                                                            |
-| **27 files** have the `wasm32` literal            | Of which **25** have actual `#[cfg(...)]` attributes, the other 2 (`frontend/module/roles.rs:9`, `std/fs.rs:10`) only mention it in documentation                                                                                                                                 |
+| Z3 wasm static library is pre-built by Emscripten | `_build-z3-wasm.yml:220`, `_build-wasm.yml:35-59` (fetches `libz3.a` from a fixed URL, degrades to warning on miss)                                                                                                                                                               |
+| **27 files** contain the `wasm32` literal         | Of which **25** have actual `#[cfg(...)]` attributes, the other 2 (`frontend/module/roles.rs:9`, `std/fs.rs:10`) are mentioned in docs only                                                                                                                                       |
 | `orchestrator.rs` 20 occurrences                  | 12 attributes + 8 comments                                                                                                                                                                                                                                                        |
 | `lib.rs` 11 occurrences                           | All attributes (`27/30/32/46/133/135/139/153/170/179/238`)                                                                                                                                                                                                                        |
 
-**Conclusion: The `#[cfg(target_arch = "wasm32")]` branches in these 27 files are load-bearing.**
-They determine which APIs in the main crate `wasm/src/lib.rs` (73 lines) can call under the wasm
-target — `lib.rs:139/153/170` gate `run_file` / `run_project` / `build_bytecode` entirely (these
-three need `std::fs`), and the shim takes a different path.
+**Conclusion: those 27 files' `#[cfg(target_arch = "wasm32")]` branches are load-bearing.** They
+decide which APIs of the main crate the wasm target can call from `wasm/src/lib.rs` (73 lines) —
+`lib.rs:139/153/170` gate `run_file` / `run_project` / `build_bytecode` entirely (all three need
+`std::fs`), while the shim takes a different path.
 
 **But this brings a fact directly relevant to this document**: the playground entry at
 `wasm/src/lib.rs:48` calls `compiler.compile_with_source(...)` — **the single-file path**.
 Therefore:
 
-| Path that consumes `proof_calls`               | Does it execute proof function? |
-| ---------------------------------------------- | ------------------------------- |
-| Single-file CLI (`lib.rs:140 run_file`)        | **Yes**                         |
-| wasm playground (`wasm/src/lib.rs:48`)         | **Yes**                         |
-| `build_bytecode` (`lib.rs:171`)                | **Yes**                         |
-| Multi-file `run` (`compile_project`)           | **No**                          |
-| `check` (`check_project`)                      | **No**                          |
-| LSP within project (`check_source_in_project`) | **No**                          |
+| Path that consumes `proof_calls`           | Does it execute the proof function? |
+| ------------------------------------------ | ----------------------------------- |
+| Single-file CLI (`lib.rs:140 run_file`)    | **Yes**                             |
+| wasm playground (`wasm/src/lib.rs:48`)     | **Yes**                             |
+| `build_bytecode` (`lib.rs:171`)            | **Yes**                             |
+| Multi-file `run` (`compile_project`)       | **No**                              |
+| `check` (`check_project`)                  | **No**                              |
+| LSP in-project (`check_source_in_project`) | **No**                              |
 
-That is: **the existence of `wasm/` makes "proof_execution has only one consumer" become "has
-three"**, but all three are on the single-file path side. `Driver`'s `ProgramKind` must add a new
-`WasmPlayground` variant (see "Target Design" 3), otherwise the unified Driver will miss this path.
+i.e.: **the existence of `wasm/` turns "proof_execution has only one consumer" into "it has
+three"**, but all three are on the single-file-path side. The Driver's `ProgramKind` must add a
+`WasmPlayground` variant (see "Target Design" §3), otherwise the unified Driver will miss this path.
 
 (Cleanup scope — which of the 12 wasm attributes in `orchestrator.rs` are unreachable in the
-playground scenario — goes to `06-cleanup-inventory.md`. The RFC-039 open question "build the wasm
-target, or delete these branches" is **already obsolete**: the target is built.)
+playground scenario — is filed under `06-cleanup-inventory.md`. The RFC-039 open question "build a
+wasm target, or delete these branches" **has expired**: the target is built.)
 
 ---
 
 ## Target Design
 
-### 1. Stage Model: `Stage` Enum (Exhaustive, Non-Runtime Registration)
+### 1. Stage Model: `Stage` Enum (Exhaustive, Not Registered at Runtime)
 
-**Core constraint: `Stage` is a compile-time exhaustible enum; runtime registration is forbidden.**
-The reason is that Rust's exhaustive `match` can enforce at compile time that "new stages must be
-handled by the orchestration layer" — this is exactly the mechanism proven effective for the opcode
-table (RFC-039 routing table B).
+**Core constraint: `Stage` is a compile-time-exhaustive enum; runtime registration is forbidden.**
+The reason: Rust's exhaustive `match` can enforce at compile time that "a new stage must be handled
+by the orchestration layer" — this is the same mechanism proven effective by the opcode table
+(RFC-039 routing table B).
 
 ```rust
 // src/driver/stage.rs
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum Stage {
-    VendorConsistency,  // Vendor consistency check          Project
+    VendorConsistency,  // Vendor-consistency check          Project
     Discovery,          // File discovery                    Project
-    Parsing,            // Lex + syntax                      PerModule
-    Registry,           // Module registry construction      Project
+    Parsing,            // Lexing + syntax                   PerModule
+    Registry,           // Module-registry construction      Project
     RoleClassification, // Role classification (Script/Bin/…) Project
-    Typecheck,          // Type check (with embedded proof)  PerModule
-    DeadCodeAnalysis,   // Dead code family analysis         Project
-    ProofExecution,     // Proof function compile-time exec  PerModule
+    Typecheck,          // Type check (with inlined proof layer) PerModule
+    DeadCodeAnalysis,   // Dead-code family analysis         Project
+    ProofExecution,     // Proof function compile-time execution PerModule
     GlobalSlotAlloc,    // Global slot allocation            Project
     IrGeneration,       // AST → ModuleIR                    PerModule
     Monomorphization,   // Monomorphization                  Project
@@ -583,8 +579,8 @@ pub enum Stage {
 }
 
 impl Stage {
-    /// All stages. Adding new variants will cause both this array and
-    /// `dispatch`'s exhaustive match to fail compilation.
+    /// All stages. When a new variant is added, both this array and the exhaustive
+    /// match in `dispatch` will fail to compile.
     pub const ALL: &'static [Stage] = &[ /* all 12, in topological order */ ];
 
     pub fn scope(self) -> StageScope {
@@ -595,52 +591,52 @@ impl Stage {
 pub enum StageScope { PerModule, Project }
 ```
 
-**Purpose of `StageScope`**: `PerModule` (run once per compilation unit) and `Project` (run once at
-project level) make "which stages must run per-module, which must run once at project level" a
-type-level fact. A `Project`-scoped stage is structurally guaranteed to run only once in `dispatch`
-— this eliminates the current need in `orchestrator.rs` to reason by hand about "whether
-`allocate_global_slots` should be called once per file".
+**The purpose of `StageScope`**: `PerModule` (runs once per compilation unit) and `Project` (runs
+once at project level) turn "which stages must run per module and which must run once at project
+level" into a type-level fact. A `Project`-scoped stage is structurally guaranteed to run only once
+in `dispatch` — this eliminates questions like "should `allocate_global_slots` be called per file"
+in `orchestrator.rs` today, which currently require human reasoning.
 
-**The stage table is ordered topologically, not alphabetically**, because failure propagation
-depends on the order.
+**The stage table is arranged in topological order, not alphabetical order**, because failure
+propagation depends on the order.
 
-> **Revision notes (P4 implementation, 2026-10-07)**: Two deviations from the original draft,
-> corrected per implementation evidence —
+> **Revision note (P4 implementation, 2026-10-07)**: two deviations from the draft, corrected by
+> implementation evidence —
 >
 > 1. `Monomorphization` moved to **after** `IrGeneration`: monomorphization consumes IR products
->    (`Monomorphizer::monomorphize(&ir, …)`, pipeline.rs), so the draft order contradicts the data
+>    (`Monomorphizer::monomorphize(&ir, …)`, pipeline.rs); the draft order contradicts the data
 >    flow.
-> 2. The Check form's stage table is normalized to dead code **before** proof per `Stage::ALL`
->    topological order: `check_project`'s current state has proof before dead code executed, the two
->    have no data dependency, the diagnostic sets are identical (C2 set semantics), only the in-file
->    diagnostic order is normalized. The single-file path (dead code embedded in typecheck, before
->    proof) already conforms to ALL order, byte-level acceptance is unaffected.
-> 3. `Parsing` moved to **before** `Registry`/`RoleClassification` (C3, 2026-10-09 user verdict):
+> 2. The Check form's stage table is normalized by `Stage::ALL`'s topological order to **dead-code
+>    first, then proof**: `check_project` currently runs proof before dead code; the two have no
+>    data dependency, and the diagnostic sets are identical (C2 set semantics), only the intra-file
+>    diagnostic order is normalized. The single-file path (dead code inlined into typecheck, before
+>    proof) already follows ALL order, so byte-by-byte acceptance is unaffected.
+> 3. `Parsing` moved to **before** `Registry` / `RoleClassification` (C3, user ruling 2026-10-09):
 >    signature collection (`extract_module_info`) and `ast_has_main` both consume AST products — the
 >    draft order would force the Registry arm to "hide parse", making the stage table lie about the
->    data flow; and multi-file parse is thus reduced from 2 times to 1. The current state is
->    honestly registered: multi-file path parse errors used to be a hard abort (`?` propagation in
->    `build_registry_from`, the tension with CollectAll semantics was filed as WBS 4.10.1) —
->    **4.10.1 has been fixed** (2026-10-09 user verdict on rust-style collection semantics + Plan
->    B): the Check path parse failure is downgraded to per-file diagnostic collection, the diseased
+>    data flow; and multi-file parse thereby drops from 2 times to 1 time. The current state is also
+>    honestly registered: multi-file path parse error used to be a hard abort
+>    (`build_registry_from`'s `?` propagation, the tension with CollectAll semantics registered as
+>    WBS 4.10.1) — **4.10.1 is now fixed** (2026-10-09 user ruling rust-style collection semantics +
+>    plan B): the Check path's parse failure degrades to per-file diagnostic collection, the sick
 >    file exits the compilation unit (does not enter registry, importer reports E5001); the
->    MultiFile path retains hard abort (under FailFast a bad file cannot produce IR, which is the
->    correct semantics, pinned for the long term).
-> 4. Check form landing (4.2.2, 2026-10-09 user verdict) supplements two registrations: a. Data
->    dependency edges 14→16: `RoleClassification` consumes Discovery's used_by edge set,
->    `DeadCodeAnalysis` consumes Discovery's W1006 shadowing events — the draft missed these (these
->    two products were produced by `discover_with_used` in the orchestrator era, wrapped and dropped
->    by `discover`, the data flow was lost when not entered into the table); b. The in-file
->    diagnostic order normalization is extended to the full form of note #2 above: the E3020 entry
->    validation moves into the RoleClassification arm (the check has no Linking stage, the arm
->    holding surfaces and AST is responsible for validation), the in-file diagnostic order = stage
+>    MultiFile path keeps the hard abort (a bad file under FailFast can't produce IR, which is
+>    correct semantics, nailed long-term).
+> 4. Check form landing (4.2.2, user ruling 2026-10-09), two additional registrations: a.
+>    Data-dependency edges 14→16: `RoleClassification` consumes Discovery's `used_by` edge set,
+>    `DeadCodeAnalysis` consumes Discovery's W1006 shadow events — the draft missed these (these
+>    products in the orchestrator era came from `discover_with_used` and were discarded by the
+>    `discover` wrapper; the data flow was lost the moment it didn't enter the table); b. The
+>    intra-file diagnostic order normalization is extended to the complete form of note #2: the
+>    E3020 entry check is moved into the RoleClassification arm (Check has no Linking stage, the arm
+>    holding surfaces and AST is responsible for the check), the intra-file diagnostic order = stage
 >    topological order (E3020 → typecheck → W1006/W1003/dead code → proof); the diagnostic set is
 >    unchanged (C2 set semantics), only the stderr entry order changes.
 
-### 2. Obligation Ledger: `Obligations` + `assert_drained()`
+### 2. Obligations Ledger: `Obligations` + `assert_drained()`
 
-**Design goal**: turn "field produced but not consumed" from undetectable into a compile-time or
-test-time assertable fact. RFC-039 has already listed this as "the single highest-value item."
+**Design goal**: turn "field produced but no one consumes" from undetectable into a compile-time- or
+test-time-assertable fact. RFC-039 has already listed this as "the highest-value item."
 
 ```rust
 // src/driver/obligations.rs
@@ -652,411 +648,405 @@ pub struct Obligations {
     pub existential_coercions:   Vec<ExistentialCoercion>,   // types.rs:44
     pub overload_resolutions:    OverloadResolutions,         // types.rs:62
     pub try_expr_impls:          Vec<(Span, String)>,        // types.rs:59
-    // …remaining span-keyed fields
+    // …the rest of the span-keyed fields
 }
 
 impl Obligations {
-    /// Settlement: called once at the tail of the stage table.
-    /// Each unconsumed field produces a W-level diagnostic (default) or hard error (strict mode).
+    /// Settle: called once at the tail of the stage table.
+    /// Each unconsumed field produces one W-level diagnostic (default) or hard error (strict mode).
     pub fn assert_drained(&self) -> Vec<Diagnostic>;
 }
 ```
 
 **Settlement semantics (three tiers)**:
 
-| Situation                               | Criterion                                          | Disposition                                                                    |
-| --------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Obligation is read by declared consumer | Field is `take()`/marked consumed in `Obligations` | Pass                                                                           |
-| Obligation non-empty but no consumer    | Field non-empty and not consumed                   | **Produce diagnostic** (W-level by default; `strict` mode promotes to E-level) |
-| Obligation empty                        | Field is empty                                     | Pass (no consumption needed)                                                   |
+| Situation                                   | Criterion                                                   | Disposition                                                                     |
+| ------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Obligation is read by its declared consumer | The field is `take()`-ed / marked consumed in `Obligations` | Pass                                                                            |
+| Obligation non-empty but no consumer        | Field is non-empty and not consumed                         | **Produce diagnostic** (W-level by default; `strict` mode escalates to E-level) |
+| Obligation is empty                         | Field is empty                                              | Pass (no consumption needed)                                                    |
 
-**Why start with W-level rather than E-level**: Fixing obligation discard will **change the
-diagnostic set**. C2 criterion requires "same diagnostic set per entry"; if we jump straight to
-E-level, `yaoxiang check` will suddenly output large numbers of `Unproven` diagnostics that were
-previously silent. Two steps (W observation first, then promote to E) make the criterion usable at
-every step. See "Implementation Points" S4 for details.
+**Why start with W-level instead of E-level**: fixing obligation discard will **change the
+diagnostic set**. The C2 criterion requires "same diagnostic set at each entry"; if we jump straight
+to E-level, `yaoxiang check` will suddenly emit a lot of `Unproven` diagnostics that were previously
+silent. Two steps (W observation first, then escalate to E) keep every step's criterion usable. See
+"Implementation Notes" S4.
 
-**The call site of `assert_drained()` is unique**: `Driver::run` at the tail of the stage table,
+**The only call site of `assert_drained()`**: in `Driver::run`, at the tail of the stage table,
 before producing `CompilationResult`.
 
 **Companion static gate**: RFC-039 has proposed `scripts/ci/check-obligations.py` (field appears ≥2
-times but no third-file read → fail). `assert_drained()` is a **runtime** gate, the script is a
-**static** gate; the two are complementary and both are needed.
+times but no third-file read → fail). `assert_drained()` is the **runtime** gate; the script is the
+**static** gate; they complement each other; both are needed.
 
-> **Revision note (P4 implementation, 2026-10-13, 4.3.1 landed)**: This note registers the
-> **implementation form, measured numbers, and 4.3.2 interface** of the sketch above and the
-> three-tier table, corresponding code file:line by line. Landing commit `1941cc47a` (validation
-> tree `99079bc52`). It is also the **third** of the three "do not remain silent" places on the red
-> list (the other two: audit surface, static gate).
+> **Revision note (P4 implementation, 2026-10-13, 4.3.1 landing)**: this note registers the
+> **implementation form, the measured numbers, and the 4.3.2 interface** of the sketch above and the
+> three-tier table, item by item corresponding to code file:line. The landing commit is `1941cc47a`
+> (verification tree `99079bc52`). It is simultaneously the **third** of the red-list "no silent"
+> three places (the other two: the audit surface, the static gate).
 >
-> **I. Landed artifacts (file:line)**
+> **I. Landing artifacts (file:line)**
 >
-> - Ledger `src/driver/obligations.rs`: 13-entry obligation list `INVENTORY` (:201, field
->   name/consumer stage/red list), **non-obligation field registration `NON_OBLIGATION_FIELDS`
->   (:150, 8 entries with reasons)**, delivery marker ledger `DeliveryLedger`, pure settlement
->   `settle_obligations` (:577), emit `emit_obligation_diagnostics` (:654), non-consumer-side gate
->   `consumer_visible_unit` (:538), skip criterion `consumer_stage_skipped` (:549), IrGeneration
->   delivery set `IR_GENERATION_DELIVERED` (:285), W1090 code string constant
->   `OBLIGATION_UNDRAINED_CODE`.
-> - **Unique settlement point**: `Driver::run` at the tail of the stage table, before
+> - Ledger `src/driver/obligations.rs`: 13-entry obligation list `INVENTORY` (`:201`, field name /
+>   consumer stage / red-list), **non-obligation field registration `NON_OBLIGATION_FIELDS` (`:150`,
+>   8 entries with reason)**, delivery-marker ledger `DeliveryLedger`, pure settlement
+>   `settle_obligations` (`:577`), outbound emission `emit_obligation_diagnostics` (`:654`),
+>   non-consumer-side gate `consumer_visible_unit` (`:538`), skip criterion `consumer_stage_skipped`
+>   (`:549`), IrGeneration delivery set `IR_GENERATION_DELIVERED` (`:285`), W1090 code-string
+>   constant `OBLIGATION_UNDRAINED_CODE`.
+> - **The only settlement point**: at the tail of `Driver::run`'s stage table, before
 >   `into_outcome()` produces `CompilationResult` — `src/driver/mod.rs:110`
 >   (`State::assert_drained`, obligations.rs:570). The early-exit path of `Aggregation::FailFast` is
->   also settled (the accounts must balance).
-> - **Seven delivery points** (one per arm; removing any one will make the runtime W1090 necessarily
->   fire): ProofExecution `src/driver/arms.rs:554` (`proof_calls()` is `TypeCheckResult`'s only
->   outbound read path for this obligation, `types.rs:170`); IrGeneration `arms.rs:672` (Check) /
->   `:726` (Embedded) / `:781` (SingleFile·WasmPlayground) / `:842` (MultiFile) — four identical
->   delivery ports: `AstToIrGenerator::new_with_type_result` / `middle::generate_ir_with_context`;
->   Monomorphization `arms.rs:936` (single-file direct read of request table) / `:1221`
->   (MultiFile·Check: Linking arm aggregation, `driver/helpers.rs:295` reads each unit's
->   `instantiation_requests`).
+>   settled the same way (the books must balance).
+> - **Seven delivery points** (one per arm; remove any one and the runtime W1090 must fire):
+>   ProofExecution `src/driver/arms.rs:554` (`proof_calls()` is the only outward-read path from
+>   `TypeCheckResult` for this obligation, `types.rs:170`); IrGeneration `arms.rs:672` (Check) /
+>   `:726` (Embedded) / `:781` (SingleFile·WasmPlayground) / `:842` (MultiFile) — four places with
+>   the same delivery port: `AstToIrGenerator::new_with_type_result` /
+>   `middle::generate_ir_with_context`; Monomorphization `arms.rs:936` (single-file direct read of
+>   request table) / `:1221` (MultiFile·Check: aggregated in Linking arm, `driver/helpers.rs:295`
+>   reads each unit's `instantiation_requests`).
 > - Audit surface: `DriverOutcome.obligations` (`src/driver/state.rs:73`) =
 >   `ObligationSettlement{ findings, pairs, empty, consumer_stage_absent, consumer_stage_skipped, delivered, drained_kinds, emitted }`;
 >   the conservation equation
 >   `pairs = empty + consumer_stage_absent + consumer_stage_skipped + delivered + findings.len()` is
->   pinned by cases.
+>   pinned by test cases.
 > - Diagnostic code: W1090 registered in `src/util/diagnostic/codes/w1xxx.rs:32`
->   (`span_exempt=true`, the reason is written above the entry :26-31 — the settlement granularity
->   is "unit × obligation", with no user-pointable source location, so no dummy span is stuffed);
->   six-language copy in `locales/*.json`. **Emission level**: from 4.3.2 onward is **error** (same
->   code promoted to E, see paragraph three) — determined by the explicit
->   `.severity(Severity::Error)` in `to_diagnostic` (obligations.rs:444), the code number remains in
->   the W family.
-> - Static gate: `scripts/ci/check-obligations.py`; new CI job `obligations`
->   (`.github/workflows/ci.yml:140-155`, with `--selftest`).
+>   (`span_exempt=true`, reason written just above at `:26-31` — the settlement granularity is "unit
+>   × obligation", with no user-pointable source location, so no dummy span); six-language copy in
+>   `locales/*.json`. **Emission level**: since 4.3.2 it is **error** (same code, escalates to E,
+>   see the third section) — decided by `to_diagnostic` (obligations.rs:444) explicitly calling
+>   `.severity(Severity::Error)`, the code number still in the W family.
+> - Static gate: `scripts/ci/check-obligations.py`; CI new job `obligations`
+>   (`.github/workflows/ci.yml:140-155`, includes `--selftest`).
 >
-> **II. Cell-by-cell landing of the three-tier table + two additional tiers**
+> **II. Per-cell landing of the three-tier table + two extra tiers**
 >
-> | Situation in the three-tier table above | Implementation Criterion                                                                  | Code                   |
-> | --------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------- |
-> | Obligation is read by declared consumer | **Delivery marker exists** (marker ↔ real read reconciled by static gate, see section V)  | obligations.rs:618-623 |
-> | Obligation non-empty but no consumer    | Non-empty + consumer stage ran + no marker → W1090 (**error level**, see paragraph three) | obligations.rs:624-630 |
-> | Obligation empty                        | `Obligation::is_produced` per-field emptiness check → pass                                | obligations.rs:587-591 |
+> | The three-tier table situation above     | Implementation criterion                                                                 | Code                   |
+> | ---------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------- |
+> | Obligation read by its declared consumer | **Delivery marker exists** (marker ↔ real read reconciled by static gate, see section V) | obligations.rs:618-623 |
+> | Obligation non-empty but no consumer     | Non-empty + consumer stage ran + no marker → W1090 (**error level**, see section III)    | obligations.rs:624-630 |
+> | Obligation is empty                      | `Obligation::is_produced` per-field empty check → pass                                   | obligations.rs:587-591 |
 >
-> Two **additional tiers** (2026-10-13 user verdict, sketch did not include):
+> Two **extra tiers** (2026-10-13 user ruling, not in the sketch):
 >
-> 1. **S1**: obligation's consumer stage is not in this `ProgramKind`'s stage table → **not judged
->    as owing** (obligations.rs:593-597). Evidence: `LSP_STAGES` has no
+> 1. **S1**: the consumer stage of an obligation is not in the stage table of this `ProgramKind` →
+>    **don't adjudicate debt** (obligations.rs:593-597). Evidence: `LSP_STAGES` has no
 >    IrGeneration/Monomorphization (program.rs:112-119), `EMBEDDED_STAGES` has no Monomorphization
->    (:121-126).
-> 2. **Skip exemption**: the consumer stage is skipped due to `SkipReason::UpstreamFailed` /
->    `ConfigDisabled` → not judged as owing (obligations.rs:598-602). `NoObligations` **does not**
->    exempt — an obligation that is non-empty while that stage declares itself to have no
->    obligations precisely means the account is unbalanced, must be reported.
+>    (`:121-126`).
+> 2. **Skip exemption**: consumer stage skipped with `SkipReason::UpstreamFailed` / `ConfigDisabled`
+>    → don't adjudicate debt (obligations.rs:598-602). `NoObligations` does **not** exempt — if the
+>    obligation is non-empty and that stage claims no obligations, that itself proves the books
+>    don't balance, must report.
 >
-> **III. Emission standard (ruling "C") and the measured numbers behind it**
+> **III. Outbound emission caliber (ruling "C") and the measured numbers behind it**
 >
 > **4.3.1 (observation period)**: this mechanism only emits **W-level** (W1090); **no strict
-> toggle**. **4.3.2 (final state, 2026-10-13 user verdict A)**: **same code promoted to E** —
-> `W1090` code number unchanged, emission level raised to `error` (explicit
-> `.severity(Severity::Error)`, `to_diagnostic` obligations.rs:444); **no new E code** (the same
-> fact with two codes is parallel representation). **The promotion only changes the emission level,
-> not the emission conditions.** **This is D59's D-class breaking change (changes externally
-> observable behavior), honestly registered**: a healthy program emits zero (when all obligations
-> have delivery markers), so the existing corpus and user programs are not affected (342/342 "diff:
-> empty"); but once a run actually hits an undelivered obligation, that diagnostic **is counted into
-> `error_count`, rendered as `error[W1090]`, with a non-zero exit code** — unlike the previous
-> "W-level does not block compilation". The decoupling of code family and emission level is
-> registered in RFC-013 "Emission Channels" section (the code-number prefix only determines number
-> attribution, the level is determined by the explicit severity at the construction point).
-> Mechanism fact (measured): severity takes explicit `.severity()`, otherwise "code starts with `W`
-> → Warning" (`codes/builder.rs:186-203`); the `ErrorCategory` in the registry **does not
-> participate** in severity; exit code is determined by `(error_count, warning_count)`
-> (`util/diagnostic/command.rs:87`) and `--deny-warnings` (`src/main.rs:567-568`), **W1090 walks
-> `error_count` because of explicit error (from 4.3.2 onward)**.
+> switch**. **4.3.2 (end state, user ruling A on 2026-10-13)**: **same code, escalate to E** — code
+> number `W1090` unchanged, emission level raised to `error` (explicit `.severity(Severity::Error)`,
+> `to_diagnostic` obligations.rs:444); **no new E code** (one fact two codes = parallel
+> representations). **Escalation only changes the emission level, not the emission condition**.
+> **This is a D-class breaking item of D59 (changes externally observable behavior), registered
+> as-is**: a healthy program emits zero (when all obligations have delivery markers, nothing is
+> reported), so existing corpora and user programs are unaffected (342/342 "diff: empty"); but once
+> a run truly hits an undelivered obligation, that diagnostic is **counted in `error_count`,
+> rendered as `error[W1090]`, non-zero exit code** — different from the previous "W-level doesn't
+> block compilation". The caliber of decoupling code family from emission level has been registered
+> in RFC-013's "emission channel" section (the code-number prefix only determines number ownership;
+> the level is decided by the explicit severity at the construction point). Mechanism facts
+> (measured): severity takes the explicit `.severity()`, otherwise "code starts with `W` → Warning"
+> (`codes/builder.rs:186-203`); the registry's `ErrorCategory` does **not** participate in severity;
+> the exit code is decided by `(error_count, warning_count)` (`util/diagnostic/command.rs:87`) and
+> `--deny-warnings` (`src/main.rs:567-568`); **W1090 goes through `error_count` (since 4.3.2)
+> because of the explicit error**.
 >
-> **Red-list fields do not enter the user-visible diagnostic stream** (captain 2026-10-13 ruling C;
-> the current red list has been zeroed, see section IV), for reproducible reasons:
+> **Red-list fields do not enter the user-visible diagnostic stream** (captain ruling C on
+> 2026-10-13; the current red list has zeroed, see section IV), the reason is reproducible:
 >
-> - Ruling A (red list emitted as W) measured cost: `interface_impl_registry` is pre-populated by
->   typecheck's preset table and **is always non-empty**; emitting a per-compile **constant signal**
->   (no discriminative power) would instead break three existing external contracts — "clean program
+> - Ruling A (red list emitted as W) measured cost: `interface_impl_registry` is filled in by
+>   typecheck's pre-table injection, **always non-empty**, so per-compile it emits a **constant
+>   signal** (zero discrimination), yet breaks three existing external contracts — "clean program
 >   zero diagnostics / LSP zero diagnostics / `warning_count == 0`":
->   `cargo test --lib --all-features` measured **12 existing cases turned red**, of which **8 are in
+>   `cargo test --lib --all-features` measured **12 existing cases turn red**, of which **8 are on
 >   out-of-scope paths** (`orchestrator/tests/namespace_data_access.rs` ×5,
 >   `lsp/handlers/tests/diagnostics.rs` ×2, `util/diagnostic/tests/mod_tests.rs` ×1; another 4 in
->   `src/driver/tests/`), 24/342 fixtures in the corpus baseline change, and the only feasible fix
+>   `src/driver/tests/`), the corpus baseline has 24/342 fixture changes, and the only feasible fix
 >   is "filter W1090 out of the zero-diagnostic assertions" = relaxing existing criteria.
-> - Ruling B (downgrade to Info level) would still break 9/12 of the list-type assertions, and Info
->   is not "output by ruling level".
-> - Ruling C's measurement: existing cases **zero modifications**, corpus baseline **zero changes**
->   (342/342 "diff: empty, behaviorally equivalent"), runtime W1090 becomes a **discriminative
->   regression detector** — healthy tree is silent throughout, removing any delivery marker triggers
->   it (each of the three delivery points has been through a remove-marker mutation, CLI `check`
->   outputs 2 `warning [W1090]` when the Check arm has its marker removed).
+> - Ruling B (downgrade to Info) still breaks 9/12 of the list-style assertions, and Info is not
+>   "emitted by ruling level".
+> - Ruling C measured: existing cases **zero changes**, corpus baseline **zero changes** (342/342
+>   "diff: empty, behavior equivalent"), runtime W1090 becomes a **discriminating regression
+>   detector** — a healthy tree stays silent the whole way, only fires when a delivery marker is
+>   removed (three delivery points each had a remove-marker mutation; CLI `check` with the marker
+>   removed in the Check arm printed 2 lines of `warning [W1090]`).
 >
-> The "do not remain silent" of the red list is borne by three places: ①
-> `DriverOutcome.obligations.findings` audit surface (each run carries it, with WBS id and evidence
-> pointer); ② `check-obligations.py` prints the red list on each run (currently empty) + staleness
-> check; ③ this note.
+> The "no-silent" of the red list is carried by three places: ① the
+> `DriverOutcome.obligations.findings` audit surface (carried out every run, with WBS id and
+> evidence pointer); ② `check-obligations.py` prints the red list (currently empty) + staleness
+> check on every run; ③ this note.
 >
-> **IV. Current state of the red list (settlement closure) and landing records for
-> 3.4.4/3.4.5/3.4.9**
+> **IV. Red-list current state (cleared) and the landing records of 3.4.4 / 3.4.5 / 3.4.9**
 >
-> Red list 3 → **0** — all three settlement tasks landed on 2026-10-13:
+> Red list 3 → **0** — the three clearing tasks all landed on 2026-10-13:
 >
-> - **3.4.4 `variant_ctor_calls` → delete field**. Its declared responsibility ("ir_gen generates
->   CreateVariant") is equivalently fulfilled by in-place shape detection on the IR side:
+> - **3.4.4 `variant_ctor_calls` → delete field**. Its declared duty ("ir_gen produces
+>   CreateVariant") is equivalently fulfilled by an in-place shape detection on the IR side:
 >   `src/middle/core/ir_gen.rs:7448 fn detect_variant_ctor_call` (same AST shape
 >   `FieldAccess{Call(Var)/Var}` + takes declaration order from `sum_type_variants`), the call site
->   `:7496` replaces the entire Call with `CreateVariant`; the function's doc explicitly states
->   "span-keyed cross-system is unreliable (the two ends have different semantics for Call node
->   span), so detect in place" — **wiring up a consumer would reintroduce the already-fixed span
->   mismatch defect**. Deletion surface: `types.rs` field, collection in
->   `checker.rs:1489-1493/:1565`, collection chain in `inference/expressions.rs` and
->   `inference/statements.rs`, the `VariantCtorCall` structure in `environment.rs`; type inference
->   and all diagnostics of `infer_variant_ctor_call` **unchanged**.
-> - **3.4.5 `method_overload_ir_names` → delete cross-stage mirror** (keep the in-phase candidate
->   name table and `overload_resolutions`). All read/write points: written in-phase
+>   at `:7496` replaces the whole Call with `CreateVariant`; the function's doc explicitly says
+>   "span-key cross-system is unreliable (the two ends have different semantics for the Call node
+>   span), so detect in-place" — **wiring a consumer would bring back the span-mismatch defect
+>   that's already been fixed**. Deletion surface: `types.rs` field, the collection at
+>   `checker.rs:1489-1493/:1565`, the collection chains in `inference/expressions.rs` and
+>   `inference/statements.rs`, the `VariantCtorCall` struct in `environment.rs`; the type inference
+>   and all diagnostics of `infer_variant_ctor_call` are **unchanged**.
+> - **3.4.5 `method_overload_ir_names` → delete the cross-stage mirror** (keep the in-phase
+>   candidate-name table and `overload_resolutions`). All read/write sites: write in phase
 >   (`environment.rs:205-219` registered in same order as `method_overloads` → `checker.rs:972` →
->   `inference/statements.rs:2871-2874` → `inference/expressions.rs:498`), read in-phase (resolution
->   point at `expressions.rs:4490-4550`, the unique hit writes to `overload_resolutions` at
->   `:4550`); the **zero-reader mirror** written into `TypeCheckResult` at `checker.rs:1558` is
->   deleted. The naming fact is still expressed at a single point: candidate name table (in-phase) +
->   span-keyed resolution (cross-stage, constructed at `ir_gen.rs:380`, consumed at `:7632/:7705`);
->   the mixed-binding name on the definition side is self-computed by `method_def_ordinals`
->   (`:1828`).
+>   `inference/statements.rs:2871-2874` → `inference/expressions.rs:498`), read in phase
+>   (`expressions.rs:4490-4550` decision point, the unique-hit case writes to `overload_resolutions`
+>   at `:4550`); what is deleted is the **zero-reader mirror** that `checker.rs:1558` pours into
+>   `TypeCheckResult`. The naming fact is still single-sourced: candidate-name table (in phase) +
+>   span-keyed resolution (cross-stage, `ir_gen.rs:380` constructs, `:7632/:7705` consumes); the
+>   definition-side mixed name is self-computed by `method_def_ordinals` (`:1828`).
 >
-> - **3.4.9 `interface_impl_registry` → reclassified as in-tree fact** (user verdict A, see §
->   Obligation Fields table's ruling change record in this document). Delete the **declaration** in
->   the doc comment that says "mirrored for middle-end/LSP consumption" (`types.rs:47-48`), keep the
->   field and its in-phase consumption (operator query at `operator_interfaces.rs:623`, seven
->   constraint-solver queries in `inference/expressions.rs`, read-only accessor at
->   `checker.rs:214-217`); cross-stage zero reads verified by
->   `git grep -n 'interface_impl_registry' -- src/middle` → empty. **Why not wire up a consumer**:
->   the content of this table is the environment mirror populated by typecheck's preset table
->   (always non-empty); if LSP really needs it, it should be re-registered per 4.6.x; forging a
->   consumer for a field "by design not needing cross-stage consumption" would only introduce false
->   obligations into the ledger.
+> - **3.4.9 `interface_impl_registry` → reclassify as in-tree fact** (user ruling A, see the
+>   §Obligation Fields table ruling record in this document). What is deleted is the **declaration**
+>   in the doc comment "mirrored for middle-side / LSP consumption" (types.rs:47-48); keep the field
+>   and its in-phase consumption (`operator_interfaces.rs:623` operator query, seven
+>   constraint-solving queries in `inference/expressions.rs`, `checker.rs:214-217` read-only
+>   accessor); cross-stage zero reads direct evidence
+>   `git grep -n 'interface_impl_registry' -- src/middle` → empty. **Why not wire a consumer**: the
+>   table's contents are an environment mirror injected by typecheck's pre-table (always non-empty);
+>   if LSP really needs it, register under 4.6.x; creating a consumer for a field that "by design
+>   doesn't need cross-stage consumption" only introduces fake obligations into the ledger.
 >
-> After the red list is zeroed, **field enumeration is closed by "obligation list ∪ non-obligation
-> field registration (`NON_OBLIGATION_FIELDS`, with reasons)"** — the gate's criterion 1 reverse
-> containment guards this end-to-end (add a field and forget to register / delete a field and forget
-> to sync both immediately go red). The red list **mechanism** is preserved: gate criterion 4's
-> staleness check and `--selftest`'s `stale-red-list` fixture continue to cover its detection
-> surface, and re-registration in the future must go through explicit ruling.
+> After the red list zeroes out, **the field census is closed by "obligations list ∪ non-obligation
+> registration (`NON_OBLIGATION_FIELDS`, with reason)"** — gate criterion 1's reverse containment
+> holds this end-to-end (add a field forget to register / delete a field forget to sync both turn
+> red on the spot). The red-list **mechanism** is preserved: gate criterion 4's staleness check and
+> `--selftest`'s `stale-red-list` fixture continue to cover its detection surface; future
+> re-registration must go through an explicit ruling.
 >
-> Synchronized standard with settlement: obligation list 16 → **13** (`INVENTORY` /
-> `Obligation::ALL` / § Obligation Fields table of this document); the gate's `--selftest` now
-> covers seven categories of fixtures (added "unregistered field", "stale anchor", and "empty red
-> list" forms), see
+> Synchronized with the clearing: obligation list 16 → **13** (`INVENTORY` / `Obligation::ALL` /
+> this document's §Obligation Fields table); gate `--selftest` now covers seven fixture categories
+> (newly added "unregistered field", "stale anchor", and "red list empty" three forms), see
 > `tests/baselines/obligations-gate/{stale-manifest,stale-struct,stale-red-list,unregistered-field,stale-anchor}/`.
 >
-> **V. Static gate (9.2) actual criteria** (three more hard criteria beyond the sketch's one
-> sentence)
+> **V. Static gate (9.2) actual criteria** (three more hard criteria beyond the one sentence in the
+> sketch)
 >
-> 1. **Three-way reconciliation + reverse containment (F2) + anchor validation (F1)**:
->    `obligations.rs`'s `INVENTORY` ↔ `TypeCheckResult` field definition ↔ this document's "§
->    Obligation Fields" table (including the table header's entry count declaration), any drift is
->    red; and `TypeCheckResult`'s field set must **be exactly equal to** "obligation list ∪
->    non-obligation registration (`NON_OBLIGATION_FIELDS`, with reasons)" — add a field and forget
->    to register, delete a field and forget to sync, non-obligation registration missing reason, two
->    tables overlap all immediately go red;
-> 2. **Read-out evidence**: non-red-list obligations must have a real read in the **declared
->    consumer file** (`.field_name` member access; comments/tests/strings don't count) — this turns
->    "delivery marker ↔ downstream real read" into a hard criterion (mechanism A's main risk is
->    exactly the two drifting);
-> 3. **Delivery marker**: non-red-list obligations must be marked at delivery points; the red list
->    conversely must not be marked;
-> 4. **Red list staleness check**: red-list fields must have zero real reads (as soon as a consumer
->    grows, it's red), and each entry carries a WBS id and evidence pointer; Plus `--selftest`:
->    built-in negative/positive fixtures, negatives must be red, positives must be green (proves the
->    detector doesn't idle).
+> 1. **Three-place reconciliation + reverse containment (F2) + anchor validation (F1)**:
+>    `obligations.rs`' `INVENTORY` ↔ `TypeCheckResult` field definitions ↔ this document's
+>    "§Obligation Fields" table (including the row-count declaration in the table header), any drift
+>    turns red; and the `TypeCheckResult` field set must **equal exactly** "obligations list ∪
+>    non-obligation registration (`NON_OBLIGATION_FIELDS`, with reason)" — adding a field without
+>    registering, removing a field without syncing, non-obligation registration without reason, two
+>    tables overlap → all turn red on the spot;
+> 2. **Read-out evidence**: non-red-list obligations must be **really read** (`.field_name` member
+>    access; comments/tests/strings don't count) in the **declared consumer file** — this turns
+>    "delivery marker ↔ downstream real read" into a hard criterion (the main risk of mechanism A is
+>    exactly that the two drift);
+> 3. **Delivery marker**: non-red-list obligations must be marked at the delivery point; red-list
+>    ones must not;
+> 4. **Red-list staleness check**: red-list fields must have zero real reads (a consumer growing
+>    turns red), and each must carry a WBS id and an evidence pointer; plus a `--selftest`: ships
+>    counter-example / positive-example fixtures, counter-example must be red, positive must be
+>    green (proves the detector isn't idling).
 >
 > **VI. Per-place deviations from the sketch above**
 >
-> 1. The sketch's `pub struct Obligations { …field… }` **does not copy by field**: the obligation
->    data is still held by `TypeCheckResult`, the ledger only records "list + delivery markers +
->    settlement conclusions". Reason: a copy would give two sources of fact (each field is produced
->    separately by typecheck's checker and the ownership layer), which would inevitably drift;
->    cross-layer data surfaces also should not be replicated to the orchestration layer.
-> 2. The sketch's `take()` / "mark consumed" **not adopted**, replaced by `is_produced` emptiness
->    check + `DeliveryLedger` delivery marker. Reason: obligations and products are the same data,
->    `take()` would take away what the downstream needs; and the 11 IrGeneration obligations are in
->    the form of "the whole `&TypeCheckResult` is handed to ir_gen", which cannot be taken
->    per-field.
-> 3. The sketch's signature `pub fn assert_drained(&self) -> Vec<Diagnostic>` → actual
->    `State::assert_drained(&mut self)`: conclusion written to `DriverOutcome.obligations`,
->    diagnostics routed by `ProgramKind`: Check/Lsp take the per-file collection channel; other
->    forms route by **level** (W1090 is E-level from 4.3.2) — single-file goes to
->    `PipelineError::TypeCheck` (obligations.rs:654 outbound arm), multi-file/embedded otherwise
+> 1. The sketch's `pub struct Obligations { …fields… }` **does not copy the fields**: obligation
+>    data is still held by `TypeCheckResult`; the ledger only records "list + delivery markers +
+>    settlement conclusion". Reason: copying would mean two sources of truth (each field is produced
+>    separately by typecheck's checker and the ownership layer), and they will inevitably drift;
+>    cross-layer data plane also shouldn't be replicated into the orchestration layer.
+> 2. The sketch's `take()` / "mark consumed" **not adopted**, replaced by `is_produced` empty
+>    check + `DeliveryLedger` delivery marker. Reason: obligation and product are the same data,
+>    `take()` would take away what the downstream needs; and 11 IrGeneration obligations come in the
+>    form of "give the whole `&TypeCheckResult` to ir_gen", which can't be taken field by field.
+> 3. Sketch signature `pub fn assert_drained(&self) -> Vec<Diagnostic>` → actual
+>    `State::assert_drained(&mut self)`: the conclusion is written into `DriverOutcome.obligations`,
+>    the diagnostics split by `ProgramKind`: Check/Lsp go through the per-file collection channel;
+>    the rest split by **level** (since 4.3.2 W1090 is E-level) — single-file goes through
+>    `PipelineError::TypeCheck` (obligations.rs:654 outbound arm), multi-file/embedded separately
 >    record `OrchestratorError` failure (otherwise `result.errors` has no consumer). Reason:
->    returning `Vec<Diagnostic>` would lose form routing — check's diagnostics must be attributed
->    per file.
-> 4. The first tier of the three-tier table drops from "obligation is read by declared consumer" to
->    "has delivery marker"; "marker ↔ real read" is left to the static gate (section V criterion 2).
-> 5. The second tier's "promote to E-level in `strict` mode" **does not go through a strict
->    toggle**, changed to **same-code promote to E in 4.3.2** (promotes even without a strict
->    toggle, because the healthy state emits zero is already safe enough, R4).
-> 6. Static gate criteria upgraded from "field appears ≥2 times but no third-file read" to the four
+>    returning `Vec<Diagnostic>` loses the form split — Check's diagnostics must be per-file
+>    attributed.
+> 4. The first-tier criterion of the three-tier table, from "obligation read by declared consumer"
+>    to "has delivery marker"; "marker ↔ real read" is left to the static gate (section V criterion
+>    2).
+> 5. The second-tier of the three-tier table, "escalate to E in `strict` mode" **not implemented via
+>    a strict switch**, instead **4.3.2 same-code-escalate-to-E** (no strict switch either, because
+>    the healthy-state zero emission is already safe enough, R4).
+> 6. Static-gate criteria upgraded from "field appears ≥2 times but no third-file read" to the four
 >    in section V.
-> 7. The two additional tiers (S1, skip exemption) not in the sketch are in paragraph two.
-> 8. The unit test name `test_obligations_drained` mentioned in S1/S4: actually landed as **20
->    cases** in `src/driver/tests/obligations.rs` (skeleton with `#[ignore]` first → turned green;
->    red state preserved: removing the unique settlement point gives `pairs: 0`, 6 failures). S1/S4
->    rows have been synchronized with the actual file.
+> 7. The two extra tiers (S1, skip exemption) not in the sketch, see section II.
+> 8. S1/S4 table's mentioned single-test name `test_obligations_drained`: actually landed as **20
+>    test cases** in `src/driver/tests/obligations.rs` (first `#[ignore]` skeleton → turned green;
+>    red-state archived: with the only settlement point removed, `pairs: 0`, 6 failed). The S1/S4
+>    two lines have been synchronized to the actual file.
 >
 > **VII. 4.3.2 landing record (level + gate reinforcement)**
 >
-> - **Per-field review input**: `ObligationSettlement.drained_kinds` (the obligation kinds actually
->   drained in this run, available per run) and the five counts (paragraph two's conservation
->   equation); combined with the audit surface `findings`, it can give the fact of "whether this
->   field has been consumed by any entry".
-> - **Level: same-code promote to E has landed** (2026-10-13 user verdict A; see paragraph three's
->   final state registration and D59 D-class breaking change declaration). Implementation:
->   `to_diagnostic` explicit `.severity(Severity::Error)`; outbound arm routes error channel by
->   level. Mutation evidence: removing any one delivery marker → that form's compilation fails,
->   `check` exit code is non-zero (`error [W1090]`); restoring makes the healthy state zero-emit
->   again (corpus 342/342 zero changes). locale copy in six languages has written "W family code,
->   emission level is error".
+> - **Per-field reconciliation input**: `ObligationSettlement.drained_kinds` (the kinds of
+>   obligations actually drained this run, available per run) and the five counts (the conservation
+>   equation in section II); combined with the audit surface `findings` it can give the fact "has
+>   this field ever been consumed by any entry".
+> - **Level: same-code-escalate-to-E has landed** (2026-10-13 user ruling A; see section III
+>   end-state registration and the D59 D-class breaking item declaration). Implementation:
+>   `to_diagnostic` explicitly `.severity(Severity::Error)`; the outbound arm splits the error
+>   channel by level. Mutation evidence: remove any delivery marker → that form's compilation fails,
+>   `check` exit code is non-zero (`error [W1090]`); after restoration the healthy state emits zero
+>   (342/342 corpus zero change). The locale copy has been written in six languages to make clear
+>   "W-family code, emission level is error".
 > - **Gate reinforcement items (F1/F2, both landed)**:
->   - **F1/R2 anchor validation**: the gate now parses the **`file:line` anchors in non-obligation
->     registration reasons and red list evidence**, validating "file is locatable (unique) + line
->     number is in the page + the symbol immediately following the anchor really appears in the
->     anchored file"; an anchor pointing to a non-existent symbol goes red. Comes with negative
->     fixture `tests/baselines/obligations-gate/stale-anchor/` (symbol does not exist / line number
->     out of range, one each). Note: the red list is currently empty, so the actual landing point of
->     this criterion is **non-obligation registration** and future evidence pointers (same code
+>   - **F1/R2 anchor validation**: the gate now parses the `file:line` anchors in **non-obligation
+>     registration reason and red-list evidence**, verifying "file locatable (uniquely) + line
+>     number registered + the symbol immediately after the anchor really appears in the anchored
+>     file"; an anchor pointing to a non-existent symbol turns red. Ships counter-example fixture
+>     `tests/baselines/obligations-gate/stale-anchor/` (one for non-existent symbol / out-of-range
+>     line each). Note: the red list is currently empty, so the actual landing point of this
+>     criterion is the **non-obligation registration** and future evidence pointers (same code
 >     path).
 >   - **F2/R3 reverse containment**: the gate outputs "`TypeCheckResult` field count − obligation
->     count − non-obligation registration count = difference", a non-empty difference is red; comes
->     with negative fixture `unregistered-field/` (new field in struct not registered).
-> - **Information item F3**: `SkipReason::UpstreamFailed` exemption is unreachable at real entries
->   (units that fail typecheck don't retain `type_result`, obligations don't exist in the first
->   place); this tier's semantics is pinned by synthetic `State` cases, real end-to-end only covers
->   `ConfigDisabled` (t3 T06).
+>     count − non-obligation registration count = difference", non-empty difference turns red; ships
+>     counter-example fixture `unregistered-field/` (newly added struct field not registered).
+> - **Information item F3**: the `SkipReason::UpstreamFailed` exemption is unreachable at real
+>   entries (a unit whose typecheck failed doesn't keep `type_result`, the obligation doesn't exist
+>   in the first place); this tier's semantics is pinned by synthetic-`State` test cases, real
+>   end-to-end only covers `ConfigDisabled` (t3 T06).
 >
-> **VIII. 4.3 secondary task closure (red list zeroed + obligation diagnostic final state E-level)**
+> **VIII. 4.3 sub-task closure (red list zeroed + obligation-diagnostic end-state E-level)**
 >
-> **8.1 Three-round landing timeline** (corresponding to code file:line; this round only supplements
-> conclusions, does not modify code)
+> **8.1 Three-round landing timeline** (item by item corresponding to code file:line; this round
+> only adds conclusions, doesn't change code)
 >
-> | Round               | Conclusion                                                                                                                                                                           | Code Anchor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-> | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-> | 4.3.1 ledger online | `State::assert_drained()` unique settlement point; 13-entry obligation list + delivery markers + three-tier settlement; audit surface `DriverOutcome.obligations`                    | call site `src/driver/mod.rs:110`; settlement `src/driver/obligations.rs:577`; outbound `:654`; seven delivery markers `src/driver/arms.rs:554/:672/:726/:781/:842/:936/:1221`                                                                                                                                                                                                                                                                                                              |
-> | 3.4.4 settlement    | `variant_ctor_calls` delete field — declared responsibility equivalently fulfilled by in-place shape detection on the IR side                                                        | `src/middle/core/ir_gen.rs:7448` (`detect_variant_ctor_call`), `:7496` (call site)                                                                                                                                                                                                                                                                                                                                                                                                          |
-> | 3.4.5 settlement    | `method_overload_ir_names` delete cross-stage mirror (keep in-phase candidate name table + `overload_resolutions`)                                                                   | resolution consumer `ir_gen.rs:380/:7632/:7705`; definition side `method_def_ordinals` `:1828`                                                                                                                                                                                                                                                                                                                                                                                              |
-> | 3.4.9 settlement    | `interface_impl_registry` reclassified as **in-tree fact**: delete "mirrored for middle/LSP consumption" declaration, keep in-phase consumption; obligations 14 → 13, red list 1 → 0 | declaration carrier `src/frontend/core/typecheck/types.rs:52` (field declaration line; its doc comment is at `:47-51` in the same file, rewritten by verdict A); in-phase consumption `src/frontend/core/typecheck/operator_interfaces.rs:623`, `src/frontend/core/typecheck/inference/expressions.rs` seven places (`:1514/:1646/:3151/:3876/:3899/:4400/:4408`), `src/frontend/core/typecheck/checker.rs:214` (read-only accessor :214-217); registration `src/driver/obligations.rs:150` |
-> | 4.3.2 leveling      | **Same-code promote to E**: explicit `.severity(Severity::Error)`, code number still `W1090`; outbound routes error channel by level (first failure priority)                        | `src/driver/obligations.rs:450` (severity), `:676-699` (E-level branch); code family and level decoupling registered in `src/util/diagnostic/codes/w1xxx.rs:26-36`                                                                                                                                                                                                                                                                                                                          |
+> | Round               | Conclusion                                                                                                                                                                           | Code anchor                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+> | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | 4.3.1 ledger online | `State::assert_drained()` only settlement point; 13-entry obligation list + delivery marker + three-tier settlement; audit surface `DriverOutcome.obligations`                       | call `src/driver/mod.rs:110`; settlement `src/driver/obligations.rs:577`; outbound `:654`; seven delivery markers `src/driver/arms.rs:554/:672/:726/:781/:842/:936/:1221`                                                                                                                                                                                                                                                                                                                 |
+> | 3.4.4 clearing      | `variant_ctor_calls` field deleted — declared duty equivalently fulfilled by in-place shape detection on the IR side                                                                 | `src/middle/core/ir_gen.rs:7448` (`detect_variant_ctor_call`), `:7496` (call site)                                                                                                                                                                                                                                                                                                                                                                                                        |
+> | 3.4.5 clearing      | `method_overload_ir_names` cross-stage mirror deleted (kept in-phase candidate-name table + `overload_resolutions`)                                                                  | decision consumer `ir_gen.rs:380/:7632/:7705`; definition-side `method_def_ordinals` `:1828`                                                                                                                                                                                                                                                                                                                                                                                              |
+> | 3.4.9 clearing      | `interface_impl_registry` reclassified as **in-tree fact**: delete "mirrored for middle/LSP consumption" declaration, keep in-phase consumption; obligations 14 → 13, red list 1 → 0 | declaration carrier `src/frontend/core/typecheck/types.rs:52` (field declaration line; its doc comment in the same file at `:47-51`, rewritten by ruling A); in-phase consumption `src/frontend/core/typecheck/operator_interfaces.rs:623`, seven sites in `src/frontend/core/typecheck/inference/expressions.rs` (`:1514/:1646/:3151/:3876/:3899/:4400/:4408`), `src/frontend/core/typecheck/checker.rs:214` (read-only accessor :214-217); registration `src/driver/obligations.rs:150` |
+> | 4.3.2 leveling      | **Same code, escalate to E**: explicit `.severity(Severity::Error)`, code number still `W1090`; outbound splits the error channel by level (first-failure precedence)                | `src/driver/obligations.rs:450` (severity), `:676-699` (E-level branch); the decoupling of code family and level registered in `src/util/diagnostic/codes/w1xxx.rs:26-36`                                                                                                                                                                                                                                                                                                                 |
 >
 > **8.2 Closure conclusion**
 >
-> - **Red list zeroed**: the number of entries with `red_list: Some` in `INVENTORY`
->   (`src/driver/obligations.rs:201`) = **0**
->   (`git grep -c 'red_list: Some' -- src/driver/obligations.rs` → 0). The **mechanism is
->   preserved**: `RedListEntry` (:120), `Obligation::red_list()`, gate criterion 4's staleness check
->   and `stale-red-list` fixture; the gate outputs "red list 0 entries — settled and zeroed".
-> - **Obligation diagnostic final state E-level**: `W1090`'s **code number and W-family attribution
->   are unchanged**, the emission level is `error` (D5 final state, 2026-10-13 user verdict A). This
->   **is a D59 D-class breaking change** (changes externally observable behavior), registered in
->   both paragraph three of this note and the RFC-013 "Emission Channels" section; **the healthy
->   state emits zero ⇒ the existing corpus and user programs are not affected** (corpus 342/342
->   "diff: empty", IR snapshots zero drift; t11 independent verification and t12 review each
+> - **Red list zeroed**: the number of entries in `INVENTORY` (`src/driver/obligations.rs:201`) with
+>   `red_list: Some` = **0** (`git grep -c 'red_list: Some' -- src/driver/obligations.rs` → 0).
+>   Mechanism **preserved**: `RedListEntry` (`:120`), `Obligation::red_list()`, gate criterion 4's
+>   staleness check and `stale-red-list` fixture; the gate outputs "red list 0 entries — already
+>   cleared".
+> - **Obligation diagnostic end-state E-level**: the **code number and W-family ownership** of
+>   `W1090` are unchanged, the emission level is `error` (D5 end state, 2026-10-13 user ruling A).
+>   This **belongs to the D-class breaking items of D59** (changes externally observable behavior),
+>   already registered in both this note's section III and the RFC-013 "emission channel" section;
+>   **healthy state zero emission ⇒ existing corpora and user programs are unaffected** (342/342
+>   corpus "diff: empty", IR snapshots zero drift; t11 independent verification and t12 review each
 >   re-verified).
-> - **Field enumeration closed**: `TypeCheckResult` field set = obligation list ∪ non-obligation
->   registration (8 entries, `src/driver/obligations.rs:150`, each with a measured consumer surface
+> - **Field census closed**: `TypeCheckResult` field set = obligations list ∪ non-obligation
+>   registration (8 entries, `src/driver/obligations.rs:150`, each with measured consumption-surface
 >   reason); gate F2 explicitly outputs the difference (currently `21 - 13 - 8 = 0`).
-> - **No un-landed promises left**: all the reinforcement items registered in this note have
->   **landed** (F1/F2/F4/F5, see sections V, VII, VIII); the only two things not closed are the
->   **known boundary** in 8.4 and t7 F5 which has been turned into an issue, neither is an un-landed
+> - **No un-landed promises**: all reinforcement items registered in this note have **already
+>   landed** (F1/F2/F4/F5, see sections V, VII, VIII); the only two unclosed items are the **known
+>   boundaries** in 8.4 and t7 F5 which has been transferred to an issue, neither is an un-landed
 >   criterion of this mechanism.
 >
-> **8.3 Status of disposition for each round's acceptance/review findings** (item by item)
+> **8.3 Disposition of acceptance / review findings from each round** (marked item by item)
 >
-> | Source        | Finding                                                                                                                                                       | Status                                                                                                                                                                                                                                                              |
-> | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-> | t3 F1 / t4 R2 | Red list evidence is plain text pointer, goes silently stale when the alternative consumer is removed                                                         | **Landed**: gate F1 anchor validation (file locatable + line in page + symbol anchor, `scripts/ci/check-obligations.py:251`); negative fixture `tests/baselines/obligations-gate/stale-anchor/`                                                                     |
-> | t3 F2 / t4 R3 | Gate criterion 1 lacks reverse containment, silently PASSes when a new field is added without registration                                                    | **Landed**: F2 difference explicit output (:577) + F4 definition line reconciliation (:455) + F5 range reconciliation; negative fixture `unregistered-field/`                                                                                                       |
-> | t4 R4         | W-only and promote-to-E standards not registered                                                                                                              | **Landed**: this note's third/seventh paragraphs + RFC-013 "Emission Channels" + six-language `locales/*.json` W1090 help and error_output examples                                                                                                                 |
-> | t7 F5         | Dead code analysis miscounts overloaded method references (legitimate overloads are still falsely reported as `W1005`)                                        | **Turned into issue `#450`**, attributed to WBS **4.9 Reference Pool Correct Implementation** (registered in `docs/src/dev/architecture/09-execution-wbs.md:237`) — not this secondary task                                                                         |
-> | t11 F7        | Gate `--root` mode F1 does not cover anchor commitments in module header prose comments                                                                       | **Known boundary** (see 8.4)                                                                                                                                                                                                                                        |
-> | t11 F8        | Validator's own tool self-recorded: mutation driver once mis-wrote the main repo (immediate `git restore` cleared, affected round output discarded and rerun) | **Information item** (not a deliverable defect)                                                                                                                                                                                                                     |
-> | t11 F9        | Main repo intermediate state (un-staged file makes this document's table header and `INVENTORY` out of sync) triggered gate red                               | **Information item / resolved**: frozen commit self-consistent PASS; "intermediate state committed directly will red the gate" is exactly the design intent of F2/F4                                                                                                |
-> | t12 F12-1     | This document's struct range is written as `16-73`, actually `16-76` (no mechanical reconciliation after t9 added 3 comment lines)                            | **Landed + mechanized**: range corrected to `16-76`, and new gate **F5** added (range anchor, red on mismatch); similar numbers grep-aligned at the same time (`17 → 20 cases`, `16 span-keyed fields` → 13)                                                        |
-> | t12 F12-2     | Multi-file form's settlement once overwrote the first failure (zzz.yx's type error was covered by W1090)                                                      | **Fixed** (captain has amended commit message to explain): `failure.is_none()` guard at `src/driver/obligations.rs:686`; this regression was caught by the **existing pin case** `test_driver_run_multi_file_proof_error_yields_to_typecheck_error`, not a new test |
+> | Source        | Finding                                                                                                                                                           | Status                                                                                                                                                                                                                                                                |
+> | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | t3 F1 / t4 R2 | Red-list evidence is a plain-text pointer; silently stale when the replaced consumer is removed                                                                   | **Landed**: gate F1 anchor validation (file locatable + line number registered + symbol anchor, `scripts/ci/check-obligations.py:251`); counter-example fixture `tests/baselines/obligations-gate/stale-anchor/`                                                      |
+> | t3 F2 / t4 R3 | Gate criterion 1 lacks reverse containment; silently PASSes when a new field is added without registration                                                        | **Landed**: F2 explicit difference output (`:577`) + F4 definition-line reconciliation (`:455`) + F5 range reconciliation; counter-example fixture `unregistered-field/`                                                                                              |
+> | t4 R4         | W-only and escalate-to-E caliber not registered                                                                                                                   | **Landed**: this note's sections III / VII + RFC-013 "emission channel" + six-language `locales/*.json` W1090 help and error_output examples                                                                                                                          |
+> | t7 F5         | Dead-code analysis's overloaded-method reference count is distorted (legal overload still mis-reported as `W1005`)                                                | **Transferred to issue `#450`**, owned by WBS **4.9 Reference Pool Correct Implementation** (`docs/src/dev/architecture/09-execution-wbs.md:237` registration) — not this sub-task                                                                                    |
+> | t11 F7        | Under gate `--root` mode, F1 doesn't cover the anchor promises in module header prose comments                                                                    | **Known boundary** (see 8.4)                                                                                                                                                                                                                                          |
+> | t11 F8        | Validator side's self-record: mutation driver once wrote to the main repo by mistake (immediate `git restore` cleared, affected rounds' output voided and re-run) | **Information item** (not a deliverable defect)                                                                                                                                                                                                                       |
+> | t11 F9        | Main repo intermediate state (unstaged file made this document's header inconsistent with `INVENTORY`) triggered gate red                                         | **Information item / resolved**: frozen commit self-consistent PASS; "intermediate state committed directly turns the gate red" is exactly F2/F4's design intent                                                                                                      |
+> | t12 F12-1     | This document's struct range written as `16-73`, actually `16-76` (no mechanical reconciliation after t9 added 3 comment lines)                                   | **Landed + mechanized**: range corrected to `16-76`, and new gate **F5** added (range anchor, wrong write turns red); same-class numbers aligned by grep in one pass (`17 → 20 test cases`, `16 span-keyed fields` → 13)                                              |
+> | t12 F12-2     | Multi-file form's settlement once overrode the first failure (`zzz.yx`'s type error was overwritten by W1090)                                                     | **Fixed** (captain amended commit message to explain): `src/driver/obligations.rs:686`'s `failure.is_none()` guard; this regression was caught by the **existing nail-board** test `test_driver_run_multi_file_proof_error_yields_to_typecheck_error`, not a new test |
 >
-> **8.4 Known boundaries (registered items, not un-landed promises)**
+> **8.4 Known boundaries (registrations, not un-landed promises)**
 >
-> - **F1's scan surface**: anchor validation only covers the text of **registered entries** —
->   non-obligation registration reasons (`NON_OBLIGATION_FIELDS`) and red list evidence;
->   **`file:line` commitments in module header prose comments are not in the scan surface**
->   (currently no registered entry is affected). If anchor commitments are written in module headers
->   in the future, **manual review must bear** the responsibility, or extend F1's scan surface —
->   pick one, do not default to no one in charge.
-> - **Static boundary of the gate**: set-level validation of delivery markers is on the static side
->   (criterion 3), single-arm removal is covered by **runtime settlement** — static + runtime two
->   layers is the design form, not a gap (t11's M11A/M11B/M11C mutation bidirectional verification).
+> - **F1's scan surface**: anchor validation only covers the **text of registered entries** —
+>   non-obligation registration reasons (`NON_OBLIGATION_FIELDS`) and red-list evidence; **the
+>   `file:line` promises in module header prose comments are not in the scan surface** (currently no
+>   registered entry is affected). If anchor promises are written in module headers in the future,
+>   **manual review must take responsibility**, or F1's scan surface must be expanded — one of the
+>   two, not allowed to default to no one in charge.
+> - **Static boundary of the gate**: the set-level check of delivery markers is on the static side
+>   (criterion 3), the single-arm removal is backstopped by **runtime settlement** — static +
+>   runtime double-layer is the designed form, not a gap (t11's M11A/M11B/M11C mutation
+>   bidirectional verification).
 
-> **Revision note (P4 implementation, 2026-10-13, 4.5 cross-layer contract PlanId-ization landed)**:
-> Two **span-keyed contracts** in the 13 obligations above (`release_plan` / `overload_resolutions`)
-> have been changed to **structural identity keys** (`PlanId`) per RFC-039 **D20**. This note
-> registers the landing form, criteria, classification basis, and known boundaries; the definition
-> line is still reconciled by gate **F4** (the row numbers in the table above are the current code
-> fact).
+> **Revision note (P4 implementation, 2026-10-13, 4.5 cross-layer contract PlanId-ization
+> landing)**: of the 13 obligations above, the **two span-keyed contracts** (`release_plan` /
+> `overload_resolutions`) have been converted to **structural-identity keys** (`PlanId`) per RFC-039
+> **D20**. This note registers the landing form, criteria, classification basis and known boundary;
+> the definition line is still reconciled by gate **F4** (the line numbers in the two rows above are
+> the current code facts).
 >
 > **I. Landing form (carrier takes A: `PlanId`)**
 >
-> The key is the **structural identity** that travels with the AST node, no longer relying on the
-> positional coincidence of "the two sides each compute a span": `PlanId` (`src/util/plan_id.rs`,
-> `u32` monotonic, unique within compilation unit, `UNPLANNED = u32::MAX` represents synthetic nodes
-> outside the parser) is issued by the **unique allocator** `ParserState::alloc_plan_id`. Carriers
-> at two places: `Stmt.plan_id` (statement identity → release plan's attribution and consumption)
-> and `Expr::Call.plan_id` (call site identity → overload resolution's production and consumption);
-> `Expr::call` is the unique call expression constructor in the whole repo, synthetic calls outside
-> the parser are uniformly recorded as `UNPLANNED` (**cannot be consumed**, see section II).
+> The key is the **structural identity** that follows the AST node, no longer relying on the
+> position coincidence of "each side computes the span once": `PlanId` (`src/util/plan_id.rs`, `u32`
+> monotonic, unique within compilation unit, `UNPLANNED = u32::MAX` for synthetic nodes outside the
+> parser) is issued by the **sole allocator** `ParserState::alloc_plan_id`. Carriers at two places:
+> `Stmt.plan_id` (statement identity → release-plan ownership and consumption) and
+> `Expr::Call.plan_id` (call-site identity → overload-resolution production and consumption);
+> `Expr::call` is the only call-expression constructor in the whole repo, synthetic calls outside
+> the parser are all marked `UNPLANNED` (**cannot be consumed**, see section II).
 >
-> - `release_plan`: `drops` is `HashMap<PlanId, Vec<String>>` (`layers/ownership.rs`), the unique
+> - `release_plan`: `drops` is `HashMap<PlanId, Vec<String>>` (`layers/ownership.rs`); the only
 >   consumer entry is `ReleasePlan::consume(stmt)` — **read and bookkeeping in the same call**;
->   `ir_gen.rs:360` reads, `:3103` uses (the statement identity is given by `walk_stmt`'s push/pop +
->   CFG node → statement identity table; the Drop attribution for scope exit goes to the last
->   statement in that scope).
-> - `overload_resolutions`: `OverloadResolutions` (table + consumption ledger **same entity**),
->   produced at `inference/expressions.rs:4550` (writes by call site `PlanId`, dispatch
->   transparently passes through destructuring from `Expr::Call { plan_id }`), consumed at
->   `ir_gen.rs:7697` (with binding) / `:7772` (without binding) via `OverloadResolutions::get` (hit
->   means bookkeeping).
+>   `ir_gen.rs:360` reads, `:3103` uses (statement identity given by `walk_stmt`'s set/restore + CFG
+>   node→statement-identity table; the scope-exit Drop belongs to the last statement in the scope).
+> - `overload_resolutions`: `OverloadResolutions` (table + consumption ledger **as one**),
+>   production site `inference/expressions.rs:4550` (writes by call-site `PlanId`, the dispatch is
+>   destructured transparently from `Expr::Call { plan_id }`), consumer sites `ir_gen.rs:7697` (with
+>   binding) / `:7772` (without binding) via `OverloadResolutions::get` (hit means bookkeeping).
 >
-> **II. Consumer-must-reach settlement (reusing 4.3 ledger, not creating a second set)**: the
-> consumption ledger is a **single implementation** `ConsumptionLedger<K>`
-> (`src/util/consumption.rs`), each of the two tables holds one instance; when `generate_module_ir`
-> returns successfully, the two ledgers are **simultaneously** marked as "completed a full round" at
-> the same point (`ir_gen.rs:1095` release plan / `:1097` overload resolution); the three-state
-> mapping is unique (`consumption_state` in `src/driver/obligations.rs`), and the unique settlement
-> point connects one line for each of the two obligations — a non-empty difference is **E-level
-> W1090** (same-code promote to E, see section III for the standard). The exemption criterion is
-> hooked on the **ledger's own completion marker** (not whether `unit.ir` exists), so the `check`
-> form taking away IR products does not constitute an exemption.
+> **II. Consumer-must-reach settlement (reuses the 4.3 ledger, no second set)**: the consumption
+> ledger is the **single implementation** `ConsumptionLedger<K>` (`src/util/consumption.rs`); each
+> of the two tables holds one instance; when `generate_module_ir` returns successfully, **the same
+> point** marks "one full round run" for both ledgers (`ir_gen.rs:1095` release plan / `:1097`
+> overload resolution); the three-state mapping is unique (`consumption_state` in
+> `src/driver/obligations.rs`), the only settlement point hooks one line each into the two
+> obligations — non-empty difference is **E-level W1090** (same code, escalate to E, caliber in
+> section III). The exemption criterion hangs on the **ledger's own completion marker** (not on
+> whether `unit.ir` exists), so the Check form taking the IR product doesn't constitute an
+> exemption.
 >
-> **III. D59 classification basis (C class, red first then green)**: The form
-> `Type.method(positional args, name = value)` was **silently giving the wrong answer** before the
-> change (measured: `r: Int = t.pick(1, a = 2)` compiles cleanly, runtime outputs `1` instead of
-> `20` — the resolved candidate was discarded, fell back to the last binding in definition order);
-> after the change, the same program has compile-time `error [W1090] ... produced key not consumed`.
-> The fix takes **loud** rather than "stuff the resolution name into a call with named arguments":
-> the latter would lose named arguments, equivalent to swapping one silence for another (final state
-> semantics see [09](./09-execution-wbs.md) §3.14 / issue #452). Also: `Drop` instructions are
-> no-ops in the interpreter (`src/backends/interpreter/executor/ops/control.rs` wildcard arm only
-> `advance()`), so the release plan's key migration does not change runtime behavior — the corpus
-> 342-entry diff being empty is empirical evidence of this.
+> **III. D59 classification basis (C class, red before green)**: the form
+> `Type.method(positional, name = value)` was **silently giving the wrong answer** before the change
+> (measured: `r: Int = t.pick(1, a = 2)` compiles cleanly, runs outputting `1` instead of `20` — the
+> candidate decided on is dropped, falls back to the last bound in declaration order); after the
+> change the same program gets compile-time `error [W1090] ... production key not consumed`. The fix
+> takes the **loud** path rather than "stuff the decided name into the named-argument call": the
+> latter loses the named arguments, equivalent to another kind of silence (end-state semantics in
+> [09](./09-execution-wbs.md) §3.14 / issue #452). Additionally: `Drop` instructions are no-ops in
+> the interpreter (`src/backends/interpreter/executor/ops/control.rs` wildcard arm only
+> `advance()`), so the key migration of the release plan doesn't change runtime behavior — the
+> 342-corpus empty diff is empirical evidence of this.
 >
-> **IV. Criteria and evidence**: D41 same-type criterion `test_release_plan_spans_consumed` (settled
+> **IV. Criteria and evidence**: D41 same-form criterion `test_release_plan_spans_consumed` (settled
 > by `PlanId`) and the new `test_overload_resolutions_consumed` (per-file lex→parse→typecheck→ir_gen
-> for corpus, **difference must be empty + evidence floor**: number of files that produced
-> resolution ≥ 1, real consumption entries ≥ 2, no whitelist); the 9 resolution form coverages are
-> pinned in `src/frontend/core/typecheck/tests/overload_resolutions.rs` (expected return /
-> positional args / type body binding / `?` operand / pure named / positional + named / ambiguous /
-> variant construction / unassigned identity). Mutation driver: consumer key shifted by one ⇒
-> criterion red + real program `error [W1090]` + corpus gate diff; restored and re-greens. Gate
-> numbers: `check-obligations.py` PASS, corpus 342 entries diff empty, `cargo test --lib` 2712
-> passed / 0 failed (IR snapshots zero drift).
+> on the corpus, **the difference must be empty + evidence floor**: number of files that produced
+> resolutions `≥ 1`, number of truly consumed entries `≥ 2`, no whitelist); 9-item decision-form
+> coverage nail-board in `src/frontend/core/typecheck/tests/overload_resolutions.rs` (expected
+> return / positional arg / type-body binding / `?` operand / pure-named / pos+named / ambiguous /
+> variant-ctor / unallocated identity). Mutation drive: consumer key shifted by one ⇒ criterion
+> red + real program `error [W1090]` + corpus-gate diff; after restoration re-greens. Gate values:
+> `check-obligations.py` PASS, corpus 342-entry diff empty, `cargo test --lib` 2712 passed / 0
+> failed (IR snapshots zero drift).
 >
-> **V. Known boundary (registered item, not an un-landed promise)**: The **unbound consumer point**
-> at `ir_gen.rs:7766-7790` is **unreachable** in the current corpus and test surface (method
-> declarations uniformly go through the bound consumer point via `register_type_bindings`), so the
-> key-control correctness of this branch **has no red state to falsify**; the reason for keeping it
-> = it is the symmetric branch of the bound path, removing it would rewrite "method calls without
-> `type_bindings`" form into silence. Registered by independent verification (t5 F-1) and review (t6
-> F2), **no new task opened**.
+> **V. Known boundaries (registrations, not un-landed promises)**: the **no-binding consumer site**
+> at `ir_gen.rs:7766-7790` is **unreachable** under the current corpus and test surface (method
+> declarations uniformly take the with-binding consumer site via `register_type_bindings`), so this
+> branch's key correctness **has no red state to falsify**; the reason to keep it = it's the
+> symmetric branch of the with-binding path, deleting it would rewrite "method call without
+> `type_bindings`" into a silent form. Registered by independent verification (t5 F-1) and review
+> (t6 F2), **no new task opened**.
 
 ### 3. Unified Driver: Single `dispatch`
 
@@ -1064,11 +1054,11 @@ times but no third-file read → fail). `assert_drained()` is a **runtime** gate
 // src/driver/program.rs
 pub enum ProgramKind {
     SingleFile,        // pipeline.rs:141 / lib.rs:140 / build_bytecode(lib.rs:171)
-    MultiFile,         // compile_project（lib.rs:154）
+    MultiFile,         // compile_project (lib.rs:154)
     Check,             // check_project / check_files_with_diagnostics
-    Lsp,               // check_source_in_project（LSP within project, results filtered to target file）
+    Lsp,               // check_source_in_project (LSP in-project, results filtered to target file)
     Embedded,          // compile_embedded_module (embedded std)
-    WasmPlayground,    // wasm/src/lib.rs:48 — the fourth caller of the single-file path
+    WasmPlayground,    // wasm/src/lib.rs:48 — fourth caller of the single-file path
 }
 
 pub enum Aggregation { FailFast, CollectAll }
@@ -1076,16 +1066,16 @@ pub enum Aggregation { FailFast, CollectAll }
 pub struct Program {
     pub kind: ProgramKind,
     pub units: Vec<Unit>,
-    /// Can only come from one of the 6 predefined combinations in `ProgramKind::stages()`
+    /// Can only be one of the 6 predefined combinations from `ProgramKind::stages()`
     pub stages: &'static [Stage],
     pub aggregation: Aggregation,
     pub config: CompileConfig,
 }
 ```
 
-**`stages()` can only be one of the 6 predefined combinations above (one for each `ProgramKind`), it
-does not accept callers freely passing arrays.** This is a key constraint to prevent the `Program`
-abstraction from degrading into "a free parameter that accepts anything", enforced by
+**`stages()` can only be the 6 predefined combinations above (one per `ProgramKind`); it does not
+accept a freely-passed array from the caller.** This is the key constraint that prevents the
+`Program` abstraction from degrading into a "free parameter that accepts anything," asserted by
 `test_program_stage_coverage`.
 
 ```rust
@@ -1096,7 +1086,7 @@ impl Driver {
     pub fn run(&mut self, program: Program) -> Result<CompilationResult, DriverError> {
         let mut state = State::new(program);
         for stage in program.stages() {
-            // Topology determines whether to skip, not the stage's return value
+            // Topology decides whether to skip, not the stage's return value
             if !state.deps_satisfied(stage) {
                 state.record_skipped(stage);   // Must produce diagnostic, see below
                 continue;
@@ -1104,333 +1094,328 @@ impl Driver {
             match stage {                            // Exhaustive match
                 Stage::VendorConsistency => { self.vendor_consistency(&mut state)? }
                 Stage::Discovery         => { self.discovery(&mut state)? }
-                // …12 arms, not one fewer
+                // … 12 arms, not one can be missing
             }
             if state.should_abort() { break }
         }
-        state.obligations.assert_drained();           // Unique settlement point
+        state.obligations.assert_drained();           // The only settlement point
         Ok(state.into_result())
     }
 }
 ```
 
-> **Revision note (P4 implementation, 2026-10-09, 4.1.3 landed)**: Four implementation deviations
+> **Revision note (P4 implementation, 2026-10-09, 4.1.3 landing)**: four implementation deviations
 > from the sketch above, semantically equivalent, registered for the record —
 >
-> 1. Section 4's `StageOutcome` three states are not returned by the stage arm, but expressed by
->    `State`'s failure marker + `Aggregation` gating (Continue / Warn / Abort semantics unchanged,
->    eliminating per-arm boilerplate returns);
-> 2. `Driver` has no `config` field — the configuration's only source is `Program.config` (section 5
->    "Avoid Driver holding mutable global state" verdict covers the sketch's field);
-> 3. `Skipped` diagnostic in 4.1.3 is only recorded into the `DriverOutcome.skipped` internal
->    ledger, not emitted — S2's "deliberately fix no bug" zero-diff criterion requires this;
+> 1. §4's `StageOutcome` three-state is not returned by the stage arm, but expressed by the `State`
+>    failure marker + `Aggregation` gate (Continue / Warn / Abort semantics unchanged, eliminating
+>    the per-arm boilerplate return);
+> 2. `Driver` has no `config` field — the configuration's only source is `Program.config` (§5 "Avoid
+>    Driver holding mutable global state" judgment overrides the sketch field);
+> 3. `Skipped` diagnostics in 4.1.3 are only recorded into the `DriverOutcome.skipped` internal
+>    ledger, not emitted — the S2 "deliberately fix no bug" zero-diff criterion requires; outbound
 >    emission follows the 4.3 obligation ledger;
 > 4. `proof_execution` module visibility relaxed to `pub(crate)`: the driver arm is the only new
->    caller (L1→L2 is an allowed direction); the orchestrator's existing call sites will be
->    considered after the 4.2 migration is complete.
-> 5. Under the multi-file form, ProofExecution is an independent stage, executed **after all**
->    typechecks (A1, 2026-10-09 user verdict): the original `compile_project` interleaved proof
->    within the per-file typecheck loop (file N's proof before file N+1's typecheck). Single failure
->    both are byte-identical; "file 1 proof fails + file 2 typecheck fails" multi-failure scenario,
->    the first report changes from proof error to typecheck error (test pinboard).
-> 6. `DriverOutcome` carries products by ProgramKind: `result` (pipeline contract) / `module` +
->    `failure` (orchestrator contract, 4.2.1) — the external error contracts of each entry
->    (PipelineError / OrchestratorError) are not types the Driver can unify.
+>    caller (L1→L2 is the allowed direction); the orchestrator's existing call sites will be
+>    discussed again after 4.2 migration is done.
+> 5. Under the multi-file form, ProofExecution is an independent stage, running after **all**
+>    typecheck (A1, 2026-10-09 user ruling): `compile_project` originally interleaved proof in the
+>    per-file typecheck loop (file N's proof before file N+1's typecheck). Single failure, the two
+>    are byte-for-byte identical; in the "file 1 proof fails + file 2 typecheck fails" multi-failure
+>    scenario, the first report changes from proof error to typecheck error (test nail-board).
+> 6. `DriverOutcome` carries products by ProgramKind channel: `result` (pipeline contract) /
+>    `module` + `failure` (orchestrator contract, 4.2.1) — each entry's external error contract
+>    (PipelineError / OrchestratorError) is not a type surface that Driver can unify.
 > 7. Check channel landing (4.2.2): `DriverOutcome.check_diagnostics` carries per-file diagnostics
->    (every discovered file has an entry, clean files have empty Vec — `check_project`'s current
->    contract); Discovery product extends to "file set + used_by edge set + shadowing events" triple
->    entering State (MultiFile form has no downstream consumer, only recorded not emitted); per-file
->    parse in the check path drops from 2 times to 1 per the C3 topology.
-> 8. Lsp form landing (4.2.3, ruled by file source branching, 2026-10-09 user decision): disk file
->    parse failure follows Check's Plan B (collect + exit compilation unit — both sides downgrade
->    converge); edited buffer parse failure retains residual AST to continue typecheck (editor
->    philosophy — intermediate typing state should not make semantic features disappear). The
->    Discovery arm keeps the buffer source for Lsp to overwrite disk stale content; Typecheck under
->    Lsp only checks the target file (other units only for the registry to provide signatures);
->    in-file diagnostic order normalization principle extends to LSP (typecheck diagnostic → W code
->    warning → proof error). The old behavior's quirk of LSP hard-aborting on unrelated disk file
->    parse errors and the handler silently falling back to the single-file path is fixed by this
->    step.
-> 9. Embedded form landing (4.2.4): `Program` adds a new `shared_registry` field — the embedded std
->    module is a sub-compilation, the registry is **input** rather than product (EMBEDDED_STAGES has
->    no Registry stage), the #94 SymbolTable sharing contract is thus made explicit as a program
->    declaration from the implicit "caller remembers to pass the same registry". Error path text
->    unified from `<std.test> (embedded std)` to unit virtual path `<std/test>` (only compiler
->    internal error surface, no test pinned). With this, all four orchestrator entries are migrated
->    into the Driver.
-> 10. Standalone check unification (4.2.5, ruling A + IR stage ruling, 2026-10-09): the Check form's
->     faithful bearing of single-file semantics for project-rootless programs — the warning surface
->     only covers the entry file (neighboring files only collect errors, better to miss than to
->     misreport); relative `use` is resolved along the importer's directory (rustc single-file mod
->     alignment). CHECK's stage table adds GlobalSlotAlloc + IrGeneration: standalone's old path
->     (pipeline full chain) already runs IR generation, E3019/E1014/E1015 etc. are only produced in
->     ir_gen (runner gate empirical evidence). IrGeneration's Check form is pure check, does not
->     consume IR; Script/Bin split is expressed by module_key's None/Some (existing toggle for
->     E3023, `ir_gen.rs:1660`). Monomorphization is not in CHECK (only produces resource
->     overrun/internal errors, zero corpus dependency). **〔2026-10-10 withdrawn by 3.4.8 empirical
->     evidence〕** — "zero corpus dependency" was actually evidence of the corpus's blind spot for
->     pathological recursive fixtures; E3005 is that class of program's only compile-time defense.
->     See note #14. Incidental fix for latent defect: the Registry arm's repeated registration
->     harvesting for embedded std units would overwrite the native half already merged by with_std()
->     (E1043 false positive) — embedded units now skip repeated registration.
-> 11. LSP single-file fallback unification (4.2.6): `run_diagnostics`'s manual
->     lex→parse→check_module_collect_all sequence deleted, replaced with
+>    (every found file has an entry, clean file is empty Vec — `check_project` current contract);
+>    Discovery product extended to "file set + used_by edge set + shadow events" triple into State
+>    (MultiFile form has no downstream consumer, just record don't emit); the check path's per-file
+>    parse drops from 2 times to 1 time with the C3 topology.
+> 8. Lsp form landing (4.2.3, decided by file-source split, 2026-10-09 user decision): disk-file
+>    parse failure is the same as Check's plan B (collect + exit compilation unit — both sides
+>    degrade consistently); the edited-buffer parse failure keeps the residual AST and continues
+>    typecheck (editor philosophy — typing intermediate state shouldn't make semantic functions
+>    disappear). The Discovery arm for Lsp keeps the buffer source overwriting stale disk content;
+>    Typecheck under Lsp only checks the target file (other units only feed the registry for
+>    signatures); the intra-file diagnostic order normalization principle extends to LSP (typecheck
+>    diagnostics → W-code warnings → proof errors). The old behavior where LSP hard-aborted on
+>    unrelated disk-file parse errors, and the handler silently fell back to the single-file path,
+>    is fixed by this step.
+> 9. Embedded form landing (4.2.4): `Program` adds a `shared_registry` field — the embedded std
+>    module is a sub-compilation, the registry is **input** not product (EMBEDDED_STAGES has no
+>    Registry stage), #94's SymbolTable sharing contract is thus explicitized from "caller remembers
+>    to pass the same registry" to a program declaration. Error path text is normalized from
+>    `<std.test> (embedded std)` to the unit virtual path `<std/test>` (compiler-internal error
+>    surface only, no test pin). At this point all four orchestrator entries are migrated into
+>    Driver.
+> 10. Standalone check unified (4.2.5, ruling A + IR-stage ruling, 2026-10-09): Check form for a
+>     program without project root is a faithful carrier of single-file semantics — the warning
+>     surface only covers the entry file (side files only get errors, better to miss than to err);
+>     relative `use` resolves along the importer's directory (rustc single-file mod alignment).
+>     CHECK stage table adds GlobalSlotAlloc + IrGeneration: standalone old path (pipeline full
+>     chain) already runs IR generation, only E3019/E1014/E1015 etc. are produced in ir_gen (runner
+>     gate empirical). IrGeneration's Check form is pure check doesn't consume IR; Script/Bin
+>     sub-form is expressed by module_key's None/Some (E3023's existing switch, ir_gen.rs:1660).
+>     Monomorphization is not in CHECK (only produces resource-exhaustion/internal errors, zero
+>     corpus dependency). **〔2026-10-10 empirically withdrawn by 3.4.8〕** — "zero corpus
+>     dependency" turns out to be evidence of a blind spot that the corpus has no
+>     pathological-recursion fixture; E3005 is the only compile-time line of defense for such
+>     programs. See note #14. Side fix of a latent defect: the Registry arm's re-harvesting
+>     registration for embedded std units overwrites the native half already merged by with_std()
+>     (E1043 false positive) — embedded units now skip duplicate registration.
+> 11. LSP single-file fallback unified (4.2.6): `run_diagnostics`'s manual
+>     lex→parse→check_module_collect_all sequence is deleted, replaced by
 >     `Program { kind: SingleFile, aggregation: CollectAll }` — LSP and CLI use the same Driver.
->     SingleFile+CollectAll form: Parsing collects all parse errors, retains residual AST to
->     continue typecheck (editor philosophy extended from 4.2.3 ruling; does not mark stage failure,
->     otherwise topological skip would prevent typecheck from ever being reached); Typecheck
->     dispatches `check_module_collect_all` free function. The LSP single-file path from this point
->     on fills in proof (E4018), W code warnings (W1001–W1005, test pinboard), and IR-level errors;
->     lexical failure changes to real diagnostic (the old synthetic "E0001 lexical error" text
->     disappears with the sequence deletion — real diagnostics carry precise span, no information
->     loss).
-> 12. `check_module` / `check_module_collect_all` line-by-line verification (4.2.7, C5 mandatory
->     item): the two entries had already converged each — mod.rs layer is
->     `check_module_inner(ast, env, collect_all)` single boolean, checker layer is
+>     SingleFile+CollectAll form: Parsing collects all parse errors, keeps residual AST to continue
+>     typecheck (editor philosophy extended from 4.2.3 ruling; not marking stage failure, otherwise
+>     topological skip makes typecheck never run); Typecheck dispatches the
+>     `check_module_collect_all` free function. The LSP single-file path thus gains proof (E4018),
+>     W-code warnings (W1001–W1005, test nail-board) and IR-level errors; lexical failure changes to
+>     report real diagnostics (old synthetic "E0001 lexical error" text disappears with the sequence
+>     deletion — real diagnostics carry precise span, no information loss).
+> 12. `check_module` / `check_module_collect_all` line-by-line verification (4.2.7, C5 must-do): the
+>     two entries had already converged — the mod.rs layer is
+>     `check_module_inner(ast, env, collect_all)` single boolean, the checker layer is
 >     `check_module_impl(module, collect_all)`; the only fork is `init_body_checker(collect_all)` →
->     `set_collect_all_errors`, pass-3 and drain two modes run together, the difference is carried
->     by whether collected_errors is empty; statements.rs five collection points (function
->     body/use/for/block/while). During verification, a duplicate diagnostic defect was confirmed
->     and fixed: the collection point puts the first error into both collected_errors and the Err
->     return channel, pass-3's add_error on Err causes the same code same span same message ×2
->     (nested can be ×3); plus two independent mechanisms: annotation validation signature formal
->     parameter double-visit with overall annotation (E1003/E1103), and the ownership layer
->     double-emitting at the same point (E2014/E2018). The fix lands at the module result boundary:
->     deduplicate by (code, span, message) — diagnostics are positional facts, duplicates carry no
->     information; 63 corpus entries have duplicate copies removed, run column and exit code zero
->     drift (borrow_conflict_err's "duplicate" is an artifact of the baseline triple format not
->     including column number — the two E2018 are actually legitimate diagnostics for different
->     columns).
-> 13. wasm playground landing (4.2.8): `run_code`/`test_compile` via `compile_playground` constructs
->     `Program { kind: WasmPlayground }` + Driver — the `Compiler` wrapper layer no longer handles
->     it. Error text byte-aligned with the old `CompileError` Display prefix (Parse error:/Type
->     error:/Internal error:), playground UI zero visible difference. WasmPlayground shares
->     SINGLE_FILE_STAGES + FailFast with SingleFile (4.1 existing declaration, real producers from
->     this step onward).
-> 14. Multi-file monomorphization and CHECK stage table correction (3.4.8, 2026-10-10 user verdict,
->     **partially withdraws note #10's mono exclusion**). Empirical evidence overturns "mono only
->     produces resource limit noise": pathological generic recursion (`f(x)=f([x])`) causes the
->     compiler process to stack overflow (0xc00000fd — the interpreter recurses at the Rust layer,
->     no graceful runtime error) on multi-file paths without mono, and the mono depth gate is the
->     only compile-time defense; the "type erasure fallback" assumption was voided by RFC-033
->     reflection ruling — `^^List(Int)` needs the real identity of the instantiated type,
->     monomorphization is the foundation of reflection, not an optional optimization. Four design
->     points: ① typecheck produces instantiation_request for qualified calls (`lib.f(x)`,
->     FieldAccess form), the generic_id uses the qualified name, sharing the namespace with merged
->     IR (currently only recognizes bare Var, expressions.rs:2455); ② `Stage::ALL` topology changes
->     to Linking before Monomorphization, MULTI_FILE stage table tail adds Monomorphization —
->     consuming merged_ir, aggregating all-unit requests (containing_fn qualification in the
->     deferred bucket), mono promotes from single-module pass to whole-program pass; single-file
+>     `set_collect_all_errors`, pass-3 and drain two modes run together, the difference carried by
+>     whether `collected_errors` is empty; five collection points in statements.rs (function
+>     body/use/for/block/while). During verification, a duplicate-diagnostic defect was confirmed
+>     and fixed: the collection point puts the first error into both `collected_errors` and the
+>     `Err` return channel, pass-3's `add_error` for `Err` causes the same code same span same
+>     message ×2 (nested can be ×3); plus two independent mechanisms: annotation-check signatures
+>     and overall-annotation double-visit (E1003/E1103), ownership-layer same-point double-emit
+>     (E2014/E2018). The fix lands at the module-result boundary: deduplicate by (code, span,
+>     message) — diagnostics are positional facts, duplicates carry no information; 63 corpus
+>     entries have duplicate copies removed, run column and exit code zero drift (the "duplicates"
+>     in `borrow_conflict_err` are artifacts of the baseline triple format without a column number —
+>     two E2018s are actually legal diagnostics in different columns).
+> 13. wasm playground landing (4.2.8): `run_code`/`test_compile` go through `compile_playground`
+>     constructing `Program { kind: WasmPlayground }` + Driver — the `Compiler` wrapper layer is no
+>     longer in the path. Error text is byte-for-byte aligned to the old `CompileError` Display
+>     prefix (Parse error:/Type error:/Internal error:), playground UI zero visible difference.
+>     WasmPlayground shares SINGLE_FILE_STAGES + FailFast with SingleFile (4.1 existing declaration,
+>     has a real producer since this step).
+> 14. Multi-file monomorphization and CHECK stage-table correction (3.4.8, 2026-10-10 user ruling,
+>     **partial withdrawal of note #10's mono exclusion**). Empirical refutation of "mono only
+>     produces resource-exhaustion noise": pathological generic recursion (`f(x)=f([x])`) without
+>     mono on the multi-file path makes the compiler process stack-overflow (0xc00000fd — the
+>     interpreter recurses in Rust, no graceful runtime error); mono's depth gate is the only
+>     compile-time line of defense; standalone check before 4.2.5 took the pipeline full chain with
+>     mono, the exclusion ruling caused a silent coverage regression ("zero corpus dependency" only
+>     proves the corpus has no pathological fixture). The "type-erasure fallback" assumption was
+>     voided by RFC-033's reflection ruling — `^^List(Int)` needs the real identity of
+>     instantiation, monomorphization is the foundation of reflection, not an optional optimization.
+>     Four design points: ① typecheck produces instantiation_request for qualified calls
+>     (`lib.f(x)`, FieldAccess shape), generic_id uses the qualified name, sharing namespace with
+>     merged IR (currently only recognizes bare Var, expressions.rs:2455); ② `Stage::ALL` topology
+>     changed to Linking before Monomorphization, MULTI_FILE stage table tail adds Monomorphization
+>     — consumes merged_ir, aggregates all units' requests (deferred bucket's containing_fn
+>     qualification), mono is upgraded from single-module pass to whole-program pass; single-file
 >     stage table unchanged (no Linking, subsequence property preserved, IR snapshots zero drift); ③
->     CHECK adds Linking (pure merge — E3020 entry validation stays in RoleClassification,
->     preventing double-reporting) and Monomorphization (pure check, does not consume, same as
->     IrGeneration's Check form) two stages; ④ resource protection follows whole-program BFS
->     coverage for cross-unit mutual recursion. Monomorphizer itself unchanged (the contract of
->     consuming ModuleIR + request set happens to be the merged IR form).
-> 15. 3.4.8 R1 (①) landing (2026-10-10, a9438007). Implement qualified call instantiation collection
->     per #14 design: `ExpressionInferrer` injects the module qualification key table (`use`
->     three-arm registration — normal / alias / item-by-item alias and only SubModule class
->     exports), `callee_generic_name` is concatenated with `SymbolTable::qualify` to the same
->     qualified name as the merged IR source; qualified call first-path arity criterion tightened
->     (when the argument list cannot be resolved, fall back to second path taking actual arguments
->     by signature, avoiding cross-module same-name function mismatches that would falsely report
->     E3018). During implementation, **three asymmetric defects** on the mono side were empirically
->     confirmed and fixed in the same round: (1) delete key (generic name set) and rewrite key
->     (containing_fn + name + span triple) granularity mismatch — call sites that cannot resolve
->     actual arguments degrade to symbol requests entering the deferred bucket, when the container
->     function is non-generic the bucket never drains, the original is removed by name → dangling
->     calls (`list_ops.yx:53` runtime E6006 empirical); fix is the restore gate
->     `restore_generics_with_uncovered_call_sites`, with `build_call_site_map` as the single source
->     of fact to determine coverage, uncovered sites' originals are preserved. (2) The restore
->     segment's `HashSet` iteration order caused function table order to be non-deterministic (t2
->     review F1) → changed to `Vec` and sorted by name, output is byte-level reproducible. (3) The
->     non-rewrite surface forms TailCall / MakeClosure originally looked up map keys in the same way
+>     CHECK adds Linking (pure merge — E3020 entry check stays in RoleClassification, prevent
+>     double-report) and Monomorphization (pure check doesn't consume, same as IrGeneration's Check
+>     form) two stages; ④ resource protection follows whole-program BFS coverage of cross-unit
+>     mutual recursion. Monomorphizer itself is unchanged (consuming ModuleIR + request set contract
+>     is exactly the merged-IR form).
+> 15. 3.4.8 R1 (①) landing (2026-10-10, a9438007). Implemented qualified-call instantiation
+>     collection per #14 design: `ExpressionInferrer` injects module-qualified key table (`use`
+>     three arms registered — normal / alias / per-item alias and only SubModule-kind export),
+>     `callee_generic_name` is concatenated via `SymbolTable::qualify` into a qualified name sharing
+>     the same source as merged IR; qualified-call first path arity criterion tightened (when
+>     argument table can't be resolved, fall back to second path to take arguments by signature,
+>     avoiding cross-module same-name function mismatch and mis-reporting E3018). During
+>     implementation, three **asymmetric defects** on the mono side were empirically confirmed and
+>     fixed in the same round: (1) delete-key (generic-name set) and rewrite-key (containing_fn +
+>     name + span triple) granularity mismatch — sites that can't resolve arguments degrade to
+>     symbol request into the deferred bucket, when the container function isn't generic the bucket
+>     never drains, the original is already deleted by name → dangling call (`list_ops.yx:53`
+>     runtime E6006 empirical); fixed by restoring gate
+>     `restore_generics_with_uncovered_call_sites`, using `build_call_site_map` as the single source
+>     of fact to determine coverage, the original of uncovered sites is preserved. (2) The restore
+>     segment's `HashSet` iteration order caused the function-table order to be non-deterministic
+>     (t2 review F1) → changed to `Vec` and sorted by name, byte-level reproducible product. (3) The
+>     non-rewrite-face shapes TailCall / MakeClosure originally looked up the map key the same way
 >     (comment claimed conservative) → `call_form_is_rewritten` single-point judgment, non-rewrite
->     forms are uniformly counted as uncovered. Each of the three comes with a pinned test
->     (red-state empirical discrimination before fix). Corpus diff baseline regenerated with the
->     same commit only one line (remove_at frame adds `(int64)`). **Submission strategy note**: when
->     the typecheck collection and mono fix are split into two commits, the staging tree containing
->     only the former triggers `stdlib_docs`'s red on HEAD's existing defect (`list.is_empty([])`
->     same family E6006) — the two halves are each other's green prerequisite, so they are merged
->     into a single atomic commit.
-> 16. 2026-10-10 five rulings registered (after R1 closure): (1) **D2 ruling A** — user module
->     exports carry `Export.type_params` with `generic_fn_type_params_snapshot()`, isomorphic to the
->     std path (`yx_sources.rs:62/108`): the declaration name becomes the authoritative source for
->     qualified call monomorphization, signature reverse-inference downgraded to fallback (merged
->     into R2 scope). (2) **HKT declaration side live, call side broken** (inferring type argument
->     E1002 / explicit type argument E1010) registered as WBS 3.5 (3 three-level tasks). (3)
->     **deferred bucket never drains under non-generic containers** merged into 3.4.8 ②'s acceptance
->     sub-item: the bucket must drain or loudly report an error, not silently not specialize. (4)
->     **Closure variable name call runtime E6006** registered as WBS 3.6; semantics (i) support
->     indirect call / (ii) compile-time rejection, **ruled (i)** — support indirect call: `CallDyn`
->     mechanism is already there (closure expression path at `ir_gen.rs:7945`), what was broken was
->     that `Var` callee was downgraded to by-name `Call`, and typecheck accepts this program in the
->     first place. (5) **Trade-off criteria solidified** — plan rejection reasons can only be based
->     on correctness and readability, "large change surface / introducing new mechanism / high cost"
->     is not a rejection reason, falls into `coding-rules.md` part two and the HOWTO self-check
->     list; trade-offs requiring user decision are given all four items per `AGENTS.md` "When
->     requesting user ruling (mandatory)" (situation+evidence / per-item pros and cons / clear
->     recommendation+cost / destructiveness explicitly named).
+>     shapes uniformly count as uncovered. Each is paired with a nail test (red-state empirical
+>     discriminating power before the fix). Corpus diff baseline regenerated one line at the same
+>     commit (remove_at frame added `(int64)`). **Commit-strategy note**: when typecheck collection
+>     and mono fix were split into two commits, the stash tree containing only the former triggered
+>     `stdlib_docs` red on HEAD's existing defect (same family E6006 as `list.is_empty([])`) — the
+>     two halves are each other's green-light prerequisite, so merged into one atomic commit.
+> 16. 2026-10-10 five-ruling registration (after R1 closure): (1) **D2 ruling A** — user-module
+>     exports carry `generic_fn_type_params_snapshot()` along with `Export.type_params`, isomorphic
+>     with the std path (`yx_sources.rs:62/108`): the declared name becomes the authoritative source
+>     for qualified-call monomorphization, signature reverse-inference degraded to fallback (merged
+>     into R2 scope). (2) **HKT declared side alive, call side broken** (inferred type arg E1002 /
+>     explicit type arg E1010) registered as WBS 3.5 (3 third-tier tasks). (3) **deferred bucket
+>     under non-generic container never drains** merged into 3.4.8 ②' s acceptance sub-item: the
+>     bucket must drain or fail loudly, no silent non-specialization. (4) **Closure variable
+>     name-call runtime E6006** registered as WBS 3.6; semantics (i) support indirect call / (ii)
+>     compile-time rejection, **ruling (i) chosen** — indirect call supported: `CallDyn` mechanism
+>     is already in place (`ir_gen.rs:7945` closure-expression path), what breaks is `Var` callee
+>     being downgraded to a name-based `Call`, and typecheck accepts that program by design. (5)
+>     **Trade-off criterion solidified** — a plan's rejection can only be based on correctness and
+>     readability; "large change surface / introduces new mechanism / high cost" is not a rejection
+>     reason, written into `coding-rules.md` part two and the HOWTO self-check list; trade-offs
+>     requiring user ruling follow the `AGENTS.md` "when requesting user ruling (mandatory)" four
+>     items (situation+evidence / per-item pros and cons / clear recommendation+cost /
+>     breaking-call-out).
 > 17. 3.4.8 ② landing and F1 root cause (2026-10-11, 375789d2 + d922a551). ② lands per #14 design:
 >     `Stage::ALL` changed to Linking before Monomorphization, MULTI_FILE table tail appends mono;
->     the Linking arm aggregates the whole-program request **before taking each unit's IR** and
->     qualifies `containing_fn` (otherwise deferred bucket keys and merged IR are from different
->     sources, the bucket never drains). **① closure (D2 ruling A)**: user module exports carry the
->     declaration-phase type parameter snapshot with `Export::type_params`, isomorphic to the std
->     path (`yx_sources.rs:62/108`). **Existing defects empirically confirmed and fixed during the
+>     the Linking arm **aggregates the whole-program request before taking each unit's IR** and
+>     qualifies `containing_fn` (otherwise the deferred bucket keys and merged IR are not from the
+>     same source, the bucket never drains). **① closure (D2 ruling A)**: user-module exports carry
+>     the declared-period type-parameter snapshot with `Export::type_params`, isomorphic with the
+>     std path (`yx_sources.rs:62/108`). **Defects empirically confirmed and fixed in the same
 >     process**: (a) **F1** — `qualify_names` only rewrites function bodies, `ir.init` is never
->     accessed, under multi-file the function definitions are already qualified while module
->     top-level calls are still bare names → runtime E6006 (**reproducible with non-generic,
->     unrelated to generics**); fix is init reusing the same `rename`/`aliases` and the same
->     `rewrite_call_names`. (b) mono side's "whole-program unique suffix" heuristic with unhit
->     silent `continue` → delete the heuristic, unhit changes to **loud E3018** (silent ambiguity
->     mismatch is worse than not parsing). **Regression caught and fixed by independent
->     verification**: t6 found that after named import `use lib.{pick}`, bare-name calls were
->     falsely rejected by E3018 (IR instruction name is the alias qualified name, request name is
->     the bare name, the aggregation side only qualifies by unit key) → fix is the aggregation side
->     **directly calling ir_gen's** `import_aliases_from` and `resolve_call_target` (extracted as
->     pub single point, one place produces, one place consumes), and covered by matrix pin test
->     covering both named import forms. **On file**: init segment `DefId` blank was empirically
->     confirmed to be "consistency blank" rather than a live defect (codegen name fallback
->     resolvable, four init calls measured pass), registered as WBS 3.7.4 to close the "function
->     body goes def, init relies on name" standard fork.
-> 18. init segment DefId standard fork closure (3.7.4, 2026-10-11, 38bd4b9e): `assign_defs` extracts
+>     visited; in multi-file, function definitions are already qualified while module-top-level
+>     calls are still bare names → runtime E6006 (**reproduces even for non-generic**, not related
+>     to generics); fixed by having init reuse the same `rename`/`aliases` and the same
+>     `rewrite_call_names`. (b) mono side "whole-program unique suffix" heuristic with missed silent
+>     `continue` → delete the heuristic, missed now **loud E3018** (ambiguous silent mismatch is
+>     worse than not parsing). **Regression caught and fixed by independent verification**: t6 found
+>     that named import `use lib.{pick}` followed by bare-name call was falsely rejected by E3018
+>     (IR instruction name is alias-qualified name, request name is bare name, aggregation side only
+>     qualifies by unit key) → fixed by aggregation side **directly calling ir_gen's**
+>     `import_aliases_from` and `resolve_call_target` (extracted to a pub single point, one place
+>     produces, one place consumes), and matrix nail tests cover two forms of named import.
+>     **Filed**: init-segment `DefId` blank empirically is "consistency blank" not a live defect
+>     (codegen name fallback can resolve, four-class init calls empirically pass), registered as WBS
+>     3.7.4 to close the "function body goes through def, init relies on name" caliber fork.
+> 18. init-segment DefId caliber fork closure (3.7.4, 2026-10-11, 38bd4b9e): `assign_defs` extracts
 >     `resolve_static_targets` single point (Call/TailCall string operands + MakeClosure), function
->     body and `ir.init` share the same implementation and the same `resolve` closure; after 208 IR
->     snapshots regenerated, only 309 `(def=_)`→`(def=dN)` changes (other-lines 0; init segment of
->     the whole tree has 0 residual `(def=_)`). codegen's DefId main path and name fallback two
->     states' translation results and execution values are identical item by item (four init calls
->     measured), corpus baseline zero drift; probes flipped and strengthened per the new standard
->     (identity + precise index + execution value, fallback init coverage immediately red). **Errata
+>     body and `ir.init` share the same implementation and the same `resolve` closure; 208 IR
+>     snapshots regenerated only 309 pairs of `(def=_)`→`(def=dN)` changes (other-lines 0; whole
+>     tree init segment 0 residual `(def=_)`). codegen's DefId main path and name fallback two
+>     states produce translation result and execution value item by item consistent (four-class init
+>     calls measured), corpus baseline zero drift; probe flips and strengthens per new caliber
+>     (identity + exact index + execution value, fallback init coverage turns red). **Errata
 >     (2026-10-11)**: the above commit numbers were rewritten by `git pull --rebase` — the original
->     b554497b/e60dcc87/b7ac7396 correspond to 375789d2/d922a551/38bd4b9e after rebase in sequence;
->     the pushed dev history is based on the new numbers (the old numbers are local temporary
->     numbers, did not enter remote history).
-> 19. 3.4.8 ③④ landing and verification (2026-10-11, 8ecf56f93). (③④ design basis see #14; ② landing
->     see #17, this entry is its closure.) **Implementation**: `CHECK_STAGES` tail =
->     `…IrGeneration → Linking → Monomorphization`; Check's `Linking` only does pure merge
->     (aggregating requests + `link_module_irs`), the entry validation block is left to
->     `RoleClassification`; `ir_generation_check` retains `us.ir` (in memory only) after generation;
->     mono failure goes to collection channel in Check, keeps `fail_with` in MultiFile;
+>     b554497b/e60dcc87/b7ac7396 correspond in order to the post-rebase 375789d2/d922a551/38bd4b9e;
+>     the pushed dev history takes the new numbers (the old numbers were local temporary numbers,
+>     not in the remote history).
+> 19. 3.4.8 ③④ landing and verification (2026-10-11, 8ecf56f93). (③④' s design basis in #14; ②' s
+>     landing in #17, this entry is its closure.) **Implementation**: `CHECK_STAGES` tail =
+>     `…IrGeneration → Linking → Monomorphization`; Check's `Linking` does only pure merge
+>     (aggregate request + `link_module_irs`), the entry check is wholly left to
+>     `RoleClassification`; `ir_generation_check` produces and keeps `us.ir` (memory only); mono
+>     failure in Check goes to the collection channel, in MultiFile keeps `fail_with`;
 >     `into_outcome` first `take_check_diagnostics` then judges failure (structural failure no
 >     longer clears already-collected diagnostics). **Verification**: four rounds of independent
->     verification (t3/t4/t10 + t5 cross-form matrix) and one round of review (t6) all pass; corpus
->     diff 340/340 per-line IDENTICAL, IR snapshots zero drift, test count 2643→2656. **Existing
->     gaps found and fixed in the same round**: F1 (rootless multi-file check's request name and IR
->     definition key from different sources → silently not specialize, see the landing note in WBS
->     3.4.8 row) — fix is aggregation side precise reverse lookup by real definition key
->     (non-heuristic), first version of the fix is aggregation side precise reverse lookup by real
->     definition key (`flat_defs`); **same-day errata**: this bridge has been deleted in the
->     regression fix, the root cause is now solved by `module_key`'s one-duty-two-use decoupling
->     (`script_mode`), the three are from the same source `{unit key}.{name}`. The regression's (CI
->     doc example gate 258 cases 10 failures → 0 failures) location and fix see the landing note in
->     WBS 3.4.8 row. **On file (existing, not this round's regression)**: E3005 help text is
->     inconsistent with resource protection semantics; multi-file E3005's span label is misaligned
->     (HEAD binary reproducible); the request collection surface's type parameter position
->     dependency (same surface categorized as 3.5).
+>     verification (t3/t4/t10 + t5 cross-form matrix) and one review (t6) all pass; corpus diff
+>     340/340 line-by-line IDENTICAL, IR snapshots zero drift, test count 2643→2656. **Existing gaps
+>     found and fixed in the same round**: F1 (rootless multi-file check's request name and IR
+>     definition key from different sources → silent non-specialization, see WBS 3.4.8 row's landing
+>     note) — fix is aggregation side exact reverse-lookup by real definition key (non-heuristic),
+>     first-version fix is aggregation side exact reverse-lookup by real definition key
+>     (`flat_defs`); **same-day erratum**: the bridge was deleted in the regression fix; root cause
+>     instead solved by `module_key` dual-duty decoupling (`script_mode`), the three share the same
+>     source `{unit key}.{name}`. The regression (CI doc-example gate 258 blocks 10 fail → 0 fail)
+>     is located and fixed per WBS 3.4.8 row's landing note. **Filed (existing, not this round's
+>     regression)**: E3005 help text doesn't match resource-protection semantics; multi-file E3005's
+>     span label is offset (HEAD binary reproducible); request-collection face's type-parameter
+>     position-dependence (same face, back to 3.5).
 
-> 20. 3.9.1 / 3.10.1 / 3.11.1 landing and diagnostic surface closure (2026-10-12, 809b9b936 +
->     8605a081b + subsequent two commits). **3.9.1 (execution layer guard reachable)**: interpreter
->     calls change to **explicit stack-driven** — `CallStatic`/`CallVirt`/`CallDyn`/`Spawn`/
->     `SpawnFromList` push a frame then return control to the outer `step_one`, the frame carries
->     `ReturnTarget{Host|CallerSlot|Discard}`, write back to the caller's slot on return, multi-call
->     instructions continue in the frame's `pending_calls`. Baseline measurement: each layer of
->     interpreter call uses native stack **2544 B**, crash threshold at `count_down(394)` (Windows
->     main thread 1 MiB); after fix, 20,000 layers of recursion can run on a 512 KiB stack thread
->     (about 0 per layer). The guard (`push_frame`) is thus reachable at any entry, any
->     `max_stack_depth` value; `ExecutorError::StackOverflow` is changed to carry the real limit
->     (the original `util/diagnostic/mod.rs` always passes 0). **The original 3.11.2 (deep stack
->     backtrace truncation) is merged into this task per user verdict** (same file, inseparable by
->     file): backtrace changed to first 16 frames + count ellipsis + last 8 frames, shallow stacks
->     unchanged frame by frame. **3.10.1 (no compile-time gate for native recursion, #447)**: locate
->     first, then change — the crash point is `MonoType::type_name` recursion (**328 B/layer**, SP
->     probe + per-operation threshold determination), the same path also has derived `Clone` (~400
->     B/layer), deep copy in `substitute`, `type_name_hash` (164 B/layer),
->     `collect_generic_type_refs`; after the four places change to work list and remove the deep
->     copy of the entire request once per layer, the pathological generic recursion with
->     `mono.max_depth=5000` produces **E3005 (with real limit)**, no longer stack overflows.
->     **3.11.1 (task boundary error code fidelity, #448)**: task result error side changed from
->     value to **structured** (`TaskResult = Result<SyncValue, TaskFailure>`,
->     `TaskOutcome::Err(TaskFailure)`), cross-boundary by-value reduction of `ExecutorError`;
->     task-internal E6001/E6003/E6004/E6008 are identical word-for-word in Standard and Embedded
->     modes. The two **pub API payload form changes** are written in the commits with
->     `BREAKING CHANGE`. **Submission strategy note**: 3.9.1 and 3.11.1 are **inseparable at the
->     file granularity** — `interpreter/executor/executor.rs` simultaneously carries the trampoline
->     and error channel's production/consumption points, `TaskFailure` is defined in
->     `runtime/engine.rs`, staging only one side will not compile (pre-commit **staging subset**
->     compilation, two refusals measured), so per the same standard as #15 they are merged into a
->     **single atomic commit**. **Known boundaries and follow-up**: Drop derive (~75 B/layer) ⇒
->     `mono.max_depth ≳ 13000` may still crash; E4012 (constant evaluation) gate is borne on native
->     recursion (each layer ~3,696 B, default 256 layers ≈ 924 KiB), currently zero call sites,
->     production unreachable, future wiring must close in the same family; Standard mode task
->     interpreter is constructed per default `ExecutorConfig` ⇒ its E6004 limit is always 1024
->     (configuration propagation registered as WBS 3.12, user verdict B: separate team); test
->     runtime budget opens issue #449 (pathological fixture 76s, clippy dual target, commit runs
->     full), not part of this RFC's construction surface. **Corpus directory layering (same round,
+> 20. 3.9.1 / 3.10.1 / 3.11.1 landing and diagnostic-surface closure (2026-10-12, 809b9b936 +
+>     8605a081b + subsequent two commits). **3.9.1 (executor-layer guard reachable)**: interpretive
+>     calls changed to **explicit stack-driven** —
+>     `CallStatic`/`CallVirt`/`CallDyn`/`Spawn`/`SpawnFromList` push frame then return control to
+>     the outer `step_one`, frame carries `ReturnTarget{Host|CallerSlot|Discard}`, on return write
+>     back to the caller's slot, multiple-call instructions continue via `pending_calls` within the
+>     frame. Baseline measured each layer of interpretive call consumes native stack **2544 B**,
+>     crash threshold at `count_down(394)` (Windows main thread 1 MiB); after the fix, 20 000 layers
+>     of recursion can run on a 512 KiB stack thread (about 0 per layer). The guard (`push_frame`)
+>     is thus reachable at any entry, any `max_stack_depth` value; `ExecutorError::StackOverflow` is
+>     changed to carry the real limit (the original `util/diagnostic/mod.rs` always passed 0). **The
+>     original 3.11.2 (deep-stack backtrace truncation) per user ruling is merged into this task**
+>     (same file, can't be split by file): backtrace changed to first 16 frames + count ellipsis +
+>     last 8 frames, shallow stack unchanged frame-by-frame. **3.10.1 (compile-time ungated native
+>     recursion, #447)**: locate first then change — crash point is `MonoType::type_name` recursion
+>     (**328 B/layer**, SP probe + per-op critical-point determined), same path also has derived
+>     `Clone` (~400 B/layer), `substitute` internal deep-copy, `type_name_hash` (164 B/layer),
+>     `collect_generic_type_refs`; after changing four places to work-list and removing each layer's
+>     one-time whole-request deep-copy, pathological generic recursion with `mono.max_depth=5000`
+>     produces **E3005 (with real limit)**, no more stack overflow. **3.11.1 (task-boundary
+>     error-code fidelity, #448)**: task-result error side changed from value to **structured**
+>     (`TaskResult = Result<SyncValue, TaskFailure>`, `TaskOutcome::Err(TaskFailure)`),
+>     cross-boundary restores `ExecutorError` by value; task-internal E6001/E6003/E6004/E6008 in
+>     Standard mode and Embedded message are verbatim identical. Two **pub API payload-shape
+>     changes** are marked `BREAKING CHANGE` in the commit. **Commit-strategy note**: 3.9.1 and
+>     3.11.1 **are not file-splittable** — `interpreter/executor/executor.rs` simultaneously carries
+>     the trampoline and the error-channel's production/consumption sites, `TaskFailure` is defined
+>     in `runtime/engine.rs`; stashing only one side fails to compile (pre-commit compiled with
+>     **stash subset**, twice rejected empirically), so per #15's same caliber, merged into **one
+>     atomic commit**. **Known boundary and follow-up**: Drop derive (~75 B/layer) ⇒
+>     `mono.max_depth ≳ 13000` may still crash; E4012 (constant evaluation) gate is carried on
+>     native recursion (~3 696 B/layer, default 256 layers ≈ 924 KiB), currently zero call site,
+>     production unreachable, future wiring must close in the same family; Standard-mode task
+>     interpreter constructed with default `ExecutorConfig` ⇒ its E6004 limit is always 1024 (config
+>     propagation registered as WBS 3.12, user ruling B: separate team); test runtime budget
+>     separately opened as issue #449 (pathological fixture 76s, clippy dual target, commit runs
+>     full), not part of this RFC's construction. **Corpus directory layering (same round,
 >     8605a081b)**: `02-type-system` (78) and `06-compile-errors` (134) total 212 fixtures split
->     into 23 category-based subdirectories, 88 IR snapshots moved in mirror path; corpus baseline
->     regenerated with the same commit (342 lines, independent recount line-by-line comparison: only
->     `file` field and 2 added changes), 41 snapshots regenerated due to file header path length,
->     line-by-line verification shows **only span offset changes** (zero difference after offset
->     normalization).
-> 21. LSP semantic data pipeline unification (4.6.1, 2026-10-16). Diagnostics and semantic data are
->     produced by the **same compilation**; project-internal cross-file references carry
->     `resolves_to` pointing to the real definition — the old form was didOpen/didChange triggering
->     **two passes** of compilation: diagnostics go through the unified Driver pipeline, semantic
->     data goes through server.rs's manual lex→parse→single-file typecheck (no module registry,
->     project-internal `use` resolution fails, reference events not produced, cross-file
->     jump/rename/reference lookup silently falls through — D55's registered silent failure is
->     closed in this task). **Implementation**: (1) `Export` carries `definition_span`
->     (extract_module_info harvests from AST identifier nodes, same source and value as typecheck's
->     definition event `def_span`; native std always None), `ModuleInfo` carries `definition_file`
->     (Registry arm fills from DiscoveredFile); (2) when the checker drains reference events, it
->     uses `import_def_locations` to redirect the cross-file import items' `resolves_to` from the
->     use line to the real position of the definition file (std import has no registration, stays at
->     use line); (3) checker module identity changed from unified `"<module>"` to unit file path
->     (this value is only consumed on the semantic data surface, zero diagnostic consumers —
->     empirical `env.module_name` all 4 consumer points); (4) `DriverOutcome` adds a new
+>     into 23 category-based sub-directories, 88 IR snapshots migrated in mirror path; corpus
+>     baseline regenerated at the same commit (342 lines, independently recomputed line-by-line
+>     comparison: only `file` field and 2 new changes), 41 snapshots regenerated due to longer
+>     file-header paths, line-by-line check **only span offset changes** (after offset-normalization
+>     zero difference).
+> 21. LSP semantic-data pipeline unified (4.6.1, 2026-10-16). Diagnostics and semantic data produced
+>     by **the same compilation**, in-project cross-file references carry `resolves_to` pointing to
+>     the real definition — the old form had didOpen/didChange trigger **two trips** of compilation:
+>     diagnostics go through the unified Driver pipeline, semantic data goes through server.rs's
+>     manual lex→parse→single-file typecheck (no module registry, in-project `use` resolution fails,
+>     reference events not produced, cross-file jump/rename/reference lookup silently fails — the
+>     D59-registered silent failure is closed in this task). **Implementation**: (1) `Export`
+>     carries `definition_span` (extract_module_info harvests from AST identifier node, same source
+>     same value as typecheck definition event's `def_span`; native std always None), `ModuleInfo`
+>     carries `definition_file` (Registry arm fills in by DiscoveredFile); (2) when checker drains
+>     reference events, via `import_def_locations` redirect cross-file imports' `resolves_to` from
+>     the use line to the real position in the definition file (std import has no registration,
+>     keeps falling to the use line); (3) checker module identity changed from unified `"<module>"`
+>     to unit file path (this value is only consumed on the semantic-data surface, zero diagnostic
+>     consumption — empirically `env.module_name` all 4 consumption sites); (4) `DriverOutcome` adds
 >     `semantic_db` channel — CollectAll form (Lsp target file regardless of diagnostic success +
->     SingleFile fallback) merges in, Lsp arm tail injects non-target files' top-level export
->     definition surface from the registry (`external_definitions`, unopened files can also jump;
->     types/submodule exports are not injected — typecheck side type registration does not produce
->     definition events, both sides maintain consistent gaps); (5) orchestrator adds
->     `analyze_source_in_project` (`check_source_in_project` re-routes and only takes the diagnostic
->     half); (6) LSP side `analysis.rs` single compilation entry replaces the manual pipeline
->     (server.rs's `update_semantic_db` deleted), World key unified to normalized file URI
->     (`uri.rs`: `path_to_uri(uri_to_path(u))` idempotent normalization, drive letter case and %XX
->     encoding differences normalized to the same key). **Incidental fix (D59 branching B class —
->     old behavior silently did nothing, does not change any originally successful program's
->     external performance)**: project-internal file's cross-file jump/rename/reference lookup
->     changes from silently falling through to hitting the real definition; when lexical error
->     occurs, the old manual pipeline deleting semantic information changes to residual AST tinting
->     preservation (4.2.6 editor philosophy extension); when the target file has type errors,
->     semantic data is no longer discarded along with `type_result` (tinting/jump does not disappear
->     in typing intermediate state). **Pinboard**: driver level 6 (target file path key/cross-file
->     resolves_to+external definition surface round-trip/std import fallback use line/error file
->     preservation/single-file fallback path key+error preservation), LSP e2e 1 (red-then-green
->     empirical — fix before, jump returns None).
+>     SingleFile fallback) aggregated in, Lsp arm tail injects non-target-file top-level
+>     export-definition surface from registry (`external_definitions`, unopened files can also jump;
+>     type/sub-module exports not injected — typecheck-side type registration doesn't produce
+>     definition events, both sides keep consistent gap); (5) orchestrator adds
+>     `analyze_source_in_project` (`check_source_in_project` transferred to call and only takes the
+>     diagnostic half); (6) LSP-side `analysis.rs` single-compilation entry replaces the manual
+>     pipeline (server.rs's `update_semantic_db` deleted), World key unified to normalized file URI
+>     (`uri.rs`: `path_to_uri(uri_to_path(u))` idempotent normalization, drive-letter case and %XX
+>     encoding differences normalized to the same key). **Side fix (D59 B-class branch — old
+>     behavior silently does nothing, doesn't change any originally-successful program's external
+>     appearance)**: in-project files' cross-file jump/rename/reference lookup changed from silently
+>     failing to hitting the real definition; lexical error time, old manual pipeline deleted
+>     semantic info, changed to residual AST staining preserved (4.2.6 editor philosophy extension);
+>     when the target file has a type error, semantic data no longer discards along with
+>     `type_result` (staining/jump doesn't disappear in typing intermediate state). **Nail board**:
+>     6 driver-level (target file path key / cross-file resolves_to + external-definition face
+>     round-trip / std import fallback to use line / error file preserved / single-file fallback
+>     path key + error preserved), 1 LSP e2e (red-then-green empirical — before fix, jump returns
+>     None), 4 URI normalization.
 
-**The refactoring of the ten entries (function-by-function specification)**:
+**Ten entries' refactoring (function by function)**:
 
-| Entry                                                      | After Refactoring                                                                                                                                                                                                               |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Pipeline::run` (`pipeline.rs:141-227`)                    | Delete function body, change to constructing `Program { kind: SingleFile, … }` and hand to Driver                                                                                                                               |
-| `Compiler::compile` (`compiler.rs:95`)                     | Unchanged (already a stateless wrapper)                                                                                                                                                                                         |
-| `compile_project` (`orchestrator.rs:99-237`)               | Slim down to `Program { kind: MultiFile, aggregation: FailFast }` constructor                                                                                                                                                   |
-| `check_project` (`orchestrator.rs:273-399`)                | Slim down to `Program { kind: Check, aggregation: CollectAll }` constructor                                                                                                                                                     |
-| `check_source_in_project` (`orchestrator.rs:450`)          | Change to one Driver call + result filtering to target file                                                                                                                                                                     |
-| `compile_embedded_module` (`orchestrator.rs:1374`)         | Change to `Program { kind: Embedded, units: [embedded] }`                                                                                                                                                                       |
-| `lib::run_file` (`lib.rs:140`)                             | Unchanged (re-dispatches to `run_project` or `SingleFile`)                                                                                                                                                                      |
-| `lib::run_project` (`lib.rs:154`)                          | Unchanged (re-dispatches to Driver)                                                                                                                                                                                             |
-| `lsp::run_diagnostics` (`lsp/handlers/diagnostics.rs:146`) | Within project changes to `Program { kind: Lsp, aggregation: CollectAll }`; **the manual lex→parse→… sequence in the single-file branch is deleted**, re-dispatching to `Program { kind: SingleFile, aggregation: CollectAll }` |
-| `check_files_with_diagnostics` (`diagnostic/mod.rs:565`)   | `standalone` branch (`614-616` → `check_single_file` `623-661`) deleted, unified to `Program { kind: Check }`                                                                                                                   |
+| Entry                                                      | After refactoring                                                                                                                                                                                                          |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Pipeline::run` (`pipeline.rs:141-227`)                    | Delete function body, change to constructing `Program { kind: SingleFile, … }` and handing to Driver                                                                                                                       |
+| `Compiler::compile` (`compiler.rs:95`)                     | Unchanged (already a stateless wrapper)                                                                                                                                                                                    |
+| `compile_project` (`orchestrator.rs:99-237`)               | Slimmed to a `Program { kind: MultiFile, aggregation: FailFast }` constructor                                                                                                                                              |
+| `check_project` (`orchestrator.rs:273-399`)                | Slimmed to a `Program { kind: Check, aggregation: CollectAll }` constructor                                                                                                                                                |
+| `check_source_in_project` (`orchestrator.rs:450`)          | Changed to a single Driver call + filter results to target file                                                                                                                                                            |
+| `compile_embedded_module` (`orchestrator.rs:1374`)         | Changed to `Program { kind: Embedded, units: [embedded] }`                                                                                                                                                                 |
+| `lib::run_file` (`lib.rs:140`)                             | Unchanged (calls `run_project` or `SingleFile`)                                                                                                                                                                            |
+| `lib::run_project` (`lib.rs:154`)                          | Unchanged (calls Driver)                                                                                                                                                                                                   |
+| `lsp::run_diagnostics` (`lsp/handlers/diagnostics.rs:146`) | In-project changes to `Program { kind: Lsp, aggregation: CollectAll }`; the **manual lex→parse→… sequence for the single-file branch deleted**, changed to calling `Program { kind: SingleFile, aggregation: CollectAll }` |
+| `check_files_with_diagnostics` (`diagnostic/mod.rs:565`)   | `standalone` branch (`614-616` → `check_single_file` `623-661`) deleted, uniformly takes `Program { kind: Check }`                                                                                                         |
 
-**`check_project` and `compile_project` duplication (~40% shared / 60% forked)**. Shared: vendor
-consistency check, file discovery, `build_registry_from`, `all_method_bindings`, resolution loop,
-per-file checker assembly, result handling. Forked: items 2/3/4/5/7/8/9/10/11 of the 11-item table
-above. **This 40% shared skeleton is exactly the value range of `Driver`** — the forked 60% are all
-"different stage set" or "different aggregation mode", which is exactly what two fields of `Program`
-can fully express.
+**The degree of duplication between `check_project` and `compile_project` (about 40% shared / 60%
+diverged)**. The shared parts: vendor-consistency check, file discovery, `build_registry_from`,
+`all_method_bindings`, parsing loop, per-file checker assembly, result handling. The diverged parts
+are items 2/3/4/5/7/8/9/10/11 in the 11-item table above. **That 40% shared skeleton is exactly the
+value zone of `Driver`** — the diverged 60% are all "different stage sets" or "different aggregation
+modes", which is exactly what two fields of `Program` can fully express.
 
 ### 4. Failure Semantics: `Continue` / `Abort` / `Warn`
 
@@ -1438,15 +1423,15 @@ can fully express.
 pub enum StageOutcome {
     Continue,  // Stage succeeded, continue
     Abort,     // Stage failed, terminate this compilation
-    Warn,      // Stage has non-blocking issues, continue
+    Warn,      // Stage has non-blocking issue, continue
 }
 ```
 
-**Key design decision: "upstream failure causes this stage to skip" is not a stage return value.**
+**Key design decision: "upstream failure causing this stage to skip" is not a stage return value.**
 
-Reason: skipping is determined by **topology**, not by the stage itself. If we let each stage return
-`Skipped` itself, the information "why didn't I run" would be scattered across 12 stages, impossible
-to audit centrally. Change to `dispatch` determining at the start of the loop based on dependencies:
+Reason: skipping is decided by **topology**, not by the stage itself. If we let each stage return
+`Skipped`, then the "why didn't I run" information would be scattered across 12 stages and cannot be
+centrally audited. Instead, `dispatch` decides at the start of the loop based on dependencies:
 
 ```rust
 if !state.deps_satisfied(stage) {
@@ -1456,338 +1441,335 @@ if !state.deps_satisfied(stage) {
 ```
 
 **`Skipped` must produce a diagnostic.** This rule directly targets the vulnerability this document
-aims to fix — the current `pipeline.rs:187` `if !proof_calls.is_empty()` is a silent "skip", it
-produces no diagnostic, simply because the obligation happens to be empty. After the rule is
-established, any "X was not done so Y did not run" must be explainable.
+is fixing — the current `if !proof_calls.is_empty()` at `pipeline.rs:187` is a silent "skip" that
+produces no diagnostic, simply because the obligation happens to be empty. With the rule
+established, any "because X wasn't done, so Y didn't run" must be explainable.
 
-Diagnostic text needs to distinguish three skip reasons:
+The diagnostic text needs to distinguish three skip reasons:
 
-| Reason                                                   | Text Direction                                                                                                                       |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Upstream `Abort` causes                                  | "Stage Y did not execute due to upstream stage X failure"                                                                            |
-| Pre-condition obligation empty causes                    | "Stage Y did not execute because there are no pending obligations (normal)" — **this severity = Info, not counted in warning count** |
-| Conditions not met (e.g. `config.mono.enabled == false`) | "Stage Y did not execute because the configuration is not enabled"                                                                   |
+| Reason                                                  | Text direction                                                                                                                                 |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Upstream `Abort` caused it                              | "Stage Y was not executed because upstream stage X failed"                                                                                     |
+| Predecessor obligation empty caused it                  | "Stage Y was not executed because there was no obligation to process (normal)" — **this item's severity = Info, not counted in warning count** |
+| Condition not met (e.g. `config.mono.enabled == false`) | "Stage Y was not executed because configuration was not enabled"                                                                               |
 
-The second category is key: it makes "normal skip" and "abnormal skip" distinguishable in the
-diagnostic stream, and does not pollute `yaoxiang check`'s `warning_count`
-(`diagnostic/mod.rs:637-641` depends on this count's non-blocking contract).
+The second class is key: it makes "normal skip" distinguishable from "abnormal skip" in the
+diagnostic stream, and doesn't pollute `yaoxiang check`'s `warning_count`
+(`diagnostic/mod.rs:637-641` relies on that count's non-blocking contract).
 
 ### 5. Diagnostic Aggregation Modes: `FailFast` vs `CollectAll`
 
 ```rust
 pub enum Aggregation {
-    FailFast,    // First error aborts (compile path)
-    CollectAll,  // Collect all diagnostics (check / LSP paths)
+    FailFast,    // First error aborts immediately (compile path)
+    CollectAll,  // Collect all diagnostics (check / LSP path)
 }
 ```
 
-| Mode         | Users                                                                                                                                                                           | Current State Correspondence |
+| Mode         | Users                                                                                                                                                                           | Current state correspondence |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | `FailFast`   | `compile_project` (`orchestrator.rs:125-137` first-error returns `OrchestratorError::TypeCheck`), `Pipeline::run` (`pipeline.rs:150/162/174/193` four early-exits)              | Already exists               |
 | `CollectAll` | `check_project` (`orchestrator.rs:313-397` no early-exit), `check_source_in_project` (`493` `check_module_collect_all`), `lsp::run_diagnostics`, `check_files_with_diagnostics` | Already exists               |
 
 **`Aggregation` must be a field of `Program`, not a global setting of Driver** — LSP serves both
-project-internal files and single-files in the same process, while CLI's `run` and `check` are two
-independent calls; putting them on Program avoids Driver holding mutable global state.
+in-project files and single-file files in the same process, while CLI's `run` and `check` are two
+separate calls; putting them on Program avoids Driver holding mutable global state.
 
-**Note the current semantic difference of the two typecheck branches**: `check_module`
-(`orchestrator.rs:124`) and `check_module_collect_all` (`493`) are not just "whether to early-exit"
-differences — they are two different checker entries. After unification, the same implementation
-should be driven by the `Aggregation` parameter, rather than keeping two functions (**this is an
-item this document needs additional verification on, see "Known Limitations and Risks"**).
+**Note the semantic difference between the current two typecheck branches**: `check_module`
+(`orchestrator.rs:124`) and `check_module_collect_all` (`493`) are not just a difference of
+"early-exit or not" — they are two different checker entries. After unification, it should be driven
+by the `Aggregation` parameter on the same implementation, not by keeping two functions (**this is
+an additional item this document needs to verify, see "Known Limitations and Risks"**).
 
 ---
 
 ## Detailed Design
 
-### Type System Impact
+### Type-System Impact
 
-| Change                                      | Type Layer Impact                                                                                                                                    |
+| Change                                      | Type-layer impact                                                                                                                                    |
 | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| New `driver/` module                        | **None**. No new type representation is introduced, `MonoType` / `PolyType` / `ir::Type` is not touched                                              |
+| New `driver/` module                        | **None**. No new type representations, doesn't touch `MonoType` / `PolyType` / `ir::Type`                                                            |
 | `TypeCheckResult` → `Obligations` migration | **Field types unchanged**, only ownership changes. `release_plan` is still `ownership::ReleasePlan`, `proof_calls` is still `Vec<ProofFunctionCall>` |
-| `Stage` / `Program` / `Obligations`         | **Brand new types**, unrelated to the language type system                                                                                           |
+| `Stage` / `Program` / `Obligations`         | **Brand-new types**, unrelated to the language type system                                                                                           |
 
-**This document does not introduce a fourth type representation.** The convergence of three parallel
-type representations (`ast::Type` / `MonoType` / `ir::Type`) is the scope of
+**This document does not introduce a fourth type representation.** The convergence of the three
+parallel type representations (`ast::Type` / `MonoType` / `ir::Type`) is the scope of
 `03-type-unification.md` (RFC-039 routing table C).
 
-**Obligation type ownership and layering**: what is migrated into the ledger is **settlement
+**Ownership and layering of obligation types**: what migrates into the ledger is **settlement
 responsibility**, not the type's owning module. `ReleasePlan` is still defined in
-`layers/ownership.rs`, `ProofFunctionCall` is still in `proof/`, the other field types stay where
-they are; `driver/obligations.rs` only holds the aggregate container and `assert_drained()`. L3
-consumers (such as `ir_gen` reading `release_plan`) continue to receive specific field types via
-parameters, **must not `use crate::driver`** — this is consistent with the driver's no
-reverse-dependency red line below.
+`layers/ownership.rs`, `ProofFunctionCall` is still in `proof/`, the rest of the field types stay in
+place; `driver/obligations.rs` only holds the aggregate container and `assert_drained()`. L3
+consumers (e.g. `ir_gen` reads `release_plan`) continue to receive specific field types via
+parameters, **must not `use crate::driver`** — this is consistent with the
+driver-no-reverse-dependency red line below.
 
-**Dependency direction** (RFC-039 four-layer model): `driver` (L1) depends on `frontend` (L2) /
-`middle` (L3) / `backends` (L4) interfaces; **L2/L3/L4 must not reverse `use crate::driver`**.
-`Driver` appearing in `TypeChecker`'s import is considered a violation, intercepted by
-`scripts/ci/check-module-boundary.py` proposed by RFC-039.
+**Dependency direction** (RFC-039 four-layer model): `driver` (L1) depends on the interfaces of
+`frontend` (L2) / `middle` (L3) / `backends` (L4); **L2/L3/L4 must not
+reverse-`use crate::driver`**. `Driver` appearing in `TypeChecker`'s imports is considered a
+violation, intercepted by the `scripts/ci/check-module-boundary.py` proposed by RFC-039.
 
 ### Runtime Behavior
 
-| Scenario                            | Before                                   | After                                                                                                                                                                                                                                                                                                                                      |
-| ----------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `yaoxiang run app.yx` (single-file) | 5 stages                                 | Same 5 stages + `assert_drained()` settlement (**4.10.3 revision, 2026-10-15**: CLI `run` no longer takes this pipeline for standalone — unified to `compile_project` (MULTI_FILE stage table), Script semantics driven by rootless; this line now only describes `lib::run_file` / `Compiler::compile` library path)                      |
-| `yaoxiang run` (multi-file)         | No proof_execution, no W1001/W1002/W1003 | proof_execution was stopped-gap connected in P3; **warning surface remains unchanged** (decision B1, 2026-10-09: dead code family warnings do not enter compile path — pool semantics is being corrected by 4.9 as defective, unified warning surface to be discussed after 4.9; the original "new warning output" in this line is voided) |
-| `yaoxiang check` (multi-file)       | No proof_execution                       | Stopped-gap connected in P3                                                                                                                                                                                                                                                                                                                |
-| LSP (within project)                | No proof_execution                       | Stopped-gap connected in P3                                                                                                                                                                                                                                                                                                                |
-| Z3 not installed + single-file      | `predicate.rs:35` **panic**              | Changed to `Abort` + E-level diagnostic (**this is a behavior change, see compatibility**)                                                                                                                                                                                                                                                 |
-| Z3 not installed + multi-file       | Silently skip                            | Same as above, unified                                                                                                                                                                                                                                                                                                                     |
+| Scenario                            | Before refactoring                       | After refactoring                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `yaoxiang run app.yx` (single-file) | 5 stages                                 | Same 5 stages + `assert_drained()` settlement (**4.10.3 revision, 2026-10-15**: CLI `run` for standalone no longer takes this pipeline — uniformly changed to `compile_project` (MULTI_FILE stage table), Script semantics driven by rootless; this row now only describes the `lib::run_file` / `Compiler::compile` library paths) |
+| `yaoxiang run` (multi-file)         | No proof_execution, no W1001/W1002/W1003 | proof_execution already stemmed in P3; **warning surface stays unexpanded** (decision B1, 2026-10-09: dead-code family warnings don't go into the compile path — pool semantics is being corrected by 4.9, normalizing warning surface waits for after 4.9; this row's draft "new warning output" is void)                          |
+| `yaoxiang check` (multi-file)       | No proof_execution                       | Already stemmed in P3                                                                                                                                                                                                                                                                                                               |
+| LSP (in-project)                    | No proof_execution                       | Already stemmed in P3                                                                                                                                                                                                                                                                                                               |
+| Z3 not installed + single-file      | `predicate.rs:35` **panic**              | Changed to `Abort` + E-level diagnostic (**this is a behavior change, see compatibility**)                                                                                                                                                                                                                                          |
+| Z3 not installed + multi-file       | Silently skip                            | Same as above, unified                                                                                                                                                                                                                                                                                                              |
 
-**The only intentional behavior breakage** is changing `predicate.rs:35`'s `.expect()` to return a
-diagnostic. This aligns with RFC-027 §8's positioning of "not bound to a specific solver", and is
-the contract already declared by `backend.rs:60` ("the caller should degrade conservatively") — the
-current implementation is the opposite of its own contract documentation.
+**The only intentional behavior break** is changing `predicate.rs:35`'s `.expect()` to return a
+diagnostic. This fits the RFC-027 §8 positioning of "not bound to a specific solver", and is also
+the contract already declared by `backend.rs:60` ("caller should degrade conservatively") — the
+current implementation is the opposite of its own contract document.
 
 ### Compiler Change List
 
 **New files (6)**
 
-| File                        | Content                                                               |
+| File                        | Contents                                                              |
 | --------------------------- | --------------------------------------------------------------------- |
 | `src/driver/mod.rs`         | `Driver`, `run()`, exhaustive `dispatch`                              |
 | `src/driver/stage.rs`       | `Stage` (12 variants), `Stage::ALL`, `StageScope`                     |
 | `src/driver/program.rs`     | `Program`, `ProgramKind`, `Aggregation`                               |
 | `src/driver/obligations.rs` | `Obligations`, `assert_drained()`                                     |
-| `src/driver/unit.rs`        | `Unit` (single-file 1 / multi-file N)                                 |
+| `src/driver/unit.rs`        | `Unit` (1 for single-file / N for multi-file)                         |
 | `src/driver/diagnostics.rs` | Cross-stage diagnostic aggregation, `Skipped` diagnostic construction |
 
 **Modified files**
 
-| File                                               | Line Range                         | Change                                                                                                                                                                                                                                                                                                                                           |
-| -------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/lib.rs`                                       | `24-36` (module declaration block) | Add `pub mod driver;`                                                                                                                                                                                                                                                                                                                            |
-| `src/lib.rs`                                       | `140-147`                          | `run_file` changes to constructing `Program { kind: SingleFile }`                                                                                                                                                                                                                                                                                |
-| `src/lib.rs`                                       | `154-167`                          | `run_project` changes to constructing `Program { kind: MultiFile }`                                                                                                                                                                                                                                                                              |
-| `src/frontend/pipeline.rs`                         | `141-227`                          | `Pipeline::run` function body replaced with `Program` construction + Driver call                                                                                                                                                                                                                                                                 |
-| `src/frontend/pipeline.rs`                         | `275-278`                          | Dead code analysis moved out, changed to `Stage::DeadCodeAnalysis` arm                                                                                                                                                                                                                                                                           |
-| `src/frontend/pipeline.rs`                         | `306-311`                          | `run_proof_execution` **kept**, moved into `driver` and as `Stage::ProofExecution` implementation                                                                                                                                                                                                                                                |
-| `src/frontend/pipeline.rs`                         | `381-389`                          | Monomorphization moved out, changed to `Stage::Monomorphization` arm                                                                                                                                                                                                                                                                             |
-| `src/frontend/module/orchestrator.rs`              | `99-237`                           | `compile_project` slimmed down to Program constructor                                                                                                                                                                                                                                                                                            |
-| `src/frontend/module/orchestrator.rs`              | `273-399`                          | `check_project` slimmed down to Program constructor                                                                                                                                                                                                                                                                                              |
-| `src/frontend/module/orchestrator.rs`              | `450`                              | `check_source_in_project` reroutes to Driver                                                                                                                                                                                                                                                                                                     |
-| `src/frontend/module/orchestrator.rs`              | `1374`                             | `compile_embedded_module` changes to `Program { kind: Embedded }`                                                                                                                                                                                                                                                                                |
-| `src/frontend/module/orchestrator.rs`              | `486-494`                          | `typecheck_with_registry_in`'s `check_module` / `check_module_collect_all` two-choice changed to be driven by `Aggregation` parameter                                                                                                                                                                                                            |
-| `src/lsp/handlers/diagnostics.rs`                  | `146-227`                          | `run_diagnostics`'s manual stage sequence deleted, re-dispatching to Driver                                                                                                                                                                                                                                                                      |
-| `src/util/diagnostic/mod.rs`                       | `565-619`                          | `check_files_with_diagnostics` unified to `Program { kind: Check }`                                                                                                                                                                                                                                                                              |
-| `src/util/diagnostic/mod.rs`                       | `621-661`                          | `check_single_file` **deleted**                                                                                                                                                                                                                                                                                                                  |
-| `wasm/src/lib.rs`                                  | `30-36`, `42-51`                   | `test_compile` / `run_code` changes to constructing `Program { kind: WasmPlayground }` (currently implicitly falls to path 1 via `Compiler::compile_with_source`)                                                                                                                                                                                |
-| `src/frontend/core/typecheck/layers/predicate.rs`  | `34-36`                            | `.expect()` changes to return `SMTResult::Unknown` + diagnostic (**behavior change**)                                                                                                                                                                                                                                                            |
-| `src/frontend/core/typecheck/checker.rs`           | `1303-1314`                        | `ProofResult::Unproven { .. } => {}` empty arm changes to produce diagnostic (**fix the second silent discard point**)                                                                                                                                                                                                                           |
-| `src/frontend/core/typecheck/checker.rs`           | `1283-1293`                        | `unwrap_or_default()` degradation path adds warning diagnostic                                                                                                                                                                                                                                                                                   |
-| `src/frontend/core/typecheck/checker.rs`           | `1244`                             | Correct comment inconsistent with `1320`                                                                                                                                                                                                                                                                                                         |
-| `src/frontend/core/typecheck/layers/README.md`     | `1-18`                             | Layer order table changed to **actual** execution order; delete "lower layer fails, upper layer does not run" (no short-circuit exists)                                                                                                                                                                                                          |
-| `src/frontend/core/typecheck/proof/smt/backend.rs` | `67-72`                            | **Per D58**: add process-level shared singleton (`LazyLock<Mutex<Option<Box<dyn Solver>>>>`) + `with_shared_solver` closure access port; `predicate.rs`/`checker.rs`/`ownership.rs` three consumer points reroute to shared port. `&'static` raw reference form is infeasible (`dyn Solver` is not `Sync`), the original text is governed by D58 |
+| File                                               | Line range                         | Change                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib.rs`                                       | `24-36` (module declaration block) | Add `pub mod driver;`                                                                                                                                                                                                                                                                                                                             |
+| `src/lib.rs`                                       | `140-147`                          | `run_file` changed to construct `Program { kind: SingleFile }`                                                                                                                                                                                                                                                                                    |
+| `src/lib.rs`                                       | `154-167`                          | `run_project` changed to construct `Program { kind: MultiFile }`                                                                                                                                                                                                                                                                                  |
+| `src/frontend/pipeline.rs`                         | `141-227`                          | `Pipeline::run` body replaced with `Program` construction + Driver call                                                                                                                                                                                                                                                                           |
+| `src/frontend/pipeline.rs`                         | `275-278`                          | Dead-code analysis moved out, changed to `Stage::DeadCodeAnalysis` arm                                                                                                                                                                                                                                                                            |
+| `src/frontend/pipeline.rs`                         | `306-311`                          | `run_proof_execution` **kept**, moved into `driver` and used as the implementation of `Stage::ProofExecution`                                                                                                                                                                                                                                     |
+| `src/frontend/pipeline.rs`                         | `381-389`                          | Monomorphization moved out, changed to `Stage::Monomorphization` arm                                                                                                                                                                                                                                                                              |
+| `src/frontend/module/orchestrator.rs`              | `99-237`                           | `compile_project` slimmed to Program constructor                                                                                                                                                                                                                                                                                                  |
+| `src/frontend/module/orchestrator.rs`              | `273-399`                          | `check_project` slimmed to Program constructor                                                                                                                                                                                                                                                                                                    |
+| `src/frontend/module/orchestrator.rs`              | `450`                              | `check_source_in_project` changed to take Driver                                                                                                                                                                                                                                                                                                  |
+| `src/frontend/module/orchestrator.rs`              | `1374`                             | `compile_embedded_module` changed to `Program { kind: Embedded }`                                                                                                                                                                                                                                                                                 |
+| `src/frontend/module/orchestrator.rs`              | `486-494`                          | `typecheck_with_registry_in`'s `check_module` / `check_module_collect_all` either-or changed to be driven by `Aggregation` parameter                                                                                                                                                                                                              |
+| `src/lsp/handlers/diagnostics.rs`                  | `146-227`                          | `run_diagnostics`'s manual stage sequence deleted, changed to calling Driver                                                                                                                                                                                                                                                                      |
+| `src/util/diagnostic/mod.rs`                       | `565-619`                          | `check_files_with_diagnostics` uniformly takes `Program { kind: Check }`                                                                                                                                                                                                                                                                          |
+| `src/util/diagnostic/mod.rs`                       | `621-661`                          | `check_single_file` **deleted**                                                                                                                                                                                                                                                                                                                   |
+| `wasm/src/lib.rs`                                  | `30-36`, `42-51`                   | `test_compile` / `run_code` changed to construct `Program { kind: WasmPlayground }` (currently goes through `Compiler::compile_with_source` implicitly landing on path 1)                                                                                                                                                                         |
+| `src/frontend/core/typecheck/layers/predicate.rs`  | `34-36`                            | `.expect()` changed to return `SMTResult::Unknown` + diagnostic (**behavior change**)                                                                                                                                                                                                                                                             |
+| `src/frontend/core/typecheck/checker.rs`           | `1303-1314`                        | `ProofResult::Unproven { .. } => {}` empty arm changed to produce diagnostic (**fixes the second silent-discard point**)                                                                                                                                                                                                                          |
+| `src/frontend/core/typecheck/checker.rs`           | `1283-1293`                        | `unwrap_or_default()` degradation path adds warning diagnostic                                                                                                                                                                                                                                                                                    |
+| `src/frontend/core/typecheck/checker.rs`           | `1244`                             | Correct the comment that doesn't match `1320`                                                                                                                                                                                                                                                                                                     |
+| `src/frontend/core/typecheck/layers/README.md`     | Whole text                         | Layer-order table changed to the **actual** execution order; remove "lower layer fails, upper layer doesn't run" (no short-circuit exists)                                                                                                                                                                                                        |
+| `src/frontend/core/typecheck/proof/smt/backend.rs` | `67-72`                            | **Per D58**: add process-level shared singleton (`LazyLock<Mutex<Option<Box<dyn Solver>>>>`) + `with_shared_solver` closure access; the three consumer sites in `predicate.rs`/`checker.rs`/`ownership.rs` change to take the shared access. `&'static` bare-reference form is infeasible (`dyn Solver` is not `Sync`); original text follows D58 |
 
-**Delete**: `check_single_file` at `src/util/diagnostic/mod.rs:621-661`; manual lex/parse sequence
+**Deleted**: `check_single_file` at `src/util/diagnostic/mod.rs:621-661`; manual lex/parse sequence
 at `src/lsp/handlers/diagnostics.rs:161-227`.
 
-**Not changed**: `checker.rs:5164/5179/5306/5318/5420/5448` (the six `Unproven` branch logics
+**Untouched**: `checker.rs:5164/5179/5306/5318/5420/5448` (the six `Unproven` branch logics
 themselves are correct — **the problem is on the consumer side, not the producer side**, changing
-the producer would mask the architectural defect); `Cargo.toml`; any
-`#[cfg(target_arch = "wasm32")]` branch (reachability determination for wasm branches goes to
+the producer side would mask the architectural defect); `Cargo.toml`; any
+`#[cfg(target_arch = "wasm32")]` branch (wasm branch reachability determination is filed under
 `06-cleanup-inventory.md`).
 
 ### Backward Compatibility
 
-| Change                                                   | Compatibility                                                              | Disposition                                                                                                                                          |
-| -------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Multi-file path adds proof_execution                     | **Breaking**: previously silently passed constraints will now report E4018 | `test_multifile_proof_obligation_not_dropped` **write red first** then fix; release in batches, expected diagnostic set changes go through CHANGELOG |
-| Multi-file path adds W1001/W1002/W1003                   | **Breaking**: programs that compiled cleanly now produce warnings          | Warnings are non-blocking (`warning_count` is counted separately, `diagnostic/mod.rs:637-641`), exit code does not change                            |
-| `assert_drained()` first run produces W-level diagnostic | **Breaking**: diagnostic set adds                                          | W first, then E, S2/S4 in two steps                                                                                                                  |
-| `predicate.rs` panic changes to diagnostic               | **Improvement**: no longer crashes                                         | No breaking                                                                                                                                          |
-| `build` / `dump_bytecode` subcommands                    | **No impact**                                                              | These two paths do not go through proof_execution                                                                                                    |
-| `TypeCheckResult` field migration to `Obligations`       | **Internal refactoring**                                                   | If `pub` API surface has external dependencies, need to synchronize; in-repo consumers are all listed in the change list                             |
+| Change                                                      | Compatibility                                                              | Disposition                                                                                                                                               |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Multi-file path adds proof_execution                        | **Breaking**: previously-silently-passed constraints now report E4018      | `test_multifile_proof_obligation_not_dropped` **written red first** then fixed; release in batches, expected diagnostic-set change goes through CHANGELOG |
+| Multi-file path adds W1001/W1002/W1003                      | **Breaking**: previously-clean-compiling programs start producing warnings | Warnings are non-blocking (`warning_count` counted separately, `diagnostic/mod.rs:637-641`), doesn't change exit code                                     |
+| First run of `assert_drained()` produces W-level diagnostic | **Breaking**: diagnostic set adds                                          | W first then E, S2/S4 two steps                                                                                                                           |
+| `predicate.rs` panic changed to diagnostic                  | **Improvement**: no longer crashes                                         | No break                                                                                                                                                  |
+| `build` / `dump_bytecode` subcommands                       | **No impact**                                                              | These two paths don't go through proof_execution                                                                                                          |
+| `TypeCheckResult` field migration to `Obligations`          | **Internal refactoring**                                                   | If there's external dependency on `pub` API, sync needed; repo-internal consumers are all listed in the change list                                       |
 
 ---
 
-## Implementation Points
+## Implementation Notes
 
-This document corresponds to RFC-039 global stage sequence **P3 (fix correctness vulnerabilities)**
-and **P4 (stage contracts and unified Driver)**. The following S1-S5 are the implementation order
-within this document; **each step's acceptance criterion references the C2 category of the
-[Equivalence Oracle document](07-equivalence-oracle.md)** (orchestration change: same **diagnostic
-set** per entry + same corpus behavior).
+This document corresponds to RFC-039 global stage sequence's **P3 (fix correctness
+vulnerabilities)** and **P4 (stage contract and unified Driver)**. The following S1–S5 are the
+implementation order within this document, **each step's acceptance criterion references the
+[Equivalence Criteria document](07-equivalence-oracle.md)'s C2 category** (orchestration change:
+same **diagnostic set** at each entry + same corpus behavior).
 
 ### S1: Establish Criteria (Red First)
 
-**Prerequisite, cannot be skipped.** The vulnerability criterion must be written as failing first.
+**Prerequisite, cannot skip.** The vulnerability criterion must be written as failing first.
 
-| Deliverable                                                                                                                                                  | Acceptance                                                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `test_multifile_proof_obligation_not_dropped`                                                                                                                | **Must be red**. If accidentally green, it means this document's vulnerability analysis needs to be re-reviewed |
-| Multi-file corpus layer: create `tests/yaoxiang-multifile/` (ruling D48 — not mixed into the single-file corpus tree; project fixtures with `yaoxiang.toml`) | Single-file and multi-file two-version corpus diagnostic sets are comparable                                    |
-| `src/driver/tests/obligations.rs` skeleton (first `#[ignore]`)                                                                                               | Marked `#[ignore]`, S4 turns green (red state preserved: removing the unique settlement point gives `pairs: 0`) |
+| Deliverable                                                                                                                                              | Acceptance                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `test_multifile_proof_obligation_not_dropped`                                                                                                            | **Must be red**. If accidentally green, that means this document's vulnerability analysis needs to be re-verified |
+| Multi-file corpus layer: create `tests/yaoxiang-multifile/` (ruling D48 — not mixed into single-file corpus tree; project fixtures with `yaoxiang.toml`) | The diagnostic sets of single-file and multi-file two-version corpora are comparable                              |
+| `src/driver/tests/obligations.rs` skeleton (first `#[ignore]`)                                                                                           | Mark `#[ignore]`, turn green at S4 (red-state archived: with the only settlement point removed, `pairs: 0`)       |
 
 **Rollback point**: no code change, pure new tests.
 
-### S2: Introduce `Stage` + `Program`, No Behavior Change
+### S2: Introduce `Stage` + `Program`, Without Changing Behavior
 
-| Deliverable                                              | Acceptance (C2)                                                                               |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `driver/stage.rs`, `driver/program.rs`, `driver/unit.rs` | `test_program_stage_coverage`: `Program::stages()` ⊆ `Stage::ALL` and equal to expected array |
-| `pipeline.rs:141-227` changes to Driver call             | **Single-file path diagnostic set and exit code byte-identical**                              |
-| Whole corpus (293 `.yx`) diff                            | Diagnostic list (sorted by `(code, file, line)`), exit code, stdout/stderr **all zero-diff**  |
+| Deliverable                                              | Acceptance (C2)                                                                                 |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `driver/stage.rs`, `driver/program.rs`, `driver/unit.rs` | `test_program_stage_coverage`: `Program::stages()` ⊆ `Stage::ALL` and equals the expected array |
+| `pipeline.rs:141-227` changed to Driver call             | **Single-file path's diagnostic set and exit code are byte-for-byte identical**                 |
+| Full corpus (293 `.yx`) diff                             | Diagnostic list (sorted by `(code, file, line)`), exit code, stdout/stderr **all zero-diff**    |
 
-**This stage deliberately does not fix any bug** — it just moves existing behavior into the Driver.
-The acceptance criterion is C1/C2 level zero-diff.
+**This stage deliberately fixes no bug** — it only moves existing behavior into the Driver. The
+acceptance standard is C1/C2-level zero-diff.
 
-**Rollback point**: `git revert` a single commit, `pipeline.rs` returns to original state.
+**Rollback point**: `git revert` a single commit, `pipeline.rs` restored to original.
 
-### S3: Merge Orchestrator Four Entries + Fix Vulnerabilities
+### S3: Merge Orchestrator Four Entries + Fix Vulnerability
 
-| Deliverable                                                                                                                   | Acceptance (C2)                                                                   |
-| ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `compile_project` / `check_project` / `check_source_in_project` / `compile_embedded_module` all change to Program constructor | Four-entry diagnostic sets are the same after `Aggregation` normalization         |
-| `check_single_file` (`diagnostic/mod.rs:621-661`) deleted                                                                     | `yaoxiang check` behaves the same inside and outside the project                  |
-| LSP manual stage sequence deleted                                                                                             | LSP and CLI give the same diagnostic set for the same file                        |
-| **`test_multifile_proof_obligation_not_dropped` turns green**                                                                 | Vulnerability fixed                                                               |
-| `checker.rs:1313` empty match arm fix                                                                                         | `test_no_silent_pass_on_unproven`: `Unproven` must produce diagnostic in any mode |
-| `predicate.rs:34-36` `.expect()` changes to diagnostic                                                                        | Remove panic in Z3-not-installed environment                                      |
+| Deliverable                                                                                                                     | Acceptance (C2)                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `compile_project` / `check_project` / `check_source_in_project` / `compile_embedded_module` all changed to Program constructors | Four entries' diagnostic sets are identical after normalizing by `Aggregation`  |
+| `check_single_file` (`diagnostic/mod.rs:621-661`) deleted                                                                       | `yaoxiang check` behaves consistently inside and outside the project            |
+| LSP manual stage sequence deleted                                                                                               | LSP and CLI give the same diagnostic set for the same file                      |
+| **`test_multifile_proof_obligation_not_dropped` turns green**                                                                   | Vulnerability fixed                                                             |
+| `checker.rs:1313` empty match arm fixed                                                                                         | `test_no_silent_pass_on_unproven`: `Unproven` produces a diagnostic in any mode |
+| `predicate.rs:34-36` `.expect()` changed to diagnostic                                                                          | No longer panics without Z3 environment                                         |
 
-**Rollback point**: vulnerability fix and structural merge are **two commits**. If the structural
-merge has issues, only the structural commit can be rolled back, keeping the vulnerability fix
-commit — at this point `test_multifile_proof_obligation_not_dropped` remains green; the reverse
-(keep the structure, roll back the fix) will turn red, which is an unacceptable intermediate state,
-forbidden to merge.
+**Rollback point**: the vulnerability fix and structural merge are **two commits**. If the
+structural merge has issues, only the structural commit can be rolled back, keeping the
+vulnerability-fix commit — at this time `test_multifile_proof_obligation_not_dropped` stays green;
+the reverse (keep structure, roll back fix) turns red, which is an unacceptable intermediate state,
+prohibited from merging.
 
-### S4: Enable Obligation Ledger
+### S4: Enable Obligations Ledger
 
-| Deliverable                                  | Acceptance                                                                                                                      |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `driver/obligations.rs` + `assert_drained()` | `src/driver/tests/obligations.rs` 20 cases turn green (implementation form see §2 revision note; case count based on that file) |
-| `scripts/ci/check-obligations.py`            | Static gate takes effect                                                                                                        |
-| Obligation diagnostic W → E upgrade          | After whole corpus diff, manually review each added E                                                                           |
+| Deliverable                                  | Acceptance                                                                                                                                 |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `driver/obligations.rs` + `assert_drained()` | `src/driver/tests/obligations.rs` 20 test cases turn green (implementation form in §2 revision note; the test count is based on that file) |
+| `scripts/ci/check-obligations.py`            | Static gate takes effect                                                                                                                   |
+| Obligation diagnostic W → E escalation       | Full corpus diff followed by manual review of every new E                                                                                  |
 
-**Rollback point**: the severity of `assert_drained()` can be controlled by a configuration item,
-W/E switching does not require code structure changes.
+**Rollback point**: `assert_drained()`'s severity level can be controlled by config item; W/E
+switching doesn't need code structure changes.
 
-### S5: Proof Layer and wasm Wrap-up
+### S5: Proof Layer and wasm Wrap-Up
 
-| Deliverable                                                                                                                                                                                                                                      | Acceptance                                                                                                                                                           |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `layers/README.md` layer order changes to actual order                                                                                                                                                                                           | Document corresponds item-by-item with `checker.rs` call sites                                                                                                       |
-| `backend.rs` process-level shared singleton (D58; **hard prerequisite: Unknown does not enter the cache** — otherwise a single timeout is solidified across compilations via the process-level cache, and pollutes the cargo test thread-shared) | Production path `default_solver()` call sites go to zero (tests only retained); cache hit rate observable across three consumer points (counter landed in 89576fafd) |
-| `checker.rs:1283-1293` degradation adds warning                                                                                                                                                                                                  | No `body_checker` has diagnostic                                                                                                                                     |
-| Reachability determination of 12 wasm attributes in `orchestrator.rs`                                                                                                                                                                            | Conclusion goes to `06-cleanup-inventory.md`, this document only registers the determination requirement                                                             |
+| Deliverable                                                                                                                                                                                                             | Acceptance                                                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `layers/README.md` layer order changed to actual order                                                                                                                                                                  | Documentation corresponds item-by-item with `checker.rs` call sites                                                                                                |
+| `backend.rs` process-level shared singleton (D58; **hard prerequisite: Unknown not in cache** — otherwise one timeout is固化 across compilations via process-level cache, and pollutes cargo test inter-thread sharing) | Production-path `default_solver()` call site zeroed (only tests keep); cache hit rate observable across three consumer sites (counter already landed in 89576fafd) |
+| `checker.rs:1283-1293` degradation adds warning                                                                                                                                                                         | Diagnostic when no `body_checker`                                                                                                                                  |
+| `orchestrator.rs` 12 wasm attributes reachability determination                                                                                                                                                         | Conclusion goes to `06-cleanup-inventory.md`, this document only registers the determination need                                                                  |
 
-**Note**: correcting the layer order will change the diagnostic set, possibly exposing many
-previously silenced `Unproven`. **This item should go independently of S1-S4**, not mixed with entry
-merging in the same PR.
+**Note**: correcting the layer order will change the diagnostic set, possibly exposing a lot of
+previously-silent `Unproven`. **This item should go independently of S1–S4**, not mixed in the same
+PR as the entry merge.
 
 ## Key Decisions and Reasons
 
-| Decision                 | Determination                                                                                                                                                                                                                                                                                                                                                                                                                             | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Stage model**          | `Stage` is a 12-variant compile-time exhaustible enum, **refuses runtime registration**                                                                                                                                                                                                                                                                                                                                                   | Exhaustive `match` is zero-cost compile-time enforcement: when a new variant is added, `dispatch` does not compile. This is isomorphic to the mechanism proven effective for the opcode table in RFC-039 routing table B. `StageScope` further makes "per-module or project-level" a type fact, eliminating the need for human reasoning about call counts                                                                                              |
-| **Obligation mechanism** | `Obligations` + `assert_drained()` for **runtime** settlement, used in parallel with the **static** gate of `scripts/ci/check-obligations.py`; **final state E-level** (2026-10-13 user verdict A: same-code promote to E, code number unchanged; **implementation form see §2 revision note**: ledger does not copy field structure; red list — 0 after settlement — mechanism preserved, does not enter user-visible diagnostic stream) | What it fixes is an entire class of bugs, not one: there are at least 2 verified same-type hidden dangers (current `proof_calls`, `checker.rs:1313`), all 13 obligation fields are in range. W→E in two steps is to make the C2 criterion usable at every step — now the obligation list has been settled to 13 entries, the red list is zero, the healthy state emits zero, so the final state directly takes E (see §2 revision note paragraphs 7, 8) |
-| **Fix scope**            | Fix the **consumer side** (orchestration layer), **do not touch** `checker.rs:5164/5179/5306/5318/5420/5448` six `Unproven` branch producer logics                                                                                                                                                                                                                                                                                        | The problem is on the consumer side, not the producer side. Changing the producer would mask the architectural defect as "logic is fixed", while the logic of these three branches itself is correct                                                                                                                                                                                                                                                    |
+| Decision                 | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                         | Reason                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Stage model**          | `Stage` is a 12-variant compile-time-exhaustive enum, **rejecting runtime registration**                                                                                                                                                                                                                                                                                                                                                         | Exhaustive `match` is zero-cost compile-time enforcement: when a new variant is added, `dispatch` fails to compile. This is isomorphic to the mechanism proven effective by the opcode table in RFC-039 routing table B. `StageScope` further turns "per-module or project-level" into a type fact, eliminating call-count questions that need human reasoning                                                                                             |
+| **Obligation mechanism** | `Obligations` + `assert_drained()` do **runtime** settlement, paired with the **static** gate of `scripts/ci/check-obligations.py`; **end-state severity E-level** (2026-10-13 user ruling A: same code escalate to E, code number unchanged; **implementation form in §2 revision note**: the ledger doesn't copy the field structure; red list — after clearing 0 entries — mechanism preserved, doesn't enter user-visible diagnostic stream) | What we fix is an entire class of bugs, not one bug: at least 2 hidden dangers of the same kind have been verified currently (`proof_calls`, `checker.rs:1313`), all 13 obligation fields are in range. W→E in two steps is to make every step's C2 criterion usable — now the obligation list has been cleared to 13 entries, the red list is zero, healthy state emits zero, so the end state directly takes E (see §2 revision note sections VII, VIII) |
+| **Fix scope**            | Fix the **consumer side** (orchestration layer), **don't touch** `checker.rs:5164/5179/5306/5318/5420/5448` six `Unproven` branches' producer-side logic                                                                                                                                                                                                                                                                                         | The problem is on the consumer side, not the producer side. Changing the producer side would mask the architectural defect as "logic is fixed", and the logic of these three branches itself is correct                                                                                                                                                                                                                                                    |
 
-This design additionally eliminates two types of cracks:
+This design additionally eliminates two kinds of cracks:
 
-- **The crack between "comment promise" and "code behavior"**. `checker.rs:5165`'s "silent pass must
-  not be resurrected" and `layers/README.md:3`'s "lower layer fails, upper layer does not run" are
-  both **comment-level contracts** — the former is fulfilled by `assert_drained()`, the latter is
-  exposed by topology-driven `Skipped` diagnostic.
-- **"Forgot to append to one array"**. Currently five functions each hand-write the call sequence;
-  after unification it is a single stage table, and missing a new stage will fail at compile time.
+- **The crack between "comment promises" and "code behavior"**. The `checker.rs:5165`'s "must not
+  let silent pass be revived" is a **comment-level contract**, fulfilled by `assert_drained()`.
+- **"One array forgotten to append"**. Currently five functions each hand-write the call sequence;
+  after unification it's the only stage table, and missing a new stage's hook will error at compile
+  time.
 
-### Rejected Directions
+### Not Adopted Directions
 
 - **Generic stage chain `Stage<A, B>`
-  (`pipeline!(Lex -> Parse -> Typecheck<Ast> -> Proof<Ast> -> Ir)`)** — 7 of the 11 inconsistencies
-  do not involve type bridging (dead code analysis two implementations, W1006, W1003,
-  monomorphization, role context, IR generation/linking), they are configuration issues of "whether
-  to run a certain analysis"; it also cannot express `Aggregation`, only moving the two-choice
-  between `check_module` / `check_module_collect_all` from the function layer to the type layer.
+  (`pipeline!(Lex -> Parse -> Typecheck<Ast> -> Proof<Ast> -> Ir)`)** — of the 11 inconsistencies, 7
+  (two implementations of dead-code analysis, W1006, W1003, monomorphization, role context, IR
+  generation/linking) **don't involve type interface**, but are configuration questions of "whether
+  to run some analysis"; it also can't express `Aggregation`, it can only move the either-or of
+  `check_module` / `check_module_collect_all` from the function layer to the type layer.
 - **`dyn Stage` + runtime registration (`driver.register(Box::new(...))`)** — cancels compile-time
-  exhaustiveness: when a new stage is added, `dispatch` no longer fails to compile, equivalent to
-  replacing "five functions each hand-writing the call" with "forgot to append to one array", which
-  is exactly the cause of the current 11 inconsistencies. This repository already has the same-form
-  anti-pattern: `ModuleDependencyGraph` / `affected_modules` / `ModuleCache` / `HotReloader`
-  described in `docs/src/dev/design/check/` are all zero-implemented.
-- **Only fix bugs without touching structure** — fixes the known 2 bugs, but only covers 1 of the
-  obligation fields, `Stage` is still scattered in 5 functions, the next fork point will continue to
-  grow from here. **It must be done first** (part of S1/S3), because structural refactoring needs a
-  known red test to prove the criterion is effective.
+  exhaustiveness: when a new stage is added, `dispatch` no longer fails to compile, which is
+  equivalent to trading "five functions each hand-writing the call" for "one array forgotten to
+  append", which is exactly the cause of the current 11 inconsistencies. This repo already has a
+  same-form counter-example: the `ModuleDependencyGraph` / `affected_modules` / `ModuleCache` /
+  `HotReloader` described by `docs/src/dev/design/check/` are all zero-implemented.
+- **Only patch bugs, don't move structure** — can fix the known 2 bugs, but only covers 1 of the
+  obligation fields, `Stage` is still scattered in 5 functions, the next fork point will keep
+  growing from here. **It must be done first** (is part of S1/S3), because structural refactoring
+  needs a known-red test to prove the criterion is valid.
 - **Change `proof_calls` to `pub` and add `debug_assert`** — `check_module` is a general entry, it
-  doesn't know who the caller is, `debug_assert!(<caller will handle>)` cannot hold; `#[must_use]`
-  only warns when the field is **wholly** discarded. This is looking for the bug at the wrong level:
-  the bug is in the orchestration layer, detection must be in the orchestration layer.
+  doesn't know who the caller is, `debug_assert!(<caller will handle>)` can't hold; `#[must_use]`
+  only warns when the field is **entirely** discarded. This is looking for the bug at the wrong
+  layer: the bug is in the orchestration layer, the detection must be in the orchestration layer.
 
 ## Known Limitations and Risks
 
-- **`orchestrator.rs`'s slimming will make it harder to read in the short term**. After 139-line
-  `compile_project` is split into "Program constructor + several driver arms", the reader needs to
-  cross two files to understand the flow. This is the common cost of all "centralize the wiring"
-  refactors.
+- **`orchestrator.rs`'s slimming will make it harder to read in the short term**. The 139-line
+  `compile_project` split into "Program constructor + several driver arms", readers need to cross
+  two files to understand the flow. This is the common cost of all "centralize the wiring"
+  refactoring.
 - **S3 will significantly change the diagnostic set, and the direction of change is "expose
-  previously silenced problems"**. After the fix, a batch of "new error" user reports may appear —
-  they are real existing bugs, they just hadn't been reported. Must be clearly explained in
-  CHANGELOG.
-- **`assert_drained()`'s severity switch requires per-field manual judgment**. For some obligation
-  fields (e.g. `module_namespaces`), "no consumer" may be designed to not need consumption, should
-  not be reported. S4 needs to go through field by field, cannot be one-size-fits-all.
-- **`Program` abstraction may be premature**. If some entry's stage set is unstable in the long
-  term, `stages()` will degrade to "each call passes a different array" free parameter, contract
-  constraints fall through. **Mitigation is `test_program_stage_coverage` asserting that `stages()`
-  can only come from 6 predefined combinations.**
-- **Criterion dependencies**: S1/S3's vulnerability fix criteria depend on the
-  [Equivalence Oracle document](07-equivalence-oracle.md)'s vulnerability test being red first. **If
-  that document does not first establish the multi-file corpus layer, S1 cannot be accepted** —
-  because the existing 293 corpus files all go through the single-file path, with zero coverage for
-  this class of defect. This document does not involve the IR verifier (`verify_loose`), that part
-  of the prerequisite work is not within the scope of this document.
-- **Layer order correction will expose previously silenced `Unproven`** (`equivalence` is not in the
-  pipeline at all, `termination` and `ownership` are in the opposite order to the declaration). This
-  is a diagnostic set change risk, should go independently.
-- **Thread safety is undetermined after the SMT backend is changed to a singleton**.
-  `backend.rs:13-19` has already stated that `Solver` is only `Send` not `Sync`, `Z3Backend`'s cache
-  is `RefCell`; after changing to a cross-compilation-unit shared singleton, need to confirm that
-  all access paths go through `Mutex`.
-- **Stage parallelization is not evaluated**. Multi-file typecheck is naturally parallelizable, but
-  parallelization will **mask order-dependency defects** (such as the actual order dependency
-  between termination and ownership). Should be opened after the equivalence criterion stabilizes.
+  previously-silent problems"**. After the fix, there may be a batch of "new error" user reports —
+  they are real bugs, just never reported. Must be clearly stated in CHANGELOG.
+- **`assert_drained()`'s severity switching needs per-field manual judgment**. For some obligation
+  fields (e.g. `module_namespaces`), "no consumer" may be by-design needing no consumption,
+  shouldn't warn. S4 needs to go through field by field, can't be one-size-fits-all.
+- **`Program` abstraction may be premature**. If some entries' stage sets are unstable for a long
+  time, `stages()` will degrade to "passing a different array each call" free parameter, contract
+  constraints become void. **Mitigation: `test_program_stage_coverage` asserts that `stages()` can
+  only come from 6 predefined combinations.**
+- **Criterion dependency**: S1/S3's vulnerability-fix criteria depend on the
+  [Equivalence Criteria document](07-equivalence-oracle.md)'s vulnerability tests going red first.
+  **If that document doesn't first establish the multi-file corpus layer, S1 cannot be accepted** —
+  because the existing 293 corpora all take the single-file path, with zero coverage for this class
+  of defect. This document doesn't cover the IR verifier (`verify_loose`); that prerequisite work is
+  not in this document's scope.
+- **Layer-order correction will expose previously-silent `Unproven`** (`equivalence` is not in the
+  pipeline at all, the actual order of `termination` and `ownership` is opposite to the declared).
+  This is a diagnostic-set-change risk, should go independently.
+- **Thread safety after SMT backend changed to singleton is undetermined**. `backend.rs:13-19` has
+  already noted that `Solver` is only `Send`, not `Sync`; `Z3Backend`'s cache is `RefCell`; after
+  changing to a cross-compilation-unit shared singleton, need to confirm that all access paths go
+  through `Mutex`.
+- **Stage parallelization not evaluated**. Multi-file typecheck is naturally parallelizable, but
+  parallelization will **mask order-dependence defects** (e.g. the actual order-dependence of
+  termination and ownership). Should be opened after the equivalence criteria are stable.
 
-> **The open questions originally listed in this section have all been ruled on.** Per-item
-> determination see
-> [RFC-039 Decisions Registration](../../rfc/accepted/039-compiler-architecture.md) (D1–D50). **This
-> document leaves no open items.**
+> **The open questions originally listed in this section have all been ruled on.** The decisions are
+> item-by-item in [RFC-039 Decision Log](../../rfc/accepted/039-compiler-architecture.md) (D1–D50).
+> **This document leaves no open items.**
 
 ## See Also
 
-- [RFC-039 Compiler Architecture Refactor](../../rfc/accepted/039-compiler-architecture.md) —
-  four-layer model, routing tables A/B/C, G1-G10 acceptance gates, P1-P10 execution order
-- [01-routing.md](01-routing.md) — stage table and dependency direction specification,
+- [RFC-039 Compiler Architecture Restructuring](../../rfc/accepted/039-compiler-architecture.md) —
+  Four-layer model, routing tables A/B/C, G1–G10 acceptance gates, P1–P10 execution order
+- [01-routing.md](01-routing.md) — Stage table and dependency direction conventions,
   `scripts/ci/check-module-boundary.py`
-- [03-type-unification.md](03-type-unification.md) — convergence of three parallel type
-  representations (this document does not introduce a fourth)
+- [03-type-unification.md](03-type-unification.md) — Convergence of three parallel type
+  representations (this document doesn't introduce a fourth)
 - [06-cleanup-inventory.md](06-cleanup-inventory.md) — wasm branch reachability cleanup;
-  `checker/semantic_tokens.rs`'s `include!` refactoring (construction steps go to
+  `checker/semantic_tokens.rs`' `include!` refactoring (construction steps filed under
   [09](09-execution-wbs.md) §P5 5.1)
-- [07-equivalence-oracle.md](07-equivalence-oracle.md) — C1-C6 grading, three-tier criteria,
+- [07-equivalence-oracle.md](07-equivalence-oracle.md) — C1–C6 grading, three-tier criteria,
   `test_multifile_proof_obligation_not_dropped` vulnerability criterion
 - [RFC-027 Compile-Time Evaluation and Types](../../rfc/accepted/027-compile-time-evaluation-types.md)
-  — design origin of Phase 2.5 proof function execution
-- [RFC-013 Error Code Specification](../../rfc/accepted/013-error-code-specification.md) —
-  comparison code table for the `build.rs:19-55` gate
-- `src/frontend/core/typecheck/checker.rs:5165-5169` — explicit declaration of "silent pass must not
-  be resurrected"
-- `src/frontend/core/typecheck/layers/README.md:3` — explicit declaration of "lower layer fails,
-  upper layer does not run" (no short-circuit in reality)
-- `src/frontend/core/typecheck/layers/predicate.rs:31-32` — explicit reason for SMT initialization
+  — Design source of Phase 2.5 proof function execution
+- [RFC-013 Error Code Specification](../../rfc/accepted/013-error-code-specification.md) — Reference
+  code table for the `build.rs:19-55` gate
+- `src/frontend/core/typecheck/checker.rs:5165-5169` — The explicit declaration "must not let silent
+  pass be revived"
+- `src/frontend/core/typecheck/layers/README.md` — Layer-order call table and the real identity of
+  `equivalence` (no short-circuit)
+- `src/frontend/core/typecheck/layers/predicate.rs:31-32` — Explicit reason for SMT-initialization
   hard failure
-- `src/frontend/core/typecheck/proof/smt/backend.rs:60` — contract declaration of "the caller should
+- `src/frontend/core/typecheck/proof/smt/backend.rs:60` — The contract declaration "caller should
   degrade conservatively" (contradicts `predicate.rs`)
 - `src/frontend/core/typecheck/types.rs:16-76` — 13 obligation fields that downstream must consume
-  (after 3.4.4/3.4.5/3.4.9 settlement)
-- `src/frontend/core/typecheck/tests/rfc027_refined_transparency.rs:13-15` — single test
+  (after 3.4.4/3.4.5/3.4.9 clearing)
+- `src/frontend/core/typecheck/tests/rfc027_refined_transparency.rs:13-15` — The unit test
   self-acknowledges "stops before pipeline"
 - `tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx:12-13` —
-  corpus self-acknowledges "executed by pipeline.rs after check_module"
-- `wasm/src/lib.rs:48` — the fourth compilation caller of the playground (single-file path, so it
-  executes proof_execution)
-- `wasm/Cargo.toml:10-18` — cdylib + wasm-bindgen in the shim crate rather than the main crate
-- `build.rs:19-55` — error code build-time gate, exemplar of this project's mandatory mechanism
+  The corpus self-acknowledges "executed by pipeline.rs after check_module"
+- `wasm/src/lib.rs:48` — The playground's fourth compilation caller (single-file path, so executes
+  proof_execution)
+- `wasm/Cargo.toml:10-18` — `cdylib` + `wasm-bindgen` are in the shim crate, not the main crate
+- `build.rs:19-55` — Error-code build-time gate, the example of this project's enforcement mechanism
