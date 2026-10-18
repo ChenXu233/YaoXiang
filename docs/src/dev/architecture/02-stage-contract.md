@@ -72,11 +72,11 @@ RFC-039 给出**为什么**重构与**按什么顺序**做；本文给出 L1 的
 | 3b | **多文件检查** | `orchestrator::check_project` | `src/frontend/module/orchestrator.rs:273-399` | 逐文件 typecheck，收集全部诊断 |
 | 3c | **LSP 项目内** | `orchestrator::check_source_in_project` | `src/frontend/module/orchestrator.rs:450` | `check_module_collect_all`（`493`） |
 | 3d | **嵌入 std** | `orchestrator::compile_embedded_module` | `src/frontend/module/orchestrator.rs:1374` | `check_module`（`1386`）+ 独立 IR |
-| 4a | **CLI 单文件** | `lib::run_file` | `src/lib.rs:140-147` | → `run_with_source_name` → 路径 1 |
-| 4b | **CLI 多文件** | `lib::run_project` | `src/lib.rs:154-167` | → `compile_project`（路径 3a） |
+| 4a | **CLI 单文件** | `lib::run_file` | `src/lib.rs` 的 `run_file` | → `run_with_source_name` → 路径 1 |
+| 4b | **CLI 多文件** | `lib::run_project` | `src/lib.rs` 的 `run_project` | → `compile_project`（路径 3a） |
 | 5 | **LSP / `yaoxiang check`** | `lsp::run_diagnostics` | `src/lsp/handlers/diagnostics.rs:146` | 项目内走 3c，否则手工 lex→parse |
 |  |  | `check_files_with_diagnostics` | `src/util/diagnostic/mod.rs:565` | → `check_project`（`590-591`） |
-| 6 | **wasm playground** | `run_code` / `test_compile` | `wasm/src/lib.rs:42` / `30` | `Compiler::compile_with_source` → 路径 1 |
+| 6 | **wasm playground** | `run_code` / `test_compile` | `wasm/src/lib.rs` 的 `run_code` / `test_compile` | `compile_playground`（`Program { kind: WasmPlayground }` + `Driver::run`）→ 路径 1 |
 
 单文件路径的 5 个阶段（`pipeline.rs`）：
 
@@ -124,7 +124,7 @@ RFC-039 给出**为什么**重构与**按什么顺序**做；本文给出 L1 的
 
 **两处需要精确表述，否则会写错：**
 
-- **第 4/5 行的准确结论是**：`yaoxiang run` 在**多文件**路径下（`lib.rs:154 run_project` → `compile_project`）永不报 W1001/W1002/W1003；在**单文件**路径下（`lib.rs:140 run_file` → `pipeline.rs:275-278`）是报的。原因在 `compile_project:138` —— `type_results.push(result)` 存下了完整 `TypeCheckResult`（含 `warnings`），但该函数**全程无任何 `result.warnings` 读取点**，`result` 唯一的下游用途是 `generate_ir_with_context`（`154-156`）。
+- **第 4/5 行的准确结论是**：`yaoxiang run` 在**多文件**路径下（`run_project` → `compile_project`）永不报 W1001/W1002/W1003；在**单文件**路径下（`run_file` → `Pipeline::run`）是报的。原因在 `compile_project` —— 它把完整 `TypeCheckResult`（含 `warnings`）压进 `type_results`，但该函数**全程无任何 `result.warnings` 读取点**，`result` 唯一的下游用途是 `generate_ir_with_context`。
 - **第 11 行的入口 `main` 判据也不同源**：`check_project:385-395` 用 `surfaces.bins`（manifest 声明面）；`compile_project` 用 `is_bin_role`（`250-252`，仅判「有无 manifest」）。两个函数对「什么文件必须定义 `main`」给出不同答案。
 
 ### 正确性漏洞：证明义务被静默丢弃（完整证据链）
@@ -355,28 +355,28 @@ wasm 目标**已建成并在 CI 中构建**，`cdylib` 不在主 crate 而在独
 | 主 crate 仅 `rlib` | `Cargo.toml:29-31` |
 | **shim crate 提供 `cdylib` + `wasm-bindgen`** | `wasm/Cargo.toml:10-11`（`crate-type = ["cdylib"]`）、`wasm/Cargo.toml:18`（`wasm-bindgen = "0.2"`） |
 | shim 依赖主 crate（rlib）为库 | `wasm/Cargo.toml:17` `yaoxiang = { path = "..", default-features = false }` |
-| 主 crate 有 wasm 目标依赖段 | `Cargo.toml:133-134` `[target.'cfg(target_arch = "wasm32")'.dependencies]` / `web-time = "1"`（`Cargo.toml:125-131` 为对应的非 wasm 段：tokio/ureq/tempfile） |
+| 主 crate 有 wasm 目标依赖段 | `Cargo.toml:139-140` `[target.'cfg(target_arch = "wasm32")'.dependencies]` / `web-time = "1"`（`Cargo.toml:131-137` 为对应的非 wasm 段：tokio/ureq/tempfile） |
 | shim 目录排除出主 workspace | `Cargo.toml:3` `exclude = ["wasm", ...]` |
-| **CI 有 4 处 wasm 构建** | `_build-wasm.yml`（可复用工作流，`:75` `wasm-pack build --target web --out-name yaoxiang`）；调用方 `dist-release.yml:267-273`（产物 `yaoxiang-wasm`）、`docs-deploy.yml:23-56`（解包进 `docs/src/.vitepress/public/wasm`，即 playground）、`nightly.yml:110-114` |
+| **CI 有 4 处 wasm 构建** | `_build-wasm.yml`（可复用工作流，`:77` `wasm-pack build --target web --out-name yaoxiang`）；调用方 `dist-release.yml:267-273`（产物 `yaoxiang-wasm`）、`docs-deploy.yml:23-56`（解包进 `docs/src/.vitepress/public/wasm`，即 playground）、`nightly.yml:110-114` |
 | Z3 wasm 静态库由 Emscripten 预构建 | `_build-z3-wasm.yml:220`、`_build-wasm.yml:35-59`（按固定 URL 拉取 `libz3.a`，缺失时降级为 warning） |
 | **29 个文件**出现 `wasm32` 字面量 | 其中 **22 个**带实际 `#[cfg(...)]` 属性，另 7 个仅文档提及（清单与逐条判定见 `06-cleanup-inventory.md` 的「F2 判定」小节） |
 | `orchestrator.rs` 16 处 | 10 条属性（4 正 + 6 反）+ 6 处注释 |
-| `lib.rs` 11 处 | 全为属性（`27/30/32/46/133/135/139/153/170/179/238`） |
+| `src/lib.rs` 11 处 | 全为属性（`28/31/33/47/145/147/151/170/187/196/269`） |
 
-**结论：这 29 个文件的 `#[cfg(target_arch = "wasm32")]` 分支是承重的。** 它们决定 `wasm/src/lib.rs`（152 行）在 wasm 目标下能调用主 crate 的哪些 API——`lib.rs:151/170/187` 把 `run_file` / `run_project` / `build_bytecode` 整体门控掉（这三条都需要 `std::fs`），而 shim 走的是另一条路。
+**结论：这 29 个文件的 `#[cfg(target_arch = "wasm32")]` 分支是承重的。** 它们决定 `wasm/src/lib.rs`（152 行）在 wasm 目标下能调用主 crate 的哪些 API——`src/lib.rs:151/170/187` 把 `run_file` / `run_project` / `build_bytecode` 整体门控掉（这三条都需要 `std::fs`），而 shim 走的是另一条路。
 
-**但这带来一个与本文直接相关的事实**：`wasm/src/lib.rs:48` 的 playground 入口调用 `compiler.compile_with_source(...)`——**单文件路径**。因此：
+**但这带来一个与本文直接相关的事实**：`wasm/src/lib.rs` 的 playground 入口 `compile_playground`（`:84`）构造 `Program { kind: WasmPlayground }` 交 `Driver::run`（JS 侧入口 `run_code`，`:122`）——**单文件路径**。因此：
 
 | 消费 `proof_calls` 的路径 | 是否执行证明函数 |
 | --- | --- |
-| 单文件 CLI（`lib.rs:140 run_file`） | **是** |
-| wasm playground（`wasm/src/lib.rs:48`） | **是** |
-| `build_bytecode`（`lib.rs:171`） | **是** |
+| 单文件 CLI（`src/lib.rs` 的 `run_file`，`:152`） | **是** |
+| wasm playground（`wasm/src/lib.rs` 的 `run_code`，`:122`） | **是** |
+| `build_bytecode`（`src/lib.rs`，`:188`） | **是** |
 | 多文件 `run`（`compile_project`） | **否** |
 | `check`（`check_project`） | **否** |
 | LSP 项目内（`check_source_in_project`） | **否** |
 
-即：**`wasm/` 的存在使得"proof_execution 只有一个消费者"变成了"有三个"**，但这三个全在单文件路径一侧。`Driver` 的 `ProgramKind` 必须新增 `WasmPlayground` 变体（见「目标设计」3），否则统一 Driver 时会漏掉这条路径。
+即：**`wasm/` 的存在使得"proof_execution 只有一个消费者"变成了"有三个"**，但这三个全在单文件路径一侧。统一 Driver 时这条路径已由 `ProgramKind::WasmPlayground` 覆盖（`src/driver/program.rs:31`，与 `SingleFile` 共用同一条单文件阶段表，`:135`）；落地记录见 `09-execution-wbs.md` 的 4.2.8 行（`:272`）。
 
 （清理范围——`orchestrator.rs` 的 10 条 wasm 属性（4 正 + 6 反）中哪些在 playground 场景下不可达——归 `06-cleanup-inventory.md` 的「F2 判定」小节：4 条 wasm 臂在 playground 运行期不可达但编译期承重、6 条 `not(wasm32)` 臂在 native 三条阶段表承重，无可直接删除的低风险项。RFC-039 开放问题中「建 wasm 目标，还是删这些分支」一条**已经过期**：目标已建成。）
 
@@ -742,12 +742,12 @@ impl Obligations {
 ```rust
 // src/driver/program.rs
 pub enum ProgramKind {
-    SingleFile,        // pipeline.rs:141 / lib.rs:140 / build_bytecode(lib.rs:171)
-    MultiFile,         // compile_project（lib.rs:154）
+    SingleFile,        // Pipeline::run / run_file / build_bytecode
+    MultiFile,         // compile_project
     Check,             // check_project / check_files_with_diagnostics
     Lsp,               // check_source_in_project（LSP 项目内，结果过滤到目标文件）
     Embedded,          // compile_embedded_module（嵌入 std）
-    WasmPlayground,    // wasm/src/lib.rs:48 —— 单文件路径的第四个调用方
+    WasmPlayground,    // wasm/src/lib.rs 的 compile_playground —— 单文件路径的第四个调用方
 }
 
 pub enum Aggregation { FailFast, CollectAll }
@@ -1017,8 +1017,8 @@ impl Driver {
 | `check_project`（`orchestrator.rs:273-399`） | 瘦身为 `Program { kind: Check, aggregation: CollectAll }` 构造器 |
 | `check_source_in_project`（`orchestrator.rs:450`） | 改为 Driver 的一次调用 + 结果过滤到目标文件 |
 | `compile_embedded_module`（`orchestrator.rs:1374`） | 改为 `Program { kind: Embedded, units: [embedded] }` |
-| `lib::run_file`（`lib.rs:140`） | 不变（转调 `run_project` 或 `SingleFile`） |
-| `lib::run_project`（`lib.rs:154`） | 不变（转调 Driver） |
+| `lib::run_file` | 不变（转调 `run_project` 或 `SingleFile`） |
+| `lib::run_project` | 不变（转调 Driver） |
 | `lsp::run_diagnostics`（`lsp/handlers/diagnostics.rs:146`） | 项目内改走 `Program { kind: Lsp, aggregation: CollectAll }`；单文件分支的**手工 lex→parse→… 序列删除**，改调 `Program { kind: SingleFile, aggregation: CollectAll }` |
 | `check_files_with_diagnostics`（`diagnostic/mod.rs:565`） | `standalone` 分支（`614-616` → `check_single_file` `623-661`）删除，统一走 `Program { kind: Check }` |
 
@@ -1141,7 +1141,7 @@ pub enum Aggregation {
 | `wasm/src/lib.rs` | `30-36`、`42-51` | `test_compile` / `run_code` 改为构造 `Program { kind: WasmPlayground }`（当前经 `Compiler::compile_with_source` 隐式落到路径 1） |
 | `src/frontend/core/typecheck/layers/predicate.rs` | `34-36` | `.expect()` 改为返回 `SMTResult::Unknown` + 诊断（**行为变更**） |
 | `src/frontend/core/typecheck/checker.rs` | `1303-1314` | `ProofResult::Unproven { .. } => {}` 空臂改为产诊断（**修复第二个静默丢弃点**） |
-| `src/frontend/core/typecheck/checker.rs` | `1283-1293` | `unwrap_or_default()` 降级路径加 warning 诊断 |
+| `src/frontend/core/typecheck/checker.rs` | `TypeChecker::ownership_inputs` 判据点 | `unwrap_or_default()` 降级路径加 warning 诊断 |
 | `src/frontend/core/typecheck/checker.rs` | `1244` | 修正与 `1320` 不符的注释 |
 | `src/frontend/core/typecheck/layers/README.md` | 全文 | 层序表改为**实际**执行顺序；删除「下层失败上层不跑」（不存在 short-circuit） |
 | `src/frontend/core/typecheck/proof/smt/backend.rs` | `67-72` | **按 D58**：新增进程级共享单例（`LazyLock<Mutex<Option<Box<dyn Solver>>>>`）+ `with_shared_solver` 闭包访问口；`predicate.rs`/`checker.rs`/`ownership.rs` 三消费点改走共享口。`&'static` 裸引用形态不可行（`dyn Solver` 不 `Sync`），原文表述以 D58 为准 |
@@ -1220,7 +1220,7 @@ pub enum Aggregation {
 | --- | --- |
 | `layers/README.md` 层序改为实际顺序 | 文档与 `checker.rs` 调用点逐条对应 |
 | `backend.rs` 进程级共享单例（D58；**硬前置：Unknown 不入缓存**——否则一次超时经进程级缓存跨编译固化、且污染 cargo test 线程间共享） | 生产路径 `default_solver()` 调用点归零（仅测试保留）；缓存命中率跨三消费点可观测（计数器已在 89576fafd 落地） |
-| `checker.rs:1283-1293` 降级加 warning | 无 `body_checker` 时有诊断 |
+| `checker.rs` 的 `TypeChecker::ownership_inputs` 判据点（所有权块 `:1296-1340`、发射点 `:1531`）降级加 warning | 无 `body_checker` 时有诊断 |
 | `orchestrator.rs` 10 条 wasm 属性（4 正 + 6 反）的可达性判定 | 结论交 `06-cleanup-inventory.md` 的「F2 判定」小节，本文只登记判定需求 |
 
 **注意**：修正层序会改变诊断集、可能暴露大量此前被静默的 `Unproven`。**这一项应独立于 S1-S4 走**，不要与入口合并混在同一个 PR。
@@ -1274,6 +1274,6 @@ pub enum Aggregation {
 - `src/frontend/core/typecheck/types.rs:16-76` — 13 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
 - `src/frontend/core/typecheck/tests/rfc027_refined_transparency.rs:13-15` — 单测自认「停在 pipeline 之前」
 - `tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx:12-13` — 语料自认「由 pipeline.rs 在 check_module 之后执行」
-- `wasm/src/lib.rs:48` — playground 的第四个编译调用方（单文件路径，故执行 proof_execution）
+- `wasm/src/lib.rs` 的 `compile_playground`（`run_code` 经它编译）— playground 的第四个编译调用方（单文件路径，故执行 proof_execution）
 - `wasm/Cargo.toml:10-18` — cdylib + wasm-bindgen 在 shim crate 而非主 crate
 - `build.rs:19-55` — 错误码构建期门禁，本项目强制机制的范例

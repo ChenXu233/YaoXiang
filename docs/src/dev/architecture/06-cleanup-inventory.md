@@ -293,7 +293,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 0         # 无运行期 cfg! 口径
 ```
 
-02 §「wasm 现状」与 F2 行的「27 个文件 / 25 带属性 / 2 仅提及」是旧 revision 数；现树为 **29 / 22 / 7**（仅提及的 7 个：`src/driver/arms.rs`、`src/frontend/core/typecheck/proof/smt/backend.rs`、`src/frontend/core/typecheck/proof/smt/mod.rs`、`src/frontend/core/typecheck/proof/smt/tests/feature_gate.rs`、`src/frontend/module/roles.rs`、`src/tests/mod.rs`、`src/util/wasm_z3_shims.rs`）。
+`02` 的「wasm 现状」与 F2 行同口径：现树 **29** 个文件出现 `wasm32` 字面量 / **22** 个带实际 `#[cfg(...)]` 属性 / **7** 个仅文档提及；`orchestrator.rs` **16** 处 = **10** 条属性（4 正 + 6 反）+ 6 处注释（仅提及的 7 个：`src/driver/arms.rs`、`src/frontend/core/typecheck/proof/smt/backend.rs`、`src/frontend/core/typecheck/proof/smt/mod.rs`、`src/frontend/core/typecheck/proof/smt/tests/feature_gate.rs`、`src/frontend/module/roles.rs`、`src/tests/mod.rs`、`src/util/wasm_z3_shims.rs`）。
 
 ## G. 门禁与判据发现登记（2026-10-06 起随各阶段施工续登）
 
