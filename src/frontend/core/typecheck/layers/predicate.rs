@@ -8,28 +8,27 @@
 //!   4. 证明函数调用（Phase 2.5）——识别 ConstExpr::Call 让 Pipeline 编译期执行
 
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
 
 use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
 use crate::frontend::core::types::eval::evaluator::Evaluator;
 use crate::frontend::core::types::mono::MonoType;
 use super::super::proof::context::ProofContext;
 use super::super::proof::smt::ast::SMTResult;
-use super::super::proof::smt::backend::{default_solver, Solver};
+use super::super::proof::smt::backend::{with_shared_solver, SolverConsumer};
 use super::super::proof::smt::translate;
 use super::super::proof::verdict::{
     BudgetReport, DisproofKind, DisproofModel, ProofFunctionCall, ProofResult, UnprovenReason,
 };
 
-/// 求解器实例——整个编译过程只初始化一次。
-///
-/// 具体后端由 `backend::default_solver()` 决定（RFC-027 §8：不绑定具体求解器）。
-/// 初始化为 `Option`：后端不可用（Z3 未安装）时**不 panic**，两个使用点按
-/// `SMTResult::Unknown` 保守降级——`Solver` 契约（backend.rs）：未知一律
-/// 保守方向，由上层决定降级形态；此处上层即 checker 的 Unproven→诊断路径
-/// （E2031 族硬错误），诊断仍在、进程不崩（WBS 3.3.1，02 §改动清单）。
-static SOLVER: LazyLock<Mutex<Option<Box<dyn Solver>>>> =
-    LazyLock::new(|| Mutex::new(default_solver()));
+// 求解器获取面（RFC-039 D58）：本模块**不再**自持 `static SOLVER` 私有单例。
+//
+// 私有单例是 D58 点名的三形态之一：缓存是实例内的（z3_backend.rs），私有单例
+// 使命中率计数在消费点之间分裂；且与 checker.rs / ownership.rs 的获取面并存。
+// 两个使用点（`try_implication` / `try_smt_solve`）改走进程级共享口
+// `backend::with_shared_solver`，后端不可用（Z3 未安装）时**不 panic**，
+// 按 `SMTResult::Unknown` 保守降级——`Solver` 契约（backend.rs）：未知一律
+// 保守方向，由上层决定降级形态；此处上层即 checker 的 Unproven→诊断路径
+// （E2031 族硬错误），诊断仍在、进程不崩（WBS 3.3.1，02 §改动清单）。
 
 /// 求解器不可用时的保守降级结果。
 ///
@@ -147,13 +146,11 @@ fn try_implication(
 
     let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
 
-    let smt_result = {
-        let guard = SOLVER.lock().unwrap();
-        // 求解器不可用（None）= 无法判断 → 经 `?` 返回升级（与 Unknown 同一降级方向）
-        guard
-            .as_ref()
-            .map(|solver| solver.solve(&commands, ctx.budget.time_ms_limit()))?
-    };
+    // 共享口（RFC-039 D58）；求解器不可用（None）= 无法判断 →
+    // 经 `?` 返回升级（与 Unknown 同一降级方向）
+    let smt_result = with_shared_solver(SolverConsumer::Predicate, |solver| {
+        solver.map(|solver| solver.solve(&commands, ctx.budget.time_ms_limit()))
+    })?;
     match smt_result {
         SMTResult::Unsat => Some(ProofResult::Proved),
         // sat = 假设不蕴含，约束可能独立成立 → 升级
@@ -173,14 +170,11 @@ fn try_smt_solve(
     let assumptions = ctx.assumptions.current();
     let commands = translate::translate_constraint(constraint, &assumptions, &var_sorts);
 
-    let smt_result = {
-        let guard = SOLVER.lock().unwrap();
-        match guard.as_ref() {
-            Some(solver) => solver.solve(&commands, ctx.budget.time_ms_limit()),
-            // Z3 缺失不 panic——按 Unknown 保守降级（WBS 3.3.1）
-            None => solver_unavailable_result(),
-        }
-    };
+    // 共享口（RFC-039 D58）；Z3 缺失不 panic——按 Unknown 保守降级（WBS 3.3.1）
+    let smt_result = with_shared_solver(SolverConsumer::Predicate, |solver| match solver {
+        Some(solver) => solver.solve(&commands, ctx.budget.time_ms_limit()),
+        None => solver_unavailable_result(),
+    });
     match smt_result {
         SMTResult::Unsat => ProofResult::Proved,
         SMTResult::Sat { model } => ProofResult::Disproved(DisproofModel {

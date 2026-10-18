@@ -109,11 +109,12 @@ fn test_strategy4_multiplicative_requires_upper_bound() {
 
 // RFC-027 §7.2: 策略 1 秩函数候选
 
-/// 策略 1：`TerminationChecker::with_solver_owned` 接受任意 `Solver` 实现
+/// 策略 1：`TerminationChecker::with_solver` 接受任意 `Solver` 实现（借用形态）
 ///
-/// 回归性质：注入点由 `&'static dyn Solver` 泛化为**持有** `Box<dyn Solver>`，
-/// 非 Z3 后端（此处为桩）必须能接入，且调用方无需 `Box::leak` 把
-/// `default_solver()` 的 `Box` 降级成静态引用（RFC-027a 计划 D3）。
+/// 回归性质：注入点不绑定 Z3——非 Z3 后端（此处为桩）必须能接入。RFC-039 D58
+/// 后注入的是**借用**（`Option<&dyn Solver>`，生命周期参数化）：生产路径的
+/// 求解器是 `proof/smt/backend.rs` 的进程级共享单例，由 `Mutex` 保护、
+/// 所有权不外借，检查器不得持有它。
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test_strategy1_termination_checker_with_solver_builder() {
@@ -129,8 +130,10 @@ fn test_strategy1_termination_checker_with_solver_builder() {
             crate::frontend::core::typecheck::proof::smt::ast::SMTResult::Unsat
         }
     }
-    // Act — 注入非 Z3 后端（持有所有权，无需 leak）
-    let checker = TerminationChecker::new().with_solver_owned(Box::new(StubSolver));
+    let solver = StubSolver;
+
+    // Act — 注入非 Z3 后端（借用：桩的生存期覆盖 checker）
+    let checker = TerminationChecker::new().with_solver(Some(&solver));
 
     // Assert — 未崩溃即证明注入点已泛化（drop 走完整生命周期）
     drop(checker);

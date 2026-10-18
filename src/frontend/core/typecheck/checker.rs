@@ -1260,26 +1260,28 @@ impl TypeChecker {
         let param_assumptions = self.collect_param_refinements();
         // WBS 3.4.2：终止性义务未判定数（无求解器时 Unjudged）随结果一并取出——
         // T4「只判定并记录，不发射诊断」是静默通道，计数在 warnings 汇聚点发 W1081。
-        let (term_results, unjudged_termination_obligations) = {
-            #[allow(unused_mut)]
-            let mut term_checker = super::layers::termination::TerminationChecker::new()
-                .set_refined_vars(refined_vars)
-                .set_measures(measures)
-                .set_param_assumptions(param_assumptions);
-            // RFC-027a T4（即 #377-1）：生产在此注入求解器后端。此前从不调用
-            // 注入点，`self.solver` 恒为 `None`，SMT 相关路径在任何平台都不执行。
-            // `default_solver()` 返回 `None`（初始化失败）时保持不注入——
-            // wasm 自 #435 起同带 Z3（libz3.a 静态链接进产物）。
-            if let Some(solver) = super::proof::smt::backend::default_solver() {
-                term_checker = term_checker.with_solver_owned(solver);
-            }
-            let results = term_checker.check_module(module, self.env());
-            let unjudged = super::layers::termination::count_unjudged_obligations(
-                term_checker.measure_verdicts(),
-                term_checker.well_founded_verdicts(),
+        let (term_results, unjudged_termination_obligations) =
+            super::proof::smt::backend::with_shared_solver(
+                super::proof::smt::backend::SolverConsumer::Termination,
+                |solver| {
+                    // RFC-027a T4（即 #377-1）：生产在此注入求解器后端。
+                    // RFC-039 D58：注入的是进程级共享单例的借用（闭包内判定），
+                    // 不再每模块新建实例——缓存计数因此跨消费点累计。
+                    // `None`（Z3 初始化失败）时保持不注入：SMT 路径不执行、
+                    // 判定为 Unjudged，由 W1081 计数上报（wasm 自 #435 起同带 Z3）。
+                    let mut term_checker = super::layers::termination::TerminationChecker::new()
+                        .set_refined_vars(refined_vars)
+                        .set_measures(measures)
+                        .set_param_assumptions(param_assumptions)
+                        .with_solver(solver);
+                    let results = term_checker.check_module(module, self.env());
+                    let unjudged = super::layers::termination::count_unjudged_obligations(
+                        term_checker.measure_verdicts(),
+                        term_checker.well_founded_verdicts(),
+                    );
+                    (results, unjudged)
+                },
             );
-            (results, unjudged)
-        };
         for result in term_results {
             match result.into_result() {
                 Ok(()) => {} // 证明通过，无需诊断

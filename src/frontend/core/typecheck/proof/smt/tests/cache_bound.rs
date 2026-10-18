@@ -9,6 +9,8 @@ use std::collections::HashMap;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::frontend::core::typecheck::proof::smt::ast::{SMTCommand, SMTResult, SMTSort};
 #[cfg(not(target_arch = "wasm32"))]
+use crate::frontend::core::typecheck::proof::smt::backend::Solver;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::frontend::core::typecheck::proof::smt::z3_backend::{evict_if_full, Z3Backend, CACHE_CAP};
 
 /// 触顶清空边界：恰满 CAP 时下一次写入路径先清空，缓存永不越过上限
@@ -51,7 +53,9 @@ fn test_cache_counters_count_hit_and_miss() {
     let second = backend.solve(&commands, 1000);
 
     // Assert
-    let (hits, misses) = backend.cache_stats();
+    let (hits, misses) = backend
+        .cache_stats()
+        .expect("Z3 后端有实例内缓存，缓存计数恒为 Some");
     assert!(
         misses >= 1,
         "首次查询必须计为 miss，实际 (hits={hits}, misses={misses})"

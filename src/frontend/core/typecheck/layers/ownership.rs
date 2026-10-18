@@ -20,7 +20,7 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 
 use crate::frontend::core::typecheck::proof::smt::ast::{SMTSort, SMTResult};
 use crate::frontend::core::typecheck::proof::smt::translate::translate_constraint;
-use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+use crate::frontend::core::typecheck::proof::smt::backend::{with_shared_solver, SolverConsumer};
 
 // ── ReleasePlan ───────────────────────────────────────────
 
@@ -674,12 +674,14 @@ pub(crate) fn smt_cut(
 
         let commands = translate_constraint(&constraint, &[], &var_sorts);
 
-        let backend = match default_solver() {
-            Some(b) => b,
-            None => return false, // 求解器不可用 → 保守不切断（回边穿越）
-        };
-
-        matches!(backend.solve(&commands, 100), SMTResult::Unsat)
+        // 共享口（RFC-039 D58）：此前每次回边判定新建 Z3 实例，缓存计数与
+        // CACHE_CAP 空转；改走进程级共享单例后，同形回边的查询可命中缓存。
+        with_shared_solver(SolverConsumer::Ownership, |solver| {
+            let Some(solver) = solver else {
+                return false; // 求解器不可用 → 保守不切断（回边穿越）
+            };
+            matches!(solver.solve(&commands, 100), SMTResult::Unsat)
+        })
     }
 }
 
