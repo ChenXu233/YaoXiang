@@ -346,7 +346,7 @@ let call_ownership = self.body_checker.as_ref()
 
 `checker.rs:1244` 的注释称终止检查「在类型检查之后、约束求解之前运行」。实际 `self.env.solver().solve()` 在 `checker.rs:1320`——**termination 在 `1256`、ownership 在 `1296` 之后，即注释所说的「之前」实际是「两层之后」**。
 
-### wasm 现状：shim crate 承载，27 个文件的分支是活的
+### wasm 现状：shim crate 承载，29 个文件的分支是活的
 
 wasm 目标**已建成并在 CI 中构建**，`cdylib` 不在主 crate 而在独立的 shim crate。
 
@@ -359,11 +359,11 @@ wasm 目标**已建成并在 CI 中构建**，`cdylib` 不在主 crate 而在独
 | shim 目录排除出主 workspace | `Cargo.toml:3` `exclude = ["wasm", ...]` |
 | **CI 有 4 处 wasm 构建** | `_build-wasm.yml`（可复用工作流，`:75` `wasm-pack build --target web --out-name yaoxiang`）；调用方 `dist-release.yml:267-273`（产物 `yaoxiang-wasm`）、`docs-deploy.yml:23-56`（解包进 `docs/src/.vitepress/public/wasm`，即 playground）、`nightly.yml:110-114` |
 | Z3 wasm 静态库由 Emscripten 预构建 | `_build-z3-wasm.yml:220`、`_build-wasm.yml:35-59`（按固定 URL 拉取 `libz3.a`，缺失时降级为 warning） |
-| **27 个文件**出现 `wasm32` 字面量 | 其中 **25 个**带实际 `#[cfg(...)]` 属性，另 2 个（`frontend/module/roles.rs:9`、`std/fs.rs:10`）仅文档提及 |
-| `orchestrator.rs` 20 处 | 12 处属性 + 8 处注释 |
+| **29 个文件**出现 `wasm32` 字面量 | 其中 **22 个**带实际 `#[cfg(...)]` 属性，另 7 个仅文档提及（清单与逐条判定见 `06-cleanup-inventory.md` 的「F2 判定」小节） |
+| `orchestrator.rs` 16 处 | 10 条属性（4 正 + 6 反）+ 6 处注释 |
 | `lib.rs` 11 处 | 全为属性（`27/30/32/46/133/135/139/153/170/179/238`） |
 
-**结论：这 27 个文件的 `#[cfg(target_arch = "wasm32")]` 分支是承重的。** 它们决定 `wasm/src/lib.rs`（73 行）在 wasm 目标下能调用主 crate 的哪些 API——`lib.rs:139/153/170` 把 `run_file` / `run_project` / `build_bytecode` 整体门控掉（这三条都需要 `std::fs`），而 shim 走的是另一条路。
+**结论：这 29 个文件的 `#[cfg(target_arch = "wasm32")]` 分支是承重的。** 它们决定 `wasm/src/lib.rs`（152 行）在 wasm 目标下能调用主 crate 的哪些 API——`lib.rs:151/170/187` 把 `run_file` / `run_project` / `build_bytecode` 整体门控掉（这三条都需要 `std::fs`），而 shim 走的是另一条路。
 
 **但这带来一个与本文直接相关的事实**：`wasm/src/lib.rs:48` 的 playground 入口调用 `compiler.compile_with_source(...)`——**单文件路径**。因此：
 
@@ -378,7 +378,7 @@ wasm 目标**已建成并在 CI 中构建**，`cdylib` 不在主 crate 而在独
 
 即：**`wasm/` 的存在使得"proof_execution 只有一个消费者"变成了"有三个"**，但这三个全在单文件路径一侧。`Driver` 的 `ProgramKind` 必须新增 `WasmPlayground` 变体（见「目标设计」3），否则统一 Driver 时会漏掉这条路径。
 
-（清理范围——`orchestrator.rs` 的 12 个 wasm 属性中哪些在 playground 场景下不可达——归 `06-cleanup-inventory.md`。RFC-039 开放问题中「建 wasm 目标，还是删这些分支」一条**已经过期**：目标已建成。）
+（清理范围——`orchestrator.rs` 的 10 条 wasm 属性（4 正 + 6 反）中哪些在 playground 场景下不可达——归 `06-cleanup-inventory.md` 的「F2 判定」小节：4 条 wasm 臂在 playground 运行期不可达但编译期承重、6 条 `not(wasm32)` 臂在 native 三条阶段表承重，无可直接删除的低风险项。RFC-039 开放问题中「建 wasm 目标，还是删这些分支」一条**已经过期**：目标已建成。）
 
 ---
 
@@ -1221,7 +1221,7 @@ pub enum Aggregation {
 | `layers/README.md` 层序改为实际顺序 | 文档与 `checker.rs` 调用点逐条对应 |
 | `backend.rs` 进程级共享单例（D58；**硬前置：Unknown 不入缓存**——否则一次超时经进程级缓存跨编译固化、且污染 cargo test 线程间共享） | 生产路径 `default_solver()` 调用点归零（仅测试保留）；缓存命中率跨三消费点可观测（计数器已在 89576fafd 落地） |
 | `checker.rs:1283-1293` 降级加 warning | 无 `body_checker` 时有诊断 |
-| `orchestrator.rs` 12 个 wasm 属性的可达性判定 | 结论交 `06-cleanup-inventory.md`，本文只登记判定需求 |
+| `orchestrator.rs` 10 条 wasm 属性（4 正 + 6 反）的可达性判定 | 结论交 `06-cleanup-inventory.md` 的「F2 判定」小节，本文只登记判定需求 |
 
 **注意**：修正层序会改变诊断集、可能暴露大量此前被静默的 `Unproven`。**这一项应独立于 S1-S4 走**，不要与入口合并混在同一个 PR。
 

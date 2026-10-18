@@ -223,9 +223,8 @@ thread_local! {
 ///
 /// # 消费点标签
 ///
-/// `consumer` 只用于观测（WBS 4.4.2：命中率按消费点可观测），不改变
-/// 获取语义。D58 把本口定名为 `with_shared_solver(f)`；落地形态多一个标签
-/// 参数，是「跨三消费点可观测」判据的直接载体。
+/// `consumer` 只用于观测（WBS 4.4.2：命中率按消费点可观测），不改变获取
+/// 语义——单一实例、唯一获取口、`Mutex` 串行的语义与标签无关。
 pub fn with_shared_solver<R>(
     consumer: SolverConsumer,
     f: impl FnOnce(Option<&dyn Solver>) -> R,

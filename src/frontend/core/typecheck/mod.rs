@@ -37,7 +37,7 @@ pub mod signature;
 pub mod types;
 // 证明管道基础设施
 pub mod proof;
-// 有序证明层
+// 证明层（本目录无调度器：调用先后由 checker::check_module_impl 决定）
 pub mod layers;
 // 独立分析遍
 pub mod passes;
