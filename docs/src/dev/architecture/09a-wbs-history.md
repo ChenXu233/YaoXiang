@@ -601,17 +601,17 @@
 ## P4 4.4 证明层与 wasm 收尾 — 收口（4.4.1 / 4.4.2 / 4.4.3）
 
 > **一、批次构成与轮次（批次名 `yx44`）**：三条三级任务 4.4.1 / 4.4.2 / 4.4.3 与 wasm 属性可达性判定同批；批次验证树 `target/yx-scratch/yx44/tree`（首次全量构建）。
-> 角色与轮次：实现 4.4.2 = t1（12 文件；本地 `1fc135437` → 推送后 `24028ffe8`）｜实现 4.4.1 的层序重写 = t2（只文档/注释，零行为变化，基于 `b5e68b3c9`）｜实现 4.4.3 = t3（11 文件，含新码 W1082；本地 `2d5e610cd` → 推送后 `52d2276ca`）｜wasm 可达性判定 = t4（只判定、零清理，判定 revision `b5e68b3c9`）｜4.4.1 收口与一笔文档提交 = t8（7 文件 173+/43-；本地 `29ebd2145` → 推送后 `d07993157`）｜独立验证 = t5（冻结 `29ebd2145`）｜轮 1 复审 = t6（revision `1b593e993`）｜补口 = t9（3 文件 9+/10-；本地 `1ebddaf95` → 推送后 `1b593e993`）｜修复轮 = t10（3 文件 23+/23-；`657c3d5e3`）｜轮 2 复审 = t11（`657c3d5e3`）｜收口 = t7（勾选 / 实录 / 批次树 gc / 文档真构建 / 一笔文档提交）。
+> 角色与轮次：实现 4.4.2 = t1（12 文件；本地 `1fc135437` → 推送后 `24028ffe8`）｜实现 4.4.1 的层序重写 = t2（只文档/注释，零行为变化，基于 `b5e68b3c9`）｜实现 4.4.3 = t3（11 文件，含新码 W1082；本地 `2d5e610cd` → 推送后 `52d2276ca`）｜wasm 可达性判定 = t4（只判定、零清理，判定 revision `b5e68b3c9`）｜4.4.1 收口与一笔文档提交 = t8（7 文件 173+/43-；本地 `29ebd2145` → 推送后 `d07993157`）｜独立验证 = t5（冻结 `29ebd2145`）｜轮 1 复审 = t6（revision `1b593e993`）｜补口 = t9（3 文件 9+/10-；本地 `1ebddaf95` → 推送后 `1b593e993`）｜修复轮 = t10（3 文件 23+/23-；本地 `657c3d5e3` → 推送后 `e184d88b6`）｜轮 2 复审 = t11（`657c3d5e3` = 推送后 `e184d88b6`，patch-id 全等）｜收口 = t7（勾选 / 实录 / 批次树 gc / 文档真构建 / 一笔文档提交；本地 `c8412565c` → 推送后 `da724940b`）。
 > **失败与重做**：t6 以 `needs_revision` 终态失败（复审轮按契约须 fail 并给 findings，非事故）；t7 首轮在批次树 gc 阶段中断，已完成产物留在主仓工作树未提交，由第二轮接手「补缺口 + 复核」——未重做已完成部分（本轮新增：4.4 勾选与证据注记、本实录、三处指向已删批次目录的路径改写、文档真构建与收口提交）。无取消轮次。
 >
 > **二、逐任务产出与量测数字（原始命令与输出见证据摘要与留档；此处只记结论）**：
 >
-> - **4.4.1**：`layers/README.md`（含 `layers/mod.rs` 顶部注释）的层序表重写为**实际调用序**（predicate → termination → ownership，调用点锚定 `checker.rs::check_module_impl`），`equivalence` 按真实身份描述（无生产调用点）；同源声明 7 处收口（`01-routing` / `02-stage-contract` / RFC-039 / `06` / typecheck README / layers 两文件）；机械对账脚本在批次树绿基线上 **11/11 PASS**（5 行锚 + `check_predicate` 三站点 + 无短路 + equivalence 零生产调用），变异 (c) 回退旧声明 → 对账 2 FAIL 即红。
+> - **4.4.1**：`layers/README.md`（含 `layers/mod.rs` 顶部注释）的层序表重写为**实际调用序**（predicate → termination → ownership，调用点锚定 `checker.rs::check_module_impl`），`equivalence` 按真实身份描述（无生产调用点）；同源声明 7 处收口（`01-routing` / `02-stage-contract` / RFC-039 / `06` / typecheck README / layers 两文件）；机械对账脚本在批次树绿基线上 **11/11 PASS**（判据 11 条 = README 侧 4 条：实际调用序声明 / 两处入口锚 / 旧序声明消失；代码侧 7 条：5 个行锚 + `check_module_impl` 无短路 + `equivalence` 零生产调用；脚本留档 `target/yx-scratch/yx44-evidence/t5-441-recon.sh`），变异 (c) 回退旧声明 → 对账 2 FAIL 即红。
 > - **4.4.2**：求解器获取面统一到 `proof/smt/backend.rs` 的进程级共享单例 + 唯一闭包口 `with_shared_solver(consumer, f)`；三消费点（predicate / termination / ownership）全部改走共享口，**编译生产链上 `default_solver()` 调用点 = 0**（唯一后端选择点下沉为私有 `new_backend()`）。`wasm/src/lib.rs` 的 `test_smt` 自检调用点是**既存**（早于本批，自 `b5e68b3c9` 起）的非测试调用点，属「测试与独立场景」面，不构成 D58 禁令违反。独立验证自构造读数（一次编译）：predicate acq=2 hit=1 miss=1 ｜ termination acq=1 hit=2 miss=2 ｜ ownership acq=2 hit=1 miss=1，三点 hit/miss 之和 (4,4) = 共享实例累计 `Some((4,4))`；变异 (a) 单例退化 → predicate hit=0 即红。**改动词面披露**：该笔提交含 `z3_backend.rs` 15 行——`cache_stats` 从固有方法迁入 `Solver` trait 块（返回 `Some(实例内计数)`）+ 1 行注释改指，无语义耦合。D58 禁令已机制化：同线程重入 → panic 含 D58，探针 `recv_timeout(120s)` 不挂死。
 > - **4.4.3**：`body_checker` 缺失时的静默降级收敛为 `TypeChecker::ownership_inputs`（唯一判据点）+ 新码 **W1082**（与既有 W 码事实不重叠：W1080 约束降级 / W1081 求解器缺失 / W1090 方向相反）；钉测试 2/2 绿；健康路径语料 348:348 零 diff；**降级分支生产面不可达穷举成立**（CLI 四入口 + eval/repl + format + LSP + wasm playground + 全部 `ProgramKind` 汇入 `check_module_impl`：`init_body_checker` 无条件先于所有权块，函数内 0 个 return/break/continue，`body_checker` 无 `.take()`）⇒ W1082 无用户可见面。变异 (b) 删发射 → 钉测试即红。**W1082 属对外契约表变更（E 类），经用户追认**；`locales/zh.json` / `locales/en.json` 与代码同提交，其余语言由 i18n bot 于推送后补齐（run 见「九」）。
 > - **wasm 属性可达性判定（t4）**：`orchestrator.rs` 现树 **10 条 = 4 正臂 + 6 反臂**（口径 = 同一行内 `#[cfg(...)]` 属性文本，正反都计；`cfg!` 运行期宏 0 命中）；4 条 wasm 正臂在 playground 运行期不可达但**编译期承重**（调用点未门控，单独删臂 ⇒ wasm 编译失败），6 条 `not(wasm32)` 反臂 native 三条阶段表承重 ⇒ D35 设想的「删不可达者」在该文件**无适用目标**，真实清理形态 = 整条 project-mode 子树在 wasm32 上门控（登记 P10 S7，三条未核实原样保留）。
 >
-> **三、独立验证（t5，冻结 `29ebd2145` = 推送后 `d07993157` 的内容，`git range-diff` 三笔全 `=`）**：门禁 **8/8 全绿**——`cargo fmt --check` 0 ｜ `clippy --all --all-features --all-targets -- -D warnings` 0 ｜ `cargo test` **3128 passed / 0 failed**（7 个测试目标合计；基线 3126 + 本批 2）｜ 语料差分 **348:348** 逐行零差异（sort diff 0 行）｜ IR 快照 `UPDATE_SNAPSHOTS=1` 重跑后 `git status` 零漂移 ｜ `check-obligations.py` 21 = 13 + 8、containment 0 缺口 ｜ `check-docs-truth.py` 源码 156 / 文档 156、CLI 21 命令一致 ｜ 错误码生成器重跑前后树均干净。构建告警仅 4 条 bot 语言的 W1082 缺条目（已知态）+ Z3 下载噪音，零代码警告。
+> **三、独立验证（t5，冻结 `29ebd2145` = 推送后 `d07993157` 的内容——两 revision 逐笔 patch-id 全等，整树差异仅在 `docs/src/en/**`、`docs/src/.i18n-cache.json` 等 bot 产物面——`git range-diff` 三笔全 `=`）**：门禁 **8/8 全绿**——`cargo fmt --check` 0 ｜ `clippy --all --all-features --all-targets -- -D warnings` 0 ｜ `cargo test` **3128 passed / 0 failed**（7 个测试目标合计；基线 3126 + 本批 2）｜ 语料差分 **348:348** 逐行零差异（sort diff 0 行）｜ IR 快照 `UPDATE_SNAPSHOTS=1` 重跑后 `git status` 零漂移 ｜ `check-obligations.py` 21 = 13 + 8、containment 0 缺口 ｜ `check-docs-truth.py` 源码 156 / 文档 156、CLI 21 命令一致 ｜ 错误码生成器重跑前后树均干净。构建告警仅 4 条 bot 语言的 W1082 缺条目（已知态）+ Z3 下载噪音，零代码警告。
 > **契约 verify 的口径更正（必须两个 JSONL 路径）**：语料门禁的调用口径 = `python scripts/ci/check-corpus-parity.py tests/baselines/corpus-parity.jsonl <本次生成>.jsonl`——**两个 JSONL 路径都要给**；漏掉第二个参数就是拿基线比基线（恒零差异，判据空转）。本批按两路径口径执行并落证（t5 的 `corpus-r44.jsonl` 产物）。
 >
 > **四、变异证据（3/3，机械可逆）**：全部经 `python scripts/dev/scratch.py trial`（`git apply` → 跑命令 → `git apply -R` → 逐文件 blob 与 HEAD 比对 → 要求 `git status` 干净）：
@@ -621,7 +621,8 @@
 > - (c) 回退旧层序声明 → 对账 2 FAIL exit 1；`layers/README.md` HEAD=`8b1ae875db32` → 变异 `e88f9af6c42d` → 还原 = HEAD。
 > 三次 trial 还原后 `git status` 均 CLEAN。trial (c) 首跑因绝对路径被 WSL 解析失败 exit 127（非判据红），改相对路径重跑为准。
 >
-> **五、复审轮次与结论**：轮 1（t6，revision `1b593e993`）**verdict = needs_revision**——3 条 findings 均为文档行号锚失准（F-01 medium：`02` §「wasm 现状」4 组过期行号；F-02 low：`02` 与 `09` 的 4.4.3 交付锚 `checker.rs:1283-1293`；F-03 low：`06` 的对照陈述），四项实质交付全部 pass。→ 修复轮（t10，`657c3d5e3`，3 文件 23+/23-，并附两条机械判据）→ 轮 2（t11，同 revision）**verdict = pass、新 finding = 0**。**最终勾选依据 = 轮 2 的 pass**。
+> **五、复审轮次与结论**：轮 1（t6，revision `1b593e993`）**verdict = needs_revision**——3 条 findings 均为文档行号锚失准（F-01 medium：`02` §「wasm 现状」4 组过期行号；F-02 low：`02` 与 `09` 的 4.4.3 交付锚 `checker.rs:1283-1293`；F-03 low：`06` 的对照陈述），四项实质交付全部 pass。→ 修复轮（t10，本地 `657c3d5e3` = 推送后 `e184d88b6`，3 文件 23+/23-，并附两条机械判据）→ 轮 2（t11，同 revision）**verdict = pass、新 finding = 0**。**最终勾选依据 = 轮 2 的 pass**。
+> **轮 3（收口 tip `da724940b` 上）**：独立验证 t12 **verdict = pass**（绑定 `da724940b`：四处规则文本逐字节、3.19 / S7 / S8 字段与 scope 齐备、计数表与判决链复算、死引用零、`check-docs-truth` 0、`markdownlint` 0）；复审 t13 **verdict = needs_revision**，4 条 findings——F-01 medium（t10 / 轮 2 只给 rebase 前哈希、§十四 的清单与 origin/dev 实际不符）、F-02 low（`02:379` 的 09 4.2.8 锚被本批自身在 `09:144`/`:182` 各插一行顶到 `:274`）、F-03 low（`09a` 写入本机盘符路径）、F-04 low（三级计数行注记和 157 ≠ 表头 156）→ 修复轮 t14（本笔）逐条关闭。
 > **t10 契约的口径裁决**：修复面以**任务记录的 5 条 F-01…F-05** 为准（F-04/F-05 为机械判据），派工简报不是判据。
 >
 > **六、用户裁决（2026-10-18）与规则固化**：
@@ -633,7 +634,7 @@
 > 5. **规则固化二**「契约 `inScope` 一律写可被路径匹配器解析的路径前缀」：落 `AGENTS.md` 团队编排约定第 6 条。
 > 6. **新增码 W1082 经追认**（对外契约表变更，E 类）。
 > 7. **登记 P10 S8**「文档更正形式收敛（就地改写，删修订注记）」：含 7 条审计清单 scope 与验收行。
-> 8. `09` 顶部计数表：二级 **63**（60 + 3.19 / S7 / S8）、三级 **156**（153 + 3），带 2026-10-18 注记。
+> 8. `09` 顶部计数表：二级 **63**（60 + 3.19 / S7 / S8）、三级 **157**（154 + 3），带 2026-10-18 注记；三级项的账目复核见「十五」。
 >
 > **七、须如实记录的进程事实**：
 > ① 4.4.2 提交用 `SKIP=cargo-fix,cargo-clippy-fix` 跳过两个 `--fix` 钩子——共享工作树里有队友在制品，`--fix` 会顺手改写他人文件；**等价门禁已在最终树手工全跑**（fmt --check / clippy `-D warnings` 均 0）。
@@ -651,13 +652,14 @@
 > **九、CI 门禁结论（AGENTS 第 13 条①，定时核对 2026-10-18 17:26 回填；明细 `target/yx-scratch/close-44/gate-runs.md`）**：
 > 第一次推送（3 笔，tip = `d07993157`）：CI **39110908163** success ｜ Deploy Docs **39110908155** success ｜ Auto Translate Docs **39110908193** success ｜ Auto Translate I18n **39110908144** success；该 tip 覆盖 `24028ffe8`（4.4.2）/ `52d2276ca`（4.4.3）/ `d07993157`（4.4.1）三笔全部内容。
 > 第二次推送（1 笔，tip = `1b593e993`）：CI **39112293391** success ｜ Deploy Docs **39112293062** success ｜ Auto Translate Docs **39112292903** success；覆盖含 t9 补口在内的全部四笔。**无 concurrency 取消**，后者覆盖前者。
-> 无关项：Nightly **39081392694** failure 的 headSha = `290f9ebc`，不属本批提交面。收口提交（本笔文档提交）推送后的结论由第二轮定时核对回填。
+> 第三次推送（2 笔，tip = `da724940b`）：CI **39121538555** success ｜ Deploy Docs **39121538562** success ｜ Auto Translate Docs **39121538541** success——三条 run 的 headSha 均 = `da724940b` 且**均已终态**（2026-10-18 第三轮定时核对回填）；轮 3 独立验证 t12 当时记为「CI 未终态」的观察就此关闭。
+> 无关项：Nightly **39081392694** failure 的 headSha = `290f9ebc`，不属本批提交面。
 >
-> **十、两次 `pull --rebase`（推送期间的自动提交对端）**：对端分别为 auto-translate 与 i18n 提交；三笔交付 + 补口笔的哈希被重写（本地 `1fc135437` → `24028ffe8`、`2d5e610cd` → `52d2276ca`、`29ebd2145` → `d07993157`、`1ebddaf95` → `1b593e993`），`git range-diff` 核过**逐笔内容不变**（三笔全 `=`）。成员未执行 `git push` / `fetch` / `pull`，同步与推送由队长统一做。**取证提醒**：此后引用提交号一律用**推送后哈希**（上列右值）；`09` 的勾选行按约定不写提交号。
+> **十、三次 `pull --rebase`（推送期间的自动提交对端）**：对端分别为 auto-translate 与 i18n 提交；六笔哈希被重写且逐一 **patch-id 全等**——本地 `1fc135437` → `24028ffe8`、`2d5e610cd` → `52d2276ca`、`29ebd2145` → `d07993157`、`1ebddaf95` → `1b593e993`、`657c3d5e3` → `e184d88b6`、`c8412565c` → `da724940b`（第三次 rebase 后 origin/dev 头 = `da724940b`）；`git range-diff` 核过**逐笔内容不变**（三笔全 `=`）。成员未执行 `git push` / `fetch` / `pull`，同步与推送由队长统一做。**取证提醒**：此后引用提交号一律用**推送后哈希**（上列右值）；`09` 的勾选行按约定不写提交号。
 >
 > **十一、未覆盖面（不得把「没测」写成「已过」）**：① doc-tests 0/0 未承载判据；② **wasm32 目标实编未做**（该面由 CI 的 `_build-wasm.yml` 覆盖，本批的 wasm 判定为静态论证）；③ 变异仅覆盖契约点名的 3 处，其余门禁未做反向改坏验证；④ 语料差分未对 `b5e68b3c9` 单独跑（只对冻结 revision 跑）；⑤ i18n bot 补齐的其余语言 W1082 文案行为未验证（只核了 `zh.json` / `en.json`）；⑥ 轮 1 复审与修复轮报出的**同类但不在契约 findings 内的既有漂移**未修（清单见「十二」），归属待用户裁决。
 >
-> **十二、`02` 全篇既有漂移观察清单（已报用户、待裁决后登记）**：口径 = 均为 **pre-existing 漂移**（非本批引入），**不构成本批 finding**；清单由修复轮发现、轮 2 复审在 `657c3d5e3` 上独立抽验并给映射，逐条照录（全清单留档 `target/yx-scratch/close-44/s9-observations.md`）：
+> **十二、`02` 全篇既有漂移观察清单（已报用户、待裁决后登记）**：口径 = 均为 **pre-existing 漂移**（非本批引入），**不构成本批 finding**；清单由修复轮发现、轮 2 复审在 `657c3d5e3`（= 推送后 `e184d88b6`）上独立抽验并给映射，逐条照录（全清单留档 `target/yx-scratch/close-44/s9-observations.md`）：
 >
 > 1. `02` §(a) 入口表 3a-3d / 5 / 5b：`02:72` 引 `orchestrator.rs:273-399` → 现 `:155`；`02:73` `:450` → `:250`；`02:74` `:1374` → `:985`；`02:78` `util/diagnostic/mod.rs:565` → `:681`；`lsp/handlers/diagnostics.rs:146` 的 `run_diagnostics` 已不在该处；**内容级**：`run_diagnostics` 与「否则手工 lex→parse」已被 4.6.1（删手工序列）取代。
 > 2. `02:1016`：`compile_project :99-237` → 现 `:107-134`（28 行 Program 构造器）。
@@ -668,10 +670,17 @@
 > 7. `02` 改动清单表其余行：`predicate.rs:34-36`、`checker.rs:1303-1314` / `:1244`、`backend.rs:67-72`、`wasm/src/lib.rs:30-36` / `:42-51`、`util/diagnostic/mod.rs:621-661`。
 > **本次收口不预置 S9 的 WBS 条目**（用户未裁决）；获得裁决后再按登记形态落 `09`。
 >
-> **十三、批次树回收（gc 与 status 原始输出；输出中的树路径按仓库相对路径记，原样为绝对路径）**：
+> **十三、批次树回收（gc 与 status 原始输出；输出中的树路径按仓库相对路径记）**：
 > `python scripts/dev/scratch.py gc` → `[scratch] 已删除 yx44-evidence（释放约 0.0 MB）` / `[scratch] gc 完成，共释放约 0.0 MB`；
 > `python scripts/dev/scratch.py status` → `yx44-evidence            holder=-` 下一行 `target/yx-scratch/yx44/tree`——注册表记录的路径**已不存在**，该名是注册表残留（`gc` 的 `_remove` 删的是 `meta["path"]` 的父目录即 `target/yx-scratch/yx44`，残留的 `meta.json` 仍落在扫描面内；其内容 batch=`yx44`、`base_rev=29ebd2145`、`lock=null`、含 t5 / t6 / t11 的持有历史）；
-> 收口轮把该注册表文件改名为 `meta.retired.json` 使其退出扫描（**不删任何证据文件、不新建任何树**）→ `python scripts/dev/scratch.py status` = `[scratch] 没有批次树`；再跑 `gc` = `[scratch] 没有批次树，无需回收`；`git worktree list` 只剩主挂载 `E:/git/YaoXiang 657c3d5e3 [dev]`。
-> 批次原始证据目录 `target/yx-scratch/yx44-evidence/`（无 `meta.json`，**非批次树**）保留为留档，收口摘要另落 `target/yx-scratch/close-44/`。验收：`git status` 干净 + 仓库外无本批新增目录（`E:/git` 与 `E:/` 顶层核对）+ 无残留批次树。
+> 收口轮把该注册表文件改名为 `meta.retired.json` 使其退出扫描（**不删任何证据文件、不新建任何树**）→ `python scripts/dev/scratch.py status` = `[scratch] 没有批次树`；再跑 `gc` = `[scratch] 没有批次树，无需回收`；`git worktree list` 只剩主挂载（`dev`）。
+> 批次原始证据目录 `target/yx-scratch/yx44-evidence/`（无 `meta.json`，**非批次树**）保留为留档，收口摘要另落 `target/yx-scratch/close-44/`。验收表述（可解析）：`git status` 干净；批次树 gc 后 `python scripts/dev/scratch.py status` = 没有批次树；`git worktree list` 只剩主挂载；仓库外无本批新增目录。
 >
-> **十四、文档真构建与提交卫生**：`npm run docs:build` 本地 **exit 0**（AGENTS 第 10 条⑨——markdownlint 抓不到 VitePress 的 Vue 编译错误，且仅含 docs 的提交会被判 `no files to check` 跳过 markdownlint）；本批的勾选 / 注记 / 登记 / 规则修改攒成**一笔**文档提交（第 8 条），落在批次收口；成员未执行 `git push` / `fetch` / `pull`。**待推送清单**（逐笔 + 覆盖说明，交队长）：`657c3d5e3`（轮 1 findings 的文档锚点修复，3 文件）+ 本收口文档提交（勾选 / 实录 / 三处路径改写 / 登记与规则修改）。
+> **十四、文档真构建与提交卫生**：`npm run docs:build` 本地 **exit 0**（AGENTS 第 10 条⑨——markdownlint 抓不到 VitePress 的 Vue 编译错误，且仅含 docs 的提交会被判 `no files to check` 跳过 markdownlint）；本批的勾选 / 注记 / 登记 / 规则修改攒成**一笔**文档提交（第 8 条），落在批次收口；成员未执行 `git push` / `fetch` / `pull`。**本批最终两笔均已推送**（收口 tip 上 `git rev-list --count origin/dev..HEAD` = 0，origin/dev 头 = `da724940b`）：`e184d88b6`（轮 1 findings 的文档锚点修复，3 文件 23+/23-）+ `da724940b`（收口文档提交，7 文件 96+/10-；含勾选 / 实录 / 三处路径改写 / 登记与规则修改）。
+>
+> **十五、计数表账目复核（轮 3 修复 F-04；方法与结果均可复核）**：判定对象 = `09` 顶部「定位与范围」表的三级计数行。
+> **方法**（两条独立口径，逐 revision 用 `git show <rev>:<file>` 取字节复算）：
+> ① **逐二级条目求和**——取每一条二级看板行括号内的「N 个三级任务」（行首 `- [x]`/`- [ ]` 加粗标题起首、行内含「个三级任务」，含 S7 行内嵌写的「1 个三级任务」）：现树 70 条二级条目，**和 = 157**。
+> ② **历史自洽性**——同一口径在 `366bc5a69^` 上得 66 条、**和 = 151 = 当期表头 151**（自洽）；`366bc5a69` 当日新登记 `4.9.6` 与 `0.4.1` 两条三级（和 151 → 153），而表头只写 151 → 152 ⇒ **表头自该笔起少记 1**；此后各 revision 均差 1（`92d490695` / `1b593e993` / `d07993157` / `e184d88b6`：和 154 对表头 153；`da724940b`：和 157 对表头 156）。
+> **结果**：真值 = **157**，故更正表头（`09:13` 三级 156 → 157）；注记 144+2+2+2+2+1+1+3 = 157 本来正确，未改；本批之前的基数 = **154**（不是 153）。**二级计数行未动**——该行口径从未与看板条目数对齐（`366bc5a69^` 上是 66 条对表头 59），本次没有可复核证据推翻 53 + 10 = 63，不为凑数改数。
+> 附带更正（同一轮）：§二 的 4.4.1 括注分解按对账脚本实际项数改为「README 侧 4 条 + 代码侧 7 条 = 11」，与 **11/11** 及脚本 11 次 `ck` 调用一致。

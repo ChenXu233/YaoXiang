@@ -376,7 +376,7 @@ wasm 目标**已建成并在 CI 中构建**，`cdylib` 不在主 crate 而在独
 | `check`（`check_project`） | **否** |
 | LSP 项目内（`check_source_in_project`） | **否** |
 
-即：**`wasm/` 的存在使得"proof_execution 只有一个消费者"变成了"有三个"**，但这三个全在单文件路径一侧。统一 Driver 时这条路径已由 `ProgramKind::WasmPlayground` 覆盖（`src/driver/program.rs:31`，与 `SingleFile` 共用同一条单文件阶段表，`:135`）；落地记录见 `09-execution-wbs.md` 的 4.2.8 行（`:272`）。
+即：**`wasm/` 的存在使得"proof_execution 只有一个消费者"变成了"有三个"**，但这三个全在单文件路径一侧。统一 Driver 时这条路径已由 `ProgramKind::WasmPlayground` 覆盖（`src/driver/program.rs:31`，与 `SingleFile` 共用同一条单文件阶段表，`:135`）；落地记录见 `09-execution-wbs.md` 的 **4.2.8** 行（`wasm` 改走 `ProgramKind::WasmPlayground`，`:274`）。
 
 （清理范围——`orchestrator.rs` 的 10 条 wasm 属性（4 正 + 6 反）中哪些在 playground 场景下不可达——归 `06-cleanup-inventory.md` 的「F2 判定」小节：4 条 wasm 臂在 playground 运行期不可达但编译期承重、6 条 `not(wasm32)` 臂在 native 三条阶段表承重，无可直接删除的低风险项。RFC-039 开放问题中「建 wasm 目标，还是删这些分支」一条**已经过期**：目标已建成。）
 
