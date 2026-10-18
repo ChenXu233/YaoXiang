@@ -986,6 +986,14 @@
     "template": "The constraint cannot be proven at compile-time; downgraded to a runtime check",
     "help": "Consider adding a proof function to improve safety"
   },
+  "W1082": {
+    "title": "ownership analysis degraded",
+    "message": "No body checker: ownership analysis ran against an empty ledger",
+    "template": "ownership analysis degraded: this compilation has no body checker (type ledger and call-ownership table missing), so ownership was judged against an empty ledger and borrow conflicts were not checked",
+    "help": "This is an internal stage-contract defect, not a mistake in your program: the ownership layer could not obtain the type ledger and call-ownership table produced by the body checker, so it passed everything as conflict-free and skipped borrow-conflict checking entirely. Please report this diagnostic together with a minimal reproduction as an issue.",
+    "example": "// Only appears when the stage order is broken (ownership runs before the body checker is built)",
+    "error_output": "warning[W1082]: ownership analysis degraded\n --> example.yx:1:1\n  |\n1 | main: () -> Void = {}\n  | ^ ownership analysis degraded: this compilation has no body checker (type ledger and call-ownership table missing), so ownership was judged against an empty ledger and borrow conflicts were not checked"
+  },
   "W1090": {
     "title": "obligation produced but never consumed",
     "message": "An obligation field was produced, but no downstream stage consumed it",

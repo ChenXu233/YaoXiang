@@ -1293,18 +1293,11 @@ impl TypeChecker {
         // 分析借用令牌冲突、Move/Drop/Clone/Mut 语义（RFC-009a §系统谓词清单）
         // #256：类型账本从推断层移交，供 Move/Dup 分类
         // #265：经证明管线入口 check_ownership，分支守卫注入假设栈
-        let (release_plan, escaped_refs) = {
-            let ledger = self
-                .body_checker
-                .as_ref()
-                .map(|bc| bc.var_type_ledger().clone())
-                .unwrap_or_default();
-            // #335 G3 类型信息流接口：调用点所有权解析表随 ledger 一并移交
-            let call_ownership = self
-                .body_checker
-                .as_ref()
-                .map(|bc| bc.call_ownership.clone())
-                .unwrap_or_default();
+        let (release_plan, escaped_refs, ownership_degradation) = {
+            // WBS 4.4.3 / 02 §S5 (d)：输入取自 body_checker（#256 账本 +
+            // #335 G3 调用点所有权表）。缺失即降级为空输入并留诊断（第三项），
+            // 在下方 warnings 汇聚点发射——静默降级曾是「静默不动作」通道。
+            let (ledger, call_ownership, degradation) = self.ownership_inputs(module.span);
             let mut proof_ctx =
                 crate::frontend::core::typecheck::proof::context::ProofContext::new(&self.env);
             let (ownership_results, plan, escaped_refs) = super::layers::ownership::check_ownership(
@@ -1343,7 +1336,7 @@ impl TypeChecker {
                     }
                 }
             }
-            (plan, escaped_refs)
+            (plan, escaped_refs, degradation)
         };
 
         // 求解所有约束
@@ -1533,6 +1526,9 @@ impl TypeChecker {
         // WBS 3.4.2：求解器缺失时终止性测度义务判 Unjudged——「未判」≠「成立」，
         // 义务存在而判不了必须让用户知情（Warning 级，不阻断——同 W1003 契约）
         let mut warnings = import_warnings;
+        // WBS 4.4.3 / 02 §S5 (d)：所有权层输入降级（无 body_checker）留痕——
+        // 生产路径不可达（`init_body_checker` 先行），一旦发射即阶段契约被破坏。
+        warnings.extend(ownership_degradation);
         if unjudged_termination_obligations > 0 {
             warnings.push(
                 ErrorCodeDefinition::termination_obligations_unjudged(
@@ -1589,6 +1585,43 @@ impl TypeChecker {
                 .collect(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
             warnings,
+        }
+    }
+
+    /// 取所有权层输入：类型账本（#256）+ 调用点所有权解析表（#335 G3）。
+    ///
+    /// `body_checker` 缺失 ⇒ 空输入——所有权分析退化为「什么都不冲突」
+    /// （**静默不动作**，RFC-039 D59 C 类 / 02 §S5 (d)）。返回值第三项即该降级的
+    /// 留痕诊断（WBS 4.4.3），调用方经 warnings 通道发射（不阻断编译）。
+    ///
+    /// 抽成方法而非就地 `unwrap_or_default()`：生产路径上 `init_body_checker`
+    /// 先于所有权阶段执行、输入恒存在，降级分支**不可达**——只有把判据抽出来
+    /// 才能用钉测试钉住它（见 `tests/checker.rs`）。
+    pub(super) fn ownership_inputs(
+        &self,
+        span: crate::util::span::Span,
+    ) -> (
+        HashMap<(usize, String), PolyType>,
+        super::inference::call_ownership::CallOwnershipTable,
+        Option<Diagnostic>,
+    ) {
+        match self.body_checker.as_ref() {
+            Some(body_checker) => (
+                body_checker.var_type_ledger().clone(),
+                body_checker.call_ownership.clone(),
+                None,
+            ),
+            // WBS 4.4.3：降级必须留痕——空账本照跑（保守方向不变），
+            // 但诊断随 warnings 通道上抛（02 §S5 (d) 的「无警告」缺口）
+            None => (
+                HashMap::new(),
+                Default::default(),
+                Some(
+                    ErrorCodeDefinition::ownership_analysis_degraded()
+                        .at(span)
+                        .build(),
+                ),
+            ),
         }
     }
 
