@@ -4911,6 +4911,18 @@ impl AstToIrGenerator {
             .type_name()
     }
 
+    /// 该调用点是否为**静态调用**——callee 是函数表里的一个名字（代码），而非某个值。
+    ///
+    /// 名字解析与 [`Self::generate_var_expr_ir`] 同一条优先级（局部变量 → 全局
+    /// 槽位 → …）：命中前两者就是**变量**，调用必须走 `CallDyn`（间接调用）；
+    /// 未命中才是函数表条目，按名 `Call`。
+    ///
+    /// 顶层值绑定（`f = double`，查 [`Self::lookup_global`]）此前两边都漏：
+    /// 它不是局部变量、却在 typecheck 的 bindings 里（类型是 `Fn`），于是被
+    /// 当成函数名。而函数表里没有叫 `f` 的代码——`f = double` 不进函数表，
+    /// 只占一个全局槽位（由 `register_global_slots` 预分配，见其注释）。
+    /// 生成的按名 `Call` 在运行期查扁平函数表落空，报
+    /// `E6006 Native function not found: f`。
     fn is_static_fn_name(
         &self,
         func: &ast::Expr,
@@ -4918,6 +4930,11 @@ impl AstToIrGenerator {
         match func {
             ast::Expr::Var(name, _) => {
                 if self.lookup_local(name).is_some() {
+                    return false;
+                }
+                // 顶层值绑定是变量不是代码：与 `generate_var_expr_ir` 的
+                // 「局部 → 全局」优先级一致，走间接调用。
+                if self.lookup_global(name).is_some() {
                     return false;
                 }
                 self.lookup_var_type(name).is_some()

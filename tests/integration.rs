@@ -49,3 +49,7 @@ mod cli;
 /// `yaoxiang` CLI 子命令端到端测试（子进程级）
 #[path = "integration/cli_e2e.rs"]
 mod cli_e2e;
+
+/// RFC-039 WBS 3.6.1：局部函数类型值按名调用走间接调用（先红后绿）
+#[path = "integration/fn_value_call.rs"]
+mod fn_value_call;
