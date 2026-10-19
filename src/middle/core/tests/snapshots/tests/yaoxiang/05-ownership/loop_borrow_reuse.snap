@@ -22,12 +22,13 @@ module
     Load %3 <- %0
     Load %4 <- int(5)
     Lt %5 <- %3, %4
-    JmpIfNot %5 -> instr(15)
+    JmpIfNot %5 -> instr(16)
     Load %6 <- %0
     Load %7 <- int(1)
     Add %0 <- %6, %7
     Load %8 <- %2
     Call %1 <- string("good_seq") [%8] (def=d1)
+    Drop %2
     Jmp -> instr(5)
     Load %3 <- %2
     LoadField %5 <- %3.1
@@ -37,8 +38,12 @@ module
     Load %6 <- string("unknown")
     Call %7 <- string("std.io.format_fallback") [%4, %6] (def=d2)
     Call %5 <- string("std.io.print") [%7] (def=d3)
+    Drop %2
     Load %3 <- string("loop_borrow_reuse_ok")
     Call %5 <- string("std.io.print") [%3] (def=d3)
+    Drop %2
+    Drop %0
+    Drop %1
     Ret %5
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

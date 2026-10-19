@@ -15,6 +15,8 @@ use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::resolver::Resolver;
 use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
+use crate::frontend::core::typecheck::layers::ownership::ReleasePlan;
+use crate::frontend::core::typecheck::types::OverloadResolutions;
 use crate::frontend::core::typecheck::{MonoType, PolyType, TypeCheckResult};
 use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
@@ -22,6 +24,7 @@ use crate::middle::core::ir::{
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::i18n::MSG;
+use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
@@ -187,12 +190,12 @@ pub struct AstToIrGenerator {
     constraint_var_concrete_types: HashMap<String, String>,
     /// RFC-004: 匿名函数绑定生成的独立 FunctionIR 列表
     anon_function_irs: Vec<FunctionIR>,
-    /// NLL 精确释放计划（所有权检查器产出）
-    release_plan: HashMap<Span, Vec<String>>,
-    /// D41/2.4.4 观测点：release_plan 的 span 键在生成期被实际消费的集合。
-    /// 「ownership 产出 ⊆ IR 构造消费」契约的判据数据出口
-    ///（test_release_plan_spans_consumed；P4 的 D20 PlanId 迁移同样依赖本观测）。
-    release_plan_consumed: std::collections::HashSet<Span>,
+    /// NLL 精确释放计划（所有权检查器产出；RFC-039 D20 / WBS 4.5.1）。
+    ///
+    /// 键 = 释放边界所在语句的 PlanId——本生成器在语句边界经
+    /// [`ReleasePlan::consume`] 取条目（取即记账），故计划本体同时携带
+    /// 「产出」与「已消费」两侧事实：结算（义务账本 W1090）读的是同一份账。
+    release_plan: ReleasePlan,
     /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
     /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
     pending_env_vars: Vec<Operand>,
@@ -229,8 +232,10 @@ pub struct AstToIrGenerator {
     operator_dispatches: HashMap<Span, (String, String, bool)>,
     /// RFC-011b：`?` 表达式的 Try 实现类型名（span 键控）
     try_expr_impls: HashMap<Span, String>,
-    /// RFC-011a §3：方法级重载决议（span 键控 → 混编 IR 名）
-    overload_resolutions: HashMap<Span, String>,
+    /// RFC-011a §3：方法级重载决议（**调用点 PlanId** 键控 → 混编 IR 名；
+    /// RFC-039 D20 / WBS 4.5.2）。消费经 `OverloadResolutions::get`（命中即
+    /// 记账），故本字段携带决议表本体（含消费台账），结算读的是同一份账。
+    overload_resolutions: OverloadResolutions,
     /// 方法定义序（key → 已生成定义数）：混编名的定义侧计数
     method_def_ordinals: HashMap<String, usize>,
 
@@ -352,8 +357,7 @@ impl AstToIrGenerator {
             fn_param_names: HashMap::new(),
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
-            release_plan: type_result.release_plan.drops.clone(),
-            release_plan_consumed: std::collections::HashSet::new(),
+            release_plan: type_result.release_plan.clone(),
             pending_env_vars: Vec::new(),
             pending_env_names: Vec::new(),
             closure_captures: HashMap::new(),
@@ -377,11 +381,7 @@ impl AstToIrGenerator {
                 .iter()
                 .map(|(span, name)| (*span, name.clone()))
                 .collect(),
-            overload_resolutions: type_result
-                .overload_resolutions
-                .iter()
-                .map(|(span, name)| (*span, name.clone()))
-                .collect(),
+            overload_resolutions: type_result.overload_resolutions.clone(),
             method_def_ordinals: HashMap::new(),
             sum_type_variants: type_result
                 .sum_types
@@ -496,28 +496,140 @@ impl AstToIrGenerator {
         Some(self.resolver().resolve_namespace(head, &segs))
     }
 
-    /// 查一个函数的**声明期形参名**（按声明序），供命名参数重排。
+    /// 从限定/混编调用名取叶子段（形参名表的键就是声明处的短名）。
+    ///
+    /// `Temp.pick` / `Temp.pick#1` → `pick`；无分隔符时原样返回。
+    fn call_name_leaf(name: &str) -> &str {
+        name.rsplit('.')
+            .next()
+            .and_then(|leaf| leaf.split('#').next())
+            .unwrap_or(name)
+    }
+
+    /// #452：把方法调用的实参按**形参声明序**放回槽位（含接收者位下标 0）。
+    ///
+    /// 位置实参占前导槽位（第 i 个 → 形参 1+i），命名实参按名入槽；命名后接
+    /// 位置实参、同一槽位重复指定、名字不在形参表里一律报错——**不得静默丢弃
+    /// 命名实参**（丢弃即换一种静默：实参进了调用但落错槽位，运行期才炸）。
+    ///
+    /// 返回逐槽的实参序（`Some(k)`：k < 位置实参数 → `args[k]`，否则
+    /// `named_args[k - 位置实参数]`；`None` = 该槽空缺）。槽位下标与 typecheck
+    /// 侧 `bind_named_args` 同坐标系（全形参表，含接收者位）。
+    /// `key` 是诊断里要显示的真名（调用点传方法键或决议出的混编名叶子段）——
+    /// 此前硬编 `"<method>"`、或拿 `names.first()`（= 接收者位 self）冒名，
+    /// 用户看到的是 "Function self has no parameter named z"（F3）。
+    fn build_arg_slots(
+        key: &str,
+        names: &[String],
+        args: &[Expr],
+        named_args: &[(String, Expr)],
+        span: &Span,
+    ) -> crate::util::diagnostic::Result<Vec<Option<usize>>> {
+        if names.is_empty() {
+            if named_args.is_empty() {
+                return Ok((0..args.len()).map(Some).collect());
+            }
+            // 形参名不可得：能力不足要**响亮**，不许把命名实参悄悄丢掉
+            return Err(ErrorCodeDefinition::unknown_argument(
+                key,
+                &named_args[0].0,
+                "（形参名表不可得）",
+            )
+            .at(*span)
+            .build());
+        }
+        let mut slots: Vec<Option<usize>> = vec![None; names.len()];
+        for i in 0..args.len() {
+            if 1 + i < slots.len() {
+                slots[1 + i] = Some(i);
+            }
+        }
+        if let (Some(last), Some((first_named_name, first_named))) =
+            (args.last(), named_args.first())
+        {
+            if first_named.span().start.offset < last.span().start.offset {
+                // 顺序非法（非重复）：一个形参收到多个实参 / 位置实参写在命名实参之后（E1111）
+                return Err(
+                    ErrorCodeDefinition::argument_order_invalid(key, first_named_name)
+                        .at(*span)
+                        .build(),
+                );
+            }
+        }
+        for (i, (name, _)) in named_args.iter().enumerate() {
+            let Some(slot) = names
+                .iter()
+                .position(|p| p == name)
+                .filter(|slot| *slot > 0)
+            else {
+                return Err(
+                    ErrorCodeDefinition::unknown_argument(key, name, &names.join(", "))
+                        .at(*span)
+                        .build(),
+                );
+            };
+            if slots[slot].is_some() {
+                return Err(ErrorCodeDefinition::argument_order_invalid(key, name)
+                    .at(*span)
+                    .build());
+            }
+            slots[slot] = Some(args.len() + i);
+        }
+        Ok(slots)
+    }
+
+    /// 查一个函数的**声明期形参名 + 必需下限**（供命名参数重排与「可选位放行」）。
     ///
     /// 两个来源，按就近优先：
-    /// 1. 本模块的 `fn_param_names`（定义与调用同文件）
-    /// 2. 模块注册表里该导出携带的 `param_names`——跨模块调用
-    ///    （`list.push(item = 9, list = v)`）时定义方的 IR 生成器实例拿不到，
-    ///    名字必须随导出传过来（同 `Export.type_params` 的跨模块情形）。
+    /// 1. 本模块的 `fn_param_names`（定义与调用同文件）——同模块函数的形参表
+    ///    不含可选位语义，故 `required_min` 取全长（全必需）
+    /// 2. 模块注册表里的导出：优先用导出携带的 `param_names`（无必需下限信息，
+    ///    同样按全必需），否则走**与 typecheck 原生臂同一出口**
+    ///    `signature::export_signature_param_info`（同一签名串给出形参名与必需下限）。
+    ///    这层同源是 t14 的要点：ir_gen 曾硬编全必需位 ⇒ 合法省略可选位的命名调用
+    ///    被共享判据误报 E1010（实测 `assert.assert(cond = 1 == 1)`）。
     ///
     /// `full_path` 是解析后的限定名（如 `std.list.push`）；`leaf` 是短名。
-    fn lookup_param_names(
+    fn lookup_param_info(
         &self,
         full_path: &str,
         leaf: &str,
-    ) -> Option<Vec<String>> {
+    ) -> Option<crate::frontend::core::typecheck::environment::ExportParamInfo> {
         if let Some(names) = self.fn_param_names.get(leaf) {
-            return Some(names.clone());
+            let names = names.clone();
+            let required_min = names.len();
+            return Some(
+                crate::frontend::core::typecheck::environment::ExportParamInfo {
+                    names,
+                    required_min,
+                },
+            );
         }
         let export = self.registry.resolve_export(full_path).ok()?;
-        export.param_names.clone()
+        if let Some(names) = export.param_names.clone() {
+            let required_min = names.len();
+            return Some(
+                crate::frontend::core::typecheck::environment::ExportParamInfo {
+                    names,
+                    required_min,
+                },
+            );
+        }
+        // #454 / t14：原生导出的注册点（src/std/mod.rs）只带签名串、不带形参名表，
+        // 故第三个来源 = 从**签名串**提取形参名与必需下限——与 typecheck 原生臂
+        // 同一出口，避免两侧各算一份而分歧。
+        let (names, required_min) =
+            crate::frontend::core::typecheck::signature::export_signature_param_info(
+                &export.signature,
+            )?;
+        Some(
+            crate::frontend::core::typecheck::environment::ExportParamInfo {
+                names,
+                required_min,
+            },
+        )
     }
 
-    /// 拆分 curry 签名为多层
     ///
     /// 输入：`type_annotation` 是 `Type::Fn` 的嵌套结构（如 `(N: Int) -> (n: N) -> Int`）
     /// 输入：`signature_params` 是拍平的所有 curry 参数（如 `[N: Int, n: N]`）
@@ -929,6 +1041,12 @@ impl AstToIrGenerator {
         &mut self,
         module: &ast::Module,
     ) {
+        // 本单元内按名判重（4.10.3）：Script 顶层对 `mut` 的赋值语句与声明
+        // 同形，逐语句计数会给同一变量重复配槽（初始化写后配的槽、读取用先
+        // 配的槽，运行时类型错配）。布局键在多文件是限定名、本检查是裸名拦
+        // 不到（见下行），故判重必须本单元局部做——与 extract_global_defs
+        // 同名判据同源。
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         for stmt in &module.items {
             let ast::StmtKind::Assign {
                 target,
@@ -946,6 +1064,9 @@ impl AstToIrGenerator {
             if ast::Expr::block_binding_is_function(type_annotation.as_ref(), value.as_deref())
                 || Self::is_type_def_binding(value.as_deref())
             {
+                continue;
+            }
+            if !seen.insert(name.clone()) {
                 continue;
             }
             // 已登记（如跨文件布局已有同名的本文件绑定）则跳过
@@ -968,14 +1089,6 @@ impl AstToIrGenerator {
     }
 
     /// 从 AST 模块生成 IR 模块
-    /// D41/2.4.4 判据数据出口：生成期实际消费的 `release_plan` span 键集合。
-    ///
-    /// 供 `test_release_plan_spans_consumed` 与 P4 的 D20（PlanId 迁移）观测——
-    /// 与 `typecheck::TypeCheckResult.release_plan.drops` 的键集做差集比对。
-    pub fn release_plan_consumed_spans(&self) -> &std::collections::HashSet<Span> {
-        &self.release_plan_consumed
-    }
-
     pub fn generate_module_ir(
         &mut self,
         module: &ast::Module,
@@ -1097,6 +1210,12 @@ impl AstToIrGenerator {
             Self::qualify_names(&mut ir, key, &aliases);
         }
         self.assign_defs(&mut ir);
+        // RFC-039 D20 / WBS 4.5.1：消费侧完整跑完一轮（生成成功返回）——
+        // 结算据此区分「消费者跑完但漏了条目」（响亮）与「消费者没跑完 / 失败」
+        //（不判：失败已按首因报出）。失败路径提前 `return Err`，不会标到这里。
+        self.release_plan.mark_consumption_completed();
+        // 同点标记重载决议表的消费侧（4.5.2 复用同一台账机制）
+        self.overload_resolutions.mark_consumption_completed();
         Ok(ir)
     }
 
@@ -1351,6 +1470,19 @@ impl AstToIrGenerator {
                 rename
                     .get(prefix)
                     .or_else(|| aliases.get(prefix))
+                    .map(|q| format!("{}{}", q, suffix))
+            })
+            .or_else(|| {
+                // 显式类型实参的预特化名（`mk(int64)`）：两层调用 `mk(Int)(5)`
+                // 由 ir_gen 按 D6.3 直接发特化名（mono 会剥掉未特化原件），其
+                // 基名同样是本单元函数——按同一套规则限定基名、类型参数串原样
+                // 保留，否则限定后查表落空（E6006；4.10.3 语料实证）。
+                let open = name.find('(')?;
+                let base = &name[..open];
+                let suffix = &name[open..]; // 含左括号
+                rename
+                    .get(base)
+                    .or_else(|| aliases.get(base))
                     .map(|q| format!("{}{}", q, suffix))
             })
     }
@@ -1673,11 +1805,26 @@ impl AstToIrGenerator {
                         );
                         return Ok(None);
                     }
-                    // MethodBind
+                    // MethodBind：签名标注是绑定语义的唯一来源（接收者位、形参名、
+                    // 返回类型都取自它）。无标注时**不得**对 None 执行 unwrap——
+                    // 那会把用户写法错误变成编译器进程 panic（#451，D59 A 类：
+                    // 实测 `exit=101`）；此处编译期拒绝并指明补全写法。
+                    let Some(method_type) = type_annotation.as_ref() else {
+                        return Err(ErrorCodeDefinition::method_binding_without_signature(
+                            &type_name,
+                            &name,
+                        )
+                        .at(stmt.span)
+                        .with_help(format!(
+                            "补上签名标注：`{type_name}.{name}: (self: &{type_name}, ...) -> 返回类型 = 函数体`；\
+                             要复用现成函数则写 `{type_name}.{name}: (…) -> 返回类型 = 函数名[位置]`"
+                        ))
+                        .build());
+                    };
                     self.generate_method_ir(
                         &type_name,
                         &name,
-                        type_annotation.as_ref().unwrap(),
+                        method_type,
                         &params,
                         &body,
                         constants,
@@ -1908,6 +2055,12 @@ impl AstToIrGenerator {
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
                         span: self.cur_span,
@@ -1918,6 +2071,8 @@ impl AstToIrGenerator {
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
             self.set_cur_span(stmt.span);
         }
         if !tail_handled {
@@ -2064,6 +2219,12 @@ impl AstToIrGenerator {
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
                         span: self.cur_span,
@@ -2079,23 +2240,8 @@ impl AstToIrGenerator {
                 &self.symbols.len().to_string()
             );
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
-            // NLL Release: 在语句边界插入 Drop 指令
-            let mut release_hit = false;
-            if let Some(vars) = self.release_plan.get(&stmt.span) {
-                release_hit = true;
-                for var in vars {
-                    if let Some(local_idx) = self.lookup_local(var) {
-                        instructions.push(Instruction::Drop {
-                            src: Operand::Local(local_idx),
-                            span: self.cur_span,
-                        });
-                    }
-                }
-            }
-            if release_hit {
-                // D41/2.4.4 观测：键被实际消费即入册（借用在上方 if-let 结束后写入）
-                self.release_plan_consumed.insert(stmt.span);
-            }
+            // NLL Release: 在语句边界消费释放计划并插入 Drop 指令
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
             // #393：语句级临时寄存器回收（同 generate_block_ir——临时不跨
             // 语句存活，回滚到具名水位与循环态地板的较大者）
             let named_watermark = self
@@ -2300,6 +2446,12 @@ impl AstToIrGenerator {
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
                         span: self.cur_span,
@@ -2310,6 +2462,8 @@ impl AstToIrGenerator {
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
             self.set_cur_span(stmt.span);
         }
         if !tail_handled {
@@ -3083,6 +3237,31 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 语句边界的释放计划消费（RFC-039 D20 / WBS 4.5.1）——**唯一消费点**。
+    ///
+    /// `ReleasePlan::consume` 命中即记账（消费台账随计划本体走），故
+    /// 「查表 → 记账 → 发 Drop」是一次动作，台账不可能与真实消费漂移。
+    /// 所有语句边界（函数体 / curry 层 / 方法体 / lambda 体 / 嵌套块 / 尾语句
+    /// 路径）都必须经过它：漏一处，该语句的计划键就没有消费，义务账本结算
+    /// 报 W1090（D41——差集必须为空，无白名单）。
+    fn emit_release_drops(
+        &mut self,
+        statement: PlanId,
+        instructions: &mut Vec<Instruction>,
+    ) {
+        let Some(vars) = self.release_plan.consume(statement) else {
+            return;
+        };
+        for var in vars {
+            if let Some(local_idx) = self.lookup_local(var) {
+                instructions.push(Instruction::Drop {
+                    src: Operand::Local(local_idx),
+                    span: self.cur_span,
+                });
+            }
+        }
+    }
+
     fn generate_local_stmt_ir(
         &mut self,
         stmt: &ast::Stmt,
@@ -3773,12 +3952,18 @@ impl AstToIrGenerator {
             // 块作为表达式 + 最后一条语句贡献块值 → 值写入 result_reg
             if let (Some(reg), true) = (result_reg, is_last) {
                 if self.generate_tail_stmt_ir(stmt, reg, instructions, constants)? {
+                    // 尾语句路径同款消费（块值已进 reg，Drop 排在块出口之前）
+                    self.emit_release_drops(stmt.plan_id, instructions);
                     self.set_cur_span(stmt.span);
                     continue;
                 }
             }
             // 其他情况正常生成语句
             self.generate_local_stmt_ir(stmt, instructions, constants)?;
+            // NLL Release: 块内每条语句边界都消费释放计划（RFC-039 D20）——
+            // 嵌套块（if/for/while/块表达式的体）的语句也各有自己的条目，
+            // 作用域退出的 Drop 就归属在块的最后一条语句上
+            self.emit_release_drops(stmt.plan_id, instructions);
             // #393：语句级临时寄存器回收——临时不跨语句存活，语句生成完
             // 回滚到「具名局部水位 ⋈ 循环态地板」。具名水位取 cur_locals
             // 最后一个具名槽（参数与全部具名绑定，含已退出作用域者，保守
@@ -4900,6 +5085,12 @@ impl AstToIrGenerator {
             if Some(i) == last_idx {
                 let result_reg = self.next_temp_reg();
                 if self.generate_tail_stmt_ir(stmt, result_reg, &mut instructions, constants)? {
+                    // 尾语句路径（RFC-039 D20 逐案核实项）：本条语句经
+                    // `generate_tail_stmt_ir` 提前返回，**必须**在同款语句边界上
+                    // 消费它的释放条目——漏这一处，尾语句的 Drop 就静默丢失
+                    //（实测红态里正是这一类：尾位置语句的计划键永不命中）。
+                    // 取值已完成（值在 result_reg），故 Drop 排在 Ret 之前。
+                    self.emit_release_drops(stmt.plan_id, &mut instructions);
                     instructions.push(Instruction::Ret {
                         value: Some(Operand::Local(result_reg)),
                         span: self.cur_span,
@@ -4910,6 +5101,8 @@ impl AstToIrGenerator {
                 }
             }
             self.generate_local_stmt_ir(stmt, &mut instructions, constants)?;
+            // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+            self.emit_release_drops(stmt.plan_id, &mut instructions);
             // #393：语句级临时寄存器回收（同 generate_block_ir）
             let named_watermark = self
                 .cur_locals
@@ -6916,6 +7109,7 @@ impl AstToIrGenerator {
                     stmts: vec![ast::Stmt {
                         kind: ast::StmtKind::Expr(Box::new(task.expr.clone())),
                         span: *span,
+                        plan_id: ast::PlanId::UNPLANNED,
                     }],
                     span: *span,
                 }),
@@ -6934,6 +7128,8 @@ impl AstToIrGenerator {
                 || crate::frontend::core::spawn::analysis::is_spawn_tail_expr(body, i)
             {
                 self.generate_local_stmt_ir(stmt, instructions, constants)?;
+                // NLL Release: 语句边界消费释放计划（RFC-039 D20）
+                self.emit_release_drops(stmt.plan_id, instructions);
             }
         }
 
@@ -6985,7 +7181,23 @@ impl AstToIrGenerator {
             }
         }
 
-        // 7. 退出 spawn 作用域
+        // 7. spawn 体语句的释放边界结算（RFC-039 D20 / WBS 4.5.1）
+        //
+        // 直接子表达式语句在第 3 步被**闭包化**（每条包成无参闭包），
+        // 尾表达式 / return 在第 6 步单独取值——这两类语句都不过通用语句循环。
+        // 但 ownership 同样走它们（`walk_expr` 的 `Expr::Spawn` 臂遍历
+        // `body.stmts`），条目必须有消费点：spawn 体的作用域退点就是此处
+        //（`Spawn` 指令已把所有闭包 join 回来）。漏掉这一处，spawn 体语句的
+        // 产出键就永远没人消费——义务结算报 W1090（实测红态残留 7 键即此类）。
+        for (i, stmt) in body.stmts.iter().enumerate() {
+            let generated_in_loop = !crate::frontend::core::spawn::analysis::is_direct_child(stmt)
+                || crate::frontend::core::spawn::analysis::is_spawn_tail_expr(body, i);
+            if !generated_in_loop {
+                self.emit_release_drops(stmt.plan_id, instructions);
+            }
+        }
+
+        // 8. 退出 spawn 作用域
         self.exit_scope();
         Ok(())
     }
@@ -7476,7 +7688,8 @@ impl AstToIrGenerator {
 
     /// 生成 Call 表达式 IR
     ///
-    /// `_expr` 为分发点透传的原表达式（当前未使用，保留以对齐其余外提臂的签名）。
+    /// `call_plan_id` = **本调用节点的身份**（`Expr::Call::plan_id`，RFC-039 D20）：
+    /// 重载决议表的消费键就是它——与 typecheck 产出侧读同一个节点上的同一个值。
     #[allow(clippy::too_many_arguments)]
     fn generate_call_expr_ir(
         &mut self,
@@ -7484,7 +7697,7 @@ impl AstToIrGenerator {
         args: &[Expr],
         named_args: &[(String, Expr)],
         span: &Span,
-        _expr: &Expr,
+        call_plan_id: PlanId,
         result_reg: usize,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -7576,36 +7789,37 @@ impl AstToIrGenerator {
                         .next()
                         .unwrap_or(&method_function_name);
                     // 本模块表 → 跨模块导出携带的 `param_names`
-                    if let Some(names) = self.lookup_param_names(&method_function_name, leaf) {
-                        if arg_regs.len() <= names.len() {
-                            let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
-                            for (i, reg) in arg_regs.iter().enumerate() {
-                                slots[i] = Some(reg.clone());
+                    if let Some(info) = self.lookup_param_info(&method_function_name, leaf) {
+                        let names = &info.names;
+                        // t12-F1 / t14：槽位判定收敛到共享判据（此前是与另一处互抄的第二份
+                        // 内联副本，槽冲突报旧码 E1015、缺规则④）；可选位与形参名同出一源。
+                        let optional: Vec<bool> =
+                            (0..names.len()).map(|i| i >= info.required_min).collect();
+                        let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                            &method_function_name,
+                            names,
+                            args,
+                            named_args,
+                            0, // 命名空间调用无接收者位
+                            &optional,
+                            *span,
+                        )?;
+                        let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
+                        for (arg_pos, pos) in positions.iter().enumerate() {
+                            if *pos >= slots.len() {
+                                continue; // 超签实参：由类型检查阶段报 E1010
                             }
-                            for (arg_name, arg_expr) in named_args.iter() {
-                                let Some(idx) = names.iter().position(|n| n == arg_name) else {
-                                    return Err(ErrorCodeDefinition::unknown_argument(
-                                        &method_function_name,
-                                        arg_name,
-                                        &names.join(", "),
-                                    )
-                                    .at(*span)
-                                    .build());
-                                };
-                                if slots[idx].is_some() {
-                                    return Err(ErrorCodeDefinition::duplicate_argument(
-                                        &method_function_name,
-                                        arg_name,
-                                    )
-                                    .at(*span)
-                                    .build());
-                                }
+                            let reg = if arg_pos < arg_regs.len() {
+                                arg_regs[arg_pos].clone()
+                            } else {
+                                let arg_expr = &named_args[arg_pos - arg_regs.len()].1;
                                 let arg_reg = self.next_temp_reg();
                                 self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
-                                slots[idx] = Some(Operand::Local(arg_reg));
-                            }
-                            arg_regs = slots.into_iter().flatten().collect();
+                                Operand::Local(arg_reg)
+                            };
+                            slots[*pos] = Some(reg);
                         }
+                        arg_regs = slots.into_iter().flatten().collect();
                     }
                 }
                 instructions.push(Instruction::Call {
@@ -7625,17 +7839,15 @@ impl AstToIrGenerator {
 
                 if let Some(binding) = binding_info {
                     // RFC-011a §3：方法级重载决议命中时，binding.function
-                    // （后定义覆盖的单值）替换为决议出的混编名
-                    // RFC-011a §3：方法级重载决议命中时，binding.function
                     //（后定义覆盖的单值）替换为决议出的混编名
-                    let binding = if named_args.is_empty() {
-                        if let Some(mangled) = self.overload_resolutions.get(span) {
-                            BindingInfo {
-                                function: mangled.clone(),
-                                positions: binding.positions.clone(),
-                            }
-                        } else {
-                            binding
+                    let binding = if let Some(mangled) = self.overload_resolutions.get(call_plan_id)
+                    {
+                        // RFC-039 D20：按**调用点身份**消费重载决议（命中即记账）。
+                        // #452：命名实参调用同样消费——决议已把命名实参计入匹配，
+                        // 这里的名字必须真的被用到（消费侧不得再带形态门）。
+                        BindingInfo {
+                            function: mangled.to_string(),
+                            positions: binding.positions.clone(),
                         }
                     } else {
                         binding
@@ -7651,12 +7863,54 @@ impl AstToIrGenerator {
                     let obj_reg = self.next_temp_reg();
                     self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
 
-                    // 生成所有方法参数 IR
+                    // 生成所有方法参数 IR。
+                    // #452：命名实参先按绑定函数的**值形参名**入槽（位置实参占前导
+                    // 槽位），再交给绑定位置重排——两步各自有据，不互相顶替。
+                    // 只用**被绑函数**的形参名：绑定路径把实参交给 binding.positions
+                    // 重排，槽序以被绑函数的形参表为准；用方法键的声明序形参名会把
+                    // 接收者位的占位错算成实参（类型体绑定形态实测 E1010）。
+                    let bound_params = self
+                        .lookup_param_info(
+                            &binding.function,
+                            Self::call_name_leaf(&binding.function),
+                        )
+                        .map(|info| info.names);
                     let mut method_arg_regs = Vec::new();
-                    for arg in args.iter() {
-                        let arg_reg = self.next_temp_reg();
-                        self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
-                        method_arg_regs.push(Operand::Local(arg_reg));
+                    if !named_args.is_empty() {
+                        if let Some(names) = bound_params {
+                            // F3：诊断用真实方法名（不是硬编 <method>，也不是 self）
+                            let diag_key = if field.is_empty() {
+                                Self::call_name_leaf(&binding.function)
+                            } else {
+                                field.as_str()
+                            };
+                            let slots =
+                                Self::build_arg_slots(diag_key, &names, args, named_args, span)?;
+                            for slot in slots.iter() {
+                                let arg_expr = match slot {
+                                    Some(slot) => {
+                                        if *slot < args.len() {
+                                            &args[*slot]
+                                        } else {
+                                            &named_args[*slot - args.len()].1
+                                        }
+                                    }
+                                    // 空槽说明给出诊断的 typecheck 侧未跑（本路径
+                                    // 只在 typecheck 通过后才到）——维持旧形态
+                                    None => continue,
+                                };
+                                let arg_reg = self.next_temp_reg();
+                                self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
+                                method_arg_regs.push(Operand::Local(arg_reg));
+                            }
+                        }
+                    }
+                    if method_arg_regs.is_empty() {
+                        for arg in args.iter() {
+                            let arg_reg = self.next_temp_reg();
+                            self.generate_expr_ir(arg, arg_reg, instructions, constants)?;
+                            method_arg_regs.push(Operand::Local(arg_reg));
+                        }
                     }
 
                     // 按绑定位置重排参数。
@@ -7700,26 +7954,50 @@ impl AstToIrGenerator {
                 } else {
                     // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
                     // RFC-011a §3：方法级重载决议命中时直接调用混编名
-                    //（typecheck 按 实参+期望返回 决议，span 键控）
-                    if named_args.is_empty() {
-                        if let Some(mangled) = self.overload_resolutions.get(span).cloned() {
-                            let obj_reg = self.next_temp_reg();
-                            self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
-                            let mut call_args = vec![Operand::Local(obj_reg)];
-                            for a in args {
-                                let r = self.next_temp_reg();
-                                self.generate_expr_ir(a, r, instructions, constants)?;
-                                call_args.push(Operand::Local(r));
-                            }
-                            instructions.push(Instruction::Call {
-                                dst: Some(Operand::Local(result_reg)),
-                                func: Operand::Const(ConstValue::String(mangled)),
-                                args: call_args,
-                                span: *span,
-                                def: None,
-                            });
-                            return Ok(());
+                    //（typecheck 按 实参兼容 + 期望返回 决议，键 = 调用点 PlanId）
+                    if let Some(mangled) = self
+                        .overload_resolutions
+                        .get(call_plan_id)
+                        .map(str::to_string)
+                    {
+                        // #452：命名实参调用同样消费决议（消费侧不得再带
+                        // named_args.is_empty() 门——那会让决议出的名字被丢弃，
+                        // 实参也按位置错配）。实参按**形参声明序**重建：位置实参占
+                        // 前导槽位、命名实参按名入槽；名字不可得则响亮报错，
+                        // 不静默丢弃命名实参。
+                        let leaf = Self::call_name_leaf(&mangled).to_string();
+                        let names = self
+                            .lookup_param_info(&mangled, &leaf)
+                            .map(|info| info.names)
+                            .unwrap_or_default();
+                        // F3：诊断用决议出的真实方法名（叶子段），不再硬编 <method>
+                        let ordered_args =
+                            Self::build_arg_slots(&leaf, &names, args, named_args, span)?;
+                        let obj_reg = self.next_temp_reg();
+                        self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
+                        let mut call_args = vec![Operand::Local(obj_reg)];
+                        for slot in ordered_args.iter() {
+                            let Some(slot) = *slot else {
+                                // 空槽：诊断归 typecheck（它保证决议通过即无空槽）
+                                continue;
+                            };
+                            let arg_expr = if slot < args.len() {
+                                &args[slot]
+                            } else {
+                                &named_args[slot - args.len()].1
+                            };
+                            let r = self.next_temp_reg();
+                            self.generate_expr_ir(arg_expr, r, instructions, constants)?;
+                            call_args.push(Operand::Local(r));
                         }
+                        instructions.push(Instruction::Call {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Const(ConstValue::String(mangled)),
+                            args: call_args,
+                            span: *span,
+                            def: None,
+                        });
+                        return Ok(());
                     }
                     // 接口直接赋值优化：检查对象是否是约束变量
                     let mut arg_regs = Vec::new();
@@ -8008,57 +8286,58 @@ impl AstToIrGenerator {
                     }
                     _ => None,
                 };
-                if let Some(names) = callee
+                if let Some(info) = callee
                     .as_ref()
                     .filter(|_| !is_ctor)
-                    .and_then(|n| self.lookup_param_names(qualified.as_deref().unwrap_or(n), n))
+                    .and_then(|n| self.lookup_param_info(qualified.as_deref().unwrap_or(n), n))
                 {
-                    // 位置实参必须在命名实参之前（同教程“位置参数必须在前面”）。
-                    // 它们按序占前导槽位。
-                    if arg_regs.len() <= names.len() {
-                        let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
-                        for (i, reg) in arg_regs.iter().enumerate() {
-                            slots[i] = Some(reg.clone());
+                    let names = &info.names;
+                    // t12-F1 / t14：槽位判定收敛到共享判据（与方法与 typecheck 原生臂
+                    // 同一实现）——此前这里是第三份内联副本，槽冲突还报旧码
+                    // E1015、且缺规则④（命名后接位置）；可选位与形参名同出一源。
+                    let diag_key = callee.as_deref().unwrap_or("<fn>");
+                    let optional: Vec<bool> =
+                        (0..names.len()).map(|i| i >= info.required_min).collect();
+                    let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                        diag_key,
+                        names,
+                        args,
+                        named_args,
+                        0, // 命名空间调用无接收者位
+                        &optional,
+                        *span,
+                    )?;
+                    let mut slots: Vec<Option<Operand>> = vec![None; names.len()];
+                    for (arg_pos, pos) in positions.iter().enumerate() {
+                        if *pos >= slots.len() {
+                            continue; // 超签实参：由类型检查阶段报 E1010
                         }
-                        for (arg_name, arg_expr) in named_args.iter() {
-                            let Some(idx) = names.iter().position(|n| n == arg_name) else {
-                                return Err(ErrorCodeDefinition::unknown_argument(
-                                    callee.as_deref().unwrap_or("<fn>"),
-                                    arg_name,
-                                    &names.join(", "),
-                                )
-                                .at(*span)
-                                .build());
-                            };
-                            if slots[idx].is_some() {
-                                return Err(ErrorCodeDefinition::duplicate_argument(
-                                    callee.as_deref().unwrap_or("<fn>"),
-                                    arg_name,
-                                )
-                                .at(*span)
-                                .build());
-                            }
+                        let reg = if arg_pos < arg_regs.len() {
+                            arg_regs[arg_pos].clone()
+                        } else {
+                            let arg_expr = &named_args[arg_pos - arg_regs.len()].1;
                             let arg_reg = self.next_temp_reg();
                             self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
-                            slots[idx] = Some(Operand::Local(arg_reg));
-                        }
-                        // 未覆盖的槽位：保持缺席，由类型检查阶段报 E1010。
-                        // 运行期为安全起见补 0（正常路径不会到这里）。
-                        arg_regs = slots
-                            .into_iter()
-                            .map(|s| {
-                                s.unwrap_or_else(|| {
-                                    let r = self.next_temp_reg();
-                                    instructions.push(Instruction::Load {
-                                        dst: Operand::Local(r),
-                                        src: Operand::Const(ConstValue::Int(0)),
-                                        span: self.cur_span,
-                                    });
-                                    Operand::Local(r)
-                                })
-                            })
-                            .collect();
+                            Operand::Local(arg_reg)
+                        };
+                        slots[*pos] = Some(reg);
                     }
+                    // 未覆盖的槽位：保持缺席，由类型检查阶段报 E1010。
+                    // 运行期为安全起见补 0（正常路径不会到这里）。
+                    arg_regs = slots
+                        .into_iter()
+                        .map(|s| {
+                            s.unwrap_or_else(|| {
+                                let r = self.next_temp_reg();
+                                instructions.push(Instruction::Load {
+                                    dst: Operand::Local(r),
+                                    src: Operand::Const(ConstValue::Int(0)),
+                                    span: self.cur_span,
+                                });
+                                Operand::Local(r)
+                            })
+                        })
+                        .collect();
                 }
             }
 
@@ -8261,14 +8540,14 @@ impl AstToIrGenerator {
                 args,
                 named_args,
                 span,
-                ..
+                plan_id,
             } => {
                 self.generate_call_expr_ir(
                     func,
                     args,
                     named_args,
                     span,
-                    expr,
+                    *plan_id,
                     result_reg,
                     instructions,
                     constants,
@@ -8487,6 +8766,7 @@ pub fn generate_ir(
 /// 预注册其他文件的类型布局（`cross_file_types`）与全局变量名（`cross_file_globals`），
 /// 使本文件的跨文件字段访问、方法调用与全局引用能正确解析；随后仅对 `ast`
 /// 这一个文件生成 IR。各文件产出的 `ModuleIR` 由编排器在 IR 层链接。
+#[allow(clippy::too_many_arguments)]
 pub fn generate_ir_with_context(
     ast: &crate::frontend::core::parser::ast::Module,
     result: &crate::frontend::core::typecheck::TypeCheckResult,
@@ -8496,12 +8776,17 @@ pub fn generate_ir_with_context(
     global_slot_base: usize,
     registry: &ModuleRegistry,
     module_key: &str,
+    // Script/Bin 语义开关（顶层可执行语句是否放行，E3023）——与限定名键
+    // 解耦（3.4.8 ③ 同源判据）：rootless（standalone）多单元形态传 true，
+    // 项目（Bin）与嵌入模块传 false
+    script_mode: bool,
 ) -> Result<crate::middle::ModuleIR, Vec<Diagnostic>> {
     let mut generator = AstToIrGenerator::new_with_type_result(
         result,
         registry.clone(),
         Some(module_key.to_string()),
-    );
+    )
+    .with_script_mode(script_mode);
     generator.seed_cross_file_types(cross_file_types);
     generator.seed_cross_file_globals(global_layout);
     generator.set_global_slot_base(global_slot_base);

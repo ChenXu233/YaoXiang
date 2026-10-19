@@ -23,6 +23,12 @@ pub struct SemanticDB {
     symbol_defs: HashMap<String, Vec<SymbolLocation>>,
     /// 符号名 → 所有引用位置
     symbol_refs: HashMap<String, Vec<SymbolLocation>>,
+    /// 外部定义面（WBS 4.6.1）：发现集中**非目标文件**的顶层导出定义，
+    /// 由 Registry 臂的签名收集派生（不经那些文件自身的 typecheck）。
+    /// 用途：跨文件跳转在定义文件尚未被 LSP 打开时也能命中——
+    /// `resolve_reference` 在 `by_file` 落空后回退本表。
+    /// 随每次编译全量重建，消费方（LSP World）摄入时整体替换，无陈旧窗口。
+    external_definitions: Vec<DefinitionInfo>,
 }
 
 /// 单文件的语义信息
@@ -357,10 +363,13 @@ impl SemanticDB {
     /// 每个文件的符号名索引（symbol_defs/symbol_refs）先清后建，来源是该文件
     /// tokens 的 Declaration 修饰位；definitions/references/imports 随
     /// `FileSemanticInfo` 原样落库（由 checker 语义事件排空产出）。
+    /// 外部定义面（4.6.1）随 `other` 整体接管——它是本次编译的全量重建，
+    /// 不是增量。
     pub fn upsert_from(
         &mut self,
         other: SemanticDB,
     ) {
+        self.external_definitions = other.external_definitions;
         for (file_path, info) in other.by_file {
             self.remove_file_symbols(&file_path);
 
@@ -576,7 +585,12 @@ impl SemanticDB {
                 return Some(def);
             }
         }
-        None
+        // 4.6.1：定义文件未打开（by_file 无条目）时回退外部定义面——
+        // 跨文件引用的 resolves_to 指向定义文件，其顶层导出定义由
+        // Registry 签名收集派生注入于此。
+        self.external_definitions
+            .iter()
+            .find(|d| d.def_id == target_def_id)
     }
 
     /// 查找指向某个定义的所有引用（用于 find references / rename）。
@@ -602,6 +616,94 @@ impl SemanticDB {
             }
         }
         out
+    }
+
+    /// 整体替换外部定义面（4.6.1）：每次编译重建全量，消费方不增量合并。
+    pub fn set_external_definitions(
+        &mut self,
+        defs: Vec<DefinitionInfo>,
+    ) {
+        self.external_definitions = defs;
+    }
+
+    /// 外部定义面（4.6.1）：发现集中非目标文件的顶层导出定义。
+    pub fn external_definitions(&self) -> &[DefinitionInfo] {
+        &self.external_definitions
+    }
+
+    /// 重映射全部文件身份（4.6.1）：编译器层以 OS 路径为键，LSP 摄入时
+    /// 经本方法统一改键（如改成规范化 file URI）——by_file 键、
+    /// definitions/references/imports 的 file_path、DefId 的 file_path
+    /// 与外部定义面一并改写，符号名索引随后从新内容整体重建。
+    pub fn remap_file_paths(
+        &mut self,
+        f: &dyn Fn(&str) -> String,
+    ) {
+        let old_files = std::mem::take(&mut self.by_file);
+        self.by_file = old_files
+            .into_iter()
+            .map(|(key, mut info)| {
+                let new_key = f(&key);
+                info.file_path = new_key.clone();
+                for def in &mut info.definitions {
+                    def.file_path = f(&def.file_path);
+                    def.def_id.file_path = f(&def.def_id.file_path);
+                }
+                for r in &mut info.references {
+                    r.file_path = f(&r.file_path);
+                    r.resolves_to.file_path = f(&r.resolves_to.file_path);
+                }
+                (new_key, info)
+            })
+            .collect();
+        for def in &mut self.external_definitions {
+            def.file_path = f(&def.file_path);
+            def.def_id.file_path = f(&def.def_id.file_path);
+        }
+        // 符号名索引按新内容整体重建（token 的 Declaration 修饰位 +
+        // definitions/references 三处来源，与 add_* 增量口径一致）
+        self.symbol_defs.clear();
+        self.symbol_refs.clear();
+        for (path, info) in &self.by_file {
+            for token in &info.tokens {
+                let location = SymbolLocation {
+                    file_path: path.clone(),
+                    span: token.span,
+                };
+                if token
+                    .modifiers
+                    .contains(&SemanticTokenModifier::Declaration)
+                {
+                    self.symbol_defs
+                        .entry(token.name.clone())
+                        .or_default()
+                        .push(location);
+                } else {
+                    self.symbol_refs
+                        .entry(token.name.clone())
+                        .or_default()
+                        .push(location);
+                }
+            }
+            for def in &info.definitions {
+                self.symbol_defs
+                    .entry(def.name.clone())
+                    .or_default()
+                    .push(SymbolLocation {
+                        file_path: path.clone(),
+                        span: def.span,
+                    });
+            }
+            for r in &info.references {
+                self.symbol_refs
+                    .entry(r.name.clone())
+                    .or_default()
+                    .push(SymbolLocation {
+                        file_path: path.clone(),
+                        span: r.span,
+                    });
+            }
+        }
     }
 
     /// 获取文件（位置）处可见的所有符号（用于补全）。

@@ -8,7 +8,7 @@
 - `signature.rs` — 签名解析工具
 - `semantic_db.rs` — 语义信息收集
 - `proof/` — 管道基础设施（ProofResult + ProofContext）
-- `layers/` — 有序证明层（equivalence → ownership → termination → predicate）
+- `layers/` — 证明层（调用顺序 predicate → termination → ownership，由 `checker.rs::check_module_impl` 的调用点决定；详见 `layers/README.md`）
 - `passes/` — 独立分析遍（无层间依赖）
 - `inference/` — HM 类型推断引擎
 - `traits/` — Trait 系统

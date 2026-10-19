@@ -18,10 +18,13 @@ module
     StoreIndex %0[%4] <- %3
     Load %2 <- %0
     Call %1 <- string("std.list.pop") [%2] (def=d1)
+    Drop %0
     Load %4 <- %1
     StringLength %3 <- %4
     Load %5 <- int(1)
     Call %2 <- string("std.test.assert_eq") [%3, %5] (def=d0)
+    Drop %1
+    Drop %0
     Ret %2
   fn main() -> Void
     locals_total=10

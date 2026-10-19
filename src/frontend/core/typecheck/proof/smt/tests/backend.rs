@@ -86,7 +86,11 @@ fn test_solver_object_is_send_for_static_sharing() {
     );
 }
 
-/// `default_solver()` 是唯一后端选择点；返回的后端确实可求解（非占位对象）
+/// `default_solver()` 新建的独立实例确实可求解（非占位对象）
+///
+/// RFC-039 D58 后它是**测试与独立场景**的实例工厂；生产路径走
+/// `backend.rs` 的进程级共享口 `with_shared_solver`（唯一后端选择点是其内部
+/// 的 `new_backend`，两个入口共用）。
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test_default_solver_returns_usable_backend() {

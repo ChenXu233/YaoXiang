@@ -1,0 +1,13 @@
+// 02-type-system/aggregates/tuples.yx
+// 覆盖: 规范 §3.6 元组类型
+// 验证: 元组字面量
+
+use std.assert
+
+main: () -> Void = {
+    // 元组
+    mut t = (1, "one", true)
+    assert.assert(true, "tuple created successfully")
+}
+
+main()

@@ -17,4 +17,6 @@ module
     Eq %11 <- %9, %10
     Load %12 <- string("n.sqrt(4.0) should be 2.0 via second alias")
     Call %13 <- string("std.assert.assert") [%11, %12] (def=d1)
+    Drop %1
+    Drop %8
     Store @0 <- %13

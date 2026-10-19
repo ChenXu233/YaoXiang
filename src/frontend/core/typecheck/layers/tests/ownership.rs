@@ -451,7 +451,9 @@ fn test_mut_allowed() {
 
 // ── E2E 集成测试（RFC-009a §用例分析） ──────────────────
 
-use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, Module, Param, Stmt, StmtKind};
+use crate::frontend::core::parser::ast::{
+    BinOp, Block, Expr, Literal, Module, Param, PlanId, Stmt, StmtKind,
+};
 use crate::frontend::core::typecheck::environment::TypeEnvironment;
 use crate::frontend::core::typecheck::layers::ownership::OwnershipChecker;
 
@@ -477,6 +479,7 @@ fn make_var_stmt(
             span: Span::default(),
         },
         span: Span::default(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -494,6 +497,7 @@ fn make_mut_var_stmt(
             span: Span::default(),
         },
         span: Span::default(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -501,6 +505,7 @@ fn make_expr_stmt(expr: Expr) -> Stmt {
     Stmt {
         kind: StmtKind::Expr(Box::new(expr)),
         span: Span::default(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 fn make_binding(
@@ -533,6 +538,7 @@ fn make_binding(
             span: Span::default(),
         },
         span: Span::default(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -558,12 +564,13 @@ fn make_call(
     func_name: &str,
     args: Vec<Expr>,
 ) -> Expr {
-    Expr::Call {
-        func: Box::new(Expr::Var(func_name.into(), Span::default())),
+    Expr::call(
+        Expr::Var(func_name.into(), Span::default()),
         args,
-        named_args: vec![],
-        span: Span::default(),
-    }
+        vec![],
+        Span::default(),
+        PlanId::UNPLANNED,
+    )
 }
 
 fn make_bool_lit(b: bool) -> Expr {
@@ -803,12 +810,13 @@ fn test_e2e_argument_passed_to_function_is_moved() {
     // x 作为参数传给 f 后不能再使用
     let (results, _plan, _escaped) = run_main(vec![
         make_var_stmt("x", make_lit(42)),
-        make_expr_stmt(Expr::Call {
-            func: Box::new(make_var("f")),
-            args: vec![make_var("x")],
-            named_args: vec![],
-            span: Span::default(),
-        }),
+        make_expr_stmt(Expr::call(
+            make_var("f"),
+            vec![make_var("x")],
+            vec![],
+            Span::default(),
+            PlanId::UNPLANNED,
+        )),
         make_expr_stmt(make_var("x")),
     ]);
 
@@ -1197,6 +1205,7 @@ fn test_e2e_return_moved_value() {
             Stmt {
                 kind: StmtKind::Return(Some(Box::new(make_var("x")))),
                 span: Span::default(),
+                plan_id: PlanId::UNPLANNED,
             },
         ],
     );
@@ -1225,6 +1234,7 @@ fn test_e2e_use_after_return_rejected() {
             Stmt {
                 kind: StmtKind::Return(Some(Box::new(make_var("x")))),
                 span: Span::default(),
+                plan_id: PlanId::UNPLANNED,
             },
             make_expr_stmt(make_var("x")),
         ],
@@ -1814,6 +1824,7 @@ fn make_if_stmt(
             span: Span::default(),
         },
         span: Span::default(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 

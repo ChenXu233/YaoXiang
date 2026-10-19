@@ -127,9 +127,11 @@ pub(super) fn execute_single_proof_fn(
                     if let Type::Struct { body } = definition {
                         for item in body {
                             if let TypeBodyItem::Expr(Type::ConstExpr(expr)) = item {
+                                // 合成语句（非解析产物）：无释放计划身份
                                 let constraint_stmt = crate::frontend::core::parser::ast::Stmt {
                                     kind: StmtKind::Expr(expr.clone()),
                                     span: crate::util::span::Span::dummy(),
+                                    plan_id: crate::util::plan_id::PlanId::UNPLANNED,
                                 };
                                 return Some((
                                     signature_params.clone(),

@@ -5,3 +5,4 @@
 mod dead_code;
 mod overload;
 mod overload_inline;
+mod overload_resolution_marks;

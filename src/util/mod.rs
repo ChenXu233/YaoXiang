@@ -3,9 +3,11 @@
 pub mod arith;
 pub mod cache;
 pub mod config;
+pub mod consumption;
 pub mod diagnostic;
 pub mod i18n;
 pub mod logger;
+pub mod plan_id;
 pub mod span;
 pub mod test_markers;
 #[cfg(feature = "cli")]

@@ -59,6 +59,10 @@ module
     Eq %6 <- %10, %8
     Load %9 <- string("grouped use match native Result")
     Call %5 <- string("std.assert.assert") [%6, %9] (def=d0)
+    Drop %1
+    Drop %3
+    Drop %4
+    Drop %0
     Ret %5
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

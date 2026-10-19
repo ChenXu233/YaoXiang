@@ -1,0 +1,26 @@
+// 06-compile-errors/ownership/use_after_move_branch_err.yx
+// 双分支均 move 后使用原变量（E2014）
+// expect: compile-error E2014
+// 覆盖: #251 P0-7 use-after-move 编译期拦截 — 分支路径 move 合并
+//       RFC-009 Dup 表 / SPEC type-system §11.2 — 含 &mut 字段（Linear）的 struct 不派生 Dup（#398）
+// 验证: if/else 两个分支分别把 h move 给 q/r，分支合并后 h 不可用
+// 注: h 需 mut——分支 1 的 `h = q` 是对 h 的**重赋值**（spec §4.3），
+//     不可变 h 会先报 E2010，掩盖本用例要验证的 E2014。
+//     负例类型同 move_after_use_err.yx：&mut 字段使 Holder 留在非 Dup 一侧。
+// 状态: ❌ 应编译失败
+
+use std.io
+
+Holder: Type = { r: &mut Int }
+
+main: () -> Void = {
+    mut a = 1
+    mut b = 2
+    mut c = 3
+    mut h = Holder(&mut a)
+    mut q = Holder(&mut b)
+    mut r = Holder(&mut c)
+    flag = true
+    if flag { h = q } else { r = h }   // 两个分支都 move h
+    io.println(h)                       // ❌ use-after-move
+}

@@ -71,6 +71,12 @@ module
     Eq %7 <- %8, %11
     Load %9 <- string("nested if small")
     Call %6 <- string("std.assert.assert") [%7, %9] (def=d0)
+    Drop %2
+    Drop %0
+    Drop %1
+    Drop %4
+    Drop %5
+    Drop %3
     Ret %6
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

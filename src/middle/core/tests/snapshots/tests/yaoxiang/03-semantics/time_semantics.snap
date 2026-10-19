@@ -80,6 +80,9 @@ module
     Call %2 <- string("std.assert.assert") [%3, %9] (def=d2)
     Load %3 <- string("time semantics ok")
     Call %2 <- string("std.io.println") [%3] (def=d5)
+    Drop %0
+    Drop %6
+    Drop %4
     Ret %2
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

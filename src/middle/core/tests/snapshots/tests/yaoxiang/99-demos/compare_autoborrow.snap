@@ -27,6 +27,8 @@ module
     Mul %4 <- %9, %10
     Add %5 <- %2, %4
     Ret %5
+    Drop %6
+    Drop %3
     Ret %5
   fn main() -> Void
     slot[0] p1 : Int(64) @depth1
@@ -42,6 +44,8 @@ module
     Load %3 <- %2
     Load %4 <- %0
     Call %1 <- string("distance") [%3, %4] (def=d1)
+    Drop %2
+    Drop %0
     Load %4 <- bool(true)
     Load %5 <- string("distance computed with auto borrow")
     Call %3 <- string("std.assert.assert") [%4, %5] (def=d2)
@@ -50,6 +54,9 @@ module
     Load %4 <- bool(true)
     Load %5 <- string("all passed")
     Call %3 <- string("std.assert.assert") [%4, %5] (def=d2)
+    Drop %1
+    Drop %2
+    Drop %0
     Ret %3
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

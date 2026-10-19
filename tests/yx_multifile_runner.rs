@@ -19,10 +19,8 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use common::{binary_name, spawn_check, spawn_run};
+use yaoxiang::package::manifest::{ENTRY_FILE, MANIFEST_FILE};
 use yaoxiang::util::test_markers::{Expectation, TestFileSpec};
-
-/// 入口文件约定名（见 tests/yaoxiang-multifile/README.md）。
-const ENTRY_NAME: &str = "main.yx";
 
 /// 发现全部项目夹具：tests/yaoxiang-multifile/ 下含 yaoxiang.toml 的一级子目录，排序。
 fn discover_projects() -> Vec<PathBuf> {
@@ -34,7 +32,7 @@ fn discover_projects() -> Vec<PathBuf> {
         for entry in std::fs::read_dir(&root).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
-            if path.is_dir() && path.join("yaoxiang.toml").is_file() {
+            if path.is_dir() && path.join(MANIFEST_FILE).is_file() {
                 dirs.push(path);
             }
         }
@@ -59,10 +57,10 @@ fn test_all_multifile_projects_pass() {
             .unwrap_or(dir)
             .display()
             .to_string();
-        let entry = dir.join(ENTRY_NAME);
+        let entry = dir.join(ENTRY_FILE);
         assert!(
             entry.is_file(),
-            "多文件夹具缺少入口 {ENTRY_NAME}: {relative}（入口约定见 tests/yaoxiang-multifile/README.md）"
+            "多文件夹具缺少入口 {ENTRY_FILE}: {relative}（入口约定见 tests/yaoxiang-multifile/README.md）"
         );
 
         // 头部指令经 TestFileSpec 统一解析（与单文件语料、yaoxiang test CLI 同一实现）
@@ -73,7 +71,7 @@ fn test_all_multifile_projects_pass() {
             continue;
         }
         if let Some(reason) = &spec.invalid {
-            panic!("Invalid header directive: {relative}/{ENTRY_NAME}: {reason}");
+            panic!("Invalid header directive: {relative}/{ENTRY_FILE}: {reason}");
         }
 
         match &spec.expectation {

@@ -19,6 +19,7 @@ module
     Load %1 <- %3
     Load %2 <- int(41)
     Add %5 <- %1, %2
+    Drop %3
     UnsafeBlockEnd
     Load %4 <- %5
     Load %6 <- int(42)
@@ -27,6 +28,7 @@ module
     Call %1 <- string("std.assert.assert") [%2, %7] (def=d0)
     UnsafeBlockStart
     Load %2 <- int(1)
+    Drop %2
     UnsafeBlockEnd
     Call %7 <- string("f") [] (def=d1)
     Load %8 <- int(7)
@@ -35,6 +37,8 @@ module
     Call %4 <- string("std.assert.assert") [%6, %9] (def=d0)
     Load %6 <- string("unsafe block value ok")
     Call %4 <- string("std.io.println") [%6] (def=d2)
+    Drop %0
+    Drop %5
     Ret %4
   fn f() -> Int(64)
     locals_total=1

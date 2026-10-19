@@ -8,6 +8,7 @@ use crate::backends::common::RuntimeValue;
 use crate::backends::interpreter::executor::debug::StepOutcome;
 use crate::backends::interpreter::executor::executor::InterpreterTask;
 use crate::backends::interpreter::executor::Interpreter;
+use crate::backends::interpreter::PendingCall;
 use crate::backends::ExecutorError;
 use crate::middle::bytecode::{BytecodeInstr, ConstValue, Reg};
 
@@ -31,7 +32,7 @@ impl Interpreter {
                 let func_id = FunctionId(*func_idx);
                 // 注：函数名标签只在下方 Standard 模式的任务调度里用到
                 // （TaskMeta.label）。此前在此无条件克隆函数名，而默认的
-                // Embedded 模式（直接调 call_static_by_id）根本不用它——
+                // Embedded 模式（蹦床压帧）根本不用它——
                 // 每次 CallStatic 都白做一次 String 分配。故移到使用处。
                 let call_args: Vec<RuntimeValue> = arg_regs
                     .iter()
@@ -46,11 +47,13 @@ impl Interpreter {
                 let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
-                    let result = self.call_static_by_id(func_id, &call_args)?;
-                    if let Some(dst_reg) = dst {
-                        self.call_stack[fi].set_slot(dst_reg.index() as usize, result);
-                    }
-                    self.call_stack[fi].advance();
+                    // 蹦床（WBS 3.9.1）：实参解析后就地压入被调帧，返回值落点由帧携带
+                    // （`ReturnTarget`）——不再进入宿主驱动循环 `drive_frame`，
+                    // 解释型深度因此不消耗原生栈，深度守卫必然可达。
+                    let resolved = self.resolve_args(&call_args)?;
+                    // 调用者 ip 暂不越过调用指令：被调帧返回时由 `return_from_frame`
+                    // 推进（期间 ip 停在调用点，栈帧捕获才能定位到调用处——与原递归实现一致）。
+                    self.start_call(PendingCall::function(func_id, resolved, *dst))?;
                     return Ok(StepOutcome::Continue);
                 }
 
@@ -169,22 +172,19 @@ impl Interpreter {
                     for r in args {
                         call_args.push(self.force_slot(fi, *r)?);
                     }
-                    let result = self.call_function_by_id(func_value.func_id, &call_args)?;
-                    if let Some(dst_reg) = dst {
-                        self.call_stack[fi].set_slot(dst_reg.index() as usize, result);
-                    }
-                } else {
-                    // RFC-011a 阶段3 加固：vtable 缺方法不再静默写 Void——
-                    // 静默路径曾把「分发错位」掩盖成空值（错误数据类别）。
-                    // 与存在类型 VariantTag/VariantPayload 的运行时守卫对称。
-                    let obj_desc = format!("{:?}", obj_val.value_type_simple());
-                    return Err(ExecutorError::runtime_only(format!(
-                        "虚表分发找不到方法 '{}'（接收者类型 {}）",
-                        method_name, obj_desc
-                    )));
+                    // 蹦床：虚表方法压帧后交还外层 step_one，返回值写回调者 dst 槽；
+                    // ip 越过调用指令由 `return_from_frame` 在被调返回时推进。
+                    self.start_call(PendingCall::function(func_value.func_id, call_args, *dst))?;
+                    return Ok(StepOutcome::Continue);
                 }
-                self.call_stack[fi].advance();
-                Ok(StepOutcome::Continue)
+                // RFC-011a 阶段3 加固：vtable 缺方法不再静默写 Void——
+                // 静默路径曾把「分发错位」掩盖成空值（错误数据类别）。
+                // 与存在类型 VariantTag/VariantPayload 的运行时守卫对称。
+                let obj_desc = format!("{:?}", obj_val.value_type_simple());
+                Err(ExecutorError::runtime_only(format!(
+                    "虚表分发找不到方法 '{}'（接收者类型 {}）",
+                    method_name, obj_desc
+                )))
             }
             BytecodeInstr::CallDyn {
                 dst,
@@ -205,10 +205,15 @@ impl Interpreter {
                     // env 同时作为 upvalues 注入新帧（LoadUpvalue 读）。
                     // 此前走 call_function_by_id 只传 args、不设 upvalues，
                     // 导致闭包体 `LoadUpvalue` 恒读 Void（实测 `adder(10)(5)` 得 10 而非 15）。
-                    let result = self.call_closure(func_value.func_id, &final_args, &env_args)?;
-                    if let Some(dst_reg) = dst {
-                        self.call_stack[fi].set_slot(dst_reg.index() as usize, result);
-                    }
+                    // 蹦床：闭包帧压栈（upvalues = env），返回值写回调者 dst 槽；
+                    // ip 越过调用指令由 `return_from_frame` 在被调返回时推进。
+                    self.start_call(PendingCall::closure(
+                        func_value.func_id,
+                        final_args,
+                        env_args,
+                        *dst,
+                    ))?;
+                    return Ok(StepOutcome::Continue);
                 } else {
                     if let Some(dst_reg) = dst {
                         self.call_stack[fi].set_slot(dst_reg.index() as usize, RuntimeValue::Void);
@@ -230,6 +235,12 @@ impl Interpreter {
                 let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
+                    // 多闭包 spawn 是一条指令发起 N 个调用：首个立即压帧，其余排进
+                    // 本帧待启动队列（`start_calls`），由返回路径逐个续跑——
+                    // 一条指令体内不再有递归的解释型调用。
+                    // 注：类型校验在压帧前一次性完成（此前是逐个执行中校验）；
+                    // 对良构程序无差异，含非函数项的动态 spawn 仍在本指令报同一错误。
+                    let mut calls = Vec::with_capacity(closures.len());
                     for func_reg in closures.iter() {
                         let closure_val = self.force_slot(fi, *func_reg)?;
                         let RuntimeValue::Function(func_value) = closure_val else {
@@ -239,16 +250,18 @@ impl Interpreter {
                                 stack,
                             ));
                         };
-                        // #254：call_closure 设 upvalues（闭包体 LoadUpvalue 读 env），
-                        // env 同时作 args 前段（LoadArg 读）。call_function_by_id 不设
-                        // upvalues → 闭包捕获读 Void。
-                        let _result = self.call_closure(
+                        // #254：闭包帧设 upvalues（闭包体 LoadUpvalue 读 env），
+                        // env 同时作 args 前段（LoadArg 读）。
+                        calls.push(PendingCall::closure(
                             func_value.func_id,
-                            &func_value.env,
-                            &func_value.env,
-                        )?;
-                        self.call_stack[fi].set_slot(func_reg.0 as usize, _result);
+                            func_value.env.clone(),
+                            func_value.env,
+                            Some(*func_reg),
+                        ));
                     }
+                    // 多调用的 ip 推进在所有被调返回后统一发生（`return_from_frame`）
+                    self.start_calls(calls)?;
+                    return Ok(StepOutcome::Continue);
                 } else {
                     use crate::backends::runtime::engine::{ResourceKey, TaskMeta};
                     use std::sync::Arc;
@@ -342,6 +355,10 @@ impl Interpreter {
                 let runtime = self.runtime_config.mode;
 
                 if matches!(runtime, crate::backends::runtime::RuntimeMode::Embedded) {
+                    // 同 Spawn：一条指令发起 N 个调用 → 首次压帧 + 其余排队续跑。
+                    // 结果丢弃（旧实现同样丢弃 `_result`）；不注入上值
+                    // （与 call_function_by_id 一致）。
+                    let mut calls = Vec::with_capacity(closures.len());
                     for closure_val in closures.iter() {
                         let RuntimeValue::Function(func_value) = closure_val else {
                             let stack = self.capture_stack();
@@ -350,9 +367,15 @@ impl Interpreter {
                                 stack,
                             ));
                         };
-                        let _result =
-                            self.call_function_by_id(func_value.func_id, &func_value.env)?;
+                        calls.push(PendingCall::function(
+                            func_value.func_id,
+                            func_value.env.clone(),
+                            None,
+                        ));
                     }
+                    // 多调用的 ip 推进在所有被调返回后统一发生（`return_from_frame`）
+                    self.start_calls(calls)?;
+                    return Ok(StepOutcome::Continue);
                 } else {
                     use crate::backends::runtime::engine::{ResourceKey, TaskMeta};
                     use std::sync::Arc;

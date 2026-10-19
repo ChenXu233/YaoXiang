@@ -1,0 +1,5 @@
+/// 夹具版 IR 生成器（反例）：从不读取该字段。
+fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
+    let _ = type_result;
+    Self
+}

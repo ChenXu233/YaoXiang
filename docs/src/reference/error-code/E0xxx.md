@@ -9,13 +9,13 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 
 词法分析器（Lexer）与语法分析器（Parser）阶段产生的错误。
 
-本族共 **11** 个码，全部在 `define_codes!` 注册表中，类别为 `Lexer / Parser`。完整索引见[错误码首页](index.md)。
+本族共 **11** 个码，全部在 `define_codes!` 注册表中，类别为 `Lexer / Parser`。完整索引见[错误码首页](./index.md)。
 
 ## 码一览
 
 | 码号 | 中文名 | 类别 | span 豁免 | 模板 | 发射点 |
 | --- | --- | --- | --- | --- | --- |
-| `E0001` | 无效字符 | `Lexer` | 否 | `无效字符：'{char}'` | ✅ 2 处 |
+| `E0001` | 无效字符 | `Lexer` | 否 | `无效字符：'{char}'` | ✅ 1 处 |
 | `E0002` | 无效数字字面量 | `Lexer` | 否 | `无效数字字面量：'{literal}'` | ✅ 1 处 |
 | `E0003` | 未终止的字符串 | `Lexer` | 否 | `字符串从第 {line} 行开始未终止` | ⚠ 暂未发射 |
 | `E0004` | 无效字符字面量 | `Lexer` | 否 | `无效字符字面量：'{literal}'` | ⚠ 暂未发射 |
@@ -37,7 +37,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`无效字符：'{char}'`
 - **消息**：源代码包含非法字符
 - **帮助**：删除非法字符或使用有效的编码
-- **发射点**：`src/frontend/core/lexer/tokens.rs:63`、`src/lsp/handlers/diagnostics.rs:172`
+- **发射点**：`src/frontend/core/lexer/tokens.rs:63`
 
 ### E0002：无效数字字面量
 
@@ -77,7 +77,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望 {expected}，找到 {found}`
 - **消息**：解析器期望特定的令牌
 - **帮助**：检查语法并添加期望的令牌
-- **发射点**：`src/frontend/compiler.rs:177`、`src/frontend/pipeline.rs:250`、`src/frontend/core/parser/mod.rs:45` 等 22 处
+- **发射点**：`src/driver/arms.rs:90`、`src/frontend/compiler.rs:177`、`src/frontend/core/parser/mod.rs:45` 等 22 处
 
 ### E0011：意外的令牌
 
@@ -87,7 +87,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`意外的令牌：'{token}'`
 - **消息**：遇到了意外的令牌
 - **帮助**：删除或替换意外的令牌
-- **发射点**：`src/frontend/compiler.rs:177`、`src/frontend/pipeline.rs:250`、`src/frontend/core/parser/mod.rs:45` 等 18 处
+- **发射点**：`src/driver/arms.rs:90`、`src/frontend/compiler.rs:177`、`src/frontend/core/parser/mod.rs:45` 等 18 处
 
 ### E0012：无效语法
 
@@ -127,7 +127,7 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`期望表达式：{context}`
 - **消息**：解析器期望一个表达式
 - **帮助**：在此位置提供一个有效的表达式
-- **发射点**：`src/frontend/core/parser/pratt/nud.rs:129`、`src/frontend/core/parser/pratt/nud.rs:169`、`src/frontend/core/parser/pratt/nud.rs:186` 等 4 处
+- **发射点**：`src/frontend/core/parser/pratt/nud.rs:133`、`src/frontend/core/parser/pratt/nud.rs:173`、`src/frontend/core/parser/pratt/nud.rs:190` 等 4 处
 
 ### E0018：关键字作名称
 
@@ -137,5 +137,5 @@ description: '词法分析器（Lexer）与语法分析器（Parser）阶段产�
 - **模板**：`'{keyword}' 是关键字，不能用作名称`
 - **消息**：关键字不能用作变量或表达式名称
 - **帮助**：换一个不同的标识符代替关键字
-- **发射点**：`src/frontend/core/parser/parser_state.rs:222`
+- **发射点**：`src/frontend/core/parser/parser_state.rs:243`
 - **源码注释名**：关键字作变量名

@@ -158,6 +158,24 @@ module
     Eq %19 <- %20, %21
     Load %24 <- string("center align width 7")
     Call %18 <- string("std.assert.assert") [%19, %24] (def=d1)
+    Drop %6
+    Drop %15
+    Drop %7
+    Drop %4
+    Drop %11
+    Drop %5
+    Drop %3
+    Drop %8
+    Drop %9
+    Drop %12
+    Drop %0
+    Drop %13
+    Drop %16
+    Drop %10
+    Drop %17
+    Drop %2
+    Drop %1
+    Drop %14
     Ret %18
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

@@ -1,0 +1,10 @@
+// 06-compile-errors/types/array_empty_n_err.yx
+// #300 维度3——空字面量配非零 N 必须编译期拒绝
+// expect: compile-error E1002
+// （注解 Array(Int, 3)，字面量 0 元素）
+// 验证: 空字面量不得产出与注解 N 不符的 0 长度数组
+// 状态: ❌ 应编译失败
+
+main: () -> Void = {
+    b: Array(Int, 3) = []
+}

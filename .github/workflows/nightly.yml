@@ -137,7 +137,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # 显式 checkout dev：schedule 事件走**默认分支**（main），而代码落在 dev 上。
+      # 照默认分支测，每晚测的都是同一个提交（main 上次动是 2026-10-12，此后
+      # 八个 nightly 测的是同一棵树），趋势图会是一条直线。只影响基准 job 测什么：
+      # release 构件仍按原样来自默认分支，报告头会写明这层归属。
       - uses: actions/checkout@v7
+        with:
+          ref: dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -159,6 +165,12 @@ jobs:
       - name: Run benchmarks
         run: cargo bench --all-features 2>&1 | tee benchmark-output.txt
 
+      # 归因元数据（sha/ref/机器）：入库与报告头都要它，缺了就无从判断
+      # 读数变化是代码还是环境引起的
+      - name: Write run meta
+        if: always()
+        run: python3 scripts/ci/bench-meta.py --kind benchmark --out target/bench-meta-benchmark.json
+
       # Criterion 的 estimates.json 是结构化结果，跨 nightly 可直接比较；
       # bench-report.sh 汇总成 Markdown 进 Step Summary，并产出 JSON 供追踪。
       - name: Summarize benchmarks
@@ -175,6 +187,7 @@ jobs:
           path: |
             target/criterion/
             target/bench-results.json
+            target/bench-meta-benchmark.json
             benchmark-output.txt
           retention-days: 30
 
@@ -186,7 +199,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      # 同 benchmark job：显式 checkout dev，否则每晚测的都是默认分支那一个提交
       - uses: actions/checkout@v7
+        with:
+          ref: dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -225,7 +241,7 @@ jobs:
             shootout-${{ runner.os }}-cargo-
 
       # 先构建 release 二进制：runner 默认用它（--yaoxiang-bin），
-      # 且 bench.yaml 的 compile 步骤也走 %y → 同一个二进制。
+      # 且 bench.toml 的 compile 步骤也走 %y → 同一个二进制。
       - name: Build yaoxiang (release)
         run: cargo build --release --bin yaoxiang-rs
 
@@ -237,6 +253,10 @@ jobs:
           # 结构化的结果走 --out-json，人读输出留在日志里即可。
           cargo run -p shootout --release -- \
             --out-json target/shootout-results.json | tee shootout-output.txt
+
+      - name: Write run meta
+        if: always()
+        run: python3 scripts/ci/bench-meta.py --kind shootout --out target/bench-meta-shootout.json
 
       - name: Summarize
         if: always()
@@ -256,7 +276,109 @@ jobs:
             shootout-output.txt
             target/shootout-results.json
             target/shootout-report.json
+            target/bench-meta-shootout.json
           retention-days: 30
+
+  # 把两类基准结果追加进仓库内的性能历史（benches/history/*.jsonl），并派生
+  # 图表数据。**由 nightly 自己提交**：artifact 只留 30 天、nightly 的
+  # Pre-release 每晚被删掉重建，两者都不是档案；写进仓库后 git log -p
+  # benches/history/ 就能把性能变化与代码改动对应起来。
+  #
+  # 为什么单独一个 job 而不是在两个基准 job 里各推一次：同一时刻只应有一次推送，
+  # 两个 job 各推一次会互相 non-fast-forward 打架。数据由 artifact 带过来。
+  #
+  # 提交回 dev（基准 job checkout 的正是 dev）；推送用的是默认 GITHUB_TOKEN，
+  # GitHub 的防递归规则下不会触发新的 workflow run，[skip ci] 只是双保险。
+  bench-history:
+    name: Perf history (commit)
+    needs: [benchmark, shootout]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Download benchmark artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '*results*'
+          path: bench-artifacts
+
+      - name: Append to history
+        id: append
+        run: |
+          set -uo pipefail
+          rc=0
+          # artifact 内部层次随 upload-artifact 的路径推断变化，故按文件名搜
+          CRIT_JSON="$(find bench-artifacts -name bench-results.json -print -quit)"
+          CRIT_META="$(find bench-artifacts -name bench-meta-benchmark.json -print -quit)"
+          SHOOT_JSON="$(find bench-artifacts -name shootout-results.json -print -quit)"
+          SHOOT_META="$(find bench-artifacts -name bench-meta-shootout.json -print -quit)"
+          echo "criterion: ${CRIT_JSON:-<缺失>} / meta ${CRIT_META:-<缺失>}"
+          echo "shootout:  ${SHOOT_JSON:-<缺失>} / meta ${SHOOT_META:-<缺失>}"
+
+          # 一套失败时仍记录另一套：缺数据比脏数据更不可挽回
+          if [[ -n "$CRIT_JSON" ]]; then
+            args=()
+            [[ -n "$CRIT_META" ]] && args+=(--meta "$CRIT_META")
+            python3 scripts/ci/bench-history.py --kind criterion \
+              --criterion-json "$CRIT_JSON" "${args[@]}" \
+              --history-dir benches/history || rc=1
+          else
+            echo "::warning::criterion 结果缺失，本次不记入历史"
+            rc=1
+          fi
+          if [[ -n "$SHOOT_JSON" ]]; then
+            args=()
+            [[ -n "$SHOOT_META" ]] && args+=(--meta "$SHOOT_META")
+            python3 scripts/ci/bench-history.py --kind shootout \
+              --shootout-json "$SHOOT_JSON" "${args[@]}" \
+              --history-dir benches/history || rc=1
+          else
+            echo "::warning::shootout 结果缺失，本次不记入历史"
+            rc=1
+          fi
+          python3 scripts/ci/bench-history.py --render-chart \
+            --history-dir benches/history \
+            --out docs/src/public/perf/history.json || rc=1
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add benches/history docs/src/public/perf/history.json
+          if git diff --cached --quiet; then
+            echo "历史无变化，跳过提交"
+            exit 0
+          fi
+          git commit -m ":wrench: chore(bench): nightly 性能数据入库 [skip ci]"
+          # 与 auto-translate bot 抢 dev 时拉平重试。nightly 跑在 UTC 22:17，
+          # 该时段通常无人提交，正常一次即中。
+          for i in 1 2 3 4 5; do
+            if git push origin HEAD:dev; then
+              echo "第 $i 次推送成功"
+              exit 0
+            fi
+            git pull --rebase origin dev
+          done
+          echo "::error::五次推送均失败（dev 上持续有并发提交）"
+          exit 1
+
+      # 数据已经落库并推送，此时才让 job 变红：入库与报警分开，避免报警把数据一起吞掉
+      - name: Fail if any suite was missing
+        if: steps.append.outputs.rc != '0'
+        run: |
+          echo "::error::有基准套件缺失结果，本次历史不完整（详见 Append to history 日志）"
+          exit 1
 
   # 把上述两类基准结果汇总为一段 Markdown，供 publish job 注入
   # nightly release 的 body。
@@ -280,10 +402,15 @@ jobs:
         run: |
           # 传 artifact 根目录即可：脚本会自动向下查找 criterion 目录
           # 与 shootout 输出（artifact 内部层次不稳定，不写死）。
+          # 报告头要写明测于哪个提交：基准 job 显式 checkout dev，而本次
+          # release 的构件来自默认分支——不点明，读者会把 dev 的数字当成
+          # release 构件的数字
+          META="$(find bench-artifacts -name bench-meta-benchmark.json -print -quit)"
           bash scripts/ci/bench-report.sh \
             --criterion-dir bench-artifacts/benchmark-results \
             --shootout-json bench-artifacts/shootout-results/target/shootout-results.json \
             --shootout bench-artifacts/shootout-results/shootout-output.txt \
+            --meta "$META" \
             > bench-notes.md
           cat bench-notes.md
 

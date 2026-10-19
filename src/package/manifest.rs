@@ -10,6 +10,15 @@ use crate::util::config::I18nConfig;
 /// The main manifest file name
 pub const MANIFEST_FILE: &str = "yaoxiang.toml";
 
+/// 多文件**工程目录**的约定入口文件名（含 `yaoxiang.toml` 的目录，见
+/// `tests/yaoxiang-multifile/README.md` 的「入口约定」）。
+///
+/// 与包布局的 `src/main.yx`（`package::commands::init` 生成、`orchestrator`
+/// 解析）**不是同一个概念**：本常量描述「一个工程目录的入口」，消费方是测试发现
+/// （`util::test_runner`，RFC-036 §5 点 6）与多文件夹具运行器
+/// （`tests/yx_multifile_runner.rs`）。
+pub const ENTRY_FILE: &str = "main.yx";
+
 /// Represents the `[package]` section of yaoxiang.toml
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageInfo {

@@ -24,6 +24,11 @@ static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
 static EMPTY_ARITY: std::sync::LazyLock<HashMap<String, (usize, Option<usize>)>> =
     std::sync::LazyLock::new(HashMap::new);
 
+/// #454：native 导出形参名表空缺省（未注入时使用）
+static EMPTY_NATIVE_PARAM_NAMES: std::sync::LazyLock<
+    HashMap<String, crate::frontend::core::typecheck::environment::ExportParamInfo>,
+> = std::sync::LazyLock::new(HashMap::new);
+
 /// RFC-009 读视图：剥离借用层，算术/比较按 inner 类型判定（读穿透）
 pub(super) fn read_view(ty: &MonoType) -> MonoType {
     let mut cur = ty;
@@ -103,8 +108,6 @@ pub struct ExpressionInferrer<'a> {
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types:
         &'a HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
-    /// RFC-010: 变体构造调用点（span 键控，ir_gen 生成 CreateVariant）
-    pub variant_ctor_calls: Vec<crate::frontend::core::typecheck::environment::VariantCtorCall>,
     /// 类型定义表: type_name -> MonoType(Struct)
     /// 用于 TypeRef → Struct 解析（字段访问等）
     type_defs: &'a HashMap<String, MonoType>,
@@ -118,10 +121,13 @@ pub struct ExpressionInferrer<'a> {
     /// RFC-011a §3：重载候选签名与 IR 混编名（方法级重载决议）
     method_overloads: Option<&'a HashMap<String, Vec<MonoType>>>,
     method_overload_ir_names: Option<&'a HashMap<String, Vec<String>>>,
+    /// RFC-011a §3 / #452：重载候选的声明期形参名（与候选序一一对应，含接收者位）。
+    /// 命名实参按形参名绑定到候选参数位——决议与冲突判定都读它。
+    method_overload_param_names: Option<&'a HashMap<String, Vec<Vec<String>>>>,
     /// 期望类型（带注解绑定传入，方法重载按期望返回决议）
     current_expected: Option<MonoType>,
-    /// RFC-011a §3：重载决议点（span → 混编 IR 名）
-    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
+    /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
+    pub overload_resolutions: Vec<(crate::util::plan_id::PlanId, String)>,
     /// RFC-011 §5.2：泛型函数约束表——调用点复检
     generic_fn_constraints: Option<&'a HashMap<String, Vec<(String, String)>>>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
@@ -150,6 +156,10 @@ pub struct ExpressionInferrer<'a> {
     pub call_ownership: CallOwnershipTable,
     /// #387：native arity 区间表（随签名表同源注入，缺省空表=无区间）
     native_arity: &'a HashMap<String, (usize, Option<usize>)>,
+    /// #454：native 导出形参名表（全限定名 + 短名 → 声明序形参名）。
+    /// 命名空间限定的原生调用据此按名绑定/判定未知名（此前整段静默跳过）。
+    native_param_names:
+        &'a HashMap<String, crate::frontend::core::typecheck::environment::ExportParamInfo>,
     /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
     /// generate_match_expr_ir 按 span 回查，替代对复合 scrutinee 的 AST 猜测
     pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
@@ -184,6 +194,7 @@ impl<'a> ExpressionInferrer<'a> {
             current_fn_param_constraints: None,
             method_overloads: None,
             method_overload_ir_names: None,
+            method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
             generic_fn_constraints: None,
@@ -193,11 +204,11 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
-            variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             dep_env: None,
@@ -232,6 +243,7 @@ impl<'a> ExpressionInferrer<'a> {
             current_fn_param_constraints: None,
             method_overloads: None,
             method_overload_ir_names: None,
+            method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
             generic_fn_constraints: None,
@@ -241,11 +253,11 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
-            variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             dep_env: None,
@@ -281,6 +293,7 @@ impl<'a> ExpressionInferrer<'a> {
             current_fn_param_constraints: None,
             method_overloads: None,
             method_overload_ir_names: None,
+            method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
             generic_fn_constraints: None,
@@ -290,11 +303,11 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
-            variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             dep_env: None,
@@ -332,6 +345,7 @@ impl<'a> ExpressionInferrer<'a> {
             current_fn_param_constraints: None,
             method_overloads: None,
             method_overload_ir_names: None,
+            method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
             generic_fn_constraints: None,
@@ -341,11 +355,11 @@ impl<'a> ExpressionInferrer<'a> {
             existential_coercions: Vec::new(),
             interface_impl_registry: &EMPTY_INTERFACE_IMPL_REGISTRY,
             sum_types: &EMPTY_SUM_TYPES,
-            variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             call_ownership: CallOwnershipTable::new(),
             native_arity: &EMPTY_ARITY,
+            native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             match_scrutinee_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             dep_env: None,
@@ -470,6 +484,14 @@ impl<'a> ExpressionInferrer<'a> {
         self.generic_type_defs = defs;
     }
 
+    /// 设置 native 导出形参名表（#454）
+    pub fn set_native_param_names(
+        &mut self,
+        names: &'a HashMap<String, crate::frontend::core::typecheck::environment::ExportParamInfo>,
+    ) {
+        self.native_param_names = names;
+    }
+
     /// 设置 native arity 区间表（#387）
     pub fn set_native_arities(
         &mut self,
@@ -502,6 +524,14 @@ impl<'a> ExpressionInferrer<'a> {
     ) {
         self.method_overloads = Some(overloads);
         self.method_overload_ir_names = Some(ir_names);
+    }
+
+    /// RFC-011a §3 / #452：重载候选的声明期形参名（命名实参入决议）
+    pub fn set_method_overload_param_names(
+        &mut self,
+        names: &'a HashMap<String, Vec<Vec<String>>>,
+    ) {
+        self.method_overload_param_names = Some(names);
     }
 
     /// 期望类型（方法重载按期望返回决议）
@@ -1418,7 +1448,9 @@ impl<'a> ExpressionInferrer<'a> {
     /// 前置：func 形如 `FieldAccess { expr: Call(Var(和类型名), 类型实参), field: 变体名 }`
     /// 且和类型名已判定（sum_types）。流程：内层实例化（Call 臂和类型分支产出
     /// `Generic{名, 实参}`）→ 变体查找（声明序）→ 变体参数按类型实参替换 →
-    /// 载荷逐参 unify → 记录 VariantCtorCall（span 键控）→ 返回该和类型。
+    /// 载荷逐参 unify → 返回该和类型。（IR 侧的 CreateVariant 由 ir_gen 就地
+    /// 形态检测产生：见 ir_gen.rs 的 detect_variant_ctor_call——span 键跨系统
+    /// 语义不同，跨层传调用点表会引入失配缺陷，2026-10-13 WBS 3.4.4 裁决删。）
     #[allow(clippy::too_many_arguments)]
     fn infer_variant_ctor_call(
         &mut self,
@@ -1436,7 +1468,7 @@ impl<'a> ExpressionInferrer<'a> {
                     .build(),
             );
         };
-        let Some((variant_index, vdef)) = variants
+        let Some((_, vdef)) = variants
             .iter()
             .enumerate()
             .find(|(_, v)| v.name == variant_name)
@@ -1496,14 +1528,6 @@ impl<'a> ExpressionInferrer<'a> {
                 .build());
             }
         }
-        self.variant_ctor_calls.push(
-            crate::frontend::core::typecheck::environment::VariantCtorCall {
-                span,
-                type_name: type_name.to_string(),
-                variant_index,
-                payload_count: subst_params.len(),
-            },
-        );
         Ok(MonoType::Generic {
             name: type_name.to_string(),
             args: concrete,
@@ -2653,6 +2677,63 @@ impl<'a> ExpressionInferrer<'a> {
         vec![]
     }
 
+    /// #452：把方法调用的实参绑定到形参槽位，并当场做规则校验。
+    ///
+    /// 绑定规则（用户 2026-10-14 裁决，主流约定）：
+    /// ① 位置实参按声明顺序占前导槽位（第 i 个位置实参 → 第 i 个值形参）；
+    /// ② 命名实参按形参名入槽；名字不匹配任何形参 → E1014；
+    /// ③ 位置与命名落在同一槽位 → E1111（既不许命名覆盖位置，也不许丢弃位置实参）；
+    /// ④ 命名实参之后不得再出现位置实参 → E1111；
+    /// ⑤ 同一形参被重复命名 → E1015（字面重复，只有这一条是「重复指定」）；
+    /// ⑥ 任一形参槽位空缺 → E1010（缺实参）。
+    ///
+    /// 返回**逐实参的形参位**（长度 = 位置实参数 + 命名实参数，顺序 = 位置实参
+    /// 在前、命名实参按书写序），供类型检查逐参对齐与 IR 生成重排共用——
+    /// 实参序两侧同源，不各自重算。
+    ///
+    /// 形参名对应的是**值形参**（不含接收者位 self）：接收者由字段访问形态提供，
+    /// 不是实参，也不可能被命名实参指定。
+    /// #452 / F1：把候选形参表按**元数**分组（元数 = 值形参数 = 形参表长度 - 1），
+    /// 每组取首候选的形参名作代表（同元数下形参名以声明为准；名字互不相同的
+    /// 同元数候选会在调用点被拒绝，不会走到这里）。
+    ///
+    /// **空表 = 名字不可用**（泛型方法声明里的类型级形参被剥离后名字表对不齐，
+    /// 登记时留空；见 `add_method_overload_with_params`）：这种条目不构成元数
+    /// 证据，不得参与分组——否则元数被误算成 0，`b.get()` 这类合法调用会报 E1010。
+    fn candidate_arity_groups(lists: &[Vec<String>]) -> Vec<(usize, Vec<String>)> {
+        let mut out: Vec<(usize, Vec<String>)> = Vec::new();
+        for names in lists.iter() {
+            if names.is_empty() {
+                continue; // 名字不可用：不构成元数证据
+            }
+            let arity = names.len() - 1;
+            if out.iter().any(|(a, _)| *a == arity) {
+                continue;
+            }
+            out.push((arity, names.clone()));
+        }
+        out
+    }
+
+    /// 方法调用的实参绑定：收敛到共享判据 `arg_binding::bind_args_to_params`
+    /// （#452 / #454 / t12-F1：判据不再有第二份）。
+    fn bind_named_args(
+        key: &str,
+        param_names: &[String],
+        args: &[crate::frontend::core::parser::ast::Expr],
+        named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
+        call_span: crate::util::span::Span,
+    ) -> Result<Vec<usize>> {
+        super::arg_binding::bind_args_to_params(
+            key,
+            param_names,
+            args,
+            named_args,
+            1, // 方法形态：param_names[0] 是接收者位 self
+            &vec![false; param_names.len()],
+            call_span,
+        )
+    }
     /// #317：FieldAccess 调用目标是否解析自 method_bindings（impl 方法绑定形态）
     ///
     /// 返回 Some(方法键) 时，签名 params[0] 是接收者占位，实参对应 params[1..]。
@@ -3401,8 +3482,8 @@ impl<'a> ExpressionInferrer<'a> {
                 args,
                 named_args,
                 span,
-                ..
-            } => self.infer_call_expr(func, args, named_args, *span),
+                plan_id,
+            } => self.infer_call_expr(func, args, named_args, *span, *plan_id),
 
             // If 表达式
             crate::frontend::core::parser::ast::Expr::If {
@@ -3967,6 +4048,7 @@ impl<'a> ExpressionInferrer<'a> {
         args: &[crate::frontend::core::parser::ast::Expr],
         named_args: &[(String, crate::frontend::core::parser::ast::Expr)],
         span: crate::util::span::Span,
+        call_plan_id: crate::util::plan_id::PlanId,
     ) -> Result<MonoType> {
         // RFC-010: 变体构造——Result(Int, String).ok(5) / Color.red()。
         // 构造器只以调用形态存在（无一等构造器值），在 infer(func) 之前
@@ -4110,6 +4192,15 @@ impl<'a> ExpressionInferrer<'a> {
         // 判据用「形参里有未绑定类型变量」而非 `lookup_type_params`：
         // 后者依赖 `generic_fn_type_params` 登记（仅在 check_fn_stmt 时填），
         // 单文件里 lambda 形态的绑定未必命中。
+        // #452：命名实参的推断类型按**书写序**（与 named_args 同序）——候选逐
+        // 形参位匹配时用它与形参类型 unify。此前命名实参只在「实参数与形参数
+        // 相等」时被检查，混合形态整体跳过类型检查。
+        let named_types: Vec<MonoType> = named_args
+            .iter()
+            .map(|(_, arg)| self.infer_expr(arg))
+            .collect::<Result<Vec<_>, _>>()?;
+        let named_types: Vec<&MonoType> = named_types.iter().collect();
+
         let mut explicit_type_args: Vec<MonoType> = Vec::new();
         let mut value_arg_types: Vec<MonoType> = arg_types.clone();
         {
@@ -4494,22 +4585,46 @@ impl<'a> ExpressionInferrer<'a> {
         // 期望返回 选择。候选的形参变量是 pass2 注册期共享的，
         // 逐调用 fresh 化后再 unify。选中后：
         //   - 以候选签名作为本调用的函数类型（分派/所有权同源）
-        //   - 记录决议（span → 混编 IR 名），ir_gen 据此命名调用
-        let selected_overload: Option<MonoType> = match &method_key {
+        //   - 记录决议（**调用点 PlanId** → 混编 IR 名），ir_gen 据此命名调用
+        let selected_overload: Option<(MonoType, Vec<String>)> = match &method_key {
             Some(key) => {
                 let cands = self.method_overloads.as_ref().and_then(|m| m.get(key));
                 let irs = self
                     .method_overload_ir_names
                     .as_ref()
                     .and_then(|m| m.get(key));
+                // #452：候选的声明期形参名（与候选序一一对应；缺表/空表 = 该候选
+                // 名字不可用，按「无约束」放行——宁可不按名匹配也不拿错位名字匹配）
+                let cand_names = self
+                    .method_overload_param_names
+                    .as_ref()
+                    .and_then(|m| m.get(key));
                 match (cands, irs) {
-                    (Some(cands), Some(irs)) if cands.len() > 1 && irs.len() == cands.len() => {
+                    // #452 / F1：候选**非空**即走决议——单候选也要跑，否则单签名的
+                    // 命名实参调用整段跳过逐参类型检查（实测运行时才 E6007）。
+                    (Some(cands), Some(irs)) if !cands.is_empty() && irs.len() == cands.len() => {
                         let mut matches: Vec<(usize, MonoType)> = Vec::new();
                         for (i, cand) in cands.iter().enumerate() {
                             let Some(MonoType::Fn { params, .. }) = Some(cand) else {
                                 continue;
                             };
-                            if params.len() != arg_types.len() + 1 {
+                            // 元数：候选值形参数 = 位置实参数 + 命名实参数
+                            if params.len() != arg_types.len() + named_args.len() + 1 {
+                                continue;
+                            }
+                            // #452 规则⑥：命名实参按**形参名**约束候选——形参表里
+                            // 没有这个名字的候选直接淘汰（形参表为空 = 名字不可用，
+                            // 不淘汰）。命名实参必须计入匹配，否则纯命名调用会静默
+                            // 落到「默认绑定」（第一个候选），与用户写的名字无关。
+                            let names: &[String] = cand_names
+                                .and_then(|l| l.get(i))
+                                .map(Vec::as_slice)
+                                .unwrap_or(&[]);
+                            if !names.is_empty()
+                                && named_args
+                                    .iter()
+                                    .any(|(n, _)| !names.iter().any(|p| p == n))
+                            {
                                 continue;
                             }
                             // 逐调用 fresh 化（共享 pass2 变量会跨调用串型）
@@ -4520,7 +4635,9 @@ impl<'a> ExpressionInferrer<'a> {
                                 for idx in idxs {
                                     subst.insert(idx, self.solver.new_var());
                                 }
-                                Self::substitute_type_vars(cand, &subst)
+                                // 克隆后在副本上替换：替换实现若含就地改写，
+                                // 直接作用在共享候选上会把后一个候选改脏
+                                Self::substitute_type_vars(&cand.clone(), &subst)
                             };
                             let Some(MonoType::Fn {
                                 params: fp,
@@ -4529,14 +4646,55 @@ impl<'a> ExpressionInferrer<'a> {
                             else {
                                 continue;
                             };
+                            // 逐形参位类型匹配（#452 规则⑥）：位置实参占前导值形参位、
+                            // 命名实参按名入槽，两侧都算进匹配。此前只按位置实参计数，
+                            // 纯命名调用恒被元数闸拦下、决议永不产出。
+                            //
+                            // 两个坑（均已实测）：
+                            // ① 候选签名跨调用共享，而 unify 会**就地绑定其中的类型变量**
+                            //    ——「先绑后否」会把后一个候选改成上一次的形状
+                            //    （实测：Int / String 两候选全被判成匹配 → 假歧义 E1107），
+                            //    故匹配在**求解器克隆沙盒**里做，胜出后再提交；
+                            // ② 逐位配对必须按**下标**取（iterator zip 在两侧都从 1 号
+                            //    元素起时会把形参整体错位一格）。
+                            let _ = fr;
+                            let mut sandbox = self.solver.clone();
+                            let mut bound: Vec<Option<MonoType>> = vec![None; fp.len()];
+                            for (k, a) in arg_types.iter().enumerate() {
+                                if let Some(slot) = bound.get_mut(1 + k) {
+                                    *slot = Some(a.clone());
+                                }
+                            }
                             let mut ok = true;
-                            for (p, a) in fp[1..].iter().zip(arg_types.iter()) {
+                            for (ni, (name, _)) in named_args.iter().enumerate() {
+                                let named_ty = named_types[ni];
+                                let mut slot = None;
+                                for (pi, pn) in names.iter().enumerate().skip(1) {
+                                    if pn == name {
+                                        slot = bound.get_mut(pi);
+                                        break;
+                                    }
+                                }
+                                let Some(slot) = slot else {
+                                    ok = false; // 形参表里没有这个名字：候选不相容
+                                    break;
+                                };
+                                *slot = Some(named_ty.clone());
+                            }
+                            if !ok {
+                                continue;
+                            }
+                            for k in 0..fp.len().saturating_sub(1) {
+                                let p = &fp[1 + k];
+                                let Some(a) = bound.get(k + 1).and_then(|s| s.as_ref()) else {
+                                    continue;
+                                };
                                 // 参数带借用而实参是值：自动借用形态兼容
-                                let pr = self.solver.resolve_type(p);
-                                let ar = self.solver.resolve_type(a);
+                                let pr = sandbox.resolve_type(p);
+                                let ar = sandbox.resolve_type(a);
                                 let borrow_ok = matches!(&pr, MonoType::Ref { .. })
                                     && !matches!(&ar, MonoType::Ref { .. });
-                                if !borrow_ok && self.solver.unify(&ar, &pr).is_err() {
+                                if !borrow_ok && sandbox.unify(&ar, &pr).is_err() {
                                     ok = false;
                                     break;
                                 }
@@ -4544,22 +4702,73 @@ impl<'a> ExpressionInferrer<'a> {
                             if !ok {
                                 continue;
                             }
-                            // 期望返回过滤（带注解绑定的调用点传入）
+                            // 期望返回过滤（带注解绑定的调用点传入）。
+                            // F4：先在自己那份沙盒里试 unify——unify 非失败原子
+                            // （bind 一落即生效、无回滚），直接打在 self.solver 上时
+                            // 失败路径会留下半截绑定，污染后续候选与同名调用。
                             if let Some(exp) = &self.current_expected {
                                 let er = self.solver.resolve_type(exp);
-                                let frr = self.solver.resolve_type(fr);
-                                if self.solver.unify(&frr, &er).is_err() {
+                                let frr = sandbox.resolve_type(fr);
+                                if sandbox.unify(&frr, &er).is_err() {
                                     continue;
                                 }
                             }
                             matches.push((i, freshened));
                         }
-                        match matches.len() {
-                            1 => matches.first().and_then(|(i, f)| {
-                                let ir = irs.get(*i)?;
-                                self.overload_resolutions.push((span, ir.clone()));
-                                Some(f.clone())
-                            }),
+                        // 把「选中候选的形参名 + 实参→形参位绑定」带出决议段：
+                        // 冲突/缺参校验与逐参类型对齐都以它为准（#452）。
+                        let chosen: Option<(usize, MonoType)> = match matches.len() {
+                            1 => match (
+                                matches.first(),
+                                matches.first().and_then(|(i, _)| irs.get(*i)),
+                            ) {
+                                (Some((i, f)), Some(ir)) => {
+                                    // 沙盒里判出的匹配要在求解器里**补做一次**
+                                    // unify：候选胜出后其类型变量必须真的绑定，
+                                    // 否则外层拿到的签名仍是未绑定变量
+                                    // （形参位是变量的候选会因此丢约束）。
+                                    let mut real = self.solver.clone();
+                                    if let MonoType::Fn { params: rp, .. } = f {
+                                        let mut bound_vals: Vec<Option<MonoType>> =
+                                            vec![None; rp.len()];
+                                        for (k, a) in arg_types.iter().enumerate() {
+                                            if let Some(slot) = bound_vals.get_mut(1 + k) {
+                                                *slot = Some(a.clone());
+                                            }
+                                        }
+                                        for (ni, (name, _)) in named_args.iter().enumerate() {
+                                            let nty = named_types[ni].clone();
+                                            let mut slot = None;
+                                            for (pi, pn) in cand_names
+                                                .and_then(|l| l.get(*i))
+                                                .map(Vec::as_slice)
+                                                .unwrap_or(&[])
+                                                .iter()
+                                                .enumerate()
+                                                .skip(1)
+                                            {
+                                                if pn == name {
+                                                    slot = bound_vals.get_mut(pi);
+                                                    break;
+                                                }
+                                            }
+                                            if let Some(slot) = slot {
+                                                *slot = Some(nty);
+                                            }
+                                        }
+                                        for (p, a) in rp[1..].iter().zip(bound_vals.iter()) {
+                                            if let Some(a) = a {
+                                                let _ = real.unify(a, p);
+                                            }
+                                        }
+                                    }
+                                    *self.solver = real;
+                                    // RFC-039 D20：键 = 调用表达式节点的身份（产出侧唯一写入点）
+                                    self.overload_resolutions.push((call_plan_id, ir.clone()));
+                                    Some((*i, f.clone()))
+                                }
+                                _ => None,
+                            },
                             // 多候选无法区分 = 隐式假设调用者想要哪一个——
                             // 不该隐式的地方不隐式：歧义即报错（E1107）
                             n if n > 1 => {
@@ -4568,14 +4777,86 @@ impl<'a> ExpressionInferrer<'a> {
                                     .build());
                             }
                             _ => None, // 0 = 无实参匹配的候选（落旧路径报错）
-                        }
+                        };
+                        chosen.map(|(i, f)| {
+                            let names = cand_names
+                                .and_then(|n| n.get(i))
+                                .cloned()
+                                .unwrap_or_default();
+                            (f, names)
+                        })
                     }
                     _ => None,
                 }
             }
             None => None,
         };
+        // 命中决议时，候选形参名随签名一并带出（未命中 = 无可信名字来源）
+        let (selected_overload, selected_param_names) = match selected_overload {
+            Some((ty, names)) => (Some(ty), Some(names)),
+            None => (None, None),
+        };
+        // 选中候选的形参数（空形参名表要靠它结算元数：把空表读成「元数 0」
+        // 会把合法的 t.pick(1) 误报成 expected 0 arguments）
+        let selected_params_len: Option<usize> = match &selected_overload {
+            Some(MonoType::Fn { params, .. }) if !params.is_empty() => Some(params.len()),
+            _ => None,
+        };
         let mono_func_ty = selected_overload.unwrap_or(mono_func_ty);
+
+        // #452：命名实参 → 方法形参槽位的绑定。返回**逐实参的形参位**：位置实参占
+        // 前导槽位、命名实参按名入槽。冲突 / 未知名 / 重复命名 / 命名后接位置实参 /
+        // 缺实参在此一律编译期报错——**不得静默择一**。
+        let mut param_positions: Option<Vec<usize>> = None;
+        // 判定出的形参表元数（值形参数）——元数结算的权威值；不用 positions 的最大
+        // 下标推（超出形参表的实参也会推出同样大的下标，见 p10 超参形态）
+        let mut bound_arity: Option<usize> = None;
+        if let Some(key) = &method_key {
+            // 名字来源（按可信度）：① 决议选中的候选（多候选时唯一可信）；
+            // ② 全部候选同元数 ⇒ 该元数唯一，取首候选形参名；
+            // ③ 恰有一条候选的元数与实参数相符 ⇒ 取它的形参名；
+            // ④ 该键下只有一条候选签名（缺参/超参正是要报的形态，不能拿实参数
+            //    去筛形参表，否则「缺参」这一格永远筛不到名字）；
+            // ⑤ 其余（多候选且元数互不相同、实参数又与任一都不符）留空不猜。
+            //
+            // #452 / F1：②③④ 是「多候选但无一命中」路径的落点——决议零命中时
+            // 名字不随签名带出，若就此留空，逐参类型检查与元数结算会被整段跳过，
+            // 命名实参调用在编译期静默通过（实测 run 打印错值 / void）。
+            let names: Option<Vec<String>> = selected_param_names.or_else(|| {
+                let lists = self
+                    .method_overload_param_names
+                    .as_ref()
+                    .and_then(|m| m.get(key))?;
+                let groups = Self::candidate_arity_groups(lists);
+                // ① 全部候选名字可用且同元数 ⇒ 该元数唯一，取首候选形参名
+                if groups.len() == lists.len() && groups.len() == 1 {
+                    return groups.first().map(|(_, names)| names.clone());
+                }
+                // ② 恰有一组候选的元数与实参数相符 ⇒ 取它的形参名
+                let total_args = arg_types.len() + named_args.len();
+                let mut exact = groups
+                    .iter()
+                    .filter(|(arity, _)| *arity == total_args)
+                    .map(|(_, names)| names);
+                let first = exact.next()?;
+                // 元数与实参数相符的候选不止一组时名字不可判定，宁可不按名匹配
+                exact.next().is_none().then(|| first.clone())
+            });
+            if let Some(names) = names {
+                // 空表 = 名字不可用（登记期对不齐留空）：此时**只能**从选中候选的
+                // 签名结算元数，不能把空表读成「元数 0」
+                bound_arity = if names.is_empty() {
+                    selected_params_len.map(|len| len - 1)
+                } else {
+                    // names 含接收者位 self（下标 0）——绑定与 IR 重排同用全形参表坐标
+                    Some(names.len() - 1)
+                };
+                if !names.is_empty() {
+                    param_positions =
+                        Some(Self::bind_named_args(key, &names, args, named_args, span)?);
+                }
+            }
+        }
 
         // 两层调用：Container(Int)(42, 43) —— func 是泛型类型构造调用，
         // 内层已完成实例化（func_ty 是具体 Struct），外层实参是构造参数。
@@ -5025,18 +5306,59 @@ impl<'a> ExpressionInferrer<'a> {
         // 形态。接收者占 params[0]，实参数须等于 params.len()-1；不符拦为
         // 编译期 E1010（原先缺参拖到运行时 E6007、超参/类型错整体静默跳过，
         // 超参仅因 3==params.len() 错位对齐意外报错）
+        // #452 / F1：命名实参同样计入——此前的 `named_args.is_empty()` 门让
+        // 「带命名实参 + 决议零命中」整段跳过元数结算（实参被静默丢弃或补零）。
+        // 期望元数取自**判定出的形参表**（bound_arity / 候选元数集合），拿不到
+        // 才退回当前签名；只对元数明显不符响亮，元数相符的形态交给上面的
+        // bind_named_args（缺参 E1010 / 未知名 E1014 / 撞槽 E1111）与逐参类型
+        // 检查（E1002）报更精确的码。
         if let Some(method_key) = &method_key {
-            if named_args.is_empty() {
-                if let MonoType::Fn { params, .. } = &mono_func_ty {
-                    if !params.is_empty() && arg_types.len() + 1 != params.len() {
-                        return Err(ErrorCodeDefinition::argument_count_mismatch(
-                            method_key,
-                            params.len() - 1,
-                            arg_types.len(),
-                        )
-                        .at(span)
-                        .build());
-                    }
+            // 候选形参表按元数分组（每组首候选作代表；空表不构成证据）
+            let arity_groups: Vec<(usize, Vec<String>)> = self
+                .method_overload_param_names
+                .as_ref()
+                .and_then(|m| m.get(method_key))
+                .map(|lists| Self::candidate_arity_groups(lists))
+                .unwrap_or_default();
+            let bind_names: Option<&Vec<String>> = arity_groups.first().map(|(_, n)| n);
+            let expected_arity: Option<usize> = bound_arity.or_else(|| match bind_names {
+                // 有候选表：以候选的元数集合为权威。全为空表（名字不可用，
+                // 如类型体绑定形态）⇒ 元数无可信来源，不报。
+                Some(names) => Some(names.len() - 1),
+                // 无候选表（调用点为单签名）：退回当前签名
+                None => match &mono_func_ty {
+                    MonoType::Fn { params, .. } if !params.is_empty() => Some(params.len() - 1),
+                    _ => None,
+                },
+            });
+            let total_args = arg_types.len() + named_args.len();
+            // 名称优先于元数：名字不在候选形参表里时，「实参个数」这个描述是
+            // 误导的（用户写了 1 个实参，但那个名字根本不存在）——先报 E1014。
+            let unknown = bind_names.and_then(|names| {
+                named_args
+                    .iter()
+                    .map(|(n, _)| n.as_str())
+                    .find(|n| !names.iter().any(|p| p == n))
+            });
+            if let Some(name) = unknown {
+                return Err(ErrorCodeDefinition::unknown_argument(
+                    method_key,
+                    name,
+                    &bind_names
+                        .map(|names| names.iter().skip(1).cloned().collect::<Vec<_>>())
+                        .unwrap_or_default()
+                        .join(", "),
+                )
+                .at(span)
+                .build());
+            }
+            if let Some(expected) = expected_arity {
+                if total_args != expected {
+                    return Err(ErrorCodeDefinition::argument_count_mismatch(
+                        method_key, expected, total_args,
+                    )
+                    .at(span)
+                    .build());
                 }
             }
         }
@@ -5060,6 +5382,7 @@ impl<'a> ExpressionInferrer<'a> {
             {
                 if let MonoType::Fn { params, .. } = &mono_func_ty {
                     let ns_key = extract_namespace_path(obj).map(|p| format!("{p}.{field}"));
+                    // #387：native arity 区间（直接命中或 std. 前缀回退）
                     let table_range = ns_key
                         .as_deref()
                         .and_then(|k| self.native_arity.get(k).copied())
@@ -5069,6 +5392,38 @@ impl<'a> ExpressionInferrer<'a> {
                                 .map(|k| format!("std.{k}"))
                                 .and_then(|k| self.native_arity.get(k.as_str()).copied())
                         });
+                    // #454 / t12-F1 / t14：原生导出与方法级调用**同一套判据**——
+                    // 收敛到共享实现 `arg_binding::bind_args_to_params`。形参名与
+                    // **必需下限**同出一源：`signature::export_signature_param_info`
+                    // （同一签名串的解析出口），调用点不再各算一份——两侧各算曾
+                    // 实体分歧（ir_gen 硬编全必需位 ⇒ 省略可选位的合法调用被误报 E1010）。
+                    if !named_args.is_empty() {
+                        if let Some(info) = ns_key
+                            .as_deref()
+                            .and_then(|k| self.native_param_names.get(k))
+                            .or_else(|| {
+                                ns_key
+                                    .as_deref()
+                                    .map(|k| format!("std.{k}"))
+                                    .and_then(|k| self.native_param_names.get(k.as_str()))
+                            })
+                        {
+                            let diag_name = ns_key.as_deref().unwrap_or(field);
+                            // 可选位：第 `required_min` 位及其后（`?name` / `...args` 尾位）
+                            let optional: Vec<bool> = (0..info.names.len())
+                                .map(|i| i >= info.required_min)
+                                .collect();
+                            super::arg_binding::bind_args_to_params(
+                                diag_name,
+                                &info.names,
+                                args,
+                                named_args,
+                                0, // 命名空间调用无接收者位
+                                &optional,
+                                span,
+                            )?;
+                        }
+                    }
                     let total = arg_types.len() + named_args.len();
                     let range = match table_range {
                         Some((min, max)) => {
@@ -5134,10 +5489,58 @@ impl<'a> ExpressionInferrer<'a> {
                 // 接收者占 params[0]，不在实参列表中
                 let recv_offset = usize::from(method_key.is_some() && !params.is_empty());
                 let param_slice = &params[recv_offset..];
-                if arg_types.len() == param_slice.len() {
-                    for (arg_expr, (arg_ty, param_ty)) in
-                        args.iter().zip(arg_types.iter().zip(param_slice.iter()))
-                    {
+                // #452：逐实参 → 形参位对齐。有绑定表时**按位**取形参类型
+                // （命名实参不再因「个数对不上」整体跳过类型检查）；无绑定表
+                // （纯位置实参 / 名字不可用）维持旧的对位规则。
+                //
+                // #452 / F1：实参序 = 位置实参（前导，与 args 同序）+ 命名实参
+                // （书写序）。元数一律按**两者之和**结算：此前用 arg_types.len()
+                // （只含位置实参）与 positions 对齐，带命名实参的调用恒失配 ⇒
+                // 整段逐参类型检查被静默跳过（多候选零命中/单候选都中招）。
+                let total_args = arg_types.len() + named_args.len();
+                let mut arg_types_all: Vec<&MonoType> = arg_types.iter().collect();
+                arg_types_all.extend(named_types.iter().copied());
+                let aligned: Option<
+                    Vec<(
+                        &MonoType,
+                        &MonoType,
+                        &crate::frontend::core::parser::ast::Expr,
+                    )>,
+                > = param_positions.as_ref().and_then(|positions| {
+                    if positions.len() != total_args {
+                        return None;
+                    }
+                    let mut out = Vec::with_capacity(positions.len());
+                    for (i, position) in positions.iter().enumerate() {
+                        // 槽位下标含接收者位（全形参表坐标）；args 侧余下的是值形参
+                        let value_slot = position.checked_sub(recv_offset)?;
+                        let param_ty = param_slice.get(value_slot)?;
+                        let arg_ty = *arg_types_all.get(i)?;
+                        // 实参序 = 位置实参（前导，与 args 同序）+ 命名实参（书写序）
+                        let arg_expr = if i < args.len() {
+                            args.get(i)?
+                        } else {
+                            &named_args.get(i - args.len())?.1
+                        };
+                        out.push((arg_ty, param_ty, arg_expr));
+                    }
+                    Some(out)
+                });
+                let checked_args: Vec<(
+                    &MonoType,
+                    &MonoType,
+                    &crate::frontend::core::parser::ast::Expr,
+                )> = match aligned {
+                    Some(list) => list,
+                    None if total_args == param_slice.len() => args
+                        .iter()
+                        .zip(arg_types.iter().zip(param_slice.iter()))
+                        .map(|(arg_expr, (arg_ty, param_ty))| (arg_ty, param_ty, arg_expr))
+                        .collect(),
+                    None => Vec::new(),
+                };
+                {
+                    for (arg_ty, param_ty, arg_expr) in checked_args.iter() {
                         // 自动借用：当参数签名要求 &T 且实参是值类型时，
                         // 编译器自动创建令牌（RFC-009 §2.8）
                         let actual_arg = match (param_ty, arg_ty) {
@@ -5146,10 +5549,10 @@ impl<'a> ExpressionInferrer<'a> {
                             {
                                 MonoType::Ref {
                                     mutable: *mutable,
-                                    inner: Box::new(a.clone()),
+                                    inner: Box::new((*a).clone()),
                                 }
                             }
-                            _ => arg_ty.clone(),
+                            _ => (*arg_ty).clone(),
                         };
                         // resolve 参数类型：TypeRef("Int") → Int(64) 等
                         let mut resolved_param = self.solver.resolve_type(param_ty);

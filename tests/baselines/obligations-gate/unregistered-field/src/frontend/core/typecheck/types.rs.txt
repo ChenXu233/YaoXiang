@@ -1,0 +1,7 @@
+/// 夹具版 TypeCheckResult（mini）：rogue_field 既不在义务清单、
+/// 也不在非义务字段登记——反向 containment 判据必须红。
+pub struct TypeCheckResult {
+    pub ghost_field: Vec<String>,
+    pub fixture_meta: String,
+    pub rogue_field: Vec<String>,
+}

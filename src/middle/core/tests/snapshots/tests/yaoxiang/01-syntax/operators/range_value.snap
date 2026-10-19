@@ -189,6 +189,12 @@ module
     Call _ <- string("std.range.abort_invalid_step") [%43] (def=d1)
     Load %50 <- string("6 in stepped range with var step")
     Call %39 <- string("std.assert.assert") [%40, %50] (def=d2)
+    Drop %0
+    Drop %8
+    Drop %17
+    Drop %30
+    Drop %29
+    Drop %3
     Ret %39
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

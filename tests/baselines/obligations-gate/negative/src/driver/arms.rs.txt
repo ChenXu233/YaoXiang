@@ -1,0 +1,4 @@
+/// 夹具版 IrGeneration 臂（反例）：交付点没有标记。
+fn ir_generation(state: &mut State) {
+    let _ = state;
+}

@@ -75,6 +75,7 @@ pub fn parse_method_bind(
             span,
         },
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 
@@ -172,6 +173,7 @@ impl BindingParser {
                 value.unwrap_or(Expr::Lit(Literal::Bool(false), value_span)),
             )),
             span: value_span,
+            plan_id: PlanId::UNPLANNED,
         })
     }
 

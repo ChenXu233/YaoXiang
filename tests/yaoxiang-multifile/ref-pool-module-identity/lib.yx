@@ -1,0 +1,4 @@
+// lib.yx —— 被导入模块：foo 无人消费，used 被 main 消费
+foo: () -> Int = () => { return 7 }
+
+used: () -> Int = () => { return 1 }

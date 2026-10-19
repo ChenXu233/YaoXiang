@@ -34,7 +34,7 @@ match parsed {
 }
 ```
 
-**实际行为**：`tests/yaoxiang/02-type-system/result.yx` 标注为 `🔴 未实现 - Result 类型在运行时未完全支持`。
+**实际行为**：`tests/yaoxiang/02-type-system/sum-types/result.yx` 标注为 `🔴 未实现 - Result 类型在运行时未完全支持`。
 
 **影响**：无法用 match 解包 Result，只能用 `result.unwrap_or()` 函数调用方式。
 

@@ -1,0 +1,6 @@
+/// 夹具版 TypeCheckResult（mini）：只声明一条义务字段。
+pub struct TypeCheckResult {
+    pub fixture_meta: String,
+    /// 定义 + 写入，消费端是否读取由夹具变体决定
+    pub ghost_field: Vec<String>,
+}

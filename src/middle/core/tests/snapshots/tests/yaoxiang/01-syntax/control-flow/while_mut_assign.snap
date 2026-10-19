@@ -14,7 +14,7 @@ module
     Load %4 <- %2
     Load %5 <- int(5)
     Lt %6 <- %4, %5
-    JmpIfNot %6 -> instr(17)
+    JmpIfNot %6 -> instr(18)
     Load %7 <- %0
     Load %8 <- %1
     Add %9 <- %7, %8
@@ -23,6 +23,7 @@ module
     Load %10 <- %2
     Load %11 <- int(1)
     Add %2 <- %10, %11
+    Drop %9
     Jmp -> instr(4)
     Load %10 <- %1
     Load %11 <- int(8)
@@ -45,19 +46,24 @@ module
     Load %12 <- %8
     Load %13 <- int(10)
     Le %11 <- %12, %13
-    JmpIfNot %11 -> instr(46)
+    JmpIfNot %11 -> instr(47)
     Load %14 <- %7
     Load %15 <- %8
     Add %7 <- %14, %15
     Load %16 <- %8
     Load %17 <- int(1)
     Add %8 <- %16, %17
-    Jmp -> instr(35)
+    Jmp -> instr(36)
     Load %12 <- %7
     Load %13 <- int(55)
     Eq %11 <- %12, %13
     Load %14 <- string("sum 1..10 should be 55")
     Call %10 <- string("std.assert.assert") [%11, %14] (def=d0)
+    Drop %0
+    Drop %1
+    Drop %2
+    Drop %8
+    Drop %7
     Ret %10
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

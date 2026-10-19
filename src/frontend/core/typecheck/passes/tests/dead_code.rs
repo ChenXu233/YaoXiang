@@ -6,7 +6,7 @@
 //! 唯一豁免口是包内引用池（RFC-029f，跨文件消费者不可见）
 
 use crate::frontend::core::typecheck::passes::dead_code::{DeadCodeAnalyzer, DeadCodeWarning};
-use crate::frontend::core::parser::ast::{Block, Module, Stmt, StmtKind, Expr, Type};
+use crate::frontend::core::parser::ast::{Block, Module, PlanId, Stmt, StmtKind, Expr, Type};
 use crate::util::span::Span;
 
 /// 私有类型 `Outer { inner: Inner }`——字段类型引用私有类型 Inner。
@@ -28,6 +28,7 @@ fn outer_with_inner_field() -> Stmt {
             },
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -59,6 +60,7 @@ fn module_with_point_param_annotation() -> Module {
                 span: Span::dummy(),
             },
             span: Span::dummy(),
+            plan_id: PlanId::UNPLANNED,
         }],
         span: Span::dummy(),
     }
@@ -106,6 +108,7 @@ fn make_binding(
             span: Span::dummy(),
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -119,6 +122,7 @@ fn make_type_def(name: &str) -> Stmt {
             definition: Type::Int(64),
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -134,6 +138,7 @@ fn make_var(name: &str) -> Stmt {
             span: Span::dummy(),
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -152,19 +157,22 @@ fn make_annotated_var(name: &str) -> Stmt {
             span: Span::dummy(),
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
 /// 构造一个引用某符号的 Call 表达式语句
 fn make_call_stmt(name: &str) -> Stmt {
     Stmt {
-        kind: StmtKind::Expr(Box::new(Expr::Call {
-            func: Box::new(Expr::Var(name.to_string(), Span::dummy())),
-            args: vec![],
-            named_args: vec![],
-            span: Span::dummy(),
-        })),
+        kind: StmtKind::Expr(Box::new(Expr::call(
+            Expr::Var(name.to_string(), Span::dummy()),
+            vec![],
+            vec![],
+            Span::dummy(),
+            PlanId::UNPLANNED,
+        ))),
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -617,6 +625,7 @@ fn make_match_stmt(
             span: Span::dummy(),
         })),
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -631,6 +640,7 @@ fn make_spawn_stmt(body_stmts: Vec<Stmt>) -> Stmt {
             span: Span::dummy(),
         })),
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -656,6 +666,7 @@ fn make_index_assign_stmt(
             span: Span::dummy(),
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 

@@ -87,6 +87,16 @@ module
     Eq %11 <- %14, %15
     Load %12 <- string("(10+20)*2-5 == 55")
     Call %10 <- string("std.assert.assert") [%11, %12] (def=d0)
+    Drop %2
+    Drop %0
+    Drop %1
+    Drop %3
+    Drop %4
+    Drop %7
+    Drop %5
+    Drop %6
+    Drop %8
+    Drop %9
     Ret %10
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

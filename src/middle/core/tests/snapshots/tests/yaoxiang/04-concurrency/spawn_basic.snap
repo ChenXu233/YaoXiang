@@ -15,10 +15,13 @@ module
     Load %8 <- %5
     Add %9 <- %7, %8
     Move %6 <- %9
+    Drop %2
+    Drop %5
     Load %9 <- %6
     Load %7 <- int(6)
     Eq %4 <- %9, %7
     Call %3 <- string("std.assert.assert") [%4] (def=d0)
+    Drop %6
     Ret %3
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

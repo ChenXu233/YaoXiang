@@ -1,0 +1,6 @@
+/// 夹具版 IR 生成器：已登记字段都有真实读取。
+fn new_with_type_result(type_result: &TypeCheckResult) -> Self {
+    let a = type_result.ghost_field.clone();
+    let _ = a;
+    Self
+}

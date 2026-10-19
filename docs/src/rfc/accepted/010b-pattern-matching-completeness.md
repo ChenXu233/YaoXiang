@@ -153,7 +153,7 @@ parent: 'RFC-010'
   守卫 Bool 校验、穷尽性记账）
 - ir_gen：`compile_pattern` 递归模式编译器 + `sum_type_variants` 镜像携带载荷类型与
   `sum_type_param_names`（载荷类型按 scrutinee 实参替换）
-- 语料：`02-type-system/pattern_destructure.yx`、`pattern_or_guard.yx`；
+- 语料：`02-type-system/aggregates/pattern_destructure.yx`、`pattern_or_guard.yx`；
   单测 E1030/E1031/E1032/E1033/E1034（rfc011b.rs）
 
 ## 开放问题

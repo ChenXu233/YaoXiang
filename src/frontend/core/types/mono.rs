@@ -163,7 +163,9 @@ pub struct DepParam {
 /// 单态类型（具体类型）
 ///
 /// 不包含类型变量的具体类型，用于类型检查的最终结果
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+///
+/// 注：`Clone` 为手写实现（栈安全，见 `impl Clone for MonoType`）——不再派生。
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum MonoType {
     /// 空类型
     /// 底部类型（爆炸原理：Never <: T 对所有 T 成立）
@@ -277,6 +279,126 @@ pub enum MonoType {
         lib: String,
         symbol: String,
     },
+}
+
+impl Clone for MonoType {
+    /// **栈安全克隆**——WBS 3.10.1 / issue #447。
+    ///
+    /// 派生 `Clone` 的原生栈用量随类型嵌套深度线性增长（实测 `Generic`
+    /// （`Vec(T)`）链约 400 字节/层）。病态泛型递归 `f(x) = f([x])` 的实参类型
+    /// 每层加一层嵌套，且每层特化都要深拷贝若干次——单态化深度闸抬到 5000 后
+    /// 这条路径先于闸门耗尽 1 MiB 主线程栈（0xC00000FD），使闸门诊断 E3005
+    /// 不可达。
+    ///
+    /// 实现：浅层（< `DEEP_CLONE_SWITCH`）走与原派生等价的逐层递归（热路径
+    /// 零额外分配），超过阈值切 `clone_deep` 工作列表——原生栈用量与嵌套深度
+    /// 无关。阈值内的递归结构（`Struct`/`Enum` 载荷等）仍由各字段的 `Clone`
+    /// 处理。
+    fn clone(&self) -> Self {
+        clone_at_depth(self, 0)
+    }
+}
+
+/// 深度阈值：到此切换工作列表（32 层 × 约 400 字节 ≈ 13 KiB，远小于栈预算）
+const DEEP_CLONE_SWITCH: usize = 32;
+
+/// 深度感知克隆：`depth` 为当前 `MonoType` 嵌套层数。
+fn clone_at_depth(
+    ty: &MonoType,
+    depth: usize,
+) -> MonoType {
+    if depth >= DEEP_CLONE_SWITCH {
+        return ty.clone_deep();
+    }
+    let d = depth + 1;
+    match ty {
+        MonoType::Never => MonoType::Never,
+        MonoType::Void => MonoType::Void,
+        MonoType::Bool => MonoType::Bool,
+        MonoType::Int(n) => MonoType::Int(*n),
+        MonoType::Float(n) => MonoType::Float(*n),
+        MonoType::Char => MonoType::Char,
+        MonoType::Struct(s) => MonoType::Struct(s.clone()),
+        MonoType::Enum(e) => MonoType::Enum(e.clone()),
+        MonoType::Fn {
+            params,
+            return_type,
+        } => MonoType::Fn {
+            params: params.iter().map(|t| clone_at_depth(t, d)).collect(),
+            return_type: Box::new(clone_at_depth(return_type, d)),
+        },
+        MonoType::TypeVar(v) => MonoType::TypeVar(*v),
+        MonoType::TypeRef(name) => MonoType::TypeRef(name.clone()),
+        MonoType::Generic { name, args } => MonoType::Generic {
+            name: name.clone(),
+            args: args.iter().map(|t| clone_at_depth(t, d)).collect(),
+        },
+        MonoType::Union(types) => {
+            MonoType::Union(types.iter().map(|t| clone_at_depth(t, d)).collect())
+        }
+        MonoType::Intersection(types) => {
+            MonoType::Intersection(types.iter().map(|t| clone_at_depth(t, d)).collect())
+        }
+        MonoType::Ref { mutable, inner } => MonoType::Ref {
+            mutable: *mutable,
+            inner: Box::new(clone_at_depth(inner, d)),
+        },
+        MonoType::AssocType {
+            host_type,
+            assoc_name,
+            assoc_args,
+        } => MonoType::AssocType {
+            host_type: Box::new(clone_at_depth(host_type, d)),
+            assoc_name: assoc_name.clone(),
+            assoc_args: assoc_args.iter().map(|t| clone_at_depth(t, d)).collect(),
+        },
+        MonoType::MetaType {
+            universe_level,
+            type_params,
+        } => MonoType::MetaType {
+            universe_level: universe_level.clone(),
+            type_params: type_params.iter().map(|t| clone_at_depth(t, d)).collect(),
+        },
+        MonoType::Literal {
+            name,
+            base_type,
+            value,
+        } => MonoType::Literal {
+            name: name.clone(),
+            base_type: Box::new(clone_at_depth(base_type, d)),
+            value: value.clone(),
+        },
+        MonoType::Refined { base, constraint } => MonoType::Refined {
+            base: Box::new(clone_at_depth(base, d)),
+            constraint: constraint.clone(),
+        },
+        MonoType::DepFn {
+            params,
+            return_type,
+        } => MonoType::DepFn {
+            params: params
+                .iter()
+                .map(|p| DepParam {
+                    name: p.name.clone(),
+                    ty: clone_at_depth(&p.ty, d),
+                })
+                .collect(),
+            return_type: Box::new(clone_at_depth(return_type, d)),
+        },
+        MonoType::LibraryRef { mechanism, lib } => MonoType::LibraryRef {
+            mechanism: mechanism.clone(),
+            lib: lib.clone(),
+        },
+        MonoType::ExternRef {
+            mechanism,
+            lib,
+            symbol,
+        } => MonoType::ExternRef {
+            mechanism: mechanism.clone(),
+            lib: lib.clone(),
+            symbol: symbol.clone(),
+        },
+    }
 }
 
 impl MonoType {
@@ -459,151 +581,252 @@ impl MonoType {
     }
 
     /// 获取类型的字符串描述
+    ///
+    /// **显式栈驱动（工作列表）——WBS 3.10.1 / issue #447**：
+    /// 此前实现按类型结构递归（`self` 的每个子节点各一次 `type_name` 调用），
+    /// 原生栈用量随**类型嵌套深度**线性增长（实测 `Vec(Vec(…))` 每层约 328 字节，
+    /// 含 format 机器）。病态泛型递归 `f(x) = f([x])` 的实参类型逐层加一层嵌套，
+    /// 单态化深度闸抬到 5000 后，编译到约第 2500 层就耗尽 1 MiB 主线程栈
+    /// （0xC00000FD）——闸门（E3005）永远不可达。
+    ///
+    /// 改为工作列表后原生栈用量与类型嵌套深度**无关**，输出逐字节不变
+    /// （渲染语义见下方各分支，与递归版一一对应）。
     pub fn type_name(&self) -> String {
-        match self {
-            MonoType::Never => "never".to_string(),
-            MonoType::Void => "void".to_string(),
-            MonoType::Bool => "bool".to_string(),
-            MonoType::Int(n) => format!("int{}", n),
-            MonoType::Float(n) => format!("float{}", n),
-            MonoType::Char => "char".to_string(),
-            MonoType::Generic { name, args } if name == "String" => "string".to_string(),
-            MonoType::Generic { name, args } if name == "Bytes" => "bytes".to_string(),
-            MonoType::Struct(s) => s.name.clone(),
-            MonoType::Enum(e) => e.name.clone(),
-            MonoType::Generic { name, args } if name == "Tuple" && !args.is_empty() => format!(
-                "({})",
-                args.iter()
-                    .map(|t| t.type_name())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            MonoType::Generic { name, args } if name == "Tuple" && args.is_empty() => {
-                "()".to_string()
-            }
-            MonoType::Generic { name, args } if name == "Option" && !args.is_empty() => {
-                format!("{}?", args[0].type_name())
-            }
-            MonoType::Generic { name, args } if name == "Result" && args.len() == 2 => {
-                format!("Result({}, {})", args[0].type_name(), args[1].type_name())
-            }
-            MonoType::Fn {
-                params,
-                return_type,
-            } => {
-                let params_str = params
-                    .iter()
-                    .map(|t| t.type_name())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("fn({}) -> {}", params_str, return_type.type_name())
-            }
-            MonoType::TypeVar(v) => format!("{}", v),
-            MonoType::TypeRef(name) => name.clone(),
-            MonoType::Generic { name, args } if name == "Range" && !args.is_empty() => {
-                format!("Range({})", args[0].type_name())
-            }
-            MonoType::Union(types) => {
-                format!(
-                    "({})",
-                    types
-                        .iter()
-                        .map(|t| t.type_name())
-                        .collect::<Vec<_>>()
-                        .join(" | ")
-                )
-            }
-            MonoType::Intersection(types) => {
-                format!(
-                    "({})",
-                    types
-                        .iter()
-                        .map(|t| t.type_name())
-                        .collect::<Vec<_>>()
-                        .join(" & ")
-                )
-            }
-            MonoType::Generic { name, args } if name == "Arc" && !args.is_empty() => {
-                format!("Arc({})", args[0].type_name())
-            }
-            MonoType::Generic { name, args } if name == "Weak" && !args.is_empty() => {
-                format!("Weak({})", args[0].type_name())
-            }
-            MonoType::Generic { name, args } => {
-                format!(
-                    "{}({})",
-                    name,
-                    args.iter()
-                        .map(|t| t.type_name())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }
-            MonoType::Ref { mutable, inner } => {
-                if *mutable {
-                    format!("&mut {}", inner.type_name())
-                } else {
-                    format!("&{}", inner.type_name())
+        /// 渲染任务：节点 / 常量片段 / 已渲染片段
+        enum Task<'a> {
+            Node(&'a MonoType),
+            Lit(&'static str),
+            Text(String),
+        }
+
+        /// 逆序压入「子节点 + 分隔符」，使弹出顺序 = 书写顺序。
+        fn push_joined<'a>(
+            stack: &mut Vec<Task<'a>>,
+            sep: &'static str,
+            children: &'a [MonoType],
+        ) {
+            for (i, child) in children.iter().enumerate().rev() {
+                stack.push(Task::Node(child));
+                if i > 0 {
+                    stack.push(Task::Lit(sep));
                 }
             }
-            MonoType::AssocType {
-                host_type,
-                assoc_name,
-                assoc_args,
-            } => {
-                let args_str = if assoc_args.is_empty() {
-                    String::new()
-                } else {
-                    format!(
-                        "({})",
-                        assoc_args
-                            .iter()
-                            .map(|t| t.type_name())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                };
-                format!("{}::{}{}", host_type.type_name(), assoc_name, args_str)
-            }
-            MonoType::Literal {
-                name: _,
-                base_type,
-                value,
-            } => {
-                format!("{}::{}", base_type.type_name(), value)
-            }
-            MonoType::MetaType {
-                universe_level: _,
-                type_params: _,
-            } => {
-                // RFC-010: Type is always just "Type", no [] syntax
-                "Type".to_string()
-            }
-            MonoType::Refined { base, constraint } => {
-                format!("{} {{{}}}", base.type_name(), constraint)
-            }
-            MonoType::DepFn {
-                params,
-                return_type,
-            } => {
-                let params_str = params
-                    .iter()
-                    .map(|p| format!("{}: {}", p.name, p.ty.type_name()))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("({}) -> {}", params_str, return_type.type_name())
-            }
-            MonoType::LibraryRef { mechanism, lib } => {
-                format!("LibraryRef({mechanism}, \"{lib}\")")
-            }
-            MonoType::ExternRef {
-                mechanism,
-                lib,
-                symbol,
-            } => {
-                format!("ExternRef({mechanism}, \"{lib}\", \"{symbol}\")")
+        }
+
+        let mut out = String::new();
+        let mut stack: Vec<Task<'_>> = vec![Task::Node(self)];
+        while let Some(task) = stack.pop() {
+            let ty = match task {
+                Task::Lit(s) => {
+                    out.push_str(s);
+                    continue;
+                }
+                Task::Text(s) => {
+                    out.push_str(&s);
+                    continue;
+                }
+                Task::Node(ty) => ty,
+            };
+            match ty {
+                MonoType::Never => out.push_str("never"),
+                MonoType::Void => out.push_str("void"),
+                MonoType::Bool => out.push_str("bool"),
+                MonoType::Int(n) => out.push_str(&format!("int{}", n)),
+                MonoType::Float(n) => out.push_str(&format!("float{}", n)),
+                MonoType::Char => out.push_str("char"),
+                MonoType::Generic { name, .. } if name == "String" => out.push_str("string"),
+                MonoType::Generic { name, .. } if name == "Bytes" => out.push_str("bytes"),
+                MonoType::Struct(s) => out.push_str(&s.name),
+                MonoType::Enum(e) => out.push_str(&e.name),
+                MonoType::Generic { name, args } if name == "Tuple" && !args.is_empty() => {
+                    out.push('(');
+                    stack.push(Task::Lit(")"));
+                    push_joined(&mut stack, ", ", args);
+                }
+                MonoType::Generic { name, args } if name == "Tuple" && args.is_empty() => {
+                    out.push_str("()");
+                }
+                MonoType::Generic { name, args } if name == "Option" && !args.is_empty() => {
+                    stack.push(Task::Lit("?"));
+                    stack.push(Task::Node(&args[0]));
+                }
+                MonoType::Generic { name, args } if name == "Result" && args.len() == 2 => {
+                    out.push_str("Result(");
+                    stack.push(Task::Lit(")"));
+                    stack.push(Task::Node(&args[1]));
+                    stack.push(Task::Lit(", "));
+                    stack.push(Task::Node(&args[0]));
+                }
+                MonoType::Fn {
+                    params,
+                    return_type,
+                } => {
+                    out.push_str("fn(");
+                    stack.push(Task::Node(return_type));
+                    stack.push(Task::Lit(") -> "));
+                    push_joined(&mut stack, ", ", params);
+                }
+                MonoType::TypeVar(v) => out.push_str(&format!("{}", v)),
+                MonoType::TypeRef(name) => out.push_str(name),
+                MonoType::Generic { name, args } if name == "Range" && !args.is_empty() => {
+                    out.push_str("Range(");
+                    stack.push(Task::Lit(")"));
+                    stack.push(Task::Node(&args[0]));
+                }
+                MonoType::Union(types) => {
+                    out.push('(');
+                    stack.push(Task::Lit(")"));
+                    push_joined(&mut stack, " | ", types);
+                }
+                MonoType::Intersection(types) => {
+                    out.push('(');
+                    stack.push(Task::Lit(")"));
+                    push_joined(&mut stack, " & ", types);
+                }
+                MonoType::Generic { name, args } if name == "Arc" && !args.is_empty() => {
+                    out.push_str("Arc(");
+                    stack.push(Task::Lit(")"));
+                    stack.push(Task::Node(&args[0]));
+                }
+                MonoType::Generic { name, args } if name == "Weak" && !args.is_empty() => {
+                    out.push_str("Weak(");
+                    stack.push(Task::Lit(")"));
+                    stack.push(Task::Node(&args[0]));
+                }
+                MonoType::Generic { name, args } => {
+                    out.push_str(name);
+                    out.push('(');
+                    stack.push(Task::Lit(")"));
+                    push_joined(&mut stack, ", ", args);
+                }
+                MonoType::Ref { mutable, inner } => {
+                    out.push_str(if *mutable { "&mut " } else { "&" });
+                    stack.push(Task::Node(inner));
+                }
+                MonoType::AssocType {
+                    host_type,
+                    assoc_name,
+                    assoc_args,
+                } => {
+                    // 书写顺序：host::name(args)；逆序压入 ⇒ 弹出即书写顺序
+                    if !assoc_args.is_empty() {
+                        stack.push(Task::Lit(")"));
+                        push_joined(&mut stack, ", ", assoc_args);
+                        stack.push(Task::Lit("("));
+                    }
+                    stack.push(Task::Text(format!("::{assoc_name}")));
+                    stack.push(Task::Node(host_type));
+                }
+                MonoType::Literal {
+                    name: _,
+                    base_type,
+                    value,
+                } => {
+                    // 书写顺序：base::value；逆序压入 ⇒ 弹出即书写顺序
+                    stack.push(Task::Text(format!("::{}", value)));
+                    stack.push(Task::Node(base_type));
+                }
+                MonoType::MetaType {
+                    universe_level: _,
+                    type_params: _,
+                } => {
+                    // RFC-010: Type is always just "Type", no [] syntax
+                    out.push_str("Type");
+                }
+                MonoType::Refined { base, constraint } => {
+                    stack.push(Task::Lit("}"));
+                    stack.push(Task::Text(format!("{}", constraint)));
+                    stack.push(Task::Lit(" {"));
+                    stack.push(Task::Node(base));
+                }
+                MonoType::DepFn {
+                    params,
+                    return_type,
+                } => {
+                    out.push('(');
+                    stack.push(Task::Node(return_type));
+                    stack.push(Task::Lit(") -> "));
+                    for (i, p) in params.iter().enumerate().rev() {
+                        stack.push(Task::Node(&p.ty));
+                        stack.push(Task::Text(format!("{}: ", p.name)));
+                        if i > 0 {
+                            stack.push(Task::Lit(", "));
+                        }
+                    }
+                }
+                MonoType::LibraryRef { mechanism, lib } => {
+                    out.push_str(&format!("LibraryRef({mechanism}, \"{lib}\")"));
+                }
+                MonoType::ExternRef {
+                    mechanism,
+                    lib,
+                    symbol,
+                } => {
+                    out.push_str(&format!("ExternRef({mechanism}, \"{lib}\", \"{symbol}\")"));
+                }
             }
         }
+        out
+    }
+
+    /// 栈安全深拷贝（显式栈 / 工作列表）——WBS 3.10.1 / issue #447。
+    ///
+    /// 背景：派生 `Clone` 的原生栈用量随**类型嵌套深度**线性增长（实测
+    /// `Generic`（`Vec(T)`）链约 400 字节/层）。病态泛型递归 `f(x) = f([x])`
+    /// 每层特化都要深拷贝一次实参类型，深度闸抬到 5000 后这条路径先于闸门
+    /// 耗尽 1 MiB 主线程栈（0xC00000FD），使闸门诊断 E3005 不可达。
+    ///
+    /// 覆盖 `MonoType` 自身的**类型子树**（`Generic`/`Fn`/`Ref`/`Union`/…，
+    /// 即“类型逐层增长”这一增长向量的载体）：原生栈用量与嵌套深度无关。
+    /// `Struct`/`Enum` 携带的复合载荷（字段类型表、方法 IR）与其余无类型
+    /// 子节点的变体仍走派生克隆——它们不是本路径的深度增长源。
+    pub fn clone_deep(&self) -> MonoType {
+        /// 后序重建帧：节点 + 其类型子节点 + 进度 + 已完成的子克隆
+        struct Frame<'a> {
+            node: &'a MonoType,
+            children: Vec<&'a MonoType>,
+            next: usize,
+            done: Vec<MonoType>,
+        }
+
+        let mut stack: Vec<Frame<'_>> = vec![Frame {
+            node: self,
+            children: type_subtree_children(self),
+            next: 0,
+            done: Vec::new(),
+        }];
+        loop {
+            let idx = match stack.len() {
+                0 => break,
+                n => n - 1,
+            };
+            let child = {
+                let frame = &mut stack[idx];
+                if frame.next < frame.children.len() {
+                    let c = frame.children[frame.next];
+                    frame.next += 1;
+                    Some(c)
+                } else {
+                    None
+                }
+            };
+            if let Some(child) = child {
+                stack.push(Frame {
+                    node: child,
+                    children: type_subtree_children(child),
+                    next: 0,
+                    done: Vec::new(),
+                });
+                continue;
+            }
+            let frame = stack.pop().expect("工作列表非空（上方 idx 已保证）");
+            let rebuilt = rebuild_with_children(frame.node, frame.done);
+            match stack.last_mut() {
+                Some(parent) => parent.done.push(rebuilt),
+                None => return rebuilt,
+            }
+        }
+        unreachable!("根节点必然在工作列表排空时重建")
     }
 
     /// 如果是 TypeVar 变体，返回内部 TypeVar
@@ -1073,5 +1296,115 @@ impl fmt::Display for PolyType {
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
         write!(f, "{}", self.type_name())
+    }
+}
+
+// ==================== 栈安全深拷贝的辅助（WBS 3.10.1 / issue #447） ====================
+
+/// 取出 `MonoType` 的**类型子节点**（按变体声明顺序）。
+///
+/// 只有直接持有 `MonoType` 子树、且属于「类型逐层增长」载体的变体返回子节点；
+/// 其余变体（含携带字段/方法等复合载荷的 `Struct`/`Enum`）返回空表，
+/// 由 `rebuild_with_children` 走派生克隆（它们不是本路径的深度增长源）。
+fn type_subtree_children(ty: &MonoType) -> Vec<&MonoType> {
+    match ty {
+        MonoType::Generic { args, .. } => args.iter().collect(),
+        MonoType::Fn {
+            params,
+            return_type,
+        } => {
+            let mut v: Vec<&MonoType> = params.iter().collect();
+            v.push(return_type);
+            v
+        }
+        MonoType::Ref { inner, .. } => vec![inner],
+        MonoType::Union(types) | MonoType::Intersection(types) => types.iter().collect(),
+        MonoType::AssocType {
+            host_type,
+            assoc_args,
+            ..
+        } => {
+            let mut v: Vec<&MonoType> = vec![host_type];
+            v.extend(assoc_args.iter());
+            v
+        }
+        MonoType::Literal { base_type, .. } => vec![base_type],
+        MonoType::MetaType { type_params, .. } => type_params.iter().collect(),
+        MonoType::Refined { base, .. } => vec![base],
+        MonoType::DepFn {
+            params,
+            return_type,
+        } => {
+            let mut v: Vec<&MonoType> = params.iter().map(|p| &p.ty).collect();
+            v.push(return_type);
+            v
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// 用按序克隆好的子节点重建节点（`children` 数量必须等于 `type_subtree_children`）。
+fn rebuild_with_children(
+    node: &MonoType,
+    children: Vec<MonoType>,
+) -> MonoType {
+    let mut it = children.into_iter();
+    match node {
+        MonoType::Generic { name, .. } => MonoType::Generic {
+            name: name.clone(),
+            args: it.collect(),
+        },
+        MonoType::Fn { params, .. } => {
+            let n = params.len();
+            let params = it.by_ref().take(n).collect();
+            let return_type = Box::new(it.next().unwrap_or(MonoType::Void));
+            MonoType::Fn {
+                params,
+                return_type,
+            }
+        }
+        MonoType::Ref { mutable, .. } => MonoType::Ref {
+            mutable: *mutable,
+            inner: Box::new(it.next().unwrap_or(MonoType::Void)),
+        },
+        MonoType::Union(_) => MonoType::Union(it.collect()),
+        MonoType::Intersection(_) => MonoType::Intersection(it.collect()),
+        MonoType::AssocType { assoc_name, .. } => MonoType::AssocType {
+            host_type: Box::new(it.next().unwrap_or(MonoType::Void)),
+            assoc_name: assoc_name.clone(),
+            assoc_args: it.collect(),
+        },
+        MonoType::Literal { name, value, .. } => MonoType::Literal {
+            name: name.clone(),
+            base_type: Box::new(it.next().unwrap_or(MonoType::Void)),
+            value: value.clone(),
+        },
+        MonoType::MetaType { universe_level, .. } => MonoType::MetaType {
+            universe_level: universe_level.clone(),
+            type_params: it.collect(),
+        },
+        MonoType::Refined { constraint, .. } => MonoType::Refined {
+            base: Box::new(it.next().unwrap_or(MonoType::Void)),
+            constraint: constraint.clone(),
+        },
+        MonoType::DepFn { params, .. } => {
+            let n = params.len();
+            let tys: Vec<MonoType> = it.by_ref().take(n).collect();
+            let return_type = Box::new(it.next().unwrap_or(MonoType::Void));
+            let rebuilt_params = params
+                .iter()
+                .zip(tys)
+                .map(|(p, ty)| DepParam {
+                    name: p.name.clone(),
+                    ty,
+                })
+                .collect();
+            MonoType::DepFn {
+                params: rebuilt_params,
+                return_type,
+            }
+        }
+        // 无类型子节点：派生克隆（浅）
+        other => other.clone(),
     }
 }

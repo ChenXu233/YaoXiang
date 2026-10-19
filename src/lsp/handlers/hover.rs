@@ -11,7 +11,7 @@ use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind};
 use tracing::debug;
 
 use crate::frontend::core::typecheck::semantic_db::DefinitionKind;
-use crate::lsp::locate::{find_identifier_at_position, position_to_internal_utf16, span_to_range};
+use crate::lsp::locate::{find_identifier_at_position, span_to_range};
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 
@@ -48,9 +48,10 @@ pub fn handle_hover(
 
     // 核心路径：SemanticDB 精确解析
     let db = world.semantic_db();
-    let (line, col) = position_to_internal_utf16(content, position);
+    // 查库键 = 光标下标识符自身的起点（2026-10-16 用户裁决，同 definition）
+    let (line, col) = (ident.span.start.line, ident.span.start.column);
 
-    let def = db.resolve_reference(&uri_str, line, col)?;
+    let def = db.resolve_reference(&crate::lsp::uri::db_key(&uri_str), line, col)?;
 
     // 构建悬停内容
     let mut markdown = String::from("```yaoxiang\n");

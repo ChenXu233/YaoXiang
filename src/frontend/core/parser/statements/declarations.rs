@@ -304,6 +304,7 @@ fn parse_assign_after_target(
                                     definition,
                                 },
                                 span,
+                                plan_id: PlanId::UNPLANNED,
                             });
                         }
                     }
@@ -428,12 +429,15 @@ fn parse_assign_after_target(
                                 body: body.clone(),
                                 span,
                             };
+                            // 合成体语句：不经过 parse_statement，就地发放身份
+                            let plan_id = state.alloc_plan_id();
                             let value = Expr::Lambda {
                                 params: own_params,
                                 body: Box::new(Block {
                                     stmts: vec![Stmt {
                                         kind: StmtKind::Expr(Box::new(inner)),
                                         span,
+                                        plan_id,
                                     }],
                                     span,
                                 }),
@@ -450,6 +454,7 @@ fn parse_assign_after_target(
                                     span,
                                 },
                                 span,
+                                plan_id: PlanId::UNPLANNED,
                             });
                         }
                         // 首组全为类型参数：落穿到标准 Lambda value 路径
@@ -472,6 +477,7 @@ fn parse_assign_after_target(
                             span,
                         },
                         span,
+                        plan_id: PlanId::UNPLANNED,
                     });
                 }
                 Some(expr) => {
@@ -517,6 +523,8 @@ fn parse_assign_after_target(
                         .collect();
 
                     // 构建 Lambda value（参数从签名提取，body 是表达式）
+                    // 合成体语句：不经过 parse_statement，就地发放身份
+                    let plan_id = state.alloc_plan_id();
                     let body_block = if let Expr::Block(block) = &expr {
                         block.clone()
                     } else {
@@ -524,6 +532,7 @@ fn parse_assign_after_target(
                             stmts: vec![Stmt {
                                 kind: StmtKind::Expr(Box::new(expr.clone())),
                                 span: state.span(),
+                                plan_id,
                             }],
                             span: state.span(),
                         }
@@ -543,6 +552,7 @@ fn parse_assign_after_target(
                             span,
                         },
                         span,
+                        plan_id: PlanId::UNPLANNED,
                     });
                 }
                 None => {
@@ -571,6 +581,7 @@ fn parse_assign_after_target(
                                     },
                                 },
                                 span,
+                                plan_id: PlanId::UNPLANNED,
                             });
                         }
                     }
@@ -586,6 +597,7 @@ fn parse_assign_after_target(
                         definition,
                     },
                     span,
+                    plan_id: PlanId::UNPLANNED,
                 });
             }
         }
@@ -615,6 +627,7 @@ fn parse_assign_after_target(
                 span,
             },
             span,
+            plan_id: PlanId::UNPLANNED,
         });
     }
 
@@ -752,6 +765,7 @@ pub fn parse_identifier_stmt(
             return Some(Stmt {
                 kind: StmtKind::Expr(Box::new(target)),
                 span,
+                plan_id: PlanId::UNPLANNED,
             });
         };
 
@@ -787,6 +801,7 @@ pub fn parse_identifier_stmt(
             return Some(Stmt {
                 kind: StmtKind::Expr(Box::new(target)),
                 span,
+                plan_id: PlanId::UNPLANNED,
             });
         }
         state.bump(); // consume `=`
@@ -811,6 +826,7 @@ pub fn parse_identifier_stmt(
                 span,
             },
             span,
+            plan_id: PlanId::UNPLANNED,
         });
     }
 
@@ -846,6 +862,7 @@ pub fn parse_identifier_stmt(
                 span,
             },
             span,
+            plan_id: PlanId::UNPLANNED,
         });
     }
 
@@ -864,6 +881,7 @@ pub fn parse_identifier_stmt(
     Some(Stmt {
         kind: StmtKind::Expr(Box::new(target)),
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 
@@ -958,6 +976,7 @@ pub fn parse_paren_destructure_stmt(
             span,
         },
         span,
+        plan_id: PlanId::UNPLANNED,
     })
 }
 
@@ -971,6 +990,7 @@ pub fn parse_expr_stmt(
         Some(Stmt {
             kind: StmtKind::Expr(Box::new(expr)),
             span,
+            plan_id: PlanId::UNPLANNED,
         })
     } else {
         // 表达式解析失败：报错而非静默吞掉 token（#258 审计：块内 `, 5` 等

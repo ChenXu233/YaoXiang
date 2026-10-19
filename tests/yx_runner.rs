@@ -28,15 +28,19 @@
 //! tests/yaoxiang/
 //! ├── 00-smoke/             # 冒烟测试
 //! ├── 01-syntax/            # 语法规范（对应 syntax.md）
-//! │   ├── basics/           #   基本语法
-//! │   ├── functions/        #   函数定义与调用
-//! │   └── control-flow/     #   控制流
+//! │   ├── basics/  functions/  control-flow/  operators/
 //! ├── 02-type-system/       # 类型系统（对应 type-system.md）
+//! │   ├── generics/  aggregates/  sum-types/  interfaces/  functions/
+//! │   ├── refinement/  termination/  patterns/  runtime/  name-resolution/
 //! ├── 03-modules/           # 模块系统（对应 modules.md）
 //! ├── 03-semantics/         # 语义（return/尾表达式）
 //! ├── 04-concurrency/       # 并发模型（对应 concurrency.md）
 //! ├── 05-ownership/         # 所有权（独立章节）
-//! ├── 06-compile-errors/    # 编译期错误检测
+//! ├── 06-compile-errors/    # 编译期错误检测（按错误类别分层）
+//! │   ├── types/  control-flow/  ownership/  refinement/  runtime/  modules/
+//! │   ├── call-args/  patterns/  interfaces/  generics/  termination/
+//! │   └── literals/  name-resolution/
+//! │   （完整的子目录说明见 tests/yaoxiang/TEST_STANDARDS.md）
 //! └── 99-demos/             # 论文演示（非规范测试）
 //! ```
 

@@ -19,6 +19,7 @@ module
     Load %0 <- %2
     Load %1 <- int(10)
     StoreField %0.0 <- %1 (type=None, name=Some("x"))
+    Drop %2
     Load %4 <- %2
     LoadField %3 <- %4.0
     Load %5 <- int(10)
@@ -32,6 +33,7 @@ module
     Move %5 <- %4
     Call %3 <- string("Inner") [%5] (def=d3)
     Call %1 <- string("Outer") [%3] (def=d4)
+    Drop %0
     Load %7 <- %1
     LoadField %8 <- %7.0
     LoadField %9 <- %8.0
@@ -46,6 +48,9 @@ module
     Eq %5 <- %4, %6
     Load %8 <- string("派生令牌后源仍可读")
     Call %3 <- string("std.assert.assert") [%5, %8] (def=d2)
+    Drop %2
+    Drop %0
+    Drop %1
     Ret %3
   init (locals=0)
     Call %0 <- string("main") [] (def=d5)

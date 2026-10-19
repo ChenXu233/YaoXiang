@@ -1,0 +1,4 @@
+/// 夹具版 IrGeneration 臂：红名单义务不该有交付标记。
+fn ir_generation(state: &mut State) {
+    let _ = state;
+}

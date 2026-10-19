@@ -18,7 +18,7 @@ use crate::frontend::config::CompileConfig;
 /// 落一个**无 manifest** 的多文件夹具（rootless / Script 语义）：入口约定
 /// `main.yx`。无 manifest 是 4.2.5 裁决 A 的 standalone 语义开关——
 /// `ir_generation_check` 据此传 `module_key=None`。
-fn make_rootless_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
+pub(super) fn make_rootless_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().expect("create tempdir");
     let mut entry = PathBuf::new();
     for (name, content) in files {
@@ -34,7 +34,7 @@ fn make_rootless_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf)
 
 /// 同夹具但**带 manifest**（Bin 语义：`module_key=Some`，E3023 开关打开）——
 /// 用来证明「Script 语义未被打开 E3023」的断言不是空转。
-fn make_bin_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
+pub(super) fn make_bin_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().expect("create tempdir");
     std::fs::write(
         dir.path().join("yaoxiang.toml"),
@@ -54,7 +54,7 @@ fn make_bin_project(files: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf) {
 }
 
 /// 以 Check 形态跑 Driver（与 `yaoxiang check` 同一入口形态）。
-fn run_check(entry: &Path) -> Result<DriverOutcome, DriverError> {
+pub(super) fn run_check(entry: &Path) -> Result<DriverOutcome, DriverError> {
     let program = Program::new(
         ProgramKind::Check,
         vec![Unit::new("main", entry, "")],
@@ -64,7 +64,7 @@ fn run_check(entry: &Path) -> Result<DriverOutcome, DriverError> {
 }
 
 /// 某文件条目里的诊断码列表（按路径后缀匹配；无条目 = panic，不静默返回空表）。
-fn check_codes(
+pub(super) fn check_codes(
     outcome: &DriverOutcome,
     suffix: &str,
 ) -> Vec<String> {

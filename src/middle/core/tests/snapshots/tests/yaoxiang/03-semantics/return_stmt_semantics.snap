@@ -52,6 +52,9 @@ module
     Eq %4 <- %5, %6
     Load %7 <- string("return_skips_rest should be 42")
     Call %3 <- string("std.assert.assert") [%4, %7] (def=d3)
+    Drop %1
+    Drop %0
+    Drop %2
     Ret %3
   init (locals=0)
     Call %0 <- string("main") [] (def=d5)

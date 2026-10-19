@@ -13,11 +13,11 @@ use crate::backends::common::value::{
 };
 use crate::middle::bytecode::{BytecodeFunction, Reg, BinaryOp, CompareOp, ConstValue};
 use crate::backends::interpreter::image::Image;
-use crate::backends::interpreter::Frame;
+use crate::backends::interpreter::{Frame, PendingCall, ReturnTarget};
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::runtime::{Runtime, RuntimeConfig};
 use crate::backends::runtime::engine::{
-    SyncValue, TaskCancelReason, TaskMeta, TaskOutcome, TaskResult, sv,
+    SyncValue, TaskCancelReason, TaskFailure, TaskMeta, TaskOutcome, TaskResult, sv,
 };
 use crate::util::i18n::MSG;
 use crate::tlog;
@@ -158,7 +158,21 @@ impl Interpreter {
         local_count: usize,
         args: &[RuntimeValue],
     ) -> ExecutorResult<RuntimeValue> {
-        let frame = crate::backends::interpreter::Frame::with_args(func_id, local_count, args);
+        self.drive_frame(Frame::with_args(func_id, local_count, args))
+    }
+
+    /// 宿主入口的驱动循环：压入 `frame`（宿主帧）并步进到它返回，取其返回值。
+    ///
+    /// 与解释型调用的分工（WBS 3.9.1）：
+    /// - 本函数只服务**宿主**入口（`execute_module` 的入口/初始化函数、
+    ///   `call_function_by_id`、`call_closure`、原生回调）——每次进入消耗一份
+    ///   原生栈，但次数由宿主侧控制，不随解释型深度增长；
+    /// - 解释型调用走 `start_call` 压帧 + 外层 `step_one` 循环（蹦床），
+    ///   故解释型深度不消耗原生栈，深度守卫必然可达。
+    fn drive_frame(
+        &mut self,
+        frame: Frame,
+    ) -> ExecutorResult<RuntimeValue> {
         let entry_depth = self.call_stack.len();
         self.push_frame(frame)?;
         loop {
@@ -248,20 +262,8 @@ impl Interpreter {
         func_id: crate::backends::common::value::FunctionId,
         args: &[RuntimeValue],
     ) -> Result<RuntimeValue, ExecutorError> {
-        let idx = func_id.0 as usize;
-        if idx >= self.image.functions_by_id.len() {
-            let stack = self.capture_stack();
-            return Err(ExecutorError::function_not_found(
-                format!(
-                    "Function with id {} not found (total functions: {})",
-                    idx,
-                    self.image.functions_by_id.len()
-                ),
-                stack,
-            ));
-        }
         // 不再克隆函数体：Frame 只持 func_id，指令经 &Image 读取
-        let local_count = self.image.functions_by_id[idx].local_count;
+        let local_count = self.local_count_of(func_id)?;
         self.execute_by_id(func_id.0, local_count, args)
     }
 
@@ -275,6 +277,42 @@ impl Interpreter {
         args: &[RuntimeValue],
         upvalues: &[RuntimeValue],
     ) -> Result<RuntimeValue, ExecutorError> {
+        let local_count = self.local_count_of(func_id)?;
+        let mut frame = Frame::with_args(func_id.0, local_count, args);
+        // Set upvalues from closure env (for LoadUpvalue instructions)
+        *frame.upvalues_mut() = upvalues.to_vec();
+        self.drive_frame(frame)
+    }
+
+    /// Push a frame onto the call stack
+    ///
+    /// **深度守卫单点**（WBS 3.9.1）：任何进帧都经此处，超限必然返回
+    /// `ExecutorError::StackOverflow { limit }`（limit = 配置上限）。
+    /// 由于解释型调用改由显式栈驱动（`start_call` 压帧后交还外层 `step_one`），
+    /// 解释型深度不再消耗原生栈——守卫因此必然可达，不会先爆进程栈。
+    pub(super) fn push_frame(
+        &mut self,
+        frame: Frame,
+    ) -> ExecutorResult<()> {
+        if self.call_stack.len() >= self.config.max_stack_depth {
+            let stack = self.capture_stack();
+            return Err(ExecutorError::stack_overflow(
+                self.config.max_stack_depth,
+                stack,
+            ));
+        }
+        self.call_stack.push(frame);
+        Ok(())
+    }
+
+    /// 函数表查询：范围校验 + `local_count`。
+    ///
+    /// 解释型调用（`start_call`）与宿主入口（`call_function_by_id` /
+    /// `call_closure`）共用这一处，「函数不存在」只有一份判定。
+    fn local_count_of(
+        &self,
+        func_id: crate::backends::common::value::FunctionId,
+    ) -> ExecutorResult<usize> {
         let idx = func_id.0 as usize;
         if idx >= self.image.functions_by_id.len() {
             let stack = self.capture_stack();
@@ -287,40 +325,116 @@ impl Interpreter {
                 stack,
             ));
         }
-        let local_count = self.image.functions_by_id[idx].local_count;
-        let mut frame =
-            crate::backends::interpreter::Frame::with_args(func_id.0, local_count, args);
-        // Set upvalues from closure env (for LoadUpvalue instructions)
-        *frame.upvalues_mut() = upvalues.to_vec();
-        let entry_depth = self.call_stack.len();
-        self.push_frame(frame)?;
+        Ok(self.image.functions_by_id[idx].local_count)
+    }
 
-        loop {
-            match self.step_one()? {
-                super::debug::StepOutcome::Continue => {}
-                super::debug::StepOutcome::Returned => {
-                    if self.call_stack.len() <= entry_depth {
-                        return Ok(std::mem::replace(
-                            &mut self.last_return_value,
-                            RuntimeValue::Void,
-                        ));
-                    }
+    /// 解析一组实参：把待定的 Async 值就地求值后再入帧。
+    pub(super) fn resolve_args(
+        &mut self,
+        args: &[RuntimeValue],
+    ) -> ExecutorResult<Vec<RuntimeValue>> {
+        let mut resolved = Vec::with_capacity(args.len());
+        for arg in args {
+            resolved.push(self.force_value_clone(arg)?);
+        }
+        Ok(resolved)
+    }
+
+    /// 发起一次解释型调用：压入被调帧，返回值落点记进该帧。
+    ///
+    /// 这是解释型调用的**唯一**进栈路径（蹦床）：调用者不进入宿主驱动循环，
+    /// 控制权回到外层 `step_one`；被调返回时由 `return_from_frame` 把返回值
+    /// 写回调用者帧的 dst 槽。原生栈因此在解释型深度方向上恒定。
+    pub(super) fn start_call(
+        &mut self,
+        call: PendingCall,
+    ) -> ExecutorResult<()> {
+        let local_count = self.local_count_of(call.func_id)?;
+        let mut frame = Frame::with_args(call.func_id.0, local_count, &call.args);
+        *frame.upvalues_mut() = call.upvalues;
+        frame.set_return_target(call.target);
+        self.push_frame(frame)
+    }
+
+    /// 依次发起一组解释型调用：首个立即压帧，其余排进调用者帧待被调返回后逐个启动。
+    ///
+    /// 用于一条指令发起多个调用的形态（`Spawn` 多闭包 / `SpawnFromList` 列表闭包）：
+    /// 此前它们在单个指令体内顺序递归调用，现在改为「排队 + 返回路径续跑」，
+    /// 顺序语义不变而深度不消耗原生栈。
+    pub(super) fn start_calls(
+        &mut self,
+        calls: Vec<PendingCall>,
+    ) -> ExecutorResult<()> {
+        let mut rest = calls.into_iter();
+        let Some(first) = rest.next() else {
+            // 空调用列表（退化指令：如闭包列表为空的 `Spawn`）——本指令不挂起
+            // 调用者，按 IPC 语义越过它（与旧实现无条件 `advance()` 一致）。
+            if let Some(caller) = self.call_stack.last_mut() {
+                caller.advance();
+            }
+            return Ok(());
+        };
+        // 本函数只由指令体调用，调用者帧此刻必在栈顶。
+        let caller = self.call_stack.last_mut().ok_or_else(|| {
+            ExecutorError::runtime_only("start_calls 无调用者帧（解释器内部错误）".to_string())
+        })?;
+        for call in rest {
+            caller.push_pending_call(call);
+        }
+        self.start_call(first)
+    }
+
+    /// 被调帧返回：弹栈 → 按 `return_target` 派发返回值 → 续跑调用者的待启动调用。
+    ///
+    /// 返回值写回调用者帧（弹栈后的栈顶）的 dst 槽——「谁压的帧谁接返回值」；
+    /// 宿主入口帧（`ReturnTarget::Host`）仍经 `last_return_value` 交还宿主循环。
+    ///
+    /// # ip 推进时机（与原递归实现对齐）
+    ///
+    /// 调用者的 ip 不提前越过调用指令：被调帧运行期间，调用者 ip 停在调用点上
+    /// （栈帧捕获因此能定位到调用处）；被调返回时才在此推进——还有排队的调用
+    /// （多调用指令）就先启动下一个，全部返回后才 `advance()`。
+    pub(super) fn return_from_frame(
+        &mut self,
+        value: RuntimeValue,
+    ) -> ExecutorResult<()> {
+        let Some(frame) = self.call_stack.pop() else {
+            return Ok(());
+        };
+        let return_target = frame.return_target();
+        match return_target {
+            ReturnTarget::Host => {
+                self.last_return_value = value;
+            }
+            ReturnTarget::Discard => {}
+            ReturnTarget::CallerSlot(slot) => {
+                if let Some(caller) = self.call_stack.last_mut() {
+                    caller.set_slot(slot as usize, value);
+                } else {
+                    // 栈空说明调用者不存在（被调帧必由调用者压入）——按宿主返回值兜底。
+                    self.last_return_value = value;
                 }
             }
         }
-    }
-
-    /// Push a frame onto the call stack
-    pub(super) fn push_frame(
-        &mut self,
-        frame: Frame,
-    ) -> ExecutorResult<()> {
-        if self.call_stack.len() >= self.config.max_stack_depth {
-            let stack = self.capture_stack();
-            return Err(ExecutorError::stack_overflow(stack));
+        if matches!(return_target, ReturnTarget::Host) {
+            // 宿主入口帧：控制权交还 `drive_frame` 的循环；调用者帧的 ip 由它
+            // 自己执行的指令推进（本次返回与它无关）。
+            return Ok(());
         }
-        self.call_stack.push(frame);
-        Ok(())
+        // 解释型调用帧：调用者（= 弹栈后的栈顶）正停在该调用指令上，此刻推进。
+        let next = self
+            .call_stack
+            .last_mut()
+            .and_then(|caller| caller.pop_pending_call());
+        match next {
+            Some(call) => self.start_call(call),
+            None => {
+                if let Some(caller) = self.call_stack.last_mut() {
+                    caller.advance();
+                }
+                Ok(())
+            }
+        }
     }
 
     /// Get the current frame
@@ -471,7 +585,8 @@ impl Interpreter {
                 for arg in &args {
                     match self.force_value_clone(arg) {
                         Ok(v) => resolved.push(v),
-                        Err(e) => return Err(sv(RuntimeValue::String(format!("{e}").into()))),
+                        // WBS 3.11.1：错误按值入通道（不再 format! 成字符串）
+                        Err(e) => return Err(TaskFailure::from_error(e)),
                     }
                 }
                 // #254：闭包 env 同时作为 upvalues（LoadUpvalue 读）与 args 前段
@@ -485,7 +600,10 @@ impl Interpreter {
 
         match exec_result {
             Ok(v) => Ok(sv(v)),
-            Err(e) => Err(sv(RuntimeValue::String(format!("{e}").into()))),
+            // WBS 3.11.1 / issue #448：错误**按值**跨任务边界（结构化），
+            // 码身份（E6001/E6003/E6004/E6008…）由此保真；此前先 format! 成
+            // 字符串，接收方一律落 E6007。
+            Err(e) => Err(TaskFailure::from_error(e)),
         }
     }
 
@@ -543,8 +661,12 @@ impl Interpreter {
     ) -> String {
         let task = self.format_task_id(task_id);
         match self.rt.outcome(task_id) {
-            Some(TaskOutcome::Err(payload)) => {
-                format!("{task}: {}", self.format_sync_value(&payload))
+            Some(TaskOutcome::Err(failure)) => {
+                // 结构化错误优先按原样展示（WBS 3.11.1），其余退回调度层消息渲染
+                match failure.downcast_ref::<ExecutorError>() {
+                    Some(original) => format!("{task}: {original}"),
+                    None => format!("{task}: {}", self.format_sync_value(failure.payload())),
+                }
             }
             Some(TaskOutcome::Cancelled(reason)) => {
                 format!(
@@ -638,12 +760,18 @@ impl Interpreter {
                         *value = rv;
                         Ok(())
                     }
-                    TaskOutcome::Err(payload) => {
+                    TaskOutcome::Err(failure) => {
                         let stack = self.capture_stack();
-                        Err(ExecutorError::runtime(
-                            self.format_sync_value(&payload),
-                            stack,
-                        ))
+                        // WBS 3.11.1 / issue #448：结构化错误**按值保真**跨任务边界——
+                        // 码身份（E6001/E6003/E6004/E6008…）与消息不再被降级成 E6007。
+                        // 仅当载荷不是解释器错误（调度层消息）时退回旧的字符串渲染。
+                        match failure.downcast_ref::<ExecutorError>() {
+                            Some(original) => Err(original.clone().with_stack(stack)),
+                            None => Err(ExecutorError::runtime(
+                                self.format_sync_value(failure.payload()),
+                                stack,
+                            )),
+                        }
                     }
                     TaskOutcome::Cancelled(reason) => {
                         let stack = self.capture_stack();
@@ -685,10 +813,7 @@ impl Interpreter {
         func_name: &str,
         call_args: &[RuntimeValue],
     ) -> ExecutorResult<RuntimeValue> {
-        let mut resolved = Vec::with_capacity(call_args.len());
-        for arg in call_args {
-            resolved.push(self.force_value_clone(arg)?);
-        }
+        let resolved = self.resolve_args(call_args)?;
 
         let stack = self.capture_stack();
         let interp_ptr = std::ptr::addr_of_mut!(*self);
@@ -724,10 +849,7 @@ impl Interpreter {
         symbol: &str,
         call_args: &[RuntimeValue],
     ) -> ExecutorResult<RuntimeValue> {
-        let mut resolved = Vec::with_capacity(call_args.len());
-        for arg in call_args {
-            resolved.push(self.force_value_clone(arg)?);
-        }
+        let resolved = self.resolve_args(call_args)?;
 
         // If no mechanism is specified (old format), fall back to direct name lookup
         if mechanism.is_empty() {
@@ -760,16 +882,15 @@ impl Interpreter {
             .map_err(|e| e.with_stack(stack))
     }
 
-    /// 按函数表索引调用字节码函数（CallStatic 的唯一分发路径）。
+    /// 按函数表索引调用字节码函数（**任务入口**：Standard/Full 模式的任务闭包
+    /// 经 `execute_scheduled_task_from_data` 走这里；Embedded 模式的 CallStatic
+    /// 已改走蹦床 `start_call`，不再经此）。
     pub(super) fn call_static_by_id(
         &mut self,
         func_id: FunctionId,
         call_args: &[RuntimeValue],
     ) -> ExecutorResult<RuntimeValue> {
-        let mut resolved = Vec::with_capacity(call_args.len());
-        for arg in call_args {
-            resolved.push(self.force_value_clone(arg)?);
-        }
+        let resolved = self.resolve_args(call_args)?;
         self.call_function_by_id(func_id, &resolved)
     }
 

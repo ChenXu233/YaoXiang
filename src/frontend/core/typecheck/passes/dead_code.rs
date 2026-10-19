@@ -2,9 +2,16 @@
 //!
 //! 识别从未被引用的定义，生成警告信息。
 //! 码义（RFC-013 + RFC-029f + RFC-029g）：顶层绑定不因任何修饰符豁免——
-//! 可达性由文件内引用与包内引用池（[`DeadCodeAnalyzer::set_project_refs`]）
-//! 共同判定。单文件（Script）路径没有包视角，未引用的顶层绑定一律报
-//! W1001/W1002/W1004/W1005。`pub` 关键字已由 RFC-029g 删除，不再是豁免来源。
+//! 可达性由文件内引用与**包内引用池**（[`DeadCodeAnalyzer::set_cross_file_refs`]
+//! / [`DeadCodeAnalyzer::set_exempt_pub`]）共同判定。池的来源是包目标的
+//! **编译面**（driver 侧 `collect_package_refs` / `collect_compilation_refs`，
+//! RFC-029f 改进 1）；身份是 `(模块, 名字)`——名字只记到 import 解析出的那个
+//! 模块，模块自有的名字（顶层定义与局部绑定）不算它对别的模块的消费
+//! （改进 2/4，见 [`DeadCodeAnalyzer::collect_module_names`] 与 driver 侧
+//! `RefPool`：只有「被 import 后**真实使用**」才算消费）。
+//! `FileRole::Script` 不接池（单文件路径没有包视角，未引用的顶层绑定一律报
+//! W1001/W1002/W1004/W1005，改进 3）；`FileRole::Test` 的引用单独成池、
+//! 不豁免生产代码（改进 5）。`pub` 关键字已由 RFC-029g 删除，不再是豁免来源。
 //! 未使用导入（W1003）由 typecheck 的 use elaboration 检测，不在此处。
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -18,12 +25,23 @@ use crate::frontend::core::parser::ast::{Module, Stmt, StmtKind, Expr, Block};
 pub struct DeadCodeAnalyzer {
     /// 入口点集合（可达性根：`main`）
     entry_points: HashSet<String>,
-    /// 所有符号定义
-    all_defs: HashMap<String, SymbolDef>,
-    /// Bin/Internal 的 pub 项豁免池（扫描目录所得，已知缺陷见 RFC-029f）
+    /// 所有符号定义——**逐定义一条**（同名重载不互相覆盖：WBS 4.9.6 / #450）
+    all_defs: Vec<SymbolDef>,
+    /// Bin/Internal 的包内引用池（driver 侧按**编译集**装配、名字已按模块
+    /// 身份剔除自有名：RFC-029f 改进 1+2）
     exempt_pub: HashSet<String>,
-    /// Lib/Script 的跨文件引用池（扫描目录所得，已知缺陷见 RFC-029f）
+    /// Lib 的跨文件引用池（同上；`FileRole::Script` 不接池——改进 3）
     cross_file_refs: HashSet<String>,
+    /// 被重载决议**命中**的方法定义标记 `(限定名去掉 #k 的基名, 声明序)`：
+    /// 由 driver 从 D20 决议产物（`overload_resolutions`，RFC-039 D20 / WBS 4.5.2）
+    /// 解析后传入——分析器**不认识 IR 名**，只收这个二元组（IR 名↔定义的配对
+    /// 留在 L1；分层：L2 不新增对 ir_gen 命名实现的依赖）
+    resolved_methods: HashSet<(String, usize)>,
+    /// 出现过 D20 决议条目的**名字组**（基名，全局；WBS 4.9.7 / issue #464）：
+    /// 这些组的方法级消费由决议逐候选给出 ⇒ 池的**名字级**豁免
+    /// （`RefPool::field_names` 全局平铺）对它们不成立，判定不因同名兄弟的
+    /// 跨文件同名引用而放宽（宁漏报方向仍保留给无决议记录的组）
+    resolved_groups: HashSet<String>,
 }
 
 /// 符号定义
@@ -61,6 +79,126 @@ pub struct DeadCodeWarning {
     pub span: Span,
 }
 
+/// 引用/绑定收集器（RFC-029f 改进 2/4）：一趟遍历同时产出**标识符引用**
+/// （死代码可达性与 W1003 复用）、**本模块自有的名字**（顶层定义 + 局部绑定）
+/// 与**字段位引用**（方法/字段短名）。
+///
+/// 各集必须同源：池的口径（哪些名字算「别的模块在消费」）与可达性的口径
+/// （哪些名字算「本文件在用」）若各走一趟遍历，分歧处就会让池自我豁免——
+/// 正是 RFC-029f 缺陷 2 的成因。
+#[derive(Default)]
+struct IdentSink {
+    /// 标识符引用（顶层定义处不算引用）
+    refs: HashSet<String>,
+    /// 本模块绑定的名字：顶层定义、函数体赋值目标、解构名、参数、
+    /// for/spawn/gen 迭代变量、嵌套函数名
+    bound: HashSet<String>,
+    /// 字段/方法位引用（`obj.render()` 只出现短名 render），**基名不是 Var**
+    /// 的那些（`f().render()`）：连命名空间归因都无从谈起，只能按名字维度计入
+    field_refs_free: HashSet<String>,
+    /// 命名空间位引用：`l.foo` 记成 基名 l 与 字段名 foo 一对——基名命中
+    /// 命名空间导入时归因到该模块（RFC-029f 改进 4 的命名空间形态）
+    namespaced_fields: Vec<(String, String)>,
+}
+
+impl IdentSink {
+    /// 记一次标识符引用
+    fn insert(
+        &mut self,
+        name: String,
+    ) {
+        self.refs.insert(name);
+    }
+
+    /// 记一次名字绑定（本模块自有）
+    fn bind(
+        &mut self,
+        name: String,
+    ) {
+        self.bound.insert(name);
+    }
+
+    /// 记一次「基名不是 Var」的字段/方法位引用
+    fn field_free(
+        &mut self,
+        name: String,
+    ) {
+        self.field_refs_free.insert(name);
+    }
+}
+
+/// `use` 面（RFC-029f 改进 2/4 的池输入，读同一份 AST 的顶层 use 项）
+#[derive(Default)]
+struct ImportFace {
+    /// 作用域内的名字（池的自有名扣减面：显式声明的对外消费面不算自有）
+    names: HashSet<String>,
+    /// 花括号项：作用域内名字 → 目标定义名 → 模块路径
+    /// （`use lib.{f as g}` 记成 g、f、lib）
+    items: Vec<(String, String, String)>,
+    /// 整体导入：基名 → 模块路径（`use std.assert` 记成 assert、std.assert；
+    /// `use lib as l` 记成 l、lib）
+    namespaces: Vec<(String, String)>,
+}
+
+/// 收集 `use` 面：花括号项的别名优先；整体导入取路径末段（无别名时）
+fn collect_import_face(ast: &Module) -> ImportFace {
+    let mut face = ImportFace::default();
+    for stmt in &ast.items {
+        let StmtKind::Use {
+            path,
+            items,
+            alias,
+            item_aliases,
+            ..
+        } = &stmt.kind
+        else {
+            continue;
+        };
+        match items {
+            Some(items) => {
+                for (i, item) in items.iter().enumerate() {
+                    let aliased = item_aliases
+                        .as_ref()
+                        .and_then(|aliases| aliases.get(i))
+                        .and_then(|alias| alias.as_ref());
+                    let local =
+                        aliased.map_or_else(|| item.name.clone(), |alias| alias.name.clone());
+                    face.names.insert(local.clone());
+                    face.items.push((local, item.name.clone(), path.clone()));
+                }
+            }
+            None => {
+                let (local, module_path) = match alias.as_ref().and_then(|alias| alias.last()) {
+                    Some(alias) => (alias.name.clone(), path.clone()),
+                    None => match path.rsplit('.').next() {
+                        Some(last) => (last.to_string(), path.clone()),
+                        None => (path.clone(), path.clone()),
+                    },
+                };
+                face.names.insert(local.clone());
+                face.namespaces.push((local, module_path));
+            }
+        }
+    }
+    face
+}
+
+/// 模块的名字面——池（RFC-029f 改进 2/4/5）与可达性共用**一趟遍历**的产物
+pub struct ModuleNames {
+    /// 全部标识符引用（可达性 / W1003 用）
+    pub refs: HashSet<String>,
+    /// 本模块自有名：顶层定义 + 局部绑定，扣掉 `use` 带入的名字
+    pub own: HashSet<String>,
+    /// 基名不是 Var 的字段/方法位引用（`f().render()`）
+    pub field_refs_free: HashSet<String>,
+    /// 命名空间位引用：基名与字段名一对（`l.foo` → l、foo）
+    pub namespaced_fields: Vec<(String, String)>,
+    /// 花括号导入项：作用域内名字 → 目标定义名 → 模块路径
+    pub imported: Vec<(String, String, String)>,
+    /// 整体导入：基名 → 模块路径
+    pub namespaces: Vec<(String, String)>,
+}
+
 impl Default for DeadCodeAnalyzer {
     fn default() -> Self {
         Self::new()
@@ -72,13 +210,17 @@ impl DeadCodeAnalyzer {
     pub fn new() -> Self {
         Self {
             entry_points: HashSet::new(),
-            all_defs: HashMap::new(),
+            all_defs: Vec::new(),
             exempt_pub: HashSet::new(),
             cross_file_refs: HashSet::new(),
+            resolved_methods: HashSet::new(),
+            resolved_groups: HashSet::new(),
         }
     }
 
-    /// 设置 Bin/Internal 的 pub 项豁免池（扫描目录所得，已知缺陷见 RFC-029f）
+    /// 设置 Bin/Internal 的包内引用池——池成员 = **别的模块**对某个名字的
+    /// 引用（driver 侧 `collect_compilation_refs` 按编译集装配，已剔除
+    /// 每个模块自有的名字）
     pub fn set_exempt_pub(
         &mut self,
         names: HashSet<String>,
@@ -86,12 +228,42 @@ impl DeadCodeAnalyzer {
         self.exempt_pub = names;
     }
 
-    /// 设置 Lib/Script 的跨文件引用池（扫描目录所得，已知缺陷见 RFC-029f）
+    /// 设置 Lib 的跨文件引用池（同 `set_exempt_pub`；Script 不接池——
+    /// 单文件语义只按定义-使用图判定，RFC-029f 改进 3）
     pub fn set_cross_file_refs(
         &mut self,
         refs: HashSet<String>,
     ) {
         self.cross_file_refs = refs;
+    }
+
+    /// 设置「被重载决议命中的方法定义」标记 `(基名, 声明序)`（WBS 4.9.6 / #450）：
+    /// driver 从 D20 决议产物解析后传入；同名重载因此**逐候选**判定——
+    /// 未被决议命中的兄弟重载落回「未调用 ⇒ 报 W1005」（验收③）。
+    /// 名字未出现在任何标记里时（调用点歧义 / 未经决议路径）回落短名共判（宁漏报）。
+    pub fn set_resolved_methods(
+        &mut self,
+        marks: HashSet<(String, usize)>,
+    ) {
+        self.resolved_methods = marks;
+    }
+
+    /// 设置「出现过决议条目的名字组」（全局集合；WBS 4.9.7 / issue #464）
+    pub fn set_resolved_groups(
+        &mut self,
+        groups: HashSet<String>,
+    ) {
+        self.resolved_groups = groups;
+    }
+
+    /// 该名字组是否有决议记录（决定逐候选还是回落短名共判）——
+    /// 用驱动侧汇总的**全局**名字组：跨单元同名方法的决议记在别的单元上，
+    /// 本单元也要据「该组受决议控制」停用池的名字级豁免
+    fn method_group_has_marks(
+        &self,
+        name: &str,
+    ) -> bool {
+        self.resolved_groups.contains(name)
     }
 
     /// 收集入口点和符号定义（合并处理以减少代码重复）
@@ -143,30 +315,48 @@ impl DeadCodeAnalyzer {
                     } else {
                         (name.clone(), SymbolKind::Function)
                     };
-                    self.all_defs.insert(
-                        def_name.clone(),
-                        SymbolDef {
-                            name: def_name.clone(),
-                            kind,
-                            location: stmt.span,
-                        },
-                    );
+                    self.record_definition(SymbolDef {
+                        name: def_name.clone(),
+                        kind,
+                        location: stmt.span,
+                    });
                     if !is_method && name == "main" {
                         self.entry_points.insert(name.clone());
                     }
                 }
                 StmtKind::TypeDefinition { name, .. } => {
-                    self.all_defs.insert(
-                        name.clone(),
-                        SymbolDef {
-                            name: name.clone(),
-                            kind: SymbolKind::Type,
-                            location: stmt.span,
-                        },
-                    );
+                    self.record_definition(SymbolDef {
+                        name: name.clone(),
+                        kind: SymbolKind::Type,
+                        location: stmt.span,
+                    });
                 }
                 _ => {}
             }
+        }
+    }
+
+    /// 记一条定义（WBS 4.9.6 / #450）：
+    ///
+    /// - **方法**逐定义**追加**——同名重载是各自独立的定义，不得互相覆盖
+    ///   （旧实现按 full name 键控，两个重载只剩一条）；
+    /// - 其余按**名字去重并保留最后一次**（顶层同名再绑定/重赋值是同一个绑定，
+    ///   与旧 map 的「后写覆盖」行为一致——不额外制造同名重复告警）。
+    fn record_definition(
+        &mut self,
+        def: SymbolDef,
+    ) {
+        if matches!(def.kind, SymbolKind::Method) {
+            self.all_defs.push(def);
+            return;
+        }
+        match self
+            .all_defs
+            .iter_mut()
+            .find(|existing| existing.name == def.name)
+        {
+            Some(slot) => *slot = def,
+            None => self.all_defs.push(def),
         }
     }
 
@@ -181,11 +371,22 @@ impl DeadCodeAnalyzer {
     /// 本遍历做语法级兜底——覆盖 match 模式、spawn 体、类型注解等
     /// Var 推断臂看不到的位置，宁多收（漏报方向）不漏收（误报方向）。
     pub fn collect_ident_refs(ast: &Module) -> HashSet<String> {
-        let mut referenced = HashSet::new();
+        Self::collect_module_names(ast).refs
+    }
+
+    /// 从 AST 收集模块的**名字面**（RFC-029f 改进 2/4/5 的池输入；一趟遍历）：
+    /// 引用集、自有名集、字段位引用集、命名空间位引用与 `use` 面。
+    ///
+    /// `own` = 本模块绑定的名字（顶层定义 + 局部绑定）**扣掉** `use` 带入的
+    /// 名字：模块自己命名空间里的标识符（`fn foo()` 的定义、函数体里的
+    /// `foo = 1`、参数、for/迭代变量）不是它对**别的模块**同名定义的消费；
+    /// `use` 带入的名字是显式声明的对外消费面，同名局部遮蔽不得吞掉它。
+    pub fn collect_module_names(ast: &Module) -> ModuleNames {
+        let mut referenced = IdentSink::default();
 
         fn collect_from_expr(
             expr: &Expr,
-            referenced: &mut HashSet<String>,
+            referenced: &mut IdentSink,
         ) {
             match expr {
                 Expr::Var(name, _) => {
@@ -201,6 +402,16 @@ impl DeadCodeAnalyzer {
                     collect_from_expr(expr, referenced);
                     // 字段名一并收集：方法调用 obj.render() 只出现短名
                     referenced.insert(field.clone());
+                    // 基名是 Var 时记成（基名, 字段名）：命中命名空间导入即可归因；
+                    // 其余（f().render() 等）连基名都没有，只能按名字维度计入
+                    match expr.as_ref() {
+                        Expr::Var(base, _) => {
+                            referenced
+                                .namespaced_fields
+                                .push((base.clone(), field.clone()));
+                        }
+                        _ => referenced.field_free(field.clone()),
+                    }
                 }
                 Expr::BinOp { left, right, .. } => {
                     collect_from_expr(left, referenced);
@@ -238,6 +449,7 @@ impl DeadCodeAnalyzer {
                     body,
                     ..
                 } => {
+                    referenced.bind(var.clone());
                     referenced.insert(var.clone());
                     collect_from_expr(iterable, referenced);
                     collect_from_block(body, referenced);
@@ -274,6 +486,7 @@ impl DeadCodeAnalyzer {
                 Expr::FnDef {
                     name, params, body, ..
                 } => {
+                    referenced.bind(name.clone());
                     referenced.insert(name.clone());
                     collect_params_names_and_types(params, referenced);
                     collect_from_block(body, referenced);
@@ -288,6 +501,7 @@ impl DeadCodeAnalyzer {
                     ..
                 } => {
                     for gen in generators {
+                        referenced.bind(gen.var.clone());
                         referenced.insert(gen.var.clone());
                         collect_from_expr(&gen.iterable, referenced);
                         if let Some(cond) = &gen.condition {
@@ -328,6 +542,7 @@ impl DeadCodeAnalyzer {
                     body,
                     ..
                 } => {
+                    referenced.bind(var.clone());
                     referenced.insert(var.clone());
                     collect_from_expr(iterable, referenced);
                     collect_from_block(body, referenced);
@@ -353,19 +568,20 @@ impl DeadCodeAnalyzer {
 
         fn collect_params_names_and_types(
             params: &[crate::frontend::core::parser::ast::Param],
-            referenced: &mut HashSet<String>,
+            referenced: &mut IdentSink,
         ) {
             for param in params {
+                referenced.bind(param.name.clone());
                 referenced.insert(param.name.clone());
                 if let Some(ty) = &param.ty {
-                    ty.collect_name_refs(referenced);
+                    ty.collect_name_refs(&mut referenced.refs);
                 }
             }
         }
 
         fn collect_from_block(
             block: &Block,
-            referenced: &mut HashSet<String>,
+            referenced: &mut IdentSink,
         ) {
             for stmt in &block.stmts {
                 collect_from_stmt(stmt, referenced, false);
@@ -376,7 +592,7 @@ impl DeadCodeAnalyzer {
         /// 一律收集），Struct/Union 头部是类型名引用，Guard 条件是真实表达式
         fn collect_pattern_refs(
             pattern: &crate::frontend::core::parser::ast::Pattern,
-            referenced: &mut HashSet<String>,
+            referenced: &mut IdentSink,
         ) {
             use crate::frontend::core::parser::ast::Pattern;
             match pattern {
@@ -412,7 +628,7 @@ impl DeadCodeAnalyzer {
 
         fn collect_from_stmt(
             stmt: &Stmt,
-            referenced: &mut HashSet<String>,
+            referenced: &mut IdentSink,
             in_toplevel: bool,
         ) {
             match &stmt.kind {
@@ -432,20 +648,37 @@ impl DeadCodeAnalyzer {
                     // 目标名：顶层是定义（不算引用，否则所有定义"自我可达"），
                     // 嵌套是写入即使用——通用走查覆盖 Var/FieldAccess/Index 等
                     // 复合目标（`counts["k"] = v` 是对 counts 的使用）
-                    if !in_toplevel {
+                    //
+                    // 绑定侧（池用）：顶层目标经 `receiver_parts` 取定义名
+                    // （方法绑定的裸名 `Point.render` → `render`，与 `all_defs`
+                    // 的短名口径一致，池按短名匹配方法）；嵌套目标只有简单
+                    // `Var` 是局部绑定——复合目标（字段/下标）不是新名字
+                    if in_toplevel {
+                        if let Some((name, _)) = target.receiver_parts() {
+                            referenced.bind(name);
+                        }
+                    } else {
+                        if let Expr::Var(name, _) = target.as_ref() {
+                            referenced.bind(name.clone());
+                        }
                         collect_from_expr(target, referenced);
                     }
                     if let Some(ty) = type_annotation {
-                        ty.collect_name_refs(referenced);
+                        ty.collect_name_refs(&mut referenced.refs);
                     }
                     for param in signature_params {
                         if let Some(ty) = &param.ty {
-                            ty.collect_name_refs(referenced);
+                            ty.collect_name_refs(&mut referenced.refs);
                         }
                     }
                 }
                 // 元组解构赋值：嵌套目标是写入即使用；顶层是定义（不计引用）
+                // 绑定侧（池用）：解构名两个层级都是新名字（顶层不计引用，
+                // 故只有这里能记上）
                 StmtKind::DestructureAssign { names, rhs, .. } => {
+                    for name in names {
+                        referenced.bind(name.name.clone());
+                    }
                     collect_from_expr(rhs, referenced);
                     if !in_toplevel {
                         for name in names {
@@ -454,16 +687,18 @@ impl DeadCodeAnalyzer {
                     }
                 }
                 StmtKind::TypeDefinition {
+                    name,
                     signature_params,
                     definition,
                     ..
                 } => {
+                    referenced.bind(name.clone());
                     for param in signature_params {
                         if let Some(ty) = &param.ty {
-                            ty.collect_name_refs(referenced);
+                            ty.collect_name_refs(&mut referenced.refs);
                         }
                     }
-                    definition.collect_name_refs(referenced);
+                    definition.collect_name_refs(&mut referenced.refs);
                 }
                 StmtKind::For {
                     var,
@@ -471,6 +706,7 @@ impl DeadCodeAnalyzer {
                     body,
                     ..
                 } => {
+                    referenced.bind(var.clone());
                     referenced.insert(var.clone());
                     collect_from_expr(iterable, referenced);
                     collect_from_block(body, referenced);
@@ -498,8 +734,18 @@ impl DeadCodeAnalyzer {
         for stmt in &ast.items {
             collect_from_stmt(stmt, &mut referenced, true);
         }
-
-        referenced
+        // 自有的名字 = 本模块绑定的名字 − `use` 带入的名字（后者是显式声明的
+        // 对外消费面，同名局部遮蔽不得吞掉它）
+        let face = collect_import_face(ast);
+        let own = referenced.bound.difference(&face.names).cloned().collect();
+        ModuleNames {
+            refs: referenced.refs,
+            own,
+            field_refs_free: referenced.field_refs_free,
+            namespaced_fields: referenced.namespaced_fields,
+            imported: face.items,
+            namespaces: face.namespaces,
+        }
     }
 
     /// 从入口点出发，计算可达符号集合
@@ -525,9 +771,30 @@ impl DeadCodeAnalyzer {
             }
             reachable.insert(symbol.clone());
 
-            for def_name in self.all_defs.keys() {
-                if ast_references.contains(def_name) && !reachable.contains(def_name) {
-                    queue.push_back(def_name.clone());
+            // 同名方法组的声明序（逐候选标记的配对键：第 k 个同名声明 ↔ 决议名 #k）
+            let mut ordinal: HashMap<String, usize> = HashMap::new();
+            for def in &self.all_defs {
+                // 方法只以**短名**出现在引用里（`obj.render()` 收集到的是 render，
+                // 不是 Point.render），故方法用短名探针——被调用的方法必须可达。
+                // WBS 4.9.6 / #450 逐候选：该名字组**有决议记录**时只认被命中的
+                // 那一个声明（未被命中的兄弟重载仍不可达 ⇒ 如实报 W1005）；
+                // 无任何决议记录（调用点歧义 / 未经决议路径）时回落短名共判（宁漏报）
+                let hit = match def.kind {
+                    SymbolKind::Method => {
+                        let k = ordinal.entry(def.name.clone()).or_insert(0);
+                        let this = *k;
+                        *k += 1;
+                        if self.method_group_has_marks(&def.name) {
+                            self.resolved_methods.contains(&(def.name.clone(), this))
+                        } else {
+                            let short = def.name.rsplit('.').next().unwrap_or(&def.name);
+                            ast_references.contains(short)
+                        }
+                    }
+                    _ => ast_references.contains(def.name.as_str()),
+                };
+                if hit && !reachable.contains(&def.name) {
+                    queue.push_back(def.name.clone());
                 }
             }
         }
@@ -538,27 +805,56 @@ impl DeadCodeAnalyzer {
     /// 找出未被引用的定义（RFC-029f + RFC-029g）
     ///
     /// 判定只有两道闸：文件内可达性，以及包内引用池。
-    /// - 提供引用池（项目模式）：池中命中即活——跨文件消费者在本文件不可见，
-    ///   这是「宁漏报」方向（也曾是 Lib 非 pub 误报的根因）。
-    /// - 无引用池（单文件 Script 路径）：只按文件内可达性判定，
-    ///   未引用的顶层绑定一律报告。
+    /// - 提供引用池（Bin/Lib，项目模式）：池中命中即活——跨文件消费者在
+    ///   本文件不可见，这是「宁漏报」方向（也曾是 Lib 非 pub 误报的根因）。
+    ///   池的身份是 `(模块, 名字)`：池里出现的是**别的模块**对该名字的引用
+    ///   （每个模块自有的名字在装配期已剔除），故同名的局部绑定不构成消费。
+    /// - 无引用池（`FileRole::Script`）：只按文件内可达性判定，
+    ///   未引用的顶层绑定一律报告——单文件语义不受项目内其它文件影响。
     /// - 没有任何修饰符能豁免——`pub` 关键字已由 RFC-029g 删除。
     pub fn find_unused_defs(
         &self,
         reachable: &HashSet<String>,
     ) -> Vec<DeadCodeWarning> {
         let mut warnings = Vec::new();
+        // 同名方法组的声明序：有决议记录时按「命中该声明」逐候选判定（WBS 4.9.6 / #450）
+        let mut ordinal: HashMap<String, usize> = HashMap::new();
 
-        for (name, def) in &self.all_defs {
-            if Self::is_reachable(name, def, reachable) {
+        for def in &self.all_defs {
+            let name = &def.name;
+            let marked_group =
+                matches!(def.kind, SymbolKind::Method) && self.method_group_has_marks(name);
+            let this_decl = match def.kind {
+                SymbolKind::Method => {
+                    let k = ordinal.entry(def.name.clone()).or_insert(0);
+                    let this = *k;
+                    *k += 1;
+                    this
+                }
+                _ => 0,
+            };
+            if marked_group {
+                // 逐候选：决议命中**本单元这条定义** ⇒ 活；未命中 ⇒ 判死
+                // （WBS 4.9.7 / #464：跨单元同名同序不被兄弟的调用豁免）
+                if self.resolved_methods.contains(&(name.clone(), this_decl)) {
+                    continue;
+                }
+            } else if Self::is_reachable(name, def, reachable) {
                 continue;
             }
-            // Bin/Internal: exempt_pub 豁免；Lib/Script: cross_file_refs 豁免
+            // Bin/Internal: exempt_pub 豁免；Lib: cross_file_refs 豁免
+            // （Script 不接池；两池的装配口径见 driver 侧 collect_compilation_refs）。
+            // **有决议记录的名字组不走名字级豁免**：field_names 是全局平铺的短名集合，
+            // 会让同单元/跨单元同名兄弟互相通吃（WBS 4.9.7 / issue #464）
             let short_name = name.rsplit('.').next().unwrap_or(name);
-            if !self.exempt_pub.is_empty() && self.exempt_pub.contains(short_name) {
+            if !marked_group && !self.exempt_pub.is_empty() && self.exempt_pub.contains(short_name)
+            {
                 continue;
             }
-            if !self.cross_file_refs.is_empty() && self.cross_file_refs.contains(short_name) {
+            if !marked_group
+                && !self.cross_file_refs.is_empty()
+                && self.cross_file_refs.contains(short_name)
+            {
                 continue;
             }
             let (code, message) = match def.kind {

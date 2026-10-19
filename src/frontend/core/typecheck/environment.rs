@@ -28,6 +28,19 @@ pub struct GenericTypeDef {
     pub type_param_names: Vec<String>,
 }
 
+/// #454 / t14：原生导出一个签名的**形参名 + 必需下限**（同一签名串的两个事实）。
+///
+/// `required_min` = 至少要有实参的**值形参个数**（`?name` 可选位与 `...args` 变参
+/// 尾位不计入）。调用点把「第 required_min 位及其后」标为可选位喂共享判据；
+/// 两侧（typecheck 原生臂与 ir_gen）都必须从这里取，避免各算一份而分歧。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportParamInfo {
+    /// 声明序形参名（不含接收者位；原生导出无接收者）
+    pub names: Vec<String>,
+    /// 必需个数下限（0..=names.len()）
+    pub required_min: usize,
+}
+
 /// 泛型类型实例化结果（WBS 3.4.1）。
 ///
 /// `unevaluable_constraints` 携带编译期不可求值的 const 约束描述——
@@ -61,18 +74,6 @@ pub struct ImplementationProof {
 pub struct SumVariantDef {
     pub name: String,
     pub params: Vec<MonoType>,
-}
-
-/// RFC-010: 变体构造调用点（span 键控，ir_gen 据此生成 CreateVariant）。
-#[derive(Debug, Clone)]
-pub struct VariantCtorCall {
-    pub span: crate::util::span::Span,
-    /// 和类型名（CreateVariant 的 group，也是类型身份来源）
-    pub type_name: String,
-    /// 变体序号（类型体声明序）
-    pub variant_index: usize,
-    /// 载荷数（0 = 零载荷；>1 运行时打包 Tuple）
-    pub payload_count: usize,
 }
 
 /// RFC-011b: 接口实现登记表条目。
@@ -119,6 +120,67 @@ pub enum BaseKind {
     Unknown,
 }
 
+/// 定义侧方法重载候选的一个键位（RFC-029f 改进 4 / WBS 4.9.7 / issue #464）。
+///
+/// 打包而非三张平行表的理由：候选、混编 IR 名、声明期形参名是**同序**配对
+/// 不变式（调用点按候选序取名，定义侧按声明序混编）。跨单元传递若拆成三条
+/// 独立通路，任一条漏接或错序都会让调用名与定义名不再对应——这里让配对随值
+/// 一起走，注入侧只做**整组同序追加**。
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MethodOverloadCandidates {
+    /// 候选签名（定义侧声明序）
+    pub candidates: Vec<MonoType>,
+    /// 与 `candidates` 同序的混编 IR 名（0 = 裸名 `{Type}.{method}`，其后 `#序`）
+    pub ir_names: Vec<String>,
+    /// 与 `candidates` 同序的声明期形参名（不可得时为空表 = 不按名匹配）
+    pub param_names: Vec<Vec<String>>,
+}
+
+impl MethodOverloadCandidates {
+    /// 同键位追加另一模块的候选组（候选组之间的**唯一**追加点：三向量同序追加）。
+    ///
+    /// 三向量等长是配对不变式（候选 ↔ 混编 IR 名 ↔ 声明期形参名）。不等长 ⇒ 合并
+    /// 结果必然错位，且错位是**静默**的（调用点会拿别人的名字派发）——debug 构建
+    /// （含全部 `cargo test`）在此当场响亮失败，不产出错位表。
+    pub fn merge_from(
+        &mut self,
+        other: &MethodOverloadCandidates,
+    ) {
+        debug_assert_eq!(
+            other.candidates.len(),
+            other.ir_names.len(),
+            "被并入的候选组自身必须等长（候选 {} / 混编名 {}）",
+            other.candidates.len(),
+            other.ir_names.len()
+        );
+        debug_assert_eq!(
+            other.candidates.len(),
+            other.param_names.len(),
+            "被并入的候选组自身必须等长（候选 {} / 形参名 {}）",
+            other.candidates.len(),
+            other.param_names.len()
+        );
+        self.candidates.extend(other.candidates.iter().cloned());
+        self.ir_names.extend(other.ir_names.iter().cloned());
+        self.param_names.extend(other.param_names.iter().cloned());
+        debug_assert_eq!(
+            self.candidates.len(),
+            self.ir_names.len(),
+            "合并后候选组必须保持等长（键位内的配对不得错位）"
+        );
+    }
+
+    /// 候选数
+    pub fn len(&self) -> usize {
+        self.candidates.len()
+    }
+
+    /// 是否没有候选
+    pub fn is_empty(&self) -> bool {
+        self.candidates.is_empty()
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct TypeEnvironment {
     pub vars: HashMap<String, PolyType>,
@@ -138,6 +200,14 @@ pub struct TypeEnvironment {
     pub method_overloads: HashMap<String, Vec<MonoType>>,
     /// RFC-011a §3：重载候选的 IR 混编名（与 method_overloads 候选序一一对应）
     pub method_overload_ir_names: HashMap<String, Vec<String>>,
+    /// RFC-011a §3：重载候选的**声明期形参名**（与 method_overloads 候选序一一对应，
+    /// 每项含接收者位 self；内层空表 = 声明期拿不到名字）。
+    ///
+    /// 命名实参（#452）进入调用点决议的唯一名字来源：位置实参占前导槽位、
+    /// 命名实参按名入槽，两者落在同一槽位即冲突（不得静默择一）。名字拿不到
+    /// （形参数与候选签名对不齐、跨模块外部绑定）时**留空**——调用点据此退回
+    /// 「不按名匹配」，不伪装成「名字已核对」。
+    pub method_overload_param_names: HashMap<String, Vec<Vec<String>>>,
     /// RFC-011a: 已通过的接口实现证明（编译期，运行时擦除）
     pub implementation_proofs: Vec<ImplementationProof>,
     /// RFC-011b: 接口实现登记表（接口名 → 实例化条目，带类型实参维度）。
@@ -161,7 +231,17 @@ pub struct TypeEnvironment {
     /// 解析出的 [min, max]。Key 与 native_signatures 同（全限定名 + 短名）；
     /// max=None 表示变参不设上限。手注 FFI 签名（add_native_signature 路径）
     /// 无表项——检查层对无表项的 native 维持旧宽容。
+    ///
+    /// **已知限制（#454 复审 F4，未修）**：`add_native_signature` 只灌
+    /// `native_signatures`，不灌 `native_param_names` ⇒ 走这条路径注册的宿主
+    /// 嵌入函数上，命名实参仍会被静默丢弃（`?454` 之后的 std 原生导出已修）。
+    /// 仓内零调用者，属宿主嵌入面待办；修法与 std 导出同构（补一张形参名表）。
     pub native_arity: HashMap<String, (usize, Option<usize>)>,
+    /// #454 / t14：原生导出的**形参名 + 必需下限**（全限定名 + 短名）。
+    /// 与 native_signatures / native_arity 同源灌装（同一签名串、同一解析入口
+    /// `signature::export_signature_param_info`）——命名实参在原生导出上的按名绑定、
+    /// 未知名/重复命名判定、以及「可选位允许缺席」都只从这张表取，调用点不各算一份。
+    pub native_param_names: HashMap<String, ExportParamInfo>,
     /// 模块注册表 - 提供统一的模块查询接口
     pub module_registry: crate::frontend::module::registry::ModuleRegistry,
     /// 已注册为「模块 Struct」的别名集合（#396：register_module_as_struct 与
@@ -202,22 +282,156 @@ impl TypeEnvironment {
         key: &str,
         ty: MonoType,
     ) {
-        let list = self.method_overloads.entry(key.to_string()).or_default();
-        if !list.contains(&ty) {
-            list.push(ty);
-            // RFC-011a §3：重载候选的 IR 混编名（注册序，0=裸名）——
-            // 定义侧 ir_gen 按同一 AST 序混编，调用点决议后按名派发
-            let ordinal = list.len() - 1;
-            let ir_name = if ordinal == 0 {
-                key.to_string()
-            } else {
-                format!("{key}#{ordinal}")
-            };
-            self.method_overload_ir_names
-                .entry(key.to_string())
-                .or_default()
-                .push(ir_name);
+        self.add_method_overload_with_params(key, ty, Vec::new());
+    }
+
+    /// RFC-011a §3 / #452：登记方法重载候选**并携带其声明期形参名**。
+    ///
+    /// 形参名是命名实参进入调用点决议的唯一依据（位置实参占前导槽位、命名实参
+    /// 按名入槽）。名字长度与候选签名对不齐时**留空**——调用点退回「不按名匹配」，
+    /// 宁可不匹配也不拿错位的名字去匹配（错位比缺失更危险）。
+    pub fn add_method_overload_with_params(
+        &mut self,
+        key: &str,
+        ty: MonoType,
+        param_names: Vec<String>,
+    ) {
+        // 形参名必须与候选签名逐一对应；对不齐视为「这个名字的来源不可信」。
+        let param_names = match &ty {
+            MonoType::Fn { params, .. } if params.len() == param_names.len() => param_names,
+            _ => Vec::new(),
+        };
+        // 同签名去重（RFC-011b 原口径）：已登记过同一签名 ⇒ 不占新声明序
+        if self
+            .method_overloads
+            .get(key)
+            .is_some_and(|list| list.contains(&ty))
+        {
+            return;
         }
+        // RFC-011a §3：重载候选的 IR 混编名（注册序，0=裸名）——
+        // 定义侧 ir_gen 按同一 AST 序混编，调用点决议后按名派发
+        let ordinal = self.method_overloads.get(key).map_or(0, Vec::len);
+        let ir_name = if ordinal == 0 {
+            key.to_string()
+        } else {
+            format!("{key}#{ordinal}")
+        };
+        // 三张平行表经**唯一写入点**落表（顺序/配对规则只有一份）
+        self.append_overload_group(
+            key,
+            MethodOverloadCandidates {
+                candidates: vec![ty],
+                ir_names: vec![ir_name],
+                param_names: vec![param_names],
+            },
+        );
+    }
+
+    /// 定义侧候选表的**快照**（键升序）：跨单元方法调用的决议输入
+    /// （RFC-029f 改进 4 / WBS 4.9.7 / issue #464）。
+    ///
+    /// 返回有序 `Vec` 而非 `HashMap`：跨单元合并的确定性从这一层起——
+    /// 模块内按定义序、模块间按模块键序，HashMap 迭代序不外泄。
+    pub fn method_overload_snapshot(&self) -> Vec<(String, MethodOverloadCandidates)> {
+        let mut keys: Vec<&String> = self.method_overloads.keys().collect();
+        keys.sort();
+        keys.into_iter()
+            .map(|key| {
+                let candidates = self.method_overloads.get(key).cloned().unwrap_or_default();
+                let ir_names = self
+                    .method_overload_ir_names
+                    .get(key)
+                    .cloned()
+                    .unwrap_or_default();
+                let param_names = self
+                    .method_overload_param_names
+                    .get(key)
+                    .cloned()
+                    .unwrap_or_default();
+                // 快照是跨单元通路的出口：三表不等长在这里当场响亮失败，不让错位的
+                // 「候选 ↔ 名字」配对流到别的编译单元（配对不变式的最后一道闸）
+                debug_assert_eq!(
+                    candidates.len(),
+                    ir_names.len(),
+                    "快照三表必须等长（键 {key}：候选 {} / 混编名 {}）",
+                    candidates.len(),
+                    ir_names.len()
+                );
+                debug_assert_eq!(
+                    candidates.len(),
+                    param_names.len(),
+                    "快照三表必须等长（键 {key}：候选 {} / 形参名 {}）",
+                    candidates.len(),
+                    param_names.len()
+                );
+                (
+                    key.clone(),
+                    MethodOverloadCandidates {
+                        candidates,
+                        ir_names,
+                        param_names,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// 注入跨模块的方法重载候选（WBS 4.9.7 / #464）：三张平行表**同序**追加。
+    ///
+    /// 与 `add_method_overload_with_params` 同源维护配对不变式——两处若各写
+    /// 一套追加逻辑，正是「候选 ↔ 名字」配对分叉的入口（禁令三）。
+    pub fn inject_method_overloads(
+        &mut self,
+        table: Vec<(String, MethodOverloadCandidates)>,
+    ) {
+        for (key, group) in table {
+            self.append_overload_group(&key, group);
+        }
+    }
+
+    /// 把一组候选**同序展开**进三张平行表——三张表**唯一**的写入点。
+    ///
+    /// 声明期登记（[Self::add_method_overload_with_params]）与跨单元注入
+    /// （[Self::inject_method_overloads]）都经此处落表：顺序/配对规则只有一份，
+    /// 两处各写一套「push candidate、push ir_name、push param_names」正是配对
+    /// 分叉的入口（禁令三）。落表前校验三向量等长（debug 构建响亮失败）。
+    fn append_overload_group(
+        &mut self,
+        key: &str,
+        group: MethodOverloadCandidates,
+    ) {
+        let MethodOverloadCandidates {
+            candidates,
+            ir_names,
+            param_names,
+        } = group;
+        debug_assert_eq!(
+            candidates.len(),
+            ir_names.len(),
+            "落表三表必须等长（键 {key}：候选 {} / 混编名 {}）",
+            candidates.len(),
+            ir_names.len()
+        );
+        debug_assert_eq!(
+            candidates.len(),
+            param_names.len(),
+            "落表三表必须等长（键 {key}：候选 {} / 形参名 {}）",
+            candidates.len(),
+            param_names.len()
+        );
+        self.method_overloads
+            .entry(key.to_string())
+            .or_default()
+            .extend(candidates);
+        self.method_overload_ir_names
+            .entry(key.to_string())
+            .or_default()
+            .extend(ir_names);
+        self.method_overload_param_names
+            .entry(key.to_string())
+            .or_default()
+            .extend(param_names);
     }
 
     /// RFC-011b: 查方法重载候选

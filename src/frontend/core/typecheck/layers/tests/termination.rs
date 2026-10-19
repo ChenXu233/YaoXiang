@@ -11,7 +11,7 @@ use crate::frontend::core::typecheck::layers::termination::{
     MeasureObligation, MeasureVerdict, TerminationChecker,
 };
 use crate::frontend::core::typecheck::proof::verdict::ProofResult;
-use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, Stmt, StmtKind};
+use crate::frontend::core::parser::ast::{BinOp, Block, Expr, Literal, PlanId, Stmt, StmtKind};
 use crate::frontend::core::types::const_data::{BinOp as ConstBinOp, ConstExpr};
 use crate::util::span::Span;
 
@@ -39,6 +39,7 @@ fn make_increment(
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -60,6 +61,7 @@ fn make_decrement(
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -134,6 +136,7 @@ fn run_check_with_refined(
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(expr.clone())),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let module = crate::frontend::core::parser::ast::Module {
         items: vec![stmt],
@@ -151,6 +154,7 @@ fn run_check(expr: &Expr) -> Vec<ProofResult> {
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(expr.clone())),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let module = crate::frontend::core::parser::ast::Module {
         items: vec![stmt],
@@ -177,6 +181,7 @@ fn run_check_with_stub_solver_refined(
     let stmt = Stmt {
         kind: StmtKind::Expr(Box::new(expr.clone())),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let module = crate::frontend::core::parser::ast::Module {
         items: vec![stmt],
@@ -185,8 +190,10 @@ fn run_check_with_stub_solver_refined(
     let env = crate::frontend::core::typecheck::environment::TypeEnvironment::new();
     let vars: std::collections::HashSet<String> = refined.iter().map(|s| s.to_string()).collect();
     // 桩求解器与 always_unsat() 是同一个：复用，而不是在这里再定义一遍。
+    // D58 后检查器只**借用**求解器：桩的生存期须覆盖 checker，故先绑定再借。
+    let solver = always_unsat();
     let mut checker = TerminationChecker::new()
-        .with_solver_owned(always_unsat())
+        .with_solver(Some(solver.as_ref()))
         .set_refined_vars(vars);
     checker.check_module(&module, &env)
 }
@@ -234,18 +241,17 @@ fn i_plus_one() -> ConstExpr {
 
 /// 构造注入了测度表、形参假设与（可选）求解器的终止检查器。
 #[cfg(not(target_arch = "wasm32"))]
-fn checker_with_measures(
+fn checker_with_measures<'a>(
     measures: &[(&str, ConstExpr)],
     param_assumptions: &[(&str, Vec<ConstExpr>)],
-    solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
-) -> TerminationChecker {
-    let mut checker = TerminationChecker::new()
+    solver: Option<&'a dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>,
+) -> TerminationChecker<'a> {
+    // D58：求解器是共享实例的借用（生命周期参数化），不再注入所有权——
+    // 注入所有权要求每个消费点各自新建实例，正是本任务要消除的形态。
+    TerminationChecker::new()
         .set_measures(owned_table(measures))
-        .set_param_assumptions(owned_table(param_assumptions));
-    if let Some(solver) = solver {
-        checker = checker.with_solver_owned(solver);
-    }
-    checker
+        .set_param_assumptions(owned_table(param_assumptions))
+        .with_solver(solver)
 }
 
 /// 解析源码 → 断言解析无错 → 返回模块；词法与语法失败都带上下文 panic。
@@ -301,6 +307,7 @@ fn test_while_constant_condition_fails() {
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     });
     let while_expr = Box::new(Expr::While {
         condition: Box::new(Expr::Lit(Literal::Bool(true), dummy_span())),
@@ -340,6 +347,7 @@ fn test_bare_while_without_refinement_generates_no_obligation() {
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     });
     let while_expr = Box::new(Expr::While {
         condition: Box::new(Expr::Lit(Literal::Bool(true), dummy_span())),
@@ -367,6 +375,7 @@ fn test_while_no_assignment_fails() {
     let body_stmt = Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Var("i".to_string(), dummy_span()))),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_while(make_lt_condition("i", "n"), vec![body_stmt]);
 
@@ -421,6 +430,7 @@ fn test_for_loop_trivially_terminates() {
     let body_stmt = Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Var("x".to_string(), dummy_span()))),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let for_expr = make_for(
         "x",
@@ -446,6 +456,7 @@ fn test_nested_while_both_terminating() {
     let inner_stmt = Stmt {
         kind: StmtKind::Expr(inner_while),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let body_stmts = vec![make_increment("i", 1), inner_stmt];
     let outer_while = make_while(make_lt_condition("i", "n"), body_stmts);
@@ -477,6 +488,7 @@ fn test_nested_while_inner_fails() {
     let inner_stmt = Stmt {
         kind: StmtKind::Expr(inner_while),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let outer_while = make_while(
         make_lt_condition("i", "n"),
@@ -534,7 +546,7 @@ fn test_strategy1_proves_dual_variable_loop() {
 /// `while i > 0 { i = i + 1 }`：候选按 `Gt` 取 Decreasing（测度 `i - 0`），
 /// 但 `δi = +1` ⇒ `Δm = δv - δbound = +1 - 0 = +1 ≥ 0` ⇒ 合成侧直接否掉，
 /// 不交给求解器。即便注入「恒 Unsat」的桩（无条件认可任何候选）也必须 Unproven——
-/// 这是 tests/yaoxiang/06-compile-errors/termination_unproven_err.yx 的单元级对照。
+/// 这是 tests/yaoxiang/06-compile-errors/termination/termination_unproven_err.yx 的单元级对照。
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test_strategy1_rejects_increment_toward_lower_bound() {
@@ -575,6 +587,7 @@ fn test_strategy1_rejects_bound_moving_away_under_guard() {
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_while(
         make_lt_condition("i", "j"),
@@ -615,6 +628,7 @@ fn test_strategy1_needs_unconditional_movement_of_measure_var() {
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_while(make_lt_condition("i", "j"), vec![guarded_step]);
 
@@ -651,6 +665,7 @@ fn test_strategy1_accepts_guarded_bound_moving_in_favourable_direction() {
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_while(
         make_lt_condition("i", "j"),
@@ -690,6 +705,7 @@ fn test_shapes_beyond_strategies_1_3_4_stay_unproven_placeholder() {
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_while(make_lt_condition("i", "n"), vec![unknown_step_increment]);
 
@@ -724,6 +740,7 @@ fn make_flag_clear() -> Stmt {
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -749,6 +766,7 @@ fn make_if_i_threshold(
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -798,6 +816,7 @@ fn test_strategy1_flag_loop_rejected_when_flag_is_set_true_again() {
             span: dummy_span(),
         })),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_flag_while(vec![
         make_decrement("i", 1),
@@ -866,6 +885,7 @@ fn test_strategy1_flag_loop_rejected_when_guard_block_rewrites_measure_var() {
             span: dummy_span(),
         }))),
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_flag_while(vec![
         make_decrement("i", 1),
@@ -902,6 +922,7 @@ fn test_strategy1_flag_loop_rejected_when_counter_has_unknown_rebinding() {
             span: dummy_span(),
         },
         span: dummy_span(),
+        plan_id: PlanId::UNPLANNED,
     };
     let while_expr = make_flag_while(vec![
         unknown_rebinding,
@@ -1102,7 +1123,7 @@ fn test_measured_function_without_self_call_generates_no_obligation() {
 fn measure_verdicts_of(
     source: &str,
     measures: &[(&str, ConstExpr)],
-    solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
+    solver: Option<&dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>,
 ) -> Vec<MeasureVerdict> {
     measure_verdicts_with_assumptions_of(source, measures, &[], solver)
 }
@@ -1111,12 +1132,12 @@ fn measure_verdicts_of(
 ///
 /// 「递减判定」与「良基性判定」只差最后读哪张结果表，装配过程完全一致。
 #[cfg(not(target_arch = "wasm32"))]
-fn run_measure_checker(
+fn run_measure_checker<'a>(
     source: &str,
     measures: &[(&str, ConstExpr)],
     param_assumptions: &[(&str, Vec<ConstExpr>)],
-    solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
-) -> TerminationChecker {
+    solver: Option<&'a dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>,
+) -> TerminationChecker<'a> {
     use crate::frontend::core::typecheck::environment::TypeEnvironment;
 
     let module = checked_module(source);
@@ -1136,7 +1157,7 @@ fn measure_verdicts_with_assumptions_of(
     source: &str,
     measures: &[(&str, ConstExpr)],
     param_assumptions: &[(&str, Vec<ConstExpr>)],
-    solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
+    solver: Option<&dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>,
 ) -> Vec<MeasureVerdict> {
     run_measure_checker(source, measures, param_assumptions, solver)
         .measure_verdicts()
@@ -1198,9 +1219,11 @@ fn test_measure_obligation_proved_when_solver_reports_unsat() {
                   if b == 0 { return a } \
                   return gcd(b, a % b) }";
     let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+    // 桩求解器先绑定：检查器只**借用**求解器（D58 生命周期参数化）
+    let solver = always_unsat();
 
     // Act
-    let verdicts = measure_verdicts_of(source, &measures, Some(always_unsat()));
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver.as_ref()));
 
     // Assert
     assert_eq!(
@@ -1221,9 +1244,11 @@ fn test_measure_obligation_disproved_when_solver_reports_sat() {
                   if b == 0 { return a } \
                   return gcd(b, a % b) }";
     let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+    // 桩求解器先绑定：检查器只**借用**求解器（D58 生命周期参数化）
+    let solver = always_sat();
 
     // Act
-    let verdicts = measure_verdicts_of(source, &measures, Some(always_sat()));
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver.as_ref()));
 
     // Assert
     assert!(
@@ -1276,7 +1301,7 @@ fn test_real_solver_proves_genuinely_decreasing_measure() {
     let solver = default_solver().expect("本用例需要 Z3（default_solver）");
 
     // Act
-    let verdicts = measure_verdicts_of(source, &measures, Some(solver));
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver.as_ref()));
 
     // Assert
     assert_eq!(
@@ -1304,7 +1329,7 @@ fn test_real_solver_rejects_increasing_measure() {
     let solver = default_solver().expect("本用例需要 Z3（default_solver）");
 
     // Act
-    let verdicts = measure_verdicts_of(source, &measures, Some(solver));
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver.as_ref()));
 
     // Assert
     assert!(
@@ -1341,7 +1366,7 @@ fn test_gcd_measure_decrease_disproved_without_lower_bound() {
     let solver = default_solver().expect("本用例需要 Z3（default_solver）");
 
     // Act
-    let verdicts = measure_verdicts_of(source, &measures, Some(solver));
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver.as_ref()));
 
     // Assert
     assert!(
@@ -1364,7 +1389,7 @@ fn well_founded_verdict_of(
     source: &str,
     measures: &[(&str, ConstExpr)],
     param_assumptions: &[(&str, Vec<ConstExpr>)],
-    solver: Option<Box<dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>>,
+    solver: Option<&dyn crate::frontend::core::typecheck::proof::smt::backend::Solver>,
 ) -> Vec<(String, MeasureVerdict)> {
     let checker = run_measure_checker(source, measures, param_assumptions, solver);
     let mut out: Vec<(String, MeasureVerdict)> = checker
@@ -1407,7 +1432,7 @@ fn test_real_solver_well_founded_from_param_refinement() {
     let solver = default_solver().expect("本用例需要 Z3（default_solver）");
 
     // Act
-    let verdicts = well_founded_verdict_of(source, &measures, &assumptions, Some(solver));
+    let verdicts = well_founded_verdict_of(source, &measures, &assumptions, Some(solver.as_ref()));
 
     // Assert
     assert_eq!(
@@ -1434,7 +1459,7 @@ fn test_real_solver_well_founded_needs_param_refinement() {
     let solver = default_solver().expect("本用例需要 Z3（default_solver）");
 
     // Act —— 无前置条件
-    let verdicts = well_founded_verdict_of(source, &measures, &[], Some(solver));
+    let verdicts = well_founded_verdict_of(source, &measures, &[], Some(solver.as_ref()));
 
     // Assert
     assert_eq!(
@@ -1511,7 +1536,7 @@ fn test_gcd_measure_decrease_proved_with_guard_and_precondition() {
         source,
         &measures,
         &[("gcd", nonnegative_b())],
-        Some(solver),
+        Some(solver.as_ref()),
     );
 
     // Assert
@@ -1544,7 +1569,7 @@ fn test_gcd_measure_decrease_needs_guard() {
         source,
         &measures,
         &[("gcd", nonnegative_b())],
-        Some(solver),
+        Some(solver.as_ref()),
     );
 
     // Assert
@@ -1591,9 +1616,11 @@ fn test_measure_obligation_not_proved_when_solver_reports_unknown() {
                   if b == 0 { return a } \
                   return gcd(b, a % b) }";
     let measures = [("gcd", ConstExpr::NamedVar("b".to_string()))];
+    // 桩求解器先绑定：检查器只**借用**求解器（D58 生命周期参数化）
+    let solver = always_unknown();
 
     // Act
-    let verdicts = measure_verdicts_of(source, &measures, Some(always_unknown()));
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver.as_ref()));
 
     // Assert
     assert_eq!(
@@ -1617,10 +1644,11 @@ fn test_measure_disproof_emits_e4022_when_well_founded() {
                   f: (n: Int, b: NonNegative(b)) -> Terminates(b) = { \
                   if b == 0 { return n } \
                   return f(n, b + 1) }";
+    let solver = default_solver().expect("本用例需要 Z3");
     let mut checker = checker_with_measures(
         &[("f", named_var("b"))],
         &[("f", nonnegative_b())],
-        Some(default_solver().expect("本用例需要 Z3")),
+        Some(solver.as_ref()),
     );
     let module = checked_module(source);
 
@@ -1654,11 +1682,8 @@ fn test_measure_disproof_silent_without_well_foundedness() {
     let source = "f: (n: Int, b: Int) -> Terminates(b) = { \
                   if b == 0 { return n } \
                   return f(n, b + 1) }";
-    let mut checker = checker_with_measures(
-        &[("f", named_var("b"))],
-        &[],
-        Some(default_solver().expect("本用例需要 Z3")),
-    );
+    let solver = default_solver().expect("本用例需要 Z3");
+    let mut checker = checker_with_measures(&[("f", named_var("b"))], &[], Some(solver.as_ref()));
     let module = checked_module(source);
 
     // Act
@@ -1745,7 +1770,11 @@ fn test_real_solver_proves_loop_measure_decrease() {
     let solver = default_solver().expect("本用例需要 Z3（default_solver）");
 
     // Act
-    let verdicts = measure_verdicts_of(source, &[("acc", measure_n_minus_i())], Some(solver));
+    let verdicts = measure_verdicts_of(
+        source,
+        &[("acc", measure_n_minus_i())],
+        Some(solver.as_ref()),
+    );
 
     // Assert
     assert_eq!(
@@ -1774,7 +1803,7 @@ fn test_real_solver_rejects_increasing_loop_measure() {
     let solver = default_solver().expect("本用例需要 Z3（default_solver）");
 
     // Act
-    let verdicts = measure_verdicts_of(source, &measures, Some(solver));
+    let verdicts = measure_verdicts_of(source, &measures, Some(solver.as_ref()));
 
     // Assert
     assert!(
@@ -1859,8 +1888,12 @@ fn test_real_solver_loop_measure_well_founded_from_loop_guard() {
     let solver = default_solver().expect("本用例需要 Z3（default_solver）");
 
     // Act —— 刻意不给形参前置条件
-    let verdicts =
-        well_founded_verdict_of(source, &[("acc", measure_n_minus_i())], &[], Some(solver));
+    let verdicts = well_founded_verdict_of(
+        source,
+        &[("acc", measure_n_minus_i())],
+        &[],
+        Some(solver.as_ref()),
+    );
 
     // Assert
     let verdict = verdicts

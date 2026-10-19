@@ -12,4 +12,4 @@ pub mod image;
 mod tests;
 
 pub use executor::Interpreter;
-pub use frames::Frame;
+pub use frames::{Frame, PendingCall, ReturnTarget};

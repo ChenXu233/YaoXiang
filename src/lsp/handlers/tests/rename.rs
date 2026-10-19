@@ -74,3 +74,22 @@ fn test_rename_not_on_ident_returns_none() {
     // Assert
     assert!(result.is_none(), "非标识符位置应返回 None");
 }
+
+#[test]
+fn test_rename_mid_identifier_cursor_rewrites_all() {
+    // Arrange：三字符名 abc——光标落在标识符**中部**（b 上）
+    // （2026-10-16 用户裁决：查库键 = 标识符自身起点）
+    let (session, world) = open_and_check("abc = 1\ny = abc + abc\n");
+
+    // Act
+    let params = make_rename_params(SAMPLE_URI, 1, 5, "renamed");
+    let result = handle_rename(&session, &world, params);
+
+    // Assert：与起点光标同效——定义 + 两个使用点共 3 处编辑
+    let edit = result.expect("标识符中部光标必须同效重命名（起点查库键裁决）");
+    let changes = edit.changes.expect("应包含 changes 表");
+    let edits = changes
+        .get(&Uri::from_str(SAMPLE_URI).unwrap())
+        .expect("编辑应落在样例文档上");
+    assert_eq!(edits.len(), 3, "定义加两个使用点共 3 处编辑");
+}

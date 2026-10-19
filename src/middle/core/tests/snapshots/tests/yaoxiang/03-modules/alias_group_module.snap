@@ -11,4 +11,5 @@ module
     Eq %6 <- %4, %5
     Load %7 <- string("sq(16.0) should be 4.0 via inline item alias")
     Call %8 <- string("std.assert.assert") [%6, %7] (def=d2)
+    Drop %3
     Store @0 <- %8

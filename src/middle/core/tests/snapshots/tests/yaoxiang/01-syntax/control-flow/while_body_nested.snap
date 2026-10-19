@@ -61,7 +61,7 @@ module
     Load %22 <- %19
     Load %24 <- int(5)
     Lt %21 <- %22, %24
-    JmpIfNot %21 -> instr(74)
+    JmpIfNot %21 -> instr(75)
     Load %25 <- %19
     Load %26 <- int(1)
     Add %19 <- %25, %26
@@ -70,15 +70,16 @@ module
     Mod %29 <- %27, %28
     Load %30 <- int(0)
     Eq %31 <- %29, %30
-    JmpIfNot %31 -> instr(72)
+    JmpIfNot %31 -> instr(73)
     Load %32 <- %19
     Load %33 <- int(10)
     Mul %34 <- %32, %33
     Load %35 <- %18
     Load %36 <- %34
     Add %18 <- %35, %36
+    Drop %34
     Move %37 <- %38
-    Jmp -> instr(72)
+    Jmp -> instr(73)
     Load %23 <- void
     Jmp -> instr(51)
     Load %35 <- %18
@@ -86,6 +87,10 @@ module
     Eq %33 <- %35, %36
     Load %39 <- string("while 体 if 分支内带注解绑定（20 + 40）")
     Call %32 <- string("std.assert.assert") [%33, %39] (def=d3)
+    Drop %18
+    Drop %1
+    Drop %19
+    Drop %0
     Ret %32
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

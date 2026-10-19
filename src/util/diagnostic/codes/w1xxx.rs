@@ -23,4 +23,21 @@ define_codes!(W1XXX, {
     ("W1081", Warning, false, termination_obligations_unjudged(count: usize) => .param("count", count.to_string())),
     // W1080 编译期无法证明约束，已降级为运行时检查
     ("W1080", Warning, false, constraint_demoted() => ),
+    // W1082 所有权分析降级：无函数体检查器 ⇒ 空类型账本 + 空调用点所有权表，
+    // 所有权判定退化为「什么都不冲突」（WBS 4.4.3 / 02 §S5 (d)；RFC-039 D59
+    // C 类「静默不动作」——降级必须留痕）。生产路径上 init_body_checker 先于
+    // 所有权阶段执行、该分支不可达，故本码是**阶段契约防线**：一旦发射即说明
+    // 阶段顺序被破坏。不并入 W1081（后者专指求解器缺失）与 W1080（约束降级）。
+    ("W1082", Warning, false, ownership_analysis_degraded() => ),
+    // W1090 义务已产出但无消费者（02-stage-contract §2 义务账本 / RFC-039 D5，
+    // WBS 4.3.1 阶段表尾部结算的未排空义务；WBS 4.3.2 同码升 E，2026-10-13 用户裁决甲）。
+    // **码族与发射级别解耦**：码号留在 W 族（不新增 E 码——同一事实两个码即平行表示），
+    // 发射级别由构造点的显式 `.severity(Severity::Error)` 决定
+    // （driver/obligations.rs 的 `to_diagnostic`）；本表的 `Warning` 类目
+    // 只表示编号归属，不决定级别（RFC-013「发射通道」节）。
+    // span_exempt=true 的理由（宏文档 codes/mod.rs:8-18 要求在此写明）：
+    // 结算发生在 Driver::run 阶段表尾部，诊断粒度是「编译单元（文件/模块）
+    // × 义务字段」——义务是阶段之间的契约，不存在用户可指的那一行源码，
+    // 故不塞 dummy span；文件身份由 file 参数进消息文本。
+    ("W1090", Warning, true, obligation_not_drained(field: &str, file: &str, detail: &str) => .param("field", field) .param("file", file) .param("detail", detail)),
 });

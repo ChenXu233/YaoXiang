@@ -21,3 +21,13 @@ overrides:
   # 5.0.12，是入库 lockfile 把解析钉在 5.0.9；此处显式拉平，既修当前解析，
   # 也防止后续 install 再回退到受害版本。
   brace-expansion@<5.0.12: ^5.0.12
+  # GHSA-r3ph-w7gj-g6xm / GHSA-r4xh-jqrq-34v2：js-yaml 5.2.3 的 maxTotalMergeKeys 不计数空
+  # 映射（可构造出二次方 CPU），smol-toml 1.7.2 的 parseKey 每行重扫到文末（同为二次方）。
+  # 消费链 markdownlint-cli@0.49.1 -> js-yaml / smol-toml；该包已是当前最新版，且用
+  # ~5.2.1 / ~1.7.0 把解析锁在补丁位——上游不存在能顶到修复版的版本，故按大版本内拉平。
+  js-yaml@>=5 <5.4.1: 5.4.1
+  smol-toml@<1.9.0: 1.9.0
+  # GHSA-238p-pmpm-9mq7：katex <0.18.2 会把继承自 Object.prototype 的 trust 当成显式授权
+  # （绕过默认 false），前提是别处已污染原型。mermaid 12.2.0 已改 ^0.18.0，剩
+  # micromark-extension-math@3.1.0（当前最新版）仍锁 ^0.16.0，故在此拉平到 0.18.2。
+  katex@<0.18.2: 0.18.2

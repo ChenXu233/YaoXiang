@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 use super::symbol::{DefKind, SymbolTable};
 use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
+use crate::frontend::core::typecheck::environment::MethodOverloadCandidates;
 use crate::frontend::core::types::mono::MonoType;
 
 /// 模块注册表
@@ -134,6 +135,35 @@ impl ModuleRegistry {
             bindings.extend(module.method_bindings.clone());
         }
         bindings
+    }
+
+    /// 方法**重载候选**表的确定性合并（RFC-029f 改进 4 / WBS 4.9.7 / issue #464）：
+    /// 对 `scoped` 给出的模块键**升序**逐模块追加候选组——模块间按键序、模块内按
+    /// 定义序，任一键位下的候选顺序因此与 HashMap 迭代序无关。
+    ///
+    /// 为什么带作用域参数而不是无条件"全注册表并集"：候选按**裸类型名**键控
+    /// （`{Type}.{method}`）。两个单元各自定义同名类型时键相同，把调用单元
+    /// **命名不到**的单元的候选并进来会让同一调用点匹配到两个签名相同的候选 ⇒
+    /// 匹配数虚高、按「歧义即报错」规则报 E1107 误报（实测形态见
+    /// `driver::helpers::visible_method_overloads` 的注释）。作用域由调用方按
+    /// import face 单点给出，本函数不做任何名字解析。
+    pub fn merge_method_overloads(
+        &self,
+        scoped: &[String],
+    ) -> HashMap<String, MethodOverloadCandidates> {
+        let mut modules: Vec<&String> = scoped.iter().collect();
+        modules.sort();
+        modules.dedup();
+        let mut merged: HashMap<String, MethodOverloadCandidates> = HashMap::new();
+        for path in modules {
+            let Some(module) = self.modules.get(path) else {
+                continue; // 不在注册表里的模块键不贡献候选（宁漏勿误）
+            };
+            for (key, group) in &module.method_overloads {
+                merged.entry(key.clone()).or_default().merge_from(group);
+            }
+        }
+        merged
     }
 
     /// 解析模块路径，查找指定的导出项
@@ -296,6 +326,7 @@ impl ModuleRegistry {
                 type_params: None,
                 param_names: None,
                 type_payload: None,
+                definition_span: None, // std 虚拟模块无源码定义位置（4.6.1）
             });
 
             // 注册模块信息
@@ -352,6 +383,7 @@ impl ModuleRegistry {
                         type_params: None,
                         param_names: None,
                         type_payload: None,
+                        definition_span: None, // std 虚拟模块无源码定义位置（4.6.1）
                     });
                     self.register(info);
                 }
@@ -418,7 +450,75 @@ mod tests {
             type_params: None,
             param_names: None,
             type_payload: None,
+            definition_span: None,
         }
+    }
+
+    /// WBS 4.9.7 / #464：跨单元候选合并的**确定性**与**作用域**（单一合并入口的钉板）。
+    ///
+    /// 判据：① 模块间按键升序（与调用方给出的顺序无关）；② 作用域外的模块不贡献候选；
+    /// ③ 候选三元组（候选/混编名/形参名）同序对齐——配对不得错位。
+    #[test]
+    fn merge_method_overloads_is_deterministic_and_scoped() {
+        // Arrange：a / b 两个模块各自登记同名键 "Temp.to" 的候选组（a 的候选为 Int，b 为 Bool）
+        let mut registry = ModuleRegistry::new();
+        let mut a = ModuleInfo::new("a".to_string(), ModuleSource::User);
+        a.method_overloads.insert(
+            "Temp.to".to_string(),
+            MethodOverloadCandidates {
+                candidates: vec![MonoType::Int(64)],
+                ir_names: vec!["Temp.to".to_string()],
+                param_names: vec![vec!["self".to_string()]],
+            },
+        );
+        let mut b = ModuleInfo::new("b".to_string(), ModuleSource::User);
+        b.method_overloads.insert(
+            "Temp.to".to_string(),
+            MethodOverloadCandidates {
+                candidates: vec![MonoType::Bool],
+                ir_names: vec!["Temp.to".to_string()],
+                param_names: vec![vec!["self".to_string()]],
+            },
+        );
+        registry.register(a);
+        registry.register(b);
+
+        // Act：同一作用域集合按两种给出顺序各并一次；再各取「只含 a」「只含 b」「空」三种作用域
+        let by_ba = registry.merge_method_overloads(&["b".to_string(), "a".to_string()]);
+        let by_ab = registry.merge_method_overloads(&["a".to_string(), "b".to_string()]);
+        let only_a = registry.merge_method_overloads(&["a".to_string()]);
+        let empty = registry.merge_method_overloads(&[]);
+
+        // Assert：合并序 = 模块键升序（a 先 b 后），与调用方顺序无关
+        let merged = by_ba
+            .get("Temp.to")
+            .expect("a/b 都在作用域内 ⇒ 键位必须存在");
+        assert_eq!(
+            merged.candidates,
+            vec![MonoType::Int(64), MonoType::Bool],
+            "候选必须按模块键升序合并（a 先、b 后），实际: {:?}",
+            merged.candidates
+        );
+        assert_eq!(
+            by_ab.get("Temp.to").map(|group| group.candidates.clone()),
+            Some(merged.candidates.clone()),
+            "合并结果不得依赖调用方给出的模块顺序"
+        );
+        // Assert：三元组同序对齐（配对错位 ⇒ 调用点名与定义名不再对应）
+        assert_eq!(
+            (merged.ir_names.len(), merged.param_names.len()),
+            (merged.candidates.len(), merged.candidates.len()),
+            "混编名/形参名必须与候选逐个对齐，实际: names={:?} params={:?}",
+            merged.ir_names,
+            merged.param_names
+        );
+        // Assert：作用域是唯一入口——作用域外的模块不贡献候选
+        assert_eq!(
+            only_a.get("Temp.to").map(|group| group.candidates.clone()),
+            Some(vec![MonoType::Int(64)]),
+            "作用域只含 a 时不得并入 b 的候选"
+        );
+        assert!(empty.is_empty(), "空作用域必须得到空表（无候选来源）");
     }
 
     #[test]

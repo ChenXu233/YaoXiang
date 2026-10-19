@@ -193,13 +193,107 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | # | 对象 | 处置 |
 | --- | --- | --- |
 | F1 | `src/frontend/core/typecheck/checker/semantic_tokens.rs`（1547 行） | **不是死代码**，是 `checker.rs:5618` 通过 `include!` 拼入的——**全仓库唯一的一处 `include!`**。该文件**没有被声明为任何模块**（`grep 'mod semantic_tokens'` 全仓零命中），第一行直接是 `impl TypeChecker {`，无自己的 `use` 头，`checker/` 目录下只有它一个文件。后果：没有模块身份、可见性隔离失效、rust-analyzer 跳转与符号搜索失效、工具链把它算作 `checker.rs` 的一部分。**`checker` 模块真实体量是 5618+1547 ≈ 7165 行**。**改法：改为真 `mod`**（施工步骤归 [09](09-execution-wbs.md) §P5 5.1），不是删除 |
-| F2 | 27 个文件的 `#[cfg(target_arch = "wasm32")]` 分支 | **不是死代码。** wasm 目标由**独立 shim crate** 承载：`wasm/Cargo.toml:10-11` `crate-type = ["cdylib"]`、`:18` `wasm-bindgen = "0.2"`、`:17` 依赖主 crate；根 `Cargo.toml:3` 的 `exclude = ["wasm", ...]` 正说明它是独立 crate。只看根 `Cargo.toml:31` 的 `crate-type = ["rlib"]` 会误判这些分支为防御性死代码——**该推断不成立**。CI 有 4 处构建（`_build-wasm.yml:75`，调用方 `dist-release.yml:271` / `docs-deploy.yml:25` / `nightly.yml:112`）。**这 27 个文件的分支是承重的**，它们决定 `wasm/src/lib.rs`（73 行）在 wasm 目标下能调用主 crate 的哪些 API（`lib.rs:139/153/170` 把 `run_file` / `run_project` / `build_bytecode` 整体门控掉）。**真正的清理目标**是其中不可达的那部分——`wasm/src/lib.rs` 只调 `Compiler::new` / `compile_with_source` / `std::io::wasm_output` / `CodegenContext` / `Interpreter`，`orchestrator.rs` 的 12 个 wasm 属性中哪些在 playground 场景不可达，需逐一判定（决议 D35：删不可达者、保留可达者，归 P10） |
+| F2 | wasm 属性（同一行内的 `#[cfg(... wasm32 ...)]`，正反都计）：现树 `src/` **29** 个文件出现 `wasm32` 字面量、**22** 个带实际属性、**7** 个仅提及；`orchestrator.rs` **10** 条（4 正 + 6 反） | **不是死代码。** wasm 目标由**独立 shim crate** 承载：`wasm/Cargo.toml:10-11` `crate-type = ["cdylib"]`、`:18` `wasm-bindgen = "0.2"`、`:17` 依赖主 crate；根 `Cargo.toml:3` 的 `exclude = ["wasm", ...]` 正说明它是独立 crate。只看根 `Cargo.toml:31` 的 `crate-type = ["rlib"]` 会误判这些分支为防御性死代码——**该推断不成立**。CI 的 wasm 构建在 `.github/workflows/_build-wasm.yml:30`（`targets: wasm32-unknown-unknown`）+ `:77`（`cd wasm && wasm-pack build --target web`），调用方 `dist-release.yml:271` / `docs-deploy.yml:25` / `nightly.yml:112`。**这些分支是承重的**：它们决定 `wasm/src/lib.rs`（现 **152** 行）在 wasm 目标下能调用主 crate 的哪些 API（`src/lib.rs:151` / `:170` / `:187` 把 `run_file` / `run_project` / `build_bytecode` 整体门控掉）。**清理范围已判定**：4 条 wasm 臂在 playground 场景运行期不可达、但编译期承重（调用点未门控）；6 条 `not(wasm32)` 臂在 native 三条阶段表承重 ⇒ **没有可直接删除的低风险项**——逐条判定与证据见下节「F2 判定」（决议 D35：删不可达者、保留可达者，归 P10） |
 | F3 | `docs/src/rfc/TRACKING.md` 的列结构 | 只有「状态」列（文档状态），**没有「实现状态」列**——它**无法表达**"RFC 标记为完成但代码没有"这个错误。全仓只有 5/52 份 RFC 有 `impl_status` 字段（`027` in-progress、`017`/`014`/`014b` complete、`review/027a` partial）。**26 份 accepted RFC 完全不记录实现状态**，包括 009、009a、013、018、038 |
-| F4 | `src/frontend/core/typecheck/layers/README.md:1-16` | 声明层序 equivalence → ownership → termination → predicate，**与实际执行顺序正好相反**（实际 predicate → termination → ownership），且**无任何 short-circuit**。README 描述的是一套未建成（或已部分放弃）的意图架构 |
+| F4 | `src/frontend/core/typecheck/layers/README.md` | **已处置（4.4.1）**：README 现描述的是 `checker.rs::check_module_impl` 的实际调用序（精化走查 `predicate` → `termination` → `ownership` → 类型约束求解），括号内行号按现树取、定位以函数名/驱动点为锚；不再声明「下层失败上层不跑」（实际无 short-circuit）；`equivalence` 按其真实身份描述为「共享类型比较工具 + 仅测试使用的证明入口」。本行只作已处置登记，不再指向旧行范围 |
 | F5 | `docs/src/rfc/index.md` | `:79` 把 RFC-026a 放在"已接受RFC"表格里但状态列写"审核中RFC"；`:48-49` 的"审核中RFC"小节只列 032 和 027a，漏 026a。与 `TRACKING.md` 的 3 条 review 不一致 |
 | F6 | `tools/cargo-dist/`（`dist.exe` 21,108,736 字节）与 `benches/shootout/out/`（8 个二进制） | **均未被 git 追踪**（`git ls-files` 返回空），被 `.gitignore` 排除。**不是问题**，仅记录以免后续审计误判为"提交了二进制" |
 | F7 | `tools/code-tables/src/lib.rs:66-78` | `extract_code_from_entry_line` 是**行首前缀匹配器**（`trim_start().strip_prefix("(\"")` 取到下一个引号），依赖 `("E1001", ...)` 元组语法，**不是 parser**。它的架构（`parse` + `validate` + build.rs 门禁 + `--fix` 治愈）值得复用到 opcode 表，但**提取器需按 opcode 形态重写（约 30 行）**。归属 06-cleanup-inventory.md 的后续工作或独立 RFC |
 | F8 | `src/backends/common/opcode.rs` 的门禁缺口 | 83 个常量、0 重复、范围 `0x00..0xE2`（span 227，**144 个空洞**）。同一份 opcode 事实被表达 **5 处**：`BytecodeInstr::opcode()`(`bytecode.rs:558-646`)/ `size()`(`649-803`)/ `opcode::opcode_name()`(`opcode.rs:120-206`)/ 解码 match(`bytecode.rs:978-2302`)/ 48 个 `translate_*`(`translator.rs:676-1577`)。**编译器只强制其中 2 处**（`backends/.../executor/debug.rs:194` 分派表 + 各 `ops/*.rs` 族函数的穷尽 match），`opcode()` / `size()` / 解码臂 / 编码器漏一处**只有跑 `.42` 产物才炸**。`size()` 表(649-803)的注释自述与实际编码不符（`bytecode.rs:2181-2182`），且**无系统性对拍测试**（现有 size 测试只覆盖 Nop/Mov/Borrow/Release 4 个）。运算符语义在此也走第三套平行枚举（`BinaryOp`/`UnaryOp`/`CompareOp`，`bytecode.rs:70/97/106`，`Rem`/`Xor`/`Sar` 又一套命名），随 opcode 生成期门禁一并收口。词表目标位置为 `middle/bytecode/opcode.rs`（随字节码域合并迁移，消除 L3→L4 反向，见 01） |
+
+### F2 判定：`orchestrator.rs` wasm 属性可达性（2026-10-18 判定，不含清理）
+
+**判定面**＝wasm 生产构建（`wasm-pack` 打的 shim crate，见 F2 行）；**判定 revision** `b5e68b3c9`。
+本节只登记判定结论，不产生任何清理承诺（清理归 P10 / D35）。
+
+#### 一、计数口径（现树重取）
+
+```console
+$ grep -c '#\[cfg(target_arch = "wasm32")\]' src/frontend/module/orchestrator.rs
+4
+$ grep -c '#\[cfg(not(target_arch = "wasm32"))\]' src/frontend/module/orchestrator.rs
+6
+```
+
+- 现树 `orchestrator.rs` 共 **10 条** wasm 属性 ＝ 4 正（`target_arch = "wasm32"`）+ 6 反（`not(...)`）。
+- 口径 ＝ **同一行内的 `#[cfg(...)]` 属性文本**，正反都计（这也正是 02 的「12 个」所用口径）；运行期宏 `cfg!(...)` 不计——全仓 `git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs'` 零命中。
+- 「12 个」不是误差，是**旧 revision 的事实**：`544695ea9`（RFC-039 设计文档首次落库）当时 5 正 + 7 反 ＝ 12：
+
+```console
+$ git show 544695ea9:src/frontend/module/orchestrator.rs | grep -c '#\[cfg(target_arch = "wasm32")\]'
+5
+$ git show 544695ea9:src/frontend/module/orchestrator.rs | grep -c '#\[cfg(not(target_arch = "wasm32"))\]'
+7
+```
+
+- 差异来源是**一对属性整对迁出**：`6ec330d22`（WBS 4.2.2，`check_project` 瘦身为 `Program` 构造器，该提交对 `orchestrator.rs` 净删 252 行）把 `role_context` 连同它的 `not(wasm32)` 实现与 `wasm32` 桩**迁到** `src/driver/helpers.rs:360/394`——`orchestrator.rs` 因此从 12 降到 10，机制本身没消失。
+- 逐 revision 复核（本次实际执行；下为摘录，`6ec330d22` 是新旧分界）：
+
+```console
+$ for rev in $(git log --format=%h -20 -- src/frontend/module/orchestrator.rs); do
+    pos=$(git show $rev:src/frontend/module/orchestrator.rs | grep -c '#\[cfg(target_arch = "wasm32")\]')
+    neg=$(git show $rev:src/frontend/module/orchestrator.rs | grep -c '#\[cfg(not(target_arch = "wasm32"))\]')
+    echo "$rev pos=$pos neg=$neg total=$((pos+neg))"
+  done
+… b8b3cc3f6 pos=4 neg=6 total=10   # 现 HEAD 侧
+… 6ec330d22 pos=4 neg=6 total=10
+… 5ba52eafb pos=5 neg=7 total=12   # 更早
+```
+
+#### 二、三问口径（不拆开就会把承重臂误判为死代码）
+
+1. **编译期存在性**——该 target 下这个臂是否参与编译；
+2. **运行期可达性**——该 target 下是否存在从 playground 入口出发的调用链；
+3. **删除代价**——删掉它是否破坏该 target 的编译（调用点是否同样带门控）。
+
+#### 三、判定起点（playground 入口与阶段表）
+
+- 入口：`wasm/src/lib.rs`（现 152 行）`run_code:122` / `test_compile:71` → `compile_playground:84` → `Driver::run(Program { kind: WasmPlayground })`；
+  `test_compiler:26` → `Compiler::new()`（`src/frontend/compiler.rs:45`，只构造 `Pipeline`，不触 orchestrator）；`test_smt:36` → `default_solver()`。
+- **`WasmPlayground` 走 `SINGLE_FILE_STAGES`**（`src/driver/program.rs:51-58`；`:135` 处 `SingleFile | WasmPlayground` 同表）：Parsing / Typecheck / DeadCodeAnalysis /
+  ProofExecution / IrGeneration / Monomorphization——**不含** VendorConsistency / Discovery / Registry / RoleClassification / GlobalSlotAlloc / Linking。
+
+#### 四、逐条判定（现树 10 条）
+
+| # | 位置（`orchestrator.rs`） | 门控对象 | wasm 构建中编译 | playground 运行期可达 | 删除代价（调用点是否门控） |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `:271` 正 | `ensure_vendor_consistency`（`:267`）的 wasm 臂（`Ok(None)`） | 是 | **否**：唯一调用点 `src/driver/arms.rs:1195`（VendorConsistency 臂）不在 playground 阶段表 | 高：`arms.rs:1195` 无门控，单独删臂 ⇒ wasm 编译失败 |
+| 2 | `:418` 正 | `discover_with_used`（`:400`）的 wasm 臂（`lock_versions` 置空） | 是 | **否**：调用点 `arms.rs:1221`（Discovery 臂）、`src/driver/helpers.rs:686`（Check 形态引用池 `collect_package_refs`，仅 `arms.rs:521` 的 Check 分支调用） | 高：同上 |
+| 3 | `:655` 正 | `member_context` 的 wasm 桩（`:656-659`） | 是 | **否**：唯一调用点 `:404`（在 #2 的函数体内） | 高：`:404` 无门控 |
+| 4 | `:753` 正 | `dep_import_surface` 的 wasm 桩（`:754-756`） | 是 | **否**：调用点 `:671`（`resolve_in_package_root`）与 `:813`（`resolve_in_vendor_with_lock`），根在 `:468` 的 `resolve_module_path`（`discover_with_used` 的 BFS 内） | 高：同上 |
+| 5 | `:41` 反 | `use crate::package::manifest::PackageManifest;` | 否（不参与 wasm 构建） | 不适用 | native 承重：被 `:678` / `:747` 使用 |
+| 6 | `:276` 反 | `ensure_vendor_consistency` 的 native 臂 | 否 | 不适用 | native 承重：VendorConsistency 在 `program.rs:61/98/113` 三条表内 |
+| 7 | `:413` 反 | `discover_with_used` 的 native 臂（lock 读取） | 否 | 不适用 | native 承重：Discovery 在 `program.rs:62/99/114` |
+| 8 | `:607` 反 | native `member_context`（工作空间解析） | 否 | 不适用 | native 承重：调用点 `:404` |
+| 9 | `:677` 反 | `resolve_in_package_root` 的 manifest 名读取 | 否 | 不适用 | native 承重：`:544/:547` ← `:468` |
+| 10 | `:745` 反 | native `dep_import_surface` | 否 | 不适用 | native 承重：`:671` / `:813` |
+
+#### 五、结论
+
+1. **4 条 wasm 臂在 playground 场景运行期不可达**（#1-#4，证据＝阶段表不含其唯一调用点所在阶段），但它们**编译期承重**。按 D35 字面「删不可达者」直接执行会编译不过——可行形态是「把整条 project-mode 子树（`orchestrator.rs` 的发现/解析函数 + driver 的 VendorConsistency/Discovery 两臂 + `helpers.rs` 的引用池集合）在 wasm32 上门控」，成本与收益归 P10 裁决。
+2. **6 条 `not(wasm32)` 臂在 playground 构建中不存在**（编译期排除），native 侧全部承重（MultiFile / Check / Lsp 三条阶段表）。「playground 不可达 ⇒ 删」对它**不适用**：按该口径删会直接破坏 CLI/LSP。
+3. ⇒ 本目录**没有「可直接删除且低风险」的项**；F2 的清理收益只落在「wasm 产物是否因此变小」上——那一项未核实（见下）。
+
+#### 六、未核实（不得当结论用）
+
+- **wasm 产物规模收益未量测**：未跑 `wasm-pack build` 与体积/符号表工具（`twiggy` / `wasm-objdump`），「门控掉 project-mode 子树能缩小多少产物」无数据；链接期是否已剔除未被引用的 `pub(crate)` 项也未验证。
+- **shim 之外的 wasm32 消费者未穷举**：本轮只核了仓库内 CI（唯一 wasm32 编译在 `_build-wasm.yml:30/77`，经 shim crate）。若第三方把主 crate 直接编到 `wasm32-unknown-unknown` 并调用 project-mode API，可达面会超出本判定。
+- **native 侧「承重」＝ 静态调用链 + 阶段表**，未逐条端到端运行验证（未跑 MultiFile/Check/Lsp 探针逐一触及每条臂）。
+
+#### 七、附：仓库级计数复核（同一 revision）
+
+```console
+$ git grep -l wasm32 b5e68b3c9 -- '*.rs' | wc -l
+30        # 含 wasm/ shim crate
+$ git grep -l wasm32 b5e68b3c9 -- 'src/*.rs' | wc -l
+29
+$ git grep -lE '#\[cfg\([^]]*wasm32' b5e68b3c9 -- 'src/*.rs' | wc -l
+22        # 带实际 cfg 属性
+$ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
+0         # 无运行期 cfg! 口径
+```
+
+`02` 的「wasm 现状」与 F2 行同口径：现树 **29** 个文件出现 `wasm32` 字面量 / **22** 个带实际 `#[cfg(...)]` 属性 / **7** 个仅文档提及；`orchestrator.rs` **16** 处 = **10** 条属性（4 正 + 6 反）+ 6 处注释（仅提及的 7 个：`src/driver/arms.rs`、`src/frontend/core/typecheck/proof/smt/backend.rs`、`src/frontend/core/typecheck/proof/smt/mod.rs`、`src/frontend/core/typecheck/proof/smt/tests/feature_gate.rs`、`src/frontend/module/roles.rs`、`src/tests/mod.rs`、`src/util/wasm_z3_shims.rs`）。
 
 ## G. 门禁与判据发现登记（2026-10-06 起随各阶段施工续登）
 
@@ -213,6 +307,42 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | G4 | 判据 D 误报 4 处 | **合法查找 / 分派表，非弥合**：`package/build/requirements.rs:17-25` 工具安装指引、`package/vendor/mod.rs:134-139` 构建结果显示名、`repl/mod.rs:241-396` REPL 命令别名（8 臂，用户界面别名属正当 UX）、`util/diagnostic/mod.rs:462-468` `parse_runtime_mode`（带注释的历史别名，单一边界点） | P9 转硬时逐处加 `// reason:` 豁免；豁免数量随门禁报告过目 |
 | G5 | `ReleasePlan.drops` span 键失配（P2 2.4.4 判据实测，非 P0 命中） | **真阳性，契约缺陷——D20 预言实证**：ownership 按「最后使用**表达式** span」记键（`ownership.rs:2574 build_release_plan`），`ir_gen.rs:1956` 按「**语句** span」查表，表达式级键永不命中——全语料实测 **168 文件 / 373 键** 未被消费，Drop 静默丢失（逐案证据见 `src/middle/core/tests/release_plan_spans.rs` 文件头） | **P4/D20**（Span 键 → PlanId，行为面约 168 文件，须等 C2 判据与语料差分就位）；判据 `test_release_plan_spans_consumed` 红态常驻（`#[ignore]`），D20 落地移除即转绿 |
 | G6 | IR 元数据三缺陷（P2 2.1.2 判据 `verify_loose` 语料跑绿过程实测，D38 预言兑现） | **真阳性×3，全部随 2.1 修复**（语料差分基线自比零差分证行为等价）：① 方法 IR 的 locals 表截断至参数数（`ir_gen.rs` 原 `take_cur_locals(param_types.len())`）——local_count 低估，运行时靠 `Frame::set_slot` 越界 resize（`frames.rs:103-105`）静默容错；② lambda / curry 中间层 / 函数路径的无注解参数被 `filter_map` 丢弃（三处），params 长度与帧布局错位——对齐 method 路径既有惯例填 `Int(64)` 占位；③ match 结果槽依赖帧隐式 Void 预初始化（末臂守卫失败的容错落点在 CFG 上有无定义路径）——`generate_match_expr_ir` 入口显式预置 Void | 已修复（2.1 同批）。**判定面收窄登记**（verify.rs 文件头为权威）：temp 槽支配性不查（Void 预初始化是帧语义，ir_gen 有意依赖）；类型一致的可信源收窄为参数槽签名 + 常量（ir_gen 从不写 `LocalSlot.ty`，全表占位 `Int(64)`——完整判定面归 P7 值表 04 §262）；`init_locals` 是 #368 调试视角表非分配上限，init 的 Local 越界不查 |
+
+## H. 巨函数清单（发版前审计口径，2026-10-16 起）
+
+> 口径（2026-10-16 `/pre-release-audit` 定）：函数跨度 > 150 行是**初筛阈值**，不是「逐个报告」
+> 的命令——全列会把清单变成行数堆砌，把本次新增信号淹没在存量里。报告条目必须含三个数：
+> **宿主行数 / 本次插入行数 / 插入前行数**。分两类：**A. 既有巨函数被插分支**（>150 行且本次
+> 插入 >50 行）；**B. 本次新增的大函数**（几乎全新且 >100 行）。下表行号取自审计 revision
+> `1935aab53`（`v0.8.4..1935aab53` 范围）。
+
+### A. 既有巨函数被插分支
+
+| 函数 | 位置 | 宿主行数 | 本次插入 | 插入前 |
+| --- | --- | --- | --- | --- |
+| `infer_call_expr` | `src/frontend/core/typecheck/inference/expressions.rs:4045` | 1594 | 358 | 1236 |
+| `generate_call_expr_ir` | `src/middle/core/ir_gen.rs:7694` | 813 | 171 | 642 |
+
+### B. 本次新增的大函数
+
+| 函数 | 位置 | 行数 | 本次新增 |
+| --- | --- | --- | --- |
+| `push_joined`（局部 helper） | `src/frontend/core/types/mono.rs:603` | 180 | 177 |
+| `consumer_stage_skipped` | `src/driver/obligations.rs:650` | 122 | 122 |
+| `push_children` | `src/middle/passes/mono/instance.rs:191` | 159 | 130 |
+| `local_count_of` | `src/backends/interpreter/executor/executor.rs:321` | 130 | 107 |
+
+**不在清单内的既有巨函数**（本次插入 ≤ 4 行，只登记不处置）：`infer_expr`（`expressions.rs:2999`，
+955 行）、`collect_function_signature`（`checker.rs:1738`，669 行）、`check_module_impl`
+（`checker.rs:1153`，441 行）、`generate_local_stmt_ir`（`ir_gen.rs:3265`，368 行）等。
+
+### 处置取向
+
+- **A 类**：随 `infer_call_expr` / `generate_call_expr_ir` 的后续拆分任务一并消解——两者是仓库里
+  最重的宿主，本次命名实参改造把 358 行插进了前者。
+- **B 类**：`push_joined` 是 `Task` 工作列表式类型格式化的**局部** helper（其宿主才是那 180 行
+  新增），与 `mono.rs:123 increment_level_string`（174 行，做层级名改写）**职责不同、不构成重复，
+  不要合并**；`consumer_stage_skipped` 与 `local_count_of` 可独立拆分。
 
 ## 关键决策与理由
 
@@ -228,7 +358,7 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | **产不出值的 opcode / 指令** | **补构造点或删 opcode** | B8（`TailCall`）、B9（`Switch`，opcode 往返测试已以 `WHITELIST=["SWITCH"]` 显式登记）、B10（`UnaryOp::Not` 静默退化）。三选一，不能维持现状；D32/D33/D34 已裁决为删，随 `.42` 升版一并处理 |
 | **数据丢失缺陷** | ~~独立 issue~~ **P7 批 e（D52）** | E 节三条硬编码丢弃——不是死代码 |
 | **无模块身份但有效** | **改造不删除** | F1（`semantic_tokens.rs`）改 `include!` → 真 `mod`（见 `02`） |
-| **需要决策的** | **列为开放问题** | F2 的**不可达 wasm 分支**清理范围、层序修正会暴露新诊断 |
+| **需要决策的** | **列为开放问题** | F2 的 wasm32 清理已登记为 [09](09-execution-wbs.md) §P10 **S7**（wasm32 门控 project-mode 子树，2026-10-18 用户裁决 B；含三条未核实原样保留）；层序修正会暴露新诊断 |
 
 ### 未采纳的方向
 
@@ -272,5 +402,5 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 - [RFC-029a 模块缓存与增量重编译（草案）](../../rfc/draft/029a-module-cache-incremental.md) — C1/C6 的正式载体
 - [RFC-039 编译器功能路由目录设计](../../rfc/accepted/039-compiler-architecture.md) — 上位总纲
 - [重构等价性判据](07-equivalence-oracle.md) — C6 类别的判据要求
-- `src/frontend/core/typecheck/layers/README.md` — F4 层序声明失真
+- `src/frontend/core/typecheck/layers/README.md` — 证明层的实际调用序与 `equivalence` 的真实身份（F4 已处置）
 - `build.rs:19-55` — 本仓库生成期门禁的范例

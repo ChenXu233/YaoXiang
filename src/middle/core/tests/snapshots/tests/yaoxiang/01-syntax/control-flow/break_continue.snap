@@ -138,7 +138,7 @@ module
     Load %36 <- %35
     Load %37 <- int(3)
     Lt %34 <- %36, %37
-    JmpIfNot %34 -> instr(152)
+    JmpIfNot %34 -> instr(153)
     Load %38 <- %35
     Load %39 <- int(1)
     Add %35 <- %38, %39
@@ -163,6 +163,7 @@ module
     Load %43 <- %30
     Load %45 <- int(1)
     Add %30 <- %43, %45
+    Drop %40
     Jmp -> instr(123)
     Load %42 <- %30
     Load %43 <- int(3)
@@ -174,6 +175,14 @@ module
     Eq %44 <- %42, %43
     Load %45 <- string("inner break fires once per outer iteration")
     Call %41 <- string("std.assert.assert") [%44, %45] (def=d0)
+    Drop %16
+    Drop %0
+    Drop %31
+    Drop %35
+    Drop %4
+    Drop %30
+    Drop %1
+    Drop %2
     Ret %41
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

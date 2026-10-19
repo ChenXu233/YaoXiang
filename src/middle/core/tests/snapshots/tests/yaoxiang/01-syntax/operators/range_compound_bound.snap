@@ -64,6 +64,8 @@ module
     Not %13 <- %15
     Load %24 <- string("range not in")
     Call %12 <- string("std.assert.assert") [%13, %24] (def=d4)
+    Drop %1
+    Drop %0
     Ret %12
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

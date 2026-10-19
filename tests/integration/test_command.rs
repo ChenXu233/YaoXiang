@@ -476,14 +476,14 @@ fn test_test_command_json_empty_discovery_outputs_empty_report() {
     );
 }
 
-/// 编译错误正文（镜像语料 06-compile-errors/array_empty_n_err.yx 的 E1002 形态）
+/// 编译错误正文（镜像语料 06-compile-errors/types/array_empty_n_err.yx 的 E1002 形态）
 const COMPILE_ERR_BODY: &str = r#"
 main = () => {
     b: Array(Int, 3) = []
 }
 "#;
 
-/// 运行期错误正文（除零，镜像语料 06-compile-errors/div_zero.yx 的 E6001 形态）
+/// 运行期错误正文（除零，镜像语料 06-compile-errors/runtime/div_zero.yx 的 E6001 形态）
 const RUNTIME_ERR_BODY: &str = r#"
 main = () => {
     x = 1 / 0

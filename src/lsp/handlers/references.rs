@@ -11,7 +11,7 @@ use lsp_types::{Location, ReferenceParams, Uri};
 use std::str::FromStr;
 use tracing::debug;
 
-use crate::lsp::locate::{find_identifier_at_position, position_to_internal_utf16, span_to_range};
+use crate::lsp::locate::{find_identifier_at_position, span_to_range};
 use crate::lsp::session::Session;
 use crate::lsp::world::World;
 
@@ -44,14 +44,17 @@ pub fn handle_references(
     debug!("查找引用: {}", ident.name);
 
     let db = world.semantic_db();
-    let (line, col) = position_to_internal_utf16(content, position);
+    // 查库键 = 光标下标识符自身的起点（2026-10-16 用户裁决，同 definition）——
+    // 定义点回退判定的列比较（start <= col < end）对标识符起点同样成立
+    let (line, col) = (ident.span.start.line, ident.span.start.column);
 
-    // 先尝试通过引用找到定义
-    let def = if let Some(def) = db.resolve_reference(&uri_str, line, col) {
+    // 先尝试通过引用找到定义（键经 4.6.1 规范化）
+    let def_key = crate::lsp::uri::db_key(&uri_str);
+    let def = if let Some(def) = db.resolve_reference(&def_key, line, col) {
         def
     } else {
         // 光标可能在定义位置本身，查找 definitions
-        let defs = db.get_definitions(&uri_str);
+        let defs = db.get_definitions(&def_key);
         defs.iter().find(|d| {
             d.span.start.line == line && d.span.start.column <= col && d.span.end.column > col
         })?

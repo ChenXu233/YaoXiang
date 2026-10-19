@@ -9,7 +9,8 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::typecheck::checker::TypeChecker;
 use crate::frontend::core::types::{MonoType, PolyType};
-use crate::frontend::core::parser::ast::{Block, Module, Stmt, Expr, Type as AstType};
+use crate::frontend::core::parser::ast::{Block, Module, PlanId, Stmt, Expr, Type as AstType};
+use crate::util::diagnostic::Severity;
 use crate::util::span::Span;
 
 // ── 辅助：AST 夹具 ──────────────────────────────────────
@@ -38,6 +39,7 @@ fn expr_stmt(
     Stmt {
         kind: crate::frontend::core::parser::ast::StmtKind::Expr(Box::new(expr)),
         span,
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -58,6 +60,7 @@ fn assign_stmt(
             span,
         },
         span,
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -171,6 +174,7 @@ fn generic_wrapper_module() -> Module {
                 },
             },
             span: Span::dummy(),
+            plan_id: PlanId::UNPLANNED,
         },
         // w: Wrapper<Int> = Wrapper(1)  (使用泛型类型)
         assign_stmt(
@@ -183,12 +187,13 @@ fn generic_wrapper_module() -> Module {
                     span: Span::dummy(),
                 }],
             }),
-            Expr::Call {
-                func: Box::new(var("Wrapper", Span::dummy())),
-                args: vec![int_lit(1, Span::dummy())],
-                named_args: vec![],
-                span: Span::dummy(),
-            },
+            Expr::call(
+                var("Wrapper", Span::dummy()),
+                vec![int_lit(1, Span::dummy())],
+                vec![],
+                Span::dummy(),
+                PlanId::UNPLANNED,
+            ),
             Span::dummy(),
         ),
     ])
@@ -382,15 +387,16 @@ fn test_type_checker_reports_fn_param_type_mismatch() {
         int_identity_fn("add"),
         // add("hello") — 传入 String 但参数期望 Int
         expr_stmt(
-            Expr::Call {
-                func: Box::new(var("add", Span::dummy())),
-                args: vec![Expr::Lit(
+            Expr::call(
+                var("add", Span::dummy()),
+                vec![Expr::Lit(
                     crate::frontend::core::lexer::tokens::Literal::String("hello".to_string()),
                     Span::dummy(),
                 )],
-                named_args: vec![],
-                span: Span::dummy(),
-            },
+                vec![],
+                Span::dummy(),
+                PlanId::UNPLANNED,
+            ),
             Span::dummy(),
         ),
     ]);
@@ -680,5 +686,78 @@ main: () -> Int = {
             .iter()
             .map(|d| &d.code)
             .collect::<Vec<_>>()
+    );
+}
+
+// ==================== WBS 4.4.3：所有权层降级留痕（02 §S5 (d)） ====================
+
+/// 无 `body_checker` 时所有权层输入降级 → **必须**有诊断（WBS 4.4.3）
+///
+/// 事实：`body_checker` 为 `None` 时所有权层拿到空类型账本 + 空调用点所有权表，
+/// 分析退化为「什么都不冲突」——**静默不动作**（RFC-039 D59 C 类 / 02 §S5 (d)）。
+/// 生产路径上 `init_body_checker` 先于所有权阶段执行、输入恒存在，故降级分支
+/// 不可达；判据抽在 `TypeChecker::ownership_inputs` 上，本用例即它的钉子。
+#[test]
+fn test_ownership_inputs_without_body_checker_reports_degradation_warning() {
+    // Arrange — `TypeChecker::new` 之后、`init_body_checker` 之前：正是降级形态
+    let checker = TypeChecker::new("degradation-probe");
+
+    // Act
+    let (ledger, call_ownership, degradation) = checker.ownership_inputs(Span::dummy());
+
+    // Assert — 保守方向不变（空输入照跑），但必须留痕
+    assert!(
+        ledger.is_empty() && call_ownership.is_empty(),
+        "无 body_checker 时输入必须是空账本 + 空调用表（保守方向不变）"
+    );
+    let warning = degradation.expect("无 body_checker 时所有权降级必须留诊断（WBS 4.4.3）");
+    assert_eq!(
+        warning.code, "W1082",
+        "降级诊断须用专用码（既有 W 码事实不重叠：W1081 专指求解器缺失）"
+    );
+    assert!(
+        matches!(warning.severity, Severity::Warning),
+        "降级是警告级（不阻断编译），实际: {:?}",
+        warning.severity
+    );
+}
+
+/// 健康路径零发射：`body_checker` 就位时不走降级分支、不产 W1082
+#[test]
+fn test_ownership_inputs_with_body_checker_reports_no_degradation() {
+    // Arrange — 真实编译（`init_body_checker` 已执行）
+    let tokens = tokenize(
+        r#"
+main = {
+    x = 1
+    x
+}
+"#,
+    )
+    .expect("测试源码词法不应失败");
+    let parsed = parse(&tokens);
+    assert!(
+        !parsed.has_errors,
+        "测试源码语法必须正确（否则无法区分 bug 与测试写错）: {:?}",
+        parsed.errors
+    );
+    let mut checker = TypeChecker::new("healthy-probe");
+    let result = checker.check_module(&parsed.module);
+
+    // Act
+    let (ledger, _call_ownership, degradation) = checker.ownership_inputs(Span::dummy());
+
+    // Assert
+    assert!(
+        degradation.is_none(),
+        "健康路径（body_checker 就位）不得走降级分支"
+    );
+    assert!(
+        !result.warnings.iter().any(|w| w.code == "W1082"),
+        "健康程序零发射：编译产物 warnings 不得含 W1082"
+    );
+    assert!(
+        !ledger.is_empty(),
+        "健康路径的类型账本来自 body_checker，不应为空"
     );
 }

@@ -21,7 +21,9 @@ ureq = { version = "2.10", default-features = false, features = ["tls"] }
 serde_json = "1"
 flate2 = "1"
 tar = "0.4"
-zip = { version = "8", default-features = false, features = ["deflate"] }
+# features 取 deflate-flate2 而非 deflate：后者在 9.x 会连带 zopfli（写入侧压缩器），
+# 而前门只解包读取；flate2 本就在依赖树内（tar.gz 侧同款），不引入第二个编解码后端
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 sha2 = "0.11"
 thiserror = "2.0.18"
 

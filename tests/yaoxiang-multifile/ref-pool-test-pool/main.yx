@@ -1,0 +1,10 @@
+// ref-pool-test-pool/main.yx
+// 覆盖: RFC-029f 引用池改进 5（WBS 4.9.5）——tests/ 的引用单独成池，不豁免生产代码
+// 验证: tests/helper.yx 引用 src/util.yx 的 debug_print，但 src/ 内无消费者——
+//       check 生产文件或测试文件时 debug_print 都必须报 W1001（测试引用不外溢）
+// 状态: ✅ 可运行（check src/util.yx 报 2 条 W1001：debug_print 与 helper）
+use src.util.{helper}
+
+main: () -> Void = {
+    n = helper()
+}

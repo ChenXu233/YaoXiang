@@ -9,7 +9,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 
 程序运行期（VM / std 原生函数）产生的错误。
 
-本族共 **7** 个码，全部在 `define_codes!` 注册表中，类别为 `Runtime`。完整索引见[错误码首页](index.md)。
+本族共 **7** 个码，全部在 `define_codes!` 注册表中，类别为 `Runtime`。完整索引见[错误码首页](./index.md)。
 
 ## 码一览
 
@@ -33,7 +33,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`表达式 {expr} 除以零`
 - **消息**：试图除以零
 - **帮助**：添加检查以防止除以零
-- **发射点**：`src/backends/interpreter/executor/executor.rs:825`、`src/backends/interpreter/executor/executor.rs:834`、`src/backends/mod.rs:163` 等 8 处
+- **发射点**：`src/backends/interpreter/executor/executor.rs:946`、`src/backends/interpreter/executor/executor.rs:955`、`src/backends/mod.rs:180` 等 8 处
 
 ### E6003：数组索引越界
 
@@ -43,7 +43,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`数组索引越界：有效范围是 0..{max}，找到 {index}`
 - **消息**：数组索引在运行时越界
 - **帮助**：确保索引在数组范围内
-- **发射点**：`src/util/diagnostic/mod.rs:212`、`src/util/test_markers.rs:251`、`src/util/test_markers.rs:341`
+- **发射点**：`src/util/diagnostic/mod.rs:214`、`src/util/test_markers.rs:251`、`src/util/test_markers.rs:341`
 - **源码注释名**：数组索引越界（运行时）
 
 ### E6004：栈溢出
@@ -54,7 +54,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`栈溢出：递归深度超出限制 {limit}`
 - **消息**：递归深度超出栈限制
 - **帮助**：减少递归深度或使用迭代
-- **发射点**：`src/backends/mod.rs:158`、`src/backends/interpreter/executor/executor.rs:320`、`src/util/diagnostic/mod.rs:204`
+- **发射点**：`src/backends/mod.rs:169`、`src/backends/interpreter/executor/executor.rs:299`、`src/util/diagnostic/mod.rs:206`
 
 ### E6005：断言失败
 
@@ -64,7 +64,7 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`断言失败：{condition}`
 - **消息**：运行时断言失败
 - **帮助**：修复断言条件或提供有效输入
-- **发射点**：`src/backends/mod.rs:185`、`src/std/assert.rs:94`、`src/util/diagnostic/mod.rs:230`
+- **发射点**：`src/backends/mod.rs:202`、`src/std/assert.rs:94`、`src/util/diagnostic/mod.rs:232`
 
 ### E6006：函数未找到（运行时）
 
@@ -93,5 +93,5 @@ description: '程序运行期（VM / std 原生函数）产生的错误。'
 - **模板**：`键不存在：{key}`
 - **消息**：字典在运行时找不到该键
 - **帮助**：索引前先用 dict.has 检查键是否存在
-- **发射点**：`src/backends/mod.rs:141`、`src/util/diagnostic/mod.rs:228`
+- **发射点**：`src/backends/mod.rs:149`、`src/util/diagnostic/mod.rs:230`
 - **源码注释名**：键缺失（#299 §4）

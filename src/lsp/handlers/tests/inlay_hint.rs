@@ -6,6 +6,7 @@
 
 use crate::frontend::core::parser::ast::{BinOp, Expr, Literal};
 use crate::lsp::handlers::inlay_hint::{simple_infer_type, evaluate_constant};
+use crate::util::plan_id::PlanId;
 
 #[test]
 fn test_simple_infer_type() {
@@ -13,12 +14,13 @@ fn test_simple_infer_type() {
     let expr = Expr::Lit(Literal::Int(10), span);
     assert_eq!(simple_infer_type(&expr), Some("Int".to_string()));
 
-    let call_expr = Expr::Call {
-        func: Box::new(Expr::Var("vec!".to_string(), span)),
-        args: vec![],
-        named_args: vec![],
+    let call_expr = Expr::call(
+        Expr::Var("vec!".to_string(), span),
+        vec![],
+        vec![],
         span,
-    };
+        PlanId::UNPLANNED,
+    );
     assert_eq!(simple_infer_type(&call_expr), Some("Vec<_>".to_string()));
 }
 

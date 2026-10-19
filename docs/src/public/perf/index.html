@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YaoXiang 性能趋势</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif; }
+  header { padding:14px 18px; border-bottom:1px solid rgba(128,128,128,.3); }
+  header h1 { margin:0 0 4px; font-size:17px; }
+  header p { margin:0; opacity:.72; font-size:12.5px; }
+  main { display:flex; gap:0; align-items:stretch; min-height:78vh; }
+  aside { width:280px; flex:none; border-right:1px solid rgba(128,128,128,.3); padding:10px; overflow:auto; max-height:82vh; }
+  section { flex:1; padding:10px 14px; overflow:auto; }
+  .ctl { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; margin-bottom:10px; font-size:12.5px; }
+  .ctl label { display:flex; gap:5px; align-items:center; cursor:pointer; }
+  .g { margin:10px 0 4px; font-weight:600; font-size:12px; opacity:.7; text-transform:uppercase; letter-spacing:.04em; }
+  .item { display:flex; gap:6px; align-items:center; padding:1px 0; font-size:12px; }
+  .item span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sw { width:10px; height:10px; flex:none; border-radius:2px; }
+  input[type=search] { width:100%; box-sizing:border-box; padding:4px 6px; margin-bottom:6px; }
+  svg { display:block; width:100%; height:auto; }
+  .tip { position:fixed; pointer-events:none; background:rgba(24,24,27,.94); color:#fff; padding:4px 7px; border-radius:4px; font-size:12px; display:none; z-index:9; }
+  .empty { opacity:.7; padding:24px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>YaoXiang 性能趋势</h1>
+  <p>数据来自 nightly 入库的 <code>benches/history/*.jsonl</code>（每次运行一行一条）。纵轴为中位数：墙钟样本右偏，中位数抗离群。</p>
+</header>
+<main>
+  <aside>
+    <input type="search" id="q" placeholder="筛选序列（bench / 语言 / 输入）">
+    <div id="picker"></div>
+  </aside>
+  <section>
+    <div class="ctl">
+      <label><input type="checkbox" id="norm"> 相对首个点（%）</label>
+      <label><input type="checkbox" id="log"> 对数纵轴</label>
+      <label><input type="checkbox" id="marks" checked> 显示发版竖线</label>
+      <span id="stat" style="opacity:.7"></span>
+    </div>
+    <svg id="chart" viewBox="0 0 920 420" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="empty" id="empty" style="display:none">没有可画的数据：先跑一次 nightly 让历史入库。</div>
+  </section>
+</main>
+<div class="tip" id="tip"></div>
+<script>
+(function () {
+  var svg = document.getElementById('chart');
+  var NS = 'http://www.w3.org/2000/svg';
+  var COLORS = ['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2','#be185d','#65a30d'];
+  var data = null, selected = {}, colorOf = {};
+
+  function el(name, attrs) {
+    var n = document.createElementNS(NS, name);
+    for (var k in attrs) { n.setAttribute(k, attrs[k]); }
+    return n;
+  }
+  function fmt(v) {
+    if (v === null || v === undefined) { return '-'; }
+    if (Math.abs(v) >= 1000) { return (v / 1000).toFixed(2) + ' s'; }
+    if (Math.abs(v) >= 1) { return v.toFixed(2) + ' ms'; }
+    if (Math.abs(v) >= 0.001) { return (v * 1000).toFixed(2) + ' us'; }
+    return (v * 1e6).toFixed(0) + ' ns';
+  }
+  function runIndexById() {
+    var m = {};
+    for (var i = 0; i < data.runs.length; i++) { m[data.runs[i].run] = i; }
+    return m;
+  }
+
+  function draw() {
+    while (svg.firstChild) { svg.removeChild(svg.firstChild); }
+    var ids = Object.keys(selected).filter(function (k) { return selected[k]; });
+    if (!ids.length) { return; }
+    var idx = runIndexById();
+    var norm = document.getElementById('norm').checked;
+    var useLog = document.getElementById('log').checked;
+    var showMarks = document.getElementById('marks').checked;
+
+    var pts = [];
+    ids.forEach(function (id) {
+      var series = null;
+      for (var i = 0; i < data.series.length; i++) { if (data.series[i].id === id) { series = data.series[i]; break; } }
+      if (!series) { return; }
+      var first = series.points.length ? series.points[0][1] : null;
+      var rows = [];
+      series.points.forEach(function (p) {
+        if (idx[p[0]] === undefined) { return; }
+        var v = p[1];
+        if (norm && first > 0) { v = (v / first - 1) * 100; }
+        rows.push([idx[p[0]], v]);
+      });
+      pts.push({ id: id, rows: rows });
+    });
+    if (!pts.length) { return; }
+
+    var xs = [], ys = [];
+    pts.forEach(function (s) { s.rows.forEach(function (r) { xs.push(r[0]); ys.push(r[1]); }); });
+    var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+    if (x1 === x0) { x1 = x0 + 1; }
+    var y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+    if (norm) { var m = Math.max(Math.abs(y0), Math.abs(y1), 1); y0 = -m; y1 = m; }
+    if (y1 === y0) { y1 = y0 + 1; }
+    var pad = 46, W = 920, H = 420;
+    var px = function (x) { return pad + (x - x0) / (x1 - x0) * (W - pad - 14); };
+    var py = function (y) {
+      var a = useLog ? (Math.log(Math.max(y, 1e-6)) - Math.log(Math.max(y0, 1e-6))) / (Math.log(y1) - Math.log(Math.max(y0, 1e-6))) : (y - y0) / (y1 - y0);
+      return H - 30 - a * (H - 30 - 14);
+    };
+
+    // 网格 + 纵轴刻度
+    for (var k = 0; k <= 4; k++) {
+      var yv = y0 + (y1 - y0) * k / 4;
+      svg.appendChild(el('line', { x1: pad, y1: py(yv), x2: W - 14, y2: py(yv), stroke: 'rgba(128,128,128,.28)', 'stroke-width': 1 }));
+      var t = el('text', { x: pad - 6, y: py(yv) + 4, 'text-anchor': 'end', 'font-size': 10.5, fill: 'currentColor', opacity: .75 });
+      t.textContent = norm ? (yv >= 0 ? '+' : '') + yv.toFixed(0) + '%' : fmt(yv);
+      svg.appendChild(t);
+    }
+    // 横轴：首次/末次运行日期
+    [0, 1].forEach(function (which) {
+      var x = which ? x1 : x0;
+      var run = data.runs[x];
+      if (!run) { return; }
+      var t = el('text', { x: px(x), y: H - 12, 'text-anchor': which ? 'end' : 'start', 'font-size': 10.5, fill: 'currentColor', opacity: .75 });
+      t.textContent = (run.ts || '').slice(0, 10) + '  #' + run.run;
+      svg.appendChild(t);
+    });
+    // 发版竖线
+    if (showMarks) {
+      (data.releases || []).forEach(function (rel) {
+        var best = null;
+        for (var i = 0; i < data.runs.length; i++) {
+          if ((data.runs[i].ts || '') >= (rel.ts || '')) { best = i; break; }
+        }
+        if (best === null || best < x0 || best > x1) { return; }
+        svg.appendChild(el('line', { x1: px(best), y1: 14, x2: px(best), y2: H - 30, stroke: '#d97706', 'stroke-width': 1, 'stroke-dasharray': '4 3', opacity: .85 }));
+        var lt = el('text', { x: px(best) + 3, y: 24, 'font-size': 10.5, fill: '#d97706' });
+        lt.textContent = rel.version;
+        svg.appendChild(lt);
+      });
+    }
+    // 折线
+    pts.forEach(function (s) {
+      var d = '';
+      s.rows.forEach(function (r, i) { d += (i ? 'L' : 'M') + px(r[0]).toFixed(1) + ' ' + py(r[1]).toFixed(1); });
+      svg.appendChild(el('path', { d: d, fill: 'none', stroke: colorOf[s.id], 'stroke-width': 1.6, opacity: .9 }));
+      s.rows.forEach(function (r, i) {
+        if (i % Math.max(1, Math.floor(s.rows.length / 60)) !== 0) { return; }
+        var run = data.runs[r[0]];
+        var c = el('circle', { cx: px(r[0]), cy: py(r[1]), r: 2.2, fill: colorOf[s.id] });
+        var tt = el('title');
+        tt.textContent = s.id + '
+' + (run ? run.ts + ' #' + run.run + ' @' + (run.sha || '').slice(0, 7) : '') + '
+' + fmt(r[1]);
+        c.appendChild(tt);
+        svg.appendChild(c);
+      });
+    });
+  }
+
+  function buildPicker() {
+    var host = document.getElementById('picker');
+    while (host.firstChild) { host.removeChild(host.firstChild); }
+    var q = (document.getElementById('q').value || '').toLowerCase();
+    var groups = {};
+    data.series.forEach(function (s) {
+      if (q && s.id.toLowerCase().indexOf(q) < 0) { return; }
+      var suite = s.id.split('/')[0];
+      (groups[suite] = groups[suite] || []).push(s.id);
+    });
+    Object.keys(groups).sort().forEach(function (suite) {
+      var h = document.createElement('div');
+      h.className = 'g';
+      h.textContent = suite + ' (' + groups[suite].length + ')';
+      host.appendChild(h);
+      groups[suite].sort().forEach(function (id) {
+        if (!(id in selected)) {
+          selected[id] = Object.keys(selected).filter(function (k) { return selected[k]; }).length < 8;
+        }
+        if (!(id in colorOf)) { colorOf[id] = COLORS[Object.keys(colorOf).length % COLORS.length]; }
+        var row = document.createElement('label');
+        row.className = 'item';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !!selected[id];
+        cb.addEventListener('change', function () { selected[id] = cb.checked; draw(); });
+        var sw = document.createElement('span');
+        sw.className = 'sw';
+        sw.style.background = colorOf[id];
+        var sp = document.createElement('span');
+        sp.textContent = id;
+        row.appendChild(cb); row.appendChild(sw); row.appendChild(sp);
+        host.appendChild(row);
+      });
+    });
+  }
+
+  fetch('./history.json', { cache: 'no-cache' }).then(function (r) {
+    if (!r.ok) { throw new Error('HTTP ' + r.status); }
+    return r.json();
+  }).then(function (j) {
+    data = j;
+    if (!data.series || !data.series.length) {
+      document.getElementById('empty').style.display = 'block';
+      return;
+    }
+    var n = data.runs.length;
+    document.getElementById('stat').textContent = data.series.length + ' 条序列 / ' + n + ' 次运行，生成于 ' + (data.generated_at || '');
+    buildPicker();
+    draw();
+    ['norm', 'log', 'marks'].forEach(function (id) { document.getElementById(id).addEventListener('change', draw); });
+    document.getElementById('q').addEventListener('input', buildPicker);
+  }).catch(function (e) {
+    document.getElementById('empty').style.display = 'block';
+    document.getElementById('empty').textContent = 'history.json 读取失败：' + e.message;
+  });
+})();
+</script>
+</body>
+</html>

@@ -8,6 +8,8 @@
 //! - LSP 能力声明
 
 mod capabilities;
+mod cross_file;
 mod locate;
 mod server;
 mod session;
+mod uri;

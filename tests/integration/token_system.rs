@@ -83,7 +83,7 @@ fn test_destructure() {
 
 #[test]
 fn test_shadow_err() {
-    let result = run_yx_file("tests/yaoxiang/06-compile-errors/shadow_err.yx");
+    let result = run_yx_file("tests/yaoxiang/06-compile-errors/name-resolution/shadow_err.yx");
     assert!(
         result.is_err(),
         "Shadow error demo should produce compile error"

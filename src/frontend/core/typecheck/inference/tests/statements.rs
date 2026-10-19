@@ -5,7 +5,7 @@
 
 use crate::frontend::core::typecheck::inference::statements::StatementChecker;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
-use crate::frontend::core::parser::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, Param};
+use crate::frontend::core::parser::ast::{self, Stmt, StmtKind, Expr, BinOp, Block, Param, PlanId};
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::util::span::Span;
 
@@ -16,6 +16,7 @@ fn make_stmt(kind: StmtKind) -> Stmt {
     Stmt {
         kind,
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }
 }
 
@@ -568,6 +569,7 @@ fn test_check_fn_def_with_params() {
     let body = make_block(vec![Stmt {
         kind: StmtKind::Expr(Box::new(Expr::Var("a".to_string(), Span::dummy()))),
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }]);
 
     // Act
@@ -597,6 +599,7 @@ fn test_check_fn_def_params_visible_in_body() {
             span: Span::dummy(),
         })),
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     }]);
 
     // Act

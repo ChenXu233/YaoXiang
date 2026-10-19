@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 pub use crate::frontend::core::lexer::tokens::Literal;
+pub use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 
 #[derive(Debug, Clone)]
@@ -33,6 +34,15 @@ pub enum Expr {
         /// RFC-010: 命名参数 `Point(x=1, y=2)`
         named_args: Vec<(String, Expr)>,
         span: Span,
+        /// 调用点身份（RFC-039 D20 / WBS 4.5.2）：解析期由 `ParserState`
+        /// 分配、随本调用节点走的 `PlanId`——重载决议（`overload_resolutions`）
+        /// 的产出与消费读同一个节点上的同一个值，不再靠「Call 的 span 两处
+        /// 各自算一遍」的位置巧合。
+        ///
+        /// 构造一律走 [`Expr::call`]（全仓唯一构造器）；解析器之外的合成调用
+        /// 记 [`PlanId::UNPLANNED`]，消费侧不消费未分配身份（见
+        /// `OverloadResolutions::get`）。
+        plan_id: PlanId,
     },
     FnDef {
         name: String,
@@ -227,6 +237,14 @@ pub enum UnOp {
 pub struct Stmt {
     pub kind: StmtKind,
     pub span: Span,
+    /// 释放计划身份（RFC-039 D20 / WBS 4.5.1）：解析期由 `ParserState`
+    /// **单调分配**、编译单元内唯一，随语句节点走。
+    ///
+    /// 它把 `ReleasePlan` 的键从「span 位置巧合」换成「AST 节点结构身份」：
+    /// ownership 把释放点归属到释放边界所在的语句，ir_gen 在语句边界按同一
+    /// 身份查表发射 `Instruction::Drop`。不经解析器的合成语句恒为
+    /// [`PlanId::UNPLANNED`]（不构成释放计划义务）。
+    pub plan_id: PlanId,
 }
 
 /// Statement kind
@@ -1011,6 +1029,28 @@ pub fn classify_generic_params(
 }
 
 impl Expr {
+    /// 调用表达式的**唯一构造器**（RFC-039 D20 / WBS 4.5.2）。
+    ///
+    /// 全仓调用点一律经此构造：`func` 收 `Expr` 或 `Box<Expr>` 皆可（`Box` 有
+    /// 恒等 `Into`）。`plan_id` 由解析器分配（`ParserState::alloc_plan_id`）；
+    /// 解析器之外的合成调用（常量求值、IR 内建、测试夹具）记
+    /// [`PlanId::UNPLANNED`]。
+    pub fn call(
+        func: impl Into<Box<Expr>>,
+        args: Vec<Expr>,
+        named_args: Vec<(String, Expr)>,
+        span: Span,
+        plan_id: PlanId,
+    ) -> Expr {
+        Expr::Call {
+            func: func.into(),
+            args,
+            named_args,
+            span,
+            plan_id,
+        }
+    }
+
     /// 表达式的源码 span（穷举变体，新增变体时编译器强制补全）
     pub fn span(&self) -> Span {
         match self {

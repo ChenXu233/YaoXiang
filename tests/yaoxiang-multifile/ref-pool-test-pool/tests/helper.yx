@@ -1,0 +1,6 @@
+// tests/helper.yx —— 测试代码：引用 src/util.yx 的 debug_print（不该豁免生产代码）
+use src.util.{debug_print}
+
+probe: () -> Void = () => {
+    debug_print(1)
+}

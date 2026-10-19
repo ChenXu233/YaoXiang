@@ -2,7 +2,7 @@
 // 覆盖: 规范 §4.3「赋值优先」——`x = value` 沿作用域链查找
 //   找到 mut x           → 赋值
 //   找到 x（已 moved）    → 重新声明
-//   找到 x（不可变，存活）→ E2010（见 06-compile-errors/shadow_err.yx）
+//   找到 x（不可变，存活）→ E2010（见 06-compile-errors/name-resolution/shadow_err.yx）
 //   找不到               → 新声明
 // 状态: ✅ 可运行
 

@@ -106,3 +106,21 @@ fn test_hover_doc_not_open_returns_none() {
     // Assert
     assert!(result.is_none(), "未打开的文档应返回 None");
 }
+
+#[test]
+fn test_hover_mid_identifier_cursor_also_shows() {
+    // Arrange：三字符名 abc——光标落在标识符**中部**（b 上）。
+    // 2026-10-16 用户裁决：查库键改用光标下标识符自身的起点
+    let (session, world) = open_and_check("abc = 1\ny = abc + abc\n");
+
+    // Act
+    let params = make_params(SAMPLE_URI, 1, 5);
+    let result = handle_hover(&session, &world, params);
+
+    // Assert：与起点光标同效——悬停给出绑定类型
+    let hover = result.expect("标识符中部光标必须同效给出悬停（起点查库键裁决）");
+    let HoverContents::Markup(markup) = &hover.contents else {
+        panic!("应返回 Markup 内容");
+    };
+    assert!(markup.value.contains("abc"), "应包含变量名 abc");
+}

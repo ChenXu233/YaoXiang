@@ -37,6 +37,7 @@ module
     Call %0 <- string("std.result.is_ok") [%1] (def=d1)
     Load %3 <- string("assert_eq equal is Ok")
     Call %2 <- string("std.assert.assert") [%0, %3] (def=d2)
+    Drop %4
     Load %0 <- int(1)
     Load %1 <- int(2)
     Call %2 <- string("std.test.assert_ne") [%0, %1] (def=d3)
@@ -44,6 +45,7 @@ module
     Call %1 <- string("std.result.is_ok") [%3] (def=d1)
     Load %5 <- string("assert_ne unequal is Ok")
     Call %0 <- string("std.assert.assert") [%1, %5] (def=d2)
+    Drop %2
     Load %3 <- int(1)
     Load %5 <- int(2)
     Lt %1 <- %3, %5
@@ -52,12 +54,14 @@ module
     Call %3 <- string("std.result.is_ok") [%5] (def=d1)
     Load %6 <- string("assert_true is Ok")
     Call %1 <- string("std.assert.assert") [%3, %6] (def=d2)
+    Drop %0
     Load %3 <- bool(false)
     Call %1 <- string("std.test.assert_false") [%3] (def=d5)
     Load %6 <- %1
     Call %5 <- string("std.result.is_ok") [%6] (def=d1)
     Load %7 <- string("assert_false is Ok")
     Call %3 <- string("std.assert.assert") [%5, %7] (def=d2)
+    Drop %1
     Load %6 <- int(1)
     Load %7 <- int(2)
     Eq %5 <- %6, %7
@@ -66,6 +70,7 @@ module
     Call %6 <- string("std.result.is_ok") [%7] (def=d1)
     Load %8 <- string("assert_not is Ok")
     Call %5 <- string("std.assert.assert") [%6, %8] (def=d2)
+    Drop %3
     Load %6 <- int(1)
     Load %7 <- int(2)
     Call %5 <- string("std.test.assert_eq") [%6, %7] (def=d0)
@@ -73,8 +78,10 @@ module
     Call %7 <- string("std.result.is_err") [%8] (def=d7)
     Load %9 <- string("assert_eq unequal is Err")
     Call %6 <- string("std.assert.assert") [%7, %9] (def=d2)
+    Drop %5
     Load %7 <- %5
     Call %6 <- string("std.result.unwrap_err") [%7] (def=d8)
+    Drop %5
     Load %9 <- %6
     Load %10 <- string("Expected 2, got 1")
     Eq %8 <- %9, %10
@@ -87,6 +94,7 @@ module
     Call %9 <- string("std.result.is_err") [%10] (def=d7)
     Load %11 <- string("assert_ne equal is Err")
     Call %8 <- string("std.assert.assert") [%9, %11] (def=d2)
+    Drop %7
     Load %10 <- int(1)
     Load %11 <- int(2)
     Eq %9 <- %10, %11
@@ -95,12 +103,14 @@ module
     Call %10 <- string("std.result.is_err") [%11] (def=d7)
     Load %12 <- string("assert_true false cond is Err")
     Call %9 <- string("std.assert.assert") [%10, %12] (def=d2)
+    Drop %8
     Load %10 <- bool(true)
     Call %9 <- string("std.test.assert_false") [%10] (def=d5)
     Load %12 <- %9
     Call %11 <- string("std.result.is_err") [%12] (def=d7)
     Load %13 <- string("assert_false true cond is Err")
     Call %10 <- string("std.assert.assert") [%11, %13] (def=d2)
+    Drop %9
     Load %12 <- int(1)
     Load %13 <- int(1)
     Eq %11 <- %12, %13
@@ -109,6 +119,7 @@ module
     Call %12 <- string("std.result.is_err") [%13] (def=d7)
     Load %14 <- string("assert_not true cond is Err")
     Call %11 <- string("std.assert.assert") [%12, %14] (def=d2)
+    Drop %10
     Load %12 <- string("yx")
     Load %13 <- string("yx")
     Call %11 <- string("std.test.assert_eq") [%12, %13] (def=d0)
@@ -116,6 +127,7 @@ module
     Call %13 <- string("std.result.is_ok") [%14] (def=d1)
     Load %15 <- string("assert_eq strings Ok")
     Call %12 <- string("std.assert.assert") [%13, %15] (def=d2)
+    Drop %11
     Load %13 <- string("yx")
     Load %14 <- string("yaoxiang")
     Call %12 <- string("std.test.assert_eq") [%13, %14] (def=d0)
@@ -123,6 +135,7 @@ module
     Call %14 <- string("std.result.is_err") [%15] (def=d7)
     Load %16 <- string("assert_eq strings Err")
     Call %13 <- string("std.assert.assert") [%14, %16] (def=d2)
+    Drop %12
     Load %14 <- string("oops")
     Call %13 <- string("std.string.parse_int") [%14] (def=d9)
     Load %15 <- %13
@@ -131,6 +144,7 @@ module
     Call %16 <- string("std.result.is_ok") [%17] (def=d1)
     Load %18 <- string("assert_err on Err is Ok")
     Call %15 <- string("std.assert.assert") [%16, %18] (def=d2)
+    Drop %14
     Load %16 <- string("42")
     Call %15 <- string("std.string.parse_int") [%16] (def=d9)
     Load %17 <- %15
@@ -139,6 +153,7 @@ module
     Call %18 <- string("std.result.is_err") [%19] (def=d7)
     Load %20 <- string("assert_err on Ok is Err")
     Call %17 <- string("std.assert.assert") [%18, %20] (def=d2)
+    Drop %16
     Load %18 <- string("nope")
     Call %17 <- string("std.string.parse_int") [%18] (def=d9)
     Load %19 <- %17
@@ -148,6 +163,7 @@ module
     Call %20 <- string("std.result.is_ok") [%21] (def=d1)
     Load %22 <- string("assert_err_code match is Ok")
     Call %19 <- string("std.assert.assert") [%20, %22] (def=d2)
+    Drop %18
     Load %20 <- string("nope")
     Call %19 <- string("std.string.parse_int") [%20] (def=d9)
     Load %21 <- %19
@@ -157,8 +173,10 @@ module
     Call %22 <- string("std.result.is_err") [%23] (def=d7)
     Load %24 <- string("assert_err_code mismatch is Err")
     Call %21 <- string("std.assert.assert") [%22, %24] (def=d2)
+    Drop %20
     Load %22 <- %20
     Call %21 <- string("std.result.unwrap_err") [%22] (def=d8)
+    Drop %20
     Load %24 <- %21
     Load %25 <- string("Expected code E9999, got E6010")
     Eq %23 <- %24, %25
@@ -174,6 +192,7 @@ module
     Call %24 <- string("std.result.is_ok") [%25] (def=d1)
     Load %26 <- string("approx_eq within eps is Ok")
     Call %23 <- string("std.assert.assert") [%24, %26] (def=d2)
+    Drop %22
     Load %24 <- float(4607182418800017408)
     Load %25 <- float(4607182418800017408)
     Load %26 <- float(0)
@@ -182,6 +201,7 @@ module
     Call %25 <- string("std.result.is_ok") [%26] (def=d1)
     Load %27 <- string("approx_eq eps=0 degenerates to exact equality")
     Call %24 <- string("std.assert.assert") [%25, %27] (def=d2)
+    Drop %23
     Load %25 <- float(4607182418800017408)
     Load %26 <- float(4611686018427387904)
     Load %27 <- float(4602678819172646912)
@@ -190,13 +210,16 @@ module
     Call %26 <- string("std.result.is_err") [%27] (def=d7)
     Load %28 <- string("approx_eq beyond eps is Err")
     Call %25 <- string("std.assert.assert") [%26, %28] (def=d2)
+    Drop %24
     Load %26 <- %24
     Call %25 <- string("std.result.unwrap_err") [%26] (def=d8)
+    Drop %24
     Load %28 <- %25
     Load %29 <- string("Expected 2")
     Call %27 <- string("std.string.contains") [%28, %29] (def=d13)
     Load %30 <- string("approx_eq diagnostic names expected value")
     Call %26 <- string("std.assert.assert") [%27, %30] (def=d2)
+    Drop %25
     Load %27 <- float(4607182418800017408)
     Load %28 <- float(4611686018427387904)
     Load %30 <- float(4607182418800017408)
@@ -206,6 +229,29 @@ module
     Call %28 <- string("std.result.is_err") [%29] (def=d7)
     Load %30 <- string("approx_eq negative eps rejected at declaration")
     Call %27 <- string("std.assert.assert") [%28, %30] (def=d2)
+    Drop %22
+    Drop %23
+    Drop %24
+    Drop %26
+    Drop %18
+    Drop %20
+    Drop %14
+    Drop %16
+    Drop %5
+    Drop %7
+    Drop %8
+    Drop %9
+    Drop %10
+    Drop %6
+    Drop %21
+    Drop %25
+    Drop %4
+    Drop %2
+    Drop %0
+    Drop %1
+    Drop %3
+    Drop %11
+    Drop %12
     Ret %27
   init (locals=0)
     Call %0 <- string("main") [] (def=d14)

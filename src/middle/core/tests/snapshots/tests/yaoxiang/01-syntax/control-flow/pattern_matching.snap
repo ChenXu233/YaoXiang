@@ -91,6 +91,11 @@ module
     Load %13 <- string("c")
     Move %5 <- %13
     Jmp -> instr(85)
+    Drop %0
+    Drop %1
+    Drop %2
+    Drop %3
+    Drop %5
     Ret
   init (locals=0)
     Call %0 <- string("main") [] (def=d0)

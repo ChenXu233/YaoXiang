@@ -18,6 +18,7 @@ module
     Eq %4 <- %2, %3
     Load %5 <- string("trim")
     Call %6 <- string("std.assert.assert") [%4, %5] (def=d1)
+    Drop %0
     Load %1 <- string("abc")
     Call %2 <- string("std.string.upper") [%1] (def=d2)
     Load %3 <- string("ABC")
@@ -136,18 +137,21 @@ module
     Call %5 <- string("std.result.is_ok") [%7] (def=d18)
     Load %8 <- string("parse_int ok")
     Call %1 <- string("std.assert.assert") [%5, %8] (def=d1)
+    Drop %3
     Load %5 <- string("not_a_number")
     Call %1 <- string("std.string.parse_int") [%5] (def=d17)
     Load %8 <- %1
     Call %7 <- string("std.result.is_err") [%8] (def=d19)
     Load %9 <- string("parse_int err on invalid")
     Call %5 <- string("std.assert.assert") [%7, %9] (def=d1)
+    Drop %1
     Load %7 <- string("xxx")
     Call %5 <- string("std.string.parse_float") [%7] (def=d20)
     Load %9 <- %5
     Call %8 <- string("std.result.is_err") [%9] (def=d19)
     Load %10 <- string("parse_float err on invalid")
     Call %7 <- string("std.assert.assert") [%8, %10] (def=d1)
+    Drop %5
     Load %11 <- string("A")
     Load %12 <- int(0)
     Call %9 <- string("std.string.char_code") [%11, %12] (def=d21)
@@ -244,18 +248,21 @@ module
     Call %10 <- string("std.result.is_ok") [%11] (def=d18)
     Load %12 <- string("from_char_code ok")
     Call %9 <- string("std.assert.assert") [%10, %12] (def=d1)
+    Drop %8
     Load %13 <- %8
     Call %11 <- string("std.result.unwrap") [%13] (def=d23)
     Load %12 <- string("A")
     Eq %10 <- %11, %12
     Load %14 <- string("from_char_code roundtrip ASCII")
     Call %9 <- string("std.assert.assert") [%10, %14] (def=d1)
+    Drop %8
     Load %10 <- int(128512)
     Call %9 <- string("std.string.from_char_code") [%10] (def=d22)
     Load %12 <- %9
     Call %11 <- string("std.result.is_ok") [%12] (def=d18)
     Load %13 <- string("from_char_code astral ok")
     Call %10 <- string("std.assert.assert") [%11, %13] (def=d1)
+    Drop %9
     Load %15 <- %9
     Call %14 <- string("std.result.unwrap") [%15] (def=d23)
     Load %16 <- int(0)
@@ -264,6 +271,7 @@ module
     Eq %11 <- %12, %13
     Load %17 <- string("astral roundtrip")
     Call %10 <- string("std.assert.assert") [%11, %17] (def=d1)
+    Drop %9
     Load %14 <- int(1)
     Neg %13 <- %14
     Call %12 <- string("std.string.from_char_code") [%13] (def=d22)
@@ -365,6 +373,16 @@ module
     Eq %11 <- %12, %13
     Load %16 <- string("format center align")
     Call %10 <- string("std.assert.assert") [%11, %16] (def=d1)
+    Drop %2
+    Drop %5
+    Drop %1
+    Drop %7
+    Drop %8
+    Drop %9
+    Drop %3
+    Drop %6
+    Drop %4
+    Drop %0
     Ret %10
   init (locals=0)
     Call %0 <- string("main") [] (def=d25)

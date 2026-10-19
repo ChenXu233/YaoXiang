@@ -1,0 +1,12 @@
+// ref-pool-import-use/main.yx
+// 覆盖: RFC-029f 引用池改进 4（WBS 4.9.4）——消费只记到 import 解析出的那个模块
+// 验证: main 用 use b.{foo} 调用 foo()，a.yx 的同名 foo 无人消费必须仍报 W1001；
+//       a.guard 只出现在 use 项里（无使用点）同样不算消费（另报 W1003 未使用导入）
+// 状态: ✅ 可运行（check 本入口报 1 条 W1001 guard + 1 条 W1003；check a.yx 报 2 条 W1001）
+use std.assert
+use a.{guard}
+use b.{foo}
+
+main: () -> Void = {
+    assert.assert(foo() == 9, "b.foo() should be 9")
+}

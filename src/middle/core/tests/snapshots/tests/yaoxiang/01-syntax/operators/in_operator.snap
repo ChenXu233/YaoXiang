@@ -103,6 +103,7 @@ module
     Load %0 <- %10
     Load %1 <- string("in composes with &&")
     Call %8 <- string("std.assert.assert") [%0, %1] (def=d0)
+    Drop %10
     Ret %8
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

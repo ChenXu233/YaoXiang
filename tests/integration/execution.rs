@@ -14,6 +14,33 @@ fn run_ok(source: &str) {
 
 // 完整程序测试
 
+/// #452 端到端：方法调用的**命名实参加入重载决议**（WBS 3.14.1）。
+///
+/// 值级 oracle 用程序内 assert 表达（跑通即算对）：
+///   ① t.pick(1, 2)        = 102   纯位置（回归）
+///   ② t.pick(1, a = 2)    = 102   混合（位置占前导槽位、命名按名入槽）
+///   ③ t.pick(a = 2, n = 1) = 102  纯命名（书写序无关）
+/// 改动前 ②③ 会**丢实参**（运行期 E6007 或算错），① 是回归对照。
+#[test]
+fn test_named_args_in_method_overload_decide_candidate() {
+    run_ok(
+        r#"
+use std.assert
+
+Temp: Type = { v: Int }
+
+Temp.pick: (self: &Temp, n: Int, a: Int) -> Int = (self, n, a) => { return n * 100 + a }
+
+main = () => {
+    t = Temp(1)
+    assert.assert(t.pick(1, 2) == 102, "positional")
+    assert.assert(t.pick(1, a = 2) == 102, "mixed positional + named")
+    assert.assert(t.pick(a = 2, n = 1) == 102, "named only, reversed order")
+}
+        "#,
+    );
+}
+
 #[test]
 fn test_simple_program() {
     run_ok(

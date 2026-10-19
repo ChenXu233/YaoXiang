@@ -2,8 +2,9 @@
 //!
 //! 生产路径等价构造（#433/RFC-039 D55 静默通道判定）：语义数据一律由真实
 //! tokenize → parse → TypeChecker::check_module_collect_all 管线产出、经
-//! World::update_semantic_db 按文件 upsert，与 `server.rs` 的
-//! `update_semantic_db` 完全同款。**禁止在测试里手工构造
+//! World::update_semantic_db 按文件 upsert（即 4.6.1 前 server.rs 手工管线
+//! 的同款形态；生产侧现由 driver 的 CollectAll 臂产出同款数据——本夹具
+//! 直驱 checker 层，不走 LSP 网络面）。**禁止在测试里手工构造
 //! definitions/references**——消费端测试手工喂登记数据即静默通道
 //! （coding-rules 第六部分）。
 

@@ -6,7 +6,7 @@
 //! - 完整的错误收集
 //! - RFC-004/010/011 支撑
 
-use crate::frontend::core::parser::ast::{Module, Expr};
+use crate::frontend::core::parser::ast::Module;
 
 // ============ 子模块声明 ============
 
@@ -37,7 +37,7 @@ pub mod signature;
 pub mod types;
 // 证明管道基础设施
 pub mod proof;
-// 有序证明层
+// 证明层（本目录无调度器：调用先后由 checker::check_module_impl 决定）
 pub mod layers;
 // 独立分析遍
 pub mod passes;
@@ -134,32 +134,6 @@ fn check_module_inner(
     result
 }
 
-/// 检查单个表达式
-pub fn infer_expression(
-    expr: &Expr,
-    env: &mut environment::TypeEnvironment,
-) -> Result<MonoType, Vec<Diagnostic>> {
-    // 创建共享 ScopeManager 并添加环境变量
-    let mut scope = inference::ScopeManager::new();
-    for (name, poly) in env.vars.clone() {
-        scope.add_var(name, poly, false, crate::util::span::Span::default());
-    }
-    let overload_candidates_clone = env.overload_candidates.clone();
-    let native_signatures_clone = env.native_signatures.clone();
-    let generic_type_defs_clone = env.generic_type_defs.clone();
-    let module_aliases_clone = env.module_aliases.clone();
-    let mut inferrer = inference::ExpressionInferrer::with_native_signatures(
-        &mut scope,
-        env.solver(),
-        &overload_candidates_clone,
-        &native_signatures_clone,
-    );
-    inferrer.set_generic_type_defs(&generic_type_defs_clone);
-    // #396：模块别名集合随委托传入（E1043 判定）
-    inferrer.set_module_aliases(&module_aliases_clone);
-    inferrer.infer_expr(expr).map_err(|diag| vec![diag])
-}
-
 /// 添加内置类型到环境
 pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
     env.types
@@ -226,6 +200,20 @@ pub fn add_native_function_types(
                 // 注册完全限定名
                 env.native_signatures
                     .insert(export.full_path.clone(), fn_ty.clone());
+
+                // #454 / t14：同源灌装「形参名 + 必需下限」（同一签名串、同一解析出口）——
+                // 命名实参的按名绑定与「可选位允许缺席」都据此判定，两侧不再各算一份
+                if let Some((names, required_min)) =
+                    signature::export_signature_param_info(&export.signature)
+                {
+                    let info = crate::frontend::core::typecheck::environment::ExportParamInfo {
+                        names,
+                        required_min,
+                    };
+                    env.native_param_names
+                        .insert(export.full_path.clone(), info.clone());
+                    env.native_param_names.insert(export.name.clone(), info);
+                }
 
                 // 注册短名称
                 env.native_signatures.insert(export.name.clone(), fn_ty);

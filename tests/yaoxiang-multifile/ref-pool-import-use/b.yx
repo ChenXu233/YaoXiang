@@ -1,0 +1,2 @@
+// b.yx —— 被 main 真实使用的 foo（跨文件消费应救活它）
+foo: () -> Int = () => { return 9 }

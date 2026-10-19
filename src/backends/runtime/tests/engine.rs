@@ -8,8 +8,8 @@
 //! - 协作式时间片
 
 use crate::backends::runtime::engine::{
-    sv, LocalRuntime, RuntimeError, TaskCancelReason, TaskMeta, TaskOutcome, TaskPoll, TaskResult,
-    ResourceKey,
+    sv, LocalRuntime, RuntimeError, TaskCancelReason, TaskFailure, TaskMeta, TaskOutcome, TaskPoll,
+    TaskResult, ResourceKey,
 };
 use crate::backends::common::value::TaskId;
 use std::collections::HashMap;
@@ -21,7 +21,8 @@ fn ok_i32(v: i32) -> TaskResult {
 }
 
 fn err_str(msg: &'static str) -> TaskResult {
-    Err(sv(msg))
+    // WBS 3.11.1：任务错误侧是结构化载荷（TaskFailure），不再是裸 SyncValue
+    Err(TaskFailure::message(msg))
 }
 
 /// 挂一个依赖 deps 的任务，返回它的 id。

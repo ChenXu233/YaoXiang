@@ -1,6 +1,11 @@
 // string_concat — 字符串拼接
 // 测试: 字符串操作性能
 // 从 BENCH_INPUT 环境变量读取循环次数，默认 500
+//
+// 口径（2026-10-15 统一，详见 bench.toml 头注）：三语言同为「累积拼接、每轮重建」。
+// `s = s + "Hello"` 每轮重建整串（O(n²)）——python 对照版刻意不用 `+=`（CPython
+// 有原地优化），rust 对照版刻意 `.clone()`（String + &str 会复用缓冲），
+// 否则这张表量到的是复杂度差异而不是语言差异。
 
 use std.{io, os, string, result}
 

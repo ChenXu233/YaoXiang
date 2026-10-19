@@ -12,6 +12,8 @@ module
     Load %3 <- bool(true)
     Load %4 <- string("move completed — p2 should own the value")
     Call %1 <- string("std.assert.assert") [%3, %4] (def=d1)
+    Drop %2
+    Drop %0
     Ret %1
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

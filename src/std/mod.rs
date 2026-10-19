@@ -329,6 +329,7 @@ pub trait StdModule {
                 type_params: None,
                 param_names: None,
                 type_payload: None,
+                definition_span: None, // native std 导出无源码定义位置（4.6.1）
             });
         }
 
@@ -343,6 +344,7 @@ pub trait StdModule {
                 type_params: None,
                 param_names: None,
                 type_payload: None,
+                definition_span: None, // native std 导出无源码定义位置（4.6.1）
             });
         }
 

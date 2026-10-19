@@ -1,0 +1,7 @@
+/// 夹具版 TypeCheckResult（mini）：ghost_two 仍在代码与文档表里，
+/// 但 INVENTORY 少登记——判据 1 的文档表对账必须红。
+pub struct TypeCheckResult {
+    pub fixture_meta: String,
+    pub ghost_field: Vec<String>,
+    pub ghost_two: Vec<String>,
+}

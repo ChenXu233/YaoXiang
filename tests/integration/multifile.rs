@@ -6,11 +6,19 @@
 //! 入口语义：RFC-029f（Bin 入口按绑定存在性判定、值 main 初始化期求值，#388 定案）。
 
 /// 在临时目录写入多文件项目并运行入口文件，返回运行结果（错误为调试文本）。
+///
+/// 夹具带 manifest（Bin 语义）：4.10.3 后 rootless = Script 语义（不自动调
+/// main，#413），而本文件测的是 RFC-029 项目编排的入口语义（Bin 自动入口）。
 fn run_project(
     files: &[(&str, &str)],
     entry: &str,
 ) -> Result<(), String> {
     let dir = tempfile::tempdir().expect("create tempdir");
+    std::fs::write(
+        dir.path().join("yaoxiang.toml"),
+        "[package]\nname = \"t\"\nversion = \"0.1.0\"\n",
+    )
+    .expect("write manifest");
     for (name, content) in files {
         let path = dir.path().join(name);
         if let Some(parent) = path.parent() {
@@ -288,6 +296,42 @@ main = () => {
     assert.assert(p.x == 3.0, "p.x should be 3")
 }
 "#;
+    run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+}
+
+#[test]
+fn test_multifile_cross_unit_method_overload_resolves_by_argument_type() {
+    // WBS 4.9.7 / #464：跨单元（registry 解析）方法调用的同名重载按**实参类型**决议。
+    // 判据（先红后绿）：修复前调用方 env 没有定义单元的候选表 ⇒ 决议段整段跳过、
+    // 退回跨单元单值绑定表（同名定义 last-wins）⇒ p.scale(2) 落到 String 候选上
+    // 报 E1002「期望 string，实际 int64」，两条调用根本无法通过编译；修复后按实参
+    // 逐候选决议 ⇒ 两条调用各自命中对应候选并跑出各自的值。
+    // Arrange - lib 定义两个同名同序（参数个数相同）重载，声明序 0=Int / 1=String
+    let lib = r#"
+Point: Type = { x: Float, y: Float }
+
+Point.scale: (self: &Point, k: Int) -> Float = (self, k) => {
+    return self.x * k
+}
+
+Point.scale: (self: &Point, s: String) -> Float = (self, s) => {
+    return self.x + 100.0
+}
+"#;
+    let main = r#"
+use std.assert
+use lib.{Point}
+
+main = () => {
+    p = Point(3.0, 4.0)
+    a: Float = p.scale(2)
+    b: Float = p.scale("x")
+    assert.assert(a == 6.0, "Int 实参必须命中声明序 0 的候选（self.x * k）")
+    assert.assert(b == 103.0, "String 实参必须命中声明序 1 的候选（self.x + 100.0）")
+}
+"#;
+
+    // Act & Assert - 编译到执行全链：两条调用各自命中正确候选
     run_project_ok(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
 }
 

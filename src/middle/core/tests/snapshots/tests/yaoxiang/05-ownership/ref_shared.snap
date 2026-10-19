@@ -24,6 +24,9 @@ module
     Load %4 <- %3
     Load %5 <- string("ref shared ok")
     Call %6 <- string("std.io.println") [%5] (def=d3)
+    Drop %1
+    Drop %0
+    Drop %4
     Ret %6
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

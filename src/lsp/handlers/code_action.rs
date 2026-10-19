@@ -20,9 +20,10 @@ pub fn handle_code_action(
 ) -> Option<Vec<CodeAction>> {
     let uri = params.text_document.uri.as_str();
 
-    // 运行诊断获取当前文件的诊断信息
-    let diag_result = diagnostics::run_diagnostics(uri, content);
-    let diagnostic_list = diag_result.diagnostics;
+    // 运行诊断获取当前文件的诊断信息（4.6.1：与发布诊断同一分析入口；
+    // 语义数据半边此处无消费者，随返回值丢弃）
+    let (diagnostics, _semantic_db) = crate::lsp::analysis::analyze_document(uri, content);
+    let diagnostic_list = diagnostics::to_lsp_diagnostics(&diagnostics);
 
     let mut actions: Vec<CodeAction> = Vec::new();
 

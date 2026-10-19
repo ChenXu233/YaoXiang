@@ -64,6 +64,9 @@ module
     Call %3 <- string("std.assert.assert") [%4, %13] (def=d1)
     Load %4 <- string("fn value reuse ok")
     Call %3 <- string("std.io.println") [%4] (def=d3)
+    Drop %7
+    Drop %5
+    Drop %0
     Ret %3
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

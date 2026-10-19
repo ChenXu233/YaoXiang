@@ -3,7 +3,7 @@ title: 'RFC-032: spawn 统一表达式修饰 — 消除 spawn for 特殊情况'
 status: '审核中'
 author: '晨煦'
 created: '2026-06-16'
-updated: '2026-08-19'
+updated: '2026-10-14'
 issue: '#98'
 ---
 
@@ -85,7 +85,7 @@ SpawnFor { var, var_mut, iterable, body, span },  // spawn for x in items { ... 
 - ❌ `Expr::SpawnFor` 从 AST 中删除
 - ❌ `SpawnForAnalysis` 从 DAG 分析中删除
 - ❌ `spawn for` 不再作为组合关键词在 Parser 中特殊处理
-- ❌ `Ir::SpawnFor` 从 IR 中删除
+- ❌ ir_gen 独立降级路径 `generate_spawn_for_expr_ir` 删除（并入统一 `Spawn` 翻译路径）
 
 ## 详细设计
 
@@ -202,7 +202,11 @@ DAG 分析完成后，运行时按 GMP 模型调度——无依赖的任务扔�
 
 ### 4. IR / Codegen 层
 
-`Ir::SpawnFor` 删除。统一为 `Ir::Spawn`，携带 `TaskSource` 信息。
+**事实修正（2026-10-14）**：IR 指令层（`middle/core/ir.rs`）本就没有 `SpawnFor` 变体，只有
+`Instruction::Spawn`(:330) 与 `Instruction::SpawnFromList`(:340)，两者**保持不变**。存在双路径的是
+ir_gen 翻译层：`Expr::SpawnFor` → `generate_spawn_for_expr_ir`(:8605) 与 `Expr::Spawn` →
+`generate_spawn_expr_ir`(:8624)。本 RFC 将两条翻译路径合并，统一按 `SpawnAnalysis.source` 分发
+生成 `Instruction::Spawn` 系列。
 
 HIR → IR 翻译根据 `SpawnAnalysis.source` 生成运行时调用：
 
@@ -258,7 +262,7 @@ spawn if use_cache {
 
 ### 缺点
 
-1. **破坏性变更**：内部 AST/IR 表示变化，需更新所有消费 `Expr::SpawnFor` 的代码
+1. **破坏性变更**：内部 AST 表示变化，需更新全部 13 个消费 `Expr::SpawnFor` 的源文件（清单见「影响范围」）；IR 快照须同提交再生
 2. **证明管道需适配**：删除 `SpawnFor` 后，证明管道通过 AST 分发（`match body { Expr::For => ..., Expr::While => ... }`）——该适配在本 RFC 范围内通过 DAG 统一入口完成
 
 ## 替代方案
@@ -290,15 +294,24 @@ spawn if use_cache {
 
 ### 影响范围
 
-| 文件/目录                                    | 改动                                                            |
-| -------------------------------------------- | --------------------------------------------------------------- |
-| `frontend/core/parser/ast.rs`                | `Spawn` body 改为 `Box<Expr>`，删除 `SpawnFor`                  |
-| `frontend/core/parser/pratt/nud.rs`          | `spawn` 处理器简化为通用表达式解析                              |
-| `frontend/core/spawn/analysis.rs`            | 统一入口，`TaskSource` 合并 Explicit + Iterate                  |
-| `frontend/core/spawn/placement.rs`           | 删除 `SpawnFor` 分支                                            |
-| `middle/core/ir.rs`                          | 删除 `Ir::SpawnFor`                                             |
-| `middle/` (IR gen, codegen)                  | 统一 spawn 路径                                                 |
-| `tests/yaoxiang/04-concurrency/spawn_for.yx` | 语义不变，验证通过                                              |
+| 文件/目录                                          | 改动                                                            |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| `frontend/core/parser/ast.rs`                     | `Spawn` body 改为 `Box<Expr>`，删除 `SpawnFor`（:79/:1070） |
+| `frontend/core/parser/pratt/nud.rs`               | 删除 `parse_spawn_for`（:154），`spawn` 改为通用表达式解析   |
+| `frontend/core/parser/pratt/mod.rs`               | span 辅助删除 `SpawnFor` 分支（:52）                          |
+| `frontend/core/spawn/analysis.rs`                 | 统一入口；删除 `SpawnForAnalysis`（:46），`TaskSource` 合并  |
+| `frontend/core/spawn/placement.rs`                | 删除 `SpawnFor` 分支（:218）                                   |
+| `frontend/core/typecheck/checker.rs`              | `For \| SpawnFor` 合并臂改为单 `For`（:4812）                 |
+| `frontend/core/typecheck/passes/dead_code.rs`     | 删除 `SpawnFor` 分支（:325）                                   |
+| `frontend/core/typecheck/inference/expressions.rs`| 删除 `SpawnFor` 分支（:3950）                                  |
+| `frontend/core/typecheck/inference/existential.rs`| span 辅助删除 `SpawnFor` 分支（:60）                          |
+| `frontend/core/typecheck/layers/ownership.rs`     | 删除 `SpawnFor` 分支（:1271、:2291）                           |
+| `frontend/core/typecheck/layers/termination.rs`    | `For \| SpawnFor` 合并臂改为单 `For`（:1994）                 |
+| `middle/core/ir_gen.rs`                           | 合并 `generate_spawn_for_expr_ir`（:8605）；:4638/:5418 删分支 |
+| `middle/core/ir.rs`                               | **不变**——指令层本无 `SpawnFor`；`Spawn`(:330)/`SpawnFromList`(:340) 保留 |
+| `formatter/handlers/expr.rs`                      | 删除 `SpawnFor` 格式化分支（:186），`spawn for` 由 `Spawn`+`For` 合成 |
+| `tests/yaoxiang/04-concurrency/spawn_for.yx`      | 语义不变，验证通过                                              |
+| IR 快照 `src/middle/core/tests/snapshots/`        | 相关表达式 IR 形状变化，**同提交再生**（AGENTS.md 红线）        |
 
 ### 依赖关系
 
@@ -316,6 +329,7 @@ spawn if use_cache {
 | DAG 对 for 内部    | 不展开 for 内部子表达式                                              | 直接子表达式规则不变，for 整体为一个任务来源        | 2026-06-16 |
 | 单任务 spawn 警告  | `spawn call(x)` / `spawn 42` 产生编译警告                            | 无并发效果，提醒用户检查意图                        | 2026-08-19 |
 | 计算结构类型       | 推迟到独立 RFC                                                       | 通用机制，不限于 spawn。ECMTT 理论基础              | 2026-08-19 |
+| IR 层事实修正     | 指令层无 `SpawnFor`；合并的是 ir_gen 翻译路径                      | `ir.rs` 仅 `Spawn`/`SpawnFromList`，原表述有误   | 2026-10-14 |
 
 ---
 

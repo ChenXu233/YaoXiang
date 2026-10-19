@@ -67,9 +67,11 @@ module
     Load %8 <- %5
     Load %9 <- int(5)
     StoreField %8.0 <- %9 (type=None, name=Some("x"))
+    Drop %5
     Load %10 <- %5
     Load %11 <- int(7)
     StoreField %10.1 <- %11 (type=None, name=Some("y"))
+    Drop %5
     Spawn %7 <- [] plan(groups=[], deps=[], resources=[])
     Load %12 <- %5
     LoadField %13 <- %12.0
@@ -86,15 +88,23 @@ module
     LoadField %11 <- %13.0
     Load %16 <- int(5)
     Eq %10 <- %11, %16
-    JmpIfNot %10 -> instr(81)
+    JmpIfNot %10 -> instr(83)
     Load %14 <- %5
     LoadField %15 <- %14.1
     Load %12 <- int(7)
     Eq %9 <- %15, %12
-    Jmp -> instr(82)
+    Jmp -> instr(84)
     Load %9 <- bool(false)
     Load %17 <- string("Standard spawn 写回共享 Struct 可见")
     Call %8 <- string("std.assert.assert") [%9, %17] (def=d1)
+    Drop %5
+    Drop %1
+    Drop %6
+    Drop %2
+    Drop %0
+    Drop %4
+    Drop %3
+    Drop %7
     Ret %8
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

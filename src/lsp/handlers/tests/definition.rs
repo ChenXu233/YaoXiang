@@ -153,3 +153,23 @@ fn test_definition_doc_not_open_returns_none() {
     // Assert
     assert!(result.is_none(), "未打开的文档应返回 None");
 }
+
+#[test]
+fn test_definition_mid_identifier_cursor_also_resolves() {
+    // Arrange：三字符名 abc——光标落在标识符**中部**（0-indexed line=1,
+    // character=5 即 b 上）。2026-10-16 用户裁决：跳转查库键改用光标下
+    // 标识符自身的起点（原精确匹配只认引用起点，中部光标静默落空）
+    let (session, world) = open_and_check("abc = 1\ny = abc + abc\n");
+
+    // Act
+    let params = make_params(SAMPLE_URI, 1, 5);
+    let result = handle_definition(&session, &world, params);
+
+    // Assert：与起点光标同效——跳回第一行 abc 定义
+    let response = result.expect("标识符中部光标必须同效跳转（起点查库键裁决）");
+    let GotoDefinitionResponse::Scalar(loc) = response else {
+        panic!("单一定义应返回 Scalar");
+    };
+    assert_eq!(loc.range.start.line, 0, "abc 定义在第一行（0-indexed）");
+    assert_eq!(loc.range.start.character, 0, "abc 定义在第 1 列");
+}

@@ -13,11 +13,13 @@
 //! yaoxiang lsp
 //! ```
 
+pub mod analysis;
 pub mod capabilities;
 pub mod handlers;
 pub mod locate;
 pub mod server;
 pub mod session;
+pub mod uri;
 pub mod world;
 
 #[cfg(test)]

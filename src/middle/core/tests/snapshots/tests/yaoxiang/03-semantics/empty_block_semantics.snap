@@ -41,13 +41,16 @@ module
     Store @2 <- %6
     Load %7 <- int(3)
     Load %8 <- %7
+    Drop %7
     Load %9 <- %8
     Load %10 <- int(2)
     Mul %11 <- %9, %10
+    Drop %8
     Store @3 <- %11
     Call %12 <- string("std.dict.new") [] (def=d2)
     Store @4 <- %12
     Load %2 <- int(1)
+    Drop %2
     Store @5 <- %1
     Load %13 <- @2
     Load %14 <- int(5)

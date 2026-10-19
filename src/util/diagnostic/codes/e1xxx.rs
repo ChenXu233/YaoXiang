@@ -124,4 +124,13 @@ define_codes!(E1XXX, {
     // 函数边界，Script 顶层=模块初始化层没有函数边界——编译期拒绝，
     // 不再运行期静默终止初始化、跳过后续顶层语句）
     ("E1109", TypeCheck, false, return_outside_function() => ),
+    // E1110 方法绑定缺少签名标注（WBS 3.13.1 / issue #451，D59 A 类：旧行为是
+    // ir_gen 对 None 标注执行 `unwrap()` ⇒ 进程 panic、exit 101）。方法绑定的
+    // 签名是绑定语义的唯一来源（接收者位、形参名、返回类型都取自它）：无标注时
+    // 既不能生成方法 IR、也无法确定重绑定位置，故编译期公开拒绝而非崩溃。
+    ("E1110", TypeCheck, false, method_binding_without_signature(type_: &str, method: &str) => .param("type", type_) .param("method", method)),
+    // E1111 一个形参收到多个实参 / 实参顺序非法（#452 复审 F2：争槽位与
+    // 「命名实参之后又写位置实参」两类，用户每个实参只写了一次，用「参数重复
+    // 指定」（E1015）描述与代码事实矛盾；E1015 只保留字面重复命名）。
+    ("E1111", TypeCheck, false, argument_order_invalid(func: &str, name: &str) => .param("func", func) .param("name", name)),
 });

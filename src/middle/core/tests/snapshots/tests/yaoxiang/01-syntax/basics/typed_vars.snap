@@ -38,6 +38,8 @@ module
     Eq %1 <- %3, %5
     Load %6 <- string("counter == 1")
     Call %0 <- string("std.assert.assert") [%1, %6] (def=d0)
+    Drop %4
+    Drop %2
     Ret %0
   init (locals=0)
     Load %0 <- int(42)

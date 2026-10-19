@@ -34,6 +34,10 @@ mod token_system;
 #[path = "integration/multifile.rs"]
 mod multifile;
 
+/// #454：stdlib 原生导出的命名实参（3.16 端到端值级 oracle）
+#[path = "integration/named_args_native.rs"]
+mod named_args_native;
+
 /// RFC-039 P2 漏洞专门判据：证明义务静默丢弃（先红后绿）
 #[path = "integration/proof_obligations.rs"]
 mod proof_obligations;

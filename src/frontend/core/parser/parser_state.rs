@@ -2,6 +2,7 @@
 
 use crate::frontend::core::lexer::tokens::*;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 use std::collections::HashSet;
 
@@ -29,6 +30,9 @@ pub struct ParserState<'a> {
     /// 还是「const 泛型应用」（实参位是类型引用）。parser 不持有类型环境，
     /// 只能靠本遍已解析的声明累积——**谓词须先声明后使用**。
     predicate_names: HashSet<String>,
+    /// 释放计划身份的单调计数器（RFC-039 D20 / WBS 4.5.1）：本编译单元的
+    /// 语句身份由此按解析序分配，见 [`Self::alloc_plan_id`]。
+    next_plan_id: u32,
 }
 
 impl<'a> ParserState<'a> {
@@ -39,7 +43,20 @@ impl<'a> ParserState<'a> {
             errors: Vec::new(),
             no_fat_arrow: false,
             predicate_names: HashSet::new(),
+            next_plan_id: 0,
         }
+    }
+
+    /// 分配下一个释放计划身份（RFC-039 D20 / WBS 4.5.1）。
+    ///
+    /// 解析期单调递增、编译单元内唯一。**唯一分配点**：语句身份必须随 AST
+    /// 节点走（`Stmt::plan_id`），故由 [`Self::parse_statement`] 统一发放——
+    /// 各 `parse_*_stmt` 只构造语法节点，不各自编号（避免同一个身份两处来源）。
+    /// 解析器之外的合成语句用 [`PlanId::UNPLANNED`]，不构成释放计划义务。
+    pub fn alloc_plan_id(&mut self) -> PlanId {
+        let id = PlanId::from_ordinal(self.next_plan_id);
+        self.next_plan_id += 1;
+        id
     }
 
     /// RFC-027：登记一个谓词名（返回 `Type` 的声明）。
@@ -184,10 +201,15 @@ impl<'a> ParserState<'a> {
             self.bump();
         }
     }
+    /// 解析一条语句。
+    ///
+    /// 释放计划身份（`Stmt::plan_id`）在此**统一发放**——语句构造在
+    /// `parse_*_stmt` 里完成、语法入不了编号，故身份的单一来源是这里：
+    /// 「每条经解析器产出的语句都有一个编译单元内唯一的身份」（RFC-039 D20）。
     pub fn parse_statement(&mut self) -> Option<crate::frontend::core::parser::ast::Stmt> {
         use crate::frontend::core::parser::statements::*;
         let ss = self.span();
-        match self.current().map(|t| &t.kind) {
+        let stmt = match self.current().map(|t| &t.kind) {
             Some(TokenKind::KwUse) => parse_use_stmt(self, ss),
             Some(TokenKind::KwReturn) => parse_return_stmt(self, ss),
             Some(TokenKind::KwBreak) => parse_break_stmt(self, ss),
@@ -223,7 +245,11 @@ impl<'a> ParserState<'a> {
                 None
             }
             Some(_) => parse_expr_stmt(self, ss),
-        }
+        };
+        stmt.map(|mut stmt| {
+            stmt.plan_id = self.alloc_plan_id();
+            stmt
+        })
     }
     pub fn parse_expression(
         &mut self,

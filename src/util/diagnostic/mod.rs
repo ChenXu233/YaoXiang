@@ -201,7 +201,9 @@ fn build_runtime_diagnostic(
         }
         ExecutorError::Runtime(message, _) => ErrorCodeDefinition::runtime_error(message.as_str()),
         ExecutorError::Type(message, _) => ErrorCodeDefinition::runtime_error(message.as_str()),
-        ExecutorError::StackOverflow(_) => ErrorCodeDefinition::stack_overflow(0),
+        // WBS 3.9.1：limit 来自错误变体携带的真实上限（单点事实源是
+        // `ExecutorConfig::max_stack_depth`），不再恒传 0。
+        ExecutorError::StackOverflow { limit, .. } => ErrorCodeDefinition::stack_overflow(*limit),
         // #280：专用变体映射专用码，不再落通用 E6007
         ExecutorError::IndexOutOfBounds {
             max,
@@ -246,6 +248,37 @@ fn finish(
     builder.build()
 }
 
+/// 深栈回显：保留的前导帧数（WBS 3.11.2 / issue #448）。
+const STACK_TRACE_HEAD_FRAMES: usize = 16;
+/// 深栈回显：保留的末尾帧数（末尾 = 最靠近触发点之外的收尾链）。
+const STACK_TRACE_TAIL_FRAMES: usize = 8;
+
+/// 回显单个栈帧（`#327`：用户面向输出不暴露字节码 ip）。
+fn format_stack_frame(
+    frame: &crate::backends::StackFrame,
+    module: &crate::middle::bytecode::BytecodeModule,
+    sources: Option<&SourceMap>,
+) -> String {
+    if let Some(ds) = resolve_runtime_span(module, frame).filter(|s| !s.is_dummy()) {
+        let loc = match sources.and_then(|sm| sm.get(ds.file_id)) {
+            Some(sf) => format!(
+                "{}:{}:{}",
+                sf.name, ds.span.start.line, ds.span.start.column
+            ),
+            None => format!("{}:{}", ds.span.start.line, ds.span.start.column),
+        };
+        format!("  at {} ({})\n", frame.function_name, loc)
+    } else {
+        format!("  at {}\n", frame.function_name)
+    }
+}
+
+/// 渲染运行时栈回溯。
+///
+/// **深栈受控回显**（WBS 3.11.2 / issue #448）：帧数超过「首段 + 末段」阈值时，
+/// 只回显首尾两段并用一行计数省略中间——E6004 首次可达后曾把完整 1024 帧
+/// 全量打印（stderr 1035 行），既淹没真正的线索也放大了输出。
+/// 阈值以内**逐帧回显**：浅栈输出与修复前逐字节相同（既有断言不放宽）。
 fn format_runtime_stack_trace(
     error: &crate::backends::ExecutorError,
     module: &crate::middle::bytecode::BytecodeModule,
@@ -256,19 +289,19 @@ fn format_runtime_stack_trace(
     };
 
     let mut out = String::from("stack trace:\n");
-    for frame in stack {
-        // #327：用户面向输出不暴露字节码 ip（形态对齐编译期；字节码定位归 RFC-034 工具链）
-        if let Some(ds) = resolve_runtime_span(module, frame).filter(|s| !s.is_dummy()) {
-            let loc = match sources.and_then(|sm| sm.get(ds.file_id)) {
-                Some(sf) => format!(
-                    "{}:{}:{}",
-                    sf.name, ds.span.start.line, ds.span.start.column
-                ),
-                None => format!("{}:{}", ds.span.start.line, ds.span.start.column),
-            };
-            out.push_str(&format!("  at {} ({})\n", frame.function_name, loc));
-        } else {
-            out.push_str(&format!("  at {}\n", frame.function_name));
+    let total = stack.len();
+    let deep = total > STACK_TRACE_HEAD_FRAMES + STACK_TRACE_TAIL_FRAMES;
+    let head_len = if deep { STACK_TRACE_HEAD_FRAMES } else { total };
+    for frame in &stack[..head_len] {
+        out.push_str(&format_stack_frame(frame, module, sources));
+    }
+    if deep {
+        out.push_str(&format!(
+            "  … 省略 {} 帧 …\n",
+            total - STACK_TRACE_HEAD_FRAMES - STACK_TRACE_TAIL_FRAMES
+        ));
+        for frame in &stack[total - STACK_TRACE_TAIL_FRAMES..] {
+            out.push_str(&format_stack_frame(frame, module, sources));
         }
     }
     out
@@ -322,7 +355,6 @@ pub fn run_file_with_diagnostics(
     runtime_mode: &str,
     workers: usize,
 ) -> anyhow::Result<()> {
-    use crate::frontend::Compiler;
     use crate::middle::passes::codegen::CodegenContext;
 
     // 通过文件头魔数判定字节码 vs 源码
@@ -352,91 +384,97 @@ pub fn run_file_with_diagnostics(
 
     let source_name = file.display().to_string();
     let mut sources = SourceMap::new();
-    let entry_file_id = sources.add_file(source_name, source);
-    let source_file = sources
-        .get(entry_file_id)
-        .ok_or_else(|| anyhow::anyhow!("Failed to load source file"))?;
+    // 兜底占位：下方按 module.source_files 重建前的初始表（编排产物恒非空时
+    // 被整体替换；保留初始项只是防御）
+    sources.add_file(source_name, source);
 
-    // RFC-029: 位于 yaoxiang 项目内的文件走多文件编排器（发现同项目 .yx、构建共享
-    // Registry、逐文件 typecheck、整体编译）；否则按单文件编译。两者都产出 ModuleIR，
-    // 复用下方同一套 codegen + 执行路径（保留 runtime/workers 配置）。
-    let module_result: Result<crate::middle::ModuleIR, crate::frontend::CompileError> =
-        if in_yaoxiang_project(file) {
-            match crate::frontend::module::orchestrator::compile_project(file) {
-                Ok(m) => Ok(m),
-                Err(e) => {
-                    // 结构化诊断按其来源文件渲染，不再包成 E8001
-                    render_orchestrator_error(&e);
-                    return Err(anyhow::anyhow!("Compilation failed"));
-                }
-            }
-        } else {
-            Compiler::new().compile(&source_file.name, &source_file.content)
-        };
-
-    match module_result {
-        Ok(module) => {
-            // #413：Script 模式（项目外单文件）不自动执行 main——T4 决议
-            // （codegen find_entry_point）：无 manifest 就没有入口概念，顶层
-            // 语句即程序主体，自动执行会与显式 main() 双跑（#356）。但静默
-            // 成功有欺骗性：main 定义了却完全惰性（未调用、值型块体也未在
-            // 初始化期求值）时给出显式提示；值型块体已求值的不再提示——
-            // 无调用它也已经执行，且照提示补 main() 只会编译报错（E1065，
-            // Void 不可调用）（#422 UX 对账）。
-            if module.source_files.is_empty() && script_main_never_called(&module) {
-                eprintln!(
-                    "提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。"
-                );
-                eprintln!(
-                    "提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"
-                );
-            }
-            // 多文件模式（#252）：按 orchestrator 发现顺序重建 SourceMap，
-            // 使索引与 debug span 的 file_id 对齐。读不到文件也要占位，保持索引稳定。
-            if !module.source_files.is_empty() {
-                let mut multi = SourceMap::new();
-                for path in &module.source_files {
-                    // #327：嵌入 std 虚拟路径（<std/test>）读盘必失败，回填嵌入源文本，
-                    // 使错误落在 std 模块内时也能渲染真实片段
-                    let content =
-                        match crate::std::yx_sources::embedded_source_by_virtual_path(path) {
-                            Some(src) => src.to_string(),
-                            None => std::fs::read_to_string(path).unwrap_or_default(),
-                        };
-                    multi.add_file(path.clone(), content);
-                }
-                sources = multi;
-            }
-            // Generate bytecode
-            // #327：debug_map 默认生成——运行时错误默认携带栈帧与源码上下文，
-            // 不再有"无位置"的运行时错误形态
-            // keep_debug_info 必须一并开启：ip→span 与局部变量名都在调试段里，
-            // 只生成不保留等于白做（E6003 只能报数值、报不出是哪个变量越界）。
-            let mut ctx = CodegenContext::new(module);
-            ctx.set_generate_debug_info(true);
-            ctx.set_keep_debug_info(true);
-            let bytecode_file = ctx
-                .generate()
-                .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
-            let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
-
-            // Execute
-            exec_module(&bytecode_module, runtime_mode, workers, Some(&sources))?;
-        }
+    // RFC-029 + 4.10.3：项目内与 standalone 统一走多文件编排（compile_project）
+    // ——standalone（无项目根）的相对 use 沿导入者目录解析，与 check 同源
+    //（4.2.5 裁决 A 的 run 半边）；Script 语义（顶层语句即程序主体、不自动调
+    // main）由 rootless 驱动：driver 侧 ir_gen 的 script_mode 与 Linking 的
+    // entry_function 门控都以无项目根为开关。产物统一为 ModuleIR，复用下方
+    // 同一套 codegen + 执行路径（保留 runtime/workers 配置）。
+    let script_mode = !in_yaoxiang_project(file);
+    let module = match crate::frontend::module::orchestrator::compile_project(file) {
+        Ok(m) => m,
         Err(e) => {
-            // 使用渲染器输出美化后的错误
-            eprintln!();
-            let output = render_compile_error(e.message(), source_file, e.diagnostic());
-            eprintln!("{}", output);
+            // 结构化诊断按其来源文件渲染，不再包成 E8001
+            render_orchestrator_error(&e);
             return Err(anyhow::anyhow!("Compilation failed"));
         }
+    };
+
+    {
+        // #413：Script 模式（项目外单文件）不自动执行 main——T4 决议
+        // （codegen find_entry_point）：无 manifest 就没有入口概念，顶层
+        // 语句即程序主体，自动执行会与显式 main() 双跑（#356）。但静默
+        // 成功有欺骗性：main 定义了却完全惰性（未调用、值型块体也未在
+        // 初始化期求值）时给出显式提示；值型块体已求值的不再提示——
+        // 无调用它也已经执行，且照提示补 main() 只会编译报错（E1065，
+        // Void 不可调用）（#422 UX 对账）。
+        // 键控（4.10.3）：统一编排后 ModuleIR 恒带 source_files，原
+        // `source_files.is_empty()` 标记随之失效——改由调用点的项目
+        // 探针（script_mode）驱动；限定名形态下 main 的函数名是
+        // `{entry_key}.main`。
+        if script_mode && script_main_never_called(&module, &qualified_main_name(file)) {
+            eprintln!(
+                    "提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。"
+                );
+            eprintln!(
+                    "提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"
+                );
+        }
+        // 多文件模式（#252）：按 orchestrator 发现顺序重建 SourceMap，
+        // 使索引与 debug span 的 file_id 对齐。读不到文件也要占位，保持索引稳定。
+        if !module.source_files.is_empty() {
+            let mut multi = SourceMap::new();
+            for path in &module.source_files {
+                // #327：嵌入 std 虚拟路径（<std/test>）读盘必失败，回填嵌入源文本，
+                // 使错误落在 std 模块内时也能渲染真实片段
+                let content = match crate::std::yx_sources::embedded_source_by_virtual_path(path) {
+                    Some(src) => src.to_string(),
+                    None => std::fs::read_to_string(path).unwrap_or_default(),
+                };
+                multi.add_file(path.clone(), content);
+            }
+            sources = multi;
+        }
+        // Generate bytecode
+        // #327：debug_map 默认生成——运行时错误默认携带栈帧与源码上下文，
+        // 不再有"无位置"的运行时错误形态
+        // keep_debug_info 必须一并开启：ip→span 与局部变量名都在调试段里，
+        // 只生成不保留等于白做（E6003 只能报数值、报不出是哪个变量越界）。
+        let mut ctx = CodegenContext::new(module);
+        ctx.set_generate_debug_info(true);
+        ctx.set_keep_debug_info(true);
+        let bytecode_file = ctx
+            .generate()
+            .map_err(|e| anyhow::anyhow!("Codegen failed: {:?}", e))?;
+        let bytecode_module = crate::middle::bytecode::BytecodeModule::from(bytecode_file);
+
+        // Execute
+        exec_module(&bytecode_module, runtime_mode, workers, Some(&sources))?;
     }
 
     Ok(())
 }
 
+/// 限定名形态下 main 的函数键（`{entry_key}.main`）——4.10.3 统一编排后
+/// 函数按单元键限定（与 driver 的入口键同一实现 `entry_module_key`）。
+fn qualified_main_name(file: &std::path::Path) -> String {
+    format!(
+        "{}.main",
+        crate::frontend::module::orchestrator::entry_module_key(file)
+    )
+}
+
 /// #413：Script 模式提示判定——文件绑定了 `main`，且模块初始化序列既没有对它
 /// 的直接调用、也没有在初始化期**求值过它的值**。
+///
+/// 命名形态（4.10.3）：统一编排后顶层绑定按单元键限定——函数形态的
+/// main 在 merged IR 里叫 `{entry_key}.main`（顶层调用名同形限定），值
+/// 形态的全局槽位同样限定为 `{entry_key}.main`（实测 IR）。裸 `main`
+/// 作为防御形态保留（管线产物/历史形状）。
 ///
 /// 顶层 `main()` 调用在 init 中是 `Call { func: Const(String("main")), .. }`
 /// （调用目标以名字常量编码，见 ir_gen 的 Call 生成）；定义本身
@@ -451,12 +489,21 @@ pub fn run_file_with_diagnostics(
 /// `MakeClosure` 的新闭包，体仍惰性，提示保留（补 `main()` 恰好跑一次）。
 /// 判别：main 槽位的 `Store` 源寄存器若由本 init 段的 `MakeClosure` 写出则
 /// 视为惰性，否则视为已在初始化期求值。
-fn script_main_never_called(module: &crate::middle::ModuleIR) -> bool {
+fn script_main_never_called(
+    module: &crate::middle::ModuleIR,
+    qualified_main: &str,
+) -> bool {
     use crate::middle::core::ir::{ConstValue, Instruction, Operand};
     use std::collections::HashSet;
 
-    let defines_main = module.functions.iter().any(|f| f.name == "main")
-        || module.globals.iter().any(|g| g.name == "main");
+    let defines_main = module
+        .functions
+        .iter()
+        .any(|f| f.name == "main" || f.name == qualified_main)
+        || module
+            .globals
+            .iter()
+            .any(|g| g.name == "main" || g.name == qualified_main);
     if !defines_main {
         return false;
     }
@@ -464,7 +511,8 @@ fn script_main_never_called(module: &crate::middle::ModuleIR) -> bool {
         Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
             matches!(
                 func,
-                Operand::Const(ConstValue::String(name)) if name == "main"
+                Operand::Const(ConstValue::String(name))
+                    if name == "main" || name == qualified_main
             )
         }
         _ => false,
@@ -476,7 +524,7 @@ fn script_main_never_called(module: &crate::middle::ModuleIR) -> bool {
     let Some(main_slot) = module
         .globals
         .iter()
-        .find(|g| g.name == "main")
+        .find(|g| g.name == "main" || g.name == qualified_main)
         .map(|g| g.index)
     else {
         return true; // main 是函数形态（未调用即死码），提示成立

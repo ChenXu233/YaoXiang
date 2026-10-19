@@ -49,6 +49,7 @@ pub fn parse(tokens: &[Token]) -> ParseResult {
             items.push(Stmt {
                 kind: StmtKind::Error(esp),
                 span: esp,
+                plan_id: state.alloc_plan_id(),
             });
             state.bump();
             continue;

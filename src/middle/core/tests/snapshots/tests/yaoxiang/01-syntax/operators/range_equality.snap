@@ -145,6 +145,9 @@ module
     Not %4 <- %5
     Load %14 <- string("tuple vs list is false, not error")
     Call %2 <- string("std.assert.assert") [%4, %14] (def=d0)
+    Drop %3
+    Drop %0
+    Drop %1
     Ret %2
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

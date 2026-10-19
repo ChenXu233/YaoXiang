@@ -1,0 +1,11 @@
+// b.yx —— 提供 Other（被 use b.{Other} 带进作用域），并另定义同名形态的 Temp
+Temp: Type = { v: Float }
+Other: Type = { v: Float }
+
+Temp.to: (self: &Temp) -> Float = (self) => {
+    self.v + 100.0
+}
+
+Other.to: (self: &Other) -> Float = (self) => {
+    self.v + 10.0
+}

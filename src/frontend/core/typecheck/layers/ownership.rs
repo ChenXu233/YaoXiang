@@ -11,6 +11,8 @@
 //! § 慢速通道: SMT 逻辑切断
 
 use std::collections::{HashMap, HashSet};
+use crate::util::consumption::ConsumptionLedger;
+use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 use super::super::proof::context::ProofContext;
 use super::super::proof::verdict::ProofResult;
@@ -18,16 +20,67 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
 
 use crate::frontend::core::typecheck::proof::smt::ast::{SMTSort, SMTResult};
 use crate::frontend::core::typecheck::proof::smt::translate::translate_constraint;
-use crate::frontend::core::typecheck::proof::smt::backend::default_solver;
+use crate::frontend::core::typecheck::proof::smt::backend::{with_shared_solver, SolverConsumer};
 
 // ── ReleasePlan ───────────────────────────────────────────
 
-/// NLL 精确释放计划
+/// NLL 精确释放计划（RFC-039 D20 / WBS 4.5.1）
 ///
-/// key = 最后使用位置的 Span，value = 在该位置需要 Drop 的变量名列表（LIFO 顺序）
+/// key = **释放边界所在语句的 [`PlanId`]**——解析期分配、随 AST 节点走的
+/// 结构身份，不再是「最后使用位置的 Span」这种跨层各自持有的位置量：
+/// 产出侧（本模块）与消费侧（IR 生成）读的是同一个节点上的同一个值。
+/// value = 在该语句边界需要 Drop 的变量名列表（LIFO 顺序，子先父后）。
+///
+/// 消费侧在语句边界经 [`Self::consume`] 取条目——取即记账；结算侧读
+/// [`Self::unconsumed`]，非空即响亮（义务账本 W1090，D41）。
 #[derive(Debug, Clone, Default)]
 pub struct ReleasePlan {
-    pub drops: HashMap<Span, Vec<String>>,
+    /// 产出：语句身份 → 该边界释放的变量名（LIFO 顺序）
+    pub drops: HashMap<PlanId, Vec<String>>,
+    /// 消费台账（与计划同体；4.5.2 的重载决议表共用同一实现）
+    consumption: ConsumptionLedger<PlanId>,
+}
+
+impl ReleasePlan {
+    /// **唯一的消费入口**：取某条语句边界的释放条目，命中即记账。
+    ///
+    /// 记账与读取是同一次调用——消费台账不可能与真实消费漂移。这是
+    /// 「产出 ⊆ 消费」可结算的前提（登记-消费型机制的消费侧直证）。
+    pub fn consume(
+        &self,
+        statement: PlanId,
+    ) -> Option<&[String]> {
+        let vars = self.drops.get(&statement)?;
+        self.consumption.mark(statement);
+        Some(vars.as_slice())
+    }
+
+    /// 未被消费的产出键（**结算判据：必须为空**；D41）。
+    ///
+    /// 升序返回——诊断与跨运行比对稳定。
+    pub fn unconsumed(&self) -> Vec<PlanId> {
+        let mut ids: Vec<PlanId> = self
+            .drops
+            .keys()
+            .copied()
+            .filter(|id| !self.consumption.contains(*id))
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// 标记消费侧已完整跑完一轮（IR 生成成功返回时调用；幂等）。
+    ///
+    /// 结算的「消费者真的跑过」判据——失败 / 未运行时不标，此时未消费键不判
+    /// （见 [`ConsumptionLedger::is_completed`]）。
+    pub fn mark_consumption_completed(&self) {
+        self.consumption.mark_completed();
+    }
+
+    /// 消费侧是否完整跑完一轮（IR 生成成功返回）。
+    pub fn consumption_completed(&self) -> bool {
+        self.consumption.is_completed()
+    }
 }
 
 /// 参数的所有权语义（从函数签名推导）
@@ -413,8 +466,11 @@ pub enum VarOp {
     Move { var: String },
     /// 读取检查点（分析时判定 E2014/E2018）
     Read { var: String, span: Span },
-    /// 作用域退出：Alive → Dropped（#264：Dropped 语义 = 作用域外不可见）
-    Drop { var: String, span: Span },
+    /// 作用域退出：Alive → Dropped（#264：Dropped 语义 = 作用域外不可见）。
+    ///
+    /// `plan_id` = 释放边界所在语句的身份（RFC-039 D20）：数据流分析据此把
+    /// 「哪条语句负责释放」带进释放计划，取代原先的位置量。
+    Drop { var: String, plan_id: PlanId },
 }
 
 /// 变量状态格：Dropped(2) > Moved(1) > Alive(0)，汇合取 max（保守）
@@ -618,12 +674,14 @@ pub(crate) fn smt_cut(
 
         let commands = translate_constraint(&constraint, &[], &var_sorts);
 
-        let backend = match default_solver() {
-            Some(b) => b,
-            None => return false, // 求解器不可用 → 保守不切断（回边穿越）
-        };
-
-        matches!(backend.solve(&commands, 100), SMTResult::Unsat)
+        // 共享口（RFC-039 D58）：此前每次回边判定新建 Z3 实例，缓存计数与
+        // CACHE_CAP 空转；改走进程级共享单例后，同形回边的查询可命中缓存。
+        with_shared_solver(SolverConsumer::Ownership, |solver| {
+            let Some(solver) = solver else {
+                return false; // 求解器不可用 → 保守不切断（回边穿越）
+            };
+            matches!(solver.solve(&commands, 100), SMTResult::Unsat)
+        })
     }
 }
 
@@ -890,14 +948,16 @@ pub struct OwnershipChecker {
     current_condition: Option<ConstExpr>,
     /// 当前 AST 片段的源码位置（walk 过程中更新）
     current_span: Span,
-    /// CFG 节点 → 源码 Span（build_release_plan 用）
-    node_spans: HashMap<usize, Span>,
+    /// 当前 walk 到的语句的释放计划身份（释放边界的归属；嵌套语句走完恢复外层）
+    current_plan_id: PlanId,
+    /// CFG 节点 → 该节点所属语句的释放计划身份（build_release_plan 用）
+    node_plan_ids: HashMap<usize, PlanId>,
     /// 作用域栈：每个元素是当前作用域内声明的变量名列表
     /// walk_stmts 进入时 push，退出时 pop 并标记 Alive→Dropped
     scope_vars: Vec<Vec<String>>,
-    /// 作用域退出时收集的 Drop 记录（Span, 变量名）
+    /// 作用域退出时收集的 Drop 记录（释放边界所在语句的身份, 变量名）
     /// build_release_plan 会将这些与 BrandTree 消费者分析合并
-    scope_drops: Vec<(Span, String)>,
+    scope_drops: Vec<(PlanId, String)>,
     /// 类型环境引用（用裸指针避免生命周期重写；env 生命周期 > checker）
     env: Option<*const crate::frontend::core::typecheck::environment::TypeEnvironment>,
     /// ref 创建的变量（Expr::Ref 的赋值目标）
@@ -953,10 +1013,11 @@ impl OwnershipChecker {
             current_node: 0,
             current_condition: None,
             current_span: Span::dummy(),
+            current_plan_id: PlanId::UNPLANNED,
             write_borrow_arg_depth: 0,
             ref_bindings: HashMap::new(),
             last_created_token: None,
-            node_spans: HashMap::new(),
+            node_plan_ids: HashMap::new(),
             scope_vars: Vec::new(),
             scope_drops: Vec::new(),
             env: None,
@@ -988,7 +1049,7 @@ impl OwnershipChecker {
         self.cfg = ControlFlowGraph::new();
         self.var_mutability.clear();
         self.pending_writes.clear();
-        self.node_spans.clear();
+        self.node_plan_ids.clear();
         self.scope_vars.clear();
         self.scope_drops.clear();
         self.ref_vars.clear();
@@ -1007,6 +1068,7 @@ impl OwnershipChecker {
         self.last_created_token = None;
         self.current_node = self.cfg.add_node(None); // 入口节点
         self.current_span = Span::dummy();
+        self.current_plan_id = PlanId::UNPLANNED;
         // #265：假设栈随函数重置（路径条件不跨函数）
         self.gamma =
             crate::frontend::core::typecheck::proof::assumptions::FlowSensitiveGamma::new();
@@ -2252,7 +2314,10 @@ impl OwnershipChecker {
             // FnDef / Lambda / Lit / FString 等跳过
             _ => vec![],
         };
-        self.node_spans.insert(self.current_node, self.current_span);
+        // RFC-039 D20：本节点归属**当前语句**——释放边界落在哪条语句上，
+        // 就由哪条语句的 IR 语句边界消费（取代原先记「最后一个表达式的 span」）
+        self.node_plan_ids
+            .insert(self.current_node, self.current_plan_id);
         result
     }
 
@@ -2263,6 +2328,10 @@ impl OwnershipChecker {
         self.current_span = stmt.span;
         // 账本键与推断层对齐：当前语句的 span offset（#256）
         self.cur_stmt_key = stmt.span.start.offset;
+        // RFC-039 D20：本语句的释放计划身份——嵌套语句走完后恢复外层身份，
+        // 使「释放边界归属最近一层语句」与「子结构走完回到父语句」两件事一致
+        let saved_plan_id = self.current_plan_id;
+        self.current_plan_id = stmt.plan_id;
         let result = match &stmt.kind {
             StmtKind::Expr(expr) => self.walk_expr(expr),
 
@@ -2312,6 +2381,10 @@ impl OwnershipChecker {
                                 }
                             }
                         }
+                        // 提前返回也要归位：否则内层身份会串给后续语句
+                        self.node_plan_ids
+                            .insert(self.current_node, self.current_plan_id);
+                        self.current_plan_id = saved_plan_id;
                         return results;
                     }
                 };
@@ -2462,7 +2535,9 @@ impl OwnershipChecker {
 
             _ => vec![],
         };
-        self.node_spans.insert(self.current_node, self.current_span);
+        self.node_plan_ids
+            .insert(self.current_node, self.current_plan_id);
+        self.current_plan_id = saved_plan_id;
         result
     }
 
@@ -2487,12 +2562,18 @@ impl OwnershipChecker {
         // 作用域退出：将本作用域内声明且仍 Alive 的变量标记为 Dropped
         // #264：判定延迟到数据流分析（Drop op 在分析时检查状态）；
         // scope_drops（release plan 用）也由分析阶段收集。
+        //
+        // RFC-039 D20：作用域退出的释放边界归属**本作用域最后一条语句**——
+        // IR 生成在每条语句生成完即消费该语句的计划条目（函数体循环 / 块循环 /
+        // 尾语句路径同款），故作用域退出的 Drop 落在最后一个语句边界上，
+        // 产出与消费逐语句对齐（不再是「作用域退出时 current_span 恰好等于
+        // 某条语句 span」的位置巧合）。
+        let exit_plan_id = stmts.last().map_or(PlanId::UNPLANNED, |stmt| stmt.plan_id);
         if let Some(scope) = self.scope_vars.pop() {
-            let span = self.current_span;
             for var in &scope {
                 self.push_var_op(VarOp::Drop {
                     var: var.clone(),
-                    span,
+                    plan_id: exit_plan_id,
                 });
             }
         }
@@ -2558,69 +2639,91 @@ impl OwnershipChecker {
         false
     }
 
+    /// 变量在品牌树里的深度（根令牌 0，字段派生 +1）；不在树中返回 0。
+    ///
+    /// 同名多节点取**最大深度**——取值不许依赖 `HashMap` 迭代顺序（同
+    /// [`Self::build_release_plan`] 的确定性要求）。
+    fn brand_depth(
+        &self,
+        var: &str,
+    ) -> usize {
+        let mut deepest = 0usize;
+        for node in self.brand_tree.nodes.values() {
+            if node.source_var != var {
+                continue;
+            }
+            let mut depth = 0usize;
+            let mut parent = node.parent.clone();
+            while let Some(parent_id) = parent {
+                let Some(parent_node) = self.brand_tree.nodes.get(&parent_id) else {
+                    break;
+                };
+                depth += 1;
+                parent = parent_node.parent.clone();
+            }
+            deepest = deepest.max(depth);
+        }
+        deepest
+    }
+
     /// 生成 NLL 精确释放计划
     ///
     /// 两源合并：
     /// 1. BrandTree 令牌消费者分析（借用变量的最后使用点）
     /// 2. 作用域退出收集的 Drop 记录（非借用变量的作用域结束点）
     ///
-    /// 结果按 Span 分组，组内 LIFO 排序（子先父后）。
+    /// 结果按释放边界所在**语句身份**分组，组内排序：子先父后（品牌树深度大的
+    /// 先释放），同深度按变量名升序。
+    ///
+    /// **组内顺序必须是全序**：原实现按「a 是否为 b 的子」这种偏序 `sort_by`，
+    /// 且输入来自 `HashSet` 迭代——组内顺序随进程哈希种子漂移。Drops 真正发射
+    /// 之后，这种漂移会直接写进 IR（同一文件两次编译的 Drop 顺序不同），
+    /// 快照 / 语料 C1 zero-diff 判据据不住。故此处改为确定性排序。
     fn build_release_plan(
         &self,
         params: &[crate::frontend::core::parser::ast::Param],
     ) -> ReleasePlan {
         let param_names: HashSet<&str> = params.iter().map(|p| p.name.as_str()).collect();
-        let mut span_groups: HashMap<Span, Vec<&str>> = HashMap::new();
+        let mut plan_groups: HashMap<PlanId, Vec<&str>> = HashMap::new();
 
-        // 源 1：BrandTree 令牌消费者
+        // 源 1：BrandTree 令牌消费者（最后一个消费点所在语句的身份）
         for node in self.brand_tree.nodes.values() {
             if param_names.contains(node.source_var.as_str()) {
                 continue; // 参数由调用方负责释放
             }
             if let Some(&max_consumer) = node.consumers.iter().max() {
-                if let Some(&span) = self.node_spans.get(&max_consumer) {
-                    span_groups.entry(span).or_default().push(&node.source_var);
+                if let Some(&plan_id) = self.node_plan_ids.get(&max_consumer) {
+                    plan_groups
+                        .entry(plan_id)
+                        .or_default()
+                        .push(&node.source_var);
                 }
             }
         }
 
         // 源 2：作用域退出 Drop 记录（覆盖非借用变量）
-        for (span, var) in &self.scope_drops {
+        for (plan_id, var) in &self.scope_drops {
             if !param_names.contains(var.as_str()) {
-                span_groups.entry(*span).or_default().push(var);
+                plan_groups.entry(*plan_id).or_default().push(var);
             }
         }
 
-        // 每组内去重 + LIFO 排序（子先父后）
-        let mut drops: HashMap<Span, Vec<String>> = HashMap::new();
-        for (span, vars) in span_groups {
-            let mut unique: Vec<String> = vars
-                .iter()
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .map(|s| s.to_string())
-                .collect();
-            // 按前缀关系排序：持有子令牌的变量先释放
-            unique.sort_by(|a, b| {
-                let a_is_child_of_b = self.brand_tree.nodes.values().any(|n| {
-                    n.source_var == *a
-                        && n.parent.as_ref().is_some_and(|p| {
-                            self.brand_tree
-                                .nodes
-                                .get(p)
-                                .is_some_and(|pn| pn.source_var == *b)
-                        })
-                });
-                if a_is_child_of_b {
-                    std::cmp::Ordering::Greater // a 是子 → 先释放（后排序）
-                } else {
-                    std::cmp::Ordering::Less
-                }
-            });
-            drops.insert(span, unique);
+        // 每组内去重 + 确定性排序（子先父后 → 同深度按名字升序）
+        let mut drops: HashMap<PlanId, Vec<String>> = HashMap::new();
+        for (plan_id, vars) in plan_groups {
+            let mut unique: Vec<String> = vars.iter().map(|s| s.to_string()).collect();
+            unique.sort_unstable();
+            unique.dedup();
+            // 全序（反深度, 名字）：子令牌（品牌树深）先释放；同名不同节点的
+            // 深度取最大值——取值本身也不许依赖 HashMap 迭代顺序
+            unique.sort_by_key(|var| (std::cmp::Reverse(self.brand_depth(var)), var.clone()));
+            drops.insert(plan_id, unique);
         }
 
-        ReleasePlan { drops }
+        ReleasePlan {
+            drops,
+            consumption: ConsumptionLedger::default(),
+        }
     }
 
     /// #264：前向数据流分析（NLL/Polonius 风格 move 分析）
@@ -2679,10 +2782,10 @@ impl OwnershipChecker {
                         }
                         _ => {}
                     },
-                    VarOp::Drop { var, span } => {
+                    VarOp::Drop { var, plan_id } => {
                         if state.get(var) == Some(&VarState::Alive) {
                             state.insert(var.clone(), VarState::Dropped);
-                            self.scope_drops.push((*span, var.clone()));
+                            self.scope_drops.push((*plan_id, var.clone()));
                         }
                     }
                     other => Self::apply_op_state(&mut state, other),
@@ -2793,7 +2896,7 @@ impl OwnershipChecker {
         self.type_ledger = type_ledger.clone();
         self.call_ownership = call_ownership.clone();
         let mut results = Vec::new();
-        let mut merged_drops: HashMap<Span, Vec<String>> = HashMap::new();
+        let mut merged_drops: HashMap<PlanId, Vec<String>> = HashMap::new();
         let mut merged_escaped: HashSet<String> = HashSet::new();
         for stmt in &module.items {
             if let StmtKind::Assign { target, value, .. } = &stmt.kind {
@@ -2842,6 +2945,7 @@ impl OwnershipChecker {
             results,
             ReleasePlan {
                 drops: merged_drops,
+                consumption: ConsumptionLedger::default(),
             },
             merged_escaped,
         )

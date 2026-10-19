@@ -215,9 +215,9 @@ error [E6007] Runtime error: type mismatch in comparison Eq: Void vs Int(4)
 - **与迭代次数无关**（修前）：`loop(0)`（零迭代）报 `Eq: Void vs Int(0)`——运行期 `while` 表达式根本没产出值，不是「最后一次迭代取错值」。
 - **影响面不止 `Terminates` 形态**（修前）：任何 `while` 作值的写法都中招。实测 `x: Int = while i < 3 { i = i + 1; i }` 后在运行期使用 `x` → `Eq: Void vs Int(3)`。类型侧的判据、义务生成与诊断均正常，缺陷只在运行期取值路径。
 - **已落地修复（2026-10-04，issue #409）**：`src/middle/core/ir_gen.rs` 的 `generate_while_expr_ir` / `generate_iterator_for_loop_ir`——循环前先给值寄存器写 `Void` 初值，循环体生成的尾表达式直接写入该寄存器，并删除出口处无条件覆写 `Void` 的指令。实测 `loop(4) == 4`、`countdown(3) == 30`、`x: Int = while i < 3 { i = i + 1; i }`（`x == 3`）、零迭代用例的**主形态全绿**。
-- **已知残留（零迭代）**：循环体一次都没求值（如 `loop(0)`）时没有「末次迭代的体值」，值寄存器保持初值 `Void`——绑定到非 `Void` 类型位并在运行期使用即报 `E6007` 类型不匹配（响亮失败，非静默错值）。这是静态近似边界：类型侧 `block_value_ty` 给的是体尾表达式的类型，对「循环是否至少执行一次」无判定能力；把它降级为 `Void` 会破坏本节 `Terminates` 循环绑定所依赖的值类型，故**不**降级。残留契约由 `tests/yaoxiang/02-type-system/while_zero_iteration_void_err.yx`（`// expect: runtime-error E6007`）钉住。
-- **解除条件（历史，已完成）**：运行期把 `while` 表达式的值产出为循环体块尾表达式的值，并让 `tests/yaoxiang/02-type-system/explicit_termination_measure_loop.yx` 与 `while_block_value.yx` 补上 `main()` 调用后能通过。两个语料现已补 `main()` 并实跑通过（`explicit_termination_measure_loop.yx` 的零迭代断言改为非零迭代 `loop(1) == 1`，零迭代情形移交上一条的新用例）。
-- **追踪**：issue [#409](https://github.com/ChenXu233/YaoXiang/issues/409)（运行期 `while` 取值）——主形态已修并**已关闭**；零迭代残留为**有意保留的设计边界**（2026-10-04 裁定，暂不修复），由契约用例 `tests/yaoxiang/02-type-system/while_zero_iteration_void_err.yx` 钉住，不再单开跟踪项。本节保留最小复现、修复记录与残留边界（en 镜像由自动翻译 bot 负责，不做手改）。
+- **已知残留（零迭代）**：循环体一次都没求值（如 `loop(0)`）时没有「末次迭代的体值」，值寄存器保持初值 `Void`——绑定到非 `Void` 类型位并在运行期使用即报 `E6007` 类型不匹配（响亮失败，非静默错值）。这是静态近似边界：类型侧 `block_value_ty` 给的是体尾表达式的类型，对「循环是否至少执行一次」无判定能力；把它降级为 `Void` 会破坏本节 `Terminates` 循环绑定所依赖的值类型，故**不**降级。残留契约由 `tests/yaoxiang/02-type-system/termination/while_zero_iteration_void_err.yx`（`// expect: runtime-error E6007`）钉住。
+- **解除条件（历史，已完成）**：运行期把 `while` 表达式的值产出为循环体块尾表达式的值，并让 `tests/yaoxiang/02-type-system/termination/explicit_termination_measure_loop.yx` 与 `while_block_value.yx` 补上 `main()` 调用后能通过。两个语料现已补 `main()` 并实跑通过（`explicit_termination_measure_loop.yx` 的零迭代断言改为非零迭代 `loop(1) == 1`，零迭代情形移交上一条的新用例）。
+- **追踪**：issue [#409](https://github.com/ChenXu233/YaoXiang/issues/409)（运行期 `while` 取值）——主形态已修并**已关闭**；零迭代残留为**有意保留的设计边界**（2026-10-04 裁定，暂不修复），由契约用例 `tests/yaoxiang/02-type-system/termination/while_zero_iteration_void_err.yx` 钉住，不再单开跟踪项。本节保留最小复现、修复记录与残留边界（en 镜像由自动翻译 bot 负责，不做手改）。
 
 #### 互递归：SCC 共享测度
 
@@ -338,7 +338,7 @@ is_odd: Terminates(nat) = {
 - [x] E2E 负例：测度不成立 → E4022（附反例）；无测度 → E4021
 - [x] E2E 正例（循环·类型侧）：`Terminates(n - i)` 绑定形态的类型判定成立（D5 已解）
 - [x] E2E 正例（循环·运行期）：`while` 作值的运行期取值（D6 已修，#409，2026-10-04）——`explicit_termination_measure_loop.yx` 与 `while_block_value.yx` 补 `main()` 后实跑通过
-- [ ] E2E 残留（零迭代）：`while` 作值且循环体零次执行时取 `Void`（静态近似边界）。契约用例 `02-type-system/while_zero_iteration_void_err.yx`（`// expect: runtime-error E6007`）；解除条件见 §示例 循环节「已知残留」
+- [ ] E2E 残留（零迭代）：`while` 作值且循环体零次执行时取 `Void`（静态近似边界）。契约用例 `02-type-system/termination/while_zero_iteration_void_err.yx`（`// expect: runtime-error E6007`）；解除条件见 §示例 循环节「已知残留」
 - [ ] E2E 待落地：`is_even`-`is_odd` 互递归（待 SCC）
 - [ ] 二元形态 `Terminates(FnType, m)`（park）。解除条件见 §锚点
 - [ ] 返回位多参数谓词 + 符号实参（2026-10-02 起有明确诊断，仍未支持）。触发形态 / 替代写法 / 解除条件见 §实现落地记录（2026-10-02，本轮硬化）
@@ -426,9 +426,9 @@ is_odd: Terminates(nat) = {
 
 | 语料 | 实测 |
 | -------- | -------- |
-| `02-type-system/rank_function_dual_variable_loop.yx`（`i < j { i += 1; j -= 1 }`） | `0 error` |
-| `02-type-system/flag_loop_guarded_exit.yx` | `0 error` |
-| `06-compile-errors/termination_unproven_err.yx` | 仍 `error [E4021]` |
+| `02-type-system/termination/rank_function_dual_variable_loop.yx`（`i < j { i += 1; j -= 1 }`） | `0 error` |
+| `02-type-system/termination/flag_loop_guarded_exit.yx` | `0 error` |
+| `06-compile-errors/termination/termination_unproven_err.yx` | 仍 `error [E4021]` |
 | 4 条反例语料（守卫块重绑 / 未知位移重绑定等） | 均 `error [E4021]` |
 
 #### 4. 文档与实现对齐

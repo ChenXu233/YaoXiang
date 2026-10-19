@@ -1,0 +1,40 @@
+/// 夹具版义务清单（mini）：登记了结构体里已不存在的 removed_field。
+struct ObligationSpec {
+    obligation: Obligation,
+    field: &'static str,
+    consumer: Stage,
+    red_list: Option<RedListEntry>,
+}
+
+const INVENTORY: &[ObligationSpec] = &[
+    ObligationSpec {
+        obligation: Obligation::GhostField,
+        field: "ghost_field",
+        consumer: Stage::IrGeneration,
+        red_list: None,
+    },
+    // 夹具把 removed_field 登记为红名单条目：这样唯一违反就是判据 1
+    //（INVENTORY 有、结构体没有），不被「无真读取」的第二条判据混进来。
+    ObligationSpec {
+        obligation: Obligation::RemovedField,
+        field: "removed_field",
+        consumer: Stage::IrGeneration,
+        red_list: Some(RedListEntry {
+            wbs: "9.9.9",
+            evidence: "夹具证据：字段已从结构体删除，INVENTORY 仍登记——判据 1 必红",
+        }),
+    },
+];
+
+/// 夹具版非义务字段登记（mini）。
+pub struct NonObligationField {
+    pub field: &'static str,
+    pub reason: &'static str,
+}
+
+pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
+    NonObligationField {
+        field: "fixture_meta",
+        reason: "夹具占位：非义务字段（单元元信息，无跨阶段契约）",
+    },
+];

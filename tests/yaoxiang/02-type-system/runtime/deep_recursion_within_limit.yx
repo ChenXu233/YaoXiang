@@ -1,0 +1,36 @@
+// 02-type-system/deep_recursion_within_limit.yx
+// 覆盖: WBS 3.9.1 良构深递归的对外行为不变（栈守卫不得误伤上限内的程序）
+// 验证: 调用深度恰好抵达默认上限 1024 帧的良构深递归正常退出 0，且值断言通过。
+// 状态: ✅ 可运行
+//
+// ## 1023/1024 边界依据
+//
+// 守卫单点在 `push_frame`：`call_stack.len() >= config.max_stack_depth` 时拒绝
+// 入栈（默认 max_stack_depth = 1024）——即**同时驻留的帧数上限为 1024**。
+// 本程序最深处的驻留帧构成：
+//   `__yx_module_init` × 1（顶层语句，含 `main()` 调用点）
+//   + `main` × 1
+//   + `count_down(1021) … count_down(0)` × 1022
+//   = 1024 帧，即模块初始化帧之下 1023 层解释型调用——
+// 恰好用满上限：最后一次入栈成功（1023 < 1024），程序正常返回。
+// 再深一层（count_down(1022) ⇒ 1025 帧）必然 E6004，由
+// 06-compile-errors/stack_overflow_e6004.yx 覆盖（实测边界见该文件与单测
+// `test_recursive_call_boundary_reports_e6004_with_real_limit`）。
+//
+// `1 + count_down(n - 1)` 是**非尾**形态：调用者帧必须存活到被调返回，
+// 深度逐层 +1，故「1023 层」是真实驻留深度，不被尾调用复用掉。
+// 形参 `n: Int` 不带下界精化 ⇒ 递减义务为残余义务（RFC-027a:223），
+// 编译期不报 E4022。
+
+use std.assert
+
+count_down: (n: Int) -> Terminates(n) = {
+    if n == 0 { return 0 }
+    return 1 + count_down(n - 1)
+}
+
+main: () -> Void = {
+    assert.assert(count_down(1021) == 1021, "良构深递归应在上限内正常返回")
+}
+
+main()

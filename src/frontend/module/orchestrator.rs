@@ -176,22 +176,28 @@ pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, Or
     }
 }
 
-/// 用项目上下文检查一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）。
+/// LSP 项目内分析产物（WBS 4.6.1）：目标文件诊断与全项目语义数据面
+/// 出自**同一次编译**（Lsp 形态的同一趟 Driver 运行）——诊断与染色/
+/// 跳转不再有各自编译、各看一份 AST 的口径分裂。
+pub struct LspAnalysis {
+    /// 目标文件的诊断集（ProgramKind::Lsp 契约：过滤到目标文件）
+    pub diagnostics: Vec<Diagnostic>,
+    /// 语义数据面：目标文件的全量语义信息（tokens/定义/引用/导入）+
+    /// 非目标文件的顶层导出定义面（`external_definitions`，跨文件跳转
+    /// 在定义文件未打开时也能命中）。文件身份为 OS 路径（URI 换算在
+    /// LSP 摄入边界完成）。
+    pub semantic_db: crate::frontend::core::typecheck::semantic_db::SemanticDB,
+}
+
+/// 用项目上下文分析一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）——
+/// 一次编译同时产出诊断与语义数据（WBS 4.6.1）。
 ///
-/// 注册表来自磁盘发现（同 `check_project`），被检查的模块用传入源码——
-/// 编辑器因此能得到与 `yaoxiang check` 一致的跨文件解析结果。
-///
-/// 02 §改动清单（WBS 4.2.3）：入口已瘦身为 `Program { kind: Lsp }` 构造器
-/// 并转调 Driver。降级策略按文件来源分流（2026-10-09 用户裁决）：磁盘
-/// 文件 parse 失败同 Check 的方案 B（收集 + 退出编译单元——修复旧行为
-/// 对无关磁盘文件硬中止、handler 静默退回单文件路径的怪癖）；被编辑
-/// 缓冲区 parse 失败保留残缺 AST 继续 typecheck（编辑器哲学）。返回
-/// 目标文件的诊断集（其余文件的收集条目不返回——LSP 按文档发布模型，
-/// 诊断由各自的 didOpen/didChange 驱动）。
-pub fn check_source_in_project(
+/// 管线与降级策略同 `check_source_in_project`（本函数即其诊断半边的
+/// 实现，4.6.1 起它转调本函数）。
+pub fn analyze_source_in_project(
     path: &Path,
     source: &str,
-) -> Result<Vec<Diagnostic>, OrchestratorError> {
+) -> Result<LspAnalysis, OrchestratorError> {
     let program = crate::driver::Program::new(
         crate::driver::ProgramKind::Lsp,
         // 占位入口单元携带缓冲区源码——Discovery 臂重建单元集时
@@ -212,14 +218,40 @@ pub fn check_source_in_project(
         })?;
     match outcome.failure {
         Some(e) => Err(e),
-        // 结果过滤到目标文件（ProgramKind::Lsp 契约）
-        None => Ok(outcome
-            .check_diagnostics
-            .into_iter()
-            .find(|(p, _)| p.as_path() == path)
-            .map(|(_, diagnostics)| diagnostics)
-            .unwrap_or_default()),
+        // 诊断过滤到目标文件（ProgramKind::Lsp 契约）；语义数据面
+        // 整体外发（目标文件全量 + 非目标文件顶层导出定义）
+        None => Ok(LspAnalysis {
+            diagnostics: outcome
+                .check_diagnostics
+                .into_iter()
+                .find(|(p, _)| p.as_path() == path)
+                .map(|(_, diagnostics)| diagnostics)
+                .unwrap_or_default(),
+            semantic_db: outcome.semantic_db,
+        }),
     }
+}
+
+/// 用项目上下文检查一份**内存源码**（LSP 脏缓冲区 / 未落盘编辑）。
+///
+/// 注册表来自磁盘发现（同 `check_project`），被检查的模块用传入源码——
+/// 编辑器因此能得到与 `yaoxiang check` 一致的跨文件解析结果。
+///
+/// 02 §改动清单（WBS 4.2.3）：入口已瘦身为 `Program { kind: Lsp }` 构造器
+/// 并转调 Driver。降级策略按文件来源分流（2026-10-09 用户裁决）：磁盘
+/// 文件 parse 失败同 Check 的方案 B（收集 + 退出编译单元——修复旧行为
+/// 对无关磁盘文件硬中止、handler 静默退回单文件路径的怪癖）；被编辑
+/// 缓冲区 parse 失败保留残缺 AST 继续 typecheck（编辑器哲学）。返回
+/// 目标文件的诊断集（其余文件的收集条目不返回——LSP 按文档发布模型，
+/// 诊断由各自的 didOpen/didChange 驱动）。
+///
+/// WBS 4.6.1：实现转调 `analyze_source_in_project` 并只取诊断半边；
+/// 语义数据面由 LSP 的分析入口消费。
+pub fn check_source_in_project(
+    path: &Path,
+    source: &str,
+) -> Result<Vec<Diagnostic>, OrchestratorError> {
+    Ok(analyze_source_in_project(path, source)?.diagnostics)
 }
 
 /// RFC-014 §项目模式前置检查（2026-09-15 决议）。
@@ -291,7 +323,7 @@ pub(crate) fn ensure_vendor_consistency(
 /// 单源判定）：Lambda 或 Fn 注解块为函数，其余为全局。
 /// 用于跨文件全局解析——其他文件引用这些名字时生成 `Call(访问器函数)`。
 /// 计算入口文件的模块键（文件 stem，`mod.yx` 折叠为目录名）。
-fn entry_module_key(entry: &Path) -> String {
+pub(crate) fn entry_module_key(entry: &Path) -> String {
     let stem = entry
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
@@ -1034,6 +1066,15 @@ pub(crate) fn extract_module_info(
     let mut info = ModuleInfo::new(module_key.to_string(), ModuleSource::User);
     // RFC-029：导出本文件的方法绑定（如 Point.get_x），供其他文件导入类型后调用。
     info.method_bindings = checker.env().method_bindings.clone();
+    // RFC-029f 改进 4 / WBS 4.9.7（#464）：方法**重载候选**同源导出。与
+    // `method_bindings` 同一趟签名收集产出（pass2 + flush_pending_body_bindings），
+    // 候选序 = 定义侧声明序（与 ir_gen 的定义侧混编序同源）——跨单元调用点的
+    // 决议按它取名，序一旦错位，调用名与定义名就不再对应。
+    info.method_overloads = checker
+        .env()
+        .method_overload_snapshot()
+        .into_iter()
+        .collect();
 
     for stmt in &ast.items {
         match &stmt.kind {
@@ -1041,8 +1082,17 @@ pub(crate) fn extract_module_info(
                 name, definition, ..
             } => {
                 if let Some(ty) = lookup(&types, name) {
-                    let mut export =
-                        make_export(module_key, name, ExportKind::Type, ty, &fn_type_params);
+                    // 类型导出不填定义位置：AST 的 TypeDefinition 节点不携带
+                    // 名字标识符 span，且 typecheck 侧类型注册不产生定义事件
+                    //（4.6.1 口径——两侧都无锚点，保持一致的空缺）
+                    let mut export = make_export(
+                        module_key,
+                        name,
+                        ExportKind::Type,
+                        ty,
+                        &fn_type_params,
+                        None,
+                    );
                     // 跨模块类型传播：泛型模板 + 和类型变体 + 接口实现随导出携带
                     export.type_payload = checker.type_def_export_payload(name, definition);
                     info.add_export(export);
@@ -1053,7 +1103,11 @@ pub(crate) fn extract_module_info(
                 type_annotation,
                 ..
             } => {
-                if let Expr::Var(name, _) = target.as_ref() {
+                if let Expr::Var(name, name_span) = target.as_ref() {
+                    // 定义位置 = 左值标识符自身 span——与 typecheck 定义事件的
+                    // `def_span = name_span`（statements.rs 的 Assign 臂）同源同值，
+                    // 跨文件 `resolves_to` 的 DefId 因此能命中本文件直接检查
+                    // 产出的定义条目（WBS 4.6.1）。
                     if let Some(ty) = lookup(&vars, name) {
                         // 函数/lambda 绑定由 collect_signatures 收集 → 在 vars 中。
                         let kind = if matches!(ty, MonoType::Fn { .. }) {
@@ -1061,7 +1115,14 @@ pub(crate) fn extract_module_info(
                         } else {
                             ExportKind::Constant
                         };
-                        info.add_export(make_export(module_key, name, kind, ty, &fn_type_params));
+                        info.add_export(make_export(
+                            module_key,
+                            name,
+                            kind,
+                            ty,
+                            &fn_type_params,
+                            Some(*name_span),
+                        ));
                     } else if let Some(type_ann) = type_annotation {
                         // 普通常量（如 `value: Int = 7`）不会被当作签名收集，
                         // 从类型标注导出其类型。
@@ -1072,6 +1133,7 @@ pub(crate) fn extract_module_info(
                             ExportKind::Constant,
                             ty,
                             &fn_type_params,
+                            Some(*name_span),
                         ));
                     }
                 }
@@ -1079,12 +1141,15 @@ pub(crate) fn extract_module_info(
             StmtKind::Expr(expr) => {
                 if let Expr::FnDef { name, .. } = expr.as_ref() {
                     if let Some(ty) = lookup(&vars, name) {
+                        // FnDef 节点不携带名字标识符 span（当前 parser 也不产
+                        // 此变体——仅测试手工构造），定义位置空缺
                         info.add_export(make_export(
                             module_key,
                             name,
                             ExportKind::Function,
                             ty,
                             &fn_type_params,
+                            None,
                         ));
                     }
                 }
@@ -1109,6 +1174,7 @@ fn make_export(
     kind: ExportKind,
     ty: MonoType,
     fn_type_params: &HashMap<String, Vec<String>>,
+    definition_span: Option<crate::util::span::Span>,
 ) -> Export {
     // 快照只登记泛型函数，故 `Function` 之外的 kind 即使同名也拿不到值；
     // 仍显式按 kind 收敛，避免将来快照语义扩展时把类型/常量卷进来。
@@ -1126,6 +1192,7 @@ fn make_export(
         type_params,
         param_names: None,
         type_payload: None,
+        definition_span,
     }
 }
 

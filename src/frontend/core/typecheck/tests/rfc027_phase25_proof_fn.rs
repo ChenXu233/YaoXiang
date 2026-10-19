@@ -152,8 +152,8 @@ fn test_call_with_named_var_args() {
 
 use crate::frontend::proof_execution::execute_single_proof_fn;
 use crate::frontend::core::parser::ast::{
-    BinOp as AstBinOp, Block, Expr, Literal, Module, Param, Stmt, StmtKind, Type as AstType,
-    TypeBodyItem,
+    BinOp as AstBinOp, Block, Expr, Literal, Module, Param, PlanId, Stmt, StmtKind,
+    Type as AstType, TypeBodyItem,
 };
 use crate::frontend::core::typecheck::TypeCheckResult;
 use crate::util::span::Span;
@@ -198,6 +198,7 @@ fn make_proof_fn_module(
                     stmts: vec![Stmt {
                         kind: StmtKind::Return(Some(Box::new(body_expr))),
                         span: Span::dummy(),
+                        plan_id: PlanId::UNPLANNED,
                     }],
                     span: Span::dummy(),
                 }),
@@ -207,6 +208,7 @@ fn make_proof_fn_module(
             span: Span::dummy(),
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     };
 
     Module {
@@ -401,6 +403,7 @@ fn make_proof_fn_typedef_module(
             },
         },
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     };
 
     Module {

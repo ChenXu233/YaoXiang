@@ -956,6 +956,8 @@ impl TypeChecker {
         body_checker.set_native_signatures(self.env.native_signatures.clone());
         // #387：native arity 区间表随签名表同源传递
         body_checker.set_native_arities(self.env.native_arity.clone());
+        // #454：native 形参名随签名表同源传递（命名实参按名绑定的唯一来源）
+        body_checker.set_native_param_names(self.env.native_param_names.clone());
         // 设置模块注册表，支持函数体/块作用域 use
         body_checker.set_module_registry(self.env.module_registry.clone());
         // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
@@ -970,6 +972,8 @@ impl TypeChecker {
         body_checker.set_method_bindings(self.env.method_bindings.clone());
         body_checker.method_overloads = self.env.method_overloads.clone();
         body_checker.method_overload_ir_names = self.env.method_overload_ir_names.clone();
+        // #452：形参名表同源注入——漏一处会让决议段静默退回「不按名匹配」
+        body_checker.method_overload_param_names = self.env.method_overload_param_names.clone();
         // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
         body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
         body_checker.set_sum_types(self.env.sum_types.clone());
@@ -1256,26 +1260,28 @@ impl TypeChecker {
         let param_assumptions = self.collect_param_refinements();
         // WBS 3.4.2：终止性义务未判定数（无求解器时 Unjudged）随结果一并取出——
         // T4「只判定并记录，不发射诊断」是静默通道，计数在 warnings 汇聚点发 W1081。
-        let (term_results, unjudged_termination_obligations) = {
-            #[allow(unused_mut)]
-            let mut term_checker = super::layers::termination::TerminationChecker::new()
-                .set_refined_vars(refined_vars)
-                .set_measures(measures)
-                .set_param_assumptions(param_assumptions);
-            // RFC-027a T4（即 #377-1）：生产在此注入求解器后端。此前从不调用
-            // 注入点，`self.solver` 恒为 `None`，SMT 相关路径在任何平台都不执行。
-            // `default_solver()` 返回 `None`（初始化失败）时保持不注入——
-            // wasm 自 #435 起同带 Z3（libz3.a 静态链接进产物）。
-            if let Some(solver) = super::proof::smt::backend::default_solver() {
-                term_checker = term_checker.with_solver_owned(solver);
-            }
-            let results = term_checker.check_module(module, self.env());
-            let unjudged = super::layers::termination::count_unjudged_obligations(
-                term_checker.measure_verdicts(),
-                term_checker.well_founded_verdicts(),
+        let (term_results, unjudged_termination_obligations) =
+            super::proof::smt::backend::with_shared_solver(
+                super::proof::smt::backend::SolverConsumer::Termination,
+                |solver| {
+                    // RFC-027a T4（即 #377-1）：生产在此注入求解器后端。
+                    // RFC-039 D58：注入的是进程级共享单例的借用（闭包内判定），
+                    // 不再每模块新建实例——缓存计数因此跨消费点累计。
+                    // `None`（Z3 初始化失败）时保持不注入：SMT 路径不执行、
+                    // 判定为 Unjudged，由 W1081 计数上报（wasm 自 #435 起同带 Z3）。
+                    let mut term_checker = super::layers::termination::TerminationChecker::new()
+                        .set_refined_vars(refined_vars)
+                        .set_measures(measures)
+                        .set_param_assumptions(param_assumptions)
+                        .with_solver(solver);
+                    let results = term_checker.check_module(module, self.env());
+                    let unjudged = super::layers::termination::count_unjudged_obligations(
+                        term_checker.measure_verdicts(),
+                        term_checker.well_founded_verdicts(),
+                    );
+                    (results, unjudged)
+                },
             );
-            (results, unjudged)
-        };
         for result in term_results {
             match result.into_result() {
                 Ok(()) => {} // 证明通过，无需诊断
@@ -1287,18 +1293,11 @@ impl TypeChecker {
         // 分析借用令牌冲突、Move/Drop/Clone/Mut 语义（RFC-009a §系统谓词清单）
         // #256：类型账本从推断层移交，供 Move/Dup 分类
         // #265：经证明管线入口 check_ownership，分支守卫注入假设栈
-        let (release_plan, escaped_refs) = {
-            let ledger = self
-                .body_checker
-                .as_ref()
-                .map(|bc| bc.var_type_ledger().clone())
-                .unwrap_or_default();
-            // #335 G3 类型信息流接口：调用点所有权解析表随 ledger 一并移交
-            let call_ownership = self
-                .body_checker
-                .as_ref()
-                .map(|bc| bc.call_ownership.clone())
-                .unwrap_or_default();
+        let (release_plan, escaped_refs, ownership_degradation) = {
+            // WBS 4.4.3 / 02 §S5 (d)：输入取自 body_checker（#256 账本 +
+            // #335 G3 调用点所有权表）。缺失即降级为空输入并留诊断（第三项），
+            // 在下方 warnings 汇聚点发射——静默降级曾是「静默不动作」通道。
+            let (ledger, call_ownership, degradation) = self.ownership_inputs(module.span);
             let mut proof_ctx =
                 crate::frontend::core::typecheck::proof::context::ProofContext::new(&self.env);
             let (ownership_results, plan, escaped_refs) = super::layers::ownership::check_ownership(
@@ -1337,7 +1336,7 @@ impl TypeChecker {
                     }
                 }
             }
-            (plan, escaped_refs)
+            (plan, escaped_refs, degradation)
         };
 
         // 求解所有约束
@@ -1380,15 +1379,28 @@ impl TypeChecker {
                 }
             }
             let (refs, imports) = (bc.take_reference_events(), bc.take_import_events());
+            // 4.6.1：跨文件导入项的 resolves_to 重定向——引用命中的绑定
+            // 是 use 行导入名（定义事件落 use 行），其真实定义在定义文件里
+            // 时（import_def_locations 登记表），DefId 指向真实定义位置，
+            // 跨文件跳转因此命中定义而非 use 行；std/native 导入无登记，
+            // 维持落 use 行的现状。
+            let import_def_locations = bc.take_import_def_locations();
             for r in refs {
+                let resolves_to = match import_def_locations.get(&r.resolves_to_span) {
+                    Some((def_file, def_span)) => semantic_db::DefId {
+                        file_path: def_file.clone(),
+                        span: *def_span,
+                    },
+                    None => semantic_db::DefId {
+                        file_path: file_path.clone(),
+                        span: r.resolves_to_span,
+                    },
+                };
                 let r#ref = semantic_db::ReferenceInfo {
                     name: r.name,
                     span: r.span,
                     file_path: file_path.clone(),
-                    resolves_to: semantic_db::DefId {
-                        file_path: file_path.clone(),
-                        span: r.resolves_to_span,
-                    },
+                    resolves_to,
                 };
                 self.semantic_db.add_reference(&file_path, r#ref);
             }
@@ -1486,11 +1498,6 @@ impl TypeChecker {
         };
 
         // RFC-011a §6: 从 body_checker 收集存在类型强制点（ir_gen 包装注入用）
-        let variant_ctor_calls = if let Some(ref bc) = self.body_checker {
-            bc.variant_ctor_calls.clone()
-        } else {
-            Vec::new()
-        };
         let try_expr_impls = if let Some(ref bc) = self.body_checker {
             bc.try_expr_impls.clone()
         } else {
@@ -1519,6 +1526,9 @@ impl TypeChecker {
         // WBS 3.4.2：求解器缺失时终止性测度义务判 Unjudged——「未判」≠「成立」，
         // 义务存在而判不了必须让用户知情（Warning 级，不阻断——同 W1003 契约）
         let mut warnings = import_warnings;
+        // WBS 4.4.3 / 02 §S5 (d)：所有权层输入降级（无 body_checker）留痕——
+        // 生产路径不可达（`init_body_checker` 先行），一旦发射即阶段契约被破坏。
+        warnings.extend(ownership_degradation);
         if unjudged_termination_obligations > 0 {
             warnings.push(
                 ErrorCodeDefinition::termination_obligations_unjudged(
@@ -1555,14 +1565,14 @@ impl TypeChecker {
             existential_coercions,
             try_expr_impls,
             match_scrutinee_types,
-            method_overload_ir_names: self.env.method_overload_ir_names.clone(),
-            overload_resolutions: if let Some(ref bc) = self.body_checker {
-                bc.overload_resolutions.clone()
-            } else {
-                Vec::new()
-            },
+            overload_resolutions:
+                crate::frontend::core::typecheck::types::OverloadResolutions::from_entries(
+                    self.body_checker
+                        .as_ref()
+                        .map(|bc| bc.overload_resolutions.clone())
+                        .unwrap_or_default(),
+                ),
             operator_dispatches,
-            variant_ctor_calls,
             implementation_proofs: self.env.implementation_proofs.clone(),
             interface_impl_registry: self.env.interface_impl_registry.clone(),
             sum_types: self.env.sum_types.clone(),
@@ -1575,6 +1585,43 @@ impl TypeChecker {
                 .collect(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
             warnings,
+        }
+    }
+
+    /// 取所有权层输入：类型账本（#256）+ 调用点所有权解析表（#335 G3）。
+    ///
+    /// `body_checker` 缺失 ⇒ 空输入——所有权分析退化为「什么都不冲突」
+    /// （**静默不动作**，RFC-039 D59 C 类 / 02 §S5 (d)）。返回值第三项即该降级的
+    /// 留痕诊断（WBS 4.4.3），调用方经 warnings 通道发射（不阻断编译）。
+    ///
+    /// 抽成方法而非就地 `unwrap_or_default()`：生产路径上 `init_body_checker`
+    /// 先于所有权阶段执行、输入恒存在，降级分支**不可达**——只有把判据抽出来
+    /// 才能用钉测试钉住它（见 `tests/checker.rs`）。
+    pub(super) fn ownership_inputs(
+        &self,
+        span: crate::util::span::Span,
+    ) -> (
+        HashMap<(usize, String), PolyType>,
+        super::inference::call_ownership::CallOwnershipTable,
+        Option<Diagnostic>,
+    ) {
+        match self.body_checker.as_ref() {
+            Some(body_checker) => (
+                body_checker.var_type_ledger().clone(),
+                body_checker.call_ownership.clone(),
+                None,
+            ),
+            // WBS 4.4.3：降级必须留痕——空账本照跑（保守方向不变），
+            // 但诊断随 warnings 通道上抛（02 §S5 (d) 的「无警告」缺口）
+            None => (
+                HashMap::new(),
+                Default::default(),
+                Some(
+                    ErrorCodeDefinition::ownership_analysis_degraded()
+                        .at(span)
+                        .build(),
+                ),
+            ),
         }
     }
 
@@ -1592,6 +1639,8 @@ impl TypeChecker {
             body_checker.set_native_signatures(self.env.native_signatures.clone());
             // #387：native arity 区间表随签名表同源传递
             body_checker.set_native_arities(self.env.native_arity.clone());
+            // #454：native 形参名随签名表同源传递（命名实参按名绑定的唯一来源）
+            body_checker.set_native_param_names(self.env.native_param_names.clone());
             // 设置模块注册表，支持函数体/块作用域 use
             body_checker.set_module_registry(self.env.module_registry.clone());
             // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
@@ -2173,10 +2222,15 @@ impl TypeChecker {
                     self.declared_methods.insert(key, fn_ty.clone());
                     self.env
                         .add_fn_binding(&name, type_name.as_deref(), fn_ty.clone());
-                    // RFC-011b: 重载候选表（接口完整性检查按候选集匹配）
+                    // RFC-011b: 重载候选表（接口完整性检查按候选集匹配）；
+                    // #452 连形参名一并登记——命名实参入决议要靠它（登记期的
+                    // 声明序形参名是本阶段唯一可信来源，调用点再无 AST 可查）。
                     if let Some(tn) = type_name.as_deref() {
                         let okey = format!("{}.{}", tn, name);
-                        self.env.add_method_overload(&okey, fn_ty.clone());
+                        let param_names: Vec<String> =
+                            signature_params.iter().map(|p| p.name.clone()).collect();
+                        self.env
+                            .add_method_overload_with_params(&okey, fn_ty.clone(), param_names);
                     }
                 } else {
                     // 如果函数有 const 泛型参数，存进 PolyType.const_binders
@@ -3012,9 +3066,12 @@ impl TypeChecker {
             let method_ty = Self::method_type_after_binding(&fn_ty, &positions);
             self.env
                 .add_method_binding(type_name, method_name, method_ty.clone());
-            // RFC-011b: 绑定形态同样进重载候选表（接口完整性检查按候选集匹配）
+            // RFC-011b: 绑定形态同样进重载候选表（接口完整性检查按候选集匹配）。
+            // #452：外部绑定的形参名在 typecheck 侧拿不到（被绑函数只留签名、
+            // 不留名字），留空 = 调用点不按名匹配（不冒充「名字已核对」）。
             let okey = format!("{}.{}", type_name, method_name);
-            self.env.add_method_overload(&okey, method_ty);
+            self.env
+                .add_method_overload_with_params(&okey, method_ty, Vec::new());
         }
     }
 

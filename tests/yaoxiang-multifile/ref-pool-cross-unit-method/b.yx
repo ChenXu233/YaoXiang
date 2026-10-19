@@ -1,0 +1,8 @@
+// b.yx —— 只进编译集（main 的 use b），同名同序的 Temp.to 没有任何调用点；
+//  main 用 use a.{Temp} 命名类型，拼不出本模块的 Temp ⇒ 定义侧身份只能靠
+//  「该名字组有决议条目」+「本单元是否被决议命中」区分（WBS 4.9.7 / #464）
+Temp: Type = { v: Float }
+
+Temp.to: (self: &Temp) -> Float = (self) => {
+    self.v
+}

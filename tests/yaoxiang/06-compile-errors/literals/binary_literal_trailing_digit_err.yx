@@ -1,0 +1,9 @@
+// 06-compile-errors/literals/binary_literal_trailing_digit_err.yx
+// 覆盖: 规范 syntax.md §1.6.1 整数 BNF（Binary ::= 0b[01][01_]*）
+// 验证: 基数字面量后紧跟字母/数字/下划线在词法层拒绝（E0002）——修复前 0b12
+//       被静默拆成 0b1 + 2 两个 token，编译通过且得到错误值 1
+// 状态: ✅ 可运行
+
+// expect: compile-error E0002
+
+x = 0b12

@@ -1,0 +1,35 @@
+module
+  global[0] y : Generic { name: "IsPositive", args: [Literal { name: "5", base_type: Int(64), value: Int(5) }] }
+  global[1] z : Int(64)
+  global[2] total : Int(64)
+  global[3] w : Generic { name: "IsPositive", args: [Literal { name: "5", base_type: Int(64), value: Int(5) }] }
+  fn IsPositive(Int(64)) -> MetaType { universe_level: UniverseLevel { level: "1" }, type_params: [] }
+    type_decl Struct { body: [Expr(ConstExpr(BinOp { op: Gt, left: Var("x", Span { start: Position { line: 10, column: 34, offset: 530 }, end: Position { line: 10, column: 35, offset: 531 } }), right: Lit(Int(0), Span { start: Position { line: 10, column: 38, offset: 534 }, end: Position { line: 10, column: 39, offset: 535 } }), span: Span { start: Position { line: 10, column: 36, offset: 532 }, end: Position { line: 10, column: 37, offset: 533 } } }))] }
+  init (locals=0)
+    Load %0 <- int(5)
+    Store @0 <- %0
+    Load %1 <- @0
+    Store @1 <- %1
+    Load %2 <- @0
+    Load %3 <- int(1)
+    Add %4 <- %2, %3
+    Store @2 <- %4
+    Load %5 <- int(5)
+    Store @3 <- %5
+    Load %6 <- @1
+    Load %7 <- int(5)
+    Eq %8 <- %6, %7
+    Load %9 <- string("精化变量的运行时值应原样传递")
+    Call %10 <- string("std.assert.assert") [%8, %9] (def=d0)
+    Load %11 <- @2
+    Load %12 <- int(6)
+    Eq %13 <- %11, %12
+    Load %14 <- string("精化变量应可参与 Int 算术")
+    Call %15 <- string("std.assert.assert") [%13, %14] (def=d0)
+    Load %16 <- int(6)
+    Store @3 <- %16
+    Load %17 <- @3
+    Load %18 <- int(6)
+    Eq %19 <- %17, %18
+    Load %20 <- string("精化变量的运行时类型是 Int，应可重赋 Int 值")
+    Call %21 <- string("std.assert.assert") [%19, %20] (def=d0)

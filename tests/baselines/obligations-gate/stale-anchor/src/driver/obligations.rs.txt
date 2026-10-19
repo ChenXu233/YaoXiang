@@ -1,0 +1,33 @@
+/// 夹具版义务清单 + 非义务登记（mini）：登记理由里的锚点**故意失效**——
+/// 一个指向不存在的符号、一个行号越界，F1 必须各报一条。
+struct ObligationSpec {
+    obligation: Obligation,
+    field: &'static str,
+    consumer: Stage,
+    red_list: Option<RedListEntry>,
+}
+
+const INVENTORY: &[ObligationSpec] = &[
+    ObligationSpec {
+        obligation: Obligation::GhostField,
+        field: "ghost_field",
+        consumer: Stage::IrGeneration,
+        red_list: None,
+    },
+];
+
+pub struct NonObligationField {
+    pub field: &'static str,
+    pub reason: &'static str,
+}
+
+pub const NON_OBLIGATION_FIELDS: &[NonObligationField] = &[
+    NonObligationField {
+        field: "fixture_meta",
+        reason: "夹具反例：锚点指向不存在的符号 src/driver/arms.rs:2 no_such_symbol_here",
+    },
+    NonObligationField {
+        field: "fixture_other",
+        reason: "夹具反例：锚点行号越界 src/driver/arms.rs:9999",
+    },
+];

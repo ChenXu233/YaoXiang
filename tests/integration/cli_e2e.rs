@@ -644,8 +644,12 @@ fn test_e2e_check_vendor_import_surface_blocks_hidden() {
 fn test_e2e_check_internal_unused_fn_reports() {
     // Arrange: internal.yx 无人 use、无 main → Internal 角色；其顶层函数无引用
     // （RFC-029f 包内 use 图不可达即报）
+    //
+    // 声明面（WBS 4.9.1 / #334）：引用池的根 = 包目标。本夹具补 `[run].main`
+    // 指向入口文件，成为 RFC-029f 意义上的合法包——池 = 入口 discover_with_used
+    // 的编译集（main.yx 未 use internal.yx ⇒ internal 仍不在包内 use 图里）。
     let tmp = TempDir::new().unwrap();
-    write_manifest(tmp.path(), "app", "");
+    write_manifest(tmp.path(), "app", "[run]\nmain = \"main.yx\"\n");
     let _main = write_yx(tmp.path(), "main.yx", "main = () => { x = 1 }");
     let internal = write_yx(
         tmp.path(),
@@ -666,10 +670,14 @@ fn test_e2e_check_internal_unused_fn_reports() {
 
 #[test]
 fn test_e2e_check_internal_fn_used_elsewhere_alive() {
-    // Arrange: 同样的顶层定义，但被其他文件具名导入并调用——
-    // 引用池来自全项目扫描，使用方在发现集之外也能救活
+    // Arrange: 同样的顶层定义，但被其他文件具名导入并调用——引用池的根 =
+    // **包目标**（WBS 4.9.1 / #334「包内 use 图」）：本夹具补 `[run].main`
+    // 指向入口文件，池 = 入口 discover_with_used 的编译集，于是使用方（入口
+    // 文件）不在被检文件的发现集里也能救活这条定义。
+    // （旧实现靠项目根目录递归扫描达成同一效果；本轮把扫描面改成编译面——
+    // 目录里从未参与编译的文件不再算消费者，见 RFC-029f 缺陷 1。）
     let tmp = TempDir::new().unwrap();
-    write_manifest(tmp.path(), "app", "");
+    write_manifest(tmp.path(), "app", "[run]\nmain = \"main.yx\"\n");
     let _main = write_yx(
         tmp.path(),
         "main.yx",
@@ -1126,8 +1134,8 @@ fn test_e2e_script_mode_top_level_diagnostic_has_span_and_var_name() {
         "顶层语句的错误应带 `-->` 源码位置（此前完全缺失）；combined: {combined:?}"
     );
     assert!(
-        combined.contains("(i)"),
-        "顶层绑定的索引变量名应可见（走全局槽位名表）；combined: {combined:?}"
+        combined.contains("top_oob.i"),
+        "顶层绑定的索引变量名应可见（走全局槽位名表；4.10.3 统一编排后按单元键限定为 top_oob.i）；combined: {combined:?}"
     );
 }
 
@@ -1637,4 +1645,142 @@ fn test_e2e_publish_no_test_skips_failing_tests() {
     // Assert
     assert_eq!(code, 0, "--no-test should skip, stderr: {stderr}");
     assert!(tmp.path().join("target/yxpkg/demo-1.0.0.yxpkg").is_file());
+}
+
+// run 命令 — standalone（无 manifest）编排统一（WBS 4.10.3，4.2.5 裁决 A 的 run 半边）
+// 规范来源：#413（T4 入口语义）、#356（防双跑）、02-stage-contract §3 注记
+
+#[test]
+fn test_e2e_run_standalone_relative_use_resolves() {
+    // Arrange - 无 manifest：a.yx 相对导入 b.yx，Script 语义显式顶层调用 main()
+    let tmp = TempDir::new().unwrap();
+    std::fs::write(
+        tmp.path().join("b.yx"),
+        "f: (x: Int) -> Int = (x) => x + 1\n",
+    )
+    .unwrap();
+    let src = tmp.path().join("a.yx");
+    std::fs::write(
+        &src,
+        "use b.{f}\nmain = () => {\n    print(f(1))\n}\nmain()\n",
+    )
+    .unwrap();
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert - 旧路径（Compiler::compile 单文件管线）对相对 use 报 E5001；
+    // 统一编排后与 check 一致解析，程序真实执行
+    assert_eq!(
+        code, 0,
+        "standalone 相对导入的 run 应成功；stdout: {stdout}\nstderr: {stderr}"
+    );
+    assert!(
+        stdout.contains("2"),
+        "f(1) 的求值结果应输出 2；stdout: {stdout}\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn test_e2e_run_standalone_top_level_script_executes() {
+    // Arrange - 无 manifest 纯脚本：顶层语句即程序主体（Script 语义保持）
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("script.yx");
+    std::fs::write(&src, "print(\"script-top-level\")\n").unwrap();
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert - 统一编排后不得被 E3023 误杀
+    assert_eq!(
+        code, 0,
+        "Script 顶层语句应正常执行（不得报 E3023）；stdout: {stdout}\nstderr: {stderr}"
+    );
+    assert!(
+        stdout.contains("script-top-level"),
+        "顶层语句输出应出现；stdout: {stdout}"
+    );
+}
+
+#[test]
+fn test_e2e_run_standalone_uncalled_main_hints_without_executing() {
+    // Arrange - 无 manifest：定义 main 但从不调用（#413 提示钉板）
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("hint.yx");
+    std::fs::write(&src, "main = () => {\n    print(\"MAIN_RAN\")\n}\n").unwrap();
+
+    // Act
+    let (code, stdout, stderr) = run_yx(&["run", src.to_str().unwrap()], tmp.path());
+
+    // Assert - #413 T4：Script 不自动执行 main + 显式提示（钉板不动）
+    assert_eq!(code, 0, "无错误的 script 应零退出；stderr: {stderr}");
+    assert!(
+        !stdout.contains("MAIN_RAN"),
+        "Script 不得自动执行 main（#356 防双跑）；stdout: {stdout}"
+    );
+    assert!(
+        stderr.contains("script 模式运行"),
+        "#413 提示不得消失（钉板）；stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("main 未被调用"),
+        "#413 第二行提示不得消失（钉板）；stderr: {stderr}"
+    );
+}
+#[test]
+fn test_e2e_check_explicit_path_under_target_is_honored() {
+    // Arrange - issue #463：默认排除表（`.git`/`.yaoxiang`/`target`）只应作用于**遍历到的子项**，
+    // 不应作用于**用户显式给出的路径**——AGENTS.md 第 9 条要求零散探针可放 `target/yx-scratch/<batch>/` 下直接跑。
+    // 夹具写在仓库 `target/` 下（这正是判据要覆盖的位置），含①显式文件 ②显式目录 ③嵌套默认排除子项 三形态。
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let root = repo
+        .join("target")
+        .join("cli-e2e-probe")
+        .join("explicit-path");
+    let nested_default_excluded = root.join("nested").join("target");
+    std::fs::create_dir_all(&nested_default_excluded).expect("create probe dirs");
+    let probe = root.join("p.yx");
+    std::fs::write(&probe, "main: () -> Void = {}\n\nmain()\n").expect("write probe");
+    let nested_probe = nested_default_excluded.join("inner.yx");
+    std::fs::write(&nested_probe, "main: () -> Void = {}\n\nmain()\n").expect("write nested probe");
+
+    // Act - ① 显式文件 ② 显式目录 ③ 显式目录 + 用户 --exclude 指向它自己
+    let (code_file, _out_file, err_file) = run_yx(&["check", probe.to_str().unwrap()], &repo);
+    let (code_dir, _out_dir, err_dir) = run_yx(&["check", root.to_str().unwrap()], &repo);
+    // 注意参数序：`--exclude` 是变参（`num_args = 1..`），必须放在位置参数**之后**，
+    // 否则它会把位置参数一并吞进排除表（本会话踩过：写成 `--exclude A B` 会变成零 paths）。
+    let (code_excluded, _out_ex, err_ex) = run_yx(
+        &[
+            "check",
+            root.to_str().unwrap(),
+            "--exclude",
+            root.to_str().unwrap(),
+        ],
+        &repo,
+    );
+
+    // Assert - 显式路径不再被默认排除表拦下（#463 的绿态）
+    assert_eq!(
+        code_file, 0,
+        "显式给出的 target/ 下文件应被收集并检查通过；stderr: {err_file:?}"
+    );
+    assert_eq!(
+        code_dir, 0,
+        "显式给出的 target/ 下目录应被遍历（不是只看文件分支）；stderr: {err_dir:?}"
+    );
+    // Assert - 反向判据：嵌套在显式目录里的 `target/` 子目录仍须跳过（AGENTS 第 9 条「不进语料差分」的依赖面）
+    let nested_content = std::fs::read_to_string(&nested_probe).expect("nested probe readable");
+    assert!(
+        nested_content.contains("main"),
+        "嵌套探针应存在但**不被收集**——它写在 nested/target/ 下"
+    );
+    // Assert - 用户显式 --exclude 仍优先于显式路径（判据序：--exclude > 显式路径 > 默认排除表）
+    assert_ne!(
+        code_excluded, 0,
+        "显式 --exclude 命中的路径仍应被排除（零发现 ⇒ 非零退出）；stderr: {err_ex:?}"
+    );
+    assert!(
+        err_ex.contains("No .yx files found"),
+        "被 --exclude 排除后应报零发现；stderr: {err_ex:?}"
+    );
 }

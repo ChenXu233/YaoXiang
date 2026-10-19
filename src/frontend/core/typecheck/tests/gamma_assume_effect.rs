@@ -10,6 +10,7 @@
 //! dep_env 注册 GammaAssume { predicate_arg: 0 }。
 
 use crate::frontend::core::typecheck::test_util::{binop};
+use crate::util::plan_id::PlanId;
 use std::collections::HashMap;
 
 use crate::frontend::core::parser::ast::{BinOp as AstBinOp, Expr};
@@ -35,12 +36,13 @@ fn make_gt_zero() -> Expr {
 
 /// 构造 `assert(x > 0)` 调用表达式
 fn make_assert_call() -> Expr {
-    Expr::Call {
-        func: Box::new(Expr::Var("assert".to_string(), Span::dummy())),
-        args: vec![make_gt_zero()],
-        named_args: Vec::new(),
-        span: Span::dummy(),
-    }
+    Expr::call(
+        Expr::Var("assert".to_string(), Span::dummy()),
+        vec![make_gt_zero()],
+        Vec::new(),
+        Span::dummy(),
+        PlanId::UNPLANNED,
+    )
 }
 
 /// 构造 Bool→Void 的函数类型（assert 的签名）

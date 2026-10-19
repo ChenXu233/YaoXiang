@@ -19,4 +19,6 @@ module
     Call %13 <- string("std.assert.assert") [%11, %12] (def=d1)
     Load %14 <- string("std module alias ok")
     Call %15 <- string("std.io.print") [%14] (def=d2)
+    Drop %1
+    Drop %8
     Store @0 <- %15

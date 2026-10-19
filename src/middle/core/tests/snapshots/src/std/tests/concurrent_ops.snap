@@ -14,6 +14,7 @@ module
     Gt %5 <- %3, %4
     Load %6 <- string("thread_id should be non-empty")
     Call %0 <- string("std.assert.assert") [%5, %6] (def=d4)
+    Drop %1
     Ret %0
   init (locals=0)
     Call %0 <- string("main") [] (def=d5)

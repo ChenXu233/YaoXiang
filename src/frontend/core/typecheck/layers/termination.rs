@@ -199,7 +199,7 @@ pub enum MeasureVerdict {
 /// 调用方（checker）必须发射 W1081。
 ///
 /// 独立成纯函数以便单测覆盖（checker 层无法模拟求解器缺失——测试环境
-/// `default_solver()` 恒为 Some）。
+/// 进程级共享求解器恒可用，见 `proof/smt/backend.rs` 的 `with_shared_solver`）。
 pub fn count_unjudged_obligations(
     measure_verdicts: &[MeasureVerdict],
     well_founded_verdicts: &std::collections::HashMap<String, MeasureVerdict>,
@@ -231,14 +231,16 @@ struct FnMeasureContext {
 /// 在类型检查之后、约束求解之前运行。
 /// 遍历 AST，为每个 `while` 循环和每个递归函数执行终止分析。
 #[derive(Debug)]
-pub struct TerminationChecker {
+pub struct TerminationChecker<'a> {
     /// 收集到的证明结果
     results: Vec<ProofResult>,
-    /// 求解器（持有所有权）——策略 1 秩函数 SMT 验证 + 显式测度义务判定
+    /// 求解器（借用进程级共享实例）——策略 1 秩函数 SMT 验证 + 显式测度义务判定
     ///
-    /// RFC-027a T4：生产在 `checker.rs` 注入 `default_solver()`；未注入则为
-    /// `None`，SMT 相关路径整体不执行（wasm 自 #435 起同带 Z3）。
-    solver: Option<Box<dyn Solver>>,
+    /// RFC-039 D58：生产在 `checker.rs` 的 `with_shared_solver` 闭包内注入
+    /// 共享实例的借用；未注入（`None`）则 SMT 相关路径整体不执行、判定为
+    /// `Unjudged`（wasm 自 #435 起同带 Z3）。生命周期参数化的原因见
+    /// [`Self::with_solver`]——共享实例由 `Mutex` 保护，只能借不能持有。
+    solver: Option<&'a dyn Solver>,
     /// 带精化标注的变量名集合——决定循环是否进**验证模式**（RFC-027 §7）
     ///
     /// RFC-027 §7：终止性不是独立开关，而是验证模式的一部分。**裸 `while`
@@ -291,13 +293,13 @@ pub struct TerminationChecker {
     path_guards: Vec<crate::frontend::core::types::const_data::ConstExpr>,
 }
 
-impl Default for TerminationChecker {
+impl<'a> Default for TerminationChecker<'a> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl TerminationChecker {
+impl<'a> TerminationChecker<'a> {
     /// 创建新的终止检查器
     pub fn new() -> Self {
         Self {
@@ -389,16 +391,21 @@ impl TerminationChecker {
         self.refined_vars = vars;
         self
     }
-    /// 注入求解器后端（持有所有权，不泄露）
+    /// 注入求解器后端（借用进程级共享实例）
     ///
-    /// RFC-027a T4：终止检查器**持有**求解器而非借 `&'static`——后者迫使调用方
-    /// 用 `Box::leak` 把 `default_solver()` 的 `Box<dyn Solver>` 变成静态引用，
-    /// 泄漏虽小但无必要（计划 D3）。
-    pub fn with_solver_owned(
+    /// RFC-039 D58：生产路径的求解器是 `proof/smt/backend.rs` 的进程级共享
+    /// 单例，由 `Mutex` 保护、以 `&dyn Solver` 借出——检查器**不能持有**它
+    /// （`Solver` 只 `Send` 不 `Sync`，所有权不外借）。故此处参数是生命周期
+    /// 参数化的借用，而非 RFC-027a T4 的 `Box<dyn Solver>` 所有权注入
+    /// （那要求每个消费点各自新建实例，D58 已裁决收敛到共享口）。
+    ///
+    /// `None` = 求解器不可用：SMT 相关路径整体不执行，判定为 `Unjudged`
+    /// （「未判」不得当「成立」，见 `compute_measure_verdicts`）。
+    pub fn with_solver(
         mut self,
-        solver: Box<dyn Solver>,
+        solver: Option<&'a dyn Solver>,
     ) -> Self {
-        self.solver = Some(solver);
+        self.solver = solver;
         self
     }
 
@@ -497,7 +504,7 @@ impl TerminationChecker {
                 }
                 a
             };
-            let verdict = match self.solver.as_deref() {
+            let verdict = match self.solver {
                 None => MeasureVerdict::Unjudged,
                 Some(solver) => {
                     // 未知按 Int：测度是整型表达式（同 `compute_measure_verdicts`）
@@ -547,7 +554,7 @@ impl TerminationChecker {
     fn compute_measure_verdicts(&self) -> Vec<MeasureVerdict> {
         use crate::frontend::core::types::const_data::ConstExpr;
 
-        let Some(solver) = self.solver.as_deref() else {
+        let Some(solver) = self.solver else {
             return vec![MeasureVerdict::Unjudged; self.measure_obligations.len()];
         };
         self.measure_obligations
@@ -1495,7 +1502,7 @@ impl TerminationChecker {
         _condition: &Expr,
         _span: crate::util::span::Span,
     ) -> Option<LinearMeasure> {
-        let solver = self.solver.as_deref()?;
+        let solver = self.solver?;
 
         let candidates = self.generate_rank_candidates(bounds);
 

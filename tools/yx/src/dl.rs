@@ -167,9 +167,20 @@ fn unpack_zip(
     let mut zip = zip::ZipArchive::new(std::io::BufReader::new(file))?;
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i)?;
+        // zip 9 起 ZipFile::name 返回 Result（非 UTF-8 条目名取不到），错误信息退回占位符
+        let raw = entry
+            .name()
+            .map(std::borrow::Cow::into_owned)
+            .unwrap_or_else(|_| "<non-UTF-8 entry name>".to_string());
+        // zip 9 起 enclosed_name 由「拒绝 ..」改为「规范化掉 ..」（实测 `pkg/../evil.txt` 得
+        // `Some("evil.txt")`——条目被静默改写到另一个落点）。故先用与 tar 侧同一个
+        // entry_path_is_safe 判据拒掉，enclosed_name 只用于挡绝对路径 / 盘符等其余形态
+        if !entry_path_is_safe(std::path::Path::new(&raw)) {
+            return Err(Error::Message(format!("unsafe archive entry: {raw}")));
+        }
         let name = entry
             .enclosed_name()
-            .ok_or_else(|| Error::Message(format!("unsafe archive entry: {}", entry.name())))?;
+            .ok_or_else(|| Error::Message(format!("unsafe archive entry: {raw}")))?;
         if name.components().count() <= 1 {
             continue;
         }

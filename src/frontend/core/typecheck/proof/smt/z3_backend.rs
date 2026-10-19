@@ -37,7 +37,7 @@ unsafe impl Send for Z3Backend {}
 /// `Solver` 抽象实现——使上层不再依赖 Z3 具体类型（RFC-027 §8）。
 ///
 /// 注意：**不**实现 `Sync`。内部 `RefCell` 缓存与 Z3 context 都禁止并发访问，
-/// 并发必须经 `Mutex` 串行化（见 `predicate.rs` 的 `SOLVER`）。
+/// 并发必须经 `Mutex` 串行化（进程级共享单例见 `backend.rs` 的 `with_shared_solver`）。
 impl super::backend::Solver for Z3Backend {
     fn solve(
         &self,
@@ -46,6 +46,14 @@ impl super::backend::Solver for Z3Backend {
     ) -> SMTResult {
         // 委托给固有方法，避免递归
         Z3Backend::solve(self, commands, timeout_ms)
+    }
+
+    /// 缓存命中/未命中计数（WBS 4.4.2「缓存命中率可观测」判据）。
+    ///
+    /// Z3 后端有实例内缓存，故恒为 `Some`；经 `&dyn Solver` 读取时
+    /// 无缓存的后端给 `None`（trait 默认实现），读取口在 `backend.rs`。
+    fn cache_stats(&self) -> Option<(u64, u64)> {
+        Some((self.cache_hits.get(), self.cache_misses.get()))
     }
 }
 
@@ -198,11 +206,6 @@ impl Z3Backend {
             cache.insert(cache_key, result.clone());
         }
         result
-    }
-
-    /// 缓存命中/未命中计数（WBS 4.4.2「缓存命中率可观测」判据）。
-    pub fn cache_stats(&self) -> (u64, u64) {
-        (self.cache_hits.get(), self.cache_misses.get())
     }
 }
 

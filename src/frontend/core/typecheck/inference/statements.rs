@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use crate::frontend::module::{Export, ExportKind, ModuleInfo};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::core::types::{MonoType, PolyType, TraitTable, TypeConstraintSolver};
-use crate::frontend::core::parser::ast::{classify_generic_params, Block, Expr, Param, Stmt};
+use crate::frontend::core::parser::ast::{classify_generic_params, Block, Expr, Param, PlanId, Stmt};
 use crate::frontend::core::typecheck::scope::VarInfo;
 use crate::frontend::core::typecheck::checker::collect_used_in_type;
 use crate::middle::passes::mono::instance::InstantiationRequest;
@@ -44,6 +44,9 @@ pub struct StatementChecker {
     native_signatures: HashMap<String, MonoType>,
     /// Native 函数 arity 区间表（#387，随签名表同源灌装）
     native_arity: HashMap<String, (usize, Option<usize>)>,
+    /// #454：Native 导出形参名（全限定名 + 短名 → 声明序形参名）
+    native_param_names:
+        HashMap<String, crate::frontend::core::typecheck::environment::ExportParamInfo>,
     /// 模块注册表（用于在函数体/块作用域中处理 use 语句）
     module_registry: ModuleRegistry,
     /// 模块别名集合（#396）：区分「模块别名 Struct」与真 struct，
@@ -110,14 +113,14 @@ pub struct StatementChecker {
     pub method_overloads: std::collections::HashMap<String, Vec<MonoType>>,
     /// RFC-011a §3：重载候选的 IR 混编名
     pub method_overload_ir_names: std::collections::HashMap<String, Vec<String>>,
-    /// RFC-011a §3：重载决议点（span → 混编 IR 名）
-    pub overload_resolutions: Vec<(crate::util::span::Span, String)>,
+    /// RFC-011a §3 / #452：重载候选的声明期形参名（与候选序一一对应，含接收者位）
+    pub method_overload_param_names: std::collections::HashMap<String, Vec<Vec<String>>>,
+    /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
+    pub overload_resolutions: Vec<(crate::util::plan_id::PlanId, String)>,
     /// 期望类型（带注解绑定的初始化推断时设置，方法重载按期望返回决议）
     pub current_expected: Option<MonoType>,
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types: HashMap<String, Vec<crate::frontend::core::typecheck::environment::SumVariantDef>>,
-    /// RFC-010: 变体构造调用点（span 键控）
-    pub variant_ctor_calls: Vec<crate::frontend::core::typecheck::environment::VariantCtorCall>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
     pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
     pub operator_dispatches:
@@ -167,6 +170,12 @@ pub struct StatementChecker {
     /// 由 TypeChecker 排空进 SemanticDB 的 imports 表。
     /// 定义/引用事件走 ScopeManager 漏斗（scope.rs），不经此缓冲。
     semantic_imports: Vec<SemanticImportEvent>,
+    /// 跨文件导入项的真实定义位置（WBS 4.6.1）：use 行绑定名源 span →
+    /// （定义文件， 定义名源 span）。import_binding 在导出携带
+    /// `definition_span` 且模块携带 `definition_file` 时登记；std/native
+    /// 导出不登记（回退现状：resolves_to 落 use 行）。TypeChecker 排空
+    /// 引用事件时查本表重写 DefId，使跨文件跳转命中真实定义。
+    import_def_locations: HashMap<crate::util::span::Span, (String, crate::util::span::Span)>,
 }
 
 /// 语义导入事件：一条 use 语句（#433/D55）。
@@ -201,6 +210,7 @@ impl StatementChecker {
             overload_candidates: HashMap::new(),
             native_signatures: HashMap::new(),
             native_arity: HashMap::new(),
+            native_param_names: HashMap::new(),
             module_registry: ModuleRegistry::with_std(),
             module_aliases: std::collections::HashSet::new(),
             module_namespaces: HashMap::new(),
@@ -214,6 +224,7 @@ impl StatementChecker {
             current_fn_param_constraints: None,
             method_overloads: std::collections::HashMap::new(),
             method_overload_ir_names: std::collections::HashMap::new(),
+            method_overload_param_names: std::collections::HashMap::new(),
             overload_resolutions: Vec::new(),
             current_expected: None,
             expected_return_type: None,
@@ -227,7 +238,6 @@ impl StatementChecker {
             existential_coercions: Vec::new(),
             interface_impl_registry: HashMap::new(),
             sum_types: HashMap::new(),
-            variant_ctor_calls: Vec::new(),
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             match_scrutinee_types: HashMap::new(),
@@ -244,6 +254,7 @@ impl StatementChecker {
             tail_annotation_span: None,
             vendor_root: None,
             semantic_imports: Vec::new(),
+            import_def_locations: HashMap::new(),
         }
     }
 
@@ -528,6 +539,14 @@ impl StatementChecker {
         self.native_arity = arities;
     }
 
+    /// 设置 native 导出形参名表（#454）
+    pub fn set_native_param_names(
+        &mut self,
+        names: HashMap<String, crate::frontend::core::typecheck::environment::ExportParamInfo>,
+    ) {
+        self.native_param_names = names;
+    }
+
     /// 设置模块注册表
     pub fn set_module_registry(
         &mut self,
@@ -629,6 +648,7 @@ impl StatementChecker {
         binding_name: &str,
         definition_span: crate::util::span::Span,
         export: &Export,
+        module: &ModuleInfo,
     ) {
         let ty = self.export_type(export);
         // 标记为导入：导入名不是本文件的绑定，不参与 spec §4.3 的
@@ -640,6 +660,15 @@ impl StatementChecker {
             PolyType::mono(ty),
             definition_span,
         );
+        // 4.6.1：被导入符号在**定义文件**里有真实位置时（用户/vendor 模块
+        // 的函数与常量导出），登记 use 行 span → 真实定义的映射；排空引用
+        // 事件时据此把 resolves_to 重定向出本文件（跨文件跳转命中定义）。
+        // std/native 导出两个位置都缺（definition_file/definition_span 为
+        // None），不登记——resolves_to 维持落 use 行的现状语义。
+        if let (Some(file), Some(def_span)) = (&module.definition_file, export.definition_span) {
+            self.import_def_locations
+                .insert(definition_span, (file.display().to_string(), def_span));
+        }
     }
 
     pub(in crate::frontend::core::typecheck) fn process_use_stmt(
@@ -759,7 +788,7 @@ impl StatementChecker {
                     }
                     // #321 W1003：登记导入本地名（内联别名优先）
                     self.note_body_import(local_name, path_span);
-                    self.import_binding(local_name, local_span, &export);
+                    self.import_binding(local_name, local_span, &export, &module);
                 }
             }
         }
@@ -775,6 +804,15 @@ impl StatementChecker {
     /// 定义/引用事件走 ScopeManager 漏斗（`take_binding_events`/`take_reference_events`）。
     pub fn take_import_events(&mut self) -> Vec<SemanticImportEvent> {
         std::mem::take(&mut self.semantic_imports)
+    }
+
+    /// 取走跨文件导入项的真实定义位置表（WBS 4.6.1）：use 行绑定名源 span →
+    /// （定义文件， 定义名源 span）。TypeChecker 排空引用事件时查表重写
+    /// `resolves_to` 的 DefId。
+    pub fn take_import_def_locations(
+        &mut self
+    ) -> HashMap<crate::util::span::Span, (String, crate::util::span::Span)> {
+        std::mem::take(&mut self.import_def_locations)
     }
 
     /// 取走作用域累积的定义事件（#433/D55）：转发 ScopeManager 采集漏斗
@@ -1386,6 +1424,7 @@ impl StatementChecker {
                                 }),
                             )),
                             span: stmt.span,
+                            plan_id: PlanId::UNPLANNED,
                         }],
                         span: stmt.span,
                     };
@@ -2859,6 +2898,7 @@ impl StatementChecker {
                                 current_result_err,
                             );
                         inferrer.set_native_arities(&self.native_arity);
+                        inferrer.set_native_param_names(&self.native_param_names);
                         inferrer.set_method_bindings(&self.method_bindings);
                         inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                         inferrer.set_sum_types(&self.sum_types);
@@ -2873,6 +2913,7 @@ impl StatementChecker {
                             &self.method_overloads,
                             &self.method_overload_ir_names,
                         );
+                        inferrer.set_method_overload_param_names(&self.method_overload_param_names);
                         inferrer.set_current_expected(self.current_expected.clone());
                         inferrer.set_dep_env(&self.dep_env);
                         // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
@@ -2903,7 +2944,6 @@ impl StatementChecker {
                             .append(&mut inferrer.overload_resolutions);
                         self.operator_dispatches
                             .extend(inferrer.operator_dispatches);
-                        self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
                         // #389：match scrutinee 类型表随委托回流
                         self.match_scrutinee_types
                             .extend(inferrer.match_scrutinee_types);
@@ -2969,6 +3009,7 @@ impl StatementChecker {
                     &self.method_bindings,
                 );
                 inferrer.set_native_arities(&self.native_arity);
+                inferrer.set_native_param_names(&self.native_param_names);
                 inferrer.set_type_defs(&self.type_defs);
                 inferrer.set_interface_impl_registry(&self.interface_impl_registry);
                 inferrer.set_sum_types(&self.sum_types);
@@ -2979,6 +3020,7 @@ impl StatementChecker {
                 inferrer.set_generic_fn_constraints(&self.generic_fn_constraints);
                 inferrer
                     .set_method_overloads(&self.method_overloads, &self.method_overload_ir_names);
+                inferrer.set_method_overload_param_names(&self.method_overload_param_names);
                 inferrer.set_current_expected(self.current_expected.clone());
                 inferrer.set_dep_env(&self.dep_env);
                 // #311：把 checker 侧循环深度传入，E1102 判定跨 walker 一致
@@ -3009,7 +3051,6 @@ impl StatementChecker {
                     .append(&mut inferrer.overload_resolutions);
                 self.operator_dispatches
                     .extend(inferrer.operator_dispatches);
-                self.variant_ctor_calls.extend(inferrer.variant_ctor_calls);
                 // #389：match scrutinee 类型表随委托回流
                 self.match_scrutinee_types
                     .extend(inferrer.match_scrutinee_types);
