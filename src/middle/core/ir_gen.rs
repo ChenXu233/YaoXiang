@@ -695,11 +695,22 @@ impl AstToIrGenerator {
         layers
     }
 
-    /// 该类型注解是否为 `Type`（元类型）——即类型参数，编译期擦除。
+    /// 该类型注解是否为**类型位**——编译期擦除，不占运行时参数位。
+    ///
+    /// 两类：具体元类型 `Type`（`T: Type`），以及**高阶类型参数**的标注
+    /// `(T: Type) -> Type`（构造器变量，RFC-010 元类型层级的 Type1/Type2+）。
+    /// 后者此前被当成值层，`(F: (T: Type) -> Type, A: Type) -> (x: A) -> A`
+    /// 的 curry 外壳被保留，构造器类型实参对应的值级函数永不生成
+    /// （运行期返回值是闭包而非调用结果）。判据委托 parser 的
+    /// `is_type_level_fn`——与声明侧类型参数分类同一实现，不内联第二份。
     fn is_type_param_ann(ty: &ast::Type) -> bool {
         match ty {
             ast::Type::MetaType { .. } => true,
             ast::Type::Name { name, .. } => name == "Type",
+            ast::Type::Fn {
+                params,
+                return_type,
+            } => crate::frontend::core::parser::ast::is_type_level_fn(params, return_type),
             _ => false,
         }
     }

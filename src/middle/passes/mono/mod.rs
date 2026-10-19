@@ -538,6 +538,45 @@ impl Monomorphizer {
             _ => Vec::new(),
         };
 
+        // 构造器变量的**头部替换**（WBS 3.5.3）：IR 类型里的 `Generic{"F", args}`
+        // 头部就是高阶类型参数（构造器变量），按声明序把它换成类型实参里的真实
+        // 构造器（`apply(Box, Int)` 的 `Box`）。判据与 typecheck 侧同源
+        // （`types::substitute::ctor_head_name` / `substitute_ctor_heads`）：
+        // 普通类型参数不会出现在应用头部，故按名替换只命中构造器变量。
+        let head_map: std::collections::HashMap<String, String> = type_params
+            .iter()
+            .enumerate()
+            .filter_map(|(i, name)| {
+                type_args
+                    .get(i)
+                    .and_then(crate::frontend::core::types::substitute::ctor_head_name)
+                    .map(|head| (name.clone(), head))
+            })
+            .collect();
+        // 声明名 → 类型实参（按声明序）：IR 里由 **AST 直译**的类型仍带声明名
+        // （`(x: F(A))` 的 `A` 是 `TypeRef("A")`，未经 solver 替换），只做
+        // TypeVar 位替换会把它留成悬空的名字。名字是声明侧与实例化的唯一对应。
+        let name_map: std::collections::HashMap<String, MonoType> = type_params
+            .iter()
+            .enumerate()
+            .filter_map(|(i, n)| type_args.get(i).map(|a| (n.clone(), a.clone())))
+            .collect();
+        let substitute_heads = |ty: &MonoType| {
+            crate::frontend::core::types::substitute::substitute_ctor_heads(
+                &ty.substitute(&name_map),
+                &head_map,
+            )
+        };
+        let new_params: Vec<MonoType> = new_params.iter().map(substitute_heads).collect();
+        let new_return_type = substitute_heads(&new_return_type);
+        let new_locals: Vec<LocalSlot> = new_locals
+            .iter()
+            .map(|slot| LocalSlot {
+                ty: substitute_heads(&slot.ty),
+                ..slot.clone()
+            })
+            .collect();
+
         // 替换指令中的类型
         let new_blocks: Vec<BasicBlock> = match &generic.body {
             FunctionBody::Code { blocks, .. } => blocks

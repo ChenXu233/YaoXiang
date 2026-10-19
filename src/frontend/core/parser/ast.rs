@@ -911,7 +911,7 @@ pub fn name_used_as_type_in(
 ///
 /// 这是高阶类型参数（构造器变量）的声明形态：F 的取值范围是类型构造器，
 /// 而非某个具体类型（RFC-010 元类型层级 Type1/Type2+）。
-fn is_type_level_fn(
+pub fn is_type_level_fn(
     params: &[Type],
     return_type: &Type,
 ) -> bool {
