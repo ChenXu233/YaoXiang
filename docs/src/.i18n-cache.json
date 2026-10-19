@@ -126,7 +126,7 @@
   "src/rfc/deprecated/020-dynamic-modules-ffi.md:en": "6f972253d26b70c24b66fdd7fa629e1e",
   "src/rfc/deprecated/021-library-driven-ffi-extension.md:en": "e62d41d476ac9fafb85d762b1209ad2f",
   "src/rfc/deprecated/022-hoare-logic-static-verification.md:en": "978647fff36bb3f565e61a68442b2dac",
-  "src/dev/release.md:en": "0d9fb7ec4517d0dac3401b7ccf6b46bd",
+  "src/dev/release.md:en": "8db611f4f76fcc2e8464851f6e230419",
   "src/rfc/accepted/027-compile-time-evaluation-types.md:en": "1a9e794676525695d4188fa320f0e292",
   "src/rfc/accepted/018-llvm-aot-compiler.md:en": "281c6365d60eb0e5de159017f64e029b",
   "src/rfc/draft/028-jit-compiler.md:en": "6fd4eb163f9a5442690da81f6629a564",
