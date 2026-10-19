@@ -48,3 +48,48 @@ fn test_hkt_inferred_type_arg_binds_head_constructor() {
         "推断传类型实参路径应无诊断，实际: {diagnostics:?}"
     );
 }
+
+#[test]
+fn test_hkt_explicit_type_arg_accepts_constructor() {
+    // Arrange：显式类型实参列表里第一位是构造器名 `Box`
+    let source = r#"
+        Box: (T: Type) -> Type = { v: T }
+        Holder: (F: (T: Type) -> Type, A: Type) -> Type = { field: F(A) }
+        main: () -> Void = {
+            h: Holder(Box, Int) = Holder(Box, Int)(Box(1))
+        }
+        main()
+    "#;
+
+    // Act
+    let diagnostics = check_source(source);
+
+    // Assert：注解与两层构造都不再报 E1002 / E1010
+    assert!(
+        diagnostics.is_empty(),
+        "显式类型实参（构造器）路径应无诊断，实际: {diagnostics:?}"
+    );
+}
+
+#[test]
+fn test_hkt_explicit_type_arg_function_form_accepts_constructor() {
+    // Arrange：显式类型实参用在**函数**调用上（`probe(Box, Int)(7)`）——
+    // 构造器参数 F 在值级签名里没有槽位，类型实参按声明序跳过它绑定 A
+    let source = r#"
+        Box: (T: Type) -> Type = { v: T }
+        probe: (F: (T: Type) -> Type, A: Type) -> (x: A) -> A = x
+        main: () -> Void = {
+            n = probe(Box, Int)(7)
+        }
+        main()
+    "#;
+
+    // Act
+    let diagnostics = check_source(source);
+
+    // Assert：此前报 E1010（expected 1 arguments, found 2）
+    assert!(
+        diagnostics.is_empty(),
+        "显式类型实参（函数形态）应无诊断，实际: {diagnostics:?}"
+    );
+}

@@ -4598,15 +4598,53 @@ impl<'a> ExpressionInferrer<'a> {
                 }
                 slots.sort_by_key(|(i, _)| *i);
                 slots.dedup_by_key(|(i, _)| *i);
-                for (idx, ta) in explicit_type_args.iter().enumerate() {
-                    if let Some((_, slot)) = slots.get(idx) {
+                // 声明序的类型参数名（跨模块导出的登记口；单文件函数在签名收集期填表）。
+                let declared_names: Vec<String> = fn_name_for_mono
+                    .and_then(|f| self.generic_fn_type_params.get(f).cloned())
+                    .unwrap_or_default();
+                // 构造器参数（高阶类型参数）在值级签名里**没有槽位**：它的类型实参绑定
+                // 到类型应用头部（`F(A)` → `Box(Int)`），不占槽。判据 = 声明的类型参数
+                // 个数多于签名中实际出现的类型变量槽位数，且该实参是构造器引用。
+                let has_ctor_params = declared_names.len() > slots.len();
+                let mut ctor_heads: HashMap<String, String> = HashMap::new();
+                let mut slot_cursor = 0usize;
+                for (i, ta) in explicit_type_args.iter().enumerate() {
+                    if has_ctor_params {
+                        if let (Some(dn), Some(head)) = (
+                            declared_names.get(i),
+                            crate::frontend::core::types::substitute::ctor_head_name(ta),
+                        ) {
+                            if self.is_ctor_reference(ta) {
+                                ctor_heads.insert(dn.clone(), head);
+                                continue;
+                            }
+                        }
+                    }
+                    if let Some((_, slot)) = slots.get(slot_cursor) {
                         let _ = self.solver.unify(slot, ta);
+                        slot_cursor += 1;
                     }
                 }
+                // 构造器变量的头部替换：签名里的 `F(A)` 落成真实构造器应用
+                // （`Box(Int)`），再展开成记录形态与值侧同形。
+                let expand_heads = !ctor_heads.is_empty();
+                let specialize = |ty: MonoType| -> MonoType {
+                    let ty = crate::frontend::core::types::substitute::substitute_ctor_heads(
+                        &ty,
+                        &ctor_heads,
+                    );
+                    if expand_heads {
+                        expand_ctor_applications(&ty, self.generic_type_defs)
+                    } else {
+                        ty
+                    }
+                };
                 // 类型实参不是值实参：从后续逐参校验中移除
-                let bound_params: Vec<MonoType> =
-                    params.iter().map(|p| self.solver.resolve_type(p)).collect();
-                let bound_ret = self.solver.resolve_type(return_type);
+                let bound_params: Vec<MonoType> = params
+                    .iter()
+                    .map(|p| specialize(self.solver.resolve_type(p)))
+                    .collect();
+                let bound_ret = specialize(self.solver.resolve_type(return_type));
                 // 返回专用化后的函数：curry 尾层已是具体形参
                 if bound_params
                     .iter()
@@ -5138,17 +5176,28 @@ impl<'a> ExpressionInferrer<'a> {
                     // 位匹配判定：Type 位收 MetaType 实参，const 位收字面量实参。
                     // 部分匹配 = 存在能填某个声明参数位的实参（MetaType 或
                     // const 位可收的字面量）；全匹配 = 位置对齐逐位吻合。
-                    let meta_count = arg_types
-                        .iter()
-                        .filter(|a| matches!(a, MonoType::MetaType { .. }))
+                    // 位匹配判定：Type 位收的实参是**类型值**——既可以是 `Int` 这样
+                    // 的具体类型（infer 成 MetaType），也可以是 `Box` / `Vec` 这样的
+                    // 类型构造器（infer 成类型级函数 (T: Type) -> Type，RFC-010 元类型
+                    // 宇宙的 Type1 值）。判定与解包必须同源：都用 concrete_type_from_expr_arg。
+                    let is_type_arg_expr = |i: usize| {
+                        matches!(arg_types[i], MonoType::MetaType { .. })
+                            || concrete_type_from_expr_arg(
+                                &args[i],
+                                self.type_defs,
+                                self.generic_type_defs,
+                            )
+                            .is_some()
+                    };
+                    let meta_count = (0..arg_types.len())
+                        .filter(|i| is_type_arg_expr(*i))
                         .count();
                     let lit_count = args
                         .iter()
                         .filter(|a| extract_const_value_from_expr(a).is_some())
                         .count();
                     let all_matched = args.len() == total_params
-                        && (0..type_param_count)
-                            .all(|i| matches!(arg_types[i], MonoType::MetaType { .. }))
+                        && (0..type_param_count).all(is_type_arg_expr)
                         && (type_param_count..total_params)
                             .all(|i| extract_const_value_from_expr(&args[i]).is_some());
                     let any_matched = meta_count > 0 || (const_param_count > 0 && lit_count > 0);
@@ -5159,14 +5208,15 @@ impl<'a> ExpressionInferrer<'a> {
                         // 类型实参解包：表达式位置的类型名 infer 成 MetaType 空壳
                         // （不存具体类型名），从 AST 实参名提取具体类型。
                         for i in 0..type_param_count {
-                            if matches!(full_args[i], MonoType::MetaType { .. }) {
-                                if let Some(concrete) = concrete_type_from_expr_arg(
-                                    &args[i],
-                                    self.type_defs,
-                                    self.generic_type_defs,
-                                ) {
-                                    full_args[i] = concrete;
-                                }
+                            // 类型实参解包：表达式位置的类型名 infer 成 MetaType 空壳
+                            // （不存具体类型名）；类型构造器名 infer 成类型级函数。两者
+                            // 都要从 AST 实参名解包成类型位要的具体类型 / 构造器名。
+                            if let Some(concrete) = concrete_type_from_expr_arg(
+                                &args[i],
+                                self.type_defs,
+                                self.generic_type_defs,
+                            ) {
+                                full_args[i] = concrete;
                             }
                         }
                         // const 参数需要 MonoType::Literal，而非 MonoType::Int
@@ -5199,7 +5249,11 @@ impl<'a> ExpressionInferrer<'a> {
                                         .iter()
                                         .map(|c| (span, c.clone())),
                                 );
-                                Ok(inst.ty)
+                                Ok(instantiate_with_ctor_heads(
+                                    inst.ty,
+                                    &generic_def,
+                                    self.generic_type_defs,
+                                ))
                             }
                             Err(e) => Err(e),
                         };
@@ -5211,7 +5265,7 @@ impl<'a> ExpressionInferrer<'a> {
                         let check_len = total_params.min(args.len());
                         for i in 0..check_len {
                             let ok = if i < type_param_count {
-                                matches!(arg_types[i], MonoType::MetaType { .. })
+                                is_type_arg_expr(i)
                             } else {
                                 extract_const_value_from_expr(&args[i]).is_some()
                             };
@@ -6450,14 +6504,19 @@ fn concrete_type_from_expr_arg(
     match expr {
         crate::frontend::core::parser::ast::Expr::Var(name, _) => {
             if is_builtin_type_name(name) {
-                MonoType::from_builtin_name(name)
-            } else if let Some(def_ty) = type_defs.get(name) {
-                Some(def_ty.clone())
+                // 内置**泛型**容器名（Vec / Array）是类型构造器：值位置是 Type
+                // 宇宙的值，类型实参位要的是构造器名（TypeRef）而非具体标量类型。
+                MonoType::from_builtin_name(name).or_else(|| {
+                    is_builtin_generic_type_name(name).then(|| MonoType::TypeRef(name.clone()))
+                })
             } else if generic_type_defs.contains_key(name) {
-                // 泛型类型名（未实例化引用，如 Container(Container) 的类型实参位）
+                // 泛型类型名（未实例化引用）作类型实参是**构造器引用**：
+                // `Holder(Box, Int)` 的 `Box` 要传构造器名（TypeRef），不是它
+                // 构造出的记录形态（记录形态会丢头部，无法再做构造器变量替换）。
+                // 泛型类型名同时登记在类型表里，故这一支必须排在 type_defs 之前。
                 Some(MonoType::TypeRef(name.clone()))
             } else {
-                None
+                type_defs.get(name).cloned()
             }
         }
         _ => None,
