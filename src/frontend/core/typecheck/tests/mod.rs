@@ -20,6 +20,7 @@ mod checker;
 mod const_param;
 mod environment;
 mod gamma_assume_effect;
+mod hkt;
 mod named_args;
 mod named_args_loud;
 mod overload_resolutions;

@@ -81,6 +81,106 @@ impl Substitution {
     }
 }
 
+/// 应用头部的构造器名：`TypeRef("Vec")` / `Generic{"Vec", []}` 都表示构造器 `Vec`。
+///
+/// 用于「构造器变量只能出现在应用头部」这条规则的绑定与替换（RFC-010 元类型
+/// 层级：Type1/Type2+ 的构造器在类型实参位以**名字**传递）。
+pub fn ctor_head_name(ty: &MonoType) -> Option<String> {
+    match ty {
+        MonoType::TypeRef(name) => Some(name.clone()),
+        MonoType::Generic { name, args } if args.is_empty() => Some(name.clone()),
+        _ => None,
+    }
+}
+
+/// 构造器变量在**应用头部**的替换：把 `F(A)` 的头部名按 `head_map`
+///（构造器参数名 → 实参构造器名）改写为真实构造器。
+///
+/// 这是该规则的唯一实现：普通替换（按 TypeVar 或 TypeRef）覆盖不到
+/// `MonoType::Generic` 的头部字符串，而 `F(A)` 的 F 正是声明里绑定的
+/// 构造器变量——只按名在头部替换，不触碰实参位。
+pub fn substitute_ctor_heads(
+    ty: &MonoType,
+    head_map: &HashMap<String, String>,
+) -> MonoType {
+    if head_map.is_empty() {
+        return ty.clone();
+    }
+    match ty {
+        MonoType::Generic { name, args } => MonoType::Generic {
+            name: head_map.get(name).cloned().unwrap_or_else(|| name.clone()),
+            args: args
+                .iter()
+                .map(|a| substitute_ctor_heads(a, head_map))
+                .collect(),
+        },
+        MonoType::Fn {
+            params,
+            return_type,
+        } => MonoType::Fn {
+            params: params
+                .iter()
+                .map(|p| substitute_ctor_heads(p, head_map))
+                .collect(),
+            return_type: Box::new(substitute_ctor_heads(return_type, head_map)),
+        },
+        MonoType::Struct(s) => MonoType::Struct(StructType {
+            fields: s
+                .fields
+                .iter()
+                .map(|(n, t)| (n.clone(), substitute_ctor_heads(t, head_map)))
+                .collect(),
+            ..s.clone()
+        }),
+        MonoType::Ref { mutable, inner } => MonoType::Ref {
+            mutable: *mutable,
+            inner: Box::new(substitute_ctor_heads(inner, head_map)),
+        },
+        MonoType::Union(ts) => MonoType::Union(
+            ts.iter()
+                .map(|t| substitute_ctor_heads(t, head_map))
+                .collect(),
+        ),
+        MonoType::Intersection(ts) => MonoType::Intersection(
+            ts.iter()
+                .map(|t| substitute_ctor_heads(t, head_map))
+                .collect(),
+        ),
+        MonoType::MetaType {
+            universe_level,
+            type_params,
+        } => MonoType::MetaType {
+            universe_level: universe_level.clone(),
+            type_params: type_params
+                .iter()
+                .map(|t| substitute_ctor_heads(t, head_map))
+                .collect(),
+        },
+        MonoType::AssocType {
+            host_type,
+            assoc_name,
+            assoc_args,
+        } => MonoType::AssocType {
+            host_type: Box::new(substitute_ctor_heads(host_type, head_map)),
+            assoc_name: assoc_name.clone(),
+            assoc_args: assoc_args
+                .iter()
+                .map(|t| substitute_ctor_heads(t, head_map))
+                .collect(),
+        },
+        MonoType::Literal {
+            name,
+            base_type,
+            value,
+        } => MonoType::Literal {
+            name: name.clone(),
+            base_type: Box::new(substitute_ctor_heads(base_type, head_map)),
+            value: value.clone(),
+        },
+        _ => ty.clone(),
+    }
+}
+
 /// 类型替换器
 #[derive(Debug, Clone, Default)]
 pub struct Substituter;

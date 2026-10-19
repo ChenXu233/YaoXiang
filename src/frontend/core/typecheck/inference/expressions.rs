@@ -2007,6 +2007,147 @@ impl<'a> ExpressionInferrer<'a> {
         }
     }
 
+    /// 值位置的**类型值**判定：`Int` 这样的具体类型 infer 成 `MetaType`；
+    /// `Box` / `Vec` 这样的类型构造器 infer 成类型级函数 `(T: Type) -> Type`
+    /// （RFC-010 元类型宇宙的 Type1 值）。两者都是类型实参的候选形态。
+    fn is_type_value(ty: &MonoType) -> bool {
+        match ty {
+            MonoType::MetaType { .. } => true,
+            MonoType::Fn {
+                params,
+                return_type,
+            } => {
+                !params.is_empty()
+                    && matches!(return_type.as_ref(), MonoType::MetaType { .. })
+                    && params
+                        .iter()
+                        .all(|p| matches!(p, MonoType::MetaType { .. }))
+            }
+            _ => false,
+        }
+    }
+    /// 泛型类型构造器名在**值位置**的类型：类型级函数 (T: Type, ...) -> Type
+    /// （RFC-010 元类型层级——构造器本身是 Type1 值，Box 的类型是 (T: Type) -> Type，
+    /// 而 Int 的类型是 Type）。
+    ///
+    /// 仅泛型类型构造器（generic_type_defs）有此形态；非泛型类型名在值位置
+    /// 仍是记录构造器调用（Point(1.0, 2.0)），返回 None 不改写。
+    /// 类型实参是否为**构造器引用**：`Holder(Box, Int)` 的 `Box`（用户泛型类型）与
+    /// `Vec`（内置泛型容器）在实参位指构造器本身——它们不是「未绑定的类型参数」，
+    /// 注解实例化不应因它们而放弃展开（展开后与值侧同形）。
+    fn is_ctor_reference(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        match ty {
+            MonoType::TypeRef(n) => {
+                self.generic_type_defs.contains_key(n) || is_builtin_generic_type_name(n)
+            }
+            _ => false,
+        }
+    }
+    fn type_ctor_value_type(
+        &self,
+        name: &str,
+    ) -> Option<MonoType> {
+        let def = self.generic_type_defs.get(name)?;
+        let meta = MonoType::MetaType {
+            universe_level: crate::frontend::core::types::mono::UniverseLevel::type0(),
+            type_params: Vec::new(),
+        };
+        let mut params: Vec<MonoType> = vec![meta.clone(); def.type_param_names.len()];
+        for binder in &def.poly.const_binders {
+            params.push(match binder.kind {
+                crate::frontend::core::types::const_data::ConstKind::Int(_) => MonoType::Int(64),
+                crate::frontend::core::types::const_data::ConstKind::Bool => MonoType::Bool,
+                crate::frontend::core::types::const_data::ConstKind::Float(_) => {
+                    MonoType::Float(64)
+                }
+            });
+        }
+        if params.is_empty() {
+            return None;
+        }
+        Some(MonoType::Fn {
+            params,
+            return_type: Box::new(meta),
+        })
+    }
+
+    /// 作用域里的类型名条目是否为「该类型自身的记录镜像」：add_type_definition
+    /// 把类型名同时登记为值名（env.add_var），其类型就是该记录类型本身。
+    /// 同名真值变量（mut Box = ...）不是镜像，按普通值处理。
+    fn is_self_type_mirror(
+        name: &str,
+        body: &MonoType,
+    ) -> bool {
+        matches!(body, MonoType::Struct(s) if s.name == name)
+    }
+    /// 声明体里的**构造器变量头部**匹配（WBS 3.5.1）：`F(A)` 的 F 是构造器
+    /// 参数名，绑定值是实参类型的头部构造器名（`[1,2]: Vec(Int)` 的 `Vec`、
+    /// `Box(1): Box` 的 `Box`），写成 `TypeRef` 形态供后续替换使用。
+    ///
+    /// 实参位（`A`）不在本函数绑定：`F(A)` 的 A 由普通类型变量槽位解出，
+    /// 头部绑定只是把 F 换成真实构造器，使 `Vec(A)` / `Box(A)` 能与实参类型对齐。
+    fn bind_ctor_param_heads(
+        shape: &MonoType,
+        actual: &MonoType,
+        type_params: &[String],
+        bindings: &mut HashMap<String, MonoType>,
+    ) {
+        match (shape, actual) {
+            (
+                MonoType::Generic { name, args: s_args },
+                MonoType::Generic {
+                    name: a_head,
+                    args: a_args,
+                },
+            ) => {
+                if type_params.iter().any(|p| p == name) {
+                    bindings.insert(name.clone(), MonoType::TypeRef(a_head.clone()));
+                }
+                if s_args.len() == a_args.len() {
+                    for (s, a) in s_args.iter().zip(a_args.iter()) {
+                        Self::bind_ctor_param_heads(s, a, type_params, bindings);
+                    }
+                }
+            }
+            (MonoType::Generic { name, .. }, MonoType::Struct(st)) => {
+                if type_params.iter().any(|p| p == name) {
+                    bindings.insert(name.clone(), MonoType::TypeRef(st.name.clone()));
+                }
+            }
+            (MonoType::Ref { inner: s, .. }, MonoType::Ref { inner: a, .. }) => {
+                Self::bind_ctor_param_heads(s, a, type_params, bindings);
+            }
+            (
+                MonoType::Fn {
+                    params: sp,
+                    return_type: sr,
+                },
+                MonoType::Fn {
+                    params: ap,
+                    return_type: ar,
+                },
+            ) if sp.len() == ap.len() => {
+                for (s, a) in sp.iter().zip(ap.iter()) {
+                    Self::bind_ctor_param_heads(s, a, type_params, bindings);
+                }
+                Self::bind_ctor_param_heads(sr, ar, type_params, bindings);
+            }
+            (MonoType::Union(s), MonoType::Union(a)) if s.len() == a.len() => {
+                for (x, y) in s.iter().zip(a.iter()) {
+                    Self::bind_ctor_param_heads(x, y, type_params, bindings);
+                }
+            }
+            (MonoType::Intersection(s), MonoType::Intersection(a)) if s.len() == a.len() => {
+                for (x, y) in s.iter().zip(a.iter()) {
+                    Self::bind_ctor_param_heads(x, y, type_params, bindings);
+                }
+            }
+            _ => {}
+        }
+    }
     /// 用实际类型 `actual` 解出 `shape` 里未绑定的 `TypeRef` 类型参数，返回替换后的类型。
     ///
     /// 只在**结构对齐**处绑定（泛型名相同、实参个数相同、以及 Ref/Fn 逐位），
@@ -3015,13 +3156,21 @@ impl<'a> ExpressionInferrer<'a> {
                     .get_var_info(name)
                     .map(|info| (info.poly.clone(), info.definition_span));
                 if let Some((poly, def_span)) = resolved {
+                    // RFC-010 元类型层级：泛型类型构造器名在**值位置**表示构造器
+                    // 本身（Type1 值），其类型是类型级函数 (T: Type, ...) -> Type，
+                    // 而不是它构造出的记录类型。kind_of(Box) 把构造器当高阶参数
+                    // 传递时，实参 Box 必须匹配形参 (T: Type) -> Type（WBS 3.5.1）。
+                    // 只改写「类型名自身的记录镜像」；同名真值变量优先。
+                    let ctor_value = self
+                        .type_ctor_value_type(name)
+                        .filter(|_| Self::is_self_type_mirror(name, &poly.body));
                     self.scope.record_reference(name, *span, def_span);
                     // #321 W1003：命中监视集的导入名记为已使用
                     self.note_import_use(name);
                     // 关键：直接使用 scope 中存储的类型！
                     // 因为 assign_var 已经将更新后的类型写入了 scope
                     // 不需要再通过 solver 解析（solver 不知道 scope 的更新）
-                    Ok(poly.body)
+                    Ok(ctor_value.unwrap_or(poly.body))
                 } else if self.sum_types.contains_key(name) {
                     // RFC-010: 和类型名在表达式位置 — Type 宇宙的值
                     // （`Result(Int, String)` 的内层 Var；构造分派在 Call 臂）
@@ -4206,14 +4355,23 @@ impl<'a> ExpressionInferrer<'a> {
         {
             let leading = arg_types
                 .iter()
-                .take_while(|t| matches!(t, MonoType::MetaType { .. }))
+                .take_while(|t| Self::is_type_value(t))
                 .count();
-            let fn_has_type_slot = matches!(
-                &func_ty,
-                MonoType::Fn { params, return_type }
-                    if params.iter().any(|p| matches!(p, MonoType::TypeVar(_)))
-                        || matches!(**return_type, MonoType::TypeVar(_))
-            );
+            // 类型位判定用**递归**扫描：构造器变量的签名里类型变量嵌在应用实参位
+            // （`x: F(A)` → `Generic{F,[TypeVar]}`），只看顶层会把这类签名漏掉。
+            let fn_has_type_slot = match &func_ty {
+                MonoType::Fn {
+                    params,
+                    return_type,
+                } => {
+                    let mut indices = HashSet::new();
+                    for p in params.iter().chain(std::iter::once(&**return_type)) {
+                        Self::collect_type_var_indices(p, &mut indices);
+                    }
+                    !indices.is_empty()
+                }
+                _ => false,
+            };
 
             if leading > 0 && fn_has_type_slot && leading <= args.len() {
                 // 把类型名实参换成**具体类型**（`Int` → `Int(64)`），
@@ -4967,7 +5125,12 @@ impl<'a> ExpressionInferrer<'a> {
         //     类型参数从元素类型自动解包；const 位无法自动解包时报错。
         if let crate::frontend::core::parser::ast::Expr::Var(ref fn_name, _) = *func {
             if let Some(generic_def) = self.generic_type_defs.get(fn_name).cloned() {
-                if let crate::frontend::core::types::MonoType::Struct(struct_body) = &func_ty {
+                // 构造/实例化用的记录体取自**声明模板**而不是 func_ty：泛型类型
+                // 构造器名在值位置的类型已是类型级函数 (T: Type) -> Type（见 Var 臂
+                // 的 type_ctor_value_type），记录体只有声明模板一处。
+                if let crate::frontend::core::types::MonoType::Struct(struct_body) =
+                    &generic_def.poly.body
+                {
                     let type_param_count = generic_def.type_param_names.len();
                     let const_param_count = generic_def.poly.const_binders.len();
                     let total_params = type_param_count + const_param_count;
@@ -5123,6 +5286,23 @@ impl<'a> ExpressionInferrer<'a> {
                         for pname in &generic_def.type_param_names {
                             param_vars.insert(pname.clone(), self.solver.new_var());
                         }
+                        // 头部位置匹配（WBS 3.5.1）：声明体里的 `F(A)`，F 是构造器
+                        // 参数名——F 只能绑定实参**类型的头部构造器**（`[1,2]` 的
+                        // `Vec`、`Box(1)` 的 `Box`），不参与普通变量位匹配。
+                        for (i, (_, field_ty)) in struct_body.fields.iter().enumerate() {
+                            if i >= provided {
+                                break;
+                            }
+                            let Some(arg_ty) = arg_types.get(i) else {
+                                break;
+                            };
+                            Self::bind_ctor_param_heads(
+                                field_ty,
+                                arg_ty,
+                                &generic_def.type_param_names,
+                                &mut param_vars,
+                            );
+                        }
                         for (i, (_, field_ty)) in struct_body.fields.iter().enumerate() {
                             if i >= provided {
                                 break;
@@ -5131,6 +5311,16 @@ impl<'a> ExpressionInferrer<'a> {
                                 break;
                             };
                             let subst = substitute_type_params_with_vars(field_ty, &param_vars);
+                            // 构造器变量头部替换后产出的是**应用形态**（`Box(Int)`），
+                            // 实际值却是记录（`Struct{Box, ...}`）——先展开成记录形态再比。
+                            let subst = if body_uses_ctor_head(
+                                &generic_def.poly.body,
+                                &generic_def.type_param_names,
+                            ) {
+                                expand_ctor_applications(&subst, self.generic_type_defs)
+                            } else {
+                                subst
+                            };
                             if self.solver.unify(&subst, arg_ty).is_err() {
                                 return Err(ErrorCodeDefinition::type_mismatch(
                                     &format!("{}", subst),
@@ -5154,10 +5344,13 @@ impl<'a> ExpressionInferrer<'a> {
                         // 不展开为 Struct：注解侧对同一形态也保持 `Generic`（见
                         // try_instantiate_generic_type），两侧表示须一致才能 unify。
                         // 全部实参具体时仍展开——与顶层 `L(Int)(...)` 路径一致。
-                        if type_args
-                            .iter()
-                            .any(super::statements::contains_unresolved_param)
-                        {
+                        // 未绑定类型参数（含所在泛型的参数）时保持 Generic 形态；但
+                        // **构造器引用**（`Vec` / `Box`）是类型实参本身，不算未绑定，
+                        // 否则推断路径与注解路径的表示分叉（一侧 Generic、一侧 Struct）。
+                        if type_args.iter().any(|t| {
+                            super::statements::contains_unresolved_param(t)
+                                && !self.is_ctor_reference(t)
+                        }) {
                             return Ok(MonoType::Generic {
                                 name: fn_name.clone(),
                                 args: type_args,
@@ -5174,7 +5367,11 @@ impl<'a> ExpressionInferrer<'a> {
                                         .iter()
                                         .map(|c| (span, c.clone())),
                                 );
-                                Ok(inst.ty)
+                                Ok(instantiate_with_ctor_heads(
+                                    inst.ty,
+                                    &generic_def,
+                                    self.generic_type_defs,
+                                ))
                             }
                             Err(e) => Err(e),
                         };
@@ -6063,8 +6260,122 @@ fn is_builtin_type_name(name: &str) -> bool {
 /// 在**值位置**没有类型构造器语义（无 `Dict(Int,Int)()` 这样的写法），
 /// 列入它们会让类型检查放行、IR 层却无对应生成器，
 /// 结果从清楚的 `E1001 unknown variable` 退化成 `E3006` 编译器内部一致性错。
-fn is_builtin_generic_type_name(name: &str) -> bool {
+pub(crate) fn is_builtin_generic_type_name(name: &str) -> bool {
     matches!(name, "Vec" | "Array")
+}
+
+/// 声明体是否在**应用头部**使用了构造器变量（`F(A)`，F 是声明的类型参数名）。
+///
+/// 只有这类泛型类型的实例化产物里才可能出现「具体应用」（`Box(Int)`、`Vec(Int)`），
+/// 需要展开成记录形态才能与实际记录值比较；普通泛型（字段是 `T`、`Container(T)`）
+/// 的既有表示不动，避免改变无关程序的行为。
+pub(crate) fn body_uses_ctor_head(
+    body: &MonoType,
+    type_params: &[String],
+) -> bool {
+    match body {
+        MonoType::Generic { name, args } => {
+            type_params.iter().any(|p| p == name)
+                || args.iter().any(|a| body_uses_ctor_head(a, type_params))
+        }
+        MonoType::Struct(s) => s
+            .fields
+            .iter()
+            .any(|(_, t)| body_uses_ctor_head(t, type_params)),
+        MonoType::Fn {
+            params,
+            return_type,
+        } => {
+            params.iter().any(|t| body_uses_ctor_head(t, type_params))
+                || body_uses_ctor_head(return_type, type_params)
+        }
+        MonoType::Ref { inner, .. } => body_uses_ctor_head(inner, type_params),
+        MonoType::Union(ts) | MonoType::Intersection(ts) => {
+            ts.iter().any(|t| body_uses_ctor_head(t, type_params))
+        }
+        _ => false,
+    }
+}
+
+/// 把「具体应用」展开成记录形态：`Box(Int)` → `Struct{Box, v: Int}`。
+///
+/// 构造器变量在头部的替换（`F(A)` → `Box(Int)`）产出的是应用形态，而实际值是
+/// 记录形态 `Struct{Box, ...}`；两者必须同形才能 unify/取字段。展开只对
+/// 声明模板已知、实参元数吻合的**用户**类型构造器做（内置容器 `Vec`/`Array`
+/// 是运行时长度的表示，保持应用形态）。
+pub(crate) fn expand_ctor_applications(
+    ty: &MonoType,
+    defs: &HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
+) -> MonoType {
+    match ty {
+        MonoType::Generic { name, args } => {
+            let expanded_args: Vec<MonoType> = args
+                .iter()
+                .map(|a| expand_ctor_applications(a, defs))
+                .collect();
+            if !is_builtin_generic_type_name(name) {
+                if let Some(def) = defs.get(name) {
+                    let total = def.type_param_names.len() + def.poly.const_binders.len();
+                    if expanded_args.len() == total {
+                        if let Ok(inst) = crate::frontend::core::typecheck::TypeEnvironment::instantiate_generic_type(def, &expanded_args) {
+                            return expand_ctor_applications(&inst.ty, defs);
+                        }
+                    }
+                }
+            }
+            MonoType::Generic {
+                name: name.clone(),
+                args: expanded_args,
+            }
+        }
+        MonoType::Struct(s) => MonoType::Struct(crate::frontend::core::types::mono::StructType {
+            fields: s
+                .fields
+                .iter()
+                .map(|(n, t)| (n.clone(), expand_ctor_applications(t, defs)))
+                .collect(),
+            ..s.clone()
+        }),
+        MonoType::Fn {
+            params,
+            return_type,
+        } => MonoType::Fn {
+            params: params
+                .iter()
+                .map(|p| expand_ctor_applications(p, defs))
+                .collect(),
+            return_type: Box::new(expand_ctor_applications(return_type, defs)),
+        },
+        MonoType::Ref { mutable, inner } => MonoType::Ref {
+            mutable: *mutable,
+            inner: Box::new(expand_ctor_applications(inner, defs)),
+        },
+        MonoType::Union(ts) => MonoType::Union(
+            ts.iter()
+                .map(|t| expand_ctor_applications(t, defs))
+                .collect(),
+        ),
+        MonoType::Intersection(ts) => MonoType::Intersection(
+            ts.iter()
+                .map(|t| expand_ctor_applications(t, defs))
+                .collect(),
+        ),
+        _ => ty.clone(),
+    }
+}
+
+/// 泛型类型的实例化产物：声明体用了构造器变量头部时，把产物里的具体应用
+/// 展开成记录形态（见 expand_ctor_applications）；否则原样返回。
+pub(crate) fn instantiate_with_ctor_heads(
+    inst_ty: MonoType,
+    def: &crate::frontend::core::typecheck::environment::GenericTypeDef,
+    defs: &HashMap<String, crate::frontend::core::typecheck::environment::GenericTypeDef>,
+) -> MonoType {
+    if body_uses_ctor_head(&def.poly.body, &def.type_param_names) {
+        expand_ctor_applications(&inst_ty, defs)
+    } else {
+        inst_ty
+    }
 }
 
 /// #287: 将泛型构造器字段类型中的 TypeRef(类型参数名) 替换为对应 TypeVar，
@@ -6083,13 +6394,21 @@ fn substitute_type_params_with_vars(
                 .collect(),
             ..s.clone()
         }),
-        MonoType::Generic { name, args } => MonoType::Generic {
-            name: name.clone(),
-            args: args
-                .iter()
-                .map(|a| substitute_type_params_with_vars(a, param_vars))
-                .collect(),
-        },
+        MonoType::Generic { name, args } => {
+            // 构造器参数名在**应用头部**：绑定值是构造器名（TypeRef / 零实参
+            // Generic）时头部改名（`F(A)` → `Vec(A)`），实参位继续递归替换。
+            let head = param_vars
+                .get(name)
+                .and_then(crate::frontend::core::types::substitute::ctor_head_name)
+                .unwrap_or_else(|| name.clone());
+            MonoType::Generic {
+                name: head,
+                args: args
+                    .iter()
+                    .map(|a| substitute_type_params_with_vars(a, param_vars))
+                    .collect(),
+            }
+        }
         MonoType::Fn {
             params,
             return_type,

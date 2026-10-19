@@ -868,7 +868,13 @@ pub fn name_used_as_type_in(
     match ty {
         Type::Name { name: n, .. } => n == name,
         Type::Literal { name: n, .. } => n == name,
-        Type::Generic { args, .. } => args.iter().any(|a| name_used_as_type_in(name, a)),
+        // 头部位置同样是类型引用：`F(A)` 的应用头部 `F` 指的是**构造器变量**
+        // （高阶类型参数，RFC-010 元类型层级的 Type1/Type2+ 值）——与 `F` 单独
+        // 出现在类型位同义。此前只下钻实参位，头部被漏掉，于是类型体内的
+        // `field: F(A)` 判不出 F 被当类型用，注解校验误报 E1003。
+        Type::Generic {
+            name: head, args, ..
+        } => head == name || args.iter().any(|a| name_used_as_type_in(name, a)),
         Type::Fn {
             params,
             return_type,
@@ -899,6 +905,24 @@ pub fn name_used_as_type_in(
         }
         _ => false,
     }
+}
+
+/// 标注是否为**类型级函数**：`(T: Type) -> Type` —— 参数位与返回位都是 `Type`。
+///
+/// 这是高阶类型参数（构造器变量）的声明形态：F 的取值范围是类型构造器，
+/// 而非某个具体类型（RFC-010 元类型层级 Type1/Type2+）。
+fn is_type_level_fn(
+    params: &[Type],
+    return_type: &Type,
+) -> bool {
+    fn is_type(t: &Type) -> bool {
+        match t {
+            Type::MetaType { .. } => true,
+            Type::Name { name, .. } => name == "Type",
+            _ => false,
+        }
+    }
+    !params.is_empty() && is_type(return_type) && params.iter().all(is_type)
 }
 
 /// Extract just the names and constraints of generic parameters from signature params.
@@ -952,6 +976,17 @@ pub fn extract_generic_param_names(params: &[Param]) -> Vec<GenericParamName> {
                         constraints: vec![ty.clone()],
                     })
                 }
+                // 高阶类型参数（构造器变量）：标注是类型级函数 `(T: Type) -> Type`。
+                // 与 `classify_generic_params` 同一判据（is_type_level_fn），否则
+                // 声明侧把它当类型参数、IR 侧却少登记一个泛型参数——单态化请求的
+                // 类型实参数与 IR 的 generic_params 对不上，直接 E3018。
+                Type::Fn {
+                    params,
+                    return_type,
+                } if is_type_level_fn(params, return_type) => Some(GenericParamName {
+                    name: p.name.clone(),
+                    constraints: Vec::new(),
+                }),
                 Type::Name { .. } => {
                     // 无法确认是否为 trait → 保守不下泛型参数
                     None
@@ -1004,6 +1039,17 @@ pub fn classify_generic_params(
                     name: p.name.clone(),
                     kind: GenericParamKind::Type,
                     constraints: vec![ty.clone()],
+                }),
+                // 高阶类型参数（构造器变量）：标注是**类型级函数** `(T: Type) -> Type`——
+                // 参数位与返回位都是 `Type`。F 的取值范围是类型构造器（RFC-010
+                // 元类型层级 Type1/Type2+），故按类型参数登记，而不是值参数。
+                Type::Fn {
+                    params,
+                    return_type,
+                } if is_type_level_fn(params, return_type) => Some(GenericParam {
+                    name: p.name.clone(),
+                    kind: GenericParamKind::Type,
+                    constraints: Vec::new(),
                 }),
                 // annotation 为具体类型（非 trait、非 CONST_PARAM_TYPES）→ 非泛型参数
                 Type::Name { .. } => None,

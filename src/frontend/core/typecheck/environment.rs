@@ -662,6 +662,28 @@ impl TypeEnvironment {
         param_names: &[String],
         args: &[MonoType],
     ) -> MonoType {
+        // 构造器变量（高阶类型参数）在**应用头部**：`F(A)` 的 F 绑定实参表
+        // 对应位的真实构造器名（`Vec` / `Box`），不是普通类型实参的同位替换
+        // （WBS 3.5.1「合一器在头部位置匹配构造器变量」）。
+        let head_map: HashMap<String, String> = param_names
+            .iter()
+            .enumerate()
+            .filter_map(|(i, n)| {
+                args.get(i)
+                    .and_then(crate::frontend::core::types::substitute::ctor_head_name)
+                    .map(|head| (n.clone(), head))
+            })
+            .collect();
+        Self::replace_type_params_with_heads(ty, param_names, args, &head_map)
+    }
+
+    /// `replace_type_params` 的实现体：额外携带构造器头部改名表。
+    fn replace_type_params_with_heads(
+        ty: &MonoType,
+        param_names: &[String],
+        args: &[MonoType],
+        head_map: &HashMap<String, String>,
+    ) -> MonoType {
         match ty {
             MonoType::TypeRef(name) => {
                 // Check if this TypeRef is a type parameter name
@@ -679,7 +701,12 @@ impl TypeEnvironment {
                     .map(|(name, field_ty)| {
                         (
                             name.clone(),
-                            Self::replace_type_params(field_ty, param_names, args),
+                            Self::replace_type_params_with_heads(
+                                field_ty,
+                                param_names,
+                                args,
+                                head_map,
+                            ),
                         )
                     })
                     .collect();
@@ -698,16 +725,18 @@ impl TypeEnvironment {
             } => {
                 let new_params: Vec<MonoType> = params
                     .iter()
-                    .map(|p| Self::replace_type_params(p, param_names, args))
+                    .map(|p| Self::replace_type_params_with_heads(p, param_names, args, head_map))
                     .collect();
-                let new_ret = Self::replace_type_params(return_type, param_names, args);
+                let new_ret =
+                    Self::replace_type_params_with_heads(return_type, param_names, args, head_map);
                 MonoType::Fn {
                     params: new_params,
                     return_type: Box::new(new_ret),
                 }
             }
             MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
-                let new_elem = Self::replace_type_params(&args[0], param_names, args);
+                let new_elem =
+                    Self::replace_type_params_with_heads(&args[0], param_names, args, head_map);
                 MonoType::Generic {
                     name: "Range".into(),
                     args: vec![new_elem],
@@ -719,10 +748,10 @@ impl TypeEnvironment {
             } => {
                 let new_args = generic_args
                     .iter()
-                    .map(|a| Self::replace_type_params(a, param_names, args))
+                    .map(|a| Self::replace_type_params_with_heads(a, param_names, args, head_map))
                     .collect();
                 MonoType::Generic {
-                    name: name.clone(),
+                    name: head_map.get(name).cloned().unwrap_or_else(|| name.clone()),
                     args: new_args,
                 }
             }
@@ -731,7 +760,12 @@ impl TypeEnvironment {
             // impl `(self: &Dog)` 比较时 expected 侧内层仍是不变元 → E1099 误报。
             MonoType::Ref { mutable, inner } => MonoType::Ref {
                 mutable: *mutable,
-                inner: Box::new(Self::replace_type_params(inner, param_names, args)),
+                inner: Box::new(Self::replace_type_params_with_heads(
+                    inner,
+                    param_names,
+                    args,
+                    head_map,
+                )),
             },
             _ => ty.clone(),
         }

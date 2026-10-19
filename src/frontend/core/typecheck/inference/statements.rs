@@ -444,6 +444,20 @@ impl StatementChecker {
     /// （`L(T)`，T 是所在泛型的参数），展开得到的 Struct 与签名侧给出的
     /// `Generic{name:“L”}` 表示不一致，unify 会报 E1002——而它们语义相同。
     /// 此时返回 None 让调用方回退到 `Generic` 形态，两侧表示一致。
+    /// 类型实参是否为**构造器引用**（用户泛型类型名 / 内置泛型容器名）。
+    /// 见 `try_instantiate_generic_type` 的未绑定参数判定。
+    fn is_ctor_reference(
+        &self,
+        ty: &MonoType,
+    ) -> bool {
+        match ty {
+            MonoType::TypeRef(n) => {
+                self.generic_type_defs.contains_key(n)
+                    || super::expressions::is_builtin_generic_type_name(n)
+            }
+            _ => false,
+        }
+    }
     fn try_instantiate_generic_type(
         &mut self,
         type_ann: &crate::frontend::core::parser::ast::Type,
@@ -459,7 +473,12 @@ impl StatementChecker {
                 let arg_types: Vec<MonoType> =
                     args.iter().map(|a| MonoType::from(a.clone())).collect();
                 // 含未绑定类型参数（TypeRef）时不做结构体展开，保持 Generic 形态。
-                if arg_types.iter().any(contains_unresolved_param) {
+                // 但**构造器引用**（`Box` / `Vec` 这类类型构造器名）不是未绑定参数：
+                // 它们是类型实参本身，必须展开成与值侧同形的记录形态。
+                if arg_types
+                    .iter()
+                    .any(|t| contains_unresolved_param(t) && !self.is_ctor_reference(t))
+                {
                     return None;
                 }
                 match TypeEnvironment::instantiate_generic_type(def, &arg_types) {
@@ -470,7 +489,13 @@ impl StatementChecker {
                                 .iter()
                                 .map(|c| (*name_span, c.clone())),
                         );
-                        Some(inst.ty)
+                        // 构造器变量头部（`F(A)`）的类型：实例化产物里的具体应用
+                        // （`Box(Int)`）展开成记录形态，与注解/值侧同形。
+                        Some(super::expressions::instantiate_with_ctor_heads(
+                            inst.ty,
+                            def,
+                            &self.generic_type_defs,
+                        ))
                     }
                     Err(_) => None,
                 }
