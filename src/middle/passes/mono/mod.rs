@@ -19,18 +19,36 @@ use crate::middle::core::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
 
-/// 是否含符号化类型实参（TypeRef(泛型参数名)）——#335 路径 A 的 deferred 分流依据
-fn contains_type_ref(ty: &MonoType) -> bool {
+/// 是否含**待求值的符号化类型实参**：`TypeRef(name)` 恰是所在泛型函数的类型参数名
+/// （#335 路径 A 的 deferred 分流依据）。
+///
+/// 为什么必须按参数名判：`TypeRef` 还承载**类型构造器引用**（`Holder(Box, Int)` 的
+/// `Box`）与具体用户类型名——它们是已定型的类型实参，进 deferred 桶就只在所在函数
+/// 特化时才会被求值；容器函数非泛型时桶永不排水，调用点已按特化名改写而函数从未
+/// 生成（运行期 E6006）。符号化的本义只是「值取决于所在泛型函数的类型参数」。
+fn contains_type_ref(
+    ty: &MonoType,
+    container_params: &[String],
+) -> bool {
     match ty {
-        MonoType::TypeRef(_) => true,
-        MonoType::Generic { args, .. } => args.iter().any(contains_type_ref),
+        MonoType::TypeRef(name) => container_params.iter().any(|p| p == name),
+        MonoType::Generic { args, .. } => {
+            args.iter().any(|a| contains_type_ref(a, container_params))
+        }
         MonoType::Fn {
             params,
             return_type,
-        } => params.iter().any(contains_type_ref) || contains_type_ref(return_type),
-        MonoType::Ref { inner, .. } => contains_type_ref(inner),
-        MonoType::Union(ts) | MonoType::Intersection(ts) => ts.iter().any(contains_type_ref),
-        MonoType::Refined { base, .. } => contains_type_ref(base),
+        } => {
+            params
+                .iter()
+                .any(|a| contains_type_ref(a, container_params))
+                || contains_type_ref(return_type, container_params)
+        }
+        MonoType::Ref { inner, .. } => contains_type_ref(inner, container_params),
+        MonoType::Union(ts) | MonoType::Intersection(ts) => {
+            ts.iter().any(|t| contains_type_ref(t, container_params))
+        }
+        MonoType::Refined { base, .. } => contains_type_ref(base, container_params),
         _ => false,
     }
 }
@@ -113,7 +131,21 @@ impl Monomorphizer {
         //（泛型体内嵌套调用的实参在此形态——此前直接特化出 pair2(T, string)
         //  等符号名函数，靠解释器类型擦除掩盖），其余正常入队
         for req in requests {
-            let symbolic = req.type_args.iter().any(contains_type_ref);
+            // 符号化判据按**所在泛型函数**的类型参数名收窄（见 contains_type_ref）。
+            let container_params: Vec<String> = req
+                .containing_fn
+                .as_deref()
+                .and_then(|cf| {
+                    self.generic_functions
+                        .get(cf)
+                        .or_else(|| self.generic_types.get(cf))
+                })
+                .and_then(|f| f.generic_params.clone())
+                .unwrap_or_default();
+            let symbolic = req
+                .type_args
+                .iter()
+                .any(|t| contains_type_ref(t, &container_params));
             if symbolic {
                 if let Some(cf) = &req.containing_fn {
                     self.deferred
