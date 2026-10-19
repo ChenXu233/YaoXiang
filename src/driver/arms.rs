@@ -410,6 +410,9 @@ impl Driver {
                 failed_stages.push(Stage::Typecheck);
                 return;
             }
+            // 3.4.6：typecheck 警告暂存，交 DeadCodeAnalysis 臂按项目内门控外发
+            //（与单文件臂 arms.rs:277 同一落点、同一消费端）。
+            us.typecheck_warnings = std::mem::take(&mut result.warnings);
             us.type_result = Some(result);
         }
         // 外部定义面（4.6.1）：Lsp 形态把**非目标文件**的顶层导出定义
@@ -464,15 +467,21 @@ impl Driver {
 
     /// `Stage::DeadCodeAnalysis` 臂（Project 作用域，臂内逐单元）。
     ///
-    /// 移植自 pipeline.rs:275-278 / 288-299。门控
-    /// `dead_code.enabled && !has_errors` 原样保留；开关关闭时连暂存的
-    /// typecheck 警告一并丢弃（现状耦合），并记录 ConfigDisabled 跳过。
-    /// 警告顺序 = 死代码警告在前、typecheck 警告在后（与 pipeline 一致）。
+    /// 单文件形态（`SingleFile`/`WasmPlayground`/`Embedded`）移植自
+    /// pipeline.rs:275-278 / 288-299。门控 `dead_code.enabled && !has_errors`
+    /// 原样保留；开关关闭时连暂存的 typecheck 警告一并丢弃（现状耦合），
+    /// 并记录 ConfigDisabled 跳过。警告顺序 = 死代码警告在前、typecheck
+    /// 警告在后（与 pipeline 一致）。
+    ///
+    /// **编排形态（Check / Lsp / MultiFile）走同一份实现**
+    /// （`dead_code_analysis_check`）：角色感知 + 引用池 + W1006 遮蔽 + W1003
+    /// 未使用导入是一套判据，形态只决定 sink 落在哪条通道（见该函数）。
+    /// 3.4.6 之前 MultiFile 没有本阶段——警告面在 compile 路径整块缺失。
     pub(super) fn dead_code_analysis(
         &self,
         state: &mut State,
     ) {
-        if matches!(state.program.kind, ProgramKind::Check) {
+        if !state.uses_pipeline_channel() {
             return self.dead_code_analysis_check(state);
         }
         let State {
@@ -508,16 +517,23 @@ impl Driver {
         }
     }
 
-    /// Check 形态（4.2.2）：移植自 check_project 主循环的逐文件警告装配。
-    /// 与单文件形态的三处现状差异（即 check_project 与 pipeline 的既有
-    /// 差异，警告面归一是 B1/4.9 的既定缓议）：
-    /// - 无 `config.dead_code.enabled` 门控（check 不读该开关）；
+    /// 编排形态（Check / Lsp / MultiFile）的逐文件警告装配——**唯一实现**：
+    /// 角色感知 + 引用池是一套判据，形态只决定 sink 落在哪条通道。
+    ///
+    /// 与单文件形态的三处差异（`SingleFile` 保留 pipeline 的旧语义）：
+    /// - 无 `config.dead_code.enabled` 门控（编排形态不读该开关）；
     /// - 不按 `typecheck_failed` 跳过（死代码只看 AST，与类型错误并存）；
     /// - 角色感知分析器（RFC-029f：Test 不参与；Bin/Internal 按
     ///   `set_exempt_pub`、Lib 按 `set_cross_file_refs` 接**编译集**引用池，
     ///   Script 不接池——4.9.3），W1006 遮蔽事件 / W1003 未使用导入 /
     ///   死代码警告仅对 **本项目文件**外发（vendor/嵌入 std 的内部警告
     ///   不混入消费方）。
+    ///
+    /// sink 分流（3.4.6）：Check / Lsp / MultiFile 一律进 `us.check_diagnostics`
+    /// ——`Diagnostic` 不携带文件身份（`util/diagnostic/error.rs` 的 span 无
+    /// file 字段），逐文件载体是唯一能把 W 码渲染到定义文件的外发形态。
+    /// 消费端按形态取：Check/Lsp 经 `DriverOutcome.check_diagnostics`，
+    /// MultiFile 由 `compile_project` 以同一形态外发。
     pub(super) fn dead_code_analysis_check(
         &self,
         state: &mut State,
@@ -1334,10 +1350,18 @@ impl Driver {
             );
             // 入口存在性（#388 定案 check 半边判据）：声明面入口必须有
             // main 绑定（值/函数皆可）；声明面之外的文件不查——Lib/
-            // Internal/Test 不要求 main（被 check ≠ 被当程序跑）
-            if surfaces
-                .as_ref()
-                .is_some_and(|s| s.bins.contains(&file_canon))
+            // Internal/Test 不要求 main（被 check ≠ 被当程序跑）。
+            //
+            // 3.4.6：本臂自 MultiFile 起也参与 compile 路径，故注入必须按形态
+            // 门控到 Check/Lsp——compile 路径的同类校验在 Linking 臂
+            //（`bin_missing_main`，判据同 surfaces 语义下的入口存在性），
+            // 不门控即同一缺失双报（与 3.4.8 ③ 把入口校验留在 Linking 的
+            // 「纯合并」决定同一条理由）。
+            let check_channel = matches!(program.kind, ProgramKind::Check | ProgramKind::Lsp);
+            if check_channel
+                && surfaces
+                    .as_ref()
+                    .is_some_and(|s| s.bins.contains(&file_canon))
                 && !ast_has_main(ast)
             {
                 // 无源码位置的文件级诊断用占位 span（原 entry_span 语义）

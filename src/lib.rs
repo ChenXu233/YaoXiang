@@ -169,7 +169,10 @@ pub fn run_file(path: &Path) -> Result<()> {
 /// 入口文件的 `main` 函数为程序入口。
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_project(entry: &Path) -> Result<()> {
-    let module = frontend::module::orchestrator::compile_project(entry)
+    // WBS 3.4.6：compile_project 同时返回逐文件警告——本入口是库路径，
+    // 没有诊断渲染职责（面向用户的渲染唯一在
+    // `util::diagnostic::run_file_with_diagnostics`）。
+    let (module, _warnings) = frontend::module::orchestrator::compile_project(entry)
         .map_err(|e| anyhow::anyhow!("Project compilation failed: {}", e))?;
     let mut ctx = crate::middle::passes::codegen::CodegenContext::new(module);
     ctx.set_generate_debug_info(true);

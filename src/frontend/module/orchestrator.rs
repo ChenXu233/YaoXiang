@@ -54,6 +54,16 @@ pub(crate) struct DiscoveredFile {
     pub(crate) source: String,
 }
 
+/// 逐文件诊断集合：`(文件, 该文件的诊断)`，**每个发现文件一条**（干净文件
+/// 为空 Vec）。
+///
+/// 这是多文件路径下诊断的**唯一**可渲染形态：`Diagnostic` 不携带文件身份
+/// （`util::diagnostic::Diagnostic` 的 span 只有 line/column/offset），
+/// 逐文件分组是唯一能把诊断渲染到定义所在文件的外发形状。
+/// `compile_project`（警告面）与 `check_project`（诊断面）共用本别名——
+/// 同一结构不在两处各拼一遍（clippy::type_complexity 与禁令一同一条理由）。
+pub type FileDiagnostics = Vec<(PathBuf, Vec<Diagnostic>)>;
+
 /// 编排错误
 #[derive(Debug, thiserror::Error)]
 pub enum OrchestratorError {
@@ -96,15 +106,24 @@ pub enum OrchestratorError {
 
 /// 编排一个项目：发现源文件 → 构建 Registry → 逐文件 typecheck → 整体编译。
 ///
-/// 返回合并后的 `ModuleIR`，可直接交给 codegen。入口文件的 `main` 函数即程序入口。
+/// 返回合并后的 `ModuleIR`（可直接交给 codegen；入口文件的 `main` 函数即
+/// 程序入口）**与逐文件警告**（`Vec<(文件, 该文件警告)>`，每个发现文件一条，
+/// 干净文件为空 Vec）。
+///
+/// 警告面（WBS 3.4.6，2026-10-19 用户裁决）：返回形态与 `check_project` 的
+/// 逐文件通道同形——`Diagnostic` 不携带文件身份（`util/diagnostic/error.rs`
+/// 的 span 只有 line/column/offset），逐文件载体是唯一能把 W 码渲染到**定义
+/// 所在文件**的形态。警告的**产生**判据与 check 共用同一份实现
+///（`driver::arms::dead_code_analysis_check`：角色感知 + 引用池），本函数
+/// 只负责把它外发，不做第二份过滤判决。
 ///
 /// 02 §改动清单（WBS 4.2.1）：入口已瘦身为 `Program { kind: MultiFile }`
 /// 构造器 + Driver 调用——阶段表以 `src/driver/program.rs` 的
 /// `MULTI_FILE_STAGES`（由 `ProgramKind::MultiFile` 派生）为**唯一权威**，
 /// 本注释不抄录清单（副本会随阶段增补腐烂：3.4.8 ② 追加 mono 时此处曾是
-/// 一份过期副本）；各阶段的执行体见 `crate::driver` 的阶段臂。外部契约
-///（`OrchestratorError` 各 variant 的渲染与退出码）逐字节不变。
-pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
+/// 一份过期副本）；各阶段的执行体见 `crate::driver` 的阶段臂。错误侧的外部
+/// 契约（`OrchestratorError` 各 variant 的渲染与退出码）逐字节不变。
+pub fn compile_project(entry: &Path) -> Result<(ModuleIR, FileDiagnostics), OrchestratorError> {
     let program = crate::driver::Program::new(
         crate::driver::ProgramKind::MultiFile,
         // 占位入口单元：Discovery 臂沿 use 图重建完整单元集（key 同
@@ -123,13 +142,19 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
             path: entry.display().to_string(),
             reason: format!("driver: {e}"),
         })?;
+    // 逐文件警告先取后判：故障路径（failure 为 Some）也带出已收集的警告
+    // ——与 `into_outcome` 的「故障不清空收集」同一原则（3.4.8 ③）。
+    let warnings = outcome.check_diagnostics;
     match outcome.failure {
         Some(e) => Err(e),
-        None => outcome.module.ok_or_else(|| OrchestratorError::Io {
-            // Linking 成功必产 merged IR——结构性不可达
-            path: entry.display().to_string(),
-            reason: "driver: linking produced no merged IR".to_string(),
-        }),
+        None => {
+            let module = outcome.module.ok_or_else(|| OrchestratorError::Io {
+                // Linking 成功必产 merged IR——结构性不可达
+                path: entry.display().to_string(),
+                reason: "driver: linking produced no merged IR".to_string(),
+            })?;
+            Ok((module, warnings))
+        }
     }
 }
 
@@ -152,7 +177,7 @@ pub fn compile_project(entry: &Path) -> Result<ModuleIR, OrchestratorError> {
 /// vendor/发现/解析失败仍经 `OrchestratorError` 硬中止（4.10.1 怪癖
 /// 保留，driver 侧测试钉板）。文件内诊断顺序归一为阶段拓扑序
 ///（2026-10-09 用户裁决，02 §1 修订注记 #4）。
-pub fn check_project(entry: &Path) -> Result<Vec<(PathBuf, Vec<Diagnostic>)>, OrchestratorError> {
+pub fn check_project(entry: &Path) -> Result<FileDiagnostics, OrchestratorError> {
     let program = crate::driver::Program::new(
         crate::driver::ProgramKind::Check,
         // 占位入口单元：Discovery 臂沿 use 图重建完整单元集

@@ -15,3 +15,4 @@ mod ref_pool;
 mod run_rootless;
 mod stage;
 mod unit;
+mod warning_parity;

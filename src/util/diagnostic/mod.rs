@@ -395,14 +395,18 @@ pub fn run_file_with_diagnostics(
     // entry_function 门控都以无项目根为开关。产物统一为 ModuleIR，复用下方
     // 同一套 codegen + 执行路径（保留 runtime/workers 配置）。
     let script_mode = !in_yaoxiang_project(file);
-    let module = match crate::frontend::module::orchestrator::compile_project(file) {
-        Ok(m) => m,
+    let (module, warnings) = match crate::frontend::module::orchestrator::compile_project(file) {
+        Ok(built) => built,
         Err(e) => {
             // 结构化诊断按其来源文件渲染，不再包成 E8001
             render_orchestrator_error(&e);
             return Err(anyhow::anyhow!("Compilation failed"));
         }
     };
+    // WBS 3.4.6：编译期警告按定义文件渲染到 stderr（非阻断——退出码仍由
+    // 执行结果决定）。与 `yaoxiang check` 同源：同一 `TextEmitter` + 同一
+    // 逐文件通道，本函数只做输出，不做任何过滤判决。
+    emit_compile_warnings(&warnings);
 
     {
         // #413：Script 模式（项目外单文件）不自动执行 main——T4 决议
@@ -655,6 +659,38 @@ pub fn check_file_with_diagnostics(file: &std::path::PathBuf) -> anyhow::Result<
 
     println!("Type check passed for {}", file.display());
     Ok(())
+}
+
+/// 把编译期警告按**定义文件**渲染到 stderr（WBS 3.4.6）。
+///
+/// 与 `yaoxiang check` 的渲染同源：同一 `TextEmitter`、同一
+/// `render_with_source` 调用、同一逐文件条目类型
+///（[`FileDiagnostics`]——与 `check_project` 的返回是同一个别名）。
+/// 本函数**不做过滤判决**——哪些警告该报由产生端（`driver` 的
+/// `dead_code_analysis_check`）单点决定，这里只负责输出。
+///
+/// 非阻断：警告不影响退出码（与 `check` 的 `--deny-warnings` 无关——那是
+/// check 子命令的选项，run 路径没有等价开关）。
+fn emit_compile_warnings(warnings: &crate::frontend::module::orchestrator::FileDiagnostics) {
+    let emitter = TextEmitter::with_config(EmitterConfig {
+        // 与 check 同口径：stderr 是终端才上色
+        use_colors: std::io::IsTerminal::is_terminal(&std::io::stderr()),
+        ..Default::default()
+    });
+    for (path, diagnostics) in warnings {
+        if diagnostics.is_empty() {
+            continue;
+        }
+        // 读不到源码（竞态删除/权限）时不伪造空 SourceFile——渲染端对
+        // 缺源文件本就按无片段处理（与 check 的 collect 同款防御）
+        let source = std::fs::read_to_string(path)
+            .ok()
+            .map(|content| SourceFile::new(path.display().to_string(), content));
+        for diagnostic in diagnostics {
+            let output = emitter.render_with_source(diagnostic, source.as_ref());
+            eprintln!("\n{}", output);
+        }
+    }
 }
 
 /// 按严重级别记账并收录诊断。
