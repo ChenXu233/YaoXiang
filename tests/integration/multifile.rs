@@ -768,3 +768,94 @@ main = () => {
 
     // Assert：yx 侧 assert.assert(lib.b == 3) 已在执行中验证
 }
+
+/// WBS 3.6.2：跨文件导入的**函数类型值**按名调用走间接调用。
+///
+/// `f = double` 是值绑定（占 lib 的全局槽位、不进函数表）。调用点此前被当成
+/// 静态函数名，运行期按 `lib.f` 查扁平函数表落空（`E6006 Native function not
+/// found: lib.f`）；修复后调用形态判据经 `use_alias_value_slot` 认出它是值，
+/// 发射 `LoadGlobal` + `CallDyn`。
+#[test]
+fn test_multifile_imported_fn_value_call_by_name_uses_indirect_call() {
+    // Arrange：lib 导出函数类型值 f；main 由 use 导入后按名调用
+    let lib = r#"
+double: (x: Int) -> Int = (x) => x * 2
+
+f = double
+"#;
+    let main = r#"
+use std.assert
+use lib.{f}
+
+main = () => {
+    assert.assert(f(3) == 6, "imported function value called by name must run the bound function")
+}
+"#;
+
+    // Act
+    let result = run_project(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert
+    assert!(
+        result.is_ok(),
+        "跨文件导入的函数类型值按名调用应走间接调用（此前 E6006 Native function not found: lib.f）：{result:?}"
+    );
+}
+
+/// WBS 3.6.2：`use lib.{f as g}` 内联别名形态——别名解析到同一个跨文件值，
+/// 调用同样走间接调用。
+#[test]
+fn test_multifile_imported_fn_value_call_by_name_with_as_alias_uses_indirect_call() {
+    // Arrange：main 用 `as g` 给导入的函数类型值起别名，再按别名调用
+    let lib = r#"
+double: (x: Int) -> Int = (x) => x * 2
+
+f = double
+"#;
+    let main = r#"
+use std.assert
+use lib.{f as g}
+
+main = () => {
+    assert.assert(g(3) == 6, "aliased import of a function value must run the bound function")
+}
+"#;
+
+    // Act
+    let result = run_project(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert
+    assert!(
+        result.is_ok(),
+        "`use lib.{{f as g}}` 的函数类型值按名调用应走间接调用（此前 E6006 lib.f）：{result:?}"
+    );
+}
+
+/// WBS 3.6.2 回归防线：导入的**函数定义**（进函数表）不因值臂扩展被当成值，
+/// 仍按名静态调用。
+#[test]
+fn test_multifile_imported_function_definition_still_calls_statically() {
+    // Arrange：lib 导出函数 double 与值绑定 f；main 只导入函数定义
+    let lib = r#"
+double: (x: Int) -> Int = (x) => x * 2
+
+f = double
+"#;
+    let main = r#"
+use std.assert
+use lib.{double}
+
+main = () => {
+    assert.assert(double(3) == 6, "imported function definition must still call statically")
+}
+"#;
+
+    // Act
+    let result = run_project(&[("lib.yx", lib), ("main.yx", main)], "main.yx");
+
+    // Assert
+    assert!(
+        result.is_ok(),
+        "导入的函数定义仍须走静态调用（值臂不得误伤函数表条目）：{result:?}"
+    );
+}

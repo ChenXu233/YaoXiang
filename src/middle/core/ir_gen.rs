@@ -832,6 +832,25 @@ impl AstToIrGenerator {
         None
     }
 
+    /// `use lib.{v}` / `use lib.{v as w}` 的本地名解析到的**跨文件全局槽位**。
+    ///
+    /// 两表联查的唯一实现：`use_aliases`（本地名 → 限定名）取限定名，
+    /// `global_slot_layout`（限定名 → 槽位号）取槽位。变量求值路径
+    /// （[`Self::generate_var_expr_ir`] 的别名臂）与调用形态判据
+    /// （[`Self::is_static_fn_name`]）**同经此处**——同一解析规则只有一份，
+    /// 两条路径不会各自猜一个答案。
+    ///
+    /// 布局只收**值绑定**（`allocate_global_slots` 的判据：非函数），故导入的
+    /// 函数定义（`use lib.{double}`）不命中此路——它按名进函数表，仍是静态调用。
+    fn use_alias_value_slot(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        self.use_aliases
+            .get(name)
+            .and_then(|qualified| self.global_slot_layout.get(qualified).copied())
+    }
+
     /// 查找变量的类型
     /// 该名字是否为「函数值」——即 typecheck 的 bindings 里其类型是 `Fn`。
     ///
@@ -4914,15 +4933,18 @@ impl AstToIrGenerator {
     /// 该调用点是否为**静态调用**——callee 是函数表里的一个名字（代码），而非某个值。
     ///
     /// 名字解析与 [`Self::generate_var_expr_ir`] 同一条优先级（局部变量 → 全局
-    /// 槽位 → …）：命中前两者就是**变量**，调用必须走 `CallDyn`（间接调用）；
-    /// 未命中才是函数表条目，按名 `Call`。
+    /// 槽位 → `use` 引入的跨文件值 → …）：命中就是**变量**，调用必须走 `CallDyn`
+    /// （间接调用，机制已在：闭包表达式路径即此）；全未命中才是函数表条目，按名 `Call`。
     ///
-    /// 顶层值绑定（`f = double`，查 [`Self::lookup_global`]）此前两边都漏：
-    /// 它不是局部变量、却在 typecheck 的 bindings 里（类型是 `Fn`），于是被
-    /// 当成函数名。而函数表里没有叫 `f` 的代码——`f = double` 不进函数表，
-    /// 只占一个全局槽位（由 `register_global_slots` 预分配，见其注释）。
-    /// 生成的按名 `Call` 在运行期查扁平函数表落空，报
-    /// `E6006 Native function not found: f`。
+    /// 两条臂都是「值被当成函数名」的实证缺陷（WBS 3.6.1 / 3.6.2）：
+    /// - 顶层值绑定（`f = double`，查 [`Self::lookup_global`]）：它不是局部变量、
+    ///   却在 typecheck 的 bindings 里（类型是 `Fn`），于是被当成函数名。而函数表
+    ///   里没有叫 `f` 的代码——`f = double` 不进函数表，只占一个全局槽位（由
+    ///   `register_global_slots` 预分配，见其注释）。按名 `Call` 在运行期查扁平
+    ///   函数表落空，报 `E6006 Native function not found: f`。
+    /// - `use lib.{f}` / `use lib.{f as g}` 导入的函数类型值（查
+    ///   [`Self::use_alias_value_slot`]）：别名解析到的是对方单元的全局槽位，函数表
+    ///   里同样没有这个值，按名 `Call` 报 `E6006 Native function not found: lib.f`。
     fn is_static_fn_name(
         &self,
         func: &ast::Expr,
@@ -4935,6 +4957,12 @@ impl AstToIrGenerator {
                 // 顶层值绑定是变量不是代码：与 `generate_var_expr_ir` 的
                 // 「局部 → 全局」优先级一致，走间接调用。
                 if self.lookup_global(name).is_some() {
+                    return false;
+                }
+                // 跨文件导入的值（`use lib.{f}` / `use lib.{f as g}`）：别名落在
+                // 跨文件值绑定槽位即是变量。联查与值路径同经 `use_alias_value_slot`
+                // ——同一实现，两条路径不会各猜一个答案。
+                if self.use_alias_value_slot(name).is_some() {
                     return false;
                 }
                 self.lookup_var_type(name).is_some()
@@ -6732,25 +6760,24 @@ impl AstToIrGenerator {
                 src: Operand::Global(global_idx),
                 span: *var_span,
             });
+        } else if let Some(slot) = self.use_alias_value_slot(var_name) {
+            // T5：`use lib.{value}`（含 `as` 别名）引入的跨文件顶层值 → 读全局槽位。
+            // 别名 → 限定名 → 槽位这两表联查归 `use_alias_value_slot`——调用形态
+            // 判据（`is_static_fn_name`）读同一实现，两条路径不会各猜一个答案。
+            instructions.push(Instruction::Load {
+                dst: Operand::Local(result_reg),
+                src: Operand::Global(slot),
+                span: *var_span,
+            });
         } else if let Some(alias) = self.use_aliases.get(var_name) {
-            // T5：`use lib.{value}` 的别名先看是否落在全局布局里
-            // （跨文件顶层绑定）——是则走 LoadGlobal。
-            // 否则是 std 原生常量（如 PI），按限定名调用 native handler。
-            if let Some(&slot) = self.global_slot_layout.get(alias) {
-                instructions.push(Instruction::Load {
-                    dst: Operand::Local(result_reg),
-                    src: Operand::Global(slot),
-                    span: *var_span,
-                });
-            } else {
-                instructions.push(Instruction::Call {
-                    dst: Some(Operand::Local(result_reg)),
-                    func: Operand::Const(ConstValue::String(alias.clone())),
-                    args: vec![],
-                    span: *var_span,
-                    def: None,
-                });
-            }
+            // 别名不落在值绑定布局里 ⇒ std 原生常量（如 PI），按限定名调用 native handler。
+            instructions.push(Instruction::Call {
+                dst: Some(Operand::Local(result_reg)),
+                func: Operand::Const(ConstValue::String(alias.clone())),
+                args: vec![],
+                span: *var_span,
+                def: None,
+            });
         } else if matches!(
             var_name,
             "Int" | "Float" | "Bool" | "String" | "Char" | "Bytes" | "Type" | "Void" | "Never"
