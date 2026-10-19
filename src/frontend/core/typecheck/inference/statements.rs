@@ -894,6 +894,17 @@ impl StatementChecker {
         self.scope.add_param(name, poly, is_mut, definition_span);
     }
 
+    /// 添加**类型参数**（编译期名）：体内类型位置可解析，但不占运行时帧槽位。
+    /// 嵌套函数体引用它不算「从外层帧取值」，故不受捕获屏障遮挡。
+    pub fn add_type_param(
+        &mut self,
+        name: String,
+        poly: PolyType,
+        definition_span: crate::util::span::Span,
+    ) {
+        self.scope.add_type_param(name, poly, definition_span);
+    }
+
     /// 变量类型账本（#256）：移交给所有权检查做 Move/Dup 分类
     pub fn var_type_ledger(&self) -> &std::collections::HashMap<(usize, String), PolyType> {
         self.scope.type_ledger()
@@ -1079,6 +1090,13 @@ impl StatementChecker {
         let prev_fn_context = self.scope.fn_context().map(str::to_owned);
         self.scope.set_fn_context(Some(name.to_string()));
 
+        // RFC-009 §2.3 捕获屏障：函数定义体不得借参数链读**外层帧**的值
+        // （外层参数 / 语句绑定值）。屏障按当前参数链深度定格——此后 enter_fn
+        // 压入的本函数参数层在屏障之上，照常可见；类型参数（编译期名）不挡。
+        // 挡掉后由上层既有的「未解析变量」判定发 E1001（与捕获外层块局部同码同文案）。
+        // 作用域：只有**函数定义体**；lambda 表达式体走 #254 创建点固化，行为不变。
+        let saved_param_barrier = self.scope.enter_capture_barrier();
+
         // 创建函数作用域（#295 三链模型：参数层 + 新局部层，外层函数局部变量不可见）
         self.scope.enter_fn();
 
@@ -1127,20 +1145,22 @@ impl StatementChecker {
 
         // 类型参数进参数链（与值级签名同一批新鲜变量）：体内值位置引用
         // `Result(T, E)` 的 T/E 由此解析为类型级值。IR 层变体构造擦除类型位，
-        // 不产生运行时形态。
+        // 不产生运行时形态。登记为**编译期名**：嵌套函数体引用外层类型参数
+        // 不构成对外层帧的取值，故不被捕获屏障遮挡（`add_type_param`）。
         for (tp_name, tp_ty) in type_param_vars {
             if !params.iter().any(|p| &p.name == tp_name) {
-                self.add_param(
+                self.add_type_param(
                     tp_name.clone(),
                     PolyType::mono(tp_ty.clone()),
-                    false,
                     crate::util::span::Span::default(),
                 );
             }
         }
 
-        // #295：函数体推断期间，外层函数的局部变量不可见（函数不捕获外层局部变量），
-        // 本函数参数与全局可见（三链模型天然实现，无需额外标志）。
+        // #295：函数体推断期间，外层函数的局部变量不可见（函数不捕获外层局部变量）。
+        // 外层函数的**参数**同样在读值意义上不可见——由上面的捕获屏障实现（RFC-009
+        // §2.3）；本函数参数与全局/模块级名照常可见。类型参数（编译期名）不受遮挡。
+        // 例外：lambda **表达式**体（#254 创建点固化）不走本屏障，行为保持原样。
 
         if self.collect_all_errors {
             // 收集模式：收集所有错误，不短路
@@ -1168,6 +1188,7 @@ impl StatementChecker {
 
             // 退出函数作用域
             self.scope.exit_fn();
+            self.scope.restore_capture_barrier(saved_param_barrier);
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
             self.scope.set_fn_context(prev_fn_context);
@@ -1199,6 +1220,7 @@ impl StatementChecker {
 
             // 退出函数作用域
             self.scope.exit_fn();
+            self.scope.restore_capture_barrier(saved_param_barrier);
             self.is_top_level = was_top_level;
             self.loop_depth = saved_loop_depth;
             self.scope.set_fn_context(prev_fn_context);
