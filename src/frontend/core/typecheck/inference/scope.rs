@@ -84,8 +84,10 @@ impl ScopeManager {
         // 前向引用占位（pass2 预注册、声明语句未执行）与导入名
         // （`use` 来的 std 导出 / 跨模块符号）都**不算本文件的现有绑定**：
         // 否则顶层 `mut i = 0` 误报 E2013；`ok = ...`（撞 `std.result.ok`）误报 E2010。
+        // 屏障无关口径：赋值/声明判定要看见「外层帧的那个绑定」才判得出
+        // E2010 / E2013，否则会静默变成新声明（见 get_var_info_impl）。
         let info = self
-            .get_var_info(name)
+            .get_var_info_unbarriered(name)
             .filter(|v| !v.forward_declared && !v.imported);
         let in_current = info.is_some() && self.var_in_current_scope(name);
         let anywhere = info.is_some();
@@ -520,9 +522,26 @@ impl ScopeManager {
     /// 参数链上「外层函数帧」的**值**绑定被捕获屏障挡住（见
     /// [`Self::enter_capture_barrier`]）：按未解析返回，让上层发出与
     /// 「未知变量」同码同文案的 E1001。编译期名（类型参数）不挡。
+    ///
+    /// 这是**读值**口径（表达式求值 / 语句读）。声明与赋值判定另走
+    /// 屏障无关的 [`Self::get_var_info_unbarriered`]，见其注释。
     pub fn get_var_info(
         &self,
         name: &str,
+    ) -> Option<&VarInfo> {
+        self.get_var_info_impl(name, true)
+    }
+
+    /// 完整信息查询的实现（`respect_param_barrier` 决定是否套捕获屏障）。
+    ///
+    /// **声明与赋值判定传 `false`**（spec §4.3 的「沿作用域链向外查找」）：
+    /// 屏障只表达「读值层面外层帧不可见」，不是「那个绑定不存在」。若让屏障
+    /// 参与赋值判定，`n = 5`（n 是外层参数）会从 E2010 变成「静默新声明」，
+    /// 而 ir_gen 并无对应的槽位落实——等于新开一条静默通道。
+    fn get_var_info_impl(
+        &self,
+        name: &str,
+        respect_param_barrier: bool,
     ) -> Option<&VarInfo> {
         for scope in self.local_scopes.iter().rev() {
             if let Some(info) = scope.get(name) {
@@ -533,13 +552,21 @@ impl ScopeManager {
             let Some(info) = scope.get(name) else {
                 continue;
             };
-            if idx < self.param_barrier && !info.compile_time_only {
+            if respect_param_barrier && idx < self.param_barrier && !info.compile_time_only {
                 // 外层帧的值参数：读它要取对方帧槽位 = 隐式捕获（RFC-009 §2.3）。
                 continue;
             }
             return Some(info);
         }
         self.globals.get(name)
+    }
+
+    /// 屏障无关的完整信息查询（声明/赋值判定专用，见 [`Self::get_var_info_impl`]）
+    fn get_var_info_unbarriered(
+        &self,
+        name: &str,
+    ) -> Option<&VarInfo> {
+        self.get_var_info_impl(name, false)
     }
 
     /// 检查变量是否可变（局部 → 参数 → 全局）
@@ -625,7 +652,8 @@ impl ScopeManager {
         &self,
         name: &str,
     ) -> bool {
-        self.get_var_info(name).is_some()
+        // 声明口径（如 for 变量遮蔽检查）：同 classify_binding，屏障无关。
+        self.get_var_info_unbarriered(name).is_some()
     }
 
     /// 是否在模块级（三链全空 = 无函数边界、无块层，#295）
