@@ -221,6 +221,7 @@ echo
 if [[ -n "$SHOOTOUT_JSON" ]]; then
   "$PY" - "$SHOOTOUT_JSON" <<'PYEOF'
 import json
+import math
 import pathlib
 import sys
 
@@ -392,4 +393,4 @@ fi
 echo
 echo "---"
 echo
-echo "_机器可读结果见 workflow artifact；性能历史（`benches/history/`）与趋势图（`/perf/`）由 nightly 自动入库；Criterion 目录：`$CRITERION_DIR`_"
+echo "_机器可读结果见 workflow artifact；性能历史（\`benches/history/\`）与趋势图（\`/perf/\`）由 nightly 自动入库；Criterion 目录：\`$CRITERION_DIR\`_"

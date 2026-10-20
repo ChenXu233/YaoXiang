@@ -176,6 +176,9 @@ jobs:
       - name: Summarize benchmarks
         if: always()
         run: |
+          # 报告生成器崩溃必须让本 step 变红：只用 tee 时管道退出码取自 tee，
+          # 脚本失败会被吞成绿色（2026-10-20 nightly 的 shootout 汇总即如此）。
+          set -o pipefail
           bash scripts/ci/bench-report.sh \
             --out-json target/bench-results.json | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -261,6 +264,8 @@ jobs:
       - name: Summarize
         if: always()
         run: |
+          # 同 benchmark job：不能把报告生成器的失败吞进 tee 的 0。
+          set -o pipefail
           bash scripts/ci/bench-report.sh \
             --shootout-json target/shootout-results.json \
             --shootout shootout-output.txt \
