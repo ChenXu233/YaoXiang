@@ -23,6 +23,7 @@ mod gamma_assume_effect;
 mod hkt;
 mod named_args;
 mod named_args_loud;
+mod native_param_names;
 mod nested_fn_capture;
 mod overload_resolutions;
 mod predicate_resolver;

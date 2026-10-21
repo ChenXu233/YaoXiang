@@ -506,76 +506,22 @@ impl AstToIrGenerator {
             .unwrap_or(name)
     }
 
-    /// #452：把方法调用的实参按**形参声明序**放回槽位（含接收者位下标 0）。
+    /// 共享判据给出的「逐实参形参位」→ **按形参槽位序**重排的实参下标。
     ///
-    /// 位置实参占前导槽位（第 i 个 → 形参 1+i），命名实参按名入槽；命名后接
-    /// 位置实参、同一槽位重复指定、名字不在形参表里一律报错——**不得静默丢弃
-    /// 命名实参**（丢弃即换一种静默：实参进了调用但落错槽位，运行期才炸）。
+    /// #452 / #456：实参绑定的**判定**只有一处——`typecheck::inference::arg_binding::
+    /// `bind_args_to_params`（位置占前导槽、命名按名入槽、未知名/争槽/命名后接位置/
+    /// 重复命名/缺参六条规则全在那边）。本函数**只搬运**：把「逐实参的形参位」
+    /// 转成 IR 侧要的「按槽位序的实参序」，不判位、不判名、不判可选位。
     ///
-    /// 返回逐槽的实参序（`Some(k)`：k < 位置实参数 → `args[k]`，否则
-    /// `named_args[k - 位置实参数]`；`None` = 该槽空缺）。槽位下标与 typecheck
-    /// 侧 `bind_named_args` 同坐标系（全形参表，含接收者位）。
-    /// `key` 是诊断里要显示的真名（调用点传方法键或决议出的混编名叶子段）——
-    /// 此前硬编 `"<method>"`、或拿 `names.first()`（= 接收者位 self）冒名，
-    /// 用户看到的是 "Function self has no parameter named z"（F3）。
-    fn build_arg_slots(
-        key: &str,
-        names: &[String],
-        args: &[Expr],
-        named_args: &[(String, Expr)],
-        span: &Span,
-    ) -> crate::util::diagnostic::Result<Vec<Option<usize>>> {
-        if names.is_empty() {
-            if named_args.is_empty() {
-                return Ok((0..args.len()).map(Some).collect());
-            }
-            // 形参名不可得：能力不足要**响亮**，不许把命名实参悄悄丢掉
-            return Err(ErrorCodeDefinition::unknown_argument(
-                key,
-                &named_args[0].0,
-                "（形参名表不可得）",
-            )
-            .at(*span)
-            .build());
-        }
-        let mut slots: Vec<Option<usize>> = vec![None; names.len()];
-        for i in 0..args.len() {
-            if 1 + i < slots.len() {
-                slots[1 + i] = Some(i);
-            }
-        }
-        if let (Some(last), Some((first_named_name, first_named))) =
-            (args.last(), named_args.first())
-        {
-            if first_named.span().start.offset < last.span().start.offset {
-                // 顺序非法（非重复）：一个形参收到多个实参 / 位置实参写在命名实参之后（E1111）
-                return Err(
-                    ErrorCodeDefinition::argument_order_invalid(key, first_named_name)
-                        .at(*span)
-                        .build(),
-                );
-            }
-        }
-        for (i, (name, _)) in named_args.iter().enumerate() {
-            let Some(slot) = names
-                .iter()
-                .position(|p| p == name)
-                .filter(|slot| *slot > 0)
-            else {
-                return Err(
-                    ErrorCodeDefinition::unknown_argument(key, name, &names.join(", "))
-                        .at(*span)
-                        .build(),
-                );
-            };
-            if slots[slot].is_some() {
-                return Err(ErrorCodeDefinition::argument_order_invalid(key, name)
-                    .at(*span)
-                    .build());
-            }
-            slots[slot] = Some(args.len() + i);
-        }
-        Ok(slots)
+    /// 此前 ir_gen 另有一份 `build_arg_slots`（约 60 行）在同一条生产路径上重判，
+    /// 与共享判据已经分歧（同一语义两个码：用户函数重复命名 E1015、方法/原生路径
+    /// E1010/E1111）——本次合并后全仓只剩共享判据一处（#456）。
+    ///
+    /// 槽位不重复由判据保证（同槽冲突已在那侧拒绝），故排序无并列。
+    fn slot_order_arg_indices(positions: &[usize]) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..positions.len()).collect();
+        order.sort_by_key(|&arg_idx| positions[arg_idx]);
+        order
     }
 
     /// 查一个函数的**声明期形参名 + 必需下限**（供命名参数重排与「可选位放行」）。
@@ -7968,20 +7914,29 @@ impl AstToIrGenerator {
                             } else {
                                 field.as_str()
                             };
-                            let slots =
-                                Self::build_arg_slots(diag_key, &names, args, named_args, span)?;
-                            for slot in slots.iter() {
-                                let arg_expr = match slot {
-                                    Some(slot) => {
-                                        if *slot < args.len() {
-                                            &args[*slot]
-                                        } else {
-                                            &named_args[*slot - args.len()].1
-                                        }
-                                    }
-                                    // 空槽说明给出诊断的 typecheck 侧未跑（本路径
-                                    // 只在 typecheck 通过后才到）——维持旧形态
-                                    None => continue,
+                            // #456：绑定**判定**走共享判据（形参表[0] 是接收者位，
+                            // 实参从槽 1 起）；本处只按槽位序搬运实参。
+                            //
+                            // `optional` 全置 true = 只重放**槽位绑定**（②未知名 / ③争槽 /
+                            // ④命名后接位置 / ⑤重复命名），不在 IR 侧重判⑥「缺参」：
+                            // 元数与缺参归 typecheck。RFC-004 绑定路径的实参是**被绑函数**
+                            // 调用的一部分，IR 按形参名表重建调用序时区分不了「缺席的接收者」
+                            // 与「缺席的必需位」；旧实现同样以空槽跳过，注释即「诊断归
+                            // typecheck」。
+                            let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                                diag_key,
+                                &names,
+                                args,
+                                named_args,
+                                1, // 方法形态：param_names[0] 是接收者位
+                                &vec![true; names.len()],
+                                *span,
+                            )?;
+                            for arg_pos in Self::slot_order_arg_indices(&positions) {
+                                let arg_expr = if arg_pos < args.len() {
+                                    &args[arg_pos]
+                                } else {
+                                    &named_args[arg_pos - args.len()].1
                                 };
                                 let arg_reg = self.next_temp_reg();
                                 self.generate_expr_ir(arg_expr, arg_reg, instructions, constants)?;
@@ -8055,20 +8010,31 @@ impl AstToIrGenerator {
                             .map(|info| info.names)
                             .unwrap_or_default();
                         // F3：诊断用决议出的真实方法名（叶子段），不再硬编 <method>
-                        let ordered_args =
-                            Self::build_arg_slots(&leaf, &names, args, named_args, span)?;
+                        // #456：绑定**判定**走共享判据（接收者占槽 0，实参从 1 起）；
+                        // 本处只按槽位序搬运实参。
+                        //
+                        // `optional` 全置 true：同上一处——IR 只重放槽位绑定，不重判
+                        // ⑥「缺参」。这里形参名表来自**声明**（同名重载取最后一条），
+                        // 而调用按 typecheck 决议出的候选（元数可能更小）发实参；
+                        // 按声明表重判缺参会把合法决议误报 E1010（`t.pick2(a = 2)`
+                        // 命中一元候选、声明表是二元那条的实测）。
+                        let positions = crate::frontend::core::typecheck::inference::arg_binding::bind_args_to_params(
+                            &leaf,
+                            &names,
+                            args,
+                            named_args,
+                            1, // 方法形态：param_names[0] 是接收者位
+                            &vec![true; names.len()],
+                            *span,
+                        )?;
                         let obj_reg = self.next_temp_reg();
                         self.generate_expr_ir(expr, obj_reg, instructions, constants)?;
                         let mut call_args = vec![Operand::Local(obj_reg)];
-                        for slot in ordered_args.iter() {
-                            let Some(slot) = *slot else {
-                                // 空槽：诊断归 typecheck（它保证决议通过即无空槽）
-                                continue;
-                            };
-                            let arg_expr = if slot < args.len() {
-                                &args[slot]
+                        for arg_pos in Self::slot_order_arg_indices(&positions) {
+                            let arg_expr = if arg_pos < args.len() {
+                                &args[arg_pos]
                             } else {
-                                &named_args[slot - args.len()].1
+                                &named_args[arg_pos - args.len()].1
                             };
                             let r = self.next_temp_reg();
                             self.generate_expr_ir(arg_expr, r, instructions, constants)?;
