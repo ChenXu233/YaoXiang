@@ -286,10 +286,13 @@ impl Driver {
     /// `check_module_collect_all`）。
     ///
     /// 双通道：MultiFile 首错经 `OrchestratorError::TypeCheck` 即返
-    /// （compile_project 现状；`result.warnings` 丢弃——决策 B1）；Check
-    /// （4.2.2）诊断进逐文件收集通道并**继续**下一文件（CollectAll），
-    /// 警告暂存，由 DeadCodeAnalysis 臂按项目内门控外发（check_project
-    /// 现状：类型失败文件的警告同样流出）。
+    /// （compile_project 契约：错误即返）；typecheck 警告不再丢弃——无错
+    /// 文件的警告暂存到 `UnitState::typecheck_warnings`，由 DeadCodeAnalysis
+    /// 臂按项目内门控外发，**警告面与 CHECK 归一**（决策 B1「死代码族警告
+    /// 不进 compile 路径」已由 WBS 3.4.6 撤销，2026-10-19 用户裁决）。
+    /// Check（4.2.2）诊断进逐文件收集通道并**继续**下一文件（CollectAll），
+    /// 警告同走上述暂存与外发（check_project 现状：类型失败文件的警告同样
+    /// 流出）。
     pub(super) fn typecheck_orchestrated(
         &self,
         state: &mut State,
