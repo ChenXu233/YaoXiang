@@ -88,8 +88,17 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 ```bash
 cargo fmt                          # 格式化（提交前必跑）
 cargo clippy --all --all-features --all-targets -- -D warnings
-cargo test                         # 测试；测试数只许增不许减
 python scripts/rfc/check_tracking.py   # RFC 状态一致性
+
+# 测试怎么跑（#486：资源画像标记 + 预算通道）——
+python scripts/dev/testsuite.py plan             # 只打印计划：预算 / 波次 / 每波峰值 / 实际 jobs 与 threads
+python scripts/dev/testsuite.py run fast         # 本地提交前默认通道：非 ignore 全跑；mode=exclusive 各自独占一波
+python scripts/dev/testsuite.py run full         # 推送前与 CI 口径：预算不足即 exit 2 并列出缺口，不静默跳过
+python scripts/dev/testsuite.py markers --check  # 标记 ↔ cargo test --list 双向对账（新增 #[ignore] 必须带 cost: 标记）
+CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 cargo test   # 手跑兜底：必须自带资源上限，否则重测会与其它测试并发
+# 禁止裸跑 cargo test -- --ignored 全量：会执行 mode=manual（快照再生改写基线）与红态常驻用例。
+# 当前 pre-commit 仍跑 cargo test --all；把门禁切到 fast/full 的接线属 #486 后续排期。
+# 测试数只许增不许减。
 
 # 基线再生——改动影响 IR 或语料行为时必跑，diff 人工 review 后同提交入库：
 UPDATE_SNAPSHOTS=1 cargo test --lib snapshot -- --ignored    # IR 快照（src/middle/core/tests/snapshots/）
@@ -117,6 +126,7 @@ git pull --rebase origin dev        # 与对端无冲突（merge-tree 干净）�
 - 不看代码就改：没打开文件、没 grep 过引用点，不许动
 - 核心功能留 `todo!()` / “Not implemented yet” / 无限期“独立 issue”
 - 删测试或放宽判据换绿灯（不存在 C5′；做不到是实现缺陷，如实报告）
+- 裸跑 `cargo test -- --ignored` 全量（会执行快照再生的 `manual` 档与红态常驻用例——等于悄悄改写基线）
 - 写/改测试不读 [test-specification.md](docs/src/dev/test-specification.md)——命名必须 `test_<what>_<scenario>` 前缀、超 5 行必须 AAA 三段注释、断言必须带自定义消息、枚举匹配用 `assert!(matches!(...))`；判据红态常驻属设计形态（如 2.4.4），不是「永久 ignore」违规
 - 改 IR/语料行为而不同步基线：改 `src/`（前端/ir_gen/std）或语料 `.yx` 会改变 IR 或运行行为时，IR 快照与语料差分基线必须**同提交**更新（命令见常用命令区），各自 git diff 人工 review；快照/差分门禁红了说明基线欠账，不许绕
 - 用 import 别名弥合同语义概念（`as AstBinOp` 这类）
