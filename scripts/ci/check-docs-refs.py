@@ -114,6 +114,10 @@ def path_like_tokens(text):
             # "fatal: '../' is outside repository"（2026-10-21 实测）——直接剔除。
             if span.startswith('/') or re.match(r'^[A-Za-z]:[\\/]', span):
                 continue
+            # 以 ~ 开头的是**用户主目录**路径（~/.yaoxiang/、~/.cargo/ …）——那是「讲本机
+            # 环境配置」的内容，不是仓库内引用（AGENTS 元规则 ① 的例外），一律不判。
+            if span.startswith('~'):
+                continue
             if '..' in span.split('/'):
                 continue
             if '://' in span:
@@ -197,6 +201,7 @@ def selftest():
         ('正例：裸目录名', 'target/', False),
         ('正例：入库路径', 'docs/src/dev/architecture/09a-wbs-history.md', False),
         ('正例：URL', 'https://github.com/ChenXu233/YaoXiang/issues/475', False),
+        ('正例：用户主目录路径', '~/.yaoxiang/settings.toml', False),
     ]
     ok = True
     for name, token, should_fail in cases:
