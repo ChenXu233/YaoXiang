@@ -7838,6 +7838,35 @@ impl AstToIrGenerator {
                     arg_regs.push(Operand::Local(arg_reg));
                 }
                 let method_function_name = self.resolve_field_path(expr, field);
+
+                // WBS 3.6.4：命名空间限定名若落在**跨文件全局槽位**，它是顶层值绑定
+                // （函数类型值），不是函数表条目——按名 `Call` 在运行期查扁平函数表
+                // 落空（`E6006 Native function not found: lib.f`）。改走间接调用：
+                // 读槽位 → `CallDyn`。限定名解析与槽位查询与
+                // `generate_field_access_expr_ir` 的命名空间数据访问**同一分支**
+                // （`resolve_namespace_data_access` + `global_slot_layout` 两表联查），
+                // 调用机制与闭包/函数值调用同一实现（`CallDyn`），不新增解析表。
+                if named_args.is_empty() {
+                    if let Some(slot) = self
+                        .resolve_namespace_data_access(expr, field)
+                        .and_then(|qualified| self.global_slot_layout.get(&qualified))
+                        .copied()
+                    {
+                        let func_reg = self.next_temp_reg();
+                        instructions.push(Instruction::Load {
+                            dst: Operand::Local(func_reg),
+                            src: Operand::Global(slot),
+                            span: *span,
+                        });
+                        instructions.push(Instruction::CallDyn {
+                            dst: Some(Operand::Local(result_reg)),
+                            func: Operand::Local(func_reg),
+                            args: arg_regs,
+                            span: *span,
+                        });
+                        return Ok(());
+                    }
+                }
                 if !named_args.is_empty() {
                     let leaf = method_function_name
                         .rsplit('.')
