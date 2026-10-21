@@ -761,3 +761,57 @@
 > **十一、计数表账目复核（本轮口径）**：`09` 顶部的二级 / 三级计数表沿用「**基数 + 增量**」口径（与 2026-10-18 的登记同）。本轮增量 = 二级 +2（0.5 / 3.20，其中 3.20 为迁号后新占号，发版前审计组改 3.21 属净零）、三级 +7（3.6.2 / 3.6.3 / 3.6.4 / 0.5.1 / 0.5.2 / 3.20.1 / 3.20.2）。**遗留的预存偏差（本轮不纠正，供后续账目复核取用）**：以「逐二级条目括号内『N 个三级任务』求和」为口径复算，本树得 162，与表头差 7——差口来自 2026-10-18 登记时新增三级但未同步改写父条目计数注记的 5 处（4.9 写 7 实为 8、3.14 写 1 实为 2、4.10 写 3 实为 5、4.4 写 3 实为 4、S2 写 1 实为 2）与 1 处反向偏差（7b 写 6 实为 5），另有 1.2 / 1.3 / 9.1 / S7 四个父条目本就不带该注记（不计入口径）。该差口**非本批引入**，本批不为他人的条目改数，只在此登记。
 >
 > **十二、遗留待办（本批登记，未修）**：①`src/driver/arms.rs` 的「决策 B1」注释与 3.4.6 后的代码事实相反（见「七」6，`src/**` 出 scope）；②3.20.1 / 3.20.2 两个既有误报（修好后须恢复 `weak.md` / `test.md` 的自然写法并再生基线）；③0.5.2（pre-commit / CI 接线 + 2600 档实测校准 + `test-specification` 细则节）；④#489 ureq 3 迁移（依赖面，豁免带硬性移除条件）；⑤3.8（native 对用户函数名的遮蔽）与 3.12（运行时模式间的执行器配置传播）待裁决、3.18 前置待 P6——**均不在本队范围**。
+
+## P3 3.17 收口（轮 2：3.17.1 手注 FFI 命名实参 + 第二份绑定判据合并）
+
+> **一、范围与轮次关系**：本节是**轮 2** 的收口登记，范围 = **3.17.1**（issue [#456](https://github.com/ChenXu233/YaoXiang/issues/456)），不含其它二级任务。轮 1（3.5 / 3.6 / 3.4.6）的收口见上一节「P3 欠账轮 1 收口」；两轮的关系在此写明：**轮 1 的复审轮 1（t4）那次 needs_revision（F1 / F2 / F3）已由 t12 修复轮 + t13 复审轮 2 覆盖（verdict = pass），不在本节重复**。本节自己的判据链 = 实现 **t15**（attempt 2 交付；**前一次 attempt 因 provider 超时、零产物**）→ 独立验证 **t16**（verdict = pass）→ 对抗性复审 **t17**（verdict = pass，**无未处置 findings**，登记 4 条观察项）。
+>
+> **二、逐条产出与量测数字（3.17.1）**：
+>
+> - **形参名表同源**：`add_native_signature` 改收**签名串**并返回 `Result`——`signature::parse_signature` 出类型，唯一出口 `signature::export_signature_param_info` 同灌「形参名 + 必需下限」；键与签名表同（同一 name）。仓内零调用者故可改签名；文档明写「只拿得到 `MonoType` 的调用方应在自己那侧解析出签名串后再走本 API」，且本函数**不得**自己解析形参名。
+> - **先红后绿**（红态在父提交 `537b46b74` 量测）：手注面四形态 + 重复命名 + 合法调用共 6 条，**5 条失败、诊断全为 `[]`**（命名实参被静默丢弃）；绿态同文件 **12 条全通过**——四形态 E1014 / E1010 / E1111 / E1111、重复命名 E1015、合法命名调用与省略可选位放行。
+> - **三调用面同一判据同一码**：手注 FFI（typecheck 阶段）/ 普通用户函数（IR 阶段）/ stdlib 原生导出（`assert.assert`）三面**逐码相等断言**（E1014 / E1010 / E1111；E1015 见手注面与用户面）。观测阶段不同只反映「谁先发现」；宿主 native 不进 registry，IR 阶段本就不可解析（**先于本任务的嵌入面限制**）。
+> - **判据单一源**：`bind_args_to_params` **1 定义**（`inference/arg_binding.rs:35`）+ **6 调用**（typecheck 2 + ir_gen 4）；第二份判据 `build_arg_slots` **0 处**（已删，`ir_gen.rs:516` 仅剩解释其历史的注释）；`ir_gen` 只剩纯搬运 `slot_order_arg_indices`（`ir_gen.rs:521`，1 定义 2 调用，零判定）。行数：`ir_gen` **+58 / −92（净 −34）**；全仓 4 文件 **+448 / −102**（其中 353 行是新测试）。
+> - **不回归**：8 条 CLI 探针（u1–u4 / d1 / d2 / n1 / n3）变异前后**逐码一致**；`ir_gen` blob `0d837e9d…` ↔ `ffe1af8e…` 核对。合并初版一处自伤已修：IR 侧重判「缺参」把 `t.pick2(a = 2)` 合法重载误报 E1010（named_args 单测抓到）⇒ 缺参判定归 typecheck、IR 只重放槽位绑定；修后 19 条 named_args + 12 条新单测全绿。语料 348-348 零漂移、IR 快照零漂移。
+>
+> **三、独立验证（t16，冻结 `c3082a160`；红态基线 `537b46b74`，两者均经 `git merge-base --is-ancestor` 核实为 HEAD 祖先；探针全部自建）**：
+>
+> - **红→绿独立复现**（手注 FFI 面）：自建独立 Rust 单测 `verify_host_ffi.rs`（4 条：未知名 E1014 / 争槽 E1111 / 命名后接位置 E1111 / 合法命名调用放行），经 `scratch.py trial` 临时挂入 `tests/mod.rs`（apply → 测 → apply -R → CLEAN）。两态各用**各自接口形态**的探针变体（父提交 `add_native_signature(name, MonoType)` 旧签名 / 修复态 `(name, &str) -> Result` 新签名——接口本身就是修复面）：父提交 **3 failed / 1 passed**，3 条失败诊断**全为 `[]`**（`got []`）、TEST_EXIT=101；修复态 **4 passed / 0 failed**、TEST_EXIT=0。红态另在修复树撤销修复的变异态复现（`M7v2` 合并补丁：撤销修复 + 撤实现者测试 + 挂自建旧 API 探针）——3 failed `got []`、TEST_EXIT=101，还原后四文件 blob 与 HEAD 一致、`git status` CLEAN，撤销后 `ir_gen.rs` blob = `0d837e9d30de`（即父提交原 blob）。CLI 面（用户函数 + stdlib）两态逐码一致——符合预期：这两面 3.16.1 已响亮，本提交的修复面只在手注 FFI。
+> - **四形态逐条**（CLI 自建探针，`c3082a160` 实测）：形参名错误 E1014 `has no parameter named x (available: a, b)`、缺必需位 E1010、位置与命名争槽 E1111、命名后接位置 E1111；附加：重复命名 E1015、stdlib 未知名 E1014、stdlib 缺必需位 E1010（help 点名 cond）、stdlib 争槽 E1111、合法命名调用 EXIT=0 输出 3/3、省略可选位 EXIT=0。
+> - **判据真删而非改名**：`git show c3082a160:src/middle/core/ir_gen.rs` 内 `build_arg_slots` **0 命中**（父提交同文件 3 命中、定义在 :521）；`slot_order_arg_indices`（修复态 :521）逐行核 = `sort_by_key(|&arg_idx| positions[arg_idx])` 纯排序，无位次/名字/可选位判定残留，文档注释明示「不判位、不判名、不判可选位」；被删的 71 行判定块（父提交 :521-593，六条规则：空表响亮 / 位置占槽 / 顺序非法 E1111 / 未知名 E1014 / 争槽 E1111 / 入槽）已不存在；`bind_args_to_params` 1 定义 6 调用（typecheck 2：`expressions.rs:2854` / `:5653`；ir_gen 4：:7828 / :7926 / :8021 / :8351），与实现者报告一致；形参名唯一出口 = `export_signature_param_info`（environment.rs 手注 / typecheck::mod stdlib / ir_gen 查表），无第二处自行解析。
+> - **自伤回归钉住**（`t.pick2(a = 2)`）：`git show c3082a160 --name-only` **不含 `named_args.rs`**（4 文件：environment.rs / tests/mod.rs / native_param_names.rs / ir_gen.rs）⇒ 钉子测试未被改；独立复跑该用例 1 passed、named_args 全套 **19 passed / 0 failed**。
+> - **不回归门禁**（`c3082a160` 树）：`cargo test --all --quiet`（4×4 口径）EXIT=0——lib **2806** + 2 ignored、integration **297**、52/44/9/2/1/9 全绿 0 failed；`cargo fmt --check` / `clippy -D warnings` 均 EXIT=0；语料差分（双参数）348/348 差异为空；`check-snapshot-drift.sh` PASS（204 快照零漂移）；`check-docs-truth.py` EXIT=0；3.16.1 四形态对照（stdlib 面）E1014 / E1010 / E1111 / 放行。
+> - **未覆盖面（t16 五项，原样抄录）**：①`testsuite.py run full`（CI 口径资源画像通道）未复跑——实现者已按裁决回落（独占波峰值 8.11 GiB > 预算 7.51 GiB，exit 2 属工具按设计拒绝）；本轮以 4×4 与 2×1 两口径的 `cargo test --all` 覆盖。②手注 FFI 面（host-FFI）只能经 Rust 测试驱动（`add_native_signature` 仓内零调用者、无 CLI 面）——「宿主嵌入进程内真实 FFI 调用」未测。③变参（`...`）命名实参形态未构造样本（无仓内判据样本）。④`check-boundary.py` / `check-fanout.py` 未复跑（实现者已过；与行为判据无交叉）。⑤CI（GitHub Actions）按约定不等，交收口环节核对。
+>
+> **四、对抗性复审（t17，被复核 revision `c3082a16051cb1bfb8b84bdc62ec6bd29d90ff2d2`，父 = `537b46b7488a60b42cdc35110e0a413c80a58169`；全部内容用 `git show <rev>:<file>` 取、行号在被引 revision 重取）**：
+>
+> - **① 判据单一源反向核**：`slot_order_arg_indices`（ir_gen.rs:521-527）**不按名重排**（排序键是共享判据给出的槽位号，名字只出现在 `arg_binding::bind_args_to_params` 内）、**缺参不兜底**（缺席的槽位根本不产生实参下标）、**不分可选位**（IR 两处传全可选、另两处传真值 `i >= required_min`）。全仓「按形参名找位置 / 找成员」的 grep 逐条核过：**槽位计算只 `arg_binding.rs:76` 一处**，其余 7 处命中各属别的关注点（泛型类型参数的约束接口检查 / const 泛型实参替换 / 泛型类型变量绑定 / 泛型类型参数替换 / const 泛型参数查表 / 方法定义查表 / 结构体字段查表）。
+> - **② 职责边界（缺参只在 typecheck 响亮、IR 只重放槽位绑定）**：typecheck 侧 `bind_named_args`（`expressions.rs:2854`）传全必需 ⇒ 缺任一值形参 E1010；原生导出臂（`:5653`）传真可选位 `i >= required_min` ⇒ 只对真必需位 E1010、`?msg` 省略放行。IR 侧本提交改的两处（`ir_gen.rs:7926` RFC-004 绑定路径 / `:8021` 重载决议方法路径）**一律传全可选、只重放槽位绑定**（注释明写「缺参归 typecheck」与「按声明表重判缺参会把合法决议误报 E1010（`t.pick2(a = 2)` 实测）」）。
+> - **③ API 形状**：environment.rs:990-993 明写「本函数**不得**自己解析形参名」并指向唯一出口 `export_signature_param_info`；:997-999 写明「只拿得到 `MonoType` 的调用方应在自己那侧解析出签名串后再走本 API」。
+> - **④ 行为变化面**：代码上四处差异（同一形参命名两次 E1111→E1015 码变 / 未知名 E1014 文案变 / 空表 E1014 文案变 / 位置实参超 IR 侧声明表：静默丢弃→照发），**实测可及形态上无诊断码 / 文案变化**（typecheck 先判、同码），IR 产物在 5 个自建探针上**逐字节一致**（p1 / p5 走本提交改的分支且产物不变、p2 / p3 / p4 两态同码、p9 不可构造、p6–p8 源码层不可达）；t15 的 8 条 CLI 探针两态逐码一致。差异全部落在**本来就失败**的程序上（程序仍失败）⇒ D59「不改变原先成功程序的对外表现」不被触及。
+> - **⑤ 测试质量**（不只看红绿）：12 条新测试（`typecheck/tests/native_param_names.rs`）逐条对 `test-specification`——命名 `test_<what>_<scenario>`、三段式 AAA 注释、断言全带自定义消息、setup 重复 ≥3 次已抽助手、助手内 panic 带上下文；**无「只断 exit code」式弱断言**（先 `assert!(`诊断非空`)` 再 `assert_eq!(`逐码相等`)`，两面都空不会空洞通过）；3 条负向用例（合法命名调用放行 / 可选位省略放行 / 显式给可选位放行）在 M1 红态下仍通过 ⇒ 它们**只防误报**，正是其用途。**M1**（去掉 `native_param_names` 灌装）→ `cargo test --lib native_param_names` **9 failed / 3 passed**、TEST_EXIT=101 ⇒ 新测试**真钉住修复**。**M2**（整段回退 `ir_gen` 合并）→ `cargo test --lib` **2806 passed / 0 failed / 2 ignored**、exit 0 ⇒ 合并面**无测试覆盖**。`pick2` 钉子（既有 `named_args.rs:253-283`，本提交未改）走**真实全链路**并断言**运行期值** `Int(20)` ⇒ **真钉住重载决议**（不是「没报错」），且它对「IR 不得重判缺参」是活的守门。
+> - **⑥ 限制登记**：宿主 native 只进 `TypeEnvironment` 的两张表、**不进 `ModuleRegistry`** ⇒ IR 生成按 registry 解析命名空间成员，故宿主 native 在 IR 阶段本就不可解析（E3006），**先于本任务的嵌入面限制**；该限制与「为何手注面必须在类型检查阶段观测」写在**测试文件文档注释**与 `environment.rs` 字段文档里（不只在报告里）。
+> - **门禁八项在被复核 revision 全部复跑全绿**：fmt --check / clippy -D warnings / `cargo test --all`（**3220 passed、0 failed**；lib 2806 + 2 ignored、integration 297）/ 语料差分 348-348 零漂移 / IR 快照 204 零漂移 / docs-truth / check-boundary（0 豁免 0 违规）/ check-fanout（新符号无同名多定义条目）。
+> - **四条观察项（原样登记：已核、判定不构成 finding、无需处置，但登记在案以免日后被当成未处置违规）**：
+>   - **O1**：提交信息称「本次合并后**全仓只剩共享判据一处**」——就**槽位绑定**而言成立；但 typecheck 的**方法重载臂**仍有一份「按名查候选表（E1014）+ 元数（E1010）」的自有判定（`inference/expressions.rs:5578-5600`），它用的是**候选组代表**的形参表（`method_overload_param_names`），与共享判据用的**已决议候选**表不同。判定依据：该处**先于本提交存在、本提交未触碰**（`git show c3082a160 --name-status` 只有 4 个文件，无 expressions.rs），且属「候选匹配」关注点（表不同、语义不同），不是槽位绑定。**措辞偏宽，登记为观察**。
+>   - **O2**：`add_native_signature` 改收签名串后，**无** `MonoType → 签名串` 的共享助手 ⇒ 未来只拿得到 MonoType 的调用方只能各写一份序列化。判定依据：形参名 / 必需下限已被文档锁死在唯一出口 `signature::export_signature_param_info`；当前**零调用者**；文档已写明「只拿得到 MonoType 的调用方应在自己那侧解析出签名串后再走本 API」⇒ 残余风险仅在「串怎么构造」一段，**低**。
+>   - **O3**：本提交的**合并部分**（ir_gen 去重）**无任何测试覆盖**（M2：整段回退 ir_gen 后 `cargo test --lib` 仍 2806 passed 全绿）。判定依据：「去重」无新行为可钉，性质使然；「单一源」性质由 grep + `check-fanout.py` 门禁保证。**可选加强**：在 `native_param_names.rs` 增一条 **IR 层**用例（覆盖 ir_gen:7926 / :8021 的路径），让合并面也有护栏。
+>   - **O4（归因更正）**：提交信息与报告把 d2 的 E1010 归因为「**方法臂**元数预检先触发」——实测该 E1010 的 help 是通用文案「check the argument count of the function call」，**不是**共享判据「缺参」的 help（「缺少必需形参：…」）⇒ 触发者是**原生（native）臂**的元数预检（`native_arity` 表）。**代码行为结论不变**（父提交既有、本次未改变，已复核），仅**归因措辞需更正**；且「`list.push` 重复命名即 E1010」须限定为「**元数不符 + 重复命名**」——只重复命名而元数相符时（`list.push(list = v, list = 9)`）两态都是 **E1015**（重复命名先于元数判）。
+>
+> **五、门禁与资源通道（一句外链）**：本任务**首次真用** `python scripts/dev/testsuite.py run full` → **exit 2**——独占波峰值 8.11 GiB > 本机预算 7.51 GiB（缺口 618 MiB），工具按设计**拒绝静默跳过** ⇒ 回落 `CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=1 cargo test --all --quiet` → **exit 0**（3220 passed / 0 failed）。该通道状态链 **#486**：`full` 在本机因峰值外推偏保守而不可用，**校准（2600 档由实测校准）属 WBS 0.5.2**。
+>
+> **六、计数表：本轮不动**——`3.17.1` 已于 2026-10-15 登记并计入表头（「2026-10-15：+2 = 3.17.1 / 3.18.1」），本轮只勾选 + 注记，**三级条数不变** ⇒ `09` 顶部的二级 67 / 三级 176 **不动**。本轮**不新增**计数偏差（父条目 3.17 的「1 个三级任务」注记本就正确）；上一节「十一」记录的 6 处预存偏差（父条目计数注记滞后）**与本轮无关、不由本轮引入**，仍按该节口径留待账目复核。
+>
+> **七、批次树回收（gc 与 status 原始输出）**：
+> `python scripts/dev/scratch.py gc` → `[scratch] 已删除 verify-p3-t16（释放约 10235.4 MB）` / `[scratch] 已删除 verify-p3-t17（释放约 10079.2 MB）` / `[scratch] gc 完成，共释放约 20314.6 MB`；
+> `python scripts/dev/scratch.py status` → `[scratch] 没有批次树`；
+> `git worktree list` → `E:/git/YaoXiang c3082a160 [dev]`（只剩主挂载）。
+> **被 gc 一并删除的还有两棵批次树内的验证证据**（`verify-p3-t16/` 的 `EVIDENCE.md`、`verify-p3-t17/` 的 `EVIDENCE-t17.md` 与探针 / 补丁 / 原始日志）——它们是**注册批次目录**，随树回收；本节第三、四节已把其量测数字、门禁数值、变异表与四条观察项**原样落进实录**以留证，结论不因文件删除而失效。**未受影响的留档**（非注册批次目录，gc 不动）：`target/yx-scratch/wbs317/`（实现者证据：evidence-3.17.1.md / red-test.txt / trial-before-after.txt + fix-3171.patch / 归因表等）。
+> 验收表述（可解析）：`git status` 干净；`python scripts/dev/scratch.py status` = 没有批次树；`git worktree list` 只剩主挂载；仓库外无本批新增目录。
+>
+> **八、文档真构建与提交卫生**：本轮的勾选 / 注记 / 登记**攒成一笔**文档提交（AGENTS.md 第 8 条）；提交前本地跑 `npm run docs:build`（AGENTS.md 第 10 条⑨）与 `python scripts/ci/check-docs-truth.py`，markdownlint 零告警。**不 push**（成员不推送，见 AGENTS.md 第 10 条⑧）；**CI / Deploy Docs 结论交统一核对环节**回填，不在会话里等。
+>
+> **九、遗留项与登记**：
+>
+> 1. **轮 1 收口登记的遗留项 ① 已关闭**：`src/driver/arms.rs` 的「决策 B1」注释与 3.4.6 后代码事实相反一项，由 `537b46b74`（`:memo: docs(driver): 修正与事实相反的 B1 注释（3.4.6 收尾遗漏）`）就地改写为现状事实（行为中性、仅注释行；措辞与 `src/driver/tests/program.rs` 中同一事实的表述对齐）。
+> 2. **本轮新登记**：O1–O4 四条观察项（已核、不阻断、登记在案）；0.5.2（`full` 通道的 2600 档实测校准 + pre-commit / CI 接线）；#489 ureq 3 迁移与 `.cargo/audit.toml` 豁免的硬性移除条件；3.8 / 3.12 待裁决、3.18 前置待 P6——**均不在本队范围**。
