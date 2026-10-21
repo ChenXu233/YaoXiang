@@ -244,9 +244,10 @@ graph TD
 | Task branches  | Follow the naming rules above | Each task creates and uses a branch in the worktree on demand, delete when done             |
 
 > **Division of labor with item 9 of AGENTS.md**: Item 9 constrains the **batch validation tree**
-> (sole entry `scripts/dev/scratch.py`, fixed to be built inside the repo at
-> `target/yx-scratch/<batch>/tree`, members are prohibited from creating new directories outside the
-> repo); this section describes a **human parallel personal branch workbench**—the former serves
+> (sole entry `scripts/dev/scratch.py`, fixed to be built inside the **workspace** but excluded by
+> `.gitignore` at `target/yx-scratch/<batch>/tree` (**never committed**; its content must not be used as a
+> citable source in docs——AGENTS meta-rule ①), members are prohibited from creating new directories
+> outside the repo); this section describes a **human parallel personal branch workbench**—the former serves
 > freeze-point measurements, the latter serves branch development; different purposes, but the same
 > principle: **not permanent**.
 

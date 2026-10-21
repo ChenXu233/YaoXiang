@@ -285,7 +285,9 @@
 > 依赖 4.6.1 的 `use` 路径解析，强行同批会扩大闸口面）。#450 归属**待裁决**——证据
 > 表明属「过载解析后名字未传回引用计数」类，仍在轮 1 已落地形态下复现，按独立 WBS 条目登记处置（队长推荐 A：并入轮 2 时登记为独立条目；**待用户裁决**）。冻结 rev = `3863a9ff0`（父提交 `62f6e1a59` 为修复前基线）；验证 PASS attempt
 > `aab92fe0`（即 t2）；复审 pass attempt `96452696`（即 t3）。**收口登记提交 = `38d30b846`（docs(docs): 4.9 引用池轮 1 收口登记）**——该笔实际由收口成员 integration-refpool 编写并推送；其收尾探针曾把收口任务误标为 terminal failed 并覆盖 output，由队长接管新 attempt 按已核实交付事实改回 completed，特此更正归属与标签。证据留档：
-> `target/yx-scratch/yx49/EVIDENCE.md`（含 8 份变异补丁与 warn_compare_v8.json）。
+> 证据摘要（8 份变异补丁清单、`warn_compare_v8.json` 的口径与结论）已内联于本节「三、+8 与 +16
+> 两套计数的对应关系」与「四、变异试验」；原始文件随工作区回收，**不入库、不得作为文档引用出处**
+> （AGENTS 元规则 ①）。
 >
 > **一、合并裁决**
 >
@@ -323,7 +325,7 @@
 >
 > **三、+8 与 +16 两套计数的对应关系**（**以 t3 复审证死**为准）
 >
-> `target/yx-scratch/yx49/EVIDENCE.md` 的 C 节写 `+16/−0`，但漏了「**新夹具记录**」这一
+> 4.9 轮 1 证据摘要的 C 节写 `+16/−0`，但漏了「**新夹具记录**」这一
 > 成分——v8 仪器（`warn_compare_v8.json`，331 文件 symmetric diff，`only_before=0`）的口径
 > **含**新夹具；t1 实现者自建的「+8」是 **warn-before / warn-after（各 325 条）按夹具
 > 聚合**（每个成员文件 check 一次）。复审逐条映射：
@@ -354,7 +356,7 @@
 >
 > **四、变异试验（机械可逆，全部 `scratch.py trial`）**
 >
-> 8 份变异补丁（`target/yx-scratch/yx49/*.patch`，p1 目录扫描、p2b use 导入名剔除、p3b script
+> 8 份变异补丁（p1 目录扫描、p2b use 导入名剔除、p3b script
 > 接池、p3 flat 消费、p4 std 接池、p7final 自建 4 判据、p8 std 关闭、p9 vendor 接池 +
 > p_stack2 / p_stack3 叠加面）。每个 trial 输出含：HEAD blob → 变异后 blob → 还原后 blob
 > 与 HEAD 一致 = 是 + `git status` CLEAN。本机 `core.autocrlf=true` 需经 `GIT_CONFIG_*`
@@ -364,7 +366,7 @@
 > **五、过程事件 / 环境教训（移交下轮必读）**
 >
 > 1. **core.autocrlf 注入**：本机 `core.autocrlf=true` 必须经 `GIT_CONFIG_*` 注入 `false`
->    才能保证补丁机械可逆；详见 `target/yx-scratch/yx49/trial_env.ps1`。**下轮不要复用**
+>    才能保证补丁机械可逆；当时的注入脚本随工作区回收（判据已在上条列出，可据此重写）。**下轮不要复用**
 >    任何不含注入的 trial 脚本。
 > 2. **同树 trial 串行**：同一棵树上的 `trial` 与 `cargo build` **必须严格串行**。`trial`
 >    内部 `git apply` 与 `cargo build` 都要触碰 worktree，并行会出现「修补未完成就被 build
@@ -472,7 +474,7 @@
 >
 > **四、变异试验（机械可逆，全部 scratch.py trial）**
 >
-> 轮 2 验证者共 9 份补丁（target/yx-scratch/yx49/ 下 m1b/m2b/m4b 为 F2 后的可编译重做版——
+> 轮 2 验证者共 9 份补丁（m1b/m2b/m4b 为 F2 后的可编译重做版——
 > 初版 M1/M2/M4 把 if 条件行注释掉留下悬挂块体，被 t8 复审 F2 判「编译失败误记为判据翻红」
 > 而作废；重做版经逐补丁 cargo check exit=0 + trial 翻红）。M3（撞名归因回潮）初版即为真变异、
 > 实测 ref_pool 5 条判据翻红，保留原判。M1b 锚点在 b8380e6ab 上重取（F1 修复后 probe 段重构，
@@ -562,7 +564,8 @@
 >    本轮 dev 顶端出现两笔来源未确认的 merge（见「二」），最终靠 reflog 反推并撤回一次错误归因。
 >    可核形态 = 成员不运行 `git push`/`fetch`/`pull`、同步一律 `pull --rebase`、用 reflog 核对。
 > 3. **基础设施不稳，先落 patch 再换人**：本批共 5 次不可恢复故障（3×TRANSPORT、1×INVALID_REQUEST（thinking 协议）、
->    1×后台子代理无消息退出）；处置惯例 = 已产出的证据与补丁先落到仓库内路径（`target/yx-scratch/<batch>/`）
+>    1×后台子代理无消息退出）；处置惯例 = 已产出的证据与补丁先落到**工作区**批次目录（`target/` 下，
+>    不入库），但**结论与数字必须就地落进本实录**——工作区路径不得作为文档引用出处（AGENTS 元规则 ①）。
 >    再换人续做，同一会话连续两次失败不赌第三次。
 > 4. **文档提交的真正判据是「本地真构建一次」**：轮 2 收口的文档提交（`042c07860`）让 Deploy Docs 红
 >    在 VitePress 的 Vue 模板编译（尖括号占位符 `<rev>` 等没进反引号被当元素解析，报 `Element is missing
@@ -595,18 +598,18 @@
 > **九、批次树状态（收口 gc，status 输出）**：收口前 `scratch.py status`——t25（holder=-）与 yx49b
 > （holder=-，此前由已停用成员 verify-r3 陈旧持有，队长 `release --force` 释放）两棵树均无持有者；
 > `gc` 删除两棵，释放约 12.7 GB；gc 后 `status` = 「没有批次树」，`git worktree list` 只剩主挂载。
-> 另：`target/yx-scratch/yx49r3/` 与 `yx49r4/` 不是批次树（无 meta.json），是成员放证据/探针的目录，
+> 另：`yx49r3` 与 `yx49r4` 不是批次树（无 meta.json），是成员放证据/探针的**工作区**目录，
 > 不属「残留批次树」。仓库外无本批新增目录。
 
 ## P4 4.4 证明层与 wasm 收尾 — 收口（4.4.1 / 4.4.2 / 4.4.3）
 
-> **一、批次构成与轮次（批次名 `yx44`）**：三条三级任务 4.4.1 / 4.4.2 / 4.4.3 与 wasm 属性可达性判定同批；批次验证树 `target/yx-scratch/yx44/tree`（首次全量构建）。
+> **一、批次构成与轮次（批次名 `yx44`）**：三条三级任务 4.4.1 / 4.4.2 / 4.4.3 与 wasm 属性可达性判定同批；批次验证树由 `scripts/dev/scratch.py init` 建在工作区 `target/` 下（首次全量构建；收口 gc 后已删除）。
 > 角色与轮次：实现 4.4.2 = t1（12 文件；本地 `1fc135437` → 推送后 `24028ffe8`）｜实现 4.4.1 的层序重写 = t2（只文档/注释，零行为变化，基于 `b5e68b3c9`）｜实现 4.4.3 = t3（11 文件，含新码 W1082；本地 `2d5e610cd` → 推送后 `52d2276ca`）｜wasm 可达性判定 = t4（只判定、零清理，判定 revision `b5e68b3c9`）｜4.4.1 收口与一笔文档提交 = t8（7 文件 173+/43-；本地 `29ebd2145` → 推送后 `d07993157`）｜独立验证 = t5（冻结 `29ebd2145`）｜轮 1 复审 = t6（revision `1b593e993`）｜补口 = t9（3 文件 9+/10-；本地 `1ebddaf95` → 推送后 `1b593e993`）｜修复轮 = t10（3 文件 23+/23-；本地 `657c3d5e3` → 推送后 `e184d88b6`）｜轮 2 复审 = t11（`657c3d5e3` = 推送后 `e184d88b6`，patch-id 全等）｜收口 = t7（勾选 / 实录 / 批次树 gc / 文档真构建 / 一笔文档提交；本地 `c8412565c` → 推送后 `da724940b`）。
 > **失败与重做**：t6 以 `needs_revision` 终态失败（复审轮按契约须 fail 并给 findings，非事故）；t7 首轮在批次树 gc 阶段中断，已完成产物留在主仓工作树未提交，由第二轮接手「补缺口 + 复核」——未重做已完成部分（本轮新增：4.4 勾选与证据注记、本实录、三处指向已删批次目录的路径改写、文档真构建与收口提交）。无取消轮次。
 >
 > **二、逐任务产出与量测数字（原始命令与输出见证据摘要与留档；此处只记结论）**：
 >
-> - **4.4.1**：`layers/README.md`（含 `layers/mod.rs` 顶部注释）的层序表重写为**实际调用序**（predicate → termination → ownership，调用点锚定 `checker.rs::check_module_impl`），`equivalence` 按真实身份描述（无生产调用点）；同源声明 7 处收口（`01-routing` / `02-stage-contract` / RFC-039 / `06` / typecheck README / layers 两文件）；机械对账脚本在批次树绿基线上 **11/11 PASS**（判据 11 条 = README 侧 4 条：实际调用序声明 / 两处入口锚 / 旧序声明消失；代码侧 7 条：5 个行锚 + `check_module_impl` 无短路 + `equivalence` 零生产调用；脚本留档 `target/yx-scratch/yx44-evidence/t5-441-recon.sh`），变异 (c) 回退旧声明 → 对账 2 FAIL 即红。
+> - **4.4.1**：`layers/README.md`（含 `layers/mod.rs` 顶部注释）的层序表重写为**实际调用序**（predicate → termination → ownership，调用点锚定 `checker.rs::check_module_impl`），`equivalence` 按真实身份描述（无生产调用点）；同源声明 7 处收口（`01-routing` / `02-stage-contract` / RFC-039 / `06` / typecheck README / layers 两文件）；机械对账脚本在批次树绿基线上 **11/11 PASS**（判据 11 条 = README 侧 4 条：实际调用序声明 / 两处入口锚 / 旧序声明消失；代码侧 7 条：5 个行锚 + `check_module_impl` 无短路 + `equivalence` 零生产调用；对账脚本为一次性脚本、随工作区回收，判据 11 条已逐条列出可据此重写），变异 (c) 回退旧声明 → 对账 2 FAIL 即红。
 > - **4.4.2**：求解器获取面统一到 `proof/smt/backend.rs` 的进程级共享单例 + 唯一闭包口 `with_shared_solver(consumer, f)`；三消费点（predicate / termination / ownership）全部改走共享口，**编译生产链上 `default_solver()` 调用点 = 0**（唯一后端选择点下沉为私有 `new_backend()`）。`wasm/src/lib.rs` 的 `test_smt` 自检调用点是**既存**（早于本批，自 `b5e68b3c9` 起）的非测试调用点，属「测试与独立场景」面，不构成 D58 禁令违反。独立验证自构造读数（一次编译）：predicate acq=2 hit=1 miss=1 ｜ termination acq=1 hit=2 miss=2 ｜ ownership acq=2 hit=1 miss=1，三点 hit/miss 之和 (4,4) = 共享实例累计 `Some((4,4))`；变异 (a) 单例退化 → predicate hit=0 即红。**改动词面披露**：该笔提交含 `z3_backend.rs` 15 行——`cache_stats` 从固有方法迁入 `Solver` trait 块（返回 `Some(实例内计数)`）+ 1 行注释改指，无语义耦合。D58 禁令已机制化：同线程重入 → panic 含 D58，探针 `recv_timeout(120s)` 不挂死。
 > - **4.4.3**：`body_checker` 缺失时的静默降级收敛为 `TypeChecker::ownership_inputs`（唯一判据点）+ 新码 **W1082**（与既有 W 码事实不重叠：W1080 约束降级 / W1081 求解器缺失 / W1090 方向相反）；钉测试 2/2 绿；健康路径语料 348:348 零 diff；**降级分支生产面不可达穷举成立**（CLI 四入口 + eval/repl + format + LSP + wasm playground + 全部 `ProgramKind` 汇入 `check_module_impl`：`init_body_checker` 无条件先于所有权块，函数内 0 个 return/break/continue，`body_checker` 无 `.take()`）⇒ W1082 无用户可见面。变异 (b) 删发射 → 钉测试即红。**W1082 属对外契约表变更（E 类），经用户追认**；`locales/zh.json` / `locales/en.json` 与代码同提交，其余语言由 i18n bot 于推送后补齐（run 见「九」）。
 > - **wasm 属性可达性判定（t4）**：`orchestrator.rs` 现树 **10 条 = 4 正臂 + 6 反臂**（口径 = 同一行内 `#[cfg(...)]` 属性文本，正反都计；`cfg!` 运行期宏 0 命中）；4 条 wasm 正臂在 playground 运行期不可达但**编译期承重**（调用点未门控，单独删臂 ⇒ wasm 编译失败），6 条 `not(wasm32)` 反臂 native 三条阶段表承重 ⇒ D35 设想的「删不可达者」在该文件**无适用目标**，真实清理形态 = 整条 project-mode 子树在 wasm32 上门控（登记 P10 S7，三条未核实原样保留）。
@@ -645,11 +648,13 @@
 > ⑥ **t5 冻结面与 t9 的覆盖差异**：t9（三处注释/文档补口，`1b593e993`）提交晚于 t5 的冻结 revision `29ebd2145`，属零行为改动，其验收由 t9 自带的机械核对 + t6 复审覆盖（t6 在 `1b593e993` 上**重跑**了 t5 的关键量测，不转述）。
 > ⑦ `docs/src/en/**` 不手改，由 push 后的 auto-translate 工作流再生（本批该 bot 落地两笔：`92d490695` i18n locales 补 W1082 其余语言、`63b6cdf37` auto-translate 文档）。
 > ⑧ **t9 越界观察的三条裁决**：㈠ t9 顺手改正 `02` 同一句内的 `wasm/src/lib.rs` 行数与门控点行号（73 / 139·153·170 → 152 / 151·170·187）——**接受**（同口径同数字的必需面，提交信息已列明）；㈡ RFC-039 **D35 行**仍写「wasm 27 个文件的 cfg 分支」——**保持不动**（决议行是历史裁决记录，其前提修正已由 P10 S7 登记承载，不改写历史）；㈢ `docs/src/en/**` 的旧口名译文由 auto-translate 对齐。
-> ⑨ `09` / `09a` 中原指向已删批次目录的两处路径（`…/yx44-evidence/EVIDENCE.md`、`…/probe-sort-mismatch.yx`）在收口轮改为指向 `target/yx-scratch/close-44/evidence-summary.md`，探针三行源码就地内联。
+> ⑨ `09` / `09a` 中原指向已删批次目录的两处路径在收口轮改为**就地内联**（证据摘要并入本实录本节，探针三行源码内联）。
+> **2026-10-21 更正**：当时改指向的仍是工作区路径，等于把违规下移一层；本轮起该摘要的交付提交、门禁数字与
+> CI run id 全部内联，文档不再引用任何工作区路径（AGENTS 元规则 ① / 第 10 条④）。
 >
 > **八、t8 验收④ 的口径裁决**：验收原文要求 `git diff | grep '修订注记\|原为\|现改为'` 为空。实测**默认上下文口径不可达**——D58 行邻行的 D59 / D61 决议行本身含「修订注记 / 原为」字样（非本任务改动）。裁决：按**新增行 / 删除行 / `-U0` 增量行**三口径全为空接受，并写明**后续同类验收只 grep 新增/删除行**——判据应落在本次改动行上，而不是整份 diff 的上下文。
 >
-> **九、CI 门禁结论（AGENTS 第 13 条①，定时核对 2026-10-18 17:26 回填；明细 `target/yx-scratch/close-44/gate-runs.md`）**：
+> **九、CI 门禁结论（AGENTS 第 13 条①，定时核对 2026-10-18 17:26 回填；run id 与结论就地内联）**：
 > 第一次推送（3 笔，tip = `d07993157`）：CI **39110908163** success ｜ Deploy Docs **39110908155** success ｜ Auto Translate Docs **39110908193** success ｜ Auto Translate I18n **39110908144** success；该 tip 覆盖 `24028ffe8`（4.4.2）/ `52d2276ca`（4.4.3）/ `d07993157`（4.4.1）三笔全部内容。
 > 第二次推送（1 笔，tip = `1b593e993`）：CI **39112293391** success ｜ Deploy Docs **39112293062** success ｜ Auto Translate Docs **39112292903** success；覆盖含 t9 补口在内的全部四笔。**无 concurrency 取消**，后者覆盖前者。
 > 第三次推送（2 笔，tip = `da724940b`）：CI **39121538555** success ｜ Deploy Docs **39121538562** success ｜ Auto Translate Docs **39121538541** success——三条 run 的 headSha 均 = `da724940b` 且**均已终态**（2026-10-18 第三轮定时核对回填）；轮 3 独立验证 t12 当时记为「CI 未终态」的观察就此关闭。
@@ -659,7 +664,7 @@
 >
 > **十一、未覆盖面（不得把「没测」写成「已过」）**：① doc-tests 0/0 未承载判据；② **wasm32 目标实编未做**（该面由 CI 的 `_build-wasm.yml` 覆盖，本批的 wasm 判定为静态论证）；③ 变异仅覆盖契约点名的 3 处，其余门禁未做反向改坏验证；④ 语料差分未对 `b5e68b3c9` 单独跑（只对冻结 revision 跑）；⑤ i18n bot 补齐的其余语言 W1082 文案行为未验证（只核了 `zh.json` / `en.json`）；⑥ 轮 1 复审与修复轮报出的**同类但不在契约 findings 内的既有漂移**未修（清单见「十二」），归属待用户裁决。
 >
-> **十二、`02` 全篇既有漂移观察清单（已报用户、待裁决后登记）**：口径 = 均为 **pre-existing 漂移**（非本批引入），**不构成本批 finding**；清单由修复轮发现、轮 2 复审在 `657c3d5e3`（= 推送后 `e184d88b6`）上独立抽验并给映射，逐条照录（全清单留档 `target/yx-scratch/close-44/s9-observations.md`）：
+> **十二、`02` 全篇既有漂移观察清单（已报用户、待裁决后登记）**：口径 = 均为 **pre-existing 漂移**（非本批引入），**不构成本批 finding**；清单由修复轮发现、轮 2 复审在 `657c3d5e3`（= 推送后 `e184d88b6`）上独立抽验并给映射，逐条照录（清单就地内联如下，原始文件随工作区回收）：
 >
 > 1. `02` §(a) 入口表 3a-3d / 5 / 5b：`02:72` 引 `orchestrator.rs:273-399` → 现 `:155`；`02:73` `:450` → `:250`；`02:74` `:1374` → `:985`；`02:78` `util/diagnostic/mod.rs:565` → `:681`；`lsp/handlers/diagnostics.rs:146` 的 `run_diagnostics` 已不在该处；**内容级**：`run_diagnostics` 与「否则手工 lex→parse」已被 4.6.1（删手工序列）取代。
 > 2. `02:1016`：`compile_project :99-237` → 现 `:107-134`（28 行 Program 构造器）。
@@ -672,9 +677,9 @@
 >
 > **十三、批次树回收（gc 与 status 原始输出；输出中的树路径按仓库相对路径记）**：
 > `python scripts/dev/scratch.py gc` → `[scratch] 已删除 yx44-evidence（释放约 0.0 MB）` / `[scratch] gc 完成，共释放约 0.0 MB`；
-> `python scripts/dev/scratch.py status` → `yx44-evidence            holder=-` 下一行 `target/yx-scratch/yx44/tree`——注册表记录的路径**已不存在**，该名是注册表残留（`gc` 的 `_remove` 删的是 `meta["path"]` 的父目录即 `target/yx-scratch/yx44`，残留的 `meta.json` 仍落在扫描面内；其内容 batch=`yx44`、`base_rev=29ebd2145`、`lock=null`、含 t5 / t6 / t11 的持有历史）；
+> `python scripts/dev/scratch.py status` → `yx44-evidence            holder=-` 下一行 `<工作区>/yx44/tree`——注册表记录的路径**已不存在**，该名是注册表残留（`gc` 的 `_remove` 删的是 `meta["path"]` 的父目录即工作区下的 `yx44`，残留的 `meta.json` 仍落在扫描面内；其内容 batch=`yx44`、`base_rev=29ebd2145`、`lock=null`、含 t5 / t6 / t11 的持有历史）；
 > 收口轮把该注册表文件改名为 `meta.retired.json` 使其退出扫描（**不删任何证据文件、不新建任何树**）→ `python scripts/dev/scratch.py status` = `[scratch] 没有批次树`；再跑 `gc` = `[scratch] 没有批次树，无需回收`；`git worktree list` 只剩主挂载（`dev`）。
-> 批次原始证据目录 `target/yx-scratch/yx44-evidence/`（无 `meta.json`，**非批次树**）保留为留档，收口摘要另落 `target/yx-scratch/close-44/`。验收表述（可解析）：`git status` 干净；批次树 gc 后 `python scripts/dev/scratch.py status` = 没有批次树；`git worktree list` 只剩主挂载；仓库外无本批新增目录。
+> 批次原始证据目录（无 `meta.json`，**非批次树**）当时保留为留档；**2026-10-21 起工作区目录不再作为证据出处**——收口摘要已内联于本节，原始目录随清理删除（AGENTS 元规则 ①）。验收表述（可解析）：`git status` 干净；批次树 gc 后 `python scripts/dev/scratch.py status` = 没有批次树；`git worktree list` 只剩主挂载；仓库外无本批新增目录。
 >
 > **十四、文档真构建与提交卫生**：`npm run docs:build` 本地 **exit 0**（AGENTS 第 10 条⑨——markdownlint 抓不到 VitePress 的 Vue 编译错误，且仅含 docs 的提交会被判 `no files to check` 跳过 markdownlint）；本批的勾选 / 注记 / 登记 / 规则修改攒成**一笔**文档提交（第 8 条），落在批次收口；成员未执行 `git push` / `fetch` / `pull`。**本批最终两笔均已推送**（收口 tip 上 `git rev-list --count origin/dev..HEAD` = 0，origin/dev 头 = `da724940b`）：`e184d88b6`（轮 1 findings 的文档锚点修复，3 文件 23+/23-）+ `da724940b`（收口文档提交，7 文件 96+/10-；含勾选 / 实录 / 三处路径改写 / 登记与规则修改）。
 >
@@ -708,7 +713,7 @@
 > - **3.4.6**（compile 路径消费 warnings，D 类）：变更前后对外表现 = **多文件 `run` 此前恒不输出任何 W 码**（红态留档：多文件 [] vs 单文件 [(W1001,3),(W1002,5),(W1003,1)]），现四路径（单文件 run / 多文件 run / 单文件 check / 多文件 check）的 W 码集合恒为 {W1003@1, W1001@3, W1002@5}（非空集）。语料基线：348 条记录中 **46 条变化**，新增 W 码 **118 条**（W1001 34 / W1002 12 / W1003 13 / W1004 42 / W1005 17），**118/118 逐条归因到文件里真实存在的未使用定义（0 条未定位）**，纯增量（0 条删除、0 处 exit / stdout / check 变化）。**D59 四条兑现**：①先红后绿（红态留档 + 转钉测试）②不改变「原先成功程序」的对外表现（纯增量，0 处 exit / stdout / check 变化）③同提交登记（本实录 + `09` 的 3.4.6 行）④基线同提交再生并人工 review diff。**超集获准**：W1004 / W1005 / W1006 一并进入 `run`（用户 2026-10-19 批准），理由 = **一份判据、一个通道**——只放 W1001/W1002/W1003 等于再造第二份过滤判决。**对外契约面变更**：`orchestrator::compile_project` 返回值由 `Result<ModuleIR, _>` 改为 `Result<(ModuleIR, FileDiagnostics), _>`（仓内消费者 2 个 + 2 个测试直驱点同步适配）。
 > - **0.5.1**（测试资源画像标记 + 独占锁 + fast/full 最小消费面）：新增 `scripts/dev/testsuite.py`（`markers --check` 与 `cargo test --list` 双向对账、`plan` 预算装箱、`run fast|full` 预算不足即报缺口不静默跳过、`manual` 档永不隐式执行）与 `src/util/test_support.rs`（跨进程文件锁，测试体内取锁 ⇒ 任何调用路径都互斥）；就地 `cost:` 标记 3 处（2600 档 exclusive，峰值由 5000 档实测线性外推、**未实测**；5000 档 exclusive，15.6 GiB / 72.6 s 实测；快照更新 manual，峰值与耗时均为外推）。自验数字：`markers --check` 核对 3149 个 `#[test]`、3 例机械变异各自 exit 1、`run fast` 批量波 2793 passed / 47.7 s + 独占波 1 passed / 14.6 s、预算 1 GiB 时 `run full` 列出缺口 7.11 GiB、两进程争锁实测 `held→blocked→held(waited 2.0s)`。**独立验证属 #486 后续排期**（本批只有实现者自验）。**0.5.2 待排期**（pre-commit / CI 接线 + 2600 档实测校准 + `test-specification` 细则节）。
 >
-> **三、独立验证（t3，冻结 `81d5e414e`；红态基线 `c599de7bb` / `1725d0215` / `ef2334de5` 均为 HEAD 祖先，`git merge-base --is-ancestor` 核实）**：探针全部为验证者自建（批次树 `target/yx-scratch/verify-p3-t3/`，探针与补丁在其 `probes/` / `patches/` 下），不转述实现者结论；该批次树连同其树内证据已在本批收口的 gc 中删除（见「九」），故本节把量测结论与数字**原样落进实录**以留证。3.5 红态四条探针均报 E1003+E1002 / E1010，绿态 exit 0 且值正确（stdout 1 / 7 / 1），并有 IR 值级实证（特化函数 `Function probe(Box, int64)`）；3.6.1 绿态输出 6 / 10，对照「值位置调用」绿、「非函数值按名调用」编译期 E1065；3.6.2 红态两形态 E6006、绿态 exit 0（探针内 `assert` 失败即非 0，exit 0 即值正确）；3.6.3 红态 stdout `void` / EXIT=0（静默错值可核）、绿态编译期 E1001 / EXIT=1，而**表达式位置内联 lambda 捕获本函数参数**放行（EXIT=0、输出 6）——放行面未被误伤。3.4.6 的 C2 归一由验证者自建夹具独立复现（四路 W 集合恒等、非空），基线差分独立复算（changed=46、added=0、removed=0、expectation / run.exit / run.stdout / check 变化 = 0、新增 W 码头 118 条与实现者一致），归因抽样 10 条全部命中真实定义。门禁在冻结树上全绿：fmt / clippy（`-D warnings`）/ `cargo test --all`（**lib 2790 passed + 2 ignored、integration 297 passed**、0 failed）/ 语料差分 348:348 差异为空 / IR 快照 204 条零漂移 / 义务账本 / docs-truth。**t11（轮 2，冻结 `8e32e8636`）** 独立复现 3.6.4 的红→绿（红态父提交 16e2a5c88：E6006 `lib.f`、EXIT=1；绿态 EXIT=0、stdout 27，探针内 4 断言全过）、判据单一源（`resolve_namespace_data_access` 1 定义 2 消费，无第三份「限定名 → 槽位」联查）、不回归八形态全过，verdict = **pass**。
+> **三、独立验证（t3，冻结 `81d5e414e`；红态基线 `c599de7bb` / `1725d0215` / `ef2334de5` 均为 HEAD 祖先，`git merge-base --is-ancestor` 核实）**：探针全部为验证者自建（批次树由 `scripts/dev/scratch.py init` 建在工作区下，探针与补丁在其 `probes/` / `patches/` 子目录），不转述实现者结论；该批次树连同其树内证据已在本批收口的 gc 中删除（见「九」），故本节把量测结论与数字**原样落进实录**以留证。3.5 红态四条探针均报 E1003+E1002 / E1010，绿态 exit 0 且值正确（stdout 1 / 7 / 1），并有 IR 值级实证（特化函数 `Function probe(Box, int64)`）；3.6.1 绿态输出 6 / 10，对照「值位置调用」绿、「非函数值按名调用」编译期 E1065；3.6.2 红态两形态 E6006、绿态 exit 0（探针内 `assert` 失败即非 0，exit 0 即值正确）；3.6.3 红态 stdout `void` / EXIT=0（静默错值可核）、绿态编译期 E1001 / EXIT=1，而**表达式位置内联 lambda 捕获本函数参数**放行（EXIT=0、输出 6）——放行面未被误伤。3.4.6 的 C2 归一由验证者自建夹具独立复现（四路 W 集合恒等、非空），基线差分独立复算（changed=46、added=0、removed=0、expectation / run.exit / run.stdout / check 变化 = 0、新增 W 码头 118 条与实现者一致），归因抽样 10 条全部命中真实定义。门禁在冻结树上全绿：fmt / clippy（`-D warnings`）/ `cargo test --all`（**lib 2790 passed + 2 ignored、integration 297 passed**、0 failed）/ 语料差分 348:348 差异为空 / IR 快照 204 条零漂移 / 义务账本 / docs-truth。**t11（轮 2，冻结 `8e32e8636`）** 独立复现 3.6.4 的红→绿（红态父提交 16e2a5c88：E6006 `lib.f`、EXIT=1；绿态 EXIT=0、stdout 27，探针内 4 断言全过）、判据单一源（`resolve_namespace_data_access` 1 定义 2 消费，无第三份「限定名 → 槽位」联查）、不回归八形态全过，verdict = **pass**。
 >
 > **四、复审轮次与结论**：轮 1（t4，判 `20abd3ebc` 的父 revision）verdict = **needs_revision**，三条 findings 全部是真缺陷：F1 = `is_ctor_reference` 同名两份（`inference/statements.rs` 方法副本），F2 = 头部改名在 `environment.rs` 与 `expressions.rs` 各内联一份，F3 = 可见性越界（该私有的未私有、该 `pub(super)` 的未收敛）。→ 修复轮 t12（一笔，4 文件 +96/−85）→ 轮 2（t13，被复核 revision `20abd3ebc`）verdict = **pass**，新 finding = 0：8 条自建探针的值与退出码与修复前逐条相同、4 份 IR dump 与轮 1 绿态**逐字节一致**、语料 348/348 零漂移、IR 快照 204 零漂移、`cargo test --all` EXIT=0（lib 2794 passed + 2 ignored、integration 297 passed、0 failed）、fmt / clippy / docs-truth 全 exit 0、`check-boundary` 的 `pub(crate)` 计数 167 / frontend-core 26（= 3.5 前基线）、`check-fanout` 同名定义零命中。**最终勾选依据 = 轮 2 的 pass**。
 >
@@ -753,7 +758,7 @@
 > `python scripts/dev/scratch.py gc` → `[scratch] 已删除 verify-p3-t3（释放约 13220.5 MB）` / `[scratch] 已删除 verify-p3-t4（释放约 14428.0 MB）` / `[scratch] gc 完成，共释放约 27648.5 MB`；
 > `python scripts/dev/scratch.py status` → `[scratch] 没有批次树`；
 > `git worktree list` → `E:/git/YaoXiang 20abd3ebc [dev]`（只剩主挂载）。
-> **被 gc 一并删除的还有两棵批次树内的验证证据**（`verify-p3-t3/` 含独立验证的探针、补丁、原始日志与结论文本；`verify-p3-t4/` 含复审轮 2 的证据）——它们是**注册批次目录**，随树回收；本实录第三、四、五节已把其结论、变异表与门禁数字原样落账，结论不因文件删除而失效。**未受影响的留档**（非注册批次目录，gc 不动）：`target/yx-scratch/wbs35/`、`wbs35repair2/`、`wbs346/`、`wbs36/`、`wbs362/`、`wbs363b/`、`wbs364/`、`wbs486/`。
+> **被 gc 一并删除的还有两棵批次树内的验证证据**（`verify-p3-t3/` 含独立验证的探针、补丁、原始日志与结论文本；`verify-p3-t4/` 含复审轮 2 的证据）——它们是**注册批次目录**，随树回收；本实录第三、四、五节已把其结论、变异表与门禁数字原样落账，结论不因文件删除而失效。**未受影响的留档**（非注册批次目录，gc 不动）：各批次的证据目录 `wbs35` / `wbs35repair2` / `wbs346` / `wbs36` / `wbs362` / `wbs363b` / `wbs364` / `wbs486`（位于工作区 `target/` 下，**不入库**；结论已逐条落进本实录，工作区路径不作为引用出处）。
 > 验收表述（可解析）：`git status` 干净；`python scripts/dev/scratch.py status` = 没有批次树；`git worktree list` 只剩主挂载；仓库外无本批新增目录。
 >
 > **十、文档真构建与提交卫生**：本批的勾选 / 注记 / 登记 / 文档更正**攒成一笔**文档提交（AGENTS.md 第 8 条），落在批次收口；生成器再生的文档并入其功能提交。提交前本地跑 `npm run docs:build`（AGENTS.md 第 10 条⑨——markdownlint 抓不到 VitePress 的 Vue 编译错误，且仅含 docs 的提交会被判 `no files to check` 跳过 markdownlint）与 `python scripts/ci/check-docs-truth.py`。**提交号在 push 之后取**：本实录按历史实录的惯例记录各轮实际发生的提交与哈希（**注意与 `09` 勾选行的分工**——`09` 的勾选 / 完成登记只写「任务 id + 证据（门禁数值、issue 号、file:line）」不写提交号，因 `pull --rebase` 会重写本地哈希；本实录是当轮过程的历史记录，保留哈希并同时给出 rebase 前后的对照，见「七」3）。**CI / Deploy Docs 结论交「统一核对」环节**，不在会话里等（AGENTS.md 第 13 条）——本批的 CI run id 与 conclusion 由队长在统一核对时回填。
@@ -806,7 +811,7 @@
 > `python scripts/dev/scratch.py gc` → `[scratch] 已删除 verify-p3-t16（释放约 10235.4 MB）` / `[scratch] 已删除 verify-p3-t17（释放约 10079.2 MB）` / `[scratch] gc 完成，共释放约 20314.6 MB`；
 > `python scripts/dev/scratch.py status` → `[scratch] 没有批次树`；
 > `git worktree list` → `E:/git/YaoXiang c3082a160 [dev]`（只剩主挂载）。
-> **被 gc 一并删除的还有两棵批次树内的验证证据**（`verify-p3-t16/` 的 `EVIDENCE.md`、`verify-p3-t17/` 的 `EVIDENCE-t17.md` 与探针 / 补丁 / 原始日志）——它们是**注册批次目录**，随树回收；本节第三、四节已把其量测数字、门禁数值、变异表与四条观察项**原样落进实录**以留证，结论不因文件删除而失效。**未受影响的留档**（非注册批次目录，gc 不动）：`target/yx-scratch/wbs317/`（实现者证据：evidence-3.17.1.md / red-test.txt / trial-before-after.txt + fix-3171.patch / 归因表等）。
+> **被 gc 一并删除的还有两棵批次树内的验证证据**（`verify-p3-t16/` 的 `EVIDENCE.md`、`verify-p3-t17/` 的 `EVIDENCE-t17.md` 与探针 / 补丁 / 原始日志）——它们是**注册批次目录**，随树回收；本节第三、四节已把其量测数字、门禁数值、变异表与四条观察项**原样落进实录**以留证，结论不因文件删除而失效。**未受影响的留档**（非注册批次目录，gc 不动）：`wbs317`（实现者证据：evidence-3.17.1.md / red-test.txt / trial-before-after.txt + fix-3171.patch / 归因表等；位于工作区 `target/` 下，**不入库**；结论已落本节，工作区路径不作为引用出处）。
 > 验收表述（可解析）：`git status` 干净；`python scripts/dev/scratch.py status` = 没有批次树；`git worktree list` 只剩主挂载；仓库外无本批新增目录。
 >
 > **八、文档真构建与提交卫生**：本轮的勾选 / 注记 / 登记**攒成一笔**文档提交（AGENTS.md 第 8 条）；提交前本地跑 `npm run docs:build`（AGENTS.md 第 10 条⑨）与 `python scripts/ci/check-docs-truth.py`，markdownlint 零告警。**不 push**（成员不推送，见 AGENTS.md 第 10 条⑧）；**CI / Deploy Docs 结论交统一核对环节**回填，不在会话里等。

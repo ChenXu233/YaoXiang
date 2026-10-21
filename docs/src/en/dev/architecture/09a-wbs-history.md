@@ -617,8 +617,10 @@
 > actually written and pushed by closing member integration-refpool; its closing probe once
 > incorrectly marked closing task as terminal failed and overwrote output, captain took over new
 > attempt and changed back to completed per verified delivery facts, hereby correcting attribution
-> and label. Evidence archived: `target/yx-scratch/yx49/EVIDENCE.md` (containing 8 mutation patches
-> and warn_compare_v8.json).
+> and label. The evidence summary (list of the 8 mutation patches, the semantics and conclusion of
+> `warn_compare_v8.json`) is inlined in this section's "Three. +8 and +16 Two Sets of Count
+> Correspondence" and "Four. Mutation Trials"; the raw files are reclaimed together with the
+> workspace, **never committed, never a citable source in docs** (AGENTS meta-rule ①).
 >
 > **One. Merge Ruling**
 >
@@ -664,7 +666,7 @@
 >
 > **Three. +8 and +16 Two Sets of Count Correspondence** (**t3 review proof as standard**)
 >
-> `target/yx-scratch/yx49/EVIDENCE.md` section C writes `+16/−0`, but missed "**new fixture
+> The 4.9 round 1 evidence summary's section C writes `+16/−0`, but missed "**new fixture
 > record**" component——v8 instrument (`warn_compare_v8.json`, 331 files symmetric diff,
 > `only_before=0`) caliber **includes** new fixtures; t1 implementer's self-built "+8" is
 > **warn-before / warn-after (each 325 entries) aggregated per fixture** (each member file check
@@ -702,7 +704,7 @@
 >
 > **Four. Mutation Trials (Mechanically Reversible, All `scratch.py trial`)**
 >
-> 8 mutation patches (`target/yx-scratch/yx49/*.patch`, p1 directory scan, p2b use import name
+> 8 mutation patches (p1 directory scan, p2b use import name
 > removal, p3b script connects pool, p3 flat consumption, p4 std connects pool, p7final self-built 4
 > criteria, p8 std close, p9 vendor connects pool + p_stack2 / p_stack3 stack surface). Each trial
 > output contains: HEAD blob → mutated blob → restored blob consistent with HEAD = yes +
@@ -714,7 +716,8 @@
 >
 > 1. **core.autocrlf Injection**: This machine `core.autocrlf=true` must be injected `false` via
 >    `GIT_CONFIG_*` to guarantee patch mechanically reversible; see
->    `target/yx-scratch/yx49/trial_env.ps1`. **Next round don't reuse** any trial script without
+>    the injection script then (reclaimed with the workspace; the criterion itself is listed in the item
+>    above and can be rewritten from it). **Next round don't reuse** any trial script without
 >    injection.
 > 2. **Same-Tree trial Serial**: On same tree, `trial` and `cargo build` **must be strictly
 >    serial**. `trial`'s internal `git apply` and `cargo build` both touch worktree, parallel will
@@ -865,7 +868,7 @@
 >
 > **Four. Mutation Trials (Mechanically Reversible, All scratch.py trial)**
 >
-> Round 2 verifier total 9 patches (target/yx-scratch/yx49/ m1b/m2b/m4b as F2 post-compilable redo
+> Round 2 verifier total 9 patches (m1b/m2b/m4b as F2 post-compilable redo
 > versions——initial M1/M2/M4 commented out if condition lines leaving dangling blocks, t8 review F2
 > judged "compile failure mis-recorded as criterion red" invalidated; redo version per patch cargo
 > check exit=0 + trial red). M3 (collision name attribution regression) initial already true
@@ -980,8 +983,10 @@
 >    `pull --rebase`, use reflog to verify.
 > 3. **Infrastructure Unstable, Drop Patch Then Swap**: This batch had 5 unrecoverable failures
 >    (3×TRANSPORT, 1×INVALID_REQUEST (thinking protocol), 1×background subagent no message exit);
->    disposition convention = produced evidence and patch first drop into repo-internal path
->    (`target/yx-scratch/<batch>/`) then swap to continue, same session two consecutive failures
+>    disposition convention = produced evidence and patch first drop into the **workspace** batch
+>    directory (`target/`, never committed), but **conclusions and numbers must be inlined into this
+>    record**——workspace paths are never a citable source in docs (AGENTS meta-rule ①). Then swap to
+>    continue, same session two consecutive failures
 >    don't bet third.
 > 4. **Document Commit's Real Criterion Is "Locally Really Build Once"**: Round 2 closing's document
 >    commit (`042c07860`) let Deploy Docs red on VitePress's Vue template compilation (angle bracket
@@ -1023,14 +1028,15 @@
 > (holder=-) and yx49b (holder=-, previously held by deprecated member verify-r3, captain
 > `release --force` released) two trees both no holder; `gc` deletes two, releases about 12.7 GB;
 > after gc `status` = "no batch tree", `git worktree list` only main mount. Additionally:
-> `target/yx-scratch/yx49r3/` and `yx49r4/` aren't batch trees (no meta.json), are member
-> evidence/probe directories, not "residual batch tree". No this batch new directories outside repo.
+> `yx49r3` and `yx49r4` aren't batch trees (no meta.json), are member
+> evidence/probe **workspace** directories, not "residual batch tree". No this batch new directories outside repo.
 
 ## P4 4.4 Proof Layer and wasm Cleanup — Closing (4.4.1 / 4.4.2 / 4.4.3)
 
 > **One. Batch Composition and Rounds (Batch name `yx44`)**: Three three-level tasks 4.4.1 / 4.4.2 /
 > 4.4.3 with wasm property reachability judgment same batch; batch verification tree
-> `target/yx-scratch/yx44/tree` (first full build). Roles and rounds: implement 4.4.2 = t1 (12
+> built under the workspace `target/` by `scripts/dev/scratch.py init` (first full build; reclaimed by
+> the closing gc). Roles and rounds: implement 4.4.2 = t1 (12
 > files; local `1fc135437` → post-push `24028ffe8`) ｜ implement 4.4.1's layer order rewrite = t2
 > (only doc/comment, zero behavior change, based on `b5e68b3c9`) ｜ implement 4.4.3 = t3 (11 files,
 > including new code W1082; local `2d5e610cd` → post-push `52d2276ca`) ｜ wasm reachability judgment
@@ -1057,8 +1063,9 @@
 >   `06` / typecheck README / layers two files); mechanical reconciliation script on batch tree
 >   green baseline **11/11 PASS** (criterion 11 = README side 4: actual call order declaration / two
 >   entry anchor / old order declaration vanished; code side 7: 5 line anchor + `check_module_impl`
->   no short circuit + `equivalence` zero production call; script archived
->   `target/yx-scratch/yx44-evidence/t5-441-recon.sh`), mutation (c) roll back old declaration →
+>   no short circuit + `equivalence` zero production call; the reconciliation script was a one-off
+>   (reclaimed with the workspace; its 11 criteria are listed item by item and can be rewritten),
+>   mutation (c) roll back old declaration →
 >   reconciliation 2 FAIL i.e. red.
 > - **4.4.2**: Solver acquisition surface unified to `proof/smt/backend.rs`'s process-level shared
 >   singleton + sole closure port `with_shared_solver(consumer, f)`; three consumption points
@@ -1199,8 +1206,10 @@
 > correction carried by P10 S7 registration, don't rewrite history); ㈢ `docs/src/en/**`'s old port
 > name translation aligned by auto-translate. ⑨ `09` / `09a` originally pointed to deleted batch
 > directory's two paths (`…/yx44-evidence/EVIDENCE.md`, `…/probe-sort-mismatch.yx`) in closing round
-> changed to point to `target/yx-scratch/close-44/evidence-summary.md`, probe three lines of source
-> inlined in place.
+> changed to be **inlined in place** (evidence summary merged into this section, probe three lines of
+> source inlined). **Corrected 2026-10-21**: the target was still a workspace path back then, which only
+> pushed the violation one level down; from this round on the delivered commits, gate numbers and CI run
+> ids of that summary are all inlined, and docs cite no workspace path (AGENTS meta-rule ① / clause 10④).
 >
 > **Eight. t8 Acceptance ④ Caliber Ruling**: Acceptance original text requires
 > `git diff | grep '修订注记\|原为\|现改为'` to be empty. **Measured default context caliber
@@ -1210,7 +1219,7 @@
 > added/deleted lines**——criterion should fall on this change's lines, not entire diff's context.
 >
 > **Nine. CI Gate Conclusion (AGENTS Clause 13①, Scheduled Verification 2026-10-18 17:26 Backfill;
-> Details `target/yx-scratch/close-44/gate-runs.md`)**: First push (3 commits, tip = `d07993157`):
+> run ids and conclusions inlined in place)**: First push (3 commits, tip = `d07993157`):
 > CI **39110908163** success ｜ Deploy Docs **39110908155** success ｜ Auto Translate Docs
 > **39110908193** success ｜ Auto Translate I18n **39110908144** success; this tip covers
 > `24028ffe8` (4.4.2) / `52d2276ca` (4.4.3) / `d07993157` (4.4.1) three commits all content. Second
@@ -1245,7 +1254,7 @@
 > Then Registration)**: Caliber = all **pre-existing drift** (not this batch's introduction),
 > **doesn't constitute this batch's finding**; list found by fix round, round 2 review on
 > `657c3d5e3` (= post-push `e184d88b6`) independently spot-checked and gave mapping, each item
-> verbatim (full list archived `target/yx-scratch/close-44/s9-observations.md`):
+> verbatim (list inlined below, the raw file is reclaimed with the workspace):
 >
 > 1. `02` §(a) entry table 3a-3d / 5 / 5b: `02:72` cites `orchestrator.rs:273-399` → now `:155`;
 >    `02:73` `:450` → `:250`; `02:74` `:1374` → `:985`; `02:78` `util/diagnostic/mod.rs:565` →
@@ -1273,15 +1282,17 @@
 > Relative Path)**: `python scripts/dev/scratch.py gc` →
 > `[scratch] 已删除 yx44-evidence（释放约 0.0 MB）` / `[scratch] gc 完成，共释放约 0.0 MB`;
 > `python scripts/dev/scratch.py status` → `yx44-evidence            holder=-` next line
-> `target/yx-scratch/yx44/tree`——registry recorded path **doesn't exist**, this name is registry
-> residue (`gc`'s `_remove` deletes `meta["path"]`'s parent directory i.e. `target/yx-scratch/yx44`,
+> `<workspace>/yx44/tree`——registry recorded path **doesn't exist**, this name is registry
+> residue (`gc`'s `_remove` deletes `meta["path"]`'s parent directory i.e. `yx44` under the workspace,
 > residual `meta.json` still in scan surface; its content batch=`yx44`, `base_rev=29ebd2145`,
 > `lock=null`, contains t5 / t6 / t11 hold history); Closing round renamed that registry file to
 > `meta.retired.json` to make it exit scan (**don't delete any evidence file, don't create any new
 > tree**) → `python scripts/dev/scratch.py status` = `[scratch] 没有批次树`; re-run `gc` =
 > `[scratch] 没有批次树，无需回收`; `git worktree list` only main mount (`dev`). Batch original
-> evidence directory `target/yx-scratch/yx44-evidence/` (no `meta.json`, **not batch tree**) kept as
-> archive, closing summary separately at `target/yx-scratch/close-44/`. Acceptance expression
+> evidence directory (no `meta.json`, **not batch tree**) was kept as archive back then; **from
+> 2026-10-21 on workspace directories are no longer citable sources**——the closing summary is inlined in
+> this section and the raw directory is deleted together with the cleanup (AGENTS meta-rule ①).
+> Acceptance expression
 > (parseable): `git status` clean; after batch tree gc `python scripts/dev/scratch.py status` = no
 > batch tree; `git worktree list` only main mount; no this batch new directories outside repo.
 >
@@ -1414,8 +1425,8 @@
 >
 > **Three. Independent Verification (t3, Frozen `81d5e414e`; Red State Baseline `c599de7bb` /
 > `1725d0215` / `ef2334de5` All HEAD Ancestors, `git merge-base --is-ancestor` Verified)**: Probes
-> all verifier self-built (batch tree `target/yx-scratch/verify-p3-t3/`, probes and patches in its
-> `probes/` / `patches/`), not paraphrasing implementer conclusion; this batch tree along with its
+> all verifier self-built (batch tree created under the workspace by `scripts/dev/scratch.py init`,
+> probes and patches in its `probes/` / `patches/`), not paraphrasing implementer conclusion; this batch tree along with its
 > in-tree evidence already deleted in this batch closing's gc (see "Nine"), so this section puts
 > measurement conclusion and numbers **verbatim into record** for evidence. 3.5 red state four
 > probes all report E1003+E1002 / E1010, green state exit 0 and value correct (stdout 1 / 7 / 1),
@@ -1582,8 +1593,9 @@
 > evidence)——they are **registered batch directories**, reclaimed with tree; this record's third,
 > fourth, fifth sections have already verbatim recorded their conclusions, mutation table and gate
 > numbers, conclusion not invalidated by file deletion. **Unaffected Archive** (non-registered batch
-> directories, gc not touched): `target/yx-scratch/wbs35/`, `wbs35repair2/`, `wbs346/`, `wbs36/`,
-> `wbs362/`, `wbs363b/`, `wbs364/`, `wbs486/`. Acceptance expression (parseable): `git status`
+> directories, gc not touched): each batch's evidence directory `wbs35` / `wbs35repair2` / `wbs346` /
+> `wbs36` / `wbs362` / `wbs363b` / `wbs364` / `wbs486` (under the workspace `target/`, **never committed**;
+> the conclusions are inlined in this record and workspace paths are not citable sources). Acceptance expression (parseable): `git status`
 > clean; `python scripts/dev/scratch.py status` = no batch tree; `git worktree list` only main
 > mount; no this batch new directories outside repo.
 >
