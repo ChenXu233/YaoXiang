@@ -52,6 +52,7 @@ ALLOWED_PREFIXES = {
     'target/test-budget/': '测试预算通道的本地输出目录（运行时产物）——不是证据引用',
     'target/…': '省略号形态的构建产物目录说明——不是证据引用',
     '.claude/': '本地 agent 工作台目录（不入库；文档讲的是本地用法与历史记录）——不是证据引用',
+    'docs/public/wasm/': 'VitePress playground 的发布产物目录（构建输出 / 发布目标）——规格，不是证据引用',
 }
 
 # 内联代码片段 + markdown 链接目标
@@ -133,30 +134,80 @@ def path_like_tokens(text):
     return hits
 
 
+def _unquote(path):
+    """git 在输出里会给含特殊字符的路径加 C 风格引号——解回来。"""
+    if len(path) >= 2 and path.startswith('"') and path.endswith('"'):
+        body = path[1:-1]
+        out = []
+        i = 0
+        while i < len(body):
+            ch = body[i]
+            if ch == '\\' and i + 1 < len(body):
+                nxt = body[i + 1]
+                mapping = {'n': '\n', 't': '\t', 'r': '\r', '"': '"', '\\': '\\'}
+                if nxt in mapping:
+                    out.append(mapping[nxt])
+                    i += 2
+                    continue
+                if nxt.isdigit():
+                    out.append(chr(int(body[i + 1:i + 4], 8)))
+                    i += 4
+                    continue
+            out.append(ch)
+            i += 1
+        return ''.join(out)
+    return path
+
+
 def classify(candidates):
     """候选 token -> [(rel, line, col, token, pattern)]（被 .gitignore 命中且有具体子路径）"""
     exemptions = []
     if not candidates:
         return [], exemptions
     uniq = sorted({tok for (_rel, _l, _c, tok) in candidates})
-    # 注意：Windows 版 git 2.55 的 check-ignore --stdin 不按 '\n' 切行（实测：多行输入被当成
-    # 一个路径），必须用 NUL 分隔喂进去（实测 2 路径 → 2 条记录）。
-    proc = run(['git', 'check-ignore', '-z', '-v', '--stdin'], stdin='\0'.join(uniq) + '\0')
-    if proc.returncode not in (0, 1):
-        # git check-ignore 失败（非「无匹配」）→ 判据无法完成，必须显式失败，
-        # 不能当成「没有违规」静默放行（2026-10-21 实测踩过：rc=128 时输出为空）。
-        raise RuntimeError('git check-ignore 失败 rc=%d: %s' % (proc.returncode, proc.err_text.strip()[:400]))
-    # -z 输出为 NUL 分隔的四元组：source \0 line \0 pattern \0 path \0
+    # 调用方式：**argv 分批**（不用 --stdin）。原因（2026-10-21 实测）：
+    #   - Windows 版 git 2.55 的 --stdin 不按 '\n' 切行（多行输入被当成一个路径）；
+    #   - Linux 版 git 的 --stdin 按 '\n' 切行，吃 NUL 分隔会直接报错。
+    # 两边的 --stdin 语义不一致 ⇒ 改用两边都一致的 argv 形式，分批以避开命令行长度上限。
+    # 判定要**两平台一致**（2026-10-21 实测踩坑）：
+    #   - 同一 token，Linux 报真实规则、Windows 对「以 / 结尾的目录形态路径」报一条**空 pattern**
+    #     （.gitignore 的空行），只认非空 pattern 的话 Windows 会漏判 → CI 红、本地绿。
+    # 对策：每个 token 查三种形态（带斜杠 / 去斜杠 / 去斜杠 + 探针子项），只认**非空** pattern；
+    # 目录形态靠「探针子项」命中（规则写的是 docs/public/wasm/* 这类子项通配）。
     ignored = {}
-    fields = [f for f in proc.out_text.split('\0')]
-    for i in range(0, len(fields) - 3, 4):
-        source, lineno, pattern, path = fields[i:i + 4]
-        if not path:
-            continue
-        ignored[path] = pattern
+    variants = []
+    for tok in uniq:
+        stripped = tok.rstrip('/')
+        for v in (tok, stripped, stripped + '/x'):
+            if v and v not in variants:
+                variants.append(v)
+    CHUNK = 150
+    for start in range(0, len(variants), CHUNK):
+        chunk = variants[start:start + CHUNK]
+        proc = run(['git', 'check-ignore', '-v', '--'] + chunk)
+        if proc.returncode not in (0, 1):
+            # git check-ignore 失败（非「无匹配」）→ 判据无法完成，必须显式失败，
+            # 不能当成「没有违规」静默放行（2026-10-21 实测踩过：rc=128 时输出为空）。
+            raise RuntimeError('git check-ignore 失败 rc=%d: %s' % (proc.returncode, proc.err_text.strip()[:400]))
+        for line in proc.out_text.splitlines():
+            if '\t' not in line:
+                continue
+            meta, path = line.split('\t', 1)
+            parts = meta.split(':', 2)
+            if len(parts) < 3:
+                continue
+            pattern = parts[2]
+            if not pattern.strip():
+                continue          # 空 pattern = .gitignore 空行，不是真规则
+            ignored.setdefault(_unquote(path), pattern)
     violations = []
     for (rel, line, col, tok) in candidates:
-        pattern = ignored.get(tok)
+        stripped = tok.rstrip('/')
+        pattern = None
+        for v in (tok, stripped, stripped + '/x'):
+            if v and v in ignored:
+                pattern = ignored[v]
+                break
         if pattern is None:
             continue
         allowed = next((why for pre, why in ALLOWED_PREFIXES.items() if tok.startswith(pre)), None)
@@ -202,6 +253,7 @@ def selftest():
         ('正例：入库路径', 'docs/src/dev/architecture/09a-wbs-history.md', False),
         ('正例：URL', 'https://github.com/ChenXu233/YaoXiang/issues/475', False),
         ('正例：用户主目录路径', '~/.yaoxiang/settings.toml', False),
+        ('反例：跨分批边界仍判红', 'target/yx-scratch/batch-%d/evidence.md' % 149, True),
     ]
     ok = True
     for name, token, should_fail in cases:
