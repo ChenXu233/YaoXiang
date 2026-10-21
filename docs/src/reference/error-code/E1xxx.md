@@ -22,7 +22,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 | `E1011` | 参数类型不匹配 | `TypeCheck` | 否 | `参数类型不匹配：期望 '{expected}'，实际 '{found}'` | ⚠ 暂未发射 |
 | `E1012` | 返回类型不匹配 | `TypeCheck` | 否 | `返回类型不匹配：期望 '{expected}'，实际 '{found}'` | ✅ 1 处 |
 | `E1013` | 函数未找到 | `TypeCheck` | 否 | `函数未找到：'{func}'` | ✅ 4 处 |
-| `E1014` | 命名参数名未知 | `TypeCheck` | 否 | `函数 '{func}' 没有名为 '{name}' 的参数（可用：{params}）` | ✅ 4 处 |
+| `E1014` | 命名参数名未知 | `TypeCheck` | 否 | `函数 '{func}' 没有名为 '{name}' 的参数（可用：{params}）` | ✅ 2 处 |
 | `E1015` | 参数重复指定 | `TypeCheck` | 否 | `函数 '{func}' 的参数 '{name}' 被重复指定` | ✅ 1 处 |
 | `E1020` | 无法推断类型 | `TypeCheck` | 否 | `无法推断 '{expr}' 的类型` | ⚠ 暂未发射 |
 | `E1021` | 类型推断冲突 | `TypeCheck` | 否 | `类型推断冲突：{reason}` | ⚠ 暂未发射 |
@@ -71,7 +71,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 | `E1108` | 空块落入容器期望位 | `TypeCheck` | 是 | `此处期望容器类型，但 \`{}\` 是空块（值 Void）` | ✅ 2 处 |
 | `E1109` | return 出现在函数外 | `TypeCheck` | 否 | `'return' 出现在函数外` | ✅ 3 处 |
 | `E1110` | 方法绑定缺少签名标注 | `TypeCheck` | 否 | `'{type}.{method}' 缺少签名标注` | ✅ 1 处 |
-| `E1111` | 实参重复占用或顺序非法 | `TypeCheck` | 否 | `函数 '{func}' 的形参 '{name}' 收到多个实参（或实参顺序非法）` | ✅ 4 处 |
+| `E1111` | 实参重复占用或顺序非法 | `TypeCheck` | 否 | `函数 '{func}' 的形参 '{name}' 收到多个实参（或实参顺序非法）` | ✅ 2 处 |
 
 ## 逐码说明
 
@@ -83,7 +83,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`未知变量：'{name}'`
 - **消息**：引用的变量未定义
 - **帮助**：检查变量名是否拼写正确，或先定义它
-- **发射点**：`src/frontend/core/typecheck/checker.rs:5064`、`src/frontend/core/typecheck/inference/expressions.rs:3039`、`src/frontend/core/typecheck/inference/statements.rs:2722` 等 5 处
+- **发射点**：`src/frontend/core/typecheck/checker.rs:5064`、`src/frontend/core/typecheck/inference/expressions.rs:3174`、`src/frontend/core/typecheck/inference/statements.rs:2755` 等 5 处
 
 ### E1002：类型不匹配
 
@@ -133,7 +133,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`返回类型不匹配：期望 '{expected}'，实际 '{found}'`
 - **消息**：函数返回类型不正确
 - **帮助**：函数体的值与声明的返回类型不符。要么修改函数体，要么修正注解——注意 `h: () -> Int = f` 的含义是「h 返回 Int」，而不是「h 就是 f」；若想给函数起别名请写 `h = f`。
-- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:1277`
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:1310`
 
 ### E1013：函数未找到
 
@@ -153,7 +153,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`函数 '{func}' 没有名为 '{name}' 的参数（可用：{params}）`
 - **消息**：调用时使用的参数名不在函数的形参表里
 - **帮助**：改用形参表里列出的名字，或改为按位置传参
-- **发射点**：`src/frontend/core/typecheck/inference/arg_binding.rs:79`、`src/frontend/core/typecheck/inference/expressions.rs:5344`、`src/middle/core/ir_gen.rs:533` 等 4 处
+- **发射点**：`src/frontend/core/typecheck/inference/arg_binding.rs:79`、`src/frontend/core/typecheck/inference/expressions.rs:5581`
 - **源码注释名**：命名参数名未知（与调用者写的名字不在形参表里）
 
 ### E1015：参数重复指定
@@ -281,7 +281,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`模块 '{module}' 没有导出 '{name}'`
 - **消息**：访问了模块未导出的成员
 - **帮助**：该模块的可用导出：{available}
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3430`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3565`
 - **源码注释名**：模块成员未找到（#396：模块别名上取成员失败。模块不是 struct，
 
 ### E1050：需要布尔操作数
@@ -324,7 +324,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`无法在非结构体类型 '{type}' 上访问字段`
 - **消息**：无法在非结构体类型上访问字段
 - **帮助**：字段访问仅适用于结构体类型
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3467`、`src/frontend/core/typecheck/inference/expressions.rs:3471`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3602`、`src/frontend/core/typecheck/inference/expressions.rs:3606`
 - **源码注释名**：不能在非结构体类型上访问字段
 
 ### E1054：条件类型不匹配
@@ -335,7 +335,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`条件必须是布尔类型，实际为 '{type}'`
 - **消息**：条件表达式必须是布尔类型
 - **帮助**：使用布尔表达式或转换为布尔类型
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3508`、`src/frontend/core/typecheck/inference/expressions.rs:3847`、`src/frontend/core/typecheck/inference/expressions.rs:5729` 等 4 处
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3643`、`src/frontend/core/typecheck/inference/expressions.rs:3982`、`src/frontend/core/typecheck/inference/expressions.rs:5966` 等 4 处
 - **源码注释名**：条件必须是布尔类型
 
 ### E1055：约束在非泛型上下文中
@@ -397,7 +397,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **构造函数**：`ErrorCodeDefinition::not_callable(type_)`
 - **模板**：`类型 \`{type}\` 不可调用——它不是函数`
 - **帮助**：只有函数值才能被调用。请检查该位置表达式的类型；若要定义函数，需写 Fn 注解 `f: () -> T = { ... }`。
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:4124`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:4259`
 
 ### E1071：类型定义只能在模块级
 
@@ -407,7 +407,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型定义 '{name}' 只能在模块级（模块顶层）`
 - **消息**：类型定义只能出现在模块顶层
 - **帮助**：将类型定义移到模块顶层
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:5973`、`src/frontend/core/typecheck/inference/statements.rs:1680`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:6210`、`src/frontend/core/typecheck/inference/statements.rs:1713`
 
 ### E1081：`?` 仅允许在返回可传播类型的函数内使用
 
@@ -417,7 +417,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`\`?\` 仅允许在返回实现 \`Try\` 的类型的函数内使用`
 - **消息**：`?` 只能在返回实现 Try 的类型的函数内使用
 - **帮助**：`?` 的失败值要沿函数返回类型传播——返回类型须实现 `Try` 接口（如 `Result(T, E)`）
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3982`、`src/frontend/core/typecheck/inference/expressions.rs:4006`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:4117`、`src/frontend/core/typecheck/inference/expressions.rs:4141`
 - **源码注释名**：`?` 仅允许在返回 Result 的函数内使用
 
 ### E1082：`?` 只能用于实现 Try 的类型
@@ -428,7 +428,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{type}' 未实现 \`Try\` 接口，不能使用 \`?\``
 - **消息**：`?` 只能用于实现 Try 接口的类型的表达式
 - **帮助**：为该类型实现 `Try` 接口四成员（is_failure/success/residual/from_error），或改用 `Result(T, E)`
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3973`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:4108`
 - **源码注释名**：`?` 只能用于 Result 表达式
 
 ### E1083：`?` 的错误类型不匹配
@@ -439,7 +439,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`\`?\` 的错误类型不匹配：期望 '{expected}'，实际 '{found}'`
 - **消息**：`expr?` 的错误类型与外层函数返回类型不匹配
 - **帮助**：请确保当前函数返回类型 `Result[_, E]` 的错误类型 `E` 与被解包的 `Result[_, E]` 的错误类型一致。
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3997`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:4132`
 
 ### E1090：✨ 不可言说 ✨
 
@@ -581,7 +581,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{keyword}' 出现在循环外`
 - **消息**：break/continue 只能在 while/for 循环体内使用
 - **帮助**：把 '{keyword}' 移入 while/for 循环体内
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3590`、`src/frontend/core/typecheck/inference/expressions.rs:3600`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3725`、`src/frontend/core/typecheck/inference/expressions.rs:3735`
 - **源码注释名**：break/continue 出现在循环外（#311：仅 while/for 体内允许循环控制流）
 
 ### E1103：类型位置不能使用方括号
@@ -614,7 +614,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{variant}' 是和类型 '{type}' 的变体构造器，不是数据字段`
 - **消息**：变体构造器只能以 类型.变体(...) 的调用形态使用
 - **帮助**：构造值写 `{type}.{variant}(...)`；从和类型值取回载荷用 match 变体解构（RFC-010b）。和类型的记录字段全部升格为变体，运行时值不携带字段表
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3313`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3448`
 - **源码注释名**：变体构造器被当作字段访问（RFC-010 记录式和类型：变体名升格，
 
 ### E1106：约束未满足
@@ -625,7 +625,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`类型 '{type}' 未实现 \`{interface}\`——泛型参数 \`{param}\` 的约束 \`{param}: {interface}\` 在此调用点不成立`
 - **消息**：类型 '{type}' 未实现接口 '{interface}'（约束 '{param}: {interface}'）
 - **帮助**：为该类型实现对应接口（类型体内写接口实例化并定义方法），或改用已实现该接口的实参
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:4520`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:4702`
 - **源码注释名**：约束未满足（RFC-011 §5.2 调用点复检）
 
 ### E1107：方法重载歧义
@@ -636,7 +636,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`方法重载歧义：'{key}' 有 {count} 个候选匹配且无法区分`
 - **消息**：'{key}' 有 {count} 个候选匹配，无法决议
 - **帮助**：为调用结果添加类型注解（如 `x: T = obj.m()`），或让重载候选的参数类型可区分
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:4775`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:4957`
 - **源码注释名**：方法重载歧义（RFC-011a §3：多候选且无期望类型可区分）
 
 ### E1108：空块落入容器期望位
@@ -647,7 +647,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`此处期望容器类型，但 \`{}\` 是空块（值 Void）`
 - **消息**：`{}` 是空块（值 Void），不是容器字面量
 - **帮助**：B 方案语义（SPEC syntax §1.6.4）：`{}` 是空块，不是空字典。空字典用 `dict.new()`，空列表用 `[]`
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3625`、`src/frontend/core/typecheck/inference/expressions.rs:4413`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3760`、`src/frontend/core/typecheck/inference/expressions.rs:4557`
 - **源码注释名**：空块 `{}` 落入容器期望位（#394：B 方案定案的 `{}` = 空块 Void，
 
 ### E1109：return 出现在函数外
@@ -658,7 +658,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'return' 出现在函数外`
 - **消息**：return 只能在函数体内使用；Script 顶层是模块初始化层，没有函数边界可退
 - **帮助**：把 'return' 移入函数体；Script 模式下顶层语句即程序主体，要提前结束一段顶层逻辑请收进函数、在调用点控制
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3543`、`src/frontend/core/typecheck/inference/statements.rs:1621`、`src/frontend/core/typecheck/inference/statements.rs:1631`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:3678`、`src/frontend/core/typecheck/inference/statements.rs:1654`、`src/frontend/core/typecheck/inference/statements.rs:1664`
 - **源码注释名**：return 出现在函数外（RFC-010a 规则②边界条件：`return` 退出最近的
 
 ### E1110：方法绑定缺少签名标注
@@ -669,7 +669,7 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`'{type}.{method}' 缺少签名标注`
 - **消息**：方法绑定 '{type}.{method}' 没有签名标注，编译器无法确定它的接收者、形参名与返回类型
 - **帮助**：补上签名标注：'{type}.{method}: (self: &{type}, ...) -> 返回类型 = 函数体'；要复用现成函数则写 '{type}.{method}: (…) -> 返回类型 = 函数名[位置]'
-- **发射点**：`src/middle/core/ir_gen.rs:1813`
+- **发射点**：`src/middle/core/ir_gen.rs:1789`
 - **源码注释名**：方法绑定缺少签名标注（WBS 3.13.1 / issue #451，D59 A 类：旧行为是
 
 ### E1111：实参重复占用或顺序非法
@@ -680,5 +680,5 @@ description: '类型检查阶段产生的错误，涵盖类型匹配、模式匹
 - **模板**：`函数 '{func}' 的形参 '{name}' 收到多个实参（或实参顺序非法）`
 - **消息**：同一个形参收到多个实参，或位置实参写在命名实参之后
 - **帮助**：每个形参只能由一个实参填入：位置实参占前导槽位、命名实参按名入槽且必须写在位置实参之后；请去掉多出的那一个，或把位置实参移到最前
-- **发射点**：`src/frontend/core/typecheck/inference/arg_binding.rs:62`、`src/frontend/core/typecheck/inference/arg_binding.rs:102`、`src/middle/core/ir_gen.rs:553` 等 4 处
+- **发射点**：`src/frontend/core/typecheck/inference/arg_binding.rs:62`、`src/frontend/core/typecheck/inference/arg_binding.rs:102`
 - **源码注释名**：一个形参收到多个实参 / 实参顺序非法（#452 复审 F2：争槽位与

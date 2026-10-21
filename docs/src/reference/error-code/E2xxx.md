@@ -60,7 +60,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`重复定义：'{name}' 已在当前作用域中定义`
 - **消息**：变量在同一作用域中定义了多次
 - **帮助**：重命名或删除重复的定义
-- **发射点**：`src/frontend/core/typecheck/checker.rs:1789`、`src/frontend/core/typecheck/inference/expressions.rs:5877`、`src/frontend/core/typecheck/inference/statements.rs:1773` 等 4 处
+- **发射点**：`src/frontend/core/typecheck/checker.rs:1789`、`src/frontend/core/typecheck/inference/expressions.rs:6114`、`src/frontend/core/typecheck/inference/statements.rs:1806` 等 4 处
 
 ### E2003：所有权错误
 
@@ -81,7 +81,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`无法给不可变变量 '{name}' 赋值`
 - **消息**：试图修改不可变变量
 - **帮助**：使用 'mut' 声明可变变量
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:5872`、`src/frontend/core/typecheck/inference/statements.rs:2440`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:6109`、`src/frontend/core/typecheck/inference/statements.rs:2473`
 
 ### E2011：使用未初始化变量
 
@@ -111,7 +111,7 @@ description: '语义分析阶段产生的错误，涵盖作用域、变量生命
 - **模板**：`Cannot shadow existing variable '{name}'`
 - **消息**：不能遮蔽已有变量
 - **帮助**：使用不同的变量名，或在不同的作用域中声明变量
-- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:5882`、`src/frontend/core/typecheck/inference/statements.rs:2454`、`src/frontend/core/typecheck/inference/statements.rs:2527`
+- **发射点**：`src/frontend/core/typecheck/inference/expressions.rs:6119`、`src/frontend/core/typecheck/inference/statements.rs:2487`、`src/frontend/core/typecheck/inference/statements.rs:2560`
 
 ### E2014：使用已移动的值
 

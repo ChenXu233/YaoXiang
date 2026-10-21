@@ -34,7 +34,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`模块 '{module}' 未找到`
 - **消息**：引用的模块不存在
 - **帮助**：检查模块路径，确保它存在
-- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:687`
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:698`
 
 ### E5002：导入错误
 
@@ -54,7 +54,7 @@ description: '模块系统与导入解析相关的错误。'
 - **模板**：`在模块 '{module}' 中找不到导出 '{export}'`
 - **消息**：模块中不存在的导出
 - **帮助**：检查模块的导出
-- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:770`
+- **发射点**：`src/frontend/core/typecheck/inference/statements.rs:781`
 
 ### E5004：循环依赖
 
