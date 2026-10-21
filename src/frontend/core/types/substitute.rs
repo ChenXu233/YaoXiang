@@ -96,9 +96,13 @@ pub fn ctor_head_name(ty: &MonoType) -> Option<String> {
 /// 构造器变量在**应用头部**的替换：把 `F(A)` 的头部名按 `head_map`
 ///（构造器参数名 → 实参构造器名）改写为真实构造器。
 ///
-/// 这是该规则的唯一实现：普通替换（按 TypeVar 或 TypeRef）覆盖不到
-/// `MonoType::Generic` 的头部字符串，而 `F(A)` 的 F 正是声明里绑定的
-/// 构造器变量——只按名在头部替换，不触碰实参位。
+/// 共享实现在此（复审轮 1 F2 校正：此前 `typecheck/environment.rs` 与
+/// `typecheck/inference/expressions.rs` 各有一份内联改名，与当时「只有一处
+/// 实现」的表述不符；历史提交信息不改写，此处按事实更正）。两处调用点现均为
+/// 「先做各自的 TypeRef/变量遍历，再调用本函数」。
+///
+/// 普通替换（按 TypeVar 或 TypeRef）覆盖不到 `MonoType::Generic` 的头部字符串，
+/// 而 `F(A)` 的 F 正是声明里绑定的构造器变量——只按名在头部替换，不触碰实参位。
 pub fn substitute_ctor_heads(
     ty: &MonoType,
     head_map: &HashMap<String, String>,

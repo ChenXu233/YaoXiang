@@ -657,6 +657,10 @@ impl TypeEnvironment {
     }
 
     /// 替换类型参数：将 TypeRef(param_name) 替换为具体的类型实参
+    ///
+    /// 两步合成（复审轮 1 F2）：先做 TypeRef 结构遍历，再对结果按
+    /// 「构造器参数名 → 实参构造器名」改名——头部改名只有共享实现
+    /// `types::substitute::substitute_ctor_heads` 一处，本函数不再内联。
     pub(crate) fn replace_type_params(
         ty: &MonoType,
         param_names: &[String],
@@ -674,15 +678,16 @@ impl TypeEnvironment {
                     .map(|head| (n.clone(), head))
             })
             .collect();
-        Self::replace_type_params_with_heads(ty, param_names, args, &head_map)
+        let walked = Self::replace_type_params_walk(ty, param_names, args);
+        crate::frontend::core::types::substitute::substitute_ctor_heads(&walked, &head_map)
     }
 
-    /// `replace_type_params` 的实现体：额外携带构造器头部改名表。
-    fn replace_type_params_with_heads(
+    /// `replace_type_params` 的结构遍历体：只替换 TypeRef 参数位，
+    /// 头部改名由调用方交给共享实现 `substitute_ctor_heads`（F2）。
+    fn replace_type_params_walk(
         ty: &MonoType,
         param_names: &[String],
         args: &[MonoType],
-        head_map: &HashMap<String, String>,
     ) -> MonoType {
         match ty {
             MonoType::TypeRef(name) => {
@@ -701,12 +706,7 @@ impl TypeEnvironment {
                     .map(|(name, field_ty)| {
                         (
                             name.clone(),
-                            Self::replace_type_params_with_heads(
-                                field_ty,
-                                param_names,
-                                args,
-                                head_map,
-                            ),
+                            Self::replace_type_params_walk(field_ty, param_names, args),
                         )
                     })
                     .collect();
@@ -725,18 +725,16 @@ impl TypeEnvironment {
             } => {
                 let new_params: Vec<MonoType> = params
                     .iter()
-                    .map(|p| Self::replace_type_params_with_heads(p, param_names, args, head_map))
+                    .map(|p| Self::replace_type_params_walk(p, param_names, args))
                     .collect();
-                let new_ret =
-                    Self::replace_type_params_with_heads(return_type, param_names, args, head_map);
+                let new_ret = Self::replace_type_params_walk(return_type, param_names, args);
                 MonoType::Fn {
                     params: new_params,
                     return_type: Box::new(new_ret),
                 }
             }
             MonoType::Generic { name, args } if name == "Range" && args.len() == 1 => {
-                let new_elem =
-                    Self::replace_type_params_with_heads(&args[0], param_names, args, head_map);
+                let new_elem = Self::replace_type_params_walk(&args[0], param_names, args);
                 MonoType::Generic {
                     name: "Range".into(),
                     args: vec![new_elem],
@@ -748,10 +746,10 @@ impl TypeEnvironment {
             } => {
                 let new_args = generic_args
                     .iter()
-                    .map(|a| Self::replace_type_params_with_heads(a, param_names, args, head_map))
+                    .map(|a| Self::replace_type_params_walk(a, param_names, args))
                     .collect();
                 MonoType::Generic {
-                    name: head_map.get(name).cloned().unwrap_or_else(|| name.clone()),
+                    name: name.clone(),
                     args: new_args,
                 }
             }
@@ -760,12 +758,7 @@ impl TypeEnvironment {
             // impl `(self: &Dog)` 比较时 expected 侧内层仍是不变元 → E1099 误报。
             MonoType::Ref { mutable, inner } => MonoType::Ref {
                 mutable: *mutable,
-                inner: Box::new(Self::replace_type_params_with_heads(
-                    inner,
-                    param_names,
-                    args,
-                    head_map,
-                )),
+                inner: Box::new(Self::replace_type_params_walk(inner, param_names, args)),
             },
             _ => ty.clone(),
         }
