@@ -219,7 +219,7 @@ YaoXiang 的每个诊断都带一个稳定码号（如 `E1001`），便于检索
 | `E6010` | 整数解析失败 | std 运行时 | `整数解析失败：{input}` | `src/std/result.rs:28`、`src/std/string.rs:958` |
 | `E6011` | 浮点解析失败 | std 运行时 | `浮点解析失败：{input}` | `src/std/result.rs:29`、`src/std/string.rs:983` 等 3 处 |
 | `E6012` | 码点非法 | std 运行时 | `码点非法：{input}` | `src/std/result.rs:30`、`src/std/string.rs:1028` |
-| `E6013` | JSON 解析失败 | std 运行时 | `JSON 解析失败：{detail}` | `src/std/json.yx:483`、`src/std/result.rs:31` |
+| `E6013` | JSON 解析失败 | std 运行时 | `JSON 解析失败：{detail}` | `src/std/json.yx:485`、`src/std/result.rs:31` |
 
 ## 标记说明
 

@@ -5,7 +5,7 @@
 {"expectation":"behavior","file":"src/std/tests/error_codes.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"src/std/tests/fs_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"src/std/tests/io_ops.yx","run":{"exit":0,"stderr":[],"stdout":["io_ops: print/println smoke"]}}
-{"expectation":"behavior","file":"src/std/tests/json_ops.yx","run":{"exit":0,"stderr":["提示：当前以 script 模式运行（文件不在 yaoxiang 项目内），顶层语句即程序主体，不会自动执行 main。","提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"],"stdout":[]}}
+{"expectation":"behavior","file":"src/std/tests/json_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"src/std/tests/list_item_borrow.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"src/std/tests/list_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"src/std/tests/math_ops.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
