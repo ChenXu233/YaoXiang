@@ -12,6 +12,7 @@
 use crate::frontend::core::lexer::tokens::Literal;
 use crate::frontend::core::parser::ast::{self, Expr};
 use crate::frontend::module::registry::ModuleRegistry;
+use crate::frontend::module::ModuleSource;
 use crate::frontend::module::resolver::Resolver;
 use crate::frontend::module::symbol::{DefKind, SymbolTable};
 use crate::frontend::module::ExportKind;
@@ -795,6 +796,37 @@ impl AstToIrGenerator {
         self.use_aliases
             .get(name)
             .and_then(|qualified| self.global_slot_layout.get(qualified).copied())
+    }
+
+    /// `use lib.{f}` 的别名目标是否**用户模块的导出函数**——即函数表里的代码。
+    ///
+    /// 值路径的别名兜底臂把「不在跨文件值绑定布局里的别名」一律当 native 常量
+    /// 零参调用（`std.math.PI` 即此形态）。但用户模块的函数定义（lambda/块绑定）
+    /// 同样不进值绑定布局——它按名进函数表，是**代码**而不是常量（#479：
+    /// `f = greet` 装进了 greet() 的返回值，f() 得 void）。判据用模块来源把
+    /// std 排除在外，并要求导出类别是 Function：只有这两条同时成立才物化为
+    /// 函数值（MakeClosure，与 `lib.greet` 作值的 #396/#348 表示一致）。
+    ///
+    /// std 函数作值（`use std.io.{println}` + `f = println`）是既有独立形态，
+    /// 本判据**不覆盖**它：`ModuleSource::Std` 排除后仍走原零参调用臂，行为
+    /// 与本修复前逐字节一致（该形态要新诊断码，属独立待裁项）。
+    fn alias_targets_user_function(
+        &self,
+        qualified: &str,
+    ) -> bool {
+        let Some((module_path, export_name)) = qualified.rsplit_once('.') else {
+            return false;
+        };
+        let Some(module) = self.registry.get(module_path) else {
+            return false;
+        };
+        if module.source == ModuleSource::Std {
+            return false;
+        }
+        matches!(
+            module.exports.get(export_name).map(|export| &export.kind),
+            Some(ExportKind::Function)
+        )
     }
 
     /// 查找变量的类型
@@ -6716,14 +6748,29 @@ impl AstToIrGenerator {
                 span: *var_span,
             });
         } else if let Some(alias) = self.use_aliases.get(var_name) {
-            // 别名不落在值绑定布局里 ⇒ std 原生常量（如 PI），按限定名调用 native handler。
-            instructions.push(Instruction::Call {
-                dst: Some(Operand::Local(result_reg)),
-                func: Operand::Const(ConstValue::String(alias.clone())),
-                args: vec![],
-                span: *var_span,
-                def: None,
-            });
+            // 别名不落在值绑定布局里，两种目标必须分开（#479）：
+            // - 用户模块的导出函数是**代码**：物化为 MakeClosure（函数值是一等值）。
+            //   零参 `Call` 会把 greet() 的返回值装进变量——`f = greet` 之后
+            //   `f()` 得 void（静默错值、exit 0）。
+            // - std 原生常量（如 PI）保持零参调用；std 原生函数作值（`f = println`）
+            //   是既有独立形态，本批不动（判据见 alias_targets_user_function）。
+            if self.alias_targets_user_function(alias) {
+                instructions.push(Instruction::MakeClosure {
+                    dst: Operand::Local(result_reg),
+                    func: alias.clone(),
+                    env: vec![],
+                    def: None,
+                    span: *var_span,
+                });
+            } else {
+                instructions.push(Instruction::Call {
+                    dst: Some(Operand::Local(result_reg)),
+                    func: Operand::Const(ConstValue::String(alias.clone())),
+                    args: vec![],
+                    span: *var_span,
+                    def: None,
+                });
+            }
         } else if matches!(
             var_name,
             "Int" | "Float" | "Bool" | "String" | "Char" | "Bytes" | "Type" | "Void" | "Never"
