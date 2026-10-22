@@ -57,6 +57,8 @@ P4「统一 Driver」是全计划最大风险点，本层是 P4 唯一可执行�
 | ref-pool-test-pool | 测试池分离：tests/ 的引用不豁免生产代码（src/）的定义（RFC-029f 改进 5 / WBS 4.9.5） | 行为 |
 | ref-pool-cross-unit-method | 跨单元方法调用的定义单元归因：未被调用的同名同序方法如实报 W1005（WBS 4.9.7 / #464） | 行为 |
 | ref-pool-cross-unit-name-owner | 跨单元方法候选注入面的名字归属过滤：每个裸类型名只由自己的提供模块供候选（WBS 4.9.7 / #464） | 行为 |
+| init-order-entry-reads-dep-value | 初始化按 `use` 依赖拓扑序：入口顶层绑定读**被依赖单元**顶层值（修复前读到 void → 运行期 E6007，#467 / WBS 4.10.4） | 行为 |
+| init-order-dep-fn-reads-own-value | 同上序：入口顶层绑定调用依赖单元的函数，该函数读**本单元**顶层值（修复前运行期 E6007，#467 / WBS 4.10.4） | 行为 |
 
 ## 计划扩展（登记用，落地时勾掉）
 

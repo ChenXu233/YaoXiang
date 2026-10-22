@@ -1,0 +1,19 @@
+// init-order-dep-fn-reads-own-value/main.yx
+// 覆盖: #467（WBS 4.10.4）多文件初始化顺序 —— 依赖单元的函数读**本单元**顶层值
+// 验证: 入口顶层绑定调用 zlib.bump()，bump 读 zlib 自己的 base。修复前 zlib 的
+//       init 段排在入口之后，运行期报 E6007（Add 上 type mismatch，栈顶在
+//       zlib.yx 内）；修复后 bumped = 42，断言通过、退出码 0
+// 状态: ✅ 可运行
+
+use std.assert
+// 同时导入 base：既让断言核对被依赖单元的顶层值，也消除 base 的
+// W1004（同单元内只被 lambda 引用的顶层绑定，跨文件引用才免告警）
+use zlib.{base, bump}
+
+// 入口单元的 init 段：调用被依赖单元的函数（该函数读它自己单元的顶层值）
+bumped: Int = bump()
+
+main = () => {
+    assert.assert(bumped == 42, "zlib.bump() 必须读到 zlib.base=41 并加 1（依赖单元先初始化，#467）")
+    assert.assert(base == 41, "被依赖单元 zlib.base 必须已初始化（#467）")
+}

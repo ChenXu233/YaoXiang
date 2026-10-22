@@ -334,6 +334,8 @@
 {"expectation":"behavior","file":"tests/yaoxiang/99-demos/tree_structure.yx","run":{"exit":0,"stderr":[],"stdout":["30"]}}
 {"expectation":"behavior","file":"tests/yaoxiang-multifile/cross-file-method/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"expectation":"behavior","file":"tests/yaoxiang-multifile/for-loop-no-use-std-list/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/init-order-dep-fn-reads-own-value/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
+{"expectation":"behavior","file":"tests/yaoxiang-multifile/init-order-entry-reads-dep-value/main.yx","run":{"exit":0,"stderr":[],"stdout":[]}}
 {"check":{"diagnostics":[["E0012","tests/yaoxiang-multifile/parse-error-in-collect-all/lib.yx",3],["E5001","tests/yaoxiang-multifile/parse-error-in-collect-all/main.yx",14]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/parse-error-in-collect-all/main.yx"}
 {"check":{"diagnostics":[["E4018","",0],["W1001","tests/yaoxiang-multifile/proof-obligation-honored/main.yx",15],["W1002","tests/yaoxiang-multifile/proof-obligation-honored/main.yx",13]],"exit":1},"expectation":"compile-error","file":"tests/yaoxiang-multifile/proof-obligation-honored/main.yx"}
 {"expectation":"behavior","file":"tests/yaoxiang-multifile/ref-pool-compile-set/main.yx","run":{"exit":0,"stderr":["     │ ^^^^^^","   4 │ helper: () -> Int = () => { return 42 }"," --> tests/yaoxiang-multifile/ref-pool-compile-set/lib.yx:4:1","help: Function is never referenced, consider removing it or adding a call; this warning is not reported when referenced by other files in the package","warning [W1001] unused function: 'helper'"],"stdout":[]}}

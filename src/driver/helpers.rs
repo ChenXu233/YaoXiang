@@ -141,6 +141,192 @@ pub(in crate::driver) fn extract_global_defs(ast: &Module) -> Vec<(String, MonoT
     out
 }
 
+/// 多文件初始化顺序 = `use` 依赖图的**拓扑序**（#467）——返回单元下标的
+/// **全排列**，调用方（Linking 臂）按它拼接各单元的 `ModuleIR.init`。
+///
+/// **依赖边从哪来**：发现期以 **use 路径**作模块键（`orchestrator::discover_with_used`
+/// 的 `key_to_path`），故「单元源码里有 `use X` 且 X 命中某单元的模块键」即一条
+/// 「本单元依赖 X 单元」的边。取边用的是发现期**同一个**词法扫描
+/// `orchestrator::scan_use_refs`：编译集就是沿它的产物 BFS 拉进来的，初始化序
+/// 必须按同一张图排。不用第二套判据（AST 顶层 `StmtKind::Use`）是因为两张图会
+/// 不一致——`use std.{list, test}` 在该扫描里展开成子模块路径
+/// `std.list`/`std.test`，而 AST 顶层只剩前缀 `std`，这类单元就会被漏掉而
+/// 退回发现序，正是本缺陷的形状（「发现包含、排序不含」）。
+///
+/// **顺序判据**（只影响 `init` 段的拼接顺序，不改槽位编号——槽位仍由
+/// `allocate_global_slots` 按发现序分配）：
+/// - 被依赖单元的初始化先于导入它的单元（#467 的修复点）。
+/// - 无依赖边的单元**保持发现顺序**（发现期已按路径字典序排序，见
+///   `orchestrator::discover_with_used` 末尾的 `files.sort_by`）——这是
+///   「无依赖信息时的确定性 tie-break」，不是静默乱序。
+/// - **入口单元最后**：编译集是从入口出发沿 use 边 BFS 得到的（同一函数以入口为
+///   队列种子），故除入口外每个单元都经 use 边从入口可达 ⇒ 拓扑序里它们都在入口
+///   之前。唯一不经 use 边注入的单元是 `std.list`（#117 补齐，只有函数绑定、
+///   `init` 为空），落在哪一侧都不影响语义。
+/// - 模块导入环：Tarjan 求 SCC 后对缩点图拓扑排序；**SCC 内部按路径字典序**。
+///   环内先后在语义上不可判定，此约定只为确定性——**不是语义保证**（环升级为
+///   编译期错误属独立待裁项，本批不新增诊断码）。
+/// - **无依赖信息**的三种情形一律不建边，单元按发现序落位（确定、可复现）：
+///   ① `use` 目标不在单元集——未解析导入由 typecheck 报 E5001，std 原生模块没有
+///   编译期初始化序列；② 单元没有 IR（parse/typecheck 失败）时它不进 `irs`，
+///   没有可排的初始化段；③ 同一文件被两种拼写命中时模块键只记首次（发现期按
+///   canonical 路径去重），第二种拼写不建边。
+pub(in crate::driver) fn init_topological_order(units: &[Unit]) -> Vec<usize> {
+    let n = units.len();
+    if n <= 1 {
+        return (0..n).collect();
+    }
+    // 模块键 → 单元下标：发现期保证模块键与文件一一对应（同键不同文件在发现期
+    // 即报 Ambiguous），这里取首个出现作防御性兜底。
+    let mut key_to_idx: HashMap<&str, usize> = HashMap::with_capacity(n);
+    for (i, unit) in units.iter().enumerate() {
+        key_to_idx.entry(unit.key.as_str()).or_insert(i);
+    }
+    // 依赖边：`dependents[d]` = 直接依赖单元 d 的单元下标（同一单元重复 `use`
+    // 同一路径只记一条边）。
+    let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for (i, unit) in units.iter().enumerate() {
+        // 与发现期同一条扫描：整份源码的 `use` token
+        for use_ref in orchestrator::scan_use_refs(&unit.source) {
+            // 目标不在单元集：不建边（无依赖信息，见函数注释①）
+            let Some(&dep) = key_to_idx.get(use_ref.path.as_str()) else {
+                continue;
+            };
+            if dep != i && !dependents[dep].contains(&i) {
+                dependents[dep].push(i);
+            }
+        }
+    }
+    let mut comps = tarjan_scc(&dependents);
+    // 每个 SCC 的成员按**路径字典序**排序（路径相同再按原下标，保证环内顺序是
+    // 确定性约定，而非发现顺序的偶然产物）。
+    for comp in &mut comps {
+        comp.sort_by(|&a, &b| units[a].path.cmp(&units[b].path).then_with(|| a.cmp(&b)));
+    }
+    let mut comp_of = vec![usize::MAX; n];
+    for (c, members) in comps.iter().enumerate() {
+        for &m in members {
+            comp_of[m] = c;
+        }
+    }
+    // SCC 依赖边（去重）：`comp_deps[c]` = c 直接依赖的 SCC
+    let mut comp_deps: Vec<Vec<usize>> = vec![Vec::new(); comps.len()];
+    for (dep, ds) in dependents.iter().enumerate() {
+        for &i in ds {
+            let (cd, ci) = (comp_of[dep], comp_of[i]);
+            if cd != ci && !comp_deps[ci].contains(&cd) {
+                comp_deps[ci].push(cd);
+            }
+        }
+    }
+    let mut comp_dependents: Vec<Vec<usize>> = vec![Vec::new(); comps.len()];
+    let mut indegree: Vec<usize> = comp_deps.iter().map(|d| d.len()).collect();
+    for (c, deps) in comp_deps.iter().enumerate() {
+        for &d in deps {
+            comp_dependents[d].push(c);
+        }
+    }
+    // 稳定 tie-break：SCC 之间按「SCC 内最小原下标」择先——无依赖关系的单元
+    // 因此保持发现顺序（路径字典序）。
+    let priority: Vec<usize> = comps
+        .iter()
+        .map(|members| members.iter().copied().min().unwrap_or(usize::MAX))
+        .collect();
+    let mut ordered: Vec<usize> = Vec::with_capacity(n);
+    let mut emitted = vec![false; comps.len()];
+    for _ in 0..comps.len() {
+        let next = (0..comps.len())
+            .filter(|&c| !emitted[c] && indegree[c] == 0)
+            .min_by_key(|&c| priority[c]);
+        let Some(c) = next else {
+            // 缩点图是 DAG，理论上必有 in-degree 0 的未处理节点。防御性兜底：
+            // 按优先键追加剩余 SCC，绝不静默丢单元（顺序仍确定、可复现）。
+            debug_assert!(false, "SCC 缩点图出现环（不可达）");
+            let mut rest: Vec<usize> = (0..comps.len()).filter(|&c| !emitted[c]).collect();
+            rest.sort_by_key(|&c| priority[c]);
+            for c in rest {
+                emitted[c] = true;
+                ordered.extend(comps[c].iter().copied());
+            }
+            break;
+        };
+        emitted[c] = true;
+        ordered.extend(comps[c].iter().copied());
+        for &dependent in &comp_dependents[c] {
+            indegree[dependent] -= 1;
+        }
+    }
+    ordered
+}
+
+/// Tarjan 强连通分量（#467 初始化顺序用）——返回每个 SCC 的成员下标。
+///
+/// `dependents[d]` 是「依赖 d 的单元」邻接表；SCC 是互达关系，与边方向无关
+/// （对反向图求 SCC 得到同一组划分），故这里直接用它当 DFS 邻接表。
+fn tarjan_scc(dependents: &[Vec<usize>]) -> Vec<Vec<usize>> {
+    struct Tarjan<'a> {
+        dependents: &'a [Vec<usize>],
+        /// 节点的 DFS 序号（`usize::MAX` = 未访问）
+        index: Vec<usize>,
+        low: Vec<usize>,
+        on_stack: Vec<bool>,
+        stack: Vec<usize>,
+        next_index: usize,
+        comps: Vec<Vec<usize>>,
+    }
+
+    impl Tarjan<'_> {
+        fn visit(
+            &mut self,
+            v: usize,
+        ) {
+            self.index[v] = self.next_index;
+            self.low[v] = self.next_index;
+            self.next_index += 1;
+            self.stack.push(v);
+            self.on_stack[v] = true;
+            for &w in &self.dependents[v] {
+                if self.index[w] == usize::MAX {
+                    self.visit(w);
+                    self.low[v] = self.low[v].min(self.low[w]);
+                } else if self.on_stack[w] {
+                    self.low[v] = self.low[v].min(self.index[w]);
+                }
+            }
+            if self.low[v] == self.index[v] {
+                let mut comp = Vec::new();
+                loop {
+                    let w = self
+                        .stack
+                        .pop()
+                        .expect("Tarjan 栈非空：lowlink == index 的根必有成员");
+                    self.on_stack[w] = false;
+                    comp.push(w);
+                    if w == v {
+                        break;
+                    }
+                }
+                self.comps.push(comp);
+            }
+        }
+    }
+
+    let n = dependents.len();
+    let mut ctx = Tarjan {
+        dependents,
+        index: vec![usize::MAX; n],
+        low: vec![0; n],
+        on_stack: vec![false; n],
+        stack: Vec::new(),
+        next_index: 0,
+        comps: Vec::new(),
+    };
+    while let Some(root) = ctx.index.iter().position(|&idx| idx == usize::MAX) {
+        ctx.visit(root);
+    }
+    ctx.comps
+}
+
 /// 链接多个文件的 `ModuleIR`：拼接函数/全局/FFI，合并 per-function 映射
 /// ——自 orchestrator 移入（4.2.1）。
 ///
@@ -148,9 +334,24 @@ pub(in crate::driver) fn extract_global_defs(ast: &Module) -> Vec<(String, MonoT
 /// 仅当同一限定名出现两次（同名文件重复发现等病态情形）才报错。入口函数：
 /// main 为函数绑定时设 `{entry_key}.main`；值 main 时为 None——程序体就是
 /// 初始化序列（#388 定案：值 main 初始化期求值即执行）。
+///
+/// **两个顺序必须分开**（#467）：
+/// - `irs` 的顺序是**文件表序**（调用方按 `state.units` 给，即发现序）。
+///   `source_files`、`init_file_ids` 的下标空间、`function_files` 的归属值、
+///   全局槽位表都建在它上面——这些是「文件身份」，与执行先后无关；消费方
+///   （debug span 的 file_id、错误定位重建 SourceMap）按同一张表索引，文件表序
+///   一换只会让两侧一起漂。
+/// - `init_order` 是 `init` 段的**执行序**（`use` 依赖拓扑序，见
+///   [`init_topological_order`]），只决定初始化指令的拼接先后：被依赖单元先跑、
+///   导入它的单元后跑。旧实现按文件表序（路径字典序）拼接，入口文件路径排在前面
+///   时，它的顶层绑定初始化会读到被依赖单元尚未写入的槽位（void：静默错值，或
+///   运行期 E6007）。
+///
+/// `init_order` 必须是 `0..irs.len()` 的置换（唯一调用方按构造保证）。
 pub(in crate::driver) fn link_module_irs(
     irs: Vec<(String, ModuleIR)>,
     entry_key: &str,
+    init_order: &[usize],
 ) -> Result<ModuleIR, OrchestratorError> {
     let mut seen: HashMap<String, String> = HashMap::new();
     for (path, ir) in &irs {
@@ -183,21 +384,46 @@ pub(in crate::driver) fn link_module_irs(
             merged.function_files.insert(func.name.clone(), i);
         }
     }
-    for (file_idx, (_, ir)) in irs.into_iter().enumerate() {
+    // 文件级产物按**文件表序**合并；初始化段先摘出来，等下面按执行序拼
+    //（#467：两者的顺序不同，见函数注释）。
+    let mut pending_init = Vec::with_capacity(irs.len());
+    for (_, mut ir) in irs {
         merged.globals.extend(ir.globals);
         merged.functions.extend(ir.functions);
-        // T5：各文件的初始化序列按发现顺序拼接（被依赖模块先于入口文件）。
-        // #368：每条指令记下所属文件——多文件下按它给 debug span 定 file_id，
-        // 否则所有段的错误都指向同一个（错的）文件。
-        merged
-            .init_file_ids
-            .extend(std::iter::repeat_n(file_idx, ir.init.len()));
-        merged.init.extend(ir.init);
-        // 不合并 init_locals：各文件槽位号从 0 起算，直接拼接会错位。
-        // 多文件下顶层只有声明（可执行语句被 E3023 拒），具名局部仅出现在
-        // Script 模式，故此处不需要它。
+        pending_init.push(std::mem::take(&mut ir.init));
+        // 不合并 init_locals：各文件槽位号从 0 起算，直接拼接会错位（它是 init
+        // 序列的局部槽位表，#368 调试视角；多文件下不做重编号合并，本函数不消费）。
         merged.ffi_libs.extend(ir.ffi_libs);
         merged.ffi_bindings.extend(ir.ffi_bindings);
+    }
+    // #467：初始化序列按**执行序**拼接——被依赖单元先于导入它的单元。
+    // #368：每条指令记下所属文件表下标，多文件下按它给 debug span 定 file_id，
+    // 否则所有段的错误都指向同一个（错的）文件；`init_file_ids` 与 `init` 等长。
+    for &file_idx in init_order {
+        let seg = pending_init
+            .get_mut(file_idx)
+            .expect("init_order 必须只引用已链接的文件表下标（调用方契约）");
+        merged
+            .init_file_ids
+            .extend(std::iter::repeat_n(file_idx, seg.len()));
+        merged.init.append(seg);
+    }
+    // 防御网（按构造不可达）：`init_order` 是全排列，上面已把每段各取一次。
+    // 万一将来调用方漏了某个单元，绝不静默丢掉它的初始化——debug 构建下断言
+    // 暴露契约破坏，release 下按发现序把残余段补到尾部（完整优先于顺序完美）。
+    let missing: Vec<usize> = (0..pending_init.len())
+        .filter(|&i| !pending_init[i].is_empty())
+        .collect();
+    debug_assert!(
+        missing.is_empty(),
+        "init_order 必须是 0..irs.len() 的置换：未覆盖文件 {missing:?} 的初始化段"
+    );
+    for file_idx in missing {
+        let seg = &mut pending_init[file_idx];
+        merged
+            .init_file_ids
+            .extend(std::iter::repeat_n(file_idx, seg.len()));
+        merged.init.append(seg);
     }
     // 槽位号已由 allocate_global_slots 全局唯一，此处仅按索引稳定排序，
     // 便于调试与运行时按索引直取。

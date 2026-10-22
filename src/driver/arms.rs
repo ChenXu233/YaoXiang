@@ -28,8 +28,8 @@ use crate::util::span::Span;
 use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::helpers::{
     aggregate_instantiation_requests, allocate_global_slots, ast_has_main,
-    collect_compilation_refs, collect_package_refs, is_bin_role, link_module_irs,
-    merge_embedded_std_ir, resolved_method_marks, role_context,
+    collect_compilation_refs, collect_package_refs, init_topological_order, is_bin_role,
+    link_module_irs, merge_embedded_std_ir, resolved_method_marks, role_context,
 };
 use super::state::{DriverError, SkipReason, SkippedStage, State, UnitState};
 use super::{Aggregation, Driver, ProgramKind, Stage, Unit};
@@ -1436,13 +1436,28 @@ impl Driver {
                 }
             }
         }
+        // #467：初始化序列按 `use` 依赖拓扑序拼接，不按发现序（路径字典序）。
+        // 顺序判据（含「无依赖信息 / 导入环 / 入口最后」的确定性约定）见
+        // helpers::init_topological_order；依赖边取自单元源码里与发现期同一条
+        // use 扫描，与「本臂已消费的 AST」无关，故在 take 各单元 IR 之前求序。
+        let unit_order = init_topological_order(&state.program.units);
         let mut irs: Vec<(String, ModuleIR)> = Vec::new();
+        // 单元下标 → 文件表下标：没有 IR 的单元（parse/typecheck 失败）没有可
+        // 拼接的初始化段，自然不进文件表，也不参与执行序。
+        let mut file_of_unit: Vec<Option<usize>> = vec![None; state.program.units.len()];
         for (i, us) in state.units.iter_mut().enumerate() {
             if let Some(ir) = us.ir.take() {
+                file_of_unit[i] = Some(irs.len());
                 irs.push((state.program.units[i].path.display().to_string(), ir));
             }
         }
-        let mut merged = match link_module_irs(irs, &state.entry_key) {
+        // 拓扑序（单元下标）→ 执行序（文件表下标）：投影是单射，故结果仍是
+        // 0..irs.len() 的置换——link_module_irs 的入参契约（不丢任何初始化段）。
+        let init_order: Vec<usize> = unit_order
+            .iter()
+            .filter_map(|&unit_idx| file_of_unit[unit_idx])
+            .collect();
+        let mut merged = match link_module_irs(irs, &state.entry_key, &init_order) {
             Ok(merged) => merged,
             Err(e) => {
                 state.fail_with(Stage::Linking, e);
