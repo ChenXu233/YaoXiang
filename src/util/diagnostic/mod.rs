@@ -343,11 +343,38 @@ pub fn io_error_reason(e: &std::io::Error) -> String {
     }
 }
 
+/// `run_file_with_diagnostics` 的运行结局。
+///
+/// 「跑完了」与「跑完了但文件绑定的 `main` 一次都没跑」在用户可见行为上不同：
+/// 后者在 rootless 形态（文件不在 yaoxiang 项目内）下是 CI 假成功——顶层语句
+/// 跑了、`main` 的体从未执行（#476）。既有两行提示仍由本模块打印，退出码归
+/// 调用方：CLI 的 `run` 取 1（与「运行期错误 = 1」同族；2 保留给 CLI/配置用法错）。
+///
+/// 不与 `driver::DriverOutcome`、`backends::runtime::TaskOutcome` 复用：前者
+/// 描述 driver 管线进度、后者描述并发任务完成态，都不携带「进程退出码待定」
+/// 这一 CLI 层语义。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunOutcome {
+    /// 程序按其语义跑完，无待上报的结局
+    Completed,
+    /// rootless 形态下定义了 `main` 却未调用（既有两行提示已打印）
+    ScriptMainNeverCalled,
+}
+
+/// 运行文件并美化错误输出
+///
+/// # 参数
+/// - `file`: 源文件路径
+///
+/// # 返回
+/// 成功返回本次运行的结局 [`RunOutcome`]（rootless 形态下「定义了 `main` 却未调用」
+/// 的提示已在本函数内打印，调用方只需据此决定退出码，见 #476）；失败返回错误
+/// （错误文本已渲染或包装完毕）。
 pub fn run_file_with_diagnostics(
     file: &std::path::PathBuf,
     runtime_mode: &str,
     workers: usize,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<RunOutcome> {
     use crate::middle::passes::codegen::CodegenContext;
 
     // 通过文件头魔数判定字节码 vs 源码
@@ -361,7 +388,9 @@ pub fn run_file_with_diagnostics(
         // #327：贯通 debug_section.sources——带 --debug-info 构建的 .42 直跑时
         // 也能渲染栈帧源码上下文；无 DebugSection 时为 None，行为同前
         let debug_sources = bytecode_module.debug_sources.as_ref();
-        return exec_module(&bytecode_module, runtime_mode, workers, debug_sources);
+        exec_module(&bytecode_module, runtime_mode, workers, debug_sources)?;
+        // .42 直跑没有源码单元，也就没有「rootless 定义 main 未调用」这一形态
+        return Ok(RunOutcome::Completed);
     }
 
     let source = match std::fs::read_to_string(file) {
@@ -401,6 +430,8 @@ pub fn run_file_with_diagnostics(
     // 逐文件通道，本函数只做输出，不做任何过滤判决。
     emit_compile_warnings(&warnings);
 
+    let mut outcome = RunOutcome::Completed;
+
     {
         // #413：Script 模式（项目外单文件）不自动执行 main——T4 决议
         // （codegen find_entry_point）：无 manifest 就没有入口概念，顶层
@@ -420,6 +451,9 @@ pub fn run_file_with_diagnostics(
             eprintln!(
                     "提示：文件中定义的 main 未被调用——如需运行，请在文件中显式调用 main()，或使用 `yaoxiang init` 建项目后运行。"
                 );
+            // #476（D 类对外面，取值 1）：只把结局交给调用方定退出码——文案不动、
+            // 不新增第二条诊断，进程内已打印的仍是上面两行
+            outcome = RunOutcome::ScriptMainNeverCalled;
         }
         // 多文件模式（#252）：按 orchestrator 发现顺序重建 SourceMap，
         // 使索引与 debug span 的 file_id 对齐。读不到文件也要占位，保持索引稳定。
@@ -453,7 +487,7 @@ pub fn run_file_with_diagnostics(
         exec_module(&bytecode_module, runtime_mode, workers, Some(&sources))?;
     }
 
-    Ok(())
+    Ok(outcome)
 }
 
 /// 限定名形态下 main 的函数键（`{entry_key}.main`）——4.10.3 统一编排后
