@@ -836,4 +836,6 @@
 >
 > **五、CI 证据（AGENTS.md 第 13 条①，定时核对回填）**：修复笔 `c7a0dd417` → CI run **39626722284 success**；前一笔 `fff9580f8` → CI run **39623038087 failure**（红在新增的「Check doc references are resolvable」，即上述平台差异，已由 `c7a0dd417` 修掉），同笔 Deploy Docs **39623038228 success**、Auto Translate Docs **39623038027 success**；更早各笔（`ec2893e0d` / `ff2104b0c` / `ffd43b1d0`）的 CI run 因连推被 concurrency **cancelled**（39621547581 / 39620372322 / 39619834870），按「以后代 run 的结论覆盖前一笔」取结论。
 >
+> **五之二、本节入库那笔的 CI 证据（2026-10-22 定时核对回填）**：本节入库笔 `612c65322` → CI run **39798235412 success**（7 个 job 全绿，含新增的「Check doc references are resolvable」与「Error-code docs up to date」两步）、Deploy Docs **39798235484 success**；同笔 Auto Translate Docs **39798235413 failure**，失败在最后一步「Commit translations」——翻译本身成功（Translate documents / Format / Lint 均 success），但推送时远端已被本批的代码提交与 bot 自己前一笔自动翻译提交推进，`git pull --rebase` + `git push` 被挡下，**结果是本文的 en 镜像尚未含本节**（zh 为唯一源；下一次触及 `docs/src/**/*.md` 的推送会再次触发该工作流补译）。并行的 4 笔 bugfix（`eb4124cf0` / `14e9b2704` / `96638ec9f` / `06ac6d687`）的 CI run **39797917813 cancelled**（连推被 concurrency 取消），按「以后代 run 的结论覆盖前一笔」取结论。
+>
 > **六、登记口径**：本节是**文档治理**记录，不新增 WBS 看板行，`09` 顶部计数表不变。
