@@ -19,6 +19,7 @@ use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::{self, FileRole};
 use crate::frontend::module::ModuleSource;
 use crate::frontend::pipeline::PipelineError;
+use crate::middle::core::ir::{Instruction, Operand};
 use crate::middle::core::ir_gen::AstToIrGenerator;
 use crate::middle::passes::mono::Monomorphizer;
 use crate::middle::ModuleIR;
@@ -29,7 +30,8 @@ use super::obligations::{Obligation, IR_GENERATION_DELIVERED};
 use super::helpers::{
     aggregate_instantiation_requests, allocate_global_slots, ast_has_main,
     collect_compilation_refs, collect_package_refs, init_topological_order, is_bin_role,
-    link_module_irs, merge_embedded_std_ir, resolved_method_marks, role_context,
+    link_module_irs, merge_embedded_std_ir, resolved_method_marks, role_context, ImportCycle,
+    InitOrder,
 };
 use super::state::{DriverError, SkipReason, SkippedStage, State, UnitState};
 use super::{Aggregation, Driver, ProgramKind, Stage, Unit};
@@ -1440,7 +1442,12 @@ impl Driver {
         // 顺序判据（含「无依赖信息 / 导入环 / 入口最后」的确定性约定）见
         // helpers::init_topological_order；依赖边取自单元源码里与发现期同一条
         // use 扫描，与「本臂已消费的 AST」无关，故在 take 各单元 IR 之前求序。
-        let unit_order = init_topological_order(&state.program.units);
+        // #491：本函数同时给出导入环（成员数 ≥2 的强连通分量）——环的检出就是
+        // 4.10.4 已经在做的那次 Tarjan SCC，Linking 臂只消费、不另建判据。
+        let InitOrder {
+            order: unit_order,
+            import_cycles,
+        } = init_topological_order(&state.program.units);
         let mut irs: Vec<(String, ModuleIR)> = Vec::new();
         // 单元下标 → 文件表下标：没有 IR 的单元（parse/typecheck 失败）没有可
         // 拼接的初始化段，自然不进文件表，也不参与执行序。
@@ -1464,6 +1471,17 @@ impl Driver {
                 return;
             }
         };
+        // #491 / W1007：模块导入环**不得静默**（用户 2026-10-23 裁决 A）。事实来源 =
+        // 上面那次 SCC（本处不新增环检测），精确信息取自刚拼好的 merged IR 的
+        // init 段。警告落逐文件收集通道（与 W1006/W1003 同一 sink，3.4.6）：环诊断
+        // 带 `use` 语句 span，故不需要 span 豁免。
+        warn_import_cycles(
+            &state.program.units,
+            &merged,
+            &import_cycles,
+            &file_of_unit,
+            &mut state.units,
+        );
         // #413 / 4.10.3：entry_function 按 is_bin_role 门控——Script（无项目根）
         // 无入口概念（顶层语句即程序主体），自动调 main 会与显式 main() 双跑
         //（#356）。link_module_irs 只看绑定存在性、不看角色；角色门控归本臂
@@ -1618,4 +1636,185 @@ fn visible_method_overloads(
         }
     }
     merged
+}
+
+// ---------------------------------------------------------------------------
+// #491 / W1007：模块导入环告警
+// ---------------------------------------------------------------------------
+
+/// 环内「读未初始化顶层值」的值边（#491 的精确信息，可选）。
+struct CycleViolation {
+    /// 读侧单元（`init` 段里 `Load{src: Global(k)}` 的所属单元）
+    reader: usize,
+    /// 写侧单元（槽位 k 的首条 `Store` 的所属单元，即槽位所有者）
+    owner: usize,
+    /// 被读槽的限定名（`GlobalSlot.name`，多文件下形如 `zother.o_val`）
+    slot: String,
+}
+
+/// 把导入环写成 W1007 并落逐文件收集通道（#491）。
+///
+/// 判据（用户 2026-10-23 裁决 A）：
+/// - **底线是「存在环」**——`cycles` 非空就报，不看本次运行是否真的读到未
+///   初始化值（那是运行期 E6007 的事，两者不是同一判据）；
+/// - 环信息来自 4.10.4 的 Tarjan SCC（`init_topological_order` 出参），本函数
+///   **不做环检测**，也不新造通道（sink = `UnitState.check_diagnostics`，与
+///   W1003/W1006 同一处）；
+/// - 精确信息（可选）：环内读侧 `Load{src: Global(k)}` 早于该槽位首条
+///   `Store{dst: Global(k)}` 且读写跨单元时，把「被违反的边 + 被读槽名」并入
+///   **同一诊断**的 help——同一码、同一发射点，不新增第二个 W 码。
+///
+/// 每个环只报一条（锚在环内一条真实 `use` 边，有值边时优先锚被违反的那条）：
+/// 环是**多文件共同**的事实，按环报一次即可；逐文件重报同一环只是把同一句话
+/// 抄 N 份，还会把警告计数放大成环长的函数。
+fn warn_import_cycles(
+    units: &[Unit],
+    merged: &ModuleIR,
+    cycles: &[ImportCycle],
+    file_of_unit: &[Option<usize>],
+    unit_states: &mut [UnitState],
+) {
+    if cycles.is_empty() {
+        return;
+    }
+    // 文件表下标 → 单元下标（`file_of_unit` 的逆映射；Linking 臂按构造是单射）
+    let mut unit_of_file: Vec<usize> = vec![usize::MAX; merged.source_files.len()];
+    for (unit_idx, file_idx) in file_of_unit.iter().enumerate() {
+        if let Some(file) = *file_idx {
+            if let Some(slot) = unit_of_file.get_mut(file) {
+                *slot = unit_idx;
+            }
+        }
+    }
+    // init 段单趟：各槽位的**首条写**下标 + 全部读（#491 值边扫描的数据面）
+    let mut first_store: HashMap<usize, usize> = HashMap::new();
+    let mut loads: Vec<(usize, usize)> = Vec::new(); // (init 下标, 槽位号)
+    for (idx, instr) in merged.init.iter().enumerate() {
+        match instr {
+            Instruction::Store {
+                dst: Operand::Global(slot),
+                ..
+            } => {
+                first_store.entry(*slot).or_insert(idx);
+            }
+            Instruction::Load {
+                src: Operand::Global(slot),
+                ..
+            } => loads.push((idx, *slot)),
+            _ => {}
+        }
+    }
+
+    for cycle in cycles {
+        let violation =
+            find_cycle_value_violation(cycle, merged, &first_store, &loads, &unit_of_file);
+        // 锚点：优先被违反的边（写侧导入读侧——正是它把读侧排到前面），否则
+        // 环内首条 `use` 边（任一成员都真实参与环）
+        let anchor = violation
+            .as_ref()
+            .and_then(|v| {
+                cycle
+                    .edges
+                    .iter()
+                    .find(|e| e.importer == v.owner && e.imported == v.reader)
+            })
+            .or_else(|| cycle.edges.first());
+        let Some(anchor) = anchor else {
+            continue; // 无 `use` 边不可能成环（防御：边集与 SCC 同源）
+        };
+        let builder =
+            ErrorCodeDefinition::module_import_cycle(&cycle_text(units, cycle)).at(anchor.span);
+        let diagnostic = match &violation {
+            Some(v) => builder.with_help(cycle_value_help(units, v)).build(),
+            None => builder.build(),
+        };
+        if let Some(us) = unit_states.get_mut(anchor.importer) {
+            us.check_diagnostics.push(diagnostic);
+        }
+    }
+}
+
+/// 环内值边的单趟比对：读下标早于该槽位首条写下标，且读写分属环内两个单元。
+///
+/// 取**首个**命中的读（按 init 序）——同一环里多个值边违反是同一个结构事实，
+/// 一次说清一条即可，不必把整条 init 序抄进诊断。
+fn find_cycle_value_violation(
+    cycle: &ImportCycle,
+    merged: &ModuleIR,
+    first_store: &HashMap<usize, usize>,
+    loads: &[(usize, usize)],
+    unit_of_file: &[usize],
+) -> Option<CycleViolation> {
+    let unit_of_init = |idx: usize| -> Option<usize> {
+        let file = *merged.init_file_ids.get(idx)?;
+        unit_of_file.get(file).copied().filter(|&u| u != usize::MAX)
+    };
+    for &(load_idx, slot) in loads {
+        let Some(&store_idx) = first_store.get(&slot) else {
+            continue;
+        };
+        // 写先于读 = 这个序是对的；只有「读早于首条写」才是事实
+        if store_idx <= load_idx {
+            continue;
+        }
+        let (Some(reader), Some(owner)) = (unit_of_init(load_idx), unit_of_init(store_idx)) else {
+            continue;
+        };
+        // 跨单元才谈得上「导入环造成的序矛盾」：同单元内读写先后属该单元自己的
+        // init 序（#467 的另一面，不是环）
+        if reader == owner || !cycle.path.contains(&reader) || !cycle.path.contains(&owner) {
+            continue;
+        }
+        let slot = merged
+            .globals
+            .iter()
+            .find(|g| g.index == slot)
+            .map(|g| g.name.clone())
+            .unwrap_or_else(|| format!("#{slot}"));
+        return Some(CycleViolation {
+            reader,
+            owner,
+            slot,
+        });
+    }
+    None
+}
+
+/// 环路径文案：`a → b → a`（`use` 方向，末项回到首项）。
+fn cycle_text(
+    units: &[Unit],
+    cycle: &ImportCycle,
+) -> String {
+    let mut names: Vec<&str> = cycle
+        .path
+        .iter()
+        .map(|&i| units.get(i).map(|u| u.key.as_str()).unwrap_or("?"))
+        .collect();
+    let Some(&first) = names.first() else {
+        return String::new();
+    };
+    names.push(first);
+    names.join(" → ")
+}
+
+/// 值边命中时的 help：把「被违反的边 + 被读槽名」写进同一诊断。
+///
+/// 与既有 `with_help` 调用点同款（typecheck / obligations）：补充句由构造点
+/// 给出，模板与通用 help 仍由 locales 提供——同一事实不新增码，也不新增字段。
+fn cycle_value_help(
+    units: &[Unit],
+    violation: &CycleViolation,
+) -> String {
+    let key = |i: usize| units.get(i).map(|u| u.key.as_str()).unwrap_or("?");
+    format!(
+        "环内值依赖与 use 顺序相反：{} 读取 {} 时 {} 尚未初始化（被违反的边：{} 导入 {}，\
+         拓扑序据此把 {} 排在前面）。初始化顺序按 use 依赖排，环内无法同时满足值依赖——\
+         打破环，或把该顶层值改为函数延迟求值",
+        key(violation.reader),
+        violation.slot,
+        key(violation.owner),
+        key(violation.owner),
+        key(violation.reader),
+        key(violation.reader),
+    )
 }

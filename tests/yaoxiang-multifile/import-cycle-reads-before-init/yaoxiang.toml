@@ -1,0 +1,3 @@
+[package]
+name = "import-cycle-reads-before-init"
+version = "0.1.0"

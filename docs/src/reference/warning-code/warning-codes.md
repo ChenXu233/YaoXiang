@@ -7,7 +7,7 @@ description: '编译器警告码及说明'
 
  本页由 `scripts/docs/gen-error-code-docs.py` 从 `src/util/diagnostic/codes/` 的 `define_codes!` 注册表与 `locales/zh.json` 生成，请勿手工编辑。改文案请改 `locales/*.json`，改码表请改 `define_codes!`，然后重跑 `python scripts/docs/gen-error-code-docs.py`。
 
-警告码以 `W` 开头，不会阻止编译，但提示代码中可能存在的问题。当前注册表共 **11** 个警告码，完整索引见[错误码首页](../error-code/index.md)。
+警告码以 `W` 开头，不会阻止编译，但提示代码中可能存在的问题。当前注册表共 **12** 个警告码，完整索引见[错误码首页](../error-code/index.md)。
 
 ## 配置
 
@@ -33,6 +33,7 @@ dead-code = "warn"
 | `W1004` | 未使用的私有变量 | 否 | `未使用的变量：'{name}'` | ✅ 1 处 |
 | `W1005` | 未使用的私有方法 | 否 | `未使用的方法：'{name}'` | ✅ 1 处 |
 | `W1006` | 本地模块遮蔽依赖包 | 否 | `本地模块 '{module}' 遮蔽了依赖包 '{dependency}'` | ✅ 2 处 |
+| `W1007` | 模块导入环 | 否 | `模块导入环 {cycle}：环内初始化顺序不可判定，读取尚未初始化的顶层值会在运行期报 E6007` | ✅ 1 处 |
 | `W1063` | const 泛型约束无法求值 | 否 | `const 泛型约束无法求值: \`{constraint}\`` | ✅ 1 处 |
 | `W1080` | 编译期证明降级 | 否 | `编译期无法证明约束，已降级为运行时检查` | ⚠ 暂未发射 |
 | `W1081` | 终止性义务未判定 | 否 | `{count} 条终止性测度义务未判定（SMT 求解器不可用）` | ✅ 1 处 |
@@ -87,7 +88,15 @@ dead-code = "warn"
 - **span 豁免**：否
 - **模板**：`本地模块 '{module}' 遮蔽了依赖包 '{dependency}'`
 - **帮助**：本地模块解析优先级最高（RFC-014）：'./src/{module}' 覆盖 .yaoxiang/vendor/ 中的依赖包 '{dependency}'。若遮蔽非本意请重命名本地模块；可用 --deny-shadowing 将其升级为错误
-- **发射点**：`src/driver/arms.rs:640`、`src/util/diagnostic/command.rs:78`
+- **发射点**：`src/driver/arms.rs:642`、`src/util/diagnostic/command.rs:78`
+
+### W1007：模块导入环
+
+- **类别**：`Warning`
+- **span 豁免**：否
+- **模板**：`模块导入环 {cycle}：环内初始化顺序不可判定，读取尚未初始化的顶层值会在运行期报 E6007`
+- **帮助**：初始化顺序按 use 依赖的拓扑序决定；环内先后只有「环内路径字典序」这一确定性约定，不是语义保证。打破环（把环上某条 use 移出环，或改为函数体里的延迟求值）即可让初始化顺序可判定。与 E3019 的分工：E3019 判单元内顶层绑定之间的初始化成环，本码判模块之间的导入成环。
+- **发射点**：`src/driver/arms.rs:1726`
 
 ### W1063：const 泛型约束无法求值
 

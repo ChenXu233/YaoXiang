@@ -20,6 +20,7 @@ use crate::frontend::module::symbol::SymbolTable;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::middle::ModuleIR;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
+use crate::util::span::Span;
 
 // manifest 解析依赖 package 模块（wasm32 下不编译）——角色上下文在 wasm 降级
 #[cfg(not(target_arch = "wasm32"))]
@@ -164,17 +165,22 @@ pub(in crate::driver) fn extract_global_defs(ast: &Module) -> Vec<(String, MonoT
 ///   之前。唯一不经 use 边注入的单元是 `std.list`（#117 补齐，只有函数绑定、
 ///   `init` 为空），落在哪一侧都不影响语义。
 /// - 模块导入环：Tarjan 求 SCC 后对缩点图拓扑排序；**SCC 内部按路径字典序**。
-///   环内先后在语义上不可判定，此约定只为确定性——**不是语义保证**（环升级为
-///   编译期错误属独立待裁项，本批不新增诊断码）。
+///   环内先后在语义上不可判定，此约定只为确定性——**不是语义保证**。该事实
+///   不再静默（#491）：成员数 ≥2 的 SCC 一并经 `import_cycles` 出参，由
+///   Linking 臂发 W1007（用户 2026-10-23 裁决 A）；本函数仍是**唯一检出点**。
 /// - **无依赖信息**的三种情形一律不建边，单元按发现序落位（确定、可复现）：
 ///   ① `use` 目标不在单元集——未解析导入由 typecheck 报 E5001，std 原生模块没有
 ///   编译期初始化序列；② 单元没有 IR（parse/typecheck 失败）时它不进 `irs`，
 ///   没有可排的初始化段；③ 同一文件被两种拼写命中时模块键只记首次（发现期按
 ///   canonical 路径去重），第二种拼写不建边。
-pub(in crate::driver) fn init_topological_order(units: &[Unit]) -> Vec<usize> {
+pub(in crate::driver) fn init_topological_order(units: &[Unit]) -> InitOrder {
     let n = units.len();
     if n <= 1 {
-        return (0..n).collect();
+        // 单单元程序没有导入边，检出面为空（#491 的 W1007 恒不发射）
+        return InitOrder {
+            order: (0..n).collect(),
+            import_cycles: Vec::new(),
+        };
     }
     // 模块键 → 单元下标：发现期保证模块键与文件一一对应（同键不同文件在发现期
     // 即报 Ambiguous），这里取首个出现作防御性兜底。
@@ -185,6 +191,10 @@ pub(in crate::driver) fn init_topological_order(units: &[Unit]) -> Vec<usize> {
     // 依赖边：`dependents[d]` = 直接依赖单元 d 的单元下标（同一单元重复 `use`
     // 同一路径只记一条边）。
     let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); n];
+    // #491：同一趟里记下每条边的源码位置（`use` 关键字到路径末段）——W1007
+    // 要落在真实语句上。去重判据与 `dependents` 完全同一处（同一导入方重复
+    // `use` 同一目标只留首条），不另建一套边集。
+    let mut edges: Vec<ImportEdge> = Vec::new();
     for (i, unit) in units.iter().enumerate() {
         // 与发现期同一条扫描：整份源码的 `use` token
         for use_ref in orchestrator::scan_use_refs(&unit.source) {
@@ -194,6 +204,11 @@ pub(in crate::driver) fn init_topological_order(units: &[Unit]) -> Vec<usize> {
             };
             if dep != i && !dependents[dep].contains(&i) {
                 dependents[dep].push(i);
+                edges.push(ImportEdge {
+                    importer: i,
+                    imported: dep,
+                    span: use_ref.span,
+                });
             }
         }
     }
@@ -203,6 +218,28 @@ pub(in crate::driver) fn init_topological_order(units: &[Unit]) -> Vec<usize> {
     for comp in &mut comps {
         comp.sort_by(|&a, &b| units[a].path.cmp(&units[b].path).then_with(|| a.cmp(&b)));
     }
+    // #491：成员数 ≥2 的 SCC 即导入环（`dep != i` 已排除自环——单元导入自己
+    // 不是环，见上方无依赖信息来源①）。环的**检出**就在 `tarjan_scc`，这里只把
+    // 它写成可读的路径与边，供 Linking 臂发射 W1007；不新增第二份环检测。
+    let mut import_cycles: Vec<ImportCycle> = comps
+        .iter()
+        .filter(|comp| comp.len() >= 2)
+        .map(|comp| {
+            // 环内边：两端都落在同一分量里（跨分量的边属缩点图，与环无关）
+            let cycle_edges: Vec<ImportEdge> = edges
+                .iter()
+                .filter(|e| comp.contains(&e.importer) && comp.contains(&e.imported))
+                .copied()
+                .collect();
+            ImportCycle {
+                path: cycle_path(comp, &cycle_edges),
+                edges: cycle_edges,
+            }
+        })
+        .collect();
+    // 确定性：环按「环内首单元（分量内路径字典序最小者）」排序，与拓扑序的
+    // tie-break 同源，不看 Tarjan 的产出顺序
+    import_cycles.sort_by_key(|c| c.path.first().copied().unwrap_or(usize::MAX));
     let mut comp_of = vec![usize::MAX; n];
     for (c, members) in comps.iter().enumerate() {
         for &m in members {
@@ -256,7 +293,100 @@ pub(in crate::driver) fn init_topological_order(units: &[Unit]) -> Vec<usize> {
             indegree[dependent] -= 1;
         }
     }
-    ordered
+    InitOrder {
+        order: ordered,
+        import_cycles,
+    }
+}
+
+/// 初始化序产物（#467 拓扑序 + #491 导入环）。
+///
+/// 两个字段是**同一份** Tarjan SCC 结果的两个视图：`order` 是拼接各单元
+/// `init` 段用的全排列，`import_cycles` 是其中成员数 ≥2 的强连通分量。
+/// **环检测只有这一处**（4.10.4 起即如此），消费方不得另建判据。
+pub(in crate::driver) struct InitOrder {
+    /// 单元下标的全排列（调用方按它拼接各单元的 `ModuleIR.init`）。
+    pub order: Vec<usize>,
+    /// 导入环，按「环内首单元」排序（确定性）。
+    pub import_cycles: Vec<ImportCycle>,
+}
+
+/// 一个模块导入环（#491）：成员之间互有导入路径的强连通分量。
+///
+/// 环内先后**不可判定**——本结构只陈述这个事实，不改初始化顺序（顺序仍是
+/// 上方拓扑序的路径字典序 tie-break）。
+pub(in crate::driver) struct ImportCycle {
+    /// 环路径，**按 `use` 方向**（`a → b` 表示 a 导入 b），首尾相接：
+    /// 末项导入首项。由 SCC 内 BFS 重建——SCC 只保证「存在环」，路径要写出来
+    /// 才可读；拿成员下标排序冒充会印出并不存在的边。
+    pub path: Vec<usize>,
+    /// 环内的 `use` 边（含源码 span），W1007 的定位取自这里。
+    pub edges: Vec<ImportEdge>,
+}
+
+/// 环内的一条 `use` 边：`importer` 导入 `imported`。
+///
+/// `span` 是 `use` 关键字到路径末段的源码位置（`UsePathRef.span`）——
+/// 用户能指着的那一行，环诊断因此不必走 span 豁免。
+#[derive(Debug, Clone, Copy)]
+pub(in crate::driver) struct ImportEdge {
+    pub importer: usize,
+    pub imported: usize,
+    pub span: Span,
+}
+
+/// 在 SCC 内重建一条**真实**的环路径（#491）：从分量首单元（路径字典序最小）
+/// 出发，沿「导入方 → 被导入方」边 BFS，找到第一个「有边指回起点」的节点，
+/// 路径 = 起点到它的 BFS 树路径，环由调用方补末项（回到起点）。
+///
+/// SCC 保证强连通，故指回起点的那条边必然存在；BFS 树路径保证路径简单
+/// （无重复节点）。本函数**只做呈现**：环的存在性由 `tarjan_scc` 判定，
+/// 它不参与检出判据（否则就是第二份环检测）。
+fn cycle_path(
+    members: &[usize],
+    edges: &[ImportEdge],
+) -> Vec<usize> {
+    let Some(&start) = members.first() else {
+        return Vec::new();
+    };
+    let mut parent: HashMap<usize, usize> = HashMap::new();
+    let mut visited: HashSet<usize> = HashSet::new();
+    let mut queue: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+    visited.insert(start);
+    queue.push_back(start);
+    let mut closing: Option<usize> = None;
+    while let Some(u) = queue.pop_front() {
+        // 出边按 `edges` 的收集序（= 单元序 × 源码 `use` 序），确定性
+        let nexts: Vec<usize> = edges
+            .iter()
+            .filter(|e| e.importer == u && members.contains(&e.imported))
+            .map(|e| e.imported)
+            .collect();
+        for v in nexts {
+            if v == start {
+                closing = Some(u);
+                break;
+            }
+            if visited.insert(v) {
+                parent.insert(v, u);
+                queue.push_back(v);
+            }
+        }
+        if closing.is_some() {
+            break;
+        }
+    }
+    // 防御：SCC 强连通 ⇒ 必然找到回边；找不到时退化为单点路径，绝不 panic
+    let Some(mut node) = closing else {
+        return vec![start];
+    };
+    let mut path = vec![node];
+    while let Some(&p) = parent.get(&node) {
+        path.push(p);
+        node = p;
+    }
+    path.reverse();
+    path
 }
 
 /// Tarjan 强连通分量（#467 初始化顺序用）——返回每个 SCC 的成员下标。

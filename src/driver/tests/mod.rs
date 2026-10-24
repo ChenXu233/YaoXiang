@@ -4,6 +4,7 @@ mod check_rootless_mono;
 mod codegen_init_calls;
 mod driver;
 mod helpers;
+mod import_cycle;
 mod lsp_semantic_db;
 mod method_unused;
 mod mono_cross_unit;
