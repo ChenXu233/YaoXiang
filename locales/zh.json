@@ -1196,9 +1196,9 @@
   "W1007": {
     "title": "模块导入环",
     "message": "编译集的模块之间存在导入环，环内初始化顺序不可判定",
-    "template": "模块导入环 {cycle}：环内初始化顺序不可判定，读取尚未初始化的顶层值会在运行期报 E6007",
+    "template": "模块导入环 {cycle}：环内初始化顺序不可判定，环内先后只按路径字典序作确定性约定（非语义保证）",
     "help": "初始化顺序按 use 依赖的拓扑序决定；环内先后只有「环内路径字典序」这一确定性约定，不是语义保证。打破环（把环上某条 use 移出环，或改为函数体里的延迟求值）即可让初始化顺序可判定。与 E3019 的分工：E3019 判单元内顶层绑定之间的初始化成环，本码判模块之间的导入成环。",
-    "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：两模块互相导入，谁先初始化都读不到对方",
-    "error_output": "warning[W1007]: 模块导入环 zlib → zother → zlib：环内初始化顺序不可判定，读取尚未初始化的顶层值会在运行期报 E6007\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: 环内值依赖与 use 顺序相反：zlib 读取 zother.o_val 时 zother 尚未初始化（被违反的边：zother 导入 zlib，拓扑序据此把 zlib 排在前面）。初始化顺序按 use 依赖排，环内无法同时满足值依赖——打破环，或把该顶层值改为函数延迟求值"
+    "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：两模块互相导入，环内先后只按路径字典序约定",
+    "error_output": "warning[W1007]: 模块导入环 zlib → zother → zlib：环内初始化顺序不可判定，环内先后只按路径字典序作确定性约定（非语义保证）\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: 环内值依赖与 use 顺序相反：zlib 读取 zother.o_val 时 zother 尚未初始化（被违反的边：zother 导入 zlib，拓扑序据此把 zlib 排在前面）。初始化顺序按 use 依赖排，环内无法同时满足值依赖——打破环，或把该顶层值改为函数延迟求值"
   }
 }

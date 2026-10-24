@@ -148,6 +148,59 @@ fn test_multifile_import_cycle_reports_violated_value_edge() {
     );
 }
 
+/// 良性环（只互导函数、无值边）⟹ 基础消息**不预判运行期后果**（复审 F3）。
+///
+/// 判据：基础消息只陈述确定事实（存在环 / 环路径 / 环内初始化顺序不可判定），
+/// 不得让用户以为自己的程序会崩——该形状实测 `run` 退出 0、零 E6007。具体后果只在
+/// **确有值边且读早于写**时由 help 给出（见
+/// test_multifile_import_cycle_reports_violated_value_edge）。
+#[test]
+fn test_multifile_benign_import_cycle_message_predicts_no_runtime_failure() {
+    // Arrange：两模块互导**函数**（无顶层值 ⇒ 无值边；环是良性的）
+    let a = "use b.{bee}\n\naye: () -> Int = () => bee()\n";
+    // b 只 `use` a 的函数、自身不再回调 a：环来自导入图（不是运行期递归），
+    // 故该形状在 CLI 上 run 退出 0、零 E6007——正是 F3 说的「良性环」。
+    let b = "use a.{aye}\n\nbee: () -> Int = () => 1\n";
+    let main = "use a.{aye}\n\nmain = () => {\n    x = aye()\n}\n";
+    let (_dir, entry) = make_script_project(&[("a.yx", a), ("b.yx", b), ("main.yx", main)]);
+
+    // Act
+    let outcome = run_multi(&entry).expect("MultiFile 形态必须返回产物");
+
+    // Assert：恰一条 W1007，确定事实齐全，且无任何运行期后果预判
+    let cycles = diagnostics_with_code(&outcome, "W1007");
+    assert_eq!(
+        cycles.len(),
+        1,
+        "良性环也必须报且只报一条 W1007（存在环即报是底线）：{:?}",
+        cycles
+            .iter()
+            .map(|(p, d)| (p.display().to_string(), d.message.clone(), d.help.clone()))
+            .collect::<Vec<_>>()
+    );
+    let diagnostic = cycles[0].1;
+    assert!(
+        diagnostic.message.contains("a → b → a"),
+        "基础消息必须保留确定事实（use 方向环路径），实际：{}",
+        diagnostic.message
+    );
+    // 后果预判禁词：E6007 码号 + 「尚未初始化 / not-yet-initialized」式后果从句。
+    // 两种语言都查：诊断语言由 error_lang 决定（CI 默认 en），判据不得依赖语言。
+    let forbidden = ["E6007", "尚未初始化", "not-yet-initialized", "reads void"];
+    for marker in forbidden {
+        assert!(
+            !diagnostic.message.contains(marker),
+            "良性环的基础消息不得预判运行期后果（命中 {marker}），实际：{}",
+            diagnostic.message
+        );
+        assert!(
+            !diagnostic.help.contains(marker),
+            "良性环的 help 也不得预判运行期后果（命中 {marker}），实际：{}",
+            diagnostic.help
+        );
+    }
+}
+
 /// 误报面：无环项目（main → lib 单向）不得出现 W1007。
 #[test]
 fn test_multifile_acyclic_imports_emit_no_w1007() {

@@ -1196,9 +1196,9 @@
   "W1007": {
     "title": "模块导入环喵",
     "message": "编译集里的模块之间有导入环，环里的初始化顺序判不了喵",
-    "template": "模块导入环 {cycle}：环里的初始化顺序判不了喵，读到还没初始化的顶层值就会在运行时报 E6007 的喵~",
+    "template": "模块导入环 {cycle}：环里的初始化顺序判不了喵，环里谁先谁后只是按路径字典序定个准（不是语义保证nya~）",
     "help": "初始化顺序是按 use 依赖的拓扑序排的喵；环里谁先谁后只有一个「环内路径字典序」的确定性约定，不是语义保证nya~ 把环打破（把环上某条 use 移出去，或者把顶层值改成函数延迟求值）就能让顺序判得出来啦喵~ E3019 管的是一个单元里顶层绑定之间的环，这个码管的是模块之间的导入环喵。",
-    "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：两个模块互相导入，谁先初始化都读不到对方喵",
-    "error_output": "warning[W1007]: 模块导入环 zlib → zother → zlib：环里的初始化顺序判不了喵，读到还没初始化的顶层值就会在运行时报 E6007 的喵~\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: 环里的值依赖跟 use 顺序是反的喵：zlib 读 zother.o_val 的时候 zother 还没初始化（被违反的边：zother 导入 zlib，所以拓扑序把 zlib 排在前面nya~）。初始化顺序按 use 依赖排，环里没法同时满足值依赖——把环打破，或者把那个顶层值改成函数延迟求值喵~"
+    "example": "// zlib.yx: use zother.{o_val}\n// zother.yx: use zlib.{z_val}\n// => zlib → zother → zlib：两个模块互相导入，环里先后只按路径字典序来定喵",
+    "error_output": "warning[W1007]: 模块导入环 zlib → zother → zlib：环里的初始化顺序判不了喵，环里谁先谁后只是按路径字典序定个准（不是语义保证nya~）\n --> zother.yx:2:1\n  |\n2 | use zlib.{z_val}\n  | ^^^^^^^^^^^^^^^^^\n  |\nhelp: 环里的值依赖跟 use 顺序是反的喵：zlib 读 zother.o_val 的时候 zother 还没初始化（被违反的边：zother 导入 zlib，所以拓扑序把 zlib 排在前面nya~）。初始化顺序按 use 依赖排，环里没法同时满足值依赖——把环打破，或者把那个顶层值改成函数延迟求值喵~"
   }
 }
