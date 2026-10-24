@@ -1042,3 +1042,23 @@
 > **补记（2026-10-24，定时核对第二轮）**：后续两轮 `229dfae42`（哈希订正）与 `f6da37c6f`（登记 #499 / #500 / #501 + AGENTS ⑤⑥）的 CI **均失败**，失败 job = **Test → Corpus parity vs baseline**（run `40080094899` / `40080885899`），差分 1 处、正是本批夹具 `import-cycle-reads-before-init/main.yx` 的 W1007 行。**根因不是代码回归**：auto-translate 的 i18n 提交 `9ad0636be` 改写了 `locales/en.json` 的 W1007 `template`（`…initialization order inside the cycle is undecidable…` → `…initialization order within the cycle cannot be determined…`），而语料基线**逐字**记录 run 的 stderr ⇒ 译文一变，基线必红。**处置**：按当前文案再生基线（提交 `076833cc4`：numstat **1 增 1 删**、356 行不变、复跑 `check-corpus-parity` 差分空 exit 0），tip `076833cc4` 的 CI **40082151891 success**。另注：`f6da37c6f` 的 **Auto Translate Docs** job 亦 failure（翻译 bot 自身作业，非代码门禁）。**暴露的结构缺陷（待裁）**：语料基线把**本地化文案**也钉死了，译文一改就是一次「看起来像回归」的红；候选修法 = 基线只记 `code | file | line`（文案交给 locales 单测）或固定探针 locale。
 >
 > **末笔结论（2026-10-24，定时核对第三轮）**：`636d1dbe9`（本节补记的文档提交）→ CI **40083597051 success**、Deploy Docs **40083597135 success**、Auto Translate Docs **40083597070 success**。**本批至此全部门禁绿，仅 `229dfae42` / `f6da37c6f` 两轮因上述基线-译文耦合而失败（已由 `076833cc4` 修复并记录覆盖关系），`f6da37c6f` 的翻译 bot 作业失败亦已重跑为 success。**
+---
+
+## P0 0.5.3 语料基线只记结构化事实（2026-10-24）
+
+> **触发**：4.10 轮 2 的两轮 CI 红（run `40080094899` / `40080885899`）——失败 job 都是 Corpus parity vs baseline，差分仅 1 处，根因是 auto-translate 的 i18n 提交 `9ad0636be` 改写了 `locales/en.json` 的 W1007 `template`。语料基线**逐字**保存渲染后的诊断文案，于是译文一变基线必红，且红的样子像代码回归。用户 2026-10-24 裁决：保留基线，字段压成结构化事实（C1）。
+
+> **改法**（提交 `69a22c4d1`）：`examples/corpus_probe.rs` 的 `capture_run` 把 `stderr` 从「逐字原文」改为 `diagnostics: [[码, 文件, 行], …]` + 仅保留**崩溃标记行**（`panicked at` / `RUST_BACKTRACE` / `internal compiler error` / `INTERNAL ERROR` / `stack backtrace:`）；新增 `strip_ansi`（run 侧 stderr 带 ANSI 颜色码，不剥则诊断头匹配不中）与 `parse_diagnostics` 的位置前瞻（诊断头与 `-->` 之间夹着源码片段时仍能取到位置——multifile 的 E6007 就是这种形态）。`exit` / `stdout` / `check.*` / `expectation` 一律不变。
+
+> **证据（本地实测，2026-10-24）**：
+>
+> | 判据 | 结果 |
+> | --- | --- |
+> | 基线重生后 `check-corpus-parity` | 356 / 356，差分空，exit 0 |
+> | **改 `locales/en.json` 的 W1007 文案后重跑探针** | **差分仍为空**（本项的存在理由：基线不再随译文漂移） |
+> | 变异核对（把某条 `run.exit` 改 99） | 报 1 处差分（比对路径未失效） |
+> | 基线规模 | 356 行不变；230 条因字段形状变化而变（机械 diff） |
+>
+> **代价（已接受）**：语料层不再承担「运行期文案措辞」的回归；该职责回到 `locales` 单测、`yx explain` 展示快照与错误码生成物对账。**新增码时若只改文案，语料基线不再变动**——这是设计目标，不是覆盖退化。
+
+> **登记**：issue [#502](https://github.com/ChenXu233/YaoXiang/issues/502)；WBS `0.5.3`（P0，不阻塞主线）；三级计数 183 → 184。
