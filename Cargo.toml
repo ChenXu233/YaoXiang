@@ -100,7 +100,7 @@ thiserror = "2.0.18"
 clap = { version = "4.6.1", features = ["derive"], optional = true }
 
 # REPL - 交互式编辑
-rustyline = { version = "18.0.0", features = ["with-file-history", "with-dirs"], optional = true }
+rustyline = { version = "19.0.0", features = ["with-file-history", "with-dirs"], optional = true }
 
 # LSP - 语言服务器协议
 lsp-types = "0.97"
